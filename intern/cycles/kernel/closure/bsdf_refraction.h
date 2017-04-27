@@ -37,10 +37,27 @@ CCL_NAMESPACE_BEGIN
 
 /* REFRACTION */
 
+ccl_device float mollify_refract(const float3 &l, const float3 &rd, const float3 &n, const float3 &nl, float dist, int sample, float* pdf)
+{
+    float molif_r = 1.f*fast_safe_powf(1.f+sample,-1.f/6.f);
+    float cos_max = 1.f/safe_sqrtf(1.f + (molif_r/dist)*(molif_r/dist)); // cone angle
+    float solid_angle = 2.f*M_PI_F*(1.f - cos_max);
+    float3 out = n*2.f * dot(n, rd) - rd;
+
+    float nc = 1.f, nt = 1.5f, nnt = dot(n, nl) > 0.f ? nc/nt : nt/nc,ddn=dot(rd,nl),cos2t;
+    if((cos2t = 1.f - nnt*nnt*(1.f - ddn*ddn)) > 0.f)
+    {
+        out = normalize(rd*nnt - n*((dot(n,nl)>0.f?1.f:-1.f)*(ddn*nnt+safe_sqrtf(cos2t))));
+    }
+
+    *pdf = 1.f;//1.f/cos_max;
+    return dot(l,out) >= cos_max ? (1.f/solid_angle)/dot(l,out):0.f;
+}
+
 ccl_device int bsdf_refraction_setup(MicrofacetBsdf *bsdf)
 {
 	bsdf->type = CLOSURE_BSDF_REFRACTION_ID;
-	return SD_BSDF;
+	return SD_BSDF | SD_BSDF_HAS_EVAL;
 }
 
 ccl_device float3 bsdf_refraction_eval_reflect(const ShaderClosure *sc, const float3 I, const float3 omega_in, float *pdf)
@@ -48,8 +65,11 @@ ccl_device float3 bsdf_refraction_eval_reflect(const ShaderClosure *sc, const fl
 	return make_float3(0.0f, 0.0f, 0.0f);
 }
 
-ccl_device float3 bsdf_refraction_eval_transmit(const ShaderClosure *sc, const float3 I, const float3 omega_in, float *pdf)
+ccl_device float3 bsdf_refraction_eval_transmit(const ShaderClosure *sc, float ray_length, int sample, const float3 I, const float3 omega_in, float *pdf)
 {
+    MicrofacetBsdf *bsdf = (MicrofacetBsdf*) sc;
+    float v = mollify_refract(omega_in, I, bsdf->N, bsdf->N, ray_length, sample, pdf);
+    return make_float3(v, v, v);
 	return make_float3(0.0f, 0.0f, 0.0f);
 }
 

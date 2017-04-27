@@ -37,14 +37,27 @@ CCL_NAMESPACE_BEGIN
 
 /* REFLECTION */
 
+ccl_device float mollify_reflect(const float3 &l, const float3 &rd, const float3 &n, const float3 &nl, float dist, int sample, float *pdf)
+{
+    float molif_r = 1.f*fast_safe_powf(1.f+sample,-1.f/6.f);
+    float cos_max = 1.f/safe_sqrtf(1.f + (molif_r/dist)*(molif_r/dist)); // cone angle
+    float solid_angle = 2.f*M_PI_F*(1.f - cos_max);
+    float3 out = n*2.f * dot(n, rd) - rd;
+    *pdf = 1.f;//1.f/cos_max;
+    return dot(l,out) >= cos_max ? (1.f/solid_angle)/dot(l,out):0.f;
+}
+
 ccl_device int bsdf_reflection_setup(MicrofacetBsdf *bsdf)
 {
 	bsdf->type = CLOSURE_BSDF_REFLECTION_ID;
-	return SD_BSDF;
+	return SD_BSDF | SD_BSDF_HAS_EVAL;
 }
 
-ccl_device float3 bsdf_reflection_eval_reflect(const ShaderClosure *sc, const float3 I, const float3 omega_in, float *pdf)
+ccl_device float3 bsdf_reflection_eval_reflect(const ShaderClosure *sc, float ray_length, int sample, const float3 I, const float3 omega_in, float *pdf)
 {
+    MicrofacetBsdf *bsdf = (MicrofacetBsdf*) sc;
+    float v = mollify_reflect(omega_in, I, bsdf->N, bsdf->N, ray_length, sample, pdf);
+    return make_float3(v, v, v);
 	return make_float3(0.0f, 0.0f, 0.0f);
 }
 

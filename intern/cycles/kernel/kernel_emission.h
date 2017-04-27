@@ -116,12 +116,16 @@ ccl_device_noinline bool direct_emission(KernelGlobals *kg,
 
 	if(is_zero(light_eval))
 		return false;
-
+	
+	/* path space regularization: remember ray_length and set it to ls->t */
+	const float remember_ray_length = sd->ray_length;
+	sd->ray_length = ls->t;
+	
 	/* evaluate BSDF at shading point */
 
 #ifdef __VOLUME__
 	if(sd->prim != PRIM_NONE)
-		shader_bsdf_eval(kg, sd, ls->D, eval, ls->pdf, ls->shader & SHADER_USE_MIS);
+		shader_bsdf_eval(kg, state, sd, ls->D, eval, ls->pdf, ls->shader & SHADER_USE_MIS);
 	else {
 		float bsdf_pdf;
 		shader_volume_phase_eval(kg, sd, ls->D, eval, &bsdf_pdf);
@@ -153,6 +157,8 @@ ccl_device_noinline bool direct_emission(KernelGlobals *kg,
 	}
 #endif
 
+    sd->ray_length = remember_ray_length;
+    
 	if(bsdf_eval_is_zero(eval))
 		return false;
 

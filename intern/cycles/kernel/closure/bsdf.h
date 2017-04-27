@@ -168,6 +168,7 @@ ccl_device
 ccl_device_forceinline
 #endif
 float3 bsdf_eval(KernelGlobals *kg,
+                 ccl_addr_space PathState *state,
                  ShaderData *sd,
                  const ShaderClosure *sc,
                  const float3 omega_in,
@@ -197,7 +198,7 @@ float3 bsdf_eval(KernelGlobals *kg,
 				eval = bsdf_translucent_eval_reflect(sc, sd->I, omega_in, pdf);
 				break;
 			case CLOSURE_BSDF_REFLECTION_ID:
-				eval = bsdf_reflection_eval_reflect(sc, sd->I, omega_in, pdf);
+				eval = bsdf_reflection_eval_reflect(sc, sd->ray_length, state->sample, sd->I, omega_in, pdf);
 				break;
 			case CLOSURE_BSDF_REFRACTION_ID:
 				eval = bsdf_refraction_eval_reflect(sc, sd->I, omega_in, pdf);
@@ -282,7 +283,7 @@ float3 bsdf_eval(KernelGlobals *kg,
 				eval = bsdf_reflection_eval_transmit(sc, sd->I, omega_in, pdf);
 				break;
 			case CLOSURE_BSDF_REFRACTION_ID:
-				eval = bsdf_refraction_eval_transmit(sc, sd->I, omega_in, pdf);
+				eval = bsdf_refraction_eval_transmit(sc, sd->ray_length, state->sample, sd->I, omega_in, pdf);
 				break;
 			case CLOSURE_BSDF_TRANSPARENT_ID:
 				eval = bsdf_transparent_eval_transmit(sc, sd->I, omega_in, pdf);

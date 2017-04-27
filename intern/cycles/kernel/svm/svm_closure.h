@@ -22,13 +22,13 @@ ccl_device void svm_node_glass_setup(ShaderData *sd, MicrofacetBsdf *bsdf, int t
 {
 	if(type == CLOSURE_BSDF_SHARP_GLASS_ID) {
 		if(refract) {
-			bsdf->alpha_y = 0.0f;
+			bsdf->alpha_y = sd->ray_length;
 			bsdf->alpha_x = 0.0f;
 			bsdf->ior = eta;
 			sd->flag |= bsdf_refraction_setup(bsdf);
 		}
 		else {
-			bsdf->alpha_y = 0.0f;
+			bsdf->alpha_y = sd->ray_length;
 			bsdf->alpha_x = 0.0f;
 			bsdf->ior = 0.0f;
 			sd->flag |= bsdf_reflection_setup(bsdf);
@@ -514,7 +514,7 @@ ccl_device void svm_node_closure_bsdf(KernelGlobals *kg, ShaderData *sd, float *
 				/* setup bsdf */
 				if(type == CLOSURE_BSDF_REFRACTION_ID) {
 					bsdf->alpha_x = 0.0f;
-					bsdf->alpha_y = 0.0f;
+					bsdf->alpha_y = sd->ray_length;
 					bsdf->ior = eta;
 
 					sd->flag |= bsdf_refraction_setup(bsdf);

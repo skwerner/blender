@@ -500,7 +500,7 @@ ccl_device_inline void shader_merge_closures(ShaderData *sd)
 
 /* BSDF */
 
-ccl_device_inline void _shader_bsdf_multi_eval(KernelGlobals *kg, ShaderData *sd, const float3 omega_in, float *pdf,
+ccl_device_inline void _shader_bsdf_multi_eval(KernelGlobals *kg, ccl_addr_space PathState *state, ShaderData *sd, const float3 omega_in, float *pdf,
 	int skip_bsdf, BsdfEval *result_eval, float sum_pdf, float sum_sample_weight)
 {
 	/* this is the veach one-sample model with balance heuristic, some pdf
@@ -513,7 +513,7 @@ ccl_device_inline void _shader_bsdf_multi_eval(KernelGlobals *kg, ShaderData *sd
 
 		if(CLOSURE_IS_BSDF(sc->type)) {
 			float bsdf_pdf = 0.0f;
-			float3 eval = bsdf_eval(kg, sd, sc, omega_in, &bsdf_pdf);
+			float3 eval = bsdf_eval(kg, state, sd, sc, omega_in, &bsdf_pdf);
 
 			if(bsdf_pdf != 0.0f) {
 				bsdf_eval_accum(result_eval, sc->type, eval*sc->weight, 1.0f);
@@ -529,6 +529,7 @@ ccl_device_inline void _shader_bsdf_multi_eval(KernelGlobals *kg, ShaderData *sd
 
 #ifdef __BRANCHED_PATH__
 ccl_device_inline void _shader_bsdf_multi_eval_branched(KernelGlobals *kg,
+                                                        ccl_addr_space PathState *state,
                                                         ShaderData *sd,
                                                         const float3 omega_in,
                                                         BsdfEval *result_eval,
@@ -539,7 +540,7 @@ ccl_device_inline void _shader_bsdf_multi_eval_branched(KernelGlobals *kg,
 		const ShaderClosure *sc = &sd->closure[i];
 		if(CLOSURE_IS_BSDF(sc->type)) {
 			float bsdf_pdf = 0.0f;
-			float3 eval = bsdf_eval(kg, sd, sc, omega_in, &bsdf_pdf);
+			float3 eval = bsdf_eval(kg, state, sd, sc, omega_in, &bsdf_pdf);
 			if(bsdf_pdf != 0.0f) {
 				float mis_weight = use_mis? power_heuristic(light_pdf, bsdf_pdf): 1.0f;
 				bsdf_eval_accum(result_eval,
@@ -559,6 +560,7 @@ ccl_device
 ccl_device_inline
 #endif
 void shader_bsdf_eval(KernelGlobals *kg,
+                      ccl_addr_space PathState *state,
                       ShaderData *sd,
                       const float3 omega_in,
                       BsdfEval *eval,
@@ -569,12 +571,12 @@ void shader_bsdf_eval(KernelGlobals *kg,
 
 #ifdef __BRANCHED_PATH__
 	if(kernel_data.integrator.branched)
-		_shader_bsdf_multi_eval_branched(kg, sd, omega_in, eval, light_pdf, use_mis);
+		_shader_bsdf_multi_eval_branched(kg, state, sd, omega_in, eval, light_pdf, use_mis);
 	else
 #endif
 	{
 		float pdf;
-		_shader_bsdf_multi_eval(kg, sd, omega_in, &pdf, -1, eval, 0.0f, 0.0f);
+		_shader_bsdf_multi_eval(kg, state, sd, omega_in, &pdf, -1, eval, 0.0f, 0.0f);
 		if(use_mis) {
 			float weight = power_heuristic(light_pdf, pdf);
 			bsdf_eval_mis(eval, weight);
@@ -583,6 +585,7 @@ void shader_bsdf_eval(KernelGlobals *kg,
 }
 
 ccl_device_inline int shader_bsdf_sample(KernelGlobals *kg,
+                                         ccl_addr_space PathState *state,
                                          ShaderData *sd,
                                          float randu, float randv,
                                          BsdfEval *bsdf_eval,
@@ -636,7 +639,7 @@ ccl_device_inline int shader_bsdf_sample(KernelGlobals *kg,
 
 		if(sd->num_closure > 1) {
 			float sweight = sc->sample_weight;
-			_shader_bsdf_multi_eval(kg, sd, *omega_in, pdf, sampled, bsdf_eval, *pdf*sweight, sweight);
+			_shader_bsdf_multi_eval(kg, state, sd, *omega_in, pdf, sampled, bsdf_eval, *pdf*sweight, sweight);
 		}
 	}
 

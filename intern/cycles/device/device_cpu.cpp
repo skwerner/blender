@@ -239,11 +239,7 @@ public:
 #ifdef WITH_OSL
 		kernel_globals.osl = &osl_globals;
 #endif
-		oiio_globals.tex_sys = TextureSystem::create();
-		oiio_globals.tex_sys->attribute("max_memory_MB", 1024.0f);
-		oiio_globals.tex_sys->attribute("autotile", 64);
-		oiio_globals.tex_sys->attribute("automip", 64);
-		oiio_globals.tex_sys->attribute("gray_to_rgb", 1);
+		oiio_globals.tex_sys = NULL;
 		kernel_globals.oiio = &oiio_globals;
 		
 		use_split_kernel = DebugFlags().cpu.split_kernel;

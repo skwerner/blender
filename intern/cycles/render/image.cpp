@@ -189,6 +189,27 @@ ImageDataType ImageManager::get_image_metadata(const string& filename,
 	}
 }
 
+const string ImageManager::get_mip_map_path(const string& filename)
+{
+	if(!path_exists(filename)) {
+		return "";
+	}
+	
+	string::size_type idx = filename.rfind('.');
+	if(idx != string::npos) {
+		std::string extension = filename.substr(idx+1);
+		if(extension == "tx") {
+			return filename;
+		}
+	}
+	
+	string tx_name = filename + ".tx";
+	if(path_exists(tx_name)) {
+		return tx_name;
+	}
+	return "";
+}
+
 int ImageManager::max_flattened_slot(ImageDataType type)
 {
 	if(tex_num_images[type] == 0) {
@@ -711,6 +732,7 @@ void ImageManager::device_load_image(Device *device,
 		}
 		OIIOGlobals *oiio = (OIIOGlobals*)device->oiio_memory();
 		if(oiio) {
+			thread_scoped_lock lock(oiio->tex_paths_mutex);
 			int flat_slot = type_index_to_flattened_slot(slot, type);
 			if (oiio->tex_paths.size() <= flat_slot) {
 				oiio->tex_paths.resize(flat_slot+1);

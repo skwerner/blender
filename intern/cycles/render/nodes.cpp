@@ -386,6 +386,7 @@ void ImageTextureNode::compile(OSLCompiler& compiler)
 	}
 
 	if(slot == -1) {
+		filename = image_manager->get_mip_map_path(filename.string());
 		compiler.parameter(this, "filename");
 	}
 	else {

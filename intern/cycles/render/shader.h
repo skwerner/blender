@@ -210,6 +210,14 @@ protected:
 	                                  DeviceRequestedFeatures *requested_features);
 
 	thread_spin_lock attribute_lock_;
+
+	void texture_system_init();
+	void texture_system_free();
+
+	OIIO::TextureSystem *ts;
+	static OIIO::TextureSystem *ts_shared;
+	static thread_mutex ts_shared_mutex;
+	static int ts_shared_users;
 };
 
 CCL_NAMESPACE_END

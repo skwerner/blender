@@ -28,6 +28,9 @@
 #include <OSL/oslexec.h>
 #endif
 
+#include "kernel/kernel_oiio_globals.h"
+#include <OpenImageIO/ImageBufAlgo.h>
+
 CCL_NAMESPACE_BEGIN
 
 /* Some helpers to silence warning in templated function. */
@@ -43,7 +46,8 @@ static bool isfinite(half /*value*/)
 ImageManager::ImageManager(const DeviceInfo& info)
 {
 	need_update = true;
-	osl_texture_system = NULL;
+	pack_images = false;
+	oiio_texture_system = NULL;
 	animation_frame = 0;
 
 	/* Set image limits */
@@ -64,9 +68,14 @@ ImageManager::~ImageManager()
 	}
 }
 
-void ImageManager::set_osl_texture_system(void *texture_system)
+void ImageManager::set_pack_images(bool pack_images_)
 {
-	osl_texture_system = texture_system;
+	pack_images = pack_images_;
+}
+
+void ImageManager::set_oiio_texture_system(void *texture_system)
+{
+	oiio_texture_system = texture_system;
 }
 
 bool ImageManager::set_animation_frame_update(int frame)
@@ -693,8 +702,23 @@ void ImageManager::device_load_image(Device *device,
 
 	Image *img = images[type][slot];
 
-	if(osl_texture_system && !img->builtin_data)
+	if(oiio_texture_system && !img->builtin_data) {
+		if(scene->params.texture_auto_convert) {
+			make_tx(img, progress);
+		}
+		OIIOGlobals *oiio = (OIIOGlobals*)device->oiio_memory();
+		if(oiio) {
+			int flat_slot = type_index_to_flattened_slot(slot, type);
+			if (oiio->tex_paths.size() <= flat_slot) {
+				oiio->tex_paths.resize(flat_slot+1);
+			}
+			OIIO::TextureSystem *tex_sys = (OIIO::TextureSystem*)oiio_texture_system;
+			OIIO::TextureSystem::TextureHandle *handle = tex_sys->get_texture_handle(OIIO::ustring(images[type][slot]->filename.c_str()));
+			oiio->tex_paths[flat_slot] = handle;
+		}
+		img->need_load = false;
 		return;
+	}
 
 	string filename = path_filename(images[type][slot]->filename);
 	progress->set_status("Updating Images", "Loading " + filename);
@@ -866,11 +890,9 @@ void ImageManager::device_free_image(Device *, ImageDataType type, int slot)
 	Image *img = images[type][slot];
 
 	if(img) {
-		if(osl_texture_system && !img->builtin_data) {
-#ifdef WITH_OSL
+		if(oiio_texture_system && !img->builtin_data) {
 			ustring filename(images[type][slot]->filename);
-			((OSL::TextureSystem*)osl_texture_system)->invalidate(filename);
-#endif
+			((OIIO::TextureSystem*)oiio_texture_system)->invalidate(filename);
 		}
 
 		if(img->mem) {
@@ -902,14 +924,13 @@ void ImageManager::device_update(Device *device,
 				device_free_image(device, (ImageDataType)type, slot);
 			}
 			else if(images[type][slot]->need_load) {
-				if(!osl_texture_system || images[type][slot]->builtin_data)
-					pool.push(function_bind(&ImageManager::device_load_image,
-					                        this,
-					                        device,
-					                        scene,
-					                        (ImageDataType)type,
-					                        slot,
-					                        &progress));
+				pool.push(function_bind(&ImageManager::device_load_image,
+										this,
+										device,
+										scene,
+										(ImageDataType)type,
+										slot,
+										&progress));
 			}
 		}
 	}
@@ -934,12 +955,11 @@ void ImageManager::device_update_slot(Device *device,
 		device_free_image(device, type, slot);
 	}
 	else if(image->need_load) {
-		if(!osl_texture_system || image->builtin_data)
-			device_load_image(device,
-			                  scene,
-			                  type,
-			                  slot,
-			                  progress);
+		device_load_image(device,
+						  scene,
+						  type,
+						  slot,
+						  progress);
 	}
 }
 
@@ -961,6 +981,47 @@ void ImageManager::device_free(Device *device)
 		}
 		images[type].clear();
 	}
+}
+
+bool ImageManager::make_tx(Image *image, Progress *progress)
+{
+	if(!path_exists(image->filename)) {
+		return false;
+	}
+	
+	string::size_type idx = image->filename.rfind('.');
+	if(idx != string::npos) {
+		std::string extension = image->filename.substr(idx+1);
+		if(extension == "tx") {
+			return true;
+		}
+	}
+	
+	string tx_name = image->filename + ".tx";
+	if(path_exists(tx_name)) {
+		image->filename = tx_name;
+		return true;
+	}
+	
+	progress->set_status("Updating Images", "Converting " + image->filename);
+	
+	ImageSpec config;
+	config.tile_width = 64;
+	config.tile_height = 64;
+	
+	ImageCache *ic = ImageCache::create();
+	ic->attribute("forcefloat", 1);
+	ic->attribute("max_memory_MB", 1024.0f);
+	
+	bool ok = ImageBufAlgo::make_texture(ImageBufAlgo::MakeTxTexture, image->filename, tx_name, config);
+	if(ok) {
+		image->filename = tx_name;
+	} else {
+		std::cout << ic->geterror() << std::endl;
+	}
+	ic->reset_stats();
+	ImageCache::destroy(ic);
+	return true;
 }
 
 CCL_NAMESPACE_END

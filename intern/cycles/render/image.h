@@ -71,7 +71,8 @@ public:
 	void device_free(Device *device);
 	void device_free_builtin(Device *device);
 
-	void set_osl_texture_system(void *texture_system);
+	void set_oiio_texture_system(void *texture_system);
+	void set_pack_images(bool pack_images_);
 	bool set_animation_frame_update(int frame);
 
 	bool need_update;
@@ -126,7 +127,8 @@ private:
 	int animation_frame;
 
 	vector<Image*> images[IMAGE_DATA_NUM_TYPES];
-	void *osl_texture_system;
+	void *oiio_texture_system;
+	bool pack_images;
 
 	bool file_load_image_generic(Image *img,
 	                             ImageInput **in,
@@ -156,6 +158,8 @@ private:
 	void device_free_image(Device *device,
 	                       ImageDataType type,
 	                       int slot);
+
+	bool make_tx(Image *image, Progress *progress);
 };
 
 CCL_NAMESPACE_END

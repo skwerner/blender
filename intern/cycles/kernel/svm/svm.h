@@ -272,7 +272,7 @@ ccl_device_noinline void svm_eval_nodes(KernelGlobals *kg, ShaderData *sd, ccl_a
 #  endif  /* NODES_FEATURE(NODE_FEATURE_BUMP) */
 #  ifdef __TEXTURES__
 			case NODE_TEX_IMAGE:
-				svm_node_tex_image(kg, sd, stack, node);
+				svm_node_tex_image(kg, sd, path_flag, stack, node);
 				break;
 			case NODE_TEX_IMAGE_BOX:
 				svm_node_tex_image_box(kg, sd, stack, node);

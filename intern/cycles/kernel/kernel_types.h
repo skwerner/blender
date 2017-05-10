@@ -90,6 +90,7 @@ CCL_NAMESPACE_BEGIN
 #    define __OSL__
 #  endif
 #  define __OIIO__
+#  define __DNDU__
 #  define __PRINCIPLED__
 #  define __SUBSURFACE__
 #  define __CMJ__
@@ -997,7 +998,11 @@ typedef ccl_addr_space struct ShaderData {
 	float3 dPdu;
 	float3 dPdv;
 #endif
-
+#ifdef __DPDU__
+	float3 dNdu;
+	float3 dNdv;
+#endif
+	
 #ifdef __OBJECT_MOTION__
 	/* object <-> world space transformations, cached to avoid
 	 * re-interpolating them constantly for shading */

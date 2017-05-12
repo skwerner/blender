@@ -376,8 +376,14 @@ ccl_device_noinline void kernel_path_ao(KernelGlobals *kg,
 		light_ray.D = ao_D;
 		light_ray.t = kernel_data.background.ao_distance;
 		light_ray.time = sd->time;
+#ifdef __RAY_DIFFERENTIALS__
 		light_ray.dP = sd->dP;
-		light_ray.dD = differential3_zero();
+		/* This is how pbrt v3 implements differentials for diffuse bounces */
+		float3 a, b;
+		make_orthonormals(ao_D, &a, &b);
+		light_ray.dD.dx = normalize(ao_D + 0.1f * a);
+		light_ray.dD.dy = normalize(ao_D + 0.1f * b);
+#endif  /* __RAY_DIFFERENTIALS__ */
 
 		if(!shadow_blocked(kg, sd, emission_sd, state, &light_ray, &ao_shadow)) {
 			path_radiance_accum_ao(L, state, throughput, ao_alpha, ao_bsdf, ao_shadow);

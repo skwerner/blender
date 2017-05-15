@@ -268,6 +268,7 @@ ccl_device_inline void shader_setup_from_sample(KernelGlobals *kg,
                                                 const float3 P,
                                                 const float3 Ng,
                                                 const float3 I,
+												const differential3 *dI,
                                                 int shader, int object, int prim,
                                                 float u, float v, float t,
                                                 float time,
@@ -390,11 +391,18 @@ ccl_device_inline void shader_setup_from_sample(KernelGlobals *kg,
 	}
 
 #ifdef __RAY_DIFFERENTIALS__
-	/* no ray differentials here yet */
-	sd->dP = differential3_zero();
-	sd->dI = differential3_zero();
-	sd->du = differential_zero();
-	sd->dv = differential_zero();
+	if(dI) {
+		sd->dI = *dI;
+		differential_transfer(&sd->dP, differential3_zero(), I, *dI, Ng, t);
+		differential_dudv(&sd->du, &sd->dv, sd->dPdu, sd->dPdv, sd->dP, sd->Ng);
+	}
+	else {
+		sd->dP = differential3_zero();
+		sd->dI = differential3_zero();
+		sd->du = differential_zero();
+		sd->dv = differential_zero();
+	}
+
 #endif
 }
 
@@ -412,7 +420,7 @@ ccl_device void shader_setup_from_displace(KernelGlobals *kg, ShaderData *sd,
 	shader |= SHADER_SMOOTH_NORMAL;
 
 	shader_setup_from_sample(kg, sd,
-	                         P, Ng, I,
+	                         P, Ng, I, NULL,
 	                         shader, object, prim,
 	                         u, v, 0.0f, 0.5f,
 	                         !(kernel_tex_fetch(__object_flag, object) & SD_OBJECT_TRANSFORM_APPLIED),

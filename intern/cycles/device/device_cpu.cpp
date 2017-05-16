@@ -910,6 +910,10 @@ protected:
 #ifdef WITH_OSL
 		OSLShader::thread_init(&kg, &kernel_globals, &osl_globals);
 #endif
+		if(kg.oiio && kg.oiio->tex_sys) {
+			kg.oiio_tdata = kg.oiio->tex_sys->get_perthread_info();
+		}
+
 		return kg;
 	}
 

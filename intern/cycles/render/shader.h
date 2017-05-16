@@ -33,6 +33,7 @@
 #include "util/util_string.h"
 #include "util/util_thread.h"
 #include "util/util_types.h"
+#include "kernel/kernel_oiio_globals.h"
 
 CCL_NAMESPACE_BEGIN
 

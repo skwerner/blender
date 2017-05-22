@@ -56,7 +56,8 @@ public:
 	              InterpolationType interpolation,
 	              ExtensionType extension,
 	              bool use_alpha,
-	              ImageMetaData& metadata);
+	              ImageMetaData& metadata,
+				  bool srgb);
 	void remove_image(int flat_slot);
 	void remove_image(const string& filename,
 	                  void *builtin_data,
@@ -119,6 +120,7 @@ public:
 		bool use_alpha;
 		bool need_load;
 		bool animated;
+		bool srgb;
 		float frame;
 		InterpolationType interpolation;
 		ExtensionType extension;

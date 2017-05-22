@@ -352,7 +352,8 @@ static void create_mesh_volume_attribute(BL::Object& b_ob,
 	        INTERPOLATION_LINEAR,
 	        EXTENSION_CLIP,
 	        use_alpha,
-	        metadata);
+	        metadata,
+            false);
 }
 
 static void create_mesh_volume_attributes(Scene *scene,

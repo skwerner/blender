@@ -309,7 +309,8 @@ int ImageManager::add_image(const string& filename,
                             InterpolationType interpolation,
                             ExtensionType extension,
                             bool use_alpha,
-                            ImageMetaData& metadata)
+                            ImageMetaData& metadata,
+                            bool srgb)
 {
 	Image *img;
 	size_t slot;
@@ -387,6 +388,7 @@ int ImageManager::add_image(const string& filename,
 	img->users = 1;
 	img->use_alpha = use_alpha;
 	img->mem = NULL;
+	img->srgb = srgb && (!metadata.is_linear);
 
 	images[type][slot] = img;
 
@@ -1075,6 +1077,10 @@ bool ImageManager::make_tx(Image *image, Progress *progress)
 	
 	ImageSpec config;
 	config.attribute("maketx:filtername", "lanczos3");
+	if(image->srgb) {
+		config.attribute("maketx:incolorspace", "sRGB");
+		config.attribute("maketx:outcolorspace", "linear");
+	}
 
 	bool ok = ImageBufAlgo::make_texture(ImageBufAlgo::MakeTxTexture, image->filename, tx_name, config);
 	if(ok) {

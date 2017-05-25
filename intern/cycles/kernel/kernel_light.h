@@ -776,6 +776,29 @@ ccl_device bool lamp_light_eval(KernelGlobals *kg, int lamp, float3 P, float3 D,
 	return true;
 }
 
+ccl_device void lamp_light_dPdudv(KernelGlobals *kg, int lamp, float u, float v, float3 *dPdu, float3 *dPdv )
+{
+	const ccl_global KernelLight *klight = &kernel_tex_fetch(__lights, lamp);
+	LightType type = (LightType)klight->type;
+
+	switch(type)
+	{
+	case LIGHT_AREA: {
+		*dPdu = make_float3(klight->area.axisu[0],	klight->area.axisu[1], klight->area.axisu[2]);
+		*dPdv = make_float3(klight->area.axisv[0],	klight->area.axisv[1], klight->area.axisv[2]);
+ 		break;
+	}
+	case LIGHT_POINT:
+	case LIGHT_DISTANT:
+	case LIGHT_SPOT:
+	default:
+		// todo
+		*dPdu = make_float3(0.0f, 0.0f, 0.0f);
+		*dPdv = make_float3(0.0f, 0.0f, 0.0f);
+		break;
+	}
+}
+
 /* Triangle Light */
 
 /* returns true if the triangle is has motion blur or an instancing transform applied */

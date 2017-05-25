@@ -28,8 +28,8 @@
 #include "kernel/bvh/bvh.h"
 
 #include "kernel/kernel_accumulate.h"
-#include "kernel/kernel_shader.h"
 #include "kernel/kernel_light.h"
+#include "kernel/kernel_shader.h"
 #include "kernel/kernel_passes.h"
 
 #if defined(__VOLUME__) || defined(__SUBSURFACE__)

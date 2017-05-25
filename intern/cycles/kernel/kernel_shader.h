@@ -360,6 +360,15 @@ ccl_device_inline void shader_setup_from_sample(KernelGlobals *kg,
 #  endif
 #endif
 	}
+	if(sd->type & PRIMITIVE_LAMP) {
+#ifdef __DPDU__
+		lamp_light_dPdudv(kg, lamp, sd->u, sd->v, &sd->dPdu, &sd->dPdv);
+#endif
+#ifdef __DNDU__
+		sd->dNdu = make_float3(0.0f, 0.0f, 0.0f);
+		sd->dNdv = make_float3(0.0f, 0.0f, 0.0f);
+#endif
+	}
 	else {
 #ifdef __DPDU__
 		sd->dPdu = make_float3(0.0f, 0.0f, 0.0f);

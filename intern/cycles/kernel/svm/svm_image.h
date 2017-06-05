@@ -16,11 +16,13 @@
 
 #ifdef __OIIO__
 #  include "kernel/kernel_oiio_globals.h"
+#  define NEAREST_LOOKUP_PATHS (PATH_RAY_DIFFUSE | PATH_RAY_SHADOW | PATH_RAY_DIFFUSE_ANCESTOR | PATH_RAY_VOLUME_SCATTER | PATH_RAY_GLOSSY)
+#  define BLUR_LOOKUP_PATHS (PATH_RAY_DIFFUSE | PATH_RAY_DIFFUSE_ANCESTOR)
 #endif
 
 CCL_NAMESPACE_BEGIN
 
-ccl_device float4 svm_image_texture(KernelGlobals *kg, int id, float x, float y, differential ds, differential dt, uint srgb, uint use_alpha, bool fast_lookup)
+ccl_device float4 svm_image_texture(KernelGlobals *kg, int id, float x, float y, differential ds, differential dt, uint srgb, uint use_alpha, int path_flag)
 {
 	float4 r;
 #  ifdef __OIIO__
@@ -28,12 +30,12 @@ ccl_device float4 svm_image_texture(KernelGlobals *kg, int id, float x, float y,
 		OIIO::TextureOpt options;
 		options.swrap = options.twrap = kg->oiio->textures[id].extension;
 		options.anisotropic = 8;
-
-		if(fast_lookup) {
+		
+		if(path_flag & NEAREST_LOOKUP_PATHS) {
 			options.interpmode = OIIO::TextureOpt::InterpClosest;
 			options.mipmode = OIIO::TextureOpt::MipModeOneLevel;
-			//if(path_flag & (PATH_RAY_DIFFUSE | PATH_RAY_DIFFUSE_ANCESTOR))
-			//	options.sblur = options.tblur = 1.f/64.f;
+			if(path_flag & BLUR_LOOKUP_PATHS)
+				options.sblur = options.tblur = 1.f/64.f;
 		}
 		else {
 			options.interpmode = kg->oiio->textures[id].interpolation;
@@ -101,8 +103,6 @@ ccl_device void svm_node_tex_image(KernelGlobals *kg, ShaderData *sd, int path_f
 		tex_co = make_float2(co.x, co.y);
 	}
 
-	bool fast_lookup = path_flag & (PATH_RAY_DIFFUSE | PATH_RAY_SHADOW | PATH_RAY_DIFFUSE_ANCESTOR | PATH_RAY_VOLUME_SCATTER | PATH_RAY_GLOSSY);
-
 	differential ds, dt;
 #ifdef __KERNEL_CPU__
 	if(stack_valid(dx_offset) && stack_valid(dy_offset)) {
@@ -136,7 +136,7 @@ ccl_device void svm_node_tex_image(KernelGlobals *kg, ShaderData *sd, int path_f
 		ds = differential_zero();
 		dt = differential_zero();
 	}
-	float4 f = svm_image_texture(kg, id, tex_co.x, tex_co.y, ds, dt, srgb, use_alpha, fast_lookup);
+	float4 f = svm_image_texture(kg, id, tex_co.x, tex_co.y, ds, dt, srgb, use_alpha, path_flag);
 
 	if(stack_valid(out_offset))
 		stack_store_float3(stack, out_offset, make_float3(f.x, f.y, f.z));
@@ -262,7 +262,6 @@ ccl_device void svm_node_tex_environment(KernelGlobals *kg, ShaderData *sd, int 
 	float2 uv;
 
 	co = safe_normalize(co);
-	bool fast_lookup = path_flag & (PATH_RAY_DIFFUSE | PATH_RAY_SHADOW | PATH_RAY_DIFFUSE_ANCESTOR | PATH_RAY_VOLUME_SCATTER | PATH_RAY_GLOSSY);
 #ifdef __OIIO__
 	float3 dRdx, dRdy;
 	if(stack_valid(dx_offset) && stack_valid(dy_offset)) {
@@ -279,11 +278,11 @@ ccl_device void svm_node_tex_environment(KernelGlobals *kg, ShaderData *sd, int 
 		options.swrap = options.twrap = kg->oiio->textures[id].extension;
 		options.anisotropic = 8;
 
-		if(fast_lookup) {
+		if(path_flag & NEAREST_LOOKUP_PATHS) {
 			options.interpmode = OIIO::TextureOpt::InterpClosest;
 			options.mipmode = OIIO::TextureOpt::MipModeOneLevel;
-	//		if(path_flag & (PATH_RAY_DIFFUSE | PATH_RAY_DIFFUSE_ANCESTOR))
-	//		   options.sblur = options.tblur = 1.f/64.f;
+			if(path_flag & BLUR_LOOKUP_PATHS)
+			   options.sblur = options.tblur = 1.f/64.f;
 		}
 		else {
 			options.interpmode = kg->oiio->textures[id].interpolation;
@@ -305,9 +304,7 @@ ccl_device void svm_node_tex_environment(KernelGlobals *kg, ShaderData *sd, int 
 	else
 		uv = direction_to_mirrorball(co);
 
-	bool fast_lookup = path_flag & (PATH_RAY_DIFFUSE | PATH_RAY_SHADOW | PATH_RAY_DIFFUSE_ANCESTOR | PATH_RAY_VOLUME_SCATTER);
-	uint use_alpha = stack_valid(alpha_offset);
-	f = svm_image_texture(kg, id, uv.x, uv.y, differential_zero(), differential_zero(), srgb, use_alpha, fast_lookup);
+	f = svm_image_texture(kg, id, uv.x, uv.y, differential_zero(), differential_zero(), srgb, use_alpha, path_flag);
 #ifdef __OIIO__
 	}
 #endif

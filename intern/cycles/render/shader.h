@@ -25,6 +25,7 @@
 
 #include "render/attribute.h"
 #include "kernel/kernel_types.h"
+#include <OpenImageIO/texture.h>
 
 #include "graph/node.h"
 

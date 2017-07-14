@@ -1024,9 +1024,10 @@ typedef ccl_addr_space struct ShaderData {
 	float3 dPdu;
 	float3 dPdv;
 #endif
+	/* differential of N w.r.t. x and y. */
 #ifdef __DPDU__
-	float3 dNdu;
-	float3 dNdv;
+	float3 dNdx;
+	float3 dNdy;
 #endif
 	
 #ifdef __OBJECT_MOTION__

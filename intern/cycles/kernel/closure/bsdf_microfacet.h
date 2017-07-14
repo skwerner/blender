@@ -684,14 +684,12 @@ ccl_device int bsdf_microfacet_ggx_sample(KernelGlobals *kg, const ShaderClosure
 
 #ifdef __RAY_DIFFERENTIALS__
 #ifdef __DNDU__
-					float3 dndx = sd->dNdu * sd->du.dx + sd->dNdv * sd->dv.dx;
-					float3 dndy = sd->dNdu * sd->du.dy + sd->dNdv * sd->dv.dy;
 					float3 dwodx = -dIdx;
 					float3 dwody = -dIdy;
-					float dDNdx = dot(dwodx, N) + dot(I, dndx);
-					float dDNdy = dot(dwody, N) + dot(I, dndy);
-					*domega_in_dx = dwodx + 2.f * (dot(I, N) * dndx + dDNdx * N);
-					*domega_in_dy = dwody + 2.f * (dot(I, N) * dndy + dDNdy * N);
+					float dDNdx = dot(dwodx, N) + dot(I, sd->dNdx);
+					float dDNdy = dot(dwody, N) + dot(I, sd->dNdy);
+					*domega_in_dx = dwodx + 2.f * (dot(I, N) * sd->dNdx + dDNdx * N);
+					*domega_in_dy = dwody + 2.f * (dot(I, N) * sd->dNdy + dDNdy * N);
 #else
 					*domega_in_dx = (2.0f * dot(m, dIdx)) * m - dIdx;
 					*domega_in_dy = (2.0f * dot(m, dIdy)) * m - dIdy;
@@ -1064,14 +1062,12 @@ ccl_device int bsdf_microfacet_beckmann_sample(KernelGlobals *kg, const ShaderCl
 
 #ifdef __RAY_DIFFERENTIALS__
 #ifdef __DNDU__
-					float3 dndx = sd->dNdu * sd->du.dx + sd->dNdv * sd->dv.dx;
-					float3 dndy = sd->dNdu * sd->du.dy + sd->dNdv * sd->dv.dy;
 					float3 dwodx = -dIdx;
 					float3 dwody = -dIdy;
-					float dDNdx = dot(dwodx, N) + dot(I, dndx);
-					float dDNdy = dot(dwody, N) + dot(I, dndy);
-					*domega_in_dx = dwodx + 2.f * (dot(I, N) * dndx + dDNdx * N);
-					*domega_in_dy = dwody + 2.f * (dot(I, N) * dndy + dDNdy * N);
+					float dDNdx = dot(dwodx, N) + dot(I, sd->dNdx);
+					float dDNdy = dot(dwody, N) + dot(I, sd->dNdy);
+					*domega_in_dx = dwodx + 2.f * (dot(I, N) * sd->dNdx + dDNdx * N);
+					*domega_in_dy = dwody + 2.f * (dot(I, N) * sd->dNdy + dDNdy * N);
 #else
 					*domega_in_dx = (2.0f * dot(m, dIdx)) * m - dIdx;
 					*domega_in_dy = (2.0f * dot(m, dIdy)) * m - dIdy;

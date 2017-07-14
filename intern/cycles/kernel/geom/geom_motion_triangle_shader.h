@@ -117,16 +117,6 @@ ccl_device_noinline void motion_triangle_shader_setup(KernelGlobals *kg,
 		float v = sd->v;
 		float w = 1.0f - u - v;
 		sd->N = (u*normals[0] + v*normals[1] + w*normals[2]);
-#ifdef __DNDU__
-		sd->dNdu = (normals[0] - normals[2]);
-		sd->dNdv = (normals[1] - normals[2]);
-#endif
-	}
-	else {
-#ifdef __DNDU__
-		sd->dNdu = make_float3(0.0f, 0.0f, 0.0f);
-		sd->dNdv = make_float3(0.0f, 0.0f, 0.0f);
-#endif
 	}
 }
 

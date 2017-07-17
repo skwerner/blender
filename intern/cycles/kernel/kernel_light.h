@@ -472,9 +472,52 @@ ccl_device float3 distant_light_sample(float3 D, float radius, float randu, floa
 	return normalize(D + disk_light_sample(D, randu, randv)*radius);
 }
 
-ccl_device float3 sphere_light_sample(float3 P, float3 center, float radius, float randu, float randv)
+ccl_device void sphere_light_sample(float3 P, LightSample *ls, float radius, float randu, float randv, float invarea)
 {
-	return disk_light_sample(normalize(P - center), randu, randv)*radius;
+	static bool sample_disc = false;
+	if(sample_disc) {
+		ls->P += disk_light_sample(normalize(P - ls->P), randu, randv)*radius;
+		ls->pdf = invarea;
+	}
+	else {
+		float3 wc = ls->P - P;
+		float dist_squared = len_squared(wc);
+		if(dist_squared <= radius * radius) {
+			ls->P += radius * sample_uniform_sphere(randu, randv);
+			ls->pdf = invarea;
+			return;
+		}
+		
+		// Compute coordinate system for sphere sampling
+		float dc;
+		wc = safe_normalize_len(wc, &dc);
+		float3 wcX, wcY;
+		make_orthonormals(wc, &wcX, &wcY);
+		
+		// Sample sphere uniformly inside subtended cone
+		
+		// Compute $\theta$ and $\phi$ values for sample in cone
+		float sinThetaMax2 = radius * radius / dist_squared;
+		float cosThetaMax = safe_sqrtf(max(0.0f, 1.0f - sinThetaMax2));
+		float cosTheta = (1.0f - randu) + randu * cosThetaMax;
+		float sinTheta = safe_sqrtf(max(0.0f, 1.0f - cosTheta * cosTheta));
+		float phi = randv * 2.0f * M_PI_F;
+		
+		// Compute angle $\alpha$ from center of sphere to sampled point on surface
+		float ds = dc * cosTheta - safe_sqrtf(max(0.0f, radius * radius - dc * dc * sinTheta * sinTheta));
+		float cosAlpha = (dc * dc + radius * radius - ds * ds) / (2.0f * dc * radius);
+		float sinAlpha = safe_sqrtf(max(0.0f, 1.0f - cosAlpha * cosAlpha));
+		
+		// Compute surface normal and sampled point on sphere
+		float3 nWorld = sinAlpha * cosf(phi) * (-wcX) + sinTheta * sinf(phi) * (-wcY) +
+		cosAlpha * (-wc);
+		
+		ls->P = ls->P + radius * nWorld;
+		
+		// Uniform cone PDF.
+		ls->pdf = (1.0f / (2.0f * M_PI_F * (1.0f - cosThetaMax))) / ( 4.f * M_PI_F * radius * radius );
+		ls->Ng = normalize(nWorld);
+	}
 }
 
 ccl_device float spot_light_attenuation(float4 data1, float4 data2, LightSample *ls)
@@ -565,18 +608,15 @@ ccl_device_inline bool lamp_light_sample(KernelGlobals *kg,
 
 		if(type == LIGHT_POINT || type == LIGHT_SPOT) {
 			float radius = data1.y;
-
-			if(radius > 0.0f)
+			float invarea = data1.z;
+			if(radius > 0.0f) {
 				/* sphere light */
-				ls->P += sphere_light_sample(P, ls->P, radius, randu, randv);
-
+				sphere_light_sample(P, ls, radius, randu, randv, invarea);
+			}
 			ls->D = normalize_len(ls->P - P, &ls->t);
 			ls->Ng = -ls->D;
-
-			float invarea = data1.z;
 			ls->eval_fac = (0.25f*M_1_PI_F)*invarea;
-			ls->pdf = invarea;
-
+			
 			if(type == LIGHT_SPOT) {
 				/* spot light attenuation */
 				float4 data2 = kernel_tex_fetch(__light_data, lamp*LIGHT_SIZE + 2);

@@ -339,30 +339,17 @@ ccl_device_inline float triangle_area(const float3& v1,
 }
 #endif  /* __KERNEL_OPENCL__ */
 
-/* Orthonormal vectors */
+/* Orthonormal vectors
+ * see http://graphics.pixar.com/library/OrthonormalB/paper.pdf
+ * "Building an Orthonormal Basis, Revisited" */
 
-ccl_device_inline void make_orthonormals(const float3 N, float3 *a, float3 *b)
+ccl_device_inline void make_orthonormals(const float3 N, float3 *b1, float3 *b2)
 {
-#if 0
-	if(fabsf(N.y) >= 0.999f) {
-		*a = make_float3(1, 0, 0);
-		*b = make_float3(0, 0, 1);
-		return;
-	}
-	if(fabsf(N.z) >= 0.999f) {
-		*a = make_float3(1, 0, 0);
-		*b = make_float3(0, 1, 0);
-		return;
-	}
-#endif
-
-	if(N.x != N.y || N.x != N.z)
-		*a = make_float3(N.z-N.y, N.x-N.z, N.y-N.x);  //(1,1,1)x N
-	else
-		*a = make_float3(N.z-N.y, N.x+N.z, -N.y-N.x);  //(-1,1,1)x N
-
-	*a = normalize(*a);
-	*b = cross(N, *a);
+	float sign = copysignf(1.0f, N.z);
+	const float a = -1.0f / (sign + N.z);
+	const float b = N.x * N.y * a;
+	*b1 = make_float3(1.0f + sign * N.x * N.x * a, sign * b, -sign * N.x);
+	*b2 = make_float3(b, sign + N.y * N.y * a, -N.y);
 }
 
 /* Color division */

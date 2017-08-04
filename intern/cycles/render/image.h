@@ -169,8 +169,8 @@ private:
 	void device_free_image(Device *device,
 	                       ImageDataType type,
 	                       int slot);
-
-	bool make_tx(Image *image, Progress *progress);
+		
+	bool get_tx(Image *image, Progress *progress, bool auto_convert);
 };
 
 CCL_NAMESPACE_END

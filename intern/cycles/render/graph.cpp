@@ -923,14 +923,37 @@ void ShaderGraph::add_differentials()
 			copy_nodes(nodes_vector, nodes_dx);
 			copy_nodes(nodes_vector, nodes_dy);
 
-			/* mark nodes to indicate they are used for differential computation, so
-			 that any texture coordinates are shifted by dx/dy when sampling */
+			/* First: Nodes that have no bump are set to center, others are left untouched. */
 			foreach(ShaderNode *node, nodes_vector)
-				node->bump = SHADER_BUMP_CENTER;
-			foreach(NodePair& pair, nodes_dx)
-				pair.second->bump = SHADER_BUMP_DX;
-			foreach(NodePair& pair, nodes_dy)
-				pair.second->bump = SHADER_BUMP_DY;
+				node->bump = node->bump == SHADER_BUMP_NONE ? SHADER_BUMP_CENTER : node->bump;
+
+			/* Second: Nodes that have no bump are set DX, others are shifted by one. */
+			foreach(NodePair& pair, nodes_dx) {
+				switch(pair.second->bump) {
+					case SHADER_BUMP_DX:
+						pair.second->bump = SHADER_BUMP_DY;
+						break;
+					case SHADER_BUMP_DY:
+						pair.second->bump = SHADER_BUMP_CENTER;
+						break;
+					default:
+						pair.second->bump = SHADER_BUMP_DX;
+				}
+			}
+			
+			/* Second: Nodes that have no bump are set DY, others are shifted by two. */
+			foreach(NodePair& pair, nodes_dy) {
+				switch(pair.second->bump) {
+					case SHADER_BUMP_DX:
+						pair.second->bump = SHADER_BUMP_CENTER;
+						break;
+					case SHADER_BUMP_DY:
+						pair.second->bump = SHADER_BUMP_DX;
+						break;
+					default:
+						pair.second->bump = SHADER_BUMP_DY;
+				}
+			}
 
 			ShaderOutput *out = vector_input->link;
 			ShaderOutput *out_dx = nodes_dx[out->parent]->output(out->name());

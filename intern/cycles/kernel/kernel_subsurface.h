@@ -428,7 +428,7 @@ ccl_device_noinline bool subsurface_random_walk(
 			const float anisotropy = 0.0f;
 			float scatter_u, scatter_v;
 			path_state_rng_2D(kg, state, PRNG_BSDF_U, &scatter_u, &scatter_v);
-			ray->D = henyey_greenstrein_sample(ray->D, anisotropy, scatter_u, scatter_v, NULL);
+			ray->D = henyey_greenstrein_sample(ray->D, anisotropy, scatter_u, scatter_v, NULL, make_float3(0.0f, 0.0f, 0.0f), make_float3(0.0f, 0.0f, 0.0f), NULL, NULL);
 		}
 
 		/* Sample color channel, use MIS with balance heuristic. */

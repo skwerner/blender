@@ -83,7 +83,7 @@ ccl_device float3 volume_henyey_greenstein_eval_phase(const ShaderClosure *sc, c
 	return make_float3(*pdf, *pdf, *pdf);
 }
 
-ccl_device float3 henyey_greenstrein_sample(float3 D, float g, float randu, float randv, float *pdf)
+ccl_device float3 henyey_greenstrein_sample(float3 D, float g, float randu, float randv, float *pdf, float3 dIdx, float3 dIdy, float3 *domega_in_dx, float3 *domega_in_dy)
 {
 	/* match pdf for small g */
 	float cos_theta;
@@ -111,6 +111,17 @@ ccl_device float3 henyey_greenstrein_sample(float3 D, float g, float randu, floa
 	make_orthonormals(D, &T, &B);
 	dir = dir.x * T + dir.y * B + dir.z * D;
 
+#ifdef __RAY_DIFFERENTIALS__
+	if(domega_in_dx && domega_in_dy) {
+		float cos_phi = cosf(phi);
+		float sin_phi = sinf(phi);
+		make_orthonormals(D - dIdx, &T, &B);
+		*domega_in_dx = sin_theta * cos_phi * T + sin_theta * sin_phi * B + cos_theta * (D - dIdx) - dir;
+		make_orthonormals(D - dIdy, &T, &B);
+		*domega_in_dy = sin_theta * cos_phi * T + sin_theta * sin_phi * B + cos_theta * (D - dIdy) - dir;
+	}
+#endif
+
 	return dir;
 }
 
@@ -121,16 +132,9 @@ ccl_device int volume_henyey_greenstein_sample(const ShaderClosure *sc, float3 I
 	float g = volume->g;
 
 	/* note that I points towards the viewer and so is used negated */
-	*omega_in = henyey_greenstrein_sample(-I, g, randu, randv, pdf);
+	*omega_in = henyey_greenstrein_sample(-I, g, randu, randv, pdf, dIdx, dIdy, domega_in_dx, domega_in_dy);
 	*eval = make_float3(*pdf, *pdf, *pdf); /* perfect importance sampling */
-
-#ifdef __RAY_DIFFERENTIALS__
-	make_orthonormals(-I-dIdx, &T, &B);
-	*domega_in_dx = sin_theta * cos_phi * T + sin_theta * sin_phi * B + cos_theta * (-I-dIdx) - *omega_in;
-	make_orthonormals(-I-dIdy, &T, &B);
-	*domega_in_dy = sin_theta * cos_phi * T + sin_theta * sin_phi * B + cos_theta * (-I-dIdy) - *omega_in ;
-#endif
-
+	
 	return LABEL_VOLUME_SCATTER;
 }
 

@@ -340,8 +340,6 @@ void ShaderGraph::finalize(Scene *scene,
 	 * modified afterwards. */
 
 	if(!finalized) {
-		clean(scene);
-		refine_bump_nodes();
 		simplify(scene);
 
 		if(do_bump)

@@ -41,11 +41,13 @@ set(SRC
 	io_alembic.c
 	io_cache.c
 	io_collada.c
+	io_openvdb.c
 	io_ops.c
 
 	io_alembic.h
 	io_cache.h
 	io_collada.h
+	io_openvdb.h
 	io_ops.h
 )
 
@@ -63,6 +65,11 @@ endif()
 
 if(WITH_INTERNATIONAL)
 	add_definitions(-DWITH_INTERNATIONAL)
+endif()
+
+
+if(WITH_OPENVDB)
+	add_definitions(-DWITH_OPENVDB)
 endif()
 
 blender_add_lib(bf_editor_io "${SRC}" "${INC}" "${INC_SYS}")

@@ -116,6 +116,7 @@ const EnumPropertyItem rna_enum_object_modifier_type_items[] = {
 	{eModifierType_Explode, "EXPLODE", ICON_MOD_EXPLODE, "Explode", ""},
 	{eModifierType_Fluidsim, "FLUID_SIMULATION", ICON_MOD_FLUIDSIM, "Fluid Simulation", ""},
 	{eModifierType_Ocean, "OCEAN", ICON_MOD_OCEAN, "Ocean", ""},
+    {eModifierType_OpenVDB, "OPENVDB", ICON_MOD_SMOKE, "OpenVDB", ""},
 	{eModifierType_ParticleInstance, "PARTICLE_INSTANCE", ICON_MOD_PARTICLE_INSTANCE, "Particle Instance", ""},
 	{eModifierType_ParticleSystem, "PARTICLE_SYSTEM", ICON_MOD_PARTICLES, "Particle System", ""},
 	{eModifierType_Smoke, "SMOKE", ICON_MOD_SMOKE, "Smoke", ""},
@@ -435,6 +436,8 @@ static StructRNA *rna_Modifier_refine(struct PointerRNA *ptr)
 			return &RNA_SurfaceDeformModifier;
 		case eModifierType_WeightedNormal:
 			return &RNA_WeightedNormalModifier;
+		case eModifierType_OpenVDB:
+			return &RNA_OpenVDBModifier;
 		/* Default */
 		case eModifierType_None:
 		case eModifierType_ShapeKey:
@@ -5037,6 +5040,29 @@ static void rna_def_modifier_weightednormal(BlenderRNA *brna)
 	prop = RNA_def_property(srna, "face_influence", PROP_BOOLEAN, PROP_NONE);
 	RNA_def_property_boolean_sdna(prop, NULL, "flag", MOD_WEIGHTEDNORMAL_FACE_INFLUENCE);
 	RNA_def_property_ui_text(prop, "Face Influence", "Use influence of face for weighting");
+  RNA_def_property_update(prop, 0, "rna_Modifier_update");
+}
+
+static void rna_def_modifier_openvdb(BlenderRNA *brna)
+{
+  StructRNA *srna;
+  PropertyRNA *prop;
+
+	srna = RNA_def_struct(brna, "OpenVDBModifier", "Modifier");
+	RNA_def_struct_ui_text(srna, "OpenVDB Modifier", "");
+	RNA_def_struct_sdna(srna, "OpenVDBModifierData");
+	RNA_def_struct_ui_icon(srna, ICON_MOD_SMOKE);
+
+	prop = RNA_def_property(srna, "filepath", PROP_STRING, PROP_FILEPATH);
+	RNA_def_property_ui_text(prop, "File Path", "Path to OpenVDB cache file");
+	RNA_def_property_update(prop, 0, "rna_Modifier_update");
+
+	prop = RNA_def_property(srna, "density", PROP_STRING, PROP_NONE);
+	RNA_def_property_ui_text(prop, "Density Grid", "Name of the grid to be used for density");
+	RNA_def_property_update(prop, 0, "rna_Modifier_update");
+
+	prop = RNA_def_property(srna, "flame", PROP_STRING, PROP_NONE);
+	RNA_def_property_ui_text(prop, "Flame Grid", "Name of the grid to be used for flame");
 	RNA_def_property_update(prop, 0, "rna_Modifier_update");
 }
 
@@ -5162,6 +5188,7 @@ void RNA_def_modifier(BlenderRNA *brna)
 	rna_def_modifier_meshseqcache(brna);
 	rna_def_modifier_surfacedeform(brna);
 	rna_def_modifier_weightednormal(brna);
+	rna_def_modifier_openvdb(brna);
 }
 
 #endif

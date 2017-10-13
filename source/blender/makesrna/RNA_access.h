@@ -462,6 +462,7 @@ extern StructRNA RNA_OceanTexData;
 extern StructRNA RNA_OceanTexture;
 extern StructRNA RNA_OffsetGpencilModifier;
 extern StructRNA RNA_OpacityGpencilModifier;
+extern StructRNA RNA_OpenVDBModifier;
 extern StructRNA RNA_Operator;
 extern StructRNA RNA_OperatorFileListElement;
 extern StructRNA RNA_OperatorMacro;

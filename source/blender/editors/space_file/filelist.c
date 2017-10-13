@@ -1996,7 +1996,7 @@ int ED_path_extension_type(const char *path)
 	else if (BLI_path_extension_check(path, ".abc")) {
 		return FILE_TYPE_ALEMBIC;
 	}
-	else if (BLI_testextensie(path, ".vdb")) {
+	else if (BLI_path_extension_check(path, ".vdb")) {
 		return FILE_TYPE_OPENVDB;
 	}
 	else if (BLI_path_extension_check_array(path, imb_ext_image)) {

@@ -41,10 +41,24 @@
 #include "BKE_global.h"
 #include "BKE_mesh.h"
 #include "BKE_main.h"
+#include "BKE_modifier.h"
+#include "BKE_smoke.h"
 
 #include "MEM_guardedalloc.h"
 
 #include "MOD_modifiertypes.h"
+
+static void initData(ModifierData *md)
+{
+	OpenVDBModifierData *vdbmd = (OpenVDBModifierData *)md;
+	SmokeModifierData *smd = (SmokeModifierData *)modifier_new(eModifierType_Smoke);
+
+	smd->type = MOD_SMOKE_TYPE_DOMAIN;
+
+	smokeModifier_createType(smd);
+
+	vdbmd->smoke = smd;
+}
 
 static void copyData(const ModifierData *md, ModifierData *target, const int flag)
 {
@@ -58,6 +72,7 @@ static bool dependsOnTime(ModifierData *UNUSED(md))
 
 static bool isDisabled(const struct Scene *UNUSED(scene), ModifierData *md, bool UNUSED(useRenderParams))
 {
+	return false;
 	OpenVDBModifierData *vdbmd = (OpenVDBModifierData *) md;
 
 	/* leave it up to the modifier to check the file is valid on calculation */
@@ -69,11 +84,9 @@ static Mesh *applyModifier(
                           Mesh *mesh)
 {
 	OpenVDBModifierData *vdbmd = (OpenVDBModifierData*) md;
+	ModifierData *smd = (ModifierData *)vdbmd->smoke;
 
-	if (ctx->flag & MOD_APPLY_ORCO)
-		return mesh;
-
-	return mesh;
+	return modwrap_applyModifier(smd, ctx, mesh);
 }
 
 
@@ -100,7 +113,7 @@ ModifierTypeInfo modifierType_OpenVDB = {
   /* deformMatricesEM */  NULL,
   /* applyModifier */     applyModifier,
 
-	/* initData */          NULL,
+	/* initData */          initData,
 	/* requiredDataMask */  NULL,
 	/* freeData */          NULL,
 	/* isDisabled */        isDisabled,

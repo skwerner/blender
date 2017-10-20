@@ -181,4 +181,19 @@ openvdb::Name do_name_versionning(const openvdb::Name &name)
 	return temp_name;
 }
 
+openvdb::CoordBBox OpenVDB_get_grid_bounds(
+        OpenVDBReader *reader,
+        const openvdb::Name &name)
+{
+	using namespace openvdb;
+
+	if (!reader->hasGrid(name)) {
+		return CoordBBox();
+	}
+
+	GridBase::Ptr grid = reader->getGrid(name);
+
+	return grid->evalActiveVoxelBoundingBox();
+}
+
 }  /* namespace internal */

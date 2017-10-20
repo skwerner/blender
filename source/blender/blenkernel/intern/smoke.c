@@ -560,6 +560,7 @@ void smokeModifier_createType(struct SmokeModifierData *smd)
 			smd->domain->coba_field = FLUID_FIELD_DENSITY;
 
 			smd->domain->clipping = 1e-3f;
+			smd->domain->vdb = NULL;
 		}
 		else if (smd->type & MOD_SMOKE_TYPE_FLOW)
 		{
@@ -2825,7 +2826,10 @@ static void smokeModifier_process(
 
 		/* only calculate something when we advanced a single frame */
 		/* don't simulate if viewing start frame, but scene frame is not real start frame */
-		bool can_simulate = (framenr == (int)smd->time + 1) && (framenr == scene_framenr);
+
+		bool can_simulate = (framenr == (int)smd->time + 1) &&
+		                    (framenr == scene_framenr) &&
+		                    (sds->cache_file_format != PTCACHE_FILE_OPENVDB_EXTERN);
 
 		/* try to read from cache */
 		if (BKE_ptcache_read(&pid, (float)framenr, can_simulate) == PTCACHE_READ_EXACT) {

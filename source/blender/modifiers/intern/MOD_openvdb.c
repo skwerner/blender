@@ -105,7 +105,11 @@ static Mesh *applyModifier(
 		struct OpenVDBReader *reader = OpenVDBReader_create();
 		OpenVDBReader_open(reader, vdbmd->filepath);
 
-		vdbmd->numgrids = OpenVDB_get_name_array(reader, (char***)&vdbmd->grids);
+		vdbmd->numgrids = OpenVDB_get_num_grids(reader);
+
+		vdbmd->grids = MEM_callocN(sizeof(*vdbmd->grids) * vdbmd->numgrids, "OpenVDB grid list");
+
+		OpenVDB_fill_name_array(reader, (char **)vdbmd->grids);
 
 		OpenVDBReader_free(reader);
 	}

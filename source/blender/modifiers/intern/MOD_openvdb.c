@@ -64,7 +64,6 @@ static void initData(ModifierData *md)
 
 	smd->domain->cache_file_format = PTCACHE_FILE_OPENVDB_EXTERN;
 	smd->domain->vdb = vdbmd;
-	smd->domain->flags |= MOD_SMOKE_ADAPTIVE_DOMAIN;
 
 	vdbmd->smoke = smd;
 	vdbmd->grids = NULL;
@@ -107,7 +106,8 @@ static Mesh *applyModifier(
                           Mesh *mesh)
 {
 	OpenVDBModifierData *vdbmd = (OpenVDBModifierData*) md;
-	ModifierData *smd = (ModifierData *)vdbmd->smoke;
+	SmokeModifierData *smd = vdbmd->smoke;
+	Mesh *r_dm;
 
 	MEM_SAFE_FREE(vdbmd->grids);
 	vdbmd->numgrids = 0;
@@ -125,7 +125,13 @@ static Mesh *applyModifier(
 		OpenVDBReader_free(reader);
 	}
 
-  return modwrap_applyModifier(smd, ctx, mesh);
+	smd->domain->flags |= MOD_SMOKE_ADAPTIVE_DOMAIN;
+
+	r_dm = modwrap_applyModifier(smd, ctx, mesh);
+
+	smd->domain->flags &= ~MOD_SMOKE_ADAPTIVE_DOMAIN;
+
+	return r_dm;
 }
 
 

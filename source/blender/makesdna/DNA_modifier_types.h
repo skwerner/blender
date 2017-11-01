@@ -1934,6 +1934,9 @@ typedef struct OpenVDBModifierData {
 	char color[64];
 
 	int numgrids;
+	int frame_offset;
+
+	int pad;
 
 	short up_axis;
 	short front_axis;

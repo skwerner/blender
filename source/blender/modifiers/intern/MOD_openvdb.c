@@ -105,6 +105,7 @@ static Mesh *applyModifier(
                           ModifierData *md, const ModifierEvalContext *ctx,
                           Mesh *mesh)
 {
+  Object *ob = ctx->object;
 	OpenVDBModifierData *vdbmd = (OpenVDBModifierData*) md;
 	SmokeModifierData *smd = vdbmd->smoke;
 	Mesh *r_dm;
@@ -127,7 +128,10 @@ static Mesh *applyModifier(
 
 	smd->domain->flags |= MOD_SMOKE_ADAPTIVE_DOMAIN;
 
-	r_dm = modwrap_applyModifier(smd, ctx, mesh);
+	invert_m4_m4(smd->domain->imat, ob->obmat);
+	copy_m4_m4(smd->domain->obmat, ob->obmat);
+
+	r_dm = modwrap_applyModifier((ModifierData*)smd, ctx, mesh);
 
 	smd->domain->flags &= ~MOD_SMOKE_ADAPTIVE_DOMAIN;
 

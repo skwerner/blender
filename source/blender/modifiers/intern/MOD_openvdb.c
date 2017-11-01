@@ -110,6 +110,8 @@ static Mesh *applyModifier(
 	SmokeModifierData *smd = vdbmd->smoke;
 	Mesh *r_dm;
 
+	ob->dt = OB_WIRE;
+
 	MEM_SAFE_FREE(vdbmd->grids);
 	vdbmd->numgrids = 0;
 

@@ -105,6 +105,7 @@ static Mesh *applyModifier(
                           ModifierData *md, const ModifierEvalContext *ctx,
                           Mesh *mesh)
 {
+#ifdef WITH_OPENVDB
   Object *ob = ctx->object;
 	OpenVDBModifierData *vdbmd = (OpenVDBModifierData*) md;
 	SmokeModifierData *smd = vdbmd->smoke;
@@ -138,6 +139,10 @@ static Mesh *applyModifier(
 	smd->domain->flags &= ~MOD_SMOKE_ADAPTIVE_DOMAIN;
 
 	return r_dm;
+#else
+	UNUSED_VARS(md, ob, flag);
+	return dm;
+#endif
 }
 
 

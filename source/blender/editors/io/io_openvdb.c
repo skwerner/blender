@@ -7,45 +7,31 @@
 #  include "BLI_winstuff.h"
 #endif
 
-#include "MEM_guardedalloc.h"
-
+#include "DNA_mesh_types.h"
 #include "DNA_modifier_types.h"
 #include "DNA_object_types.h"
 #include "DNA_scene_types.h"
 #include "DNA_space_types.h"
-#include "DNA_mesh_types.h"
 
 #include "BKE_context.h"
-#include "BKE_global.h"
 #include "BKE_main.h"
-#include "BKE_report.h"
 #include "BKE_mesh.h"
-#include "BKE_object.h"
 #include "BKE_modifier.h"
+#include "BKE_object.h"
+#include "BKE_report.h"
 
 #include "BLI_listbase.h"
-#include "BLI_math_vector.h"
 #include "BLI_path_util.h"
 #include "BLI_string.h"
-#include "BLI_utildefines.h"
-
-#include "BLT_translation.h"
 
 #include "RNA_access.h"
-#include "RNA_define.h"
-#include "RNA_enum_types.h"
-
-#include "UI_interface.h"
-#include "UI_resources.h"
 
 #include "WM_api.h"
 #include "WM_types.h"
 
 #include "io_openvdb.h"
 
-#ifdef WITH_OPENVDB
 #include "openvdb_capi.h"
-#endif
 
 static void wm_openvdb_import_draw(bContext *UNUSED(C), wmOperator *op)
 {
@@ -64,6 +50,7 @@ static int wm_openvdb_import_exec(bContext *C, wmOperator *op)
 
 	Main *bmain = CTX_data_main(C);
 	Scene *scene = CTX_data_scene(C);
+    ViewLayer *viewlayer = CTX_data_view_layer(C);
 	char filepath[FILE_MAX];
 	char filename[64];
 	char cachename[64];
@@ -73,7 +60,7 @@ static int wm_openvdb_import_exec(bContext *C, wmOperator *op)
 	BLI_stringdec(filename, cachename, NULL, NULL);
 
 	Mesh *mesh = BKE_mesh_add(bmain, cachename);
-	Object *ob = BKE_object_add(bmain, scene, OB_MESH, cachename);
+	Object *ob = BKE_object_add(bmain, scene, viewlayer, OB_MESH, cachename);
 	ob->data = mesh;
 
 	ModifierData *md = modifier_new(eModifierType_OpenVDB);

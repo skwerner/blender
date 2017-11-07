@@ -122,7 +122,7 @@ void OpenVDB_import_grid_fl(
 	internal::OpenVDB_import_grid<openvdb::FloatGrid>(reader, name, data, res);
 }
 
-void OpenVDB_import_grid_fl_extern(
+bool OpenVDB_import_grid_fl_extern(
         OpenVDBReader *reader,
         const char *name, float **data,
         const int res_min[3], const int res[3],
@@ -130,7 +130,7 @@ void OpenVDB_import_grid_fl_extern(
 {
 	Timer(__func__);
 
-	internal::OpenVDB_import_grid_extern<openvdb::FloatGrid>(reader, name, data, res_min, res, up, front);
+	return internal::OpenVDB_import_grid_extern<openvdb::FloatGrid>(reader, name, data, res_min, res, up, front);
 }
 
 void OpenVDB_import_grid_ch(
@@ -152,7 +152,7 @@ void OpenVDB_import_grid_vec(
 	internal::OpenVDB_import_grid_vector(reader, name, data_x, data_y, data_z, res);
 }
 
-void OpenVDB_import_grid_vec_extern(
+bool OpenVDB_import_grid_vec_extern(
         struct OpenVDBReader *reader,
         const char *name,
         float **data_x, float **data_y, float **data_z,
@@ -161,7 +161,7 @@ void OpenVDB_import_grid_vec_extern(
 {
 	Timer(__func__);
 
-	internal::OpenVDB_import_grid_vector_extern(reader, name, data_x, data_y, data_z, res_min, res, up, front);
+	return internal::OpenVDB_import_grid_vector_extern(reader, name, data_x, data_y, data_z, res_min, res, up, front);
 }
 
 bool OpenVDB_has_grid(OpenVDBReader *reader, const char *name)

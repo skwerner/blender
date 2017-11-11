@@ -777,6 +777,10 @@ class DATA_PT_modifiers(ModifierButtonsPanel, Panel):
 
         layout.prop(md, "hide_volume")
 
+        row = layout.row()
+        row.active = not md.hide_volume
+        row.prop(md, "hide_unselected")
+
     def PARTICLE_INSTANCE(self, layout, ob, md):
         layout.prop(md, "object")
         if md.object:

@@ -119,7 +119,9 @@ static Mesh *applyModifier(
   Object *ob = ctx->object;
 	OpenVDBModifierData *vdbmd = (OpenVDBModifierData*) md;
 	SmokeModifierData *smd = vdbmd->smoke;
-	Mesh *r_dm;	char filepath[1024];
+	Mesh *r_dm;
+  char filepath[1024];
+  int vdbflags = vdbmd->flags;
 
 	ob->dt = OB_WIRE;
 
@@ -142,14 +144,23 @@ static Mesh *applyModifier(
 		OpenVDBReader_free(reader);
 	}
 
-	smd->domain->flags |= MOD_SMOKE_ADAPTIVE_DOMAIN;
-
 	invert_m4_m4(smd->domain->imat, ob->obmat);
 	copy_m4_m4(smd->domain->obmat, ob->obmat);
 
-	r_dm = modwrap_applyModifier((ModifierData*)smd, ctx, mesh);
+	/* XXX Hack to avoid passing stuff all over the place. */
+	if ((vdbmd->flags & MOD_OPENVDB_HIDE_UNSELECTED) &&
+	    !(ob->flag & SELECT))
+	{
+		vdbmd->flags |= MOD_OPENVDB_HIDE_VOLUME;
+	}
+
+	smd->domain->flags |= MOD_SMOKE_ADAPTIVE_DOMAIN;
+
+  r_dm = modwrap_applyModifier((ModifierData*)smd, ctx, mesh);
 
 	smd->domain->flags &= ~MOD_SMOKE_ADAPTIVE_DOMAIN;
+
+	vdbmd->flags = vdbflags;
 
 	return r_dm;
 #else

@@ -2818,10 +2818,15 @@ static void smokeModifier_process(
 		}
 
 		smd->domain->flags &= ~MOD_SMOKE_FILE_LOAD;
-		CLAMP(framenr, startframe, endframe);
+
+		if (sds->cache_file_format != PTCACHE_FILE_OPENVDB_EXTERN) {
+			CLAMP(framenr, startframe, endframe);
+		}
 
 		/* If already viewing a pre/after frame, no need to reload */
-		if ((smd->time == framenr) && (framenr != scene_framenr))
+
+		if ((smd->time == framenr) && (framenr != scene_framenr) &&
+		    (sds->cache_file_format != PTCACHE_FILE_OPENVDB_EXTERN))
 			return;
 
 		if (smokeModifier_init(smd, ob, scene_framenr, me) == 0)

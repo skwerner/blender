@@ -70,6 +70,8 @@ static void initData(ModifierData *md)
 
 	vdbmd->up_axis = MOD_OVDB_AXIS_Z;
 	vdbmd->front_axis = MOD_OVDB_AXIS_MIN_Y;
+
+	vdbmd->frame_last = -1;
 }
 
 static void freeData(ModifierData *md)
@@ -94,6 +96,8 @@ static void copyData(const ModifierData *md, ModifierData *target, const int fla
 	modifier_copyData((ModifierData *)vdbmd->smoke, (ModifierData *)tvdbmd->smoke);
 
 	tvdbmd->grids = MEM_dupallocN(vdbmd->grids);
+
+	vdbmd->frame_last = -1;
 }
 
 static bool dependsOnTime(ModifierData *UNUSED(md))

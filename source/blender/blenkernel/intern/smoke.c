@@ -2800,7 +2800,8 @@ static void smokeModifier_process(
 		BKE_ptcache_id_from_smoke(&pid, ob, smd);
 		BKE_ptcache_id_time(&pid, scene, framenr, &startframe, &endframe, &timescale);
 
-		if (!smd->domain->fluid || framenr == startframe)
+		if ((sds->cache_file_format != PTCACHE_FILE_OPENVDB_EXTERN) &&
+		    (!smd->domain->fluid || framenr == startframe))
 		{
 			BKE_ptcache_id_reset(scene, &pid, PTCACHE_RESET_OUTDATED);
 			smokeModifier_reset_ex(smd, false);

@@ -1193,6 +1193,7 @@ static int ptcache_smoke_openvdb_extern_read(struct OpenVDBReader *reader, void 
 		if (sds->fluid) {
 			smoke_free(sds->fluid);
 			sds->fluid = NULL;
+			vdbmd->frame_last = -1;
 		}
 
 		return 0;
@@ -1271,6 +1272,7 @@ static int ptcache_smoke_openvdb_extern_read(struct OpenVDBReader *reader, void 
 		if (sds->fluid) {
 			smoke_free(sds->fluid);
 			sds->fluid = NULL;
+			vdbmd->frame_last = -1;
 		}
 
 		return 0;
@@ -1292,6 +1294,7 @@ static int ptcache_smoke_openvdb_extern_read(struct OpenVDBReader *reader, void 
 		sds->total_cells = sds->res[0] * sds->res[1] * sds->res[2];
 		smoke_free(sds->fluid);
 		sds->fluid = NULL;
+		vdbmd->frame_last = -1;
 		return 1;
 	}
 
@@ -3038,6 +3041,7 @@ int BKE_ptcache_read(PTCacheID *pid, float cfra, bool no_extrapolate_old)
 			if (sds->fluid) {
 				smoke_free(sds->fluid);
 				sds->fluid = NULL;
+				vdbmd->frame_last = -1;
 			}
 
 			return 0;

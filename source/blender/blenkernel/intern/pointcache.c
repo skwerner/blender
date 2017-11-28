@@ -1176,11 +1176,34 @@ static int ptcache_smoke_openvdb_extern_read(struct OpenVDBReader *reader, void 
 	int cache_fields = 0;
 	bool reallocate = false;
 	int vdb_type = PTCACHE_VDB_TYPE_GENERIC;
-	int up_axis = vdbmd->up_axis;
-	int front_axis = vdbmd->front_axis;
+	short up_axis = vdbmd->up_axis;
+	short front_axis = vdbmd->front_axis;
+	short up = vdbmd->up_axis;
+	short front = vdbmd->front_axis;
+	bool inv[3];
+	int res_min[3];
+	int res_max[3];
 
 	if (OpenVDB_has_metadata(reader, "FFXVDBVersion")) {
 		vdb_type = PTCACHE_VDB_TYPE_FUMEFX;
+
+		up_axis = up = 1;
+		front_axis = front = 2;
+	}
+
+	inv[2] = up >= 3;
+	inv[1] = front < 3;
+
+	up %= 3;
+	front %= 3;
+	inv[0] = !(inv[2] == inv[1]);
+
+	if (up < front) {
+		inv[0] = !inv[0];
+	}
+
+	if (abs(up - front) == 2) {
+		inv[0] = !inv[0];
 	}
 
 	if (!OpenVDB_has_grid(reader, vdbmd->density) &&
@@ -1216,11 +1239,22 @@ static int ptcache_smoke_openvdb_extern_read(struct OpenVDBReader *reader, void 
 		int res[3];
 		OpenVDBReader_get_meta_v3_int(reader, "Nmax", sds->base_res);
 		OpenVDBReader_get_meta_v3_int(reader, "N", res);
-		OpenVDBReader_get_meta_v3_int(reader, "N0", sds->res_min);
-		VECADD(sds->res_max, sds->res_min, res);
-		sds->res_max[0] -= 1;
-		sds->res_max[1] -= 1;
-		sds->res_max[2] -= 1;
+		OpenVDBReader_get_meta_v3_int(reader, "N0", res_min);
+		VECADD(res_max, res_min, res);
+		res_max[0] -= 1;
+		res_max[1] -= 1;
+		res_max[2] -= 1;
+
+		for (int i = 0; i < 3; i++) {
+			if (inv[i]) {
+				sds->res_max[i] = sds->base_res[i] - res_min[i];
+				sds->res_min[i] = sds->base_res[i] - res_max[i];
+			}
+			else {
+				sds->res_max[i] = res_max[i];
+				sds->res_min[i] = res_min[i];
+			}
+		}
 
 		if (sds->res[0] != res[0] ||
 		    sds->res[1] != res[1] ||
@@ -1241,9 +1275,6 @@ static int ptcache_smoke_openvdb_extern_read(struct OpenVDBReader *reader, void 
 		sds->p0[0] = -sds->p1[0];
 		sds->p0[1] = -sds->p1[1];
 		sds->p0[2] = 0.0f;
-
-		up_axis = 1;
-		front_axis = 2;
 	}
 	else {
 		if (!OpenVDB_get_bbox(reader,
@@ -1252,18 +1283,21 @@ static int ptcache_smoke_openvdb_extern_read(struct OpenVDBReader *reader, void 
 							  cache_fields & SM_ACTIVE_FIRE ? vdbmd->flame : NULL,
 							  cache_fields & SM_ACTIVE_COLORS ? vdbmd->color : NULL,
 							  vdbmd->up_axis, vdbmd->front_axis,
-							  sds->res_min, sds->res_max, sds->base_res,
+							  res_min, res_max, sds->base_res,
 							  sds->p0, sds->p1, sds->cell_size))
 		{
 			modifier_setError((ModifierData *)vdbmd, "Grids have different transformations");
 		}
+
+		VECCOPY(sds->res_min, res_min);
+		VECCOPY(sds->res_max, res_max);
 	}
 
 	sub_v3_v3v3(sds->global_size, sds->p1, sds->p0);
 
-	if ((sds->res_max[0] <= sds->res_min[0]) ||
-	    (sds->res_max[1] <= sds->res_min[1]) ||
-	    (sds->res_max[2] <= sds->res_min[2]))
+	if ((sds->res_max[0] < sds->res_min[0]) ||
+	    (sds->res_max[1] < sds->res_min[1]) ||
+	    (sds->res_max[2] < sds->res_min[2]))
 	{
 		OpenVDBReader_free(reader);
 
@@ -1322,7 +1356,7 @@ static int ptcache_smoke_openvdb_extern_read(struct OpenVDBReader *reader, void 
 		//OpenVDB_import_grid_fl(reader, "shadow", &sds->shadow, sds->res);
 
 		if (OpenVDB_has_grid(reader, vdbmd->density)) {
-			if (!OpenVDB_import_grid_fl_extern(reader, vdbmd->density, &dens, sds->res_min, sds->res_max, sds->res,
+			if (!OpenVDB_import_grid_fl_extern(reader, vdbmd->density, &dens, res_min, res_max, sds->res,
 										       up_axis, front_axis))
 			{
 				modifier_setError((ModifierData *)vdbmd, "Density grid is of the wrong type");
@@ -1330,7 +1364,7 @@ static int ptcache_smoke_openvdb_extern_read(struct OpenVDBReader *reader, void 
 		}
 
 		if (cache_fields & SM_ACTIVE_HEAT) {
-			if (!OpenVDB_import_grid_fl_extern(reader, vdbmd->heat, &heat, sds->res_min, sds->res_max, sds->res,
+			if (!OpenVDB_import_grid_fl_extern(reader, vdbmd->heat, &heat, res_min, res_max, sds->res,
 			                                   up_axis, front_axis))
 			{
 				modifier_setError((ModifierData *)vdbmd, "Heat grid is of the wrong type");
@@ -1338,7 +1372,7 @@ static int ptcache_smoke_openvdb_extern_read(struct OpenVDBReader *reader, void 
 		}
 
 		if (cache_fields & SM_ACTIVE_FIRE) {
-			if (!OpenVDB_import_grid_fl_extern(reader, vdbmd->flame, &flame, sds->res_min, sds->res_max, sds->res,
+			if (!OpenVDB_import_grid_fl_extern(reader, vdbmd->flame, &flame, res_min, res_max, sds->res,
 			                                   up_axis, front_axis))
 			{
 				modifier_setError((ModifierData *)vdbmd, "Flame grid is of the wrong type");
@@ -1346,7 +1380,7 @@ static int ptcache_smoke_openvdb_extern_read(struct OpenVDBReader *reader, void 
 		}
 
 		if (cache_fields & SM_ACTIVE_COLORS) {
-			if (!OpenVDB_import_grid_vec_extern(reader, vdbmd->color, &r, &g, &b, sds->res_min, sds->res_max, sds->res,
+			if (!OpenVDB_import_grid_vec_extern(reader, vdbmd->color, &r, &g, &b, res_min, res_max, sds->res,
 			                                    up_axis, front_axis))
 			{
 				modifier_setError((ModifierData *)vdbmd, "Color grid is of the wrong type");

@@ -110,13 +110,7 @@ static bool isDisabled(const struct Scene *UNUSED(scene), ModifierData *md, bool
 	OpenVDBModifierData *vdbmd = (OpenVDBModifierData *) md;
 
 	/* leave it up to the modifier to check the file is valid on calculation */
-	bool disabled = (vdbmd->filepath[0] == '\0') || (vdbmd->up_axis % 3 == vdbmd->front_axis % 3);
-
-	if (disabled) {
-		vdbmd->frame_last = -1;
-	}
-
-	return disabled;
+	return (vdbmd->filepath[0] == '\0') || (vdbmd->up_axis % 3 == vdbmd->front_axis % 3);
 }
 
 static Mesh *applyModifier(

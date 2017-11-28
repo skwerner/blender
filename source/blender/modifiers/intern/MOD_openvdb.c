@@ -63,6 +63,7 @@ static void initData(ModifierData *md)
 	smokeModifier_createType(smd);
 
 	smd->domain->cache_file_format = PTCACHE_FILE_OPENVDB_EXTERN;
+	smd->domain->vdb = vdbmd;
 
 	vdbmd->smoke = smd;
 	vdbmd->grids = NULL;
@@ -94,6 +95,7 @@ static void copyData(const ModifierData *md, ModifierData *target, const int fla
 	tvdbmd->smoke = (SmokeModifierData *)modifier_new(eModifierType_Smoke);
 
 	modifier_copyData((ModifierData *)vdbmd->smoke, (ModifierData *)tvdbmd->smoke);
+	vdbmd->smoke->domain->vdb = vdbmd;
 
 	tvdbmd->grids = MEM_dupallocN(vdbmd->grids);
 

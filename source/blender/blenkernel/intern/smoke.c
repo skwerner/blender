@@ -676,6 +676,7 @@ void smokeModifier_copy(const struct SmokeModifierData *smd, struct SmokeModifie
 		tsds->draw_velocity = sds->draw_velocity;
 		tsds->vector_draw_type = sds->vector_draw_type;
 		tsds->vector_scale = sds->vector_scale;
+      tsds->vdb = NULL;
 
 		tsds->use_coba = sds->use_coba;
 		tsds->coba_field = sds->coba_field;

@@ -61,6 +61,7 @@
 #include "BKE_library.h"
 #include "BKE_main.h"
 #include "BKE_material.h"
+#include "BKE_modifier.h"
 #include "BKE_object.h"
 #include "BKE_paint.h"
 #include "BKE_particle.h"
@@ -102,6 +103,7 @@ void ED_object_base_select(Base *base, eObjectSelect_Mode mode)
 	if (mode == BA_INVERT) {
 		mode = (base->flag & BASE_SELECTED) != 0 ? BA_DESELECT : BA_SELECT;
 	}
+	ModifierData *md;
 
 	if (base) {
 		switch (mode) {
@@ -118,6 +120,17 @@ void ED_object_base_select(Base *base, eObjectSelect_Mode mode)
 				break;
 		}
 		BKE_scene_object_base_flag_sync_from_base(base);
+	}
+
+	/* This is kinda hackish, but good enough to ensure VDB update for now. */
+	md = modifiers_findByType(base->object, eModifierType_OpenVDB);
+
+	if (md) {
+		OpenVDBModifierData *vdbmd = (OpenVDBModifierData *)md;
+
+		if (vdbmd->flags & MOD_OPENVDB_HIDE_UNSELECTED) {
+			DEG_id_tag_update(&base->object->id, ID_RECALC_ALL);
+		}
 	}
 }
 

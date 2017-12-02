@@ -126,6 +126,7 @@ static Mesh *applyModifier(
 	Mesh *r_dm;
   char filepath[1024];
   int vdbflags = vdbmd->flags;
+  short vdbsimplify = vdbmd->simplify;
   smd->domain->vdb = vdbmd;
 
 	ob->dt = OB_WIRE;
@@ -153,10 +154,26 @@ static Mesh *applyModifier(
 	copy_m4_m4(smd->domain->obmat, ob->obmat);
 
 	/* XXX Hack to avoid passing stuff all over the place. */
-	if ((vdbmd->flags & MOD_OPENVDB_HIDE_UNSELECTED) &&
-	    !(ob->flag & SELECT))
-	{
-		vdbmd->flags |= MOD_OPENVDB_HIDE_VOLUME;
+	if (ctx->flag & MOD_APPLY_RENDER) {
+		vdbmd->flags &= ~MOD_OPENVDB_HIDE_VOLUME;
+		vdbmd->simplify = 0;
+
+		if (!(vdbmd->flags & MOD_OPENVDB_IS_RENDER)) {
+			vdbmd->frame_last = -1;
+			vdbflags |= MOD_OPENVDB_IS_RENDER;
+		}
+	}
+	else {
+		if ((vdbmd->flags & MOD_OPENVDB_HIDE_UNSELECTED) &&
+			!(ob->flag & SELECT))
+		{
+			vdbmd->flags |= MOD_OPENVDB_HIDE_VOLUME;
+		}
+
+		if (vdbmd->flags & MOD_OPENVDB_IS_RENDER) {
+			vdbmd->frame_last = -1;
+			vdbflags &= ~MOD_OPENVDB_IS_RENDER;
+		}
 	}
 
 	smd->domain->flags |= MOD_SMOKE_ADAPTIVE_DOMAIN;
@@ -166,6 +183,7 @@ static Mesh *applyModifier(
 	smd->domain->flags &= ~MOD_SMOKE_ADAPTIVE_DOMAIN;
 
 	vdbmd->flags = vdbflags;
+	vdbmd->simplify = vdbsimplify;
 
 	return r_dm;
 #else

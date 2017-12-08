@@ -57,6 +57,7 @@ class Progress;
 class BakeManager;
 class BakeData;
 class RenderStats;
+class VolumeManager;
 
 /* Scene Device Data */
 

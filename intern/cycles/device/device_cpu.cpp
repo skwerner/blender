@@ -40,6 +40,9 @@
 #include "kernel/osl/osl_shader.h"
 #include "kernel/osl/osl_globals.h"
 
+#include "kernel/vdb/vdb_globals.h"
+#include "kernel/vdb/vdb_thread.h"
+
 #include "render/buffers.h"
 #include "render/coverage.h"
 
@@ -166,6 +169,10 @@ class CPUDevice : public Device {
 
 #ifdef WITH_OSL
   OSLGlobals osl_globals;
+#endif
+
+#ifdef WITH_OPENVDB
+	OpenVDBGlobals vdb_globals;
 #endif
 
   bool use_split_kernel;
@@ -495,6 +502,15 @@ class CPUDevice : public Device {
   {
 #ifdef WITH_OSL
     return &osl_globals;
+#else
+    return NULL;
+#endif
+  }
+
+  void *vdb_memory()
+  {
+#ifdef WITH_OPENVDB
+    return &vdb_globals;
 #else
     return NULL;
 #endif
@@ -985,6 +1001,9 @@ class CPUDevice : public Device {
 #ifdef WITH_OSL
     OSLShader::thread_init(&kg, &kernel_globals, &osl_globals);
 #endif
+#ifdef WITH_OPENVDB
+    VDBVolume::thread_init(&kg, &vdb_globals);
+#endif
     for (int sample = 0; sample < task.num_samples; sample++) {
       for (int x = task.shader_x; x < task.shader_x + task.shader_w; x++)
         shader_kernel()(&kg,
@@ -1004,6 +1023,10 @@ class CPUDevice : public Device {
 
 #ifdef WITH_OSL
     OSLShader::thread_free(&kg);
+#endif
+
+#ifdef WITH_OPENVDB
+		VDBVolume::thread_free(&kg);
 #endif
   }
 
@@ -1057,6 +1080,9 @@ class CPUDevice : public Device {
 #ifdef WITH_OSL
     OSLShader::thread_init(&kg, &kernel_globals, &osl_globals);
 #endif
+#ifdef WITH_OPENVDB
+    VDBVolume::thread_init(&kg, &vdb_globals);
+#endif
     return kg;
   }
 
@@ -1078,6 +1104,9 @@ class CPUDevice : public Device {
     }
 #ifdef WITH_OSL
     OSLShader::thread_free(kg);
+#endif
+#ifdef WITH_OPENVDB
+		VDBVolume::thread_free(kg);
 #endif
   }
 

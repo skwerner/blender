@@ -47,6 +47,11 @@ struct OSLShadingSystem;
 
 typedef unordered_map<float, float> CoverageMap;
 
+#  ifdef WITH_OPENVDB
+struct OpenVDBGlobals;
+struct OpenVDBThreadData;
+#  endif
+
 struct Intersection;
 struct VolumeStep;
 
@@ -62,6 +67,12 @@ typedef struct KernelGlobals {
   OSLGlobals *osl;
   OSLShadingSystem *osl_ss;
   OSLThreadData *osl_tdata;
+#  endif
+
+#  ifdef __OPENVDB__
+	/* OpenVDB */
+	OpenVDBGlobals *vdb;
+	OpenVDBThreadData *vdb_tdata;
 #  endif
 
   /* **** Run-time data ****  */

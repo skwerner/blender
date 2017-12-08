@@ -134,6 +134,9 @@ CCL_NAMESPACE_BEGIN
 #  ifdef WITH_OSL
 #    define __OSL__
 #  endif
+#  ifdef WITH_OPENVDB
+#    define __OPENVDB__
+#  endif
 #  define __VOLUME_DECOUPLED__
 #  define __VOLUME_RECORD_ALL__
 #endif /* __KERNEL_CPU__ */

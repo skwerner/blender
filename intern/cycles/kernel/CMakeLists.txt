@@ -481,6 +481,11 @@ if(WITH_CYCLES_OSL)
   add_subdirectory(shaders)
 endif()
 
+# OpenVDB module
+if(WITH_OPENVDB)
+	add_subdirectory(vdb)
+endif()
+
 # CPU module
 
 include_directories(${INC})

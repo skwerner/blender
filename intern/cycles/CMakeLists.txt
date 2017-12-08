@@ -226,7 +226,22 @@ if(WITH_CYCLES_EMBREE)
   )
 endif()
 
+<<<<<<< HEAD
 if(WITH_OPENSUBDIV)
+=======
+if(WITH_OPENVDB)
+	add_definitions(-DWITH_OPENVDB)
+	add_definitions(-DDWREAL_IS_DOUBLE=0)
+	add_definitions(-DTBB_USE_EXCEPTIONS=0)
+	include_directories(
+		SYSTEM
+		${OPENVDB_INCLUDE_DIRS}
+		${TBB_INCLUDE_DIRS}
+	)
+endif()
+
+if(WITH_CYCLES_OPENSUBDIV)
+>>>>>>> 09abd45df40... Cycles: First attempts at making OpenVDB modifier show up in render
   add_definitions(-DWITH_OPENSUBDIV)
   include_directories(
     SYSTEM

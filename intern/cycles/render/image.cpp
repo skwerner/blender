@@ -14,6 +14,11 @@
  * limitations under the License.
  */
 
+#ifdef WITH_OPENVDB
+#include <openvdb/openvdb.h>
+#include "kernel/vdb/vdb_globals.h"
+#endif
+
 #include "render/image.h"
 #include "device/device.h"
 #include "render/colorspace.h"
@@ -107,6 +112,10 @@ ImageManager::ImageManager(const DeviceInfo &info)
   for (size_t type = 0; type < IMAGE_DATA_NUM_TYPES; type++) {
     tex_num_images[type] = 0;
   }
+
+#ifdef WITH_OPENVDB
+	openvdb::initialize();
+#endif
 }
 
 ImageManager::~ImageManager()
@@ -200,6 +209,7 @@ void ImageManager::metadata_detect_colorspace(ImageMetaData &metadata, const cha
 
 bool ImageManager::get_image_metadata(const string &filename,
                                       void *builtin_data,
+                                      int layer,
                                       ustring colorspace,
                                       ImageMetaData &metadata)
 {
@@ -297,6 +307,7 @@ bool ImageManager::get_image_metadata(const string &filename,
 static bool image_equals(ImageManager::Image *image,
                          const string &filename,
                          void *builtin_data,
+                         int layer,
                          InterpolationType interpolation,
                          ExtensionType extension,
                          ImageAlphaType alpha_type,
@@ -304,13 +315,15 @@ static bool image_equals(ImageManager::Image *image,
 {
   return image->filename == filename && image->builtin_data == builtin_data &&
          image->interpolation == interpolation && image->extension == extension &&
-         image->alpha_type == alpha_type && image->colorspace == colorspace;
+         image->alpha_type == alpha_type && image->colorspace == colorspace &&
+         image->layer == layer;
 }
 
 int ImageManager::add_image(const string &filename,
                             void *builtin_data,
                             bool animated,
                             float frame,
+                            int layer,
                             InterpolationType interpolation,
                             ExtensionType extension,
                             ImageAlphaType alpha_type,
@@ -320,7 +333,7 @@ int ImageManager::add_image(const string &filename,
   Image *img;
   size_t slot;
 
-  get_image_metadata(filename, builtin_data, colorspace, metadata);
+  get_image_metadata(filename, builtin_data, layer, colorspace, metadata);
   ImageDataType type = metadata.type;
 
   thread_scoped_lock device_lock(device_mutex);
@@ -340,7 +353,7 @@ int ImageManager::add_image(const string &filename,
     img = images[type][slot];
     if (img &&
         image_equals(
-            img, filename, builtin_data, interpolation, extension, alpha_type, colorspace)) {
+            img, filename, builtin_data, layer, interpolation, extension, alpha_type, colorspace)) {
       if (img->frame != frame) {
         img->frame = frame;
         img->need_load = true;
@@ -397,6 +410,7 @@ int ImageManager::add_image(const string &filename,
   img->need_load = true;
   img->animated = animated;
   img->frame = frame;
+	img->layer = layer;
   img->interpolation = interpolation;
   img->extension = extension;
   img->users = 1;
@@ -444,6 +458,7 @@ void ImageManager::remove_image(int flat_slot)
 
 void ImageManager::remove_image(const string &filename,
                                 void *builtin_data,
+								int layer,
                                 InterpolationType interpolation,
                                 ExtensionType extension,
                                 ImageAlphaType alpha_type,
@@ -456,6 +471,7 @@ void ImageManager::remove_image(const string &filename,
       if (images[type][slot] && image_equals(images[type][slot],
                                              filename,
                                              builtin_data,
+                                             layer,
                                              interpolation,
                                              extension,
                                              alpha_type,
@@ -483,6 +499,7 @@ void ImageManager::tag_reload_image(const string &filename,
       if (images[type][slot] && image_equals(images[type][slot],
                                              filename,
                                              builtin_data,
+                                             0,
                                              interpolation,
                                              extension,
                                              alpha_type,
@@ -779,6 +796,55 @@ void ImageManager::device_load_image(
     return;
 
   Image *img = images[type][slot];
+  if(!img) {
+		return;
+	}
+
+#ifdef WITH_OPENVDB
+	if(string_endswith(img->filename, ".vdb")) {
+		OpenVDBGlobals *vdb = (OpenVDBGlobals*)device->vdb_memory();
+		if(vdb) {
+			openvdb::io::File file(img->filename);
+			try {
+				file.open();
+				openvdb::GridBase::Ptr base_grid;
+				openvdb::GridPtrVecPtr grids = file.readAllGridMetadata();
+				if(img->layer < grids->size()) {
+					base_grid = file.readGrid(grids->at(img->layer)->getName());
+				}
+				if(base_grid) {
+					thread_scoped_lock lock(vdb->tex_paths_mutex);
+					if(type == IMAGE_DATA_TYPE_FLOAT) {
+						if (vdb->scalar_grids.size() <= slot) {
+							vdb->scalar_grids.resize(slot+1);
+						}
+						openvdb::FloatGrid::Ptr grid = openvdb::gridPtrCast<openvdb::FloatGrid>(base_grid);
+						vdb->scalar_grids[slot].init(grid);
+					}
+					else if(type == IMAGE_DATA_TYPE_FLOAT4) {
+						if (vdb->vector_grids.size() <= slot) {
+							vdb->vector_grids.resize(slot+1);
+						}
+						openvdb::Vec3SGrid::Ptr grid = openvdb::gridPtrCast<openvdb::Vec3SGrid>(base_grid);
+						vdb->vector_grids[slot].init(grid);
+					}
+					else {
+						assert(0);
+					}
+				}
+				img->need_load = false;
+			}
+			catch(const openvdb::Exception&) {
+				std::cerr << e.what();
+				assert(0);
+			}
+			if(file.isOpen()) {
+				file.close();
+			}
+			return;
+		}
+	} else
+#endif
 
   if (osl_texture_system && !img->builtin_data)
     return;

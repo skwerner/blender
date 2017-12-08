@@ -81,6 +81,7 @@ class ImageManager {
                 void *builtin_data,
                 bool animated,
                 float frame,
+                int layer,
                 InterpolationType interpolation,
                 ExtensionType extension,
                 ImageAlphaType alpha_type,
@@ -90,6 +91,7 @@ class ImageManager {
   void remove_image(int flat_slot);
   void remove_image(const string &filename,
                     void *builtin_data,
+                    int layer,
                     InterpolationType interpolation,
                     ExtensionType extension,
                     ImageAlphaType alpha_type,
@@ -102,6 +104,7 @@ class ImageManager {
                         ustring colorspace);
   bool get_image_metadata(const string &filename,
                           void *builtin_data,
+                          int layer,
                           ustring colorspace,
                           ImageMetaData &metadata);
   bool get_image_metadata(int flat_slot, ImageMetaData &metadata);
@@ -153,6 +156,7 @@ class ImageManager {
     bool need_load;
     bool animated;
     float frame;
+		int layer;
     InterpolationType interpolation;
     ExtensionType extension;
 

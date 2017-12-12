@@ -31,6 +31,7 @@ class AttributeRequest;
 class AttributeRequestSet;
 class AttributeSet;
 class ImageManager;
+class VolumeManager;
 class Mesh;
 struct Transform;
 
@@ -38,6 +39,7 @@ struct Transform;
 
 struct VoxelAttribute {
   ImageManager *manager;
+	VolumeManager *vol_manager;
   int slot;
 };
 

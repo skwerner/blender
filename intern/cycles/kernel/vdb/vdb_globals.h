@@ -26,43 +26,52 @@
 
 CCL_NAMESPACE_BEGIN
 
-typedef openvdb::math::Ray<float> vdb_ray_t;
-typedef openvdb::math::Transform vdb_transform_t;
-#if 0
 class OpenVDBTextureBase
 {
 public:
-	virtual ~OpenVDBTextureBase() = 0;
-	virtual bool lookup(float x, float y, float z, float *value) = 0;
+	static OpenVDBTextureBase* create_from_grid(openvdb::GridBase::Ptr grid, const Transform &tfm);
+	virtual ~OpenVDBTextureBase() { ; }
+	virtual bool hasUniformVoxels() const = 0;
 };
-#endif
-
-template<class T> struct OpenVDBTexture // : public OpenVDBTextureBase
-{
-	OpenVDBTexture() : intersector(NULL) { ; }
-	void init(typename T::Ptr &in) {
-		grid = in;
-		if(grid->hasUniformVoxels() && !grid->empty()) {
-			intersector = new openvdb::tools::VolumeRayIntersector<T, T::TreeType::RootNodeType::ChildNodeType::LEVEL, vdb_ray_t>(*grid);
-		}
-		openvdb::CoordBBox bbox = grid->evalActiveVoxelBoundingBox();
-		float3 min_p = make_float3(bbox.min().x(), bbox.min().y(), bbox.min().z());
-		float3 max_p = make_float3(bbox.max().x()+1, bbox.max().y()+1, bbox.max().z()+1);
-		float3 scale = max_p - min_p;
-		tfm = transform_translate(-min_p)*transform_scale(scale);
-	}
-	typename T::Ptr grid;
-	openvdb::tools::VolumeRayIntersector<T, T::TreeType::RootNodeType::ChildNodeType::LEVEL, vdb_ray_t> *intersector;
-	Transform tfm;
-};
-
-typedef openvdb::tools::VolumeRayIntersector<openvdb::FloatGrid, openvdb::FloatGrid::TreeType::RootNodeType::ChildNodeType::LEVEL, vdb_ray_t> scalar_isector_t;
-typedef openvdb::tools::VolumeRayIntersector<openvdb::Vec3SGrid, openvdb::Vec3SGrid::TreeType::RootNodeType::ChildNodeType::LEVEL, vdb_ray_t> vector_isector_t;
 
 struct OpenVDBGlobals {
-	vector<OpenVDBTexture<openvdb::FloatGrid> > scalar_grids;
-	vector<OpenVDBTexture<openvdb::Vec3SGrid> > vector_grids;
-	thread_mutex tex_paths_mutex;
+	vector<OpenVDBTextureBase*> grids;
+};
+
+template<class T> class OpenVDBTexture : public OpenVDBTextureBase
+{
+public:
+	OpenVDBTexture() : intersector(NULL) { ; }
+	virtual ~OpenVDBTexture() { release(); }
+
+	void init(typename T::Ptr &in, const Transform &in_tfm) {
+		grid = in;
+		if(grid->hasUniformVoxels() && !grid->empty()) {
+			intersector = new openvdb::tools::VolumeRayIntersector<T, T::TreeType::RootNodeType::ChildNodeType::LEVEL, openvdb::math::Ray<float> >(*grid);
+		}
+		openvdb::CoordBBox bbox = grid->evalActiveVoxelBoundingBox();
+		const openvdb::math::Transform &tran = grid->constTransform();
+		const openvdb::BBoxd bbox_w = tran.indexToWorld(bbox);
+		float3 min_p = make_float3(bbox_w.min().x(), bbox_w.min().y(), bbox_w.min().z());
+		float3 max_p = make_float3(bbox_w.max().x(), bbox_w.max().y(), bbox_w.max().z());
+		float3 scale = max_p - min_p;
+		tfm = transform_translate(min_p) * transform_scale(scale) * in_tfm;
+	}
+
+	virtual bool hasUniformVoxels() const { return grid->hasUniformVoxels(); }
+
+	typename T::Ptr grid;
+	openvdb::tools::VolumeRayIntersector<T, T::TreeType::RootNodeType::ChildNodeType::LEVEL, openvdb::math::Ray<float> > *intersector;
+	Transform tfm;
+
+private:
+	void release() {
+		if(intersector) {
+			delete intersector;
+			intersector = NULL;
+		}
+		grid.reset();
+	}
 };
 
 CCL_NAMESPACE_END

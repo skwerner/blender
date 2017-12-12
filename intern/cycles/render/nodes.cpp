@@ -263,7 +263,7 @@ ImageTextureNode::~ImageTextureNode()
 {
   if (image_manager) {
     image_manager->remove_image(
-        filename.string(), builtin_data, 0, interpolation, extension, alpha_type, colorspace);
+        filename.string(), builtin_data, interpolation, extension, alpha_type, colorspace);
   }
 }
 
@@ -302,7 +302,6 @@ void ImageTextureNode::compile(SVMCompiler &compiler)
     ImageMetaData metadata;
     slot = image_manager->add_image(filename.string(),
                                     builtin_data,
-                                    0,
                                     animated,
                                     0,
                                     interpolation,
@@ -377,12 +376,11 @@ void ImageTextureNode::compile(OSLCompiler &compiler)
   if (is_float == -1) {
     ImageMetaData metadata;
     if (builtin_data == NULL) {
-      image_manager->get_image_metadata(filename.string(), NULL, 0, colorspace, metadata);
+      image_manager->get_image_metadata(filename.string(), NULL, colorspace, metadata);
     }
     else {
       slot = image_manager->add_image(filename.string(),
                                       builtin_data,
-                                      0,
                                       animated,
                                       0,
                                       interpolation,
@@ -473,7 +471,7 @@ EnvironmentTextureNode::~EnvironmentTextureNode()
 {
   if (image_manager) {
     image_manager->remove_image(
-        filename.string(), builtin_data, 0, interpolation, EXTENSION_REPEAT, alpha_type, colorspace);
+        filename.string(), builtin_data, interpolation, EXTENSION_REPEAT, alpha_type, colorspace);
   }
 }
 
@@ -510,7 +508,6 @@ void EnvironmentTextureNode::compile(SVMCompiler &compiler)
     ImageMetaData metadata;
     slot = image_manager->add_image(filename.string(),
                                     builtin_data,
-                                    0,
                                     animated,
                                     0,
                                     interpolation,
@@ -566,12 +563,11 @@ void EnvironmentTextureNode::compile(OSLCompiler &compiler)
   if (is_float == -1) {
     ImageMetaData metadata;
     if (builtin_data == NULL) {
-      image_manager->get_image_metadata(filename.string(), NULL, 0, colorspace, metadata);
+      image_manager->get_image_metadata(filename.string(), NULL, colorspace, metadata);
     }
     else {
       slot = image_manager->add_image(filename.string(),
                                       builtin_data,
-                                      0,
                                       animated,
                                       0,
                                       interpolation,
@@ -1510,7 +1506,6 @@ PointDensityTextureNode::~PointDensityTextureNode()
   if (image_manager) {
     image_manager->remove_image(filename.string(),
                                 builtin_data,
-                                0,
                                 interpolation,
                                 EXTENSION_CLIP,
                                 IMAGE_ALPHA_AUTO,
@@ -1543,7 +1538,6 @@ void PointDensityTextureNode::add_image()
     ImageMetaData metadata;
     slot = image_manager->add_image(filename.string(),
                                     builtin_data,
-                                    0,
                                     false,
                                     0,
                                     interpolation,

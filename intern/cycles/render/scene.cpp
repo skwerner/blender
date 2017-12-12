@@ -32,6 +32,7 @@
 #include "render/shader.h"
 #include "render/svm.h"
 #include "render/tables.h"
+#include "render/volume.h"
 
 #include "util/util_foreach.h"
 #include "util/util_guarded_allocator.h"
@@ -101,6 +102,7 @@ Scene::Scene(const SceneParams &params_, Device *device)
   particle_system_manager = new ParticleSystemManager();
   curve_system_manager = new CurveSystemManager();
   bake_manager = new BakeManager();
+	volume_manager = new VolumeManager();
 
   /* OSL only works on the CPU */
   if (device->info.has_osl)
@@ -155,6 +157,7 @@ void Scene::free_memory(bool final)
       image_manager->device_free_builtin(device);
 
     lookup_tables->device_free(device, &dscene);
+		volume_manager->device_free(device, &dscene);
   }
 
   if (final) {
@@ -171,7 +174,9 @@ void Scene::free_memory(bool final)
     delete particle_system_manager;
     delete curve_system_manager;
     delete image_manager;
-		delete bake_manager;	}
+		delete bake_manager;
+		delete volume_manager;
+	}
 }
 
 void Scene::device_update(Device *device_, Progress &progress)
@@ -293,6 +298,11 @@ void Scene::device_update(Device *device_, Progress &progress)
   if (progress.get_cancel() || device->have_error())
     return;
 
+  progress.set_status("Updating OpenVDB Volumes");
+  volume_manager->device_update(device, &dscene, this, progress);
+
+  if(progress.get_cancel() || device->have_error()) return;
+
   if (device->have_error() == false) {
     progress.set_status("Updating Device", "Writing constant memory");
     device->const_copy_to("__data", &dscene.data, sizeof(dscene.data));
@@ -382,6 +392,7 @@ void Scene::reset()
   light_manager->tag_update(this);
   particle_system_manager->tag_update(this);
   curve_system_manager->tag_update(this);
+	volume_manager->tag_update(this);
 }
 
 void Scene::device_free()

@@ -17,6 +17,7 @@
 #include "render/image.h"
 #include "render/mesh.h"
 #include "render/attribute.h"
+#include "render/volume.h"
 
 #include "util/util_foreach.h"
 #include "util/util_transform.h"
@@ -32,7 +33,12 @@ Attribute::~Attribute()
     VoxelAttribute *voxel_data = data_voxel();
 
     if (voxel_data && voxel_data->slot != -1) {
-      voxel_data->manager->remove_image(voxel_data->slot);
+      if(voxel_data->manager) {
+        voxel_data->manager->remove_image(voxel_data->slot);
+      }
+      else if(voxel_data->vol_manager) {
+        voxel_data->vol_manager->remove_volume(voxel_data->slot);
+      }
     }
   }
 }

@@ -470,22 +470,6 @@ ccl_device float4 kernel_tex_image_interp(KernelGlobals *kg, int id, float x, fl
 {
   const TextureInfo &info = kernel_tex_fetch(__texture_info, id);
 
-#ifdef __OPENVDB__
-  if(kg->vdb) {
-    if(kernel_tex_type(id) == IMAGE_DATA_TYPE_FLOAT) {
-      float r = VDBVolume::sample_scalar(kg->vdb, kg->vdb_tdata, index, x, y, z, 1);
-      if(r != 0.0f) {
-        r = 1.0f;
-      }
-      return make_float4(r, r, r, 1.0f);
-    } else if(kernel_tex_type(id) == IMAGE_DATA_TYPE_FLOAT4) {
-      float r, g, b;
-      VDBVolume::sample_vector(kg->vdb, kg->vdb_tdata, index, x, y, z, &r, &g, &b, 1);
-      return make_float4(r, g, b, 1.0f);
-    }
-  }
-#endif
-
   switch (kernel_tex_type(id)) {
     case IMAGE_DATA_TYPE_HALF:
       return TextureInterpolator<half>::interp(info, x, y);
@@ -513,6 +497,14 @@ ccl_device float4 kernel_tex_image_interp(KernelGlobals *kg, int id, float x, fl
 ccl_device float4 kernel_tex_image_interp_3d(
     KernelGlobals *kg, int id, float x, float y, float z, InterpolationType interp)
 {
+#ifdef __OPENVDB__
+  if(kg->vdb && id < -1) {
+    float r, g, b;
+    VDBVolume::sample(kg->vdb_tdata, (-tex)-2, x, y, z, &r, &g, &b, 1);
+    return make_float4(r, g, b, 1.0f);
+  }
+#endif
+  
   const TextureInfo &info = kernel_tex_fetch(__texture_info, id);
 
   switch (kernel_tex_type(id)) {

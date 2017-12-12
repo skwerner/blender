@@ -9,6 +9,7 @@ set(INC_SYS
 
 set(SRC
 	vdb_thread.cpp
+	vdb_globals.cpp
 )
 
 set(HEADER_SRC

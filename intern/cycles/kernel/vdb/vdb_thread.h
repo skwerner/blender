@@ -37,11 +37,8 @@ public:
 		OPENVDB_SAMPLE_BOX   = 1,
 	};
 
-	static bool scalar_has_uniform_voxels(OpenVDBGlobals *vdb, int vdb_index);
-	static bool vector_has_uniform_voxels(OpenVDBGlobals *vdb, int vdb_index);
-	static float sample_scalar(OpenVDBGlobals *vdb, OpenVDBThreadData *vdb_thread, int vdb_index,
-	                           float x, float y, float z, int sampling);
-	static bool sample_vector(OpenVDBGlobals *vdb, OpenVDBThreadData *vdb_thread, int vdb_index,
+	static bool has_uniform_voxels(OpenVDBGlobals *vdb, int vdb_index);
+	static bool sample(OpenVDBThreadData *vdb_thread, int vdb_index,
 	                          float x, float y, float z,
 	                          float *r, float *g, float *b, int sampling);
 	static bool intersect(OpenVDBThreadData *vdb_thread, int vdb_index, const Ray *ray, float *isect);

@@ -137,7 +137,8 @@ bool OpenVDB_import_grid_extern(
         const int res_max[3],
         const int res[3],
         const int level,
-        short up, short front)
+        short up, short front,
+        float *max_value)
 {
 	using namespace openvdb;
 
@@ -171,6 +172,10 @@ bool OpenVDB_import_grid_extern(
 		inv_x = !inv_x;
 	}
 
+	if (max_value) {
+		*max_value = 0.0f;
+	}
+
 	math::Coord xyz;
 	int &x = xyz[right], &y = xyz[front], &z = xyz[up];
 	int index = 0;
@@ -188,6 +193,10 @@ bool OpenVDB_import_grid_extern(
 			     inv_x ? x -= level : x += level)
 			{
 				(*data)[index] = acc.getValue(xyz);
+
+				if (max_value && (*data)[index] > *max_value) {
+					*max_value = (*data)[index];
+				}
 
 				index++;
 			}

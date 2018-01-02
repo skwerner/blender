@@ -1439,7 +1439,10 @@ static int ptcache_smoke_openvdb_extern_read(struct OpenVDBReader *reader, void 
 	}
 
 	/* check if active fields have changed */
-	if ((fluid_fields != cache_fields) || (cache_fields != sds->active_fields)) {
+	if ((fluid_fields != cache_fields) ||
+	    (cache_fields != sds->active_fields) ||
+	    (sds->flags & MOD_OPENVDB_HAS_DENSITY && !OpenVDB_has_grid(reader, vdbmd->density)))
+	{
 		reallocate = true;
 	}
 
@@ -1467,6 +1470,8 @@ static int ptcache_smoke_openvdb_extern_read(struct OpenVDBReader *reader, void 
 			{
 				modifier_setError((ModifierData *)vdbmd, "Density grid is of the wrong type");
 			}
+
+			sds->flags |= MOD_OPENVDB_HAS_DENSITY;
 		}
 
 		if (cache_fields & SM_ACTIVE_HEAT) {

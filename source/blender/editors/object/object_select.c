@@ -120,16 +120,16 @@ void ED_object_base_select(Base *base, eObjectSelect_Mode mode)
 				break;
 		}
 		BKE_scene_object_base_flag_sync_from_base(base);
-	}
 
-	/* This is kinda hackish, but good enough to ensure VDB update for now. */
-	md = modifiers_findByType(base->object, eModifierType_OpenVDB);
+		/* This is kinda hackish, but good enough to ensure VDB update for now. */
+		md = modifiers_findByType(base->object, eModifierType_OpenVDB);
 
-	if (md) {
-		OpenVDBModifierData *vdbmd = (OpenVDBModifierData *)md;
+		if (md) {
+			OpenVDBModifierData *vdbmd = (OpenVDBModifierData *)md;
 
-		if (vdbmd->flags & MOD_OPENVDB_HIDE_UNSELECTED) {
-			DEG_id_tag_update(&base->object->id, ID_RECALC_ALL);
+          if (vdbmd->flags & MOD_OPENVDB_HIDE_UNSELECTED) {
+              DEG_id_tag_update(&base->object->id, ID_RECALC_ALL);
+          }
 		}
 	}
 }

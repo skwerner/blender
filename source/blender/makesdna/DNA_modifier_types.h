@@ -1977,6 +1977,10 @@ typedef struct OpenVDBModifierData {
 
   int numeric_display;
   char _pad2[4];
+  float density_min;
+  float density_max;
+  float flame_min;
+  float flame_max;
 } OpenVDBModifierData;
 
 /* OpenVDBModifierData flags */

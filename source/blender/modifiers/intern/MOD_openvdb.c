@@ -91,6 +91,7 @@ static void copyData(const ModifierData *md, ModifierData *target, const int fla
 {
   OpenVDBModifierData *vdbmd = (OpenVDBModifierData *)md;
   OpenVDBModifierData *tvdbmd = (OpenVDBModifierData *)target;
+	PointCache *cache, *tcache;
 
   modifier_copyData_generic(md, target, flag);
 
@@ -98,6 +99,12 @@ static void copyData(const ModifierData *md, ModifierData *target, const int fla
 
   modifier_copyData((ModifierData *)vdbmd->smoke, (ModifierData *)tvdbmd->smoke);
   vdbmd->smoke->domain->vdb = vdbmd;
+
+	cache = vdbmd->smoke->domain->point_cache[0];
+	tcache = tvdbmd->smoke->domain->point_cache[0];
+
+	tcache->startframe = cache->startframe;
+	tcache->endframe = cache->endframe;
 
   tvdbmd->grids = MEM_dupallocN(vdbmd->grids);
 

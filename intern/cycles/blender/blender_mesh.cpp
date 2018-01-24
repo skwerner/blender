@@ -389,7 +389,7 @@ static void create_mesh_volume_attribute(BL::Object& b_ob,
       tfm.x = vdb_axis_to_float4(right, inv_x);
       tfm.y = vdb_axis_to_float4(front, inv_y);
       tfm.z = vdb_axis_to_float4(up, inv_z);
-      volume_data->slot = -(volume_manager->add_volume(b_vdb.filepath(), grid_name, tfm) + 2);
+			volume_data->slot = -(volume_manager->add_volume(b_vdb.abs_path(), grid_name, tfm) + 2);
       volume_data->vol_manager = volume_manager;
       volume_data->manager = NULL;
       has_vdb = true;

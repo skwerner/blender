@@ -1491,9 +1491,11 @@ static void rna_OpenVDBModifier_viewport_update(Main *UNUSED(bmain),
 static void rna_OpenVDBModifier_abs_path_get(PointerRNA *ptr, char *value)
 {
   OpenVDBModifierData *vdbmd = (OpenVDBModifierData *)ptr->data;
+	char filepath[1024];
 
-  BLI_strncpy(value, vdbmd->filepath, 1024);
-  BLI_path_abs(value, G.main->name);
+	BLI_strncpy(filepath, vdbmd->filepath, 1024);
+	BLI_path_abs(filepath, G.main->name);
+	BLI_strncpy(value, filepath, 1024);
 }
 
 static int rna_OpenVDBModifier_abs_path_length(PointerRNA *ptr)

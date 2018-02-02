@@ -163,9 +163,82 @@ ccl_device void kernel_volume_shadow_homogeneous(KernelGlobals *kg,
 		*throughput *= volume_color_transmittance(sigma_t, ray->t);
 }
 
+
+/* Residual ratio tracking to estimate volume transmission.
+   See Novak et al, 2014, "Residual Ratio Tracking for Estimating Attenuation in Participating Media."
+   sigma_c should be the lower bound of the volume density,
+   sigma_r should be the difference between lower and upper bound of volume density.
+   When sigma_c == 0, it is the same as ratio tracking. */
+ccl_device void kernel_volume_transmission_residual_ratio(KernelGlobals *kg,
+                                                          ccl_addr_space PathState *state,
+                                                          Ray *ray,
+                                                          ShaderData *sd,
+                                                          float3 *throughput,
+                                                          float sigma_r,
+														  float sigma_c = 0.0f)
+{
+	const float tp_eps = 1e-6f; /* todo: this is likely not the right value */
+
+	float t = 0.0f;
+	float T_c = expf(-sigma_c*ray->t);
+	float3 T_r = make_float3(1.0f, 1.0f, 1.0f);
+	/* Sometimes, excessive values for ray.t come in when a volume exit intersection is missed.
+	   Allow for a max number of steps to prevent this from stepping towards infinite lights.
+	   The original algorithm would be while(true) instead of a for loop.
+	 */
+	for(int i = 0; i < kernel_data.integrator.volume_max_steps; ++i) {
+		float s = lcg_step_float_addrspace(&state->rng_congruential);
+		t = t - (logf(1.f - s) / sigma_r);
+		if(t >= ray->t) {
+			break;
+		}
+		float3 new_P = ray->P + ray->D * t;
+		float3 sigma_t;
+		volume_shader_extinction_sample(kg, sd, state, new_P, &sigma_t);
+		T_r = T_r * (make_float3(1.0f, 1.0f, 1.0f) - (sigma_t - make_float3(sigma_c, sigma_c, sigma_c))/sigma_r);
+		/* This cutoff introduces bias, but is quite the speedup in dense volumes.
+		   Could probably be replaced with russian roulette to remain unbiased.
+		 */
+		if(max3(*throughput * T_r * T_c) < tp_eps) {
+			break;
+		}
+	}
+
+	*throughput *= T_c * T_r;
+	return;
+}
+
+/* Simple Woodcock tracking to estimate volume transmission.
+   Requires sigma_m to be a tight upper bound of the volume density. */
+ccl_device void kernel_volume_transmission_woodcock(KernelGlobals *kg,
+													ccl_addr_space PathState *state,
+													Ray *ray,
+													ShaderData *sd,
+													float3 *throughput,
+													float sigma_m)
+{
+	float t = 0.0f;
+	float3 sigma_t;
+	float s2;
+	do {
+		float s = lcg_step_float_addrspace(&state->rng_congruential);
+		t = t - (logf(1.f - s) / sigma_m);
+		if(t >= ray->t) {
+			break;
+		}
+		s2 = lcg_step_float_addrspace(&state->rng_congruential);
+		float3 new_P = ray->P + ray->D * t;
+		volume_shader_extinction_sample(kg, sd, state, new_P, &sigma_t);
+	} while(s2 > (average(sigma_t) / sigma_m));
+	if(t < ray->t) {
+		*throughput = make_float3(0.0f, 0.0f, 0.0f);
+	}
+	return;
+}
+
 /* heterogeneous volume: integrate stepping through the volume until we
  * reach the end, get absorbed entirely, or run out of iterations */
-ccl_device void kernel_volume_shadow_heterogeneous(KernelGlobals *kg,
+ccl_device void kernel_volume_shadow_heterogeneous_ray_march(KernelGlobals *kg,
                                                    ccl_addr_space PathState *state,
                                                    Ray *ray,
                                                    ShaderData *sd,
@@ -221,6 +294,51 @@ ccl_device void kernel_volume_shadow_heterogeneous(KernelGlobals *kg,
 	}
 
 	*throughput = tp;
+}
+
+
+/* heterogeneous volume: Estimate transmission via modified residual ratio tracking */
+ccl_device void kernel_volume_shadow_heterogeneous(KernelGlobals *kg,
+												   ccl_addr_space PathState *state,
+												   Ray *ray,
+												   ShaderData *sd,
+												   float3 *throughput)
+{
+	/*  Use probes to get approximate upper and lower bounds of volume density.
+	    Exact bounds deliver best results, but are hard to determine for procedurals.
+		See "Unbiased Light Transport Estimators for Inhomogeneous Participating Media"
+		Szirmay-Kalos et al, 2017 */
+
+	float sigma_c = FLT_MAX;
+	float sigma_r = -1.0f;
+
+	/* todo: find a good way to derive the number of probes or expose the parameter to the user. */
+	const float inv_num_probes = 0.1f;
+	const float probe_step = ray->t * inv_num_probes;
+	float t = probe_step * lcg_step_float_addrspace(&state->rng_congruential);
+	for(; t < ray->t; t += probe_step) {
+		float3 new_P = ray->P + ray->D * t;
+		float3 sigma_t;
+		if(volume_shader_extinction_sample(kg, sd, state, new_P, &sigma_t)) {
+			sigma_c = min(sigma_c, min3(sigma_t));
+			sigma_r = max(sigma_r, max3(sigma_t));
+		}
+	}
+
+	if(sigma_r != sigma_c) {
+		sigma_r -= sigma_c;
+	}
+	else {
+		sigma_c = 0.0f;
+	}
+
+	if(sigma_r <= 0.0f) {
+		/* If there is no density at all in our probes, derive one from the volume step size.
+		   This hurts performance in empty spaces, but allows it to detect tiny dense clusters.
+		 */
+		sigma_r = 1.0f/kernel_data.integrator.volume_step_size;
+	}
+	return kernel_volume_transmission_residual_ratio(kg, state, ray, sd, throughput, sigma_r, sigma_c);
 }
 
 /* get the volume attenuation over line segment defined by ray, with the

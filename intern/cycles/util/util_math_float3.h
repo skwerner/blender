@@ -290,6 +290,12 @@ ccl_device_inline float max3(float3 a)
 	return max(max(a.x, a.y), a.z);
 }
 
+ccl_device_inline float min3(float3 a)
+{
+	return min(min(a.x, a.y), a.z);
+}
+
+
 ccl_device_inline float len(const float3 a)
 {
 #if defined(__KERNEL_SSE41__) && defined(__KERNEL_SSE__)

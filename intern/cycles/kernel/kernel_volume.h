@@ -604,7 +604,6 @@ ccl_device VolumeIntegrateResult kernel_volume_integrate_heterogeneous_distance(
 	float t = 0.0f;
 	float sigma_samp = 1.0f / min(ray->t * 0.5f, kernel_data.integrator.volume_step_size);
 	float rphase = path_state_rng_1D(kg, state, PRNG_PHASE_CHANNEL);
-	int closure_flag = sd->flag;
 	do
 	{
 		float s = lcg_step_float_addrspace(&state->rng_congruential);
@@ -616,6 +615,7 @@ ccl_device VolumeIntegrateResult kernel_volume_integrate_heterogeneous_distance(
 		float3 new_P = ray->P + ray->D * t;
 		VolumeShaderCoefficients coeff;
 		volume_shader_sample(kg, sd, state, new_P, &coeff);
+		int closure_flag = sd->flag;
 		float3 albedo = safe_divide_color(coeff.sigma_s, coeff.sigma_t);
 		int channel = (int)(rphase*3.0f); /* TODO: better choice of channel */
 		float a = kernel_volume_channel_get(albedo, channel);

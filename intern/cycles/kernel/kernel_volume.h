@@ -177,8 +177,6 @@ ccl_device void kernel_volume_transmission_residual_ratio(KernelGlobals *kg,
                                                           float sigma_r,
 														  float sigma_c = 0.0f)
 {
-	const float tp_eps = 1e-6f; /* todo: this is likely not the right value */
-
 	float t = 0.0f;
 	float T_c = expf(-sigma_c*ray->t);
 	float3 T_r = make_float3(1.0f, 1.0f, 1.0f);
@@ -196,12 +194,6 @@ ccl_device void kernel_volume_transmission_residual_ratio(KernelGlobals *kg,
 		float3 sigma_t;
 		volume_shader_extinction_sample(kg, sd, state, new_P, &sigma_t);
 		T_r = T_r * (make_float3(1.0f, 1.0f, 1.0f) - (sigma_t - make_float3(sigma_c, sigma_c, sigma_c))/sigma_r);
-		/* This cutoff introduces bias, but is quite the speedup in dense volumes.
-		   Could probably be replaced with russian roulette to remain unbiased.
-		 */
-		if(max3(*throughput * T_r * T_c) < tp_eps) {
-			break;
-		}
 	}
 
 	*throughput *= T_c * T_r;
@@ -313,6 +305,10 @@ ccl_device void kernel_volume_shadow_heterogeneous(KernelGlobals *kg,
 	float sigma_r = -1.0f;
 
 	/* todo: find a good way to derive the number of probes or expose the parameter to the user. */
+
+	float tr_min = FLT_MAX;
+	float tr_max = -1.0f;
+	float tr_mean = 0.0f;
 	const float inv_num_probes = 0.1f;
 	const float probe_step = ray->t * inv_num_probes;
 	float t = probe_step * lcg_step_float_addrspace(&state->rng_congruential);
@@ -320,10 +316,14 @@ ccl_device void kernel_volume_shadow_heterogeneous(KernelGlobals *kg,
 		float3 new_P = ray->P + ray->D * t;
 		float3 sigma_t;
 		if(volume_shader_extinction_sample(kg, sd, state, new_P, &sigma_t)) {
-			sigma_c = min(sigma_c, min3(sigma_t));
-			sigma_r = max(sigma_r, max3(sigma_t));
+			tr_min = min(tr_min, min3(sigma_t));
+			tr_max = max(tr_max, max3(sigma_t));
+			tr_mean += average(sigma_t);
 		}
 	}
+
+	sigma_c = tr_mean * inv_num_probes;
+	sigma_r = max(tr_max - tr_mean, tr_mean - tr_min);
 
 	if(sigma_r != sigma_c) {
 		sigma_r -= sigma_c;
@@ -589,11 +589,82 @@ ccl_device VolumeIntegrateResult kernel_volume_integrate_homogeneous(
 	return VOLUME_PATH_ATTENUATED;
 }
 
+/* The particle tracing algorithm from section 4.1 in
+   "Unbiased Light Transport Estimators for Inhomogeneous Participating Media"
+   Szirmay-Kalos et al, 2017 */
+ccl_device VolumeIntegrateResult kernel_volume_integrate_heterogeneous_distance(
+																				KernelGlobals *kg,
+																				ccl_addr_space PathState *state,
+																				Ray *ray,
+																				ShaderData *sd,
+																				PathRadiance *L,
+																				ccl_addr_space float3 *throughput)
+{
+	float3 tp = *throughput;
+	float t = 0.0f;
+	float sigma_samp = 1.0f / min(ray->t * 0.5f, kernel_data.integrator.volume_step_size);
+	float rphase = path_state_rng_1D(kg, state, PRNG_PHASE_CHANNEL);
+	int closure_flag = sd->flag;
+	do
+	{
+		float s = lcg_step_float_addrspace(&state->rng_congruential);
+		float dt = - (logf(1.f - s) / sigma_samp);
+		t = t + dt;
+		if(t > ray->t) {
+			break;
+		}
+		float3 new_P = ray->P + ray->D * t;
+		VolumeShaderCoefficients coeff;
+		volume_shader_sample(kg, sd, state, new_P, &coeff);
+		float3 albedo = safe_divide_color(coeff.sigma_s, coeff.sigma_t);
+		int channel = (int)(rphase*3.0f); /* TODO: better choice of channel */
+		float a = kernel_volume_channel_get(albedo, channel);
+		float r = kernel_volume_channel_get(coeff.sigma_t, channel) / sigma_samp;
+		float qscat = a * r;
+		float qtran = fabsf(1.0f - r);
+		float qsum = qscat + qtran;
+		if(r < 1.0f || qsum > 1.0f) {
+			qscat = qscat / qsum;
+			qtran = qtran / qsum;
+		}
+		float xi = lcg_step_float_addrspace(&state->rng_congruential);
+		if(xi < qscat) {
+			tp = tp * r * a / qscat;
+
+			if(L && (closure_flag & SD_EMISSION)) {
+				float3 emission = coeff.emission * dt;
+				path_radiance_accum_emission(L, state, tp, emission);
+			}
+
+			/* adjust throughput and move to new location */
+			sd->P = ray->P + t * ray->D;
+			*throughput = tp;
+			return VOLUME_PATH_SCATTERED;
+		}
+		else if(xi < qscat + qtran) {
+			/* transmission */
+			tp = (1.0f - r) * tp / qtran;
+
+			if(L && (closure_flag & SD_EMISSION)) {
+				float3 emission = coeff.emission * dt;
+				path_radiance_accum_emission(L, state, tp, emission);
+			}
+		}
+		else {
+			/* absorption */
+			tp = make_float3(0.0f, 0.0f, 0.0f);
+		}
+	} while(fabsf(min3(tp)) > 0.0f && t < ray->t);
+
+	*throughput = tp;
+	return VOLUME_PATH_ATTENUATED;
+}
+
 /* heterogeneous volume distance sampling: integrate stepping through the
  * volume until we reach the end, get absorbed entirely, or run out of
  * iterations. this does probabilistically scatter or get transmitted through
  * for path tracing where we don't want to branch. */
-ccl_device VolumeIntegrateResult kernel_volume_integrate_heterogeneous_distance(
+ccl_device VolumeIntegrateResult kernel_volume_integrate_heterogeneous_distance_ray_march(
     KernelGlobals *kg,
     ccl_addr_space PathState *state,
     Ray *ray,

@@ -1044,6 +1044,8 @@ typedef ccl_addr_space struct ShaderDataTinyStorage {
 typedef struct VolumeStack {
 	int object;
 	int shader;
+	float t_enter;
+	float t_exit;
 } VolumeStack;
 #endif
 

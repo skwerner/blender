@@ -158,7 +158,7 @@ ccl_device void kernel_volume_shadow_homogeneous(KernelGlobals *kg,
                                                  float3 *throughput)
 {
 	float3 sigma_t;
-
+	sd->ray_length = 0.0f;
 	if(volume_shader_extinction_sample(kg, sd, state, ray->P, &sigma_t))
 		*throughput *= volume_color_transmittance(sigma_t, ray->t);
 }
@@ -197,6 +197,7 @@ ccl_device void kernel_volume_shadow_heterogeneous(KernelGlobals *kg,
 		float3 sigma_t;
 
 		/* compute attenuation over segment */
+		sd->ray_length = t + random_jitter_offset;
 		if(volume_shader_extinction_sample(kg, sd, state, new_P, &sigma_t)) {
 			/* Compute expf() only for every Nth step, to save some calculations
 			 * because exp(a)*exp(b) = exp(a+b), also do a quick tp_eps check then. */
@@ -382,6 +383,7 @@ ccl_device VolumeIntegrateResult kernel_volume_integrate_homogeneous(
 {
 	VolumeShaderCoefficients coeff;
 
+	sd->ray_length = 0.0f;
 	if(!volume_shader_sample(kg, sd, state, ray->P, &coeff))
 		return VOLUME_PATH_MISSED;
 
@@ -514,6 +516,7 @@ ccl_device VolumeIntegrateResult kernel_volume_integrate_heterogeneous_distance(
 		VolumeShaderCoefficients coeff;
 
 		/* compute segment */
+		sd->ray_length = t + random_jitter_offset;
 		if(volume_shader_sample(kg, sd, state, new_P, &coeff)) {
 			int closure_flag = sd->flag;
 			float3 new_tp;
@@ -749,6 +752,7 @@ ccl_device void kernel_volume_decoupled_record(KernelGlobals *kg, PathState *sta
 		VolumeShaderCoefficients coeff;
 
 		/* compute segment */
+		sd->ray_length = t + random_jitter_offset;
 		if(volume_shader_sample(kg, sd, state, new_P, &coeff)) {
 			int closure_flag = sd->flag;
 			float3 sigma_t = coeff.sigma_t;
@@ -1036,6 +1040,7 @@ ccl_device VolumeIntegrateResult kernel_volume_decoupled_scatter(
 		sd->P = ray->P + step->shade_t*ray->D;
 
 		VolumeShaderCoefficients coeff;
+		sd->ray_length = step->shade_t;
 		volume_shader_sample(kg, sd, state, sd->P, &coeff);
 	}
 
@@ -1093,6 +1098,8 @@ ccl_device void kernel_volume_stack_init(KernelGlobals *kg,
 		if(kernel_data.background.volume_shader != SHADER_NONE) {
 			stack[0].shader = kernel_data.background.volume_shader;
 			stack[0].object = PRIM_NONE;
+			stack[0].t_enter = 0.0f;
+			stack[0].t_exit = FLT_MAX;
 			stack[1].shader = SHADER_NONE;
 		}
 		else {
@@ -1144,6 +1151,8 @@ ccl_device void kernel_volume_stack_init(KernelGlobals *kg,
 				if(need_add) {
 					stack[stack_index].object = stack_sd->object;
 					stack[stack_index].shader = stack_sd->shader;
+					stack[stack_index].t_enter = 0.0f;
+					stack[stack_index].t_exit = FLT_MAX;
 					++stack_index;
 				}
 			}
@@ -1192,6 +1201,8 @@ ccl_device void kernel_volume_stack_init(KernelGlobals *kg,
 			if(need_add) {
 				stack[stack_index].object = stack_sd->object;
 				stack[stack_index].shader = stack_sd->shader;
+				stack[stack_index].t_enter = 0.0f;
+				stack[stack_index].t_exit = FLT_MAX;
 				++stack_index;
 			}
 		}
@@ -1217,10 +1228,28 @@ ccl_device void kernel_volume_stack_init(KernelGlobals *kg,
 	if(stack_index == 0 && kernel_data.background.volume_shader == SHADER_NONE) {
 		stack[0].shader = kernel_data.background.volume_shader;
 		stack[0].object = PRIM_NONE;
+		stack[0].t_enter = 0.0f;
+		stack[0].t_exit = FLT_MAX;
 		stack[1].shader = SHADER_NONE;
 	}
 	else {
 		stack[stack_index].shader = SHADER_NONE;
+	}
+}
+
+ccl_device void kernel_volume_stack_remove(KernelGlobals *kg, int object, ccl_addr_space VolumeStack *stack)
+{
+	for(int i = 0; stack[i].shader != SHADER_NONE; i++) {
+		if(stack[i].object == object) {
+			/* shift back next stack entries */
+			do {
+				stack[i] = stack[i+1];
+				i++;
+			}
+			while(stack[i].shader != SHADER_NONE);
+
+			return;
+		}
 	}
 }
 
@@ -1235,18 +1264,7 @@ ccl_device void kernel_volume_stack_enter_exit(KernelGlobals *kg, ShaderData *sd
 	
 	if(sd->flag & SD_BACKFACING) {
 		/* exit volume object: remove from stack */
-		for(int i = 0; stack[i].shader != SHADER_NONE; i++) {
-			if(stack[i].object == sd->object) {
-				/* shift back next stack entries */
-				do {
-					stack[i] = stack[i+1];
-					i++;
-				}
-				while(stack[i].shader != SHADER_NONE);
-
-				return;
-			}
-		}
+		kernel_volume_stack_remove(kg, sd->object, stack);
 	}
 	else {
 		/* enter volume object: add to stack */
@@ -1265,6 +1283,8 @@ ccl_device void kernel_volume_stack_enter_exit(KernelGlobals *kg, ShaderData *sd
 		/* add to the end of the stack */
 		stack[i].shader = sd->shader;
 		stack[i].object = sd->object;
+		stack[i].t_enter = 0.0f;
+		stack[i].t_exit = FLT_MAX;
 		stack[i+1].shader = SHADER_NONE;
 	}
 }

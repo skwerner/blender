@@ -7,12 +7,12 @@ uniform float density_scale;
 
 void main()
 {
-	float flame = texture3D(flame_texture, coords).r * density_scale;
-	vec4 emission = texture1D(spectrum_texture, flame);
+  float flame = texture3D(flame_texture, coords).r * density_scale;
+  vec4 emission = texture1D(spectrum_texture, flame);
 
-	vec4 color;
-	color.rgb = emission.a * emission.rgb;
-	color.a = emission.a;
+  vec4 color;
+  color.rgb = emission.a * emission.rgb;
+  color.a = emission.a;
 
-	gl_FragColor = color;
+  gl_FragColor = color;
 }

@@ -73,7 +73,7 @@ static void wm_openvdb_import_draw(bContext *UNUSED(C), wmOperator *op)
   PointerRNA ptr;
 
   RNA_pointer_create(NULL, op->type->srna, op->properties, &ptr);
-  //ui_openvdb_import_settings(op->layout, &ptr);
+  // ui_openvdb_import_settings(op->layout, &ptr);
 }
 
 static int wm_openvdb_import_exec(bContext *C, wmOperator *op)

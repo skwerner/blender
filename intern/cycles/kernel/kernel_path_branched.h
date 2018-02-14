@@ -126,6 +126,8 @@ ccl_device_forceinline void kernel_branched_path_volume(KernelGlobals *kg,
         VolumeIntegrateResult result = kernel_volume_decoupled_scatter(
             kg, &ps, &pray, sd, &tp, rphase, rscatter, &volume_segment, NULL, false);
 
+        kernel_volume_branch_stack(sd->ray_length, ps.volume_stack);
+
         if (result == VOLUME_PATH_SCATTERED &&
             kernel_path_volume_bounce(kg, sd, &tp, &ps, &L->state, &pray)) {
           kernel_path_indirect(kg, indirect_sd, emission_sd, &pray, tp * num_samples_inv, &ps, L);
@@ -166,6 +168,8 @@ ccl_device_forceinline void kernel_branched_path_volume(KernelGlobals *kg,
 
       VolumeIntegrateResult result = kernel_volume_integrate(
           kg, &ps, sd, &volume_ray, L, &tp, heterogeneous);
+
+      kernel_volume_branch_stack(sd->ray_length, ps.volume_stack);
 
 #      ifdef __VOLUME_SCATTER__
       if (result == VOLUME_PATH_SCATTERED) {

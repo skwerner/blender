@@ -43,21 +43,7 @@ ccl_addr_space
 #  endif
   *ps = *state;
 
-  /* remove all non-overlapping volumes from the stack */
-  for (int i = 0; ps->volume_stack[i].shader != SHADER_NONE; ++i) {
-    if (ps->volume_stack[i].t_exit < sd->ray_length ||
-        ps->volume_stack[i].t_enter > sd->ray_length) {
-      int j = i;
-      /* shift back next stack entries */
-      do {
-        ps->volume_stack[j] = ps->volume_stack[j + 1];
-        ++j;
-      } while (ps->volume_stack[j].shader != SHADER_NONE);
-      --i;
-    }
-    ps->volume_stack[i].t_enter = 0.0f;
-    ps->volume_stack[i].t_exit = FLT_MAX;
-  }
+  kernel_volume_branch_stack(sd->ray_length, ps->volume_stack);
 
   /* We are checking for shadow on the "other" side of the surface, so need
    * to discard volume we are currently at.

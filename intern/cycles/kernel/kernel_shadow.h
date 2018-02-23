@@ -455,6 +455,7 @@ ccl_device_inline bool shadow_blocked(KernelGlobals *kg,
                                       Ray *ray_input,
                                       float3 *shadow)
 {
+	kernel_profile_phase(Prof::shadow_blocked)
 	Ray *ray = ray_input;
 	Intersection isect;
 	/* Some common early checks. */

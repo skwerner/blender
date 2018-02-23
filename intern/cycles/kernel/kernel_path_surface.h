@@ -33,6 +33,8 @@ ccl_device_noinline void kernel_branched_path_surface_connect_light(
 	if(!(sd->flag & SD_BSDF_HAS_EVAL))
 		return;
 
+	kernel_profile_phase(Prof::kernel_path_surface_connect_light)
+
 	Ray light_ray;
 	BsdfEval L_light;
 	bool is_lamp;
@@ -234,6 +236,8 @@ ccl_device_inline void kernel_path_surface_connect_light(KernelGlobals *kg,
 		return;
 	}
 #endif
+
+	kernel_profile_phase(Prof::kernel_path_surface_connect_light)
 
 	/* sample illumination from lights to find path contribution */
 	float light_u, light_v;

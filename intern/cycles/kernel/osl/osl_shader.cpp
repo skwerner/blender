@@ -32,6 +32,7 @@
 #include "util/util_foreach.h"
 
 #include "render/attribute.h"
+#include "render/stats.h"
 
 
 CCL_NAMESPACE_BEGIN
@@ -88,6 +89,7 @@ void OSLShader::thread_free(KernelGlobals *kg)
 static void shaderdata_to_shaderglobals(KernelGlobals *kg, ShaderData *sd, PathState *state,
                                         int path_flag, OSLThreadData *tdata)
 {
+	kernel_profile_phase(Prof::shaderdata_to_shaderglobals)
 	OSL::ShaderGlobals *globals = &tdata->globals;
 
 	/* copy from shader data to shader globals */
@@ -139,6 +141,7 @@ static void flatten_surface_closure_tree(ShaderData *sd,
                                          const OSL::ClosureColor *closure,
                                          float3 weight = make_float3(1.0f, 1.0f, 1.0f))
 {
+	kernel_profile_phase(Prof::flatten_surface_closure_tree)
 	/* OSL gives us a closure tree, we flatten it into arrays per
 	 * closure type, for evaluation, sampling, etc later on. */
 
@@ -171,6 +174,7 @@ static void flatten_surface_closure_tree(ShaderData *sd,
 
 void OSLShader::eval_surface(KernelGlobals *kg, ShaderData *sd, PathState *state, int path_flag)
 {
+	kernel_profile_phase(Prof::OSLShader_eval_surface)
 	/* setup shader globals from shader data */
 	OSLThreadData *tdata = kg->osl_tdata;
 	shaderdata_to_shaderglobals(kg, sd, state, path_flag, tdata);
@@ -183,6 +187,7 @@ void OSLShader::eval_surface(KernelGlobals *kg, ShaderData *sd, PathState *state
 
 	/* automatic bump shader */
 	if(kg->osl->bump_state[shader]) {
+		kernel_profile_phase(Prof::OSLShader_eval_surface_bump)
 		/* save state */
 		float3 P = sd->P;
 		float3 dPdx = sd->dP.dx;

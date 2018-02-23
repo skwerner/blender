@@ -60,6 +60,7 @@ ccl_device_forceinline int bsdf_sample(KernelGlobals *kg,
                                        differential3 *domega_in,
                                        float *pdf)
 {
+	kernel_profile_phase(Prof::bsdf_sample)
 	int label;
 
 	switch(sc->type) {
@@ -196,6 +197,7 @@ float3 bsdf_eval(KernelGlobals *kg,
                  const float3 omega_in,
                  float *pdf)
 {
+	kernel_profile_phase(Prof::bsdf_eval)
 	float3 eval;
 
 	if(dot(sd->Ng, omega_in) >= 0.0f) {

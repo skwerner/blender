@@ -28,6 +28,7 @@
 #include "render/mesh.h"
 #include "render/object.h"
 #include "render/scene.h"
+#include "render/stats.h"
 
 #include "kernel/osl/osl_closures.h"
 #include "kernel/osl/osl_globals.h"
@@ -913,6 +914,7 @@ bool OSLRenderServices::texture(ustring filename,
                                 float *dresultds,
                                 float *dresultdt)
 {
+	kernel_profile_phase(Prof::OSLRenderServices_texture)
 	OSL::TextureSystem *ts = osl_ts;
 	ShaderData *sd = (ShaderData *)(sg->renderstate);
 	KernelGlobals *kg = sd->osl_globals;

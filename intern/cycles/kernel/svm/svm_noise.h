@@ -226,6 +226,7 @@ ccl_device_inline ssef scale3_sse(const ssef& result)
 #ifndef __KERNEL_SSE2__
 ccl_device_noinline float perlin(float x, float y, float z)
 {
+	kernel_profile_phase(Prof::perlin)
 	int X; float fx = floorfrac(x, &X);
 	int Y; float fy = floorfrac(y, &Y);
 	int Z; float fz = floorfrac(z, &Z);
@@ -252,6 +253,7 @@ ccl_device_noinline float perlin(float x, float y, float z)
 #else
 ccl_device_noinline float perlin(float x, float y, float z)
 {
+	kernel_profile_phase(Prof::perlin)
 	ssef xyz = ssef(x, y, z, 0.0f);
 	ssei XYZ;
 

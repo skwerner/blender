@@ -41,6 +41,7 @@
 #include "kernel/osl/osl_globals.h"
 
 #include "render/buffers.h"
+#include "render/stats.h"
 
 #include "util/util_debug.h"
 #include "util/util_foreach.h"
@@ -270,6 +271,11 @@ public:
 	{
 		task_pool.stop();
 		texture_info.free();
+
+		PrintStats(stdout);
+		ReportProfilerResults(stdout);
+		ClearStats();
+		ClearProfiler();
 	}
 
 	virtual bool show_samples() const
@@ -743,6 +749,8 @@ public:
 
 	void thread_render(DeviceTask& task)
 	{
+		ProfilerWorkerThreadInit();
+		
 		if(task_pool.canceled()) {
 			if(task.need_finish_queue == false)
 				return;

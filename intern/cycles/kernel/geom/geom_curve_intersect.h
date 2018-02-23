@@ -40,6 +40,7 @@ ccl_device_forceinline bool cardinal_curve_intersect(
         float difl,
         float extmax)
 {
+	kernel_profile_phase(Prof::curve_intersect)
 	const bool is_curve_primitive = (type & PRIMITIVE_CURVE);
 
 	if(!is_curve_primitive && kernel_data.bvh.use_bvh_steps) {

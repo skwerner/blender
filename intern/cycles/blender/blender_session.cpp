@@ -28,6 +28,7 @@
 #include "render/scene.h"
 #include "render/session.h"
 #include "render/shader.h"
+#include "render/stats.h"
 
 #include "util/util_color.h"
 #include "util/util_foreach.h"
@@ -472,6 +473,7 @@ void BlenderSession::render()
 
 			/* render */
 			session->start();
+			InitProfiler();
 			session->wait();
 
 			if(session->progress.get_cancel())

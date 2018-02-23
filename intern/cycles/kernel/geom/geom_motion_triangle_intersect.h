@@ -233,6 +233,7 @@ ccl_device_inline void motion_triangle_intersect_local(
         uint *lcg_state,
         int max_hits)
 {
+	kernel_profile_phase(Prof::motion_triangle_intersect)
 	/* Only intersect with matching object, for instanced objects we
 	 * already know we are only intersecting the right object. */
 	if(object == OBJECT_NONE) {

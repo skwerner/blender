@@ -630,6 +630,7 @@ ccl_device_inline bool lamp_light_sample(KernelGlobals *kg,
 
 ccl_device bool lamp_light_eval(KernelGlobals *kg, int lamp, float3 P, float3 D, float t, LightSample *ls)
 {
+	kernel_profile_phase(Prof::lamp_light_eval)
 	float4 data0 = kernel_tex_fetch(__light_data, lamp*LIGHT_SIZE + 0);
 	float4 data1 = kernel_tex_fetch(__light_data, lamp*LIGHT_SIZE + 1);
 
@@ -1078,6 +1079,7 @@ ccl_device_noinline bool light_sample(KernelGlobals *kg,
                                       int bounce,
                                       LightSample *ls)
 {
+	kernel_profile_phase(Prof::light_sample)
 	/* sample index */
 	int index = light_distribution_sample(kg, &randu);
 

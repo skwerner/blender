@@ -30,6 +30,7 @@ ccl_device_inline bool triangle_intersect(KernelGlobals *kg,
                                           int object,
                                           int prim_addr)
 {
+	kernel_profile_phase(Prof::triangle_intersect)
 	const uint tri_vindex = kernel_tex_fetch(__prim_tri_index, prim_addr);
 #if defined(__KERNEL_SSE2__) && defined(__KERNEL_SSE__)
 	const ssef *ssef_verts = (ssef*)&kg->__prim_tri_verts.data[tri_vindex];
@@ -88,6 +89,7 @@ ccl_device_inline void triangle_intersect_local(
         uint *lcg_state,
         int max_hits)
 {
+	kernel_profile_phase(Prof::triangle_intersect)
 	/* Only intersect with matching object, for instanced objects we
 	 * already know we are only intersecting the right object. */
 	if(object == OBJECT_NONE) {

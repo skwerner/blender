@@ -364,6 +364,8 @@ ccl_device_inline void camera_sample(KernelGlobals *kg,
                                      float time,
                                      ccl_addr_space Ray *ray)
 {
+	kernel_profile_phase(Prof::camera_sample)
+
 	/* pixel filter */
 	int filter_table_offset = kernel_data.film.filter_table_offset;
 	float raster_x = x + lookup_table_read(kg, filter_u, filter_table_offset, FILTER_TABLE_SIZE);

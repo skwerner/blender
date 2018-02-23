@@ -181,6 +181,8 @@ ccl_device_forceinline VolumeIntegrateResult kernel_path_volume(
 		return VOLUME_PATH_ATTENUATED;
 	}
 
+	kernel_profile_phase(Prof::kernel_path_volume)
+
 	/* volume attenuation, emission, scatter */
 	Ray volume_ray = *ray;
 	volume_ray.t = (hit)? isect->t: FLT_MAX;
@@ -557,6 +559,7 @@ ccl_device_forceinline void kernel_path_integrate(
 	ccl_global float *buffer,
 	ShaderData *emission_sd)
 {
+	kernel_profile_phase(Prof::kernel_path_integrate)
 	/* Shader data memory used for both volumes and surfaces, saves stack space. */
 	ShaderData sd;
 

@@ -434,6 +434,7 @@ ccl_device void kernel_branched_path_integrate(KernelGlobals *kg,
                                                ccl_global float *buffer,
                                                PathRadiance *L)
 {
+	kernel_profile_phase(Prof::kernel_path_integrate)
 	/* initialize */
 	float3 throughput = make_float3(1.0f, 1.0f, 1.0f);
 

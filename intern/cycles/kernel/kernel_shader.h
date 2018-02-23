@@ -54,6 +54,7 @@ ccl_device_noinline void shader_setup_from_ray(KernelGlobals *kg,
                                                const Intersection *isect,
                                                const Ray *ray)
 {
+	kernel_profile_phase(Prof::shader_setup_from_ray)
 #ifdef __INSTANCING__
 	sd->object = (isect->object == PRIM_NONE)? kernel_tex_fetch(__prim_object, isect->prim): isect->object;
 #endif
@@ -968,6 +969,7 @@ ccl_device float3 shader_holdout_eval(KernelGlobals *kg, ShaderData *sd)
 ccl_device void shader_eval_surface(KernelGlobals *kg, ShaderData *sd,
 	ccl_addr_space PathState *state, int path_flag)
 {
+	kernel_profile_phase(Prof::shader_eval_surface)
 	/* If path is being terminated, we are tracing a shadow ray or evaluating
 	 * emission, then we don't need to store closures. The emission and shadow
 	 * shader data also do not have a closure array to save GPU memory. */
@@ -1009,6 +1011,7 @@ ccl_device void shader_eval_surface(KernelGlobals *kg, ShaderData *sd,
 ccl_device float3 shader_eval_background(KernelGlobals *kg, ShaderData *sd,
 	ccl_addr_space PathState *state, int path_flag)
 {
+	kernel_profile_phase(Prof::shader_eval_background)
 	sd->num_closure = 0;
 	sd->num_closure_left = 0;
 
@@ -1153,6 +1156,7 @@ ccl_device_inline void shader_eval_volume(KernelGlobals *kg,
                                           ccl_addr_space VolumeStack *stack,
                                           int path_flag)
 {
+	kernel_profile_phase(Prof::shader_eval_volume)
 	/* If path is being terminated, we are tracing a shadow ray or evaluating
 	 * emission, then we don't need to store closures. The emission and shadow
 	 * shader data also do not have a closure array to save GPU memory. */
@@ -1217,6 +1221,7 @@ ccl_device_inline void shader_eval_volume(KernelGlobals *kg,
 
 ccl_device void shader_eval_displacement(KernelGlobals *kg, ShaderData *sd, ccl_addr_space PathState *state)
 {
+	kernel_profile_phase(Prof::shader_eval_displacement)
 	sd->num_closure = 0;
 	sd->num_closure_left = 0;
 
@@ -1238,6 +1243,7 @@ ccl_device void shader_eval_displacement(KernelGlobals *kg, ShaderData *sd, ccl_
 #ifdef __TRANSPARENT_SHADOWS__
 ccl_device bool shader_transparent_shadow(KernelGlobals *kg, Intersection *isect)
 {
+	kernel_profile_phase(Prof::shader_transparent_shadow)
 	int prim = kernel_tex_fetch(__prim_index, isect->prim);
 	int shader = 0;
 

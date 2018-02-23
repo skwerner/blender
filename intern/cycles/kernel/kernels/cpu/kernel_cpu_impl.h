@@ -22,6 +22,8 @@
 
 #include "kernel/kernel_compat_cpu.h"
 
+#include "render/stats.h"
+
 #ifndef KERNEL_STUB
 #  ifndef __SPLIT_KERNEL__
 #    include "kernel/kernel_math.h"
@@ -79,6 +81,7 @@ void KERNEL_FUNCTION_FULL_NAME(path_trace)(KernelGlobals *kg,
                                            int offset,
                                            int stride)
 {
+	kernel_profile_phase(Prof::path_trace);
 #ifdef KERNEL_STUB
 	STUB_ASSERT(KERNEL_ARCH, path_trace);
 #else

@@ -19,6 +19,7 @@
 #include "render/object.h"
 #include "render/scene.h"
 #include "render/tables.h"
+#include "render/stats.h"
 
 #include "device/device.h"
 

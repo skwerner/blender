@@ -166,6 +166,7 @@ ccl_device_intersect bool scene_intersect(KernelGlobals *kg,
                                           float difl,
                                           float extmax)
 {
+	ProfilePhase p(Prof::scene_intersect);
 #ifdef __OBJECT_MOTION__
 	if(kernel_data.bvh.have_motion) {
 #  ifdef __HAIR__
@@ -210,6 +211,7 @@ ccl_device_intersect void scene_intersect_local(KernelGlobals *kg,
                                                 uint *lcg_state,
                                                 int max_hits)
 {
+	ProfilePhase p(Prof::scene_intersect_local);
 #ifdef __OBJECT_MOTION__
 	if(kernel_data.bvh.have_motion) {
 		return bvh_intersect_local_motion(kg,
@@ -237,6 +239,7 @@ ccl_device_intersect bool scene_intersect_shadow_all(KernelGlobals *kg,
                                                      uint max_hits,
                                                      uint *num_hits)
 {
+	ProfilePhase p(Prof::scene_intersect_shadow_all);
 #  ifdef __OBJECT_MOTION__
 	if(kernel_data.bvh.have_motion) {
 #    ifdef __HAIR__
@@ -296,6 +299,7 @@ ccl_device_intersect bool scene_intersect_volume(KernelGlobals *kg,
                                                  Intersection *isect,
                                                  const uint visibility)
 {
+	ProfilePhase p(Prof::scene_intersect_volume);
 #  ifdef __OBJECT_MOTION__
 	if(kernel_data.bvh.have_motion) {
 		return bvh_intersect_volume_motion(kg, ray, isect, visibility);
@@ -324,6 +328,7 @@ ccl_device_intersect uint scene_intersect_volume_all(KernelGlobals *kg,
                                                      const uint max_hits,
                                                      const uint visibility)
 {
+	ProfilePhase p(Prof::scene_intersect_volume_all);
 #  ifdef __OBJECT_MOTION__
 	if(kernel_data.bvh.have_motion) {
 		return bvh_intersect_volume_all_motion(kg, ray, isect, max_hits, visibility);

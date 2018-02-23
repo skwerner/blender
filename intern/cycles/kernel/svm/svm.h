@@ -194,6 +194,7 @@ CCL_NAMESPACE_BEGIN
 /* Main Interpreter Loop */
 ccl_device_noinline void svm_eval_nodes(KernelGlobals *kg, ShaderData *sd, ccl_addr_space PathState *state, ShaderType type, int path_flag)
 {
+	kernel_profile_phase(Prof::svm_eval_nodes)
 	float stack[SVM_STACK_SIZE];
 	int offset = sd->shader & SHADER_MASK;
 

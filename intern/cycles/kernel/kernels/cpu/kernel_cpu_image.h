@@ -474,6 +474,7 @@ template<typename T> struct TextureInterpolator  {
 
 ccl_device float4 kernel_tex_image_interp(KernelGlobals *kg, int id, float x, float y)
 {
+	kernel_profile_phase(Prof::kernel_tex_image_interp)
 	const TextureInfo& info = kernel_tex_fetch(__texture_info, id);
 
 	switch(kernel_tex_type(id)) {
@@ -495,6 +496,7 @@ ccl_device float4 kernel_tex_image_interp(KernelGlobals *kg, int id, float x, fl
 
 ccl_device float4 kernel_tex_image_interp_3d(KernelGlobals *kg, int id, float x, float y, float z, InterpolationType interp)
 {
+	kernel_profile_phase(Prof::kernel_tex_image_interp_3d)
 	const TextureInfo& info = kernel_tex_fetch(__texture_info, id);
 
 	switch(kernel_tex_type(id)) {

@@ -59,6 +59,7 @@ ccl_device_inline float3 mix(const float3& a, const float3& b, float t);
 ccl_device_inline float3 rcp(const float3& a);
 #endif  /* !__KERNEL_OPENCL__ */
 
+ccl_device_inline float min3(float3 a);
 ccl_device_inline float max3(float3 a);
 ccl_device_inline float len(const float3 a);
 ccl_device_inline float len_squared(const float3 a);
@@ -285,14 +286,14 @@ ccl_device_inline float3 rcp(const float3& a)
 }
 #endif  /* !__KERNEL_OPENCL__ */
 
-ccl_device_inline float max3(float3 a)
-{
-	return max(max(a.x, a.y), a.z);
-}
-
 ccl_device_inline float min3(float3 a)
 {
 	return min(min(a.x, a.y), a.z);
+}
+
+ccl_device_inline float max3(float3 a)
+{
+	return max(max(a.x, a.y), a.z);
 }
 
 

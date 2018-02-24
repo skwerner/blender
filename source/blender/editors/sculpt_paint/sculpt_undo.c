@@ -890,7 +890,7 @@ SculptUndoNode *sculpt_undo_push_node(Object *ob, PBVHNode *node,
 	SculptUndoNode *unode;
 
 	/* list is manipulated by multiple threads, so we lock */
-	BLI_lock_thread(LOCK_CUSTOM1);
+	BLI_thread_lock(LOCK_CUSTOM1);
 
 	if (ss->bm ||
 	    ELEM(type,
@@ -900,17 +900,17 @@ SculptUndoNode *sculpt_undo_push_node(Object *ob, PBVHNode *node,
 		/* Dynamic topology stores only one undo node per stroke,
 		 * regardless of the number of PBVH nodes modified */
 		unode = sculpt_undo_bmesh_push(ob, node, type);
-		BLI_unlock_thread(LOCK_CUSTOM1);
+		BLI_thread_unlock(LOCK_CUSTOM1);
 		return unode;
 	}
 	else if ((unode = sculpt_undo_get_node(node))) {
-		BLI_unlock_thread(LOCK_CUSTOM1);
+		BLI_thread_unlock(LOCK_CUSTOM1);
 		return unode;
 	}
 
 	unode = sculpt_undo_alloc_node(ob, node, type);
 	
-	BLI_unlock_thread(LOCK_CUSTOM1);
+	BLI_thread_unlock(LOCK_CUSTOM1);
 
 	/* copy threaded, hopefully this is the performance critical part */
 
@@ -958,7 +958,7 @@ void sculpt_undo_push_begin(const char *name)
 	                         sculpt_undo_restore, sculpt_undo_free, sculpt_undo_cleanup);
 }
 
-void sculpt_undo_push_end(const bContext *C)
+void sculpt_undo_push_end(void)
 {
 	ListBase *lb = undo_paint_push_get_list(UNDO_PAINT_MESH);
 	SculptUndoNode *unode;
@@ -976,5 +976,5 @@ void sculpt_undo_push_end(const bContext *C)
 
 	ED_undo_paint_push_end(UNDO_PAINT_MESH);
 
-	WM_file_tag_modified(C);
+	WM_file_tag_modified();
 }

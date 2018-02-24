@@ -1279,6 +1279,8 @@ static int wm_operator_call_internal(
 		switch (context) {
 			case WM_OP_INVOKE_DEFAULT:
 			case WM_OP_INVOKE_REGION_WIN:
+			case WM_OP_INVOKE_REGION_PREVIEW:
+			case WM_OP_INVOKE_REGION_CHANNELS:
 			case WM_OP_INVOKE_AREA:
 			case WM_OP_INVOKE_SCREEN:
 				/* window is needed for invoke, cancel operator */
@@ -2082,7 +2084,7 @@ static int wm_handlers_do_intern(bContext *C, wmEvent *event, ListBase *handlers
 
 				PRINT("%s:   checking '%s' ...", __func__, keymap->idname);
 
-				if (!keymap->poll || keymap->poll(C)) {
+				if (WM_keymap_poll(C, keymap)) {
 
 					PRINT("pass\n");
 

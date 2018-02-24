@@ -253,10 +253,10 @@ void deg_evaluate_on_refresh(EvaluationContext *eval_ctx,
                              const unsigned int layers)
 {
 	/* Nothing to update, early out. */
-	if (BLI_gset_size(graph->entry_tags) == 0) {
+	if (BLI_gset_len(graph->entry_tags) == 0) {
 		return;
 	}
-	DEG_DEBUG_PRINTF("%s: layers:%u, graph->layers:%u\n",
+	DEG_DEBUG_PRINTF(EVAL, "%s: layers:%u, graph->layers:%u\n",
 	                 __func__,
 	                 layers,
 	                 graph->layers);

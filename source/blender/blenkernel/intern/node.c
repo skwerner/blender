@@ -2787,7 +2787,7 @@ int BKE_node_instance_hash_haskey(bNodeInstanceHash *hash, bNodeInstanceKey key)
 
 int BKE_node_instance_hash_size(bNodeInstanceHash *hash)
 {
-	return BLI_ghash_size(hash->ghash);
+	return BLI_ghash_len(hash->ghash);
 }
 
 void BKE_node_instance_hash_clear_tags(bNodeInstanceHash *hash)
@@ -3590,6 +3590,7 @@ static void registerShaderNodes(void)
 	register_node_type_sh_attribute();
 	register_node_type_sh_bevel();
 	register_node_type_sh_displacement();
+	register_node_type_sh_vector_displacement();
 	register_node_type_sh_geometry();
 	register_node_type_sh_light_path();
 	register_node_type_sh_light_falloff();
@@ -3615,6 +3616,7 @@ static void registerShaderNodes(void)
 	register_node_type_sh_holdout();
 	register_node_type_sh_volume_absorption();
 	register_node_type_sh_volume_scatter();
+	register_node_type_sh_volume_principled();
 	register_node_type_sh_subsurface_scattering();
 	register_node_type_sh_mix_shader();
 	register_node_type_sh_add_shader();

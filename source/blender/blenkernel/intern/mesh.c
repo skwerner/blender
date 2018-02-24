@@ -1003,7 +1003,7 @@ static void make_edges_mdata_extend(MEdge **r_alledge, int *r_totedge,
 		BKE_mesh_poly_edgehash_insert(eh, mp, mloop + mp->loopstart);
 	}
 
-	totedge_new = BLI_edgehash_size(eh);
+	totedge_new = BLI_edgehash_len(eh);
 
 #ifdef DEBUG
 	/* ensure that theres no overlap! */
@@ -2633,7 +2633,7 @@ Mesh *BKE_mesh_new_from_object(
 void BKE_mesh_eval_geometry(EvaluationContext *UNUSED(eval_ctx),
                             Mesh *mesh)
 {
-	if (G.debug & G_DEBUG_DEPSGRAPH) {
+	if (G.debug & G_DEBUG_DEPSGRAPH_EVAL) {
 		printf("%s on %s\n", __func__, mesh->id.name);
 	}
 	if (mesh->bb == NULL || (mesh->bb->flag & BOUNDBOX_DIRTY)) {

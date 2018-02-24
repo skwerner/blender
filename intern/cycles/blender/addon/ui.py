@@ -449,6 +449,7 @@ class CYCLES_RENDER_PT_layer_options(CyclesButtonsPanel, Panel):
 
     def draw(self, context):
         layout = self.layout
+        with_freestyle = bpy.app.build_options.freestyle
 
         scene = context.scene
         rd = scene.render
@@ -477,6 +478,10 @@ class CYCLES_RENDER_PT_layer_options(CyclesButtonsPanel, Panel):
         col.prop(rl, "use_ao", "Use AO")
         col.prop(rl, "use_solid", "Use Surfaces")
         col.prop(rl, "use_strand", "Use Hair")
+        if with_freestyle:
+            row = col.row()
+            row.prop(rl, "use_freestyle", "Use Freestyle")
+            row.active = rd.use_freestyle
 
 
 class CYCLES_RENDER_PT_layer_passes(CyclesButtonsPanel, Panel):
@@ -1315,13 +1320,9 @@ class CYCLES_MATERIAL_PT_settings(CyclesButtonsPanel, Panel):
         col.prop(cmat, "sample_as_light", text="Multiple Importance")
         col.prop(cmat, "use_transparent_shadow")
 
-        if context.scene.cycles.feature_set == 'EXPERIMENTAL':
-            col.separator()
-            col.label(text="Geometry:")
-            col.prop(cmat, "displacement_method", text="")
-        else:
-            col.separator()
-            col.prop(mat, "pass_index")
+        col.separator()
+        col.label(text="Geometry:")
+        col.prop(cmat, "displacement_method", text="")
 
         col = split.column()
         col.label(text="Volume:")
@@ -1331,9 +1332,8 @@ class CYCLES_MATERIAL_PT_settings(CyclesButtonsPanel, Panel):
         col.prop(cmat, "volume_interpolation", text="")
         col.prop(cmat, "homogeneous_volume", text="Homogeneous")
 
-        if context.scene.cycles.feature_set == 'EXPERIMENTAL':
-            col.separator()
-            col.prop(mat, "pass_index")
+        col.separator()
+        col.prop(mat, "pass_index")
 
 
 class CYCLES_MATERIAL_PT_viewport(CyclesButtonsPanel, Panel):

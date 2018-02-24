@@ -285,7 +285,7 @@ ObjectManager::~ObjectManager()
 {
 }
 
-void ObjectManager::device_update_object_transform(UpdateObejctTransformState *state,
+void ObjectManager::device_update_object_transform(UpdateObjectTransformState *state,
                                                    Object *ob,
                                                    int object_index)
 {
@@ -433,7 +433,7 @@ void ObjectManager::device_update_object_transform(UpdateObejctTransformState *s
 }
 
 bool ObjectManager::device_update_object_transform_pop_work(
-        UpdateObejctTransformState *state,
+        UpdateObjectTransformState *state,
         int *start_index,
         int *num_objects)
 {
@@ -458,7 +458,7 @@ bool ObjectManager::device_update_object_transform_pop_work(
 }
 
 void ObjectManager::device_update_object_transform_task(
-        UpdateObejctTransformState *state)
+        UpdateObjectTransformState *state)
 {
 	int start_index, num_objects;
 	while(device_update_object_transform_pop_work(state,
@@ -478,7 +478,7 @@ void ObjectManager::device_update_transforms(DeviceScene *dscene,
                                              uint *object_flag,
                                              Progress& progress)
 {
-	UpdateObejctTransformState state;
+	UpdateObjectTransformState state;
 	state.need_motion = scene->need_motion();
 	state.have_motion = false;
 	state.have_curves = false;
@@ -604,9 +604,16 @@ void ObjectManager::device_update_flags(Device *,
 	foreach(Object *object, scene->objects) {
 		if(object->mesh->has_volume) {
 			object_flag[object_index] |= SD_OBJECT_HAS_VOLUME;
+			object_flag[object_index] &= ~SD_OBJECT_HAS_VOLUME_ATTRIBUTES;
+
+			foreach(Attribute& attr, object->mesh->attributes.attributes) {
+				if(attr.element == ATTR_ELEMENT_VOXEL) {
+					object_flag[object_index] |= SD_OBJECT_HAS_VOLUME_ATTRIBUTES;
+				}
+			}
 		}
 		else {
-			object_flag[object_index] &= ~SD_OBJECT_HAS_VOLUME;
+			object_flag[object_index] &= ~(SD_OBJECT_HAS_VOLUME|SD_OBJECT_HAS_VOLUME_ATTRIBUTES);
 		}
 		if(object->is_shadow_catcher) {
 			object_flag[object_index] |= SD_OBJECT_SHADOW_CATCHER;

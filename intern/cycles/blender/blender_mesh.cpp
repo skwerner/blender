@@ -97,8 +97,11 @@ struct MikkUserData {
 
 		if(layer_name == NULL) {
 			Attribute *attr_orco = attributes.find(ATTR_STD_GENERATED);
-			orco = attr_orco->data_float3();
-			mesh_texture_space(*(BL::Mesh*)&b_mesh, orco_loc, orco_size);
+
+			if(attr_orco) {
+				orco = attr_orco->data_float3();
+				mesh_texture_space(*(BL::Mesh*)&b_mesh, orco_loc, orco_size);
+			}
 		}
 		else {
 			Attribute *attr_uv = attributes.find(ustring(layer_name));
@@ -364,6 +367,8 @@ static void create_mesh_volume_attributes(Scene *scene,
 		create_mesh_volume_attribute(b_ob, mesh, scene->image_manager, ATTR_STD_VOLUME_FLAME, frame);
 	if(mesh->need_attribute(scene, ATTR_STD_VOLUME_HEAT))
 		create_mesh_volume_attribute(b_ob, mesh, scene->image_manager, ATTR_STD_VOLUME_HEAT, frame);
+	if(mesh->need_attribute(scene, ATTR_STD_VOLUME_TEMPERATURE))
+		create_mesh_volume_attribute(b_ob, mesh, scene->image_manager, ATTR_STD_VOLUME_TEMPERATURE, frame);
 	if(mesh->need_attribute(scene, ATTR_STD_VOLUME_VELOCITY))
 		create_mesh_volume_attribute(b_ob, mesh, scene->image_manager, ATTR_STD_VOLUME_VELOCITY, frame);
 }

@@ -242,6 +242,13 @@ function(blender_add_lib__impl
 	# listed is helpful for IDE's (QtCreator/MSVC)
 	blender_source_group("${sources}")
 
+	#if enabled, set the FOLDER property for visual studio projects 
+	if(WINDOWS_USE_VISUAL_STUDIO_FOLDERS)
+		get_filename_component(FolderDir ${CMAKE_CURRENT_SOURCE_DIR} DIRECTORY)
+		string(REPLACE ${CMAKE_SOURCE_DIR} "" FolderDir ${FolderDir})
+		set_target_properties(${name} PROPERTIES FOLDER ${FolderDir})
+	endif()
+
 	list_assert_duplicates("${sources}")
 	list_assert_duplicates("${includes}")
 	# Not for system includes because they can resolve to the same path
@@ -712,10 +719,6 @@ function(SETUP_BLENDER_SORTED_LIBS)
 
 	if(WITH_IK_ITASC)
 		list(APPEND BLENDER_SORTED_LIBS bf_intern_itasc)
-	endif()
-
-	if(WITH_MOD_BOOLEAN)
-		list(APPEND BLENDER_SORTED_LIBS extern_carve)
 	endif()
 
 	if(WITH_GHOST_XDND)

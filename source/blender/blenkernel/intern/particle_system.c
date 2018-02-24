@@ -48,7 +48,7 @@
 #include "DNA_mesh_types.h"
 #include "DNA_meshdata_types.h"
 #include "DNA_modifier_types.h"
-#include "DNA_object_force.h"
+#include "DNA_object_force_types.h"
 #include "DNA_object_types.h"
 #include "DNA_curve_types.h"
 #include "DNA_scene_types.h"
@@ -58,7 +58,7 @@
 #include "BLI_utildefines.h"
 #include "BLI_edgehash.h"
 #include "BLI_rand.h"
-#include "BLI_jitter.h"
+#include "BLI_jitter_2d.h"
 #include "BLI_math.h"
 #include "BLI_blenlib.h"
 #include "BLI_kdtree.h"
@@ -96,7 +96,7 @@
 
 /* fluid sim particle import */
 #ifdef WITH_MOD_FLUID
-#include "DNA_object_fluidsim.h"
+#include "DNA_object_fluidsim_types.h"
 #include "LBM_fluidsim.h"
 #include <zlib.h>
 #include <string.h>
@@ -497,6 +497,8 @@ void psys_thread_context_free(ParticleThreadContext *ctx)
 		MEM_freeN(ctx->vg_rough2);
 	if (ctx->vg_roughe)
 		MEM_freeN(ctx->vg_roughe);
+	if (ctx->vg_twist)
+		MEM_freeN(ctx->vg_twist);
 
 	if (ctx->sim.psys->lattice_deform_data) {
 		end_latt_deform(ctx->sim.psys->lattice_deform_data);
@@ -518,6 +520,9 @@ void psys_thread_context_free(ParticleThreadContext *ctx)
 	}
 	if (ctx->roughcurve != NULL) {
 		curvemapping_free(ctx->roughcurve);
+	}
+	if (ctx->twistcurve != NULL) {
+		curvemapping_free(ctx->twistcurve);
 	}
 }
 
@@ -4400,7 +4405,7 @@ void BKE_particle_system_eval_init(EvaluationContext *UNUSED(eval_ctx),
                                    Scene *scene,
                                    Object *ob)
 {
-	if (G.debug & G_DEBUG_DEPSGRAPH) {
+	if (G.debug & G_DEBUG_DEPSGRAPH_EVAL) {
 		printf("%s on %s\n", __func__, ob->id.name);
 	}
 	BKE_ptcache_object_reset(scene, ob, PTCACHE_RESET_DEPSGRAPH);

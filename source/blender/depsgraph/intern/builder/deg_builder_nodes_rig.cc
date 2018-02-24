@@ -123,9 +123,8 @@ void DepsgraphNodeBuilder::build_rig(Object *object)
 	 *       Eventually, we need some type of proxy/isolation mechanism in-between here
 	 *       to ensure that we can use same rig multiple times in same scene...
 	 */
-	if ((arm->id.tag & LIB_TAG_DOIT) == 0) {
+	if (!built_map_.checkIsBuilt(arm)) {
 		build_animdata(&arm->id);
-
 		/* Make sure pose is up-to-date with armature updates. */
 		add_operation_node(&arm->id,
 		                   DEG_NODE_TYPE_PARAMETERS,
@@ -195,7 +194,7 @@ void DepsgraphNodeBuilder::build_rig(Object *object)
 	op_node->set_as_exit();
 
 	/* bones */
-	BLI_LISTBASE_FOREACH (bPoseChannel *, pchan, &object->pose->chanbase) {
+	LISTBASE_FOREACH (bPoseChannel *, pchan, &object->pose->chanbase) {
 		/* Node for bone evaluation. */
 		op_node = add_operation_node(&object->id, DEG_NODE_TYPE_BONE, pchan->name, NULL,
 		                             DEG_OPCODE_BONE_LOCAL);
@@ -236,7 +235,7 @@ void DepsgraphNodeBuilder::build_rig(Object *object)
 		 * - Care is needed to ensure that multi-headed trees work out the same as in ik-tree building
 		 * - Animated chain-lengths are a problem...
 		 */
-		BLI_LISTBASE_FOREACH (bConstraint *, con, &pchan->constraints) {
+		LISTBASE_FOREACH (bConstraint *, con, &pchan->constraints) {
 			switch (con->type) {
 				case CONSTRAINT_TYPE_KINEMATIC:
 					build_ik_pose(object, pchan, con);
@@ -275,7 +274,7 @@ void DepsgraphNodeBuilder::build_proxy_rig(Object *object)
 	op_node->set_as_entry();
 
 
-	BLI_LISTBASE_FOREACH (bPoseChannel *, pchan, &object->pose->chanbase) {
+	LISTBASE_FOREACH (bPoseChannel *, pchan, &object->pose->chanbase) {
 		op_node = add_operation_node(&object->id, DEG_NODE_TYPE_BONE, pchan->name,
 		                             NULL, DEG_OPCODE_BONE_LOCAL);
 		op_node->set_as_entry();

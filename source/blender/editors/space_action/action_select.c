@@ -36,7 +36,7 @@
 
 #include "BLI_blenlib.h"
 #include "BLI_dlrbTree.h"
-#include "BLI_lasso.h"
+#include "BLI_lasso_2d.h"
 #include "BLI_utildefines.h"
 
 #include "DNA_anim_types.h"
@@ -220,7 +220,7 @@ static void borderselect_action(bAnimContext *ac, const rcti rect, short mode, s
 	UI_view2d_region_to_view(v2d, rect.xmax, rect.ymax - 2, &rectf.xmax, &rectf.ymax);
 	
 	/* filter data */
-	filter = (ANIMFILTER_DATA_VISIBLE | ANIMFILTER_LIST_VISIBLE | ANIMFILTER_LIST_CHANNELS | ANIMFILTER_NODUPLIS);
+	filter = (ANIMFILTER_DATA_VISIBLE | ANIMFILTER_LIST_VISIBLE | ANIMFILTER_LIST_CHANNELS);
 	ANIM_animdata_filter(ac, &anim_data, filter, ac->data, ac->datatype);
 	
 	/* get beztriple editing/validation funcs  */
@@ -262,6 +262,7 @@ static void borderselect_action(bAnimContext *ac, const rcti rect, short mode, s
 		{
 			/* loop over data selecting */
 			switch (ale->type) {
+#if 0 /* XXX: Keyframes are not currently shown here */
 				case ANIMTYPE_GPDATABLOCK:
 				{
 					bGPdata *gpd = ale->data;
@@ -271,6 +272,7 @@ static void borderselect_action(bAnimContext *ac, const rcti rect, short mode, s
 					}
 					break;
 				}
+#endif
 				case ANIMTYPE_GPLAYER:
 					ED_gplayer_frames_select_border(ale->data, rectf.xmin, rectf.xmax, selectmode);
 					break;
@@ -307,26 +309,27 @@ static int actkeys_borderselect_exec(bContext *C, wmOperator *op)
 	bAnimContext ac;
 	rcti rect;
 	short mode = 0, selectmode = 0;
-	int gesture_mode;
-	bool extend;
+	const bool select = !RNA_boolean_get(op->ptr, "deselect");
+	const bool extend = RNA_boolean_get(op->ptr, "extend");
 	
 	/* get editor data */
 	if (ANIM_animdata_get_context(C, &ac) == 0)
 		return OPERATOR_CANCELLED;
 
 	/* clear all selection if not extending selection */
-	extend = RNA_boolean_get(op->ptr, "extend");
-	if (!extend)
+	if (!extend) {
 		deselect_action_keys(&ac, 1, SELECT_SUBTRACT);
+	}
 	
 	/* get settings from operator */
 	WM_operator_properties_border_to_rcti(op, &rect);
-		
-	gesture_mode = RNA_int_get(op->ptr, "gesture_mode");
-	if (gesture_mode == GESTURE_MODAL_SELECT)
+
+	if (select) {
 		selectmode = SELECT_ADD;
-	else
+	}
+	else {
 		selectmode = SELECT_SUBTRACT;
+	}
 	
 	/* selection 'mode' depends on whether borderselect region only matters on one axis */
 	if (RNA_boolean_get(op->ptr, "axis_range")) {
@@ -360,10 +363,10 @@ void ACTION_OT_select_border(wmOperatorType *ot)
 	ot->description = "Select all keyframes within the specified region";
 	
 	/* api callbacks */
-	ot->invoke = WM_border_select_invoke;
+	ot->invoke = WM_gesture_border_invoke;
 	ot->exec = actkeys_borderselect_exec;
-	ot->modal = WM_border_select_modal;
-	ot->cancel = WM_border_select_cancel;
+	ot->modal = WM_gesture_border_modal;
+	ot->cancel = WM_gesture_border_cancel;
 	
 	ot->poll = ED_operator_action_active;
 	
@@ -371,7 +374,7 @@ void ACTION_OT_select_border(wmOperatorType *ot)
 	ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
 	
 	/* rna */
-	WM_operator_properties_gesture_border(ot, true);
+	WM_operator_properties_gesture_border_select(ot);
 	
 	ot->prop = RNA_def_boolean(ot->srna, "axis_range", 0, "Axis Range", "");
 }
@@ -398,7 +401,7 @@ static void region_select_action_keys(bAnimContext *ac, const rctf *rectf_view, 
 	UI_view2d_region_to_view_rctf(v2d, rectf_view, &rectf);
 	
 	/* filter data */
-	filter = (ANIMFILTER_DATA_VISIBLE | ANIMFILTER_LIST_VISIBLE | ANIMFILTER_LIST_CHANNELS | ANIMFILTER_NODUPLIS);
+	filter = (ANIMFILTER_DATA_VISIBLE | ANIMFILTER_LIST_VISIBLE | ANIMFILTER_LIST_CHANNELS);
 	ANIM_animdata_filter(ac, &anim_data, filter, ac->data, ac->datatype);
 	
 	/* get beztriple editing/validation funcs  */
@@ -463,6 +466,7 @@ static void region_select_action_keys(bAnimContext *ac, const rctf *rectf_view, 
 		{
 			/* loop over data selecting */
 			switch (ale->type) {
+#if 0 /* XXX: Keyframes are not currently shown here */
 				case ANIMTYPE_GPDATABLOCK:
 				{
 					bGPdata *gpd = ale->data;
@@ -472,6 +476,7 @@ static void region_select_action_keys(bAnimContext *ac, const rctf *rectf_view, 
 					}
 					break;
 				}
+#endif
 				case ANIMTYPE_GPLAYER:
 				{
 					ED_gplayer_frames_select_region(&ked, ale->data, mode, selectmode);
@@ -570,9 +575,7 @@ void ACTION_OT_select_lasso(wmOperatorType *ot)
 	ot->flag = OPTYPE_UNDO;
 	
 	/* properties */
-	RNA_def_collection_runtime(ot->srna, "path", &RNA_OperatorMousePath, "Path", "");
-	RNA_def_boolean(ot->srna, "deselect", false, "Deselect", "Deselect rather than select items");
-	RNA_def_boolean(ot->srna, "extend", true, "Extend", "Extend selection instead of deselecting everything first");
+	WM_operator_properties_gesture_lasso_select(ot);
 }
 
 /* ------------------- */
@@ -580,8 +583,8 @@ void ACTION_OT_select_lasso(wmOperatorType *ot)
 static int action_circle_select_exec(bContext *C, wmOperator *op)
 {
 	bAnimContext ac;
-	const int gesture_mode = RNA_int_get(op->ptr, "gesture_mode");
-	const short selectmode = (gesture_mode == GESTURE_MODAL_SELECT) ? SELECT_ADD : SELECT_SUBTRACT;
+	const bool select = !RNA_boolean_get(op->ptr, "deselect");
+	const short selectmode = select ? SELECT_ADD : SELECT_SUBTRACT;
 	
 	KeyframeEdit_CircleData data = {0};
 	rctf rect_fl;
@@ -627,11 +630,9 @@ void ACTION_OT_select_circle(wmOperatorType *ot)
 	
 	/* flags */
 	ot->flag = OPTYPE_UNDO;
-	
-	RNA_def_int(ot->srna, "x", 0, INT_MIN, INT_MAX, "X", "", INT_MIN, INT_MAX);
-	RNA_def_int(ot->srna, "y", 0, INT_MIN, INT_MAX, "Y", "", INT_MIN, INT_MAX);
-	RNA_def_int(ot->srna, "radius", 1, 1, INT_MAX, "Radius", "", 1, INT_MAX);
-	RNA_def_int(ot->srna, "gesture_mode", 0, INT_MIN, INT_MAX, "Event Type", "", INT_MIN, INT_MAX);
+
+	/* properties */
+	WM_operator_properties_gesture_circle_select(ot);
 }
 
 /* ******************** Column Select Operator **************************** */
@@ -643,7 +644,7 @@ void ACTION_OT_select_circle(wmOperatorType *ot)
  */
 
 /* defines for column-select mode */
-static EnumPropertyItem prop_column_select_types[] = {
+static const EnumPropertyItem prop_column_select_types[] = {
 	{ACTKEYS_COLUMNSEL_KEYS, "KEYS", 0, "On Selected Keyframes", ""},
 	{ACTKEYS_COLUMNSEL_CFRA, "CFRA", 0, "On Current Frame", ""},
 	{ACTKEYS_COLUMNSEL_MARKERS_COLUMN, "MARKERS_COLUMN", 0, "On Selected Markers", ""},
@@ -718,8 +719,6 @@ static void columnselect_action_keys(bAnimContext *ac, short mode)
 	CfraElem *ce;
 	KeyframeEditFunc select_cb, ok_cb;
 	KeyframeEditData ked = {{NULL}};
-	
-	/* initialize keyframe editing data */
 	
 	/* build list of columns */
 	switch (mode) {
@@ -1011,7 +1010,7 @@ void ACTION_OT_select_less(wmOperatorType *ot)
 /* Select keyframes left/right of the current frame indicator */
 
 /* defines for left-right select tool */
-static EnumPropertyItem prop_actkeys_leftright_select_types[] = {
+static const EnumPropertyItem prop_actkeys_leftright_select_types[] = {
 	{ACTKEYS_LRSEL_TEST, "CHECK", 0, "Check if Select Left or Right", ""},
 	{ACTKEYS_LRSEL_LEFT, "LEFT", 0, "Before current frame", ""},
 	{ACTKEYS_LRSEL_RIGHT, "RIGHT", 0, "After current frame", ""},
@@ -1128,7 +1127,8 @@ static int actkeys_select_leftright_exec(bContext *C, wmOperator *op)
 	actkeys_select_leftright(&ac, leftright, selectmode);
 	
 	/* set notifier that keyframe selection (and channels too) have changed */
-	WM_event_add_notifier(C, NC_ANIMATION | ND_KEYFRAME | ND_ANIMCHAN | NA_SELECTED, NULL);
+	WM_event_add_notifier(C, NC_ANIMATION | ND_KEYFRAME | NA_SELECTED, NULL);
+	WM_event_add_notifier(C, NC_ANIMATION | ND_ANIMCHAN | NA_SELECTED, NULL);
 	
 	return OPERATOR_FINISHED;
 }
@@ -1578,7 +1578,8 @@ static int actkeys_clickselect_invoke(bContext *C, wmOperator *op, const wmEvent
 	mouse_action_keys(&ac, event->mval, selectmode, column, channel);
 	
 	/* set notifier that keyframe selection (and channels too) have changed */
-	WM_event_add_notifier(C, NC_ANIMATION | ND_KEYFRAME | ND_ANIMCHAN | NA_SELECTED, NULL);
+	WM_event_add_notifier(C, NC_ANIMATION | ND_KEYFRAME | NA_SELECTED, NULL);
+	WM_event_add_notifier(C, NC_ANIMATION | ND_ANIMCHAN | NA_SELECTED, NULL);
 	
 	/* for tweak grab to work */
 	return OPERATOR_FINISHED | OPERATOR_PASS_THROUGH;

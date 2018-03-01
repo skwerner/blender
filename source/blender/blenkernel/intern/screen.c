@@ -181,6 +181,7 @@ ARegion *BKE_area_region_copy(SpaceType *st, ARegion *ar)
 	BLI_listbase_clear(&newar->ui_lists);
 	newar->swinid = 0;
 	newar->regiontimer = NULL;
+	newar->headerstr = NULL;
 	
 	/* use optional regiondata callback */
 	if (ar->regiondata) {
@@ -380,6 +381,9 @@ void BKE_screen_free(bScreen *sc)
 	BLI_freelistN(&sc->vertbase);
 	BLI_freelistN(&sc->edgebase);
 	BLI_freelistN(&sc->areabase);
+
+	/* Region and timer are freed by the window manager. */
+	MEM_SAFE_FREE(sc->tool_tip);
 }
 
 /* for depsgraph */

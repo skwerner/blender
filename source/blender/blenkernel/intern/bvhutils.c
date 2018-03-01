@@ -411,7 +411,7 @@ static BVHTree *bvhtree_from_editmesh_verts_create_tree(
 			BMVert *eve = BM_vert_at_index(em->bm, i);
 			BLI_bvhtree_insert(tree, i, eve->co, 1);
 		}
-		BLI_assert(BLI_bvhtree_get_size(tree) == verts_num_active);
+		BLI_assert(BLI_bvhtree_get_len(tree) == verts_num_active);
 		BLI_bvhtree_balance(tree);
 	}
 
@@ -440,7 +440,7 @@ static BVHTree *bvhtree_from_mesh_verts_create_tree(
 			}
 			BLI_bvhtree_insert(tree, i, vert[i].co, 1);
 		}
-		BLI_assert(BLI_bvhtree_get_size(tree) == verts_num_active);
+		BLI_assert(BLI_bvhtree_get_len(tree) == verts_num_active);
 		BLI_bvhtree_balance(tree);
 	}
 
@@ -612,7 +612,7 @@ static BVHTree *bvhtree_from_editmesh_edges_create_tree(
 
 			BLI_bvhtree_insert(tree, i, co[0], 2);
 		}
-		BLI_assert(BLI_bvhtree_get_size(tree) == edges_num_active);
+		BLI_assert(BLI_bvhtree_get_len(tree) == edges_num_active);
 		BLI_bvhtree_balance(tree);
 	}
 
@@ -829,7 +829,7 @@ static BVHTree *bvhtree_from_mesh_faces_create_tree(
 					BLI_bvhtree_insert(tree, i, co[0], face[i].v4 ? 4 : 3);
 				}
 			}
-			BLI_assert(BLI_bvhtree_get_size(tree) == faces_num_active);
+			BLI_assert(BLI_bvhtree_get_len(tree) == faces_num_active);
 			BLI_bvhtree_balance(tree);
 		}
 	}
@@ -990,7 +990,7 @@ static BVHTree *bvhtree_from_editmesh_looptri_create_tree(
 					}
 				}
 			}
-			BLI_assert(BLI_bvhtree_get_size(tree) == looptri_num_active);
+			BLI_assert(BLI_bvhtree_get_len(tree) == looptri_num_active);
 			BLI_bvhtree_balance(tree);
 		}
 	}
@@ -1032,7 +1032,7 @@ static BVHTree *bvhtree_from_mesh_looptri_create_tree(
 					BLI_bvhtree_insert(tree, i, co[0], 3);
 				}
 			}
-			BLI_assert(BLI_bvhtree_get_size(tree) == looptri_num_active);
+			BLI_assert(BLI_bvhtree_get_len(tree) == looptri_num_active);
 			BLI_bvhtree_balance(tree);
 		}
 	}
@@ -1137,7 +1137,6 @@ BVHTree *bvhtree_from_mesh_looptri(
 	const MLoopTri *looptri = NULL;
 	bool vert_allocated = false;
 	bool loop_allocated = false;
-	bool looptri_allocated = false;
 
 	BLI_rw_mutex_lock(&cache_rwlock, THREAD_LOCK_READ);
 	tree = bvhcache_find(dm->bvhCache, BVHTREE_FROM_LOOPTRI);
@@ -1150,12 +1149,7 @@ BVHTree *bvhtree_from_mesh_looptri(
 	mpoly = DM_get_poly_array(dm, &poly_allocated);
 
 	mloop = DM_get_loop_array(dm, &loop_allocated);
-	looptri = DM_get_looptri_array(
-	        dm,
-	        mvert,
-	        mpoly, dm->getNumPolys(dm),
-	        mloop, dm->getNumLoops(dm),
-	        &looptri_allocated);
+	looptri = dm->getLoopTriArray(dm);
 
 	if (poly_allocated) {
 		MEM_freeN(mpoly);
@@ -1193,7 +1187,7 @@ BVHTree *bvhtree_from_mesh_looptri(
 		        data, tree, true, epsilon,
 		        mvert, vert_allocated,
 		        mloop, loop_allocated,
-		        looptri, looptri_allocated);
+		        looptri, false);
 	}
 	else {
 		if (vert_allocated) {
@@ -1201,9 +1195,6 @@ BVHTree *bvhtree_from_mesh_looptri(
 		}
 		if (loop_allocated) {
 			MEM_freeN(mloop);
-		}
-		if (looptri_allocated) {
-			MEM_freeN((void *)looptri);
 		}
 		memset(data, 0, sizeof(*data));
 	}

@@ -16,150 +16,9 @@
 
 CCL_NAMESPACE_BEGIN
 
-/* Float4 textures on various devices. */
-#if defined(__KERNEL_CPU__)
-#  define TEX_NUM_FLOAT4_IMAGES		TEX_NUM_FLOAT4_CPU
-#elif defined(__KERNEL_CUDA__)
-#  if __CUDA_ARCH__ < 300
-#    define TEX_NUM_FLOAT4_IMAGES	TEX_NUM_FLOAT4_CUDA
-#  else
-#    define TEX_NUM_FLOAT4_IMAGES	TEX_NUM_FLOAT4_CUDA_KEPLER
-#  endif
-#else
-#  define TEX_NUM_FLOAT4_IMAGES	TEX_NUM_FLOAT4_OPENCL
-#endif
-
 ccl_device float4 svm_image_texture(KernelGlobals *kg, int id, float x, float y, uint srgb, uint use_alpha)
 {
-#ifdef __KERNEL_CPU__
-	float4 r = kernel_tex_image_interp(id, x, y);
-#elif defined(__KERNEL_OPENCL__)
 	float4 r = kernel_tex_image_interp(kg, id, x, y);
-#else
-	float4 r;
-
-#  if __CUDA_ARCH__ < 300
-	/* not particularly proud of this massive switch, what are the
-	 * alternatives?
-	 * - use a single big 1D texture, and do our own lookup/filtering
-	 * - group by size and use a 3d texture, performance impact
-	 * - group into larger texture with some padding for correct lerp
-	 *
-	 * also note that cuda has a textures limit (128 for Fermi, 256 for Kepler),
-	 * and we cannot use all since we still need some for other storage */
-
-	switch(id) {
-		case 0: r = kernel_tex_image_interp(__tex_image_float4_000, x, y); break;
-		case 1: r = kernel_tex_image_interp(__tex_image_float4_001, x, y); break;
-		case 2: r = kernel_tex_image_interp(__tex_image_float4_002, x, y); break;
-		case 3: r = kernel_tex_image_interp(__tex_image_float4_003, x, y); break;
-		case 4: r = kernel_tex_image_interp(__tex_image_float4_004, x, y); break;
-		case 5: r = kernel_tex_image_interp(__tex_image_byte4_005, x, y); break;
-		case 6: r = kernel_tex_image_interp(__tex_image_byte4_006, x, y); break;
-		case 7: r = kernel_tex_image_interp(__tex_image_byte4_007, x, y); break;
-		case 8: r = kernel_tex_image_interp(__tex_image_byte4_008, x, y); break;
-		case 9: r = kernel_tex_image_interp(__tex_image_byte4_009, x, y); break;
-		case 10: r = kernel_tex_image_interp(__tex_image_byte4_010, x, y); break;
-		case 11: r = kernel_tex_image_interp(__tex_image_byte4_011, x, y); break;
-		case 12: r = kernel_tex_image_interp(__tex_image_byte4_012, x, y); break;
-		case 13: r = kernel_tex_image_interp(__tex_image_byte4_013, x, y); break;
-		case 14: r = kernel_tex_image_interp(__tex_image_byte4_014, x, y); break;
-		case 15: r = kernel_tex_image_interp(__tex_image_byte4_015, x, y); break;
-		case 16: r = kernel_tex_image_interp(__tex_image_byte4_016, x, y); break;
-		case 17: r = kernel_tex_image_interp(__tex_image_byte4_017, x, y); break;
-		case 18: r = kernel_tex_image_interp(__tex_image_byte4_018, x, y); break;
-		case 19: r = kernel_tex_image_interp(__tex_image_byte4_019, x, y); break;
-		case 20: r = kernel_tex_image_interp(__tex_image_byte4_020, x, y); break;
-		case 21: r = kernel_tex_image_interp(__tex_image_byte4_021, x, y); break;
-		case 22: r = kernel_tex_image_interp(__tex_image_byte4_022, x, y); break;
-		case 23: r = kernel_tex_image_interp(__tex_image_byte4_023, x, y); break;
-		case 24: r = kernel_tex_image_interp(__tex_image_byte4_024, x, y); break;
-		case 25: r = kernel_tex_image_interp(__tex_image_byte4_025, x, y); break;
-		case 26: r = kernel_tex_image_interp(__tex_image_byte4_026, x, y); break;
-		case 27: r = kernel_tex_image_interp(__tex_image_byte4_027, x, y); break;
-		case 28: r = kernel_tex_image_interp(__tex_image_byte4_028, x, y); break;
-		case 29: r = kernel_tex_image_interp(__tex_image_byte4_029, x, y); break;
-		case 30: r = kernel_tex_image_interp(__tex_image_byte4_030, x, y); break;
-		case 31: r = kernel_tex_image_interp(__tex_image_byte4_031, x, y); break;
-		case 32: r = kernel_tex_image_interp(__tex_image_byte4_032, x, y); break;
-		case 33: r = kernel_tex_image_interp(__tex_image_byte4_033, x, y); break;
-		case 34: r = kernel_tex_image_interp(__tex_image_byte4_034, x, y); break;
-		case 35: r = kernel_tex_image_interp(__tex_image_byte4_035, x, y); break;
-		case 36: r = kernel_tex_image_interp(__tex_image_byte4_036, x, y); break;
-		case 37: r = kernel_tex_image_interp(__tex_image_byte4_037, x, y); break;
-		case 38: r = kernel_tex_image_interp(__tex_image_byte4_038, x, y); break;
-		case 39: r = kernel_tex_image_interp(__tex_image_byte4_039, x, y); break;
-		case 40: r = kernel_tex_image_interp(__tex_image_byte4_040, x, y); break;
-		case 41: r = kernel_tex_image_interp(__tex_image_byte4_041, x, y); break;
-		case 42: r = kernel_tex_image_interp(__tex_image_byte4_042, x, y); break;
-		case 43: r = kernel_tex_image_interp(__tex_image_byte4_043, x, y); break;
-		case 44: r = kernel_tex_image_interp(__tex_image_byte4_044, x, y); break;
-		case 45: r = kernel_tex_image_interp(__tex_image_byte4_045, x, y); break;
-		case 46: r = kernel_tex_image_interp(__tex_image_byte4_046, x, y); break;
-		case 47: r = kernel_tex_image_interp(__tex_image_byte4_047, x, y); break;
-		case 48: r = kernel_tex_image_interp(__tex_image_byte4_048, x, y); break;
-		case 49: r = kernel_tex_image_interp(__tex_image_byte4_049, x, y); break;
-		case 50: r = kernel_tex_image_interp(__tex_image_byte4_050, x, y); break;
-		case 51: r = kernel_tex_image_interp(__tex_image_byte4_051, x, y); break;
-		case 52: r = kernel_tex_image_interp(__tex_image_byte4_052, x, y); break;
-		case 53: r = kernel_tex_image_interp(__tex_image_byte4_053, x, y); break;
-		case 54: r = kernel_tex_image_interp(__tex_image_byte4_054, x, y); break;
-		case 55: r = kernel_tex_image_interp(__tex_image_byte4_055, x, y); break;
-		case 56: r = kernel_tex_image_interp(__tex_image_byte4_056, x, y); break;
-		case 57: r = kernel_tex_image_interp(__tex_image_byte4_057, x, y); break;
-		case 58: r = kernel_tex_image_interp(__tex_image_byte4_058, x, y); break;
-		case 59: r = kernel_tex_image_interp(__tex_image_byte4_059, x, y); break;
-		case 60: r = kernel_tex_image_interp(__tex_image_byte4_060, x, y); break;
-		case 61: r = kernel_tex_image_interp(__tex_image_byte4_061, x, y); break;
-		case 62: r = kernel_tex_image_interp(__tex_image_byte4_062, x, y); break;
-		case 63: r = kernel_tex_image_interp(__tex_image_byte4_063, x, y); break;
-		case 64: r = kernel_tex_image_interp(__tex_image_byte4_064, x, y); break;
-		case 65: r = kernel_tex_image_interp(__tex_image_byte4_065, x, y); break;
-		case 66: r = kernel_tex_image_interp(__tex_image_byte4_066, x, y); break;
-		case 67: r = kernel_tex_image_interp(__tex_image_byte4_067, x, y); break;
-		case 68: r = kernel_tex_image_interp(__tex_image_byte4_068, x, y); break;
-		case 69: r = kernel_tex_image_interp(__tex_image_byte4_069, x, y); break;
-		case 70: r = kernel_tex_image_interp(__tex_image_byte4_070, x, y); break;
-		case 71: r = kernel_tex_image_interp(__tex_image_byte4_071, x, y); break;
-		case 72: r = kernel_tex_image_interp(__tex_image_byte4_072, x, y); break;
-		case 73: r = kernel_tex_image_interp(__tex_image_byte4_073, x, y); break;
-		case 74: r = kernel_tex_image_interp(__tex_image_byte4_074, x, y); break;
-		case 75: r = kernel_tex_image_interp(__tex_image_byte4_075, x, y); break;
-		case 76: r = kernel_tex_image_interp(__tex_image_byte4_076, x, y); break;
-		case 77: r = kernel_tex_image_interp(__tex_image_byte4_077, x, y); break;
-		case 78: r = kernel_tex_image_interp(__tex_image_byte4_078, x, y); break;
-		case 79: r = kernel_tex_image_interp(__tex_image_byte4_079, x, y); break;
-		case 80: r = kernel_tex_image_interp(__tex_image_byte4_080, x, y); break;
-		case 81: r = kernel_tex_image_interp(__tex_image_byte4_081, x, y); break;
-		case 82: r = kernel_tex_image_interp(__tex_image_byte4_082, x, y); break;
-		case 83: r = kernel_tex_image_interp(__tex_image_byte4_083, x, y); break;
-		case 84: r = kernel_tex_image_interp(__tex_image_byte4_084, x, y); break;
-		case 85: r = kernel_tex_image_interp(__tex_image_byte4_085, x, y); break;
-		case 86: r = kernel_tex_image_interp(__tex_image_byte4_086, x, y); break;
-		case 87: r = kernel_tex_image_interp(__tex_image_byte4_087, x, y); break;
-		case 88: r = kernel_tex_image_interp(__tex_image_byte4_088, x, y); break;
-		default:
-			kernel_assert(0);
-			return make_float4(0.0f, 0.0f, 0.0f, 0.0f);
-	}
-#  else
-	CUtexObject tex = kernel_tex_fetch(__bindless_mapping, id);
-	/* float4, byte4 and half4 */
-	const int texture_type = kernel_tex_type(id);
-	if(texture_type == IMAGE_DATA_TYPE_FLOAT4 ||
-	   texture_type == IMAGE_DATA_TYPE_BYTE4 ||
-	   texture_type == IMAGE_DATA_TYPE_HALF4)
-	{
-		r = kernel_tex_image_interp_float4(tex, x, y);
-	}
-	/* float, byte and half */
-	else {
-		float f = kernel_tex_image_interp_float(tex, x, y);
-		r = make_float4(f, f, f, 1.0f);
-	}
-#  endif
-#endif
-
 	const float alpha = r.w;
 
 	if(use_alpha && alpha != 1.0f && alpha != 0.0f) {
@@ -224,6 +83,8 @@ ccl_device void svm_node_tex_image_box(KernelGlobals *kg, ShaderData *sd, float 
 	object_inverse_normal_transform(kg, sd, &N);
 
 	/* project from direction vector to barycentric coordinates in triangles */
+	float3 signed_N = N;
+
 	N.x = fabsf(N.x);
 	N.y = fabsf(N.y);
 	N.z = fabsf(N.z);
@@ -293,12 +154,19 @@ ccl_device void svm_node_tex_image_box(KernelGlobals *kg, ShaderData *sd, float 
 	float4 f = make_float4(0.0f, 0.0f, 0.0f, 0.0f);
 	uint use_alpha = stack_valid(alpha_offset);
 
-	if(weight.x > 0.0f)
-		f += weight.x*svm_image_texture(kg, id, co.y, co.z, srgb, use_alpha);
-	if(weight.y > 0.0f)
-		f += weight.y*svm_image_texture(kg, id, co.x, co.z, srgb, use_alpha);
-	if(weight.z > 0.0f)
-		f += weight.z*svm_image_texture(kg, id, co.y, co.x, srgb, use_alpha);
+	/* Map so that no textures are flipped, rotation is somewhat arbitrary. */
+	if(weight.x > 0.0f) {
+		float2 uv = make_float2((signed_N.x < 0.0f)? 1.0f - co.y: co.y, co.z);
+		f += weight.x*svm_image_texture(kg, id, uv.x, uv.y, srgb, use_alpha);
+	}
+	if(weight.y > 0.0f) {
+		float2 uv = make_float2((signed_N.y > 0.0f)? 1.0f - co.x: co.x, co.z);
+		f += weight.y*svm_image_texture(kg, id, uv.x, uv.y, srgb, use_alpha);
+	}
+	if(weight.z > 0.0f) {
+		float2 uv = make_float2((signed_N.z > 0.0f)? 1.0f - co.y: co.y, co.x);
+		f += weight.z*svm_image_texture(kg, id, uv.x, uv.y, srgb, use_alpha);
+	}
 
 	if(stack_valid(out_offset))
 		stack_store_float3(stack, out_offset, make_float3(f.x, f.y, f.z));

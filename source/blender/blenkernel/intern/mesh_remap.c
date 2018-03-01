@@ -36,7 +36,7 @@
 #include "BLI_bitmap.h"
 #include "BLI_math.h"
 #include "BLI_memarena.h"
-#include "BLI_polyfill2d.h"
+#include "BLI_polyfill_2d.h"
 #include "BLI_rand.h"
 
 #include "BKE_bvhutils.h"
@@ -1184,7 +1184,6 @@ void BKE_mesh_remap_calc_loops_from_dm(
 		bool polys_allocated_src;
 		MPoly *polys_src = DM_get_poly_array(dm_src, &polys_allocated_src);
 		const int num_polys_src = dm_src->getNumPolys(dm_src);
-		bool looptri_allocated_src = false;
 		const MLoopTri *looptri_src = NULL;
 		int num_looptri_src = 0;
 
@@ -1374,17 +1373,11 @@ void BKE_mesh_remap_calc_loops_from_dm(
 				if (dirty_tess_flag) {
 					dm_src->dirty &= ~dirty_tess_flag;
 				}
-				DM_ensure_looptri(dm_src);
 				if (dirty_tess_flag) {
 					dm_src->dirty |= dirty_tess_flag;
 				}
 
-				looptri_src = DM_get_looptri_array(
-				        dm_src,
-				        verts_src,
-				        polys_src, num_polys_src,
-				        loops_src, num_loops_src,
-				        &looptri_allocated_src);
+				looptri_src = dm_src->getLoopTriArray(dm_src);
 				num_looptri_src = dm_src->getNumLoopTri(dm_src);
 				looptri_active = BLI_BITMAP_NEW((size_t)num_looptri_src, __func__);
 
@@ -1403,16 +1396,13 @@ void BKE_mesh_remap_calc_loops_from_dm(
 					        &treedata[tindex],
 					        verts_src, verts_allocated_src,
 					        loops_src, loops_allocated_src,
-					        looptri_src, num_looptri_src, looptri_allocated_src,
+					        looptri_src, num_looptri_src, false,
 					        looptri_active, num_looptri_active, bvh_epsilon, 2, 6);
 					if (verts_allocated_src) {
 						verts_allocated_src = false;  /* Only 'give' our verts once, to first tree! */
 					}
 					if (loops_allocated_src) {
 						loops_allocated_src = false;  /* Only 'give' our loops once, to first tree! */
-					}
-					if (looptri_allocated_src) {
-						looptri_allocated_src = false;  /* Only 'give' our looptri once, to first tree! */
 					}
 				}
 
@@ -1492,6 +1482,7 @@ void BKE_mesh_remap_calc_loops_from_dm(
 
 							for (i = vert_to_refelem_map_src[nearest.index].count; i--;) {
 								const int index_src = vert_to_refelem_map_src[nearest.index].indices[i];
+								BLI_assert(index_src != -1);
 								const float dot = dot_v3v3(nors_src[index_src], *nor_dst);
 
 								pidx_src = (mode == MREMAP_MODE_LOOP_NEAREST_LOOPNOR) ?
@@ -1532,7 +1523,12 @@ void BKE_mesh_remap_calc_loops_from_dm(
 									}
 								}
 							}
-							if (mode == MREMAP_MODE_LOOP_NEAREST_POLYNOR) {
+							if (best_index_src == -1) {
+								/* We found no item to map back from closest vertex... */
+								best_nor_dot = -1.0f;
+								hit_dist = FLT_MAX;
+							}
+							else if (mode == MREMAP_MODE_LOOP_NEAREST_POLYNOR) {
 								/* Our best_index_src is a poly one for now!
 								 * Have to find its loop matching our closest vertex. */
 								mp_src = &polys_src[best_index_src];
@@ -1928,9 +1924,6 @@ void BKE_mesh_remap_calc_loops_from_dm(
 		if (polys_allocated_src) {
 			MEM_freeN(polys_src);
 		}
-		if (looptri_allocated_src) {
-			MEM_freeN((void *)looptri_src);
-		}
 		if (vert_to_loop_map_src) {
 			MEM_freeN(vert_to_loop_map_src);
 		}
@@ -2182,7 +2175,7 @@ void BKE_mesh_remap_calc_polys_from_dm(
 					tri_vidx_2d[1][2] = 3;
 				}
 				else {
-					BLI_polyfill_calc((const float(*)[2])poly_vcos_2d, (unsigned int)mp->totloop, -1,
+					BLI_polyfill_calc(poly_vcos_2d, (unsigned int)mp->totloop, -1,
 					                  (unsigned int (*)[3])tri_vidx_2d);
 				}
 

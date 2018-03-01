@@ -28,9 +28,21 @@
 CCL_NAMESPACE_BEGIN
 
 class Device;
-class DeviceScene;
 class Progress;
 class Scene;
+
+class ImageMetaData {
+public:
+	/* Must be set by image file or builtin callback. */
+	bool is_float, is_half;
+	int channels;
+	size_t width, height, depth;
+	bool builtin_free_cache;
+
+	/* Automatically set. */
+	ImageDataType type;
+	bool is_linear;
+};
 
 class ImageManager {
 public:
@@ -41,11 +53,10 @@ public:
 	              void *builtin_data,
 	              bool animated,
 	              float frame,
-	              bool& is_float,
-	              bool& is_linear,
 	              InterpolationType interpolation,
 	              ExtensionType extension,
-	              bool use_alpha);
+	              bool use_alpha,
+	              ImageMetaData& metadata);
 	void remove_image(int flat_slot);
 	void remove_image(const string& filename,
 	                  void *builtin_data,
@@ -57,24 +68,24 @@ public:
 	                      InterpolationType interpolation,
 	                      ExtensionType extension,
 	                      bool use_alpha);
-	ImageDataType get_image_metadata(const string& filename, void *builtin_data, bool& is_linear);
+	bool get_image_metadata(const string& filename,
+	                        void *builtin_data,
+	                        ImageMetaData& metadata);
 
-	void device_prepare_update(DeviceScene *dscene);
 	void device_update(Device *device,
-	                   DeviceScene *dscene,
 	                   Scene *scene,
 	                   Progress& progress);
 	void device_update_slot(Device *device,
-	                        DeviceScene *dscene,
 	                        Scene *scene,
 	                        int flat_slot,
 	                        Progress *progress);
-	void device_free(Device *device, DeviceScene *dscene);
-	void device_free_builtin(Device *device, DeviceScene *dscene);
+	void device_free(Device *device);
+	void device_free_builtin(Device *device);
 
 	void set_osl_texture_system(void *texture_system);
-	void set_pack_images(bool pack_images_);
 	bool set_animation_frame_update(int frame);
+
+	device_memory *image_memory(int flat_slot);
 
 	bool need_update;
 
@@ -84,23 +95,22 @@ public:
 	 */
 	function<void(const string &filename,
 	              void *data,
-	              bool &is_float,
-	              int &width,
-	              int &height,
-	              int &depth,
-	              int &channels)> builtin_image_info_cb;
+	              ImageMetaData& metadata)> builtin_image_info_cb;
 	function<bool(const string &filename,
 	              void *data,
 	              unsigned char *pixels,
-	              const size_t pixels_size)> builtin_image_pixels_cb;
+	              const size_t pixels_size,
+	              const bool free_cache)> builtin_image_pixels_cb;
 	function<bool(const string &filename,
 	              void *data,
 	              float *pixels,
-	              const size_t pixels_size)> builtin_image_float_pixels_cb;
+	              const size_t pixels_size,
+	              const bool free_cache)> builtin_image_float_pixels_cb;
 
 	struct Image {
 		string filename;
 		void *builtin_data;
+		bool builtin_free_cache;
 
 		bool use_alpha;
 		bool need_load;
@@ -109,6 +119,9 @@ public:
 		InterpolationType interpolation;
 		ExtensionType extension;
 
+		string mem_name;
+		device_memory *mem;
+
 		int users;
 	};
 
@@ -116,16 +129,19 @@ private:
 	int tex_num_images[IMAGE_DATA_NUM_TYPES];
 	int max_num_images;
 	bool has_half_images;
-	bool cuda_fermi_limits;
 
 	thread_mutex device_mutex;
 	int animation_frame;
 
 	vector<Image*> images[IMAGE_DATA_NUM_TYPES];
 	void *osl_texture_system;
-	bool pack_images;
 
-	bool file_load_image_generic(Image *img, ImageInput **in, int &width, int &height, int &depth, int &components);
+	bool file_load_image_generic(Image *img,
+	                             ImageInput **in,
+	                             int &width,
+	                             int &height,
+	                             int &depth,
+	                             int &components);
 
 	template<TypeDesc::BASETYPE FileFormat,
 	         typename StorageType,
@@ -140,29 +156,14 @@ private:
 	int flattened_slot_to_type_index(int flat_slot, ImageDataType *type);
 	string name_from_type(int type);
 
-	uint8_t pack_image_options(ImageDataType type, size_t slot);
-
 	void device_load_image(Device *device,
-	                       DeviceScene *dscene,
 	                       Scene *scene,
 	                       ImageDataType type,
 	                       int slot,
 	                       Progress *progess);
 	void device_free_image(Device *device,
-	                       DeviceScene *dscene,
 	                       ImageDataType type,
 	                       int slot);
-
-	template<typename T>
-	void device_pack_images_type(
-	        ImageDataType type,
-	        const vector<device_vector<T>*>& cpu_textures,
-	        device_vector<T> *device_image,
-	        uint4 *info);
-
-	void device_pack_images(Device *device,
-	                        DeviceScene *dscene,
-	                        Progress& progess);
 };
 
 CCL_NAMESPACE_END

@@ -178,6 +178,9 @@ static void cmp_node_image_create_outputs(bNodeTree *ntree, bNode *node, LinkNod
 	cmp_node_image_add_pass_output(ntree, node, "Alpha", RE_PASSNAME_COMBINED, -1, SOCK_FLOAT, false, available_sockets, &prev_index);
 
 	if (ima) {
+		if (!ima->rr) {
+			cmp_node_image_add_pass_output(ntree, node, RE_PASSNAME_Z, RE_PASSNAME_Z, -1, SOCK_FLOAT, false, available_sockets, &prev_index);
+		}
 		BKE_image_release_ibuf(ima, ibuf, NULL);
 	}
 }
@@ -337,6 +340,7 @@ void register_node_type_cmp_image(void)
 	node_type_init(&ntype, node_composit_init_image);
 	node_type_storage(&ntype, "ImageUser", node_composit_free_image, node_composit_copy_image);
 	node_type_update(&ntype, cmp_node_image_update, NULL);
+	node_type_label(&ntype, node_image_label);
 
 	nodeRegisterType(&ntype);
 }

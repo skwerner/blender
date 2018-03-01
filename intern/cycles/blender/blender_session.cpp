@@ -115,8 +115,7 @@ void BlenderSession::create()
 void BlenderSession::create_session()
 {
 	SessionParams session_params = BlenderSync::get_session_params(b_engine, b_userpref, b_scene, background);
-	bool is_cpu = session_params.device.type == DEVICE_CPU;
-	SceneParams scene_params = BlenderSync::get_scene_params(b_scene, background, is_cpu);
+	SceneParams scene_params = BlenderSync::get_scene_params(b_scene, background);
 	bool session_pause = BlenderSync::get_session_pause(b_scene, background);
 
 	/* reset status/progress */
@@ -125,14 +124,6 @@ void BlenderSession::create_session()
 	last_progress = -1.0f;
 	start_resize_time = 0.0;
 
-	/* create scene */
-	scene = new Scene(scene_params, session_params.device);
-
-	/* setup callbacks for builtin image support */
-	scene->image_manager->builtin_image_info_cb = function_bind(&BlenderSession::builtin_image_info, this, _1, _2, _3, _4, _5, _6, _7);
-	scene->image_manager->builtin_image_pixels_cb = function_bind(&BlenderSession::builtin_image_pixels, this, _1, _2, _3, _4);
-	scene->image_manager->builtin_image_float_pixels_cb = function_bind(&BlenderSession::builtin_image_float_pixels, this, _1, _2, _3, _4);
-
 	/* create session */
 	session = new Session(session_params);
 	session->scene = scene;
@@ -140,8 +131,18 @@ void BlenderSession::create_session()
 	session->progress.set_cancel_callback(function_bind(&BlenderSession::test_cancel, this));
 	session->set_pause(session_pause);
 
+	/* create scene */
+	scene = new Scene(scene_params, session->device);
+
+	/* setup callbacks for builtin image support */
+	scene->image_manager->builtin_image_info_cb = function_bind(&BlenderSession::builtin_image_info, this, _1, _2, _3);
+	scene->image_manager->builtin_image_pixels_cb = function_bind(&BlenderSession::builtin_image_pixels, this, _1, _2, _3, _4, _5);
+	scene->image_manager->builtin_image_float_pixels_cb = function_bind(&BlenderSession::builtin_image_float_pixels, this, _1, _2, _3, _4, _5);
+
+	session->scene = scene;
+
 	/* create sync */
-	sync = new BlenderSync(b_engine, b_data, b_scene, scene, !background, session->progress, is_cpu);
+	sync = new BlenderSync(b_engine, b_data, b_scene, scene, !background, session->progress);
 	BL::Object b_camera_override(b_engine.camera_override());
 	if(b_v3d) {
 		if(session_pause == false) {
@@ -179,8 +180,7 @@ void BlenderSession::reset_session(BL::BlendData& b_data_, BL::Scene& b_scene_)
 	b_scene = b_scene_;
 
 	SessionParams session_params = BlenderSync::get_session_params(b_engine, b_userpref, b_scene, background);
-	const bool is_cpu = session_params.device.type == DEVICE_CPU;
-	SceneParams scene_params = BlenderSync::get_scene_params(b_scene, background, is_cpu);
+	SceneParams scene_params = BlenderSync::get_scene_params(b_scene, background);
 
 	width = render_resolution_x(b_render);
 	height = render_resolution_y(b_render);
@@ -211,7 +211,7 @@ void BlenderSession::reset_session(BL::BlendData& b_data_, BL::Scene& b_scene_)
 	session->stats.mem_peak = session->stats.mem_used;
 
 	/* sync object should be re-created */
-	sync = new BlenderSync(b_engine, b_data, b_scene, scene, !background, session->progress, is_cpu);
+	sync = new BlenderSync(b_engine, b_data, b_scene, scene, !background, session->progress);
 
 	/* for final render we will do full data sync per render layer, only
 	 * do some basic syncing here, no objects or materials for speed */
@@ -307,11 +307,10 @@ static void end_render_result(BL::RenderEngine& b_engine,
 
 void BlenderSession::do_write_update_render_tile(RenderTile& rtile, bool do_update_only, bool highlight)
 {
-	BufferParams& params = rtile.buffers->params;
-	int x = params.full_x - session->tile_manager.params.full_x;
-	int y = params.full_y - session->tile_manager.params.full_y;
-	int w = params.width;
-	int h = params.height;
+	int x = rtile.x - session->tile_manager.params.full_x;
+	int y = rtile.y - session->tile_manager.params.full_y;
+	int w = rtile.w;
+	int h = rtile.h;
 
 	/* get render result */
 	BL::RenderResult b_rr = begin_render_result(b_engine, x, y, w, h, b_rlay_name.c_str(), b_rview_name.c_str());
@@ -331,20 +330,20 @@ void BlenderSession::do_write_update_render_tile(RenderTile& rtile, bool do_upda
 	BL::RenderLayer b_rlay = *b_single_rlay;
 
 	if(do_update_only) {
-		/* update only needed */
+		/* Sample would be zero at initial tile update, which is only needed
+		 * to tag tile form blender side as IN PROGRESS for proper highlight
+		 * no buffers should be sent to blender yet. For denoise we also
+		 * keep showing the noisy buffers until denoise is done. */
+		bool merge = (rtile.sample != 0) && (rtile.task != RenderTile::DENOISE);
 
-		if(rtile.sample != 0) {
-			/* sample would be zero at initial tile update, which is only needed
-			 * to tag tile form blender side as IN PROGRESS for proper highlight
-			 * no buffers should be sent to blender yet
-			 */
+		if(merge) {
 			update_render_result(b_rr, b_rlay, rtile);
 		}
 
-		end_render_result(b_engine, b_rr, true, highlight, true);
+		end_render_result(b_engine, b_rr, true, highlight, merge);
 	}
 	else {
-		/* write result */
+		/* Write final render result. */
 		write_render_result(b_rr, b_rlay, rtile);
 		end_render_result(b_engine, b_rr, false, false, true);
 	}
@@ -381,7 +380,10 @@ void BlenderSession::render()
 	BL::RenderSettings r = b_scene.render();
 	BL::RenderSettings::layers_iterator b_layer_iter;
 	BL::RenderResult::views_iterator b_view_iter;
-	
+
+	/* We do some special meta attributes when we only have single layer. */
+	const bool is_single_layer = (r.layers.length() == 1);
+
 	for(r.layers.begin(b_layer_iter); b_layer_iter != r.layers.end(); ++b_layer_iter) {
 		b_rlay_name = b_layer_iter->name();
 
@@ -403,7 +405,7 @@ void BlenderSession::render()
 		buffer_params.passes = passes;
 
 		PointerRNA crl = RNA_pointer_get(&b_layer_iter->ptr, "cycles");
-		bool use_denoising = !session_params.progressive_refine && get_boolean(crl, "use_denoising");
+		bool use_denoising = get_boolean(crl, "use_denoising");
 		buffer_params.denoising_data_pass = use_denoising;
 		session->tile_manager.schedule_denoising = use_denoising;
 		session->params.use_denoising = use_denoising;
@@ -474,6 +476,15 @@ void BlenderSession::render()
 
 			if(session->progress.get_cancel())
 				break;
+		}
+
+		if(is_single_layer) {
+			BL::RenderResult b_rr = b_engine.get_result();
+			string num_aa_samples = string_printf("%d", session->params.samples);
+			b_rr.stamp_data_add_field("Cycles Samples", num_aa_samples.c_str());
+			/* TODO(sergey): Report whether we're doing resumable render
+			 * and also start/end sample if so.
+			 */
 		}
 
 		/* free result without merging */
@@ -661,10 +672,9 @@ void BlenderSession::do_write_update_render_result(BL::RenderResult& b_rr,
 	if(!buffers->copy_from_device())
 		return;
 
-	BufferParams& params = buffers->params;
 	float exposure = scene->film->exposure;
 
-	vector<float> pixels(params.width*params.height*4);
+	vector<float> pixels(rtile.w*rtile.h*4);
 
 	/* Adjust absolute sample number to the range. */
 	int sample = rtile.sample;
@@ -736,8 +746,7 @@ void BlenderSession::synchronize()
 
 	/* on session/scene parameter changes, we recreate session entirely */
 	SessionParams session_params = BlenderSync::get_session_params(b_engine, b_userpref, b_scene, background);
-	const bool is_cpu = session_params.device.type == DEVICE_CPU;
-	SceneParams scene_params = BlenderSync::get_scene_params(b_scene, background, is_cpu);
+	SceneParams scene_params = BlenderSync::get_scene_params(b_scene, background);
 	bool session_pause = BlenderSync::get_session_pause(b_scene, background);
 
 	if(session->params.modified(session_params) ||
@@ -1009,18 +1018,11 @@ int BlenderSession::builtin_image_frame(const string &builtin_name)
 
 void BlenderSession::builtin_image_info(const string &builtin_name,
                                         void *builtin_data,
-                                        bool &is_float,
-                                        int &width,
-                                        int &height,
-                                        int &depth,
-                                        int &channels)
+                                        ImageMetaData& metadata)
 {
 	/* empty image */
-	is_float = false;
-	width = 1;
-	height = 1;
-	depth = 0;
-	channels = 0;
+	metadata.width = 1;
+	metadata.height = 1;
 
 	if(!builtin_data)
 		return;
@@ -1034,32 +1036,34 @@ void BlenderSession::builtin_image_info(const string &builtin_name,
 		/* image data */
 		BL::Image b_image(b_id);
 
-		is_float = b_image.is_float();
-		width = b_image.size()[0];
-		height = b_image.size()[1];
-		depth = 1;
-		channels = b_image.channels();
+		metadata.builtin_free_cache = !b_image.has_data();
+		metadata.is_float = b_image.is_float();
+		metadata.width = b_image.size()[0];
+		metadata.height = b_image.size()[1];
+		metadata.depth = 1;
+		metadata.channels = b_image.channels();
 	}
 	else if(b_id.is_a(&RNA_Object)) {
 		/* smoke volume data */
 		BL::Object b_ob(b_id);
 		BL::SmokeDomainSettings b_domain = object_smoke_domain_find(b_ob);
 
-		is_float = true;
-		depth = 1;
-		channels = 1;
+		metadata.is_float = true;
+		metadata.depth = 1;
+		metadata.channels = 1;
 
 		if(!b_domain)
 			return;
 
 		if(builtin_name == Attribute::standard_name(ATTR_STD_VOLUME_DENSITY) ||
 		   builtin_name == Attribute::standard_name(ATTR_STD_VOLUME_FLAME) ||
-		   builtin_name == Attribute::standard_name(ATTR_STD_VOLUME_HEAT))
-			channels = 1;
+		   builtin_name == Attribute::standard_name(ATTR_STD_VOLUME_HEAT) ||
+		   builtin_name == Attribute::standard_name(ATTR_STD_VOLUME_TEMPERATURE))
+			metadata.channels = 1;
 		else if(builtin_name == Attribute::standard_name(ATTR_STD_VOLUME_COLOR))
-			channels = 4;
+			metadata.channels = 4;
 		else if(builtin_name == Attribute::standard_name(ATTR_STD_VOLUME_VELOCITY))
-			channels = 3;
+			metadata.channels = 3;
 		else
 			return;
 
@@ -1073,9 +1077,9 @@ void BlenderSession::builtin_image_info(const string &builtin_name,
 			amplify = 1;
 		}
 
-		width = resolution.x * amplify;
-		height = resolution.y * amplify;
-		depth = resolution.z * amplify;
+		metadata.width = resolution.x * amplify;
+		metadata.height = resolution.y * amplify;
+		metadata.depth = resolution.z * amplify;
 	}
 	else {
 		/* TODO(sergey): Check we're indeed in shader node tree. */
@@ -1084,9 +1088,11 @@ void BlenderSession::builtin_image_info(const string &builtin_name,
 		BL::Node b_node(ptr);
 		if(b_node.is_a(&RNA_ShaderNodeTexPointDensity)) {
 			BL::ShaderNodeTexPointDensity b_point_density_node(b_node);
-			channels = 4;
-			width = height = depth = b_point_density_node.resolution();
-			is_float = true;
+			metadata.channels = 4;
+			metadata.width = b_point_density_node.resolution();
+			metadata.height = metadata.width;
+			metadata.depth = metadata.width;
+			metadata.is_float = true;
 		}
 	}
 }
@@ -1094,7 +1100,8 @@ void BlenderSession::builtin_image_info(const string &builtin_name,
 bool BlenderSession::builtin_image_pixels(const string &builtin_name,
                                           void *builtin_data,
                                           unsigned char *pixels,
-                                          const size_t pixels_size)
+                                          const size_t pixels_size,
+                                          const bool free_cache)
 {
 	if(!builtin_data) {
 		return false;
@@ -1115,7 +1122,6 @@ bool BlenderSession::builtin_image_pixels(const string &builtin_name,
 
 	if(image_pixels && num_pixels * channels == pixels_size) {
 		memcpy(pixels, image_pixels, pixels_size * sizeof(unsigned char));
-		MEM_freeN(image_pixels);
 	}
 	else {
 		if(channels == 1) {
@@ -1134,6 +1140,16 @@ bool BlenderSession::builtin_image_pixels(const string &builtin_name,
 			}
 		}
 	}
+
+	if(image_pixels) {
+		MEM_freeN(image_pixels);
+	}
+
+	/* Free image buffers to save memory during render. */
+	if(free_cache) {
+		b_image.buffers_free();
+	}
+
 	/* Premultiply, byte images are always straight for Blender. */
 	unsigned char *cp = pixels;
 	for(size_t i = 0; i < num_pixels; i++, cp += channels) {
@@ -1147,7 +1163,8 @@ bool BlenderSession::builtin_image_pixels(const string &builtin_name,
 bool BlenderSession::builtin_image_float_pixels(const string &builtin_name,
                                                 void *builtin_data,
                                                 float *pixels,
-                                                const size_t pixels_size)
+                                                const size_t pixels_size,
+                                                const bool free_cache)
 {
 	if(!builtin_data) {
 		return false;
@@ -1172,7 +1189,6 @@ bool BlenderSession::builtin_image_float_pixels(const string &builtin_name,
 
 		if(image_pixels && num_pixels * channels == pixels_size) {
 			memcpy(pixels, image_pixels, pixels_size * sizeof(float));
-			MEM_freeN(image_pixels);
 		}
 		else {
 			if(channels == 1) {
@@ -1190,6 +1206,15 @@ bool BlenderSession::builtin_image_float_pixels(const string &builtin_name,
 					}
 				}
 			}
+		}
+
+		if(image_pixels) {
+			MEM_freeN(image_pixels);
+		}
+
+		/* Free image buffers to save memory during render. */
+		if(free_cache) {
+			b_image.buffers_free();
 		}
 
 		return true;
@@ -1253,6 +1278,13 @@ bool BlenderSession::builtin_image_float_pixels(const string &builtin_name,
 			SmokeDomainSettings_heat_grid_get_length(&b_domain.ptr, &length);
 			if(length == num_pixels) {
 				SmokeDomainSettings_heat_grid_get(&b_domain.ptr, pixels);
+				return true;
+			}
+		}
+		else if(builtin_name == Attribute::standard_name(ATTR_STD_VOLUME_TEMPERATURE)) {
+			SmokeDomainSettings_temperature_grid_get_length(&b_domain.ptr, &length);
+			if(length == num_pixels) {
+				SmokeDomainSettings_temperature_grid_get(&b_domain.ptr, pixels);
 				return true;
 			}
 		}

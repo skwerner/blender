@@ -120,7 +120,7 @@ static BMOpDefine bmo_smooth_vert_def = {
 };
 
 /*
- * Vertext Smooth Laplacian.
+ * Vertex Smooth Laplacian.
  *
  * Smooths vertices by using Laplacian smoothing propose by.
  * Desbrun, et al. Implicit Fairing of Irregular Meshes using Diffusion and Curvature Flow.
@@ -843,7 +843,6 @@ static BMOpDefine bmo_bmesh_to_mesh_def = {
 	 {"mesh", BMO_OP_SLOT_PTR, {(int)BMO_OP_SLOT_SUBTYPE_PTR_MESH}},
 	/* pointer to an object structure */
 	 {"object", BMO_OP_SLOT_PTR, {(int)BMO_OP_SLOT_SUBTYPE_PTR_OBJECT}},
-	 {"skip_tessface", BMO_OP_SLOT_BOOL},  /* don't calculate mfaces */
 	 {{'\0'}},
 	},
 	{{{'\0'}}},  /* no output */
@@ -1684,7 +1683,7 @@ static BMOpDefine bmo_create_circle_def = {
 	{{"cap_ends",        BMO_OP_SLOT_BOOL},  /* whether or not to fill in the ends with faces */
 	 {"cap_tris",        BMO_OP_SLOT_BOOL},  /* fill ends with triangles instead of ngons */
 	 {"segments",        BMO_OP_SLOT_INT},
-	 {"diameter",        BMO_OP_SLOT_FLT},  /* diameter of one end */
+	 {"radius",          BMO_OP_SLOT_FLT},  /* Radius of the circle. */
 	 {"matrix",          BMO_OP_SLOT_MAT},  /* matrix to multiply the new geometry with */
 	 {"calc_uvs",        BMO_OP_SLOT_BOOL}, /* calculate default UVs */
 	 {{'\0'}},

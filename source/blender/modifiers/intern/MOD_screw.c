@@ -112,6 +112,56 @@ static void screwvert_iter_step(ScrewVertIter *iter)
 	}
 }
 
+static DerivedMesh *dm_remove_doubles_on_axis(
+        DerivedMesh *result, MVert *mvert_new, const uint totvert, const uint step_tot,
+        const float axis_vec[3], const float axis_offset[3], const float merge_threshold)
+{
+	const float merge_threshold_sq = SQUARE(merge_threshold);
+	const bool use_offset = axis_offset != NULL;
+	uint tot_doubles = 0;
+	for (uint i = 0; i < totvert; i += 1) {
+		float axis_co[3];
+		if (use_offset) {
+			float offset_co[3];
+			sub_v3_v3v3(offset_co, mvert_new[i].co, axis_offset);
+			project_v3_v3v3_normalized(axis_co, offset_co, axis_vec);
+			add_v3_v3(axis_co, axis_offset);
+		}
+		else {
+			project_v3_v3v3_normalized(axis_co, mvert_new[i].co, axis_vec);
+		}
+		const float dist_sq = len_squared_v3v3(axis_co, mvert_new[i].co);
+		if (dist_sq <= merge_threshold_sq) {
+			mvert_new[i].flag |= ME_VERT_TMP_TAG;
+			tot_doubles += 1;
+			copy_v3_v3(mvert_new[i].co, axis_co);
+		}
+	}
+
+	if (tot_doubles != 0) {
+		uint tot = totvert * step_tot;
+		int *full_doubles_map = MEM_malloc_arrayN(tot, sizeof(int), __func__);
+		copy_vn_i(full_doubles_map, (int)tot, -1);
+
+		uint tot_doubles_left = tot_doubles;
+		for (uint i = 0; i < totvert; i += 1) {
+			if (mvert_new[i].flag & ME_VERT_TMP_TAG) {
+				int *doubles_map = &full_doubles_map[totvert + i] ;
+				for (uint step = 1; step < step_tot; step += 1) {
+					*doubles_map = (int)i;
+					doubles_map += totvert;
+				}
+				tot_doubles_left -= 1;
+				if (tot_doubles_left == 0) {
+					break;
+				}
+			}
+		}
+		result = CDDM_merge_verts(result, full_doubles_map, (int)(tot_doubles * (step_tot - 1)), CDDM_MERGE_VERTS_DUMP_IF_MAPPED);
+		MEM_freeN(full_doubles_map);
+	}
+	return result;
+}
 
 static void initData(ModifierData *md)
 {
@@ -123,6 +173,7 @@ static void initData(ModifierData *md)
 	ltmd->steps = 16;
 	ltmd->render_steps = 16;
 	ltmd->iter = 1;
+	ltmd->merge_dist = 0.01f;
 }
 
 static void copyData(ModifierData *md, ModifierData *target)
@@ -398,10 +449,10 @@ static DerivedMesh *applyModifier(ModifierData *md, Object *ob,
 
 		mpoly_orig = dm->getPolyArray(dm);
 		mloop_orig = dm->getLoopArray(dm);
-		edge_poly_map = MEM_mallocN(sizeof(*edge_poly_map) * totedge, __func__);
+		edge_poly_map = MEM_malloc_arrayN(totedge, sizeof(*edge_poly_map), __func__);
 		memset(edge_poly_map, 0xff, sizeof(*edge_poly_map) * totedge);
 
-		vert_loop_map = MEM_mallocN(sizeof(*vert_loop_map) * totvert, __func__);
+		vert_loop_map = MEM_malloc_arrayN(totvert, sizeof(*vert_loop_map), __func__);
 		memset(vert_loop_map, 0xff, sizeof(*vert_loop_map) * totvert);
 
 		for (i = 0, mp_orig = mpoly_orig; i < totpoly; i++, mp_orig++) {
@@ -447,7 +498,7 @@ static DerivedMesh *applyModifier(ModifierData *md, Object *ob,
 		 * This makes the modifier faster with one less alloc.
 		 */
 
-		vert_connect = MEM_mallocN(sizeof(ScrewVertConnect) * totvert, "ScrewVertConnect");
+		vert_connect = MEM_malloc_arrayN(totvert, sizeof(ScrewVertConnect), "ScrewVertConnect");
 		//vert_connect = (ScrewVertConnect *) &medge_new[totvert];  /* skip the first slice of verts */
 		vc = vert_connect;
 
@@ -1050,6 +1101,16 @@ static DerivedMesh *applyModifier(ModifierData *md, Object *ob,
 		MEM_freeN(vert_loop_map);
 	}
 
+	if ((ltmd->flag & MOD_SCREW_MERGE) && (screw_ofs == 0.0f)) {
+		DerivedMesh *result_prev = result;
+		result = dm_remove_doubles_on_axis(
+		        result, mvert_new, totvert, step_tot,
+		        axis_vec, ltmd->ob_axis ? mtx_tx[3] : NULL, ltmd->merge_dist);
+		if (result != result_prev) {
+			result->dirty |= DM_DIRTY_NORMALS;
+		}
+	}
+
 	if ((ltmd->flag & MOD_SCREW_NORMAL_CALC) == 0) {
 		result->dirty |= DM_DIRTY_NORMALS;
 	}
@@ -1058,32 +1119,24 @@ static DerivedMesh *applyModifier(ModifierData *md, Object *ob,
 }
 
 
-static void updateDepgraph(ModifierData *md, DagForest *forest,
-                           struct Main *UNUSED(bmain),
-                           struct Scene *UNUSED(scene),
-                           Object *UNUSED(ob),
-                           DagNode *obNode)
+static void updateDepgraph(ModifierData *md, const ModifierUpdateDepsgraphContext *ctx)
 {
 	ScrewModifierData *ltmd = (ScrewModifierData *) md;
 
 	if (ltmd->ob_axis) {
-		DagNode *curNode = dag_get_node(forest, ltmd->ob_axis);
+		DagNode *curNode = dag_get_node(ctx->forest, ltmd->ob_axis);
 
-		dag_add_relation(forest, curNode, obNode,
+		dag_add_relation(ctx->forest, curNode, ctx->obNode,
 		                 DAG_RL_DATA_DATA | DAG_RL_OB_DATA,
 		                 "Screw Modifier");
 	}
 }
 
-static void updateDepsgraph(ModifierData *md,
-                            struct Main *UNUSED(bmain),
-                            struct Scene *UNUSED(scene),
-                            Object *UNUSED(ob),
-                            struct DepsNodeHandle *node)
+static void updateDepsgraph(ModifierData *md, const ModifierUpdateDepsgraphContext *ctx)
 {
 	ScrewModifierData *ltmd = (ScrewModifierData *)md;
 	if (ltmd->ob_axis != NULL) {
-		DEG_add_object_relation(node, ltmd->ob_axis, DEG_OB_COMP_TRANSFORM, "Screw Modifier");
+		DEG_add_object_relation(ctx->node, ltmd->ob_axis, DEG_OB_COMP_TRANSFORM, "Screw Modifier");
 	}
 }
 

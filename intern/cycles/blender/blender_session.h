@@ -26,6 +26,7 @@
 
 CCL_NAMESPACE_BEGIN
 
+class ImageMetaData;
 class Scene;
 class Session;
 class RenderBuffers;
@@ -152,19 +153,17 @@ protected:
 	int builtin_image_frame(const string &builtin_name);
 	void builtin_image_info(const string &builtin_name,
 	                        void *builtin_data,
-	                        bool &is_float,
-	                        int &width,
-	                        int &height,
-	                        int &depth,
-	                        int &channels);
+	                        ImageMetaData& metadata);
 	bool builtin_image_pixels(const string &builtin_name,
 	                          void *builtin_data,
 	                          unsigned char *pixels,
-	                          const size_t pixels_size);
+	                          const size_t pixels_size,
+	                          const bool free_cache);
 	bool builtin_image_float_pixels(const string &builtin_name,
 	                                void *builtin_data,
 	                                float *pixels,
-	                                const size_t pixels_size);
+	                                const size_t pixels_size,
+	                                const bool free_cache);
 
 	/* Update tile manager to reflect resumable render settings. */
 	void update_resumable_tile_manager(int num_samples);

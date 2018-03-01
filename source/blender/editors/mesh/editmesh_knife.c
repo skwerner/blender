@@ -271,6 +271,8 @@ static bool knife_verts_edge_in_face(KnifeVert *v1, KnifeVert *v2, BMFace *f);
 
 static void knifetool_free_bmbvh(KnifeTool_OpData *kcd);
 
+static int knifetool_modal(bContext *C, wmOperator *op, const wmEvent *event);
+
 static void knife_update_header(bContext *C, wmOperator *op, KnifeTool_OpData *kcd)
 {
 	char header[UI_MAX_DRAW_STR];
@@ -1206,6 +1208,7 @@ static bool knife_ray_intersect_face(
 
 	for (; tri_i < tottri; tri_i++) {
 		const float *lv1, *lv2, *lv3;
+		float ray_tri_uv[2];
 
 		tri = kcd->em->looptris[tri_i];
 		if (tri[0]->f != f)
@@ -1217,7 +1220,7 @@ static bool knife_ray_intersect_face(
 		 * tesselation edge and might not hit either tesselation tri with
 		 * an exact test;
 		 * we will exclude hits near real edges by a later test */
-		if (isect_ray_tri_epsilon_v3(v1, raydir, lv1, lv2, lv3, &lambda, NULL, KNIFE_FLT_EPS)) {
+		if (isect_ray_tri_epsilon_v3(v1, raydir, lv1, lv2, lv3, &lambda, ray_tri_uv, KNIFE_FLT_EPS)) {
 			/* check if line coplanar with tri */
 			normal_tri_v3(tri_norm, lv1, lv2, lv3);
 			plane_from_point_normal_v3(tri_plane, lv1, tri_norm);
@@ -1226,8 +1229,7 @@ static bool knife_ray_intersect_face(
 			{
 				return false;
 			}
-			copy_v3_v3(hit_cageco, v1);
-			madd_v3_v3fl(hit_cageco, raydir, lambda);
+			interp_v3_v3v3v3_uv(hit_cageco, lv1, lv2, lv3, ray_tri_uv);
 			/* Now check that far enough away from verts and edges */
 			lst = knife_get_face_kedges(kcd, f);
 			for (ref = lst->first; ref; ref = ref->next) {
@@ -1239,11 +1241,7 @@ static bool knife_ray_intersect_face(
 					return false;
 				}
 			}
-
-			transform_point_by_tri_v3(
-			        hit_co, hit_cageco,
-			        tri[0]->v->co, tri[1]->v->co, tri[2]->v->co,
-			        lv1, lv2, lv3);
+			interp_v3_v3v3v3_uv(hit_co, tri[0]->v->co, tri[1]->v->co, tri[2]->v->co, ray_tri_uv);
 			return true;
 		}
 	}
@@ -2286,7 +2284,7 @@ static void knife_make_face_cuts(KnifeTool_OpData *kcd, BMFace *f, ListBase *kfe
 	/* point to knife edges we've created edges in, edge_array aligned */
 	KnifeEdge **kfe_array = BLI_array_alloca(kfe_array, edge_array_len);
 
-	BLI_assert(BLI_gset_size(kcd->edgenet.edge_visit) == 0);
+	BLI_assert(BLI_gset_len(kcd->edgenet.edge_visit) == 0);
 
 	i = 0;
 	for (ref = kfedges->first; ref; ref = ref->next) {
@@ -2666,6 +2664,7 @@ static int knifetool_invoke(bContext *C, wmOperator *op, const wmEvent *event)
 {
 	const bool only_select = RNA_boolean_get(op->ptr, "only_selected");
 	const bool cut_through = !RNA_boolean_get(op->ptr, "use_occlude_geometry");
+	const bool wait_for_input = RNA_boolean_get(op->ptr, "wait_for_input");
 
 	KnifeTool_OpData *kcd;
 
@@ -2693,6 +2692,18 @@ static int knifetool_invoke(bContext *C, wmOperator *op, const wmEvent *event)
 
 	knifetool_update_mval_i(kcd, event->mval);
 
+	if (wait_for_input == false) {
+		/* Avoid copy-paste logic. */
+		wmEvent event_modal = {
+			.prevval = KM_NOTHING,
+			.type = EVT_MODAL_MAP,
+			.val = KNF_MODAL_ADD_CUT,
+		};
+		int ret = knifetool_modal(C, op, &event_modal);
+		BLI_assert(ret == OPERATOR_RUNNING_MODAL);
+		UNUSED_VARS_NDEBUG(ret);
+	}
+
 	knife_update_header(C, op, kcd);
 
 	return OPERATOR_RUNNING_MODAL;
@@ -2700,7 +2711,7 @@ static int knifetool_invoke(bContext *C, wmOperator *op, const wmEvent *event)
 
 wmKeyMap *knifetool_modal_keymap(wmKeyConfig *keyconf)
 {
-	static EnumPropertyItem modal_items[] = {
+	static const EnumPropertyItem modal_items[] = {
 		{KNF_MODAL_CANCEL, "CANCEL", 0, "Cancel", ""},
 		{KNF_MODAL_CONFIRM, "CONFIRM", 0, "Confirm", ""},
 		{KNF_MODAL_MIDPOINT_ON, "SNAP_MIDPOINTS_ON", 0, "Snap To Midpoints On", ""},
@@ -2959,8 +2970,13 @@ void MESH_OT_knife_tool(wmOperatorType *ot)
 	/* flags */
 	ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO | OPTYPE_BLOCKING;
 
+	/* properties */
+	PropertyRNA *prop;
 	RNA_def_boolean(ot->srna, "use_occlude_geometry", true, "Occlude Geometry", "Only cut the front most geometry");
 	RNA_def_boolean(ot->srna, "only_selected", false, "Only Selected", "Only cut selected geometry");
+
+	prop = RNA_def_boolean(ot->srna, "wait_for_input", true, "Wait for Input", "");
+	RNA_def_property_flag(prop, PROP_HIDDEN | PROP_SKIP_SAVE);
 }
 
 

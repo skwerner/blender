@@ -124,24 +124,18 @@ static int bpy_bm_elem_hflag_set(BPy_BMElem *self, PyObject *value, void *flag)
 
 	BPY_BM_CHECK_INT(self);
 
-	param = PyLong_AsLong(value);
-
-	if ((unsigned int)param <= 1) {
-		if (hflag == BM_ELEM_SELECT)
-			BM_elem_select_set(self->bm, self->ele, param);
-		else
-			BM_elem_flag_set(self->ele, hflag, param);
-
-		return 0;
-	}
-	else {
-		PyErr_Format(PyExc_TypeError,
-		             "expected True/False or 0/1, not %.200s",
-		             Py_TYPE(value)->tp_name);
+	if ((param = PyC_Long_AsBool(value)) == -1) {
 		return -1;
 	}
-}
 
+	if (hflag == BM_ELEM_SELECT) {
+		BM_elem_select_set(self->bm, self->ele, param);
+	}
+	else {
+		BM_elem_flag_set(self->ele, hflag, param);
+	}
+	return 0;
+}
 
 PyDoc_STRVAR(bpy_bm_elem_index_doc,
 "Index of this element.\n"
@@ -169,21 +163,17 @@ static int bpy_bm_elem_index_set(BPy_BMElem *self, PyObject *value, void *UNUSED
 
 	BPY_BM_CHECK_INT(self);
 
-	param = PyLong_AsLong(value);
-
-	if (param == -1 && PyErr_Occurred()) {
-		PyErr_SetString(PyExc_TypeError,
-		                "expected an int type");
+	if (((param = PyC_Long_AsI32(value)) == -1) && PyErr_Occurred()) {
+		/* error is set */
 		return -1;
 	}
-	else {
-		BM_elem_index_set(self->ele, param); /* set_dirty! */
 
-		/* when setting the index assume its set invalid */
-		self->bm->elem_index_dirty |= self->ele->head.htype;
+	BM_elem_index_set(self->ele, param); /* set_dirty! */
 
-		return 0;
-	}
+	/* when setting the index assume its set invalid */
+	self->bm->elem_index_dirty |= self->ele->head.htype;
+
+	return 0;
 }
 
 /* type specific get/sets
@@ -506,14 +496,12 @@ static int bpy_bmface_material_index_set(BPy_BMFace *self, PyObject *value)
 
 	BPY_BM_CHECK_INT(self);
 
-	param = PyLong_AsLong(value);
-
-	if (param == -1 && PyErr_Occurred()) {
-		PyErr_SetString(PyExc_TypeError,
-		                "expected an int type");
+	if (((param = PyC_Long_AsI32(value)) == -1) && PyErr_Occurred()) {
+		/* error is set */
 		return -1;
 	}
-	else if ((param < 0) || (param > MAXMAT)) {
+
+	if ((param < 0) || (param > MAXMAT)) {
 		/* normally we clamp but in this case raise an error */
 		PyErr_SetString(PyExc_ValueError,
 		                "material index outside of usable range (0 - 32766)");
@@ -916,7 +904,11 @@ static PyObject *bpy_bmesh_to_mesh(BPy_BMesh *self, PyObject *args)
 	/* python won't ensure matching uv/mtex */
 	BM_mesh_cd_validate(bm);
 
-	BM_mesh_bm_to_me(bm, me, (&(struct BMeshToMeshParams){0}));
+	BM_mesh_bm_to_me(
+	        bm, me,
+	        (&(struct BMeshToMeshParams){
+	            .calc_object_remap = true,
+	        }));
 
 	/* we could have the user do this but if they forget blender can easy crash
 	 * since the references arrays for the objects derived meshes are now invalid */
@@ -1049,6 +1041,13 @@ PyDoc_STRVAR(bpy_bmesh_from_mesh_doc,
 "   :type use_shape_key: boolean\n"
 "   :arg shape_key_index: The shape key index to use.\n"
 "   :type shape_key_index: int\n"
+"\n"
+"   .. note::\n"
+"\n"
+"      Multiple calls can be used to join multiple meshes.\n"
+"\n"
+"      Custom-data layers are only copied from ``mesh`` on initialization.\n"
+"      Further calls will copy custom-data to matching layers, layers missing on the target mesh wont be added.\n"
 );
 static PyObject *bpy_bmesh_from_mesh(BPy_BMesh *self, PyObject *args, PyObject *kw)
 {
@@ -1113,15 +1112,16 @@ static PyObject *bpy_bmesh_select_flush(BPy_BMesh *self, PyObject *value)
 
 	BPY_BM_CHECK_OBJ(self);
 
-	param = PyLong_AsLong(value);
-	if (param != false && param != true) {
-		PyErr_SetString(PyExc_TypeError,
-		                "expected a boolean type 0/1");
+	if ((param = PyC_Long_AsBool(value)) == -1) {
 		return NULL;
 	}
 
-	if (param)  BM_mesh_select_flush(self->bm);
-	else        BM_mesh_deselect_flush(self->bm);
+	if (param) {
+		BM_mesh_select_flush(self->bm);
+	}
+	else {
+		BM_mesh_deselect_flush(self->bm);
+	}
 
 	Py_RETURN_NONE;
 }
@@ -1301,10 +1301,7 @@ static PyObject *bpy_bm_elem_select_set(BPy_BMElem *self, PyObject *value)
 
 	BPY_BM_CHECK_OBJ(self);
 
-	param = PyLong_AsLong(value);
-	if (param != false && param != true) {
-		PyErr_SetString(PyExc_TypeError,
-		                "expected a boolean type 0/1");
+	if ((param = PyC_Long_AsBool(value)) == -1) {
 		return NULL;
 	}
 
@@ -1329,10 +1326,7 @@ static PyObject *bpy_bm_elem_hide_set(BPy_BMElem *self, PyObject *value)
 
 	BPY_BM_CHECK_OBJ(self);
 
-	param = PyLong_AsLong(value);
-	if (param != false && param != true) {
-		PyErr_SetString(PyExc_TypeError,
-		                "expected a boolean type 0/1");
+	if ((param = PyC_Long_AsBool(value)) == -1) {
 		return NULL;
 	}
 
@@ -1475,7 +1469,7 @@ static PyObject *bpy_bmvert_calc_edge_angle(BPy_BMVert *self, PyObject *args)
 		else {
 			PyErr_SetString(PyExc_ValueError,
 			                "BMVert.calc_edge_angle(): "
-			                "vert doesn't use 2 edges");
+			                "vert must connect to exactly 2 edges");
 			return NULL;
 		}
 	}
@@ -3878,7 +3872,7 @@ void *BPy_BMElem_PySeq_As_Array_FAST(
 	BMesh *bm = (r_bm && *r_bm) ? *r_bm : NULL;
 	PyObject **seq_fast_items = PySequence_Fast_ITEMS(seq_fast);
 	const Py_ssize_t seq_len = PySequence_Fast_GET_SIZE(seq_fast);
-	Py_ssize_t i;
+	Py_ssize_t i, i_last_dirty = PY_SSIZE_T_MAX;
 
 	BPy_BMElem *item;
 	BMElem **alloc;
@@ -3927,6 +3921,7 @@ void *BPy_BMElem_PySeq_As_Array_FAST(
 
 		if (do_unique_check) {
 			BM_elem_flag_enable(item->ele, BM_ELEM_INTERNAL_TAG);
+			i_last_dirty = i;
 		}
 	}
 
@@ -3943,6 +3938,8 @@ void *BPy_BMElem_PySeq_As_Array_FAST(
 		}
 
 		if (ok == false) {
+			/* Cleared above. */
+			i_last_dirty = PY_SSIZE_T_MAX;
 			PyErr_Format(PyExc_ValueError,
 			             "%s: found the same %.200s used multiple times",
 			             error_prefix, BPy_BMElem_StringFromHType(htype));
@@ -3955,6 +3952,11 @@ void *BPy_BMElem_PySeq_As_Array_FAST(
 	return alloc;
 
 err_cleanup:
+	if (do_unique_check && (i_last_dirty != PY_SSIZE_T_MAX)) {
+		for (i = 0; i <= i_last_dirty; i++) {
+			BM_elem_flag_disable(alloc[i], BM_ELEM_INTERNAL_TAG);
+		}
+	}
 	PyMem_FREE(alloc);
 	return NULL;
 

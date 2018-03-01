@@ -343,7 +343,7 @@ static void make_duplis_group(const DupliContext *ctx)
 	}
 }
 
-const DupliGenerator gen_dupli_group = {
+static const DupliGenerator gen_dupli_group = {
     OB_DUPLIGROUP,                  /* type */
     make_duplis_group               /* make_duplis */
 };
@@ -379,7 +379,7 @@ static void make_duplis_frames(const DupliContext *ctx)
 
 	/* special flag to avoid setting recalc flags to notify the depsgraph of
 	 * updates, as this is not a permanent change to the object */
-	ob->id.tag |= LIB_TAG_ANIM_NO_RECALC;
+	ob->id.recalc |= ID_RECALC_SKIP_ANIM_TAG;
 
 	for (scene->r.cfra = ob->dupsta; scene->r.cfra <= dupend; scene->r.cfra++) {
 		int ok = 1;
@@ -421,7 +421,7 @@ static void make_duplis_frames(const DupliContext *ctx)
 	*ob = copyob;
 }
 
-const DupliGenerator gen_dupli_frames = {
+static const DupliGenerator gen_dupli_frames = {
     OB_DUPLIFRAMES,                 /* type */
     make_duplis_frames              /* make_duplis */
 };
@@ -571,7 +571,7 @@ static void make_duplis_verts(const DupliContext *ctx)
 	vdd.dm->release(vdd.dm);
 }
 
-const DupliGenerator gen_dupli_verts = {
+static const DupliGenerator gen_dupli_verts = {
     OB_DUPLIVERTS,                  /* type */
     make_duplis_verts               /* make_duplis */
 };
@@ -630,7 +630,7 @@ static void make_duplis_font(const DupliContext *ctx)
 
 	/* in par the family name is stored, use this to find the other objects */
 
-	BKE_vfont_to_curve_ex(G.main, par, FO_DUPLI, NULL,
+	BKE_vfont_to_curve_ex(G.main, par, par->data, FO_DUPLI, NULL,
 	                      &text, &text_len, &text_free, &chartransdata);
 
 	if (text == NULL || chartransdata == NULL) {
@@ -684,7 +684,7 @@ static void make_duplis_font(const DupliContext *ctx)
 	MEM_freeN(chartransdata);
 }
 
-const DupliGenerator gen_dupli_verts_font = {
+static const DupliGenerator gen_dupli_verts_font = {
     OB_DUPLIVERTS,                  /* type */
     make_duplis_font                /* make_duplis */
 };
@@ -847,7 +847,7 @@ static void make_duplis_faces(const DupliContext *ctx)
 	fdd.dm->release(fdd.dm);
 }
 
-const DupliGenerator gen_dupli_faces = {
+static const DupliGenerator gen_dupli_faces = {
     OB_DUPLIFACES,                  /* type */
     make_duplis_faces               /* make_duplis */
 };
@@ -1168,7 +1168,7 @@ static void make_duplis_particles(const DupliContext *ctx)
 	}
 }
 
-const DupliGenerator gen_dupli_particles = {
+static const DupliGenerator gen_dupli_particles = {
     OB_DUPLIPARTS,                  /* type */
     make_duplis_particles           /* make_duplis */
 };

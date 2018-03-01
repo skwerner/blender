@@ -36,7 +36,7 @@
 #include "BLI_math.h"
 #include "BLI_alloca.h"
 #include "BLI_linklist.h"
-#include "BLI_stackdefines.h"
+#include "BLI_utildefines_stack.h"
 
 #include "BKE_customdata.h"
 
@@ -749,6 +749,22 @@ bool BM_vert_is_edge_pair(const BMVert *v)
 	if (e) {
 		BMEdge *e_other = BM_DISK_EDGE_NEXT(e, v);
 		return ((e_other != e) && (BM_DISK_EDGE_NEXT(e_other, v) == e));
+	}
+	return false;
+}
+
+/**
+ * Fast alternative to ``(BM_vert_edge_count(v) == 2)``
+ * that checks both edges connect to the same faces.
+ */
+bool BM_vert_is_edge_pair_manifold(const BMVert *v)
+{
+	const BMEdge *e = v->e;
+	if (e) {
+		BMEdge *e_other = BM_DISK_EDGE_NEXT(e, v);
+		if (((e_other != e) && (BM_DISK_EDGE_NEXT(e_other, v) == e))) {
+			return BM_edge_is_manifold(e) && BM_edge_is_manifold(e_other);
+		}
 	}
 	return false;
 }
@@ -1728,6 +1744,7 @@ float BM_vert_calc_edge_angle_ex(const BMVert *v, const float fallback)
 
 	if ((e1 = v->e) &&
 	    (e2 =  bmesh_disk_edge_next(e1, v)) &&
+	    (e1 != e2) &&
 	    /* make sure we come full circle and only have 2 connected edges */
 	    (e1 == bmesh_disk_edge_next(e2, v)))
 	{
@@ -2092,7 +2109,8 @@ bool BM_face_exists_multi(BMVert **varr, BMEdge **earr, int len)
 
 	if (tot_tag == 0) {
 		/* no faces use only boundary verts, quit early */
-		return false;
+		ok = false;
+		goto finally;
 	}
 
 	/* 2) loop over non-boundary edges that use boundary verts,
@@ -2127,6 +2145,12 @@ bool BM_face_exists_multi(BMVert **varr, BMEdge **earr, int len)
 		}
 	}
 
+finally:
+	/* Cleanup */
+	for (i = 0; i < len; i++) {
+		BM_elem_flag_disable(varr[i], BM_ELEM_INTERNAL_TAG);
+		BM_elem_flag_disable(earr[i], BM_ELEM_INTERNAL_TAG);
+	}
 	return ok;
 }
 

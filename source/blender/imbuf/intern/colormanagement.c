@@ -47,6 +47,7 @@
 #include "IMB_imbuf.h"
 #include "IMB_imbuf_types.h"
 #include "IMB_filetype.h"
+#include "IMB_filter.h"
 #include "IMB_moviecache.h"
 
 #include "MEM_guardedalloc.h"
@@ -1521,6 +1522,10 @@ static bool is_ibuf_rect_in_display_space(ImBuf *ibuf, const ColorManagedViewSet
 	{
 		const char *from_colorspace = ibuf->rect_colorspace->name;
 		const char *to_colorspace = IMB_colormanagement_get_display_colorspace_name(view_settings, display_settings);
+		ColorManagedLook *look_descr = colormanage_look_get_named(view_settings->look);
+		if (look_descr != NULL && !STREQ(look_descr->process_space, "")) {
+			return false;
+		}
 
 		if (to_colorspace && STREQ(from_colorspace, to_colorspace))
 			return true;
@@ -1635,12 +1640,13 @@ static void *do_processor_transform_thread(void *handle_v)
 	if (float_from_byte) {
 		IMB_buffer_float_from_byte(float_buffer, byte_buffer,
 		                           IB_PROFILE_SRGB, IB_PROFILE_SRGB,
-		                           true,
+		                           false,
 		                           width, height, width, width);
-			IMB_colormanagement_processor_apply(handle->cm_processor,
-			                                    float_buffer,
-			                                    width, height, channels,
-			                                    predivide);
+		IMB_colormanagement_processor_apply(handle->cm_processor,
+		                                    float_buffer,
+		                                    width, height, channels,
+		                                    predivide);
+		IMB_premultiply_rect_float(float_buffer, 4, width, height);
 	}
 	else {
 		if (byte_buffer != NULL) {
@@ -1776,14 +1782,15 @@ void IMB_colormanagement_transform_from_byte_threaded(float *float_buffer, unsig
 		 */
 		IMB_buffer_float_from_byte(float_buffer, byte_buffer,
 		                           IB_PROFILE_SRGB, IB_PROFILE_SRGB,
-		                           true,
+		                           false,
 		                           width, height, width, width);
+		IMB_premultiply_rect_float(float_buffer, 4, width, height);
 		return;
 	}
 	cm_processor = IMB_colormanagement_colorspace_processor_new(from_colorspace, to_colorspace);
 	processor_transform_apply_threaded(byte_buffer, float_buffer,
 	                                   width, height, channels,
-	                                   cm_processor, true, true);
+	                                   cm_processor, false, true);
 	IMB_colormanagement_processor_free(cm_processor);
 }
 
@@ -2169,7 +2176,7 @@ unsigned char *IMB_display_buffer_acquire(ImBuf *ibuf, const ColorManagedViewSet
 		BLI_rcti_init(&ibuf->invalid_rect, 0, 0, 0, 0);
 	}
 
-	BLI_lock_thread(LOCK_COLORMANAGE);
+	BLI_thread_lock(LOCK_COLORMANAGE);
 
 	/* ensure color management bit fields exists */
 	if (!ibuf->display_buffer_flags) {
@@ -2187,7 +2194,7 @@ unsigned char *IMB_display_buffer_acquire(ImBuf *ibuf, const ColorManagedViewSet
 	display_buffer = colormanage_cache_get(ibuf, &cache_view_settings, &cache_display_settings, cache_handle);
 
 	if (display_buffer) {
-		BLI_unlock_thread(LOCK_COLORMANAGE);
+		BLI_thread_unlock(LOCK_COLORMANAGE);
 		return display_buffer;
 	}
 
@@ -2198,7 +2205,7 @@ unsigned char *IMB_display_buffer_acquire(ImBuf *ibuf, const ColorManagedViewSet
 
 	colormanage_cache_put(ibuf, &cache_view_settings, &cache_display_settings, display_buffer, cache_handle);
 
-	BLI_unlock_thread(LOCK_COLORMANAGE);
+	BLI_thread_unlock(LOCK_COLORMANAGE);
 
 	return display_buffer;
 }
@@ -2237,11 +2244,11 @@ void IMB_display_buffer_transform_apply(unsigned char *display_buffer, float *li
 void IMB_display_buffer_release(void *cache_handle)
 {
 	if (cache_handle) {
-		BLI_lock_thread(LOCK_COLORMANAGE);
+		BLI_thread_lock(LOCK_COLORMANAGE);
 
 		colormanage_cache_handle_release(cache_handle);
 
-		BLI_unlock_thread(LOCK_COLORMANAGE);
+		BLI_thread_unlock(LOCK_COLORMANAGE);
 	}
 }
 
@@ -2565,6 +2572,14 @@ const char *IMB_colormanagement_colorspace_get_indexed_name(int index)
 
 void IMB_colormanagment_colorspace_from_ibuf_ftype(ColorManagedColorspaceSettings *colorspace_settings, ImBuf *ibuf)
 {
+	/* Don't modify non-color data space, it does not change with file type. */
+	ColorSpace *colorspace = colormanage_colorspace_get_named(colorspace_settings->name);
+
+	if (colorspace && colorspace->is_data) {
+		return;
+	}
+
+	/* Get color space from file type. */
 	const ImFileType *type;
 
 	for (type = IMB_FILE_TYPES; type < IMB_FILE_TYPES_LAST; type++) {
@@ -2949,7 +2964,7 @@ static void imb_partial_display_buffer_update_ex(ImBuf *ibuf,
 		view_flag = 1 << (cache_view_settings.view - 1);
 		display_index = cache_display_settings.display - 1;
 
-		BLI_lock_thread(LOCK_COLORMANAGE);
+		BLI_thread_lock(LOCK_COLORMANAGE);
 
 		if ((ibuf->userflags & IB_DISPLAY_BUFFER_INVALID) == 0) {
 			display_buffer = colormanage_cache_get(ibuf,
@@ -2968,7 +2983,7 @@ static void imb_partial_display_buffer_update_ex(ImBuf *ibuf,
 		memset(ibuf->display_buffer_flags, 0, global_tot_display * sizeof(unsigned int));
 		ibuf->display_buffer_flags[display_index] |= view_flag;
 
-		BLI_unlock_thread(LOCK_COLORMANAGE);
+		BLI_thread_unlock(LOCK_COLORMANAGE);
 	}
 
 	if (display_buffer == NULL) {

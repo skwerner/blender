@@ -44,13 +44,13 @@
 #include "BLI_bitmap.h"
 #include "BLI_task.h"
 
+#include "BKE_colorband.h"
 #include "BKE_context.h"
 #include "BKE_depsgraph.h"
 #include "BKE_brush.h"
 #include "BKE_image.h"
 #include "BKE_paint.h"
 #include "BKE_report.h"
-#include "BKE_texture.h"
 
 #include "ED_paint.h"
 #include "ED_screen.h"
@@ -797,6 +797,7 @@ static void paint_2d_ibuf_rgb_set(ImBuf *ibuf, int x, int y, const bool is_torus
 		float map_alpha = (rgb[3] == 0.0f) ? rrgbf[3] : rrgbf[3] / rgb[3];
 
 		mul_v3_v3fl(rrgbf, rgb, map_alpha);
+		rrgbf[3] = rgb[3];
 	}
 	else {
 		unsigned char straight[4];
@@ -806,6 +807,7 @@ static void paint_2d_ibuf_rgb_set(ImBuf *ibuf, int x, int y, const bool is_torus
 		rrgb[0] = straight[0];
 		rrgb[1] = straight[1];
 		rrgb[2] = straight[2];
+		rrgb[3] = straight[3];
 	}
 }
 
@@ -995,7 +997,7 @@ static void paint_2d_lift_smear(ImBuf *ibuf, ImBuf *ibufb, int *pos, short tile)
 		IMB_rectblend(ibufb, ibufb, ibuf, NULL, NULL, NULL, 0, region[a].destx, region[a].desty,
 		              region[a].destx, region[a].desty,
 		              region[a].srcx, region[a].srcy,
-		              region[a].width, region[a].height, IMB_BLEND_COPY_RGB, false);
+		              region[a].width, region[a].height, IMB_BLEND_COPY, false);
 }
 
 static ImBuf *paint_2d_lift_clone(ImBuf *ibuf, ImBuf *ibufb, int *pos)
@@ -1068,7 +1070,10 @@ typedef struct Paint2DForeachData {
 	int tilew;
 } Paint2DForeachData;
 
-static void paint_2d_op_foreach_do(void *data_v, const int iter)
+static void paint_2d_op_foreach_do(
+        void *__restrict data_v,
+        const int iter,
+        const ParallelRangeTLS *__restrict UNUSED(tls))
 {
 	Paint2DForeachData *data = (Paint2DForeachData *)data_v;
 	paint_2d_do_making_brush(data->s, data->region, data->curveb,
@@ -1096,6 +1101,7 @@ static int paint_2d_op(void *state, ImBuf *ibufb, unsigned short *curveb, unsign
 	/* lift from canvas */
 	if (s->tool == PAINT_TOOL_SOFTEN) {
 		paint_2d_lift_soften(s, s->canvas, ibufb, bpos, tile);
+		blend = IMB_BLEND_INTERPOLATE;
 	}
 	else if (s->tool == PAINT_TOOL_SMEAR) {
 		if (lastpos[0] == pos[0] && lastpos[1] == pos[1])
@@ -1103,6 +1109,7 @@ static int paint_2d_op(void *state, ImBuf *ibufb, unsigned short *curveb, unsign
 
 		paint_2d_convert_brushco(ibufb, lastpos, blastpos);
 		paint_2d_lift_smear(s->canvas, ibufb, blastpos, tile);
+		blend = IMB_BLEND_INTERPOLATE;
 	}
 	else if (s->tool == PAINT_TOOL_CLONE && s->clonecanvas) {
 		liftpos[0] = pos[0] - offset[0] * s->canvas->x;
@@ -1152,9 +1159,12 @@ static int paint_2d_op(void *state, ImBuf *ibufb, unsigned short *curveb, unsign
 				data.blend = blend;
 				data.tilex = tilex;
 				data.tilew = tilew;
+
+				ParallelRangeSettings settings;
+				BLI_parallel_range_settings_defaults(&settings);
 				BLI_task_parallel_range(tiley, tileh + 1, &data,
 				                        paint_2d_op_foreach_do,
-				                        true);
+				                        &settings);
 
 			}
 		}
@@ -1662,7 +1672,7 @@ void paint_2d_gradient_fill(
 						break;
 					}
 				}
-				do_colorband(br->gradient, f, color_f);
+				BKE_colorband_evaluate(br->gradient, f, color_f);
 				/* convert to premultiplied */
 				mul_v3_fl(color_f, color_f[3]);
 				color_f[3] *= br->alpha;
@@ -1692,7 +1702,7 @@ void paint_2d_gradient_fill(
 					}
 				}
 
-				do_colorband(br->gradient, f, color_f);
+				BKE_colorband_evaluate(br->gradient, f, color_f);
 				linearrgb_to_srgb_v3_v3(color_f, color_f);
 				rgba_float_to_uchar((unsigned char *)&color_b, color_f);
 				((unsigned char *)&color_b)[3] *= br->alpha;

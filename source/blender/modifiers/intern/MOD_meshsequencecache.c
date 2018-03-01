@@ -25,12 +25,14 @@
  */
 
 #include "DNA_cachefile_types.h"
+#include "DNA_mesh_types.h"
 #include "DNA_modifier_types.h"
 #include "DNA_object_types.h"
 #include "DNA_scene_types.h"
 
 #include "BKE_cachefile.h"
 #include "BKE_DerivedMesh.h"
+#include "BKE_cdderivedmesh.h"
 #include "BKE_global.h"
 #include "BKE_library.h"
 #include "BKE_library_query.h"
@@ -95,15 +97,18 @@ static bool isDisabled(ModifierData *md, int UNUSED(useRenderParams))
 
 static DerivedMesh *applyModifier(ModifierData *md, Object *ob,
                                   DerivedMesh *dm,
-                                  ModifierApplyFlag flag)
+                                  ModifierApplyFlag UNUSED(flag))
 {
 #ifdef WITH_ALEMBIC
 	MeshSeqCacheModifierData *mcmd = (MeshSeqCacheModifierData *) md;
 
+	/* Only used to check whether we are operating on org data or not... */
+	Mesh *me = (ob->type == OB_MESH) ? ob->data : NULL;
+	DerivedMesh *org_dm = dm;
+
 	Scene *scene = md->scene;
 	const float frame = BKE_scene_frame_get(scene);
 	const float time = BKE_cachefile_time_offset(mcmd->cache_file, frame, FPS);
-
 	const char *err_str = NULL;
 
 	CacheFile *cache_file = mcmd->cache_file;
@@ -121,6 +126,16 @@ static DerivedMesh *applyModifier(ModifierData *md, Object *ob,
 		}
 	}
 
+	if (me != NULL) {
+		MVert *mvert = dm->getVertArray(dm);
+		MEdge *medge = dm->getEdgeArray(dm);
+		MPoly *mpoly = dm->getPolyArray(dm);
+		if ((me->mvert == mvert) || (me->medge == medge) || (me->mpoly == mpoly)) {
+			/* We need to duplicate data here, otherwise we'll modify org mesh, see T51701. */
+			dm = CDDM_copy(dm);
+		}
+	}
+
 	DerivedMesh *result = ABC_read_mesh(mcmd->reader,
 	                                    ob,
 	                                    dm,
@@ -132,11 +147,15 @@ static DerivedMesh *applyModifier(ModifierData *md, Object *ob,
 		modifier_setError(md, "%s", err_str);
 	}
 
+	if (!ELEM(result, NULL, dm) && (dm != org_dm)) {
+		dm->release(dm);
+		dm = org_dm;
+	}
+
 	return result ? result : dm;
-	UNUSED_VARS(flag);
 #else
 	return dm;
-	UNUSED_VARS(md, ob, flag);
+	UNUSED_VARS(md, ob);
 #endif
 }
 
@@ -155,36 +174,25 @@ static void foreachIDLink(ModifierData *md, Object *ob,
 }
 
 
-static void updateDepgraph(ModifierData *md, DagForest *forest,
-                           struct Main *bmain,
-                           struct Scene *scene,
-                           Object *ob, DagNode *obNode)
+static void updateDepgraph(ModifierData *md, const ModifierUpdateDepsgraphContext *ctx)
 {
 	MeshSeqCacheModifierData *mcmd = (MeshSeqCacheModifierData *) md;
 
 	if (mcmd->cache_file != NULL) {
-		DagNode *curNode = dag_get_node(forest, mcmd->cache_file);
+		DagNode *curNode = dag_get_node(ctx->forest, mcmd->cache_file);
 
-		dag_add_relation(forest, curNode, obNode,
+		dag_add_relation(ctx->forest, curNode, ctx->obNode,
 		                 DAG_RL_DATA_DATA | DAG_RL_OB_DATA, "Cache File Modifier");
 	}
-
-	UNUSED_VARS(bmain, scene, ob);
 }
 
-static void updateDepsgraph(ModifierData *md,
-                            struct Main *bmain,
-                            struct Scene *scene,
-                            Object *ob,
-                            struct DepsNodeHandle *node)
+static void updateDepsgraph(ModifierData *md, const ModifierUpdateDepsgraphContext *ctx)
 {
 	MeshSeqCacheModifierData *mcmd = (MeshSeqCacheModifierData *) md;
 
 	if (mcmd->cache_file != NULL) {
-		DEG_add_object_cache_relation(node, mcmd->cache_file, DEG_OB_COMP_CACHE, "Mesh Cache File");
+		DEG_add_object_cache_relation(ctx->node, mcmd->cache_file, DEG_OB_COMP_CACHE, "Mesh Cache File");
 	}
-
-	UNUSED_VARS(bmain, scene, ob);
 }
 
 ModifierTypeInfo modifierType_MeshSequenceCache = {

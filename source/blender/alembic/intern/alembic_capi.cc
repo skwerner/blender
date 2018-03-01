@@ -259,7 +259,7 @@ static void export_startjob(void *customdata, short *stop, short *do_update, flo
 
 	try {
 		Scene *scene = data->scene;
-		AbcExporter exporter(scene, data->filename, data->settings);
+		AbcExporter exporter(data->bmain, scene, data->filename, data->settings);
 
 		const int orig_frame = CFRA;
 
@@ -990,6 +990,10 @@ CacheReader *CacheReader_open_alembic_object(AbcArchiveHandle *handle, CacheRead
 
 	ImportSettings settings;
 	AbcObjectReader *abc_reader = create_reader(iobject, settings);
+	if (abc_reader == NULL) {
+		/* This object is not supported */
+		return NULL;
+	}
 	abc_reader->object(object);
 	abc_reader->incref();
 

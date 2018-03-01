@@ -377,7 +377,12 @@ void wm_window_title(wmWindowManager *wm, wmWindow *win)
 
 void WM_window_set_dpi(wmWindow *win)
 {
-	int auto_dpi = GHOST_GetDPIHint(win->ghostwin);
+	float auto_dpi = GHOST_GetDPIHint(win->ghostwin);
+
+	/* Clamp auto DPI to 96, since our font/interface drawing does not work well
+	 * with lower sizes. The main case we are interested in supporting is higher
+	 * DPI. If a smaller UI is desired it is still possible to adjust UI scale. */
+	auto_dpi = max_ff(auto_dpi, 96.0f);
 
 	/* Lazily init UI scale size, preserving backwards compatibility by
 	 * computing UI scale from ratio of previous DPI and auto DPI */
@@ -397,13 +402,16 @@ void WM_window_set_dpi(wmWindow *win)
 	/* Blender's UI drawing assumes DPI 72 as a good default following macOS
 	 * while Windows and Linux use DPI 96. GHOST assumes a default 96 so we
 	 * remap the DPI to Blender's convention. */
+	auto_dpi *= GHOST_GetNativePixelSize(win->ghostwin);
 	int dpi = auto_dpi * U.ui_scale * (72.0 / 96.0f);
 
 	/* Automatically set larger pixel size for high DPI. */
-	int pixelsize = MAX2(1, dpi / 54);
+	int pixelsize = max_ii(1, (int)(dpi / 64));
+	/* User adjustment for pixel size. */
+	pixelsize = max_ii(1, pixelsize + U.ui_line_width);
 
 	/* Set user preferences globals for drawing, and for forward compatibility. */
-	U.pixelsize = GHOST_GetNativePixelSize(win->ghostwin) * pixelsize;
+	U.pixelsize = pixelsize;
 	U.dpi = dpi / pixelsize;
 	U.virtual_pixel = (pixelsize == 1) ? VIRTUAL_PIXEL_NATIVE : VIRTUAL_PIXEL_DOUBLE;
 	U.widget_unit = (U.pixelsize * U.dpi * 20 + 36) / 72;
@@ -469,8 +477,12 @@ static void wm_window_ghostwindow_add(wmWindowManager *wm, const char *title, wm
 		
 		/* store actual window size in blender window */
 		bounds = GHOST_GetClientBounds(win->ghostwin);
-		win->sizex = GHOST_GetWidthRectangle(bounds);
-		win->sizey = GHOST_GetHeightRectangle(bounds);
+
+		/* win32: gives undefined window size when minimized */
+		if (GHOST_GetWindowState(win->ghostwin) != GHOST_kWindowStateMinimized) {
+			win->sizex = GHOST_GetWidthRectangle(bounds);
+			win->sizey = GHOST_GetHeightRectangle(bounds);
+		}
 		GHOST_DisposeRectangle(bounds);
 		
 #ifndef __APPLE__
@@ -1454,6 +1466,7 @@ wmTimer *WM_event_add_timer_notifier(wmWindowManager *wm, wmWindow *win, unsigne
 	wt->timestep = timestep;
 	wt->win = win;
 	wt->customdata = SET_UINT_IN_POINTER(type);
+	wt->flags |= WM_TIMER_NO_FREE_CUSTOM_DATA;
 
 	BLI_addtail(&wm->timers, wt);
 
@@ -1475,8 +1488,9 @@ void WM_event_remove_timer(wmWindowManager *wm, wmWindow *UNUSED(win), wmTimer *
 			wm->reports.reporttimer = NULL;
 		
 		BLI_remlink(&wm->timers, wt);
-		if (wt->customdata)
+		if (wt->customdata != NULL && (wt->flags & WM_TIMER_NO_FREE_CUSTOM_DATA) == 0) {
 			MEM_freeN(wt->customdata);
+		}
 		MEM_freeN(wt);
 		
 		/* there might be events in queue with this timer as customdata */

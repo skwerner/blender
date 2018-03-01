@@ -38,7 +38,7 @@
 
 #include "BLI_math.h"
 #include "BLI_blenlib.h"
-#include "BLI_jitter.h"
+#include "BLI_jitter_2d.h"
 #include "BLI_utildefines.h"
 
 #include "DNA_camera_types.h"
@@ -47,10 +47,6 @@
 #include "DNA_scene_types.h"
 
 #include "BKE_camera.h"
-
-#ifdef WITH_QUICKTIME
-#include "quicktime_export.h"
-#endif
 
 /* this module */
 #include "renderpipeline.h"

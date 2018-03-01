@@ -39,7 +39,6 @@
 
 #include "BLI_utildefines.h"
 
-
 #include "BKE_cdderivedmesh.h"
 #include "BKE_lattice.h"
 #include "BKE_library_query.h"
@@ -48,6 +47,7 @@
 #include "depsgraph_private.h"
 #include "DEG_depsgraph_build.h"
 
+#include "MOD_modifiertypes.h"
 
 static void initData(ModifierData *md)
 {
@@ -92,28 +92,20 @@ static void foreachObjectLink(
 	walk(userData, ob, &cmd->object, IDWALK_CB_NOP);
 }
 
-static void updateDepgraph(ModifierData *md, DagForest *forest,
-                           struct Main *UNUSED(bmain),
-                           Scene *UNUSED(scene),
-                           Object *UNUSED(ob),
-                           DagNode *obNode)
+static void updateDepgraph(ModifierData *md, const ModifierUpdateDepsgraphContext *ctx)
 {
 	CurveModifierData *cmd = (CurveModifierData *) md;
 
 	if (cmd->object) {
-		DagNode *curNode = dag_get_node(forest, cmd->object);
+		DagNode *curNode = dag_get_node(ctx->forest, cmd->object);
 		curNode->eval_flags |= DAG_EVAL_NEED_CURVE_PATH;
 
-		dag_add_relation(forest, curNode, obNode,
+		dag_add_relation(ctx->forest, curNode, ctx->obNode,
 		                 DAG_RL_DATA_DATA | DAG_RL_OB_DATA, "Curve Modifier");
 	}
 }
 
-static void updateDepsgraph(ModifierData *md,
-                            struct Main *UNUSED(bmain),
-                            struct Scene *UNUSED(scene),
-                            Object *object,
-                            struct DepsNodeHandle *node)
+static void updateDepsgraph(ModifierData *md, const ModifierUpdateDepsgraphContext *ctx)
 {
 	CurveModifierData *cmd = (CurveModifierData *)md;
 	if (cmd->object != NULL) {
@@ -123,12 +115,12 @@ static void updateDepsgraph(ModifierData *md,
 		/* TODO(sergey): Currently path is evaluated as a part of modifier stack,
 		 * might be changed in the future.
 		 */
-		struct Depsgraph *depsgraph = DEG_get_graph_from_handle(node);
-		DEG_add_object_relation(node, cmd->object, DEG_OB_COMP_GEOMETRY, "Curve Modifier");
+		struct Depsgraph *depsgraph = DEG_get_graph_from_handle(ctx->node);
+		DEG_add_object_relation(ctx->node, cmd->object, DEG_OB_COMP_GEOMETRY, "Curve Modifier");
 		DEG_add_special_eval_flag(depsgraph, &cmd->object->id, DAG_EVAL_NEED_CURVE_PATH);
 	}
 
-	DEG_add_object_relation(node, object, DEG_OB_COMP_TRANSFORM, "Curve Modifier");
+	DEG_add_object_relation(ctx->node, ctx->object, DEG_OB_COMP_TRANSFORM, "Curve Modifier");
 }
 
 static void deformVerts(ModifierData *md, Object *ob,

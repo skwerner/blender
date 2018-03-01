@@ -48,7 +48,7 @@
 #include "DNA_mesh_types.h"
 #include "DNA_meshdata_types.h"
 #include "DNA_modifier_types.h"
-#include "DNA_object_force.h"
+#include "DNA_object_force_types.h"
 #include "DNA_object_types.h"
 #include "DNA_curve_types.h"
 #include "DNA_scene_types.h"
@@ -58,7 +58,7 @@
 #include "BLI_utildefines.h"
 #include "BLI_edgehash.h"
 #include "BLI_rand.h"
-#include "BLI_jitter.h"
+#include "BLI_jitter_2d.h"
 #include "BLI_math.h"
 #include "BLI_blenlib.h"
 #include "BLI_kdtree.h"
@@ -96,7 +96,7 @@
 
 /* fluid sim particle import */
 #ifdef WITH_MOD_FLUID
-#include "DNA_object_fluidsim.h"
+#include "DNA_object_fluidsim_types.h"
 #include "LBM_fluidsim.h"
 #include <zlib.h>
 #include <string.h>
@@ -497,6 +497,8 @@ void psys_thread_context_free(ParticleThreadContext *ctx)
 		MEM_freeN(ctx->vg_rough2);
 	if (ctx->vg_roughe)
 		MEM_freeN(ctx->vg_roughe);
+	if (ctx->vg_twist)
+		MEM_freeN(ctx->vg_twist);
 
 	if (ctx->sim.psys->lattice_deform_data) {
 		end_latt_deform(ctx->sim.psys->lattice_deform_data);
@@ -518,6 +520,9 @@ void psys_thread_context_free(ParticleThreadContext *ctx)
 	}
 	if (ctx->roughcurve != NULL) {
 		curvemapping_free(ctx->roughcurve);
+	}
+	if (ctx->twistcurve != NULL) {
+		curvemapping_free(ctx->twistcurve);
 	}
 }
 
@@ -2319,21 +2324,21 @@ static void collision_point_on_surface(float p[3], ParticleCollisionElement *pce
 		}
 		case 3:
 		{
-				float p0[3], e1[3], e2[3], nor[3];
+			float p0[3], e1[3], e2[3], nor[3];
 
-				sub_v3_v3v3(e1, pce->x1, pce->x0);
-				sub_v3_v3v3(e2, pce->x2, pce->x0);
-				sub_v3_v3v3(p0, p, pce->x0);
+			sub_v3_v3v3(e1, pce->x1, pce->x0);
+			sub_v3_v3v3(e2, pce->x2, pce->x0);
+			sub_v3_v3v3(p0, p, pce->x0);
 
-				cross_v3_v3v3(nor, e1, e2);
-				normalize_v3(nor);
+			cross_v3_v3v3(nor, e1, e2);
+			normalize_v3(nor);
 
-				if (pce->inv_nor == 1)
-					negate_v3(nor);
+			if (pce->inv_nor == 1)
+				negate_v3(nor);
 
-				madd_v3_v3v3fl(co, pce->x0, nor, col->radius);
-				madd_v3_v3fl(co, e1, pce->uv[0]);
-				madd_v3_v3fl(co, e2, pce->uv[1]);
+			madd_v3_v3v3fl(co, pce->x0, nor, col->radius);
+			madd_v3_v3fl(co, e1, pce->uv[0]);
+			madd_v3_v3fl(co, e2, pce->uv[1]);
 			break;
 		}
 	}
@@ -3042,10 +3047,12 @@ static void hair_create_input_dm(ParticleSimulationData *sim, int totpoint, int 
 	/* calculate maximum segment length */
 	max_length = 0.0f;
 	LOOP_PARTICLES {
-		for (k=1, key=pa->hair+1; k<pa->totkey; k++,key++) {
-			float length = len_v3v3(key->co, (key-1)->co);
-			if (max_length < length)
-				max_length = length;
+		if (!(pa->flag & PARS_UNEXIST)) {
+			for (k=1, key=pa->hair+1; k<pa->totkey; k++,key++) {
+				float length = len_v3v3(key->co, (key-1)->co);
+				if (max_length < length)
+					max_length = length;
+			}
 		}
 	}
 	
@@ -3057,76 +3064,78 @@ static void hair_create_input_dm(ParticleSimulationData *sim, int totpoint, int 
 	/* make vgroup for pin roots etc.. */
 	hair_index = 1;
 	LOOP_PARTICLES {
-		float root_mat[4][4];
-		float bending_stiffness;
-		bool use_hair;
-		
-		pa->hair_index = hair_index;
-		use_hair = psys_hair_use_simulation(pa, max_length);
-		
-		psys_mat_hair_to_object(sim->ob, sim->psmd->dm_final, psys->part->from, pa, hairmat);
-		mul_m4_m4m4(root_mat, sim->ob->obmat, hairmat);
-		normalize_m4(root_mat);
-		
-		bending_stiffness = CLAMPIS(1.0f - part->bending_random * psys_frand(psys, p + 666), 0.0f, 1.0f);
-		
-		for (k=0, key=pa->hair; k<pa->totkey; k++,key++) {
-			ClothHairData *hair;
-			float *co, *co_next;
-			
-			co = key->co;
-			co_next = (key+1)->co;
-			
-			/* create fake root before actual root to resist bending */
-			if (k==0) {
-				hair = &psys->clmd->hairdata[pa->hair_index - 1];
+		if (!(pa->flag & PARS_UNEXIST)) {
+			float root_mat[4][4];
+			float bending_stiffness;
+			bool use_hair;
+
+			pa->hair_index = hair_index;
+			use_hair = psys_hair_use_simulation(pa, max_length);
+
+			psys_mat_hair_to_object(sim->ob, sim->psmd->dm_final, psys->part->from, pa, hairmat);
+			mul_m4_m4m4(root_mat, sim->ob->obmat, hairmat);
+			normalize_m4(root_mat);
+
+			bending_stiffness = CLAMPIS(1.0f - part->bending_random * psys_frand(psys, p + 666), 0.0f, 1.0f);
+
+			for (k=0, key=pa->hair; k<pa->totkey; k++,key++) {
+				ClothHairData *hair;
+				float *co, *co_next;
+
+				co = key->co;
+				co_next = (key+1)->co;
+
+				/* create fake root before actual root to resist bending */
+				if (k==0) {
+					hair = &psys->clmd->hairdata[pa->hair_index - 1];
+					copy_v3_v3(hair->loc, root_mat[3]);
+					copy_m3_m4(hair->rot, root_mat);
+
+					hair->radius = hair_radius;
+					hair->bending_stiffness = bending_stiffness;
+
+					add_v3_v3v3(mvert->co, co, co);
+					sub_v3_v3(mvert->co, co_next);
+					mul_m4_v3(hairmat, mvert->co);
+
+					medge->v1 = pa->hair_index - 1;
+					medge->v2 = pa->hair_index;
+
+					dvert = hair_set_pinning(dvert, 1.0f);
+
+					mvert++;
+					medge++;
+				}
+
+				/* store root transform in cloth data */
+				hair = &psys->clmd->hairdata[pa->hair_index + k];
 				copy_v3_v3(hair->loc, root_mat[3]);
 				copy_m3_m4(hair->rot, root_mat);
-				
+
 				hair->radius = hair_radius;
 				hair->bending_stiffness = bending_stiffness;
-				
-				add_v3_v3v3(mvert->co, co, co);
-				sub_v3_v3(mvert->co, co_next);
+
+				copy_v3_v3(mvert->co, co);
 				mul_m4_v3(hairmat, mvert->co);
-				
-				medge->v1 = pa->hair_index - 1;
-				medge->v2 = pa->hair_index;
-				
-				dvert = hair_set_pinning(dvert, 1.0f);
-				
+
+				if (k) {
+					medge->v1 = pa->hair_index + k - 1;
+					medge->v2 = pa->hair_index + k;
+				}
+
+				/* roots and disabled hairs should be 1.0, the rest can be anything from 0.0 to 1.0 */
+				if (use_hair)
+					dvert = hair_set_pinning(dvert, key->weight);
+				else
+					dvert = hair_set_pinning(dvert, 1.0f);
+
 				mvert++;
-				medge++;
+				if (k)
+					medge++;
 			}
-			
-			/* store root transform in cloth data */
-			hair = &psys->clmd->hairdata[pa->hair_index + k];
-			copy_v3_v3(hair->loc, root_mat[3]);
-			copy_m3_m4(hair->rot, root_mat);
-			
-			hair->radius = hair_radius;
-			hair->bending_stiffness = bending_stiffness;
-			
-			copy_v3_v3(mvert->co, co);
-			mul_m4_v3(hairmat, mvert->co);
-			
-			if (k) {
-				medge->v1 = pa->hair_index + k - 1;
-				medge->v2 = pa->hair_index + k;
-			}
-			
-			/* roots and disabled hairs should be 1.0, the rest can be anything from 0.0 to 1.0 */
-			if (use_hair)
-				dvert = hair_set_pinning(dvert, key->weight);
-			else
-				dvert = hair_set_pinning(dvert, 1.0f);
-			
-			mvert++;
-			if (k)
-				medge++;
+
+			hair_index += pa->totkey + 1;
 		}
-		
-		hair_index += pa->totkey + 1;
 	}
 }
 
@@ -3152,9 +3161,11 @@ static void do_hair_dynamics(ParticleSimulationData *sim)
 	totpoint = 0;
 	totedge = 0;
 	LOOP_PARTICLES {
-		/* "out" dm contains all hairs */
-		totedge += pa->totkey;
-		totpoint += pa->totkey + 1; /* +1 for virtual root point */
+		if (!(pa->flag & PARS_UNEXIST)) {
+			/* "out" dm contains all hairs */
+			totedge += pa->totkey;
+			totpoint += pa->totkey + 1; /* +1 for virtual root point */
+		}
 	}
 	
 	realloc_roots = false; /* whether hair root info array has to be reallocated */
@@ -3365,14 +3376,16 @@ typedef struct DynamicStepSolverTaskData {
 } DynamicStepSolverTaskData;
 
 static void dynamics_step_sph_ddr_task_cb_ex(
-        void *userdata, void *userdata_chunk, const int p, const int UNUSED(thread_id))
+        void *__restrict userdata,
+        const int p,
+        const ParallelRangeTLS *__restrict tls)
 {
 	DynamicStepSolverTaskData *data = userdata;
 	ParticleSimulationData *sim = data->sim;
 	ParticleSystem *psys = sim->psys;
 	ParticleSettings *part = psys->part;
 
-	SPHData *sphdata = userdata_chunk;
+	SPHData *sphdata = tls->userdata_chunk;
 
 	ParticleData *pa;
 
@@ -3399,7 +3412,9 @@ static void dynamics_step_sph_ddr_task_cb_ex(
 }
 
 static void dynamics_step_sph_classical_basic_integrate_task_cb_ex(
-        void *userdata,  void *UNUSED(userdata_chunk), const int p, const int UNUSED(thread_id))
+        void *__restrict userdata, 
+        const int p,
+        const ParallelRangeTLS *__restrict UNUSED(tls))
 {
 	DynamicStepSolverTaskData *data = userdata;
 	ParticleSimulationData *sim = data->sim;
@@ -3415,13 +3430,15 @@ static void dynamics_step_sph_classical_basic_integrate_task_cb_ex(
 }
 
 static void dynamics_step_sph_classical_calc_density_task_cb_ex(
-        void *userdata, void *userdata_chunk, const int p, const int UNUSED(thread_id))
+        void *__restrict userdata,
+        const int p,
+        const ParallelRangeTLS *__restrict tls)
 {
 	DynamicStepSolverTaskData *data = userdata;
 	ParticleSimulationData *sim = data->sim;
 	ParticleSystem *psys = sim->psys;
 
-	SPHData *sphdata = userdata_chunk;
+	SPHData *sphdata = tls->userdata_chunk;
 
 	ParticleData *pa;
 
@@ -3433,14 +3450,16 @@ static void dynamics_step_sph_classical_calc_density_task_cb_ex(
 }
 
 static void dynamics_step_sph_classical_integrate_task_cb_ex(
-        void *userdata, void *userdata_chunk, const int p, const int UNUSED(thread_id))
+        void *__restrict userdata,
+        const int p,
+        const ParallelRangeTLS *__restrict tls)
 {
 	DynamicStepSolverTaskData *data = userdata;
 	ParticleSimulationData *sim = data->sim;
 	ParticleSystem *psys = sim->psys;
 	ParticleSettings *part = psys->part;
 
-	SPHData *sphdata = userdata_chunk;
+	SPHData *sphdata = tls->userdata_chunk;
 
 	ParticleData *pa;
 
@@ -3631,9 +3650,16 @@ static void dynamics_step(ParticleSimulationData *sim, float cfra)
 				/* Apply SPH forces using double-density relaxation algorithm
 				 * (Clavat et. al.) */
 
-				BLI_task_parallel_range_ex(
-				            0, psys->totpart, &task_data, &sphdata, sizeof(sphdata),
-				            dynamics_step_sph_ddr_task_cb_ex, psys->totpart > 100, true);
+				ParallelRangeSettings settings;
+				BLI_parallel_range_settings_defaults(&settings);
+				settings.use_threading = (psys->totpart > 100);
+				settings.userdata_chunk = &sphdata;
+				settings.userdata_chunk_size = sizeof(sphdata);
+				BLI_task_parallel_range(
+				        0, psys->totpart,
+				        &task_data,
+				        dynamics_step_sph_ddr_task_cb_ex,
+				        &settings);
 
 				sph_springs_modify(psys, timestep);
 			}
@@ -3643,21 +3669,46 @@ static void dynamics_step(ParticleSimulationData *sim, float cfra)
 				 * and Monaghan). Note that, unlike double-density relaxation,
 				 * this algorithm is separated into distinct loops. */
 
-				BLI_task_parallel_range_ex(
-				            0, psys->totpart, &task_data, NULL, 0,
-				            dynamics_step_sph_classical_basic_integrate_task_cb_ex, psys->totpart > 100, true);
+				{
+					ParallelRangeSettings settings;
+					BLI_parallel_range_settings_defaults(&settings);
+					settings.use_threading = (psys->totpart > 100);
+					BLI_task_parallel_range(
+					        0, psys->totpart,
+					        &task_data,
+					        dynamics_step_sph_classical_basic_integrate_task_cb_ex,
+					        &settings);
+				}
 
 				/* calculate summation density */
 				/* Note that we could avoid copying sphdata for each thread here (it's only read here),
 				 * but doubt this would gain us anything except confusion... */
-				BLI_task_parallel_range_ex(
-				            0, psys->totpart, &task_data, &sphdata, sizeof(sphdata),
-				            dynamics_step_sph_classical_calc_density_task_cb_ex, psys->totpart > 100, true);
+				{
+				ParallelRangeSettings settings;
+				BLI_parallel_range_settings_defaults(&settings);
+				settings.use_threading = (psys->totpart > 100);
+				settings.userdata_chunk = &sphdata;
+				settings.userdata_chunk_size = sizeof(sphdata);
+					BLI_task_parallel_range(
+					        0, psys->totpart,
+					        &task_data,
+					        dynamics_step_sph_classical_calc_density_task_cb_ex,
+					        &settings);
+				}
 
 				/* do global forces & effectors */
-				BLI_task_parallel_range_ex(
-				            0, psys->totpart, &task_data, &sphdata, sizeof(sphdata),
-				            dynamics_step_sph_classical_integrate_task_cb_ex, psys->totpart > 100, true);
+				{
+				ParallelRangeSettings settings;
+				BLI_parallel_range_settings_defaults(&settings);
+				settings.use_threading = (psys->totpart > 100);
+				settings.userdata_chunk = &sphdata;
+				settings.userdata_chunk_size = sizeof(sphdata);
+					BLI_task_parallel_range(
+					        0, psys->totpart,
+					        &task_data,
+					        dynamics_step_sph_classical_integrate_task_cb_ex,
+					        &settings);
+				}
 			}
 
 			BLI_spin_end(&task_data.spin);
@@ -4350,13 +4401,12 @@ void BKE_particlesystem_id_loop(ParticleSystem *psys, ParticleSystemIDFunc func,
 
 /* **** Depsgraph evaluation **** */
 
-void BKE_particle_system_eval(EvaluationContext *UNUSED(eval_ctx),
-                              Scene *scene,
-                              Object *ob,
-                              ParticleSystem *psys)
+void BKE_particle_system_eval_init(EvaluationContext *UNUSED(eval_ctx),
+                                   Scene *scene,
+                                   Object *ob)
 {
-	if (G.debug & G_DEBUG_DEPSGRAPH) {
-		printf("%s on %s:%s\n", __func__, ob->id.name, psys->name);
+	if (G.debug & G_DEBUG_DEPSGRAPH_EVAL) {
+		printf("%s on %s\n", __func__, ob->id.name);
 	}
 	BKE_ptcache_object_reset(scene, ob, PTCACHE_RESET_DEPSGRAPH);
 }

@@ -20,22 +20,6 @@
 CCL_NAMESPACE_BEGIN
 
 /* Texture limits on devices. */
-
-/* CUDA (Geforce 4xx and 5xx) */
-#define TEX_NUM_FLOAT4_CUDA      5
-#define TEX_NUM_BYTE4_CUDA       84
-#define TEX_NUM_HALF4_CUDA       0
-#define TEX_NUM_FLOAT_CUDA       0
-#define TEX_NUM_BYTE_CUDA        0
-#define TEX_NUM_HALF_CUDA        0
-#define TEX_START_FLOAT4_CUDA    0
-#define TEX_START_BYTE4_CUDA     TEX_NUM_FLOAT4_CUDA
-#define TEX_START_HALF4_CUDA     (TEX_NUM_FLOAT4_CUDA + TEX_NUM_BYTE4_CUDA)
-#define TEX_START_FLOAT_CUDA     (TEX_NUM_FLOAT4_CUDA + TEX_NUM_BYTE4_CUDA + TEX_NUM_HALF4_CUDA)
-#define TEX_START_BYTE_CUDA      (TEX_NUM_FLOAT4_CUDA + TEX_NUM_BYTE4_CUDA + TEX_NUM_HALF4_CUDA + TEX_NUM_FLOAT_CUDA)
-#define TEX_START_HALF_CUDA      (TEX_NUM_FLOAT4_CUDA + TEX_NUM_BYTE4_CUDA + TEX_NUM_HALF4_CUDA + TEX_NUM_FLOAT_CUDA + TEX_NUM_BYTE_CUDA)
-
-/* Any architecture other than old CUDA cards */
 #define TEX_NUM_MAX (INT_MAX >> 4)
 
 /* Color to use when textures are not found. */
@@ -44,13 +28,62 @@ CCL_NAMESPACE_BEGIN
 #define TEX_IMAGE_MISSING_B 1
 #define TEX_IMAGE_MISSING_A 1
 
-#if defined (__KERNEL_CUDA__) && (__CUDA_ARCH__ < 300)
-#  define kernel_tex_type(tex) (tex < TEX_START_BYTE4_CUDA ? IMAGE_DATA_TYPE_FLOAT4 : IMAGE_DATA_TYPE_BYTE4)
-#  define kernel_tex_index(tex) (tex)
-#else
-#  define kernel_tex_type(tex) (tex & IMAGE_DATA_TYPE_MASK)
-#  define kernel_tex_index(tex) (tex >> IMAGE_DATA_TYPE_SHIFT)
-#endif
+/* Texture type. */
+#define kernel_tex_type(tex) (tex & IMAGE_DATA_TYPE_MASK)
+
+/* Interpolation types for textures
+ * cuda also use texture space to store other objects */
+typedef enum InterpolationType {
+	INTERPOLATION_NONE = -1,
+	INTERPOLATION_LINEAR = 0,
+	INTERPOLATION_CLOSEST = 1,
+	INTERPOLATION_CUBIC = 2,
+	INTERPOLATION_SMART = 3,
+
+	INTERPOLATION_NUM_TYPES,
+} InterpolationType;
+
+/* Texture types
+ * Since we store the type in the lower bits of a flat index,
+ * the shift and bit mask constant below need to be kept in sync. */
+typedef enum ImageDataType {
+	IMAGE_DATA_TYPE_FLOAT4 = 0,
+	IMAGE_DATA_TYPE_BYTE4 = 1,
+	IMAGE_DATA_TYPE_HALF4 = 2,
+	IMAGE_DATA_TYPE_FLOAT = 3,
+	IMAGE_DATA_TYPE_BYTE = 4,
+	IMAGE_DATA_TYPE_HALF = 5,
+
+	IMAGE_DATA_NUM_TYPES
+} ImageDataType;
+
+#define IMAGE_DATA_TYPE_SHIFT 3
+#define IMAGE_DATA_TYPE_MASK 0x7
+
+/* Extension types for textures.
+ *
+ * Defines how the image is extrapolated past its original bounds. */
+typedef enum ExtensionType {
+	/* Cause the image to repeat horizontally and vertically. */
+	EXTENSION_REPEAT = 0,
+	/* Extend by repeating edge pixels of the image. */
+	EXTENSION_EXTEND = 1,
+	/* Clip to image size and set exterior pixels as transparent. */
+	EXTENSION_CLIP = 2,
+
+	EXTENSION_NUM_TYPES,
+} ExtensionType;
+
+typedef struct TextureInfo {
+	/* Pointer, offset or texture depending on device. */
+	uint64_t data;
+	/* Buffer number for OpenCL. */
+	uint cl_buffer;
+	/* Interpolation and extension type. */
+	uint interpolation, extension;
+	/* Dimensions. */
+	uint width, height, depth;
+} TextureInfo;
 
 CCL_NAMESPACE_END
 

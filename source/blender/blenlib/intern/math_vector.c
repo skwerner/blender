@@ -652,6 +652,31 @@ void project_v3_v3v3(float out[3], const float p[3], const float v_proj[3])
 }
 
 /**
+ * Project \a p onto a unit length \a v_proj
+ */
+void project_v2_v2v2_normalized(float out[2], const float p[2], const float v_proj[2])
+{
+	BLI_ASSERT_UNIT_V2(v_proj);
+	const float mul = dot_v2v2(p, v_proj);
+
+	out[0] = mul * v_proj[0];
+	out[1] = mul * v_proj[1];
+}
+
+/**
+ * Project \a p onto a unit length \a v_proj
+ */
+void project_v3_v3v3_normalized(float out[3], const float p[3], const float v_proj[3])
+{
+	BLI_ASSERT_UNIT_V3(v_proj);
+	const float mul = dot_v3v3(p, v_proj);
+
+	out[0] = mul * v_proj[0];
+	out[1] = mul * v_proj[1];
+	out[2] = mul * v_proj[2];
+}
+
+/**
  * In this case plane is a 3D vector only (no 4th component).
  *
  * Projecting will make \a c a copy of \a v orthogonal to \a v_plane.
@@ -825,6 +850,20 @@ void ortho_v2_v2(float out[2], const float v[2])
 }
 
 /**
+ * Rotate a point \a p by \a angle around origin (0, 0)
+ */
+void rotate_v2_v2fl(float r[2], const float p[2], const float angle)
+{
+	const float co = cosf(angle);
+	const float si = sinf(angle);
+
+	BLI_assert(r != p);
+
+	r[0] = co * p[0] - si * p[1];
+	r[1] = si * p[0] + co * p[1];
+}
+
+/**
  * Rotate a point \a p by \a angle around an arbitrary unit length \a axis.
  * http://local.wasp.uwa.edu.au/~pbourke/geometry/
  */
@@ -851,6 +890,8 @@ void rotate_normalized_v3_v3v3fl(float out[3], const float p[3], const float axi
 
 void rotate_v3_v3v3fl(float r[3], const float p[3], const float axis[3], const float angle)
 {
+	BLI_assert(r != p);
+
 	float axis_n[3];
 
 	normalize_v3_v3(axis_n, axis);

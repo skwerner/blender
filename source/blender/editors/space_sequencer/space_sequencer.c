@@ -60,6 +60,8 @@
 
 #include "IMB_imbuf.h"
 
+#include "GPU_compositing.h"
+
 #include "sequencer_intern.h"   // own include
 
 /**************************** common state *****************************/
@@ -218,6 +220,11 @@ static void sequencer_free(SpaceLink *sl)
 
 	if (scopes->histogram_ibuf)
 		IMB_freeImBuf(scopes->histogram_ibuf);
+
+	if (sseq->compositor != NULL) {
+		GPU_fx_compositor_destroy(sseq->compositor);
+		sseq->compositor = NULL;
+	}
 }
 
 
@@ -435,6 +442,7 @@ static void sequencer_dropboxes(void)
 
 /* ************* end drop *********** */
 
+/* DO NOT make this static, this hides the symbol and breaks API generation script. */
 const char *sequencer_context_dir[] = {"edit_mask", NULL};
 
 static int sequencer_context(const bContext *C, const char *member, bContextDataResult *result)

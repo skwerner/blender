@@ -402,21 +402,29 @@ void GHOST_WindowWin32::getClientBounds(GHOST_Rect &bounds) const
 {
 	RECT rect;
 	POINT coord;
-	::GetClientRect(m_hWnd, &rect);
+	if (!IsIconic(m_hWnd)) {
+		::GetClientRect(m_hWnd, &rect);
 
-	coord.x = rect.left;
-	coord.y = rect.top;
-	::ClientToScreen(m_hWnd, &coord);
+		coord.x = rect.left;
+		coord.y = rect.top;
+		::ClientToScreen(m_hWnd, &coord);
 
-	bounds.m_l = coord.x;
-	bounds.m_t = coord.y;
+		bounds.m_l = coord.x;
+		bounds.m_t = coord.y;
 
-	coord.x = rect.right;
-	coord.y = rect.bottom;
-	::ClientToScreen(m_hWnd, &coord);
+		coord.x = rect.right;
+		coord.y = rect.bottom;
+		::ClientToScreen(m_hWnd, &coord);
 
-	bounds.m_r = coord.x;
-	bounds.m_b = coord.y;
+		bounds.m_r = coord.x;
+		bounds.m_b = coord.y;
+	}
+	else {
+		bounds.m_b = 0;
+		bounds.m_l = 0;
+		bounds.m_r = 0;
+		bounds.m_t = 0;
+	}
 }
 
 
@@ -890,19 +898,14 @@ void GHOST_WindowWin32::processWin32TabletEvent(WPARAM wParam, LPARAM lParam)
 		if (fpWTPacket) {
 			if (fpWTPacket((HCTX)lParam, wParam, &pkt)) {
 				if (m_tabletData) {
-					switch (pkt.pkCursor) {
-						case 0: /* first device */
-						case 3: /* second device */
+					switch (pkt.pkCursor % 3) { /* % 3 for multiple devices ("DualTrack") */
+						case 0:
 							m_tabletData->Active = GHOST_kTabletModeNone; /* puck - not yet supported */
 							break;
 						case 1:
-						case 4:
-						case 7:
 							m_tabletData->Active = GHOST_kTabletModeStylus; /* stylus */
 							break;
 						case 2:
-						case 5:
-						case 8:
 							m_tabletData->Active = GHOST_kTabletModeEraser; /* eraser */
 							break;
 					}

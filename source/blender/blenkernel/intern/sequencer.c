@@ -377,6 +377,8 @@ static void seqclipboard_ptr_restore(Main *bmain, ID **id_pt)
 					}
 					break;
 				}
+				default:
+					break;
 			}
 		}
 
@@ -480,9 +482,12 @@ void BKE_sequencer_editing_free(Scene *scene)
 
 static void sequencer_imbuf_assign_spaces(Scene *scene, ImBuf *ibuf)
 {
+#if 0
+	/* Bute buffer is supposed to be in sequencer working space already. */
 	if (ibuf->rect != NULL) {
 		IMB_colormanagement_assign_rect_colorspace(ibuf, scene->sequencer_colorspace_settings.name);
 	}
+#endif
 	if (ibuf->rect_float != NULL) {
 		IMB_colormanagement_assign_float_colorspace(ibuf, scene->sequencer_colorspace_settings.name);
 	}
@@ -1155,6 +1160,7 @@ static const char *give_seqname_by_type(int type)
 		case SEQ_TYPE_ALPHAOVER:     return "Alpha Over";
 		case SEQ_TYPE_ALPHAUNDER:    return "Alpha Under";
 		case SEQ_TYPE_OVERDROP:      return "Over Drop";
+		case SEQ_TYPE_COLORMIX:      return "Color Mix";
 		case SEQ_TYPE_WIPE:          return "Wipe";
 		case SEQ_TYPE_GLOW:          return "Glow";
 		case SEQ_TYPE_TRANSFORM:     return "Transform";
@@ -1669,6 +1675,11 @@ static bool seq_proxy_get_fname(Editing *ed, Sequence *seq, int cfra, int render
 		}
 		else if (seq->type == SEQ_TYPE_IMAGE) {
 			fname[0] = 0;
+		}
+		else {
+			/* We could make a name here, except non-movie's don't generate proxies,
+			 * cancel until other types of sequence strips are supported. */
+			return false;
 		}
 		BLI_path_append(dir, sizeof(dir), fname);
 		BLI_path_abs(name, G.main->name);
@@ -3193,11 +3204,12 @@ static ImBuf *seq_render_scene_strip(const SeqRenderData *context, Sequence *seq
 		int scemode;
 		int cfra;
 		float subframe;
+
 #ifdef DURIAN_CAMERA_SWITCH
-		ListBase markers;
+		int mode;
 #endif
 	} orig_data;
-	
+
 	/* Old info:
 	 * Hack! This function can be called from do_render_seq(), in that case
 	 * the seq->scene can already have a Render initialized with same name,
@@ -3233,7 +3245,7 @@ static ImBuf *seq_render_scene_strip(const SeqRenderData *context, Sequence *seq
 	const bool is_background = G.background;
 	const bool do_seq_gl = is_rendering ?
 	        0 /* (context->scene->r.seq_flag & R_SEQ_GL_REND) */ :
-	        (context->scene->r.seq_flag & R_SEQ_GL_PREV) != 0;
+	        (context->scene->r.seq_prev_type) != OB_RENDER;
 	// bool have_seq = false;  /* UNUSED */
 	bool have_comp = false;
 	bool use_gpencil = true;
@@ -3257,7 +3269,7 @@ static ImBuf *seq_render_scene_strip(const SeqRenderData *context, Sequence *seq
 	orig_data.cfra = scene->r.cfra;
 	orig_data.subframe = scene->r.subframe;
 #ifdef DURIAN_CAMERA_SWITCH
-	orig_data.markers = scene->markers;
+	orig_data.mode = scene->r.mode;
 #endif
 
 	BKE_scene_frame_set(scene, frame);
@@ -3280,20 +3292,27 @@ static ImBuf *seq_render_scene_strip(const SeqRenderData *context, Sequence *seq
 
 	/* prevent eternal loop */
 	scene->r.scemode &= ~R_DOSEQ;
-	
+
 #ifdef DURIAN_CAMERA_SWITCH
 	/* stooping to new low's in hackyness :( */
-	BLI_listbase_clear(&scene->markers);
+	scene->r.mode |= R_NO_CAMERA_SWITCH;
 #endif
 
 	is_frame_update = (orig_data.cfra != scene->r.cfra) || (orig_data.subframe != scene->r.subframe);
 
 	if ((sequencer_view3d_cb && do_seq_gl && camera) && is_thread_main) {
 		char err_out[256] = "unknown";
-		int width = (scene->r.xsch * scene->r.size) / 100;
-		int height = (scene->r.ysch * scene->r.size) / 100;
+		const int width = (scene->r.xsch * scene->r.size) / 100;
+		const int height = (scene->r.ysch * scene->r.size) / 100;
 		const bool use_background = (scene->r.alphamode == R_ADDSKY);
 		const char *viewname = BKE_scene_multiview_render_view_name_get(&scene->r, context->view_id);
+
+		unsigned int draw_flags = SEQ_OFSDRAW_NONE;
+		draw_flags |= (use_gpencil) ? SEQ_OFSDRAW_USE_GPENCIL : 0;
+		draw_flags |= (use_background) ? SEQ_OFSDRAW_USE_BACKGROUND : 0;
+		draw_flags |= (context->gpu_full_samples) ? SEQ_OFSDRAW_USE_FULL_SAMPLE : 0;
+		draw_flags |= (context->scene->r.seq_flag & R_SEQ_SOLID_TEX) ? SEQ_OFSDRAW_USE_SOLID_TEX : 0;
+		draw_flags |= (context->scene->r.seq_flag & R_SEQ_CAMERA_DOF) ? SEQ_OFSDRAW_USE_CAMERA_DOF : 0;
 
 		/* for old scene this can be uninitialized,
 		 * should probably be added to do_versions at some point if the functionality stays */
@@ -3304,18 +3323,15 @@ static ImBuf *seq_render_scene_strip(const SeqRenderData *context, Sequence *seq
 		BKE_scene_update_for_newframe(context->eval_ctx, context->bmain, scene, scene->lay);
 		ibuf = sequencer_view3d_cb(
 		        /* set for OpenGL render (NULL when scrubbing) */
-		        scene, camera, width, height, IB_rect,
-		        context->scene->r.seq_prev_type,
-		        (context->scene->r.seq_flag & R_SEQ_SOLID_TEX) != 0,
-		        use_gpencil, use_background, scene->r.alphamode,
-		        context->gpu_samples, context->gpu_full_samples, viewname,
+		        scene, camera, width, height, IB_rect, draw_flags, context->scene->r.seq_prev_type,
+		        scene->r.alphamode, context->gpu_samples, viewname,
 		        context->gpu_fx, context->gpu_offscreen, err_out);
 		if (ibuf == NULL) {
 			fprintf(stderr, "seq_render_scene_strip failed to get opengl buffer: %s\n", err_out);
 		}
 	}
 	else {
-		Render *re = RE_GetRender(scene->id.name);
+		Render *re = RE_GetSceneRender(scene);
 		const int totviews = BKE_scene_multiview_num_views_get(&scene->r);
 		int i;
 		ImBuf **ibufs_arr;
@@ -3332,7 +3348,7 @@ static ImBuf *seq_render_scene_strip(const SeqRenderData *context, Sequence *seq
 		 */
 		if (!is_thread_main || is_rendering == false || is_background || context->eval_ctx->mode == DAG_EVAL_RENDER) {
 			if (re == NULL)
-				re = RE_NewRender(scene->id.name);
+				re = RE_NewSceneRender(scene);
 
 			BKE_scene_update_for_newframe(context->eval_ctx, context->bmain, scene, scene->lay);
 			RE_BlenderFrame(re, context->bmain, scene, NULL, camera, scene->lay, frame, false);
@@ -3399,7 +3415,7 @@ finally:
 
 #ifdef DURIAN_CAMERA_SWITCH
 	/* stooping to new low's in hackyness :( */
-	scene->markers = orig_data.markers;
+	scene->r.mode &= ~(orig_data.mode & R_NO_CAMERA_SWITCH);
 #endif
 
 	return ibuf;
@@ -4474,8 +4490,11 @@ Sequence *BKE_sequencer_foreground_frame_get(Scene *scene, int frame)
 	for (seq = ed->seqbasep->first; seq; seq = seq->next) {
 		if (seq->flag & SEQ_MUTE || seq->startdisp > frame || seq->enddisp <= frame)
 			continue;
-		/* only use elements you can see - not */
-		if (ELEM(seq->type, SEQ_TYPE_IMAGE, SEQ_TYPE_META, SEQ_TYPE_SCENE, SEQ_TYPE_MOVIE, SEQ_TYPE_COLOR)) {
+		/* Only use strips that generate an image, not ones that combine
+		 * other strips or apply some effect. */
+		if (ELEM(seq->type, SEQ_TYPE_IMAGE, SEQ_TYPE_META, SEQ_TYPE_SCENE,
+		         SEQ_TYPE_MOVIE, SEQ_TYPE_COLOR, SEQ_TYPE_TEXT))
+		{
 			if (seq->machine > best_machine) {
 				best_seq = seq;
 				best_machine = seq->machine;
@@ -5371,9 +5390,8 @@ Sequence *BKE_sequencer_add_movie_strip(bContext *C, ListBase *seqbasep, SeqLoad
 	return seq;
 }
 
-static Sequence *seq_dupli(Scene *scene, Scene *scene_to, Sequence *seq, int dupe_flag)
+static Sequence *seq_dupli(const Scene *scene_src, Scene *scene_dst, Sequence *seq, int dupe_flag, const int flag)
 {
-	Scene *sce_audio = scene_to ? scene_to : scene;
 	Sequence *seqn = MEM_dupallocN(seq);
 
 	seq->tmp = seqn;
@@ -5397,7 +5415,7 @@ static Sequence *seq_dupli(Scene *scene, Scene *scene_to, Sequence *seq, int dup
 	}
 
 	if (seq->prop) {
-		seqn->prop = IDP_CopyProperty(seq->prop);
+		seqn->prop = IDP_CopyProperty_ex(seq->prop, flag);
 	}
 
 	if (seqn->modifiers.first) {
@@ -5416,7 +5434,7 @@ static Sequence *seq_dupli(Scene *scene, Scene *scene_to, Sequence *seq, int dup
 	else if (seq->type == SEQ_TYPE_SCENE) {
 		seqn->strip->stripdata = NULL;
 		if (seq->scene_sound)
-			seqn->scene_sound = BKE_sound_scene_add_scene_sound_defaults(sce_audio, seqn);
+			seqn->scene_sound = BKE_sound_scene_add_scene_sound_defaults(scene_dst, seqn);
 	}
 	else if (seq->type == SEQ_TYPE_MOVIECLIP) {
 		/* avoid assert */
@@ -5433,9 +5451,11 @@ static Sequence *seq_dupli(Scene *scene, Scene *scene_to, Sequence *seq, int dup
 		seqn->strip->stripdata =
 		        MEM_dupallocN(seq->strip->stripdata);
 		if (seq->scene_sound)
-			seqn->scene_sound = BKE_sound_add_scene_sound_defaults(sce_audio, seqn);
+			seqn->scene_sound = BKE_sound_add_scene_sound_defaults(scene_dst, seqn);
 
-		id_us_plus((ID *)seqn->sound);
+		if ((flag & LIB_ID_CREATE_NO_USER_REFCOUNT) == 0) {
+			id_us_plus((ID *)seqn->sound);
+		}
 	}
 	else if (seq->type == SEQ_TYPE_IMAGE) {
 		seqn->strip->stripdata =
@@ -5455,11 +5475,15 @@ static Sequence *seq_dupli(Scene *scene, Scene *scene_to, Sequence *seq, int dup
 		BLI_assert(0);
 	}
 
-	if (dupe_flag & SEQ_DUPE_UNIQUE_NAME)
-		BKE_sequence_base_unique_name_recursive(&scene->ed->seqbase, seqn);
+	if (scene_src == scene_dst) {
+		if (dupe_flag & SEQ_DUPE_UNIQUE_NAME) {
+			BKE_sequence_base_unique_name_recursive(&scene_dst->ed->seqbase, seqn);
+		}
 
-	if (dupe_flag & SEQ_DUPE_ANIM)
-		BKE_sequencer_dupe_animdata(scene, seq->name + 2, seqn->name + 2);
+		if (dupe_flag & SEQ_DUPE_ANIM) {
+			BKE_sequencer_dupe_animdata(scene_dst, seq->name + 2, seqn->name + 2);
+		}
+	}
 
 	return seqn;
 }
@@ -5486,16 +5510,16 @@ static void seq_new_fix_links_recursive(Sequence *seq)
 	}
 }
 
-Sequence *BKE_sequence_dupli_recursive(Scene *scene, Scene *scene_to, Sequence *seq, int dupe_flag)
+Sequence *BKE_sequence_dupli_recursive(const Scene *scene_src, Scene *scene_dst, Sequence *seq, int dupe_flag)
 {
 	Sequence *seqn;
 
 	seq->tmp = NULL;
-	seqn = seq_dupli(scene, scene_to, seq, dupe_flag);
+	seqn = seq_dupli(scene_src, scene_dst, seq, dupe_flag, 0);
 	if (seq->type == SEQ_TYPE_META) {
 		Sequence *s;
 		for (s = seq->seqbase.first; s; s = s->next) {
-			Sequence *n = BKE_sequence_dupli_recursive(scene, scene_to, s, dupe_flag);
+			Sequence *n = BKE_sequence_dupli_recursive(scene_src, scene_dst, s, dupe_flag);
 			if (n) {
 				BLI_addtail(&seqn->seqbase, n);
 			}
@@ -5508,19 +5532,19 @@ Sequence *BKE_sequence_dupli_recursive(Scene *scene, Scene *scene_to, Sequence *
 }
 
 void BKE_sequence_base_dupli_recursive(
-        Scene *scene, Scene *scene_to, ListBase *nseqbase, ListBase *seqbase,
-        int dupe_flag)
+        const Scene *scene_src, Scene *scene_dst, ListBase *nseqbase, const ListBase *seqbase,
+        int dupe_flag, const int flag)
 {
 	Sequence *seq;
 	Sequence *seqn = NULL;
-	Sequence *last_seq = BKE_sequencer_active_get(scene);
+	Sequence *last_seq = BKE_sequencer_active_get((Scene *)scene_src);
 	/* always include meta's strips */
 	int dupe_flag_recursive = dupe_flag | SEQ_DUPE_ALL;
 
 	for (seq = seqbase->first; seq; seq = seq->next) {
 		seq->tmp = NULL;
 		if ((seq->flag & SELECT) || (dupe_flag & SEQ_DUPE_ALL)) {
-			seqn = seq_dupli(scene, scene_to, seq, dupe_flag);
+			seqn = seq_dupli(scene_src, scene_dst, seq, dupe_flag, flag);
 			if (seqn) { /*should never fail */
 				if (dupe_flag & SEQ_DUPE_CONTEXT) {
 					seq->flag &= ~SEQ_ALLSEL;
@@ -5530,13 +5554,13 @@ void BKE_sequence_base_dupli_recursive(
 				BLI_addtail(nseqbase, seqn);
 				if (seq->type == SEQ_TYPE_META) {
 					BKE_sequence_base_dupli_recursive(
-					        scene, scene_to, &seqn->seqbase, &seq->seqbase,
-					        dupe_flag_recursive);
+					        scene_src, scene_dst, &seqn->seqbase, &seq->seqbase,
+					        dupe_flag_recursive, flag);
 				}
 
 				if (dupe_flag & SEQ_DUPE_CONTEXT) {
 					if (seq == last_seq) {
-						BKE_sequencer_active_set(scene, seqn);
+						BKE_sequencer_active_set(scene_dst, seqn);
 					}
 				}
 			}

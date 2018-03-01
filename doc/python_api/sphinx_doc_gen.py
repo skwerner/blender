@@ -1010,9 +1010,9 @@ def pymodule2sphinx(basepath, module_name, module, title):
 context_type_map = {
     "active_base": ("ObjectBase", False),
     "active_bone": ("EditBone", False),
+    "active_gpencil_brush": ("GPencilSculptBrush", False),
     "active_gpencil_frame": ("GreasePencilLayer", True),
     "active_gpencil_layer": ("GPencilLayer", True),
-    "active_gpencil_brush": ("GPencilSculptBrush", False),
     "active_gpencil_palette": ("GPencilPalette", True),
     "active_gpencil_palettecolor": ("GPencilPaletteColor", True),
     "active_node": ("Node", False),
@@ -1063,6 +1063,7 @@ context_type_map = {
     "selected_bones": ("EditBone", True),
     "selected_editable_bases": ("ObjectBase", True),
     "selected_editable_bones": ("EditBone", True),
+    "selected_editable_fcurves": ("FCurce", True),
     "selected_editable_objects": ("Object", True),
     "selected_editable_sequences": ("Sequence", True),
     "selected_nodes": ("Node", True),
@@ -1719,9 +1720,6 @@ def write_rst_contents(basepath):
         fw("   :maxdepth: 1\n\n")
         for info, info_desc in INFO_DOCS:
             fw("   %s <%s>\n\n" % (info_desc, info))
-        fw("\n")
-        fw("- :ref:`Blender/Python Add-on Tutorial: a step by step guide on")
-        fw(" how to write an add-on from scratch <blender_manual:advanced_scripting_addon_tutorial>`\n")
         fw("\n")
 
     fw(title_string("Application Modules", "=", double=True))

@@ -30,8 +30,7 @@
  * in local memory on the GPU, as it would take too many register and indexes in
  * ways not known at compile time. This seems the only solution even though it
  * may be slow, with two positive factors. If the same shader is being executed,
- * memory access will be coalesced, and on fermi cards, memory will actually be
- * cached.
+ * memory access will be coalesced and cached.
  *
  * The result of shader execution will be a single closure. This means the
  * closure type, associated label, data and weight. Sampling from multiple
@@ -183,6 +182,10 @@ CCL_NAMESPACE_END
 #include "kernel/svm/svm_voxel.h"
 #include "kernel/svm/svm_bump.h"
 
+#ifdef __SHADER_RAYTRACE__
+#  include "kernel/svm/svm_bevel.h"
+#endif
+
 CCL_NAMESPACE_BEGIN
 
 #define NODES_GROUP(group) ((group) <= __NODES_MAX_GROUP__)
@@ -207,7 +210,7 @@ ccl_device_noinline void svm_eval_nodes(KernelGlobals *kg, ShaderData *sd, ccl_a
 				break;
 			}
 			case NODE_CLOSURE_BSDF:
-				svm_node_closure_bsdf(kg, sd, stack, node, path_flag, &offset);
+				svm_node_closure_bsdf(kg, sd, stack, node, type, path_flag, &offset);
 				break;
 			case NODE_CLOSURE_EMISSION:
 				svm_node_closure_emission(sd, stack, node);
@@ -262,6 +265,12 @@ ccl_device_noinline void svm_eval_nodes(KernelGlobals *kg, ShaderData *sd, ccl_a
 				break;
 			case NODE_SET_DISPLACEMENT:
 				svm_node_set_displacement(kg, sd, stack, node.y);
+				break;
+			case NODE_DISPLACEMENT:
+				svm_node_displacement(kg, sd, stack, node);
+				break;
+			case NODE_VECTOR_DISPLACEMENT:
+				svm_node_vector_displacement(kg, sd, stack, node, &offset);
 				break;
 #  endif  /* NODES_FEATURE(NODE_FEATURE_BUMP) */
 #  ifdef __TEXTURES__
@@ -325,7 +334,10 @@ ccl_device_noinline void svm_eval_nodes(KernelGlobals *kg, ShaderData *sd, ccl_a
 				break;
 #  if NODES_FEATURE(NODE_FEATURE_VOLUME)
 			case NODE_CLOSURE_VOLUME:
-				svm_node_closure_volume(kg, sd, stack, node, path_flag);
+				svm_node_closure_volume(kg, sd, stack, node, type);
+				break;
+			case NODE_PRINCIPLED_VOLUME:
+				svm_node_principled_volume(kg, sd, stack, node, type, path_flag, &offset);
 				break;
 #  endif  /* NODES_FEATURE(NODE_FEATURE_VOLUME) */
 #  ifdef __EXTRA_NODES__
@@ -460,6 +472,11 @@ ccl_device_noinline void svm_eval_nodes(KernelGlobals *kg, ShaderData *sd, ccl_a
 				svm_node_tex_voxel(kg, sd, stack, node, &offset);
 				break;
 #  endif  /* NODES_FEATURE(NODE_FEATURE_VOLUME) */
+#  ifdef __SHADER_RAYTRACE__
+			case NODE_BEVEL:
+				svm_node_bevel(kg, sd, state, stack, node);
+				break;
+#  endif  /* __SHADER_RAYTRACE__ */
 #endif  /* NODES_GROUP(NODE_GROUP_LEVEL_3) */
 			case NODE_END:
 				return;

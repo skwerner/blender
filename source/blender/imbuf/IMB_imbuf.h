@@ -205,6 +205,7 @@ typedef enum IMB_BlendMode {
 	IMB_BLEND_SATURATION = 21,
 	IMB_BLEND_LUMINOSITY = 22,
 	IMB_BLEND_COLOR	= 23,
+	IMB_BLEND_INTERPOLATE = 24,
 
 	IMB_BLEND_COPY = 1000,
 	IMB_BLEND_COPY_RGB = 1001,
@@ -582,6 +583,12 @@ bool IMB_metadata_change_field(struct ImBuf *img, const char *key, const char *f
 void IMB_metadata_copy(struct ImBuf *dimb, struct ImBuf *simb);
 
 /* exported for image tools in blender, to quickly allocate 32 bits rect */
+void *imb_alloc_pixels(unsigned int x,
+                       unsigned int y,
+                       unsigned int channels,
+                       size_t typesize,
+                       const char *name);
+
 bool imb_addrectImBuf(struct ImBuf *ibuf);
 void imb_freerectImBuf(struct ImBuf *ibuf);
 

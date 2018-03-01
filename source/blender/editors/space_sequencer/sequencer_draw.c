@@ -40,6 +40,7 @@
 
 #include "DNA_scene_types.h"
 #include "DNA_mask_types.h"
+#include "DNA_object_types.h"
 #include "DNA_screen_types.h"
 #include "DNA_space_types.h"
 #include "DNA_userdef_types.h"
@@ -59,6 +60,7 @@
 #include "BIF_glutil.h"
 
 #include "GPU_basic_shader.h"
+#include "GPU_compositing.h"
 
 #include "ED_anim_api.h"
 #include "ED_gpencil.h"
@@ -154,6 +156,7 @@ void color3ubv_from_seq(Scene *curscene, Sequence *seq, unsigned char col[3])
 		case SEQ_TYPE_MULTICAM:
 		case SEQ_TYPE_ADJUSTMENT:
 		case SEQ_TYPE_GAUSSIAN_BLUR:
+		case SEQ_TYPE_COLORMIX:
 			UI_GetThemeColor3ubv(TH_SEQ_EFFECT, col);
 
 			/* slightly offset hue to distinguish different effects */
@@ -168,6 +171,7 @@ void color3ubv_from_seq(Scene *curscene, Sequence *seq, unsigned char col[3])
 			else if (seq->type == SEQ_TYPE_MULTICAM)      rgb_byte_set_hue_float_offset(col, 0.32);
 			else if (seq->type == SEQ_TYPE_ADJUSTMENT)    rgb_byte_set_hue_float_offset(col, 0.40);
 			else if (seq->type == SEQ_TYPE_GAUSSIAN_BLUR) rgb_byte_set_hue_float_offset(col, 0.42);
+			else if (seq->type == SEQ_TYPE_COLORMIX)      rgb_byte_set_hue_float_offset(col, 0.46);
 			break;
 
 		case SEQ_TYPE_COLOR:
@@ -907,7 +911,7 @@ void ED_sequencer_special_preview_clear(void)
 
 ImBuf *sequencer_ibuf_get(struct Main *bmain, Scene *scene, SpaceSeq *sseq, int cfra, int frame_ofs, const char *viewname)
 {
-	SeqRenderData context;
+	SeqRenderData context = {0};
 	ImBuf *ibuf;
 	int rectx, recty;
 	float render_size;
@@ -934,6 +938,12 @@ ImBuf *sequencer_ibuf_get(struct Main *bmain, Scene *scene, SpaceSeq *sseq, int 
 	        rectx, recty, proxy_size,
 	        &context);
 	context.view_id = BKE_scene_multiview_view_id_get(&scene->r, viewname);
+	if (scene->r.seq_flag & R_SEQ_CAMERA_DOF) {
+		if (sseq->compositor == NULL) {
+			sseq->compositor = GPU_fx_compositor_create();
+		}
+		context.gpu_fx = sseq->compositor;
+	}
 
 	/* sequencer could start rendering, in this case we need to be sure it wouldn't be canceled
 	 * by Esc pressed somewhere in the past
@@ -1116,18 +1126,16 @@ void draw_image_seq(const bContext *C, Scene *scene, ARegion *ar, SpaceSeq *sseq
 	const char *names[2] = {STEREO_LEFT_NAME, STEREO_RIGHT_NAME};
 	bool draw_metadata = false;
 
-	if (G.is_rendering == false && (scene->r.seq_flag & R_SEQ_GL_PREV) == 0) {
+	if (G.is_rendering == false && (scene->r.seq_prev_type) == OB_RENDER) {
 		/* stop all running jobs, except screen one. currently previews frustrate Render
 		 * needed to make so sequencer's rendering doesn't conflict with compositor
 		 */
 		WM_jobs_kill_type(CTX_wm_manager(C), NULL, WM_JOB_TYPE_COMPOSITE);
 
-		if ((scene->r.seq_flag & R_SEQ_GL_PREV) == 0) {
-			/* in case of final rendering used for preview, kill all previews,
-			 * otherwise threading conflict will happen in rendering module
-			 */
-			WM_jobs_kill_type(CTX_wm_manager(C), NULL, WM_JOB_TYPE_RENDER_PREVIEW);
-		}
+		/* in case of final rendering used for preview, kill all previews,
+		 * otherwise threading conflict will happen in rendering module
+		 */
+		WM_jobs_kill_type(CTX_wm_manager(C), NULL, WM_JOB_TYPE_RENDER_PREVIEW);
 	}
 
 	if ((!draw_overlay || sseq->overlay_type == SEQ_DRAW_OVERLAY_REFERENCE) && !draw_backdrop) {
@@ -1631,9 +1639,8 @@ void draw_timeline_seq(const bContext *C, ARegion *ar)
 	/* draw backdrop */
 	draw_seq_backdrop(v2d);
 	
-	/* regular grid-pattern over the rest of the view (i.e. 25-frame grid lines) */
-	// NOTE: the gridlines are currently spaced every 25 frames, which is only fine for 25 fps, but maybe not for 30...
-	UI_view2d_constant_grid_draw(v2d);
+	/* regular grid-pattern over the rest of the view (i.e. 1-second grid lines) */
+	UI_view2d_constant_grid_draw(v2d, FPS);
 
 	/* Only draw backdrop in pure sequence view. */
 	if (sseq->view == SEQ_VIEW_SEQUENCE && sseq->draw_flag & SEQ_DRAW_BACKDROP) {

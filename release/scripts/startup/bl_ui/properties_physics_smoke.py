@@ -20,7 +20,7 @@
 import bpy
 from bpy.types import Panel
 
-from bl_ui.properties_physics_common import (
+from .properties_physics_common import (
     point_cache_ui,
     effector_weights_ui,
 )
@@ -68,6 +68,8 @@ class PHYSICS_PT_smoke(PhysicButtonsPanel, Panel):
             col.prop(domain, "time_scale", text="Scale")
             col.label(text="Border Collisions:")
             col.prop(domain, "collision_extents", text="")
+            col.label(text="Empty Space:")
+            col.prop(domain, "clipping")
 
             col = split.column()
             col.label(text="Behavior:")

@@ -35,8 +35,7 @@ ccl_device void kernel_filter_divide_shadow(int sample,
                                             ccl_global float *bufferVariance,
                                             int4 rect,
                                             int buffer_pass_stride,
-                                            int buffer_denoising_offset,
-                                            bool use_split_variance)
+                                            int buffer_denoising_offset)
 {
 	int xtile = (x < tiles->x[1])? 0: ((x < tiles->x[2])? 1: 2);
 	int ytile = (y < tiles->y[1])? 0: ((y < tiles->y[2])? 1: 2);
@@ -57,12 +56,14 @@ ccl_device void kernel_filter_divide_shadow(int sample,
 	float varB = center_buffer[5];
 	int odd_sample = (sample+1)/2;
 	int even_sample = sample/2;
-	if(use_split_variance) {
-		varA = max(0.0f, varA - unfilteredA[idx]*unfilteredA[idx]*odd_sample);
-		varB = max(0.0f, varB - unfilteredB[idx]*unfilteredB[idx]*even_sample);
-	}
-	varA /= (odd_sample - 1);
-	varB /= (even_sample - 1);
+
+	/* Approximate variance as E[x^2] - 1/N * (E[x])^2, since online variance
+	 * update does not work efficiently with atomics in the kernel. */
+	varA = max(0.0f, varA - unfilteredA[idx]*unfilteredA[idx]*odd_sample);
+	varB = max(0.0f, varB - unfilteredB[idx]*unfilteredB[idx]*even_sample);
+
+	varA /= max(odd_sample - 1, 1);
+	varB /= max(even_sample - 1, 1);
 
 	sampleVariance[idx]  = 0.5f*(varA + varB) / sample;
 	sampleVarianceV[idx] = 0.5f * (varA - varB) * (varA - varB) / (sample*sample);
@@ -84,8 +85,7 @@ ccl_device void kernel_filter_get_feature(int sample,
                                           ccl_global float *mean,
                                           ccl_global float *variance,
                                           int4 rect, int buffer_pass_stride,
-                                          int buffer_denoising_offset,
-                                          bool use_split_variance)
+                                          int buffer_denoising_offset)
 {
 	int xtile = (x < tiles->x[1])? 0: ((x < tiles->x[2])? 1: 2);
 	int ytile = (y < tiles->y[1])? 0: ((y < tiles->y[2])? 1: 2);
@@ -96,11 +96,14 @@ ccl_device void kernel_filter_get_feature(int sample,
 	int idx = (y-rect.y)*buffer_w + (x - rect.x);
 
 	mean[idx] = center_buffer[m_offset] / sample;
-	if(use_split_variance) {
+	if(sample > 1) {
+		/* Approximate variance as E[x^2] - 1/N * (E[x])^2, since online variance
+		 * update does not work efficiently with atomics in the kernel. */
 		variance[idx] = max(0.0f, (center_buffer[v_offset] - mean[idx]*mean[idx]*sample) / (sample * (sample-1)));
 	}
 	else {
-		variance[idx] = center_buffer[v_offset] / (sample * (sample-1));
+		/* Can't compute variance with single sample, just set it very high. */
+		variance[idx] = 1e10f;
 	}
 }
 
@@ -119,7 +122,9 @@ ccl_device void kernel_filter_detect_outliers(int x, int y,
 	for(int y1 = max(y-2, rect.y); y1 < min(y+3, rect.w); y1++) {
 		for(int x1 = max(x-2, rect.x); x1 < min(x+3, rect.z); x1++) {
 			int idx = (y1-rect.y)*buffer_w + (x1-rect.x);
-			float L = average(make_float3(image[idx], image[idx+pass_stride], image[idx+2*pass_stride]));
+			float3 color = make_float3(image[idx], image[idx+pass_stride], image[idx+2*pass_stride]);
+			color = max(color, make_float3(0.0f, 0.0f, 0.0f));
+			float L = average(color);
 
 			/* Find the position of L. */
 			int i;
@@ -137,10 +142,11 @@ ccl_device void kernel_filter_detect_outliers(int x, int y,
 	}
 
 	int idx = (y-rect.y)*buffer_w + (x-rect.x);
-	float L = average(make_float3(image[idx], image[idx+pass_stride], image[idx+2*pass_stride]));
+	float3 color = make_float3(image[idx], image[idx+pass_stride], image[idx+2*pass_stride]);
+	color = max(color, make_float3(0.0f, 0.0f, 0.0f));
+	float L = average(color);
 
 	float ref = 2.0f*values[(int)(n*0.75f)];
-	float fac = 1.0f;
 	if(L > ref) {
 		/* The pixel appears to be an outlier.
 		 * However, it may just be a legitimate highlight. Therefore, it is checked how likely it is that the pixel
@@ -153,15 +159,16 @@ ccl_device void kernel_filter_detect_outliers(int x, int y,
 			/* The pixel is an outlier, so negate the depth value to mark it as one.
 			 * Also, scale its brightness down to the outlier threshold to avoid trouble with the NLM weights. */
 			depth[idx] = -depth[idx];
-			fac = ref/L;
+			float fac = ref/L;
+			color *= fac;
 			variance[idx              ] *= fac*fac;
 			variance[idx + pass_stride] *= fac*fac;
 			variance[idx+2*pass_stride] *= fac*fac;
 		}
 	}
-	out[idx              ] = fac*image[idx];
-	out[idx + pass_stride] = fac*image[idx + pass_stride];
-	out[idx+2*pass_stride] = fac*image[idx+2*pass_stride];
+	out[idx              ] = color.x;
+	out[idx + pass_stride] = color.y;
+	out[idx+2*pass_stride] = color.z;
 }
 
 /* Combine A/B buffers.

@@ -807,7 +807,6 @@ static bool pchan_autoik_adjust(bPoseChannel *pchan, short chainlen)
 /* change the chain-length of auto-ik */
 void transform_autoik_update(TransInfo *t, short mode)
 {
-	const short old_len = t->settings->autoik_chainlen;
 	short *chainlen = &t->settings->autoik_chainlen;
 	bPoseChannel *pchan;
 
@@ -818,12 +817,13 @@ void transform_autoik_update(TransInfo *t, short mode)
 	}
 	else if (mode == -1) {
 		/* mode==-1 is from WHEELMOUSEUP... decreases len */
-		if (*chainlen > 0) (*chainlen)--;
-	}
-
-	/* IK length did not change, skip any updates. */
-	if (old_len == *chainlen) {
-		return;
+		if (*chainlen > 0) {
+			(*chainlen)--;
+		}
+		else {
+			/* IK length did not change, skip updates. */
+			return;
+		}
 	}
 
 	/* sanity checks (don't assume t->poseobj is set, or that it is an armature) */
@@ -1905,7 +1905,6 @@ static void createTransParticleVerts(bContext *C, TransInfo *t)
 {
 	TransData *td = NULL;
 	TransDataExtension *tx;
-	Base *base = CTX_data_active_base(C);
 	Object *ob = CTX_data_active_object(C);
 	ParticleEditSettings *pset = PE_settings(t->scene);
 	PTCacheEdit *edit = PE_get_current(t->scene, ob);
@@ -1924,8 +1923,6 @@ static void createTransParticleVerts(bContext *C, TransInfo *t)
 
 	if (psys)
 		psmd = psys_get_modifier(ob, psys);
-
-	base->flag |= BA_HAS_RECALC_DATA;
 
 	for (i = 0, point = edit->points; i < edit->totpoint; i++, point++) {
 		point->flag &= ~PEP_TRANSFORM;
@@ -2801,7 +2798,7 @@ void flushTransSeq(TransInfo *t)
 		tdsq = (TransDataSeq *)td->extra;
 		seq = tdsq->seq;
 		old_start = seq->start;
-		new_frame = iroundf(td2d->loc[0]);
+		new_frame = round_fl_to_int(td2d->loc[0]);
 
 		switch (tdsq->sel_flag) {
 			case SELECT:
@@ -2813,7 +2810,7 @@ void flushTransSeq(TransInfo *t)
 					seq->start = new_frame - tdsq->start_offset;
 #endif
 				if (seq->depth == 0) {
-					seq->machine = iroundf(td2d->loc[1]);
+					seq->machine = round_fl_to_int(td2d->loc[1]);
 					CLAMP(seq->machine, 1, MAXSEQ);
 				}
 				break;
@@ -3515,65 +3512,134 @@ static void posttrans_mask_clean(Mask *mask)
 	}
 }
 
+/* Time + Average value */
+typedef struct tRetainedKeyframe {
+	struct tRetainedKeyframe *next, *prev;
+	float frame;      /* frame to cluster around */
+	float val;        /* average value */
+	
+	size_t tot_count; /* number of keyframes that have been averaged */
+	size_t del_count; /* number of keyframes of this sort that have been deleted so far */
+} tRetainedKeyframe;
+
 /* Called during special_aftertrans_update to make sure selected keyframes replace
  * any other keyframes which may reside on that frame (that is not selected).
  */
 static void posttrans_fcurve_clean(FCurve *fcu, const bool use_handle)
 {
-	float *selcache;    /* cache for frame numbers of selected frames (fcu->totvert*sizeof(float)) */
-	int len, index, i;  /* number of frames in cache, item index */
-
-	/* allocate memory for the cache */
-	// TODO: investigate using BezTriple columns instead?
-	if (fcu->totvert == 0 || fcu->bezt == NULL)
+	/* NOTE: We assume that all keys are sorted */
+	ListBase retained_keys = {NULL, NULL};
+	const bool can_average_points = ((fcu->flag & (FCURVE_INT_VALUES | FCURVE_DISCRETE_VALUES)) == 0);
+	
+	/* sanity checks */
+	if ((fcu->totvert == 0) || (fcu->bezt == NULL))
 		return;
-	selcache = MEM_callocN(sizeof(float) * fcu->totvert, "FCurveSelFrameNums");
-	len = 0;
-	index = 0;
-
-	/* We do 2 loops, 1 for marking keyframes for deletion, one for deleting
-	 * as there is no guarantee what order the keyframes are exactly, even though
-	 * they have been sorted by time.
+	
+	/* 1) Identify selected keyframes, and average the values on those
+	 * in case there are collisions due to multiple keys getting scaled
+	 * to all end up on the same frame
 	 */
-
-	/*	Loop 1: find selected keyframes   */
-	for (i = 0; i < fcu->totvert; i++) {
+	for (int i = 0; i < fcu->totvert; i++) {
 		BezTriple *bezt = &fcu->bezt[i];
 		
 		if (BEZT_ISSEL_ANY(bezt)) {
-			selcache[index] = bezt->vec[1][0];
-			index++;
-			len++;
-		}
-	}
-
-	/* Loop 2: delete unselected keyframes on the same frames 
-	 * (if any keyframes were found, or the whole curve wasn't affected) 
-	 */
-	if ((len) && (len != fcu->totvert)) {
-		for (i = fcu->totvert - 1; i >= 0; i--) {
-			BezTriple *bezt = &fcu->bezt[i];
+			bool found = false;
 			
-			if (BEZT_ISSEL_ANY(bezt) == 0) {
-				/* check beztriple should be removed according to cache */
-				for (index = 0; index < len; index++) {
-					if (IS_EQF(bezt->vec[1][0], selcache[index])) {
-						delete_fcurve_key(fcu, i, 0);
-						break;
-					}
-					else if (bezt->vec[1][0] < selcache[index])
-						break;
+			/* If there's another selected frame here, merge it */
+			for (tRetainedKeyframe *rk = retained_keys.last; rk; rk = rk->prev) {
+				if (IS_EQT(rk->frame, bezt->vec[1][0], BEZT_BINARYSEARCH_THRESH)) {
+					rk->val += bezt->vec[1][1];
+					rk->tot_count++;
+					
+					found = true;
+					break;
+				}
+				else if (rk->frame < bezt->vec[1][0]) {
+					/* Terminate early if have passed the supposed insertion point? */
+					break;
 				}
 			}
+			
+			/* If nothing found yet, create a new one */
+			if (found == false) {
+				tRetainedKeyframe *rk = MEM_callocN(sizeof(tRetainedKeyframe), "tRetainedKeyframe");
+				
+				rk->frame = bezt->vec[1][0];
+				rk->val   = bezt->vec[1][1];
+				rk->tot_count = 1;
+				
+				BLI_addtail(&retained_keys, rk);
+			}
 		}
-		
-		testhandles_fcurve(fcu, use_handle);
 	}
-
-	/* free cache */
-	MEM_freeN(selcache);
+	
+	if (BLI_listbase_is_empty(&retained_keys)) {
+		/* This may happen if none of the points were selected... */
+		if (G.debug & G_DEBUG) {
+			printf("%s: nothing to do for FCurve %p (rna_path = '%s')\n", __func__, fcu, fcu->rna_path);
+		}
+		return;
+	}
+	else {
+		/* Compute the average values for each retained keyframe */
+		for (tRetainedKeyframe *rk = retained_keys.first; rk; rk = rk->next) {
+			rk->val = rk->val / (float)rk->tot_count;
+		}
+	}
+	
+	/* 2) Delete all keyframes duplicating the "retained keys" found above
+	 *   - Most of these will be unselected keyframes
+	 *   - Some will be selected keyframes though. For those, we only keep the last one
+	 *     (or else everything is gone), and replace its value with the averaged value. 
+	 */
+	for (int i = fcu->totvert - 1; i >= 0; i--) {
+		BezTriple *bezt = &fcu->bezt[i];
+		
+		/* Is this keyframe a candidate for deletion? */
+		/* TODO: Replace loop with an O(1) lookup instead */
+		for (tRetainedKeyframe *rk = retained_keys.last; rk; rk = rk->prev) {
+			if (IS_EQT(bezt->vec[1][0], rk->frame, BEZT_BINARYSEARCH_THRESH)) {
+				/* Selected keys are treated with greater care than unselected ones... */
+				if (BEZT_ISSEL_ANY(bezt)) {
+					/* - If this is the last selected key left (based on rk->del_count) ==> UPDATE IT
+					 *   (or else we wouldn't have any keyframe left here)
+					 * - Otherwise, there are still other selected keyframes on this frame
+					 *   to be merged down still ==> DELETE IT
+					 */
+					if (rk->del_count == rk->tot_count - 1) {
+						/* Update keyframe... */
+						if (can_average_points) {
+							/* TODO: update handles too? */
+							bezt->vec[1][1] = rk->val;
+						}
+					}
+					else {
+						/* Delete Keyframe */
+						delete_fcurve_key(fcu, i, 0);
+					}
+					
+					/* Update count of how many we've deleted
+					 * - It should only matter that we're doing this for all but the last one
+					 */
+					rk->del_count++;
+				}
+				else {
+					/* Always delete - Unselected keys don't matter */
+					delete_fcurve_key(fcu, i, 0);
+				}
+								
+				/* Stop the RK search... we've found our match now */
+				break;
+			}
+		}
+	}
+	
+	/* 3) Recalculate handles */
+	testhandles_fcurve(fcu, use_handle);
+	
+	/* cleanup */
+	BLI_freelistN(&retained_keys);
 }
-
 
 
 /* Called by special_aftertrans_update to make sure selected keyframes replace
@@ -3761,7 +3827,7 @@ void flushTransIntFrameActionData(TransInfo *t)
 
 	/* flush data! */
 	for (i = 0; i < t->total; i++, tfd++) {
-		*(tfd->sdata) = iroundf(tfd->val);
+		*(tfd->sdata) = round_fl_to_int(tfd->val);
 	}
 }
 
@@ -4789,7 +4855,7 @@ void flushTransGraphData(TransInfo *t)
 		
 		/* if int-values only, truncate to integers */
 		if (td->flag & TD_INTVALUES)
-			td2d->loc2d[1] = floorf(td2d->loc[1] + 0.5f);
+			td2d->loc2d[1] = floorf(td2d->loc[1] * inv_unit_scale - tdg->offset + 0.5f);
 		else
 			td2d->loc2d[1] = td2d->loc[1] * inv_unit_scale - tdg->offset;
 		
@@ -5606,17 +5672,14 @@ static void set_trans_object_base_flags(TransInfo *t)
 	}
 
 	/* all recalc flags get flushed to all layers, so a layer flip later on works fine */
-#ifdef WITH_LEGACY_DEPSGRAPH
 	DAG_scene_flush_update(G.main, t->scene, -1, 0);
-#endif
 
 	/* and we store them temporal in base (only used for transform code) */
 	/* this because after doing updates, the object->recalc is cleared */
 	for (base = scene->base.first; base; base = base->next) {
-		if (base->object->recalc & OB_RECALC_OB)
-			base->flag |= BA_HAS_RECALC_OB;
-		if (base->object->recalc & OB_RECALC_DATA)
-			base->flag |= BA_HAS_RECALC_DATA;
+		if (base->object->recalc & (OB_RECALC_OB | OB_RECALC_DATA)) {
+			base->flag |= BA_SNAP_FIX_DEPS_FIASCO;
+		}
 	}
 }
 
@@ -5687,17 +5750,14 @@ static int count_proportional_objects(TransInfo *t)
 
 	/* all recalc flags get flushed to all layers, so a layer flip later on works fine */
 	DAG_scene_relations_update(G.main, t->scene);
-#ifdef WITH_LEGACY_DEPSGRAPH
 	DAG_scene_flush_update(G.main, t->scene, -1, 0);
-#endif
 
 	/* and we store them temporal in base (only used for transform code) */
 	/* this because after doing updates, the object->recalc is cleared */
 	for (base = scene->base.first; base; base = base->next) {
-		if (base->object->recalc & OB_RECALC_OB)
-			base->flag |= BA_HAS_RECALC_OB;
-		if (base->object->recalc & OB_RECALC_DATA)
-			base->flag |= BA_HAS_RECALC_DATA;
+		if (base->object->recalc & (OB_RECALC_OB | OB_RECALC_DATA)) {
+			base->flag |= BA_SNAP_FIX_DEPS_FIASCO;
+		}
 	}
 
 	return total;
@@ -5712,7 +5772,7 @@ static void clear_trans_object_base_flags(TransInfo *t)
 		if (base->flag & BA_WAS_SEL)
 			base->flag |= SELECT;
 
-		base->flag &= ~(BA_WAS_SEL | BA_HAS_RECALC_OB | BA_HAS_RECALC_DATA | BA_TEMP_TAG | BA_TRANSFORM_CHILD | BA_TRANSFORM_PARENT);
+		base->flag &= ~(BA_WAS_SEL | BA_SNAP_FIX_DEPS_FIASCO | BA_TEMP_TAG | BA_TRANSFORM_CHILD | BA_TRANSFORM_PARENT);
 	}
 }
 
@@ -5976,27 +6036,23 @@ static void special_aftertrans_update__movieclip(bContext *C, TransInfo *t)
 {
 	SpaceClip *sc = t->sa->spacedata.first;
 	MovieClip *clip = ED_space_clip_get_clip(sc);
-	MovieTrackingPlaneTrack *plane_track;
 	ListBase *plane_tracks_base = BKE_tracking_get_active_plane_tracks(&clip->tracking);
-	int framenr = ED_space_clip_get_clip_frame_number(sc);
-
-	for (plane_track = plane_tracks_base->first;
+	const int framenr = ED_space_clip_get_clip_frame_number(sc);
+	/* Update coordinates of modified plane tracks. */
+	for (MovieTrackingPlaneTrack *plane_track = plane_tracks_base->first;
 	     plane_track;
 	     plane_track = plane_track->next)
 	{
 		bool do_update = false;
-
 		if (plane_track->flag & PLANE_TRACK_HIDDEN) {
 			continue;
 		}
-
 		do_update |= PLANE_TRACK_VIEW_SELECTED(plane_track) != 0;
 		if (do_update == false) {
 			if ((plane_track->flag & PLANE_TRACK_AUTOKEY) == 0) {
 				int i;
 				for (i = 0; i < plane_track->point_tracksnr; i++) {
 					MovieTrackingTrack *track = plane_track->point_tracks[i];
-
 					if (TRACK_VIEW_SELECTED(sc, track)) {
 						do_update = true;
 						break;
@@ -6004,15 +6060,14 @@ static void special_aftertrans_update__movieclip(bContext *C, TransInfo *t)
 				}
 			}
 		}
-
 		if (do_update) {
 			BKE_tracking_track_plane_from_existing_motion(plane_track, framenr);
 		}
 	}
-
-	if (t->scene->nodetree) {
-		/* tracks can be used for stabilization nodes,
-		 * flush update for such nodes */
+	if (t->scene->nodetree != NULL) {
+		/* Tracks can be used for stabilization nodes,
+		 * flush update for such nodes.
+		 */
 		nodeUpdateID(t->scene->nodetree, &clip->id);
 		WM_event_add_notifier(C, NC_SCENE | ND_NODES, NULL);
 	}
@@ -6617,7 +6672,7 @@ static void createTransObject(bContext *C, TransInfo *t)
 		}
 		
 		/* select linked objects, but skip them later */
-		if (ID_IS_LINKED_DATABLOCK(ob)) {
+		if (ID_IS_LINKED(ob)) {
 			td->flag |= TD_SKIP;
 		}
 		
@@ -7840,7 +7895,7 @@ static void createTransGPencil(bContext *C, TransInfo *t)
 	float mtx[3][3], smtx[3][3];
 	
 	const Scene *scene = CTX_data_scene(C);
-	const int cfra = CFRA;
+	const int cfra_scene = CFRA;
 	
 	const bool is_prop_edit = (t->flag & T_PROP_EDIT) != 0;
 	const bool is_prop_edit_connected = (t->flag & T_PROP_CONNECTED) != 0;
@@ -7865,7 +7920,7 @@ static void createTransGPencil(bContext *C, TransInfo *t)
 		if (gpencil_layer_is_editable(gpl) && (gpl->actframe != NULL)) {
 			bGPDframe *gpf = gpl->actframe;
 			bGPDstroke *gps;
-			
+
 			for (gps = gpf->strokes.first; gps; gps = gps->next) {
 				/* skip strokes that are invalid for current view */
 				if (ED_gpencil_stroke_can_use(C, gps) == false) {
@@ -7921,6 +7976,7 @@ static void createTransGPencil(bContext *C, TransInfo *t)
 	for (gpl = gpd->layers.first; gpl; gpl = gpl->next) {
 		/* only editable and visible layers are considered */
 		if (gpencil_layer_is_editable(gpl) && (gpl->actframe != NULL)) {
+			const int cfra = (gpl->flag & GP_LAYER_FRAMELOCK) ? gpl->actframe->framenum : cfra_scene;
 			bGPDframe *gpf = gpl->actframe;
 			bGPDstroke *gps;
 			float diff_mat[4][4];
@@ -7937,7 +7993,6 @@ static void createTransGPencil(bContext *C, TransInfo *t)
 			 * - This is useful when animating as it saves that "uh-oh" moment when you realize you've
 			 *   spent too much time editing the wrong frame...
 			 */
-			// XXX: should this be allowed when framelock is enabled?
 			if (gpf->framenum != cfra) {
 				gpf = BKE_gpencil_frame_addcopy(gpl, cfra);
 				/* in some weird situations (framelock enabled) return NULL */

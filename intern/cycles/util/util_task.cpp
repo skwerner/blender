@@ -14,7 +14,6 @@
  * limitations under the License.
  */
 
-#include "util/util_debug.h"
 #include "util/util_foreach.h"
 #include "util/util_logging.h"
 #include "util/util_system.h"
@@ -206,9 +205,9 @@ void TaskScheduler::init(int num_threads)
 		threads.resize(num_threads);
 
 		const int num_groups = system_cpu_group_count();
-		unsigned short num_process_groups;
+		unsigned short num_process_groups = 0;
 		vector<unsigned short> process_groups;
-		int current_group_threads;
+		int current_group_threads = 0;
 		if(num_groups > 1) {
 			process_groups.resize(num_groups);
 			num_process_groups = system_cpu_process_groups(num_groups, 

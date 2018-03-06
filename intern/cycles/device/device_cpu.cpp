@@ -274,10 +274,12 @@ public:
 	~CPUDevice()
 	{
 		task_pool.stop();
-		texture_info.free();		
-		VLOG(1) << oiio_globals.tex_sys->getstats();
-		oiio_globals.tex_sys->reset_stats();
-		TextureSystem::destroy(oiio_globals.tex_sys);
+		texture_info.free();
+		if(oiio_globals.tex_sys) {
+			VLOG(1) << oiio_globals.tex_sys->getstats();
+			oiio_globals.tex_sys->reset_stats();
+			TextureSystem::destroy(oiio_globals.tex_sys);
+		}
 		kernel_globals.oiio = NULL;
 	}
 

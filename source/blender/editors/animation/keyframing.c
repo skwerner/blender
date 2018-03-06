@@ -145,7 +145,7 @@ bAction *verify_adt_action(ID *id, short add)
 		BLI_snprintf(actname, sizeof(actname), "%sAction", id->name + 2);
 		
 		/* create action */
-		adt->action = add_empty_action(G.main, actname);
+		adt->action = BKE_action_add(G.main, actname);
 		
 		/* set ID-type from ID-block that this is going to be assigned to
 		 * so that users can't accidentally break actions by assigning them
@@ -1356,7 +1356,7 @@ static int insert_key_exec(bContext *C, wmOperator *op)
 	 * updated since the last switching to the edit mode will be keyframed correctly
 	 */
 	if (obedit && ANIM_keyingset_find_id(ks, (ID *)obedit->data)) {
-		ED_object_toggle_modes(C, OB_MODE_EDIT);
+		ED_object_mode_toggle(C, OB_MODE_EDIT);
 		ob_edit_mode = true;
 	}
 	
@@ -1367,7 +1367,7 @@ static int insert_key_exec(bContext *C, wmOperator *op)
 	
 	/* restore the edit mode if necessary */
 	if (ob_edit_mode) {
-		ED_object_toggle_modes(C, OB_MODE_EDIT);
+		ED_object_mode_toggle(C, OB_MODE_EDIT);
 	}
 
 	/* report failure or do updates? */

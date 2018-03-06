@@ -36,7 +36,7 @@
 #include "MEM_guardedalloc.h"
 
 #include "BLI_utildefines.h"
-#include "BLI_jitter.h"
+#include "BLI_jitter_2d.h"
 #include "BLI_kdtree.h"
 #include "BLI_math.h"
 #include "BLI_math_geom.h"
@@ -1104,7 +1104,7 @@ static int psys_thread_context_init_distribute(ParticleThreadContext *ctx, Parti
 		/* This is to address tricky issues with vertex-emitting when user tries (and expects) exact 1-1 vert/part
 		 * distribution (see T47983 and its two example files). It allows us to consider pos as
 		 * 'midpoint between v and v+1' (or 'p and p+1', depending whether we have more vertices than particles or not),
-		 * and avoid stumbling over float imprecisions in element_sum.
+		 * and avoid stumbling over float impression in element_sum.
 		 * Note: moved face and volume distribution to this as well (instead of starting at zero),
 		 * for the same reasons, see T52682. */
 		pos = (totpart < totmapped) ? 0.5 / (double)totmapped : step * 0.5;  /* We choose the smaller step. */

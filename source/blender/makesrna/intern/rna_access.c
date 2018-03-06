@@ -172,6 +172,11 @@ void RNA_pointer_create(ID *id, StructRNA *type, void *data, PointerRNA *r_ptr)
 	}
 }
 
+bool RNA_pointer_is_null(const PointerRNA *ptr)
+{
+	return !((ptr->data != NULL) && (ptr->id.data != NULL) && (ptr->type != NULL));
+}
+
 static void rna_pointer_inherit_id(StructRNA *type, PointerRNA *parent, PointerRNA *ptr)
 {
 	if (type && type->flag & STRUCT_ID) {
@@ -560,9 +565,14 @@ const char *RNA_struct_translation_context(const StructRNA *type)
 	return type->translation_context;
 }
 
-PropertyRNA *RNA_struct_name_property(StructRNA *type)
+PropertyRNA *RNA_struct_name_property(const StructRNA *type)
 {
 	return type->nameproperty;
+}
+
+const EnumPropertyItem *RNA_struct_property_tag_defines(const StructRNA *type)
+{
+	return type->prop_tag_defines;
 }
 
 PropertyRNA *RNA_struct_iterator_property(StructRNA *type)
@@ -573,6 +583,22 @@ PropertyRNA *RNA_struct_iterator_property(StructRNA *type)
 StructRNA *RNA_struct_base(StructRNA *type)
 {
 	return type->base;
+}
+
+/**
+ * Use to find the subtype directly below a base-type.
+ *
+ * So if type were `RNA_SpotLamp`, `RNA_struct_base_of(type, &RNA_ID)` would return `&RNA_Lamp`.
+ */
+const StructRNA *RNA_struct_base_child_of(const StructRNA *type, const StructRNA *parent_type)
+{
+	while (type) {
+		if (type->base == parent_type) {
+			return type;
+		}
+		type = type->base;
+	}
+	return NULL;
 }
 
 bool RNA_struct_is_ID(const StructRNA *type)
@@ -705,6 +731,23 @@ bool RNA_struct_contains_property(PointerRNA *ptr, PropertyRNA *prop_test)
 	return found;
 }
 
+unsigned int RNA_struct_count_properties(StructRNA *srna)
+{
+	PointerRNA struct_ptr;
+	unsigned int counter = 0;
+
+	RNA_pointer_create(NULL, srna, NULL, &struct_ptr);
+
+	RNA_STRUCT_BEGIN (&struct_ptr, prop)
+	{
+		counter++;
+		UNUSED_VARS(prop);
+	}
+	RNA_STRUCT_END;
+
+	return counter;
+}
+
 /* low level direct access to type->properties, note this ignores parent classes so should be used with care */
 const struct ListBase *RNA_struct_type_properties(StructRNA *srna)
 {
@@ -729,7 +772,7 @@ FunctionRNA *RNA_struct_find_function(StructRNA *srna, const char *identifier)
 	}
 	return NULL;
 
-	/* funcitonal but slow */
+	/* functional but slow */
 #else
 	PointerRNA tptr;
 	PropertyRNA *iterprop;
@@ -928,6 +971,17 @@ PropertyUnit RNA_property_unit(PropertyRNA *prop)
 int RNA_property_flag(PropertyRNA *prop)
 {
 	return rna_ensure_property(prop)->flag;
+}
+
+/**
+ * Get the tags set for \a prop as int bitfield.
+ * \note Doesn't perform any validity check on the set bits. #RNA_def_property_tags does this
+ *       in debug builds (to avoid performance issues in non-debug builds), which should be
+ *       the only way to set tags. Hence, at this point we assume the tag bitfield to be valid.
+ */
+int RNA_property_tags(PropertyRNA *prop)
+{
+	return rna_ensure_property(prop)->tags;
 }
 
 bool RNA_property_builtin(PropertyRNA *prop)
@@ -1594,6 +1648,18 @@ int RNA_enum_from_value(const EnumPropertyItem *item, const int value)
 		}
 	}
 	return -1;
+}
+
+unsigned int RNA_enum_items_count(const EnumPropertyItem *item)
+{
+	unsigned int i = 0;
+
+	while (item->identifier) {
+		item++;
+		i++;
+	}
+
+	return i;
 }
 
 bool RNA_property_enum_identifier(bContext *C, PointerRNA *ptr, PropertyRNA *prop, const int value,
@@ -2935,6 +3001,42 @@ void RNA_property_string_set(PointerRNA *ptr, PropertyRNA *prop, const char *val
 		group = RNA_struct_idprops(ptr, 1);
 		if (group)
 			IDP_AddToGroup(group, IDP_NewString(value, prop->identifier, RNA_property_string_maxlength(prop)));
+	}
+}
+
+void RNA_property_string_set_bytes(PointerRNA *ptr, PropertyRNA *prop, const char *value, int len)
+{
+	StringPropertyRNA *sprop = (StringPropertyRNA *)prop;
+	IDProperty *idprop;
+
+	BLI_assert(RNA_property_type(prop) == PROP_STRING);
+	BLI_assert(RNA_property_subtype(prop) == PROP_BYTESTRING);
+
+	if ((idprop = rna_idproperty_check(&prop, ptr))) {
+		IDP_ResizeArray(idprop, len);
+		memcpy(idprop->data.pointer, value, (size_t)len);
+
+		rna_idproperty_touch(idprop);
+	}
+	else if (sprop->set) {
+		/* XXX, should take length argument (currently not used). */
+		sprop->set(ptr, value);  /* set function needs to clamp its self */
+	}
+	else if (sprop->set_ex) {
+		/* XXX, should take length argument (currently not used). */
+		sprop->set_ex(ptr, prop, value);  /* set function needs to clamp its self */
+	}
+	else if (prop->flag & PROP_EDITABLE) {
+		IDProperty *group;
+
+		group = RNA_struct_idprops(ptr, 1);
+		if (group) {
+			IDPropertyTemplate val = {0};
+			val.string.str = value;
+			val.string.len = len;
+			val.string.subtype = IDP_STRING_SUB_BYTE;
+			IDP_AddToGroup(group, IDP_New(IDP_STRING, &val, prop->identifier));
+		}
 	}
 }
 
@@ -5622,7 +5724,7 @@ void RNA_struct_property_unset(PointerRNA *ptr, const char *identifier)
 	}
 }
 
-bool RNA_property_is_idprop(PropertyRNA *prop)
+bool RNA_property_is_idprop(const PropertyRNA *prop)
 {
 	return (prop->magic != RNA_MAGIC);
 }
@@ -5679,13 +5781,10 @@ char *RNA_pointer_as_string_id(bContext *C, PointerRNA *ptr)
 
 static char *rna_pointer_as_string__bldata(PointerRNA *ptr)
 {
-	if (ptr->type == NULL) {
+	if (ptr->type == NULL || ptr->id.data == NULL) {
 		return BLI_strdup("None");
 	}
 	else if (RNA_struct_is_ID(ptr->type)) {
-		if (ptr->id.data == NULL) {
-			return BLI_strdup("None");
-		}
 		return RNA_path_full_ID_py(ptr->id.data);
 	}
 	else {
@@ -6792,6 +6891,12 @@ int RNA_function_call_direct_va_lookup(bContext *C, ReportList *reports, Pointer
 		return RNA_function_call_direct_va(C, reports, ptr, func, format, args);
 
 	return 0;
+}
+
+const char *RNA_translate_ui_text(
+        const char *text, const char *text_ctxt, StructRNA *type, PropertyRNA *prop, int translate)
+{
+	return rna_translate_ui_text(text, text_ctxt, type, prop, translate);
 }
 
 bool RNA_property_reset(PointerRNA *ptr, PropertyRNA *prop, int index)

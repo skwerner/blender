@@ -75,6 +75,7 @@ const EnumPropertyItem rna_enum_sequence_modifier_type_items[] = {
 
 #include "BKE_report.h"
 #include "BKE_idprop.h"
+#include "BKE_movieclip.h"
 
 #include "WM_api.h"
 
@@ -550,6 +551,8 @@ static StructRNA *rna_Sequence_refine(struct PointerRNA *ptr)
 			return &RNA_GaussianBlurSequence;
 		case SEQ_TYPE_TEXT:
 			return &RNA_TextSequence;
+		case SEQ_TYPE_COLORMIX:
+			return &RNA_ColorMixSequence;
 		default:
 			return &RNA_Sequence;
 	}
@@ -1083,6 +1086,13 @@ static void rna_Sequence_modifier_clear(Sequence *seq, bContext *C)
 	WM_main_add_notifier(NC_SCENE | ND_SEQUENCER, NULL);
 }
 
+static float rna_Sequence_fps_get(PointerRNA *ptr)
+{
+	Scene *scene = (Scene *)ptr->id.data;
+	Sequence *seq = (Sequence *)(ptr->data);
+	return BKE_sequence_get_fps(scene, seq);
+}
+
 #else
 
 static void rna_def_strip_element(BlenderRNA *brna)
@@ -1338,6 +1348,24 @@ static const EnumPropertyItem blend_mode_items[] = {
 	{SEQ_TYPE_GAMCROSS, "GAMMA_CROSS", 0, "Gamma Cross", ""},
 	{SEQ_TYPE_MUL, "MULTIPLY", 0, "Multiply", ""},
 	{SEQ_TYPE_OVERDROP, "OVER_DROP", 0, "Over Drop", ""},
+	{SEQ_TYPE_LIGHTEN, "LIGHTEN", 0, "Lighten", ""},
+	{SEQ_TYPE_DARKEN, "DARKEN", 0, "Darken", ""},
+	{SEQ_TYPE_SCREEN, "SCREEN", 0, "Screen", ""},
+	{SEQ_TYPE_OVERLAY, "OVERLAY", 0, "Overlay", ""},
+	{SEQ_TYPE_DODGE, "DODGE", 0, "Dodge", ""},
+	{SEQ_TYPE_BURN, "BURN", 0, "Burn", ""},
+	{SEQ_TYPE_LINEAR_BURN, "LINEAR_BURN", 0, "Linear Burn", ""},
+	{SEQ_TYPE_SOFT_LIGHT, "SOFT_LIGHT", 0, "Soft Light", ""},
+	{SEQ_TYPE_HARD_LIGHT, "HARD_LIGHT", 0, "Hard Light", ""},
+	{SEQ_TYPE_PIN_LIGHT, "PIN_LIGHT", 0, "Pin Light", ""},
+	{SEQ_TYPE_LIN_LIGHT, "LINEAR_LIGHT", 0, "Linear Light", ""},
+	{SEQ_TYPE_VIVID_LIGHT, "VIVID_LIGHT", 0, "Vivid Light", ""},
+	{SEQ_TYPE_BLEND_COLOR, "COLOR", 0, "Color", ""},
+	{SEQ_TYPE_HUE, "HUE", 0, "Hue", ""},
+	{SEQ_TYPE_SATURATION, "SATURATION", 0, "Saturation", ""},
+	{SEQ_TYPE_VALUE, "VALUE", 0, "Value", ""},
+	{SEQ_TYPE_DIFFERENCE, "DIFFERENCE", 0, "Difference", ""},
+	{SEQ_TYPE_EXCLUSION, "EXCLUSION", 0, "Exclusion", ""},
 	{0, NULL, 0, NULL, NULL}
 };
 
@@ -1411,6 +1439,7 @@ static void rna_def_sequence(BlenderRNA *brna)
 		{SEQ_TYPE_ADJUSTMENT, "ADJUSTMENT", 0, "Adjustment Layer", ""},
 		{SEQ_TYPE_GAUSSIAN_BLUR, "GAUSSIAN_BLUR", 0, "Gaussian Blur", ""},
 		{SEQ_TYPE_TEXT, "TEXT", 0, "Text", ""},
+		{SEQ_TYPE_COLORMIX, "COLORMIX", 0, "Color Mix", ""},
 		{0, NULL, 0, NULL, NULL}
 	};
 	
@@ -1819,6 +1848,16 @@ static void rna_def_color_management(StructRNA *srna)
 	RNA_def_property_ui_text(prop, "Color Space Settings", "Input color space settings");
 }
 
+static void rna_def_movie_types(StructRNA *srna)
+{
+	PropertyRNA *prop;
+
+	prop = RNA_def_property(srna, "fps", PROP_FLOAT, PROP_NONE);
+	RNA_def_property_ui_text(prop, "FPS", "Frames per second");
+	RNA_def_property_clear_flag(prop, PROP_EDITABLE);
+	RNA_def_property_float_funcs(prop, "rna_Sequence_fps_get", NULL, NULL);
+}
+
 static void rna_def_image(BlenderRNA *brna)
 {
 	StructRNA *srna;
@@ -1918,6 +1957,7 @@ static void rna_def_scene(BlenderRNA *brna)
 	rna_def_filter_video(srna);
 	rna_def_proxy(srna);
 	rna_def_input(srna);
+	rna_def_movie_types(srna);
 }
 
 static void rna_def_movie(BlenderRNA *brna)
@@ -1978,6 +2018,7 @@ static void rna_def_movie(BlenderRNA *brna)
 	rna_def_proxy(srna);
 	rna_def_input(srna);
 	rna_def_color_management(srna);
+	rna_def_movie_types(srna);
 }
 
 static void rna_def_movieclip(BlenderRNA *brna)
@@ -2003,6 +2044,7 @@ static void rna_def_movieclip(BlenderRNA *brna)
 
 	rna_def_filter_video(srna);
 	rna_def_input(srna);
+	rna_def_movie_types(srna);
 }
 
 static void rna_def_mask(BlenderRNA *brna)
@@ -2139,6 +2181,7 @@ static void rna_def_wipe(StructRNA *srna)
 	prop = RNA_def_property(srna, "transition_type", PROP_ENUM, PROP_NONE);
 	RNA_def_property_enum_sdna(prop, NULL, "wipetype");
 	RNA_def_property_enum_items(prop, wipe_type_items);
+	RNA_def_property_translation_context(prop, BLT_I18NCONTEXT_ID_SEQUENCE);
 	RNA_def_property_ui_text(prop, "Transition Type", "");
 	RNA_def_property_update(prop, NC_SCENE | ND_SEQUENCER, "rna_Sequence_update");
 }
@@ -2378,6 +2421,49 @@ static void rna_def_text(StructRNA *srna)
 	RNA_def_property_update(prop, NC_SCENE | ND_SEQUENCER, "rna_Sequence_update");
 }
 
+static void rna_def_color_mix(StructRNA *srna)
+{
+	static EnumPropertyItem blend_color_items[] = {
+		{SEQ_TYPE_ADD, "ADD", 0, "Add", ""},
+		{SEQ_TYPE_SUB, "SUBTRACT", 0, "Subtract", ""},
+		{SEQ_TYPE_MUL, "MULTIPLY", 0, "Multiply", ""},
+		{SEQ_TYPE_LIGHTEN, "LIGHTEN", 0, "Lighten", ""},
+		{SEQ_TYPE_DARKEN, "DARKEN", 0, "Darken", ""},
+		{SEQ_TYPE_SCREEN, "SCREEN", 0, "Screen", ""},
+		{SEQ_TYPE_OVERLAY, "OVERLAY", 0, "Overlay", ""},
+		{SEQ_TYPE_DODGE, "DODGE", 0, "Dodge", ""},
+		{SEQ_TYPE_BURN, "BURN", 0, "Burn", ""},
+		{SEQ_TYPE_LINEAR_BURN, "LINEAR_BURN", 0, "Linear Burn", ""},
+		{SEQ_TYPE_SOFT_LIGHT, "SOFT_LIGHT", 0, "Soft Light", ""},
+		{SEQ_TYPE_HARD_LIGHT, "HARD_LIGHT", 0, "Hard Light", ""},
+		{SEQ_TYPE_PIN_LIGHT, "PIN_LIGHT", 0, "Pin Light", ""},
+		{SEQ_TYPE_LIN_LIGHT, "LINEAR_LIGHT", 0, "Linear Light", ""},
+		{SEQ_TYPE_VIVID_LIGHT, "VIVID_LIGHT", 0, "Vivid Light", ""},
+		{SEQ_TYPE_BLEND_COLOR, "COLOR", 0, "Color", ""},
+		{SEQ_TYPE_HUE, "HUE", 0, "Hue", ""},
+		{SEQ_TYPE_SATURATION, "SATURATION", 0, "Saturation", ""},
+		{SEQ_TYPE_VALUE, "VALUE", 0, "Value", ""},
+		{SEQ_TYPE_DIFFERENCE, "DIFFERENCE", 0, "Difference", ""},
+		{SEQ_TYPE_EXCLUSION, "EXCLUSION", 0, "Exclusion", ""},
+		{0, NULL, 0, NULL, NULL}
+	};
+
+	PropertyRNA *prop;
+
+	RNA_def_struct_sdna_from(srna, "ColorMixVars", "effectdata");
+
+	prop = RNA_def_property(srna, "blend_effect", PROP_ENUM, PROP_NONE);
+	RNA_def_property_enum_sdna(prop, NULL, "blend_effect");
+	RNA_def_property_enum_items(prop, blend_color_items);
+	RNA_def_property_ui_text(prop, "Blend Effect", "Method for controlling how the strip combines with other strips");
+	RNA_def_property_update(prop, NC_SCENE | ND_SEQUENCER, "rna_Sequence_update");
+
+	prop = RNA_def_property(srna, "factor", PROP_FLOAT, PROP_FACTOR);
+	RNA_def_property_range(prop, 0.0f, 1.0f);
+	RNA_def_property_ui_text(prop, "Blend Factor", "Percentage of how much the strip's colors affect other strips");
+	RNA_def_property_update(prop, NC_SCENE | ND_SEQUENCER, "rna_Sequence_update");
+}
+
 static EffectInfo def_effects[] = {
 	{"AddSequence", "Add Sequence", "Add Sequence", NULL, 2},
 	{"AdjustmentSequence", "Adjustment Layer Sequence",
@@ -2404,6 +2490,7 @@ static EffectInfo def_effects[] = {
 	 rna_def_gaussian_blur, 1},
 	{"TextSequence", "Text Sequence", "Sequence strip creating text",
 	 rna_def_text, 0},
+	{"ColorMixSequence", "Color Mix Sequence", "Color Mix Sequence", rna_def_color_mix, 2},
 	{"", "", "", NULL, 0}
 };
 

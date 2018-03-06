@@ -50,7 +50,6 @@ struct VolumeStep;
 
 typedef struct KernelGlobals {
 #  define KERNEL_TEX(type, name) texture<type> name;
-#  define KERNEL_IMAGE_TEX(type, ttype, name)
 #  include "kernel/kernel_textures.h"
 
 	KernelData __data;
@@ -100,7 +99,6 @@ typedef struct KernelGlobals {
 } KernelGlobals;
 
 #  define KERNEL_TEX(type, name) const __constant__ __device__ type *name;
-#  define KERNEL_IMAGE_TEX(type, ttype, name) ttype name;
 #  include "kernel/kernel_textures.h"
 
 #endif  /* __KERNEL_CUDA__ */

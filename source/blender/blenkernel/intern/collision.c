@@ -36,7 +36,7 @@
 #include "DNA_effect_types.h"
 #include "DNA_group_types.h"
 #include "DNA_object_types.h"
-#include "DNA_object_force.h"
+#include "DNA_object_force_types.h"
 #include "DNA_scene_types.h"
 #include "DNA_meshdata_types.h"
 
@@ -801,8 +801,8 @@ int cloth_bvh_objcollision(Object *ob, ClothModifierData *clmd, float step, floa
 				if ( cloth->bvhselftree ) {
 					// search for overlapping collision pairs
 					overlap = BLI_bvhtree_overlap(cloth->bvhselftree, cloth->bvhselftree, &result, NULL, NULL);
-	
-	// #pragma omp parallel for private(k, i, j) schedule(static)
+
+					/* Could be parallelized (using BLI_task)... */
 					for ( k = 0; k < result; k++ ) {
 						float temp[3];
 						float length = 0;

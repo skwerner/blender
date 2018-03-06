@@ -446,6 +446,7 @@ Mesh::Mesh()
 
 	geometry_flags = GEOMETRY_NONE;
 
+	volume_isovalue = 0.001f;
 	has_volume = false;
 	has_surface_bssrdf = false;
 
@@ -533,7 +534,7 @@ void Mesh::reserve_subd_faces(int numfaces, int num_ngons_, int numcorners)
 	subd_attributes.resize(true);
 }
 
-void Mesh::clear()
+void Mesh::clear(bool preserve_voxel_data)
 {
 	/* clear all verts and triangles */
 	verts.clear();
@@ -556,15 +557,19 @@ void Mesh::clear()
 
 	subd_creases.clear();
 
-	attributes.clear();
 	curve_attributes.clear();
 	subd_attributes.clear();
+	attributes.clear(preserve_voxel_data);
+
 	used_shaders.clear();
+
+	if(!preserve_voxel_data) {
+		geometry_flags = GEOMETRY_NONE;
+	}
 
 	transform_applied = false;
 	transform_negative_scaled = false;
 	transform_normal = transform_identity();
-	geometry_flags = GEOMETRY_NONE;
 
 	delete patch_table;
 	patch_table = NULL;
@@ -1058,7 +1063,9 @@ void Mesh::compute_bvh(Device *device,
 
 			BVHParams bparams;
 			bparams.use_spatial_split = params->use_bvh_spatial_split;
-			bparams.use_qbvh = params->use_qbvh && device->info.has_qbvh;
+			bparams.bvh_layout = BVHParams::best_bvh_layout(
+			        params->bvh_layout,
+			        device->info.bvh_layout_mask);
 			bparams.use_unaligned_nodes = dscene->data.bvh.have_curves &&
 			                              params->use_bvh_unaligned_nodes;
 			bparams.num_motion_triangle_steps = params->num_bvh_time_steps;
@@ -1817,15 +1824,17 @@ void MeshManager::device_update_bvh(Device *device, DeviceScene *dscene, Scene *
 
 	BVHParams bparams;
 	bparams.top_level = true;
-	bparams.use_qbvh = scene->params.use_qbvh && device->info.has_qbvh;
+	bparams.bvh_layout = BVHParams::best_bvh_layout(
+	        scene->params.bvh_layout,
+	        device->info.bvh_layout_mask);
 	bparams.use_spatial_split = scene->params.use_bvh_spatial_split;
 	bparams.use_unaligned_nodes = dscene->data.bvh.have_curves &&
 	                              scene->params.use_bvh_unaligned_nodes;
 	bparams.num_motion_triangle_steps = scene->params.num_bvh_time_steps;
 	bparams.num_motion_curve_steps = scene->params.num_bvh_time_steps;
 
-	VLOG(1) << (bparams.use_qbvh ? "Using QBVH optimization structure"
-	                             : "Using regular BVH optimization structure");
+	VLOG(1) << "Using " << bvh_layout_name(bparams.bvh_layout)
+	        << " layout.";
 
 	BVH *bvh = BVH::create(bparams, scene->objects);
 	bvh->build(progress);
@@ -1882,23 +1891,28 @@ void MeshManager::device_update_bvh(Device *device, DeviceScene *dscene, Scene *
 	}
 
 	dscene->data.bvh.root = pack.root_index;
-	dscene->data.bvh.use_qbvh = bparams.use_qbvh;
+	dscene->data.bvh.bvh_layout = bparams.bvh_layout;
 	dscene->data.bvh.use_bvh_steps = (scene->params.num_bvh_time_steps != 0);
 
 	delete bvh;
 }
 
-void MeshManager::device_update_flags(Device * /*device*/,
-                                      DeviceScene * /*dscene*/,
-                                      Scene * scene,
-                                      Progress& /*progress*/)
+void MeshManager::device_update_preprocess(Device *device,
+                                           Scene *scene,
+                                           Progress& progress)
 {
 	if(!need_update && !need_flags_update) {
 		return;
 	}
-	/* update flags */
+
+	progress.set_status("Updating Meshes Flags");
+
+	/* Update flags. */
+	bool volume_images_updated = false;
+
 	foreach(Mesh *mesh, scene->meshes) {
 		mesh->has_volume = false;
+
 		foreach(const Shader *shader, mesh->used_shaders) {
 			if(shader->has_volume) {
 				mesh->has_volume = true;
@@ -1907,7 +1921,29 @@ void MeshManager::device_update_flags(Device * /*device*/,
 				mesh->has_surface_bssrdf = true;
 			}
 		}
+
+		if(need_update && mesh->has_volume) {
+			/* Create volume meshes if there is voxel data. */
+			bool has_voxel_attributes = false;
+
+			foreach(Attribute& attr, mesh->attributes.attributes) {
+				if(attr.element == ATTR_ELEMENT_VOXEL) {
+					has_voxel_attributes = true;
+				}
+			}
+
+			if(has_voxel_attributes) {
+				if(!volume_images_updated) {
+					progress.set_status("Updating Meshes Volume Bounds");
+					device_update_volume_images(device, scene, progress);
+					volume_images_updated = true;
+				}
+
+				create_volume_mesh(scene, mesh, progress);
+			}
+		}
 	}
+
 	need_flags_update = false;
 }
 
@@ -1950,6 +1986,44 @@ void MeshManager::device_update_displacement_images(Device *device,
 	pool.wait_work();
 }
 
+void MeshManager::device_update_volume_images(Device *device,
+											  Scene *scene,
+											  Progress& progress)
+{
+	progress.set_status("Updating Volume Images");
+	TaskPool pool;
+	ImageManager *image_manager = scene->image_manager;
+	set<int> volume_images;
+
+	foreach(Mesh *mesh, scene->meshes) {
+		if(!mesh->need_update) {
+			continue;
+		}
+
+		foreach(Attribute& attr, mesh->attributes.attributes) {
+			if(attr.element != ATTR_ELEMENT_VOXEL) {
+				continue;
+			}
+
+			VoxelAttribute *voxel = attr.data_voxel();
+
+			if(voxel->slot != -1) {
+				volume_images.insert(voxel->slot);
+			}
+		}
+	}
+
+	foreach(int slot, volume_images) {
+		pool.push(function_bind(&ImageManager::device_update_slot,
+								image_manager,
+								device,
+								scene,
+								slot,
+								&progress));
+	}
+	pool.wait_work();
+}
+
 void MeshManager::device_update(Device *device, DeviceScene *dscene, Scene *scene, Progress& progress)
 {
 	if(!need_update)
@@ -1960,7 +2034,7 @@ void MeshManager::device_update(Device *device, DeviceScene *dscene, Scene *scen
 	/* Update normals. */
 	foreach(Mesh *mesh, scene->meshes) {
 		foreach(Shader *shader, mesh->used_shaders) {
-			if(shader->need_update_attributes)
+			if(shader->need_update_mesh)
 				mesh->need_update = true;
 		}
 
@@ -2100,15 +2174,11 @@ void MeshManager::device_update(Device *device, DeviceScene *dscene, Scene *scen
 	        << summary.full_report();
 
 	foreach(Shader *shader, scene->shaders) {
-		shader->need_update_attributes = false;
+		shader->need_update_mesh = false;
 	}
 
-#ifdef __OBJECT_MOTION__
-	Scene::MotionType need_motion = scene->need_motion(device->info.advanced_shading);
+	Scene::MotionType need_motion = scene->need_motion();
 	bool motion_blur = need_motion == Scene::MOTION_BLUR;
-#else
-	bool motion_blur = false;
-#endif
 
 	/* Update objects. */
 	vector<Object *> volume_objects;

@@ -474,52 +474,109 @@ ccl_device float3 distant_light_sample(float3 D, float radius, float randu, floa
 	return normalize(D + disk_light_sample(D, randu, randv)*radius);
 }
 
-ccl_device void sphere_light_sample(float3 P, LightSample *ls, float radius, float randu, float randv, float invarea)
+ccl_device float lamp_light_pdf(const float3 Ng, const float3 I, float t)
 {
-	static bool sample_disc = false;
-	if(sample_disc) {
-		ls->P += disk_light_sample(normalize(P - ls->P), randu, randv)*radius;
-		ls->pdf = invarea;
+	float cos_pi = dot(Ng, I);
+
+	if(cos_pi <= 0.0f)
+		return 0.0f;
+
+	return t*t/cos_pi;
+}
+
+ccl_device_inline float uniform_cone_pdf(float cos_theta_max) {
+	return cos_theta_max < 1.0f ? 1.0f / (2.0f * M_PI_F * (1.0f - cos_theta_max)) : 0.0f;
+}
+
+/* Sphere light sampling code is taken from pbrt v3 with the following license:
+
+ pbrt source code is Copyright(c) 1998-2016
+ Matt Pharr, Greg Humphreys, and Wenzel Jakob.
+
+ Redistribution and use in source and binary forms, with or without
+ modification, are permitted provided that the following conditions are
+ met:
+
+ - Redistributions of source code must retain the above copyright
+ notice, this list of conditions and the following disclaimer.
+
+ - Redistributions in binary form must reproduce the above copyright
+ notice, this list of conditions and the following disclaimer in the
+ documentation and/or other materials provided with the distribution.
+
+ THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS
+ IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
+ TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A
+ PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+ HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+ LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+ DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+ THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+*/
+
+ccl_device float sphere_light_pdf(float3 P, float3 lightP, const LightSample *ls,float radius, float invarea)
+{
+	float3 wc = lightP - P;
+	float dist_squared = len_squared(wc);
+	/* Uniform sphere sampling when we're shading a point inside the sphere light. */
+	if(dist_squared <= radius * radius) {
+		return invarea * lamp_light_pdf(ls->Ng, ls->D, ls->t);
+	}
+
+	float sin_theta_max2 = radius * radius / dist_squared;
+	float cos_theta_max = safe_sqrtf(max(0.0f, 1.0f - sin_theta_max2));
+	float pdf = uniform_cone_pdf(cos_theta_max);
+	if(isfinite_safe(pdf)) {
+		return pdf;
 	}
 	else {
-		float3 wc = ls->P - P;
-		float dist_squared = len_squared(wc);
-		if(dist_squared <= radius * radius) {
-			ls->P += radius * sample_uniform_sphere(randu, randv);
-			ls->pdf = invarea;
-			return;
-		}
-		
-		// Compute coordinate system for sphere sampling
-		float dc;
-		wc = safe_normalize_len(wc, &dc);
-		float3 wcX, wcY;
-		make_orthonormals(wc, &wcX, &wcY);
-		
-		// Sample sphere uniformly inside subtended cone
-		
-		// Compute $\theta$ and $\phi$ values for sample in cone
-		float sinThetaMax2 = radius * radius / dist_squared;
-		float cosThetaMax = safe_sqrtf(max(0.0f, 1.0f - sinThetaMax2));
-		float cosTheta = (1.0f - randu) + randu * cosThetaMax;
-		float sinTheta = safe_sqrtf(max(0.0f, 1.0f - cosTheta * cosTheta));
-		float phi = randv * 2.0f * M_PI_F;
-		
-		// Compute angle $\alpha$ from center of sphere to sampled point on surface
-		float ds = dc * cosTheta - safe_sqrtf(max(0.0f, radius * radius - dc * dc * sinTheta * sinTheta));
-		float cosAlpha = (dc * dc + radius * radius - ds * ds) / (2.0f * dc * radius);
-		float sinAlpha = safe_sqrtf(max(0.0f, 1.0f - cosAlpha * cosAlpha));
-		
-		// Compute surface normal and sampled point on sphere
-		float3 nWorld = sinAlpha * cosf(phi) * (-wcX) + sinTheta * sinf(phi) * (-wcY) +
-		cosAlpha * (-wc);
-		
-		ls->P = ls->P + radius * nWorld;
-		
-		// Uniform cone PDF.
-		ls->pdf = (1.0f / (2.0f * M_PI_F * (1.0f - cosThetaMax))) / ( 4.f * M_PI_F * radius * radius );
-		ls->Ng = normalize(nWorld);
+		return 0.0f;
 	}
+}
+
+ccl_device void sphere_light_sample(float3 P, LightSample *ls, float radius, float randu, float randv, float invarea)
+{
+	float3 wc = ls->P - P;
+	float dist_squared = len_squared(wc);
+
+	if(dist_squared <= radius * radius) {
+		ls->P += radius * sample_uniform_sphere(randu, randv);
+		ls->pdf = invarea;
+		return;
+	}
+
+	/* Compute coordinate system for sphere sampling. */
+	float dc;
+	wc = safe_normalize_len(wc, &dc);
+	float3 wcX, wcY;
+	make_orthonormals(wc, &wcX, &wcY);
+
+	/* Sample sphere uniformly inside subtended cone. */
+
+	/* Compute theta and phi values for sample in cone. */
+	float sin_theta_max2 = radius * radius / dist_squared;
+	float cos_theta_max = safe_sqrtf(max(0.0f, 1.0f - sin_theta_max2));
+	float cos_theta = (1.0f - randu) + randu * cos_theta_max;
+	float sin_theta = safe_sqrtf(max(0.0f, 1.0f - cos_theta * cos_theta));
+	float phi = randv * 2.0f * M_PI_F;
+
+	/* Compute angle alpha from center of sphere to sampled point on surface. */
+	float ds = dc * cos_theta - safe_sqrtf(max(0.0f, radius * radius - dc * dc * sin_theta * sin_theta));
+	float cos_alpha = (dc * dc + radius * radius - ds * ds) / (2.0f * dc * radius);
+	float sin_alpha = safe_sqrtf(max(0.0f, 1.0f - cos_alpha * cos_alpha));
+
+	/* Compute surface normal and sampled point on sphere. */
+	float3 n_world = sin_alpha * cosf(phi) * (-wcX) +  sin_alpha * sinf(phi) * (-wcY) + cos_alpha * (-wc);
+
+	ls->P = ls->P + radius * n_world;
+
+	/* Uniform cone PDF. */
+	ls->pdf = uniform_cone_pdf(cos_theta_max);
+	ls->Ng = normalize(n_world);
 }
 
 ccl_device float spot_light_attenuation(float4 data1, float4 data2, LightSample *ls)
@@ -543,16 +600,6 @@ ccl_device float spot_light_attenuation(float4 data1, float4 data2, LightSample 
 	}
 
 	return attenuation;
-}
-
-ccl_device float lamp_light_pdf(KernelGlobals *kg, const float3 Ng, const float3 I, float t)
-{
-	float cos_pi = dot(Ng, I);
-
-	if(cos_pi <= 0.0f)
-		return 0.0f;
-	
-	return t*t/cos_pi;
 }
 
 ccl_device_inline bool lamp_light_sample(KernelGlobals *kg,
@@ -610,6 +657,7 @@ ccl_device_inline bool lamp_light_sample(KernelGlobals *kg,
 		if(type == LIGHT_POINT || type == LIGHT_SPOT) {
 			float radius = data1.y;
 			float invarea = data1.z;
+			float3 light_P = ls->P;
 			if(radius > 0.0f) {
 				/* sphere light */
 				sphere_light_sample(P, ls, radius, randu, randv, invarea);
@@ -630,7 +678,7 @@ ccl_device_inline bool lamp_light_sample(KernelGlobals *kg,
 			ls->u = uv.x;
 			ls->v = uv.y;
 
-			ls->pdf *= lamp_light_pdf(kg, ls->Ng, -ls->D, ls->t);
+			ls->pdf = sphere_light_pdf(P, light_P, ls, radius, invarea);
 		}
 		else {
 			/* area light */
@@ -735,18 +783,15 @@ ccl_device bool lamp_light_eval(KernelGlobals *kg, int lamp, float3 P, float3 D,
 		if(radius == 0.0f)
 			return false;
 
-		if(!ray_aligned_disk_intersect(P, D, t,
-		                               lightP, radius, &ls->P, &ls->t))
-		{
+		if(!ray_sphere_intersect(P, D, t, lightP, radius, &ls->P, &ls->t)) {
 			return false;
 		}
 
-		ls->Ng = -D;
+		ls->Ng = (ls->t < radius ? -1.0f : 1.0f) * normalize(ls->P - lightP);
 		ls->D = D;
 
 		float invarea = data1.z;
 		ls->eval_fac = (0.25f*M_1_PI_F)*invarea;
-		ls->pdf = invarea;
 
 		if(type == LIGHT_SPOT) {
 			/* spot light attenuation */
@@ -762,7 +807,7 @@ ccl_device bool lamp_light_eval(KernelGlobals *kg, int lamp, float3 P, float3 D,
 
 		/* compute pdf */
 		if(ls->t != FLT_MAX)
-			ls->pdf *= lamp_light_pdf(kg, ls->Ng, -ls->D, ls->t);
+			ls->pdf = sphere_light_pdf(P, lightP, ls, radius, invarea);
 	}
 	else if(type == LIGHT_AREA) {
 		/* area light */

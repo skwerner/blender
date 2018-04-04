@@ -30,24 +30,21 @@ ccl_device bool ray_sphere_intersect(
 	const float radiussq = sphere_radius*sphere_radius;
 	const float tsq = dot(d, d);
 
-	if(tsq > radiussq) {
-		/* Ray origin outside sphere. */
-		const float tp = dot(d, ray_D);
-		if(tp < 0.0f) {
-			/* Ray  points away from sphere. */
-			return false;
-		}
-		const float dsq = tsq - tp*tp;  /* pythagoras */
-		if(dsq > radiussq)  {
-			/* Closest point on ray outside sphere. */
-			return false;
-		}
-		const float t = tp - sqrtf(radiussq - dsq);  /* pythagoras */
-		if(t < ray_t) {
-			*isect_t = t;
-			*isect_P = ray_P + ray_D*t;
-			return true;
-		}
+	const float tp = dot(d, ray_D);
+	if(tsq > radiussq && tp < 0.0f) {
+		/* Ray  points away from sphere. */
+		return false;
+	}
+	const float dsq = tsq - tp*tp;  /* pythagoras */
+	if(dsq > radiussq)  {
+		/* Closest point on ray outside sphere. */
+		return false;
+	}
+	const float t = tp - sqrtf(radiussq - dsq);  /* pythagoras */
+	if(t < ray_t) {
+		*isect_t = t;
+		*isect_P = ray_P + ray_D*t;
+		return true;
 	}
 	return false;
 }

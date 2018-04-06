@@ -3580,6 +3580,12 @@ int BKE_ptcache_read(PTCacheID *pid, float cfra, bool no_extrapolate_old)
     sds = smd->domain;
     vdbmd = sds->vdb;
 
+    if (vdbmd->flags & MOD_OPENVDB_NOW_RENDERING) {
+        return 0;
+    }
+
+    cfra1 = cfra2 = -1;
+
     if (cfrai < pid->cache->startframe || cfrai > pid->cache->endframe) {
       sds->total_cells = 0;
 

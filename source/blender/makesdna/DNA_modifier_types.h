@@ -1996,6 +1996,7 @@ enum {
   MOD_OPENVDB_IS_RENDER = (1 << 4),
   MOD_OPENVDB_HAS_DENSITY = (1 << 5),
   MOD_OPENVDB_SPLIT_VELOCITY = (1 << 6),
+	MOD_OPENVDB_NOW_RENDERING   = (1 << 7),
 };
 
 enum {

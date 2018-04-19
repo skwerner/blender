@@ -71,8 +71,10 @@ ccl_device_inline void kernel_volume_branch_stack(float distance, VolumeStack *s
       } while (stack[j].shader != SHADER_NONE);
       --i;
     }
-    stack[i].t_enter = 0.0f;
-    stack[i].t_exit = FLT_MAX;
+    else {
+      stack[i].t_enter = 0.0f;
+      stack[i].t_exit = FLT_MAX;
+    }
   }
 }
 

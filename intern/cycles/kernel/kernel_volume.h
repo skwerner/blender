@@ -62,10 +62,12 @@ ccl_device_inline void kernel_volume_branch_stack(float distance, VolumeStack *s
    Set all other volumes to go from zero to infinity.
    */
   for (int i = 0; stack[i].shader != SHADER_NONE; ++i) {
+    assert(i >= 0 && i < VOLUME_STACK_SIZE);
     if (stack[i].t_exit < distance || stack[i].t_enter > distance) {
       int j = i;
       /* shift back next stack entries */
       do {
+        assert(j >= 0 && j < VOLUME_STACK_SIZE - 1);
         stack[j] = stack[j + 1];
         ++j;
       } while (stack[j].shader != SHADER_NONE);

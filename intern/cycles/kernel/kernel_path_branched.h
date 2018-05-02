@@ -429,7 +429,9 @@ ccl_device void kernel_branched_path_integrate(KernelGlobals *kg,
           for (int i = 0; state.volume_stack[i].shader != SHADER_NONE && i < VOLUME_STACK_SIZE;
                ++i) {
             if (state.volume_stack[i].object == sd.object) {
-              state.volume_stack[i].t_exit = volume_ray.t;
+              state.volume_stack[i].t_exit = volume_ray.t > state.volume_stack[i].t_exit ?
+                                                 volume_ray.t :
+                                                 state.volume_stack[i].t_exit;
               break;
             }
           }
@@ -437,15 +439,23 @@ ccl_device void kernel_branched_path_integrate(KernelGlobals *kg,
         }
         else {
           int i = 0;
-          while (state.volume_stack[i].shader != SHADER_NONE && i < VOLUME_STACK_SIZE) {
+          bool found = false;
+          while (state.volume_stack[i].shader != SHADER_NONE && i < VOLUME_STACK_SIZE - 1) {
+            if (state.volume_stack[i].object == sd.object) {
+              /* Don't add the object if it is already on the stack. */
+              found = true;
+              break;
+            }
             ++i;
           }
-          state.volume_stack[i].object = sd.object;
-          state.volume_stack[i].shader = sd.shader;
-          state.volume_stack[i].t_enter = volume_ray.t;
-          state.volume_stack[i].t_exit = FLT_MAX;
-          state.volume_stack[i + 1].shader = SHADER_NONE;
-          ++volumes_entered;
+          if (!found) {
+            state.volume_stack[i].object = sd.object;
+            state.volume_stack[i].shader = sd.shader;
+            state.volume_stack[i].t_enter = volume_ray.t;
+            state.volume_stack[i].t_exit = FLT_MAX;
+            state.volume_stack[i + 1].shader = SHADER_NONE;
+            ++volumes_entered;
+          }
         }
       }
     }

@@ -454,8 +454,8 @@ ccl_device void kernel_branched_path_integrate(KernelGlobals *kg,
             state.volume_stack[i].t_enter = volume_ray.t;
             state.volume_stack[i].t_exit = FLT_MAX;
             state.volume_stack[i + 1].shader = SHADER_NONE;
-            ++volumes_entered;
           }
+          ++volumes_entered;
         }
       }
     }

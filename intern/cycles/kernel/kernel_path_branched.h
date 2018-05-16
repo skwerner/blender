@@ -426,6 +426,7 @@ ccl_device void kernel_branched_path_integrate(KernelGlobals *kg,
           volume_ray.t = len(sd.P - volume_ray.P);
         }
         if (sd.flag & SD_BACKFACING) {
+          /* The ray is leaving a volume. */
           --volumes_entered;
           for (int i = 0; state.volume_stack[i].shader != SHADER_NONE && i < VOLUME_STACK_SIZE;
                ++i) {
@@ -435,6 +436,8 @@ ccl_device void kernel_branched_path_integrate(KernelGlobals *kg,
                 state.volume_stack[i].t_exit = volume_ray.t;
               }
               else {
+                  /* The ray should traverse front-to-back, but sometimes it doesn't?! */
+                  assert(volume_ray.t >= state.volume_stack[i].t_exit);
                 state.volume_stack[i].t_exit = max(volume_ray.t, state.volume_stack[i].t_exit);
               }
               break;
@@ -442,15 +445,23 @@ ccl_device void kernel_branched_path_integrate(KernelGlobals *kg,
           }
         }
         else {
+          /* The ray is entering a volume. */
           int i = 0;
           ++volumes_entered;
           bool found = false;
           while (state.volume_stack[i].shader != SHADER_NONE && i < VOLUME_STACK_SIZE - 1) {
-            if (state.volume_stack[i].object == sd.object && state.volume_stack[i].depth > 0) {
-              /* Don't add the object if it is already on the stack. */
-              ++state.volume_stack[i].depth;
-              found = true;
-              break;
+            if (state.volume_stack[i].object == sd.object) {
+              bool inside = state.volume_stack[i].depth == 0 &&
+                            volume_ray.t >= state.volume_stack[i].t_enter &&
+                            volume_ray.t <= state.volume_stack[i].t_exit;
+              /* The ray should traverse front-to-back, but sometimes it doesn't?! */
+              assert(!inside);
+              if (state.volume_stack[i].depth > 0 || inside) {
+                /* This is a re-entry into an object we haven't left yet. */
+                ++state.volume_stack[i].depth;
+                found = true;
+                break;
+              }
             }
             ++i;
           }
@@ -461,6 +472,10 @@ ccl_device void kernel_branched_path_integrate(KernelGlobals *kg,
             state.volume_stack[i].t_exit = FLT_MAX;
             state.volume_stack[i].depth = 1;
             state.volume_stack[i + 1].shader = SHADER_NONE;
+          }
+          else {
+            /* Not enough room on the stack. Skip this object. */
+            assert(found);
           }
         }
       }

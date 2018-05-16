@@ -426,35 +426,40 @@ ccl_device void kernel_branched_path_integrate(KernelGlobals *kg,
           volume_ray.t = len(sd.P - volume_ray.P);
         }
         if (sd.flag & SD_BACKFACING) {
+          --volumes_entered;
           for (int i = 0; state.volume_stack[i].shader != SHADER_NONE && i < VOLUME_STACK_SIZE;
                ++i) {
-            if (state.volume_stack[i].object == sd.object) {
-              if (volume_ray.t > state.volume_stack[i].t_exit ||
-                  state.volume_stack[i].t_exit == FLT_MAX) {
+            if (state.volume_stack[i].object == sd.object && state.volume_stack[i].depth > 0) {
+              --state.volume_stack[i].depth;
+              if (state.volume_stack[i].t_exit == FLT_MAX) {
                 state.volume_stack[i].t_exit = volume_ray.t;
+              }
+              else {
+                state.volume_stack[i].t_exit = max(volume_ray.t, state.volume_stack[i].t_exit);
               }
               break;
             }
           }
-          --volumes_entered;
         }
         else {
           int i = 0;
           ++volumes_entered;
           bool found = false;
           while (state.volume_stack[i].shader != SHADER_NONE && i < VOLUME_STACK_SIZE - 1) {
-            if (state.volume_stack[i].object == sd.object) {
+            if (state.volume_stack[i].object == sd.object && state.volume_stack[i].depth > 0) {
               /* Don't add the object if it is already on the stack. */
+              ++state.volume_stack[i].depth;
               found = true;
               break;
             }
             ++i;
           }
-          if (!found) {
+          if (i < VOLUME_STACK_SIZE - 1 && !found) {
             state.volume_stack[i].object = sd.object;
             state.volume_stack[i].shader = sd.shader;
             state.volume_stack[i].t_enter = volume_ray.t;
             state.volume_stack[i].t_exit = FLT_MAX;
+            state.volume_stack[i].depth = 1;
             state.volume_stack[i + 1].shader = SHADER_NONE;
           }
         }

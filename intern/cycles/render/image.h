@@ -24,6 +24,7 @@
 #include "util/util_string.h"
 #include "util/util_thread.h"
 #include "util/util_vector.h"
+#include "util/util_sparse_grid.h"
 
 CCL_NAMESPACE_BEGIN
 
@@ -34,7 +35,7 @@ class Scene;
 class ImageMetaData {
 public:
 	/* Must be set by image file or builtin callback. */
-	bool is_float, is_half;
+	bool is_float, is_half, is_volume;
 	int channels;
 	size_t width, height, depth;
 	bool builtin_free_cache;
@@ -150,6 +151,15 @@ private:
 	                     ImageDataType type,
 	                     int texture_limit,
 	                     device_vector<DeviceType>& tex_img);
+
+	template<TypeDesc::BASETYPE FileFormat,
+	         typename StorageType,
+	         typename DeviceType>
+	bool file_load_image(Image *img,
+	                     ImageDataType type,
+	                     int texture_limit,
+	                     device_vector<SparseTile>& tex_img,
+	                     device_vector<int>& tex_offsets);
 
 	int max_flattened_slot(ImageDataType type);
 	int type_index_to_flattened_slot(int slot, ImageDataType type);

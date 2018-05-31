@@ -52,6 +52,7 @@
 #include "util/util_progress.h"
 #include "util/util_system.h"
 #include "util/util_thread.h"
+#include "util/util_sparse_grid.h"
 
 CCL_NAMESPACE_BEGIN
 
@@ -375,9 +376,14 @@ public:
 
 	void tex_alloc(device_memory& mem)
 	{
+		size_t total_memory = mem.memory_size();
+		device_memory *offsets = mem.offsets;
+		if(offsets != NULL)
+			total_memory += offsets->memory_size();
+
 		VLOG(1) << "Texture allocate: " << mem.name << ", "
-		        << string_human_readable_number(mem.memory_size()) << " bytes. ("
-		        << string_human_readable_size(mem.memory_size()) << ")";
+		        << string_human_readable_number(total_memory) << " bytes. ("
+		        << string_human_readable_size(total_memory) << ")";
 
 		if(mem.interpolation == INTERPOLATION_NONE) {
 			/* Data texture. */
@@ -390,7 +396,7 @@ public:
 			/* Image Texture. */
 			int flat_slot = 0;
 			if(string_startswith(mem.name, "__tex_image")) {
-				int pos =  string(mem.name).rfind("_");
+				int pos = string(mem.name).rfind("_");
 				flat_slot = atoi(mem.name + pos + 1);
 			}
 			else {
@@ -408,16 +414,34 @@ public:
 			info.cl_buffer = 0;
 			info.interpolation = mem.interpolation;
 			info.extension = mem.extension;
-			info.width = mem.data_width;
-			info.height = mem.data_height;
-			info.depth = mem.data_depth;
-
+			if(offsets != NULL) {
+				/* If mem is a sparse volume, its real (tile)
+				 * dimensions are stored in the offsets texture.
+				 * Here, we store the pixel resolution. */
+				info.width = offsets->data_width * TILE_SIZE;
+				info.height = offsets->data_height * TILE_SIZE;
+				info.depth = offsets->data_depth * TILE_SIZE;
+				info.offsets = (uint64_t)offsets->host_pointer;
+			}
+			else {
+				info.width = mem.data_width;
+				info.height = mem.data_height;
+				info.depth = mem.data_depth;
+				info.offsets = (uint64_t)0;
+			}
 			need_texture_info = true;
 		}
 
 		mem.device_pointer = (device_ptr)mem.host_pointer;
 		mem.device_size = mem.memory_size();
 		stats.mem_alloc(mem.device_size);
+
+		if(offsets != NULL) {
+			offsets->device_pointer = (device_ptr)offsets->host_pointer;
+			offsets->device_size = offsets->memory_size();
+			stats.mem_alloc(offsets->device_size);
+		}
+
 	}
 
 	void tex_free(device_memory& mem)

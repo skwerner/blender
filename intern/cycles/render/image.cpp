@@ -108,7 +108,10 @@ bool ImageManager::get_image_metadata(const string& filename,
 			return false;
 		}
 
-		if(metadata.is_float) {
+		if(metadata.is_volume) {
+			metadata.type = IMAGE_DATA_TYPE_VOLUME;
+		}
+		else if(metadata.is_float) {
 			metadata.is_linear = true;
 			metadata.type = (metadata.channels > 1) ? IMAGE_DATA_TYPE_FLOAT4 : IMAGE_DATA_TYPE_FLOAT;
 		}
@@ -183,7 +186,10 @@ bool ImageManager::get_image_metadata(const string& filename,
 	/* set type and channels */
 	metadata.channels = spec.nchannels;
 
-	if(metadata.is_half) {
+	if(metadata.is_volume) {
+		metadata.type = IMAGE_DATA_TYPE_VOLUME;
+	}
+	else if(metadata.is_half) {
 		metadata.type = (metadata.channels > 1) ? IMAGE_DATA_TYPE_HALF4 : IMAGE_DATA_TYPE_HALF;
 	}
 	else if(metadata.is_float) {
@@ -235,6 +241,8 @@ string ImageManager::name_from_type(int type)
 		return "half4";
 	else if(type == IMAGE_DATA_TYPE_HALF)
 		return "half";
+	else if(type == IMAGE_DATA_TYPE_VOLUME)
+		return "volume";
 	else
 		return "byte4";
 }
@@ -574,6 +582,7 @@ bool ImageManager::file_load_image(Image *img,
 	 * but device doesn't support single channel textures.
 	 */
 	bool is_rgba = (type == IMAGE_DATA_TYPE_FLOAT4 ||
+	                type == IMAGE_DATA_TYPE_VOLUME ||
 	                type == IMAGE_DATA_TYPE_HALF4 ||
 	                type == IMAGE_DATA_TYPE_BYTE4);
 	if(is_rgba) {
@@ -682,6 +691,87 @@ bool ImageManager::file_load_image(Image *img,
 	return true;
 }
 
+
+/* If volume, call this to convert to sparse grid. */
+template<TypeDesc::BASETYPE FileFormat,
+         typename StorageType,
+         typename DeviceType>
+bool ImageManager::file_load_image(Image *img,
+                                   ImageDataType type,
+                                   int texture_limit,
+                                   device_vector<SparseTile>& tex_img,
+                                   device_vector<int>& tex_offsets)
+{
+
+	device_vector<DeviceType> *tex_img_dense
+		= new device_vector<DeviceType>(NULL, img->mem_name.c_str(), MEM_TEXTURE);
+
+	if(!file_load_image<FileFormat, StorageType, DeviceType>(img,
+	                                                         type,
+	                                                         texture_limit,
+	                                                         *tex_img_dense))
+	{
+		/* Release temporary pointer. */
+		delete tex_img_dense;
+		tex_img_dense = NULL;
+		return false;
+	}
+
+	DeviceType *data = tex_img_dense->data();
+	size_t tile_width = compute_tile_resolution(tex_img_dense->data_width);
+	size_t tile_height = compute_tile_resolution(tex_img_dense->data_height);
+	size_t tile_depth = compute_tile_resolution(tex_img_dense->data_depth);
+
+	vector<SparseTile> sparse_grid;
+	vector<int> offsets;
+	/* Sample threshold value for now. */
+	float4 threshold = make_float4(0.0f);
+	int active_tile_count = create_sparse_grid(data, threshold,
+										       tex_img_dense->data_width,
+											   tex_img_dense->data_height,
+											   tex_img_dense->data_depth,
+											   &sparse_grid, &offsets);
+
+	if(active_tile_count < 1) {
+		/* to-do (gchua): handle this. */
+	}
+
+	SparseTile *texture_pixels;
+	int *texture_offsets;
+	{
+		/* Since only active tiles are stored in tex_img, its
+		 * allocated memory will be <= the actual resolution
+		 * of the volume. We store the true resolution (in tiles) in the
+		 * tex_offsets instead, since it needs to be allocated enough
+		 * space to track all tiles anyway. */
+		thread_scoped_lock device_lock(device_mutex);
+		texture_pixels = (SparseTile*)tex_img.alloc(active_tile_count);
+		texture_offsets = (int*)tex_offsets.alloc(tile_width,
+												 tile_height,
+												 tile_depth);
+	}
+
+	memcpy(texture_offsets,
+		   &offsets[0],
+		   offsets.size() * sizeof(int));
+	memcpy(texture_pixels,
+		   &sparse_grid[0],
+		   active_tile_count * sizeof(SparseTile));
+
+	VLOG(1) << "Memory usage of dense grid '" << img->filename << "': "
+		    << string_human_readable_size(tex_img_dense->memory_size());
+	VLOG(1) << "Memory usage of sparse grid '" << img->filename << "': "
+	        << string_human_readable_size(tex_img.memory_size());
+	VLOG(1) << "Memory usage of auxiliary index: "
+	        << string_human_readable_size(tex_offsets.memory_size());
+
+	/* Release temporary pointer. */
+	delete tex_img_dense;
+	tex_img_dense = NULL;
+
+	return true;
+}
+
 void ImageManager::device_load_image(Device *device,
                                      Scene *scene,
                                      ImageDataType type,
@@ -696,7 +786,7 @@ void ImageManager::device_load_image(Device *device,
 	if(osl_texture_system && !img->builtin_data)
 		return;
 
-	string filename = path_filename(images[type][slot]->filename);
+	string filename = path_filename(img->filename);
 	progress->set_status("Updating Images", "Loading " + filename);
 
 	const int texture_limit = scene->params.texture_limit;
@@ -705,9 +795,13 @@ void ImageManager::device_load_image(Device *device,
 	int flat_slot = type_index_to_flattened_slot(slot, type);
 	img->mem_name = string_printf("__tex_image_%s_%03d", name_from_type(type).c_str(), flat_slot);
 
-	/* Free previous texture in slot. */
+	/* Free previous texture(s) in slot. */
 	if(img->mem) {
 		thread_scoped_lock device_lock(device_mutex);
+		if(img->mem->offsets) {
+			delete img->mem->offsets;
+			img->mem->offsets = NULL;
+		}
 		delete img->mem;
 		img->mem = NULL;
 	}
@@ -857,6 +951,55 @@ void ImageManager::device_load_image(Device *device,
 		thread_scoped_lock device_lock(device_mutex);
 		tex_img->copy_to_device();
 	}
+	else if(type == IMAGE_DATA_TYPE_VOLUME) {
+		device_vector<SparseTile> *tex_img
+			= new device_vector<SparseTile>(device, img->mem_name.c_str(), MEM_TEXTURE);
+		device_vector<int> *tex_offsets
+			= new device_vector<int>(device, (img->mem_name + "_offsets").c_str(), MEM_TEXTURE);
+
+		if(!file_load_image<TypeDesc::FLOAT, float, float4>(img,
+															type,
+															texture_limit,
+															*tex_img,
+															*tex_offsets))
+		{
+			/* Clear pointers. */
+			delete tex_img;
+			delete tex_offsets;
+			tex_img = NULL;
+			tex_offsets = NULL;
+
+			/* on failure to load, we set a 1x1 pixels pink image (float4) */
+			device_vector<float4> *tex_fail
+				= new device_vector<float4>(device, img->mem_name.c_str(), MEM_TEXTURE);
+
+			thread_scoped_lock device_lock(device_mutex);
+			float *pixels = (float*)tex_fail->alloc(1, 1);
+
+			pixels[0] = TEX_IMAGE_MISSING_R;
+			pixels[1] = TEX_IMAGE_MISSING_G;
+			pixels[2] = TEX_IMAGE_MISSING_B;
+			pixels[3] = TEX_IMAGE_MISSING_A;
+
+			img->mem = tex_fail;
+			img->mem->interpolation = img->interpolation;
+			img->mem->extension = img->extension;
+			tex_fail->copy_to_device();
+		}
+		else {
+			img->mem = tex_img;
+			img->mem->interpolation = img->interpolation;
+			img->mem->extension = img->extension;
+			img->mem->offets = tex_offsets;
+			/* Need to set interpolation so that tex_alloc() will treat
+			 * tex_offsets as a image instead of data texture. */
+			tex_offsets->interpolation = img->interpolation;
+
+			thread_scoped_lock device_lock(device_mutex);
+			tex_img->copy_to_device();
+			tex_offsets->copy_to_device();
+		}
+	}
 
 	img->need_load = false;
 }
@@ -902,7 +1045,7 @@ void ImageManager::device_update(Device *device,
 				device_free_image(device, (ImageDataType)type, slot);
 			}
 			else if(images[type][slot]->need_load) {
-				if(!osl_texture_system || images[type][slot]->builtin_data)
+				if(!osl_texture_system || images[type][slot]->builtin_data) {
 					pool.push(function_bind(&ImageManager::device_load_image,
 					                        this,
 					                        device,
@@ -910,6 +1053,7 @@ void ImageManager::device_update(Device *device,
 					                        (ImageDataType)type,
 					                        slot,
 					                        &progress));
+				}
 			}
 		}
 	}
@@ -934,12 +1078,13 @@ void ImageManager::device_update_slot(Device *device,
 		device_free_image(device, type, slot);
 	}
 	else if(image->need_load) {
-		if(!osl_texture_system || image->builtin_data)
+		if(!osl_texture_system || image->builtin_data) {
 			device_load_image(device,
 			                  scene,
 			                  type,
 			                  slot,
 			                  progress);
+		}
 	}
 }
 

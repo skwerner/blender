@@ -17,9 +17,12 @@
 #ifndef __KERNEL_CPU_IMAGE_H__
 #define __KERNEL_CPU_IMAGE_H__
 
+#include "util/util_sparse_grid.h"
+
 CCL_NAMESPACE_BEGIN
 
-template<typename T> struct TextureInterpolator  {
+template<typename T, bool is_tile = false>
+struct TextureInterpolator  {
 #define SET_CUBIC_SPLINE_WEIGHTS(u, t) \
 	{ \
 		u[0] = (((-1.0f/6.0f)* t + 0.5f) * t - 0.5f) * t + (1.0f/6.0f); \
@@ -68,7 +71,7 @@ template<typename T> struct TextureInterpolator  {
 	                                     int width, int height)
 	{
 		if(x < 0 || y < 0 || x >= width || y >= height) {
-			return make_float4(0.0f, 0.0f, 0.0f, 0.0f);
+			return make_float4(0.0f);
 		}
 		return read(data[y * width + x]);
 	}
@@ -111,7 +114,7 @@ template<typename T> struct TextureInterpolator  {
 				break;
 			case EXTENSION_CLIP:
 				if(x < 0.0f || y < 0.0f || x > 1.0f || y > 1.0f) {
-					return make_float4(0.0f, 0.0f, 0.0f, 0.0f);
+					return make_float4(0.0f);
 				}
 				ATTR_FALLTHROUGH;
 			case EXTENSION_EXTEND:
@@ -120,7 +123,7 @@ template<typename T> struct TextureInterpolator  {
 				break;
 			default:
 				kernel_assert(0);
-				return make_float4(0.0f, 0.0f, 0.0f, 0.0f);
+				return make_float4(0.0f);
 		}
 		return read(data[ix + iy*width]);
 	}
@@ -153,7 +156,7 @@ template<typename T> struct TextureInterpolator  {
 				break;
 			default:
 				kernel_assert(0);
-				return make_float4(0.0f, 0.0f, 0.0f, 0.0f);
+				return make_float4(0.0f);
 		}
 		return (1.0f - ty) * (1.0f - tx) * read(data, ix, iy, width, height) +
 		       (1.0f - ty) * tx * read(data, nix, iy, width, height) +
@@ -202,7 +205,7 @@ template<typename T> struct TextureInterpolator  {
 				break;
 			default:
 				kernel_assert(0);
-				return make_float4(0.0f, 0.0f, 0.0f, 0.0f);
+				return make_float4(0.0f);
 		}
 		const int xc[4] = {pix, ix, nix, nnix};
 		const int yc[4] = {piy, iy, niy, nniy};
@@ -230,7 +233,7 @@ template<typename T> struct TextureInterpolator  {
 	                                       float x, float y)
 	{
 		if(UNLIKELY(!info.data)) {
-			return make_float4(0.0f, 0.0f, 0.0f, 0.0f);
+			return make_float4(0.0f);
 		}
 		switch(info.interpolation) {
 			case INTERPOLATION_CLOSEST:
@@ -266,7 +269,7 @@ template<typename T> struct TextureInterpolator  {
 				if(x < 0.0f || y < 0.0f || z < 0.0f ||
 				   x > 1.0f || y > 1.0f || z > 1.0f)
 				{
-					return make_float4(0.0f, 0.0f, 0.0f, 0.0f);
+					return make_float4(0.0f);
 				}
 				ATTR_FALLTHROUGH;
 			case EXTENSION_EXTEND:
@@ -276,11 +279,18 @@ template<typename T> struct TextureInterpolator  {
 				break;
 			default:
 				kernel_assert(0);
-				return make_float4(0.0f, 0.0f, 0.0f, 0.0f);
+				return make_float4(0.0f);
 		}
 
-		const T *data = (const T*)info.data;
-		return read(data[ix + iy*width + iz*width*height]);
+		if(is_tile) {
+			const SparseTile *data = (const SparseTile*)info.data;
+			const int *ofs = (const int*)info.offsets;
+			return read(get_value(data, ofs, ix, iy, iz, width, height, depth));
+		}
+		else {
+			const T *data = (const T*)info.data;
+			return read(data[compute_index(ix, iy, iz, width, height, depth)]);
+		}
 	}
 
 	static ccl_always_inline float4 interp_3d_linear(const TextureInfo& info,
@@ -310,7 +320,7 @@ template<typename T> struct TextureInterpolator  {
 				if(x < 0.0f || y < 0.0f || z < 0.0f ||
 				   x > 1.0f || y > 1.0f || z > 1.0f)
 				{
-					return make_float4(0.0f, 0.0f, 0.0f, 0.0f);
+					return make_float4(0.0f);
 				}
 				ATTR_FALLTHROUGH;
 			case EXTENSION_EXTEND:
@@ -324,21 +334,39 @@ template<typename T> struct TextureInterpolator  {
 				break;
 			default:
 				kernel_assert(0);
-				return make_float4(0.0f, 0.0f, 0.0f, 0.0f);
+				return make_float4(0.0f);
 		}
 
-		const T *data = (const T*)info.data;
 		float4 r;
 
-		r  = (1.0f - tz)*(1.0f - ty)*(1.0f - tx)*read(data[ix + iy*width + iz*width*height]);
-		r += (1.0f - tz)*(1.0f - ty)*tx*read(data[nix + iy*width + iz*width*height]);
-		r += (1.0f - tz)*ty*(1.0f - tx)*read(data[ix + niy*width + iz*width*height]);
-		r += (1.0f - tz)*ty*tx*read(data[nix + niy*width + iz*width*height]);
-
-		r += tz*(1.0f - ty)*(1.0f - tx)*read(data[ix + iy*width + niz*width*height]);
-		r += tz*(1.0f - ty)*tx*read(data[nix + iy*width + niz*width*height]);
-		r += tz*ty*(1.0f - tx)*read(data[ix + niy*width + niz*width*height]);
-		r += tz*ty*tx*read(data[nix + niy*width + niz*width*height]);
+		if(is_tile) {
+			const SparseTile *data = (const SparseTile*)info.data;
+			const int *ofs = (const int*)info.offsets;
+			/* Initial check if either voxel is in an active tile. */
+			if(!is_active(ofs, ix, iy, iz, width, height, depth) &&
+			   !is_active(ofs, nix, niy, niz, width, height, depth)) {
+				return make_float4(0.0f);
+			}
+			r  = (1.0f - tz)*(1.0f - ty)*(1.0f - tx) * read(get_value(data, ofs, ix,  iy,  iz,  width, height, depth));
+			r += (1.0f - tz)*(1.0f - ty)*tx			 * read(get_value(data, ofs, nix, iy,  iz,  width, height, depth));
+			r += (1.0f - tz)*ty*(1.0f - tx)			 * read(get_value(data, ofs, ix,  niy, iz,  width, height, depth));
+			r += (1.0f - tz)*ty*tx					 * read(get_value(data, ofs, nix, niy, iz,  width, height, depth));
+			r += tz*(1.0f - ty)*(1.0f - tx)			 * read(get_value(data, ofs, ix,  iy,  niz, width, height, depth));
+			r += tz*(1.0f - ty)*tx					 * read(get_value(data, ofs, nix, iy,  niz, width, height, depth));
+			r += tz*ty*(1.0f - tx)					 * read(get_value(data, ofs, ix,  niy, niz, width, height, depth));
+			r += tz*ty*tx							 * read(get_value(data, ofs, nix, niy, niz, width, height, depth));
+		}
+		else {
+			const T *data = (const T*)info.data;
+			r  = (1.0f - tz)*(1.0f - ty)*(1.0f - tx) * read(data[compute_index(ix,  iy,  iz,  width, height, depth)]);
+			r += (1.0f - tz)*(1.0f - ty)*tx			 * read(data[compute_index(nix, iy,  iz,  width, height, depth)]);
+			r += (1.0f - tz)*ty*(1.0f - tx)			 * read(data[compute_index(ix,  niy, iz,  width, height, depth)]);
+			r += (1.0f - tz)*ty*tx					 * read(data[compute_index(nix, niy, iz,  width, height, depth)]);
+			r += tz*(1.0f - ty)*(1.0f - tx)			 * read(data[compute_index(ix,  iy,  niz, width, height, depth)]);
+			r += tz*(1.0f - ty)*tx					 * read(data[compute_index(nix, iy,  niz, width, height, depth)]);
+			r += tz*ty*(1.0f - tx)					 * read(data[compute_index(ix,  niy, niz, width, height, depth)]);
+			r += tz*ty*tx							 * read(data[compute_index(nix, niy, niz, width, height, depth)]);
+		}
 
 		return r;
 	}
@@ -356,6 +384,8 @@ template<typename T> struct TextureInterpolator  {
 #endif
 	float4 interp_3d_tricubic(const TextureInfo& info, float x, float y, float z)
 	{
+		/* todo (gchua): add tile support for this */
+		kernel_assert(!is_tile);
 		int width = info.width;
 		int height = info.height;
 		int depth = info.depth;
@@ -389,7 +419,7 @@ template<typename T> struct TextureInterpolator  {
 				if(x < 0.0f || y < 0.0f || z < 0.0f ||
 				   x > 1.0f || y > 1.0f || z > 1.0f)
 				{
-					return make_float4(0.0f, 0.0f, 0.0f, 0.0f);
+					return make_float4(0.0f);
 				}
 				ATTR_FALLTHROUGH;
 			case EXTENSION_EXTEND:
@@ -411,7 +441,7 @@ template<typename T> struct TextureInterpolator  {
 				break;
 			default:
 				kernel_assert(0);
-				return make_float4(0.0f, 0.0f, 0.0f, 0.0f);
+				return make_float4(0.0f);
 		}
 
 		const int xc[4] = {pix, ix, nix, nnix};
@@ -458,7 +488,7 @@ template<typename T> struct TextureInterpolator  {
 	                                          InterpolationType interp)
 	{
 		if(UNLIKELY(!info.data))
-			return make_float4(0.0f, 0.0f, 0.0f, 0.0f);
+			return make_float4(0.0f);
 
 		switch((interp == INTERPOLATION_NONE)? info.interpolation: interp) {
 			case INTERPOLATION_CLOSEST:
@@ -508,6 +538,8 @@ ccl_device float4 kernel_tex_image_interp_3d(KernelGlobals *kg, int id, float x,
 			return TextureInterpolator<half4>::interp_3d(info, x, y, z, interp);
 		case IMAGE_DATA_TYPE_BYTE4:
 			return TextureInterpolator<uchar4>::interp_3d(info, x, y, z, interp);
+		case IMAGE_DATA_TYPE_VOLUME:
+			return TextureInterpolator<float4, true>::interp_3d(info, x, y, z, interp);
 		case IMAGE_DATA_TYPE_FLOAT4:
 		default:
 			return TextureInterpolator<float4>::interp_3d(info, x, y, z, interp);

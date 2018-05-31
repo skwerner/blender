@@ -197,6 +197,7 @@ public:
 	device_ptr device_pointer;
 	void *host_pointer;
 	void *shared_pointer;
+	device_memory *offsets = NULL;
 
 	virtual ~device_memory();
 

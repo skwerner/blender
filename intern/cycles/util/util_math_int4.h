@@ -28,6 +28,9 @@ CCL_NAMESPACE_BEGIN
  */
 
 #ifndef __KERNEL_GPU__
+ccl_device_inline bool operator==(const int4& a, const int4& b);
+ccl_device_inline bool operator!=(const int4& a, const int4& b);
+ccl_device_inline bool operator<(const int4& a, const int4& b);
 ccl_device_inline int4 operator+(const int4& a, const int4& b);
 ccl_device_inline int4 operator+=(int4& a, const int4& b);
 ccl_device_inline int4 operator>>(const int4& a, int i);
@@ -42,6 +45,21 @@ ccl_device_inline int4 select(const int4& mask, const int4& a, const int4& b);
  */
 
 #ifndef __KERNEL_GPU__
+ccl_device_inline bool operator==(const int4& a, const int4& b)
+{
+	return a.x == b.x && a.y == b.y && a.z == b.z && a.w == b.w;
+}
+
+ccl_device_inline bool operator!=(const int4& a, const int4& b)
+{
+	return !(a == b);
+}
+
+ccl_device_inline bool operator<(const int4& a, const int4& b)
+{
+	return a.x < b.x && a.y < b.y && a.z < b.z && a.w < b.w;
+}
+
 ccl_device_inline int4 operator+(const int4& a, const int4& b)
 {
 #ifdef __KERNEL_SSE__

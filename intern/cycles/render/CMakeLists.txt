@@ -20,6 +20,7 @@ set(SRC
 	image.cpp
 	integrator.cpp
 	light.cpp
+	light_tree.cpp
 	mesh.cpp
 	mesh_displace.cpp
 	mesh_subdivision.cpp

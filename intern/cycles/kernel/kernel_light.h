@@ -503,7 +503,7 @@ ccl_device float lamp_light_pdf(KernelGlobals *kg, const float3 Ng, const float3
 
 	if(cos_pi <= 0.0f)
 		return 0.0f;
-	
+
 	return t*t/cos_pi;
 }
 
@@ -1078,6 +1078,88 @@ ccl_device bool light_select_reached_max_bounces(KernelGlobals *kg, int index, i
 	return (bounce > kernel_tex_fetch(__lights, index).max_bounces);
 }
 
+ccl_device float calc_node_importance(KernelGlobals *kg, float3 P, int node_offset)
+{
+    float4 node0 = kernel_tex_fetch(__light_tree_nodes, node_offset + 0);
+    float4 node1 = kernel_tex_fetch(__light_tree_nodes, node_offset + 1);
+    float4 node2 = kernel_tex_fetch(__light_tree_nodes, node_offset + 2);
+    float4 node3 = kernel_tex_fetch(__light_tree_nodes, node_offset + 3);
+
+    float energy = node0[0]; // TODO: This energy is not set correctly on host
+    float3 bboxMin = make_float3( node1[0], node1[1], node1[2]);
+    float3 bboxMax = make_float3( node1[3], node2[0], node2[1]);
+    float theta_o = node2[2];
+    float theta_e = node2[3];
+    float3 axis = make_float3(node3[0], node3[1], node3[2]);
+    float3 centroid = 0.5f*(bboxMax + bboxMin);
+
+    float3 centroidToP = P-centroid;
+    float theta = acosf(dot(axis,normalize(centroidToP)));
+    float theta_u = 0; // TODO: Figure out how to calculate this one
+    float d2 = len_squared(centroidToP);
+
+    return energy * cosf(clamp(theta - theta_o - theta_u, 0.0, theta_e))/d2;
+}
+
+ccl_device void update_parent_node(KernelGlobals *kg, int node_offset,
+                                   int *childOffset, int *distribution_id,
+                                   int *nemitters)
+{
+    float4 node        = kernel_tex_fetch(__light_tree_nodes, node_offset);
+    (*childOffset)     = __float_as_int(node[1]);
+    (*distribution_id) = __float_as_int(node[2]);
+    (*nemitters)       = __float_as_int(node[3]);
+}
+
+ccl_device int sample_light_bvh(KernelGlobals *kg, float3 P, float randu)
+{
+    int index = -1;
+
+    /* read in first part of root node of light BVH */
+    int secondChildOffset, distribution_id, nemitters;
+    update_parent_node(kg, 0, &secondChildOffset, &distribution_id, &nemitters);
+
+    int offset = 0;
+    do{
+
+        /* Found a leaf - Choose which light to use */
+        if(nemitters > 0){ // Found a leaf
+             if(nemitters == 1){
+                 index = distribution_id;
+             } else { // Leaf with several lights. Pick one randomly.
+                 light_distribution_sample(kg, &randu); // TODO: Rescale random number in a better way
+                 int light = min((int)(randu* (float)nemitters), nemitters-1);
+                 index = distribution_id +light;
+             }
+             break;
+        } else { // Interior node, pick left or right randomly
+
+            /* calculate probability of going down left node */
+            int child_offsetL = offset + 4;
+            int child_offsetR = 4*secondChildOffset;
+            float I_L = calc_node_importance(kg, P, child_offsetL);
+            float I_R = calc_node_importance(kg, P, child_offsetR);
+            float P_L = I_L / ( I_L + I_R);
+
+            /* choose which node to go down */
+            light_distribution_sample(kg, &randu); // TODO: Rescale random number in a better way
+            if(randu <= P_L){ // Going down left node
+                offset = child_offsetL;
+            } else { // Going down right node
+                offset = child_offsetR;
+            }
+
+            /* update parent node info for next iteration */
+            update_parent_node(kg, offset, &secondChildOffset,
+                               &distribution_id, &nemitters);
+        }
+
+
+    } while(1);
+
+    return index;
+}
+
 ccl_device_noinline bool light_sample(KernelGlobals *kg,
                                       float randu,
                                       float randv,
@@ -1087,7 +1169,8 @@ ccl_device_noinline bool light_sample(KernelGlobals *kg,
                                       LightSample *ls)
 {
 	/* sample index */
-	int index = light_distribution_sample(kg, &randu);
+	//int index = light_distribution_sample(kg, &randu);
+	int index = sample_light_bvh(kg, P, randu);
 
 	/* fetch light data */
 	const ccl_global KernelLightDistribution *kdistribution = &kernel_tex_fetch(__light_distribution, index);

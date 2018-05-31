@@ -44,7 +44,7 @@ COMMANDLINE=$@
 
 DISTRO=""
 RPM=""
-SRC="$HOME/src/blender-deps"
+SRC="$HOME/Programming/blender-git/src/blender-deps"
 INST="/opt/lib"
 TMP="/tmp"
 CWD=$PWD

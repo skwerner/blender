@@ -1085,7 +1085,7 @@ ccl_device float calc_node_importance(KernelGlobals *kg, float3 P, int node_offs
     float4 node2 = kernel_tex_fetch(__light_tree_nodes, node_offset + 2);
     float4 node3 = kernel_tex_fetch(__light_tree_nodes, node_offset + 3);
 
-    float energy = node0[0]; // TODO: This energy is not set correctly on host
+    float energy = node0[0];
     float3 bboxMin = make_float3( node1[0], node1[1], node1[2]);
     float3 bboxMax = make_float3( node1[3], node2[0], node2[1]);
     float theta_o = node2[2];
@@ -1111,9 +1111,10 @@ ccl_device void update_parent_node(KernelGlobals *kg, int node_offset,
     (*nemitters)       = __float_as_int(node[3]);
 }
 
-ccl_device int sample_light_bvh(KernelGlobals *kg, float3 P, float randu)
+ccl_device int sample_light_bvh(KernelGlobals *kg, float3 P, float randu, float *pdf_factor)
 {
     int index = -1;
+    *pdf_factor = 1.0f;
 
     /* read in first part of root node of light BVH */
     int secondChildOffset, distribution_id, nemitters;
@@ -1130,6 +1131,7 @@ ccl_device int sample_light_bvh(KernelGlobals *kg, float3 P, float randu)
                  light_distribution_sample(kg, &randu); // TODO: Rescale random number in a better way
                  int light = min((int)(randu* (float)nemitters), nemitters-1);
                  index = distribution_id +light;
+                 *pdf_factor *= 1.0f / (float)nemitters;
              }
              break;
         } else { // Interior node, pick left or right randomly
@@ -1145,8 +1147,10 @@ ccl_device int sample_light_bvh(KernelGlobals *kg, float3 P, float randu)
             light_distribution_sample(kg, &randu); // TODO: Rescale random number in a better way
             if(randu <= P_L){ // Going down left node
                 offset = child_offsetL;
+                *pdf_factor *= P_L;
             } else { // Going down right node
                 offset = child_offsetR;
+                *pdf_factor *= 1.0f - P_L;
             }
 
             /* update parent node info for next iteration */
@@ -1155,7 +1159,7 @@ ccl_device int sample_light_bvh(KernelGlobals *kg, float3 P, float randu)
         }
 
 
-    } while(1);
+    } while(true);
 
     return index;
 }
@@ -1168,9 +1172,15 @@ ccl_device_noinline bool light_sample(KernelGlobals *kg,
                                       int bounce,
                                       LightSample *ls)
 {
+	/* TODO: Restructure PDF calculations now that the light BVH is here */
 	/* sample index */
-	//int index = light_distribution_sample(kg, &randu);
-	int index = sample_light_bvh(kg, P, randu);
+	float pdf_factor = 1.0f;
+	int index = -1;
+	if (kernel_data.integrator.use_light_bvh){
+		index = sample_light_bvh(kg, P, randu, &pdf_factor);
+	} else {
+		index = light_distribution_sample(kg, &randu);
+	}
 
 	/* fetch light data */
 	const ccl_global KernelLightDistribution *kdistribution = &kernel_tex_fetch(__light_distribution, index);
@@ -1182,6 +1192,7 @@ ccl_device_noinline bool light_sample(KernelGlobals *kg,
 
 		triangle_light_sample(kg, prim, object, randu, randv, time, ls, P);
 		ls->shader |= shader_flag;
+		ls->pdf *= pdf_factor;
 		return (ls->pdf > 0.0f);
 	}
 	else {
@@ -1190,8 +1201,9 @@ ccl_device_noinline bool light_sample(KernelGlobals *kg,
 		if(UNLIKELY(light_select_reached_max_bounces(kg, lamp, bounce))) {
 			return false;
 		}
-
-		return lamp_light_sample(kg, lamp, randu, randv, P, ls);
+		lamp_light_sample(kg, lamp, randu, randv, P, ls);
+		ls->pdf *= pdf_factor;
+		return (ls->pdf > 0.0f);
 	}
 }
 

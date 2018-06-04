@@ -536,9 +536,10 @@ void LightManager::device_update_tree_distribution(Device *, DeviceScene *dscene
     size_t num_distribution = num_triangles + num_lights;
     VLOG(1) << "Total " << num_distribution << " of light distribution primitives.";
 
-
     /* create light BVH */
+    double time_start = time_dt();
     LightTree lightBVH(emissivePrims, scene->objects, scene->lights, 1);
+    VLOG(1) << "Light BVH build time: " << time_dt() - time_start;
     emissivePrims.clear();
     if(progress.get_cancel()) return;
 
@@ -627,7 +628,6 @@ void LightManager::device_update_tree_distribution(Device *, DeviceScene *dscene
         distribution[offset].mesh_light.shader_flag = shader_flag;
         distribution[offset].mesh_light.object_id = prim.object_id;
         offset++;
-        VLOG(1) << "Added a mesh light";
 
         int triangle_id = prim.prim_id - mesh->tri_offset;
         Mesh::Triangle t = mesh->get_triangle(triangle_id);
@@ -673,9 +673,6 @@ void LightManager::device_update_tree_distribution(Device *, DeviceScene *dscene
         offset++;
         totarea += lightarea;
 
-        VLOG(1) << "Added a normal light";
-
-
         if(light->size > 0.0f && light->use_mis)
             use_lamp_mis = true;
         if(light->type == LIGHT_BACKGROUND) {
@@ -719,17 +716,9 @@ void LightManager::device_update_tree_distribution(Device *, DeviceScene *dscene
         /* sample one, with 0.5 probability of light or triangle */
         kintegrator->num_all_lights = num_lights;
 
-        if(trianglearea > 0.0f) {
-            kintegrator->pdf_triangles = 1.0f/trianglearea;
-            if(num_lights)
-                kintegrator->pdf_triangles *= 0.5f;
-        }
-
-        if(num_lights) {
-            kintegrator->pdf_lights = 1.0f/num_lights;
-            if(trianglearea > 0.0f)
-                kintegrator->pdf_lights *= 0.5f;
-        }
+        // Let BVH traversal take care of pdf calculations
+        kintegrator->pdf_triangles  = 1.0f;
+        kintegrator->pdf_lights     = 1.0f;
 
         kintegrator->use_lamp_mis = use_lamp_mis;
 
@@ -1160,7 +1149,7 @@ void LightManager::device_update(Device *device, DeviceScene *dscene, Scene *sce
 	if(useMLS) {
 		device_update_tree_distribution(device, dscene, scene, progress);
 	} else {
-	device_update_distribution(device, dscene, scene, progress);
+		device_update_distribution(device, dscene, scene, progress);
 	}
 	if(progress.get_cancel()) return;
 

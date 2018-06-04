@@ -27,6 +27,18 @@ class Object;
 
 #define LIGHT_BVH_NODE_SIZE 4
 
+struct Orientation{ // Orientation bounds
+    Orientation(){
+        axis = make_float3(0.0f,0.0f,0.0f);
+        theta_o = 0;
+        theta_e = 0;
+    }
+
+    float3 axis;
+    float theta_o;
+    float theta_e;
+};
+
 /* Temporary data structure for nodes during build */
 struct BVHBuildNode {
 
@@ -35,36 +47,53 @@ struct BVHBuildNode {
         bbox = BoundBox::empty;
     }
 
-    void init_leaf(unsigned int first, unsigned int n, const BoundBox& b){
+    void init_leaf(unsigned int first, unsigned int n, const BoundBox& b,
+                   const Orientation &c, float e){
         firstPrimOffset = first;
         nPrimitives = n;
         bbox = b;
+        bcone = c;
+        energy = e;
     }
 
-    void init_interior(unsigned int axis, BVHBuildNode *c0, BVHBuildNode *c1){
+    void init_interior(unsigned int axis, BVHBuildNode *c0, BVHBuildNode *c1,
+                       const Orientation &c, float e){
         children[0] = c0;
         children[1] = c1;
         splitAxis = axis;
         bbox = merge(c0->bbox, c1->bbox);
         nPrimitives = 0;
+        bcone = c;
+        energy = e;
     }
 
+    Orientation bcone;
     BoundBox bbox;
     BVHBuildNode *children[2];
     unsigned int splitAxis, firstPrimOffset, nPrimitives;
+    float energy;
 };
 
 struct BVHPrimitiveInfo {
     BVHPrimitiveInfo() {
         bbox = BoundBox::empty;
     }
-    BVHPrimitiveInfo(unsigned int primitiveNumber, const BoundBox &bounds)
+    BVHPrimitiveInfo(unsigned int primitiveNumber, const BoundBox &bounds,
+                     const Orientation& oBounds, float e)
         : primitiveNumber(primitiveNumber),
           bbox(bounds),
-          centroid(bounds.center()) {}
+          centroid(bounds.center()),
+          energy(e)
+    {
+        bcone.axis = oBounds.axis;
+        bcone.theta_o = oBounds.theta_o;
+        bcone.theta_e = oBounds.theta_e;
+    }
     unsigned int primitiveNumber;
     BoundBox bbox;
     float3 centroid;
+    float energy;
+    Orientation bcone;
 };
 
 struct Primitive {
@@ -73,17 +102,29 @@ struct Primitive {
     Primitive(int prim, int object): prim_id(prim), object_id(object) {}
 };
 
-struct CompareToMid {
-    CompareToMid(int d, float m) {
-        dim = d; mid = m;
+struct CompareToBucket {
+    CompareToBucket(int split, int num, int d, const BoundBox &b):
+        centroidBbox(b)
+    {
+        splitBucket = split;
+        nBuckets = num;
+        dim = d;
+        invExtent = 1.0f / (centroidBbox.max[dim] - centroidBbox.min[dim]);
     }
 
-    int dim;
-    float mid;
+    bool operator() (const BVHPrimitiveInfo &p) const {
+        int bucket_id = (int)((float)nBuckets * (p.centroid[dim]-centroidBbox.min[dim]) *
+                        invExtent);
+        if (bucket_id == nBuckets) {
+            bucket_id--;
+        }
 
-    bool operator()(const BVHPrimitiveInfo &a){
-        return a.centroid[dim] < mid;
+        return bucket_id <= splitBucket;
     }
+
+    int splitBucket, nBuckets, dim;
+    float invExtent;
+    const BoundBox &centroidBbox;
 };
 
 // TODO: Have this struct in kernel_types.h instead?
@@ -102,11 +143,7 @@ struct CompactNode {
     int nemitters; // only for leaf
 
     BoundBox bounds_w; // World space bounds
-    struct { // Orientation bounds
-        float3 axis;
-        float theta_o;
-        float theta_e;
-    }bounds_o;
+    Orientation bounds_o; // Orientation bounds
 
 };
 
@@ -128,15 +165,24 @@ public:
 
 private:
 
-    BVHBuildNode* recursive_build(vector<BVHPrimitiveInfo> &buildData,
-                                  unsigned int start,
-                                  unsigned int end,
-                                  unsigned int *totalNodes,
+    BVHBuildNode* recursive_build(const unsigned int start,
+                                  const unsigned int end,
+                                  vector<BVHPrimitiveInfo> &buildData,
+                                  unsigned int &totalNodes,
                                   vector<Primitive> &orderedPrims);
 
     BoundBox get_bbox(const Primitive& prim);
-    int flattenBVHTree(BVHBuildNode *node, int *offset);
-
+    Orientation get_bcone(const Primitive& prim);
+    float get_energy(const Primitive &prim);
+    Orientation aggregate_bounding_cones(const vector<Orientation> &bcones);
+    float calculate_cone_measure(const Orientation &bcone);
+    int flattenBVHTree(const BVHBuildNode &node, int &offset);
+    void split_saoh(const BoundBox &centroidBbox,
+                    const vector<BVHPrimitiveInfo> &buildData,
+                    const int start, const int end, const int nBuckets,
+                    const float node_energy, const float node_M_Omega,
+                    const BoundBox &node_bbox,
+                    float &min_cost, int &min_dim, int &min_bucket);
 
     // Stores an index for each emissive primitive, if < 0 then lamp
     // To be able to find which triangle the id refers to I also need to

@@ -91,9 +91,9 @@ struct CompactNode {
     CompactNode():
     energy(0.0f), secondChildOffset(-1), prim_id(-1), nemitters(-1), bounds_w(BoundBox::empty)
     {
-        axis = make_float3(0.0f);
-        theta_o = 0.0f;
-        theta_e = 0.0f;
+        bounds_o.axis = make_float3(0.0f);
+        bounds_o.theta_o = 0.0f;
+        bounds_o.theta_e = 0.0f;
     }
 
     float energy;

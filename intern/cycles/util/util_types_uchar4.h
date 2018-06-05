@@ -31,6 +31,7 @@ struct uchar4 {
 	__forceinline uchar& operator[](int i);
 };
 
+ccl_device_inline uchar4 make_uchar4(uchar u);
 ccl_device_inline uchar4 make_uchar4(uchar x, uchar y, uchar z, uchar w);
 #endif  /* __KERNEL_GPU__ */
 

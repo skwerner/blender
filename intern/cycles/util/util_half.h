@@ -32,12 +32,12 @@ CCL_NAMESPACE_BEGIN
 
 #define float4_store_half(h, f, scale) vstore_half4(f * (scale), 0, h);
 
-#else
+#else /* __KERNEL_OPENCL__ */
 
 /* CUDA has its own half data type, no need to define then */
 #ifndef __KERNEL_CUDA__
 typedef unsigned short half;
-#endif
+#endif /* __KERNEL_CUDA__ */
 
 struct half4 { half x, y, z, w; };
 
@@ -51,7 +51,7 @@ ccl_device_inline void float4_store_half(half *h, float4 f, float scale)
 	h[3] = __float2half(f.w * scale);
 }
 
-#else
+#else /* __KERNEL_CUDA__ */
 
 ccl_device_inline void float4_store_half(half *h, float4 f, float scale)
 {
@@ -71,23 +71,23 @@ ccl_device_inline void float4_store_half(half *h, float4 f, float scale)
 
 		h[i] = (rshift & 0x7FFF);
 	}
-#else
+#else /*__KERNEL_SSE2__ */
 	/* same as above with SSE */
 	ssef fscale = load4f(f) * scale;
 	ssef x = min(max(fscale, 0.0f), 65504.0f);
 
 #ifdef __KERNEL_AVX2__
 	ssei rpack = _mm_cvtps_ph(x, 0);
-#else
+#else /* __KERNEL_AVX2__ */
 	ssei absolute = cast(x) & 0x7FFFFFFF;
 	ssei Z = absolute + 0xC8000000;
 	ssei result = andnot(absolute < 0x38800000, Z);
 	ssei rshift = (result >> 13) & 0x7FFF;
 	ssei rpack = _mm_packs_epi32(rshift, rshift);
-#endif
+#endif /* __KERNEL_AVX2__ */
 
 	_mm_storel_pi((__m64*)h, _mm_castsi128_ps(rpack));
-#endif
+#endif /*__KERNEL_SSE2__ */
 }
 
 ccl_device_inline float half_to_float(half h)
@@ -133,11 +133,22 @@ ccl_device_inline half float_to_half(float f)
 	return (value_bits | sign_bit);
 }
 
-#endif
+ccl_device_inline half4 make_half4(half h)
+{
+	half4 a = {h, h, h, h};
+	return a;
+}
 
-#endif
+ccl_device_inline half4 make_half4(half x, half y, half z, half w)
+{
+	half4 a = {x, y, z, w};
+	return a;
+}
+
+#endif /* __KERNEL_CUDA__ */
+
+#endif /* __KERNEL_OPENCL__ */
 
 CCL_NAMESPACE_END
 
 #endif /* __UTIL_HALF_H__ */
-

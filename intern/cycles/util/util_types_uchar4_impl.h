@@ -38,6 +38,12 @@ uchar& uchar4::operator[](int i)
 	return *(&x + i);
 }
 
+ccl_device_inline uchar4 make_uchar4(uchar u)
+{
+	uchar4 a = {u, u, u, u};
+	return a;
+}
+
 ccl_device_inline uchar4 make_uchar4(uchar x, uchar y, uchar z, uchar w)
 {
 	uchar4 a = {x, y, z, w};

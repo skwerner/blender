@@ -21,8 +21,7 @@
 
 CCL_NAMESPACE_BEGIN
 
-template<typename T, bool is_tile = false>
-struct TextureInterpolator  {
+template<typename T> struct TextureInterpolator  {
 #define SET_CUBIC_SPLINE_WEIGHTS(u, t) \
 	{ \
 		u[0] = (((-1.0f/6.0f)* t + 0.5f) * t - 0.5f) * t + (1.0f/6.0f); \
@@ -282,10 +281,13 @@ struct TextureInterpolator  {
 				return make_float4(0.0f);
 		}
 
-		if(is_tile) {
-			const SparseTile *data = (const SparseTile*)info.data;
-			const int *ofs = (const int*)info.offsets;
-			return read(get_value(data, ofs, ix, iy, iz, width, height, depth));
+		const int *ofs = (const int*)info.offsets;
+		if(ofs) {
+			const SparseTile<T> *data = (const SparseTile<T>*)info.data;
+			return read(get_value<T>(data, ofs, ix, iy, iz,
+			                         compute_tile_resolution(width),
+			                         compute_tile_resolution(height),
+			                         compute_tile_resolution(depth)));
 		}
 		else {
 			const T *data = (const T*)info.data;
@@ -338,23 +340,26 @@ struct TextureInterpolator  {
 		}
 
 		float4 r;
+		const int *ofs = (const int*)info.offsets;
 
-		if(is_tile) {
-			const SparseTile *data = (const SparseTile*)info.data;
-			const int *ofs = (const int*)info.offsets;
+		if(ofs) {
+			const SparseTile<T> *data = (const SparseTile<T>*)info.data;
+			int tiw = compute_tile_resolution(width);
+			int tih = compute_tile_resolution(height);
+			int tid = compute_tile_resolution(depth);
 			/* Initial check if either voxel is in an active tile. */
-			if(!is_active(ofs, ix, iy, iz, width, height, depth) &&
-			   !is_active(ofs, nix, niy, niz, width, height, depth)) {
+			if(!tile_is_active(ofs, ix, iy, iz, tiw, tih, tid) &&
+			   !tile_is_active(ofs, nix, niy, niz, tiw, tih, tid)) {
 				return make_float4(0.0f);
 			}
-			r  = (1.0f - tz)*(1.0f - ty)*(1.0f - tx) * read(get_value(data, ofs, ix,  iy,  iz,  width, height, depth));
-			r += (1.0f - tz)*(1.0f - ty)*tx			 * read(get_value(data, ofs, nix, iy,  iz,  width, height, depth));
-			r += (1.0f - tz)*ty*(1.0f - tx)			 * read(get_value(data, ofs, ix,  niy, iz,  width, height, depth));
-			r += (1.0f - tz)*ty*tx					 * read(get_value(data, ofs, nix, niy, iz,  width, height, depth));
-			r += tz*(1.0f - ty)*(1.0f - tx)			 * read(get_value(data, ofs, ix,  iy,  niz, width, height, depth));
-			r += tz*(1.0f - ty)*tx					 * read(get_value(data, ofs, nix, iy,  niz, width, height, depth));
-			r += tz*ty*(1.0f - tx)					 * read(get_value(data, ofs, ix,  niy, niz, width, height, depth));
-			r += tz*ty*tx							 * read(get_value(data, ofs, nix, niy, niz, width, height, depth));
+			r  = (1.0f - tz)*(1.0f - ty)*(1.0f - tx) * read(get_value<T>(data, ofs, ix,  iy,  iz,  tiw, tih, tid));
+			r += (1.0f - tz)*(1.0f - ty)*tx			 * read(get_value<T>(data, ofs, nix, iy,  iz,  tiw, tih, tid));
+			r += (1.0f - tz)*ty*(1.0f - tx)			 * read(get_value<T>(data, ofs, ix,  niy, iz,  tiw, tih, tid));
+			r += (1.0f - tz)*ty*tx					 * read(get_value<T>(data, ofs, nix, niy, iz,  tiw, tih, tid));
+			r += tz*(1.0f - ty)*(1.0f - tx)			 * read(get_value<T>(data, ofs, ix,  iy,  niz, tiw, tih, tid));
+			r += tz*(1.0f - ty)*tx					 * read(get_value<T>(data, ofs, nix, iy,  niz, tiw, tih, tid));
+			r += tz*ty*(1.0f - tx)					 * read(get_value<T>(data, ofs, ix,  niy, niz, tiw, tih, tid));
+			r += tz*ty*tx							 * read(get_value<T>(data, ofs, nix, niy, niz, tiw, tih, tid));
 		}
 		else {
 			const T *data = (const T*)info.data;
@@ -384,8 +389,6 @@ struct TextureInterpolator  {
 #endif
 	float4 interp_3d_tricubic(const TextureInfo& info, float x, float y, float z)
 	{
-		/* todo (gchua): add tile support for this */
-		kernel_assert(!is_tile);
 		int width = info.width;
 		int height = info.height;
 		int depth = info.depth;
@@ -538,8 +541,6 @@ ccl_device float4 kernel_tex_image_interp_3d(KernelGlobals *kg, int id, float x,
 			return TextureInterpolator<half4>::interp_3d(info, x, y, z, interp);
 		case IMAGE_DATA_TYPE_BYTE4:
 			return TextureInterpolator<uchar4>::interp_3d(info, x, y, z, interp);
-		case IMAGE_DATA_TYPE_VOLUME:
-			return TextureInterpolator<float4, true>::interp_3d(info, x, y, z, interp);
 		case IMAGE_DATA_TYPE_FLOAT4:
 		default:
 			return TextureInterpolator<float4>::interp_3d(info, x, y, z, interp);

@@ -307,6 +307,7 @@ void ImageTextureNode::compile(SVMCompiler& compiler)
 		                                interpolation,
 		                                extension,
 		                                use_alpha,
+		                                false,
 		                                metadata);
 		is_float = metadata.is_float;
 		is_linear = metadata.is_linear;
@@ -372,6 +373,7 @@ void ImageTextureNode::compile(OSLCompiler& compiler)
 			                                interpolation,
 			                                extension,
 			                                use_alpha,
+			                                false,
 			                                metadata);
 		}
 		is_float = metadata.is_float;
@@ -502,6 +504,7 @@ void EnvironmentTextureNode::compile(SVMCompiler& compiler)
 		                                interpolation,
 		                                EXTENSION_REPEAT,
 		                                use_alpha,
+		                                false,
 		                                metadata);
 		is_float = metadata.is_float;
 		is_linear = metadata.is_linear;
@@ -558,6 +561,7 @@ void EnvironmentTextureNode::compile(OSLCompiler& compiler)
 			                                interpolation,
 			                                EXTENSION_REPEAT,
 			                                use_alpha,
+			                                false,
 			                                metadata);
 		}
 		is_float = metadata.is_float;
@@ -1502,11 +1506,14 @@ void PointDensityTextureNode::compile(SVMCompiler& compiler)
 	if(use_density || use_color) {
 		if(slot == -1) {
 			ImageMetaData metadata;
-			slot = image_manager->add_image(filename.string(), builtin_data,
-			                                false, 0,
+			slot = image_manager->add_image(filename.string(),
+			                                builtin_data,
+			                                false,
+			                                0,
 			                                interpolation,
 			                                EXTENSION_CLIP,
 			                                true,
+			                                false,
 			                                metadata);
 		}
 
@@ -1553,11 +1560,14 @@ void PointDensityTextureNode::compile(OSLCompiler& compiler)
 	if(use_density || use_color) {
 		if(slot == -1) {
 			ImageMetaData metadata;
-			slot = image_manager->add_image(filename.string(), builtin_data,
-			                                false, 0,
+			slot = image_manager->add_image(filename.string(),
+			                                builtin_data,
+			                                false,
+			                                0,
 			                                interpolation,
 			                                EXTENSION_CLIP,
 			                                true,
+			                                false,
 			                                metadata);
 		}
 

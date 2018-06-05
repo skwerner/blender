@@ -24,7 +24,6 @@
 #include "util/util_string.h"
 #include "util/util_thread.h"
 #include "util/util_vector.h"
-#include "util/util_sparse_grid.h"
 
 CCL_NAMESPACE_BEGIN
 
@@ -35,7 +34,7 @@ class Scene;
 class ImageMetaData {
 public:
 	/* Must be set by image file or builtin callback. */
-	bool is_float, is_half, is_volume;
+	bool is_float, is_half;
 	int channels;
 	size_t width, height, depth;
 	bool builtin_free_cache;
@@ -57,6 +56,7 @@ public:
 	              InterpolationType interpolation,
 	              ExtensionType extension,
 	              bool use_alpha,
+	              bool make_sparse,
 	              ImageMetaData& metadata);
 	void remove_image(int flat_slot);
 	void remove_image(const string& filename,
@@ -116,6 +116,7 @@ public:
 		bool use_alpha;
 		bool need_load;
 		bool animated;
+		bool make_sparse;
 		float frame;
 		InterpolationType interpolation;
 		ExtensionType extension;
@@ -152,14 +153,23 @@ private:
 	                     int texture_limit,
 	                     device_vector<DeviceType>& tex_img);
 
+	template<typename StorageType,
+	         typename DeviceType>
+	void file_load_failed(device_vector<DeviceType> *tex_img,
+	                      ImageDataType type);
+
+	template<typename DeviceType>
+	bool file_make_image_sparse(Device *device,
+	                            Image *img,
+	                            device_vector<DeviceType> *tex_dense);
+
 	template<TypeDesc::BASETYPE FileFormat,
 	         typename StorageType,
 	         typename DeviceType>
-	bool file_load_image(Image *img,
-	                     ImageDataType type,
-	                     int texture_limit,
-	                     device_vector<SparseTile>& tex_img,
-	                     device_vector<int>& tex_offsets);
+	void load_image(Device *device,
+	                Image *img,
+	                ImageDataType type,
+	                int texture_limit);
 
 	int max_flattened_slot(ImageDataType type);
 	int type_index_to_flattened_slot(int slot, ImageDataType type);

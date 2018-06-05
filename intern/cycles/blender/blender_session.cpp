@@ -1051,7 +1051,6 @@ void BlenderSession::builtin_image_info(const string &builtin_name,
 		BL::SmokeDomainSettings b_domain = object_smoke_domain_find(b_ob);
 
 		metadata.is_float = true;
-		metadata.is_volume = false;
 		metadata.depth = 1;
 		metadata.channels = 1;
 
@@ -1061,19 +1060,14 @@ void BlenderSession::builtin_image_info(const string &builtin_name,
 		if(builtin_name == Attribute::standard_name(ATTR_STD_VOLUME_DENSITY) ||
 		   builtin_name == Attribute::standard_name(ATTR_STD_VOLUME_FLAME) ||
 		   builtin_name == Attribute::standard_name(ATTR_STD_VOLUME_HEAT) ||
-		   builtin_name == Attribute::standard_name(ATTR_STD_VOLUME_TEMPERATURE)) {
+		   builtin_name == Attribute::standard_name(ATTR_STD_VOLUME_TEMPERATURE))
 			metadata.channels = 1;
-		}
-		else if(builtin_name == Attribute::standard_name(ATTR_STD_VOLUME_COLOR)) {
+		else if(builtin_name == Attribute::standard_name(ATTR_STD_VOLUME_COLOR))
 			metadata.channels = 4;
-			metadata.is_volume = true;
-		}
-		else if(builtin_name == Attribute::standard_name(ATTR_STD_VOLUME_VELOCITY)) {
+		else if(builtin_name == Attribute::standard_name(ATTR_STD_VOLUME_VELOCITY))
 			metadata.channels = 3;
-		}
-		else {
+		else
 			return;
-		}
 
 		int3 resolution = get_int3(b_domain.domain_resolution());
 		int amplify = (b_domain.use_high_resolution())? b_domain.amplify() + 1: 1;

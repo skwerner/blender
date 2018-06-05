@@ -22,6 +22,7 @@
 #include "util/util_logging.h"
 #include "util/util_path.h"
 #include "util/util_progress.h"
+#include "util/util_sparse_grid.h"
 #include "util/util_texture.h"
 
 #ifdef WITH_OSL
@@ -108,10 +109,7 @@ bool ImageManager::get_image_metadata(const string& filename,
 			return false;
 		}
 
-		if(metadata.is_volume) {
-			metadata.type = IMAGE_DATA_TYPE_VOLUME;
-		}
-		else if(metadata.is_float) {
+		if(metadata.is_float) {
 			metadata.is_linear = true;
 			metadata.type = (metadata.channels > 1) ? IMAGE_DATA_TYPE_FLOAT4 : IMAGE_DATA_TYPE_FLOAT;
 		}
@@ -186,10 +184,7 @@ bool ImageManager::get_image_metadata(const string& filename,
 	/* set type and channels */
 	metadata.channels = spec.nchannels;
 
-	if(metadata.is_volume) {
-		metadata.type = IMAGE_DATA_TYPE_VOLUME;
-	}
-	else if(metadata.is_half) {
+	if(metadata.is_half) {
 		metadata.type = (metadata.channels > 1) ? IMAGE_DATA_TYPE_HALF4 : IMAGE_DATA_TYPE_HALF;
 	}
 	else if(metadata.is_float) {
@@ -241,8 +236,6 @@ string ImageManager::name_from_type(int type)
 		return "half4";
 	else if(type == IMAGE_DATA_TYPE_HALF)
 		return "half";
-	else if(type == IMAGE_DATA_TYPE_VOLUME)
-		return "volume";
 	else
 		return "byte4";
 }
@@ -268,6 +261,7 @@ int ImageManager::add_image(const string& filename,
                             InterpolationType interpolation,
                             ExtensionType extension,
                             bool use_alpha,
+                            bool make_sparse,
                             ImageMetaData& metadata)
 {
 	Image *img;
@@ -345,6 +339,7 @@ int ImageManager::add_image(const string& filename,
 	img->extension = extension;
 	img->users = 1;
 	img->use_alpha = use_alpha;
+	img->make_sparse = make_sparse;
 	img->mem = NULL;
 
 	images[type][slot] = img;
@@ -582,7 +577,6 @@ bool ImageManager::file_load_image(Image *img,
 	 * but device doesn't support single channel textures.
 	 */
 	bool is_rgba = (type == IMAGE_DATA_TYPE_FLOAT4 ||
-	                type == IMAGE_DATA_TYPE_VOLUME ||
 	                type == IMAGE_DATA_TYPE_HALF4 ||
 	                type == IMAGE_DATA_TYPE_BYTE4);
 	if(is_rgba) {
@@ -691,85 +685,158 @@ bool ImageManager::file_load_image(Image *img,
 	return true;
 }
 
-
-/* If volume, call this to convert to sparse grid. */
-template<TypeDesc::BASETYPE FileFormat,
-         typename StorageType,
+template<typename StorageType,
          typename DeviceType>
-bool ImageManager::file_load_image(Image *img,
-                                   ImageDataType type,
-                                   int texture_limit,
-                                   device_vector<SparseTile>& tex_img,
-                                   device_vector<int>& tex_offsets)
+void ImageManager::file_load_failed(device_vector<DeviceType> *tex_img,
+                                    ImageDataType type)
 {
+	/* On failure to load, we set a 1x1 pixels pink image. */
+	thread_scoped_lock device_lock(device_mutex);
+	StorageType *pixels = (StorageType*)tex_img->alloc(1, 1);
 
-	device_vector<DeviceType> *tex_img_dense
-		= new device_vector<DeviceType>(NULL, img->mem_name.c_str(), MEM_TEXTURE);
+	switch(type) {
+		case IMAGE_DATA_TYPE_FLOAT4:
+			pixels[0] = TEX_IMAGE_MISSING_R;
+			pixels[1] = TEX_IMAGE_MISSING_G;
+			pixels[2] = TEX_IMAGE_MISSING_B;
+			pixels[3] = TEX_IMAGE_MISSING_A;
+			break;
+		case IMAGE_DATA_TYPE_FLOAT:
+			pixels[0] = TEX_IMAGE_MISSING_R;
+			break;
+		case IMAGE_DATA_TYPE_BYTE4:
+			pixels[0] = (TEX_IMAGE_MISSING_R * 255);
+			pixels[1] = (TEX_IMAGE_MISSING_G * 255);
+			pixels[2] = (TEX_IMAGE_MISSING_B * 255);
+			pixels[3] = (TEX_IMAGE_MISSING_A * 255);
+			break;
+		case IMAGE_DATA_TYPE_BYTE:
+			pixels[0] = (TEX_IMAGE_MISSING_R * 255);
+			break;
+		case IMAGE_DATA_TYPE_HALF4:
+			pixels[0] = TEX_IMAGE_MISSING_R;
+			pixels[1] = TEX_IMAGE_MISSING_G;
+			pixels[2] = TEX_IMAGE_MISSING_B;
+			pixels[3] = TEX_IMAGE_MISSING_A;
+			break;
+		case IMAGE_DATA_TYPE_HALF:
+			pixels[0] = TEX_IMAGE_MISSING_R;
+			break;
+		default:
+			assert(0);
+	}
+}
 
-	if(!file_load_image<FileFormat, StorageType, DeviceType>(img,
-	                                                         type,
-	                                                         texture_limit,
-	                                                         *tex_img_dense))
-	{
-		/* Release temporary pointer. */
-		delete tex_img_dense;
-		tex_img_dense = NULL;
+template<typename DeviceType>
+bool ImageManager::file_make_image_sparse(Device *device,
+                                          Image *img,
+                                          device_vector<DeviceType> *tex_dense)
+{
+	device_vector<SparseTile<DeviceType>> *tex_sparse
+	        = new device_vector<SparseTile<DeviceType>>(device,
+	                                                    (img->mem_name).c_str(),
+	                                                    MEM_TEXTURE);
+	device_vector<int> *tex_offsets
+	        = new device_vector<int>(device,
+	                                 (img->mem_name + "_offsets").c_str(),
+	                                 MEM_TEXTURE);
+
+	vector<SparseTile<DeviceType>> sparse_grid;
+	vector<int> offsets;
+	int active_tile_count = create_sparse_grid<DeviceType>(
+	                            tex_dense->data(),
+	                            tex_dense->data_width,
+	                            tex_dense->data_height,
+	                            tex_dense->data_depth,
+	                            &sparse_grid,
+	                            &offsets);
+
+	if(active_tile_count < 1) {
+		VLOG(1) << "Could not make sparse grid for "
+		        << path_filename(img->filename) << " (" << img->mem_name << ")"
+		        << ", no active tiles";
+		delete tex_sparse;
+		delete tex_offsets;
+		tex_sparse = NULL;
+		tex_offsets = NULL;
 		return false;
 	}
 
-	DeviceType *data = tex_img_dense->data();
-	size_t tile_width = compute_tile_resolution(tex_img_dense->data_width);
-	size_t tile_height = compute_tile_resolution(tex_img_dense->data_height);
-	size_t tile_depth = compute_tile_resolution(tex_img_dense->data_depth);
-
-	vector<SparseTile> sparse_grid;
-	vector<int> offsets;
-	/* Sample threshold value for now. */
-	float4 threshold = make_float4(0.0f);
-	int active_tile_count = create_sparse_grid(data, threshold,
-										       tex_img_dense->data_width,
-											   tex_img_dense->data_height,
-											   tex_img_dense->data_depth,
-											   &sparse_grid, &offsets);
-
-	if(active_tile_count < 1) {
-		/* to-do (gchua): handle this. */
-	}
-
-	SparseTile *texture_pixels;
+	SparseTile<DeviceType> *texture_pixels;
 	int *texture_offsets;
+	int tiw = compute_tile_resolution(tex_dense->data_width);
+	int tih = compute_tile_resolution(tex_dense->data_height);
+	int tid = compute_tile_resolution(tex_dense->data_depth);
+
 	{
-		/* Since only active tiles are stored in tex_img, its
+		/* Since only active tiles are stored in tex_sparse, its
 		 * allocated memory will be <= the actual resolution
 		 * of the volume. We store the true resolution (in tiles) in the
 		 * tex_offsets instead, since it needs to be allocated enough
 		 * space to track all tiles anyway. */
 		thread_scoped_lock device_lock(device_mutex);
-		texture_pixels = (SparseTile*)tex_img.alloc(active_tile_count);
-		texture_offsets = (int*)tex_offsets.alloc(tile_width,
-												 tile_height,
-												 tile_depth);
+		texture_pixels = (SparseTile<DeviceType>*)tex_sparse->alloc(active_tile_count);
+		texture_offsets = (int*)tex_offsets->alloc(tiw, tih, tid);
 	}
 
-	memcpy(texture_offsets,
+	memcpy(&texture_offsets[0],
 		   &offsets[0],
 		   offsets.size() * sizeof(int));
-	memcpy(texture_pixels,
+	memcpy(&texture_pixels[0],
 		   &sparse_grid[0],
-		   active_tile_count * sizeof(SparseTile));
+		   active_tile_count * sizeof(SparseTile<DeviceType>));
 
-	VLOG(1) << "Memory usage of dense grid '" << img->filename << "': "
-		    << string_human_readable_size(tex_img_dense->memory_size());
-	VLOG(1) << "Memory usage of sparse grid '" << img->filename << "': "
-	        << string_human_readable_size(tex_img.memory_size());
-	VLOG(1) << "Memory usage of auxiliary index: "
-	        << string_human_readable_size(tex_offsets.memory_size());
+	img->mem = tex_sparse;
+	img->mem->interpolation = img->interpolation;
+	img->mem->extension = img->extension;
+	img->mem->offsets = tex_offsets;
 
-	/* Release temporary pointer. */
-	delete tex_img_dense;
-	tex_img_dense = NULL;
+	thread_scoped_lock device_lock(device_mutex);
+	tex_sparse->copy_to_device();
+
+	VLOG(1) << "Original memory usage of '"
+	        << path_filename(img->filename) << "' (" << img->mem_name << "): "
+	        << string_human_readable_size(tex_dense->memory_size());
 
 	return true;
+}
+
+template<TypeDesc::BASETYPE FileFormat,
+         typename StorageType,
+         typename DeviceType>
+void ImageManager::load_image(Device *device,
+                              Image *img,
+                              ImageDataType type,
+                              int texture_limit)
+{
+	device_vector<DeviceType> *tex_img
+	        = new device_vector<DeviceType>(device,
+	                                        img->mem_name.c_str(),
+	                                        MEM_TEXTURE);
+
+	if(!file_load_image<FileFormat, StorageType, DeviceType>(img,
+	                                                         type,
+	                                                         texture_limit,
+	                                                         *tex_img)) {
+		VLOG(1) << "Failed to load "
+		        << path_filename(img->filename) << " (" << img->mem_name << ")";
+		file_load_failed<StorageType, DeviceType>(tex_img, type);
+	}
+
+	if(img->make_sparse) {
+		if(file_make_image_sparse<DeviceType>(device, img, tex_img)) {
+			delete tex_img;
+			tex_img = NULL;
+		}
+	}
+
+	if(tex_img) {
+		img->mem = tex_img;
+		img->mem->interpolation = img->interpolation;
+		img->mem->extension = img->extension;
+		thread_scoped_lock device_lock(device_mutex);
+		tex_img->copy_to_device();
+	}
 }
 
 void ImageManager::device_load_image(Device *device,
@@ -807,198 +874,27 @@ void ImageManager::device_load_image(Device *device,
 	}
 
 	/* Create new texture. */
-	if(type == IMAGE_DATA_TYPE_FLOAT4) {
-		device_vector<float4> *tex_img
-			= new device_vector<float4>(device, img->mem_name.c_str(), MEM_TEXTURE);
-
-		if(!file_load_image<TypeDesc::FLOAT, float>(img,
-		                                            type,
-		                                            texture_limit,
-		                                            *tex_img))
-		{
-			/* on failure to load, we set a 1x1 pixels pink image */
-			thread_scoped_lock device_lock(device_mutex);
-			float *pixels = (float*)tex_img->alloc(1, 1);
-
-			pixels[0] = TEX_IMAGE_MISSING_R;
-			pixels[1] = TEX_IMAGE_MISSING_G;
-			pixels[2] = TEX_IMAGE_MISSING_B;
-			pixels[3] = TEX_IMAGE_MISSING_A;
-		}
-
-		img->mem = tex_img;
-		img->mem->interpolation = img->interpolation;
-		img->mem->extension = img->extension;
-
-		thread_scoped_lock device_lock(device_mutex);
-		tex_img->copy_to_device();
-	}
-	else if(type == IMAGE_DATA_TYPE_FLOAT) {
-		device_vector<float> *tex_img
-			= new device_vector<float>(device, img->mem_name.c_str(), MEM_TEXTURE);
-
-		if(!file_load_image<TypeDesc::FLOAT, float>(img,
-		                                            type,
-		                                            texture_limit,
-		                                            *tex_img))
-		{
-			/* on failure to load, we set a 1x1 pixels pink image */
-			thread_scoped_lock device_lock(device_mutex);
-			float *pixels = (float*)tex_img->alloc(1, 1);
-
-			pixels[0] = TEX_IMAGE_MISSING_R;
-		}
-
-		img->mem = tex_img;
-		img->mem->interpolation = img->interpolation;
-		img->mem->extension = img->extension;
-
-		thread_scoped_lock device_lock(device_mutex);
-		tex_img->copy_to_device();
-	}
-	else if(type == IMAGE_DATA_TYPE_BYTE4) {
-		device_vector<uchar4> *tex_img
-			= new device_vector<uchar4>(device, img->mem_name.c_str(), MEM_TEXTURE);
-
-		if(!file_load_image<TypeDesc::UINT8, uchar>(img,
-		                                            type,
-		                                            texture_limit,
-		                                            *tex_img))
-		{
-			/* on failure to load, we set a 1x1 pixels pink image */
-			thread_scoped_lock device_lock(device_mutex);
-			uchar *pixels = (uchar*)tex_img->alloc(1, 1);
-
-			pixels[0] = (TEX_IMAGE_MISSING_R * 255);
-			pixels[1] = (TEX_IMAGE_MISSING_G * 255);
-			pixels[2] = (TEX_IMAGE_MISSING_B * 255);
-			pixels[3] = (TEX_IMAGE_MISSING_A * 255);
-		}
-
-		img->mem = tex_img;
-		img->mem->interpolation = img->interpolation;
-		img->mem->extension = img->extension;
-
-		thread_scoped_lock device_lock(device_mutex);
-		tex_img->copy_to_device();
-	}
-	else if(type == IMAGE_DATA_TYPE_BYTE) {
-		device_vector<uchar> *tex_img
-			= new device_vector<uchar>(device, img->mem_name.c_str(), MEM_TEXTURE);
-
-		if(!file_load_image<TypeDesc::UINT8, uchar>(img,
-		                                            type,
-		                                            texture_limit,
-		                                            *tex_img)) {
-			/* on failure to load, we set a 1x1 pixels pink image */
-			thread_scoped_lock device_lock(device_mutex);
-			uchar *pixels = (uchar*)tex_img->alloc(1, 1);
-
-			pixels[0] = (TEX_IMAGE_MISSING_R * 255);
-		}
-
-		img->mem = tex_img;
-		img->mem->interpolation = img->interpolation;
-		img->mem->extension = img->extension;
-
-		thread_scoped_lock device_lock(device_mutex);
-		tex_img->copy_to_device();
-	}
-	else if(type == IMAGE_DATA_TYPE_HALF4) {
-		device_vector<half4> *tex_img
-			= new device_vector<half4>(device, img->mem_name.c_str(), MEM_TEXTURE);
-
-		if(!file_load_image<TypeDesc::HALF, half>(img,
-		                                          type,
-		                                          texture_limit,
-		                                          *tex_img)) {
-			/* on failure to load, we set a 1x1 pixels pink image */
-			thread_scoped_lock device_lock(device_mutex);
-			half *pixels = (half*)tex_img->alloc(1, 1);
-
-			pixels[0] = TEX_IMAGE_MISSING_R;
-			pixels[1] = TEX_IMAGE_MISSING_G;
-			pixels[2] = TEX_IMAGE_MISSING_B;
-			pixels[3] = TEX_IMAGE_MISSING_A;
-		}
-
-		img->mem = tex_img;
-		img->mem->interpolation = img->interpolation;
-		img->mem->extension = img->extension;
-
-		thread_scoped_lock device_lock(device_mutex);
-		tex_img->copy_to_device();
-	}
-	else if(type == IMAGE_DATA_TYPE_HALF) {
-		device_vector<half> *tex_img
-			= new device_vector<half>(device, img->mem_name.c_str(), MEM_TEXTURE);
-
-		if(!file_load_image<TypeDesc::HALF, half>(img,
-		                                          type,
-		                                          texture_limit,
-		                                          *tex_img)) {
-			/* on failure to load, we set a 1x1 pixels pink image */
-			thread_scoped_lock device_lock(device_mutex);
-			half *pixels = (half*)tex_img->alloc(1, 1);
-
-			pixels[0] = TEX_IMAGE_MISSING_R;
-		}
-
-		img->mem = tex_img;
-		img->mem->interpolation = img->interpolation;
-		img->mem->extension = img->extension;
-
-		thread_scoped_lock device_lock(device_mutex);
-		tex_img->copy_to_device();
-	}
-	else if(type == IMAGE_DATA_TYPE_VOLUME) {
-		device_vector<SparseTile> *tex_img
-			= new device_vector<SparseTile>(device, img->mem_name.c_str(), MEM_TEXTURE);
-		device_vector<int> *tex_offsets
-			= new device_vector<int>(device, (img->mem_name + "_offsets").c_str(), MEM_TEXTURE);
-
-		if(!file_load_image<TypeDesc::FLOAT, float, float4>(img,
-															type,
-															texture_limit,
-															*tex_img,
-															*tex_offsets))
-		{
-			/* Clear pointers. */
-			delete tex_img;
-			delete tex_offsets;
-			tex_img = NULL;
-			tex_offsets = NULL;
-
-			/* on failure to load, we set a 1x1 pixels pink image (float4) */
-			device_vector<float4> *tex_fail
-				= new device_vector<float4>(device, img->mem_name.c_str(), MEM_TEXTURE);
-
-			thread_scoped_lock device_lock(device_mutex);
-			float *pixels = (float*)tex_fail->alloc(1, 1);
-
-			pixels[0] = TEX_IMAGE_MISSING_R;
-			pixels[1] = TEX_IMAGE_MISSING_G;
-			pixels[2] = TEX_IMAGE_MISSING_B;
-			pixels[3] = TEX_IMAGE_MISSING_A;
-
-			img->mem = tex_fail;
-			img->mem->interpolation = img->interpolation;
-			img->mem->extension = img->extension;
-			tex_fail->copy_to_device();
-		}
-		else {
-			img->mem = tex_img;
-			img->mem->interpolation = img->interpolation;
-			img->mem->extension = img->extension;
-			img->mem->offets = tex_offsets;
-			/* Need to set interpolation so that tex_alloc() will treat
-			 * tex_offsets as a image instead of data texture. */
-			tex_offsets->interpolation = img->interpolation;
-
-			thread_scoped_lock device_lock(device_mutex);
-			tex_img->copy_to_device();
-			tex_offsets->copy_to_device();
-		}
+	switch(type) {
+		case IMAGE_DATA_TYPE_FLOAT4:
+			load_image<TypeDesc::FLOAT, float, float4>(device, img, type, texture_limit);
+			break;
+		case IMAGE_DATA_TYPE_FLOAT:
+			load_image<TypeDesc::FLOAT, float, float>(device, img, type, texture_limit);
+			break;
+		case IMAGE_DATA_TYPE_BYTE4:
+			load_image<TypeDesc::UINT8, uchar, uchar4>(device, img, type, texture_limit);
+			break;
+		case IMAGE_DATA_TYPE_BYTE:
+			load_image<TypeDesc::UINT8, uchar, uchar>(device, img, type, texture_limit);
+			break;
+		case IMAGE_DATA_TYPE_HALF4:
+			load_image<TypeDesc::HALF, half, half4>(device, img, type, texture_limit);
+			break;
+		case IMAGE_DATA_TYPE_HALF:
+			load_image<TypeDesc::HALF, half, half>(device, img, type, texture_limit);
+			break;
+		default:
+			assert(0);
 	}
 
 	img->need_load = false;
@@ -1007,6 +903,7 @@ void ImageManager::device_load_image(Device *device,
 void ImageManager::device_free_image(Device *, ImageDataType type, int slot)
 {
 	Image *img = images[type][slot];
+	VLOG(1) << "Freeing " << img->mem_name;
 
 	if(img) {
 		if(osl_texture_system && !img->builtin_data) {
@@ -1018,6 +915,9 @@ void ImageManager::device_free_image(Device *, ImageDataType type, int slot)
 
 		if(img->mem) {
 			thread_scoped_lock device_lock(device_mutex);
+			if(img->mem->offsets){
+				delete img->mem->offsets;
+			}
 			delete img->mem;
 		}
 

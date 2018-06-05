@@ -23,21 +23,6 @@
 
 CCL_NAMESPACE_BEGIN
 
-namespace {
-
-template<typename T>
-const T *util_image_read(const vector<T>& pixels,
-                         const size_t width,
-                         const size_t height,
-                         const size_t /*depth*/,
-                         const size_t components,
-                         const size_t x, const size_t y, const size_t z) {
-	const size_t index = ((size_t)z * (width * height) +
-	                      (size_t)y * width +
-	                      (size_t)x) * components;
-	return &pixels[index];
-}
-
 /* Cast input pixel from unknown storage to float. */
 template<typename T>
 inline float cast_to_float(T value);
@@ -82,6 +67,36 @@ template<>
 inline half cast_from_float(float value)
 {
 	return float_to_half(value);
+}
+template<>
+inline float4 cast_from_float(float value)
+{
+	return make_float4(value);
+}
+template<>
+inline uchar4 cast_from_float(float value)
+{
+	return make_uchar4(cast_from_float<uchar>(value));
+}
+template<>
+inline half4 cast_from_float(float value)
+{
+	return make_half4(cast_from_float<half>(value));
+}
+
+namespace {
+
+template<typename T>
+const T *util_image_read(const vector<T>& pixels,
+                         const size_t width,
+                         const size_t height,
+                         const size_t /*depth*/,
+                         const size_t components,
+                         const size_t x, const size_t y, const size_t z) {
+	const size_t index = ((size_t)z * (width * height) +
+	                      (size_t)y * width +
+	                      (size_t)x) * components;
+	return &pixels[index];
 }
 
 template<typename T>

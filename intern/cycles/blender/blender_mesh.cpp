@@ -342,6 +342,7 @@ static void create_mesh_volume_attribute(BL::Object& b_ob,
 	ImageMetaData metadata;
 	bool animated = false;
 	bool use_alpha = true;
+	bool make_sparse = true;
 
 	volume_data->manager = image_manager;
 	volume_data->slot = image_manager->add_image(
@@ -352,6 +353,7 @@ static void create_mesh_volume_attribute(BL::Object& b_ob,
 	        INTERPOLATION_LINEAR,
 	        EXTENSION_CLIP,
 	        use_alpha,
+	        make_sparse,
 	        metadata);
 }
 

@@ -524,7 +524,9 @@ ccl_device void kernel_branched_path_integrate(KernelGlobals *kg,
           } while (state.volume_stack[j].shader != SHADER_NONE);
           --i;
         }
-        state.volume_stack[i].t_enter = 0.0f;
+        if (i > 0) {
+          state.volume_stack[i].t_enter = 0.0f;
+        }
       }
       volume_ray.P = save_p;
     }

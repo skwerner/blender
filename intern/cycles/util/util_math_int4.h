@@ -40,6 +40,11 @@ ccl_device_inline int4 clamp(const int4& a, const int4& mn, const int4& mx);
 ccl_device_inline int4 select(const int4& mask, const int4& a, const int4& b);
 #endif  /* __KERNEL_GPU__ */
 
+#ifndef __KERNEL_OPENCL__
+ccl_device_inline bool any(const int4& a);
+ccl_device_inline bool all(const int4& a);
+#endif  /* __KERNEL_OPENCL__ */
+
 /*******************************************************************************
  * Definition.
  */
@@ -131,6 +136,18 @@ ccl_device_inline int4 load_int4(const int *v)
 #endif
 }
 #endif  /* __KERNEL_GPU__ */
+
+#ifndef __KERNEL_OPENCL__
+ccl_device_inline bool any(const int4& a)
+{
+	return a.x || a.y || a.z || a.w;
+}
+
+ccl_device_inline bool all(const int4& a)
+{
+	return a.x && a.y && a.z && a.w;
+}
+#endif  /* __KERNEL_OPENCL__ */
 
 CCL_NAMESPACE_END
 

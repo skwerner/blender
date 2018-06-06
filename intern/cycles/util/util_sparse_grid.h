@@ -38,16 +38,11 @@
 
 CCL_NAMESPACE_BEGIN
 
-/* For some type4 textures (e.g. color), they may still be
- * considered active even if at least one of their values
- * is beneath the threshold. Thus, we require a custom
- * function using ORs instead of ANDs.
- */
 namespace {
 	inline bool gt(float a, float b) { return a > b; }
 	inline bool gt(uchar a, uchar b) { return a > b; }
 	inline bool gt(half a, half b) { return a > b; }
-	inline bool gt(float4 a, float4 b) { return a.x > b.x || a.y > b.y || a.z > b.z || a.w > b.w; }
+	inline bool gt(float4 a, float4 b) { return any(b < a); }
 	inline bool gt(uchar4 a, uchar4 b) { return a.x > b.x || a.y > b.y || a.z > b.z || a.w > b.w; }
 	inline bool gt(half4 a, half4 b) { return a.x > b.x || a.y > b.y || a.z > b.z || a.w > b.w; }
 }
@@ -66,6 +61,12 @@ const inline int compute_index(const size_t x, const size_t y, const size_t z,
 		return -1;
 	}
 	return x + width * (y + z * height);
+}
+
+const inline int compute_index(const size_t x, const size_t y, const size_t z,
+                               const int3 resolution)
+{
+	return compute_index(x, y, z, resolution.x, resolution.y, resolution.z);
 }
 
 const inline int3 compute_coordinates(const size_t index, const size_t width,

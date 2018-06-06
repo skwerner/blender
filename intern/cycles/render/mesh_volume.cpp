@@ -21,26 +21,10 @@
 #include "util/util_foreach.h"
 #include "util/util_logging.h"
 #include "util/util_progress.h"
+#include "util/util_sparse_grid.h"
 #include "util/util_types.h"
 
 CCL_NAMESPACE_BEGIN
-
-static size_t compute_voxel_index(const int3 &resolution, size_t x, size_t y, size_t z)
-{
-	if(x == -1 || x >= resolution.x) {
-		return -1;
-	}
-
-	if(y == -1 || y >= resolution.y) {
-		return -1;
-	}
-
-	if(z == -1 || z >= resolution.z) {
-		return -1;
-	}
-
-	return x + y*resolution.x + z*resolution.x*resolution.y;
-}
 
 struct QuadData {
 	int v0, v1, v2, v3;
@@ -200,7 +184,7 @@ void VolumeMeshBuilder::add_node(int x, int y, int z)
 
 	assert((index_x >= 0) && (index_y >= 0) && (index_z >= 0));
 
-	const size_t index = compute_voxel_index(res, index_x, index_y, index_z);
+	const size_t index = compute_index(index_x, index_y, index_z, res);
 
 	/* We already have a node here. */
 	if(grid[index] == 1) {
@@ -253,7 +237,7 @@ void VolumeMeshBuilder::generate_vertices_and_quads(
 	for(int z = 0; z < res.z; ++z) {
 		for(int y = 0; y < res.y; ++y) {
 			for(int x = 0; x < res.x; ++x) {
-				size_t voxel_index = compute_voxel_index(res, x, y, z);
+				size_t voxel_index = compute_index(x, y, z, res);
 				if(grid[voxel_index] == 0) {
 					continue;
 				}
@@ -281,32 +265,32 @@ void VolumeMeshBuilder::generate_vertices_and_quads(
 				 * an inactive node.
 				 */
 
-				voxel_index = compute_voxel_index(res, x - 1, y, z);
+				voxel_index = compute_index(x - 1, y, z, res);
 				if(voxel_index == -1 || grid[voxel_index] == 0) {
 					create_quad(corners, vertices_is, quads, QUAD_X_MIN);
 				}
 
-				voxel_index = compute_voxel_index(res, x + 1, y, z);
+				voxel_index = compute_index(x + 1, y, z, res);
 				if(voxel_index == -1 || grid[voxel_index] == 0) {
 					create_quad(corners, vertices_is, quads, QUAD_X_MAX);
 				}
 
-				voxel_index = compute_voxel_index(res, x, y - 1, z);
+				voxel_index = compute_index(x, y - 1, z, res);
 				if(voxel_index == -1 || grid[voxel_index] == 0) {
 					create_quad(corners, vertices_is, quads, QUAD_Y_MIN);
 				}
 
-				voxel_index = compute_voxel_index(res, x, y + 1, z);
+				voxel_index = compute_index(x, y + 1, z, res);
 				if(voxel_index == -1 || grid[voxel_index] == 0) {
 					create_quad(corners, vertices_is, quads, QUAD_Y_MAX);
 				}
 
-				voxel_index = compute_voxel_index(res, x, y, z - 1);
+				voxel_index = compute_index(x, y, z - 1, res);
 				if(voxel_index == -1 || grid[voxel_index] == 0) {
 					create_quad(corners, vertices_is, quads, QUAD_Z_MIN);
 				}
 
-				voxel_index = compute_voxel_index(res, x, y, z + 1);
+				voxel_index = compute_index(x, y, z + 1, res);
 				if(voxel_index == -1 || grid[voxel_index] == 0) {
 					create_quad(corners, vertices_is, quads, QUAD_Z_MAX);
 				}
@@ -394,7 +378,8 @@ void VolumeMeshBuilder::convert_quads_to_tris(const vector<QuadData> &quads,
 /* ************************************************************************** */
 
 struct VoxelAttributeGrid {
-	float *data;
+	void *data;
+	int *offsets = NULL;
 	int channels;
 };
 
@@ -418,9 +403,18 @@ void MeshManager::create_volume_mesh(Scene *scene,
 
 		VoxelAttribute *voxel = attr.data_voxel();
 		device_memory *image_memory = scene->image_manager->image_memory(voxel->slot);
-		int3 resolution = make_int3(image_memory->data_width,
-                                    image_memory->data_height,
-		                            image_memory->data_depth);
+		device_memory *offsets = image_memory->offsets;
+		int3 resolution;
+		if(offsets) {
+			resolution = make_int3(offsets->data_width * TILE_SIZE,
+			                       offsets->data_height * TILE_SIZE,
+			                       offsets->data_depth * TILE_SIZE);
+		}
+		else{
+			resolution = make_int3(image_memory->data_width,
+                                   image_memory->data_height,
+		                           image_memory->data_depth);
+		}
 
 		if(volume_params.resolution == make_int3(0, 0, 0)) {
 			volume_params.resolution = resolution;
@@ -431,8 +425,11 @@ void MeshManager::create_volume_mesh(Scene *scene,
 		}
 
 		VoxelAttributeGrid voxel_grid;
-		voxel_grid.data = static_cast<float*>(image_memory->host_pointer);
+		voxel_grid.data = image_memory->host_pointer;
 		voxel_grid.channels = image_memory->data_elements;
+		if(offsets) {
+			voxel_grid.offsets = static_cast<int*>(offsets->host_pointer);
+		}
 		voxel_grids.push_back(voxel_grid);
 	}
 
@@ -472,6 +469,9 @@ void MeshManager::create_volume_mesh(Scene *scene,
 	float3 cell_size = make_float3(1.0f/resolution.x,
 	                               1.0f/resolution.y,
 	                               1.0f/resolution.z);
+	const int3 tile_res = make_int3(compute_tile_resolution(resolution.x),
+	                                compute_tile_resolution(resolution.y),
+	                                compute_tile_resolution(resolution.z));
 
 	if(attr) {
 		const Transform *tfm = attr->data_transform();
@@ -488,19 +488,57 @@ void MeshManager::create_volume_mesh(Scene *scene,
 	VolumeMeshBuilder builder(&volume_params);
 	const float isovalue = mesh->volume_isovalue;
 
-	for(int z = 0; z < resolution.z; ++z) {
-		for(int y = 0; y < resolution.y; ++y) {
-			for(int x = 0; x < resolution.x; ++x) {
-				size_t voxel_index = compute_voxel_index(resolution, x, y, z);
+	for(size_t i = 0; i < voxel_grids.size(); ++i) {
+		const VoxelAttributeGrid &voxel_grid = voxel_grids[i];
+		const int channels = voxel_grid.channels;
 
-				for(size_t i = 0; i < voxel_grids.size(); ++i) {
-					const VoxelAttributeGrid &voxel_grid = voxel_grids[i];
-					const int channels = voxel_grid.channels;
-
-					for(int c = 0; c < channels; c++) {
-						if(voxel_grid.data[voxel_index * channels + c] >= isovalue) {
+		if(channels > 1 && voxel_grid.offsets) {
+			SparseTile<float4> *data = (SparseTile<float4>*)voxel_grid.data;
+			for(int z = 0; z < resolution.z; ++z) {
+				for(int y = 0; y < resolution.y; ++y) {
+					for(int x = 0; x < resolution.x; ++x) {
+						float4 val = get_value<float4>(data,
+						                               voxel_grid.offsets,
+						                               x, y, z,
+						                               tile_res.x,
+						                               tile_res.y,
+						                               tile_res.z);
+						if(any(isovalue < val)) {
 							builder.add_node_with_padding(x, y, z);
-							break;
+						}
+					}
+				}
+			}
+		}
+		else if(voxel_grid.offsets) {
+			SparseTile<float> *data = (SparseTile<float>*)voxel_grid.data;
+			for(int z = 0; z < resolution.z; ++z) {
+				for(int y = 0; y < resolution.y; ++y) {
+					for(int x = 0; x < resolution.x; ++x) {
+						float val = get_value<float>(data,
+						                             voxel_grid.offsets,
+						                             x, y, z,
+						                             tile_res.x,
+						                             tile_res.y,
+						                             tile_res.z);
+						if(val >= isovalue) {
+							builder.add_node_with_padding(x, y, z);
+						}
+					}
+				}
+			}
+		}
+		else {
+			float *data = (float*)(voxel_grid.data);
+			for(int z = 0; z < resolution.z; ++z) {
+				for(int y = 0; y < resolution.y; ++y) {
+					for(int x = 0; x < resolution.x; ++x) {
+						size_t voxel_index = compute_index(x, y, z, resolution) * channels;
+						for(int c = 0 ; c < channels; ++c) {
+							if(data[voxel_index + c] >= isovalue) {
+								builder.add_node_with_padding(x, y, z);
+								break;
+							}
 						}
 					}
 				}

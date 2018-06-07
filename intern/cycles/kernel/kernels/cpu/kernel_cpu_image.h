@@ -75,6 +75,21 @@ template<typename T> struct TextureInterpolator  {
 		return read(data[y * width + x]);
 	}
 
+	static ccl_always_inline float4 read(const T *data, const int *offsets,
+	                                     int x, int y, int z,
+	                                     int tiw, int tih, int tid)
+	{
+		int index = compute_index(offsets, x, y, z, tiw, tih, tid);
+		return index < 0 ? make_float4(0.0f) : read(data[index]);
+	}
+
+	static ccl_always_inline float4 read(const T *data, const int *offsets,
+	                                     int idx, int width, int height, int depth)
+	{
+		int index = compute_index(offsets, idx, width, height, depth);
+		return index < 0 ? make_float4(0.0f) : read(data[index]);
+	}
+
 	static ccl_always_inline int wrap_periodic(int x, int width)
 	{
 		x %= width;
@@ -281,18 +296,14 @@ template<typename T> struct TextureInterpolator  {
 				return make_float4(0.0f);
 		}
 
+		const T *data = (const T*)info.data;
 		const int *ofs = (const int*)info.offsets;
+
 		if(ofs) {
-			const SparseTile<T> *data = (const SparseTile<T>*)info.data;
-			return read(get_value<T>(data, ofs, ix, iy, iz,
-			                         compute_tile_resolution(width),
-			                         compute_tile_resolution(height),
-			                         compute_tile_resolution(depth)));
+			return read(data, ofs, ix, iy, iz, get_tile_res(width),
+			            get_tile_res(height), get_tile_res(depth));
 		}
-		else {
-			const T *data = (const T*)info.data;
-			return read(data[compute_index(ix, iy, iz, width, height, depth)]);
-		}
+		return read(data[compute_index(ix, iy, iz, width, height, depth)]);
 	}
 
 	static ccl_always_inline float4 interp_3d_linear(const TextureInfo& info,
@@ -340,29 +351,26 @@ template<typename T> struct TextureInterpolator  {
 		}
 
 		float4 r;
+		const T *data = (const T*)info.data;
 		const int *ofs = (const int*)info.offsets;
 
 		if(ofs) {
-			const SparseTile<T> *data = (const SparseTile<T>*)info.data;
-			int tiw = compute_tile_resolution(width);
-			int tih = compute_tile_resolution(height);
-			int tid = compute_tile_resolution(depth);
+			int tiw = get_tile_res(width), tih = get_tile_res(height), tid = get_tile_res(depth);
 			/* Initial check if either voxel is in an active tile. */
 			if(!tile_is_active(ofs, ix, iy, iz, tiw, tih, tid) &&
 			   !tile_is_active(ofs, nix, niy, niz, tiw, tih, tid)) {
 				return make_float4(0.0f);
 			}
-			r  = (1.0f - tz)*(1.0f - ty)*(1.0f - tx) * read(get_value<T>(data, ofs, ix,  iy,  iz,  tiw, tih, tid));
-			r += (1.0f - tz)*(1.0f - ty)*tx			 * read(get_value<T>(data, ofs, nix, iy,  iz,  tiw, tih, tid));
-			r += (1.0f - tz)*ty*(1.0f - tx)			 * read(get_value<T>(data, ofs, ix,  niy, iz,  tiw, tih, tid));
-			r += (1.0f - tz)*ty*tx					 * read(get_value<T>(data, ofs, nix, niy, iz,  tiw, tih, tid));
-			r += tz*(1.0f - ty)*(1.0f - tx)			 * read(get_value<T>(data, ofs, ix,  iy,  niz, tiw, tih, tid));
-			r += tz*(1.0f - ty)*tx					 * read(get_value<T>(data, ofs, nix, iy,  niz, tiw, tih, tid));
-			r += tz*ty*(1.0f - tx)					 * read(get_value<T>(data, ofs, ix,  niy, niz, tiw, tih, tid));
-			r += tz*ty*tx							 * read(get_value<T>(data, ofs, nix, niy, niz, tiw, tih, tid));
+			r  = (1.0f - tz)*(1.0f - ty)*(1.0f - tx) * read(data, ofs, ix,  iy,  iz,  tiw, tih, tid);
+			r += (1.0f - tz)*(1.0f - ty)*tx			 * read(data, ofs, nix, iy,  iz,  tiw, tih, tid);
+			r += (1.0f - tz)*ty*(1.0f - tx)			 * read(data, ofs, ix,  niy, iz,  tiw, tih, tid);
+			r += (1.0f - tz)*ty*tx					 * read(data, ofs, nix, niy, iz,  tiw, tih, tid);
+			r += tz*(1.0f - ty)*(1.0f - tx)			 * read(data, ofs, ix,  iy,  niz, tiw, tih, tid);
+			r += tz*(1.0f - ty)*tx					 * read(data, ofs, nix, iy,  niz, tiw, tih, tid);
+			r += tz*ty*(1.0f - tx)					 * read(data, ofs, ix,  niy, niz, tiw, tih, tid);
+			r += tz*ty*tx							 * read(data, ofs, nix, niy, niz, tiw, tih, tid);
 		}
 		else {
-			const T *data = (const T*)info.data;
 			r  = (1.0f - tz)*(1.0f - ty)*(1.0f - tx) * read(data[compute_index(ix,  iy,  iz,  width, height, depth)]);
 			r += (1.0f - tz)*(1.0f - ty)*tx			 * read(data[compute_index(nix, iy,  iz,  width, height, depth)]);
 			r += (1.0f - tz)*ty*(1.0f - tx)			 * read(data[compute_index(ix,  niy, iz,  width, height, depth)]);
@@ -461,7 +469,9 @@ template<typename T> struct TextureInterpolator  {
 		/* Some helper macro to keep code reasonable size,
 		 * let compiler to inline all the matrix multiplications.
 		 */
-#define DATA(x, y, z) (read(data[xc[x] + yc[y] + zc[z]]))
+#define DATA(x, y, z) (ofs ? \
+	    read(data, ofs, xc[x] + yc[y] + zc[z], width, height, depth) : \
+	    read(data[xc[x] + yc[y] + zc[z]]))
 #define COL_TERM(col, row) \
 		(v[col] * (u[0] * DATA(0, col, row) + \
 		           u[1] * DATA(1, col, row) + \
@@ -479,6 +489,7 @@ template<typename T> struct TextureInterpolator  {
 
 		/* Actual interpolation. */
 		const T *data = (const T*)info.data;
+		const int *ofs = (const int*)info.offsets;
 		return ROW_TERM(0) + ROW_TERM(1) + ROW_TERM(2) + ROW_TERM(3);
 
 #undef COL_TERM

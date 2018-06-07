@@ -730,52 +730,49 @@ void ImageManager::file_load_failed(device_vector<DeviceType> *tex_img,
 template<typename DeviceType>
 bool ImageManager::file_make_image_sparse(Device *device,
                                           Image *img,
-                                          device_vector<DeviceType> *tex_dense)
+                                          device_vector<DeviceType> *tex_img)
 {
-	device_vector<SparseTile<DeviceType>> *tex_sparse
-	        = new device_vector<SparseTile<DeviceType>>(device,
-	                                                    (img->mem_name).c_str(),
-	                                                    MEM_TEXTURE);
 	device_vector<int> *tex_offsets
 	        = new device_vector<int>(device,
 	                                 (img->mem_name + "_offsets").c_str(),
 	                                 MEM_TEXTURE);
 
-	vector<SparseTile<DeviceType>> sparse_grid;
+	vector<DeviceType> sparse_grid;
 	vector<int> offsets;
-	int active_tile_count = create_sparse_grid<DeviceType>(
-	                            tex_dense->data(),
-	                            tex_dense->data_width,
-	                            tex_dense->data_height,
-	                            tex_dense->data_depth,
-	                            &sparse_grid,
-	                            &offsets);
+	int voxel_count = create_sparse_grid<DeviceType>(tex_img->data(),
+	                                                 tex_img->data_width,
+	                                                 tex_img->data_height,
+	                                                 tex_img->data_depth,
+	                                                 &sparse_grid,
+	                                                 &offsets);
 
-	if(active_tile_count < 1) {
+	if(voxel_count < 1) {
 		VLOG(1) << "Could not make sparse grid for "
 		        << path_filename(img->filename) << " (" << img->mem_name << ")"
 		        << ", no active tiles";
-		delete tex_sparse;
 		delete tex_offsets;
-		tex_sparse = NULL;
 		tex_offsets = NULL;
 		return false;
 	}
 
-	SparseTile<DeviceType> *texture_pixels;
+	VLOG(1) << "Original memory usage of '"
+	        << path_filename(img->filename) << "' (" << img->mem_name << "): "
+	        << string_human_readable_size(tex_img->memory_size());
+
+	DeviceType *texture_pixels;
 	int *texture_offsets;
-	int tiw = compute_tile_resolution(tex_dense->data_width);
-	int tih = compute_tile_resolution(tex_dense->data_height);
-	int tid = compute_tile_resolution(tex_dense->data_depth);
+	int tiw = get_tile_res(tex_img->data_width);
+	int tih = get_tile_res(tex_img->data_height);
+	int tid = get_tile_res(tex_img->data_depth);
 
 	{
-		/* Since only active tiles are stored in tex_sparse, its
+		/* Since only active tiles are stored in tex_img, its
 		 * allocated memory will be <= the actual resolution
 		 * of the volume. We store the true resolution (in tiles) in the
 		 * tex_offsets instead, since it needs to be allocated enough
 		 * space to track all tiles anyway. */
 		thread_scoped_lock device_lock(device_mutex);
-		texture_pixels = (SparseTile<DeviceType>*)tex_sparse->alloc(active_tile_count);
+		texture_pixels = (DeviceType*)tex_img->alloc(voxel_count);
 		texture_offsets = (int*)tex_offsets->alloc(tiw, tih, tid);
 	}
 
@@ -784,20 +781,9 @@ bool ImageManager::file_make_image_sparse(Device *device,
 		   offsets.size() * sizeof(int));
 	memcpy(&texture_pixels[0],
 		   &sparse_grid[0],
-		   active_tile_count * sizeof(SparseTile<DeviceType>));
+		   voxel_count * sizeof(DeviceType));
 
-	img->mem = tex_sparse;
-	img->mem->interpolation = img->interpolation;
-	img->mem->extension = img->extension;
-	img->mem->offsets = tex_offsets;
-
-	thread_scoped_lock device_lock(device_mutex);
-	tex_sparse->copy_to_device();
-
-	VLOG(1) << "Original memory usage of '"
-	        << path_filename(img->filename) << "' (" << img->mem_name << "): "
-	        << string_human_readable_size(tex_dense->memory_size());
-
+	tex_img->offsets = tex_offsets;
 	return true;
 }
 
@@ -824,19 +810,17 @@ void ImageManager::load_image(Device *device,
 	}
 
 	if(img->make_sparse) {
-		if(file_make_image_sparse<DeviceType>(device, img, tex_img)) {
-			delete tex_img;
-			tex_img = NULL;
+		if(!file_make_image_sparse<DeviceType>(device, img, tex_img)) {
+			file_load_failed<StorageType, DeviceType>(tex_img, type);
 		}
 	}
 
-	if(tex_img) {
-		img->mem = tex_img;
-		img->mem->interpolation = img->interpolation;
-		img->mem->extension = img->extension;
-		thread_scoped_lock device_lock(device_mutex);
-		tex_img->copy_to_device();
-	}
+	img->mem = tex_img;
+	img->mem->interpolation = img->interpolation;
+	img->mem->extension = img->extension;
+
+	thread_scoped_lock device_lock(device_mutex);
+	tex_img->copy_to_device();
 }
 
 void ImageManager::device_load_image(Device *device,

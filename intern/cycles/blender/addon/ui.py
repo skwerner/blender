@@ -211,6 +211,10 @@ class CYCLES_RENDER_PT_sampling(CyclesButtonsPanel, Panel):
                 layout.row().prop(cscene, "use_layer_samples")
                 break
 
+        row = layout.row(align=True)
+        row.label(text="Experimental:")
+        row.prop(cscene, "use_light_bvh", text="Light BVH")
+
         draw_samples_info(layout, context)
 
 

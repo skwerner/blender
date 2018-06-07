@@ -698,6 +698,7 @@ void LightManager::device_update_tree_distribution(Device *, DeviceScene *dscene
 
     /* update device */
     KernelIntegrator *kintegrator = &dscene->data.integrator;
+    kintegrator->use_light_bvh = true;
     KernelFilm *kfilm = &dscene->data.film;
     kintegrator->use_direct_light = (totarea > 0.0f);
 
@@ -1131,9 +1132,6 @@ void LightManager::device_update(Device *device, DeviceScene *dscene, Scene *sce
 	if(!need_update)
 		return;
 
-	// TODO(englesson): Integrate this properly with GUI
-	bool useMLS = true;
-
 	VLOG(1) << "Total " << scene->lights.size() << " lights.";
 
 	device_free(device, dscene);
@@ -1146,7 +1144,7 @@ void LightManager::device_update(Device *device, DeviceScene *dscene, Scene *sce
 	if(progress.get_cancel()) return;
 
 
-	if(useMLS) {
+	if(scene->integrator->use_light_bvh) {
 		device_update_tree_distribution(device, dscene, scene, progress);
 	} else {
 		device_update_distribution(device, dscene, scene, progress);

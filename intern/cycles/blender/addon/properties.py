@@ -183,6 +183,12 @@ class CyclesRenderSettings(bpy.types.PropertyGroup):
                 default=False,
                 )
 
+        cls.use_light_bvh = BoolProperty(
+                name="Light BVH",
+                description="Samples many lights more efficiently",
+                default=False,
+                )
+
         cls.samples = IntProperty(
                 name="Samples",
                 description="Number of samples to render for each pixel",

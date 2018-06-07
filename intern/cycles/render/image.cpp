@@ -262,6 +262,7 @@ int ImageManager::add_image(const string& filename,
                             ExtensionType extension,
                             bool use_alpha,
                             bool make_sparse,
+                            float isovalue,
                             ImageMetaData& metadata)
 {
 	Image *img;
@@ -340,6 +341,7 @@ int ImageManager::add_image(const string& filename,
 	img->users = 1;
 	img->use_alpha = use_alpha;
 	img->make_sparse = make_sparse;
+	img->isovalue = isovalue;
 	img->mem = NULL;
 
 	images[type][slot] = img;
@@ -743,6 +745,7 @@ bool ImageManager::file_make_image_sparse(Device *device,
 	                                                 tex_img->data_width,
 	                                                 tex_img->data_height,
 	                                                 tex_img->data_depth,
+	                                                 img->isovalue,
 	                                                 &sparse_grid,
 	                                                 &offsets);
 

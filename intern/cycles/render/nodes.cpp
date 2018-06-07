@@ -308,6 +308,7 @@ void ImageTextureNode::compile(SVMCompiler& compiler)
 		                                extension,
 		                                use_alpha,
 		                                false,
+		                                0.0f,
 		                                metadata);
 		is_float = metadata.is_float;
 		is_linear = metadata.is_linear;
@@ -374,6 +375,7 @@ void ImageTextureNode::compile(OSLCompiler& compiler)
 			                                extension,
 			                                use_alpha,
 			                                false,
+			                                0.0f,
 			                                metadata);
 		}
 		is_float = metadata.is_float;
@@ -505,6 +507,7 @@ void EnvironmentTextureNode::compile(SVMCompiler& compiler)
 		                                EXTENSION_REPEAT,
 		                                use_alpha,
 		                                false,
+		                                0.0f,
 		                                metadata);
 		is_float = metadata.is_float;
 		is_linear = metadata.is_linear;
@@ -562,6 +565,7 @@ void EnvironmentTextureNode::compile(OSLCompiler& compiler)
 			                                EXTENSION_REPEAT,
 			                                use_alpha,
 			                                false,
+			                                0.0f,
 			                                metadata);
 		}
 		is_float = metadata.is_float;
@@ -1514,6 +1518,7 @@ void PointDensityTextureNode::compile(SVMCompiler& compiler)
 			                                EXTENSION_CLIP,
 			                                true,
 			                                false,
+			                                0.0f,
 			                                metadata);
 		}
 
@@ -1568,6 +1573,7 @@ void PointDensityTextureNode::compile(OSLCompiler& compiler)
 			                                EXTENSION_CLIP,
 			                                true,
 			                                false,
+											0.0f,
 			                                metadata);
 		}
 

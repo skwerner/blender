@@ -354,6 +354,7 @@ static void create_mesh_volume_attribute(BL::Object& b_ob,
 	        EXTENSION_CLIP,
 	        use_alpha,
 	        make_sparse,
+	        mesh->volume_isovalue,
 	        metadata);
 }
 

@@ -57,6 +57,7 @@ public:
 	              ExtensionType extension,
 	              bool use_alpha,
 	              bool make_sparse,
+	              float isovalue,
 	              ImageMetaData& metadata);
 	void remove_image(int flat_slot);
 	void remove_image(const string& filename,
@@ -117,6 +118,7 @@ public:
 		bool need_load;
 		bool animated;
 		bool make_sparse;
+		float isovalue;
 		float frame;
 		InterpolationType interpolation;
 		ExtensionType extension;

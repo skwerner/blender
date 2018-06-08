@@ -77,16 +77,23 @@ template<typename T> struct TextureInterpolator  {
 
 	static ccl_always_inline float4 read(const T *data, const int *offsets,
 	                                     int x, int y, int z,
+	                                     int width, int height, int depth,
 	                                     int tiw, int tih, int tid)
 	{
-		int index = compute_index(offsets, x, y, z, tiw, tih, tid);
+		int index = compute_index(offsets, x, y, z,
+		                          width, height, depth, tiw, tih, tid);
 		return index < 0 ? make_float4(0.0f) : read(data[index]);
 	}
 
 	static ccl_always_inline float4 read(const T *data, const int *offsets,
 	                                     int idx, int width, int height, int depth)
 	{
-		int index = compute_index(offsets, idx, width, height, depth);
+		int3 c = compute_coordinates(idx, width, height, depth);
+		int index = compute_index(offsets, c.x, c.y, c.z,
+		                          width, height, depth,
+		                          get_tile_res(width),
+		                          get_tile_res(height),
+		                          get_tile_res(depth));
 		return index < 0 ? make_float4(0.0f) : read(data[index]);
 	}
 
@@ -300,8 +307,8 @@ template<typename T> struct TextureInterpolator  {
 		const int *ofs = (const int*)info.offsets;
 
 		if(ofs) {
-			return read(data, ofs, ix, iy, iz, get_tile_res(width),
-			            get_tile_res(height), get_tile_res(depth));
+			return read(data, ofs, ix, iy, iz, width, height, depth,
+			            get_tile_res(width), get_tile_res(height), get_tile_res(depth));
 		}
 		return read(data[compute_index(ix, iy, iz, width, height, depth)]);
 	}
@@ -361,14 +368,14 @@ template<typename T> struct TextureInterpolator  {
 			   !tile_is_active(ofs, nix, niy, niz, tiw, tih, tid)) {
 				return make_float4(0.0f);
 			}
-			r  = (1.0f - tz)*(1.0f - ty)*(1.0f - tx) * read(data, ofs, ix,  iy,  iz,  tiw, tih, tid);
-			r += (1.0f - tz)*(1.0f - ty)*tx			 * read(data, ofs, nix, iy,  iz,  tiw, tih, tid);
-			r += (1.0f - tz)*ty*(1.0f - tx)			 * read(data, ofs, ix,  niy, iz,  tiw, tih, tid);
-			r += (1.0f - tz)*ty*tx					 * read(data, ofs, nix, niy, iz,  tiw, tih, tid);
-			r += tz*(1.0f - ty)*(1.0f - tx)			 * read(data, ofs, ix,  iy,  niz, tiw, tih, tid);
-			r += tz*(1.0f - ty)*tx					 * read(data, ofs, nix, iy,  niz, tiw, tih, tid);
-			r += tz*ty*(1.0f - tx)					 * read(data, ofs, ix,  niy, niz, tiw, tih, tid);
-			r += tz*ty*tx							 * read(data, ofs, nix, niy, niz, tiw, tih, tid);
+			r  = (1.0f - tz)*(1.0f - ty)*(1.0f - tx) * read(data, ofs, ix,  iy,  iz,  width, height, depth, tiw, tih, tid);
+			r += (1.0f - tz)*(1.0f - ty)*tx			 * read(data, ofs, nix, iy,  iz,  width, height, depth, tiw, tih, tid);
+			r += (1.0f - tz)*ty*(1.0f - tx)			 * read(data, ofs, ix,  niy, iz,  width, height, depth, tiw, tih, tid);
+			r += (1.0f - tz)*ty*tx					 * read(data, ofs, nix, niy, iz,  width, height, depth, tiw, tih, tid);
+			r += tz*(1.0f - ty)*(1.0f - tx)			 * read(data, ofs, ix,  iy,  niz, width, height, depth, tiw, tih, tid);
+			r += tz*(1.0f - ty)*tx					 * read(data, ofs, nix, iy,  niz, width, height, depth, tiw, tih, tid);
+			r += tz*ty*(1.0f - tx)					 * read(data, ofs, ix,  niy, niz, width, height, depth, tiw, tih, tid);
+			r += tz*ty*tx							 * read(data, ofs, nix, niy, niz, width, height, depth, tiw, tih, tid);
 		}
 		else {
 			r  = (1.0f - tz)*(1.0f - ty)*(1.0f - tx) * read(data[compute_index(ix,  iy,  iz,  width, height, depth)]);

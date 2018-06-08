@@ -404,17 +404,9 @@ void MeshManager::create_volume_mesh(Scene *scene,
 		VoxelAttribute *voxel = attr.data_voxel();
 		device_memory *image_memory = scene->image_manager->image_memory(voxel->slot);
 		device_memory *offsets = image_memory->offsets;
-		int3 resolution;
-		if(offsets) {
-			resolution = make_int3(offsets->data_width * TILE_SIZE,
-			                       offsets->data_height * TILE_SIZE,
-			                       offsets->data_depth * TILE_SIZE);
-		}
-		else {
-			resolution = make_int3(image_memory->data_width,
-                                   image_memory->data_height,
-		                           image_memory->data_depth);
-		}
+		int3 resolution = make_int3(image_memory->real_width,
+		                            image_memory->real_height,
+		                            image_memory->real_depth);
 
 		if(volume_params.resolution == make_int3(0, 0, 0)) {
 			volume_params.resolution = resolution;
@@ -491,21 +483,26 @@ void MeshManager::create_volume_mesh(Scene *scene,
 	for(int z = 0; z < resolution.z; ++z) {
 		for(int y = 0; y < resolution.y; ++y) {
 			for(int x = 0; x < resolution.x; ++x) {
-				int voxel_index = compute_index(x, y, z, resolution);
-
 				for(size_t i = 0; i < voxel_grids.size(); ++i) {
 					const VoxelAttributeGrid &voxel_grid = voxel_grids[i];
 					const int channels = voxel_grid.channels;
 					const int *offsets = voxel_grid.offsets;
+					int voxel_index;
 
 					if(offsets) {
 						voxel_index = compute_index(offsets, x, y, z,
+						                            resolution.x,
+						                            resolution.y,
+						                            resolution.z,
 						                            tile_res.x,
 						                            tile_res.y,
 						                            tile_res.z);
 						if(voxel_index < 0) {
 							continue;
 						}
+					}
+					else {
+						voxel_index = compute_index(x, y, z, resolution);
 					}
 
 					voxel_index *= channels;

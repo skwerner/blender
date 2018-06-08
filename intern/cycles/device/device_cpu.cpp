@@ -378,8 +378,9 @@ public:
 	{
 		size_t total_memory = mem.memory_size();
 		device_memory *offsets = mem.offsets;
-		if(offsets != NULL)
+		if(offsets) {
 			total_memory += offsets->memory_size();
+		}
 
 		VLOG(1) << "Texture allocate: " << mem.name << ", "
 		        << string_human_readable_number(total_memory) << " bytes. ("
@@ -414,21 +415,10 @@ public:
 			info.cl_buffer = 0;
 			info.interpolation = mem.interpolation;
 			info.extension = mem.extension;
-			if(offsets != NULL) {
-				/* If mem is a sparse volume, its real (tile)
-				 * dimensions are stored in the offsets texture.
-				 * Here, we store the pixel resolution. */
-				info.width = offsets->data_width * TILE_SIZE;
-				info.height = offsets->data_height * TILE_SIZE;
-				info.depth = offsets->data_depth * TILE_SIZE;
-				info.offsets = (uint64_t)offsets->host_pointer;
-			}
-			else {
-				info.width = mem.data_width;
-				info.height = mem.data_height;
-				info.depth = mem.data_depth;
-				info.offsets = (uint64_t)0;
-			}
+			info.width = mem.real_width;
+			info.height = mem.real_height;
+			info.depth = mem.real_depth;
+			info.offsets = (uint64_t)(offsets ? offsets->host_pointer : 0);
 			need_texture_info = true;
 		}
 
@@ -436,7 +426,7 @@ public:
 		mem.device_size = mem.memory_size();
 		stats.mem_alloc(mem.device_size);
 
-		if(offsets != NULL) {
+		if(offsets) {
 			offsets->device_pointer = (device_ptr)offsets->host_pointer;
 			offsets->device_size = offsets->memory_size();
 			stats.mem_alloc(offsets->device_size);
@@ -447,6 +437,9 @@ public:
 	void tex_free(device_memory& mem)
 	{
 		if(mem.device_pointer) {
+			if(mem.offsets) {
+				tex_free(*mem.offsets);
+			}
 			mem.device_pointer = 0;
 			stats.mem_free(mem.device_size);
 			mem.device_size = 0;

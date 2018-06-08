@@ -161,7 +161,7 @@ private:
 	                      ImageDataType type);
 
 	template<typename DeviceType>
-	bool file_make_image_sparse(Device *device,
+	void file_make_image_sparse(Device *device,
 	                            Image *img,
 	                            device_vector<DeviceType> *tex_dense);
 

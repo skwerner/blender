@@ -99,6 +99,7 @@ const inline bool tile_is_active(const int *offsets,
 
 const inline int compute_index(const int *offsets,
                                int x, int y, int z,
+                               int width, int height, int depth,
                                int tiw, int tih, int tid)
 {
 	/* Get the 1D array index in the dense grid of the tile (x, y, z) is in. */
@@ -107,23 +108,18 @@ const inline int compute_index(const int *offsets,
 	if(dense_index < 0) {
 		return -1;
 	}
-	/* Get the index of the tile in the sparse grid. */
+	/* Get the index of the first voxel in the target tile. */
 	int sparse_index = offsets[dense_index];
 	if (sparse_index < 0) {
 		return -1;
 	}
+	/* If tile is a border tile, get its real dimensions. */
+	int itiw = tix+1 == tiw && width % TILE_SIZE != 0 ? width % TILE_SIZE : TILE_SIZE;
+	int itih = tiy+1 == tih && height % TILE_SIZE != 0 ? height % TILE_SIZE : TILE_SIZE;
+	int itid = tiz+1 == tid && depth % TILE_SIZE != 0 ? depth % TILE_SIZE : TILE_SIZE;
 	/* Look up voxel in the tile. */
-	int in_tile_index = compute_index(x%TILE_SIZE, y%TILE_SIZE, z%TILE_SIZE,
-	                                  TILE_SIZE, TILE_SIZE, TILE_SIZE);
+	int in_tile_index = compute_index(x % itiw, y % itih, z % itid, itiw, itih, itid);
 	return sparse_index + in_tile_index;
-}
-
-const inline int compute_index(const int *offsets, int index,
-                               int width, int height, int depth)
-{
-	int3 c = compute_coordinates(index, width, height, depth);
-	return compute_index(offsets, c.x, c.y, c.z, get_tile_res(width),
-	                     get_tile_res(height), get_tile_res(depth));
 }
 
 template<typename T>
@@ -137,9 +133,7 @@ int create_sparse_grid(const T *dense_grid,
 		return 0;
 	}
 
-	const T empty = cast_from_float<T>(0.0f);
 	const T threshold = cast_from_float<T>(isovalue);
-
 	/* Total number of active voxels (voxels in active tiles). */
 	int voxel_count = 0;
 	/* Total number of tiles in the grid (incl. inactive). */
@@ -155,27 +149,17 @@ int create_sparse_grid(const T *dense_grid,
 	for(int z=0 ; z < depth ; z += TILE_SIZE) {
 		for(int y=0 ; y < height ; y += TILE_SIZE) {
 			for(int x=0 ; x < width ; x += TILE_SIZE) {
-
 				bool tile_is_empty = true;
 				int c = 0;
 
 				/* Populate the tile. */
-				for(int k=z ; k < z+TILE_SIZE ; ++k) {
-					for(int j=y ; j < y+TILE_SIZE ; ++j) {
-						for(int i=x ; i < x+TILE_SIZE ; ++i) {
+				for(int k=z ; k < z+TILE_SIZE && k < depth ; ++k) {
+					for(int j=y ; j < y+TILE_SIZE && j < height; ++j) {
+						for(int i=x ; i < x+TILE_SIZE && i < width ; ++i) {
 							int index = compute_index(i, j, k, width, height, depth);
-							if(index < 0) {
-								/* Out of bounds of original image
-								 * store an empty voxel. */
-								sparse_grid->at(voxel_count + c) = empty;
-							}
-							else {
-								sparse_grid->at(voxel_count + c) = dense_grid[index];
-								if(tile_is_empty) {
-									if(gt(dense_grid[index], threshold)) {
-										tile_is_empty = false;
-									}
-								}
+							sparse_grid->at(voxel_count + c) = dense_grid[index];
+							if(tile_is_empty) {
+								tile_is_empty = !gt(dense_grid[index], threshold);
 							}
 							++c;
 						}

@@ -4,7 +4,7 @@
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version. 
+ * of the License, or (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -18,7 +18,7 @@
  * The Original Code is Copyright (C) 2008 Blender Foundation.
  * All rights reserved.
  *
- * 
+ *
  * Contributor(s): Blender Foundation
  *
  * ***** END GPL LICENSE BLOCK *****
@@ -50,7 +50,7 @@ struct wmKeyConfig;
 /* temp data to pass on to modal */
 typedef struct bNodeLinkDrag {
 	struct bNodeLinkDrag *next, *prev;
-	
+
 	/* List of links dragged by the operator.
 	 * Note: This is a list of LinkData structs on top of the actual bNodeLinks.
 	 * This way the links can be added to the node tree while being stored in this list.

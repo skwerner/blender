@@ -377,9 +377,9 @@ public:
 	void tex_alloc(device_memory& mem)
 	{
 		size_t total_memory = mem.memory_size();
-		device_memory *offsets = mem.offsets;
-		if(offsets) {
-			total_memory += offsets->memory_size();
+		device_memory *grid_info = mem.grid_info;
+		if(grid_info) {
+			total_memory += grid_info->memory_size();
 		}
 
 		VLOG(1) << "Texture allocate: " << mem.name << ", "
@@ -418,7 +418,14 @@ public:
 			info.width = mem.real_width;
 			info.height = mem.real_height;
 			info.depth = mem.real_depth;
-			info.offsets = (uint64_t)(offsets ? offsets->host_pointer : 0);
+			info.grid_info = 0;
+			if(grid_info) {
+				info.grid_info = (uint64_t)grid_info->host_pointer;
+				info.tiled_width = get_tile_res(info.width);
+				info.tiled_height = get_tile_res(info.height);
+				info.last_tile_width = info.width % TILE_SIZE;
+				info.last_tile_height = info.height % TILE_SIZE;
+			}
 			need_texture_info = true;
 		}
 
@@ -426,10 +433,10 @@ public:
 		mem.device_size = mem.memory_size();
 		stats.mem_alloc(mem.device_size);
 
-		if(offsets) {
-			offsets->device_pointer = (device_ptr)offsets->host_pointer;
-			offsets->device_size = offsets->memory_size();
-			stats.mem_alloc(offsets->device_size);
+		if(grid_info) {
+			grid_info->device_pointer = (device_ptr)grid_info->host_pointer;
+			grid_info->device_size = grid_info->memory_size();
+			stats.mem_alloc(grid_info->device_size);
 		}
 
 	}
@@ -437,8 +444,8 @@ public:
 	void tex_free(device_memory& mem)
 	{
 		if(mem.device_pointer) {
-			if(mem.offsets) {
-				tex_free(*mem.offsets);
+			if(mem.grid_info) {
+				tex_free(*mem.grid_info);
 			}
 			mem.device_pointer = 0;
 			stats.mem_free(mem.device_size);

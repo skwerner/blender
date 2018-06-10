@@ -78,15 +78,18 @@ typedef struct TextureInfo {
 	/* Pointer, offset or texture depending on device. */
 	uint64_t data;
 	/* References the offsets for tiles in sparse volumes. */
-	uint64_t offsets;
-	/* Dummy member to keep sizeof(TextureInfo) divisible by 16. */
-	uint64_t pad;
+	uint64_t grid_info;
 	/* Buffer number for OpenCL. */
 	uint cl_buffer;
 	/* Interpolation and extension type. */
 	uint interpolation, extension;
 	/* Dimensions. */
 	uint width, height, depth;
+	/* Tiled dimensions for sparse grid index calculations,
+	 * and length of the last tile's dimensions. */
+	uint tiled_width, tiled_height, last_tile_width, last_tile_height;
+	/* Dummy variable to keep TextureInfo the correct size. */
+	uint64_t dummy;
 } TextureInfo;
 
 CCL_NAMESPACE_END

@@ -526,9 +526,14 @@ void OpenCLDeviceBase::const_copy_to(const char *name, void *host, size_t size)
 
 void OpenCLDeviceBase::tex_alloc(device_memory& mem)
 {
+	size_t total_memory = mem.memory_size();
+	if(mem.grid_info) {
+		total_memory += mem.grid_info->memory_size();
+	}
+
 	VLOG(1) << "Texture allocate: " << mem.name << ", "
-	        << string_human_readable_number(mem.memory_size()) << " bytes. ("
-	        << string_human_readable_size(mem.memory_size()) << ")";
+	        << string_human_readable_number(total_memory) << " bytes. ("
+	        << string_human_readable_size(total_memory) << ")";
 
 	memory_manager.alloc(mem.name, mem);
 	/* Set the pointer to non-null to keep code that inspects its value from thinking its unallocated. */

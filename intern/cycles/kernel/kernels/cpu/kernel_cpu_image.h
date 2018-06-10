@@ -75,26 +75,33 @@ template<typename T> struct TextureInterpolator  {
 		return read(data[y * width + x]);
 	}
 
-	static ccl_always_inline float4 read(const T *data, const int *offsets,
+	static ccl_always_inline float4 read(const T *data, const int *grid_info,
 	                                     int x, int y, int z,
-	                                     int width, int height, int depth,
-	                                     int tiw, int tih, int tid)
+	                                     int tiw, int tih, int ltw, int lth)
 	{
-		int index = compute_index(offsets, x, y, z,
-		                          width, height, depth, tiw, tih, tid);
-		return index < 0 ? make_float4(0.0f) : read(data[index]);
+		int tix = x / TILE_SIZE, itix = x % TILE_SIZE,
+		    tiy = y / TILE_SIZE, itiy = y % TILE_SIZE,
+		    tiz = z / TILE_SIZE, itiz = z % TILE_SIZE;
+		int dense_index = compute_index_fast(tix, tiy, tiz, tiw, tih) * 2;
+		int sparse_index = grid_info[dense_index];
+		int dims = grid_info[dense_index + 1];
+		if(sparse_index < 0) {
+			return make_float4(0.0f);
+		}
+		int itiw = dims & (1 << ST_SHIFT_TRUNCATE_WIDTH) ? ltw : TILE_SIZE;
+		int itih = dims & (1 << ST_SHIFT_TRUNCATE_HEIGHT) ? lth : TILE_SIZE;
+		int in_tile_index = compute_index_fast(itix, itiy, itiz, itiw, itih);
+		return read(data[sparse_index + in_tile_index]);
 	}
 
-	static ccl_always_inline float4 read(const T *data, const int *offsets,
-	                                     int idx, int width, int height, int depth)
+	static ccl_always_inline float4 read(const T *data, const int *grid_info,
+	                                     int index, int width, int height, int /*depth*/,
+	                                     int tiw, int tih, int ltw, int lth)
 	{
-		int3 c = compute_coordinates(idx, width, height, depth);
-		int index = compute_index(offsets, c.x, c.y, c.z,
-		                          width, height, depth,
-		                          get_tile_res(width),
-		                          get_tile_res(height),
-		                          get_tile_res(depth));
-		return index < 0 ? make_float4(0.0f) : read(data[index]);
+		int x = index % width;
+		int y = (index / width) % height;
+		int z = index / (width * height);
+		return read(data, grid_info, x, y, z, tiw, tih, ltw, lth);
 	}
 
 	static ccl_always_inline int wrap_periodic(int x, int width)
@@ -304,13 +311,14 @@ template<typename T> struct TextureInterpolator  {
 		}
 
 		const T *data = (const T*)info.data;
-		const int *ofs = (const int*)info.offsets;
+		const int *grid_info = (const int*)info.grid_info;
 
-		if(ofs) {
-			return read(data, ofs, ix, iy, iz, width, height, depth,
-			            get_tile_res(width), get_tile_res(height), get_tile_res(depth));
+		if(grid_info) {
+			return read(data, grid_info, ix, iy, iz,
+			            info.tiled_width, info.tiled_height,
+			            info.last_tile_width, info.last_tile_height);
 		}
-		return read(data[compute_index(ix, iy, iz, width, height, depth)]);
+		return read(data[compute_index_fast(ix, iy, iz, width, height)]);
 	}
 
 	static ccl_always_inline float4 interp_3d_linear(const TextureInfo& info,
@@ -359,33 +367,31 @@ template<typename T> struct TextureInterpolator  {
 
 		float4 r;
 		const T *data = (const T*)info.data;
-		const int *ofs = (const int*)info.offsets;
+		const int *gi = (const int*)info.grid_info;
 
-		if(ofs) {
-			int tiw = get_tile_res(width), tih = get_tile_res(height), tid = get_tile_res(depth);
-			/* Initial check if either voxel is in an active tile. */
-			if(!tile_is_active(ofs, ix, iy, iz, tiw, tih, tid) &&
-			   !tile_is_active(ofs, nix, niy, niz, tiw, tih, tid)) {
-				return make_float4(0.0f);
-			}
-			r  = (1.0f - tz)*(1.0f - ty)*(1.0f - tx) * read(data, ofs, ix,  iy,  iz,  width, height, depth, tiw, tih, tid);
-			r += (1.0f - tz)*(1.0f - ty)*tx			 * read(data, ofs, nix, iy,  iz,  width, height, depth, tiw, tih, tid);
-			r += (1.0f - tz)*ty*(1.0f - tx)			 * read(data, ofs, ix,  niy, iz,  width, height, depth, tiw, tih, tid);
-			r += (1.0f - tz)*ty*tx					 * read(data, ofs, nix, niy, iz,  width, height, depth, tiw, tih, tid);
-			r += tz*(1.0f - ty)*(1.0f - tx)			 * read(data, ofs, ix,  iy,  niz, width, height, depth, tiw, tih, tid);
-			r += tz*(1.0f - ty)*tx					 * read(data, ofs, nix, iy,  niz, width, height, depth, tiw, tih, tid);
-			r += tz*ty*(1.0f - tx)					 * read(data, ofs, ix,  niy, niz, width, height, depth, tiw, tih, tid);
-			r += tz*ty*tx							 * read(data, ofs, nix, niy, niz, width, height, depth, tiw, tih, tid);
+		if(gi) {
+			int tiw = info.tiled_width;
+			int tih = info.tiled_height;
+			int ltw = info.last_tile_width;
+			int lth = info.last_tile_height;
+			r  = (1.0f - tz)*(1.0f - ty)*(1.0f - tx) * read(data, gi, ix,  iy,  iz,  tiw, tih, ltw, lth);
+			r += (1.0f - tz)*(1.0f - ty)*tx          * read(data, gi, nix, iy,  iz,  tiw, tih, ltw, lth);
+			r += (1.0f - tz)*ty*(1.0f - tx)          * read(data, gi, ix,  niy, iz,  tiw, tih, ltw, lth);
+			r += (1.0f - tz)*ty*tx                   * read(data, gi, nix, niy, iz,  tiw, tih, ltw, lth);
+			r += tz*(1.0f - ty)*(1.0f - tx)          * read(data, gi, ix,  iy,  niz, tiw, tih, ltw, lth);
+			r += tz*(1.0f - ty)*tx                   * read(data, gi, nix, iy,  niz, tiw, tih, ltw, lth);
+			r += tz*ty*(1.0f - tx)                   * read(data, gi, ix,  niy, niz, tiw, tih, ltw, lth);
+			r += tz*ty*tx                            * read(data, gi, nix, niy, niz, tiw, tih, ltw, lth);
 		}
 		else {
-			r  = (1.0f - tz)*(1.0f - ty)*(1.0f - tx) * read(data[compute_index(ix,  iy,  iz,  width, height, depth)]);
-			r += (1.0f - tz)*(1.0f - ty)*tx			 * read(data[compute_index(nix, iy,  iz,  width, height, depth)]);
-			r += (1.0f - tz)*ty*(1.0f - tx)			 * read(data[compute_index(ix,  niy, iz,  width, height, depth)]);
-			r += (1.0f - tz)*ty*tx					 * read(data[compute_index(nix, niy, iz,  width, height, depth)]);
-			r += tz*(1.0f - ty)*(1.0f - tx)			 * read(data[compute_index(ix,  iy,  niz, width, height, depth)]);
-			r += tz*(1.0f - ty)*tx					 * read(data[compute_index(nix, iy,  niz, width, height, depth)]);
-			r += tz*ty*(1.0f - tx)					 * read(data[compute_index(ix,  niy, niz, width, height, depth)]);
-			r += tz*ty*tx							 * read(data[compute_index(nix, niy, niz, width, height, depth)]);
+			r  = (1.0f - tz)*(1.0f - ty)*(1.0f - tx) * read(data[compute_index_fast(ix,  iy,  iz,  width, height)]);
+			r += (1.0f - tz)*(1.0f - ty)*tx			 * read(data[compute_index_fast(nix, iy,  iz,  width, height)]);
+			r += (1.0f - tz)*ty*(1.0f - tx)			 * read(data[compute_index_fast(ix,  niy, iz,  width, height)]);
+			r += (1.0f - tz)*ty*tx					 * read(data[compute_index_fast(nix, niy, iz,  width, height)]);
+			r += tz*(1.0f - ty)*(1.0f - tx)			 * read(data[compute_index_fast(ix,  iy,  niz, width, height)]);
+			r += tz*(1.0f - ty)*tx					 * read(data[compute_index_fast(nix, iy,  niz, width, height)]);
+			r += tz*ty*(1.0f - tx)					 * read(data[compute_index_fast(ix,  niy, niz, width, height)]);
+			r += tz*ty*tx							 * read(data[compute_index_fast(nix, niy, niz, width, height)]);
 		}
 
 		return r;
@@ -407,6 +413,10 @@ template<typename T> struct TextureInterpolator  {
 		int width = info.width;
 		int height = info.height;
 		int depth = info.depth;
+		int tiw = info.tiled_width;
+		int tih = info.tiled_height;
+		int ltw = info.last_tile_width;
+		int lth = info.last_tile_height;
 		int ix, iy, iz;
 		int nix, niy, niz;
 		/* Tricubic b-spline interpolation. */
@@ -476,9 +486,9 @@ template<typename T> struct TextureInterpolator  {
 		/* Some helper macro to keep code reasonable size,
 		 * let compiler to inline all the matrix multiplications.
 		 */
-#define DATA(x, y, z) (ofs ? \
-	    read(data, ofs, xc[x] + yc[y] + zc[z], width, height, depth) : \
-	    read(data[xc[x] + yc[y] + zc[z]]))
+#define DATA(x, y, z) (gi ? \
+		read(data, gi, xc[x] + yc[y] + zc[z], width, height, depth, tiw, tih, ltw, lth) : \
+		read(data[xc[x] + yc[y] + zc[z]]))
 #define COL_TERM(col, row) \
 		(v[col] * (u[0] * DATA(0, col, row) + \
 		           u[1] * DATA(1, col, row) + \
@@ -496,7 +506,7 @@ template<typename T> struct TextureInterpolator  {
 
 		/* Actual interpolation. */
 		const T *data = (const T*)info.data;
-		const int *ofs = (const int*)info.offsets;
+		const int *gi = (const int*)info.grid_info;
 		return ROW_TERM(0) + ROW_TERM(1) + ROW_TERM(2) + ROW_TERM(3);
 
 #undef COL_TERM

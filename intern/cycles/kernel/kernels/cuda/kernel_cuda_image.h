@@ -58,6 +58,30 @@ ccl_device float cubic_h1(float a)
 	return 1.0f + cubic_w3(a) / (cubic_w2(a) + cubic_w3(a)) + 0.5f;
 }
 
+ccl_device bool compute_sparse_coordinates(const TextureInfo *info, float fx, float fy, float fz)
+{
+	float *ix, *iy, *iz;
+	modff(fx, *ix);
+	modff(fy, *iy);
+	modff(fz, *iz);
+	int x = *ix, y = *iy, z = *iz;
+	int tix = x / TILE_SIZE, itix = x % TILE_SIZE,
+	    tiy = y / TILE_SIZE, itiy = y % TILE_SIZE,
+	    tiz = z / TILE_SIZE, itiz = z % TILE_SIZE;
+	int dense_index = (tix + info->tiled_width * (tiy + tiz * info->tiled_height)) * 4;
+	int tile_x = info->grid_info[dense_index];
+	if(tile_x < 0) {
+		return false;
+	}
+	int tile_y = info->grid_info[dense_index + 1];
+	int tile_z = info->grid_info[dense_index + 2];
+	int dims = info->grid_info[dense_index + 3];
+	fx += tile_x + itix + (dims & (1 << ST_SHIFT_X_LHS_PAD));
+	fy += tile_y + itiy + (dims & (1 << ST_SHIFT_Y_LHS_PAD));
+	fz += tile_z + itiz + (dims & (1 << ST_SHIFT_Z_LHS_PAD));
+	return true;
+}
+
 /* Fast bicubic texture lookup using 4 bilinear lookups, adapted from CUDA samples. */
 template<typename T>
 ccl_device T kernel_tex_image_interp_bicubic(const TextureInfo& info, CUtexObject tex, float x, float y)
@@ -160,6 +184,12 @@ ccl_device float4 kernel_tex_image_interp_3d(KernelGlobals *kg, int id, float x,
 	const TextureInfo& info = kernel_tex_fetch(__texture_info, id);
 	CUtexObject tex = (CUtexObject)info.data;
 	uint interpolation = (interp == INTERPOLATION_NONE)? info.interpolation: interp;
+
+	if(info.grid_info) {
+		if(!compute_sparse_coordinates(&info, x, y, z)) {
+			return make_float4(0.0f);
+		}
+	}
 
 	const int texture_type = kernel_tex_type(id);
 	if(texture_type == IMAGE_DATA_TYPE_FLOAT4 ||

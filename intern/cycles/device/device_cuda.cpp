@@ -1020,6 +1020,9 @@ public:
 		string bind_name = mem.name;
 		size_t dsize = datatype_size(mem.data_type);
 		size_t size = mem.memory_size();
+		if(mem.grid_info) {
+			size += mem.grid_info->memory_size();
+		}
 
 		CUaddress_mode address_mode = CU_TR_ADDRESS_MODE_WRAP;
 		switch(mem.extension) {

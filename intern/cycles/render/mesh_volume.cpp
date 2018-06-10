@@ -379,7 +379,7 @@ void VolumeMeshBuilder::convert_quads_to_tris(const vector<QuadData> &quads,
 
 struct VoxelAttributeGrid {
 	float *data;
-	int *offsets = NULL;
+	int *grid_info = NULL;
 	int channels;
 };
 
@@ -403,7 +403,7 @@ void MeshManager::create_volume_mesh(Scene *scene,
 
 		VoxelAttribute *voxel = attr.data_voxel();
 		device_memory *image_memory = scene->image_manager->image_memory(voxel->slot);
-		device_memory *offsets = image_memory->offsets;
+		device_memory *grid_info = image_memory->grid_info;
 		int3 resolution = make_int3(image_memory->real_width,
 		                            image_memory->real_height,
 		                            image_memory->real_depth);
@@ -419,8 +419,8 @@ void MeshManager::create_volume_mesh(Scene *scene,
 		VoxelAttributeGrid voxel_grid;
 		voxel_grid.data = static_cast<float*>(image_memory->host_pointer);
 		voxel_grid.channels = image_memory->data_elements;
-		if(offsets) {
-			voxel_grid.offsets = static_cast<int*>(offsets->host_pointer);
+		if(grid_info) {
+			voxel_grid.grid_info = static_cast<int*>(grid_info->host_pointer);
 		}
 		voxel_grids.push_back(voxel_grid);
 	}
@@ -461,9 +461,12 @@ void MeshManager::create_volume_mesh(Scene *scene,
 	float3 cell_size = make_float3(1.0f/resolution.x,
 	                               1.0f/resolution.y,
 	                               1.0f/resolution.z);
-	const int3 tile_res = make_int3(get_tile_res(resolution.x),
-	                                get_tile_res(resolution.y),
-	                                get_tile_res(resolution.z));
+	const int3 tiled_res = make_int3(get_tile_res(resolution.x),
+	                                 get_tile_res(resolution.y),
+	                                 get_tile_res(resolution.z));
+	const int3 last_tile_res = make_int3(resolution.x % TILE_SIZE,
+	                                     resolution.y % TILE_SIZE,
+	                                     resolution.z % TILE_SIZE);
 
 	if(attr) {
 		const Transform *tfm = attr->data_transform();
@@ -486,17 +489,16 @@ void MeshManager::create_volume_mesh(Scene *scene,
 				for(size_t i = 0; i < voxel_grids.size(); ++i) {
 					const VoxelAttributeGrid &voxel_grid = voxel_grids[i];
 					const int channels = voxel_grid.channels;
-					const int *offsets = voxel_grid.offsets;
+					const int *grid_info = voxel_grid.grid_info;
 					int voxel_index;
 
-					if(offsets) {
-						voxel_index = compute_index(offsets, x, y, z,
-						                            resolution.x,
-						                            resolution.y,
-						                            resolution.z,
-						                            tile_res.x,
-						                            tile_res.y,
-						                            tile_res.z);
+					if(grid_info) {
+						voxel_index = compute_index(grid_info, x, y, z,
+						                            tiled_res.x,
+						                            tiled_res.y,
+						                            tiled_res.z,
+						                            last_tile_res.x,
+						                            last_tile_res.y);
 						if(voxel_index < 0) {
 							continue;
 						}

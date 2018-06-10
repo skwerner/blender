@@ -67,6 +67,25 @@ ccl_device_inline float4 svm_image_texture_read(KernelGlobals *kg, const ccl_glo
 	}
 }
 
+ccl_device_inline float4 svm_image_texture_read(KernelGlobals *kg,
+                                                const ccl_global TextureInfo *info,
+                                                int id, int x, int y, int z)
+{
+	int tix = x / TILE_SIZE, itix = x % TILE_SIZE,
+	    tiy = y / TILE_SIZE, itiy = y % TILE_SIZE,
+	    tiz = z / TILE_SIZE, itiz = z % TILE_SIZE;
+	int dense_index = (tix + info->tiled_width * (tiy + tiz * info->tiled_height)) * 2;
+	int sparse_index = info->grid_info[dense_index];
+	int dims = info->grid_info[dense_index + 1];
+	if(sparse_index < 0) {
+		return make_float4(0.0f);
+	}
+	int itiw = dims & (1 << ST_SHIFT_TRUNCATE_WIDTH) ? info->last_tile_width : TILE_SIZE;
+	int itih = dims & (1 << ST_SHIFT_TRUNCATE_HEIGHT) ? info->last_tile_height : TILE_SIZE;
+	int in_tile_index = itix + itiw * (itiy + itih * itiz);
+	return svm_image_texture_read(kg, info, id, sparse_index + in_tile_index);
+}
+
 ccl_device_inline float4 svm_image_texture_read_2d(KernelGlobals *kg, int id, int x, int y)
 {
 	const ccl_global TextureInfo *info = kernel_tex_info(kg, id);
@@ -101,6 +120,9 @@ ccl_device_inline float4 svm_image_texture_read_3d(KernelGlobals *kg, int id, in
 		z = svm_image_texture_wrap_clamp(z, info->depth);
 	}
 
+	if(info->grid_info) {
+		return svm_image_texture_read(kg, info, id, x, y, z);
+	}
 	int offset = x + info->width * y + info->width * info->height * z;
 	return svm_image_texture_read(kg, info, id, offset);
 }

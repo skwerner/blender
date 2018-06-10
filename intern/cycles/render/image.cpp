@@ -737,9 +737,8 @@ void ImageManager::file_make_image_sparse(Device *device,
 	int real_width = tex_img->data_width;
 	int real_height = tex_img->data_height;
 	int real_depth = tex_img->data_depth;
-
 	vector<DeviceType> sparse_grid;
-	vector<int> offsets;
+	vector<int> grid_info;
 
 	int voxel_count = create_sparse_grid<DeviceType>(tex_img->data(),
 	                                                 real_width,
@@ -747,15 +746,23 @@ void ImageManager::file_make_image_sparse(Device *device,
 	                                                 real_depth,
 	                                                 img->isovalue,
 	                                                 &sparse_grid,
-	                                                 &offsets);
-
-	size_t memory_usage = offsets.size() * sizeof(int) +
-	                   voxel_count * sizeof(DeviceType);
+	                                                 &grid_info);
 
 	if(voxel_count < 1) {
 		VLOG(1) << "Could not make sparse grid for "
 		        << path_filename(img->filename) << " (" << img->mem_name << ")"
 		        << ", no active tiles";
+		return;
+	}
+
+	size_t memory_usage = grid_info.size() * sizeof(int) + voxel_count * sizeof(DeviceType);
+	if(memory_usage >= tex_img->memory_size()) {
+		VLOG(1) << "Memory usage of '"
+		        << path_filename(img->filename) << "' (" << img->mem_name
+		        << ") increased from "
+		        << string_human_readable_size(tex_img->memory_size()) << " to "
+		        << string_human_readable_size(memory_usage)
+		        << ", not using sparse grid";
 		return;
 	}
 
@@ -766,26 +773,26 @@ void ImageManager::file_make_image_sparse(Device *device,
 	        << string_human_readable_size(memory_usage);
 
 	DeviceType *texture_pixels;
-	int *texture_offsets;
-	device_vector<int> *tex_offsets
+	int *texture_info;
+	device_vector<int> *tex_info
 	        = new device_vector<int>(device,
-	                                 (img->mem_name + "_offsets").c_str(),
+	                                 (img->mem_name + "_info").c_str(),
 	                                 MEM_TEXTURE);
 
 	{
 		thread_scoped_lock device_lock(device_mutex);
 		texture_pixels = (DeviceType*)tex_img->alloc(voxel_count);
-		texture_offsets = (int*)tex_offsets->alloc(offsets.size());
+		texture_info = (int*)tex_info->alloc(grid_info.size());
 	}
 
-	memcpy(&texture_offsets[0],
-		   &offsets[0],
-		   offsets.size() * sizeof(int));
+	memcpy(&texture_info[0],
+		   &grid_info[0],
+		   grid_info.size() * sizeof(int));
 	memcpy(&texture_pixels[0],
 		   &sparse_grid[0],
 		   voxel_count * sizeof(DeviceType));
 
-	tex_img->offsets = tex_offsets;
+	tex_img->grid_info = tex_info;
 	tex_img->real_width = real_width;
 	tex_img->real_height = real_height;
 	tex_img->real_depth = real_depth;
@@ -850,9 +857,9 @@ void ImageManager::device_load_image(Device *device,
 	/* Free previous texture(s) in slot. */
 	if(img->mem) {
 		thread_scoped_lock device_lock(device_mutex);
-		if(img->mem->offsets) {
-			delete img->mem->offsets;
-			img->mem->offsets = NULL;
+		if(img->mem->grid_info) {
+			delete img->mem->grid_info;
+			img->mem->grid_info = NULL;
 		}
 		delete img->mem;
 		img->mem = NULL;
@@ -900,8 +907,8 @@ void ImageManager::device_free_image(Device *, ImageDataType type, int slot)
 
 		if(img->mem) {
 			thread_scoped_lock device_lock(device_mutex);
-			if(img->mem->offsets){
-				delete img->mem->offsets;
+			if(img->mem->grid_info){
+				delete img->mem->grid_info;
 			}
 			delete img->mem;
 		}

@@ -49,6 +49,13 @@ if(WITH_CYCLES_NETWORK)
   )
 endif()
 
+
+if(WITH_CYCLES_DEVICE_METAL)
+	list(APPEND SRC
+		device_metal.mm
+	)
+endif()
+
 set(SRC_HEADERS
   device.h
   device_denoising.h
@@ -88,6 +95,9 @@ if(WITH_CYCLES_DEVICE_CUDA)
 endif()
 if(WITH_CYCLES_DEVICE_OPTIX)
   add_definitions(-DWITH_OPTIX)
+endif()
+if(WITH_CYCLES_DEVICE_METAL)
+	add_definitions(-DWITH_METAL)
 endif()
 if(WITH_CYCLES_DEVICE_MULTI)
   add_definitions(-DWITH_MULTI)

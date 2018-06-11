@@ -190,6 +190,11 @@ if(WITH_JACK)
   set(PLATFORM_LINKFLAGS "${PLATFORM_LINKFLAGS} -F/Library/Frameworks -weak_framework jackmp")
 endif()
 
+
+if(WITH_CYCLES_DEVICE_METAL)
+	set(PLATFORM_LINKFLAGS "${PLATFORM_LINKFLAGS} -framework Metal")
+endif()
+
 if(WITH_PYTHON_MODULE OR WITH_PYTHON_FRAMEWORK)
   # force cmake to link right framework
   set(PLATFORM_LINKFLAGS "${PLATFORM_LINKFLAGS} /Library/Frameworks/Python.framework/Versions/${PYTHON_VERSION}/Python")

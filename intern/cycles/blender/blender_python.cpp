@@ -962,16 +962,18 @@ static PyObject *enable_print_stats_func(PyObject * /*self*/, PyObject * /*args*
 static PyObject *get_device_types_func(PyObject * /*self*/, PyObject * /*args*/)
 {
   vector<DeviceType> device_types = Device::available_types();
-  bool has_cuda = false, has_optix = false, has_opencl = false;
+  bool has_cuda = false, has_optix = false, has_opencl = false, has_metal = false;
   foreach (DeviceType device_type, device_types) {
     has_cuda |= (device_type == DEVICE_CUDA);
     has_optix |= (device_type == DEVICE_OPTIX);
     has_opencl |= (device_type == DEVICE_OPENCL);
+    has_metal |= (device_type == DEVICE_METAL);
   }
-  PyObject *list = PyTuple_New(3);
+  PyObject *list = PyTuple_New(4);
   PyTuple_SET_ITEM(list, 0, PyBool_FromLong(has_cuda));
   PyTuple_SET_ITEM(list, 1, PyBool_FromLong(has_optix));
   PyTuple_SET_ITEM(list, 2, PyBool_FromLong(has_opencl));
+  PyTuple_SET_ITEM(list, 3, PyBool_FromLong(has_metal));
   return list;
 }
 

@@ -69,8 +69,8 @@ const inline int compute_index(const size_t x, const size_t y, const size_t z,
 	return x + width * (y + z * height);
 }
 
-const inline int compute_index_fast(const size_t x, const size_t y, const size_t z,
-                                    const size_t width, const size_t height)
+const inline int compute_index(const size_t x, const size_t y, const size_t z,
+                               const size_t width, const size_t height)
 {
 	return x + width * (y + z * height);
 }
@@ -114,10 +114,9 @@ const inline int compute_index(const int *grid_info,
 	int itih = dims & (1 << ST_SHIFT_TRUNCATE_HEIGHT) ? lth : TILE_SIZE;
 	/* Look up voxel in the tile.
 	 * Need to check whether or not a tile is padded on any of its 6 faces. */
-	int in_tile_index = compute_index_fast(itix, itiy, itiz, itiw, itih);
+	int in_tile_index = compute_index(itix, itiy, itiz, itiw, itih);
 	return sparse_index + in_tile_index;
 }
-
 
 /* Do not call this function in the kernel. */
 const inline int compute_index_cuda(const int *grid_info,
@@ -176,7 +175,7 @@ int create_sparse_grid(const T *dense_grid,
 				for(int k=z ; k < min(z+TILE_SIZE, depth) ; ++k) {
 					for(int j=y ; j < min(y+TILE_SIZE, height) ; ++j) {
 						for(int i=x ; i < min(x+TILE_SIZE, width) ; ++i) {
-							int index = compute_index_fast(i, j, k, width, height);
+							int index = compute_index(i, j, k, width, height);
 							sparse_grid->at(voxel_count + voxel) = dense_grid[index];
 							if(!is_active) {
 								is_active = gt(dense_grid[index], threshold);
@@ -219,7 +218,7 @@ const bool check_tile_active(const T *dense_grid, T threshold,
 	for(int k=z ; k < min(z+TILE_SIZE, depth) ; ++k) {
 		for(int j=y ; j < min(y+TILE_SIZE, height) ; ++j) {
 			for(int i=x ; i < min(x+TILE_SIZE, width) ; ++i) {
-				int index = compute_index_fast(i, j, k, width, height);
+				int index = compute_index(i, j, k, width, height);
 				if(gt(dense_grid[index], threshold)) {
 					return true;
 				}
@@ -321,7 +320,7 @@ int create_sparse_grid_cuda(const T *dense_grid,
 				for(int k = z_lhs ; k < z_rhs ; ++k) {
 					for(int j = y_lhs ; j < y_rhs ; ++j) {
 						for(int i = x_lhs ; i < x_rhs ; ++i) {
-							int index = compute_index_fast(i, j, k, width, height);
+							int index = compute_index(i, j, k, width, height);
 							sparse_grid->at(voxel_count + voxel) = dense_grid[index];
 							++voxel;
 						}

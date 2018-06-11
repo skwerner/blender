@@ -467,6 +467,7 @@ void MeshManager::create_volume_mesh(Scene *scene,
 	const int3 last_tile_res = make_int3(resolution.x % TILE_SIZE,
 	                                     resolution.y % TILE_SIZE,
 	                                     resolution.z % TILE_SIZE);
+	const bool using_cuda = (scene->device->info.type == DEVICE_CUDA);
 
 	if(attr) {
 		const Transform *tfm = attr->data_transform();
@@ -493,12 +494,24 @@ void MeshManager::create_volume_mesh(Scene *scene,
 					int voxel_index;
 
 					if(grid_info) {
-						voxel_index = compute_index(grid_info, x, y, z,
-						                            tiled_res.x,
-						                            tiled_res.y,
-						                            tiled_res.z,
-						                            last_tile_res.x,
-						                            last_tile_res.y);
+						if(!using_cuda) {
+							voxel_index = compute_index(grid_info, x, y, z,
+														tiled_res.x,
+														tiled_res.y,
+														tiled_res.z,
+														last_tile_res.x,
+														last_tile_res.y);
+						}
+						else {
+							voxel_index = compute_index_cuda(grid_info,
+							                                 x, y, z,
+							                                 resolution.x,
+							                                 resolution.y,
+							                                 resolution.z,
+							                                 tiled_res.x,
+							                                 tiled_res.y,
+							                                 tiled_res.z);
+						}
 						if(voxel_index < 0) {
 							continue;
 						}

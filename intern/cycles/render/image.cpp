@@ -739,14 +739,26 @@ void ImageManager::file_make_image_sparse(Device *device,
 	int real_depth = tex_img->data_depth;
 	vector<DeviceType> sparse_grid;
 	vector<int> grid_info;
+	int voxel_count;
 
-	int voxel_count = create_sparse_grid<DeviceType>(tex_img->data(),
+	if(device->info.type != DEVICE_CUDA) {
+		voxel_count = create_sparse_grid<DeviceType>(tex_img->data(),
 	                                                 real_width,
 	                                                 real_height,
 	                                                 real_depth,
 	                                                 img->isovalue,
 	                                                 &sparse_grid,
 	                                                 &grid_info);
+	}
+	else {
+		voxel_count = create_sparse_grid_cuda<DeviceType>(tex_img->data(),
+		                                                  real_width,
+		                                                  real_height,
+		                                                  real_depth,
+		                                                  img->isovalue,
+		                                                  &sparse_grid,
+		                                                  &grid_info);
+	}
 
 	if(voxel_count < 1) {
 		VLOG(1) << "Could not make sparse grid for "

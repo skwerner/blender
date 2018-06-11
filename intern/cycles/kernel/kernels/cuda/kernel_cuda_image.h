@@ -58,7 +58,8 @@ ccl_device float cubic_h1(float a)
 	return 1.0f + cubic_w3(a) / (cubic_w2(a) + cubic_w3(a)) + 0.5f;
 }
 
-ccl_device bool compute_sparse_coordinates(const TextureInfo *info, float fx, float fy, float fz)
+/* Converts coordinates from normal volume textures dense to sparse ones. */
+ccl_device bool compute_sparse_coordinates(const TextureInfo *info, float &fx, float &fy, float &fz)
 {
 	float *ix, *iy, *iz;
 	modff(fx, *ix);
@@ -76,9 +77,9 @@ ccl_device bool compute_sparse_coordinates(const TextureInfo *info, float fx, fl
 	int tile_y = info->grid_info[dense_index + 1];
 	int tile_z = info->grid_info[dense_index + 2];
 	int dims = info->grid_info[dense_index + 3];
-	fx += tile_x + itix + (dims & (1 << ST_SHIFT_X_LHS_PAD));
-	fy += tile_y + itiy + (dims & (1 << ST_SHIFT_Y_LHS_PAD));
-	fz += tile_z + itiz + (dims & (1 << ST_SHIFT_Z_LHS_PAD));
+	fx += tile_x + itix + (dims & (1 << ST_SHIFT_X_PAD));
+	fy += tile_y + itiy + (dims & (1 << ST_SHIFT_Y_PAD));
+	fz += tile_z + itiz + (dims & (1 << ST_SHIFT_Z_PAD));
 	return true;
 }
 

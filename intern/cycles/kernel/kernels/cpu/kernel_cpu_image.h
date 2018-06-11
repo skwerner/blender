@@ -30,6 +30,11 @@ template<typename T> struct TextureInterpolator  {
 		u[3] = (1.0f / 6.0f) * t * t * t; \
 	} (void)0
 
+	static ccl_always_inline int flatten(int x, int y, int z, int width, int height)
+	{
+		return x + width * (y + z * height);
+	}
+
 	static ccl_always_inline float4 read(float4 r)
 	{
 		return r;
@@ -82,7 +87,7 @@ template<typename T> struct TextureInterpolator  {
 		int tix = x / TILE_SIZE, itix = x % TILE_SIZE,
 		    tiy = y / TILE_SIZE, itiy = y % TILE_SIZE,
 		    tiz = z / TILE_SIZE, itiz = z % TILE_SIZE;
-		int dense_index = compute_index_fast(tix, tiy, tiz, tiw, tih) * 2;
+		int dense_index = flatten(tix, tiy, tiz, tiw, tih) * 2;
 		int sparse_index = grid_info[dense_index];
 		int dims = grid_info[dense_index + 1];
 		if(sparse_index < 0) {
@@ -90,7 +95,7 @@ template<typename T> struct TextureInterpolator  {
 		}
 		int itiw = dims & (1 << ST_SHIFT_TRUNCATE_WIDTH) ? ltw : TILE_SIZE;
 		int itih = dims & (1 << ST_SHIFT_TRUNCATE_HEIGHT) ? lth : TILE_SIZE;
-		int in_tile_index = compute_index_fast(itix, itiy, itiz, itiw, itih);
+		int in_tile_index = flatten(itix, itiy, itiz, itiw, itih);
 		return read(data[sparse_index + in_tile_index]);
 	}
 
@@ -318,7 +323,7 @@ template<typename T> struct TextureInterpolator  {
 			            info.tiled_width, info.tiled_height,
 			            info.last_tile_width, info.last_tile_height);
 		}
-		return read(data[compute_index_fast(ix, iy, iz, width, height)]);
+		return read(data[flatten(ix, iy, iz, width, height)]);
 	}
 
 	static ccl_always_inline float4 interp_3d_linear(const TextureInfo& info,
@@ -384,14 +389,14 @@ template<typename T> struct TextureInterpolator  {
 			r += tz*ty*tx                            * read(data, gi, nix, niy, niz, tiw, tih, ltw, lth);
 		}
 		else {
-			r  = (1.0f - tz)*(1.0f - ty)*(1.0f - tx) * read(data[compute_index_fast(ix,  iy,  iz,  width, height)]);
-			r += (1.0f - tz)*(1.0f - ty)*tx			 * read(data[compute_index_fast(nix, iy,  iz,  width, height)]);
-			r += (1.0f - tz)*ty*(1.0f - tx)			 * read(data[compute_index_fast(ix,  niy, iz,  width, height)]);
-			r += (1.0f - tz)*ty*tx					 * read(data[compute_index_fast(nix, niy, iz,  width, height)]);
-			r += tz*(1.0f - ty)*(1.0f - tx)			 * read(data[compute_index_fast(ix,  iy,  niz, width, height)]);
-			r += tz*(1.0f - ty)*tx					 * read(data[compute_index_fast(nix, iy,  niz, width, height)]);
-			r += tz*ty*(1.0f - tx)					 * read(data[compute_index_fast(ix,  niy, niz, width, height)]);
-			r += tz*ty*tx							 * read(data[compute_index_fast(nix, niy, niz, width, height)]);
+			r  = (1.0f - tz)*(1.0f - ty)*(1.0f - tx) * read(data[flatten(ix,  iy,  iz,  width, height)]);
+			r += (1.0f - tz)*(1.0f - ty)*tx			 * read(data[flatten(nix, iy,  iz,  width, height)]);
+			r += (1.0f - tz)*ty*(1.0f - tx)			 * read(data[flatten(ix,  niy, iz,  width, height)]);
+			r += (1.0f - tz)*ty*tx					 * read(data[flatten(nix, niy, iz,  width, height)]);
+			r += tz*(1.0f - ty)*(1.0f - tx)			 * read(data[flatten(ix,  iy,  niz, width, height)]);
+			r += tz*(1.0f - ty)*tx					 * read(data[flatten(nix, iy,  niz, width, height)]);
+			r += tz*ty*(1.0f - tx)					 * read(data[flatten(ix,  niy, niz, width, height)]);
+			r += tz*ty*tx							 * read(data[flatten(nix, niy, niz, width, height)]);
 		}
 
 		return r;

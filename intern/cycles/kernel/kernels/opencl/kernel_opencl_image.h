@@ -67,6 +67,7 @@ ccl_device_inline float4 svm_image_texture_read(KernelGlobals *kg, const ccl_glo
 	}
 }
 
+/* Calculates the index for sparse volume textures. */
 ccl_device_inline float4 svm_image_texture_read(KernelGlobals *kg,
                                                 const ccl_global TextureInfo *info,
                                                 int id, int x, int y, int z)

@@ -250,290 +250,298 @@ bool LightManager::object_usable_as_light(Object *object) {
 
 void LightManager::device_update_distribution(Device *, DeviceScene *dscene, Scene *scene, Progress& progress)
 {
-    progress.set_status("Updating Lights", "Computing distribution");
+	progress.set_status("Updating Lights", "Computing distribution");
 
-    /* count */
-    size_t num_lights = 0;
-    size_t num_portals = 0;
-    size_t num_background_lights = 0;
-    size_t num_triangles = 0;
+	/* count */
+	size_t num_lights = 0;
+	size_t num_portals = 0;
+	size_t num_background_lights = 0;
+	size_t num_triangles = 0;
 
-    bool background_mis = false;
+	bool background_mis = false;
 
-    /* The emissivePrims vector contains all emissive primitives in the scene,
-    * i.e., all mesh light triangles and all lamps. The order of the primitives
-    * in the vector is important since it has the same order as the
-    * light_distribution array.
-    *
-    * If using the light BVH then the order is important since the light BVH
-    * reordered the lights so lights in the same node are next to each other
-    * in memory.
-    *
-    * If NOT using the light BVH then the order is important since during
-    * sampling we assume all triangles are first in the array.
-    */
-    vector<Primitive> emissivePrims;
-    emissivePrims.reserve(scene->lights.size());
+	/* The emissivePrims vector contains all emissive primitives in the scene,
+	* i.e., all mesh light triangles and all lamps. The order of the primitives
+	* in the vector is important since it has the same order as the
+	* light_distribution array.
+	*
+	* If using the light BVH then the order is important since the light BVH
+	* reordered the lights so lights in the same node are next to each other
+	* in memory.
+	*
+	* If NOT using the light BVH then the order is important since during
+	* sampling we assume all triangles are first in the array.
+	*/
+	vector<Primitive> emissivePrims;
+	emissivePrims.reserve(scene->lights.size());
 
-    int light_index = 0;
-    foreach(Light *light, scene->lights) {
-        if(light->is_enabled) {
-            emissivePrims.push_back(Primitive(~light_index,-1));
-            num_lights++;
-            light_index++;
-        }
-        if(light->is_portal) {
-            num_portals++;
-        }
-    }
+	int light_index = 0;
+	foreach(Light *light, scene->lights) {
+		if(light->is_enabled) {
+			emissivePrims.push_back(Primitive(~light_index,-1));
+			num_lights++;
+			light_index++;
+		}
+		if(light->is_portal) {
+			num_portals++;
+		}
+	}
 
-    int object_id = 0;
-    foreach(Object *object, scene->objects) {
-        if(progress.get_cancel()) return;
+	int object_id = 0;
+	foreach(Object *object, scene->objects) {
+		if(progress.get_cancel()) return;
 
-        if(!object_usable_as_light(object)) {
-            object_id++;
-            continue;
-        }
-        /* Count emissive triangles. */
-        Mesh *mesh = object->mesh;
-        size_t mesh_num_triangles = mesh->num_triangles();
-        for(size_t i = 0; i < mesh_num_triangles; i++) {
-            int shader_index = mesh->shader[i];
-            Shader *shader = (shader_index < mesh->used_shaders.size())
-                                     ? mesh->used_shaders[shader_index]
-                                     : scene->default_surface;
+		if(!object_usable_as_light(object)) {
+			object_id++;
+			continue;
+		}
+		/* Count emissive triangles. */
+		Mesh *mesh = object->mesh;
+		size_t mesh_num_triangles = mesh->num_triangles();
+		for(size_t i = 0; i < mesh_num_triangles; i++) {
+			int shader_index = mesh->shader[i];
+			Shader *shader = (shader_index < mesh->used_shaders.size())
+			        ? mesh->used_shaders[shader_index]
+			          : scene->default_surface;
 
-            if(shader->use_mis && shader->has_surface_emission) {
-                emissivePrims.push_back(Primitive(i + mesh->tri_offset, object_id));
-                num_triangles++;
-            }
-        }
+			if(shader->use_mis && shader->has_surface_emission) {
+				emissivePrims.push_back(Primitive(i + mesh->tri_offset, object_id));
+				num_triangles++;
+			}
+		}
 
-        object_id++;
-    }
+		object_id++;
+	}
 
-    size_t num_distribution = num_triangles + num_lights;
-    VLOG(1) << "Total " << num_distribution << " of light distribution primitives.";
+	size_t num_distribution = num_triangles + num_lights;
+	VLOG(1) << "Total " << num_distribution << " of light distribution primitives.";
 
-    if (scene->integrator->use_light_bvh) {
+	if (scene->integrator->use_light_bvh) {
 
-        /* create light BVH */
-        double time_start = time_dt();
-        LightTree lightBVH(emissivePrims, scene->objects, scene->lights, 1);
-        VLOG(1) << "Light BVH build time: " << time_dt() - time_start;
+		/* create light BVH */
+		double time_start = time_dt();
+		LightTree lightBVH(emissivePrims, scene->objects, scene->lights, 1);
+		VLOG(1) << "Light BVH build time: " << time_dt() - time_start;
 
-        /* the light BVH reorders the primitives so update emissivePrims */
-        const vector<Primitive>& orderedPrims = lightBVH.getPrimitives();
-        emissivePrims = orderedPrims;
+		/* the light BVH reorders the primitives so update emissivePrims */
+		const vector<Primitive>& orderedPrims = lightBVH.getPrimitives();
+		emissivePrims = orderedPrims;
 
-        if(progress.get_cancel()) return;
+		if(progress.get_cancel()) return;
 
-        /* create nodes */
-        const vector<CompactNode>& nodesVec = lightBVH.getNodes();
-        float4 *nodes = dscene->light_tree_nodes.alloc(nodesVec.size()*LIGHT_BVH_NODE_SIZE);
+		/* create nodes */
+		const vector<CompactNode>& nodesVec = lightBVH.getNodes();
+		float4 *nodes = dscene->light_tree_nodes.alloc(nodesVec.size()*LIGHT_BVH_NODE_SIZE);
 
-        /* convert each compact node into 4xfloat4
-         * 4 for energy, secondChildoffset, prim_id, nemitters
-         * 4 for bbox.min + bbox.max[0]
-         * 4 for bbox.max[1-2], theta_o, theta_e
-         * 4 for axis + 1 pad
-         */
-        size_t offset = 0;
-        foreach (CompactNode node, nodesVec){
-            nodes[offset].x = node.energy;
-            nodes[offset].y = __int_as_float(node.secondChildOffset);
-            nodes[offset].z = __int_as_float(node.prim_id);
-            nodes[offset].w = __int_as_float(node.nemitters);
+		/* convert each compact node into 4xfloat4
+		 * 4 for energy, secondChildoffset, prim_id, nemitters
+		 * 4 for bbox.min + bbox.max[0]
+		 * 4 for bbox.max[1-2], theta_o, theta_e
+		 * 4 for axis + 1 pad
+		 */
+		size_t offset = 0;
+		foreach (CompactNode node, nodesVec){
+			nodes[offset].x = node.energy;
+			nodes[offset].y = __int_as_float(node.secondChildOffset);
+			nodes[offset].z = __int_as_float(node.prim_id);
+			nodes[offset].w = __int_as_float(node.nemitters);
 
-            nodes[offset+1].x = node.bounds_w.min[0];
-            nodes[offset+1].y = node.bounds_w.min[1];
-            nodes[offset+1].z = node.bounds_w.min[2];
-            nodes[offset+1].w = node.bounds_w.max[0];
+			nodes[offset+1].x = node.bounds_w.min[0];
+			nodes[offset+1].y = node.bounds_w.min[1];
+			nodes[offset+1].z = node.bounds_w.min[2];
+			nodes[offset+1].w = node.bounds_w.max[0];
 
-            nodes[offset+2].x = node.bounds_w.max[1];
-            nodes[offset+2].y = node.bounds_w.max[2];
-            nodes[offset+2].z = node.bounds_o.theta_o;
-            nodes[offset+2].w = node.bounds_o.theta_e;
+			nodes[offset+2].x = node.bounds_w.max[1];
+			nodes[offset+2].y = node.bounds_w.max[2];
+			nodes[offset+2].z = node.bounds_o.theta_o;
+			nodes[offset+2].w = node.bounds_o.theta_e;
 
-            nodes[offset+3].x = node.bounds_o.axis[0];
-            nodes[offset+3].y = node.bounds_o.axis[1];
-            nodes[offset+3].z = node.bounds_o.axis[2];
-            nodes[offset+3].w = 0; // pad
+			nodes[offset+3].x = node.bounds_o.axis[0];
+			nodes[offset+3].y = node.bounds_o.axis[1];
+			nodes[offset+3].z = node.bounds_o.axis[2];
+			nodes[offset+3].w = 0; // pad
 
-            offset += 4;
-        }
+			offset += 4;
+		}
 
-    }
+	}
 
-    /* create light distribution in same order as the emissivePrims */
+	/* create light distribution in same order as the emissivePrims */
 
-    /* emission area */
-    KernelLightDistribution *distribution = dscene->light_distribution.alloc(num_distribution + 1);
-    float totarea = 0.0f;
+	/* emission area */
+	KernelLightDistribution *distribution = dscene->light_distribution.alloc(num_distribution + 1);
+	float totarea = 0.0f;
 
-    /* triangles */
-    size_t offset = 0;
+	/* triangles */
+	size_t offset = 0;
 
-    assert(emissivePrims.size() == num_distribution);
+	assert(emissivePrims.size() == num_distribution);
 
-    /* create distributions for mesh lights */
-    foreach (Primitive prim, emissivePrims){
-        if(progress.get_cancel()) return;
+	/* create distributions for mesh lights */
+	foreach (Primitive prim, emissivePrims){
+		if(progress.get_cancel()) return;
 
-        if (prim.prim_id < 0){ // Early exit for lights
-            offset++;
-            continue;
-        }
+		if (prim.prim_id < 0){ // Early exit for lights
+			offset++;
+			continue;
+		}
 
-        const Object* object = scene->objects[prim.object_id];
-        /* Sum area. */
-        const Mesh *mesh = object->mesh;
-        int shader_flag = 0;
+		const Object* object = scene->objects[prim.object_id];
+		/* Sum area. */
+		const Mesh *mesh = object->mesh;
+		int shader_flag = 0;
 
-        if(!(object->visibility & PATH_RAY_DIFFUSE)) {
-            shader_flag |= SHADER_EXCLUDE_DIFFUSE;
-            use_light_visibility = true;
-        }
-        if(!(object->visibility & PATH_RAY_GLOSSY)) {
-            shader_flag |= SHADER_EXCLUDE_GLOSSY;
-            use_light_visibility = true;
-        }
-        if(!(object->visibility & PATH_RAY_TRANSMIT)) {
-            shader_flag |= SHADER_EXCLUDE_TRANSMIT;
-            use_light_visibility = true;
-        }
-        if(!(object->visibility & PATH_RAY_VOLUME_SCATTER)) {
-            shader_flag |= SHADER_EXCLUDE_SCATTER;
-            use_light_visibility = true;
-        }
+		if(!(object->visibility & PATH_RAY_DIFFUSE)) {
+			shader_flag |= SHADER_EXCLUDE_DIFFUSE;
+			use_light_visibility = true;
+		}
+		if(!(object->visibility & PATH_RAY_GLOSSY)) {
+			shader_flag |= SHADER_EXCLUDE_GLOSSY;
+			use_light_visibility = true;
+		}
+		if(!(object->visibility & PATH_RAY_TRANSMIT)) {
+			shader_flag |= SHADER_EXCLUDE_TRANSMIT;
+			use_light_visibility = true;
+		}
+		if(!(object->visibility & PATH_RAY_VOLUME_SCATTER)) {
+			shader_flag |= SHADER_EXCLUDE_SCATTER;
+			use_light_visibility = true;
+		}
 
-        distribution[offset].totarea = totarea;
-        distribution[offset].prim = prim.prim_id;
-        distribution[offset].mesh_light.shader_flag = shader_flag;
-        distribution[offset].mesh_light.object_id = prim.object_id;
-        offset++;
+		distribution[offset].totarea = totarea;
+		distribution[offset].prim = prim.prim_id;
+		distribution[offset].mesh_light.shader_flag = shader_flag;
+		distribution[offset].mesh_light.object_id = prim.object_id;
+		offset++;
 
-        int triangle_id = prim.prim_id - mesh->tri_offset;
-        totarea += mesh->compute_triangle_area(triangle_id, object->tfm);
-    }
+		int triangle_id = prim.prim_id - mesh->tri_offset;
+		totarea += mesh->compute_triangle_area(triangle_id, object->tfm);
+	}
 
-    float trianglearea = totarea;
+	float trianglearea = totarea;
 
-    /* point lights */
-    float lightarea = (totarea > 0.0f) ? totarea / num_lights : 1.0f;
-    bool use_lamp_mis = false;
-    offset = 0;
+	/* point lights */
+	float lightarea = (totarea > 0.0f) ? totarea / num_lights : 1.0f;
+	bool use_lamp_mis = false;
+	offset = 0;
 
-    /* create distributions for lights */
-    foreach (Primitive prim, emissivePrims){
-        if(progress.get_cancel()) return;
+	/* create distributions for lights */
+	foreach (Primitive prim, emissivePrims){
+		if(progress.get_cancel()) return;
 
-        if (prim.prim_id >= 0){ // Early exit for mesh lights
-            offset++;
-            continue;
-        }
+		if (prim.prim_id >= 0){ // Early exit for mesh lights
+			offset++;
+			continue;
+		}
 
-        int light_index = -prim.prim_id -1;
-        const Light* light = scene->lights[light_index];
+		int light_index = -prim.prim_id -1;
+		const Light* light = scene->lights[light_index];
 
-        distribution[offset].totarea = totarea;
-        distribution[offset].prim = prim.prim_id;
-        distribution[offset].lamp.pad = 1.0f;
-        distribution[offset].lamp.size = light->size;
-        offset++;
-        totarea += lightarea;
+		distribution[offset].totarea = totarea;
+		distribution[offset].prim = prim.prim_id;
+		distribution[offset].lamp.pad = 1.0f;
+		distribution[offset].lamp.size = light->size;
+		offset++;
+		totarea += lightarea;
 
-        if(light->size > 0.0f && light->use_mis)
-            use_lamp_mis = true;
-        if(light->type == LIGHT_BACKGROUND) {
-            num_background_lights++;
-            background_mis = light->use_mis;
-        }
+		if(light->size > 0.0f && light->use_mis)
+			use_lamp_mis = true;
+		if(light->type == LIGHT_BACKGROUND) {
+			num_background_lights++;
+			background_mis = light->use_mis;
+		}
 
-    }
+	}
 
-    /* normalize cumulative distribution functions */
-    distribution[num_distribution].totarea = totarea;
-    distribution[num_distribution].prim = 0.0f;
-    distribution[num_distribution].lamp.pad = 0.0f;
-    distribution[num_distribution].lamp.size = 0.0f;
+	/* normalize cumulative distribution functions */
+	distribution[num_distribution].totarea = totarea;
+	distribution[num_distribution].prim = 0.0f;
+	distribution[num_distribution].lamp.pad = 0.0f;
+	distribution[num_distribution].lamp.size = 0.0f;
 
-    if(totarea > 0.0f) {
-        for(size_t i = 0; i < num_distribution; i++)
-            distribution[i].totarea /= totarea;
-        distribution[num_distribution].totarea = 1.0f;
-    }
+	if(totarea > 0.0f) {
+		for(size_t i = 0; i < num_distribution; i++)
+			distribution[i].totarea /= totarea;
+		distribution[num_distribution].totarea = 1.0f;
+	}
 
-    if(progress.get_cancel()) return;
+	if(progress.get_cancel()) return;
 
-    /* update device */
-    KernelIntegrator *kintegrator = &dscene->data.integrator;
-    kintegrator->use_light_bvh = scene->integrator->use_light_bvh;
-    KernelFilm *kfilm = &dscene->data.film;
-    kintegrator->use_direct_light = (totarea > 0.0f);
+	/* update device */
+	KernelIntegrator *kintegrator = &dscene->data.integrator;
+	kintegrator->use_light_bvh = scene->integrator->use_light_bvh;
+	KernelFilm *kfilm = &dscene->data.film;
+	kintegrator->use_direct_light = (totarea > 0.0f);
 
-    if(kintegrator->use_direct_light) {
+	if(kintegrator->use_direct_light) {
 
-        /* update light bvh nodes */
-        dscene->light_tree_nodes.copy_to_device();
+		/* update light bvh nodes */
+		dscene->light_tree_nodes.copy_to_device();
 
-        /* number of emissives */
-        kintegrator->num_distribution = num_distribution;
+		/* number of emissives */
+		kintegrator->num_distribution = num_distribution;
 
-        /* precompute pdfs */
-        kintegrator->pdf_triangles = 0.0f;
-        kintegrator->pdf_lights = 0.0f;
+		/* precompute pdfs */
+		kintegrator->pdf_triangles = 0.0f;
+		kintegrator->pdf_lights = 0.0f;
 
-        /* sample one, with 0.5 probability of light or triangle */
-        kintegrator->num_all_lights = num_lights;
+		/* sample one, with 0.5 probability of light or triangle */
+		kintegrator->num_all_lights = num_lights;
 
-        // Let BVH traversal take care of pdf calculations
-        kintegrator->pdf_triangles  = 1.0f;
-        kintegrator->pdf_lights     = 1.0f;
+		if(trianglearea > 0.0f) {
+			kintegrator->pdf_triangles = 1.0f/trianglearea;
+			if(num_lights)
+				kintegrator->pdf_triangles *= 0.5f;
+		}
 
-        kintegrator->use_lamp_mis = use_lamp_mis;
+		if(num_lights) {
+			kintegrator->pdf_lights = 1.0f/num_lights;
+			if(trianglearea > 0.0f)
+				kintegrator->pdf_lights *= 0.5f;
+		}
 
-        /* bit of an ugly hack to compensate for emitting triangles influencing
-         * amount of samples we get for this pass */
-        kfilm->pass_shadow_scale = 1.0f;
+		kintegrator->use_lamp_mis = use_lamp_mis;
 
-        if(kintegrator->pdf_triangles != 0.0f)
-            kfilm->pass_shadow_scale *= 0.5f;
+		/* bit of an ugly hack to compensate for emitting triangles influencing
+		 * amount of samples we get for this pass */
+		kfilm->pass_shadow_scale = 1.0f;
 
-        if(num_background_lights < num_lights)
-            kfilm->pass_shadow_scale *= (float)(num_lights - num_background_lights)/(float)num_lights;
+		if(kintegrator->pdf_triangles != 0.0f)
+			kfilm->pass_shadow_scale *= 0.5f;
 
-        /* CDF */
-        dscene->light_distribution.copy_to_device();
+		if(num_background_lights < num_lights)
+			kfilm->pass_shadow_scale *= (float)(num_lights - num_background_lights)/(float)num_lights;
 
-        /* Portals */
-        if(num_portals > 0) {
-            kintegrator->portal_offset = light_index;
-            kintegrator->num_portals = num_portals;
-            kintegrator->portal_pdf = background_mis? 0.5f: 1.0f;
-        }
-        else {
-            kintegrator->num_portals = 0;
-            kintegrator->portal_offset = 0;
-            kintegrator->portal_pdf = 0.0f;
-        }
-    }
-    else {
-        dscene->light_distribution.free();
-        dscene->light_tree_nodes.free();
+		/* CDF */
+		dscene->light_distribution.copy_to_device();
 
-        kintegrator->num_distribution = 0;
-        kintegrator->num_all_lights = 0;
-        kintegrator->pdf_triangles = 0.0f;
-        kintegrator->pdf_lights = 0.0f;
-        kintegrator->use_lamp_mis = false;
-        kintegrator->num_portals = 0;
-        kintegrator->portal_offset = 0;
-        kintegrator->portal_pdf = 0.0f;
+		/* Portals */
+		if(num_portals > 0) {
+			kintegrator->portal_offset = light_index;
+			kintegrator->num_portals = num_portals;
+			kintegrator->portal_pdf = background_mis? 0.5f: 1.0f;
+		}
+		else {
+			kintegrator->num_portals = 0;
+			kintegrator->portal_offset = 0;
+			kintegrator->portal_pdf = 0.0f;
+		}
+	}
+	else {
+		dscene->light_distribution.free();
+		dscene->light_tree_nodes.free();
 
-        kfilm->pass_shadow_scale = 1.0f;
-    }
+		kintegrator->num_distribution = 0;
+		kintegrator->num_all_lights = 0;
+		kintegrator->pdf_triangles = 0.0f;
+		kintegrator->pdf_lights = 0.0f;
+		kintegrator->use_lamp_mis = false;
+		kintegrator->num_portals = 0;
+		kintegrator->portal_offset = 0;
+		kintegrator->portal_pdf = 0.0f;
+
+		kfilm->pass_shadow_scale = 1.0f;
+	}
 }
 
 static void background_cdf(int start,

@@ -1080,88 +1080,88 @@ ccl_device bool light_select_reached_max_bounces(KernelGlobals *kg, int index, i
 
 ccl_device float calc_node_importance(KernelGlobals *kg, float3 P, int node_offset)
 {
-    float4 node0 = kernel_tex_fetch(__light_tree_nodes, node_offset + 0);
-    float4 node1 = kernel_tex_fetch(__light_tree_nodes, node_offset + 1);
-    float4 node2 = kernel_tex_fetch(__light_tree_nodes, node_offset + 2);
-    float4 node3 = kernel_tex_fetch(__light_tree_nodes, node_offset + 3);
+	float4 node0 = kernel_tex_fetch(__light_tree_nodes, node_offset + 0);
+	float4 node1 = kernel_tex_fetch(__light_tree_nodes, node_offset + 1);
+	float4 node2 = kernel_tex_fetch(__light_tree_nodes, node_offset + 2);
+	float4 node3 = kernel_tex_fetch(__light_tree_nodes, node_offset + 3);
 
-    float energy = node0[0];
-    float3 bboxMin = make_float3( node1[0], node1[1], node1[2]);
-    float3 bboxMax = make_float3( node1[3], node2[0], node2[1]);
-    float theta_o = node2[2];
-    float theta_e = node2[3];
-    float3 axis = make_float3(node3[0], node3[1], node3[2]);
-    float3 centroid = 0.5f*(bboxMax + bboxMin);
+	float energy = node0[0];
+	float3 bboxMin = make_float3( node1[0], node1[1], node1[2]);
+	float3 bboxMax = make_float3( node1[3], node2[0], node2[1]);
+	float theta_o = node2[2];
+	float theta_e = node2[3];
+	float3 axis = make_float3(node3[0], node3[1], node3[2]);
+	float3 centroid = 0.5f*(bboxMax + bboxMin);
 
-    float3 centroidToP = P-centroid;
-    float theta = acosf(dot(axis,normalize(centroidToP)));
-    float theta_u = 0; // TODO: Figure out how to calculate this one
-    float d2 = len_squared(centroidToP);
+	float3 centroidToP = P-centroid;
+	float theta = acosf(dot(axis,normalize(centroidToP)));
+	float theta_u = 0; // TODO: Figure out how to calculate this one
+	float d2 = len_squared(centroidToP);
 
-    return energy * cosf(clamp(theta - theta_o - theta_u, 0.0, theta_e))/d2;
+	return energy * cosf(clamp(theta - theta_o - theta_u, 0.0, theta_e))/d2;
 }
 
 ccl_device void update_parent_node(KernelGlobals *kg, int node_offset,
                                    int *childOffset, int *distribution_id,
                                    int *nemitters)
 {
-    float4 node        = kernel_tex_fetch(__light_tree_nodes, node_offset);
-    (*childOffset)     = __float_as_int(node[1]);
-    (*distribution_id) = __float_as_int(node[2]);
-    (*nemitters)       = __float_as_int(node[3]);
+	float4 node        = kernel_tex_fetch(__light_tree_nodes, node_offset);
+	(*childOffset)     = __float_as_int(node[1]);
+	(*distribution_id) = __float_as_int(node[2]);
+	(*nemitters)       = __float_as_int(node[3]);
 }
 
 ccl_device int sample_light_bvh(KernelGlobals *kg, float3 P, float randu, float *pdf_factor)
 {
-    int index = -1;
-    *pdf_factor = 1.0f;
+	int index = -1;
+	*pdf_factor = 1.0f;
 
-    /* read in first part of root node of light BVH */
-    int secondChildOffset, distribution_id, nemitters;
-    update_parent_node(kg, 0, &secondChildOffset, &distribution_id, &nemitters);
+	/* read in first part of root node of light BVH */
+	int secondChildOffset, distribution_id, nemitters;
+	update_parent_node(kg, 0, &secondChildOffset, &distribution_id, &nemitters);
 
-    int offset = 0;
-    do{
+	int offset = 0;
+	do{
 
-        /* Found a leaf - Choose which light to use */
-        if(nemitters > 0){ // Found a leaf
-             if(nemitters == 1){
-                 index = distribution_id;
-             } else { // Leaf with several lights. Pick one randomly.
-                 light_distribution_sample(kg, &randu); // TODO: Rescale random number in a better way
-                 int light = min((int)(randu* (float)nemitters), nemitters-1);
-                 index = distribution_id +light;
-                 *pdf_factor *= 1.0f / (float)nemitters;
-             }
-             break;
-        } else { // Interior node, pick left or right randomly
+		/* Found a leaf - Choose which light to use */
+		if(nemitters > 0){ // Found a leaf
+			if(nemitters == 1){
+				index = distribution_id;
+			} else { // Leaf with several lights. Pick one randomly.
+				light_distribution_sample(kg, &randu); // TODO: Rescale random number in a better way
+				int light = min((int)(randu* (float)nemitters), nemitters-1);
+				index = distribution_id +light;
+				*pdf_factor *= 1.0f / (float)nemitters;
+			}
+			break;
+		} else { // Interior node, pick left or right randomly
 
-            /* calculate probability of going down left node */
-            int child_offsetL = offset + 4;
-            int child_offsetR = 4*secondChildOffset;
-            float I_L = calc_node_importance(kg, P, child_offsetL);
-            float I_R = calc_node_importance(kg, P, child_offsetR);
-            float P_L = I_L / ( I_L + I_R);
+			/* calculate probability of going down left node */
+			int child_offsetL = offset + 4;
+			int child_offsetR = 4*secondChildOffset;
+			float I_L = calc_node_importance(kg, P, child_offsetL);
+			float I_R = calc_node_importance(kg, P, child_offsetR);
+			float P_L = I_L / ( I_L + I_R);
 
-            /* choose which node to go down */
-            light_distribution_sample(kg, &randu); // TODO: Rescale random number in a better way
-            if(randu <= P_L){ // Going down left node
-                offset = child_offsetL;
-                *pdf_factor *= P_L;
-            } else { // Going down right node
-                offset = child_offsetR;
-                *pdf_factor *= 1.0f - P_L;
-            }
+			/* choose which node to go down */
+			light_distribution_sample(kg, &randu); // TODO: Rescale random number in a better way
+			if(randu <= P_L){ // Going down left node
+				offset = child_offsetL;
+				*pdf_factor *= P_L;
+			} else { // Going down right node
+				offset = child_offsetR;
+				*pdf_factor *= 1.0f - P_L;
+			}
 
-            /* update parent node info for next iteration */
-            update_parent_node(kg, offset, &secondChildOffset,
-                               &distribution_id, &nemitters);
-        }
+			/* update parent node info for next iteration */
+			update_parent_node(kg, offset, &secondChildOffset,
+			                   &distribution_id, &nemitters);
+		}
 
 
-    } while(true);
+	} while(true);
 
-    return index;
+	return index;
 }
 
 ccl_device_noinline bool light_sample(KernelGlobals *kg,
@@ -1181,6 +1181,10 @@ ccl_device_noinline bool light_sample(KernelGlobals *kg,
 	} else {
 		index = light_distribution_sample(kg, &randu);
 	}
+
+	// HERE: let sample_light_bvh be responsible for calc pdf of choosign this
+	// light. Change triangle_light_sample and lamp_light_sample to only calc
+	// PDF of position and direction similar to PBRT?
 
 	/* fetch light data */
 	const ccl_global KernelLightDistribution *kdistribution = &kernel_tex_fetch(__light_distribution, index);

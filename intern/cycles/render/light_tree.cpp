@@ -509,12 +509,13 @@ BVHBuildNode* LightTree::recursive_build(const unsigned int start,
 			}
 
 			/* build children */
-			node->init_interior( min_dim,
-			                     recursive_build( start, mid, buildData,
-			                                      totalNodes, orderedPrims ),
-			                     recursive_build( mid, end, buildData,
-			                                      totalNodes, orderedPrims),
-			                     node_bcone, node_energy);
+			/* the order of execution of arguments is platform dependent so
+			 * force a depth first going down left child first like this. */
+			BVHBuildNode *left = recursive_build( start, mid, buildData,
+			                                      totalNodes, orderedPrims );
+			BVHBuildNode *right = recursive_build( mid, end, buildData,
+			                                       totalNodes, orderedPrims);
+			node->init_interior( min_dim, left, right, node_bcone, node_energy);
 		}
 	}
 

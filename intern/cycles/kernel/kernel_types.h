@@ -1305,8 +1305,11 @@ typedef struct KernelIntegrator {
 	int use_ambient_occlusion;
 	int num_distribution;
 	int num_all_lights;
+	int num_light_nodes;
+	int num_triangle_lights;
 	float pdf_triangles;
 	float pdf_lights;
+	float pdf_inv_totarea;
 	int pdf_background_res;
 	float light_inv_rr_threshold;
 
@@ -1369,7 +1372,6 @@ typedef struct KernelIntegrator {
 	int start_sample;
 
 	int max_closures;
-	int pad1,pad2,pad3;
 } KernelIntegrator;
 static_assert_align(KernelIntegrator, 16);
 
@@ -1502,8 +1504,10 @@ typedef struct KernelLight {
 static_assert_align(KernelLight, 16);
 
 typedef struct KernelLightDistribution {
+	float area;
 	float totarea;
 	int prim;
+	float pad1,pad2,pad3;
 	union {
 		struct {
 			int shader_flag;

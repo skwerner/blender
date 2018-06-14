@@ -212,6 +212,7 @@ ccl_device_noinline float3 indirect_primitive_emission(KernelGlobals *kg, Shader
 		/* multiple importance sampling, get triangle light pdf,
 		 * and compute weight with respect to BSDF pdf */
 		float pdf = triangle_light_pdf(kg, sd, t);
+		pdf *= light_distribution_pdf(kg, sd->P, sd->prim);
 		float mis_weight = power_heuristic(bsdf_pdf, pdf);
 
 		return L*mis_weight;
@@ -273,6 +274,9 @@ ccl_device_noinline bool indirect_lamp_emission(KernelGlobals *kg,
 		if(!(state->flag & PATH_RAY_MIS_SKIP)) {
 			/* multiple importance sampling, get regular light pdf,
 			 * and compute weight with respect to BSDF pdf */
+
+			/* multiply with light picking probablity to pdf */
+			ls.pdf *= light_distribution_pdf(kg, ls.P, ~ls.lamp);
 			float mis_weight = power_heuristic(state->ray_pdf, ls.pdf);
 			L *= mis_weight;
 		}
@@ -324,6 +328,7 @@ ccl_device_noinline float3 indirect_background(KernelGlobals *kg,
 	if(!(state->flag & PATH_RAY_MIS_SKIP) && res) {
 		/* multiple importance sampling, get background light pdf for ray
 		 * direction, and compute weight with respect to BSDF pdf */
+		/* TODO: PDF should be multiplied by picking probability */
 		float pdf = background_light_pdf(kg, ray->P, ray->D);
 		float mis_weight = power_heuristic(state->ray_pdf, pdf);
 

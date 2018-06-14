@@ -106,6 +106,9 @@ public:
 	device_vector<float2> light_background_marginal_cdf;
 	device_vector<float2> light_background_conditional_cdf;
 	device_vector<float4> light_tree_nodes;
+	device_vector<uint>   light_distribution_to_node;
+	device_vector<uint>   lamp_to_distribution;
+	device_vector<uint>   triangle_to_distribution;
 
 	/* particles */
 	device_vector<KernelParticle> particles;

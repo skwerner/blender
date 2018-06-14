@@ -275,18 +275,6 @@ void LightManager::device_update_distribution(Device *, DeviceScene *dscene, Sce
 	vector<Primitive> emissivePrims;
 	emissivePrims.reserve(scene->lights.size());
 
-	int light_index = 0;
-	foreach(Light *light, scene->lights) {
-		if(light->is_enabled) {
-			emissivePrims.push_back(Primitive(~light_index,-1));
-			num_lights++;
-			light_index++;
-		}
-		if(light->is_portal) {
-			num_portals++;
-		}
-	}
-
 	int object_id = 0;
 	foreach(Object *object, scene->objects) {
 		if(progress.get_cancel()) return;
@@ -311,6 +299,18 @@ void LightManager::device_update_distribution(Device *, DeviceScene *dscene, Sce
 		}
 
 		object_id++;
+	}
+
+	int light_index = 0;
+	foreach(Light *light, scene->lights) {
+		if(light->is_enabled) {
+			emissivePrims.push_back(Primitive(~light_index,-1));
+			num_lights++;
+			light_index++;
+		}
+		if(light->is_portal) {
+			num_portals++;
+		}
 	}
 
 	size_t num_distribution = num_triangles + num_lights;
@@ -364,6 +364,49 @@ void LightManager::device_update_distribution(Device *, DeviceScene *dscene, Sce
 			offset += 4;
 		}
 
+		/* find mapping between distribution_id to node_id, used for MIS */
+		uint *  distribution_to_node =
+		        dscene->light_distribution_to_node.alloc(num_distribution);
+		for( int i = 0; i < nodesVec.size(); ++i){
+			const CompactNode& node = nodesVec[i];
+			if(node.nemitters == 0) continue;
+
+			int start = node.prim_id; // distribution id
+			int end = start + node.nemitters;
+			for(int j = start; j < end; ++j){
+				distribution_to_node[j] = 4*i;
+			}
+		}
+	}
+
+	/* find mapping between lamp_id to distribution_id, used for MIS */
+	uint *lamp_to_distribution =
+	        dscene->lamp_to_distribution.alloc(num_lights);
+	for(int i = 0; i < emissivePrims.size(); ++i){
+		const Primitive& prim = emissivePrims[i];
+		if(prim.prim_id >= 0) continue; // Skip triangles
+		int lamp_id = -prim.prim_id-1;
+		lamp_to_distribution[lamp_id] = i;
+	}
+
+	/* find mapping between triangle_id to distribution_id, used for MIS */
+
+	vector< std::pair<uint,uint> > tri_to_distr;
+	tri_to_distr.reserve(num_triangles);
+	for(int i = 0; i < emissivePrims.size(); ++i){
+		const Primitive& prim = emissivePrims[i];
+		if(prim.prim_id < 0) continue; // Skip lamps
+		tri_to_distr.push_back(std::make_pair( prim.prim_id, i ));
+	}
+
+	std::sort(tri_to_distr.begin(), tri_to_distr.end());
+
+	assert(num_triangles == tri_to_distr.size());
+	uint *triangle_to_distribution =
+	        dscene->triangle_to_distribution.alloc(num_triangles*2);
+	for(int i = 0; i < tri_to_distr.size(); ++i){
+		triangle_to_distribution[2*i  ] = tri_to_distr[i].first;
+		triangle_to_distribution[2*i+1] = tri_to_distr[i].second;
 	}
 
 	/* create light distribution in same order as the emissivePrims */
@@ -408,14 +451,16 @@ void LightManager::device_update_distribution(Device *, DeviceScene *dscene, Sce
 			use_light_visibility = true;
 		}
 
+		int triangle_id = prim.prim_id - mesh->tri_offset;
+		const float area = mesh->compute_triangle_area(triangle_id, object->tfm);
+		distribution[offset].area = area;
 		distribution[offset].totarea = totarea;
 		distribution[offset].prim = prim.prim_id;
 		distribution[offset].mesh_light.shader_flag = shader_flag;
 		distribution[offset].mesh_light.object_id = prim.object_id;
 		offset++;
 
-		int triangle_id = prim.prim_id - mesh->tri_offset;
-		totarea += mesh->compute_triangle_area(triangle_id, object->tfm);
+		totarea += area;
 	}
 
 	float trianglearea = totarea;
@@ -437,6 +482,7 @@ void LightManager::device_update_distribution(Device *, DeviceScene *dscene, Sce
 		int light_index = -prim.prim_id -1;
 		const Light* light = scene->lights[light_index];
 
+		distribution[offset].area = lightarea;
 		distribution[offset].totarea = totarea;
 		distribution[offset].prim = prim.prim_id;
 		distribution[offset].lamp.pad = 1.0f;
@@ -454,6 +500,7 @@ void LightManager::device_update_distribution(Device *, DeviceScene *dscene, Sce
 	}
 
 	/* normalize cumulative distribution functions */
+	distribution[num_distribution].area = 0.0f;
 	distribution[num_distribution].totarea = totarea;
 	distribution[num_distribution].prim = 0.0f;
 	distribution[num_distribution].lamp.pad = 0.0f;
@@ -472,11 +519,18 @@ void LightManager::device_update_distribution(Device *, DeviceScene *dscene, Sce
 	kintegrator->use_light_bvh = scene->integrator->use_light_bvh;
 	KernelFilm *kfilm = &dscene->data.film;
 	kintegrator->use_direct_light = (totarea > 0.0f);
+	kintegrator->pdf_inv_totarea = 1.0f / totarea;
+	kintegrator->num_light_nodes =
+	        dscene->light_tree_nodes.size() / LIGHT_BVH_NODE_SIZE;
+	kintegrator->num_triangle_lights = num_triangles;
 
 	if(kintegrator->use_direct_light) {
 
-		/* update light bvh nodes */
+		/* update light bvh */
 		dscene->light_tree_nodes.copy_to_device();
+		dscene->light_distribution_to_node.copy_to_device();
+		dscene->lamp_to_distribution.copy_to_device();
+		dscene->triangle_to_distribution.copy_to_device();
 
 		/* number of emissives */
 		kintegrator->num_distribution = num_distribution;
@@ -530,7 +584,14 @@ void LightManager::device_update_distribution(Device *, DeviceScene *dscene, Sce
 	else {
 		dscene->light_distribution.free();
 		dscene->light_tree_nodes.free();
+		dscene->light_distribution_to_node.free();
+		dscene->lamp_to_distribution.free();
+		dscene->triangle_to_distribution.free();
 
+		kintegrator->pdf_inv_totarea = 0.0f;
+		kintegrator->num_light_nodes = 0;
+		kintegrator->num_triangle_lights = 0;
+		kintegrator->use_light_bvh = false;
 		kintegrator->num_distribution = 0;
 		kintegrator->num_all_lights = 0;
 		kintegrator->pdf_triangles = 0.0f;
@@ -943,6 +1004,9 @@ void LightManager::device_free(Device *, DeviceScene *dscene)
 {
 	dscene->light_distribution.free();
 	dscene->light_tree_nodes.free();
+	dscene->light_distribution_to_node.free();
+	dscene->lamp_to_distribution.free();
+	dscene->triangle_to_distribution.free();
 	dscene->lights.free();
 	dscene->light_background_marginal_cdf.free();
 	dscene->light_background_conditional_cdf.free();

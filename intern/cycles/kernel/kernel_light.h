@@ -440,7 +440,7 @@ ccl_device float background_light_pdf(KernelGlobals *kg, float3 P, float3 direct
 			/* Portal sampling is not possible here because all portals point to the wrong side.
 			 * If map sampling is possible, it would be used instead, otherwise fallback sampling is used. */
 			if(portal_sampling_pdf == 1.0f) {
-				return kernel_data.integrator.pdf_lights / M_4PI_F;
+				return 1.0f / M_4PI_F;
 			}
 			else {
 				/* Force map sampling. */
@@ -452,7 +452,7 @@ ccl_device float background_light_pdf(KernelGlobals *kg, float3 P, float3 direct
 		/* Evaluate PDF of sampling this direction by map sampling. */
 		map_pdf = background_map_pdf(kg, direction) * (1.0f - portal_sampling_pdf);
 	}
-	return (portal_pdf + map_pdf) * kernel_data.integrator.pdf_lights;
+	return portal_pdf + map_pdf;
 }
 #endif
 
@@ -624,8 +624,6 @@ ccl_device_inline bool lamp_light_sample(KernelGlobals *kg,
 		}
 	}
 
-	ls->pdf *= kernel_data.integrator.pdf_lights;
-
 	return (ls->pdf > 0.0f);
 }
 
@@ -768,8 +766,6 @@ ccl_device bool lamp_light_eval(KernelGlobals *kg, int lamp, float3 P, float3 D,
 		return false;
 	}
 
-	ls->pdf *= kernel_data.integrator.pdf_lights;
-
 	return true;
 }
 
@@ -808,13 +804,12 @@ ccl_device_inline bool triangle_world_space_vertices(KernelGlobals *kg, int obje
 
 ccl_device_inline float triangle_light_pdf_area(KernelGlobals *kg, const float3 Ng, const float3 I, float t)
 {
-	float pdf = kernel_data.integrator.pdf_triangles;
 	float cos_pi = fabsf(dot(Ng, I));
 
 	if(cos_pi == 0.0f)
 		return 0.0f;
 
-	return t*t*pdf/cos_pi;
+	return t*t/cos_pi;
 }
 
 ccl_device_forceinline float triangle_light_pdf(KernelGlobals *kg, ShaderData *sd, float t)
@@ -882,6 +877,7 @@ ccl_device_forceinline float triangle_light_pdf(KernelGlobals *kg, ShaderData *s
 			const float area_pre = triangle_area(V[0], V[1], V[2]);
 			pdf = pdf * area_pre / area;
 		}
+
 		return pdf;
 	}
 }
@@ -894,7 +890,7 @@ ccl_device_forceinline void triangle_light_sample(KernelGlobals *kg, int prim, i
 	 * to the length of the edges of the triangle. */
 
 	float3 V[3];
-	bool has_motion = triangle_world_space_vertices(kg, object, prim, time, V);
+	triangle_world_space_vertices(kg, object, prim, time, V);
 
 	const float3 e0 = V[1] - V[0];
 	const float3 e1 = V[2] - V[0];
@@ -903,7 +899,6 @@ ccl_device_forceinline void triangle_light_sample(KernelGlobals *kg, int prim, i
 	const float3 N0 = cross(e0, e1);
 	float Nl = 0.0f;
 	ls->Ng = safe_normalize_len(N0, &Nl);
-	float area = 0.5f * Nl;
 
 	/* flip normal if necessary */
 	const int object_flag = kernel_tex_fetch(__object_flag, object);
@@ -1000,13 +995,7 @@ ccl_device_forceinline void triangle_light_sample(KernelGlobals *kg, int prim, i
 			return;
 		}
 		else {
-			if(has_motion) {
-				/* get the center frame vertices, this is what the PDF was calculated from */
-				triangle_world_space_vertices(kg, object, prim, -1.0f, V);
-				area = triangle_area(V[0], V[1], V[2]);
-			}
-			const float pdf = area * kernel_data.integrator.pdf_triangles;
-			ls->pdf = pdf / solid_angle;
+			ls->pdf = 1.0f / solid_angle;
 		}
 	}
 	else {
@@ -1020,14 +1009,7 @@ ccl_device_forceinline void triangle_light_sample(KernelGlobals *kg, int prim, i
 		/* compute incoming direction, distance and pdf */
 		ls->D = normalize_len(ls->P - P, &ls->t);
 		ls->pdf = triangle_light_pdf_area(kg, ls->Ng, -ls->D, ls->t);
-		if(has_motion && area != 0.0f) {
-			/* scale the PDF.
-			 * area = the area the sample was taken from
-			 * area_pre = the are from which pdf_triangles was calculated from */
-			triangle_world_space_vertices(kg, object, prim, -1.0f, V);
-			const float area_pre = triangle_area(V[0], V[1], V[2]);
-			ls->pdf = ls->pdf * area_pre / area;
-		}
+
 		ls->u = u;
 		ls->v = v;
 	}
@@ -1111,7 +1093,9 @@ ccl_device void update_parent_node(KernelGlobals *kg, int node_offset,
 	(*nemitters)       = __float_as_int(node[3]);
 }
 
-ccl_device int sample_light_bvh(KernelGlobals *kg, float3 P, float randu, float *pdf_factor)
+/* picks a light from the light BVH and returns its index and the probability of
+ * picking this light. */
+ccl_device int light_bvh_sample(KernelGlobals *kg, float3 P, float randu, float *pdf_factor)
 {
 	int index = -1;
 	*pdf_factor = 1.0f;
@@ -1164,6 +1148,124 @@ ccl_device int sample_light_bvh(KernelGlobals *kg, float3 P, float randu, float 
 	return index;
 }
 
+/* converts from an emissive triangle index to the corresponding
+ * light distribution index. */
+ccl_device int triangle_to_distribution(KernelGlobals *kg, int triangle_id)
+{
+	/* binary search to find triangle_id which then gives distribution_id */
+	/* equivalent to implementation of std::lower_bound */
+	/* todo: of complexity log(N) now. could be made constant with a hash table? */
+	int first = 0;
+	int last = kernel_data.integrator.num_triangle_lights;
+	int count = last - first;
+	int middle,step;
+	while (count > 0) {
+		step = count / 2;
+		middle = first + step;
+		int triangle = kernel_tex_fetch(__triangle_to_distribution, middle*2);
+		if (triangle < triangle_id) {
+			first = middle + 1;
+			count -= step + 1;
+		}
+		else
+			count = step;
+	}
+
+	int triangle = kernel_tex_fetch(__triangle_to_distribution, first*2);
+	kernel_assert(triangle == triangle_id);
+
+	return kernel_tex_fetch(__triangle_to_distribution, first*2+1);
+}
+
+/* computes the probability of picking a light in the given node_id */
+ccl_device float light_bvh_pdf(KernelGlobals *kg, float3 P, int node_id){
+	float pdf = 1.0f;
+	/* read in first part of root node of light BVH */
+	int secondChildOffset, distribution_id, nemitters;
+	update_parent_node(kg, 0, &secondChildOffset, &distribution_id, &nemitters);
+
+	int offset = 0;
+	do{
+
+		if(nemitters > 0){ // Found our leaf node
+			kernel_assert(offset == node_id);
+			if(nemitters > 1){
+				pdf *= 1.0f / (float)nemitters;
+			}
+			break;
+		} else { // Interior node, pick left or right depending on node_id
+
+			/* calculate probability of going down left node */
+			int child_offsetL = offset + 4;
+			int child_offsetR = 4*secondChildOffset;
+			float I_L = calc_node_importance(kg, P, child_offsetL);
+			float I_R = calc_node_importance(kg, P, child_offsetR);
+			float P_L = I_L / ( I_L + I_R);
+
+			/* choose which child to go down to. assumes nodes have been flattened
+			 * in a depth first manner. */
+			if(node_id < child_offsetR){
+				offset = child_offsetL;
+				pdf *= P_L;
+			} else {
+				offset = child_offsetR;
+				pdf *= 1.0f - P_L;
+			}
+
+			/* update parent node info for next iteration */
+			update_parent_node(kg, offset, &secondChildOffset,
+			                   &distribution_id, &nemitters);
+		}
+
+	} while(true);
+
+	return pdf;
+}
+
+/* computes the the probability of picking the given light out of all lights */
+ccl_device float light_distribution_pdf(KernelGlobals *kg, float3 P, int prim_id)
+{
+	/* convert from triangle/lamp to light distribution */
+	int distribution_id;
+	if(prim_id >= 0){ // Triangle_id = prim_id
+		distribution_id = triangle_to_distribution(kg, prim_id);
+	} else { // Lamp
+		int lamp_id = -prim_id-1;
+		distribution_id = kernel_tex_fetch(__lamp_to_distribution, lamp_id);
+	}
+
+	kernel_assert((distribution_id >= 0) &&
+	               (distribution_id < kernel_data.integrator.num_distribution));
+
+	/* compute picking pdf for this light */
+	if (kernel_data.integrator.use_light_bvh){
+		// Find mapping from distribution_id to node_id
+		int node_id = kernel_tex_fetch(__light_distribution_to_node,
+		                               distribution_id);
+		return light_bvh_pdf(kg, P, node_id);
+	} else {
+		const ccl_global KernelLightDistribution *kdistribution =
+		        &kernel_tex_fetch(__light_distribution, distribution_id);
+		return kdistribution->area * kernel_data.integrator.pdf_inv_totarea;
+	}
+}
+
+/* picks a light and returns its index and the probability of picking it */
+ccl_device void light_distribution_sample(KernelGlobals *kg, float3 P,
+                                          float *randu, int *index, float *pdf)
+{
+	if (kernel_data.integrator.use_light_bvh){
+		*index = light_bvh_sample(kg, P, *randu, pdf);
+	} else {
+		*index = light_distribution_sample(kg, randu);
+		const ccl_global KernelLightDistribution *kdistribution =
+		        &kernel_tex_fetch(__light_distribution, *index);
+		*pdf = kdistribution->area * kernel_data.integrator.pdf_inv_totarea;
+	}
+}
+
+
+/* picks a point on a light and computes the probability of picking this point*/
 ccl_device_noinline bool light_sample(KernelGlobals *kg,
                                       float randu,
                                       float randv,
@@ -1172,21 +1274,12 @@ ccl_device_noinline bool light_sample(KernelGlobals *kg,
                                       int bounce,
                                       LightSample *ls)
 {
-	/* TODO: Restructure PDF calculations now that the light BVH is here */
-	/* sample index */
-	float pdf_factor = 1.0f;
+	/* sample index and compute light picking pdf */
+	float pdf_factor = 0.0f;
 	int index = -1;
-	if (kernel_data.integrator.use_light_bvh){
-		index = sample_light_bvh(kg, P, randu, &pdf_factor);
-	} else {
-		index = light_distribution_sample(kg, &randu);
-	}
+	light_distribution_sample(kg, P, &randu, &index, &pdf_factor);
 
-	// HERE: let sample_light_bvh be responsible for calc pdf of choosign this
-	// light. Change triangle_light_sample and lamp_light_sample to only calc
-	// PDF of position and direction similar to PBRT?
-
-	/* fetch light data */
+	/* fetch light data and compute rest of light pdf */
 	const ccl_global KernelLightDistribution *kdistribution = &kernel_tex_fetch(__light_distribution, index);
 	int prim = kdistribution->prim;
 
@@ -1196,8 +1289,6 @@ ccl_device_noinline bool light_sample(KernelGlobals *kg,
 
 		triangle_light_sample(kg, prim, object, randu, randv, time, ls, P);
 		ls->shader |= shader_flag;
-		ls->pdf *= pdf_factor;
-		return (ls->pdf > 0.0f);
 	}
 	else {
 		int lamp = -prim-1;
@@ -1205,10 +1296,15 @@ ccl_device_noinline bool light_sample(KernelGlobals *kg,
 		if(UNLIKELY(light_select_reached_max_bounces(kg, lamp, bounce))) {
 			return false;
 		}
-		lamp_light_sample(kg, lamp, randu, randv, P, ls);
-		ls->pdf *= pdf_factor;
-		return (ls->pdf > 0.0f);
+		if (!lamp_light_sample(kg, lamp, randu, randv, P, ls)){
+			return false;
+		}
 	}
+
+	/* combine pdfs */
+	ls->pdf *= pdf_factor;
+
+	return (ls->pdf > 0.0f);
 }
 
 ccl_device int light_select_num_samples(KernelGlobals *kg, int index)

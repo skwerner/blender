@@ -84,6 +84,25 @@ public:
 		return tri;
 	}
 
+	float compute_triangle_area(size_t i, const Transform& tfm) const
+	{
+		Mesh::Triangle t = get_triangle(i);
+		if(!t.valid(&verts[0])) {
+			return 0.0f;
+		}
+		float3 p1 = verts[t.v[0]];
+		float3 p2 = verts[t.v[1]];
+		float3 p3 = verts[t.v[2]];
+
+		if(!transform_applied) {
+			p1 = transform_point(&tfm, p1);
+			p2 = transform_point(&tfm, p2);
+			p3 = transform_point(&tfm, p3);
+		}
+
+		return triangle_area(p1, p2, p3);
+	}
+
 	size_t num_triangles() const
 	{
 		return triangles.size() / 3;

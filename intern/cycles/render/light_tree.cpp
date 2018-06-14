@@ -126,11 +126,31 @@ BoundBox LightTree::get_bbox(const Primitive& prim)
             float radius = lamp->size;
             bbox.grow(lamp->co + make_float3(radius));
             bbox.grow(lamp->co - make_float3(radius));
+        } else if(lamp->type == LIGHT_AREA){
+           /*     p2--------p3
+            *    /         /
+            *   /         /
+            *  p0--------p1
+            */
+            const float3& p0 = lamp->co;
+            const float3 axisu = lamp->axisu*(lamp->sizeu*lamp->size);
+            const float3 axisv = lamp->axisv*(lamp->sizev*lamp->size);
+            const float3 p1 = p0 + axisu;
+            const float3 p2 = p0 + axisv;
+            const float3 p3 = p0 + axisu + axisv;
+            bbox.grow(p0);
+            bbox.grow(p1);
+            bbox.grow(p2);
+            bbox.grow(p3);
+        } else if (lamp->type == LIGHT_BACKGROUND || lamp->type == LIGHT_DISTANT){
+            /* TODO: Can we support backgrounds and distant lights in the light
+             * tree? They do not have a bbox right?
+             */
+            return bbox;
+        } else {
+            assert(false);
         }
-        /* TODO: Handle all possible light sources here. */
-        bbox.grow(lamp->co);
     }
-
     return bbox;
 }
 
@@ -151,13 +171,16 @@ Orientation LightTree::get_bcone(const Primitive& prim){
         int lamp_id = -prim.prim_id-1;
         Light* lamp = lights[lamp_id];
         /* TODO: Make general. This is specific for point & spot lights */
-        bcone.axis = lamp->dir;
+        bcone.axis = lamp->dir / len(lamp->dir);
         if (lamp->type == LIGHT_POINT) {
             bcone.theta_o = M_PI_F;
             bcone.theta_e = M_PI_2_F;
         } else if (lamp->type == LIGHT_SPOT){
             bcone.theta_o = 0;
-            bcone.theta_e = lamp->spot_angle;
+            bcone.theta_e = lamp->spot_angle * 0.5f;
+        } else if (lamp->type == LIGHT_AREA){
+            bcone.theta_o = 0;
+            bcone.theta_e = M_PI_2_F;
         }
 
     }
@@ -170,7 +193,6 @@ float LightTree::get_energy(const Primitive &prim){
     float3 emission = make_float3(0.0f);
     Shader *shader = NULL;
 
-    /* extract shader for mesh light / normal light */
     if (prim.prim_id >= 0){
         /* extract bounding cone from emissive triangle */
         const Object* object = objects[prim.object_id];
@@ -179,22 +201,60 @@ float LightTree::get_energy(const Primitive &prim){
 
         int shader_index = mesh->shader[triangle_id];
         shader = mesh->used_shaders.at(shader_index);
+
+        /* get emission from shader */
+        bool is_constant_emission = shader->is_constant_emission(&emission);
+        if(!is_constant_emission){
+            return 1.0f;
+        }
+
+        const Transform& tfm = objects[prim.object_id]->tfm;
+        float area = mesh->compute_triangle_area(triangle_id, tfm);
+
+        emission *= area * M_PI_F;
+
     } else {
         assert(prim.object_id == -1);
         int lamp_id = -prim.prim_id-1;
-        shader = lights[lamp_id]->shader;
+        const Light* light = lights[lamp_id];
+
+        /* get emission from shader */
+        shader = light->shader;
+        bool is_constant_emission = shader->is_constant_emission(&emission);
+        if(!is_constant_emission){
+            return 1.0f;
+        }
+
+        /* calculate the total emission by integrating the emission over the
+         * the entire sphere of directions. */
+        if (light->type == LIGHT_POINT){
+            emission *= M_4PI_F;
+        } else if (light->type == LIGHT_SPOT){
+            /* The emission is only non-zero within the cone and if spot_smooth
+             * is non-zero there will be a falloff. In this case, approximate
+             * the integral by considering a smaller cone without falloff. */
+            float spot_angle = light->spot_angle * 0.5f;
+            float spot_falloff_angle = spot_angle * (1.0f - light->spot_smooth);
+            float spot_middle_angle = (spot_angle + spot_falloff_angle) * 0.5f;
+            emission *= M_2PI_F * (1.0f - cosf(spot_middle_angle));
+        } else if (light->type == LIGHT_AREA){
+            float3 axisu = light->axisu*(light->sizeu*light->size);
+            float3 axisv = light->axisv*(light->sizev*light->size);
+            float area = len(axisu)*len(axisv);
+            emission *= area * M_PI_F;
+        } else {
+            // TODO: All light types are not supported yet
+            assert(false);
+        }
     }
 
-    /* get emission from shader */
-    bool is_constant_emission = shader->is_constant_emission(&emission);
-    if(!is_constant_emission){
-        return 1.0f;
-    } else {
-        /* TODO: Convert float3 emission to float energy somehow.
-         * Convert to luminance? For now, do something stupid.
-         */
-        return emission[0] + emission[1] + emission[2];
-    }
+    /* convert RGB to luminance */
+    const float luminance = 0.212671f * emission[0] +
+                            0.715160f * emission[1] +
+                            0.072169f * emission[2];
+
+    return luminance;
+
 }
 
 Orientation LightTree::aggregate_bounding_cones(

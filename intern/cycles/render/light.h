@@ -118,10 +118,6 @@ protected:
 	                                DeviceScene *dscene,
 	                                Scene *scene,
 	                                Progress& progress);
-	void device_update_tree_distribution(Device *device,
-	                                     DeviceScene *dscene,
-	                                     Scene *scene,
-	                                     Progress& progress);
 	void device_update_background(Device *device,
 	                              DeviceScene *dscene,
 	                              Scene *scene,

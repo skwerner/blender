@@ -82,12 +82,12 @@ template<typename T> struct TextureInterpolator  {
 
 	static ccl_always_inline float4 read(const T *data, const int *grid_info,
 	                                     int x, int y, int z,
-	                                     int tiw, int tih, int ltw, int lth)
+	                                     int bit_count, int ltw, int lth)
 	{
 		int tix = x / TILE_SIZE, itix = x % TILE_SIZE,
 		    tiy = y / TILE_SIZE, itiy = y % TILE_SIZE,
 		    tiz = z / TILE_SIZE, itiz = z % TILE_SIZE;
-		int dense_index = flatten(tix, tiy, tiz, tiw, tih) * 2;
+		int dense_index = compute_morton(tix, tiy, tiz, bit_count) * 2;
 		int sparse_index = grid_info[dense_index];
 		int dims = grid_info[dense_index + 1];
 		if(sparse_index < 0) {
@@ -101,12 +101,12 @@ template<typename T> struct TextureInterpolator  {
 
 	static ccl_always_inline float4 read(const T *data, const int *grid_info,
 	                                     int index, int width, int height, int /*depth*/,
-	                                     int tiw, int tih, int ltw, int lth)
+	                                     int bit_count, int ltw, int lth)
 	{
 		int x = index % width;
 		int y = (index / width) % height;
 		int z = index / (width * height);
-		return read(data, grid_info, x, y, z, tiw, tih, ltw, lth);
+		return read(data, grid_info, x, y, z, bit_count, ltw, lth);
 	}
 
 	static ccl_always_inline int wrap_periodic(int x, int width)
@@ -319,8 +319,7 @@ template<typename T> struct TextureInterpolator  {
 		const int *grid_info = (const int*)info.grid_info;
 
 		if(grid_info) {
-			return read(data, grid_info, ix, iy, iz,
-			            info.tiled_width, info.tiled_height,
+			return read(data, grid_info, ix, iy, iz, info.bit_count,
 			            info.last_tile_width, info.last_tile_height);
 		}
 		return read(data[flatten(ix, iy, iz, width, height)]);
@@ -375,18 +374,17 @@ template<typename T> struct TextureInterpolator  {
 		const int *gi = (const int*)info.grid_info;
 
 		if(gi) {
-			int tiw = info.tiled_width;
-			int tih = info.tiled_height;
+			int bc = info.bit_count;
 			int ltw = info.last_tile_width;
 			int lth = info.last_tile_height;
-			r  = (1.0f - tz)*(1.0f - ty)*(1.0f - tx) * read(data, gi, ix,  iy,  iz,  tiw, tih, ltw, lth);
-			r += (1.0f - tz)*(1.0f - ty)*tx          * read(data, gi, nix, iy,  iz,  tiw, tih, ltw, lth);
-			r += (1.0f - tz)*ty*(1.0f - tx)          * read(data, gi, ix,  niy, iz,  tiw, tih, ltw, lth);
-			r += (1.0f - tz)*ty*tx                   * read(data, gi, nix, niy, iz,  tiw, tih, ltw, lth);
-			r += tz*(1.0f - ty)*(1.0f - tx)          * read(data, gi, ix,  iy,  niz, tiw, tih, ltw, lth);
-			r += tz*(1.0f - ty)*tx                   * read(data, gi, nix, iy,  niz, tiw, tih, ltw, lth);
-			r += tz*ty*(1.0f - tx)                   * read(data, gi, ix,  niy, niz, tiw, tih, ltw, lth);
-			r += tz*ty*tx                            * read(data, gi, nix, niy, niz, tiw, tih, ltw, lth);
+			r  = (1.0f - tz)*(1.0f - ty)*(1.0f - tx) * read(data, gi, ix,  iy,  iz,  bc, ltw, lth);
+			r += (1.0f - tz)*(1.0f - ty)*tx          * read(data, gi, nix, iy,  iz,  bc, ltw, lth);
+			r += (1.0f - tz)*ty*(1.0f - tx)          * read(data, gi, ix,  niy, iz,  bc, ltw, lth);
+			r += (1.0f - tz)*ty*tx                   * read(data, gi, nix, niy, iz,  bc, ltw, lth);
+			r += tz*(1.0f - ty)*(1.0f - tx)          * read(data, gi, ix,  iy,  niz, bc, ltw, lth);
+			r += tz*(1.0f - ty)*tx                   * read(data, gi, nix, iy,  niz, bc, ltw, lth);
+			r += tz*ty*(1.0f - tx)                   * read(data, gi, ix,  niy, niz, bc, ltw, lth);
+			r += tz*ty*tx                            * read(data, gi, nix, niy, niz, bc, ltw, lth);
 		}
 		else {
 			r  = (1.0f - tz)*(1.0f - ty)*(1.0f - tx) * read(data[flatten(ix,  iy,  iz,  width, height)]);
@@ -418,8 +416,7 @@ template<typename T> struct TextureInterpolator  {
 		int width = info.width;
 		int height = info.height;
 		int depth = info.depth;
-		int tiw = info.tiled_width;
-		int tih = info.tiled_height;
+		int bc = info.bit_count;
 		int ltw = info.last_tile_width;
 		int lth = info.last_tile_height;
 		int ix, iy, iz;
@@ -492,7 +489,7 @@ template<typename T> struct TextureInterpolator  {
 		 * let compiler to inline all the matrix multiplications.
 		 */
 #define DATA(x, y, z) (gi ? \
-		read(data, gi, xc[x] + yc[y] + zc[z], width, height, depth, tiw, tih, ltw, lth) : \
+		read(data, gi, xc[x] + yc[y] + zc[z], width, height, depth, bc, ltw, lth) : \
 		read(data[xc[x] + yc[y] + zc[z]]))
 #define COL_TERM(col, row) \
 		(v[col] * (u[0] * DATA(0, col, row) + \

@@ -85,11 +85,11 @@ typedef struct TextureInfo {
 	uint interpolation, extension;
 	/* Dimensions. */
 	uint width, height, depth;
-	/* Tiled dimensions for sparse grid index calculations,
-	 * and length of the last tile's dimensions. */
-	uint tiled_width, tiled_height, last_tile_width, last_tile_height;
+	/* For sparse grid index calculations: tiled dimensions, last tile's
+	 * dimensions, and bit count of the dimensions. */
+	uint tiled_width, tiled_height, last_tile_width, last_tile_height, bit_count;
 	/* Dummy variable to keep TextureInfo the correct size. */
-	uint64_t dummy;
+	uint dummy;
 } TextureInfo;
 
 CCL_NAMESPACE_END

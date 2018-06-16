@@ -86,11 +86,34 @@ const inline size_t get_tile_res(const size_t res)
 	return (res / TILE_SIZE) + (res % TILE_SIZE != 0);
 }
 
+/* Finds the number of bits used by the largest
+ * dimension of an image. Used for Morton order. */
+const inline size_t compute_bit_count(size_t width, size_t height, size_t depth)
+{
+	size_t largest_dim = max(max(width, height), depth);
+	size_t bit_count = 0, n = 1;
+	while(largest_dim >= n) {
+		n *= 2;
+		++bit_count;
+	}
+	return bit_count;
+}
+
+const inline size_t compute_morton(size_t x, size_t y, size_t z, size_t bit_count)
+{
+	size_t morton_index = 0;
+	for (size_t i = 0 ; i < bit_count ; ++i) {
+		morton_index |= ((x >> i) & 1) << (i * 3 + 0);
+		morton_index |= ((y >> i) & 1) << (i * 3 + 1);
+		morton_index |= ((z >> i) & 1) << (i * 3 + 2);
+	}
+	return morton_index;
+}
+
 /* Do not call this function in the kernel. */
 const inline int compute_index(const int *grid_info,
                                int x, int y, int z,
-                               int tiw, int tih, int tid,
-                               int ltw, int lth)
+                               int bit_count, int ltw, int lth)
 {
 	/* Coordinates of (x, y, z)'s tile and
 	 * coordinates of (x, y, z) with origin at tile start. */
@@ -98,7 +121,7 @@ const inline int compute_index(const int *grid_info,
 	    tiy = y / TILE_SIZE, itiy = y % TILE_SIZE,
 	    tiz = z / TILE_SIZE, itiz = z % TILE_SIZE;
 	/* Get the 1D array index in the dense grid of the tile (x, y, z) is in. */
-	int dense_index = compute_index(tix, tiy, tiz, tiw, tih, tid) * 2;
+	int dense_index = compute_morton(tix, tiy, tiz, bit_count) * 2;
 	if(dense_index < 0) {
 		return -1;
 	}
@@ -155,19 +178,21 @@ int create_sparse_grid(const T *dense_grid,
 	}
 
 	const T threshold = cast_from_float<T>(isovalue);
-
+	/* Get the minumum number of bits needed to represent each dimension. */
+	size_t bit_count = compute_bit_count(width, height, depth);
 	/* Resize vectors to tiled resolution. Have to overalloc
 	 * sparse_grid because we don't know the number of
 	 * active tiles yet. */
 	sparse_grid->resize(width * height * depth);
-	grid_info->resize(get_tile_res(width) *
-	                  get_tile_res(height) *
-	                  get_tile_res(depth) * 2);
-	int info_count = 0, voxel_count = 0;
+	/* Overalloc of grid_info for morton order. */
+	const size_t max_dim = max(max(width, height), depth);
+	grid_info->resize(max_dim * max_dim * max_dim * 2);
 
+	int voxel_count = 0;
 	for(int z=0 ; z < depth ; z += TILE_SIZE) {
 		for(int y=0 ; y < height ; y += TILE_SIZE) {
 			for(int x=0 ; x < width ; x += TILE_SIZE) {
+
 				bool is_active = false;
 				int voxel = 0;
 
@@ -185,6 +210,10 @@ int create_sparse_grid(const T *dense_grid,
 					}
 				}
 
+				/* Compute tile index. */
+				size_t tile = compute_morton(x/TILE_SIZE, y/TILE_SIZE,
+				                             z/TILE_SIZE, bit_count) * 2;
+
 				/* If tile is active, store tile's offset and dimension info. */
 				if(is_active) {
 					/* Store if the tile is the last tile in the X/Y direction
@@ -192,15 +221,14 @@ int create_sparse_grid(const T *dense_grid,
 					int dimensions = 0;
 					dimensions |= ((x + TILE_SIZE > width) << ST_SHIFT_TRUNCATE_WIDTH);
 					dimensions |= ((y + TILE_SIZE > height) << ST_SHIFT_TRUNCATE_HEIGHT);
-					grid_info->at(info_count) = voxel_count;
-					grid_info->at(info_count + 1) = dimensions;
+					grid_info->at(tile) = voxel_count;
+					grid_info->at(tile + 1) = dimensions;
 					voxel_count += voxel;
 				}
 				else {
-					grid_info->at(info_count) = -1;
-					grid_info->at(info_count + 1) = 0;
+					grid_info->at(tile) = -1;
+					grid_info->at(tile + 1) = 0;
 				}
-				info_count += 2;
 			}
 		}
 	}

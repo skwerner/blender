@@ -526,7 +526,7 @@ ccl_device void kernel_branched_path_integrate(KernelGlobals *kg,
 
 #ifdef __AO__
 		/* ambient occlusion */
-		if(kernel_data.integrator.use_ambient_occlusion || (sd.flag & SD_AO)) {
+		if(kernel_data.integrator.use_ambient_occlusion) {
 			kernel_branched_path_ao(kg, &sd, emission_sd, L, &state, throughput);
 		}
 #endif  /* __AO__ */
@@ -567,10 +567,7 @@ ccl_device void kernel_branched_path_integrate(KernelGlobals *kg,
 #ifdef __VOLUME__
 		}
 		else {
-			/* For volume bounding meshes we pass through without counting transparent
-			 * bounces, only sanity check in case self intersection gets us stuck. */
-			state.volume_bounds_bounce++;
-			if (state.volume_bounds_bounce > VOLUME_BOUNDS_MAX) {
+			if(!path_state_volume_next(kg, &state)) {
 				break;
 			}
 		}

@@ -51,6 +51,7 @@
 #include "BKE_library_query.h"
 #include "BKE_modifier.h"
 #include "BKE_mesh.h"
+#include "BKE_object_deform.h"
 
 #include "MOD_util.h"
 
@@ -79,15 +80,6 @@ static void initData(ModifierData *md)
 	amd->fit_type = MOD_ARR_FIXEDCOUNT;
 	amd->offset_type = MOD_ARR_OFF_RELATIVE;
 	amd->flags = 0;
-}
-
-static void copyData(ModifierData *md, ModifierData *target)
-{
-#if 0
-	ArrayModifierData *amd = (ArrayModifierData *) md;
-	ArrayModifierData *tamd = (ArrayModifierData *) target;
-#endif
-	modifier_copyData_generic(md, target);
 }
 
 static void foreachObjectLink(
@@ -138,9 +130,11 @@ static void updateDepsgraph(ModifierData *md, const ModifierUpdateDepsgraphConte
 	ArrayModifierData *amd = (ArrayModifierData *)md;
 	if (amd->start_cap != NULL) {
 		DEG_add_object_relation(ctx->node, amd->start_cap, DEG_OB_COMP_TRANSFORM, "Array Modifier Start Cap");
+		DEG_add_object_relation(ctx->node, amd->start_cap, DEG_OB_COMP_GEOMETRY, "Array Modifier Start Cap");
 	}
 	if (amd->end_cap != NULL) {
 		DEG_add_object_relation(ctx->node, amd->end_cap, DEG_OB_COMP_TRANSFORM, "Array Modifier End Cap");
+		DEG_add_object_relation(ctx->node, amd->end_cap, DEG_OB_COMP_GEOMETRY, "Array Modifier End Cap");
 	}
 	if (amd->curve_ob) {
 		struct Depsgraph *depsgraph = DEG_get_graph_from_handle(ctx->node);
@@ -312,7 +306,7 @@ static void dm_mvert_map_doubles(
 static void dm_merge_transform(
         DerivedMesh *result, DerivedMesh *cap_dm, float cap_offset[4][4],
         unsigned int cap_verts_index, unsigned int cap_edges_index, int cap_loops_index, int cap_polys_index,
-        int cap_nverts, int cap_nedges, int cap_nloops, int cap_npolys)
+        int cap_nverts, int cap_nedges, int cap_nloops, int cap_npolys, int *remap, int remap_len)
 {
 	int *index_orig;
 	int i;
@@ -320,6 +314,7 @@ static void dm_merge_transform(
 	MEdge *me;
 	MLoop *ml;
 	MPoly *mp;
+	MDeformVert *dvert;
 
 	/* needed for subsurf so arrays are allocated */
 	cap_dm->getVertArray(cap_dm);
@@ -338,6 +333,12 @@ static void dm_merge_transform(
 		mul_m4_v3(cap_offset, mv->co);
 		/* Reset MVert flags for caps */
 		mv->flag = mv->bweight = 0;
+	}
+
+	/* remap the vertex groups if necessary */
+	dvert = DM_get_vert_data(result, cap_verts_index, CD_MDEFORMVERT);
+	if (dvert != NULL) {
+		BKE_object_defgroup_index_map_apply(dvert, cap_nverts, remap, remap_len);
 	}
 
 	/* adjust cap edge vertex indices */
@@ -417,6 +418,11 @@ static DerivedMesh *arrayModifier_doArray(
 
 	DerivedMesh *result, *start_cap_dm = NULL, *end_cap_dm = NULL;
 
+	int *vgroup_start_cap_remap = NULL;
+	int vgroup_start_cap_remap_len = 0;
+	int *vgroup_end_cap_remap = NULL;
+	int vgroup_end_cap_remap_len = 0;
+
 	chunk_nverts = dm->getNumVerts(dm);
 	chunk_nedges = dm->getNumEdges(dm);
 	chunk_nloops = dm->getNumLoops(dm);
@@ -425,6 +431,8 @@ static DerivedMesh *arrayModifier_doArray(
 	count = amd->count;
 
 	if (amd->start_cap && amd->start_cap != ob && amd->start_cap->type == OB_MESH) {
+		vgroup_start_cap_remap = BKE_object_defgroup_index_map_create(amd->start_cap, ob, &vgroup_start_cap_remap_len);
+
 		start_cap_dm = get_dm_for_modifier(amd->start_cap, flag);
 		if (start_cap_dm) {
 			start_cap_nverts = start_cap_dm->getNumVerts(start_cap_dm);
@@ -434,6 +442,8 @@ static DerivedMesh *arrayModifier_doArray(
 		}
 	}
 	if (amd->end_cap && amd->end_cap != ob && amd->end_cap->type == OB_MESH) {
+		vgroup_end_cap_remap = BKE_object_defgroup_index_map_create(amd->end_cap, ob, &vgroup_end_cap_remap_len);
+
 		end_cap_dm = get_dm_for_modifier(amd->end_cap, flag);
 		if (end_cap_dm) {
 			end_cap_nverts = end_cap_dm->getNumVerts(end_cap_dm);
@@ -541,8 +551,8 @@ static DerivedMesh *arrayModifier_doArray(
 	DM_copy_loop_data(dm, result, 0, 0, chunk_nloops);
 	DM_copy_poly_data(dm, result, 0, 0, chunk_npolys);
 
-	/* subsurf for eg wont have mesh data in the
-	 * now add mvert/medge/mface layers */
+	/* Subsurf for eg wont have mesh data in the custom data arrays.
+	 * now add mvert/medge/mpoly layers. */
 
 	if (!CustomData_has_layer(&dm->vertData, CD_MVERT)) {
 		dm->copyVertArray(dm, result_dm_verts);
@@ -696,7 +706,8 @@ static DerivedMesh *arrayModifier_doArray(
 		        result_nedges - start_cap_nedges - end_cap_nedges,
 		        result_nloops - start_cap_nloops - end_cap_nloops,
 		        result_npolys - start_cap_npolys - end_cap_npolys,
-		        start_cap_nverts, start_cap_nedges, start_cap_nloops, start_cap_npolys);
+		        start_cap_nverts, start_cap_nedges, start_cap_nloops, start_cap_npolys,
+		        vgroup_start_cap_remap, vgroup_start_cap_remap_len);
 		/* Identify doubles with first chunk */
 		if (use_merge) {
 			dm_mvert_map_doubles(
@@ -720,7 +731,8 @@ static DerivedMesh *arrayModifier_doArray(
 		        result_nedges - end_cap_nedges,
 		        result_nloops - end_cap_nloops,
 		        result_npolys - end_cap_npolys,
-		        end_cap_nverts, end_cap_nedges, end_cap_nloops, end_cap_npolys);
+		        end_cap_nverts, end_cap_nedges, end_cap_nloops, end_cap_npolys,
+		        vgroup_end_cap_remap, vgroup_end_cap_remap_len);
 		/* Identify doubles with last chunk */
 		if (use_merge) {
 			dm_mvert_map_doubles(
@@ -768,13 +780,21 @@ static DerivedMesh *arrayModifier_doArray(
 		result->dirty |= DM_DIRTY_NORMALS;
 	}
 
+	if (vgroup_start_cap_remap) {
+		MEM_freeN(vgroup_start_cap_remap);
+	}
+	if (vgroup_end_cap_remap) {
+		MEM_freeN(vgroup_end_cap_remap);
+	}
+
 	return result;
 }
 
 
-static DerivedMesh *applyModifier(ModifierData *md, Object *ob,
-                                  DerivedMesh *dm,
-                                  ModifierApplyFlag flag)
+static DerivedMesh *applyModifier(
+        ModifierData *md, Object *ob,
+        DerivedMesh *dm,
+        ModifierApplyFlag flag)
 {
 	ArrayModifierData *amd = (ArrayModifierData *) md;
 	return arrayModifier_doArray(amd, md->scene, ob, dm, flag);
@@ -792,7 +812,7 @@ ModifierTypeInfo modifierType_Array = {
 	                        eModifierTypeFlag_EnableInEditmode |
 	                        eModifierTypeFlag_AcceptsCVs,
 
-	/* copyData */          copyData,
+	/* copyData */          modifier_copyData_generic,
 	/* deformVerts */       NULL,
 	/* deformMatrices */    NULL,
 	/* deformVertsEM */     NULL,

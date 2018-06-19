@@ -4,7 +4,7 @@
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version. 
+ * of the License, or (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -223,7 +223,7 @@ static bool uri_from_filename(const char *path, char *uri)
 {
 	char orig_uri[URI_MAX];
 	const char *dirstart = path;
-	
+
 #ifdef WIN32
 	{
 		char vol[3];
@@ -430,16 +430,17 @@ static ImBuf *thumb_create_ex(
 			IMB_scaleImBuf(img, ex, ey);
 		}
 		BLI_snprintf(desc, sizeof(desc), "Thumbnail for %s", uri);
-		IMB_metadata_change_field(img, "Description", desc);
-		IMB_metadata_change_field(img, "Software", "Blender");
-		IMB_metadata_change_field(img, "Thumb::URI", uri);
-		IMB_metadata_change_field(img, "Thumb::MTime", mtime);
+		IMB_metadata_ensure(&img->metadata);
+		IMB_metadata_set_field(img->metadata, "Software", "Blender");
+		IMB_metadata_set_field(img->metadata, "Thumb::URI", uri);
+		IMB_metadata_set_field(img->metadata, "Description", desc);
+		IMB_metadata_set_field(img->metadata, "Thumb::MTime", mtime);
 		if (use_hash) {
-			IMB_metadata_change_field(img, "X-Blender::Hash", hash);
+			IMB_metadata_set_field(img->metadata, "X-Blender::Hash", hash);
 		}
 		if (ELEM(source, THB_SOURCE_IMAGE, THB_SOURCE_BLEND, THB_SOURCE_FONT)) {
-			IMB_metadata_change_field(img, "Thumb::Image::Width", cwidth);
-			IMB_metadata_change_field(img, "Thumb::Image::Height", cheight);
+			IMB_metadata_set_field(img->metadata, "Thumb::Image::Width", cwidth);
+			IMB_metadata_set_field(img->metadata, "Thumb::Image::Height", cheight);
 		}
 		img->ftype = IMB_FTYPE_PNG;
 		img->planes = 32;
@@ -589,7 +590,7 @@ ImBuf *IMB_thumb_manage(const char *org_path, ThumbSize size, ThumbSource source
 
 				const bool use_hash = thumbhash_from_path(file_path, source, thumb_hash);
 
-				if (IMB_metadata_get_field(img, "Thumb::MTime", mtime, sizeof(mtime))) {
+				if (IMB_metadata_get_field(img->metadata, "Thumb::MTime", mtime, sizeof(mtime))) {
 					regenerate = (st.st_mtime != atol(mtime));
 				}
 				else {
@@ -598,7 +599,7 @@ ImBuf *IMB_thumb_manage(const char *org_path, ThumbSize size, ThumbSource source
 				}
 
 				if (use_hash && !regenerate) {
-					if (IMB_metadata_get_field(img, "X-Blender::Hash", thumb_hash_curr, sizeof(thumb_hash_curr))) {
+					if (IMB_metadata_get_field(img->metadata, "X-Blender::Hash", thumb_hash_curr, sizeof(thumb_hash_curr))) {
 						regenerate = !STREQ(thumb_hash, thumb_hash_curr);
 					}
 					else {

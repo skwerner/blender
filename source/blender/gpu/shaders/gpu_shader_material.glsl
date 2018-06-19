@@ -413,6 +413,11 @@ void math_abs(float val1, out float outval)
 	outval = abs(val1);
 }
 
+void math_atan2(float val1, float val2, out float outval)
+{
+	outval = atan(val1, val2);
+}
+
 void squeeze(float val, float width, float center, out float outval)
 {
 	outval = 1.0 / (1.0 + pow(2.71828183, -((val - center) * width)));
@@ -2599,7 +2604,8 @@ void node_bsdf_glossy(vec4 color, float roughness, vec3 N, out vec4 result)
 		vec3 light_specular = gl_LightSource[i].specular.rgb;
 
 		/* we mix in some diffuse so low roughness still shows up */
-		float bsdf = 0.5 * pow(max(dot(N, H), 0.0), 1.0 / roughness);
+		float r2 = roughness * roughness;
+		float bsdf = 0.5 * pow(max(dot(N, H), 0.0), 1.0 / r2);
 		bsdf += 0.5 * max(dot(N, light_position), 0.0);
 		L += light_specular * bsdf;
 	}
@@ -2779,9 +2785,10 @@ void node_bsdf_refraction(vec4 color, float roughness, float ior, vec3 N, out ve
 	node_bsdf_diffuse(color, 0.0, N, result);
 }
 
-void node_ambient_occlusion(vec4 color, out vec4 result)
+void node_ambient_occlusion(vec4 color, float distance, vec3 normal, out vec4 result_color, out float result_ao)
 {
-	result = color;
+	result_color = color;
+	result_ao = 1.0;
 }
 
 /* emission */
@@ -3881,7 +3888,7 @@ void material_preview_matcap(vec4 color, sampler2D ima, vec4 N, vec4 mask, out v
 {
 	vec3 normal;
 	vec2 tex;
-	
+
 #ifndef USE_OPENSUBDIV
 	/* remap to 0.0 - 1.0 range. This is done because OpenGL 2.0 clamps colors
 	 * between shader stages and we want the full range of the normal */

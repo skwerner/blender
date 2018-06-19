@@ -558,7 +558,12 @@ static ShaderNode *add_node(Scene *scene,
 		node = new EmissionNode();
 	}
 	else if(b_node.is_a(&RNA_ShaderNodeAmbientOcclusion)) {
-		node = new AmbientOcclusionNode();
+		BL::ShaderNodeAmbientOcclusion b_ao_node(b_node);
+		AmbientOcclusionNode *ao = new AmbientOcclusionNode();
+		ao->samples = b_ao_node.samples();
+		ao->inside = b_ao_node.inside();
+		ao->only_local = b_ao_node.only_local();
+		node = ao;
 	}
 	else if(b_node.is_a(&RNA_ShaderNodeVolumeScatter)) {
 		node = new ScatterVolumeNode();
@@ -817,6 +822,22 @@ static ShaderNode *add_node(Scene *scene,
 		BL::TexMapping b_texture_mapping(b_sky_node.texture_mapping());
 		get_tex_mapping(&sky->tex_mapping, b_texture_mapping);
 		node = sky;
+	}
+	else if(b_node.is_a(&RNA_ShaderNodeTexIES)) {
+		BL::ShaderNodeTexIES b_ies_node(b_node);
+		IESLightNode *ies = new IESLightNode();
+		switch(b_ies_node.mode()) {
+			case BL::ShaderNodeTexIES::mode_EXTERNAL:
+				ies->filename = blender_absolute_path(b_data, b_ntree, b_ies_node.filepath());
+				break;
+			case BL::ShaderNodeTexIES::mode_INTERNAL:
+				ies->ies = get_text_datablock_content(b_ies_node.ies().ptr);
+				if(ies->ies.empty()) {
+					ies->ies = "\n";
+				}
+				break;
+		}
+		node = ies;
 	}
 	else if(b_node.is_a(&RNA_ShaderNodeNormalMap)) {
 		BL::ShaderNodeNormalMap b_normal_map_node(b_node);

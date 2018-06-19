@@ -39,6 +39,7 @@ set(SRC_OSL
 	node_principled_volume.osl
 	node_holdout.osl
 	node_hsv.osl
+	node_ies_light.osl
 	node_image_texture.osl
 	node_invert.osl
 	node_layer_weight.osl
@@ -109,7 +110,7 @@ foreach(_file ${SRC_OSL})
 	string(REPLACE ".osl" ".oso" _OSO_FILE ${_OSL_FILE})
 	string(REPLACE ${CMAKE_SOURCE_DIR} ${CMAKE_BINARY_DIR} _OSO_FILE ${_OSO_FILE})
 	add_custom_command(
-		OUTPUT ${_OSO_FILE} 
+		OUTPUT ${_OSO_FILE}
 		COMMAND ${OSL_COMPILER} -q -O2  -I"${CMAKE_CURRENT_SOURCE_DIR}" -o ${_OSO_FILE} ${_OSL_FILE}
 		DEPENDS ${_OSL_FILE} ${SRC_OSL_HEADERS} ${OSL_COMPILER})
 	list(APPEND SRC_OSO

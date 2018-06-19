@@ -64,10 +64,10 @@ typedef struct BlendFileData {
 	int fileflags;
 	int globalf;
 	char filename[1024];    /* 1024 = FILE_MAX */
-	
+
 	struct bScreen *curscreen;
 	struct Scene *curscene;
-	
+
 	eBlenFileType type;
 } BlendFileData;
 
@@ -147,8 +147,10 @@ void BLO_update_defaults_startup_blend(struct Main *mainvar);
 
 struct BlendThumbnail *BLO_thumbnail_from_file(const char *filepath);
 
+struct Main *BLO_main_from_memfile(struct MemFile *memfile, struct Main *bmain, struct Scene **r_scene);
+
 #ifdef __cplusplus
-} 
+}
 #endif
 
 #endif  /* __BLO_READFILE_H__ */

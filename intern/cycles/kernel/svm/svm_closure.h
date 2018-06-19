@@ -217,7 +217,7 @@ ccl_device void svm_node_closure_bsdf(KernelGlobals *kg, ShaderData *sd, float *
 
 			/* sheen */
 			if(diffuse_weight > CLOSURE_WEIGHT_CUTOFF && sheen > CLOSURE_WEIGHT_CUTOFF) {
-				float m_cdlum = linear_rgb_to_gray(base_color);
+				float m_cdlum = linear_rgb_to_gray(kg, base_color);
 				float3 m_ctint = m_cdlum > 0.0f ? base_color / m_cdlum : make_float3(1.0f, 1.0f, 1.0f); // normalize lum. to isolate hue+sat
 
 				/* color of the sheen component */
@@ -468,10 +468,12 @@ ccl_device void svm_node_closure_bsdf(KernelGlobals *kg, ShaderData *sd, float *
 				break;
 			}
 
+			float roughness = sqr(param1);
+
 			bsdf->N = N;
 			bsdf->T = make_float3(0.0f, 0.0f, 0.0f);
-			bsdf->alpha_x = param1;
-			bsdf->alpha_y = param1;
+			bsdf->alpha_x = roughness;
+			bsdf->alpha_y = roughness;
 			bsdf->ior = 0.0f;
 			bsdf->extra = NULL;
 
@@ -525,8 +527,9 @@ ccl_device void svm_node_closure_bsdf(KernelGlobals *kg, ShaderData *sd, float *
 					sd->flag |= bsdf_refraction_setup(bsdf);
 				}
 				else {
-					bsdf->alpha_x = param1;
-					bsdf->alpha_y = param1;
+					float roughness = sqr(param1);
+					bsdf->alpha_x = roughness;
+					bsdf->alpha_y = roughness;
 					bsdf->ior = eta;
 
 					if(type == CLOSURE_BSDF_MICROFACET_BECKMANN_REFRACTION_ID)
@@ -557,7 +560,7 @@ ccl_device void svm_node_closure_bsdf(KernelGlobals *kg, ShaderData *sd, float *
 			/* fresnel */
 			float cosNO = dot(N, sd->I);
 			float fresnel = fresnel_dielectric_cos(cosNO, eta);
-			float roughness = param1;
+			float roughness = sqr(param1);
 
 			/* reflection */
 #ifdef __CAUSTICS_TRICKS__
@@ -611,8 +614,9 @@ ccl_device void svm_node_closure_bsdf(KernelGlobals *kg, ShaderData *sd, float *
 			bsdf->extra = extra;
 			bsdf->T = make_float3(0.0f, 0.0f, 0.0f);
 
-			bsdf->alpha_x = param1;
-			bsdf->alpha_y = param1;
+			float roughness = sqr(param1);
+			bsdf->alpha_x = roughness;
+			bsdf->alpha_y = roughness;
 			float eta = fmaxf(param2, 1e-5f);
 			bsdf->ior = (sd->flag & SD_BACKFACING)? 1.0f/eta: eta;
 
@@ -648,7 +652,7 @@ ccl_device void svm_node_closure_bsdf(KernelGlobals *kg, ShaderData *sd, float *
 					bsdf->T = rotate_around_axis(bsdf->T, bsdf->N, rotation * M_2PI_F);
 
 				/* compute roughness */
-				float roughness = param1;
+				float roughness = sqr(param1);
 				float anisotropy = clamp(param2, -0.99f, 0.99f);
 
 				if(anisotropy < 0.0f) {
@@ -990,24 +994,6 @@ ccl_device void svm_node_closure_holdout(ShaderData *sd, float *stack, uint4 nod
 		closure_alloc(sd, sizeof(ShaderClosure), CLOSURE_HOLDOUT_ID, sd->svm_closure_weight);
 
 	sd->flag |= SD_HOLDOUT;
-}
-
-ccl_device void svm_node_closure_ambient_occlusion(ShaderData *sd, float *stack, uint4 node)
-{
-	uint mix_weight_offset = node.y;
-
-	if(stack_valid(mix_weight_offset)) {
-		float mix_weight = stack_load_float(stack, mix_weight_offset);
-
-		if(mix_weight == 0.0f)
-			return;
-
-		closure_alloc(sd, sizeof(ShaderClosure), CLOSURE_AMBIENT_OCCLUSION_ID, sd->svm_closure_weight * mix_weight);
-	}
-	else
-		closure_alloc(sd, sizeof(ShaderClosure), CLOSURE_AMBIENT_OCCLUSION_ID, sd->svm_closure_weight);
-
-	sd->flag |= SD_AO;
 }
 
 /* Closure Nodes */

@@ -53,10 +53,10 @@ typedef struct PoseTarget {
 
 typedef struct PoseTree {
 	struct PoseTree *next, *prev;
-	
+
 	int type;                       /* type of IK that this serves (CONSTRAINT_TYPE_KINEMATIC or ..._SPLINEIK) */
 	int totchannel;                 /* number of pose channels */
-	
+
 	struct ListBase targets;        /* list of targets of the tree */
 	struct bPoseChannel **pchan;    /* array of pose channels */
 	int     *parent;                /* and their parents */
@@ -169,41 +169,39 @@ void BKE_splineik_execute_tree(struct Scene *scene, struct Object *ob, struct bP
 
 void BKE_pose_eval_init(struct EvaluationContext *eval_ctx,
                         struct Scene *scene,
-                        struct Object *ob,
-                        struct bPose *pose);
+                        struct Object *ob);
 
 void BKE_pose_eval_init_ik(struct EvaluationContext *eval_ctx,
                            struct Scene *scene,
-                           struct Object *ob,
-                           struct bPose *pose);
+                           struct Object *ob);
 
 void BKE_pose_eval_bone(struct EvaluationContext *eval_ctx,
                         struct Scene *scene,
                         struct Object *ob,
-                        struct bPoseChannel *pchan);
+                        int pchan_index);
 
 void BKE_pose_constraints_evaluate(struct EvaluationContext *eval_ctx,
                                    struct Scene *scene,
                                    struct Object *ob,
-                                   struct bPoseChannel *pchan);
+                                   int pchan_index);
 
 void BKE_pose_bone_done(struct EvaluationContext *eval_ctx,
-                        struct bPoseChannel *pchan);
+                        struct Object *ob,
+                        int pchan_index);
 
 void BKE_pose_iktree_evaluate(struct EvaluationContext *eval_ctx,
                               struct Scene *scene,
                               struct Object *ob,
-                              struct bPoseChannel *rootchan);
+                              int rootchan_index);
 
 void BKE_pose_splineik_evaluate(struct EvaluationContext *eval_ctx,
                                 struct Scene *scene,
                                 struct Object *ob,
-                                struct bPoseChannel *rootchan);
+                                int rootchan_index);
 
 void BKE_pose_eval_flush(struct EvaluationContext *eval_ctx,
                          struct Scene *scene,
-                         struct Object *ob,
-                         struct bPose *pose);
+                         struct Object *ob);
 
 void BKE_pose_eval_proxy_copy(struct EvaluationContext *eval_ctx,
                               struct Object *ob);

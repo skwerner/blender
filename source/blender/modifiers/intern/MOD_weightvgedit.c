@@ -79,15 +79,11 @@ static void freeData(ModifierData *md)
 {
 	WeightVGEditModifierData *wmd = (WeightVGEditModifierData *) md;
 	curvemapping_free(wmd->cmap_curve);
-
-	if (wmd->mask_texture) {
-		id_us_min(&wmd->mask_texture->id);
-	}
 }
 
-static void copyData(ModifierData *md, ModifierData *target)
+static void copyData(const ModifierData *md, ModifierData *target)
 {
-	WeightVGEditModifierData *wmd  = (WeightVGEditModifierData *) md;
+	const WeightVGEditModifierData *wmd  = (const WeightVGEditModifierData *) md;
 	WeightVGEditModifierData *twmd = (WeightVGEditModifierData *) target;
 
 	modifier_copyData_generic(md, target);
@@ -176,8 +172,9 @@ static bool isDisabled(ModifierData *md, int UNUSED(useRenderParams))
 	return (wmd->defgrp_name[0] == '\0');
 }
 
-static DerivedMesh *applyModifier(ModifierData *md, Object *ob, DerivedMesh *derivedData,
-                                  ModifierApplyFlag UNUSED(flag))
+static DerivedMesh *applyModifier(
+        ModifierData *md, Object *ob, DerivedMesh *derivedData,
+        ModifierApplyFlag UNUSED(flag))
 {
 	WeightVGEditModifierData *wmd = (WeightVGEditModifierData *) md;
 	DerivedMesh *dm = derivedData;

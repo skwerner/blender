@@ -15,8 +15,8 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
- * Contributor: 
- *		Jeroen Bakker 
+ * Contributor:
+ *		Jeroen Bakker
  *		Monique Dewanchand
  */
 
@@ -41,7 +41,7 @@ public:
 	 * Default constructor
 	 */
 	SetVectorOperation();
-	
+
 	const float getX() { return this->m_x; }
 	void setX(float value) { this->m_x = value; }
 	const float getY() { return this->m_y; }
@@ -50,7 +50,7 @@ public:
 	void setZ(float value) { this->m_z = value; }
 	const float getW() { return this->m_w; }
 	void setW(float value) { this->m_w = value; }
-	
+
 	/**
 	 * the inner loop of this program
 	 */

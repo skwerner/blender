@@ -15,8 +15,8 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
- * Contributor: 
- *		Jeroen Bakker 
+ * Contributor:
+ *		Jeroen Bakker
  *		Monique Dewanchand
  */
 
@@ -27,7 +27,7 @@
 void MathNode::convertToOperations(NodeConverter &converter, const CompositorContext &/*context*/) const
 {
 	MathBaseOperation *operation = NULL;
-	
+
 	switch (this->getbNode()->custom1) {
 		case NODE_MATH_ADD:
 			operation = new MathAddOperation();
@@ -86,13 +86,16 @@ void MathNode::convertToOperations(NodeConverter &converter, const CompositorCon
 		case NODE_MATH_ABS:
 			operation = new MathAbsoluteOperation();
 			break;
+		case NODE_MATH_ATAN2:
+			operation = new MathArcTan2Operation();
+			break;
 	}
-	
+
 	if (operation) {
 		bool useClamp = getbNode()->custom2;
 		operation->setUseClamp(useClamp);
 		converter.addOperation(operation);
-		
+
 		converter.mapInputSocket(getInputSocket(0), operation->getInputSocket(0));
 		converter.mapInputSocket(getInputSocket(1), operation->getInputSocket(1));
 		converter.mapOutputSocket(getOutputSocket(0), operation->getOutputSocket());

@@ -58,11 +58,10 @@ def with_tempdir(wrapped):
 class AbstractBlenderRunnerTest(unittest.TestCase):
     """Base class for all test suites which needs to run Blender"""
 
-    @classmethod
-    def setUpClass(cls):
-        global args
-        cls.blender = args.blender
-        cls.testdir = pathlib.Path(args.testdir)
+    # Set in a subclass
+    blender: pathlib.Path = None
+    testdir: pathlib.Path = None
+
 
     def run_blender(self, filepath: str, python_script: str, timeout: int=300) -> str:
         """Runs Blender by opening a blendfile and executing a script.
@@ -73,18 +72,27 @@ class AbstractBlenderRunnerTest(unittest.TestCase):
         :param timeout: in seconds
         """
 
-        blendfile = self.testdir / filepath
+        assert self.blender, "Path to Blender binary is to be set in setUpClass()"
+        assert self.testdir, "Path to tests binary is to be set in setUpClass()"
 
-        command = (
+        blendfile = self.testdir / filepath if filepath else ""
+
+        command = [
             self.blender,
             '--background',
             '-noaudio',
             '--factory-startup',
             '--enable-autoexec',
-            str(blendfile),
+        ]
+
+        if blendfile:
+            command.append(str(blendfile))
+
+        command.extend([
             '-E', 'CYCLES',
             '--python-exit-code', '47',
             '--python-expr', python_script,
+            ]
         )
 
         proc = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,

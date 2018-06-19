@@ -15,8 +15,8 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
- * Contributor: 
- *		Jeroen Bakker 
+ * Contributor:
+ *		Jeroen Bakker
  *		Monique Dewanchand
  */
 
@@ -53,7 +53,7 @@ class WorkScheduler {
 	 * inside this loop new work is queried and being executed
 	 */
 	static void *thread_execute_gpu(void *data);
-#endif	
+#endif
 public:
 	/**
 	 * @brief schedule a chunk of a group to be calculated.

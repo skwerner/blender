@@ -138,7 +138,6 @@ class USERPREF_MT_app_templates(Menu):
             layout.operator_context = 'INVOKE_DEFAULT'
             props = layout.operator("wm.app_template_install")
 
-
     def draw(self, context):
         self.draw_ex(context, use_splash=False, use_default=True, use_install=True)
 
@@ -211,7 +210,6 @@ class USERPREF_PT_interface(Panel):
         return (userpref.active_section == 'INTERFACE')
 
     def draw(self, context):
-        import sys
         layout = self.layout
 
         userpref = context.user_preferences
@@ -244,9 +242,8 @@ class USERPREF_PT_interface(Panel):
 
         col.separator()
 
-        if sys.platform[:3] == "win":
-            col.label("Warnings")
-            col.prop(view, "use_quit_dialog")
+        col.label("Warnings")
+        col.prop(view, "use_quit_dialog")
 
         row.separator()
         row.separator()
@@ -283,8 +280,8 @@ class USERPREF_PT_interface(Panel):
         row.separator()
 
         col = row.column()
-        #Toolbox doesn't exist yet
-        #col.label(text="Toolbox:")
+        # Toolbox doesn't exist yet
+        # col.label(text="Toolbox:")
         #col.prop(view, "show_column_layout")
         #col.label(text="Open Toolbox Delay:")
         #col.prop(view, "open_left_mouse_delay", text="Hold LMB")
@@ -325,7 +322,6 @@ class USERPREF_PT_interface(Panel):
         col.label(text="Options intended for use with app-templates only.")
         col.prop(view, "show_layout_ui")
         col.prop(view, "show_view3d_cursor")
-
 
 
 class USERPREF_PT_edit(Panel):
@@ -411,7 +407,7 @@ class USERPREF_PT_edit(Panel):
 
         sub = col.column()
 
-        #~ sub.active = edit.use_keyframe_insert_auto # incorrect, time-line can enable
+        # ~ sub.active = edit.use_keyframe_insert_auto # incorrect, time-line can enable
         sub.prop(edit, "use_keyframe_insert_available", text="Only Insert Available")
 
         col.separator()
@@ -1219,7 +1215,7 @@ class USERPREF_PT_input(Panel):
 
         #sub.prop(inputs, "use_mouse_mmb_paste")
 
-        #col.separator()
+        # col.separator()
 
         sub = col.column()
         sub.prop(inputs, "invert_zoom_wheel", text="Invert Wheel Zoom Direction")
@@ -1334,7 +1330,7 @@ class USERPREF_PT_addons(Panel):
         'OFFICIAL': 'FILE_BLEND',
         'COMMUNITY': 'POSE_DATA',
         'TESTING': 'MOD_EXPLODE',
-        }
+    }
 
     @classmethod
     def poll(cls, context):
@@ -1412,7 +1408,6 @@ class USERPREF_PT_addons(Panel):
                 sub_col.label("    " + addon_file)
                 sub_col.label("    " + addon_path)
 
-
         if addon_utils.error_encoding:
             self.draw_error(
                 col,
@@ -1437,11 +1432,11 @@ class USERPREF_PT_addons(Panel):
 
             # check if addon should be visible with current filters
             if ((filter == "All") or
-                (filter == info["category"]) or
-                (filter == "Enabled" and is_enabled) or
-                (filter == "Disabled" and not is_enabled) or
-                (filter == "User" and (mod.__file__.startswith((scripts_addons_folder, userpref_addons_folder))))
-            ):
+                        (filter == info["category"]) or
+                        (filter == "Enabled" and is_enabled) or
+                    (filter == "Disabled" and not is_enabled) or
+                    (filter == "User" and (mod.__file__.startswith((scripts_addons_folder, userpref_addons_folder))))
+                    ):
                 if search and search not in info["name"].lower():
                     if info["author"]:
                         if search not in info["author"].lower():
@@ -1513,12 +1508,15 @@ class USERPREF_PT_addons(Panel):
                             split.operator(
                                 "wm.url_open", text="Documentation", icon='HELP',
                             ).url = info["wiki_url"]
-                        split.operator(
-                            "wm.url_open", text="Report a Bug", icon='URL',
-                        ).url = info.get(
-                            "tracker_url",
-                            "https://developer.blender.org/maniphest/task/edit/form/2",
-                        )
+                        # Only add "Report a Bug" button if tracker_url is set
+                        # or the add-on is bundled (use official tracker then).
+                        if info.get("tracker_url") or not user_addon:
+                            split.operator(
+                                "wm.url_open", text="Report a Bug", icon='URL',
+                            ).url = info.get(
+                                "tracker_url",
+                                "https://developer.blender.org/maniphest/task/edit/form/2",
+                            )
                         if user_addon:
                             split.operator(
                                 "wm.addon_remove", text="Remove", icon='CANCEL',

@@ -43,8 +43,6 @@
 #include "BLI_fileops.h"
 #include "BLI_string.h"
 
-#include "BKE_global.h"
-
 #include "imbuf.h"
 #include "IMB_imbuf_types.h"
 #include "IMB_imbuf.h"
@@ -53,6 +51,7 @@
 #include "IMB_anim.h"
 
 #ifdef WITH_FFMPEG
+#include "BKE_global.h"  /* G.debug */
 #include <libavcodec/avcodec.h>
 #include <libavformat/avformat.h>
 #include <libavdevice/avdevice.h>
@@ -167,7 +166,7 @@ int IMB_ispic_type(const char *name)
 	BLI_assert(!BLI_path_is_rel(name));
 
 	if (UTIL_DEBUG) printf("%s: loading %s\n", __func__, name);
-	
+
 	if (BLI_stat(name, &st) == -1)
 		return false;
 	if (((st.st_mode) & S_IFMT) != S_IFREG)
@@ -282,7 +281,7 @@ static int isffmpeg(const char *filename)
 	AVCodec *pCodec;
 	AVCodecContext *pCodecCtx;
 
-	if (BLI_testextensie_n(
+	if (BLI_path_extension_check_n(
 	        filename,
 	        ".swf", ".jpg", ".png", ".dds", ".tga", ".bmp", ".tif", ".exr", ".cin", ".wav", NULL))
 	{
@@ -379,13 +378,13 @@ int imb_get_anim_type(const char *name)
 
 	return ANIM_NONE;
 }
- 
+
 bool IMB_isanim(const char *filename)
 {
 	int type;
 
 	type = imb_get_anim_type(filename);
-	
+
 	return (type && type != ANIM_SEQUENCE);
 }
 

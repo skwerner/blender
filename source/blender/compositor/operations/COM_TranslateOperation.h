@@ -15,8 +15,8 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
- * Contributor: 
- *		Jeroen Bakker 
+ * Contributor:
+ *		Jeroen Bakker
  *		Monique Dewanchand
  */
 
@@ -45,7 +45,7 @@ public:
 
 	float getDeltaX() { return this->m_deltaX * this->m_factorX; }
 	float getDeltaY() { return this->m_deltaY * this->m_factorY; }
-	
+
 	inline void ensureDelta() {
 		if (!this->m_isDeltaSet) {
 			float tempDelta[4];

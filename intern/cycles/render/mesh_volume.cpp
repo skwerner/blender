@@ -152,22 +152,22 @@ public:
 	void add_node_with_padding(int x, int y, int z);
 
 	void create_mesh(vector<float3> &vertices,
-					 vector<int> &indices,
-					 vector<float3> &face_normals);
+	                 vector<int> &indices,
+	                 vector<float3> &face_normals);
 
 private:
 	void generate_vertices_and_quads(vector<int3> &vertices_is,
-									 vector<QuadData> &quads);
+	                                 vector<QuadData> &quads);
 
 	void deduplicate_vertices(vector<int3> &vertices,
-							  vector<QuadData> &quads);
+	                          vector<QuadData> &quads);
 
 	void convert_object_space(const vector<int3> &vertices,
-							  vector<float3> &out_vertices);
+	                          vector<float3> &out_vertices);
 
 	void convert_quads_to_tris(const vector<QuadData> &quads,
-							   vector<int> &tris,
-							   vector<float3> &face_normals);
+	                           vector<int> &tris,
+	                           vector<float3> &face_normals);
 };
 
 VolumeMeshBuilder::VolumeMeshBuilder(VolumeParams *volume_params)
@@ -224,8 +224,8 @@ void VolumeMeshBuilder::add_node_with_padding(int x, int y, int z)
 }
 
 void VolumeMeshBuilder::create_mesh(vector<float3> &vertices,
-									vector<int> &indices,
-									vector<float3> &face_normals)
+                                    vector<int> &indices,
+                                    vector<float3> &face_normals)
 {
 	/* We create vertices in index space (is), and only convert them to object
 	 * space when done. */
@@ -260,8 +260,8 @@ void VolumeMeshBuilder::generate_vertices_and_quads(
 
 				/* Compute min and max coords of the node in index space. */
 				int3 min = make_int3((x - pad_offset.x)*CUBE_SIZE,
-									 (y - pad_offset.y)*CUBE_SIZE,
-									 (z - pad_offset.z)*CUBE_SIZE);
+				                     (y - pad_offset.y)*CUBE_SIZE,
+				                     (z - pad_offset.z)*CUBE_SIZE);
 
 				/* Maximum is just CUBE_SIZE voxels away from minimum on each axis. */
 				int3 max = make_int3(min.x + CUBE_SIZE, min.y + CUBE_SIZE, min.z + CUBE_SIZE);
@@ -316,7 +316,7 @@ void VolumeMeshBuilder::generate_vertices_and_quads(
 }
 
 void VolumeMeshBuilder::deduplicate_vertices(vector<int3> &vertices,
-											 vector<QuadData> &quads)
+                                             vector<QuadData> &quads)
 {
 	vector<int3> sorted_vertices = vertices;
 	std::sort(sorted_vertices.begin(), sorted_vertices.end());
@@ -355,7 +355,7 @@ void VolumeMeshBuilder::deduplicate_vertices(vector<int3> &vertices,
 }
 
 void VolumeMeshBuilder::convert_object_space(const vector<int3> &vertices,
-											 vector<float3> &out_vertices)
+	                                         vector<float3> &out_vertices)
 {
 	out_vertices.reserve(vertices.size());
 
@@ -369,8 +369,8 @@ void VolumeMeshBuilder::convert_object_space(const vector<int3> &vertices,
 }
 
 void VolumeMeshBuilder::convert_quads_to_tris(const vector<QuadData> &quads,
-											  vector<int> &tris,
-											  vector<float3> &face_normals)
+                                              vector<int> &tris,
+                                              vector<float3> &face_normals)
 {
 	int index_offset = 0;
 	tris.resize(quads.size()*6);
@@ -393,17 +393,14 @@ void VolumeMeshBuilder::convert_quads_to_tris(const vector<QuadData> &quads,
 
 /* ************************************************************************** */
 
-/* For debugging: render the created mesh using the default diffuse shader. */
-//#define RENDER_DIFFUSE
-
 struct VoxelAttributeGrid {
 	float *data;
 	int channels;
 };
 
 void MeshManager::create_volume_mesh(Scene *scene,
-									 Mesh *mesh,
-									 Progress& progress)
+                                     Mesh *mesh,
+                                     Progress& progress)
 {
 	string msg = string_printf("Computing Volume Mesh %s", mesh->name.c_str());
 	progress.set_status("Updating Mesh", msg);
@@ -443,6 +440,8 @@ void MeshManager::create_volume_mesh(Scene *scene,
 		return;
 	}
 
+	/* Compute padding. */
+	Shader *volume_shader = NULL;
 	int pad_size = 0;
 
 	foreach(Shader *shader, mesh->used_shaders) {
@@ -450,12 +449,20 @@ void MeshManager::create_volume_mesh(Scene *scene,
 			continue;
 		}
 
+		volume_shader = shader;
+
 		if(shader->volume_interpolation_method == VOLUME_INTERPOLATION_LINEAR) {
 			pad_size = max(1, pad_size);
 		}
 		else if(shader->volume_interpolation_method == VOLUME_INTERPOLATION_CUBIC) {
 			pad_size = max(2, pad_size);
 		}
+
+		break;
+	}
+
+	if(!volume_shader) {
+		return;
 	}
 
 	/* Compute start point and cell size from transform. */
@@ -463,8 +470,8 @@ void MeshManager::create_volume_mesh(Scene *scene,
 	const int3 resolution = volume_params.resolution;
 	float3 start_point = make_float3(0.0f, 0.0f, 0.0f);
 	float3 cell_size = make_float3(1.0f/resolution.x,
-								   1.0f/resolution.y,
-								   1.0f/resolution.z);
+	                               1.0f/resolution.y,
+	                               1.0f/resolution.z);
 
 	if(attr) {
 		const Transform *tfm = attr->data_transform();
@@ -477,6 +484,7 @@ void MeshManager::create_volume_mesh(Scene *scene,
 	volume_params.cell_size = cell_size;
 	volume_params.pad_size = pad_size;
 
+	/* Build bounding mesh around non-empty volume cells. */
 	VolumeMeshBuilder builder(&volume_params);
 	const float isovalue = mesh->volume_isovalue;
 
@@ -487,52 +495,12 @@ void MeshManager::create_volume_mesh(Scene *scene,
 
 				for(size_t i = 0; i < voxel_grids.size(); ++i) {
 					const VoxelAttributeGrid &voxel_grid = voxel_grids[i];
+					const int channels = voxel_grid.channels;
 
-					if(voxel_grid.channels == 1) {
-						if(voxel_grid.data[voxel_index] >= isovalue) {
+					for(int c = 0; c < channels; c++) {
+						if(voxel_grid.data[voxel_index * channels + c] >= isovalue) {
 							builder.add_node_with_padding(x, y, z);
 							break;
-						}
-					}
-					else if(voxel_grid.channels == 3) {
-						voxel_index = compute_voxel_index(resolution, x*3, y, z);
-
-						if(voxel_grid.data[voxel_index] >= isovalue) {
-							builder.add_node_with_padding(x, y, z);
-							break;
-						}
-
-						if(voxel_grid.data[voxel_index + 1] >= isovalue) {
-							builder.add_node_with_padding(x, y, z);
-							break;
-						}
-
-						if(voxel_grid.data[voxel_index + 2] >= isovalue) {
-							builder.add_node_with_padding(x, y, z);
-							break;
-						}
-					}
-					else if(voxel_grid.channels == 4) {
-						voxel_index = compute_voxel_index(resolution, x*4, y, z);
-
-						/* check alpha first */
-						if(voxel_grid.data[voxel_index + 3] < isovalue) {
-							continue;
-						}
-
-						if(voxel_grid.data[voxel_index] >= isovalue) {
-							builder.add_node_with_padding(x, y, z);
-							continue;
-						}
-
-						if(voxel_grid.data[voxel_index + 1] >= isovalue) {
-							builder.add_node_with_padding(x, y, z);
-							continue;
-						}
-
-						if(voxel_grid.data[voxel_index + 2] >= isovalue) {
-							builder.add_node_with_padding(x, y, z);
-							continue;
 						}
 					}
 				}
@@ -540,26 +508,22 @@ void MeshManager::create_volume_mesh(Scene *scene,
 		}
 	}
 
+	/* Create mesh. */
 	vector<float3> vertices;
 	vector<int> indices;
 	vector<float3> face_normals;
 	builder.create_mesh(vertices, indices, face_normals);
 
-#ifdef RENDER_DIFFUSE
-	int shader = mesh->used_shaders[0]->id;
-#else
-	int shader = mesh->shader[0];
-#endif
-
 	mesh->clear(true);
 	mesh->reserve_mesh(vertices.size(), indices.size()/3);
+	mesh->used_shaders.push_back(volume_shader);
 
 	for(size_t i = 0; i < vertices.size(); ++i) {
 		mesh->add_vertex(vertices[i]);
 	}
 
 	for(size_t i = 0; i < indices.size(); i += 3) {
-		mesh->add_triangle(indices[i], indices[i + 1], indices[i + 2], shader, false);
+		mesh->add_triangle(indices[i], indices[i + 1], indices[i + 2], 0, false);
 	}
 
 	Attribute *attr_fN = mesh->attributes.add(ATTR_STD_FACE_NORMAL);
@@ -569,13 +533,14 @@ void MeshManager::create_volume_mesh(Scene *scene,
 		fN[i] = face_normals[i];
 	}
 
+	/* Print stats. */
 	VLOG(1) << "Memory usage volume mesh: "
-			<< ((vertices.size() + face_normals.size())*sizeof(float3) + indices.size()*sizeof(int))/(1024.0*1024.0)
-			<< "Mb.";
+	        << ((vertices.size() + face_normals.size())*sizeof(float3) + indices.size()*sizeof(int))/(1024.0*1024.0)
+	        << "Mb.";
 
 	VLOG(1) << "Memory usage volume grid: "
-			<< (resolution.x*resolution.y*resolution.z*sizeof(float))/(1024.0*1024.0)
-			<< "Mb.";
+	        << (resolution.x*resolution.y*resolution.z*sizeof(float))/(1024.0*1024.0)
+	        << "Mb.";
 }
 
 CCL_NAMESPACE_END

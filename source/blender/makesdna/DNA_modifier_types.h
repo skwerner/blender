@@ -174,7 +174,7 @@ typedef struct BuildModifierData {
 
 	float start, length;
 	short flag;
-	
+
 	short randomize;      /* (bool) whether order of vertices is randomized - legacy files (for readfile conversion) */
 	int seed;             /* (int) random seed */
 } BuildModifierData;
@@ -612,7 +612,7 @@ typedef struct ClothModifierData {
 	float hair_grid_max[3];
 	int hair_grid_res[3];
 	float hair_grid_cellsize;
-	
+
 	struct ClothSolverResult *solver_result;
 } ClothModifierData;
 
@@ -753,12 +753,21 @@ typedef enum {
 	eParticleInstanceFlag_UseSize   = (1 << 7),
 } ParticleInstanceModifierFlag;
 
+typedef enum {
+	eParticleInstanceSpace_World    = 0,
+	eParticleInstanceSpace_Local    = 1,
+} ParticleInstanceModifierSpace;
+
 typedef struct ParticleInstanceModifierData {
 	ModifierData modifier;
 
 	struct Object *ob;
-	short psys, flag, axis, pad;
+	short psys, flag, axis, space;
 	float position, random_position;
+	float rotation, random_rotation;
+	float particle_amount, particle_offset;
+	char index_layer_name[64]; /* MAX_CUSTOMDATA_LAYER_NAME */
+	char value_layer_name[64]; /* MAX_CUSTOMDATA_LAYER_NAME */
 } ParticleInstanceModifierData;
 
 typedef enum {
@@ -951,7 +960,7 @@ typedef struct OceanModifierData {
 
 	struct Ocean *ocean;
 	struct OceanCache *oceancache;
-	
+
 	int resolution;
 	int spatial_size;
 
@@ -1550,6 +1559,7 @@ enum {
 enum {
 	MOD_NORMALEDIT_INVERT_VGROUP            = (1 << 0),
 	MOD_NORMALEDIT_USE_DIRECTION_PARALLEL   = (1 << 1),
+	MOD_NORMALEDIT_NO_POLYNORS_FIX             = (1 << 2),
 };
 
 /* NormalEditModifierData.mix_mode */

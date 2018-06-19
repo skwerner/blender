@@ -15,8 +15,8 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
- * Contributor: 
- *		Jeroen Bakker 
+ * Contributor:
+ *		Jeroen Bakker
  *		Monique Dewanchand
  */
 
@@ -43,34 +43,34 @@ private:
 	float m_cam_lens;
 	float m_dof_sp;
 	Object *m_cameraObject;
-	
+
 	FastGaussianBlurValueOperation *m_blurPostOperation;
 public:
 	/**
 	 * Default constructor
 	 */
 	ConvertDepthToRadiusOperation();
-	
+
 	/**
 	 * the inner loop of this program
 	 */
 	void executePixelSampled(float output[4], float x, float y, PixelSampler sampler);
-	
+
 	/**
 	 * Initialize the execution
 	 */
 	void initExecution();
-	
+
 	/**
 	 * Deinitialize the execution
 	 */
 	void deinitExecution();
-	
+
 	void setfStop(float fStop) { this->m_fStop = fStop; }
 	void setMaxRadius(float maxRadius) { this->m_maxRadius = maxRadius; }
 	void setCameraObject(Object *camera) { this->m_cameraObject = camera; }
 	float determineFocalDistance();
 	void setPostBlur(FastGaussianBlurValueOperation *operation) {this->m_blurPostOperation = operation;}
-	
+
 };
 #endif

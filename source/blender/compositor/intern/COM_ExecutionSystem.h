@@ -15,8 +15,8 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
- * Contributor: 
- *		Jeroen Bakker 
+ * Contributor:
+ *		Jeroen Bakker
  *		Monique Dewanchand
  */
 
@@ -114,7 +114,7 @@ class ExecutionSystem {
 public:
 	typedef std::vector<NodeOperation*> Operations;
 	typedef std::vector<ExecutionGroup*> Groups;
-	
+
 private:
 	/**
 	 * @brief the context used during execution
@@ -136,7 +136,7 @@ private: //methods
 	 * find all execution group with output nodes
 	 */
 	void findOutputExecutionGroup(vector<ExecutionGroup *> *result, CompositorPriority priority) const;
-	
+
 	/**
 	 * find all execution group with output nodes
 	 */

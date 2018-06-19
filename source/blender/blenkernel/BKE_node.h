@@ -86,7 +86,7 @@ struct bNodeInstanceHash;
 
 /** Compact definition of a node socket.
  * Can be used to quickly define a list of static sockets for a node,
- * which are added to each new node of that type. 
+ * which are added to each new node of that type.
  *
  * \deprecated This struct is used by C nodes to define templates as simple
  * static struct lists. These are converted to the new template collections
@@ -99,7 +99,7 @@ typedef struct bNodeSocketTemplate {
 	float min, max;
 	int subtype;  /* would use PropertySubType but this is a bad level include to use RNA */
 	int flag;
-	
+
 	/* after this line is used internal only */
 	struct bNodeSocket *sock;		/* used to hold verified socket */
 	char identifier[64];			/* generated from name */
@@ -110,21 +110,21 @@ typedef struct bNodeSocketTemplate {
  */
 typedef struct bNodeSocketType {
 	char idname[64];				/* identifier name */
-	
+
 	void (*draw)(struct bContext *C, struct uiLayout *layout, struct PointerRNA *ptr, struct PointerRNA *node_ptr, const char *text);
 	void (*draw_color)(struct bContext *C, struct PointerRNA *ptr, struct PointerRNA *node_ptr, float *r_color);
-	
+
 	void (*interface_draw)(struct bContext *C, struct uiLayout *layout, struct PointerRNA *ptr);
 	void (*interface_draw_color)(struct bContext *C, struct PointerRNA *ptr, float *r_color);
 	void (*interface_register_properties)(struct bNodeTree *ntree, struct bNodeSocket *stemp, struct StructRNA *data_srna);
 	void (*interface_init_socket)(struct bNodeTree *ntree, struct bNodeSocket *stemp, struct bNode *node, struct bNodeSocket *sock, const char *data_path);
 	void (*interface_verify_socket)(struct bNodeTree *ntree, struct bNodeSocket *stemp, struct bNode *node, struct bNodeSocket *sock, const char *data_path);
 	void (*interface_from_socket)(struct bNodeTree *ntree, struct bNodeSocket *stemp, struct bNode *node, struct bNodeSocket *sock);
-	
+
 	/* RNA integration */
 	ExtensionRNA ext_socket;
 	ExtensionRNA ext_interface;
-	
+
 	/* for standard socket types in C */
 	int type, subtype;
 } bNodeSocketType;
@@ -141,23 +141,23 @@ typedef int (*NodeGPUExecFunction)(struct GPUMaterial *mat, struct bNode *node, 
 typedef struct bNodeType {
 	void *next, *prev;
 	short needs_free;		/* set for allocated types that need to be freed */
-	
+
 	char idname[64];				/* identifier name */
 	int type;
 
 	char ui_name[64];	/* MAX_NAME */
 	char ui_description[256];
 	int ui_icon;
-	
+
 	float width, minwidth, maxwidth;
 	float height, minheight, maxheight;
 	short nclass, flag, compatibility;
-	
+
 	/* templates for static sockets */
 	bNodeSocketTemplate *inputs, *outputs;
-	
+
 	char storagename[64];			/* struct name for DNA */
-	
+
 	/* Main draw function for the node */
 	void (*draw_nodetype)(const struct bContext *C, struct ARegion *ar, struct SpaceNode *snode,
 	                 struct bNodeTree *ntree, struct bNode *node, bNodeInstanceKey key);
@@ -183,41 +183,41 @@ typedef struct bNodeType {
 	int (*select_area_func)(struct bNode *node, int x, int y);
 	/// Optional tweak area polling (for grabbing).
 	int (*tweak_area_func)(struct bNode *node, int x, int y);
-	
+
 	/// Called when the node is updated in the editor.
 	void (*updatefunc)(struct bNodeTree *ntree, struct bNode *node);
 	/// Check and update if internal ID data has changed.
 	void (*verifyfunc)(struct bNodeTree *ntree, struct bNode *node, struct ID *id);
-	
+
 	/// Initialize a new node instance of this type after creation.
 	void (*initfunc)(struct bNodeTree *ntree, struct bNode *node);
 	/// Free the node instance.
 	void (*freefunc)(struct bNode *node);
 	/// Make a copy of the node instance.
 	void (*copyfunc)(struct bNodeTree *dest_ntree, struct bNode *dest_node, struct bNode *src_node);
-	
+
 	/* Registerable API callback versions, called in addition to C callbacks */
 	void (*initfunc_api)(const struct bContext *C, struct PointerRNA *ptr);
 	void (*freefunc_api)(struct PointerRNA *ptr);
 	void (*copyfunc_api)(struct PointerRNA *ptr, struct bNode *src_node);
-	
+
 	/* can this node type be added to a node tree */
 	int (*poll)(struct bNodeType *ntype, struct bNodeTree *nodetree);
 	/* can this node be added to a node tree */
 	int (*poll_instance)(struct bNode *node, struct bNodeTree *nodetree);
-	
+
 	/* optional handling of link insertion */
 	void (*insert_link)(struct bNodeTree *ntree, struct bNode *node, struct bNodeLink *link);
 	/* Update the internal links list, for muting and disconnect operators. */
 	void (*update_internal_links)(struct bNodeTree *, struct bNode *node);
-	
+
 	/* **** execution callbacks **** */
 	NodeInitExecFunction initexecfunc;
 	NodeFreeExecFunction freeexecfunc;
 	NodeExecFunction execfunc;
 	/* gpu */
 	NodeGPUExecFunction gpufunc;
-	
+
 	/* RNA integration */
 	ExtensionRNA ext;
 } bNodeType;
@@ -277,7 +277,7 @@ typedef struct bNodeTreeType {
 	char ui_name[64];
 	char ui_description[256];
 	int ui_icon;
-	
+
 	/* callbacks */
 	void (*free_cache)(struct bNodeTree *ntree);
 	void (*free_node_cache)(struct bNodeTree *ntree, struct bNode *node);
@@ -291,15 +291,15 @@ typedef struct bNodeTreeType {
 	/* calls allowing threaded composite */
 	void (*localize)(struct bNodeTree *localtree, struct bNodeTree *ntree);
 	void (*local_sync)(struct bNodeTree *localtree, struct bNodeTree *ntree);
-	void (*local_merge)(struct bNodeTree *localtree, struct bNodeTree *ntree);
+	void (*local_merge)(struct Main *bmain, struct bNodeTree *localtree, struct bNodeTree *ntree);
 
 	/* Tree update. Overrides nodetype->updatetreefunc! */
 	void (*update)(struct bNodeTree *ntree);
-	
+
 	int (*validate_link)(struct bNodeTree *ntree, struct bNodeLink *link);
 
 	void (*node_add_init)(struct bNodeTree *ntree, struct bNode *bnode);
-	
+
 	/* RNA integration */
 	ExtensionRNA ext;
 } bNodeTreeType;
@@ -369,7 +369,7 @@ int             ntreeOutputExists(struct bNode *node, struct bNodeSocket *testso
 void            ntreeNodeFlagSet(const bNodeTree *ntree, const int flag, const bool enable);
 struct bNodeTree *ntreeLocalize(struct bNodeTree *ntree);
 void            ntreeLocalSync(struct bNodeTree *localtree, struct bNodeTree *ntree);
-void            ntreeLocalMerge(struct bNodeTree *localtree, struct bNodeTree *ntree);
+void            ntreeLocalMerge(struct Main *bmain, struct bNodeTree *localtree, struct bNodeTree *ntree);
 
 /** \} */
 
@@ -573,7 +573,6 @@ void            BKE_node_preview_set_pixel(struct bNodePreview *preview, const f
 
 /** \} */
 
-
 /* -------------------------------------------------------------------- */
 /** \name Node Type Access
  * \{ */
@@ -603,6 +602,7 @@ void            node_type_gpu(struct bNodeType *ntype, NodeGPUExecFunction gpufu
 void            node_type_internal_links(struct bNodeType *ntype, void (*update_internal_links)(struct bNodeTree *, struct bNode *));
 void            node_type_compatibility(struct bNodeType *ntype, short compatibility);
 
+/** \} */
 
 /* -------------------------------------------------------------------- */
 /** \name Node Generic Functions
@@ -692,7 +692,7 @@ bool BKE_node_tree_iter_step(struct NodeTreeIterStore *ntreeiter,
 
 /* -------------------------------------------------------------------- */
 /** \name Shader Nodes
- */
+ * \{ */
 struct ShadeInput;
 struct ShadeResult;
 
@@ -789,6 +789,7 @@ struct ShadeResult;
 #define SH_NODE_UVALONGSTROKE			191
 #define SH_NODE_TEX_POINTDENSITY		192
 #define SH_NODE_BSDF_PRINCIPLED         193
+#define SH_NODE_TEX_IES                 194
 #define SH_NODE_BEVEL                   197
 #define SH_NODE_DISPLACEMENT            198
 #define SH_NODE_VECTOR_DISPLACEMENT     199
@@ -816,7 +817,7 @@ void            ntreeGPUMaterialNodes(struct bNodeTree *ntree, struct GPUMateria
 
 /* -------------------------------------------------------------------- */
 /** \name Composite Nodes
- */
+ * \{ */
 
 /* output socket defines */
 #define RRES_OUT_IMAGE					0
@@ -1000,7 +1001,7 @@ void ntreeCompositColorBalanceSyncFromCDL(bNodeTree *ntree, bNode *node);
 
 /* -------------------------------------------------------------------- */
 /** \name Texture Nodes
- */
+ * \{ */
 
 struct TexResult;
 

@@ -49,6 +49,7 @@
 #include "IMB_filetype.h"
 #include "IMB_filter.h"
 #include "IMB_moviecache.h"
+#include "IMB_metadata.h"
 
 #include "MEM_guardedalloc.h"
 
@@ -2447,7 +2448,7 @@ const char *IMB_colormanagement_view_get_default_name(const char *display_name)
 {
 	ColorManagedDisplay *display = colormanage_display_get_named(display_name);
 	ColorManagedView *view = NULL;
-	
+
 	if (display)
 		view = colormanage_view_get_default(display);
 
@@ -2869,7 +2870,7 @@ static void partial_buffer_update_rect(ImBuf *ibuf,
 						display_buffer[display_index] =
 							display_buffer[display_index + 1] =
 							display_buffer[display_index + 2] =
-							display_buffer[display_index + 3] = FTOCHAR(pixel[0]);
+							display_buffer[display_index + 3] = unit_float_to_uchar_clamp(pixel[0]);
 					}
 				}
 			}

@@ -48,7 +48,7 @@
 #include "IMB_imbuf.h"
 #include "IMB_metadata.h"
 #include "IMB_filetype.h"
-#include "jpeglib.h" 
+#include "jpeglib.h"
 #include "jerror.h"
 
 #include "IMB_colormanagement.h"
@@ -247,12 +247,12 @@ static boolean handle_app1(j_decompress_ptr cinfo)
 	INT32 length; /* initialized by the macro */
 	INT32 i;
 	char neogeo[128];
-	
+
 	INPUT_VARS(cinfo);
 
 	INPUT_2BYTES(cinfo, length, return false);
 	length -= 2;
-	
+
 	if (length < 16) {
 		for (i = 0; i < length; i++) {
 			INPUT_BYTE(cinfo, neogeo[i], return false);
@@ -308,12 +308,12 @@ static ImBuf *ibJpegImageFromCinfo(struct jpeg_decompress_struct *cinfo, int fla
 			row_stride = cinfo->output_width * depth;
 
 			row_pointer = (*cinfo->mem->alloc_sarray)((j_common_ptr) cinfo, JPOOL_IMAGE, row_stride, 1);
-			
+
 			for (y = ibuf->y - 1; y >= 0; y--) {
 				jpeg_read_scanlines(cinfo, row_pointer, 1);
 				rect = (uchar *) (ibuf->rect + y * ibuf->x);
 				buffer = row_pointer[0];
-				
+
 				switch (depth) {
 					case 1:
 						for (x = ibuf->x; x > 0; x--) {
@@ -382,7 +382,8 @@ static ImBuf *ibJpegImageFromCinfo(struct jpeg_decompress_struct *cinfo, int fla
 					 * the information when we write
 					 * it back to disk.
 					 */
-					IMB_metadata_add_field(ibuf, "None", str);
+					IMB_metadata_ensure(&ibuf->metadata);
+					IMB_metadata_set_field(ibuf->metadata, "None", str);
 					ibuf->flags |= IB_metadata;
 					MEM_freeN(str);
 					goto next_stamp_marker;
@@ -408,7 +409,8 @@ static ImBuf *ibJpegImageFromCinfo(struct jpeg_decompress_struct *cinfo, int fla
 
 				*value = '\0'; /* need finish the key string */
 				value++;
-				IMB_metadata_add_field(ibuf, key, value);
+				IMB_metadata_ensure(&ibuf->metadata);
+				IMB_metadata_set_field(ibuf->metadata, key, value);
 				ibuf->flags |= IB_metadata;
 				MEM_freeN(str);
 next_stamp_marker:
@@ -417,7 +419,7 @@ next_stamp_marker:
 
 			jpeg_finish_decompress(cinfo);
 		}
-		
+
 		jpeg_destroy((j_common_ptr) cinfo);
 		if (ibuf) {
 			ibuf->ftype = IMB_FTYPE_JPG;
@@ -454,7 +456,7 @@ ImBuf *imb_load_jpeg(const unsigned char *buffer, size_t size, int flags, char c
 	memory_source(cinfo, buffer, size);
 
 	ibuf = ibJpegImageFromCinfo(cinfo, flags);
-	
+
 	return(ibuf);
 }
 
@@ -582,7 +584,7 @@ static int init_jpeg(FILE *outfile, struct jpeg_compress_struct *cinfo, struct I
 			break;
 	}
 	jpeg_set_defaults(cinfo);
-	
+
 	/* own settings */
 
 	cinfo->dct_method = JDCT_FLOAT;
@@ -627,7 +629,7 @@ static int save_stdjpeg(const char *name, struct ImBuf *ibuf)
 
 int imb_savejpeg(struct ImBuf *ibuf, const char *name, int flags)
 {
-	
+
 	ibuf->flags = flags;
 	return save_stdjpeg(name, ibuf);
 }

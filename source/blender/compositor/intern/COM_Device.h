@@ -15,8 +15,8 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
- * Contributor: 
- *		Jeroen Bakker 
+ * Contributor:
+ *		Jeroen Bakker
  *		Monique Dewanchand
  */
 
@@ -34,11 +34,11 @@ class Device {
 
 public:
 	/**
-	 * @brief Declaration of the virtual destructor 
+	 * @brief Declaration of the virtual destructor
 	 * @note resolve warning gcc 4.7
 	 */
 	virtual ~Device() {}
-	
+
 	/**
 	 * @brief initialize the device
 	 */

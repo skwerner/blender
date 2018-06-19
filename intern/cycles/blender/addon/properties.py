@@ -128,6 +128,12 @@ enum_volume_interpolation = (
     ('CUBIC', "Cubic", "Smoothed high quality interpolation, but slower")
     )
 
+enum_world_mis = (
+    ('NONE', "None", "Don't sample the background, faster but might cause noise for non-solid backgrounds"),
+    ('AUTOMATIC', "Auto", "Automatically try to determine the best setting"),
+    ('MANUAL', "Manual", "Manually set the resolution of the sampling map, higher values are slower and require more memory but reduce noise")
+    )
+
 enum_device_type = (
     ('CPU', "CPU", "CPU", 0),
     ('CUDA', "CUDA", "CUDA", 1),
@@ -571,6 +577,7 @@ class CyclesRenderSettings(bpy.types.PropertyGroup):
                 ('SHADOW', "Shadow", ""),
                 ('NORMAL', "Normal", ""),
                 ('UV', "UV", ""),
+                ('ROUGHNESS', "Roughness", ""),
                 ('EMIT', "Emit", ""),
                 ('ENVIRONMENT', "Environment", ""),
                 ('DIFFUSE', "Diffuse", ""),
@@ -980,15 +987,15 @@ class CyclesWorldSettings(bpy.types.PropertyGroup):
                 description="Cycles world settings",
                 type=cls,
                 )
-        cls.sample_as_light = BoolProperty(
-                name="Multiple Importance Sample",
-                description="Use multiple importance sampling for the environment, "
-                            "enabling for non-solid colors is recommended",
-                default=True,
+        cls.sampling_method = EnumProperty(
+                name="Sampling method",
+                description="How to sample the background light",
+                items=enum_world_mis,
+                default='AUTOMATIC',
                 )
         cls.sample_map_resolution = IntProperty(
                 name="Map Resolution",
-                description="Importance map size is resolution x resolution; "
+                description="Importance map size is resolution x resolution/2; "
                             "higher values potentially produce less noise, at the cost of memory and speed",
                 min=4, max=8192,
                 default=1024,
@@ -1131,7 +1138,7 @@ class CyclesObjectSettings(bpy.types.PropertyGroup):
 
         cls.motion_steps = IntProperty(
                 name="Motion Steps",
-                description="Control accuracy of deformation motion blur, more steps gives more memory usage (actual number of steps is 2^(steps - 1))",
+                description="Control accuracy of motion blur, more steps gives more memory usage (actual number of steps is 2^(steps - 1))",
                 min=1, soft_max=8,
                 default=1,
                 )

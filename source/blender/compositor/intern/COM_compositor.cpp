@@ -15,8 +15,8 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
- * Contributor: 
- *		Jeroen Bakker 
+ * Contributor:
+ *		Jeroen Bakker
  *		Monique Dewanchand
  */
 
@@ -94,7 +94,7 @@ void COM_execute(RenderData *rd, Scene *scene, bNodeTree *editingtree, int rende
 		ExecutionSystem *system = new ExecutionSystem(rd, scene, editingtree, rendering, twopass, viewSettings, displaySettings, viewName);
 		system->execute();
 		delete system;
-		
+
 		if (editingtree->test_break(editingtree->tbh)) {
 			// during editing multiple calls to this method can be triggered.
 			// make sure one the last one will be doing the work.

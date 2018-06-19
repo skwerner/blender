@@ -196,6 +196,8 @@ public:
 
 	static void free_memory();
 
+	float linear_rgb_to_gray(float3 c);
+
 protected:
 	ShaderManager();
 
@@ -220,6 +222,11 @@ protected:
 	static OIIO::TextureSystem *ts_shared;
 	static thread_mutex ts_shared_mutex;
 	static int ts_shared_users;
+
+	float3 xyz_to_r;
+	float3 xyz_to_g;
+	float3 xyz_to_b;
+	float3 rgb_to_y;
 };
 
 CCL_NAMESPACE_END

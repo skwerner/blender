@@ -15,8 +15,8 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
- * Contributor: 
- *		Jeroen Bakker 
+ * Contributor:
+ *		Jeroen Bakker
  *		Monique Dewanchand
  */
 
@@ -45,7 +45,7 @@ private:
 
 	const ColorManagedViewSettings *m_viewSettings;
 	const ColorManagedDisplaySettings *m_displaySettings;
-	
+
 	SocketReader *m_imageInput;
 	SocketReader *m_alphaInput;
 	SocketReader *m_depthInput;

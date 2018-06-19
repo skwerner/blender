@@ -46,15 +46,6 @@ struct wmTimer;
 struct Material;
 struct GPUFX;
 
-/* This is needed to not let VC choke on near and far... old
- * proprietary MS extensions... */
-#ifdef WIN32
-#undef near
-#undef far
-#define near clipsta
-#define far clipend
-#endif
-
 #include "DNA_defs.h"
 #include "DNA_listBase.h"
 #include "DNA_image_types.h"
@@ -63,9 +54,13 @@ struct GPUFX;
 
 /* ******************************** */
 
-/* The near/far thing is a Win EXCEPTION. Thus, leave near/far in the
- * code, and patch for windows. */
- 
+/* The near/far thing is a Win EXCEPTION, caused by indirect includes from <windows.h>.
+ * Thus, leave near/far in the code, and undef for windows. */
+#ifdef _WIN32
+#  undef near
+#  undef far
+#endif
+
 /* Background Picture in 3D-View */
 typedef struct BGpic {
 	struct BGpic *next, *prev;
@@ -84,7 +79,7 @@ typedef struct BGpic {
 /* ********************************* */
 
 typedef struct RegionView3D {
-	
+
 	float winmat[4][4];			/* GL_PROJECTION matrix */
 	float viewmat[4][4];		/* GL_MODELVIEW matrix */
 	float viewinv[4][4];		/* inverse of viewmat */
@@ -153,9 +148,10 @@ typedef struct RegionView3D {
 typedef struct View3D {
 	struct SpaceLink *next, *prev;
 	ListBase regionbase;		/* storage of regions for inactive spaces */
-	int spacetype;
-	float blockscale;
-	short blockhandler[8];
+	char spacetype;
+	char link_flag;
+	char _pad0[6];
+	/* End 'SpaceLink' header. */
 
 	float viewquat[4]  DNA_DEPRECATED;
 	float dist         DNA_DEPRECATED;
@@ -166,10 +162,10 @@ typedef struct View3D {
 
 	unsigned int lay_prev; /* for active layer toggle */
 	unsigned int lay_used; /* used while drawing */
-	
+
 	short persp  DNA_DEPRECATED;
 	short view   DNA_DEPRECATED;
-	
+
 	struct Object *camera, *ob_centre;
 	rctf render_border;
 
@@ -177,12 +173,12 @@ typedef struct View3D {
 	struct BGpic *bgpic  DNA_DEPRECATED; /* deprecated, use bgpicbase, only kept for do_versions(...) */
 
 	struct View3D *localvd; /* allocated backup of its self while in localview */
-	
+
 	char ob_centre_bone[64];		/* optional string for armature bone to define center, MAXBONENAME */
-	
+
 	unsigned int lay;
 	int layact;
-	
+
 	/**
 	 * The drawing mode for the 3d display. Set to OB_BOUNDBOX, OB_WIRE, OB_SOLID,
 	 * OB_TEXTURE, OB_MATERIAL or OB_RENDER */
@@ -190,7 +186,7 @@ typedef struct View3D {
 	short ob_centre_cursor;		/* optional bool for 3d cursor to define center */
 	short scenelock, around;
 	short flag, flag2;
-	
+
 	float lens, grid;
 	float near, far;
 	float ofs[3]  DNA_DEPRECATED;			/* XXX deprecated */
@@ -204,9 +200,9 @@ typedef struct View3D {
 
 	/* transform widget info */
 	char twtype, twmode, twflag;
-	
+
 	short flag3;
-	
+
 	/* afterdraw, for xray & transparent */
 	struct ListBase afterdraw_transp;
 	struct ListBase afterdraw_xray;

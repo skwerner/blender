@@ -33,7 +33,6 @@
 
 #include "BKE_cachefile.h"
 #include "BKE_context.h"
-#include "BKE_global.h"
 #include "BKE_library.h"
 #include "BKE_main.h"
 #include "BKE_report.h"
@@ -61,8 +60,8 @@ static int cachefile_open_invoke(bContext *C, wmOperator *op, const wmEvent *eve
 		char filepath[FILE_MAX];
 		Main *bmain = CTX_data_main(C);
 
-		BLI_strncpy(filepath, bmain->name, sizeof(filepath));
-		BLI_replace_extension(filepath, sizeof(filepath), ".abc");
+		BLI_strncpy(filepath, BKE_main_blendfile_path(bmain), sizeof(filepath));
+		BLI_path_extension_replace(filepath, sizeof(filepath), ".abc");
 		RNA_string_set(op->ptr, "filepath", filepath);
 	}
 

@@ -15,8 +15,8 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
- * Contributor: 
- *		Jeroen Bakker 
+ * Contributor:
+ *		Jeroen Bakker
  *		Monique Dewanchand
  */
 
@@ -35,7 +35,7 @@ private:
 	void updateGauss();
 public:
 	GaussianYBlurOperation();
-	
+
 	/**
 	 * the inner loop of this program
 	 */
@@ -55,7 +55,7 @@ public:
 	 * Deinitialize the execution
 	 */
 	void deinitExecution();
-	
+
 	void *initializeTileData(rcti *rect);
 	bool determineDependingAreaOfInterest(rcti *input, ReadBufferOperation *readOperation, rcti *output);
 

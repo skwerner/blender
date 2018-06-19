@@ -25,6 +25,7 @@
 CCL_NAMESPACE_BEGIN
 
 class ImageManager;
+class LightManager;
 class Scene;
 class Shader;
 
@@ -282,6 +283,27 @@ public:
 	}
 };
 
+class IESLightNode : public TextureNode {
+public:
+	SHADER_NODE_NO_CLONE_CLASS(IESLightNode)
+
+	~IESLightNode();
+	ShaderNode *clone() const;
+	virtual int get_group() { return NODE_GROUP_LEVEL_2; }
+
+	ustring filename;
+	ustring ies;
+
+	float strength;
+	float3 vector;
+
+private:
+	LightManager *light_manager;
+	int slot;
+
+	void get_slot();
+};
+
 class MappingNode : public ShaderNode {
 public:
 	SHADER_NODE_CLASS(MappingNode)
@@ -517,12 +539,16 @@ public:
 	SHADER_NODE_CLASS(AmbientOcclusionNode)
 
 	bool has_spatial_varying() { return true; }
-	virtual int get_group() { return NODE_GROUP_LEVEL_1; }
-	virtual ClosureType get_closure_type() { return CLOSURE_AMBIENT_OCCLUSION_ID; }
+	virtual int get_group() { return NODE_GROUP_LEVEL_3; }
+	virtual bool has_raytrace() { return true; }
 
-	float3 normal_osl;
 	float3 color;
-	float surface_mix_weight;
+	float distance;
+	float3 normal;
+	int samples;
+
+	bool only_local;
+	bool inside;
 };
 
 class VolumeNode : public ShaderNode {
@@ -1064,6 +1090,7 @@ public:
 class DisplacementNode : public ShaderNode {
 public:
 	SHADER_NODE_CLASS(DisplacementNode)
+	void constant_fold(const ConstantFolder& folder);
 	virtual int get_feature() {
 		return NODE_FEATURE_BUMP;
 	}
@@ -1080,6 +1107,7 @@ public:
 	SHADER_NODE_CLASS(VectorDisplacementNode)
 	void attributes(Shader *shader, AttributeRequestSet *attributes);
 	bool has_attribute_dependency() { return true; }
+	void constant_fold(const ConstantFolder& folder);
 	virtual int get_feature() {
 		return NODE_FEATURE_BUMP;
 	}

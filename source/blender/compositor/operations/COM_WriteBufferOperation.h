@@ -15,8 +15,8 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
- * Contributor: 
- *		Jeroen Bakker 
+ * Contributor:
+ *		Jeroen Bakker
  *		Monique Dewanchand
  */
 
@@ -41,7 +41,7 @@ public:
 	void executePixelSampled(float output[4], float x, float y, PixelSampler sampler);
 	const bool isWriteBufferOperation() const { return true; }
 	bool isSingleValue() const { return m_single_value; }
-	
+
 	void executeRegion(rcti *rect, unsigned int tileNumber);
 	void initExecution();
 	void deinitExecution();

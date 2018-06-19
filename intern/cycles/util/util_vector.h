@@ -131,7 +131,7 @@ public:
 	{
 		if(this != &from) {
 			resize(from.size());
-			memcpy(data_, from.data_, datasize_*sizeof(T));
+			memcpy((void*)data_, from.data_, datasize_*sizeof(T));
 		}
 
 		return *this;
@@ -204,7 +204,9 @@ public:
 					return NULL;
 				}
 				else if(data_ != NULL) {
-					memcpy(newdata, data_, ((datasize_ < newsize)? datasize_: newsize)*sizeof(T));
+					memcpy((void *)newdata,
+					       data_,
+					       ((datasize_ < newsize)? datasize_: newsize)*sizeof(T));
 					mem_free(data_, capacity_);
 				}
 				data_ = newdata;
@@ -212,6 +214,18 @@ public:
 			}
 			datasize_ = newsize;
 		}
+		return data_;
+	}
+
+	T* resize(size_t newsize, const T& value)
+	{
+		size_t oldsize = size();
+		resize(newsize);
+
+		for(size_t i = oldsize; i < size(); i++) {
+			data_[i] = value;
+		}
+
 		return data_;
 	}
 

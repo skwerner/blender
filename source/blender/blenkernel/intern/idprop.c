@@ -86,7 +86,7 @@ IDProperty *IDP_NewIDPArray(const char *name)
 	prop->type = IDP_IDPARRAY;
 	prop->len = 0;
 	BLI_strncpy(prop->name, name, MAX_IDPROP_NAME);
-	
+
 	return prop;
 }
 
@@ -113,14 +113,14 @@ IDProperty *IDP_CopyIDPArray(const IDProperty *array, const int flag)
 		memcpy(GETPROP(narray, i), tmp, sizeof(IDProperty));
 		MEM_freeN(tmp);
 	}
-	
+
 	return narray;
 }
 
 static void IDP_FreeIDPArray(IDProperty *prop, const bool do_id_user)
 {
 	int i;
-	
+
 	BLI_assert(prop->type == IDP_IDPARRAY);
 
 	for (i = 0; i < prop->len; i++)
@@ -472,7 +472,7 @@ static IDProperty *IDP_CopyID(const IDProperty *prop, const int flag)
 static IDProperty *IDP_CopyGroup(const IDProperty *prop, const int flag)
 {
 	IDProperty *newp, *link;
-	
+
 	BLI_assert(prop->type == IDP_GROUP);
 	newp = idp_generic_copy(prop, flag);
 	newp->len = prop->len;
@@ -579,10 +579,9 @@ void IDP_ReplaceGroupInGroup(IDProperty *dest, const IDProperty *src)
 void IDP_ReplaceInGroup_ex(IDProperty *group, IDProperty *prop, IDProperty *prop_exist)
 {
 	BLI_assert(group->type == IDP_GROUP);
-
 	BLI_assert(prop_exist == IDP_GetPropertyFromGroup(group, prop->name));
 
-	if ((prop_exist = IDP_GetPropertyFromGroup(group, prop->name))) {
+	if (prop_exist != NULL) {
 		BLI_insertlinkreplace(&group->data.group, prop_exist, prop);
 		IDP_FreeProperty(prop_exist);
 		MEM_freeN(prop_exist);
@@ -832,9 +831,9 @@ bool IDP_EqualsProperties_ex(IDProperty *prop1, IDProperty *prop2, const bool is
 				if ((p1 != p2) && ((fabsf(p1 - p2) / max_ff(p1, p2)) < 0.001f)) {
 					printf("WARNING: Comparing two float properties that have nearly the same value (%f vs. %f)\n", p1, p2);
 					printf("    p1: ");
-					IDP_spit(prop1);
+					IDP_print(prop1);
 					printf("    p2: ");
-					IDP_spit(prop2);
+					IDP_print(prop2);
 				}
 			}
 #endif
@@ -878,9 +877,10 @@ bool IDP_EqualsProperties_ex(IDProperty *prop1, IDProperty *prop2, const bool is
 			if (prop1->len != prop2->len)
 				return false;
 
-			for (i = 0; i < prop1->len; i++)
-				if (!IDP_EqualsProperties(&array1[i], &array2[i]))
+			for (i = 0; i < prop1->len; i++) {
+				if (!IDP_EqualsProperties_ex(&array1[i], &array2[i], is_strict))
 					return false;
+			}
 			return true;
 		}
 		case IDP_ID:
@@ -1024,7 +1024,7 @@ IDProperty *IDP_New(const char type, const IDPropertyTemplate *val, const char *
 
 	prop->type = type;
 	BLI_strncpy(prop->name, name, MAX_IDPROP_NAME);
-	
+
 	return prop;
 }
 
@@ -1068,3 +1068,4 @@ void IDP_ClearProperty(IDProperty *prop)
 }
 
 /** \} */
+

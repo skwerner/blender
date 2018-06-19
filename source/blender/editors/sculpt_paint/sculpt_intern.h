@@ -28,7 +28,7 @@
 /** \file blender/editors/sculpt_paint/sculpt_intern.h
  *  \ingroup edsculpt
  */
- 
+
 
 #ifndef __SCULPT_INTERN_H__
 #define __SCULPT_INTERN_H__
@@ -122,6 +122,8 @@ typedef struct SculptUndoNode {
 
 	/* shape keys */
 	char shapeName[sizeof(((KeyBlock *)0))->name];
+
+	size_t undo_size;
 } SculptUndoNode;
 
 /* Factor of brush to have rake point following behind

@@ -34,6 +34,7 @@
 #include "util/util_md5.h"
 #include "util/util_path.h"
 #include "util/util_progress.h"
+#include "util/util_projection.h"
 
 #endif
 
@@ -94,7 +95,9 @@ void OSLShaderManager::device_update(Device *device, DeviceScene *dscene, Scene 
 		 * compile shaders alternating */
 		thread_scoped_lock lock(ss_mutex);
 
-		OSLCompiler compiler((void*)this, (void*)ss, scene->image_manager);
+		OSLCompiler compiler((void*)this, (void*)ss,
+		                     scene->image_manager,
+		                     scene->light_manager);
 		compiler.background = (shader == scene->default_background);
 		compiler.compile(scene, og, shader);
 
@@ -503,11 +506,14 @@ OSLNode *OSLShaderManager::osl_node(const std::string& filepath,
 
 /* Graph Compiler */
 
-OSLCompiler::OSLCompiler(void *manager_, void *shadingsys_, ImageManager *image_manager_)
+OSLCompiler::OSLCompiler(void *manager_, void *shadingsys_,
+                         ImageManager *image_manager_,
+                         LightManager *light_manager_)
 {
 	manager = manager_;
 	shadingsys = shadingsys_;
 	image_manager = image_manager_;
+	light_manager = light_manager_;
 	current_type = SHADER_TYPE_SURFACE;
 	current_shader = NULL;
 	background = false;
@@ -790,7 +796,9 @@ void OSLCompiler::parameter(ShaderNode* node, const char *name)
 		case SocketType::TRANSFORM:
 		{
 			Transform value = node->get_transform(socket);
-			ss->Parameter(uname, TypeDesc::TypeMatrix, &value);
+			ProjectionTransform projection(value);
+			projection = projection_transpose(projection);
+			ss->Parameter(uname, TypeDesc::TypeMatrix, &projection);
 			break;
 		}
 		case SocketType::BOOLEAN_ARRAY:
@@ -858,7 +866,11 @@ void OSLCompiler::parameter(ShaderNode* node, const char *name)
 		case SocketType::TRANSFORM_ARRAY:
 		{
 			const array<Transform>& value = node->get_transform_array(socket);
-			ss->Parameter(uname, array_typedesc(TypeDesc::TypeMatrix, value.size()), value.data());
+			array<ProjectionTransform> fvalue(value.size());
+			for(size_t i = 0; i < value.size(); i++) {
+				fvalue[i] = projection_transpose(ProjectionTransform(value[i]));
+			}
+			ss->Parameter(uname, array_typedesc(TypeDesc::TypeMatrix, fvalue.size()), fvalue.data());
 			break;
 		}
 		case SocketType::CLOSURE:
@@ -925,7 +937,9 @@ void OSLCompiler::parameter(const char *name, ustring s)
 void OSLCompiler::parameter(const char *name, const Transform& tfm)
 {
 	OSL::ShadingSystem *ss = (OSL::ShadingSystem*)shadingsys;
-	ss->Parameter(name, TypeDesc::TypeMatrix, (float*)&tfm);
+	ProjectionTransform projection(tfm);
+	projection = projection_transpose(projection);
+	ss->Parameter(name, TypeDesc::TypeMatrix, (float*)&projection);
 }
 
 void OSLCompiler::parameter_array(const char *name, const float f[], int arraylen)

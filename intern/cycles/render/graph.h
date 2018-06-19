@@ -286,7 +286,7 @@ protected:
 
 	/* Graph simplification routines. */
 	void clean(Scene *scene);
-	void constant_fold();
+	void constant_fold(Scene *scene);
 	void simplify_settings(Scene *scene);
 	void deduplicate_nodes();
 	void verify_volume_output();

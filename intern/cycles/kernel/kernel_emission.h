@@ -29,7 +29,7 @@ ccl_device_noinline float3 direct_emissive_eval(KernelGlobals *kg,
 	/* setup shading at emitter */
 	float3 eval;
 
-	int shader_flag = kernel_tex_fetch(__shader_flag, (ls->shader & SHADER_MASK)*SHADER_SIZE);
+	int shader_flag = kernel_tex_fetch(__shaders, (ls->shader & SHADER_MASK)).flags;
 
 #ifdef __BACKGROUND_MIS__
 	if(ls->type == LIGHT_BACKGROUND) {
@@ -51,9 +51,9 @@ ccl_device_noinline float3 direct_emissive_eval(KernelGlobals *kg,
 #endif
 	if(shader_flag & SD_HAS_CONSTANT_EMISSION)
 	{
-		eval.x = __int_as_float(kernel_tex_fetch(__shader_flag, (ls->shader & SHADER_MASK)*SHADER_SIZE + 2));
-		eval.y = __int_as_float(kernel_tex_fetch(__shader_flag, (ls->shader & SHADER_MASK)*SHADER_SIZE + 3));
-		eval.z = __int_as_float(kernel_tex_fetch(__shader_flag, (ls->shader & SHADER_MASK)*SHADER_SIZE + 4));
+		eval.x = kernel_tex_fetch(__shaders, (ls->shader & SHADER_MASK)).constant_emission[0];
+		eval.y = kernel_tex_fetch(__shaders, (ls->shader & SHADER_MASK)).constant_emission[1];
+		eval.z = kernel_tex_fetch(__shaders, (ls->shader & SHADER_MASK)).constant_emission[2];
 		if((ls->prim != PRIM_NONE) && dot(ls->Ng, I) < 0.0f) {
 			ls->Ng = -ls->Ng;
 		}
@@ -326,9 +326,9 @@ ccl_device_noinline float3 indirect_background(KernelGlobals *kg,
 
 #ifdef __BACKGROUND_MIS__
 	/* check if background light exists or if we should skip pdf */
-	int res = kernel_data.integrator.pdf_background_res;
+	int res_x = kernel_data.integrator.pdf_background_res_x;
 
-	if(!(state->flag & PATH_RAY_MIS_SKIP) && res) {
+	if(!(state->flag & PATH_RAY_MIS_SKIP) && res_x) {
 		/* multiple importance sampling, get background light pdf for ray
 		 * direction, and compute weight with respect to BSDF pdf */
 		float pdf = background_light_pdf(kg, ray->P, ray->D);

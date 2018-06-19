@@ -14,8 +14,10 @@
  * limitations under the License.
  */
 
+#include "render/film.h"
 #include "render/image.h"
 #include "render/integrator.h"
+#include "render/light.h"
 #include "render/nodes.h"
 #include "render/scene.h"
 #include "render/svm.h"
@@ -117,8 +119,7 @@ Transform TextureMapping::compute_transform()
 		case NORMAL:
 			/* no translation for normals, and inverse transpose */
 			mat = rmat*smat;
-			mat = transform_inverse(mat);
-			mat = transform_transpose(mat);
+			mat = transform_transposed_inverse(mat);
 			break;
 	}
 
@@ -153,7 +154,6 @@ void TextureMapping::compile(SVMCompiler& compiler, int offset_in, int offset_ou
 	compiler.add_node(tfm.x);
 	compiler.add_node(tfm.y);
 	compiler.add_node(tfm.z);
-	compiler.add_node(tfm.w);
 
 	if(use_minmax) {
 		compiler.add_node(NODE_MIN_MAX, offset_out, offset_out);
@@ -193,9 +193,7 @@ void TextureMapping::compile_end(SVMCompiler& compiler, ShaderInput *vector_in, 
 void TextureMapping::compile(OSLCompiler &compiler)
 {
 	if(!skip()) {
-		Transform tfm = transform_transpose(compute_transform());
-
-		compiler.parameter("mapping", tfm);
+		compiler.parameter("mapping", compute_transform());
 		compiler.parameter("use_mapping", 1);
 	}
 }
@@ -397,10 +395,10 @@ void ImageTextureNode::compile(OSLCompiler& compiler)
 		/* TODO(sergey): It's not so simple to pass custom attribute
 		 * to the texture() function in order to make builtin images
 		 * support more clear. So we use special file name which is
-		 * "@<slot_number>" and check whether file name matches this
+		 * "@i<slot_number>" and check whether file name matches this
 		 * mask in the OSLRenderServices::texture().
 		 */
-		compiler.parameter("filename", string_printf("@%d", slot).c_str());
+		compiler.parameter("filename", string_printf("@i%d", slot).c_str());
 	}
 	if(is_linear || color_space != NODE_COLOR_SPACE_COLOR)
 		compiler.parameter("color_space", "linear");
@@ -580,7 +578,7 @@ void EnvironmentTextureNode::compile(OSLCompiler& compiler)
 		compiler.parameter(this, "filename");
 	}
 	else {
-		compiler.parameter("filename", string_printf("@%d", slot).c_str());
+		compiler.parameter("filename", string_printf("@i%d", slot).c_str());
 	}
 	compiler.parameter(this, "projection");
 	if(is_linear || color_space != NODE_COLOR_SPACE_COLOR)
@@ -965,6 +963,97 @@ void VoronoiTextureNode::compile(OSLCompiler& compiler)
 
 	compiler.parameter(this, "coloring");
 	compiler.add(this, "node_voronoi_texture");
+}
+
+/* IES Light */
+
+NODE_DEFINE(IESLightNode)
+{
+	NodeType* type = NodeType::add("ies_light", create, NodeType::SHADER);
+
+	TEXTURE_MAPPING_DEFINE(IESLightNode);
+
+	SOCKET_STRING(ies, "IES", ustring());
+	SOCKET_STRING(filename, "File Name", ustring());
+
+	SOCKET_IN_FLOAT(strength, "Strength", 1.0f);
+	SOCKET_IN_POINT(vector, "Vector", make_float3(0.0f, 0.0f, 0.0f), SocketType::LINK_TEXTURE_NORMAL);
+
+	SOCKET_OUT_FLOAT(fac, "Fac");
+
+	return type;
+}
+
+IESLightNode::IESLightNode()
+: TextureNode(node_type)
+{
+	light_manager = NULL;
+	slot = -1;
+}
+
+ShaderNode *IESLightNode::clone() const
+{
+	IESLightNode *node = new IESLightNode(*this);
+
+	node->light_manager = NULL;
+	node->slot = -1;
+
+	return node;
+}
+
+IESLightNode::~IESLightNode()
+{
+	if(light_manager) {
+		light_manager->remove_ies(slot);
+	}
+}
+
+void IESLightNode::get_slot()
+{
+	assert(light_manager);
+
+	if(slot == -1) {
+		if(ies.empty()) {
+			slot = light_manager->add_ies_from_file(filename);
+		}
+		else {
+			slot = light_manager->add_ies(ies);
+		}
+	}
+}
+
+void IESLightNode::compile(SVMCompiler& compiler)
+{
+	light_manager = compiler.light_manager;
+	get_slot();
+
+	ShaderInput *strength_in = input("Strength");
+	ShaderInput *vector_in = input("Vector");
+	ShaderOutput *fac_out = output("Fac");
+
+	int vector_offset = tex_mapping.compile_begin(compiler, vector_in);
+
+	compiler.add_node(NODE_IES,
+		compiler.encode_uchar4(
+			compiler.stack_assign_if_linked(strength_in),
+			vector_offset,
+			compiler.stack_assign(fac_out),
+			0),
+		slot,
+		__float_as_int(strength));
+
+	tex_mapping.compile_end(compiler, vector_in, vector_offset);
+}
+
+void IESLightNode::compile(OSLCompiler& compiler)
+{
+	light_manager = compiler.light_manager;
+	get_slot();
+
+	tex_mapping.compile(compiler);
+
+	compiler.parameter("slot", slot);
+	compiler.add(this, "node_ies_light");
 }
 
 /* Musgrave Texture */
@@ -1443,7 +1532,6 @@ void PointDensityTextureNode::compile(SVMCompiler& compiler)
 				compiler.add_node(tfm.x);
 				compiler.add_node(tfm.y);
 				compiler.add_node(tfm.z);
-				compiler.add_node(tfm.w);
 			}
 		}
 		else {
@@ -1484,10 +1572,10 @@ void PointDensityTextureNode::compile(OSLCompiler& compiler)
 		}
 
 		if(slot != -1) {
-			compiler.parameter("filename", string_printf("@%d", slot).c_str());
+			compiler.parameter("filename", string_printf("@i%d", slot).c_str());
 		}
 		if(space == NODE_TEX_VOXEL_SPACE_WORLD) {
-			compiler.parameter("mapping", transform_transpose(tfm));
+			compiler.parameter("mapping", tfm);
 			compiler.parameter("use_mapping", 1);
 		}
 		compiler.parameter(this, "interpolation");
@@ -1567,8 +1655,7 @@ void MappingNode::compile(SVMCompiler& compiler)
 
 void MappingNode::compile(OSLCompiler& compiler)
 {
-	Transform tfm = transform_transpose(tex_mapping.compute_transform());
-	compiler.parameter("Matrix", tfm);
+	compiler.parameter("Matrix", tex_mapping.compute_transform());
 	compiler.parameter_point("mapping_min", tex_mapping.min);
 	compiler.parameter_point("mapping_max", tex_mapping.max);
 	compiler.parameter("use_minmax", tex_mapping.use_minmax);
@@ -1596,7 +1683,8 @@ RGBToBWNode::RGBToBWNode()
 void RGBToBWNode::constant_fold(const ConstantFolder& folder)
 {
 	if(folder.all_inputs_constant()) {
-		folder.make_constant(linear_rgb_to_gray(color));
+		float val = folder.scene->shader_manager->linear_rgb_to_gray(color);
+		folder.make_constant(val);
 	}
 }
 
@@ -1692,7 +1780,8 @@ void ConvertNode::constant_fold(const ConstantFolder& folder)
 			if(to == SocketType::FLOAT) {
 				if(from == SocketType::COLOR) {
 					/* color to float */
-					folder.make_constant(linear_rgb_to_gray(value_color));
+					float val = folder.scene->shader_manager->linear_rgb_to_gray(value_color);
+					folder.make_constant(val);
 				}
 				else {
 					/* vector/point/normal to float */
@@ -1873,7 +1962,7 @@ NODE_DEFINE(AnisotropicBsdfNode)
 
 	SOCKET_IN_VECTOR(tangent, "Tangent", make_float3(0.0f, 0.0f, 0.0f), SocketType::LINK_TANGENT);
 
-	SOCKET_IN_FLOAT(roughness, "Roughness", 0.2f);
+	SOCKET_IN_FLOAT(roughness, "Roughness", 0.5f);
 	SOCKET_IN_FLOAT(anisotropy, "Anisotropy", 0.5f);
 	SOCKET_IN_FLOAT(rotation, "Rotation", 0.0f);
 
@@ -1933,7 +2022,7 @@ NODE_DEFINE(GlossyBsdfNode)
 	distribution_enum.insert("ashikhmin_shirley", CLOSURE_BSDF_ASHIKHMIN_SHIRLEY_ID);
 	distribution_enum.insert("Multiscatter GGX", CLOSURE_BSDF_MICROFACET_MULTI_GGX_ID);
 	SOCKET_ENUM(distribution, "Distribution", distribution_enum, CLOSURE_BSDF_MICROFACET_GGX_ID);
-	SOCKET_IN_FLOAT(roughness, "Roughness", 0.2f);
+	SOCKET_IN_FLOAT(roughness, "Roughness", 0.5f);
 
 	SOCKET_OUT_CLOSURE(BSDF, "BSDF");
 
@@ -2715,11 +2804,17 @@ NODE_DEFINE(AmbientOcclusionNode)
 {
 	NodeType* type = NodeType::add("ambient_occlusion", create, NodeType::SHADER);
 
-	SOCKET_IN_NORMAL(normal_osl, "NormalIn", make_float3(0.0f, 0.0f, 0.0f), SocketType::LINK_NORMAL | SocketType::OSL_INTERNAL);
-	SOCKET_IN_COLOR(color, "Color", make_float3(0.8f, 0.8f, 0.8f));
-	SOCKET_IN_FLOAT(surface_mix_weight, "SurfaceMixWeight", 0.0f, SocketType::SVM_INTERNAL);
+	SOCKET_INT(samples, "Samples", 8);
 
-	SOCKET_OUT_CLOSURE(AO, "AO");
+	SOCKET_IN_COLOR(color, "Color", make_float3(0.8f, 0.8f, 0.8f));
+	SOCKET_IN_FLOAT(distance, "Distance", 1.0f);
+	SOCKET_IN_NORMAL(normal, "Normal", make_float3(0.0f, 0.0f, 0.0f), SocketType::LINK_NORMAL);
+
+	SOCKET_BOOLEAN(inside, "Inside", false);
+	SOCKET_BOOLEAN(only_local, "Only Local", true);
+
+	SOCKET_OUT_COLOR(color, "Color");
+	SOCKET_OUT_FLOAT(ao, "AO");
 
 	return type;
 }
@@ -2732,17 +2827,33 @@ AmbientOcclusionNode::AmbientOcclusionNode()
 void AmbientOcclusionNode::compile(SVMCompiler& compiler)
 {
 	ShaderInput *color_in = input("Color");
+	ShaderInput *distance_in = input("Distance");
+	ShaderInput *normal_in = input("Normal");
+	ShaderOutput *color_out = output("Color");
+	ShaderOutput *ao_out = output("AO");
 
-	if(color_in->link)
-		compiler.add_node(NODE_CLOSURE_WEIGHT, compiler.stack_assign(color_in));
-	else
-		compiler.add_node(NODE_CLOSURE_SET_WEIGHT, color);
+	int flags = (inside? NODE_AO_INSIDE : 0) | (only_local? NODE_AO_ONLY_LOCAL : 0);
 
-	compiler.add_node(NODE_CLOSURE_AMBIENT_OCCLUSION, compiler.closure_mix_weight_offset());
+	if (!distance_in->link && distance == 0.0f) {
+		flags |= NODE_AO_GLOBAL_RADIUS;
+	}
+
+	compiler.add_node(NODE_AMBIENT_OCCLUSION,
+		compiler.encode_uchar4(flags,
+		                       compiler.stack_assign_if_linked(distance_in),
+		                       compiler.stack_assign_if_linked(normal_in),
+		                       compiler.stack_assign(ao_out)),
+		compiler.encode_uchar4(compiler.stack_assign(color_in),
+		                       compiler.stack_assign(color_out),
+		                       samples),
+		__float_as_uint(distance));
 }
 
 void AmbientOcclusionNode::compile(OSLCompiler& compiler)
 {
+	compiler.parameter(this, "samples");
+	compiler.parameter(this, "inside");
+	compiler.parameter(this, "only_local");
 	compiler.add(this, "node_ambient_occlusion");
 }
 
@@ -3229,7 +3340,6 @@ void TextureCoordinateNode::compile(SVMCompiler& compiler)
 			compiler.add_node(ob_itfm.x);
 			compiler.add_node(ob_itfm.y);
 			compiler.add_node(ob_itfm.z);
-			compiler.add_node(ob_itfm.w);
 		}
 	}
 
@@ -3268,7 +3378,7 @@ void TextureCoordinateNode::compile(OSLCompiler& compiler)
 	if(compiler.output_type() == SHADER_TYPE_VOLUME)
 		compiler.parameter("is_volume", true);
 	compiler.parameter(this, "use_transform");
-	Transform ob_itfm = transform_transpose(transform_inverse(ob_tfm));
+	Transform ob_itfm = transform_transposed_inverse(ob_tfm);
 	compiler.parameter("object_itfm", ob_itfm);
 
 	compiler.parameter(this, "from_dupli");
@@ -4617,7 +4727,7 @@ void AttributeNode::compile(SVMCompiler& compiler)
 	ShaderOutput *vector_out = output("Vector");
 	ShaderOutput *fac_out = output("Fac");
 	ShaderNodeType attr_node = NODE_ATTR;
-	int attr = compiler.attribute_standard(attribute);;
+	int attr = compiler.attribute_standard(attribute);
 
 	if(bump == SHADER_BUMP_DX)
 		attr_node = NODE_ATTR_BUMP_DX;
@@ -4969,6 +5079,7 @@ NODE_DEFINE(MathNode)
 	type_enum.insert("greater_than", NODE_MATH_GREATER_THAN);
 	type_enum.insert("modulo", NODE_MATH_MODULO);
 	type_enum.insert("absolute", NODE_MATH_ABSOLUTE);
+	type_enum.insert("arctan2", NODE_MATH_ARCTAN2);
 	SOCKET_ENUM(type, "Type", type_enum, NODE_MATH_ADD);
 
 	SOCKET_BOOLEAN(use_clamp, "Use Clamp", false);
@@ -5801,6 +5912,15 @@ DisplacementNode::DisplacementNode()
 {
 }
 
+void DisplacementNode::constant_fold(const ConstantFolder& folder)
+{
+	if(folder.all_inputs_constant()) {
+		if((height - midlevel == 0.0f) || (scale == 0.0f)) {
+			folder.make_zero();
+		}
+	}
+}
+
 void DisplacementNode::compile(SVMCompiler& compiler)
 {
 	ShaderInput *height_in = input("Height");
@@ -5850,6 +5970,16 @@ NODE_DEFINE(VectorDisplacementNode)
 VectorDisplacementNode::VectorDisplacementNode()
 : ShaderNode(node_type)
 {
+}
+
+void VectorDisplacementNode::constant_fold(const ConstantFolder& folder)
+{
+	if(folder.all_inputs_constant()) {
+		if((vector == make_float3(0.0f, 0.0f, 0.0f) && midlevel == 0.0f) ||
+		   (scale == 0.0f)) {
+			folder.make_zero();
+		}
+	}
 }
 
 void VectorDisplacementNode::attributes(Shader *shader, AttributeRequestSet *attributes)

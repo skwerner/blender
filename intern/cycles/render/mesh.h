@@ -368,7 +368,7 @@ class MeshManager {
 
   void tag_update(Scene *scene);
 
-  void create_volume_mesh(Scene *scene, Mesh *mesh, Progress &progress);
+  void create_volume_mesh(Scene *scene, Device *device, Mesh *mesh, Progress &progress);
 
   void collect_statistics(const Scene *scene, RenderStats *stats);
 

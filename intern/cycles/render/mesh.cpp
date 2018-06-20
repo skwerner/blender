@@ -2031,7 +2031,7 @@ void MeshManager::device_update_preprocess(Device *device, Scene *scene, Progres
           volume_images_updated = true;
         }
 
-        create_volume_mesh(scene, mesh, progress);
+        create_volume_mesh(scene, device, mesh, progress);
       }
     }
   }

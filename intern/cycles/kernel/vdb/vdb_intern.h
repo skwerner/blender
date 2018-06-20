@@ -37,12 +37,7 @@
 
 CCL_NAMESPACE_BEGIN
 
-#if defined(HAS_CPP11_FEATURES)
 using std::isfinite;
-#else
-using boost::math::isfinite;
-#endif
-
 CCL_NAMESPACE_END
 
 #endif /* __VDB_INTERN_H__ */

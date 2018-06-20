@@ -819,6 +819,8 @@ class DATA_PT_modifiers(ModifierButtonsPanel, Panel):
         sub.active = md.use_frame_override
         sub.prop(md, "frame_override")
 
+        layout.prop(md, "sparse_render")
+
         layout.separator()
         layout.label(text="Viewport Display Options:")
 

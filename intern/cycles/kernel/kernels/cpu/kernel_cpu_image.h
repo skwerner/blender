@@ -500,7 +500,7 @@ ccl_device float4 kernel_tex_image_interp_3d(
 #ifdef __OPENVDB__
   if(kg->vdb && id < -1) {
     float r, g, b;
-    VDBVolume::sample(kg->vdb_tdata, (-tex)-2, x, y, z, &r, &g, &b, 1);
+    VDBVolume::sample(kg->vdb_tdata, (-id)-2, x, y, z, &r, &g, &b, 1);
     return make_float4(r, g, b, 1.0f);
   }
 #endif

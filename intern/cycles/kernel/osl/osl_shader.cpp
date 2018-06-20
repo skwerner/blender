@@ -38,7 +38,6 @@ CCL_NAMESPACE_BEGIN
 /* Threads */
 
 void OSLShader::thread_init(KernelGlobals *kg,
-                            KernelGlobals *kernel_globals,
                             OSLGlobals *osl_globals)
 {
   /* no osl used? */

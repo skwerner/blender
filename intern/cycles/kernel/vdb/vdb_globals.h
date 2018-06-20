@@ -29,9 +29,10 @@ CCL_NAMESPACE_BEGIN
 class OpenVDBTextureBase
 {
 public:
-	static OpenVDBTextureBase* create_from_grid(openvdb::GridBase::Ptr grid, const Transform &tfm);
+	static OpenVDBTextureBase* create_from_grid(openvdb::GridBase::Ptr grid, const Transform &tfm, int3 resolution, int3 index_offset);
 	virtual ~OpenVDBTextureBase() { ; }
 	virtual bool hasUniformVoxels() const = 0;
+	virtual int num_channels() const = 0;
 };
 
 struct OpenVDBGlobals {
@@ -44,25 +45,36 @@ public:
 	OpenVDBTexture() : intersector(NULL) { ; }
 	virtual ~OpenVDBTexture() { release(); }
 
-	void init(typename T::Ptr &in, const Transform &in_tfm) {
+	void init(typename T::Ptr &in, const Transform &in_tfm, int3 _resolution, int3 _index_offset) {
 		grid = in;
 		if(grid->hasUniformVoxels() && !grid->empty()) {
 			intersector = new openvdb::tools::VolumeRayIntersector<T, T::TreeType::RootNodeType::ChildNodeType::LEVEL, openvdb::math::Ray<float> >(*grid);
 		}
-		openvdb::CoordBBox bbox = grid->evalActiveVoxelBoundingBox();
-		const openvdb::math::Transform &tran = grid->constTransform();
-		const openvdb::BBoxd bbox_w = tran.indexToWorld(bbox);
-		float3 min_p = make_float3(bbox_w.min().x(), bbox_w.min().y(), bbox_w.min().z());
-		float3 max_p = make_float3(bbox_w.max().x(), bbox_w.max().y(), bbox_w.max().z());
-		float3 scale = max_p - min_p;
-		tfm = transform_translate(min_p) * transform_scale(scale) * in_tfm;
+
+		tfm = in_tfm;
+
+		resolution = _resolution;
+		index_offset = _index_offset;
 	}
 
 	virtual bool hasUniformVoxels() const { return grid->hasUniformVoxels(); }
 
+	virtual int num_channels() const
+	{
+		if(grid->template isType<openvdb::FloatGrid>()) {
+			return 1;
+		}
+		else if(grid->template isType<openvdb::Vec3SGrid>()) {
+			return 3;
+		}
+		return 0;
+	}
+
 	typename T::Ptr grid;
 	openvdb::tools::VolumeRayIntersector<T, T::TreeType::RootNodeType::ChildNodeType::LEVEL, openvdb::math::Ray<float> > *intersector;
-	Transform tfm;
+	Transform tfm; /* cycles world to vdb world */
+	int3 resolution;
+	int3 index_offset;
 
 private:
 	void release() {

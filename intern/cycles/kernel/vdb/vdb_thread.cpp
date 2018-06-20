@@ -14,6 +14,14 @@
  * limitations under the License.
  */
 
+#ifdef WITH_OPENVDB
+/* Must be included before Cycles #defines foreach() -
+ * OpenVDB is using foreach as method name. */
+#  include <openvdb/openvdb.h>
+#  include <openvdb/tools/Interpolation.h>
+#  include <openvdb/tools/RayIntersector.h>
+#endif
+
 #include "kernel/kernel_compat_cpu.h"
 #include "kernel/kernel_types.h"
 #include "kernel/split/kernel_split_data_types.h"
@@ -38,13 +46,15 @@ public:
 	static OpenVDBGridThreadDataBase *create_from_texture(const OpenVDBTextureBase* tex);
 
 	virtual bool sample(float x, float y, float z, float *r, float *g, float *b, int sampling) = 0;
+	virtual bool sample_index(int x, int y, int z, float *r, float *g, float *b) = 0;
 	virtual bool intersect(const Ray *ray, float *isect) = 0;
 	virtual bool march(float *t0, float *t1) = 0;
+	virtual void index_offset(int *x, int *y, int *z) = 0;
 };
 
 template <class T> class OpenVDBGridThreadData : public OpenVDBGridThreadDataBase {
 public:
-	OpenVDBGridThreadData(const OpenVDBTexture<T> *tex) : accessor(NULL), point_sampler(NULL), box_sampler(NULL), stag_point_sampler(NULL), stag_box_sampler(NULL), isector(NULL), tfm(tex->tfm), grid(tex->grid)
+	OpenVDBGridThreadData(const OpenVDBTexture<T> *_tex) : accessor(NULL), point_sampler(NULL), box_sampler(NULL), stag_point_sampler(NULL), stag_box_sampler(NULL), isector(NULL), tex(_tex)
 	{
 		init(tex);
 	}
@@ -60,10 +70,21 @@ public:
 		free();
 	}
 
-
 	virtual bool sample(float x, float y, float z, float *r, float *g, float *b, int sampling)
 	{
 		return false;
+	}
+
+	virtual bool sample_index(int x, int y, int z, float *r, float *g, float *b)
+	{
+		return false;
+	}
+
+	virtual void index_offset(int *x, int *y, int *z)
+	{
+		*x = tex->index_offset.x;
+		*y = tex->index_offset.y;
+		*z = tex->index_offset.z;
 	}
 
 	virtual bool march(float *t0, float *t1)
@@ -142,25 +163,32 @@ private:
 	stag_point_sampler_t *stag_point_sampler;
 	stag_box_sampler_t *stag_box_sampler;
 	isector_t *isector;
-	const Transform &tfm;
-	const typename T::Ptr grid;
+	const OpenVDBTexture<T> *tex;
 };
+
+template <>
+inline bool OpenVDBGridThreadData<FloatGrid>::sample_index(int x, int y, int z, float *r, float *g, float *b)
+{
+	float value = point_sampler->sampleVoxel(x, y, z);
+	*r = *g = *b = value;
+	return true;
+}
 
 template <>
 inline bool OpenVDBGridThreadData<FloatGrid>::sample(float x, float y, float z, float *r, float *g, float *b, int sampling)
 {
 	float3 pos = make_float3(x, y, z);
-	pos = transform_point(&tfm, pos);
+	pos = transform_point(&tex->tfm, pos);
 	Vec3d p(pos.x, pos.y, pos.z);
 
 	float value = 0.0f;
 	switch (sampling) {
 		case VDBVolume::OPENVDB_SAMPLE_BOX:
-			value = box_sampler->wsSample(p);
+			value = box_sampler->isSample(p);
 			break;
 		case VDBVolume::OPENVDB_SAMPLE_POINT:
 		default:
-			value = point_sampler->wsSample(p);
+			value = point_sampler->isSample(p);
 	}
 	*r = *g = *b = value;
 	return true;
@@ -169,21 +197,21 @@ inline bool OpenVDBGridThreadData<FloatGrid>::sample(float x, float y, float z, 
 template <>
 inline bool OpenVDBGridThreadData<Vec3SGrid>::sample(float x, float y, float z, float *r, float *g, float *b, int sampling)
 {
-	bool staggered = grid->getGridClass() == GRID_STAGGERED;
+	bool staggered = tex->grid->getGridClass() == GRID_STAGGERED;
 	Vec3s value;
 
 	float3 pos = make_float3(x, y, z);
-	pos = transform_point(&tfm, pos);
+	pos = transform_point(&tex->tfm, pos);
 	Vec3d p(pos.x, pos.y, pos.z);
 
 	if (staggered) {
 		switch (sampling) {
 			case VDBVolume::OPENVDB_SAMPLE_POINT:
-				value = stag_point_sampler->wsSample(p);
+				value = stag_point_sampler->isSample(p);
 				break;
 			case VDBVolume::OPENVDB_SAMPLE_BOX:
 			default:
-				value = stag_box_sampler->wsSample(p);
+				value = stag_box_sampler->isSample(p);
 				break;
 		}
 	}
@@ -196,6 +224,26 @@ inline bool OpenVDBGridThreadData<Vec3SGrid>::sample(float x, float y, float z, 
 			default:
 				value = box_sampler->wsSample(p);
 		}
+	}
+
+	*r = value.x();
+	*g = value.y();
+	*b = value.z();
+	return true;
+}
+
+
+template <>
+inline bool OpenVDBGridThreadData<Vec3SGrid>::sample_index(int x, int y, int z, float *r, float *g, float *b)
+{
+	bool staggered = tex->grid->getGridClass() == GRID_STAGGERED;
+	Vec3s value;
+	
+	if(staggered) {
+		value = stag_point_sampler->sampleVoxel(x, y, z);
+	}
+	else {
+		value = point_sampler->sampleVoxel(x, y, z);
 	}
 
 	*r = value.x();
@@ -225,10 +273,8 @@ struct OpenVDBThreadData {
 	std::vector<OpenVDBGridThreadDataBase*> data;
 };
 
-void VDBVolume::thread_init(KernelGlobals *kg, OpenVDBGlobals *vdb_globals)
+OpenVDBThreadData* VDBVolume::thread_init(OpenVDBGlobals *vdb_globals)
 {
-	kg->vdb = vdb_globals;
-	
 	OpenVDBThreadData *tdata = new OpenVDBThreadData;
 
 	for (size_t i = 0; i < vdb_globals->grids.size(); ++i) {
@@ -240,14 +286,15 @@ void VDBVolume::thread_init(KernelGlobals *kg, OpenVDBGlobals *vdb_globals)
 		}
 	}
 
-	kg->vdb_tdata = tdata;
+	return tdata;
 }
 
-void VDBVolume::thread_free(KernelGlobals *kg)
+void VDBVolume::thread_free(OpenVDBThreadData *tdata)
 {
-	OpenVDBThreadData *tdata = kg->vdb_tdata;
-	kg->vdb_tdata = NULL;
-	
+	if(!tdata) {
+		return;
+	}
+
 	for (size_t i = 0; i < tdata->data.size(); ++i) {
 		if(tdata->data[i]) {
 			delete tdata->data[i];
@@ -262,11 +309,23 @@ bool VDBVolume::has_uniform_voxels(OpenVDBGlobals *vdb, int vdb_index)
 	return vdb->grids[vdb_index]->hasUniformVoxels();
 }
 
-
 bool VDBVolume::sample(OpenVDBThreadData *vdb_thread, int vdb_index, float x, float y, float z, float *r, float *g, float *b, int sampling)
 {
 	if(vdb_thread->data.size() > vdb_index && vdb_thread->data[vdb_index]) {
 		return vdb_thread->data[vdb_index]->sample(x, y, z, r, g, b, sampling);
+	}
+	else {
+		*r = TEX_IMAGE_MISSING_R;
+		*g = TEX_IMAGE_MISSING_G;
+		*b = TEX_IMAGE_MISSING_B;
+		return false;
+	}
+}
+
+bool VDBVolume::sample_index(OpenVDBThreadData *vdb_thread, int vdb_index, int x, int y, int z, float *r, float *g, float *b)
+{
+	if(vdb_thread->data.size() > vdb_index && vdb_thread->data[vdb_index]) {
+		return vdb_thread->data[vdb_index]->sample_index(x, y, z, r, g, b);
 	}
 	else {
 		*r = TEX_IMAGE_MISSING_R;

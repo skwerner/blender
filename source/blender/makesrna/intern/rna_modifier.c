@@ -1488,23 +1488,40 @@ static void rna_OpenVDBModifier_viewport_update(Main *UNUSED(bmain),
   WM_main_add_notifier(NC_OBJECT | ND_MODIFIER, ptr->id.data);
 }
 
+static void RNA_OpenVDBModifier_abs_framed_path(ModifierData *md, char *filepath)
+{
+	OpenVDBModifierData *vdbmd = (OpenVDBModifierData *)md;
+	PointCache *cache = vdbmd->smoke->domain->point_cache[0];
+	int cfra = vdbmd->flags & MOD_OPENVDB_OVERRIDE_FRAME ?
+	               (vdbmd->frame_override) :
+	               (md->scene->r.cfra - cache->startframe + 1 + vdbmd->frame_offset);
+
+	char head[FILE_MAX], tail[FILE_MAX];
+	unsigned short numlen;
+
+	BLI_stringdec(vdbmd->filepath, head, tail, &numlen);
+	BLI_stringenc(filepath, head, tail, numlen, cfra);
+
+	if (BLI_path_is_rel(filepath)) {
+		BLI_path_abs(filepath, G.main->name);
+	}
+}
+
 static void rna_OpenVDBModifier_abs_path_get(PointerRNA *ptr, char *value)
 {
-  OpenVDBModifierData *vdbmd = (OpenVDBModifierData *)ptr->data;
 	char filepath[1024];
 
-	BLI_strncpy(filepath, vdbmd->filepath, 1024);
-	BLI_path_abs(filepath, G.main->name);
+	RNA_OpenVDBModifier_abs_framed_path((ModifierData *)ptr->data, filepath);
+
 	BLI_strncpy(value, filepath, 1024);
 }
 
 static int rna_OpenVDBModifier_abs_path_length(PointerRNA *ptr)
 {
-  OpenVDBModifierData *vdbmd = (OpenVDBModifierData *)ptr->data;
   char filepath[1024];
 
-  BLI_strncpy(filepath, vdbmd->filepath, sizeof(filepath));
-  BLI_path_abs(filepath, G.main->name);
+	RNA_OpenVDBModifier_abs_framed_path((ModifierData *)ptr->data, filepath);
+
   return strlen(filepath);
 }
 

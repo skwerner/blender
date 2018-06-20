@@ -822,7 +822,9 @@ class DATA_PT_modifiers(ModifierButtonsPanel, Panel):
         layout.separator()
         layout.label(text="Viewport Display Options:")
 
-        layout.prop(md, "simplify_level")
+        row = layout.row()
+        row.prop(md, "simplify_level")
+        row.prop(md, "simplify_render")
 
         row = layout.row()
         row.prop(md, "hide_volume")

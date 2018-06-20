@@ -6575,6 +6575,11 @@ static void rna_def_modifier_openvdb(BlenderRNA *brna)
   RNA_def_property_boolean_funcs(prop, "rna_OpenVDBModifier_show_axis_convert_get", NULL);
   RNA_def_property_clear_flag(prop, PROP_EDITABLE);
 
+	prop = RNA_def_property(srna, "simplify_render", PROP_BOOLEAN, PROP_NONE);
+	RNA_def_property_boolean_sdna(prop, NULL, "flags", MOD_OPENVDB_SIMPLIFY_RENDER);
+	RNA_def_property_ui_text(prop, "Simplify Render", "Use simplification level in render");
+	RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
+
   prop = RNA_def_property(srna, "max_density", PROP_FLOAT, PROP_NONE);
   RNA_def_property_clear_flag(prop, PROP_EDITABLE);
 

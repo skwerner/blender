@@ -1093,11 +1093,30 @@ ccl_device void update_parent_node(KernelGlobals *kg, int node_offset,
 	(*nemitters)       = __float_as_int(node[3]);
 }
 
+/* picks one of the distant lights and computes the probability of picking it */
+ccl_device void light_distant_sample(KernelGlobals *kg, float3 P, float *randu,
+                                     int *index, float *pdf){
+	light_distribution_sample(kg, randu); // rescale random number
+
+	/* choose one of the distant lights randomly */
+	int num_distant = kernel_data.integrator.num_distant_lights;
+	int light = min((int)(*randu * (float)num_distant), num_distant-1);
+
+	/* this assumes the distant lights are at the end of the distribution array */
+	// TODO: have a distant lights offset into distribution array instead
+	int num_total_lights = kernel_data.integrator.num_distribution;
+	int distant_lights_offset = num_total_lights-num_distant;
+
+	*index = light + distant_lights_offset;
+	*pdf = kernel_data.integrator.inv_num_distant_lights;
+}
+
 /* picks a light from the light BVH and returns its index and the probability of
  * picking this light. */
-ccl_device int light_bvh_sample(KernelGlobals *kg, float3 P, float randu, float *pdf_factor)
+ccl_device void light_bvh_sample(KernelGlobals *kg, float3 P, float randu,
+                                 int *index, float *pdf_factor)
 {
-	int index = -1;
+	int sampled_index = -1;
 	*pdf_factor = 1.0f;
 
 	/* read in first part of root node of light BVH */
@@ -1110,11 +1129,11 @@ ccl_device int light_bvh_sample(KernelGlobals *kg, float3 P, float randu, float 
 		/* Found a leaf - Choose which light to use */
 		if(nemitters > 0){ // Found a leaf
 			if(nemitters == 1){
-				index = distribution_id;
+				sampled_index = distribution_id;
 			} else { // Leaf with several lights. Pick one randomly.
 				light_distribution_sample(kg, &randu); // TODO: Rescale random number in a better way
 				int light = min((int)(randu* (float)nemitters), nemitters-1);
-				index = distribution_id +light;
+				sampled_index = distribution_id +light;
 				*pdf_factor *= 1.0f / (float)nemitters;
 			}
 			break;
@@ -1145,7 +1164,7 @@ ccl_device int light_bvh_sample(KernelGlobals *kg, float3 P, float randu, float 
 
 	} while(true);
 
-	return index;
+	*index = sampled_index;
 }
 
 /* converts from an emissive triangle index to the corresponding
@@ -1235,14 +1254,20 @@ ccl_device float light_distribution_pdf(KernelGlobals *kg, float3 P, int prim_id
 	}
 
 	kernel_assert((distribution_id >= 0) &&
-	               (distribution_id < kernel_data.integrator.num_distribution));
+	              (distribution_id < kernel_data.integrator.num_distribution));
 
 	/* compute picking pdf for this light */
 	if (kernel_data.integrator.use_light_bvh){
 		// Find mapping from distribution_id to node_id
 		int node_id = kernel_tex_fetch(__light_distribution_to_node,
 		                               distribution_id);
-		return light_bvh_pdf(kg, P, node_id);
+		if(node_id==-1){ // Distant lights are not in any nodes
+			return (1.0f - kernel_data.integrator.bvh_sample_probability) *
+			       kernel_data.integrator.inv_num_distant_lights;
+		} else {
+			return kernel_data.integrator.bvh_sample_probability *
+			       light_bvh_pdf(kg, P, node_id);
+		}
 	} else {
 		const ccl_global KernelLightDistribution *kdistribution =
 		        &kernel_tex_fetch(__light_distribution, distribution_id);
@@ -1255,15 +1280,23 @@ ccl_device void light_distribution_sample(KernelGlobals *kg, float3 P,
                                           float *randu, int *index, float *pdf)
 {
 	if (kernel_data.integrator.use_light_bvh){
-		*index = light_bvh_sample(kg, P, *randu, pdf);
-	} else {
+		/* sample light BVH or distant lights */
+		float bvh_sample_prob = kernel_data.integrator.bvh_sample_probability;
+		if(*randu <= bvh_sample_prob) { // Sample light BVH
+			light_bvh_sample(kg, P, *randu, index, pdf);
+			*pdf *= bvh_sample_prob;
+		} else { // Sample distant lights
+			light_distant_sample(kg, P, randu, index, pdf);
+			*pdf *= (1.0f - bvh_sample_prob);
+		}
+
+	} else { // Sample light distribution CDF
 		*index = light_distribution_sample(kg, randu);
 		const ccl_global KernelLightDistribution *kdistribution =
 		        &kernel_tex_fetch(__light_distribution, *index);
 		*pdf = kdistribution->area * kernel_data.integrator.pdf_inv_totarea;
 	}
 }
-
 
 /* picks a point on a light and computes the probability of picking this point*/
 ccl_device_noinline bool light_sample(KernelGlobals *kg,

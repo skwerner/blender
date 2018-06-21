@@ -37,13 +37,25 @@ LightTree::LightTree(const vector<Primitive>& prims_,
 
 	if (prims_.empty()) return;
 
-	// Move all primitives into local primitives array
+	/* move all primitives except distant lights into local primitives array */
 	primitives.reserve(prims_.size());
+	vector<Primitive> distant_lights;
 	foreach(Primitive prim, prims_ ){
+
+		/* put distant lights into its own array */
+		if (prim.prim_id < 0){
+			int lamp_id = -prim.prim_id-1;
+			const Light *lamp = lights[lamp_id];
+			if (lamp->type == LIGHT_DISTANT){
+				distant_lights.push_back(prim);
+				continue;
+			}
+		}
+
 		primitives.push_back(prim);
 	}
 
-	// Initialize buildData array
+	/* initialize buildData array */
 	vector<BVHPrimitiveInfo> buildData;
 	buildData.reserve(primitives.size());
 	for(int i = 0; i < primitives.size(); ++i){
@@ -53,7 +65,7 @@ LightTree::LightTree(const vector<Primitive>& prims_,
 		buildData.push_back(BVHPrimitiveInfo(i, bbox, bcone, energy));
 	}
 
-	// Recursively build BVH tree
+	/* recursively build BVH tree */
 	unsigned int totalNodes = 0;
 	vector<Primitive> orderedPrims;
 	orderedPrims.reserve(primitives.size());
@@ -65,9 +77,14 @@ LightTree::LightTree(const vector<Primitive>& prims_,
 	orderedPrims.clear();
 	buildData.clear();
 
+	/* add distant and background lights to the end of primitives array */
+	for(int i = 0; i < distant_lights.size(); ++i){
+		primitives.push_back(distant_lights[i]);
+	}
+
 	VLOG(1) << "Total BVH nodes: " << totalNodes;
 
-	// Convert to linear representation of the tree
+	/* convert to linear representation of the tree */
 	nodes.resize(totalNodes);
 	int offset = 0;
 	flattenBVHTree(*root, offset);

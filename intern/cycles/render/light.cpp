@@ -256,6 +256,7 @@ void LightManager::device_update_distribution(Device *, DeviceScene *dscene, Sce
 	size_t num_lights = 0;
 	size_t num_portals = 0;
 	size_t num_background_lights = 0;
+	size_t num_distant_lights = 0;
 	size_t num_triangles = 0;
 
 	bool background_mis = false;
@@ -367,6 +368,11 @@ void LightManager::device_update_distribution(Device *, DeviceScene *dscene, Sce
 		/* find mapping between distribution_id to node_id, used for MIS */
 		uint *  distribution_to_node =
 		        dscene->light_distribution_to_node.alloc(num_distribution);
+		/* initialize indices to -1 to know which lights that are not in nodes */
+		for(int i = 0; i < num_distribution; ++i){
+			distribution_to_node[i] = -1;
+		}
+
 		for( int i = 0; i < nodesVec.size(); ++i){
 			const CompactNode& node = nodesVec[i];
 			if(node.nemitters == 0) continue;
@@ -495,6 +501,8 @@ void LightManager::device_update_distribution(Device *, DeviceScene *dscene, Sce
 		if(light->type == LIGHT_BACKGROUND) {
 			num_background_lights++;
 			background_mis = light->use_mis;
+		} else if(light->type == LIGHT_DISTANT){
+			num_distant_lights++;
 		}
 
 	}
@@ -519,10 +527,6 @@ void LightManager::device_update_distribution(Device *, DeviceScene *dscene, Sce
 	kintegrator->use_light_bvh = scene->integrator->use_light_bvh;
 	KernelFilm *kfilm = &dscene->data.film;
 	kintegrator->use_direct_light = (totarea > 0.0f);
-	kintegrator->pdf_inv_totarea = 1.0f / totarea;
-	kintegrator->num_light_nodes =
-	        dscene->light_tree_nodes.size() / LIGHT_BVH_NODE_SIZE;
-	kintegrator->num_triangle_lights = num_triangles;
 
 	if(kintegrator->use_direct_light) {
 
@@ -531,13 +535,22 @@ void LightManager::device_update_distribution(Device *, DeviceScene *dscene, Sce
 		dscene->light_distribution_to_node.copy_to_device();
 		dscene->lamp_to_distribution.copy_to_device();
 		dscene->triangle_to_distribution.copy_to_device();
+		kintegrator->num_light_nodes =
+		        dscene->light_tree_nodes.size() / LIGHT_BVH_NODE_SIZE;
+		kintegrator->bvh_sample_probability =
+		        1.0f - 0.5f * (float)num_distant_lights / (float)num_lights;
 
 		/* number of emissives */
 		kintegrator->num_distribution = num_distribution;
+		kintegrator->num_triangle_lights = num_triangles;
+		kintegrator->num_distant_lights = num_distant_lights;
+		kintegrator->inv_num_distant_lights = 1.0f / (float)num_distant_lights;
 
 		/* precompute pdfs */
 		kintegrator->pdf_triangles = 0.0f;
 		kintegrator->pdf_lights = 0.0f;
+		kintegrator->pdf_inv_totarea = 1.0f / totarea;
+
 
 		/* sample one, with 0.5 probability of light or triangle */
 		kintegrator->num_all_lights = num_lights;
@@ -594,6 +607,9 @@ void LightManager::device_update_distribution(Device *, DeviceScene *dscene, Sce
 		kintegrator->use_light_bvh = false;
 		kintegrator->num_distribution = 0;
 		kintegrator->num_all_lights = 0;
+		kintegrator->num_distant_lights = 0;
+		kintegrator->inv_num_distant_lights = 0.0f;
+		kintegrator->bvh_sample_probability = 0.0f;
 		kintegrator->pdf_triangles = 0.0f;
 		kintegrator->pdf_lights = 0.0f;
 		kintegrator->use_lamp_mis = false;

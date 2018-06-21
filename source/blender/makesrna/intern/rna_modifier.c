@@ -1492,10 +1492,15 @@ static void RNA_OpenVDBModifier_abs_framed_path(ModifierData *md, char *filepath
 {
 	OpenVDBModifierData *vdbmd = (OpenVDBModifierData *)md;
 	PointCache *cache = vdbmd->smoke->domain->point_cache[0];
+  /* TODO: Frame #? */
+#if 0
 	int cfra = vdbmd->flags & MOD_OPENVDB_OVERRIDE_FRAME ?
 	               (vdbmd->frame_override) :
 	               (md->scene->r.cfra - cache->startframe + 1 + vdbmd->frame_offset);
-
+#else
+  int cfra = vdbmd->flags & MOD_OPENVDB_OVERRIDE_FRAME ? (vdbmd->frame_override) :
+             (0 - cache->startframe + 1 + vdbmd->frame_offset);
+#endif
 	char head[FILE_MAX], tail[FILE_MAX];
 	unsigned short numlen;
 

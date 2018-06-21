@@ -1469,6 +1469,10 @@ static int ptcache_smoke_openvdb_extern_read(struct OpenVDBReader *reader, void 
     sds->res_max[2] = res_max[2] - res_min[2];
   }
 
+  sds->res_offset[0] = res_min[0];
+  sds->res_offset[1] = res_min[1];
+  sds->res_offset[2] = res_min[2];
+
   sub_v3_v3v3(sds->global_size, sds->p1, sds->p0);
 
   if ((sds->res_max[0] <= sds->res_min[0]) || (sds->res_max[1] <= sds->res_min[1]) ||

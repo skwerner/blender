@@ -254,9 +254,11 @@ typedef struct SmokeDomainSettings {
   char coba_field;
   char interp_method;
 
-  float clipping;
-  char _pad3[4];
   struct OpenVDBModifierData *vdb;
+
+  float clipping;
+
+  int res_offset[3];
 } SmokeDomainSettings;
 
 /* inflow / outflow */

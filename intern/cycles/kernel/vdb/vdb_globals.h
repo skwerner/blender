@@ -54,8 +54,8 @@ public:
 		openvdb::CoordBBox bbox = grid->evalActiveVoxelBoundingBox();
 		const openvdb::math::Transform &tran = grid->constTransform();
 		const openvdb::BBoxd bbox_w = tran.indexToWorld(bbox);
-		float3 min_p = make_float3(bbox_w.min().x(), bbox_w.min().y(), bbox_w.min().z());
-		float3 max_p = make_float3(bbox_w.max().x(), bbox_w.max().y(), bbox_w.max().z());
+		float3 min_p = make_float3((float)bbox_w.min().x(), (float)bbox_w.min().y(), (float)bbox_w.min().z());
+		float3 max_p = make_float3((float)bbox_w.max().x(), (float)bbox_w.max().y(), (float)bbox_w.max().z());
 		float3 scale = max_p - min_p;
 		tfm = transform_translate(min_p) * transform_scale(scale) * in_tfm;
 

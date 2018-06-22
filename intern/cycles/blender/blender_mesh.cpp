@@ -320,10 +320,9 @@ static void create_mesh_volume_attribute(BL::Object& b_ob,
   bool animated = false;
 
 #ifdef WITH_OPENVDB
-  int index = 0;
   bool has_vdb = false;
   BL::OpenVDBModifier b_vdb = object_vdb_modifier_find(b_ob);
-	if(b_vdb && b_domain && !b_vdb.in_memory_render()) {
+	int index = 0;
   switch(std) {
     case ATTR_STD_VOLUME_FLAME:
       index = b_vdb.flame();
@@ -344,12 +343,11 @@ static void create_mesh_volume_attribute(BL::Object& b_ob,
       assert(0);
       break;
   }
-  }
 
   /* Values from the VDB modifier are 1 based, indices in the OpenVDB API are 0 based. */
   --index;
 
-  if(index >= 0 && b_vdb && b_domain/* && !b_vdb.in_memory_render()*/) {
+	if(index >= 0 && b_vdb && b_domain && !b_vdb.in_memory_render()) {
     short front = b_vdb.front_axis();
     short up = b_vdb.up_axis();
 
@@ -450,7 +448,7 @@ static void create_mesh_volume_attributes(Scene *scene, BL::Object &b_ob, Mesh *
     create_mesh_volume_attribute(
         b_ob, mesh, scene->image_manager, scene->volume_manager, ATTR_STD_VOLUME_VELOCITY, frame);
   else if (scene->need_motion() == Scene::MOTION_BLUR) {
-//		create_mesh_volume_attribute(b_ob, mesh, scene->image_manager, scene->volume_manager, ATTR_STD_VOLUME_VELOCITY, frame);
+		create_mesh_volume_attribute(b_ob, mesh, scene->image_manager, scene->volume_manager, ATTR_STD_VOLUME_VELOCITY, frame);
   }
 }
 

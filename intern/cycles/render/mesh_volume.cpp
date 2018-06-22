@@ -498,7 +498,7 @@ void MeshManager::create_volume_mesh(Scene *scene,
             if(voxel_grid.data) {
               size_t voxel_index = compute_voxel_index(resolution, x, y, z);
 
-              if(voxel_grid.data[voxel_index * channels + c] > isovalue) {
+							if(voxel_grid.data[voxel_index * channels + c] >=isovalue) {
                 builder.add_node_with_padding(x, y, z);
                 break;
               }
@@ -514,7 +514,7 @@ void MeshManager::create_volume_mesh(Scene *scene,
               index[axis.z >= 0 ? axis.z : -axis.z - 1] = ((axis.z >= 0) ? z : (resolution.z - z - 1)) + offset.z;
 
               if(VDBVolume::sample_index(vdb_thread.data, voxel_grid.channels, index[0], index[1], index[2], &r, &g, &b)) {
-                if(r > isovalue || r > isovalue || g > isovalue) {
+								if(r >= isovalue || r >= isovalue || g >= isovalue) {
                   builder.add_node_with_padding(x, y, z);
                   break;
                 }

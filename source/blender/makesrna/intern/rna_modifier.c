@@ -1488,48 +1488,6 @@ static void rna_OpenVDBModifier_viewport_update(Main *UNUSED(bmain),
   WM_main_add_notifier(NC_OBJECT | ND_MODIFIER, ptr->id.data);
 }
 
-static void RNA_OpenVDBModifier_abs_framed_path(ModifierData *md, char *filepath)
-{
-	OpenVDBModifierData *vdbmd = (OpenVDBModifierData *)md;
-	PointCache *cache = vdbmd->smoke->domain->point_cache[0];
-  /* TODO: Frame #? */
-#if 0
-	int cfra = vdbmd->flags & MOD_OPENVDB_OVERRIDE_FRAME ?
-	               (vdbmd->frame_override) :
-	               (md->scene->r.cfra - cache->startframe + 1 + vdbmd->frame_offset);
-#else
-  int cfra = vdbmd->flags & MOD_OPENVDB_OVERRIDE_FRAME ? (vdbmd->frame_override) :
-             (0 - cache->startframe + 1 + vdbmd->frame_offset);
-#endif
-	char head[FILE_MAX], tail[FILE_MAX];
-	unsigned short numlen;
-
-	BLI_stringdec(vdbmd->filepath, head, tail, &numlen);
-	BLI_stringenc(filepath, head, tail, numlen, cfra);
-
-	if (BLI_path_is_rel(filepath)) {
-		BLI_path_abs(filepath, G.main->name);
-	}
-}
-
-static void rna_OpenVDBModifier_abs_path_get(PointerRNA *ptr, char *value)
-{
-	char filepath[1024];
-
-	RNA_OpenVDBModifier_abs_framed_path((ModifierData *)ptr->data, filepath);
-
-	BLI_strncpy(value, filepath, 1024);
-}
-
-static int rna_OpenVDBModifier_abs_path_length(PointerRNA *ptr)
-{
-  char filepath[1024];
-
-	RNA_OpenVDBModifier_abs_framed_path((ModifierData *)ptr->data, filepath);
-
-  return strlen(filepath);
-}
-
 static int rna_OpenVDBModifier_density_grid_get(PointerRNA *ptr)
 {
   OpenVDBModifierData *vdbmd = (OpenVDBModifierData *)ptr->data;
@@ -6419,8 +6377,6 @@ static void rna_def_modifier_openvdb(BlenderRNA *brna)
   RNA_def_property_update(prop, 0, "rna_OpenVDBModifier_update");
 
   prop = RNA_def_property(srna, "abs_path", PROP_STRING, PROP_FILEPATH);
-  RNA_def_property_string_funcs(
-      prop, "rna_OpenVDBModifier_abs_path_get", "rna_OpenVDBModifier_abs_path_length", NULL);
   RNA_def_property_clear_flag(prop, PROP_EDITABLE);
   RNA_def_property_ui_text(prop, "Abs Path", "Absolute path to OpenVDB cache file");
 

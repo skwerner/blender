@@ -1948,6 +1948,7 @@ typedef struct OpenVDBModifierData {
   ModifierData modifier;
 
   char filepath[1024]; /* FILE_MAX */
+	char abs_path[1024]; /* The absolute file path with the current frame number. */
   char (*grids)[64];
   char density[64];
   char heat[64];

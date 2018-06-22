@@ -320,9 +320,10 @@ static void create_mesh_volume_attribute(BL::Object& b_ob,
   bool animated = false;
 
 #ifdef WITH_OPENVDB
+  int index = 0;
   bool has_vdb = false;
   BL::OpenVDBModifier b_vdb = object_vdb_modifier_find(b_ob);
-  int index = 0;
+	if(b_vdb && b_domain && b_vdb.sparse_render()) {
   switch(std) {
     case ATTR_STD_VOLUME_FLAME:
       index = b_vdb.flame();
@@ -342,6 +343,7 @@ static void create_mesh_volume_attribute(BL::Object& b_ob,
     default:
       assert(0);
       break;
+  }
   }
 
   /* Values from the VDB modifier are 1 based, indices in the OpenVDB API are 0 based. */
@@ -398,17 +400,14 @@ static void create_mesh_volume_attribute(BL::Object& b_ob,
       }
 
       /* Bake a matrix to get from normalized coordinates to index space. */
+
+      Transform tfm = transform_identity();
+      tfm.x = vdb_axis_to_float4(right, inv[right]);
+      tfm.y = vdb_axis_to_float4(front, inv[front]);
+      tfm.z = vdb_axis_to_float4(up, inv[up]);
+
       int3 resolution = get_int3(b_domain.domain_resolution());
-      int3 offset = /*get_int3(b_domain.index_offset())*/ make_int3(0); 
-
-      Transform tfm = transform_empty();
-      tfm.x[right] = inv[right] ? -resolution[right] : resolution[right];
-      tfm.x.w = offset[right] + (inv[right] ? resolution[right] : 0);
-      tfm.y[front] = inv[front] ? -resolution[front] : resolution[front];
-      tfm.y.w = offset[front] + (inv[front] ? resolution[front] : 0);
-      tfm.z[up] = inv[up] ? -resolution[up] : resolution[up];
-      tfm.z.w = offset[up] + (inv[up] ? resolution[up] : 0);
-
+      int3 offset = get_int3(b_domain.index_offset());
       int3 axis = make_int3(inv[0] ? -right-1 : right, inv[1] ? -front-1 : front, inv[2] ? -up-1 : up);
       volume_data->slot = -(volume_manager->add_volume(b_vdb.abs_path(), grid_name, tfm, resolution, offset, axis) + 2);
       volume_data->vol_manager = volume_manager;
@@ -450,6 +449,9 @@ static void create_mesh_volume_attributes(Scene *scene, BL::Object &b_ob, Mesh *
   if (mesh->need_attribute(scene, ATTR_STD_VOLUME_VELOCITY))
     create_mesh_volume_attribute(
         b_ob, mesh, scene->image_manager, scene->volume_manager, ATTR_STD_VOLUME_VELOCITY, frame);
+  else if (scene->need_motion() == Scene::MOTION_BLUR) {
+//		create_mesh_volume_attribute(b_ob, mesh, scene->image_manager, scene->volume_manager, ATTR_STD_VOLUME_VELOCITY, frame);
+  }
 }
 
 /* Create vertex color attributes. */

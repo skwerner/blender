@@ -148,7 +148,7 @@ static const int CUBE_SIZE = 8;
  */
 class VolumeMeshBuilder {
   /* Auxilliary volume that is used to check if a node already added. */
-  vector<char> grid;
+	vector<bool> grid;
 
   /* The resolution of the auxilliary volume, set to be equal to 1/CUBE_SIZE
    * of the original volume on each axis. */
@@ -366,7 +366,11 @@ struct VoxelAttributeGrid {
   int channels;
 };
 
-void MeshManager::create_volume_mesh(Scene *scene, Device *device, Mesh *mesh, Progress &progress)
+void MeshManager::create_volume_mesh(Scene *scene,
+                                     Device *device,
+                                     DeviceScene *dscene,
+									 Mesh *mesh,
+									 Progress& progress)
 {
   string msg = string_printf("Computing Volume Mesh %s", mesh->name.c_str());
   progress.set_status("Updating Mesh", msg);
@@ -388,15 +392,16 @@ void MeshManager::create_volume_mesh(Scene *scene, Device *device, Mesh *mesh, P
     }
 
     VoxelAttribute *voxel = attr.data_voxel();
-    device_memory *image_memory = scene->image_manager->image_memory(voxel->slot);
-    int3 resolution = make_int3(1, 1, 1);
+		device_memory *image_memory = NULL;
+		int3 resolution = make_int3(1, 1, 1);
 		if(voxel->manager && voxel->slot >= 0) {
-          resolution = make_int3( image_memory->data_width,
+			image_memory = scene->image_manager->image_memory(voxel->slot);
+			resolution = make_int3(image_memory->data_width,
                                    image_memory->data_height,
                                    image_memory->data_depth);
 		}
-		else if(voxel->vol_manager && voxel->slot < -1) {
 
+        else if(voxel->vol_manager && voxel->slot < -1) {
 #ifdef WITH_OPENVDB
 			resolution = voxel->vol_manager->grids[-(voxel->slot + 2)]->vdb_resolution;
 #endif
@@ -415,7 +420,7 @@ void MeshManager::create_volume_mesh(Scene *scene, Device *device, Mesh *mesh, P
     }
 
     VoxelAttributeGrid voxel_grid;
-    if(image_memory) {
+    if (image_memory) {
       voxel_grid.data = static_cast<float *>(image_memory->host_pointer);
       voxel_grid.channels = image_memory->data_elements;
     }
@@ -477,12 +482,11 @@ void MeshManager::create_volume_mesh(Scene *scene, Device *device, Mesh *mesh, P
   VolumeMeshBuilder builder(&volume_params);
   const float isovalue = mesh->volume_isovalue;
 
-  for (int z = 0; z < resolution.z; ++z) {
-    for (int y = 0; y < resolution.y; ++y) {
-      for (int x = 0; x < resolution.x; ++x) {
-        size_t voxel_index = compute_voxel_index(resolution, x, y, z);
 
-        for (size_t i = 0; i < voxel_grids.size(); ++i) {
+  for(int z = 0; z < resolution.z; ++z) {
+    for(int y = 0; y < resolution.y; ++y) {
+      for(int x = 0; x < resolution.x; ++x) {
+        for(size_t i = 0; i < voxel_grids.size(); ++i) {
           const VoxelAttributeGrid &voxel_grid = voxel_grids[i];
           int channels = voxel_grid.channels;
           if(voxel_grid.data == NULL) {
@@ -490,13 +494,15 @@ void MeshManager::create_volume_mesh(Scene *scene, Device *device, Mesh *mesh, P
             channels = 1;
 #endif
           }
-          for (int c = 0; c < channels; c++) {
+          for(int c = 0; c < channels; c++) {
             if(voxel_grid.data) {
-              if (voxel_grid.data[voxel_index * channels + c] >= isovalue) {
+              size_t voxel_index = compute_voxel_index(resolution, x, y, z);
+
+              if(voxel_grid.data[voxel_index * channels + c] > isovalue) {
                 builder.add_node_with_padding(x, y, z);
                 break;
               }
-          }
+            }
 #ifdef WITH_OPENVDB
             else {
               float r, g, b;

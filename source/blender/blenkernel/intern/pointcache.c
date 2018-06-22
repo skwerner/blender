@@ -2666,6 +2666,8 @@ static void openvdb_filepath(PTCacheID *pid, char *filepath, int cfra)
   if (BLI_path_is_rel(filepath)) {
     BLI_path_abs(filepath, blendfilename);
   }
+
+	BLI_strncpy(vdbmd->abs_path, filepath, sizeof(vdbmd->abs_path));
 }
 
 /* youll need to close yourself after! */

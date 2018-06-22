@@ -1010,7 +1010,8 @@ class CPUDevice : public Device {
     OSLShader::thread_init(&kg, &osl_globals);
 #endif
 #ifdef WITH_OPENVDB
-    VDBVolume::thread_init(&vdb_globals);
+    kg.vdb = &vdb_globals;
+    kg.vdb_tdata = VDBVolume::thread_init(&vdb_globals);
 #endif
     for (int sample = 0; sample < task.num_samples; sample++) {
       for (int x = task.shader_x; x < task.shader_x + task.shader_w; x++)
@@ -1089,6 +1090,7 @@ class CPUDevice : public Device {
     OSLShader::thread_init(&kg, &osl_globals);
 #endif
 #ifdef WITH_OPENVDB
+    kg.vdb = &vdb_globals;
     kg.vdb_tdata = VDBVolume::thread_init(&vdb_globals);
 #endif
     return kg;

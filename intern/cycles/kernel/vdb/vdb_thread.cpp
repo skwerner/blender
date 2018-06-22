@@ -169,7 +169,10 @@ private:
 template <>
 inline bool OpenVDBGridThreadData<FloatGrid>::sample_index(int x, int y, int z, float *r, float *g, float *b)
 {
-	float value = point_sampler->sampleVoxel(x, y, z);
+	float3 pos = make_float3(x, y, z);
+	Coord p(pos.x, pos.y, pos.z);
+
+	float value = point_sampler->isSample(p);
 	*r = *g = *b = value;
 	return true;
 }
@@ -238,12 +241,15 @@ inline bool OpenVDBGridThreadData<Vec3SGrid>::sample_index(int x, int y, int z, 
 {
 	bool staggered = tex->grid->getGridClass() == GRID_STAGGERED;
 	Vec3s value;
-	
+
+	float3 pos = make_float3(x, y, z);
+	Coord p(pos.x, pos.y, pos.z);
+
 	if(staggered) {
-		value = stag_point_sampler->sampleVoxel(x, y, z);
+		value = stag_point_sampler->isSample(p);
 	}
 	else {
-		value = point_sampler->sampleVoxel(x, y, z);
+		value = point_sampler->isSample(p);
 	}
 
 	*r = value.x();

@@ -323,7 +323,7 @@ static void create_mesh_volume_attribute(BL::Object& b_ob,
   int index = 0;
   bool has_vdb = false;
   BL::OpenVDBModifier b_vdb = object_vdb_modifier_find(b_ob);
-	if(b_vdb && b_domain && b_vdb.sparse_render()) {
+	if(b_vdb && b_domain && !b_vdb.in_memory_render()) {
   switch(std) {
     case ATTR_STD_VOLUME_FLAME:
       index = b_vdb.flame();

@@ -283,23 +283,6 @@ static void mikk_compute_tangents(
 
 /* Create Volume Attribute */
 
-static inline float4 vdb_axis_to_float4(short axis, bool negate)
-{
-	float val = negate ? -1.0f : 1.0f;
-	float w = negate ? 1.0f : 0.0f;
-	switch(axis) {
-		case 0:
-			return make_float4(val, 0.0f, 0.0f, w);
-		case 1:
-			return make_float4(0.0f, val, 0.0f, w);
-		case 2:
-			return make_float4(0.0f, 0.0f, val, w);
-		default:
-			assert(0);
-			return make_float4(val, 0.0f, 0.0f, w);
-	}
-}
-
 static void create_mesh_volume_attribute(BL::Object& b_ob,
                                          Mesh *mesh,
                                          ImageManager *image_manager,
@@ -398,14 +381,17 @@ static void create_mesh_volume_attribute(BL::Object& b_ob,
       }
 
       /* Bake a matrix to get from normalized coordinates to index space. */
-
-      Transform tfm = transform_identity();
-      tfm.x = vdb_axis_to_float4(right, inv[right]);
-      tfm.y = vdb_axis_to_float4(front, inv[front]);
-      tfm.z = vdb_axis_to_float4(up, inv[up]);
-
       int3 resolution = get_int3(b_domain.domain_resolution());
       int3 offset = get_int3(b_domain.index_offset());
+
+			Transform tfm = transform_empty();
+			tfm.x[right] = inv[right] ? -resolution[right] : resolution[right];
+			tfm.x.w = offset[right] + (inv[right] ? resolution[right] : 0);
+			tfm.y[front] = inv[front] ? -resolution[front] : resolution[front];
+			tfm.y.w = offset[front] + (inv[front] ? resolution[front] : 0);
+			tfm.z[up] = inv[up] ? -resolution[up] : resolution[up];
+			tfm.z.w = offset[up] + (inv[up] ? resolution[up] : 0);
+
       int3 axis = make_int3(inv[0] ? -right-1 : right, inv[1] ? -front-1 : front, inv[2] ? -up-1 : up);
       volume_data->slot = -(volume_manager->add_volume(b_vdb.abs_path(), grid_name, tfm, resolution, offset, axis) + 2);
       volume_data->vol_manager = volume_manager;

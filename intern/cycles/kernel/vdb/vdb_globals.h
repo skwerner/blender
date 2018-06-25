@@ -51,13 +51,7 @@ public:
 			intersector = new openvdb::tools::VolumeRayIntersector<T, T::TreeType::RootNodeType::ChildNodeType::LEVEL, openvdb::math::Ray<float> >(*grid);
 		}
 
-		openvdb::CoordBBox bbox = grid->evalActiveVoxelBoundingBox();
-		const openvdb::math::Transform &tran = grid->constTransform();
-		const openvdb::BBoxd bbox_w = tran.indexToWorld(bbox);
-		float3 min_p = make_float3((float)bbox_w.min().x(), (float)bbox_w.min().y(), (float)bbox_w.min().z());
-		float3 max_p = make_float3((float)bbox_w.max().x(), (float)bbox_w.max().y(), (float)bbox_w.max().z());
-		float3 scale = max_p - min_p;
-		tfm = transform_translate(min_p) * transform_scale(scale) * in_tfm;
+		tfm = in_tfm;
 
         resolution = _resolution;
 		index_offset = _index_offset;

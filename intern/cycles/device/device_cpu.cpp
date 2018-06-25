@@ -27,8 +27,6 @@
 #include "kernel/vdb/vdb_globals.h"
 #include "kernel/vdb/vdb_thread.h"
 
-#include "kernel/kernel_oiio_globals.h"
-
 #include "device/device.h"
 #include "device/device_denoising.h"
 #include "device/device_intern.h"

@@ -31,6 +31,7 @@ CCL_NAMESPACE_BEGIN
 class Device;
 class DeviceScene;
 class Object;
+class Primitive;
 class Progress;
 class Scene;
 class Shader;
@@ -126,6 +127,18 @@ protected:
 
 	/* Check whether light manager can use the object as a light-emissive. */
 	bool object_usable_as_light(Object *object);
+
+	/* compute energy of background lights */
+	float background_light_energy(Device *device,
+	                              DeviceScene *dscene,
+	                              Scene *scene,
+	                              Progress &progress,
+	                              const vector<Primitive> &prims);
+
+	/* compute energy of distant lights */
+	float distant_lights_energy(const Scene *scene,
+	                            const vector<Primitive> &prims);
+
 
 	struct IESSlot {
 		IESFile ies;

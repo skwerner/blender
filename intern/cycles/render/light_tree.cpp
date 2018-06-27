@@ -37,17 +37,21 @@ LightTree::LightTree(const vector<Primitive>& prims_,
 
 	if (prims_.empty()) return;
 
-	/* move all primitives except distant lights into local primitives array */
+	/* move all primitives except background and distant lights into local
+	 * primitives array */
 	primitives.reserve(prims_.size());
 	vector<Primitive> distant_lights;
+	vector<Primitive> background_lights;
 	foreach(Primitive prim, prims_ ){
 
 		/* put distant lights into its own array */
 		if (prim.prim_id < 0){
-			int lamp_id = -prim.prim_id-1;
-			const Light *lamp = lights[lamp_id];
+			const Light *lamp = lights[prim.lamp_id];
 			if (lamp->type == LIGHT_DISTANT){
 				distant_lights.push_back(prim);
+				continue;
+			} else if(lamp->type == LIGHT_BACKGROUND){
+				background_lights.push_back(prim);
 				continue;
 			}
 		}
@@ -69,7 +73,6 @@ LightTree::LightTree(const vector<Primitive>& prims_,
 	unsigned int totalNodes = 0;
 	vector<Primitive> orderedPrims;
 	orderedPrims.reserve(primitives.size());
-
 	BVHBuildNode *root = recursive_build(0, primitives.size(), buildData,
 	                                     totalNodes, orderedPrims);
 
@@ -77,12 +80,19 @@ LightTree::LightTree(const vector<Primitive>& prims_,
 	orderedPrims.clear();
 	buildData.clear();
 
-	/* add distant and background lights to the end of primitives array */
+	/* add background lights to the primitives array */
+	for(int i = 0; i < background_lights.size(); ++i){
+		primitives.push_back(background_lights[i]);
+	}
+
+	/* add distant lights to the end of primitives array */
 	for(int i = 0; i < distant_lights.size(); ++i){
 		primitives.push_back(distant_lights[i]);
 	}
 
 	VLOG(1) << "Total BVH nodes: " << totalNodes;
+
+	if(!root) return;
 
 	/* convert to linear representation of the tree */
 	nodes.resize(totalNodes);
@@ -135,9 +145,7 @@ BoundBox LightTree::get_bbox(const Primitive& prim)
 
 	} else {
 		/* extract bounding box from lamp based on light type */
-		assert(prim.object_id == -1);
-		int lamp_id = -prim.prim_id-1;
-		Light* lamp = lights[lamp_id];
+		Light* lamp = lights[prim.lamp_id];
 
 		if (lamp->type == LIGHT_POINT || lamp->type == LIGHT_SPOT){
 			float radius = lamp->size;
@@ -159,11 +167,6 @@ BoundBox LightTree::get_bbox(const Primitive& prim)
 			bbox.grow(p1);
 			bbox.grow(p2);
 			bbox.grow(p3);
-		} else if (lamp->type == LIGHT_BACKGROUND || lamp->type == LIGHT_DISTANT){
-			/* TODO: Can we support backgrounds and distant lights in the light
-			 * tree? They do not have a bbox right?
-			 */
-			return bbox;
 		} else {
 			assert(false);
 		}
@@ -184,10 +187,7 @@ Orientation LightTree::get_bcone(const Primitive& prim){
 		bcone.theta_o = 0.0f;
 		bcone.theta_e = M_PI_2_F;
 	} else {
-		assert(prim.object_id == -1);
-		int lamp_id = -prim.prim_id-1;
-		Light* lamp = lights[lamp_id];
-		/* TODO: Make general. This is specific for point & spot lights */
+		Light* lamp = lights[prim.lamp_id];
 		bcone.axis = lamp->dir / len(lamp->dir);
 		if (lamp->type == LIGHT_POINT) {
 			bcone.theta_o = M_PI_F;
@@ -211,7 +211,7 @@ float LightTree::get_energy(const Primitive &prim){
 	Shader *shader = NULL;
 
 	if (prim.prim_id >= 0){
-		/* extract bounding cone from emissive triangle */
+		/* extract shader from emissive triangle */
 		const Object* object = objects[prim.object_id];
 		const Mesh* mesh = object->mesh;
 		const int triangle_id = prim.prim_id - mesh->tri_offset;
@@ -222,7 +222,7 @@ float LightTree::get_energy(const Primitive &prim){
 		/* get emission from shader */
 		bool is_constant_emission = shader->is_constant_emission(&emission);
 		if(!is_constant_emission){
-			return 1.0f;
+			return 0.0f;
 		}
 
 		const Transform& tfm = objects[prim.object_id]->tfm;
@@ -231,15 +231,13 @@ float LightTree::get_energy(const Primitive &prim){
 		emission *= area * M_PI_F;
 
 	} else {
-		assert(prim.object_id == -1);
-		int lamp_id = -prim.prim_id-1;
-		const Light* light = lights[lamp_id];
+		const Light* light = lights[prim.lamp_id];
 
 		/* get emission from shader */
 		shader = light->shader;
 		bool is_constant_emission = shader->is_constant_emission(&emission);
 		if(!is_constant_emission){
-			return 1.0f;
+			return 0.0f;
 		}
 
 		/* calculate the total emission by integrating the emission over the
@@ -265,12 +263,7 @@ float LightTree::get_energy(const Primitive &prim){
 		}
 	}
 
-	/* convert RGB to luminance */
-	const float luminance = 0.212671f * emission[0] +
-	                        0.715160f * emission[1] +
-	                        0.072169f * emission[2];
-
-	return luminance;
+	return rgb_to_luminance(emission);
 
 }
 
@@ -434,6 +427,8 @@ BVHBuildNode* LightTree::recursive_build(const unsigned int start,
                                          unsigned int &totalNodes,
                                          vector<Primitive> &orderedPrims)
 {
+	if(buildData.size() == 0) return NULL;
+
 	totalNodes++;
 	BVHBuildNode *node = new BVHBuildNode();
 

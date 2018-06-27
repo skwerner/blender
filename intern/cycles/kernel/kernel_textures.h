@@ -68,7 +68,8 @@ KERNEL_TEX(float4, __light_tree_nodes)
 KERNEL_TEX(uint, __light_distribution_to_node)
 KERNEL_TEX(uint, __lamp_to_distribution)
 KERNEL_TEX(uint, __triangle_to_distribution)
-
+KERNEL_TEX(float, __light_group_sample_cdf)
+KERNEL_TEX(float, __light_group_sample_prob)
 
 /* particles */
 KERNEL_TEX(KernelParticle, __particles)

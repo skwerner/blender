@@ -248,7 +248,86 @@ bool LightManager::object_usable_as_light(Object *object) {
 	return false;
 }
 
-void LightManager::device_update_distribution(Device *, DeviceScene *dscene, Scene *scene, Progress& progress)
+float LightManager::distant_lights_energy(const Scene *scene,
+                                          const vector<Primitive> &prims)
+{
+	float luminance = 0.0f;
+	float3 emission;
+	foreach(Primitive prim, prims){
+
+		if(prim.prim_id >= 0) continue;
+
+		const Light *lamp = scene->lights[prim.lamp_id];
+		if(lamp->type != LIGHT_DISTANT) continue;
+
+		/* get emission from shader */
+		bool is_constant_emission = lamp->shader->is_constant_emission(&emission);
+		if(!is_constant_emission) continue; // TODO: Properly handle this case
+
+		luminance += rgb_to_luminance(emission);
+	}
+
+
+	/* TODO: could project each bbox onto a disk outside the scene and sum up
+	 * all the projected areas instead if this results in too high sampling */
+
+	/* get radius of bounding sphere of scene */
+	BoundBox scene_bbox = BoundBox::empty;
+	foreach(Object *object, scene->objects) {
+		// TODO: What about transforms?
+		scene_bbox.grow(object->bounds);
+	}
+
+	float radius_squared = len_squared(scene_bbox.max - scene_bbox.center());
+
+	return M_PI_F * radius_squared * luminance;
+}
+
+float LightManager::background_light_energy(Device *device,
+                                             DeviceScene *dscene,
+                                             Scene *scene,
+                                             Progress &progress,
+                                             const vector<Primitive> &prims)
+{
+	/* compute energy for all background lights */
+	float average_luminance = 0.0f;
+	size_t num_pixels = 0;
+	/* find background lights */
+	foreach(Primitive prim, prims){
+
+		if(prim.prim_id >= 0) continue;
+
+		const Light *lamp = scene->lights[prim.lamp_id];
+		if(lamp->type != LIGHT_BACKGROUND) continue;
+
+		int res = lamp->map_resolution;
+		assert(res > 0);
+		vector<float3> pixels;
+		shade_background_pixels(device, dscene, res, pixels, progress);
+		num_pixels += pixels.size();
+		for(int i = 0; i < pixels.size(); ++i){
+			average_luminance += rgb_to_luminance(pixels[i]);
+		}
+
+		break;
+	}
+
+	if(num_pixels == 0) return 0.0f;
+
+	average_luminance /= (float)num_pixels;
+
+	/* get radius of bounding sphere of scene */
+	BoundBox scene_bbox = BoundBox::empty;
+	foreach(Object *object, scene->objects) {
+		// TODO: What about transforms?
+		scene_bbox.grow(object->bounds);
+	}
+	float radius_squared = len_squared(scene_bbox.max - scene_bbox.center());
+
+	return M_PI_F * radius_squared * average_luminance;
+}
+
+void LightManager::device_update_distribution(Device *device, DeviceScene *dscene, Scene *scene, Progress& progress)
 {
 	progress.set_status("Updating Lights", "Computing distribution");
 
@@ -303,15 +382,17 @@ void LightManager::device_update_distribution(Device *, DeviceScene *dscene, Sce
 	}
 
 	int light_index = 0;
+	int light_id = 0;
 	foreach(Light *light, scene->lights) {
 		if(light->is_enabled) {
-			emissivePrims.push_back(Primitive(~light_index,-1));
+			emissivePrims.push_back(Primitive(~light_index, light_id));
 			num_lights++;
 			light_index++;
 		}
 		if(light->is_portal) {
 			num_portals++;
 		}
+		light_id++;
 	}
 
 	size_t num_distribution = num_triangles + num_lights;
@@ -365,6 +446,45 @@ void LightManager::device_update_distribution(Device *, DeviceScene *dscene, Sce
 			offset += 4;
 		}
 
+		/* create CDF for distant lights, background lights and light tree */
+		float tree_energy = (nodesVec.size() > 0) ? nodesVec[0].energy : 0.0f;
+		float distant_energy = distant_lights_energy(scene, emissivePrims);
+		float background_energy = background_light_energy(device, dscene, scene,
+		                                                  progress,
+		                                                  emissivePrims);
+
+		float3 func = make_float3(tree_energy, distant_energy, background_energy);
+
+		float4 cdf = make_float4(0.0f);
+		float3 probs;
+		const int num_func_values = LIGHTGROUP_NUM;
+		const int num_cdf_values = num_func_values + 1;
+		for(int i = 1; i < num_cdf_values; ++i){
+			cdf[i] = cdf[i-1] + func[i-1];
+		}
+		float func_integral = cdf[num_func_values];
+		if(func_integral == 0.0f){ // Sample uniformly if no energy
+			for(int i = 1; i < num_cdf_values; ++i){
+				cdf[i] = (float)i / num_func_values;
+			}
+			probs = make_float3(1.0f / (float)num_func_values);
+		} else {
+			for(int i = 0; i < num_cdf_values; ++i){
+				cdf[i] /= func_integral;
+			}
+			probs = func / func_integral;
+		}
+
+		float *type_cdf = dscene->light_group_sample_cdf.alloc(num_cdf_values);
+		for(int i = 0; i < num_cdf_values; ++i){
+			type_cdf[i] = cdf[i];
+		}
+
+		float *type_prob = dscene->light_group_sample_prob.alloc(num_func_values);
+		for(int i = 0; i < num_func_values; ++i){
+			type_prob[i] = probs[i];
+		}
+
 		/* find mapping between distribution_id to node_id, used for MIS */
 		uint *  distribution_to_node =
 		        dscene->light_distribution_to_node.alloc(num_distribution);
@@ -372,7 +492,6 @@ void LightManager::device_update_distribution(Device *, DeviceScene *dscene, Sce
 		for(int i = 0; i < num_distribution; ++i){
 			distribution_to_node[i] = -1;
 		}
-
 		for( int i = 0; i < nodesVec.size(); ++i){
 			const CompactNode& node = nodesVec[i];
 			if(node.nemitters == 0) continue;
@@ -391,12 +510,11 @@ void LightManager::device_update_distribution(Device *, DeviceScene *dscene, Sce
 	for(int i = 0; i < emissivePrims.size(); ++i){
 		const Primitive& prim = emissivePrims[i];
 		if(prim.prim_id >= 0) continue; // Skip triangles
-		int lamp_id = -prim.prim_id-1;
+		int lamp_id = -prim.prim_id-1; // This should not use prim.lamp_id
 		lamp_to_distribution[lamp_id] = i;
 	}
 
 	/* find mapping between triangle_id to distribution_id, used for MIS */
-
 	vector< std::pair<uint,uint> > tri_to_distr;
 	tri_to_distr.reserve(num_triangles);
 	for(int i = 0; i < emissivePrims.size(); ++i){
@@ -477,6 +595,7 @@ void LightManager::device_update_distribution(Device *, DeviceScene *dscene, Sce
 	offset = 0;
 
 	/* create distributions for lights */
+	int background_index = -1;
 	foreach (Primitive prim, emissivePrims){
 		if(progress.get_cancel()) return;
 
@@ -485,15 +604,13 @@ void LightManager::device_update_distribution(Device *, DeviceScene *dscene, Sce
 			continue;
 		}
 
-		int light_index = -prim.prim_id -1;
-		const Light* light = scene->lights[light_index];
+		const Light* light = scene->lights[prim.lamp_id];
 
 		distribution[offset].area = lightarea;
 		distribution[offset].totarea = totarea;
 		distribution[offset].prim = prim.prim_id;
 		distribution[offset].lamp.pad = 1.0f;
 		distribution[offset].lamp.size = light->size;
-		offset++;
 		totarea += lightarea;
 
 		if(light->size > 0.0f && light->use_mis)
@@ -501,10 +618,12 @@ void LightManager::device_update_distribution(Device *, DeviceScene *dscene, Sce
 		if(light->type == LIGHT_BACKGROUND) {
 			num_background_lights++;
 			background_mis = light->use_mis;
+			background_index = offset;
 		} else if(light->type == LIGHT_DISTANT){
 			num_distant_lights++;
 		}
 
+		offset++;
 	}
 
 	/* normalize cumulative distribution functions */
@@ -535,10 +654,13 @@ void LightManager::device_update_distribution(Device *, DeviceScene *dscene, Sce
 		dscene->light_distribution_to_node.copy_to_device();
 		dscene->lamp_to_distribution.copy_to_device();
 		dscene->triangle_to_distribution.copy_to_device();
+		dscene->light_group_sample_cdf.copy_to_device();
+		dscene->light_group_sample_prob.copy_to_device();
 		kintegrator->num_light_nodes =
 		        dscene->light_tree_nodes.size() / LIGHT_BVH_NODE_SIZE;
-		kintegrator->bvh_sample_probability =
-		        1.0f - 0.5f * (float)num_distant_lights / (float)num_lights;
+		// TODO: Currently this is only the correct offset when using light BVH
+		kintegrator->distant_lights_offset = num_distribution - num_distant_lights;
+		kintegrator->background_light_index = background_index;
 
 		/* number of emissives */
 		kintegrator->num_distribution = num_distribution;
@@ -609,14 +731,14 @@ void LightManager::device_update_distribution(Device *, DeviceScene *dscene, Sce
 		kintegrator->num_all_lights = 0;
 		kintegrator->num_distant_lights = 0;
 		kintegrator->inv_num_distant_lights = 0.0f;
-		kintegrator->bvh_sample_probability = 0.0f;
 		kintegrator->pdf_triangles = 0.0f;
 		kintegrator->pdf_lights = 0.0f;
 		kintegrator->use_lamp_mis = false;
 		kintegrator->num_portals = 0;
 		kintegrator->portal_offset = 0;
 		kintegrator->portal_pdf = 0.0f;
-
+		kintegrator->distant_lights_offset = 0;
+		kintegrator->background_light_index = 0;
 		kfilm->pass_shadow_scale = 1.0f;
 	}
 }
@@ -936,6 +1058,7 @@ void LightManager::device_update_points(Device *,
 		klights[light_index].itfm = transform_inverse(light->tfm);
 
 		light_index++;
+
 	}
 
 	/* TODO(sergey): Consider moving portals update to their own function
@@ -1026,6 +1149,8 @@ void LightManager::device_free(Device *, DeviceScene *dscene)
 	dscene->lights.free();
 	dscene->light_background_marginal_cdf.free();
 	dscene->light_background_conditional_cdf.free();
+	dscene->light_group_sample_prob.free();
+	dscene->light_group_sample_cdf.free();
 	dscene->ies_lights.free();
 }
 

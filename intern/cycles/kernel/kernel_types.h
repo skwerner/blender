@@ -666,6 +666,16 @@ enum PanoramaType {
 	PANORAMA_NUM_TYPES,
 };
 
+/* Light Sampling Group */
+
+enum LightGroup {
+	LIGHTGROUP_TREE,
+	LIGHTGROUP_DISTANT,
+	LIGHTGROUP_BACKGROUND,
+
+	LIGHTGROUP_NUM,
+};
+
 /* Differential */
 
 typedef struct differential3 {
@@ -1309,12 +1319,13 @@ typedef struct KernelIntegrator {
 	int num_triangle_lights;
 	int num_distant_lights;
 	float inv_num_distant_lights;
-	float bvh_sample_probability;
 	float pdf_triangles;
 	float pdf_lights;
 	float pdf_inv_totarea;
 	int pdf_background_res;
 	float light_inv_rr_threshold;
+	int distant_lights_offset;
+	int background_light_index;
 
 	/* light portals */
 	float portal_pdf;
@@ -1375,7 +1386,6 @@ typedef struct KernelIntegrator {
 	int start_sample;
 
 	int max_closures;
-	int pad;
 } KernelIntegrator;
 static_assert_align(KernelIntegrator, 16);
 

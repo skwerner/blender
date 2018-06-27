@@ -97,8 +97,17 @@ struct BVHPrimitiveInfo {
 };
 
 struct Primitive {
+	/* If prim_id >= 0 then the primitive is a triangle and prim_id is a global
+	 * triangle index.
+	 * If prim_id < 0 then the primitive is a lamp and -prim_id-1 is an index
+	 * into the klights array on the device. */
 	int prim_id;
-	int object_id; // Only used for triangles
+	union {
+		/* which object the triangle belongs to */
+		int object_id;
+		/* index for this lamp in the scene->lights array */
+		int lamp_id;
+	};
 	Primitive(int prim, int object): prim_id(prim), object_id(object) {}
 };
 

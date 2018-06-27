@@ -1015,6 +1015,45 @@ ccl_device_forceinline void triangle_light_sample(KernelGlobals *kg, int prim, i
 	}
 }
 
+/* chooses either to sample the light tree, distant or background lights by
+ * sampling a CDF based on energy */
+ccl_device int light_group_distribution_sample(KernelGlobals *kg, float *randu)
+{
+	/* This is basically std::upper_bound as used by pbrt, to find a point light or
+	 * triangle to emit from, proportional to area. a good improvement would be to
+	 * also sample proportional to power, though it's not so well defined with
+	 * arbitrary shaders. */
+	const int num_groups = LIGHTGROUP_NUM;
+	int first = 0;
+	int len = num_groups + 1;
+	float r = *randu;
+	// todo: refactor this into its own function. It is used in several places
+	while(len > 0) {
+		int half_len = len >> 1;
+		int middle = first + half_len;
+
+		if(r < kernel_tex_fetch(__light_group_sample_cdf, middle)) {
+			len = half_len;
+		}
+		else {
+			first = middle + 1;
+			len = len - half_len - 1;
+		}
+	}
+
+	/* Clamping should not be needed but float rounding errors seem to
+	 * make this fail on rare occasions. */
+	int index = clamp(first-1, 0, num_groups-1);
+
+	/* Rescale to reuse random number. this helps the 2D samples within
+	 * each area light be stratified as well. */
+	float distr_min = kernel_tex_fetch(__light_group_sample_cdf, index);
+	float distr_max = kernel_tex_fetch(__light_group_sample_cdf, index+1);
+	*randu = (r - distr_min)/(distr_max - distr_min);
+
+	return index;
+}
+
 /* Light Distribution */
 
 ccl_device int light_distribution_sample(KernelGlobals *kg, float *randu)
@@ -1102,13 +1141,19 @@ ccl_device void light_distant_sample(KernelGlobals *kg, float3 P, float *randu,
 	int num_distant = kernel_data.integrator.num_distant_lights;
 	int light = min((int)(*randu * (float)num_distant), num_distant-1);
 
-	/* this assumes the distant lights are at the end of the distribution array */
-	// TODO: have a distant lights offset into distribution array instead
-	int num_total_lights = kernel_data.integrator.num_distribution;
-	int distant_lights_offset = num_total_lights-num_distant;
+	/* This assumes the distant lights are next to each other in the
+	 * distribution array starting at distant_lights_offset. */
+	int distant_lights_offset = kernel_data.integrator.distant_lights_offset;
 
 	*index = light + distant_lights_offset;
 	*pdf = kernel_data.integrator.inv_num_distant_lights;
+}
+
+/* picks one of the background lights and computes the probability of picking it */
+ccl_device void light_background_sample(KernelGlobals *kg, float3 P, float *randu,
+                                     int *index, float *pdf){
+	*index = kernel_data.integrator.background_light_index;
+	*pdf = 1.0f;
 }
 
 /* picks a light from the light BVH and returns its index and the probability of
@@ -1258,16 +1303,41 @@ ccl_device float light_distribution_pdf(KernelGlobals *kg, float3 P, int prim_id
 
 	/* compute picking pdf for this light */
 	if (kernel_data.integrator.use_light_bvh){
-		// Find mapping from distribution_id to node_id
-		int node_id = kernel_tex_fetch(__light_distribution_to_node,
-		                               distribution_id);
-		if(node_id==-1){ // Distant lights are not in any nodes
-			return (1.0f - kernel_data.integrator.bvh_sample_probability) *
-			       kernel_data.integrator.inv_num_distant_lights;
+
+		/* find out which group of lights to sample */
+		int group;
+		if(prim_id >= 0){
+			group = LIGHTGROUP_TREE;
 		} else {
-			return kernel_data.integrator.bvh_sample_probability *
-			       light_bvh_pdf(kg, P, node_id);
+			int lamp = -prim_id-1;
+			int light_type = kernel_tex_fetch(__lights, lamp).type;
+			if(light_type == LIGHT_DISTANT){
+				group = LIGHTGROUP_DISTANT;
+			} else if(light_type == LIGHT_BACKGROUND){
+				group = LIGHTGROUP_BACKGROUND;
+			} else {
+				group = LIGHTGROUP_TREE;
+			}
 		}
+
+		/* get probabilty to sample this group of lights */
+		float group_prob = kernel_tex_fetch(__light_group_sample_prob, group);
+		float pdf = group_prob;
+
+		if(group == LIGHTGROUP_TREE){
+			// Find mapping from distribution_id to node_id
+			int node_id = kernel_tex_fetch(__light_distribution_to_node,
+			                               distribution_id);
+			pdf *= light_bvh_pdf(kg, P, node_id);
+		} else if(group == LIGHTGROUP_DISTANT) {
+			pdf *= kernel_data.integrator.inv_num_distant_lights;
+		} else if(group == LIGHTGROUP_BACKGROUND) {
+			/* there is only one background light so nothing to do here */
+		} else {
+			kernel_assert(false);
+		}
+
+		return pdf;
 	} else {
 		const ccl_global KernelLightDistribution *kdistribution =
 		        &kernel_tex_fetch(__light_distribution, distribution_id);
@@ -1280,15 +1350,22 @@ ccl_device void light_distribution_sample(KernelGlobals *kg, float3 P,
                                           float *randu, int *index, float *pdf)
 {
 	if (kernel_data.integrator.use_light_bvh){
-		/* sample light BVH or distant lights */
-		float bvh_sample_prob = kernel_data.integrator.bvh_sample_probability;
-		if(*randu <= bvh_sample_prob) { // Sample light BVH
+
+		/* sample light type distribution */
+		int   group      = light_group_distribution_sample(kg, randu);
+		float group_prob = kernel_tex_fetch(__light_group_sample_prob, group);
+
+		if(group == LIGHTGROUP_TREE){
 			light_bvh_sample(kg, P, *randu, index, pdf);
-			*pdf *= bvh_sample_prob;
-		} else { // Sample distant lights
+		} else if(group == LIGHTGROUP_DISTANT) {
 			light_distant_sample(kg, P, randu, index, pdf);
-			*pdf *= (1.0f - bvh_sample_prob);
+		} else if(group == LIGHTGROUP_BACKGROUND) {
+			light_background_sample(kg, P, randu, index, pdf);
+		} else {
+			kernel_assert(false);
 		}
+
+		*pdf *= group_prob;
 
 	} else { // Sample light distribution CDF
 		*index = light_distribution_sample(kg, randu);
@@ -1329,6 +1406,7 @@ ccl_device_noinline bool light_sample(KernelGlobals *kg,
 		if(UNLIKELY(light_select_reached_max_bounces(kg, lamp, bounce))) {
 			return false;
 		}
+
 		if (!lamp_light_sample(kg, lamp, randu, randv, P, ls)){
 			return false;
 		}

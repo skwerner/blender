@@ -328,8 +328,9 @@ ccl_device_noinline float3 indirect_background(KernelGlobals *kg,
 	if(!(state->flag & PATH_RAY_MIS_SKIP) && res) {
 		/* multiple importance sampling, get background light pdf for ray
 		 * direction, and compute weight with respect to BSDF pdf */
-		/* TODO: PDF should be multiplied by picking probability */
 		float pdf = background_light_pdf(kg, ray->P, ray->D);
+		int background_index = kernel_data.integrator.background_light_index;
+		pdf *= light_distribution_pdf(kg, ray->P, background_index);
 		float mis_weight = power_heuristic(state->ray_pdf, pdf);
 
 		return L*mis_weight;

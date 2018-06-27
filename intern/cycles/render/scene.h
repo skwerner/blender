@@ -109,6 +109,8 @@ public:
 	device_vector<uint>   light_distribution_to_node;
 	device_vector<uint>   lamp_to_distribution;
 	device_vector<uint>   triangle_to_distribution;
+	device_vector<float>  light_group_sample_cdf;
+	device_vector<float>  light_group_sample_prob;
 
 	/* particles */
 	device_vector<KernelParticle> particles;

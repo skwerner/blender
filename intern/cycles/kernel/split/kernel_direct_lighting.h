@@ -90,6 +90,7 @@ ccl_device void kernel_direct_lighting(KernelGlobals *kg,
 			                light_u, light_v,
 			                sd->time,
 			                sd->P,
+                            &sd->N,
 			                state->bounce,
 			                &ls)) {
 

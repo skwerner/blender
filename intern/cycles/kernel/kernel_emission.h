@@ -229,13 +229,14 @@ ccl_device_noinline bool indirect_lamp_emission(KernelGlobals *kg,
                                                 float3 *emission)
 {
 	bool hit_lamp = false;
+	float3 N = emission_sd->N;
 
 	*emission = make_float3(0.0f, 0.0f, 0.0f);
 
 	for(int lamp = 0; lamp < kernel_data.integrator.num_all_lights; lamp++) {
 		LightSample ls;
 
-		if(!lamp_light_eval(kg, lamp, ray->P, ray->D, ray->t, &ls))
+		if(!lamp_light_eval(kg, lamp, ray->P, &N, ray->D, ray->t, &ls))
 			continue;
 
 #ifdef __PASSES__

@@ -295,6 +295,8 @@ ccl_device_noinline void kernel_branched_path_surface_indirect_light(KernelGloba
 
 			ps.rng_hash = state->rng_hash;
 
+			indirect_sd->N = sd->N;
+
 			kernel_path_indirect(kg,
 			                     indirect_sd,
 			                     emission_sd,

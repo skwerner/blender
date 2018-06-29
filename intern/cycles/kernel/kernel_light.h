@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+#include "PSCMaps.h"
+
 CCL_NAMESPACE_BEGIN
 
 /* Light Sample result */
@@ -520,10 +522,25 @@ ccl_device_inline float uniform_cone_pdf(float cos_theta_max) {
 
 */
 
-ccl_device float sphere_light_pdf(float3 P, float3 lightP, const LightSample *ls,float radius, float invarea)
+ccl_device float sphere_light_pdf(float3 P, float3 *N, float3 lightP, const LightSample *ls, float radius, float invarea)
 {
+	static bool sample_sphere = true;
 	float3 wc = lightP - P;
 	float dist_squared = len_squared(wc);
+	if(sample_sphere && N && dist_squared > radius * radius) {
+		PSCM::PSCMaps<float> pscm;
+		float light_dist;
+		float3 light_dir = normalize_len(lightP - P, &light_dist);
+
+		const float alpha = asinf(radius / light_dist);
+		const float beta = asinf(dot(*N, light_dir));
+
+		pscm.initialize(alpha, beta, true);
+		if(!pscm.is_invisible()) {
+			return dot(*N, ls->D) / pscm.get_area();
+		}
+	}
+
 	/* Uniform sphere sampling when we're shading a point inside the sphere light. */
 	if(dist_squared <= radius * radius) {
 		return invarea * lamp_light_pdf(ls->Ng, ls->D, ls->t);
@@ -540,10 +557,36 @@ ccl_device float sphere_light_pdf(float3 P, float3 lightP, const LightSample *ls
 	}
 }
 
-ccl_device void sphere_light_sample(float3 P, LightSample *ls, float radius, float randu, float randv, float invarea)
+ccl_device void sphere_light_sample(float3 P, float3 *N, LightSample *ls, float radius, float randu, float randv, float invarea)
 {
 	float3 wc = ls->P - P;
 	float dist_squared = len_squared(wc);
+
+	static bool sample_sphere = true;
+	if(sample_sphere && N && dist_squared > radius * radius) {
+		float3 lightP = ls->P;
+		PSCM::PSCMaps<float> pscm;
+		float light_dist = sqrtf(dist_squared);
+		float3 c = normalize_len(ls->P - P, &light_dist);
+
+		const float alpha = asinf(radius / light_dist);
+		const float beta = asinf(dot(*N, c));
+
+		float3 vz = *N;
+		float3 vy  = normalize(cross(vz, wc));
+		float3 vx = -cross(vz, vy);
+
+		pscm.initialize(alpha, beta, true);
+		if(!pscm.is_invisible()) {
+			float x, y;
+			pscm.eval_map(randu, randv, x, y);
+			ls->D = x*vx + y * vy + sqrtf(1.0f - x*x - y*y) * vz;
+			ls->pdf = dot(*N, ls->D) / pscm.get_area();
+			ray_sphere_intersect(P, ls->D, light_dist, ls->P, radius, &ls->P, &ls->t);
+			ls->Ng = normalize(ls->P - lightP);
+			return;
+		}
+	}
 
 	if(dist_squared <= radius * radius) {
 		ls->P += radius * sample_uniform_sphere(randu, randv);
@@ -604,6 +647,7 @@ ccl_device_inline bool lamp_light_sample(KernelGlobals *kg,
                                          int lamp,
                                          float randu, float randv,
                                          float3 P,
+                                         float3 *N,
                                          LightSample *ls)
 {
 	const ccl_global KernelLight *klight = &kernel_tex_fetch(__lights, lamp);
@@ -656,7 +700,7 @@ ccl_device_inline bool lamp_light_sample(KernelGlobals *kg,
 			float invarea = klight->spot.invarea;
 			if(radius > 0.0f) {
 				/* sphere light */
-				sphere_light_sample(P, ls, radius, randu, randv, invarea);
+				sphere_light_sample(P, N, ls, radius, randu, randv, invarea);
 			}
 			ls->D = normalize_len(ls->P - P, &ls->t);
 			ls->Ng = -ls->D;
@@ -679,7 +723,7 @@ ccl_device_inline bool lamp_light_sample(KernelGlobals *kg,
 			ls->u = uv.x;
 			ls->v = uv.y;
 
-			ls->pdf = sphere_light_pdf(P, light_P, ls, radius, invarea);
+			ls->pdf = sphere_light_pdf(P, N, light_P, ls, radius, invarea);
 		}
 		else {
 			/* area light */
@@ -720,7 +764,7 @@ ccl_device_inline bool lamp_light_sample(KernelGlobals *kg,
 	return (ls->pdf > 0.0f);
 }
 
-ccl_device bool lamp_light_eval(KernelGlobals *kg, int lamp, float3 P, float3 D, float t, LightSample *ls)
+ccl_device bool lamp_light_eval(KernelGlobals *kg, int lamp, float3 P, float3 *N, float3 D, float t, LightSample *ls)
 {
 	const ccl_global KernelLight *klight = &kernel_tex_fetch(__lights, lamp);
 	LightType type = (LightType)klight->type;
@@ -815,7 +859,7 @@ ccl_device bool lamp_light_eval(KernelGlobals *kg, int lamp, float3 P, float3 D,
 
 		/* compute pdf */
 		if(ls->t != FLT_MAX)
-			ls->pdf = sphere_light_pdf(P, lightP, ls, radius, invarea);
+			ls->pdf = sphere_light_pdf(P, N, lightP, ls, radius, invarea);
 	}
 	else if(type == LIGHT_AREA) {
 		/* area light */
@@ -1171,6 +1215,7 @@ ccl_device_noinline bool light_sample(KernelGlobals *kg,
                                       float randv,
                                       float time,
                                       float3 P,
+                                      float3 *N,
                                       int bounce,
                                       LightSample *ls)
 {
@@ -1196,7 +1241,7 @@ ccl_device_noinline bool light_sample(KernelGlobals *kg,
 			return false;
 		}
 
-		return lamp_light_sample(kg, lamp, randu, randv, P, ls);
+		return lamp_light_sample(kg, lamp, randu, randv, P, N, ls);
 	}
 }
 

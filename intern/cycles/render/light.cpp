@@ -299,10 +299,9 @@ float LightManager::background_light_energy(Device *device,
 		const Light *lamp = scene->lights[prim.lamp_id];
 		if(lamp->type != LIGHT_BACKGROUND) continue;
 
-		int res = lamp->map_resolution;
-		assert(res > 0);
 		vector<float3> pixels;
-		shade_background_pixels(device, dscene, res, pixels, progress);
+		int2 res = get_background_map_resolution(lamp, scene);
+		shade_background_pixels(device, dscene, res.x, res.y, pixels, progress);
 		num_pixels += pixels.size();
 		for(int i = 0; i < pixels.size(); ++i){
 			average_luminance += rgb_to_luminance(pixels[i]);
@@ -810,29 +809,8 @@ void LightManager::device_update_background(Device *device,
 	assert(kintegrator->use_direct_light);
 
 	/* get the resolution from the light's size (we stuff it in there) */
-	int2 res = make_int2(background_light->map_resolution, background_light->map_resolution/2);
-	/* If the resolution isn't set manually, try to find an environment texture. */
-	if (res.x == 0) {
-		Shader *shader = (scene->background->shader) ? scene->background->shader : scene->default_background;
-		foreach(ShaderNode *node, shader->graph->nodes) {
-			if(node->type == EnvironmentTextureNode::node_type) {
-				EnvironmentTextureNode *env = (EnvironmentTextureNode*) node;
-				ImageMetaData metadata;
-				if(env->image_manager && env->image_manager->get_image_metadata(env->slot, metadata)) {
-					res.x = max(res.x, metadata.width);
-					res.y = max(res.y, metadata.height);
-				}
-			}
-		}
-		if (res.x > 0 && res.y > 0) {
-			VLOG(2) << "Automatically set World MIS resolution to " << res.x << " by " << res.y << "\n";
-		}
-	}
-	/* If it's still unknown, just use the default. */
-	if (res.x == 0 || res.y == 0) {
-		res = make_int2(1024, 512);
-		VLOG(2) << "Setting World MIS resolution to default\n";
-	}
+	int2 res = get_background_map_resolution(background_light, scene);
+
 	kintegrator->pdf_background_res_x = res.x;
 	kintegrator->pdf_background_res_y = res.y;
 
@@ -1295,6 +1273,36 @@ void LightManager::device_update_ies(DeviceScene *dscene)
 
 		dscene->ies_lights.copy_to_device();
 	}
+}
+
+int2 LightManager::get_background_map_resolution(const Light *background_light,
+                                                   const Scene *scene)
+{
+	int2 res = make_int2(background_light->map_resolution, background_light->map_resolution/2);
+	/* If the resolution isn't set manually, try to find an environment texture. */
+	if (res.x == 0) {
+		Shader *shader = (scene->background->shader) ? scene->background->shader : scene->default_background;
+		foreach(ShaderNode *node, shader->graph->nodes) {
+			if(node->type == EnvironmentTextureNode::node_type) {
+				EnvironmentTextureNode *env = (EnvironmentTextureNode*) node;
+				ImageMetaData metadata;
+				if(env->image_manager && env->image_manager->get_image_metadata(env->slot, metadata)) {
+					res.x = max(res.x, metadata.width);
+					res.y = max(res.y, metadata.height);
+				}
+			}
+		}
+		if (res.x > 0 && res.y > 0) {
+			VLOG(2) << "Automatically set World MIS resolution to " << res.x << " by " << res.y << "\n";
+		}
+	}
+	/* If it's still unknown, just use the default. */
+	if (res.x == 0 || res.y == 0) {
+		res = make_int2(1024, 512);
+		VLOG(2) << "Setting World MIS resolution to default\n";
+	}
+
+	return res;
 }
 
 CCL_NAMESPACE_END

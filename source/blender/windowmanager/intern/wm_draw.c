@@ -48,6 +48,7 @@
 
 #include "BKE_context.h"
 #include "BKE_image.h"
+#include "BKE_main.h"
 
 #include "GHOST_C-api.h"
 
@@ -689,6 +690,7 @@ static void wm_method_draw_triple(bContext *C, wmWindow *win)
 
 static void wm_method_draw_triple_multiview(bContext *C, wmWindow *win, eStereoViews sview)
 {
+	Main *bmain = CTX_data_main(C);
 	wmWindowManager *wm = CTX_wm_manager(C);
 	wmDrawData *drawdata;
 	wmDrawTriple *triple_data, *triple_all;
@@ -754,7 +756,7 @@ static void wm_method_draw_triple_multiview(bContext *C, wmWindow *win, eStereoV
 			{
 				SpaceNode *snode = sa->spacedata.first;
 				if ((snode->flag & SNODE_BACKDRAW) && ED_node_is_compositor(snode)) {
-					Image *ima = BKE_image_verify_viewer(IMA_TYPE_COMPOSITE, "Viewer Node");
+					Image *ima = BKE_image_verify_viewer(bmain, IMA_TYPE_COMPOSITE, "Viewer Node");
 					ima->eye = sview;
 				}
 				break;
@@ -946,6 +948,7 @@ void WM_paint_cursor_tag_redraw(wmWindow *win, ARegion *ar)
 
 void wm_draw_update(bContext *C)
 {
+	Main *bmain = CTX_data_main(C);
 	wmWindowManager *wm = CTX_wm_manager(C);
 	wmWindow *win;
 
@@ -953,7 +956,7 @@ void wm_draw_update(bContext *C)
 	BKE_subsurf_free_unused_buffers();
 #endif
 
-	GPU_free_unused_buffers();
+	GPU_free_unused_buffers(bmain);
 
 	for (win = wm->windows.first; win; win = win->next) {
 #ifdef WIN32
@@ -1066,4 +1069,3 @@ void WM_redraw_windows(bContext *C)
 	CTX_wm_area_set(C, area_prev);
 	CTX_wm_region_set(C, ar_prev);
 }
-

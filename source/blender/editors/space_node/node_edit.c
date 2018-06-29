@@ -87,6 +87,7 @@ enum {
 };
 
 typedef struct CompoJob {
+	Main *bmain;
 	Scene *scene;
 	bNodeTree *ntree;
 	bNodeTree *localtree;
@@ -182,7 +183,7 @@ static void compo_freejob(void *cjv)
 	CompoJob *cj = cjv;
 
 	if (cj->localtree) {
-		ntreeLocalMerge(cj->localtree, cj->ntree);
+		ntreeLocalMerge(cj->bmain, cj->localtree, cj->ntree);
 	}
 	MEM_freeN(cj);
 }
@@ -266,6 +267,7 @@ void ED_node_composite_job(const bContext *C, struct bNodeTree *nodetree, Scene 
 {
 	wmJob *wm_job;
 	CompoJob *cj;
+	Main *bmain = CTX_data_main(C);
 	Scene *scene = CTX_data_scene(C);
 
 	/* to fix bug: [#32272] */
@@ -277,13 +279,14 @@ void ED_node_composite_job(const bContext *C, struct bNodeTree *nodetree, Scene 
 	G.is_break = false;
 #endif
 
-	BKE_image_backup_render(scene, BKE_image_verify_viewer(IMA_TYPE_R_RESULT, "Render Result"), false);
+	BKE_image_backup_render(scene, BKE_image_verify_viewer(bmain, IMA_TYPE_R_RESULT, "Render Result"), false);
 
 	wm_job = WM_jobs_get(CTX_wm_manager(C), CTX_wm_window(C), scene_owner, "Compositing",
 	                     WM_JOB_EXCL_RENDER | WM_JOB_PROGRESS, WM_JOB_TYPE_COMPOSITE);
 	cj = MEM_callocN(sizeof(CompoJob), "compo job");
 
 	/* customdata for preview thread */
+	cj->bmain = bmain;
 	cj->scene = scene;
 	cj->ntree = nodetree;
 	cj->recalc_flags = compo_get_recalc_flags(C);
@@ -687,7 +690,7 @@ void ED_node_set_active(Main *bmain, bNodeTree *ntree, bNode *node)
 					ED_node_tag_update_nodetree(bmain, ntree, node);
 
 				/* addnode() doesnt link this yet... */
-				node->id = (ID *)BKE_image_verify_viewer(IMA_TYPE_COMPOSITE, "Viewer Node");
+				node->id = (ID *)BKE_image_verify_viewer(bmain, IMA_TYPE_COMPOSITE, "Viewer Node");
 			}
 			else if (node->type == CMP_NODE_R_LAYERS) {
 				Scene *scene;
@@ -956,11 +959,13 @@ static int node_resize_modal(bContext *C, wmOperator *op, const wmEvent *event)
 		case LEFTMOUSE:
 		case MIDDLEMOUSE:
 		case RIGHTMOUSE:
+			if (event->val == KM_RELEASE) {
+				node_resize_exit(C, op, false);
+				ED_node_post_apply_transform(C, snode->edittree);
 
-			node_resize_exit(C, op, false);
-			ED_node_post_apply_transform(C, snode->edittree);
-
-			return OPERATOR_FINISHED;
+				return OPERATOR_FINISHED;
+			}
+			break;
 	}
 
 	return OPERATOR_RUNNING_MODAL;
@@ -1132,6 +1137,7 @@ static void node_duplicate_reparent_recursive(bNode *node)
 
 static int node_duplicate_exec(bContext *C, wmOperator *op)
 {
+	Main *bmain = CTX_data_main(C);
 	SpaceNode *snode = CTX_wm_space_node(C);
 	bNodeTree *ntree = snode->edittree;
 	bNode *node, *newnode, *lastnode;
@@ -1139,7 +1145,7 @@ static int node_duplicate_exec(bContext *C, wmOperator *op)
 	const bool keep_inputs = RNA_boolean_get(op->ptr, "keep_inputs");
 	bool do_tag_update = false;
 
-	ED_preview_kill_jobs(CTX_wm_manager(C), CTX_data_main(C));
+	ED_preview_kill_jobs(CTX_wm_manager(C), bmain);
 
 	lastnode = ntree->nodes.last;
 	for (node = ntree->nodes.first; node; node = node->next) {
@@ -1216,7 +1222,7 @@ static int node_duplicate_exec(bContext *C, wmOperator *op)
 			node->flag &= ~NODE_ACTIVE;
 			nodeSetSelected(newnode, true);
 
-			do_tag_update |= (do_tag_update || node_connected_to_output(ntree, newnode));
+			do_tag_update |= (do_tag_update || node_connected_to_output(bmain, ntree, newnode));
 		}
 
 		/* make sure we don't copy new nodes again! */
@@ -1586,18 +1592,19 @@ void NODE_OT_hide_socket_toggle(wmOperatorType *ot)
 
 static int node_mute_exec(bContext *C, wmOperator *UNUSED(op))
 {
+	Main *bmain = CTX_data_main(C);
 	SpaceNode *snode = CTX_wm_space_node(C);
 	bNode *node;
 	bool do_tag_update = false;
 
-	ED_preview_kill_jobs(CTX_wm_manager(C), CTX_data_main(C));
+	ED_preview_kill_jobs(CTX_wm_manager(C), bmain);
 
 	for (node = snode->edittree->nodes.first; node; node = node->next) {
 		/* Only allow muting of nodes having a mute func! */
 		if ((node->flag & SELECT) && node->typeinfo->update_internal_links) {
 			node->flag ^= NODE_MUTED;
 			snode_update(snode, node);
-			do_tag_update |= (do_tag_update || node_connected_to_output(snode->edittree, node));
+			do_tag_update |= (do_tag_update || node_connected_to_output(bmain, snode->edittree, node));
 		}
 	}
 
@@ -1628,17 +1635,18 @@ void NODE_OT_mute_toggle(wmOperatorType *ot)
 
 static int node_delete_exec(bContext *C, wmOperator *UNUSED(op))
 {
+	Main *bmain = CTX_data_main(C);
 	SpaceNode *snode = CTX_wm_space_node(C);
 	bNode *node, *next;
 	bool do_tag_update = false;
 
-	ED_preview_kill_jobs(CTX_wm_manager(C), CTX_data_main(C));
+	ED_preview_kill_jobs(CTX_wm_manager(C), bmain);
 
 	for (node = snode->edittree->nodes.first; node; node = next) {
 		next = node->next;
 		if (node->flag & SELECT) {
 			/* check id user here, nodeFreeNode is called for free dbase too */
-			do_tag_update |= (do_tag_update || node_connected_to_output(snode->edittree, node));
+			do_tag_update |= (do_tag_update || node_connected_to_output(bmain, snode->edittree, node));
 			if (node->id)
 				id_us_min(node->id);
 			nodeFreeNode(snode->edittree, node);
@@ -2498,13 +2506,14 @@ static void viewer_border_corner_to_backdrop(SpaceNode *snode, ARegion *ar, int 
 
 static int viewer_border_exec(bContext *C, wmOperator *op)
 {
+	Main *bmain = CTX_data_main(C);
 	Image *ima;
 	void *lock;
 	ImBuf *ibuf;
 
-	ED_preview_kill_jobs(CTX_wm_manager(C), CTX_data_main(C));
+	ED_preview_kill_jobs(CTX_wm_manager(C), bmain);
 
-	ima = BKE_image_verify_viewer(IMA_TYPE_COMPOSITE, "Viewer Node");
+	ima = BKE_image_verify_viewer(bmain, IMA_TYPE_COMPOSITE, "Viewer Node");
 	ibuf = BKE_image_acquire_ibuf(ima, NULL, &lock);
 
 	if (ibuf) {

@@ -1114,7 +1114,7 @@ static int view_zoomdrag_modal(bContext *C, wmOperator *op, const wmEvent *event
 
 			/* some view2d's (graph) don't have min/max zoom, or extreme ones */
 			if (v2d->maxzoom > 0.0f)
-				zoomfac = CLAMPIS(0.001f * v2d->maxzoom, 0.001f, 0.01f);
+				zoomfac = clamp_f(0.001f * v2d->maxzoom, 0.001f, 0.01f);
 
 			/* x-axis transform */
 			fac = zoomfac * (event->x - vzd->lastx);
@@ -2168,4 +2168,3 @@ void ED_keymap_view2d(wmKeyConfig *keyconf)
 	WM_keymap_add_item(keymap, "VIEW2D_OT_zoom_in", PADPLUSKEY, KM_PRESS, 0, 0);
 	WM_keymap_add_item(keymap, "VIEW2D_OT_reset", HOMEKEY, KM_PRESS, 0, 0);
 }
-

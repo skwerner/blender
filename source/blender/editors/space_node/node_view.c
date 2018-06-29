@@ -36,8 +36,9 @@
 
 #include "BKE_context.h"
 #include "BKE_image.h"
-#include "BKE_screen.h"
+#include "BKE_main.h"
 #include "BKE_node.h"
+#include "BKE_screen.h"
 
 #include "ED_node.h"  /* own include */
 #include "ED_screen.h"
@@ -225,11 +226,12 @@ static int snode_bg_viewmove_modal(bContext *C, wmOperator *op, const wmEvent *e
 		case LEFTMOUSE:
 		case MIDDLEMOUSE:
 		case RIGHTMOUSE:
-
-			MEM_freeN(nvm);
-			op->customdata = NULL;
-
-			return OPERATOR_FINISHED;
+			if (event->val == KM_RELEASE) {
+				MEM_freeN(nvm);
+				op->customdata = NULL;
+				return OPERATOR_FINISHED;
+			}
+			break;
 	}
 
 	return OPERATOR_RUNNING_MODAL;
@@ -237,6 +239,7 @@ static int snode_bg_viewmove_modal(bContext *C, wmOperator *op, const wmEvent *e
 
 static int snode_bg_viewmove_invoke(bContext *C, wmOperator *op, const wmEvent *event)
 {
+	Main *bmain = CTX_data_main(C);
 	SpaceNode *snode = CTX_wm_space_node(C);
 	ARegion *ar = CTX_wm_region(C);
 	NodeViewMove *nvm;
@@ -246,7 +249,7 @@ static int snode_bg_viewmove_invoke(bContext *C, wmOperator *op, const wmEvent *
 
 	void *lock;
 
-	ima = BKE_image_verify_viewer(IMA_TYPE_COMPOSITE, "Viewer Node");
+	ima = BKE_image_verify_viewer(bmain, IMA_TYPE_COMPOSITE, "Viewer Node");
 	ibuf = BKE_image_acquire_ibuf(ima, NULL, &lock);
 
 	if (ibuf == NULL) {
@@ -330,6 +333,7 @@ void NODE_OT_backimage_zoom(wmOperatorType *ot)
 
 static int backimage_fit_exec(bContext *C, wmOperator *UNUSED(op))
 {
+	Main *bmain = CTX_data_main(C);
 	SpaceNode *snode = CTX_wm_space_node(C);
 	ARegion *ar = CTX_wm_region(C);
 
@@ -342,7 +346,7 @@ static int backimage_fit_exec(bContext *C, wmOperator *UNUSED(op))
 
 	float facx, facy;
 
-	ima = BKE_image_verify_viewer(IMA_TYPE_COMPOSITE, "Viewer Node");
+	ima = BKE_image_verify_viewer(bmain, IMA_TYPE_COMPOSITE, "Viewer Node");
 	ibuf = BKE_image_acquire_ibuf(ima, NULL, &lock);
 
 	if ((ibuf == NULL) || (ibuf->x == 0) || (ibuf->y == 0)) {
@@ -420,7 +424,7 @@ static void sample_draw(const bContext *C, ARegion *ar, void *arg_info)
 /* Returns color in linear space, matching ED_space_image_color_sample().
  * And here we've got recursion in the comments tips...
  */
-bool ED_space_node_color_sample(SpaceNode *snode, ARegion *ar, int mval[2], float r_col[3])
+bool ED_space_node_color_sample(Main *bmain, SpaceNode *snode, ARegion *ar, int mval[2], float r_col[3])
 {
 	void *lock;
 	Image *ima;
@@ -435,7 +439,7 @@ bool ED_space_node_color_sample(SpaceNode *snode, ARegion *ar, int mval[2], floa
 		return false;
 	}
 
-	ima = BKE_image_verify_viewer(IMA_TYPE_COMPOSITE, "Viewer Node");
+	ima = BKE_image_verify_viewer(bmain, IMA_TYPE_COMPOSITE, "Viewer Node");
 	ibuf = BKE_image_acquire_ibuf(ima, NULL, &lock);
 	if (!ibuf) {
 		return false;
@@ -476,6 +480,7 @@ bool ED_space_node_color_sample(SpaceNode *snode, ARegion *ar, int mval[2], floa
 
 static void sample_apply(bContext *C, wmOperator *op, const wmEvent *event)
 {
+	Main *bmain = CTX_data_main(C);
 	SpaceNode *snode = CTX_wm_space_node(C);
 	ARegion *ar = CTX_wm_region(C);
 	ImageSampleInfo *info = op->customdata;
@@ -484,7 +489,7 @@ static void sample_apply(bContext *C, wmOperator *op, const wmEvent *event)
 	ImBuf *ibuf;
 	float fx, fy, bufx, bufy;
 
-	ima = BKE_image_verify_viewer(IMA_TYPE_COMPOSITE, "Viewer Node");
+	ima = BKE_image_verify_viewer(bmain, IMA_TYPE_COMPOSITE, "Viewer Node");
 	ibuf = BKE_image_acquire_ibuf(ima, NULL, &lock);
 	if (!ibuf) {
 		info->draw = 0;

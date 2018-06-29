@@ -315,7 +315,7 @@ static bool object_hook_index_array(Main *bmain, Scene *scene, Object *obedit,
 
 			BMEditMesh *em;
 
-			EDBM_mesh_load(obedit);
+			EDBM_mesh_load(bmain, obedit);
 			EDBM_mesh_make(obedit, scene->toolsettings->selectmode, true);
 
 			DAG_id_tag_update(obedit->data, 0);
@@ -910,4 +910,3 @@ void OBJECT_OT_hook_select(wmOperatorType *ot)
 	RNA_def_enum_funcs(prop, hook_mod_itemf);
 	RNA_def_property_flag(prop, PROP_ENUM_NO_TRANSLATE);
 }
-

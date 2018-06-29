@@ -395,6 +395,7 @@ uiPopupMenu *UI_popup_menu_begin_ex(
         struct bContext *C, const char *title, const char *block_name,
         int icon) ATTR_NONNULL();
 void UI_popup_menu_end(struct bContext *C, struct uiPopupMenu *head);
+bool UI_popup_menu_end_or_cancel(struct bContext *C, struct uiPopupMenu *head);
 struct uiLayout *UI_popup_menu_layout(uiPopupMenu *head);
 
 void UI_popup_menu_reports(struct bContext *C, struct ReportList *reports) ATTR_NONNULL();
@@ -496,6 +497,8 @@ void    UI_block_direction_set(uiBlock *block, char direction);
 void    UI_block_order_flip(uiBlock *block);
 void    UI_block_flag_enable(uiBlock *block, int flag);
 void    UI_block_flag_disable(uiBlock *block, int flag);
+
+bool    UI_block_is_empty(const uiBlock *block);
 
 int     UI_but_return_value_get(uiBut *but);
 
@@ -886,7 +889,6 @@ uiBlock *uiLayoutGetBlock(uiLayout *layout);
 void uiLayoutSetFunc(uiLayout *layout, uiMenuHandleFunc handlefunc, void *argv);
 void uiLayoutSetContextPointer(uiLayout *layout, const char *name, struct PointerRNA *ptr);
 void uiLayoutContextCopy(uiLayout *layout, struct bContextStore *context);
-const char *uiLayoutIntrospect(uiLayout *layout); // XXX - testing
 struct MenuType *UI_but_menutype_get(uiBut *but);
 void UI_menutype_draw(struct bContext *C, struct MenuType *mt, struct uiLayout *layout);
 

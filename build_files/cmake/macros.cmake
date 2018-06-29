@@ -51,7 +51,7 @@ endmacro()
 function(list_assert_duplicates
 	list_id
 	)
-	
+
 	# message(STATUS "list data: ${list_id}")
 
 	list(LENGTH list_id _len_before)
@@ -242,7 +242,7 @@ function(blender_add_lib__impl
 	# listed is helpful for IDE's (QtCreator/MSVC)
 	blender_source_group("${sources}")
 
-	#if enabled, set the FOLDER property for visual studio projects 
+	#if enabled, set the FOLDER property for visual studio projects
 	if(WINDOWS_USE_VISUAL_STUDIO_FOLDERS)
 		get_filename_component(FolderDir ${CMAKE_CURRENT_SOURCE_DIR} DIRECTORY)
 		string(REPLACE ${CMAKE_SOURCE_DIR} "" FolderDir ${FolderDir})
@@ -1041,10 +1041,16 @@ macro(remove_cc_flag
 
 endmacro()
 
-macro(add_cc_flag
+macro(add_c_flag
 	flag)
 
 	set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${flag}")
+	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${flag}")
+endmacro()
+
+macro(add_cxx_flag
+	flag)
+
 	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${flag}")
 endmacro()
 
@@ -1070,7 +1076,8 @@ macro(remove_strict_flags)
 		)
 
 		# negate flags implied by '-Wall'
-		add_cc_flag("${CC_REMOVE_STRICT_FLAGS}")
+		add_c_flag("${C_REMOVE_STRICT_FLAGS}")
+		add_cxx_flag("${CXX_REMOVE_STRICT_FLAGS}")
 	endif()
 
 	if(CMAKE_C_COMPILER_ID MATCHES "Clang")
@@ -1082,7 +1089,8 @@ macro(remove_strict_flags)
 		)
 
 		# negate flags implied by '-Wall'
-		add_cc_flag("${CC_REMOVE_STRICT_FLAGS}")
+		add_c_flag("${C_REMOVE_STRICT_FLAGS}")
+		add_cxx_flag("${CXX_REMOVE_STRICT_FLAGS}")
 	endif()
 
 	if(MSVC)
@@ -1112,28 +1120,39 @@ endmacro()
 # note, we can only append flags on a single file so we need to negate the options.
 # at the moment we cant shut up ffmpeg deprecations, so use this, but will
 # probably add more removals here.
-macro(remove_strict_flags_file
+macro(remove_strict_c_flags_file
 	filenames)
-
 	foreach(_SOURCE ${ARGV})
-
 		if(CMAKE_COMPILER_IS_GNUCC OR
-		  (CMAKE_C_COMPILER_ID MATCHES "Clang"))
-
+		   (CMAKE_C_COMPILER_ID MATCHES "Clang"))
 			set_source_files_properties(${_SOURCE}
 				PROPERTIES
-					COMPILE_FLAGS "${CC_REMOVE_STRICT_FLAGS}"
+					COMPILE_FLAGS "${C_REMOVE_STRICT_FLAGS}"
 			)
 		endif()
-
 		if(MSVC)
 			# TODO
 		endif()
-
 	endforeach()
-
 	unset(_SOURCE)
+endmacro()
 
+macro(remove_strict_cxx_flags_file
+	filenames)
+	remove_strict_c_flags_file(${filenames} ${ARHV})
+	foreach(_SOURCE ${ARGV})
+		if(CMAKE_COMPILER_IS_GNUCC OR
+		   (CMAKE_CXX_COMPILER_ID MATCHES "Clang"))
+			set_source_files_properties(${_SOURCE}
+				PROPERTIES
+					COMPILE_FLAGS "${CXX_REMOVE_STRICT_FLAGS}"
+			)
+		endif()
+		if(MSVC)
+			# TODO
+		endif()
+	endforeach()
+	unset(_SOURCE)
 endmacro()
 
 # External libs may need 'signed char' to be default.

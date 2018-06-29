@@ -708,7 +708,7 @@ static void toggle_paint_cursor(bContext *C, int enable)
  * purpose is to make sure the paint cursor is shown if paint
  * mode is enabled in the image editor. the paint poll will
  * ensure that the cursor is hidden when not in paint mode */
-void ED_space_image_paint_update(wmWindowManager *wm, Scene *scene)
+void ED_space_image_paint_update(Main *bmain, wmWindowManager *wm, Scene *scene)
 {
 	ToolSettings *settings = scene->toolsettings;
 	wmWindow *win;
@@ -723,7 +723,7 @@ void ED_space_image_paint_update(wmWindowManager *wm, Scene *scene)
 					enabled = true;
 
 	if (enabled) {
-		BKE_paint_init(scene, ePaintTexture2D, PAINT_CURSOR_TEXTURE_PAINT);
+		BKE_paint_init(bmain, scene, ePaintTexture2D, PAINT_CURSOR_TEXTURE_PAINT);
 
 		paint_cursor_start_explicit(&imapaint->paint, wm, image_paint_poll);
 	}
@@ -1024,6 +1024,7 @@ static int texture_paint_toggle_poll(bContext *C)
 
 static int texture_paint_toggle_exec(bContext *C, wmOperator *op)
 {
+	Main *bmain = CTX_data_main(C);
 	Scene *scene = CTX_data_scene(C);
 	Object *ob = CTX_data_active_object(C);
 	const int mode_flag = OB_MODE_TEXTURE_PAINT;
@@ -1039,14 +1040,13 @@ static int texture_paint_toggle_exec(bContext *C, wmOperator *op)
 		ob->mode &= ~mode_flag;
 
 		if (U.glreslimit != 0)
-			GPU_free_images();
-		GPU_paint_set_mipmap(1);
+			GPU_free_images(bmain);
+		GPU_paint_set_mipmap(bmain, 1);
 
 		toggle_paint_cursor(C, 0);
 	}
 	else {
 		bScreen *sc;
-		Main *bmain = CTX_data_main(C);
 		Image *ima = NULL;
 		ImagePaintSettings *imapaint = &scene->toolsettings->imapaint;
 
@@ -1086,11 +1086,11 @@ static int texture_paint_toggle_exec(bContext *C, wmOperator *op)
 
 		ob->mode |= mode_flag;
 
-		BKE_paint_init(scene, ePaintTextureProjective, PAINT_CURSOR_TEXTURE_PAINT);
+		BKE_paint_init(bmain, scene, ePaintTextureProjective, PAINT_CURSOR_TEXTURE_PAINT);
 
 		if (U.glreslimit != 0)
-			GPU_free_images();
-		GPU_paint_set_mipmap(0);
+			GPU_free_images(bmain);
+		GPU_paint_set_mipmap(bmain, 0);
 
 		toggle_paint_cursor(C, 1);
 	}
@@ -1223,4 +1223,3 @@ int mask_paint_poll(bContext *C)
 {
 	return BKE_paint_select_elem_test(CTX_data_active_object(C));
 }
-

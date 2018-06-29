@@ -1992,7 +1992,7 @@ int ui_handler_panel_region(bContext *C, const wmEvent *event, ARegion *ar, cons
 				}
 				else if (event->type == RIGHTMOUSE) {
 					if (mouse_state == PANEL_MOUSE_INSIDE_HEADER) {
-						ui_panel_menu(C, ar, block->panel);
+						ui_popup_context_menu_for_panel(C, ar, block->panel);
 						retval = WM_UI_HANDLER_BREAK;
 						break;
 					}
@@ -2052,7 +2052,7 @@ static int ui_handler_panel(bContext *C, const wmEvent *event, void *userdata)
 	uiHandlePanelData *data = panel->activedata;
 
 	/* verify if we can stop */
-	if (event->type == LEFTMOUSE && event->val != KM_PRESS) {
+	if (event->type == LEFTMOUSE && event->val == KM_RELEASE) {
 		ScrArea *sa = CTX_wm_area(C);
 		ARegion *ar = CTX_wm_region(C);
 		int align = panel_aligned(sa, ar);
@@ -2148,4 +2148,3 @@ static void panel_activate_state(const bContext *C, Panel *pa, uiHandlePanelStat
 
 	ED_region_tag_redraw(ar);
 }
-

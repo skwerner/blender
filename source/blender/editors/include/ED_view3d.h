@@ -92,7 +92,7 @@ typedef struct ViewDepths {
 } ViewDepths;
 
 float *ED_view3d_cursor3d_get(struct Scene *scene, struct View3D *v3d);
-void   ED_view3d_cursor3d_position(struct bContext *C, float fp[3], const int mval[2]);
+void   ED_view3d_cursor3d_position(struct bContext *C, const int mval[2], float cursor_co[3]);
 void   ED_view3d_cursor3d_update(struct bContext *C, const int mval[2]);
 
 struct Camera *ED_view3d_camera_data_get(struct View3D *v3d, struct RegionView3D *rv3d);
@@ -362,7 +362,7 @@ void                    ED_view3d_mats_rv3d_restore(struct RegionView3D *rv3d, s
 bool ED_view3d_context_activate(struct bContext *C);
 void ED_view3d_draw_offscreen_init(struct Main *bmain, struct Scene *scene, struct View3D *v3d);
 void ED_view3d_draw_offscreen(
-        struct Scene *scene, struct View3D *v3d, struct ARegion *ar, int winx, int winy, float viewmat[4][4],
+        struct Main *bmain, struct Scene *scene, struct View3D *v3d, struct ARegion *ar, int winx, int winy, float viewmat[4][4],
         float winmat[4][4], bool do_bgpic, bool do_sky, bool is_persp, const char *viewname,
         struct GPUFX *fx, struct GPUFXSettings *fx_settings,
         struct GPUOffScreen *ofs);

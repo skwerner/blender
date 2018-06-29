@@ -385,7 +385,7 @@ public:
 		VLOG(1) << "Found nvcc " << nvcc
 		        << ", CUDA version " << cuda_version
 		        << ".";
-		const int major = cuda_version / 10, minor = cuda_version & 10;
+		const int major = cuda_version / 10, minor = cuda_version % 10;
 		if(cuda_version == 0) {
 			cuda_error_message("CUDA nvcc compiler version could not be parsed.");
 			return false;
@@ -2407,7 +2407,7 @@ bool device_cuda_init(void)
 			result = true;
 		}
 		else {
-			VLOG(1) << "Neither precompiled kernels nor CUDA compiler wad found,"
+			VLOG(1) << "Neither precompiled kernels nor CUDA compiler was found,"
 			        << " unable to use CUDA";
 		}
 #endif

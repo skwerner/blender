@@ -50,11 +50,11 @@ typedef struct Global {
 
 	/* active pointers */
 	struct Main *main;
-	
+
 	/* strings: lastsaved */
 	char ima[1024], lib[1024]; /* 1024 = FILE_MAX */
 
-	/* when set: G.main->name contains valid relative base path */
+	/* when set: G_MAIN->name contains valid relative base path */
 	bool relbase_valid;
 	bool file_loaded;
 	bool save_over;
@@ -221,8 +221,13 @@ enum {
 /* Memory is allocated where? blender.c */
 extern Global G;
 
+/**
+ * Stupid macro to hide the few *valid* usages of G.main (from startup/exit code e.g.), helps with cleanup task.
+ */
+#define G_MAIN (G).main
+
 #ifdef __cplusplus
 }
 #endif
-	
+
 #endif

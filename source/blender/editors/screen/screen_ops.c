@@ -665,7 +665,7 @@ static void fullscreen_click_rcti_init(rcti *rect, const short x1, const short y
 	BLI_rcti_init(rect, x, x + icon_size, y, y + icon_size);
 }
 
-AZone *is_in_area_actionzone(ScrArea *sa, const int xy[2])
+static AZone *area_actionzone_refresh_xy(ScrArea *sa, const int xy[2], const bool test_only)
 {
 	AZone *az = NULL;
 
@@ -673,49 +673,55 @@ AZone *is_in_area_actionzone(ScrArea *sa, const int xy[2])
 		if (BLI_rcti_isect_pt_v(&az->rect, xy)) {
 			if (az->type == AZONE_AREA) {
 				/* no triangle intersect but a hotspot circle based on corner */
-				int radius = (xy[0] - az->x1) * (xy[0] - az->x1) + (xy[1] - az->y1) * (xy[1] - az->y1);
-
-				if (radius <= AZONESPOT * AZONESPOT)
+				int radius_sq = SQUARE(xy[0] - az->x1) + SQUARE(xy[1] - az->y1);
+				if (radius_sq <= SQUARE(AZONESPOT)) {
 					break;
+				}
 			}
 			else if (az->type == AZONE_REGION) {
 				break;
 			}
 			else if (az->type == AZONE_FULLSCREEN) {
-				int mouse_radius, spot_radius, fadein_radius, fadeout_radius;
 				rcti click_rect;
-
 				fullscreen_click_rcti_init(&click_rect, az->x1, az->y1, az->x2, az->y2);
+				const bool click_isect = BLI_rcti_isect_pt_v(&click_rect, xy);
 
-				if (BLI_rcti_isect_pt_v(&click_rect, xy)) {
-					az->alpha = 1.0f;
+				if (test_only) {
+					if (click_isect) {
+						break;
+					}
 				}
 				else {
-					mouse_radius = (xy[0] - az->x2) * (xy[0] - az->x2) + (xy[1] - az->y2) * (xy[1] - az->y2);
-					spot_radius = AZONESPOT * AZONESPOT;
-					fadein_radius = AZONEFADEIN * AZONEFADEIN;
-					fadeout_radius = AZONEFADEOUT * AZONEFADEOUT;
-
-					if (mouse_radius < spot_radius) {
+					if (click_isect) {
 						az->alpha = 1.0f;
-					}
-					else if (mouse_radius < fadein_radius) {
-						az->alpha = 1.0f;
-					}
-					else if (mouse_radius < fadeout_radius) {
-						az->alpha = 1.0f - ((float)(mouse_radius - fadein_radius)) / ((float)(fadeout_radius - fadein_radius));
 					}
 					else {
-						az->alpha = 0.0f;
+						const int mouse_sq = SQUARE(xy[0] - az->x2) + SQUARE(xy[1] - az->y2);
+						const int spot_sq = SQUARE(AZONESPOT);
+						const int fadein_sq = SQUARE(AZONEFADEIN);
+						const int fadeout_sq = SQUARE(AZONEFADEOUT);
+
+						if (mouse_sq < spot_sq) {
+							az->alpha = 1.0f;
+						}
+						else if (mouse_sq < fadein_sq) {
+							az->alpha = 1.0f;
+						}
+						else if (mouse_sq < fadeout_sq) {
+							az->alpha = 1.0f - ((float)(mouse_sq - fadein_sq)) / ((float)(fadeout_sq - fadein_sq));
+						}
+						else {
+							az->alpha = 0.0f;
+						}
+
+						/* fade in/out but no click */
+						az = NULL;
 					}
 
-					/* fade in/out but no click */
-					az = NULL;
+					/* XXX force redraw to show/hide the action zone */
+					ED_area_tag_redraw(sa);
+					break;
 				}
-
-				/* XXX force redraw to show/hide the action zone */
-				ED_area_tag_redraw(sa);
-				break;
 			}
 		}
 	}
@@ -723,6 +729,15 @@ AZone *is_in_area_actionzone(ScrArea *sa, const int xy[2])
 	return az;
 }
 
+AZone *ED_area_actionzone_find_xy(ScrArea *sa, const int xy[2])
+{
+	return area_actionzone_refresh_xy(sa, xy, true);
+}
+
+AZone *ED_area_actionzone_refresh_xy(ScrArea *sa, const int xy[2])
+{
+	return area_actionzone_refresh_xy(sa, xy, false);
+}
 
 static void actionzone_exit(wmOperator *op)
 {
@@ -760,7 +775,7 @@ static void actionzone_apply(bContext *C, wmOperator *op, int type)
 static int actionzone_invoke(bContext *C, wmOperator *op, const wmEvent *event)
 {
 	ScrArea *sa = CTX_wm_area(C);
-	AZone *az = is_in_area_actionzone(sa, &event->x);
+	AZone *az = ED_area_actionzone_find_xy(sa, &event->x);
 	sActionzoneData *sad;
 
 	/* quick escape */
@@ -817,7 +832,7 @@ static int actionzone_modal(bContext *C, wmOperator *op, const wmEvent *event)
 			if (sad->az->type == AZONE_AREA) {
 				/* once we drag outside the actionzone, register a gesture
 				 * check we're not on an edge so join finds the other area */
-				is_gesture = ((is_in_area_actionzone(sad->sa1, &event->x) != sad->az) &&
+				is_gesture = ((ED_area_actionzone_find_xy(sad->sa1, &event->x) != sad->az) &&
 				              (screen_find_active_scredge(sc, winsize_x, winsize_y, event->x, event->y) == NULL));
 			}
 			else {
@@ -2255,7 +2270,7 @@ static void SCREEN_OT_frame_offset(wmOperatorType *ot)
 
 	ot->poll = ED_operator_screenactive_norender;
 	ot->flag = OPTYPE_UNDO_GROUPED;
-	ot->undo_group = "FRAME_CHANGE";
+	ot->undo_group = "Frame Change";
 
 	/* rna */
 	RNA_def_int(ot->srna, "delta", 0, INT_MIN, INT_MAX, "Delta", "", INT_MIN, INT_MAX);
@@ -2314,7 +2329,7 @@ static void SCREEN_OT_frame_jump(wmOperatorType *ot)
 
 	ot->poll = ED_operator_screenactive_norender;
 	ot->flag = OPTYPE_UNDO_GROUPED;
-	ot->undo_group = "FRAME_CHANGE";
+	ot->undo_group = "Frame Change";
 
 	/* rna */
 	RNA_def_boolean(ot->srna, "end", 0, "Last Frame", "Jump to the last frame of the frame range");
@@ -2427,7 +2442,7 @@ static void SCREEN_OT_keyframe_jump(wmOperatorType *ot)
 
 	ot->poll = ED_operator_screenactive_norender;
 	ot->flag = OPTYPE_UNDO_GROUPED;
-	ot->undo_group = "FRAME_CHANGE";
+	ot->undo_group = "Frame Change";
 
 	/* properties */
 	RNA_def_boolean(ot->srna, "next", true, "Next Keyframe", "");
@@ -2494,7 +2509,7 @@ static void SCREEN_OT_marker_jump(wmOperatorType *ot)
 
 	ot->poll = ED_operator_screenactive_norender;
 	ot->flag = OPTYPE_UNDO_GROUPED;
-	ot->undo_group = "FRAME_CHANGE";
+	ot->undo_group = "Frame Change";
 
 	/* properties */
 	RNA_def_boolean(ot->srna, "next", true, "Next Marker", "");
@@ -4478,7 +4493,6 @@ void ED_operatortypes_screen(void)
 	WM_operatortype_append(SCREEN_OT_back_to_previous);
 	WM_operatortype_append(SCREEN_OT_spacedata_cleanup);
 	WM_operatortype_append(SCREEN_OT_screenshot);
-	WM_operatortype_append(SCREEN_OT_screencast);
 	WM_operatortype_append(SCREEN_OT_userpref_show);
 	WM_operatortype_append(SCREEN_OT_region_blend);
 	WM_operatortype_append(SCREEN_OT_space_context_cycle);
@@ -4610,7 +4624,6 @@ void ED_keymap_screen(wmKeyConfig *keyconf)
 	RNA_boolean_set(kmi->ptr, "use_hide_panels", true);
 
 	WM_keymap_add_item(keymap, "SCREEN_OT_screenshot", F3KEY, KM_PRESS, KM_CTRL, 0);
-	WM_keymap_add_item(keymap, "SCREEN_OT_screencast", F3KEY, KM_PRESS, KM_ALT, 0);
 
 	kmi = WM_keymap_add_item(keymap, "SCREEN_OT_space_context_cycle", TABKEY, KM_PRESS, KM_CTRL, 0);
 	RNA_enum_set(kmi->ptr, "direction", SPACE_CONTEXT_CYCLE_NEXT);

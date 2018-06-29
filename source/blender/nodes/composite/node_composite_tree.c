@@ -134,7 +134,7 @@ static void local_sync(bNodeTree *localtree, bNodeTree *ntree)
 	BKE_node_preview_sync_tree(ntree, localtree);
 }
 
-static void local_merge(bNodeTree *localtree, bNodeTree *ntree)
+static void local_merge(Main *bmain, bNodeTree *localtree, bNodeTree *ntree)
 {
 	bNode *lnode;
 	bNodeSocket *lsock;
@@ -147,7 +147,7 @@ static void local_merge(bNodeTree *localtree, bNodeTree *ntree)
 			if (ELEM(lnode->type, CMP_NODE_VIEWER, CMP_NODE_SPLITVIEWER)) {
 				if (lnode->id && (lnode->flag & NODE_DO_OUTPUT)) {
 					/* image_merge does sanity check for pointers */
-					BKE_image_merge((Image *)lnode->new_node->id, (Image *)lnode->id);
+					BKE_image_merge(bmain, (Image *)lnode->new_node->id, (Image *)lnode->id);
 				}
 			}
 			else if (lnode->type == CMP_NODE_MOVIEDISTORTION) {
@@ -280,7 +280,10 @@ void ntreeCompositTagRender(Scene *curscene)
 {
 	Scene *sce;
 
-	for (sce = G.main->scene.first; sce; sce = sce->id.next) {
+	/* XXX Think using G_MAIN here is valid, since you want to update current file's scene nodes,
+	 * not the ones in temp main generated for rendering?
+	 * This is still rather weak though, ideally render struct would store own main AND original G_MAIN... */
+	for (sce = G_MAIN->scene.first; sce; sce = sce->id.next) {
 		if (sce->nodetree) {
 			bNode *node;
 

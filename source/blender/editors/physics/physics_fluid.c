@@ -395,7 +395,7 @@ static void fluid_init_all_channels(bContext *C, Object *UNUSED(fsDomain), Fluid
 
 		/* XXX: This can't be used due to an anim sys optimization that ignores recalc object animation,
 		 * leaving it for the depgraph (this ignores object animation such as modifier properties though... :/ )
-		 * --> BKE_animsys_evaluate_all_animation(G.main, eval_time);
+		 * --> BKE_animsys_evaluate_all_animation(CTX_data_main(C), eval_time);
 		 * This doesn't work with drivers:
 		 * --> BKE_animsys_evaluate_animdata(&fsDomain->id, fsDomain->adt, eval_time, ADT_RECALC_ALL);
 		 */
@@ -1118,4 +1118,3 @@ void FLUID_OT_bake(wmOperatorType *ot)
 	ot->exec = fluid_bake_exec;
 	ot->poll = ED_operator_object_active_editable;
 }
-

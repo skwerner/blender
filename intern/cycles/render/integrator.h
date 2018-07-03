@@ -69,6 +69,7 @@ public:
 	bool sample_all_lights_indirect;
 	float light_sampling_threshold;
 	bool use_light_bvh;
+	float splitting_threshold;
 
 	enum Method {
 		BRANCHED_PATH = 0,

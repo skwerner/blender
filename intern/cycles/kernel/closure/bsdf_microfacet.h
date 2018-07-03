@@ -391,6 +391,81 @@ ccl_device void bsdf_microfacet_ggx_blur(ShaderClosure *sc, float roughness)
 	bsdf->alpha_y = fmaxf(roughness, bsdf->alpha_y);
 }
 
+/* TODO: Use this in the tree traversal splitting */
+ccl_device float3 bsdf_microfacet_ggx_eval_reflect_simple(const ShaderClosure *sc, const float3 I, const float3 omega_in)
+{
+	const MicrofacetBsdf *bsdf = (const MicrofacetBsdf*)sc;
+	float alpha_x = bsdf->alpha_x;
+	float alpha_y = bsdf->alpha_y;
+	bool m_refractive = bsdf->type == CLOSURE_BSDF_MICROFACET_GGX_REFRACTION_ID;
+	float3 N = bsdf->N;
+
+	if(m_refractive || alpha_x*alpha_y <= 1e-7f)
+		return make_float3(0.0f, 0.0f, 0.0f);
+
+	float cosNO = dot(N, I);
+	float cosNI = dot(N, omega_in); // pass in our conservative cosine instead of this one?
+	                                // fresnel calcs some kind of cosine with I too.
+
+	if(cosNI > 0 && cosNO > 0) {
+		/* get half vector */
+		float3 m = normalize(omega_in + I);
+		float alpha2 = alpha_x * alpha_y;
+		float D, G1o, G1i;
+
+		/* assume isotropic */
+
+		/* isotropic
+			 * eq. 20: (F*G*D)/(4*in*on)
+			 * eq. 33: first we calculate D(m) */
+		float cosThetaM = dot(N, m);
+		float cosThetaM2 = cosThetaM * cosThetaM;
+		float cosThetaM4 = cosThetaM2 * cosThetaM2;
+		float tanThetaM2 = (1 - cosThetaM2) / cosThetaM2;
+
+		/* use GTR2 */
+		D = alpha2 / (M_PI_F * cosThetaM4 * (alpha2 + tanThetaM2) * (alpha2 + tanThetaM2));
+
+		/* eq. 34: now calculate G1(i,m) and G1(o,m) */
+		//G1o = 2 / (1 + safe_sqrtf(1 + alpha2 * (1 - cosNO * cosNO) / (cosNO * cosNO)));
+		//G1i = 2 / (1 + safe_sqrtf(1 + alpha2 * (1 - cosNI * cosNI) / (cosNI * cosNI)));
+
+		/* Let a2=alpha2 and cos=cosNO/cosNI then the above is equivalent to:
+		 * 2    / (    1 + sqrt(      1 + a2 * (1 - cos^2)  / cos^2 )       )       = /common denom/       =
+		 * 2    / (    1 + sqrt( (cos^2 + a2 * (1 - cos^2)) / cos^2 )       )       = /factor out 1/cos^2/ =
+		 * 2    / (    1 + sqrt(  cos^2 + a2 * (1 - cos^2)          ) / cos )       = /common denom/       =
+		 * 2    / ( (cos + sqrt(  cos^2 + a2 * (1 - cos^2)          )       ) / cos = /move cos to num/    =
+		 * 2cos / (  cos + sqrt(  cos^2 + a2 * (1 - cos^2)          )       )       = /rewrite sqrt/       =
+		 * 2cos / (  cos + sqrt(  cos^2 * (1 - a2) + a2             )       )
+		 * => removes one of the divisions
+		 *
+		 *  - Glo should contain a cosNO in its numerator but this cancels with
+		 *    cosNO in the denomenator in eq. 20.(removes another division)
+		 *  - There should be a cosNI in the denomenator of eq. 20 but I think
+		 *    this has been canceled out already since there is no cosNI in
+		 *    path_radiance_bsdf_bounce() ?
+		 *  - Both Glo and Gli should contain a 2.0 in their numerators but they
+		 *    cancel with 1/4 in eq. 20.
+		 *
+		 * => This code does three less divisions in total
+		 *  This could potentially be used in the real GGX evaluation too.
+		 */
+		G1o = 1.0f  / (cosNO + safe_sqrtf(cosNO * cosNO * (1.0f - alpha2) + alpha2));
+		G1i = cosNI / (cosNI + safe_sqrtf(cosNI * cosNI * (1.0f - alpha2) + alpha2));
+
+		float G = G1o * G1i;
+
+		/* eq. 20 */
+		float3 F = reflection_color(bsdf, omega_in, m);
+
+		float3 out = F * G * D;
+
+		return out;
+	}
+
+	return make_float3(0.0f, 0.0f, 0.0f);
+}
+
 ccl_device float3 bsdf_microfacet_ggx_eval_reflect(const ShaderClosure *sc, const float3 I, const float3 omega_in, float *pdf)
 {
 	const MicrofacetBsdf *bsdf = (const MicrofacetBsdf*)sc;

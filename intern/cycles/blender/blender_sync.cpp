@@ -282,6 +282,7 @@ void BlenderSync::sync_integrator()
 	                                                  Integrator::PATH);
 
 	integrator->use_light_bvh = get_boolean(cscene, "use_light_bvh");
+	integrator->splitting_threshold = get_float(cscene, "splitting_threshold");
 	integrator->sample_all_lights_direct = get_boolean(cscene, "sample_all_lights_direct");
 	integrator->sample_all_lights_indirect = get_boolean(cscene, "sample_all_lights_indirect");
 	integrator->light_sampling_threshold = get_float(cscene, "light_sampling_threshold");

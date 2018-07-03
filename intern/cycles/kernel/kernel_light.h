@@ -1122,6 +1122,7 @@ ccl_device float calc_node_importance(KernelGlobals *kg, float3 P, int node_offs
 	float theta_u = 0; // TODO: Figure out how to calculate this one
 	float d2 = len_squared(centroidToP);
 
+	// todo: fix clamp here so it is 0 outside theta_e + theta_o ?
 	return energy * cosf(clamp(theta - theta_o - theta_u, 0.0, theta_e))/d2;
 }
 
@@ -1378,22 +1379,18 @@ ccl_device void light_distribution_sample(KernelGlobals *kg, float3 P,
 	}
 }
 
-/* picks a point on a light and computes the probability of picking this point*/
-ccl_device_noinline bool light_sample(KernelGlobals *kg,
-                                      float randu,
-                                      float randv,
-                                      float time,
-                                      float3 P,
-                                      int bounce,
-                                      LightSample *ls)
+/* picks a point on a given light and computes the probability of picking this point*/
+ccl_device void light_point_sample(KernelGlobals *kg,
+                              float randu,
+                              float randv,
+                              float time,
+                              float3 P,
+                              int bounce,
+                              int distribution_id,
+                              LightSample *ls)
 {
-	/* sample index and compute light picking pdf */
-	float pdf_factor = 0.0f;
-	int index = -1;
-	light_distribution_sample(kg, P, &randu, &index, &pdf_factor);
-
 	/* fetch light data and compute rest of light pdf */
-	const ccl_global KernelLightDistribution *kdistribution = &kernel_tex_fetch(__light_distribution, index);
+	const ccl_global KernelLightDistribution *kdistribution = &kernel_tex_fetch(__light_distribution, distribution_id);
 	int prim = kdistribution->prim;
 
 	if(prim >= 0) {
@@ -1407,13 +1404,31 @@ ccl_device_noinline bool light_sample(KernelGlobals *kg,
 		int lamp = -prim-1;
 
 		if(UNLIKELY(light_select_reached_max_bounces(kg, lamp, bounce))) {
-			return false;
+			ls->pdf = 0.0f;
+			return;
 		}
 
 		if (!lamp_light_sample(kg, lamp, randu, randv, P, ls)){
-			return false;
+			ls->pdf = 0.0f;
+			return;
 		}
 	}
+}
+
+/* picks a point on a light and computes the probability of picking this point*/
+ccl_device_noinline bool light_sample(KernelGlobals *kg,
+                                      float randu,
+                                      float randv,
+                                      float time,
+                                      float3 P,
+                                      int bounce,
+                                      LightSample *ls)
+{
+	/* sample index and compute light picking pdf */
+	float pdf_factor = 0.0f;
+	int index = -1;
+	light_distribution_sample(kg, P, &randu, &index, &pdf_factor);
+	light_point_sample(kg, randu, randv, time, P, bounce, index, ls);
 
 	/* combine pdfs */
 	ls->pdf *= pdf_factor;

@@ -642,6 +642,7 @@ void LightManager::device_update_distribution(Device *device, DeviceScene *dscen
 	/* update device */
 	KernelIntegrator *kintegrator = &dscene->data.integrator;
 	kintegrator->use_light_bvh = scene->integrator->use_light_bvh;
+	kintegrator->splitting_threshold = scene->integrator->splitting_threshold;
 	KernelFilm *kfilm = &dscene->data.film;
 	kintegrator->use_direct_light = (totarea > 0.0f);
 

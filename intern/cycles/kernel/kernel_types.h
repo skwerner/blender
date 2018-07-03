@@ -1315,6 +1315,7 @@ static_assert_align(KernelBackground, 16);
 typedef struct KernelIntegrator {
 	/* emission */
 	int use_light_bvh;
+	float splitting_threshold;
 	int use_direct_light;
 	int use_ambient_occlusion;
 	int num_distribution;
@@ -1392,7 +1393,7 @@ typedef struct KernelIntegrator {
 
 	int max_closures;
 
-	int pad1, pad2, pad3;
+	int pad1, pad2;
 } KernelIntegrator;
 static_assert_align(KernelIntegrator, 16);
 

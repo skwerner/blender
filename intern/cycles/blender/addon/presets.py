@@ -69,6 +69,7 @@ class AddPresetSampling(AddPresetBase, Operator):
         "cycles.volume_samples",
         "cycles.use_square_samples",
         "cycles.use_light_bvh",
+        "cycles.splitting_threshold",
         "cycles.progressive",
         "cycles.seed",
         "cycles.sample_clamp_direct",

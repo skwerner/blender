@@ -640,7 +640,7 @@ static void rna_Window_screen_set(PointerRNA *ptr, PointerRNA value)
 	win->newscreen = value.data;
 }
 
-static int rna_Window_screen_assign_poll(PointerRNA *UNUSED(ptr), PointerRNA value)
+static bool rna_Window_screen_assign_poll(PointerRNA *UNUSED(ptr), PointerRNA value)
 {
 	bScreen *screen = (bScreen *)value.id.data;
 
@@ -943,7 +943,7 @@ static void rna_wmClipboard_set(PointerRNA *UNUSED(ptr), const char *value)
 
 #ifdef WITH_PYTHON
 
-static int rna_operator_poll_cb(bContext *C, wmOperatorType *ot)
+static bool rna_operator_poll_cb(bContext *C, wmOperatorType *ot)
 {
 	extern FunctionRNA rna_Operator_poll_func;
 
@@ -951,7 +951,7 @@ static int rna_operator_poll_cb(bContext *C, wmOperatorType *ot)
 	ParameterList list;
 	FunctionRNA *func;
 	void *ret;
-	int visible;
+	bool visible;
 
 	RNA_pointer_create(NULL, ot->ext.srna, NULL, &ptr); /* dummy */
 	func = &rna_Operator_poll_func; /* RNA_struct_find_function(&ptr, "poll"); */
@@ -961,7 +961,7 @@ static int rna_operator_poll_cb(bContext *C, wmOperatorType *ot)
 	ot->ext.call(C, &ptr, func, &list);
 
 	RNA_parameter_get_lookup(&list, "visible", &ret);
-	visible = *(int *)ret;
+	visible = *(bool *)ret;
 
 	RNA_parameter_list_free(&list);
 
@@ -1012,7 +1012,7 @@ static bool rna_operator_check_cb(bContext *C, wmOperator *op)
 	op->type->ext.call(C, &opr, func, &list);
 
 	RNA_parameter_get_lookup(&list, "result", &ret);
-	result = (*(int *)ret) != 0;
+	result = (*(bool *)ret) != 0;
 
 	RNA_parameter_list_free(&list);
 

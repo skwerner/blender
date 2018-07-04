@@ -529,7 +529,7 @@ static float rna_View3D_GridScaleUnit_get(PointerRNA *ptr)
 	return ED_view3d_grid_scale(scene, v3d, NULL);
 }
 
-static void rna_SpaceView3D_layer_set(PointerRNA *ptr, const int *values)
+static void rna_SpaceView3D_layer_set(PointerRNA *ptr, const bool *values)
 {
 	View3D *v3d = (View3D *)(ptr->data);
 
@@ -838,7 +838,8 @@ static void rna_SpaceImageEditor_image_set(PointerRNA *ptr, PointerRNA value)
 	SpaceImage *sima = (SpaceImage *)(ptr->data);
 	bScreen *sc = (bScreen *)ptr->id.data;
 
-	ED_space_image_set(G.main, sima, sc->scene, sc->scene->obedit, (Image *)value.data);
+	BLI_assert(BKE_id_is_in_gobal_main(value.data));
+	ED_space_image_set(G_MAIN, sima, sc->scene, sc->scene->obedit, (Image *)value.data);
 }
 
 static void rna_SpaceImageEditor_mask_set(PointerRNA *ptr, PointerRNA value)
@@ -1478,7 +1479,7 @@ static void rna_SpaceNodeEditor_node_tree_set(PointerRNA *ptr, const PointerRNA 
 	ED_node_tree_start(snode, (bNodeTree *)value.data, NULL, NULL);
 }
 
-static int rna_SpaceNodeEditor_node_tree_poll(PointerRNA *ptr, const PointerRNA value)
+static bool rna_SpaceNodeEditor_node_tree_poll(PointerRNA *ptr, const PointerRNA value)
 {
 	SpaceNode *snode = (SpaceNode *)ptr->data;
 	bNodeTree *ntree = (bNodeTree *)value.data;
@@ -1502,7 +1503,7 @@ static void rna_SpaceNodeEditor_tree_type_set(PointerRNA *ptr, int value)
 	SpaceNode *snode = (SpaceNode *)ptr->data;
 	ED_node_set_tree_type(snode, rna_node_tree_type_from_enum(value));
 }
-static int rna_SpaceNodeEditor_tree_type_poll(void *Cv, bNodeTreeType *type)
+static bool rna_SpaceNodeEditor_tree_type_poll(void *Cv, bNodeTreeType *type)
 {
 	bContext *C = (bContext *)Cv;
 	if (type->poll)

@@ -742,9 +742,8 @@ bool WM_operator_pystring_abbreviate(char *str, int str_len_max)
 
 /* return NULL if no match is found */
 #if 0
-static char *wm_prop_pystring_from_context(bContext *C, PointerRNA *ptr, PropertyRNA *prop, int index)
+static const char *wm_context_member_from_ptr(bContext *C, PointerRNA *ptr)
 {
-
 	/* loop over all context items and do 2 checks
 	 *
 	 * - see if the pointer is in the context.
@@ -758,13 +757,9 @@ static char *wm_prop_pystring_from_context(bContext *C, PointerRNA *ptr, Propert
 	const char *member_found = NULL;
 	const char *member_id = NULL;
 
-	char *prop_str = NULL;
-	char *ret = NULL;
-
-
 	for (link = lb.first; link; link = link->next) {
 		const char *identifier = link->data;
-		PointerRNA ctx_item_ptr = {{0}} // CTX_data_pointer_get(C, identifier); // XXX, this isnt working
+		PointerRNA ctx_item_ptr = {{0}}; // CTX_data_pointer_get(C, identifier); // XXX, this isnt working
 
 		if (ctx_item_ptr.type == NULL) {
 			continue;
@@ -785,35 +780,26 @@ static char *wm_prop_pystring_from_context(bContext *C, PointerRNA *ptr, Propert
 			}
 		}
 	}
-
-	if (member_found) {
-		prop_str = RNA_path_property_py(ptr, prop, index);
-		if (prop_str) {
-			ret = BLI_sprintfN("bpy.context.%s.%s", member_found, prop_str);
-			MEM_freeN(prop_str);
-		}
-	}
-	else if (member_id) {
-		prop_str = RNA_path_struct_property_py(ptr, prop, index);
-		if (prop_str) {
-			ret = BLI_sprintfN("bpy.context.%s.%s", member_id, prop_str);
-			MEM_freeN(prop_str);
-		}
-	}
-
 	BLI_freelistN(&lb);
 
-	return ret;
+	if (member_found) {
+		return member_found;
+	}
+	else if (member_id) {
+		return member_id;
+	}
+	else {
+		return NULL;
+	}
 }
+
 #else
 
 /* use hard coded checks for now */
-static char *wm_prop_pystring_from_context(bContext *C, PointerRNA *ptr, PropertyRNA *prop, int index)
+
+static const char *wm_context_member_from_ptr(bContext *C, PointerRNA *ptr)
 {
 	const char *member_id = NULL;
-
-	char *prop_str = NULL;
-	char *ret = NULL;
 
 	if (ptr->id.data) {
 
@@ -911,22 +897,28 @@ static char *wm_prop_pystring_from_context(bContext *C, PointerRNA *ptr, Propert
 			default:
 				break;
 		}
-
-		if (member_id) {
-			prop_str = RNA_path_struct_property_py(ptr, prop, index);
-			if (prop_str) {
-				ret = BLI_sprintfN("bpy.context.%s.%s", member_id, prop_str);
-				MEM_freeN(prop_str);
-			}
-		}
 #undef CTX_TEST_PTR_ID
 #undef CTX_TEST_PTR_ID_CAST
 #undef CTX_TEST_SPACE_TYPE
 	}
 
-	return ret;
+	return member_id;
 }
 #endif
+
+static char *wm_prop_pystring_from_context(bContext *C, PointerRNA *ptr, PropertyRNA *prop, int index)
+{
+	const char *member_id = wm_context_member_from_ptr(C, ptr);
+	char *ret = NULL;
+	if (member_id != NULL) {
+		char *prop_str = RNA_path_struct_property_py(ptr, prop, index);
+		if (prop_str) {
+			ret = BLI_sprintfN("bpy.context.%s.%s", member_id, prop_str);
+			MEM_freeN(prop_str);
+		}
+	}
+	return ret;
+}
 
 char *WM_prop_pystring_assign(bContext *C, PointerRNA *ptr, PropertyRNA *prop, int index)
 {
@@ -1273,7 +1265,7 @@ bool WM_operator_filesel_ensure_ext_imtype(wmOperator *op, const struct ImageFor
 }
 
 /* op->poll */
-int WM_operator_winactive(bContext *C)
+bool WM_operator_winactive(bContext *C)
 {
 	if (CTX_wm_window(C) == NULL) return 0;
 	return 1;
@@ -1899,8 +1891,7 @@ static uiBlock *wm_block_create_splash(bContext *C, ARegion *ar, void *UNUSED(ar
 	if (mt) {
 		UI_menutype_draw(C, mt, layout);
 
-//		wmWindowManager *wm = CTX_wm_manager(C);
-//		uiItemM(layout, C, "USERPREF_MT_keyconfigs", U.keyconfigstr, ICON_NONE);
+//		uiItemM(layout, "USERPREF_MT_keyconfigs", U.keyconfigstr, ICON_NONE);
 	}
 
 	UI_block_emboss_set(block, UI_EMBOSS_PULLDOWN);
@@ -2037,7 +2028,7 @@ static int wm_search_menu_invoke(bContext *C, wmOperator *UNUSED(op), const wmEv
 }
 
 /* op->poll */
-static int wm_search_menu_poll(bContext *C)
+static bool wm_search_menu_poll(bContext *C)
 {
 	if (CTX_wm_window(C) == NULL) {
 		return 0;
@@ -2124,7 +2115,7 @@ static void WM_OT_call_menu_pie(wmOperatorType *ot)
 
 /* this poll functions is needed in place of WM_operator_winactive
  * while it crashes on full screen */
-static int wm_operator_winactive_normal(bContext *C)
+static bool wm_operator_winactive_normal(bContext *C)
 {
 	wmWindow *win = CTX_wm_window(C);
 
@@ -2221,8 +2212,9 @@ static void WM_OT_console_toggle(wmOperatorType *ot)
  * - draw(bContext): drawing callback for paint cursor
  */
 
-void *WM_paint_cursor_activate(wmWindowManager *wm, int (*poll)(bContext *C),
-                               wmPaintCursorDraw draw, void *customdata)
+void *WM_paint_cursor_activate(
+        wmWindowManager *wm, bool (*poll)(bContext *C),
+        wmPaintCursorDraw draw, void *customdata)
 {
 	wmPaintCursor *pc = MEM_callocN(sizeof(wmPaintCursor), "paint cursor");
 

@@ -86,11 +86,12 @@ ccl_device void kernel_direct_lighting(KernelGlobals *kg,
 			float terminate = path_state_rng_light_termination(kg, state);
 
 			LightSample ls;
+			float3 N = sd->N;
 			if(light_sample(kg,
 			                light_u, light_v,
 			                sd->time,
 			                sd->P,
-                            &sd->N,
+                            &N,
 			                state->bounce,
 			                &ls)) {
 

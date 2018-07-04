@@ -107,6 +107,7 @@ set(SRC_HEADERS
 	kernel_random.h
 	kernel_shader.h
 	kernel_shadow.h
+	kernel_sphere_light.h
 	kernel_subsurface.h
 	kernel_textures.h
 	kernel_types.h

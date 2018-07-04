@@ -57,7 +57,8 @@ ccl_device_noinline void kernel_branched_path_surface_connect_light(
 				float terminate = path_branched_rng_light_termination(kg, lamp_rng_hash, state, j, num_samples);
 
 				LightSample ls;
-				if(lamp_light_sample(kg, i, light_u, light_v, sd->P, &sd->N, &ls)) {
+				float3 N = sd->N;
+				if(lamp_light_sample(kg, i, light_u, light_v, sd->P, &N, &ls)) {
 					/* The sampling probability returned by lamp_light_sample assumes that all lights were sampled.
 					 * However, this code only samples lamps, so if the scene also had mesh lights, the real probability is twice as high. */
 					if(kernel_data.integrator.pdf_triangles != 0.0f)
@@ -94,7 +95,8 @@ ccl_device_noinline void kernel_branched_path_surface_connect_light(
 					light_u = 0.5f*light_u;
 
 				LightSample ls;
-				if(light_sample(kg, light_u, light_v, sd->time, sd->P, &sd->N, state->bounce, &ls)) {
+				float3 N = sd->N;
+				if(light_sample(kg, light_u, light_v, sd->time, sd->P, &N, state->bounce, &ls)) {
 					/* Same as above, probability needs to be corrected since the sampling was forced to select a mesh light. */
 					if(kernel_data.integrator.num_all_lights)
 						ls.pdf *= 2.0f;
@@ -122,7 +124,8 @@ ccl_device_noinline void kernel_branched_path_surface_connect_light(
 		float terminate = path_state_rng_light_termination(kg, state);
 
 		LightSample ls;
-		if(light_sample(kg, light_u, light_v, sd->time, sd->P, &sd->N, state->bounce, &ls)) {
+		float3 N = sd->N;
+		if(light_sample(kg, light_u, light_v, sd->time, sd->P, &N, state->bounce, &ls)) {
 			/* sample random light */
 			if(direct_emission(kg, sd, emission_sd, &ls, state, &light_ray, &L_light, &is_lamp, terminate)) {
 				/* trace shadow ray */
@@ -248,7 +251,8 @@ ccl_device_inline void kernel_path_surface_connect_light(KernelGlobals *kg,
 #endif
 
 	LightSample ls;
-	if(light_sample(kg, light_u, light_v, sd->time, sd->P, &sd->N, state->bounce, &ls)) {
+	float3 N = sd->N;
+	if(light_sample(kg, light_u, light_v, sd->time, sd->P, &N, state->bounce, &ls)) {
 		float terminate = path_state_rng_light_termination(kg, state);
 		if(direct_emission(kg, sd, emission_sd, &ls, state, &light_ray, &L_light, &is_lamp, terminate)) {
 			/* trace shadow ray */

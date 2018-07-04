@@ -79,7 +79,7 @@ ccl_device_inline float eval_ArE(const PSCMap *maps, float theta)
 	theta = check_theta(theta, M_PI_F);
 	const float tt = fabsf(tanf(theta));
 
-	constexpr float pi2 = 0.5f * M_PI_F;
+	const float pi2 = 0.5f * M_PI_F;
 	float result;
 	if(theta <= pi2)
 		result = maps->axay2 * atanf(maps->sin_beta_abs*tt);
@@ -222,7 +222,7 @@ ccl_device_inline float eval_ArE_inverse(const PSCMap *maps, float Ar_value)
 	Ar_value = max(0.0f, min(Ar_value, Ar_max_value));
 
 	const float ang = Ar_value / maps->axay2;
-	constexpr float pi2 = 0.5f*M_PI_F;
+	const float pi2 = 0.5f*M_PI_F;
 
 	if(ang <= pi2)
 		return atanf(tanf(ang) / maps->sin_beta_abs);
@@ -302,17 +302,12 @@ ccl_device_inline float Ar_integrand(const PSCMap *maps, float theta, float Ar_m
 
 ccl_device_inline float InverseNSB(const PSCMap *maps, const float t_max, const float Aobj, const float A_max, const float Ar_max_value)
 {
-	using namespace std;
-
 	const float
 		A = max(0.0f, min(Aobj, A_max)); // A is always positive
 	float
 		tn = (A / A_max)*t_max, // current best estimation of result value 't'
 		tn_min = 0.0f,         // current interval: minimum value
-		tn_max = t_max,          // current interval: maximum value
-		diff_tn_min = 0.0f - A,  // == F(tn_min) - A, (always negative) current difference at the left extreme of the interval
-		diff_tn_max = A_max - A;   // == F(tn_max) - A, (always positive) current difference at the right extreme of the interval
-
+		tn_max = t_max;          // current interval: maximum value
 
 	int num_iters = 0;  // number of iterations so far
 
@@ -342,12 +337,10 @@ ccl_device_inline float InverseNSB(const PSCMap *maps, const float t_max, const 
 			if(0.0 < diff) {
 				// move to the left (current F(yn) is higher than desired)
 				tn_max = tn;
-				diff_tn_max = diff;
 			}
 			else {
 				// move to the right (current F(yn) is smaller than desired )
 				tn_min = tn;
-				diff_tn_min = diff;
 			}
 
 			// update 'tn' according to the secant rule

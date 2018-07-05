@@ -1,5 +1,10 @@
 /*
- * Copyright 2018 Blender Foundation
+ * Projected Spherical Cap Maps
+ * Original source code:
+ * Copyright (C) 2018 Carlos Ureña and Iliyan Georgiev
+ * https://github.com/carlos-urena/psc-sampler
+ *
+ * Ported to straight C for OpenCL compatibility by Stefan Werner
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -81,11 +86,12 @@ ccl_device_inline float eval_ArE(const PSCMap *maps, float theta)
 
 	const float pi2 = 0.5f * M_PI_F;
 	float result;
-	if(theta <= pi2)
+	if(theta <= pi2) {
 		result = maps->axay2 * atanf(maps->sin_beta_abs*tt);
-	else
+	}
+	else {
 		result = maps->axay2 * (M_PI_F - atanf(maps->sin_beta_abs*tt));
-
+	}
 	return result;
 }
 
@@ -224,10 +230,12 @@ ccl_device_inline float eval_ArE_inverse(const PSCMap *maps, float Ar_value)
 	const float ang = Ar_value / maps->axay2;
 	const float pi2 = 0.5f*M_PI_F;
 
-	if(ang <= pi2)
+	if(ang <= pi2) {
 		return atanf(tanf(ang) / maps->sin_beta_abs);
-	else
+	}
+	else {
 		return M_PI_F + atanf(tanf(ang) / maps->sin_beta_abs);
+	}
 }
 
 ccl_device_inline float eval_Ar(const PSCMap *maps, float theta)
@@ -246,9 +254,7 @@ ccl_device_inline float eval_Ar(const PSCMap *maps, float theta)
 	}
 
 	// ellipse+lune
-	return  (theta <= maps->phi_l)
-		? eval_ArC(maps, theta)
-		: eval_ArE(maps, theta) + maps->L;
+	return  (theta <= maps->phi_l) ? eval_ArC(maps, theta) : eval_ArE(maps, theta) + maps->L;
 }
 
 ccl_device_inline float eval_rCirc(const PSCMap *maps, float theta)  // theta in [0,phi_l]
@@ -275,8 +281,7 @@ ccl_device_inline float eval_rad_integrand(const PSCMap *maps, float theta)
 
 	// lune only
 	if(maps->center_below_hor) {
-		if(theta <= maps->phi_l)
-		{
+		if(theta <= maps->phi_l) {
 			const float rc = eval_rCirc(maps, theta),
 				re = eval_rEll(maps, theta);
 			return 0.5f*(rc*rc - re * re);
@@ -390,10 +395,8 @@ ccl_device_inline float eval_Ar_inverse(const PSCMap *maps, float Ar_value)
 
 
 	// in the lune only case, for small values of L, use a parabola approximation
-	if(maps->center_below_hor)  // !fully visible and center below hor., --> lune only
-	{
-		if(maps->L < 1e-5f)          // small lune area
-		{
+	if(maps->center_below_hor) {
+		if(maps->L < 1e-5f) {
 			return maps->phi_l * (1.0f - safe_sqrtf(1.0f - A_frac));  // inverse parabola
 		}
 	}
@@ -417,18 +420,15 @@ ccl_device_inline void eval_rmin_rmax(const PSCMap *maps, const float theta, flo
 	const float theta_c = min(theta, M_PI_F);
 
 	// ellipse only, or: ellipse+lune and theta above phi_l
-	if(maps->fully_visible || (!maps->center_below_hor && maps->phi_l <= theta_c))
-	{
+	if(maps->fully_visible || (!maps->center_below_hor && maps->phi_l <= theta_c)) {
 		*rmin = 0.0f;
 		*rmax = eval_rEll(maps, theta_c);
 	}
-	else if(maps->center_below_hor) // lune only
-	{
+	else if(maps->center_below_hor) {
 		*rmin = eval_rEll(maps, theta_c);
 		*rmax = eval_rCirc(maps, theta_c);
 	}
-	else // ellipse+lune (theta is for sure below phi_l, see above)
-	{
+	else {
 		*rmin = 0.0f;
 		*rmax = eval_rCirc(maps, theta_c);
 	}
@@ -452,8 +452,7 @@ ccl_device_inline void eval(const PSCMap *maps, float s, float t, float *x, floa
 		rmax = 1.0f;
 		scaled = true;
 	}
-	else // partially visible
-	{
+	else {
 		varphi = max(0.0f, min(M_PI_F, eval_Ar_inverse(maps, u*0.5f*maps->F)));
 		eval_rmin_rmax(maps, varphi, &rmin, &rmax);
 	}
@@ -539,18 +538,15 @@ ccl_device_inline void eval_xmin_xmax(const PSCMap *maps, float y, float *xmin, 
 	float yy = y;
 	const float xell = eval_xEll(maps, yy);
 
-	if(maps->fully_visible) // ellipse only
-	{
+	if(maps->fully_visible) {
 		*xmin = maps->xe - xell;
 		*xmax = maps->xe + xell;
 	}
-	else if(maps->center_below_hor)  // lune only
-	{
+	else if(maps->center_below_hor)	{
 		*xmin = maps->xe + xell;
 		*xmax = maps->xe + eval_xCir(maps, yy);
 	}
-	else // ellipse plus lune
-	{
+	else {
 		*xmin = maps->xe - xell;
 		*xmax = (y <= maps->yl) ? maps->xe + eval_xCir(maps, yy) : maps->xe + xell;
 	}
@@ -599,13 +595,12 @@ ccl_device_inline float sphere_light_projected_sa_eval(float alpha, float beta, 
 {
 	PSCMap maps;
 	PSCMap_initialize(&maps, alpha, beta, p_use_radial);
-	/* end duplicate code */
 
 	//if(maps.using_radial)
 		rad_map(&maps, randu, randv, x, y);
 	//else
 	//	hor_map(&maps, randu, randv, x, y);
-		return maps.F;
+	return maps.F;
 }
 
 ccl_device_inline float uniform_cone_pdf(float cos_theta_max) {

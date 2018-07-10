@@ -1156,6 +1156,96 @@ static int ptcache_smoke_openvdb_read(struct OpenVDBReader *reader, void *smoke_
 
 	return 1;
 }
+
+static int ptcache_smoke_openvdb_extern_read(struct OpenVDBReader *reader, void *smoke_v)
+{
+	SmokeModifierData *smd = (SmokeModifierData *)smoke_v;
+
+	if (!smd) {
+		return 0;
+	}
+
+	SmokeDomainSettings *sds = smd->domain;
+
+	int fluid_fields = smoke_get_data_flags(sds);
+	int cache_fields = 0;
+	bool reallocate = false;
+	int res[3], res_min[3], res_max[3];
+
+	if (!OpenVDBReader_has_smoke_grid(reader, VDB_SMOKE_DENSITY) &&
+	    !OpenVDBReader_has_smoke_grid(reader, VDB_SMOKE_FLAME))
+	{
+		return 0;
+	}
+
+	if (!OpenVDBReader_get_detailed_bounds(reader, res_min, res_max, res,
+	                                       sds->p0, sds->p1, sds->cell_size))
+	{
+		modifier_setError((ModifierData *)smd, "Imported OpenVDB grids have different transformations");
+	}
+
+	sds->res_min[0] = sds->res_min[1] = sds->res_min[2] = 0;
+	VECSUB(sds->res_max, res_max, res_min);
+	sub_v3_v3v3(sds->global_size, sds->p1, sds->p0);
+
+	if (sds->res[0] != res[0] || sds->res[1] != res[1] || sds->res[2] != res[2])
+	{
+		reallocate = true;
+		VECCOPY(sds->res, res);
+	}
+
+	/* check if active fields have changed */
+	if (OpenVDBReader_has_smoke_grid(reader, VDB_SMOKE_HEAT) ||
+		OpenVDBReader_has_smoke_grid(reader, VDB_SMOKE_TEMPERATURE)) {
+		cache_fields |= SM_ACTIVE_HEAT;
+	}
+	if (OpenVDBReader_has_smoke_grid(reader, VDB_SMOKE_FLAME)) {
+		cache_fields |= SM_ACTIVE_FIRE;
+	}
+	if (OpenVDBReader_has_smoke_grid(reader, VDB_SMOKE_COLOR)) {
+		cache_fields |= SM_ACTIVE_COLORS;
+	}
+
+	reallocate = (reallocate || ((fluid_fields == cache_fields) && (sds->active_fields == cache_fields)));
+
+	/* reallocate fluid if needed */
+	if (reallocate) {
+		sds->active_fields = cache_fields;
+		sds->maxres = MAX3(sds->base_res[0], sds->base_res[1], sds->base_res[2]);
+		sds->dx = 1.0f / sds->maxres;
+		smoke_reallocate_fluid(sds, sds->dx, sds->res, 1);
+		sds->total_cells = sds->res[0] * sds->res[1] * sds->res[2];
+	}
+
+	if (sds->fluid) {
+		float dt, dx, *dens, *react, *fuel, *flame, *heat, *heatold, *vx, *vy, *vz, *r, *g, *b;
+		unsigned char *obstacles;
+
+		smoke_export(sds->fluid, &dt, &dx, &dens, &react, &flame, &fuel, &heat,
+		             &heatold, &vx, &vy, &vz, &r, &g, &b, &obstacles);
+
+		if (OpenVDBReader_has_smoke_grid(reader, VDB_SMOKE_DENSITY)) {
+			OpenVDB_import_grid_fl(reader, vdb_grid_name(VDB_SMOKE_DENSITY), &dens, sds->res);
+		}
+		if(OpenVDBReader_has_smoke_grid(reader, VDB_SMOKE_HEAT)) {
+			OpenVDB_import_grid_fl(reader, vdb_grid_name(VDB_SMOKE_HEAT), &heat, sds->res);
+		}
+	    else if(OpenVDBReader_has_smoke_grid(reader, VDB_SMOKE_TEMPERATURE)) {
+			OpenVDB_import_grid_fl(reader, vdb_grid_name(VDB_SMOKE_TEMPERATURE), &heat, sds->res);
+		}
+		if (cache_fields & SM_ACTIVE_FIRE) {
+			OpenVDB_import_grid_fl(reader, vdb_grid_name(VDB_SMOKE_FLAME), &flame, sds->res);
+		}
+		if (cache_fields & SM_ACTIVE_COLORS) {
+			OpenVDB_import_grid_vec(reader, vdb_grid_name(VDB_SMOKE_COLOR), &r, &g, &b, sds->res);
+		}
+		if (OpenVDBReader_has_smoke_grid(reader, VDB_SMOKE_VELOCITY)) {
+			OpenVDB_import_grid_vec(reader, vdb_grid_name(VDB_SMOKE_VELOCITY), &vx, &vy, &vz, sds->res);
+		}
+	}
+
+	return 1;
+}
 #endif
 
 #else // WITH_SMOKE
@@ -1173,6 +1263,12 @@ static int ptcache_smoke_openvdb_write(struct OpenVDBWriter *writer, void *smoke
 }
 
 static int ptcache_smoke_openvdb_read(struct OpenVDBReader *reader, void *smoke_v)
+{
+	UNUSED_VARS(reader, smoke_v);
+	return 0;
+}
+
+static int ptcache_smoke_openvdb_extern_read(struct OpenVDBReader *reader, void *smoke_v)
 {
 	UNUSED_VARS(reader, smoke_v);
 	return 0;
@@ -1544,7 +1640,7 @@ void BKE_ptcache_id_from_smoke(PTCacheID *pid, struct Object *ob, struct SmokeMo
 	pid->write_stream			= ptcache_smoke_write;
 
 	pid->write_openvdb_stream	= ptcache_smoke_openvdb_write;
-	pid->read_openvdb_stream	= ptcache_smoke_openvdb_read;
+	pid->read_openvdb_stream	= (sds->cache_file_format == PTCACHE_FILE_OPENVDB_EXTERN ? ptcache_smoke_openvdb_extern_read : ptcache_smoke_openvdb_read);
 
 	pid->write_extra_data		= NULL;
 	pid->read_extra_data		= NULL;
@@ -1866,6 +1962,19 @@ static int ptcache_filename(PTCacheID *pid, char *filename, int cfra, short do_p
 	}
 	
 	return len; /* make sure the above string is always 16 chars */
+}
+
+static void openvdb_filepath(PTCacheID *pid, char *filepath)
+{
+	SmokeModifierData *smd = (SmokeModifierData *)pid->calldata;
+
+	BLI_strncpy(filepath, smd->domain->openvdb_filepath, 1024);
+
+	if (BLI_path_is_rel(filepath)) {
+		Library *lib = (pid->ob) ? pid->ob->id.lib : NULL;
+		const char *blendfilename = (lib && (pid->cache->flag & PTCACHE_IGNORE_LIBPATH) == 0) ? lib->filepath: G.main->name;
+		BLI_path_abs(filepath, blendfilename);
+	}
 }
 
 /* youll need to close yourself after! */
@@ -2525,6 +2634,30 @@ static int ptcache_read_openvdb_stream(PTCacheID *pid, int cfra)
 #endif
 }
 
+static int ptcache_read_openvdb_extern_stream(PTCacheID *pid)
+{
+#if defined(WITH_OPENVDB) && defined(WITH_SMOKE)
+	char filepath[FILE_MAX * 2];
+
+	openvdb_filepath(pid, filepath);
+
+	if (!BLI_exists(filepath)) {
+		return 0;
+	}
+
+	struct OpenVDBReader *reader = OpenVDBReader_create();
+	OpenVDBReader_open(reader, filepath);
+
+	int result = pid->read_openvdb_stream(reader, pid->calldata);
+
+	OpenVDBReader_free(reader);
+	return result;
+#else
+	UNUSED_VARS(pid);
+	return 0;
+#endif
+}
+
 static int ptcache_read(PTCacheID *pid, int cfra)
 {
 	PTCacheMem *pm = NULL;
@@ -2638,6 +2771,10 @@ int BKE_ptcache_read(PTCacheID *pid, float cfra, bool no_extrapolate_old)
 {
 	int cfrai = (int)floor(cfra), cfra1=0, cfra2=0;
 	int ret = 0;
+
+	if (pid->file_type == PTCACHE_FILE_OPENVDB_EXTERN && pid->read_openvdb_stream) {
+		return ptcache_read_openvdb_extern_stream(pid);
+	}
 
 	/* nothing to read to */
 	if (pid->totpoint(pid->calldata, cfrai) == 0)
@@ -3096,6 +3233,14 @@ int  BKE_ptcache_id_exist(PTCacheID *pid, int cfra)
 {
 	if (!pid->cache)
 		return 0;
+
+	if (pid->file_type == PTCACHE_FILE_OPENVDB_EXTERN) {
+		char filename[MAX_PTCACHE_PATH];
+
+		openvdb_filepath(pid, filename);
+
+		return BLI_exists(filename);
+	}
 
 	if (cfra<pid->cache->startframe || cfra > pid->cache->endframe)
 		return 0;

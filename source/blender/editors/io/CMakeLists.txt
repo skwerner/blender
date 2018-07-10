@@ -30,6 +30,7 @@ set(INC
 	../../collada
 	../../alembic
 	../../../../intern/guardedalloc
+	../../../../intern/openvdb
 )
 
 set(INC_SYS
@@ -40,11 +41,13 @@ set(SRC
 	io_alembic.c
 	io_cache.c
 	io_collada.c
+	io_openvdb.c
 	io_ops.c
 
 	io_alembic.h
 	io_cache.h
 	io_collada.h
+	io_openvdb.h
 	io_ops.h
 )
 
@@ -58,6 +61,10 @@ if(WITH_ALEMBIC)
 	if(WITH_ALEMBIC_HDF5)
 		add_definitions(-DWITH_ALEMBIC_HDF5)
 	endif()
+endif()
+
+if(WITH_OPENVDB)
+	add_definitions(-DWITH_OPENVDB)
 endif()
 
 if(WITH_INTERNATIONAL)

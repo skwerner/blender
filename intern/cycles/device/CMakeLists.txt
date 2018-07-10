@@ -60,6 +60,10 @@ set(SRC_HEADERS
 	device_task.h
 )
 
+if(WITH_OPENVDB)
+	list(APPEND SRC_HEADERS device_memory_openvdb.h)
+endif()
+
 add_definitions(${GL_DEFINITIONS})
 if(WITH_CYCLES_NETWORK)
 	add_definitions(-DWITH_NETWORK)

@@ -415,16 +415,28 @@ public:
 			info.cl_buffer = 0;
 			info.interpolation = mem.interpolation;
 			info.extension = mem.extension;
+			info.grid_type = mem.grid_type;
 			info.width = mem.real_width;
 			info.height = mem.real_height;
 			info.depth = mem.real_depth;
-			info.grid_info = 0;
-			if(grid_info) {
-				info.grid_info = (uint64_t)grid_info->host_pointer;
-				info.tiled_width = get_tile_res(info.width);
-				info.tiled_height = get_tile_res(info.height);
-				info.last_tile_width = info.width % TILE_SIZE;
-				info.last_tile_height = info.height % TILE_SIZE;
+
+			/* For OpenVDB textures, the kernel will retrieve the accessor from
+			 * util, but there must be some value stored in data or the texture
+			 * will not be used. As a stopgap, the accessor pointer will just
+			 * be stored in both data and util. */
+			switch(mem.grid_type) {
+				case IMAGE_GRID_TYPE_OPENVDB:
+					info.util = info.data;
+					break;
+				case IMAGE_GRID_TYPE_SPARSE:
+					info.util = (uint64_t)grid_info->host_pointer;
+					info.tiled_width = get_tile_res(info.width);
+					info.tiled_height = get_tile_res(info.height);
+					info.last_tile_width = info.width % TILE_SIZE;
+					info.last_tile_height = info.height % TILE_SIZE;
+					break;
+				default:
+					info.util = 0;
 			}
 			need_texture_info = true;
 		}
@@ -438,7 +450,6 @@ public:
 			grid_info->device_size = grid_info->memory_size();
 			stats.mem_alloc(grid_info->device_size);
 		}
-
 	}
 
 	void tex_free(device_memory& mem)

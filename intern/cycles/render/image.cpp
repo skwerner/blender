@@ -29,6 +29,10 @@
 #include <OSL/oslexec.h>
 #endif
 
+#ifdef WITH_OPENVDB
+#include "render/openvdb.h"
+#endif
+
 CCL_NAMESPACE_BEGIN
 
 /* Some helpers to silence warning in templated function. */
@@ -104,6 +108,26 @@ bool ImageManager::get_image_metadata(const string& filename,
 	if(builtin_data) {
 		if(builtin_image_info_cb) {
 			builtin_image_info_cb(filename, builtin_data, metadata);
+
+#ifdef WITH_OPENVDB
+			/* Metadata for external OpenVDB volumes. */
+			if(!metadata.openvdb_filepath.empty()) {
+				if(!path_exists(metadata.openvdb_filepath)) {
+					VLOG(1) << "File '" << filename << "' does not exist.";
+					return false;
+				}
+				if(path_is_directory(metadata.openvdb_filepath)) {
+					VLOG(1) << "File '" << filename << "' is a directory, can't use as OpenVDB.";
+					return false;
+				}
+				int3 res = get_openvdb_resolution(metadata.openvdb_filepath);
+				metadata.width = res.x;
+				metadata.height = res.y;
+				metadata.depth = res.z;
+				metadata.is_float = true;
+				metadata.is_half = false;
+			}
+#endif
 		}
 		else {
 			return false;
@@ -343,6 +367,7 @@ int ImageManager::add_image(const string& filename,
 	img->make_sparse = make_sparse;
 	img->isovalue = isovalue;
 	img->mem = NULL;
+	img->openvdb_filepath = metadata.openvdb_filepath;
 
 	images[type][slot] = img;
 
@@ -730,7 +755,7 @@ void ImageManager::file_load_failed(device_vector<DeviceType> *tex_img,
 }
 
 template<typename DeviceType>
-void ImageManager::file_make_image_sparse(Device *device,
+bool ImageManager::file_make_image_sparse(Device *device,
                                           Image *img,
                                           device_vector<DeviceType> *tex_img)
 {
@@ -764,7 +789,7 @@ void ImageManager::file_make_image_sparse(Device *device,
 		VLOG(1) << "Could not make sparse grid for "
 		        << path_filename(img->filename) << " (" << img->mem_name << ")"
 		        << ", no active tiles";
-		return;
+		return false;
 	}
 
 	size_t memory_usage = grid_info.size() * sizeof(int) + voxel_count * sizeof(DeviceType);
@@ -775,7 +800,7 @@ void ImageManager::file_make_image_sparse(Device *device,
 		        << string_human_readable_size(tex_img->memory_size()) << " to "
 		        << string_human_readable_size(memory_usage)
 		        << ", not using sparse grid";
-		return;
+		return false;
 	}
 
 	VLOG(1) << "Memory usage of '"
@@ -808,6 +833,8 @@ void ImageManager::file_make_image_sparse(Device *device,
 	tex_img->real_width = real_width;
 	tex_img->real_height = real_height;
 	tex_img->real_depth = real_depth;
+
+	return true;
 }
 
 template<TypeDesc::BASETYPE FileFormat,
@@ -823,6 +850,8 @@ void ImageManager::load_image(Device *device,
 	                                        img->mem_name.c_str(),
 	                                        MEM_TEXTURE);
 
+	bool is_sparse = false;
+
 	if(!file_load_image<FileFormat, StorageType, DeviceType>(img,
 	                                                         type,
 	                                                         texture_limit,
@@ -832,16 +861,109 @@ void ImageManager::load_image(Device *device,
 		file_load_failed<StorageType, DeviceType>(tex_img, type);
 	}
 	else if(img->make_sparse) {
-		file_make_image_sparse<DeviceType>(device, img, tex_img);
+		is_sparse = file_make_image_sparse<DeviceType>(device, img, tex_img);
 	}
 
 	img->mem = tex_img;
 	img->mem->interpolation = img->interpolation;
 	img->mem->extension = img->extension;
+	img->mem->grid_type = is_sparse ? IMAGE_GRID_TYPE_SPARSE : IMAGE_GRID_TYPE_DEFAULT;
 
 	thread_scoped_lock device_lock(device_mutex);
 	tex_img->copy_to_device();
 }
+
+#ifdef WITH_OPENVDB
+template<typename StorageType,
+         typename DeviceType>
+void ImageManager::load_openvdb_image(Device *device,
+                                      Image *img,
+                                      ImageDataType type,
+                                      int texture_limit)
+{
+	VLOG(1) << "Loading " << img->openvdb_filepath << ", Grid: " << img->filename;
+
+	int3 resolution = get_openvdb_resolution(img->openvdb_filepath);
+
+	if(device->info.type == DEVICE_CPU && 0) {
+		device_memory *tex_vdb = NULL;
+		{
+			thread_scoped_lock device_lock(device_mutex);
+			tex_vdb = file_load_openvdb(device,
+			                            img->openvdb_filepath,
+			                            img->filename,
+			                            resolution,
+			                            img->mem_name,
+			                            img->interpolation,
+			                            img->extension,
+			                            type == IMAGE_DATA_TYPE_FLOAT4,
+			                            texture_limit);
+		}
+
+		if(tex_vdb) {
+			img->mem = tex_vdb;
+		}
+		else {
+			VLOG(1) << "Failed to load "
+					<< path_filename(img->filename) << " (" << img->mem_name << ")";
+
+			device_vector<DeviceType> *tex_img =
+			        new device_vector<DeviceType>(device,
+			                                      img->mem_name.c_str(),
+			                                      MEM_TEXTURE);
+
+			file_load_failed<StorageType, DeviceType>(tex_img, type);
+
+			img->mem = tex_img;
+			img->mem->interpolation = img->interpolation;
+			img->mem->extension = img->extension;
+			img->mem->grid_type = IMAGE_GRID_TYPE_DEFAULT;
+
+			thread_scoped_lock device_lock(device_mutex);
+			tex_img->copy_to_device();
+		}
+	}
+	else {
+		device_vector<DeviceType> *tex_img =
+		        new device_vector<DeviceType>(device,
+		                                      img->mem_name.c_str(),
+		                                      MEM_TEXTURE);
+		bool is_sparse = false;
+
+		/* All pre-checks should happen BEFORE alloc. */
+		if(!openvdb_has_grid(img->openvdb_filepath, img->filename)) {
+			VLOG(1) << "Failed to load "
+					<< path_filename(img->filename) << " (" << img->mem_name << ")";
+
+			file_load_failed<StorageType, DeviceType>(tex_img, type);
+		}
+		else {
+			DeviceType *texture_pixels;
+			{
+				thread_scoped_lock device_lock(device_mutex);
+				texture_pixels = (DeviceType*)tex_img->alloc(resolution.x,
+				                                             resolution.y,
+				                                             resolution.z);
+			}
+
+			file_load_openvdb_dense(img->openvdb_filepath, img->filename,
+			                        resolution, texture_limit, texture_pixels);
+
+			if(img->make_sparse) {
+				is_sparse = file_make_image_sparse<DeviceType>(device, img, tex_img);
+			}
+		}
+
+		img->mem = tex_img;
+		img->mem->interpolation = img->interpolation;
+		img->mem->extension = img->extension;
+		img->mem->grid_type = is_sparse ? IMAGE_GRID_TYPE_SPARSE : IMAGE_GRID_TYPE_DEFAULT;
+
+		thread_scoped_lock device_lock(device_mutex);
+		tex_img->copy_to_device();
+	}
+}
+#endif
 
 void ImageManager::device_load_image(Device *device,
                                      Scene *scene,
@@ -880,10 +1002,20 @@ void ImageManager::device_load_image(Device *device,
 	/* Create new texture. */
 	switch(type) {
 		case IMAGE_DATA_TYPE_FLOAT4:
-			load_image<TypeDesc::FLOAT, float, float4>(device, img, type, texture_limit);
+#ifdef WITH_OPENVDB
+			if(!img->openvdb_filepath.empty())
+				load_openvdb_image<float, float4>(device, img, type, texture_limit);
+			else
+#endif
+				load_image<TypeDesc::FLOAT, float, float4>(device, img, type, texture_limit);
 			break;
 		case IMAGE_DATA_TYPE_FLOAT:
-			load_image<TypeDesc::FLOAT, float, float>(device, img, type, texture_limit);
+#ifdef WITH_OPENVDB
+			if(!img->openvdb_filepath.empty())
+				load_openvdb_image<float, float>(device, img, type, texture_limit);
+			else
+#endif
+				load_image<TypeDesc::FLOAT, float, float>(device, img, type, texture_limit);
 			break;
 		case IMAGE_DATA_TYPE_BYTE4:
 			load_image<TypeDesc::UINT8, uchar, uchar4>(device, img, type, texture_limit);

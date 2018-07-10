@@ -122,6 +122,16 @@ openvdb::GridBase::Ptr OpenVDBReader::getGrid(const openvdb::Name &name) const
 	return m_file->readGrid(name);
 }
 
+openvdb::math::CoordBBox OpenVDBReader::getGridBounds(const openvdb::Name &name) const
+{
+	return getGrid(name)->evalActiveVoxelBoundingBox();
+}
+
+openvdb::math::Transform::Ptr OpenVDBReader::getGridTranform(const openvdb::Name &name) const
+{
+	return getGrid(name)->transformPtr();
+}
+
 size_t OpenVDBReader::numGrids() const
 {
 	return m_file->getGrids()->size();

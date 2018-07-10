@@ -60,6 +60,13 @@ typedef enum ImageDataType {
 #define IMAGE_DATA_TYPE_SHIFT 3
 #define IMAGE_DATA_TYPE_MASK 0x7
 
+/* Texture Grid Types */
+typedef enum ImageGridType {
+	IMAGE_GRID_TYPE_DEFAULT,
+	IMAGE_GRID_TYPE_SPARSE,
+	IMAGE_GRID_TYPE_OPENVDB,
+} ImageGridType;
+
 /* Extension types for textures.
  *
  * Defines how the image is extrapolated past its original bounds. */
@@ -78,18 +85,18 @@ typedef struct TextureInfo {
 	/* Pointer, offset or texture depending on device. */
 	uint64_t data;
 	/* References the offsets for tiles in sparse volumes. */
-	uint64_t grid_info;
+	uint64_t util;
 	/* Buffer number for OpenCL. */
 	uint cl_buffer;
-	/* Interpolation and extension type. */
-	uint interpolation, extension;
+	/* Interpolation, extension, and grid type. */
+	uint interpolation, extension, grid_type;
 	/* Dimensions. */
 	uint width, height, depth;
 	/* Tiled dimensions for sparse grid index calculations,
 	 * and length of the last tile's dimensions. */
 	uint tiled_width, tiled_height, last_tile_width, last_tile_height;
-	/* Dummy variable to keep TextureInfo the correct size. */
-	uint64_t dummy;
+	/* Dummy variables to keep TextureInfo the correct size. */
+	uint dummy;
 } TextureInfo;
 
 CCL_NAMESPACE_END

@@ -36,6 +36,26 @@ int OpenVDB_getVersionHex()
 	return openvdb::OPENVDB_LIBRARY_VERSION;
 }
 
+const char *vdb_grid_name(const int grid)
+{
+	switch(grid) {
+		case VDB_SMOKE_DENSITY:
+			return "density";
+		case VDB_SMOKE_COLOR:
+			return "color";
+		case VDB_SMOKE_FLAME:
+			return "flame";
+		case VDB_SMOKE_HEAT:
+			return "heat";
+		case VDB_SMOKE_TEMPERATURE:
+			return "temperature";
+		case VDB_SMOKE_VELOCITY:
+			return "velocity";
+		default:
+			return "";
+	}
+}
+
 OpenVDBFloatGrid *OpenVDB_export_grid_fl(
         OpenVDBWriter *writer,
         const char *name, float *data,
@@ -216,6 +236,16 @@ void OpenVDBReader_open(OpenVDBReader *reader, const char *filename)
 	reader->open(filename);
 }
 
+bool OpenVDBReader_has_grid(OpenVDBReader *reader, const char *name)
+{
+	return reader->hasGrid(name);
+}
+
+bool OpenVDBReader_has_smoke_grid(OpenVDBReader *reader, const int grid)
+{
+	return reader->hasGrid(vdb_grid_name(grid));
+}
+
 void OpenVDBReader_get_meta_fl(OpenVDBReader *reader, const char *name, float *value)
 {
 	reader->floatMeta(name, *value);
@@ -239,4 +269,97 @@ void OpenVDBReader_get_meta_v3_int(OpenVDBReader *reader, const char *name, int 
 void OpenVDBReader_get_meta_mat4(OpenVDBReader *reader, const char *name, float value[4][4])
 {
 	reader->mat4sMeta(name, value);
+}
+
+static bool OpenVDBReader_get_bbox(struct OpenVDBReader *reader,
+                                   openvdb::math::CoordBBox *bbox,
+                                   openvdb::BBoxd *bbox_world,
+                                   openvdb::math::Vec3d *v_size)
+{
+	openvdb::math::Transform::Ptr tfm;
+	bool is_valid = true; /* file is valid if all grids have the same tranform */
+
+	for(int type = 0; type < VDB_SMOKE_GRID_NUM; type++) {
+		const char *grid_name = vdb_grid_name(type);
+
+		if(reader->hasGrid(grid_name)) {
+			bbox->expand(reader->getGridBounds(grid_name));
+
+			if(!tfm) {
+				tfm = reader->getGridTranform(grid_name);
+			}
+			else {
+				is_valid = (*tfm == *(reader->getGridTranform(grid_name)));
+			}
+		}
+	}
+
+	if(bbox_world) {
+		*bbox_world = tfm->indexToWorld(*bbox);
+	}
+	if(v_size) {
+		*v_size = tfm->voxelSize();
+	}
+
+	return is_valid;
+}
+
+bool OpenVDBReader_get_simple_bounds(struct OpenVDBReader *reader, int res[3])
+{
+	using namespace openvdb;
+
+	math::CoordBBox bbox;
+	math::Coord coord;
+	bool is_valid = OpenVDBReader_get_bbox(reader, &bbox, NULL, NULL);
+
+	coord = bbox.dim();
+	res[0] = coord[0];
+	res[1] = coord[1];
+	res[2] = coord[2];
+
+	return is_valid;
+}
+
+bool OpenVDBReader_get_detailed_bounds(struct OpenVDBReader *reader,
+                                       int res_min[3], int res_max[3], int res[3],
+                                       float bbox_min[3], float bbox_max[3], float voxel_size[3])
+{
+	using namespace openvdb;
+
+	math::CoordBBox bbox;
+	BBoxd bbox_world;
+	math::Coord coord;
+	math::Vec3d vec3d;
+	bool is_valid = OpenVDBReader_get_bbox(reader, &bbox, &bbox_world, &vec3d);
+
+	voxel_size[0] = vec3d[0];
+	voxel_size[1] = vec3d[1];
+	voxel_size[2] = vec3d[2];
+
+	vec3d = bbox_world.min();
+	bbox_min[0] = vec3d[0];
+	bbox_min[1] = vec3d[1];
+	bbox_min[2] = vec3d[2];
+
+	vec3d = bbox_world.max();
+	bbox_max[0] = vec3d[0];
+	bbox_max[1] = vec3d[1];
+	bbox_max[2] = vec3d[2];
+
+	coord = bbox.getStart();
+	res_min[0] = coord[0];
+	res_min[1] = coord[1];
+	res_min[2] = coord[2];
+
+	coord = bbox.getEnd();
+	res_max[0] = coord[0];
+	res_max[1] = coord[1];
+	res_max[2] = coord[2];
+
+	coord = bbox.dim();
+	res[0] = coord[0];
+	res[1] = coord[1];
+	res[2] = coord[2];
+
+	return is_valid;
 }

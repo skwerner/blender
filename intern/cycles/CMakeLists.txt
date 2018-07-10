@@ -261,6 +261,28 @@ if(WITH_CYCLES_LOGGING)
 	)
 endif()
 
+if(WITH_OPENVDB)
+	add_definitions(-DWITH_OPENVDB)
+
+	if(WITH_OPENVDB_3_ABI_COMPATIBLE)
+		add_definitions(
+			-DOPENVDB_3_ABI_COMPATIBLE
+		)
+	endif()
+
+	if(WITH_OPENVDB_BLOSC)
+		add_definitions(
+			-DWITH_OPENVDB_BLOSC
+		)
+	endif()
+
+	include_directories(
+		SYSTEM
+		${OPENVDB_INCLUDE_DIRS}
+		../openvdb
+	)
+endif()
+
 # Debugging capabilities (debug passes etc).
 if(WITH_CYCLES_DEBUG)
 	add_definitions(-DWITH_CYCLES_DEBUG)

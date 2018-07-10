@@ -46,6 +46,19 @@ enum {
 	VEC_CONTRAVARIANT_ABSOLUTE = 4,
 };
 
+enum {
+	VDB_SMOKE_DENSITY,
+	VDB_SMOKE_COLOR,
+	VDB_SMOKE_FLAME,
+	VDB_SMOKE_HEAT,
+	VDB_SMOKE_TEMPERATURE,
+	VDB_SMOKE_VELOCITY,
+
+	VDB_SMOKE_GRID_NUM
+};
+
+const char *vdb_grid_name(const int grid);
+
 struct OpenVDBFloatGrid *OpenVDB_export_grid_fl(
         struct OpenVDBWriter *writer,
         const char *name, float *data,
@@ -93,11 +106,18 @@ void OpenVDBWriter_write(struct OpenVDBWriter *writer, const char *filename);
 struct OpenVDBReader *OpenVDBReader_create(void);
 void OpenVDBReader_free(struct OpenVDBReader *reader);
 void OpenVDBReader_open(struct OpenVDBReader *reader, const char *filename);
+bool OpenVDBReader_has_grid(struct OpenVDBReader *reader, const char *name);
+bool OpenVDBReader_has_smoke_grid(struct OpenVDBReader *reader, const int grid);
 void OpenVDBReader_get_meta_fl(struct OpenVDBReader *reader, const char *name, float *value);
 void OpenVDBReader_get_meta_int(struct OpenVDBReader *reader, const char *name, int *value);
 void OpenVDBReader_get_meta_v3(struct OpenVDBReader *reader, const char *name, float value[3]);
 void OpenVDBReader_get_meta_v3_int(struct OpenVDBReader *reader, const char *name, int value[3]);
 void OpenVDBReader_get_meta_mat4(struct OpenVDBReader *reader, const char *name, float value[4][4]);
+
+bool OpenVDBReader_get_simple_bounds(struct OpenVDBReader *reader, int res[3]);
+bool OpenVDBReader_get_detailed_bounds(struct OpenVDBReader *reader,
+                                       int res_min[3], int res_max[3], int res[3],
+                                       float bbox_min[3], float bbox_max[3], float voxel_size[3]);
 
 #ifdef __cplusplus
 }

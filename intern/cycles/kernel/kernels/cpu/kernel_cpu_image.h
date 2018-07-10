@@ -19,9 +19,14 @@
 
 #include "util/util_sparse_grid.h"
 
+#ifdef WITH_OPENVDB
+#include <openvdb/openvdb.h>
+#endif
+
 CCL_NAMESPACE_BEGIN
 
-template<typename T> struct TextureInterpolator  {
+template<typename T, typename UtilType>
+struct TextureInterpolator {
 #define SET_CUBIC_SPLINE_WEIGHTS(u, t) \
 	{ \
 		u[0] = (((-1.0f/6.0f)* t + 0.5f) * t - 0.5f) * t + (1.0f/6.0f); \
@@ -29,11 +34,6 @@ template<typename T> struct TextureInterpolator  {
 		u[2] =  ((     -0.5f * t + 0.5f) * t + 0.5f) * t + (1.0f/6.0f); \
 		u[3] = (1.0f / 6.0f) * t * t * t; \
 	} (void)0
-
-	static ccl_always_inline int flatten(int x, int y, int z, int width, int height)
-	{
-		return x + width * (y + z * height);
-	}
 
 	static ccl_always_inline float4 read(float4 r)
 	{
@@ -80,14 +80,29 @@ template<typename T> struct TextureInterpolator  {
 		return read(data[y * width + x]);
 	}
 
-	static ccl_always_inline float4 read(const T *data, const int *grid_info,
-	                                     int x, int y, int z,
-	                                     int tiw, int tih, int ltw, int lth)
+	/* Default grid voxel access. */
+	static ccl_always_inline float4 read_data(const T *data,
+	                                          const void */*util*/,
+	                                          int x, int y, int z,
+	                                          int width, int height,
+	                                          int /*tiw*/, int /*tih*/,
+	                                          int /*ltw*/, int /*lth*/)
+	{
+		return read(data[x + width * (y + z * height)]);
+	}
+
+	/* Sparse grid voxel access. */
+	static ccl_always_inline float4 read_data(const T *data,
+	                                          const int *grid_info,
+	                                          int x, int y, int z,
+	                                          int /*width*/, int /*height*/,
+	                                          int tiw, int tih,
+	                                          int ltw, int lth)
 	{
 		int tix = x / TILE_SIZE, itix = x % TILE_SIZE,
 		    tiy = y / TILE_SIZE, itiy = y % TILE_SIZE,
 		    tiz = z / TILE_SIZE, itiz = z % TILE_SIZE;
-		int dense_index = flatten(tix, tiy, tiz, tiw, tih) * 2;
+		int dense_index = (tix + tiw * (tiy + tiz * tih)) * 2;
 		int sparse_index = grid_info[dense_index];
 		int dims = grid_info[dense_index + 1];
 		if(sparse_index < 0) {
@@ -95,19 +110,35 @@ template<typename T> struct TextureInterpolator  {
 		}
 		int itiw = dims & (1 << ST_SHIFT_TRUNCATE_WIDTH) ? ltw : TILE_SIZE;
 		int itih = dims & (1 << ST_SHIFT_TRUNCATE_HEIGHT) ? lth : TILE_SIZE;
-		int in_tile_index = flatten(itix, itiy, itiz, itiw, itih);
+		int in_tile_index = itix + itiw * (itiy + itiz * itih);
 		return read(data[sparse_index + in_tile_index]);
 	}
 
-	static ccl_always_inline float4 read(const T *data, const int *grid_info,
-	                                     int index, int width, int height, int /*depth*/,
-	                                     int tiw, int tih, int ltw, int lth)
+#ifdef WITH_OPENVDB
+	/* OpenVDB grid voxel access. */
+	static ccl_always_inline float4 read_data(const T */*data*/,
+	                                          openvdb::FloatGrid::ConstAccessor *accessor,
+	                                          int x, int y, int z,
+	                                          int /*width*/, int /*height*/,
+	                                          int /*tiw*/, int /*tih*/,
+	                                          int /*ltw*/, int /*lth*/)
 	{
-		int x = index % width;
-		int y = (index / width) % height;
-		int z = index / (width * height);
-		return read(data, grid_info, x, y, z, tiw, tih, ltw, lth);
+		const openvdb::math::Coord xyz(x, y, z);
+		return read(accessor->getValue(xyz));
 	}
+
+	static ccl_always_inline float4 read_data(const T */*data*/,
+	                                          openvdb::Vec3SGrid::ConstAccessor *accessor,
+	                                          int x, int y, int z,
+	                                          int /*width*/, int /*height*/,
+	                                          int /*tiw*/, int /*tih*/,
+	                                          int /*ltw*/, int /*lth*/)
+	{
+		const openvdb::math::Coord xyz(x, y, z);
+		openvdb::math::Vec3s r = accessor->getValue(xyz);
+		return make_float4(r.x(), r.y(), r.z(), 1.0f);
+	}
+#endif
 
 	static ccl_always_inline int wrap_periodic(int x, int width)
 	{
@@ -316,14 +347,11 @@ template<typename T> struct TextureInterpolator  {
 		}
 
 		const T *data = (const T*)info.data;
-		const int *grid_info = (const int*)info.grid_info;
+		UtilType *util = (UtilType*)info.util;
 
-		if(grid_info) {
-			return read(data, grid_info, ix, iy, iz,
-			            info.tiled_width, info.tiled_height,
-			            info.last_tile_width, info.last_tile_height);
-		}
-		return read(data[flatten(ix, iy, iz, width, height)]);
+		return read_data(data, util, ix, iy, iz, width, height,
+		                 info.tiled_width, info.tiled_height,
+		                 info.last_tile_width, info.last_tile_height);
 	}
 
 	static ccl_always_inline float4 interp_3d_linear(const TextureInfo& info,
@@ -372,32 +400,20 @@ template<typename T> struct TextureInterpolator  {
 
 		float4 r;
 		const T *data = (const T*)info.data;
-		const int *gi = (const int*)info.grid_info;
+		UtilType *util = (UtilType*)info.util;
+		int tiw = info.tiled_width;
+		int tih = info.tiled_height;
+		int ltw = info.last_tile_width;
+		int lth = info.last_tile_height;
 
-		if(gi) {
-			int tiw = info.tiled_width;
-			int tih = info.tiled_height;
-			int ltw = info.last_tile_width;
-			int lth = info.last_tile_height;
-			r  = (1.0f - tz)*(1.0f - ty)*(1.0f - tx) * read(data, gi, ix,  iy,  iz,  tiw, tih, ltw, lth);
-			r += (1.0f - tz)*(1.0f - ty)*tx          * read(data, gi, nix, iy,  iz,  tiw, tih, ltw, lth);
-			r += (1.0f - tz)*ty*(1.0f - tx)          * read(data, gi, ix,  niy, iz,  tiw, tih, ltw, lth);
-			r += (1.0f - tz)*ty*tx                   * read(data, gi, nix, niy, iz,  tiw, tih, ltw, lth);
-			r += tz*(1.0f - ty)*(1.0f - tx)          * read(data, gi, ix,  iy,  niz, tiw, tih, ltw, lth);
-			r += tz*(1.0f - ty)*tx                   * read(data, gi, nix, iy,  niz, tiw, tih, ltw, lth);
-			r += tz*ty*(1.0f - tx)                   * read(data, gi, ix,  niy, niz, tiw, tih, ltw, lth);
-			r += tz*ty*tx                            * read(data, gi, nix, niy, niz, tiw, tih, ltw, lth);
-		}
-		else {
-			r  = (1.0f - tz)*(1.0f - ty)*(1.0f - tx) * read(data[flatten(ix,  iy,  iz,  width, height)]);
-			r += (1.0f - tz)*(1.0f - ty)*tx			 * read(data[flatten(nix, iy,  iz,  width, height)]);
-			r += (1.0f - tz)*ty*(1.0f - tx)			 * read(data[flatten(ix,  niy, iz,  width, height)]);
-			r += (1.0f - tz)*ty*tx					 * read(data[flatten(nix, niy, iz,  width, height)]);
-			r += tz*(1.0f - ty)*(1.0f - tx)			 * read(data[flatten(ix,  iy,  niz, width, height)]);
-			r += tz*(1.0f - ty)*tx					 * read(data[flatten(nix, iy,  niz, width, height)]);
-			r += tz*ty*(1.0f - tx)					 * read(data[flatten(ix,  niy, niz, width, height)]);
-			r += tz*ty*tx							 * read(data[flatten(nix, niy, niz, width, height)]);
-		}
+		r  = (1.0f - tz)*(1.0f - ty)*(1.0f - tx) * read_data(data, util, ix,  iy,  iz,  width, height, tiw, tih, ltw, lth);
+		r += (1.0f - tz)*(1.0f - ty)*tx          * read_data(data, util, nix, iy,  iz,  width, height, tiw, tih, ltw, lth);
+		r += (1.0f - tz)*ty*(1.0f - tx)          * read_data(data, util, ix,  niy, iz,  width, height, tiw, tih, ltw, lth);
+		r += (1.0f - tz)*ty*tx                   * read_data(data, util, nix, niy, iz,  width, height, tiw, tih, ltw, lth);
+		r += tz*(1.0f - ty)*(1.0f - tx)          * read_data(data, util, ix,  iy,  niz, width, height, tiw, tih, ltw, lth);
+		r += tz*(1.0f - ty)*tx                   * read_data(data, util, nix, iy,  niz, width, height, tiw, tih, ltw, lth);
+		r += tz*ty*(1.0f - tx)                   * read_data(data, util, ix,  niy, niz, width, height, tiw, tih, ltw, lth);
+		r += tz*ty*tx                            * read_data(data, util, nix, niy, niz, width, height, tiw, tih, ltw, lth);
 
 		return r;
 	}
@@ -418,10 +434,6 @@ template<typename T> struct TextureInterpolator  {
 		int width = info.width;
 		int height = info.height;
 		int depth = info.depth;
-		int tiw = info.tiled_width;
-		int tih = info.tiled_height;
-		int ltw = info.last_tile_width;
-		int lth = info.last_tile_height;
 		int ix, iy, iz;
 		int nix, niy, niz;
 		/* Tricubic b-spline interpolation. */
@@ -491,9 +503,8 @@ template<typename T> struct TextureInterpolator  {
 		/* Some helper macro to keep code reasonable size,
 		 * let compiler to inline all the matrix multiplications.
 		 */
-#define DATA(x, y, z) (gi ? \
-		read(data, gi, xc[x] + yc[y] + zc[z], width, height, depth, tiw, tih, ltw, lth) : \
-		read(data[xc[x] + yc[y] + zc[z]]))
+		/* To-do (gschua): fix voxel access for non-default grid types. */
+#define DATA(x, y, z) (read(data[xc[x] + yc[y] + zc[z]]))
 #define COL_TERM(col, row) \
 		(v[col] * (u[0] * DATA(0, col, row) + \
 		           u[1] * DATA(1, col, row) + \
@@ -511,7 +522,6 @@ template<typename T> struct TextureInterpolator  {
 
 		/* Actual interpolation. */
 		const T *data = (const T*)info.data;
-		const int *gi = (const int*)info.grid_info;
 		return ROW_TERM(0) + ROW_TERM(1) + ROW_TERM(2) + ROW_TERM(3);
 
 #undef COL_TERM
@@ -527,12 +537,12 @@ template<typename T> struct TextureInterpolator  {
 			return make_float4(0.0f);
 
 		switch((interp == INTERPOLATION_NONE)? info.interpolation: interp) {
-			case INTERPOLATION_CLOSEST:
-				return interp_3d_closest(info, x, y, z);
+			case INTERPOLATION_CUBIC:
+				return interp_3d_tricubic(info, x, y, z);
 			case INTERPOLATION_LINEAR:
 				return interp_3d_linear(info, x, y, z);
 			default:
-				return interp_3d_tricubic(info, x, y, z);
+				return interp_3d_closest(info, x, y, z);
 		}
 	}
 #undef SET_CUBIC_SPLINE_WEIGHTS
@@ -544,18 +554,18 @@ ccl_device float4 kernel_tex_image_interp(KernelGlobals *kg, int id, float x, fl
 
 	switch(kernel_tex_type(id)) {
 		case IMAGE_DATA_TYPE_HALF:
-			return TextureInterpolator<half>::interp(info, x, y);
+			return TextureInterpolator<half, void>::interp(info, x, y);
 		case IMAGE_DATA_TYPE_BYTE:
-			return TextureInterpolator<uchar>::interp(info, x, y);
+			return TextureInterpolator<uchar, void>::interp(info, x, y);
 		case IMAGE_DATA_TYPE_FLOAT:
-			return TextureInterpolator<float>::interp(info, x, y);
+			return TextureInterpolator<float, void>::interp(info, x, y);
 		case IMAGE_DATA_TYPE_HALF4:
-			return TextureInterpolator<half4>::interp(info, x, y);
+			return TextureInterpolator<half4, void>::interp(info, x, y);
 		case IMAGE_DATA_TYPE_BYTE4:
-			return TextureInterpolator<uchar4>::interp(info, x, y);
+			return TextureInterpolator<uchar4, void>::interp(info, x, y);
 		case IMAGE_DATA_TYPE_FLOAT4:
 		default:
-			return TextureInterpolator<float4>::interp(info, x, y);
+			return TextureInterpolator<float4, void>::interp(info, x, y);
 	}
 }
 
@@ -563,20 +573,52 @@ ccl_device float4 kernel_tex_image_interp_3d(KernelGlobals *kg, int id, float x,
 {
 	const TextureInfo& info = kernel_tex_fetch(__texture_info, id);
 
+	/* UNLIKELY(info.util) is a quicker way to check if grid type is not
+	 * default, since only default type will have util == 0. */
+
 	switch(kernel_tex_type(id)) {
 		case IMAGE_DATA_TYPE_HALF:
-			return TextureInterpolator<half>::interp_3d(info, x, y, z, interp);
+			if(UNLIKELY(info.util))
+				return TextureInterpolator<half, int>::interp_3d(info, x, y, z, interp);
+			else
+				return TextureInterpolator<half, void>::interp_3d(info, x, y, z, interp);
 		case IMAGE_DATA_TYPE_BYTE:
-			return TextureInterpolator<uchar>::interp_3d(info, x, y, z, interp);
+			if(UNLIKELY(info.util))
+				return TextureInterpolator<uchar, int>::interp_3d(info, x, y, z, interp);
+			else
+				return TextureInterpolator<uchar, void>::interp_3d(info, x, y, z, interp);
 		case IMAGE_DATA_TYPE_FLOAT:
-			return TextureInterpolator<float>::interp_3d(info, x, y, z, interp);
+			if(UNLIKELY(info.util))
+#ifdef WITH_OPENVDB
+				if(info.grid_type == IMAGE_GRID_TYPE_OPENVDB)
+				    return TextureInterpolator<float, openvdb::FloatGrid::ConstAccessor>::interp_3d(info, x, y, z, interp);
+				else
+#endif
+					return TextureInterpolator<float, int>::interp_3d(info, x, y, z, interp);
+			else
+				return TextureInterpolator<float, void>::interp_3d(info, x, y, z, interp);
 		case IMAGE_DATA_TYPE_HALF4:
-			return TextureInterpolator<half4>::interp_3d(info, x, y, z, interp);
+			if(UNLIKELY(info.util))
+				return TextureInterpolator<half4, int>::interp_3d(info, x, y, z, interp);
+			else
+				return TextureInterpolator<half4, void>::interp_3d(info, x, y, z, interp);
 		case IMAGE_DATA_TYPE_BYTE4:
-			return TextureInterpolator<uchar4>::interp_3d(info, x, y, z, interp);
+			if(UNLIKELY(info.util))
+				return TextureInterpolator<uchar4, int>::interp_3d(info, x, y, z, interp);
+			else
+				return TextureInterpolator<half4, void>::interp_3d(info, x, y, z, interp);
 		case IMAGE_DATA_TYPE_FLOAT4:
+			if(UNLIKELY(info.util))
+#ifdef WITH_OPENVDB
+				if(info.grid_type == IMAGE_GRID_TYPE_OPENVDB)
+				    return TextureInterpolator<float4, openvdb::Vec3SGrid::ConstAccessor>::interp_3d(info, x, y, z, interp);
+				else
+#endif
+					return TextureInterpolator<float4, int>::interp_3d(info, x, y, z, interp);
+			else
+				return TextureInterpolator<float4, void>::interp_3d(info, x, y, z, interp);
 		default:
-			return TextureInterpolator<float4>::interp_3d(info, x, y, z, interp);
+			return make_float4(0.0f);
 	}
 }
 

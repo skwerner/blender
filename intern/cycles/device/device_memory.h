@@ -174,9 +174,12 @@ template<> struct device_type_traits<uint64_t> {
 class device_memory
 {
 public:
-	size_t memory_size() { return data_size*data_elements*datatype_size(data_type); }
+	size_t memory_size() {
+		/* Not including grid_info. */
+		return data_size * data_elements * datatype_size(data_type);
+	}
 	size_t memory_elements_size(int elements) {
-		return elements*data_elements*datatype_size(data_type);
+		return elements * data_elements * datatype_size(data_type);
 	}
 
 	/* Data information. */
@@ -197,6 +200,7 @@ public:
 	const char *name;
 	InterpolationType interpolation;
 	ExtensionType extension;
+	ImageGridType grid_type;
 
 	/* Pointers. */
 	Device *device;

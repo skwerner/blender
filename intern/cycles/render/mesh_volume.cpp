@@ -15,22 +15,19 @@
  */
 
 #include "render/mesh.h"
+#include "render/mesh_volume.h"
 #include "render/attribute.h"
+#ifdef WITH_OPENVDB
+#include "render/openvdb.h"
+#endif
 #include "render/scene.h"
 
 #include "util/util_foreach.h"
 #include "util/util_logging.h"
 #include "util/util_progress.h"
 #include "util/util_sparse_grid.h"
-#include "util/util_types.h"
 
 CCL_NAMESPACE_BEGIN
-
-struct QuadData {
-	int v0, v1, v2, v3;
-
-	float3 normal;
-};
 
 enum {
 	QUAD_X_MIN = 0,
@@ -90,69 +87,7 @@ static void create_quad(int3 corners[8], vector<int3> &vertices, vector<QuadData
 	vertices.push_back(corners[quads_indices[face_index][3]]);
 }
 
-struct VolumeParams {
-	int3 resolution;
-	float3 cell_size;
-	float3 start_point;
-	int pad_size;
-};
-
 static const int CUBE_SIZE = 8;
-
-/* Create a mesh from a volume.
- *
- * The way the algorithm works is as follows:
- *
- * - the coordinates of active voxels from a dense volume (or 3d image) are
- * gathered inside an auxialliary volume.
- * - each set of coordinates of an CUBE_SIZE cube are mapped to the same
- * coordinate of the auxilliary volume.
- * - quads are created between active and non-active voxels in the auxialliary
- * volume to generate a tight mesh around the volume.
- */
-class VolumeMeshBuilder {
-	/* Auxilliary volume that is used to check if a node already added. */
-	vector<char> grid;
-
-	/* The resolution of the auxilliary volume, set to be equal to 1/CUBE_SIZE
-	 * of the original volume on each axis. */
-	int3 res;
-
-	size_t number_of_nodes;
-
-	/* Offset due to padding in the original grid. Padding will transform the
-	 * coordinates of the original grid from 0...res to -padding...res+padding,
-	 * so some coordinates are negative, and we need to properly account for
-	 * them. */
-	int3 pad_offset;
-
-	VolumeParams *params;
-
-public:
-	VolumeMeshBuilder(VolumeParams *volume_params);
-
-	void add_node(int x, int y, int z);
-
-	void add_node_with_padding(int x, int y, int z);
-
-	void create_mesh(vector<float3> &vertices,
-	                 vector<int> &indices,
-	                 vector<float3> &face_normals);
-
-private:
-	void generate_vertices_and_quads(vector<int3> &vertices_is,
-	                                 vector<QuadData> &quads);
-
-	void deduplicate_vertices(vector<int3> &vertices,
-	                          vector<QuadData> &quads);
-
-	void convert_object_space(const vector<int3> &vertices,
-	                          vector<float3> &out_vertices);
-
-	void convert_quads_to_tris(const vector<QuadData> &quads,
-	                           vector<int> &tris,
-	                           vector<float3> &face_normals);
-};
 
 VolumeMeshBuilder::VolumeMeshBuilder(VolumeParams *volume_params)
 {
@@ -378,8 +313,8 @@ void VolumeMeshBuilder::convert_quads_to_tris(const vector<QuadData> &quads,
 /* ************************************************************************** */
 
 struct VoxelAttributeGrid {
-	float *data;
-	int *grid_info = NULL;
+	void *data;
+	int *grid_info;
 	int channels;
 };
 
@@ -395,6 +330,8 @@ void MeshManager::create_volume_mesh(Scene *scene,
 	/* Compute volume parameters. */
 	VolumeParams volume_params;
 	volume_params.resolution = make_int3(0, 0, 0);
+	bool is_openvdb = false;
+	int grid_mem = -1;
 
 	foreach(Attribute& attr, mesh->attributes.attributes) {
 		if(attr.element != ATTR_ELEMENT_VOXEL) {
@@ -409,19 +346,21 @@ void MeshManager::create_volume_mesh(Scene *scene,
 		                            image_memory->real_depth);
 
 		if(volume_params.resolution == make_int3(0, 0, 0)) {
+			/* First volume grid. */
 			volume_params.resolution = resolution;
+			grid_mem = image_memory->memory_size();
 		}
 		else if(volume_params.resolution != resolution) {
 			VLOG(1) << "Can't create volume mesh, all voxel grid resolutions must be equal\n";
 			return;
 		}
 
+		is_openvdb = (image_memory->grid_type == IMAGE_GRID_TYPE_OPENVDB);
+
 		VoxelAttributeGrid voxel_grid;
-		voxel_grid.data = static_cast<float*>(image_memory->host_pointer);
+		voxel_grid.data = image_memory->host_pointer;
 		voxel_grid.channels = image_memory->data_elements;
-		if(grid_info) {
-			voxel_grid.grid_info = static_cast<int*>(grid_info->host_pointer);
-		}
+		voxel_grid.grid_info = grid_info ? static_cast<int*>(grid_info->host_pointer) : NULL;
 		voxel_grids.push_back(voxel_grid);
 	}
 
@@ -484,47 +423,54 @@ void MeshManager::create_volume_mesh(Scene *scene,
 	VolumeMeshBuilder builder(&volume_params);
 	const float isovalue = mesh->volume_isovalue;
 
-	for(int z = 0; z < resolution.z; ++z) {
-		for(int y = 0; y < resolution.y; ++y) {
-			for(int x = 0; x < resolution.x; ++x) {
-				for(size_t i = 0; i < voxel_grids.size(); ++i) {
-					const VoxelAttributeGrid &voxel_grid = voxel_grids[i];
-					const int channels = voxel_grid.channels;
-					const int *grid_info = voxel_grid.grid_info;
-					int voxel_index;
+	for(size_t i = 0; i < voxel_grids.size(); ++i) {
+		const VoxelAttributeGrid &voxel_grid = voxel_grids[i];
+		const int channels = voxel_grid.channels;
 
-					if(grid_info) {
-						if(!using_cuda) {
-							voxel_index = compute_index(grid_info, x, y, z,
-														tiled_res.x,
-														tiled_res.y,
-														tiled_res.z,
-														last_tile_res.x,
-														last_tile_res.y);
+		if(is_openvdb) {
+#ifdef WITH_OPENVDB
+			if(channels > 1) {
+				build_openvdb_mesh_vec(&builder, voxel_grid.data, resolution, isovalue);
+			}
+			else {
+				build_openvdb_mesh_fl(&builder, voxel_grid.data, resolution, isovalue);
+			}
+#else
+			assert(0);
+#endif
+		}
+		else {
+			const int *grid_info = voxel_grid.grid_info;
+			float *data = static_cast<float*>(voxel_grid.data);
+
+			for(int z = 0; z < resolution.z; ++z) {
+				for(int y = 0; y < resolution.y; ++y) {
+					for(int x = 0; x < resolution.x; ++x) {
+						int voxel_index;
+
+						if(grid_info) {
+							voxel_index = using_cuda ?
+							    compute_index_cuda(grid_info, x, y, z,
+							                       resolution.x, resolution.y, resolution.z,
+							                       tiled_res.x, tiled_res.y, tiled_res.z) :
+							    compute_index(grid_info, x, y, z,
+							                  tiled_res.x, tiled_res.y, tiled_res.z,
+							                  last_tile_res.x, last_tile_res.y);
+
+							if(voxel_index < 0) {
+								continue;
+							}
 						}
 						else {
-							voxel_index = compute_index_cuda(grid_info,
-							                                 x, y, z,
-							                                 resolution.x,
-							                                 resolution.y,
-							                                 resolution.z,
-							                                 tiled_res.x,
-							                                 tiled_res.y,
-							                                 tiled_res.z);
+							voxel_index = compute_index(x, y, z, resolution);
 						}
-						if(voxel_index < 0) {
-							continue;
-						}
-					}
-					else {
-						voxel_index = compute_index(x, y, z, resolution);
-					}
 
-					voxel_index *= channels;
-					for(int c = 0; c < channels; c++) {
-						if(voxel_grid.data[voxel_index + c] >= isovalue) {
-							builder.add_node_with_padding(x, y, z);
-							break;
+						voxel_index *= channels;
+						for(int c = 0; c < channels; c++) {
+							if(data[voxel_index + c] >= isovalue) {
+								builder.add_node_with_padding(x, y, z);
+								break;
+							}
 						}
 					}
 				}
@@ -562,9 +508,7 @@ void MeshManager::create_volume_mesh(Scene *scene,
 	        << ((vertices.size() + face_normals.size())*sizeof(float3) + indices.size()*sizeof(int))/(1024.0*1024.0)
 	        << "Mb.";
 
-	VLOG(1) << "Memory usage volume grid: "
-	        << (resolution.x*resolution.y*resolution.z*sizeof(float))/(1024.0*1024.0)
-	        << "Mb.";
+	VLOG(1) << "Memory usage volume grid: " << grid_mem / (1024.0 * 1024.0) << "Mb.";
 }
 
 CCL_NAMESPACE_END

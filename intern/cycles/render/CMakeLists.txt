@@ -51,6 +51,7 @@ set(SRC_HEADERS
 	integrator.h
 	light.h
 	mesh.h
+	mesh_volume.h
 	nodes.h
 	object.h
 	osl.h
@@ -64,6 +65,11 @@ set(SRC_HEADERS
 	tables.h
 	tile.h
 )
+
+if(WITH_OPENVDB)
+	list(APPEND SRC openvdb.cpp)
+	list(APPEND SRC_HEADERS openvdb.h)
+endif()
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${RTTI_DISABLE_FLAGS}")
 

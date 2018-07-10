@@ -48,7 +48,12 @@ public:
 	void mat4sMeta(const openvdb::Name &name, float value[4][4]) const;
 
 	bool hasGrid(const openvdb::Name &name) const;
+
+	/* Don't run these functions without checking if grid exists first! */
 	openvdb::GridBase::Ptr getGrid(const openvdb::Name &name) const;
+	openvdb::math::CoordBBox getGridBounds(const openvdb::Name &name) const;
+	openvdb::math::Transform::Ptr getGridTranform(const openvdb::Name &name) const;
+
 	size_t numGrids() const;
 };
 

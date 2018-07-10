@@ -1180,7 +1180,6 @@ ccl_device void light_bvh_sample(KernelGlobals *kg, float3 P, float randu,
 			if(num_emitters == 1){
 				sampled_index = distribution_id;
 			} else { // Leaf with several lights. Pick one randomly.
-				light_distribution_sample(kg, &randu); // TODO: Rescale random number in a better way
 				int light = min((int)(randu* (float)num_emitters), num_emitters-1);
 				sampled_index = distribution_id +light;
 				*pdf_factor *= 1.0f / (float)num_emitters;
@@ -1196,11 +1195,16 @@ ccl_device void light_bvh_sample(KernelGlobals *kg, float3 P, float randu,
 			float P_L = I_L / ( I_L + I_R);
 
 			/* choose which node to go down */
-			light_distribution_sample(kg, &randu); // TODO: Rescale random number in a better way
 			if(randu <= P_L){ // Going down left node
+				/* rescale random number */
+				randu = randu / P_L;
+
 				offset = child_offsetL;
 				*pdf_factor *= P_L;
 			} else { // Going down right node
+				/* rescale random number */
+				randu = (randu * (I_L + I_R) - I_L)/I_R;
+
 				offset = child_offsetR;
 				*pdf_factor *= 1.0f - P_L;
 			}

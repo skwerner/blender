@@ -126,9 +126,6 @@ ccl_device void accum_light_tree_contribution(KernelGlobals *kg, float randu,
                                               ShaderData *sd, ShaderData *emission_sd,
                                               int *num_lights)
 {
-	/* TODO: sort out randu and randv rescaling */
-	light_distribution_sample(kg, &randu);
-	light_distribution_sample(kg, &randv);
 
 	float3 P = sd->P;
 	float time = sd->time;
@@ -187,11 +184,17 @@ ccl_device void accum_light_tree_contribution(KernelGlobals *kg, float randu,
 			float I_L = calc_node_importance(kg, P, child_offsetL);
 			float I_R = calc_node_importance(kg, P, child_offsetR);
 			float P_L = I_L / ( I_L + I_R);
-			light_distribution_sample(kg, &randu);
+
 			if(randu <= P_L){ // Going down left node
+				/* rescale random number */
+				randu = randu / P_L;
+
 				offset = child_offsetL;
 				pdf_factor *= P_L;
 			} else { // Going down right node
+				/* rescale random number */
+				randu = (randu * (I_L + I_R) - I_L)/I_R;
+
 				offset = child_offsetR;
 				pdf_factor *= 1.0f - P_L;
 			}

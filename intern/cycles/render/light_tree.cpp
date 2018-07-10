@@ -109,17 +109,20 @@ int LightTree::flattenBVHTree(const BVHBuildNode &node, int &offset){
 	compactNode.bounds_o = node.bcone;
 
 	int myOffset = offset++;
-	if (node.nPrimitives > 0){
-
+	if (node.is_leaf){
+		/* create leaf node */
 		assert( !node.children[0] && !node.children[1] );
 
 		compactNode.energy = node.energy;
+		compactNode.energy_variance = node.energy_variance;
 		compactNode.prim_id = node.firstPrimOffset;
-		compactNode.nemitters = node.nPrimitives;
+		compactNode.num_emitters = node.num_emitters;
 	} else {
 
 		/* create interior compact node */
-		compactNode.nemitters = 0;
+		compactNode.num_emitters = node.num_emitters;
+		compactNode.energy = node.energy;
+		compactNode.energy_variance = node.energy_variance;
 		assert( node.children[0] && node.children[1] );
 		flattenBVHTree(*node.children[0], offset);
 		compactNode.secondChildOffset = flattenBVHTree(*node.children[1],
@@ -436,27 +439,37 @@ BVHBuildNode* LightTree::recursive_build(const unsigned int start,
 	BoundBox node_bbox = BoundBox::empty;
 	vector<Orientation> bcones;
 	bcones.reserve(end-start);
-	float node_energy = 0.0f;
+	double node_energy = 0.0;
+	double node_energy_sum_squared = 0.0;
+	unsigned int num_emitters = end - start;
+
 	for (unsigned int i = start; i < end; ++i){
 		node_bbox.grow(buildData[i].bbox);
 		bcones.push_back(buildData[i].bcone);
-		node_energy += buildData[i].energy;
+		double energy = (double)buildData[i].energy;
+		node_energy += energy;
+		node_energy_sum_squared += energy * energy;
 	}
+	double node_energy_mean = node_energy / (double)num_emitters;
+
+	/* using max due to precision issues here */
+	double node_energy_variance =
+	       node_energy_sum_squared / (double)num_emitters - // E[e^2]
+	       node_energy_mean * node_energy_mean; // E[e]^2
+	node_energy_variance = max(node_energy_variance, 0.0);
 
 	Orientation node_bcone = aggregate_bounding_cones(bcones);
 	bcones.clear();
 	const float node_M_Omega = calculate_cone_measure(node_bcone);
 
-	assert(end >= start);
-	unsigned int nPrimitives = end - start;
-	if(nPrimitives == 1){
+	if(num_emitters == 1){
 		/* create leaf */
 		int firstPrimOffset = orderedPrims.size();
 		int prim = buildData[start].primitiveNumber;
 		orderedPrims.push_back(primitives[prim]);
 
-		node->init_leaf(firstPrimOffset, nPrimitives, node_bbox, node_bcone,
-		                node_energy);
+		node->init_leaf(firstPrimOffset, num_emitters, node_bbox, node_bcone,
+		                node_energy, node_energy_variance);
 		return node;
 	} else {
 		/* compute bounds for primitive centroids */
@@ -484,8 +497,8 @@ BVHBuildNode* LightTree::recursive_build(const unsigned int start,
 				orderedPrims.push_back(primitives[prim]);
 			}
 
-			node->init_leaf(firstPrimOffset, nPrimitives, node_bbox, node_bcone,
-			                node_energy);
+			node->init_leaf(firstPrimOffset, num_emitters, node_bbox, node_bcone,
+			                node_energy, node_energy_variance);
 
 			return node;
 		} else {
@@ -495,12 +508,13 @@ BVHBuildNode* LightTree::recursive_build(const unsigned int start,
 			float min_cost;
 			int min_dim, min_bucket;
 			split_saoh(centroidBbox, buildData, start, end, nBuckets,
-			           node_energy, node_M_Omega, node_bbox,
+			           (float)node_energy, node_M_Omega, node_bbox,
 			           min_cost, min_dim, min_bucket);
 			assert(total_min_dim != -1);
 
 			int mid = 0;
-			if (nPrimitives > maxPrimsInNode || min_cost < nPrimitives){
+			// TODO: Should be based on cost vs energy here instead of <num_emitters
+			if (num_emitters > maxPrimsInNode || min_cost < num_emitters){
 				/* partition primitives */
 				BVHPrimitiveInfo *midPtr =
 				        std::partition(&buildData[start], &buildData[end-1]+1,
@@ -515,8 +529,8 @@ BVHBuildNode* LightTree::recursive_build(const unsigned int start,
 					orderedPrims.push_back(primitives[prim]);
 				}
 
-				node->init_leaf(firstPrimOffset, nPrimitives, node_bbox,
-				                node_bcone, node_energy);
+				node->init_leaf(firstPrimOffset, num_emitters, node_bbox,
+				                node_bcone, node_energy, node_energy_variance);
 				return node;
 			}
 
@@ -527,7 +541,8 @@ BVHBuildNode* LightTree::recursive_build(const unsigned int start,
 			                                      totalNodes, orderedPrims );
 			BVHBuildNode *right = recursive_build( mid, end, buildData,
 			                                       totalNodes, orderedPrims);
-			node->init_interior( min_dim, left, right, node_bcone, node_energy);
+			node->init_interior(min_dim, left, right, node_bcone, num_emitters,
+			                    node_energy, node_energy_variance);
 		}
 	}
 

@@ -46,14 +46,13 @@ ccl_device void accum_light_contribution(KernelGlobals *kg,
 }
 
 /* Decides whether to go down both childen or only one in the tree traversal */
-ccl_device bool split(KernelGlobals *kg, ShaderData * sd, int node_offset,
-                      float randu, float randv)
+ccl_device bool split(KernelGlobals *kg, float3 P, int node_offset)
 {
 	/* early exists if never/always splitting */
-	const float threshold = 1.0f - kernel_data.integrator.splitting_threshold;
-	if(threshold == 1.0f){
+	const double threshold = (double)kernel_data.integrator.splitting_threshold;
+	if(threshold == 0.0){
 		return false;
-	} else if(threshold == 0.0f){
+	} else if(threshold == 1.0){
 		return true;
 	}
 
@@ -63,101 +62,59 @@ ccl_device bool split(KernelGlobals *kg, ShaderData * sd, int node_offset,
 	const float3 bboxMin = make_float3( node1[0], node1[1], node1[2]);
 	const float3 bboxMax = make_float3( node1[3], node2[0], node2[1]);
 
-	/* if P is inside bounding box then split */
-	const float3 P = sd->P;
-	const bool x_inside = (P[0] >= bboxMin[0] && P[0] <= bboxMax[0]);
-	const bool y_inside = (P[1] >= bboxMin[1] && P[1] <= bboxMax[1]);
-	const bool z_inside = (P[2] >= bboxMin[2] && P[2] <= bboxMax[2]);
-	if(x_inside && y_inside && z_inside){
-		return true; // Split
+	/* if P is inside bounding sphere then split */
+	const float3 centroid = 0.5f * (bboxMax + bboxMin);
+	const double radius_squared = (double)len_squared(bboxMax - centroid);
+	const double dist_squared   = (double)len_squared(centroid - P);
+	if(dist_squared <= radius_squared){
+		return true;
 	}
 
-	/* solid angle */
+	/* eq. 8 & 9 */
+	/* observed precision issues and issues with overflow of num_emitters_squared.
+	 * using doubles to fix this for now. */
 
-	/* approximate solid angle of bbox with solid angle of sphere */
-	// From PBRT, todo: do for visible faces of bbox instead?
-	const float3 centroid       = 0.5f * (bboxMax + bboxMin);
-	const float  radius_squared = len_squared(bboxMax-centroid);
-	const float  dist_squared   = len_squared(centroid-P);
+	/* Interval the distance can be in: [a,b] */
+	const double  radius = sqrt(radius_squared);
+	const double  dist   = sqrt(dist_squared);
+	const double  a      = dist - radius;
+	const double  b      = dist + radius;
 
-	/* (---r---C       )
-	 *  \     /
-	 *   \ th/ <--- d
-	 *    \ /
-	 *     P
-	 * sin(th) = r/d <=> sin^2(th) = r^2 / d^2 */
-	const float sin_theta_max_squared = radius_squared / dist_squared;
-	const float cos_theta_max = safe_sqrtf(max(0.0f,1.0f-sin_theta_max_squared));
-	const float solid_angle = (dist_squared <= radius_squared)
-	                          ? M_2PI_F : M_2PI_F * (1.0f - cos_theta_max);
+	const double g_mean         = 1.0 / (a * b);
+	const double g_mean_squared = g_mean * g_mean;
+	const double a3             = a * a * a;
+	const double b3             = b * b * b;
+	const double g_variance     = (b3 - a3) / (3.0 * (b - a) * a3 * b3) -
+	                              g_mean_squared;
 
-	/* BSDF peak */
+	/* eq. 10 */
+	const float4 node0   = kernel_tex_fetch(__light_tree_nodes, node_offset    );
+	const float4 node3   = kernel_tex_fetch(__light_tree_nodes, node_offset + 3);
+	const double energy       = (double)node0[0];
+	const double e_variance   = (double)node3[3];
+	const double num_emitters = (double)__float_as_int(node0[3]);
 
-	/* TODO: Instead of randomly picking a BSDF, it might be better to
-	 * loop over the BSDFs for the point and see if there are any specular ones.
-	 * If so, pick one of these, otherwise, skip BSDF peak calculations. */
-	const ShaderClosure *sc = shader_bsdf_pick(sd, &randu);
-	if(sc == NULL) {
-		return false; // TODO: handle this
-	}
+	const double num_emitters_squared = num_emitters * num_emitters;
+	const double e_mean = energy / num_emitters;
+	const double e_mean_squared = e_mean * e_mean;
+	const double variance = (e_variance * (g_variance + g_mean_squared) +
+	                         e_mean_squared * g_variance) * num_emitters_squared;
+	/*
+	 * If I run into further precision issues
+	 *  sigma^2 = (V[e] * (V[g] + E[g]^2) + (E[e]^2 * V[g]) * N^2 =
+	 *          = / V[e] = E[e^2] - E[e]^2 =  ((e_1)^2 + (e_2)^2 +..+(e_N)^2)/N - E[e]^2 / =
+	 *          = / E[e] = (e_1 + e_2 + .. + e_N)/N / =
+	 *            (( ((e_1)^2 + .. +(e_N)^2) / N - (e_1 + .. + e_N)^2 / N^2 )(V[g] + E[g]^2) + V[g](e_1 + .. + e_N)^2 / N^2)N^2 =
+	 *          = (  ((e_1)^2 + .. +(e_N)^2) * N - (e_1 + .. + e_N)^2       )(V[g] + E[g]^2) + V[g](e_1 + .. + e_N)^2
+	 *
+	 * => No need to calculate N^2 which could be really large for the root node when a lot of lights are used
+	 * However, e_mean^2 will be really large instead?
+	 * */
 
-	float bsdf_peak = 1.0f;
+	/* normalize */
+	const double variance_normalized = sqrt(sqrt( 1.0 / (1.0 + sqrt(variance))));
 
-	/* only sample BSDF if "highly specular" */
-	/* TODO: This does not work as I expect, but it might be related to that we
-	 * currently consider non-specular BSDFs here too */
-	if(bsdf_get_roughness_squared(sc) < 0.25f) {
-		float3 eval;
-		float bsdf_pdf;
-		float3 bsdf_omega_in;
-		differential3 bsdf_domega_in;
-
-		bsdf_pdf = 0.0f;
-		bsdf_sample(kg, sd, sc, randu, randv, &eval, &bsdf_omega_in,
-		            &bsdf_domega_in, &bsdf_pdf);
-
-		/* TODO: More efficient to:
-		 *  1. Only sample direction
-		 *  2. If sampled direction points towards cluster
-		 *       - Compute conservative cosine with vector to cluster center
-		 *       - Evaluate simplified GGX for direction sampled direction or
-		 *         vector to cluster?
-		*/
-
-		if(bsdf_pdf != 0.0f && !is_zero(eval)){
-
-			/* check if sampled direction is pointing towards the cluster */
-			const float3 P_to_centroid = normalize(centroid - P);
-			const float theta     = acosf(dot(bsdf_omega_in, P_to_centroid));
-			const float theta_max = acosf(cos_theta_max);
-			if(theta <= theta_max){
-
-				eval /= bsdf_pdf;
-				const float BSDF = min(max3(eval), 1.0f);
-
-				/* conservative cosine between dir to cluster's center and N */
-				const float cosNI = dot(P_to_centroid, sd->N);
-				const float NI    = acosf(cosNI);
-				/* TODO: Do something better than clamp here.
-				 * The problem: conservative_cosNI = cos(M_PI_2_F - theta_max)
-				 * for NI > PI/2 instead of 0 */
-				const float conservative_NI = clamp(NI - theta_max,
-				                                    0.0, M_PI_2_F - theta_max);
-				const float conservative_cosNI = cosf(conservative_NI);
-
-				bsdf_peak = BSDF * conservative_cosNI;
-			}
-		}
-	}
-
-	/* TODO: how to make it so bsdf_peak makes it more probable to split? */
-	const float heuristic = solid_angle * bsdf_peak;
-
-	/* normalize heuristic */
-	const float normalized_heuristic = heuristic  * M_1_PI_F * 0.5f;
-
-	/* if heuristic is larger than the threshold then split */
-	return normalized_heuristic > threshold;
+	return variance_normalized < threshold;
 }
 
 /* Recursive tree traversal and accumulating contribution to L for each leaf. */
@@ -178,13 +135,13 @@ ccl_device void accum_light_tree_contribution(KernelGlobals *kg, float randu,
 	int bounce = state->bounce;
 
 	/* read in first part of node of light BVH */
-	int secondChildOffset, distribution_id, nemitters;
-	update_parent_node(kg, offset, &secondChildOffset, &distribution_id, &nemitters);
+	int secondChildOffset, distribution_id, num_emitters;
+	update_parent_node(kg, offset, &secondChildOffset, &distribution_id, &num_emitters);
 
 	/* Found a leaf - Choose which light to use */
-	if(nemitters > 0){ // Found a leaf
+	if(secondChildOffset == -1){ // Found a leaf
 
-		if(nemitters == 1){
+		if(num_emitters == 1){
 			(*num_lights)++; // used for debugging purposes
 			// Distribution_id is the index
 			/* consider this as having picked a light. */
@@ -215,7 +172,7 @@ ccl_device void accum_light_tree_contribution(KernelGlobals *kg, float randu,
 		int child_offsetR = 4*secondChildOffset;
 
 		/* choose whether to go down both(split) or only one of the children */
-		if(can_split && split(kg, sd, offset, randu, randv)){
+		if(can_split && split(kg, P, offset)){
 			/* go down both child nodes */
 			accum_light_tree_contribution(kg, randu, randv, child_offsetL,
 			                              pdf_factor, true, throughput, L,
@@ -289,7 +246,7 @@ ccl_device_noinline void kernel_branched_path_surface_connect_light(
 			accum_light_tree_contribution(kg, randu, randv, 0, group_prob, true,
 			                              throughput, L, state, sd, emission_sd,
 			                              &num_lights);
-			if(num_lights > 10){ // Debug print
+			if(num_lights > 100){ // Debug print
 				VLOG(1) << "Sampled " << num_lights << " lights!";
 			}
 

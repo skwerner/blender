@@ -47,31 +47,36 @@ struct BVHBuildNode {
 		bbox = BoundBox::empty;
 	}
 
-	void init_leaf(unsigned int first, unsigned int n, const BoundBox& b,
-	               const Orientation &c, float e){
+	void init_leaf(unsigned int first, uint n, const BoundBox& b,
+	               const Orientation &c, double e, double e_var){
 		firstPrimOffset = first;
-		nPrimitives = n;
+		num_emitters = n;
 		bbox = b;
 		bcone = c;
-		energy = e;
+		energy = (float)e;
+		energy_variance = (float)e_var;
+		is_leaf = true;
 	}
 
 	void init_interior(unsigned int axis, BVHBuildNode *c0, BVHBuildNode *c1,
-	                   const Orientation &c, float e){
+	                   const Orientation &c, uint n, double e, double e_var){
 		children[0] = c0;
 		children[1] = c1;
 		splitAxis = axis;
 		bbox = merge(c0->bbox, c1->bbox);
-		nPrimitives = 0;
+		num_emitters = n;
 		bcone = c;
-		energy = e;
+		energy = (float)e;
+		energy_variance = (float)e_var;
+		is_leaf = false;
 	}
 
 	Orientation bcone;
 	BoundBox bbox;
 	BVHBuildNode *children[2];
-	unsigned int splitAxis, firstPrimOffset, nPrimitives;
-	float energy;
+	unsigned int splitAxis, firstPrimOffset, num_emitters;
+	float energy, energy_variance;
+	bool is_leaf;
 };
 
 struct BVHPrimitiveInfo {
@@ -139,7 +144,8 @@ struct CompareToBucket {
 // TODO: Have this struct in kernel_types.h instead?
 struct CompactNode {
 	CompactNode():
-	    energy(0.0f), secondChildOffset(-1), prim_id(-1), nemitters(-1), bounds_w(BoundBox::empty)
+	    energy(0.0f), energy_variance(0.0f), secondChildOffset(-1), prim_id(-1),
+	    num_emitters(-1), bounds_w(BoundBox::empty)
 	{
 		bounds_o.axis = make_float3(0.0f);
 		bounds_o.theta_o = 0.0f;
@@ -147,9 +153,10 @@ struct CompactNode {
 	}
 
 	float energy;
+	float energy_variance;
 	int secondChildOffset; // only for interior
 	int prim_id;   // Index into the primitives array (only for leaf)
-	int nemitters; // only for leaf
+	int num_emitters;
 
 	BoundBox bounds_w; // World space bounds
 	Orientation bounds_o; // Orientation bounds

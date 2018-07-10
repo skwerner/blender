@@ -1128,12 +1128,12 @@ ccl_device float calc_node_importance(KernelGlobals *kg, float3 P, int node_offs
 
 ccl_device void update_parent_node(KernelGlobals *kg, int node_offset,
                                    int *childOffset, int *distribution_id,
-                                   int *nemitters)
+                                   int *num_emitters)
 {
 	float4 node        = kernel_tex_fetch(__light_tree_nodes, node_offset);
 	(*childOffset)     = __float_as_int(node[1]);
 	(*distribution_id) = __float_as_int(node[2]);
-	(*nemitters)       = __float_as_int(node[3]);
+	(*num_emitters)    = __float_as_int(node[3]);
 }
 
 /* picks one of the distant lights and computes the probability of picking it */
@@ -1169,21 +1169,21 @@ ccl_device void light_bvh_sample(KernelGlobals *kg, float3 P, float randu,
 	*pdf_factor = 1.0f;
 
 	/* read in first part of root node of light BVH */
-	int secondChildOffset, distribution_id, nemitters;
-	update_parent_node(kg, 0, &secondChildOffset, &distribution_id, &nemitters);
+	int secondChildOffset, distribution_id, num_emitters;
+	update_parent_node(kg, 0, &secondChildOffset, &distribution_id, &num_emitters);
 
 	int offset = 0;
 	do{
 
 		/* Found a leaf - Choose which light to use */
-		if(nemitters > 0){ // Found a leaf
-			if(nemitters == 1){
+		if(secondChildOffset == -1){ // Found a leaf
+			if(num_emitters == 1){
 				sampled_index = distribution_id;
 			} else { // Leaf with several lights. Pick one randomly.
 				light_distribution_sample(kg, &randu); // TODO: Rescale random number in a better way
-				int light = min((int)(randu* (float)nemitters), nemitters-1);
+				int light = min((int)(randu* (float)num_emitters), num_emitters-1);
 				sampled_index = distribution_id +light;
-				*pdf_factor *= 1.0f / (float)nemitters;
+				*pdf_factor *= 1.0f / (float)num_emitters;
 			}
 			break;
 		} else { // Interior node, pick left or right randomly
@@ -1207,7 +1207,7 @@ ccl_device void light_bvh_sample(KernelGlobals *kg, float3 P, float randu,
 
 			/* update parent node info for next iteration */
 			update_parent_node(kg, offset, &secondChildOffset,
-			                   &distribution_id, &nemitters);
+			                   &distribution_id, &num_emitters);
 		}
 
 
@@ -1249,16 +1249,16 @@ ccl_device int triangle_to_distribution(KernelGlobals *kg, int triangle_id)
 ccl_device float light_bvh_pdf(KernelGlobals *kg, float3 P, int node_id){
 	float pdf = 1.0f;
 	/* read in first part of root node of light BVH */
-	int secondChildOffset, distribution_id, nemitters;
-	update_parent_node(kg, 0, &secondChildOffset, &distribution_id, &nemitters);
+	int secondChildOffset, distribution_id, num_emitters;
+	update_parent_node(kg, 0, &secondChildOffset, &distribution_id, &num_emitters);
 
 	int offset = 0;
 	do{
 
-		if(nemitters > 0){ // Found our leaf node
+		if(secondChildOffset == -1){ // Found our leaf node
 			kernel_assert(offset == node_id);
-			if(nemitters > 1){
-				pdf *= 1.0f / (float)nemitters;
+			if(num_emitters > 1){
+				pdf *= 1.0f / (float)num_emitters;
 			}
 			break;
 		} else { // Interior node, pick left or right depending on node_id
@@ -1282,7 +1282,7 @@ ccl_device float light_bvh_pdf(KernelGlobals *kg, float3 P, int node_id){
 
 			/* update parent node info for next iteration */
 			update_parent_node(kg, offset, &secondChildOffset,
-			                   &distribution_id, &nemitters);
+			                   &distribution_id, &num_emitters);
 		}
 
 	} while(true);

@@ -414,17 +414,17 @@ void LightManager::device_update_distribution(Device *device, DeviceScene *dscen
 		float4 *nodes = dscene->light_tree_nodes.alloc(nodesVec.size()*LIGHT_BVH_NODE_SIZE);
 
 		/* convert each compact node into 4xfloat4
-		 * 4 for energy, secondChildoffset, prim_id, nemitters
+		 * 4 for energy, secondChildoffset, prim_id, num_emitters
 		 * 4 for bbox.min + bbox.max[0]
 		 * 4 for bbox.max[1-2], theta_o, theta_e
-		 * 4 for axis + 1 pad
+		 * 4 for axis + energy variance
 		 */
 		size_t offset = 0;
 		foreach (CompactNode node, nodesVec){
 			nodes[offset].x = node.energy;
 			nodes[offset].y = __int_as_float(node.secondChildOffset);
 			nodes[offset].z = __int_as_float(node.prim_id);
-			nodes[offset].w = __int_as_float(node.nemitters);
+			nodes[offset].w = __int_as_float(node.num_emitters);
 
 			nodes[offset+1].x = node.bounds_w.min[0];
 			nodes[offset+1].y = node.bounds_w.min[1];
@@ -439,7 +439,7 @@ void LightManager::device_update_distribution(Device *device, DeviceScene *dscen
 			nodes[offset+3].x = node.bounds_o.axis[0];
 			nodes[offset+3].y = node.bounds_o.axis[1];
 			nodes[offset+3].z = node.bounds_o.axis[2];
-			nodes[offset+3].w = 0; // pad
+			nodes[offset+3].w = node.energy_variance;
 
 			offset += 4;
 		}
@@ -492,10 +492,10 @@ void LightManager::device_update_distribution(Device *device, DeviceScene *dscen
 		}
 		for( int i = 0; i < nodesVec.size(); ++i){
 			const CompactNode& node = nodesVec[i];
-			if(node.nemitters == 0) continue;
+			if(node.secondChildOffset != -1) continue; // Skip interior nodes
 
 			int start = node.prim_id; // distribution id
-			int end = start + node.nemitters;
+			int end = start + node.num_emitters;
 			for(int j = start; j < end; ++j){
 				distribution_to_node[j] = 4*i;
 			}

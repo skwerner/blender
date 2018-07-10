@@ -776,5 +776,6 @@ void UI_OT_eyedropper_depth(struct wmOperatorType *ot);
 
 /* interface_eyedropper_driver.c */
 void UI_OT_eyedropper_driver(struct wmOperatorType *ot);
+void UI_OT_eyedropper_color_separate(struct wmOperatorType *ot);
 
 #endif  /* __INTERFACE_INTERN_H__ */

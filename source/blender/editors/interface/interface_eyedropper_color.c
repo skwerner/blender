@@ -28,6 +28,7 @@
  *
  * Defines:
  * - #UI_OT_eyedropper_color
+ * - #UI_OT_eyedropper_color_separate
  */
 
 #include "MEM_guardedalloc.h"
@@ -350,6 +351,32 @@ void UI_OT_eyedropper_color(wmOperatorType *ot)
 	ot->cancel = eyedropper_cancel;
 	ot->exec = eyedropper_exec;
 	ot->poll = eyedropper_poll;
+
+	/* flags */
+	ot->flag = OPTYPE_BLOCKING | OPTYPE_INTERNAL;
+
+	/* properties */
+}
+
+static bool eyedropper_separate(bContext *C)
+{
+	if(!CTX_wm_window(C)) return 0;
+	else return 1;
+}
+
+void UI_OT_eyedropper_color_separate(wmOperatorType *ot)
+{
+	/* identifiers */
+	ot->name = "Eyedropper";
+	ot->idname = "UI_OT_eyedropper_color_separate";
+	ot->description = "Sample a color from the Blender Window to store in a property";
+
+	/* api callbacks */
+	ot->invoke = eyedropper_invoke;
+	ot->modal = eyedropper_modal;
+	ot->cancel = eyedropper_cancel;
+	ot->exec = eyedropper_exec;
+	ot->poll = eyedropper_separate;
 
 	/* flags */
 	ot->flag = OPTYPE_BLOCKING | OPTYPE_INTERNAL;

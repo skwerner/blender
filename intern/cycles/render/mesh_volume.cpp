@@ -461,9 +461,6 @@ void MeshManager::create_volume_mesh(Scene *scene,
 	float3 cell_size = make_float3(1.0f/resolution.x,
 	                               1.0f/resolution.y,
 	                               1.0f/resolution.z);
-	const size_t bit_count = compute_bit_count(resolution.x,
-	                                           resolution.y,
-	                                           resolution.z);
 	const int3 tiled_res = make_int3(get_tile_res(resolution.x),
 	                                 get_tile_res(resolution.y),
 	                                 get_tile_res(resolution.z));
@@ -499,7 +496,9 @@ void MeshManager::create_volume_mesh(Scene *scene,
 					if(grid_info) {
 						if(!using_cuda) {
 							voxel_index = compute_index(grid_info, x, y, z,
-														bit_count,
+														tiled_res.x,
+														tiled_res.y,
+														tiled_res.z,
 														last_tile_res.x,
 														last_tile_res.y);
 						}

@@ -421,9 +421,8 @@ public:
 			info.grid_info = 0;
 			if(grid_info) {
 				info.grid_info = (uint64_t)grid_info->host_pointer;
-				info.bit_count = compute_bit_count(info.width,
-				                                   info.height,
-				                                   info.depth);
+				info.tiled_width = get_tile_res(info.width);
+				info.tiled_height = get_tile_res(info.height);
 				info.last_tile_width = info.width % TILE_SIZE;
 				info.last_tile_height = info.height % TILE_SIZE;
 			}

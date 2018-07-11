@@ -347,6 +347,7 @@ void LightTree::split_saoh(const BoundBox &centroidBbox,
 	min_cost = std::numeric_limits<float>::max();
 	min_bucket = -1;
 
+	const float extent_max = max3(centroidBbox.size());
 	for (int dim = 0; dim < 3; ++dim){
 
 		BucketInfo buckets[nBuckets];
@@ -358,12 +359,12 @@ void LightTree::split_saoh(const BoundBox &centroidBbox,
 			continue;
 		}
 
-		const float invExtent = 1.0f / extent;
+		const float extent_inv = 1.0f / extent;
 		for (unsigned int i = start; i < end; ++i)
 		{
 			int bucket_id = (int)((float)nBuckets *
 			                      (buildData[i].centroid[dim] - centroidBbox.min[dim]) *
-			                      invExtent);
+			                      extent_inv);
 			if (bucket_id == nBuckets) bucket_id = nBuckets - 1;
 			buckets[bucket_id].count++;
 			buckets[bucket_id].energy += buildData[i].energy;
@@ -391,6 +392,7 @@ void LightTree::split_saoh(const BoundBox &centroidBbox,
 			bcones_L.clear();
 			bcones_R.clear();
 
+			/* L corresponds to all buckets up to and including i */
 			for (int j = 0; j <= i; ++j){
 				if (buckets[j].count != 0){
 					energy_L += buckets[j].energy;
@@ -399,6 +401,7 @@ void LightTree::split_saoh(const BoundBox &centroidBbox,
 				}
 			}
 
+			/* R corresponds to bucket i+1 and all after */
 			for (int j = i+1; j < nBuckets; ++j){
 				if (buckets[j].count != 0){
 					energy_R += buckets[j].energy;
@@ -407,14 +410,24 @@ void LightTree::split_saoh(const BoundBox &centroidBbox,
 				}
 			}
 
-			Orientation bcone_L = aggregate_bounding_cones(bcones_L);
-			Orientation bcone_R = aggregate_bounding_cones(bcones_R);
-			float M_Omega_L = calculate_cone_measure(bcone_L);
-			float M_Omega_R = calculate_cone_measure(bcone_R);
+			/* eq. 2 */
+			const Orientation bcone_L = aggregate_bounding_cones(bcones_L);
+			const Orientation bcone_R = aggregate_bounding_cones(bcones_R);
+			const float M_Omega_L     = calculate_cone_measure(bcone_L);
+			const float M_Omega_R     = calculate_cone_measure(bcone_R);
+			const float K             = extent_max * extent_inv;
 
-			cost[i] = (energy_L*M_Omega_L*bbox_L.area() +
-			           energy_R*M_Omega_R*bbox_R.area()) /
-			        (node_energy*node_M_Omega*node_bbox.area());
+			/* NOTE: in eq 2 they do not have the energy of the parent in the
+			 * denominator. Is this a typo?
+			 * Actually. The denominator does not affect the minimization since
+			 * it is just a constant scale factor for every cost being minimized.
+			 * The denominator might help with numerical issues though.
+			 *
+			 * TODO: When optimizing, could calc denominator once and take its
+			 * inverse once and then just multiply here. */
+			cost[i] = K * (energy_L    * M_Omega_L    * bbox_L.area()  +
+			               energy_R    * M_Omega_R    * bbox_R.area()) /
+			              (node_energy * node_M_Omega * node_bbox.area());
 		}
 
 		/* update minimum cost, dim and bucket */

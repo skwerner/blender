@@ -26,6 +26,7 @@
 #include "COM_ConvertOperation.h"
 #include "BLI_string.h"
 #include "BLI_hash_mm3.h"
+#include "BLI_assert.h"
 #include <iterator>
 
 CryptomatteNode::CryptomatteNode(bNode *editorNode) : Node(editorNode)
@@ -44,7 +45,9 @@ static inline float hash_to_float(uint32_t hash) {
 	sign = sign << 31;
 	uint32_t float_bits = sign | exponent | mantissa;
 	float f;
-	::memcpy(&f, &float_bits, 4);
+	/* Bit casting relies on equal size for both types. */
+	BLI_STATIC_ASSERT(sizeof(float) == sizeof(uint32_t), "float and uint32_t are not the same size")
+	::memcpy(&f, &float_bits, sizeof(float));
 	return f;
 }
 

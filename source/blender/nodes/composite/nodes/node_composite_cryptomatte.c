@@ -67,7 +67,7 @@ static void cryptomatte_add(NodeCryptomatte* n, float f)
 	static char number[32];
 	BLI_snprintf(number, sizeof(number), "<%.9g>", f);
 
-	if(BLI_strnlen(n->matte_id, sizeof(n->matte_id)) == 0) {
+	if (BLI_strnlen(n->matte_id, sizeof(n->matte_id)) == 0) {
 		BLI_snprintf(n->matte_id, sizeof(n->matte_id), "%s", number);
 		return;
 	}
@@ -159,7 +159,7 @@ static void cryptomatte_remove(NodeCryptomatte*n, float f)
 		}
 		/* If this has a leading bracket, assume a raw floating point number and look for the closing bracket. */
 		else if (n->matte_id[start] == '<') {
-			if(strncmp(n->matte_id+start, number, strlen(number)) == 0) {
+			if (strncmp(n->matte_id+start, number, strlen(number)) == 0) {
 				/* This number is already there, so skip it. */
 				skip = true;
 			}
@@ -202,7 +202,7 @@ static bNodeSocketTemplate outputs[] = {
 void ntreeCompositCryptomatteSyncFromAdd(bNodeTree *UNUSED(ntree), bNode *node)
 {
 	NodeCryptomatte *n = node->storage;
-	if(n->add[0] != 0.0f) {
+	if (n->add[0] != 0.0f) {
 		cryptomatte_add(n, n->add[0]);
 		n->add[0] = 0.0f;
 		n->add[1] = 0.0f;
@@ -213,7 +213,7 @@ void ntreeCompositCryptomatteSyncFromAdd(bNodeTree *UNUSED(ntree), bNode *node)
 void ntreeCompositCryptomatteSyncFromRemove(bNodeTree *UNUSED(ntree), bNode *node)
 {
 	NodeCryptomatte *n = node->storage;
-	if(n->remove[0] != 0.0f) {
+	if (n->remove[0] != 0.0f) {
 		cryptomatte_remove(n, n->remove[0]);
 		n->remove[0] = 0.0f;
 		n->remove[1] = 0.0f;

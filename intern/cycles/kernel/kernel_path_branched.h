@@ -145,6 +145,7 @@ ccl_device_forceinline void kernel_branched_path_volume(
 					                     indirect_sd,
 					                     emission_sd,
 					                     &pray,
+					                     sd->N,
 					                     tp*num_samples_inv,
 					                     &ps,
 					                     L);
@@ -203,6 +204,7 @@ ccl_device_forceinline void kernel_branched_path_volume(
 					                     indirect_sd,
 					                     emission_sd,
 					                     &pray,
+					                     sd->N,
 					                     tp,
 					                     &ps,
 					                     L);
@@ -294,11 +296,11 @@ ccl_device_noinline void kernel_branched_path_surface_indirect_light(KernelGloba
 			}
 
 			ps.rng_hash = state->rng_hash;
-
 			kernel_path_indirect(kg,
 			                     indirect_sd,
 			                     emission_sd,
 			                     &bsdf_ray,
+			                     sd->N,
 			                     tp*num_samples_inv,
 			                     &ps,
 			                     L);
@@ -474,7 +476,7 @@ ccl_device void kernel_branched_path_integrate(KernelGlobals *kg,
 
 		/* Shade background. */
 		if(!hit) {
-			kernel_path_background(kg, &state, &ray, throughput, &sd, L);
+			kernel_path_background(kg, &state, &ray, sd.N, throughput, &sd, L);
 			break;
 		}
 

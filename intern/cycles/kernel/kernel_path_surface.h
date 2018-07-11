@@ -124,10 +124,12 @@ ccl_device void accum_light_tree_contribution(KernelGlobals *kg, float randu,
                                               float3 throughput, PathRadiance *L,
                                               ccl_addr_space PathState * state,
                                               ShaderData *sd, ShaderData *emission_sd,
-                                              int *num_lights)
+                                              int *num_lights,
+                                              int *num_lights_fail)
 {
 
 	float3 P = sd->P;
+	float3 N = sd->N;
 	float time = sd->time;
 	int bounce = state->bounce;
 
@@ -152,6 +154,7 @@ ccl_device void accum_light_tree_contribution(KernelGlobals *kg, float randu,
 				return;
 			}
 
+
 			Ray light_ray;
 			BsdfEval L_light;
 			bool is_lamp;
@@ -173,16 +176,22 @@ ccl_device void accum_light_tree_contribution(KernelGlobals *kg, float randu,
 			/* go down both child nodes */
 			accum_light_tree_contribution(kg, randu, randv, child_offsetL,
 			                              pdf_factor, true, throughput, L,
-			                              state, sd, emission_sd, num_lights);
+			                              state, sd, emission_sd, num_lights, num_lights_fail);
 			accum_light_tree_contribution(kg, randu, randv, child_offsetR,
 			                              pdf_factor, true, throughput, L,
-			                              state, sd, emission_sd, num_lights);
+			                              state, sd, emission_sd, num_lights, num_lights_fail);
 		} else {
 			/* go down one of the child nodes */
 
 			/* calculate probability of going down left node */
-			float I_L = calc_node_importance(kg, P, child_offsetL);
-			float I_R = calc_node_importance(kg, P, child_offsetR);
+			float I_L = calc_node_importance(kg, P, N, child_offsetL);
+			float I_R = calc_node_importance(kg, P, N, child_offsetR);
+
+			if( (I_L == 0.0f) && (I_R == 0.0f) ){
+				(*num_lights_fail)++; // used for debugging purposes
+				return;
+			}
+
 			float P_L = I_L / ( I_L + I_R);
 
 			if(randu <= P_L){ // Going down left node
@@ -201,7 +210,7 @@ ccl_device void accum_light_tree_contribution(KernelGlobals *kg, float randu,
 
 			accum_light_tree_contribution(kg, randu, randv, offset, pdf_factor,
 			                              false, throughput, L, state, sd,
-			                              emission_sd, num_lights);
+			                              emission_sd, num_lights, num_lights_fail);
 		}
 	}
 }
@@ -246,12 +255,17 @@ ccl_device_noinline void kernel_branched_path_surface_connect_light(
 		if(group == LIGHTGROUP_TREE){
 			/* accumulate contribution to L from potentially several lights */
 			int num_lights = 0;
+			int num_lights_fail = 0;
 			accum_light_tree_contribution(kg, randu, randv, 0, group_prob, true,
 			                              throughput, L, state, sd, emission_sd,
-			                              &num_lights);
-			if(num_lights > 100){ // Debug print
-				VLOG(1) << "Sampled " << num_lights << " lights!";
+			                              &num_lights, &num_lights_fail);
+
+			/*
+			if(num_lights_fail > 1){ // Debug print
+				//VLOG(1) << "Sampled " << num_lights << " lights!";
+				VLOG(1) << "Traversed " << num_lights_fail << " branches in vain and was able to sample " << num_lights << " though!";
 			}
+			*/
 
 			/* have accumulated all the contributions so return */
 			return;
@@ -322,7 +336,7 @@ ccl_device_noinline void kernel_branched_path_surface_connect_light(
 				kernel_assert(!kernel_data.integrator.use_light_bvh);
 
 				LightSample ls;
-				if(light_sample(kg, light_u, light_v, sd->time, sd->P, state->bounce, &ls)) {
+				if(light_sample(kg, light_u, light_v, sd->time, sd->P, sd->N, state->bounce, &ls)) {
 					/* Same as above, probability needs to be corrected since the sampling was forced to select a mesh light. */
 					if(kernel_data.integrator.num_all_lights)
 						ls.pdf *= 2.0f;
@@ -341,7 +355,7 @@ ccl_device_noinline void kernel_branched_path_surface_connect_light(
 		float terminate = path_state_rng_light_termination(kg, state);
 
 		LightSample ls;
-		if(light_sample(kg, light_u, light_v, sd->time, sd->P, state->bounce, &ls)) {
+		if(light_sample(kg, light_u, light_v, sd->time, sd->P, sd->N, state->bounce, &ls)) {
 			/* sample random light */
 			accum_light_contribution(kg, sd, emission_sd, &ls, state, &light_ray,
 			                         &L_light, L, &is_lamp, terminate, throughput,
@@ -458,7 +472,7 @@ ccl_device_inline void kernel_path_surface_connect_light(KernelGlobals *kg,
 #endif
 
 	LightSample ls;
-	if(light_sample(kg, light_u, light_v, sd->time, sd->P, state->bounce, &ls)) {
+	if(light_sample(kg, light_u, light_v, sd->time, sd->P, sd->N, state->bounce, &ls)) {
 		float terminate = path_state_rng_light_termination(kg, state);
 		accum_light_contribution(kg, sd, emission_sd, &ls, state, &light_ray,
 		                         &L_light, L, &is_lamp, terminate, throughput,

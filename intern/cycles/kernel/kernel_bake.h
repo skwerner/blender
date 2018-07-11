@@ -100,6 +100,7 @@ ccl_device_inline void compute_light_pass(KernelGlobals *kg,
 					                     &indirect_sd,
 					                     &emission_sd,
 					                     &ray,
+					                     sd->N,
 					                     throughput,
 					                     &state,
 					                     &L_sample);
@@ -118,7 +119,7 @@ ccl_device_inline void compute_light_pass(KernelGlobals *kg,
 				state.ray_t = 0.0f;
 #endif
 				/* compute indirect light */
-				kernel_path_indirect(kg, &indirect_sd, &emission_sd, &ray, throughput, &state, &L_sample);
+				kernel_path_indirect(kg, &indirect_sd, &emission_sd, &ray, sd->N, throughput, &state, &L_sample);
 
 				/* sum and reset indirect light pass variables for the next samples */
 				path_radiance_sum_indirect(&L_sample);

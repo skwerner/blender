@@ -2551,8 +2551,8 @@ static void node_composit_buts_cryptomatte(uiLayout *layout, bContext *UNUSED(C)
 
 static void node_composit_buts_cryptomatte_ex(uiLayout *layout, bContext *UNUSED(C), PointerRNA *UNUSED(ptr))
 {
-	uiItemO(layout, IFACE_("Add Input"), ICON_ZOOMIN, "NODE_OT_cryptomatte_add_socket");
-	uiItemO(layout, IFACE_("Remove Input"), ICON_ZOOMOUT, "NODE_OT_cryptomatte_remove_socket");
+	uiItemO(layout, IFACE_("Add Crypto Layer"), ICON_ZOOMIN, "NODE_OT_cryptomatte_layer_add");
+	uiItemO(layout, IFACE_("Remove Crypto Layer"), ICON_ZOOMOUT, "NODE_OT_cryptomatte_layer_remove");
 }
 
 static void node_composit_buts_brightcontrast(uiLayout *layout, bContext *UNUSED(C), PointerRNA *ptr)

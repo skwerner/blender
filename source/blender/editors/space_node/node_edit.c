@@ -2614,14 +2614,12 @@ void NODE_OT_clear_viewer_border(wmOperatorType *ot)
 
 /* ****************** Cryptomatte Add Socket  ******************* */
 
-static int node_cryptomatte_add_socket_exec(bContext *C, wmOperator *op)
+static int node_cryptomatte_add_socket_exec(bContext *C, wmOperator *UNUSED(op))
 {
-	Scene *scene = CTX_data_scene(C);
 	SpaceNode *snode = CTX_wm_space_node(C);
 	PointerRNA ptr = CTX_data_pointer_get(C, "node");
 	bNodeTree *ntree = NULL;
 	bNode *node = NULL;
-	char file_path[MAX_NAME];
 
 	if (ptr.data) {
 		node = ptr.data;
@@ -2632,8 +2630,9 @@ static int node_cryptomatte_add_socket_exec(bContext *C, wmOperator *op)
 		node = nodeGetActive(snode->edittree);
 	}
 
-	if (!node || node->type != CMP_NODE_CRYPTOMATTE)
+	if (!node || node->type != CMP_NODE_CRYPTOMATTE) {
 		return OPERATOR_CANCELLED;
+	}
 
 	ntreeCompositCryptomatteAddSocket(ntree, node);
 
@@ -2642,12 +2641,12 @@ static int node_cryptomatte_add_socket_exec(bContext *C, wmOperator *op)
 	return OPERATOR_FINISHED;
 }
 
-void NODE_OT_cryptomatte_add_socket(wmOperatorType *ot)
+void NODE_OT_cryptomatte_layer_add(wmOperatorType *ot)
 {
 	/* identifiers */
 	ot->name = "Add Cryptomatte Socket";
-	ot->description = "Add a new input to a cryptomatte node";
-	ot->idname = "NODE_OT_cryptomatte_add_socket";
+	ot->description = "Add a new input layer to a Cryptomatte node";
+	ot->idname = "NODE_OT_cryptomatte_layer_add";
 
 	/* callbacks */
 	ot->exec = node_cryptomatte_add_socket_exec;
@@ -2675,23 +2674,25 @@ static int node_cryptomatte_remove_socket_exec(bContext *C, wmOperator *UNUSED(o
 		node = nodeGetActive(snode->edittree);
 	}
 
-	if (!node || node->type != CMP_NODE_CRYPTOMATTE)
+	if (!node || node->type != CMP_NODE_CRYPTOMATTE) {
 		return OPERATOR_CANCELLED;
+	}
 
-	if (!ntreeCompositCryptomatteRemoveSocket(ntree, node))
+	if (!ntreeCompositCryptomatteRemoveSocket(ntree, node)) {
 		return OPERATOR_CANCELLED;
+	}
 
 	snode_notify(C, snode);
 
 	return OPERATOR_FINISHED;
 }
 
-void NODE_OT_cryptomatte_remove_socket(wmOperatorType *ot)
+void NODE_OT_cryptomatte_layer_remove(wmOperatorType *ot)
 {
 	/* identifiers */
 	ot->name = "Remove Cryptomatte Socket";
-	ot->description = "Remove input from a crytpomatte node";
-	ot->idname = "NODE_OT_cryptomatte_remove_socket";
+	ot->description = "Remove layer from a Crytpomatte node";
+	ot->idname = "NODE_OT_cryptomatte_layer_remove";
 
 	/* callbacks */
 	ot->exec = node_cryptomatte_remove_socket_exec;

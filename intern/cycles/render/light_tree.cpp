@@ -273,51 +273,56 @@ float LightTree::get_energy(const Primitive &prim){
 Orientation LightTree::aggregate_bounding_cones(
         const vector<Orientation> &bcones) {
 
-	if(bcones.size() == 1){
+	if(bcones.size() == 0){
+		return Orientation();
+	} else if(bcones.size() == 1){
 		return bcones[0];
 	}
 
-	/* use average of all axes as axis for now */
-	Orientation bcone;
-	for(unsigned int i = 0; i < bcones.size(); ++i){
-		bcone.axis += bcones[i].axis;
+	Orientation cone = bcones[0];
+	for(int i = 1; i < bcones.size(); ++i){
+		cone = cone_union(cone, bcones[i]);
 	}
 
-	const float length = len(bcone.axis);
-	if (length == 0){
-		bcone.axis = make_float3(0.0f, 0.0f, 0.0f); // NOTE: 0.0, 0.0, 0.0 here for now
-	} else {
-		bcone.axis /= length;
-	}
-
-	float max_theta_o = 0.0f;
-	float max_theta_e = 0.0f;
-	for(unsigned int i = 0; i < bcones.size(); ++i){
-		float theta = acosf(dot(bcone.axis, bcones[i].axis));
-		float theta_o = min(theta + bcones[i].theta_o, M_PI_F);
-		float theta_e_full = theta_o + bcones[i].theta_e;
-		if (theta_o > max_theta_o) {
-			max_theta_o = theta_o;
-		}
-		if (theta_e_full > max_theta_e) {
-			max_theta_e = theta_e_full;
-		}
-	}
-
-	max_theta_e -= max_theta_o;
-	bcone.theta_o = max_theta_o;
-	bcone.theta_e = max_theta_e;
-
-	return bcone;
+	return cone;
 }
 
-float LightTree::calculate_cone_measure(const Orientation &bcone) {
-	// http://www.wolframalpha.com/input/?i=integrate+cos(w-x)sin(w)dw+from+x+to+x%2By
+/* Algorithm 1 */
+Orientation LightTree::cone_union(const Orientation& cone1, const Orientation& cone2){
+	const Orientation * a = &cone1;
+	const Orientation * b = &cone2;
+	if (b->theta_o > a->theta_o){
+		a = &cone2;
+		b = &cone1;
+	}
 
+
+	float theta_d = safe_acosf(dot(a->axis, b->axis));
+
+	float theta_e = fmaxf(a->theta_e, b->theta_e);
+	if (fminf(theta_d + b->theta_o, M_PI_F) <= a->theta_o){
+		return Orientation(a->axis, a->theta_o, theta_e);
+	}
+
+	float theta_o = (a->theta_o + theta_d + b->theta_o) * 0.5f;
+	if (M_PI_F <= theta_o){
+		return Orientation(a->axis, M_PI_F, theta_e);
+	}
+
+	float theta_r = theta_o - a->theta_o;
+	float3 axis = rotate_around_axis(a->axis, cross(a->axis, b->axis), theta_r);
+	axis = normalize(axis);
+	return Orientation(axis, theta_o, theta_e);
+}
+
+
+float LightTree::calculate_cone_measure(const Orientation &bcone) {
+	/* eq. 1 */
+	float theta_w = fminf(bcone.theta_o + bcone.theta_e, M_PI_F);
 	return M_2PI_F * (1.0f-cosf(bcone.theta_o) +
-	                  0.5f * bcone.theta_e * sinf(bcone.theta_o) +
+	                  0.5f * (theta_w-bcone.theta_o) * sinf(bcone.theta_o) +
 	                  0.25f * cosf(bcone.theta_o) -
-	                  0.25f * cosf(bcone.theta_o + 2.0f*bcone.theta_e ));
+	                  0.25f * cosf(bcone.theta_o - 2.0f*theta_w ));
 }
 
 void LightTree::split_saoh(const BoundBox &centroidBbox,
@@ -410,7 +415,6 @@ void LightTree::split_saoh(const BoundBox &centroidBbox,
 			cost[i] = (energy_L*M_Omega_L*bbox_L.area() +
 			           energy_R*M_Omega_R*bbox_R.area()) /
 			        (node_energy*node_M_Omega*node_bbox.area());
-
 		}
 
 		/* update minimum cost, dim and bucket */

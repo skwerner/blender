@@ -34,6 +34,8 @@ struct Orientation{ // Orientation bounds
 		theta_e = 0;
 	}
 
+	Orientation(const float3& a, float o, float e): axis(a), theta_o(o), theta_e(e) {}
+
 	float3 axis;
 	float theta_o;
 	float theta_e;
@@ -191,6 +193,7 @@ private:
 	Orientation get_bcone(const Primitive& prim);
 	float get_energy(const Primitive &prim);
 	Orientation aggregate_bounding_cones(const vector<Orientation> &bcones);
+	Orientation cone_union(const Orientation& a, const Orientation& b);
 	float calculate_cone_measure(const Orientation &bcone);
 	int flattenBVHTree(const BVHBuildNode &node, int &offset);
 	void split_saoh(const BoundBox &centroidBbox,

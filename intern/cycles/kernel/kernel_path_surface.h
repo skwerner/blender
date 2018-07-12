@@ -121,7 +121,8 @@ ccl_device bool split(KernelGlobals *kg, float3 P, int node_offset)
 ccl_device void accum_light_tree_contribution(KernelGlobals *kg, float randu,
                                               float randv, int offset,
                                               float pdf_factor, bool can_split,
-                                              float3 throughput, PathRadiance *L,
+                                              float3 throughput, float scale_factor,
+                                              PathRadiance *L,
                                               ccl_addr_space PathState * state,
                                               ShaderData *sd, ShaderData *emission_sd,
                                               int *num_lights,
@@ -139,7 +140,6 @@ ccl_device void accum_light_tree_contribution(KernelGlobals *kg, float randu,
 
 	/* Found a leaf - Choose which light to use */
 	if(secondChildOffset == -1){ // Found a leaf
-
 		if(num_emitters == 1){
 			(*num_lights)++; // used for debugging purposes
 			// Distribution_id is the index
@@ -150,10 +150,7 @@ ccl_device void accum_light_tree_contribution(KernelGlobals *kg, float randu,
 			/* combine pdfs */
 			ls.pdf *= pdf_factor;
 
-			if(ls.pdf == 0.0f){
-				return;
-			}
-
+			if(ls.pdf <= 0.0f) return;
 
 			Ray light_ray;
 			BsdfEval L_light;
@@ -161,7 +158,8 @@ ccl_device void accum_light_tree_contribution(KernelGlobals *kg, float randu,
 			float terminate = path_state_rng_light_termination(kg, state);
 			accum_light_contribution(kg, sd, emission_sd, &ls, state,
 			                         &light_ray, &L_light, L, &is_lamp,
-			                         terminate, throughput, 1.0f);
+			                         terminate, throughput, scale_factor);
+
 
 		} // TODO: do else, i.e. with several lights per node
 
@@ -175,11 +173,15 @@ ccl_device void accum_light_tree_contribution(KernelGlobals *kg, float randu,
 		if(can_split && split(kg, P, offset)){
 			/* go down both child nodes */
 			accum_light_tree_contribution(kg, randu, randv, child_offsetL,
-			                              pdf_factor, true, throughput, L,
-			                              state, sd, emission_sd, num_lights, num_lights_fail);
+			                              pdf_factor, true, throughput,
+			                              scale_factor, L, state, sd,
+			                              emission_sd, num_lights,
+			                              num_lights_fail);
 			accum_light_tree_contribution(kg, randu, randv, child_offsetR,
-			                              pdf_factor, true, throughput, L,
-			                              state, sd, emission_sd, num_lights, num_lights_fail);
+			                              pdf_factor, true, throughput,
+			                              scale_factor, L, state, sd,
+			                              emission_sd, num_lights,
+			                              num_lights_fail);
 		} else {
 			/* go down one of the child nodes */
 
@@ -187,13 +189,14 @@ ccl_device void accum_light_tree_contribution(KernelGlobals *kg, float randu,
 			float I_L = calc_node_importance(kg, P, N, child_offsetL);
 			float I_R = calc_node_importance(kg, P, N, child_offsetR);
 
-			if( (I_L == 0.0f) && (I_R == 0.0f) ){
+			if((I_L == 0.0f) && (I_R == 0.0f)){
 				(*num_lights_fail)++; // used for debugging purposes
 				return;
 			}
 
 			float P_L = I_L / ( I_L + I_R);
 
+			/* choose which node to go down */
 			if(randu <= P_L){ // Going down left node
 				/* rescale random number */
 				randu = randu / P_L;
@@ -209,8 +212,9 @@ ccl_device void accum_light_tree_contribution(KernelGlobals *kg, float randu,
 			}
 
 			accum_light_tree_contribution(kg, randu, randv, offset, pdf_factor,
-			                              false, throughput, L, state, sd,
-			                              emission_sd, num_lights, num_lights_fail);
+			                              false, throughput, scale_factor, L,
+			                              state, sd, emission_sd, num_lights,
+			                              num_lights_fail);
 		}
 	}
 }
@@ -257,8 +261,9 @@ ccl_device_noinline void kernel_branched_path_surface_connect_light(
 			int num_lights = 0;
 			int num_lights_fail = 0;
 			accum_light_tree_contribution(kg, randu, randv, 0, group_prob, true,
-			                              throughput, L, state, sd, emission_sd,
-			                              &num_lights, &num_lights_fail);
+			                              throughput, num_samples_adjust, L, // todo: is num_samples_adjust correct here?
+			                              state, sd, emission_sd, &num_lights,
+			                              &num_lights_fail);
 
 			/*
 			if(num_lights_fail > 1){ // Debug print
@@ -286,7 +291,7 @@ ccl_device_noinline void kernel_branched_path_surface_connect_light(
 		/* combine pdfs */
 		ls.pdf *= group_prob;
 
-		if(ls.pdf == 0.0f) return;
+		if(ls.pdf <= 0.0f) return;
 
 		/* accumulate the contribution of this distant/background light to L */
 		float terminate = path_state_rng_light_termination(kg, state);

@@ -1205,25 +1205,24 @@ ccl_device void light_background_sample(KernelGlobals *kg, float3 P, float *rand
 /* picks a light from the light BVH and returns its index and the probability of
  * picking this light. */
 ccl_device void light_bvh_sample(KernelGlobals *kg, float3 P, float3 N,
-                                 float randu, int *index, float *pdf_factor)
+                                 float *randu, int *index, float *pdf_factor)
 {
 	int sampled_index = -1;
 	*pdf_factor = 1.0f;
 
-	/* read in first part of root node of light BVH */
-	int secondChildOffset, distribution_id, num_emitters;
-	update_parent_node(kg, 0, &secondChildOffset, &distribution_id, &num_emitters);
-
 	int offset = 0;
+	int secondChildOffset, distribution_id, num_emitters;
 	do{
+
+		/* read in first part of node of light BVH */
+		update_parent_node(kg, offset, &secondChildOffset, &distribution_id, &num_emitters);
 
 		/* Found a leaf - Choose which light to use */
 		if(secondChildOffset == -1){ // Found a leaf
 			if(num_emitters == 1){
-
 				sampled_index = distribution_id;
 			} else { // Leaf with several lights. Pick one randomly.
-				int light = min((int)(randu* (float)num_emitters), num_emitters-1);
+				int light = min((int)(*randu * (float)num_emitters), num_emitters-1);
 				sampled_index = distribution_id +light;
 				*pdf_factor *= 1.0f / (float)num_emitters;
 			}
@@ -1235,33 +1234,28 @@ ccl_device void light_bvh_sample(KernelGlobals *kg, float3 P, float3 N,
 			int child_offsetR = 4*secondChildOffset;
 			float I_L = calc_node_importance(kg, P, N, child_offsetL);
 			float I_R = calc_node_importance(kg, P, N, child_offsetR);
-			if( (I_L==0.0f) && (I_R == 0.0f)){
+			if((I_L == 0.0f) && (I_R == 0.0f)){
 				*pdf_factor = 0.0f;
 				break;
 			}
+
 			float P_L = I_L / ( I_L + I_R);
 
 			/* choose which node to go down */
-			if(randu <= P_L){ // Going down left node
+			if(*randu <= P_L){ // Going down left node
 				/* rescale random number */
-				randu = randu / P_L;
+				*randu = *randu / P_L;
 
 				offset = child_offsetL;
 				*pdf_factor *= P_L;
 			} else { // Going down right node
 				/* rescale random number */
-				randu = (randu * (I_L + I_R) - I_L)/I_R;
+				*randu = (*randu * (I_L + I_R) - I_L)/I_R;
 
 				offset = child_offsetR;
 				*pdf_factor *= 1.0f - P_L;
 			}
-
-			/* update parent node info for next iteration */
-			update_parent_node(kg, offset, &secondChildOffset,
-			                   &distribution_id, &num_emitters);
 		}
-
-
 	} while(true);
 
 	*index = sampled_index;
@@ -1417,7 +1411,7 @@ ccl_device void light_distribution_sample(KernelGlobals *kg, float3 P, float3 N,
 		float group_prob = kernel_tex_fetch(__light_group_sample_prob, group);
 
 		if(group == LIGHTGROUP_TREE){
-			light_bvh_sample(kg, P, N, *randu, index, pdf);
+			light_bvh_sample(kg, P, N, randu, index, pdf);
 		} else if(group == LIGHTGROUP_DISTANT) {
 			light_distant_sample(kg, P, randu, index, pdf);
 		} else if(group == LIGHTGROUP_BACKGROUND) {

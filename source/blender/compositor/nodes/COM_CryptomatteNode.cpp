@@ -63,9 +63,9 @@ void CryptomatteNode::convertToOperations(NodeConverter &converter, const Compos
 
 	CryptomatteOperation *operation = new CryptomatteOperation(getNumberOfInputSockets()-1);
 	if (cryptoMatteSettings) {
-		std::string input = cryptoMatteSettings->matte_id;
-		if (!input.empty()) {
+		if (cryptoMatteSettings->matte_id) {
 			/* Split the string by commas, ignoring white space. */
+			std::string input = cryptoMatteSettings->matte_id;
 			std::istringstream ss(input);
 			while (ss.good()) {
 				std::string token;
@@ -102,12 +102,19 @@ void CryptomatteNode::convertToOperations(NodeConverter &converter, const Compos
 	
 	SetAlphaOperation *operationAlpha = new SetAlphaOperation();
 	converter.addOperation(operationAlpha);
-	
+
+	converter.addLink(operation->getOutputSocket(0), separateOperation->getInputSocket(0));
+	converter.addLink(separateOperation->getOutputSocket(0), operationAlpha->getInputSocket(1));
+
+	SetAlphaOperation *clearAlphaOperation = new SetAlphaOperation();
+	converter.addOperation(clearAlphaOperation);
+	converter.addInputValue(clearAlphaOperation->getInputSocket(1), 1.0f);
+
+	converter.addLink(operation->getOutputSocket(0), clearAlphaOperation->getInputSocket(0));
+
 	converter.mapInputSocket(inputSocketImage, operationAlpha->getInputSocket(0));
 	converter.mapOutputSocket(outputSocketMatte, separateOperation->getOutputSocket(0));
 	converter.mapOutputSocket(outputSocketImage, operationAlpha->getOutputSocket(0));
-	converter.mapOutputSocket(outputCryptoPick, operation->getOutputSocket(0));
+	converter.mapOutputSocket(outputCryptoPick, clearAlphaOperation->getOutputSocket(0));
 	
-	converter.addLink(operation->getOutputSocket(0), separateOperation->getInputSocket(0));
-	converter.addLink(separateOperation->getOutputSocket(0), operationAlpha->getInputSocket(1));
 }

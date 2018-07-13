@@ -64,62 +64,70 @@ static inline float hash_to_float(uint32_t hash)
 static void cryptomatte_add(NodeCryptomatte* n, float f)
 {
 	/* Turn the number into a string. */
-	static char number[32];
+	char number[32];
 	BLI_snprintf(number, sizeof(number), "<%.9g>", f);
 
-	if (BLI_strnlen(n->matte_id, sizeof(n->matte_id)) == 0) {
-		BLI_snprintf(n->matte_id, sizeof(n->matte_id), "%s", number);
+	/* Search if we already have the number. */
+	if (n->matte_id && BLI_strnlen(n->matte_id, sizeof(n->matte_id)) != 0) {
+		size_t start = 0;
+		const size_t end = strlen(n->matte_id);
+		size_t token_len = 0;
+		while (start < end) {
+			/* Ignore leading whitespace. */
+			while (start < end && n->matte_id[start] == ' ') {
+				++start;
+			}
+
+			/* Find the next seprator. */
+			char* token_end = strchr(n->matte_id+start, ',');
+			if (token_end == NULL || token_end == n->matte_id+start) {
+				token_end = n->matte_id+end;
+			}
+			/* Be aware that token_len still contains any trailing white space. */
+			token_len = token_end - (n->matte_id + start);
+
+			/* If this has a leading bracket, assume a raw floating point number and look for the closing bracket. */
+			if (n->matte_id[start] == '<') {
+				if (strncmp(n->matte_id+start, number, strlen(number)) == 0) {
+					/* This number is already there, so continue. */
+					return;
+				}
+			}
+			else {
+				/* Remove trailing white space */
+				size_t name_len = token_len;
+				while (n->matte_id[start+name_len] == ' ' && name_len > 0) {
+					name_len--;
+				}
+				/* Calculate the hash of the token and compare. */
+				uint32_t hash = BLI_hash_mm3((const unsigned char*)(n->matte_id+start), name_len, 0);
+				if (f == hash_to_float(hash)) {
+					return;
+				}
+			}
+			start += token_len+1;
+		}
+	}
+
+	DynStr *new_matte = BLI_dynstr_new();
+	if (!new_matte) {
 		return;
 	}
 
-	/* Search if we already have the number. */
-	size_t start = 0;
-	const size_t end = strlen(n->matte_id);
-	size_t token_len = 0;
-	while (start < end) {
-		/* Ignore leading whitespace. */
-		while (start < end && n->matte_id[start] == ' ') {
-			++start;
-		}
-
-		/* Find the next seprator. */
-		char* token_end = strchr(n->matte_id+start, ',');
-		if (token_end == NULL || token_end == n->matte_id+start) {
-			token_end = n->matte_id+end;
-		}
-		/* Be aware that token_len still contains any trailing white space. */
-		token_len = token_end - (n->matte_id + start);
-
-		/* If this has a leading bracket, assume a raw floating point number and look for the closing bracket. */
-		if (n->matte_id[start] == '<') {
-			if (strncmp(n->matte_id+start, number, strlen(number)) == 0) {
-				/* This number is already there, so continue. */
-				return;
-			}
-		}
-		else {
-			/* Remove trailing white space */
-			size_t name_len = token_len;
-			while (n->matte_id[start+name_len] == ' ' && name_len > 0) {
-				name_len--;
-			}
-			/* Calculate the hash of the token and compare. */
-			uint32_t hash = BLI_hash_mm3((const unsigned char*)(n->matte_id+start), name_len, 0);
-			if (f == hash_to_float(hash)) {
-				return;
-			}
-		}
-		start += token_len+1;
+	if(n->matte_id) {
+		BLI_dynstr_append(new_matte, n->matte_id);
+		MEM_freeN(n->matte_id);
 	}
-	char *temp_str;
-	temp_str = BLI_strdup(n->matte_id);
-	BLI_snprintf(n->matte_id, sizeof(n->matte_id), "%s,%s", temp_str, number);
-	MEM_freeN(temp_str);
+
+	BLI_dynstr_append(new_matte, ",");
+	BLI_dynstr_append(new_matte, number);
+	n->matte_id = BLI_dynstr_get_cstring(new_matte);
+	BLI_dynstr_free(new_matte);
 }
 
 static void cryptomatte_remove(NodeCryptomatte*n, float f)
 {
-	if (strnlen(n->matte_id, sizeof(n->matte_id)) == 0) {
+	if (n->matte_id == NULL || BLI_strnlen(n->matte_id, sizeof(n->matte_id)) == 0) {
 		/* Empty string, nothing to remove. */
 		return;
 	}
@@ -187,8 +195,14 @@ static void cryptomatte_remove(NodeCryptomatte*n, float f)
 		}
 		start += token_len+1;
 	}
-	
-	BLI_strncpy(n->matte_id, BLI_dynstr_get_cstring(new_matte), sizeof(n->matte_id));
+
+	if(n->matte_id) {
+		MEM_freeN(n->matte_id);
+		n->matte_id = NULL;
+	}
+	if(BLI_dynstr_get_len(new_matte) > 0) {
+		n->matte_id = BLI_dynstr_get_cstring(new_matte);
+	}
 	BLI_dynstr_free(new_matte);
 }
 
@@ -256,6 +270,30 @@ static void init(bNodeTree *ntree, bNode *node)
 	ntreeCompositCryptomatteAddSocket(ntree, node);
 }
 
+static void node_free_cryptomatte(bNode *node)
+{
+	NodeCryptomatte *nc = node->storage;
+
+	if (nc) {
+		if (nc->matte_id) {
+			MEM_freeN(nc->matte_id);
+		}
+
+		MEM_freeN(nc);
+	}
+}
+
+static void node_copy_cryptomatte(bNodeTree *UNUSED(dest_ntree), bNode *dest_node, bNode *src_node)
+{
+	NodeCryptomatte *src_nc = src_node->storage;
+	NodeCryptomatte *dest_nc = MEM_dupallocN(src_nc);
+
+	if (src_nc->matte_id)
+		dest_nc->matte_id = MEM_dupallocN(src_nc->matte_id);
+
+	dest_node->storage = dest_nc;
+}
+
 void register_node_type_cmp_cryptomatte(void)
 {
 	static bNodeType ntype;
@@ -263,6 +301,6 @@ void register_node_type_cmp_cryptomatte(void)
 	cmp_node_type_base(&ntype, CMP_NODE_CRYPTOMATTE, "Cryptomatte", NODE_CLASS_CONVERTOR, 0);
 	node_type_socket_templates(&ntype, NULL, outputs);
 	node_type_init(&ntype, init);
-	node_type_storage(&ntype, "NodeCryptomatte", node_free_standard_storage, node_copy_standard_storage);
+	node_type_storage(&ntype, "NodeCryptomatte", node_free_cryptomatte, node_copy_cryptomatte);
 	nodeRegisterType(&ntype);
 }

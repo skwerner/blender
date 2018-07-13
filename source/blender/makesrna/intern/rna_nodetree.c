@@ -2876,6 +2876,36 @@ static void rna_NodeColorBalance_update_cdl(Main *bmain, Scene *scene, PointerRN
 	rna_Node_update(bmain, scene, ptr);
 }
 
+static void rna_NodeCryptomatte_matte_get(PointerRNA *ptr, char *value)
+{
+	bNode *node = (bNode *)ptr->data;
+	NodeCryptomatte *nc = node->storage;
+
+	strcpy(value, (nc->matte_id) ? nc->matte_id : "");
+}
+
+static int rna_NodeCryptomatte_matte_length(PointerRNA *ptr)
+{
+	bNode *node = (bNode *)ptr->data;
+	NodeCryptomatte *nc = node->storage;
+
+	return (nc->matte_id) ? strlen(nc->matte_id) : 0;
+}
+
+static void rna_NodeCryptomatte_matte_set(PointerRNA *ptr, const char *value)
+{
+	bNode *node = (bNode *)ptr->data;
+	NodeCryptomatte *nc = node->storage;
+
+	if (nc->matte_id)
+		MEM_freeN(nc->matte_id);
+
+	if (value && value[0])
+		nc->matte_id = BLI_strdup(value);
+	else
+		nc->matte_id = NULL;
+}
+
 static void rna_NodeCryptomatte_update_add(Main *bmain, Scene *scene, PointerRNA *ptr)
 {
 	ntreeCompositCryptomatteSyncFromAdd(ptr->id.data, ptr->data);
@@ -6972,9 +7002,11 @@ static void def_cmp_cryptomatte(StructRNA *srna)
 
 	RNA_def_struct_sdna_from(srna, "NodeCryptomatte", "storage");
 	prop = RNA_def_property(srna, "matte_id", PROP_STRING, PROP_NONE);
-	RNA_def_property_string_sdna(prop, NULL, "matte_id");
+	RNA_def_property_string_funcs(prop, "rna_NodeCryptomatte_matte_get", "rna_NodeCryptomatte_matte_length",
+								  "rna_NodeCryptomatte_matte_set");
 	RNA_def_property_ui_text(prop, "Matte List", "");
 	RNA_def_property_update(prop, NC_NODE | NA_EDITED, "rna_Node_update");
+
 
 	prop = RNA_def_property(srna, "add", PROP_FLOAT, PROP_COLOR);
 	RNA_def_property_float_sdna(prop, NULL, "add");

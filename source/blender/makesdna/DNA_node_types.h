@@ -908,8 +908,9 @@ typedef struct NodeSunBeams {
 typedef struct NodeCryptomatte {
 	float add[3];
 	float remove[3];
-	char matte_id[1024];
+	char *matte_id;
 	int num_inputs;
+	int pad;
 } NodeCryptomatte;
 
 /* script node mode */

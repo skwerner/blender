@@ -267,7 +267,8 @@ static void init(bNodeTree *ntree, bNode *node)
 
 	nodeAddStaticSocket(ntree, node, SOCK_IN, SOCK_RGBA, PROP_NONE, "image", "Image");
 
-	/* add two inputs by default */
+	/* Add three inputs by default, as recommended by the Cryptomatte specification. */
+	ntreeCompositCryptomatteAddSocket(ntree, node);
 	ntreeCompositCryptomatteAddSocket(ntree, node);
 	ntreeCompositCryptomatteAddSocket(ntree, node);
 }

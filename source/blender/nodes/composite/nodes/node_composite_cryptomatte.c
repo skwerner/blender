@@ -68,9 +68,9 @@ static void cryptomatte_add(NodeCryptomatte* n, float f)
 	BLI_snprintf(number, sizeof(number), "<%.9g>", f);
 
 	/* Search if we already have the number. */
-	if (n->matte_id && BLI_strnlen(n->matte_id, sizeof(n->matte_id)) != 0) {
+	if (n->matte_id && strlen(n->matte_id) != 0) {
 		size_t start = 0;
-		const size_t end = BLI_strnlen(n->matte_id, sizeof(n->matte_id));
+		const size_t end = strlen(n->matte_id);
 		size_t token_len = 0;
 		while (start < end) {
 			/* Ignore leading whitespace. */
@@ -129,7 +129,7 @@ static void cryptomatte_add(NodeCryptomatte* n, float f)
 
 static void cryptomatte_remove(NodeCryptomatte*n, float f)
 {
-	if (n->matte_id == NULL || BLI_strnlen(n->matte_id, sizeof(n->matte_id)) == 0) {
+	if (n->matte_id == NULL || strlen(n->matte_id) == 0) {
 		/* Empty string, nothing to remove. */
 		return;
 	}

@@ -17,8 +17,6 @@
 #ifndef __KERNEL_CPU_IMAGE_H__
 #define __KERNEL_CPU_IMAGE_H__
 
-#include "util/util_sparse_grid.h"
-
 #ifdef WITH_OPENVDB
 #include <openvdb/openvdb.h>
 #endif
@@ -86,6 +84,7 @@ struct TextureInterpolator {
 	                                          int x, int y, int z,
 	                                          int width, int height,
 	                                          int /*tiw*/, int /*tih*/,
+	                                          int /*evw*/, int /*evh*/,
 	                                          int /*ltw*/, int /*lth*/)
 	{
 		return read(data[x + width * (y + z * height)]);
@@ -97,19 +96,18 @@ struct TextureInterpolator {
 	                                          int x, int y, int z,
 	                                          int /*width*/, int /*height*/,
 	                                          int tiw, int tih,
+	                                          int evw, int evh,
 	                                          int ltw, int lth)
 	{
 		int tix = x / TILE_SIZE, itix = x % TILE_SIZE,
 		    tiy = y / TILE_SIZE, itiy = y % TILE_SIZE,
 		    tiz = z / TILE_SIZE, itiz = z % TILE_SIZE;
-		int dense_index = (tix + tiw * (tiy + tiz * tih)) * 2;
-		int sparse_index = grid_info[dense_index];
-		int dims = grid_info[dense_index + 1];
+		int sparse_index = grid_info[(tix + tiw * (tiy + tiz * tih))];
 		if(sparse_index < 0) {
 			return make_float4(0.0f);
 		}
-		int itiw = dims & (1 << ST_SHIFT_TRUNCATE_WIDTH) ? ltw : TILE_SIZE;
-		int itih = dims & (1 << ST_SHIFT_TRUNCATE_HEIGHT) ? lth : TILE_SIZE;
+		int itiw = (x > evw) ? ltw : TILE_SIZE;
+		int itih = (y > evh) ? lth : TILE_SIZE;
 		int in_tile_index = itix + itiw * (itiy + itiz * itih);
 		return read(data[sparse_index + in_tile_index]);
 	}
@@ -121,6 +119,7 @@ struct TextureInterpolator {
 	                                          int x, int y, int z,
 	                                          int /*width*/, int /*height*/,
 	                                          int /*tiw*/, int /*tih*/,
+	                                          int /*evw*/, int /*evh*/,
 	                                          int /*ltw*/, int /*lth*/)
 	{
 		const openvdb::math::Coord xyz(x, y, z);
@@ -132,6 +131,7 @@ struct TextureInterpolator {
 	                                          int x, int y, int z,
 	                                          int /*width*/, int /*height*/,
 	                                          int /*tiw*/, int /*tih*/,
+	                                          int /*evw*/, int /*evh*/,
 	                                          int /*ltw*/, int /*lth*/)
 	{
 		const openvdb::math::Coord xyz(x, y, z);
@@ -348,10 +348,12 @@ struct TextureInterpolator {
 
 		const T *data = (const T*)info.data;
 		UtilType *util = (UtilType*)info.util;
+		int ltw = info.last_tile_dim & LAST_TILE_WIDTH_MASK;
+		int lth = info.last_tile_dim & LAST_TILE_HEIGHT_MASK;
 
 		return read_data(data, util, ix, iy, iz, width, height,
 		                 info.tiled_width, info.tiled_height,
-		                 info.last_tile_width, info.last_tile_height);
+		                 info.even_width, info.even_height, ltw, lth);
 	}
 
 	static ccl_always_inline float4 interp_3d_linear(const TextureInfo& info,
@@ -403,17 +405,19 @@ struct TextureInterpolator {
 		UtilType *util = (UtilType*)info.util;
 		int tiw = info.tiled_width;
 		int tih = info.tiled_height;
-		int ltw = info.last_tile_width;
-		int lth = info.last_tile_height;
+		int evw = info.even_width;
+		int evh = info.even_height;
+		int ltw = info.last_tile_dim & LAST_TILE_WIDTH_MASK;
+		int lth = info.last_tile_dim & LAST_TILE_HEIGHT_MASK;
 
-		r  = (1.0f - tz)*(1.0f - ty)*(1.0f - tx) * read_data(data, util, ix,  iy,  iz,  width, height, tiw, tih, ltw, lth);
-		r += (1.0f - tz)*(1.0f - ty)*tx          * read_data(data, util, nix, iy,  iz,  width, height, tiw, tih, ltw, lth);
-		r += (1.0f - tz)*ty*(1.0f - tx)          * read_data(data, util, ix,  niy, iz,  width, height, tiw, tih, ltw, lth);
-		r += (1.0f - tz)*ty*tx                   * read_data(data, util, nix, niy, iz,  width, height, tiw, tih, ltw, lth);
-		r += tz*(1.0f - ty)*(1.0f - tx)          * read_data(data, util, ix,  iy,  niz, width, height, tiw, tih, ltw, lth);
-		r += tz*(1.0f - ty)*tx                   * read_data(data, util, nix, iy,  niz, width, height, tiw, tih, ltw, lth);
-		r += tz*ty*(1.0f - tx)                   * read_data(data, util, ix,  niy, niz, width, height, tiw, tih, ltw, lth);
-		r += tz*ty*tx                            * read_data(data, util, nix, niy, niz, width, height, tiw, tih, ltw, lth);
+		r  = (1.0f - tz)*(1.0f - ty)*(1.0f - tx) * read_data(data, util, ix,  iy,  iz,  width, height, tiw, tih, evw, evh, ltw, lth);
+		r += (1.0f - tz)*(1.0f - ty)*tx          * read_data(data, util, nix, iy,  iz,  width, height, tiw, tih, evw, evh, ltw, lth);
+		r += (1.0f - tz)*ty*(1.0f - tx)          * read_data(data, util, ix,  niy, iz,  width, height, tiw, tih, evw, evh, ltw, lth);
+		r += (1.0f - tz)*ty*tx                   * read_data(data, util, nix, niy, iz,  width, height, tiw, tih, evw, evh, ltw, lth);
+		r += tz*(1.0f - ty)*(1.0f - tx)          * read_data(data, util, ix,  iy,  niz, width, height, tiw, tih, evw, evh, ltw, lth);
+		r += tz*(1.0f - ty)*tx                   * read_data(data, util, nix, iy,  niz, width, height, tiw, tih, evw, evh, ltw, lth);
+		r += tz*ty*(1.0f - tx)                   * read_data(data, util, ix,  niy, niz, width, height, tiw, tih, evw, evh, ltw, lth);
+		r += tz*ty*tx                            * read_data(data, util, nix, niy, niz, width, height, tiw, tih, evw, evh, ltw, lth);
 
 		return r;
 	}

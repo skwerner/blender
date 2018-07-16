@@ -19,6 +19,7 @@
 
 #include "util/util_half.h"
 #include "util/util_image.h"
+#include "util/util_texture.h"
 #include "util/util_types.h"
 #include "util/util_vector.h"
 
@@ -47,17 +48,13 @@ namespace {
 	inline bool gt(half4 a, half4 b) { return a.x > b.x || a.y > b.y || a.z > b.z || a.w > b.w; }
 }
 
-static const int TILE_SIZE = 8;
-
 /* Sparse Tile Dimensions Information
  * For maintaining characteristics of each tile's dimensions.
  * A series of bools stored in the bits of the tile's dimension int. */
 typedef enum SparseTileDimShift {
-	ST_SHIFT_TRUNCATE_WIDTH = 0,
-	ST_SHIFT_TRUNCATE_HEIGHT = 1,
-	ST_SHIFT_X_PAD = 2,
-	ST_SHIFT_Y_PAD = 3,
-	ST_SHIFT_Z_PAD = 4,
+	ST_SHIFT_X_PAD = 0,
+	ST_SHIFT_Y_PAD = 1,
+	ST_SHIFT_Z_PAD = 2,
 } SparseTileDimShift;
 
 const inline int compute_index(const size_t x, const size_t y, const size_t z,
@@ -89,29 +86,31 @@ const inline size_t get_tile_res(const size_t res)
 /* Do not call this function in the kernel. */
 const inline int compute_index(const int *grid_info,
                                int x, int y, int z,
-                               int tiw, int tih, int tid,
-                               int ltw, int lth)
+                               int width, int height, int depth)
 {
 	/* Coordinates of (x, y, z)'s tile and
 	 * coordinates of (x, y, z) with origin at tile start. */
 	int tix = x / TILE_SIZE, itix = x % TILE_SIZE,
 	    tiy = y / TILE_SIZE, itiy = y % TILE_SIZE,
-	    tiz = z / TILE_SIZE, itiz = z % TILE_SIZE;
+	    tiz = z / TILE_SIZE, itiz = z % TILE_SIZE,
+	    tiw = get_tile_res(width),
+	    tih = get_tile_res(height),
+	    tid = get_tile_res(depth);
 	/* Get the 1D array index in the dense grid of the tile (x, y, z) is in. */
-	int dense_index = compute_index(tix, tiy, tiz, tiw, tih, tid) * 2;
+	int dense_index = compute_index(tix, tiy, tiz, tiw, tih, tid);
 	if(dense_index < 0) {
 		return -1;
 	}
-	/* Get the offset and dimension info of target tile. */
+	/* Get the offset of target tile. */
 	int sparse_index = grid_info[dense_index];
-	int dims = grid_info[dense_index + 1];
 	if (sparse_index < 0) {
 		return -1;
 	}
 	/* If the tile is the last tile in a direction and the end is truncated, we
 	 * have to recalulate itiN with the truncated length.  */
-	int itiw = dims & (1 << ST_SHIFT_TRUNCATE_WIDTH) ? ltw : TILE_SIZE;
-	int itih = dims & (1 << ST_SHIFT_TRUNCATE_HEIGHT) ? lth : TILE_SIZE;
+	int ltw = width % TILE_SIZE, lth = height % TILE_SIZE;
+	int itiw = (x > width - ltw) ? ltw : TILE_SIZE;
+	int itih = (y > height - lth) ? lth : TILE_SIZE;
 	/* Look up voxel in the tile.
 	 * Need to check whether or not a tile is padded on any of its 6 faces. */
 	int in_tile_index = compute_index(itix, itiy, itiz, itiw, itih);
@@ -151,7 +150,7 @@ int create_sparse_grid(const T *dense_grid,
                        vector<T> *sparse_grid, vector<int> *grid_info)
 {
 	if(!dense_grid) {
-		return 0;
+		return -1;
 	}
 
 	const T threshold = cast_from_float<T>(isovalue);
@@ -162,12 +161,12 @@ int create_sparse_grid(const T *dense_grid,
 	sparse_grid->resize(width * height * depth);
 	grid_info->resize(get_tile_res(width) *
 	                  get_tile_res(height) *
-	                  get_tile_res(depth) * 2);
+	                  get_tile_res(depth));
 	int info_count = 0, voxel_count = 0;
 
 	for(int z=0 ; z < depth ; z += TILE_SIZE) {
 		for(int y=0 ; y < height ; y += TILE_SIZE) {
-			for(int x=0 ; x < width ; x += TILE_SIZE) {
+			for(int x=0 ; x < width ; x += TILE_SIZE, ++info_count) {
 				bool is_active = false;
 				int voxel = 0;
 
@@ -185,22 +184,14 @@ int create_sparse_grid(const T *dense_grid,
 					}
 				}
 
-				/* If tile is active, store tile's offset and dimension info. */
+				/* If tile is active, store tile's offset. */
 				if(is_active) {
-					/* Store if the tile is the last tile in the X/Y direction
-					 * and if its x/y resolution is not divisible by TILE_SIZE. */
-					int dimensions = 0;
-					dimensions |= ((x + TILE_SIZE > width) << ST_SHIFT_TRUNCATE_WIDTH);
-					dimensions |= ((y + TILE_SIZE > height) << ST_SHIFT_TRUNCATE_HEIGHT);
 					grid_info->at(info_count) = voxel_count;
-					grid_info->at(info_count + 1) = dimensions;
 					voxel_count += voxel;
 				}
 				else {
 					grid_info->at(info_count) = -1;
-					grid_info->at(info_count + 1) = 0;
 				}
-				info_count += 2;
 			}
 		}
 	}
@@ -241,7 +232,7 @@ int create_sparse_grid_cuda(const T *dense_grid,
 	                       get_tile_res(depth);
 
 	if(!dense_grid || tile_count < 3) {
-		return 0;
+		return -1;
 	}
 
 	const T threshold = cast_from_float<T>(isovalue);

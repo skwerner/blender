@@ -1,5 +1,6 @@
 
 #include <openvdb/openvdb.h>
+#include <openvdb/tools/GridTransformer.h>
 #include "intern/openvdb_reader.h"
 #include "openvdb_capi.h"
 #include "render/openvdb.h"
@@ -15,71 +16,114 @@ struct OpenVDBReader;
 
 CCL_NAMESPACE_BEGIN
 
-static struct OpenVDBReader *get_reader(const string& filepath,
-                                        const string& grid_name)
+/* Comparison and assignment utilities. */
+
+static const bool gte(openvdb::Vec3SGrid::ConstAccessor accessor,
+                      openvdb::math::Coord c, const float f)
 {
-	/* Logging is done when metadata is retrieved. */
+	openvdb::math::Vec3s v = accessor.getValue(c);
+	return (v.x() >= f || v.y() >= f || v.z() >= f);
+}
+
+static const bool gte(openvdb::FloatGrid::ConstAccessor accessor,
+                      openvdb::math::Coord c, const float f)
+{
+	return accessor.getValue(c) >= f;
+}
+
+static void copy(openvdb::Vec3SGrid::ConstAccessor accessor,
+                 openvdb::math::Coord c, float *f)
+{
+	openvdb::math::Vec3s v = accessor.getValue(c);
+	*(f + 0) = v.x();
+	*(f + 1) = v.y();
+	*(f + 2) = v.z();
+	*(f + 3) = 1.0f;
+}
+
+static void copy(openvdb::FloatGrid::ConstAccessor accessor,
+                 openvdb::math::Coord c, float *f)
+{
+	*f = accessor.getValue(c);
+}
+
+/* Misc internal helper functions.
+ * Logging should be done by callers. */
+
+template<typename GridType>
+static bool get_grid(const string& filepath,
+                     const string& grid_name,
+                     typename GridType::Ptr& grid,
+                     typename GridType::ConstAccessor& accessor,
+                     int3& resolution)
+{
+	using namespace openvdb;
+
 	if(!path_exists(filepath) || path_is_directory(filepath)) {
-		return NULL;
+		return false;
 	}
 
 	struct OpenVDBReader *reader = OpenVDBReader_create();
 	OpenVDBReader_open(reader, filepath.c_str());
 
-	/* If grid name is provided, we also check it's validity here. */
-	if(!grid_name.empty()) {
-		if (!OpenVDBReader_has_grid(reader, grid_name.c_str())) {
-			VLOG(1) << filepath << " does not have grid " << grid_name;
-			OpenVDBReader_free(reader);
-			return NULL;
-		}
+	if (!OpenVDBReader_has_grid(reader, grid_name.c_str())) {
+		OpenVDBReader_free(reader);
+		return false;
 	}
 
-	return reader;
-}
+	int min_bound[3], res[3];
+	OpenVDBReader_get_bounds(reader, min_bound, NULL, res, NULL, NULL, NULL);
 
-static void OpenVDB_import_grid_vector_fl4(OpenVDBReader *reader,
-                                           const openvdb::Name &name,
-                                           float4 *data,
-                                           const int3& resolution)
+	/* In order to keep sampling uniform, we expect a volume's bound to begin at
+	 * (0, 0, 0) in object space. External VDBs may have a non-zero origin, so
+	 * all voxels must be translated. This process may be memory inefficient. */
 
-{
-	using namespace openvdb;
+	typename GridType::Ptr orig_grid = gridPtrCast<GridType>(reader->getGrid(grid_name));
 
-	Vec3SGrid::Ptr vgrid = gridPtrCast<Vec3SGrid>(reader->getGrid(name));
-	Vec3SGrid::ConstAccessor acc = vgrid->getConstAccessor();
-	math::Coord xyz;
-	int &x = xyz[0], &y = xyz[1], &z = xyz[2];
-
-	size_t index = 0;
-	for (z = 0; z < resolution.z; ++z) {
-		for (y = 0; y < resolution.y; ++y) {
-			for (x = 0; x < resolution.x; ++x, index += 4) {
-				math::Vec3s value = acc.getValue(xyz);
-				(*data)[index + 0] = value.x();
-				(*data)[index + 1] = value.y();
-				(*data)[index + 2] = value.z();
-				(*data)[index + 3] = 1.0f;
-			}
-		}
+	if(min_bound[0] == 0 && min_bound[1] == 0 && min_bound[2] == 0) {
+		grid = orig_grid;
 	}
+	else {
+		grid = GridType::create();
+		math::Mat4d xform = math::Mat4d::identity();
+		math::Vec3d translation(-min_bound[0], -min_bound[1], -min_bound[2]);
+		xform.setTranslation(translation);
+		tools::GridTransformer transformer(xform);
+		transformer.transformGrid<tools::PointSampler, GridType>(*orig_grid, *grid);
+	}
+
+	accessor = grid->getConstAccessor();
+	resolution = make_int3(res[0], res[1], res[2]);
+
+	OpenVDBReader_free(reader);
+	return true;
 }
+
+/* Misc external helper functions. These all assume that the file exists and is
+ * a valid .vdb file. Logging should be done by callers. */
 
 bool openvdb_has_grid(const string& filepath, const string& grid_name)
 {
-	return get_reader(filepath, grid_name);
-}
-
-int3 get_openvdb_resolution(const string& filepath)
-{
-	struct OpenVDBReader *reader = get_reader(filepath, string());
-	if(!reader) {
-		return make_int3(0, 0, 0);
+	if(grid_name.empty()) {
+		return false;
 	}
 
-	int res[3];
-	OpenVDBReader_get_simple_bounds(reader, res);
+	struct OpenVDBReader *reader = OpenVDBReader_create();
+	OpenVDBReader_open(reader, filepath.c_str());
 
+	bool has_grid = OpenVDBReader_has_grid(reader, grid_name.c_str());
+
+	OpenVDBReader_free(reader);
+	return has_grid;
+}
+
+int3 openvdb_get_resolution(const string& filepath)
+{
+	struct OpenVDBReader *reader = OpenVDBReader_create();
+	OpenVDBReader_open(reader, filepath.c_str());
+
+	int res[3];
+	OpenVDBReader_get_bounds(reader, NULL, NULL, res, NULL, NULL, NULL);
 	OpenVDBReader_free(reader);
 
 	return make_int3(res[0], res[1], res[2]);
@@ -87,121 +131,237 @@ int3 get_openvdb_resolution(const string& filepath)
 
 /* For now, since there is no official OpenVDB interpolation implementations
  * for CUDA or OpenCL, OpenVDB grids can only be saved for CPU rendering.
- * Otherwise, we convert the OpenVDB grids to dense arrays. */
+ * Otherwise, we convert the OpenVDB grids to arrays. */
 
-/* to-do (gschua): handle texture limits. */
-
-/* Thread must be locked before file_load_openvdb_cpu() is called. */
-device_memory *file_load_openvdb(Device *device,
-                                 const string& filepath,
-                                 const string& grid_name,
-                                 const int3& resolution,
-                                 const string& mem_name,
-                                 const InterpolationType& interpolation,
-                                 const ExtensionType& extension,
-                                 const bool& is_vec,
-                                 const int& /*texture_limit*/)
+/* Direct load OpenVDB to device.
+ * Thread must be locked before file_load_openvdb_cpu() is called. */
+template<typename GridType>
+static device_memory *openvdb_load_device(Device *device,
+                                          const string& filepath,
+                                          const string& grid_name,
+                                          const string& mem_name,
+                                          const InterpolationType& interpolation,
+                                          const ExtensionType& extension)
 {
 	using namespace openvdb;
 
-	struct OpenVDBReader *reader = get_reader(filepath, grid_name);
-	if(!reader) {
+	typename GridType::Ptr grid = GridType::create();
+	typename GridType::ConstAccessor accessor = grid->getConstAccessor();
+	int3 resolution;
+
+	if(!get_grid<GridType>(filepath, grid_name, grid, accessor, resolution)) {
 		return NULL;
 	}
 
+	device_openvdb<GridType> *tex_img =
+			new device_openvdb<GridType>(device, mem_name.c_str(),
+	                                     MEM_TEXTURE, grid, accessor,
+	                                     resolution);
+
+	tex_img->interpolation = interpolation;
+	tex_img->extension = extension;
+	tex_img->grid_type = IMAGE_GRID_TYPE_OPENVDB;
+	tex_img->copy_to_device();
+
+	return tex_img;
+}
+
+device_memory *openvdb_load_device(Device *device,
+                                   const string& filepath,
+                                   const string& grid_name,
+                                   const string& mem_name,
+                                   const InterpolationType& interpolation,
+                                   const ExtensionType& extension,
+                                   const bool is_vec)
+{
 	if(is_vec) {
-		Vec3SGrid::Ptr grid = gridPtrCast<Vec3SGrid>(reader->getGrid(grid_name));
-		Vec3SGrid::ConstAccessor accessor = grid->getConstAccessor();
-
-		device_openvdb<Vec3SGrid, float4> *tex_img =
-		        new device_openvdb<Vec3SGrid, float4>(device,
-		                                              mem_name.c_str(),
-		                                              MEM_TEXTURE,
-		                                              grid,
-		                                              accessor,
-		                                              resolution);
-		tex_img->interpolation = interpolation;
-		tex_img->extension = extension;
-		tex_img->grid_type = IMAGE_GRID_TYPE_OPENVDB;
-		tex_img->copy_to_device();
-
-		OpenVDBReader_free(reader);
-		return tex_img;
+		return openvdb_load_device<openvdb::Vec3SGrid>(device, filepath,
+		                                               grid_name, mem_name,
+		                                               interpolation, extension);
 	}
 	else {
-		FloatGrid::Ptr grid = gridPtrCast<FloatGrid>(reader->getGrid(grid_name));
-		FloatGrid::ConstAccessor accessor = grid->getConstAccessor();
-
-		device_openvdb<FloatGrid, float> *tex_img =
-		        new device_openvdb<FloatGrid, float>(device,
-		                                             mem_name.c_str(),
-		                                             MEM_TEXTURE,
-	                                                 grid,
-		                                             accessor,
-	                                                 resolution);
-
-		tex_img->interpolation = interpolation;
-		tex_img->extension = extension;
-		tex_img->grid_type = IMAGE_GRID_TYPE_OPENVDB;
-		tex_img->copy_to_device();
-
-		OpenVDBReader_free(reader);
-		return tex_img;
+		return openvdb_load_device<openvdb::FloatGrid>(device, filepath,
+		                                               grid_name, mem_name,
+		                                               interpolation, extension);
 	}
 }
 
-bool file_load_openvdb_dense(const string& filepath,
-                             const string& grid_name,
-                             const int3& resolution,
-                             const int& /*texture_limit*/,
-                             float *data)
-{
-	struct OpenVDBReader *reader = get_reader(filepath, grid_name);
-	if(!reader) {
-		return false;
-	}
+/* Load OpenVDB file to sparse grid. Based on util/util_sparse_grid.h */
 
-	int res[3] = {resolution.x, resolution.y, resolution.z};
-	OpenVDB_import_grid_fl(reader, grid_name.c_str(), &data, res);
-
-	OpenVDBReader_free(reader);
-
-	return true;
-}
-
-bool file_load_openvdb_dense(const string& filepath,
-                             const string& grid_name,
-                             const int3& resolution,
-                             const int& /*texture_limit*/,
-                             float4 *data)
-{
-	struct OpenVDBReader *reader = get_reader(filepath, grid_name);
-	if(!reader) {
-		return false;
-	}
-
-	OpenVDB_import_grid_vector_fl4(reader, grid_name, data, resolution);
-
-	OpenVDBReader_free(reader);
-
-	return true;
-}
-
-void build_openvdb_mesh_fl(VolumeMeshBuilder *builder,
-                           void *v_accessor,
-                           const int3 resolution,
-                           const float isovalue)
+template<typename GridType>
+static int openvdb_preprocess(const string& filepath, const string& grid_name,
+                              const float threshold, int *grid_info)
 {
 	using namespace openvdb;
 
-	FloatGrid::ConstAccessor *acc = static_cast<FloatGrid::ConstAccessor*>(v_accessor);
+	typename GridType::Ptr grid = GridType::create();
+	typename GridType::ConstAccessor accessor = grid->getConstAccessor();
+	int3 resolution;
+
+	if(!get_grid<GridType>(filepath, grid_name, grid, accessor, resolution)) {
+		return -1;
+	}
+
+	math::Coord ijk;
+	int &i = ijk[0], &j = ijk[1], &k = ijk[2];
+	int tile_count = 0, active_count = 0;
+
+	for (int z = 0; z < resolution.z; z += TILE_SIZE) {
+		for (int y = 0; y < resolution.y; y += TILE_SIZE) {
+			for (int x = 0; x < resolution.x; x += TILE_SIZE, ++tile_count) {
+				bool is_active = false;
+				int max_i = min(x + TILE_SIZE, resolution.x);
+				int max_j = min(y + TILE_SIZE, resolution.y);
+				int max_k = min(z + TILE_SIZE, resolution.z);
+
+				for (k = z; k < max_k && !is_active; ++k) {
+					for (j = y; j < max_j && !is_active; ++j) {
+						for (i = x; i < max_i && !is_active; ++i) {
+							is_active = gte(accessor, ijk, threshold);
+						}
+					}
+				}
+
+				grid_info[tile_count] = is_active - 1; /* 0 if active, -1 if inactive. */
+				active_count += is_active;
+			}
+		}
+	}
+
+	return active_count;
+}
+
+int openvdb_preprocess(const string& filepath, const string& grid_name,
+                       const float threshold, int *grid_info, const bool is_vec)
+{
+	if(is_vec) {
+		return openvdb_preprocess<openvdb::Vec3SGrid>(filepath, grid_name,
+		                                              threshold, grid_info);
+	}
+	else {
+		return openvdb_preprocess<openvdb::FloatGrid>(filepath, grid_name,
+													  threshold, grid_info);
+	}
+}
+
+template<typename GridType>
+static bool openvdb_load_sparse(const string& filepath, const string& grid_name,
+                                float *data, int *grid_info, const int channels)
+{
+	using namespace openvdb;
+
+	typename GridType::Ptr grid = GridType::create();
+	typename GridType::ConstAccessor accessor = grid->getConstAccessor();
+	int3 resolution;
+
+	if(!get_grid<GridType>(filepath, grid_name, grid, accessor, resolution)) {
+		return false;
+	}
+
+	math::Coord ijk;
+	int &i = ijk[0], &j = ijk[1], &k = ijk[2];
+	int tile_count = 0, index = 0;
+
+	for (int z = 0; z < resolution.z; z += TILE_SIZE) {
+		for (int y = 0; y < resolution.y; y += TILE_SIZE) {
+			for (int x = 0; x < resolution.x; x += TILE_SIZE, ++tile_count) {
+				if(grid_info[tile_count] < 0) {
+					continue;
+				}
+
+				grid_info[tile_count] = index;
+				int max_i = min(x + TILE_SIZE, resolution.x);
+				int max_j = min(y + TILE_SIZE, resolution.y);
+				int max_k = min(z + TILE_SIZE, resolution.z);
+
+				for (k = z; k < max_k; ++k) {
+					for (j = y; j < max_j; ++j) {
+						for (i = x; i < max_i; ++i, index += channels) {
+							copy(accessor, ijk, data + index);
+						}
+					}
+				}
+			}
+		}
+	}
+
+	return true;
+}
+
+bool openvdb_load_sparse(const string& filepath, const string& grid_name,
+                         float *data, int *grid_info, const int channels)
+{
+	if(channels > 1) {
+		return openvdb_load_sparse<openvdb::Vec3SGrid>(filepath, grid_name, data,
+		                                               grid_info, channels);
+	}
+	else {
+		return openvdb_load_sparse<openvdb::FloatGrid>(filepath, grid_name, data,
+		                                               grid_info, channels);
+	}
+}
+
+/* Load OpenVDB file to dense grid. */
+template<typename GridType>
+static bool openvdb_load_dense(const string& filepath, const string& grid_name,
+	                           float *data, const int channels)
+{
+	using namespace openvdb;
+
+	typename GridType::Ptr grid = GridType::create();
+	typename GridType::ConstAccessor accessor = grid->getConstAccessor();
+	int3 resolution;
+
+	if(!get_grid<GridType>(filepath, grid_name, grid, accessor, resolution)) {
+		return false;
+	}
+
+	math::Coord xyz;
+	int &x = xyz[0], &y = xyz[1], &z = xyz[2];
+	int index = 0;
+
+	for (z = 0; z < resolution.z; ++z) {
+		for (y = 0; y < resolution.y; ++y) {
+			for (x = 0; x < resolution.x; ++x, index += channels) {
+				copy(accessor, xyz, data + index);
+			}
+		}
+	}
+
+	return true;
+}
+
+bool openvdb_load_dense(const string& filepath, const string& grid_name,
+                        float *data, const int channels)
+{
+	if(channels > 1) {
+		return openvdb_load_dense<openvdb::Vec3SGrid>(filepath, grid_name,
+		                                              data, channels);
+	}
+	else {
+		return openvdb_load_dense<openvdb::FloatGrid>(filepath, grid_name,
+		                                              data, channels);
+	}
+}
+
+/* Volume Mesh Builder functions. */
+
+template<typename GridType>
+static void openvdb_build_mesh(VolumeMeshBuilder *builder, void *v_accessor,
+                               const int3 resolution, const float threshold)
+{
+	using namespace openvdb;
+
+	typename GridType::ConstAccessor *acc =
+	        static_cast<typename GridType::ConstAccessor*>(v_accessor);
+
 	math::Coord xyz;
 	int &x = xyz[0], &y = xyz[1], &z = xyz[2];
 
 	for (z = 0; z < resolution.z; ++z) {
 		for (y = 0; y < resolution.y; ++y) {
 			for (x = 0; x < resolution.x; ++x) {
-				if(acc->getValue(xyz) >= isovalue) {
+				if(gte(*acc, xyz, threshold)) {
 					builder->add_node_with_padding(x, y, z);
 				}
 			}
@@ -209,26 +369,17 @@ void build_openvdb_mesh_fl(VolumeMeshBuilder *builder,
 	}
 }
 
-void build_openvdb_mesh_vec(VolumeMeshBuilder *builder,
-                            void *v_accessor,
-                            const int3 resolution,
-                            const float isovalue)
+void openvdb_build_mesh(VolumeMeshBuilder *builder, void *v_accessor,
+                        const int3 resolution, const float threshold,
+                        const bool is_vec)
 {
-	using namespace openvdb;
-
-	Vec3SGrid::ConstAccessor *acc = static_cast<Vec3SGrid::ConstAccessor*>(v_accessor);
-	math::Coord xyz;
-	int &x = xyz[0], &y = xyz[1], &z = xyz[2];
-
-	for (z = 0; z < resolution.z; ++z) {
-		for (y = 0; y < resolution.y; ++y) {
-			for (x = 0; x < resolution.x; ++x) {
-				math::Vec3s val = acc->getValue(xyz);
-				if(val.x() >= isovalue || val.y() >= isovalue || val.z() >= isovalue) {
-					builder->add_node_with_padding(x, y, z);
-				}
-			}
-		}
+	if(is_vec) {
+		openvdb_build_mesh<openvdb::Vec3SGrid>(builder, v_accessor,
+		                                       resolution, threshold);
+	}
+	else {
+		openvdb_build_mesh<openvdb::FloatGrid>(builder, v_accessor,
+		                                       resolution, threshold);
 	}
 }
 

@@ -304,25 +304,9 @@ static bool OpenVDBReader_get_bbox(struct OpenVDBReader *reader,
 	return is_valid;
 }
 
-bool OpenVDBReader_get_simple_bounds(struct OpenVDBReader *reader, int res[3])
-{
-	using namespace openvdb;
-
-	math::CoordBBox bbox;
-	math::Coord coord;
-	bool is_valid = OpenVDBReader_get_bbox(reader, &bbox, NULL, NULL);
-
-	coord = bbox.dim();
-	res[0] = coord[0];
-	res[1] = coord[1];
-	res[2] = coord[2];
-
-	return is_valid;
-}
-
-bool OpenVDBReader_get_detailed_bounds(struct OpenVDBReader *reader,
-                                       int res_min[3], int res_max[3], int res[3],
-                                       float bbox_min[3], float bbox_max[3], float voxel_size[3])
+bool OpenVDBReader_get_bounds(struct OpenVDBReader *reader,
+                              int res_min[3], int res_max[3], int res[3],
+                              float bbox_min[3], float bbox_max[3], float voxel_size[3])
 {
 	using namespace openvdb;
 
@@ -332,34 +316,41 @@ bool OpenVDBReader_get_detailed_bounds(struct OpenVDBReader *reader,
 	math::Vec3d vec3d;
 	bool is_valid = OpenVDBReader_get_bbox(reader, &bbox, &bbox_world, &vec3d);
 
-	voxel_size[0] = vec3d[0];
-	voxel_size[1] = vec3d[1];
-	voxel_size[2] = vec3d[2];
-
-	vec3d = bbox_world.min();
-	bbox_min[0] = vec3d[0];
-	bbox_min[1] = vec3d[1];
-	bbox_min[2] = vec3d[2];
-
-	vec3d = bbox_world.max();
-	bbox_max[0] = vec3d[0];
-	bbox_max[1] = vec3d[1];
-	bbox_max[2] = vec3d[2];
-
-	coord = bbox.getStart();
-	res_min[0] = coord[0];
-	res_min[1] = coord[1];
-	res_min[2] = coord[2];
-
-	coord = bbox.getEnd();
-	res_max[0] = coord[0];
-	res_max[1] = coord[1];
-	res_max[2] = coord[2];
-
-	coord = bbox.dim();
-	res[0] = coord[0];
-	res[1] = coord[1];
-	res[2] = coord[2];
+	if(voxel_size) {
+		voxel_size[0] = vec3d[0];
+		voxel_size[1] = vec3d[1];
+		voxel_size[2] = vec3d[2];
+	}
+	if(bbox_min) {
+		vec3d = bbox_world.min();
+		bbox_min[0] = vec3d[0];
+		bbox_min[1] = vec3d[1];
+		bbox_min[2] = vec3d[2];
+	}
+	if(bbox_max) {
+		vec3d = bbox_world.max();
+		bbox_max[0] = vec3d[0];
+		bbox_max[1] = vec3d[1];
+		bbox_max[2] = vec3d[2];
+	}
+	if(res_min) {
+		coord = bbox.getStart();
+		res_min[0] = coord[0];
+		res_min[1] = coord[1];
+		res_min[2] = coord[2];
+	}
+	if(res_max) {
+		coord = bbox.getEnd();
+		res_max[0] = coord[0];
+		res_max[1] = coord[1];
+		res_max[2] = coord[2];
+	}
+	if(res) {
+		coord = bbox.dim();
+		res[0] = coord[0];
+		res[1] = coord[1];
+		res[2] = coord[2];
+	}
 
 	return is_valid;
 }

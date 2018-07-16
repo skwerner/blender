@@ -114,10 +114,9 @@ void OpenVDBReader_get_meta_v3(struct OpenVDBReader *reader, const char *name, f
 void OpenVDBReader_get_meta_v3_int(struct OpenVDBReader *reader, const char *name, int value[3]);
 void OpenVDBReader_get_meta_mat4(struct OpenVDBReader *reader, const char *name, float value[4][4]);
 
-bool OpenVDBReader_get_simple_bounds(struct OpenVDBReader *reader, int res[3]);
-bool OpenVDBReader_get_detailed_bounds(struct OpenVDBReader *reader,
-                                       int res_min[3], int res_max[3], int res[3],
-                                       float bbox_min[3], float bbox_max[3], float voxel_size[3]);
+bool OpenVDBReader_get_bounds(struct OpenVDBReader *reader,
+                              int res_min[3], int res_max[3], int res[3],
+                              float bbox_min[3], float bbox_max[3], float voxel_size[3]);
 
 #ifdef __cplusplus
 }

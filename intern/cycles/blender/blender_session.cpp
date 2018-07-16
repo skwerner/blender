@@ -1082,11 +1082,6 @@ void BlenderSession::builtin_image_info(const string &builtin_name,
 		metadata.width = resolution.x * amplify;
 		metadata.height = resolution.y * amplify;
 		metadata.depth = resolution.z * amplify;
-
-		if(b_domain.is_openvdb()) {
-			metadata.openvdb_filepath = blender_absolute_path(b_data, b_id,
-			                                                  b_domain.openvdb_filepath());
-		}
 	}
 	else {
 		/* TODO(sergey): Check we're indeed in shader node tree. */

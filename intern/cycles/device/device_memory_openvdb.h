@@ -10,7 +10,17 @@
 
 CCL_NAMESPACE_BEGIN
 
-template<typename GridType, typename DataType>
+template<> struct device_type_traits<openvdb::Vec3SGrid> {
+	static const DataType data_type = TYPE_FLOAT;
+	static const int num_elements = 4;
+};
+
+template<> struct device_type_traits<openvdb::FloatGrid> {
+	static const DataType data_type = TYPE_FLOAT;
+	static const int num_elements = 1;
+};
+
+template<typename GridType>
 class device_openvdb : public device_memory
 {
 public:
@@ -26,8 +36,8 @@ public:
 	{
 		using namespace openvdb;
 
-		data_type = device_type_traits<DataType>::data_type;
-		data_elements = device_type_traits<DataType>::num_elements;
+		data_type = device_type_traits<GridType>::data_type;
+		data_elements = device_type_traits<GridType>::num_elements;
 
 		assert(data_elements > 0);
 

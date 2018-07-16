@@ -432,9 +432,13 @@ public:
 					info.util = (uint64_t)grid_info->host_pointer;
 					info.tiled_width = get_tile_res(info.width);
 					info.tiled_height = get_tile_res(info.height);
-					info.last_tile_width = info.width % TILE_SIZE;
-					info.last_tile_height = info.height % TILE_SIZE;
+					info.even_width = info.width - (info.width % TILE_SIZE);
+					info.even_height = info.height - (info.height % TILE_SIZE);
+					info.last_tile_dim = 0;
+					info.last_tile_dim |= ((info.width % TILE_SIZE) << LAST_TILE_WIDTH_MASK);
+					info.last_tile_dim |= ((info.height % TILE_SIZE) << LAST_TILE_HEIGHT_MASK);
 					break;
+				case IMAGE_GRID_TYPE_DEFAULT:
 				default:
 					info.util = 0;
 			}

@@ -38,7 +38,8 @@ public:
 	int channels;
 	size_t width, height, depth;
 	bool builtin_free_cache;
-	string openvdb_filepath;
+	/* For OpenVDB files. Each grid in a .vdb is treated as a separate image. */
+	string grid_name;
 
 	/* Automatically set. */
 	ImageDataType type;
@@ -65,12 +66,14 @@ public:
 	                  void *builtin_data,
 	                  InterpolationType interpolation,
 	                  ExtensionType extension,
-	                  bool use_alpha);
+	                  bool use_alpha,
+	                  const string& grid_name);
 	void tag_reload_image(const string& filename,
 	                      void *builtin_data,
 	                      InterpolationType interpolation,
 	                      ExtensionType extension,
-	                      bool use_alpha);
+	                      bool use_alpha,
+	                      const string& grid_name);
 	bool get_image_metadata(const string& filename,
 	                        void *builtin_data,
 	                        ImageMetaData& metadata);
@@ -112,6 +115,7 @@ public:
 
 	struct Image {
 		string filename;
+		string grid_name; /* For .vdb files. */
 		void *builtin_data;
 		bool builtin_free_cache;
 
@@ -128,8 +132,6 @@ public:
 		device_memory *mem;
 
 		int users;
-
-		string openvdb_filepath;
 	};
 
 private:
@@ -150,40 +152,19 @@ private:
 	                             int &depth,
 	                             int &components);
 
-	template<TypeDesc::BASETYPE FileFormat,
-	         typename StorageType,
-	         typename DeviceType>
-	bool file_load_image(Image *img,
-	                     ImageDataType type,
-	                     int texture_limit,
-	                     device_vector<DeviceType>& tex_img);
-
 	template<typename StorageType,
 	         typename DeviceType>
-	void file_load_failed(device_vector<DeviceType> *tex_img,
-	                      ImageDataType type);
-
-	template<typename DeviceType>
-	bool file_make_image_sparse(Device *device,
-	                            Image *img,
-	                            device_vector<DeviceType> *tex_dense);
+	void file_load_failed(Image *img,
+	                      ImageDataType type,
+	                      device_vector<DeviceType> *tex_img);
 
 	template<TypeDesc::BASETYPE FileFormat,
 	         typename StorageType,
 	         typename DeviceType>
-	void load_image(Device *device,
-	                Image *img,
-	                ImageDataType type,
-	                int texture_limit);
-
-#ifdef WITH_OPENVDB
-	template<typename StorageType,
-	         typename DeviceType>
-	void load_openvdb_image(Device *device,
-	                        Image *img,
-	                        ImageDataType type,
-	                        int texture_limit);
-#endif
+	void file_load_image(Device *device,
+	                     Image *img,
+                         ImageDataType type,
+                         int texture_limit);
 
 	int max_flattened_slot(ImageDataType type);
 	int type_index_to_flattened_slot(int slot, ImageDataType type);

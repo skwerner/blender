@@ -1178,8 +1178,8 @@ static int ptcache_smoke_openvdb_extern_read(struct OpenVDBReader *reader, void 
 		return 0;
 	}
 
-	if (!OpenVDBReader_get_detailed_bounds(reader, res_min, res_max, res,
-	                                       sds->p0, sds->p1, sds->cell_size))
+	if (!OpenVDBReader_get_bounds(reader, res_min, res_max, res,
+	                              sds->p0, sds->p1, sds->cell_size))
 	{
 		modifier_setError((ModifierData *)smd, "Imported OpenVDB grids have different transformations");
 	}

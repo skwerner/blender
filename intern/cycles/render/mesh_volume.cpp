@@ -403,9 +403,6 @@ void MeshManager::create_volume_mesh(Scene *scene,
 	const int3 tiled_res = make_int3(get_tile_res(resolution.x),
 	                                 get_tile_res(resolution.y),
 	                                 get_tile_res(resolution.z));
-	const int3 last_tile_res = make_int3(resolution.x % TILE_SIZE,
-	                                     resolution.y % TILE_SIZE,
-	                                     resolution.z % TILE_SIZE);
 	const bool using_cuda = (scene->device->info.type == DEVICE_CUDA);
 
 	if(attr) {
@@ -429,12 +426,7 @@ void MeshManager::create_volume_mesh(Scene *scene,
 
 		if(is_openvdb) {
 #ifdef WITH_OPENVDB
-			if(channels > 1) {
-				build_openvdb_mesh_vec(&builder, voxel_grid.data, resolution, isovalue);
-			}
-			else {
-				build_openvdb_mesh_fl(&builder, voxel_grid.data, resolution, isovalue);
-			}
+			openvdb_build_mesh(&builder, voxel_grid.data, resolution, isovalue, channels > 1);
 #else
 			assert(0);
 #endif
@@ -454,8 +446,7 @@ void MeshManager::create_volume_mesh(Scene *scene,
 							                       resolution.x, resolution.y, resolution.z,
 							                       tiled_res.x, tiled_res.y, tiled_res.z) :
 							    compute_index(grid_info, x, y, z,
-							                  tiled_res.x, tiled_res.y, tiled_res.z,
-							                  last_tile_res.x, last_tile_res.y);
+							                  resolution.x, resolution.y, resolution.z);
 
 							if(voxel_index < 0) {
 								continue;

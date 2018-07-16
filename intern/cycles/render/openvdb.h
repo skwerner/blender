@@ -10,39 +10,28 @@
 CCL_NAMESPACE_BEGIN
 
 bool openvdb_has_grid(const string& filepath, const string& grid_name);
-int3 get_openvdb_resolution(const string& filepath);
+int3 openvdb_get_resolution(const string& filepath);
 
-device_memory *file_load_openvdb(Device *device,
-                                 const string& filepath,
-                                 const string& grid_name,
-                                 const int3& resolution,
-                                 const string& mem_name,
-                                 const InterpolationType& interpolation,
-                                 const ExtensionType& extension,
-                                 const bool& is_vec,
-                                 const int& /*texture_limit*/);
+device_memory *openvdb_load_device(Device *device,
+                                   const string& filepath,
+                                   const string& grid_name,
+                                   const string& mem_name,
+                                   const InterpolationType& interpolation,
+                                   const ExtensionType& extension,
+                                   const bool is_vec);
 
-bool file_load_openvdb_dense(const string& filepath,
-                             const string& grid_name,
-                             const int3& resolution,
-                             const int& /*texture_limit*/,
-                             float *data);
+int openvdb_preprocess(const string& filepath, const string& grid_name,
+                       const float threshold, int *grid_info, const bool is_vec);
 
-bool file_load_openvdb_dense(const string& filepath,
-                             const string& grid_name,
-                             const int3& resolution,
-                             const int& /*texture_limit*/,
-                             float4 *data);
+bool openvdb_load_sparse(const string& filepath, const string& grid_name,
+                         float *data, int *grid_info, const int channels);
 
-void build_openvdb_mesh_fl(VolumeMeshBuilder *builder,
-                           void *v_accessor,
-                           const int3 resolution,
-                           const float isovalue);
+bool openvdb_load_dense(const string& filepath, const string& grid_name,
+                        float *data, const int channels);
 
-void build_openvdb_mesh_vec(VolumeMeshBuilder *builder,
-                            void *v_accessor,
-                            const int3 resolution,
-                            const float isovalue);
+void openvdb_build_mesh(VolumeMeshBuilder *builder, void *v_accessor,
+                        const int3 resolution, const float threshold,
+                        const bool is_vec);
 
 CCL_NAMESPACE_END
 

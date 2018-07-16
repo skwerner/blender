@@ -262,7 +262,8 @@ ImageTextureNode::~ImageTextureNode()
 		                            builtin_data,
 		                            interpolation,
 		                            extension,
-		                            use_alpha);
+		                            use_alpha,
+		                            string());
 	}
 }
 
@@ -463,7 +464,8 @@ EnvironmentTextureNode::~EnvironmentTextureNode()
 		                            builtin_data,
 		                            interpolation,
 		                            EXTENSION_REPEAT,
-		                            use_alpha);
+		                            use_alpha,
+		                            string());
 	}
 }
 
@@ -1475,7 +1477,8 @@ PointDensityTextureNode::~PointDensityTextureNode()
 		                            builtin_data,
 		                            interpolation,
 		                            EXTENSION_CLIP,
-		                            true);
+		                            true,
+		                            string());
 	}
 }
 

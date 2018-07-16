@@ -70,7 +70,7 @@ static void cryptomatte_add(NodeCryptomatte* n, float f)
 	/* Search if we already have the number. */
 	if (n->matte_id && BLI_strnlen(n->matte_id, sizeof(n->matte_id)) != 0) {
 		size_t start = 0;
-		const size_t end = strlen(n->matte_id);
+		const size_t end = BLI_strnlen(n->matte_id, sizeof(n->matte_id));
 		size_t token_len = 0;
 		while (start < end) {
 			/* Ignore leading whitespace. */
@@ -119,7 +119,9 @@ static void cryptomatte_add(NodeCryptomatte* n, float f)
 		MEM_freeN(n->matte_id);
 	}
 
-	BLI_dynstr_append(new_matte, ",");
+	if(BLI_dynstr_get_len(new_matte) > 0) {
+		BLI_dynstr_append(new_matte, ",");
+	}
 	BLI_dynstr_append(new_matte, number);
 	n->matte_id = BLI_dynstr_get_cstring(new_matte);
 	BLI_dynstr_free(new_matte);

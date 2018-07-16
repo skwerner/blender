@@ -7004,26 +7004,19 @@ static void def_cmp_cryptomatte(StructRNA *srna)
 	prop = RNA_def_property(srna, "matte_id", PROP_STRING, PROP_NONE);
 	RNA_def_property_string_funcs(prop, "rna_NodeCryptomatte_matte_get", "rna_NodeCryptomatte_matte_length",
 								  "rna_NodeCryptomatte_matte_set");
-	RNA_def_property_ui_text(prop, "Matte List", "");
+	RNA_def_property_ui_text(prop, "Matte Objects", "List of object and material crypto IDs to include in matte");
 	RNA_def_property_update(prop, NC_NODE | NA_EDITED, "rna_Node_update");
 
 
 	prop = RNA_def_property(srna, "add", PROP_FLOAT, PROP_COLOR);
-	RNA_def_property_float_sdna(prop, NULL, "add");
-	RNA_def_property_array(prop, 3);
 	RNA_def_property_float_array_default(prop, default_1);
 	RNA_def_property_range(prop,  -FLT_MAX, FLT_MAX);
-	RNA_def_property_ui_range(prop, 0, 2, 0.1, 3);
-	RNA_def_property_ui_text(prop, "Add", "Add to matte");
+	RNA_def_property_ui_text(prop, "Add", "Add object or material to matte, by picking a color from the Pick output");
 	RNA_def_property_update(prop, NC_NODE | NA_EDITED, "rna_NodeCryptomatte_update_add");
 
 	prop = RNA_def_property(srna, "remove", PROP_FLOAT, PROP_COLOR);
-	RNA_def_property_float_sdna(prop, NULL, "remove");
-	RNA_def_property_array(prop, 3);
 	RNA_def_property_float_array_default(prop, default_1);
-	RNA_def_property_range(prop,  -FLT_MAX, FLT_MAX);
-	RNA_def_property_ui_range(prop, 0, 2, 0.1, 3);
-	RNA_def_property_ui_text(prop, "Remove", "Remove from matte");
+	RNA_def_property_ui_text(prop, "Remove", "Remove object or material from matte, by picking a color from the Pick output");
 	RNA_def_property_update(prop, NC_NODE | NA_EDITED, "rna_NodeCryptomatte_update_remove");
 }
 

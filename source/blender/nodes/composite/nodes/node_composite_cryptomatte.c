@@ -211,7 +211,7 @@ static void cryptomatte_remove(NodeCryptomatte*n, float f)
 static bNodeSocketTemplate outputs[] = {
 	{	SOCK_RGBA,	0, N_("Image")},
 	{	SOCK_FLOAT, 0, N_("Matte")},
-	{	SOCK_RGBA,	0, N_("CryptoPick")},
+	{	SOCK_RGBA,	0, N_("Pick")},
 	{	-1, 0, ""	}
 };
 

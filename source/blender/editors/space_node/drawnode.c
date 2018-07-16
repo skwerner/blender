@@ -2544,9 +2544,15 @@ static void node_composit_buts_sunbeams(uiLayout *layout, bContext *UNUSED(C), P
 
 static void node_composit_buts_cryptomatte(uiLayout *layout, bContext *UNUSED(C), PointerRNA *ptr)
 {
-	uiItemR(layout, ptr, "matte_id", 0, NULL, ICON_NONE);
-    uiTemplateEyedropper(layout, ptr, "add");
-    uiTemplateEyedropper(layout, ptr, "remove");
+	uiLayout *col = uiLayoutColumn(layout, true);
+
+	uiItemL(col, IFACE_("Matte Objects:"), ICON_NONE);
+
+	uiLayout *row = uiLayoutRow(col, true);
+	uiTemplateCryptoPicker(row, ptr, "add");
+	uiTemplateCryptoPicker(row, ptr, "remove");
+
+	uiItemR(col, ptr, "matte_id", 0, "", ICON_NONE);
 }
 
 static void node_composit_buts_cryptomatte_ex(uiLayout *layout, bContext *UNUSED(C), PointerRNA *UNUSED(ptr))

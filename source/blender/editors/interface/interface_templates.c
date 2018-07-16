@@ -2572,12 +2572,11 @@ void uiTemplatePalette(uiLayout *layout, PointerRNA *ptr, const char *propname, 
 	}
 }
 
-void uiTemplateEyedropper(uiLayout *layout, PointerRNA *ptr, const char *propname)
+void uiTemplateCryptoPicker(uiLayout *layout, PointerRNA *ptr, const char *propname)
 {
 	PropertyRNA *prop = RNA_struct_find_property(ptr, propname);
 	uiBlock *block;
 	uiBut *but;
-	uiLayout *col;
 
 	if (!prop) {
 		RNA_warning("property not found: %s.%s", RNA_struct_identifier(ptr->type), propname);
@@ -2586,11 +2585,7 @@ void uiTemplateEyedropper(uiLayout *layout, PointerRNA *ptr, const char *propnam
 
 	block = uiLayoutGetBlock(layout);
 
-	col = uiLayoutColumn(layout, true);
-	uiLayoutRow(col, true);
-
-	uiDefBut(block, UI_BTYPE_LABEL, 0, RNA_property_ui_name(prop), 0, 19, 145, 19, NULL, 0, 0, 0, 0, RNA_property_ui_description(prop));
-	but = uiDefIconButO(block, UI_BTYPE_BUT, "UI_OT_eyedropper_color_separate", WM_OP_INVOKE_DEFAULT, ICON_EYEDROPPER, 0, 0, UI_UNIT_X, UI_UNIT_Y, NULL);
+	but = uiDefIconTextButO(block, UI_BTYPE_BUT, "UI_OT_eyedropper_color_crypto", WM_OP_INVOKE_DEFAULT, ICON_EYEDROPPER, RNA_property_ui_name(prop), 0, 0, UI_UNIT_X, UI_UNIT_Y, RNA_property_ui_description(prop));
 	but->rnapoin = *ptr;
 	but->rnaprop = prop;
 	but->rnaindex = -1;

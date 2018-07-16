@@ -56,7 +56,7 @@ void CryptomatteNode::convertToOperations(NodeConverter &converter, const Compos
 	NodeInput *inputSocketImage = this->getInputSocket(0);
 	NodeOutput *outputSocketImage = this->getOutputSocket(0);
 	NodeOutput *outputSocketMatte = this->getOutputSocket(1);
-	NodeOutput *outputCryptoPick = this->getOutputSocket(2);
+	NodeOutput *outputSocketPick = this->getOutputSocket(2);
 
 	bNode *node = this->getbNode();
 	NodeCryptomatte *cryptoMatteSettings = (NodeCryptomatte *)node->storage;
@@ -115,6 +115,6 @@ void CryptomatteNode::convertToOperations(NodeConverter &converter, const Compos
 	converter.mapInputSocket(inputSocketImage, operationAlpha->getInputSocket(0));
 	converter.mapOutputSocket(outputSocketMatte, separateOperation->getOutputSocket(0));
 	converter.mapOutputSocket(outputSocketImage, operationAlpha->getOutputSocket(0));
-	converter.mapOutputSocket(outputCryptoPick, clearAlphaOperation->getOutputSocket(0));
+	converter.mapOutputSocket(outputSocketPick, clearAlphaOperation->getOutputSocket(0));
 	
 }

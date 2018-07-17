@@ -78,6 +78,8 @@ DeviceScene::DeviceScene(Device *device)
   triangle_to_distribution(device, "__triangle_to_distribution", MEM_TEXTURE),
   light_group_sample_cdf(device, "__light_group_sample_cdf", MEM_TEXTURE),
   light_group_sample_prob(device, "__light_group_sample_prob", MEM_TEXTURE),
+  leaf_to_first_emitter(device, "__leaf_to_first_emitter", MEM_TEXTURE),
+  light_tree_leaf_emitters(device, "__light_tree_leaf_emitters", MEM_TEXTURE),
   particles(device, "__particles", MEM_TEXTURE),
   svm_nodes(device, "__svm_nodes", MEM_TEXTURE),
   shaders(device, "__shaders", MEM_TEXTURE),

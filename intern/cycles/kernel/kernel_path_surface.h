@@ -138,30 +138,61 @@ ccl_device void accum_light_tree_contribution(KernelGlobals *kg, float randu,
 	int secondChildOffset, distribution_id, num_emitters;
 	update_parent_node(kg, offset, &secondChildOffset, &distribution_id, &num_emitters);
 
-	/* Found a leaf - Choose which light to use */
-	if(secondChildOffset == -1){ // Found a leaf
-		if(num_emitters == 1){
-			(*num_lights)++; // used for debugging purposes
-			// Distribution_id is the index
-			/* consider this as having picked a light. */
-			LightSample ls;
-			light_point_sample(kg, randu, randv, time, P, bounce, distribution_id, &ls);
+	/* found a leaf */
+	if(secondChildOffset == -1){
 
-			/* combine pdfs */
-			ls.pdf *= pdf_factor;
+		/* if there are several emitters in this leaf then pick one of them */
+		if(num_emitters > 1){
 
-			if(ls.pdf <= 0.0f) return;
+			/* create and sample CDF without dynamic allocation */
+			float sum = 0.0f;
+			for (int i = 0; i < num_emitters; ++i) {
+				sum += calc_light_importance(kg, P, N, offset, i);
+			}
 
-			Ray light_ray;
-			BsdfEval L_light;
-			bool is_lamp;
-			float terminate = path_state_rng_light_termination(kg, state);
-			accum_light_contribution(kg, sd, emission_sd, &ls, state,
-			                         &light_ray, &L_light, L, &is_lamp,
-			                         terminate, throughput, scale_factor);
+			if(sum == 0.0f){
+				return;
+			}
 
+			float sum_inv = 1.0f / sum;
+			float cdf_L = 0.0f;
+			float cdf_R = 0.0f;
+			float prob = 0.0f;
+			int light;
+			for (int i = 1; i < num_emitters + 1; ++i) {
+				prob = calc_light_importance(kg, P, N, offset, i-1) * sum_inv;
+				cdf_R = cdf_L + prob;
+				if(randu < cdf_R){
+					light = i-1;
+					break;
+				}
 
-		} // TODO: do else, i.e. with several lights per node
+				cdf_L = cdf_R;
+			}
+			distribution_id += light;
+			pdf_factor *= prob;
+
+			/* rescale random number */
+			randu = (randu - cdf_L)/(cdf_R - cdf_L);
+		}
+
+		(*num_lights)++; // used for debugging purposes
+
+		LightSample ls;
+		light_point_sample(kg, randu, randv, time, P, bounce, distribution_id, &ls);
+
+		/* combine pdfs */
+		ls.pdf *= pdf_factor;
+
+		if(ls.pdf <= 0.0f) return;
+
+		Ray light_ray;
+		BsdfEval L_light;
+		bool is_lamp;
+		float terminate = path_state_rng_light_termination(kg, state);
+		accum_light_contribution(kg, sd, emission_sd, &ls, state,
+		                         &light_ray, &L_light, L, &is_lamp,
+		                         terminate, throughput, scale_factor);
 
 		return;
 	} else { // Interior node, choose which child(ren) to go down

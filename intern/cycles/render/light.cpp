@@ -400,17 +400,17 @@ void LightManager::device_update_distribution(Device *device, DeviceScene *dscen
 
 		/* create light BVH */
 		double time_start = time_dt();
-		LightTree lightBVH(emissivePrims, scene->objects, scene->lights, 1);
+		LightTree lightBVH(emissivePrims, scene->objects, scene->lights, 64);
 		VLOG(1) << "Light BVH build time: " << time_dt() - time_start;
 
 		/* the light BVH reorders the primitives so update emissivePrims */
-		const vector<Primitive>& orderedPrims = lightBVH.getPrimitives();
+		const vector<Primitive>& orderedPrims = lightBVH.get_primitives();
 		emissivePrims = orderedPrims;
 
 		if(progress.get_cancel()) return;
 
 		/* create nodes */
-		const vector<CompactNode>& nodesVec = lightBVH.getNodes();
+		const vector<CompactNode>& nodesVec = lightBVH.get_nodes();
 		float4 *nodes = dscene->light_tree_nodes.alloc(nodesVec.size()*LIGHT_BVH_NODE_SIZE);
 
 		/* convert each compact node into 4xfloat4
@@ -420,6 +420,7 @@ void LightManager::device_update_distribution(Device *device, DeviceScene *dscen
 		 * 4 for axis + energy variance
 		 */
 		size_t offset = 0;
+		size_t num_leaf_lights = 0;
 		foreach (CompactNode node, nodesVec){
 			nodes[offset].x = node.energy;
 			nodes[offset].y = __int_as_float(node.secondChildOffset);
@@ -442,6 +443,61 @@ void LightManager::device_update_distribution(Device *device, DeviceScene *dscen
 			nodes[offset+3].w = node.energy_variance;
 
 			offset += 4;
+
+			if((node.secondChildOffset == -1) && (node.num_emitters > 1)){
+				num_leaf_lights += node.num_emitters;
+			}
+		}
+
+		/* store information needed for importance computations for each emitter
+		 * in leaf nodes containing several emitters.
+		 *
+		 * Each leaf node with several emitters stores relevant information about
+		 * its emitters in the light_tree_leaf_emitters array. Each such node
+		 * also stores an offset into the light_tree_leaf_emitters array to where
+		 * its first light is. This offset is stored in leaf_to_first_emitter.
+		 */
+		float4 *leaf_emitters = dscene->light_tree_leaf_emitters.alloc(num_leaf_lights*3);
+		int    *leaf_to_first_emitter = dscene->leaf_to_first_emitter.alloc(nodesVec.size());
+
+		offset = 0;
+		for(int i = 0; i < nodesVec.size(); ++i){
+			const CompactNode& node = nodesVec[i];
+
+			/* only store this information for leaf nodes with several emitters */
+			if(!((node.secondChildOffset == -1) && (node.num_emitters > 1))){
+				leaf_to_first_emitter[i] = -1;
+				continue;
+			}
+
+			leaf_to_first_emitter[i] = offset;
+
+			int start = node.prim_id; // distribution id
+			int end = start + node.num_emitters;
+			for(int j = start; j < end; ++j){
+
+				/* todo: is there a better way than recalcing this? */
+				/* have getters for the light tree that just accesses buildData? */
+				BoundBox bbox     = lightBVH.get_bbox(emissivePrims[j]);
+				Orientation bcone = lightBVH.get_bcone(emissivePrims[j]);
+				float energy      = lightBVH.get_energy(emissivePrims[j]);
+
+				leaf_emitters[offset].x = bbox.min[0];
+				leaf_emitters[offset].y = bbox.min[1];
+				leaf_emitters[offset].z = bbox.min[2];
+				leaf_emitters[offset].w = bbox.max[0];
+
+				leaf_emitters[offset+1].x = bbox.max[1];
+				leaf_emitters[offset+1].y = bbox.max[2];
+				leaf_emitters[offset+1].z = bcone.theta_o;
+				leaf_emitters[offset+1].w = bcone.theta_e;
+
+				leaf_emitters[offset+2].x = bcone.axis[0];
+				leaf_emitters[offset+2].y = bcone.axis[1];
+				leaf_emitters[offset+2].z = bcone.axis[2];
+				leaf_emitters[offset+2].w = energy;
+				offset += 3;
+			}
 		}
 
 		/* create CDF for distant lights, background lights and light tree */
@@ -486,10 +542,7 @@ void LightManager::device_update_distribution(Device *device, DeviceScene *dscen
 		/* find mapping between distribution_id to node_id, used for MIS */
 		uint *  distribution_to_node =
 		        dscene->light_distribution_to_node.alloc(num_distribution);
-		/* initialize indices to -1 to know which lights that are not in nodes */
-		for(int i = 0; i < num_distribution; ++i){
-			distribution_to_node[i] = -1;
-		}
+
 		for( int i = 0; i < nodesVec.size(); ++i){
 			const CompactNode& node = nodesVec[i];
 			if(node.secondChildOffset != -1) continue; // Skip interior nodes
@@ -655,6 +708,8 @@ void LightManager::device_update_distribution(Device *device, DeviceScene *dscen
 		dscene->triangle_to_distribution.copy_to_device();
 		dscene->light_group_sample_cdf.copy_to_device();
 		dscene->light_group_sample_prob.copy_to_device();
+		dscene->leaf_to_first_emitter.copy_to_device();
+		dscene->light_tree_leaf_emitters.copy_to_device();
 		kintegrator->num_light_nodes =
 		        dscene->light_tree_nodes.size() / LIGHT_BVH_NODE_SIZE;
 		// TODO: Currently this is only the correct offset when using light BVH
@@ -716,6 +771,10 @@ void LightManager::device_update_distribution(Device *device, DeviceScene *dscen
 		}
 	}
 	else {
+		dscene->light_group_sample_cdf.free();
+		dscene->light_group_sample_prob.free();
+		dscene->leaf_to_first_emitter.free();
+		dscene->light_tree_leaf_emitters.free();
 		dscene->light_distribution.free();
 		dscene->light_tree_nodes.free();
 		dscene->light_distribution_to_node.free();
@@ -1152,6 +1211,8 @@ void LightManager::device_free(Device *, DeviceScene *dscene)
 	dscene->light_background_conditional_cdf.free();
 	dscene->light_group_sample_prob.free();
 	dscene->light_group_sample_cdf.free();
+	dscene->leaf_to_first_emitter.free();
+	dscene->light_tree_leaf_emitters.free();
 	dscene->ies_lights.free();
 }
 

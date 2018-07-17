@@ -63,9 +63,9 @@ LightTree::LightTree(const vector<Primitive>& prims_,
 	vector<BVHPrimitiveInfo> buildData;
 	buildData.reserve(primitives.size());
 	for(int i = 0; i < primitives.size(); ++i){
-		BoundBox bbox = get_bbox(primitives[i]);
+		BoundBox bbox     = get_bbox(primitives[i]);
 		Orientation bcone = get_bcone(primitives[i]);
-		float energy = get_energy(primitives[i]);
+		float energy      = get_energy(primitives[i]);
 		buildData.push_back(BVHPrimitiveInfo(i, bbox, bcone, energy));
 	}
 
@@ -145,11 +145,9 @@ BoundBox LightTree::get_bbox(const Primitive& prim)
 		const Mesh::Triangle triangle = mesh->get_triangle(triangle_id);
 		const float3 *vpos = &mesh->verts[0];
 		triangle.bounds_grow(vpos, bbox);
-
 	} else {
 		/* extract bounding box from lamp based on light type */
 		Light* lamp = lights[prim.lamp_id];
-
 		if (lamp->type == LIGHT_POINT || lamp->type == LIGHT_SPOT){
 			float radius = lamp->size;
 			bbox.grow(lamp->co + make_float3(radius));
@@ -530,8 +528,7 @@ BVHBuildNode* LightTree::recursive_build(const unsigned int start,
 			assert(total_min_dim != -1);
 
 			int mid = 0;
-			// TODO: Should be based on cost vs energy here instead of <num_emitters
-			if (num_emitters > maxPrimsInNode || min_cost < num_emitters){
+			if (num_emitters > maxPrimsInNode || min_cost < (float)node_energy){
 				/* partition primitives */
 				BVHPrimitiveInfo *midPtr =
 				        std::partition(&buildData[start], &buildData[end-1]+1,

@@ -1102,21 +1102,10 @@ ccl_device bool light_select_reached_max_bounces(KernelGlobals *kg, int index, i
 	return (bounce > kernel_tex_fetch(__lights, index).max_bounces);
 }
 
-ccl_device float calc_node_importance(KernelGlobals *kg, float3 P, float3 N, int node_offset)
+ccl_device float calc_importance(KernelGlobals *kg, float3 P, float3 N,
+                                 float3 bboxMax, float theta_o, float theta_e,
+                                 float3 axis, float energy, float3 centroid)
 {
-	const float4 node0 = kernel_tex_fetch(__light_tree_nodes, node_offset + 0);
-	const float4 node1 = kernel_tex_fetch(__light_tree_nodes, node_offset + 1);
-	const float4 node2 = kernel_tex_fetch(__light_tree_nodes, node_offset + 2);
-	const float4 node3 = kernel_tex_fetch(__light_tree_nodes, node_offset + 3);
-
-	const float energy    = node0[0];
-	const float3 bboxMin  = make_float3( node1[0], node1[1], node1[2]);
-	const float3 bboxMax  = make_float3( node1[3], node2[0], node2[1]);
-	const float theta_o   = node2[2];
-	const float theta_e   = node2[3];
-	const float3 axis     = make_float3(node3[0], node3[1], node3[2]);
-	const float3 centroid = 0.5f*(bboxMax + bboxMin);
-
 	/* eq. 3 */
 
 	/* "theta_u captures the solid angle of the entire box" */
@@ -1166,6 +1155,48 @@ ccl_device float calc_node_importance(KernelGlobals *kg, float3 P, float3 N, int
 	const float f_a                   = fmaxf(cos_theta_i_prime, 0.0f) * M_1_PI_F;
 
 	return f_a * abs_cos_theta_i_prime * energy * cos_theta_prime / d2;
+}
+
+ccl_device float calc_light_importance(KernelGlobals *kg, float3 P, float3 N,
+                                       int node_offset, int light_offset)
+{
+	int first_emitter = kernel_tex_fetch(__leaf_to_first_emitter, node_offset/4);
+	kernel_assert(first_emitter != -1);
+	int offset = first_emitter + light_offset*3;
+
+	const float4 node0 = kernel_tex_fetch(__light_tree_leaf_emitters, offset + 0);
+	const float4 node1 = kernel_tex_fetch(__light_tree_leaf_emitters, offset + 1);
+	const float4 node2 = kernel_tex_fetch(__light_tree_leaf_emitters, offset + 2);
+
+	const float3 bboxMin  = make_float3( node0[0], node0[1], node0[2]);
+	const float3 bboxMax  = make_float3( node0[3], node1[0], node1[1]);
+	const float  theta_o  = node1[2];
+	const float  theta_e  = node1[3];
+	const float3 axis     = make_float3(node2[0], node2[1], node2[2]);
+	const float  energy   = node2[3];
+	const float3 centroid = 0.5f*(bboxMax + bboxMin);
+
+	return calc_importance(kg, P, N, bboxMax, theta_o, theta_e, axis, energy,
+	                       centroid);
+}
+
+ccl_device float calc_node_importance(KernelGlobals *kg, float3 P, float3 N, int node_offset)
+{
+	const float4 node0 = kernel_tex_fetch(__light_tree_nodes, node_offset + 0);
+	const float4 node1 = kernel_tex_fetch(__light_tree_nodes, node_offset + 1);
+	const float4 node2 = kernel_tex_fetch(__light_tree_nodes, node_offset + 2);
+	const float4 node3 = kernel_tex_fetch(__light_tree_nodes, node_offset + 3);
+
+	const float  energy   = node0[0];
+	const float3 bboxMin  = make_float3( node1[0], node1[1], node1[2]);
+	const float3 bboxMax  = make_float3( node1[3], node2[0], node2[1]);
+	const float  theta_o  = node2[2];
+	const float  theta_e  = node2[3];
+	const float3 axis     = make_float3(node3[0], node3[1], node3[2]);
+	const float3 centroid = 0.5f*(bboxMax + bboxMin);
+
+	return calc_importance(kg, P, N, bboxMax, theta_o, theta_e, axis, energy,
+	                       centroid);
 }
 
 ccl_device void update_parent_node(KernelGlobals *kg, int node_offset,
@@ -1222,9 +1253,37 @@ ccl_device void light_bvh_sample(KernelGlobals *kg, float3 P, float3 N,
 			if(num_emitters == 1){
 				sampled_index = distribution_id;
 			} else { // Leaf with several lights. Pick one randomly.
-				int light = min((int)(*randu * (float)num_emitters), num_emitters-1);
-				sampled_index = distribution_id +light;
-				*pdf_factor *= 1.0f / (float)num_emitters;
+				/* create and sample CDF without dynamic allocation */
+				float sum = 0.0f;
+				for (int i = 0; i < num_emitters; ++i) {
+					sum += calc_light_importance(kg, P, N, offset, i);
+				}
+
+				if(sum == 0.0f){
+					*pdf_factor = 0.0f;
+					return;
+				}
+
+				float sum_inv = 1.0f / sum;
+
+				float cdf_L = 0.0f;
+				float cdf_R = 0.0f;
+				float prob = 0.0f;
+				int light;
+				for (int i = 1; i < num_emitters + 1; ++i) {
+					prob = calc_light_importance(kg, P, N, offset, i-1) * sum_inv;
+					cdf_R = cdf_L + prob;
+					if(*randu < cdf_R){
+						light = i-1;
+						break;
+					}
+					cdf_L = cdf_R;
+				}
+
+				sampled_index = distribution_id + light;
+				*pdf_factor *= prob;
+				/* rescale random number */
+				*randu = (*randu - cdf_L)/(cdf_R - cdf_L);
 			}
 			break;
 		} else { // Interior node, pick left or right randomly
@@ -1291,20 +1350,41 @@ ccl_device int triangle_to_distribution(KernelGlobals *kg, int triangle_id)
 }
 
 /* computes the probability of picking a light in the given node_id */
-ccl_device float light_bvh_pdf(KernelGlobals *kg, float3 P, float3 N, int node_id){
+ccl_device float light_bvh_pdf(KernelGlobals *kg, float3 P, float3 N,
+                               int distribution_id){
+
+	// Find mapping from distribution_id to node_id
+	int node_id = kernel_tex_fetch(__light_distribution_to_node, distribution_id);
+
 	float pdf = 1.0f;
 	/* read in first part of root node of light BVH */
-	int secondChildOffset, distribution_id, num_emitters;
-	update_parent_node(kg, 0, &secondChildOffset, &distribution_id, &num_emitters);
+	int secondChildOffset, first_distribution_id, num_emitters;
+	update_parent_node(kg, 0, &secondChildOffset, &first_distribution_id, &num_emitters);
 
 	int offset = 0;
 	do{
 
 		if(secondChildOffset == -1){ // Found our leaf node
 			kernel_assert(offset == node_id);
-			if(num_emitters > 1){
-				pdf *= 1.0f / (float)num_emitters;
+			if(num_emitters == 1){
+				break;
 			}
+
+			float sum = 0.0f;
+			for (int i = 0; i < num_emitters; ++i) {
+				sum += calc_light_importance(kg, P, N, offset, i);
+			}
+
+			if(sum == 0.0f){
+				return 0.0f;
+			}
+
+			float sum_inv = 1.0f / sum;
+
+			pdf *= calc_light_importance(kg, P, N, offset,
+			                             distribution_id - first_distribution_id)
+			       * sum_inv;
+
 			break;
 		} else { // Interior node, pick left or right depending on node_id
 
@@ -1332,7 +1412,7 @@ ccl_device float light_bvh_pdf(KernelGlobals *kg, float3 P, float3 N, int node_i
 
 			/* update parent node info for next iteration */
 			update_parent_node(kg, offset, &secondChildOffset,
-			                   &distribution_id, &num_emitters);
+			                   &first_distribution_id, &num_emitters);
 		}
 
 	} while(true);
@@ -1380,10 +1460,7 @@ ccl_device float light_distribution_pdf(KernelGlobals *kg, float3 P, float3 N,
 		float pdf = group_prob;
 
 		if(group == LIGHTGROUP_TREE){
-			// Find mapping from distribution_id to node_id
-			int node_id = kernel_tex_fetch(__light_distribution_to_node,
-			                               distribution_id);
-			pdf *= light_bvh_pdf(kg, P, N, node_id);
+			pdf *= light_bvh_pdf(kg, P, N, distribution_id);
 		} else if(group == LIGHTGROUP_DISTANT) {
 			pdf *= kernel_data.integrator.inv_num_distant_lights;
 		} else if(group == LIGHTGROUP_BACKGROUND) {

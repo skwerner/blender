@@ -173,13 +173,17 @@ public:
 	          const vector<Light*>& lights_,
 	          const unsigned int maxPrimsInNode_);
 
-	const vector<Primitive>& getPrimitives() const {
+	const vector<Primitive>& get_primitives() const {
 		return primitives;
 	}
 
-	const vector<CompactNode>& getNodes() const {
+	const vector<CompactNode>& get_nodes() const {
 		return nodes;
 	}
+
+	BoundBox get_bbox(const Primitive& prim);
+	Orientation get_bcone(const Primitive& prim);
+	float get_energy(const Primitive &prim);
 
 private:
 
@@ -189,9 +193,6 @@ private:
 	                              unsigned int &totalNodes,
 	                              vector<Primitive> &orderedPrims);
 
-	BoundBox get_bbox(const Primitive& prim);
-	Orientation get_bcone(const Primitive& prim);
-	float get_energy(const Primitive &prim);
 	Orientation aggregate_bounding_cones(const vector<Orientation> &bcones);
 	Orientation cone_union(const Orientation& a, const Orientation& b);
 	float calculate_cone_measure(const Orientation &bcone);

@@ -381,10 +381,14 @@ void LightManager::device_update_distribution(Device *device, DeviceScene *dscen
 
 	int light_index = 0;
 	int light_id = 0;
+	int background_index = -1;
 	foreach(Light *light, scene->lights) {
 		if(light->is_enabled) {
 			emissivePrims.push_back(Primitive(~light_index, light_id));
 			num_lights++;
+			if(light->type == LIGHT_BACKGROUND){
+				 background_index = light_index;
+			}
 			light_index++;
 		}
 		if(light->is_portal) {
@@ -646,7 +650,6 @@ void LightManager::device_update_distribution(Device *device, DeviceScene *dscen
 	offset = 0;
 
 	/* create distributions for lights */
-	int background_index = -1;
 	foreach (Primitive prim, emissivePrims){
 		if(progress.get_cancel()) return;
 
@@ -669,7 +672,6 @@ void LightManager::device_update_distribution(Device *device, DeviceScene *dscen
 		if(light->type == LIGHT_BACKGROUND) {
 			num_background_lights++;
 			background_mis = light->use_mis;
-			background_index = offset;
 		} else if(light->type == LIGHT_DISTANT){
 			num_distant_lights++;
 		}

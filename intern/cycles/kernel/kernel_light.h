@@ -805,14 +805,14 @@ ccl_device_inline bool triangle_world_space_vertices(KernelGlobals *kg, int obje
 	return has_motion;
 }
 
-ccl_device_inline float triangle_light_pdf_area(KernelGlobals *kg, const float3 Ng, const float3 I, float t)
+ccl_device_inline float triangle_light_pdf_area(KernelGlobals *kg, const float3 Ng, const float3 I, float t, float triangle_area)
 {
 	float cos_pi = fabsf(dot(Ng, I));
 
 	if(cos_pi == 0.0f)
 		return 0.0f;
 
-	return t*t/cos_pi;
+	return t*t/(cos_pi * triangle_area);
 }
 
 ccl_device_forceinline float triangle_light_pdf(KernelGlobals *kg, ShaderData *sd, float t)
@@ -822,7 +822,7 @@ ccl_device_forceinline float triangle_light_pdf(KernelGlobals *kg, ShaderData *s
 	 * to the length of the edges of the triangle. */
 
 	float3 V[3];
-	bool has_motion = triangle_world_space_vertices(kg, sd->object, sd->prim, sd->time, V);
+	triangle_world_space_vertices(kg, sd->object, sd->prim, sd->time, V);
 
 	const float3 e0 = V[1] - V[0];
 	const float3 e1 = V[2] - V[0];
@@ -853,35 +853,12 @@ ccl_device_forceinline float triangle_light_pdf(KernelGlobals *kg, ShaderData *s
 			return 0.0f;
 		}
 		else {
-			float area = 1.0f;
-			if(has_motion) {
-				/* get the center frame vertices, this is what the PDF was calculated from */
-				triangle_world_space_vertices(kg, sd->object, sd->prim, -1.0f, V);
-				area = triangle_area(V[0], V[1], V[2]);
-			}
-			else {
-				area = 0.5f * len(N);
-			}
-			const float pdf = area * kernel_data.integrator.pdf_triangles;
-			return pdf / solid_angle;
+			return 1.0f / solid_angle;
 		}
 	}
 	else {
-		float pdf = triangle_light_pdf_area(kg, sd->Ng, sd->I, t);
-		if(has_motion) {
-			const float	area = 0.5f * len(N);
-			if(UNLIKELY(area == 0.0f)) {
-				return 0.0f;
-			}
-			/* scale the PDF.
-			 * area = the area the sample was taken from
-			 * area_pre = the are from which pdf_triangles was calculated from */
-			triangle_world_space_vertices(kg, sd->object, sd->prim, -1.0f, V);
-			const float area_pre = triangle_area(V[0], V[1], V[2]);
-			pdf = pdf * area_pre / area;
-		}
-
-		return pdf;
+		const float area = 0.5f * len(N);
+		return triangle_light_pdf_area(kg, sd->Ng, sd->I, t, area);
 	}
 }
 
@@ -1011,7 +988,8 @@ ccl_device_forceinline void triangle_light_sample(KernelGlobals *kg, int prim, i
 		ls->P = u * V[0] + v * V[1] + t * V[2];
 		/* compute incoming direction, distance and pdf */
 		ls->D = normalize_len(ls->P - P, &ls->t);
-		ls->pdf = triangle_light_pdf_area(kg, ls->Ng, -ls->D, ls->t);
+		float area = 0.5f * Nl;
+		ls->pdf = triangle_light_pdf_area(kg, ls->Ng, -ls->D, ls->t, area);
 
 		ls->u = u;
 		ls->v = v;
@@ -1556,6 +1534,11 @@ ccl_device_noinline bool light_sample(KernelGlobals *kg,
 	float pdf_factor = 0.0f;
 	int index = -1;
 	light_distribution_sample(kg, P, N, &randu, &index, &pdf_factor);
+
+	if(pdf_factor == 0.0f){
+		return false;
+	}
+
 	light_point_sample(kg, randu, randv, time, P, bounce, index, ls);
 
 	/* combine pdfs */

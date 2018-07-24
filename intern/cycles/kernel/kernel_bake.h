@@ -68,7 +68,8 @@ ccl_device_inline void compute_light_pass(KernelGlobals *kg,
 
 		/* sample emission */
 		if((pass_filter & BAKE_FILTER_EMISSION) && (sd->flag & SD_EMISSION)) {
-			float3 emission = indirect_primitive_emission(kg, sd, 0.0f, state.flag, state.ray_pdf);
+			bool is_volume_boundary = (state.volume_bounce > 0) || (state.volume_bounds_bounce > 0);
+			float3 emission = indirect_primitive_emission(kg, sd, 0.0f, state.flag, state.ray_pdf, ray.P, sd->N, is_volume_boundary); // todo: is this the correct P and N?
 			path_radiance_accum_emission(&L_sample, &state, throughput, emission);
 		}
 
@@ -119,7 +120,7 @@ ccl_device_inline void compute_light_pass(KernelGlobals *kg,
 				state.ray_t = 0.0f;
 #endif
 				/* compute indirect light */
-				kernel_path_indirect(kg, &indirect_sd, &emission_sd, &ray, sd->N, throughput, &state, &L_sample);
+				kernel_path_indirect(kg, &indirect_sd, &emission_sd, &ray, sd->N, throughput, &state, &L_sample); // todo: is this correct P and N?
 
 				/* sum and reset indirect light pass variables for the next samples */
 				path_radiance_sum_indirect(&L_sample);
@@ -138,7 +139,8 @@ ccl_device_inline void compute_light_pass(KernelGlobals *kg,
 
 		/* sample emission */
 		if((pass_filter & BAKE_FILTER_EMISSION) && (sd->flag & SD_EMISSION)) {
-			float3 emission = indirect_primitive_emission(kg, sd, 0.0f, state.flag, state.ray_pdf);
+			bool is_volume_boundary = (state.volume_bounce > 0) || (state.volume_bounds_bounce > 0);
+			float3 emission = indirect_primitive_emission(kg, sd, 0.0f, state.flag, state.ray_pdf, ray.P, sd->N, is_volume_boundary); // todo: is this correct P and N?
 			path_radiance_accum_emission(&L_sample, &state, throughput, emission);
 		}
 

@@ -111,6 +111,7 @@ ccl_device void kernel_holdout_emission_blurring_pathtermination_ao(
 		                             sd,
 		                             state,
 		                             ray,
+		                             sd->N, // todo: correct normal for MIS?
 		                             throughput,
 		                             emission_sd,
 		                             L,

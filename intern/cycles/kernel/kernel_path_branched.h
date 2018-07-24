@@ -451,6 +451,7 @@ ccl_device void kernel_branched_path_integrate(KernelGlobals *kg,
 	PathState state;
 	path_state_init(kg, emission_sd, &state, rng_hash, sample, &ray);
 
+	float3 MIS_N = make_float3(0.0f);
 	/* Main Loop
 	 * Here we only handle transparency intersections from the camera ray.
 	 * Indirect bounces are handled in kernel_branched_path_surface_indirect_light().
@@ -460,6 +461,7 @@ ccl_device void kernel_branched_path_integrate(KernelGlobals *kg,
 		Intersection isect;
 		bool hit = kernel_path_scene_intersect(kg, &state, &ray, &isect, L);
 
+		MIS_N = sd.N;
 #ifdef __VOLUME__
 		/* Volume integration. */
 		kernel_branched_path_volume(kg,
@@ -476,7 +478,7 @@ ccl_device void kernel_branched_path_integrate(KernelGlobals *kg,
 
 		/* Shade background. */
 		if(!hit) {
-			kernel_path_background(kg, &state, &ray, sd.N, throughput, &sd, L);
+			kernel_path_background(kg, &state, &ray, MIS_N, throughput, &sd, L);
 			break;
 		}
 
@@ -496,6 +498,7 @@ ccl_device void kernel_branched_path_integrate(KernelGlobals *kg,
 		                             &sd,
 		                             &state,
 		                             &ray,
+		                             MIS_N,
 		                             throughput,
 		                             emission_sd,
 		                             L,

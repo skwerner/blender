@@ -198,7 +198,7 @@ ccl_device_noinline bool direct_emission(KernelGlobals *kg,
 
 /* Indirect Primitive Emission */
 
-ccl_device_noinline float3 indirect_primitive_emission(KernelGlobals *kg, ShaderData *sd, float t, int path_flag, float bsdf_pdf)
+ccl_device_noinline float3 indirect_primitive_emission(KernelGlobals *kg, ShaderData *sd, float t, int path_flag, float bsdf_pdf, float3 P, float3 N, bool is_volume_boundary)
 {
 	/* evaluate emissive closure */
 	float3 L = shader_emissive_eval(kg, sd);
@@ -212,7 +212,7 @@ ccl_device_noinline float3 indirect_primitive_emission(KernelGlobals *kg, Shader
 		/* multiple importance sampling, get triangle light pdf,
 		 * and compute weight with respect to BSDF pdf */
 		float pdf = triangle_light_pdf(kg, sd, t);
-		pdf *= light_distribution_pdf(kg, sd->P, sd->N, sd->prim);
+		pdf *= light_distribution_pdf(kg, P, N, sd->prim, is_volume_boundary);
 		float mis_weight = power_heuristic(bsdf_pdf, pdf);
 
 		return L*mis_weight;
@@ -260,6 +260,7 @@ ccl_device_noinline bool indirect_lamp_emission(KernelGlobals *kg,
 		                                ls.t,
 		                                ray->time);
 
+		bool is_inside_volume = false;
 #ifdef __VOLUME__
 		if(state->volume_stack[0].shader != SHADER_NONE) {
 			/* shadow attenuation */
@@ -269,6 +270,10 @@ ccl_device_noinline bool indirect_lamp_emission(KernelGlobals *kg,
 			kernel_volume_shadow(kg, emission_sd, state, &volume_ray, &volume_tp);
 			L *= volume_tp;
 		}
+
+		if((state->volume_bounce > 0 || (state->volume_bounds_bounce > 0)) && (emission_sd->flag & SD_HAS_VOLUME)) {
+			is_inside_volume = true;
+		}
 #endif
 
 		if(!(state->flag & PATH_RAY_MIS_SKIP)) {
@@ -276,7 +281,7 @@ ccl_device_noinline bool indirect_lamp_emission(KernelGlobals *kg,
 			 * and compute weight with respect to BSDF pdf */
 
 			/* multiply with light picking probablity to pdf */
-			ls.pdf *= light_distribution_pdf(kg, ray->P, N, ~ls.lamp);
+			ls.pdf *= light_distribution_pdf(kg, ray->P, N, ~ls.lamp, is_inside_volume);
 			float mis_weight = power_heuristic(state->ray_pdf, ls.pdf);
 			L *= mis_weight;
 		}
@@ -323,6 +328,16 @@ ccl_device_noinline float3 indirect_background(KernelGlobals *kg,
 	path_state_modify_bounce(state, false);
 
 #ifdef __BACKGROUND_MIS__
+
+	/* todo: looks like this only happens for volume boundaries and not inside.
+	 * is this expected? */
+	bool is_on_volume_boundary = false;
+#ifdef __VOLUME__
+	if((state->volume_bounce > 0) || (state->volume_bounds_bounce > 0)) {
+		is_on_volume_boundary = true;
+	}
+#endif
+
 	/* check if background light exists or if we should skip pdf */
 	int res_x = kernel_data.integrator.pdf_background_res_x;
 
@@ -331,7 +346,7 @@ ccl_device_noinline float3 indirect_background(KernelGlobals *kg,
 		 * direction, and compute weight with respect to BSDF pdf */
 		float pdf = background_light_pdf(kg, ray->P, ray->D);
 		int background_index = kernel_data.integrator.background_light_index;
-		pdf *= light_distribution_pdf(kg, ray->P, N, ~background_index);
+		pdf *= light_distribution_pdf(kg, ray->P, N, ~background_index, is_on_volume_boundary);
 		float mis_weight = power_heuristic(state->ray_pdf, pdf);
 
 		return L*mis_weight;

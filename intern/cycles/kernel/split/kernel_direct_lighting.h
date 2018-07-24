@@ -92,7 +92,7 @@ ccl_device void kernel_direct_lighting(KernelGlobals *kg,
 			                sd->P,
 			                sd->N,
 			                state->bounce,
-			                &ls)) {
+			                &ls, false)) {
 
 				Ray light_ray;
 				light_ray.time = sd->time;

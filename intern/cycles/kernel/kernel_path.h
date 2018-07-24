@@ -275,6 +275,7 @@ ccl_device_forceinline bool kernel_path_shader_apply(
 	ShaderData *sd,
 	ccl_addr_space PathState *state,
 	ccl_addr_space Ray *ray,
+	float3 MIS_N,
 	float3 throughput,
 	ShaderData *emission_sd,
 	PathRadiance *L,
@@ -288,7 +289,7 @@ ccl_device_forceinline bool kernel_path_shader_apply(
 
 			float3 bg = make_float3(0.0f, 0.0f, 0.0f);
 			if(!kernel_data.background.transparent) {
-				bg = indirect_background(kg, emission_sd, sd->N, state, ray);
+				bg = indirect_background(kg, emission_sd, MIS_N, state, ray);
 			}
 			path_radiance_accum_shadowcatcher(L, throughput, bg);
 		}
@@ -341,7 +342,8 @@ ccl_device_forceinline bool kernel_path_shader_apply(
 #ifdef __EMISSION__
 	/* emission */
 	if(sd->flag & SD_EMISSION) {
-		float3 emission = indirect_primitive_emission(kg, sd, sd->ray_length, state->flag, state->ray_pdf);
+		bool is_volume_boundary = (state->volume_bounce > 0) || (state->volume_bounds_bounce > 0);
+		float3 emission = indirect_primitive_emission(kg, sd, sd->ray_length, state->flag, state->ray_pdf, ray->P, MIS_N, is_volume_boundary);
 		path_radiance_accum_emission(L, state, throughput, emission);
 	}
 #endif  /* __EMISSION__ */
@@ -412,6 +414,7 @@ ccl_device void kernel_path_indirect(KernelGlobals *kg,
 
 	/* path iteration */
 	for(;;) {
+
 		/* Find intersection with objects in scene. */
 		Intersection isect;
 		bool hit = kernel_path_scene_intersect(kg, state, ray, &isect, L);
@@ -437,6 +440,7 @@ ccl_device void kernel_path_indirect(KernelGlobals *kg,
 		else if(result == VOLUME_PATH_MISSED) {
 			break;
 		}
+
 #endif /* __VOLUME__*/
 
 		/* Shade background. */
@@ -450,7 +454,7 @@ ccl_device void kernel_path_indirect(KernelGlobals *kg,
 
 		/* Setup shader data. */
 		shader_setup_from_ray(kg, sd, &isect, ray);
-		N = sd->N;
+
 		/* Skip most work for volume bounding surface. */
 #ifdef __VOLUME__
 		if(!(sd->flag & SD_HAS_ONLY_VOLUME)) {
@@ -465,6 +469,7 @@ ccl_device void kernel_path_indirect(KernelGlobals *kg,
 		                             sd,
 		                             state,
 		                             ray,
+		                             N,
 		                             throughput,
 		                             emission_sd,
 		                             L,
@@ -539,6 +544,8 @@ ccl_device void kernel_path_indirect(KernelGlobals *kg,
 
 		if(!kernel_path_surface_bounce(kg, sd, &throughput, state, &L->state, ray))
 			break;
+
+		N = sd->N;
 	}
 
 #ifdef __SUBSURFACE__
@@ -573,7 +580,7 @@ ccl_device_forceinline void kernel_path_integrate(
 {
 	/* Shader data memory used for both volumes and surfaces, saves stack space. */
 	ShaderData sd;
-
+	float3 MIS_N;
 #ifdef __SUBSURFACE__
 	SubsurfaceIndirectRays ss_indirect;
 	kernel_path_subsurface_init_indirect(&ss_indirect);
@@ -587,8 +594,10 @@ ccl_device_forceinline void kernel_path_integrate(
 		Intersection isect;
 		bool hit = kernel_path_scene_intersect(kg, state, ray, &isect, L);
 
+		MIS_N = sd.N;
 		/* Find intersection with lamps and compute emission for MIS. */
-		kernel_path_lamp_emission(kg, state, ray, sd.N, throughput, &isect, &sd, L);
+		/* todo: is this the correct normal */
+		kernel_path_lamp_emission(kg, state, ray, MIS_N, throughput, &isect, &sd, L);
 
 #ifdef __VOLUME__
 		/* Volume integration. */
@@ -612,7 +621,8 @@ ccl_device_forceinline void kernel_path_integrate(
 
 		/* Shade background. */
 		if(!hit) {
-			kernel_path_background(kg, state, ray, sd.N, throughput, &sd, L);
+			/* todo: is this the correct normal? */
+			kernel_path_background(kg, state, ray, MIS_N, throughput, &sd, L);
 			break;
 		}
 		else if(path_state_ao_bounce(kg, state)) {
@@ -636,6 +646,7 @@ ccl_device_forceinline void kernel_path_integrate(
 		                             &sd,
 		                             state,
 		                             ray,
+		                             MIS_N,
 		                             throughput,
 		                             emission_sd,
 		                             L,

@@ -1112,21 +1112,21 @@ ccl_device float calc_importance(KernelGlobals *kg, float3 P, float3 N,
 	} else {
 		const float sin_theta_u_squared = r2 / d2;
 		const float cos_theta_u         = safe_sqrtf(1.0f - sin_theta_u_squared);
-		theta_u                         = acosf(cos_theta_u);
+		theta_u                         = fast_acosf(cos_theta_u);
 	}
 
 	/* cos(theta') */
-	const float theta       = acosf(dot(axis, centroidToPDir));
+	const float theta       = fast_acosf(dot(axis, centroidToPDir));
 	const float theta_prime = fmaxf(theta - theta_o - theta_u, 0.0f);
 	if (theta_prime >= theta_e){
 		return 0.0f;
 	}
-	const float cos_theta_prime = cosf(theta_prime);
+	const float cos_theta_prime = fast_cosf(theta_prime);
 
 	/* f_a|cos(theta'_i)| -- diffuse approximation */
-	const float theta_i               = acosf(dot(N, -centroidToPDir));
+	const float theta_i               = fast_acosf(dot(N, -centroidToPDir));
 	const float theta_i_prime         = fmaxf(theta_i - theta_u, 0.0f);
-	const float cos_theta_i_prime     = cosf(theta_i_prime);
+	const float cos_theta_i_prime     = fast_cosf(theta_i_prime);
 	const float abs_cos_theta_i_prime = fabsf(cos_theta_i_prime);
 	/* doing something similar to bsdf_diffuse_eval_reflect() */
 	/* TODO: Use theta_i or theta_i_prime here? */

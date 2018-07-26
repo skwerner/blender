@@ -397,7 +397,7 @@ static void create_mesh_volume_attributes(Scene *scene,
 		create_mesh_volume_attribute(mesh, scene->image_manager, ATTR_STD_VOLUME_HEAT, filename, builtin_data, frame);
 	if(mesh->need_attribute(scene, ATTR_STD_VOLUME_TEMPERATURE))
 		create_mesh_volume_attribute(mesh, scene->image_manager, ATTR_STD_VOLUME_TEMPERATURE, filename, builtin_data, frame);
-	if(mesh->need_attribute(scene, ATTR_STD_VOLUME_VELOCITY))
+	if(mesh->need_attribute(scene, ATTR_STD_VOLUME_VELOCITY) || scene->need_motion() == Scene::MOTION_BLUR)
 		create_mesh_volume_attribute(mesh, scene->image_manager, ATTR_STD_VOLUME_VELOCITY, filename, builtin_data, frame);
 }
 

@@ -1543,6 +1543,11 @@ void MeshManager::device_update_attributes(Device *device, DeviceScene *dscene, 
 		foreach(Shader *shader, mesh->used_shaders) {
 			mesh_attributes[i].add(shader->attributes);
 		}
+
+		/* motion blur for volumes */
+		if(scene->need_motion() == Scene::MOTION_BLUR && mesh->has_volume) {
+			mesh_attributes[i].add(ATTR_STD_VOLUME_VELOCITY);
+		}
 	}
 
 	/* mesh attribute are stored in a single array per data type. here we fill

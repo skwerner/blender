@@ -7,6 +7,7 @@
 
 #include "util/util_logging.h"
 #include "util/util_path.h"
+#include "util/util_sparse_grid.h"
 
 #include "device/device_memory_openvdb.h"
 
@@ -50,6 +51,37 @@ static void copy(openvdb::FloatGrid::ConstAccessor accessor,
 /* Misc internal helper functions.
  * Logging should be done by callers. */
 
+/* Simple range shift for grids with non-zero background values. May have
+ * strange results depending on the grid. */
+static void shift_range(openvdb::Vec3SGrid::Ptr grid)
+{
+	using namespace openvdb;
+
+	const math::Vec3s z(0.0f, 0.0f, 0.0f);
+	const math::Vec3s background_value = grid->background();
+
+	if(background_value != z) {
+		for (Vec3SGrid::ValueOnIter iter = grid->beginValueOn(); iter; ++iter) {
+		    iter.setValue(iter.getValue() - background_value);
+		}
+		tools::changeBackground(grid->tree(), z);
+	}
+}
+
+static void shift_range(openvdb::FloatGrid::Ptr grid)
+{
+	using namespace openvdb;
+
+	const float background_value = grid->background();
+
+	if(background_value != 0.0f) {
+		for (FloatGrid::ValueOnIter iter = grid->beginValueOn(); iter; ++iter) {
+		    iter.setValue(iter.getValue() - background_value);
+		}
+		tools::changeBackground(grid->tree(), 0.0f);
+	}
+}
+
 template<typename GridType>
 static bool get_grid(const string& filepath,
                      const string& grid_name,
@@ -92,6 +124,10 @@ static bool get_grid(const string& filepath,
 		transformer.transformGrid<tools::PointSampler, GridType>(*orig_grid, *grid);
 	}
 
+	/* Need to account for external grids with a non-zero background value and
+	 * voxels below background value. */
+	shift_range(grid);
+
 	accessor = grid->getConstAccessor();
 	resolution = make_int3(res[0], res[1], res[2]);
 
@@ -133,15 +169,15 @@ int3 openvdb_get_resolution(const string& filepath)
  * for CUDA or OpenCL, OpenVDB grids can only be saved for CPU rendering.
  * Otherwise, we convert the OpenVDB grids to arrays. */
 
-/* Direct load OpenVDB to device.
+/* Direct load external OpenVDB grid to device.
  * Thread must be locked before file_load_openvdb_cpu() is called. */
 template<typename GridType>
-static device_memory *openvdb_load_device(Device *device,
-                                          const string& filepath,
-                                          const string& grid_name,
-                                          const string& mem_name,
-                                          const InterpolationType& interpolation,
-                                          const ExtensionType& extension)
+static device_memory *openvdb_load_device_extern(Device *device,
+                                                 const string& filepath,
+                                                 const string& grid_name,
+                                                 const string& mem_name,
+                                                 const InterpolationType& interpolation,
+                                                 const ExtensionType& extension)
 {
 	using namespace openvdb;
 
@@ -166,87 +202,60 @@ static device_memory *openvdb_load_device(Device *device,
 	return tex_img;
 }
 
-device_memory *openvdb_load_device(Device *device,
-                                   const string& filepath,
-                                   const string& grid_name,
-                                   const string& mem_name,
-                                   const InterpolationType& interpolation,
-                                   const ExtensionType& extension,
-                                   const bool is_vec)
+device_memory *openvdb_load_device_extern(Device *device,
+                                          const string& filepath,
+                                          const string& grid_name,
+                                          const string& mem_name,
+                                          const InterpolationType& interpolation,
+                                          const ExtensionType& extension,
+                                          const bool is_vec)
 {
 	if(is_vec) {
-		return openvdb_load_device<openvdb::Vec3SGrid>(device, filepath,
-		                                               grid_name, mem_name,
-		                                               interpolation, extension);
+		return openvdb_load_device_extern<openvdb::Vec3SGrid>(device, filepath,
+		                                                      grid_name, mem_name,
+		                                                      interpolation, extension);
 	}
 	else {
-		return openvdb_load_device<openvdb::FloatGrid>(device, filepath,
-		                                               grid_name, mem_name,
-		                                               interpolation, extension);
+		return openvdb_load_device_extern<openvdb::FloatGrid>(device, filepath,
+		                                                      grid_name, mem_name,
+		                                                      interpolation, extension);
 	}
 }
 
 /* Load OpenVDB file to sparse grid. Based on util/util_sparse_grid.h */
-
 template<typename GridType>
-static int openvdb_preprocess(const string& filepath, const string& grid_name,
-                              const float threshold, int *grid_info)
+static const bool openvdb_check_tile_active(typename GridType::ConstAccessor accessor,
+                                            int x, int y, int z,
+                                            float threshold, int3 resolution)
 {
 	using namespace openvdb;
 
-	typename GridType::Ptr grid = GridType::create();
-	typename GridType::ConstAccessor accessor = grid->getConstAccessor();
-	int3 resolution;
-
-	if(!get_grid<GridType>(filepath, grid_name, grid, accessor, resolution)) {
-		return -1;
-	}
-
 	math::Coord ijk;
 	int &i = ijk[0], &j = ijk[1], &k = ijk[2];
-	int tile_count = 0, active_count = 0;
 
-	for (int z = 0; z < resolution.z; z += TILE_SIZE) {
-		for (int y = 0; y < resolution.y; y += TILE_SIZE) {
-			for (int x = 0; x < resolution.x; x += TILE_SIZE, ++tile_count) {
-				bool is_active = false;
-				int max_i = min(x + TILE_SIZE, resolution.x);
-				int max_j = min(y + TILE_SIZE, resolution.y);
-				int max_k = min(z + TILE_SIZE, resolution.z);
+	const int max_i = min(x + TILE_SIZE, resolution.x);
+	const int max_j = min(y + TILE_SIZE, resolution.y);
+	const int max_k = min(z + TILE_SIZE, resolution.z);
 
-				for (k = z; k < max_k && !is_active; ++k) {
-					for (j = y; j < max_j && !is_active; ++j) {
-						for (i = x; i < max_i && !is_active; ++i) {
-							is_active = gte(accessor, ijk, threshold);
-						}
-					}
+	for(k = z; k < max_k; ++k) {
+		for(j = y; j < max_j; ++j) {
+			for(i = x; i < max_i; ++i) {
+				if(gte(accessor, ijk, threshold)) {
+					return true;
 				}
-
-				grid_info[tile_count] = is_active - 1; /* 0 if active, -1 if inactive. */
-				active_count += is_active;
 			}
 		}
 	}
-
-	return active_count;
-}
-
-int openvdb_preprocess(const string& filepath, const string& grid_name,
-                       const float threshold, int *grid_info, const bool is_vec)
-{
-	if(is_vec) {
-		return openvdb_preprocess<openvdb::Vec3SGrid>(filepath, grid_name,
-		                                              threshold, grid_info);
-	}
-	else {
-		return openvdb_preprocess<openvdb::FloatGrid>(filepath, grid_name,
-													  threshold, grid_info);
-	}
+	return false;
 }
 
 template<typename GridType>
-static bool openvdb_load_sparse(const string& filepath, const string& grid_name,
-                                float *data, int *grid_info, const int channels)
+static bool openvdb_load_sparse(const string& filepath,
+                                const string& grid_name,
+                                const int channels,
+                                const float threshold,
+                                vector<float> *sparse_grid,
+		                        vector<int> *grid_info)
 {
 	using namespace openvdb;
 
@@ -258,26 +267,75 @@ static bool openvdb_load_sparse(const string& filepath, const string& grid_name,
 		return false;
 	}
 
-	math::Coord ijk;
-	int &i = ijk[0], &j = ijk[1], &k = ijk[2];
-	int tile_count = 0, index = 0;
+	const int tile_count = get_tile_res(resolution.x) *
+	                       get_tile_res(resolution.y) *
+	                       get_tile_res(resolution.z);
+	const int tile_pix_count = TILE_SIZE * TILE_SIZE * TILE_SIZE * channels;
 
-	for (int z = 0; z < resolution.z; z += TILE_SIZE) {
-		for (int y = 0; y < resolution.y; y += TILE_SIZE) {
-			for (int x = 0; x < resolution.x; x += TILE_SIZE, ++tile_count) {
-				if(grid_info[tile_count] < 0) {
+	/* Initial prepass to find active tiles. */
+	grid_info->resize(tile_count);
+	int tile = 0, active_count = 0;
+
+	for(int z = 0; z < resolution.z; z += TILE_SIZE) {
+		for(int y = 0; y < resolution.y; y += TILE_SIZE) {
+			for(int x = 0; x < resolution.x; x += TILE_SIZE, ++tile) {
+				int is_active = openvdb_check_tile_active<GridType>(accessor,
+				                                                    x, y, z,
+				                                                    threshold,
+				                                                    resolution);
+				active_count += is_active;
+				/* 0 if active, -1 if inactive. */
+				grid_info->at(tile) = is_active - 1;
+			}
+		}
+	}
+
+	/* Check memory savings. */
+	int sparse_mem_use = (tile_count * sizeof(int) +
+	                      active_count * tile_pix_count * sizeof(float));
+	int dense_mem_use = resolution.x * resolution.y *
+	                    resolution.z * channels * sizeof(float);
+
+	if(sparse_mem_use >= dense_mem_use) {
+		VLOG(1) << "Memory of " << grid_name << " increased from "
+		        << string_human_readable_size(dense_mem_use) << " to "
+		        << string_human_readable_size(sparse_mem_use)
+		        << ", not using sparse grid";
+		return false;
+	}
+
+	VLOG(1) << "Memory of " << grid_name << " decreased from "
+			<< string_human_readable_size(dense_mem_use) << " to "
+			<< string_human_readable_size(sparse_mem_use);
+
+	/* Populate the sparse grid. */
+	sparse_grid->resize(active_count * tile_pix_count);
+	float *sg = &(*sparse_grid)[0];
+
+	int voxel = 0;
+	tile = 0;
+
+	for(int z = 0; z < resolution.z; z += TILE_SIZE) {
+		for(int y = 0; y < resolution.y; y += TILE_SIZE) {
+			for(int x = 0; x < resolution.x; x += TILE_SIZE, ++tile) {
+				if(grid_info->at(tile) == -1) {
 					continue;
 				}
 
-				grid_info[tile_count] = index;
-				int max_i = min(x + TILE_SIZE, resolution.x);
-				int max_j = min(y + TILE_SIZE, resolution.y);
-				int max_k = min(z + TILE_SIZE, resolution.z);
+				grid_info->at(tile) = voxel / channels;
 
-				for (k = z; k < max_k; ++k) {
-					for (j = y; j < max_j; ++j) {
-						for (i = x; i < max_i; ++i, index += channels) {
-							copy(accessor, ijk, data + index);
+				/* Populate the tile. */
+				const int max_i = min(x + TILE_SIZE, resolution.x);
+				const int max_j = min(y + TILE_SIZE, resolution.y);
+				const int max_k = min(z + TILE_SIZE, resolution.z);
+
+				math::Coord ijk;
+				int &i = ijk[0], &j = ijk[1], &k = ijk[2];
+
+				for(k = z; k < max_k; ++k) {
+					for(j = y; j < max_j; ++j) {
+						for(i = x; i < max_i; ++i, ++voxel) {
+							copy(accessor, ijk, sg + voxel);
 						}
 					}
 				}
@@ -288,16 +346,22 @@ static bool openvdb_load_sparse(const string& filepath, const string& grid_name,
 	return true;
 }
 
-bool openvdb_load_sparse(const string& filepath, const string& grid_name,
-                         float *data, int *grid_info, const int channels)
+bool openvdb_load_sparse(const string& filepath,
+                         const string& grid_name,
+                         const int channels,
+                         const float threshold,
+                         vector<float> *sparse_grid,
+                         vector<int> *grid_info)
 {
 	if(channels > 1) {
-		return openvdb_load_sparse<openvdb::Vec3SGrid>(filepath, grid_name, data,
-		                                               grid_info, channels);
+		return openvdb_load_sparse<openvdb::Vec3SGrid>(filepath, grid_name,
+		                                               channels, threshold,
+		                                               sparse_grid, grid_info);
 	}
 	else {
-		return openvdb_load_sparse<openvdb::FloatGrid>(filepath, grid_name, data,
-		                                               grid_info, channels);
+		return openvdb_load_sparse<openvdb::FloatGrid>(filepath, grid_name,
+		                                               channels, threshold,
+		                                               sparse_grid, grid_info);
 	}
 }
 
@@ -341,6 +405,105 @@ bool openvdb_load_dense(const string& filepath, const string& grid_name,
 	else {
 		return openvdb_load_dense<openvdb::FloatGrid>(filepath, grid_name,
 		                                              data, channels);
+	}
+}
+
+/* Convert internal volume data to OpenVDB grid, then load grid to device. */
+static device_memory *openvdb_load_device_intern_vec(Device *device,
+                                                     const float *data,
+                                                     const int3 resolution,
+                                                     const string& mem_name,
+                                                     const InterpolationType& interpolation,
+                                                     const ExtensionType& extension)
+{
+	using namespace openvdb;
+
+	Vec3SGrid::Ptr grid = Vec3SGrid::create();
+	Vec3SGrid::Accessor accessor = grid->getAccessor();
+
+	const math::Vec3s zero_vec(0.0f, 0.0f, 0.0f);
+	tools::changeBackground(grid->tree(), zero_vec);
+
+	openvdb::math::Coord xyz;
+	int &x = xyz[0], &y = xyz[1], &z = xyz[2];
+
+	for (z = 0; z < resolution.z; ++z) {
+		for (y = 0; y < resolution.y; ++y) {
+			for (x = 0; x < resolution.x; ++x) {
+				int index = (x + resolution.x * (y + z * resolution.y)) * 4;
+				openvdb::math::Vec3s val(data[index + 0], data[index + 1], data[index + 2]);
+				accessor.setValue(xyz, val);
+			}
+		}
+	}
+
+	Vec3SGrid::ConstAccessor c_accessor = grid->getConstAccessor();
+	device_openvdb<Vec3SGrid> *tex_img =
+			new device_openvdb<Vec3SGrid>(device, mem_name.c_str(), MEM_TEXTURE,
+	                                      grid, c_accessor, resolution);
+
+	tex_img->interpolation = interpolation;
+	tex_img->extension = extension;
+	tex_img->grid_type = IMAGE_GRID_TYPE_OPENVDB;
+	tex_img->copy_to_device();
+
+	return tex_img;
+}
+
+static device_memory *openvdb_load_device_intern_flt(Device *device,
+                                                     const float *data,
+                                                     const int3 resolution,
+                                                     const string& mem_name,
+                                                     const InterpolationType& interpolation,
+                                                     const ExtensionType& extension)
+{
+	using namespace openvdb;
+
+	FloatGrid::Ptr grid = FloatGrid::create();
+	FloatGrid::Accessor accessor = grid->getAccessor();
+
+	tools::changeBackground(grid->tree(), 0.0f);
+
+	openvdb::math::Coord xyz;
+	int &x = xyz[0], &y = xyz[1], &z = xyz[2];
+
+	for (z = 0; z < resolution.z; ++z) {
+		for (y = 0; y < resolution.y; ++y) {
+			for (x = 0; x < resolution.x; ++x) {
+				int index = x + resolution.x * (y + z * resolution.y);
+				accessor.setValue(xyz, data[index]);
+			}
+		}
+	}
+
+	FloatGrid::ConstAccessor c_accessor = grid->getConstAccessor();
+	device_openvdb<FloatGrid> *tex_img =
+			new device_openvdb<FloatGrid>(device, mem_name.c_str(), MEM_TEXTURE,
+	                                      grid, c_accessor, resolution);
+
+	tex_img->interpolation = interpolation;
+	tex_img->extension = extension;
+	tex_img->grid_type = IMAGE_GRID_TYPE_OPENVDB;
+	tex_img->copy_to_device();
+
+	return tex_img;
+}
+
+device_memory *openvdb_load_device_intern(Device *device,
+                                          const float *data,
+                                          const int3 resolution,
+                                          const string& mem_name,
+                                          const InterpolationType& interpolation,
+                                          const ExtensionType& extension,
+                                          const bool is_vec)
+{
+	if(is_vec) {
+		return openvdb_load_device_intern_vec(device, data, resolution,
+		                                      mem_name, interpolation, extension);
+	}
+	else {
+		return openvdb_load_device_intern_flt(device, data, resolution,
+		                                      mem_name, interpolation, extension);
 	}
 }
 

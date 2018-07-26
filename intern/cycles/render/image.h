@@ -122,7 +122,7 @@ public:
 		bool use_alpha;
 		bool need_load;
 		bool animated;
-		bool make_sparse;
+		bool is_volume;
 		float isovalue;
 		float frame;
 		InterpolationType interpolation;
@@ -170,6 +170,7 @@ private:
 	int type_index_to_flattened_slot(int slot, ImageDataType type);
 	int flattened_slot_to_type_index(int flat_slot, ImageDataType *type);
 	string name_from_type(int type);
+	string name_from_grid_type(int type);
 
 	void device_load_image(Device *device,
 	                       Scene *scene,

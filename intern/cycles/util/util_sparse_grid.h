@@ -19,6 +19,8 @@
 
 #include "util/util_half.h"
 #include "util/util_image.h"
+#include "util/util_logging.h"
+#include "util/util_string.h"
 #include "util/util_texture.h"
 #include "util/util_types.h"
 #include "util/util_vector.h"
@@ -38,15 +40,6 @@
  */
 
 CCL_NAMESPACE_BEGIN
-
-namespace {
-	inline bool gt(float a, float b) { return a > b; }
-	inline bool gt(uchar a, uchar b) { return a > b; }
-	inline bool gt(half a, half b) { return a > b; }
-	inline bool gt(float4 a, float4 b) { return any(b < a); }
-	inline bool gt(uchar4 a, uchar4 b) { return a.x > b.x || a.y > b.y || a.z > b.z || a.w > b.w; }
-	inline bool gt(half4 a, half4 b) { return a.x > b.x || a.y > b.y || a.z > b.z || a.w > b.w; }
-}
 
 /* Sparse Tile Dimensions Information
  * For maintaining characteristics of each tile's dimensions.
@@ -144,74 +137,26 @@ const inline int compute_index_cuda(const int *grid_info,
 }
 
 template<typename T>
-int create_sparse_grid(const T *dense_grid,
-                       const int width, const int height,
-                       const int depth, const float isovalue,
-                       vector<T> *sparse_grid, vector<int> *grid_info)
+static const bool check_tile_active(const T *dense_grid,
+                                    int x, int y, int z,
+                                    const T threshold,
+                                    const int width,
+                                    const int height,
+                                    const int depth,
+                                    const int channels)
 {
-	if(!dense_grid) {
-		return -1;
-	}
+	const int max_i = min(x + TILE_SIZE, width);
+	const int max_j = min(y + TILE_SIZE, height);
+	const int max_k = min(z + TILE_SIZE, depth);
 
-	const T threshold = cast_from_float<T>(isovalue);
-
-	/* Resize vectors to tiled resolution. Have to overalloc
-	 * sparse_grid because we don't know the number of
-	 * active tiles yet. */
-	sparse_grid->resize(width * height * depth);
-	grid_info->resize(get_tile_res(width) *
-	                  get_tile_res(height) *
-	                  get_tile_res(depth));
-	int info_count = 0, voxel_count = 0;
-
-	for(int z=0 ; z < depth ; z += TILE_SIZE) {
-		for(int y=0 ; y < height ; y += TILE_SIZE) {
-			for(int x=0 ; x < width ; x += TILE_SIZE, ++info_count) {
-				bool is_active = false;
-				int voxel = 0;
-
-				/* Populate the tile. */
-				for(int k=z ; k < min(z+TILE_SIZE, depth) ; ++k) {
-					for(int j=y ; j < min(y+TILE_SIZE, height) ; ++j) {
-						for(int i=x ; i < min(x+TILE_SIZE, width) ; ++i) {
-							int index = compute_index(i, j, k, width, height);
-							sparse_grid->at(voxel_count + voxel) = dense_grid[index];
-							if(!is_active) {
-								is_active = gt(dense_grid[index], threshold);
-							}
-							++voxel;
-						}
+	for(int k = z; k < max_k; ++k) {
+		for(int j = y; j < max_j; ++j) {
+			for(int i = x; i < max_i; ++i) {
+				int index = compute_index(i, j, k, width, height) * channels;
+				for(int c = 0; c < channels; ++c) {
+					if(dense_grid[index + c] >= threshold) {
+						return true;
 					}
-				}
-
-				/* If tile is active, store tile's offset. */
-				if(is_active) {
-					grid_info->at(info_count) = voxel_count;
-					voxel_count += voxel;
-				}
-				else {
-					grid_info->at(info_count) = -1;
-				}
-			}
-		}
-	}
-
-	/* Return so that the parent function can resize
-	 * sparse_grid appropriately. */
-	return voxel_count;
-}
-
-template<typename T>
-const bool check_tile_active(const T *dense_grid, T threshold,
-                             int x, int y, int z,
-                             int width, int height, int depth)
-{
-	for(int k=z ; k < min(z+TILE_SIZE, depth) ; ++k) {
-		for(int j=y ; j < min(y+TILE_SIZE, height) ; ++j) {
-			for(int i=x ; i < min(x+TILE_SIZE, width) ; ++i) {
-				int index = compute_index(i, j, k, width, height);
-				if(gt(dense_grid[index], threshold)) {
-					return true;
 				}
 			}
 		}
@@ -220,11 +165,100 @@ const bool check_tile_active(const T *dense_grid, T threshold,
 }
 
 template<typename T>
+bool create_sparse_grid(const T *dense_grid,
+                        const int width,
+                        const int height,
+                        const int depth,
+                        const int channels,
+                        const string grid_name,
+                        const float isovalue,
+                        vector<T> *sparse_grid,
+                        vector<int> *grid_info)
+{
+	assert(dense_grid != NULL);
+
+	const T threshold = cast_from_float<T>(isovalue);
+	const int tile_count = get_tile_res(width) *
+	                       get_tile_res(height) *
+	                       get_tile_res(depth);
+	const int tile_pix_count = TILE_SIZE * TILE_SIZE * TILE_SIZE * channels;
+
+	/* Initial prepass to find active tiles. */
+	grid_info->resize(tile_count);
+	int tile = 0, active_count = 0;
+
+	for(int z = 0; z < depth; z += TILE_SIZE) {
+		for(int y = 0; y < height; y += TILE_SIZE) {
+			for(int x = 0; x < width; x += TILE_SIZE, ++tile) {
+				int is_active = check_tile_active<T>(dense_grid, x, y, z, threshold,
+				                                     width, height, depth, channels);
+				active_count += is_active;
+				/* 0 if active, -1 if inactive. */
+				grid_info->at(tile) = is_active - 1;
+			}
+		}
+	}
+
+	/* Check memory savings. */
+	int sparse_mem_use = (tile_count * sizeof(int) +
+	                      active_count * tile_pix_count * sizeof(T));
+	int dense_mem_use = width * height * depth * channels * sizeof(T);
+
+	if(sparse_mem_use >= dense_mem_use) {
+		VLOG(1) << "Memory of " << grid_name << " increased from "
+		        << string_human_readable_size(dense_mem_use) << " to "
+		        << string_human_readable_size(sparse_mem_use)
+		        << ", not using sparse grid";
+		return false;
+	}
+
+	VLOG(1) << "Memory of " << grid_name << " decreased from "
+			<< string_human_readable_size(dense_mem_use) << " to "
+			<< string_human_readable_size(sparse_mem_use);
+
+	/* Populate the sparse grid. */
+	sparse_grid->resize(active_count * tile_pix_count);
+
+	int voxel = 0;
+	tile = 0;
+
+	for(int z = 0; z < depth; z += TILE_SIZE) {
+		for(int y = 0; y < height; y += TILE_SIZE) {
+			for(int x = 0; x < width; x += TILE_SIZE, ++tile) {
+				if(grid_info->at(tile) == -1) {
+					continue;
+				}
+
+				grid_info->at(tile) = voxel / channels;
+
+				/* Populate the tile. */
+				const int max_i = min(x + TILE_SIZE, width);
+				const int max_j = min(y + TILE_SIZE, height);
+				const int max_k = min(z + TILE_SIZE, depth);
+
+				for(int k = z; k < max_k; ++k) {
+					for(int j = y; j < max_j; ++j) {
+						for(int i = x; i < max_i; ++i) {
+							int index = compute_index(i, j, k, width, height) * channels;
+							for(int c = 0; c < channels; ++c, ++voxel) {
+								sparse_grid->at(voxel) = dense_grid[index + c];
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+
+	return true;
+}
+
+template<typename T>
 int create_sparse_grid_cuda(const T *dense_grid,
-                            int width, int height, int depth,
-                            float isovalue,
-                            vector<T> *sparse_grid,
-                            vector<int> *grid_info)
+                            const int width, const int height,
+                            const int depth, const int channels,
+                            const float isovalue,
+                            vector<T> *sparse_grid, vector<int> *grid_info)
 {
 	/* Total number of tiles in the grid (incl. inactive). */
 	const int tile_count = get_tile_res(width) *
@@ -244,8 +278,8 @@ int create_sparse_grid_cuda(const T *dense_grid,
 		for(int y = 0 ; y < height ; y += TILE_SIZE) {
 			for(int x = 0 ; x < width ; x += TILE_SIZE) {
 				int is_active = check_tile_active(dense_grid, threshold,
-				                                  x, y, z,
-				                                  width, height, depth) - 1;
+				                                  x, y, z, width, height, depth,
+				                                  channels) - 1;
 				grid_info->at(info_count) = is_active;
 				grid_info->at(info_count + 1) = is_active;
 				grid_info->at(info_count + 2) = is_active;

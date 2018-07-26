@@ -278,11 +278,13 @@ static bool OpenVDBReader_get_bbox(struct OpenVDBReader *reader,
 {
 	openvdb::math::Transform::Ptr tfm;
 	bool is_valid = true; /* file is valid if all grids have the same tranform */
+	bool has_smoke_grid = false;
 
 	for(int type = 0; type < VDB_SMOKE_GRID_NUM; type++) {
 		const char *grid_name = vdb_grid_name(type);
 
 		if(reader->hasGrid(grid_name)) {
+			has_smoke_grid = true;
 			bbox->expand(reader->getGridBounds(grid_name));
 
 			if(!tfm) {
@@ -294,10 +296,8 @@ static bool OpenVDBReader_get_bbox(struct OpenVDBReader *reader,
 		}
 	}
 
-	if(bbox_world) {
+	if(has_smoke_grid) {
 		*bbox_world = tfm->indexToWorld(*bbox);
-	}
-	if(v_size) {
 		*v_size = tfm->voxelSize();
 	}
 
@@ -310,10 +310,11 @@ bool OpenVDBReader_get_bounds(struct OpenVDBReader *reader,
 {
 	using namespace openvdb;
 
-	math::CoordBBox bbox;
-	BBoxd bbox_world;
-	math::Coord coord;
-	math::Vec3d vec3d;
+	math::Coord coord(0, 0, 0);
+	math::CoordBBox bbox(coord, coord);
+	math::Vec3d vec3d(0, 0, 0);
+	BBoxd bbox_world(vec3d, vec3d);
+
 	bool is_valid = OpenVDBReader_get_bbox(reader, &bbox, &bbox_world, &vec3d);
 
 	if(voxel_size) {

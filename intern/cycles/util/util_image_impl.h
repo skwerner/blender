@@ -68,21 +68,6 @@ inline half cast_from_float(float value)
 {
 	return float_to_half(value);
 }
-template<>
-inline float4 cast_from_float(float value)
-{
-	return make_float4(value);
-}
-template<>
-inline uchar4 cast_from_float(float value)
-{
-	return make_uchar4(cast_from_float<uchar>(value));
-}
-template<>
-inline half4 cast_from_float(float value)
-{
-	return make_half4(cast_from_float<half>(value));
-}
 
 namespace {
 

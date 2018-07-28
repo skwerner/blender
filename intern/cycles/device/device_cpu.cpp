@@ -377,9 +377,11 @@ public:
 	void tex_alloc(device_memory& mem)
 	{
 		size_t total_memory = mem.memory_size();
-		device_memory *grid_info = mem.grid_info;
-		if(grid_info) {
-			total_memory += grid_info->memory_size();
+		device_memory *sparse_mem = NULL;
+
+		if(mem.grid_info && mem.grid_type == IMAGE_GRID_TYPE_SPARSE) {
+			sparse_mem = (device_memory*)mem.grid_info;
+			total_memory += sparse_mem->memory_size();
 		}
 
 		VLOG(1) << "Texture allocate: " << mem.name << ", "
@@ -420,16 +422,12 @@ public:
 			info.height = mem.real_height;
 			info.depth = mem.real_depth;
 
-			/* For OpenVDB textures, the kernel will retrieve the accessor from
-			 * util, but there must be some value stored in data or the texture
-			 * will not be used. As a stopgap, the accessor pointer will just
-			 * be stored in both data and util. */
 			switch(mem.grid_type) {
 				case IMAGE_GRID_TYPE_OPENVDB:
-					info.util = info.data;
+					info.util = (uint64_t)mem.grid_info;
 					break;
 				case IMAGE_GRID_TYPE_SPARSE:
-					info.util = (uint64_t)grid_info->host_pointer;
+					info.util = (uint64_t)sparse_mem->host_pointer;
 					info.tiled_width = get_tile_res(info.width);
 					info.tiled_height = get_tile_res(info.height);
 					info.even_width = info.width - (info.width % TILE_SIZE);
@@ -449,18 +447,19 @@ public:
 		mem.device_size = mem.memory_size();
 		stats.mem_alloc(mem.device_size);
 
-		if(grid_info) {
-			grid_info->device_pointer = (device_ptr)grid_info->host_pointer;
-			grid_info->device_size = grid_info->memory_size();
-			stats.mem_alloc(grid_info->device_size);
+		if(sparse_mem) {
+			sparse_mem->device_pointer = (device_ptr)sparse_mem->host_pointer;
+			sparse_mem->device_size = sparse_mem->memory_size();
+			stats.mem_alloc(sparse_mem->device_size);
 		}
 	}
 
 	void tex_free(device_memory& mem)
 	{
 		if(mem.device_pointer) {
-			if(mem.grid_info) {
-				tex_free(*mem.grid_info);
+			if(mem.grid_info && mem.grid_type == IMAGE_GRID_TYPE_SPARSE) {
+				device_memory *grid_info = (device_memory*)mem.grid_info;
+				tex_free(*grid_info);
 			}
 			mem.device_pointer = 0;
 			stats.mem_free(mem.device_size);

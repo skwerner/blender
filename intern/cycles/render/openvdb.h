@@ -20,15 +20,18 @@ device_memory *openvdb_load_device_extern(Device *device,
                                           const ExtensionType& extension,
                                           const bool is_vec);
 
-bool openvdb_load_sparse(const string& filepath,
-                         const string& grid_name,
-                         const int channels,
-                         const float threshold,
-                         vector<float> *sparse_grid,
-                         vector<int> *grid_info);
+void openvdb_load_preprocess(const string& filepath,
+                             const string& grid_name,
+                             const int channels,
+                             const float threshold,
+                             vector<int> *sparse_index,
+                             int &sparse_size);
 
-bool openvdb_load_dense(const string& filepath, const string& grid_name,
-                        float *data, const int channels);
+void openvdb_load_image(const string& filepath,
+                        const string& grid_name,
+                        const int channels,
+                        float *image,
+                        vector<int> *sparse_index);
 
 device_memory *openvdb_load_device_intern(Device *device,
                                           const float *data,
@@ -38,8 +41,9 @@ device_memory *openvdb_load_device_intern(Device *device,
                                           const ExtensionType& extension,
                                           const bool is_vec);
 
-void openvdb_build_mesh(VolumeMeshBuilder *builder, void *v_accessor,
-                        const int3 resolution, const float threshold,
+void openvdb_build_mesh(VolumeMeshBuilder *builder,
+                        void *v_grid,
+                        const float threshold,
                         const bool is_vec);
 
 CCL_NAMESPACE_END

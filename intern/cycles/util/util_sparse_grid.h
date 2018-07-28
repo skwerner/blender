@@ -137,34 +137,6 @@ const inline int compute_index_cuda(const int *grid_info,
 }
 
 template<typename T>
-static const bool check_tile_active(const T *dense_grid,
-                                    int x, int y, int z,
-                                    const T threshold,
-                                    const int width,
-                                    const int height,
-                                    const int depth,
-                                    const int channels)
-{
-	const int max_i = min(x + TILE_SIZE, width);
-	const int max_j = min(y + TILE_SIZE, height);
-	const int max_k = min(z + TILE_SIZE, depth);
-
-	for(int k = z; k < max_k; ++k) {
-		for(int j = y; j < max_j; ++j) {
-			for(int i = x; i < max_i; ++i) {
-				int index = compute_index(i, j, k, width, height) * channels;
-				for(int c = 0; c < channels; ++c) {
-					if(dense_grid[index + c] >= threshold) {
-						return true;
-					}
-				}
-			}
-		}
-	}
-	return false;
-}
-
-template<typename T>
 bool create_sparse_grid(const T *dense_grid,
                         const int width,
                         const int height,
@@ -181,27 +153,44 @@ bool create_sparse_grid(const T *dense_grid,
 	const int tile_count = get_tile_res(width) *
 	                       get_tile_res(height) *
 	                       get_tile_res(depth);
-	const int tile_pix_count = TILE_SIZE * TILE_SIZE * TILE_SIZE * channels;
 
 	/* Initial prepass to find active tiles. */
-	grid_info->resize(tile_count);
-	int tile = 0, active_count = 0;
+	grid_info->resize(tile_count, -1);  /* 0 if active, -1 if inactive. */
+	int tile = 0, voxel = 0, voxel_count = 0;
 
 	for(int z = 0; z < depth; z += TILE_SIZE) {
 		for(int y = 0; y < height; y += TILE_SIZE) {
 			for(int x = 0; x < width; x += TILE_SIZE, ++tile) {
-				int is_active = check_tile_active<T>(dense_grid, x, y, z, threshold,
-				                                     width, height, depth, channels);
-				active_count += is_active;
-				/* 0 if active, -1 if inactive. */
-				grid_info->at(tile) = is_active - 1;
+				bool is_active = false;
+				const int max_i = min(x + TILE_SIZE, width);
+				const int max_j = min(y + TILE_SIZE, height);
+				const int max_k = min(z + TILE_SIZE, depth);
+
+				voxel = 0;
+				for(int k = z; k < max_k; ++k) {
+					for(int j = y; j < max_j; ++j) {
+						for(int i = x; i < max_i; ++i, ++voxel) {
+							int index = compute_index(i, j, k, width, height) * channels;
+							for(int c = 0; c < channels; ++c) {
+								if(dense_grid[index + c] >= threshold) {
+									is_active = true;
+									break;
+								}
+							}
+						}
+					}
+				}
+
+				if(is_active) {
+					grid_info->at(tile) = 0;
+					voxel_count += voxel;
+				}
 			}
 		}
 	}
 
 	/* Check memory savings. */
-	int sparse_mem_use = (tile_count * sizeof(int) +
-	                      active_count * tile_pix_count * sizeof(T));
+	int sparse_mem_use = tile_count * sizeof(int) + voxel_count * channels * sizeof(T);
 	int dense_mem_use = width * height * depth * channels * sizeof(T);
 
 	if(sparse_mem_use >= dense_mem_use) {
@@ -217,10 +206,8 @@ bool create_sparse_grid(const T *dense_grid,
 			<< string_human_readable_size(sparse_mem_use);
 
 	/* Populate the sparse grid. */
-	sparse_grid->resize(active_count * tile_pix_count);
-
-	int voxel = 0;
-	tile = 0;
+	sparse_grid->resize(voxel_count * channels);
+	voxel = tile = 0;
 
 	for(int z = 0; z < depth; z += TILE_SIZE) {
 		for(int y = 0; y < height; y += TILE_SIZE) {

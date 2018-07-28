@@ -474,6 +474,33 @@ void ImageManager::tag_reload_image(const string& filename,
 	}
 }
 
+bool ImageManager::allocate_sparse_index(Device *device,
+                                         device_memory *tex_img,
+                                         vector<int> *sparse_index,
+                                         string mem_name)
+{
+	mem_name += "_index";
+	device_vector<int> *tex_index =
+	        new device_vector<int>(device, mem_name.c_str(), MEM_TEXTURE);
+
+	int *ti;
+	{
+		thread_scoped_lock device_lock(device_mutex);
+		ti = (int*)tex_index->alloc(sparse_index->size());
+	}
+
+	if(ti == NULL) {
+		return false;
+	}
+
+	memcpy(ti, &(*sparse_index)[0], sparse_index->size() * sizeof(int));
+
+	tex_img->grid_info = static_cast<void*>(tex_index);
+	tex_img->grid_type = IMAGE_GRID_TYPE_SPARSE;
+
+	return true;
+}
+
 bool ImageManager::file_load_image_generic(Image *img,
                                            ImageInput **in,
                                            int &width,
@@ -565,8 +592,7 @@ bool ImageManager::file_load_image_generic(Image *img,
 	return true;
 }
 
-template<typename StorageType,
-         typename DeviceType>
+template<typename DeviceType>
 void ImageManager::file_load_failed(Image *img,
                                     ImageDataType type,
 			                        device_vector<DeviceType> *tex_img)
@@ -577,36 +603,54 @@ void ImageManager::file_load_failed(Image *img,
 
 	/* On failure to load, we set a 1x1 pixels pink image. */
 	thread_scoped_lock device_lock(device_mutex);
-	StorageType *pixels = (StorageType*)tex_img->alloc(1, 1);
+	DeviceType *device_pixels = tex_img->alloc(1, 1);
 
 	switch(type) {
 		case IMAGE_DATA_TYPE_FLOAT4:
-			pixels[0] = TEX_IMAGE_MISSING_R;
-			pixels[1] = TEX_IMAGE_MISSING_G;
-			pixels[2] = TEX_IMAGE_MISSING_B;
-			pixels[3] = TEX_IMAGE_MISSING_A;
+		{
+			float4 *pixels = (float4*)device_pixels;
+			pixels[0].x = TEX_IMAGE_MISSING_R;
+			pixels[0].y = TEX_IMAGE_MISSING_G;
+			pixels[0].z = TEX_IMAGE_MISSING_B;
+			pixels[0].w = TEX_IMAGE_MISSING_A;
 			break;
+		}
 		case IMAGE_DATA_TYPE_FLOAT:
+		{
+			float *pixels = (float*)device_pixels;
 			pixels[0] = TEX_IMAGE_MISSING_R;
 			break;
+		}
 		case IMAGE_DATA_TYPE_BYTE4:
-			pixels[0] = (TEX_IMAGE_MISSING_R * 255);
-			pixels[1] = (TEX_IMAGE_MISSING_G * 255);
-			pixels[2] = (TEX_IMAGE_MISSING_B * 255);
-			pixels[3] = (TEX_IMAGE_MISSING_A * 255);
+		{
+			uchar4 *pixels = (uchar4*)device_pixels;
+			pixels[0].x = (TEX_IMAGE_MISSING_R * 255);
+			pixels[0].y = (TEX_IMAGE_MISSING_G * 255);
+			pixels[0].z = (TEX_IMAGE_MISSING_B * 255);
+			pixels[0].w = (TEX_IMAGE_MISSING_A * 255);
 			break;
+		}
 		case IMAGE_DATA_TYPE_BYTE:
+		{
+			uchar *pixels = (uchar*)device_pixels;
 			pixels[0] = (TEX_IMAGE_MISSING_R * 255);
 			break;
+		}
 		case IMAGE_DATA_TYPE_HALF4:
-			pixels[0] = TEX_IMAGE_MISSING_R;
-			pixels[1] = TEX_IMAGE_MISSING_G;
-			pixels[2] = TEX_IMAGE_MISSING_B;
-			pixels[3] = TEX_IMAGE_MISSING_A;
+		{
+			half4 *pixels = (half4*)device_pixels;
+			pixels[0].x = TEX_IMAGE_MISSING_R;
+			pixels[0].y = TEX_IMAGE_MISSING_G;
+			pixels[0].z = TEX_IMAGE_MISSING_B;
+			pixels[0].w = TEX_IMAGE_MISSING_A;
 			break;
+		}
 		case IMAGE_DATA_TYPE_HALF:
+		{
+			half *pixels = (half*)device_pixels;
 			pixels[0] = TEX_IMAGE_MISSING_R;
 			break;
+		}
 		default:
 			assert(0);
 	}
@@ -615,8 +659,114 @@ void ImageManager::file_load_failed(Image *img,
 	img->mem = tex_img;
 	img->mem->interpolation = img->interpolation;
 	img->mem->extension = img->extension;
+	img->mem->grid_type = IMAGE_GRID_TYPE_DEFAULT;
+
 	tex_img->copy_to_device();
 }
+
+#ifdef WITH_OPENVDB
+template<typename DeviceType>
+void ImageManager::file_load_extern_vdb(Device *device,
+                                        Image *img,
+                                        ImageDataType type)
+{
+	VLOG(1) << "Loading external VDB " << img->filename
+	        << ", Grid: " << img->grid_name;
+
+	device_vector<DeviceType> *tex_img =
+	        new device_vector<DeviceType>(device,
+	                                      img->mem_name.c_str(),
+	                                      MEM_TEXTURE);
+
+	/* Retrieve metadata. */
+	int width, height, depth, components;
+	if(!file_load_image_generic(img, NULL, width, height, depth, components)) {
+		file_load_failed<DeviceType>(img, type, tex_img);
+		return;
+	}
+
+	if(device->info.type == DEVICE_CPU && 0) {
+		/* Load pointer to OpenVDB grid into texture. */
+		device_memory *tex_vdb = NULL;
+		{
+			thread_scoped_lock device_lock(device_mutex);
+			tex_vdb = openvdb_load_device_extern(device,
+												 img->filename,
+												 img->grid_name,
+												 img->mem_name,
+												 img->interpolation,
+												 img->extension,
+												 components > 1);
+
+		}
+
+		if(tex_vdb) {
+			img->mem = tex_vdb;
+			delete tex_img;
+			tex_img = NULL;
+		}
+		else {
+			file_load_failed<DeviceType>(img, type, tex_img);
+		}
+	}
+	else {
+		/* Load VDB as device_vector. */
+		int sparse_size = -1;
+		vector<int> sparse_index;
+		openvdb_load_preprocess(img->filename, img->grid_name, components,
+		                        img->isovalue, &sparse_index, sparse_size);
+
+		/* Allocate space for image. */
+		float *pixels;
+		{
+			thread_scoped_lock device_lock(device_mutex);
+			if(sparse_size > -1) {
+				pixels = (float*)tex_img->alloc(sparse_size);
+			}
+			else {
+				pixels = (float*)tex_img->alloc(width, height, depth);
+			}
+		}
+
+		if(!pixels) {
+			/* Could be that we've run out of memory. */
+			file_load_failed<DeviceType>(img, type, tex_img);
+			return;
+		}
+
+		/* Load image. */
+		openvdb_load_image(img->filename, img->grid_name, components, pixels, &sparse_index);
+
+		/* Allocate space for sparse_index if it exists. */
+		if(sparse_size > -1) {
+			tex_img->grid_type = IMAGE_GRID_TYPE_SPARSE;
+
+			if(!allocate_sparse_index(device, (device_memory*)tex_img,
+			                          &sparse_index, img->mem_name))
+			{
+				/* Could be that we've run out of memory. */
+				file_load_failed<DeviceType>(img, type, tex_img);
+				return;
+			}
+		}
+		else {
+			tex_img->grid_type = IMAGE_GRID_TYPE_DEFAULT;
+		}
+
+		/* Set metadata and copy. */
+		tex_img->real_width = width;
+		tex_img->real_height = height;
+		tex_img->real_depth = depth;
+		tex_img->interpolation = img->interpolation;
+		tex_img->extension = img->extension;
+
+		img->mem = tex_img;
+
+		thread_scoped_lock device_lock(device_mutex);
+		tex_img->copy_to_device();
+	}
+}
+#endif
 
 template<TypeDesc::BASETYPE FileFormat,
          typename StorageType,
@@ -630,7 +780,10 @@ void ImageManager::file_load_image(Device *device,
 	        new device_vector<DeviceType>(device,
 	                                      img->mem_name.c_str(),
 	                                      MEM_TEXTURE);
+
 	tex_img->grid_type = IMAGE_GRID_TYPE_DEFAULT;
+	tex_img->interpolation = img->interpolation;
+	tex_img->extension = img->extension;
 
 	/* Try to retrieve an ImageInput for reading the image.
 	 * Otherwise, retrieve metadata. */
@@ -638,7 +791,7 @@ void ImageManager::file_load_image(Device *device,
 	int width, height, depth, components;
 	if(!file_load_image_generic(img, &in, width, height, depth, components)) {
 		/* Could not retrieve image. */
-		file_load_failed<StorageType, DeviceType>(img, type, tex_img);
+		file_load_failed<DeviceType>(img, type, tex_img);
 		return;
 	}
 
@@ -646,46 +799,9 @@ void ImageManager::file_load_image(Device *device,
 	size_t num_pixels = ((size_t)width) * height * depth;
 	if(max_size == 0) {
 		/* Don't bother with invalid images. */
-		file_load_failed<StorageType, DeviceType>(img, type, tex_img);
+		file_load_failed<DeviceType>(img, type, tex_img);
 		return;
 	}
-
-	const bool is_rgba = (type == IMAGE_DATA_TYPE_FLOAT4 ||
-	                      type == IMAGE_DATA_TYPE_HALF4 ||
-	                      type == IMAGE_DATA_TYPE_BYTE4);
-	const bool is_extern_vdb = string_endswith(img->filename, ".vdb");
-
-#ifdef WITH_OPENVDB
-	/* Load pointer to OpenVDB grid into texture if using CPU. */
-	if(is_extern_vdb && device->info.type == DEVICE_CPU && 0) {
-		VLOG(1) << "Loading external VDB " << img->filename
-		        << ", Grid: " << img->grid_name;
-
-		device_memory *tex_vdb = NULL;
-		{
-			thread_scoped_lock device_lock(device_mutex);
-			tex_vdb = openvdb_load_device_extern(device,
-			                                     img->filename,
-			                                     img->grid_name,
-			                                     img->mem_name,
-			                                     img->interpolation,
-			                                     img->extension,
-			                                     is_rgba);
-		}
-
-		if(tex_vdb) {
-			img->mem = tex_vdb;
-			delete tex_img;
-			tex_img = NULL;
-		}
-		else {
-			file_load_failed<StorageType, DeviceType>(img, type, tex_img);
-		}
-		/* For now, if we directly load OpenVDB grids, do not do any image
-		 * post-processing. */
-		return;
-	}
-#endif
 
 	/* Allocate storage for the image. */
 	vector<StorageType> pixels_storage;
@@ -701,7 +817,7 @@ void ImageManager::file_load_image(Device *device,
 
 	if(pixels == NULL) {
 		/* Could be that we've run out of memory. */
-		file_load_failed<StorageType, DeviceType>(img, type, tex_img);
+		file_load_failed<DeviceType>(img, type, tex_img);
 		return;
 	}
 
@@ -737,13 +853,6 @@ void ImageManager::file_load_image(Device *device,
 		in->close();
 		delete in;
 	}
-#ifdef WITH_OPENVDB
-	else if(is_extern_vdb) {
-		VLOG(1) << "Loading external VDB " << img->filename
-		        << ", Grid: " << img->grid_name;
-		openvdb_load_dense(img->filename, img->grid_name, (float*)pixels, components);
-	}
-#endif
 	else {
 		if(FileFormat == TypeDesc::FLOAT) {
 			builtin_image_float_pixels_cb(img->filename,
@@ -771,6 +880,9 @@ void ImageManager::file_load_image(Device *device,
 	 */
 	const StorageType alpha_one = (FileFormat == TypeDesc::UINT8)? 255 : 1;
 	const bool cmyk = (in ? strcmp(in->format_name(), "jpeg") == 0 && components == 4 : false);
+	const bool is_rgba = (type == IMAGE_DATA_TYPE_FLOAT4 ||
+	                      type == IMAGE_DATA_TYPE_HALF4 ||
+	                      type == IMAGE_DATA_TYPE_BYTE4);
 
 	if(is_rgba) {
 		if(cmyk) {
@@ -874,28 +986,19 @@ void ImageManager::file_load_image(Device *device,
 
 	/* Compress image if needed. */
 	int num_pixels_real = -1;
-	device_vector<int> *tex_info = NULL;
-
 	if(img->is_volume && device->info.type != DEVICE_CUDA) {
 		vector<StorageType> sparse_pixels;
-		vector<int> grid_info;
+		vector<int> sparse_index;
 
 		if(create_sparse_grid<StorageType>(pixels, width, height, depth,
 		                                   components, img->filename,
-	                                       img->isovalue, &sparse_pixels, &grid_info))
+		                                   img->isovalue, &sparse_pixels,
+		                                   &sparse_index))
 		{
 			pixels = &sparse_pixels[0];
 			num_pixels_real = sparse_pixels.size() / components;
-
-			tex_info = new device_vector<int>(device,
-			                                  (img->mem_name + "_info").c_str(),
-			                                  MEM_TEXTURE);
-			int *texture_info;
-			{
-				thread_scoped_lock device_lock(device_mutex);
-				texture_info = (int*)tex_info->alloc(grid_info.size());
-			}
-			memcpy(texture_info, &grid_info[0], grid_info.size() * sizeof(int));
+			allocate_sparse_index(device, (device_memory*)tex_img,
+			                      &sparse_index, img->mem_name);
 		}
 	}
 
@@ -919,13 +1022,6 @@ void ImageManager::file_load_image(Device *device,
 	tex_img->real_width = width;
 	tex_img->real_height = height;
 	tex_img->real_depth = depth;
-	tex_img->interpolation = img->interpolation;
-	tex_img->extension = img->extension;
-
-	if(tex_info != NULL) {
-		tex_img->grid_info = tex_info;
-		tex_img->grid_type = IMAGE_GRID_TYPE_SPARSE;
-	}
 
 	img->mem = tex_img;
 
@@ -957,8 +1053,9 @@ void ImageManager::device_load_image(Device *device,
 	/* Free previous texture(s) in slot. */
 	if(img->mem) {
 		thread_scoped_lock device_lock(device_mutex);
-		if(img->mem->grid_info) {
-			delete img->mem->grid_info;
+		if(img->mem->grid_info && img->mem->grid_type == IMAGE_GRID_TYPE_SPARSE) {
+			device_memory *info = (device_memory*)img->mem->grid_info;
+			delete info;
 			img->mem->grid_info = NULL;
 		}
 		delete img->mem;
@@ -967,13 +1064,24 @@ void ImageManager::device_load_image(Device *device,
 
 	/* Create new texture. */
 	const int texture_limit = scene->params.texture_limit;
+	const bool is_extern_vdb = string_endswith(img->filename, ".vdb");
 
 	switch(type) {
 		case IMAGE_DATA_TYPE_FLOAT4:
-			file_load_image<TypeDesc::FLOAT, float, float4>(device, img, type, texture_limit);
+#ifdef WITH_OPENVDB
+			if(is_extern_vdb)
+				file_load_extern_vdb<float4>(device, img, type);
+			else
+#endif
+				file_load_image<TypeDesc::FLOAT, float, float4>(device, img, type, texture_limit);
 			break;
 		case IMAGE_DATA_TYPE_FLOAT:
-			file_load_image<TypeDesc::FLOAT, float, float>(device, img, type, texture_limit);
+#ifdef WITH_OPENVDB
+			if(is_extern_vdb)
+				file_load_extern_vdb<float>(device, img, type);
+			else
+#endif
+				file_load_image<TypeDesc::FLOAT, float, float>(device, img, type, texture_limit);
 			break;
 		case IMAGE_DATA_TYPE_BYTE4:
 			file_load_image<TypeDesc::UINT8, uchar, uchar4>(device, img, type, texture_limit);
@@ -1014,8 +1122,10 @@ void ImageManager::device_free_image(Device *, ImageDataType type, int slot)
 
 		if(img->mem) {
 			thread_scoped_lock device_lock(device_mutex);
-			if(img->mem->grid_info){
-				delete img->mem->grid_info;
+			if(img->mem->grid_info && img->mem->grid_type == IMAGE_GRID_TYPE_SPARSE) {
+				device_memory *info = (device_memory*)img->mem->grid_info;
+				delete info;
+				img->mem->grid_info = NULL;
 			}
 			delete img->mem;
 		}

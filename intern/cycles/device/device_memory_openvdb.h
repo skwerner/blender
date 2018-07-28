@@ -41,7 +41,8 @@ public:
 
 		assert(data_elements > 0);
 
-		host_pointer = static_cast<void*>(&vdb_acc);
+		host_pointer = static_cast<void*>(&vdb_grid);
+		grid_info = static_cast<void*>(&vdb_acc);
 
 		data_width = real_width = resolution.x;
 		data_height = real_height = resolution.y;

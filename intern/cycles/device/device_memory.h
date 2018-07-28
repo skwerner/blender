@@ -207,7 +207,7 @@ public:
 	device_ptr device_pointer;
 	void *host_pointer;
 	void *shared_pointer;
-	device_memory *grid_info = NULL;
+	void *grid_info;
 
 	virtual ~device_memory();
 

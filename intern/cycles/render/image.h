@@ -145,6 +145,11 @@ private:
 	vector<Image*> images[IMAGE_DATA_NUM_TYPES];
 	void *osl_texture_system;
 
+	bool allocate_sparse_index(Device *device,
+	                           device_memory *tex_img,
+	                           vector<int> *sparse_index,
+	                           string mem_name);
+
 	bool file_load_image_generic(Image *img,
 	                             ImageInput **in,
 	                             int &width,
@@ -152,11 +157,17 @@ private:
 	                             int &depth,
 	                             int &components);
 
-	template<typename StorageType,
-	         typename DeviceType>
+	template<typename DeviceType>
 	void file_load_failed(Image *img,
 	                      ImageDataType type,
 	                      device_vector<DeviceType> *tex_img);
+
+#ifdef WITH_OPENVDB
+	template<typename DeviceType>
+	void file_load_extern_vdb(Device *device,
+	                          Image *img,
+	                          ImageDataType type);
+#endif
 
 	template<TypeDesc::BASETYPE FileFormat,
 	         typename StorageType,

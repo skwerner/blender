@@ -314,8 +314,9 @@ void VolumeMeshBuilder::convert_quads_to_tris(const vector<QuadData> &quads,
 
 struct VoxelAttributeGrid {
 	void *data;
-	int *grid_info;
+	int *sparse_index;
 	int channels;
+	ImageGridType grid_type;
 };
 
 void MeshManager::create_volume_mesh(Scene *scene,
@@ -330,7 +331,6 @@ void MeshManager::create_volume_mesh(Scene *scene,
 	/* Compute volume parameters. */
 	VolumeParams volume_params;
 	volume_params.resolution = make_int3(0, 0, 0);
-	bool is_openvdb = false;
 	int grid_mem = -1;
 
 	foreach(Attribute& attr, mesh->attributes.attributes) {
@@ -340,7 +340,6 @@ void MeshManager::create_volume_mesh(Scene *scene,
 
 		VoxelAttribute *voxel = attr.data_voxel();
 		device_memory *image_memory = scene->image_manager->image_memory(voxel->slot);
-		device_memory *grid_info = image_memory->grid_info;
 		int3 resolution = make_int3(image_memory->real_width,
 		                            image_memory->real_height,
 		                            image_memory->real_depth);
@@ -355,12 +354,20 @@ void MeshManager::create_volume_mesh(Scene *scene,
 			return;
 		}
 
-		is_openvdb = (image_memory->grid_type == IMAGE_GRID_TYPE_OPENVDB);
-
 		VoxelAttributeGrid voxel_grid;
+
 		voxel_grid.data = image_memory->host_pointer;
 		voxel_grid.channels = image_memory->data_elements;
-		voxel_grid.grid_info = grid_info ? static_cast<int*>(grid_info->host_pointer) : NULL;
+		voxel_grid.grid_type = image_memory->grid_type;
+
+		if(image_memory->grid_type == IMAGE_GRID_TYPE_SPARSE) {
+			device_memory *sparse_mem = (device_memory*)image_memory->grid_info;
+			voxel_grid.sparse_index = static_cast<int*>(sparse_mem->host_pointer);
+		}
+		else {
+			voxel_grid.sparse_index = NULL;
+		}
+
 		voxel_grids.push_back(voxel_grid);
 	}
 
@@ -400,10 +407,6 @@ void MeshManager::create_volume_mesh(Scene *scene,
 	float3 cell_size = make_float3(1.0f/resolution.x,
 	                               1.0f/resolution.y,
 	                               1.0f/resolution.z);
-	const int3 tiled_res = make_int3(get_tile_res(resolution.x),
-	                                 get_tile_res(resolution.y),
-	                                 get_tile_res(resolution.z));
-	const bool using_cuda = (scene->device->info.type == DEVICE_CUDA);
 
 	if(attr) {
 		const Transform *tfm = attr->data_transform();
@@ -424,39 +427,39 @@ void MeshManager::create_volume_mesh(Scene *scene,
 		const VoxelAttributeGrid &voxel_grid = voxel_grids[i];
 		const int channels = voxel_grid.channels;
 
-		if(is_openvdb) {
+		if(voxel_grid.grid_type == IMAGE_GRID_TYPE_OPENVDB) {
 #ifdef WITH_OPENVDB
-			openvdb_build_mesh(&builder, voxel_grid.data, resolution, isovalue, channels > 1);
-#else
-			assert(0);
+			openvdb_build_mesh(&builder, voxel_grid.data, isovalue, channels > 1);
 #endif
 		}
-		else {
-			const int *grid_info = voxel_grid.grid_info;
+		else if(voxel_grid.grid_type == IMAGE_GRID_TYPE_SPARSE) {
 			float *data = static_cast<float*>(voxel_grid.data);
-
 			for(int z = 0; z < resolution.z; ++z) {
 				for(int y = 0; y < resolution.y; ++y) {
 					for(int x = 0; x < resolution.x; ++x) {
-						int voxel_index;
-
-						if(grid_info) {
-							voxel_index = using_cuda ?
-							    compute_index_cuda(grid_info, x, y, z,
-							                       resolution.x, resolution.y, resolution.z,
-							                       tiled_res.x, tiled_res.y, tiled_res.z) :
-							    compute_index(grid_info, x, y, z,
-							                  resolution.x, resolution.y, resolution.z);
-
-							if(voxel_index < 0) {
-								continue;
+						int voxel_index = compute_index(voxel_grid.sparse_index,
+						                                x, y, z,
+						                                resolution.x,
+						                                resolution.y,
+						                                resolution.z) * channels;
+						if(voxel_index >= 0) {
+							for(int c = 0; c < channels; c++) {
+								if(data[voxel_index + c] >= isovalue) {
+									builder.add_node_with_padding(x, y, z);
+									break;
+								}
 							}
 						}
-						else {
-							voxel_index = compute_index(x, y, z, resolution);
-						}
-
-						voxel_index *= channels;
+					}
+				}
+			}
+		}
+		else {
+			float *data = static_cast<float*>(voxel_grid.data);
+			for(int z = 0; z < resolution.z; ++z) {
+				for(int y = 0; y < resolution.y; ++y) {
+					for(int x = 0; x < resolution.x; ++x) {
+						int voxel_index = compute_index(x, y, z, resolution) * channels;
 						for(int c = 0; c < channels; c++) {
 							if(data[voxel_index + c] >= isovalue) {
 								builder.add_node_with_padding(x, y, z);

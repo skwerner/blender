@@ -24,6 +24,7 @@ CCL_NAMESPACE_BEGIN
 
 class Light;
 class Object;
+class Scene;
 
 #define LIGHT_BVH_NODE_SIZE 4
 
@@ -132,7 +133,7 @@ struct CompareToBucket {
 		int bucket_id = (int)((float)nBuckets * (p.centroid[dim]-centroidBbox.min[dim]) *
 		                      invExtent);
 		if (bucket_id == nBuckets) {
-			bucket_id--;
+			bucket_id = nBuckets - 1;
 		}
 
 		return bucket_id <= splitBucket;
@@ -171,6 +172,7 @@ public:
 	LightTree(const vector<Primitive>& prims_,
 	          const vector<Object*>& objects_,
 	          const vector<Light*>& lights_,
+	          Scene* scene,
 	          const unsigned int maxPrimsInNode_);
 
 	const vector<Primitive>& get_primitives() const {
@@ -211,6 +213,7 @@ private:
 	vector<Object*> objects;
 	vector<Light*> lights;
 	unsigned int maxPrimsInNode;
+	Scene *scene;
 
 	vector<CompactNode> nodes;
 };

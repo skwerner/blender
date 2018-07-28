@@ -137,13 +137,6 @@ ccl_device float3 hsv_to_rgb(float3 hsv)
 	return rgb;
 }
 
-ccl_device float rgb_to_luminance(float3 rgb)
-{
-	return 0.212671f * rgb.x +
-	       0.715160f * rgb.y +
-	       0.072169f * rgb.z;
-}
-
 ccl_device float3 xyY_to_xyz(float x, float y, float Y)
 {
 	float X, Z;

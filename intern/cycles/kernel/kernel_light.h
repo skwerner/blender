@@ -1300,11 +1300,17 @@ ccl_device void light_bvh_sample(KernelGlobals *kg, float3 P, float3 N,
 
 /* converts from an emissive triangle index to the corresponding
  * light distribution index. */
-ccl_device int triangle_to_distribution(KernelGlobals *kg, int triangle_id)
+ccl_device int triangle_to_distribution(KernelGlobals *kg, int triangle_id,
+                                        int object_id)
 {
 	/* binary search to find triangle_id which then gives distribution_id */
 	/* equivalent to implementation of std::lower_bound */
 	/* todo: of complexity log(N) now. could be made constant with a hash table? */
+	/* __triangle_to_distribution is an array of uints of the format below:
+	 * [triangle_id0, object_id0, distribution_id0, triangle_id1,... ]
+	 * where e.g. [triangle_id0,object_id0] corresponds to distribution id
+	 * distribution_id0
+	 */
 	int first = 0;
 	int last = kernel_data.integrator.num_triangle_lights;
 	int count = last - first;
@@ -1312,7 +1318,7 @@ ccl_device int triangle_to_distribution(KernelGlobals *kg, int triangle_id)
 	while (count > 0) {
 		step = count / 2;
 		middle = first + step;
-		int triangle = kernel_tex_fetch(__triangle_to_distribution, middle*2);
+		int triangle = kernel_tex_fetch(__triangle_to_distribution, middle*3);
 		if (triangle < triangle_id) {
 			first = middle + 1;
 			count -= step + 1;
@@ -1321,9 +1327,18 @@ ccl_device int triangle_to_distribution(KernelGlobals *kg, int triangle_id)
 			count = step;
 	}
 
+	/* If instancing then we can have several triangles with the same triangle_id
+	 * so loop over object_id too. */
+	/* todo: do a binary search here too if many instances */
+	while(true){
+		int object = kernel_tex_fetch(__triangle_to_distribution, first*3+1);
+		if(object == object_id) break;
+		++first;
+	}
+
 	kernel_assert(kernel_tex_fetch(__triangle_to_distribution, first*2) == triangle_id);
 
-	return kernel_tex_fetch(__triangle_to_distribution, first*2+1);
+	return kernel_tex_fetch(__triangle_to_distribution, first*3+2);
 }
 
 /* computes the probability of picking a light in the given node_id */
@@ -1399,12 +1414,13 @@ ccl_device float light_bvh_pdf(KernelGlobals *kg, float3 P, float3 N,
 
 /* computes the the probability of picking the given light out of all lights */
 ccl_device float light_distribution_pdf(KernelGlobals *kg, float3 P, float3 N,
-                                        int prim_id, bool is_inside_volume)
+                                        int prim_id, int object_id,
+                                        bool is_inside_volume)
 {
 	/* convert from triangle/lamp to light distribution */
 	int distribution_id;
 	if(prim_id >= 0){ // Triangle_id = prim_id
-		distribution_id = triangle_to_distribution(kg, prim_id);
+		distribution_id = triangle_to_distribution(kg, prim_id, object_id);
 	} else { // Lamp
 		int lamp_id = -prim_id-1;
 		distribution_id = kernel_tex_fetch(__lamp_to_distribution, lamp_id);

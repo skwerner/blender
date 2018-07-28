@@ -31,8 +31,10 @@ CCL_NAMESPACE_BEGIN
 LightTree::LightTree(const vector<Primitive>& prims_,
                      const vector<Object*>& objects_,
                      const vector<Light*>& lights_,
+                     Scene* scene_,
                      const unsigned int maxPrimsInNode_)
-    :  objects(objects_), lights(lights_), maxPrimsInNode(maxPrimsInNode_)
+    :  objects(objects_), lights(lights_), maxPrimsInNode(maxPrimsInNode_),
+      scene(scene_)
 {
 
 	if (prims_.empty()) return;
@@ -66,6 +68,7 @@ LightTree::LightTree(const vector<Primitive>& prims_,
 		BoundBox bbox     = get_bbox(primitives[i]);
 		Orientation bcone = get_bcone(primitives[i]);
 		float energy      = get_energy(primitives[i]);
+
 		buildData.push_back(BVHPrimitiveInfo(i, bbox, bcone, energy));
 	}
 
@@ -143,8 +146,21 @@ BoundBox LightTree::get_bbox(const Primitive& prim)
 		const Mesh* mesh = object->mesh;
 		const int triangle_id = prim.prim_id - mesh->tri_offset;
 		const Mesh::Triangle triangle = mesh->get_triangle(triangle_id);
-		const float3 *vpos = &mesh->verts[0];
-		triangle.bounds_grow(vpos, bbox);
+
+		float3 p0 = mesh->verts[triangle.v[0]];
+		float3 p1 = mesh->verts[triangle.v[1]];
+		float3 p2 = mesh->verts[triangle.v[2]];
+
+		if(!mesh->transform_applied) {
+			const Transform& tfm = object->tfm;
+			p0 = transform_point(&tfm, p0);
+			p1 = transform_point(&tfm, p1);
+			p2 = transform_point(&tfm, p2);
+		}
+
+		bbox.grow(p0);
+		bbox.grow(p1);
+		bbox.grow(p2);
 	} else {
 		/* extract bounding box from lamp based on light type */
 		Light* lamp = lights[prim.lamp_id];
@@ -183,8 +199,26 @@ Orientation LightTree::get_bcone(const Primitive& prim){
 		const Mesh* mesh = object->mesh;
 		const int triangle_id = prim.prim_id - mesh->tri_offset;
 		const Mesh::Triangle triangle = mesh->get_triangle(triangle_id);
-		const float3 *vpos = &mesh->verts[0];
-		bcone.axis = triangle.compute_normal(vpos);
+
+		float3 p0 = mesh->verts[triangle.v[0]];
+		float3 p1 = mesh->verts[triangle.v[1]];
+		float3 p2 = mesh->verts[triangle.v[2]];
+
+		if(!mesh->transform_applied) {
+			const Transform& tfm = object->tfm;
+			p0 = transform_point(&tfm, p0);
+			p1 = transform_point(&tfm, p1);
+			p2 = transform_point(&tfm, p2);
+		}
+
+		float3 normal = make_float3(1.0f, 0.0f, 0.0f);
+		const float3 norm = cross(p1 - p0, p2 - p0);
+		const float normlen = len(norm);
+		if(normlen != 0.0f) {
+			normal = norm / normlen;
+		}
+
+		bcone.axis = normal;
 		bcone.theta_o = 0.0f;
 		bcone.theta_e = M_PI_2_F;
 	} else {
@@ -223,7 +257,7 @@ float LightTree::get_energy(const Primitive &prim){
 		/* get emission from shader */
 		bool is_constant_emission = shader->is_constant_emission(&emission);
 		if(!is_constant_emission){
-			return 0.0f;
+			return 0.1f;
 		}
 
 		const Transform& tfm = objects[prim.object_id]->tfm;
@@ -264,7 +298,7 @@ float LightTree::get_energy(const Primitive &prim){
 		}
 	}
 
-	return rgb_to_luminance(emission);
+	return scene->shader_manager->linear_rgb_to_gray(emission);
 
 }
 
@@ -341,7 +375,6 @@ void LightTree::split_saoh(const BoundBox &centroidBbox,
 		Orientation bcone;
 	};
 
-	min_cost = -1;
 	min_cost = std::numeric_limits<float>::max();
 	min_bucket = -1;
 
@@ -459,9 +492,9 @@ BVHBuildNode* LightTree::recursive_build(const unsigned int start,
 	unsigned int num_emitters = end - start;
 
 	for (unsigned int i = start; i < end; ++i){
-		node_bbox.grow(buildData[i].bbox);
-		bcones.push_back(buildData[i].bcone);
-		double energy = (double)buildData[i].energy;
+		node_bbox.grow(buildData.at(i).bbox);
+		bcones.push_back(buildData.at(i).bcone);
+		double energy = (double)buildData.at(i).energy;
 		node_energy += energy;
 		node_energy_sum_squared += energy * energy;
 	}
@@ -480,8 +513,8 @@ BVHBuildNode* LightTree::recursive_build(const unsigned int start,
 	if(num_emitters == 1){
 		/* create leaf */
 		int firstPrimOffset = orderedPrims.size();
-		int prim = buildData[start].primitiveNumber;
-		orderedPrims.push_back(primitives[prim]);
+		int prim = buildData.at(start).primitiveNumber;
+		orderedPrims.push_back(primitives.at(prim));
 
 		node->init_leaf(firstPrimOffset, num_emitters, node_bbox, node_bcone,
 		                node_energy, node_energy_variance);
@@ -490,7 +523,7 @@ BVHBuildNode* LightTree::recursive_build(const unsigned int start,
 		/* compute bounds for primitive centroids */
 		BoundBox centroidBbox = BoundBox::empty;
 		for (unsigned int i = start; i < end; ++i){
-			centroidBbox.grow(buildData[i].centroid);
+			centroidBbox.grow(buildData.at(i).centroid);
 		}
 
 		float3 diag = centroidBbox.size();
@@ -508,8 +541,8 @@ BVHBuildNode* LightTree::recursive_build(const unsigned int start,
 			/* create leaf */
 			int firstPrimOffset = orderedPrims.size();
 			for (int i = start; i < end; ++i) {
-				int prim = buildData[i].primitiveNumber;
-				orderedPrims.push_back(primitives[prim]);
+				int prim = buildData.at(i).primitiveNumber;
+				orderedPrims.push_back(primitives.at(prim));
 			}
 
 			node->init_leaf(firstPrimOffset, num_emitters, node_bbox, node_bcone,
@@ -539,8 +572,8 @@ BVHBuildNode* LightTree::recursive_build(const unsigned int start,
 				/* create leaf */
 				int firstPrimOffset = orderedPrims.size();
 				for (int i = start; i < end; ++i) {
-					int prim = buildData[i].primitiveNumber;
-					orderedPrims.push_back(primitives[prim]);
+					int prim = buildData.at(i).primitiveNumber;
+					orderedPrims.push_back(primitives.at(prim));
 				}
 
 				node->init_leaf(firstPrimOffset, num_emitters, node_bbox,

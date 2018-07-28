@@ -263,7 +263,7 @@ float LightManager::distant_lights_energy(const Scene *scene,
 		bool is_constant_emission = lamp->shader->is_constant_emission(&emission);
 		if(!is_constant_emission) continue; // TODO: Properly handle this case
 
-		luminance += rgb_to_luminance(emission);
+		luminance += scene->shader_manager->linear_rgb_to_gray(emission);
 	}
 
 
@@ -304,7 +304,7 @@ float LightManager::background_light_energy(Device *device,
 		shade_background_pixels(device, dscene, res.x, res.y, pixels, progress);
 		num_pixels += pixels.size();
 		for(int i = 0; i < pixels.size(); ++i){
-			average_luminance += rgb_to_luminance(pixels[i]);
+			average_luminance += scene->shader_manager->linear_rgb_to_gray(pixels[i]);
 		}
 
 		break;
@@ -404,7 +404,7 @@ void LightManager::device_update_distribution(Device *device, DeviceScene *dscen
 
 		/* create light BVH */
 		double time_start = time_dt();
-		LightTree lightBVH(emissivePrims, scene->objects, scene->lights, 64);
+		LightTree lightBVH(emissivePrims, scene->objects, scene->lights, scene, 64);
 		VLOG(1) << "Light BVH build time: " << time_dt() - time_start;
 
 		/* the light BVH reorders the primitives so update emissivePrims */
@@ -570,22 +570,23 @@ void LightManager::device_update_distribution(Device *device, DeviceScene *dscen
 	}
 
 	/* find mapping between triangle_id to distribution_id, used for MIS */
-	vector< std::pair<uint,uint> > tri_to_distr;
+	vector< std::tuple<uint,uint, uint> > tri_to_distr;
 	tri_to_distr.reserve(num_triangles);
 	for(int i = 0; i < emissivePrims.size(); ++i){
 		const Primitive& prim = emissivePrims[i];
 		if(prim.prim_id < 0) continue; // Skip lamps
-		tri_to_distr.push_back(std::make_pair( prim.prim_id, i ));
+		tri_to_distr.push_back(std::make_tuple(prim.prim_id, prim.object_id, i));
 	}
 
 	std::sort(tri_to_distr.begin(), tri_to_distr.end());
 
 	assert(num_triangles == tri_to_distr.size());
 	uint *triangle_to_distribution =
-	        dscene->triangle_to_distribution.alloc(num_triangles*2);
+	        dscene->triangle_to_distribution.alloc(num_triangles*3);
 	for(int i = 0; i < tri_to_distr.size(); ++i){
-		triangle_to_distribution[2*i  ] = tri_to_distr[i].first;
-		triangle_to_distribution[2*i+1] = tri_to_distr[i].second;
+		triangle_to_distribution[3*i  ] = std::get<0>(tri_to_distr[i]);
+		triangle_to_distribution[3*i+1] = std::get<1>(tri_to_distr[i]);
+		triangle_to_distribution[3*i+2] = std::get<2>(tri_to_distr[i]);
 	}
 
 	/* create light distribution in same order as the emissivePrims */

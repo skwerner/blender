@@ -1146,12 +1146,12 @@ ccl_device float calc_light_importance(KernelGlobals *kg, float3 P, float3 N,
 	const float4 node1 = kernel_tex_fetch(__light_tree_leaf_emitters, offset + 1);
 	const float4 node2 = kernel_tex_fetch(__light_tree_leaf_emitters, offset + 2);
 
-	const float3 bboxMin  = make_float3( node0[0], node0[1], node0[2]);
-	const float3 bboxMax  = make_float3( node0[3], node1[0], node1[1]);
-	const float  theta_o  = node1[2];
-	const float  theta_e  = node1[3];
-	const float3 axis     = make_float3(node2[0], node2[1], node2[2]);
-	const float  energy   = node2[3];
+	const float3 bboxMin  = make_float3(node0.x, node0.y, node0.z);
+	const float3 bboxMax  = make_float3(node0.w, node1.x, node1.y);
+	const float  theta_o  = node1.z;
+	const float  theta_e  = node1.w;
+	const float3 axis     = make_float3(node2.x, node2.y, node2.z);
+	const float  energy   = node2.w;
 	const float3 centroid = 0.5f*(bboxMax + bboxMin);
 
 	return calc_importance(kg, P, N, bboxMax, theta_o, theta_e, axis, energy,
@@ -1165,12 +1165,12 @@ ccl_device float calc_node_importance(KernelGlobals *kg, float3 P, float3 N, int
 	const float4 node2 = kernel_tex_fetch(__light_tree_nodes, node_offset + 2);
 	const float4 node3 = kernel_tex_fetch(__light_tree_nodes, node_offset + 3);
 
-	const float  energy   = node0[0];
-	const float3 bboxMin  = make_float3( node1[0], node1[1], node1[2]);
-	const float3 bboxMax  = make_float3( node1[3], node2[0], node2[1]);
-	const float  theta_o  = node2[2];
-	const float  theta_e  = node2[3];
-	const float3 axis     = make_float3(node3[0], node3[1], node3[2]);
+	const float  energy   = node0.x;
+	const float3 bboxMin  = make_float3(node1.x, node1.y, node1.z);
+	const float3 bboxMax  = make_float3(node1.w, node2.x, node2.y);
+	const float  theta_o  = node2.z;
+	const float  theta_e  = node2.w;
+	const float3 axis     = make_float3(node3.x, node3.y, node3.z);
 	const float3 centroid = 0.5f*(bboxMax + bboxMin);
 
 	return calc_importance(kg, P, N, bboxMax, theta_o, theta_e, axis, energy,
@@ -1182,9 +1182,9 @@ ccl_device void update_parent_node(KernelGlobals *kg, int node_offset,
                                    int *num_emitters)
 {
 	float4 node        = kernel_tex_fetch(__light_tree_nodes, node_offset);
-	(*childOffset)     = __float_as_int(node[1]);
-	(*distribution_id) = __float_as_int(node[2]);
-	(*num_emitters)    = __float_as_int(node[3]);
+	(*childOffset)     = __float_as_int(node.y);
+	(*distribution_id) = __float_as_int(node.z);
+	(*num_emitters)    = __float_as_int(node.w);
 }
 
 /* picks one of the distant lights and computes the probability of picking it */
@@ -1321,8 +1321,7 @@ ccl_device int triangle_to_distribution(KernelGlobals *kg, int triangle_id)
 			count = step;
 	}
 
-	int triangle = kernel_tex_fetch(__triangle_to_distribution, first*2);
-	kernel_assert(triangle == triangle_id);
+	kernel_assert(kernel_tex_fetch(__triangle_to_distribution, first*2) == triangle_id);
 
 	return kernel_tex_fetch(__triangle_to_distribution, first*2+1);
 }

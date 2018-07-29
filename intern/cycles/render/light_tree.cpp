@@ -525,7 +525,7 @@ BVHBuildNode* LightTree::recursive_build(const unsigned int start,
 			split_saoh(centroidBbox, buildData, start, end, nBuckets,
 			           (float)node_energy, node_M_Omega, node_bbox,
 			           min_cost, min_dim, min_bucket);
-			assert(total_min_dim != -1);
+			assert(min_dim != -1);
 
 			int mid = 0;
 			if (num_emitters > maxPrimsInNode || min_cost < (float)node_energy){

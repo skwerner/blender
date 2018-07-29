@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "util/util_logging.h"
+//#include "util/util_logging.h"
 
 CCL_NAMESPACE_BEGIN
 
@@ -59,8 +59,8 @@ ccl_device bool split(KernelGlobals *kg, float3 P, int node_offset)
 	/* extract bounding box of cluster */
 	const float4 node1   = kernel_tex_fetch(__light_tree_nodes, node_offset + 1);
 	const float4 node2   = kernel_tex_fetch(__light_tree_nodes, node_offset + 2);
-	const float3 bboxMin = make_float3( node1[0], node1[1], node1[2]);
-	const float3 bboxMax = make_float3( node1[3], node2[0], node2[1]);
+	const float3 bboxMin = make_float3(node1.x, node1.y, node1.z);
+	const float3 bboxMax = make_float3(node1.w, node2.x, node2.y);
 
 	/* if P is inside bounding sphere then split */
 	const float3 centroid = 0.5f * (bboxMax + bboxMin);
@@ -90,9 +90,9 @@ ccl_device bool split(KernelGlobals *kg, float3 P, int node_offset)
 	/* eq. 10 */
 	const float4 node0   = kernel_tex_fetch(__light_tree_nodes, node_offset    );
 	const float4 node3   = kernel_tex_fetch(__light_tree_nodes, node_offset + 3);
-	const double energy       = (double)node0[0];
-	const double e_variance   = (double)node3[3];
-	const double num_emitters = (double)__float_as_int(node0[3]);
+	const double energy       = (double)node0.x;
+	const double e_variance   = (double)node3.w;
+	const double num_emitters = (double)__float_as_int(node0.w);
 
 	const double num_emitters_squared = num_emitters * num_emitters;
 	const double e_mean = energy / num_emitters;

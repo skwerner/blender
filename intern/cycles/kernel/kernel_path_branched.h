@@ -451,7 +451,7 @@ ccl_device void kernel_branched_path_integrate(KernelGlobals *kg,
 	PathState state;
 	path_state_init(kg, emission_sd, &state, rng_hash, sample, &ray);
 
-	float3 MIS_N = make_float3(0.0f);
+	float3 MIS_N = make_float3(0.0f, 0.0f, 0.0f);
 	/* Main Loop
 	 * Here we only handle transparency intersections from the camera ray.
 	 * Indirect bounces are handled in kernel_branched_path_surface_indirect_light().

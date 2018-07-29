@@ -197,7 +197,7 @@ class CyclesRenderSettings(bpy.types.PropertyGroup):
 
         cls.splitting_threshold = FloatProperty(
                 name="Splitting",
-                description="Threshold for splitting. 0.0=one light, 1.0=all lights",
+                description="Amount of lights to sample at a time, from one light at 0.0, to adaptively more lights as needed, to all lights at 1.0",
                 min=0.0, max=1.0,
                 default=0.0,
                 )

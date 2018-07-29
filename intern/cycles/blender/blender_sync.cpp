@@ -326,8 +326,14 @@ void BlenderSync::sync_integrator()
 		integrator->ao_bounces = 0;
 	}
 
-	if(integrator->modified(previntegrator))
+	if(integrator->modified(previntegrator)) {
 		integrator->tag_update(scene);
+	}
+	if(integrator->use_light_bvh != previntegrator.use_light_bvh ||
+	   integrator->splitting_threshold != previntegrator.splitting_threshold)
+	{
+		scene->light_manager->tag_update(scene);
+	}
 }
 
 /* Film */

@@ -89,8 +89,8 @@ ccl_device void kernel_direct_lighting(KernelGlobals *kg,
 			if(light_sample(kg,
 			                light_u, light_v,
 			                sd->time,
-			                sd->P,
-			                sd->N,
+			                sd->P_pick,
+			                sd->N_pick,
 			                state->bounce,
 			                &ls, false)) {
 

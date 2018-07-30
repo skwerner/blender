@@ -41,8 +41,7 @@ ccl_device_inline void kernel_path_volume_connect_light(
 
 	/* connect to light from given point where shader has been evaluated */
 	light_ray.time = sd->time;
-
-	if(light_sample(kg, light_u, light_v, sd->time, sd->P, sd->N, state->bounce, &ls, true))
+	if(light_sample(kg, light_u, light_v, sd->time, sd->P_pick, sd->N_pick, state->bounce, &ls, true))
 	{
 		float terminate = path_state_rng_light_termination(kg, state);
 		if(direct_emission(kg, sd, emission_sd, &ls, state, &light_ray, &L_light, &is_lamp, terminate)) {
@@ -179,7 +178,7 @@ ccl_device void kernel_branched_path_volume_connect_light(
 
 				/* todo: split up light_sample so we don't have to call it again with new position */
 				if(result == VOLUME_PATH_SCATTERED &&
-				   lamp_light_sample(kg, i, light_u, light_v, sd->P, &ls)) {
+				   lamp_light_sample(kg, i, light_u, light_v, sd->P_pick, &ls)) {
 
 					float terminate = path_branched_rng_light_termination(kg, state->rng_hash, state, j, num_samples);
 					if(direct_emission(kg, sd, emission_sd, &ls, state, &light_ray, &L_light, &is_lamp, terminate)) {
@@ -210,7 +209,7 @@ ccl_device void kernel_branched_path_volume_connect_light(
 					light_u = 0.5f*light_u;
 
 				LightSample ls;
-				light_sample(kg, light_u, light_v, sd->time, ray->P, sd->N, state->bounce, &ls, true);
+				light_sample(kg, light_u, light_v, sd->time, sd->P_pick, sd->N_pick, state->bounce, &ls, true);
 
 				float3 tp = throughput;
 
@@ -247,7 +246,7 @@ ccl_device void kernel_branched_path_volume_connect_light(
 		path_state_rng_2D(kg, state, PRNG_LIGHT_U, &light_u, &light_v);
 
 		LightSample ls;
-		light_sample(kg, light_u, light_v, sd->time, ray->P, sd->N, state->bounce, &ls, true);
+		light_sample(kg, light_u, light_v, sd->time, sd->P_pick, sd->N_pick, state->bounce, &ls, true);
 
 		float3 tp = throughput;
 

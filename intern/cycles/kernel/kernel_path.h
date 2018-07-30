@@ -100,7 +100,6 @@ ccl_device_forceinline void kernel_path_lamp_emission(
 	KernelGlobals *kg,
 	ccl_addr_space PathState *state,
 	Ray *ray,
-	float3 N,
 	float3 throughput,
 	ccl_addr_space Intersection *isect,
 	ShaderData *emission_sd,
@@ -121,8 +120,7 @@ ccl_device_forceinline void kernel_path_lamp_emission(
 
 		/* intersect with lamp */
 		float3 emission;
-
-		if(indirect_lamp_emission(kg, emission_sd, state, N, &light_ray, &emission))
+		if(indirect_lamp_emission(kg, emission_sd, state, &light_ray, &emission))
 			path_radiance_accum_emission(L, state, throughput, emission);
 	}
 #endif  /* __LAMP_MIS__ */
@@ -132,7 +130,6 @@ ccl_device_forceinline void kernel_path_background(
 	KernelGlobals *kg,
 	ccl_addr_space PathState *state,
 	ccl_addr_space Ray *ray,
-	float3 N,
 	float3 throughput,
 	ShaderData *sd,
 	PathRadiance *L)
@@ -155,7 +152,7 @@ ccl_device_forceinline void kernel_path_background(
 
 #ifdef __BACKGROUND__
 	/* sample background shader */
-	float3 L_background = indirect_background(kg, sd, N, state, ray);
+	float3 L_background = indirect_background(kg, sd, sd->N_pick, state, ray);
 	path_radiance_accum_background(L, state, throughput, L_background);
 #endif  /* __BACKGROUND__ */
 }
@@ -201,6 +198,8 @@ ccl_device_forceinline VolumeIntegrateResult kernel_path_volume(
 		shader_setup_from_volume(kg, sd, &volume_ray);
 		kernel_volume_decoupled_record(kg, state,
 			&volume_ray, sd, &volume_segment, heterogeneous);
+
+		kernel_update_light_picking(sd);
 
 		volume_segment.sampling_method = sampling_method;
 
@@ -250,6 +249,8 @@ ccl_device_forceinline VolumeIntegrateResult kernel_path_volume(
 		VolumeIntegrateResult result = kernel_volume_integrate(
 			kg, state, sd, &volume_ray, L, throughput, heterogeneous);
 
+		kernel_update_light_picking(sd);
+
 #  ifdef __VOLUME_SCATTER__
 		if(result == VOLUME_PATH_SCATTERED) {
 			/* direct lighting */
@@ -275,7 +276,6 @@ ccl_device_forceinline bool kernel_path_shader_apply(
 	ShaderData *sd,
 	ccl_addr_space PathState *state,
 	ccl_addr_space Ray *ray,
-	float3 MIS_N,
 	float3 throughput,
 	ShaderData *emission_sd,
 	PathRadiance *L,
@@ -289,7 +289,7 @@ ccl_device_forceinline bool kernel_path_shader_apply(
 
 			float3 bg = make_float3(0.0f, 0.0f, 0.0f);
 			if(!kernel_data.background.transparent) {
-				bg = indirect_background(kg, emission_sd, MIS_N, state, ray);
+				bg = indirect_background(kg, emission_sd, sd->N_pick, state, ray);
 			}
 			path_radiance_accum_shadowcatcher(L, throughput, bg);
 		}
@@ -343,7 +343,7 @@ ccl_device_forceinline bool kernel_path_shader_apply(
 	/* emission */
 	if(sd->flag & SD_EMISSION) {
 		bool is_volume_boundary = (state->volume_bounce > 0) || (state->volume_bounds_bounce > 0);
-		float3 emission = indirect_primitive_emission(kg, sd, sd->ray_length, state->flag, state->ray_pdf, ray->P, MIS_N, is_volume_boundary);
+		float3 emission = indirect_primitive_emission(kg, sd, sd->ray_length, state->flag, state->ray_pdf, is_volume_boundary);
 		path_radiance_accum_emission(L, state, throughput, emission);
 	}
 #endif  /* __EMISSION__ */
@@ -400,7 +400,6 @@ ccl_device void kernel_path_indirect(KernelGlobals *kg,
                                      ShaderData *sd,
                                      ShaderData *emission_sd,
                                      Ray *ray,
-                                     float3 N,
                                      float3 throughput,
                                      PathState *state,
                                      PathRadiance *L)
@@ -420,7 +419,7 @@ ccl_device void kernel_path_indirect(KernelGlobals *kg,
 		bool hit = kernel_path_scene_intersect(kg, state, ray, &isect, L);
 
 		/* Find intersection with lamps and compute emission for MIS. */
-		kernel_path_lamp_emission(kg, state, ray, N, throughput, &isect, sd, L);
+		kernel_path_lamp_emission(kg, state, ray, throughput, &isect, sd, L);
 
 #ifdef __VOLUME__
 		/* Volume integration. */
@@ -445,7 +444,7 @@ ccl_device void kernel_path_indirect(KernelGlobals *kg,
 
 		/* Shade background. */
 		if(!hit) {
-			kernel_path_background(kg, state, ray, N, throughput, sd, L);
+			kernel_path_background(kg, state, ray, throughput, sd, L);
 			break;
 		}
 		else if(path_state_ao_bounce(kg, state)) {
@@ -469,7 +468,6 @@ ccl_device void kernel_path_indirect(KernelGlobals *kg,
 		                             sd,
 		                             state,
 		                             ray,
-		                             N,
 		                             throughput,
 		                             emission_sd,
 		                             L,
@@ -494,6 +492,8 @@ ccl_device void kernel_path_indirect(KernelGlobals *kg,
 
 			throughput /= probability;
 		}
+
+		kernel_update_light_picking(sd);
 
 		kernel_update_denoising_features(kg, sd, state, L);
 
@@ -545,7 +545,6 @@ ccl_device void kernel_path_indirect(KernelGlobals *kg,
 		if(!kernel_path_surface_bounce(kg, sd, &throughput, state, &L->state, ray))
 			break;
 
-		N = sd->N;
 	}
 
 #ifdef __SUBSURFACE__
@@ -580,7 +579,6 @@ ccl_device_forceinline void kernel_path_integrate(
 {
 	/* Shader data memory used for both volumes and surfaces, saves stack space. */
 	ShaderData sd;
-	float3 MIS_N;
 #ifdef __SUBSURFACE__
 	SubsurfaceIndirectRays ss_indirect;
 	kernel_path_subsurface_init_indirect(&ss_indirect);
@@ -594,10 +592,8 @@ ccl_device_forceinline void kernel_path_integrate(
 		Intersection isect;
 		bool hit = kernel_path_scene_intersect(kg, state, ray, &isect, L);
 
-		MIS_N = sd.N;
 		/* Find intersection with lamps and compute emission for MIS. */
-		/* todo: is this the correct normal */
-		kernel_path_lamp_emission(kg, state, ray, MIS_N, throughput, &isect, &sd, L);
+		kernel_path_lamp_emission(kg, state, ray, throughput, &isect, &sd, L);
 
 #ifdef __VOLUME__
 		/* Volume integration. */
@@ -621,8 +617,7 @@ ccl_device_forceinline void kernel_path_integrate(
 
 		/* Shade background. */
 		if(!hit) {
-			/* todo: is this the correct normal? */
-			kernel_path_background(kg, state, ray, MIS_N, throughput, &sd, L);
+			kernel_path_background(kg, state, ray, throughput, &sd, L);
 			break;
 		}
 		else if(path_state_ao_bounce(kg, state)) {
@@ -646,7 +641,6 @@ ccl_device_forceinline void kernel_path_integrate(
 		                             &sd,
 		                             state,
 		                             ray,
-		                             MIS_N,
 		                             throughput,
 		                             emission_sd,
 		                             L,
@@ -670,6 +664,8 @@ ccl_device_forceinline void kernel_path_integrate(
 
 			throughput /= probability;
 		}
+
+		kernel_update_light_picking(&sd);
 
 		kernel_update_denoising_features(kg, &sd, state, L);
 

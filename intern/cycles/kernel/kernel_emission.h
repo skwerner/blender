@@ -198,7 +198,7 @@ ccl_device_noinline bool direct_emission(KernelGlobals *kg,
 
 /* Indirect Primitive Emission */
 
-ccl_device_noinline float3 indirect_primitive_emission(KernelGlobals *kg, ShaderData *sd, float t, int path_flag, float bsdf_pdf, float3 P, float3 N, bool is_volume_boundary)
+ccl_device_noinline float3 indirect_primitive_emission(KernelGlobals *kg, ShaderData *sd, float t, int path_flag, float bsdf_pdf, bool is_volume_boundary)
 {
 	/* evaluate emissive closure */
 	float3 L = shader_emissive_eval(kg, sd);
@@ -212,7 +212,7 @@ ccl_device_noinline float3 indirect_primitive_emission(KernelGlobals *kg, Shader
 		/* multiple importance sampling, get triangle light pdf,
 		 * and compute weight with respect to BSDF pdf */
 		float pdf = triangle_light_pdf(kg, sd, t);
-		pdf *= light_distribution_pdf(kg, P, N, sd->prim, sd->object, is_volume_boundary);
+		pdf *= light_distribution_pdf(kg, sd->P_pick, sd->N_pick, sd->prim, sd->object, is_volume_boundary);
 		float mis_weight = power_heuristic(bsdf_pdf, pdf);
 
 		return L*mis_weight;
@@ -226,7 +226,6 @@ ccl_device_noinline float3 indirect_primitive_emission(KernelGlobals *kg, Shader
 ccl_device_noinline bool indirect_lamp_emission(KernelGlobals *kg,
                                                 ShaderData *emission_sd,
                                                 ccl_addr_space PathState *state,
-                                                float3 N,
                                                 Ray *ray,
                                                 float3 *emission)
 {
@@ -281,7 +280,7 @@ ccl_device_noinline bool indirect_lamp_emission(KernelGlobals *kg,
 			 * and compute weight with respect to BSDF pdf */
 
 			/* multiply with light picking probablity to pdf */
-			ls.pdf *= light_distribution_pdf(kg, ray->P, N, ~ls.lamp, -1, is_inside_volume);
+			ls.pdf *= light_distribution_pdf(kg, ray->P, emission_sd->N_pick, ~ls.lamp, -1, is_inside_volume);
 			float mis_weight = power_heuristic(state->ray_pdf, ls.pdf);
 			L *= mis_weight;
 		}

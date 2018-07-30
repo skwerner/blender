@@ -33,6 +33,37 @@ typedef struct LightSample {
 	LightType type;		/* type of light */
 } LightSample;
 
+/* This normal is used in the light picking when using the light tree */
+ccl_device void kernel_update_light_picking(
+	ShaderData *sd)
+{
+	bool transmission = false;
+	bool reflective = false;
+	bool glass = false;
+	for(int i = 0; i < sd->num_closure; ++i){
+		const ShaderClosure *sc = &sd->closure[i];
+		if(CLOSURE_IS_GLASS(sc->type)){
+			glass = true;
+		}
+		if(CLOSURE_IS_BSDF_TRANSMISSION(sc->type)) {
+			transmission = true;
+		}
+		if(CLOSURE_IS_BSDF_DIFFUSE(sc->type) || CLOSURE_IS_BSDF_GLOSSY(sc->type)){
+			reflective = true;
+		}
+	}
+
+	if(glass || (reflective && transmission)){
+		sd->N_pick = make_float3(0.0f, 0.0f, 0.0f);
+	} else if(!glass && !reflective && transmission){
+		sd->N_pick = -sd->N;
+	} else {
+		sd->N_pick = sd->N;
+	}
+
+	sd->P_pick = sd->P;
+}
+
 /* Area light sampling */
 
 /* Uses the following paper:
@@ -1124,15 +1155,19 @@ ccl_device float calc_importance(KernelGlobals *kg, float3 P, float3 N,
 	const float cos_theta_prime = fast_cosf(theta_prime);
 
 	/* f_a|cos(theta'_i)| -- diffuse approximation */
-	const float theta_i               = fast_acosf(dot(N, -centroidToPDir));
-	const float theta_i_prime         = fmaxf(theta_i - theta_u, 0.0f);
-	const float cos_theta_i_prime     = fast_cosf(theta_i_prime);
-	const float abs_cos_theta_i_prime = fabsf(cos_theta_i_prime);
-	/* doing something similar to bsdf_diffuse_eval_reflect() */
-	/* TODO: Use theta_i or theta_i_prime here? */
-	const float f_a                   = fmaxf(cos_theta_i_prime, 0.0f) * M_1_PI_F;
+	if(N != make_float3(0.0f, 0.0f, 0.0f)){
+		const float theta_i               = fast_acosf(dot(N, -centroidToPDir));
+		const float theta_i_prime         = fmaxf(theta_i - theta_u, 0.0f);
+		const float cos_theta_i_prime     = fast_cosf(theta_i_prime);
+		const float abs_cos_theta_i_prime = fabsf(cos_theta_i_prime);
+		/* doing something similar to bsdf_diffuse_eval_reflect() */
+		/* TODO: Use theta_i or theta_i_prime here? */
+		const float f_a                   = fmaxf(cos_theta_i_prime, 0.0f) * M_1_PI_F;
 
-	return f_a * abs_cos_theta_i_prime * energy * cos_theta_prime / d2;
+		return f_a * abs_cos_theta_i_prime * energy * cos_theta_prime / d2;
+	}
+
+	return energy * cos_theta_prime / d2;
 }
 
 ccl_device float calc_light_importance(KernelGlobals *kg, float3 P, float3 N,

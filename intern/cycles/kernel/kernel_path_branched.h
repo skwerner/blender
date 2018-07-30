@@ -102,6 +102,8 @@ ccl_device_forceinline void kernel_branched_path_volume(
 		kernel_volume_decoupled_record(kg, state,
 			&volume_ray, sd, &volume_segment, heterogeneous);
 
+		kernel_update_light_picking(sd);
+
 		/* direct light sampling */
 		if(volume_segment.closure_flag & SD_SCATTER) {
 			volume_segment.sampling_method = volume_stack_sampling_method(kg, state->volume_stack);
@@ -141,11 +143,12 @@ ccl_device_forceinline void kernel_branched_path_volume(
 				                             &L->state,
 				                             &pray))
 				{
+					indirect_sd->P_pick = sd->P_pick;
+					indirect_sd->N_pick = sd->N_pick;
 					kernel_path_indirect(kg,
 					                     indirect_sd,
 					                     emission_sd,
 					                     &pray,
-					                     sd->N,
 					                     tp*num_samples_inv,
 					                     &ps,
 					                     L);
@@ -187,6 +190,8 @@ ccl_device_forceinline void kernel_branched_path_volume(
 			VolumeIntegrateResult result = kernel_volume_integrate(
 				kg, &ps, sd, &volume_ray, L, &tp, heterogeneous);
 
+			kernel_update_light_picking(sd);
+
 #  ifdef __VOLUME_SCATTER__
 			if(result == VOLUME_PATH_SCATTERED) {
 				/* todo: support equiangular, MIS and all light sampling.
@@ -200,11 +205,12 @@ ccl_device_forceinline void kernel_branched_path_volume(
 				                             &L->state,
 				                             &pray))
 				{
+					indirect_sd->P_pick = sd->P_pick;
+					indirect_sd->N_pick = sd->N_pick;
 					kernel_path_indirect(kg,
 					                     indirect_sd,
 					                     emission_sd,
 					                     &pray,
-					                     sd->N,
 					                     tp,
 					                     &ps,
 					                     L);
@@ -296,11 +302,12 @@ ccl_device_noinline void kernel_branched_path_surface_indirect_light(KernelGloba
 			}
 
 			ps.rng_hash = state->rng_hash;
+			indirect_sd->P_pick = sd->P_pick;
+			indirect_sd->N_pick = sd->N_pick;
 			kernel_path_indirect(kg,
 			                     indirect_sd,
 			                     emission_sd,
 			                     &bsdf_ray,
-			                     sd->N,
 			                     tp*num_samples_inv,
 			                     &ps,
 			                     L);
@@ -451,7 +458,6 @@ ccl_device void kernel_branched_path_integrate(KernelGlobals *kg,
 	PathState state;
 	path_state_init(kg, emission_sd, &state, rng_hash, sample, &ray);
 
-	float3 MIS_N = make_float3(0.0f, 0.0f, 0.0f);
 	/* Main Loop
 	 * Here we only handle transparency intersections from the camera ray.
 	 * Indirect bounces are handled in kernel_branched_path_surface_indirect_light().
@@ -461,7 +467,6 @@ ccl_device void kernel_branched_path_integrate(KernelGlobals *kg,
 		Intersection isect;
 		bool hit = kernel_path_scene_intersect(kg, &state, &ray, &isect, L);
 
-		MIS_N = sd.N;
 #ifdef __VOLUME__
 		/* Volume integration. */
 		kernel_branched_path_volume(kg,
@@ -478,7 +483,7 @@ ccl_device void kernel_branched_path_integrate(KernelGlobals *kg,
 
 		/* Shade background. */
 		if(!hit) {
-			kernel_path_background(kg, &state, &ray, MIS_N, throughput, &sd, L);
+			kernel_path_background(kg, &state, &ray, throughput, &sd, L);
 			break;
 		}
 
@@ -498,7 +503,6 @@ ccl_device void kernel_branched_path_integrate(KernelGlobals *kg,
 		                             &sd,
 		                             &state,
 		                             &ray,
-		                             MIS_N,
 		                             throughput,
 		                             emission_sd,
 		                             L,
@@ -526,6 +530,8 @@ ccl_device void kernel_branched_path_integrate(KernelGlobals *kg,
 				throughput /= probability;
 			}
 		}
+
+		kernel_update_light_picking(&sd);
 
 		kernel_update_denoising_features(kg, &sd, &state, L);
 

@@ -257,7 +257,7 @@ float LightTree::get_energy(const Primitive &prim){
 		/* get emission from shader */
 		bool is_constant_emission = shader->is_constant_emission(&emission);
 		if(!is_constant_emission){
-			return 0.1f;
+			emission = make_float3(1.0f);
 		}
 
 		const Transform& tfm = objects[prim.object_id]->tfm;
@@ -272,7 +272,7 @@ float LightTree::get_energy(const Primitive &prim){
 		shader = light->shader;
 		bool is_constant_emission = shader->is_constant_emission(&emission);
 		if(!is_constant_emission){
-			return 0.0f;
+			emission = make_float3(1.0f);
 		}
 
 		/* calculate the total emission by integrating the emission over the

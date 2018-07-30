@@ -128,9 +128,9 @@ ccl_device void accum_light_tree_contribution(KernelGlobals *kg, float randu,
                                               int *num_lights,
                                               int *num_lights_fail)
 {
+	float3 P = sd->P_pick;
+	float3 N = sd->N_pick;
 
-	float3 P = sd->P;
-	float3 N = sd->N;
 	float time = sd->time;
 	int bounce = state->bounce;
 
@@ -347,7 +347,7 @@ ccl_device_noinline void kernel_branched_path_surface_connect_light(
 				float terminate = path_branched_rng_light_termination(kg, lamp_rng_hash, state, j, num_samples);
 
 				LightSample ls;
-				if(lamp_light_sample(kg, i, light_u, light_v, sd->P, &ls)) {
+				if(lamp_light_sample(kg, i, light_u, light_v, sd->P_pick, &ls)) {
 					accum_light_contribution(kg, sd, emission_sd, &ls, state,
 					                         &light_ray, &L_light, L, &is_lamp,
 					                         terminate, throughput,
@@ -371,7 +371,7 @@ ccl_device_noinline void kernel_branched_path_surface_connect_light(
 					light_u = 0.5f*light_u;
 
 				LightSample ls;
-				if(light_sample(kg, light_u, light_v, sd->time, sd->P, sd->N, state->bounce, &ls, false)) {
+				if(light_sample(kg, light_u, light_v, sd->time, sd->P_pick, sd->N_pick, state->bounce, &ls, false)) {
 					/* Same as above, probability needs to be corrected since the sampling was forced to select a mesh light. */
 					if(kernel_data.integrator.num_all_lights)
 						ls.pdf *= 2.0f;
@@ -390,7 +390,7 @@ ccl_device_noinline void kernel_branched_path_surface_connect_light(
 		float terminate = path_state_rng_light_termination(kg, state);
 
 		LightSample ls;
-		if(light_sample(kg, light_u, light_v, sd->time, sd->P, sd->N, state->bounce, &ls, false)) {
+		if(light_sample(kg, light_u, light_v, sd->time, sd->P_pick, sd->N_pick, state->bounce, &ls, false)) {
 			/* sample random light */
 			accum_light_contribution(kg, sd, emission_sd, &ls, state, &light_ray,
 			                         &L_light, L, &is_lamp, terminate, throughput,
@@ -507,7 +507,7 @@ ccl_device_inline void kernel_path_surface_connect_light(KernelGlobals *kg,
 #endif
 
 	LightSample ls;
-	if(light_sample(kg, light_u, light_v, sd->time, sd->P, sd->N, state->bounce, &ls, false)) {
+	if(light_sample(kg, light_u, light_v, sd->time, sd->P_pick, sd->N_pick, state->bounce, &ls, false)) {
 		float terminate = path_state_rng_light_termination(kg, state);
 		accum_light_contribution(kg, sd, emission_sd, &ls, state, &light_ray,
 		                         &L_light, L, &is_lamp, terminate, throughput,

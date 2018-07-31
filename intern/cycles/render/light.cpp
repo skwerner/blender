@@ -504,6 +504,8 @@ void LightManager::device_update_distribution(Device *device, DeviceScene *dscen
 			}
 		}
 
+		if(progress.get_cancel()) return;
+
 		/* create CDF for distant lights, background lights and light tree */
 		float tree_energy = (nodesVec.size() > 0) ? nodesVec[0].energy : 0.0f;
 		float distant_energy = distant_lights_energy(scene, emissivePrims);
@@ -543,6 +545,8 @@ void LightManager::device_update_distribution(Device *device, DeviceScene *dscen
 			type_prob[i] = probs[i];
 		}
 
+		if(progress.get_cancel()) return;
+
 		/* find mapping between distribution_id to node_id, used for MIS */
 		uint *  distribution_to_node =
 		        dscene->light_distribution_to_node.alloc(num_distribution);
@@ -558,6 +562,8 @@ void LightManager::device_update_distribution(Device *device, DeviceScene *dscen
 			}
 		}
 	}
+
+	if(progress.get_cancel()) return;
 
 	/* find mapping between lamp_id to distribution_id, used for MIS */
 	uint *lamp_to_distribution =
@@ -588,6 +594,8 @@ void LightManager::device_update_distribution(Device *device, DeviceScene *dscen
 		triangle_to_distribution[3*i+1] = std::get<1>(tri_to_distr[i]);
 		triangle_to_distribution[3*i+2] = std::get<2>(tri_to_distr[i]);
 	}
+
+	if(progress.get_cancel()) return;
 
 	/* create light distribution in same order as the emissivePrims */
 

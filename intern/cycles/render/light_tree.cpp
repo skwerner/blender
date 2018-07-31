@@ -169,17 +169,14 @@ BoundBox LightTree::get_bbox(const Primitive& prim)
 			bbox.grow(lamp->co + make_float3(radius));
 			bbox.grow(lamp->co - make_float3(radius));
 		} else if(lamp->type == LIGHT_AREA){
-			/*     p2--------p3
-			*    /         /
-			*   /         /
-			*  p0--------p1
-			*/
-			const float3& p0 = lamp->co;
-			const float3 axisu = lamp->axisu*(lamp->sizeu*lamp->size);
-			const float3 axisv = lamp->axisv*(lamp->sizev*lamp->size);
-			const float3 p1 = p0 + axisu;
-			const float3 p2 = p0 + axisv;
-			const float3 p3 = p0 + axisu + axisv;
+			const float3 center = lamp->co;
+			const float3 half_axisu = 0.5f * lamp->axisu*(lamp->sizeu*lamp->size);
+			const float3 half_axisv = 0.5f * lamp->axisv*(lamp->sizev*lamp->size);
+			const float3 p0 = center - half_axisu - half_axisv;
+			const float3 p1 = center - half_axisu + half_axisv;
+			const float3 p2 = center + half_axisu - half_axisv;
+			const float3 p3 = center + half_axisu + half_axisv;
+
 			bbox.grow(p0);
 			bbox.grow(p1);
 			bbox.grow(p2);

@@ -102,7 +102,7 @@ ccl_device_forceinline void kernel_branched_path_volume(
 		kernel_volume_decoupled_record(kg, state,
 			&volume_ray, sd, &volume_segment, heterogeneous);
 
-		kernel_update_light_picking(sd);
+		kernel_update_light_picking(sd, state);
 
 		/* direct light sampling */
 		if(volume_segment.closure_flag & SD_SCATTER) {
@@ -190,7 +190,7 @@ ccl_device_forceinline void kernel_branched_path_volume(
 			VolumeIntegrateResult result = kernel_volume_integrate(
 				kg, &ps, sd, &volume_ray, L, &tp, heterogeneous);
 
-			kernel_update_light_picking(sd);
+			kernel_update_light_picking(sd, &ps);
 
 #  ifdef __VOLUME_SCATTER__
 			if(result == VOLUME_PATH_SCATTERED) {
@@ -531,7 +531,7 @@ ccl_device void kernel_branched_path_integrate(KernelGlobals *kg,
 			}
 		}
 
-		kernel_update_light_picking(&sd);
+		kernel_update_light_picking(&sd, &state);
 
 		kernel_update_denoising_features(kg, &sd, &state, L);
 

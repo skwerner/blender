@@ -69,7 +69,7 @@ ccl_device_inline void compute_light_pass(KernelGlobals *kg,
 		/* sample emission */
 		if((pass_filter & BAKE_FILTER_EMISSION) && (sd->flag & SD_EMISSION)) {
 			bool is_volume_boundary = (state.volume_bounce > 0) || (state.volume_bounds_bounce > 0);
-			float3 emission = indirect_primitive_emission(kg, sd, 0.0f, state.flag, state.ray_pdf, is_volume_boundary);
+			float3 emission = indirect_primitive_emission(kg, sd, 0.0f, sd->P_pick, sd->N_pick, state.flag, state.ray_pdf, is_volume_boundary);
 			path_radiance_accum_emission(&L_sample, &state, throughput, emission);
 		}
 
@@ -143,7 +143,7 @@ ccl_device_inline void compute_light_pass(KernelGlobals *kg,
 		/* sample emission */
 		if((pass_filter & BAKE_FILTER_EMISSION) && (sd->flag & SD_EMISSION)) {
 			bool is_volume_boundary = (state.volume_bounce > 0) || (state.volume_bounds_bounce > 0);
-			float3 emission = indirect_primitive_emission(kg, sd, 0.0f, state.flag, state.ray_pdf, is_volume_boundary);
+			float3 emission = indirect_primitive_emission(kg, sd, 0.0f, sd->P_pick, sd->N_pick, state.flag, state.ray_pdf, is_volume_boundary);
 			path_radiance_accum_emission(&L_sample, &state, throughput, emission);
 		}
 

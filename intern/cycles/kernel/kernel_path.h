@@ -109,18 +109,25 @@ ccl_device_forceinline void kernel_path_lamp_emission(
 	if(kernel_data.integrator.use_lamp_mis && !(state->flag & PATH_RAY_CAMERA)) {
 		/* ray starting from previous non-transparent bounce */
 		Ray light_ray;
+		float3 N_pick;
+		if(state->ray_t == 0.0f){
+			light_ray.P = emission_sd->P_pick;
+			N_pick = emission_sd->N_pick;
+		} else {
+			/* Current bounce was on a transparent surface */
+			light_ray.P = ray->P - state->ray_t*ray->D;
+			N_pick = state->ray_N;
+		}
 
-		light_ray.P = ray->P - state->ray_t*ray->D;
-		state->ray_t += isect->t;
 		light_ray.D = ray->D;
-		light_ray.t = state->ray_t;
+		light_ray.t = state->ray_t + isect->t;
 		light_ray.time = ray->time;
 		light_ray.dD = ray->dD;
 		light_ray.dP = ray->dP;
 
 		/* intersect with lamp */
 		float3 emission;
-		if(indirect_lamp_emission(kg, emission_sd, state, &light_ray, &emission))
+		if(indirect_lamp_emission(kg, emission_sd, state, N_pick, &light_ray, &emission))
 			path_radiance_accum_emission(L, state, throughput, emission);
 	}
 #endif  /* __LAMP_MIS__ */
@@ -199,7 +206,7 @@ ccl_device_forceinline VolumeIntegrateResult kernel_path_volume(
 		kernel_volume_decoupled_record(kg, state,
 			&volume_ray, sd, &volume_segment, heterogeneous);
 
-		kernel_update_light_picking(sd);
+		kernel_update_light_picking(sd, state);
 
 		volume_segment.sampling_method = sampling_method;
 
@@ -249,7 +256,7 @@ ccl_device_forceinline VolumeIntegrateResult kernel_path_volume(
 		VolumeIntegrateResult result = kernel_volume_integrate(
 			kg, state, sd, &volume_ray, L, throughput, heterogeneous);
 
-		kernel_update_light_picking(sd);
+		kernel_update_light_picking(sd, state);
 
 #  ifdef __VOLUME_SCATTER__
 		if(result == VOLUME_PATH_SCATTERED) {
@@ -342,11 +349,29 @@ ccl_device_forceinline bool kernel_path_shader_apply(
 #ifdef __EMISSION__
 	/* emission */
 	if(sd->flag & SD_EMISSION) {
+
+		/* ray starting from previous non-transparent bounce */
+		float3 P_pick;
+		float3 N_pick;
+		if(state->ray_t == 0.0f){ // Non-transparent bounce
+			P_pick = sd->P_pick;
+			N_pick = sd->N_pick;
+		} else { // Transparent bounce
+			P_pick = ray->P - state->ray_t*ray->D;
+			N_pick = state->ray_N;
+		}
+
+		float ray_length = state->ray_t + sd->ray_length;
+
 		bool is_volume_boundary = (state->volume_bounce > 0) || (state->volume_bounds_bounce > 0);
-		float3 emission = indirect_primitive_emission(kg, sd, sd->ray_length, state->flag, state->ray_pdf, is_volume_boundary);
+		float3 emission = indirect_primitive_emission(kg, sd, ray_length, P_pick, N_pick, state->flag, state->ray_pdf, is_volume_boundary);
 		path_radiance_accum_emission(L, state, throughput, emission);
 	}
 #endif  /* __EMISSION__ */
+
+#if defined(__LAMP_MIS__) || defined(__EMISSION__) || defined(__BACKGROUND_MIS__)
+	state->ray_t += sd->ray_length;
+#endif
 
 	return true;
 }
@@ -493,7 +518,7 @@ ccl_device void kernel_path_indirect(KernelGlobals *kg,
 			throughput /= probability;
 		}
 
-		kernel_update_light_picking(sd);
+		kernel_update_light_picking(sd, state);
 
 		kernel_update_denoising_features(kg, sd, state, L);
 
@@ -588,6 +613,7 @@ ccl_device_forceinline void kernel_path_integrate(
 
 	/* path iteration */
 	for(;;) {
+
 		/* Find intersection with objects in scene. */
 		Intersection isect;
 		bool hit = kernel_path_scene_intersect(kg, state, ray, &isect, L);
@@ -665,7 +691,7 @@ ccl_device_forceinline void kernel_path_integrate(
 			throughput /= probability;
 		}
 
-		kernel_update_light_picking(&sd);
+		kernel_update_light_picking(&sd, state);
 
 		kernel_update_denoising_features(kg, &sd, state, L);
 
@@ -704,6 +730,7 @@ ccl_device_forceinline void kernel_path_integrate(
 		/* compute direct lighting and next bounce */
 		if(!kernel_path_surface_bounce(kg, &sd, &throughput, state, &L->state, ray))
 			break;
+
 	}
 
 #ifdef __SUBSURFACE__

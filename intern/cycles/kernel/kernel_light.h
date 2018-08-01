@@ -35,11 +35,13 @@ typedef struct LightSample {
 
 /* This normal is used in the light picking when using the light tree */
 ccl_device void kernel_update_light_picking(
-	ShaderData *sd)
+	ShaderData *sd,
+	ccl_addr_space PathState *state)
 {
 	bool transmission = false;
 	bool reflective = false;
 	bool glass = false;
+	bool transparent = false;
 	for(int i = 0; i < sd->num_closure; ++i){
 		const ShaderClosure *sc = &sd->closure[i];
 		if(CLOSURE_IS_GLASS(sc->type)){
@@ -50,6 +52,9 @@ ccl_device void kernel_update_light_picking(
 		}
 		if(CLOSURE_IS_BSDF_DIFFUSE(sc->type) || CLOSURE_IS_BSDF_GLOSSY(sc->type)){
 			reflective = true;
+		}
+		if(CLOSURE_IS_BSDF_TRANSPARENT(sc->type)){
+			transparent = true;
 		}
 	}
 
@@ -62,6 +67,15 @@ ccl_device void kernel_update_light_picking(
 	}
 
 	sd->P_pick = sd->P;
+
+#if defined(__LAMP_MIS__) || defined(__EMISSION__) || defined(__BACKGROUND_MIS__)
+	if(!transparent){
+		state->ray_N = sd->N_pick;
+	}
+	// todo: what if there is a transparent but it is not this BSDF that is
+	// sampled in surface_bounce() ?
+#endif
+
 }
 
 /* Area light sampling */

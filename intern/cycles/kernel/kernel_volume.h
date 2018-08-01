@@ -1073,7 +1073,7 @@ ccl_device VolumeIntegrateResult kernel_volume_decoupled_scatter(
 	/* move to new position */
 	sd->P = ray->P + sample_t*ray->D;
 
-	kernel_update_light_picking(sd);
+	kernel_update_light_picking(sd, state);
 
 	return VOLUME_PATH_SCATTERED;
 }

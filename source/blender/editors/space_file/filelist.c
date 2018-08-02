@@ -935,7 +935,7 @@ static int filelist_geticon_ex(
 		return ICON_FILE_BLANK;
 	else if (typeflag & FILE_TYPE_ALEMBIC)
 		return ICON_FILE_BLANK;
-	else if (typeflag & FILE_TYPE_OPENVDB)
+	else if (typeflag & FILE_TYPE_VOLUME)
 		return ICON_FILE_BLANK;
 	else if (typeflag & FILE_TYPE_TEXT)
 		return ICON_FILE_TEXT;
@@ -1997,7 +1997,7 @@ int ED_path_extension_type(const char *path)
 		return FILE_TYPE_ALEMBIC;
 	}
 	else if (BLI_testextensie(path, ".vdb")) {
-		return FILE_TYPE_OPENVDB;
+		return FILE_TYPE_VOLUME;
 	}
 	else if (BLI_testextensie_array(path, imb_ext_image)) {
 		return FILE_TYPE_IMAGE;
@@ -2051,7 +2051,7 @@ int ED_file_extension_icon(const char *path)
 			return ICON_FILE_BLANK;
 		case FILE_TYPE_ALEMBIC:
 			return ICON_FILE_BLANK;
-		case FILE_TYPE_OPENVDB:
+		case FILE_TYPE_VOLUME:
 			return ICON_FILE_BLANK;
 		case FILE_TYPE_TEXT:
 			return ICON_FILE_TEXT;

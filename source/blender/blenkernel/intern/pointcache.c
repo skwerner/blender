@@ -1964,13 +1964,13 @@ static int ptcache_filename(PTCacheID *pid, char *filename, int cfra, short do_p
 	return len; /* make sure the above string is always 16 chars */
 }
 
-static void openvdb_filepath(PTCacheID *pid, char *filepath)
+static void openvdb_extern_filepath(PTCacheID *pid, char *filepath)
 {
 	SmokeModifierData *smd = (SmokeModifierData *)pid->calldata;
 
-	BLI_strncpy(filepath, smd->domain->openvdb_filepath, 1024);
+	BLI_strncpy(filepath, smd->domain->volume_filepath, 1024);
 
-	if (BLI_path_is_rel(filepath)) {
+	if (BLI_path_is_rel(filepath) && BLI_testextensie(filepath, ".vdb")) {
 		Library *lib = (pid->ob) ? pid->ob->id.lib : NULL;
 		const char *blendfilename = (lib && (pid->cache->flag & PTCACHE_IGNORE_LIBPATH) == 0) ? lib->filepath: G.main->name;
 		BLI_path_abs(filepath, blendfilename);
@@ -2639,7 +2639,7 @@ static int ptcache_read_openvdb_extern_stream(PTCacheID *pid)
 #if defined(WITH_OPENVDB) && defined(WITH_SMOKE)
 	char filepath[FILE_MAX * 2];
 
-	openvdb_filepath(pid, filepath);
+	openvdb_extern_filepath(pid, filepath);
 
 	if (!BLI_exists(filepath)) {
 		return 0;
@@ -3237,7 +3237,7 @@ int  BKE_ptcache_id_exist(PTCacheID *pid, int cfra)
 	if (pid->file_type == PTCACHE_FILE_OPENVDB_EXTERN) {
 		char filename[MAX_PTCACHE_PATH];
 
-		openvdb_filepath(pid, filename);
+		openvdb_extern_filepath(pid, filename);
 
 		return BLI_exists(filename);
 	}

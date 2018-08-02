@@ -1211,10 +1211,10 @@ ccl_device_inline void shader_eval_volume(KernelGlobals *kg,
 			/* todo: this is inefficient for motion blur, we should be
 			 * caching matrices instead of recomputing them each step */
 			shader_setup_object_transforms(kg, sd, sd->time);
+#endif
 
 			/* Cache volume P. */
 			sd->P_v = volume_get_position(kg, sd);
-#endif
 		}
 
 		/* evaluate shader */

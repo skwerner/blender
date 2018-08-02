@@ -52,6 +52,21 @@ class PHYSICS_PT_smoke(PhysicButtonsPanel, Panel):
         md = context.smoke
         ob = context.object
 
+        if bpy.app.build_options.openvdb and md.domain_settings.use_volume_file:
+            domain = md.domain_settings
+            layout.prop(domain, "use_volume_file", text="Volume Import")
+            split = layout.split(percentage=0.25)
+            col = split.column()
+            col.label(text="File Path:")
+            col = split.column()
+            col.prop(domain, "volume_filepath", text="")
+            split = layout.split(percentage=0.5)
+            col = split.column()
+            col.label(text="Empty Space:")
+            col = split.column()
+            col.prop(domain, "clipping")
+            return
+
         layout.row().prop(md, "smoke_type", expand=True)
 
         if md.smoke_type == 'DOMAIN':
@@ -81,16 +96,6 @@ class PHYSICS_PT_smoke(PhysicButtonsPanel, Panel):
             sub.active = domain.use_dissolve_smoke
             sub.prop(domain, "dissolve_speed", text="Time")
             sub.prop(domain, "use_dissolve_smoke_log", text="Slow")
-
-            if(bpy.app.build_options.openvdb):
-                layout.prop(domain, "is_openvdb", text="OpenVDB Import")
-
-                if(domain.is_openvdb):
-                    split = layout.split(percentage=0.35)
-                    col = split.column()
-                    col.label(text="File Path:")
-                    col = split.column()
-                    col.prop(domain, "openvdb_filepath", text="")
 
         elif md.smoke_type == 'FLOW':
 
@@ -188,7 +193,7 @@ class PHYSICS_PT_smoke_fire(PhysicButtonsPanel, Panel):
     @classmethod
     def poll(cls, context):
         md = context.smoke
-        return md and (md.smoke_type == 'DOMAIN') and (not md.domain_settings.is_openvdb)
+        return md and (md.smoke_type == 'DOMAIN') and (not md.domain_settings.use_volume_file)
 
     def draw(self, context):
         layout = self.layout
@@ -218,7 +223,7 @@ class PHYSICS_PT_smoke_adaptive_domain(PhysicButtonsPanel, Panel):
     @classmethod
     def poll(cls, context):
         md = context.smoke
-        return md and (md.smoke_type == 'DOMAIN') and (not md.domain_settings.is_openvdb)
+        return md and (md.smoke_type == 'DOMAIN') and (not md.domain_settings.use_volume_file)
 
     def draw_header(self, context):
         md = context.smoke.domain_settings
@@ -253,7 +258,7 @@ class PHYSICS_PT_smoke_highres(PhysicButtonsPanel, Panel):
     def poll(cls, context):
         md = context.smoke
         rd = context.scene.render
-        return md and (md.smoke_type == 'DOMAIN') and (rd.engine in cls.COMPAT_ENGINES) and (not md.domain_settings.is_openvdb)
+        return md and (md.smoke_type == 'DOMAIN') and (rd.engine in cls.COMPAT_ENGINES) and (not md.domain_settings.use_volume_file)
 
     def draw_header(self, context):
         md = context.smoke.domain_settings
@@ -293,7 +298,7 @@ class PHYSICS_PT_smoke_groups(PhysicButtonsPanel, Panel):
     def poll(cls, context):
         md = context.smoke
         rd = context.scene.render
-        return md and (md.smoke_type == 'DOMAIN') and (rd.engine in cls.COMPAT_ENGINES) and (not md.domain_settings.is_openvdb)
+        return md and (md.smoke_type == 'DOMAIN') and (rd.engine in cls.COMPAT_ENGINES) and (not md.domain_settings.use_volume_file)
 
     def draw(self, context):
         layout = self.layout
@@ -322,7 +327,7 @@ class PHYSICS_PT_smoke_cache(PhysicButtonsPanel, Panel):
     def poll(cls, context):
         md = context.smoke
         rd = context.scene.render
-        return md and (md.smoke_type == 'DOMAIN') and (rd.engine in cls.COMPAT_ENGINES) and (not md.domain_settings.is_openvdb)
+        return md and (md.smoke_type == 'DOMAIN') and (rd.engine in cls.COMPAT_ENGINES) and (not md.domain_settings.use_volume_file)
 
     def draw(self, context):
         layout = self.layout
@@ -359,7 +364,7 @@ class PHYSICS_PT_smoke_field_weights(PhysicButtonsPanel, Panel):
     def poll(cls, context):
         md = context.smoke
         rd = context.scene.render
-        return md and (md.smoke_type == 'DOMAIN') and (rd.engine in cls.COMPAT_ENGINES) and (not md.domain_settings.is_openvdb)
+        return md and (md.smoke_type == 'DOMAIN') and (rd.engine in cls.COMPAT_ENGINES) and (not md.domain_settings.use_volume_file)
 
     def draw(self, context):
         domain = context.smoke.domain_settings
@@ -374,7 +379,7 @@ class PHYSICS_PT_smoke_display_settings(PhysicButtonsPanel, Panel):
     def poll(cls, context):
         md = context.smoke
         rd = context.scene.render
-        return md and (md.smoke_type == 'DOMAIN') and (not rd.use_game_engine) and (not md.domain_settings.is_openvdb)
+        return md and (md.smoke_type == 'DOMAIN') and (not rd.use_game_engine) and (not md.domain_settings.use_volume_file)
 
     def draw(self, context):
         domain = context.smoke.domain_settings

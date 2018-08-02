@@ -378,15 +378,18 @@ static void create_mesh_volume_attributes(Scene *scene,
 	string filename;
 	void *builtin_data;
 
-	if(b_domain.is_openvdb()) {
-		if(!scene->params.intialized_openvdb) {
+	if(b_domain.use_volume_file()) {
+		BL::ID b_id = b_ob.data();
+		filename = blender_absolute_path(b_data, b_id,
+		                                 b_domain.volume_filepath());
+
+		if(string_endswith(filename, ".vdb") &&
+		   !scene->params.intialized_openvdb)
+		{
 			openvdb_initialize();
 			scene->params.intialized_openvdb = true;
 		}
 
-		BL::ID b_id = b_ob.data();
-		filename = blender_absolute_path(b_data, b_id,
-		                                 b_domain.openvdb_filepath());
 		builtin_data = NULL;
 	}
 	else {

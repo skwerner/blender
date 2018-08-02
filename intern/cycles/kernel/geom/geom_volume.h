@@ -55,6 +55,7 @@ ccl_device_inline float3 volume_get_position(KernelGlobals *kg,
 {
 	float3 P = volume_normalized_position(kg, sd, sd->P);
 
+#ifdef __OBJECT_MOTION__
 	/* Eulerian motion blur. */
 	if(kernel_data.cam.shuttertime != -1.0f) {
 		AttributeDescriptor v_desc = find_attribute(kg, sd, ATTR_STD_VOLUME_VELOCITY);
@@ -73,6 +74,7 @@ ccl_device_inline float3 volume_get_position(KernelGlobals *kg,
 			P = volume_normalized_position(kg, sd, sd->P + velocity * sd->time);
 		}
 	}
+#endif
 
 	return P;
 }

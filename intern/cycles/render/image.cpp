@@ -275,14 +275,14 @@ string ImageManager::name_from_type(int type)
 		return "byte4";
 }
 
-string ImageManager::name_from_grid_type(int type)
+static string name_from_grid_type(int type)
 {
 	if(type == IMAGE_GRID_TYPE_SPARSE)
 		return "sparse";
 	else if(type == IMAGE_GRID_TYPE_OPENVDB)
 		return "OpenVDB";
 	else
-		return "default";
+		return "dense";
 }
 
 static bool image_equals(ImageManager::Image *image,

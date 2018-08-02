@@ -440,22 +440,22 @@ static void rna_Smoke_use_color_ramp_set(PointerRNA *ptr, int value)
 	}
 }
 
-static void rna_SmokeDomain_openvdb_filepath_get(PointerRNA *ptr, char *value)
+static void rna_SmokeDomain_volume_filepath_get(PointerRNA *ptr, char *value)
 {
 	SmokeDomainSettings *sds = (SmokeDomainSettings *)ptr->data;
-	BLI_strncpy(value, sds->openvdb_filepath, sizeof(sds->openvdb_filepath));
+	BLI_strncpy(value, sds->volume_filepath, sizeof(sds->volume_filepath));
 }
 
-static int rna_SmokeDomain_openvdb_filepath_length(PointerRNA *ptr)
+static int rna_SmokeDomain_volume_filepath_length(PointerRNA *ptr)
 {
 	SmokeDomainSettings *sds = (SmokeDomainSettings *)ptr->data;
-	return strlen(sds->openvdb_filepath);
+	return strlen(sds->volume_filepath);
 }
 
-static void rna_SmokeDomain_openvdb_filepath_set(PointerRNA *ptr, const char *value)
+static void rna_SmokeDomain_volume_filepath_set(PointerRNA *ptr, const char *value)
 {
 	SmokeDomainSettings *sds = (SmokeDomainSettings *)ptr->data;
-	BLI_strncpy(sds->openvdb_filepath, value, sizeof(sds->openvdb_filepath));
+	BLI_strncpy(sds->volume_filepath, value, sizeof(sds->volume_filepath));
 }
 #else
 
@@ -932,16 +932,16 @@ static void rna_def_smoke_domain_settings(BlenderRNA *brna)
 	                         "Value under which voxels are considered empty space to optimize caching or rendering");
 	RNA_def_property_update(prop, NC_OBJECT | ND_MODIFIER, NULL);
 
-	/* OpenVDB */
+	/* Volume File Import */
 
-	prop = RNA_def_property(srna, "is_openvdb", PROP_BOOLEAN, PROP_NONE);
-	RNA_def_property_boolean_sdna(prop, NULL, "flags", MOD_SMOKE_OPENVDB_EXTERN);
-	RNA_def_property_ui_text(prop, "OpenVDB Import", "Set domain for external OpenVDB smoke files");
+	prop = RNA_def_property(srna, "use_volume_file", PROP_BOOLEAN, PROP_NONE);
+	RNA_def_property_boolean_sdna(prop, NULL, "flags", MOD_SMOKE_FILE_LOAD);
+	RNA_def_property_ui_text(prop, "Volume Import", "Use external volume file");
 	RNA_def_property_update(prop, NC_OBJECT | ND_MODIFIER, "rna_Smoke_reset");
 
-	prop = RNA_def_property(srna, "openvdb_filepath", PROP_STRING, PROP_FILEPATH);
-	RNA_def_property_string_funcs(prop, "rna_SmokeDomain_openvdb_filepath_get", "rna_SmokeDomain_openvdb_filepath_length", "rna_SmokeDomain_openvdb_filepath_set");
-	RNA_def_property_ui_text(prop, "OpenVDB File Path", "Path to the .vdb file");
+	prop = RNA_def_property(srna, "volume_filepath", PROP_STRING, PROP_FILEPATH);
+	RNA_def_property_string_funcs(prop, "rna_SmokeDomain_volume_filepath_get", "rna_SmokeDomain_volume_filepath_length", "rna_SmokeDomain_volume_filepath_set");
+	RNA_def_property_ui_text(prop, "Volume File Path", "Path to external volume file");
 	RNA_def_property_update(prop, NC_OBJECT | ND_MODIFIER, "rna_Smoke_reset");
 }
 

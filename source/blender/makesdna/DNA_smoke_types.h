@@ -43,7 +43,6 @@ enum {
 #endif
 	MOD_SMOKE_FILE_LOAD = (1 << 6),  /* flag for file load */
 	MOD_SMOKE_ADAPTIVE_DOMAIN = (1 << 7),
-	MOD_SMOKE_OPENVDB_EXTERN = (1 << 8),
 };
 
 /* noise */
@@ -222,7 +221,7 @@ typedef struct SmokeDomainSettings {
 	float clipping;
 	float pad3;
 
-	char openvdb_filepath[1024];
+	char volume_filepath[1024];
 } SmokeDomainSettings;
 
 

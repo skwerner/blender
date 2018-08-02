@@ -61,10 +61,10 @@ static int wm_openvdb_import_exec(bContext *C, wmOperator *op)
 	smd->type = MOD_SMOKE_TYPE_DOMAIN;
 	smokeModifier_createType(smd);
 
-	smd->domain->flags |= MOD_SMOKE_OPENVDB_EXTERN;
+	smd->domain->flags |= MOD_SMOKE_FILE_LOAD;
 	smd->domain->flags |= MOD_SMOKE_ADAPTIVE_DOMAIN;
 	smd->domain->cache_file_format = PTCACHE_FILE_OPENVDB_EXTERN;
-	BLI_strncpy(smd->domain->openvdb_filepath, filepath, sizeof(filepath));
+	BLI_strncpy(smd->domain->volume_filepath, filepath, sizeof(filepath));
 
 	return OPERATOR_FINISHED;
 }
@@ -80,7 +80,7 @@ void WM_OT_openvdb_import(wmOperatorType *ot)
 	ot->poll = WM_operator_winactive;
 	ot->ui = wm_openvdb_import_draw;
 
-	WM_operator_properties_filesel(ot, FILE_TYPE_FOLDER | FILE_TYPE_OPENVDB,
+	WM_operator_properties_filesel(ot, FILE_TYPE_FOLDER | FILE_TYPE_VOLUME,
 	                               FILE_BLENDER, FILE_OPENFILE, WM_FILESEL_FILEPATH,
 	                               FILE_DEFAULTDISPLAY, FILE_SORT_ALPHA);
 }

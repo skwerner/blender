@@ -417,27 +417,25 @@ public:
 			info.cl_buffer = 0;
 			info.interpolation = mem.interpolation;
 			info.extension = mem.extension;
-			info.grid_type = mem.grid_type;
 			info.width = mem.real_width;
 			info.height = mem.real_height;
 			info.depth = mem.real_depth;
 
-			switch(mem.grid_type) {
-				case IMAGE_GRID_TYPE_SPARSE:
-					info.util = (uint64_t)sparse_mem->host_pointer;
-					info.tiled_width = get_tile_res(info.width);
-					info.tiled_height = get_tile_res(info.height);
-					info.even_width = info.width - (info.width % TILE_SIZE);
-					info.even_height = info.height - (info.height % TILE_SIZE);
-					info.last_tile_dim = 0;
-					info.last_tile_dim |= ((info.width % TILE_SIZE) << LAST_TILE_WIDTH_MASK);
-					info.last_tile_dim |= ((info.height % TILE_SIZE) << LAST_TILE_HEIGHT_MASK);
-					break;
-				case IMAGE_GRID_TYPE_OPENVDB:
-				case IMAGE_GRID_TYPE_DEFAULT:
-				default:
-					info.util = 0;
+			SparseTextureInfo sparse_info;
+			if(mem.grid_type == IMAGE_GRID_TYPE_SPARSE) {
+				sparse_info.offsets = (uint64_t)sparse_mem->host_pointer;
+				sparse_info.tiled_w = get_tile_res(info.width);
+				sparse_info.tiled_h = get_tile_res(info.height);
+				sparse_info.remain_w = info.width % TILE_SIZE;
+				sparse_info.remain_h = info.height % TILE_SIZE;
+				sparse_info.div_w = info.width - sparse_info.remain_w;
+				sparse_info.div_h = info.height - sparse_info.remain_h;
 			}
+			else {
+				sparse_info.offsets = 0;
+			}
+			info.sparse_info = sparse_info;
+
 			need_texture_info = true;
 		}
 

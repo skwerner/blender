@@ -81,29 +81,30 @@ typedef enum ExtensionType {
 	EXTENSION_NUM_TYPES,
 } ExtensionType;
 
+typedef struct SparseTextureInfo {
+	/* Tile offsets for sparse volumes. */
+	uint64_t offsets;
+	/* Dim / TILE_SIZE */
+	uint tiled_w, tiled_h;
+	/* Dim % TILE_SIZE */
+	uint remain_w, remain_h;
+	/* Dim - (Dim % TILE_SIZE) */
+	uint div_w, div_h;
+} SparseTextureInfo;
+
 typedef struct TextureInfo {
 	/* Pointer, offset or texture depending on device. */
 	uint64_t data;
-	/* References the offsets for tiles in sparse volumes. */
-	uint64_t util;
 	/* Buffer number for OpenCL. */
 	uint cl_buffer;
 	/* Interpolation, extension, and grid type. */
-	uint interpolation, extension, grid_type;
+	uint interpolation, extension;
 	/* Dimensions. */
 	uint width, height, depth;
-	/* Dimension info for sparse grid index calculations. */
-	uint tiled_width, tiled_height, even_width, even_height, last_tile_dim;
+	SparseTextureInfo sparse_info;
 } TextureInfo;
 
 #define TILE_SIZE 8
-
-/* Since tile dimensions are <= TILE_SIZE, only need a small number of bits per
- * dimension to store the last tile's dimensions. */
-#define LAST_TILE_WIDTH_SHIFT 3
-#define LAST_TILE_HEIGHT_SHIFT 6
-#define LAST_TILE_WIDTH_MASK 0x7
-#define LAST_TILE_HEIGHT_MASK 0x56
 
 CCL_NAMESPACE_END
 

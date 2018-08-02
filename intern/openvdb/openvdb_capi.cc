@@ -134,31 +134,36 @@ OpenVDBVectorGrid *OpenVDB_export_grid_vec(struct OpenVDBWriter *writer,
 
 void OpenVDB_import_grid_fl(
         OpenVDBReader *reader,
-        const char *name, float **data,
-        const int res[3])
+        const char *name, float *data,
+        const int res[3], const int min_bound[3])
 {
 	Timer(__func__);
 
-	internal::OpenVDB_import_grid<openvdb::FloatGrid>(reader, name, data, res);
+	internal::OpenVDB_import_grid<openvdb::FloatGrid, float, float>(
+	            reader, name, NULL, &data, res, min_bound, 1, false);
 }
 
 void OpenVDB_import_grid_ch(
         OpenVDBReader *reader,
-        const char *name, unsigned char **data,
-        const int res[3])
+        const char *name, unsigned char *data,
+        const int res[3], const int min_bound[3])
 {
-	internal::OpenVDB_import_grid<openvdb::Int32Grid>(reader, name, data, res);
+	internal::OpenVDB_import_grid<openvdb::Int32Grid, int, unsigned char>(
+	            reader, name, NULL, &data, res, min_bound, 1, false);
 }
 
 void OpenVDB_import_grid_vec(
         struct OpenVDBReader *reader,
         const char *name,
-        float **data_x, float **data_y, float **data_z,
-        const int res[3])
+        float *data_x, float *data_y, float *data_z,
+        const int res[3], const int min_bound[3])
 {
 	Timer(__func__);
 
-	internal::OpenVDB_import_grid_vector(reader, name, data_x, data_y, data_z, res);
+	float *data[3] = {data_x, data_y, data_z};
+
+	internal::OpenVDB_import_grid<openvdb::Vec3SGrid, openvdb::math::Vec3s, float>(
+	            reader, name, NULL, data, res, min_bound, 3, false);
 }
 
 OpenVDBWriter *OpenVDBWriter_create()

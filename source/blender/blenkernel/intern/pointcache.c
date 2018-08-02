@@ -1104,32 +1104,32 @@ static int ptcache_smoke_openvdb_read(struct OpenVDBReader *reader, void *smoke_
 
 		OpenVDBReader_get_meta_fl(reader, "blender/smoke/dt", &dt);
 
-		OpenVDB_import_grid_fl(reader, "shadow", &sds->shadow, sds->res);
+		OpenVDB_import_grid_fl(reader, "shadow", sds->shadow, sds->res, sds->res_min);
 
 		const char *name = (!sds->wt) ? "density" : "density_low";
-		OpenVDB_import_grid_fl(reader, name, &dens, sds->res);
+		OpenVDB_import_grid_fl(reader, name, dens, sds->res, sds->res_min);
 
 		if (cache_fields & SM_ACTIVE_HEAT) {
-			OpenVDB_import_grid_fl(reader, "heat", &heat, sds->res);
-			OpenVDB_import_grid_fl(reader, "heat_old", &heatold, sds->res);
+			OpenVDB_import_grid_fl(reader, "heat", heat, sds->res, sds->res_min);
+			OpenVDB_import_grid_fl(reader, "heat_old", heatold, sds->res, sds->res_min);
 		}
 
 		if (cache_fields & SM_ACTIVE_FIRE) {
 			name = (!sds->wt) ? "flame" : "flame_low";
-			OpenVDB_import_grid_fl(reader, name, &flame, sds->res);
+			OpenVDB_import_grid_fl(reader, name, flame, sds->res, sds->res_min);
 			name = (!sds->wt) ? "fuel" : "fuel_low";
-			OpenVDB_import_grid_fl(reader, name, &fuel, sds->res);
+			OpenVDB_import_grid_fl(reader, name, fuel, sds->res, sds->res_min);
 			name = (!sds->wt) ? "react" : "react_low";
-			OpenVDB_import_grid_fl(reader, name, &react, sds->res);
+			OpenVDB_import_grid_fl(reader, name, react, sds->res, sds->res_min);
 		}
 
 		if (cache_fields & SM_ACTIVE_COLORS) {
 			name = (!sds->wt) ? "color" : "color_low";
-			OpenVDB_import_grid_vec(reader, name, &r, &g, &b, sds->res);
+			OpenVDB_import_grid_vec(reader, name, r, g, b, sds->res, sds->res_min);
 		}
 
-		OpenVDB_import_grid_vec(reader, "velocity", &vx, &vy, &vz, sds->res);
-		OpenVDB_import_grid_ch(reader, "obstacles", &obstacles, sds->res);
+		OpenVDB_import_grid_vec(reader, "velocity", vx, vy, vz, sds->res, sds->res_min);
+		OpenVDB_import_grid_ch(reader, "obstacles", obstacles, sds->res, sds->res_min);
 	}
 
 	if (sds->wt) {
@@ -1137,19 +1137,19 @@ static int ptcache_smoke_openvdb_read(struct OpenVDBReader *reader, void *smoke_
 
 		smoke_turbulence_export(sds->wt, &dens, &react, &flame, &fuel, &r, &g, &b, &tcu, &tcv, &tcw);
 
-		OpenVDB_import_grid_fl(reader, "density", &dens, sds->res_wt);
+		OpenVDB_import_grid_fl(reader, "density", dens, sds->res_wt, sds->res_min);
 
 		if (cache_fields & SM_ACTIVE_FIRE) {
-			OpenVDB_import_grid_fl(reader, "flame", &flame, sds->res_wt);
-			OpenVDB_import_grid_fl(reader, "fuel", &fuel, sds->res_wt);
-			OpenVDB_import_grid_fl(reader, "react", &react, sds->res_wt);
+			OpenVDB_import_grid_fl(reader, "flame", flame, sds->res_wt, sds->res_min);
+			OpenVDB_import_grid_fl(reader, "fuel", fuel, sds->res_wt, sds->res_min);
+			OpenVDB_import_grid_fl(reader, "react", react, sds->res_wt, sds->res_min);
 		}
 
 		if (cache_fields & SM_ACTIVE_COLORS) {
-			OpenVDB_import_grid_vec(reader, "color", &r, &g, &b, sds->res_wt);
+			OpenVDB_import_grid_vec(reader, "color", r, g, b, sds->res_wt, sds->res_min);
 		}
 
-		OpenVDB_import_grid_vec(reader, "texture coordinates", &tcu, &tcv, &tcw, sds->res);
+		OpenVDB_import_grid_vec(reader, "texture coordinates", tcu, tcv, tcw, sds->res, sds->res_min);
 	}
 
 	OpenVDBReader_free(reader);
@@ -1225,22 +1225,22 @@ static int ptcache_smoke_openvdb_extern_read(struct OpenVDBReader *reader, void 
 		             &heatold, &vx, &vy, &vz, &r, &g, &b, &obstacles);
 
 		if (OpenVDBReader_has_smoke_grid(reader, VDB_SMOKE_DENSITY)) {
-			OpenVDB_import_grid_fl(reader, vdb_grid_name(VDB_SMOKE_DENSITY), &dens, sds->res);
+			OpenVDB_import_grid_fl(reader, vdb_grid_name(VDB_SMOKE_DENSITY), dens, sds->res, sds->res_min);
 		}
 		if(OpenVDBReader_has_smoke_grid(reader, VDB_SMOKE_HEAT)) {
-			OpenVDB_import_grid_fl(reader, vdb_grid_name(VDB_SMOKE_HEAT), &heat, sds->res);
+			OpenVDB_import_grid_fl(reader, vdb_grid_name(VDB_SMOKE_HEAT), heat, sds->res, sds->res_min);
 		}
 	    else if(OpenVDBReader_has_smoke_grid(reader, VDB_SMOKE_TEMPERATURE)) {
-			OpenVDB_import_grid_fl(reader, vdb_grid_name(VDB_SMOKE_TEMPERATURE), &heat, sds->res);
+			OpenVDB_import_grid_fl(reader, vdb_grid_name(VDB_SMOKE_TEMPERATURE), heat, sds->res, sds->res_min);
 		}
 		if (cache_fields & SM_ACTIVE_FIRE) {
-			OpenVDB_import_grid_fl(reader, vdb_grid_name(VDB_SMOKE_FLAME), &flame, sds->res);
+			OpenVDB_import_grid_fl(reader, vdb_grid_name(VDB_SMOKE_FLAME), flame, sds->res, sds->res_min);
 		}
 		if (cache_fields & SM_ACTIVE_COLORS) {
-			OpenVDB_import_grid_vec(reader, vdb_grid_name(VDB_SMOKE_COLOR), &r, &g, &b, sds->res);
+			OpenVDB_import_grid_vec(reader, vdb_grid_name(VDB_SMOKE_COLOR), r, g, b, sds->res, sds->res_min);
 		}
 		if (OpenVDBReader_has_smoke_grid(reader, VDB_SMOKE_VELOCITY)) {
-			OpenVDB_import_grid_vec(reader, vdb_grid_name(VDB_SMOKE_VELOCITY), &vx, &vy, &vz, sds->res);
+			OpenVDB_import_grid_vec(reader, vdb_grid_name(VDB_SMOKE_VELOCITY), vx, vy, vz, sds->res, sds->res_min);
 		}
 	}
 

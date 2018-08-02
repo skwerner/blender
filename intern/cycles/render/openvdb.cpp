@@ -1,9 +1,12 @@
 
 #include <openvdb/openvdb.h>
 #include <openvdb/tools/GridTransformer.h>
-#include "intern/openvdb_reader.h"
-#include "openvdb_capi.h"
+
 #include "render/openvdb.h"
+
+#include "intern/openvdb_reader.h"
+#include "intern/openvdb_dense_convert.h"
+#include "openvdb_capi.h"
 
 #include "util/util_logging.h"
 #include "util/util_path.h"
@@ -24,23 +27,10 @@ static bool operator >=(const openvdb::math::Vec3s &a, const float &b)
 	return a.x() >= b || a.y() >= b || a.z() >= b;
 }
 
-static void copy(float *des, const openvdb::math::Vec3s *src)
-{
-	*(des + 0) = src->x();
-	*(des + 1) = src->y();
-	*(des + 2) = src->z();
-	*(des + 3) = 1.0f;
-}
-
-static void copy(float *des, const float *src)
-{
-	*des = *src;
-}
-
-static const int tile_index(openvdb::math::Coord start, int3 tiled_res)
+static const int tile_index(openvdb::math::Coord start, const int tiled_res[3])
 {
 	return compute_index(start.x() / TILE_SIZE, start.y() / TILE_SIZE,
-	                     start.z() / TILE_SIZE, tiled_res.x, tiled_res.y);
+	                     start.z() / TILE_SIZE, tiled_res[0], tiled_res[1]);
 }
 
 /* Simple range shift for grids with non-zero background values. May have
@@ -48,24 +38,19 @@ static const int tile_index(openvdb::math::Coord start, int3 tiled_res)
 static void shift_range(openvdb::Vec3SGrid::Ptr grid)
 {
 	using namespace openvdb;
-
-	const math::Vec3s z(0.0f, 0.0f, 0.0f);
 	const math::Vec3s background_value = grid->background();
-
-	if(background_value != z) {
+	if(background_value != math::Vec3s(0.0f, 0.0f, 0.0f)) {
 		for (Vec3SGrid::ValueOnIter iter = grid->beginValueOn(); iter; ++iter) {
 		    iter.setValue(iter.getValue() - background_value);
 		}
-		tools::changeBackground(grid->tree(), z);
+		tools::changeBackground(grid->tree(), math::Vec3s(0.0f, 0.0f, 0.0f));
 	}
 }
 
 static void shift_range(openvdb::FloatGrid::Ptr grid)
 {
 	using namespace openvdb;
-
 	const float background_value = grid->background();
-
 	if(background_value != 0.0f) {
 		for (FloatGrid::ValueOnIter iter = grid->beginValueOn(); iter; ++iter) {
 		    iter.setValue(iter.getValue() - background_value);
@@ -78,8 +63,8 @@ template<typename GridType>
 static bool get_grid(const string& filepath,
                      const string& grid_name,
                      typename GridType::Ptr& grid,
-                     int3 *resolution,
-                     openvdb::math::Coord *minimum_bound)
+                     int resolution[3],
+                     int min_bound[3])
 {
 	using namespace openvdb;
 
@@ -115,15 +100,8 @@ static bool get_grid(const string& filepath,
 	 * voxels below background value. */
 	shift_range(grid);
 
-	int min_bound[3], res[3];
-	OpenVDBReader_get_bounds(reader, min_bound, NULL, res, NULL, NULL, NULL);
-
-	if(resolution) {
-		*resolution = make_int3(res[0], res[1], res[2]);
-	}
-	if(minimum_bound) {
-		*minimum_bound = math::Coord(min_bound[0], min_bound[1], min_bound[2]);
-	}
+	/* Retrieve bound data. */
+	OpenVDBReader_get_bounds(reader, min_bound, NULL, resolution, NULL, NULL, NULL);
 
 	OpenVDBReader_free(reader);
 	return true;
@@ -159,12 +137,12 @@ int3 openvdb_get_resolution(const string& filepath)
 	return make_int3(res[0], res[1], res[2]);
 }
 
-/* For now, since there is no official OpenVDB interpolation implementations
+/* For now, since there is no official OpenVDB accessor implementations
  * for CUDA or OpenCL, OpenVDB grids can only be saved for CPU rendering.
  * Otherwise, we convert the OpenVDB grids to arrays. */
 
 /* Direct load external OpenVDB grid to device.
- * Thread must be locked before file_load_openvdb_cpu() is called. */
+ * Thread must be locked before openvdb_load_device_*() is called. */
 template<typename GridType>
 static device_memory *openvdb_load_device_extern(Device *device,
                                                  const string& filepath,
@@ -177,23 +155,19 @@ static device_memory *openvdb_load_device_extern(Device *device,
 
 	typename GridType::Ptr grid = GridType::create();
 	typename GridType::Ptr orig_grid = GridType::create();
-	int3 resolution;
-	math::Coord min_bound;
+	int res[3], min_bound[3];
 
-	if(!get_grid<GridType>(filepath, grid_name, orig_grid, &resolution, &min_bound)) {
+	if(!get_grid<GridType>(filepath, grid_name, orig_grid, res, min_bound)) {
 		return NULL;
 	}
 
-	/* In order to keep sampling uniform, we expect a volume's bound to begin at
-	 * (0, 0, 0) in object space. External VDBs may have a non-zero origin, so
-	 * all voxels must be translated. This process may be memory inefficient. */
-
-	if(min_bound.x() == 0 && min_bound.y() == 0 && min_bound.z() == 0) {
+	if(min_bound[0] == 0 && min_bound[1] == 0 && min_bound[2] == 0) {
 		grid = orig_grid;
 	}
 	else {
+		/* Create translate grid that begins at (0, 0, 0). */
 		math::Mat4d xform = math::Mat4d::identity();
-		math::Vec3d translation(-min_bound.x(), -min_bound.y(), -min_bound.z());
+		math::Vec3d translation(-min_bound[0], -min_bound[1], -min_bound[1]);
 		xform.setTranslation(translation);
 		tools::GridTransformer transformer(xform);
 		transformer.transformGrid<tools::PointSampler, GridType>(*orig_grid, *grid);
@@ -203,7 +177,8 @@ static device_memory *openvdb_load_device_extern(Device *device,
 
 	device_openvdb<GridType> *tex_img =
 			new device_openvdb<GridType>(device, mem_name.c_str(), MEM_TEXTURE,
-	                                     grid, accessor, resolution);
+	                                     grid, accessor,
+	                                     make_int3(res[0], res[1], res[2]));
 
 	tex_img->interpolation = interpolation;
 	tex_img->extension = extension;
@@ -245,23 +220,23 @@ static void openvdb_load_preprocess(const string& filepath,
 	using namespace openvdb;
 
 	typename GridType::Ptr grid = GridType::create();
-	int3 resolution;
-	math::Coord min_bound;
+	int res[3], min_bound[3];
 
-	if(!get_grid<GridType>(filepath, grid_name, grid, &resolution, &min_bound) ||
+	if(!get_grid<GridType>(filepath, grid_name, grid, res, min_bound) ||
 	   !(channels == 4 || channels == 1))
 	{
 		return;
 	}
 
-	const int3 tiled_res = make_int3(get_tile_res(resolution.x),
-	                                 get_tile_res(resolution.y),
-	                                 get_tile_res(resolution.z));
-	const int3 last_tile = make_int3(resolution.x % TILE_SIZE,
-	                                 resolution.y % TILE_SIZE,
-	                                 resolution.z % TILE_SIZE);
-	const int tile_count = tiled_res.x * tiled_res.y * tiled_res.z;
+	const int tiled_res[3] = {get_tile_res(res[0]),
+	                          get_tile_res(res[1]),
+	                          get_tile_res(res[2])};
+	const int remainder[3] = {res[0] % TILE_SIZE,
+	                          res[1] % TILE_SIZE,
+	                          res[2] % TILE_SIZE};
+	const int tile_count = tiled_res[0] * tiled_res[1] * tiled_res[2];
 	const int tile_pix_count = TILE_SIZE * TILE_SIZE * TILE_SIZE * channels;
+	const math::Coord min(min_bound[0], min_bound[1], min_bound[2]);
 
 	sparse_index->resize(tile_count, -1); /* 0 if active, -1 if inactive. */
 	int voxel_count = 0;
@@ -269,18 +244,18 @@ static void openvdb_load_preprocess(const string& filepath,
 	for (typename GridType::TreeType::LeafCIter iter = grid->tree().cbeginLeaf(); iter; ++iter) {
 		const typename GridType::TreeType::LeafNodeType *leaf = iter.getLeaf();
 		const T *data = leaf->buffer().data();
-		const math::Coord start = leaf->getNodeBoundingBox().getStart() - min_bound;
+		const math::Coord start = leaf->getNodeBoundingBox().getStart() - min;
 
 		for(int i = 0; i < tile_pix_count; ++i) {
 			if(data[i] >= threshold) {
 				sparse_index->at(tile_index(start, tiled_res)) = 0;
 
 				/* Calculate how many voxels are in this tile. */
-				int tile_width = (start.x() + TILE_SIZE > resolution.x) ? last_tile.x : TILE_SIZE;
-				int tile_height = (start.y() + TILE_SIZE > resolution.y) ? last_tile.y : TILE_SIZE;
-				int tile_depth = (start.z() + TILE_SIZE > resolution.z) ? last_tile.z : TILE_SIZE;
-				voxel_count += tile_width * tile_height * tile_depth;
+				const int tile_width = (start.x() + TILE_SIZE > res[0]) ? remainder[0] : TILE_SIZE;
+				const int tile_height = (start.y() + TILE_SIZE > res[1]) ? remainder[1] : TILE_SIZE;
+				const int tile_depth = (start.z() + TILE_SIZE > res[2]) ? remainder[2] : TILE_SIZE;
 
+				voxel_count += tile_width * tile_height * tile_depth;
 				break;
 			}
 		}
@@ -288,7 +263,7 @@ static void openvdb_load_preprocess(const string& filepath,
 
 	/* Check memory savings. */
 	const int sparse_mem_use = tile_count * sizeof(int) + voxel_count * channels * sizeof(float);
-	const int dense_mem_use = resolution.x * resolution.y * resolution.z * channels * sizeof(float);
+	const int dense_mem_use = res[0] * res[1] * res[2] * channels * sizeof(float);
 
 	if(sparse_mem_use < dense_mem_use) {
 		VLOG(1) << "Memory of " << grid_name << " decreased from "
@@ -323,21 +298,19 @@ void openvdb_load_preprocess(const string& filepath,
 	}
 }
 
-
 template<typename GridType, typename T>
 static void openvdb_load_image(const string& filepath,
                                const string& grid_name,
                                const int channels,
-                               float *image,
+                               float *data,
                                vector<int> *sparse_index)
 {
 	using namespace openvdb;
 
 	typename GridType::Ptr grid = GridType::create();
-	int3 resolution;
-	math::Coord min_bound;
+	int res[3], min_bound[3];
 
-	if(!get_grid<GridType>(filepath, grid_name, grid, &resolution, &min_bound) ||
+	if(!get_grid<GridType>(filepath, grid_name, grid, res, min_bound) ||
 	   !(channels == 4 || channels == 1))
 	{
 		return;
@@ -352,40 +325,39 @@ static void openvdb_load_image(const string& filepath,
 
 	if(make_sparse) {
 		/* Load VDB as sparse image. */
-		const int3 tiled_res = make_int3(get_tile_res(resolution.x),
-		                                 get_tile_res(resolution.y),
-		                                 get_tile_res(resolution.z));
-		const int3 last_tile = make_int3(resolution.x % TILE_SIZE,
-		                                 resolution.y % TILE_SIZE,
-		                                 resolution.z % TILE_SIZE);
+		const int tiled_res[3] = {get_tile_res(res[0]),
+		                          get_tile_res(res[1]),
+		                          get_tile_res(res[2])};
+		const int remainder[3] = {res[0] % TILE_SIZE,
+		                          res[1] % TILE_SIZE,
+		                          res[2] % TILE_SIZE};
+		const math::Coord min(min_bound[0], min_bound[1], min_bound[2]);
 		int start_index = 0;
 
 		for (typename GridType::TreeType::LeafCIter iter = grid->tree().cbeginLeaf(); iter; ++iter) {
 			const typename GridType::TreeType::LeafNodeType *leaf = iter.getLeaf();
 
-			const math::Coord start = leaf->getNodeBoundingBox().getStart() - min_bound;
+			const math::Coord start = leaf->getNodeBoundingBox().getStart() - min;
 			int tile = tile_index(start, tiled_res);
 			if(sparse_index->at(tile) == -1) {
 				continue;
 			}
 			sparse_index->at(tile) = start_index / channels;
 
+			const T *leaf_tile = leaf->buffer().data();
+			float *data_tile = data + start_index;
 
-			const T *vdb_tile = leaf->buffer().data();
-			float *arr_tile = image + start_index;
+			const int tile_width = (start.x() + TILE_SIZE > res[0]) ? remainder[0] : TILE_SIZE;
+			const int tile_height = (start.y() + TILE_SIZE > res[1]) ? remainder[1] : TILE_SIZE;
+			const int tile_depth = (start.z() + TILE_SIZE > res[2]) ? remainder[2] : TILE_SIZE;
 
-
-			const int tile_width = (start.x() + TILE_SIZE > resolution.x) ? last_tile.x : TILE_SIZE;
-			const int tile_height = (start.y() + TILE_SIZE > resolution.y) ? last_tile.y : TILE_SIZE;
-			const int tile_depth = (start.z() + TILE_SIZE > resolution.z) ? last_tile.z : TILE_SIZE;
-
-			/* Index computation by coordinates is reversed in VDB grids. */
 			for(int k = 0; k < tile_depth; ++k) {
 				for(int j = 0; j < tile_height; ++j) {
 					for(int i = 0; i < tile_width; ++i) {
-						int arr_index = compute_index(i, j, k, tile_width, tile_height);
-						int vdb_index = compute_index(k, j, i, TILE_SIZE, TILE_SIZE);
-						copy(arr_tile + arr_index, vdb_tile + vdb_index);
+						int data_index = compute_index(i, j, k, tile_width, tile_height);
+						/* Index computation by coordinates is reversed in VDB grids. */
+						int leaf_index = compute_index(k, j, i, TILE_SIZE, TILE_SIZE);
+						internal::copy(data_tile + data_index, leaf_tile + leaf_index);
 					}
 				}
 			}
@@ -395,25 +367,8 @@ static void openvdb_load_image(const string& filepath,
 	}
 	else {
 		/* Load VDB as dense image. */
-		for (typename GridType::TreeType::LeafCIter iter = grid->tree().cbeginLeaf(); iter; ++iter) {
-			const typename GridType::TreeType::LeafNodeType *leaf = iter.getLeaf();
-			const T *vdb_tile = leaf->buffer().data();
-			const math::Coord start = leaf->getNodeBoundingBox().getStart() - min_bound;
-
-			for (int k = 0; k < TILE_SIZE; ++k) {
-				for (int j = 0; j < TILE_SIZE; ++j) {
-					for (int i = 0; i < TILE_SIZE; ++i) {
-						int arr_index = compute_index(start.x() + i,
-													  start.y() + j,
-													  start.z() + k,
-													  resolution.x,
-													  resolution.y);
-						int vdb_index = compute_index(k, j, i, TILE_SIZE, TILE_SIZE);
-						copy(image + arr_index, vdb_tile + vdb_index);
-					}
-				}
-			}
-		}
+		internal::OpenVDB_import_grid<GridType, T, float>(
+		            NULL, NULL, &grid, &data, res, min_bound, channels, true);
 	}
 }
 
@@ -433,7 +388,8 @@ void openvdb_load_image(const string& filepath,
 	}
 }
 
-/* Convert internal volume data to OpenVDB grid, then load grid to device. */
+/* Convert internal volume data to OpenVDB grid, then load grid to device.
+ * Thread must be locked before openvdb_load_device_*() is called. */
 static device_memory *openvdb_load_device_intern_vec(Device *device,
                                                      const float *data,
                                                      const int3 resolution,
@@ -446,8 +402,7 @@ static device_memory *openvdb_load_device_intern_vec(Device *device,
 	Vec3SGrid::Ptr grid = Vec3SGrid::create();
 	Vec3SGrid::Accessor accessor = grid->getAccessor();
 
-	const math::Vec3s zero_vec(0.0f, 0.0f, 0.0f);
-	tools::changeBackground(grid->tree(), zero_vec);
+	tools::changeBackground(grid->tree(), math::Vec3s(0.0f, 0.0f, 0.0f));
 
 	openvdb::math::Coord xyz;
 	int &x = xyz[0], &y = xyz[1], &z = xyz[2];
@@ -533,8 +488,7 @@ device_memory *openvdb_load_device_intern(Device *device,
 }
 
 /* Volume Mesh Builder functions. */
-
-template<typename GridType>
+template<typename GridType, typename T>
 static void openvdb_build_mesh(VolumeMeshBuilder *builder,
                                void *v_grid,
                                const float threshold)
@@ -545,7 +499,7 @@ static void openvdb_build_mesh(VolumeMeshBuilder *builder,
 
 	for (typename GridType::TreeType::LeafCIter iter = grid->tree().cbeginLeaf(); iter; ++iter) {
 		const typename GridType::TreeType::LeafNodeType *leaf = iter.getLeaf();
-		const float *data = (float*)leaf->buffer().data();
+		const T *data = leaf->buffer().data();
 		const math::Coord start = leaf->getNodeBoundingBox().getStart();
 
 		for (int k = 0; k < TILE_SIZE; ++k) {
@@ -569,10 +523,10 @@ void openvdb_build_mesh(VolumeMeshBuilder *builder,
                         const bool is_vec)
 {
 	if(is_vec) {
-		openvdb_build_mesh<openvdb::Vec3SGrid>(builder, v_grid, threshold);
+		openvdb_build_mesh<openvdb::Vec3SGrid, openvdb::math::Vec3s>(builder, v_grid, threshold);
 	}
 	else {
-		openvdb_build_mesh<openvdb::FloatGrid>(builder, v_grid, threshold);
+		openvdb_build_mesh<openvdb::FloatGrid, float>(builder, v_grid, threshold);
 	}
 }
 

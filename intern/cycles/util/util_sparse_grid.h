@@ -71,7 +71,7 @@ const inline int compute_index(const size_t x, const size_t y, const size_t z,
 	return compute_index(x, y, z, resolution.x, resolution.y, resolution.z);
 }
 
-const inline size_t get_tile_res(const size_t res)
+const inline int get_tile_res(const size_t res)
 {
 	return (res / TILE_SIZE) + (res % TILE_SIZE != 0);
 }

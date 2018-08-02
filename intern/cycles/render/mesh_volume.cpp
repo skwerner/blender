@@ -311,8 +311,9 @@ void VolumeMeshBuilder::convert_quads_to_tris(const vector<QuadData> &quads,
 
 struct VoxelAttributeGrid {
 	void *data;
-	int *sparse_index;
+	int *offsets;
 	int channels;
+	int data_width;
 	ImageGridType grid_type;
 };
 
@@ -337,9 +338,9 @@ void MeshManager::create_volume_mesh(Scene *scene,
 
 		VoxelAttribute *voxel = attr.data_voxel();
 		device_memory *image_memory = scene->image_manager->image_memory(voxel->slot);
-		int3 resolution = make_int3(image_memory->real_width,
-		                            image_memory->real_height,
-		                            image_memory->real_depth);
+		int3 resolution = make_int3(image_memory->dense_width,
+		                            image_memory->dense_height,
+		                            image_memory->dense_depth);
 
 		if(volume_params.resolution == make_int3(0, 0, 0)) {
 			/* First volume grid. */
@@ -355,14 +356,17 @@ void MeshManager::create_volume_mesh(Scene *scene,
 
 		voxel_grid.data = image_memory->host_pointer;
 		voxel_grid.channels = image_memory->data_elements;
+		voxel_grid.data_width = image_memory->data_width;
 		voxel_grid.grid_type = image_memory->grid_type;
 
-		if(image_memory->grid_type == IMAGE_GRID_TYPE_SPARSE) {
+		if(image_memory->grid_type == IMAGE_GRID_TYPE_SPARSE ||
+		   image_memory->grid_type == IMAGE_GRID_TYPE_SPARSE_PAD)
+		{
 			device_memory *sparse_mem = (device_memory*)image_memory->grid_info;
-			voxel_grid.sparse_index = static_cast<int*>(sparse_mem->host_pointer);
+			voxel_grid.offsets = static_cast<int*>(sparse_mem->host_pointer);
 		}
 		else {
-			voxel_grid.sparse_index = NULL;
+			voxel_grid.offsets = NULL;
 		}
 
 		voxel_grids.push_back(voxel_grid);
@@ -423,35 +427,32 @@ void MeshManager::create_volume_mesh(Scene *scene,
 	for(size_t i = 0; i < voxel_grids.size(); ++i) {
 		const VoxelAttributeGrid &voxel_grid = voxel_grids[i];
 		const int channels = voxel_grid.channels;
+		const float *data = static_cast<float*>(voxel_grid.data);
 
-		if(voxel_grid.grid_type == IMAGE_GRID_TYPE_SPARSE) {
-			float *data = static_cast<float*>(voxel_grid.data);
-			for(int z = 0; z < resolution.z; ++z) {
-				for(int y = 0; y < resolution.y; ++y) {
-					for(int x = 0; x < resolution.x; ++x) {
-						int voxel_index = compute_index(voxel_grid.sparse_index,
-						                                x, y, z,
-						                                resolution.x,
-						                                resolution.y,
-						                                resolution.z) * channels;
-						if(voxel_index >= 0) {
-							for(int c = 0; c < channels; c++) {
-								if(data[voxel_index + c] >= isovalue) {
-									builder.add_node_with_padding(x, y, z);
-									break;
-								}
-							}
-						}
+		for(int z = 0; z < resolution.z; ++z) {
+			for(int y = 0; y < resolution.y; ++y) {
+				for(int x = 0; x < resolution.x; ++x) {
+					int voxel_index = -1;
+					switch(voxel_grid.grid_type) {
+						case IMAGE_GRID_TYPE_SPARSE:
+							voxel_index = compute_index(voxel_grid.offsets,
+							                            x, y, z, resolution.x,
+							                            resolution.y, resolution.z);
+							break;
+						case IMAGE_GRID_TYPE_SPARSE_PAD:
+							voxel_index = compute_index_pad(voxel_grid.offsets,
+							                                x, y, z, resolution.x,
+							                                resolution.y, resolution.z,
+							                                voxel_grid.data_width);
+							break;
+						case IMAGE_GRID_TYPE_OPENVDB:
+						case IMAGE_GRID_TYPE_DEFAULT:
+						default:
+							voxel_index = compute_index(x, y, z, resolution);
 					}
-				}
-			}
-		}
-		else {
-			float *data = static_cast<float*>(voxel_grid.data);
-			for(int z = 0; z < resolution.z; ++z) {
-				for(int y = 0; y < resolution.y; ++y) {
-					for(int x = 0; x < resolution.x; ++x) {
-						int voxel_index = compute_index(x, y, z, resolution) * channels;
+					voxel_index *= channels;
+
+					if(voxel_index >= 0) {
 						for(int c = 0; c < channels; c++) {
 							if(data[voxel_index + c] >= isovalue) {
 								builder.add_node_with_padding(x, y, z);

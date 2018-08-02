@@ -64,6 +64,7 @@ typedef enum ImageDataType {
 typedef enum ImageGridType {
 	IMAGE_GRID_TYPE_DEFAULT,
 	IMAGE_GRID_TYPE_SPARSE,
+	IMAGE_GRID_TYPE_SPARSE_PAD,
 	IMAGE_GRID_TYPE_OPENVDB,
 } ImageGridType;
 
@@ -81,6 +82,9 @@ typedef enum ExtensionType {
 	EXTENSION_NUM_TYPES,
 } ExtensionType;
 
+/* Sparse Texture Information.
+ *
+ * Data cached to use for converting dense coordinates to sparse. */
 typedef struct SparseTextureInfo {
 	/* Tile offsets for sparse volumes. */
 	uint64_t offsets;
@@ -104,7 +108,10 @@ typedef struct TextureInfo {
 	SparseTextureInfo sparse_info;
 } TextureInfo;
 
+/* Sparse tile size and padding settings. */
 #define TILE_SIZE 8
+#define SPARSE_PAD 1
+#define PADDED_TILE (TILE_SIZE + SPARSE_PAD * 2)
 
 CCL_NAMESPACE_END
 

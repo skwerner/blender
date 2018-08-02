@@ -52,7 +52,6 @@
 #include "util/util_progress.h"
 #include "util/util_system.h"
 #include "util/util_thread.h"
-#include "util/util_sparse_grid.h"
 
 CCL_NAMESPACE_BEGIN
 
@@ -376,17 +375,9 @@ public:
 
 	void tex_alloc(device_memory& mem)
 	{
-		size_t total_memory = mem.memory_size();
-		device_memory *sparse_mem = NULL;
-
-		if(mem.grid_info && mem.grid_type == IMAGE_GRID_TYPE_SPARSE) {
-			sparse_mem = (device_memory*)mem.grid_info;
-			total_memory += sparse_mem->memory_size();
-		}
-
 		VLOG(1) << "Texture allocate: " << mem.name << ", "
-		        << string_human_readable_number(total_memory) << " bytes. ("
-		        << string_human_readable_size(total_memory) << ")";
+		        << string_human_readable_number(mem.memory_size()) << " bytes. ("
+		        << string_human_readable_size(mem.memory_size()) << ")";
 
 		if(mem.interpolation == INTERPOLATION_NONE) {
 			/* Data texture. */
@@ -417,24 +408,34 @@ public:
 			info.cl_buffer = 0;
 			info.interpolation = mem.interpolation;
 			info.extension = mem.extension;
-			info.width = mem.real_width;
-			info.height = mem.real_height;
-			info.depth = mem.real_depth;
+			info.width = mem.dense_width;
+			info.height = mem.dense_height;
+			info.depth = mem.dense_depth;
 
-			SparseTextureInfo sparse_info;
-			if(mem.grid_type == IMAGE_GRID_TYPE_SPARSE) {
-				sparse_info.offsets = (uint64_t)sparse_mem->host_pointer;
-				sparse_info.tiled_w = get_tile_res(info.width);
-				sparse_info.tiled_h = get_tile_res(info.height);
-				sparse_info.remain_w = info.width % TILE_SIZE;
-				sparse_info.remain_h = info.height % TILE_SIZE;
-				sparse_info.div_w = info.width - sparse_info.remain_w;
-				sparse_info.div_h = info.height - sparse_info.remain_h;
+			SparseTextureInfo s_info;
+			s_info.offsets = 0;
+
+			/* If image is sparse, cache info needed for index calculation. */
+			if(mem.grid_info && mem.grid_type == IMAGE_GRID_TYPE_SPARSE) {
+				device_memory *sparse_mem = (device_memory*)mem.grid_info;
+				s_info.offsets = (uint64_t)sparse_mem->host_pointer;
+				s_info.remain_w = info.width % TILE_SIZE;
+				s_info.remain_h = info.height % TILE_SIZE;
+				s_info.tiled_w = info.width / TILE_SIZE + (s_info.remain_w != 0);
+				s_info.tiled_h = info.height / TILE_SIZE + (s_info.remain_h != 0);
+				s_info.div_w = info.width - s_info.remain_w;
+				s_info.div_h = info.height - s_info.remain_h;
+
+				VLOG(1) << "Allocate: " << sparse_mem->name << ", "
+				        << string_human_readable_number(sparse_mem->memory_size()) << " bytes. ("
+				        << string_human_readable_size(sparse_mem->memory_size()) << ")";
+
+				sparse_mem->device_pointer = (device_ptr)sparse_mem->host_pointer;
+				sparse_mem->device_size = sparse_mem->memory_size();
+				stats.mem_alloc(sparse_mem->device_size);
 			}
-			else {
-				sparse_info.offsets = 0;
-			}
-			info.sparse_info = sparse_info;
+
+			info.sparse_info = s_info;
 
 			need_texture_info = true;
 		}
@@ -442,12 +443,6 @@ public:
 		mem.device_pointer = (device_ptr)mem.host_pointer;
 		mem.device_size = mem.memory_size();
 		stats.mem_alloc(mem.device_size);
-
-		if(sparse_mem) {
-			sparse_mem->device_pointer = (device_ptr)sparse_mem->host_pointer;
-			sparse_mem->device_size = sparse_mem->memory_size();
-			stats.mem_alloc(sparse_mem->device_size);
-		}
 	}
 
 	void tex_free(device_memory& mem)

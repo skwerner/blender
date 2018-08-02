@@ -69,21 +69,21 @@ ccl_device_inline float4 svm_image_texture_read(KernelGlobals *kg, const ccl_glo
 
 /* Calculates the index for sparse volume textures. */
 ccl_device_inline float4 svm_image_texture_read(KernelGlobals *kg,
-                                                const ccl_global TextureInfo *info,
+                                                const ccl_global SparseTextureInfo *s_info,
+                                                const int *offsets,
                                                 int id, int x, int y, int z)
 {
 	int tix = x / TILE_SIZE, itix = x % TILE_SIZE,
 	    tiy = y / TILE_SIZE, itiy = y % TILE_SIZE,
 	    tiz = z / TILE_SIZE, itiz = z % TILE_SIZE;
-	int dense_index = (tix + info->tiled_width * (tiy + tiz * info->tiled_height)) * 2;
-	int sparse_index = info->grid_info[dense_index];
-	int dims = info->grid_info[dense_index + 1];
+	int tile_index = tix + s_info->tiled_w * (tiy + tiz * s_info->tiled_h);
+	int sparse_index = offsets[tile_index];
 	if(sparse_index < 0) {
 		return make_float4(0.0f);
 	}
-	int itiw = dims & (1 << ST_SHIFT_TRUNCATE_WIDTH) ? info->last_tile_width : TILE_SIZE;
-	int itih = dims & (1 << ST_SHIFT_TRUNCATE_HEIGHT) ? info->last_tile_height : TILE_SIZE;
-	int in_tile_index = itix + itiw * (itiy + itih * itiz);
+	int itiw = (x > s_info.div_w) ? s_info.remain_w : TILE_SIZE;
+	int itih = (y > s_info.div_h) ? s_info.remain_h : TILE_SIZE;
+	int in_tile_index = itix + itiw * (itiy + itiz * itih);
 	return svm_image_texture_read(kg, info, id, sparse_index + in_tile_index);
 }
 
@@ -121,9 +121,11 @@ ccl_device_inline float4 svm_image_texture_read_3d(KernelGlobals *kg, int id, in
 		z = svm_image_texture_wrap_clamp(z, info->depth);
 	}
 
-	if(info->grid_info) {
-		return svm_image_texture_read(kg, info, id, x, y, z);
+	if(info->sparse_info.offsets) {
+		const int *offsets = (const int*)info->sparse_info.offsets
+		return svm_image_texture_read(kg, info->sparse_info, offsets, id, x, y, z);
 	}
+
 	int offset = x + info->width * y + info->width * info->height * z;
 	return svm_image_texture_read(kg, info, id, offset);
 }

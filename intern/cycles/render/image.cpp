@@ -279,6 +279,8 @@ static string name_from_grid_type(int type)
 {
 	if(type == IMAGE_GRID_TYPE_SPARSE)
 		return "sparse";
+	else if(type == IMAGE_GRID_TYPE_SPARSE_PAD)
+		return "padded sparse";
 	else if(type == IMAGE_GRID_TYPE_OPENVDB)
 		return "OpenVDB";
 	else
@@ -474,19 +476,18 @@ void ImageManager::tag_reload_image(const string& filename,
 	}
 }
 
-bool ImageManager::allocate_sparse_index(Device *device,
-                                         device_memory *tex_img,
-                                         vector<int> *sparse_index,
-                                         string mem_name)
+bool ImageManager::allocate_grid_info(Device *device,
+                                      device_memory *tex_img,
+                                      vector<int> *sparse_index)
 {
-	mem_name += "_index";
-	device_vector<int> *tex_index =
-	        new device_vector<int>(device, mem_name.c_str(), MEM_TEXTURE);
+	string info_name = string(tex_img->name) + "_info";
+	device_vector<int> *tex_info =
+	        new device_vector<int>(device, info_name.c_str(), MEM_TEXTURE);
 
 	int *ti;
 	{
 		thread_scoped_lock device_lock(device_mutex);
-		ti = (int*)tex_index->alloc(sparse_index->size());
+		ti = (int*)tex_info->alloc(sparse_index->size());
 	}
 
 	if(ti == NULL) {
@@ -494,9 +495,7 @@ bool ImageManager::allocate_sparse_index(Device *device,
 	}
 
 	memcpy(ti, &(*sparse_index)[0], sparse_index->size() * sizeof(int));
-
-	tex_img->grid_info = static_cast<void*>(tex_index);
-	tex_img->grid_type = IMAGE_GRID_TYPE_SPARSE;
+	tex_img->grid_info = static_cast<void*>(tex_info);
 
 	return true;
 }
@@ -686,9 +685,9 @@ void ImageManager::file_load_extern_vdb(Device *device,
 	}
 
 	int sparse_size = -1;
-	vector<int> sparse_index;
+	vector<int> sparse_offsets;
 	openvdb_load_preprocess(img->filename, img->grid_name, img->isovalue,
-	                        &sparse_index, sparse_size);
+	                        &sparse_offsets, sparse_size);
 
 	/* Allocate space for image. */
 	float *pixels;
@@ -709,15 +708,13 @@ void ImageManager::file_load_extern_vdb(Device *device,
 	}
 
 	/* Load image. */
-	openvdb_load_image(img->filename, img->grid_name, pixels, &sparse_index);
+	openvdb_load_image(img->filename, img->grid_name, pixels, &sparse_offsets);
 
 	/* Allocate space for sparse_index if it exists. */
 	if(sparse_size > -1) {
 		tex_img->grid_type = IMAGE_GRID_TYPE_SPARSE;
 
-		if(!allocate_sparse_index(device, (device_memory*)tex_img,
-								  &sparse_index, img->mem_name))
-		{
+		if(!allocate_grid_info(device, (device_memory*)tex_img, &sparse_offsets)) {
 			/* Could be that we've run out of memory. */
 			file_load_failed<DeviceType>(img, type, tex_img);
 			return;
@@ -728,9 +725,9 @@ void ImageManager::file_load_extern_vdb(Device *device,
 	}
 
 	/* Set metadata and copy. */
-	tex_img->real_width = width;
-	tex_img->real_height = height;
-	tex_img->real_depth = depth;
+	tex_img->dense_width = width;
+	tex_img->dense_height = height;
+	tex_img->dense_depth = depth;
 	tex_img->interpolation = img->interpolation;
 	tex_img->extension = img->extension;
 
@@ -958,43 +955,67 @@ void ImageManager::file_load_image(Device *device,
 	}
 
 	/* Compress image if needed. */
-	int num_pixels_real = -1;
-	if(img->is_volume && device->info.type != DEVICE_CUDA) {
+	int3 sparse_resolution = make_int3(-1, -1, -1);
+	if(img->is_volume) {
 		vector<StorageType> sparse_pixels;
-		vector<int> sparse_index;
+		vector<int> sparse_offsets;
 
-		if(create_sparse_grid<StorageType>(pixels, width, height, depth,
-		                                   components, img->filename,
-		                                   img->isovalue, &sparse_pixels,
-		                                   &sparse_index))
-		{
-			pixels = &sparse_pixels[0];
-			num_pixels_real = sparse_pixels.size() / components;
-			allocate_sparse_index(device, (device_memory*)tex_img,
-			                      &sparse_index, img->mem_name);
+		if(device->info.type == DEVICE_CUDA) {
+			if(create_sparse_grid_pad<StorageType>(pixels, width, height, depth,
+			                                       components, img->filename,
+			                                       img->isovalue, &sparse_pixels,
+			                                       &sparse_offsets, sparse_resolution))
+			{
+				pixels = &sparse_pixels[0];
+				if(!allocate_grid_info(device, (device_memory*)tex_img, &sparse_offsets)) {
+					/* Could be that we've run out of memory. */
+					file_load_failed<DeviceType>(img, type, tex_img);
+					return;
+				}
+				tex_img->grid_type = IMAGE_GRID_TYPE_SPARSE_PAD;
+			}
+		}
+		else {
+			if(create_sparse_grid<StorageType>(pixels, width, height, depth,
+			                                   components, img->filename,
+			                                   img->isovalue, &sparse_pixels,
+			                                   &sparse_offsets))
+			{
+				pixels = &sparse_pixels[0];
+				if(!allocate_grid_info(device, (device_memory*)tex_img, &sparse_offsets)) {
+					/* Could be that we've run out of memory. */
+					file_load_failed<DeviceType>(img, type, tex_img);
+					return;
+				}
+				tex_img->grid_type = IMAGE_GRID_TYPE_SPARSE;
+				sparse_resolution = make_int3(sparse_pixels.size() / components, 1, 1);
+			}
 		}
 	}
 
 	/* Store image. */
-	StorageType *texture_pixels;
+	StorageType *texture_pixels = NULL;
+	int num_pixels_real = num_pixels;
 	{
 		thread_scoped_lock device_lock(device_mutex);
-		if(num_pixels_real > -1) {
+		if(sparse_resolution.x > -1) {
 			/* For sparse grids, the dimensions of the image do not match the
-			 * required storage space. Allocate with num_pixels_real instead. */
-			texture_pixels = (StorageType*)tex_img->alloc(num_pixels_real);
+			 * required storage space. */
+			texture_pixels = (StorageType*)tex_img->alloc(sparse_resolution.x,
+			                                              sparse_resolution.y,
+			                                              sparse_resolution.z);
+			num_pixels_real = sparse_resolution.x * sparse_resolution.y * sparse_resolution.z;
 		}
 		else {
 			texture_pixels = (StorageType*)tex_img->alloc(width, height, depth);
-			num_pixels_real = num_pixels;
 		}
 	}
 
-	memcpy(texture_pixels, pixels, num_pixels_real * sizeof(DeviceType));
+	memcpy(texture_pixels, pixels, tex_img->memory_size());
 
-	tex_img->real_width = width;
-	tex_img->real_height = height;
-	tex_img->real_depth = depth;
+	tex_img->dense_width = width;
+	tex_img->dense_height = height;
+	tex_img->dense_depth = depth;
 
 	img->mem = tex_img;
 
@@ -1026,7 +1047,9 @@ void ImageManager::device_load_image(Device *device,
 	/* Free previous texture(s) in slot. */
 	if(img->mem) {
 		thread_scoped_lock device_lock(device_mutex);
-		if(img->mem->grid_info && img->mem->grid_type == IMAGE_GRID_TYPE_SPARSE) {
+		if((img->mem->grid_type == IMAGE_GRID_TYPE_SPARSE ||
+		    img->mem->grid_type == IMAGE_GRID_TYPE_SPARSE_PAD) && img->mem->grid_info)
+		{
 			device_memory *info = (device_memory*)img->mem->grid_info;
 			delete info;
 			img->mem->grid_info = NULL;
@@ -1095,7 +1118,9 @@ void ImageManager::device_free_image(Device *, ImageDataType type, int slot)
 
 		if(img->mem) {
 			thread_scoped_lock device_lock(device_mutex);
-			if(img->mem->grid_info && img->mem->grid_type == IMAGE_GRID_TYPE_SPARSE) {
+			if((img->mem->grid_type == IMAGE_GRID_TYPE_SPARSE ||
+			    img->mem->grid_type == IMAGE_GRID_TYPE_SPARSE_PAD) && img->mem->grid_info)
+			{
 				device_memory *info = (device_memory*)img->mem->grid_info;
 				delete info;
 				img->mem->grid_info = NULL;

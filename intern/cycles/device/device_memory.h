@@ -190,12 +190,11 @@ public:
 	size_t data_width;
 	size_t data_height;
 	size_t data_depth;
-	/* For normal images, data_* = real_*. For sparse images,
-	 * real_* refers to the real voxel resolution of the image,
-	 * since sparse images are stored as a long 1D array. */
-	size_t real_width;
-	size_t real_height;
-	size_t real_depth;
+	/* data_* stores actual dimensions, while dense_* stores image dimensions
+	 * before compression. */
+	size_t dense_width;
+	size_t dense_height;
+	size_t dense_depth;
 	MemoryType type;
 	const char *name;
 	InterpolationType interpolation;
@@ -328,9 +327,9 @@ public:
 		}
 
 		data_size = new_size;
-		data_width = real_width = width;
-		data_height = real_height = height;
-		data_depth = real_depth = depth;
+		data_width = dense_width = width;
+		data_height = dense_height = height;
+		data_depth = dense_depth = depth;
 
 		return data();
 	}

@@ -59,27 +59,30 @@ ccl_device float cubic_h1(float a)
 }
 
 /* Converts coordinates from normal volume textures dense to sparse ones. */
-ccl_device bool compute_sparse_coordinates(const TextureInfo *info, float &fx, float &fy, float &fz)
+ccl_device bool sparse_coordinates(const SparseTextureInfo *s_info, float &fx, float &fy, float &fz)
 {
-	float *ix, *iy, *iz;
-	modff(fx, *ix);
-	modff(fy, *iy);
-	modff(fz, *iz);
-	int x = *ix, y = *iy, z = *iz;
-	int tix = x / TILE_SIZE, itix = x % TILE_SIZE,
-	    tiy = y / TILE_SIZE, itiy = y % TILE_SIZE,
-	    tiz = z / TILE_SIZE, itiz = z % TILE_SIZE;
-	int dense_index = (tix + info->tiled_width * (tiy + tiz * info->tiled_height)) * 4;
-	int tile_x = info->grid_info[dense_index];
-	if(tile_x < 0) {
+	const int *offsets = (const int *)s_info->offsets;
+	float ix = 0.0f, iy = 0.0f, iz = 0.0f;
+	modff(fx, &ix);
+	modff(fy, &iy);
+	modff(fz, &iz);
+	int x = int(ix), y = int(iy), z = int(iz);
+	int tix = x / TILE_SIZE, sx = (x % TILE_SIZE) + SPARSE_PAD,
+	    tiy = y / TILE_SIZE, sy = (y % TILE_SIZE) + SPARSE_PAD,
+	    tiz = z / TILE_SIZE, sz = (z % TILE_SIZE) + SPARSE_PAD;
+	int tile = tix + s_info->tiled_w * (tiy + tiz * s_info->tiled_h);
+	int start_x = offsets[tile];
+	if(start_x < 0) {
 		return false;
 	}
-	int tile_y = info->grid_info[dense_index + 1];
-	int tile_z = info->grid_info[dense_index + 2];
-	int dims = info->grid_info[dense_index + 3];
-	fx += tile_x + itix + (dims & (1 << ST_SHIFT_X_PAD));
-	fy += tile_y + itiy + (dims & (1 << ST_SHIFT_Y_PAD));
-	fz += tile_z + itiz + (dims & (1 << ST_SHIFT_Z_PAD));
+	if(x >= TILE_SIZE) {
+		if(offsets[tile - 1] > -1) {
+			sx -= SPARSE_PAD;
+		}
+	}
+	fx += float(start_x + sx);
+	fy += float(sy);
+	fz += float(sz);
 	return true;
 }
 
@@ -186,8 +189,8 @@ ccl_device float4 kernel_tex_image_interp_3d(KernelGlobals *kg, int id, float x,
 	CUtexObject tex = (CUtexObject)info.data;
 	uint interpolation = (interp == INTERPOLATION_NONE)? info.interpolation: interp;
 
-	if(info.grid_info) {
-		if(!compute_sparse_coordinates(&info, x, y, z)) {
+	if(info.sparse_info.offsets) {
+		if(!sparse_coordinates(&info.sparse_info, x, y, z)) {
 			return make_float4(0.0f);
 		}
 	}

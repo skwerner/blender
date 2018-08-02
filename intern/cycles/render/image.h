@@ -145,10 +145,9 @@ private:
 	vector<Image*> images[IMAGE_DATA_NUM_TYPES];
 	void *osl_texture_system;
 
-	bool allocate_sparse_index(Device *device,
-	                           device_memory *tex_img,
-	                           vector<int> *sparse_index,
-	                           string mem_name);
+	bool allocate_grid_info(Device *device,
+	                        device_memory *tex_img,
+	                        vector<int> *sparse_index);
 
 	bool file_load_image_generic(Image *img,
 	                             ImageInput **in,

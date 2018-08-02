@@ -6,6 +6,7 @@
 
 CCL_NAMESPACE_BEGIN
 
+void openvdb_initialize();
 bool openvdb_has_grid(const string& filepath, const string& grid_name);
 int3 openvdb_get_resolution(const string& filepath);
 

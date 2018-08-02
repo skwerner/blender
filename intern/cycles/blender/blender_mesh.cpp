@@ -31,6 +31,10 @@
 #include "util/util_logging.h"
 #include "util/util_math.h"
 
+#ifdef WITH_OPENVDB
+#include "render/openvdb.h"
+#endif
+
 #include "mikktspace.h"
 
 CCL_NAMESPACE_BEGIN
@@ -375,9 +379,13 @@ static void create_mesh_volume_attributes(Scene *scene,
 	void *builtin_data;
 
 	if(b_domain.is_openvdb()) {
+		if(!scene->params.intialized_openvdb) {
+			openvdb_initialize();
+			scene->params.intialized_openvdb = true;
+		}
+
 		BL::ID b_id = b_ob.data();
-		filename = blender_absolute_path(b_data,
-		                                 b_id,
+		filename = blender_absolute_path(b_data, b_id,
 		                                 b_domain.openvdb_filepath());
 		builtin_data = NULL;
 	}

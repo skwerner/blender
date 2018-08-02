@@ -279,7 +279,6 @@ if(WITH_OPENVDB)
 	include_directories(
 		SYSTEM
 		${OPENVDB_INCLUDE_DIRS}
-		../openvdb
 	)
 endif()
 

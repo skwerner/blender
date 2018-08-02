@@ -70,7 +70,7 @@ openvdb::Name do_name_versionning(const openvdb::Name &name);
 openvdb::Mat4R convertMatrix(const float mat[4][4]);
 
 template <typename GridType, typename T>
-GridType *OpenVDB_export_grid(
+typename GridType::Ptr OpenVDB_export_grid(
         OpenVDBWriter *writer,
         const openvdb::Name &name,
         const T *data,
@@ -82,15 +82,17 @@ GridType *OpenVDB_export_grid(
 	using namespace openvdb;
 
 	math::CoordBBox bbox(Coord(0), Coord(res[0] - 1, res[1] - 1, res[2] - 1));
-	Mat4R mat = convertMatrix(fluid_mat);
-	math::Transform::Ptr transform = math::Transform::createLinearTransform(mat);
 
 	typename GridType::Ptr grid = GridType::create(T(0));
 
 	tools::Dense<const T, openvdb::tools::LayoutXYZ> dense_grid(bbox, data);
 	tools::copyFromDense(dense_grid, grid->tree(), static_cast<T>(clipping));
 
-	grid->setTransform(transform);
+	if(fluid_mat) {
+		Mat4R mat = convertMatrix(fluid_mat);
+		math::Transform::Ptr transform = math::Transform::createLinearTransform(mat);
+		grid->setTransform(transform);
+	}
 
 	/* Avoid clipping against an empty grid. */
 	if (mask && !mask->tree().empty()) {
@@ -101,12 +103,14 @@ GridType *OpenVDB_export_grid(
 	grid->setIsInWorldSpace(false);
 	grid->setVectorType(openvdb::VEC_INVARIANT);
 
-	writer->insert(grid);
+	if(writer) {
+		writer->insert(grid);
+	}
 
-	return grid.get();
+	return grid;
 }
 
-openvdb::GridBase *OpenVDB_export_vector_grid(OpenVDBWriter *writer,
+openvdb::GridBase::Ptr OpenVDB_export_vector_grid(OpenVDBWriter *writer,
 		const openvdb::Name &name,
 		const float *data_x, const float *data_y, const float *data_z,
 		const int res[3],

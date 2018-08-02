@@ -67,7 +67,7 @@ OpenVDBFloatGrid *OpenVDB_export_grid_fl(
 	using openvdb::FloatGrid;
 
 	FloatGrid *mask_grid = reinterpret_cast<FloatGrid *>(mask);
-	FloatGrid *grid = internal::OpenVDB_export_grid<FloatGrid>(
+	FloatGrid::Ptr grid = internal::OpenVDB_export_grid<FloatGrid>(
 	        writer,
 	        name,
 	        data,
@@ -76,7 +76,7 @@ OpenVDBFloatGrid *OpenVDB_export_grid_fl(
 			clipping,
 	        mask_grid);
 
-	return reinterpret_cast<OpenVDBFloatGrid *>(grid);
+	return reinterpret_cast<OpenVDBFloatGrid *>(grid.get());
 }
 
 OpenVDBIntGrid *OpenVDB_export_grid_ch(
@@ -91,7 +91,7 @@ OpenVDBIntGrid *OpenVDB_export_grid_ch(
 	using openvdb::Int32Grid;
 
 	FloatGrid *mask_grid = reinterpret_cast<FloatGrid *>(mask);
-	Int32Grid *grid = internal::OpenVDB_export_grid<Int32Grid>(
+	Int32Grid::Ptr grid = internal::OpenVDB_export_grid<Int32Grid>(
 	        writer,
 	        name,
 	        data,
@@ -100,7 +100,7 @@ OpenVDBIntGrid *OpenVDB_export_grid_ch(
 			clipping,
 	        mask_grid);
 
-	return reinterpret_cast<OpenVDBIntGrid *>(grid);
+	return reinterpret_cast<OpenVDBIntGrid *>(grid.get());
 }
 
 OpenVDBVectorGrid *OpenVDB_export_grid_vec(struct OpenVDBWriter *writer,
@@ -116,7 +116,7 @@ OpenVDBVectorGrid *OpenVDB_export_grid_vec(struct OpenVDBWriter *writer,
 	using openvdb::VecType;
 
 	FloatGrid *mask_grid = reinterpret_cast<FloatGrid *>(mask);
-	GridBase *grid = internal::OpenVDB_export_vector_grid(
+	typename GridBase::Ptr grid = internal::OpenVDB_export_vector_grid(
 	        writer,
 	        name,
 	        data_x,
@@ -129,7 +129,7 @@ OpenVDBVectorGrid *OpenVDB_export_grid_vec(struct OpenVDBWriter *writer,
 			clipping,
 	        mask_grid);
 
-	return reinterpret_cast<OpenVDBVectorGrid *>(grid);
+	return reinterpret_cast<OpenVDBVectorGrid *>(grid.get());
 }
 
 void OpenVDB_import_grid_fl(

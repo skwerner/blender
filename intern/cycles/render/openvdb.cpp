@@ -393,34 +393,58 @@ void openvdb_load_image(const string& filepath,
 static device_memory *openvdb_load_device_intern_vec(Device *device,
                                                      const float *data,
                                                      const int3 resolution,
+                                                     const string& grid_name,
+                                                     const float clipping,
                                                      const string& mem_name,
                                                      const InterpolationType& interpolation,
                                                      const ExtensionType& extension)
 {
 	using namespace openvdb;
 
-	Vec3SGrid::Ptr grid = Vec3SGrid::create();
-	Vec3SGrid::Accessor accessor = grid->getAccessor();
+	/* Split data into 3 separate arrays. */
+	size_t data_size = resolution.x * resolution.y * resolution.z;
 
-	tools::changeBackground(grid->tree(), math::Vec3s(0.0f, 0.0f, 0.0f));
+	float *data_x = new float[data_size];
+	float *data_y = new float[data_size];
+	float *data_z = new float[data_size];
 
-	openvdb::math::Coord xyz;
-	int &x = xyz[0], &y = xyz[1], &z = xyz[2];
-
-	for (z = 0; z < resolution.z; ++z) {
-		for (y = 0; y < resolution.y; ++y) {
-			for (x = 0; x < resolution.x; ++x) {
-				int index = (x + resolution.x * (y + z * resolution.y)) * 4;
-				openvdb::math::Vec3s val(data[index + 0], data[index + 1], data[index + 2]);
-				accessor.setValue(xyz, val);
-			}
-		}
+	for(int i = 0; i < data_size; ++i) {
+		data_x[i] = data[i * 4 + 0];
+		data_y[i] = data[i * 4 + 1];
+		data_z[i] = data[i * 4 + 2];
 	}
 
-	Vec3SGrid::ConstAccessor c_accessor = grid->getConstAccessor();
+	GridBase::Ptr base_grid = internal::OpenVDB_export_vector_grid(
+	                              NULL, grid_name.c_str(), data_x, data_y,
+	                              data_z, (int*)&resolution, NULL,
+	                              openvdb::VEC_INVARIANT, (grid_name == "color"),
+	                              clipping, NULL);
+
+	delete data_x;
+	delete data_y;
+	delete data_z;
+
+	Vec3SGrid::Ptr grid = gridPtrCast<Vec3SGrid>(base_grid);
+
+	/* Check memory savings. */
+	const int dense_mem_use = resolution.x * resolution.y * resolution.z * 4 * sizeof(float);
+
+	if(grid->memUsage() < dense_mem_use) {
+		VLOG(1) << "Memory of " << grid_name << " decreased from "
+				<< string_human_readable_size(dense_mem_use) << " to "
+				<< string_human_readable_size(grid->memUsage());
+	}
+	else {
+		VLOG(1) << "Memory of " << grid_name << " increased from "
+		        << string_human_readable_size(dense_mem_use) << " to "
+		        << string_human_readable_size(grid->memUsage())
+		        << ", not using VDB grid";
+		return NULL;
+	}
+
 	device_openvdb<Vec3SGrid> *tex_img =
 			new device_openvdb<Vec3SGrid>(device, mem_name.c_str(), MEM_TEXTURE,
-	                                      grid, c_accessor, resolution);
+	                                      grid, grid->getConstAccessor(), resolution);
 
 	tex_img->interpolation = interpolation;
 	tex_img->extension = extension;
@@ -433,33 +457,36 @@ static device_memory *openvdb_load_device_intern_vec(Device *device,
 static device_memory *openvdb_load_device_intern_flt(Device *device,
                                                      const float *data,
                                                      const int3 resolution,
+                                                     const string& grid_name,
+                                                     const float clipping,
                                                      const string& mem_name,
                                                      const InterpolationType& interpolation,
                                                      const ExtensionType& extension)
 {
 	using namespace openvdb;
 
-	FloatGrid::Ptr grid = FloatGrid::create();
-	FloatGrid::Accessor accessor = grid->getAccessor();
+	FloatGrid::Ptr grid = internal::OpenVDB_export_grid<FloatGrid>(
+	            NULL, grid_name.c_str(), data, (int*)&resolution, NULL, clipping, NULL);
 
-	tools::changeBackground(grid->tree(), 0.0f);
+	/* Check memory savings. */
+	const int dense_mem_use = resolution.x * resolution.y * resolution.z * sizeof(float);
 
-	openvdb::math::Coord xyz;
-	int &x = xyz[0], &y = xyz[1], &z = xyz[2];
-
-	for (z = 0; z < resolution.z; ++z) {
-		for (y = 0; y < resolution.y; ++y) {
-			for (x = 0; x < resolution.x; ++x) {
-				int index = x + resolution.x * (y + z * resolution.y);
-				accessor.setValue(xyz, data[index]);
-			}
-		}
+	if(grid->memUsage() < dense_mem_use) {
+		VLOG(1) << "Memory of " << grid_name << " decreased from "
+				<< string_human_readable_size(dense_mem_use) << " to "
+				<< string_human_readable_size(grid->memUsage());
+	}
+	else {
+		VLOG(1) << "Memory of " << grid_name << " increased from "
+		        << string_human_readable_size(dense_mem_use) << " to "
+		        << string_human_readable_size(grid->memUsage())
+		        << ", not using VDB grid";
+		return NULL;
 	}
 
-	FloatGrid::ConstAccessor c_accessor = grid->getConstAccessor();
 	device_openvdb<FloatGrid> *tex_img =
 			new device_openvdb<FloatGrid>(device, mem_name.c_str(), MEM_TEXTURE,
-	                                      grid, c_accessor, resolution);
+	                                      grid, grid->getConstAccessor(), resolution);
 
 	tex_img->interpolation = interpolation;
 	tex_img->extension = extension;
@@ -472,6 +499,8 @@ static device_memory *openvdb_load_device_intern_flt(Device *device,
 device_memory *openvdb_load_device_intern(Device *device,
                                           const float *data,
                                           const int3 resolution,
+                                          const string& grid_name,
+                                          const float clipping,
                                           const string& mem_name,
                                           const InterpolationType& interpolation,
                                           const ExtensionType& extension,
@@ -479,11 +508,13 @@ device_memory *openvdb_load_device_intern(Device *device,
 {
 	if(is_vec) {
 		return openvdb_load_device_intern_vec(device, data, resolution,
-		                                      mem_name, interpolation, extension);
+		                                      grid_name, clipping, mem_name,
+		                                      interpolation, extension);
 	}
 	else {
 		return openvdb_load_device_intern_flt(device, data, resolution,
-		                                      mem_name, interpolation, extension);
+		                                      grid_name, clipping, mem_name,
+		                                      interpolation, extension);
 	}
 }
 

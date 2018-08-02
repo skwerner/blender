@@ -72,7 +72,7 @@ public:
 	}
 };
 
-openvdb::GridBase *OpenVDB_export_vector_grid(
+openvdb::GridBase::Ptr OpenVDB_export_vector_grid(
         OpenVDBWriter *writer,
         const openvdb::Name &name,
         const float *data_x, const float *data_y, const float *data_z,
@@ -86,8 +86,6 @@ openvdb::GridBase *OpenVDB_export_vector_grid(
 	using namespace openvdb;
 
 	math::CoordBBox bbox(Coord(0), Coord(res[0] - 1, res[1] - 1, res[2] - 1));
-	Mat4R mat = convertMatrix(fluid_mat);
-	math::Transform::Ptr transform = math::Transform::createLinearTransform(mat);
 
 	FloatGrid::Ptr grid[3];
 
@@ -114,7 +112,11 @@ openvdb::GridBase *OpenVDB_export_vector_grid(
 	MergeScalarGrids op(&(grid[0]->tree()), &(grid[1]->tree()), &(grid[2]->tree()));
 	tools::foreach(vecgrid->beginValueOn(), op, true, false);
 
-	vecgrid->setTransform(transform);
+	if(fluid_mat) {
+		Mat4R mat = convertMatrix(fluid_mat);
+		math::Transform::Ptr transform = math::Transform::createLinearTransform(mat);
+		vecgrid->setTransform(transform);
+	}
 
 	/* Avoid clipping against an empty grid. */
 	if (mask && !mask->tree().empty()) {
@@ -127,9 +129,11 @@ openvdb::GridBase *OpenVDB_export_vector_grid(
 	vecgrid->insertMeta("is_color", BoolMetadata(is_color));
 	vecgrid->setGridClass(GRID_STAGGERED);
 
-	writer->insert(vecgrid);
+	if(writer) {
+		writer->insert(vecgrid);
+	}
 
-	return vecgrid.get();
+	return vecgrid;
 }
 
 openvdb::Name do_name_versionning(const openvdb::Name &name)

@@ -17,13 +17,9 @@
 #ifndef __KERNEL_CPU_IMAGE_H__
 #define __KERNEL_CPU_IMAGE_H__
 
-#ifdef WITH_OPENVDB
-#include <openvdb/openvdb.h>
-#endif
-
 CCL_NAMESPACE_BEGIN
 
-template<typename T, typename UtilType>
+template<typename T>
 struct TextureInterpolator {
 #define SET_CUBIC_SPLINE_WEIGHTS(u, t) \
 	{ \
@@ -92,7 +88,7 @@ struct TextureInterpolator {
 
 	/* Sparse grid voxel access. */
 	static ccl_always_inline float4 read_data(const T *data,
-	                                          const int *grid_info,
+	                                          const int *sparse_indexes,
 	                                          int x, int y, int z,
 	                                          int /*width*/, int /*height*/,
 	                                          int tiw, int tih,
@@ -102,7 +98,7 @@ struct TextureInterpolator {
 		int tix = x / TILE_SIZE, itix = x % TILE_SIZE,
 		    tiy = y / TILE_SIZE, itiy = y % TILE_SIZE,
 		    tiz = z / TILE_SIZE, itiz = z % TILE_SIZE;
-		int sparse_index = grid_info[(tix + tiw * (tiy + tiz * tih))];
+		int sparse_index = sparse_indexes[(tix + tiw * (tiy + tiz * tih))];
 		if(sparse_index < 0) {
 			return make_float4(0.0f);
 		}
@@ -111,34 +107,6 @@ struct TextureInterpolator {
 		int in_tile_index = itix + itiw * (itiy + itiz * itih);
 		return read(data[sparse_index + in_tile_index]);
 	}
-
-#ifdef WITH_OPENVDB
-	/* OpenVDB grid voxel access. */
-	static ccl_always_inline float4 read_data(const T */*data*/,
-	                                          openvdb::FloatGrid::ConstAccessor *accessor,
-	                                          int x, int y, int z,
-	                                          int /*width*/, int /*height*/,
-	                                          int /*tiw*/, int /*tih*/,
-	                                          int /*evw*/, int /*evh*/,
-	                                          int /*ltw*/, int /*lth*/)
-	{
-		const openvdb::math::Coord xyz(x, y, z);
-		return read(accessor->getValue(xyz));
-	}
-
-	static ccl_always_inline float4 read_data(const T */*data*/,
-	                                          openvdb::Vec3SGrid::ConstAccessor *accessor,
-	                                          int x, int y, int z,
-	                                          int /*width*/, int /*height*/,
-	                                          int /*tiw*/, int /*tih*/,
-	                                          int /*evw*/, int /*evh*/,
-	                                          int /*ltw*/, int /*lth*/)
-	{
-		const openvdb::math::Coord xyz(x, y, z);
-		openvdb::math::Vec3s r = accessor->getValue(xyz);
-		return make_float4(r.x(), r.y(), r.z(), 1.0f);
-	}
-#endif
 
 	static ccl_always_inline int wrap_periodic(int x, int width)
 	{
@@ -347,7 +315,7 @@ struct TextureInterpolator {
 		}
 
 		const T *data = (const T*)info.data;
-		UtilType *util = (UtilType*)info.util;
+		const int *util = (const int*)info.util;
 		int ltw = info.last_tile_dim & LAST_TILE_WIDTH_MASK;
 		int lth = info.last_tile_dim & LAST_TILE_HEIGHT_MASK;
 
@@ -402,7 +370,7 @@ struct TextureInterpolator {
 
 		float4 r;
 		const T *data = (const T*)info.data;
-		UtilType *util = (UtilType*)info.util;
+		const int *util = (const int*)info.util;
 		int tiw = info.tiled_width;
 		int tih = info.tiled_height;
 		int evw = info.even_width;
@@ -558,18 +526,18 @@ ccl_device float4 kernel_tex_image_interp(KernelGlobals *kg, int id, float x, fl
 
 	switch(kernel_tex_type(id)) {
 		case IMAGE_DATA_TYPE_HALF:
-			return TextureInterpolator<half, void>::interp(info, x, y);
+			return TextureInterpolator<half>::interp(info, x, y);
 		case IMAGE_DATA_TYPE_BYTE:
-			return TextureInterpolator<uchar, void>::interp(info, x, y);
+			return TextureInterpolator<uchar>::interp(info, x, y);
 		case IMAGE_DATA_TYPE_FLOAT:
-			return TextureInterpolator<float, void>::interp(info, x, y);
+			return TextureInterpolator<float>::interp(info, x, y);
 		case IMAGE_DATA_TYPE_HALF4:
-			return TextureInterpolator<half4, void>::interp(info, x, y);
+			return TextureInterpolator<half4>::interp(info, x, y);
 		case IMAGE_DATA_TYPE_BYTE4:
-			return TextureInterpolator<uchar4, void>::interp(info, x, y);
+			return TextureInterpolator<uchar4>::interp(info, x, y);
 		case IMAGE_DATA_TYPE_FLOAT4:
 		default:
-			return TextureInterpolator<float4, void>::interp(info, x, y);
+			return TextureInterpolator<float4>::interp(info, x, y);
 	}
 }
 
@@ -577,50 +545,19 @@ ccl_device float4 kernel_tex_image_interp_3d(KernelGlobals *kg, int id, float x,
 {
 	const TextureInfo& info = kernel_tex_fetch(__texture_info, id);
 
-	/* UNLIKELY(info.util) is a quicker way to check if grid type is not
-	 * default, since only default type will have util == 0. */
-
 	switch(kernel_tex_type(id)) {
 		case IMAGE_DATA_TYPE_HALF:
-			if(UNLIKELY(info.util))
-				return TextureInterpolator<half, int>::interp_3d(info, x, y, z, interp);
-			else
-				return TextureInterpolator<half, void>::interp_3d(info, x, y, z, interp);
+			return TextureInterpolator<half>::interp_3d(info, x, y, z, interp);
 		case IMAGE_DATA_TYPE_BYTE:
-			if(UNLIKELY(info.util))
-				return TextureInterpolator<uchar, int>::interp_3d(info, x, y, z, interp);
-			else
-				return TextureInterpolator<uchar, void>::interp_3d(info, x, y, z, interp);
+			return TextureInterpolator<uchar>::interp_3d(info, x, y, z, interp);
 		case IMAGE_DATA_TYPE_FLOAT:
-			if(UNLIKELY(info.util))
-#ifdef WITH_OPENVDB
-				if(info.grid_type == IMAGE_GRID_TYPE_OPENVDB)
-				    return TextureInterpolator<float, openvdb::FloatGrid::ConstAccessor>::interp_3d(info, x, y, z, interp);
-				else
-#endif
-					return TextureInterpolator<float, int>::interp_3d(info, x, y, z, interp);
-			else
-				return TextureInterpolator<float, void>::interp_3d(info, x, y, z, interp);
+			return TextureInterpolator<float>::interp_3d(info, x, y, z, interp);
 		case IMAGE_DATA_TYPE_HALF4:
-			if(UNLIKELY(info.util))
-				return TextureInterpolator<half4, int>::interp_3d(info, x, y, z, interp);
-			else
-				return TextureInterpolator<half4, void>::interp_3d(info, x, y, z, interp);
+			return TextureInterpolator<half4>::interp_3d(info, x, y, z, interp);
 		case IMAGE_DATA_TYPE_BYTE4:
-			if(UNLIKELY(info.util))
-				return TextureInterpolator<uchar4, int>::interp_3d(info, x, y, z, interp);
-			else
-				return TextureInterpolator<half4, void>::interp_3d(info, x, y, z, interp);
+			return TextureInterpolator<uchar4>::interp_3d(info, x, y, z, interp);
 		case IMAGE_DATA_TYPE_FLOAT4:
-			if(UNLIKELY(info.util))
-#ifdef WITH_OPENVDB
-				if(info.grid_type == IMAGE_GRID_TYPE_OPENVDB)
-				    return TextureInterpolator<float4, openvdb::Vec3SGrid::ConstAccessor>::interp_3d(info, x, y, z, interp);
-				else
-#endif
-					return TextureInterpolator<float4, int>::interp_3d(info, x, y, z, interp);
-			else
-				return TextureInterpolator<float4, void>::interp_3d(info, x, y, z, interp);
+			return TextureInterpolator<float4>::interp_3d(info, x, y, z, interp);
 		default:
 			return make_float4(0.0f);
 	}

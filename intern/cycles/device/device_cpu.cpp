@@ -423,9 +423,6 @@ public:
 			info.depth = mem.real_depth;
 
 			switch(mem.grid_type) {
-				case IMAGE_GRID_TYPE_OPENVDB:
-					info.util = (uint64_t)mem.grid_info;
-					break;
 				case IMAGE_GRID_TYPE_SPARSE:
 					info.util = (uint64_t)sparse_mem->host_pointer;
 					info.tiled_width = get_tile_res(info.width);
@@ -436,6 +433,7 @@ public:
 					info.last_tile_dim |= ((info.width % TILE_SIZE) << LAST_TILE_WIDTH_MASK);
 					info.last_tile_dim |= ((info.height % TILE_SIZE) << LAST_TILE_HEIGHT_MASK);
 					break;
+				case IMAGE_GRID_TYPE_OPENVDB:
 				case IMAGE_GRID_TYPE_DEFAULT:
 				default:
 					info.util = 0;

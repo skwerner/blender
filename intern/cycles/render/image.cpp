@@ -685,86 +685,59 @@ void ImageManager::file_load_extern_vdb(Device *device,
 		return;
 	}
 
-	if(device->info.type == DEVICE_CPU && 0) {
-		/* Load pointer to OpenVDB grid into texture. */
-		device_memory *tex_vdb = NULL;
-		{
-			thread_scoped_lock device_lock(device_mutex);
-			tex_vdb = openvdb_load_device_extern(device,
-												 img->filename,
-												 img->grid_name,
-												 img->mem_name,
-												 img->interpolation,
-												 img->extension,
-												 components > 1);
+	int sparse_size = -1;
+	vector<int> sparse_index;
+	openvdb_load_preprocess(img->filename, img->grid_name, components,
+							img->isovalue, &sparse_index, sparse_size);
 
-		}
-
-		if(tex_vdb) {
-			img->mem = tex_vdb;
-			delete tex_img;
-			tex_img = NULL;
+	/* Allocate space for image. */
+	float *pixels;
+	{
+		thread_scoped_lock device_lock(device_mutex);
+		if(sparse_size > -1) {
+			pixels = (float*)tex_img->alloc(sparse_size);
 		}
 		else {
-			file_load_failed<DeviceType>(img, type, tex_img);
+			pixels = (float*)tex_img->alloc(width, height, depth);
 		}
 	}
-	else {
-		/* Load VDB as device_vector. */
-		int sparse_size = -1;
-		vector<int> sparse_index;
-		openvdb_load_preprocess(img->filename, img->grid_name, components,
-		                        img->isovalue, &sparse_index, sparse_size);
 
-		/* Allocate space for image. */
-		float *pixels;
+	if(!pixels) {
+		/* Could be that we've run out of memory. */
+		file_load_failed<DeviceType>(img, type, tex_img);
+		return;
+	}
+
+	/* Load image. */
+	openvdb_load_image(img->filename, img->grid_name, components, pixels, &sparse_index);
+
+	/* Allocate space for sparse_index if it exists. */
+	if(sparse_size > -1) {
+		tex_img->grid_type = IMAGE_GRID_TYPE_SPARSE;
+
+		if(!allocate_sparse_index(device, (device_memory*)tex_img,
+								  &sparse_index, img->mem_name))
 		{
-			thread_scoped_lock device_lock(device_mutex);
-			if(sparse_size > -1) {
-				pixels = (float*)tex_img->alloc(sparse_size);
-			}
-			else {
-				pixels = (float*)tex_img->alloc(width, height, depth);
-			}
-		}
-
-		if(!pixels) {
 			/* Could be that we've run out of memory. */
 			file_load_failed<DeviceType>(img, type, tex_img);
 			return;
 		}
-
-		/* Load image. */
-		openvdb_load_image(img->filename, img->grid_name, components, pixels, &sparse_index);
-
-		/* Allocate space for sparse_index if it exists. */
-		if(sparse_size > -1) {
-			tex_img->grid_type = IMAGE_GRID_TYPE_SPARSE;
-
-			if(!allocate_sparse_index(device, (device_memory*)tex_img,
-			                          &sparse_index, img->mem_name))
-			{
-				/* Could be that we've run out of memory. */
-				file_load_failed<DeviceType>(img, type, tex_img);
-				return;
-			}
-		}
-		else {
-			tex_img->grid_type = IMAGE_GRID_TYPE_DEFAULT;
-		}
-
-		/* Set metadata and copy. */
-		tex_img->real_width = width;
-		tex_img->real_height = height;
-		tex_img->real_depth = depth;
-		tex_img->interpolation = img->interpolation;
-		tex_img->extension = img->extension;
-
-		img->mem = tex_img;
-
-		thread_scoped_lock device_lock(device_mutex);
-		tex_img->copy_to_device();
 	}
+	else {
+		tex_img->grid_type = IMAGE_GRID_TYPE_DEFAULT;
+	}
+
+	/* Set metadata and copy. */
+	tex_img->real_width = width;
+	tex_img->real_height = height;
+	tex_img->real_depth = depth;
+	tex_img->interpolation = img->interpolation;
+	tex_img->extension = img->extension;
+
+	img->mem = tex_img;
+
+	thread_scoped_lock device_lock(device_mutex);
+	tex_img->copy_to_device();
 }
 #endif
 

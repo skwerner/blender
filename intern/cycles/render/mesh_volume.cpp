@@ -17,9 +17,6 @@
 #include "render/mesh.h"
 #include "render/mesh_volume.h"
 #include "render/attribute.h"
-#ifdef WITH_OPENVDB
-#include "render/openvdb.h"
-#endif
 #include "render/scene.h"
 
 #include "util/util_foreach.h"
@@ -427,12 +424,7 @@ void MeshManager::create_volume_mesh(Scene *scene,
 		const VoxelAttributeGrid &voxel_grid = voxel_grids[i];
 		const int channels = voxel_grid.channels;
 
-		if(voxel_grid.grid_type == IMAGE_GRID_TYPE_OPENVDB) {
-#ifdef WITH_OPENVDB
-			openvdb_build_mesh(&builder, voxel_grid.data, isovalue, channels > 1);
-#endif
-		}
-		else if(voxel_grid.grid_type == IMAGE_GRID_TYPE_SPARSE) {
+		if(voxel_grid.grid_type == IMAGE_GRID_TYPE_SPARSE) {
 			float *data = static_cast<float*>(voxel_grid.data);
 			for(int z = 0; z < resolution.z; ++z) {
 				for(int y = 0; y < resolution.y; ++y) {

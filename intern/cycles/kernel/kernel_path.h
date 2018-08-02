@@ -286,7 +286,8 @@ ccl_device_forceinline bool kernel_path_shader_apply(
 	float3 throughput,
 	ShaderData *emission_sd,
 	PathRadiance *L,
-	ccl_global float *buffer)
+	ccl_global float *buffer,
+	bool has_volume)
 {
 #ifdef __SHADOW_TRICKS__
 	if((sd->object_flag & SD_OBJECT_SHADOW_CATCHER)) {
@@ -363,8 +364,7 @@ ccl_device_forceinline bool kernel_path_shader_apply(
 
 		float ray_length = state->ray_t + sd->ray_length;
 
-		bool is_volume_boundary = (state->volume_bounce > 0) || (state->volume_bounds_bounce > 0);
-		float3 emission = indirect_primitive_emission(kg, sd, ray_length, P_pick, N_pick, state->flag, state->ray_pdf, is_volume_boundary);
+		float3 emission = indirect_primitive_emission(kg, sd, ray_length, P_pick, N_pick, state->flag, state->ray_pdf, has_volume);
 		path_radiance_accum_emission(L, state, throughput, emission);
 	}
 #endif  /* __EMISSION__ */
@@ -477,6 +477,7 @@ ccl_device void kernel_path_indirect(KernelGlobals *kg,
 		}
 
 		/* Setup shader data. */
+		bool has_volume = (sd->flag & SD_HAS_VOLUME) != 0;
 		shader_setup_from_ray(kg, sd, &isect, ray);
 
 		/* Skip most work for volume bounding surface. */
@@ -496,7 +497,8 @@ ccl_device void kernel_path_indirect(KernelGlobals *kg,
 		                             throughput,
 		                             emission_sd,
 		                             L,
-		                             NULL))
+		                             NULL,
+		                             has_volume))
 		{
 			break;
 		}
@@ -651,6 +653,7 @@ ccl_device_forceinline void kernel_path_integrate(
 		}
 
 		/* Setup shader data. */
+		bool has_volume = (sd.flag & SD_HAS_VOLUME) != 0;
 		shader_setup_from_ray(kg, &sd, &isect, ray);
 
 		/* Skip most work for volume bounding surface. */
@@ -670,7 +673,8 @@ ccl_device_forceinline void kernel_path_integrate(
 		                             throughput,
 		                             emission_sd,
 		                             L,
-		                             buffer))
+		                             buffer,
+		                             has_volume))
 		{
 			break;
 		}

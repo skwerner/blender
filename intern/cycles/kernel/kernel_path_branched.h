@@ -463,6 +463,7 @@ ccl_device void kernel_branched_path_integrate(KernelGlobals *kg,
 	 * Indirect bounces are handled in kernel_branched_path_surface_indirect_light().
 	 */
 	for(;;) {
+
 		/* Find intersection with objects in scene. */
 		Intersection isect;
 		bool hit = kernel_path_scene_intersect(kg, &state, &ray, &isect, L);
@@ -488,6 +489,7 @@ ccl_device void kernel_branched_path_integrate(KernelGlobals *kg,
 		}
 
 		/* Setup and evaluate shader. */
+		bool has_volume = (sd.flag & SD_HAS_VOLUME) != 0;
 		shader_setup_from_ray(kg, &sd, &isect, &ray);
 
 		/* Skip most work for volume bounding surface. */
@@ -506,7 +508,8 @@ ccl_device void kernel_branched_path_integrate(KernelGlobals *kg,
 		                             throughput,
 		                             emission_sd,
 		                             L,
-		                             buffer))
+		                             buffer,
+		                             has_volume))
 		{
 			break;
 		}

@@ -1112,7 +1112,7 @@ typedef struct PathState {
 	float ray_pdf;     /* last bounce pdf */
 #if defined(__LAMP_MIS__) || defined(__EMISSION__) || defined(__BACKGROUND_MIS__)
 	float ray_t;       /* accumulated distance through transparent surfaces */
-	float3 ray_N;     /* geometry normal at last non-transparent surface */
+	float3 ray_N;      /* geometry normal at last non-transparent surface */
 #endif
 
 	/* volume rendering */

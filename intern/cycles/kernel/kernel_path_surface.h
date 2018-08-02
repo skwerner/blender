@@ -504,8 +504,9 @@ ccl_device_inline void kernel_path_surface_connect_light(KernelGlobals *kg,
 	light_ray.time = sd->time;
 #endif
 
+	bool has_volume = ((sd->flag & SD_HAS_VOLUME) != 0);
 	LightSample ls;
-	if(light_sample(kg, light_u, light_v, sd->time, sd->P_pick, sd->N_pick, state->bounce, &ls, false)) {
+	if(light_sample(kg, light_u, light_v, sd->time, sd->P_pick, sd->N_pick, state->bounce, &ls, has_volume)) {
 		float terminate = path_state_rng_light_termination(kg, state);
 		accum_light_contribution(kg, sd, emission_sd, &ls, state, &light_ray,
 		                         &L_light, L, &is_lamp, terminate, throughput,
@@ -522,6 +523,7 @@ ccl_device bool kernel_path_surface_bounce(KernelGlobals *kg,
                                            PathRadianceState *L_state,
                                            ccl_addr_space Ray *ray)
 {
+
 	/* no BSDF? we can stop here */
 	if(sd->flag & SD_BSDF) {
 		/* sample BSDF */
@@ -545,7 +547,7 @@ ccl_device bool kernel_path_surface_bounce(KernelGlobals *kg,
 		/* set labels */
 		if(!(label & LABEL_TRANSPARENT)) {
 			state->ray_pdf = bsdf_pdf;
-#ifdef __LAMP_MIS__
+#if defined(__LAMP_MIS__) || defined(__EMISSION__) || defined(__BACKGROUND_MIS__)
 			state->ray_t = 0.0f;
 #endif
 			state->min_ray_pdf = fminf(bsdf_pdf, state->min_ray_pdf);
@@ -556,6 +558,7 @@ ccl_device bool kernel_path_surface_bounce(KernelGlobals *kg,
 
 		/* setup ray */
 		ray->P = ray_offset(sd->P, (label & LABEL_TRANSMIT)? -sd->Ng: sd->Ng);
+		kernel_update_light_picking(sd, state);
 		ray->D = normalize(bsdf_omega_in);
 
 		if(state->bounce == 0)
@@ -588,6 +591,8 @@ ccl_device bool kernel_path_surface_bounce(KernelGlobals *kg,
 
 		/* setup ray position, direction stays unchanged */
 		ray->P = ray_offset(sd->P, -sd->Ng);
+		kernel_update_light_picking(sd, state);
+
 #ifdef __RAY_DIFFERENTIALS__
 		ray->dP = sd->dP;
 #endif

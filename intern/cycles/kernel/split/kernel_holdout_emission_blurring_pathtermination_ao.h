@@ -114,7 +114,8 @@ ccl_device void kernel_holdout_emission_blurring_pathtermination_ao(
 		                             throughput,
 		                             emission_sd,
 		                             L,
-		                             buffer))
+		                             buffer,
+		                             false)) // todo: check if starting from volume
 		{
 			kernel_split_path_end(kg, ray_index);
 		}

@@ -222,7 +222,7 @@ ccl_device void kernel_branched_path_volume_connect_light(
 					
 				/* todo: split up light_sample so we don't have to call it again with new position */
 				if(result == VOLUME_PATH_SCATTERED &&
-				   light_sample(kg, light_u, light_v, sd->time, sd->P, sd->N, state->bounce, &ls, true)) {
+				   light_sample(kg, light_u, light_v, sd->time, sd->P_pick, sd->N_pick, state->bounce, &ls, true)) {
 					if(kernel_data.integrator.num_all_lights)
 						ls.pdf *= 2.0f;
 

@@ -1256,7 +1256,7 @@ ccl_device void light_distant_sample(KernelGlobals *kg, float3 P, float *randu,
 /* picks one of the background lights and computes the probability of picking it */
 ccl_device void light_background_sample(KernelGlobals *kg, float3 P, float *randu,
                                      int *index, float *pdf){
-	*index = kernel_data.integrator.background_light_index;
+	*index = kernel_tex_fetch(__lamp_to_distribution, kernel_data.integrator.background_light_index);
 	*pdf = 1.0f;
 }
 
@@ -1464,7 +1464,7 @@ ccl_device float light_bvh_pdf(KernelGlobals *kg, float3 P, float3 N,
 /* computes the the probability of picking the given light out of all lights */
 ccl_device float light_distribution_pdf(KernelGlobals *kg, float3 P, float3 N,
                                         int prim_id, int object_id,
-                                        bool is_inside_volume)
+                                        bool has_volume)
 {
 	/* convert from triangle/lamp to light distribution */
 	int distribution_id;
@@ -1479,7 +1479,7 @@ ccl_device float light_distribution_pdf(KernelGlobals *kg, float3 P, float3 N,
 	              (distribution_id < kernel_data.integrator.num_distribution));
 
 	/* compute picking pdf for this light */
-	if (kernel_data.integrator.use_light_bvh && !is_inside_volume){
+	if (kernel_data.integrator.use_light_bvh && !has_volume){
 		/* find out which group of lights to sample */
 		int group;
 		if(prim_id >= 0){
@@ -1520,10 +1520,10 @@ ccl_device float light_distribution_pdf(KernelGlobals *kg, float3 P, float3 N,
 
 /* picks a light and returns its index and the probability of picking it */
 ccl_device void light_distribution_sample(KernelGlobals *kg, float3 P, float3 N,
-                                          bool is_in_volume, float *randu,
+                                          bool has_volume, float *randu,
                                           int *index, float *pdf)
 {
-	if (kernel_data.integrator.use_light_bvh && !is_in_volume){
+	if (kernel_data.integrator.use_light_bvh && !has_volume){
 		/* sample light type distribution */
 		int   group      = light_group_distribution_sample(kg, randu);
 		float group_prob = kernel_tex_fetch(__light_group_sample_prob, group);
@@ -1592,12 +1592,12 @@ ccl_device_noinline bool light_sample(KernelGlobals *kg,
                                       float3 N,
                                       int bounce,
                                       LightSample *ls,
-                                      bool is_in_volume)
+                                      bool has_volume)
 {
 	/* sample index and compute light picking pdf */
 	float pdf_factor = 0.0f;
 	int index = -1;
-	light_distribution_sample(kg, P, N, is_in_volume, &randu, &index, &pdf_factor);
+	light_distribution_sample(kg, P, N, has_volume, &randu, &index, &pdf_factor);
 
 	if(pdf_factor == 0.0f){
 		return false;

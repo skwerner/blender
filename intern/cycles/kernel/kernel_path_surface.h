@@ -49,10 +49,10 @@ ccl_device void accum_light_contribution(KernelGlobals *kg,
 ccl_device bool split(KernelGlobals *kg, float3 P, int node_offset)
 {
 	/* early exists if never/always splitting */
-	const double threshold = (double)kernel_data.integrator.splitting_threshold;
-	if(threshold == 0.0){
+	const float threshold = kernel_data.integrator.splitting_threshold;
+	if(threshold == 0.0f){
 		return false;
-	} else if(threshold == 1.0){
+	} else if(threshold == 1.0f){
 		return true;
 	}
 
@@ -64,40 +64,38 @@ ccl_device bool split(KernelGlobals *kg, float3 P, int node_offset)
 
 	/* if P is inside bounding sphere then split */
 	const float3 centroid = 0.5f * (bboxMax + bboxMin);
-	const double radius_squared = (double)len_squared(bboxMax - centroid);
-	const double dist_squared   = (double)len_squared(centroid - P);
+	const float radius_squared = len_squared(bboxMax - centroid);
+	const float dist_squared   = len_squared(centroid - P);
+
 	if(dist_squared <= radius_squared){
 		return true;
 	}
 
 	/* eq. 8 & 9 */
-	/* observed precision issues and issues with overflow of num_emitters_squared.
-	 * using doubles to fix this for now. */
 
 	/* Interval the distance can be in: [a,b] */
-	const double  radius = sqrt(radius_squared);
-	const double  dist   = sqrt(dist_squared);
-	const double  a      = dist - radius;
-	const double  b      = dist + radius;
+	const float  radius = sqrt(radius_squared);
+	const float  dist   = sqrt(dist_squared);
+	const float  a      = dist - radius;
+	const float  b      = dist + radius;
 
-	const double g_mean         = 1.0 / (a * b);
-	const double g_mean_squared = g_mean * g_mean;
-	const double a3             = a * a * a;
-	const double b3             = b * b * b;
-	const double g_variance     = (b3 - a3) / (3.0 * (b - a) * a3 * b3) -
+	const float g_mean         = 1.0f / (a * b);
+	const float g_mean_squared = g_mean * g_mean;
+	const float a3             = a * a * a;
+	const float b3             = b * b * b;
+	const float g_variance     = (b3 - a3) / (3.0f * (b - a) * a3 * b3) -
 	                              g_mean_squared;
 
 	/* eq. 10 */
 	const float4 node0   = kernel_tex_fetch(__light_tree_nodes, node_offset    );
 	const float4 node3   = kernel_tex_fetch(__light_tree_nodes, node_offset + 3);
-	const double energy       = (double)node0.x;
-	const double e_variance   = (double)node3.w;
-	const double num_emitters = (double)__float_as_int(node0.w);
-
-	const double num_emitters_squared = num_emitters * num_emitters;
-	const double e_mean = energy / num_emitters;
-	const double e_mean_squared = e_mean * e_mean;
-	const double variance = (e_variance * (g_variance + g_mean_squared) +
+	const float energy       = node0.x;
+	const float e_variance   = node3.w;
+	const float num_emitters = (float)__float_as_int(node0.w);
+	const float num_emitters_squared = num_emitters * num_emitters;
+	const float e_mean = energy / num_emitters;
+	const float e_mean_squared = e_mean * e_mean;
+	const float variance = (e_variance * (g_variance + g_mean_squared) +
 	                         e_mean_squared * g_variance) * num_emitters_squared;
 	/*
 	 * If I run into further precision issues
@@ -112,7 +110,7 @@ ccl_device bool split(KernelGlobals *kg, float3 P, int node_offset)
 	 * */
 
 	/* normalize */
-	const double variance_normalized = sqrt(sqrt( 1.0 / (1.0 + sqrt(variance))));
+	const float variance_normalized = sqrt(sqrt( 1.0f / (1.0f + sqrt(variance))));
 
 	return variance_normalized < threshold;
 }

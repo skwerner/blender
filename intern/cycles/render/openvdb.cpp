@@ -19,21 +19,40 @@ namespace {
 
 /* Misc internal helper functions. */
 
-bool operator >=(const openvdb::math::Vec3s &a, const float &b)
+template <typename T> bool gte_any(const T &a, const float &b) { return float(a) > b; }
+template <> bool gte_any(const openvdb::math::Vec3d &a, const float &b)
 {
-	return a.x() >= b || a.y() >= b || a.z() >= b;
+	return float(a.x()) >= b || float(a.y()) >= b || float(a.z()) >= b;
+}
+template <> bool gte_any(const openvdb::math::Vec3i &a, const float &b)
+{
+	return float(a.x()) >= b || float(a.y()) >= b || float(a.z()) >= b;
+}
+template <> bool gte_any(const openvdb::math::Vec3s &a, const float &b)
+{
+	return float(a.x()) >= b || float(a.y()) >= b || float(a.z()) >= b;
 }
 
-void copy(float *des, const float *src)
+template <typename T> void copy(float *des, const T *src) { *des = float(*src); }
+template <> void copy(float *des, const openvdb::math::Vec3d *src)
 {
-	*des = *src;
+	*(des + 0) = float(src->x());
+	*(des + 1) = float(src->y());
+	*(des + 2) = float(src->z());
+	*(des + 3) = 1.0f;
 }
-
-void copy(float *des, const openvdb::math::Vec3s *src)
+template <> void copy(float *des, const openvdb::math::Vec3i *src)
 {
-	*(des + 0) = src->x();
-	*(des + 1) = src->y();
-	*(des + 2) = src->z();
+	*(des + 0) = float(src->x());
+	*(des + 1) = float(src->y());
+	*(des + 2) = float(src->z());
+	*(des + 3) = 1.0f;
+}
+template <> void copy(float *des, const openvdb::math::Vec3s *src)
+{
+	*(des + 0) = float(src->x());
+	*(des + 1) = float(src->y());
+	*(des + 2) = float(src->z());
 	*(des + 3) = 1.0f;
 }
 
@@ -92,32 +111,6 @@ void get_bounds(openvdb::io::File *vdb_file,
 	min_bound = bbox.getStart();
 }
 
-/* Simple range shift for grids with non-zero background values. May have
- * strange results depending on the grid. */
-void shift_range(openvdb::Vec3SGrid::Ptr grid)
-{
-	using namespace openvdb;
-	const math::Vec3s background_value = grid->background();
-	if(background_value != math::Vec3s(0.0f, 0.0f, 0.0f)) {
-		for (Vec3SGrid::ValueOnIter iter = grid->beginValueOn(); iter; ++iter) {
-		    iter.setValue(iter.getValue() - background_value);
-		}
-		tools::changeBackground(grid->tree(), math::Vec3s(0.0f, 0.0f, 0.0f));
-	}
-}
-
-void shift_range(openvdb::FloatGrid::Ptr grid)
-{
-	using namespace openvdb;
-	const float background_value = grid->background();
-	if(background_value != 0.0f) {
-		for (FloatGrid::ValueOnIter iter = grid->beginValueOn(); iter; ++iter) {
-		    iter.setValue(iter.getValue() - background_value);
-		}
-		tools::changeBackground(grid->tree(), 0.0f);
-	}
-}
-
 /* File and Grid IO */
 
 void cleanup_file(openvdb::io::File *vdb_file)
@@ -150,10 +143,10 @@ openvdb::io::File *load_file(const string &filepath)
 	return vdb_file;
 }
 
-template<typename GridType>
 bool get_grid(const string &filepath,
               const string &grid_name,
-              typename GridType::Ptr &grid,
+              openvdb::GridBase::Ptr &grid,
+              OpenVDBGridType &grid_type,
               openvdb::math::Coord &resolution,
               openvdb::math::Coord &min_bound)
 {
@@ -169,25 +162,35 @@ bool get_grid(const string &filepath,
 		return false;
 	}
 
-	grid = gridPtrCast<GridType>(vdb_file->readGrid(grid_name));
+	grid = vdb_file->readGrid(grid_name);
 
-	/* Verify that leaf dimensions match internal tile dimensions. */
-	typename GridType::TreeType::LeafCIter iter = grid->tree().cbeginLeaf();
-	if(iter) {
-		const math::Coord dim = iter.getLeaf()->getNodeBoundingBox().dim();
-
-		if(dim[0] != TILE_SIZE || dim[1] != TILE_SIZE || dim[2] != TILE_SIZE) {
-			VLOG(1) << "Cannot load grid " << grid->getName() << " from "
-			        << filepath << ", leaf dimensions are "
-			        << dim[0] << "x" << dim[1] << "x" << dim[2];
-			cleanup_file(vdb_file);
-			return false;
-		}
+	if (grid->isType<BoolGrid>()) {
+		grid_type = OPENVDB_GRID_BOOL;
 	}
-
-	/* Need to account for external grids with a non-zero background value and
-	 * voxels below background value. */
-	shift_range(grid);
+	else if (grid->isType<DoubleGrid>()) {
+		grid_type = OPENVDB_GRID_DOUBLE;
+	}
+	else if (grid->isType<FloatGrid>()) {
+		grid_type = OPENVDB_GRID_FLOAT;
+	}
+	else if (grid->isType<Int32Grid>()) {
+		grid_type = OPENVDB_GRID_INT32;
+	}
+	else if (grid->isType<Int64Grid>()) {
+		grid_type = OPENVDB_GRID_INT64;
+	}
+	else if (grid->isType<Vec3DGrid>()) {
+		grid_type = OPENVDB_GRID_VEC_DOUBLE;
+	}
+	else if (grid->isType<Vec3IGrid>()) {
+		grid_type = OPENVDB_GRID_VEC_UINT32;
+	}
+	else if (grid->isType<Vec3SGrid>()) {
+		grid_type = OPENVDB_GRID_VEC_FLOAT;
+	}
+	else {
+		grid_type = OPENVDB_GRID_MISC;
+	}
 
 	/* Retrieve bound data. */
 	get_bounds(vdb_file, resolution, min_bound);
@@ -196,11 +199,44 @@ bool get_grid(const string &filepath,
 	return true;
 }
 
+template <typename GridType, typename T>
+bool validate_and_process_grid(typename GridType::Ptr grid)
+{
+	using namespace openvdb;
+
+	/* Verify that leaf dimensions match internal tile dimensions. */
+	typename GridType::TreeType::LeafCIter iter = grid->tree().cbeginLeaf();
+	if(iter) {
+		const math::Coord dim = iter.getLeaf()->getNodeBoundingBox().dim();
+
+		if(dim[0] != TILE_SIZE || dim[1] != TILE_SIZE || dim[2] != TILE_SIZE) {
+			VLOG(1) << "Cannot load grid " << grid->getName()
+			        << ", leaf dimensions are "
+			        << dim[0] << "x" << dim[1] << "x" << dim[2];
+			return false;
+		}
+	}
+
+	/* Need to account for external grids with a non-zero background value.
+	 * May have strange results depending on the grid. */
+	const T background_value = grid->background();
+
+	if(background_value != T(0)) {
+		for (typename GridType::ValueOnIter iter = grid->beginValueOn(); iter; ++iter) {
+		    iter.setValue(iter.getValue() - background_value);
+		}
+		tools::changeBackground(grid->tree(), T(0));
+	}
+
+	return true;
+}
+
 /* Load OpenVDB grid to texture. */
 
 template<typename GridType, typename T>
-void image_load_preprocess(const string &filepath,
-                           const string &grid_name,
+void image_load_preprocess(openvdb::GridBase::Ptr grid_base,
+                           const openvdb::math::Coord resolution,
+                           const openvdb::math::Coord min_bound,
                            const int channels,
                            const float threshold,
                            vector<int> *sparse_indexes,
@@ -208,17 +244,12 @@ void image_load_preprocess(const string &filepath,
 {
 	using namespace openvdb;
 
-	if(channels != 1 && channels != 4) {
+	typename GridType::Ptr grid = gridPtrCast<GridType>(grid_base);
+	if(!validate_and_process_grid<GridType, T>(grid)) {
 		return;
 	}
 
-	typename GridType::Ptr grid = GridType::create();
-	math::Coord resolution, min_bound, tiled_res, remainder;
-
-	if(!get_grid<GridType>(filepath, grid_name, grid, resolution, min_bound)) {
-		return;
-	}
-
+	math::Coord tiled_res, remainder;
 	for(int i = 0; i < 3; ++i) {
 		tiled_res[i] = get_tile_res(resolution[i]);
 		remainder[i] = resolution[i] % TILE_SIZE;
@@ -235,7 +266,7 @@ void image_load_preprocess(const string &filepath,
 		const T *data = leaf->buffer().data();
 
 		for(int i = 0; i < tile_pix_count; ++i) {
-			if(data[i] >= threshold) {
+			if(gte_any(data[i], threshold)) {
 				const math::Coord tile_start = leaf->getNodeBoundingBox().getStart() - min_bound;
 				sparse_indexes->at(get_tile_index(tile_start, tiled_res)) = 0;
 				/* Calculate how many voxels are in this tile. */
@@ -249,7 +280,7 @@ void image_load_preprocess(const string &filepath,
 	const int sparse_mem_use = tile_count * sizeof(int) + voxel_count * channels * sizeof(float);
 	const int dense_mem_use = coord_product(resolution) * channels * sizeof(float);
 
-	VLOG(1) << grid_name << " memory usage: \n"
+	VLOG(1) << grid->getName() << " memory usage: \n"
 	        << "Dense: " << string_human_readable_size(dense_mem_use) << "\n"
 	        << "Sparse: " << string_human_readable_size(sparse_mem_use) << "\n"
 	        << "VDB Grid: " << string_human_readable_size(grid->memUsage());
@@ -264,24 +295,20 @@ void image_load_preprocess(const string &filepath,
 }
 
 template<typename GridType, typename T>
-void image_load_dense(const string &filepath,
-                      const string &grid_name,
+void image_load_dense(openvdb::GridBase::Ptr grid_base,
+                      const openvdb::math::Coord resolution,
+                      const openvdb::math::Coord min_bound,
                       const int channels,
                       float *data)
 {
 	using namespace openvdb;
 
-	if(channels != 1 && channels != 4) {
+	typename GridType::Ptr grid = gridPtrCast<GridType>(grid_base);
+	if(!validate_and_process_grid<GridType, T>(grid)) {
 		return;
 	}
 
-	typename GridType::Ptr grid = GridType::create();
-	math::Coord resolution, min_bound, tiled_res, remainder;
-
-	if(!get_grid<GridType>(filepath, grid_name, grid, resolution, min_bound)) {
-		return;
-	}
-
+	math::Coord tiled_res, remainder;
 	for(int i = 0; i < 3; ++i) {
 		tiled_res[i] = get_tile_res(resolution[i]);
 		remainder[i] = resolution[i] % TILE_SIZE;
@@ -313,25 +340,21 @@ void image_load_dense(const string &filepath,
 }
 
 template<typename GridType, typename T>
-void image_load_sparse(const string &filepath,
-                       const string &grid_name,
+void image_load_sparse(openvdb::GridBase::Ptr grid_base,
+                       const openvdb::math::Coord resolution,
+                       const openvdb::math::Coord min_bound,
                        const int channels,
                        float *data,
                        vector<int> *sparse_indexes)
 {
 	using namespace openvdb;
 
-	if(channels != 1 && channels != 4) {
+	typename GridType::Ptr grid = gridPtrCast<GridType>(grid_base);
+	if(!validate_and_process_grid<GridType, T>(grid)) {
 		return;
 	}
 
-	typename GridType::Ptr grid = GridType::create();
-	math::Coord resolution, min_bound, tiled_res, remainder;
-
-	if(!get_grid<GridType>(filepath, grid_name, grid, resolution, min_bound)) {
-		return;
-	}
-
+	math::Coord tiled_res, remainder;
 	for(int i = 0; i < 3; ++i) {
 		tiled_res[i] = get_tile_res(resolution[i]);
 		remainder[i] = resolution[i] % TILE_SIZE;
@@ -402,27 +425,74 @@ int3 openvdb_get_resolution(const string& filepath)
 
 void openvdb_load_preprocess(const string& filepath,
                              const string& grid_name,
-                             const int channels,
                              const float threshold,
                              vector<int> *sparse_indexes,
                              int &sparse_size)
 {
-	if(channels > 1) {
-		image_load_preprocess<openvdb::Vec3SGrid, openvdb::math::Vec3s>(
-		            filepath, grid_name, channels, threshold, sparse_indexes, sparse_size);
+	using namespace openvdb;
+
+	GridBase::Ptr grid;
+    OpenVDBGridType grid_type;
+    math::Coord resolution, min_bound;
+
+	if(!get_grid(filepath, grid_name, grid, grid_type, resolution, min_bound)) {
+		return;
 	}
-	else {
-		image_load_preprocess<openvdb::FloatGrid, float>(
-		            filepath, grid_name, channels, threshold, sparse_indexes, sparse_size);
+
+	switch(grid_type) {
+		case OPENVDB_GRID_BOOL:
+			return image_load_preprocess<BoolGrid, unsigned long int>(
+			            grid, resolution, min_bound, 1, threshold,
+			            sparse_indexes, sparse_size);
+		case OPENVDB_GRID_DOUBLE:
+			return image_load_preprocess<DoubleGrid, double>(
+			            grid, resolution, min_bound, 1, threshold,
+			            sparse_indexes, sparse_size);
+		case OPENVDB_GRID_FLOAT:
+			return image_load_preprocess<FloatGrid, float>(
+			            grid, resolution, min_bound, 1, threshold,
+			            sparse_indexes, sparse_size);
+		case OPENVDB_GRID_INT32:
+			return image_load_preprocess<Int32Grid, int32_t>(
+			            grid, resolution, min_bound, 1, threshold,
+			            sparse_indexes, sparse_size);
+		case OPENVDB_GRID_INT64:
+			return image_load_preprocess<Int64Grid, int64_t>(
+			            grid, resolution, min_bound, 1, threshold,
+			            sparse_indexes, sparse_size);
+		case OPENVDB_GRID_VEC_DOUBLE:
+			return image_load_preprocess<Vec3DGrid, math::Vec3d>(
+			            grid, resolution, min_bound, 4, threshold,
+			            sparse_indexes, sparse_size);
+		case OPENVDB_GRID_VEC_UINT32:
+			return image_load_preprocess<Vec3IGrid, math::Vec3i>(
+			            grid, resolution, min_bound, 4, threshold,
+			            sparse_indexes, sparse_size);
+		case OPENVDB_GRID_VEC_FLOAT:
+			return image_load_preprocess<Vec3SGrid, math::Vec3s>(
+			            grid, resolution, min_bound, 4, threshold,
+			            sparse_indexes, sparse_size);
+		case OPENVDB_GRID_MISC:
+		default:
+			return;
 	}
 }
 
 void openvdb_load_image(const string& filepath,
                         const string& grid_name,
-                        const int channels,
                         float *image,
                         vector<int> *sparse_indexes)
 {
+	using namespace openvdb;
+
+	GridBase::Ptr grid;
+    OpenVDBGridType grid_type;
+    math::Coord resolution, min_bound;
+
+	if(!get_grid(filepath, grid_name, grid, grid_type, resolution, min_bound)) {
+		return;
+	}
+
 	bool make_sparse = false;
 	if(sparse_indexes) {
 		if(sparse_indexes->size() > 0) {
@@ -430,24 +500,66 @@ void openvdb_load_image(const string& filepath,
 		}
 	}
 
-	if(make_sparse) {
-		if(channels > 1) {
-			image_load_sparse<openvdb::Vec3SGrid, openvdb::math::Vec3s>(
-			            filepath, grid_name, channels, image, sparse_indexes);
-		}
-		else {
-			image_load_sparse<openvdb::FloatGrid, float>(
-			            filepath, grid_name, channels, image, sparse_indexes);
+	if(!make_sparse) {
+		switch(grid_type) {
+			case OPENVDB_GRID_BOOL:
+				return image_load_dense<BoolGrid, unsigned long int>(
+				            grid, resolution, min_bound, 1, image);
+			case OPENVDB_GRID_DOUBLE:
+				return image_load_dense<DoubleGrid, double>(
+				            grid, resolution, min_bound, 1, image);
+			case OPENVDB_GRID_FLOAT:
+				return image_load_dense<FloatGrid, float>(
+				            grid, resolution, min_bound, 1, image);
+			case OPENVDB_GRID_INT32:
+				return image_load_dense<Int32Grid, int32_t>(
+				            grid, resolution, min_bound, 1, image);
+			case OPENVDB_GRID_INT64:
+				return image_load_dense<Int64Grid, int64_t>(
+				            grid, resolution, min_bound, 1, image);
+			case OPENVDB_GRID_VEC_DOUBLE:
+				return image_load_dense<Vec3DGrid, math::Vec3d>(
+				            grid, resolution, min_bound, 1, image);
+			case OPENVDB_GRID_VEC_UINT32:
+				return image_load_dense<Vec3IGrid, math::Vec3i>(
+				            grid, resolution, min_bound, 1, image);
+			case OPENVDB_GRID_VEC_FLOAT:
+				return image_load_dense<Vec3SGrid, math::Vec3s>(
+				            grid, resolution, min_bound, 1, image);
+			case OPENVDB_GRID_MISC:
+			default:
+				return;
 		}
 	}
 	else {
-		if(channels > 1) {
-			image_load_dense<openvdb::Vec3SGrid, openvdb::math::Vec3s>(
-			            filepath, grid_name, channels, image);
-		}
-		else {
-			image_load_dense<openvdb::FloatGrid, float>(
-			            filepath, grid_name, channels, image);
+		switch(grid_type) {
+			case OPENVDB_GRID_BOOL:
+				return image_load_sparse<BoolGrid, unsigned long int>(
+				            grid, resolution, min_bound, 1, image, sparse_indexes);
+			case OPENVDB_GRID_DOUBLE:
+				return image_load_sparse<DoubleGrid, double>(
+				            grid, resolution, min_bound, 1, image, sparse_indexes);
+			case OPENVDB_GRID_FLOAT:
+				return image_load_sparse<FloatGrid, float>(
+				            grid, resolution, min_bound, 1, image, sparse_indexes);
+			case OPENVDB_GRID_INT32:
+				return image_load_sparse<Int32Grid, int32_t>(
+				            grid, resolution, min_bound, 1, image, sparse_indexes);
+			case OPENVDB_GRID_INT64:
+				return image_load_sparse<Int64Grid, int64_t>(
+				            grid, resolution, min_bound, 1, image, sparse_indexes);
+			case OPENVDB_GRID_VEC_DOUBLE:
+				return image_load_sparse<Vec3DGrid, math::Vec3d>(
+				            grid, resolution, min_bound, 1, image, sparse_indexes);
+			case OPENVDB_GRID_VEC_UINT32:
+				return image_load_sparse<Vec3IGrid, math::Vec3i>(
+				            grid, resolution, min_bound, 1, image, sparse_indexes);
+			case OPENVDB_GRID_VEC_FLOAT:
+				return image_load_sparse<Vec3SGrid, math::Vec3s>(
+				            grid, resolution, min_bound, 1, image, sparse_indexes);
+			case OPENVDB_GRID_MISC:
+			default:
+				return;
 		}
 	}
 }

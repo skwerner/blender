@@ -687,8 +687,8 @@ void ImageManager::file_load_extern_vdb(Device *device,
 
 	int sparse_size = -1;
 	vector<int> sparse_index;
-	openvdb_load_preprocess(img->filename, img->grid_name, components,
-							img->isovalue, &sparse_index, sparse_size);
+	openvdb_load_preprocess(img->filename, img->grid_name, img->isovalue,
+	                        &sparse_index, sparse_size);
 
 	/* Allocate space for image. */
 	float *pixels;
@@ -709,7 +709,7 @@ void ImageManager::file_load_extern_vdb(Device *device,
 	}
 
 	/* Load image. */
-	openvdb_load_image(img->filename, img->grid_name, components, pixels, &sparse_index);
+	openvdb_load_image(img->filename, img->grid_name, pixels, &sparse_index);
 
 	/* Allocate space for sparse_index if it exists. */
 	if(sparse_size > -1) {

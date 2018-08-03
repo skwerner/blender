@@ -80,9 +80,9 @@ ccl_device_inline float3 triangle_smooth_normal(KernelGlobals *kg, float3 Ng, in
 {
 	/* load triangle vertices */
 	const uint4 tri_vindex = kernel_tex_fetch(__tri_vindex, prim);
-	float3 n0 = float4_to_float3(kernel_tex_fetch(__tri_vnormal, tri_vindex.x));
-	float3 n1 = float4_to_float3(kernel_tex_fetch(__tri_vnormal, tri_vindex.y));
-	float3 n2 = float4_to_float3(kernel_tex_fetch(__tri_vnormal, tri_vindex.z));
+	float3 n0 = decode_normal(kernel_tex_fetch(__tri_vnormal, tri_vindex.x));
+	float3 n1 = decode_normal(kernel_tex_fetch(__tri_vnormal, tri_vindex.y));
+	float3 n2 = decode_normal(kernel_tex_fetch(__tri_vnormal, tri_vindex.z));
 
 	float3 N = safe_normalize((1.0f - u - v)*n2 + u*n0 + v*n1);
 

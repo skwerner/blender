@@ -265,6 +265,10 @@ ccl_device_inline float ensure_finite(float v)
 	return isfinite_safe(v)? v : 0.0f;
 }
 
+ccl_device_inline float sign_not_zero(float v) {
+	return (v < 0.0f) ? -1.0f : 1.0f;
+}
+
 #ifndef __KERNEL_OPENCL__
 ccl_device_inline int clamp(int a, int mn, int mx)
 {
@@ -635,6 +639,37 @@ ccl_device_inline float2 map_to_sphere(const float3 co)
 		u = v = 0.0f;
 	}
 	return make_float2(u, v);
+}
+
+ccl_device_inline float2 encode_normal(float3 n)
+{
+	float2 projected;
+	const float invL1Norm = 1.0f / (fabsf(n.x) + fabsf(n.y) + fabsf(n.z));
+
+	if (n.z < 0.0f) {
+		projected[0] = (1.0f - float(fabsf(n[1] * invL1Norm)) * sign_not_zero(n[0]));
+		projected[1] = (1.0f - float(fabsf(n[0] * invL1Norm)) * sign_not_zero(n[1]));
+	}
+	else {
+		projected[0] = (n[0] * invL1Norm);
+		projected[1] = (n[1] * invL1Norm);
+	}
+	return projected;
+}
+
+ccl_device_inline float3 decode_normal(float2 f)
+{
+	float3 n;
+	n.x = f.x;
+	n.y = f.y;
+	n.z = 1.0f - (fabsf(f.x) + fabsf(f.y));
+
+	if (n.z < 0.0f) {
+		float oldX = n.x;
+		n.x = (1.0f - fabsf(n.y)) * sign_not_zero(oldX);
+		n.y = (1.0f - fabsf(oldX)) * sign_not_zero(n.y);
+	}
+	return normalize(n);
 }
 
 CCL_NAMESPACE_END

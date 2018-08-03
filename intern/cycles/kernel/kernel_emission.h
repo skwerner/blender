@@ -76,7 +76,7 @@ ccl_device_noinline float3 direct_emissive_eval(KernelGlobals *kg,
 		/* Evaluate emissive closure. */
 		eval = shader_emissive_eval(kg, emission_sd);
 	}
-	
+
 	eval *= ls->eval_fac;
 
 	return eval;
@@ -348,4 +348,3 @@ ccl_device_noinline float3 indirect_background(KernelGlobals *kg,
 }
 
 CCL_NAMESPACE_END
-

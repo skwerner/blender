@@ -536,7 +536,7 @@ string OSLCompiler::compatible_name(ShaderNode *node, ShaderInput *input)
 	/* strip whitespace */
 	while((i = sname.find(" ")) != string::npos)
 		sname.replace(i, 1, "");
-	
+
 	/* if output exists with the same name, add "In" suffix */
 	foreach(ShaderOutput *output, node->outputs) {
 		if(input->name() == output->name()) {
@@ -544,7 +544,7 @@ string OSLCompiler::compatible_name(ShaderNode *node, ShaderInput *input)
 			break;
 		}
 	}
-	
+
 	return sname;
 }
 
@@ -556,7 +556,7 @@ string OSLCompiler::compatible_name(ShaderNode *node, ShaderOutput *output)
 	/* strip whitespace */
 	while((i = sname.find(" ")) != string::npos)
 		sname.replace(i, 1, "");
-	
+
 	/* if input exists with the same name, add "Out" suffix */
 	foreach(ShaderInput *input, node->inputs) {
 		if(input->name() == output->name()) {
@@ -564,7 +564,7 @@ string OSLCompiler::compatible_name(ShaderNode *node, ShaderOutput *output)
 			break;
 		}
 	}
-	
+
 	return sname;
 }
 
@@ -572,7 +572,7 @@ bool OSLCompiler::node_skip_input(ShaderNode *node, ShaderInput *input)
 {
 	/* exception for output node, only one input is actually used
 	 * depending on the current shader type */
-	
+
 	if(input->flags() & SocketType::SVM_INTERNAL)
 		return true;
 
@@ -662,7 +662,7 @@ void OSLCompiler::add(ShaderNode *node, const char *name, bool isfilepath)
 		ss->Shader("displacement", name, id(node).c_str());
 	else
 		assert(0);
-	
+
 	/* link inputs to other nodes */
 	foreach(ShaderInput *input, node->inputs) {
 		if(input->link) {
@@ -1208,4 +1208,3 @@ void OSLCompiler::parameter_color_array(const char * /*name*/, const array<float
 #endif /* WITH_OSL */
 
 CCL_NAMESPACE_END
-

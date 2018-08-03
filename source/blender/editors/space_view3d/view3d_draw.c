@@ -3021,7 +3021,7 @@ static void view3d_draw_objects(
 	}
 
 	if ((v3d->flag2 & V3D_RENDER_SHADOW) == 0) {
-		GPU_free_images_old();
+		GPU_free_images_old(bmain);
 	}
 }
 
@@ -3091,7 +3091,7 @@ void ED_view3d_draw_offscreen_init(Main *bmain, Scene *scene, View3D *v3d)
  */
 static void view3d_main_region_clear(Scene *scene, View3D *v3d, ARegion *ar)
 {
-	if (scene->world && (v3d->flag3 & V3D_SHOW_WORLD)) {
+	if (scene->world && (v3d->flag2 & V3D_SHOW_WORLD)) {
 		RegionView3D *rv3d = ar->regiondata;
 		GPUMaterial *gpumat = GPU_material_world(scene, scene->world);
 
@@ -3206,7 +3206,7 @@ void ED_view3d_draw_offscreen(
 	if ((v3d->flag2 & V3D_RENDER_SHADOW) == 0) {
 		/* free images which can have changed on frame-change
 		 * warning! can be slow so only free animated images - campbell */
-		GPU_free_images_anim();
+		GPU_free_images_anim(bmain);
 	}
 
 	/* setup view matrices before fx or unbinding the offscreen buffers will cause issues */
@@ -3260,7 +3260,7 @@ void ED_view3d_draw_offscreen(
 		}
 
 		/* freeing the images again here could be done after the operator runs, leaving for now */
-		GPU_free_images_anim();
+		GPU_free_images_anim(bmain);
 	}
 
 	/* restore size */
@@ -3497,7 +3497,7 @@ ImBuf *ED_view3d_draw_offscreen_imbuf_simple(
 		v3d.flag2 |= V3D_SOLID_TEX;
 	}
 	if (draw_flags & V3D_OFSDRAW_USE_BACKGROUND) {
-		v3d.flag3 |= V3D_SHOW_WORLD;
+		v3d.flag2 |= V3D_SHOW_WORLD;
 	}
 	if (draw_flags & V3D_OFSDRAW_USE_CAMERA_DOF) {
 		if (camera->type == OB_CAMERA) {

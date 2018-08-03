@@ -60,6 +60,8 @@
 #include "BKE_sound.h"
 #include "BKE_image.h"
 
+#include "DNA_screen_types.h"
+
 #include "DEG_depsgraph.h"
 
 #ifdef WITH_FFMPEG
@@ -1474,11 +1476,11 @@ static int arg_handle_ge_parameters_set(int argc, const char **argv, void *data)
 #endif
 			/* doMipMap */
 			if (STREQ(argv[a], "nomipmap")) {
-				GPU_set_mipmap(0); //doMipMap = 0;
+				GPU_set_mipmap(G_MAIN, 0); //doMipMap = 0;
 			}
 			/* linearMipMap */
 			if (STREQ(argv[a], "linearmipmap")) {
-				GPU_set_mipmap(1);
+				GPU_set_mipmap(G_MAIN, 1);
 				GPU_set_linear_mipmap(1); //linearMipMap = 1;
 			}
 
@@ -1588,6 +1590,16 @@ static int arg_handle_scene_set(int argc, const char **argv, void *data)
 		Scene *scene = BKE_scene_set_name(CTX_data_main(C), argv[1]);
 		if (scene) {
 			CTX_data_scene_set(C, scene);
+
+			/* Set the scene of the first window, see: T55991,
+			 * otherwise scrips that run later won't get this scene back from the context. */
+			wmWindow *win = CTX_wm_window(C);
+			if (win == NULL) {
+				win = CTX_wm_manager(C)->windows.first;
+			}
+			if (win != NULL) {
+				win->screen->scene = scene;
+			}
 		}
 		return 1;
 	}

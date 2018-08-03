@@ -19,10 +19,10 @@
 import bpy
 
 from bpy.types import (
-        Panel,
-        Menu,
-        Operator,
-        )
+    Panel,
+    Menu,
+    Operator,
+)
 
 
 class CYCLES_MT_sampling_presets(Menu):
@@ -85,6 +85,7 @@ def use_sample_all_lights(context):
     cscene = context.scene.cycles
 
     return cscene.sample_all_lights_direct or cscene.sample_all_lights_indirect
+
 
 def show_device_active(context):
     cscene = context.scene.cycles
@@ -977,9 +978,9 @@ class CYCLES_LAMP_PT_preview(CyclesButtonsPanel, Panel):
     @classmethod
     def poll(cls, context):
         return context.lamp and \
-               not (context.lamp.type == 'AREA' and
-                    context.lamp.cycles.is_portal) \
-               and CyclesButtonsPanel.poll(context)
+            not (context.lamp.type == 'AREA' and
+                 context.lamp.cycles.is_portal) \
+            and CyclesButtonsPanel.poll(context)
 
     def draw(self, context):
         self.layout.template_preview(context.lamp)
@@ -1047,7 +1048,7 @@ class CYCLES_LAMP_PT_nodes(CyclesButtonsPanel, Panel):
     def poll(cls, context):
         return context.lamp and not (context.lamp.type == 'AREA' and
                                      context.lamp.cycles.is_portal) and \
-               CyclesButtonsPanel.poll(context)
+            CyclesButtonsPanel.poll(context)
 
     def draw(self, context):
         layout = self.layout
@@ -1753,6 +1754,7 @@ class CYCLES_SCENE_PT_simplify(CyclesButtonsPanel, Panel):
         col = split.column()
         col.prop(cscene, "ao_bounces_render")
 
+
 def draw_device(self, context):
     scene = context.scene
     layout = self.layout
@@ -1835,7 +1837,7 @@ def get_panels():
         'WORLD_PT_mist',
         'WORLD_PT_preview',
         'WORLD_PT_world'
-        }
+    }
 
     panels = []
     for panel in bpy.types.Panel.__subclasses__():

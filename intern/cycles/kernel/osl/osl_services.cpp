@@ -365,7 +365,7 @@ bool OSLRenderServices::get_matrix(OSL::ShaderGlobals *sg, OSL::Matrix44 &result
 bool OSLRenderServices::get_inverse_matrix(OSL::ShaderGlobals *sg, OSL::Matrix44 &result, ustring to)
 {
 	KernelGlobals *kg = kernel_globals;
-	
+
 	if(to == u_ndc) {
 		copy_matrix(result, kernel_data.cam.worldtondc);
 		return true;
@@ -382,11 +382,11 @@ bool OSLRenderServices::get_inverse_matrix(OSL::ShaderGlobals *sg, OSL::Matrix44
 		copy_matrix(result, kernel_data.cam.worldtocamera);
 		return true;
 	}
-	
+
 	return false;
 }
 
-bool OSLRenderServices::get_array_attribute(OSL::ShaderGlobals *sg, bool derivatives, 
+bool OSLRenderServices::get_array_attribute(OSL::ShaderGlobals *sg, bool derivatives,
                                             ustring object, TypeDesc type, ustring name,
                                             int index, void *val)
 {
@@ -685,7 +685,7 @@ bool OSLRenderServices::get_object_standard_attribute(KernelGlobals *kg, ShaderD
 		float3 f = particle_angular_velocity(kg, particle_id);
 		return set_attribute_float3(f, type, derivatives, val);
 	}
-	
+
 	/* Geometry Attributes */
 	else if(name == u_geom_numpolyvertices) {
 		return set_attribute_int(3, type, derivatives, val);
@@ -874,7 +874,7 @@ bool OSLRenderServices::get_attribute(ShaderData *sd, bool derivatives, ustring 
 	return false;
 }
 
-bool OSLRenderServices::get_userdata(bool derivatives, ustring name, TypeDesc type, 
+bool OSLRenderServices::get_userdata(bool derivatives, ustring name, TypeDesc type,
                                      OSL::ShaderGlobals *sg, void *val)
 {
 	return false; /* disabled by lockgeom */

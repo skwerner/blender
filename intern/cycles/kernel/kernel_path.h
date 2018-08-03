@@ -768,4 +768,3 @@ ccl_device void kernel_path_trace(KernelGlobals *kg,
 #endif  /* __SPLIT_KERNEL__ */
 
 CCL_NAMESPACE_END
-

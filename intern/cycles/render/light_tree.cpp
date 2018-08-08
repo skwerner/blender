@@ -439,17 +439,9 @@ void LightTree::split_saoh(const BoundBox &centroid_bbox,
 			const float M_Omega_R     = calculate_cone_measure(bcone_R);
 			const float K             = extent_max * extent_inv;
 
-			/* NOTE: in eq 2 they do not have the energy of the parent in the
-			 * denominator. Is this a typo?
-			 * Actually. The denominator does not affect the minimization since
-			 * it is just a constant scale factor for every cost being minimized.
-			 * The denominator might help with numerical issues though.
-			 *
-			 * TODO: When optimizing, could calc denominator once and take its
-			 * inverse once and then just multiply here. */
 			cost[i] = K * (energy_L    * M_Omega_L    * bbox_L.area()  +
 			               energy_R    * M_Omega_R    * bbox_R.area()) /
-			              (node_energy * node_M_Omega * node_bbox.area());
+			              (node_M_Omega * node_bbox.area());
 		}
 
 		/* update minimum cost, dim and bucket */

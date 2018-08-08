@@ -80,18 +80,18 @@ struct OpenVDBVectorGrid *OpenVDB_export_grid_vec(struct OpenVDBWriter *writer,
 void OpenVDB_import_grid_fl(
         struct OpenVDBReader *reader,
         const char *name, float *data,
-        const int res[3], const int min_bound[3]);
+        const int res[3], const int min_bound[3], const int sample_level);
 
 void OpenVDB_import_grid_ch(
         struct OpenVDBReader *reader,
         const char *name, unsigned char *data,
-        const int res[3], const int min_bound[3]);
+        const int res[3], const int min_bound[3], const int sample_level);
 
 void OpenVDB_import_grid_vec(
         struct OpenVDBReader *reader,
         const char *name,
         float *data_x, float *data_y, float *data_z,
-        const int res[3], const int min_bound[3]);
+        const int res[3], const int min_bound[3], const int sample_level);
 
 struct OpenVDBWriter *OpenVDBWriter_create(void);
 void OpenVDBWriter_free(struct OpenVDBWriter *writer);

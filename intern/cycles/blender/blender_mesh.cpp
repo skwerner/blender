@@ -31,10 +31,6 @@
 #include "util/util_logging.h"
 #include "util/util_math.h"
 
-#ifdef WITH_OPENVDB
-#include "render/openvdb.h"
-#endif
-
 #include "mikktspace.h"
 
 CCL_NAMESPACE_BEGIN
@@ -376,23 +372,15 @@ static void create_mesh_volume_attributes(Scene *scene,
 		return;
 
 	string filename;
-	void *builtin_data;
+	void *builtin_data = NULL;
 
-	if(b_domain.use_volume_file()) {
-		BL::ID b_id = b_ob.data();
-		filename = blender_absolute_path(b_data, b_id,
-		                                 b_domain.volume_filepath());
-
-		if(string_endswith(filename, ".vdb") &&
-		   !scene->params.intialized_openvdb)
-		{
-			openvdb_initialize();
-			scene->params.intialized_openvdb = true;
+	if(volume_get_frame_file(b_data, b_ob, b_domain, (int)frame, filename)) {
+		if(string_endswith(filename, ".vdb")) {
+			init_openvdb_in_scene(scene->params.intialized_openvdb);
 		}
-
-		builtin_data = NULL;
 	}
 	else {
+		filename = string();
 		builtin_data = b_ob.ptr.data;
 	}
 
@@ -408,7 +396,7 @@ static void create_mesh_volume_attributes(Scene *scene,
 		create_mesh_volume_attribute(mesh, scene->image_manager, ATTR_STD_VOLUME_HEAT, filename, builtin_data, frame);
 	if(mesh->need_attribute(scene, ATTR_STD_VOLUME_TEMPERATURE))
 		create_mesh_volume_attribute(mesh, scene->image_manager, ATTR_STD_VOLUME_TEMPERATURE, filename, builtin_data, frame);
-	if(mesh->need_attribute(scene, ATTR_STD_VOLUME_VELOCITY) || scene->need_motion() == Scene::MOTION_BLUR)
+	if(mesh->need_attribute(scene, ATTR_STD_VOLUME_VELOCITY) || mesh->use_volume_motion_blur)
 		create_mesh_volume_attribute(mesh, scene->image_manager, ATTR_STD_VOLUME_VELOCITY, filename, builtin_data, frame);
 }
 

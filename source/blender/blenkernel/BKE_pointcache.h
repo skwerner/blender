@@ -267,6 +267,9 @@ typedef struct PTCacheEdit {
 /* Particle functions */
 void BKE_ptcache_make_particle_key(struct ParticleKey *key, int index, void **data, float time);
 
+/* Filename functions */
+void BKE_ptcache_volume_extern_find_frame(const char *input, char *output, const int cfra, const short multi_import);
+
 /**************** Creating ID's ****************************/
 void BKE_ptcache_id_from_softbody(PTCacheID *pid, struct Object *ob, struct SoftBody *sb);
 void BKE_ptcache_id_from_particles(PTCacheID *pid, struct Object *ob, struct ParticleSystem *psys);

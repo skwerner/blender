@@ -18,6 +18,9 @@
 #define __BLENDER_UTIL_H__
 
 #include "render/mesh.h"
+#ifdef WITH_OPENVDB
+#include "render/openvdb.h"
+#endif
 
 #include "util/util_algorithm.h"
 #include "util/util_map.h"
@@ -36,6 +39,7 @@ void BKE_image_user_frame_calc(void *iuser, int cfra, int fieldnr);
 void BKE_image_user_file_path(void *iuser, void *ima, char *path);
 unsigned char *BKE_image_get_pixels_for_frame(void *image, int frame);
 float *BKE_image_get_float_pixels_for_frame(void *image, int frame);
+void BKE_ptcache_volume_extern_find_frame(const char *input, char *output, const int cfra, const short multi_import);
 }
 
 CCL_NAMESPACE_BEGIN
@@ -603,6 +607,72 @@ static inline Mesh::SubdivisionType object_subdivision_type(BL::Object& b_ob, bo
 	}
 
 	return Mesh::SUBDIVISION_NONE;
+}
+
+static inline void init_openvdb_in_scene(bool& initialized)
+{
+	if(!initialized) {
+		openvdb_initialize();
+		initialized = true;
+	}
+}
+
+static inline bool volume_get_frame_file(BL::BlendData& b_data,
+                                         BL::Object& b_ob,
+                                         BL::SmokeDomainSettings& b_domain,
+                                         const int& cfra,
+                                         string& filename)
+{
+	if(b_domain.volume_filepath().empty()) {
+		return false;
+	}
+
+	char output[1024];
+	BKE_ptcache_volume_extern_find_frame(b_domain.volume_filepath().c_str(),
+	                                     output, cfra, b_domain.multi_import());
+
+	BL::ID b_id = b_ob.data();
+	filename = blender_absolute_path(b_data, b_id, string(output));
+
+	return true;
+}
+
+static inline bool object_use_volume_motion(BL::Object& b_parent,
+                                            BL::Object& b_ob,
+                                            BL::BlendData& b_data,
+                                            const int& cfra,
+                                            bool& initialized_openvdb)
+{
+	BL::SmokeDomainSettings b_domain = object_smoke_domain_find(b_ob);
+	if(!b_domain) {
+		return false;
+	}
+
+	/* For imported volumes, the file must have a velocity grid. */
+	string filename;
+	if(volume_get_frame_file(b_data, b_ob, b_domain, cfra, filename)) {
+		if(string_endswith(filename, ".vdb")) {
+			init_openvdb_in_scene(initialized_openvdb);
+			if(!openvdb_has_grid(filename, "velocity")) {
+				return false;
+			}
+		}
+	}
+
+	PointerRNA cobject = RNA_pointer_get(&b_ob.ptr, "cycles");
+	bool use_volume_motion = get_boolean(cobject, "use_volume_motion");
+
+	/* If motion blur is enabled for the object we also check
+	 * whether it's enabled for the parent object as well.
+	 *
+	 * This way we can control motion blur from the dupligroup
+	 * duplicator much easier.
+	 */
+	if(use_volume_motion && b_parent.ptr.data != b_ob.ptr.data) {
+		PointerRNA parent_cobject = RNA_pointer_get(&b_parent.ptr, "cycles");
+		use_volume_motion &= get_boolean(parent_cobject, "use_volume_motion");
+	}
+	return use_volume_motion;
 }
 
 /* ID Map

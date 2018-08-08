@@ -1545,7 +1545,7 @@ void MeshManager::device_update_attributes(Device *device, DeviceScene *dscene, 
 		}
 
 		/* motion blur for volumes */
-		if(mesh->use_motion_blur && mesh->motion_steps > 1 && mesh->has_volume)
+		if(mesh->use_volume_motion_blur)
 		{
 			mesh_attributes[i].add(ATTR_STD_VOLUME_VELOCITY);
 		}

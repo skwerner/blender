@@ -124,11 +124,11 @@ template <typename GridType, typename GridDataType, typename DataType>
 void OpenVDB_import_grid(
         OpenVDBReader *reader,
         const char *name,
-        typename GridType::Ptr *grid_ptr,
         DataType **data,
-        const int res[3],
+        const int raw_res[3],
         const int min_bound[3],
 		const int channels,
+		const int sample_level,
 		const bool weave)
 {
 	using namespace openvdb;
@@ -137,6 +137,12 @@ void OpenVDB_import_grid(
 	 * Normal pattern: xxx...yyy....zzz
 	 * Normal data is an array of pointers while weave data is a pointer to a
 	 * flat T array. */
+
+	int remainder[3], res[3];
+	for(int i = 0; i < 3; ++i) {
+		remainder[i] = res[i] % CUBE_SIZE;
+		res[i] = raw_res[i] / sample_level + (raw_res[i] % sample_level != 0);
+	}
 
 	if(weave) {
 		memset(data[0], 0, res[0] * res[1] * res[2] * channels * sizeof(DataType));
@@ -147,30 +153,19 @@ void OpenVDB_import_grid(
 		}
 	}
 
-	typename GridType::Ptr grid;
+	openvdb::Name temp_name(name);
 
-	if(reader && name) {
-		openvdb::Name temp_name(name);
+	if (!reader->hasGrid(temp_name)) {
+		temp_name = do_name_versionning(temp_name);
 
 		if (!reader->hasGrid(temp_name)) {
-			temp_name = do_name_versionning(temp_name);
-
-			if (!reader->hasGrid(temp_name)) {
-				std::fprintf(stderr, "OpenVDB grid %s not found in file!\n", temp_name.c_str());
-				return;
-			}
+			std::fprintf(stderr, "OpenVDB grid %s not found in file!\n", temp_name.c_str());
+			return;
 		}
-
-		grid = gridPtrCast<GridType>(reader->getGrid(temp_name));
-	}
-	else if(grid_ptr) {
-		grid = *grid_ptr;
-	}
-	else {
-		return;
 	}
 
-	const int remainder[3] = {res[0] % CUBE_SIZE, res[1] % CUBE_SIZE, res[2] % CUBE_SIZE};
+	typename GridType::Ptr grid = gridPtrCast<GridType>(reader->getGrid(temp_name));
+
 	const math::Coord min(min_bound[0], min_bound[1], min_bound[2]);
 
 	for (typename GridType::TreeType::LeafCIter iter = grid->tree().cbeginLeaf(); iter; ++iter) {
@@ -178,17 +173,28 @@ void OpenVDB_import_grid(
 		const GridDataType *leaf_data = leaf->buffer().data();
 
 		const math::Coord start = leaf->getNodeBoundingBox().getStart() - min;
-		const int tile_width = (start.x() + CUBE_SIZE > res[0]) ? remainder[0] : CUBE_SIZE;
-		const int tile_height = (start.y() + CUBE_SIZE > res[1]) ? remainder[1] : CUBE_SIZE;
-		const int tile_depth = (start.z() + CUBE_SIZE > res[2]) ? remainder[2] : CUBE_SIZE;
+		const int tile_width = (start.x() + CUBE_SIZE > raw_res[0]) ? remainder[0] : CUBE_SIZE;
+		const int tile_height = (start.y() + CUBE_SIZE > raw_res[1]) ? remainder[1] : CUBE_SIZE;
+		const int tile_depth = (start.z() + CUBE_SIZE > raw_res[2]) ? remainder[2] : CUBE_SIZE;
 
 		for (int k = 0; k < tile_depth; ++k) {
 			for (int j = 0; j < tile_height; ++j) {
 				for (int i = 0; i < tile_width; ++i) {
-					int data_index = compute_index(start.x() + i,
-												   start.y() + j,
-												   start.z() + k,
-												   res[0], res[1]);
+					int x = start.x() + i;
+					int y = start.y() + j;
+					int z = start.z() + k;
+
+					/* Get every (sample_level)th voxel. */
+					if(sample_level > 1) {
+						if(x % sample_level != 0 || y % sample_level != 0 || z % sample_level != 0) {
+							continue;
+						}
+						x /= sample_level;
+						y /= sample_level;
+						z /= sample_level;
+					}
+
+					int data_index = compute_index(x, y, z, res[0], res[1]);
 					/* Index computation by coordinates is reversed in VDB grids. */
 					int leaf_index = compute_index(k, j, i, tile_depth, tile_height);
 

@@ -1083,8 +1083,14 @@ class CyclesObjectSettings(bpy.types.PropertyGroup):
 
         cls.use_deform_motion = BoolProperty(
                 name="Use Deformation Motion",
-                description="Use deformation motion blur for this object. If object is a volume, use volume motion blur",
+                description="Use deformation motion blur for this object",
                 default=True,
+                )
+
+        cls.use_volume_motion = BoolProperty(
+                name="Use Volume Motion",
+                description="Use volume motion blur for this object",
+                default=False,
                 )
 
         cls.motion_steps = IntProperty(

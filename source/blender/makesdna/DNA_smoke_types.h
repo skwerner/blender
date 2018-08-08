@@ -216,12 +216,12 @@ typedef struct SmokeDomainSettings {
 	char vector_draw_type;
 	char use_coba;
 	char coba_field;  /* simulation field used for the color mapping */
-	char pad2;
+
+	char multi_import;
+	char volume_filepath[1024];
+	int sample_level;
 
 	float clipping;
-	float pad3;
-
-	char volume_filepath[1024];
 } SmokeDomainSettings;
 
 

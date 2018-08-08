@@ -457,6 +457,12 @@ static void rna_SmokeDomain_volume_filepath_set(PointerRNA *ptr, const char *val
 	SmokeDomainSettings *sds = (SmokeDomainSettings *)ptr->data;
 	BLI_strncpy(sds->volume_filepath, value, sizeof(sds->volume_filepath));
 }
+
+static void rna_SmokeDomain_multi_import_set(PointerRNA *ptr, int value)
+{
+	SmokeDomainSettings *sds = (SmokeDomainSettings *)ptr->data;
+	sds->multi_import = value;
+}
 #else
 
 static void rna_def_smoke_domain_settings(BlenderRNA *brna)
@@ -934,14 +940,21 @@ static void rna_def_smoke_domain_settings(BlenderRNA *brna)
 
 	/* Volume File Import */
 
-	prop = RNA_def_property(srna, "use_volume_file", PROP_BOOLEAN, PROP_NONE);
-	RNA_def_property_boolean_sdna(prop, NULL, "flags", MOD_SMOKE_FILE_LOAD);
-	RNA_def_property_ui_text(prop, "Volume Import", "Use external volume file");
-	RNA_def_property_update(prop, NC_OBJECT | ND_MODIFIER, "rna_Smoke_reset");
-
 	prop = RNA_def_property(srna, "volume_filepath", PROP_STRING, PROP_FILEPATH);
 	RNA_def_property_string_funcs(prop, "rna_SmokeDomain_volume_filepath_get", "rna_SmokeDomain_volume_filepath_length", "rna_SmokeDomain_volume_filepath_set");
 	RNA_def_property_ui_text(prop, "Volume File Path", "Path to external volume file");
+	RNA_def_property_update(prop, NC_OBJECT | ND_MODIFIER, "rna_Smoke_reset");
+
+	prop = RNA_def_property(srna, "multi_import", PROP_BOOLEAN, PROP_NONE);
+	RNA_def_property_boolean_funcs(prop, NULL, "rna_SmokeDomain_multi_import_set");
+	RNA_def_property_ui_text(prop, "Multiple Import", "Try to import similarly named files as an animation");
+	RNA_def_property_update(prop, NC_OBJECT | ND_MODIFIER, "rna_Smoke_reset");
+
+	prop = RNA_def_property(srna, "sample_level", PROP_INT, PROP_NONE);
+	RNA_def_property_int_sdna(prop, NULL, "sample_level");
+	RNA_def_property_range(prop, 1, 16);
+	RNA_def_property_ui_range(prop, 1, 16, 1, -1);
+	RNA_def_property_ui_text(prop, "Simplify", "Change level of detail of preview (1 for maximum detail, and larger numbers for less detail)");
 	RNA_def_property_update(prop, NC_OBJECT | ND_MODIFIER, "rna_Smoke_reset");
 }
 

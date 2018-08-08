@@ -64,6 +64,8 @@ static int wm_openvdb_import_exec(bContext *C, wmOperator *op)
 	smd->domain->flags |= MOD_SMOKE_FILE_LOAD;
 	smd->domain->flags |= MOD_SMOKE_ADAPTIVE_DOMAIN;
 	smd->domain->cache_file_format = PTCACHE_FILE_OPENVDB_EXTERN;
+	smd->domain->multi_import = 0;
+	smd->domain->sample_level = 0; /* initial import flag */
 	BLI_strncpy(smd->domain->volume_filepath, filepath, sizeof(filepath));
 
 	return OPERATOR_FINISHED;

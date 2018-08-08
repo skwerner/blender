@@ -149,7 +149,7 @@ ccl_device void kernel_branched_path_volume_connect_light(
 	bool is_lamp;
 
 	light_ray.time = sd->time;
-	if(sample_all_lights && !kernel_data.integrator.use_light_bvh) {
+	if(sample_all_lights && !kernel_data.integrator.use_light_tree) {
 		/* lamp sampling */
 		for(int i = 0; i < kernel_data.integrator.num_all_lights; i++) {
 			if(UNLIKELY(light_select_reached_max_bounces(kg, i, state->bounce)))

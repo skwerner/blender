@@ -281,7 +281,7 @@ void BlenderSync::sync_integrator()
 	                                                  Integrator::NUM_METHODS,
 	                                                  Integrator::PATH);
 
-	integrator->use_light_bvh = get_boolean(cscene, "use_light_bvh");
+	integrator->use_light_tree = get_boolean(cscene, "use_light_tree");
 	integrator->splitting_threshold = get_float(cscene, "splitting_threshold");
 	integrator->sample_all_lights_direct = get_boolean(cscene, "sample_all_lights_direct");
 	integrator->sample_all_lights_indirect = get_boolean(cscene, "sample_all_lights_indirect");
@@ -329,7 +329,7 @@ void BlenderSync::sync_integrator()
 	if(integrator->modified(previntegrator)) {
 		integrator->tag_update(scene);
 	}
-	if(integrator->use_light_bvh != previntegrator.use_light_bvh ||
+	if(integrator->use_light_tree != previntegrator.use_light_tree ||
 	   integrator->splitting_threshold != previntegrator.splitting_threshold)
 	{
 		scene->light_manager->tag_update(scene);

@@ -1319,7 +1319,7 @@ static_assert_align(KernelBackground, 16);
 
 typedef struct KernelIntegrator {
 	/* emission */
-	int use_light_bvh;
+	int use_light_tree;
 	float splitting_threshold;
 	int use_direct_light;
 	int use_ambient_occlusion;

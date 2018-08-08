@@ -33,7 +33,15 @@ typedef struct LightSample {
 	LightType type;		/* type of light */
 } LightSample;
 
-/* This normal is used in the light picking when using the light tree */
+/* Updates the position and normal used to pick a light for direct lighting.
+ *
+ * The light tree importance metric contains a term that approximates the BSDF
+ * at the shading point. Currently, this is a diffuse approximation which will
+ * give a zero importance for all lights in the lower hemisphere. However, if
+ * it is possible to refract at the shading point then we do not want zero
+ * importance for the lights in the lower hemisphere. This is done by setting
+ * the normal to either [0,0,0] to indicate that it should not be used in the
+ * importance calculations or to flip the normal if we know it must refract. */
 ccl_device void kernel_update_light_picking(
 	ShaderData *sd,
 	ccl_addr_space PathState *state)
@@ -69,13 +77,13 @@ ccl_device void kernel_update_light_picking(
 	sd->P_pick = sd->P;
 
 #if defined(__LAMP_MIS__) || defined(__EMISSION__) || defined(__BACKGROUND_MIS__)
+	/* update ray_N to be the normal at the last non-transparent bounce */
 	if(!transparent){
 		state->ray_N = sd->N_pick;
 	}
-	// todo: what if there is a transparent but it is not this BSDF that is
+	// todo: what if there is a transparent BSDF but it is not this BSDF that is
 	// sampled in surface_bounce() ?
 #endif
-
 }
 
 /* Area light sampling */
@@ -545,6 +553,7 @@ ccl_device float spot_light_attenuation(float3 dir, float spot_angle, float spot
 	return attenuation;
 }
 
+/* returns the PDF of sampling a point on this lamp */
 ccl_device float lamp_light_pdf(KernelGlobals *kg, const float3 Ng, const float3 I, float t)
 {
 	float cos_pi = dot(Ng, I);
@@ -1125,6 +1134,7 @@ ccl_device bool light_select_reached_max_bounces(KernelGlobals *kg, int index, i
 	return (bounce > kernel_tex_fetch(__lights, index).max_bounces);
 }
 
+/* calculates the importance metric for the given node and shading point P */
 ccl_device float calc_importance(KernelGlobals *kg, float3 P, float3 N,
                                  float3 bboxMax, float theta_o, float theta_e,
                                  float3 axis, float energy, float3 centroid)
@@ -1139,10 +1149,10 @@ ccl_device float calc_importance(KernelGlobals *kg, float3 P, float3 N,
 	 *    \ /
 	 *     P
 	 * sin(th) = r/d <=> sin^2(th) = r^2 / d^2 */
-	const float3 centroidToP        = P - centroid;
-	const float3 centroidToPDir     = normalize(centroidToP);
-	const float r2                  = len_squared(bboxMax - centroid);
-	float d2                        = len_squared(centroidToP);
+	const float3 centroid_to_P     = P - centroid;
+	const float3 centroid_to_P_dir = normalize(centroid_to_P);
+	const float r2                 = len_squared(bboxMax - centroid);
+	float d2                       = len_squared(centroid_to_P);
 
 	/* based on comment in the implementation details of the paper */
 	const bool splitting = kernel_data.integrator.splitting_threshold != 0.0f;
@@ -1161,7 +1171,7 @@ ccl_device float calc_importance(KernelGlobals *kg, float3 P, float3 N,
 	}
 
 	/* cos(theta') */
-	const float theta       = fast_acosf(dot(axis, centroidToPDir));
+	const float theta       = fast_acosf(dot(axis, centroid_to_P_dir));
 	const float theta_prime = fmaxf(theta - theta_o - theta_u, 0.0f);
 	if (theta_prime >= theta_e){
 		return 0.0f;
@@ -1170,7 +1180,7 @@ ccl_device float calc_importance(KernelGlobals *kg, float3 P, float3 N,
 
 	/* f_a|cos(theta'_i)| -- diffuse approximation */
 	if(N != make_float3(0.0f, 0.0f, 0.0f)){
-		const float theta_i               = fast_acosf(dot(N, -centroidToPDir));
+		const float theta_i               = fast_acosf(dot(N, -centroid_to_P_dir));
 		const float theta_i_prime         = fmaxf(theta_i - theta_u, 0.0f);
 		const float cos_theta_i_prime     = fast_cosf(theta_i_prime);
 		const float abs_cos_theta_i_prime = fabsf(cos_theta_i_prime);
@@ -1184,54 +1194,75 @@ ccl_device float calc_importance(KernelGlobals *kg, float3 P, float3 N,
 	return energy * cos_theta_prime / d2;
 }
 
+/* the energy, spatial and orientation bounds for the light are loaded and decoded
+ * and then this information is used to calculate the importance for this light.
+ * This function is used to calculate the importance for a light in a node
+ * containing several lights. */
 ccl_device float calc_light_importance(KernelGlobals *kg, float3 P, float3 N,
                                        int node_offset, int light_offset)
 {
+	/* find offset into light_tree_leaf_emitters array */
 	int first_emitter = kernel_tex_fetch(__leaf_to_first_emitter, node_offset/4);
 	kernel_assert(first_emitter != -1);
 	int offset = first_emitter + light_offset*3;
 
-	const float4 node0 = kernel_tex_fetch(__light_tree_leaf_emitters, offset + 0);
-	const float4 node1 = kernel_tex_fetch(__light_tree_leaf_emitters, offset + 1);
-	const float4 node2 = kernel_tex_fetch(__light_tree_leaf_emitters, offset + 2);
+	/* get relevant information to be able to calculate the importance */
+	const float4 data0 = kernel_tex_fetch(__light_tree_leaf_emitters, offset + 0);
+	const float4 data1 = kernel_tex_fetch(__light_tree_leaf_emitters, offset + 1);
+	const float4 data2 = kernel_tex_fetch(__light_tree_leaf_emitters, offset + 2);
 
-	const float3 bboxMin  = make_float3(node0.x, node0.y, node0.z);
-	const float3 bboxMax  = make_float3(node0.w, node1.x, node1.y);
-	const float  theta_o  = node1.z;
-	const float  theta_e  = node1.w;
-	const float3 axis     = make_float3(node2.x, node2.y, node2.z);
-	const float  energy   = node2.w;
-	const float3 centroid = 0.5f*(bboxMax + bboxMin);
+	/* decode data for this light */
+	const float3 bbox_min  = make_float3(data0.x, data0.y, data0.z);
+	const float3 bbox_max  = make_float3(data0.w, data1.x, data1.y);
+	const float  theta_o  = data1.z;
+	const float  theta_e  = data1.w;
+	const float3 axis     = make_float3(data2.x, data2.y, data2.z);
+	const float  energy   = data2.w;
+	const float3 centroid = 0.5f*(bbox_max + bbox_min);
 
-	return calc_importance(kg, P, N, bboxMax, theta_o, theta_e, axis, energy,
+	return calc_importance(kg, P, N, bbox_max, theta_o, theta_e, axis, energy,
 	                       centroid);
 }
 
+/* the combined energy, spatial and orientation bounds for all the lights for the
+ * given node are loaded and decoded and then this information is used to
+ * calculate the importance for this node. */
 ccl_device float calc_node_importance(KernelGlobals *kg, float3 P, float3 N, int node_offset)
 {
+	/* load the data for this node */
 	const float4 node0 = kernel_tex_fetch(__light_tree_nodes, node_offset + 0);
 	const float4 node1 = kernel_tex_fetch(__light_tree_nodes, node_offset + 1);
 	const float4 node2 = kernel_tex_fetch(__light_tree_nodes, node_offset + 2);
 	const float4 node3 = kernel_tex_fetch(__light_tree_nodes, node_offset + 3);
 
+	/* decode the data so it can be used to calculate the importance */
 	const float  energy   = node0.x;
-	const float3 bboxMin  = make_float3(node1.x, node1.y, node1.z);
-	const float3 bboxMax  = make_float3(node1.w, node2.x, node2.y);
+	const float3 bbox_min  = make_float3(node1.x, node1.y, node1.z);
+	const float3 bbox_max  = make_float3(node1.w, node2.x, node2.y);
 	const float  theta_o  = node2.z;
 	const float  theta_e  = node2.w;
 	const float3 axis     = make_float3(node3.x, node3.y, node3.z);
-	const float3 centroid = 0.5f*(bboxMax + bboxMin);
+	const float3 centroid = 0.5f*(bbox_max + bbox_min);
 
-	return calc_importance(kg, P, N, bboxMax, theta_o, theta_e, axis, energy,
+	return calc_importance(kg, P, N, bbox_max, theta_o, theta_e, axis, energy,
 	                       centroid);
 }
 
-ccl_device void update_parent_node(KernelGlobals *kg, int node_offset,
-                                   int *childOffset, int *distribution_id,
-                                   int *num_emitters)
+/* given a node offset, this function loads and decodes the minimum amount of
+ * data needed for a the given node to be able to only either identify if it is
+ * a leaf node or how to find its two children
+ *
+ * child_o	ffset is an offset into the nodes array to this nodes right child. the
+ * left child has index node_offset+4.
+ * distribution_id corresponds to an offset into the distribution array for the
+ * first light contained in this node. num_emitters is how many lights there are
+ * in this node. */
+ccl_device void update_node(KernelGlobals *kg, int node_offset,
+                            int *child_offset, int *distribution_id,
+                            int *num_emitters)
 {
 	float4 node        = kernel_tex_fetch(__light_tree_nodes, node_offset);
-	(*childOffset)     = __float_as_int(node.y);
+	(*child_offset)     = __float_as_int(node.y);
 	(*distribution_id) = __float_as_int(node.z);
 	(*num_emitters)    = __float_as_int(node.w);
 }
@@ -1253,34 +1284,52 @@ ccl_device void light_distant_sample(KernelGlobals *kg, float3 P, float *randu,
 	*pdf = kernel_data.integrator.inv_num_distant_lights;
 }
 
-/* picks one of the background lights and computes the probability of picking it */
+/* picks the background light and sets the probability of picking it */
 ccl_device void light_background_sample(KernelGlobals *kg, float3 P, float *randu,
                                      int *index, float *pdf){
 	*index = kernel_tex_fetch(__lamp_to_distribution, kernel_data.integrator.background_light_index);
 	*pdf = 1.0f;
 }
 
-/* picks a light from the light BVH and returns its index and the probability of
+/* picks a light from the light tree and returns its index and the probability of
  * picking this light. */
-ccl_device void light_bvh_sample(KernelGlobals *kg, float3 P, float3 N,
+ccl_device void light_tree_sample(KernelGlobals *kg, float3 P, float3 N,
                                  float *randu, int *index, float *pdf_factor)
 {
 	int sampled_index = -1;
 	*pdf_factor = 1.0f;
 
 	int offset = 0;
-	int secondChildOffset, distribution_id, num_emitters;
+	int right_child_offset, distribution_id, num_emitters;
 	do{
 
-		/* read in first part of node of light BVH */
-		update_parent_node(kg, offset, &secondChildOffset, &distribution_id, &num_emitters);
+		/* read in first part of node of light tree */
+		update_node(kg, offset, &right_child_offset, &distribution_id, &num_emitters);
 
 		/* Found a leaf - Choose which light to use */
-		if(secondChildOffset == -1){ // Found a leaf
+		if(right_child_offset == -1){ // Found a leaf
 			if(num_emitters == 1){
 				sampled_index = distribution_id;
-			} else { // Leaf with several lights. Pick one randomly.
-				/* create and sample CDF without dynamic allocation */
+			} else {
+
+				/* At a leaf node containing several lights. Pick one of these
+				 * by creating and sampling a CDF based on the importance metric.
+				 *
+				 * The number of lights in this leaf node is not known at compile
+				 * time and dynamic allocation is not allowed on the GPU, so
+				 * some more computations have to be done instead.
+				 * (TODO: Could we allocate a fixed array of the same size as
+				 * the maximum allowed number of lights per node in the
+				 * construction algorithm? i.e. max_lights_in_node.)
+				 *
+				 * First, the total importance of all the lights are calculated.
+				 * Then, a linear loop over the lights are done where the
+				 * current CDF value is calculated. This loop can stop as soon
+				 * as the random value used to sample the CDF is less than the
+				 * current CDF value. The sampled light has index i-1 if i is
+				 * the iteration counter of the loop over the lights. This is
+				 * similar to for example light the old light_distribution_sample()
+				 * except not having an array to store the CDF in. */
 				float sum = 0.0f;
 				for (int i = 0; i < num_emitters; ++i) {
 					sum += calc_light_importance(kg, P, N, offset, i);
@@ -1317,7 +1366,7 @@ ccl_device void light_bvh_sample(KernelGlobals *kg, float3 P, float3 N,
 
 			/* calculate probability of going down left node */
 			int child_offsetL = offset + 4;
-			int child_offsetR = 4*secondChildOffset;
+			int child_offsetR = 4*right_child_offset;
 			float I_L = calc_node_importance(kg, P, N, child_offsetL);
 			float I_R = calc_node_importance(kg, P, N, child_offsetR);
 			if((I_L == 0.0f) && (I_R == 0.0f)){
@@ -1390,27 +1439,52 @@ ccl_device int triangle_to_distribution(KernelGlobals *kg, int triangle_id,
 	return kernel_tex_fetch(__triangle_to_distribution, first*3+2);
 }
 
-/* computes the probability of picking a light in the given node_id */
-ccl_device float light_bvh_pdf(KernelGlobals *kg, float3 P, float3 N,
+/* given a light in the form of a distribution id, this function computes the
+ * the probability of picking it using the light tree. this mimics the
+ * probability calculations in light_tree_sample()
+ *
+ * the nodes array contains all the nodes of the tree and each interior node
+ * has its left child directly after it in the nodes array and the right child
+ * is also after it at the second_child_offset.
+ *
+ * Given the structure of the nodes array we can find the path from the root
+ * to the leaf node the given light belongs to as follows:
+ *
+ * 1. Find the offset of the leaf node the given light belongs to.
+ * 2. Traverse the tree in a top-down manner where the decision to go down the
+ *    left or right child is determined as follows:
+ *    If the node we are looking for has a lower offset than the right child
+ *    then it belongs to a node between the current node and the right child.
+ *    That is, we should go down the left node. Otherwise, the right node.
+ *    This is done recursively until the leaf node is found.
+ * 3. Before going down the left or right child the probability is updated in
+ *    the same way it is done in light_tree_sample().
+ */
+ccl_device float light_tree_pdf(KernelGlobals *kg, float3 P, float3 N,
                                int distribution_id){
 
-	// Find mapping from distribution_id to node_id
+	/* find mapping from distribution_id to node_id */
 	int node_id = kernel_tex_fetch(__light_distribution_to_node, distribution_id);
 
 	float pdf = 1.0f;
-	/* read in first part of root node of light BVH */
-	int secondChildOffset, first_distribution_id, num_emitters;
-	update_parent_node(kg, 0, &secondChildOffset, &first_distribution_id, &num_emitters);
+	/* read in first part of root node of light tree */
+	int right_child_offset, first_distribution_id, num_emitters;
+	update_node(kg, 0, &right_child_offset, &first_distribution_id, &num_emitters);
 
 	int offset = 0;
 	do{
 
-		if(secondChildOffset == -1){ // Found our leaf node
+		if(right_child_offset == -1){ // Found our leaf node
 			kernel_assert(offset == node_id);
 			if(num_emitters == 1){
 				break;
 			}
 
+			/* the case of being a light inside a leaf node with several lights.
+			 * during sampling, a CDF is created based on importance, so here
+			 * the probability of sampling this light using the CDF has to be
+			 * computed. This is done by dividing the importance of this light
+			 * by the total sum of the importance of all lights in the leaf. */
 			float sum = 0.0f;
 			for (int i = 0; i < num_emitters; ++i) {
 				sum += calc_light_importance(kg, P, N, offset, i);
@@ -1420,18 +1494,16 @@ ccl_device float light_bvh_pdf(KernelGlobals *kg, float3 P, float3 N,
 				return 0.0f;
 			}
 
-			float sum_inv = 1.0f / sum;
-
 			pdf *= calc_light_importance(kg, P, N, offset,
 			                             distribution_id - first_distribution_id)
-			       * sum_inv;
+			       / sum;
 
 			break;
 		} else { // Interior node, pick left or right depending on node_id
 
 			/* calculate probability of going down left node */
 			int child_offsetL = offset + 4;
-			int child_offsetR = 4*secondChildOffset;
+			int child_offsetR = 4*right_child_offset;
 			float I_L = calc_node_importance(kg, P, N, child_offsetL);
 			float I_R = calc_node_importance(kg, P, N, child_offsetR);
 
@@ -1452,7 +1524,7 @@ ccl_device float light_bvh_pdf(KernelGlobals *kg, float3 P, float3 N,
 			}
 
 			/* update parent node info for next iteration */
-			update_parent_node(kg, offset, &secondChildOffset,
+			update_node(kg, offset, &right_child_offset,
 			                   &first_distribution_id, &num_emitters);
 		}
 
@@ -1461,7 +1533,8 @@ ccl_device float light_bvh_pdf(KernelGlobals *kg, float3 P, float3 N,
 	return pdf;
 }
 
-/* computes the the probability of picking the given light out of all lights */
+/* computes the the probability of picking the given light out of all lights.
+ * this mimics the probability calculations in light_distribution_sample() */
 ccl_device float light_distribution_pdf(KernelGlobals *kg, float3 P, float3 N,
                                         int prim_id, int object_id,
                                         bool has_volume)
@@ -1479,7 +1552,7 @@ ccl_device float light_distribution_pdf(KernelGlobals *kg, float3 P, float3 N,
 	              (distribution_id < kernel_data.integrator.num_distribution));
 
 	/* compute picking pdf for this light */
-	if (kernel_data.integrator.use_light_bvh && !has_volume){
+	if (kernel_data.integrator.use_light_tree && !has_volume){
 		/* find out which group of lights to sample */
 		int group;
 		if(prim_id >= 0){
@@ -1501,7 +1574,7 @@ ccl_device float light_distribution_pdf(KernelGlobals *kg, float3 P, float3 N,
 		float pdf = group_prob;
 
 		if(group == LIGHTGROUP_TREE){
-			pdf *= light_bvh_pdf(kg, P, N, distribution_id);
+			pdf *= light_tree_pdf(kg, P, N, distribution_id);
 		} else if(group == LIGHTGROUP_DISTANT) {
 			pdf *= kernel_data.integrator.inv_num_distant_lights;
 		} else if(group == LIGHTGROUP_BACKGROUND) {
@@ -1523,13 +1596,13 @@ ccl_device void light_distribution_sample(KernelGlobals *kg, float3 P, float3 N,
                                           bool has_volume, float *randu,
                                           int *index, float *pdf)
 {
-	if (kernel_data.integrator.use_light_bvh && !has_volume){
+	if (kernel_data.integrator.use_light_tree && !has_volume){
 		/* sample light type distribution */
 		int   group      = light_group_distribution_sample(kg, randu);
 		float group_prob = kernel_tex_fetch(__light_group_sample_prob, group);
 
 		if(group == LIGHTGROUP_TREE){
-			light_bvh_sample(kg, P, N, randu, index, pdf);
+			light_tree_sample(kg, P, N, randu, index, pdf);
 		} else if(group == LIGHTGROUP_DISTANT) {
 			light_distant_sample(kg, P, randu, index, pdf);
 		} else if(group == LIGHTGROUP_BACKGROUND) {
@@ -1583,7 +1656,8 @@ ccl_device void light_point_sample(KernelGlobals *kg,
 	}
 }
 
-/* picks a point on a light and computes the probability of picking this point*/
+/* picks a light and then picks a point on the light and computes the
+ * probability of doing so. */
 ccl_device_noinline bool light_sample(KernelGlobals *kg,
                                       float randu,
                                       float randv,
@@ -1594,7 +1668,7 @@ ccl_device_noinline bool light_sample(KernelGlobals *kg,
                                       LightSample *ls,
                                       bool has_volume)
 {
-	/* sample index and compute light picking pdf */
+	/* pick a light and compute the probability of picking this light */
 	float pdf_factor = 0.0f;
 	int index = -1;
 	light_distribution_sample(kg, P, N, has_volume, &randu, &index, &pdf_factor);
@@ -1603,6 +1677,7 @@ ccl_device_noinline bool light_sample(KernelGlobals *kg,
 		return false;
 	}
 
+	/* pick a point on the light and the probability of picking this point */
 	light_point_sample(kg, randu, randv, time, P, bounce, index, ls);
 
 	/* combine pdfs */

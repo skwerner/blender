@@ -189,8 +189,8 @@ class CyclesRenderSettings(bpy.types.PropertyGroup):
                 default=False,
                 )
 
-        cls.use_light_bvh = BoolProperty(
-                name="Light BVH",
+        cls.use_light_tree = BoolProperty(
+                name="Light Tree",
                 description="Samples many lights more efficiently",
                 default=False,
                 )

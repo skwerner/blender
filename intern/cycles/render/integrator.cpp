@@ -67,7 +67,7 @@ NODE_DEFINE(Integrator)
 	SOCKET_BOOLEAN(sample_all_lights_direct, "Sample All Lights Direct", true);
 	SOCKET_BOOLEAN(sample_all_lights_indirect, "Sample All Lights Indirect", true);
 	SOCKET_FLOAT(light_sampling_threshold, "Light Sampling Threshold", 0.05f);
-	SOCKET_BOOLEAN(use_light_bvh, "Use BVH to optimize many light sampling", false);
+	SOCKET_BOOLEAN(use_light_tree, "Use light tree to optimize many light sampling", false);
 	SOCKET_FLOAT(splitting_threshold, "Amount of lights to sample at a time, from one light at 0.0, to adaptively more lights as needed, to all lights at 1.0", 0.0f);
 
 	static NodeEnum method_enum;

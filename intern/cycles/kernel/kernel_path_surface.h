@@ -18,6 +18,8 @@
 
 CCL_NAMESPACE_BEGIN
 
+/* connect the given light sample with the shading point and calculate its
+ * contribution and accumulate it to L */
 ccl_device void accum_light_contribution(KernelGlobals *kg,
                                          ShaderData *sd,
                                          ShaderData* emission_sd,
@@ -45,7 +47,14 @@ ccl_device void accum_light_contribution(KernelGlobals *kg,
 	}
 }
 
-/* Decides whether to go down both childen or only one in the tree traversal */
+/* Decides whether to go down both childen or only one in the tree traversal.
+ * The split heuristic is based on the variance of the lighting within the node.
+ * There are two types of variances that are considered: variance in energy and
+ * in the distance term 1/d^2. The variance in energy is pre-computed on the
+ * host but the distance term is calculated here. These variances are then
+ * combined and normalized to get the final splitting heuristic. High variance
+ * leads to a lower splitting heuristic which leads to more splits during the
+ * traversal. */
 ccl_device bool split(KernelGlobals *kg, float3 P, int node_offset)
 {
 	/* early exists if never/always splitting */
@@ -73,7 +82,10 @@ ccl_device bool split(KernelGlobals *kg, float3 P, int node_offset)
 
 	/* eq. 8 & 9 */
 
-	/* Interval the distance can be in: [a,b] */
+	/* the integral in eq. 8 requires us to know the interval the distance can
+	 * be in: [a,b]. This is found by considering a bounding sphere around the
+	 * bounding box of the node and "a" then becomes the smallest distance to
+	 * this sphere and "b" becomes the largest. */
 	const float  radius = sqrt(radius_squared);
 	const float  dist   = sqrt(dist_squared);
 	const float  a      = dist - radius;
@@ -97,34 +109,30 @@ ccl_device bool split(KernelGlobals *kg, float3 P, int node_offset)
 	const float e_mean_squared = e_mean * e_mean;
 	const float variance = (e_variance * (g_variance + g_mean_squared) +
 	                         e_mean_squared * g_variance) * num_emitters_squared;
-	/*
-	 * If I run into further precision issues
-	 *  sigma^2 = (V[e] * (V[g] + E[g]^2) + (E[e]^2 * V[g]) * N^2 =
-	 *          = / V[e] = E[e^2] - E[e]^2 =  ((e_1)^2 + (e_2)^2 +..+(e_N)^2)/N - E[e]^2 / =
-	 *          = / E[e] = (e_1 + e_2 + .. + e_N)/N / =
-	 *            (( ((e_1)^2 + .. +(e_N)^2) / N - (e_1 + .. + e_N)^2 / N^2 )(V[g] + E[g]^2) + V[g](e_1 + .. + e_N)^2 / N^2)N^2 =
-	 *          = (  ((e_1)^2 + .. +(e_N)^2) * N - (e_1 + .. + e_N)^2       )(V[g] + E[g]^2) + V[g](e_1 + .. + e_N)^2
-	 *
-	 * => No need to calculate N^2 which could be really large for the root node when a lot of lights are used
-	 * However, e_mean^2 will be really large instead?
-	 * */
 
-	/* normalize */
+	/* normalize the variance heuristic to be within [0,1]. Note that high
+	 * variance corresponds to a low normalized variance. To give an idea of
+	 * how this normalization function looks like:
+	 *			  variance: 0    1   10  100  1000  10000  100000
+	 * normalized variance: 1  0.8  0.7  0.5   0.4    0.3     0.2  */
 	const float variance_normalized = sqrt(sqrt( 1.0f / (1.0f + sqrt(variance))));
 
 	return variance_normalized < threshold;
 }
 
-/* Recursive tree traversal and accumulating contribution to L for each leaf. */
+/* The accum_light_tree_contribution() function does the following:
+ * 1. Recursive tree traversal using splitting. This picks one or more lights.
+ * 2. For each picked light, a position on the light is also chosen.
+ * 3. The total contribution of all these light samples are evaluated and
+ *    accumulated to L. */
 ccl_device void accum_light_tree_contribution(KernelGlobals *kg, float randu,
                                               float randv, int offset,
                                               float pdf_factor, bool can_split,
                                               float3 throughput, float scale_factor,
                                               PathRadiance *L,
                                               ccl_addr_space PathState * state,
-                                              ShaderData *sd, ShaderData *emission_sd,
-                                              int *num_lights,
-                                              int *num_lights_fail)
+                                              ShaderData *sd,
+                                              ShaderData *emission_sd)
 {
 	float3 P = sd->P_pick;
 	float3 N = sd->N_pick;
@@ -132,17 +140,18 @@ ccl_device void accum_light_tree_contribution(KernelGlobals *kg, float randu,
 	float time = sd->time;
 	int bounce = state->bounce;
 
-	/* read in first part of node of light BVH */
-	int secondChildOffset, distribution_id, num_emitters;
-	update_parent_node(kg, offset, &secondChildOffset, &distribution_id, &num_emitters);
+	/* read in first part of node of light tree */
+	int right_child_offset, distribution_id, num_emitters;
+	update_node(kg, offset, &right_child_offset, &distribution_id, &num_emitters);
 
 	/* found a leaf */
-	if(secondChildOffset == -1){
+	if(right_child_offset == -1){
 
 		/* if there are several emitters in this leaf then pick one of them */
 		if(num_emitters > 1){
 
-			/* create and sample CDF without dynamic allocation */
+			/* create and sample CDF without dynamic allocation.
+			 * see comment in light_tree_sample() for this piece of code */
 			float sum = 0.0f;
 			for (int i = 0; i < num_emitters; ++i) {
 				sum += calc_light_importance(kg, P, N, offset, i);
@@ -174,8 +183,8 @@ ccl_device void accum_light_tree_contribution(KernelGlobals *kg, float randu,
 			randu = (randu - cdf_L)/(cdf_R - cdf_L);
 		}
 
-		(*num_lights)++; // used for debugging purposes
-
+		/* pick a point on the chosen light(distribution_id) and calculate the
+		 * probability of picking this point */
 		LightSample ls;
 		light_point_sample(kg, randu, randv, time, P, bounce, distribution_id, &ls);
 
@@ -184,6 +193,7 @@ ccl_device void accum_light_tree_contribution(KernelGlobals *kg, float randu,
 
 		if(ls.pdf <= 0.0f) return;
 
+		/* compute and accumulate the total contribution of this light */
 		Ray light_ray;
 		BsdfEval L_light;
 		bool is_lamp;
@@ -196,7 +206,7 @@ ccl_device void accum_light_tree_contribution(KernelGlobals *kg, float randu,
 	} else { // Interior node, choose which child(ren) to go down
 
 		int child_offsetL = offset + 4;
-		int child_offsetR = 4*secondChildOffset;
+		int child_offsetR = 4*right_child_offset;
 
 		/* choose whether to go down both(split) or only one of the children */
 		if(can_split && split(kg, P, offset)){
@@ -204,25 +214,23 @@ ccl_device void accum_light_tree_contribution(KernelGlobals *kg, float randu,
 			accum_light_tree_contribution(kg, randu, randv, child_offsetL,
 			                              pdf_factor, true, throughput,
 			                              scale_factor, L, state, sd,
-			                              emission_sd, num_lights,
-			                              num_lights_fail);
+			                              emission_sd);
 			accum_light_tree_contribution(kg, randu, randv, child_offsetR,
 			                              pdf_factor, true, throughput,
 			                              scale_factor, L, state, sd,
-			                              emission_sd, num_lights,
-			                              num_lights_fail);
+			                              emission_sd);
 		} else {
 			/* go down one of the child nodes */
 
-			/* calculate probability of going down left node */
+			/* evaluate the importance of each of the child nodes */
 			float I_L = calc_node_importance(kg, P, N, child_offsetL);
 			float I_R = calc_node_importance(kg, P, N, child_offsetR);
 
 			if((I_L == 0.0f) && (I_R == 0.0f)){
-				(*num_lights_fail)++; // used for debugging purposes
 				return;
 			}
 
+			/* calculate the probability of going down the left node */
 			float P_L = I_L / ( I_L + I_R);
 
 			/* choose which node to go down */
@@ -242,8 +250,7 @@ ccl_device void accum_light_tree_contribution(KernelGlobals *kg, float randu,
 
 			accum_light_tree_contribution(kg, randu, randv, offset, pdf_factor,
 			                              false, throughput, scale_factor, L,
-			                              state, sd, emission_sd, num_lights,
-			                              num_lights_fail);
+			                              state, sd, emission_sd);
 		}
 	}
 }
@@ -273,9 +280,9 @@ ccl_device_noinline void kernel_branched_path_surface_connect_light(
 	light_ray.time = sd->time;
 #  endif
 
-	bool use_light_bvh = kernel_data.integrator.use_light_bvh;
+	bool use_light_tree = kernel_data.integrator.use_light_tree;
 	bool use_splitting = kernel_data.integrator.splitting_threshold != 0.0f;
-	if(use_light_bvh && use_splitting){
+	if(use_light_tree && use_splitting){
 
 		int index;
 		float randu, randv;
@@ -288,19 +295,9 @@ ccl_device_noinline void kernel_branched_path_surface_connect_light(
 
 		if(group == LIGHTGROUP_TREE){
 			/* accumulate contribution to L from potentially several lights */
-			int num_lights = 0;
-			int num_lights_fail = 0;
 			accum_light_tree_contribution(kg, randu, randv, 0, group_prob, true,
 			                              throughput, num_samples_adjust, L, // todo: is num_samples_adjust correct here?
-			                              state, sd, emission_sd, &num_lights,
-			                              &num_lights_fail);
-
-			/*
-			if(num_lights_fail > 1){ // Debug print
-				//VLOG(1) << "Sampled " << num_lights << " lights!";
-				VLOG(1) << "Traversed " << num_lights_fail << " branches in vain and was able to sample " << num_lights << " though!";
-			}
-			*/
+			                              state, sd, emission_sd);
 
 			/* have accumulated all the contributions so return */
 			return;
@@ -329,7 +326,7 @@ ccl_device_noinline void kernel_branched_path_surface_connect_light(
 		                         &L_light, L, &is_lamp, terminate, throughput,
 		                         num_samples_adjust);
 
-	} else if(sample_all_lights && !use_light_bvh) {
+	} else if(sample_all_lights && !use_light_tree) {
 		/* lamp sampling */
 		for(int i = 0; i < kernel_data.integrator.num_all_lights; i++) {
 			if(UNLIKELY(light_select_reached_max_bounces(kg, i, state->bounce)))
@@ -389,7 +386,6 @@ ccl_device_noinline void kernel_branched_path_surface_connect_light(
 
 		LightSample ls;
 		if(light_sample(kg, light_u, light_v, sd->time, sd->P_pick, sd->N_pick, state->bounce, &ls, false)) {
-			/* sample random light */
 			accum_light_contribution(kg, sd, emission_sd, &ls, state, &light_ray,
 			                         &L_light, L, &is_lamp, terminate, throughput,
 			                         num_samples_adjust);

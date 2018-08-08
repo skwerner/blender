@@ -213,8 +213,8 @@ class CYCLES_RENDER_PT_sampling(CyclesButtonsPanel, Panel):
 
         row = layout.row(align=True)
         row.label(text="Experimental:")
-        row.prop(cscene, "use_light_bvh", text="Light BVH")
-        if cscene.use_light_bvh and use_branched_path(context):
+        row.prop(cscene, "use_light_tree", text="Light Tree")
+        if cscene.use_light_tree and use_branched_path(context):
             row = layout.row(align=True)
             row.label(text="") # create empty column
             row.prop(cscene, "splitting_threshold", text="Splitting")

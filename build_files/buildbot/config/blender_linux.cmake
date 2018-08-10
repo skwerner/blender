@@ -21,9 +21,8 @@ else()
 	message(FATAL_ERROR "Unknown build environment")
 endif()
 
-# Default to only build Blender, not the player
+# Default to only build Blender
 set(WITH_BLENDER             ON  CACHE BOOL "" FORCE)
-set(WITH_PLAYER              OFF CACHE BOOL "" FORCE)
 
 # ######## Linux-specific build options ########
 # Options which are specific to Linux-only platforms
@@ -74,7 +73,7 @@ set(SNDFILE_LIBRARY          "/usr/lib${MULTILIB}/libsndfile.a;/usr/lib${MULTILI
 
 # OpenAL libraries
 set(OPENAL_ROOT_DIR           "/opt/lib/openal" CACHE STRING "" FORCE)
-set(OPENAL_INCLUDE_DIR        "${OPENAL_ROOT_DIR}/include" CACHE STRING "" FORCE)
+set(OPENAL_INCLUDE_DIR        "${OPENAL_ROOT_DIR}/include/AL" CACHE STRING "" FORCE)
 set(OPENAL_LIBRARY
 	${OPENAL_ROOT_DIR}/lib/libopenal.a
 	${OPENAL_ROOT_DIR}/lib/libcommon.a

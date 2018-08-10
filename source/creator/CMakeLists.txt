@@ -76,12 +76,6 @@ if(WITH_HEADLESS)
 	add_definitions(-DWITH_HEADLESS)
 endif()
 
-if(WITH_GAMEENGINE)
-	blender_include_dirs(../gameengine/BlenderRoutines)
-
-	add_definitions(-DWITH_GAMEENGINE)
-endif()
-
 if(WITH_SDL)
 	if(WITH_SDL_DYNLOAD)
 		add_definitions(-DWITH_SDL_DYNLOAD)
@@ -341,7 +335,7 @@ install(
 
 if(WITH_PYTHON)
 	# install(CODE "message(\"copying blender scripts...\")")
-	
+
 	# exclude addons_contrib if release
 	if("${BLENDER_VERSION_CYCLE}" STREQUAL "release" OR
 	   "${BLENDER_VERSION_CYCLE}" STREQUAL "rc")
@@ -367,7 +361,7 @@ if(WITH_PYTHON)
 		PATTERN "${ADDON_EXCLUDE_CONDITIONAL}" EXCLUDE
 		PATTERN "${FREESTYLE_EXCLUDE_CONDITIONAL}" EXCLUDE
 	)
-	
+
 	unset(ADDON_EXCLUDE_CONDITIONAL)
 	unset(FREESTYLE_EXCLUDE_CONDITIONAL)
 endif()
@@ -427,6 +421,13 @@ if(WITH_OPENCOLORIO)
 		DESTINATION ${TARGETDIR_VER}/datafiles
 	)
 endif()
+
+# Add default workspaces.blend to build (under [version]/datafiles
+install(
+	FILES ${CMAKE_SOURCE_DIR}/release/datafiles/workspaces.blend
+	DESTINATION ${TARGETDIR_VER}/datafiles
+)
+
 
 # helpful tip when using make
 if("${CMAKE_GENERATOR}" MATCHES ".*Makefiles.*")
@@ -647,7 +648,7 @@ if(UNIX AND NOT APPLE)
 				unset(_suffix)
 			endif()
 			unset(_target_LIB)
-			
+
 		endif()
 	endif()
 elseif(WIN32)
@@ -811,7 +812,7 @@ elseif(WIN32)
 			DESTINATION "."
 		)
 	endif()
-	
+
 	if(WITH_SYSTEM_AUDASPACE)
 		install(
 			FILES
@@ -828,7 +829,7 @@ elseif(WIN32)
 			DESTINATION "."
 		)
 	endif()
-		
+
 	install( # x86 builds can run on x64 Windows, so this is required at all times
 		FILES ${LIBDIR}/thumbhandler/lib/BlendThumb64.dll
 		DESTINATION "."
@@ -939,53 +940,6 @@ elseif(APPLE)
 		)
 		unset(_py_inc_suffix)
 	endif()
-	
-	# install blenderplayer bundle - copy of blender.app above. re-using macros et al
-	# note we are using OSX Bundle as base and copying Blender dummy bundle on top of it
-	if(WITH_GAMEENGINE AND WITH_PLAYER)
-		set(OSX_APP_PLAYER_SOURCEDIR ${CMAKE_SOURCE_DIR}/release/darwin/blenderplayer.app)
-		set(PLAYER_SOURCEINFO ${OSX_APP_PLAYER_SOURCEDIR}/Contents/Info.plist)
-		set(PLAYER_TARGETDIR_VER blenderplayer.app/Contents/Resources/${BLENDER_VERSION})
-
-
-		# important to make a clean  install each time else old scripts get loaded.
-		install(
-			CODE
-			"file(REMOVE_RECURSE ${PLAYER_TARGETDIR_VER})"
-		)
-
-		# Give the bundle actual creation/modification date
-		execute_process(COMMAND SetFile -d ${SETFILE_DATE} -m ${SETFILE_DATE}
-		                ${EXECUTABLE_OUTPUT_PATH}/blenderplayer.app)
-
-		install(
-			FILES ${OSX_APP_PLAYER_SOURCEDIR}/Contents/PkgInfo
-			DESTINATION blenderplayer.app/Contents
-		)
-
-		install_dir(
-			${OSX_APP_PLAYER_SOURCEDIR}/Contents/Resources
-			blenderplayer.app/Contents/
-		)
-
-		if(WITH_OPENMP AND CMAKE_C_COMPILER_ID MATCHES "Clang" AND NOT ${CMAKE_C_COMPILER_VERSION} VERSION_LESS '3.4')
-			install(
-				FILES ${LIBDIR}/openmp/lib/libiomp5.dylib
-				DESTINATION blenderplayer.app/Contents/Resources/lib/
-			)
-		endif()
-
-
-		# python
-		if(WITH_PYTHON AND NOT WITH_PYTHON_FRAMEWORK)
-			# Copy the python libs into the install directory
-			install_dir(
-				${PYTHON_LIBPATH}
-				${PLAYER_TARGETDIR_VER}/python/lib
-			)
-		endif()
-
-	endif()
 
 endif()
 
@@ -1020,6 +974,34 @@ delayed_do_install(${TARGETDIR_VER})
 unset(BLENDER_TEXT_FILES)
 unset(BLENDER_TEXT_FILES_DESTINATION)
 
+
+# -----------------------------------------------------------------------------
+# Geometry Icons
+
+# Geometry icons.
+get_property(_icon_names GLOBAL PROPERTY ICON_GEOM_NAMES)
+set(_icon_files)
+foreach(_f ${_icon_names})
+	list(APPEND _icon_files
+		"${CMAKE_SOURCE_DIR}/release/datafiles/icons/${_f}.dat"
+	)
+endforeach()
+install(
+	FILES ${_icon_files}
+	DESTINATION ${TARGETDIR_VER}/datafiles/icons
+)
+
+unset(_icon_names)
+unset(_icon_files)
+unset(_f)
+
+# -----------------------------------------------------------------------------
+# Studio Lights
+install(
+	DIRECTORY
+		${CMAKE_SOURCE_DIR}/release/datafiles/studiolights
+	DESTINATION ${TARGETDIR_VER}/datafiles
+)
 
 # -----------------------------------------------------------------------------
 # Setup link libs

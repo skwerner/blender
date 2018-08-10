@@ -23,12 +23,14 @@
 #
 # ***** END GPL LICENSE BLOCK *****
 
-set(INC 
+set(INC
 	.
 	../blenfont
 	../blenkernel
 	../blenlib
 	../blentranslation
+	../depsgraph
+	../draw
 	../imbuf
 	../makesdna
 	../makesrna
@@ -46,6 +48,7 @@ set(INC_SYS
 )
 
 set(SRC
+	${CMAKE_SOURCE_DIR}/release/datafiles/userdef/userdef_default_theme.c
 	intern/blend_validate.c
 	intern/readblenentry.c
 	intern/readfile.c
@@ -54,6 +57,7 @@ set(SRC
 	intern/versioning_250.c
 	intern/versioning_260.c
 	intern/versioning_270.c
+	intern/versioning_280.c
 	intern/versioning_defaults.c
 	intern/versioning_legacy.c
 	intern/writefile.c

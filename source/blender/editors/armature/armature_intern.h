@@ -4,7 +4,7 @@
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version. 
+ * of the License, or (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -18,7 +18,7 @@
  * The Original Code is Copyright (C) 2009 Blender Foundation.
  * All rights reserved.
  *
- * 
+ *
  * Contributor(s): Blender Foundation
  *
  * ***** END GPL LICENSE BLOCK *****
@@ -139,43 +139,31 @@ void POSE_OT_quaternions_flip(struct wmOperatorType *ot);
 void POSE_OT_bone_layers(struct wmOperatorType *ot);
 
 /* ******************************************************* */
-/* Etch-A-Ton (Skeleton Sketching) Operators */
-
-void SKETCH_OT_gesture(struct wmOperatorType *ot);
-void SKETCH_OT_delete(struct wmOperatorType *ot);
-void SKETCH_OT_draw_stroke(struct wmOperatorType *ot);
-void SKETCH_OT_draw_preview(struct wmOperatorType *ot);
-void SKETCH_OT_finish_stroke(struct wmOperatorType *ot);
-void SKETCH_OT_cancel_stroke(struct wmOperatorType *ot);
-void SKETCH_OT_convert(struct wmOperatorType *ot);
-void SKETCH_OT_select(struct wmOperatorType *ot);
-
-/* ******************************************************* */
 /* Pose Tool Utilities (for PoseLib, Pose Sliding, etc.) */
 /* pose_utils.c */
 
 /* Temporary data linking PoseChannels with the F-Curves they affect */
 typedef struct tPChanFCurveLink {
 	struct tPChanFCurveLink *next, *prev;
-	
+
 	ListBase fcurves;               /* F-Curves for this PoseChannel (wrapped with LinkData) */
 	struct bPoseChannel *pchan;     /* Pose Channel which data is attached to */
-	
+
 	char *pchan_path;               /* RNA Path to this Pose Channel (needs to be freed when we're done) */
-	
+
 	float oldloc[3];                /* transform values at start of operator (to be restored before each modal step) */
 	float oldrot[3];
 	float oldscale[3];
 	float oldquat[4];
 	float oldangle;
 	float oldaxis[3];
-	
+
 	float roll1, roll2;             /* old bbone values (to be restored along with the transform properties) */
 	float curveInX, curveInY;       /* (NOTE: we haven't renamed these this time, as their names are already long enough) */
 	float curveOutX, curveOutY;
 	float ease1, ease2;
 	float scaleIn, scaleOut;
-	
+
 	struct IDProperty *oldprops;    /* copy of custom properties at start of operator (to be restored before each modal step) */
 } tPChanFCurveLink;
 
@@ -225,7 +213,6 @@ void POSE_OT_propagate(struct wmOperatorType *ot);
  */
 
 EditBone *make_boneList(struct ListBase *edbo, struct ListBase *bones, struct EditBone *parent, struct Bone *actBone);
-bool BIF_sk_selectStroke(struct bContext *C, const int mval[2], const bool extend);
 
 /* duplicate method */
 void preEditBoneDuplicate(struct ListBase *editbones);
@@ -248,14 +235,18 @@ void armature_select_mirrored_ex(struct bArmature *arm, const int flag);
 void armature_select_mirrored(struct bArmature *arm);
 void armature_tag_unselect(struct bArmature *arm);
 
-void *get_nearest_bone(struct bContext *C, const int xy[2], bool findunsel);
+void *get_nearest_bone(
+        struct bContext *C, const int xy[2], bool findunsel,
+        struct Base **r_base);
+
 void *get_bone_from_selectbuffer(
-        struct Scene *scene, struct Base *base, const unsigned int *buffer, short hits,
-        bool findunsel, bool do_nearest);
+        struct Base **bases, uint bases_len,
+        bool is_editmode, const unsigned int *buffer, short hits,
+        bool findunsel, bool do_nearest,
+        struct Base **r_base);
 
 int bone_looper(struct Object *ob, struct Bone *bone, void *data,
                 int (*bone_func)(struct Object *, struct Bone *, void *));
 
 
 #endif /* __ARMATURE_INTERN_H__ */
-

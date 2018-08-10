@@ -37,6 +37,7 @@
 #include "BLI_utildefines.h"
 
 #include "BKE_context.h"
+#include "BKE_main.h"
 #include "BKE_report.h"
 
 #include "BLT_translation.h"
@@ -55,6 +56,10 @@
 
 #include "UI_interface.h"
 #include "UI_resources.h"
+
+#include "GPU_immediate.h"
+
+#include "DEG_depsgraph.h"
 
 #include "view3d_intern.h"  /* own include */
 
@@ -129,18 +134,15 @@ typedef enum eWalkGravityState {
 void walk_modal_keymap(wmKeyConfig *keyconf)
 {
 	static const EnumPropertyItem modal_items[] = {
-		{WALK_MODAL_CANCEL, "CANCEL", 0, "Cancel", ""},
 		{WALK_MODAL_CONFIRM, "CONFIRM", 0, "Confirm", ""},
+		{WALK_MODAL_CANCEL, "CANCEL", 0, "Cancel", ""},
 
-		{WALK_MODAL_ACCELERATE, "ACCELERATE", 0, "Accelerate", ""},
-		{WALK_MODAL_DECELERATE, "DECELERATE", 0, "Decelerate", ""},
-
-		{WALK_MODAL_DIR_FORWARD, "FORWARD", 0, "Move Forward", ""},
-		{WALK_MODAL_DIR_BACKWARD, "BACKWARD", 0, "Move Backward", ""},
-		{WALK_MODAL_DIR_LEFT, "LEFT", 0, "Move Left (Strafe)", ""},
-		{WALK_MODAL_DIR_RIGHT, "RIGHT", 0, "Move Right (Strafe)", ""},
-		{WALK_MODAL_DIR_UP, "UP", 0, "Move Up", ""},
-		{WALK_MODAL_DIR_DOWN, "DOWN", 0, "Move Down", ""},
+		{WALK_MODAL_DIR_FORWARD, "FORWARD", 0, "Forward", ""},
+		{WALK_MODAL_DIR_BACKWARD, "BACKWARD", 0, "Backward", ""},
+		{WALK_MODAL_DIR_LEFT, "LEFT", 0, "Left (Strafe)", ""},
+		{WALK_MODAL_DIR_RIGHT, "RIGHT", 0, "Right (Strafe)", ""},
+		{WALK_MODAL_DIR_UP, "UP", 0, "Up", ""},
+		{WALK_MODAL_DIR_DOWN, "DOWN", 0, "Down", ""},
 
 		{WALK_MODAL_DIR_FORWARD_STOP, "FORWARD_STOP", 0, "Stop Move Forward", ""},
 		{WALK_MODAL_DIR_BACKWARD_STOP, "BACKWARD_STOP", 0, "Stop Mode Backward", ""},
@@ -151,14 +153,17 @@ void walk_modal_keymap(wmKeyConfig *keyconf)
 
 		{WALK_MODAL_TELEPORT, "TELEPORT", 0, "Teleport", "Move forward a few units at once"},
 
-		{WALK_MODAL_FAST_ENABLE, "FAST_ENABLE", 0, "Fast Enable", "Move faster (walk or fly)"},
-		{WALK_MODAL_FAST_DISABLE, "FAST_DISABLE", 0, "Fast Disable", "Resume regular speed"},
+		{WALK_MODAL_ACCELERATE, "ACCELERATE", 0, "Accelerate", ""},
+		{WALK_MODAL_DECELERATE, "DECELERATE", 0, "Decelerate", ""},
 
-		{WALK_MODAL_SLOW_ENABLE, "SLOW_ENABLE", 0, "Slow Enable", "Move slower (walk or fly)"},
-		{WALK_MODAL_SLOW_DISABLE, "SLOW_DISABLE", 0, "Slow Disable", "Resume regular speed"},
+		{WALK_MODAL_FAST_ENABLE, "FAST_ENABLE", 0, "Fast", "Move faster (walk or fly)"},
+		{WALK_MODAL_FAST_DISABLE, "FAST_DISABLE", 0, "Fast (Off)", "Resume regular speed"},
+
+		{WALK_MODAL_SLOW_ENABLE, "SLOW_ENABLE", 0, "Slow", "Move slower (walk or fly)"},
+		{WALK_MODAL_SLOW_DISABLE, "SLOW_DISABLE", 0, "Slow (Off)", "Resume regular speed"},
 
 		{WALK_MODAL_JUMP, "JUMP", 0, "Jump", "Jump when in walk mode"},
-		{WALK_MODAL_JUMP_STOP, "JUMP_STOP", 0, "Jump Stop", "Stop pushing jump"},
+		{WALK_MODAL_JUMP_STOP, "JUMP_STOP", 0, "Jump (Off)", "Stop pushing jump"},
 
 		{WALK_MODAL_TOGGLE, "GRAVITY_TOGGLE", 0, "Toggle Gravity", "Toggle gravity effect"},
 
@@ -173,8 +178,8 @@ void walk_modal_keymap(wmKeyConfig *keyconf)
 	keymap = WM_modalkeymap_add(keyconf, "View3D Walk Modal", modal_items);
 
 	/* items for modal map */
-	WM_modalkeymap_add_item(keymap, ESCKEY, KM_PRESS, KM_ANY, 0, WALK_MODAL_CANCEL);
 	WM_modalkeymap_add_item(keymap, RIGHTMOUSE, KM_ANY, KM_ANY, 0, WALK_MODAL_CANCEL);
+	WM_modalkeymap_add_item(keymap, ESCKEY, KM_PRESS, KM_ANY, 0, WALK_MODAL_CANCEL);
 
 	WM_modalkeymap_add_item(keymap, LEFTMOUSE, KM_ANY, KM_ANY, 0, WALK_MODAL_CONFIRM);
 	WM_modalkeymap_add_item(keymap, RETKEY, KM_PRESS, KM_ANY, 0, WALK_MODAL_CONFIRM);
@@ -245,6 +250,7 @@ typedef struct WalkInfo {
 	RegionView3D *rv3d;
 	View3D *v3d;
 	ARegion *ar;
+	struct Depsgraph *depsgraph;
 	Scene *scene;
 
 	wmTimer *timer; /* needed for redraws */
@@ -328,7 +334,7 @@ static void drawWalkPixel(const struct bContext *UNUSED(C), ARegion *ar, void *a
 	rctf viewborder;
 
 	if (walk->scene->camera) {
-		ED_view3d_calc_camera_border(walk->scene, ar, walk->v3d, walk->rv3d, &viewborder, false);
+		ED_view3d_calc_camera_border(walk->scene, walk->depsgraph, ar, walk->v3d, walk->rv3d, &viewborder, false);
 		xoff = viewborder.xmin + BLI_rctf_size_x(&viewborder) * 0.5f;
 		yoff = viewborder.ymin + BLI_rctf_size_y(&viewborder) * 0.5f;
 	}
@@ -337,24 +343,33 @@ static void drawWalkPixel(const struct bContext *UNUSED(C), ARegion *ar, void *a
 		yoff = walk->ar->winy / 2;
 	}
 
-	UI_ThemeColor(TH_VIEW_OVERLAY);
-	glBegin(GL_LINES);
+	GPUVertFormat *format = immVertexFormat();
+	uint pos = GPU_vertformat_attr_add(format, "pos", GPU_COMP_I32, 2, GPU_FETCH_INT_TO_FLOAT);
+
+	immBindBuiltinProgram(GPU_SHADER_2D_UNIFORM_COLOR);
+
+	immUniformThemeColor(TH_VIEW_OVERLAY);
+
+	immBegin(GPU_PRIM_LINES, 8);
+
 	/* North */
-	glVertex2i(xoff, yoff + inner_length);
-	glVertex2i(xoff, yoff + outter_length);
+	immVertex2i(pos, xoff, yoff + inner_length);
+	immVertex2i(pos, xoff, yoff + outter_length);
 
 	/* East */
-	glVertex2i(xoff + inner_length, yoff);
-	glVertex2i(xoff + outter_length, yoff);
+	immVertex2i(pos, xoff + inner_length, yoff);
+	immVertex2i(pos, xoff + outter_length, yoff);
 
 	/* South */
-	glVertex2i(xoff, yoff - inner_length);
-	glVertex2i(xoff, yoff - outter_length);
+	immVertex2i(pos, xoff, yoff - inner_length);
+	immVertex2i(pos, xoff, yoff - outter_length);
 
 	/* West */
-	glVertex2i(xoff - inner_length, yoff);
-	glVertex2i(xoff - outter_length, yoff);
-	glEnd();
+	immVertex2i(pos, xoff - inner_length, yoff);
+	immVertex2i(pos, xoff - outter_length, yoff);
+
+	immEnd();
+	immUnbindProgram();
 }
 
 static void walk_update_header(bContext *C, wmOperator *op, WalkInfo *walk)
@@ -389,7 +404,7 @@ static void walk_update_header(bContext *C, wmOperator *op, WalkInfo *walk)
 
 #undef WM_MODALKEY
 
-	ED_area_headerprint(CTX_wm_area(C), header);
+	ED_workspace_status_text(C, header);
 }
 
 static void walk_navigation_mode_set(bContext *C, wmOperator *op, WalkInfo *walk, eWalkMethod mode)
@@ -493,11 +508,13 @@ static float userdef_speed = -1.f;
 
 static bool initWalkInfo(bContext *C, WalkInfo *walk, wmOperator *op)
 {
+	Main *bmain = CTX_data_main(C);
 	wmWindow *win = CTX_wm_window(C);
 
 	walk->rv3d = CTX_wm_region_view3d(C);
 	walk->v3d = CTX_wm_view3d(C);
 	walk->ar = CTX_wm_region(C);
+	walk->depsgraph = CTX_data_depsgraph(C);
 	walk->scene = CTX_data_scene(C);
 
 #ifdef NDOF_WALK_DEBUG
@@ -587,11 +604,11 @@ static bool initWalkInfo(bContext *C, WalkInfo *walk, wmOperator *op)
 	walk->rv3d->rflag |= RV3D_NAVIGATING;
 
 	walk->snap_context = ED_transform_snap_object_context_create_view3d(
-	        CTX_data_main(C), walk->scene, 0,
+	        bmain, walk->scene, CTX_data_depsgraph(C), 0,
 	        walk->ar, walk->v3d);
 
 	walk->v3d_camera_control = ED_view3d_cameracontrol_acquire(
-	        walk->scene, walk->v3d, walk->rv3d,
+	        walk->depsgraph, walk->scene, walk->v3d, walk->rv3d,
 	        (U.uiflag & USER_CAM_LOCK_NO_PARENT) == 0);
 
 	/* center the mouse */
@@ -1419,7 +1436,7 @@ static int walk_modal(bContext *C, wmOperator *op, const wmEvent *event)
 	}
 
 	if (ELEM(exit_code, OPERATOR_FINISHED, OPERATOR_CANCELLED))
-		ED_area_headerprint(CTX_wm_area(C), NULL);
+		ED_workspace_status_text(C, NULL);
 
 	return exit_code;
 }

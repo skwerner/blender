@@ -37,6 +37,7 @@
 #include "BKE_context.h"
 #include "BKE_image.h"
 #include "BKE_global.h"
+#include "BKE_main.h"
 #include "BKE_screen.h"
 #include "BKE_report.h"
 
@@ -90,8 +91,10 @@ static ScrArea *find_area_showing_r_result(bContext *C, Scene *scene, wmWindow *
 
 	/* find an imagewindow showing render result */
 	for (*win = wm->windows.first; *win; *win = (*win)->next) {
-		if ((*win)->screen->scene == scene) {
-			for (sa = (*win)->screen->areabase.first; sa; sa = sa->next) {
+		if (WM_window_get_active_scene(*win) == scene) {
+			const bScreen *screen = WM_window_get_active_screen(*win);
+
+			for (sa = screen->areabase.first; sa; sa = sa->next) {
 				if (sa->spacetype == SPACE_IMAGE) {
 					sima = sa->spacedata.first;
 					if (sima->image && sima->image->type == IMA_TYPE_R_RESULT)
@@ -102,7 +105,7 @@ static ScrArea *find_area_showing_r_result(bContext *C, Scene *scene, wmWindow *
 				break;
 		}
 	}
-	
+
 	return sa;
 }
 
@@ -129,6 +132,7 @@ static ScrArea *find_area_image_empty(bContext *C)
 /* new window uses x,y to set position */
 ScrArea *render_view_open(bContext *C, int mx, int my, ReportList *reports)
 {
+	Main *bmain = CTX_data_main(C);
 	Scene *scene = CTX_data_scene(C);
 	wmWindow *win = NULL;
 	ScrArea *sa = NULL;
@@ -137,7 +141,7 @@ ScrArea *render_view_open(bContext *C, int mx, int my, ReportList *reports)
 
 	if (scene->r.displaymode == R_OUTPUT_NONE)
 		return NULL;
-	
+
 	if (scene->r.displaymode == R_OUTPUT_WINDOW) {
 		int sizex = 30 * UI_DPI_FAC + (scene->r.xsch * scene->r.size) / 100;
 		int sizey = 60 * UI_DPI_FAC + (scene->r.ysch * scene->r.size) / 100;
@@ -175,7 +179,7 @@ ScrArea *render_view_open(bContext *C, int mx, int my, ReportList *reports)
 		sa = find_area_showing_r_result(C, scene, &win);
 		if (sa == NULL)
 			sa = find_area_image_empty(C);
-		
+
 		/* if area found in other window, we make that one show in front */
 		if (win && win != CTX_wm_window(C))
 			wm_window_raise(win);
@@ -211,7 +215,7 @@ ScrArea *render_view_open(bContext *C, int mx, int my, ReportList *reports)
 	sima = sa->spacedata.first;
 
 	/* get the correct image, and scale it */
-	sima->image = BKE_image_verify_viewer(IMA_TYPE_R_RESULT, "Render Result");
+	sima->image = BKE_image_verify_viewer(bmain, IMA_TYPE_R_RESULT, "Render Result");
 
 
 	/* if we're rendering to full screen, set appropriate hints on image editor
@@ -246,7 +250,7 @@ static int render_view_cancel_exec(bContext *C, wmOperator *UNUSED(op))
 	}
 
 	/* test if we have a temp screen in front */
-	if (win->screen->temp) {
+	if (WM_window_is_temp_screen(win)) {
 		wm_window_lower(win);
 		return OPERATOR_FINISHED;
 	}
@@ -290,26 +294,27 @@ void RENDER_OT_view_cancel(struct wmOperatorType *ot)
 static int render_view_show_invoke(bContext *C, wmOperator *op, const wmEvent *event)
 {
 	wmWindow *wincur = CTX_wm_window(C);
-	
+
 	/* test if we have currently a temp screen active */
-	if (wincur->screen->temp) {
+	if (WM_window_is_temp_screen(wincur)) {
 		wm_window_lower(wincur);
 	}
 	else {
 		wmWindow *win, *winshow;
 		ScrArea *sa = find_area_showing_r_result(C, CTX_data_scene(C), &winshow);
-		
+
 		/* is there another window on current scene showing result? */
 		for (win = CTX_wm_manager(C)->windows.first; win; win = win->next) {
-			bScreen *sc = win->screen;
-			if ((sc->temp && ((ScrArea *)sc->areabase.first)->spacetype == SPACE_IMAGE) ||
+			const bScreen *sc = WM_window_get_active_screen(win);
+
+			if ((WM_window_is_temp_screen(win) && ((ScrArea *)sc->areabase.first)->spacetype == SPACE_IMAGE) ||
 			    (win == winshow && winshow != wincur))
 			{
 				wm_window_raise(win);
 				return OPERATOR_FINISHED;
 			}
 		}
-		
+
 		/* determine if render already shows */
 		if (sa) {
 			/* but don't close it when rendering */
@@ -348,4 +353,3 @@ void RENDER_OT_view_show(struct wmOperatorType *ot)
 	ot->invoke = render_view_show_invoke;
 	ot->poll = ED_operator_screenactive;
 }
-

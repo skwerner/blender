@@ -4,7 +4,7 @@
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version. 
+ * of the License, or (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -14,7 +14,7 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- * 
+ *
  * Contributor(s): Campbell Barton
  *
  * ***** END GPL LICENSE BLOCK *****
@@ -55,6 +55,10 @@
 
 #include "UI_interface.h"
 #include "UI_resources.h"
+
+#include "GPU_immediate.h"
+
+#include "DEG_depsgraph.h"
 
 #include "view3d_intern.h"  /* own include */
 
@@ -98,29 +102,30 @@ typedef enum eFlyPanState {
 void fly_modal_keymap(wmKeyConfig *keyconf)
 {
 	static const EnumPropertyItem modal_items[] = {
-		{FLY_MODAL_CANCEL, "CANCEL", 0, "Cancel", ""},
 		{FLY_MODAL_CONFIRM, "CONFIRM", 0, "Confirm", ""},
+		{FLY_MODAL_CANCEL, "CANCEL", 0, "Cancel", ""},
+
+		{FLY_MODAL_DIR_FORWARD, "FORWARD", 0, "Forward", ""},
+		{FLY_MODAL_DIR_BACKWARD, "BACKWARD", 0, "Backward", ""},
+		{FLY_MODAL_DIR_LEFT, "LEFT", 0, "Left", ""},
+		{FLY_MODAL_DIR_RIGHT, "RIGHT", 0, "Right", ""},
+		{FLY_MODAL_DIR_UP, "UP", 0, "Up", ""},
+		{FLY_MODAL_DIR_DOWN, "DOWN", 0, "Down", ""},
+
+		{FLY_MODAL_PAN_ENABLE, "PAN_ENABLE", 0, "Pan", ""},
+		{FLY_MODAL_PAN_DISABLE, "PAN_DISABLE", 0, "Pan (Off)", ""},
+
 		{FLY_MODAL_ACCELERATE, "ACCELERATE", 0, "Accelerate", ""},
 		{FLY_MODAL_DECELERATE, "DECELERATE", 0, "Decelerate", ""},
-
-		{FLY_MODAL_PAN_ENABLE, "PAN_ENABLE", 0, "Pan Enable", ""},
-		{FLY_MODAL_PAN_DISABLE, "PAN_DISABLE", 0, "Pan Disable", ""},
-
-		{FLY_MODAL_DIR_FORWARD, "FORWARD", 0, "Fly Forward", ""},
-		{FLY_MODAL_DIR_BACKWARD, "BACKWARD", 0, "Fly Backward", ""},
-		{FLY_MODAL_DIR_LEFT, "LEFT", 0, "Fly Left", ""},
-		{FLY_MODAL_DIR_RIGHT, "RIGHT", 0, "Fly Right", ""},
-		{FLY_MODAL_DIR_UP, "UP", 0, "Fly Up", ""},
-		{FLY_MODAL_DIR_DOWN, "DOWN", 0, "Fly Down", ""},
 
 		{FLY_MODAL_AXIS_LOCK_X, "AXIS_LOCK_X", 0, "X Axis Correction", "X axis correction (toggle)"},
 		{FLY_MODAL_AXIS_LOCK_Z, "AXIS_LOCK_Z", 0, "X Axis Correction", "Z axis correction (toggle)"},
 
-		{FLY_MODAL_PRECISION_ENABLE, "PRECISION_ENABLE", 0, "Precision Enable", ""},
-		{FLY_MODAL_PRECISION_DISABLE, "PRECISION_DISABLE", 0, "Precision Disable", ""},
+		{FLY_MODAL_PRECISION_ENABLE, "PRECISION_ENABLE", 0, "Precision", ""},
+		{FLY_MODAL_PRECISION_DISABLE, "PRECISION_DISABLE", 0, "Precision (Off)", ""},
 
-		{FLY_MODAL_FREELOOK_ENABLE, "FREELOOK_ENABLE", 0, "Rotation Enable", ""},
-		{FLY_MODAL_FREELOOK_DISABLE, "FREELOOK_DISABLE", 0, "Rotation Disable", ""},
+		{FLY_MODAL_FREELOOK_ENABLE, "FREELOOK_ENABLE", 0, "Rotation", ""},
+		{FLY_MODAL_FREELOOK_DISABLE, "FREELOOK_DISABLE", 0, "Rotation (Off)", ""},
 
 		{0, NULL, 0, NULL, NULL}};
 
@@ -133,8 +138,8 @@ void fly_modal_keymap(wmKeyConfig *keyconf)
 	keymap = WM_modalkeymap_add(keyconf, "View3D Fly Modal", modal_items);
 
 	/* items for modal map */
-	WM_modalkeymap_add_item(keymap, ESCKEY, KM_PRESS, KM_ANY, 0, FLY_MODAL_CANCEL);
 	WM_modalkeymap_add_item(keymap, RIGHTMOUSE, KM_ANY, KM_ANY, 0, FLY_MODAL_CANCEL);
+	WM_modalkeymap_add_item(keymap, ESCKEY, KM_PRESS, KM_ANY, 0, FLY_MODAL_CANCEL);
 
 	WM_modalkeymap_add_item(keymap, LEFTMOUSE, KM_ANY, KM_ANY, 0, FLY_MODAL_CONFIRM);
 	WM_modalkeymap_add_item(keymap, RETKEY, KM_PRESS, KM_ANY, 0, FLY_MODAL_CONFIRM);
@@ -147,7 +152,7 @@ void fly_modal_keymap(wmKeyConfig *keyconf)
 	WM_modalkeymap_add_item(keymap, WHEELDOWNMOUSE, KM_PRESS, KM_ANY, 0, FLY_MODAL_DECELERATE);
 
 	WM_modalkeymap_add_item(keymap, MOUSEPAN, 0, 0, 0, FLY_MODAL_SPEED);
-	
+
 	WM_modalkeymap_add_item(keymap, MIDDLEMOUSE, KM_PRESS, KM_ANY, 0, FLY_MODAL_PAN_ENABLE);
 	/* XXX - Bug in the event system, middle mouse release doesnt work */
 	WM_modalkeymap_add_item(keymap, MIDDLEMOUSE, KM_RELEASE, KM_ANY, 0, FLY_MODAL_PAN_DISABLE);
@@ -191,6 +196,7 @@ typedef struct FlyInfo {
 	RegionView3D *rv3d;
 	View3D *v3d;
 	ARegion *ar;
+	struct Depsgraph *depsgraph;
 	Scene *scene;
 
 	wmTimer *timer; /* needed for redraws */
@@ -240,7 +246,7 @@ static void drawFlyPixel(const struct bContext *UNUSED(C), ARegion *UNUSED(ar), 
 	float x1, x2, y1, y2;
 
 	if (fly->scene->camera) {
-		ED_view3d_calc_camera_border(fly->scene, fly->ar, fly->v3d, fly->rv3d, &viewborder, false);
+		ED_view3d_calc_camera_border(fly->scene, fly->depsgraph, fly->ar, fly->v3d, fly->rv3d, &viewborder, false);
 		xoff = viewborder.xmin;
 		yoff = viewborder.ymin;
 	}
@@ -257,36 +263,45 @@ static void drawFlyPixel(const struct bContext *UNUSED(C), ARegion *UNUSED(ar), 
 	x2 = xoff + 0.55f * fly->width;
 	y2 = yoff + 0.55f * fly->height;
 
-	UI_ThemeColor(TH_VIEW_OVERLAY);
-	glBegin(GL_LINES);
-	/* bottom left */
-	glVertex2f(x1, y1);
-	glVertex2f(x1, y1 + 5);
+	GPUVertFormat *format = immVertexFormat();
+	uint pos = GPU_vertformat_attr_add(format, "pos", GPU_COMP_F32, 2, GPU_FETCH_FLOAT);
 
-	glVertex2f(x1, y1);
-	glVertex2f(x1 + 5, y1);
+	immBindBuiltinProgram(GPU_SHADER_2D_UNIFORM_COLOR);
+
+	immUniformThemeColor(TH_VIEW_OVERLAY);
+
+	immBegin(GPU_PRIM_LINES, 16);
+
+	/* bottom left */
+	immVertex2f(pos, x1, y1);
+	immVertex2f(pos, x1, y1 + 5);
+
+	immVertex2f(pos, x1, y1);
+	immVertex2f(pos, x1 + 5, y1);
 
 	/* top right */
-	glVertex2f(x2, y2);
-	glVertex2f(x2, y2 - 5);
+	immVertex2f(pos, x2, y2);
+	immVertex2f(pos, x2, y2 - 5);
 
-	glVertex2f(x2, y2);
-	glVertex2f(x2 - 5, y2);
+	immVertex2f(pos, x2, y2);
+	immVertex2f(pos, x2 - 5, y2);
 
 	/* top left */
-	glVertex2f(x1, y2);
-	glVertex2f(x1, y2 - 5);
+	immVertex2f(pos, x1, y2);
+	immVertex2f(pos, x1, y2 - 5);
 
-	glVertex2f(x1, y2);
-	glVertex2f(x1 + 5, y2);
+	immVertex2f(pos, x1, y2);
+	immVertex2f(pos, x1 + 5, y2);
 
 	/* bottom right */
-	glVertex2f(x2, y1);
-	glVertex2f(x2, y1 + 5);
+	immVertex2f(pos, x2, y1);
+	immVertex2f(pos, x2, y1 + 5);
 
-	glVertex2f(x2, y1);
-	glVertex2f(x2 - 5, y1);
-	glEnd();
+	immVertex2f(pos, x2, y1);
+	immVertex2f(pos, x2 - 5, y1);
+
+	immEnd();
+	immUnbindProgram();
 }
 
 static void fly_update_header(bContext *C, wmOperator *op, FlyInfo *fly)
@@ -319,7 +334,7 @@ static void fly_update_header(bContext *C, wmOperator *op, FlyInfo *fly)
 
 #undef WM_MODALKEY
 
-	ED_area_headerprint(CTX_wm_area(C), header);
+	ED_workspace_status_text(C, header);
 }
 
 /* FlyInfo->state */
@@ -332,6 +347,7 @@ enum {
 static bool initFlyInfo(bContext *C, FlyInfo *fly, wmOperator *op, const wmEvent *event)
 {
 	wmWindow *win = CTX_wm_window(C);
+
 	rctf viewborder;
 
 	float upvec[3]; /* tmp */
@@ -340,6 +356,7 @@ static bool initFlyInfo(bContext *C, FlyInfo *fly, wmOperator *op, const wmEvent
 	fly->rv3d = CTX_wm_region_view3d(C);
 	fly->v3d = CTX_wm_view3d(C);
 	fly->ar = CTX_wm_region(C);
+	fly->depsgraph = CTX_data_depsgraph(C);
 	fly->scene = CTX_data_scene(C);
 
 #ifdef NDOF_FLY_DEBUG
@@ -406,12 +423,12 @@ static bool initFlyInfo(bContext *C, FlyInfo *fly, wmOperator *op, const wmEvent
 	}
 
 	fly->v3d_camera_control = ED_view3d_cameracontrol_acquire(
-	        fly->scene, fly->v3d, fly->rv3d,
+	        CTX_data_depsgraph(C), fly->scene, fly->v3d, fly->rv3d,
 	        (U.uiflag & USER_CAM_LOCK_NO_PARENT) == 0);
 
 	/* calculate center */
 	if (fly->scene->camera) {
-		ED_view3d_calc_camera_border(fly->scene, fly->ar, fly->v3d, fly->rv3d, &viewborder, false);
+		ED_view3d_calc_camera_border(fly->scene, fly->depsgraph, fly->ar, fly->v3d, fly->rv3d, &viewborder, false);
 
 		fly->width = BLI_rctf_size_x(&viewborder);
 		fly->height = BLI_rctf_size_y(&viewborder);
@@ -534,12 +551,12 @@ static void flyEvent(bContext *C, wmOperator *op, FlyInfo *fly, const wmEvent *e
 			case FLY_MODAL_CONFIRM:
 				fly->state = FLY_CONFIRM;
 				break;
-				
+
 			/* speed adjusting with mousepan (trackpad) */
 			case FLY_MODAL_SPEED:
 			{
 				float fac = 0.02f * (event->prevy - event->y);
-				
+
 				/* allowing to brake immediate */
 				if (fac > 0.0f && fly->speed < 0.0f)
 					fly->speed = 0.0f;
@@ -547,7 +564,7 @@ static void flyEvent(bContext *C, wmOperator *op, FlyInfo *fly, const wmEvent *e
 					fly->speed = 0.0f;
 				else
 					fly->speed += fly->grid * fac;
-				
+
 				break;
 			}
 			case FLY_MODAL_ACCELERATE:
@@ -1066,7 +1083,7 @@ static int fly_modal(bContext *C, wmOperator *op, const wmEvent *event)
 	}
 
 	if (ELEM(exit_code, OPERATOR_FINISHED, OPERATOR_CANCELLED))
-		ED_area_headerprint(CTX_wm_area(C), NULL);
+		ED_workspace_status_text(C, NULL);
 
 	return exit_code;
 }

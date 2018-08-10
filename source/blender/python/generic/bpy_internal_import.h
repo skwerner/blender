@@ -1,4 +1,4 @@
-/* 
+/*
  * ***** BEGIN GPL LICENSE BLOCK *****
  *
  * This program is free software; you can redistribute it and/or
@@ -47,16 +47,11 @@ bool        bpy_text_compile(struct Text *text);
 PyObject   *bpy_text_import(struct Text *text);
 PyObject   *bpy_text_import_name(const char *name, int *found);
 PyObject   *bpy_text_reimport(PyObject *module, int *found);
-/* void		bpy_text_clear_modules(int clear_all);*/ /* Clear user modules */ 
+/* void		bpy_text_clear_modules(int clear_all);*/ /* Clear user modules */
 
 void bpy_text_filename_get(char *fn, size_t fn_len, struct Text *text);
 
-/* The game engine has its own Main struct, if this is set search this rather than G.main */
 struct Main *bpy_import_main_get(void);
 void bpy_import_main_set(struct Main *maggie);
-
-/* This is used for importing text from dynamically loaded libraries in the game engine */
-void bpy_import_main_extra_add(struct Main *maggie);
-void bpy_import_main_extra_remove(struct Main *maggie);
 
 #endif				/* __BPY_INTERNAL_IMPORT_H__ */

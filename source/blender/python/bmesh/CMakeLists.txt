@@ -18,11 +18,12 @@
 #
 # ***** END GPL LICENSE BLOCK *****
 
-set(INC 
+set(INC
 	.
 	../../bmesh
 	../../blenkernel
 	../../blenlib
+	../../depsgraph
 	../../makesdna
 	../../../../intern/guardedalloc
 )

@@ -34,10 +34,12 @@
 
 struct bContext;
 struct Object;
+struct ParticleSystem;
 struct ParticleEditSettings;
 struct rcti;
 struct PTCacheEdit;
 struct Scene;
+struct ViewLayer;
 struct UndoType;
 
 /* particle edit mode */
@@ -45,15 +47,18 @@ void PE_free_ptcache_edit(struct PTCacheEdit *edit);
 int PE_start_edit(struct PTCacheEdit *edit);
 
 /* access */
+struct PTCacheEdit *PE_get_current_from_psys(struct ParticleSystem *psys);
 struct PTCacheEdit *PE_get_current(struct Scene *scene, struct Object *ob);
-struct PTCacheEdit *PE_create_current(struct Scene *scene, struct Object *ob);
-void PE_current_changed(struct Scene *scene, struct Object *ob);
-int PE_minmax(struct Scene *scene, float min[3], float max[3]);
+struct PTCacheEdit *PE_create_current(struct Depsgraph *depsgraph, struct Scene *scene, struct Object *ob);
+void PE_current_changed(struct Depsgraph *depsgraph, struct Scene *scene, struct Object *ob);
+int PE_minmax(struct Scene *scene, struct ViewLayer *view_layer, float min[3], float max[3]);
 struct ParticleEditSettings *PE_settings(struct Scene *scene);
 
 /* update calls */
 void PE_hide_keys_time(struct Scene *scene, struct PTCacheEdit *edit, float cfra);
-void PE_update_object(struct Scene *scene, struct Object *ob, int useflag);
+void PE_update_object(
+        struct Depsgraph *depsgraph, struct Scene *scene,
+        struct Object *ob, int useflag);
 
 /* selection tools */
 int PE_mouse_particles(struct bContext *C, const int mval[2], bool extend, bool deselect, bool toggle);
@@ -66,4 +71,3 @@ void PE_deselect_all_visible(struct PTCacheEdit *edit);
 void ED_particle_undosys_type(struct UndoType *ut);
 
 #endif /* __ED_PARTICLE_H__ */
-

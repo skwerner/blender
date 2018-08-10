@@ -9,7 +9,6 @@
 #
 # also defined,
 #  GLEW_LIBRARY, where to find the Glew library.
-#  GLEW_MX_LIBRARY, where to find the GlewMX library.
 
 #=============================================================================
 # Copyright 2014 Blender Foundation.
@@ -50,17 +49,7 @@ FIND_LIBRARY(GLEW_LIBRARY
     lib64 lib
   )
 
-
-FIND_LIBRARY(GLEW_MX_LIBRARY
-  NAMES
-    GLEWmx
-  HINTS
-    ${_glew_SEARCH_DIRS}
-  PATH_SUFFIXES
-    lib64 lib
-  )
-
-# handle the QUIETLY and REQUIRED arguments and set GLEW_FOUND to TRUE if 
+# handle the QUIETLY and REQUIRED arguments and set GLEW_FOUND to TRUE if
 # all listed variables are TRUE
 INCLUDE(FindPackageHandleStandardArgs)
 FIND_PACKAGE_HANDLE_STANDARD_ARGS(Glew DEFAULT_MSG
@@ -73,7 +62,6 @@ ENDIF(GLEW_FOUND)
 MARK_AS_ADVANCED(
   GLEW_INCLUDE_DIR
   GLEW_LIBRARY
-  GLEW_MX_LIBRARY
 )
 
 UNSET(_glew_SEARCH_DIRS)

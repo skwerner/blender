@@ -4,7 +4,7 @@
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version. 
+ * of the License, or (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -18,7 +18,7 @@
  * The Original Code is Copyright (C) 2008 Blender Foundation.
  * All rights reserved.
  *
- * 
+ *
  * Contributor(s): Blender Foundation
  *
  * ***** END GPL LICENSE BLOCK *****
@@ -36,13 +36,12 @@
 
 #include "BLI_sys_types.h"  /* int64_t */
 
-#include "BIF_gl.h"  /* bglMats */
-#include "BIF_glutil.h"  /* bglMats */
-
 #include "BLI_math_vector.h"
 
 #include "BKE_camera.h"
 #include "BKE_screen.h"
+
+#include "GPU_matrix.h"
 
 #include "ED_view3d.h"  /* own include */
 
@@ -58,13 +57,13 @@
 void ED_view3d_project_float_v2_m4(const ARegion *ar, const float co[3], float r_co[2], float mat[4][4])
 {
 	float vec4[4];
-	
+
 	copy_v3_v3(vec4, co);
 	vec4[3] = 1.0;
 	/* r_co[0] = IS_CLIPPED; */ /* always overwritten */
-	
+
 	mul_m4_v4(mat, vec4);
-	
+
 	if (vec4[3] > FLT_EPSILON) {
 		r_co[0] = (float)(ar->winx / 2.0f) + (ar->winx / 2.0f) * vec4[0] / vec4[3];
 		r_co[1] = (float)(ar->winy / 2.0f) + (ar->winy / 2.0f) * vec4[1] / vec4[3];
@@ -80,13 +79,13 @@ void ED_view3d_project_float_v2_m4(const ARegion *ar, const float co[3], float r
 void ED_view3d_project_float_v3_m4(const ARegion *ar, const float vec[3], float r_co[3], float mat[4][4])
 {
 	float vec4[4];
-	
+
 	copy_v3_v3(vec4, vec);
 	vec4[3] = 1.0;
 	/* r_co[0] = IS_CLIPPED; */ /* always overwritten */
-	
+
 	mul_m4_v4(mat, vec4);
-	
+
 	if (vec4[3] > FLT_EPSILON) {
 		r_co[0] = (float)(ar->winx / 2.0f) + (ar->winx / 2.0f) * vec4[0] / vec4[3];
 		r_co[1] = (float)(ar->winy / 2.0f) + (ar->winy / 2.0f) * vec4[1] / vec4[3];
@@ -315,6 +314,7 @@ float ED_view3d_calc_zfac(const RegionView3D *rv3d, const float co[3], bool *r_f
 }
 
 static void view3d_win_to_ray_segment(
+        struct Depsgraph *depsgraph,
         const ARegion *ar, const View3D *v3d, const float mval[2],
         float r_ray_co[3], float r_ray_dir[3], float r_ray_start[3], float r_ray_end[3])
 {
@@ -332,7 +332,7 @@ static void view3d_win_to_ray_segment(
 		start_offset = -end_offset;
 	}
 	else {
-		ED_view3d_clip_range_get(v3d, rv3d, &start_offset, &end_offset, false);
+		ED_view3d_clip_range_get(depsgraph, v3d, rv3d, &start_offset, &end_offset, false);
 	}
 
 	if (r_ray_start) {
@@ -371,12 +371,13 @@ bool ED_view3d_clip_segment(const RegionView3D *rv3d, float ray_start[3], float 
  * \return success, false if the ray is totally clipped.
  */
 bool ED_view3d_win_to_ray_ex(
+        struct Depsgraph *depsgraph,
         const ARegion *ar, const View3D *v3d, const float mval[2],
         float r_ray_co[3], float r_ray_normal[3], float r_ray_start[3], bool do_clip)
 {
 	float ray_end[3];
 
-	view3d_win_to_ray_segment(ar, v3d, mval, r_ray_co, r_ray_normal, r_ray_start, ray_end);
+	view3d_win_to_ray_segment(depsgraph, ar, v3d, mval, r_ray_co, r_ray_normal, r_ray_start, ray_end);
 
 	/* bounds clipping */
 	if (do_clip) {
@@ -400,10 +401,11 @@ bool ED_view3d_win_to_ray_ex(
  * \return success, false if the ray is totally clipped.
  */
 bool ED_view3d_win_to_ray(
+        struct Depsgraph *depsgraph,
         const ARegion *ar, const View3D *v3d, const float mval[2],
         float r_ray_start[3], float r_ray_normal[3], const bool do_clip)
 {
-	return ED_view3d_win_to_ray_ex(ar, v3d, mval, NULL, r_ray_normal, r_ray_start, do_clip);
+	return ED_view3d_win_to_ray_ex(depsgraph, ar, v3d, mval, NULL, r_ray_normal, r_ray_start, do_clip);
 }
 
 /**
@@ -549,10 +551,10 @@ void ED_view3d_win_to_delta(const ARegion *ar, const float mval[2], float out[3]
 {
 	RegionView3D *rv3d = ar->regiondata;
 	float dx, dy;
-	
+
 	dx = 2.0f * mval[0] * zfac / ar->winx;
 	dy = 2.0f * mval[1] * zfac / ar->winy;
-	
+
 	out[0] = (rv3d->persinv[0][0] * dx + rv3d->persinv[1][0] * dy);
 	out[1] = (rv3d->persinv[0][1] * dx + rv3d->persinv[1][1] * dy);
 	out[2] = (rv3d->persinv[0][2] * dx + rv3d->persinv[1][2] * dy);
@@ -633,10 +635,11 @@ void ED_view3d_win_to_vector(const ARegion *ar, const float mval[2], float out[3
  * \param do_clip Optionally clip the ray by the view clipping planes.
  * \return success, false if the segment is totally clipped.
  */
-bool ED_view3d_win_to_segment(const ARegion *ar, View3D *v3d, const float mval[2],
+bool ED_view3d_win_to_segment(struct Depsgraph *depsgraph,
+                              const ARegion *ar, View3D *v3d, const float mval[2],
                               float r_ray_start[3], float r_ray_end[3], const bool do_clip)
 {
-	view3d_win_to_ray_segment(ar, v3d, mval, NULL, NULL, r_ray_start, r_ray_end);
+	view3d_win_to_ray_segment(depsgraph, ar, v3d, mval, NULL, NULL, r_ray_start, r_ray_end);
 
 	/* bounds clipping */
 	if (do_clip) {
@@ -666,16 +669,22 @@ void ED_view3d_ob_project_mat_get_from_obmat(const RegionView3D *rv3d, float obm
 }
 
 /**
- * Uses window coordinates (x,y) and depth component z to find a point in
- * modelspace */
-void ED_view3d_unproject(bglMats *mats, float out[3], const float x, const float y, const float z)
+ * Convert between region relative coordinates (x,y) and depth component z and
+ * a point in world space. */
+void ED_view3d_project(const struct ARegion *ar, const float world[3], float region[3])
 {
-	double ux, uy, uz;
+	// viewport is set up to make coordinates relative to the region, not window
+	RegionView3D *rv3d = ar->regiondata;
+	int viewport[4] = {0, 0, ar->winx, ar->winy};
 
-	gluUnProject(x, y, z, mats->modelview, mats->projection,
-	             (GLint *)mats->viewport, &ux, &uy, &uz);
+	GPU_matrix_project(world, rv3d->viewmat, rv3d->winmat, viewport, region);
+}
 
-	out[0] = ux;
-	out[1] = uy;
-	out[2] = uz;
+bool ED_view3d_unproject(const struct ARegion *ar, float regionx, float regiony, float regionz, float world[3])
+{
+	RegionView3D *rv3d = ar->regiondata;
+	int viewport[4] = {0, 0, ar->winx, ar->winy};
+	float region[3] = {regionx, regiony, regionz};
+
+	return GPU_matrix_unproject(region, rv3d->viewmat, rv3d->winmat, viewport, world);
 }

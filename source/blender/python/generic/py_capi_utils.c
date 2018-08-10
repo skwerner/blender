@@ -91,7 +91,7 @@ int PyC_AsArray_FAST(
 		}
 	}
 	else if (type == &PyBool_Type) {
-		int *array_bool = array;
+		bool *array_bool = array;
 		for (i = 0; i < length; i++) {
 			array_bool[i] = (PyLong_AsLong(value_fast_items[i]) != 0);
 		}
@@ -230,6 +230,12 @@ int PyC_ParseBool(PyObject *o, void *p)
 	return 1;
 }
 
+/* silly function, we dont use arg. just check its compatible with __deepcopy__ */
+int PyC_CheckArgs_DeepCopy(PyObject *args)
+{
+	PyObject *dummy_pydict;
+	return PyArg_ParseTuple(args, "|O!:__deepcopy__", &PyDict_Type, &dummy_pydict) != 0;
+}
 
 #ifndef MATH_STANDALONE
 
@@ -295,7 +301,7 @@ void PyC_LineSpit(void)
 
 	PyErr_Clear();
 	PyC_FileAndNum(&filename, &lineno);
-	
+
 	fprintf(stderr, "%s:%d\n", filename, lineno);
 }
 
@@ -317,7 +323,7 @@ void PyC_StackSpit(void)
 void PyC_FileAndNum(const char **filename, int *lineno)
 {
 	PyFrameObject *frame;
-	
+
 	if (filename) *filename = NULL;
 	if (lineno)   *lineno = -1;
 
@@ -375,22 +381,22 @@ PyObject *PyC_Object_GetAttrStringArgs(PyObject *o, Py_ssize_t n, ...)
 	Py_ssize_t i;
 	PyObject *item = o;
 	const char *attr;
-	
+
 	va_list vargs;
 
 	va_start(vargs, n);
 	for (i = 0; i < n; i++) {
 		attr = va_arg(vargs, char *);
 		item = PyObject_GetAttrString(item, attr);
-		
-		if (item) 
+
+		if (item)
 			Py_DECREF(item);
 		else /* python will set the error value here */
 			break;
-		
+
 	}
 	va_end(vargs);
-	
+
 	Py_XINCREF(item); /* final value has is increfed, to match PyObject_GetAttrString */
 	return item;
 }
@@ -839,7 +845,7 @@ void PyC_RunQuicky(const char *filepath, int n, ...)
 			}
 		}
 		va_end(vargs);
-		
+
 		/* set the value so we can access it */
 		PyDict_SetItemString(py_dict, "values", values);
 		Py_DECREF(values);
@@ -865,7 +871,7 @@ void PyC_RunQuicky(const char *filepath, int n, ...)
 				for (i = 0; i * 2 < n; i++) {
 					const char *format = va_arg(vargs, char *);
 					void *ptr = va_arg(vargs, void *);
-					
+
 					PyObject *item;
 					PyObject *item_new;
 					/* prepend the string formatting and remake the tuple */

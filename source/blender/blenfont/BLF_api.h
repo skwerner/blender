@@ -4,7 +4,7 @@
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version. 
+ * of the License, or (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -18,7 +18,7 @@
  * The Original Code is Copyright (C) 2009 Blender Foundation.
  * All rights reserved.
  *
- * 
+ *
  * Contributor(s): Blender Foundation
  *
  * ***** END GPL LICENSE BLOCK *****
@@ -35,6 +35,9 @@
 #include "BLI_compiler_attrs.h"
 #include "BLI_sys_types.h"
 
+/* enable this only if needed (unused circa 2016) */
+#define BLF_BLUR_ENABLE 0
+
 struct rctf;
 struct ColorManagedDisplay;
 struct ResultBLF;
@@ -43,9 +46,8 @@ int BLF_init(void);
 void BLF_exit(void);
 void BLF_default_dpi(int dpi);
 void BLF_default_set(int fontid);
-
-void BLF_antialias_set(bool enabled);
-bool BLF_antialias_get(void);
+int BLF_default(void); /* get default font ID so we can pass it to other functions */
+void BLF_batch_reset(void); /* call when changing opengl context. */
 
 void BLF_cache_clear(void);
 
@@ -65,6 +67,17 @@ void BLF_aspect(int fontid, float x, float y, float z);
 void BLF_position(int fontid, float x, float y, float z);
 void BLF_size(int fontid, int size, int dpi);
 
+/* goal: small but useful color API */
+void BLF_color4ubv(int fontid, const unsigned char rgba[4]);
+void BLF_color3ubv(int fontid, const unsigned char rgb[3]);
+void BLF_color3ubv_alpha(int fontid, const unsigned char rgb[3], unsigned char alpha);
+void BLF_color3ub(int fontid, unsigned char r, unsigned char g, unsigned char b);
+void BLF_color4f(int fontid, float r, float g, float b, float a);
+void BLF_color4fv(int fontid, const float rgba[4]);
+void BLF_color3f(int fontid, float r, float g, float b);
+void BLF_color3fv_alpha(int fontid, const float rgb[3], float alpha);
+/* also available: UI_FontThemeColor(fontid, colorid) */
+
 /* Set a 4x4 matrix to be multiplied before draw the text.
  * Remember that you need call BLF_enable(BLF_MATRIX)
  * to enable this.
@@ -78,6 +91,12 @@ void BLF_size(int fontid, int size, int dpi);
  *
  */
 void BLF_matrix(int fontid, const float m[16]);
+
+/* Batch drawcalls together as long as
+ * the modelview matrix and the font remain unchanged. */
+void BLF_batch_draw_begin(void);
+void BLF_batch_draw_flush(void);
+void BLF_batch_draw_end(void);
 
 /* Draw the string using the default font, size and dpi. */
 void BLF_draw_default(float x, float y, float z, const char *str, size_t len) ATTR_NONNULL();
@@ -102,7 +121,7 @@ void BLF_boundbox_ex(int fontid, const char *str, size_t len, struct rctf *box, 
 void BLF_boundbox(int fontid, const char *str, size_t len, struct rctf *box) ATTR_NONNULL();
 
 /* The next both function return the width and height
- * of the string, using the current font and both value 
+ * of the string, using the current font and both value
  * are multiplied by the aspect of the font.
  */
 float BLF_width_ex(int fontid, const char *str, size_t len, struct ResultBLF *r_info) ATTR_WARN_UNUSED_RESULT ATTR_NONNULL(2);
@@ -126,29 +145,16 @@ void BLF_width_and_height(int fontid, const char *str, size_t len, float *r_widt
  */
 float BLF_fixed_width(int fontid) ATTR_WARN_UNUSED_RESULT;
 
-/* and this two function return the width and height
- * of the string, using the default font and both value
- * are multiplied by the aspect of the font.
- */
-void  BLF_width_and_height_default(const char *str, size_t len, float *r_width, float *r_height) ATTR_NONNULL();
-float BLF_width_default(const char *str, size_t len) ATTR_WARN_UNUSED_RESULT ATTR_NONNULL();
-float BLF_height_default(const char *str, size_t len) ATTR_WARN_UNUSED_RESULT ATTR_NONNULL();
-
-/* Set rotation for default font. */
-void BLF_rotation_default(float angle);
-
-/* Enable/disable options to the default font. */
-void BLF_enable_default(int option);
-void BLF_disable_default(int option);
-
 /* By default, rotation and clipping are disable and
  * have to be enable/disable using BLF_enable/disable.
  */
 void BLF_rotation(int fontid, float angle);
 void BLF_clipping(int fontid, float xmin, float ymin, float xmax, float ymax);
-void BLF_clipping_default(float xmin, float ymin, float xmax, float ymax);
 void BLF_wordwrap(int fontid, int wrap_width);
+
+#if BLF_BLUR_ENABLE
 void BLF_blur(int fontid, int size);
+#endif
 
 void BLF_enable(int fontid, int option);
 void BLF_disable(int fontid, int option);
@@ -223,6 +229,7 @@ void BLF_state_print(int fontid);
 #define BLF_ASPECT           (1 << 5)
 #define BLF_HINTING          (1 << 6)
 #define BLF_WORD_WRAP        (1 << 7)
+#define BLF_MONOCHROME       (1 << 8)  /* no-AA */
 
 #define BLF_DRAW_STR_DUMMY_MAX 1024
 

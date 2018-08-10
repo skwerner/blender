@@ -1,7 +1,6 @@
 #ifndef __IMAGE_OPENVDB_H__
 #define __IMAGE_OPENVDB_H__
 
-#include "util/util_types.h"
 #include "util/util_string.h"
 
 CCL_NAMESPACE_BEGIN

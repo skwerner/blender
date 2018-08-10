@@ -88,6 +88,7 @@
 #include "BLI_math_vector.h"
 
 #include "BKE_mesh.h"
+#include "BKE_mesh_runtime.h"
 #include "BKE_customdata.h"
 #include "BKE_multires.h"
 
@@ -97,42 +98,6 @@
 
 #include "bmesh.h"
 #include "intern/bmesh_private.h" /* for element checking */
-
-/**
- * Currently this is only used for Python scripts
- * which may fail to keep matching UV/TexFace layers.
- *
- * \note This should only perform any changes in exceptional cases,
- * if we need this to be faster we could inline #BM_data_layer_add and only
- * call #update_data_blocks once at the end.
- */
-void BM_mesh_cd_validate(BMesh *bm)
-{
-	int totlayer_mtex = CustomData_number_of_layers(&bm->pdata, CD_MTEXPOLY);
-	int totlayer_uv = CustomData_number_of_layers(&bm->ldata, CD_MLOOPUV);
-
-	if (LIKELY(totlayer_mtex == totlayer_uv)) {
-		/* pass */
-	}
-	else if (totlayer_mtex < totlayer_uv) {
-		const int uv_index_first = CustomData_get_layer_index(&bm->ldata, CD_MLOOPUV);
-		do {
-			const char *from_name =  bm->ldata.layers[uv_index_first + totlayer_mtex].name;
-			BM_data_layer_add_named(bm, &bm->pdata, CD_MTEXPOLY, from_name);
-			CustomData_set_layer_unique_name(&bm->pdata, totlayer_mtex);
-		} while (totlayer_uv != ++totlayer_mtex);
-	}
-	else if (totlayer_uv < totlayer_mtex) {
-		const int mtex_index_first = CustomData_get_layer_index(&bm->pdata, CD_MTEXPOLY);
-		do {
-			const char *from_name = bm->pdata.layers[mtex_index_first + totlayer_uv].name;
-			BM_data_layer_add_named(bm, &bm->ldata, CD_MLOOPUV, from_name);
-			CustomData_set_layer_unique_name(&bm->ldata, totlayer_uv);
-		} while (totlayer_mtex != ++totlayer_uv);
-	}
-
-	BLI_assert(totlayer_mtex == totlayer_uv);
-}
 
 void BM_mesh_cd_flag_ensure(BMesh *bm, Mesh *mesh, const char cd_flag)
 {
@@ -243,7 +208,7 @@ void BM_mesh_bm_from_me(
 	BMEdge *e, **etable = NULL;
 	BMFace *f, **ftable = NULL;
 	float (*keyco)[3] = NULL;
-	int totuv, totloops, i;
+	int totloops, i;
 
 	if (!me || !me->totvert) {
 		if (me && is_new) { /*no verts? still copy customdata layout*/
@@ -265,13 +230,6 @@ void BM_mesh_bm_from_me(
 		CustomData_copy(&me->edata, &bm->edata, CD_MASK_BMESH, CD_CALLOC, 0);
 		CustomData_copy(&me->ldata, &bm->ldata, CD_MASK_BMESH, CD_CALLOC, 0);
 		CustomData_copy(&me->pdata, &bm->pdata, CD_MASK_BMESH, CD_CALLOC, 0);
-
-		/* make sure uv layer names are consisten */
-		totuv = CustomData_number_of_layers(&bm->pdata, CD_MTEXPOLY);
-		for (i = 0; i < totuv; i++) {
-			int li = CustomData_get_layer_index_n(&bm->pdata, CD_MTEXPOLY, i);
-			CustomData_set_layer_name(&bm->ldata, CD_MLOOPUV, i, bm->pdata.layers[li].name);
-		}
 	}
 
 	/* -------------------------------------------------------------------- */
@@ -590,8 +548,12 @@ BLI_INLINE void bmesh_quick_edgedraw_flag(MEdge *med, BMEdge *e)
 	}
 }
 
+/**
+ *
+ * \param bmain May be NULL in case \a calc_object_remap parameter option is not set.
+ */
 void BM_mesh_bm_to_me(
-        BMesh *bm, Mesh *me,
+        Main *bmain, BMesh *bm, Mesh *me,
         const struct BMeshToMeshParams *params)
 {
 	MLoop *mloop;
@@ -752,11 +714,12 @@ void BM_mesh_bm_to_me(
 
 	/* patch hook indices and vertex parents */
 	if (params->calc_object_remap && (ototvert > 0)) {
+		BLI_assert(bmain != NULL);
 		Object *ob;
 		ModifierData *md;
 		BMVert **vertMap = NULL;
 
-		for (ob = G.main->object.first; ob; ob = ob->id.next) {
+		for (ob = bmain->object.first; ob; ob = ob->id.next) {
 			if ((ob->parent) && (ob->parent->data == me) && ELEM(ob->partype, PARVERT1, PARVERT3)) {
 
 				if (vertMap == NULL) {
@@ -979,4 +942,7 @@ void BM_mesh_bm_to_me(
 
 	/* topology could be changed, ensure mdisps are ok */
 	multires_topology_changed(me);
+
+	/* to be removed as soon as COW is enabled by default. */
+	BKE_mesh_runtime_clear_geometry(me);
 }

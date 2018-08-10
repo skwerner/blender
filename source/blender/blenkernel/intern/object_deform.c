@@ -51,7 +51,9 @@
 #include "BKE_editmesh.h"
 #include "BKE_object_deform.h"  /* own include */
 #include "BKE_object.h"
+#include "BKE_mesh.h"
 #include "BKE_modifier.h"
+#include "BKE_gpencil.h"
 
 /** \name Misc helpers
  * \{ */
@@ -132,7 +134,7 @@ bDeformGroup *BKE_object_defgroup_add_name(Object *ob, const char *name)
 /**
  * Add a vgroup of default name to object. *Does not* handle MDeformVert data at all!
  */
-bDeformGroup *BKE_object_defgroup_add(Object *ob) 
+bDeformGroup *BKE_object_defgroup_add(Object *ob)
 {
 	return BKE_object_defgroup_add_name(ob, DATA_("Group"));
 }
@@ -401,10 +403,17 @@ static void object_defgroup_remove_edit_mode(Object *ob, bDeformGroup *dg)
  */
 void BKE_object_defgroup_remove(Object *ob, bDeformGroup *defgroup)
 {
-	if (BKE_object_is_in_editmode_vgroup(ob))
-		object_defgroup_remove_edit_mode(ob, defgroup);
-	else
-		object_defgroup_remove_object_mode(ob, defgroup);
+	if ((ob) && (ob->type == OB_GPENCIL)) {
+		BKE_gpencil_vgroup_remove(ob, defgroup);
+	}
+	else {
+		if (BKE_object_is_in_editmode_vgroup(ob))
+			object_defgroup_remove_edit_mode(ob, defgroup);
+		else
+			object_defgroup_remove_object_mode(ob, defgroup);
+
+		BKE_mesh_batch_cache_dirty(ob->data, BKE_MESH_BATCH_DIRTY_ALL);
+	}
 }
 
 /**
@@ -781,4 +790,3 @@ void BKE_object_defgroup_subset_to_index_array(
 		}
 	}
 }
-

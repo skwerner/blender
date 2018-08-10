@@ -26,9 +26,11 @@
 
 /* defines VIEW3D_OT_ruler modal operator */
 
+#include "DNA_meshdata_types.h"
 #include "DNA_scene_types.h"
 #include "DNA_object_types.h"
 #include "DNA_gpencil_types.h"
+#include "DNA_brush_types.h"
 
 #include "MEM_guardedalloc.h"
 
@@ -38,14 +40,21 @@
 #include "BLT_translation.h"
 
 #include "BKE_context.h"
-#include "BKE_unit.h"
 #include "BKE_gpencil.h"
+#include "BKE_main.h"
+#include "BKE_material.h"
+#include "BKE_unit.h"
 
 #include "BIF_gl.h"
+
+#include "GPU_immediate.h"
+#include "GPU_immediate_util.h"
+#include "GPU_state.h"
 
 #include "WM_api.h"
 #include "WM_types.h"
 
+#include "ED_gpencil.h"
 #include "ED_screen.h"
 #include "ED_view3d.h"
 #include "ED_transform_snap_object_context.h"
@@ -264,6 +273,7 @@ static bool view3d_ruler_pick(RulerInfo *ruler_info, const float mval[2],
  */
 static void ruler_state_set(bContext *C, RulerInfo *ruler_info, int state)
 {
+	Main *bmain = CTX_data_main(C);
 	if (state == ruler_info->state) {
 		return;
 	}
@@ -279,7 +289,7 @@ static void ruler_state_set(bContext *C, RulerInfo *ruler_info, int state)
 	}
 	else if (state == RULER_STATE_DRAG) {
 		ruler_info->snap_context = ED_transform_snap_object_context_create_view3d(
-		        CTX_data_main(C), CTX_data_scene(C), 0,
+		        bmain, CTX_data_scene(C), CTX_data_depsgraph(C), 0,
 		        ruler_info->ar, CTX_wm_view3d(C));
 	}
 	else {
@@ -292,38 +302,30 @@ static void ruler_state_set(bContext *C, RulerInfo *ruler_info, int state)
 #define RULER_ID "RulerData3D"
 static bool view3d_ruler_to_gpencil(bContext *C, RulerInfo *ruler_info)
 {
+	Main *bmain = CTX_data_main(C);
 	Scene *scene = CTX_data_scene(C);
+
 	bGPDlayer *gpl;
 	bGPDframe *gpf;
 	bGPDstroke *gps;
-	bGPDpalette *palette;
-	bGPDpalettecolor *palcolor;
 	RulerItem *ruler_item;
 	const char *ruler_name = RULER_ID;
 	bool changed = false;
 
+	/* FIXME: This needs to be reviewed. Should it keep being done like this? */
 	if (scene->gpd == NULL) {
-		scene->gpd = BKE_gpencil_data_addnew("GPencil");
+		scene->gpd = BKE_gpencil_data_addnew(bmain, "Annotations");
 	}
+	bGPdata *gpd = scene->gpd;
 
-	gpl = BLI_findstring(&scene->gpd->layers, ruler_name, offsetof(bGPDlayer, info));
+	gpl = BLI_findstring(&gpd->layers, ruler_name, offsetof(bGPDlayer, info));
 	if (gpl == NULL) {
-		gpl = BKE_gpencil_layer_addnew(scene->gpd, ruler_name, false);
+		gpl = BKE_gpencil_layer_addnew(gpd, ruler_name, false);
+		copy_v4_v4(gpl->color, U.gpencil_new_layer_col);
 		gpl->thickness = 1;
 		gpl->flag |= GP_LAYER_HIDE;
 	}
 
-	/* try to get active palette or create a new one */
-	palette = BKE_gpencil_palette_getactive(scene->gpd);
-	if (palette == NULL) {
-		palette = BKE_gpencil_palette_addnew(scene->gpd, DATA_("GP_Palette"), true);
-	}
-	/* try to get color with the ruler name or create a new one */
-	palcolor = BKE_gpencil_palettecolor_getbyname(palette, (char *)ruler_name);
-	if (palcolor == NULL) {
-		palcolor = BKE_gpencil_palettecolor_addnew(palette, (char *)ruler_name, true);
-	}
-	
 	gpf = BKE_gpencil_layer_getframe(gpl, CFRA, true);
 	BKE_gpencil_free_strokes(gpf);
 
@@ -336,6 +338,7 @@ static bool view3d_ruler_to_gpencil(bContext *C, RulerInfo *ruler_info)
 		if (ruler_item->flag & RULERITEM_USE_ANGLE) {
 			gps->totpoints = 3;
 			pt = gps->points = MEM_callocN(sizeof(bGPDspoint) * gps->totpoints, "gp_stroke_points");
+			gps->dvert = MEM_callocN(sizeof(MDeformVert) * gps->totpoints, "gp_stroke_weights");
 			for (j = 0; j < 3; j++) {
 				copy_v3_v3(&pt->x, ruler_item->co[j]);
 				pt->pressure = 1.0f;
@@ -346,6 +349,7 @@ static bool view3d_ruler_to_gpencil(bContext *C, RulerInfo *ruler_info)
 		else {
 			gps->totpoints = 2;
 			pt = gps->points = MEM_callocN(sizeof(bGPDspoint) * gps->totpoints, "gp_stroke_points");
+			gps->dvert = MEM_callocN(sizeof(MDeformVert) * gps->totpoints, "gp_stroke_weights");
 			for (j = 0; j < 3; j += 2) {
 				copy_v3_v3(&pt->x, ruler_item->co[j]);
 				pt->pressure = 1.0f;
@@ -355,9 +359,7 @@ static bool view3d_ruler_to_gpencil(bContext *C, RulerInfo *ruler_info)
 		}
 		gps->flag = GP_STROKE_3DSPACE;
 		gps->thickness = 3;
-		/* assign color to stroke */
-		BLI_strncpy(gps->colorname, palcolor->info, sizeof(gps->colorname));
-		gps->palcolor = palcolor;
+
 		BLI_addtail(&gpf->strokes, gps);
 		changed = true;
 	}
@@ -425,15 +427,14 @@ static void ruler_info_draw_pixel(const struct bContext *C, ARegion *ar, void *a
 #define ARC_STEPS 24
 	const int arc_steps = ARC_STEPS;
 	int i;
-	//unsigned int color_act = 0x666600;
-	unsigned int color_act = 0xffffff;
-	unsigned int color_base = 0x0;
-	unsigned char color_back[4] = {0xff, 0xff, 0xff, 0x80};
+	const float color_act[4] = {1.0f, 1.0f, 1.0f, 1.0f};
+	const float color_base[4] = {0.0f, 0.0f, 0.0f, 1.0f};
 	unsigned char color_text[3];
 	unsigned char color_wire[3];
+	float color_back[4] = {1.0f, 1.0f, 1.0f, 0.5f};
 
 	/* anti-aliased lines for more consistent appearance */
-	glEnable(GL_LINE_SMOOTH);
+	GPU_line_smooth(true);
 
 	BLF_enable(blf_mono_font, BLF_ROTATION);
 	BLF_size(blf_mono_font, 14 * U.pixelsize, U.dpi);
@@ -453,30 +454,39 @@ static void ruler_info_draw_pixel(const struct bContext *C, ARegion *ar, void *a
 			ED_view3d_project_float_global(ar, ruler_item->co[j], co_ss[j], V3D_PROJ_TEST_NOP);
 		}
 
-		glEnable(GL_BLEND);
+		GPU_blend(true);
 
-		cpack(is_act ? color_act : color_base);
+		const uint shdr_pos = GPU_vertformat_attr_add(immVertexFormat(), "pos", GPU_COMP_F32, 2, GPU_FETCH_FLOAT);
 
 		if (ruler_item->flag & RULERITEM_USE_ANGLE) {
-			glBegin(GL_LINE_STRIP);
-			for (j = 0; j < 3; j++) {
-				glVertex2fv(co_ss[j]);
-			}
-			glEnd();
-			cpack(0xaaaaaa);
-			setlinestyle(3);
-			glBegin(GL_LINE_STRIP);
-			for (j = 0; j < 3; j++) {
-				glVertex2fv(co_ss[j]);
-			}
-			glEnd();
-			setlinestyle(0);
+			immBindBuiltinProgram(GPU_SHADER_2D_LINE_DASHED_UNIFORM_COLOR);
+
+			float viewport_size[4];
+			GPU_viewport_size_get_f(viewport_size);
+			immUniform2f("viewport_size", viewport_size[2], viewport_size[3]);
+
+			immUniform1i("colors_len", 2);  /* "advanced" mode */
+			const float *col = is_act ? color_act : color_base;
+			immUniformArray4fv("colors", (float *)(float[][4]){{0.67f, 0.67f, 0.67f, 1.0f}, {col[0], col[1], col[2], col[3]}}, 2);
+			immUniform1f("dash_width", 6.0f);
+
+			immBegin(GPU_PRIM_LINE_STRIP, 3);
+
+			immVertex2fv(shdr_pos, co_ss[0]);
+			immVertex2fv(shdr_pos, co_ss[1]);
+			immVertex2fv(shdr_pos, co_ss[2]);
+
+			immEnd();
+
+			immUnbindProgram();
+
+			immBindBuiltinProgram(GPU_SHADER_2D_UNIFORM_COLOR);
 
 			/* arc */
 			{
 				float dir_tmp[3];
 				float co_tmp[3];
-				float arc_ss_coords[ARC_STEPS + 1][2];
+				float arc_ss_coord[2];
 
 				float dir_a[3];
 				float dir_b[3];
@@ -500,46 +510,19 @@ static void ruler_info_draw_pixel(const struct bContext *C, ARegion *ar, void *a
 
 				copy_v3_v3(dir_tmp, dir_a);
 
-				glColor3ubv(color_wire);
+				immUniformColor3ubv(color_wire);
+
+				immBegin(GPU_PRIM_LINE_STRIP, arc_steps + 1);
 
 				for (j = 0; j <= arc_steps; j++) {
 					madd_v3_v3v3fl(co_tmp, ruler_item->co[1], dir_tmp, px_scale);
-					ED_view3d_project_float_global(ar, co_tmp, arc_ss_coords[j], V3D_PROJ_TEST_NOP);
+					ED_view3d_project_float_global(ar, co_tmp, arc_ss_coord, V3D_PROJ_TEST_NOP);
 					mul_qt_v3(quat, dir_tmp);
+
+					immVertex2fv(shdr_pos, arc_ss_coord);
 				}
 
-				glEnableClientState(GL_VERTEX_ARRAY);
-				glVertexPointer(2, GL_FLOAT, 0, arc_ss_coords);
-				glDrawArrays(GL_LINE_STRIP, 0, arc_steps + 1);
-				glDisableClientState(GL_VERTEX_ARRAY);
-			}
-
-			/* text */
-			{
-				char numstr[256];
-				float numstr_size[2];
-				float pos[2];
-				const int prec = 2;  /* XXX, todo, make optional */
-
-				ruler_item_as_string(ruler_item, unit, numstr, sizeof(numstr), prec);
-
-				BLF_width_and_height(blf_mono_font, numstr, sizeof(numstr), &numstr_size[0], &numstr_size[1]);
-
-				pos[0] = co_ss[1][0] + (cap_size * 2.0f);
-				pos[1] = co_ss[1][1] - (numstr_size[1] / 2.0f);
-
-				/* draw text (bg) */
-				glColor4ubv(color_back);
-				UI_draw_roundbox_corner_set(UI_CNR_ALL);
-				UI_draw_roundbox(
-				        pos[0] - bg_margin,                  pos[1] - bg_margin,
-				        pos[0] + bg_margin + numstr_size[0], pos[1] + bg_margin + numstr_size[1],
-				        bg_radius);
-				/* draw text */
-				glColor3ubv(color_text);
-				BLF_position(blf_mono_font, pos[0], pos[1], 0.0f);
-				BLF_rotation(blf_mono_font, 0.0f);
-				BLF_draw(blf_mono_font, numstr, sizeof(numstr));
+				immEnd();
 			}
 
 			/* capping */
@@ -558,77 +541,86 @@ static void ruler_info_draw_pixel(const struct bContext *C, ARegion *ar, void *a
 				rot_90_vec_b[1] =  dir_ruler[0];
 				normalize_v2(rot_90_vec_b);
 
-				glEnable(GL_BLEND);
+				GPU_blend(true);
 
-				glColor3ubv(color_wire);
+				immUniformColor3ubv(color_wire);
 
-				glBegin(GL_LINES);
+				immBegin(GPU_PRIM_LINES, 8);
 
 				madd_v2_v2v2fl(cap, co_ss[0], rot_90_vec_a, cap_size);
-				glVertex2fv(cap);
+				immVertex2fv(shdr_pos, cap);
 				madd_v2_v2v2fl(cap, co_ss[0], rot_90_vec_a, -cap_size);
-				glVertex2fv(cap);
+				immVertex2fv(shdr_pos, cap);
 
 				madd_v2_v2v2fl(cap, co_ss[2], rot_90_vec_b, cap_size);
-				glVertex2fv(cap);
+				immVertex2fv(shdr_pos, cap);
 				madd_v2_v2v2fl(cap, co_ss[2], rot_90_vec_b, -cap_size);
-				glVertex2fv(cap);
+				immVertex2fv(shdr_pos, cap);
 
 				/* angle vertex */
-				glVertex2f(co_ss[1][0] - cap_size, co_ss[1][1] - cap_size);
-				glVertex2f(co_ss[1][0] + cap_size, co_ss[1][1] + cap_size);
-				glVertex2f(co_ss[1][0] - cap_size, co_ss[1][1] + cap_size);
-				glVertex2f(co_ss[1][0] + cap_size, co_ss[1][1] - cap_size);
-				glEnd();
+				immVertex2f(shdr_pos, co_ss[1][0] - cap_size, co_ss[1][1] - cap_size);
+				immVertex2f(shdr_pos, co_ss[1][0] + cap_size, co_ss[1][1] + cap_size);
+				immVertex2f(shdr_pos, co_ss[1][0] - cap_size, co_ss[1][1] + cap_size);
+				immVertex2f(shdr_pos, co_ss[1][0] + cap_size, co_ss[1][1] - cap_size);
 
-				glDisable(GL_BLEND);
-			}
-		}
-		else {
-			glBegin(GL_LINE_STRIP);
-			for (j = 0; j < 3; j += 2) {
-				glVertex2fv(co_ss[j]);
-			}
-			glEnd();
-			cpack(0xaaaaaa);
-			setlinestyle(3);
-			glBegin(GL_LINE_STRIP);
-			for (j = 0; j < 3; j += 2) {
-				glVertex2fv(co_ss[j]);
-			}
-			glEnd();
-			setlinestyle(0);
+				immEnd();
 
-			sub_v2_v2v2(dir_ruler, co_ss[0], co_ss[2]);
+				GPU_blend(false);
+			}
+
+			immUnbindProgram();
 
 			/* text */
 			{
 				char numstr[256];
 				float numstr_size[2];
-				const int prec = 6;  /* XXX, todo, make optional */
-				float pos[2];
+				float posit[2];
+				const int prec = 2;  /* XXX, todo, make optional */
 
 				ruler_item_as_string(ruler_item, unit, numstr, sizeof(numstr), prec);
 
 				BLF_width_and_height(blf_mono_font, numstr, sizeof(numstr), &numstr_size[0], &numstr_size[1]);
 
-				mid_v2_v2v2(pos, co_ss[0], co_ss[2]);
-
-				/* center text */
-				pos[0] -= numstr_size[0] / 2.0f;
-				pos[1] -= numstr_size[1] / 2.0f;
+				posit[0] = co_ss[1][0] + (cap_size * 2.0f);
+				posit[1] = co_ss[1][1] - (numstr_size[1] / 2.0f);
 
 				/* draw text (bg) */
-				glColor4ubv(color_back);
 				UI_draw_roundbox_corner_set(UI_CNR_ALL);
-				UI_draw_roundbox(pos[0] - bg_margin,                  pos[1] - bg_margin,
-				           pos[0] + bg_margin + numstr_size[0], pos[1] + bg_margin + numstr_size[1],
-				           bg_radius);
+				UI_draw_roundbox_aa(true,
+				        posit[0] - bg_margin,                  posit[1] - bg_margin,
+				        posit[0] + bg_margin + numstr_size[0], posit[1] + bg_margin + numstr_size[1],
+				        bg_radius, color_back);
 				/* draw text */
-				glColor3ubv(color_text);
-				BLF_position(blf_mono_font, pos[0], pos[1], 0.0f);
+				BLF_color3ubv(blf_mono_font, color_text);
+				BLF_position(blf_mono_font, posit[0], posit[1], 0.0f);
+				BLF_rotation(blf_mono_font, 0.0f);
 				BLF_draw(blf_mono_font, numstr, sizeof(numstr));
 			}
+		}
+		else {
+			immBindBuiltinProgram(GPU_SHADER_2D_LINE_DASHED_UNIFORM_COLOR);
+
+			float viewport_size[4];
+			GPU_viewport_size_get_f(viewport_size);
+			immUniform2f("viewport_size", viewport_size[2], viewport_size[3]);
+
+			immUniform1i("colors_len", 2);  /* "advanced" mode */
+			const float *col = is_act ? color_act : color_base;
+			immUniformArray4fv("colors", (float *)(float[][4]){{0.67f, 0.67f, 0.67f, 1.0f}, {col[0], col[1], col[2], col[3]}}, 2);
+			immUniform1f("dash_width", 6.0f);
+
+			immBegin(GPU_PRIM_LINES, 2);
+
+			immVertex2fv(shdr_pos, co_ss[0]);
+			immVertex2fv(shdr_pos, co_ss[2]);
+
+			immEnd();
+
+			immUnbindProgram();
+
+			immBindBuiltinProgram(GPU_SHADER_2D_UNIFORM_COLOR);
+
+			sub_v2_v2v2(dir_ruler, co_ss[0], co_ss[2]);
 
 			/* capping */
 			{
@@ -637,27 +629,61 @@ static void ruler_info_draw_pixel(const struct bContext *C, ARegion *ar, void *a
 
 				normalize_v2(rot_90_vec);
 
-				glEnable(GL_BLEND);
-				glColor3ubv(color_wire);
+				GPU_blend(true);
 
-				glBegin(GL_LINES);
+				immUniformColor3ubv(color_wire);
+
+				immBegin(GPU_PRIM_LINES, 4);
+
 				madd_v2_v2v2fl(cap, co_ss[0], rot_90_vec, cap_size);
-				glVertex2fv(cap);
+				immVertex2fv(shdr_pos, cap);
 				madd_v2_v2v2fl(cap, co_ss[0], rot_90_vec, -cap_size);
-				glVertex2fv(cap);
+				immVertex2fv(shdr_pos, cap);
 
 				madd_v2_v2v2fl(cap, co_ss[2], rot_90_vec, cap_size);
-				glVertex2fv(cap);
+				immVertex2fv(shdr_pos, cap);
 				madd_v2_v2v2fl(cap, co_ss[2], rot_90_vec, -cap_size);
-				glVertex2fv(cap);
-				glEnd();
+				immVertex2fv(shdr_pos, cap);
 
-				glDisable(GL_BLEND);
+				immEnd();
+
+				GPU_blend(false);
+			}
+
+			immUnbindProgram();
+
+			/* text */
+			{
+				char numstr[256];
+				float numstr_size[2];
+				const int prec = 6;  /* XXX, todo, make optional */
+				float posit[2];
+
+				ruler_item_as_string(ruler_item, unit, numstr, sizeof(numstr), prec);
+
+				BLF_width_and_height(blf_mono_font, numstr, sizeof(numstr), &numstr_size[0], &numstr_size[1]);
+
+				mid_v2_v2v2(posit, co_ss[0], co_ss[2]);
+
+				/* center text */
+				posit[0] -= numstr_size[0] / 2.0f;
+				posit[1] -= numstr_size[1] / 2.0f;
+
+				/* draw text (bg) */
+				UI_draw_roundbox_corner_set(UI_CNR_ALL);
+				UI_draw_roundbox_aa(true,
+				           posit[0] - bg_margin,                  posit[1] - bg_margin,
+				           posit[0] + bg_margin + numstr_size[0], posit[1] + bg_margin + numstr_size[1],
+				           bg_radius, color_back);
+				/* draw text */
+				BLF_color3ubv(blf_mono_font, color_text);
+				BLF_position(blf_mono_font, posit[0], posit[1], 0.0f);
+				BLF_draw(blf_mono_font, numstr, sizeof(numstr));
 			}
 		}
 	}
 
-	glDisable(GL_LINE_SMOOTH);
+	GPU_line_smooth(false);
 
 	BLF_disable(blf_mono_font, BLF_ROTATION);
 
@@ -672,8 +698,14 @@ static void ruler_info_draw_pixel(const struct bContext *C, ARegion *ar, void *a
 			float co_ss[3];
 			ED_view3d_project_float_global(ar, ruler_item->co[ruler_item->co_index], co_ss, V3D_PROJ_TEST_NOP);
 
-			cpack(color_act);
-			circ(co_ss[0], co_ss[1], size * U.pixelsize);
+			uint pos = GPU_vertformat_attr_add(immVertexFormat(), "pos", GPU_COMP_F32, 2, GPU_FETCH_FLOAT);
+
+			immBindBuiltinProgram(GPU_SHADER_2D_UNIFORM_COLOR);
+			immUniformColor4fv(color_act);
+
+			imm_draw_circle_wire_2d(pos, co_ss[0], co_ss[1], size * U.pixelsize, 32);
+
+			immUnbindProgram();
 		}
 	}
 
@@ -728,14 +760,14 @@ static bool view3d_ruler_item_mousemove(
 
 			co_other = ruler_item->co[ruler_item->co_index == 0 ? 2 : 0];
 
-			if (ED_transform_snap_object_project_view3d_mixed(
+			if (ED_transform_snap_object_project_view3d(
 			        ruler_info->snap_context,
-			        SCE_SELECT_FACE,
+			        SCE_SNAP_MODE_FACE,
 			        &(const struct SnapObjectParams){
 			            .snap_select = SNAP_ALL,
 			            .use_object_edit_cage = true,
 			        },
-			        mval_fl, &dist_px, true,
+			        mval_fl, &dist_px,
 			        co, ray_normal))
 			{
 				negate_v3(ray_normal);
@@ -752,19 +784,17 @@ static bool view3d_ruler_item_mousemove(
 			}
 		}
 		else if (do_snap) {
-			// Scene *scene = CTX_data_scene(C);
-			View3D *v3d = ruler_info->sa->spacedata.first;
 			const float mval_fl[2] = {UNPACK2(mval)};
-			bool use_depth = (v3d->drawtype >= OB_SOLID);
 
-			if (ED_transform_snap_object_project_view3d_mixed(
+			if (ED_transform_snap_object_project_view3d(
 			        ruler_info->snap_context,
-			        (SCE_SELECT_VERTEX | SCE_SELECT_EDGE) | (use_depth ? SCE_SELECT_FACE : 0),
+			        (SCE_SNAP_MODE_VERTEX | SCE_SNAP_MODE_EDGE | SCE_SNAP_MODE_FACE),
 			        &(const struct SnapObjectParams){
 			            .snap_select = SNAP_ALL,
 			            .use_object_edit_cage = true,
+			            .use_occlusion_test = true,
 			        },
-			        mval_fl, &dist_px, use_depth,
+			        mval_fl, &dist_px,
 			        co, NULL))
 			{
 				ruler_info->snap_flag |= RULER_SNAP_OK;
@@ -777,7 +807,7 @@ static bool view3d_ruler_item_mousemove(
 	}
 }
 
-static void view3d_ruler_header_update(ScrArea *sa)
+static void view3d_ruler_header_update(bContext *C)
 {
 	const char *text = IFACE_("Ctrl+LMB: Add, "
 	                          "Del: Remove, "
@@ -787,7 +817,7 @@ static void view3d_ruler_header_update(ScrArea *sa)
 	                          "Enter: Store,  "
 	                          "Esc: Cancel");
 
-	ED_area_headerprint(sa, text);
+	ED_workspace_status_text(C, text);
 }
 
 /* -------------------------------------------------------------------- */
@@ -813,7 +843,7 @@ static int view3d_ruler_invoke(bContext *C, wmOperator *op, const wmEvent *UNUSE
 	ruler_info->draw_handle_pixel = ED_region_draw_cb_activate(ar->type, ruler_info_draw_pixel,
 	                                                           ruler_info, REGION_DRAW_POST_PIXEL);
 
-	view3d_ruler_header_update(sa);
+	view3d_ruler_header_update(C);
 
 	op->flag |= OP_IS_MODAL_CURSOR_REGION;
 
@@ -876,7 +906,7 @@ static int view3d_ruler_modal(bContext *C, wmOperator *op, const wmEvent *event)
 					    BLI_listbase_is_empty(&ruler_info->items))
 					{
 						View3D *v3d = CTX_wm_view3d(C);
-						const bool use_depth = (v3d->drawtype >= OB_SOLID);
+						const bool use_depth = (v3d->shading.type >= OB_SOLID);
 
 						/* Create new line */
 						RulerItem *ruler_item_prev = ruler_item_active_get(ruler_info);
@@ -1045,7 +1075,7 @@ static int view3d_ruler_modal(bContext *C, wmOperator *op, const wmEvent *event)
 	}
 
 	if (do_draw) {
-		view3d_ruler_header_update(sa);
+		view3d_ruler_header_update(C);
 
 		/* all 3d views draw rulers */
 		WM_event_add_notifier(C, NC_SPACE | ND_SPACE_VIEW3D, NULL);
@@ -1059,7 +1089,7 @@ exit:
 		view3d_ruler_free(ruler_info);
 		op->customdata = NULL;
 
-		ED_area_headerprint(sa, NULL);
+		ED_workspace_status_text(C, NULL);
 	}
 
 	return exit_code;

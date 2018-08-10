@@ -38,8 +38,9 @@
 #ifdef RNA_RUNTIME
 
 #include "BKE_font.h"
-#include "BKE_depsgraph.h"
 #include "DNA_object_types.h"
+
+#include "DEG_depsgraph.h"
 
 #include "WM_api.h"
 
@@ -60,7 +61,7 @@ static void rna_VectorFont_reload_update(Main *UNUSED(bmain), Scene *UNUSED(scen
 
 	/* update */
 	WM_main_add_notifier(NC_GEOM | ND_DATA, NULL);
-	DAG_id_tag_update(&vf->id, OB_RECALC_OB | OB_RECALC_DATA);
+	DEG_id_tag_update(&vf->id, OB_RECALC_OB | OB_RECALC_DATA);
 }
 
 #else
@@ -69,7 +70,7 @@ void RNA_def_vfont(BlenderRNA *brna)
 {
 	StructRNA *srna;
 	PropertyRNA *prop;
-	
+
 	srna = RNA_def_struct(brna, "VectorFont", "ID");
 	RNA_def_struct_ui_text(srna, "Vector Font", "Vector font for Text objects");
 	RNA_def_struct_sdna(srna, "VFont");

@@ -28,11 +28,14 @@
  */
 
 enum eCurveMappingPreset;
+struct bContext;
 struct Brush;
+struct Paint;
 struct ImBuf;
 struct ImagePool;
 struct Main;
 struct Scene;
+struct ToolSettings;
 struct UnifiedPaintSettings;
 // enum eCurveMappingPreset;
 
@@ -45,23 +48,21 @@ void BKE_brush_system_exit(void);
 /* datablock functions */
 void BKE_brush_init(struct Brush *brush);
 struct Brush *BKE_brush_add(struct Main *bmain, const char *name, const eObjectMode ob_mode);
+struct Brush *BKE_brush_add_gpencil(struct Main *bmain, struct ToolSettings *ts, const char *name);
+void BKE_brush_init_gpencil_settings(struct Brush *brush);
 struct Brush *BKE_brush_first_search(struct Main *bmain, const eObjectMode ob_mode);
 void BKE_brush_copy_data(struct Main *bmain, struct Brush *brush_dst, const struct Brush *brush_src, const int flag);
 struct Brush *BKE_brush_copy(struct Main *bmain, const struct Brush *brush);
 void BKE_brush_make_local(struct Main *bmain, struct Brush *brush, const bool lib_local);
-void BKE_brush_unlink(struct Main *bmain, struct Brush *brush);
 void BKE_brush_free(struct Brush *brush);
 
 void BKE_brush_sculpt_reset(struct Brush *brush);
+void BKE_brush_gpencil_presets(struct bContext *C);
+struct Brush *BKE_brush_getactive_gpencil(struct ToolSettings *ts);
+struct Paint *BKE_brush_get_gpencil_paint(struct ToolSettings *ts);
 
 /* image icon function */
 struct ImBuf *get_brush_icon(struct Brush *brush);
-
-/* brush library operations used by different paint panels */
-int BKE_brush_texture_set_nr(struct Brush *brush, int nr);
-int BKE_brush_texture_delete(struct Brush *brush);
-int BKE_brush_clone_image_set_nr(struct Brush *brush, int nr);
-int BKE_brush_clone_image_delete(struct Brush *brush);
 
 /* jitter */
 void BKE_brush_jitter_pos(
@@ -127,4 +128,3 @@ void BKE_brush_scale_size(
 void BKE_brush_debug_print_state(struct Brush *br);
 
 #endif
-

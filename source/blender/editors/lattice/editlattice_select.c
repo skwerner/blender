@@ -50,6 +50,7 @@
 #include "BKE_context.h"
 #include "BKE_lattice.h"
 #include "BKE_report.h"
+#include "BKE_layer.h"
 
 #include "ED_screen.h"
 #include "ED_lattice.h"
@@ -57,6 +58,8 @@
 
 #include "WM_api.h"
 #include "WM_types.h"
+
+#include "DEG_depsgraph.h"
 
 #include "lattice_intern.h"
 
@@ -84,36 +87,44 @@ static void bpoint_select_set(BPoint *bp, bool select)
 
 static int lattice_select_random_exec(bContext *C, wmOperator *op)
 {
-	Object *obedit = CTX_data_edit_object(C);
-	Lattice *lt = ((Lattice *)obedit->data)->editlatt->latt;
-
 	const float randfac = RNA_float_get(op->ptr, "percent") / 100.0f;
 	const int seed = WM_operator_properties_select_random_seed_increment_get(op);
 	const bool select = (RNA_enum_get(op->ptr, "action") == SEL_SELECT);
 
-	RNG *rng = BLI_rng_new_srandom(seed);
+	ViewLayer *view_layer = CTX_data_view_layer(C);
+	uint objects_len = 0;
+	Object **objects = BKE_view_layer_array_from_objects_in_edit_mode_unique_data(view_layer, &objects_len);
+	for (uint ob_index = 0; ob_index < objects_len; ob_index++) {
+		Object *obedit = objects[ob_index];
+		Lattice *lt = ((Lattice *)obedit->data)->editlatt->latt;
 
-	int tot;
-	BPoint *bp;
+		RNG *rng = BLI_rng_new_srandom(seed);
 
-	tot = lt->pntsu * lt->pntsv * lt->pntsw;
-	bp = lt->def;
-	while (tot--) {
-		if (!bp->hide) {
-			if (BLI_rng_get_float(rng) < randfac) {
-				bpoint_select_set(bp, select);
+		int tot;
+		BPoint *bp;
+
+		tot = lt->pntsu * lt->pntsv * lt->pntsw;
+		bp = lt->def;
+		while (tot--) {
+			if (!bp->hide) {
+				if (BLI_rng_get_float(rng) < randfac) {
+					bpoint_select_set(bp, select);
+				}
 			}
+			bp++;
 		}
-		bp++;
+
+		if (select == false) {
+			lt->actbp = LT_ACTBP_NONE;
+		}
+
+		BLI_rng_free(rng);
+
+		DEG_id_tag_update(obedit->data, DEG_TAG_SELECT_UPDATE);
+		WM_event_add_notifier(C, NC_GEOM | ND_SELECT, obedit->data);
+
 	}
-
-	if (select == false) {
-		lt->actbp = LT_ACTBP_NONE;
-	}
-
-	BLI_rng_free(rng);
-
-	WM_event_add_notifier(C, NC_GEOM | ND_SELECT, obedit->data);
+	MEM_freeN(objects);
 
 	return OPERATOR_FINISHED;
 }
@@ -183,18 +194,28 @@ static void ed_lattice_select_mirrored(Lattice *lt, const int axis, const bool e
 
 static int lattice_select_mirror_exec(bContext *C, wmOperator *op)
 {
-	Object *obedit = CTX_data_edit_object(C);
-	Lattice *lt = ((Lattice *)obedit->data)->editlatt->latt;
 	const int axis_flag = RNA_enum_get(op->ptr, "axis");
 	const bool extend = RNA_boolean_get(op->ptr, "extend");
 
-	for (int axis = 0; axis < 3; axis++) {
-		if ((1 << axis) & axis_flag) {
-			ed_lattice_select_mirrored(lt, axis, extend);
-		}
-	}
+	ViewLayer *view_layer = CTX_data_view_layer(C);
+	uint objects_len = 0;
+	Object **objects = BKE_view_layer_array_from_objects_in_edit_mode_unique_data(view_layer, &objects_len);
 
-	WM_event_add_notifier(C, NC_GEOM | ND_SELECT, obedit->data);
+	for (uint ob_index = 0; ob_index < objects_len; ob_index++) {
+		Object *obedit = objects[ob_index];
+		Lattice *lt = ((Lattice *)obedit->data)->editlatt->latt;
+
+		for (int axis = 0; axis < 3; axis++) {
+			if ((1 << axis) & axis_flag) {
+				ed_lattice_select_mirrored(lt, axis, extend);
+			}
+		}
+
+		/* TODO, only notify changes */
+		DEG_id_tag_update(obedit->data, DEG_TAG_SELECT_UPDATE);
+		WM_event_add_notifier(C, NC_GEOM | ND_SELECT, obedit->data);
+	}
+	MEM_freeN(objects);
 
 	return OPERATOR_FINISHED;
 }
@@ -278,6 +299,7 @@ static int lattice_select_more_less(bContext *C, const bool select)
 
 	MEM_freeN(selpoints);
 
+	DEG_id_tag_update(obedit->data, DEG_TAG_SELECT_UPDATE);
 	WM_event_add_notifier(C, NC_GEOM | ND_SELECT, obedit->data);
 	return OPERATOR_FINISHED;
 }
@@ -349,51 +371,56 @@ void ED_lattice_flags_set(Object *obedit, int flag)
 
 static int lattice_select_all_exec(bContext *C, wmOperator *op)
 {
-	Object *obedit = CTX_data_edit_object(C);
-	Lattice *lt = obedit->data;
-	BPoint *bp;
-	int a;
+	ViewLayer *view_layer = CTX_data_view_layer(C);
 	int action = RNA_enum_get(op->ptr, "action");
+
+	uint objects_len = 0;
+	Object **objects = BKE_view_layer_array_from_objects_in_edit_mode_unique_data(view_layer, &objects_len);
 
 	if (action == SEL_TOGGLE) {
 		action = SEL_SELECT;
-
-		bp = lt->editlatt->latt->def;
-		a = lt->editlatt->latt->pntsu * lt->editlatt->latt->pntsv * lt->editlatt->latt->pntsw;
-
-		while (a--) {
-			if (bp->hide == 0) {
-				if (bp->f1 & SELECT) {
-					action = SEL_DESELECT;
-					break;
-				}
+		for (uint ob_index = 0; ob_index < objects_len; ob_index++) {
+			Object *obedit = objects[ob_index];
+			Lattice *lt = obedit->data;
+			if (BKE_lattice_is_any_selected(lt->editlatt->latt)) {
+				action = SEL_DESELECT;
+				break;
 			}
-			bp++;
 		}
 	}
 
-	switch (action) {
-		case SEL_SELECT:
-			ED_lattice_flags_set(obedit, 1);
-			break;
-		case SEL_DESELECT:
-			ED_lattice_flags_set(obedit, 0);
-			break;
-		case SEL_INVERT:
-			bp = lt->editlatt->latt->def;
-			a = lt->editlatt->latt->pntsu * lt->editlatt->latt->pntsv * lt->editlatt->latt->pntsw;
-			lt->editlatt->latt->actbp = LT_ACTBP_NONE;
+	for (uint ob_index = 0; ob_index < objects_len; ob_index++) {
+		Object *obedit = objects[ob_index];
+		Lattice *lt;
+		BPoint *bp;
+		int a;
 
-			while (a--) {
-				if (bp->hide == 0) {
-					bp->f1 ^= SELECT;
+		switch (action) {
+			case SEL_SELECT:
+				ED_lattice_flags_set(obedit, 1);
+				break;
+			case SEL_DESELECT:
+				ED_lattice_flags_set(obedit, 0);
+				break;
+			case SEL_INVERT:
+				lt = obedit->data;
+				bp = lt->editlatt->latt->def;
+				a = lt->editlatt->latt->pntsu * lt->editlatt->latt->pntsv * lt->editlatt->latt->pntsw;
+				lt->editlatt->latt->actbp = LT_ACTBP_NONE;
+
+				while (a--) {
+					if (bp->hide == 0) {
+						bp->f1 ^= SELECT;
+					}
+					bp++;
 				}
-				bp++;
-			}
-			break;
+				break;
+		}
+		DEG_id_tag_update(obedit->data, DEG_TAG_SELECT_UPDATE);
+		WM_event_add_notifier(C, NC_GEOM | ND_SELECT, obedit->data);
 	}
+	MEM_freeN(objects);
 
-	WM_event_add_notifier(C, NC_GEOM | ND_SELECT, obedit->data);
 
 	return OPERATOR_FINISHED;
 }
@@ -449,6 +476,7 @@ static int lattice_select_ungrouped_exec(bContext *C, wmOperator *op)
 		}
 	}
 
+	DEG_id_tag_update(obedit->data, DEG_TAG_SELECT_UPDATE);
 	WM_event_add_notifier(C, NC_GEOM | ND_SELECT, obedit->data);
 
 	return OPERATOR_FINISHED;
@@ -547,6 +575,7 @@ bool ED_lattice_select_pick(bContext *C, const int mval[2], bool extend, bool de
 			lt->actbp = LT_ACTBP_NONE;
 		}
 
+		DEG_id_tag_update(vc.obedit->data, DEG_TAG_SELECT_UPDATE);
 		WM_event_add_notifier(C, NC_GEOM | ND_SELECT, vc.obedit->data);
 
 		return true;

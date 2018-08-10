@@ -59,14 +59,10 @@ static PyStructSequence_Field app_cb_info_fields[] = {
 	{(char *)"load_post",         (char *)"on loading a new blend file (after)"},
 	{(char *)"save_pre",          (char *)"on saving a blend file (before)"},
 	{(char *)"save_post",         (char *)"on saving a blend file (after)"},
-	{(char *)"scene_update_pre",  (char *)"on every scene data update. Does not imply that anything changed in the "
-                                          "scene, just that the dependency graph is about to be reevaluated, and the "
-                                          "scene is about to be updated by Blender's animation system."},
-	{(char *)"scene_update_post",  (char *)"on every scene data update. Does not imply that anything changed in the "
-                                           "scene, just that the dependency graph was reevaluated, and the scene was "
-                                           "possibly updated by Blender's animation system."},
-	{(char *)"game_pre",          (char *)"on starting the game engine"},
-	{(char *)"game_post",         (char *)"on ending the game engine"},
+	{(char *)"undo_pre",          (char *)"on loading an undo step (before)"},
+	{(char *)"undo_post",         (char *)"on loading an undo step (after)"},
+	{(char *)"redo_pre",          (char *)"on loading a redo step (before)"},
+	{(char *)"redo_post",         (char *)"on loading a redo step (after)"},
 	{(char *)"version_update",    (char *)"on ending the versioning code"},
 
 	/* sets the permanent tag */

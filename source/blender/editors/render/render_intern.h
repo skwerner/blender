@@ -4,7 +4,7 @@
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version. 
+ * of the License, or (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -18,7 +18,7 @@
  * The Original Code is Copyright (C) 2008 Blender Foundation.
  * All rights reserved.
  *
- * 
+ *
  * Contributor(s): Blender Foundation
  *
  * ***** END GPL LICENSE BLOCK *****
@@ -53,8 +53,11 @@ void WORLD_OT_new(struct wmOperatorType *ot);
 void MATERIAL_OT_copy(struct wmOperatorType *ot);
 void MATERIAL_OT_paste(struct wmOperatorType *ot);
 
-void SCENE_OT_render_layer_add(struct wmOperatorType *ot);
-void SCENE_OT_render_layer_remove(struct wmOperatorType *ot);
+void SCENE_OT_view_layer_add(struct wmOperatorType *ot);
+void SCENE_OT_view_layer_remove(struct wmOperatorType *ot);
+
+void SCENE_OT_light_cache_bake(struct wmOperatorType *ot);
+void SCENE_OT_light_cache_free(struct wmOperatorType *ot);
 
 void SCENE_OT_render_view_add(struct wmOperatorType *ot);
 void SCENE_OT_render_view_remove(struct wmOperatorType *ot);
@@ -83,15 +86,10 @@ void SCENE_OT_freestyle_stroke_material_create(struct wmOperatorType *ot);
 void TEXTURE_OT_slot_copy(struct wmOperatorType *ot);
 void TEXTURE_OT_slot_paste(struct wmOperatorType *ot);
 void TEXTURE_OT_slot_move(struct wmOperatorType *ot);
-void TEXTURE_OT_envmap_save(struct wmOperatorType *ot);
-void TEXTURE_OT_envmap_clear(struct wmOperatorType *ot);
-void TEXTURE_OT_envmap_clear_all(struct wmOperatorType *ot);
 
 /* render_internal.c */
 void RENDER_OT_render(struct wmOperatorType *ot);
 void RENDER_OT_shutter_curve_preset(struct wmOperatorType *ot);
-void render_view3d_update(struct RenderEngine *engine, const struct bContext *C);
-void render_view3d_draw(struct RenderEngine *engine, const struct bContext *C);
 
 /* render_view.c */
 struct ScrArea *render_view_open(struct bContext *C, int mx, int my, struct ReportList *reports);
@@ -103,4 +101,3 @@ void RENDER_OT_view_cancel(struct wmOperatorType *ot);
 void RENDER_OT_opengl(struct wmOperatorType *ot);
 
 #endif /* __RENDER_INTERN_H__ */
-

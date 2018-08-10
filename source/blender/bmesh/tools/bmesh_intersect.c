@@ -81,12 +81,6 @@
 /* use accelerated overlap check */
 #define USE_BVH
 
-// #define USE_BOOLEAN_RAYCAST_DRAW
-
-#ifdef USE_BOOLEAN_RAYCAST_DRAW
-/* insert bl_debug_draw_quad_clear... here */
-#endif
-
 // #define USE_DUMP
 
 static void tri_v3_scale(
@@ -243,7 +237,7 @@ static void face_edges_add(
 #ifdef USE_NET
 static void face_edges_split(
         BMesh *bm, BMFace *f, struct LinkBase *e_ls_base,
-        bool use_island_connect,
+        bool use_island_connect, bool use_partial_connect,
         MemArena *mem_arena_edgenet)
 {
 	uint i;
@@ -268,7 +262,7 @@ static void face_edges_split(
 		if (BM_face_split_edgenet_connect_islands(
 		        bm, f,
 		        edge_arr, edge_arr_len,
-		        false,
+		        use_partial_connect,
 		        mem_arena_edgenet,
 		        &edge_arr_holes, &edge_arr_holes_len))
 		{
@@ -986,7 +980,7 @@ bool BM_mesh_intersect(
         struct BMLoop *(*looptris)[3], const int looptris_tot,
         int (*test_fn)(BMFace *f, void *user_data), void *user_data,
         const bool use_self, const bool use_separate, const bool use_dissolve, const bool use_island_connect,
-        const bool use_edge_tag, const int boolean_mode,
+        const bool use_partial_connect, const bool use_edge_tag, const int boolean_mode,
         const float eps)
 {
 	struct ISectState s;
@@ -1004,10 +998,6 @@ bool BM_mesh_intersect(
 	BVHTreeOverlap *overlap;
 #else
 	int i_a, i_b;
-#endif
-
-#ifdef USE_BOOLEAN_RAYCAST_DRAW
-	bl_debug_draw_quad_clear();
 #endif
 
 	s.bm = bm;
@@ -1233,7 +1223,7 @@ bool BM_mesh_intersect(
 
 				if (BM_vert_in_edge(e, v_prev)) {
 					BMEdge *e_split;
-					v_prev = BM_edge_split(bm, e, v_prev, &e_split, CLAMPIS(fac, 0.0f, 1.0f));
+					v_prev = BM_edge_split(bm, e, v_prev, &e_split, clamp_f(fac, 0.0f, 1.0f));
 					BLI_assert(BM_vert_in_edge(e, v_end));
 
 					if (!BM_edge_exists(v_prev, vi) &&
@@ -1501,7 +1491,7 @@ bool BM_mesh_intersect(
 
 			BLI_assert(BM_elem_index_get(f) == f_index);
 
-			face_edges_split(bm, f, e_ls_base, use_island_connect, mem_arena_edgenet);
+			face_edges_split(bm, f, e_ls_base, use_island_connect, use_partial_connect, mem_arena_edgenet);
 
 			BLI_memarena_clear(mem_arena_edgenet);
 		}
@@ -1607,17 +1597,6 @@ bool BM_mesh_intersect(
 						do_flip = (side == 0);
 						break;
 				}
-
-#ifdef USE_BOOLEAN_RAYCAST_DRAW
-				{
-					uint colors[4] = {0x00000000, 0xffffffff, 0xff000000, 0x0000ff};
-					float co_other[3] = {UNPACK3(co)};
-					co_other[0] += 1000.0f;
-					bl_debug_color_set(colors[(hits & 1) == 1]);
-					bl_debug_draw_edge_add(co, co_other);
-				}
-#endif
-
 			}
 
 			if (do_remove) {

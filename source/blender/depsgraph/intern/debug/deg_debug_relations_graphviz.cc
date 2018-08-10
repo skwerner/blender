@@ -81,18 +81,21 @@ static const char *deg_debug_colors_light[] = {
 #ifdef COLOR_SCHEME_NODE_TYPE
 static const int deg_debug_node_type_color_map[][2] = {
     {DEG_NODE_TYPE_TIMESOURCE,   0},
-    {DEG_NODE_TYPE_ID_REF,       2},
+    {DEG_NODE_TYPE_ID_REF,       1},
 
     /* Outer Types */
-    {DEG_NODE_TYPE_PARAMETERS,   2},
-    {DEG_NODE_TYPE_PROXY,        3},
-    {DEG_NODE_TYPE_ANIMATION,    4},
-    {DEG_NODE_TYPE_TRANSFORM,    5},
-    {DEG_NODE_TYPE_GEOMETRY,     6},
-    {DEG_NODE_TYPE_SEQUENCER,    7},
-    {DEG_NODE_TYPE_SHADING,      8},
-    {DEG_NODE_TYPE_CACHE,        9},
-    {-1,                         0}
+    {DEG_NODE_TYPE_PARAMETERS,        2},
+    {DEG_NODE_TYPE_PROXY,             3},
+    {DEG_NODE_TYPE_ANIMATION,         4},
+    {DEG_NODE_TYPE_TRANSFORM,         5},
+    {DEG_NODE_TYPE_GEOMETRY,          6},
+    {DEG_NODE_TYPE_SEQUENCER,         7},
+    {DEG_NODE_TYPE_SHADING,           8},
+    {DEG_NODE_TYPE_SHADING_PARAMETERS, 9},
+    {DEG_NODE_TYPE_CACHE,             10},
+    {DEG_NODE_TYPE_LAYER_COLLECTIONS, 11},
+    {DEG_NODE_TYPE_COPY_ON_WRITE,     12},
+    {-1,                              0}
 };
 #endif
 
@@ -268,6 +271,26 @@ static void deg_debug_graphviz_relation_style(const DebugContext &ctx,
 	deg_debug_fprintf(ctx, "%s", style);
 }
 
+static void deg_debug_graphviz_relation_arrowhead(const DebugContext &ctx,
+                                                  const DepsRelation *rel)
+{
+	const char *shape_default = "normal";
+	const char *shape_no_cow = "box";
+	const char *shape = shape_default;
+	if (rel->from->get_class() == DEG_NODE_CLASS_OPERATION &&
+	    rel->to->get_class() == DEG_NODE_CLASS_OPERATION)
+	{
+		OperationDepsNode *op_from = (OperationDepsNode *)rel->from;
+		OperationDepsNode *op_to = (OperationDepsNode *)rel->to;
+		if (op_from->owner->type == DEG_NODE_TYPE_COPY_ON_WRITE &&
+		    !op_to->owner->need_tag_cow_before_update())
+		{
+			shape = shape_no_cow;
+		}
+	}
+	deg_debug_fprintf(ctx, "%s", shape);
+}
+
 static void deg_debug_graphviz_node_style(const DebugContext &ctx, const DepsNode *node)
 {
 	const char *base_style = "filled"; /* default style */
@@ -297,12 +320,6 @@ static void deg_debug_graphviz_node_single(const DebugContext &ctx,
 {
 	const char *shape = "box";
 	string name = node->identifier();
-	if (node->type == DEG_NODE_TYPE_ID_REF) {
-		IDDepsNode *id_node = (IDDepsNode *)node;
-		char buf[256];
-		BLI_snprintf(buf, sizeof(buf), " (Layers: %u)", id_node->layers);
-		name += buf;
-	}
 	deg_debug_fprintf(ctx, "// %s\n", name.c_str());
 	deg_debug_fprintf(ctx, "\"node_%p\"", node);
 	deg_debug_fprintf(ctx, "[");
@@ -323,12 +340,6 @@ static void deg_debug_graphviz_node_cluster_begin(const DebugContext &ctx,
                                                   const DepsNode *node)
 {
 	string name = node->identifier();
-	if (node->type == DEG_NODE_TYPE_ID_REF) {
-		IDDepsNode *id_node = (IDDepsNode *)node;
-		char buf[256];
-		BLI_snprintf(buf, sizeof(buf), " (Layers: %u)", id_node->layers);
-		name += buf;
-	}
 	deg_debug_fprintf(ctx, "// %s\n", name.c_str());
 	deg_debug_fprintf(ctx, "subgraph \"cluster_%p\" {" NL, node);
 //	deg_debug_fprintf(ctx, "label=<<B>%s</B>>;" NL, name);
@@ -390,8 +401,13 @@ static void deg_debug_graphviz_node(const DebugContext &ctx,
 		case DEG_NODE_TYPE_EVAL_POSE:
 		case DEG_NODE_TYPE_BONE:
 		case DEG_NODE_TYPE_SHADING:
+		case DEG_NODE_TYPE_SHADING_PARAMETERS:
 		case DEG_NODE_TYPE_CACHE:
+		case DEG_NODE_TYPE_LAYER_COLLECTIONS:
 		case DEG_NODE_TYPE_EVAL_PARTICLES:
+		case DEG_NODE_TYPE_COPY_ON_WRITE:
+		case DEG_NODE_TYPE_OBJECT_FROM_LAYER:
+		case DEG_NODE_TYPE_BATCH_CACHE:
 		{
 			ComponentDepsNode *comp_node = (ComponentDepsNode *)node;
 			if (!comp_node->operations.empty()) {
@@ -406,8 +422,12 @@ static void deg_debug_graphviz_node(const DebugContext &ctx,
 			}
 			break;
 		}
-		default:
+		case DEG_NODE_TYPE_UNDEFINED:
+		case DEG_NODE_TYPE_TIMESOURCE:
+		case DEG_NODE_TYPE_OPERATION:
 			deg_debug_graphviz_node_single(ctx, node);
+			break;
+		case NUM_DEG_NODE_TYPES:
 			break;
 	}
 }
@@ -485,6 +505,8 @@ static void deg_debug_graphviz_node_relations(const DebugContext &ctx,
 		deg_debug_graphviz_relation_color(ctx, rel);
 		deg_debug_fprintf(ctx, ",style=");
 		deg_debug_graphviz_relation_style(ctx, rel);
+		deg_debug_fprintf(ctx, ",arrowhead=");
+		deg_debug_graphviz_relation_arrowhead(ctx, rel);
 		deg_debug_fprintf(ctx, ",penwidth=\"%f\"", penwidth);
 		/* NOTE: edge from node to own cluster is not possible and gives graphviz
 		 * warning, avoid this here by just linking directly to the invisible

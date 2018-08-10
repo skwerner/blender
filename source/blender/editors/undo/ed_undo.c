@@ -36,8 +36,11 @@
 #include "CLG_log.h"
 
 #include "DNA_scene_types.h"
+#include "DNA_object_types.h"
 
 #include "BLI_utildefines.h"
+#include "BLI_callbacks.h"
+#include "BLI_listbase.h"
 
 #include "BLT_translation.h"
 
@@ -45,16 +48,22 @@
 #include "BKE_context.h"
 #include "BKE_global.h"
 #include "BKE_main.h"
+#include "BKE_scene.h"
 #include "BKE_screen.h"
+#include "BKE_layer.h"
 #include "BKE_undo_system.h"
+#include "BKE_workspace.h"
+#include "BKE_paint.h"
 
 #include "ED_gpencil.h"
 #include "ED_render.h"
+#include "ED_object.h"
 #include "ED_screen.h"
 #include "ED_undo.h"
 
 #include "WM_api.h"
 #include "WM_types.h"
+#include "WM_toolsystem.h"
 
 #include "RNA_access.h"
 #include "RNA_define.h"
@@ -104,8 +113,8 @@ static int ed_undo_step(bContext *C, int step, const char *undoname)
 	CLOG_INFO(&LOG, 1, "name='%s', step=%d", undoname, step);
 	wmWindowManager *wm = CTX_wm_manager(C);
 	wmWindow *win = CTX_wm_window(C);
-	// Main *bmain = CTX_data_main(C);
 	Scene *scene = CTX_data_scene(C);
+	ScrArea *sa = CTX_wm_area(C);
 
 	/* undo during jobs are running can easily lead to freeing data using by jobs,
 	 * or they can just lead to freezing job in some other cases */
@@ -118,20 +127,79 @@ static int ed_undo_step(bContext *C, int step, const char *undoname)
 	if (ED_gpencil_session_active()) {
 		return ED_undo_gpencil_step(C, step, undoname);
 	}
+	if (sa && (sa->spacetype == SPACE_VIEW3D)) {
+		Object *obact = CTX_data_active_object(C);
+		if (obact && (obact->type == OB_GPENCIL)) {
+			ED_gpencil_toggle_brush_cursor(C, false, NULL);
+		}
+	}
+
+	UndoStep *step_data_from_name = NULL;
+	int step_for_callback = step;
+	if (undoname != NULL) {
+		step_data_from_name = BKE_undosys_step_find_by_name(wm->undo_stack, undoname);
+		if (step_data_from_name == NULL) {
+			return OPERATOR_CANCELLED;
+		}
+
+		/* TODO(campbell), could use simple optimization. */
+		/* Pointers match on redo. */
+		step_for_callback = (
+		        BLI_findindex(&wm->undo_stack->steps, step_data_from_name) <
+		        BLI_findindex(&wm->undo_stack->steps, wm->undo_stack->step_active)) ? 1 : -1;
+	}
+
+	/* App-Handlers (pre). */
+	{
+		/* Note: ignore grease pencil for now. */
+		Main *bmain = CTX_data_main(C);
+		wm->op_undo_depth++;
+		BLI_callback_exec(bmain, &scene->id, (step_for_callback > 0) ? BLI_CB_EVT_UNDO_PRE : BLI_CB_EVT_REDO_PRE);
+		wm->op_undo_depth--;
+	}
+
 
 	/* Undo System */
 	{
 		if (undoname) {
-			UndoStep *step_data = BKE_undosys_step_find_by_name(wm->undo_stack, undoname);
-			BKE_undosys_step_undo_with_data(wm->undo_stack, C, step_data);
+			BKE_undosys_step_undo_with_data(wm->undo_stack, C, step_data_from_name);
 		}
 		else {
 			BKE_undosys_step_undo_compat_only(wm->undo_stack, C, step);
 		}
+
+		/* Set special modes for grease pencil */
+		if (sa && (sa->spacetype == SPACE_VIEW3D)) {
+			Object *obact = CTX_data_active_object(C);
+			if (obact && (obact->type == OB_GPENCIL)) {
+				/* set cursor */
+				if (ELEM(obact->mode, OB_MODE_GPENCIL_PAINT, OB_MODE_GPENCIL_SCULPT, OB_MODE_GPENCIL_WEIGHT)) {
+					ED_gpencil_toggle_brush_cursor(C, true, NULL);
+				}
+				else {
+					ED_gpencil_toggle_brush_cursor(C, false, NULL);
+				}
+				/* set workspace mode */
+				Base *basact = CTX_data_active_base(C);
+				ED_object_base_activate(C, basact);
+			}
+		}
+	}
+
+	/* App-Handlers (post). */
+	{
+		Main *bmain = CTX_data_main(C);
+		scene = CTX_data_scene(C);
+		wm->op_undo_depth++;
+		BLI_callback_exec(bmain, &scene->id, step_for_callback > 0 ? BLI_CB_EVT_UNDO_PRE : BLI_CB_EVT_REDO_PRE);
+		wm->op_undo_depth--;
 	}
 
 	WM_event_add_notifier(C, NC_WINDOW, NULL);
 	WM_event_add_notifier(C, NC_WM | ND_UNDO, NULL);
+
+	Main *bmain = CTX_data_main(C);
+	WM_toolsystem_refresh_screen_all(bmain);
 
 	if (win) {
 		win->addmousemove = true;
@@ -143,15 +211,10 @@ static int ed_undo_step(bContext *C, int step, const char *undoname)
 void ED_undo_grouped_push(bContext *C, const char *str)
 {
 	/* do nothing if previous undo task is the same as this one (or from the same undo group) */
-	{
-		wmWindowManager *wm = CTX_wm_manager(C);
-		if (wm->undo_stack->steps.last) {
-			const UndoStep *us = wm->undo_stack->steps.last;
-			if (STREQ(str, us->name)) {
-				return;
-			}
-		}
-
+	wmWindowManager *wm = CTX_wm_manager(C);
+	const UndoStep *us = wm->undo_stack->step_active;
+	if (us && STREQ(str, us->name)) {
+		BKE_undosys_stack_clear_active(wm->undo_stack);
 	}
 
 	/* push as usual */
@@ -205,7 +268,7 @@ bool ED_undo_is_valid(const bContext *C, const char *undoname)
  */
 UndoStack *ED_undo_stack_get(void)
 {
-	wmWindowManager *wm = G.main->wm.first;
+	wmWindowManager *wm = G_MAIN->wm.first;
 	return wm->undo_stack;
 }
 
@@ -242,7 +305,7 @@ static int ed_undo_redo_exec(bContext *C, wmOperator *UNUSED(op))
 	return ret ? OPERATOR_FINISHED : OPERATOR_CANCELLED;
 }
 
-static int ed_undo_redo_poll(bContext *C)
+static bool ed_undo_redo_poll(bContext *C)
 {
 	wmOperator *last_op = WM_operator_last_redo(C);
 	return last_op && ED_operator_screenactive(C) &&
@@ -307,7 +370,7 @@ void ED_OT_undo_redo(wmOperatorType *ot)
  * \{ */
 
 /* ui callbacks should call this rather than calling WM_operator_repeat() themselves */
-int ED_undo_operator_repeat(bContext *C, struct wmOperator *op)
+int ED_undo_operator_repeat(bContext *C, wmOperator *op)
 {
 	int ret = 0;
 
@@ -317,11 +380,12 @@ int ED_undo_operator_repeat(bContext *C, struct wmOperator *op)
 		struct Scene *scene = CTX_data_scene(C);
 
 		/* keep in sync with logic in view3d_panel_operator_redo() */
-		ARegion *ar = CTX_wm_region(C);
-		ARegion *ar1 = BKE_area_find_region_active_win(CTX_wm_area(C));
+		ARegion *ar_orig = CTX_wm_region(C);
+		ARegion *ar_win = BKE_area_find_region_active_win(CTX_wm_area(C));
 
-		if (ar1)
-			CTX_wm_region_set(C, ar1);
+		if (ar_win) {
+			CTX_wm_region_set(C, ar_win);
+		}
 
 		if ((WM_operator_repeat_check(C, op)) &&
 		    (WM_operator_poll(C, op->type)) &&
@@ -333,8 +397,6 @@ int ED_undo_operator_repeat(bContext *C, struct wmOperator *op)
 		    (WM_jobs_test(wm, scene, WM_JOB_TYPE_ANY) == 0))
 		{
 			int retval;
-
-			ED_viewport_render_kill_jobs(wm, CTX_data_main(C), true);
 
 			if (G.debug & G_DEBUG)
 				printf("redo_cb: operator redo %s\n", op->type->name);
@@ -351,6 +413,15 @@ int ED_undo_operator_repeat(bContext *C, struct wmOperator *op)
 						ED_region_tag_refresh_ui(ar_menu);
 					}
 				}
+			}
+
+			if (op->type->flag & OPTYPE_USE_EVAL_DATA) {
+				/* We need to force refresh of depsgraph after undo step,
+				 * redoing the operator *may* rely on some valid evaluated data. */
+				Main *bmain = CTX_data_main(C);
+				scene = CTX_data_scene(C);
+				ViewLayer *view_layer = CTX_data_view_layer(C);
+				BKE_scene_view_layer_graph_evaluated_ensure(bmain, scene, view_layer);
 			}
 
 			retval = WM_operator_repeat(C, op);
@@ -370,7 +441,7 @@ int ED_undo_operator_repeat(bContext *C, struct wmOperator *op)
 		}
 
 		/* set region back */
-		CTX_wm_region_set(C, ar);
+		CTX_wm_region_set(C, ar_orig);
 	}
 	else {
 		CLOG_WARN(&LOG, "called with NULL 'op'");
@@ -412,7 +483,7 @@ static const EnumPropertyItem *rna_undo_itemf(bContext *C, int *totitem)
 			item_tmp.identifier = us->name;
 			item_tmp.name = IFACE_(us->name);
 			if (us == wm->undo_stack->step_active) {
-				item_tmp.icon = ICON_RESTRICT_VIEW_OFF;
+				item_tmp.icon = ICON_HIDE_OFF;
 			}
 			else {
 				item_tmp.icon = ICON_NONE;
@@ -492,6 +563,27 @@ void ED_OT_undo_history(wmOperatorType *ot)
 
 	RNA_def_int(ot->srna, "item", 0, 0, INT_MAX, "Item", "", 0, INT_MAX);
 
+}
+
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Undo Helper Functions
+ * \{ */
+
+void ED_undo_object_set_active_or_warn(ViewLayer *view_layer, Object *ob, const char *info, CLG_LogRef *log)
+{
+	Object *ob_prev = OBACT(view_layer);
+	if (ob_prev != ob) {
+		Base *base = BKE_view_layer_base_find(view_layer, ob);
+		if (base != NULL) {
+			view_layer->basact = base;
+		}
+		else {
+			/* Should never fail, may not crash but can give odd behavior. */
+			CLOG_WARN(log, "'%s' failed to restore active object: '%s'", info, ob->id.name + 2);
+		}
+	}
 }
 
 /** \} */

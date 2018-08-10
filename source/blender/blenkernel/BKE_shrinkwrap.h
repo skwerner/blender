@@ -47,11 +47,11 @@
  */
 
 struct Object;
-struct DerivedMesh;
+struct Mesh;
 struct MVert;
 struct MDeformVert;
+struct ModifierEvalContext;
 struct ShrinkwrapModifierData;
-struct MDeformVert;
 struct BVHTree;
 struct SpaceTransform;
 
@@ -69,15 +69,15 @@ typedef struct ShrinkwrapCalcData {
 	int vgroup;                     //Vertex group num
 	bool invert_vgroup;             /* invert vertex group influence */
 
-	struct DerivedMesh *target;     //mesh we are shrinking to
+	struct Mesh *target;     //mesh we are shrinking to
 	struct SpaceTransform local2target;    //transform to move between local and target space
 
 	float keepDist;                 //Distance to keep above target surface (units are in local space)
 
 } ShrinkwrapCalcData;
 
-void shrinkwrapModifier_deform(struct ShrinkwrapModifierData *smd, struct Object *ob, struct DerivedMesh *dm,
-                               float (*vertexCos)[3], int numVerts, bool for_render);
+void shrinkwrapModifier_deform(struct ShrinkwrapModifierData *smd, struct Scene *scene, struct Object *ob, struct Mesh *mesh,
+                               float (*vertexCos)[3], int numVerts);
 
 /*
  * This function casts a ray in the given BVHTree.. but it takes into consideration the space_transform, that is:

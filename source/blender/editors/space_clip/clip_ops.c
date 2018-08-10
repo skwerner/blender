@@ -56,7 +56,6 @@
 
 #include "BKE_context.h"
 #include "BKE_global.h"
-#include "BKE_depsgraph.h"
 #include "BKE_report.h"
 #include "BKE_library.h"
 #include "BKE_main.h"
@@ -82,6 +81,8 @@
 #include "UI_view2d.h"
 
 #include "PIL_time.h"
+
+#include "DEG_depsgraph_build.h"
 
 #include "clip_intern.h"	// own include
 
@@ -249,7 +250,7 @@ static int open_exec(bContext *C, wmOperator *op)
 
 	WM_event_add_notifier(C, NC_MOVIECLIP | NA_ADDED, clip);
 
-	DAG_relations_tag_update(bmain);
+	DEG_relations_tag_update(bmain);
 	MEM_freeN(op->customdata);
 
 	return OPERATOR_FINISHED;
@@ -317,7 +318,7 @@ static int reload_exec(bContext *C, wmOperator *UNUSED(op))
 	if (!clip)
 		return OPERATOR_CANCELLED;
 
-	BKE_movieclip_reload(clip);
+	BKE_movieclip_reload(CTX_data_main(C), clip);
 
 	WM_event_add_notifier(C, NC_MOVIECLIP | NA_EDITED, clip);
 
@@ -467,7 +468,7 @@ static void view_pan_cancel(bContext *C, wmOperator *op)
 void CLIP_OT_view_pan(wmOperatorType *ot)
 {
 	/* identifiers */
-	ot->name = "View Pan";
+	ot->name = "Pan View";
 	ot->idname = "CLIP_OT_view_pan";
 	ot->description = "Pan the view";
 
@@ -898,7 +899,7 @@ void CLIP_OT_view_selected(wmOperatorType *ot)
 
 /********************** change frame operator *********************/
 
-static int change_frame_poll(bContext *C)
+static bool change_frame_poll(bContext *C)
 {
 	/* prevent changes during render */
 	if (G.is_rendering)
@@ -1314,7 +1315,7 @@ static void proxy_endjob(void *pjv)
 
 	if (pj->clip->source == MCLIP_SRC_MOVIE) {
 		/* Timecode might have changed, so do a full reload to deal with this. */
-		BKE_movieclip_reload(pj->clip);
+		BKE_movieclip_reload(pj->main, pj->clip);
 	}
 	else {
 		/* For image sequences we'll preserve original cache. */

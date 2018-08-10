@@ -33,6 +33,7 @@
 #include "MEM_guardedalloc.h"
 
 #include "DNA_userdef_types.h"
+#include "DNA_windowmanager_types.h"
 
 #include "BLI_blenlib.h"
 #include "BLI_utildefines.h"
@@ -53,7 +54,7 @@
 
 #include "PIL_time.h" /* USER_ZOOM_CONT */
 
-static int view2d_poll(bContext *C)
+static bool view2d_poll(bContext *C)
 {
 	ARegion *ar = CTX_wm_region(C);
 
@@ -128,7 +129,7 @@ static int view_pan_init(bContext *C, wmOperator *op)
 }
 
 #ifdef WITH_INPUT_NDOF
-static int view_pan_poll(bContext *C)
+static bool view_pan_poll(bContext *C)
 {
 	ARegion *ar = CTX_wm_region(C);
 	View2D *v2d;
@@ -169,27 +170,23 @@ static void view_pan_apply_ex(bContext *C, v2dViewPanData *vpd, float dx, float 
 	/* validate that view is in valid configuration after this operation */
 	UI_view2d_curRect_validate(v2d);
 
+	/* don't rebuild full tree in outliner, since we're just changing our view */
+	ED_region_tag_redraw_no_rebuild(vpd->ar);
+
 	/* request updates to be done... */
-	ED_region_tag_redraw(vpd->ar);
 	WM_event_add_mousemove(C);
 
 	UI_view2d_sync(vpd->sc, vpd->sa, v2d, V2D_LOCK_COPY);
-
-	/* exceptions */
-	if (vpd->sa->spacetype == SPACE_OUTLINER) {
-		/* don't rebuild full tree, since we're just changing our view */
-		SpaceOops *soops = vpd->sa->spacedata.first;
-		soops->storeflag |= SO_TREESTORE_REDRAW;
-	}
 }
 
 static void view_pan_apply(bContext *C, wmOperator *op)
 {
 	v2dViewPanData *vpd = op->customdata;
 
-	view_pan_apply_ex(C, vpd,
-	                  RNA_int_get(op->ptr, "deltax"),
-	                  RNA_int_get(op->ptr, "deltay"));
+	view_pan_apply_ex(
+	        C, vpd,
+	        RNA_int_get(op->ptr, "deltax"),
+	        RNA_int_get(op->ptr, "deltay"));
 
 }
 
@@ -357,7 +354,7 @@ static int view_scrollright_exec(bContext *C, wmOperator *op)
 	}
 
 	/* set RNA-Props - only movement in positive x-direction */
-	RNA_int_set(op->ptr, "deltax", 20);
+	RNA_int_set(op->ptr, "deltax", 40);
 	RNA_int_set(op->ptr, "deltay", 0);
 
 	/* apply movement, then we're done */
@@ -401,7 +398,7 @@ static int view_scrollleft_exec(bContext *C, wmOperator *op)
 	}
 
 	/* set RNA-Props - only movement in negative x-direction */
-	RNA_int_set(op->ptr, "deltax", -20);
+	RNA_int_set(op->ptr, "deltax", -40);
 	RNA_int_set(op->ptr, "deltay", 0);
 
 	/* apply movement, then we're done */
@@ -609,7 +606,7 @@ static int view_zoomdrag_init(bContext *C, wmOperator *op)
 }
 
 /* check if step-zoom can be applied */
-static int view_zoom_poll(bContext *C)
+static bool view_zoom_poll(bContext *C)
 {
 	ARegion *ar = CTX_wm_region(C);
 	View2D *v2d;
@@ -641,6 +638,7 @@ static void view_zoomstep_apply_ex(
 	View2D *v2d = &ar->v2d;
 	const rctf cur_old = v2d->cur;
 	float dx, dy;
+	const int snap_test = ED_region_snap_size_test(ar);
 
 	/* calculate amount to move view by, ensuring symmetry so the
 	 * old zoom level is restored after zooming back the same amount
@@ -725,17 +723,24 @@ static void view_zoomstep_apply_ex(
 	/* validate that view is in valid configuration after this operation */
 	UI_view2d_curRect_validate(v2d);
 
+	if (ED_region_snap_size_apply(ar, snap_test)) {
+		ScrArea *sa = CTX_wm_area(C);
+		ED_area_tag_redraw(sa);
+		WM_event_add_notifier(C, NC_SCREEN | NA_EDITED, NULL);
+	}
+
 	/* request updates to be done... */
-	ED_region_tag_redraw(vzd->ar);
+	ED_region_tag_redraw_no_rebuild(vzd->ar);
 	UI_view2d_sync(CTX_wm_screen(C), CTX_wm_area(C), v2d, V2D_LOCK_COPY);
 }
 
 static void view_zoomstep_apply(bContext *C, wmOperator *op)
 {
 	v2dViewZoomData *vzd = op->customdata;
-	view_zoomstep_apply_ex(C, vzd, true,
-	                       RNA_float_get(op->ptr, "zoomfacx"),
-	                       RNA_float_get(op->ptr, "zoomfacy"));
+	view_zoomstep_apply_ex(
+	        C, vzd, true,
+	        RNA_float_get(op->ptr, "zoomfacx"),
+	        RNA_float_get(op->ptr, "zoomfacy"));
 }
 
 /* --------------- Individual Operators ------------------- */
@@ -788,9 +793,10 @@ static int view_zoomin_invoke(bContext *C, wmOperator *op, const wmEvent *event)
 		ARegion *ar = CTX_wm_region(C);
 
 		/* store initial mouse position (in view space) */
-		UI_view2d_region_to_view(&ar->v2d,
-		                         event->mval[0], event->mval[1],
-		                         &vzd->mx_2d, &vzd->my_2d);
+		UI_view2d_region_to_view(
+		        &ar->v2d,
+		        event->mval[0], event->mval[1],
+		        &vzd->mx_2d, &vzd->my_2d);
 	}
 
 	return view_zoomin_exec(C, op);
@@ -853,9 +859,10 @@ static int view_zoomout_invoke(bContext *C, wmOperator *op, const wmEvent *event
 		ARegion *ar = CTX_wm_region(C);
 
 		/* store initial mouse position (in view space) */
-		UI_view2d_region_to_view(&ar->v2d,
-		                         event->mval[0], event->mval[1],
-		                         &vzd->mx_2d, &vzd->my_2d);
+		UI_view2d_region_to_view(
+		        &ar->v2d,
+		        event->mval[0], event->mval[1],
+		        &vzd->mx_2d, &vzd->my_2d);
 	}
 
 	return view_zoomout_exec(C, op);
@@ -898,6 +905,7 @@ static void view_zoomdrag_apply(bContext *C, wmOperator *op)
 	v2dViewZoomData *vzd = op->customdata;
 	View2D *v2d = vzd->v2d;
 	float dx, dy;
+	const int snap_test = ED_region_snap_size_test(vzd->ar);
 
 	/* get amount to move view by */
 	dx = RNA_float_get(op->ptr, "deltax");
@@ -962,8 +970,14 @@ static void view_zoomdrag_apply(bContext *C, wmOperator *op)
 	/* validate that view is in valid configuration after this operation */
 	UI_view2d_curRect_validate(v2d);
 
+	if (ED_region_snap_size_apply(vzd->ar, snap_test)) {
+		ScrArea *sa = CTX_wm_area(C);
+		ED_area_tag_redraw(sa);
+		WM_event_add_notifier(C, NC_SCREEN | NA_EDITED, NULL);
+	}
+
 	/* request updates to be done... */
-	ED_region_tag_redraw(vzd->ar);
+	ED_region_tag_redraw_no_rebuild(vzd->ar);
 	UI_view2d_sync(CTX_wm_screen(C), CTX_wm_area(C), v2d, V2D_LOCK_COPY);
 }
 
@@ -1056,9 +1070,10 @@ static int view_zoomdrag_invoke(bContext *C, wmOperator *op, const wmEvent *even
 		ARegion *ar = CTX_wm_region(C);
 
 		/* store initial mouse position (in view space) */
-		UI_view2d_region_to_view(&ar->v2d,
-		                         event->mval[0], event->mval[1],
-		                         &vzd->mx_2d, &vzd->my_2d);
+		UI_view2d_region_to_view(
+		        &ar->v2d,
+		        event->mval[0], event->mval[1],
+		        &vzd->mx_2d, &vzd->my_2d);
 	}
 
 	if (v2d->keepofs & V2D_LOCKOFS_X)
@@ -1114,7 +1129,7 @@ static int view_zoomdrag_modal(bContext *C, wmOperator *op, const wmEvent *event
 
 			/* some view2d's (graph) don't have min/max zoom, or extreme ones */
 			if (v2d->maxzoom > 0.0f)
-				zoomfac = CLAMPIS(0.001f * v2d->maxzoom, 0.001f, 0.01f);
+				zoomfac = clamp_f(0.001f * v2d->maxzoom, 0.001f, 0.01f);
 
 			/* x-axis transform */
 			fac = zoomfac * (event->x - vzd->lastx);
@@ -1345,9 +1360,10 @@ static int view2d_ndof_invoke(bContext *C, wmOperator *op, const wmEvent *event)
 
 				vzd = op->customdata;
 
-				view_zoomstep_apply_ex(C, vzd, false,
-				                       do_zoom_xy[0] ? zoom_factor : 0.0f,
-				                       do_zoom_xy[1] ? zoom_factor : 0.0f);
+				view_zoomstep_apply_ex(
+				        C, vzd, false,
+				        do_zoom_xy[0] ? zoom_factor : 0.0f,
+				        do_zoom_xy[1] ? zoom_factor : 0.0f);
 
 				view_zoomstep_exit(op);
 			}
@@ -1392,14 +1408,18 @@ struct SmoothView2DStore {
  */
 static float smooth_view_rect_to_fac(const rctf *rect_a, const rctf *rect_b)
 {
-	const float size_a[2] = {BLI_rctf_size_x(rect_a),
-	                         BLI_rctf_size_y(rect_a)};
-	const float size_b[2] = {BLI_rctf_size_x(rect_b),
-	                         BLI_rctf_size_y(rect_b)};
-	const float cent_a[2] = {BLI_rctf_cent_x(rect_a),
-	                         BLI_rctf_cent_y(rect_a)};
-	const float cent_b[2] = {BLI_rctf_cent_x(rect_b),
-	                         BLI_rctf_cent_y(rect_b)};
+	const float size_a[2] = {
+		BLI_rctf_size_x(rect_a),
+		BLI_rctf_size_y(rect_a)};
+	const float size_b[2] = {
+		BLI_rctf_size_x(rect_b),
+		BLI_rctf_size_y(rect_b)};
+	const float cent_a[2] = {
+		BLI_rctf_cent_x(rect_a),
+		BLI_rctf_cent_y(rect_a)};
+	const float cent_b[2] = {
+		BLI_rctf_cent_x(rect_b),
+		BLI_rctf_cent_y(rect_b)};
 
 	float fac_max = 0.0f;
 	float tfac;
@@ -1478,7 +1498,7 @@ void UI_view2d_smooth_view(
 		v2d->cur = sms.new_cur;
 
 		UI_view2d_curRect_validate(v2d);
-		ED_region_tag_redraw(ar);
+		ED_region_tag_redraw_no_rebuild(ar);
 		UI_view2d_sync(CTX_wm_screen(C), CTX_wm_area(C), v2d, V2D_LOCK_COPY);
 	}
 }
@@ -1522,7 +1542,7 @@ static int view2d_smoothview_invoke(bContext *C, wmOperator *UNUSED(op), const w
 
 	UI_view2d_curRect_validate(v2d);
 	UI_view2d_sync(CTX_wm_screen(C), CTX_wm_area(C), v2d, V2D_LOCK_COPY);
-	ED_region_tag_redraw(ar);
+	ED_region_tag_redraw_no_rebuild(ar);
 
 	if (v2d->sms == NULL) {
 		UI_view2d_zoom_cache_reset();
@@ -1658,6 +1678,21 @@ static short mouse_in_scroller_handle(int mouse, int sc_min, int sc_max, int sh_
 	return SCROLLHANDLE_BAR;
 }
 
+static bool scroller_activate_poll(bContext *C)
+{
+	if (!view2d_poll(C)) {
+		return false;
+	}
+
+	wmWindow *win = CTX_wm_window(C);
+	ARegion *ar = CTX_wm_region(C);
+	View2D *v2d = &ar->v2d;
+	wmEvent *event = win->eventstate;
+
+	/* check if mouse in scrollbars, if they're enabled */
+	return (UI_view2d_mouse_in_scrollers(ar, v2d, event->x, event->y) != 0);
+}
+
 /* initialize customdata for scroller manipulation operator */
 static void scroller_activate_init(bContext *C, wmOperator *op, const wmEvent *event, short in_scroller)
 {
@@ -1699,9 +1734,10 @@ static void scroller_activate_init(bContext *C, wmOperator *op, const wmEvent *e
 		vsm->fac_round = (BLI_rctf_size_x(&v2d->cur)) / (float)(BLI_rcti_size_x(&ar->winrct) + 1);
 
 		/* get 'zone' (i.e. which part of scroller is activated) */
-		vsm->zone = mouse_in_scroller_handle(event->mval[0],
-		                                     v2d->hor.xmin, v2d->hor.xmax,
-		                                     scrollers->hor_min, scrollers->hor_max);
+		vsm->zone = mouse_in_scroller_handle(
+		        event->mval[0],
+		        v2d->hor.xmin, v2d->hor.xmax,
+		        scrollers->hor_min, scrollers->hor_max);
 
 		if ((v2d->keepzoom & V2D_LOCKZOOM_X) && ELEM(vsm->zone, SCROLLHANDLE_MIN, SCROLLHANDLE_MAX)) {
 			/* default to scroll, as handles not usable */
@@ -1720,9 +1756,10 @@ static void scroller_activate_init(bContext *C, wmOperator *op, const wmEvent *e
 		vsm->fac_round = (BLI_rctf_size_y(&v2d->cur)) / (float)(BLI_rcti_size_y(&ar->winrct) + 1);
 
 		/* get 'zone' (i.e. which part of scroller is activated) */
-		vsm->zone = mouse_in_scroller_handle(event->mval[1],
-		                                     v2d->vert.ymin, v2d->vert.ymax,
-		                                     scrollers->vert_min, scrollers->vert_max);
+		vsm->zone = mouse_in_scroller_handle(
+		        event->mval[1],
+		        v2d->vert.ymin, v2d->vert.ymax,
+		        scrollers->vert_min, scrollers->vert_max);
 
 		if ((v2d->keepzoom & V2D_LOCKZOOM_Y) && ELEM(vsm->zone, SCROLLHANDLE_MIN, SCROLLHANDLE_MAX)) {
 			/* default to scroll, as handles not usable */
@@ -1734,7 +1771,7 @@ static void scroller_activate_init(bContext *C, wmOperator *op, const wmEvent *e
 	}
 
 	UI_view2d_scrollers_free(scrollers);
-	ED_region_tag_redraw(ar);
+	ED_region_tag_redraw_no_rebuild(ar);
 }
 
 /* cleanup temp customdata  */
@@ -1748,7 +1785,7 @@ static void scroller_activate_exit(bContext *C, wmOperator *op)
 		MEM_freeN(op->customdata);
 		op->customdata = NULL;
 
-		ED_region_tag_redraw(CTX_wm_region(C));
+		ED_region_tag_redraw_no_rebuild(CTX_wm_region(C));
 	}
 }
 
@@ -1810,7 +1847,7 @@ static void scroller_activate_apply(bContext *C, wmOperator *op)
 	UI_view2d_curRect_validate(v2d);
 
 	/* request updates to be done... */
-	ED_region_tag_redraw(vsm->ar);
+	ED_region_tag_redraw_no_rebuild(vsm->ar);
 	UI_view2d_sync(CTX_wm_screen(C), CTX_wm_area(C), v2d, V2D_LOCK_COPY);
 }
 
@@ -1894,7 +1931,7 @@ static int scroller_activate_invoke(bContext *C, wmOperator *op, const wmEvent *
 	short in_scroller = 0;
 
 	/* check if mouse in scrollbars, if they're enabled */
-	in_scroller = UI_view2d_mouse_in_scrollers(C, v2d, event->x, event->y);
+	in_scroller = UI_view2d_mouse_in_scrollers(ar, v2d, event->x, event->y);
 
 	/* if in a scroller, init customdata then set modal handler which will catch mousedown to start doing useful stuff */
 	if (in_scroller) {
@@ -1988,7 +2025,7 @@ static void VIEW2D_OT_scroller_activate(wmOperatorType *ot)
 	ot->modal = scroller_activate_modal;
 	ot->cancel = scroller_activate_cancel;
 
-	ot->poll = view2d_poll;
+	ot->poll = scroller_activate_poll;
 }
 
 /* ********************************************************* */
@@ -2000,6 +2037,7 @@ static int reset_exec(bContext *C, wmOperator *UNUSED(op))
 	ARegion *ar = CTX_wm_region(C);
 	View2D *v2d = &ar->v2d;
 	int winx, winy;
+	const int snap_test = ED_region_snap_size_test(ar);
 
 	/* zoom 1.0 */
 	winx = (float)(BLI_rcti_size_x(&v2d->mask) + 1);
@@ -2033,6 +2071,12 @@ static int reset_exec(bContext *C, wmOperator *UNUSED(op))
 
 	/* validate that view is in valid configuration after this operation */
 	UI_view2d_curRect_validate(v2d);
+
+	if (ED_region_snap_size_apply(ar, snap_test)) {
+		ScrArea *sa = CTX_wm_area(C);
+		ED_area_tag_redraw(sa);
+		WM_event_add_notifier(C, NC_SCREEN | NA_EDITED, NULL);
+	}
 
 	/* request updates to be done... */
 	ED_region_tag_redraw(ar);
@@ -2168,4 +2212,3 @@ void ED_keymap_view2d(wmKeyConfig *keyconf)
 	WM_keymap_add_item(keymap, "VIEW2D_OT_zoom_in", PADPLUSKEY, KM_PRESS, 0, 0);
 	WM_keymap_add_item(keymap, "VIEW2D_OT_reset", HOMEKEY, KM_PRESS, 0, 0);
 }
-

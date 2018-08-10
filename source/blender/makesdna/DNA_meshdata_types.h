@@ -164,8 +164,8 @@ typedef struct MLoop {
  *     MEdge *ed = &medge[mloop[lt->tri[j]].e];
  *     unsigned int tri_edge[2]  = {mloop[lt->tri[j]].v, mloop[lt->tri[j_next]].v};
  *
- *     if (((ed->v1 == tri_edge[0]) && (ed->v1 == tri_edge[1])) ||
- *         ((ed->v1 == tri_edge[1]) && (ed->v1 == tri_edge[0])))
+ *     if (((ed->v1 == tri_edge[0]) && (ed->v2 == tri_edge[1])) ||
+ *         ((ed->v1 == tri_edge[1]) && (ed->v2 == tri_edge[0])))
  *     {
  *         printf("real edge found %u %u\n", tri_edge[0], tri_edge[1]);
  *     }
@@ -186,22 +186,9 @@ typedef struct MVertTri {
 	unsigned int tri[3];
 } MVertTri;
 
-
-typedef struct MTexPoly {
-	struct Image *tpage;
-	char flag, transp;
-	short mode, tile, pad;
-} MTexPoly;
-
-/* can copy from/to MTexPoly/MTFace */
-#define ME_MTEXFACE_CPY(dst, src)   \
-{                                   \
-	(dst)->tpage  = (src)->tpage;   \
-	(dst)->flag   = (src)->flag;    \
-	(dst)->transp = (src)->transp;  \
-	(dst)->mode   = (src)->mode;    \
-	(dst)->tile   = (src)->tile;    \
-} (void)0
+//typedef struct MTexPoly {
+//	void *pad;
+//} MTexPoly;
 
 typedef struct MLoopUV {
 	float uv[2];
@@ -256,9 +243,6 @@ typedef struct MSelect {
 /*tessellation uv face data*/
 typedef struct MTFace {
 	float uv[4][2];
-	struct Image *tpage;
-	char flag, transp;
-	short mode, tile, unwrap;
 } MTFace;
 
 /*Custom Data Properties*/
@@ -401,7 +385,7 @@ enum {
 /*	SELECT              = (1 << 0), */
 	ME_VERT_TMP_TAG     = (1 << 2),
 	ME_HIDE             = (1 << 4),
-	ME_VERT_MERGED      = (1 << 6),
+/*	ME_VERT_MERGED      = (1 << 6), */
 	ME_VERT_PBVH_UPDATE = (1 << 7),
 };
 
@@ -437,7 +421,7 @@ enum {
 enum {
 	ME_SMOOTH   = (1 << 0),
 	ME_FACE_SEL = (1 << 1),
-/*	ME_HIDE     = (1 << 4), */ 
+/*	ME_HIDE     = (1 << 4), */
 };
 
 #define ME_POLY_LOOP_PREV(mloop, mp, i)  (&(mloop)[(mp)->loopstart + (((i) + (mp)->totloop - 1) % (mp)->totloop)])
@@ -461,60 +445,6 @@ enum {
 	ME_VSEL = 0,
 	ME_ESEL = 1,
 	ME_FSEL = 2,
-};
-
-/* mtface->flag */
-enum {
-	// TF_SELECT = (1 << 0),  /* use MFace hide flag (after 2.43), should be able to reuse after 2.44 */
-	// TF_ACTIVE = (1 << 1),  /* deprecated! */
-	TF_SEL1   = (1 << 2),
-	TF_SEL2   = (1 << 3),
-	TF_SEL3   = (1 << 4),
-	TF_SEL4   = (1 << 5),
-};
-
-/* mtface->mode */
-enum {
-	TF_DYNAMIC    = (1 << 0),
-	TF_ALPHASORT  = (1 << 1),
-	TF_TEX        = (1 << 2),
-	TF_SHAREDVERT = (1 << 3),
-	TF_LIGHT      = (1 << 4),
-
-	TF_CONVERTED  = (1 << 5),  /* tface converted to material */
-
-	TF_SHAREDCOL  = (1 << 6),
-	// TF_TILES      = (1 << 7),  /* deprecated */
-	TF_BILLBOARD  = (1 << 8),
-	TF_TWOSIDE    = (1 << 9),
-	TF_INVISIBLE  = (1 << 10),
-
-	TF_OBCOL      = (1 << 11),
-	TF_BILLBOARD2 = (1 << 12),  /* with Z axis constraint */
-	TF_SHADOW     = (1 << 13),
-	TF_BMFONT     = (1 << 14),
-};
-
-/* mtface->transp, values 1-4 are used as flags in the GL, WARNING, TF_SUB cant work with this */
-enum {
-	TF_SOLID = 0,
-	TF_ADD   = (1 << 0),
-	TF_ALPHA = (1 << 1),
-	TF_CLIP  = (1 << 2),  /* clipmap alpha/binary alpha all or nothing! */
-
-	TF_SUB   = 3,  /* sub is not available in the user interface anymore */
-};
-
-/* mtface->unwrap */
-enum {
-	TF_DEPRECATED1 = (1 << 0),
-	TF_DEPRECATED2 = (1 << 1),
-	TF_DEPRECATED3 = (1 << 2),
-	TF_DEPRECATED4 = (1 << 3),
-	TF_PIN1        = (1 << 4),
-	TF_PIN2        = (1 << 5),
-	TF_PIN3        = (1 << 6),
-	TF_PIN4        = (1 << 7),
 };
 
 #endif  /* __DNA_MESHDATA_TYPES_H__ */

@@ -48,7 +48,7 @@ struct LinkNode;
 /* *** editmesh_utils.c *** */
 
 /*
- * ok: the EDBM module is for editmode bmesh stuff.  in contrast, the 
+ * ok: the EDBM module is for editmode bmesh stuff.  in contrast, the
  * BMEdit module is for code shared with blenkernel that concerns
  * the BMEditMesh structure. */
 
@@ -73,7 +73,7 @@ bool EDBM_op_finish(struct BMEditMesh *em, struct BMOperator *bmop,
 
 void EDBM_stats_update(struct BMEditMesh *em);
 
-int  EDBM_view3d_poll(struct bContext *C);
+bool EDBM_view3d_poll(struct bContext *C);
 
 struct BMElem *EDBM_elem_from_selectmode(
         struct BMEditMesh *em,
@@ -92,6 +92,8 @@ void MESH_OT_primitive_monkey_add(struct wmOperatorType *ot);
 void MESH_OT_primitive_uv_sphere_add(struct wmOperatorType *ot);
 void MESH_OT_primitive_ico_sphere_add(struct wmOperatorType *ot);
 
+/* *** editmesh_add_gizmo.c *** */
+void MESH_OT_primitive_cube_add_gizmo(struct wmOperatorType *ot);
 
 /* *** editmesh_bevel.c *** */
 void MESH_OT_bevel(struct wmOperatorType *ot);
@@ -102,6 +104,7 @@ void MESH_OT_bisect(struct wmOperatorType *ot);
 /* *** editmesh_extrude.c *** */
 void MESH_OT_extrude_repeat(struct wmOperatorType *ot);
 void MESH_OT_extrude_region(struct wmOperatorType *ot);
+void MESH_OT_extrude_context(struct wmOperatorType *ot);
 void MESH_OT_extrude_verts_indiv(struct wmOperatorType *ot);
 void MESH_OT_extrude_edges_indiv(struct wmOperatorType *ot);
 void MESH_OT_extrude_faces_indiv(struct wmOperatorType *ot);
@@ -112,6 +115,12 @@ void MESH_OT_screw(struct wmOperatorType *ot);
 
 /* *** editmesh_extrude_spin.c *** */
 void MESH_OT_spin(struct wmOperatorType *ot);
+
+/* *** editmesh_polybuild.c *** */
+void MESH_OT_polybuild_face_at_cursor(struct wmOperatorType *ot);
+void MESH_OT_polybuild_split_at_cursor(struct wmOperatorType *ot);
+void MESH_OT_polybuild_dissolve_at_cursor(struct wmOperatorType *ot);
+void MESH_OT_polybuild_hover(struct wmOperatorType *ot);
 
 /* *** editmesh_inset.c *** */
 void MESH_OT_inset(struct wmOperatorType *ot);
@@ -208,7 +217,6 @@ void MESH_OT_hide(struct wmOperatorType *ot);
 void MESH_OT_reveal(struct wmOperatorType *ot);
 void MESH_OT_mark_seam(struct wmOperatorType *ot);
 void MESH_OT_mark_sharp(struct wmOperatorType *ot);
-void MESH_OT_noise(struct wmOperatorType *ot);
 void MESH_OT_flip_normals(struct wmOperatorType *ot);
 void MESH_OT_solidify(struct wmOperatorType *ot);
 void MESH_OT_knife_cut(struct wmOperatorType *ot);
@@ -250,14 +258,6 @@ void MESH_OT_customdata_skin_clear(struct wmOperatorType *ot);
 void MESH_OT_customdata_custom_splitnormals_add(struct wmOperatorType *ot);
 void MESH_OT_customdata_custom_splitnormals_clear(struct wmOperatorType *ot);
 void MESH_OT_drop_named_image(struct wmOperatorType *ot);
-
-
-/* *** mesh_navmesh.c *** */
-void MESH_OT_navmesh_make(struct wmOperatorType *ot);
-void MESH_OT_navmesh_face_copy(struct wmOperatorType *ot);
-void MESH_OT_navmesh_face_add(struct wmOperatorType *ot);
-void MESH_OT_navmesh_reset(struct wmOperatorType *ot);
-void MESH_OT_navmesh_clear(struct wmOperatorType *ot);
 
 
 #endif  /* __MESH_INTERN_H__ */

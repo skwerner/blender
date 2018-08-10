@@ -38,15 +38,15 @@
 #include "BLI_task.h"
 #include "BLI_ghash.h"
 
-extern "C" {
-#include "BKE_depsgraph.h"
-#include "BKE_global.h"
-} /* extern "C" */
+#include "DNA_object_types.h"
+#include "DNA_scene_types.h"
 
 #include "DEG_depsgraph.h"
+#include "DEG_depsgraph_query.h"
 
 #include "atomic_ops.h"
 
+#include "intern/eval/deg_eval_copy_on_write.h"
 #include "intern/eval/deg_eval_flush.h"
 #include "intern/eval/deg_eval_stats.h"
 #include "intern/nodes/deg_node.h"
@@ -68,13 +68,10 @@ namespace DEG {
 static void schedule_children(TaskPool *pool,
                               Depsgraph *graph,
                               OperationDepsNode *node,
-                              const unsigned int layers,
                               const int thread_id);
 
 struct DepsgraphEvalState {
-	EvaluationContext *eval_ctx;
 	Depsgraph *graph;
-	unsigned int layers;
 	bool do_stats;
 };
 
@@ -90,21 +87,20 @@ static void deg_task_run_func(TaskPool *pool,
 	/* Perform operation. */
 	if (state->do_stats) {
 		const double start_time = PIL_check_seconds_timer();
-		node->evaluate(state->eval_ctx);
+		node->evaluate((::Depsgraph *)state->graph);
 		node->stats.current_time += PIL_check_seconds_timer() - start_time;
 	}
 	else {
-		node->evaluate(state->eval_ctx);
+		node->evaluate((::Depsgraph *)state->graph);
 	}
 	/* Schedule children. */
 	BLI_task_pool_delayed_push_begin(pool, thread_id);
-	schedule_children(pool, state->graph, node, state->layers, thread_id);
+	schedule_children(pool, state->graph, node, thread_id);
 	BLI_task_pool_delayed_push_end(pool, thread_id);
 }
 
 typedef struct CalculatePengindData {
 	Depsgraph *graph;
-	unsigned int layers;
 } CalculatePengindData;
 
 static void calculate_pending_func(
@@ -114,26 +110,19 @@ static void calculate_pending_func(
 {
 	CalculatePengindData *data = (CalculatePengindData *)data_v;
 	Depsgraph *graph = data->graph;
-	unsigned int layers = data->layers;
 	OperationDepsNode *node = graph->operations[i];
-	IDDepsNode *id_node = node->owner->owner;
 
 	node->num_links_pending = 0;
 	node->scheduled = false;
 
 	/* count number of inputs that need updates */
-	if ((id_node->layers & layers) != 0 &&
-	    (node->flag & DEPSOP_FLAG_NEEDS_UPDATE) != 0)
-	{
+	if ((node->flag & DEPSOP_FLAG_NEEDS_UPDATE) != 0) {
 		foreach (DepsRelation *rel, node->inlinks) {
 			if (rel->from->type == DEG_NODE_TYPE_OPERATION &&
 			    (rel->flag & DEPSREL_FLAG_CYCLIC) == 0)
 			{
 				OperationDepsNode *from = (OperationDepsNode *)rel->from;
-				IDDepsNode *id_from_node = from->owner->owner;
-				if ((id_from_node->layers & layers) != 0 &&
-				    (from->flag & DEPSOP_FLAG_NEEDS_UPDATE) != 0)
-				{
+				if ((from->flag & DEPSOP_FLAG_NEEDS_UPDATE) != 0) {
 					++node->num_links_pending;
 				}
 			}
@@ -141,12 +130,11 @@ static void calculate_pending_func(
 	}
 }
 
-static void calculate_pending_parents(Depsgraph *graph, unsigned int layers)
+static void calculate_pending_parents(Depsgraph *graph)
 {
 	const int num_operations = graph->operations.size();
 	CalculatePengindData data;
 	data.graph = graph;
-	data.layers = layers;
 	ParallelRangeSettings settings;
 	BLI_parallel_range_settings_defaults(&settings);
 	settings.min_iter_per_thread = 1024;
@@ -160,7 +148,7 @@ static void calculate_pending_parents(Depsgraph *graph, unsigned int layers)
 static void initialize_execution(DepsgraphEvalState *state, Depsgraph *graph)
 {
 	const bool do_stats = state->do_stats;
-	calculate_pending_parents(graph, state->layers);
+	calculate_pending_parents(graph);
 	/* Clear tags and other things which needs to be clear. */
 	foreach (OperationDepsNode *node, graph->operations) {
 		node->done = 0;
@@ -174,15 +162,11 @@ static void initialize_execution(DepsgraphEvalState *state, Depsgraph *graph)
  *   dec_parents: Decrement pending parents count, true when child nodes are
  *                scheduled after a task has been completed.
  */
-static void schedule_node(TaskPool *pool, Depsgraph *graph, unsigned int layers,
+static void schedule_node(TaskPool *pool, Depsgraph *graph,
                           OperationDepsNode *node, bool dec_parents,
                           const int thread_id)
 {
-	unsigned int id_layers = node->owner->owner->layers;
-
-	if ((node->flag & DEPSOP_FLAG_NEEDS_UPDATE) != 0 &&
-	    (id_layers & layers) != 0)
-	{
+	if ((node->flag & DEPSOP_FLAG_NEEDS_UPDATE) != 0) {
 		if (dec_parents) {
 			BLI_assert(node->num_links_pending > 0);
 			atomic_sub_and_fetch_uint32(&node->num_links_pending, 1);
@@ -194,7 +178,7 @@ static void schedule_node(TaskPool *pool, Depsgraph *graph, unsigned int layers,
 			if (!is_scheduled) {
 				if (node->is_noop()) {
 					/* skip NOOP node, schedule children right away */
-					schedule_children(pool, graph, node, layers, thread_id);
+					schedule_children(pool, graph, node, thread_id);
 				}
 				else {
 					/* children are scheduled once this task is completed */
@@ -210,19 +194,16 @@ static void schedule_node(TaskPool *pool, Depsgraph *graph, unsigned int layers,
 	}
 }
 
-static void schedule_graph(TaskPool *pool,
-                           Depsgraph *graph,
-                           const unsigned int layers)
+static void schedule_graph(TaskPool *pool, Depsgraph *graph)
 {
 	foreach (OperationDepsNode *node, graph->operations) {
-		schedule_node(pool, graph, layers, node, false, 0);
+		schedule_node(pool, graph, node, false, 0);
 	}
 }
 
 static void schedule_children(TaskPool *pool,
                               Depsgraph *graph,
                               OperationDepsNode *node,
-                              const unsigned int layers,
                               const int thread_id)
 {
 	foreach (DepsRelation *rel, node->outlinks) {
@@ -234,10 +215,25 @@ static void schedule_children(TaskPool *pool,
 		}
 		schedule_node(pool,
 		              graph,
-		              layers,
 		              child,
 		              (rel->flag & DEPSREL_FLAG_CYCLIC) == 0,
 		              thread_id);
+	}
+}
+
+static void depsgraph_ensure_view_layer(Depsgraph *graph)
+{
+	/* We update copy-on-write scene in the following cases:
+	 * - It was not expanded yet.
+	 * - It was tagged for update of CoW component.
+	 * This allows us to have proper view layer pointer.
+	 */
+	Scene *scene_cow = graph->scene_cow;
+	if (!deg_copy_on_write_is_expanded(&scene_cow->id) ||
+	     scene_cow->id.recalc & ID_RECALC_COPY_ON_WRITE)
+	{
+		const IDDepsNode *id_node = graph->find_id_node(&graph->scene->id);
+		deg_update_copy_on_write_datablock(graph, id_node);
 	}
 }
 
@@ -248,28 +244,18 @@ static void schedule_children(TaskPool *pool,
  *
  * \note Time sources should be all valid!
  */
-void deg_evaluate_on_refresh(EvaluationContext *eval_ctx,
-                             Depsgraph *graph,
-                             const unsigned int layers)
+void deg_evaluate_on_refresh(Depsgraph *graph)
 {
-	/* Set time for the current graph evaluation context. */
-	TimeSourceDepsNode *time_src = graph->find_time_source();
-	eval_ctx->ctime = time_src->cfra;
 	/* Nothing to update, early out. */
 	if (BLI_gset_len(graph->entry_tags) == 0) {
 		return;
 	}
-	DEG_DEBUG_PRINTF(EVAL, "%s: layers:%u, graph->layers:%u\n",
-	                 __func__,
-	                 layers,
-	                 graph->layers);
 	const bool do_time_debug = ((G.debug & G_DEBUG_DEPSGRAPH_TIME) != 0);
 	const double start_time = do_time_debug ? PIL_check_seconds_timer() : 0;
-	/* Set up evaluation context for depsgraph itself. */
+	depsgraph_ensure_view_layer(graph);
+	/* Set up evaluation state. */
 	DepsgraphEvalState state;
-	state.eval_ctx = eval_ctx;
 	state.graph = graph;
-	state.layers = layers;
 	state.do_stats = do_time_debug;
 	/* Set up task scheduler and pull for threaded evaluation. */
 	TaskScheduler *task_scheduler;
@@ -286,7 +272,7 @@ void deg_evaluate_on_refresh(EvaluationContext *eval_ctx,
 	/* Prepare all nodes for evaluation. */
 	initialize_execution(&state, graph);
 	/* Do actual evaluation now. */
-	schedule_graph(task_pool, graph, layers);
+	schedule_graph(task_pool, graph);
 	BLI_task_pool_work_and_wait(task_pool);
 	BLI_task_pool_free(task_pool);
 	/* Finalize statistics gathering. This is because we only gather single

@@ -33,6 +33,8 @@
 #include "intern/depsgraph_intern.h"
 #include "util/deg_util_foreach.h"
 
+#include "DNA_scene_types.h"
+
 namespace DEG {
 
 void TimeSourceDepsNode::tag_update(Depsgraph *graph)

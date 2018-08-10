@@ -109,6 +109,7 @@ void register_node_type_cmp_luma_matte(void);
 void register_node_type_cmp_doubleedgemask(void);
 void register_node_type_cmp_keyingscreen(void);
 void register_node_type_cmp_keying(void);
+void register_node_type_cmp_cryptomatte(void);
 
 void register_node_type_cmp_translate(void);
 void register_node_type_cmp_rotate(void);
@@ -140,7 +141,7 @@ void register_node_type_cmp_planetrackdeform(void);
 void register_node_type_cmp_cornerpin(void);
 
 void node_cmp_rlayers_outputs(struct bNodeTree *ntree, struct bNode *node);
-void node_cmp_rlayers_register_pass(struct bNodeTree *ntree, struct bNode *node, struct Scene *scene, struct SceneRenderLayer *srl, const char *name, int type);
+void node_cmp_rlayers_register_pass(struct bNodeTree *ntree, struct bNode *node, struct Scene *scene, struct ViewLayer *view_layer, const char *name, int type);
 const char *node_cmp_rlayers_sock_to_pass(int sock_index);
 
 #endif

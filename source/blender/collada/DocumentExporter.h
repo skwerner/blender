@@ -31,7 +31,7 @@
 
 extern "C" {
 #include "DNA_customdata_types.h"
-#include "BKE_depsgraph.h"
+
 }
 
 struct Scene;
@@ -39,10 +39,12 @@ struct Scene;
 class DocumentExporter
 {
  public:
-	DocumentExporter(const ExportSettings *export_settings);
-	int  exportCurrentScene(const EvaluationContext *eval_ctx, Scene *sce);
+	DocumentExporter(Depsgraph *depsgraph, const ExportSettings *export_settings);
+	int  exportCurrentScene(bContext *C, Scene *sce);
+
 	void exportScenes(const char *filename);
 private:
+	Depsgraph *depsgraph;
 	const ExportSettings *export_settings;
 };
 

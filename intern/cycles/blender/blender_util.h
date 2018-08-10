@@ -49,15 +49,15 @@ void python_thread_state_restore(void **python_thread_state);
 
 static inline BL::Mesh object_to_mesh(BL::BlendData& data,
                                       BL::Object& object,
-                                      BL::Scene& scene,
+                                      BL::Depsgraph& depsgraph,
                                       bool apply_modifiers,
-                                      bool render,
                                       bool calc_undeformed,
                                       Mesh::SubdivisionType subdivision_type)
 {
 	bool subsurf_mod_show_render = false;
 	bool subsurf_mod_show_viewport = false;
 
+	/* TODO: make this work with copy-on-write, modifiers are already evaluated. */
 	if(subdivision_type != Mesh::SUBDIVISION_NONE) {
 		BL::Modifier subsurf_mod = object.modifiers[object.modifiers.length()-1];
 
@@ -68,7 +68,7 @@ static inline BL::Mesh object_to_mesh(BL::BlendData& data,
 		subsurf_mod.show_viewport(false);
 	}
 
-	BL::Mesh me = data.meshes.new_from_object(scene, object, apply_modifiers, (render)? 2: 1, false, calc_undeformed);
+	BL::Mesh me = data.meshes.new_from_object(depsgraph, object, apply_modifiers, false, calc_undeformed);
 
 	if(subdivision_type != Mesh::SUBDIVISION_NONE) {
 		BL::Modifier subsurf_mod = object.modifiers[object.modifiers.length()-1];
@@ -255,7 +255,7 @@ static inline Transform get_transform(const BL::Array<float, 16>& array)
 
 	/* We assume both types to be just 16 floats, and transpose because blender
 	 * use column major matrix order while we use row major. */
-	memcpy(&projection, &array, sizeof(float)*16);
+	memcpy((void *)&projection, &array, sizeof(float)*16);
 	projection = projection_transpose(projection);
 
 	/* Drop last row, matrix is assumed to be affine transform. */
@@ -297,7 +297,7 @@ static inline int4 get_int4(const BL::Array<int, 4>& array)
 	return make_int4(array[0], array[1], array[2], array[3]);
 }
 
-static inline uint get_layer(const BL::Array<int, 20>& array)
+static inline uint get_layer(const BL::Array<bool, 20>& array)
 {
 	uint layer = 0;
 
@@ -308,10 +308,10 @@ static inline uint get_layer(const BL::Array<int, 20>& array)
 	return layer;
 }
 
-static inline uint get_layer(const BL::Array<int, 20>& array,
-                             const BL::Array<int, 8>& local_array,
+static inline uint get_layer(const BL::Array<bool, 20>& array,
+                             const BL::Array<bool, 8>& local_array,
                              bool is_light = false,
-                             uint scene_layers = (1 << 20) - 1)
+                             uint view_layers = (1 << 20) - 1)
 {
 	uint layer = 0;
 
@@ -323,7 +323,7 @@ static inline uint get_layer(const BL::Array<int, 20>& array,
 		/* Consider light is visible if it was visible without layer
 		 * override, which matches behavior of Blender Internal.
 		 */
-		if(layer & scene_layers) {
+		if(layer & view_layers) {
 			for(uint i = 0; i < 8; i++)
 				layer |= (1 << (20+i));
 		}
@@ -609,6 +609,7 @@ static inline Mesh::SubdivisionType object_subdivision_type(BL::Object& b_ob, bo
 	return Mesh::SUBDIVISION_NONE;
 }
 
+#ifdef WITH_OPENVDB
 static inline void init_openvdb_in_scene(bool& initialized)
 {
 	if(!initialized) {
@@ -616,6 +617,7 @@ static inline void init_openvdb_in_scene(bool& initialized)
 		initialized = true;
 	}
 }
+#endif
 
 static inline bool volume_get_frame_file(BL::BlendData& b_data,
                                          BL::Object& b_ob,
@@ -651,12 +653,16 @@ static inline bool object_use_volume_motion(BL::Object& b_parent,
 	/* For imported volumes, the file must have a velocity grid. */
 	string filename;
 	if(volume_get_frame_file(b_data, b_ob, b_domain, cfra, filename)) {
+#ifdef WITH_OPENVDB
 		if(string_endswith(filename, ".vdb")) {
 			init_openvdb_in_scene(initialized_openvdb);
 			if(!openvdb_has_grid(filename, "velocity")) {
 				return false;
 			}
 		}
+#else
+		initialized_openvdb = false;
+#endif
 	}
 
 	PointerRNA cobject = RNA_pointer_get(&b_ob.ptr, "cycles");

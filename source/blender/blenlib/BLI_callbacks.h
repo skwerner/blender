@@ -49,10 +49,10 @@ typedef enum {
 	BLI_CB_EVT_LOAD_POST,
 	BLI_CB_EVT_SAVE_PRE,
 	BLI_CB_EVT_SAVE_POST,
-	BLI_CB_EVT_SCENE_UPDATE_PRE,
-	BLI_CB_EVT_SCENE_UPDATE_POST,
-	BLI_CB_EVT_GAME_PRE,
-	BLI_CB_EVT_GAME_POST,
+	BLI_CB_EVT_UNDO_PRE,
+	BLI_CB_EVT_UNDO_POST,
+	BLI_CB_EVT_REDO_PRE,
+	BLI_CB_EVT_REDO_POST,
 	BLI_CB_EVT_VERSION_UPDATE,
 	BLI_CB_EVT_TOT
 } eCbEvent;
@@ -66,7 +66,7 @@ typedef struct bCallbackFuncStore {
 } bCallbackFuncStore;
 
 
-void BLI_callback_exec(struct Main *main, struct ID *self, eCbEvent evt);
+void BLI_callback_exec(struct Main *bmain, struct ID *self, eCbEvent evt);
 void BLI_callback_add(bCallbackFuncStore *funcstore, eCbEvent evt);
 
 void BLI_callback_global_init(void);

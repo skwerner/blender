@@ -4,7 +4,7 @@
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version. 
+ * of the License, or (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -48,15 +48,15 @@ static void node_shader_exec_seprgb(void *UNUSED(data), int UNUSED(thread), bNod
 {
 	float col[3];
 	nodestack_get_vec(col, SOCK_VECTOR, in[0]);
-	
+
 	out[0]->vec[0] = col[0];
 	out[1]->vec[0] = col[1];
 	out[2]->vec[0] = col[2];
 }
 
-static int gpu_shader_seprgb(GPUMaterial *mat, bNode *UNUSED(node), bNodeExecData *UNUSED(execdata), GPUNodeStack *in, GPUNodeStack *out)
+static int gpu_shader_seprgb(GPUMaterial *mat, bNode *node, bNodeExecData *UNUSED(execdata), GPUNodeStack *in, GPUNodeStack *out)
 {
-	return GPU_stack_link(mat, "separate_rgb", in, out);
+	return GPU_stack_link(mat, node, "separate_rgb", in, out);
 }
 
 void register_node_type_sh_seprgb(void)
@@ -64,7 +64,6 @@ void register_node_type_sh_seprgb(void)
 	static bNodeType ntype;
 
 	sh_node_type_base(&ntype, SH_NODE_SEPRGB, "Separate RGB", NODE_CLASS_CONVERTOR, 0);
-	node_type_compatibility(&ntype, NODE_OLD_SHADING | NODE_NEW_SHADING);
 	node_type_socket_templates(&ntype, sh_node_seprgb_in, sh_node_seprgb_out);
 	node_type_exec(&ntype, NULL, NULL, node_shader_exec_seprgb);
 	node_type_gpu(&ntype, gpu_shader_seprgb);
@@ -92,15 +91,15 @@ static void node_shader_exec_combrgb(void *UNUSED(data), int UNUSED(thread), bNo
 	nodestack_get_vec(&r, SOCK_FLOAT, in[0]);
 	nodestack_get_vec(&g, SOCK_FLOAT, in[1]);
 	nodestack_get_vec(&b, SOCK_FLOAT, in[2]);
-	
+
 	out[0]->vec[0] = r;
 	out[0]->vec[1] = g;
 	out[0]->vec[2] = b;
 }
 
-static int gpu_shader_combrgb(GPUMaterial *mat, bNode *UNUSED(node), bNodeExecData *UNUSED(execdata), GPUNodeStack *in, GPUNodeStack *out)
+static int gpu_shader_combrgb(GPUMaterial *mat, bNode *node, bNodeExecData *UNUSED(execdata), GPUNodeStack *in, GPUNodeStack *out)
 {
-	return GPU_stack_link(mat, "combine_rgb", in, out);
+	return GPU_stack_link(mat, node, "combine_rgb", in, out);
 }
 
 void register_node_type_sh_combrgb(void)
@@ -108,7 +107,6 @@ void register_node_type_sh_combrgb(void)
 	static bNodeType ntype;
 
 	sh_node_type_base(&ntype, SH_NODE_COMBRGB, "Combine RGB", NODE_CLASS_CONVERTOR, 0);
-	node_type_compatibility(&ntype, NODE_OLD_SHADING | NODE_NEW_SHADING);
 	node_type_socket_templates(&ntype, sh_node_combrgb_in, sh_node_combrgb_out);
 	node_type_exec(&ntype, NULL, NULL, node_shader_exec_combrgb);
 	node_type_gpu(&ntype, gpu_shader_combrgb);

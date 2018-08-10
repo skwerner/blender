@@ -609,7 +609,7 @@ void BM_mesh_select_mode_set(BMesh *bm, int selectmode)
 {
 	BMIter iter;
 	BMElem *ele;
-	
+
 	bm->selectmode = selectmode;
 
 	if (bm->selectmode & SCE_SELECT_VERTEX) {
@@ -737,13 +737,13 @@ BMFace *BM_mesh_active_face_get(BMesh *bm, const bool is_sloppy, const bool is_s
 		BMIter iter;
 		BMFace *f = NULL;
 		BMEditSelection *ese;
-		
+
 		/* Find the latest non-hidden face from the BMEditSelection */
 		ese = bm->selected.last;
 		for ( ; ese; ese = ese->prev) {
 			if (ese->htype == BM_FACE) {
 				f = (BMFace *)ese->ele;
-				
+
 				if (BM_elem_flag_test(f, BM_ELEM_HIDDEN)) {
 					f = NULL;
 				}
@@ -842,10 +842,10 @@ void BM_editselection_normal(BMEditSelection *ese, float r_normal[3])
 		BMEdge *eed = (BMEdge *)ese->ele;
 		float plane[3]; /* need a plane to correct the normal */
 		float vec[3]; /* temp vec storage */
-		
+
 		add_v3_v3v3(r_normal, eed->v1->no, eed->v2->no);
 		sub_v3_v3v3(plane, eed->v2->co, eed->v1->co);
-		
+
 		/* the 2 vertex normals will be close but not at rightangles to the edge
 		 * for rotate about edge we want them to be at right angles, so we need to
 		 * do some extra calculation to correct the vert normals,
@@ -853,7 +853,7 @@ void BM_editselection_normal(BMEditSelection *ese, float r_normal[3])
 		cross_v3_v3v3(vec, r_normal, plane);
 		cross_v3_v3v3(r_normal, plane, vec);
 		normalize_v3(r_normal);
-		
+
 	}
 	else if (ese->htype == BM_FACE) {
 		BMFace *efa = (BMFace *)ese->ele;
@@ -863,13 +863,13 @@ void BM_editselection_normal(BMEditSelection *ese, float r_normal[3])
 
 /* Calculate a plane that is rightangles to the edge/vert/faces normal
  * also make the plane run along an axis that is related to the geometry,
- * because this is used for the manipulators Y axis. */
+ * because this is used for the gizmos Y axis. */
 void BM_editselection_plane(BMEditSelection *ese, float r_plane[3])
 {
 	if (ese->htype == BM_VERT) {
 		BMVert *eve = (BMVert *)ese->ele;
 		float vec[3] = {0.0f, 0.0f, 0.0f};
-		
+
 		if (ese->prev) { /* use previously selected data to make a useful vertex plane */
 			BM_editselection_center(ese->prev, vec);
 			sub_v3_v3v3(r_plane, vec, eve->co);
@@ -895,7 +895,7 @@ void BM_editselection_plane(BMEditSelection *ese, float r_plane[3])
 		else {
 			/* the plane is simple, it runs along the edge
 			 * however selecting different edges can swap the direction of the y axis.
-			 * this makes it less likely for the y axis of the manipulator
+			 * this makes it less likely for the y axis of the gizmo
 			 * (running along the edge).. to flip less often.
 			 * at least its more predictable */
 			if (eed->v2->co[1] > eed->v1->co[1]) {  /* check which to do first */
@@ -1261,7 +1261,7 @@ void BM_edge_hide_set(BMEdge *e, const bool hide)
 			BM_elem_flag_set(l_iter->f, BM_ELEM_HIDDEN, hide);
 		} while ((l_iter = l_iter->radial_next) != l_first);
 	}
-	
+
 	BM_elem_flag_set(e, BM_ELEM_HIDDEN, hide);
 
 	/* hide vertices if necessary */

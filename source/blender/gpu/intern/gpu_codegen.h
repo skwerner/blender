@@ -57,7 +57,8 @@ typedef enum GPUDataSource {
 	GPU_SOURCE_OPENGL_BUILTIN,
 	GPU_SOURCE_TEX_PIXEL,
 	GPU_SOURCE_TEX,
-	GPU_SOURCE_ATTRIB
+	GPU_SOURCE_ATTRIB,
+	GPU_SOURCE_STRUCT
 } GPUDataSource;
 
 typedef enum {
@@ -156,34 +157,38 @@ typedef struct GPUInput {
 } GPUInput;
 
 struct GPUPass {
-	struct GPUPass *next, *prev;
+	struct GPUPass *next;
 
-	ListBase inputs;
-	struct GPUOutput *output;
 	struct GPUShader *shader;
 	char *fragmentcode;
 	char *geometrycode;
 	char *vertexcode;
-	const char *libcode;
+	char *defines;
+	unsigned int refcount;       /* Orphaned GPUPasses gets freed by the garbage collector. */
+	uint32_t hash;               /* Identity hash generated from all GLSL code. */
+	bool compiled;               /* Did we already tried to compile the attached GPUShader. */
 };
-
 
 typedef struct GPUPass GPUPass;
 
-GPUPass *GPU_generate_pass(ListBase *nodes, struct GPUNodeLink *outlink,
-                           struct GPUVertexAttribs *attribs, int *builtin,
-                           const GPUMatType type, const char *name,
-                           const bool use_opensubdiv,
-                           const bool use_new_shading);
+GPUPass *GPU_generate_pass_new(
+        GPUMaterial *material,
+        GPUNodeLink *frag_outlink, struct GPUVertexAttribs *attribs,
+        ListBase *nodes,
+        const char *vert_code, const char *geom_code,
+        const char *frag_lib, const char *defines);
 
-struct GPUShader *GPU_pass_shader(GPUPass *pass);
+struct GPUShader *GPU_pass_shader_get(GPUPass *pass);
 
-void GPU_pass_bind(GPUPass *pass, double time, int mipmap);
-void GPU_pass_update_uniforms(GPUPass *pass);
-void GPU_pass_unbind(GPUPass *pass);
+void GPU_nodes_extract_dynamic_inputs(struct GPUShader *shader, ListBase *inputs, ListBase *nodes);
+void GPU_nodes_get_vertex_attributes(ListBase *nodes, struct GPUVertexAttribs *attribs);
+void GPU_nodes_prune(ListBase *nodes, struct GPUNodeLink *outlink);
 
-void GPU_pass_free(GPUPass *pass);
+void GPU_pass_compile(GPUPass *pass, const char *shname);
+void GPU_pass_release(GPUPass *pass);
 void GPU_pass_free_nodes(ListBase *nodes);
+
+void GPU_inputs_free(ListBase *inputs);
 
 void gpu_codegen_init(void);
 void gpu_codegen_exit(void);
@@ -195,4 +200,3 @@ void gpu_material_add_node(struct GPUMaterial *material, struct GPUNode *node);
 int GPU_link_changed(struct GPUNodeLink *link);
 
 #endif
-

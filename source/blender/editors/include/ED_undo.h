@@ -4,7 +4,7 @@
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version. 
+ * of the License, or (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -25,7 +25,10 @@
 #ifndef __ED_UNDO_H__
 #define __ED_UNDO_H__
 
+#include "BLI_compiler_attrs.h"
+
 struct bContext;
+struct CLG_LogRef;
 struct wmOperator;
 struct wmOperatorType;
 struct UndoStack;
@@ -53,6 +56,10 @@ bool    ED_undo_is_valid(const struct bContext *C, const char *undoname);
 
 struct UndoStack *ED_undo_stack_get(void);
 
+/* helpers */
+void ED_undo_object_set_active_or_warn(
+        struct ViewLayer *view_layer, struct Object *ob, const char *info, struct CLG_LogRef *log);
+
 /* undo_system_types.c */
 void ED_undosys_type_init(void);
 void ED_undosys_type_free(void);
@@ -61,4 +68,3 @@ void ED_undosys_type_free(void);
 struct MemFile *ED_undosys_stack_memfile_get_active(struct UndoStack *ustack);
 
 #endif /* __ED_UNDO_H__ */
-

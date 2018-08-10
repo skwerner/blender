@@ -34,6 +34,8 @@
 #define __READFILE_H__
 
 #include "zlib.h"
+#include "DNA_sdna_types.h"
+#include "DNA_space_types.h"
 #include "DNA_windowmanager_types.h"  /* for ReportType */
 
 struct OldNewMap;
@@ -64,23 +66,23 @@ typedef struct FileData {
 
 	// now only in use for library appending
 	char relabase[FILE_MAX];
-	
+
 	// variables needed for reading from stream
 	char headerdone;
 	int inbuffer;
-	
+
 	// gzip stream for memory decompression
 	z_stream strm;
-	
+
 	// general reading variables
 	struct SDNA *filesdna;
 	const struct SDNA *memsdna;
 	const char *compflags;  /* array of eSDNA_StructCompare */
-	
+
 	int fileversion;
 	int id_name_offs;       /* used to retrieve ID names from (bhead+1) */
 	int globalf, fileflags; /* for do_versions patching */
-	
+
 	eBLOReadSkip skip_flags;  /* skip some data-blocks */
 
 	struct OldNewMap *datamap;
@@ -88,15 +90,16 @@ typedef struct FileData {
 	struct OldNewMap *libmap;
 	struct OldNewMap *imamap;
 	struct OldNewMap *movieclipmap;
+	struct OldNewMap *scenemap;
 	struct OldNewMap *soundmap;
 	struct OldNewMap *packedmap;
-	
+
 	struct BHeadSort *bheadmap;
 	int tot_bheadmap;
 
 	/* see: USE_GHASH_BHEAD */
 	struct GHash *bhead_idname_hash;
-	
+
 	ListBase *mainlist;
 	ListBase *old_mainlist;  /* Used for undo. */
 
@@ -138,6 +141,8 @@ FileData *blo_openblendermemfile(struct MemFile *memfile, struct ReportList *rep
 void blo_clear_proxy_pointers_from_lib(Main *oldmain);
 void blo_make_image_pointer_map(FileData *fd, Main *oldmain);
 void blo_end_image_pointer_map(FileData *fd, Main *oldmain);
+void blo_make_scene_pointer_map(FileData *fd, Main *oldmain);
+void blo_end_scene_pointer_map(FileData *fd, Main *oldmain);
 void blo_make_movieclip_pointer_map(FileData *fd, Main *oldmain);
 void blo_end_movieclip_pointer_map(FileData *fd, Main *oldmain);
 void blo_make_sound_pointer_map(FileData *fd, Main *oldmain);
@@ -167,12 +172,13 @@ void blo_do_version_old_trackto_to_constraints(struct Object *ob);
 void blo_do_versions_view3d_split_250(struct View3D *v3d, struct ListBase *regions);
 void blo_do_versions_key_uidgen(struct Key *key);
 
-void blo_do_versions_pre250(struct FileData *fd, struct Library *lib, struct Main *main);
-void blo_do_versions_250(struct FileData *fd, struct Library *lib, struct Main *main);
-void blo_do_versions_260(struct FileData *fd, struct Library *lib, struct Main *main);
-void blo_do_versions_270(struct FileData *fd, struct Library *lib, struct Main *main);
+void blo_do_versions_pre250(struct FileData *fd, struct Library *lib, struct Main *bmain);
+void blo_do_versions_250(struct FileData *fd, struct Library *lib, struct Main *bmain);
+void blo_do_versions_260(struct FileData *fd, struct Library *lib, struct Main *bmain);
+void blo_do_versions_270(struct FileData *fd, struct Library *lib, struct Main *bmain);
+void blo_do_versions_280(struct FileData *fd, struct Library *lib, struct Main *bmain);
 
-void do_versions_after_linking_270(struct Main *main);
+void do_versions_after_linking_270(struct Main *bmain);
+void do_versions_after_linking_280(struct Main *bmain);
 
 #endif
-

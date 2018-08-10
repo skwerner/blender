@@ -129,14 +129,17 @@ typedef struct SmokeDomainSettings {
 	struct SmokeModifierData *smd; /* for fast RNA access */
 	struct FLUID_3D *fluid;
 	void *fluid_mutex;
-	struct Group *fluid_group;
-	struct Group *eff_group; // UNUSED
-	struct Group *coll_group; // collision objects group
+	struct Collection *fluid_group;
+	struct Collection *eff_group; // UNUSED
+	struct Collection *coll_group; // collision objects group
 	struct WTURBULENCE *wt; // WTURBULENCE object, if active
 	struct GPUTexture *tex;
 	struct GPUTexture *tex_wt;
 	struct GPUTexture *tex_shadow;
 	struct GPUTexture *tex_flame;
+	struct GPUTexture *tex_velocity_x;
+	struct GPUTexture *tex_velocity_y;
+	struct GPUTexture *tex_velocity_z;
 	float *shadow;
 
 	/* simulation data */
@@ -174,7 +177,7 @@ typedef struct SmokeDomainSettings {
 	int flags; /* show up-res or low res, etc */
 	int viewsettings;
 	short noise; /* noise type: wave, curl, anisotropic */
-	short diss_percent; 
+	short diss_percent;
 	int diss_speed;/* in frames */
 	float strength;
 	int res_wt[3];

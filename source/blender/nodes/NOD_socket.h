@@ -4,7 +4,7 @@
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version. 
+ * of the License, or (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -49,7 +49,7 @@ struct bNodeSocket *node_add_socket_from_template(struct bNodeTree *ntree, struc
 void node_verify_socket_templates(struct bNodeTree *ntree, struct bNode *node);
 
 void node_socket_init_default_value(struct bNodeSocket *sock);
-void node_socket_copy_default_value(struct bNodeSocket *to, struct bNodeSocket *from);
+void node_socket_copy_default_value(struct bNodeSocket *to, const struct bNodeSocket *from);
 void register_standard_node_socket_types(void);
 
 #endif

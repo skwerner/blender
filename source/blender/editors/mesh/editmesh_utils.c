@@ -43,12 +43,14 @@
 
 #include "BKE_DerivedMesh.h"
 #include "BKE_context.h"
-#include "BKE_depsgraph.h"
+#include "BKE_main.h"
 #include "BKE_mesh.h"
 #include "BKE_mesh_mapping.h"
 #include "BKE_report.h"
 #include "BKE_editmesh.h"
 #include "BKE_editmesh_bvh.h"
+
+#include "DEG_depsgraph.h"
 
 #include "BKE_object.h"  /* XXX. only for EDBM_mesh_load(). */
 
@@ -169,6 +171,10 @@ bool EDBM_op_finish(BMEditMesh *em, BMOperator *bmop, wmOperator *op, const bool
 		 * but means we need to re-tessellate here */
 		if (em->looptris == NULL) {
 			BKE_editmesh_tessface_calc(em);
+		}
+
+		if (em->ob) {
+			DEG_id_tag_update(&((Mesh *)em->ob->data)->id, DEG_TAG_COPY_ON_WRITE);
 		}
 
 		return false;
@@ -323,9 +329,9 @@ void EDBM_mesh_make(Object *ob, const int select_mode, const bool add_key_index)
 
 /**
  * \warning This can invalidate the #DerivedMesh cache of other objects (for linked duplicates).
- * Most callers should run #DAG_id_tag_update on \a ob->data, see: T46738, T46913
+ * Most callers should run #DEG_id_tag_update on \a ob->data, see: T46738, T46913
  */
-void EDBM_mesh_load(Object *ob)
+void EDBM_mesh_load(Main *bmain, Object *ob)
 {
 	Mesh *me = ob->data;
 	BMesh *bm = me->edit_btmesh->bm;
@@ -337,7 +343,7 @@ void EDBM_mesh_load(Object *ob)
 	}
 
 	BM_mesh_bm_to_me(
-	        bm, me, (&(struct BMeshToMeshParams){
+	        bmain, bm, me, (&(struct BMeshToMeshParams){
 	            .calc_object_remap = true,
 	        }));
 
@@ -357,7 +363,7 @@ void EDBM_mesh_load(Object *ob)
 	 * cycles.
 	 */
 #if 0
-	for (Object *other_object = G.main->object.first;
+	for (Object *other_object = bmain->object.first;
 	     other_object != NULL;
 	     other_object = other_object->id.next)
 	{
@@ -511,7 +517,6 @@ UvVertMap *BM_uv_vert_map_create(
 	/* vars from original func */
 	UvVertMap *vmap;
 	UvMapVert *buf;
-	/* MTexPoly *tf; */ /* UNUSED */
 	MLoopUV *luv;
 	unsigned int a;
 	int totverts, i, totuv, totfaces;
@@ -553,15 +558,15 @@ UvVertMap *BM_uv_vert_map_create(
 
 	BM_ITER_MESH_INDEX (efa, &iter, bm, BM_FACES_OF_MESH, a) {
 		if ((use_select == false) || BM_elem_flag_test(efa, BM_ELEM_SELECT)) {
-			float (*tf_uv)[2];
+			float (*tf_uv)[2] = NULL;
 
 			if (use_winding) {
 				tf_uv = (float (*)[2])BLI_buffer_reinit_data(&tf_uv_buf, vec2f, efa->len);
 			}
 
 			BM_ITER_ELEM_INDEX(l, &liter, efa, BM_LOOPS_OF_FACE, i) {
-				buf->tfindex = i;
-				buf->f = a;
+				buf->loop_of_poly_index = i;
+				buf->poly_index = a;
 				buf->separate = 0;
 
 				buf->next = vmap->vert[BM_elem_index_get(l->v)];
@@ -592,10 +597,9 @@ UvVertMap *BM_uv_vert_map_create(
 			v->next = newvlist;
 			newvlist = v;
 
-			efa = BM_face_at_index(bm, v->f);
-			/* tf = CustomData_bmesh_get(&bm->pdata, efa->head.data, CD_MTEXPOLY); */ /* UNUSED */
+			efa = BM_face_at_index(bm, v->poly_index);
 
-			l = BM_iter_at_index(bm, BM_LOOPS_OF_FACE, efa, v->tfindex);
+			l = BM_iter_at_index(bm, BM_LOOPS_OF_FACE, efa, v->loop_of_poly_index);
 			luv = BM_ELEM_CD_GET_VOID_P(l, cd_loop_uv_offset);
 			uv = luv->uv;
 
@@ -604,17 +608,15 @@ UvVertMap *BM_uv_vert_map_create(
 
 			while (iterv) {
 				next = iterv->next;
-				efa = BM_face_at_index(bm, iterv->f);
-				/* tf = CustomData_bmesh_get(&bm->pdata, efa->head.data, CD_MTEXPOLY); */ /* UNUSED */
-
-				l = BM_iter_at_index(bm, BM_LOOPS_OF_FACE, efa, iterv->tfindex);
+				efa = BM_face_at_index(bm, iterv->poly_index);
+				l = BM_iter_at_index(bm, BM_LOOPS_OF_FACE, efa, iterv->loop_of_poly_index);
 				luv = BM_ELEM_CD_GET_VOID_P(l, cd_loop_uv_offset);
 				uv2 = luv->uv;
 
 				sub_v2_v2v2(uvdiff, uv2, uv);
 
 				if (fabsf(uvdiff[0]) < limit[0] && fabsf(uvdiff[1]) < limit[1] &&
-				    (!use_winding || winding[iterv->f] == winding[v->f]))
+				    (!use_winding || winding[iterv->poly_index] == winding[v->poly_index]))
 				{
 					if (lastv) lastv->next = next;
 					else vlist = next;
@@ -660,7 +662,7 @@ UvElementMap *BM_uv_element_map_create(
 	/* vars from original func */
 	UvElementMap *element_map;
 	UvElement *buf;
-	bool *winding;
+	bool *winding = NULL;
 	BLI_buffer_declare_static(vec2f, tf_uv_buf, BLI_BUFFER_NOP, BM_DEFAULT_NGON_STACK_SIZE);
 
 	MLoopUV *luv;
@@ -701,7 +703,7 @@ UvElementMap *BM_uv_element_map_create(
 		}
 
 		if (!selected || BM_elem_flag_test(efa, BM_ELEM_SELECT)) {
-			float (*tf_uv)[2];
+			float (*tf_uv)[2] = NULL;
 
 			if (use_winding) {
 				tf_uv = (float (*)[2])BLI_buffer_reinit_data(&tf_uv_buf, vec2f, efa->len);
@@ -711,7 +713,7 @@ UvElementMap *BM_uv_element_map_create(
 				buf->l = l;
 				buf->separate = 0;
 				buf->island = INVALID_ISLAND;
-				buf->tfindex = i;
+				buf->loop_of_poly_index = i;
 
 				buf->next = element_map->vert[BM_elem_index_get(l->v)];
 				element_map->vert[BM_elem_index_get(l->v)] = buf;
@@ -824,7 +826,7 @@ UvElementMap *BM_uv_element_map_create(
 								map[element - element_map->buf] = islandbufsize;
 								islandbuf[islandbufsize].l = element->l;
 								islandbuf[islandbufsize].separate = element->separate;
-								islandbuf[islandbufsize].tfindex = element->tfindex;
+								islandbuf[islandbufsize].loop_of_poly_index = element->loop_of_poly_index;
 								islandbuf[islandbufsize].island =  nislands;
 								islandbufsize++;
 
@@ -925,7 +927,7 @@ UvElement *BM_uv_element_get(UvElementMap *map, BMFace *efa, BMLoop *l)
 
 /* last_sel, use em->act_face otherwise get the last selected face in the editselections
  * at the moment, last_sel is mainly useful for making sure the space image dosnt flicker */
-BMFace *EDBM_uv_active_face_get(BMEditMesh *em, const bool sloppy, const bool selected, MTexPoly **r_tf)
+BMFace *EDBM_uv_active_face_get(BMEditMesh *em, const bool sloppy, const bool selected)
 {
 	BMFace *efa = NULL;
 
@@ -936,11 +938,9 @@ BMFace *EDBM_uv_active_face_get(BMEditMesh *em, const bool sloppy, const bool se
 	efa = BM_mesh_active_face_get(em->bm, sloppy, selected);
 
 	if (efa) {
-		if (r_tf) *r_tf = CustomData_bmesh_get(&em->bm->pdata, efa->head.data, CD_MTEXPOLY);
 		return efa;
 	}
 
-	if (r_tf) *r_tf = NULL;
 	return NULL;
 }
 
@@ -949,7 +949,6 @@ bool EDBM_uv_check(BMEditMesh *em)
 {
 	/* some of these checks could be a touch overkill */
 	return em && em->bm->totface &&
-	       CustomData_has_layer(&em->bm->pdata, CD_MTEXPOLY) &&
 	       CustomData_has_layer(&em->bm->ldata, CD_MLOOPUV);
 }
 
@@ -1008,7 +1007,7 @@ void EDBM_verts_mirror_cache_begin_ex(
 	BMesh *bm = em->bm;
 	BMIter iter;
 	BMVert *v;
-	int cd_vmirr_offset;
+	int cd_vmirr_offset = 0;
 	int i;
 	const float maxdist_sq = SQUARE(maxdist);
 
@@ -1036,7 +1035,7 @@ void EDBM_verts_mirror_cache_begin_ex(
 	BM_mesh_elem_index_ensure(bm, BM_VERT);
 
 	if (use_topology) {
-		ED_mesh_mirrtopo_init(me, NULL, -1, &mesh_topo_store, true);
+		ED_mesh_mirrtopo_init(me, NULL, &mesh_topo_store, true);
 	}
 	else {
 		tree = BLI_kdtree_new(bm->totvert);
@@ -1334,7 +1333,7 @@ void EDBM_update_generic(BMEditMesh *em, const bool do_tessface, const bool is_d
 {
 	Object *ob = em->ob;
 	/* order of calling isn't important */
-	DAG_id_tag_update(ob->data, OB_RECALC_DATA);
+	DEG_id_tag_update(ob->data, OB_RECALC_DATA);
 	WM_main_add_notifier(NC_GEOM | ND_DATA, ob->data);
 
 	if (do_tessface) {
@@ -1383,7 +1382,7 @@ DerivedMesh *EDBM_mesh_deform_dm_get(BMEditMesh *em)
  * \{ */
 
 /* poll call for mesh operators requiring a view3d context */
-int EDBM_view3d_poll(bContext *C)
+bool EDBM_view3d_poll(bContext *C)
 {
 	if (ED_operator_editmesh(C) && ED_operator_view3d_active(C)) {
 		return 1;
@@ -1486,7 +1485,9 @@ static void scale_point(float c1[3], const float p[3], const float s)
 	add_v3_v3(c1, p);
 }
 
-bool BMBVH_EdgeVisible(struct BMBVHTree *tree, BMEdge *e, ARegion *ar, View3D *v3d, Object *obedit)
+bool BMBVH_EdgeVisible(struct BMBVHTree *tree, BMEdge *e,
+                       struct Depsgraph *depsgraph,
+                       ARegion *ar, View3D *v3d, Object *obedit)
 {
 	BMFace *f;
 	float co1[3], co2[3], co3[3], dir1[3], dir2[3], dir3[3];
@@ -1498,7 +1499,7 @@ bool BMBVH_EdgeVisible(struct BMBVHTree *tree, BMEdge *e, ARegion *ar, View3D *v
 		ar->winy / 2.0f,
 	};
 
-	ED_view3d_win_to_segment(ar, v3d, mval_f, origin, end, false);
+	ED_view3d_win_to_segment(depsgraph, ar, v3d, mval_f, origin, end, false);
 
 	invert_m4_m4(invmat, obedit->obmat);
 	mul_m4_v3(invmat, origin);

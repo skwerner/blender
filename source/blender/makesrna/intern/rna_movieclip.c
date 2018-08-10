@@ -49,19 +49,19 @@
 
 #ifdef RNA_RUNTIME
 
-#include "BKE_depsgraph.h"
+#include "DEG_depsgraph.h"
 
 #include "ED_clip.h"
 
 #include "DNA_screen_types.h"
 #include "DNA_space_types.h"
 
-static void rna_MovieClip_reload_update(Main *UNUSED(bmain), Scene *UNUSED(scene), PointerRNA *ptr)
+static void rna_MovieClip_reload_update(Main *bmain, Scene *UNUSED(scene), PointerRNA *ptr)
 {
 	MovieClip *clip = (MovieClip *)ptr->id.data;
 
-	BKE_movieclip_reload(clip);
-	DAG_id_tag_update(&clip->id, 0);
+	BKE_movieclip_reload(bmain, clip);
+	DEG_id_tag_update(&clip->id, 0);
 }
 
 static void rna_MovieClip_size_get(PointerRNA *ptr, int *values)
@@ -251,7 +251,7 @@ static void rna_def_moviecliUser(BlenderRNA *brna)
 	prop = RNA_def_property(srna, "proxy_render_size", PROP_ENUM, PROP_NONE);
 	RNA_def_property_enum_sdna(prop, NULL, "render_size");
 	RNA_def_property_enum_items(prop, clip_render_size_items);
-	RNA_def_property_ui_text(prop, "Proxy render size",
+	RNA_def_property_ui_text(prop, "Proxy Render Size",
 	                         "Draw preview using full resolution or different proxy resolutions");
 	RNA_def_property_update(prop, NC_MOVIECLIP | ND_DISPLAY, "rna_MovieClipUser_proxy_render_settings_update");
 
@@ -338,6 +338,7 @@ static void rna_def_movieclip(BlenderRNA *brna)
 	prop = RNA_def_property(srna, "grease_pencil", PROP_POINTER, PROP_NONE);
 	RNA_def_property_pointer_sdna(prop, NULL, "gpd");
 	RNA_def_property_struct_type(prop, "GreasePencil");
+	RNA_def_property_pointer_funcs(prop, NULL, NULL, NULL, "rna_GPencil_datablocks_annotations_poll");
 	RNA_def_property_flag(prop, PROP_EDITABLE | PROP_ID_REFCOUNT);
 	RNA_def_property_ui_text(prop, "Grease Pencil", "Grease pencil data for this movie clip");
 	RNA_def_property_update(prop, NC_MOVIECLIP | ND_DISPLAY, NULL);

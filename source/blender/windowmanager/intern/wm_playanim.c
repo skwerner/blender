@@ -28,8 +28,11 @@
 /** \file blender/windowmanager/intern/wm_playanim.c
  *  \ingroup wm
  *
+ * Animation player for image sequences & video's with sound support.
+ * Launched in a separate process from Blender's #RENDER_OT_play_rendered_anim
+ *
  * \note This file uses ghost directly and none of the WM definitions.
- *       this could be made into its own module, alongside creator/
+ * this could be made into its own module, alongside creator.
  */
 
 #include <sys/types.h>
@@ -58,24 +61,31 @@
 #include "IMB_imbuf_types.h"
 #include "IMB_imbuf.h"
 
-#include "BKE_depsgraph.h"
 #include "BKE_image.h"
 
 #include "BIF_gl.h"
 #include "BIF_glutil.h"
+
+#include "GPU_matrix.h"
+#include "GPU_immediate.h"
+#include "GPU_immediate_util.h"
+#include "GPU_context.h"
+#include "GPU_init_exit.h"
 
 #include "DNA_scene_types.h"
 #include "ED_datafiles.h" /* for fonts */
 #include "GHOST_C-api.h"
 #include "BLF_api.h"
 
+#include "DEG_depsgraph.h"
+
 #include "WM_api.h"  /* only for WM_main_playanim */
 
 #ifdef WITH_AUDASPACE
-#  include AUD_DEVICE_H
-#  include AUD_HANDLE_H
-#  include AUD_SOUND_H
-#  include AUD_SPECIAL_H
+#  include <AUD_Device.h>
+#  include <AUD_Handle.h>
+#  include <AUD_Sound.h>
+#  include <AUD_Special.h>
 
 static AUD_Sound *source = NULL;
 static AUD_Handle *playback_handle = NULL;
@@ -96,7 +106,7 @@ typedef struct PlayState {
 
 	/* window and viewport size */
 	int win_x, win_y;
-	
+
 	/* current zoom level */
 	float zoom;
 
@@ -117,7 +127,7 @@ typedef struct PlayState {
 	bool  loading;
 	/* x/y image flip */
 	bool draw_flip[2];
-	
+
 	int fstep;
 
 	/* current picture */
@@ -129,9 +139,12 @@ typedef struct PlayState {
 
 	/* saves passing args */
 	struct ImBuf *curframe_ibuf;
-	
+
 	/* restarts player for file drop */
 	char dropped_file[FILE_MAX];
+
+	bool need_frame_update;
+	int frame_cursor_x;
 } PlayState;
 
 /* for debugging */
@@ -174,6 +187,7 @@ typedef enum eWS_Qual {
 static struct WindowStateGlobal {
 	GHOST_SystemHandle ghost_system;
 	void *ghost_window;
+	GPUContext *gpu_context;
 
 	/* events */
 	eWS_Qual qual;
@@ -190,10 +204,8 @@ static void playanim_window_get_size(int *r_width, int *r_height)
 static void playanim_gl_matrix(void)
 {
 	/* unified matrix, note it affects offset for drawing */
-	glMatrixMode(GL_PROJECTION);
-	glLoadIdentity();
-	glOrtho(0.0f, 1.0f, 0.0f, 1.0f, -1.0f, 1.0f);
-	glMatrixMode(GL_MODELVIEW);
+	/* note! cannot use GPU_matrix_ortho_2d_set here because shader ignores. */
+	GPU_matrix_ortho_set(0.0f, 1.0f, 0.0f, 1.0f, -1.0, 1.0f);
 }
 
 /* implementation */
@@ -308,42 +320,45 @@ static void playanim_toscreen(PlayState *ps, PlayAnimPict *picture, struct ImBuf
 
 	CLAMP(offs_x, 0.0f, 1.0f);
 	CLAMP(offs_y, 0.0f, 1.0f);
-	glRasterPos2f(offs_x, offs_y);
 
 	glClearColor(0.1, 0.1, 0.1, 0.0);
 	glClear(GL_COLOR_BUFFER_BIT);
-	
+
 	/* checkerboard for case alpha */
 	if (ibuf->planes == 32) {
 		glEnable(GL_BLEND);
-		glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+		glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
 
-		fdrawcheckerboard(offs_x, offs_y, offs_x + span_x, offs_y + span_y);
+		imm_draw_box_checker_2d(offs_x, offs_y, offs_x + span_x, offs_y + span_y);
 	}
 
-	glRasterPos2f(offs_x + (ps->draw_flip[0] ? span_x : 0.0f),
-	              offs_y + (ps->draw_flip[1] ? span_y : 0.0f));
+	IMMDrawPixelsTexState state = immDrawPixelsTexSetup(GPU_SHADER_2D_IMAGE_COLOR);
 
-	glPixelZoom(ps->zoom * (ps->draw_flip[0] ? -1.0f : 1.0f),
-	            ps->zoom * (ps->draw_flip[1] ? -1.0f : 1.0f));
-
-	glDrawPixels(ibuf->x, ibuf->y, GL_RGBA, GL_UNSIGNED_BYTE, ibuf->rect);
+	immDrawPixelsTex(
+	        &state,
+	        offs_x + (ps->draw_flip[0] ? span_x : 0.0f),
+	        offs_y + (ps->draw_flip[1] ? span_y : 0.0f),
+	        ibuf->x, ibuf->y, GL_RGBA, GL_UNSIGNED_BYTE, GL_NEAREST,
+	        ibuf->rect,
+	        ((ps->draw_flip[0] ? -1.0f : 1.0f)) * (ps->zoom / (float)ps->win_x),
+	        ((ps->draw_flip[1] ? -1.0f : 1.0f)) * (ps->zoom / (float)ps->win_y),
+	        NULL);
 
 	glDisable(GL_BLEND);
-	
+
 	pupdate_time();
 
 	if (picture && (g_WS.qual & (WS_QUAL_SHIFT | WS_QUAL_LMOUSE)) && (fontid != -1)) {
 		int sizex, sizey;
 		float fsizex_inv, fsizey_inv;
 		char str[32 + FILE_MAX];
-		cpack(-1);
 		BLI_snprintf(str, sizeof(str), "%s | %.2f frames/s", picture->name, fstep / swaptime);
 
 		playanim_window_get_size(&sizex, &sizey);
 		fsizex_inv = 1.0f / sizex;
 		fsizey_inv = 1.0f / sizey;
 
+		BLF_color4f(fontid, 1.0, 1.0, 1.0, 1.0);
 		BLF_enable(fontid, BLF_ASPECT);
 		BLF_aspect(fontid, fsizex_inv, fsizey_inv, 1.0f);
 		BLF_position(fontid, 10.0f * fsizex_inv, 10.0f * fsizey_inv, 0.0f);
@@ -354,24 +369,25 @@ static void playanim_toscreen(PlayState *ps, PlayAnimPict *picture, struct ImBuf
 		float fac = ps->picture->frame / (double)(((PlayAnimPict *)picsbase.last)->frame - ((PlayAnimPict *)picsbase.first)->frame);
 
 		fac = 2.0f * fac - 1.0f;
-		glMatrixMode(GL_PROJECTION);
-		glPushMatrix();
-		glLoadIdentity();
-		glMatrixMode(GL_MODELVIEW);
-		glPushMatrix();
-		glLoadIdentity();
+		GPU_matrix_push_projection();
+		GPU_matrix_identity_projection_set();
+		GPU_matrix_push();
+		GPU_matrix_identity_set();
 
-		glColor4f(0.0f, 1.0f, 0.0f, 1.0f);
+		uint pos = GPU_vertformat_attr_add(immVertexFormat(), "pos", GPU_COMP_F32, 2, GPU_FETCH_FLOAT);
 
-		glBegin(GL_LINES);
-		glVertex2f(fac, -1.0f);
-		glVertex2f(fac, 1.0f);
-		glEnd();
+		immBindBuiltinProgram(GPU_SHADER_2D_UNIFORM_COLOR);
+		immUniformColor3ub(0, 255, 0);
 
-		glPopMatrix();
-		glMatrixMode(GL_PROJECTION);
-		glPopMatrix();
-		glMatrixMode(GL_MODELVIEW);
+		immBegin(GPU_PRIM_LINES, 2);
+		immVertex2f(pos, fac, -1.0f);
+		immVertex2f(pos, fac,  1.0f);
+		immEnd();
+
+		immUnbindProgram();
+
+		GPU_matrix_pop();
+		GPU_matrix_pop_projection();
 	}
 
 	GHOST_SwapWindowBuffers(g_WS.ghost_window);
@@ -548,8 +564,18 @@ static void update_sound_fps(void)
 #endif
 }
 
-static void change_frame(PlayState *ps, int cx)
+static void tag_change_frame(PlayState *ps, int cx)
 {
+	ps->need_frame_update = true;
+	ps->frame_cursor_x = cx;
+}
+
+static void change_frame(PlayState *ps)
+{
+	if (!ps->need_frame_update) {
+		return;
+	}
+
 	int sizex, sizey;
 	int i, i_last;
 
@@ -559,7 +585,7 @@ static void change_frame(PlayState *ps, int cx)
 
 	playanim_window_get_size(&sizex, &sizey);
 	i_last = ((struct PlayAnimPict *)picsbase.last)->frame;
-	i = (i_last * cx) / sizex;
+	i = (i_last * ps->frame_cursor_x) / sizex;
 	CLAMP(i, 0, i_last);
 
 #ifdef WITH_AUDASPACE
@@ -600,6 +626,8 @@ static void change_frame(PlayState *ps, int cx)
 	ps->sstep = true;
 	ps->wait2 = false;
 	ps->next_frame = 0;
+
+	ps->need_frame_update = false;
 }
 
 static int ghost_event_proc(GHOST_EventHandle evt, GHOST_TUserDataPtr ps_void)
@@ -940,18 +968,18 @@ static int ghost_event_proc(GHOST_EventHandle evt, GHOST_TUserDataPtr ps_void)
 		{
 			GHOST_TEventButtonData *bd = GHOST_GetEventData(evt);
 			int cx, cy, sizex, sizey, inside_window;
-			
+
 			GHOST_GetCursorPosition(g_WS.ghost_system, &cx, &cy);
 			GHOST_ScreenToClient(g_WS.ghost_window, cx, cy, &cx, &cy);
 			playanim_window_get_size(&sizex, &sizey);
 
 			inside_window = (cx >= 0 && cx < sizex && cy >= 0 && cy <= sizey);
-			
+
 			if (bd->button == GHOST_kButtonMaskLeft) {
 				if (type == GHOST_kEventButtonDown) {
 					if (inside_window) {
 						g_WS.qual |= WS_QUAL_LMOUSE;
-						change_frame(ps, cx);
+						tag_change_frame(ps, cx);
 					}
 				}
 				else
@@ -996,7 +1024,7 @@ static int ghost_event_proc(GHOST_EventHandle evt, GHOST_TUserDataPtr ps_void)
 
 				GHOST_ScreenToClient(g_WS.ghost_window, cd->x, cd->y, &cx, &cy);
 
-				change_frame(ps, cx);
+				tag_change_frame(ps, cx);
 			}
 			break;
 		}
@@ -1010,23 +1038,23 @@ static int ghost_event_proc(GHOST_EventHandle evt, GHOST_TUserDataPtr ps_void)
 		case GHOST_kEventWindowMove:
 		{
 			float zoomx, zoomy;
-			
+
 			playanim_window_get_size(&ps->win_x, &ps->win_y);
 			GHOST_ActivateWindowDrawingContext(g_WS.ghost_window);
 
 			zoomx = (float) ps->win_x / ps->ibufx;
 			zoomy = (float) ps->win_y / ps->ibufy;
-			
+
 			/* zoom always show entire image */
 			ps->zoom = MIN2(zoomx, zoomy);
-			
+
 			/* zoom steps of 2 for speed */
 			ps->zoom = floor(ps->zoom + 0.5f);
 			if (ps->zoom < 1.0f) ps->zoom = 1.0f;
-			
+
 			glViewport(0, 0, ps->win_x, ps->win_y);
 			glScissor(0, 0, ps->win_x, ps->win_y);
-			
+
 			playanim_gl_matrix();
 
 			ptottime = 0.0;
@@ -1043,11 +1071,11 @@ static int ghost_event_proc(GHOST_EventHandle evt, GHOST_TUserDataPtr ps_void)
 		case GHOST_kEventDraggingDropDone:
 		{
 			GHOST_TEventDragnDropData *ddd = GHOST_GetEventData(evt);
-			
+
 			if (ddd->dataType == GHOST_kDragnDropTypeFilenames) {
 				GHOST_TStringArray *stra = ddd->data;
 				int a;
-				
+
 				for (a = 0; a < stra->count; a++) {
 					BLI_strncpy(ps->dropped_file, (char *)stra->strings[a], sizeof(ps->dropped_file));
 					ps->go = false;
@@ -1114,7 +1142,7 @@ static char *wm_main_playanim_intern(int argc, const char **argv)
 	int sfra = -1;
 	int efra = -1;
 	int totblock;
-	
+
 	PlayState ps = {0};
 
 	/* ps.doubleb   = true;*/ /* UNUSED */
@@ -1255,6 +1283,11 @@ static char *wm_main_playanim_intern(int argc, const char **argv)
 
 	//GHOST_ActivateWindowDrawingContext(g_WS.ghost_window);
 
+	/* initialize OpenGL immediate mode */
+	g_WS.gpu_context =  GPU_context_create();
+	GPU_init();
+	immActivate();
+
 	/* initialize the font */
 	BLF_init();
 	ps.fontid = BLF_load_mem("monospace", (unsigned char *)datatoc_bmonofont_ttf, datatoc_bmonofont_ttf_size);
@@ -1262,14 +1295,14 @@ static char *wm_main_playanim_intern(int argc, const char **argv)
 
 	ps.ibufx = ibuf->x;
 	ps.ibufy = ibuf->y;
-	
+
 	ps.win_x = ps.ibufx;
 	ps.win_y = ps.ibufy;
 
 	if (maxwinx % ibuf->x) maxwinx = ibuf->x * (1 + (maxwinx / ibuf->x));
 	if (maxwiny % ibuf->y) maxwiny = ibuf->y * (1 + (maxwiny / ibuf->y));
 
-	
+
 	glClearColor(0.1, 0.1, 0.1, 0.0);
 	glClear(GL_COLOR_BUFFER_BIT);
 
@@ -1428,23 +1461,18 @@ static char *wm_main_playanim_intern(int argc, const char **argv)
 
 			ps.next_frame = ps.direction;
 
-			while ((hasevent = GHOST_ProcessEvents(g_WS.ghost_system, ps.wait2))) {
-				if (hasevent) {
-					GHOST_DispatchEvents(g_WS.ghost_system);
-				}
-				/* Note, this still draws for mousemoves on pause */
-				if (ps.wait2) {
-					if (hasevent) {
-						if (ibuf) {
-							while (pupdate_time()) PIL_sleep_ms(1);
-							ptottime -= swaptime;
-							playanim_toscreen(&ps, ps.picture, ibuf, ps.fontid, ps.fstep);
-						}
-					}
-				}
-				if (ps.go == false) {
-					break;
-				}
+			while ((hasevent = GHOST_ProcessEvents(g_WS.ghost_system, 0))) {
+				GHOST_DispatchEvents(g_WS.ghost_system);
+			}
+			if (ps.go == false) {
+				break;
+			}
+			change_frame(&ps);
+			if (!hasevent) {
+				PIL_sleep_ms(1);
+			}
+			if (ps.wait2) {
+				continue;
 			}
 
 			ps.wait2 = ps.sstep;
@@ -1524,8 +1552,19 @@ static char *wm_main_playanim_intern(int argc, const char **argv)
 #endif
 	/* we still miss freeing a lot!,
 	 * but many areas could skip initialization too for anim play */
-	
+
+	GPU_shader_free_builtin_shaders();
+
+	if (g_WS.gpu_context) {
+		GPU_context_active_set(g_WS.gpu_context);
+		GPU_context_discard(g_WS.gpu_context);
+		g_WS.gpu_context = NULL;
+	}
+
 	BLF_exit();
+
+	immDeactivate();
+	GPU_exit();
 
 	GHOST_DisposeWindow(g_WS.ghost_system, g_WS.ghost_window);
 
@@ -1534,10 +1573,10 @@ static char *wm_main_playanim_intern(int argc, const char **argv)
 		BLI_strncpy(filepath, ps.dropped_file, sizeof(filepath));
 		return filepath;
 	}
-	
+
 	IMB_exit();
 	BKE_images_exit();
-	DAG_exit();
+	DEG_free_node_types();
 
 	totblock = MEM_get_memory_blocks_in_use();
 	if (totblock != 0) {
@@ -1547,7 +1586,7 @@ static char *wm_main_playanim_intern(int argc, const char **argv)
 		MEM_printmemlist();
 #endif
 	}
-	
+
 	return NULL;
 }
 

@@ -54,6 +54,7 @@
 #include "BKE_customdata.h"
 #include "BKE_data_transfer.h"
 #include "BKE_deform.h"  /* own include */
+#include "BKE_mesh.h"
 #include "BKE_mesh_mapping.h"
 #include "BKE_object_deform.h"
 
@@ -72,6 +73,10 @@ bDeformGroup *BKE_defgroup_new(Object *ob, const char *name)
 
 	BLI_addtail(&ob->defbase, defgroup);
 	defgroup_unique_name(defgroup, ob);
+
+	if (ob->type != OB_GPENCIL) {
+		BKE_mesh_batch_cache_dirty(ob->data, BKE_MESH_BATCH_DIRTY_ALL);
+	}
 
 	return defgroup;
 }
@@ -1189,7 +1194,12 @@ bool data_transfer_layersmapping_vgroups(
 
 		if (fromlayers >= 0) {
 			idx_src = fromlayers;
-			BLI_assert(idx_src < BLI_listbase_count(&ob_src->defbase));
+			if (idx_src >= BLI_listbase_count(&ob_src->defbase)) {
+				/* This can happen when vgroups are removed from source object...
+				 * Remapping would be really tricky here, we'd need to go over all objects in Main everytime we delete
+				 * a vgroup... for now, simpler and safer to abort. */
+				return false;
+			}
 		}
 		else if ((idx_src = ob_src->actdef - 1) == -1) {
 			return false;
@@ -1282,6 +1292,46 @@ bool data_transfer_layersmapping_vgroups(
 	}
 
 	return true;
+}
+
+/** \} */
+
+/* -------------------------------------------------------------------- */
+
+/** \name Various utils & helpers.
+ * \{ */
+
+void BKE_defvert_weight_to_rgb(float r_rgb[3], const float weight)
+{
+	const float blend = ((weight / 2.0f) + 0.5f);
+
+	if (weight <= 0.25f) {    /* blue->cyan */
+		r_rgb[0] = 0.0f;
+		r_rgb[1] = blend * weight * 4.0f;
+		r_rgb[2] = blend;
+	}
+	else if (weight <= 0.50f) {  /* cyan->green */
+		r_rgb[0] = 0.0f;
+		r_rgb[1] = blend;
+		r_rgb[2] = blend * (1.0f - ((weight - 0.25f) * 4.0f));
+	}
+	else if (weight <= 0.75f) {  /* green->yellow */
+		r_rgb[0] = blend * ((weight - 0.50f) * 4.0f);
+		r_rgb[1] = blend;
+		r_rgb[2] = 0.0f;
+	}
+	else if (weight <= 1.0f) {  /* yellow->red */
+		r_rgb[0] = blend;
+		r_rgb[1] = blend * (1.0f - ((weight - 0.75f) * 4.0f));
+		r_rgb[2] = 0.0f;
+	}
+	else {
+		/* exceptional value, unclamped or nan,
+		 * avoid uninitialized memory use */
+		r_rgb[0] = 1.0f;
+		r_rgb[1] = 0.0f;
+		r_rgb[2] = 1.0f;
+	}
 }
 
 /** \} */

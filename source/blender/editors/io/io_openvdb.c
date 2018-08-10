@@ -22,8 +22,38 @@
 #include "WM_api.h"
 #include "WM_types.h"
 
+#include "DEG_depsgraph.h"
+#include "DEG_depsgraph_build.h"
+
 #include "io_openvdb.h"
 #include "openvdb_capi.h"
+
+static int estimate_sample_level(const char *filepath)
+{
+	/* Estimate a sample level to avoid crashing when loading large volumes on
+	 * low-memory computers. */
+
+	int res[3], raw_res[3];
+	int sample_level = 0, result = 0;
+
+	struct OpenVDBReader *reader = OpenVDBReader_create();
+	OpenVDBReader_open(reader, filepath);
+	result = OpenVDBReader_get_bounds(reader, NULL, NULL, raw_res, NULL, NULL, NULL);
+	OpenVDBReader_free(reader);
+
+	if (!result) {
+		return 1;
+	}
+
+	do {
+		++sample_level;
+		for(int i = 0; i < 3; ++i) {
+			res[i] = raw_res[i] / sample_level + (raw_res[i] % sample_level != 0);
+		}
+	} while(res[0] * res[1] * res[2] > 40000000);
+
+	return sample_level;
+}
 
 static void wm_openvdb_import_draw(bContext *UNUSED(C), wmOperator *op)
 {
@@ -47,7 +77,8 @@ static int wm_openvdb_import_exec(bContext *C, wmOperator *op)
 
 	Main *bmain = CTX_data_main(C);
 	Scene *scene = CTX_data_scene(C);
-	Object *ob = BKE_object_add(bmain, scene, OB_MESH, filename);
+	ViewLayer *view_layer = CTX_data_view_layer(C);
+	Object *ob = BKE_object_add(bmain, scene, view_layer, OB_MESH, filename);
 
 	BLI_path_abs(filepath, ID_BLEND_PATH(G.main, (ID *)ob));
 	if (!BLI_exists(filepath)) {
@@ -61,19 +92,21 @@ static int wm_openvdb_import_exec(bContext *C, wmOperator *op)
 	smd->type = MOD_SMOKE_TYPE_DOMAIN;
 	smokeModifier_createType(smd);
 
-	smd->domain->flags |= MOD_SMOKE_FILE_LOAD;
-	smd->domain->flags |= MOD_SMOKE_ADAPTIVE_DOMAIN;
+	smd->domain->flags |= MOD_SMOKE_FILE_LOAD | MOD_SMOKE_ADAPTIVE_DOMAIN;
 	smd->domain->cache_file_format = PTCACHE_FILE_OPENVDB_EXTERN;
 	smd->domain->multi_import = 0;
-	smd->domain->sample_level = 0; /* initial import flag */
+	smd->domain->sample_level = estimate_sample_level(filepath);
 	BLI_strncpy(smd->domain->volume_filepath, filepath, sizeof(filepath));
+
+	DEG_id_tag_update(&scene->id, DEG_TAG_BASE_FLAGS_UPDATE);
+	DEG_relations_tag_update(bmain);
 
 	return OPERATOR_FINISHED;
 }
 
 void WM_OT_openvdb_import(wmOperatorType *ot)
 {
-	ot->name = "Import OpenVDB Smoke";
+	ot->name = "Import OpenVDB";
 	ot->description = "Load an external OpenVDB smoke file";
 	ot->idname = "WM_OT_openvdb_import";
 

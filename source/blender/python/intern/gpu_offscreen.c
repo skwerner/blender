@@ -35,10 +35,13 @@
 
 #include "WM_types.h"
 
+#include "BKE_global.h"
+#include "BKE_library.h"
+
 #include "ED_screen.h"
 
-#include "GPU_compositing.h"
 #include "GPU_framebuffer.h"
+#include "GPU_texture.h"
 
 #include "../mathutils/mathutils.h"
 
@@ -89,7 +92,8 @@ PyDoc_STRVAR(pygpu_offscreen_color_texture_doc, "Color texture.\n\n:type: int");
 static PyObject *pygpu_offscreen_color_texture_get(BPy_GPUOffScreen *self, void *UNUSED(type))
 {
 	BPY_GPU_OFFSCREEN_CHECK_OBJ(self);
-	return PyLong_FromLong(GPU_offscreen_color_texture(self->ofs));
+	GPUTexture *texture = GPU_offscreen_color_texture(self->ofs);
+	return PyLong_FromLong(GPU_texture_opengl_bindcode(texture));
 }
 
 PyDoc_STRVAR(pygpu_offscreen_bind_doc,
@@ -162,12 +166,15 @@ PyDoc_STRVAR(pygpu_offscreen_draw_view3d_doc,
 );
 static PyObject *pygpu_offscreen_draw_view3d(BPy_GPUOffScreen *self, PyObject *args, PyObject *kwds)
 {
-	static const char *kwlist[] = {"scene", "view3d", "region", "projection_matrix", "modelview_matrix", NULL};
+	/* TODO: This doesn't work currently because of missing depsgraph. */
+#if 0
+	static const char *kwlist[] = {"scene", "view_layer", "view3d", "region", "projection_matrix", "modelview_matrix", NULL};
 
 	MatrixObject *py_mat_modelview, *py_mat_projection;
-	PyObject *py_scene, *py_region, *py_view3d;
+	PyObject *py_scene, *py_view_layer, *py_region, *py_view3d;
 
 	Scene *scene;
+	ViewLayer *view_layer;
 	View3D *v3d;
 	ARegion *ar;
 	GPUFX *fx;
@@ -177,29 +184,30 @@ static PyObject *pygpu_offscreen_draw_view3d(BPy_GPUOffScreen *self, PyObject *a
 	BPY_GPU_OFFSCREEN_CHECK_OBJ(self);
 
 	if (!PyArg_ParseTupleAndKeywords(
-	        args, kwds, "OOOO&O&:draw_view3d", (char **)(kwlist),
-	        &py_scene, &py_view3d, &py_region,
+	        args, kwds, "OOOOO&O&:draw_view3d", (char **)(kwlist),
+	        &py_scene, &py_view_layer, &py_view3d, &py_region,
 	        Matrix_Parse4x4, &py_mat_projection,
 	        Matrix_Parse4x4, &py_mat_modelview) ||
-	    (!(scene    = PyC_RNA_AsPointer(py_scene, "Scene")) ||
-	     !(v3d      = PyC_RNA_AsPointer(py_view3d, "SpaceView3D")) ||
-	     !(ar       = PyC_RNA_AsPointer(py_region, "Region"))))
+	    (!(scene       = PyC_RNA_AsPointer(py_scene, "Scene")) ||
+	     !(view_layer = PyC_RNA_AsPointer(py_view_layer, "ViewLayer")) ||
+	     !(v3d         = PyC_RNA_AsPointer(py_view3d, "SpaceView3D")) ||
+	     !(ar          = PyC_RNA_AsPointer(py_region, "Region"))))
 	{
 		return NULL;
 	}
 
+	BLI_assert(BKE_id_is_in_gobal_main(&scene->id));
+
 	fx = GPU_fx_compositor_create();
 
 	fx_settings = v3d->fx_settings;  /* full copy */
-
-	ED_view3d_draw_offscreen_init(scene, v3d);
 
 	rv3d_mats = ED_view3d_mats_rv3d_backup(ar->regiondata);
 
 	GPU_offscreen_bind(self->ofs, true); /* bind */
 
 	ED_view3d_draw_offscreen(
-	        scene, v3d, ar, GPU_offscreen_width(self->ofs), GPU_offscreen_height(self->ofs),
+	        scene, view_layer, v3d, ar, GPU_offscreen_width(self->ofs), GPU_offscreen_height(self->ofs),
 	        (float(*)[4])py_mat_modelview->matrix, (float(*)[4])py_mat_projection->matrix,
 	        false, true, true, "",
 	        fx, &fx_settings,
@@ -212,6 +220,10 @@ static PyObject *pygpu_offscreen_draw_view3d(BPy_GPUOffScreen *self, PyObject *a
 	MEM_freeN(rv3d_mats);
 
 	Py_RETURN_NONE;
+#else
+	UNUSED_VARS(self, args, kwds);
+#endif
+	return NULL;
 }
 
 PyDoc_STRVAR(pygpu_offscreen_free_doc,
@@ -346,7 +358,7 @@ static PyObject *pygpu_offscreen_new(PyObject *UNUSED(self), PyObject *args, PyO
 		return NULL;
 	}
 
-	ofs = GPU_offscreen_create(width, height, samples, err_out);
+	ofs = GPU_offscreen_create(width, height, samples, true, false, err_out);
 
 	if (ofs == NULL) {
 		PyErr_Format(PyExc_RuntimeError,

@@ -1,7 +1,6 @@
 
-varying vec3 varposition;
-varying vec3 varnormal;
-
+out vec3 varposition;
+out vec3 varnormal;
 
 /* Color, keep in sync with: gpu_shader_vertex.glsl */
 
@@ -30,11 +29,7 @@ void srgb_to_linearrgb(vec4 col_from, out vec4 col_to)
 
 bool is_srgb(int info)
 {
-#ifdef USE_NEW_SHADING
 	return (info == 1)? true: false;
-#else
-	return false;
-#endif
 }
 
 void set_var_from_attr(float attr, int info, out float var)
@@ -78,4 +73,3 @@ void main()
 	varposition = gl_Vertex.xyz;
 
 	varnormal = normalize(-varposition);
-

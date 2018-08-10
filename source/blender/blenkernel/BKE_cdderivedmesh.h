@@ -36,6 +36,7 @@
 #define __BKE_CDDERIVEDMESH_H__
 
 #include "BKE_DerivedMesh.h"
+#include "BKE_customdata.h"
 
 struct DerivedMesh;
 struct BMEditMesh;
@@ -52,6 +53,10 @@ struct DerivedMesh *CDDM_new(int numVerts, int numEdges, int numFaces,
  * calculate normals as those functions will automatically create new
  * data to not overwrite the original */
 struct DerivedMesh *CDDM_from_mesh(struct Mesh *mesh);
+
+/* creates a CDDerivedMesh from the given Mesh with custom allocation type. */
+struct DerivedMesh *CDDM_from_mesh_ex(struct Mesh *mesh, eCDAllocType alloctype, CustomDataMask mask);
+
 
 struct DerivedMesh *CDDM_from_bmesh(struct BMesh *bm, const bool use_mdisps);
 
@@ -174,4 +179,3 @@ void CDDM_set_mloop(struct DerivedMesh *dm, struct MLoop *mloop);
 void CDDM_set_mpoly(struct DerivedMesh *dm, struct MPoly *mpoly);
 
 #endif
-

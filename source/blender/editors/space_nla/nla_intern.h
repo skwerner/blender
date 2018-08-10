@@ -4,7 +4,7 @@
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version. 
+ * of the License, or (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -18,7 +18,7 @@
  * The Original Code is Copyright (C) 2009 Blender Foundation, Joshua Leung.
  * All rights reserved.
  *
- * 
+ *
  * Contributor(s): Blender Foundation, Joshua Leung
  *
  * ***** END GPL LICENSE BLOCK *****
@@ -65,7 +65,7 @@ enum eNlaEdit_LeftRightSelect_Mode {
 
 /* --- */
 
-void NLA_OT_select_all_toggle(wmOperatorType *ot);
+void NLA_OT_select_all(wmOperatorType *ot);
 void NLA_OT_select_border(wmOperatorType *ot);
 void NLA_OT_select_leftright(wmOperatorType *ot);
 void NLA_OT_click_select(wmOperatorType *ot);
@@ -148,8 +148,8 @@ void NLA_OT_selected_objects_add(wmOperatorType *ot);
 /* **************************************** */
 /* nla_ops.c */
 
-int nlaop_poll_tweakmode_off(bContext *C);
-int nlaop_poll_tweakmode_on(bContext *C);
+bool nlaop_poll_tweakmode_off(bContext *C);
+bool nlaop_poll_tweakmode_on(bContext *C);
 
 bool nlaedit_is_tweakmode_on(bAnimContext *ac);
 
@@ -159,4 +159,3 @@ void nla_operatortypes(void);
 void nla_keymap(wmKeyConfig *keyconf);
 
 #endif /* __NLA_INTERN_H__ */
-

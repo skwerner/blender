@@ -4,7 +4,7 @@
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version. 
+ * of the License, or (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -34,14 +34,22 @@
 #define __RE_MULTIRES_BAKE_H__
 
 struct MultiresBakeRender;
+struct Scene;
 
 typedef struct MultiresBakeRender {
+	Scene *scene;
 	DerivedMesh *lores_dm, *hires_dm;
 	bool simple;
 	int bake_filter;      /* Bake-filter, aka margin */
 	int lvl, tot_lvl;
 	short mode;
 	bool use_lores_mesh;  /* Use low-resolution mesh when baking displacement maps */
+
+	/* material aligned image array (for per-face bake image) */
+	struct {
+		Image **array;
+		int     len;
+	} ob_image;
 
 	int number_of_rays;   /* Number of rays to be cast when doing AO baking */
 	float bias;           /* Bias between object and start ray point when doing AO baking */

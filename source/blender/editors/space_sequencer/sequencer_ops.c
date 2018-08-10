@@ -68,7 +68,7 @@ void sequencer_operatortypes(void)
 	WM_operatortype_append(SEQUENCER_OT_meta_toggle);
 	WM_operatortype_append(SEQUENCER_OT_meta_make);
 	WM_operatortype_append(SEQUENCER_OT_meta_separate);
-	
+
 	WM_operatortype_append(SEQUENCER_OT_gap_remove);
 	WM_operatortype_append(SEQUENCER_OT_gap_insert);
 	WM_operatortype_append(SEQUENCER_OT_snap);
@@ -135,7 +135,7 @@ void sequencer_keymap(wmKeyConfig *keyconf)
 {
 	wmKeyMap *keymap;
 	wmKeyMapItem *kmi;
-	
+
 	/* Common items ------------------------------------------------------------------ */
 	keymap = WM_keymap_find(keyconf, "SequencerCommon", SPACE_SEQ, 0);
 
@@ -151,7 +151,9 @@ void sequencer_keymap(wmKeyConfig *keyconf)
 	keymap = WM_keymap_find(keyconf, "Sequencer", SPACE_SEQ, 0);
 
 	kmi = WM_keymap_add_item(keymap, "SEQUENCER_OT_select_all", AKEY, KM_PRESS, 0, 0);
-	RNA_enum_set(kmi->ptr, "action", SEL_TOGGLE);
+	RNA_enum_set(kmi->ptr, "action", SEL_SELECT);
+	kmi = WM_keymap_add_item(keymap, "SEQUENCER_OT_select_all", AKEY, KM_PRESS, KM_ALT, 0);
+	RNA_enum_set(kmi->ptr, "action", SEL_DESELECT);
 	kmi = WM_keymap_add_item(keymap, "SEQUENCER_OT_select_all", IKEY, KM_PRESS, KM_CTRL, 0);
 	RNA_enum_set(kmi->ptr, "action", SEL_INVERT);
 
@@ -198,7 +200,7 @@ void sequencer_keymap(wmKeyConfig *keyconf)
 	WM_keymap_add_item(keymap, "SEQUENCER_OT_meta_toggle", TABKEY, KM_PRESS, 0, 0);
 
 	WM_keymap_add_item(keymap, "SEQUENCER_OT_meta_make", GKEY, KM_PRESS, KM_CTRL, 0);
-	WM_keymap_add_item(keymap, "SEQUENCER_OT_meta_separate", GKEY, KM_PRESS, KM_ALT, 0);
+	WM_keymap_add_item(keymap, "SEQUENCER_OT_meta_separate", GKEY, KM_PRESS, KM_CTRL | KM_ALT, 0);
 
 	WM_keymap_add_item(keymap, "SEQUENCER_OT_view_all", HOMEKEY, KM_PRESS, 0, 0);
 #ifdef WITH_INPUT_NDOF
@@ -228,7 +230,7 @@ void sequencer_keymap(wmKeyConfig *keyconf)
 	RNA_boolean_set(WM_keymap_add_item(keymap, "SEQUENCER_OT_gap_remove", BACKSPACEKEY, KM_PRESS, 0, 0)->ptr, "all", false);
 	RNA_boolean_set(WM_keymap_add_item(keymap, "SEQUENCER_OT_gap_remove", BACKSPACEKEY, KM_PRESS, KM_SHIFT, 0)->ptr, "all", true);
 	WM_keymap_add_item(keymap, "SEQUENCER_OT_gap_insert", EQUALKEY, KM_PRESS, KM_SHIFT, 0);
-	
+
 	WM_keymap_add_item(keymap, "SEQUENCER_OT_snap", SKEY, KM_PRESS, KM_SHIFT, 0);
 	WM_keymap_add_item(keymap, "SEQUENCER_OT_swap_inputs", SKEY, KM_PRESS, KM_ALT, 0);
 

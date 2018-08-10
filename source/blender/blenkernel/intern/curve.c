@@ -53,7 +53,6 @@
 
 #include "BKE_animsys.h"
 #include "BKE_curve.h"
-#include "BKE_depsgraph.h"
 #include "BKE_displist.h"
 #include "BKE_font.h"
 #include "BKE_global.h"
@@ -128,6 +127,8 @@ void BKE_curve_editNurb_free(Curve *cu)
 void BKE_curve_free(Curve *cu)
 {
 	BKE_animdata_free((ID *)cu, false);
+
+	BKE_curve_batch_cache_free(cu);
 
 	BKE_nurbList_free(&cu->nurb);
 	BKE_curve_editfont_free(cu);
@@ -209,8 +210,9 @@ void BKE_curve_copy_data(Main *bmain, Curve *cu_dst, const Curve *cu_src, const 
 	cu_dst->strinfo = MEM_dupallocN(cu_src->strinfo);
 	cu_dst->tb = MEM_dupallocN(cu_src->tb);
 	cu_dst->bb = MEM_dupallocN(cu_src->bb);
+	cu_dst->batch_cache = NULL;
 
-	if (cu_src->key) {
+	if (cu_src->key && (flag & LIB_ID_COPY_SHAPEKEY)) {
 		BKE_id_copy_ex(bmain, &cu_src->key->id, (ID **)&cu_dst->key, flag, false);
 	}
 
@@ -221,7 +223,7 @@ void BKE_curve_copy_data(Main *bmain, Curve *cu_dst, const Curve *cu_src, const 
 Curve *BKE_curve_copy(Main *bmain, const Curve *cu)
 {
 	Curve *cu_copy;
-	BKE_id_copy_ex(bmain, &cu->id, (ID **)&cu_copy, 0, false);
+	BKE_id_copy_ex(bmain, &cu->id, (ID **)&cu_copy, LIB_ID_COPY_SHAPEKEY, false);
 	return cu_copy;
 }
 
@@ -1026,7 +1028,7 @@ static void basisNurb(float t, short order, int pnts, float *knots, float *basis
 	/* this is for float inaccuracy */
 	if (t < knots[0])
 		t = knots[0];
-	else if (t > knots[opp2]) 
+	else if (t > knots[opp2])
 		t = knots[opp2];
 
 	/* this part is order '1' */
@@ -1622,7 +1624,7 @@ float *BKE_curve_surf_make_orco(Object *ob)
 /* NOTE: This routine is tied to the order of vertex
  * built by displist and as passed to the renderer.
  */
-float *BKE_curve_make_orco(Scene *scene, Object *ob, int *r_numVerts)
+float *BKE_curve_make_orco(Depsgraph *depsgraph, Scene *scene, Object *ob, int *r_numVerts)
 {
 	Curve *cu = ob->data;
 	DispList *dl;
@@ -1630,7 +1632,7 @@ float *BKE_curve_make_orco(Scene *scene, Object *ob, int *r_numVerts)
 	float *fp, *coord_array;
 	ListBase disp = {NULL, NULL};
 
-	BKE_displist_make_curveTypes_forOrco(scene, ob, &disp);
+	BKE_displist_make_curveTypes_forOrco(depsgraph, scene, ob, &disp);
 
 	numVerts = 0;
 	for (dl = disp.first; dl; dl = dl->next) {
@@ -1721,8 +1723,9 @@ float *BKE_curve_make_orco(Scene *scene, Object *ob, int *r_numVerts)
 
 /* ***************** BEVEL ****************** */
 
-void BKE_curve_bevel_make(Scene *scene, Object *ob, ListBase *disp,
-                          const bool for_render, const bool use_render_resolution)
+void BKE_curve_bevel_make(
+        Depsgraph *depsgraph, Scene *scene, Object *ob, ListBase *disp,
+        const bool for_render, const bool use_render_resolution)
 {
 	DispList *dl, *dlnew;
 	Curve *bevcu, *cu;
@@ -1746,14 +1749,14 @@ void BKE_curve_bevel_make(Scene *scene, Object *ob, ListBase *disp,
 			facy = cu->bevobj->size[1];
 
 			if (for_render) {
-				BKE_displist_make_curveTypes_forRender(scene, cu->bevobj, &bevdisp, NULL, false, use_render_resolution);
+				BKE_displist_make_curveTypes_forRender(depsgraph, scene, cu->bevobj, &bevdisp, NULL, false, use_render_resolution);
 				dl = bevdisp.first;
 			}
-			else if (cu->bevobj->curve_cache) {
-				dl = cu->bevobj->curve_cache->disp.first;
+			else if (cu->bevobj->runtime.curve_cache) {
+				dl = cu->bevobj->runtime.curve_cache->disp.first;
 			}
 			else {
-				BLI_assert(cu->bevobj->curve_cache != NULL);
+				BLI_assert(cu->bevobj->runtime.curve_cache != NULL);
 				dl = NULL;
 			}
 
@@ -2135,7 +2138,7 @@ static void alfa_bezpart(BezTriple *prevbezt, BezTriple *bezt, Nurb *nu, float *
 				if (tilt_array == NULL || nu->tilt_interp != nu->radius_interp) {
 					key_curve_position_weights(fac, t, nu->radius_interp);
 				}
-				*radius_array = 
+				*radius_array =
 				        t[0] * pprev->radius + t[1] * prevbezt->radius +
 				        t[2] * bezt->radius + t[3] * next->radius;
 			}
@@ -2145,7 +2148,7 @@ static void alfa_bezpart(BezTriple *prevbezt, BezTriple *bezt, Nurb *nu, float *
 
 		if (weight_array) {
 			/* basic interpolation for now, could copy tilt interp too  */
-			*weight_array = 
+			*weight_array =
 			        prevbezt->weight +
 			        (bezt->weight - prevbezt->weight) * (3.0f * fac * fac - 2.0f * fac * fac * fac);
 
@@ -2666,24 +2669,24 @@ void BKE_curve_bevelList_make(Object *ob, ListBase *nurbs, bool for_render)
 		ELEM(cu->bevfac2_mapping, CU_BEVFAC_MAP_SEGMENT, CU_BEVFAC_MAP_SPLINE);
 
 
-	bev = &ob->curve_cache->bev;
+	bev = &ob->runtime.curve_cache->bev;
 
 	/* do we need to calculate the radius for each point? */
 	/* do_radius = (cu->bevobj || cu->taperobj || (cu->flag & CU_FRONT) || (cu->flag & CU_BACK)) ? 0 : 1; */
 
 	/* STEP 1: MAKE POLYS  */
 
-	BKE_curve_bevelList_free(&ob->curve_cache->bev);
+	BKE_curve_bevelList_free(&ob->runtime.curve_cache->bev);
 	nu = nurbs->first;
 	if (cu->editnurb && ob->type != OB_FONT) {
 		is_editmode = 1;
 	}
 
 	for (; nu; nu = nu->next) {
-		
+
 		if (nu->hide && is_editmode)
 			continue;
-		
+
 		/* check if we will calculate tilt data */
 		do_tilt = CU_DO_TILT(cu, nu);
 		do_radius = CU_DO_RADIUS(cu, nu); /* normal display uses the radius, better just to calculate them */
@@ -4959,7 +4962,7 @@ bool BKE_curve_minmax(Curve *cu, bool use_radius, float min[3], float max[3])
 	 */
 	if (is_font) {
 		nurb_lb = &temp_nurb_lb;
-		BKE_vfont_to_curve_ex(G.main, NULL, cu, FO_EDIT, nurb_lb,
+		BKE_vfont_to_curve_ex(NULL, cu, FO_EDIT, nurb_lb,
 		                      NULL, NULL, NULL, NULL);
 		use_radius = false;
 	}
@@ -5157,7 +5160,7 @@ void BKE_curve_material_index_clear(Curve *cu)
 	}
 }
 
-int BKE_curve_material_index_validate(Curve *cu)
+bool BKE_curve_material_index_validate(Curve *cu)
 {
 	const int curvetype = BKE_curve_type_get(cu);
 	bool is_valid = true;
@@ -5185,7 +5188,7 @@ int BKE_curve_material_index_validate(Curve *cu)
 	}
 
 	if (!is_valid) {
-		DAG_id_tag_update(&cu->id, OB_RECALC_DATA);
+		DEG_id_tag_update(&cu->id, OB_RECALC_DATA);
 		return true;
 	}
 	else {
@@ -5252,11 +5255,28 @@ void BKE_curve_rect_from_textbox(const struct Curve *cu, const struct TextBox *t
 
 /* **** Depsgraph evaluation **** */
 
-void BKE_curve_eval_geometry(EvaluationContext *UNUSED(eval_ctx),
+void BKE_curve_eval_geometry(Depsgraph *depsgraph,
                              Curve *curve)
 {
-	DEG_debug_print_eval(__func__, curve->id.name, curve);
+	DEG_debug_print_eval(depsgraph, __func__, curve->id.name, curve);
 	if (curve->bb == NULL || (curve->bb->flag & BOUNDBOX_DIRTY)) {
 		BKE_curve_texspace_calc(curve);
+	}
+}
+
+/* Draw Engine */
+void (*BKE_curve_batch_cache_dirty_cb)(Curve *cu, int mode) = NULL;
+void (*BKE_curve_batch_cache_free_cb)(Curve *cu) = NULL;
+
+void BKE_curve_batch_cache_dirty(Curve *cu, int mode)
+{
+	if (cu->batch_cache) {
+		BKE_curve_batch_cache_dirty_cb(cu, mode);
+	}
+}
+void BKE_curve_batch_cache_free(Curve *cu)
+{
+	if (cu->batch_cache) {
+		BKE_curve_batch_cache_free_cb(cu);
 	}
 }

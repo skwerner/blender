@@ -36,7 +36,22 @@ CCL_NAMESPACE_BEGIN
 
 /* CUDA has its own half data type, no need to define then */
 #ifndef __KERNEL_CUDA__
-typedef unsigned short half;
+/* Implementing this as a class rather than a typedef so that the compiler can tell it apart from unsigned shorts. */
+class half {
+public:
+	half() : v(0) {}
+	half(const unsigned short& i) : v(i) {}
+	operator unsigned short() { return v; }
+	half& operator=(const unsigned short& i) { v = i; return *this; }
+	friend bool operator==(const half& a, const half& b) { return a.v == b.v; }
+	friend bool operator!=(const half& a, const half& b) { return a.v != b.v; }
+	friend bool operator<(const half& a, const half& b) { return a.v < b.v; }
+	friend bool operator>(const half& a, const half& b) { return a.v > b.v; }
+	friend bool operator<=(const half& a, const half& b) { return a.v <= b.v; }
+	friend bool operator>=(const half& a, const half& b) { return a.v >= b.v; }
+private:
+	unsigned short v;
+};
 #endif /* __KERNEL_CUDA__ */
 
 struct half4 { half x, y, z, w; };

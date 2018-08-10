@@ -42,11 +42,11 @@ def example_function(text, save_path, render_path):
     scene.camera = cam_ob       # set the active camera
     cam_ob.location = 0.0, 0.0, 10.0
 
-    # Lamp
-    lamp_data = bpy.data.lamps.new("MyLamp", 'POINT')
-    lamp_ob = bpy.data.objects.new(name="MyCam", object_data=lamp_data)
-    scene.objects.link(lamp_ob)
-    lamp_ob.location = 2.0, 2.0, 5.0
+    # Light
+    light_data = bpy.data.lights.new("MyLight", 'POINT')
+    light_ob = bpy.data.objects.new(name="MyCam", object_data=light_data)
+    scene.objects.link(light_ob)
+    light_ob.location = 2.0, 2.0, 5.0
 
     if save_path:
         bpy.ops.wm.save_as_mainfile(filepath=save_path)
@@ -73,21 +73,27 @@ def main():
 
     # When --help or no args are given, print this help
     usage_text = (
-            "Run blender in background mode with this script:"
-            "  blender --background --python " + __file__ + " -- [options]"
-            )
+        "Run blender in background mode with this script:"
+        "  blender --background --python " + __file__ + " -- [options]"
+    )
 
     parser = argparse.ArgumentParser(description=usage_text)
 
     # Example utility, add some text and renders or saves it (with options)
     # Possible types are: string, int, long, choice, float and complex.
-    parser.add_argument("-t", "--text", dest="text", type=str, required=True,
-            help="This text will be used to render an image")
+    parser.add_argument(
+        "-t", "--text", dest="text", type=str, required=True,
+        help="This text will be used to render an image",
+    )
 
-    parser.add_argument("-s", "--save", dest="save_path", metavar='FILE',
-            help="Save the generated file to the specified path")
-    parser.add_argument("-r", "--render", dest="render_path", metavar='FILE',
-            help="Render an image to the specified path")
+    parser.add_argument(
+        "-s", "--save", dest="save_path", metavar='FILE',
+        help="Save the generated file to the specified path",
+    )
+    parser.add_argument(
+        "-r", "--render", dest="render_path", metavar='FILE',
+        help="Render an image to the specified path",
+    )
 
     args = parser.parse_args(argv)  # In this example we wont use the args
 

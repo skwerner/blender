@@ -29,6 +29,7 @@ set(INC
 	../../ikplugin
 	../../makesdna
 	../../makesrna
+	../../render/extern/include
 	../../windowmanager
 	../../depsgraph
 	../../../../intern/guardedalloc
@@ -45,7 +46,8 @@ set(SRC
 	transform_conversions.c
 	transform_generics.c
 	transform_input.c
-	transform_manipulator.c
+	transform_gizmo_2d.c
+	transform_gizmo_3d.c
 	transform_ops.c
 	transform_orientations.c
 	transform_snap.c
@@ -56,10 +58,6 @@ set(SRC
 
 if(WITH_INTERNATIONAL)
 	add_definitions(-DWITH_INTERNATIONAL)
-endif()
-
-if(WITH_LEGACY_DEPSGRAPH)
-	add_definitions(-DWITH_LEGACY_DEPSGRAPH)
 endif()
 
 add_definitions(${GL_DEFINITIONS})

@@ -47,8 +47,11 @@
 #include "BLI_task.h"
 
 #include "BKE_shrinkwrap.h"
+#include "BKE_cdderivedmesh.h"
 #include "BKE_DerivedMesh.h"
 #include "BKE_lattice.h"
+#include "BKE_library.h"
+#include "BKE_modifier.h"
 
 #include "BKE_deform.h"
 #include "BKE_editmesh.h"
@@ -154,16 +157,16 @@ static void shrinkwrap_calc_nearest_vertex(ShrinkwrapCalcData *calc)
 	BVHTreeFromMesh treeData = NULL_BVHTreeFromMesh;
 	BVHTreeNearest nearest  = NULL_BVHTreeNearest;
 
-	if (calc->target != NULL && calc->target->getNumVerts(calc->target) == 0) {
+	if (calc->target != NULL && calc->target->totvert == 0) {
 		return;
 	}
 
-	TIMEIT_BENCH(bvhtree_from_mesh_get(&treeData, calc->target, BVHTREE_FROM_VERTS, 2), bvhtree_verts);
+	TIMEIT_BENCH(BKE_bvhtree_from_mesh_get(&treeData, calc->target, BVHTREE_FROM_VERTS, 2), bvhtree_verts);
 	if (treeData.tree == NULL) {
 		OUT_OF_MEMORY();
 		return;
 	}
-	
+
 	/* Setup nearest */
 	nearest.index = -1;
 	nearest.dist_sq = FLT_MAX;
@@ -297,7 +300,7 @@ static void shrinkwrap_calc_normal_projection_cb_ex(
 	}
 
 	if (calc->vert) {
-		/* calc->vert contains verts from derivedMesh  */
+		/* calc->vert contains verts from evaluated mesh.  */
 		/* this coordinated are deformed by vertexCos only for normal projection (to get correct normals) */
 		/* for other cases calc->varts contains undeformed coordinates and vertexCos should be used */
 		if (calc->smd->projAxis == MOD_SHRINKWRAP_PROJECT_OVER_NORMAL) {
@@ -354,7 +357,7 @@ static void shrinkwrap_calc_normal_projection_cb_ex(
 	/* don't set the initial dist (which is more efficient),
 	 * because its calculated in the targets space, we want the dist in our own space */
 	if (proj_limit_squared != 0.0f) {
-		if (len_squared_v3v3(hit->co, co) > proj_limit_squared) {
+		if (hit->index != -1 && len_squared_v3v3(hit->co, co) > proj_limit_squared) {
 			hit->index = -1;
 		}
 	}
@@ -365,7 +368,7 @@ static void shrinkwrap_calc_normal_projection_cb_ex(
 	}
 }
 
-static void shrinkwrap_calc_normal_projection(ShrinkwrapCalcData *calc, bool for_render)
+static void shrinkwrap_calc_normal_projection(ShrinkwrapCalcData *calc)
 {
 	/* Options about projection direction */
 	float proj_axis[3]      = {0.0f, 0.0f, 0.0f};
@@ -379,7 +382,8 @@ static void shrinkwrap_calc_normal_projection(ShrinkwrapCalcData *calc, bool for
 	void *treeData = NULL;
 
 	/* auxiliary target */
-	DerivedMesh *auxMesh    = NULL;
+	Mesh *auxMesh = NULL;
+	bool auxMesh_free;
 	void *auxData = NULL;
 	SpaceTransform local2aux;
 
@@ -388,7 +392,7 @@ static void shrinkwrap_calc_normal_projection(ShrinkwrapCalcData *calc, bool for
 	if ((calc->smd->shrinkOpts & (MOD_SHRINKWRAP_PROJECT_ALLOW_POS_DIR | MOD_SHRINKWRAP_PROJECT_ALLOW_NEG_DIR)) == 0)
 		return;
 
-	if (calc->target != NULL && calc->target->getNumPolys(calc->target) == 0) {
+	if (calc->target != NULL && calc->target->totpoly == 0) {
 		return;
 	}
 
@@ -412,7 +416,7 @@ static void shrinkwrap_calc_normal_projection(ShrinkwrapCalcData *calc, bool for
 	}
 
 	if (calc->smd->auxTarget) {
-		auxMesh = object_get_derived_final(calc->smd->auxTarget, for_render);
+		auxMesh = BKE_modifier_get_evaluated_mesh_from_evaluated_object(calc->smd->auxTarget, &auxMesh_free);
 		if (!auxMesh)
 			return;
 		BLI_SPACE_TRANSFORM_SETUP(&local2aux, calc->ob, calc->smd->auxTarget);
@@ -427,47 +431,24 @@ static void shrinkwrap_calc_normal_projection(ShrinkwrapCalcData *calc, bool for
 
 	BVHTree *targ_tree;
 	void *targ_callback;
-	if (calc->smd->target && calc->target->type == DM_TYPE_EDITBMESH) {
-		emtarget = BKE_editmesh_from_object(calc->smd->target);
-		if ((targ_tree = bvhtree_from_editmesh_looptri(
-		         &treedata_stack.emtreedata, emtarget, 0.0, 4, 6, &calc->target->bvhCache)))
-		{
-			targ_callback = treedata_stack.emtreedata.raycast_callback;
-			treeData = &treedata_stack.emtreedata;
-		}
-	}
-	else {
-		if ((targ_tree = bvhtree_from_mesh_get(
-		             &treedata_stack.dmtreedata, calc->target, BVHTREE_FROM_LOOPTRI, 4)))
-		{
-			targ_callback = treedata_stack.dmtreedata.raycast_callback;
-			treeData = &treedata_stack.dmtreedata;
-		}
-	}
-	if (targ_tree) {
+	if ((targ_tree = BKE_bvhtree_from_mesh_get(
+	         &treedata_stack.dmtreedata, calc->target, BVHTREE_FROM_LOOPTRI, 4)))
+	{
+		targ_callback = treedata_stack.dmtreedata.raycast_callback;
+		treeData = &treedata_stack.dmtreedata;
+
 		BVHTree *aux_tree = NULL;
 		void *aux_callback = NULL;
-		if (auxMesh != NULL && auxMesh->getNumPolys(auxMesh) != 0) {
+		if (auxMesh != NULL && auxMesh->totpoly != 0) {
 			/* use editmesh to avoid array allocation */
-			if (calc->smd->auxTarget && auxMesh->type == DM_TYPE_EDITBMESH) {
-				emaux = BKE_editmesh_from_object(calc->smd->auxTarget);
-				if ((aux_tree = bvhtree_from_editmesh_looptri(
-				         &auxdata_stack.emtreedata, emaux, 0.0, 4, 6, &auxMesh->bvhCache)))
-				{
-					aux_callback = auxdata_stack.emtreedata.raycast_callback;
-					auxData = &auxdata_stack.emtreedata;
-				}
-			}
-			else {
-				if ((aux_tree = bvhtree_from_mesh_get(
-				        &auxdata_stack.dmtreedata, auxMesh, BVHTREE_FROM_LOOPTRI, 4)) != NULL)
-				{
-					aux_callback = auxdata_stack.dmtreedata.raycast_callback;
-					auxData = &auxdata_stack.dmtreedata;
-				}
+			if ((aux_tree = BKE_bvhtree_from_mesh_get(
+			         &auxdata_stack.dmtreedata, auxMesh, BVHTREE_FROM_LOOPTRI, 4)) != NULL)
+			{
+				aux_callback = auxdata_stack.dmtreedata.raycast_callback;
+				auxData = &auxdata_stack.dmtreedata;
 			}
 		}
-		/* After sucessufuly build the trees, start projection vertexs */
+		/* After successfully build the trees, start projection vertices. */
 		ShrinkwrapCalcCBData data = {
 			.calc = calc,
 			.treeData = treeData, .targ_tree = targ_tree, .targ_callback = targ_callback,
@@ -502,6 +483,9 @@ static void shrinkwrap_calc_normal_projection(ShrinkwrapCalcData *calc, bool for
 		else {
 			free_bvhtree_from_mesh(auxData);
 		}
+	}
+	if (auxMesh != NULL && auxMesh_free) {
+		BKE_id_free(NULL, auxMesh);
 	}
 }
 
@@ -585,12 +569,12 @@ static void shrinkwrap_calc_nearest_surface_point(ShrinkwrapCalcData *calc)
 	BVHTreeFromMesh treeData = NULL_BVHTreeFromMesh;
 	BVHTreeNearest nearest  = NULL_BVHTreeNearest;
 
-	if (calc->target->getNumPolys(calc->target) == 0) {
+	if (calc->target->totpoly == 0) {
 		return;
 	}
 
 	/* Create a bvh-tree of the given target */
-	bvhtree_from_mesh_get(&treeData, calc->target, BVHTREE_FROM_LOOPTRI, 2);
+	BKE_bvhtree_from_mesh_get(&treeData, calc->target, BVHTREE_FROM_LOOPTRI, 2);
 	if (treeData.tree == NULL) {
 		OUT_OF_MEMORY();
 		return;
@@ -616,12 +600,13 @@ static void shrinkwrap_calc_nearest_surface_point(ShrinkwrapCalcData *calc)
 }
 
 /* Main shrinkwrap function */
-void shrinkwrapModifier_deform(ShrinkwrapModifierData *smd, Object *ob, DerivedMesh *dm,
-                               float (*vertexCos)[3], int numVerts, bool for_render)
+void shrinkwrapModifier_deform(ShrinkwrapModifierData *smd, struct Scene *scene, Object *ob, Mesh *mesh,
+                               float (*vertexCos)[3], int numVerts)
 {
 
 	DerivedMesh *ss_mesh    = NULL;
 	ShrinkwrapCalcData calc = NULL_ShrinkwrapCalcData;
+	bool target_free;
 
 	/* remove loop dependencies on derived meshes (TODO should this be done elsewhere?) */
 	if (smd->target == ob) smd->target = NULL;
@@ -637,8 +622,8 @@ void shrinkwrapModifier_deform(ShrinkwrapModifierData *smd, Object *ob, DerivedM
 
 	/* DeformVertex */
 	calc.vgroup = defgroup_name_index(calc.ob, calc.smd->vgroup_name);
-	if (dm) {
-		calc.dvert = dm->getVertDataArray(dm, CD_MDEFORMVERT);
+	if (mesh) {
+		calc.dvert = mesh->dvert;
 	}
 	else if (calc.ob->type == OB_LATTICE) {
 		calc.dvert = BKE_lattice_deform_verts_get(calc.ob);
@@ -646,7 +631,7 @@ void shrinkwrapModifier_deform(ShrinkwrapModifierData *smd, Object *ob, DerivedM
 
 
 	if (smd->target) {
-		calc.target = object_get_derived_final(smd->target, for_render);
+		calc.target = BKE_modifier_get_evaluated_mesh_from_evaluated_object(smd->target, &target_free);
 
 		/* TODO there might be several "bugs" on non-uniform scales matrixs
 		 * because it will no longer be nearest surface, not sphere projection
@@ -661,10 +646,10 @@ void shrinkwrapModifier_deform(ShrinkwrapModifierData *smd, Object *ob, DerivedM
 
 	calc.vgroup = defgroup_name_index(calc.ob, smd->vgroup_name);
 
-	if (dm != NULL && smd->shrinkType == MOD_SHRINKWRAP_PROJECT) {
+	if (mesh != NULL && smd->shrinkType == MOD_SHRINKWRAP_PROJECT) {
 		/* Setup arrays to get vertexs positions, normals and deform weights */
-		calc.vert   = dm->getVertDataArray(dm, CD_MVERT);
-		calc.dvert  = dm->getVertDataArray(dm, CD_MDEFORMVERT);
+		calc.vert   = mesh->mvert;
+		calc.dvert  = mesh->dvert;
 
 		/* Using vertexs positions/normals as if a subsurface was applied */
 		if (smd->subsurfLevels) {
@@ -672,7 +657,10 @@ void shrinkwrapModifier_deform(ShrinkwrapModifierData *smd, Object *ob, DerivedM
 			ssmd.subdivType = ME_CC_SUBSURF;        /* catmull clark */
 			ssmd.levels     = smd->subsurfLevels;   /* levels */
 
-			ss_mesh = subsurf_make_derived_from_derived(dm, &ssmd, NULL, (ob->mode & OB_MODE_EDIT) ? SUBSURF_IN_EDIT_MODE : 0);
+			/* TODO to be moved to Mesh once we are done with changes in subsurf code. */
+			DerivedMesh *dm = CDDM_from_mesh(mesh);
+
+			ss_mesh = subsurf_make_derived_from_derived(dm, &ssmd, scene, NULL, (ob->mode & OB_MODE_EDIT) ? SUBSURF_IN_EDIT_MODE : 0);
 
 			if (ss_mesh) {
 				calc.vert = ss_mesh->getVertDataArray(ss_mesh, CD_MVERT);
@@ -684,8 +672,10 @@ void shrinkwrapModifier_deform(ShrinkwrapModifierData *smd, Object *ob, DerivedM
 			}
 
 			/* Just to make sure we are not leaving any memory behind */
-			assert(ssmd.emCache == NULL);
-			assert(ssmd.mCache == NULL);
+			BLI_assert(ssmd.emCache == NULL);
+			BLI_assert(ssmd.mCache == NULL);
+
+			dm->release(dm);
 		}
 	}
 
@@ -697,7 +687,7 @@ void shrinkwrapModifier_deform(ShrinkwrapModifierData *smd, Object *ob, DerivedM
 				break;
 
 			case MOD_SHRINKWRAP_PROJECT:
-				TIMEIT_BENCH(shrinkwrap_calc_normal_projection(&calc, for_render), deform_project);
+				TIMEIT_BENCH(shrinkwrap_calc_normal_projection(&calc), deform_project);
 				break;
 
 			case MOD_SHRINKWRAP_NEAREST_VERTEX:
@@ -709,4 +699,8 @@ void shrinkwrapModifier_deform(ShrinkwrapModifierData *smd, Object *ob, DerivedM
 	/* free memory */
 	if (ss_mesh)
 		ss_mesh->release(ss_mesh);
+
+	if (target_free && calc.target) {
+		BKE_id_free(NULL, calc.target);
+	}
 }

@@ -15,8 +15,8 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
- * Contributor: 
- *		Jeroen Bakker 
+ * Contributor:
+ *		Jeroen Bakker
  *		Monique Dewanchand
  */
 
@@ -55,7 +55,7 @@ void *CalculateStandardDeviationOperation::initializeTileData(rcti *rect)
 		for (int i = 0, offset = 0; i < size; i++, offset += 4) {
 			if (buffer[offset + 3] > 0) {
 				pixels++;
-		
+
 				switch (this->m_setting) {
 					case 1:  /* rgb combined */
 					{

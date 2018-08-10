@@ -30,8 +30,7 @@ class PhysicButtonsPanel:
 
     @classmethod
     def poll(cls, context):
-        rd = context.scene.render
-        return (context.object) and rd.engine in cls.COMPAT_ENGINES
+        return (context.object) and context.engine in cls.COMPAT_ENGINES
 
 
 def physics_add(self, layout, md, name, type, typeicon, toggles):
@@ -57,7 +56,7 @@ def physics_add_special(self, layout, data, name, addop, removeop, typeicon):
 class PHYSICS_PT_add(PhysicButtonsPanel, Panel):
     bl_label = ""
     bl_options = {'HIDE_HEADER'}
-    COMPAT_ENGINES = {'BLENDER_RENDER'}
+    COMPAT_ENGINES = {'BLENDER_RENDER', 'BLENDER_EEVEE', 'BLENDER_OPENGL'}
 
     def draw(self, context):
         obj = context.object
@@ -98,7 +97,7 @@ class PHYSICS_PT_add(PhysicButtonsPanel, Panel):
                             'CONSTRAINT')  # RB_TODO needs better icon
 
 
-# cache-type can be 'PSYS' 'HAIR' 'SMOKE' etc
+# cache-type can be 'PSYS' 'HAIR' 'SMOKE' etc.
 
 def point_cache_ui(self, context, cache, enabled, cachetype):
     layout = self.layout
@@ -113,8 +112,8 @@ def point_cache_ui(self, context, cache, enabled, cachetype):
         col.operator("ptcache.add", icon='ZOOMIN', text="")
         col.operator("ptcache.remove", icon='ZOOMOUT', text="")
 
-    row = layout.row()
     if cachetype in {'PSYS', 'HAIR', 'SMOKE'}:
+        row = layout.row()
         row.prop(cache, "use_external")
 
         if cachetype == 'SMOKE':
@@ -132,7 +131,9 @@ def point_cache_ui(self, context, cache, enabled, cachetype):
 
         cache_info = cache.info
         if cache_info:
-            layout.label(text=cache_info)
+            col = layout.column()
+            col.alignment = 'RIGHT'
+            col.label(text=cache_info)
     else:
         if cachetype in {'SMOKE', 'DYNAMIC_PAINT'}:
             if not bpy.data.is_saved:
@@ -140,51 +141,62 @@ def point_cache_ui(self, context, cache, enabled, cachetype):
                 layout.enabled = False
 
     if not cache.use_external or cachetype == 'SMOKE':
-        row = layout.row(align=True)
+        col = layout.column(align=True)
+        col.use_property_split = True
 
         if cachetype not in {'PSYS', 'DYNAMIC_PAINT'}:
-            row.enabled = enabled
-            row.prop(cache, "frame_start")
-            row.prop(cache, "frame_end")
-        if cachetype not in {'SMOKE', 'CLOTH', 'DYNAMIC_PAINT', 'RIGID_BODY'}:
-            row.prop(cache, "frame_step")
 
-        if cachetype != 'SMOKE':
-            layout.label(text=cache.info)
+            col.enabled = enabled
+            col.prop(cache, "frame_start", text="Simulation Start")
+            col.prop(cache, "frame_end")
+
+        if cachetype not in {'SMOKE', 'CLOTH', 'DYNAMIC_PAINT', 'RIGID_BODY'}:
+            col.prop(cache, "frame_step")
+
+        cache_info = cache.info
+        if cachetype != 'SMOKE' and cache_info:  # avoid empty space.
+            col = layout.column(align=True)
+            col.alignment = 'RIGHT'
+            col.label(text=cache_info)
 
         can_bake = True
 
         if cachetype not in {'SMOKE', 'DYNAMIC_PAINT', 'RIGID_BODY'}:
-            split = layout.split()
-            split.enabled = enabled and bpy.data.is_saved
+            flow = layout.grid_flow(row_major=True, columns=0, even_columns=True, even_rows=False, align=True)
+            flow.enabled = enabled and bpy.data.is_saved
 
-            col = split.column()
+            flow.use_property_split = True
+
+            # NOTE: TODO temporarly used until the animate properties are properly skipped.
+            flow.use_property_decorate = False  # No animation (remove this later on)
+
+            col = flow.column()
             col.prop(cache, "use_disk_cache")
 
-            col = split.column()
+            subcol = col.column()
+            subcol.active = cache.use_disk_cache
+            subcol.prop(cache, "use_library_path", "Use Lib Path")
+
+            col = flow.column()
+            col.enabled = enabled and bpy.data.is_saved
             col.active = cache.use_disk_cache
-            col.prop(cache, "use_library_path", "Use Lib Path")
-
-            row = layout.row()
-            row.enabled = enabled and bpy.data.is_saved
-            row.active = cache.use_disk_cache
-            row.label(text="Compression:")
-            row.prop(cache, "compression", expand=True)
-
-            layout.separator()
+            col.prop(cache, "compression", text="Compression", expand=True)
 
             if cache.id_data.library and not cache.use_disk_cache:
                 can_bake = False
 
                 col = layout.column(align=True)
-                col.label(text="Linked object baking requires Disk Cache to be enabled", icon='INFO')
+                col.alignment = 'RIGHT'
+
+                col.separator()
+
+                col.label(text="Linked object baking requires Disk Cache to be enabled")
         else:
             layout.separator()
 
-        split = layout.split()
-        split.active = can_bake
-
-        col = split.column()
+        flow = layout.grid_flow(row_major=True, columns=0, even_columns=True, even_rows=False, align=False)
+        col = flow.column()
+        col.active = can_bake
 
         if cache.is_baked is True:
             col.operator("ptcache.free_bake", text="Free Bake")
@@ -199,7 +211,7 @@ def point_cache_ui(self, context, cache, enabled, cachetype):
         sub.enabled = enabled
         sub.operator("ptcache.bake_from_cache", text="Current Cache to Bake")
 
-        col = split.column()
+        col = flow.column()
         col.operator("ptcache.bake_all", text="Bake All Dynamics").bake = True
         col.operator("ptcache.free_bake_all", text="Free All Bakes")
         col.operator("ptcache.bake_all", text="Update All To Frame").bake = False
@@ -207,32 +219,35 @@ def point_cache_ui(self, context, cache, enabled, cachetype):
 
 def effector_weights_ui(self, context, weights, weight_type):
     layout = self.layout
+    layout.use_property_split = True
 
     layout.prop(weights, "group")
 
-    split = layout.split()
+    # NOTE: TODO temporarly used until the animate properties are properly skipped
+    layout.use_property_decorate = False  # No animation (remove this later on)
 
-    split.prop(weights, "gravity", slider=True)
-    split.prop(weights, "all", slider=True)
+    flow = layout.grid_flow(row_major=True, columns=0, even_columns=True, even_rows=False, align=True)
 
-    layout.separator()
-
-    split = layout.split()
-
-    col = split.column()
+    col = flow.column()
+    col.prop(weights, "gravity", slider=True)
+    col.prop(weights, "all", slider=True)
     col.prop(weights, "force", slider=True)
     col.prop(weights, "vortex", slider=True)
+
+    col = flow.column()
     col.prop(weights, "magnetic", slider=True)
+    col.prop(weights, "harmonic", slider=True)
+    col.prop(weights, "charge", slider=True)
+    col.prop(weights, "lennardjones", slider=True)
+
+    col = flow.column()
     col.prop(weights, "wind", slider=True)
     col.prop(weights, "curve_guide", slider=True)
     col.prop(weights, "texture", slider=True)
     if weight_type != 'SMOKE':
         col.prop(weights, "smokeflow", slider=True)
 
-    col = split.column()
-    col.prop(weights, "harmonic", slider=True)
-    col.prop(weights, "charge", slider=True)
-    col.prop(weights, "lennardjones", slider=True)
+    col = flow.column()
     col.prop(weights, "turbulence", slider=True)
     col.prop(weights, "drag", slider=True)
     col.prop(weights, "boid", slider=True)
@@ -240,13 +255,12 @@ def effector_weights_ui(self, context, weights, weight_type):
 
 def basic_force_field_settings_ui(self, context, field):
     layout = self.layout
-
-    split = layout.split()
+    layout.use_property_split = True
 
     if not field or field.type == 'NONE':
         return
 
-    col = split.column()
+    col = layout.column()
 
     if field.type == 'DRAG':
         col.prop(field, "linear_drag", text="Linear")
@@ -266,57 +280,44 @@ def basic_force_field_settings_ui(self, context, field):
     else:
         col.prop(field, "flow")
 
-    col = split.column()
+    col = layout.column()
     sub = col.column(align=True)
     sub.prop(field, "noise")
-    sub.prop(field, "seed")
+    sub.prop(field, "seed", text="Noise Seed")
     if field.type == 'TURBULENCE':
         col.prop(field, "use_global_coords", text="Global")
     elif field.type == 'HARMONIC':
         col.prop(field, "use_multiple_springs")
     if field.type == 'FORCE':
-        col.prop(field, "use_gravity_falloff",  text="Gravitation")
+        col.prop(field, "use_gravity_falloff", text="Gravitation")
 
-    split = layout.split()
-
-    col = split.column()
-    col.label(text="Effect point:")
-    col.prop(field, "apply_to_location")
-    col.prop(field, "apply_to_rotation")
-
-    col = split.column()
-    col.label(text="Collision:")
+    col.prop(field, "apply_to_location", text="Affect Location")
+    col.prop(field, "apply_to_rotation", text="Affect Rotation")
     col.prop(field, "use_absorption")
 
 
 def basic_force_field_falloff_ui(self, context, field):
     layout = self.layout
 
-    split = layout.split(percentage=0.35)
-
     if not field or field.type == 'NONE':
         return
 
-    col = split.column()
-    col.prop(field, "z_direction", text="")
+    col = layout.column()
+    col.prop(field, "z_direction")
 
-    col = split.column()
     col.prop(field, "falloff_power", text="Power")
 
     split = layout.split()
-    col = split.column()
-    row = col.row(align=True)
-    row.prop(field, "use_min_distance", text="")
-    sub = row.row(align=True)
+    split.prop(field, "use_min_distance", text="Min Distance")
+    sub = split.column(align=True)
     sub.active = field.use_min_distance
-    sub.prop(field, "distance_min", text="Minimum")
+    sub.prop(field, "distance_min", text="")
 
-    col = split.column()
-    row = col.row(align=True)
-    row.prop(field, "use_max_distance", text="")
-    sub = row.row(align=True)
+    split = layout.split()
+    split.prop(field, "use_max_distance", text="Max Distance")
+    sub = split.column(align=True)
     sub.active = field.use_max_distance
-    sub.prop(field, "distance_max", text="Maximum")
+    sub.prop(field, "distance_max", text="")
 
 
 classes = (

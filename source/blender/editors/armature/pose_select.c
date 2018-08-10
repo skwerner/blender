@@ -43,9 +43,11 @@
 #include "BKE_armature.h"
 #include "BKE_constraint.h"
 #include "BKE_context.h"
-#include "BKE_depsgraph.h"
 #include "BKE_object.h"
 #include "BKE_report.h"
+#include "BKE_layer.h"
+
+#include "DEG_depsgraph.h"
 
 #include "RNA_access.h"
 #include "RNA_define.h"
@@ -101,9 +103,9 @@ void ED_pose_bone_select(Object *ob, bPoseChannel *pchan, bool select)
 	// XXX: actually, we can probably still get away with no object - at most we have no updates
 	if (ELEM(NULL, ob, ob->pose, pchan, pchan->bone))
 		return;
-	
+
 	arm = ob->data;
-	
+
 	/* can only change selection state if bone can be modified */
 	if (PBONE_SELECTABLE(arm, pchan->bone)) {
 		/* change selection state - activate too if selected */
@@ -115,39 +117,46 @@ void ED_pose_bone_select(Object *ob, bPoseChannel *pchan, bool select)
 			pchan->bone->flag &= ~BONE_SELECTED;
 			arm->act_bone = NULL;
 		}
-		
+
 		// TODO: select and activate corresponding vgroup?
-		
-		/* tag necessary depsgraph updates 
+
+		/* tag necessary depsgraph updates
 		 * (see rna_Bone_select_update() in rna_armature.c for details)
 		 */
 		if (arm->flag & ARM_HAS_VIZ_DEPS) {
-			DAG_id_tag_update(&ob->id, OB_RECALC_DATA);
+			DEG_id_tag_update(&ob->id, OB_RECALC_DATA);
 		}
-		
+
 		/* send necessary notifiers */
 		WM_main_add_notifier(NC_GEOM | ND_DATA, ob);
+
+		/* tag armature for copy-on-write update (since act_bone is in armature not object) */
+		DEG_id_tag_update(&arm->id, DEG_TAG_COPY_ON_WRITE);
 	}
 }
 
 /* called from editview.c, for mode-less pose selection */
 /* assumes scene obact and basact is still on old situation */
 bool ED_armature_pose_select_pick_with_buffer(
-        Scene *scene, Base *base, const unsigned int *buffer, short hits,
+        ViewLayer *view_layer, Base *base, const unsigned int *buffer, short hits,
         bool extend, bool deselect, bool toggle, bool do_nearest)
 {
 	Object *ob = base->object;
 	Bone *nearBone;
-	
+
 	if (!ob || !ob->pose) return 0;
 
-	nearBone = get_bone_from_selectbuffer(scene, base, buffer, hits, 1, do_nearest);
-	
+	Object *ob_act = OBACT(view_layer);
+	Object *obedit = OBEDIT_FROM_VIEW_LAYER(view_layer);
+
+	/* Callers happen to already get the active base */
+	Base *base_dummy = NULL;
+	nearBone = get_bone_from_selectbuffer(&base, 1, obedit != NULL, buffer, hits, 1, do_nearest, &base_dummy);
+
 	/* if the bone cannot be affected, don't do anything */
 	if ((nearBone) && !(nearBone->flag & BONE_UNSELECTABLE)) {
-		Object *ob_act = OBACT;
 		bArmature *arm = ob->data;
-		
+
 		/* since we do unified select, we don't shift+select a bone if the
 		 * armature object was not active yet.
 		 * note, special exception for armature mode so we can do multi-select
@@ -163,7 +172,12 @@ bool ED_armature_pose_select_pick_with_buffer(
 		}
 
 		if (!extend && !deselect && !toggle) {
-			ED_pose_deselect_all(ob, SEL_DESELECT, true);
+			{
+				uint objects_len = 0;
+				Object **objects = BKE_object_pose_array_get_unique(view_layer, &objects_len);
+				ED_pose_deselect_all_multi(objects, objects_len, SEL_DESELECT, true);
+				MEM_freeN(objects);
+			}
 			nearBone->flag |= (BONE_SELECTED | BONE_TIPSEL | BONE_ROOTSEL);
 			arm->act_bone = nearBone;
 		}
@@ -191,27 +205,30 @@ bool ED_armature_pose_select_pick_with_buffer(
 				}
 			}
 		}
-		
+
 		if (ob_act) {
 			/* in weightpaint we select the associated vertex group too */
 			if (ob_act->mode & OB_MODE_WEIGHT_PAINT) {
 				if (nearBone == arm->act_bone) {
 					ED_vgroup_select_by_name(ob_act, nearBone->name);
-					DAG_id_tag_update(&ob_act->id, OB_RECALC_DATA);
+					DEG_id_tag_update(&ob_act->id, OB_RECALC_DATA);
 				}
 			}
-			/* if there are some dependencies for visualizing armature state 
-			 * (e.g. Mask Modifier in 'Armature' mode), force update 
+			/* if there are some dependencies for visualizing armature state
+			 * (e.g. Mask Modifier in 'Armature' mode), force update
 			 */
 			else if (arm->flag & ARM_HAS_VIZ_DEPS) {
-				/* NOTE: ob not ob_act here is intentional - it's the source of the 
+				/* NOTE: ob not ob_act here is intentional - it's the source of the
 				 *       bones being selected  [T37247]
 				 */
-				DAG_id_tag_update(&ob->id, OB_RECALC_DATA);
+				DEG_id_tag_update(&ob->id, OB_RECALC_DATA);
 			}
+
+			/* tag armature for copy-on-write update (since act_bone is in armature not object) */
+			DEG_id_tag_update(&arm->id, DEG_TAG_COPY_ON_WRITE);
 		}
 	}
-	
+
 	return nearBone != NULL;
 }
 
@@ -221,12 +238,12 @@ void ED_pose_deselect_all(Object *ob, int select_mode, const bool ignore_visibil
 {
 	bArmature *arm = ob->data;
 	bPoseChannel *pchan;
-	
+
 	/* we call this from outliner too */
 	if (ob->pose == NULL) {
 		return;
 	}
-	
+
 	/* Determine if we're selecting or deselecting */
 	if (select_mode == SEL_TOGGLE) {
 		select_mode = SEL_SELECT;
@@ -239,7 +256,7 @@ void ED_pose_deselect_all(Object *ob, int select_mode, const bool ignore_visibil
 			}
 		}
 	}
-	
+
 	/* Set the flags accordingly */
 	for (pchan = ob->pose->chanbase.first; pchan; pchan = pchan->next) {
 		/* ignore the pchan if it isn't visible or if its selection cannot be changed */
@@ -249,24 +266,73 @@ void ED_pose_deselect_all(Object *ob, int select_mode, const bool ignore_visibil
 	}
 }
 
+static bool ed_pose_is_any_selected(Object *ob, bool ignore_visibility)
+{
+	bArmature *arm = ob->data;
+	for (bPoseChannel *pchan = ob->pose->chanbase.first; pchan; pchan = pchan->next) {
+		if (ignore_visibility || PBONE_VISIBLE(arm, pchan->bone)) {
+			if (pchan->bone->flag & BONE_SELECTED) {
+				return true;
+			}
+		}
+	}
+	return false;
+}
+
+static bool ed_pose_is_any_selected_multi(Object **objects, uint objects_len, bool ignore_visibility)
+{
+	for (uint ob_index = 0; ob_index < objects_len; ob_index++) {
+		Object *ob_iter = objects[ob_index];
+		if (ed_pose_is_any_selected(ob_iter, ignore_visibility)) {
+			return true;
+		}
+	}
+	return false;
+}
+
+void ED_pose_deselect_all_multi(Object **objects, uint objects_len, int select_mode, const bool ignore_visibility)
+{
+	if (select_mode == SEL_TOGGLE) {
+		select_mode = ed_pose_is_any_selected_multi(
+		        objects, objects_len, ignore_visibility) ? SEL_DESELECT : SEL_SELECT;
+	}
+
+	for (uint ob_index = 0; ob_index < objects_len; ob_index++) {
+		Object *ob_iter = objects[ob_index];
+		bArmature *arm = ob_iter->data;
+
+		ED_pose_deselect_all(ob_iter, select_mode, ignore_visibility);
+
+		/* if there are some dependencies for visualizing armature state
+		 * (e.g. Mask Modifier in 'Armature' mode), force update
+		 */
+		if (arm->flag & ARM_HAS_VIZ_DEPS) {
+			/* NOTE: ob not ob_act here is intentional - it's the source of the
+			 *       bones being selected  [T37247]
+			 */
+			DEG_id_tag_update(&ob_iter->id, OB_RECALC_DATA);
+		}
+
+		/* need to tag armature for cow updates, or else selection doesn't update */
+		DEG_id_tag_update(&arm->id, DEG_TAG_COPY_ON_WRITE);
+	}
+}
+
 /* ***************** Selections ********************** */
 
 static void selectconnected_posebonechildren(Object *ob, Bone *bone, int extend)
 {
 	Bone *curBone;
-	
+
 	/* stop when unconnected child is encountered, or when unselectable bone is encountered */
 	if (!(bone->flag & BONE_CONNECTED) || (bone->flag & BONE_UNSELECTABLE))
 		return;
-	
-	/* XXX old cruft! use notifiers instead */
-	//select_actionchannel_by_name (ob->action, bone->name, !(shift));
-	
+
 	if (extend)
 		bone->flag &= ~BONE_SELECTED;
 	else
 		bone->flag |= BONE_SELECTED;
-	
+
 	for (curBone = bone->childbase.first; curBone; curBone = curBone->next)
 		selectconnected_posebonechildren(ob, curBone, extend);
 }
@@ -275,18 +341,19 @@ static void selectconnected_posebonechildren(Object *ob, Bone *bone, int extend)
 /* previously known as "selectconnected_posearmature" */
 static int pose_select_connected_invoke(bContext *C, wmOperator *op, const wmEvent *event)
 {
-	Object *ob = BKE_object_pose_armature_get(CTX_data_active_object(C));
-	bArmature *arm = (bArmature *)ob->data;
 	Bone *bone, *curBone, *next = NULL;
 	const bool extend = RNA_boolean_get(op->ptr, "extend");
 
 	view3d_operator_needs_opengl(C);
 
-	bone = get_nearest_bone(C, event->mval, !extend);
+	Base *base = NULL;
+	bone = get_nearest_bone(C, event->mval, !extend, &base);
 
 	if (!bone)
 		return OPERATOR_CANCELLED;
-	
+
+	bArmature *arm = base->object->data;
+
 	/* Select parents */
 	for (curBone = bone; curBone; curBone = next) {
 		/* ignore bone if cannot be selected */
@@ -295,7 +362,7 @@ static int pose_select_connected_invoke(bContext *C, wmOperator *op, const wmEve
 				curBone->flag &= ~BONE_SELECTED;
 			else
 				curBone->flag |= BONE_SELECTED;
-			
+
 			if (curBone->flag & BONE_CONNECTED)
 				next = curBone->parent;
 			else
@@ -304,23 +371,26 @@ static int pose_select_connected_invoke(bContext *C, wmOperator *op, const wmEve
 		else
 			next = NULL;
 	}
-	
+
 	/* Select children */
 	for (curBone = bone->childbase.first; curBone; curBone = next)
-		selectconnected_posebonechildren(ob, curBone, extend);
-	
+		selectconnected_posebonechildren(base->object, curBone, extend);
+
 	/* updates */
-	WM_event_add_notifier(C, NC_OBJECT | ND_BONE_SELECT, ob);
-	
+	WM_event_add_notifier(C, NC_OBJECT | ND_BONE_SELECT, base->object);
+
 	if (arm->flag & ARM_HAS_VIZ_DEPS) {
 		/* mask modifier ('armature' mode), etc. */
-		DAG_id_tag_update(&ob->id, OB_RECALC_DATA);
+		DEG_id_tag_update(&base->object->id, OB_RECALC_DATA);
 	}
+
+	/* need to tag armature for cow updates, or else selection doesn't update */
+	DEG_id_tag_update(&arm->id, DEG_TAG_COPY_ON_WRITE);
 
 	return OPERATOR_FINISHED;
 }
 
-static int pose_select_linked_poll(bContext *C)
+static bool pose_select_linked_poll(bContext *C)
 {
 	return (ED_operator_view3d_active(C) && ED_operator_posemode(C));
 }
@@ -331,15 +401,15 @@ void POSE_OT_select_linked(wmOperatorType *ot)
 	ot->name = "Select Connected";
 	ot->idname = "POSE_OT_select_linked";
 	ot->description = "Select bones related to selected ones by parent/child relationships";
-	
-	/* api callbacks */
+
+	/* callbacks */
 	/* leave 'exec' unset */
 	ot->invoke = pose_select_connected_invoke;
 	ot->poll = pose_select_linked_poll;
-	
+
 	/* flags */
 	ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
-	
+
 	/* props */
 	RNA_def_boolean(ot->srna, "extend", false, "Extend", "Extend selection instead of deselecting everything first");
 }
@@ -349,29 +419,35 @@ void POSE_OT_select_linked(wmOperatorType *ot)
 static int pose_de_select_all_exec(bContext *C, wmOperator *op)
 {
 	int action = RNA_enum_get(op->ptr, "action");
-	
+
 	Scene *scene = CTX_data_scene(C);
-	Object *ob = ED_object_context(C);
-	bArmature *arm = ob->data;
 	int multipaint = scene->toolsettings->multipaint;
 
 	if (action == SEL_TOGGLE) {
 		action = CTX_DATA_COUNT(C, selected_pose_bones) ? SEL_DESELECT : SEL_SELECT;
 	}
-	
+
+	Object *ob_prev = NULL;
+
 	/*	Set the flags */
-	CTX_DATA_BEGIN(C, bPoseChannel *, pchan, visible_pose_bones)
+	CTX_DATA_BEGIN_WITH_ID(C, bPoseChannel *, pchan, visible_pose_bones, Object *, ob)
 	{
+		bArmature *arm = ob->data;
 		pose_do_bone_select(pchan, action);
+
+		if (ob_prev != ob) {
+			/* weightpaint or mask modifiers need depsgraph updates */
+			if (multipaint || (arm->flag & ARM_HAS_VIZ_DEPS)) {
+				DEG_id_tag_update(&ob->id, OB_RECALC_DATA);
+			}
+			/* need to tag armature for cow updates, or else selection doesn't update */
+			DEG_id_tag_update(&arm->id, DEG_TAG_COPY_ON_WRITE);
+			ob_prev = ob;
+		}
 	}
 	CTX_DATA_END;
 
 	WM_event_add_notifier(C, NC_OBJECT | ND_BONE_SELECT, NULL);
-	
-	/* weightpaint or mask modifiers need depsgraph updates */
-	if (multipaint || (arm->flag & ARM_HAS_VIZ_DEPS)) {
-		DAG_id_tag_update(&ob->id, OB_RECALC_DATA);
-	}
 
 	return OPERATOR_FINISHED;
 }
@@ -382,14 +458,14 @@ void POSE_OT_select_all(wmOperatorType *ot)
 	ot->name = "(De)select All";
 	ot->idname = "POSE_OT_select_all";
 	ot->description = "Toggle selection status of all bones";
-	
+
 	/* api callbacks */
 	ot->exec = pose_de_select_all_exec;
 	ot->poll = ED_operator_posemode;
-	
+
 	/* flags */
 	ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
-	
+
 	WM_operator_properties_select_all(ot);
 }
 
@@ -397,34 +473,45 @@ void POSE_OT_select_all(wmOperatorType *ot)
 
 static int pose_select_parent_exec(bContext *C, wmOperator *UNUSED(op))
 {
-	Object *ob = BKE_object_pose_armature_get(CTX_data_active_object(C));
-	bArmature *arm = (bArmature *)ob->data;
-	bPoseChannel *pchan, *parent;
+	/* only clear relevant transforms for selected bones */
+	ViewLayer *view_layer = CTX_data_view_layer(C);
+	FOREACH_OBJECT_IN_MODE_BEGIN (view_layer, OB_MODE_POSE, ob_iter)
+	{
+		Object *ob = ob_iter;
+		bArmature *arm = (bArmature *)ob->data;
 
-	/* Determine if there is an active bone */
-	pchan = CTX_data_active_pose_bone(C);
-	if (pchan) {
-		parent = pchan->parent;
-		if ((parent) && !(parent->bone->flag & (BONE_HIDDEN_P | BONE_UNSELECTABLE))) {
-			parent->bone->flag |= BONE_SELECTED;
-			arm->act_bone = parent->bone;
+		FOREACH_PCHAN_SELECTED_IN_OBJECT_BEGIN (ob_iter, pchan)
+		{
+			if (pchan) {
+				bPoseChannel *parent = pchan->parent;
+				if ((parent) && !(parent->bone->flag & (BONE_HIDDEN_P | BONE_UNSELECTABLE))) {
+					parent->bone->flag |= BONE_SELECTED;
+					arm->act_bone = parent->bone;
+				}
+				else {
+					continue;
+				}
+			}
+			else {
+				continue;
+			}
+
+			/* updates */
+			WM_event_add_notifier(C, NC_OBJECT | ND_BONE_SELECT, ob);
+
+			if (arm->flag & ARM_HAS_VIZ_DEPS) {
+				/* mask modifier ('armature' mode), etc. */
+				DEG_id_tag_update(&ob->id, OB_RECALC_DATA);
+			}
+
+			/* tag armature for copy-on-write update (since act_bone is in armature not object) */
+			DEG_id_tag_update(&arm->id, DEG_TAG_COPY_ON_WRITE);
+
 		}
-		else {
-			return OPERATOR_CANCELLED;
-		}
+		FOREACH_PCHAN_SELECTED_IN_OBJECT_END;
 	}
-	else {
-		return OPERATOR_CANCELLED;
-	}
-	
-	/* updates */
-	WM_event_add_notifier(C, NC_OBJECT | ND_BONE_SELECT, ob);
-	
-	if (arm->flag & ARM_HAS_VIZ_DEPS) {
-		/* mask modifier ('armature' mode), etc. */
-		DAG_id_tag_update(&ob->id, OB_RECALC_DATA);
-	}
-	
+	FOREACH_OBJECT_IN_MODE_END;
+
 	return OPERATOR_FINISHED;
 }
 
@@ -447,32 +534,44 @@ void POSE_OT_select_parent(wmOperatorType *ot)
 
 static int pose_select_constraint_target_exec(bContext *C, wmOperator *UNUSED(op))
 {
-	Object *ob = BKE_object_pose_armature_get(CTX_data_active_object(C));
-	bArmature *arm = (bArmature *)ob->data;
 	bConstraint *con;
 	int found = 0;
-	
-	CTX_DATA_BEGIN (C, bPoseChannel *, pchan, visible_pose_bones)
+	Object *ob_prev = NULL;
+
+	CTX_DATA_BEGIN_WITH_ID (C, bPoseChannel *, pchan, visible_pose_bones, Object *, ob)
 	{
+		bArmature *arm = ob->data;
 		if (pchan->bone->flag & BONE_SELECTED) {
 			for (con = pchan->constraints.first; con; con = con->next) {
 				const bConstraintTypeInfo *cti = BKE_constraint_typeinfo_get(con);
 				ListBase targets = {NULL, NULL};
 				bConstraintTarget *ct;
-				
+
 				if (cti && cti->get_constraint_targets) {
 					cti->get_constraint_targets(con, &targets);
-					
+
 					for (ct = targets.first; ct; ct = ct->next) {
 						if ((ct->tar == ob) && (ct->subtarget[0])) {
 							bPoseChannel *pchanc = BKE_pose_channel_find_name(ob->pose, ct->subtarget);
 							if ((pchanc) && !(pchanc->bone->flag & BONE_UNSELECTABLE)) {
 								pchanc->bone->flag |= BONE_SELECTED | BONE_TIPSEL | BONE_ROOTSEL;
 								found = 1;
+
+								if (ob != ob_prev) {
+									/* updates */
+									WM_event_add_notifier(C, NC_OBJECT | ND_BONE_SELECT, ob);
+									if (arm->flag & ARM_HAS_VIZ_DEPS) {
+										/* mask modifier ('armature' mode), etc. */
+										DEG_id_tag_update(&ob->id, OB_RECALC_DATA);
+									}
+									/* tag armature for copy on write, since selection status is armature data */
+									DEG_id_tag_update(&arm->id, DEG_TAG_COPY_ON_WRITE);
+									ob_prev = ob;
+								}
 							}
 						}
 					}
-					
+
 					if (cti->flush_constraint_targets)
 						cti->flush_constraint_targets(con, &targets, 1);
 				}
@@ -480,18 +579,10 @@ static int pose_select_constraint_target_exec(bContext *C, wmOperator *UNUSED(op
 		}
 	}
 	CTX_DATA_END;
-	
+
 	if (!found)
 		return OPERATOR_CANCELLED;
-	
-	/* updates */
-	WM_event_add_notifier(C, NC_OBJECT | ND_BONE_SELECT, ob);
-	
-	if (arm->flag & ARM_HAS_VIZ_DEPS) {
-		/* mask modifier ('armature' mode), etc. */
-		DAG_id_tag_update(&ob->id, OB_RECALC_DATA);
-	}
-	
+
 	return OPERATOR_FINISHED;
 }
 
@@ -501,11 +592,11 @@ void POSE_OT_select_constraint_target(wmOperatorType *ot)
 	ot->name = "Select Constraint Target";
 	ot->idname = "POSE_OT_select_constraint_target";
 	ot->description = "Select bones used as targets for the currently selected bones";
-	
+
 	/* api callbacks */
 	ot->exec = pose_select_constraint_target_exec;
 	ot->poll = ED_operator_posemode;
-	
+
 	/* flags */
 	ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
 }
@@ -520,7 +611,7 @@ static int pose_select_hierarchy_exec(bContext *C, wmOperator *op)
 	int direction = RNA_enum_get(op->ptr, "direction");
 	const bool add_to_sel = RNA_boolean_get(op->ptr, "extend");
 	bool changed = false;
-	
+
 	pchan_act = BKE_pose_channel_active(ob);
 	if (pchan_act == NULL) {
 		return OPERATOR_CANCELLED;
@@ -577,15 +668,18 @@ static int pose_select_hierarchy_exec(bContext *C, wmOperator *op)
 	if (changed == false) {
 		return OPERATOR_CANCELLED;
 	}
-	
+
 	/* updates */
 	WM_event_add_notifier(C, NC_OBJECT | ND_BONE_SELECT, ob);
-	
+
 	if (arm->flag & ARM_HAS_VIZ_DEPS) {
 		/* mask modifier ('armature' mode), etc. */
-		DAG_id_tag_update(&ob->id, OB_RECALC_DATA);
+		DEG_id_tag_update(&ob->id, OB_RECALC_DATA);
 	}
-	
+
+	/* tag armature for copy-on-write update (since act_bone is in armature not object) */
+	DEG_id_tag_update(&arm->id, DEG_TAG_COPY_ON_WRITE);
+
 	return OPERATOR_FINISHED;
 }
 
@@ -596,19 +690,19 @@ void POSE_OT_select_hierarchy(wmOperatorType *ot)
 		{BONE_SELECT_CHILD, "CHILD", 0, "Select Child", ""},
 		{0, NULL, 0, NULL, NULL}
 	};
-	
+
 	/* identifiers */
 	ot->name = "Select Hierarchy";
 	ot->idname = "POSE_OT_select_hierarchy";
 	ot->description = "Select immediate parent/children of selected bones";
-	
+
 	/* api callbacks */
 	ot->exec = pose_select_hierarchy_exec;
 	ot->poll = ED_operator_posemode;
-	
+
 	/* flags */
 	ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
-	
+
 	/* props */
 	ot->prop = RNA_def_enum(ot->srna, "direction", direction_items, BONE_SELECT_PARENT, "Direction", "");
 	RNA_def_boolean(ot->srna, "extend", false, "Extend", "Extend the selection");
@@ -630,22 +724,22 @@ static bool pose_select_same_group(bContext *C, Object *ob, bool extend)
 	char *group_flags;
 	int numGroups = 0;
 	bool changed = false, tagged = false;
-	
+
 	/* sanity checks */
 	if (ELEM(NULL, ob, pose, arm))
 		return 0;
-		
+
 	/* count the number of groups */
 	numGroups = BLI_listbase_count(&pose->agroups);
 	if (numGroups == 0)
 		return 0;
-		
-	/* alloc a small array to keep track of the groups to use 
+
+	/* alloc a small array to keep track of the groups to use
 	 *  - each cell stores on/off state for whether group should be used
 	 *	- size is (numGroups + 1), since (index = 0) is used for no-group
 	 */
 	group_flags = MEM_callocN(numGroups + 1, "pose_select_same_group");
-	
+
 	CTX_DATA_BEGIN (C, bPoseChannel *, pchan, visible_pose_bones)
 	{
 		/* keep track of group as group to use later? */
@@ -653,13 +747,13 @@ static bool pose_select_same_group(bContext *C, Object *ob, bool extend)
 			group_flags[pchan->agrp_index] = 1;
 			tagged = true;
 		}
-		
+
 		/* deselect all bones before selecting new ones? */
 		if ((extend == false) && (pchan->bone->flag & BONE_UNSELECTABLE) == 0)
 			pchan->bone->flag &= ~BONE_SELECTED;
 	}
 	CTX_DATA_END;
-	
+
 	/* small optimization: only loop through bones a second time if there are any groups tagged */
 	if (tagged) {
 		/* only if group matches (and is not selected or current bone) */
@@ -675,10 +769,10 @@ static bool pose_select_same_group(bContext *C, Object *ob, bool extend)
 		}
 		CTX_DATA_END;
 	}
-	
+
 	/* free temp info */
 	MEM_freeN(group_flags);
-	
+
 	return changed;
 }
 
@@ -688,25 +782,25 @@ static bool pose_select_same_layer(bContext *C, Object *ob, bool extend)
 	bArmature *arm = (ob) ? ob->data : NULL;
 	bool changed = false;
 	int layers = 0;
-	
+
 	if (ELEM(NULL, ob, pose, arm))
 		return 0;
-	
+
 	/* figure out what bones are selected */
 	CTX_DATA_BEGIN (C, bPoseChannel *, pchan, visible_pose_bones)
 	{
 		/* keep track of layers to use later? */
 		if (pchan->bone->flag & BONE_SELECTED)
 			layers |= pchan->bone->layer;
-			
+
 		/* deselect all bones before selecting new ones? */
 		if ((extend == false) && (pchan->bone->flag & BONE_UNSELECTABLE) == 0)
 			pchan->bone->flag &= ~BONE_SELECTED;
 	}
 	CTX_DATA_END;
-	if (layers == 0) 
+	if (layers == 0)
 		return 0;
-		
+
 	/* select bones that are on same layers as layers flag */
 	CTX_DATA_BEGIN (C, bPoseChannel *, pchan, visible_pose_bones)
 	{
@@ -717,7 +811,7 @@ static bool pose_select_same_layer(bContext *C, Object *ob, bool extend)
 		}
 	}
 	CTX_DATA_END;
-	
+
 	return changed;
 }
 
@@ -725,11 +819,11 @@ static bool pose_select_same_keyingset(bContext *C, ReportList *reports, Object 
 {
 	KeyingSet *ks = ANIM_scene_get_active_keyingset(CTX_data_scene(C));
 	KS_Path *ksp;
-	
+
 	bArmature *arm = (ob) ? ob->data : NULL;
 	bPose *pose = (ob) ? ob->pose : NULL;
 	bool changed = false;
-	
+
 	/* sanity checks: validate Keying Set and object */
 	if (ks == NULL) {
 		BKE_report(reports, RPT_ERROR, "No active Keying Set to use");
@@ -738,7 +832,7 @@ static bool pose_select_same_keyingset(bContext *C, ReportList *reports, Object 
 	else if (ANIM_validate_keyingset(C, NULL, ks) != 0) {
 		if (ks->paths.first == NULL) {
 			if ((ks->flag & KEYINGSET_ABSOLUTE) == 0) {
-				BKE_report(reports, RPT_ERROR, 
+				BKE_report(reports, RPT_ERROR,
 				           "Use another Keying Set, as the active one depends on the currently "
 				           "selected items or cannot find any targets due to unsuitable context");
 			}
@@ -748,10 +842,10 @@ static bool pose_select_same_keyingset(bContext *C, ReportList *reports, Object 
 		}
 		return false;
 	}
-		
+
 	if (ELEM(NULL, ob, pose, arm))
 		return false;
-		
+
 	/* if not extending selection, deselect all selected first */
 	if (extend == false) {
 		CTX_DATA_BEGIN (C, bPoseChannel *, pchan, visible_pose_bones)
@@ -761,8 +855,8 @@ static bool pose_select_same_keyingset(bContext *C, ReportList *reports, Object 
 		}
 		CTX_DATA_END;
 	}
-		
-	/* iterate over elements in the Keying Set, setting selection depending on whether 
+
+	/* iterate over elements in the Keying Set, setting selection depending on whether
 	 * that bone is visible or not...
 	 */
 	for (ksp = ks->paths.first; ksp; ksp = ksp->next) {
@@ -770,10 +864,10 @@ static bool pose_select_same_keyingset(bContext *C, ReportList *reports, Object 
 		if ((ksp->id == &ob->id) && (ksp->rna_path != NULL)) {
 			if (strstr(ksp->rna_path, "bones")) {
 				char *boneName = BLI_str_quoted_substrN(ksp->rna_path, "bones[");
-				
+
 				if (boneName) {
 					bPoseChannel *pchan = BKE_pose_channel_find_name(pose, boneName);
-					
+
 					if (pchan) {
 						/* select if bone is visible and can be affected */
 						if (PBONE_SELECTABLE(arm, pchan->bone)) {
@@ -781,14 +875,14 @@ static bool pose_select_same_keyingset(bContext *C, ReportList *reports, Object 
 							changed = true;
 						}
 					}
-					
+
 					/* free temp memory */
 					MEM_freeN(boneName);
 				}
 			}
 		}
 	}
-	
+
 	return changed;
 }
 
@@ -799,38 +893,41 @@ static int pose_select_grouped_exec(bContext *C, wmOperator *op)
 	const ePose_SelectSame_Mode type = RNA_enum_get(op->ptr, "type");
 	const bool extend = RNA_boolean_get(op->ptr, "extend");
 	bool changed = false;
-	
+
 	/* sanity check */
 	if (ob->pose == NULL)
 		return OPERATOR_CANCELLED;
-		
+
 	/* selection types */
 	switch (type) {
 		case POSE_SEL_SAME_LAYER: /* layer */
 			changed = pose_select_same_layer(C, ob, extend);
 			break;
-		
+
 		case POSE_SEL_SAME_GROUP: /* group */
 			changed = pose_select_same_group(C, ob, extend);
 			break;
-			
+
 		case POSE_SEL_SAME_KEYINGSET: /* Keying Set */
 			changed = pose_select_same_keyingset(C, op->reports, ob, extend);
 			break;
-		
+
 		default:
 			printf("pose_select_grouped() - Unknown selection type %u\n", type);
 			break;
 	}
-	
+
 	/* notifiers for updates */
 	WM_event_add_notifier(C, NC_OBJECT | ND_POSE, ob);
-	
+
 	if (arm->flag & ARM_HAS_VIZ_DEPS) {
 		/* mask modifier ('armature' mode), etc. */
-		DAG_id_tag_update(&ob->id, OB_RECALC_DATA);
+		DEG_id_tag_update(&ob->id, OB_RECALC_DATA);
 	}
-	
+
+	/* need to tag armature for cow updates, or else selection doesn't update */
+	DEG_id_tag_update(&arm->id, DEG_TAG_COPY_ON_WRITE);
+
 	/* report done status */
 	if (changed)
 		return OPERATOR_FINISHED;
@@ -851,15 +948,15 @@ void POSE_OT_select_grouped(wmOperatorType *ot)
 	ot->name = "Select Grouped";
 	ot->description = "Select all visible bones grouped by similar properties";
 	ot->idname = "POSE_OT_select_grouped";
-	
+
 	/* api callbacks */
 	ot->invoke = WM_menu_invoke;
 	ot->exec = pose_select_grouped_exec;
 	ot->poll = ED_operator_posemode;
-	
+
 	/* flags */
 	ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
-	
+
 	/* properties */
 	RNA_def_boolean(ot->srna, "extend", false, "Extend", "Extend selection instead of deselecting everything first");
 	ot->prop = RNA_def_enum(ot->srna, "type", prop_select_grouped_types, 0, "Type", "");
@@ -873,59 +970,63 @@ void POSE_OT_select_grouped(wmOperatorType *ot)
 static int pose_select_mirror_exec(bContext *C, wmOperator *op)
 {
 	Object *ob_act = CTX_data_active_object(C);
-	Object *ob = BKE_object_pose_armature_get(ob_act);
-	bArmature *arm;
-	bPoseChannel *pchan, *pchan_mirror_act = NULL;
-	const bool active_only = RNA_boolean_get(op->ptr, "only_active");
-	const bool extend = RNA_boolean_get(op->ptr, "extend");
+	ViewLayer *view_layer = CTX_data_view_layer(C);
 
-	if ((ob && (ob->mode & OB_MODE_POSE)) == 0) {
-		return OPERATOR_CANCELLED;
-	}
+	FOREACH_OBJECT_IN_MODE_BEGIN(view_layer, OB_MODE_POSE, ob)
+	{
+		bArmature *arm;
+		bPoseChannel *pchan, *pchan_mirror_act = NULL;
+		const bool active_only = RNA_boolean_get(op->ptr, "only_active");
+		const bool extend = RNA_boolean_get(op->ptr, "extend");
 
-	arm = ob->data;
+		arm = ob->data;
 
-	for (pchan = ob->pose->chanbase.first; pchan; pchan = pchan->next) {
-		const int flag = (pchan->bone->flag & BONE_SELECTED);
-		PBONE_PREV_FLAG_SET(pchan, flag);
-	}
+		for (pchan = ob->pose->chanbase.first; pchan; pchan = pchan->next) {
+			const int flag = (pchan->bone->flag & BONE_SELECTED);
+			PBONE_PREV_FLAG_SET(pchan, flag);
+		}
 
-	for (pchan = ob->pose->chanbase.first; pchan; pchan = pchan->next) {
-		if (PBONE_SELECTABLE(arm, pchan->bone)) {
-			bPoseChannel *pchan_mirror;
-			int flag_new = extend ? PBONE_PREV_FLAG_GET(pchan) : 0;
+		for (pchan = ob->pose->chanbase.first; pchan; pchan = pchan->next) {
+			if (PBONE_SELECTABLE(arm, pchan->bone)) {
+				bPoseChannel *pchan_mirror;
+				int flag_new = extend ? PBONE_PREV_FLAG_GET(pchan) : 0;
 
-			if ((pchan_mirror = BKE_pose_channel_get_mirrored(ob->pose, pchan->name)) &&
-			    (PBONE_VISIBLE(arm, pchan_mirror->bone)))
-			{
-				const int flag_mirror = PBONE_PREV_FLAG_GET(pchan_mirror);
-				flag_new |= flag_mirror;
+				if ((pchan_mirror = BKE_pose_channel_get_mirrored(ob->pose, pchan->name)) &&
+				    (PBONE_VISIBLE(arm, pchan_mirror->bone)))
+				{
+					const int flag_mirror = PBONE_PREV_FLAG_GET(pchan_mirror);
+					flag_new |= flag_mirror;
 
-				if (pchan->bone == arm->act_bone) {
-					pchan_mirror_act = pchan_mirror;
+					if (pchan->bone == arm->act_bone) {
+						pchan_mirror_act = pchan_mirror;
+					}
+
+					/* skip all but the active or its mirror */
+					if (active_only && !ELEM(arm->act_bone, pchan->bone, pchan_mirror->bone)) {
+						continue;
+					}
 				}
 
-				/* skip all but the active or its mirror */
-				if (active_only && !ELEM(arm->act_bone, pchan->bone, pchan_mirror->bone)) {
-					continue;
-				}
+				pchan->bone->flag = (pchan->bone->flag & ~(BONE_SELECTED | BONE_TIPSEL | BONE_ROOTSEL)) | flag_new;
 			}
-
-			pchan->bone->flag = (pchan->bone->flag & ~(BONE_SELECTED | BONE_TIPSEL | BONE_ROOTSEL)) | flag_new;
 		}
-	}
 
-	if (pchan_mirror_act) {
-		arm->act_bone = pchan_mirror_act->bone;
+		if (pchan_mirror_act) {
+			arm->act_bone = pchan_mirror_act->bone;
 
-		/* in weightpaint we select the associated vertex group too */
-		if (ob_act->mode & OB_MODE_WEIGHT_PAINT) {
-			ED_vgroup_select_by_name(ob_act, pchan_mirror_act->name);
-			DAG_id_tag_update(&ob_act->id, OB_RECALC_DATA);
+			/* in weightpaint we select the associated vertex group too */
+			if (ob_act->mode & OB_MODE_WEIGHT_PAINT) {
+				ED_vgroup_select_by_name(ob_act, pchan_mirror_act->name);
+				DEG_id_tag_update(&ob_act->id, OB_RECALC_DATA);
+			}
 		}
-	}
 
-	WM_event_add_notifier(C, NC_OBJECT | ND_BONE_SELECT, ob);
+		WM_event_add_notifier(C, NC_OBJECT | ND_BONE_SELECT, ob);
+
+		/* need to tag armature for cow updates, or else selection doesn't update */
+		DEG_id_tag_update(&arm->id, DEG_TAG_COPY_ON_WRITE);
+	}
+	FOREACH_OBJECT_IN_MODE_END;
 
 	return OPERATOR_FINISHED;
 }
@@ -936,11 +1037,11 @@ void POSE_OT_select_mirror(wmOperatorType *ot)
 	ot->name = "Flip Active/Selected Bone";
 	ot->idname = "POSE_OT_select_mirror";
 	ot->description = "Mirror the bone selection";
-	
+
 	/* api callbacks */
 	ot->exec = pose_select_mirror_exec;
 	ot->poll = ED_operator_posemode;
-	
+
 	/* flags */
 	ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
 
@@ -948,4 +1049,3 @@ void POSE_OT_select_mirror(wmOperatorType *ot)
 	RNA_def_boolean(ot->srna, "only_active", false, "Active Only", "Only operate on the active bone");
 	RNA_def_boolean(ot->srna, "extend", false, "Extend", "Extend the selection");
 }
-

@@ -2,6 +2,7 @@ if NOT "%verbose%" == "" (
 	echo Detecting msvc 2017
 )
 set BUILD_VS_VER=15
+set BUILD_VS_YEAR=2017
 set ProgramFilesX86=%ProgramFiles(x86)%
 if not exist "%ProgramFilesX86%" set ProgramFilesX86=%ProgramFiles%
 
@@ -9,10 +10,15 @@ set vs_where=%ProgramFilesX86%\Microsoft Visual Studio\Installer\vswhere.exe
 if not exist "%vs_where%" (
 	if NOT "%verbose%" == "" (
 		echo Visual Studio 2017 ^(15.2 or newer^) is not detected
-		goto FAIL
 	)
+	goto FAIL
 )
-for /f "usebackq tokens=1* delims=: " %%i in (`"%vs_where%" -products * -latest %VSWHERE_ARGS% -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64`) do (
+
+if NOT "%verbose%" == "" (
+		echo "%vs_where%" -latest %VSWHERE_ARGS% -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64`
+	)
+
+for /f "usebackq tokens=1* delims=: " %%i in (`"%vs_where%" -latest %VSWHERE_ARGS% -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64`) do (
 	if /i "%%i"=="installationPath" set VS_InstallDir=%%j
 )
 

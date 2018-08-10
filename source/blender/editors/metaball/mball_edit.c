@@ -19,7 +19,7 @@
  * All rights reserved.
  *
  * The Original Code is: all of this file.
- 
+
  * Contributor(s): none yet.
  *
  * ***** END GPL LICENSE BLOCK *****
@@ -47,9 +47,11 @@
 #include "RNA_define.h"
 #include "RNA_access.h"
 
-#include "BKE_depsgraph.h"
 #include "BKE_context.h"
 #include "BKE_mball.h"
+#include "BKE_layer.h"
+
+#include "DEG_depsgraph.h"
 
 #include "ED_mball.h"
 #include "ED_screen.h"
@@ -77,7 +79,7 @@ void ED_mball_editmball_make(Object *obedit)
 	MetaElem *ml; /*, *newml;*/
 
 	ml = mb->elems.first;
-	
+
 	while (ml) {
 		if (ml->flag & SELECT) mb->lastelem = ml;
 		ml = ml->next;
@@ -105,7 +107,7 @@ MetaElem *ED_mball_add_primitive(bContext *UNUSED(C), Object *obedit, float mat[
 		ml->flag &= ~SELECT;
 		ml = ml->next;
 	}
-	
+
 	ml = BKE_mball_element_add(mball, type);
 	ml->rad *= dia;
 	mball->wiresize *= dia;
@@ -152,6 +154,7 @@ static int mball_select_all_exec(bContext *C, wmOperator *op)
 			break;
 	}
 
+	DEG_id_tag_update(&mb->id, DEG_TAG_SELECT_UPDATE);
 	WM_event_add_notifier(C, NC_GEOM | ND_SELECT, mb);
 
 	return OPERATOR_FINISHED;
@@ -333,6 +336,7 @@ static int mball_select_similar_exec(bContext *C, wmOperator *op)
 	}
 
 	if (changed) {
+		DEG_id_tag_update(&mb->id, DEG_TAG_SELECT_UPDATE);
 		WM_event_add_notifier(C, NC_GEOM | ND_SELECT, mb);
 	}
 
@@ -366,31 +370,47 @@ void MBALL_OT_select_similar(wmOperatorType *ot)
 /* Random metaball selection */
 static int select_random_metaelems_exec(bContext *C, wmOperator *op)
 {
-	Object *obedit = CTX_data_edit_object(C);
-	MetaBall *mb = (MetaBall *)obedit->data;
-	MetaElem *ml;
 	const bool select = (RNA_enum_get(op->ptr, "action") == SEL_SELECT);
 	const float randfac = RNA_float_get(op->ptr, "percent") / 100.0f;
 	const int seed = WM_operator_properties_select_random_seed_increment_get(op);
-	
-	RNG *rng = BLI_rng_new_srandom(seed);
 
-	for (ml = mb->editelems->first; ml; ml = ml->next) {
-		if (BLI_rng_get_float(rng) < randfac) {
-			if (select)
-				ml->flag |= SELECT;
-			else
-				ml->flag &= ~SELECT;
+	ViewLayer *view_layer = CTX_data_view_layer(C);
+	uint objects_len = 0;
+	Object **objects = BKE_view_layer_array_from_objects_in_edit_mode_unique_data(view_layer, &objects_len);
+	for (uint ob_index = 0; ob_index < objects_len; ob_index++) {
+		Object *obedit = objects[ob_index];
+		MetaBall *mb = (MetaBall *)obedit->data;
+		if (!BKE_mball_is_any_unselected(mb)) {
+			continue;
 		}
+		int seed_iter = seed;
+
+		/* This gives a consistent result regardless of object order. */
+		if (ob_index) {
+			seed_iter += BLI_ghashutil_strhash_p(obedit->id.name);
+		}
+
+		RNG *rng = BLI_rng_new_srandom(seed_iter);
+
+		for (MetaElem *ml = mb->editelems->first; ml; ml = ml->next) {
+			if (BLI_rng_get_float(rng) < randfac) {
+				if (select) {
+					ml->flag |= SELECT;
+				}
+				else {
+					ml->flag &= ~SELECT;
+				}
+			}
+		}
+
+		BLI_rng_free(rng);
+
+		DEG_id_tag_update(&mb->id, DEG_TAG_SELECT_UPDATE);
+		WM_event_add_notifier(C, NC_GEOM | ND_SELECT, mb);
 	}
-
-	BLI_rng_free(rng);
-
-	WM_event_add_notifier(C, NC_GEOM | ND_SELECT, mb);
-	
+	MEM_freeN(objects);
 	return OPERATOR_FINISHED;
 }
-
 
 void MBALL_OT_select_random_metaelems(struct wmOperatorType *ot)
 {
@@ -398,14 +418,14 @@ void MBALL_OT_select_random_metaelems(struct wmOperatorType *ot)
 	ot->name = "Select Random";
 	ot->description = "Randomly select metaelements";
 	ot->idname = "MBALL_OT_select_random_metaelems";
-	
+
 	/* callback functions */
 	ot->exec = select_random_metaelems_exec;
 	ot->poll = ED_operator_editmball;
-	
+
 	/* flags */
 	ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
-	
+
 	/* properties */
 	WM_operator_properties_select_random(ot);
 }
@@ -418,7 +438,7 @@ static int duplicate_metaelems_exec(bContext *C, wmOperator *UNUSED(op))
 	Object *obedit = CTX_data_edit_object(C);
 	MetaBall *mb = (MetaBall *)obedit->data;
 	MetaElem *ml, *newml;
-	
+
 	ml = mb->editelems->last;
 	if (ml) {
 		while (ml) {
@@ -431,7 +451,7 @@ static int duplicate_metaelems_exec(bContext *C, wmOperator *UNUSED(op))
 			ml = ml->prev;
 		}
 		WM_event_add_notifier(C, NC_GEOM | ND_DATA, mb);
-		DAG_id_tag_update(obedit->data, 0);
+		DEG_id_tag_update(obedit->data, 0);
 	}
 
 	return OPERATOR_FINISHED;
@@ -460,7 +480,7 @@ static int delete_metaelems_exec(bContext *C, wmOperator *UNUSED(op))
 	Object *obedit = CTX_data_edit_object(C);
 	MetaBall *mb = (MetaBall *)obedit->data;
 	MetaElem *ml, *next;
-	
+
 	ml = mb->editelems->first;
 	if (ml) {
 		while (ml) {
@@ -473,7 +493,7 @@ static int delete_metaelems_exec(bContext *C, wmOperator *UNUSED(op))
 			ml = next;
 		}
 		WM_event_add_notifier(C, NC_GEOM | ND_DATA, mb);
-		DAG_id_tag_update(obedit->data, 0);
+		DEG_id_tag_update(obedit->data, 0);
 	}
 
 	return OPERATOR_FINISHED;
@@ -513,7 +533,7 @@ static int hide_metaelems_exec(bContext *C, wmOperator *op)
 			ml = ml->next;
 		}
 		WM_event_add_notifier(C, NC_GEOM | ND_DATA, mb);
-		DAG_id_tag_update(obedit->data, 0);
+		DEG_id_tag_update(obedit->data, 0);
 	}
 
 	return OPERATOR_FINISHED;
@@ -532,7 +552,7 @@ void MBALL_OT_hide_metaelems(wmOperatorType *ot)
 
 	/* flags */
 	ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
-	
+
 	/* props */
 	RNA_def_boolean(ot->srna, "unselected", false, "Unselected", "Hide unselected rather than selected");
 }
@@ -556,9 +576,9 @@ static int reveal_metaelems_exec(bContext *C, wmOperator *op)
 	}
 	if (changed) {
 		WM_event_add_notifier(C, NC_GEOM | ND_DATA, mb);
-		DAG_id_tag_update(obedit->data, 0);
+		DEG_id_tag_update(obedit->data, 0);
 	}
-	
+
 	return OPERATOR_FINISHED;
 }
 
@@ -568,11 +588,11 @@ void MBALL_OT_reveal_metaelems(wmOperatorType *ot)
 	ot->name = "Reveal";
 	ot->description = "Reveal all hidden metaelements";
 	ot->idname = "MBALL_OT_reveal_metaelems";
-	
+
 	/* callback functions */
 	ot->exec = reveal_metaelems_exec;
 	ot->poll = ED_operator_editmball;
-	
+
 	/* flags */
 	ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
 
@@ -597,7 +617,9 @@ bool ED_mball_select_pick(bContext *C, const int mval[2], bool extend, bool dese
 
 	BLI_rcti_init_pt_radius(&rect, mval, 12);
 
-	hits = view3d_opengl_select(&vc, buffer, MAXPICKBUF, &rect, VIEW3D_SELECT_PICK_NEAREST);
+	hits = view3d_opengl_select(
+	        &vc, buffer, MAXPICKBUF, &rect,
+	        VIEW3D_SELECT_PICK_NEAREST, VIEW3D_SELECT_FILTER_NOP);
 
 	/* does startelem exist? */
 	ml = mb->editelems->first;
@@ -607,7 +629,7 @@ bool ED_mball_select_pick(bContext *C, const int mval[2], bool extend, bool dese
 	}
 
 	if (ml == NULL) startelem = mb->editelems->first;
-	
+
 	if (hits > 0) {
 		ml = startelem;
 		while (ml) {
@@ -627,7 +649,7 @@ bool ED_mball_select_pick(bContext *C, const int mval[2], bool extend, bool dese
 			if (ml == NULL) ml = mb->editelems->first;
 			if (ml == startelem) break;
 		}
-		
+
 		/* When some metaelem was found, then it is necessary to select or
 		 * deselect it. */
 		if (ml_act) {
@@ -650,9 +672,10 @@ bool ED_mball_select_pick(bContext *C, const int mval[2], bool extend, bool dese
 				/* Select only metaelem clicked on */
 				ml_act->flag |= SELECT;
 			}
-			
+
 			mb->lastelem = ml_act;
-			
+
+			DEG_id_tag_update(&mb->id, DEG_TAG_SELECT_UPDATE);
 			WM_event_add_notifier(C, NC_GEOM | ND_SELECT, mb);
 
 			return true;
@@ -661,5 +684,3 @@ bool ED_mball_select_pick(bContext *C, const int mval[2], bool extend, bool dese
 
 	return false;
 }
-
-

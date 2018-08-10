@@ -1,4 +1,8 @@
 
+uniform mat4 ModelViewMatrix;
+uniform mat4 ProjectionMatrix;
+uniform mat3 NormalMatrix;
+
 #if defined(USE_SOLID_LIGHTING) || defined(USE_SCENE_LIGHTING)
 #if defined(USE_FLAT_NORMAL)
 varying vec3 eyespace_vert_pos;
@@ -29,15 +33,15 @@ varying float gl_ClipDistance[6];
 
 void main()
 {
-	vec4 co = gl_ModelViewMatrix * gl_Vertex;
+	vec4 co = ModelViewMatrix * gl_Vertex;
 
 #if defined(USE_SOLID_LIGHTING) || defined(USE_SCENE_LIGHTING)
 #if !defined(USE_FLAT_NORMAL)
-	varying_normal = normalize(gl_NormalMatrix * gl_Normal);
+	varying_normal = normalize(NormalMatrix * gl_Normal);
 #endif
 #if defined(USE_FLAT_NORMAL)
 	/* transform vertex into eyespace */
-	eyespace_vert_pos = (gl_ModelViewMatrix * gl_Vertex).xyz;
+	eyespace_vert_pos = (ModelViewMatrix * gl_Vertex).xyz;
 #endif
 
 #ifndef USE_SOLID_LIGHTING
@@ -45,7 +49,7 @@ void main()
 #endif
 #endif
 
-	gl_Position = gl_ProjectionMatrix * co;
+	gl_Position = ProjectionMatrix * co;
 
 #ifdef CLIP_WORKAROUND
 	int i;
@@ -54,8 +58,8 @@ void main()
 #elif !defined(GPU_ATI)
 	// Setting gl_ClipVertex is necessary to get glClipPlane working on NVIDIA
 	// graphic cards, while on ATI it can cause a software fallback.
-	gl_ClipVertex = co; 
-#endif 
+	gl_ClipVertex = co;
+#endif
 
 #ifdef USE_COLOR
 #ifdef DRAW_LINE
@@ -69,4 +73,3 @@ void main()
 	varying_texture_coord = (gl_TextureMatrix[0] * gl_MultiTexCoord0).st;
 #endif
 }
-

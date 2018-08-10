@@ -4,7 +4,7 @@
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version. 
+ * of the License, or (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -24,7 +24,7 @@
  *
  * ***** END GPL LICENSE BLOCK *****
  */
- 
+
 /** \file rigidbody_world.c
  *  \ingroup editor_physics
  *  \brief Rigid Body world editing operators
@@ -58,12 +58,12 @@
 /* API */
 
 /* check if there is an active rigid body world */
-static int ED_rigidbody_world_active_poll(bContext *C)
+static bool ED_rigidbody_world_active_poll(bContext *C)
 {
 	Scene *scene = CTX_data_scene(C);
 	return (scene && scene->rigidbody_world);
 }
-static int ED_rigidbody_world_add_poll(bContext *C)
+static bool ED_rigidbody_world_add_poll(bContext *C)
 {
 	Scene *scene = CTX_data_scene(C);
 	return (scene && scene->rigidbody_world == NULL);
@@ -114,8 +114,7 @@ static int rigidbody_world_remove_exec(bContext *C, wmOperator *op)
 		return OPERATOR_CANCELLED;
 	}
 
-	BKE_rigidbody_free_world(rbw);
-	scene->rigidbody_world = NULL;
+	BKE_rigidbody_free_world(scene);
 
 	/* done */
 	return OPERATOR_FINISHED;
@@ -152,14 +151,14 @@ static int rigidbody_world_export_exec(bContext *C, wmOperator *op)
 		BKE_report(op->reports, RPT_ERROR, "No Rigid Body World to export");
 		return OPERATOR_CANCELLED;
 	}
-	if (rbw->physics_world == NULL) {
+	if (rbw->shared->physics_world == NULL) {
 		BKE_report(op->reports, RPT_ERROR, "Rigid Body World has no associated physics data to export");
 		return OPERATOR_CANCELLED;
 	}
 
 	RNA_string_get(op->ptr, "filepath", path);
 #ifdef WITH_BULLET
-	RB_dworld_export(rbw->physics_world, path);
+	RB_dworld_export(rbw->shared->physics_world, path);
 #endif
 	return OPERATOR_FINISHED;
 }
@@ -174,7 +173,7 @@ static int rigidbody_world_export_invoke(bContext *C, wmOperator *op, const wmEv
 
 	// TODO: use the actual rigidbody world's name + .bullet instead of this temp crap
 	RNA_string_set(op->ptr, "filepath", "rigidbodyworld_export.bullet");
-	WM_event_add_fileselect(C, op); 
+	WM_event_add_fileselect(C, op);
 
 	return OPERATOR_RUNNING_MODAL;
 }

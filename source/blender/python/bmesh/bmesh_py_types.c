@@ -34,9 +34,12 @@
 #include "DNA_object_types.h"
 #include "DNA_material_types.h"
 
-#include "BKE_depsgraph.h"
 #include "BKE_customdata.h"
 #include "BKE_DerivedMesh.h"
+#include "BKE_global.h"
+#include "BKE_library.h"
+
+#include "DEG_depsgraph.h"
 
 #include "bmesh.h"
 
@@ -901,10 +904,9 @@ static PyObject *bpy_bmesh_to_mesh(BPy_BMesh *self, PyObject *args)
 
 	bm = self->bm;
 
-	/* python won't ensure matching uv/mtex */
-	BM_mesh_cd_validate(bm);
-
+	BLI_assert(BKE_id_is_in_gobal_main(&me->id));
 	BM_mesh_bm_to_me(
+	        G_MAIN,  /* XXX UGLY! */
 	        bm, me,
 	        (&(struct BMeshToMeshParams){
 	            .calc_object_remap = true,
@@ -912,7 +914,7 @@ static PyObject *bpy_bmesh_to_mesh(BPy_BMesh *self, PyObject *args)
 
 	/* we could have the user do this but if they forget blender can easy crash
 	 * since the references arrays for the objects derived meshes are now invalid */
-	DAG_id_tag_update(&me->id, OB_RECALC_DATA);
+	DEG_id_tag_update(&me->id, OB_RECALC_DATA);
 
 	Py_RETURN_NONE;
 }
@@ -935,6 +937,8 @@ PyDoc_STRVAR(bpy_bmesh_from_object_doc,
 );
 static PyObject *bpy_bmesh_from_object(BPy_BMesh *self, PyObject *args, PyObject *kw)
 {
+	/* TODO: This doesn't work currently because of missing depsgraph. */
+#if 0
 	static const char *kwlist[] = {"object", "scene", "deform", "render", "cage", "face_normals", NULL};
 	PyObject *py_object;
 	PyObject *py_scene;
@@ -1027,6 +1031,10 @@ static PyObject *bpy_bmesh_from_object(BPy_BMesh *self, PyObject *args, PyObject
 	dm->release(dm);
 
 	Py_RETURN_NONE;
+#else
+	UNUSED_VARS(self, args, kw);
+#endif
+	return NULL;
 }
 
 
@@ -1397,7 +1405,7 @@ static PyObject *bpy_bmvert_copy_from_vert_interp(BPy_BMVert *self, PyObject *ar
 			return NULL;
 		}
 
-		BM_data_interp_from_verts(bm, vert_array[0], vert_array[1], self->v, CLAMPIS(fac, 0.0f, 1.0f));
+		BM_data_interp_from_verts(bm, vert_array[0], vert_array[1], self->v, clamp_f(fac, 0.0f, 1.0f));
 
 		PyMem_FREE(vert_array);
 		Py_RETURN_NONE;
@@ -2149,7 +2157,7 @@ static PyObject *bpy_bmedgeseq_new(BPy_BMElemSeq *self, PyObject *args)
 		if (vert_array == NULL) {
 			return NULL;
 		}
-		
+
 		if (BM_edge_exists(vert_array[0], vert_array[1])) {
 			PyErr_SetString(PyExc_ValueError,
 			                "edges.new(): this edge exists");

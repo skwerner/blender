@@ -49,8 +49,8 @@ typedef struct FreestyleModuleSettings FreestyleModuleSettings;
 
 /* FreestyleConfig */
 void BKE_freestyle_config_init(FreestyleConfig *config);
-void BKE_freestyle_config_free(FreestyleConfig *config);
-void BKE_freestyle_config_copy(FreestyleConfig *new_config, FreestyleConfig *config, const int flag);
+void BKE_freestyle_config_free(FreestyleConfig *config, const bool do_id_user);
+void BKE_freestyle_config_copy(FreestyleConfig *new_config, const FreestyleConfig *config, const int flag);
 
 /* FreestyleConfig.modules */
 FreestyleModuleConfig *BKE_freestyle_module_add(FreestyleConfig *config);
@@ -70,4 +70,3 @@ void BKE_freestyle_lineset_unique_name(FreestyleConfig *config, FreestyleLineSet
 #endif
 
 #endif
-

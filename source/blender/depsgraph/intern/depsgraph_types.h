@@ -49,17 +49,19 @@ struct bAction;
 struct ChannelDriver;
 struct ModifierData;
 struct PointerRNA;
-struct EvaluationContext;
 struct FCurve;
+struct Depsgraph;
 
 namespace DEG {
 
+/* TODO(sergey): Find a better place for this. */
 using std::string;
 using std::vector;
+using std::max;
 
 /* Evaluation Operation for atomic operation */
 // XXX: move this to another header that can be exposed?
-typedef function<void(struct EvaluationContext *)> DepsEvalOperationCb;
+typedef function<void(struct ::Depsgraph *)> DepsEvalOperationCb;
 
 /* Metatype of Nodes - The general "level" in the graph structure
  * the node serves.
@@ -79,6 +81,18 @@ typedef enum eDepsNode_Class {
 	 */
 	DEG_NODE_CLASS_OPERATION       = 2,
 } eDepsNode_Class;
+
+/* Note: We use max comparison to mark an id node that is linked more than once
+ * So keep this enum ordered accordingly.
+ */
+typedef enum eDepsNode_LinkedState_Type {
+	/* Generic indirectly linked id node. */
+	DEG_ID_LINKED_INDIRECTLY       = 0,
+	/* Id node present in the set (background) only. */
+	DEG_ID_LINKED_VIA_SET          = 1,
+	/* Id node directly linked via the ScenLayer. */
+	DEG_ID_LINKED_DIRECTLY         = 2,
+} eDepsNode_LinkedState_Type;
 
 /* Types of Nodes */
 typedef enum eDepsNode_Type {
@@ -112,6 +126,18 @@ typedef enum eDepsNode_Type {
 	DEG_NODE_TYPE_GEOMETRY,
 	/* Sequencer Component (Scene Only) */
 	DEG_NODE_TYPE_SEQUENCER,
+	/* Component which contains all operations needed for layer collections
+	 * evaluation.
+	 */
+	DEG_NODE_TYPE_LAYER_COLLECTIONS,
+	/* Entry component of majority of ID nodes: prepares CoW pointers for
+	 * execution.
+	 */
+	DEG_NODE_TYPE_COPY_ON_WRITE,
+	/* Used by all operations which are updating object when something is
+	 * changed in view layer.
+	 */
+	DEG_NODE_TYPE_OBJECT_FROM_LAYER,
 
 	/* **** Evaluation-Related Outer Types (with Subdata) **** */
 
@@ -123,12 +149,17 @@ typedef enum eDepsNode_Type {
 	DEG_NODE_TYPE_EVAL_PARTICLES,
 	/* Material Shading Component */
 	DEG_NODE_TYPE_SHADING,
+	DEG_NODE_TYPE_SHADING_PARAMETERS,
 	/* Cache Component */
 	DEG_NODE_TYPE_CACHE,
+	/* Batch Cache Component */
+	DEG_NODE_TYPE_BATCH_CACHE,
 
 	/* Total number of meaningful node types. */
 	NUM_DEG_NODE_TYPES,
 } eDepsNode_Type;
+
+const char *nodeTypeAsString(eDepsNode_Type type);
 
 /* Identifiers for common operations (as an enum). */
 typedef enum eDepsOperation_Code {
@@ -149,6 +180,9 @@ typedef enum eDepsOperation_Code {
 	DEG_OPCODE_ANIMATION,
 	/* Driver */
 	DEG_OPCODE_DRIVER,
+
+	/* Object related. --------------------------------- */
+	DEG_OPCODE_OBJECT_BASE_FLAGS,
 
 	/* Transform. -------------------------------------- */
 	/* Transform entry point - local transforms only */
@@ -174,6 +208,10 @@ typedef enum eDepsOperation_Code {
 	DEG_OPCODE_GEOMETRY_UBEREVAL,
 	DEG_OPCODE_GEOMETRY_CLOTH_MODIFIER,
 	DEG_OPCODE_GEOMETRY_SHAPEKEY,
+
+	/* Object data. ------------------------------------- */
+	DEG_OPCODE_LIGHT_PROBE_EVAL,
+	DEG_OPCODE_SPEAKER_EVAL,
 
 	/* Pose. -------------------------------------------- */
 	/* Init pose, clear flags, etc. */
@@ -211,9 +249,24 @@ typedef enum eDepsOperation_Code {
 	/* Particle System evaluation. */
 	DEG_OPCODE_PARTICLE_SYSTEM_EVAL_INIT,
 	DEG_OPCODE_PARTICLE_SYSTEM_EVAL,
+	DEG_OPCODE_PARTICLE_SETTINGS_EVAL,
+
+	/* Point Cache. ------------------------------------- */
+	DEG_OPCODE_POINT_CACHE_RESET,
+
+	/* Collections. ------------------------------------- */
+	DEG_OPCODE_VIEW_LAYER_EVAL,
+
+	/* Copy on Write. ------------------------------------ */
+	DEG_OPCODE_COPY_ON_WRITE,
 
 	/* Shading. ------------------------------------------- */
 	DEG_OPCODE_SHADING,
+	DEG_OPCODE_MATERIAL_UPDATE,
+	DEG_OPCODE_WORLD_UPDATE,
+
+	/* Batch caches. -------------------------------------- */
+	DEG_OPCODE_GEOMETRY_SELECT_UPDATE,
 
 	/* Masks. ------------------------------------------ */
 	DEG_OPCODE_MASK_ANIMATION,
@@ -224,17 +277,17 @@ typedef enum eDepsOperation_Code {
 
 	DEG_NUM_OPCODES,
 } eDepsOperation_Code;
+const char *operationCodeAsString(eDepsOperation_Code opcode);
 
-/* Some magic to stringify operation codes. */
-class DepsOperationStringifier {
-public:
-	DepsOperationStringifier();
-	const char *operator[](eDepsOperation_Code opcodex);
-protected:
-	const char *names_[DEG_NUM_OPCODES];
-};
-
-/* String defines for these opcodes, defined in depsgraph_type_defines.cpp */
-extern DepsOperationStringifier DEG_OPNAMES;
+typedef enum eDepsNode_CollectionOwner {
+	/* Unknown owner of collection, collection is pulled directly, maybe
+	 * via driver.
+	 */
+	DEG_COLLECTION_OWNER_UNKNOWN,
+	/* Collection belongs to a scene. */
+	DEG_COLLECTION_OWNER_SCENE,
+	/* Collection is used by object, as a dupli-system. */
+	DEG_COLLECTION_OWNER_OBJECT,
+} eDepsNode_CollectionOwner;
 
 }  // namespace DEG

@@ -42,6 +42,7 @@ struct bActionGroup;
 struct Object;
 struct ListBase;
 struct bGPDlayer;
+struct Palette;
 struct MaskLayer;
 struct Scene;
 struct View2D;
@@ -53,17 +54,17 @@ struct DLRBT_Tree;
 typedef struct ActKeyColumn {
 	/* ListBase linkage */
 	struct ActKeyColumn *next, *prev;
-	
+
 	/* sorting-tree linkage */
 	struct ActKeyColumn *left, *right;  /* 'children' of this node, less than and greater than it (respectively) */
 	struct ActKeyColumn *parent;        /* parent of this node in the tree */
 	char tree_col;                      /* DLRB_BLACK or DLRB_RED */
-	
+
 	/* keyframe info */
 	char key_type;                      /* eBezTripe_KeyframeType */
 	short sel;
 	float cfra;
-	
+
 	/* only while drawing - used to determine if long-keyframe needs to be drawn */
 	short modified;
 	short totcurve;
@@ -73,21 +74,21 @@ typedef struct ActKeyColumn {
 typedef struct ActKeyBlock {
 	/* ListBase linkage */
 	struct ActKeyBlock *next, *prev;
-	
+
 	/* sorting-tree linkage */
 	struct ActKeyBlock *left, *right;   /* 'children' of this node, less than and greater than it (respectively) */
 	struct ActKeyBlock *parent;         /* parent of this node in the tree */
 	char tree_col;                      /* DLRB_BLACK or DLRB_RED */
-	
+
 	/* key-block info */
 	char sel;
 	short flag;
 	float val;
 	float start, end;
-	
+
 	/* only while drawing - used to determine if block needs to be drawn */
 	short modified;
-	short totcurve; 
+	short totcurve;
 } ActKeyBlock;
 
 /* ActKeyBlock - Flag */
@@ -108,8 +109,10 @@ typedef enum eKeyframeShapeDrawOpts {
 	KEYFRAME_SHAPE_BOTH
 } eKeyframeShapeDrawOpts;
 
-/* draw simple diamond-shape keyframe (with OpenGL) */
-void draw_keyframe_shape(float x, float y, float xscale, float hsize, short sel, short key_type, short mode, float alpha);
+/* draw simple diamond-shape keyframe */
+/* caller should set up vertex format, bind GPU_SHADER_KEYFRAME_DIAMOND, immBegin(GPU_PRIM_POINTS, n), then call this n times */
+void draw_keyframe_shape(float x, float y, float size, bool sel, short key_type, short mode, float alpha,
+                         unsigned int pos_id, unsigned int size_id, unsigned int color_id, unsigned int outline_color_id);
 
 /* ******************************* Methods ****************************** */
 
@@ -149,9 +152,11 @@ void scene_to_keylist(struct bDopeSheet *ads, struct Scene *sce, struct DLRBT_Tr
 /* DopeSheet Summary */
 void summary_to_keylist(struct bAnimContext *ac, struct DLRBT_Tree *keys, struct DLRBT_Tree *blocks);
 /* Grease Pencil datablock summary */
-void gpencil_to_keylist(struct bDopeSheet *ads, struct bGPdata *gpd, struct DLRBT_Tree *keys);
+void gpencil_to_keylist(struct bDopeSheet *ads, struct bGPdata *gpd, struct DLRBT_Tree *keys, const bool active);
 /* Grease Pencil Layer */
 void gpl_to_keylist(struct bDopeSheet *ads, struct bGPDlayer *gpl, struct DLRBT_Tree *keys);
+/* Palette */
+void palette_to_keylist(struct bDopeSheet *ads, struct Palette *palette, struct DLRBT_Tree *keys, struct DLRBT_Tree *blocks);
 /* Mask */
 void mask_to_keylist(struct bDopeSheet *UNUSED(ads), struct MaskLayer *masklay, struct DLRBT_Tree *keys);
 

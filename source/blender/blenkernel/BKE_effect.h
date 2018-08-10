@@ -40,12 +40,14 @@
 struct Object;
 struct Scene;
 struct ListBase;
-struct Group;
+struct Collection;
 struct ParticleSimulationData;
 struct ParticleData;
 struct ParticleKey;
+struct Depsgraph;
+struct ViewLayer;
 
-struct EffectorWeights *BKE_add_effector_weights(struct Group *group);
+struct EffectorWeights *BKE_add_effector_weights(struct Collection *collection);
 struct PartDeflect *object_add_collision_fields(int type);
 
 /* Input to effector code */
@@ -93,11 +95,12 @@ typedef struct EffectorData {
 typedef struct EffectorCache {
 	struct EffectorCache *next, *prev;
 
+	struct Depsgraph *depsgraph;
 	struct Scene *scene;
 	struct Object *ob;
 	struct ParticleSystem *psys;
 	struct SurfaceModifierData *surmd;
-	
+
 	struct PartDeflect *pd;
 
 	/* precalculated for guides */
@@ -109,11 +112,35 @@ typedef struct EffectorCache {
 	int flag;
 } EffectorCache;
 
-void            free_partdeflect(struct PartDeflect *pd);
-struct ListBase *pdInitEffectors(struct Scene *scene, struct Object *ob_src, struct ParticleSystem *psys_src, struct EffectorWeights *weights, bool for_simulation);
-void            pdEndEffectors(struct ListBase **effectors);
-void            pdPrecalculateEffectors(struct ListBase *effectors);
-void            pdDoEffectors(struct ListBase *effectors, struct ListBase *colliders, struct EffectorWeights *weights, struct EffectedPoint *point, float *force, float *impulse);
+typedef struct EffectorRelation {
+	struct EffectorRelation *next, *prev;
+
+	struct Object *ob;
+	struct ParticleSystem *psys;
+	struct PartDeflect *pd;
+} EffectorRelation;
+
+void free_partdeflect(struct PartDeflect *pd);
+
+struct ListBase *BKE_effector_relations_create(
+        struct Depsgraph *depsgraph,
+        struct ViewLayer *view_layer,
+        struct Collection *collection);
+void BKE_effector_relations_free(struct ListBase *lb);
+
+struct ListBase *BKE_effectors_create(
+        struct Depsgraph *depsgraph,
+        struct Object *ob_src,
+        struct ParticleSystem *psys_src,
+        struct EffectorWeights *weights);
+void BKE_effectors_apply(
+        struct ListBase *effectors,
+        struct ListBase *colliders,
+        struct EffectorWeights *weights,
+        struct EffectedPoint *point,
+        float *force,
+        float *impulse);
+void BKE_effectors_free(struct ListBase *lb);
 
 void pd_point_from_particle(struct ParticleSimulationData *sim, struct ParticleData *pa, struct ParticleKey *state, struct EffectedPoint *point);
 void pd_point_from_loc(struct Scene *scene, float *loc, float *vel, int index, struct EffectedPoint *point);
@@ -167,10 +194,10 @@ unsigned int BKE_sim_debug_data_hash_combine(unsigned int kx, unsigned int ky);
 typedef struct SimDebugElement {
 	unsigned int category_hash;
 	unsigned int hash;
-	
+
 	int type;
 	float color[3];
-	
+
 	float v1[3], v2[3];
 	char str[64];
 } SimDebugElement;
@@ -226,4 +253,3 @@ void BKE_sim_debug_data_clear(void);
 void BKE_sim_debug_data_clear_category(const char *category);
 
 #endif
-

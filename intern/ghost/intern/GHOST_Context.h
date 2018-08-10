@@ -33,6 +33,7 @@
 #ifndef __GHOST_CONTEXT_H__
 #define __GHOST_CONTEXT_H__
 
+#include "GHOST_IContext.h"
 #include "GHOST_Types.h"
 
 #include "glew-mx.h"
@@ -40,7 +41,7 @@
 #include <cstdlib> // for NULL
 
 
-class GHOST_Context
+class GHOST_Context : public GHOST_IContext
 {
 public:
 	/**
@@ -50,15 +51,13 @@ public:
 	 */
 	GHOST_Context(bool stereoVisual, GHOST_TUns16 numOfAASamples)
 	    : m_stereoVisual(stereoVisual),
-	      m_numOfAASamples(numOfAASamples),
-	      m_mxContext(NULL)
+	      m_numOfAASamples(numOfAASamples)
 	{}
 
 	/**
 	 * Destructor.
 	 */
 	virtual ~GHOST_Context() {
-		mxDestroyContext(m_mxContext);
 	}
 
 	/**
@@ -72,6 +71,12 @@ public:
 	 * \return  A boolean success indicator.
 	 */
 	virtual GHOST_TSuccess activateDrawingContext() = 0;
+
+	/**
+	 * Release the drawing context of the calling thread.
+	 * \return  A boolean success indicator.
+	 */
+	virtual GHOST_TSuccess releaseDrawingContext()= 0;
 
 	/**
 	 * Call immediately after new to initialize.  If this fails then immediately delete the object.
@@ -128,18 +133,11 @@ public:
 protected:
 	void initContextGLEW();
 
-	inline void activateGLEW() const {
-		mxMakeCurrentContext(m_mxContext);
-	}
-
 	bool m_stereoVisual;
 
 	GHOST_TUns16 m_numOfAASamples;
 
 	static void initClearGL();
-
-private:
-	MXContext *m_mxContext;
 
 #ifdef WITH_CXX_GUARDEDALLOC
 	MEM_CXX_CLASS_ALLOC_FUNCS("GHOST:GHOST_Context")

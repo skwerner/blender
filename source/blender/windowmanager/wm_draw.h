@@ -4,7 +4,7 @@
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version. 
+ * of the License, or (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -18,7 +18,7 @@
  * The Original Code is Copyright (C) 2007 Blender Foundation.
  * All rights reserved.
  *
- * 
+ *
  * Contributor(s): Blender Foundation
  *
  * ***** END GPL LICENSE BLOCK *****
@@ -34,31 +34,26 @@
 
 #include "GPU_glew.h"
 
-typedef struct wmDrawTriple {
-	GLuint bind;
-	int x, y;
-	GLenum target;
-} wmDrawTriple;
+struct GPUOffScreen;
+struct GPUViewport;
+struct GPUTexture;
 
-typedef struct wmDrawData {
-	struct wmDrawData *next, *prev;
-	wmDrawTriple *triple;
-} wmDrawData;
+typedef struct wmDrawBuffer {
+	struct GPUOffScreen *offscreen[2];
+	struct GPUViewport *viewport[2];
+	bool stereo;
+	int bound_view;
+} wmDrawBuffer;
 
 struct bContext;
 struct wmWindow;
 struct ARegion;
 
 /* wm_draw.c */
-void		wm_draw_update			(struct bContext *C);
-void		wm_draw_window_clear	(struct wmWindow *win);
-void		wm_draw_region_clear	(struct wmWindow *win, struct ARegion *ar);
+void wm_draw_update(struct bContext *C);
+void wm_draw_region_clear(struct wmWindow *win, struct ARegion *ar);
+void wm_draw_region_blend(struct ARegion *ar, int view, bool blend);
 
-void		wm_tag_redraw_overlay	(struct wmWindow *win, struct ARegion *ar);
-
-void		wm_triple_draw_textures	(struct wmWindow *win, struct wmDrawTriple *triple, float alpha, bool is_interlace);
-
-void		wm_draw_data_free		(struct wmWindow *win);
+struct GPUTexture *wm_draw_region_texture(struct ARegion *ar, int view);
 
 #endif /* __WM_DRAW_H__ */
-

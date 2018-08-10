@@ -40,6 +40,7 @@
 #include "DNA_curve_types.h"
 #include "DNA_group_types.h"
 #include "DNA_listBase.h"
+#include "DNA_mesh_types.h"
 #include "DNA_meshdata_types.h"
 #include "DNA_object_types.h"
 #include "DNA_object_force_types.h"
@@ -57,13 +58,14 @@
 #include "PIL_time.h"
 
 #include "BKE_anim.h"		/* needed for where_on_path */
+#include "BKE_bvhutils.h"
+#include "BKE_collection.h"
 #include "BKE_collision.h"
 #include "BKE_curve.h"
 #include "BKE_displist.h"
-#include "BKE_DerivedMesh.h"
-#include "BKE_cdderivedmesh.h"
 #include "BKE_effect.h"
 #include "BKE_global.h"
+#include "BKE_layer.h"
 #include "BKE_library.h"
 #include "BKE_modifier.h"
 #include "BKE_object.h"
@@ -71,6 +73,9 @@
 #include "BKE_scene.h"
 #include "BKE_smoke.h"
 
+#include "DEG_depsgraph.h"
+#include "DEG_depsgraph_physics.h"
+#include "DEG_depsgraph_query.h"
 
 #include "RE_render_ext.h"
 #include "RE_shader_ext.h"
@@ -82,7 +87,7 @@
 #include <string.h>
 #endif // WITH_MOD_FLUID
 
-EffectorWeights *BKE_add_effector_weights(Group *group)
+EffectorWeights *BKE_add_effector_weights(Collection *collection)
 {
 	EffectorWeights *weights = MEM_callocN(sizeof(EffectorWeights), "EffectorWeights");
 	int i;
@@ -92,7 +97,7 @@ EffectorWeights *BKE_add_effector_weights(Group *group)
 
 	weights->global_gravity = 1.0f;
 
-	weights->group = group;
+	weights->group = collection;
 
 	return weights;
 }
@@ -131,9 +136,8 @@ PartDeflect *object_add_collision_fields(int type)
 	return pd;
 }
 
-/* ***************** PARTICLES ***************** */
+/************************ PARTICLES ***************************/
 
-/* -------------------------- Effectors ------------------ */
 void free_partdeflect(PartDeflect *pd)
 {
 	if (!pd)
@@ -145,132 +149,12 @@ void free_partdeflect(PartDeflect *pd)
 	MEM_freeN(pd);
 }
 
-static EffectorCache *new_effector_cache(Scene *scene, Object *ob, ParticleSystem *psys, PartDeflect *pd)
+/******************** EFFECTOR RELATIONS ***********************/
+
+static void precalculate_effector(struct Depsgraph *depsgraph, EffectorCache *eff)
 {
-	EffectorCache *eff = MEM_callocN(sizeof(EffectorCache), "EffectorCache");
-	eff->scene = scene;
-	eff->ob = ob;
-	eff->psys = psys;
-	eff->pd = pd;
-	eff->frame = -1;
-	return eff;
-}
-static void add_object_to_effectors(ListBase **effectors, Scene *scene, EffectorWeights *weights, Object *ob, Object *ob_src, bool for_simulation)
-{
-	EffectorCache *eff = NULL;
-
-	if ( ob == ob_src )
-		return;
-
-	if (for_simulation) {
-		if (weights->weight[ob->pd->forcefield] == 0.0f )
-			return;
-
-		if (ob->pd->shape == PFIELD_SHAPE_POINTS && !ob->derivedFinal )
-			return;
-	}
-
-	if (*effectors == NULL)
-		*effectors = MEM_callocN(sizeof(ListBase), "effectors list");
-
-	eff = new_effector_cache(scene, ob, NULL, ob->pd);
-
-	/* make sure imat is up to date */
-	invert_m4_m4(ob->imat, ob->obmat);
-
-	BLI_addtail(*effectors, eff);
-}
-static void add_particles_to_effectors(ListBase **effectors, Scene *scene, EffectorWeights *weights, Object *ob, ParticleSystem *psys, ParticleSystem *psys_src, bool for_simulation)
-{
-	ParticleSettings *part= psys->part;
-
-	if ( !psys_check_enabled(ob, psys, G.is_rendering) )
-		return;
-
-	if ( psys == psys_src && (part->flag & PART_SELF_EFFECT) == 0)
-		return;
-
-	if ( part->pd && part->pd->forcefield && (!for_simulation || weights->weight[part->pd->forcefield] != 0.0f)) {
-		if (*effectors == NULL)
-			*effectors = MEM_callocN(sizeof(ListBase), "effectors list");
-
-		BLI_addtail(*effectors, new_effector_cache(scene, ob, psys, part->pd));
-	}
-
-	if (part->pd2 && part->pd2->forcefield && (!for_simulation || weights->weight[part->pd2->forcefield] != 0.0f)) {
-		if (*effectors == NULL)
-			*effectors = MEM_callocN(sizeof(ListBase), "effectors list");
-
-		BLI_addtail(*effectors, new_effector_cache(scene, ob, psys, part->pd2));
-	}
-}
-
-/* returns ListBase handle with objects taking part in the effecting */
-ListBase *pdInitEffectors(Scene *scene, Object *ob_src, ParticleSystem *psys_src,
-                          EffectorWeights *weights, bool for_simulation)
-{
-	Base *base;
-	unsigned int layer= ob_src->lay;
-	ListBase *effectors = NULL;
-	
-	if (weights->group) {
-		GroupObject *go;
-		
-		for (go= weights->group->gobject.first; go; go= go->next) {
-			if ( (go->ob->lay & layer) ) {
-				if ( go->ob->pd && go->ob->pd->forcefield )
-					add_object_to_effectors(&effectors, scene, weights, go->ob, ob_src, for_simulation);
-
-				if ( go->ob->particlesystem.first ) {
-					ParticleSystem *psys= go->ob->particlesystem.first;
-
-					for ( ; psys; psys=psys->next )
-						add_particles_to_effectors(&effectors, scene, weights, go->ob, psys, psys_src, for_simulation);
-				}
-			}
-		}
-	}
-	else {
-		for (base = scene->base.first; base; base= base->next) {
-			if ( (base->lay & layer) ) {
-				if ( base->object->pd && base->object->pd->forcefield )
-					add_object_to_effectors(&effectors, scene, weights, base->object, ob_src, for_simulation);
-
-				if ( base->object->particlesystem.first ) {
-					ParticleSystem *psys= base->object->particlesystem.first;
-
-					for ( ; psys; psys=psys->next )
-						add_particles_to_effectors(&effectors, scene, weights, base->object, psys, psys_src, for_simulation);
-				}
-			}
-		}
-	}
-	
-	if (for_simulation)
-		pdPrecalculateEffectors(effectors);
-	
-	return effectors;
-}
-
-void pdEndEffectors(ListBase **effectors)
-{
-	if (*effectors) {
-		EffectorCache *eff = (*effectors)->first;
-
-		for (; eff; eff=eff->next) {
-			if (eff->guide_data)
-				MEM_freeN(eff->guide_data);
-		}
-
-		BLI_freelistN(*effectors);
-		MEM_freeN(*effectors);
-		*effectors = NULL;
-	}
-}
-
-static void precalculate_effector(EffectorCache *eff)
-{
-	unsigned int cfra = (unsigned int)(eff->scene->r.cfra >= 0 ? eff->scene->r.cfra : -eff->scene->r.cfra);
+	float ctime = DEG_get_ctime(depsgraph);
+	unsigned int cfra = (unsigned int)(ctime >= 0 ? ctime : -ctime);
 	if (!eff->pd->rng)
 		eff->pd->rng = BLI_rng_new(eff->pd->seed + cfra);
 	else
@@ -279,10 +163,10 @@ static void precalculate_effector(EffectorCache *eff)
 	if (eff->pd->forcefield == PFIELD_GUIDE && eff->ob->type==OB_CURVE) {
 		Curve *cu= eff->ob->data;
 		if (cu->flag & CU_PATH) {
-			if (eff->ob->curve_cache == NULL || eff->ob->curve_cache->path==NULL || eff->ob->curve_cache->path->data==NULL)
-				BKE_displist_make_curveTypes(eff->scene, eff->ob, 0);
+			if (eff->ob->runtime.curve_cache == NULL || eff->ob->runtime.curve_cache->path==NULL || eff->ob->runtime.curve_cache->path->data==NULL)
+				BKE_displist_make_curveTypes(depsgraph, eff->scene, eff->ob, 0);
 
-			if (eff->ob->curve_cache->path && eff->ob->curve_cache->path->data) {
+			if (eff->ob->runtime.curve_cache->path && eff->ob->runtime.curve_cache->path->data) {
 				where_on_path(eff->ob, 0.0, eff->guide_loc, eff->guide_dir, NULL, &eff->guide_radius, NULL);
 				mul_m4_v3(eff->ob->obmat, eff->guide_loc);
 				mul_mat3_m4_v3(eff->ob->obmat, eff->guide_dir);
@@ -295,25 +179,163 @@ static void precalculate_effector(EffectorCache *eff)
 			eff->flag |= PE_USE_NORMAL_DATA;
 	}
 	else if (eff->psys)
-		psys_update_particle_tree(eff->psys, eff->scene->r.cfra);
+		psys_update_particle_tree(eff->psys, ctime);
 
 	/* Store object velocity */
 	if (eff->ob) {
 		float old_vel[3];
 
-		BKE_object_where_is_calc_time(eff->scene, eff->ob, cfra - 1.0f);
+		BKE_object_where_is_calc_time(depsgraph, eff->scene, eff->ob, cfra - 1.0f);
 		copy_v3_v3(old_vel, eff->ob->obmat[3]);
-		BKE_object_where_is_calc_time(eff->scene, eff->ob, cfra);
+		BKE_object_where_is_calc_time(depsgraph, eff->scene, eff->ob, cfra);
 		sub_v3_v3v3(eff->velocity, eff->ob->obmat[3], old_vel);
 	}
 }
 
-void pdPrecalculateEffectors(ListBase *effectors)
+static void add_effector_relation(ListBase *relations, Object *ob, ParticleSystem *psys, PartDeflect *pd)
 {
-	if (effectors) {
-		EffectorCache *eff = effectors->first;
-		for (; eff; eff=eff->next)
-			precalculate_effector(eff);
+	EffectorRelation *relation = MEM_callocN(sizeof(EffectorRelation), "EffectorRelation");
+	relation->ob = ob;
+	relation->psys = psys;
+	relation->pd = pd;
+
+	BLI_addtail(relations, relation);
+}
+
+static void add_effector_evaluation(ListBase **effectors, Depsgraph *depsgraph, Scene *scene, Object *ob, ParticleSystem *psys, PartDeflect *pd)
+{
+	if (*effectors == NULL) {
+		*effectors = MEM_callocN(sizeof(ListBase), "effector effectors");
+	}
+
+	EffectorCache *eff = MEM_callocN(sizeof(EffectorCache), "EffectorCache");
+	eff->depsgraph = depsgraph;
+	eff->scene = scene;
+	eff->ob = ob;
+	eff->psys = psys;
+	eff->pd = pd;
+	eff->frame = -1;
+	BLI_addtail(*effectors, eff);
+
+	precalculate_effector(depsgraph, eff);
+}
+
+/* Create list of effector relations in the collection or entire scene.
+ * This is used by the depsgraph to build relations, as well as faster
+ * lookup of effectors during evaluation. */
+ListBase *BKE_effector_relations_create(
+        Depsgraph *depsgraph,
+        ViewLayer *view_layer,
+        Collection *collection)
+{
+	Base *base = BKE_collection_or_layer_objects(view_layer, collection);
+	const bool for_render = (DEG_get_mode(depsgraph) == DAG_EVAL_RENDER);
+	const int base_flag = (for_render) ? BASE_ENABLED_RENDER : BASE_ENABLED_VIEWPORT;
+
+	ListBase *relations = MEM_callocN(sizeof(ListBase), "effector relations");
+
+	for (; base; base = base->next) {
+		if (!(base->flag & base_flag)) {
+			continue;
+		}
+
+		Object *ob = base->object;
+
+		if (ob->pd && ob->pd->forcefield) {
+			add_effector_relation(relations, ob, NULL, ob->pd);
+		}
+
+		for (ParticleSystem *psys = ob->particlesystem.first; psys; psys = psys->next) {
+			ParticleSettings *part = psys->part;
+
+			if (psys_check_enabled(ob, psys, for_render)) {
+				if (part->pd && part->pd->forcefield) {
+					add_effector_relation(relations, ob, psys, part->pd);
+				}
+				if (part->pd2 && part->pd2->forcefield) {
+					add_effector_relation(relations, ob, psys, part->pd2);
+				}
+			}
+		}
+	}
+
+	return relations;
+}
+
+void BKE_effector_relations_free(ListBase *lb)
+{
+	if (lb) {
+		BLI_freelistN(lb);
+		MEM_freeN(lb);
+	}
+}
+
+/* Create effective list of effectors from relations built beforehand. */
+ListBase *BKE_effectors_create(
+        Depsgraph *depsgraph,
+        Object *ob_src,
+        ParticleSystem *psys_src,
+        EffectorWeights *weights)
+{
+	Scene *scene = DEG_get_evaluated_scene(depsgraph);
+	ListBase *relations = DEG_get_effector_relations(depsgraph, weights->group);
+	ListBase *effectors = NULL;
+
+	if (!relations) {
+		return NULL;
+	}
+
+	for (EffectorRelation *relation = relations->first; relation; relation = relation->next) {
+		/* Get evaluated object. */
+		Object *ob = (Object*)DEG_get_evaluated_id(depsgraph, &relation->ob->id);
+
+		if (relation->psys) {
+			/* Get evaluated particle system. */
+			ParticleSystem *psys = BLI_findstring(&ob->particlesystem,
+			        relation->psys->name, offsetof(ParticleSystem, name));
+			ParticleSettings *part = psys->part;
+
+			if (psys == psys_src && (part->flag & PART_SELF_EFFECT) == 0) {
+				continue;
+			}
+
+			PartDeflect *pd = (relation->pd == relation->psys->part->pd) ? part->pd : part->pd2;
+			if (weights->weight[pd->forcefield] == 0.0f) {
+				continue;
+			}
+
+			add_effector_evaluation(&effectors, depsgraph, scene, ob, psys, pd);
+		}
+		else {
+			/* Object effector. */
+			if (ob == ob_src) {
+				continue;
+			}
+			else if (weights->weight[ob->pd->forcefield] == 0.0f) {
+				continue;
+			}
+			else if (ob->pd->shape == PFIELD_SHAPE_POINTS && ob->runtime.mesh_eval == NULL) {
+				continue;
+			}
+
+			add_effector_evaluation(&effectors, depsgraph, scene, ob, NULL, ob->pd);
+		}
+	}
+
+	return effectors;
+}
+
+void BKE_effectors_free(ListBase *lb)
+{
+	if (lb) {
+		for (EffectorCache *eff = lb->first; eff; eff = eff->next) {
+			if (eff->guide_data) {
+				MEM_freeN(eff->guide_data);
+			}
+		}
+
+		BLI_freelistN(lb);
+		MEM_freeN(lb);
 	}
 }
 
@@ -326,7 +348,7 @@ void pd_point_from_particle(ParticleSimulationData *sim, ParticleData *pa, Parti
 	point->index = pa - sim->psys->particles;
 	point->size = pa->size;
 	point->charge = 0.0f;
-	
+
 	if (part->pd && part->pd->forcefield == PFIELD_CHARGE)
 		point->charge += part->pd->f_strength;
 
@@ -385,7 +407,7 @@ void pd_point_from_soft(Scene *scene, float *loc, float *vel, int index, Effecte
 
 // triangle - ray callback function
 static void eff_tri_ray_hit(void *UNUSED(userData), int UNUSED(index), const BVHTreeRay *UNUSED(ray), BVHTreeRayHit *hit)
-{	
+{
 	/* whenever we hit a bounding box, we don't check further */
 	hit->dist = -1;
 	hit->index = 1;
@@ -399,19 +421,19 @@ static float eff_calc_visibility(ListBase *colliders, EffectorCache *eff, Effect
 	ColliderCache *col;
 	float norm[3], len = 0.0;
 	float visibility = 1.0, absorption = 0.0;
-	
+
 	if (!(eff->pd->flag & PFIELD_VISIBILITY))
 		return visibility;
 
 	if (!colls)
-		colls = get_collider_cache(eff->scene, eff->ob, NULL);
+		colls = BKE_collider_cache_create(eff->depsgraph, eff->ob, NULL);
 
 	if (!colls)
 		return visibility;
 
 	negate_v3_v3(norm, efd->vec_to_point);
 	len = normalize_v3(norm);
-	
+
 	/* check all collision objects */
 	for (col = colls->first; col; col = col->next) {
 		CollisionModifierData *collmd = col->collmd;
@@ -434,7 +456,7 @@ static float eff_calc_visibility(ListBase *colliders, EffectorCache *eff, Effect
 
 				/* visibility is only between 0 and 1, calculated from 1-absorption */
 				visibility *= CLAMPIS(1.0f-absorption, 0.0f, 1.0f);
-				
+
 				if (visibility <= 0.0f)
 					break;
 			}
@@ -442,8 +464,8 @@ static float eff_calc_visibility(ListBase *colliders, EffectorCache *eff, Effect
 	}
 
 	if (!colliders)
-		free_collider_cache(&colls);
-	
+		BKE_collider_cache_free(&colls);
+
 	return visibility;
 }
 
@@ -454,11 +476,11 @@ static float wind_func(struct RNG *rng, float strength)
 	float force = BLI_rng_get_float(rng) + 1.0f;
 	float ret;
 	float sign = 0;
-	
+
 	sign = ((float)random > 64.0f) ? 1.0f: -1.0f; // dividing by 2 is not giving equal sign distribution
-	
+
 	ret = sign*((float)random / force)*strength/128.0f;
-	
+
 	return ret;
 }
 
@@ -551,7 +573,7 @@ int closest_point_on_surface(SurfaceModifierData *surmd, const float co[3], floa
 		if (surface_vel) {
 			const MLoop *mloop = surmd->bvhtree->loop;
 			const MLoopTri *lt = &surmd->bvhtree->looptri[nearest.index];
-			
+
 			copy_v3_v3(surface_vel, surmd->v[mloop[lt->tri[0]].v].co);
 			add_v3_v3(surface_vel, surmd->v[mloop[lt->tri[1]].v].co);
 			add_v3_v3(surface_vel, surmd->v[mloop[lt->tri[2]].v].co);
@@ -565,7 +587,7 @@ int closest_point_on_surface(SurfaceModifierData *surmd, const float co[3], floa
 }
 int get_effector_data(EffectorCache *eff, EffectorData *efd, EffectedPoint *point, int real_velocity)
 {
-	float cfra = eff->scene->r.cfra;
+	float cfra = DEG_get_ctime(eff->depsgraph);
 	int ret = 0;
 
 	/* In case surface object is in Edit mode when loading the .blend, surface modifier is never executed
@@ -584,12 +606,10 @@ int get_effector_data(EffectorCache *eff, EffectorData *efd, EffectedPoint *poin
 		efd->size = 0.0f;
 	}
 	else if (eff->pd && eff->pd->shape==PFIELD_SHAPE_POINTS) {
-
-		if (eff->ob->derivedFinal) {
-			DerivedMesh *dm = eff->ob->derivedFinal;
-
-			dm->getVertCo(dm, *efd->index, efd->loc);
-			dm->getVertNo(dm, *efd->index, efd->nor);
+		Mesh *me_eval = eff->ob->runtime.mesh_eval;
+		if (me_eval != NULL) {
+			copy_v3_v3(efd->loc, me_eval->mvert[*efd->index].co);
+			normal_short_to_float_v3(efd->nor, me_eval->mvert[*efd->index].no);
 
 			mul_m4_v3(eff->ob->obmat, efd->loc);
 			mul_mat3_m4_v3(eff->ob->obmat, efd->nor);
@@ -612,6 +632,7 @@ int get_effector_data(EffectorCache *eff, EffectorData *efd, EffectedPoint *poin
 		}
 		else {
 			ParticleSimulationData sim= {NULL};
+			sim.depsgraph = eff->depsgraph;
 			sim.scene= eff->scene;
 			sim.ob= eff->ob;
 			sim.psys= eff->psys;
@@ -632,7 +653,7 @@ int get_effector_data(EffectorCache *eff, EffectorData *efd, EffectedPoint *poin
 			efd->nor[0] = 1.f;
 			efd->nor[1] = efd->nor[2] = 0.f;
 			mul_qt_v3(state.rot, efd->nor);
-		
+
 			if (real_velocity)
 				copy_v3_v3(efd->vel, state.vel);
 
@@ -696,7 +717,8 @@ static void get_effector_tot(EffectorCache *eff, EffectorData *efd, EffectedPoin
 	efd->index = p;
 
 	if (eff->pd->shape == PFIELD_SHAPE_POINTS) {
-		*tot = eff->ob->derivedFinal ? eff->ob->derivedFinal->numVertData : 1;
+		Mesh *me_eval = eff->ob->runtime.mesh_eval;
+		*tot = me_eval != NULL ? me_eval->totvert : 1;
 
 		if (*tot && eff->pd->forcefield == PFIELD_HARMONIC && point->index >= 0) {
 			*p = point->index % *tot;
@@ -705,9 +727,9 @@ static void get_effector_tot(EffectorCache *eff, EffectorData *efd, EffectedPoin
 	}
 	else if (eff->psys) {
 		*tot = eff->psys->totpart;
-		
+
 		if (eff->pd->forcefield == PFIELD_CHARGE) {
-			/* Only the charge of the effected particle is used for 
+			/* Only the charge of the effected particle is used for
 			 * interaction, not fall-offs. If the fall-offs aren't the
 			 * same this will be unphysical, but for animation this
 			 * could be the wanted behavior. If you want physical
@@ -869,10 +891,10 @@ static void do_physical_effector(EffectorCache *eff, EffectorData *efd, Effected
 				/* new vortex force */
 				cross_v3_v3v3(temp, efd->nor2, efd->vec_to_point2);
 				mul_v3_fl(temp, strength * efd->falloff);
-				
+
 				cross_v3_v3v3(force, efd->nor2, temp);
 				mul_v3_fl(force, strength * efd->falloff);
-				
+
 				madd_v3_v3fl(temp, point->vel, -point->vel_to_sec);
 				add_v3_v3(force, temp);
 			}
@@ -900,7 +922,7 @@ static void do_physical_effector(EffectorCache *eff, EffectorData *efd, Effected
 			break;
 		case PFIELD_LENNARDJ:
 			fac = pow((efd->size + point->size) / efd->distance, 6.0);
-			
+
 			fac = - fac * (1.0f - fac) / efd->distance;
 
 			/* limit the repulsive term drastically to avoid huge forces */
@@ -971,7 +993,7 @@ static void do_physical_effector(EffectorCache *eff, EffectorData *efd, Effected
 	}
 }
 
-/*  -------- pdDoEffectors() --------
+/*  -------- BKE_effectors_apply() --------
  * generic force/speed system, now used for particles and softbodies
  * scene       = scene where it runs in, for time and stuff
  * lb			= listbase with objects that take part in effecting
@@ -984,7 +1006,7 @@ static void do_physical_effector(EffectorCache *eff, EffectorData *efd, Effected
  * flags		= only used for softbody wind now
  * guide		= old speed of particle
  */
-void pdDoEffectors(ListBase *effectors, ListBase *colliders, EffectorWeights *weights, EffectedPoint *point, float *force, float *impulse)
+void BKE_effectors_apply(ListBase *effectors, ListBase *colliders, EffectorWeights *weights, EffectedPoint *point, float *force, float *impulse)
 {
 	/*
 	 * Modifies the force on a particle according to its
@@ -1005,7 +1027,7 @@ void pdDoEffectors(ListBase *effectors, ListBase *colliders, EffectorWeights *we
 
 	/* Cycle through collected objects, get total of (1/(gravity_strength * dist^gravity_power)) */
 	/* Check for min distance here? (yes would be cool to add that, ton) */
-	
+
 	if (effectors) for (eff = effectors->first; eff; eff=eff->next) {
 		/* object effectors were fully checked to be OK to evaluate! */
 
@@ -1014,7 +1036,7 @@ void pdDoEffectors(ListBase *effectors, ListBase *colliders, EffectorWeights *we
 		for (; p<tot; p+=step) {
 			if (get_effector_data(eff, &efd, point, 0)) {
 				efd.falloff= effector_falloff(eff, &efd, point, weights);
-				
+
 				if (efd.falloff > 0.0f)
 					efd.falloff *= eff_calc_visibility(colliders, eff, &efd, point);
 
@@ -1029,7 +1051,7 @@ void pdDoEffectors(ListBase *effectors, ListBase *colliders, EffectorWeights *we
 					copy_v3_v3(temp1, force);
 
 					do_physical_effector(eff, &efd, point, force);
-					
+
 					/* for softbody backward compatibility */
 					if (point->flag & PE_WIND_AS_SPEED && impulse) {
 						sub_v3_v3v3(temp2, force, temp1);
@@ -1142,14 +1164,14 @@ void BKE_sim_debug_data_add_element(int type, const float v1[3], const float v2[
 {
 	unsigned int category_hash = BLI_ghashutil_strhash_p(category);
 	SimDebugElement *elem;
-	
+
 	if (!_sim_debug_data) {
 		if (G.debug & G_DEBUG_SIMDATA)
 			BKE_sim_debug_data_set_enabled(true);
 		else
 			return;
 	}
-	
+
 	elem = MEM_callocN(sizeof(SimDebugElement), "sim debug data element");
 	elem->type = type;
 	elem->category_hash = category_hash;
@@ -1169,7 +1191,7 @@ void BKE_sim_debug_data_add_element(int type, const float v1[3], const float v2[
 		BLI_strncpy(elem->str, str, sizeof(elem->str));
 	else
 		elem->str[0] = '\0';
-	
+
 	debug_data_insert(_sim_debug_data, elem);
 }
 
@@ -1178,7 +1200,7 @@ void BKE_sim_debug_data_remove_element(unsigned int hash)
 	SimDebugElement dummy;
 	if (!_sim_debug_data)
 		return;
-	
+
 	dummy.hash = hash;
 	BLI_ghash_remove(_sim_debug_data->gh, &dummy, NULL, debug_element_free);
 }
@@ -1187,7 +1209,7 @@ void BKE_sim_debug_data_clear(void)
 {
 	if (!_sim_debug_data)
 		return;
-	
+
 	if (_sim_debug_data->gh)
 		BLI_ghash_clear(_sim_debug_data->gh, NULL, debug_element_free);
 }
@@ -1195,17 +1217,17 @@ void BKE_sim_debug_data_clear(void)
 void BKE_sim_debug_data_clear_category(const char *category)
 {
 	int category_hash = (int)BLI_ghashutil_strhash_p(category);
-	
+
 	if (!_sim_debug_data)
 		return;
-	
+
 	if (_sim_debug_data->gh) {
 		GHashIterator iter;
 		BLI_ghashIterator_init(&iter, _sim_debug_data->gh);
 		while (!BLI_ghashIterator_done(&iter)) {
 			const SimDebugElement *elem = BLI_ghashIterator_getValue(&iter);
 			BLI_ghashIterator_step(&iter); /* removing invalidates the current iterator, so step before removing */
-			
+
 			if (elem->category_hash == category_hash)
 				BLI_ghash_remove(_sim_debug_data->gh, elem, NULL, debug_element_free);
 		}

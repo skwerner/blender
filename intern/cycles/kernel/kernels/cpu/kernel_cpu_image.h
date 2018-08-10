@@ -36,13 +36,13 @@ struct TextureInterpolator {
 
 	static ccl_always_inline float4 read(uchar4 r)
 	{
-		float f = 1.0f/255.0f;
+		float f = 1.0f / 255.0f;
 		return make_float4(r.x*f, r.y*f, r.z*f, r.w*f);
 	}
 
 	static ccl_always_inline float4 read(uchar r)
 	{
-		float f = r*(1.0f/255.0f);
+		float f = r * (1.0f / 255.0f);
 		return make_float4(f, f, f, 1.0f);
 	}
 
@@ -62,6 +62,18 @@ struct TextureInterpolator {
 	{
 		float f = half_to_float(r);
 		return make_float4(f, f, f, 1.0f);
+	}
+
+	static ccl_always_inline float4 read(uint16_t r)
+	{
+		float f = r*(1.0f/65535.0f);
+		return make_float4(f, f, f, 1.0f);
+	}
+
+	static ccl_always_inline float4 read(ushort4 r)
+	{
+		float f = 1.0f/65535.0f;
+		return make_float4(r.x*f, r.y*f, r.z*f, r.w*f);
 	}
 
 	static ccl_always_inline float4 read(const T *data,
@@ -537,15 +549,21 @@ ccl_device float4 kernel_tex_image_interp(KernelGlobals *kg, int id, float x, fl
 			return TextureInterpolator<half>::interp(info, x, y);
 		case IMAGE_DATA_TYPE_BYTE:
 			return TextureInterpolator<uchar>::interp(info, x, y);
+		case IMAGE_DATA_TYPE_USHORT:
+			return TextureInterpolator<uint16_t>::interp(info, x, y);
 		case IMAGE_DATA_TYPE_FLOAT:
 			return TextureInterpolator<float>::interp(info, x, y);
 		case IMAGE_DATA_TYPE_HALF4:
 			return TextureInterpolator<half4>::interp(info, x, y);
 		case IMAGE_DATA_TYPE_BYTE4:
 			return TextureInterpolator<uchar4>::interp(info, x, y);
+		case IMAGE_DATA_TYPE_USHORT4:
+			return TextureInterpolator<ushort4>::interp(info, x, y);
 		case IMAGE_DATA_TYPE_FLOAT4:
-		default:
 			return TextureInterpolator<float4>::interp(info, x, y);
+		default:
+			assert(0);
+			return make_float4(TEX_IMAGE_MISSING_R, TEX_IMAGE_MISSING_G, TEX_IMAGE_MISSING_B, TEX_IMAGE_MISSING_A);
 	}
 }
 
@@ -558,16 +576,21 @@ ccl_device float4 kernel_tex_image_interp_3d(KernelGlobals *kg, int id, float x,
 			return TextureInterpolator<half>::interp_3d(info, x, y, z, interp);
 		case IMAGE_DATA_TYPE_BYTE:
 			return TextureInterpolator<uchar>::interp_3d(info, x, y, z, interp);
+		case IMAGE_DATA_TYPE_USHORT:
+			return TextureInterpolator<uint16_t>::interp_3d(info, x, y, z, interp);
 		case IMAGE_DATA_TYPE_FLOAT:
 			return TextureInterpolator<float>::interp_3d(info, x, y, z, interp);
 		case IMAGE_DATA_TYPE_HALF4:
 			return TextureInterpolator<half4>::interp_3d(info, x, y, z, interp);
 		case IMAGE_DATA_TYPE_BYTE4:
 			return TextureInterpolator<uchar4>::interp_3d(info, x, y, z, interp);
+		case IMAGE_DATA_TYPE_USHORT4:
+			return TextureInterpolator<ushort4>::interp_3d(info, x, y, z, interp);
 		case IMAGE_DATA_TYPE_FLOAT4:
 			return TextureInterpolator<float4>::interp_3d(info, x, y, z, interp);
 		default:
-			return make_float4(0.0f);
+			assert(0);
+			return make_float4(TEX_IMAGE_MISSING_R, TEX_IMAGE_MISSING_G, TEX_IMAGE_MISSING_B, TEX_IMAGE_MISSING_A);
 	}
 }
 

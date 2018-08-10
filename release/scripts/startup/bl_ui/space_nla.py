@@ -19,15 +19,17 @@
 # <pep8 compliant>
 
 import bpy
-from bpy.types import Header, Menu
+from bpy.types import Header, Menu, Panel
+from .space_dopesheet import (
+    DopesheetFilterPopoverBase,
+    dopesheet_filter,
+)
 
 
 class NLA_HT_header(Header):
     bl_space_type = 'NLA_EDITOR'
 
     def draw(self, context):
-        from .space_dopesheet import dopesheet_filter
-
         layout = self.layout
 
         st = context.space_data
@@ -37,9 +39,32 @@ class NLA_HT_header(Header):
 
         NLA_MT_editor_menus.draw_collapsible(context, layout)
 
+        layout.separator_spacer()
+
         dopesheet_filter(layout, context)
 
+        layout.popover(
+            panel="NLA_PT_filters",
+            text="",
+            icon='FILTER',
+        )
+
         layout.prop(st, "auto_snap", text="")
+
+
+class NLA_PT_filters(DopesheetFilterPopoverBase, Panel):
+    bl_space_type = 'NLA_EDITOR'
+    bl_region_type = 'HEADER'
+    bl_label = "Filters"
+
+    def draw(self, context):
+        layout = self.layout
+
+        DopesheetFilterPopoverBase.draw_generic_filters(context, layout)
+        layout.separator()
+        DopesheetFilterPopoverBase.draw_search_filters(context, layout)
+        layout.separator()
+        DopesheetFilterPopoverBase.draw_standard_filters(context, layout)
 
 
 class NLA_MT_editor_menus(Menu):
@@ -90,9 +115,7 @@ class NLA_MT_view(Menu):
         layout.operator("nla.view_frame")
 
         layout.separator()
-        layout.operator("screen.area_dupli")
-        layout.operator("screen.screen_full_area")
-        layout.operator("screen.screen_full_area", text="Toggle Fullscreen Area").use_hide_panels = True
+        layout.menu("INFO_MT_area")
 
 
 class NLA_MT_select(Menu):
@@ -101,9 +124,9 @@ class NLA_MT_select(Menu):
     def draw(self, context):
         layout = self.layout
 
-        # This is a bit misleading as the operator's default text is "Select All" while it actually *toggles* All/None
-        layout.operator("nla.select_all_toggle").invert = False
-        layout.operator("nla.select_all_toggle", text="Invert Selection").invert = True
+        layout.operator("nla.select_all", text="All").action = 'SELECT'
+        layout.operator("nla.select_all", text="None").action = 'DESELECT'
+        layout.operator("nla.select_all", text="Invert").action = 'INVERT'
 
         layout.separator()
         layout.operator("nla.select_border").axis_range = False
@@ -219,6 +242,7 @@ classes = (
     NLA_MT_marker,
     NLA_MT_add,
     NLA_MT_edit_transform,
+    NLA_PT_filters,
 )
 
 if __name__ == "__main__":  # only for live edit.

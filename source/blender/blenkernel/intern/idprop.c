@@ -86,7 +86,7 @@ IDProperty *IDP_NewIDPArray(const char *name)
 	prop->type = IDP_IDPARRAY;
 	prop->len = 0;
 	BLI_strncpy(prop->name, name, MAX_IDPROP_NAME);
-	
+
 	return prop;
 }
 
@@ -113,14 +113,14 @@ IDProperty *IDP_CopyIDPArray(const IDProperty *array, const int flag)
 		memcpy(GETPROP(narray, i), tmp, sizeof(IDProperty));
 		MEM_freeN(tmp);
 	}
-	
+
 	return narray;
 }
 
 static void IDP_FreeIDPArray(IDProperty *prop, const bool do_id_user)
 {
 	int i;
-	
+
 	BLI_assert(prop->type == IDP_IDPARRAY);
 
 	for (i = 0; i < prop->len; i++)
@@ -472,10 +472,11 @@ static IDProperty *IDP_CopyID(const IDProperty *prop, const int flag)
 static IDProperty *IDP_CopyGroup(const IDProperty *prop, const int flag)
 {
 	IDProperty *newp, *link;
-	
+
 	BLI_assert(prop->type == IDP_GROUP);
 	newp = idp_generic_copy(prop, flag);
 	newp->len = prop->len;
+	newp->subtype = prop->subtype;
 
 	for (link = prop->data.group.first; link; link = link->next) {
 		BLI_addtail(&newp->data.group, IDP_CopyProperty_ex(link, flag));
@@ -601,8 +602,9 @@ void IDP_ReplaceInGroup(IDProperty *group, IDProperty *prop)
 
 /**
  * If a property is missing in \a dest, add it.
+ * Do it recursively.
  */
-void IDP_MergeGroup(IDProperty *dest, const IDProperty *src, const bool do_overwrite)
+void IDP_MergeGroup_ex(IDProperty *dest, const IDProperty *src, const bool do_overwrite, const int flag)
 {
 	IDProperty *prop;
 
@@ -611,19 +613,44 @@ void IDP_MergeGroup(IDProperty *dest, const IDProperty *src, const bool do_overw
 
 	if (do_overwrite) {
 		for (prop = src->data.group.first; prop; prop = prop->next) {
-			IDProperty *copy = IDP_CopyProperty(prop);
+			if (prop->type == IDP_GROUP) {
+				IDProperty *prop_exist = IDP_GetPropertyFromGroup(dest, prop->name);
+
+				if (prop_exist != NULL) {
+					IDP_MergeGroup_ex(prop_exist, prop, do_overwrite, flag);
+					continue;
+				}
+			}
+
+			IDProperty *copy = IDP_CopyProperty_ex(prop, flag);
 			IDP_ReplaceInGroup(dest, copy);
 		}
 	}
 	else {
 		for (prop = src->data.group.first; prop; prop = prop->next) {
-			if (IDP_GetPropertyFromGroup(dest, prop->name) == NULL) {
-				IDProperty *copy = IDP_CopyProperty(prop);
+			IDProperty *prop_exist = IDP_GetPropertyFromGroup(dest, prop->name);
+			if (prop_exist != NULL) {
+				if (prop->type == IDP_GROUP) {
+					IDP_MergeGroup_ex(prop_exist, prop, do_overwrite, flag);
+					continue;
+				}
+			}
+			else {
+				IDProperty *copy = IDP_CopyProperty_ex(prop, flag);
 				dest->len++;
 				BLI_addtail(&dest->data.group, copy);
 			}
 		}
 	}
+}
+
+/**
+ * If a property is missing in \a dest, add it.
+ * Do it recursively.
+ */
+void IDP_MergeGroup(IDProperty *dest, const IDProperty *src, const bool do_overwrite)
+{
+	IDP_MergeGroup_ex(dest, src, do_overwrite, 0);
 }
 
 /**
@@ -886,7 +913,6 @@ bool IDP_EqualsProperties_ex(IDProperty *prop1, IDProperty *prop2, const bool is
 		case IDP_ID:
 			return (IDP_Id(prop1) == IDP_Id(prop2));
 		default:
-			/* should never get here */
 			BLI_assert(0);
 			break;
 	}
@@ -988,7 +1014,8 @@ IDProperty *IDP_New(const char type, const IDPropertyTemplate *val, const char *
 					prop->data.pointer = MEM_mallocN(DEFAULT_ALLOC_FOR_NULL_STRINGS, "id property string 1");
 					*IDP_String(prop) = '\0';
 					prop->totallen = DEFAULT_ALLOC_FOR_NULL_STRINGS;
-					prop->len = 1; /*NULL string, has len of 1 to account for null byte.*/
+					/* NULL string, has len of 1 to account for null byte. */
+					prop->len = 1;
 				}
 				else {
 					BLI_assert((int)val->string.len <= (int)strlen(st) + 1);
@@ -1003,8 +1030,8 @@ IDProperty *IDP_New(const char type, const IDPropertyTemplate *val, const char *
 		}
 		case IDP_GROUP:
 		{
+			/* Values are set properly by calloc. */
 			prop = MEM_callocN(sizeof(IDProperty), "IDProperty group");
-			/* heh I think all needed values are set properly by calloc anyway :) */
 			break;
 		}
 		case IDP_ID:
@@ -1024,7 +1051,7 @@ IDProperty *IDP_New(const char type, const IDPropertyTemplate *val, const char *
 
 	prop->type = type;
 	BLI_strncpy(prop->name, name, MAX_IDPROP_NAME);
-	
+
 	return prop;
 }
 
@@ -1067,5 +1094,15 @@ void IDP_ClearProperty(IDProperty *prop)
 	prop->len = prop->totallen = 0;
 }
 
-/** \} */
+void IDP_Reset(IDProperty *prop, const IDProperty *reference)
+{
+	if (prop == NULL) {
+		return;
+	}
+	IDP_ClearProperty(prop);
+	if (reference != NULL) {
+		IDP_MergeGroup(prop, reference, true);
+	}
+}
 
+/** \} */

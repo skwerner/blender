@@ -29,6 +29,7 @@ CCL_NAMESPACE_BEGIN
 
 class Device;
 class Progress;
+class RenderStats;
 class Scene;
 
 class ImageMetaData {
@@ -38,8 +39,6 @@ public:
 	int channels;
 	size_t width, height, depth;
 	bool builtin_free_cache;
-	/* For OpenVDB files. Each grid in a .vdb is treated as a separate image. */
-	string grid_name;
 
 	/* Automatically set. */
 	ImageDataType type;
@@ -52,30 +51,34 @@ public:
 	~ImageManager();
 
 	int add_image(const string& filename,
+	              const string& grid_name,
 	              void *builtin_data,
 	              bool animated,
 	              float frame,
 	              InterpolationType interpolation,
 	              ExtensionType extension,
 	              bool use_alpha,
-	              bool make_sparse,
+	              bool is_volume,
 	              float isovalue,
 	              ImageMetaData& metadata);
 	void remove_image(int flat_slot);
 	void remove_image(const string& filename,
+	                  const string& grid_name,
 	                  void *builtin_data,
 	                  InterpolationType interpolation,
 	                  ExtensionType extension,
-	                  bool use_alpha,
-	                  const string& grid_name);
+	                  bool use_alpha);
 	void tag_reload_image(const string& filename,
+	                      const string& grid_name,
 	                      void *builtin_data,
 	                      InterpolationType interpolation,
 	                      ExtensionType extension,
-	                      bool use_alpha,
-	                      const string& grid_name);
+	                      bool use_alpha);
 	bool get_image_metadata(const string& filename,
+	                        const string& grid_name,
 	                        void *builtin_data,
+	                        ImageMetaData& metadata);
+	bool get_image_metadata(int flat_slot,
 	                        ImageMetaData& metadata);
 
 	void device_update(Device *device,
@@ -86,12 +89,18 @@ public:
 	                        int flat_slot,
 	                        Progress *progress);
 	void device_free(Device *device);
+
+	void device_load_builtin(Device *device,
+	                         Scene *scene,
+	                         Progress& progress);
 	void device_free_builtin(Device *device);
 
 	void set_osl_texture_system(void *texture_system);
 	bool set_animation_frame_update(int frame);
 
 	device_memory *image_memory(int flat_slot);
+
+	void collect_statistics(RenderStats *stats);
 
 	bool need_update;
 
@@ -115,9 +124,10 @@ public:
 
 	struct Image {
 		string filename;
-		string grid_name; /* For .vdb files. */
+		/* For OpenVDB files. Each grid in a .vdb is treated as a separate image. */
+		string grid_name;
 		void *builtin_data;
-		bool builtin_free_cache;
+		ImageMetaData metadata;
 
 		bool use_alpha;
 		bool need_load;
@@ -150,11 +160,7 @@ private:
 	                        vector<int> *sparse_index);
 
 	bool file_load_image_generic(Image *img,
-	                             ImageInput **in,
-	                             int &width,
-	                             int &height,
-	                             int &depth,
-	                             int &components);
+	                             ImageInput **in);
 
 	template<typename DeviceType>
 	void file_load_failed(Image *img,
@@ -176,16 +182,11 @@ private:
                          ImageDataType type,
                          int texture_limit);
 
-	int max_flattened_slot(ImageDataType type);
-	int type_index_to_flattened_slot(int slot, ImageDataType type);
-	int flattened_slot_to_type_index(int flat_slot, ImageDataType *type);
-	string name_from_type(int type);
-
 	void device_load_image(Device *device,
 	                       Scene *scene,
 	                       ImageDataType type,
 	                       int slot,
-	                       Progress *progess);
+	                       Progress *progress);
 	void device_free_image(Device *device,
 	                       ImageDataType type,
 	                       int slot);
@@ -194,4 +195,3 @@ private:
 CCL_NAMESPACE_END
 
 #endif /* __IMAGE_H__ */
-

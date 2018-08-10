@@ -4,7 +4,7 @@
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version. 
+ * of the License, or (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -39,6 +39,10 @@
 
 struct bNode;
 struct bNodeTree;
+struct BakePixel;
+struct Depsgraph;
+struct IDProperty;
+struct Main;
 struct Object;
 struct Render;
 struct RenderData;
@@ -48,13 +52,13 @@ struct RenderLayer;
 struct RenderResult;
 struct ReportList;
 struct Scene;
-struct BakePixel;
+struct ViewLayer;
 
 /* External Engine */
 
 /* RenderEngineType.flag */
 #define RE_INTERNAL				1
-#define RE_GAME					2
+/* #define RE_FLAG_DEPRECATED	2 */
 #define RE_USE_PREVIEW			4
 #define RE_USE_POSTPROCESS		8
 #define RE_USE_SHADING_NODES	16
@@ -88,15 +92,20 @@ typedef struct RenderEngineType {
 	char name[64];
 	int flag;
 
-	void (*update)(struct RenderEngine *engine, struct Main *bmain, struct Scene *scene);
-	void (*render)(struct RenderEngine *engine, struct Scene *scene);
-	void (*bake)(struct RenderEngine *engine, struct Scene *scene, struct Object *object, const int pass_type, const int pass_filter, const int object_id, const struct BakePixel *pixel_array, const int num_pixels, const int depth, void *result);
+	void (*update)(struct RenderEngine *engine, struct Main *bmain, struct Depsgraph *depsgraph);
+	void (*render)(struct RenderEngine *engine, struct Depsgraph *depsgraph);
+	void (*bake)(struct RenderEngine *engine, struct Depsgraph *depsgraph,
+	             struct Object *object, const int pass_type,
+	             const int pass_filter, const int object_id, const struct BakePixel *pixel_array, const int num_pixels,
+	             const int depth, void *result);
 
 	void (*view_update)(struct RenderEngine *engine, const struct bContext *context);
 	void (*view_draw)(struct RenderEngine *engine, const struct bContext *context);
 
 	void (*update_script_node)(struct RenderEngine *engine, struct bNodeTree *ntree, struct bNode *node);
-	void (*update_render_passes)(struct RenderEngine *engine, struct Scene *scene, struct SceneRenderLayer *srl);
+	void (*update_render_passes)(struct RenderEngine *engine, struct Scene *scene, struct ViewLayer *view_layer);
+
+	struct DrawEngineType *draw_engine;
 
 	/* RNA integration */
 	ExtensionRNA ext;
@@ -121,6 +130,9 @@ typedef struct RenderEngine {
 
 	struct ReportList *reports;
 
+	/* Depsgraph */
+	struct Depsgraph *depsgraph;
+
 	/* for blender internal only */
 	int update_flag;
 	int job_update_flag;
@@ -141,16 +153,16 @@ void RE_result_load_from_file(struct RenderResult *result, struct ReportList *re
 struct RenderResult *RE_engine_begin_result(RenderEngine *engine, int x, int y, int w, int h, const char *layername, const char *viewname);
 void RE_engine_update_result(RenderEngine *engine, struct RenderResult *result);
 void RE_engine_add_pass(RenderEngine *engine, const char *name, int channels, const char *chan_id, const char *layername);
-void RE_engine_end_result(RenderEngine *engine, struct RenderResult *result, int cancel, int highlight, int merge_results);
+void RE_engine_end_result(RenderEngine *engine, struct RenderResult *result, bool cancel, bool highlight, bool merge_results);
 struct RenderResult *RE_engine_get_result(struct RenderEngine *engine);
 
 const char *RE_engine_active_view_get(RenderEngine *engine);
 void RE_engine_active_view_set(RenderEngine *engine, const char *viewname);
-float RE_engine_get_camera_shift_x(RenderEngine *engine, struct Object *camera, int use_spherical_stereo);
-void RE_engine_get_camera_model_matrix(RenderEngine *engine, struct Object *camera, int use_spherical_stereo, float *r_modelmat);
-int RE_engine_get_spherical_stereo(RenderEngine *engine, struct Object *camera);
+float RE_engine_get_camera_shift_x(RenderEngine *engine, struct Object *camera, bool use_spherical_stereo);
+void RE_engine_get_camera_model_matrix(RenderEngine *engine, struct Object *camera, bool use_spherical_stereo, float *r_modelmat);
+bool RE_engine_get_spherical_stereo(RenderEngine *engine, struct Object *camera);
 
-int RE_engine_test_break(RenderEngine *engine);
+bool RE_engine_test_break(RenderEngine *engine);
 void RE_engine_update_stats(RenderEngine *engine, const char *stats, const char *info);
 void RE_engine_update_progress(RenderEngine *engine, float progress);
 void RE_engine_update_memory_stats(RenderEngine *engine, float mem_used, float mem_peak);
@@ -163,19 +175,22 @@ bool RE_engine_is_external(struct Render *re);
 
 void RE_engine_frame_set(struct RenderEngine *engine, int frame, float subframe);
 
-void RE_engine_register_pass(struct RenderEngine *engine, struct Scene *scene, struct SceneRenderLayer *srl,
+void RE_engine_register_pass(struct RenderEngine *engine, struct Scene *scene, struct ViewLayer *view_layer,
                              const char *name, int channels, const char *chanid, int type);
 
 /* Engine Types */
 
 void RE_engines_init(void);
 void RE_engines_exit(void);
+void RE_engines_register(RenderEngineType *render_type);
+
+bool RE_engine_is_opengl(RenderEngineType *render_type);
 
 RenderEngineType *RE_engines_find(const char *idname);
 
 rcti* RE_engine_get_current_tiles(struct Render *re, int *r_total_tiles, bool *r_needs_free);
 struct RenderData *RE_engine_get_render_data(struct Render *re);
-void RE_bake_engine_set_engine_parameters(struct Render *re, struct Main *bmain, struct Scene *scene);
+void RE_bake_engine_set_engine_parameters(
+        struct Render *re, struct Main *bmain, struct Scene *scene);
 
 #endif /* __RE_ENGINE_H__ */
-

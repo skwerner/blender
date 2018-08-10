@@ -35,11 +35,17 @@
 #include "BLI_utildefines.h"
 #include "BLI_rect.h"
 
+#include "BKE_action.h"
 #include "BKE_armature.h"
 #include "BKE_curve.h"
 #include "BKE_DerivedMesh.h"
 #include "BKE_displist.h"
 #include "BKE_editmesh.h"
+#include "BKE_context.h"
+#include "BKE_mesh_runtime.h"
+
+#include "DEG_depsgraph.h"
+#include "DEG_depsgraph_query.h"
 
 #include "bmesh.h"
 
@@ -109,7 +115,9 @@ void meshobject_foreachScreenVert(
         void *userData, eV3DProjTest clip_flag)
 {
 	foreachScreenObjectVert_userData data;
-	DerivedMesh *dm = mesh_get_derived_deform(vc->scene, vc->obact, CD_MASK_BAREMESH);
+	DerivedMesh *dm;
+
+	dm = mesh_get_derived_deform(vc->depsgraph, vc->scene, vc->obact, CD_MASK_BAREMESH);
 
 	ED_view3d_check_mats_rv3d(vc->rv3d);
 
@@ -150,7 +158,9 @@ void mesh_foreachScreenVert(
         void *userData, eV3DProjTest clip_flag)
 {
 	foreachScreenVert_userData data;
-	DerivedMesh *dm = editbmesh_get_derived_cage(vc->scene, vc->obedit, vc->em, CD_MASK_BAREMESH);
+	DerivedMesh *dm;
+
+	dm = editbmesh_get_derived_cage(vc->depsgraph, vc->scene, vc->obedit, vc->em, CD_MASK_BAREMESH);
 
 	ED_view3d_check_mats_rv3d(vc->rv3d);
 
@@ -204,7 +214,9 @@ void mesh_foreachScreenEdge(
         void *userData, eV3DProjTest clip_flag)
 {
 	foreachScreenEdge_userData data;
-	DerivedMesh *dm = editbmesh_get_derived_cage(vc->scene, vc->obedit, vc->em, CD_MASK_BAREMESH);
+	DerivedMesh *dm;
+
+	dm = editbmesh_get_derived_cage(vc->depsgraph, vc->scene, vc->obedit, vc->em, CD_MASK_BAREMESH);
 
 	ED_view3d_check_mats_rv3d(vc->rv3d);
 
@@ -250,7 +262,9 @@ void mesh_foreachScreenFace(
         void *userData, const eV3DProjTest clip_flag)
 {
 	foreachScreenFace_userData data;
-	DerivedMesh *dm = editbmesh_get_derived_cage(vc->scene, vc->obedit, vc->em, CD_MASK_BAREMESH);
+	DerivedMesh *dm;
+
+	dm = editbmesh_get_derived_cage(vc->depsgraph, vc->scene, vc->obedit, vc->em, CD_MASK_BAREMESH);
 
 	ED_view3d_check_mats_rv3d(vc->rv3d);
 
@@ -366,7 +380,7 @@ void lattice_foreachScreenVert(
 	Object *obedit = vc->obedit;
 	Lattice *lt = obedit->data;
 	BPoint *bp = lt->editlatt->latt->def;
-	DispList *dl = obedit->curve_cache ? BKE_displist_find(&obedit->curve_cache->disp, DL_VERTS) : NULL;
+	DispList *dl = obedit->runtime.curve_cache ? BKE_displist_find(&obedit->runtime.curve_cache->disp, DL_VERTS) : NULL;
 	const float *co = dl ? dl->verts : NULL;
 	int i, N = lt->editlatt->latt->pntsu * lt->editlatt->latt->pntsv * lt->editlatt->latt->pntsw;
 
@@ -438,19 +452,21 @@ void pose_foreachScreenBone(
         void (*func)(void *userData, struct bPoseChannel *pchan, const float screen_co_a[2], const float screen_co_b[2]),
         void *userData, const eV3DProjTest clip_flag)
 {
-	bArmature *arm = vc->obact->data;
+	const Object *ob_eval = DEG_get_evaluated_object(vc->depsgraph, vc->obact);
+	const bArmature *arm_eval = ob_eval->data;
 	bPose *pose = vc->obact->pose;
 	bPoseChannel *pchan;
 
 	ED_view3d_check_mats_rv3d(vc->rv3d);
 
 	for (pchan = pose->chanbase.first; pchan; pchan = pchan->next) {
-		if (PBONE_VISIBLE(arm, pchan->bone)) {
+		if (PBONE_VISIBLE(arm_eval, pchan->bone)) {
+			bPoseChannel *pchan_eval = BKE_pose_channel_find_name(ob_eval->pose, pchan->name);
 			float screen_co_a[2], screen_co_b[2];
 			int points_proj_tot = 0;
 
 			/* project head location to screenspace */
-			if (ED_view3d_project_float_object(vc->ar, pchan->pose_head, screen_co_a, clip_flag) == V3D_PROJ_RET_OK) {
+			if (ED_view3d_project_float_object(vc->ar, pchan_eval->pose_head, screen_co_a, clip_flag) == V3D_PROJ_RET_OK) {
 				points_proj_tot++;
 			}
 			else {
@@ -459,7 +475,7 @@ void pose_foreachScreenBone(
 			}
 
 			/* project tail location to screenspace */
-			if (ED_view3d_project_float_object(vc->ar, pchan->pose_tail, screen_co_b, clip_flag) == V3D_PROJ_RET_OK) {
+			if (ED_view3d_project_float_object(vc->ar, pchan_eval->pose_tail, screen_co_b, clip_flag) == V3D_PROJ_RET_OK) {
 				points_proj_tot++;
 			}
 			else {

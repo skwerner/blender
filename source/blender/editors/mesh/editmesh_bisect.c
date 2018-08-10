@@ -50,8 +50,16 @@
 #include "ED_screen.h"
 #include "ED_view3d.h"
 
+#include "UI_resources.h"
 
 #include "mesh_intern.h"  /* own include */
+
+#define USE_GIZMO
+
+#ifdef USE_GIZMO
+#include "ED_gizmo_library.h"
+#include "ED_undo.h"
+#endif
 
 static int mesh_bisect_exec(bContext *C, wmOperator *op);
 
@@ -62,7 +70,7 @@ typedef struct {
 	/* modal only */
 	BMBackup mesh_backup;
 	bool is_first;
-	short twtype;
+	short gizmo_flag;
 } BisectData;
 
 static bool mesh_bisect_interactive_calc(
@@ -148,11 +156,11 @@ static int mesh_bisect_invoke(bContext *C, wmOperator *op, const wmEvent *event)
 
 		/* misc other vars */
 		G.moving = G_TRANSFORM_EDIT;
-		opdata->twtype = v3d->twtype;
-		v3d->twtype = 0;
+		opdata->gizmo_flag = v3d->gizmo_flag;
+		v3d->gizmo_flag = V3D_GIZMO_HIDE;
 
 		/* initialize modal callout */
-		ED_area_headerprint(CTX_wm_area(C), IFACE_("LMB: Click and drag to draw cut line"));
+		ED_workspace_status_text(C, IFACE_("LMB: Click and drag to draw cut line"));
 	}
 	return ret;
 }
@@ -161,7 +169,7 @@ static void edbm_bisect_exit(bContext *C, BisectData *opdata)
 {
 	View3D *v3d = CTX_wm_view3d(C);
 	EDBM_redo_state_free(&opdata->mesh_backup, NULL, false);
-	v3d->twtype = opdata->twtype;
+	v3d->gizmo_flag = opdata->gizmo_flag;
 	G.moving = 0;
 }
 
@@ -177,15 +185,25 @@ static int mesh_bisect_modal(bContext *C, wmOperator *op, const wmEvent *event)
 	/* update or clear modal callout */
 	if (event->type == EVT_MODAL_MAP) {
 		if (event->val == GESTURE_MODAL_BEGIN) {
-			ED_area_headerprint(CTX_wm_area(C), IFACE_("LMB: Release to confirm cut line"));
+			ED_workspace_status_text(C, IFACE_("LMB: Release to confirm cut line"));
 		}
 		else {
-			ED_area_headerprint(CTX_wm_area(C), NULL);
+			ED_workspace_status_text(C, NULL);
 		}
 	}
 
 	if (ret & (OPERATOR_FINISHED | OPERATOR_CANCELLED)) {
 		edbm_bisect_exit(C, &opdata_back);
+
+#ifdef USE_GIZMO
+		/* Setup gizmos */
+		{
+			View3D *v3d = CTX_wm_view3d(C);
+			if (v3d && (v3d->gizmo_flag & V3D_GIZMO_HIDE) == 0) {
+				WM_gizmo_group_type_ensure("MESH_GGT_bisect");
+			}
+		}
+#endif
 	}
 
 	return ret;
@@ -225,7 +243,7 @@ static int mesh_bisect_exec(bContext *C, wmOperator *op)
 		RNA_property_float_get_array(op->ptr, prop_plane_co, plane_co);
 	}
 	else {
-		copy_v3_v3(plane_co, ED_view3d_cursor3d_get(scene, v3d));
+		copy_v3_v3(plane_co, ED_view3d_cursor3d_get(scene, v3d)->location);
 		RNA_property_float_set_array(op->ptr, prop_plane_co, plane_co);
 	}
 
@@ -315,6 +333,9 @@ static int mesh_bisect_exec(bContext *C, wmOperator *op)
 	}
 }
 
+#ifdef USE_GIZMO
+static void MESH_GGT_bisect(struct wmGizmoGroupType *gzgt);
+#endif
 
 void MESH_OT_bisect(struct wmOperatorType *ot)
 {
@@ -347,7 +368,335 @@ void MESH_OT_bisect(struct wmOperatorType *ot)
 	RNA_def_boolean(ot->srna, "clear_inner", false, "Clear Inner", "Remove geometry behind the plane");
 	RNA_def_boolean(ot->srna, "clear_outer", false, "Clear Outer", "Remove geometry in front of the plane");
 
-	RNA_def_float(ot->srna, "threshold", 0.0001, 0.0, 10.0, "Axis Threshold", "", 0.00001, 0.1);
+	RNA_def_float(ot->srna, "threshold", 0.0001, 0.0, 10.0, "Axis Threshold",
+	              "Preserves the existing geometry along the cut plane", 0.00001, 0.1);
 
 	WM_operator_properties_gesture_straightline(ot, CURSOR_EDIT);
+
+#ifdef USE_GIZMO
+	WM_gizmogrouptype_append(MESH_GGT_bisect);
+#endif
 }
+
+
+#ifdef USE_GIZMO
+
+/* -------------------------------------------------------------------- */
+
+/** \name Bisect Gizmo
+ * \{ */
+
+typedef struct GizmoGroup {
+	/* Arrow to change plane depth. */
+	struct wmGizmo *translate_z;
+	/* Translate XYZ */
+	struct wmGizmo *translate_c;
+	/* For grabbing the gizmo and moving freely. */
+	struct wmGizmo *rotate_c;
+
+	/* We could store more vars here! */
+	struct {
+		bContext *context;
+		wmOperator *op;
+		PropertyRNA *prop_plane_co;
+		PropertyRNA *prop_plane_no;
+
+		float rotate_axis[3];
+		float rotate_up[3];
+	} data;
+} GizmoGroup;
+
+/**
+ * XXX. calling redo from property updates is not great.
+ * This is needed because changing the RNA doesn't cause a redo
+ * and we're not using operator UI which does just this.
+ */
+static void gizmo_bisect_exec(GizmoGroup *man)
+{
+	wmOperator *op = man->data.op;
+	if (op == WM_operator_last_redo((bContext *)man->data.context)) {
+		ED_undo_operator_repeat((bContext *)man->data.context, op);
+	}
+}
+
+static void gizmo_mesh_bisect_update_from_op(GizmoGroup *man)
+{
+	wmOperator *op = man->data.op;
+
+	float plane_co[3], plane_no[3];
+
+	RNA_property_float_get_array(op->ptr, man->data.prop_plane_co, plane_co);
+	RNA_property_float_get_array(op->ptr, man->data.prop_plane_no, plane_no);
+
+	WM_gizmo_set_matrix_location(man->translate_z, plane_co);
+	WM_gizmo_set_matrix_location(man->rotate_c, plane_co);
+	/* translate_c location comes from the property. */
+
+	WM_gizmo_set_matrix_rotation_from_z_axis(man->translate_z, plane_no);
+
+	WM_gizmo_set_scale(man->translate_c, 0.2);
+
+	RegionView3D *rv3d = ED_view3d_context_rv3d(man->data.context);
+	if (rv3d) {
+		normalize_v3_v3(man->data.rotate_axis, rv3d->viewinv[2]);
+		normalize_v3_v3(man->data.rotate_up, rv3d->viewinv[1]);
+
+		/* ensure its orthogonal */
+		project_plane_normalized_v3_v3v3(man->data.rotate_up, man->data.rotate_up, man->data.rotate_axis);
+		normalize_v3(man->data.rotate_up);
+
+		WM_gizmo_set_matrix_rotation_from_z_axis(man->translate_c, plane_no);
+
+		float plane_no_cross[3];
+		cross_v3_v3v3(plane_no_cross, plane_no, man->data.rotate_axis);
+
+		WM_gizmo_set_matrix_offset_rotation_from_yz_axis(man->rotate_c, plane_no_cross, man->data.rotate_axis);
+		RNA_enum_set(man->rotate_c->ptr, "draw_options",
+		             ED_GIZMO_DIAL_DRAW_FLAG_ANGLE_MIRROR |
+		             ED_GIZMO_DIAL_DRAW_FLAG_ANGLE_START_Y);
+	}
+}
+
+/* depth callbacks */
+static void gizmo_bisect_prop_depth_get(
+        const wmGizmo *gz, wmGizmoProperty *gz_prop,
+        void *value_p)
+{
+	GizmoGroup *man = gz->parent_gzgroup->customdata;
+	wmOperator *op = man->data.op;
+	float *value = value_p;
+
+	BLI_assert(gz_prop->type->array_length == 1);
+	UNUSED_VARS_NDEBUG(gz_prop);
+
+	float plane_co[3], plane_no[3];
+	RNA_property_float_get_array(op->ptr, man->data.prop_plane_co, plane_co);
+	RNA_property_float_get_array(op->ptr, man->data.prop_plane_no, plane_no);
+
+	value[0] = dot_v3v3(plane_no, plane_co) - dot_v3v3(plane_no, gz->matrix_basis[3]);
+}
+
+static void gizmo_bisect_prop_depth_set(
+        const wmGizmo *gz, wmGizmoProperty *gz_prop,
+        const void *value_p)
+{
+	GizmoGroup *man = gz->parent_gzgroup->customdata;
+	wmOperator *op = man->data.op;
+	const float *value = value_p;
+
+	BLI_assert(gz_prop->type->array_length == 1);
+	UNUSED_VARS_NDEBUG(gz_prop);
+
+	float plane_co[3], plane[4];
+	RNA_property_float_get_array(op->ptr, man->data.prop_plane_co, plane_co);
+	RNA_property_float_get_array(op->ptr, man->data.prop_plane_no, plane);
+	normalize_v3(plane);
+
+	plane[3] = -value[0] - dot_v3v3(plane, gz->matrix_basis[3]);
+
+	/* Keep our location, may be offset simply to be inside the viewport. */
+	closest_to_plane_normalized_v3(plane_co, plane, plane_co);
+
+	RNA_property_float_set_array(op->ptr, man->data.prop_plane_co, plane_co);
+
+	gizmo_bisect_exec(man);
+}
+
+/* translate callbacks */
+static void gizmo_bisect_prop_translate_get(
+        const wmGizmo *gz, wmGizmoProperty *gz_prop,
+        void *value_p)
+{
+	GizmoGroup *man = gz->parent_gzgroup->customdata;
+	wmOperator *op = man->data.op;
+
+	BLI_assert(gz_prop->type->array_length == 3);
+	UNUSED_VARS_NDEBUG(gz_prop);
+
+	RNA_property_float_get_array(op->ptr, man->data.prop_plane_co, value_p);
+}
+
+static void gizmo_bisect_prop_translate_set(
+        const wmGizmo *gz, wmGizmoProperty *gz_prop,
+        const void *value_p)
+{
+	GizmoGroup *man = gz->parent_gzgroup->customdata;
+	wmOperator *op = man->data.op;
+
+	BLI_assert(gz_prop->type->array_length == 3);
+	UNUSED_VARS_NDEBUG(gz_prop);
+
+	RNA_property_float_set_array(op->ptr, man->data.prop_plane_co, value_p);
+
+	gizmo_bisect_exec(man);
+}
+
+/* angle callbacks */
+static void gizmo_bisect_prop_angle_get(
+        const wmGizmo *gz, wmGizmoProperty *gz_prop,
+        void *value_p)
+{
+	GizmoGroup *man = gz->parent_gzgroup->customdata;
+	wmOperator *op = man->data.op;
+	float *value = value_p;
+
+	BLI_assert(gz_prop->type->array_length == 1);
+	UNUSED_VARS_NDEBUG(gz_prop);
+
+	float plane_no[4];
+	RNA_property_float_get_array(op->ptr, man->data.prop_plane_no, plane_no);
+	normalize_v3(plane_no);
+
+	float plane_no_proj[3];
+	project_plane_normalized_v3_v3v3(plane_no_proj, plane_no, man->data.rotate_axis);
+
+	if (!is_zero_v3(plane_no_proj)) {
+		const float angle = -angle_signed_on_axis_v3v3_v3(plane_no_proj, man->data.rotate_up, man->data.rotate_axis);
+		value[0] = angle;
+	}
+	else {
+		value[0] = 0.0f;
+	}
+}
+
+static void gizmo_bisect_prop_angle_set(
+        const wmGizmo *gz, wmGizmoProperty *gz_prop,
+        const void *value_p)
+{
+	GizmoGroup *man = gz->parent_gzgroup->customdata;
+	wmOperator *op = man->data.op;
+	const float *value = value_p;
+
+	BLI_assert(gz_prop->type->array_length == 1);
+	UNUSED_VARS_NDEBUG(gz_prop);
+
+	float plane_no[4];
+	RNA_property_float_get_array(op->ptr, man->data.prop_plane_no, plane_no);
+	normalize_v3(plane_no);
+
+	float plane_no_proj[3];
+	project_plane_normalized_v3_v3v3(plane_no_proj, plane_no, man->data.rotate_axis);
+
+	if (!is_zero_v3(plane_no_proj)) {
+		const float angle = -angle_signed_on_axis_v3v3_v3(plane_no_proj, man->data.rotate_up, man->data.rotate_axis);
+		const float angle_delta = angle - angle_compat_rad(value[0], angle);
+		if (angle_delta != 0.0f) {
+			float mat[3][3];
+			axis_angle_normalized_to_mat3(mat, man->data.rotate_axis, angle_delta);
+			mul_m3_v3(mat, plane_no);
+
+			/* re-normalize - seems acceptable */
+			RNA_property_float_set_array(op->ptr, man->data.prop_plane_no, plane_no);
+
+			gizmo_bisect_exec(man);
+		}
+	}
+}
+
+static bool gizmo_mesh_bisect_poll(const bContext *C, wmGizmoGroupType *gzgt)
+{
+	wmOperator *op = WM_operator_last_redo(C);
+	if (op == NULL || !STREQ(op->type->idname, "MESH_OT_bisect")) {
+		WM_gizmo_group_type_unlink_delayed_ptr(gzgt);
+		return false;
+	}
+	return true;
+}
+
+static void gizmo_mesh_bisect_setup(const bContext *C, wmGizmoGroup *gzgroup)
+{
+	wmOperator *op = WM_operator_last_redo(C);
+
+	if (op == NULL || !STREQ(op->type->idname, "MESH_OT_bisect")) {
+		return;
+	}
+
+	struct GizmoGroup *man = MEM_callocN(sizeof(GizmoGroup), __func__);
+	gzgroup->customdata = man;
+
+	const wmGizmoType *gzt_arrow = WM_gizmotype_find("GIZMO_GT_arrow_3d", true);
+	const wmGizmoType *gzt_grab = WM_gizmotype_find("GIZMO_GT_grab_3d", true);
+	const wmGizmoType *gzt_dial = WM_gizmotype_find("GIZMO_GT_dial_3d", true);
+
+	man->translate_z = WM_gizmo_new_ptr(gzt_arrow, gzgroup, NULL);
+	man->translate_c = WM_gizmo_new_ptr(gzt_grab, gzgroup, NULL);
+	man->rotate_c = WM_gizmo_new_ptr(gzt_dial, gzgroup, NULL);
+
+	UI_GetThemeColor3fv(TH_GIZMO_PRIMARY, man->translate_z->color);
+	UI_GetThemeColor3fv(TH_GIZMO_PRIMARY, man->translate_c->color);
+	UI_GetThemeColor3fv(TH_GIZMO_SECONDARY, man->rotate_c->color);
+
+	RNA_enum_set(man->translate_z->ptr, "draw_style", ED_GIZMO_ARROW_STYLE_NORMAL);
+	RNA_enum_set(man->translate_c->ptr, "draw_style", ED_GIZMO_GRAB_STYLE_RING_2D);
+
+	WM_gizmo_set_flag(man->translate_c, WM_GIZMO_DRAW_VALUE, true);
+	WM_gizmo_set_flag(man->rotate_c, WM_GIZMO_DRAW_VALUE, true);
+
+	{
+		man->data.context = (bContext *)C;
+		man->data.op = op;
+		man->data.prop_plane_co = RNA_struct_find_property(op->ptr, "plane_co");
+		man->data.prop_plane_no = RNA_struct_find_property(op->ptr, "plane_no");
+	}
+
+	gizmo_mesh_bisect_update_from_op(man);
+
+	/* Setup property callbacks */
+	{
+		WM_gizmo_target_property_def_func(
+		        man->translate_z, "offset",
+		        &(const struct wmGizmoPropertyFnParams) {
+		            .value_get_fn = gizmo_bisect_prop_depth_get,
+		            .value_set_fn = gizmo_bisect_prop_depth_set,
+		            .range_get_fn = NULL,
+		            .user_data = NULL,
+		        });
+
+		WM_gizmo_target_property_def_func(
+		        man->translate_c, "offset",
+		        &(const struct wmGizmoPropertyFnParams) {
+		            .value_get_fn = gizmo_bisect_prop_translate_get,
+		            .value_set_fn = gizmo_bisect_prop_translate_set,
+		            .range_get_fn = NULL,
+		            .user_data = NULL,
+		        });
+
+		WM_gizmo_target_property_def_func(
+		        man->rotate_c, "offset",
+		        &(const struct wmGizmoPropertyFnParams) {
+		            .value_get_fn = gizmo_bisect_prop_angle_get,
+		            .value_set_fn = gizmo_bisect_prop_angle_set,
+		            .range_get_fn = NULL,
+		            .user_data = NULL,
+		        });
+	}
+}
+
+static void gizmo_mesh_bisect_draw_prepare(
+        const bContext *UNUSED(C), wmGizmoGroup *gzgroup)
+{
+	GizmoGroup *man = gzgroup->customdata;
+	if (man->data.op->next) {
+		man->data.op = WM_operator_last_redo((bContext *)man->data.context);
+	}
+	gizmo_mesh_bisect_update_from_op(man);
+}
+
+static void MESH_GGT_bisect(struct wmGizmoGroupType *gzgt)
+{
+	gzgt->name = "Mesh Bisect";
+	gzgt->idname = "MESH_GGT_bisect";
+
+	gzgt->flag = WM_GIZMOGROUPTYPE_3D;
+
+	gzgt->gzmap_params.spaceid = SPACE_VIEW3D;
+	gzgt->gzmap_params.regionid = RGN_TYPE_WINDOW;
+
+	gzgt->poll = gizmo_mesh_bisect_poll;
+	gzgt->setup = gizmo_mesh_bisect_setup;
+	gzgt->draw_prepare = gizmo_mesh_bisect_draw_prepare;
+}
+
+/** \} */
+
+#endif  /* USE_GIZMO */

@@ -4,7 +4,7 @@
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version. 
+ * of the License, or (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -60,35 +60,27 @@
 
 #include "buttons_intern.h"  /* own include */
 
-/********************** toolbox operator *********************/
+/********************** context_menu operator *********************/
 
-static int toolbox_invoke(bContext *C, wmOperator *UNUSED(op), const wmEvent *UNUSED(event))
+static int context_menu_invoke(bContext *C, wmOperator *UNUSED(op), const wmEvent *UNUSED(event))
 {
-	bScreen *sc = CTX_wm_screen(C);
-	SpaceButs *sbuts = CTX_wm_space_buts(C);
-	PointerRNA ptr;
-	uiPopupMenu *pup;
-	uiLayout *layout;
-
-	RNA_pointer_create(&sc->id, &RNA_SpaceProperties, sbuts, &ptr);
-
-	pup = UI_popup_menu_begin(C, IFACE_("Align"), ICON_NONE);
-	layout = UI_popup_menu_layout(pup);
-	uiItemsEnumR(layout, &ptr, "align");
+	uiPopupMenu *pup = UI_popup_menu_begin(C, IFACE_("Context Menu"), ICON_NONE);
+	uiLayout *layout = UI_popup_menu_layout(pup);
+	uiItemM(layout, "INFO_MT_area", NULL, ICON_NONE);
 	UI_popup_menu_end(C, pup);
 
 	return OPERATOR_INTERFACE;
 }
 
-void BUTTONS_OT_toolbox(wmOperatorType *ot)
+void BUTTONS_OT_context_menu(wmOperatorType *ot)
 {
 	/* identifiers */
-	ot->name = "Toolbox";
-	ot->description = "Display button panel toolbox";
-	ot->idname = "BUTTONS_OT_toolbox";
-	
+	ot->name = "Context Menu";
+	ot->description = "Display properties editor context_menu";
+	ot->idname = "BUTTONS_OT_context_menu";
+
 	/* api callbacks */
-	ot->invoke = toolbox_invoke;
+	ot->invoke = context_menu_invoke;
 	ot->poll = ED_operator_buttons_active;
 }
 
@@ -102,14 +94,15 @@ typedef struct FileBrowseOp {
 
 static int file_browse_exec(bContext *C, wmOperator *op)
 {
+	Main *bmain = CTX_data_main(C);
 	FileBrowseOp *fbo = op->customdata;
 	ID *id;
 	char *str, path[FILE_MAX];
 	const char *path_prop = RNA_struct_find_property(op->ptr, "directory") ? "directory" : "filepath";
-	
+
 	if (RNA_struct_property_is_set(op->ptr, path_prop) == 0 || fbo == NULL)
 		return OPERATOR_CANCELLED;
-	
+
 	str = RNA_string_get_alloc(op->ptr, path_prop, NULL, 0);
 
 	/* add slash for directories, important for some properties */
@@ -118,14 +111,14 @@ static int file_browse_exec(bContext *C, wmOperator *op)
 		id = fbo->ptr.id.data;
 
 		BLI_strncpy(path, str, FILE_MAX);
-		BLI_path_abs(path, id ? ID_BLEND_PATH(G.main, id) : G.main->name);
-		
+		BLI_path_abs(path, id ? ID_BLEND_PATH(bmain, id) : BKE_main_blendfile_path(bmain));
+
 		if (BLI_is_dir(path)) {
 			/* do this first so '//' isnt converted to '//\' on windows */
 			BLI_add_slash(path);
 			if (is_relative) {
 				BLI_strncpy(path, str, FILE_MAX);
-				BLI_path_rel(path, G.main->name);
+				BLI_path_rel(path, BKE_main_blendfile_path(bmain));
 				str = MEM_reallocN(str, strlen(path) + 2);
 				BLI_strncpy(str, path, FILE_MAX);
 			}
@@ -255,7 +248,7 @@ void BUTTONS_OT_file_browse(wmOperatorType *ot)
 	ot->name = "Accept";
 	ot->description = "Open a file browser, Hold Shift to open the file, Alt to browse containing directory";
 	ot->idname = "BUTTONS_OT_file_browse";
-	
+
 	/* api callbacks */
 	ot->invoke = file_browse_invoke;
 	ot->exec = file_browse_exec;

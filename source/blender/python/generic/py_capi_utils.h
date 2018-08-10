@@ -76,7 +76,7 @@ PyObject *      PyC_UnicodeFromByteAndSize(const char *str, Py_ssize_t size);
 const char *    PyC_UnicodeAsByte(PyObject *py_str, PyObject **coerce); /* coerce must be NULL */
 const char *    PyC_UnicodeAsByteAndSize(PyObject *py_str, Py_ssize_t *size, PyObject **coerce);
 
-/* name namespace function for bpy & bge */
+/* name namespace function for bpy */
 PyObject *		PyC_DefaultNameSpace(const char *filename);
 void			PyC_RunQuicky(const char *filepath, int n, ...);
 
@@ -106,6 +106,7 @@ bool PyC_RunString_AsString(const char *expr, const char *filename, char **r_val
 
 int PyC_ParseBool(PyObject *o, void *p);
 
+int PyC_CheckArgs_DeepCopy(PyObject *args);
 
 /* Integer parsing (with overflow checks), -1 on error. */
 int     PyC_Long_AsBool(PyObject *value);

@@ -4,7 +4,7 @@
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version. 
+ * of the License, or (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -33,15 +33,14 @@
 #ifndef __RENDERPIPELINE_H__
 #define __RENDERPIPELINE_H__
 
+struct ListBase;
 struct Render;
 struct RenderData;
 struct RenderLayer;
 struct RenderResult;
 
 struct RenderLayer *render_get_active_layer(struct Render *re, struct RenderResult *rr);
-float panorama_pixel_rot(struct Render *re);
-void render_update_anim_renderdata(struct Render *re, struct RenderData *rd);
+void render_update_anim_renderdata(struct Render *re, struct RenderData *rd, struct ListBase *render_layers);
 void render_copy_renderdata(struct RenderData *to, struct RenderData *from);
 
 #endif /* __RENDERPIPELINE_H__ */
-

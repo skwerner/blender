@@ -34,6 +34,7 @@
 
 #include "BLI_utildefines.h"
 #include "BLI_ghash.h"
+#include "BLI_listbase.h"
 
 #include "PIL_time.h"
 #include "PIL_time_utildefines.h"
@@ -42,12 +43,9 @@ extern "C" {
 #include "DNA_cachefile_types.h"
 #include "DNA_object_types.h"
 #include "DNA_scene_types.h"
-#include "DNA_object_force_types.h"
 
 #include "BKE_main.h"
-#include "BKE_collision.h"
-#include "BKE_effect.h"
-#include "BKE_modifier.h"
+#include "BKE_scene.h"
 } /* extern "C" */
 
 #include "DEG_depsgraph.h"
@@ -188,32 +186,48 @@ void DEG_add_special_eval_flag(Depsgraph *graph, ID *id, short flag)
 /* ******************** */
 /* Graph Building API's */
 
-/* Build depsgraph for the given scene, and dump results in given
+/* Build depsgraph for the given scene layer, and dump results in given
  * graph container.
  */
-/* XXX: assume that this is called from outside, given the current scene as
- * the "main" scene.
- */
-void DEG_graph_build_from_scene(Depsgraph *graph, Main *bmain, Scene *scene)
+void DEG_graph_build_from_view_layer(Depsgraph *graph,
+                                      Main *bmain,
+                                      Scene *scene,
+                                      ViewLayer *view_layer)
 {
-	double start_time;
+	double start_time = 0.0;
 	if (G.debug & G_DEBUG_DEPSGRAPH_BUILD) {
 		start_time = PIL_check_seconds_timer();
 	}
 
 	DEG::Depsgraph *deg_graph = reinterpret_cast<DEG::Depsgraph *>(graph);
+	BLI_assert(BLI_findindex(&scene->view_layers, view_layer) != -1);
+
+	BLI_assert(deg_graph->scene == scene);
+	BLI_assert(deg_graph->view_layer == view_layer);
+
+	/* TODO(sergey): This is a bit tricky, but ensures that all the data
+	 * is evaluated properly when depsgraph is becoming "visible".
+	 *
+	 * This now could happen for both visible scene is changed and extra
+	 * dependency graph was created for render engine.
+	 */
+	const bool need_on_visible_update = (deg_graph->id_nodes.size() == 0);
 
 	/* 1) Generate all the nodes in the graph first */
 	DEG::DepsgraphNodeBuilder node_builder(bmain, deg_graph);
 	node_builder.begin_build();
-	node_builder.build_scene(scene);
+	node_builder.build_view_layer(scene,
+	                               view_layer,
+	                               DEG::DEG_ID_LINKED_DIRECTLY);
+	node_builder.end_build();
 
 	/* 2) Hook up relationships between operations - to determine evaluation
 	 *    order.
 	 */
 	DEG::DepsgraphRelationBuilder relation_builder(bmain, deg_graph);
 	relation_builder.begin_build();
-	relation_builder.build_scene(scene);
+	relation_builder.build_view_layer(scene, view_layer);
+	relation_builder.build_copy_on_write_relations();
 
 	/* Detect and solve cycles. */
 	DEG::deg_graph_detect_cycles(deg_graph);
@@ -228,7 +242,7 @@ void DEG_graph_build_from_scene(Depsgraph *graph, Main *bmain, Scene *scene)
 	}
 
 	/* 4) Flush visibility layer and re-schedule nodes for update. */
-	DEG::deg_graph_build_finalize(deg_graph);
+	DEG::deg_graph_build_finalize(bmain, deg_graph);
 
 #if 0
 	if (!DEG_debug_consistency_check(deg_graph)) {
@@ -236,6 +250,16 @@ void DEG_graph_build_from_scene(Depsgraph *graph, Main *bmain, Scene *scene)
 		abort();
 	}
 #endif
+
+	/* Relations are up to date. */
+	deg_graph->need_update = false;
+
+	/* Store pointers to commonly used valuated datablocks. */
+	deg_graph->scene_cow = (Scene *)deg_graph->get_cow_id(&deg_graph->scene->id);
+
+	if (need_on_visible_update) {
+		DEG_graph_on_visible_update(bmain, graph);
+	}
 
 	if (G.debug & G_DEBUG_DEPSGRAPH_BUILD) {
 		printf("Depsgraph built in %f seconds.\n",
@@ -246,141 +270,51 @@ void DEG_graph_build_from_scene(Depsgraph *graph, Main *bmain, Scene *scene)
 /* Tag graph relations for update. */
 void DEG_graph_tag_relations_update(Depsgraph *graph)
 {
+	DEG_DEBUG_PRINTF(graph, TAG, "%s: Tagging relations for update.\n", __func__);
 	DEG::Depsgraph *deg_graph = reinterpret_cast<DEG::Depsgraph *>(graph);
 	deg_graph->need_update = true;
+	/* NOTE: When relations are updated, it's quite possible that
+	 * we've got new bases in the scene. This means, we need to
+	 * re-create flat array of bases in view layer.
+	 *
+	 * TODO(sergey): Try to make it so we don't flush updates
+	 * to the whole depsgraph.
+	 */
+	{
+		DEG::IDDepsNode *id_node = deg_graph->find_id_node(&deg_graph->scene->id);
+		if (id_node != NULL) {
+			id_node->tag_update(deg_graph);
+		}
+	}
+}
+
+/* Create or update relations in the specified graph. */
+void DEG_graph_relations_update(Depsgraph *graph,
+                                Main *bmain,
+                                Scene *scene,
+                                ViewLayer *view_layer)
+{
+	DEG::Depsgraph *deg_graph = (DEG::Depsgraph *)graph;
+	if (!deg_graph->need_update) {
+		/* Graph is up to date, nothing to do. */
+		return;
+	}
+	DEG_graph_build_from_view_layer(graph, bmain, scene, view_layer);
 }
 
 /* Tag all relations for update. */
 void DEG_relations_tag_update(Main *bmain)
 {
-	for (Scene *scene = (Scene *)bmain->scene.first;
-	     scene != NULL;
-	     scene = (Scene *)scene->id.next)
-	{
-		if (scene->depsgraph != NULL) {
-			DEG_graph_tag_relations_update(scene->depsgraph);
-		}
-	}
-}
-
-/* Create new graph if didn't exist yet,
- * or update relations if graph was tagged for update.
- */
-void DEG_scene_relations_update(Main *bmain, Scene *scene)
-{
-	if (scene->depsgraph == NULL) {
-		/* Rebuild graph from scratch and exit. */
-		scene->depsgraph = DEG_graph_new();
-		DEG_graph_build_from_scene(scene->depsgraph, bmain, scene);
-		return;
-	}
-
-	DEG::Depsgraph *graph = reinterpret_cast<DEG::Depsgraph *>(scene->depsgraph);
-	if (!graph->need_update) {
-		/* Graph is up to date, nothing to do. */
-		return;
-	}
-
-	/* Clear all previous nodes and operations. */
-	graph->clear_all_nodes();
-	graph->operations.clear();
-	BLI_gset_clear(graph->entry_tags, NULL);
-
-	/* Build new nodes and relations. */
-	DEG_graph_build_from_scene(reinterpret_cast< ::Depsgraph * >(graph),
-	                           bmain,
-	                           scene);
-
-	graph->need_update = false;
-}
-
-/* Rebuild dependency graph only for a given scene. */
-void DEG_scene_relations_rebuild(Main *bmain, Scene *scene)
-{
-	if (scene->depsgraph != NULL) {
-		DEG_graph_tag_relations_update(scene->depsgraph);
-	}
-	DEG_scene_relations_update(bmain, scene);
-}
-
-void DEG_scene_graph_free(Scene *scene)
-{
-	if (scene->depsgraph) {
-		DEG_graph_free(scene->depsgraph);
-		scene->depsgraph = NULL;
-	}
-}
-
-void DEG_add_collision_relations(DepsNodeHandle *handle,
-                                 Scene *scene,
-                                 Object *object,
-                                 Group *group,
-                                 int layer,
-                                 unsigned int modifier_type,
-                                 DEG_CollobjFilterFunction fn,
-                                 bool dupli,
-                                 const char *name)
-{
-	unsigned int numcollobj;
-	Object **collobjs = get_collisionobjects_ext(scene, object, group, layer, &numcollobj, modifier_type, dupli);
-
-	for (unsigned int i = 0; i < numcollobj; i++) {
-		Object *ob1 = collobjs[i];
-
-		if (!fn || fn(ob1, modifiers_findByType(ob1, (ModifierType)modifier_type))) {
-			DEG_add_object_relation(handle, ob1, DEG_OB_COMP_TRANSFORM, name);
-			DEG_add_object_relation(handle, ob1, DEG_OB_COMP_GEOMETRY, name);
-		}
-	}
-
-	if (collobjs)
-		MEM_freeN(collobjs);
-}
-
-void DEG_add_forcefield_relations(DepsNodeHandle *handle,
-                                  Scene *scene,
-                                  Object *object,
-                                  EffectorWeights *effector_weights,
-                                  bool add_absorption,
-                                  int skip_forcefield,
-                                  const char *name)
-{
-	ListBase *effectors = pdInitEffectors(scene, object, NULL, effector_weights, false);
-	if (effectors == NULL) {
-		return;
-	}
-	for (EffectorCache *eff = (EffectorCache*)effectors->first; eff; eff = eff->next) {
-		if (eff->ob != object && eff->pd->forcefield != skip_forcefield) {
-			DEG_add_object_relation(handle, eff->ob, DEG_OB_COMP_TRANSFORM, name);
-			if (eff->psys) {
-				DEG_add_object_relation(handle, eff->ob, DEG_OB_COMP_EVAL_PARTICLES, name);
-				/* TODO: remove this when/if EVAL_PARTICLES is sufficient
-				 * for up to date particles.
-				 */
-				DEG_add_object_relation(handle, eff->ob, DEG_OB_COMP_GEOMETRY, name);
-			}
-			if (eff->pd->forcefield == PFIELD_SMOKEFLOW && eff->pd->f_source) {
-				DEG_add_object_relation(handle,
-				                        eff->pd->f_source,
-				                        DEG_OB_COMP_TRANSFORM,
-				                        "Smoke Force Domain");
-				DEG_add_object_relation(handle,
-				                        eff->pd->f_source,
-				                        DEG_OB_COMP_GEOMETRY,
-				                        "Smoke Force Domain");
-			}
-			if (add_absorption && (eff->pd->flag & PFIELD_VISIBILITY)) {
-				DEG_add_collision_relations(handle,
-				                            scene,
-				                            object,
-				                            NULL,
-				                            eff->ob->lay,
-				                            eModifierType_Collision,
-				                            NULL,
-				                            true,
-				                            "Force Absorption");
+	DEG_GLOBAL_DEBUG_PRINTF(TAG, "%s: Tagging relations for update.\n", __func__);
+	LISTBASE_FOREACH (Scene *, scene, &bmain->scene) {
+		LISTBASE_FOREACH (ViewLayer *, view_layer, &scene->view_layers) {
+			Depsgraph *depsgraph =
+			        (Depsgraph *)BKE_scene_get_depsgraph(scene,
+			                                             view_layer,
+			                                             false);
+			if (depsgraph != NULL) {
+				DEG_graph_tag_relations_update(depsgraph);
 			}
 		}
 	}
-	pdEndEffectors(&effectors);
 }

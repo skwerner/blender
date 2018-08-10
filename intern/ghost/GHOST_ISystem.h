@@ -36,6 +36,7 @@
 #define __GHOST_ISYSTEM_H__
 
 #include "GHOST_Types.h"
+#include "GHOST_IContext.h"
 #include "GHOST_ITimerTask.h"
 #include "GHOST_IWindow.h"
 
@@ -262,6 +263,20 @@ public:
 	virtual GHOST_TSuccess disposeWindow(GHOST_IWindow *window) = 0;
 
 	/**
+	 * Create a new offscreen context.
+	 * Never explicitly delete the context, use disposeContext() instead.
+	 * \return  The new context (or 0 if creation failed).
+	 */
+	virtual GHOST_IContext *createOffscreenContext() = 0;
+
+	/**
+	 * Dispose of a context.
+	 * \param   context Pointer to the context to be disposed.
+	 * \return  Indication of success.
+	 */
+	virtual GHOST_TSuccess disposeContext(GHOST_IContext *context) = 0;
+
+	/**
 	 * Returns whether a window is valid.
 	 * \param   window Pointer to the window to be checked.
 	 * \return  Indication of validity.
@@ -300,7 +315,7 @@ public:
 	 * \return The current status.
 	 */
 	virtual bool getFullScreen(void) = 0;
-	
+
 	/**
 	 * Native pixel size support (MacBook 'retina').
 	 */
@@ -447,4 +462,3 @@ protected:
 };
 
 #endif // __GHOST_ISYSTEM_H__
-

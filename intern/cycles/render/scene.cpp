@@ -79,13 +79,13 @@ DeviceScene::DeviceScene(Device *device)
   sobol_directions(device, "__sobol_directions", MEM_TEXTURE),
   ies_lights(device, "__ies", MEM_TEXTURE)
 {
-	memset(&data, 0, sizeof(data));
+	memset((void*)&data, 0, sizeof(data));
 }
 
 Scene::Scene(const SceneParams& params_, Device *device)
 : device(device), dscene(device), params(params_)
 {
-	memset(&dscene.data, 0, sizeof(dscene.data));
+	memset((void *)&dscene.data, 0, sizeof(dscene.data));
 
 	camera = new Camera();
 	dicing_camera = new Camera();
@@ -319,7 +319,7 @@ bool Scene::need_global_attribute(AttributeStandard std)
 		return need_motion() != MOTION_NONE;
 	else if(std == ATTR_STD_MOTION_VERTEX_NORMAL)
 		return need_motion() == MOTION_BLUR;
-	
+
 	return false;
 }
 
@@ -379,5 +379,10 @@ void Scene::device_free()
 	free_memory(false);
 }
 
-CCL_NAMESPACE_END
+void Scene::collect_statistics(RenderStats *stats)
+{
+	mesh_manager->collect_statistics(this, stats);
+	image_manager->collect_statistics(stats);
+}
 
+CCL_NAMESPACE_END

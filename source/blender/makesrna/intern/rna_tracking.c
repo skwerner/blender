@@ -51,8 +51,9 @@
 #include "DNA_anim_types.h"
 
 #include "BKE_animsys.h"
-#include "BKE_depsgraph.h"
 #include "BKE_node.h"
+
+#include "DEG_depsgraph.h"
 
 #include "IMB_imbuf.h"
 
@@ -208,14 +209,14 @@ static void rna_trackingTrack_name_set(PointerRNA *ptr, const char *value)
 	}
 }
 
-static int rna_trackingTrack_select_get(PointerRNA *ptr)
+static bool rna_trackingTrack_select_get(PointerRNA *ptr)
 {
 	MovieTrackingTrack *track = (MovieTrackingTrack *)ptr->data;
 
 	return TRACK_SELECTED(track);
 }
 
-static void rna_trackingTrack_select_set(PointerRNA *ptr, int value)
+static void rna_trackingTrack_select_set(PointerRNA *ptr, bool value)
 {
 	MovieTrackingTrack *track = (MovieTrackingTrack *)ptr->data;
 
@@ -426,7 +427,7 @@ static void rna_tracking_flushUpdate(Main *UNUSED(bmain), Scene *scene, PointerR
 
 	WM_main_add_notifier(NC_SCENE | ND_NODES, NULL);
 	WM_main_add_notifier(NC_SCENE, NULL);
-	DAG_id_tag_update(&clip->id, 0);
+	DEG_id_tag_update(&clip->id, 0);
 }
 
 static void rna_tracking_resetIntrinsics(Main *UNUSED(bmain), Scene *UNUSED(scene), PointerRNA *ptr)
@@ -515,7 +516,7 @@ static void rna_trackingObject_flushUpdate(Main *UNUSED(bmain), Scene *UNUSED(sc
 	MovieClip *clip = (MovieClip *)ptr->id.data;
 
 	WM_main_add_notifier(NC_OBJECT | ND_TRANSFORM, NULL);
-	DAG_id_tag_update(&clip->id, 0);
+	DEG_id_tag_update(&clip->id, 0);
 }
 
 static void rna_trackingMarker_frame_set(PointerRNA *ptr, int value)
@@ -664,7 +665,7 @@ static void rna_trackingObject_remove(MovieTracking *tracking, ReportList *repor
 	WM_main_add_notifier(NC_MOVIECLIP | NA_EDITED, NULL);
 }
 
-static MovieTrackingMarker *rna_trackingMarkers_find_frame(MovieTrackingTrack *track, int framenr, int exact)
+static MovieTrackingMarker *rna_trackingMarkers_find_frame(MovieTrackingTrack *track, int framenr, bool exact)
 {
 	if (exact)
 		return BKE_tracking_marker_get_exact(track, framenr);
@@ -706,7 +707,7 @@ static void rna_trackingMarkers_delete_frame(MovieTrackingTrack *track, int fram
 }
 
 static MovieTrackingPlaneMarker *rna_trackingPlaneMarkers_find_frame(MovieTrackingPlaneTrack *plane_track,
-                                                                     int framenr, int exact)
+                                                                     int framenr, bool exact)
 {
 	if (exact)
 		return BKE_tracking_plane_marker_get_exact(plane_track, framenr);
@@ -1479,6 +1480,7 @@ static void rna_def_trackingTrack(BlenderRNA *brna)
 	prop = RNA_def_property(srna, "grease_pencil", PROP_POINTER, PROP_NONE);
 	RNA_def_property_pointer_sdna(prop, NULL, "gpd");
 	RNA_def_property_struct_type(prop, "GreasePencil");
+	RNA_def_property_pointer_funcs(prop, NULL, NULL, NULL, "rna_GPencil_datablocks_annotations_poll");
 	RNA_def_property_flag(prop, PROP_EDITABLE | PROP_ID_REFCOUNT);
 	RNA_def_property_ui_text(prop, "Grease Pencil", "Grease pencil data for this track");
 	RNA_def_property_update(prop, NC_MOVIECLIP | ND_DISPLAY, NULL);

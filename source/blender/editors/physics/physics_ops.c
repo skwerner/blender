@@ -4,7 +4,7 @@
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version. 
+ * of the License, or (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -85,6 +85,7 @@ static void operatortypes_particle(void)
 	WM_operatortype_append(PARTICLE_OT_copy_particle_systems);
 	WM_operatortype_append(PARTICLE_OT_duplicate_particle_system);
 
+	WM_operatortype_append(PARTICLE_OT_dupliob_refresh);
 	WM_operatortype_append(PARTICLE_OT_dupliob_copy);
 	WM_operatortype_append(PARTICLE_OT_dupliob_remove);
 	WM_operatortype_append(PARTICLE_OT_dupliob_move_up);
@@ -111,12 +112,14 @@ static void keymap_particle(wmKeyConfig *keyconf)
 {
 	wmKeyMapItem *kmi;
 	wmKeyMap *keymap;
-	
+
 	keymap = WM_keymap_find(keyconf, "Particle", 0, 0);
 	keymap->poll = PE_poll;
-	
+
 	kmi = WM_keymap_add_item(keymap, "PARTICLE_OT_select_all", AKEY, KM_PRESS, 0, 0);
-	RNA_enum_set(kmi->ptr, "action", SEL_TOGGLE);
+	RNA_enum_set(kmi->ptr, "action", SEL_SELECT);
+	kmi = WM_keymap_add_item(keymap, "PARTICLE_OT_select_all", AKEY, KM_PRESS, KM_ALT, 0);
+	RNA_enum_set(kmi->ptr, "action", SEL_DESELECT);
 	kmi = WM_keymap_add_item(keymap, "PARTICLE_OT_select_all", IKEY, KM_PRESS, KM_CTRL, 0);
 	RNA_enum_set(kmi->ptr, "action", SEL_INVERT);
 
@@ -137,23 +140,6 @@ static void keymap_particle(wmKeyConfig *keyconf)
 	kmi = WM_keymap_add_item(keymap, "PARTICLE_OT_hide", HKEY, KM_PRESS, KM_SHIFT, 0);
 	RNA_boolean_set(kmi->ptr, "unselected", true);
 
-	/* Shift+LMB behavior first, so it has priority over KM_ANY item below. */
-	kmi = WM_keymap_add_item(keymap, "VIEW3D_OT_manipulator", LEFTMOUSE, KM_PRESS, KM_SHIFT, 0);
-	RNA_boolean_set(kmi->ptr, "release_confirm", true);
-	RNA_boolean_set(kmi->ptr, "use_planar_constraint", true);
-	RNA_boolean_set(kmi->ptr, "use_accurate", false);
-
-	kmi = WM_keymap_add_item(keymap, "VIEW3D_OT_manipulator", LEFTMOUSE, KM_PRESS, KM_SHIFT, 0);
-	RNA_boolean_set(kmi->ptr, "release_confirm", true);
-	RNA_boolean_set(kmi->ptr, "use_planar_constraint", false);
-	RNA_boolean_set(kmi->ptr, "use_accurate", true);
-
-	/* Using KM_ANY here to allow holding modifiers before starting to transform. */
-	kmi = WM_keymap_add_item(keymap, "VIEW3D_OT_manipulator", LEFTMOUSE, KM_PRESS, KM_ANY, 0);
-	RNA_boolean_set(kmi->ptr, "release_confirm", true);
-	RNA_boolean_set(kmi->ptr, "use_planar_constraint", false);
-	RNA_boolean_set(kmi->ptr, "use_accurate", false);
-
 	WM_keymap_add_item(keymap, "PARTICLE_OT_brush_edit", LEFTMOUSE, KM_PRESS, 0, 0);
 	WM_keymap_add_item(keymap, "PARTICLE_OT_brush_edit", LEFTMOUSE, KM_PRESS, KM_SHIFT, 0);
 
@@ -166,7 +152,7 @@ static void keymap_particle(wmKeyConfig *keyconf)
 	RNA_string_set(kmi->ptr, "data_path_primary", "tool_settings.particle_edit.brush.strength");
 
 	WM_keymap_add_menu(keymap, "VIEW3D_MT_particle_specials", WKEY, KM_PRESS, 0, 0);
-	
+
 	WM_keymap_add_item(keymap, "PARTICLE_OT_weight_set", KKEY, KM_PRESS, KM_SHIFT, 0);
 
 	ED_keymap_proportional_cycle(keyconf, keymap);
@@ -222,7 +208,7 @@ static void operatortypes_dynamicpaint(void)
 //static void keymap_pointcache(wmWindowManager *wm)
 //{
 //	wmKeyMap *keymap = WM_keymap_find(wm, "Pointcache", 0, 0);
-//	
+//
 //	WM_keymap_add_item(keymap, "PHYSICS_OT_bake_all", AKEY, KM_PRESS, 0, 0);
 //	WM_keymap_add_item(keymap, "PHYSICS_OT_free_all", PADPLUSKEY, KM_PRESS, KM_CTRL, 0);
 //	WM_keymap_add_item(keymap, "PHYSICS_OT_bake_particle_system", PADMINUS, KM_PRESS, KM_CTRL, 0);
@@ -245,6 +231,3 @@ void ED_keymap_physics(wmKeyConfig *keyconf)
 	keymap_particle(keyconf);
 	//keymap_pointcache(keyconf);
 }
-
-
-

@@ -4,7 +4,7 @@
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version. 
+ * of the License, or (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -18,7 +18,7 @@
  * The Original Code is Copyright (C) 2007 Blender Foundation.
  * All rights reserved.
  *
- * 
+ *
  * Contributor(s): Blender Foundation
  *
  * ***** END GPL LICENSE BLOCK *****
@@ -42,6 +42,11 @@ struct ARegion;
 
 /* wmKeyMap is in DNA_windowmanager.h, it's savable */
 
+struct wmEventHandler_KeymapFn {
+	void (*handle_post_fn)(wmKeyMap *keymap, wmKeyMapItem *kmi, void *user_data);
+	void  *user_data;
+};
+
 typedef struct wmEventHandler {
 	struct wmEventHandler *next, *prev;
 
@@ -51,6 +56,10 @@ typedef struct wmEventHandler {
 	/* keymap handler */
 	wmKeyMap *keymap;                   /* pointer to builtin/custom keymaps */
 	const rcti *bblocal, *bbwin;              /* optional local and windowspace bb */
+	/* Run after the keymap item runs. */
+	struct wmEventHandler_KeymapFn keymap_callback;
+
+	struct bToolRef *keymap_tool;
 
 	/* modal operator handler */
 	wmOperator *op;                     /* for derived/modal handlers */
@@ -68,7 +77,8 @@ typedef struct wmEventHandler {
 
 	/* drop box handler */
 	ListBase *dropboxes;
-
+	/* gizmo handler */
+	struct wmGizmoMap *gizmo_map;
 } wmEventHandler;
 
 /* custom types for handlers, for signaling, freeing */
@@ -87,6 +97,7 @@ void        wm_event_do_handlers    (bContext *C);
 
 void        wm_event_add_ghostevent (wmWindowManager *wm, wmWindow *win, int type, int time, void *customdata);
 
+void        wm_event_do_depsgraph(bContext *C);
 void        wm_event_do_refresh_wm_and_depsgraph(bContext *C);
 void        wm_event_do_notifiers(bContext *C);
 

@@ -32,11 +32,14 @@
 #include "DocumentImporter.h"
 #include "ExportSettings.h"
 #include "ImportSettings.h"
+#include "collada.h"
 
 extern "C"
 {
 #include "BKE_scene.h"
 #include "BKE_context.h"
+#include "DEG_depsgraph.h"
+#include "DEG_depsgraph_query.h"
 
 /* make dummy file */
 #include "BLI_fileops.h"
@@ -48,17 +51,20 @@ int collada_import(bContext *C, ImportSettings *import_settings)
 	return (imp.import())? 1:0;
 }
 
-int collada_export(EvaluationContext *eval_ctx,
+int collada_export(bContext *C,
+                   Depsgraph *depsgraph,
                    Scene *sce,
                    ExportSettings *export_settings)
 {
+	ViewLayer *view_layer = DEG_get_evaluated_view_layer(depsgraph);
 
 	int includeFilter = OB_REL_NONE;
 	if (export_settings->include_armatures) includeFilter |= OB_REL_MOD_ARMATURE;
 	if (export_settings->include_children) includeFilter |= OB_REL_CHILDREN_RECURSIVE;
 
 	eObjectSet objectSet = (export_settings->selected) ? OB_SET_SELECTED : OB_SET_ALL;
-	export_settings->export_set = BKE_object_relational_superset(sce, objectSet, (eObRelationTypes)includeFilter);
+	export_settings->export_set = BKE_object_relational_superset(view_layer, objectSet, (eObRelationTypes)includeFilter);
+
 	int export_count = BLI_linklist_count(export_settings->export_set);
 
 	if (export_count == 0) {
@@ -74,8 +80,8 @@ int collada_export(EvaluationContext *eval_ctx,
 			bc_bubble_sort_by_Object_name(export_settings->export_set);
 	}
 
-	DocumentExporter exporter(export_settings);
-	int status = exporter.exportCurrentScene(eval_ctx, sce);
+	DocumentExporter exporter(depsgraph, export_settings);
+	int status = exporter.exportCurrentScene(C, sce);
 
 	BLI_linklist_free(export_settings->export_set, NULL);
 

@@ -43,10 +43,6 @@ typedef enum BC_export_transformation_type {
 	BC_TRANSFORMATION_TYPE_TRANSROTLOC
 } BC_export_transformation_type;
 
-typedef enum BC_export_texture_type {
-	BC_TEXTURE_TYPE_MAT,
-	BC_TEXTURE_TYPE_UV
-} BC_export_texture_type;
 
 typedef struct ExportSettings {
 	bool apply_modifiers;
@@ -61,7 +57,7 @@ typedef struct ExportSettings {
 	int sampling_rate;
 
 	bool active_uv_only;
-	BC_export_texture_type export_texture_type;
+	bool include_material_textures;
 	bool use_texture_copies;
 
 	bool triangulate;

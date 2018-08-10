@@ -203,10 +203,10 @@ static PyObject *exit_func(PyObject * /*self*/, PyObject * /*args*/)
 
 static PyObject *create_func(PyObject * /*self*/, PyObject *args)
 {
-	PyObject *pyengine, *pyuserpref, *pydata, *pyscene, *pyregion, *pyv3d, *pyrv3d;
+	PyObject *pyengine, *pyuserpref, *pydata, *pyregion, *pyv3d, *pyrv3d;
 	int preview_osl;
 
-	if(!PyArg_ParseTuple(args, "OOOOOOOi", &pyengine, &pyuserpref, &pydata, &pyscene,
+	if(!PyArg_ParseTuple(args, "OOOOOOi", &pyengine, &pyuserpref, &pydata,
 	                     &pyregion, &pyv3d, &pyrv3d, &preview_osl))
 	{
 		return NULL;
@@ -224,10 +224,6 @@ static PyObject *create_func(PyObject * /*self*/, PyObject *args)
 	PointerRNA dataptr;
 	RNA_main_pointer_create((Main*)PyLong_AsVoidPtr(pydata), &dataptr);
 	BL::BlendData data(dataptr);
-
-	PointerRNA sceneptr;
-	RNA_id_pointer_create((ID*)PyLong_AsVoidPtr(pyscene), &sceneptr);
-	BL::Scene scene(sceneptr);
 
 	PointerRNA regionptr;
 	RNA_pointer_create(NULL, &RNA_Region, pylong_as_voidptr_typesafe(pyregion), &regionptr);
@@ -249,26 +245,12 @@ static PyObject *create_func(PyObject * /*self*/, PyObject *args)
 		int width = region.width();
 		int height = region.height();
 
-		session = new BlenderSession(engine, userpref, data, scene, v3d, rv3d, width, height);
+		session = new BlenderSession(engine, userpref, data, v3d, rv3d, width, height);
 	}
 	else {
-		/* override some settings for preview */
-		if(engine.is_preview()) {
-			PointerRNA cscene = RNA_pointer_get(&sceneptr, "cycles");
-
-			RNA_boolean_set(&cscene, "shading_system", preview_osl);
-			RNA_boolean_set(&cscene, "use_progressive_refine", true);
-		}
-
 		/* offline session or preview render */
-		session = new BlenderSession(engine, userpref, data, scene);
+		session = new BlenderSession(engine, userpref, data, preview_osl);
 	}
-
-	python_thread_state_save(&session->python_thread_state);
-
-	session->create();
-
-	python_thread_state_restore(&session->python_thread_state);
 
 	return PyLong_FromVoidPtr(session);
 }
@@ -280,13 +262,22 @@ static PyObject *free_func(PyObject * /*self*/, PyObject *value)
 	Py_RETURN_NONE;
 }
 
-static PyObject *render_func(PyObject * /*self*/, PyObject *value)
+static PyObject *render_func(PyObject * /*self*/, PyObject *args)
 {
-	BlenderSession *session = (BlenderSession*)PyLong_AsVoidPtr(value);
+	PyObject *pysession, *pydepsgraph;
+
+	if(!PyArg_ParseTuple(args, "OO", &pysession, &pydepsgraph))
+		return NULL;
+
+	BlenderSession *session = (BlenderSession*)PyLong_AsVoidPtr(pysession);
+
+	PointerRNA depsgraphptr;
+	RNA_pointer_create(NULL, &RNA_Depsgraph, (ID*)PyLong_AsVoidPtr(pydepsgraph), &depsgraphptr);
+	BL::Depsgraph b_depsgraph(depsgraphptr);
 
 	python_thread_state_save(&session->python_thread_state);
 
-	session->render();
+	session->render(b_depsgraph);
 
 	python_thread_state_restore(&session->python_thread_state);
 
@@ -296,15 +287,19 @@ static PyObject *render_func(PyObject * /*self*/, PyObject *value)
 /* pixel_array and result passed as pointers */
 static PyObject *bake_func(PyObject * /*self*/, PyObject *args)
 {
-	PyObject *pysession, *pyobject;
+	PyObject *pysession, *pydepsgraph, *pyobject;
 	PyObject *pypixel_array, *pyresult;
 	const char *pass_type;
 	int num_pixels, depth, object_id, pass_filter;
 
-	if(!PyArg_ParseTuple(args, "OOsiiOiiO", &pysession, &pyobject, &pass_type, &pass_filter, &object_id, &pypixel_array, &num_pixels, &depth, &pyresult))
+	if(!PyArg_ParseTuple(args, "OOOsiiOiiO", &pysession, &pydepsgraph, &pyobject, &pass_type, &pass_filter, &object_id, &pypixel_array, &num_pixels, &depth, &pyresult))
 		return NULL;
 
 	BlenderSession *session = (BlenderSession*)PyLong_AsVoidPtr(pysession);
+
+	PointerRNA depsgraphptr;
+	RNA_pointer_create(NULL, &RNA_Depsgraph, PyLong_AsVoidPtr(pydepsgraph), &depsgraphptr);
+	BL::Depsgraph b_depsgraph(depsgraphptr);
 
 	PointerRNA objectptr;
 	RNA_id_pointer_create((ID*)PyLong_AsVoidPtr(pyobject), &objectptr);
@@ -318,7 +313,7 @@ static PyObject *bake_func(PyObject * /*self*/, PyObject *args)
 
 	python_thread_state_save(&session->python_thread_state);
 
-	session->bake(b_object, pass_type, pass_filter, object_id, b_bake_pixel, (size_t)num_pixels, depth, (float *)b_result);
+	session->bake(b_depsgraph, b_object, pass_type, pass_filter, object_id, b_bake_pixel, (size_t)num_pixels, depth, (float *)b_result);
 
 	python_thread_state_restore(&session->python_thread_state);
 
@@ -327,11 +322,11 @@ static PyObject *bake_func(PyObject * /*self*/, PyObject *args)
 
 static PyObject *draw_func(PyObject * /*self*/, PyObject *args)
 {
-	PyObject *pysession, *pyv3d, *pyrv3d;
+	PyObject *pysession, *pygraph, *pyv3d, *pyrv3d;
 
-	if(!PyArg_ParseTuple(args, "OOO", &pysession, &pyv3d, &pyrv3d))
+	if(!PyArg_ParseTuple(args, "OOOO", &pysession, &pygraph, &pyv3d, &pyrv3d))
 		return NULL;
-	
+
 	BlenderSession *session = (BlenderSession*)PyLong_AsVoidPtr(pysession);
 
 	if(PyLong_AsVoidPtr(pyrv3d)) {
@@ -347,9 +342,9 @@ static PyObject *draw_func(PyObject * /*self*/, PyObject *args)
 
 static PyObject *reset_func(PyObject * /*self*/, PyObject *args)
 {
-	PyObject *pysession, *pydata, *pyscene;
+	PyObject *pysession, *pydata, *pydepsgraph;
 
-	if(!PyArg_ParseTuple(args, "OOO", &pysession, &pydata, &pyscene))
+	if(!PyArg_ParseTuple(args, "OOO", &pysession, &pydata, &pydepsgraph))
 		return NULL;
 
 	BlenderSession *session = (BlenderSession*)PyLong_AsVoidPtr(pysession);
@@ -358,26 +353,35 @@ static PyObject *reset_func(PyObject * /*self*/, PyObject *args)
 	RNA_main_pointer_create((Main*)PyLong_AsVoidPtr(pydata), &dataptr);
 	BL::BlendData b_data(dataptr);
 
-	PointerRNA sceneptr;
-	RNA_id_pointer_create((ID*)PyLong_AsVoidPtr(pyscene), &sceneptr);
-	BL::Scene b_scene(sceneptr);
+	PointerRNA depsgraphptr;
+	RNA_pointer_create(NULL, &RNA_Depsgraph, PyLong_AsVoidPtr(pydepsgraph), &depsgraphptr);
+	BL::Depsgraph b_depsgraph(depsgraphptr);
 
 	python_thread_state_save(&session->python_thread_state);
 
-	session->reset_session(b_data, b_scene);
+	session->reset_session(b_data, b_depsgraph);
 
 	python_thread_state_restore(&session->python_thread_state);
 
 	Py_RETURN_NONE;
 }
 
-static PyObject *sync_func(PyObject * /*self*/, PyObject *value)
+static PyObject *sync_func(PyObject * /*self*/, PyObject *args)
 {
-	BlenderSession *session = (BlenderSession*)PyLong_AsVoidPtr(value);
+	PyObject *pysession, *pydepsgraph;
+
+	if(!PyArg_ParseTuple(args, "OO", &pysession, &pydepsgraph))
+		return NULL;
+
+	BlenderSession *session = (BlenderSession*)PyLong_AsVoidPtr(pysession);
+
+	PointerRNA depsgraphptr;
+	RNA_pointer_create(NULL, &RNA_Depsgraph, PyLong_AsVoidPtr(pydepsgraph), &depsgraphptr);
+	BL::Depsgraph b_depsgraph(depsgraphptr);
 
 	python_thread_state_save(&session->python_thread_state);
 
-	session->synchronize();
+	session->synchronize(b_depsgraph);
 
 	python_thread_state_restore(&session->python_thread_state);
 
@@ -590,7 +594,7 @@ static PyObject *osl_compile_func(PyObject * /*self*/, PyObject *args)
 
 	if(!PyArg_ParseTuple(args, "ss", &inputfile, &outputfile))
 		return NULL;
-	
+
 	/* return */
 	if(!OSLShaderManager::osl_compile(inputfile, outputfile))
 		Py_RETURN_FALSE;
@@ -734,6 +738,12 @@ static PyObject *set_resumable_chunk_range_func(PyObject * /*self*/, PyObject *a
 	Py_RETURN_NONE;
 }
 
+static PyObject *enable_print_stats_func(PyObject * /*self*/, PyObject * /*args*/)
+{
+	BlenderSession::print_render_stats = true;
+	Py_RETURN_NONE;
+}
+
 static PyObject *get_device_types_func(PyObject * /*self*/, PyObject * /*args*/)
 {
 	vector<DeviceInfo>& devices = Device::available_devices();
@@ -753,10 +763,10 @@ static PyMethodDef methods[] = {
 	{"exit", exit_func, METH_VARARGS, ""},
 	{"create", create_func, METH_VARARGS, ""},
 	{"free", free_func, METH_O, ""},
-	{"render", render_func, METH_O, ""},
+	{"render", render_func, METH_VARARGS, ""},
 	{"bake", bake_func, METH_VARARGS, ""},
 	{"draw", draw_func, METH_VARARGS, ""},
-	{"sync", sync_func, METH_O, ""},
+	{"sync", sync_func, METH_VARARGS, ""},
 	{"reset", reset_func, METH_VARARGS, ""},
 #ifdef WITH_OSL
 	{"osl_update_node", osl_update_node_func, METH_VARARGS, ""},
@@ -771,6 +781,9 @@ static PyMethodDef methods[] = {
 	/* Debugging routines */
 	{"debug_flags_update", debug_flags_update_func, METH_VARARGS, ""},
 	{"debug_flags_reset", debug_flags_reset_func, METH_NOARGS, ""},
+
+	/* Statistics. */
+	{"enable_print_stats", enable_print_stats_func, METH_NOARGS, ""},
 
 	/* Resumable render */
 	{"set_resumable_chunk", set_resumable_chunk_func, METH_VARARGS, ""},

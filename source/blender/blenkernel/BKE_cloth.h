@@ -37,10 +37,11 @@
 
 struct Object;
 struct Scene;
+struct Mesh;
 struct MFace;
-struct DerivedMesh;
 struct ClothModifierData;
 struct CollisionModifierData;
+struct Depsgraph;
 
 #define DO_INLINE MALWAYS_INLINE
 
@@ -67,7 +68,7 @@ typedef struct ClothHairData {
 
 typedef struct ClothSolverResult {
 	int status;
-	
+
 	int max_iterations, min_iterations;
 	float avg_iterations;
 	float max_error, min_error, avg_error;
@@ -138,7 +139,7 @@ typedef struct ClothSpring {
 	int	flags; 		/* defined in BKE_cloth.h, e.g. deactivated due to tearing */
 	float 	stiffness;	/* stiffness factor from the vertex groups */
 	float editrestlen;
-	
+
 	/* angular bending spring target and derivatives */
 	float target[3];
 }
@@ -203,16 +204,16 @@ struct CollPair;
 typedef struct ColliderContacts {
 	struct Object *ob;
 	struct CollisionModifierData *collmd;
-	
+
 	struct CollPair *collisions;
 	int totcollisions;
 } ColliderContacts;
 
 // needed for implicit.c
-int cloth_bvh_objcollision (struct Object *ob, struct ClothModifierData *clmd, float step, float dt );
-int cloth_points_objcollision(struct Object *ob, struct ClothModifierData *clmd, float step, float dt);
+int cloth_bvh_objcollision (struct Depsgraph *depsgraph, struct Object *ob, struct ClothModifierData *clmd, float step, float dt );
+int cloth_points_objcollision(struct Depsgraph *depsgraph, struct Object *ob, struct ClothModifierData *clmd, float step, float dt);
 
-void cloth_find_point_contacts(struct Object *ob, struct ClothModifierData *clmd, float step, float dt,
+void cloth_find_point_contacts(struct Depsgraph *depsgraph, struct Object *ob, struct ClothModifierData *clmd, float step, float dt,
                                ColliderContacts **r_collider_contacts, int *r_totcolliders);
 void cloth_free_contacts(ColliderContacts *collider_contacts, int totcolliders);
 
@@ -226,7 +227,7 @@ void cloth_free_contacts(ColliderContacts *collider_contacts, int totcolliders);
 void cloth_free_modifier_extern (struct ClothModifierData *clmd );
 void cloth_free_modifier (struct ClothModifierData *clmd );
 void cloth_init (struct ClothModifierData *clmd );
-void clothModifier_do (struct ClothModifierData *clmd, struct Scene *scene, struct Object *ob, struct DerivedMesh *dm, float (*vertexCos)[3]);
+void clothModifier_do(struct ClothModifierData *clmd, struct Depsgraph *depsgraph, struct Scene *scene, struct Object *ob, struct Mesh *dm, float (*vertexCos)[3]);
 
 int cloth_uses_vgroup(struct ClothModifierData *clmd);
 
@@ -235,11 +236,11 @@ void bvhtree_update_from_cloth(struct ClothModifierData *clmd, bool moving);
 void bvhselftree_update_from_cloth(struct ClothModifierData *clmd, bool moving);
 
 // needed for button_object.c
-void cloth_clear_cache (struct Object *ob, struct ClothModifierData *clmd, float framenr );
+void cloth_clear_cache(
+        struct Object *ob, struct ClothModifierData *clmd, float framenr );
 
 void cloth_parallel_transport_hair_frame(float mat[3][3], const float dir_old[3], const float dir_new[3]);
 
 ////////////////////////////////////////////////
 
 #endif
-

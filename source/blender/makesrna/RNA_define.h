@@ -37,6 +37,14 @@
 extern "C" {
 #endif
 
+#ifdef UNIT_TEST
+#define RNA_MAX_ARRAY_LENGTH 64
+#else
+#define RNA_MAX_ARRAY_LENGTH 32
+#endif
+
+#define RNA_MAX_ARRAY_DIMENSION 3
+
 /* Blender RNA */
 
 BlenderRNA *RNA_create(void);
@@ -76,11 +84,11 @@ void RNA_def_struct_translation_context(StructRNA *srna, const char *context);
 
 typedef void StructOrFunctionRNA;
 
-PropertyRNA *RNA_def_boolean(StructOrFunctionRNA *cont, const char *identifier, int default_value, const char *ui_name, const char *ui_description);
-PropertyRNA *RNA_def_boolean_array(StructOrFunctionRNA *cont, const char *identifier, int len, int *default_value, const char *ui_name, const char *ui_description);
-PropertyRNA *RNA_def_boolean_layer(StructOrFunctionRNA *cont, const char *identifier, int len, int *default_value, const char *ui_name, const char *ui_description);
-PropertyRNA *RNA_def_boolean_layer_member(StructOrFunctionRNA *cont, const char *identifier, int len, int *default_value, const char *ui_name, const char *ui_description);
-PropertyRNA *RNA_def_boolean_vector(StructOrFunctionRNA *cont, const char *identifier, int len, int *default_value, const char *ui_name, const char *ui_description);
+PropertyRNA *RNA_def_boolean(StructOrFunctionRNA *cont, const char *identifier, bool default_value, const char *ui_name, const char *ui_description);
+PropertyRNA *RNA_def_boolean_array(StructOrFunctionRNA *cont, const char *identifier, int len, bool *default_value, const char *ui_name, const char *ui_description);
+PropertyRNA *RNA_def_boolean_layer(StructOrFunctionRNA *cont, const char *identifier, int len, bool *default_value, const char *ui_name, const char *ui_description);
+PropertyRNA *RNA_def_boolean_layer_member(StructOrFunctionRNA *cont, const char *identifier, int len, bool *default_value, const char *ui_name, const char *ui_description);
+PropertyRNA *RNA_def_boolean_vector(StructOrFunctionRNA *cont, const char *identifier, int len, bool *default_value, const char *ui_name, const char *ui_description);
 
 PropertyRNA *RNA_def_int(StructOrFunctionRNA *cont, const char *identifier, int default_value, int hardmin, int hardmax, const char *ui_name, const char *ui_description, int softmin, int softmax);
 PropertyRNA *RNA_def_int_vector(StructOrFunctionRNA *cont, const char *identifier, int len, const int *default_value, int hardmin, int hardmax, const char *ui_name, const char *ui_description, int softmin, int softmax);
@@ -141,6 +149,8 @@ void RNA_def_property_collection_sdna(PropertyRNA *prop, const char *structname,
 
 void RNA_def_property_flag(PropertyRNA *prop, PropertyFlag flag);
 void RNA_def_property_clear_flag(PropertyRNA *prop, PropertyFlag flag);
+void RNA_def_property_override_flag(PropertyRNA *prop, PropertyOverrideFlag flag);
+void RNA_def_property_override_clear_flag(PropertyRNA *prop, PropertyOverrideFlag flag);
 void RNA_def_property_tags(PropertyRNA *prop, int tags);
 void RNA_def_property_subtype(PropertyRNA *prop, PropertySubType subtype);
 void RNA_def_property_array(PropertyRNA *prop, int length);
@@ -152,8 +162,8 @@ void RNA_def_property_string_maxlength(PropertyRNA *prop, int maxlength);
 void RNA_def_property_struct_type(PropertyRNA *prop, const char *type);
 void RNA_def_property_struct_runtime(PropertyRNA *prop, StructRNA *type);
 
-void RNA_def_property_boolean_default(PropertyRNA *prop, int value);
-void RNA_def_property_boolean_array_default(PropertyRNA *prop, const int *array);
+void RNA_def_property_boolean_default(PropertyRNA *prop, bool value);
+void RNA_def_property_boolean_array_default(PropertyRNA *prop, const bool *array);
 void RNA_def_property_int_default(PropertyRNA *prop, int value);
 void RNA_def_property_int_array_default(PropertyRNA *prop, const int *array);
 void RNA_def_property_float_default(PropertyRNA *prop, float value);
@@ -168,6 +178,8 @@ void RNA_def_property_ui_icon(PropertyRNA *prop, int icon, bool consecutive);
 void RNA_def_property_update(PropertyRNA *prop, int noteflag, const char *updatefunc);
 void RNA_def_property_editable_func(PropertyRNA *prop, const char *editable);
 void RNA_def_property_editable_array_func(PropertyRNA *prop, const char *editable);
+
+void RNA_def_property_override_funcs(PropertyRNA *prop, const char *diff, const char *store, const char *apply);
 
 void RNA_def_property_update_runtime(PropertyRNA *prop, const void *func);
 void RNA_def_property_poll_runtime(PropertyRNA *prop, const void *func);
@@ -247,4 +259,3 @@ extern const int rna_matrix_dimsize_4x2[];
 #endif
 
 #endif /* __RNA_DEFINE_H__ */
-

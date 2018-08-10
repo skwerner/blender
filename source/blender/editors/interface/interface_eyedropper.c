@@ -82,6 +82,7 @@ wmKeyMap *eyedropper_modal_keymap(wmKeyConfig *keyconf)
 	/* assign to operators */
 	WM_modalkeymap_assign(keymap, "UI_OT_eyedropper_colorband");
 	WM_modalkeymap_assign(keymap, "UI_OT_eyedropper_color");
+	WM_modalkeymap_assign(keymap, "UI_OT_eyedropper_color_crypto");
 	WM_modalkeymap_assign(keymap, "UI_OT_eyedropper_id");
 	WM_modalkeymap_assign(keymap, "UI_OT_eyedropper_depth");
 	WM_modalkeymap_assign(keymap, "UI_OT_eyedropper_driver");
@@ -135,8 +136,8 @@ void eyedropper_draw_cursor_text(const struct bContext *C, const ARegion *ar, co
 	wmWindow *win = CTX_wm_window(C);
 	int x = win->eventstate->x;
 	int y = win->eventstate->y;
-	const unsigned char fg[4] = {255, 255, 255, 255};
-	const unsigned char bg[4] = {0, 0, 0, 50};
+	const float col_fg[4] = {1.0f, 1.0f, 1.0f, 1.0f};
+	const float col_bg[4] = {0.0f, 0.0f, 0.0f, 0.2f};
 
 
 	if ((name[0] == '\0') ||
@@ -150,7 +151,7 @@ void eyedropper_draw_cursor_text(const struct bContext *C, const ARegion *ar, co
 
 	y += U.widget_unit;
 
-	UI_fontstyle_draw_simple_backdrop(fstyle, x, y, name, fg, bg);
+	UI_fontstyle_draw_simple_backdrop(fstyle, x, y, name, col_fg, col_bg);
 }
 
 
@@ -165,8 +166,8 @@ void eyedropper_draw_cursor_text(const struct bContext *C, const ARegion *ar, co
  */
 uiBut *eyedropper_get_property_button_under_mouse(bContext *C, const wmEvent *event)
 {
-	wmWindow *win = CTX_wm_window(C);
-	ScrArea *sa = BKE_screen_find_area_xy(win->screen, SPACE_TYPE_ANY, event->x, event->y);
+	bScreen *screen = CTX_wm_screen(C);
+	ScrArea *sa = BKE_screen_find_area_xy(screen, SPACE_TYPE_ANY, event->x, event->y);
 	ARegion *ar = BKE_area_find_region_xy(sa, RGN_TYPE_ANY, event->x, event->y);
 
 	uiBut *but = ui_but_find_mouse_over(ar, event);
@@ -180,4 +181,3 @@ uiBut *eyedropper_get_property_button_under_mouse(bContext *C, const wmEvent *ev
 }
 
 /** \} */
-

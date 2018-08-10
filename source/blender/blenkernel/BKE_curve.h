@@ -36,6 +36,7 @@
 struct BezTriple;
 struct Curve;
 struct EditNurb;
+struct Depsgraph;
 struct GHash;
 struct ListBase;
 struct Main;
@@ -98,7 +99,7 @@ void BKE_curve_transform(struct Curve *cu, float mat[4][4], const bool do_keys, 
 void BKE_curve_translate(struct Curve *cu, float offset[3], const bool do_keys);
 void BKE_curve_material_index_remove(struct Curve *cu, int index);
 void BKE_curve_material_index_clear(struct Curve *cu);
-int BKE_curve_material_index_validate(struct Curve *cu);
+bool BKE_curve_material_index_validate(struct Curve *cu);
 void BKE_curve_material_remap(struct Curve *cu, const unsigned int *remap, unsigned int remap_len);
 
 ListBase    *BKE_curve_nurbs_get(struct Curve *cu);
@@ -122,13 +123,14 @@ void BKE_curve_editNurb_keyIndex_free(struct GHash **keyindex);
 void BKE_curve_editNurb_free(struct Curve *cu);
 struct ListBase *BKE_curve_editNurbs_get(struct Curve *cu);
 
-float *BKE_curve_make_orco(struct Scene *scene, struct Object *ob, int *r_numVerts);
+float *BKE_curve_make_orco(struct Depsgraph *depsgraph, struct Scene *scene, struct Object *ob, int *r_numVerts);
 float *BKE_curve_surf_make_orco(struct Object *ob);
 
 void BKE_curve_bevelList_free(struct ListBase *bev);
 void BKE_curve_bevelList_make(struct Object *ob, struct ListBase *nurbs, bool for_render);
-void BKE_curve_bevel_make(struct Scene *scene, struct Object *ob,  struct ListBase *disp,
-                          const bool for_render, const bool use_render_resolution);
+void BKE_curve_bevel_make(
+        struct Depsgraph *depsgraph, struct Scene *scene, struct Object *ob,  struct ListBase *disp,
+        const bool for_render, const bool use_render_resolution);
 
 void BKE_curve_forward_diff_bezier(float q0, float q1, float q2, float q3, float *p, int it, int stride);
 void BKE_curve_forward_diff_tangent_bezier(float q0, float q1, float q2, float q3, float *p, int it, int stride);
@@ -215,10 +217,17 @@ void BKE_nurb_handles_test(struct Nurb *nu, const bool use_handles);
 
 /* **** Depsgraph evaluation **** */
 
-struct EvaluationContext;
+void BKE_curve_eval_geometry(
+        struct Depsgraph *depsgraph,
+        struct Curve *curve);
 
-void BKE_curve_eval_geometry(struct EvaluationContext *eval_ctx,
-                             struct Curve *curve);
+/* Draw Cache */
+enum {
+	BKE_CURVE_BATCH_DIRTY_ALL = 0,
+	BKE_CURVE_BATCH_DIRTY_SELECT,
+};
+void BKE_curve_batch_cache_dirty(struct Curve *cu, int mode);
+void BKE_curve_batch_cache_free(struct Curve *cu);
 
 /* curve_decimate.c */
 unsigned int BKE_curve_decimate_bezt_array(

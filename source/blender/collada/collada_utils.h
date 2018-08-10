@@ -34,7 +34,6 @@
 
 #include <vector>
 #include <map>
-#include <set>
 #include <algorithm>
 
 extern "C" {
@@ -52,7 +51,6 @@ extern "C" {
 
 #include "BKE_context.h"
 #include "BKE_object.h"
-#include "BKE_DerivedMesh.h"
 #include "BKE_scene.h"
 #include "BKE_idprop.h"
 }
@@ -61,17 +59,20 @@ extern "C" {
 #include "ExportSettings.h"
 #include "collada_internal.h"
 
+struct Depsgraph;
+
 typedef std::map<COLLADAFW::TextureMapId, std::vector<MTex *> > TexIndexTextureArrayMap;
 
-extern Main *bc_get_main();
-extern EvaluationContext *bc_get_evaluation_context();
-extern void bc_update_scene(Scene *scene, float ctime);
+extern Scene *bc_get_scene(bContext *C);
+extern Depsgraph *bc_get_depsgraph();
+extern void bc_update_scene(Main *bmain, Depsgraph *depsgraph, Scene *scene, float ctime);
 
 extern float bc_get_float_value(const COLLADAFW::FloatOrDoubleArray& array, unsigned int index);
 extern int bc_test_parent_loop(Object *par, Object *ob);
 extern int bc_set_parent(Object *ob, Object *par, bContext *C, bool is_parent_space = true);
-extern Object *bc_add_object(Scene *scene, int type, const char *name);
-extern Mesh *bc_get_mesh_copy(Scene *scene, Object *ob, BC_export_mesh_type export_mesh_type, bool apply_modifiers, bool triangulate);
+extern Object *bc_add_object(Main *bmain, Scene *scene, ViewLayer *view_layer, int type, const char *name);
+extern Mesh *bc_get_mesh_copy(
+        Depsgraph *depsgraph, Scene *scene, Object *ob, BC_export_mesh_type export_mesh_type, bool apply_modifiers, bool triangulate);
 
 extern Object *bc_get_assigned_armature(Object *ob);
 extern Object *bc_get_highest_selected_ancestor_or_self(LinkNode *export_set, Object *ob);
@@ -90,8 +91,8 @@ extern void bc_bubble_sort_by_Object_name(LinkNode *export_set);
 extern bool bc_is_root_bone(Bone *aBone, bool deform_bones_only);
 extern int  bc_get_active_UVLayer(Object *ob);
 
-extern std::string bc_replace_string(std::string data, const std::string& pattern, const std::string& replacement); 
-extern std::string bc_url_encode(std::string data); 
+extern std::string bc_replace_string(std::string data, const std::string& pattern, const std::string& replacement);
+extern std::string bc_url_encode(std::string data);
 extern void bc_match_scale(Object *ob, UnitConverter &bc_unit, bool scale_to_scene);
 extern void bc_match_scale(std::vector<Object *> *objects_done, UnitConverter &unit_converter, bool scale_to_scene);
 
@@ -123,14 +124,6 @@ extern bool bc_get_property_matrix(Bone *bone, std::string key, float mat[4][4])
 
 extern void bc_create_restpose_mat(const ExportSettings *export_settings, Bone *bone, float to_mat[4][4], float world[4][4], bool use_local_space);
 
-extern std::string bc_get_active_uvlayer_name(Object *ob);
-extern std::string bc_get_active_uvlayer_name(Mesh *me);
-extern std::string bc_get_uvlayer_name(Mesh *me, int layer);
-
-extern std::set<Image *> bc_getUVImages(Scene *sce, bool all_uv_layers);
-extern std::set<Image *> bc_getUVImages(Object *ob, bool all_uv_layers);
-extern std::set<Object *> bc_getUVTexturedObjects(Scene *sce, bool all_uv_layers);
-
 class BCPolygonNormalsIndices
 {
 	std::vector<unsigned int> normal_indices;
@@ -141,8 +134,8 @@ class BCPolygonNormalsIndices
 		normal_indices.push_back(index);
 	}
 
-	unsigned int operator[](unsigned int i) { 
-		return normal_indices[i]; 
+	unsigned int operator[](unsigned int i) {
+		return normal_indices[i];
 	}
 
 };

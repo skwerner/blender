@@ -4,7 +4,7 @@
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version. 
+ * of the License, or (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -18,7 +18,7 @@
  * The Original Code is Copyright (C) 2009 Blender Foundation.
  * All rights reserved.
  *
- * 
+ *
  * Contributor(s): Blender Foundation
  *
  * ***** END GPL LICENSE BLOCK *****
@@ -77,12 +77,16 @@ void ED_operatortypes_mesh(void)
 	WM_operatortype_append(MESH_OT_primitive_monkey_add);
 	WM_operatortype_append(MESH_OT_primitive_uv_sphere_add);
 	WM_operatortype_append(MESH_OT_primitive_ico_sphere_add);
+
+	WM_operatortype_append(MESH_OT_primitive_cube_add_gizmo);
+
 	WM_operatortype_append(MESH_OT_duplicate);
 	WM_operatortype_append(MESH_OT_remove_doubles);
 	WM_operatortype_append(MESH_OT_spin);
 	WM_operatortype_append(MESH_OT_screw);
 
 	WM_operatortype_append(MESH_OT_extrude_region);
+	WM_operatortype_append(MESH_OT_extrude_context);
 	WM_operatortype_append(MESH_OT_extrude_faces_indiv);
 	WM_operatortype_append(MESH_OT_extrude_edges_indiv);
 	WM_operatortype_append(MESH_OT_extrude_verts_indiv);
@@ -94,12 +98,12 @@ void ED_operatortypes_mesh(void)
 	WM_operatortype_append(MESH_OT_loop_to_region);
 	WM_operatortype_append(MESH_OT_region_to_loop);
 	WM_operatortype_append(MESH_OT_select_axis);
-	
+
 	WM_operatortype_append(MESH_OT_uvs_rotate);
 	WM_operatortype_append(MESH_OT_uvs_reverse);
 	WM_operatortype_append(MESH_OT_colors_rotate);
 	WM_operatortype_append(MESH_OT_colors_reverse);
-	
+
 	WM_operatortype_append(MESH_OT_fill);
 	WM_operatortype_append(MESH_OT_fill_grid);
 	WM_operatortype_append(MESH_OT_fill_holes);
@@ -141,13 +145,18 @@ void ED_operatortypes_mesh(void)
 #endif
 	WM_operatortype_append(MESH_OT_vertices_smooth);
 	WM_operatortype_append(MESH_OT_vertices_smooth_laplacian);
-	WM_operatortype_append(MESH_OT_noise);
 	WM_operatortype_append(MESH_OT_flip_normals);
 	WM_operatortype_append(MESH_OT_rip);
 	WM_operatortype_append(MESH_OT_rip_edge);
 	WM_operatortype_append(MESH_OT_blend_from_shape);
 	WM_operatortype_append(MESH_OT_shape_propagate_to_all);
-	
+
+	/* editmesh_polybuild */
+	WM_operatortype_append(MESH_OT_polybuild_face_at_cursor);
+	WM_operatortype_append(MESH_OT_polybuild_split_at_cursor);
+	WM_operatortype_append(MESH_OT_polybuild_dissolve_at_cursor);
+	WM_operatortype_append(MESH_OT_polybuild_hover);
+
 	WM_operatortype_append(MESH_OT_uv_texture_add);
 	WM_operatortype_append(MESH_OT_uv_texture_remove);
 	WM_operatortype_append(MESH_OT_vertex_color_add);
@@ -191,14 +200,6 @@ void ED_operatortypes_mesh(void)
 	WM_operatortype_append(MESH_OT_bisect);
 	WM_operatortype_append(MESH_OT_symmetrize);
 	WM_operatortype_append(MESH_OT_symmetry_snap);
-
-#ifdef WITH_GAMEENGINE
-	WM_operatortype_append(MESH_OT_navmesh_make);
-	WM_operatortype_append(MESH_OT_navmesh_face_copy);
-	WM_operatortype_append(MESH_OT_navmesh_face_add);
-	WM_operatortype_append(MESH_OT_navmesh_reset);
-	WM_operatortype_append(MESH_OT_navmesh_clear);
-#endif
 }
 
 #if 0 /* UNUSED, remove? */
@@ -219,7 +220,7 @@ void ED_operatormacros_mesh(void)
 {
 	wmOperatorType *ot;
 	wmOperatorTypeMacro *otmacro;
-	
+
 	ot = WM_operatortype_append_macro("MESH_OT_loopcut_slide", "Loop Cut and Slide", "Cut mesh loop and slide it",
 	                                  OPTYPE_UNDO | OPTYPE_REGISTER);
 	WM_operatortype_macro_define(ot, "MESH_OT_loopcut");
@@ -261,6 +262,13 @@ void ED_operatormacros_mesh(void)
 	RNA_enum_set(otmacro->ptr, "proportional", 0);
 	RNA_boolean_set(otmacro->ptr, "mirror", false);
 
+	ot = WM_operatortype_append_macro("MESH_OT_extrude_context_move", "Extrude Region and Move",
+	                                  "Extrude context and move result", OPTYPE_UNDO | OPTYPE_REGISTER);
+	otmacro = WM_operatortype_macro_define(ot, "MESH_OT_extrude_context");
+	otmacro = WM_operatortype_macro_define(ot, "TRANSFORM_OT_translate");
+	RNA_enum_set(otmacro->ptr, "proportional", 0);
+	RNA_boolean_set(otmacro->ptr, "mirror", false);
+
 	ot = WM_operatortype_append_macro("MESH_OT_extrude_region_shrink_fatten", "Extrude Region and Shrink/Fatten",
 	                                  "Extrude region and move result", OPTYPE_UNDO | OPTYPE_REGISTER);
 	otmacro = WM_operatortype_macro_define(ot, "MESH_OT_extrude_region");
@@ -288,28 +296,48 @@ void ED_operatormacros_mesh(void)
 	otmacro = WM_operatortype_macro_define(ot, "TRANSFORM_OT_translate");
 	RNA_enum_set(otmacro->ptr, "proportional", 0);
 	RNA_boolean_set(otmacro->ptr, "mirror", false);
+
+
+	ot = WM_operatortype_append_macro(
+	        "MESH_OT_polybuild_face_at_cursor_move", "Face At Cursor Move", "",
+	        OPTYPE_UNDO | OPTYPE_REGISTER);
+	WM_operatortype_macro_define(ot, "MESH_OT_polybuild_face_at_cursor");
+	otmacro = WM_operatortype_macro_define(ot, "TRANSFORM_OT_translate");
+	RNA_enum_set(otmacro->ptr, "proportional", 0);
+	RNA_boolean_set(otmacro->ptr, "mirror", false);
+
+	ot = WM_operatortype_append_macro(
+	        "MESH_OT_polybuild_split_at_cursor_move", "Split At Cursor Move", "",
+	        OPTYPE_UNDO | OPTYPE_REGISTER);
+	WM_operatortype_macro_define(ot, "MESH_OT_polybuild_split_at_cursor");
+	otmacro = WM_operatortype_macro_define(ot, "TRANSFORM_OT_translate");
+	RNA_enum_set(otmacro->ptr, "proportional", 0);
+	RNA_boolean_set(otmacro->ptr, "mirror", false);
 }
 
 /* note mesh keymap also for other space? */
 void ED_keymap_mesh(wmKeyConfig *keyconf)
-{	
+{
 	wmKeyMap *keymap;
 	wmKeyMapItem *kmi;
-	int i;
-	
+
 	keymap = WM_keymap_find(keyconf, "Mesh", 0, 0);
 	keymap->poll = ED_operator_editmesh;
-	
+
 	WM_keymap_add_item(keymap, "MESH_OT_loopcut_slide", RKEY, KM_PRESS, KM_CTRL, 0);
 	WM_keymap_add_item(keymap, "MESH_OT_offset_edge_loops_slide", RKEY, KM_PRESS, KM_CTRL | KM_SHIFT, 0);
 	WM_keymap_add_item(keymap, "MESH_OT_inset", IKEY, KM_PRESS, 0, 0);
+#ifdef USE_WM_KEYMAP_27X
 	WM_keymap_add_item(keymap, "MESH_OT_poke", PKEY, KM_PRESS, KM_ALT, 0);
+#endif
 	kmi = WM_keymap_add_item(keymap, "MESH_OT_bevel", BKEY, KM_PRESS, KM_CTRL, 0);
 	RNA_boolean_set(kmi->ptr, "vertex_only", false);
 	kmi = WM_keymap_add_item(keymap, "MESH_OT_bevel", BKEY, KM_PRESS, KM_CTRL | KM_SHIFT, 0);
 	RNA_boolean_set(kmi->ptr, "vertex_only", true);
 
-	/* selecting */
+	/* Selec Vert/Edge/Face. */
+	ED_keymap_editmesh_elem_mode(keyconf, keymap);
+
 	/* standard mouse selection goes via space_view3d */
 	kmi = WM_keymap_add_item(keymap, "MESH_OT_loop_select", SELECTMOUSE, KM_PRESS, KM_ALT, 0);
 	RNA_boolean_set(kmi->ptr, "extend", false);
@@ -336,7 +364,9 @@ void ED_keymap_mesh(wmKeyConfig *keyconf)
 	RNA_boolean_set(kmi->ptr, "use_fill", true);
 
 	kmi = WM_keymap_add_item(keymap, "MESH_OT_select_all", AKEY, KM_PRESS, 0, 0);
-	RNA_enum_set(kmi->ptr, "action", SEL_TOGGLE);
+	RNA_enum_set(kmi->ptr, "action", SEL_SELECT);
+	kmi = WM_keymap_add_item(keymap, "MESH_OT_select_all", AKEY, KM_PRESS, KM_ALT, 0);
+	RNA_enum_set(kmi->ptr, "action", SEL_DESELECT);
 	kmi = WM_keymap_add_item(keymap, "MESH_OT_select_all", IKEY, KM_PRESS, KM_CTRL, 0);
 	RNA_enum_set(kmi->ptr, "action", SEL_INVERT);
 
@@ -346,21 +376,24 @@ void ED_keymap_mesh(wmKeyConfig *keyconf)
 	WM_keymap_add_item(keymap, "MESH_OT_select_next_item", PADPLUSKEY, KM_PRESS, KM_CTRL | KM_SHIFT, 0);
 	WM_keymap_add_item(keymap, "MESH_OT_select_prev_item", PADMINUS, KM_PRESS, KM_CTRL | KM_SHIFT, 0);
 
+#ifdef USE_WM_KEYMAP_27X
 	WM_keymap_add_item(keymap, "MESH_OT_select_non_manifold", MKEY, KM_PRESS, (KM_CTRL | KM_SHIFT | KM_ALT), 0);
-	
+#endif
+
 	WM_keymap_add_item(keymap, "MESH_OT_select_linked", LKEY, KM_PRESS, KM_CTRL, 0);
 	kmi = WM_keymap_add_item(keymap, "MESH_OT_select_linked_pick", LKEY, KM_PRESS, 0, 0);
 	RNA_boolean_set(kmi->ptr, "deselect", false);
 	kmi = WM_keymap_add_item(keymap, "MESH_OT_select_linked_pick", LKEY, KM_PRESS, KM_SHIFT, 0);
 	RNA_boolean_set(kmi->ptr, "deselect", true);
-	
+
+#ifdef USE_WM_KEYMAP_27X
 	WM_keymap_add_item(keymap, "MESH_OT_faces_select_linked_flat", FKEY, KM_PRESS, (KM_CTRL | KM_SHIFT | KM_ALT), 0);
+#endif
+
+	WM_keymap_add_item(keymap, "MESH_OT_select_mirror", MKEY, KM_PRESS, KM_CTRL | KM_SHIFT, 0);
 
 	WM_keymap_add_menu(keymap, "VIEW3D_MT_edit_mesh_select_similar", GKEY, KM_PRESS, KM_SHIFT, 0);
-	
-	/* selection mode */
-	WM_keymap_add_menu(keymap, "VIEW3D_MT_edit_mesh_select_mode", TABKEY, KM_PRESS, KM_CTRL, 0);
-	
+
 	/* hide */
 	kmi = WM_keymap_add_item(keymap, "MESH_OT_hide", HKEY, KM_PRESS, 0, 0);
 	RNA_boolean_set(kmi->ptr, "unselected", false);
@@ -369,20 +402,31 @@ void ED_keymap_mesh(wmKeyConfig *keyconf)
 	WM_keymap_add_item(keymap, "MESH_OT_reveal", HKEY, KM_PRESS, KM_ALT, 0);
 
 	/* tools */
+#ifdef USE_WM_KEYMAP_27X
 	kmi = WM_keymap_add_item(keymap, "MESH_OT_normals_make_consistent", NKEY, KM_PRESS, KM_CTRL, 0);
 	RNA_boolean_set(kmi->ptr, "inside", false);
 	kmi = WM_keymap_add_item(keymap, "MESH_OT_normals_make_consistent", NKEY, KM_PRESS, KM_SHIFT | KM_CTRL, 0);
 	RNA_boolean_set(kmi->ptr, "inside", true);
-	
+#else
+	kmi = WM_keymap_add_item(keymap, "MESH_OT_normals_make_consistent", NKEY, KM_PRESS, KM_SHIFT, 0);
+	RNA_boolean_set(kmi->ptr, "inside", false);
+	kmi = WM_keymap_add_item(keymap, "MESH_OT_normals_make_consistent", NKEY, KM_PRESS, KM_SHIFT | KM_CTRL, 0);
+	RNA_boolean_set(kmi->ptr, "inside", true);
+#endif
+
 	WM_keymap_add_item(keymap, "VIEW3D_OT_edit_mesh_extrude_move_normal", EKEY, KM_PRESS, 0, 0); /* python operator */
 	WM_keymap_add_menu(keymap, "VIEW3D_MT_edit_mesh_extrude", EKEY, KM_PRESS, KM_ALT, 0);
-	
+
 	WM_keymap_add_item(keymap, "TRANSFORM_OT_edge_crease", EKEY, KM_PRESS, KM_SHIFT, 0);
-	
+
+#ifdef USE_WM_KEYMAP_27X
 	WM_keymap_add_item(keymap, "MESH_OT_spin", RKEY, KM_PRESS, KM_ALT, 0);
-	
+#endif
+
 	WM_keymap_add_item(keymap, "MESH_OT_fill", FKEY, KM_PRESS, KM_ALT, 0);
+#ifdef USE_WM_KEYMAP_27X
 	WM_keymap_add_item(keymap, "MESH_OT_beautify_fill", FKEY, KM_PRESS, KM_SHIFT | KM_ALT, 0);
+#endif
 
 	kmi = WM_keymap_add_item(keymap, "MESH_OT_quads_convert_to_tris", TKEY, KM_PRESS, KM_CTRL, 0);
 	RNA_enum_set(kmi->ptr, "quad_method", MOD_TRIANGULATE_QUAD_BEAUTY);
@@ -414,9 +458,9 @@ void ED_keymap_mesh(wmKeyConfig *keyconf)
 	WM_keymap_add_item(keymap, "MESH_OT_edge_face_add", FKEY, KM_PRESS, 0, 0);
 //	WM_keymap_add_item(keymap, "MESH_OT_skin", FKEY, KM_PRESS, KM_CTRL|KM_ALT, 0); /* python, removed */
 	WM_keymap_add_item(keymap, "MESH_OT_duplicate_move", DKEY, KM_PRESS, KM_SHIFT, 0);
-	
+
 	WM_keymap_add_menu(keymap, "INFO_MT_mesh_add", AKEY, KM_PRESS, KM_SHIFT, 0);
-	
+
 	WM_keymap_add_item(keymap, "MESH_OT_separate", PKEY, KM_PRESS, 0, 0);
 	WM_keymap_add_item(keymap, "MESH_OT_split", YKEY, KM_PRESS, 0, 0);
 	WM_keymap_add_item(keymap, "MESH_OT_vert_connect_path", JKEY, KM_PRESS, 0, 0);
@@ -434,15 +478,17 @@ void ED_keymap_mesh(wmKeyConfig *keyconf)
 
 	WM_keymap_add_item(keymap, "MESH_OT_dissolve_mode", XKEY, KM_PRESS, KM_CTRL, 0);
 	WM_keymap_add_item(keymap, "MESH_OT_dissolve_mode", DELKEY, KM_PRESS, KM_CTRL, 0);
-	
+
 	kmi = WM_keymap_add_item(keymap, "MESH_OT_knife_tool", KKEY, KM_PRESS, 0, 0);
 	RNA_boolean_set(kmi->ptr, "use_occlude_geometry", true);
 	RNA_boolean_set(kmi->ptr, "only_selected",          false);
 
+#ifdef USE_WM_KEYMAP_27X
 	kmi = WM_keymap_add_item(keymap, "MESH_OT_knife_tool", KKEY, KM_PRESS, KM_SHIFT, 0);
 	RNA_boolean_set(kmi->ptr, "use_occlude_geometry", false);
 	RNA_boolean_set(kmi->ptr, "only_selected",          true);
-	
+#endif
+
 	WM_keymap_add_item(keymap, "OBJECT_OT_vertex_parent_set", PKEY, KM_PRESS, KM_CTRL, 0);
 
 	/* menus */
@@ -452,17 +498,20 @@ void ED_keymap_mesh(wmKeyConfig *keyconf)
 	WM_keymap_add_menu(keymap, "VIEW3D_MT_edit_mesh_vertices", VKEY, KM_PRESS, KM_CTRL, 0);
 	WM_keymap_add_menu(keymap, "VIEW3D_MT_hook", HKEY, KM_PRESS, KM_CTRL, 0);
 	WM_keymap_add_menu(keymap, "VIEW3D_MT_uv_map", UKEY, KM_PRESS, 0, 0);
+
 	WM_keymap_add_menu(keymap, "VIEW3D_MT_vertex_group", GKEY, KM_PRESS, KM_CTRL, 0);
-	
+	WM_keymap_add_item(keymap, "OBJECT_OT_vertex_group_remove_from", GKEY, KM_PRESS, KM_CTRL | KM_ALT, 0);
+
+#ifdef USE_WM_KEYMAP_27X
 	/* useful stuff from object-mode */
-	for (i = 0; i <= 5; i++) {
+	for (int i = 0; i <= 5; i++) {
 		kmi = WM_keymap_add_item(keymap, "OBJECT_OT_subdivision_set", ZEROKEY + i, KM_PRESS, KM_CTRL, 0);
 		RNA_int_set(kmi->ptr, "level", i);
 	}
-	
+#endif
+
 	ED_keymap_proportional_cycle(keyconf, keymap);
 	ED_keymap_proportional_editmode(keyconf, keymap, true);
 
 	knifetool_modal_keymap(keyconf);
 }
-

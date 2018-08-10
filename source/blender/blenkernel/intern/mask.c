@@ -51,7 +51,7 @@
 
 #include "BKE_animsys.h"
 #include "BKE_curve.h"
-#include "BKE_depsgraph.h"
+
 #include "BKE_library.h"
 #include "BKE_main.h"
 #include "BKE_mask.h"
@@ -60,6 +60,8 @@
 #include "BKE_tracking.h"
 #include "BKE_movieclip.h"
 #include "BKE_image.h"
+
+#include "DEG_depsgraph_build.h"
 
 static struct {
 	ListBase splines;
@@ -817,7 +819,7 @@ Mask *BKE_mask_new(Main *bmain, const char *name)
 	mask->sfra = 1;
 	mask->efra = 100;
 
-	DAG_relations_tag_update(bmain);
+	DEG_relations_tag_update(bmain);
 
 	return mask;
 }
@@ -1454,18 +1456,6 @@ void BKE_mask_evaluate_all_masks(Main *bmain, float ctime, const bool do_newfram
 
 	for (mask = bmain->mask.first; mask; mask = mask->id.next) {
 		BKE_mask_evaluate(mask, ctime, do_newframe);
-	}
-}
-
-void BKE_mask_update_scene(Main *bmain, Scene *scene)
-{
-	Mask *mask;
-
-	for (mask = bmain->mask.first; mask; mask = mask->id.next) {
-		if (mask->id.recalc & ID_RECALC_ALL) {
-			bool do_new_frame = (mask->id.recalc & ID_RECALC_DATA) != 0;
-			BKE_mask_evaluate_all_masks(bmain, CFRA, do_new_frame);
-		}
 	}
 }
 

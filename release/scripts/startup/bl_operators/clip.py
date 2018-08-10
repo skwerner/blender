@@ -133,11 +133,11 @@ class CLIP_OT_filter_tracks(bpy.types.Operator):
     bl_idname = "clip.filter_tracks"
     bl_options = {'UNDO', 'REGISTER'}
 
-    track_threshold = FloatProperty(
-            name="Track Threshold",
-            description="Filter Threshold to select problematic tracks",
-            default=5.0,
-            )
+    track_threshold: FloatProperty(
+        name="Track Threshold",
+        description="Filter Threshold to select problematic tracks",
+        default=5.0,
+    )
 
     @staticmethod
     def _filter_values(context, threshold):
@@ -165,9 +165,10 @@ class CLIP_OT_filter_tracks(bpy.types.Operator):
 
             # Find tracks with markers in both this frame and the previous one.
             relevant_tracks = [
-                    track for track in clip.tracking.tracks
-                    if (track.markers.find_frame(frame) and
-                        track.markers.find_frame(frame - 1))]
+                track for track in clip.tracking.tracks
+                if (track.markers.find_frame(frame) and
+                    track.markers.find_frame(frame - 1))
+            ]
 
             if not relevant_tracks:
                 continue
@@ -235,9 +236,9 @@ class CLIP_OT_track_to_empty(Operator):
         ob = None
 
         ob = bpy.data.objects.new(name=track.name, object_data=None)
-        ob.select = True
+        ob.select_set(action='SELECT')
         context.scene.objects.link(ob)
-        context.scene.objects.active = ob
+        context.view_layer.objects.active = ob
 
         for con in ob.constraints:
             if con.type == 'FOLLOW_TRACK':
@@ -313,7 +314,7 @@ class CLIP_OT_bundles_to_mesh(Operator):
             ob.matrix_world = matrix
             context.scene.objects.link(ob)
             ob.select = True
-            context.scene.objects.active = ob
+            context.view_layer.objects.active = ob
         else:
             self.report({'WARNING'}, "No usable tracks selected")
 
@@ -399,7 +400,7 @@ class CLIP_OT_delete_proxy(Operator):
 
 class CLIP_OT_set_viewport_background(Operator):
     """Set current movie clip as a camera background in 3D view-port """ \
-    """(works only when a 3D view-port is visible)"""
+        """(works only when a 3D view-port is visible)"""
 
     bl_idname = "clip.set_viewport_background"
     bl_label = "Set as Background"
@@ -515,7 +516,7 @@ object's movement caused by this constraint"""
         # XXX, should probably use context.selected_editable_objects
         # since selected objects can be from a lib or in hidden layer!
         for ob in scene.objects:
-            if ob.select:
+            if ob.select_set(action='SELECT'):
                 self._bake_object(scene, ob)
 
         return {'FINISHED'}
@@ -612,24 +613,24 @@ class CLIP_OT_setup_tracking_scene(Operator):
         CLIP_set_viewport_background(context, True, sc.clip, sc.clip_user)
 
     @staticmethod
-    def _setupRenderLayers(context):
+    def _setupViewLayers(context):
         scene = context.scene
-        rlayers = scene.render.layers
+        view_layers = scene.view_layers
 
-        if not scene.render.layers.get("Foreground"):
-            if len(rlayers) == 1:
-                fg = rlayers[0]
+        if not view_layers.get("Foreground"):
+            if len(view_layers) == 1:
+                fg = view_layers[0]
                 fg.name = 'Foreground'
             else:
-                fg = scene.render.layers.new("Foreground")
+                fg = view_layers.new("Foreground")
 
             fg.use_sky = True
             fg.layers = [True] + [False] * 19
             fg.layers_zmask = [False] * 10 + [True] + [False] * 9
             fg.use_pass_vector = True
 
-        if not scene.render.layers.get("Background"):
-            bg = scene.render.layers.new("Background")
+        if not view_layers.get("Background"):
+            bg = view_layers.new("Background")
             bg.use_pass_shadow = True
             bg.use_pass_ambient_occlusion = True
             bg.layers = [False] * 10 + [True] + [False] * 9
@@ -914,17 +915,17 @@ class CLIP_OT_setup_tracking_scene(Operator):
         return [(layers_a[i] | layers_b[i]) for i in range(len(layers_a))]
 
     @staticmethod
-    def _createLamp(scene):
-        lamp = bpy.data.lamps.new(name="Lamp", type='POINT')
-        lampob = bpy.data.objects.new(name="Lamp", object_data=lamp)
-        scene.objects.link(lampob)
+    def _createLight(scene):
+        light = bpy.data.lights.new(name="Light", type='POINT')
+        lightob = bpy.data.objects.new(name="Light", object_data=light)
+        scene.objects.link(lightob)
 
-        lampob.matrix_local = Matrix.Translation((4.076, 1.005, 5.904))
+        lightob.matrix_local = Matrix.Translation((4.076, 1.005, 5.904))
 
-        lamp.distance = 30
-        lamp.shadow_method = 'RAY_SHADOW'
+        light.distance = 30
+        light.shadow_method = 'RAY_SHADOW'
 
-        return lampob
+        return lightob
 
     def _createSampleObject(self, scene):
         vertices = self._getPlaneVertices(1.0, -1.0) + \
@@ -941,25 +942,25 @@ class CLIP_OT_setup_tracking_scene(Operator):
     def _setupObjects(self, context):
         scene = context.scene
 
-        fg = scene.render.layers.get("Foreground")
-        bg = scene.render.layers.get("Background")
+        fg = scene.view_layers.get("Foreground")
+        bg = scene.view_layers.get("Background")
 
         all_layers = self._mergeLayers(fg.layers, bg.layers)
 
-        # ensure all lamps are active on foreground and background
-        has_lamp = False
+        # ensure all lights are active on foreground and background
+        has_light = False
         has_mesh = False
         for ob in scene.objects:
-            if ob.type == 'LAMP':
+            if ob.type == 'LIGHT':
                 ob.layers = all_layers
-                has_lamp = True
+                has_light = True
             elif ob.type == 'MESH' and "is_ground" not in ob:
                 has_mesh = True
 
-        # create sample lamp if there's no lamps in the scene
-        if not has_lamp:
-            lamp = self._createLamp(scene)
-            lamp.layers = all_layers
+        # create sample light if there's no lights in the scene
+        if not has_light:
+            light = self._createLight(scene)
+            light.layers = all_layers
 
         # create sample object if there's no meshes in the scene
         if not has_mesh:
@@ -986,7 +987,7 @@ class CLIP_OT_setup_tracking_scene(Operator):
         self._setupWorld(context)
         self._setupCamera(context)
         self._setupViewport(context)
-        self._setupRenderLayers(context)
+        self._setupViewLayers(context)
         self._setupNodes(context)
         self._setupObjects(context)
 
@@ -1047,13 +1048,13 @@ class CLIP_OT_track_settings_to_track(bpy.types.Operator):
         "use_green_channel",
         "use_blue_channel",
         "weight"
-        )
+    )
 
     _attrs_marker = (
         "pattern_corners",
         "search_min",
         "search_max",
-        )
+    )
 
     @classmethod
     def poll(cls, context):

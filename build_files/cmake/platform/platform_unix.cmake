@@ -148,7 +148,7 @@ endif()
 # Codecs
 if(WITH_CODEC_SNDFILE)
 	find_package_wrapper(SndFile)
-	if(NOT SNDFILE_FOUND)
+	if(NOT LIBSNDFILE_FOUND)
 		set(WITH_CODEC_SNDFILE OFF)
 	endif()
 endif()

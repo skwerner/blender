@@ -35,12 +35,22 @@
 
 #include "DNA_listBase.h"
 
-struct Group;
+struct Collection;
 
 struct EffectorWeights;
 
 /* ******************************** */
 /* RigidBody World */
+
+/* Container for data shared by original and evaluated copies of RigidBodyWorld */
+typedef struct RigidBodyWorld_Shared {
+	/* cache */
+	struct PointCache *pointcache;
+	struct ListBase ptcaches;
+
+	/* References to Physics Sim objects. Exist at runtime only ---------------------- */
+	void *physics_world;		/* Physics sim world (i.e. btDiscreteDynamicsWorld) */
+} RigidBodyWorld_Shared;
 
 /* RigidBodyWorld (rbw)
  *
@@ -50,27 +60,24 @@ typedef struct RigidBodyWorld {
 	/* Sim World Settings ------------------------------------------------------------- */
 	struct EffectorWeights *effector_weights; /* effectors info */
 
-	struct Group *group;		/* Group containing objects to use for Rigid Bodies */
+	struct Collection *group;		/* Group containing objects to use for Rigid Bodies */
 	struct Object **objects;	/* Array to access group objects by index, only used at runtime */
-	
-	struct Group *constraints;	/* Group containing objects to use for Rigid Body Constraints*/
+
+	struct Collection *constraints;	/* Group containing objects to use for Rigid Body Constraints*/
 
 	int pad;
 	float ltime;				/* last frame world was evaluated for (internal) */
-	
-	/* cache */
-	struct PointCache *pointcache;
-	struct ListBase ptcaches;
+
+	struct RigidBodyWorld_Shared *shared; /* This pointer is shared between all evaluated copies */
+	struct PointCache *pointcache DNA_DEPRECATED; /* Moved to shared->pointcache */
+	struct ListBase ptcaches DNA_DEPRECATED; /* Moved to shared->ptcaches */
 	int numbodies;              /* number of objects in rigid body group */
-	
+
 	short steps_per_second;		/* number of simulation steps thaken per second */
 	short num_solver_iterations;/* number of constraint solver iterations made per simulation step */
-	
+
 	int flag;					/* (eRigidBodyWorld_Flag) settings for this RigidBodyWorld */
 	float time_scale;			/* used to speed up or slow down the simulation */
-	
-	/* References to Physics Sim objects. Exist at runtime only ---------------------- */
-	void *physics_world;		/* Physics sim world (i.e. btDiscreteDynamicsWorld) */
 } RigidBodyWorld;
 
 /* Flags for RigidBodyWorld */
@@ -86,6 +93,18 @@ typedef enum eRigidBodyWorld_Flag {
 /* ******************************** */
 /* RigidBody Object */
 
+/* Container for data that is shared among CoW copies.
+ *
+ * This is placed in a separate struct so that, for example, the physics_shape
+ * pointer can be replaced without having to update all CoW copies. */
+#
+#
+typedef struct RigidBodyOb_Shared {
+	/* References to Physics Sim objects. Exist at runtime only */
+	void *physics_object;	/* Physics object representation (i.e. btRigidBody) */
+	void *physics_shape;	/* Collision shape used by physics sim (i.e. btCollisionShape) */
+} RigidBodyOb_Shared;
+
 /* RigidBodyObject (rbo)
  *
  * Represents an object participating in a RigidBody sim.
@@ -93,36 +112,34 @@ typedef enum eRigidBodyWorld_Flag {
  * participating in a sim.
  */
 typedef struct RigidBodyOb {
-	/* References to Physics Sim objects. Exist at runtime only */
-	void *physics_object;	/* Physics object representation (i.e. btRigidBody) */
-	void *physics_shape;	/* Collision shape used by physics sim (i.e. btCollisionShape) */
-	
 	/* General Settings for this RigidBodyOb */
 	short type;				/* (eRigidBodyOb_Type) role of RigidBody in sim  */
-	short shape;			/* (eRigidBody_Shape) collision shape to use */ 
-	
+	short shape;			/* (eRigidBody_Shape) collision shape to use */
+
 	int flag;				/* (eRigidBodyOb_Flag) */
 	int col_groups;			/* Collision groups that determines wich rigid bodies can collide with each other */
 	short mesh_source;		/* (eRigidBody_MeshSource) mesh source for mesh based collision shapes */
 	short pad;
-	
+
 	/* Physics Parameters */
 	float mass;				/* how much object 'weighs' (i.e. absolute 'amount of stuff' it holds) */
-	
+
 	float friction;			/* resistance of object to movement */
 	float restitution;		/* how 'bouncy' object is when it collides */
-	
-	float margin;			/* tolerance for detecting collisions */ 
-	
+
+	float margin;			/* tolerance for detecting collisions */
+
 	float lin_damping;		/* damping for linear velocities */
 	float ang_damping;		/* damping for angular velocities */
-	
+
 	float lin_sleep_thresh;	/* deactivation threshold for linear velocities */
 	float ang_sleep_thresh;	/* deactivation threshold for angular velocities */
-	
+
 	float orn[4];			/* rigid body orientation */
 	float pos[3];			/* rigid body position */
 	float pad1;
+
+	struct RigidBodyOb_Shared *shared; /* This pointer is shared between all evaluated copies */
 } RigidBodyOb;
 
 
@@ -166,12 +183,12 @@ typedef enum eRigidBody_Shape {
 	RB_SHAPE_CYLINDER,
 		/* cone (i.e. party hat) */
 	RB_SHAPE_CONE,
-	
+
 		/* convex hull (minimal shrinkwrap encompassing all verts) */
 	RB_SHAPE_CONVEXH,
 		/* triangulated mesh */
 	RB_SHAPE_TRIMESH,
-	
+
 		/* concave mesh approximated using primitives */
 	//RB_SHAPE_COMPOUND,
 } eRigidBody_Shape;
@@ -203,7 +220,8 @@ typedef struct RigidBodyCon {
 	int flag;					/* (eRigidBodyCon_Flag) */
 
 	float breaking_threshold;	/* breaking impulse threshold */
-	float pad;
+	char spring_type;       	/* spring implementation to use */
+	char pad[3];
 
 	/* limits */
 	/* translation limits */
@@ -273,8 +291,14 @@ typedef enum eRigidBodyCon_Type {
 	/* Simplified spring constraint with only once axis that's automatically placed between the connected bodies */
 	RBC_TYPE_SPRING,
 	/* dirves bodies by applying linear and angular forces */
-	RBC_TYPE_MOTOR
+	RBC_TYPE_MOTOR,
 } eRigidBodyCon_Type;
+
+/* Spring implementation type for RigidBodyOb */
+typedef enum eRigidBodyCon_SpringType {
+	RBC_SPRING_TYPE1 = 0,	/* btGeneric6DofSpringConstraint */
+	RBC_SPRING_TYPE2,   	/* btGeneric6DofSpring2Constraint */
+} eRigidBodyCon_SpringType;
 
 /* Flags for RigidBodyCon */
 typedef enum eRigidBodyCon_Flag {
@@ -311,4 +335,3 @@ typedef enum eRigidBodyCon_Flag {
 /* ******************************** */
 
 #endif /* __DNA_RIGIDBODY_TYPES_H__ */
-

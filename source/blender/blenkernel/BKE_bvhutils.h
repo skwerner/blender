@@ -40,6 +40,7 @@
 
 struct DerivedMesh;
 struct BMEditMesh;
+struct Mesh;
 struct MVert;
 struct MFace;
 
@@ -101,7 +102,7 @@ typedef struct BVHTreeFromMesh {
  */
 BVHTree *bvhtree_from_editmesh_verts(
         BVHTreeFromEditMesh *data, struct BMEditMesh *em,
-        float epsilon, int tree_type, int axis);
+        float epsilon, int tree_type, int axis, BVHCache **bvh_cache);
 BVHTree *bvhtree_from_editmesh_verts_ex(
         BVHTreeFromEditMesh *data, struct BMEditMesh *em,
         const BLI_bitmap *mask, int verts_num_active,
@@ -114,7 +115,7 @@ BVHTree *bvhtree_from_mesh_verts_ex(
 
 BVHTree *bvhtree_from_editmesh_edges(
         BVHTreeFromEditMesh *data, struct BMEditMesh *em,
-        float epsilon, int tree_type, int axis);
+        float epsilon, int tree_type, int axis, BVHCache **bvh_cache);
 BVHTree *bvhtree_from_editmesh_edges_ex(
         BVHTreeFromEditMesh *data, struct BMEditMesh *em,
         const BLI_bitmap *edges_mask, int edges_num_active,
@@ -154,6 +155,10 @@ BVHTree *bvhtree_from_mesh_get(
         struct BVHTreeFromMesh *data, struct DerivedMesh *mesh,
         const int type, const int tree_type);
 
+BVHTree *BKE_bvhtree_from_mesh_get(
+        struct BVHTreeFromMesh *data, struct Mesh *mesh,
+        const int type, const int tree_type);
+
 /**
  * Frees data allocated by a call to bvhtree_from_mesh_*.
  */
@@ -182,14 +187,18 @@ enum {
 	BVHTREE_FROM_FACES           = 2,
 	BVHTREE_FROM_LOOPTRI         = 3,
 
-	BVHTREE_FROM_EM_LOOPTRI      = 4,
+	BVHTREE_FROM_LOOSEVERTS      = 4,
+	BVHTREE_FROM_LOOSEEDGES      = 5,
+
+	BVHTREE_FROM_EM_VERTS        = 6,
+	BVHTREE_FROM_EM_EDGES        = 7,
+	BVHTREE_FROM_EM_LOOPTRI      = 8,
 };
 
 
-BVHTree *bvhcache_find(BVHCache *cache, int type);
+bool     bvhcache_find(const BVHCache *cache, int type, BVHTree **r_tree);
 bool     bvhcache_has_tree(const BVHCache *cache, const BVHTree *tree);
 void     bvhcache_insert(BVHCache **cache_p, BVHTree *tree, int type);
-void     bvhcache_init(BVHCache **cache_p);
 void     bvhcache_free(BVHCache **cache_p);
 
 

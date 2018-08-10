@@ -96,8 +96,8 @@ class VIEW3D_MT_tools_projectpaint_clone(Menu):
     def draw(self, context):
         layout = self.layout
 
-        for i, tex in enumerate(context.active_object.data.uv_textures):
-            props = layout.operator("wm.context_set_int", text=tex.name, translate=False)
+        for i, uv_layer in enumerate(context.active_object.data.uv_layers):
+            props = layout.operator("wm.context_set_int", text=uv_layer.name, translate=False)
             props.data_path = "active_object.data.uv_texture_clone_index"
             props.value = i
 
@@ -126,7 +126,7 @@ def brush_texpaint_common(panel, context, layout, brush, settings, projpaint=Fal
                     col.prop(brush, "gradient_stroke_mode", text="Mode")
                     if brush.gradient_stroke_mode in {'SPACING_REPEAT', 'SPACING_CLAMP'}:
                         col.prop(brush, "grad_spacing")
-                else: # if brush.image_tool == 'FILL':
+                else:  # if brush.image_tool == 'FILL':
                     col.prop(brush, "gradient_fill_mode")
             else:
                 row = col.row(align=True)

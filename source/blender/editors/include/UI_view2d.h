@@ -4,7 +4,7 @@
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version. 
+ * of the License, or (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -18,12 +18,12 @@
  * The Original Code is Copyright (C) 2008 Blender Foundation.
  * All rights reserved.
  *
- * 
+ *
  * Contributor(s): Blender Foundation, Joshua Leung
  *
  *
  * Generic 2d view with should allow drawing grids,
- * panning, zooming, scrolling, .. 
+ * panning, zooming, scrolling, ..
  * ***** END GPL LICENSE BLOCK *****
  */
 
@@ -44,8 +44,8 @@
 /* generic value to use when coordinate lies out of view when converting */
 #define V2D_IS_CLIPPED  12000
 
-/* Common View2D view types 
- * NOTE: only define a type here if it completely sets all (+/- a few) of the relevant flags 
+/* Common View2D view types
+ * NOTE: only define a type here if it completely sets all (+/- a few) of the relevant flags
  *	    and settings for a View2D region, and that set of settings is used in more
  *	    than one specific place
  */
@@ -75,7 +75,7 @@ enum eView2D_Units {
 	V2D_UNIT_SECONDS = 0,
 	V2D_UNIT_FRAMES,
 	V2D_UNIT_FRAMESCALE,
-	
+
 	/* for drawing values */
 	V2D_UNIT_VALUES,
 	V2D_UNIT_DEGREES,
@@ -95,7 +95,7 @@ enum eView2D_Gridlines {
 	V2D_HORIZONTAL_AXIS         = (1 << 2),
 	V2D_VERTICAL_AXIS           = (1 << 3),
 	V2D_HORIZONTAL_FINELINES    = (1 << 4),
-	
+
 	V2D_GRIDLINES_MAJOR         = (V2D_VERTICAL_LINES | V2D_VERTICAL_AXIS | V2D_HORIZONTAL_LINES | V2D_HORIZONTAL_AXIS),
 	V2D_GRIDLINES_ALL           = (V2D_GRIDLINES_MAJOR | V2D_HORIZONTAL_FINELINES),
 };
@@ -103,8 +103,11 @@ enum eView2D_Gridlines {
 /* ------ Defines for Scrollers ----- */
 
 /* scroller area */
-#define V2D_SCROLL_HEIGHT   (0.85f * U.widget_unit)
-#define V2D_SCROLL_WIDTH    (0.85f * U.widget_unit)
+#define V2D_SCROLL_HEIGHT      (0.45f * U.widget_unit)
+#define V2D_SCROLL_WIDTH       (0.45f * U.widget_unit)
+/* For scrollers with scale markings (text written onto them) */
+#define V2D_SCROLL_HEIGHT_TEXT (0.79f * U.widget_unit)
+#define V2D_SCROLL_WIDTH_TEXT  (0.79f * U.widget_unit)
 
 /* scroller 'handles' hotspot radius for mouse */
 #define V2D_SCROLLER_HANDLE_SIZE    (0.6f * U.widget_unit)
@@ -219,7 +222,7 @@ void UI_view2d_center_set(struct View2D *v2d, float x, float y);
 
 void UI_view2d_offset(struct View2D *v2d, float xfac, float yfac);
 
-short UI_view2d_mouse_in_scrollers(const struct bContext *C, struct View2D *v2d, int x, int y);
+short UI_view2d_mouse_in_scrollers(const struct ARegion *ar, struct View2D *v2d, int x, int y);
 
 /* cached text drawing in v2d, to allow pixel-aligned draw as post process */
 void UI_view2d_text_cache_add(struct View2D *v2d, float x, float y,

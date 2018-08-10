@@ -33,6 +33,7 @@
  */
 
 #include "DNA_object_types.h"
+#include "DNA_mesh_types.h"
 #include "DNA_meshdata_types.h"
 
 #include "MEM_guardedalloc.h"
@@ -41,18 +42,23 @@
 #include "BLI_utildefines.h"
 
 #include "BKE_collision.h"
-#include "BKE_cdderivedmesh.h"
 #include "BKE_global.h"
+#include "BKE_library.h"
+#include "BKE_mesh.h"
+#include "BKE_mesh_runtime.h"
 #include "BKE_modifier.h"
 #include "BKE_pointcache.h"
 #include "BKE_scene.h"
 
 #include "MOD_modifiertypes.h"
+#include "MOD_util.h"
 
-static void initData(ModifierData *md) 
+#include "DEG_depsgraph_query.h"
+
+static void initData(ModifierData *md)
 {
 	CollisionModifierData *collmd = (CollisionModifierData *) md;
-	
+
 	collmd->x = NULL;
 	collmd->xnew = NULL;
 	collmd->current_x = NULL;
@@ -68,7 +74,7 @@ static void initData(ModifierData *md)
 static void freeData(ModifierData *md)
 {
 	CollisionModifierData *collmd = (CollisionModifierData *) md;
-	
+
 	if (collmd) {  /* Seriously? */
 		if (collmd->bvhtree) {
 			BLI_bvhtree_free(collmd->bvhtree);
@@ -96,39 +102,50 @@ static bool dependsOnTime(ModifierData *UNUSED(md))
 }
 
 static void deformVerts(
-        ModifierData *md, Object *ob,
-        DerivedMesh *derivedData,
+        ModifierData *md, const ModifierEvalContext *ctx,
+        Mesh *mesh,
         float (*vertexCos)[3],
-        int UNUSED(numVerts),
-        ModifierApplyFlag UNUSED(flag))
+        int UNUSED(numVerts))
 {
 	CollisionModifierData *collmd = (CollisionModifierData *) md;
-	DerivedMesh *dm = NULL;
+	Mesh *mesh_src;
 	MVert *tempVert = NULL;
-	
-	/* if possible use/create DerivedMesh */
-	if (derivedData) dm = CDDM_copy(derivedData);
-	else if (ob->type == OB_MESH) dm = CDDM_from_mesh(ob->data);
-	
+	Object *ob = ctx->object;
+
+	if (mesh == NULL) {
+		mesh_src = MOD_get_mesh_eval(ob, NULL, NULL, NULL, false, false);
+	}
+	else {
+		/* Not possible to use get_mesh() in this case as we'll modify its vertices
+		 * and get_mesh() would return 'mesh' directly. */
+		BKE_id_copy_ex(
+		        NULL, (ID *)mesh, (ID **)&mesh_src,
+		        LIB_ID_CREATE_NO_MAIN |
+		        LIB_ID_CREATE_NO_USER_REFCOUNT |
+		        LIB_ID_CREATE_NO_DEG_TAG |
+		        LIB_ID_COPY_NO_PREVIEW,
+		        false);
+	}
+
 	if (!ob->pd) {
 		printf("CollisionModifier deformVerts: Should not happen!\n");
 		return;
 	}
-	
-	if (dm) {
+
+	if (mesh_src) {
 		float current_time = 0;
 		unsigned int mvert_num = 0;
 
-		CDDM_apply_vert_coords(dm, vertexCos);
-		CDDM_calc_normals(dm);
-		
-		current_time = BKE_scene_frame_get(md->scene);
-		
+		BKE_mesh_apply_vert_coords(mesh_src, vertexCos);
+		BKE_mesh_calc_normals(mesh_src);
+
+		current_time = DEG_get_ctime(ctx->depsgraph);
+
 		if (G.debug_value > 0)
 			printf("current_time %f, collmd->time_xnew %f\n", current_time, collmd->time_xnew);
-		
-		mvert_num = dm->getNumVerts(dm);
-		
+
+		mvert_num = mesh_src->totvert;
+
 		if (current_time > collmd->time_xnew) {
 			unsigned int i;
 
@@ -138,13 +155,13 @@ static void deformVerts(
 
 			if (collmd->time_xnew == -1000) { /* first time */
 
-				collmd->x = dm->dupVertArray(dm); /* frame start position */
+				collmd->x = MEM_dupallocN(mesh_src->mvert); /* frame start position */
 
 				for (i = 0; i < mvert_num; i++) {
 					/* we save global positions */
 					mul_m4_v3(ob->obmat, collmd->x[i].co);
 				}
-				
+
 				collmd->xnew = MEM_dupallocN(collmd->x); // frame end position
 				collmd->current_x = MEM_dupallocN(collmd->x); // inter-frame
 				collmd->current_xnew = MEM_dupallocN(collmd->x); // inter-frame
@@ -152,12 +169,12 @@ static void deformVerts(
 
 				collmd->mvert_num = mvert_num;
 
-				collmd->tri_num = dm->getNumLoopTri(dm);
 				{
-					const MLoop *mloop = dm->getLoopArray(dm);
-					const MLoopTri *looptri = dm->getLoopTriArray(dm);
+					const MLoop *mloop = mesh_src->mloop;
+					const MLoopTri *looptri = BKE_mesh_runtime_looptri_ensure(mesh_src);
+					collmd->tri_num = BKE_mesh_runtime_looptri_len(mesh_src);
 					MVertTri *tri = MEM_malloc_arrayN(collmd->tri_num, sizeof(*tri), __func__);
-					DM_verttri_from_looptri(tri, mloop, looptri, collmd->tri_num);
+					BKE_mesh_runtime_verttri_from_looptri(tri, mloop, looptri, collmd->tri_num);
 					collmd->tri = tri;
 				}
 
@@ -177,7 +194,7 @@ static void deformVerts(
 				collmd->xnew = tempVert;
 				collmd->time_x = collmd->time_xnew;
 
-				memcpy(collmd->xnew, dm->getVertArray(dm), mvert_num * sizeof(MVert));
+				memcpy(collmd->xnew, mesh_src->mvert, mvert_num * sizeof(MVert));
 
 				bool is_static = true;
 
@@ -201,9 +218,9 @@ static void deformVerts(
 						        collmd->tri, collmd->tri_num,
 						        ob->pd->pdef_sboft);
 					}
-			
+
 				}
-				
+
 				/* happens on file load (ONLY when i decomment changes in readfile.c) */
 				if (!collmd->bvhtree) {
 					collmd->bvhtree = bvhtree_build_from_mvert(
@@ -226,7 +243,7 @@ static void deformVerts(
 			else if (mvert_num != collmd->mvert_num) {
 				freeData((ModifierData *)collmd);
 			}
-			
+
 		}
 		else if (current_time < collmd->time_xnew) {
 			freeData((ModifierData *)collmd);
@@ -237,9 +254,10 @@ static void deformVerts(
 			}
 		}
 	}
-	
-	if (dm)
-		dm->release(dm);
+
+	if (mesh_src != mesh) {
+		BKE_id_free(NULL, mesh_src);
+	}
 }
 
 
@@ -252,17 +270,25 @@ ModifierTypeInfo modifierType_Collision = {
 	                        eModifierTypeFlag_Single,
 
 	/* copyData */          NULL,
+
+	/* deformVerts_DM */    NULL,
+	/* deformMatrices_DM */ NULL,
+	/* deformVertsEM_DM */  NULL,
+	/* deformMatricesEM_DM*/NULL,
+	/* applyModifier_DM */  NULL,
+	/* applyModifierEM_DM */NULL,
+
 	/* deformVerts */       deformVerts,
 	/* deformMatrices */    NULL,
 	/* deformVertsEM */     NULL,
 	/* deformMatricesEM */  NULL,
 	/* applyModifier */     NULL,
 	/* applyModifierEM */   NULL,
+
 	/* initData */          initData,
 	/* requiredDataMask */  NULL,
 	/* freeData */          freeData,
 	/* isDisabled */        NULL,
-	/* updateDepgraph */    NULL,
 	/* updateDepsgraph */   NULL,
 	/* dependsOnTime */     dependsOnTime,
 	/* dependsOnNormals */	NULL,

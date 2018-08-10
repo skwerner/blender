@@ -38,13 +38,12 @@ class PhysicButtonsPanel:
     @classmethod
     def poll(cls, context):
         ob = context.object
-        rd = context.scene.render
-        return (ob and ob.type == 'MESH') and (rd.engine in cls.COMPAT_ENGINES) and (context.smoke)
+        return (ob and ob.type == 'MESH') and (context.engine in cls.COMPAT_ENGINES) and (context.smoke)
 
 
 class PHYSICS_PT_smoke(PhysicButtonsPanel, Panel):
     bl_label = "Smoke"
-    COMPAT_ENGINES = {'BLENDER_RENDER'}
+    COMPAT_ENGINES = {'BLENDER_RENDER', 'BLENDER_EEVEE', 'BLENDER_OPENGL'}
 
     def draw(self, context):
         layout = self.layout
@@ -148,9 +147,10 @@ class PHYSICS_PT_smoke(PhysicButtonsPanel, Panel):
 
 
 class PHYSICS_PT_smoke_flow_advanced(PhysicButtonsPanel, Panel):
-    bl_label = "Smoke Flow Advanced"
+    bl_label = "Advanced"
+    bl_parent_id = 'PHYSICS_PT_smoke'
     bl_options = {'DEFAULT_CLOSED'}
-    COMPAT_ENGINES = {'BLENDER_RENDER'}
+    COMPAT_ENGINES = {'BLENDER_RENDER', 'BLENDER_EEVEE', 'BLENDER_OPENGL'}
 
     @classmethod
     def poll(cls, context):
@@ -172,7 +172,7 @@ class PHYSICS_PT_smoke_flow_advanced(PhysicButtonsPanel, Panel):
         sub.label(text="Mapping:")
         sub.prop(flow, "texture_map_type", expand=False, text="")
         if flow.texture_map_type == 'UV':
-            sub.prop_search(flow, "uv_layer", ob.data, "uv_textures", text="")
+            sub.prop_search(flow, "uv_layer", ob.data, "uv_layers", text="")
         if flow.texture_map_type == 'AUTO':
             sub.prop(flow, "texture_size")
         sub.prop(flow, "texture_offset")
@@ -183,9 +183,10 @@ class PHYSICS_PT_smoke_flow_advanced(PhysicButtonsPanel, Panel):
 
 
 class PHYSICS_PT_smoke_fire(PhysicButtonsPanel, Panel):
-    bl_label = "Smoke Flames"
+    bl_label = "Flames"
+    bl_parent_id = 'PHYSICS_PT_smoke'
     bl_options = {'DEFAULT_CLOSED'}
-    COMPAT_ENGINES = {'BLENDER_RENDER'}
+    COMPAT_ENGINES = {'BLENDER_RENDER', 'BLENDER_EEVEE', 'BLENDER_OPENGL'}
 
     @classmethod
     def poll(cls, context):
@@ -213,9 +214,10 @@ class PHYSICS_PT_smoke_fire(PhysicButtonsPanel, Panel):
 
 
 class PHYSICS_PT_smoke_adaptive_domain(PhysicButtonsPanel, Panel):
-    bl_label = "Smoke Adaptive Domain"
+    bl_label = "Adaptive Domain"
+    bl_parent_id = 'PHYSICS_PT_smoke'
     bl_options = {'DEFAULT_CLOSED'}
-    COMPAT_ENGINES = {'BLENDER_RENDER'}
+    COMPAT_ENGINES = {'BLENDER_RENDER', 'BLENDER_EEVEE', 'BLENDER_OPENGL'}
 
     @classmethod
     def poll(cls, context):
@@ -247,15 +249,15 @@ class PHYSICS_PT_smoke_adaptive_domain(PhysicButtonsPanel, Panel):
 
 
 class PHYSICS_PT_smoke_highres(PhysicButtonsPanel, Panel):
-    bl_label = "Smoke High Resolution"
+    bl_label = "High Resolution"
+    bl_parent_id = 'PHYSICS_PT_smoke'
     bl_options = {'DEFAULT_CLOSED'}
-    COMPAT_ENGINES = {'BLENDER_RENDER'}
+    COMPAT_ENGINES = {'BLENDER_RENDER', 'BLENDER_EEVEE', 'BLENDER_OPENGL'}
 
     @classmethod
     def poll(cls, context):
         md = context.smoke
-        rd = context.scene.render
-        return md and (md.smoke_type == 'DOMAIN') and (rd.engine in cls.COMPAT_ENGINES) and (not use_smoke_import(md))
+        return md and (md.smoke_type == 'DOMAIN') and (context.engine in cls.COMPAT_ENGINES) and (not use_smoke_import(md))
 
     def draw_header(self, context):
         md = context.smoke.domain_settings
@@ -287,15 +289,15 @@ class PHYSICS_PT_smoke_highres(PhysicButtonsPanel, Panel):
 
 
 class PHYSICS_PT_smoke_groups(PhysicButtonsPanel, Panel):
-    bl_label = "Smoke Groups"
+    bl_label = "Groups"
+    bl_parent_id = 'PHYSICS_PT_smoke'
     bl_options = {'DEFAULT_CLOSED'}
-    COMPAT_ENGINES = {'BLENDER_RENDER'}
+    COMPAT_ENGINES = {'BLENDER_RENDER', 'BLENDER_EEVEE', 'BLENDER_OPENGL'}
 
     @classmethod
     def poll(cls, context):
         md = context.smoke
-        rd = context.scene.render
-        return md and (md.smoke_type == 'DOMAIN') and (rd.engine in cls.COMPAT_ENGINES) and (not use_smoke_import(md))
+        return md and (md.smoke_type == 'DOMAIN') and (context.engine in cls.COMPAT_ENGINES) and (not use_smoke_import(md))
 
     def draw(self, context):
         layout = self.layout
@@ -316,15 +318,15 @@ class PHYSICS_PT_smoke_groups(PhysicButtonsPanel, Panel):
 
 
 class PHYSICS_PT_smoke_cache(PhysicButtonsPanel, Panel):
-    bl_label = "Smoke Cache"
+    bl_label = "Cache"
+    bl_parent_id = 'PHYSICS_PT_smoke'
     bl_options = {'DEFAULT_CLOSED'}
-    COMPAT_ENGINES = {'BLENDER_RENDER'}
+    COMPAT_ENGINES = {'BLENDER_RENDER', 'BLENDER_EEVEE', 'BLENDER_OPENGL'}
 
     @classmethod
     def poll(cls, context):
         md = context.smoke
-        rd = context.scene.render
-        return md and (md.smoke_type == 'DOMAIN') and (rd.engine in cls.COMPAT_ENGINES) and (not use_smoke_import(md))
+        return md and (md.smoke_type == 'DOMAIN') and (context.engine in cls.COMPAT_ENGINES) and (not use_smoke_import(md))
 
     def draw(self, context):
         layout = self.layout
@@ -353,30 +355,30 @@ class PHYSICS_PT_smoke_cache(PhysicButtonsPanel, Panel):
 
 
 class PHYSICS_PT_smoke_field_weights(PhysicButtonsPanel, Panel):
-    bl_label = "Smoke Field Weights"
+    bl_label = "Field Weights"
+    bl_parent_id = 'PHYSICS_PT_smoke'
     bl_options = {'DEFAULT_CLOSED'}
-    COMPAT_ENGINES = {'BLENDER_RENDER'}
+    COMPAT_ENGINES = {'BLENDER_RENDER', 'BLENDER_EEVEE', 'BLENDER_OPENGL'}
 
     @classmethod
     def poll(cls, context):
         md = context.smoke
-        rd = context.scene.render
-        return md and (md.smoke_type == 'DOMAIN') and (rd.engine in cls.COMPAT_ENGINES) and (not use_smoke_import(md))
+        return md and (md.smoke_type == 'DOMAIN') and (context.engine in cls.COMPAT_ENGINES) and (not use_smoke_import(md))
 
     def draw(self, context):
         domain = context.smoke.domain_settings
         effector_weights_ui(self, context, domain.effector_weights, 'SMOKE')
 
 
-class PHYSICS_PT_smoke_display_settings(PhysicButtonsPanel, Panel):
-    bl_label = "Smoke Display Settings"
+class PHYSICS_PT_smoke_viewport_display(PhysicButtonsPanel, Panel):
+    bl_label = "Viewport Display"
+    bl_parent_id = 'PHYSICS_PT_smoke'
     bl_options = {'DEFAULT_CLOSED'}
 
     @classmethod
     def poll(cls, context):
         md = context.smoke
-        rd = context.scene.render
-        return md and (md.smoke_type == 'DOMAIN') and (not rd.use_game_engine) and (not use_smoke_import(md))
+        return md and (md.smoke_type == 'DOMAIN') and (not use_smoke_import(md))
 
     def draw(self, context):
         domain = context.smoke.domain_settings
@@ -407,21 +409,51 @@ class PHYSICS_PT_smoke_display_settings(PhysicButtonsPanel, Panel):
         row.enabled = do_full_slicing or not do_axis_slicing
         row.prop(domain, "slice_per_voxel")
 
-        layout.separator()
-        layout.label(text="Debug:")
+
+class PHYSICS_PT_smoke_viewport_display_color(PhysicButtonsPanel, Panel):
+    bl_label = "Color Mapping"
+    bl_parent_id = 'PHYSICS_PT_smoke_viewport_display'
+    bl_options = {'DEFAULT_CLOSED'}
+
+    @classmethod
+    def poll(cls, context):
+        md = context.smoke
+        return md and (md.smoke_type == 'DOMAIN') and (not use_smoke_import(md))
+
+    def draw_header(self, context):
+        md = context.smoke.domain_settings
+
+        self.layout.prop(md, "use_color_ramp", text="")
+
+    def draw(self, context):
+        domain = context.smoke.domain_settings
+        layout = self.layout
+
+        col = layout.column()
+        col.enabled = domain.use_color_ramp
+        col.prop(domain, "coba_field")
+        col.template_color_ramp(domain, "color_ramp", expand=True)
+
+
+class PHYSICS_PT_smoke_viewport_display_debug(PhysicButtonsPanel, Panel):
+    bl_label = "Debug"
+    bl_parent_id = 'PHYSICS_PT_smoke_viewport_display'
+    bl_options = {'DEFAULT_CLOSED'}
+
+    @classmethod
+    def poll(cls, context):
+        md = context.smoke
+        return md and (md.smoke_type == 'DOMAIN') and (not use_smoke_import(md))
+
+    def draw(self, context):
+        domain = context.smoke.domain_settings
+        layout = self.layout
+
         layout.prop(domain, "draw_velocity")
         col = layout.column()
         col.enabled = domain.draw_velocity
         col.prop(domain, "vector_draw_type")
         col.prop(domain, "vector_scale")
-
-        layout.separator()
-        layout.label(text="Color Mapping:")
-        layout.prop(domain, "use_color_ramp")
-        col = layout.column()
-        col.enabled = domain.use_color_ramp
-        col.prop(domain, "coba_field")
-        col.template_color_ramp(domain, "color_ramp", expand=True)
 
 
 classes = (
@@ -433,7 +465,9 @@ classes = (
     PHYSICS_PT_smoke_groups,
     PHYSICS_PT_smoke_cache,
     PHYSICS_PT_smoke_field_weights,
-    PHYSICS_PT_smoke_display_settings,
+    PHYSICS_PT_smoke_viewport_display,
+    PHYSICS_PT_smoke_viewport_display_color,
+    PHYSICS_PT_smoke_viewport_display_debug,
 )
 
 if __name__ == "__main__":  # only for live edit.

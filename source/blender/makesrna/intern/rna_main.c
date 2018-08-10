@@ -42,7 +42,7 @@
 
 /* all the list begin functions are added manually here, Main is not in SDNA */
 
-static int rna_Main_use_autopack_get(PointerRNA *UNUSED(ptr))
+static bool rna_Main_use_autopack_get(PointerRNA *UNUSED(ptr))
 {
 	if (G.fileflags & G_AUTOPACK)
 		return 1;
@@ -50,7 +50,7 @@ static int rna_Main_use_autopack_get(PointerRNA *UNUSED(ptr))
 	return 0;
 }
 
-static void rna_Main_use_autopack_set(PointerRNA *UNUSED(ptr), int value)
+static void rna_Main_use_autopack_set(PointerRNA *UNUSED(ptr), bool value)
 {
 	if (value)
 		G.fileflags |= G_AUTOPACK;
@@ -58,12 +58,12 @@ static void rna_Main_use_autopack_set(PointerRNA *UNUSED(ptr), int value)
 		G.fileflags &= ~G_AUTOPACK;
 }
 
-static int rna_Main_is_saved_get(PointerRNA *UNUSED(ptr))
+static bool rna_Main_is_saved_get(PointerRNA *UNUSED(ptr))
 {
 	return G.relbase_valid;
 }
 
-static int rna_Main_is_dirty_get(PointerRNA *ptr)
+static bool rna_Main_is_dirty_get(PointerRNA *ptr)
 {
 	/* XXX, not totally nice to do it this way, should store in main ? */
 	Main *bmain = (Main *)ptr->data;
@@ -107,7 +107,7 @@ static void rna_Main_object_begin(CollectionPropertyIterator *iter, PointerRNA *
 	rna_iterator_listbase_begin(iter, &bmain->object, NULL);
 }
 
-static void rna_Main_lamp_begin(CollectionPropertyIterator *iter, PointerRNA *ptr)
+static void rna_Main_light_begin(CollectionPropertyIterator *iter, PointerRNA *ptr)
 {
 	Main *bmain = (Main *)ptr->data;
 	rna_iterator_listbase_begin(iter, &bmain->lamp, NULL);
@@ -209,10 +209,10 @@ static void rna_Main_sound_begin(CollectionPropertyIterator *iter, PointerRNA *p
 	rna_iterator_listbase_begin(iter, &bmain->sound, NULL);
 }
 
-static void rna_Main_group_begin(CollectionPropertyIterator *iter, PointerRNA *ptr)
+static void rna_Main_collection_begin(CollectionPropertyIterator *iter, PointerRNA *ptr)
 {
 	Main *bmain = (Main *)ptr->data;
-	rna_iterator_listbase_begin(iter, &bmain->group, NULL);
+	rna_iterator_listbase_begin(iter, &bmain->collection, NULL);
 }
 
 static void rna_Main_armature_begin(CollectionPropertyIterator *iter, PointerRNA *ptr)
@@ -293,6 +293,18 @@ static void rna_Main_paintcurves_begin(CollectionPropertyIterator *iter, Pointer
 	rna_iterator_listbase_begin(iter, &bmain->paintcurves, NULL);
 }
 
+static void rna_Main_workspaces_begin(CollectionPropertyIterator *iter, PointerRNA *ptr)
+{
+	Main *bmain = (Main *)ptr->data;
+	rna_iterator_listbase_begin(iter, &bmain->workspaces, NULL);
+}
+
+static void rna_Main_lightprobes_begin(CollectionPropertyIterator *iter, PointerRNA *ptr)
+{
+	Main *bmain = (Main *)ptr->data;
+	rna_iterator_listbase_begin(iter, &bmain->lightprobe, NULL);
+}
+
 static void rna_Main_version_get(PointerRNA *ptr, int *value)
 {
 	Main *bmain = (Main *)ptr->data;
@@ -341,7 +353,7 @@ void RNA_def_main(BlenderRNA *brna)
 		{"materials", "Material", "rna_Main_mat_begin", "Materials", "Material data-blocks", RNA_def_main_materials},
 		{"node_groups", "NodeTree", "rna_Main_nodetree_begin", "Node Groups", "Node group data-blocks", RNA_def_main_node_groups},
 		{"meshes", "Mesh", "rna_Main_mesh_begin", "Meshes", "Mesh data-blocks", RNA_def_main_meshes},
-		{"lamps", "Lamp", "rna_Main_lamp_begin", "Lamps", "Lamp data-blocks", RNA_def_main_lamps},
+		{"lights", "Light", "rna_Main_light_begin", "Lights", "Light data-blocks", RNA_def_main_lights},
 		{"libraries", "Library", "rna_Main_library_begin", "Libraries", "Library data-blocks", RNA_def_main_libraries},
 		{"screens", "Screen", "rna_Main_screen_begin", "Screens", "Screen data-blocks", RNA_def_main_screens},
 		{"window_managers", "WindowManager", "rna_Main_wm_begin", "Window Managers", "Window manager data-blocks", RNA_def_main_window_managers},
@@ -353,7 +365,7 @@ void RNA_def_main(BlenderRNA *brna)
 		{"textures", "Texture", "rna_Main_tex_begin", "Textures", "Texture data-blocks", RNA_def_main_textures},
 		{"brushes", "Brush", "rna_Main_brush_begin", "Brushes", "Brush data-blocks", RNA_def_main_brushes},
 		{"worlds", "World", "rna_Main_world_begin", "Worlds", "World data-blocks", RNA_def_main_worlds},
-		{"groups", "Group", "rna_Main_group_begin", "Groups", "Group data-blocks", RNA_def_main_groups},
+		{"collections", "Collection", "rna_Main_collection_begin", "Collections", "Collection data-blocks", RNA_def_main_collections},
 		{"shape_keys", "Key", "rna_Main_key_begin", "Shape Keys", "Shape Key data-blocks", NULL},
 		{"texts", "Text", "rna_Main_text_begin", "Texts", "Text data-blocks", RNA_def_main_texts},
 		{"speakers", "Speaker", "rna_Main_speaker_begin", "Speakers", "Speaker data-blocks", RNA_def_main_speakers},
@@ -368,11 +380,13 @@ void RNA_def_main(BlenderRNA *brna)
 		{"linestyles", "FreestyleLineStyle", "rna_Main_linestyle_begin", "Line Styles", "Line Style data-blocks", RNA_def_main_linestyles},
 		{"cache_files", "CacheFile", "rna_Main_cachefiles_begin", "Cache Files", "Cache Files data-blocks", RNA_def_main_cachefiles},
 		{"paint_curves", "PaintCurve", "rna_Main_paintcurves_begin", "Paint Curves", "Paint Curves data-blocks", RNA_def_main_paintcurves},
+		{"workspaces", "WorkSpace", "rna_Main_workspaces_begin", "Workspaces", "Workspace data-blocks", RNA_def_main_workspaces},
+		{"lightprobes", "LightProbe", "rna_Main_lightprobes_begin", "LightProbes", "LightProbe data-blocks", RNA_def_main_lightprobes},
 		{NULL, NULL, NULL, NULL, NULL, NULL}
 	};
 
 	int i;
-	
+
 	srna = RNA_def_struct(brna, "BlendData", NULL);
 	RNA_def_struct_ui_text(srna, "Blendfile Data",
 	                       "Main data structure representing a .blend file and all its data-blocks");
@@ -383,7 +397,7 @@ void RNA_def_main(BlenderRNA *brna)
 	RNA_def_property_string_funcs(prop, "rna_Main_filepath_get", "rna_Main_filepath_length", "rna_Main_filepath_set");
 	RNA_def_property_clear_flag(prop, PROP_EDITABLE);
 	RNA_def_property_ui_text(prop, "Filename", "Path to the .blend file");
-	
+
 	prop = RNA_def_property(srna, "is_dirty", PROP_BOOLEAN, PROP_NONE);
 	RNA_def_property_clear_flag(prop, PROP_EDITABLE);
 	RNA_def_property_boolean_funcs(prop, "rna_Main_is_dirty_get", NULL);

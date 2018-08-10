@@ -34,32 +34,32 @@ from bpy.props import (
 
 
 class NodeSetting(PropertyGroup):
-    value = StringProperty(
-            name="Value",
-            description="Python expression to be evaluated "
-            "as the initial node setting",
-            default="",
-            )
+    value: StringProperty(
+        name="Value",
+        description="Python expression to be evaluated "
+        "as the initial node setting",
+        default="",
+    )
 
 
 # Base class for node 'Add' operators
 class NodeAddOperator:
 
-    type = StringProperty(
-            name="Node Type",
-            description="Node type",
-            )
-    use_transform = BoolProperty(
-            name="Use Transform",
-            description="Start transform operator after inserting the node",
-            default=False,
-            )
-    settings = CollectionProperty(
-            name="Settings",
-            description="Settings to be applied on the newly created node",
-            type=NodeSetting,
-            options={'SKIP_SAVE'},
-            )
+    type: StringProperty(
+        name="Node Type",
+        description="Node type",
+    )
+    use_transform: BoolProperty(
+        name="Use Transform",
+        description="Start transform operator after inserting the node",
+        default=False,
+    )
+    settings: CollectionProperty(
+        name="Settings",
+        description="Settings to be applied on the newly created node",
+        type=NodeSetting,
+        options={'SKIP_SAVE'},
+    )
 
     @staticmethod
     def store_mouse_cursor(context, event):
@@ -70,7 +70,7 @@ class NodeAddOperator:
         if context.region.type == 'WINDOW':
             # convert mouse position to the View2D for later node placement
             space.cursor_location_from_region(
-                    event.mouse_region_x, event.mouse_region_y)
+                event.mouse_region_x, event.mouse_region_y)
         else:
             space.cursor_location = tree.view_center
 
@@ -99,8 +99,8 @@ class NodeAddOperator:
                 setattr(node, setting.name, value)
             except AttributeError as e:
                 self.report(
-                        {'ERROR_INVALID_INPUT'},
-                        "Node has no attribute " + setting.name)
+                    {'ERROR_INVALID_INPUT'},
+                    "Node has no attribute " + setting.name)
                 print(str(e))
                 # Continue despite invalid attribute
 
@@ -152,10 +152,10 @@ class NODE_OT_add_and_link_node(NodeAddOperator, Operator):
     bl_label = "Add and Link Node"
     bl_options = {'REGISTER', 'UNDO'}
 
-    link_socket_index = IntProperty(
-            name="Link Socket Index",
-            description="Index of the socket to link",
-            )
+    link_socket_index: IntProperty(
+        name="Link Socket Index",
+        description="Index of the socket to link",
+    )
 
     def execute(self, context):
         space = context.space_data
@@ -195,11 +195,11 @@ class NODE_OT_add_search(NodeAddOperator, Operator):
                 nodetype = getattr(bpy.types, item.nodetype, None)
                 if nodetype:
                     enum_items.append(
-                            (str(index),
-                             item.label,
-                             nodetype.bl_rna.description,
-                             index,
-                             ))
+                        (str(index),
+                         item.label,
+                         nodetype.bl_rna.description,
+                         index,
+                         ))
         return enum_items
 
     # Look up the item based on index
@@ -210,11 +210,11 @@ class NODE_OT_add_search(NodeAddOperator, Operator):
                 return item
         return None
 
-    node_item = EnumProperty(
-            name="Node Type",
-            description="Node type",
-            items=node_enum_items,
-            )
+    node_item: EnumProperty(
+        name="Node Type",
+        description="Node type",
+        items=node_enum_items,
+    )
 
     def execute(self, context):
         item = self.find_node_item(context)
@@ -233,7 +233,7 @@ class NODE_OT_add_search(NodeAddOperator, Operator):
 
             if self.use_transform:
                 bpy.ops.node.translate_attach_remove_on_cancel(
-                        'INVOKE_DEFAULT')
+                    'INVOKE_DEFAULT')
 
             return {'FINISHED'}
         else:

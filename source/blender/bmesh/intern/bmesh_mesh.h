@@ -60,6 +60,7 @@ void BM_edges_sharp_from_angle_set(BMesh *bm, const float split_angle);
 void bmesh_edit_begin(BMesh *bm, const BMOpTypeFlag type_flag);
 void bmesh_edit_end(BMesh *bm, const BMOpTypeFlag type_flag);
 
+void BM_mesh_elem_index_ensure_ex(BMesh *bm, const char htype, int elem_offset[4]);
 void BM_mesh_elem_index_ensure(BMesh *bm, const char hflag);
 void BM_mesh_elem_index_validate(
         BMesh *bm, const char *location, const char *func,
@@ -110,25 +111,22 @@ extern const BMAllocTemplate bm_mesh_chunksize_default;
 
 #define BMALLOC_TEMPLATE_FROM_BM(bm) { (CHECK_TYPE_INLINE(bm, BMesh *), \
 	(bm)->totvert), (bm)->totedge, (bm)->totloop, (bm)->totface}
-#define BMALLOC_TEMPLATE_FROM_ME(me) { (CHECK_TYPE_INLINE(me, Mesh *), \
-	(me)->totvert), (me)->totedge, (me)->totloop, (me)->totpoly}
 
-#define _VA_BMALLOC_TEMPLATE_FROM_DM_1(dm) { \
-	(CHECK_TYPE_INLINE(dm, DerivedMesh *), \
-	(dm)->getNumVerts(dm)),		\
-	(dm)->getNumEdges(dm),		\
-	(dm)->getNumLoops(dm),		\
-	(dm)->getNumPolys(dm),		\
+#define _VA_BMALLOC_TEMPLATE_FROM_ME_1(me) { \
+	(CHECK_TYPE_INLINE(me, Mesh *), \
+	(me)->totvert),	\
+	(me)->totedge,	\
+	(me)->totloop,	\
+	(me)->totpoly,	\
 }
-#define _VA_BMALLOC_TEMPLATE_FROM_DM_2(dm_a, dm_b) { \
-	(CHECK_TYPE_INLINE(dm_a, DerivedMesh *), \
-	 CHECK_TYPE_INLINE(dm_b, DerivedMesh *), \
-	(dm_a)->getNumVerts(dm_a)) + (dm_b)->getNumVerts(dm_b),	\
-	(dm_a)->getNumEdges(dm_a)  + (dm_b)->getNumEdges(dm_b),	\
-	(dm_a)->getNumLoops(dm_a)  + (dm_b)->getNumLoops(dm_b),	\
-	(dm_a)->getNumPolys(dm_a)  + (dm_b)->getNumPolys(dm_b),	\
+#define _VA_BMALLOC_TEMPLATE_FROM_ME_2(me_a, me_b) { \
+	(CHECK_TYPE_INLINE(me_a, Mesh *), \
+	 CHECK_TYPE_INLINE(me_b, Mesh *), \
+	(me_a)->totvert + (me_b)->totvert),	\
+	(me_a)->totedge + (me_b)->totedge,	\
+	(me_a)->totloop + (me_b)->totloop,	\
+	(me_a)->totpoly + (me_b)->totpoly,	\
 }
-
-#define BMALLOC_TEMPLATE_FROM_DM(...) VA_NARGS_CALL_OVERLOAD(_VA_BMALLOC_TEMPLATE_FROM_DM_, __VA_ARGS__)
+#define BMALLOC_TEMPLATE_FROM_ME(...) VA_NARGS_CALL_OVERLOAD(_VA_BMALLOC_TEMPLATE_FROM_ME_, __VA_ARGS__)
 
 #endif /* __BMESH_MESH_H__ */

@@ -40,27 +40,37 @@
 #include "BLI_utildefines.h"
 #include "BLI_math.h"
 
-#include "BKE_cdderivedmesh.h"
+#include "BKE_library.h"
+#include "BKE_mesh.h"
 #include "BKE_modifier.h"
 
 #include "bmesh.h"
 #include "bmesh_tools.h"
 
+#include "DNA_mesh_types.h"
 #include "DNA_object_types.h"
 
 #include "MOD_modifiertypes.h"
 
-static DerivedMesh *doEdgeSplit(DerivedMesh *dm, EdgeSplitModifierData *emd)
+static Mesh *doEdgeSplit(Mesh *mesh, EdgeSplitModifierData *emd, const ModifierEvalContext *ctx)
 {
-	DerivedMesh *result;
+	Mesh *result;
 	BMesh *bm;
 	BMIter iter;
 	BMEdge *e;
 	float threshold = cosf(emd->split_angle + 0.000000175f);
 	const bool calc_face_normals = (emd->flags & MOD_EDGESPLIT_FROMANGLE) != 0;
 
-	bm = DM_to_bmesh(dm, calc_face_normals);
-	
+	bm = BKE_mesh_to_bmesh_ex(
+	        mesh,
+	        &(struct BMeshCreateParams){0},
+	        &(struct BMeshFromMeshParams){
+	            .calc_face_normal = calc_face_normals,
+	            .add_key_index = false,
+	            .use_shapekey = true,
+	            .active_shapekey = ctx->object->shapenr,
+	        });
+
 	if (emd->flags & MOD_EDGESPLIT_FROMANGLE) {
 		BM_ITER_MESH (e, &iter, bm, BM_EDGES_OF_MESH) {
 			/* check for 1 edge having 2 face users */
@@ -78,7 +88,7 @@ static DerivedMesh *doEdgeSplit(DerivedMesh *dm, EdgeSplitModifierData *emd)
 			}
 		}
 	}
-	
+
 	if (emd->flags & MOD_EDGESPLIT_FROMFLAG) {
 		BM_ITER_MESH (e, &iter, bm, BM_EDGES_OF_MESH) {
 			/* check for 2 or more edge users */
@@ -91,15 +101,15 @@ static DerivedMesh *doEdgeSplit(DerivedMesh *dm, EdgeSplitModifierData *emd)
 			}
 		}
 	}
-	
+
 	BM_mesh_edgesplit(bm, false, true, false);
 
 	/* BM_mesh_validate(bm); */ /* for troubleshooting */
 
-	result = CDDM_from_bmesh(bm, true);
+	result = BKE_bmesh_to_mesh_nomain(bm, &((struct BMeshToMeshParams){0}));
 	BM_mesh_free(bm);
 
-	result->dirty |= DM_DIRTY_NORMALS;
+	result->runtime.cd_dirty_vert |= CD_MASK_NORMAL;
 	return result;
 }
 
@@ -112,17 +122,18 @@ static void initData(ModifierData *md)
 	emd->flags = MOD_EDGESPLIT_FROMANGLE | MOD_EDGESPLIT_FROMFLAG;
 }
 
-static DerivedMesh *applyModifier(
-        ModifierData *md, Object *UNUSED(ob), DerivedMesh *dm,
-        ModifierApplyFlag UNUSED(flag))
+static Mesh *applyModifier(
+        ModifierData *md,
+        const ModifierEvalContext *ctx,
+        Mesh *mesh)
 {
-	DerivedMesh *result;
+	Mesh *result;
 	EdgeSplitModifierData *emd = (EdgeSplitModifierData *) md;
 
 	if (!(emd->flags & (MOD_EDGESPLIT_FROMANGLE | MOD_EDGESPLIT_FROMFLAG)))
-		return dm;
+		return mesh;
 
-	result = doEdgeSplit(dm, emd);
+	result = doEdgeSplit(mesh, emd, ctx);
 
 	return result;
 }
@@ -140,17 +151,25 @@ ModifierTypeInfo modifierType_EdgeSplit = {
 	                        eModifierTypeFlag_EnableInEditmode,
 
 	/* copyData */          modifier_copyData_generic,
+
+	/* deformVerts_DM */    NULL,
+	/* deformMatrices_DM */ NULL,
+	/* deformVertsEM_DM */  NULL,
+	/* deformMatricesEM_DM*/NULL,
+	/* applyModifier_DM */  NULL,
+	/* applyModifierEM_DM */NULL,
+
 	/* deformVerts */       NULL,
 	/* deformMatrices */    NULL,
 	/* deformVertsEM */     NULL,
 	/* deformMatricesEM */  NULL,
 	/* applyModifier */     applyModifier,
 	/* applyModifierEM */   NULL,
+
 	/* initData */          initData,
 	/* requiredDataMask */  NULL,
 	/* freeData */          NULL,
 	/* isDisabled */        NULL,
-	/* updateDepgraph */    NULL,
 	/* updateDepsgraph */   NULL,
 	/* dependsOnTime */     NULL,
 	/* dependsOnNormals */	NULL,

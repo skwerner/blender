@@ -4,7 +4,7 @@
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version. 
+ * of the License, or (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -33,7 +33,7 @@
 #include "node_shader_util.h"
 
 
-/* **************** SCALAR MATH ******************** */ 
+/* **************** SCALAR MATH ******************** */
 static bNodeSocketTemplate sh_node_math_in[] = {
 	{ SOCK_FLOAT, 1, N_("Value"), 0.5f, 0.5f, 0.5f, 1.0f, -10000.0f, 10000.0f, PROP_NONE},
 	{ SOCK_FLOAT, 1, N_("Value"), 0.5f, 0.5f, 0.5f, 1.0f, -10000.0f, 10000.0f, PROP_NONE},
@@ -45,15 +45,15 @@ static bNodeSocketTemplate sh_node_math_out[] = {
 	{ -1, 0, "" }
 };
 
-static void node_shader_exec_math(void *UNUSED(data), int UNUSED(thread), bNode *node, bNodeExecData *UNUSED(execdata), bNodeStack **in, bNodeStack **out) 
+static void node_shader_exec_math(void *UNUSED(data), int UNUSED(thread), bNode *node, bNodeExecData *UNUSED(execdata), bNodeStack **in, bNodeStack **out)
 {
 	float a, b, r = 0.0f;
-	
+
 	nodestack_get_vec(&a, SOCK_FLOAT, in[0]);
 	nodestack_get_vec(&b, SOCK_FLOAT, in[1]);
-	
+
 	switch (node->custom1) {
-	
+
 		case NODE_MATH_ADD:
 			r = a + b;
 			break;
@@ -147,7 +147,7 @@ static void node_shader_exec_math(void *UNUSED(data), int UNUSED(thread), bNode 
 			}
 			else {
 				float y_mod_1 = fabsf(fmodf(b, 1.0f));
-				
+
 				/* if input value is not nearly an integer, fall back to zero, nicer than straight rounding */
 				if (y_mod_1 > 0.999f || y_mod_1 < 0.001f) {
 					r = powf(a, floorf(b + 0.5f));
@@ -226,6 +226,46 @@ static void node_shader_exec_math(void *UNUSED(data), int UNUSED(thread), bNode 
 			r = atan2(a, b);
 			break;
 		}
+		case NODE_MATH_FLOOR:
+		{
+			if (in[0]->hasinput || !in[1]->hasinput) /* This one only takes one input, so we've got to choose. */
+				r = floorf(a);
+			else
+				r = floorf(b);
+			break;
+		}
+		case NODE_MATH_CEIL:
+		{
+			if (in[0]->hasinput || !in[1]->hasinput) /* This one only takes one input, so we've got to choose. */
+				r = ceilf(a);
+			else
+				r = ceilf(b);
+			break;
+		}
+		case NODE_MATH_FRACT:
+		{
+			if (in[0]->hasinput || !in[1]->hasinput) /* This one only takes one input, so we've got to choose. */
+				r = a - floorf(a);
+			else
+				r = b - floorf(b);
+			break;
+		}
+		case NODE_MATH_SQRT:
+		{
+			if (in[0]->hasinput || !in[1]->hasinput) { /* This one only takes one input, so we've got to choose. */
+				if (a > 0)
+					r = sqrt(a);
+				else
+					r = 0.0;
+			}
+			else {
+				if (b > 0)
+					r = sqrt(b);
+				else
+					r = 0.0;
+			}
+			break;
+		}
 	}
 	if (node->custom2 & SHD_MATH_CLAMP) {
 		CLAMP(r, 0.0f, 1.0f);
@@ -240,7 +280,7 @@ static int gpu_shader_math(GPUMaterial *mat, bNode *node, bNodeExecData *UNUSED(
 	    "math_divide", "math_sine", "math_cosine", "math_tangent", "math_asin",
 	    "math_acos", "math_atan", "math_pow", "math_log", "math_min", "math_max",
 	    "math_round", "math_less_than", "math_greater_than", "math_modulo", "math_abs",
-	    "math_atan2"
+	    "math_atan2", "math_floor", "math_ceil", "math_fract", "math_sqrt"
 	};
 
 	switch (node->custom1) {
@@ -256,7 +296,7 @@ static int gpu_shader_math(GPUMaterial *mat, bNode *node, bNodeExecData *UNUSED(
 		case NODE_MATH_GREATER:
 		case NODE_MATH_MOD:
 		case NODE_MATH_ATAN2:
-			GPU_stack_link(mat, names[node->custom1], in, out);
+			GPU_stack_link(mat, node, names[node->custom1], in, out);
 			break;
 		case NODE_MATH_SIN:
 		case NODE_MATH_COS:
@@ -266,19 +306,23 @@ static int gpu_shader_math(GPUMaterial *mat, bNode *node, bNodeExecData *UNUSED(
 		case NODE_MATH_ATAN:
 		case NODE_MATH_ROUND:
 		case NODE_MATH_ABS:
+		case NODE_MATH_FLOOR:
+		case NODE_MATH_FRACT:
+		case NODE_MATH_CEIL:
+		case NODE_MATH_SQRT:
 			if (in[0].hasinput || !in[1].hasinput) {
 				/* use only first item and terminator */
 				GPUNodeStack tmp_in[2];
 				memcpy(&tmp_in[0], &in[0], sizeof(GPUNodeStack));
 				memcpy(&tmp_in[1], &in[2], sizeof(GPUNodeStack));
-				GPU_stack_link(mat, names[node->custom1], tmp_in, out);
+				GPU_stack_link(mat, node, names[node->custom1], tmp_in, out);
 			}
 			else {
 				/* use only second item and terminator */
 				GPUNodeStack tmp_in[2];
 				memcpy(&tmp_in[0], &in[1], sizeof(GPUNodeStack));
 				memcpy(&tmp_in[1], &in[2], sizeof(GPUNodeStack));
-				GPU_stack_link(mat, names[node->custom1], tmp_in, out);
+				GPU_stack_link(mat, node, names[node->custom1], tmp_in, out);
 			}
 			break;
 		default:
@@ -299,7 +343,6 @@ void register_node_type_sh_math(void)
 	static bNodeType ntype;
 
 	sh_node_type_base(&ntype, SH_NODE_MATH, "Math", NODE_CLASS_CONVERTOR, 0);
-	node_type_compatibility(&ntype, NODE_OLD_SHADING | NODE_NEW_SHADING);
 	node_type_socket_templates(&ntype, sh_node_math_in, sh_node_math_out);
 	node_type_label(&ntype, node_math_label);
 	node_type_storage(&ntype, "", NULL, NULL);

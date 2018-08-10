@@ -51,7 +51,7 @@ private:
 	float y_up_mat4[4][4];
 	float z_up_mat4[4][4];
 	float scale_mat4[4][4];
-	
+
 public:
 
 	enum UnitSystem {
@@ -66,11 +66,11 @@ public:
 	void read_asset(const COLLADAFW::FileInfo *asset);
 
 	void convertVector3(COLLADABU::Math::Vector3 &vec, float *v);
-	
+
 	UnitConverter::UnitSystem isMetricSystem(void);
-	
+
 	float getLinearMeter(void);
-		
+
 	// TODO need also for angle conversion, time conversion...
 
 	void dae_matrix_to_mat4_(float out[4][4], const COLLADABU::Math::Matrix4& in);
@@ -103,7 +103,6 @@ extern std::string get_joint_sid(Bone *bone);
 extern std::string get_camera_id(Object *ob);
 
 extern std::string get_material_id(Material *mat);
-extern std::string get_material_id_from_id(std::string id);
 
 extern std::string get_morph_id(Object *ob);
 

@@ -52,9 +52,10 @@
 
 #include "BKE_context.h"
 #include "BKE_customdata.h"
-#include "BKE_depsgraph.h"
 #include "BKE_mesh_mapping.h"
 #include "BKE_editmesh.h"
+
+#include "DEG_depsgraph.h"
 
 #include "UI_interface.h"
 
@@ -62,6 +63,9 @@
 #include "ED_uvedit.h"
 #include "ED_screen.h"
 #include "ED_space_api.h"
+
+#include "GPU_batch.h"
+#include "GPU_state.h"
 
 #include "RNA_access.h"
 #include "RNA_define.h"
@@ -154,6 +158,8 @@ typedef struct StitchState {
 	bool snap_islands;
 	/* stitch at midpoints or at islands */
 	bool midpoints;
+	/* object for editmesh */
+	Object *obedit;
 	/* editmesh, cached for use in modal handler */
 	BMEditMesh *em;
 	/* clear seams of stitched edges after stitch */
@@ -286,7 +292,7 @@ static void stitch_update_header(StitchState *state, bContext *C)
 		             state->limit_dist,
 		             WM_bool_as_string(state->use_limit));
 
-		ED_area_headerprint(sa, msg);
+		ED_workspace_status_text(C, msg);
 	}
 }
 
@@ -483,9 +489,10 @@ static void stitch_calculate_island_snapping(
 						int face_preview_pos = preview_position[BM_elem_index_get(element->l->f)].data_position;
 
 						stitch_uv_rotate(rotation_mat, island_stitch_data[i].medianPoint,
-						                 preview->preview_polys + face_preview_pos + 2 * element->tfindex, state->aspect);
+						                 preview->preview_polys + face_preview_pos + 2 * element->loop_of_poly_index,
+						                 state->aspect);
 
-						add_v2_v2(preview->preview_polys + face_preview_pos + 2 * element->tfindex,
+						add_v2_v2(preview->preview_polys + face_preview_pos + 2 * element->loop_of_poly_index,
 						          island_stitch_data[i].translation);
 					}
 				}
@@ -901,7 +908,7 @@ static void stitch_propagate_uv_final_position(
 			else {
 				int face_preview_pos = preview_position[BM_elem_index_get(element_iter->l->f)].data_position;
 				if (face_preview_pos != STITCH_NO_PREVIEW) {
-					copy_v2_v2(preview->preview_polys + face_preview_pos + 2 * element_iter->tfindex,
+					copy_v2_v2(preview->preview_polys + face_preview_pos + 2 * element_iter->loop_of_poly_index,
 					           final_position[index].uv);
 				}
 			}
@@ -1538,63 +1545,126 @@ static void stitch_calculate_edge_normal(BMEditMesh *em, UvEdge *edge, float *no
 	normalize_v2(normal);
 }
 
+/**
+ */
+static void stitch_draw_vbo(GPUVertBuf *vbo, GPUPrimType prim_type, const float col[4])
+{
+	GPUBatch *batch = GPU_batch_create_ex(prim_type, vbo, NULL, GPU_BATCH_OWNS_VBO);
+	GPU_batch_program_set_builtin(batch, GPU_SHADER_2D_UNIFORM_COLOR);
+	GPU_batch_uniform_4fv(batch, "color", col);
+	GPU_batch_draw(batch);
+	GPU_batch_discard(batch);
+}
+
+/* TODO make things pretier : store batches inside StitchPreviewer instead of the bare verts pos */
 static void stitch_draw(const bContext *UNUSED(C), ARegion *UNUSED(ar), void *arg)
 {
-	int i, index = 0;
+	int j, index = 0;
+	unsigned int num_line = 0, num_tri, tri_idx = 0, line_idx = 0;
 	StitchState *state = (StitchState *)arg;
 	StitchPreviewer *stitch_preview = state->stitch_preview;
+	GPUVertBuf *vbo, *vbo_line;
+	float col[4];
 
-	glPushClientAttrib(GL_CLIENT_VERTEX_ARRAY_BIT);
-	glEnableClientState(GL_VERTEX_ARRAY);
-
-	glEnable(GL_BLEND);
-
-	UI_ThemeColor4(TH_STITCH_PREVIEW_ACTIVE);
-	glVertexPointer(2, GL_FLOAT, 0, stitch_preview->static_tris);
-	glDrawArrays(GL_TRIANGLES, 0, stitch_preview->num_static_tris * 3);
-
-	glVertexPointer(2, GL_FLOAT, 0, stitch_preview->preview_polys);
-	for (i = 0; i < stitch_preview->num_polys; i++) {
-		glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
-		UI_ThemeColor4(TH_STITCH_PREVIEW_FACE);
-		glDrawArrays(GL_POLYGON, index, stitch_preview->uvs_per_polygon[i]);
-		glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
-		UI_ThemeColor4(TH_STITCH_PREVIEW_EDGE);
-		glDrawArrays(GL_POLYGON, index, stitch_preview->uvs_per_polygon[i]);
-#if 0
-		glPolygonMode(GL_FRONT_AND_BACK, GL_POINT);
-		UI_ThemeColor4(TH_STITCH_PREVIEW_VERT);
-		glDrawArrays(GL_POLYGON, index, stitch_preview->uvs_per_polygon[i]);
-#endif
-
-		index += stitch_preview->uvs_per_polygon[i];
+	static GPUVertFormat format = { 0 };
+	static unsigned int pos_id;
+	if (format.attr_len == 0) {
+		pos_id = GPU_vertformat_attr_add(&format, "pos", GPU_COMP_F32, 2, GPU_FETCH_FLOAT);
 	}
-	glDisable(GL_BLEND);
 
-	/* draw vert preview */
+	GPU_blend(true);
+
+	/* Static Tris */
+	UI_GetThemeColor4fv(TH_STITCH_PREVIEW_ACTIVE, col);
+	vbo = GPU_vertbuf_create_with_format(&format);
+	GPU_vertbuf_data_alloc(vbo, stitch_preview->num_static_tris * 3);
+	for (int i = 0; i < stitch_preview->num_static_tris * 3; i++) {
+		GPU_vertbuf_attr_set(vbo, pos_id, i, &stitch_preview->static_tris[i * 2]);
+	}
+	stitch_draw_vbo(vbo, GPU_PRIM_TRIS, col);
+
+
+	/* Preview Polys */
+	for (int i = 0; i < stitch_preview->num_polys; i++)
+		num_line += stitch_preview->uvs_per_polygon[i];
+
+	num_tri = num_line - 2 * stitch_preview->num_polys;
+
+	/* we need to convert the polys into triangles / lines */
+	vbo = GPU_vertbuf_create_with_format(&format);
+	vbo_line = GPU_vertbuf_create_with_format(&format);
+
+	GPU_vertbuf_data_alloc(vbo, num_tri * 3);
+	GPU_vertbuf_data_alloc(vbo_line, num_line * 2);
+
+	for (int i = 0; i < stitch_preview->num_polys; i++) {
+		BLI_assert(stitch_preview->uvs_per_polygon[i] >= 3);
+
+		/* Start line */
+		GPU_vertbuf_attr_set(vbo_line, pos_id, line_idx++, &stitch_preview->preview_polys[index]);
+		GPU_vertbuf_attr_set(vbo_line, pos_id, line_idx++, &stitch_preview->preview_polys[index + 2]);
+
+		for (j = 1; j < stitch_preview->uvs_per_polygon[i] - 1; ++j) {
+			GPU_vertbuf_attr_set(vbo, pos_id, tri_idx++, &stitch_preview->preview_polys[index]);
+			GPU_vertbuf_attr_set(vbo, pos_id, tri_idx++, &stitch_preview->preview_polys[index + (j + 0) * 2]);
+			GPU_vertbuf_attr_set(vbo, pos_id, tri_idx++, &stitch_preview->preview_polys[index + (j + 1) * 2]);
+
+			GPU_vertbuf_attr_set(vbo_line, pos_id, line_idx++, &stitch_preview->preview_polys[index + (j + 0) * 2]);
+			GPU_vertbuf_attr_set(vbo_line, pos_id, line_idx++, &stitch_preview->preview_polys[index + (j + 1) * 2]);
+		}
+
+		/* Closing line */
+		GPU_vertbuf_attr_set(vbo_line, pos_id, line_idx++, &stitch_preview->preview_polys[index]);
+		/* j = uvs_per_polygon[i] - 1*/
+		GPU_vertbuf_attr_set(vbo_line, pos_id, line_idx++, &stitch_preview->preview_polys[index + j * 2]);
+
+		index += stitch_preview->uvs_per_polygon[i] * 2;
+	}
+	UI_GetThemeColor4fv(TH_STITCH_PREVIEW_FACE, col);
+	stitch_draw_vbo(vbo, GPU_PRIM_TRIS, col);
+	UI_GetThemeColor4fv(TH_STITCH_PREVIEW_EDGE, col);
+	stitch_draw_vbo(vbo_line, GPU_PRIM_LINES, col);
+
+	GPU_blend(false);
+
+
+	/* draw stitch vert/lines preview */
 	if (state->mode == STITCH_VERT) {
-		glPointSize(UI_GetThemeValuef(TH_VERTEX_SIZE) * 2.0f);
+		GPU_point_size(UI_GetThemeValuef(TH_VERTEX_SIZE) * 2.0f);
 
-		UI_ThemeColor4(TH_STITCH_PREVIEW_STITCHABLE);
-		glVertexPointer(2, GL_FLOAT, 0, stitch_preview->preview_stitchable);
-		glDrawArrays(GL_POINTS, 0, stitch_preview->num_stitchable);
+		UI_GetThemeColor4fv(TH_STITCH_PREVIEW_STITCHABLE, col);
+		vbo = GPU_vertbuf_create_with_format(&format);
+		GPU_vertbuf_data_alloc(vbo, stitch_preview->num_stitchable);
+		for (int i = 0; i < stitch_preview->num_stitchable; i++) {
+			GPU_vertbuf_attr_set(vbo, pos_id, i, &stitch_preview->preview_stitchable[i * 2]);
+		}
+		stitch_draw_vbo(vbo, GPU_PRIM_POINTS, col);
 
-		UI_ThemeColor4(TH_STITCH_PREVIEW_UNSTITCHABLE);
-		glVertexPointer(2, GL_FLOAT, 0, stitch_preview->preview_unstitchable);
-		glDrawArrays(GL_POINTS, 0, stitch_preview->num_unstitchable);
+		UI_GetThemeColor4fv(TH_STITCH_PREVIEW_UNSTITCHABLE, col);
+		vbo = GPU_vertbuf_create_with_format(&format);
+		GPU_vertbuf_data_alloc(vbo, stitch_preview->num_unstitchable);
+		for (int i = 0; i < stitch_preview->num_unstitchable; i++) {
+			GPU_vertbuf_attr_set(vbo, pos_id, i, &stitch_preview->preview_unstitchable[i * 2]);
+		}
+		stitch_draw_vbo(vbo, GPU_PRIM_POINTS, col);
 	}
 	else {
-		UI_ThemeColor4(TH_STITCH_PREVIEW_STITCHABLE);
-		glVertexPointer(2, GL_FLOAT, 0, stitch_preview->preview_stitchable);
-		glDrawArrays(GL_LINES, 0, 2 * stitch_preview->num_stitchable);
+		UI_GetThemeColor4fv(TH_STITCH_PREVIEW_STITCHABLE, col);
+		vbo = GPU_vertbuf_create_with_format(&format);
+		GPU_vertbuf_data_alloc(vbo, stitch_preview->num_stitchable * 2);
+		for (int i = 0; i < stitch_preview->num_stitchable * 2; i++) {
+			GPU_vertbuf_attr_set(vbo, pos_id, i, &stitch_preview->preview_stitchable[i * 2]);
+		}
+		stitch_draw_vbo(vbo, GPU_PRIM_LINES, col);
 
-		UI_ThemeColor4(TH_STITCH_PREVIEW_UNSTITCHABLE);
-		glVertexPointer(2, GL_FLOAT, 0, stitch_preview->preview_unstitchable);
-		glDrawArrays(GL_LINES, 0, 2 * stitch_preview->num_unstitchable);
+		UI_GetThemeColor4fv(TH_STITCH_PREVIEW_UNSTITCHABLE, col);
+		vbo = GPU_vertbuf_create_with_format(&format);
+		GPU_vertbuf_data_alloc(vbo, stitch_preview->num_unstitchable * 2);
+		for (int i = 0; i < stitch_preview->num_unstitchable * 2; i++) {
+			GPU_vertbuf_attr_set(vbo, pos_id, i, &stitch_preview->preview_unstitchable[i * 2]);
+		}
+		stitch_draw_vbo(vbo, GPU_PRIM_LINES, col);
 	}
-
-	glPopClientAttrib();
-	glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
 }
 
 static UvEdge *uv_edge_get(BMLoop *l, StitchState *state)
@@ -1653,6 +1723,7 @@ static int stitch_init(bContext *C, wmOperator *op)
 	/* initialize state */
 	state->use_limit = RNA_boolean_get(op->ptr, "use_limit");
 	state->limit_dist = RNA_float_get(op->ptr, "limit");
+	state->obedit = obedit;
 	state->em = em;
 	state->snap_islands = RNA_boolean_get(op->ptr, "snap_islands");
 	state->static_island = RNA_int_get(op->ptr, "static_island");
@@ -2013,18 +2084,18 @@ static void stitch_exit(bContext *C, wmOperator *op, int finished)
 			RNA_collection_add(op->ptr, "selection", &itemptr);
 
 			RNA_int_set(&itemptr, "face_index", BM_elem_index_get(element->l->f));
-			RNA_int_set(&itemptr, "element_index", element->tfindex);
+			RNA_int_set(&itemptr, "element_index", element->loop_of_poly_index);
 		}
 
 		uvedit_live_unwrap_update(sima, scene, obedit);
 	}
 
 	if (sa)
-		ED_area_headerprint(sa, NULL);
+		ED_workspace_status_text(C, NULL);
 
 	ED_region_draw_cb_exit(CTX_wm_region(C)->type, state->draw_handle);
 
-	DAG_id_tag_update(obedit->data, 0);
+	DEG_id_tag_update(obedit->data, 0);
 	WM_event_add_notifier(C, NC_GEOM | ND_DATA, obedit->data);
 
 	state_delete(state);
@@ -2066,7 +2137,7 @@ static void stitch_select(bContext *C, Scene *scene, const wmEvent *event, Stitc
 
 	if (state->mode == STITCH_VERT) {
 		if (uv_find_nearest_vert(
-		            scene, ima, state->em, co, 0.0f, &hit))
+		            scene, ima, state->obedit, co, 0.0f, &hit))
 		{
 			/* Add vertex to selection, deselect all common uv's of vert other
 			 * than selected and update the preview. This behavior was decided so that
@@ -2080,7 +2151,7 @@ static void stitch_select(bContext *C, Scene *scene, const wmEvent *event, Stitc
 	}
 	else {
 		if (uv_find_nearest_edge(
-		            scene, ima, state->em, co, &hit))
+		            scene, ima, state->obedit, co, &hit))
 		{
 			UvEdge *edge = uv_edge_get(hit.l, state);
 			stitch_select_edge(edge, state, false);
@@ -2265,7 +2336,7 @@ void UV_OT_stitch(wmOperatorType *ot)
 	ot->description = "Stitch selected UV vertices by proximity";
 	ot->idname = "UV_OT_stitch";
 	ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
-	
+
 	/* api callbacks */
 	ot->invoke = stitch_invoke;
 	ot->modal = stitch_modal;

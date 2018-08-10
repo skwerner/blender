@@ -47,10 +47,11 @@
 #include "BLT_translation.h"
 
 #include "BKE_context.h"
-#include "BKE_depsgraph.h"
 #include "BKE_screen.h"
 #include "BKE_movieclip.h"
 #include "BKE_tracking.h"
+
+#include "DEG_depsgraph.h"
 
 #include "ED_gpencil.h"
 
@@ -76,7 +77,7 @@ void ED_clip_buttons_register(ARegionType *UNUSED(art))
 
 /********************* MovieClip Template ************************/
 
-void uiTemplateMovieClip(uiLayout *layout, bContext *C, PointerRNA *ptr, const char *propname, int compact)
+void uiTemplateMovieClip(uiLayout *layout, bContext *C, PointerRNA *ptr, const char *propname, bool compact)
 {
 	PropertyRNA *prop;
 	PointerRNA clipptr;
@@ -106,7 +107,7 @@ void uiTemplateMovieClip(uiLayout *layout, bContext *C, PointerRNA *ptr, const c
 	uiLayoutSetContextPointer(layout, "edit_movieclip", &clipptr);
 
 	if (!compact)
-		uiTemplateID(layout, C, ptr, propname, NULL, "CLIP_OT_open", NULL, UI_TEMPLATE_ID_FILTER_ALL);
+		uiTemplateID(layout, C, ptr, propname, NULL, "CLIP_OT_open", NULL, UI_TEMPLATE_ID_FILTER_ALL, false);
 
 	if (clip) {
 		uiLayout *col;
@@ -236,7 +237,7 @@ static void marker_block_handler(bContext *C, void *arg_cb, int event)
 		marker->pos[1] = cb->marker_pos[1] / height;
 
 		/* to update position of "parented" objects */
-		DAG_id_tag_update(&cb->clip->id, 0);
+		DEG_id_tag_update(&cb->clip->id, 0);
 		WM_event_add_notifier(C, NC_SPACE | ND_SPACE_VIEW3D, NULL);
 
 		ok = true;
@@ -321,7 +322,7 @@ static void marker_block_handler(bContext *C, void *arg_cb, int event)
 			sub_v2_v2(cb->track->markers[i].pos, delta);
 
 		/* to update position of "parented" objects */
-		DAG_id_tag_update(&cb->clip->id, 0);
+		DEG_id_tag_update(&cb->clip->id, 0);
 		WM_event_add_notifier(C, NC_SPACE | ND_SPACE_VIEW3D, NULL);
 
 		ok = true;
@@ -332,7 +333,7 @@ static void marker_block_handler(bContext *C, void *arg_cb, int event)
 }
 
 void uiTemplateMarker(uiLayout *layout, PointerRNA *ptr, const char *propname, PointerRNA *userptr,
-                      PointerRNA *trackptr, int compact)
+                      PointerRNA *trackptr, bool compact)
 {
 	PropertyRNA *prop;
 	uiBlock *block;
@@ -386,7 +387,7 @@ void uiTemplateMarker(uiLayout *layout, PointerRNA *ptr, const char *propname, P
 		else
 			tip = TIP_("Marker is enabled at current frame");
 
-		bt = uiDefIconButBitI(block, UI_BTYPE_TOGGLE_N, MARKER_DISABLED, 0, ICON_RESTRICT_VIEW_OFF, 0, 0, UI_UNIT_X, UI_UNIT_Y,
+		bt = uiDefIconButBitI(block, UI_BTYPE_TOGGLE_N, MARKER_DISABLED, 0, ICON_HIDE_OFF, 0, 0, UI_UNIT_X, UI_UNIT_Y,
 		                      &cb->marker_flag, 0, 0, 1, 0, tip);
 		UI_but_funcN_set(bt, marker_update_cb, cb, NULL);
 	}

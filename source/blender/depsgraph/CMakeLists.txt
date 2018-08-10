@@ -28,6 +28,7 @@ set(INC
 	../blenkernel
 	../blenlib
 	../bmesh
+	../draw
 	../makesdna
 	../makesrna
 	../modifiers
@@ -45,16 +46,17 @@ set(SRC
 	intern/builder/deg_builder_map.cc
 	intern/builder/deg_builder_nodes.cc
 	intern/builder/deg_builder_nodes_rig.cc
-	intern/builder/deg_builder_nodes_scene.cc
+	intern/builder/deg_builder_nodes_view_layer.cc
 	intern/builder/deg_builder_pchanmap.cc
 	intern/builder/deg_builder_relations.cc
 	intern/builder/deg_builder_relations_keys.cc
 	intern/builder/deg_builder_relations_rig.cc
-	intern/builder/deg_builder_relations_scene.cc
+	intern/builder/deg_builder_relations_view_layer.cc
 	intern/builder/deg_builder_transitive.cc
 	intern/debug/deg_debug_relations_graphviz.cc
 	intern/debug/deg_debug_stats_gnuplot.cc
 	intern/eval/deg_eval.cc
+	intern/eval/deg_eval_copy_on_write.cc
 	intern/eval/deg_eval_flush.cc
 	intern/eval/deg_eval_stats.cc
 	intern/nodes/deg_node.cc
@@ -66,14 +68,17 @@ set(SRC
 	intern/depsgraph_build.cc
 	intern/depsgraph_debug.cc
 	intern/depsgraph_eval.cc
+	intern/depsgraph_physics.cc
 	intern/depsgraph_query.cc
 	intern/depsgraph_query_foreach.cc
+	intern/depsgraph_query_iter.cc
 	intern/depsgraph_tag.cc
 	intern/depsgraph_type_defines.cc
 
 	DEG_depsgraph.h
 	DEG_depsgraph_build.h
 	DEG_depsgraph_debug.h
+	DEG_depsgraph_physics.h
 	DEG_depsgraph_query.h
 
 	intern/builder/deg_builder.h
@@ -85,6 +90,7 @@ set(SRC
 	intern/builder/deg_builder_relations_impl.h
 	intern/builder/deg_builder_transitive.h
 	intern/eval/deg_eval.h
+	intern/eval/deg_eval_copy_on_write.h
 	intern/eval/deg_eval_flush.h
 	intern/eval/deg_eval_stats.h
 	intern/nodes/deg_node.h
@@ -99,32 +105,6 @@ set(SRC
 	util/deg_util_foreach.h
 	util/deg_util_function.h
 )
-
-if(WITH_CXX11)
-	add_definitions(-DDEG_STD_UNORDERED_MAP)
-elseif(HAVE_STD_UNORDERED_MAP_HEADER)
-	if(HAVE_UNORDERED_MAP_IN_STD_NAMESPACE)
-		add_definitions(-DDEG_STD_UNORDERED_MAP)
-	else()
-		if(HAVE_UNORDERED_MAP_IN_TR1_NAMESPACE)
-			add_definitions(-DDEG_STD_UNORDERED_MAP_IN_TR1_NAMESPACE)
-		else()
-			add_definitions(-DDEG_NO_UNORDERED_MAP)
-			message(STATUS "Replacing unordered_map/set with map/set (warning: slower!)")
-		endif()
-	endif()
-else()
-	if(HAVE_UNORDERED_MAP_IN_TR1_NAMESPACE)
-		add_definitions(-DDEG_TR1_UNORDERED_MAP)
-	else()
-		add_definitions(-DDEG_NO_UNORDERED_MAP)
-		message(STATUS "Replacing unordered_map/set with map/set (warning: slower!)")
-	endif()
-endif()
-
-if(WITH_LEGACY_DEPSGRAPH)
-	add_definitions(-DWITH_LEGACY_DEPSGRAPH)
-endif()
 
 if(WITH_BOOST)
 	list(APPEND INC_SYS

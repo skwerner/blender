@@ -4,7 +4,7 @@
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version. 
+ * of the License, or (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -18,7 +18,7 @@
  * The Original Code is Copyright (C) 2007 Blender Foundation.
  * All rights reserved.
  *
- * 
+ *
  * Contributor(s): Blender Foundation
  *
  * ***** END GPL LICENSE BLOCK *****
@@ -52,9 +52,11 @@
 #include "BKE_screen.h"
 #include "BKE_report.h"
 #include "BKE_global.h"
+#include "BKE_workspace.h"
 
 #include "WM_api.h"
 #include "WM_types.h"
+#include "WM_message.h"
 #include "wm_window.h"
 #include "wm_event_system.h"
 #include "wm_draw.h"
@@ -104,7 +106,7 @@ void WM_operator_free(wmOperator *op)
 			WM_operator_free(opm);
 		}
 	}
-	
+
 	MEM_freeN(op);
 }
 
@@ -187,11 +189,11 @@ void wm_operator_register(bContext *C, wmOperator *op)
 void WM_operator_stack_clear(wmWindowManager *wm)
 {
 	wmOperator *op;
-	
+
 	while ((op = BLI_pophead(&wm->operators))) {
 		WM_operator_free(op);
 	}
-	
+
 	WM_main_add_notifier(NC_WM | ND_HISTORY, NULL);
 }
 
@@ -221,131 +223,6 @@ void WM_operator_handlers_clear(wmWindowManager *wm, wmOperatorType *ot)
 	}
 }
 
-/* ************ uiListType handling ************** */
-
-static GHash *uilisttypes_hash = NULL;
-
-uiListType *WM_uilisttype_find(const char *idname, bool quiet)
-{
-	uiListType *ult;
-
-	if (idname[0]) {
-		ult = BLI_ghash_lookup(uilisttypes_hash, idname);
-		if (ult) {
-			return ult;
-		}
-	}
-
-	if (!quiet) {
-		printf("search for unknown uilisttype %s\n", idname);
-	}
-
-	return NULL;
-}
-
-bool WM_uilisttype_add(uiListType *ult)
-{
-	BLI_ghash_insert(uilisttypes_hash, ult->idname, ult);
-	return 1;
-}
-
-void WM_uilisttype_freelink(uiListType *ult)
-{
-	bool ok;
-
-	ok = BLI_ghash_remove(uilisttypes_hash, ult->idname, NULL, MEM_freeN);
-
-	BLI_assert(ok);
-	(void)ok;
-}
-
-/* called on initialize WM_init() */
-void WM_uilisttype_init(void)
-{
-	uilisttypes_hash = BLI_ghash_str_new_ex("uilisttypes_hash gh", 16);
-}
-
-void WM_uilisttype_free(void)
-{
-	GHashIterator gh_iter;
-
-	GHASH_ITER (gh_iter, uilisttypes_hash) {
-		uiListType *ult = BLI_ghashIterator_getValue(&gh_iter);
-		if (ult->ext.free) {
-			ult->ext.free(ult->ext.data);
-		}
-	}
-
-	BLI_ghash_free(uilisttypes_hash, NULL, MEM_freeN);
-	uilisttypes_hash = NULL;
-}
-
-/* ************ MenuType handling ************** */
-
-static GHash *menutypes_hash = NULL;
-
-MenuType *WM_menutype_find(const char *idname, bool quiet)
-{
-	MenuType *mt;
-
-	if (idname[0]) {
-		mt = BLI_ghash_lookup(menutypes_hash, idname);
-		if (mt)
-			return mt;
-	}
-
-	if (!quiet)
-		printf("search for unknown menutype %s\n", idname);
-
-	return NULL;
-}
-
-bool WM_menutype_add(MenuType *mt)
-{
-	BLI_ghash_insert(menutypes_hash, mt->idname, mt);
-	return true;
-}
-
-void WM_menutype_freelink(MenuType *mt)
-{
-	bool ok;
-
-	ok = BLI_ghash_remove(menutypes_hash, mt->idname, NULL, MEM_freeN);
-
-	BLI_assert(ok);
-	(void)ok;
-}
-
-/* called on initialize WM_init() */
-void WM_menutype_init(void)
-{
-	/* reserve size is set based on blender default setup */
-	menutypes_hash = BLI_ghash_str_new_ex("menutypes_hash gh", 512);
-}
-
-void WM_menutype_free(void)
-{
-	GHashIterator gh_iter;
-
-	GHASH_ITER (gh_iter, menutypes_hash) {
-		MenuType *mt = BLI_ghashIterator_getValue(&gh_iter);
-		if (mt->ext.free) {
-			mt->ext.free(mt->ext.data);
-		}
-	}
-
-	BLI_ghash_free(menutypes_hash, NULL, MEM_freeN);
-	menutypes_hash = NULL;
-}
-
-bool WM_menutype_poll(bContext *C, MenuType *mt)
-{
-	if (mt->poll != NULL) {
-		return mt->poll(C, mt);
-	}
-	return true;
-}
-
 /* ****************************************** */
 
 void WM_keymap_init(bContext *C)
@@ -359,10 +236,10 @@ void WM_keymap_init(bContext *C)
 		wm->addonconf = WM_keyconfig_new(wm, "Blender Addon");
 	if (!wm->userconf)
 		wm->userconf = WM_keyconfig_new(wm, "Blender User");
-	
+
 	/* initialize only after python init is done, for keymaps that
 	 * use python operators */
-	if (CTX_py_init_get(C) && (wm->initialized & WM_INIT_KEYMAP) == 0) {
+	if (CTX_py_init_get(C) && (wm->initialized & WM_KEYMAP_IS_INITIALIZED) == 0) {
 		/* create default key config, only initialize once,
 		 * it's persistent across sessions */
 		if (!(wm->defaultconf->flag & KEYCONF_INIT_DEFAULT)) {
@@ -375,14 +252,15 @@ void WM_keymap_init(bContext *C)
 		WM_keyconfig_update_tag(NULL, NULL);
 		WM_keyconfig_update(wm);
 
-		wm->initialized |= WM_INIT_KEYMAP;
+		wm->initialized |= WM_KEYMAP_IS_INITIALIZED;
 	}
 }
 
 void WM_check(bContext *C)
 {
+	Main *bmain = CTX_data_main(C);
 	wmWindowManager *wm = CTX_wm_manager(C);
-	
+
 	/* wm context */
 	if (wm == NULL) {
 		wm = CTX_data_main(C)->wm.first;
@@ -395,7 +273,7 @@ void WM_check(bContext *C)
 
 	if (!G.background) {
 		/* case: fileread */
-		if ((wm->initialized & WM_INIT_WINDOW) == 0) {
+		if ((wm->initialized & WM_WINDOW_IS_INITIALIZED) == 0) {
 			WM_keymap_init(C);
 			WM_autosave_init(wm);
 		}
@@ -404,11 +282,15 @@ void WM_check(bContext *C)
 		wm_window_ghostwindows_ensure(wm);
 	}
 
+	if (wm->message_bus == NULL) {
+		wm->message_bus = WM_msgbus_create();
+	}
+
 	/* case: fileread */
 	/* note: this runs in bg mode to set the screen context cb */
-	if ((wm->initialized & WM_INIT_WINDOW) == 0) {
-		ED_screens_initialize(wm);
-		wm->initialized |= WM_INIT_WINDOW;
+	if ((wm->initialized & WM_WINDOW_IS_INITIALIZED) == 0) {
+		ED_screens_initialize(bmain, wm);
+		wm->initialized |= WM_WINDOW_IS_INITIALIZED;
 	}
 }
 
@@ -416,7 +298,7 @@ void wm_clear_default_size(bContext *C)
 {
 	wmWindowManager *wm = CTX_wm_manager(C);
 	wmWindow *win;
-	
+
 	/* wm context */
 	if (wm == NULL) {
 		wm = CTX_data_main(C)->wm.first;
@@ -426,7 +308,7 @@ void wm_clear_default_size(bContext *C)
 	if (wm == NULL || BLI_listbase_is_empty(&wm->windows)) {
 		return;
 	}
-	
+
 	for (win = wm->windows.first; win; win = win->next) {
 		win->sizex = 0;
 		win->sizey = 0;
@@ -437,21 +319,25 @@ void wm_clear_default_size(bContext *C)
 }
 
 /* on startup, it adds all data, for matching */
-void wm_add_default(bContext *C)
+void wm_add_default(Main *bmain, bContext *C)
 {
-	wmWindowManager *wm = BKE_libblock_alloc(CTX_data_main(C), ID_WM, "WinMan", 0);
+	wmWindowManager *wm = BKE_libblock_alloc(bmain, ID_WM, "WinMan", 0);
 	wmWindow *win;
 	bScreen *screen = CTX_wm_screen(C); /* XXX from file read hrmf */
-	
+	WorkSpace *workspace;
+	WorkSpaceLayout *layout = BKE_workspace_layout_find_global(bmain, screen, &workspace);
+
 	CTX_wm_manager_set(C, wm);
-	win = wm_window_new(C);
-	win->screen = screen;
+	win = wm_window_new(C, NULL);
+	win->scene = CTX_data_scene(C);
+	STRNCPY(win->view_layer_name, CTX_data_view_layer(C)->name);
+	BKE_workspace_active_set(win->workspace_hook, workspace);
+	BKE_workspace_hook_layout_for_workspace_set(win->workspace_hook, workspace, layout);
 	screen->winid = win->winid;
-	BLI_strncpy(win->screenname, screen->id.name + 2, sizeof(win->screenname));
-	
+
 	wm->winactive = win;
 	wm->file_saved = 1;
-	wm_window_make_drawable(wm, win); 
+	wm_window_make_drawable(wm, win);
 }
 
 
@@ -466,11 +352,11 @@ void wm_close_and_free(bContext *C, wmWindowManager *wm)
 		wm_autosave_timer_ended(wm);
 
 	while ((win = BLI_pophead(&wm->windows))) {
-		win->screen = NULL; /* prevent draw clear to use screen */
-		wm_draw_window_clear(win);
+		/* prevent draw clear to use screen */
+		BKE_workspace_active_set(win->workspace_hook, NULL);
 		wm_window_free(C, wm, win);
 	}
-	
+
 	while ((op = BLI_pophead(&wm->operators))) {
 		WM_operator_free(op);
 	}
@@ -480,11 +366,15 @@ void wm_close_and_free(bContext *C, wmWindowManager *wm)
 	}
 
 	BLI_freelistN(&wm->queue);
-	
+
+	if (wm->message_bus != NULL) {
+		WM_msgbus_destroy(wm->message_bus);
+	}
+
 	BLI_freelistN(&wm->paintcursors);
 
 	WM_drag_free_list(&wm->drags);
-	
+
 	wm_reports_free(wm);
 
 	if (wm->undo_stack) {
@@ -514,19 +404,17 @@ void WM_main(bContext *C)
 	wm_event_do_refresh_wm_and_depsgraph(C);
 
 	while (1) {
-		
+
 		/* get events from ghost, handle window events, add to window queues */
-		wm_window_process_events(C); 
-		
+		wm_window_process_events(C);
+
 		/* per window, all events to the window, screen, area and region handlers */
 		wm_event_do_handlers(C);
-		
+
 		/* events have left notes about changes, we handle and cache it */
 		wm_event_do_notifiers(C);
-		
+
 		/* execute cached changes draw */
 		wm_draw_update(C);
 	}
 }
-
-

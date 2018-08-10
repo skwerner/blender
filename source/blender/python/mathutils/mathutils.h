@@ -62,7 +62,7 @@ enum {
 	float *_data;               /* array of data (alias), wrapped status depends on wrapped status */            \
 	PyObject *cb_user;          /* if this vector references another object, otherwise NULL,                     \
 	                             * *Note* this owns its reference */                                             \
-	unsigned char cb_type;      /* which user funcs do we adhere to, RNA, GameObject, etc */                     \
+	unsigned char cb_type;      /* which user funcs do we adhere to, RNA, etc */                                 \
 	unsigned char cb_subtype;   /* subtype: location, rotation...                                                \
 	                             * to avoid defining many new functions for every attribute of the same type */  \
 	unsigned char flag          /* wrapped data type? */                                                         \
@@ -173,7 +173,5 @@ int column_vector_multiplication(float rvec[4], VectorObject *vec, MatrixObject 
 /* dynstr as python string utility funcions */
 PyObject *mathutils_dynstr_to_py(struct DynStr *ds);
 #endif
-
-int mathutils_deepcopy_args_check(PyObject *args);
 
 #endif /* __MATHUTILS_H__ */

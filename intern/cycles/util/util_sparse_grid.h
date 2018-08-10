@@ -112,7 +112,7 @@ const inline int compute_index_pad(const int *offsets,
 	if (start_x < 0) {
 		return -1;
 	}
-	/* Check if tile's min bound is padded. */
+	/* Check if tile's x min bound is padded. */
 	if(x >= TILE_SIZE) {
 		if(offsets[tile - 1] > -1) {
 			sx -= SPARSE_PAD;
@@ -133,9 +133,11 @@ bool create_sparse_grid(const T *dense_grid,
                         vector<T> *sparse_grid,
                         vector<int> *grid_info)
 {
-	assert(dense_grid != NULL);
+	if(dense_grid == NULL) {
+		return false;
+	}
 
-	const T threshold = cast_from_float<T>(isovalue);
+	const T threshold = util_image_cast_from_float<T>(isovalue);
 	const int tile_count = get_tile_res(width) *
 	                       get_tile_res(height) *
 	                       get_tile_res(depth);
@@ -229,8 +231,8 @@ bool create_sparse_grid(const T *dense_grid,
 const static int2 padded_tile_bound(const vector<int> *offsets, const int x,
                                     const int width, const int tile)
 {
-	/* Don't need padding in if the neighbor tile is active. Always min pad if
-	 * tile is at the min bound.  */
+	/* Don't need x padding if neighbor tile in x direction is active. Always
+	 * pad tile's min bound if the tile is at the min bound of the image.  */
 	int min_bound = -SPARSE_PAD;
 	if(x >= TILE_SIZE) {
 		if(offsets->at(tile - 1) > -1) {
@@ -264,10 +266,10 @@ bool create_sparse_grid_pad(const T *dense_grid,
 	/* For padded sparse grids, offsets only stores the x coordinate of the
 	 * starting voxel in each padded tile (taking into account pad) because
 	 * 1. CUDA expects coordinates instead of a flat index.
-	 * 2. A padded sparse grid is stored as a long 1 x 1 x tile_count line of
+	 * 2. A padded sparse grid is stored as a long tile_count x 1 x 1 line of
 	 *    tiles, so the starting voxel in each tile is always (X, 0, 0).
 	 */
-	const T threshold = cast_from_float<T>(isovalue);
+	const T threshold = util_image_cast_from_float<T>(isovalue);
 	const int tile_count = get_tile_res(width) *
 	                       get_tile_res(height) *
 	                       get_tile_res(depth);
@@ -294,7 +296,7 @@ bool create_sparse_grid_pad(const T *dense_grid,
 						for(int i = x; i < max_i; ++i) {
 							int index = compute_index(i, j, k, width, height) * channels;
 							for(int c = 0; c < channels; ++c) {
-								if(dense_grid[index + c] >= threshold) {
+								if(threshold <= dense_grid[index + c]) {
 									grid_info->at(tile) = 0;
 									break;
 								}

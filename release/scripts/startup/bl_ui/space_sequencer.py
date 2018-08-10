@@ -22,7 +22,6 @@ from bpy.types import Header, Menu, Panel
 from rna_prop_ui import PropertyPanel
 from .properties_grease_pencil_common import (
     GreasePencilDataPanel,
-    GreasePencilPaletteColorPanel,
     GreasePencilToolsPanel,
 )
 from bpy.app.translations import pgettext_iface as iface_
@@ -79,30 +78,29 @@ class SEQUENCER_HT_header(Header):
         row = layout.row(align=True)
         row.template_header()
 
+        layout.prop(st, "view_type", text="")
+
         SEQUENCER_MT_editor_menus.draw_collapsible(context, layout)
 
-        row = layout.row(align=True)
-        row.prop(scene, "use_preview_range", text="", toggle=True)
-        row.prop(scene, "lock_frame_selection_to_range", text="", toggle=True)
+        if st.view_type == 'SEQUENCER':
+            layout.prop(st, "show_backdrop", text="Backdrop")
 
-        layout.prop(st, "view_type", expand=True, text="")
+        layout.separator_spacer()
+
+        layout.template_running_jobs()
+
+        if st.view_type == 'SEQUENCER':
+            layout.separator()
+            layout.operator("sequencer.refresh_all")
+
+        if st.view_type == 'SEQUENCER_PREVIEW':
+            layout.separator()
+            layout.operator("sequencer.refresh_all")
 
         if st.view_type in {'PREVIEW', 'SEQUENCER_PREVIEW'}:
             layout.prop(st, "display_mode", expand=True, text="")
 
-        if st.view_type == 'SEQUENCER':
-            row = layout.row(align=True)
-            row.operator("sequencer.copy", text="", icon='COPYDOWN')
-            row.operator("sequencer.paste", text="", icon='PASTEDOWN')
-
-            layout.separator()
-            layout.operator("sequencer.refresh_all")
-            layout.prop(st, "show_backdrop")
-        else:
-            if st.view_type == 'SEQUENCER_PREVIEW':
-                layout.separator()
-                layout.operator("sequencer.refresh_all")
-
+        if st.view_type != 'SEQUENCER':
             layout.prop(st, "preview_channels", expand=True, text="")
             layout.prop(st, "display_channel", text="Channel")
 
@@ -134,7 +132,11 @@ class SEQUENCER_HT_header(Header):
         props.animation = True
         props.sequencer = True
 
-        layout.template_running_jobs()
+        if st.view_type == 'SEQUENCER':
+
+            row = layout.row(align=True)
+            row.operator("sequencer.copy", text="", icon='COPYDOWN')
+            row.operator("sequencer.paste", text="", icon='PASTEDOWN')
 
 
 class SEQUENCER_MT_editor_menus(Menu):
@@ -237,9 +239,7 @@ class SEQUENCER_MT_view(Menu):
             layout.prop(st, "use_marker_sync")
             layout.separator()
 
-        layout.operator("screen.area_dupli")
-        layout.operator("screen.screen_full_area")
-        layout.operator("screen.screen_full_area", text="Toggle Fullscreen Area").use_hide_panels = True
+        layout.menu("INFO_MT_area")
 
 
 class SEQUENCER_MT_select(Menu):
@@ -247,6 +247,12 @@ class SEQUENCER_MT_select(Menu):
 
     def draw(self, context):
         layout = self.layout
+
+        layout.operator("sequencer.select_all", text="All").action = 'SELECT'
+        layout.operator("sequencer.select_all", text="None").action = 'DESELECT'
+        layout.operator("sequencer.select_all", text="Invert").action = 'INVERT'
+
+        layout.separator()
 
         layout.operator("sequencer.select_active_side", text="Strips to the Left").side = 'LEFT'
         layout.operator("sequencer.select_active_side", text="Strips to the Right").side = 'RIGHT'
@@ -266,8 +272,6 @@ class SEQUENCER_MT_select(Menu):
         layout.operator("sequencer.select_linked")
         layout.operator("sequencer.select_less")
         layout.operator("sequencer.select_more")
-        layout.operator("sequencer.select_all").action = 'TOGGLE'
-        layout.operator("sequencer.select_all", text="Inverse").action = 'INVERT'
 
 
 class SEQUENCER_MT_marker(Menu):
@@ -338,7 +342,19 @@ class SEQUENCER_MT_add(Menu):
         layout.operator("sequencer.image_strip_add", text="Image")
         layout.operator("sequencer.sound_strip_add", text="Sound")
 
+        layout.menu("SEQUENCER_MT_add_generate")
         layout.menu("SEQUENCER_MT_add_effect")
+
+
+class SEQUENCER_MT_add_generate(Menu):
+    bl_label = "Generate"
+
+    def draw(self, context):
+        layout = self.layout
+
+        layout.operator_context = 'INVOKE_REGION_WIN'
+        layout.operator("sequencer.effect_strip_add", text="Color").type = 'COLOR'
+        layout.operator("sequencer.effect_strip_add", text="Text").type = 'TEXT'
 
 
 class SEQUENCER_MT_add_effect(Menu):
@@ -360,10 +376,8 @@ class SEQUENCER_MT_add_effect(Menu):
         layout.operator("sequencer.effect_strip_add", text="Over Drop").type = 'OVER_DROP'
         layout.operator("sequencer.effect_strip_add", text="Wipe").type = 'WIPE'
         layout.operator("sequencer.effect_strip_add", text="Glow").type = 'GLOW'
-        layout.operator("sequencer.effect_strip_add", text="Text").type = 'TEXT'
         layout.operator("sequencer.effect_strip_add", text="Color Mix").type = 'COLORMIX'
         layout.operator("sequencer.effect_strip_add", text="Transform").type = 'TRANSFORM'
-        layout.operator("sequencer.effect_strip_add", text="Color").type = 'COLOR'
         layout.operator("sequencer.effect_strip_add", text="Speed Control").type = 'SPEED'
         layout.operator("sequencer.effect_strip_add", text="Multicam Selector").type = 'MULTICAM'
         layout.operator("sequencer.effect_strip_add", text="Adjustment Layer").type = 'ADJUSTMENT'
@@ -430,10 +444,6 @@ class SEQUENCER_MT_strip(Menu):
         layout = self.layout
 
         layout.operator_context = 'INVOKE_REGION_WIN'
-
-        layout.operator("ed.undo")
-        layout.operator("ed.redo")
-        layout.operator("ed.undo_history")
 
         layout.separator()
         layout.menu("SEQUENCER_MT_strip_transform")
@@ -708,11 +718,11 @@ class SEQUENCER_PT_effect(SequencerButtonsPanel, Panel):
                     if i == strip.multicam_source:
                         sub = row.row(align=True)
                         sub.enabled = False
-                        sub.operator("sequencer.cut_multicam", text="%d" % i).camera = i
+                        sub.operator("sequencer.cut_multicam", text=f"{i:d}").camera = i
                     else:
                         sub_1 = row.row(align=True)
                         sub_1.enabled = True
-                        sub_1.operator("sequencer.cut_multicam", text="%d" % i).camera = i
+                        sub_1.operator("sequencer.cut_multicam", text=f"{i:d}").camera = i
 
                 if strip.channel > BT_ROW and (strip_channel - 1) % BT_ROW:
                     for i in range(strip.channel, strip_channel + ((BT_ROW + 1 - strip_channel) % BT_ROW)):
@@ -1270,14 +1280,6 @@ class SEQUENCER_PT_grease_pencil(GreasePencilDataPanel, SequencerButtonsPanel_Ou
     # But, it should only show up when there are images in the preview region
 
 
-class SEQUENCER_PT_grease_pencil_palettecolor(GreasePencilPaletteColorPanel, SequencerButtonsPanel_Output, Panel):
-    bl_space_type = 'SEQUENCE_EDITOR'
-    bl_region_type = 'UI'
-
-    # NOTE: this is just a wrapper around the generic GP Panel
-    # But, it should only show up when there are images in the preview region
-
-
 class SEQUENCER_PT_grease_pencil_tools(GreasePencilToolsPanel, SequencerButtonsPanel_Output, Panel):
     bl_space_type = 'SEQUENCE_EDITOR'
     bl_region_type = 'UI'
@@ -1288,7 +1290,7 @@ class SEQUENCER_PT_grease_pencil_tools(GreasePencilToolsPanel, SequencerButtonsP
 
 
 class SEQUENCER_PT_custom_props(SequencerButtonsPanel, PropertyPanel, Panel):
-    COMPAT_ENGINES = {'BLENDER_RENDER', 'BLENDER_GAME'}
+    COMPAT_ENGINES = {'BLENDER_RENDER', 'BLENDER_EEVEE', 'BLENDER_OPENGL'}
     _context_path = "scene.sequence_editor.active_strip"
     _property_type = (bpy.types.Sequence,)
     bl_category = "Strip"
@@ -1303,6 +1305,7 @@ classes = (
     SEQUENCER_MT_marker,
     SEQUENCER_MT_frame,
     SEQUENCER_MT_add,
+    SEQUENCER_MT_add_generate,
     SEQUENCER_MT_add_effect,
     SEQUENCER_MT_strip,
     SEQUENCER_MT_strip_transform,
@@ -1321,7 +1324,6 @@ classes = (
     SEQUENCER_PT_view_safe_areas,
     SEQUENCER_PT_modifiers,
     SEQUENCER_PT_grease_pencil,
-    SEQUENCER_PT_grease_pencil_palettecolor,
     SEQUENCER_PT_grease_pencil_tools,
     SEQUENCER_PT_custom_props,
 )

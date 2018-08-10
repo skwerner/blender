@@ -54,6 +54,7 @@
 
 #include "BKE_key.h"
 
+struct Depsgraph;
 class SceneExporter;
 
 class ControllerExporter : public COLLADASW::LibraryControllers, protected TransformWriter, protected InstanceWriter
@@ -65,11 +66,13 @@ public:
 
 	bool add_instance_controller(Object *ob);
 
-	void export_controllers(Scene *sce);
+	void export_controllers(Main *bmain, Depsgraph *depsgraph, Scene *sce);
 
 	void operator()(Object *ob);
 
 private:
+	Depsgraph *depsgraph;
+	Main *m_bmain;
 	Scene *scene;
 	UnitConverter converter;
 	const ExportSettings *export_settings;

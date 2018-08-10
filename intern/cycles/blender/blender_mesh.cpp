@@ -332,14 +332,14 @@ static void create_mesh_volume_attribute(Mesh *mesh,
                                          float frame)
 {
 	ImageMetaData metadata;
-
+	string grid_name;
 	if(filename.empty()) {
 		/* Built-in smoke. */
 		filename = Attribute::standard_name(std);
 	}
 	else {
 		/* External VDB. */
-		metadata.grid_name = Attribute::standard_name(std);
+		grid_name = Attribute::standard_name(std);
 	}
 
 	Attribute *attr = mesh->attributes.add(std);
@@ -348,6 +348,7 @@ static void create_mesh_volume_attribute(Mesh *mesh,
 	volume_data->manager = image_manager;
 	volume_data->slot = image_manager->add_image(
 			filename,
+	        grid_name,
 			builtin_data,
 			false,
 			frame,
@@ -355,7 +356,7 @@ static void create_mesh_volume_attribute(Mesh *mesh,
 			EXTENSION_CLIP,
 			true,
 			true,
-			mesh->volume_isovalue,
+	        mesh->volume_isovalue,
 			metadata);
 }
 
@@ -375,9 +376,11 @@ static void create_mesh_volume_attributes(Scene *scene,
 	void *builtin_data = NULL;
 
 	if(volume_get_frame_file(b_data, b_ob, b_domain, (int)frame, filename)) {
+#ifdef WITH_OPENVDB
 		if(string_endswith(filename, ".vdb")) {
 			init_openvdb_in_scene(scene->params.intialized_openvdb);
 		}
+#endif
 	}
 	else {
 		filename = string();
@@ -426,7 +429,8 @@ static void attr_create_vertex_color(Scene *scene,
 				int n = p->loop_total();
 				for(int i = 0; i < n; i++) {
 					float3 color = get_float3(l->data[p->loop_start() + i].color());
-					*(cdata++) = color_float_to_byte(color_srgb_to_scene_linear_v3(color));
+					/* Encode vertex color using the sRGB curve. */
+					*(cdata++) = color_float_to_byte(color_srgb_to_linear_v3(color));
 				}
 			}
 		}
@@ -449,12 +453,13 @@ static void attr_create_vertex_color(Scene *scene,
 				int tri_a[3], tri_b[3];
 				face_split_tri_indices(face_flags[i], tri_a, tri_b);
 
+				/* Encode vertex color using the sRGB curve. */
 				uchar4 colors[4];
-				colors[0] = color_float_to_byte(color_srgb_to_scene_linear_v3(get_float3(c->color1())));
-				colors[1] = color_float_to_byte(color_srgb_to_scene_linear_v3(get_float3(c->color2())));
-				colors[2] = color_float_to_byte(color_srgb_to_scene_linear_v3(get_float3(c->color3())));
+				colors[0] = color_float_to_byte(color_srgb_to_linear_v3(get_float3(c->color1())));
+				colors[1] = color_float_to_byte(color_srgb_to_linear_v3(get_float3(c->color2())));
+				colors[2] = color_float_to_byte(color_srgb_to_linear_v3(get_float3(c->color3())));
 				if(nverts[i] == 4) {
-					colors[3] = color_float_to_byte(color_srgb_to_scene_linear_v3(get_float3(c->color4())));
+					colors[3] = color_float_to_byte(color_srgb_to_linear_v3(get_float3(c->color4())));
 				}
 
 				cdata[0] = colors[tri_a[0]];
@@ -586,7 +591,7 @@ static void attr_create_subd_uv_map(Scene *scene,
 		int i = 0;
 
 		for(b_mesh.uv_layers.begin(l); l != b_mesh.uv_layers.end(); ++l, ++i) {
-			bool active_render = b_mesh.uv_textures[i].active_render();
+			bool active_render = l->active_render();
 			AttributeStandard uv_std = (active_render)? ATTR_STD_UV: ATTR_STD_NONE;
 			ustring uv_name = ustring(l->name().c_str());
 			AttributeStandard tangent_std = (active_render)? ATTR_STD_UV_TANGENT
@@ -1094,50 +1099,35 @@ static void sync_mesh_fluid_motion(BL::Object& b_ob, Scene *scene, Mesh *mesh)
 	}
 }
 
-Mesh *BlenderSync::sync_mesh(BL::Object& b_ob,
+Mesh *BlenderSync::sync_mesh(BL::Depsgraph& b_depsgraph,
+                             BL::Object& b_ob,
+                             BL::Object& b_ob_instance,
                              bool object_updated,
                              bool hide_tris)
 {
-	/* When viewport display is not needed during render we can force some
-	 * caches to be releases from blender side in order to reduce peak memory
-	 * footprint during synchronization process.
-	 */
-	const bool is_interface_locked = b_engine.render() &&
-	                                 b_engine.render().use_lock_interface();
-	const bool can_free_caches = BlenderSession::headless || is_interface_locked;
-
 	/* test if we can instance or if the object is modified */
 	BL::ID b_ob_data = b_ob.data();
-	BL::ID key = (BKE_object_is_modified(b_ob))? b_ob: b_ob_data;
-	BL::Material material_override = render_layer.material_override;
+	BL::ID key = (BKE_object_is_modified(b_ob))? b_ob_instance: b_ob_data;
 
 	/* find shader indices */
 	vector<Shader*> used_shaders;
 
 	BL::Object::material_slots_iterator slot;
 	for(b_ob.material_slots.begin(slot); slot != b_ob.material_slots.end(); ++slot) {
-		if(material_override) {
-			find_shader(material_override, used_shaders, scene->default_surface);
-		}
-		else {
-			BL::ID b_material(slot->material());
-			find_shader(b_material, used_shaders, scene->default_surface);
-		}
+		BL::ID b_material(slot->material());
+		find_shader(b_material, used_shaders, scene->default_surface);
 	}
 
 	if(used_shaders.size() == 0) {
-		if(material_override)
-			find_shader(material_override, used_shaders, scene->default_surface);
-		else
-			used_shaders.push_back(scene->default_surface);
+		used_shaders.push_back(scene->default_surface);
 	}
 
 	/* test if we need to sync */
 	int requested_geometry_flags = Mesh::GEOMETRY_NONE;
-	if(render_layer.use_surfaces) {
+	if(view_layer.use_surfaces) {
 		requested_geometry_flags |= Mesh::GEOMETRY_TRIANGLES;
 	}
-	if(render_layer.use_hair) {
+	if(view_layer.use_hair) {
 		requested_geometry_flags |= Mesh::GEOMETRY_CURVES;
 	}
 	Mesh *mesh;
@@ -1196,7 +1186,7 @@ Mesh *BlenderSync::sync_mesh(BL::Object& b_ob,
 		 * freed data from the blender side.
 		 */
 		if(preview && b_ob.type() != BL::Object::type_MESH)
-			b_ob.update_from_editmode();
+			b_ob.update_from_editmode(b_data);
 
 		bool need_undeformed = mesh->need_attribute(scene, ATTR_STD_GENERATED);
 
@@ -1211,14 +1201,13 @@ Mesh *BlenderSync::sync_mesh(BL::Object& b_ob,
 
 		BL::Mesh b_mesh = object_to_mesh(b_data,
 		                                 b_ob,
-		                                 b_scene,
-		                                 true,
-		                                 !preview,
+		                                 b_depsgraph,
+		                                 false,
 		                                 need_undeformed,
 		                                 mesh->subdivision_type);
 
 		if(b_mesh) {
-			if(render_layer.use_surfaces && !hide_tris) {
+			if(view_layer.use_surfaces && !hide_tris) {
 				if(mesh->subdivision_type != Mesh::SUBDIVISION_NONE)
 					create_subd_mesh(scene, mesh, b_ob, b_mesh, used_shaders,
 					                 dicing_rate, max_subdivisions);
@@ -1228,12 +1217,8 @@ Mesh *BlenderSync::sync_mesh(BL::Object& b_ob,
 				create_mesh_volume_attributes(scene, b_data, b_ob, mesh, b_scene.frame_current());
 			}
 
-			if(render_layer.use_hair && mesh->subdivision_type == Mesh::SUBDIVISION_NONE)
+			if(view_layer.use_hair && mesh->subdivision_type == Mesh::SUBDIVISION_NONE)
 				sync_curves(mesh, b_mesh, b_ob, false);
-
-			if(can_free_caches) {
-				b_ob.cache_release();
-			}
 
 			/* free derived mesh */
 			b_data.meshes.remove(b_mesh, false, true, false);
@@ -1256,7 +1241,8 @@ Mesh *BlenderSync::sync_mesh(BL::Object& b_ob,
 	return mesh;
 }
 
-void BlenderSync::sync_mesh_motion(BL::Object& b_ob,
+void BlenderSync::sync_mesh_motion(BL::Depsgraph& b_depsgraph,
+                                   BL::Object& b_ob,
                                    Object *object,
                                    float motion_time)
 {
@@ -1299,9 +1285,8 @@ void BlenderSync::sync_mesh_motion(BL::Object& b_ob,
 		/* get derived mesh */
 		b_mesh = object_to_mesh(b_data,
 		                        b_ob,
-		                        b_scene,
-		                        true,
-		                        !preview,
+		                        b_depsgraph,
+		                        false,
 		                        false,
 		                        Mesh::SUBDIVISION_NONE);
 	}

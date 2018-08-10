@@ -4,7 +4,7 @@
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version. 
+ * of the License, or (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -18,7 +18,7 @@
  * The Original Code is Copyright (C) 2008 Blender Foundation.
  * All rights reserved.
  *
- * 
+ *
  * Contributor(s): Blender Foundation
  *
  * ***** END GPL LICENSE BLOCK *****
@@ -42,7 +42,6 @@
 #  include "BLI_winstuff.h"
 #endif
 
-#include "BIF_gl.h"
 #include "BIF_glutil.h"
 
 #include "BKE_context.h"
@@ -52,6 +51,8 @@
 #include "BLO_readfile.h"
 
 #include "BLT_translation.h"
+
+#include "BLF_api.h"
 
 #include "IMB_imbuf_types.h"
 
@@ -71,6 +72,10 @@
 #include "WM_api.h"
 #include "WM_types.h"
 
+#include "GPU_immediate.h"
+#include "GPU_immediate_util.h"
+#include "GPU_state.h"
+
 #include "filelist.h"
 
 #include "file_intern.h"    // own include
@@ -82,7 +87,7 @@ static char *file_draw_tooltip_func(bContext *UNUSED(C), void *argN, const char 
 	return BLI_strdup(dyn_tooltip);
 }
 
-/* Note: This function uses pixelspace (0, 0, winx, winy), not view2d. 
+/* Note: This function uses pixelspace (0, 0, winx, winy), not view2d.
  * The controls are laid out as follows:
  *
  * -------------------------------------------
@@ -117,14 +122,14 @@ void file_draw_buttons(const bContext *C, ARegion *ar)
 	int available_w = max_x - min_x;
 	int line1_w     = available_w;
 	int line2_w     = available_w;
-	
+
 	uiBut *but;
 	uiBlock *block;
 	SpaceFile *sfile  = CTX_wm_space_file(C);
 	FileSelectParams *params = ED_fileselect_get_params(sfile);
 	ARegion *artmp;
 	const bool is_browse_only = (sfile->op == NULL);
-	
+
 	/* Initialize UI block. */
 	BLI_snprintf(uiblockstr, sizeof(uiblockstr), "win %p", (void *)ar);
 	block = UI_block_begin(C, ar, uiblockstr, UI_EMBOSS);
@@ -208,11 +213,11 @@ void file_draw_buttons(const bContext *C, ARegion *ar)
 				UI_but_flag_enable(but, UI_BUT_REDALERT);
 			}
 		}
-		
+
 		/* clear func */
 		UI_block_func_set(block, NULL, NULL, NULL);
 	}
-	
+
 	/* Filename number increment / decrement buttons. */
 	if (fnumbuttons && (params->flag & FILE_DIRSEL_ONLY) == 0) {
 		UI_block_align_begin(block);
@@ -229,7 +234,7 @@ void file_draw_buttons(const bContext *C, ARegion *ar)
 		RNA_int_set(UI_but_operator_ptr_get(but), "increment", 1);
 		UI_block_align_end(block);
 	}
-	
+
 	/* Execute / cancel buttons. */
 	if (loadbutton) {
 		const struct FileDirEntry *file = sfile->files ? filelist_file(sfile->files, params->active_file) : NULL;
@@ -250,7 +255,7 @@ void file_draw_buttons(const bContext *C, ARegion *ar)
 		uiDefButO(block, UI_BTYPE_BUT, "FILE_OT_cancel", WM_OP_EXEC_REGION_WIN, IFACE_("Cancel"),
 		          max_x - loadbutton, line2_y, loadbutton, btn_h, "");
 	}
-	
+
 	UI_block_end(C, block);
 	UI_block_draw(C, block);
 }
@@ -258,9 +263,10 @@ void file_draw_buttons(const bContext *C, ARegion *ar)
 
 static void draw_tile(int sx, int sy, int width, int height, int colorid, int shade)
 {
-	UI_ThemeColorShade(colorid, shade);
+	float color[4];
+	UI_GetThemeColorShade4fv(colorid, shade, color);
 	UI_draw_roundbox_corner_set(UI_CNR_ALL);
-	UI_draw_roundbox((float)sx, (float)(sy - height), (float)(sx + width), (float)sy, 5.0f);
+	UI_draw_roundbox_aa(true, (float)sx, (float)(sy - height), (float)(sx + width), (float)sy, 5.0f, color);
 }
 
 
@@ -269,10 +275,10 @@ static void file_draw_icon(uiBlock *block, const char *path, int sx, int sy, int
 	uiBut *but;
 	int x, y;
 	// float alpha = 1.0f;
-	
+
 	x = sx;
 	y = sy - height;
-	
+
 	/*if (icon == ICON_FILE_BLANK) alpha = 0.375f;*/
 
 	but = uiDefIconBut(block, UI_BTYPE_LABEL, 0, icon, x, y, width, height, NULL, 0.0f, 0.0f, 0.0f, 0.0f, NULL);
@@ -285,7 +291,8 @@ static void file_draw_icon(uiBlock *block, const char *path, int sx, int sy, int
 }
 
 
-static void file_draw_string(int sx, int sy, const char *string, float width, int height, short align)
+static void file_draw_string(int sx, int sy, const char *string, float width, int height, short align,
+                             const unsigned char col[4])
 {
 	uiStyle *style;
 	uiFontStyle fs;
@@ -310,14 +317,14 @@ static void file_draw_string(int sx, int sy, const char *string, float width, in
 	rect.ymin = sy - height;
 	rect.ymax = sy;
 
-	UI_fontstyle_draw(&fs, &rect, fname);
+	UI_fontstyle_draw(&fs, &rect, fname, col);
 }
 
 void file_calc_previews(const bContext *C, ARegion *ar)
 {
 	SpaceFile *sfile = CTX_wm_space_file(C);
 	View2D *v2d = &ar->v2d;
-	
+
 	ED_fileselect_init_layout(sfile, ar);
 	UI_view2d_totRect_set(v2d, sfile->layout->width, sfile->layout->height);
 }
@@ -335,6 +342,7 @@ static void file_draw_preview(
 	float scale;
 	int ex, ey;
 	bool use_dropshadow = !is_icon && (typeflags & FILE_TYPE_IMAGE);
+	float col[4] = {1.0f, 1.0f, 1.0f, 1.0f};
 
 	BLI_assert(imb != NULL);
 
@@ -370,23 +378,23 @@ static void file_draw_preview(
 	xco = sx + (int)dx;
 	yco = sy - layout->prv_h + (int)dy;
 
-	glBlendFunc(GL_SRC_ALPHA,  GL_ONE_MINUS_SRC_ALPHA);
+	GPU_blend_set_func_separate(GPU_SRC_ALPHA, GPU_ONE_MINUS_SRC_ALPHA, GPU_ONE, GPU_ONE_MINUS_SRC_ALPHA);
 
 	/* shadow */
 	if (use_dropshadow) {
 		UI_draw_box_shadow(220, (float)xco, (float)yco, (float)(xco + ex), (float)(yco + ey));
 	}
 
-	glEnable(GL_BLEND);
+	GPU_blend(true);
 
 	/* the image */
 	if (!is_icon && typeflags & FILE_TYPE_FTFONT) {
-		UI_ThemeColor(TH_TEXT);
+		UI_GetThemeColor4fv(TH_TEXT, col);
 	}
-	else {
-		glColor4f(1.0, 1.0, 1.0, 1.0);
-	}
-	glaDrawPixelsTexScaled((float)xco, (float)yco, imb->x, imb->y, GL_RGBA, GL_UNSIGNED_BYTE, GL_NEAREST, imb->rect, scale, scale);
+
+	IMMDrawPixelsTexState state = immDrawPixelsTexSetup(GPU_SHADER_2D_IMAGE_COLOR);
+	immDrawPixelsTexScaled(&state, (float)xco, (float)yco, imb->x, imb->y, GL_RGBA, GL_UNSIGNED_BYTE, GL_NEAREST, imb->rect,
+	                       scale, scale, 1.0f, 1.0f, col);
 
 	if (icon) {
 		UI_icon_draw_aspect((float)xco, (float)yco, icon, icon_aspect, 1.0f);
@@ -394,8 +402,13 @@ static void file_draw_preview(
 
 	/* border */
 	if (use_dropshadow) {
-		glColor4f(0.0f, 0.0f, 0.0f, 0.4f);
-		fdrawbox((float)xco, (float)yco, (float)(xco + ex), (float)(yco + ey));
+		GPUVertFormat *format = immVertexFormat();
+		uint pos = GPU_vertformat_attr_add(format, "pos", GPU_COMP_F32, 2, GPU_FETCH_FLOAT);
+
+		immBindBuiltinProgram(GPU_SHADER_2D_UNIFORM_COLOR);
+		immUniformColor4f(0.0f, 0.0f, 0.0f, 0.4f);
+		imm_draw_box_wire_2d(pos, (float)xco, (float)yco, (float)(xco + ex), (float)(yco + ey));
+		immUnbindProgram();
 	}
 
 	but = uiDefBut(block, UI_BTYPE_LABEL, 0, "", xco, yco, ex, ey, NULL, 0.0, 0.0, 0, 0, NULL);
@@ -407,11 +420,12 @@ static void file_draw_preview(
 		UI_but_drag_set_image(but, BLI_strdup(path), icon, imb, scale, true);
 	}
 
-	glDisable(GL_BLEND);
+	GPU_blend(false);
 }
 
 static void renamebutton_cb(bContext *C, void *UNUSED(arg1), char *oldname)
 {
+	Main *bmain = CTX_data_main(C);
 	char newname[FILE_MAX + 12];
 	char orgname[FILE_MAX + 12];
 	char filename[FILE_MAX + 12];
@@ -420,10 +434,11 @@ static void renamebutton_cb(bContext *C, void *UNUSED(arg1), char *oldname)
 	ScrArea *sa = CTX_wm_area(C);
 	ARegion *ar = CTX_wm_region(C);
 
-	BLI_make_file_string(G.main->name, orgname, sfile->params->dir, oldname);
+	const char *blendfile_path = BKE_main_blendfile_path(bmain);
+	BLI_make_file_string(blendfile_path, orgname, sfile->params->dir, oldname);
 	BLI_strncpy(filename, sfile->params->renameedit, sizeof(filename));
 	BLI_filename_make_safe(filename);
-	BLI_make_file_string(G.main->name, newname, sfile->params->dir, filename);
+	BLI_make_file_string(blendfile_path, newname, sfile->params->dir, filename);
 
 	if (!STREQ(orgname, newname)) {
 		if (!BLI_exists(newname)) {
@@ -451,49 +466,70 @@ static void draw_background(FileLayout *layout, View2D *v2d)
 	int i;
 	int sy;
 
-	UI_ThemeColorShade(TH_BACK, -7);
+	uint pos = GPU_vertformat_attr_add(immVertexFormat(), "pos", GPU_COMP_F32, 2, GPU_FETCH_FLOAT);
+	immBindBuiltinProgram(GPU_SHADER_2D_UNIFORM_COLOR);
+	immUniformThemeColorShade(TH_BACK, -7);
 
 	/* alternating flat shade background */
 	for (i = 0; (i <= layout->rows); i += 2) {
 		sy = (int)v2d->cur.ymax - i * (layout->tile_h + 2 * layout->tile_border_y) - layout->tile_border_y;
 
-		glRectf(v2d->cur.xmin, (float)sy, v2d->cur.xmax, (float)(sy + layout->tile_h + 2 * layout->tile_border_y));
-		
+		immRectf(pos, v2d->cur.xmin, (float)sy, v2d->cur.xmax, (float)(sy + layout->tile_h + 2 * layout->tile_border_y));
 	}
+
+	immUnbindProgram();
 }
 
 static void draw_dividers(FileLayout *layout, View2D *v2d)
 {
-	const int step = (layout->tile_w + 2 * layout->tile_border_x);
-	int v1[2], v2[2];
-	int sx;
-	unsigned char col_hi[3], col_lo[3];
-
-	UI_GetThemeColorShade3ubv(TH_BACK,  30, col_hi);
-	UI_GetThemeColorShade3ubv(TH_BACK, -30, col_lo);
-
-	v1[1] = v2d->cur.ymax - layout->tile_border_y;
-	v2[1] = v2d->cur.ymin;
-
-	glBegin(GL_LINES);
-
 	/* vertical column dividers */
-	sx = (int)v2d->tot.xmin;
+
+	const int step = (layout->tile_w + 2 * layout->tile_border_x);
+
+	unsigned int vertex_len = 0;
+	int sx = (int)v2d->tot.xmin;
 	while (sx < v2d->cur.xmax) {
 		sx += step;
-
-		glColor3ubv(col_lo);
-		v1[0] = v2[0] = sx;
-		glVertex2iv(v1);
-		glVertex2iv(v2);
-
-		glColor3ubv(col_hi);
-		v1[0] = v2[0] = sx + 1;
-		glVertex2iv(v1);
-		glVertex2iv(v2);
+		vertex_len += 4; /* vertex_count = 2 points per line * 2 lines per divider */
 	}
 
-	glEnd();
+	if (vertex_len > 0) {
+		int v1[2], v2[2];
+		unsigned char col_hi[3], col_lo[3];
+
+		UI_GetThemeColorShade3ubv(TH_BACK,  30, col_hi);
+		UI_GetThemeColorShade3ubv(TH_BACK, -30, col_lo);
+
+		v1[1] = v2d->cur.ymax - layout->tile_border_y;
+		v2[1] = v2d->cur.ymin;
+
+		GPUVertFormat *format = immVertexFormat();
+		uint pos = GPU_vertformat_attr_add(format, "pos", GPU_COMP_I32, 2, GPU_FETCH_INT_TO_FLOAT);
+		uint color = GPU_vertformat_attr_add(format, "color", GPU_COMP_U8, 3, GPU_FETCH_INT_TO_FLOAT_UNIT);
+
+		immBindBuiltinProgram(GPU_SHADER_2D_FLAT_COLOR);
+		immBegin(GPU_PRIM_LINES, vertex_len);
+
+		sx = (int)v2d->tot.xmin;
+		while (sx < v2d->cur.xmax) {
+			sx += step;
+
+			v1[0] = v2[0] = sx;
+			immSkipAttrib(color);
+			immVertex2iv(pos, v1);
+			immAttrib3ubv(color, col_lo);
+			immVertex2iv(pos, v2);
+
+			v1[0] = v2[0] = sx + 1;
+			immSkipAttrib(color);
+			immVertex2iv(pos, v1);
+			immAttrib3ubv(color, col_hi);
+			immVertex2iv(pos, v2);
+		}
+
+		immEnd();
+		immUnbindProgram();
+	}
 }
 
 void file_draw_list(const bContext *C, ARegion *ar)
@@ -517,16 +553,17 @@ void file_draw_list(const bContext *C, ARegion *ar)
 	short align;
 	bool do_drag;
 	int column_space = 0.6f * UI_UNIT_X;
+	unsigned char text_col[4];
 	const bool small_size = SMALL_SIZE_CHECK(params->thumbnail_size);
 	const bool update_stat_strings = small_size != SMALL_SIZE_CHECK(layout->curr_size);
 	const float thumb_icon_aspect = sqrtf(64.0f / (float)(params->thumbnail_size));
 
 	numfiles = filelist_files_ensure(files);
-	
+
 	if (params->display != FILE_IMGDISPLAY) {
 
 		draw_background(layout, v2d);
-	
+
 		draw_dividers(layout, v2d);
 	}
 
@@ -575,6 +612,8 @@ void file_draw_list(const bContext *C, ARegion *ar)
 		}
 	}
 
+	BLF_batch_draw_begin();
+
 	for (i = offset; (i < numfiles) && (i < offset + numfiles_layout); i++) {
 		unsigned int file_selflag;
 		char path[FILE_MAX_LIBEXTRA];
@@ -586,9 +625,6 @@ void file_draw_list(const bContext *C, ARegion *ar)
 		file_selflag = filelist_entry_select_get(sfile->files, file, CHECK_ALL);
 
 		BLI_join_dirfile(path, sizeof(path), root, file->relpath);
-
-		UI_ThemeColor4(TH_TEXT);
-
 
 		if (!(file_selflag & FILE_SEL_EDITING)) {
 			if ((params->highlight_file == i) || (file_selflag & FILE_SEL_HIGHLIGHTED) ||
@@ -625,7 +661,7 @@ void file_draw_list(const bContext *C, ARegion *ar)
 			sx += ICON_DEFAULT_WIDTH_SCALE + 0.2f * UI_UNIT_X;
 		}
 
-		UI_ThemeColor4(TH_TEXT);
+		UI_GetThemeColor4ubv(TH_TEXT, text_col);
 
 		if (file_selflag & FILE_SEL_EDITING) {
 			uiBut *but;
@@ -656,7 +692,7 @@ void file_draw_list(const bContext *C, ARegion *ar)
 
 		if (!(file_selflag& FILE_SEL_EDITING)) {
 			int tpos = (FILE_IMGDISPLAY == params->display) ? sy - layout->tile_h + layout->textheight : sy;
-			file_draw_string(sx + 1, tpos, file->name, (float)textwidth, textheight, align);
+			file_draw_string(sx + 1, tpos, file->name, (float)textwidth, textheight, align, text_col);
 		}
 
 		sx += (int)layout->column_widths[COLUMN_NAME] + column_space;
@@ -668,7 +704,8 @@ void file_draw_list(const bContext *C, ARegion *ar)
 					BLI_filelist_entry_size_to_string(NULL, file->entry->size, small_size, file->entry->size_str);
 				}
 				file_draw_string(
-				            sx, sy, file->entry->size_str, layout->column_widths[COLUMN_SIZE], layout->tile_h, align);
+				            sx, sy, file->entry->size_str, layout->column_widths[COLUMN_SIZE], layout->tile_h,
+				            align, text_col);
 			}
 			sx += (int)layout->column_widths[COLUMN_SIZE] + column_space;
 		}
@@ -679,10 +716,12 @@ void file_draw_list(const bContext *C, ARegion *ar)
 					            NULL, file->entry->time, small_size, file->entry->time_str, file->entry->date_str);
 				}
 				file_draw_string(
-				            sx, sy, file->entry->date_str, layout->column_widths[COLUMN_DATE], layout->tile_h, align);
+				            sx, sy, file->entry->date_str, layout->column_widths[COLUMN_DATE], layout->tile_h,
+				            align, text_col);
 				sx += (int)layout->column_widths[COLUMN_DATE] + column_space;
 				file_draw_string(
-				            sx, sy, file->entry->time_str, layout->column_widths[COLUMN_TIME], layout->tile_h, align);
+				            sx, sy, file->entry->time_str, layout->column_widths[COLUMN_TIME], layout->tile_h,
+				            align, text_col);
 				sx += (int)layout->column_widths[COLUMN_TIME] + column_space;
 			}
 			else {
@@ -697,11 +736,14 @@ void file_draw_list(const bContext *C, ARegion *ar)
 					BLI_filelist_entry_size_to_string(NULL, file->entry->size, small_size, file->entry->size_str);
 				}
 				file_draw_string(
-				            sx, sy, file->entry->size_str, layout->column_widths[COLUMN_SIZE], layout->tile_h, align);
+				            sx, sy, file->entry->size_str, layout->column_widths[COLUMN_SIZE], layout->tile_h,
+				            align, text_col);
 			}
 			sx += (int)layout->column_widths[COLUMN_SIZE] + column_space;
 		}
 	}
+
+	BLF_batch_draw_end();
 
 	UI_block_end(C, block);
 	UI_block_draw(C, block);

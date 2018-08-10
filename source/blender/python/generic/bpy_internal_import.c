@@ -116,16 +116,6 @@ void bpy_import_main_set(struct Main *maggie)
 	bpy_import_main = maggie;
 }
 
-void bpy_import_main_extra_add(struct Main *maggie)
-{
-	BLI_addhead(&bpy_import_main_list, maggie);
-}
-
-void bpy_import_main_extra_remove(struct Main *maggie)
-{
-	BLI_remlink_safe(&bpy_import_main_list, maggie);
-}
-
 /* returns a dummy filename for a textblock so we can tell what file a text block comes from */
 void bpy_text_filename_get(char *fn, size_t fn_len, Text *text)
 {
@@ -185,9 +175,9 @@ PyObject *bpy_text_import_name(const char *name, int *found)
 	Text *text;
 	char txtname[MAX_ID_NAME - 2];
 	int namelen = strlen(name);
-//XXX	Main *maggie = bpy_import_main ? bpy_import_main:G.main;
+//XXX	Main *maggie = bpy_import_main ? bpy_import_main : G_MAIN;
 	Main *maggie = bpy_import_main;
-	
+
 	*found = 0;
 
 	if (!maggie) {
@@ -220,7 +210,7 @@ PyObject *bpy_text_import_name(const char *name, int *found)
 		return NULL;
 	else
 		*found = 1;
-	
+
 	return bpy_text_import(text);
 }
 
@@ -234,16 +224,16 @@ PyObject *bpy_text_reimport(PyObject *module, int *found)
 	Text *text;
 	const char *name;
 	const char *filepath;
-//XXX	Main *maggie = bpy_import_main ? bpy_import_main:G.main;
+//XXX	Main *maggie = bpy_import_main ? bpy_import_main : G_MAIN;
 	Main *maggie = bpy_import_main;
-	
+
 	if (!maggie) {
 		printf("ERROR: bpy_import_main_set() was not called before running python. this is a bug.\n");
 		return NULL;
 	}
-	
+
 	*found = 0;
-	
+
 	/* get name, filename from the module itself */
 	if ((name = PyModule_GetName(module)) == NULL)
 		return NULL;
@@ -298,15 +288,15 @@ static PyObject *blender_import(PyObject *UNUSED(self), PyObject *args, PyObject
 
 	/* import existing builtin modules or modules that have been imported already */
 	newmodule = PyImport_ImportModuleLevel(name, globals, locals, fromlist, level);
-	
+
 	if (newmodule)
 		return newmodule;
-	
+
 	PyErr_Fetch(&exception, &err, &tb); /* get the python error in case we cant import as blender text either */
-	
+
 	/* importing from existing modules failed, see if we have this module as blender text */
 	newmodule = bpy_text_import_name(name, &found);
-	
+
 	if (newmodule) { /* found module as blender text, ignore above exception */
 		PyErr_Clear();
 		Py_XDECREF(exception);

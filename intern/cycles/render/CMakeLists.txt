@@ -33,6 +33,7 @@ set(SRC
 	session.cpp
 	shader.cpp
 	sobol.cpp
+	stats.cpp
 	svm.cpp
 	tables.cpp
 	tile.cpp
@@ -51,7 +52,6 @@ set(SRC_HEADERS
 	integrator.h
 	light.h
 	mesh.h
-	mesh_volume.h
 	nodes.h
 	object.h
 	osl.h
@@ -61,6 +61,7 @@ set(SRC_HEADERS
 	session.h
 	shader.h
 	sobol.h
+	stats.h
 	svm.h
 	tables.h
 	tile.h

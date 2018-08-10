@@ -121,7 +121,7 @@ void SkinInfo::borrow_skin_controller_data(const COLLADAFW::SkinControllerData *
 
 	unit_converter->dae_matrix_to_mat4_(bind_shape_matrix, skin->getBindShapeMatrix());
 }
-	
+
 void SkinInfo::free()
 {
 	joints_per_vertex.releaseMemory();
@@ -159,9 +159,9 @@ void SkinInfo::set_controller(const COLLADAFW::SkinController *co)
 }
 
 // called from write_controller
-Object *SkinInfo::create_armature(Scene *scene)
+Object *SkinInfo::create_armature(Main *bmain, Scene *scene, ViewLayer *view_layer)
 {
-	ob_arm = bc_add_object(scene, OB_ARMATURE, NULL);
+	ob_arm = bc_add_object(bmain, scene, view_layer, OB_ARMATURE, NULL);
 	return ob_arm;
 }
 
@@ -199,7 +199,7 @@ const COLLADAFW::UniqueId& SkinInfo::get_controller_uid()
 }
 
 // check if this skin controller references a joint or any descendant of it
-// 
+//
 // some nodes may not be referenced by SkinController,
 // in this case to determine if the node belongs to this armature,
 // we need to search down the tree
@@ -241,10 +241,7 @@ void SkinInfo::link_armature(bContext *C, Object *ob, std::map<COLLADAFW::Unique
 	BKE_object_workob_calc_parent(scene, ob, &workob);
 	invert_m4_m4(ob->parentinv, workob.obmat);
 
-	DAG_id_tag_update(&obn->id, OB_RECALC_OB | OB_RECALC_DATA);
-
-	DAG_relations_tag_update(bmain);
-	WM_event_add_notifier(C, NC_OBJECT | ND_TRANSFORM, NULL);
+	DEG_id_tag_update(&obn->id, OB_RECALC_OB | OB_RECALC_DATA);
 #endif
 	copy_m4_m4(ob->obmat, bind_shape_matrix);
 	BKE_object_apply_mat4(ob, ob->obmat, 0, 0);
@@ -259,9 +256,9 @@ void SkinInfo::link_armature(bContext *C, Object *ob, std::map<COLLADAFW::Unique
 
 		// skip joints that have invalid UID
 		if ((*it).joint_uid == COLLADAFW::UniqueId::INVALID) continue;
-		
+
 		// name group by joint node name
-		
+
 		if (joint_by_uid.find((*it).joint_uid) != joint_by_uid.end()) {
 			name = bc_get_joint_name(joint_by_uid[(*it).joint_uid]);
 		}

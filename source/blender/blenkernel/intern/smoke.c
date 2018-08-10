@@ -71,7 +71,6 @@
 #include "BKE_constraint.h"
 #include "BKE_customdata.h"
 #include "BKE_deform.h"
-#include "BKE_depsgraph.h"
 #include "BKE_DerivedMesh.h"
 #include "BKE_effect.h"
 #include "BKE_global.h"
@@ -83,6 +82,9 @@
 #include "BKE_scene.h"
 #include "BKE_smoke.h"
 #include "BKE_texture.h"
+
+#include "DEG_depsgraph.h"
+#include "DEG_depsgraph_query.h"
 
 #include "RE_shader_ext.h"
 
@@ -127,7 +129,7 @@ void smoke_initWaveletBlenderRNA(struct WTURBULENCE *UNUSED(wt), float *UNUSED(s
 void smoke_initBlenderRNA(struct FLUID_3D *UNUSED(fluid), float *UNUSED(alpha), float *UNUSED(beta), float *UNUSED(dt_factor), float *UNUSED(vorticity),
                           int *UNUSED(border_colli), float *UNUSED(burning_rate), float *UNUSED(flame_smoke), float *UNUSED(flame_smoke_color),
                           float *UNUSED(flame_vorticity), float *UNUSED(flame_ignition_temp), float *UNUSED(flame_max_temp)) {}
-struct DerivedMesh *smokeModifier_do(SmokeModifierData *UNUSED(smd), Scene *UNUSED(scene), Object *UNUSED(ob), DerivedMesh *UNUSED(dm)) { return NULL; }
+struct DerivedMesh *smokeModifier_do(SmokeModifierData *UNUSED(smd), struct Depsgraph *UNUSED(depsgraph), Scene *UNUSED(scene), Object *UNUSED(ob), DerivedMesh *UNUSED(dm)) { return NULL; }
 float smoke_get_velocity_at(struct Object *UNUSED(ob), float UNUSED(position[3]), float UNUSED(velocity[3])) { return 0.0f; }
 
 #endif /* WITH_SMOKE */
@@ -660,6 +662,14 @@ void smokeModifier_copy(const struct SmokeModifierData *smd, struct SmokeModifie
 		if (smd->domain->coba) {
 			tsmd->domain->coba = MEM_dupallocN(smd->domain->coba);
 		}
+
+		tsmd->domain->multi_import = smd->domain->multi_import;
+		BLI_strncpy(tsmd->domain->volume_filepath,
+		            smd->domain->volume_filepath,
+		            sizeof(smd->domain->volume_filepath));
+		tsmd->domain->sample_level = smd->domain->sample_level;
+
+		tsmd->domain->clipping = smd->domain->clipping;
 	}
 	else if (tsmd->flow) {
 		tsmd->flow->psys = smd->flow->psys;
@@ -696,16 +706,16 @@ void smokeModifier_copy(const struct SmokeModifierData *smd, struct SmokeModifie
 #ifdef WITH_SMOKE
 
 // forward decleration
-static void smoke_calc_transparency(SmokeDomainSettings *sds, Scene *scene);
+static void smoke_calc_transparency(SmokeDomainSettings *sds, ViewLayer *view_layer);
 static float calc_voxel_transp(float *result, float *input, int res[3], int *pixel, float *tRay, float correct);
 
-static int get_lamp(Scene *scene, float *light)
+static int get_lamp(ViewLayer *view_layer, float *light)
 {
 	Base *base_tmp = NULL;
 	int found_lamp = 0;
 
 	// try to find a lamp, preferably local
-	for (base_tmp = scene->base.first; base_tmp; base_tmp = base_tmp->next) {
+	for (base_tmp = FIRSTBASE(view_layer); base_tmp; base_tmp = base_tmp->next) {
 		if (base_tmp->object->type == OB_LAMP) {
 			Lamp *la = base_tmp->object->data;
 
@@ -891,7 +901,7 @@ static void obstacles_from_derivedmesh(
 }
 
 /* Animated obstacles: dx_step = ((x_new - x_old) / totalsteps) * substep */
-static void update_obstacles(Scene *scene, Object *ob, SmokeDomainSettings *sds, float dt,
+static void update_obstacles(Depsgraph *depsgraph, Object *ob, SmokeDomainSettings *sds, float dt,
                              int UNUSED(substep), int UNUSED(totalsteps))
 {
 	Object **collobjs = NULL;
@@ -931,7 +941,7 @@ static void update_obstacles(Scene *scene, Object *ob, SmokeDomainSettings *sds,
 	}
 
 
-	collobjs = get_collisionobjects(scene, ob, sds->coll_group, &numcollobj, eModifierType_Smoke);
+	collobjs = BKE_collision_objects_create(depsgraph, ob, sds->coll_group, &numcollobj, eModifierType_Smoke);
 
 	// update obstacle tags in cells
 	for (collIndex = 0; collIndex < numcollobj; collIndex++)
@@ -948,8 +958,7 @@ static void update_obstacles(Scene *scene, Object *ob, SmokeDomainSettings *sds,
 		}
 	}
 
-	if (collobjs)
-		MEM_freeN(collobjs);
+	BKE_collision_objects_free(collobjs);
 
 	/* obstacle cells should not contain any velocity from the smoke simulation */
 	for (z = 0; z < sds->res[0] * sds->res[1] * sds->res[2]; z++)
@@ -1810,7 +1819,7 @@ static void adjustDomainResolution(SmokeDomainSettings *sds, int new_shift[3], E
 				int zn = z - new_shift[2];
 				int index;
 				float max_den;
-				
+
 				/* skip if cell already belongs to new area */
 				if (xn >= min[0] && xn <= max[0] && yn >= min[1] && yn <= max[1] && zn >= min[2] && zn <= max[2])
 					continue;
@@ -2106,7 +2115,8 @@ BLI_INLINE void apply_inflow_fields(SmokeFlowSettings *sfs, float emission_value
 	}
 }
 
-static void update_flowsfluids(EvaluationContext *eval_ctx, Scene *scene, Object *ob, SmokeDomainSettings *sds, float dt)
+static void update_flowsfluids(
+        struct Depsgraph *depsgraph, Scene *scene, Object *ob, SmokeDomainSettings *sds, float dt)
 {
 	Object **flowobjs = NULL;
 	EmissionMap *emaps = NULL;
@@ -2148,7 +2158,7 @@ static void update_flowsfluids(EvaluationContext *eval_ctx, Scene *scene, Object
 		sds->p1[2] = sds->p0[2] + sds->cell_size[2] * sds->base_res[2];
 	}
 
-	flowobjs = get_collisionobjects(scene, ob, sds->fluid_group, &numflowobj, eModifierType_Smoke);
+	flowobjs = BKE_collision_objects_create(depsgraph, ob, sds->fluid_group, &numflowobj, eModifierType_Smoke);
 
 	/* init emission maps for each flow */
 	emaps = MEM_callocN(sizeof(struct EmissionMap) * numflowobj, "smoke_flow_maps");
@@ -2213,7 +2223,7 @@ static void update_flowsfluids(EvaluationContext *eval_ctx, Scene *scene, Object
 					else { /* MOD_SMOKE_FLOW_SOURCE_MESH */
 						/* update flow object frame */
 						BLI_mutex_lock(&object_update_lock);
-						BKE_object_modifier_update_subframe(eval_ctx, scene, collob, true, 5, BKE_scene_frame_get(scene), eModifierType_Smoke);
+						BKE_object_modifier_update_subframe(depsgraph, scene, collob, true, 5, BKE_scene_frame_get(scene), eModifierType_Smoke);
 						BLI_mutex_unlock(&object_update_lock);
 
 						/* apply flow */
@@ -2449,8 +2459,7 @@ static void update_flowsfluids(EvaluationContext *eval_ctx, Scene *scene, Object
 		}
 	}
 
-	if (flowobjs)
-		MEM_freeN(flowobjs);
+	BKE_collision_objects_free(flowobjs);
 	if (emaps)
 		MEM_freeN(emaps);
 }
@@ -2509,7 +2518,7 @@ static void update_effectors_task_cb(
 			mul_m4_v3(sds->obmat, voxelCenter);
 
 			pd_point_from_loc(data->scene, voxelCenter, vel, index, &epoint);
-			pdDoEffectors(data->effectors, NULL, sds->effector_weights, &epoint, retvel, NULL);
+			BKE_effectors_apply(data->effectors, NULL, sds->effector_weights, &epoint, retvel, NULL);
 
 			/* convert retvel to local space */
 			mag = len_v3(retvel);
@@ -2525,12 +2534,12 @@ static void update_effectors_task_cb(
 	}
 }
 
-static void update_effectors(Scene *scene, Object *ob, SmokeDomainSettings *sds, float UNUSED(dt))
+static void update_effectors(struct Depsgraph *depsgraph, Scene *scene, Object *ob, SmokeDomainSettings *sds, float UNUSED(dt))
 {
 	ListBase *effectors;
 	/* make sure smoke flow influence is 0.0f */
 	sds->effector_weights->weight[PFIELD_SMOKEFLOW] = 0.0f;
-	effectors = pdInitEffectors(scene, ob, NULL, sds->effector_weights, true);
+	effectors = BKE_effectors_create(depsgraph, ob, NULL, sds->effector_weights);
 
 	if (effectors) {
 		// precalculate wind forces
@@ -2557,11 +2566,12 @@ static void update_effectors(Scene *scene, Object *ob, SmokeDomainSettings *sds,
 		                        &settings);
 	}
 
-	pdEndEffectors(&effectors);
+	BKE_effectors_free(effectors);
 }
 
 static void step(
-        EvaluationContext *eval_ctx, Scene *scene, Object *ob, SmokeModifierData *smd, DerivedMesh *domain_dm, float fps)
+        Depsgraph *depsgraph,
+        Scene *scene, Object *ob, SmokeModifierData *smd, DerivedMesh *domain_dm, float fps)
 {
 	SmokeDomainSettings *sds = smd->domain;
 	/* stability values copied from wturbulence.cpp */
@@ -2631,11 +2641,11 @@ static void step(
 	for (substep = 0; substep < totalSubsteps; substep++)
 	{
 		// calc animated obstacle velocities
-		update_flowsfluids(eval_ctx, scene, ob, sds, dtSubdiv);
-		update_obstacles(scene, ob, sds, dtSubdiv, substep, totalSubsteps);
+		update_flowsfluids(depsgraph, scene, ob, sds, dtSubdiv);
+		update_obstacles(depsgraph, ob, sds, dtSubdiv, substep, totalSubsteps);
 
 		if (sds->total_cells > 1) {
-			update_effectors(scene, ob, sds, dtSubdiv); // DG TODO? problem --> uses forces instead of velocity, need to check how they need to be changed with variable dt
+			update_effectors(depsgraph, scene, ob, sds, dtSubdiv); // DG TODO? problem --> uses forces instead of velocity, need to check how they need to be changed with variable dt
 			smoke_step(sds->fluid, gravity, dtSubdiv);
 		}
 	}
@@ -2728,7 +2738,8 @@ static DerivedMesh *createDomainGeometry(SmokeDomainSettings *sds, Object *ob)
 	return result;
 }
 
-static void smokeModifier_process(EvaluationContext *eval_ctx, SmokeModifierData *smd, Scene *scene, Object *ob, DerivedMesh *dm)
+static void smokeModifier_process(
+        SmokeModifierData *smd, struct Depsgraph *depsgraph, Scene *scene, Object *ob, DerivedMesh *dm)
 {
 	if ((smd->type & MOD_SMOKE_TYPE_FLOW))
 	{
@@ -2849,11 +2860,11 @@ static void smokeModifier_process(EvaluationContext *eval_ctx, SmokeModifierData
 
 			}
 
-			step(eval_ctx, scene, ob, smd, dm, scene->r.frs_sec / scene->r.frs_sec_base);
+			step(depsgraph, scene, ob, smd, dm, scene->r.frs_sec / scene->r.frs_sec_base);
 		}
 
 		// create shadows before writing cache so they get stored
-		smoke_calc_transparency(sds, scene);
+		smoke_calc_transparency(sds, DEG_get_evaluated_view_layer(depsgraph));
 
 		if (sds->wt && sds->total_cells > 1) {
 			smoke_turbulence_step(sds->wt, sds->fluid);
@@ -2870,14 +2881,14 @@ static void smokeModifier_process(EvaluationContext *eval_ctx, SmokeModifierData
 	}
 }
 
-struct DerivedMesh *smokeModifier_do(SmokeModifierData *smd, Scene *scene, Object *ob, DerivedMesh *dm)
+struct DerivedMesh *smokeModifier_do(
+        SmokeModifierData *smd, struct Depsgraph *depsgraph, Scene *scene, Object *ob, DerivedMesh *dm)
 {
 	/* lock so preview render does not read smoke data while it gets modified */
 	if ((smd->type & MOD_SMOKE_TYPE_DOMAIN) && smd->domain)
 		BLI_rw_mutex_lock(smd->domain->fluid_mutex, THREAD_LOCK_WRITE);
 
-	/* Ugly G.main, hopefully won't be needed anymore in 2.8 */
-	smokeModifier_process(G.main->eval_ctx , smd, scene, ob, dm);
+	smokeModifier_process(smd, depsgraph, scene, ob, dm);
 
 	if ((smd->type & MOD_SMOKE_TYPE_DOMAIN) && smd->domain)
 		BLI_rw_mutex_unlock(smd->domain->fluid_mutex);
@@ -2992,7 +3003,7 @@ static void bresenham_linie_3D(int x1, int y1, int z1, int x2, int y2, int z2, f
 	cb(result, input, res, pixel, tRay, correct);
 }
 
-static void smoke_calc_transparency(SmokeDomainSettings *sds, Scene *scene)
+static void smoke_calc_transparency(SmokeDomainSettings *sds, ViewLayer *view_layer)
 {
 	float bv[6] = {0};
 	float light[3];
@@ -3000,7 +3011,7 @@ static void smoke_calc_transparency(SmokeDomainSettings *sds, Scene *scene)
 	float *density = smoke_get_density(sds->fluid);
 	float correct = -7.0f * sds->dx;
 
-	if (!get_lamp(scene, light)) return;
+	if (!get_lamp(view_layer, light)) return;
 
 	/* convert light pos to sim cell space */
 	mul_m4_v3(sds->imat, light);

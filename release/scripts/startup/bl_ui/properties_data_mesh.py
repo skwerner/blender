@@ -24,7 +24,6 @@ from rna_prop_ui import PropertyPanel
 
 class MESH_MT_vertex_group_specials(Menu):
     bl_label = "Vertex Group Specials"
-    COMPAT_ENGINES = {'BLENDER_RENDER', 'BLENDER_GAME'}
 
     def draw(self, context):
         layout = self.layout
@@ -48,7 +47,6 @@ class MESH_MT_vertex_group_specials(Menu):
 
 class MESH_MT_shape_key_specials(Menu):
     bl_label = "Shape Key Specials"
-    COMPAT_ENGINES = {'BLENDER_RENDER', 'BLENDER_GAME'}
 
     def draw(self, context):
         layout = self.layout
@@ -72,6 +70,17 @@ class MESH_UL_vgroups(UIList):
             icon = 'LOCKED' if vgroup.lock_weight else 'UNLOCKED'
             layout.prop(vgroup, "lock_weight", text="", icon=icon, emboss=False)
         elif self.layout_type == 'GRID':
+            layout.alignment = 'CENTER'
+            layout.label(text="", icon_value=icon)
+
+
+class MESH_UL_fmaps(UIList):
+    def draw_item(self, context, layout, data, item, icon, active_data, active_propname, index):
+        # assert(isinstance(item, bpy.types.FaceMap))
+        fmap = item
+        if self.layout_type in {'DEFAULT', 'COMPACT'}:
+            layout.prop(fmap, "name", text="", emboss=False, icon_value=icon)
+        elif self.layout_type in {'GRID'}:
             layout.alignment = 'CENTER'
             layout.label(text="", icon_value=icon)
 
@@ -119,14 +128,14 @@ class MeshButtonsPanel:
 
     @classmethod
     def poll(cls, context):
-        engine = context.scene.render.engine
+        engine = context.engine
         return context.mesh and (engine in cls.COMPAT_ENGINES)
 
 
 class DATA_PT_context_mesh(MeshButtonsPanel, Panel):
     bl_label = ""
     bl_options = {'HIDE_HEADER'}
-    COMPAT_ENGINES = {'BLENDER_RENDER', 'BLENDER_GAME'}
+    COMPAT_ENGINES = {'BLENDER_RENDER', 'BLENDER_EEVEE', 'BLENDER_OPENGL'}
 
     def draw(self, context):
         layout = self.layout
@@ -143,31 +152,32 @@ class DATA_PT_context_mesh(MeshButtonsPanel, Panel):
 
 class DATA_PT_normals(MeshButtonsPanel, Panel):
     bl_label = "Normals"
-    COMPAT_ENGINES = {'BLENDER_RENDER', 'BLENDER_GAME'}
+    bl_options = {'DEFAULT_CLOSED'}
+    COMPAT_ENGINES = {'BLENDER_RENDER', 'BLENDER_EEVEE', 'BLENDER_OPENGL'}
 
     def draw(self, context):
         layout = self.layout
+        layout.use_property_split = True
 
         mesh = context.mesh
 
-        split = layout.split()
+        col = layout.column()
+        col.prop(mesh, "show_double_sided")
 
-        col = split.column()
         col.prop(mesh, "use_auto_smooth")
         sub = col.column()
         sub.active = mesh.use_auto_smooth and not mesh.has_custom_normals
         sub.prop(mesh, "auto_smooth_angle", text="Angle")
 
-        split.prop(mesh, "show_double_sided")
-
 
 class DATA_PT_texture_space(MeshButtonsPanel, Panel):
     bl_label = "Texture Space"
     bl_options = {'DEFAULT_CLOSED'}
-    COMPAT_ENGINES = {'BLENDER_RENDER', 'BLENDER_GAME'}
+    COMPAT_ENGINES = {'BLENDER_RENDER', 'BLENDER_EEVEE', 'BLENDER_OPENGL'}
 
     def draw(self, context):
         layout = self.layout
+        layout.use_property_split = True
 
         mesh = context.mesh
 
@@ -176,18 +186,18 @@ class DATA_PT_texture_space(MeshButtonsPanel, Panel):
         layout.separator()
 
         layout.prop(mesh, "use_auto_texspace")
-        row = layout.row()
-        row.column().prop(mesh, "texspace_location", text="Location")
-        row.column().prop(mesh, "texspace_size", text="Size")
+
+        layout.prop(mesh, "texspace_location", text="Location")
+        layout.prop(mesh, "texspace_size", text="Size")
 
 
 class DATA_PT_vertex_groups(MeshButtonsPanel, Panel):
     bl_label = "Vertex Groups"
-    COMPAT_ENGINES = {'BLENDER_RENDER', 'BLENDER_GAME'}
+    COMPAT_ENGINES = {'BLENDER_RENDER', 'BLENDER_EEVEE', 'BLENDER_OPENGL'}
 
     @classmethod
     def poll(cls, context):
-        engine = context.scene.render.engine
+        engine = context.engine
         obj = context.object
         return (obj and obj.type in {'MESH', 'LATTICE'} and (engine in cls.COMPAT_ENGINES))
 
@@ -228,13 +238,56 @@ class DATA_PT_vertex_groups(MeshButtonsPanel, Panel):
             layout.prop(context.tool_settings, "vertex_group_weight", text="Weight")
 
 
-class DATA_PT_shape_keys(MeshButtonsPanel, Panel):
-    bl_label = "Shape Keys"
-    COMPAT_ENGINES = {'BLENDER_RENDER', 'BLENDER_GAME'}
+class DATA_PT_face_maps(MeshButtonsPanel, Panel):
+    bl_label = "Face Maps"
+    bl_options = {'DEFAULT_CLOSED'}
+    COMPAT_ENGINES = {'BLENDER_RENDER', 'BLENDER_EEVEE', 'BLENDER_OPENGL'}
 
     @classmethod
     def poll(cls, context):
-        engine = context.scene.render.engine
+        obj = context.object
+        return (obj and obj.type == 'MESH')
+
+    def draw(self, context):
+        layout = self.layout
+
+        ob = context.object
+        facemap = ob.face_maps.active
+
+        rows = 2
+        if facemap:
+            rows = 4
+
+        row = layout.row()
+        row.template_list("MESH_UL_fmaps", "", ob, "face_maps", ob.face_maps, "active_index", rows=rows)
+
+        col = row.column(align=True)
+        col.operator("object.face_map_add", icon='ZOOMIN', text="")
+        col.operator("object.face_map_remove", icon='ZOOMOUT', text="")
+        if facemap:
+            col.separator()
+            col.operator("object.face_map_move", icon='TRIA_UP', text="").direction = 'UP'
+            col.operator("object.face_map_move", icon='TRIA_DOWN', text="").direction = 'DOWN'
+
+        if ob.face_maps and (ob.mode == 'EDIT' and ob.type == 'MESH'):
+            row = layout.row()
+
+            sub = row.row(align=True)
+            sub.operator("object.face_map_assign", text="Assign")
+            sub.operator("object.face_map_remove_from", text="Remove")
+
+            sub = row.row(align=True)
+            sub.operator("object.face_map_select", text="Select")
+            sub.operator("object.face_map_deselect", text="Deselect")
+
+
+class DATA_PT_shape_keys(MeshButtonsPanel, Panel):
+    bl_label = "Shape Keys"
+    COMPAT_ENGINES = {'BLENDER_RENDER', 'BLENDER_EEVEE', 'BLENDER_OPENGL'}
+
+    @classmethod
+    def poll(cls, context):
+        engine = context.engine
         obj = context.object
         return (obj and obj.type in {'MESH', 'LATTICE', 'CURVE', 'SURFACE'} and (engine in cls.COMPAT_ENGINES))
 
@@ -300,19 +353,16 @@ class DATA_PT_shape_keys(MeshButtonsPanel, Panel):
                     row.active = enable_edit_value
                     row.prop(kb, "value")
 
-                    split = layout.split()
+                    layout.use_property_split = True
 
-                    col = split.column(align=True)
-                    col.active = enable_edit_value
-                    col.label(text="Range:")
-                    col.prop(kb, "slider_min", text="Min")
-                    col.prop(kb, "slider_max", text="Max")
+                    col = layout.column()
+                    sub.active = enable_edit_value
+                    sub = col.column(align=True)
+                    sub.prop(kb, "slider_min", text="Range Min")
+                    sub.prop(kb, "slider_max", text="Max")
 
-                    col = split.column(align=True)
-                    col.active = enable_edit_value
-                    col.label(text="Blend:")
-                    col.prop_search(kb, "vertex_group", ob, "vertex_groups", text="")
-                    col.prop_search(kb, "relative_key", key, "key_blocks", text="")
+                    col.prop_search(kb, "vertex_group", ob, "vertex_groups", text="Vertex Group")
+                    col.prop_search(kb, "relative_key", key, "key_blocks", text="Relative To")
 
             else:
                 layout.prop(kb, "interpolation")
@@ -323,7 +373,7 @@ class DATA_PT_shape_keys(MeshButtonsPanel, Panel):
 
 class DATA_PT_uv_texture(MeshButtonsPanel, Panel):
     bl_label = "UV Maps"
-    COMPAT_ENGINES = {'BLENDER_RENDER', 'BLENDER_GAME'}
+    COMPAT_ENGINES = {'BLENDER_RENDER', 'BLENDER_EEVEE', 'BLENDER_OPENGL'}
 
     def draw(self, context):
         layout = self.layout
@@ -333,7 +383,7 @@ class DATA_PT_uv_texture(MeshButtonsPanel, Panel):
         row = layout.row()
         col = row.column()
 
-        col.template_list("MESH_UL_uvmaps_vcols", "uvmaps", me, "uv_textures", me.uv_textures, "active_index", rows=1)
+        col.template_list("MESH_UL_uvmaps_vcols", "uvmaps", me, "uv_layers", me.uv_layers, "active_index", rows=1)
 
         col = row.column(align=True)
         col.operator("mesh.uv_texture_add", icon='ZOOMIN', text="")
@@ -342,7 +392,7 @@ class DATA_PT_uv_texture(MeshButtonsPanel, Panel):
 
 class DATA_PT_vertex_colors(MeshButtonsPanel, Panel):
     bl_label = "Vertex Colors"
-    COMPAT_ENGINES = {'BLENDER_RENDER', 'BLENDER_GAME'}
+    COMPAT_ENGINES = {'BLENDER_RENDER', 'BLENDER_EEVEE', 'BLENDER_OPENGL'}
 
     def draw(self, context):
         layout = self.layout
@@ -362,10 +412,11 @@ class DATA_PT_vertex_colors(MeshButtonsPanel, Panel):
 class DATA_PT_customdata(MeshButtonsPanel, Panel):
     bl_label = "Geometry Data"
     bl_options = {'DEFAULT_CLOSED'}
-    COMPAT_ENGINES = {'BLENDER_RENDER', 'BLENDER_GAME'}
+    COMPAT_ENGINES = {'BLENDER_RENDER', 'BLENDER_EEVEE', 'BLENDER_OPENGL'}
 
     def draw(self, context):
         layout = self.layout
+        layout.use_property_split = True
 
         obj = context.object
         me = context.mesh
@@ -388,7 +439,7 @@ class DATA_PT_customdata(MeshButtonsPanel, Panel):
 
 
 class DATA_PT_custom_props_mesh(MeshButtonsPanel, PropertyPanel, Panel):
-    COMPAT_ENGINES = {'BLENDER_RENDER', 'BLENDER_GAME'}
+    COMPAT_ENGINES = {'BLENDER_RENDER', 'BLENDER_EEVEE', 'BLENDER_OPENGL'}
     _context_path = "object.data"
     _property_type = bpy.types.Mesh
 
@@ -397,15 +448,17 @@ classes = (
     MESH_MT_vertex_group_specials,
     MESH_MT_shape_key_specials,
     MESH_UL_vgroups,
+    MESH_UL_fmaps,
     MESH_UL_shape_keys,
     MESH_UL_uvmaps_vcols,
     DATA_PT_context_mesh,
-    DATA_PT_normals,
-    DATA_PT_texture_space,
     DATA_PT_vertex_groups,
     DATA_PT_shape_keys,
     DATA_PT_uv_texture,
     DATA_PT_vertex_colors,
+    DATA_PT_face_maps,
+    DATA_PT_normals,
+    DATA_PT_texture_space,
     DATA_PT_customdata,
     DATA_PT_custom_props_mesh,
 )

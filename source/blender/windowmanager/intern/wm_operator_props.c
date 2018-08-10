@@ -4,7 +4,7 @@
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version. 
+ * of the License, or (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -132,7 +132,9 @@ void WM_operator_properties_filesel(
 static void wm_operator_properties_select_action_ex(wmOperatorType *ot, int default_action,
                                                     const EnumPropertyItem *select_actions)
 {
-	RNA_def_enum(ot->srna, "action", select_actions, default_action, "Action", "Selection action to execute");
+	PropertyRNA *prop;
+	prop = RNA_def_enum(ot->srna, "action", select_actions, default_action, "Action", "Selection action to execute");
+	RNA_def_property_flag(prop, PROP_HIDDEN | PROP_SKIP_SAVE);
 }
 
 void WM_operator_properties_select_action(wmOperatorType *ot, int default_action)
@@ -358,9 +360,9 @@ void WM_operator_properties_checker_interval(wmOperatorType *ot, bool nth_can_di
 {
 	const int nth_default = nth_can_disable ? 1 : 2;
 	const int nth_min =  min_ii(nth_default, 2);
-	RNA_def_int(ot->srna, "nth", nth_default, nth_min, INT_MAX, "Nth Selection", "", nth_min, 100);
-	RNA_def_int(ot->srna, "skip", 1, 1, INT_MAX, "Skip", "", 1, 100);
-	RNA_def_int(ot->srna, "offset", 0, INT_MIN, INT_MAX, "Offset", "", -100, 100);
+	RNA_def_int(ot->srna, "nth", nth_default, nth_min, INT_MAX, "Nth Element", "Skip every Nth element", nth_min, 100);
+	RNA_def_int(ot->srna, "skip", 1, 1, INT_MAX, "Skip", "Number of elements to skip at once", 1, 100);
+	RNA_def_int(ot->srna, "offset", 0, INT_MIN, INT_MAX, "Offset", "Offset from the starting point", -100, 100);
 }
 
 void WM_operator_properties_checker_interval_from_op(

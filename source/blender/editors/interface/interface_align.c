@@ -110,9 +110,9 @@ enum {
 
 bool ui_but_can_align(const uiBut *but)
 {
-	return (
-	    !ELEM(but->type, UI_BTYPE_LABEL, UI_BTYPE_CHECKBOX, UI_BTYPE_CHECKBOX_N, UI_BTYPE_SEPR, UI_BTYPE_SEPR_LINE) &&
-	    (BLI_rctf_size_x(&but->rect) > 0.0f) && (BLI_rctf_size_y(&but->rect) > 0.0f));
+	const bool btype_can_align = !ELEM(but->type, UI_BTYPE_LABEL, UI_BTYPE_CHECKBOX, UI_BTYPE_CHECKBOX_N,
+	                                   UI_BTYPE_TAB, UI_BTYPE_SEPR, UI_BTYPE_SEPR_LINE, UI_BTYPE_SEPR_SPACER);
+	return (btype_can_align && (BLI_rctf_size_x(&but->rect) > 0.0f) && (BLI_rctf_size_y(&but->rect) > 0.0f));
 }
 
 /**
@@ -320,13 +320,43 @@ static int ui_block_align_butal_cmp(const void *a, const void *b)
 	return 0;
 }
 
+static void ui_block_align_but_to_region(uiBut *but, const ARegion *region)
+{
+	rctf *rect = &but->rect;
+	const float but_width = BLI_rctf_size_x(rect);
+	const float but_height = BLI_rctf_size_y(rect);
+	const float px = U.pixelsize;
+
+	switch (but->drawflag & UI_BUT_ALIGN) {
+		case UI_BUT_ALIGN_TOP:
+			rect->ymax = region->winy + px;
+			rect->ymin = but->rect.ymax - but_height;
+			break;
+		case UI_BUT_ALIGN_DOWN:
+			rect->ymin = -px;
+			rect->ymax = rect->ymin + but_height;
+			break;
+		case UI_BUT_ALIGN_LEFT:
+			rect->xmin = -px;
+			rect->xmax = rect->xmin + but_width;
+			break;
+		case UI_BUT_ALIGN_RIGHT:
+			rect->xmax = region->winx + px;
+			rect->xmin = rect->xmax - but_width;
+			break;
+		default:
+			BLI_assert(0);
+			break;
+	}
+}
+
 /**
  * Compute the alignment of all 'align groups' of buttons in given block.
  *
  * This is using an order-independent algorithm, i.e. alignment of buttons should be OK regardless of order in which
  * they are added to the block.
  */
-void ui_block_align_calc(uiBlock *block)
+void ui_block_align_calc(uiBlock *block, const ARegion *region)
 {
 	uiBut *but;
 	int num_buttons = 0;
@@ -338,10 +368,17 @@ void ui_block_align_calc(uiBlock *block)
 	int side;
 	int i, j;
 
-	/* First loop: we count number of buttons belonging to an align group, and clear their align flag. */
+	/* First loop: we count number of buttons belonging to an align group, and clear their align flag.
+	 * Tabs get some special treatment here, they get aligned to region border. */
 	for (but = block->buttons.first; but; but = but->next) {
-		/* Clear old align flags. */
-		but->drawflag &= ~UI_BUT_ALIGN_ALL;
+		/* special case: tabs need to be aligned to a region border, drawflag tells which one */
+		if (but->type == UI_BTYPE_TAB) {
+			ui_block_align_but_to_region(but, region);
+		}
+		else {
+			/* Clear old align flags. */
+			but->drawflag &= ~UI_BUT_ALIGN_ALL;
+		}
 
 		if (but->alignnr != 0) {
 			num_buttons++;
@@ -462,7 +499,8 @@ void ui_block_align_calc(uiBlock *block)
 
 bool ui_but_can_align(uiBut *but)
 {
-	return !ELEM(but->type, UI_BTYPE_LABEL, UI_BTYPE_CHECKBOX, UI_BTYPE_CHECKBOX_N, UI_BTYPE_SEPR, UI_BTYPE_SEPR_LINE);
+	return !ELEM(but->type, UI_BTYPE_LABEL, UI_BTYPE_CHECKBOX, UI_BTYPE_CHECKBOX_N,
+	             UI_BTYPE_SEPR, UI_BTYPE_SEPR_LINE, UI_BTYPE_SEPR_SPACER);
 }
 
 static bool buts_are_horiz(uiBut *but1, uiBut *but2)

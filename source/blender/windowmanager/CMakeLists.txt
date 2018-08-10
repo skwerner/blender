@@ -25,20 +25,23 @@
 
 set(INC
 	.
+	gizmo
+	gizmo/intern
 	../blenfont
 	../blenkernel
 	../blenlib
 	../blenloader
 	../blentranslation
 	../compositor
+	../depsgraph
 	../editors/include
+	../draw
 	../gpu
 	../imbuf
 	../makesdna
 	../makesrna
 	../nodes
 	../render/extern/include
-	../../gameengine/BlenderRoutines
 	../../../intern/clog
 	../../../intern/ghost
 	../../../intern/guardedalloc
@@ -53,7 +56,6 @@ set(INC_SYS
 
 set(SRC
 	intern/wm.c
-	intern/wm_playanim.c
 	intern/wm_cursors.c
 	intern/wm_dragdrop.c
 	intern/wm_draw.c
@@ -65,15 +67,31 @@ set(SRC
 	intern/wm_init_exit.c
 	intern/wm_jobs.c
 	intern/wm_keymap.c
+	intern/wm_menu_type.c
 	intern/wm_operator_props.c
+	intern/wm_operator_type.c
 	intern/wm_operators.c
-	intern/wm_subwindow.c
-	intern/wm_tooltip.c
-	intern/wm_window.c
+	intern/wm_panel_type.c
+	intern/wm_playanim.c
 	intern/wm_stereo.c
+	intern/wm_subwindow.c
+	intern/wm_toolsystem.c
+	intern/wm_tooltip.c
+	intern/wm_uilist_type.c
+	intern/wm_window.c
+	gizmo/intern/wm_gizmo.c
+	gizmo/intern/wm_gizmo_group.c
+	gizmo/intern/wm_gizmo_group_type.c
+	gizmo/intern/wm_gizmo_map.c
+	gizmo/intern/wm_gizmo_target_props.c
+	gizmo/intern/wm_gizmo_type.c
+	message_bus/intern/wm_message_bus.c
+	message_bus/intern/wm_message_bus_rna.c
+	message_bus/intern/wm_message_bus_static.c
 
 	WM_api.h
 	WM_keymap.h
+	WM_toolsystem.h
 	WM_types.h
 	wm.h
 	wm_cursors.h
@@ -81,12 +99,18 @@ set(SRC
 	wm_event_system.h
 	wm_event_types.h
 	wm_files.h
-	wm_subwindow.h
 	wm_window.h
+	gizmo/WM_gizmo_api.h
+	gizmo/WM_gizmo_types.h
+	gizmo/wm_gizmo_fn.h
+	gizmo/wm_gizmo_wmapi.h
+	gizmo/intern/wm_gizmo_intern.h
+	message_bus/intern/wm_message_bus_intern.h
+	message_bus/wm_message_bus.h
 )
 
 if(WITH_AUDASPACE)
-	add_definitions(${AUDASPACE_DEFINITIONS})
+	add_definitions(-DWITH_AUDASPACE)
 
 	list(APPEND INC_SYS
 		${AUDASPACE_C_INCLUDE_DIRS}
@@ -121,10 +145,6 @@ if(WITH_PYTHON)
 		../python
 	)
 	add_definitions(-DWITH_PYTHON)
-endif()
-
-if(WITH_GAMEENGINE)
-	add_definitions(-DWITH_GAMEENGINE)
 endif()
 
 if(WITH_BUILDINFO)

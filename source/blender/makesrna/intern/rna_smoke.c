@@ -54,21 +54,23 @@
 
 #include "BKE_colorband.h"
 #include "BKE_context.h"
-#include "BKE_depsgraph.h"
 #include "BKE_particle.h"
+
+#include "DEG_depsgraph.h"
+#include "DEG_depsgraph_build.h"
 
 #include "smoke_API.h"
 
 
 static void rna_Smoke_update(Main *UNUSED(bmain), Scene *UNUSED(scene), PointerRNA *ptr)
 {
-	DAG_id_tag_update(ptr->id.data, OB_RECALC_DATA);
+	DEG_id_tag_update(ptr->id.data, OB_RECALC_DATA);
 }
 
 static void rna_Smoke_dependency_update(Main *bmain, Scene *scene, PointerRNA *ptr)
 {
 	rna_Smoke_update(bmain, scene, ptr);
-	DAG_relations_tag_update(bmain);
+	DEG_relations_tag_update(bmain);
 }
 
 static void rna_Smoke_resetCache(Main *UNUSED(bmain), Scene *UNUSED(scene), PointerRNA *ptr)
@@ -76,7 +78,7 @@ static void rna_Smoke_resetCache(Main *UNUSED(bmain), Scene *UNUSED(scene), Poin
 	SmokeDomainSettings *settings = (SmokeDomainSettings *)ptr->data;
 	if (settings->smd && settings->smd->domain)
 		settings->point_cache[0]->flag |= PTCACHE_OUTDATED;
-	DAG_id_tag_update(ptr->id.data, OB_RECALC_DATA);
+	DEG_id_tag_update(ptr->id.data, OB_RECALC_DATA);
 }
 
 static void rna_Smoke_cachetype_set(struct PointerRNA *ptr, int value)
@@ -241,7 +243,7 @@ static void rna_SmokeModifier_density_grid_get(PointerRNA *ptr, float *values)
 	float *density;
 
 	BLI_rw_mutex_lock(sds->fluid_mutex, THREAD_LOCK_READ);
-	
+
 	if (sds->flags & MOD_SMOKE_HIGHRES && sds->wt)
 		density = smoke_turbulence_get_density(sds->wt);
 	else
@@ -324,12 +326,12 @@ static void rna_SmokeModifier_flame_grid_get(PointerRNA *ptr, float *values)
 	float *flame;
 
 	BLI_rw_mutex_lock(sds->fluid_mutex, THREAD_LOCK_READ);
-	
+
 	if (sds->flags & MOD_SMOKE_HIGHRES && sds->wt)
 		flame = smoke_turbulence_get_flame(sds->wt);
 	else
 		flame = smoke_get_flame(sds->fluid);
-	
+
 	if (flame)
 		memcpy(values, flame, size * sizeof(float));
 	else
@@ -429,7 +431,7 @@ static void rna_SmokeFlow_uvlayer_set(PointerRNA *ptr, const char *value)
 	rna_object_uvlayer_name_set(ptr, value, flow->uvlayer_name, sizeof(flow->uvlayer_name));
 }
 
-static void rna_Smoke_use_color_ramp_set(PointerRNA *ptr, int value)
+static void rna_Smoke_use_color_ramp_set(PointerRNA *ptr, bool value)
 {
 	SmokeDomainSettings *sds = (SmokeDomainSettings *)ptr->data;
 
@@ -606,23 +608,23 @@ static void rna_def_smoke_domain_settings(BlenderRNA *brna)
 
 	prop = RNA_def_property(srna, "collision_group", PROP_POINTER, PROP_NONE);
 	RNA_def_property_pointer_sdna(prop, NULL, "coll_group");
-	RNA_def_property_struct_type(prop, "Group");
+	RNA_def_property_struct_type(prop, "Collection");
 	RNA_def_property_flag(prop, PROP_EDITABLE);
-	RNA_def_property_ui_text(prop, "Collision Group", "Limit collisions to this group");
+	RNA_def_property_ui_text(prop, "Collision Collection", "Limit collisions to this collection");
 	RNA_def_property_update(prop, NC_OBJECT | ND_MODIFIER, "rna_Smoke_reset_dependency");
 
 	prop = RNA_def_property(srna, "fluid_group", PROP_POINTER, PROP_NONE);
 	RNA_def_property_pointer_sdna(prop, NULL, "fluid_group");
-	RNA_def_property_struct_type(prop, "Group");
+	RNA_def_property_struct_type(prop, "Collection");
 	RNA_def_property_flag(prop, PROP_EDITABLE);
-	RNA_def_property_ui_text(prop, "Fluid Group", "Limit fluid objects to this group");
+	RNA_def_property_ui_text(prop, "Fluid Collection", "Limit fluid objects to this collection");
 	RNA_def_property_update(prop, NC_OBJECT | ND_MODIFIER, "rna_Smoke_reset_dependency");
 
 	prop = RNA_def_property(srna, "effector_group", PROP_POINTER, PROP_NONE);
 	RNA_def_property_pointer_sdna(prop, NULL, "eff_group");
-	RNA_def_property_struct_type(prop, "Group");
+	RNA_def_property_struct_type(prop, "Collection");
 	RNA_def_property_flag(prop, PROP_EDITABLE);
-	RNA_def_property_ui_text(prop, "Effector Group", "Limit effectors to this group");
+	RNA_def_property_ui_text(prop, "Effector Collection", "Limit effectors to this collection");
 	RNA_def_property_update(prop, NC_OBJECT | ND_MODIFIER, "rna_Smoke_reset_dependency");
 
 	prop = RNA_def_property(srna, "strength", PROP_FLOAT, PROP_NONE);
@@ -1013,7 +1015,7 @@ static void rna_def_smoke_flow_settings(BlenderRNA *brna)
 	RNA_def_property_ui_range(prop, -10, 10, 1, 1);
 	RNA_def_property_ui_text(prop, "Temp. Diff.", "Temperature difference to ambient temperature");
 	RNA_def_property_update(prop, NC_OBJECT | ND_MODIFIER, "rna_Smoke_reset");
-	
+
 	prop = RNA_def_property(srna, "particle_system", PROP_POINTER, PROP_NONE);
 	RNA_def_property_pointer_sdna(prop, NULL, "psys");
 	RNA_def_property_struct_type(prop, "ParticleSystem");

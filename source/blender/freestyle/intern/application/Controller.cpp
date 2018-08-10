@@ -40,7 +40,7 @@ extern "C" {
 #include "../scene_graph/NodeDrawingStyle.h"
 #include "../scene_graph/NodeShape.h"
 #include "../scene_graph/NodeTransform.h"
-#include "../scene_graph/NodeSceneRenderLayer.h"
+#include "../scene_graph/NodeViewLayer.h"
 #include "../scene_graph/ScenePrettyPrinter.h"
 #include "../scene_graph/VertexRep.h"
 
@@ -232,9 +232,9 @@ bool Controller::hitViewMapCache()
 	return false;
 }
 
-int Controller::LoadMesh(Render *re, SceneRenderLayer *srl)
+int Controller::LoadMesh(Render *re, ViewLayer *view_layer)
 {
-	BlenderFileLoader loader(re, srl);
+	BlenderFileLoader loader(re, view_layer);
 
 	loader.setRenderMonitor(_pRenderMonitor);
 
@@ -301,7 +301,7 @@ int Controller::LoadMesh(Render *re, SceneRenderLayer *srl)
 		}
 		cam->setProjectionMatrix(proj);
 		_RootNode->AddChild(cam);
-		_RootNode->AddChild(new NodeSceneRenderLayer(*re->scene, *srl));
+		_RootNode->AddChild(new NodeViewLayer(*re->scene, *view_layer));
 
 		sceneHashFunc.reset();
 		//blenderScene->accept(sceneHashFunc);
@@ -471,11 +471,11 @@ void Controller::ComputeViewMap()
 
 	// retrieve the 3D viewpoint and transformations information
 	//----------------------------------------------------------
-	// Save the viewpoint context at the view level in order 
+	// Save the viewpoint context at the view level in order
 	// to be able to restore it later:
 
 	// Restore the context of view:
-	// we need to perform all these operations while the 
+	// we need to perform all these operations while the
 	// 3D context is on.
 	Vec3f vp(UNPACK3(g_freestyle.viewpoint));
 
@@ -928,7 +928,7 @@ Render *Controller::RenderStrokes(Render *re, bool render)
 
 void Controller::InsertStyleModule(unsigned index, const char *iFileName)
 {
-	if (!BLI_testextensie(iFileName, ".py")) {
+	if (!BLI_path_extension_check(iFileName, ".py")) {
 		cerr << "Error: Cannot load \"" << string(iFileName) << "\", unknown extension" << endl;
 		return;
 	}

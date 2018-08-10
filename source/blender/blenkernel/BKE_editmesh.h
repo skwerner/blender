@@ -40,6 +40,7 @@ struct Mesh;
 struct Scene;
 struct DerivedMesh;
 struct MeshStatVis;
+struct Depsgraph;
 
 /**
  * This structure is used for mesh edit-mode.
@@ -56,7 +57,7 @@ typedef struct BMEditMesh {
 	/*this is for undoing failed operations*/
 	struct BMEditMesh *emcopy;
 	int emcopyusers;
-	
+
 	/* we store tessellations as triplets of three loops,
 	 * which each define a triangle.*/
 	struct BMLoop *(*looptris)[3];
@@ -88,7 +89,6 @@ BMEditMesh *BKE_editmesh_copy(BMEditMesh *em);
 BMEditMesh *BKE_editmesh_from_object(struct Object *ob);
 void        BKE_editmesh_free_derivedmesh(BMEditMesh *em);
 void        BKE_editmesh_free(BMEditMesh *em);
-void        BKE_editmesh_update_linked_customdata(BMEditMesh *em);
 
 void        BKE_editmesh_color_free(BMEditMesh *em);
 void        BKE_editmesh_color_ensure(BMEditMesh *em, const char htype);
@@ -99,6 +99,7 @@ float     (*BKE_editmesh_vertexCos_get_orco(BMEditMesh *em, int *r_numVerts))[3]
 void        BKE_editmesh_statvis_calc(BMEditMesh *em, struct DerivedMesh *dm,
                                       const struct MeshStatVis *statvis);
 
-float (*BKE_editmesh_vertexCos_get(struct BMEditMesh *em, struct Scene *scene, int *r_numVerts))[3];
+float (*BKE_editmesh_vertexCos_get(
+           struct Depsgraph *depsgraph, struct BMEditMesh *em, struct Scene *scene, int *r_numVerts))[3];
 
 #endif /* __BKE_EDITMESH_H__ */

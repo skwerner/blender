@@ -4,7 +4,7 @@
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version. 
+ * of the License, or (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -40,7 +40,7 @@ extern "C" {
 #endif
 
 struct FreestyleLineStyle;
-struct Group;
+struct Collection;
 struct Text;
 
 /* FreestyleConfig::flags */
@@ -125,7 +125,7 @@ typedef struct FreestyleLineSet {
 	int qi_start, qi_end;
 	int edge_types, exclude_edge_types; /* feature edge types */
 	int pad2;
-	struct Group *group; /* group of target objects */
+	struct Collection *group; /* group of target objects */
 
 	struct FreestyleLineStyle *linestyle;
 } FreestyleLineSet;

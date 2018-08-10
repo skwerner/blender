@@ -29,9 +29,9 @@ class EditExternally(Operator):
     bl_label = "Image Edit Externally"
     bl_options = {'REGISTER'}
 
-    filepath = StringProperty(
-            subtype='FILE_PATH',
-            )
+    filepath: StringProperty(
+        subtype='FILE_PATH',
+    )
 
     @staticmethod
     def _editor_guess(context):

@@ -4,7 +4,7 @@
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version. 
+ * of the License, or (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -18,7 +18,7 @@
  * The Original Code is Copyright (C) 2008 Blender Foundation.
  * All rights reserved.
  *
- * 
+ *
  * Contributor(s): Blender Foundation
  *
  * ***** END GPL LICENSE BLOCK *****
@@ -28,7 +28,7 @@
  *  \ingroup collada
  */
 #ifdef WITH_COLLADA
-#include "DNA_scene_types.h"
+#include "DNA_space_types.h"
 
 #include "BLT_translation.h"
 
@@ -36,11 +36,12 @@
 #include "BLI_utildefines.h"
 
 #include "BKE_context.h"
-#include "BKE_depsgraph.h"
 #include "BKE_global.h"
 #include "BKE_main.h"
 #include "BKE_report.h"
 #include "BKE_object.h"
+
+#include "DEG_depsgraph.h"
 
 #include "ED_screen.h"
 #include "ED_object.h"
@@ -59,16 +60,19 @@
 #include "io_collada.h"
 
 static int wm_collada_export_invoke(bContext *C, wmOperator *op, const wmEvent *UNUSED(event))
-{	
+{
+	Main *bmain = CTX_data_main(C);
+
 	if (!RNA_struct_property_is_set(op->ptr, "filepath")) {
 		char filepath[FILE_MAX];
+		const char *blendfile_path = BKE_main_blendfile_path(bmain);
 
-		if (G.main->name[0] == 0)
+		if (blendfile_path[0] == '\0')
 			BLI_strncpy(filepath, "untitled", sizeof(filepath));
 		else
-			BLI_strncpy(filepath, G.main->name, sizeof(filepath));
+			BLI_strncpy(filepath, blendfile_path, sizeof(filepath));
 
-		BLI_replace_extension(filepath, sizeof(filepath), ".dae");
+		BLI_path_extension_replace(filepath, sizeof(filepath), ".dae");
 		RNA_string_set(op->ptr, "filepath", filepath);
 	}
 
@@ -93,7 +97,7 @@ static int wm_collada_export_exec(bContext *C, wmOperator *op)
 	int sample_animations;
 	int sampling_rate;
 
-	int export_texture_type;
+	int include_material_textures;
 	int use_texture_copies;
 	int active_uv_only;
 
@@ -115,7 +119,7 @@ static int wm_collada_export_exec(bContext *C, wmOperator *op)
 	}
 
 	RNA_string_get(op->ptr, "filepath", filepath);
-	BLI_ensure_extension(filepath, sizeof(filepath), ".dae");
+	BLI_path_extension_ensure(filepath, sizeof(filepath), ".dae");
 
 
 	/* Avoid File write exceptions in Collada */
@@ -149,7 +153,7 @@ static int wm_collada_export_exec(bContext *C, wmOperator *op)
 
 	deform_bones_only        = RNA_boolean_get(op->ptr, "deform_bones_only");
 
-	export_texture_type      = RNA_enum_get(op->ptr, "export_texture_type_selection");
+	include_material_textures = RNA_boolean_get(op->ptr, "include_material_textures");
 	use_texture_copies       = RNA_boolean_get(op->ptr, "use_texture_copies");
 	active_uv_only           = RNA_boolean_get(op->ptr, "active_uv_only");
 
@@ -163,11 +167,13 @@ static int wm_collada_export_exec(bContext *C, wmOperator *op)
 	limit_precision = RNA_boolean_get(op->ptr, "limit_precision");
 	keep_bind_info = RNA_boolean_get(op->ptr, "keep_bind_info");
 
-	/* get editmode results */
-	ED_object_editmode_load(CTX_data_edit_object(C));
+	Main *bmain = CTX_data_main(C);
 
-	EvaluationContext *eval_ctx = G.main->eval_ctx;
+	/* get editmode results */
+	ED_object_editmode_load(bmain, CTX_data_edit_object(C));
+
 	Scene *scene = CTX_data_scene(C);
+
 	ExportSettings export_settings;
 
 	export_settings.filepath = filepath;
@@ -183,7 +189,7 @@ static int wm_collada_export_exec(bContext *C, wmOperator *op)
 	export_settings.sampling_rate = sampling_rate;
 
 	export_settings.active_uv_only = active_uv_only != 0;
-	export_settings.export_texture_type = export_texture_type;
+	export_settings.include_material_textures = include_material_textures != 0;
 	export_settings.use_texture_copies = use_texture_copies != 0;
 
 	export_settings.triangulate = triangulate != 0;
@@ -199,10 +205,11 @@ static int wm_collada_export_exec(bContext *C, wmOperator *op)
 	if (export_settings.include_armatures) includeFilter |= OB_REL_MOD_ARMATURE;
 	if (export_settings.include_children) includeFilter |= OB_REL_CHILDREN_RECURSIVE;
 
-
-	export_count = collada_export(eval_ctx,
-		scene,
-		&export_settings
+	export_count = collada_export(
+	                   C,
+	                   CTX_data_depsgraph(C),
+	                   scene,
+	                   &export_settings
 	);
 
 	if (export_count == 0) {
@@ -273,7 +280,7 @@ static void uiCollada_exportSettings(uiLayout *layout, PointerRNA *imfptr)
 	uiItemR(row, imfptr, "active_uv_only", 0, NULL, ICON_NONE);
 
 	row = uiLayoutRow(box, false);
-	uiItemR(row, imfptr, "export_texture_type_selection", 0, "", ICON_NONE);
+	uiItemR(row, imfptr, "include_material_textures", 0, NULL, ICON_NONE);
 
 	row = uiLayoutRow(box, false);
 	uiItemR(row, imfptr, "use_texture_copies", 1, NULL, ICON_NONE);
@@ -330,8 +337,8 @@ static bool wm_collada_export_check(bContext *UNUSED(C), wmOperator *op)
 	char filepath[FILE_MAX];
 	RNA_string_get(op->ptr, "filepath", filepath);
 
-	if (!BLI_testextensie(filepath, ".dae")) {
-		BLI_ensure_extension(filepath, FILE_MAX, ".dae");
+	if (!BLI_path_extension_check(filepath, ".dae")) {
+		BLI_path_extension_ensure(filepath, FILE_MAX, ".dae");
 		RNA_string_set(op->ptr, "filepath", filepath);
 		return true;
 	}
@@ -350,15 +357,9 @@ void WM_OT_collada_export(wmOperatorType *ot)
 	};
 
 	static const EnumPropertyItem prop_bc_export_transformation_type[] = {
-		{ BC_TRANSFORMATION_TYPE_MATRIX, "matrix", 0, "Matrix", "Use <matrix> to specify transformations" },
-		{ BC_TRANSFORMATION_TYPE_TRANSROTLOC, "transrotloc", 0, "TransRotLoc", "Use <translate>, <rotate>, <scale> to specify transformations" },
-		{ 0, NULL, 0, NULL, NULL }
-	};
-
-	static const EnumPropertyItem prop_bc_export_texture_type[] = {
-		{ BC_TEXTURE_TYPE_MAT, "mat", 0, "Materials", "Export Materials" },
-		{ BC_TEXTURE_TYPE_UV, "uv", 0, "UV Textures", "Export UV Textures (Face textures) as materials" },
-		{ 0, NULL, 0, NULL, NULL }
+		{BC_TRANSFORMATION_TYPE_MATRIX, "matrix", 0, "Matrix", "Use <matrix> to specify transformations"},
+		{BC_TRANSFORMATION_TYPE_TRANSROTLOC, "transrotloc", 0, "TransRotLoc", "Use <translate>, <rotate>, <scale> to specify transformations"},
+		{0, NULL, 0, NULL, NULL}
 	};
 
 	ot->name = "Export COLLADA";
@@ -412,8 +413,12 @@ void WM_OT_collada_export(wmOperatorType *ot)
 	RNA_def_int(func, "sampling_rate", 1, 1, INT_MAX,
 		"Sampling Rate", "The distance between 2 keyframes. 1 means: Every frame is keyed", 1, INT_MAX);
 
+
 	RNA_def_boolean(func, "active_uv_only", 0, "Only Selected UV Map",
 	                "Export only the selected UV Map");
+
+	RNA_def_boolean(func, "include_material_textures", 0, "Include Material Textures",
+	                "Export textures assigned to the object Materials");
 
 	RNA_def_boolean(func, "use_texture_copies", 1, "Copy",
 	                "Copy textures to same folder where the .dae file is exported");
@@ -431,20 +436,11 @@ void WM_OT_collada_export(wmOperatorType *ot)
 	RNA_def_boolean(func, "sort_by_name", 0, "Sort by Object name",
 	                "Sort exported data by Object name");
 
-
 	RNA_def_int(func, "export_transformation_type", 0, INT_MIN, INT_MAX,
-		"Transform", "Transformation type for translation, scale and rotation", INT_MIN, INT_MAX);
+	            "Transform", "Transformation type for translation, scale and rotation", INT_MIN, INT_MAX);
 
 	RNA_def_enum(func, "export_transformation_type_selection", prop_bc_export_transformation_type, 0,
-		"Transform", "Transformation type for translation, scale and rotation");
-
-
-	RNA_def_int(func, "export_texture_type", 0, INT_MIN, INT_MAX,
-		"Texture Type", "Type for exported Textures (UV or MAT)", INT_MIN, INT_MAX);
-
-	RNA_def_enum(func, "export_texture_type_selection", prop_bc_export_texture_type, 0,
-		"Texture Type", "Type for exported Textures (UV or MAT)");
-
+	             "Transform", "Transformation type for translation, scale and rotation");
 
 	RNA_def_boolean(func, "open_sim", 0, "Export to SL/OpenSim",
 	                "Compatibility mode for SL, OpenSim and other compatible online worlds");
@@ -497,6 +493,7 @@ static int wm_collada_import_exec(bContext *C, wmOperator *op)
 	import_settings.keep_bind_info = keep_bind_info != 0;
 
 	if (collada_import(C, &import_settings)) {
+		DEG_id_tag_update(&CTX_data_scene(C)->id, DEG_TAG_BASE_FLAGS_UPDATE);
 		return OPERATOR_FINISHED;
 	}
 	else {
@@ -594,8 +591,8 @@ void WM_OT_collada_import(wmOperatorType *ot)
 		0,
 		INT_MAX);
 
-	RNA_def_boolean(ot->srna, 
-		"keep_bind_info", 0, "Keep Bind Info", 
+	RNA_def_boolean(ot->srna,
+		"keep_bind_info", 0, "Keep Bind Info",
 		"Store Bindpose information in custom bone properties for later use during Collada export");
 
 }

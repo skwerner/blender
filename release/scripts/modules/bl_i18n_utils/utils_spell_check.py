@@ -163,7 +163,7 @@ class SpellChecker:
         "rolloff",
         "runtime",
         "scanline",
-        "screencast", "screenshot", "screenshots",
+        "screenshot", "screenshots",
         "seekability",
         "selfcollision",
         "shadowbuffer", "shadowbuffers",
@@ -442,7 +442,6 @@ class SpellChecker:
         "fedge", "fedges",
         "filmic",
         "fluidsim",
-        "frameserver",
         "freestyle",
         "enum", "enums",
         "gpencil",
@@ -589,7 +588,6 @@ class SpellChecker:
         "yuv", "yuva",
 
         # Blender acronyms
-        "bge",
         "bli",
         "bpy",
         "bvh",

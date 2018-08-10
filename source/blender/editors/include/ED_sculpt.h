@@ -4,7 +4,7 @@
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version. 
+ * of the License, or (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -42,8 +42,7 @@ struct ListBase;
 
 /* sculpt.c */
 void ED_operatortypes_sculpt(void);
-void ED_sculpt_redraw_planes_get(float planes[4][4], struct ARegion *ar,
-                                 struct RegionView3D *rv3d, struct Object *ob);
+void ED_sculpt_redraw_planes_get(float planes[4][4], struct ARegion *ar, struct Object *ob);
 int  ED_sculpt_mask_box_select(struct bContext *C, struct ViewContext *vc, const struct rcti *rect, bool select, bool extend);
 
 /* sculpt_undo.c */

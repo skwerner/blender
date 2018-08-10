@@ -49,14 +49,20 @@
 #include "intern/nodes/deg_node_operation.h"
 
 struct Base;
+struct bArmature;
+struct bAction;
 struct bGPdata;
 struct CacheFile;
+struct Camera;
 struct ListBase;
 struct GHash;
 struct ID;
 struct FCurve;
-struct Group;
+struct Collection;
 struct Key;
+struct Lamp;
+struct LayerCollection;
+struct LightProbe;
 struct Main;
 struct Mask;
 struct Material;
@@ -68,7 +74,10 @@ struct Object;
 struct bPoseChannel;
 struct bConstraint;
 struct ParticleSystem;
+struct ParticleSettings;
 struct Scene;
+struct Speaker;
+struct ViewLayer;
 struct Tex;
 struct World;
 struct EffectorWeights;
@@ -191,10 +200,21 @@ struct DepsgraphRelationBuilder
 	                                       const char *description,
 	                                       bool check_unique = false);
 
-	void build_scene(Scene *scene);
-	void build_group(Object *object, Group *group);
-	void build_object(Object *object);
+	void build_id(ID *id);
+	void build_layer_collections(ListBase *lb);
+	void build_view_layer(Scene *scene, ViewLayer *view_layer);
+	void build_collection(eDepsNode_CollectionOwner owner_type,
+	                      Object *object,
+	                      Collection *collection);
+	void build_object(Base *base, Object *object);
+	void build_object_flags(Base *base, Object *object);
 	void build_object_data(Object *object);
+	void build_object_data_camera(Object *object);
+	void build_object_data_geometry(Object *object);
+	void build_object_data_geometry_datablock(ID *obdata);
+	void build_object_data_lamp(Object *object);
+	void build_object_data_lightprobe(Object *object);
+	void build_object_data_speaker(Object *object);
 	void build_object_parent(Object *object);
 	void build_constraints(ID *id,
 	                       eDepsNode_Type component_type,
@@ -212,12 +232,14 @@ struct DepsgraphRelationBuilder
 	                                     OperationDepsNode *operation_from,
 	                                     ListBase *strips);
 	void build_animdata_drivers(ID *id);
+	void build_action(bAction *action);
 	void build_driver(ID *id, FCurve *fcurve);
 	void build_driver_data(ID *id, FCurve *fcurve);
 	void build_driver_variables(ID *id, FCurve *fcurve);
 	void build_world(World *world);
 	void build_rigidbody(Scene *scene);
 	void build_particles(Object *object);
+	void build_particle_settings(ParticleSettings *part);
 	void build_particles_visualization_object(Object *object,
 	                                          ParticleSystem *psys,
 	                                          Object *draw_object);
@@ -232,34 +254,37 @@ struct DepsgraphRelationBuilder
 	                         RootPChanMap *root_map);
 	void build_rig(Object *object);
 	void build_proxy_rig(Object *object);
-	void build_shapekeys(ID *obdata, Key *key);
-	void build_obdata_geom(Object *object);
-	void build_camera(Object *object);
-	void build_lamp(Object *object);
+	void build_shapekeys(Key *key);
+	void build_armature(bArmature *armature);
+	void build_camera(Camera *camera);
+	void build_lamp(Lamp *lamp);
 	void build_nodetree(bNodeTree *ntree);
 	void build_material(Material *ma);
 	void build_texture(Tex *tex);
-	void build_texture_stack(MTex **texture_stack);
 	void build_compositor(Scene *scene);
 	void build_gpencil(bGPdata *gpd);
 	void build_cachefile(CacheFile *cache_file);
 	void build_mask(Mask *mask);
 	void build_movieclip(MovieClip *clip);
+	void build_lightprobe(LightProbe *probe);
+	void build_speaker(Speaker *speaker);
+
+	void build_nested_datablock(ID *owner, ID *id);
+	void build_nested_nodetree(ID *owner, bNodeTree *ntree);
+	void build_nested_shapekey(ID *owner, Key *key);
 
 	void add_collision_relations(const OperationKey &key,
-	                             Scene *scene,
 	                             Object *object,
-	                             Group *group,
-	                             int layer,
-	                             bool dupli,
+	                             Collection *collection,
 	                             const char *name);
 	void add_forcefield_relations(const OperationKey &key,
-	                              Scene *scene,
 	                              Object *object,
 	                              ParticleSystem *psys,
 	                              EffectorWeights *eff,
-	                              bool add_absorption,
-	                              const char *name);
+	                              bool add_absorption, const char *name);
+
+	void build_copy_on_write_relations();
+	void build_copy_on_write_relations(IDDepsNode *id_node);
 
 	template <typename KeyType>
 	OperationDepsNode *find_operation_node(const KeyType &key);

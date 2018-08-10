@@ -31,7 +31,8 @@ endif()
 
 if(CMAKE_C_COMPILER_ID MATCHES "Clang")
 	set(MSVC_CLANG On)
-	set(MSVC_REDIST_DIR $ENV{VCToolsRedistDir})
+	set(VC_TOOLS_DIR $ENV{VCToolsRedistDir} CACHE STRING "Location of the msvc redistributables")
+	set(MSVC_REDIST_DIR ${VC_TOOLS_DIR})
 	if (DEFINED MSVC_REDIST_DIR)
 		file(TO_CMAKE_PATH ${MSVC_REDIST_DIR} MSVC_REDIST_DIR)
 	else()
@@ -129,10 +130,7 @@ include(InstallRequiredSystemLibraries)
 
 remove_cc_flag("/MDd" "/MD")
 
-if(MSVC_CLANG) # Clangs version of cl doesn't support all flags 
-	if(NOT WITH_CXX11) # C++11 is on by default in clang-cl and can't be turned off, if c++11 is not enabled in blender repress some c++11 related warnings. 
-		set(CXX_WARN_FLAGS "-Wno-inconsistent-missing-override")
-	endif()
+if(MSVC_CLANG) # Clangs version of cl doesn't support all flags
 	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${CXX_WARN_FLAGS} /nologo /J /Gd /EHsc -Wno-unused-command-line-argument -Wno-microsoft-enum-forward-reference ")
 	set(CMAKE_C_FLAGS     "${CMAKE_C_FLAGS} /nologo /J /Gd -Wno-unused-command-line-argument -Wno-microsoft-enum-forward-reference")
 else()
@@ -149,7 +147,7 @@ set(CMAKE_C_FLAGS_MINSIZEREL "${CMAKE_C_FLAGS_MINSIZEREL} /MT")
 set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "${CMAKE_CXX_FLAGS_RELWITHDEBINFO} /MT")
 set(CMAKE_C_FLAGS_RELWITHDEBINFO "${CMAKE_C_FLAGS_RELWITHDEBINFO} /MT")
 
-set(PLATFORM_LINKFLAGS "/SUBSYSTEM:CONSOLE /STACK:2097152 /INCREMENTAL:NO ")
+set(PLATFORM_LINKFLAGS "${PLATFORM_LINKFLAGS} /SUBSYSTEM:CONSOLE /STACK:2097152 /INCREMENTAL:NO ")
 set(PLATFORM_LINKFLAGS "${PLATFORM_LINKFLAGS} /NODEFAULTLIB:msvcrt.lib /NODEFAULTLIB:msvcmrt.lib /NODEFAULTLIB:msvcurt.lib /NODEFAULTLIB:msvcrtd.lib ")
 
 # Ignore meaningless for us linker warnings.
@@ -162,7 +160,7 @@ else()
 	set(PLATFORM_LINKFLAGS "/MACHINE:IX86 /LARGEADDRESSAWARE ${PLATFORM_LINKFLAGS}")
 endif()
 
-set(PLATFORM_LINKFLAGS_DEBUG "/IGNORE:4099 /NODEFAULTLIB:libcmt.lib /NODEFAULTLIB:libc.lib")
+set(PLATFORM_LINKFLAGS_DEBUG "${PLATFORM_LINKFLAGS_DEBUG} /IGNORE:4099 /NODEFAULTLIB:libcmt.lib /NODEFAULTLIB:libc.lib")
 
 if(NOT DEFINED LIBDIR)
 
@@ -424,7 +422,7 @@ if(WITH_OPENIMAGEIO)
 	set(OIIO_OPTIMIZED optimized ${OPENIMAGEIO_LIBPATH}/OpenImageIO.lib optimized ${OPENIMAGEIO_LIBPATH}/OpenImageIO_Util.lib)
 	set(OIIO_DEBUG debug ${OPENIMAGEIO_LIBPATH}/OpenImageIO_d.lib debug ${OPENIMAGEIO_LIBPATH}/OpenImageIO_Util_d.lib)
 	set(OPENIMAGEIO_LIBRARIES ${OIIO_OPTIMIZED} ${OIIO_DEBUG})
-	
+
 	set(OPENIMAGEIO_DEFINITIONS "-DUSE_TBB=0")
 	set(OPENCOLORIO_DEFINITIONS "-DOCIO_STATIC_BUILD")
 	set(OPENIMAGEIO_IDIFF "${OPENIMAGEIO}/bin/idiff.exe")
@@ -473,7 +471,7 @@ if(WITH_OPENVDB)
 	set(OPENVDB_LIBPATH ${LIBDIR}/openvdb/lib)
 	set(OPENVDB_INCLUDE_DIRS ${OPENVDB}/include ${TBB_INCLUDE_DIR})
 	set(OPENVDB_LIBRARIES optimized ${OPENVDB_LIBPATH}/openvdb.lib debug ${OPENVDB_LIBPATH}/openvdb_d.lib ${TBB_LIBRARIES} ${BLOSC_LIBRARIES})
-	
+
 endif()
 
 if(WITH_ALEMBIC)
@@ -550,22 +548,21 @@ set(WINTAB_INC ${LIBDIR}/wintab/include)
 if(WITH_OPENAL)
 	set(OPENAL ${LIBDIR}/openal)
 	set(OPENALDIR ${LIBDIR}/openal)
-	set(OPENAL_INCLUDE_DIR ${OPENAL}/include)
+	set(OPENAL_INCLUDE_DIR ${OPENAL}/include/AL)
 	set(OPENAL_LIBPATH ${OPENAL}/lib)
 	if(MSVC)
 		set(OPENAL_LIBRARY ${OPENAL_LIBPATH}/openal32.lib)
 	else()
 		set(OPENAL_LIBRARY ${OPENAL_LIBPATH}/wrap_oal.lib)
 	endif()
-	
+
 endif()
 
 if(WITH_CODEC_SNDFILE)
-	set(SNDFILE ${LIBDIR}/sndfile)
-	set(SNDFILE_INCLUDE_DIRS ${SNDFILE}/include)
-	set(SNDFILE_LIBPATH ${SNDFILE}/lib) # TODO, deprecate
-	set(SNDFILE_LIBRARIES ${SNDFILE_LIBPATH}/libsndfile-1.lib)
-	
+	set(LIBSNDFILE ${LIBDIR}/sndfile)
+	set(LIBSNDFILE_INCLUDE_DIRS ${LIBSNDFILE}/include)
+	set(LIBSNDFILE_LIBPATH ${LIBSNDFILE}/lib) # TODO, deprecate
+	set(LIBSNDFILE_LIBRARIES ${LIBSNDFILE_LIBPATH}/libsndfile-1.lib)
 endif()
 
 if(WITH_RAYOPTIMIZATION AND SUPPORT_SSE_BUILD)

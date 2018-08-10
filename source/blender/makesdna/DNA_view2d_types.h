@@ -41,28 +41,32 @@ typedef struct View2D {
 	rctf tot, cur;					/* tot - area that data can be drawn in; cur - region of tot that is visible in viewport */
 	rcti vert, hor;					/* vert - vertical scrollbar region; hor - horizontal scrollbar region */
 	rcti mask;						/* mask - region (in screenspace) within which 'cur' can be viewed */
-	
+
 	float min[2], max[2];			/* min/max sizes of 'cur' rect (only when keepzoom not set) */
 	float minzoom, maxzoom;			/* allowable zoom factor range (only when (keepzoom & V2D_LIMITZOOM)) is set */
-	
+
 	short scroll;					/* scroll - scrollbars to display (bitflag) */
 	short scroll_ui;				/* scroll_ui - temp settings used for UI drawing of scrollers */
-	
+
 	short keeptot;					/* keeptot - 'cur' rect cannot move outside the 'tot' rect? */
 	short keepzoom;					/* keepzoom - axes that zooming cannot occur on, and also clamp within zoom-limits */
 	short keepofs;					/* keepofs - axes that translation is not allowed to occur on */
-	
+
 	short flag;						/* settings */
 	short align;					/* alignment of content in totrect */
-	
+
 	short winx, winy;				/* storage of current winx/winy values, set in UI_view2d_size_update */
 	short oldwinx, oldwiny;			/* storage of previous winx/winy values encountered by UI_view2d_curRect_validate(), for keepaspect */
-	
+
 	short around;					/* pivot point for transforms (rotate and scale) */
 
 	float *tab_offset;				/* different offset per tab, for buttons */
 	int tab_num;					/* number of tabs stored */
 	int tab_cur;					/* current tab */
+
+	/* Usually set externally (as in, not in view2d files). */
+	char alpha_vert, alpha_hor;		/* alpha of vertical and horizontal scrollbars (range is [0, 255]) */
+	short pad[3];
 
 	/* animated smooth view */
 	struct SmoothView2DStore *sms;
@@ -164,4 +168,3 @@ enum {
 };
 
 #endif
-

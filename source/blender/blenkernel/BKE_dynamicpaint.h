@@ -27,8 +27,12 @@
  *  \ingroup bke
  */
 
-struct EvaluationContext;
+struct Depsgraph;
+struct DynamicPaintCanvasSettings;
+struct DynamicPaintModifierData;
+struct Main;
 struct Scene;
+struct ViewLayer;
 
 /* Actual surface point	*/
 typedef struct PaintSurfaceData {
@@ -53,7 +57,7 @@ typedef struct PaintPoint {
 } PaintPoint;
 
 /* heigh field waves	*/
-typedef struct PaintWavePoint {		
+typedef struct PaintWavePoint {
 
 	float height;
 	float velocity;
@@ -61,9 +65,8 @@ typedef struct PaintWavePoint {
 	short state;
 } PaintWavePoint;
 
-struct DerivedMesh *dynamicPaint_Modifier_do(
-        struct EvaluationContext *eval_ctx, struct DynamicPaintModifierData *pmd, struct Scene *scene,
-        struct Object *ob, struct DerivedMesh *dm);
+struct DerivedMesh *dynamicPaint_Modifier_do(struct DynamicPaintModifierData *pmd, struct Depsgraph *depsgraph, struct Scene *scene,
+                                             struct Object *ob, struct DerivedMesh *dm);
 void dynamicPaint_Modifier_free(struct DynamicPaintModifierData *pmd);
 void dynamicPaint_Modifier_copy(const struct DynamicPaintModifierData *pmd, struct DynamicPaintModifierData *tsmd);
 
@@ -87,8 +90,8 @@ struct DynamicPaintSurface *get_activeSurface(struct DynamicPaintCanvasSettings 
 /* image sequence baking */
 int dynamicPaint_createUVSurface(struct Scene *scene, struct DynamicPaintSurface *surface, float *progress, short *do_update);
 int dynamicPaint_calculateFrame(
-        struct EvaluationContext *eval_ctx, struct DynamicPaintSurface *surface, struct Scene *scene,
-        struct Object *cObject, int frame);
+        struct DynamicPaintSurface *surface, struct Depsgraph *depsgraph,
+        struct Scene *scene, struct Object *cObject, int frame);
 void dynamicPaint_outputSurfaceImage(struct DynamicPaintSurface *surface, char *filename, short output_layer);
 
 /* PaintPoint state */

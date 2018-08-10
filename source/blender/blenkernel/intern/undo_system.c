@@ -39,6 +39,7 @@
 
 #include "BKE_context.h"
 #include "BKE_global.h"
+#include "BKE_library_override.h"
 #include "BKE_main.h"
 #include "BKE_undo_system.h"
 
@@ -234,6 +235,23 @@ void BKE_undosys_stack_clear(UndoStack *ustack)
 	ustack->step_active = NULL;
 }
 
+void BKE_undosys_stack_clear_active(UndoStack *ustack)
+{
+	/* Remove active and all following undos. */
+	UndoStep *us = ustack->step_active;
+
+	if (us) {
+		ustack->step_active = us->prev;
+		bool is_not_empty = ustack->step_active != NULL;
+
+		while (ustack->steps.last != ustack->step_active) {
+			UndoStep *us_iter = ustack->steps.last;
+			undosys_step_free_and_unlink(ustack, us_iter);
+			undosys_stack_validate(ustack, is_not_empty);
+		}
+	}
+}
+
 static bool undosys_stack_push_main(UndoStack *ustack, const char *name, struct Main *bmain)
 {
 	UNDO_NESTED_ASSERT(false);
@@ -375,7 +393,7 @@ UndoStep *BKE_undosys_step_push_init_with_type(UndoStack *ustack, bContext *C, c
 		us->type = ut;
 		ustack->step_init = us;
 		ut->step_encode_init(C, us);
-		undosys_stack_validate(ustack, true);
+		undosys_stack_validate(ustack, false);
 		return us;
 	}
 	else {
@@ -395,11 +413,18 @@ UndoStep *BKE_undosys_step_push_init(UndoStack *ustack, bContext *C, const char 
 	return BKE_undosys_step_push_init_with_type(ustack, C, name, ut);
 }
 
+/**
+ * \param C: Can be NULL from some callers if their encoding function doesn't need it
+ */
 bool BKE_undosys_step_push_with_type(UndoStack *ustack, bContext *C, const char *name, const UndoType *ut)
 {
 	UNDO_NESTED_ASSERT(false);
 	undosys_stack_validate(ustack, false);
 	bool is_not_empty = ustack->step_active != NULL;
+
+	/* Might not be final place for this to be called - probably only want to call it from some
+	 * undo handlers, not all of them? */
+	BKE_main_override_static_operations_create(G.main, false);
 
 	/* Remove all undos after (also when 'ustack->step_active == NULL'). */
 	while (ustack->steps.last != ustack->step_active) {

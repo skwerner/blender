@@ -31,10 +31,12 @@
 #include <stdlib.h>
 #include <float.h>
 
+#include "GPU_immediate.h"
+#include "GPU_draw.h"
 #include "GPU_select.h"
 #include "GPU_extensions.h"
 #include "GPU_glew.h"
- 
+
 #include "MEM_guardedalloc.h"
 
 #include "BLI_rect.h"
@@ -316,8 +318,8 @@ void gpu_select_pick_begin(
 
 	/* Restrict OpenGL operations for when we don't have cache */
 	if (ps->is_cached == false) {
+		gpuPushAttrib(GPU_DEPTH_BUFFER_BIT | GPU_VIEWPORT_BIT);
 
-		glPushAttrib(GL_DEPTH_BUFFER_BIT | GL_VIEWPORT_BIT);
 		/* disable writing to the framebuffer */
 		glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
 
@@ -334,12 +336,8 @@ void gpu_select_pick_begin(
 			glDepthFunc(GL_LEQUAL);
 		}
 
-		/* set just in case */
-		glPixelTransferf(GL_DEPTH_BIAS, 0.0);
-		glPixelTransferf(GL_DEPTH_SCALE, 1.0);
-
 		float viewport[4];
-		glGetFloatv(GL_SCISSOR_BOX, viewport);
+		glGetFloatv(GL_VIEWPORT, viewport);
 
 		ps->src.clip_rect = *input;
 		ps->src.rect_len = rect_len;
@@ -542,7 +540,7 @@ uint gpu_select_pick_end(void)
 			/* force finishing last pass */
 			gpu_select_pick_load_id(ps->gl.prev_id);
 		}
-		glPopAttrib();
+		gpuPopAttrib();
 		glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
 	}
 

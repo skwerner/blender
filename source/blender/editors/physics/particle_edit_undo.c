@@ -44,11 +44,12 @@
 #include "BLI_string.h"
 #include "BLI_utildefines.h"
 
-#include "BKE_depsgraph.h"
+#include "BKE_context.h"
 #include "BKE_particle.h"
 #include "BKE_pointcache.h"
-#include "BKE_context.h"
 #include "BKE_undo_system.h"
+
+#include "DEG_depsgraph.h"
 
 #include "ED_object.h"
 #include "ED_particle.h"
@@ -229,16 +230,19 @@ typedef struct ParticleUndoStep {
 static bool particle_undosys_poll(struct bContext *C)
 {
 	Scene *scene = CTX_data_scene(C);
-	Object *ob = OBACT;
+	ViewLayer *view_layer = CTX_data_view_layer(C);
+	Object *ob = OBACT(view_layer);
 	PTCacheEdit *edit = PE_get_current(scene, ob);
+
 	return (edit != NULL);
 }
 
 static bool particle_undosys_step_encode(struct bContext *C, UndoStep *us_p)
 {
 	ParticleUndoStep *us = (ParticleUndoStep *)us_p;
+	ViewLayer *view_layer = CTX_data_view_layer(C);
 	us->scene_ref.ptr = CTX_data_scene(C);
-	us->object_ref.ptr = us->scene_ref.ptr->basact->object;
+	us->object_ref.ptr = OBACT(view_layer);
 	PTCacheEdit *edit = PE_get_current(us->scene_ref.ptr, us->object_ref.ptr);
 	undoptcache_from_editcache(&us->data, edit);
 	return true;
@@ -256,7 +260,7 @@ static void particle_undosys_step_decode(struct bContext *C, UndoStep *us_p, int
 	PTCacheEdit *edit = PE_get_current(scene, ob);
 	if (edit) {
 		undoptcache_to_editcache(&us->data, edit);
-		DAG_id_tag_update(&ob->id, OB_RECALC_DATA);
+		DEG_id_tag_update(&ob->id, OB_RECALC_DATA);
 	}
 	else {
 		BLI_assert(0);

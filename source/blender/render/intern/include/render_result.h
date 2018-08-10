@@ -4,7 +4,7 @@
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version. 
+ * of the License, or (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -55,8 +55,6 @@ struct ColorManagedViewSettings;
 
 struct RenderResult *render_result_new(struct Render *re,
 	struct rcti *partrct, int crop, int savebuffers, const char *layername, const char *viewname);
-struct RenderResult *render_result_new_full_sample(struct Render *re,
-	struct ListBase *lb, struct rcti *partrct, int crop, int savebuffers, const char *viewname);
 
 struct RenderResult *render_result_new_from_exr(void *exrhandle, const char *colorspace, bool predivide, int rectx, int recty);
 
@@ -117,5 +115,27 @@ void render_result_views_shallowcopy(struct RenderResult *dst, struct RenderResu
 void render_result_views_shallowdelete(struct RenderResult *rr);
 bool render_result_has_views(struct RenderResult *rr);
 
-#endif /* __RENDER_RESULT_H__ */
+#define FOREACH_VIEW_LAYER_TO_RENDER_BEGIN(re_, iter_)    \
+{                                                         \
+	int nr_;                                              \
+	ViewLayer *iter_;                                     \
+	for (nr_ = 0, iter_ = (re_)->view_layers.first;       \
+	     iter_ != NULL;                                   \
+	    iter_ = iter_->next, nr_++)                       \
+	{                                                     \
+		if (!G.background &&  (re_)->r.scemode & R_SINGLE_LAYER) {  \
+			if (nr_ != re->active_view_layer) {           \
+				continue;                                 \
+			}                                             \
+		}                                                 \
+		else {                                            \
+			if ((iter_->flag & VIEW_LAYER_RENDER) == 0) { \
+				continue;                                 \
+			}                                             \
+		}
 
+#define FOREACH_VIEW_LAYER_TO_RENDER_END                  \
+	}                                                     \
+} ((void)0)
+
+#endif /* __RENDER_RESULT_H__ */

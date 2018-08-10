@@ -34,7 +34,7 @@ extern "C" {
 #include "DNA_image_types.h"
 #include "DNA_meshdata_types.h"
 
-#include "BKE_customdata.h" 
+#include "BKE_customdata.h"
 #include "BKE_global.h"
 #include "BKE_image.h"
 #include "BKE_main.h"
@@ -53,11 +53,11 @@ ImagesExporter::ImagesExporter(COLLADASW::StreamWriter *sw, const ExportSettings
 {
 }
 
-void ImagesExporter::export_UV_Image(Image *image, bool use_copies) 
+void ImagesExporter::export_UV_Image(Image *image, bool use_copies)
 {
-	std::string id(id_name(image));
-	std::string translated_id(translate_id(id));
-	bool not_yet_exported = find(mImages.begin(), mImages.end(), translated_id) == mImages.end();
+	std::string name(id_name(image));
+	std::string translated_name(translate_id(name));
+	bool not_yet_exported = find(mImages.begin(), mImages.end(), translated_name) == mImages.end();
 
 	if (not_yet_exported) {
 
@@ -88,7 +88,7 @@ void ImagesExporter::export_UV_Image(Image *image, bool use_copies)
 
 			// make absolute destination path
 
-			BLI_strncpy(export_file, id.c_str(), sizeof(export_file));
+			BLI_strncpy(export_file, name.c_str(), sizeof(export_file));
 			BKE_image_path_ensure_ext_from_imformat(export_file, &imageFormat);
 
 			BLI_join_dirfile(export_path, sizeof(export_path), export_dir, export_file);
@@ -113,11 +113,11 @@ void ImagesExporter::export_UV_Image(Image *image, bool use_copies)
 
 			// make absolute source path
 			BLI_strncpy(source_path, image->name, sizeof(source_path));
-			BLI_path_abs(source_path, G.main->name);
+			BLI_path_abs(source_path, BKE_main_blendfile_path_from_global());
 			BLI_cleanup_path(NULL, source_path);
 
 			if (use_copies) {
-			
+
 				// This image is already located on the file system.
 				// But we want to create copies here.
 				// To move images into the same export directory.
@@ -143,64 +143,19 @@ void ImagesExporter::export_UV_Image(Image *image, bool use_copies)
 			}
 		}
 
-		/* set name also to mNameNC. This helps other viewers import files exported from Blender better */
-		COLLADASW::Image img(COLLADABU::URI(COLLADABU::URI::nativePathToUri(export_path)), translated_id, translated_id); 
+		COLLADASW::Image img(COLLADABU::URI(COLLADABU::URI::nativePathToUri(export_path)), translated_name, translated_name); /* set name also to mNameNC. This helps other viewers import files exported from Blender better */
 		img.add(mSW);
 		fprintf(stdout, "Collada export: Added image: %s\n", export_file);
-		mImages.push_back(translated_id);
+		mImages.push_back(translated_name);
 
 		BKE_image_release_ibuf(image, imbuf, NULL);
 	}
 }
 
-void ImagesExporter::export_UV_Images()
-{
-	std::set<Image *> uv_textures;
-	LinkNode *node;
-	bool use_texture_copies = this->export_settings->use_texture_copies;
-	bool active_uv_only     = this->export_settings->active_uv_only;
-
-	for (node = this->export_settings->export_set; node; node = node->next) {
-		Object *ob = (Object *)node->link;
-		if (ob->type == OB_MESH) {
-			Mesh *me     = (Mesh *) ob->data;
-			BKE_mesh_tessface_ensure(me);
-			int active_uv_layer = CustomData_get_active_layer_index(&me->pdata, CD_MTEXPOLY);
-			for (int i = 0; i < me->pdata.totlayer; i++) {
-				if (me->pdata.layers[i].type == CD_MTEXPOLY) {
-					if (!active_uv_only || active_uv_layer == i)
-					{
-						MTexPoly *txface = (MTexPoly *)me->pdata.layers[i].data;
-						for (int j = 0; j < me->totpoly; j++, txface++) {
-
-							Image *ima = txface->tpage;
-							if (ima == NULL)
-								continue;
-
-							bool not_in_list = uv_textures.find(ima) == uv_textures.end();
-							if (not_in_list) {
-									uv_textures.insert(ima);
-									export_UV_Image(ima, use_texture_copies);
-							}
-						}
-					}
-				}
-			}
-		}
-	}
-}
-
-/* ============================================================
- * Check if there are any images to be exported
- * Returns true as soon as an object is detected that
- * either has an UV Texture assigned, or has a material
- * assigned that uses an Image Texture.
- * ============================================================
- */
 bool ImagesExporter::hasImages(Scene *sce)
 {
 	LinkNode *node;
-	
+
 	for (node = this->export_settings->export_set; node; node = node->next) {
 		Object *ob = (Object *)node->link;
 
@@ -209,27 +164,8 @@ bool ImagesExporter::hasImages(Scene *sce)
 
 			// no material, but check all of the slots
 			if (!ma) continue;
-			int b;
-			for (b = 0; b < MAX_MTEX; b++) {
-				MTex *mtex = ma->mtex[b];
-				if (mtex && mtex->tex && mtex->tex->ima) return true;
-			}
-
+			// TODO: find image textures in shader nodes
 		}
-		if (ob->type == OB_MESH) {
-			Mesh *me     = (Mesh *) ob->data;
-			BKE_mesh_tessface_ensure(me);
-			bool has_uvs = (bool)CustomData_has_layer(&me->fdata, CD_MTFACE);
-			if (has_uvs) {
-				int num_layers = CustomData_number_of_layers(&me->fdata, CD_MTFACE);
-				for (int a = 0; a < num_layers; a++) {
-					MTFace *tface = (MTFace *)CustomData_get_layer_n(&me->fdata, CD_MTFACE, a);
-					Image *img = tface->tpage;
-					if (img) return true;
-				}
-			}
-		}
-
 	}
 	return false;
 }
@@ -239,11 +175,8 @@ void ImagesExporter::exportImages(Scene *sce)
 	openLibrary();
 
 	MaterialFunctor mf;
-	if (this->export_settings->export_texture_type == BC_TEXTURE_TYPE_MAT) {
+	if (this->export_settings->include_material_textures) {
 		mf.forEachMaterialInExportSet<ImagesExporter>(sce, *this, this->export_settings->export_set);
-	}
-	else {
-		export_UV_Images();
 	}
 
 	closeLibrary();
@@ -253,13 +186,6 @@ void ImagesExporter::exportImages(Scene *sce)
 
 void ImagesExporter::operator()(Material *ma, Object *ob)
 {
-	int a;
-	bool use_texture_copies = this->export_settings->use_texture_copies;
-	for (a = 0; a < MAX_MTEX; a++) {
-		MTex *mtex = ma->mtex[a];
-		if (mtex && mtex->tex && mtex->tex->ima) {
-			Image *image = mtex->tex->ima;
-			export_UV_Image(image, use_texture_copies);
-		}
-	}
+	// bool use_texture_copies = this->export_settings->use_texture_copies;
+	// TODO call export_UV_Image for every image in shader nodes
 }

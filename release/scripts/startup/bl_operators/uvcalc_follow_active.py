@@ -18,7 +18,7 @@
 
 # <pep8 compliant>
 
-#for full docs see...
+# for full docs see...
 # http://mediawiki.blender.org/index.php/Scripts/Manual/UV_Calculate/Follow_active_quads
 
 import bpy
@@ -30,8 +30,8 @@ def extend(obj, operator, EXTEND_MODE):
     import bmesh
     me = obj.data
     # script will fail without UVs
-    if not me.uv_textures:
-        me.uv_textures.new()
+    if not me.uv_layers:
+        me.uv_layers.new()
 
     bm = bmesh.from_edit_mesh(me)
 
@@ -226,15 +226,15 @@ class FollowActiveQuads(Operator):
     bl_label = "Follow Active Quads"
     bl_options = {'REGISTER', 'UNDO'}
 
-    mode = bpy.props.EnumProperty(
-            name="Edge Length Mode",
-            description="Method to space UV edge loops",
-            items=(('EVEN', "Even", "Space all UVs evenly"),
-                   ('LENGTH', "Length", "Average space UVs edge length of each loop"),
-                   ('LENGTH_AVERAGE', "Length Average", "Average space UVs edge length of each loop"),
-                   ),
-            default='LENGTH_AVERAGE',
-            )
+    mode: bpy.props.EnumProperty(
+        name="Edge Length Mode",
+        description="Method to space UV edge loops",
+        items=(('EVEN', "Even", "Space all UVs evenly"),
+               ('LENGTH', "Length", "Average space UVs edge length of each loop"),
+               ('LENGTH_AVERAGE', "Length Average", "Average space UVs edge length of each loop"),
+               ),
+        default='LENGTH_AVERAGE',
+    )
 
     @classmethod
     def poll(cls, context):

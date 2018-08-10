@@ -4,7 +4,7 @@
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version. 
+ * of the License, or (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -18,7 +18,7 @@
  * The Original Code is Copyright (C) 2008 Blender Foundation.
  * All rights reserved.
  *
- * 
+ *
  * Contributor(s): Blender Foundation
  *
  * ***** END GPL LICENSE BLOCK *****
@@ -113,6 +113,17 @@ void ED_file_change_dir(struct bContext *C);
 
 /* File menu stuff */
 
+/* FSMenuEntry's without paths indicate separators */
+typedef struct FSMenuEntry {
+	struct FSMenuEntry *next;
+
+	char *path;
+	char name[256];  /* FILE_MAXFILE */
+	short save;
+	short valid;
+	short pad[2];
+} FSMenuEntry;
+
 typedef enum FSMenuCategory {
 	FS_CATEGORY_SYSTEM,
 	FS_CATEGORY_SYSTEM_BOOKMARKS,
@@ -145,4 +156,3 @@ char *ED_fsmenu_entry_get_name(struct FSMenuEntry *fsentry);
 void ED_fsmenu_entry_set_name(struct FSMenuEntry *fsentry, const char *name);
 
 #endif /* __ED_FILESELECT_H__ */
-

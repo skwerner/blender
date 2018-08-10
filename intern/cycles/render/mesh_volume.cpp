@@ -15,7 +15,6 @@
  */
 
 #include "render/mesh.h"
-#include "render/mesh_volume.h"
 #include "render/attribute.h"
 #include "render/scene.h"
 
@@ -25,6 +24,12 @@
 #include "util/util_sparse_grid.h"
 
 CCL_NAMESPACE_BEGIN
+
+struct QuadData {
+	int v0, v1, v2, v3;
+
+	float3 normal;
+};
 
 enum {
 	QUAD_X_MIN = 0,
@@ -65,26 +70,93 @@ const float3 quads_normals[6] = {
 	make_float3(0.0f, 0.0f, 1.0f),
 };
 
-static void create_quad(int3 corners[8], vector<int3> &vertices, vector<QuadData> &quads, int face_index)
+static int add_vertex(int3 v, vector<int3> &vertices, int3 res, unordered_map<size_t, int> &used_verts)
 {
-	size_t vertex_offset = vertices.size();
+	size_t vert_key = v.x + v.y * (res.x+1) + v.z * (res.x+1)*(res.y+1);
+	unordered_map<size_t, int>::iterator it = used_verts.find(vert_key);
 
+	if(it != used_verts.end()) {
+		return it->second;
+	}
+
+	int vertex_offset = vertices.size();
+	used_verts[vert_key] = vertex_offset;
+	vertices.push_back(v);
+	return vertex_offset;
+}
+
+static void create_quad(int3 corners[8], vector<int3> &vertices, vector<QuadData> &quads, int3 res, unordered_map<size_t, int> &used_verts, int face_index)
+{
 	QuadData quad;
-	quad.v0 = vertex_offset + 0;
-	quad.v1 = vertex_offset + 1;
-	quad.v2 = vertex_offset + 2;
-	quad.v3 = vertex_offset + 3;
+	quad.v0 = add_vertex(corners[quads_indices[face_index][0]], vertices, res, used_verts);
+	quad.v1 = add_vertex(corners[quads_indices[face_index][1]], vertices, res, used_verts);
+	quad.v2 = add_vertex(corners[quads_indices[face_index][2]], vertices, res, used_verts);
+	quad.v3 = add_vertex(corners[quads_indices[face_index][3]], vertices, res, used_verts);
 	quad.normal = quads_normals[face_index];
 
 	quads.push_back(quad);
-
-	vertices.push_back(corners[quads_indices[face_index][0]]);
-	vertices.push_back(corners[quads_indices[face_index][1]]);
-	vertices.push_back(corners[quads_indices[face_index][2]]);
-	vertices.push_back(corners[quads_indices[face_index][3]]);
 }
 
+struct VolumeParams {
+	int3 resolution;
+	float3 cell_size;
+	float3 start_point;
+	int pad_size;
+};
+
 static const int CUBE_SIZE = 8;
+
+/* Create a mesh from a volume.
+ *
+ * The way the algorithm works is as follows:
+ *
+ * - the coordinates of active voxels from a dense volume (or 3d image) are
+ * gathered inside an auxialliary volume.
+ * - each set of coordinates of an CUBE_SIZE cube are mapped to the same
+ * coordinate of the auxilliary volume.
+ * - quads are created between active and non-active voxels in the auxialliary
+ * volume to generate a tight mesh around the volume.
+ */
+class VolumeMeshBuilder {
+	/* Auxilliary volume that is used to check if a node already added. */
+	vector<char> grid;
+
+	/* The resolution of the auxilliary volume, set to be equal to 1/CUBE_SIZE
+	 * of the original volume on each axis. */
+	int3 res;
+
+	size_t number_of_nodes;
+
+	/* Offset due to padding in the original grid. Padding will transform the
+	 * coordinates of the original grid from 0...res to -padding...res+padding,
+	 * so some coordinates are negative, and we need to properly account for
+	 * them. */
+	int3 pad_offset;
+
+	VolumeParams *params;
+
+public:
+	VolumeMeshBuilder(VolumeParams *volume_params);
+
+	void add_node(int x, int y, int z);
+
+	void add_node_with_padding(int x, int y, int z);
+
+	void create_mesh(vector<float3> &vertices,
+	                 vector<int> &indices,
+	                 vector<float3> &face_normals);
+
+private:
+	void generate_vertices_and_quads(vector<int3> &vertices_is,
+	                                 vector<QuadData> &quads);
+
+	void convert_object_space(const vector<int3> &vertices,
+	                          vector<float3> &out_vertices);
+
+	void convert_quads_to_tris(const vector<QuadData> &quads,
+	                           vector<int> &tris,
+	                           vector<float3> &face_normals);
+};
 
 VolumeMeshBuilder::VolumeMeshBuilder(VolumeParams *volume_params)
 {
@@ -150,8 +222,6 @@ void VolumeMeshBuilder::create_mesh(vector<float3> &vertices,
 
 	generate_vertices_and_quads(vertices_is, quads);
 
-	deduplicate_vertices(vertices_is, quads);
-
 	convert_object_space(vertices_is, vertices);
 
 	convert_quads_to_tris(quads, indices, face_normals);
@@ -161,10 +231,7 @@ void VolumeMeshBuilder::generate_vertices_and_quads(
 		vector<ccl::int3> &vertices_is,
 		vector<QuadData> &quads)
 {
-	/* Overallocation, we could count the number of quads and vertices to create
-	 * in a pre-pass if memory becomes an issue. */
-	vertices_is.reserve(number_of_nodes*8);
-	quads.reserve(number_of_nodes*6);
+	unordered_map<size_t, int> used_verts;
 
 	for(int z = 0; z < res.z; ++z) {
 		for(int y = 0; y < res.y; ++y) {
@@ -199,75 +266,36 @@ void VolumeMeshBuilder::generate_vertices_and_quads(
 
 				voxel_index = compute_index(x - 1, y, z, res);
 				if(voxel_index == -1 || grid[voxel_index] == 0) {
-					create_quad(corners, vertices_is, quads, QUAD_X_MIN);
+					create_quad(corners, vertices_is, quads, res, used_verts, QUAD_X_MIN);
 				}
 
 				voxel_index = compute_index(x + 1, y, z, res);
 				if(voxel_index == -1 || grid[voxel_index] == 0) {
-					create_quad(corners, vertices_is, quads, QUAD_X_MAX);
+					create_quad(corners, vertices_is, quads, res, used_verts, QUAD_X_MAX);
 				}
 
 				voxel_index = compute_index(x, y - 1, z, res);
 				if(voxel_index == -1 || grid[voxel_index] == 0) {
-					create_quad(corners, vertices_is, quads, QUAD_Y_MIN);
+					create_quad(corners, vertices_is, quads, res, used_verts, QUAD_Y_MIN);
 				}
 
 				voxel_index = compute_index(x, y + 1, z, res);
 				if(voxel_index == -1 || grid[voxel_index] == 0) {
-					create_quad(corners, vertices_is, quads, QUAD_Y_MAX);
+					create_quad(corners, vertices_is, quads, res, used_verts, QUAD_Y_MAX);
 				}
 
 				voxel_index = compute_index(x, y, z - 1, res);
 				if(voxel_index == -1 || grid[voxel_index] == 0) {
-					create_quad(corners, vertices_is, quads, QUAD_Z_MIN);
+					create_quad(corners, vertices_is, quads, res, used_verts, QUAD_Z_MIN);
 				}
 
 				voxel_index = compute_index(x, y, z + 1, res);
 				if(voxel_index == -1 || grid[voxel_index] == 0) {
-					create_quad(corners, vertices_is, quads, QUAD_Z_MAX);
+					create_quad(corners, vertices_is, quads, res, used_verts, QUAD_Z_MAX);
 				}
 			}
 		}
 	}
-}
-
-void VolumeMeshBuilder::deduplicate_vertices(vector<int3> &vertices,
-                                             vector<QuadData> &quads)
-{
-	vector<int3> sorted_vertices = vertices;
-	std::sort(sorted_vertices.begin(), sorted_vertices.end());
-	vector<int3>::iterator it = std::unique(sorted_vertices.begin(), sorted_vertices.end());
-	sorted_vertices.resize(std::distance(sorted_vertices.begin(), it));
-
-	vector<QuadData> new_quads = quads;
-
-	for(size_t i = 0; i < vertices.size(); ++i) {
-		for(size_t j = 0; j < sorted_vertices.size(); ++j) {
-			if(vertices[i] != sorted_vertices[j]) {
-				continue;
-			}
-
-			for(int k = 0; k < quads.size(); ++k) {
-				if(quads[k].v0 == i) {
-					new_quads[k].v0 = j;
-				}
-				else if(quads[k].v1 == i) {
-					new_quads[k].v1 = j;
-				}
-				else if(quads[k].v2 == i) {
-					new_quads[k].v2 = j;
-				}
-				else if(quads[k].v3 == i) {
-					new_quads[k].v3 = j;
-				}
-			}
-
-			break;
-		}
-	}
-
-	vertices = sorted_vertices;
-	quads = new_quads;
 }
 
 void VolumeMeshBuilder::convert_object_space(const vector<int3> &vertices,
@@ -310,7 +338,7 @@ void VolumeMeshBuilder::convert_quads_to_tris(const vector<QuadData> &quads,
 /* ************************************************************************** */
 
 struct VoxelAttributeGrid {
-	void *data;
+	float *data;
 	int *offsets;
 	int channels;
 	int data_width;
@@ -354,7 +382,7 @@ void MeshManager::create_volume_mesh(Scene *scene,
 
 		VoxelAttributeGrid voxel_grid;
 
-		voxel_grid.data = image_memory->host_pointer;
+		voxel_grid.data = static_cast<float*>(image_memory->host_pointer);
 		voxel_grid.channels = image_memory->data_elements;
 		voxel_grid.data_width = image_memory->data_width;
 		voxel_grid.grid_type = image_memory->grid_type;
@@ -426,8 +454,6 @@ void MeshManager::create_volume_mesh(Scene *scene,
 
 	for(size_t i = 0; i < voxel_grids.size(); ++i) {
 		const VoxelAttributeGrid &voxel_grid = voxel_grids[i];
-		const int channels = voxel_grid.channels;
-		const float *data = static_cast<float*>(voxel_grid.data);
 
 		for(int z = 0; z < resolution.z; ++z) {
 			for(int y = 0; y < resolution.y; ++y) {
@@ -450,11 +476,11 @@ void MeshManager::create_volume_mesh(Scene *scene,
 						default:
 							voxel_index = compute_index(x, y, z, resolution);
 					}
-					voxel_index *= channels;
+					voxel_index *= voxel_grid.channels;
 
 					if(voxel_index >= 0) {
-						for(int c = 0; c < channels; c++) {
-							if(data[voxel_index + c] >= isovalue) {
+						for(int c = 0; c < voxel_grid.channels; c++) {
+							if(voxel_grid.data[voxel_index + c] >= isovalue) {
 								builder.add_node_with_padding(x, y, z);
 								break;
 							}

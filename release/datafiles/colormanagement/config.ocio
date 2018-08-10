@@ -40,6 +40,9 @@ roles:
   # Non-color data
   data: Non-Color
 
+  # CIE XYZ color space
+  XYZ: XYZ
+
 displays:
   sRGB:
     - !<View> {name: Default, colorspace: sRGB}
@@ -67,7 +70,7 @@ displays:
     - !<View> {name: Default, colorspace: Raw}
 
 active_displays: [sRGB, DCIP3, Rec709, XYZ, None]
-active_views: [Default, RRT, Raw, Log]
+active_views: [Filmic, Default, RRT, Raw, Log]
 
 colorspaces:
   - !<ColorSpace>
@@ -188,8 +191,7 @@ colorspaces:
     allocationvars: [-8.5, 5]
     from_reference: !<GroupTransform>
       children:
-        - !<FileTransform> {src: rec709_to_aces.spimtx, interpolation: linear}
-        - !<FileTransform> {src: aces_to_xyz.spimtx, interpolation: linear}
+        - !<FileTransform> {src: srgb_to_xyz.spimtx, interpolation: linear}
 
   - !<ColorSpace>
     name: rrt_xyz

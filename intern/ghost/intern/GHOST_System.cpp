@@ -113,7 +113,7 @@ GHOST_TSuccess GHOST_System::disposeWindow(GHOST_IWindow *window)
 
 	/*
 	 * Remove all pending events for the window.
-	 */ 
+	 */
 	if (m_windowManager->getWindowFound(window)) {
 		m_eventManager->removeWindowEvents(window);
 	}
@@ -219,10 +219,12 @@ bool GHOST_System::getFullScreen(void)
 void GHOST_System::dispatchEvents()
 {
 #ifdef WITH_INPUT_NDOF
+  #ifndef WIN32
 	// NDOF Motion event is sent only once per dispatch, so do it now:
 	if (m_ndofManager) {
 		m_ndofManager->sendMotionEvent();
 	}
+  #endif
 #endif
 
 	if (m_eventManager) {
@@ -272,7 +274,7 @@ GHOST_TSuccess GHOST_System::pushEvent(GHOST_IEvent *event)
 GHOST_TSuccess GHOST_System::getModifierKeyState(GHOST_TModifierKeyMask mask, bool& isDown) const
 {
 	GHOST_ModifierKeys keys;
-	// Get the state of all modifier keys 
+	// Get the state of all modifier keys
 	GHOST_TSuccess success = getModifierKeys(keys);
 	if (success) {
 		// Isolate the state of the key requested
@@ -297,7 +299,9 @@ GHOST_TSuccess GHOST_System::getButtonState(GHOST_TButtonMask mask, bool& isDown
 #ifdef WITH_INPUT_NDOF
 void GHOST_System::setNDOFDeadZone(float deadzone)
 {
-	this->m_ndofManager->setDeadZone(deadzone);
+	if (this->m_ndofManager) {
+		this->m_ndofManager->setDeadZone(deadzone);
+	}
 }
 #endif
 
@@ -306,7 +310,7 @@ GHOST_TSuccess GHOST_System::init()
 	m_timerManager = new GHOST_TimerManager();
 	m_windowManager = new GHOST_WindowManager();
 	m_eventManager = new GHOST_EventManager();
-	
+
 #ifdef GHOST_DEBUG
 	if (m_eventManager) {
 		m_eventPrinter = new GHOST_EventPrinter();
@@ -390,4 +394,3 @@ bool GHOST_System::useNativePixel(void)
 	m_nativePixel = true;
 	return 1;
 }
-

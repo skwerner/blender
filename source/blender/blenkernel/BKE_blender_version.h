@@ -27,11 +27,11 @@
 /* these lines are grep'd, watch out for our not-so-awesome regex
  * and keep comment above the defines.
  * Use STRINGIFY() rather than defining with quotes */
-#define BLENDER_VERSION         279
-#define BLENDER_SUBVERSION      4
-/* Several breakages with 270, e.g. constraint deg vs rad */
-#define BLENDER_MINVERSION      270
-#define BLENDER_MINSUBVERSION   6
+#define BLENDER_VERSION         280
+#define BLENDER_SUBVERSION      21
+/* Several breakages with 280, e.g. collections vs layers */
+#define BLENDER_MINVERSION      280
+#define BLENDER_MINSUBVERSION   0
 
 /* used by packaging tools */
 /* can be left blank, otherwise a,b,c... etc with no quotes */

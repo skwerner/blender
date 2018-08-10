@@ -93,7 +93,7 @@ PyObject *pyrna_callback_add(BPy_StructRNA *self, PyObject *args)
 
 	if (!PyArg_ParseTuple(args, "OO!|s:bpy_struct.callback_add", &cb_func, &PyTuple_Type, &cb_args, &cb_event_str))
 		return NULL;
-	
+
 	if (!PyCallable_Check(cb_func)) {
 		PyErr_SetString(PyExc_TypeError, "callback_add(): first argument isn't callable");
 		return NULL;
@@ -101,7 +101,10 @@ PyObject *pyrna_callback_add(BPy_StructRNA *self, PyObject *args)
 
 	if (RNA_struct_is_a(self->ptr.type, &RNA_Region)) {
 		if (cb_event_str) {
-			if (pyrna_enum_value_from_id(region_draw_mode_items, cb_event_str, &cb_event, "bpy_struct.callback_add()") == -1) {
+			if (pyrna_enum_value_from_id(
+			            region_draw_mode_items, cb_event_str,
+			            &cb_event, "bpy_struct.callback_add()") == -1)
+			{
 				return NULL;
 			}
 		}
@@ -168,9 +171,7 @@ static eSpace_Type rna_Space_refine_reverse(StructRNA *srna)
 	if (srna == &RNA_SpaceTextEditor)       return SPACE_TEXT;
 	if (srna == &RNA_SpaceDopeSheetEditor)  return SPACE_ACTION;
 	if (srna == &RNA_SpaceNLA)              return SPACE_NLA;
-	if (srna == &RNA_SpaceTimeline)         return SPACE_TIME;
 	if (srna == &RNA_SpaceNodeEditor)       return SPACE_NODE;
-	if (srna == &RNA_SpaceLogicEditor)      return SPACE_LOGIC;
 	if (srna == &RNA_SpaceConsole)          return SPACE_CONSOLE;
 	if (srna == &RNA_SpaceUserPreferences)  return SPACE_USERPREF;
 	if (srna == &RNA_SpaceClipEditor)       return SPACE_CLIP;
@@ -212,10 +213,16 @@ PyObject *pyrna_callback_classmethod_add(PyObject *UNUSED(self), PyObject *args)
 			return NULL;
 		}
 
-		if (pyrna_enum_value_from_id(region_draw_mode_items, cb_event_str, &cb_event, "bpy_struct.callback_add()") == -1) {
+		if (pyrna_enum_value_from_id(
+		            region_draw_mode_items, cb_event_str,
+		            &cb_event, "bpy_struct.callback_add()") == -1)
+		{
 			return NULL;
 		}
-		else if (pyrna_enum_value_from_id(rna_enum_region_type_items, cb_regiontype_str, &cb_regiontype, "bpy_struct.callback_add()") == -1) {
+		else if (pyrna_enum_value_from_id(
+		                 rna_enum_region_type_items, cb_regiontype_str,
+		                 &cb_regiontype, "bpy_struct.callback_add()") == -1)
+		{
 			return NULL;
 		}
 		else {
@@ -227,7 +234,10 @@ PyObject *pyrna_callback_classmethod_add(PyObject *UNUSED(self), PyObject *args)
 			else {
 				SpaceType *st = BKE_spacetype_from_id(spaceid);
 				ARegionType *art = BKE_regiontype_from_id(st, cb_regiontype);
-
+				if (art == NULL) {
+					PyErr_Format(PyExc_TypeError, "region type '%.200s' not in space", cb_regiontype_str);
+					return NULL;
+				}
 				handle = ED_region_draw_cb_activate(art, cb_region_draw, (void *)args, cb_event);
 				Py_INCREF(args);
 			}
@@ -278,7 +288,10 @@ PyObject *pyrna_callback_classmethod_remove(PyObject *UNUSED(self), PyObject *ar
 		customdata = ED_region_draw_cb_customdata(handle);
 		Py_DECREF((PyObject *)customdata);
 
-		if (pyrna_enum_value_from_id(rna_enum_region_type_items, cb_regiontype_str, &cb_regiontype, "bpy_struct.callback_remove()") == -1) {
+		if (pyrna_enum_value_from_id(
+		            rna_enum_region_type_items, cb_regiontype_str,
+		            &cb_regiontype, "bpy_struct.callback_remove()") == -1)
+		{
 			return NULL;
 		}
 		else {
@@ -290,7 +303,10 @@ PyObject *pyrna_callback_classmethod_remove(PyObject *UNUSED(self), PyObject *ar
 			else {
 				SpaceType *st = BKE_spacetype_from_id(spaceid);
 				ARegionType *art = BKE_regiontype_from_id(st, cb_regiontype);
-
+				if (art == NULL) {
+					PyErr_Format(PyExc_TypeError, "region type '%.200s' not in space", cb_regiontype_str);
+					return NULL;
+				}
 				ED_region_draw_cb_exit(art, handle);
 			}
 		}

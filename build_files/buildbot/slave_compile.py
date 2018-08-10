@@ -60,7 +60,6 @@ if 'cmake' in builder:
 
     # Config file to be used (relative to blender's sources root)
     cmake_config_file = "build_files/cmake/config/blender_full.cmake"
-    cmake_player_config_file = None
     cmake_cuda_config_file = None
 
     # Set build options.
@@ -78,7 +77,13 @@ if 'cmake' in builder:
         # cmake_extra_options.append('-DCUDA_NVCC_EXECUTABLE=/usr/local/cuda-hack/nvcc')
 
     elif builder.startswith('win'):
-        if builder.endswith('_vc2015'):
+        if builder.endswith('_vs2017'):
+            if builder.startswith('win64'):
+                cmake_options.extend(['-G', 'Visual Studio 15 2017 Win64'])
+            elif builder.startswith('win32'):
+                bits = 32
+                cmake_options.extend(['-G', 'Visual Studio 15 2017'])
+        elif builder.endswith('_vc2015'):
             if builder.startswith('win64'):
                 cmake_options.extend(['-G', 'Visual Studio 14 2015 Win64'])
             elif builder.startswith('win32'):
@@ -101,14 +106,13 @@ if 'cmake' in builder:
         elif glibc == 'glibc211':
             deb_name = "squeeze"
         cmake_config_file = "build_files/buildbot/config/blender_linux.cmake"
-        cmake_player_config_file = "build_files/buildbot/config/blender_linux_player.cmake"
         if builder.endswith('x86_64_cmake'):
             chroot_name = 'buildbot_' + deb_name + '_x86_64'
-            targets = ['player', 'blender']
+            targets = ['blender']
         elif builder.endswith('i686_cmake'):
             bits = 32
             chroot_name = 'buildbot_' + deb_name + '_i686'
-            targets = ['player', 'blender']
+            targets = ['blender']
         cmake_extra_options.extend(["-DCMAKE_C_COMPILER=/usr/bin/gcc-7",
                                     "-DCMAKE_CXX_COMPILER=/usr/bin/g++-7"])
 
@@ -159,9 +163,7 @@ if 'cmake' in builder:
         os.chdir(target_build_dir)
         # Tweaking CMake options to respect the target
         target_cmake_options = cmake_options[:]
-        if target == 'player':
-            target_cmake_options.append("-C" + os.path.join(blender_dir, cmake_player_config_file))
-        elif target == 'cuda':
+        if target == 'cuda':
             target_cmake_options += cuda_cmake_options
             target_chroot_prefix = cuda_chroot_prefix[:]
             target_name = 'cycles_kernel_cuda'

@@ -39,11 +39,13 @@
 struct AnimData;
 struct Ipo;
 struct Key;
+struct LinkNode;
 struct MCol;
 struct MEdge;
 struct MFace;
 struct MLoop;
 struct MLoopCol;
+struct MLoopTri;
 struct MLoopUV;
 struct MPoly;
 struct MTexPoly;
@@ -52,12 +54,56 @@ struct Material;
 struct Mesh;
 struct Multires;
 
+#
+#
+typedef struct EditMeshData {
+	/** when set, \a vertexNos, polyNos are lazy initialized */
+	const float (*vertexCos)[3];
+
+	/** lazy initialize (when \a vertexCos is set) */
+	float const (*vertexNos)[3];
+	float const (*polyNos)[3];
+	/** also lazy init but dont depend on \a vertexCos */
+	const float (*polyCos)[3];
+} EditMeshData;
+
+
+/**
+ * \warning Typical access is done via #BKE_mesh_runtime_looptri_ensure, #BKE_mesh_runtime_looptri_len.
+ */
+struct MLoopTri_Store {
+	/* WARNING! swapping between array (ready-to-be-used data) and array_wip (where data is actually computed)
+	 *          shall always be protected by same lock as one used for looptris computing. */
+	struct MLoopTri *array, *array_wip;
+	int len;
+	int len_alloc;
+};
+
+/* not saved in file! */
+typedef struct Mesh_Runtime {
+	struct EditMeshData *edit_data;
+	void *batch_cache;
+
+	int64_t cd_dirty_vert;
+	int64_t cd_dirty_edge;
+	int64_t cd_dirty_loop;
+	int64_t cd_dirty_poly;
+
+	struct MLoopTri_Store looptris;
+
+	/** 'BVHCache', for 'BKE_bvhutil.c' */
+	struct LinkNode *bvh_cache;
+
+	int deformed_only; /* set by modifier stack if only deformed from original */
+	char padding[4];
+} Mesh_Runtime;
+
 typedef struct Mesh {
 	ID id;
 	struct AnimData *adt;		/* animation data (must be immediately after id for utilities to use it) */
 
 	struct BoundBox *bb;
-	
+
 	struct Ipo *ipo  DNA_DEPRECATED;  /* old animation system, deprecated for 2.5 */
 	struct Key *key;
 	struct Material **mat;
@@ -66,7 +112,6 @@ typedef struct Mesh {
 /* BMESH ONLY */
 	/*new face structures*/
 	struct MPoly *mpoly;
-	struct MTexPoly *mtpoly;
 	struct MLoop *mloop;
 	struct MLoopUV *mloopuv;
 	struct MLoopCol *mloopcol;
@@ -105,7 +150,7 @@ typedef struct Mesh {
 	 * this means the active face must always be selected, this is to keep track
 	 * of the last selected face and is similar to the old active face flag where
 	 * the face does not need to be selected, -1 is inactive */
-	int act_face; 
+	int act_face;
 
 	/* texture space, copied as one block in editobject.c */
 	float loc[3];
@@ -127,6 +172,8 @@ typedef struct Mesh {
 	short totcol;
 
 	struct Multires *mr DNA_DEPRECATED; /* deprecated multiresolution modeling data, only keep for loading old files */
+
+	Mesh_Runtime runtime;
 } Mesh;
 
 /* deprecated by MTFace, only here for file reading */
@@ -231,9 +278,6 @@ enum {
 
 /* this is so we can save bmesh files that load in trunk, ignoring NGons
  * will eventually be removed */
-
-#define USE_BMESH_SAVE_AS_COMPAT
-#define USE_BMESH_SAVE_WITHOUT_MFACE
 
 /* enable this so meshes get tessfaces calculated by default */
 /* #define USE_TESSFACE_DEFAULT */

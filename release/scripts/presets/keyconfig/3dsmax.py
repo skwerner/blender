@@ -7,7 +7,7 @@ kc = wm.keyconfigs.new('3dsmax')
 # Map Window
 km = kc.keymaps.new('Window', space_type='EMPTY', region_type='WINDOW', modal=False)
 
-kmi = km.keymap_items.new('wm.window_duplicate', 'W', 'PRESS', ctrl=True, alt=True)
+kmi = km.keymap_items.new('wm.window_new', 'W', 'PRESS', ctrl=True, alt=True)
 kmi = km.keymap_items.new('wm.read_homefile', 'N', 'PRESS', ctrl=True)
 kmi = km.keymap_items.new('wm.save_homefile', 'U', 'PRESS', ctrl=True)
 kmi = km.keymap_items.new('wm.call_menu', 'O', 'PRESS', shift=True, ctrl=True)
@@ -32,9 +32,6 @@ kmi = km.keymap_items.new('wm.search_menu', 'SPACE', 'PRESS')
 kmi = km.keymap_items.new('wm.call_menu', 'NDOF_BUTTON_MENU', 'PRESS')
 kmi.properties.name = 'USERPREF_MT_ndof_settings'
 kmi = km.keymap_items.new('wm.context_set_enum', 'F2', 'PRESS', shift=True)
-kmi.properties.data_path = 'area.type'
-kmi.properties.value = 'LOGIC_EDITOR'
-kmi = km.keymap_items.new('wm.context_set_enum', 'F3', 'PRESS', shift=True, ctrl=True)
 kmi.properties.data_path = 'area.type'
 kmi.properties.value = 'NODE_EDITOR'
 kmi = km.keymap_items.new('wm.context_set_enum', 'F4', 'PRESS', shift=True)
@@ -91,7 +88,6 @@ kmi = km.keymap_items.new('screen.screen_full_area', 'UP_ARROW', 'PRESS', ctrl=T
 kmi = km.keymap_items.new('screen.screen_full_area', 'DOWN_ARROW', 'PRESS', ctrl=True)
 kmi = km.keymap_items.new('screen.screen_full_area', 'SPACE', 'PRESS', shift=True)
 kmi = km.keymap_items.new('screen.screenshot', 'F3', 'PRESS', ctrl=True)
-kmi = km.keymap_items.new('screen.screencast', 'F3', 'PRESS', alt=True)
 kmi = km.keymap_items.new('screen.region_quadview', 'W', 'PRESS', alt=True)
 kmi = km.keymap_items.new('screen.repeat_history', 'F3', 'PRESS', shift=True)
 kmi = km.keymap_items.new('screen.repeat_last', 'R', 'PRESS', shift=True)
@@ -294,7 +290,6 @@ kmi = km.keymap_items.new('wm.context_cycle_enum', 'O', 'PRESS', shift=True)
 kmi.properties.data_path = 'tool_settings.proportional_edit_falloff'
 kmi = km.keymap_items.new('wm.context_toggle', 'O', 'PRESS')
 kmi.properties.data_path = 'tool_settings.use_proportional_edit_objects'
-kmi = km.keymap_items.new('view3d.game_start', 'P', 'PRESS', shift=True, ctrl=True, alt=True)
 kmi = km.keymap_items.new('object.select_all', 'A', 'PRESS', ctrl=True)
 kmi.properties.action = 'INVERT'
 kmi = km.keymap_items.new('object.select_linked', 'L', 'PRESS', shift=True)
@@ -330,7 +325,6 @@ kmi = km.keymap_items.new('object.hide_view_set', 'H', 'PRESS', shift=True)
 kmi.properties.unselected = True
 kmi = km.keymap_items.new('object.hide_render_clear', 'H', 'PRESS', ctrl=True, alt=True)
 kmi = km.keymap_items.new('object.hide_render_set', 'H', 'PRESS', ctrl=True)
-kmi = km.keymap_items.new('object.move_to_layer', 'M', 'PRESS')
 kmi = km.keymap_items.new('object.delete', 'X', 'PRESS')
 kmi.properties.use_global = False
 kmi = km.keymap_items.new('object.delete', 'X', 'PRESS', shift=True)
@@ -591,11 +585,11 @@ kmi.properties.nr = 9
 kmi = km.keymap_items.new('view3d.layers', 'ZERO', 'PRESS', any=True)
 kmi.properties.nr = 10
 kmi = km.keymap_items.new('wm.context_toggle_enum', 'F3', 'PRESS')
-kmi.properties.data_path = 'space_data.viewport_shade'
+kmi.properties.data_path = 'space_data.shading.type'
 kmi.properties.value_1 = 'SOLID'
 kmi.properties.value_2 = 'WIREFRAME'
 kmi = km.keymap_items.new('wm.context_toggle_enum', 'Z', 'PRESS', alt=True)
-kmi.properties.data_path = 'space_data.viewport_shade'
+kmi.properties.data_path = 'space_data.shading.type'
 kmi.properties.value_1 = 'SOLID'
 kmi.properties.value_2 = 'TEXTURED'
 kmi = km.keymap_items.new('view3d.select_or_deselect_all', 'SELECTMOUSE', 'CLICK')
@@ -727,7 +721,7 @@ kmi.properties.value_1 = 'VERTEX'
 kmi.properties.value_2 = 'INCREMENT'
 kmi = km.keymap_items.new('view3d.select_border', 'EVT_TWEAK_L', 'ANY', ctrl=True)
 kmi = km.keymap_items.new('wm.context_toggle', 'G', 'PRESS')
-kmi.properties.data_path = 'space_data.show_floor'
+kmi.properties.data_path = 'space_data.overlay.show_floor'
 
 # Map Animation Channels
 km = kc.keymaps.new('Animation Channels', space_type='EMPTY', region_type='WINDOW', modal=False)
@@ -1110,7 +1104,7 @@ kmi = km.keymap_items.new('node.group_edit', 'TAB', 'PRESS')
 kmi.properties.exit = False
 kmi = km.keymap_items.new('node.group_edit', 'TAB', 'PRESS', shift=True)
 kmi.properties.exit = True
-kmi = km.keymap_items.new('node.read_renderlayers', 'R', 'PRESS', ctrl=True)
+kmi = km.keymap_items.new('node.read_viewlayers', 'R', 'PRESS', ctrl=True)
 kmi = km.keymap_items.new('node.read_fullsamplelayers', 'R', 'PRESS', shift=True)
 kmi = km.keymap_items.new('node.render_changed', 'Z', 'PRESS')
 kmi = km.keymap_items.new('node.clipboard_copy', 'C', 'PRESS', ctrl=True)
@@ -2283,17 +2277,6 @@ kmi.properties.value_2 = 'CONNECTED'
 # Map Armature
 km = kc.keymaps.new('Armature', space_type='EMPTY', region_type='WINDOW', modal=False)
 
-kmi = km.keymap_items.new('sketch.delete', 'X', 'PRESS')
-kmi = km.keymap_items.new('sketch.delete', 'DEL', 'PRESS')
-kmi = km.keymap_items.new('sketch.finish_stroke', 'RIGHTMOUSE', 'PRESS')
-kmi = km.keymap_items.new('sketch.cancel_stroke', 'ESC', 'PRESS')
-kmi = km.keymap_items.new('sketch.gesture', 'LEFTMOUSE', 'PRESS', shift=True)
-kmi = km.keymap_items.new('sketch.draw_stroke', 'LEFTMOUSE', 'PRESS')
-kmi = km.keymap_items.new('sketch.draw_stroke', 'LEFTMOUSE', 'PRESS', ctrl=True)
-kmi.properties.snap = True
-kmi = km.keymap_items.new('sketch.draw_preview', 'MOUSEMOVE', 'ANY')
-kmi = km.keymap_items.new('sketch.draw_preview', 'MOUSEMOVE', 'ANY', ctrl=True)
-kmi.properties.snap = True
 kmi = km.keymap_items.new('armature.hide', 'H', 'PRESS')
 kmi.properties.unselected = False
 kmi = km.keymap_items.new('armature.hide', 'H', 'PRESS', shift=True)
@@ -2449,4 +2432,3 @@ kmi = km.keymap_items.new_modal('SELECT', 'LEFTMOUSE', 'RELEASE', any=True)
 kmi = km.keymap_items.new_modal('SELECT', 'RIGHTMOUSE', 'RELEASE', any=True)
 kmi = km.keymap_items.new_modal('BEGIN', 'MIDDLEMOUSE', 'PRESS')
 kmi = km.keymap_items.new_modal('DESELECT', 'MIDDLEMOUSE', 'RELEASE')
-

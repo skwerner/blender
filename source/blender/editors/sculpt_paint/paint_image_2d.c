@@ -46,11 +46,12 @@
 
 #include "BKE_colorband.h"
 #include "BKE_context.h"
-#include "BKE_depsgraph.h"
 #include "BKE_brush.h"
 #include "BKE_image.h"
 #include "BKE_paint.h"
 #include "BKE_report.h"
+
+#include "DEG_depsgraph.h"
 
 #include "ED_paint.h"
 #include "ED_screen.h"
@@ -441,8 +442,9 @@ static ImBuf *brush_painter_imbuf_new(BrushPainter *painter, int size, float pre
 }
 
 /* update rectangular section of the brush image */
-static void brush_painter_imbuf_update(BrushPainter *painter, ImBuf *oldtexibuf,
-                                       int origx, int origy, int w, int h, int xt, int yt)
+static void brush_painter_imbuf_update(
+        BrushPainter *painter, ImBuf *oldtexibuf,
+        int origx, int origy, int w, int h, int xt, int yt)
 {
 	Scene *scene = painter->scene;
 	Brush *brush = painter->brush;
@@ -581,7 +583,7 @@ static void brush_painter_imbuf_partial_update(BrushPainter *painter, const floa
 		destx = desty = 0;
 		w = h = 0;
 	}
-	
+
 	x1 = min_ii(destx, ibuf->x);
 	y1 = min_ii(desty, ibuf->y);
 	x2 = min_ii(destx + w, ibuf->x);
@@ -659,11 +661,12 @@ static void brush_painter_2d_refresh_cache(ImagePaintState *s, BrushPainter *pai
 
 	bool do_random = false;
 	bool do_partial_update = false;
-	bool update_color = (brush->flag & BRUSH_USE_GRADIENT) &&
-	                    ((ELEM(brush->gradient_stroke_mode,
-	                           BRUSH_GRADIENT_SPACING_REPEAT,
-	                           BRUSH_GRADIENT_SPACING_CLAMP)) ||
-	                     (cache->last_pressure != pressure));
+	bool update_color = (
+	        (brush->flag & BRUSH_USE_GRADIENT) &&
+	        ((ELEM(brush->gradient_stroke_mode,
+	               BRUSH_GRADIENT_SPACING_REPEAT,
+	               BRUSH_GRADIENT_SPACING_CLAMP)) ||
+	         (cache->last_pressure != pressure)));
 	float tex_rotation = -brush->mtex.rot;
 	float mask_rotation = -brush->mask_mtex.rot;
 
@@ -679,8 +682,9 @@ static void brush_painter_2d_refresh_cache(ImagePaintState *s, BrushPainter *pai
 		else if (!((brush->flag & BRUSH_ANCHORED) || update_color))
 			do_partial_update = true;
 
-		brush_painter_2d_tex_mapping(s, diameter, painter->startpaintpos, pos, mouse,
-		                             brush->mtex.brush_map_mode, &painter->tex_mapping);
+		brush_painter_2d_tex_mapping(
+		        s, diameter, painter->startpaintpos, pos, mouse,
+		        brush->mtex.brush_map_mode, &painter->tex_mapping);
 	}
 
 	if (painter->cache.is_maskbrush) {
@@ -712,8 +716,9 @@ static void brush_painter_2d_refresh_cache(ImagePaintState *s, BrushPainter *pai
 				cache->tex_mask = NULL;
 			}
 
-			brush_painter_2d_tex_mapping(s, diameter, painter->startpaintpos, pos, mouse,
-			                             brush->mask_mtex.brush_map_mode, &painter->mask_mapping);
+			brush_painter_2d_tex_mapping(
+			        s, diameter, painter->startpaintpos, pos, mouse,
+			        brush->mask_mtex.brush_map_mode, &painter->mask_mapping);
 
 			if (do_partial_update_mask)
 				brush_painter_mask_imbuf_partial_update(painter, pos, diameter);
@@ -861,8 +866,9 @@ static void paint_2d_lift_soften(ImagePaintState *s, ImBuf *ibuf, ImBuf *ibufb, 
 	out_off[0] = out_off[1] = 0;
 
 	if (!tile) {
-		IMB_rectclip(ibuf, ibufb, &in_off[0], &in_off[1], &out_off[0],
-		             &out_off[1], &dim[0], &dim[1]);
+		IMB_rectclip(
+		        ibuf, ibufb, &in_off[0], &in_off[1], &out_off[0],
+		        &out_off[1], &dim[0], &dim[1]);
 
 		if ((dim[0] == 0) || (dim[1] == 0))
 			return;
@@ -893,9 +899,10 @@ static void paint_2d_lift_soften(ImagePaintState *s, ImBuf *ibuf, ImBuf *ibufb, 
 
 			for (yk = 0; yk < kernel->side; yk++) {
 				for (xk = 0; xk < kernel->side; xk++) {
-					count += paint_2d_ibuf_add_if(ibuf, xi + xk - kernel->pixel_len,
-					                               yi + yk - kernel->pixel_len, outrgb, tile,
-					                               kernel->wdata[xk + yk * kernel->side]);
+					count += paint_2d_ibuf_add_if(
+					        ibuf, xi + xk - kernel->pixel_len,
+					        yi + yk - kernel->pixel_len, outrgb, tile,
+					        kernel->wdata[xk + yk * kernel->side]);
 				}
 			}
 
@@ -994,10 +1001,11 @@ static void paint_2d_lift_smear(ImBuf *ibuf, ImBuf *ibufb, int *pos, short tile)
 	tot = paint_2d_torus_split_region(region, ibufb, ibuf, tile);
 
 	for (a = 0; a < tot; a++)
-		IMB_rectblend(ibufb, ibufb, ibuf, NULL, NULL, NULL, 0, region[a].destx, region[a].desty,
-		              region[a].destx, region[a].desty,
-		              region[a].srcx, region[a].srcy,
-		              region[a].width, region[a].height, IMB_BLEND_COPY, false);
+		IMB_rectblend(
+		        ibufb, ibufb, ibuf, NULL, NULL, NULL, 0, region[a].destx, region[a].desty,
+		        region[a].destx, region[a].desty,
+		        region[a].srcx, region[a].srcy,
+		        region[a].width, region[a].height, IMB_BLEND_COPY, false);
 }
 
 static ImBuf *paint_2d_lift_clone(ImBuf *ibuf, ImBuf *ibufb, int *pos)
@@ -1008,10 +1016,12 @@ static ImBuf *paint_2d_lift_clone(ImBuf *ibuf, ImBuf *ibufb, int *pos)
 	ImBuf *clonebuf = IMB_allocImBuf(w, h, ibufb->planes, ibufb->flags);
 
 	IMB_rectclip(clonebuf, ibuf, &destx, &desty, &srcx, &srcy, &w, &h);
-	IMB_rectblend(clonebuf, clonebuf, ibufb, NULL, NULL, NULL, 0, destx, desty, destx, desty, destx, desty, w, h,
-	              IMB_BLEND_COPY_ALPHA, false);
-	IMB_rectblend(clonebuf, clonebuf, ibuf, NULL, NULL, NULL, 0, destx, desty, destx, desty, srcx, srcy, w, h,
-	              IMB_BLEND_COPY_RGB, false);
+	IMB_rectblend(
+	        clonebuf, clonebuf, ibufb, NULL, NULL, NULL, 0, destx, desty, destx, desty, destx, desty, w, h,
+	        IMB_BLEND_COPY_ALPHA, false);
+	IMB_rectblend(
+	        clonebuf, clonebuf, ibuf, NULL, NULL, NULL, 0, destx, desty, destx, desty, srcx, srcy, w, h,
+	        IMB_BLEND_COPY_RGB, false);
 
 	return clonebuf;
 }
@@ -1022,15 +1032,16 @@ static void paint_2d_convert_brushco(ImBuf *ibufb, const float pos[2], int ipos[
 	ipos[1] = (int)floorf((pos[1] - ibufb->y / 2));
 }
 
-static void paint_2d_do_making_brush(ImagePaintState *s,
-                                     ImagePaintRegion *region,
-                                     unsigned short *curveb,
-                                     unsigned short *texmaskb,
-                                     ImBuf *frombuf,
-                                     float mask_max,
-                                     short blend,
-                                     int tilex, int tiley,
-                                     int tilew, int tileh)
+static void paint_2d_do_making_brush(
+        ImagePaintState *s,
+        ImagePaintRegion *region,
+        unsigned short *curveb,
+        unsigned short *texmaskb,
+        ImBuf *frombuf,
+        float mask_max,
+        short blend,
+        int tilex, int tiley,
+        int tilew, int tileh)
 {
 	ImBuf tmpbuf;
 	IMB_initImBuf(&tmpbuf, IMAPAINT_TILE_SIZE, IMAPAINT_TILE_SIZE, 32, 0);
@@ -1049,13 +1060,14 @@ static void paint_2d_do_making_brush(ImagePaintState *s,
 			else
 				tmpbuf.rect = image_undo_find_tile(undo_tiles, s->image, s->canvas, tx, ty, &mask, false);
 
-			IMB_rectblend(s->canvas, &tmpbuf, frombuf, mask,
-			              curveb, texmaskb, mask_max,
-			              region->destx, region->desty,
-			              origx, origy,
-			              region->srcx, region->srcy,
-			              region->width, region->height,
-			              blend, ((s->brush->flag & BRUSH_ACCUMULATE) != 0));
+			IMB_rectblend(
+			        s->canvas, &tmpbuf, frombuf, mask,
+			        curveb, texmaskb, mask_max,
+			        region->destx, region->desty,
+			        origx, origy,
+			        region->srcx, region->srcy,
+			        region->width, region->height,
+			        blend, ((s->brush->flag & BRUSH_ACCUMULATE) != 0));
 		}
 	}
 }
@@ -1078,11 +1090,12 @@ static void paint_2d_op_foreach_do(
         const ParallelRangeTLS *__restrict UNUSED(tls))
 {
 	Paint2DForeachData *data = (Paint2DForeachData *)data_v;
-	paint_2d_do_making_brush(data->s, data->region, data->curveb,
-	                         data->texmaskb, data->frombuf, data->mask_max,
-	                         data->blend,
-	                         data->tilex, iter,
-	                         data->tilew, iter);
+	paint_2d_do_making_brush(
+	        data->s, data->region, data->curveb,
+	        data->texmaskb, data->frombuf, data->mask_max,
+	        data->blend,
+	        data->tilex, iter,
+	        data->tilew, iter);
 }
 
 static int paint_2d_op(void *state, ImBuf *ibufb, unsigned short *curveb, unsigned short *texmaskb, const float lastpos[2], const float pos[2])
@@ -1131,24 +1144,27 @@ static int paint_2d_op(void *state, ImBuf *ibufb, unsigned short *curveb, unsign
 		paint_2d_set_region(region, bpos[0], bpos[1], 0, 0, frombuf->x, frombuf->y);
 		tot = 1;
 	}
-	
+
 	/* blend into canvas */
 	for (a = 0; a < tot; a++) {
-		ED_imapaint_dirty_region(s->image, s->canvas,
-		                         region[a].destx, region[a].desty,
-		                         region[a].width, region[a].height, true);
-	
+		ED_imapaint_dirty_region(
+		        s->image, s->canvas,
+		        region[a].destx, region[a].desty,
+		        region[a].width, region[a].height, true);
+
 		if (s->do_masking) {
 			/* masking, find original pixels tiles from undo buffer to composite over */
 			int tilex, tiley, tilew, tileh;
 
-			imapaint_region_tiles(s->canvas, region[a].destx, region[a].desty,
-			                      region[a].width, region[a].height,
-			                      &tilex, &tiley, &tilew, &tileh);
+			imapaint_region_tiles(
+			        s->canvas, region[a].destx, region[a].desty,
+			        region[a].width, region[a].height,
+			        &tilex, &tiley, &tilew, &tileh);
 
 			if (tiley == tileh) {
-				paint_2d_do_making_brush(s, &region[a], curveb, texmaskb, frombuf,
-				                         mask_max, blend, tilex, tiley, tilew, tileh);
+				paint_2d_do_making_brush(
+				        s, &region[a], curveb, texmaskb, frombuf,
+				        mask_max, blend, tilex, tiley, tilew, tileh);
 			}
 			else {
 				Paint2DForeachData data;
@@ -1164,19 +1180,21 @@ static int paint_2d_op(void *state, ImBuf *ibufb, unsigned short *curveb, unsign
 
 				ParallelRangeSettings settings;
 				BLI_parallel_range_settings_defaults(&settings);
-				BLI_task_parallel_range(tiley, tileh + 1, &data,
-				                        paint_2d_op_foreach_do,
-				                        &settings);
+				BLI_task_parallel_range(
+				        tiley, tileh + 1, &data,
+				        paint_2d_op_foreach_do,
+				        &settings);
 
 			}
 		}
 		else {
 			/* no masking, composite brush directly onto canvas */
-			IMB_rectblend_threaded(s->canvas, s->canvas, frombuf, NULL, curveb, texmaskb, mask_max,
-			                       region[a].destx, region[a].desty,
-			                       region[a].destx, region[a].desty,
-			                       region[a].srcx, region[a].srcy,
-			                       region[a].width, region[a].height, blend, false);
+			IMB_rectblend_threaded(
+			        s->canvas, s->canvas, frombuf, NULL, curveb, texmaskb, mask_max,
+			        region[a].destx, region[a].desty,
+			        region[a].destx, region[a].desty,
+			        region[a].srcx, region[a].srcy,
+			        region[a].width, region[a].height, blend, false);
 		}
 	}
 
@@ -1231,7 +1249,7 @@ static int paint_2d_canvas_set(ImagePaintState *s, Image *ima)
 
 	/* set masking */
 	s->do_masking = paint_use_opacity_masking(s->brush);
-	
+
 	return 1;
 }
 
@@ -1367,7 +1385,7 @@ void paint_2d_redraw(const bContext *C, void *ps, bool final)
 
 		/* compositor listener deals with updating */
 		WM_event_add_notifier(C, NC_IMAGE | NA_EDITED, s->image);
-		DAG_id_tag_update(&s->image->id, 0);
+		DEG_id_tag_update(&s->image->id, 0);
 	}
 	else {
 		if (!s->sima || !s->sima->lock)
@@ -1477,16 +1495,18 @@ void paint_2d_bucket_fill(
 		if (do_float) {
 			for (x_px = 0; x_px < ibuf->x; x_px++) {
 				for (y_px = 0; y_px < ibuf->y; y_px++) {
-					blend_color_mix_float(ibuf->rect_float + 4 * (((size_t)y_px) * ibuf->x + x_px),
-					                      ibuf->rect_float + 4 * (((size_t)y_px) * ibuf->x + x_px), color_f);
+					blend_color_mix_float(
+					        ibuf->rect_float + 4 * (((size_t)y_px) * ibuf->x + x_px),
+					        ibuf->rect_float + 4 * (((size_t)y_px) * ibuf->x + x_px), color_f);
 				}
 			}
 		}
 		else {
 			for (x_px = 0; x_px < ibuf->x; x_px++) {
 				for (y_px = 0; y_px < ibuf->y; y_px++) {
-					blend_color_mix_byte((unsigned char *)(ibuf->rect + ((size_t)y_px) * ibuf->x + x_px),
-					                     (unsigned char *)(ibuf->rect + ((size_t)y_px) * ibuf->x + x_px), (unsigned char *)&color_b);
+					blend_color_mix_byte(
+					        (unsigned char *)(ibuf->rect + ((size_t)y_px) * ibuf->x + x_px),
+					        (unsigned char *)(ibuf->rect + ((size_t)y_px) * ibuf->x + x_px), (unsigned char *)&color_b);
 				}
 			}
 		}
@@ -1537,9 +1557,10 @@ void paint_2d_bucket_fill(
 			while (!BLI_stack_is_empty(stack)) {
 				BLI_stack_pop(stack, &coordinate);
 
-				IMB_blend_color_float(ibuf->rect_float + 4 * (coordinate),
-				                      ibuf->rect_float + 4 * (coordinate),
-				                      color_f, br->blend);
+				IMB_blend_color_float(
+				        ibuf->rect_float + 4 * (coordinate),
+				        ibuf->rect_float + 4 * (coordinate),
+				        color_f, br->blend);
 
 				/* reconstruct the coordinates here */
 				x_px = coordinate % width;
@@ -1568,9 +1589,10 @@ void paint_2d_bucket_fill(
 			while (!BLI_stack_is_empty(stack)) {
 				BLI_stack_pop(stack, &coordinate);
 
-				IMB_blend_color_byte((unsigned char *)(ibuf->rect + coordinate),
-				                     (unsigned char *)(ibuf->rect + coordinate),
-				                     (unsigned char *)&color_b, br->blend);
+				IMB_blend_color_byte(
+				        (unsigned char *)(ibuf->rect + coordinate),
+				        (unsigned char *)(ibuf->rect + coordinate),
+				        (unsigned char *)&color_b, br->blend);
 
 				/* reconstruct the coordinates here */
 				x_px = coordinate % width;
@@ -1678,9 +1700,10 @@ void paint_2d_gradient_fill(
 				/* convert to premultiplied */
 				mul_v3_fl(color_f, color_f[3]);
 				color_f[3] *= br->alpha;
-				IMB_blend_color_float(ibuf->rect_float + 4 * (((size_t)y_px) * ibuf->x + x_px),
-				                      ibuf->rect_float + 4 * (((size_t)y_px) * ibuf->x + x_px),
-				                      color_f, br->blend);
+				IMB_blend_color_float(
+				        ibuf->rect_float + 4 * (((size_t)y_px) * ibuf->x + x_px),
+				        ibuf->rect_float + 4 * (((size_t)y_px) * ibuf->x + x_px),
+				        color_f, br->blend);
 			}
 		}
 	}
@@ -1708,9 +1731,10 @@ void paint_2d_gradient_fill(
 				linearrgb_to_srgb_v3_v3(color_f, color_f);
 				rgba_float_to_uchar((unsigned char *)&color_b, color_f);
 				((unsigned char *)&color_b)[3] *= br->alpha;
-				IMB_blend_color_byte((unsigned char *)(ibuf->rect + ((size_t)y_px) * ibuf->x + x_px),
-				                     (unsigned char *)(ibuf->rect + ((size_t)y_px) * ibuf->x + x_px),
-				                     (unsigned char *)&color_b, br->blend);
+				IMB_blend_color_byte(
+				        (unsigned char *)(ibuf->rect + ((size_t)y_px) * ibuf->x + x_px),
+				        (unsigned char *)(ibuf->rect + ((size_t)y_px) * ibuf->x + x_px),
+				        (unsigned char *)&color_b, br->blend);
 			}
 		}
 	}

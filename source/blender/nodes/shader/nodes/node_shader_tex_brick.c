@@ -4,7 +4,7 @@
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version. 
+ * of the License, or (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -54,7 +54,7 @@ static void node_shader_init_tex_brick(bNodeTree *UNUSED(ntree), bNode *node)
 	NodeTexBrick *tex = MEM_callocN(sizeof(NodeTexBrick), "NodeTexBrick");
 	BKE_texture_mapping_default(&tex->base.tex_mapping, TEXMAP_TYPE_POINT);
 	BKE_texture_colormapping_default(&tex->base.color_mapping);
-	
+
 	tex->offset = 0.5f;
 	tex->squash = 1.0f;
 	tex->offset_freq = 2;
@@ -80,7 +80,7 @@ static int node_shader_gpu_tex_brick(GPUMaterial *mat, bNode *node, bNodeExecDat
 	NodeTexBrick *tex = (NodeTexBrick *)node->storage;
 	float offset_freq = tex->offset_freq;
 	float squash_freq = tex->squash_freq;
-	return GPU_stack_link(mat, "node_tex_brick",
+	return GPU_stack_link(mat, node, "node_tex_brick",
 	                      in, out,
 	                      GPU_uniform(&tex->offset), GPU_uniform(&offset_freq),
 	                      GPU_uniform(&tex->squash), GPU_uniform(&squash_freq));
@@ -92,7 +92,6 @@ void register_node_type_sh_tex_brick(void)
 	static bNodeType ntype;
 
 	sh_node_type_base(&ntype, SH_NODE_TEX_BRICK, "Brick Texture", NODE_CLASS_TEXTURE, 0);
-	node_type_compatibility(&ntype, NODE_NEW_SHADING);
 	node_type_socket_templates(&ntype, sh_node_tex_brick_in, sh_node_tex_brick_out);
 	node_type_size_preset(&ntype, NODE_SIZE_MIDDLE);
 	node_type_init(&ntype, node_shader_init_tex_brick);

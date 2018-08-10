@@ -90,7 +90,7 @@ public:
 	 *        - TRIANGLES     : the face indices describe single triangles
 	 *      If iCopy != 0, the array is copied; you must desallocate iFaceStyle. Else you must not.
 	 *    iVIndices,
-	 *      Array of vertices indices. 
+	 *      Array of vertices indices.
 	 *      The integers contained in this array must be multiple of 3.
 	 *      If iCopy != 0, the array is copied; you must desallocate iVIndices. Else you must not.
 	 *    iVISize
@@ -150,8 +150,6 @@ public:
 		std::swap(_MISize, ioOther._MISize);
 		std::swap(_TISize, ioOther._TISize);
 
-		std::swap(_displayList, ioOther._displayList);
-
 		Rep::swap(ioOther);
 	}
 
@@ -172,12 +170,6 @@ public:
 
 	/*! Compute the Bounding Box */
 	virtual void ComputeBBox();
-
-	/*! modifiers */
-	inline void setDisplayList(unsigned int index)
-	{
-		_displayList = index;
-	}
 
 	/*! Accessors */
 	virtual const float *vertices() const
@@ -280,11 +272,6 @@ public:
 		return _TISize;
 	}
 
-	inline unsigned int displayList() const
-	{
-		return _displayList;
-	}
-
 protected:
 	float *_Vertices;
 	float *_Normals;
@@ -310,8 +297,6 @@ protected:
 	unsigned _NISize;
 	unsigned _MISize;
 	unsigned _TISize;
-
-	unsigned int _displayList;
 
 #ifdef WITH_CXX_GUARDEDALLOC
 	MEM_CXX_CLASS_ALLOC_FUNCS("Freestyle:IndexedFaceSet")

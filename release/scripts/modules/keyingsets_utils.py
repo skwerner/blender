@@ -36,7 +36,7 @@ __all__ = (
     "RKS_GEN_rotation",
     "RKS_GEN_scaling",
     "RKS_GEN_bendy_bones",
-    )
+)
 
 import bpy
 
@@ -153,8 +153,10 @@ def get_transform_generators_base_info(data):
         # no path in this case
         path = ""
 
-        # data on ID-blocks directly should get grouped by the KeyingSet
-        grouping = None
+        # transform data on ID-blocks directly should get grouped under a
+        # hardcoded label ("Object Transforms") so that they get grouped
+        # consistently when keyframed directly
+        grouping = "Object Transforms"
     else:
         # get the path to the ID-block
         path = data.path_from_id()
@@ -219,6 +221,7 @@ def RKS_GEN_scaling(ksi, context, ks, data):
 
 # ------
 
+
 # Property identifiers for Bendy Bones
 bbone_property_ids = (
     "bbone_curveinx",
@@ -256,4 +259,3 @@ def RKS_GEN_bendy_bones(ksi, context, ks, data):
             ks.paths.add(id_block, path, group_method='NAMED', group_name=grouping)
         else:
             ks.paths.add(id_block, path)
-

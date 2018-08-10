@@ -33,24 +33,26 @@ class MeshMirrorUV(Operator):
     bl_label = "Copy Mirrored UV coords"
     bl_options = {'REGISTER', 'UNDO'}
 
-    direction = EnumProperty(
-            name="Axis Direction",
-            items=(('POSITIVE', "Positive", ""),
-                   ('NEGATIVE', "Negative", "")),
-            )
+    direction: EnumProperty(
+        name="Axis Direction",
+        items=(
+            ('POSITIVE', "Positive", ""),
+            ('NEGATIVE', "Negative", ""),
+        ),
+    )
 
-    precision = IntProperty(
-            name="Precision",
-            description=("Tolerance for finding vertex duplicates"),
-            min=1, max=16,
-            soft_min=1, soft_max=16,
-            default=3,
-            )
+    precision: IntProperty(
+        name="Precision",
+        description=("Tolerance for finding vertex duplicates"),
+        min=1, max=16,
+        soft_min=1, soft_max=16,
+        default=3,
+    )
 
     @classmethod
     def poll(cls, context):
         obj = context.active_object
-        return (obj and obj.type == 'MESH' and obj.data.uv_textures.active)
+        return (obj and obj.type == 'MESH' and obj.data.uv_layers.active)
 
     def execute(self, context):
         DIR = (self.direction == 'NEGATIVE')

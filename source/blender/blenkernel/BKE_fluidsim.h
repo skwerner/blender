@@ -36,10 +36,11 @@ struct Object;
 struct Scene;
 struct FluidsimSettings;
 struct MVert;
+struct Depsgraph;
 
 /* old interface */
 
-void initElbeemMesh(struct Scene *scene, struct Object *ob,
+void initElbeemMesh(struct Depsgraph *depsgraph, struct Scene *scene, struct Object *ob,
                     int *numVertices, float **vertices,
                     int *numTriangles, int **triangles,
                     int useGlobalCoords, int modifierIndex);
@@ -51,4 +52,3 @@ void fluid_get_bb(struct MVert *mvert, int totvert, float obmat[4][4],
 void fluid_estimate_memory(struct Object *ob, struct FluidsimSettings *fss, char *value);
 
 #endif
-

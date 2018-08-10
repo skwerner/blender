@@ -4,7 +4,7 @@
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version. 
+ * of the License, or (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -41,6 +41,7 @@
 #include "BKE_context.h"
 #include "BKE_global.h"
 #include "BKE_main.h"
+#include "BKE_scene.h"
 
 /* **************** IMAGE (and RenderResult, multilayer image) ******************** */
 
@@ -149,10 +150,10 @@ static void cmp_node_image_create_outputs(bNodeTree *ntree, bNode *node, LinkNod
 
 		/* make sure ima->type is correct */
 		ibuf = BKE_image_acquire_ibuf(ima, &load_iuser, NULL);
-		
+
 		if (ima->rr) {
 			RenderLayer *rl = BLI_findlink(&ima->rr->layers, iuser->layer);
-			
+
 			if (rl) {
 				RenderPass *rpass;
 				for (rpass = rl->passes.first; rpass; rpass = rpass->next) {
@@ -190,16 +191,16 @@ typedef struct RLayerUpdateData {
 	int prev_index;
 } RLayerUpdateData;
 
-void node_cmp_rlayers_register_pass(bNodeTree *ntree, bNode *node, Scene *scene, SceneRenderLayer *srl, const char *name, int type)
+void node_cmp_rlayers_register_pass(bNodeTree *ntree, bNode *node, Scene *scene, ViewLayer *view_layer, const char *name, int type)
 {
 	RLayerUpdateData *data = node->storage;
 
-	if (scene == NULL || srl == NULL || data == NULL || node->id != (ID *)scene) {
+	if (scene == NULL || view_layer == NULL || data == NULL || node->id != (ID *)scene) {
 		return;
 	}
 
-	SceneRenderLayer *node_srl = BLI_findlink(&scene->r.layers, node->custom1);
-	if (node_srl != srl) {
+	ViewLayer *node_view_layer = BLI_findlink(&scene->view_layers, node->custom1);
+	if (node_view_layer != view_layer) {
 		return;
 	}
 
@@ -220,15 +221,15 @@ static void cmp_node_rlayer_create_outputs(bNodeTree *ntree, bNode *node, LinkNo
 	if (scene) {
 		RenderEngineType *engine_type = RE_engines_find(scene->r.engine);
 		if (engine_type && engine_type->update_render_passes) {
-			SceneRenderLayer *srl = BLI_findlink(&scene->r.layers, node->custom1);
-			if (srl) {
+			ViewLayer *view_layer = BLI_findlink(&scene->view_layers, node->custom1);
+			if (view_layer) {
 				RLayerUpdateData *data = MEM_mallocN(sizeof(RLayerUpdateData), "render layer update data");
 				data->available_sockets = available_sockets;
 				data->prev_index = -1;
 				node->storage = data;
 
 				RenderEngine *engine = RE_engine_create(engine_type);
-				engine_type->update_render_passes(engine, scene, srl);
+				engine_type->update_render_passes(engine, scene, view_layer);
 				RE_engine_free(engine);
 
 				MEM_freeN(data);
@@ -250,7 +251,7 @@ static void cmp_node_image_verify_outputs(bNodeTree *ntree, bNode *node, bool rl
 	bNodeSocket *sock, *sock_next;
 	LinkNodePair available_sockets = {NULL, NULL};
 	int sock_index;
-	
+
 	/* XXX make callback */
 	if (rlayer)
 		cmp_node_rlayer_create_outputs(ntree, node, &available_sockets);
@@ -303,9 +304,9 @@ static void node_composit_init_image(bNodeTree *ntree, bNode *node)
 	node->storage = iuser;
 	iuser->frames = 1;
 	iuser->sfra = 1;
-	iuser->fie_ima = 2;
 	iuser->ok = 1;
-	
+	iuser->flag |= IMA_ANIM_ALWAYS;
+
 	/* setup initial outputs */
 	cmp_node_image_verify_outputs(ntree, node, false);
 }
@@ -313,20 +314,20 @@ static void node_composit_init_image(bNodeTree *ntree, bNode *node)
 static void node_composit_free_image(bNode *node)
 {
 	bNodeSocket *sock;
-	
+
 	/* free extra socket info */
 	for (sock = node->outputs.first; sock; sock = sock->next)
 		MEM_freeN(sock->storage);
-	
+
 	MEM_freeN(node->storage);
 }
 
 static void node_composit_copy_image(bNodeTree *UNUSED(dest_ntree), bNode *dest_node, bNode *src_node)
 {
 	bNodeSocket *sock;
-	
+
 	dest_node->storage = MEM_dupallocN(src_node->storage);
-	
+
 	/* copy extra socket info */
 	for (sock = src_node->outputs.first; sock; sock = sock->next)
 		sock->new_sock->storage = MEM_dupallocN(sock->storage);
@@ -388,11 +389,11 @@ static void node_composit_init_rlayers(const bContext *C, PointerRNA *ptr)
 	}
 }
 
-static int node_composit_poll_rlayers(bNodeType *UNUSED(ntype), bNodeTree *ntree)
+static bool node_composit_poll_rlayers(bNodeType *UNUSED(ntype), bNodeTree *ntree)
 {
 	if (STREQ(ntree->idname, "CompositorNodeTree")) {
 		Scene *scene;
-		
+
 		/* XXX ugly: check if ntree is a local scene node tree.
 		 * Render layers node can only be used in local scene->nodetree,
 		 * since it directly links to the scene.
@@ -400,7 +401,7 @@ static int node_composit_poll_rlayers(bNodeType *UNUSED(ntype), bNodeTree *ntree
 		for (scene = G.main->scene.first; scene; scene = scene->id.next)
 			if (scene->nodetree == ntree)
 				break;
-		
+
 		return (scene != NULL);
 	}
 	return false;
@@ -440,6 +441,7 @@ void register_node_type_cmp_rlayers(void)
 	node_type_storage(&ntype, NULL, node_composit_free_rlayers, node_composit_copy_rlayers);
 	node_type_update(&ntype, cmp_node_rlayers_update, NULL);
 	node_type_init(&ntype, node_cmp_rlayers_outputs);
+	node_type_size_preset(&ntype, NODE_SIZE_LARGE);
 
 	nodeRegisterType(&ntype);
 }

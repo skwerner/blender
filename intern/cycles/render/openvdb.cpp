@@ -8,6 +8,7 @@
 #include "util/util_logging.h"
 #include "util/util_path.h"
 #include "util/util_sparse_grid.h"
+#include "util/util_types.h"
 
 /* Functions that directly use the OpenVDB library throughout render. */
 
@@ -256,8 +257,6 @@ void image_load_preprocess(openvdb::GridBase::Ptr grid_base,
 	}
 
 	const int tile_count = coord_product(tiled_res);
-	const int tile_pix_count = TILE_SIZE * TILE_SIZE * TILE_SIZE * channels;
-
 	sparse_indexes->resize(tile_count, -1); /* 0 if active, -1 if inactive. */
 	int voxel_count = 0;
 
@@ -265,7 +264,7 @@ void image_load_preprocess(openvdb::GridBase::Ptr grid_base,
 		const typename GridType::TreeType::LeafNodeType *leaf = iter.getLeaf();
 		const T *data = leaf->buffer().data();
 
-		for(int i = 0; i < tile_pix_count; ++i) {
+		for(int i = 0; i < TILE_SIZE * TILE_SIZE * TILE_SIZE * channels; ++i) {
 			if(gte_any(data[i], threshold)) {
 				const math::Coord tile_start = leaf->getNodeBoundingBox().getStart() - min_bound;
 				sparse_indexes->at(get_tile_index(tile_start, tiled_res)) = 0;
@@ -519,14 +518,13 @@ void openvdb_load_image(const string& filepath,
 				            grid, resolution, min_bound, 1, image);
 			case OPENVDB_GRID_VEC_DOUBLE:
 				return image_load_dense<Vec3DGrid, math::Vec3d>(
-				            grid, resolution, min_bound, 1, image);
+				            grid, resolution, min_bound, 4, image);
 			case OPENVDB_GRID_VEC_UINT32:
 				return image_load_dense<Vec3IGrid, math::Vec3i>(
-				            grid, resolution, min_bound, 1, image);
+				            grid, resolution, min_bound, 4, image);
 			case OPENVDB_GRID_VEC_FLOAT:
 				return image_load_dense<Vec3SGrid, math::Vec3s>(
-				            grid, resolution, min_bound, 1, image);
-			case OPENVDB_GRID_MISC:
+				            grid, resolution, min_bound, 4, image);
 			default:
 				return;
 		}
@@ -550,14 +548,13 @@ void openvdb_load_image(const string& filepath,
 				            grid, resolution, min_bound, 1, image, sparse_indexes);
 			case OPENVDB_GRID_VEC_DOUBLE:
 				return image_load_sparse<Vec3DGrid, math::Vec3d>(
-				            grid, resolution, min_bound, 1, image, sparse_indexes);
+				            grid, resolution, min_bound, 4, image, sparse_indexes);
 			case OPENVDB_GRID_VEC_UINT32:
 				return image_load_sparse<Vec3IGrid, math::Vec3i>(
-				            grid, resolution, min_bound, 1, image, sparse_indexes);
+				            grid, resolution, min_bound, 4, image, sparse_indexes);
 			case OPENVDB_GRID_VEC_FLOAT:
 				return image_load_sparse<Vec3SGrid, math::Vec3s>(
-				            grid, resolution, min_bound, 1, image, sparse_indexes);
-			case OPENVDB_GRID_MISC:
+				            grid, resolution, min_bound, 4, image, sparse_indexes);
 			default:
 				return;
 		}

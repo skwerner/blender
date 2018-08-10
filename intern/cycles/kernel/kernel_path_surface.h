@@ -14,7 +14,6 @@
  * limitations under the License.
  */
 
-//#include "util/util_logging.h"
 
 CCL_NAMESPACE_BEGIN
 
@@ -45,79 +44,6 @@ ccl_device void accum_light_contribution(KernelGlobals *kg,
 			path_radiance_accum_total_light(L, state, throughput*scale, L_light);
 		}
 	}
-}
-
-/* Decides whether to go down both childen or only one in the tree traversal.
- * The split heuristic is based on the variance of the lighting within the node.
- * There are two types of variances that are considered: variance in energy and
- * in the distance term 1/d^2. The variance in energy is pre-computed on the
- * host but the distance term is calculated here. These variances are then
- * combined and normalized to get the final splitting heuristic. High variance
- * leads to a lower splitting heuristic which leads to more splits during the
- * traversal. */
-ccl_device bool split(KernelGlobals *kg, float3 P, int node_offset)
-{
-	/* early exists if never/always splitting */
-	const float threshold = kernel_data.integrator.splitting_threshold;
-	if(threshold == 0.0f){
-		return false;
-	} else if(threshold == 1.0f){
-		return true;
-	}
-
-	/* extract bounding box of cluster */
-	const float4 node1   = kernel_tex_fetch(__light_tree_nodes, node_offset + 1);
-	const float4 node2   = kernel_tex_fetch(__light_tree_nodes, node_offset + 2);
-	const float3 bboxMin = make_float3(node1.x, node1.y, node1.z);
-	const float3 bboxMax = make_float3(node1.w, node2.x, node2.y);
-
-	/* if P is inside bounding sphere then split */
-	const float3 centroid = 0.5f * (bboxMax + bboxMin);
-	const float radius_squared = len_squared(bboxMax - centroid);
-	const float dist_squared   = len_squared(centroid - P);
-
-	if(dist_squared <= radius_squared){
-		return true;
-	}
-
-	/* eq. 8 & 9 */
-
-	/* the integral in eq. 8 requires us to know the interval the distance can
-	 * be in: [a,b]. This is found by considering a bounding sphere around the
-	 * bounding box of the node and "a" then becomes the smallest distance to
-	 * this sphere and "b" becomes the largest. */
-	const float  radius = sqrt(radius_squared);
-	const float  dist   = sqrt(dist_squared);
-	const float  a      = dist - radius;
-	const float  b      = dist + radius;
-
-	const float g_mean         = 1.0f / (a * b);
-	const float g_mean_squared = g_mean * g_mean;
-	const float a3             = a * a * a;
-	const float b3             = b * b * b;
-	const float g_variance     = (b3 - a3) / (3.0f * (b - a) * a3 * b3) -
-	                              g_mean_squared;
-
-	/* eq. 10 */
-	const float4 node0   = kernel_tex_fetch(__light_tree_nodes, node_offset    );
-	const float4 node3   = kernel_tex_fetch(__light_tree_nodes, node_offset + 3);
-	const float energy       = node0.x;
-	const float e_variance   = node3.w;
-	const float num_emitters = (float)__float_as_int(node0.w);
-	const float num_emitters_squared = num_emitters * num_emitters;
-	const float e_mean = energy / num_emitters;
-	const float e_mean_squared = e_mean * e_mean;
-	const float variance = (e_variance * (g_variance + g_mean_squared) +
-	                         e_mean_squared * g_variance) * num_emitters_squared;
-
-	/* normalize the variance heuristic to be within [0,1]. Note that high
-	 * variance corresponds to a low normalized variance. To give an idea of
-	 * how this normalization function looks like:
-	 *			  variance: 0    1   10  100  1000  10000  100000
-	 * normalized variance: 1  0.8  0.7  0.5   0.4    0.3     0.2  */
-	const float variance_normalized = sqrt(sqrt( 1.0f / (1.0f + sqrt(variance))));
-
-	return variance_normalized < threshold;
 }
 
 /* The accum_light_tree_contribution() function does the following:

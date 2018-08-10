@@ -1439,9 +1439,83 @@ ccl_device int triangle_to_distribution(KernelGlobals *kg, int triangle_id,
 	return kernel_tex_fetch(__triangle_to_distribution, first*3+2);
 }
 
+/* Decides whether to go down both childen or only one in the tree traversal.
+ * The split heuristic is based on the variance of the lighting within the node.
+ * There are two types of variances that are considered: variance in energy and
+ * in the distance term 1/d^2. The variance in energy is pre-computed on the
+ * host but the distance term is calculated here. These variances are then
+ * combined and normalized to get the final splitting heuristic. High variance
+ * leads to a lower splitting heuristic which leads to more splits during the
+ * traversal. */
+ccl_device bool split(KernelGlobals *kg, float3 P, int node_offset)
+{
+	/* early exists if never/always splitting */
+	const float threshold = kernel_data.integrator.splitting_threshold;
+	if(threshold == 0.0f){
+		return false;
+	} else if(threshold == 1.0f){
+		return true;
+	}
+
+	/* extract bounding box of cluster */
+	const float4 node1   = kernel_tex_fetch(__light_tree_nodes, node_offset + 1);
+	const float4 node2   = kernel_tex_fetch(__light_tree_nodes, node_offset + 2);
+	const float3 bboxMin = make_float3(node1.x, node1.y, node1.z);
+	const float3 bboxMax = make_float3(node1.w, node2.x, node2.y);
+
+	/* if P is inside bounding sphere then split */
+	const float3 centroid = 0.5f * (bboxMax + bboxMin);
+	const float radius_squared = len_squared(bboxMax - centroid);
+	const float dist_squared   = len_squared(centroid - P);
+
+	if(dist_squared <= radius_squared){
+		return true;
+	}
+
+	/* eq. 8 & 9 */
+
+	/* the integral in eq. 8 requires us to know the interval the distance can
+	 * be in: [a,b]. This is found by considering a bounding sphere around the
+	 * bounding box of the node and "a" then becomes the smallest distance to
+	 * this sphere and "b" becomes the largest. */
+	const float  radius = sqrt(radius_squared);
+	const float  dist   = sqrt(dist_squared);
+	const float  a      = dist - radius;
+	const float  b      = dist + radius;
+
+	const float g_mean         = 1.0f / (a * b);
+	const float g_mean_squared = g_mean * g_mean;
+	const float a3             = a * a * a;
+	const float b3             = b * b * b;
+	const float g_variance     = (b3 - a3) / (3.0f * (b - a) * a3 * b3) -
+	                              g_mean_squared;
+
+	/* eq. 10 */
+	const float4 node0   = kernel_tex_fetch(__light_tree_nodes, node_offset    );
+	const float4 node3   = kernel_tex_fetch(__light_tree_nodes, node_offset + 3);
+	const float energy       = node0.x;
+	const float e_variance   = node3.w;
+	const float num_emitters = (float)__float_as_int(node0.w);
+	const float num_emitters_squared = num_emitters * num_emitters;
+	const float e_mean = energy / num_emitters;
+	const float e_mean_squared = e_mean * e_mean;
+	const float variance = (e_variance * (g_variance + g_mean_squared) +
+	                         e_mean_squared * g_variance) * num_emitters_squared;
+
+	/* normalize the variance heuristic to be within [0,1]. Note that high
+	 * variance corresponds to a low normalized variance. To give an idea of
+	 * how this normalization function looks like:
+	 *			  variance: 0    1   10  100  1000  10000  100000
+	 * normalized variance: 1  0.8  0.7  0.5   0.4    0.3     0.2  */
+	const float variance_normalized = sqrt(sqrt( 1.0f / (1.0f + sqrt(variance))));
+
+	return variance_normalized < threshold;
+}
+
+
 /* given a light in the form of a distribution id, this function computes the
  * the probability of picking it using the light tree. this mimics the
- * probability calculations in light_tree_sample()
+ * probability calculations in accum_light_tree_contribution()
  *
  * the nodes array contains all the nodes of the tree and each interior node
  * has its left child directly after it in the nodes array and the right child
@@ -1457,28 +1531,27 @@ ccl_device int triangle_to_distribution(KernelGlobals *kg, int triangle_id,
  *    then it belongs to a node between the current node and the right child.
  *    That is, we should go down the left node. Otherwise, the right node.
  *    This is done recursively until the leaf node is found.
- * 3. Before going down the left or right child the probability is updated in
- *    the same way it is done in light_tree_sample().
+ * 3. Before going down the left or right child:
+ *    a) If we are splitting then the probability is not affected.
+ *    b) If we are not splitting then the probability is multiplied by the
+ *       probability of choosing this particular child node.
  */
 ccl_device float light_tree_pdf(KernelGlobals *kg, float3 P, float3 N,
-                               int distribution_id){
+                               int distribution_id, int offset, float pdf,
+                               bool can_split){
 
 	/* find mapping from distribution_id to node_id */
 	int node_id = kernel_tex_fetch(__light_distribution_to_node, distribution_id);
 
-	float pdf = 1.0f;
-	/* read in first part of root node of light tree */
+	/* read in first part of node of light tree */
 	int right_child_offset, first_distribution_id, num_emitters;
-	update_node(kg, 0, &right_child_offset, &first_distribution_id, &num_emitters);
+	update_node(kg, offset, &right_child_offset, &first_distribution_id, &num_emitters);
 
-	int offset = 0;
-	do{
+	/* found a leaf */
+	if(right_child_offset == -1){
 
-		if(right_child_offset == -1){ // Found our leaf node
-			kernel_assert(offset == node_id);
-			if(num_emitters == 1){
-				break;
-			}
+		/* if there are several emitters in this leaf then pick one of them */
+		if(num_emitters > 1){
 
 			/* the case of being a light inside a leaf node with several lights.
 			 * during sampling, a CDF is created based on importance, so here
@@ -1497,13 +1570,30 @@ ccl_device float light_tree_pdf(KernelGlobals *kg, float3 P, float3 N,
 			pdf *= calc_light_importance(kg, P, N, offset,
 			                             distribution_id - first_distribution_id)
 			       / sum;
+		}
 
-			break;
-		} else { // Interior node, pick left or right depending on node_id
+		return pdf;
+	} else { // Interior node, choose which child(ren) to go down
 
-			/* calculate probability of going down left node */
-			int child_offsetL = offset + 4;
-			int child_offsetR = 4*right_child_offset;
+		int child_offsetL = offset + 4;
+		int child_offsetR = 4*right_child_offset;
+
+		/* choose whether to go down both(split) or only one of the children */
+		if(can_split && split(kg, P, offset)){
+			/* go down to the child node that is an ancestor of this node_id
+			 * without changing the probability since we split here */
+
+			if(node_id < child_offsetR){
+				offset = child_offsetL;
+			} else {
+				offset = child_offsetR;
+			}
+
+			return light_tree_pdf(kg, P, N, distribution_id, offset, pdf, true);
+		} else {
+			/* go down one of the child nodes */
+
+			/* evaluate the importance of each of the child nodes */
 			float I_L = calc_node_importance(kg, P, N, child_offsetL);
 			float I_R = calc_node_importance(kg, P, N, child_offsetR);
 
@@ -1511,10 +1601,10 @@ ccl_device float light_tree_pdf(KernelGlobals *kg, float3 P, float3 N,
 				return 0.0f;
 			}
 
+			/* calculate the probability of going down the left node */
 			float P_L = I_L / ( I_L + I_R);
 
-			/* choose which child to go down to. assumes nodes have been flattened
-			 * in a depth first manner. */
+			/* choose which node to go down */
 			if(node_id < child_offsetR){
 				offset = child_offsetL;
 				pdf *= P_L;
@@ -1523,14 +1613,9 @@ ccl_device float light_tree_pdf(KernelGlobals *kg, float3 P, float3 N,
 				pdf *= 1.0f - P_L;
 			}
 
-			/* update parent node info for next iteration */
-			update_node(kg, offset, &right_child_offset,
-			                   &first_distribution_id, &num_emitters);
+			return light_tree_pdf(kg, P, N, distribution_id, offset, pdf, false);
 		}
-
-	} while(true);
-
-	return pdf;
+	}
 }
 
 /* computes the the probability of picking the given light out of all lights.
@@ -1574,7 +1659,7 @@ ccl_device float light_distribution_pdf(KernelGlobals *kg, float3 P, float3 N,
 		float pdf = group_prob;
 
 		if(group == LIGHTGROUP_TREE){
-			pdf *= light_tree_pdf(kg, P, N, distribution_id);
+			pdf *= light_tree_pdf(kg, P, N, distribution_id, 0, 1.0f, true);
 		} else if(group == LIGHTGROUP_DISTANT) {
 			pdf *= kernel_data.integrator.inv_num_distant_lights;
 		} else if(group == LIGHTGROUP_BACKGROUND) {

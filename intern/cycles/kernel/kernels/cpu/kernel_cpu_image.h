@@ -92,18 +92,18 @@ struct TextureInterpolator {
 	                                          const int *offsets,
 	                                          int x, int y, int z)
 	{
-		int tix = x / TILE_SIZE, itix = x % TILE_SIZE,
-		    tiy = y / TILE_SIZE, itiy = y % TILE_SIZE,
-		    tiz = z / TILE_SIZE, itiz = z % TILE_SIZE;
-		int tile_index = tix + s_info.tiled_w * (tiy + tiz * s_info.tiled_h);
-		int sparse_index = offsets[tile_index];
-		if(sparse_index < 0) {
+		int tile_start = offsets[(x >> TILE_INDEX_SHIFT)
+		                 + s_info.tiled_w
+		                 * ((y >> TILE_INDEX_SHIFT)
+		                    + (z >> TILE_INDEX_SHIFT)
+		                    * s_info.tiled_h)];
+		if(tile_start < 0) {
 			return make_float4(0.0f);
 		}
-		int itiw = (x > s_info.div_w) ? s_info.remain_w : TILE_SIZE;
-		int itih = (y > s_info.div_h) ? s_info.remain_h : TILE_SIZE;
-		int in_tile_index = itix + itiw * (itiy + itiz * itih);
-		return read(data[sparse_index + in_tile_index]);
+		return read(data[tile_start + (x & TILE_INDEX_MASK)
+		        + ((x > s_info.div_w) ? s_info.remain_w : TILE_SIZE)
+		        * ((y & TILE_INDEX_MASK) + (z & TILE_INDEX_MASK)
+		           * ((y > s_info.div_h) ? s_info.remain_h : TILE_SIZE))]);
 	}
 
 	static ccl_always_inline float4 read_data(const T *data,

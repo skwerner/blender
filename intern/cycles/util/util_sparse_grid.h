@@ -52,7 +52,7 @@ const inline int compute_index(const size_t x, const size_t y, const size_t z,
 
 const inline int get_tile_res(const size_t res)
 {
-	return (res / TILE_SIZE) + (res % TILE_SIZE != 0);
+	return (res >> TILE_INDEX_SHIFT) + ((res & TILE_INDEX_MASK) != 0);
 }
 
 const inline int compute_index(const int *offsets,
@@ -61,9 +61,9 @@ const inline int compute_index(const int *offsets,
 {
 	/* Get coordinates of voxel's tile in tiled image space and coordinates of
 	 * voxel in tile space. */
-	int tix = x / TILE_SIZE, itix = x % TILE_SIZE,
-	    tiy = y / TILE_SIZE, itiy = y % TILE_SIZE,
-	    tiz = z / TILE_SIZE, itiz = z % TILE_SIZE;
+	int tix = x >> TILE_INDEX_SHIFT, itix = x & TILE_INDEX_MASK,
+	    tiy = y >> TILE_INDEX_SHIFT, itiy = y & TILE_INDEX_MASK,
+	    tiz = z >> TILE_INDEX_SHIFT, itiz = z & TILE_INDEX_MASK;
 	/* Get flat index of voxel's tile. */
 	int tile = compute_index(tix, tiy, tiz,
 	                         get_tile_res(width),
@@ -79,7 +79,7 @@ const inline int compute_index(const int *offsets,
 	}
 	/* If the tile is the last tile in a direction and the end is truncated, we
 	 * have to recalulate itiN with the truncated length. */
-	int remainder_w = width % TILE_SIZE, remainder_h = height % TILE_SIZE;
+	int remainder_w = width & TILE_INDEX_MASK, remainder_h = height & TILE_INDEX_MASK;
 	int itiw = (x > width - remainder_w) ? remainder_w : TILE_SIZE;
 	int itih = (y > height - remainder_h) ? remainder_h : TILE_SIZE;
 	/* Get flat index of voxel in tile space. */
@@ -95,9 +95,9 @@ const inline int compute_index_pad(const int *offsets,
 	/* Get coordinates of voxel's tile in tiled image space and coordinates of
 	 * voxel in tile space. In-tile y and z coordinates assume a pad on
 	 * the tile's minimum bound. */
-	int tix = x / TILE_SIZE, sx = (x % TILE_SIZE) + SPARSE_PAD,
-	    tiy = y / TILE_SIZE, sy = (y % TILE_SIZE) + SPARSE_PAD,
-	    tiz = z / TILE_SIZE, sz = (z % TILE_SIZE) + SPARSE_PAD;
+	int tix = x >> TILE_INDEX_SHIFT, sx = (x & TILE_INDEX_MASK) + SPARSE_PAD,
+	    tiy = y >> TILE_INDEX_SHIFT, sy = (y & TILE_INDEX_MASK) + SPARSE_PAD,
+	    tiz = z >> TILE_INDEX_SHIFT, sz = (z & TILE_INDEX_MASK) + SPARSE_PAD;
 	/* Get flat index of voxel's tile. */
 	int tile = compute_index(tix, tiy, tiz,
 	                         get_tile_res(width),

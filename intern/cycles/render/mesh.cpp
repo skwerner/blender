@@ -457,6 +457,10 @@ Mesh::Mesh()
 	subd_params = NULL;
 
 	patch_table = NULL;
+
+	motion_steps = 0;
+	use_motion_blur = false;
+	use_volume_motion_blur = false;
 }
 
 Mesh::~Mesh()

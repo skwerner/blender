@@ -20,7 +20,7 @@ namespace {
 
 /* Misc internal helper functions. */
 
-template <typename T> bool gte_any(const T &a, const float &b) { return float(a) > b; }
+template <typename T> bool gte_any(const T &a, const float &b) { return float(a) >= b; }
 template <> bool gte_any(const openvdb::math::Vec3d &a, const float &b)
 {
 	return float(a.x()) >= b || float(a.y()) >= b || float(a.z()) >= b;
@@ -60,9 +60,9 @@ template <> void copy(float *des, const openvdb::math::Vec3s *src)
 const int get_tile_index(const openvdb::math::Coord &start,
                          const openvdb::math::Coord &tiled_res)
 {
-	return compute_index(start.x() / TILE_SIZE,
-	                     start.y() / TILE_SIZE,
-	                     start.z() / TILE_SIZE,
+	return compute_index(start.x() >> TILE_INDEX_SHIFT,
+	                     start.y() >> TILE_INDEX_SHIFT,
+	                     start.z() >> TILE_INDEX_SHIFT,
 	                     tiled_res.x(),
 	                     tiled_res.y());
 }
@@ -201,7 +201,8 @@ bool get_grid(const string &filepath,
 }
 
 template <typename GridType, typename T>
-bool validate_and_process_grid(typename GridType::Ptr grid)
+bool validate_and_process_grid(typename GridType::Ptr &grid,
+                               const openvdb::math::Coord min_bound)
 {
 	using namespace openvdb;
 
@@ -217,6 +218,17 @@ bool validate_and_process_grid(typename GridType::Ptr grid)
 			return false;
 		}
 	}
+
+	/* Translate grid to start at origin. */
+	if(min_bound[0] != 0 || min_bound[1] != 0 || min_bound[2] != 0) {
+		typename GridType::Ptr new_grid = GridType::create();
+		math::Mat4d xform = math::Mat4d::identity();
+		math::Vec3d translation(-min_bound[0], -min_bound[1], -min_bound[2]);
+		xform.setTranslation(translation);
+		tools::GridTransformer transformer(xform);
+		transformer.transformGrid<tools::PointSampler, GridType>(*grid, *new_grid);
+		grid = new_grid;
+    }
 
 	/* Need to account for external grids with a non-zero background value.
 	 * May have strange results depending on the grid. */
@@ -246,7 +258,7 @@ void image_load_preprocess(openvdb::GridBase::Ptr grid_base,
 	using namespace openvdb;
 
 	typename GridType::Ptr grid = gridPtrCast<GridType>(grid_base);
-	if(!validate_and_process_grid<GridType, T>(grid)) {
+	if(!validate_and_process_grid<GridType, T>(grid, min_bound)) {
 		return;
 	}
 
@@ -264,10 +276,10 @@ void image_load_preprocess(openvdb::GridBase::Ptr grid_base,
 		const typename GridType::TreeType::LeafNodeType *leaf = iter.getLeaf();
 		const T *data = leaf->buffer().data();
 
-		for(int i = 0; i < TILE_SIZE * TILE_SIZE * TILE_SIZE * channels; ++i) {
+		for(int i = 0; i < TILE_SIZE * TILE_SIZE * TILE_SIZE; ++i) {
 			if(gte_any(data[i], threshold)) {
-				const math::Coord tile_start = leaf->getNodeBoundingBox().getStart() - min_bound;
-				sparse_indexes->at(get_tile_index(tile_start, tiled_res)) = 0;
+				const math::Coord tile_start = leaf->getNodeBoundingBox().getStart();
+				sparse_indexes->at(get_tile_index(tile_start, tiled_res)) = voxel_count;
 				/* Calculate how many voxels are in this tile. */
 				voxel_count += coord_product(get_tile_dim(tile_start, resolution, remainder));
 				break;
@@ -303,7 +315,7 @@ void image_load_dense(openvdb::GridBase::Ptr grid_base,
 	using namespace openvdb;
 
 	typename GridType::Ptr grid = gridPtrCast<GridType>(grid_base);
-	if(!validate_and_process_grid<GridType, T>(grid)) {
+	if(!validate_and_process_grid<GridType, T>(grid, min_bound)) {
 		return;
 	}
 
@@ -318,7 +330,7 @@ void image_load_dense(openvdb::GridBase::Ptr grid_base,
 	for (typename GridType::TreeType::LeafCIter iter = grid->tree().cbeginLeaf(); iter; ++iter) {
 		const typename GridType::TreeType::LeafNodeType *leaf = iter.getLeaf();
 		const T *leaf_data = leaf->buffer().data();
-		const math::Coord tile_start = leaf->getNodeBoundingBox().getStart() - min_bound;
+		const math::Coord tile_start = leaf->getNodeBoundingBox().getStart();
 		const math::Coord tile_dim = get_tile_dim(tile_start, resolution, remainder);
 
 		for (int k = 0; k < tile_dim.z(); ++k) {
@@ -330,7 +342,7 @@ void image_load_dense(openvdb::GridBase::Ptr grid_base,
 												   resolution.x(),
 					                               resolution.y());
 					/* Index computation by coordinates is reversed in VDB grids. */
-					int leaf_index = compute_index(k, j, i, tile_dim.z(), tile_dim.y());
+					int leaf_index = compute_index(k, j, i, TILE_SIZE, TILE_SIZE);
 					copy(data + data_index, leaf_data + leaf_index);
 				}
 			}
@@ -349,7 +361,7 @@ void image_load_sparse(openvdb::GridBase::Ptr grid_base,
 	using namespace openvdb;
 
 	typename GridType::Ptr grid = gridPtrCast<GridType>(grid_base);
-	if(!validate_and_process_grid<GridType, T>(grid)) {
+	if(!validate_and_process_grid<GridType, T>(grid, min_bound)) {
 		return;
 	}
 
@@ -364,21 +376,20 @@ void image_load_sparse(openvdb::GridBase::Ptr grid_base,
 	for (typename GridType::TreeType::LeafCIter iter = grid->tree().cbeginLeaf(); iter; ++iter) {
 		const typename GridType::TreeType::LeafNodeType *leaf = iter.getLeaf();
 
-		const math::Coord tile_start = leaf->getNodeBoundingBox().getStart() - min_bound;
+		const math::Coord tile_start = leaf->getNodeBoundingBox().getStart();
 		int tile_index = get_tile_index(tile_start, tiled_res);
-		if(sparse_indexes->at(tile_index) == -1) {
+		if(sparse_indexes->at(tile_index) < 0) {
 			continue;
 		}
 
-		sparse_indexes->at(tile_index) = voxel_count / channels;
+		float *data_tile = data + sparse_indexes->at(tile_index);
 		const math::Coord tile_dim = get_tile_dim(tile_start, resolution, remainder);
 		const T *leaf_tile = leaf->buffer().data();
-		float *data_tile = data + voxel_count;
 
 		for(int k = 0; k < tile_dim.z(); ++k) {
 			for(int j = 0; j < tile_dim.y(); ++j) {
 				for(int i = 0; i < tile_dim.x(); ++i, ++voxel_count) {
-					int data_index = compute_index(i, j, k, tile_dim.x(), tile_dim.y());
+					int data_index = compute_index(i, j, k, tile_dim.x(), tile_dim.y()) * channels;
 					/* Index computation by coordinates is reversed in VDB grids. */
 					int leaf_index = compute_index(k, j, i, TILE_SIZE, TILE_SIZE);
 					copy(data_tile + data_index, leaf_tile + leaf_index);

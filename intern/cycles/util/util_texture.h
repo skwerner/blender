@@ -113,6 +113,10 @@ typedef struct TextureInfo {
 
 /* Sparse tile size and padding settings. */
 #define TILE_SIZE 8
+/* For bit operations instead of division/modulo of TILE_SIZE */
+#define TILE_INDEX_SHIFT 3
+#define TILE_INDEX_MASK 0x7
+
 #define SPARSE_PAD 1
 #define PADDED_TILE (TILE_SIZE + SPARSE_PAD * 2)
 

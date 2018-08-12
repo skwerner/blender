@@ -67,22 +67,21 @@ ccl_device bool sparse_coordinates(const SparseTextureInfo *s_info, float &fx, f
 	modff(fy, &iy);
 	modff(fz, &iz);
 	int x = int(ix), y = int(iy), z = int(iz);
-	int tix = x / TILE_SIZE, sx = (x % TILE_SIZE) + SPARSE_PAD,
-	    tiy = y / TILE_SIZE, sy = (y % TILE_SIZE) + SPARSE_PAD,
-	    tiz = z / TILE_SIZE, sz = (z % TILE_SIZE) + SPARSE_PAD;
-	int tile = tix + s_info->tiled_w * (tiy + tiz * s_info->tiled_h);
+	int tile = (x >> TILE_INDEX_SHIFT) + s_info->tiled_w
+	           * ((y >> TILE_INDEX_SHIFT) + (z >> TILE_INDEX_SHIFT) * s_info->tiled_h);
 	int start_x = offsets[tile];
 	if(start_x < 0) {
 		return false;
 	}
+	int in_tile_x = (x & TILE_INDEX_MASK) + SPARSE_PAD;
 	if(x >= TILE_SIZE) {
 		if(offsets[tile - 1] > -1) {
-			sx -= SPARSE_PAD;
+			in_tile_x -= SPARSE_PAD;
 		}
 	}
-	fx += float(start_x + sx);
-	fy += float(sy);
-	fz += float(sz);
+	fx += float(start_x + in_tile_x);
+	fy += float((y & TILE_INDEX_MASK) + SPARSE_PAD);
+	fz += float((z & TILE_INDEX_MASK) + SPARSE_PAD);
 	return true;
 }
 

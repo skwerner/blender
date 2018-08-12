@@ -437,10 +437,6 @@ Object *BlenderSync::sync_object(BL::Depsgraph& b_depsgraph,
 		Scene::MotionType need_motion = scene->need_motion();
 		if(need_motion != Scene::MOTION_NONE && object->mesh) {
 			Mesh *mesh = object->mesh;
-			mesh->motion_steps = 0;
-			mesh->use_motion_blur = false;
-			mesh->use_volume_motion_blur = false;
-
 			uint motion_steps;
 
 			if(scene->need_motion() == Scene::MOTION_BLUR) {

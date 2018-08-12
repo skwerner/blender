@@ -702,19 +702,28 @@ void ImageManager::file_load_extern_vdb(Device *device,
 		return;
 	}
 
+	const bool use_pad = (device->info.type == DEVICE_CUDA);
 	int sparse_size = -1;
 	vector<int> sparse_offsets;
 	openvdb_load_preprocess(img->filename, img->grid_name, img->isovalue,
-	                        &sparse_offsets, sparse_size);
+	                        use_pad, &sparse_offsets, sparse_size);
 
 	/* Allocate space for image. */
 	float *pixels;
 	{
 		thread_scoped_lock device_lock(device_mutex);
-		if(sparse_size > -1) {
+		if(use_pad && sparse_size > -1) {
+			tex_img->grid_type = IMAGE_GRID_TYPE_SPARSE_PAD;
+			int width = sparse_size / (PADDED_TILE * PADDED_TILE *
+									   (type == IMAGE_DATA_TYPE_FLOAT4 ? 4 : 1));
+			pixels = (float*)tex_img->alloc(width, PADDED_TILE, PADDED_TILE);
+		}
+		else if(sparse_size > -1) {
+			tex_img->grid_type = IMAGE_GRID_TYPE_SPARSE;
 			pixels = (float*)tex_img->alloc(sparse_size);
 		}
 		else {
+			tex_img->grid_type = IMAGE_GRID_TYPE_DEFAULT;
 			pixels = (float*)tex_img->alloc(img->metadata.width,
 			                                img->metadata.height,
 			                                img->metadata.depth);
@@ -728,20 +737,16 @@ void ImageManager::file_load_extern_vdb(Device *device,
 	}
 
 	/* Load image. */
-	openvdb_load_image(img->filename, img->grid_name, pixels, &sparse_offsets);
+	openvdb_load_image(img->filename, img->grid_name, &sparse_offsets,
+	                   sparse_size, use_pad, pixels);
 
 	/* Allocate space for sparse_index if it exists. */
 	if(sparse_size > -1) {
-		tex_img->grid_type = IMAGE_GRID_TYPE_SPARSE;
-
 		if(!allocate_grid_info(device, (device_memory*)tex_img, &sparse_offsets)) {
 			/* Could be that we've run out of memory. */
 			file_load_failed<DeviceType>(img, type, tex_img);
 			return;
 		}
-	}
-	else {
-		tex_img->grid_type = IMAGE_GRID_TYPE_DEFAULT;
 	}
 
 	/* Set metadata and copy. */

@@ -26,13 +26,16 @@ int3 openvdb_get_resolution(const string& filepath);
 void openvdb_load_preprocess(const string& filepath,
                              const string& grid_name,
                              const float threshold,
+                             const bool use_pad,
                              vector<int> *sparse_index,
                              int &sparse_size);
 
 void openvdb_load_image(const string& filepath,
                         const string& grid_name,
-                        float *image,
-                        vector<int> *sparse_index);
+                        const vector<int> *sparse_indexes,
+                        const int sparse_size,
+                        const bool use_pad,
+                        float *image);
 
 CCL_NAMESPACE_END
 

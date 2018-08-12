@@ -555,8 +555,8 @@ void viewrotate_modal_keymap(wmKeyConfig *keyconf)
 	static const EnumPropertyItem modal_items[] = {
 		{VIEW_MODAL_CONFIRM,    "CONFIRM", 0, "Confirm", ""},
 
-		{VIEWROT_MODAL_AXIS_SNAP_ENABLE,    "AXIS_SNAP_ENABLE", 0, "Enable Axis Snap", ""},
-		{VIEWROT_MODAL_AXIS_SNAP_DISABLE,   "AXIS_SNAP_DISABLE", 0, "Disable Axis Snap", ""},
+		{VIEWROT_MODAL_AXIS_SNAP_ENABLE,    "AXIS_SNAP_ENABLE", 0, "Axis Snap", ""},
+		{VIEWROT_MODAL_AXIS_SNAP_DISABLE,   "AXIS_SNAP_DISABLE", 0, "Axis Snap (Off)", ""},
 
 		{VIEWROT_MODAL_SWITCH_ZOOM, "SWITCH_TO_ZOOM", 0, "Switch to Zoom"},
 		{VIEWROT_MODAL_SWITCH_MOVE, "SWITCH_TO_MOVE", 0, "Switch to Move"},
@@ -928,7 +928,7 @@ static int viewrotate_invoke(bContext *C, wmOperator *op, const wmEvent *event)
 }
 
 /* test for unlocked camera view in quad view */
-static int view3d_camera_user_poll(bContext *C)
+static bool view3d_camera_user_poll(bContext *C)
 {
 	View3D *v3d;
 	ARegion *ar;
@@ -943,7 +943,7 @@ static int view3d_camera_user_poll(bContext *C)
 	return 0;
 }
 
-static int view3d_lock_poll(bContext *C)
+static bool view3d_lock_poll(bContext *C)
 {
 	View3D *v3d = CTX_wm_view3d(C);
 	if (v3d) {

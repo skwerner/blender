@@ -53,6 +53,8 @@ using Alembic::AbcGeom::OV2fGeomParam;
 using Alembic::AbcGeom::OC4fGeomParam;
 
 
+typedef std::unordered_map<uint64_t, int> uv_index_map;
+
 static inline uint64_t uv_to_hash_key(Imath::V2f v)
 {
 	/* Convert -0.0f to 0.0f, so bitwise comparison works. */
@@ -106,7 +108,7 @@ static void get_uvs(const CDStreamConfig &config,
 		}
 	}
 	else {
-		std::unordered_map<uint64_t, int> idx_map;
+		uv_index_map idx_map;
 		int idx_count = 0;
 
 		for (int i = 0; i < num_poly; ++i) {
@@ -117,7 +119,7 @@ static void get_uvs(const CDStreamConfig &config,
 				loopuvpoly--;
 				Imath::V2f uv(loopuvpoly->uv[0], loopuvpoly->uv[1]);
 				uint64_t k = uv_to_hash_key(uv);
-				std::unordered_map<uint64_t, int>::iterator it = idx_map.find(k);
+				uv_index_map::iterator it = idx_map.find(k);
 				if (it == idx_map.end()) {
 					idx_map[k] = idx_count;
 					uvs.push_back(uv);

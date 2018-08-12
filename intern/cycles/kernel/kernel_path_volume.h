@@ -84,7 +84,7 @@ bool kernel_path_volume_bounce(
 
 	if(phase_pdf == 0.0f || bsdf_eval_is_zero(&phase_eval))
 		return false;
-	
+
 	/* modify throughput */
 	path_radiance_bsdf_bounce(kg, L_state, throughput, &phase_eval, phase_pdf, state->bounce, label);
 
@@ -219,7 +219,7 @@ ccl_device void kernel_branched_path_volume_connect_light(
 
 				VolumeIntegrateResult result = kernel_volume_decoupled_scatter(kg,
 					state, ray, sd, &tp, rphase, rscatter, segment, (ls.t != FLT_MAX)? &ls.P: NULL, false);
-					
+
 				/* todo: split up light_sample so we don't have to call it again with new position */
 				if(result == VOLUME_PATH_SCATTERED &&
 				   light_sample(kg, light_u, light_v, sd->time, sd->P_pick, sd->N_pick, state->bounce, &ls, true)) {
@@ -256,7 +256,7 @@ ccl_device void kernel_branched_path_volume_connect_light(
 
 		VolumeIntegrateResult result = kernel_volume_decoupled_scatter(kg,
 			state, ray, sd, &tp, rphase, rscatter, segment, (ls.t != FLT_MAX)? &ls.P: NULL, false);
-			
+
 		/* todo: split up light_sample so we don't have to call it again with new position */
 		if(result == VOLUME_PATH_SCATTERED &&
 		   light_sample(kg, light_u, light_v, sd->time, sd->P, sd->N, state->bounce, &ls, true)) {
@@ -280,4 +280,3 @@ ccl_device void kernel_branched_path_volume_connect_light(
 #endif /* __VOLUME_SCATTER__ */
 
 CCL_NAMESPACE_END
-

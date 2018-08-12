@@ -247,7 +247,7 @@ static void screenshot_cancel(bContext *UNUSED(C), wmOperator *op)
 	screenshot_data_free(op);
 }
 
-static bool screenshot_draw_check_prop(PointerRNA *UNUSED(ptr), PropertyRNA *prop)
+static bool screenshot_draw_check_prop(PointerRNA *UNUSED(ptr), PropertyRNA *prop, void *UNUSED(user_data))
 {
 	const char *prop_id = RNA_property_identifier(prop);
 
@@ -266,10 +266,10 @@ static void screenshot_draw(bContext *UNUSED(C), wmOperator *op)
 
 	/* main draw call */
 	RNA_pointer_create(NULL, op->type->srna, op->properties, &ptr);
-	uiDefAutoButsRNA(layout, &ptr, screenshot_draw_check_prop, '\0');
+	uiDefAutoButsRNA(layout, &ptr, screenshot_draw_check_prop, NULL, '\0');
 }
 
-static int screenshot_poll(bContext *C)
+static bool screenshot_poll(bContext *C)
 {
 	if (G.background)
 		return false;

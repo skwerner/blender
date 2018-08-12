@@ -93,4 +93,3 @@ KERNEL_TEX(TextureInfo, __texture_info)
 KERNEL_TEX(float, __ies)
 
 #undef KERNEL_TEX
-

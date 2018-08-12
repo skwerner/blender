@@ -327,7 +327,7 @@ bool Scene::need_global_attribute(AttributeStandard std)
 		return need_motion() != MOTION_NONE;
 	else if(std == ATTR_STD_MOTION_VERTEX_NORMAL)
 		return need_motion() == MOTION_BLUR;
-	
+
 	return false;
 }
 
@@ -387,5 +387,10 @@ void Scene::device_free()
 	free_memory(false);
 }
 
-CCL_NAMESPACE_END
+void Scene::collect_statistics(RenderStats *stats)
+{
+	mesh_manager->collect_statistics(this, stats);
+	image_manager->collect_statistics(stats);
+}
 
+CCL_NAMESPACE_END

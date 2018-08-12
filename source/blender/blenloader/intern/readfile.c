@@ -138,6 +138,7 @@
 #include "BKE_multires.h"
 #include "BKE_node.h" // for tree type defines
 #include "BKE_object.h"
+#include "BKE_ocean.h"
 #include "BKE_paint.h"
 #include "BKE_particle.h"
 #include "BKE_pointcache.h"
@@ -3160,6 +3161,10 @@ static void direct_link_nodetree(FileData *fd, bNodeTree *ntree)
 					direct_link_curvemapping(fd, node->storage);
 				else if (ELEM(node->type, CMP_NODE_IMAGE, CMP_NODE_R_LAYERS, CMP_NODE_VIEWER, CMP_NODE_SPLITVIEWER))
 					((ImageUser *)node->storage)->ok = 1;
+				else if (node->type==CMP_NODE_CRYPTOMATTE) {
+					NodeCryptomatte *nc = (NodeCryptomatte *) node->storage;
+					nc->matte_id = newdataadr(fd, nc->matte_id);
+				}
 			}
 			else if ( ntree->type==NTREE_TEXTURE) {
 				if (node->type==TEX_NODE_CURVE_RGB || node->type==TEX_NODE_CURVE_TIME)
@@ -5362,8 +5367,8 @@ static void direct_link_modifiers(FileData *fd, ListBase *lb)
 		else if (md->type == eModifierType_Ocean) {
 			OceanModifierData *omd = (OceanModifierData *)md;
 			omd->oceancache = NULL;
-			omd->ocean = NULL;
-			omd->refresh = (MOD_OCEAN_REFRESH_ADD|MOD_OCEAN_REFRESH_RESET|MOD_OCEAN_REFRESH_SIM);
+			omd->ocean = BKE_ocean_add();
+			omd->refresh = MOD_OCEAN_REFRESH_RESET;
 		}
 		else if (md->type == eModifierType_Warp) {
 			WarpModifierData *tmd = (WarpModifierData *)md;
@@ -7537,6 +7542,7 @@ static void direct_link_speaker(FileData *fd, Speaker *spk)
 
 static void direct_link_sound(FileData *fd, bSound *sound)
 {
+	sound->tags = 0;
 	sound->handle = NULL;
 	sound->playback_handle = NULL;
 
@@ -7548,6 +7554,7 @@ static void direct_link_sound(FileData *fd, bSound *sound)
 
 	if (fd->soundmap) {
 		sound->waveform = newsoundadr(fd, sound->waveform);
+		sound->tags |= SOUND_TAGS_WAVEFORM_NO_RELOAD;
 	}
 	else {
 		sound->waveform = NULL;
@@ -7558,7 +7565,7 @@ static void direct_link_sound(FileData *fd, bSound *sound)
 		BLI_spin_init(sound->spinlock);
 	}
 	/* clear waveform loading flag */
-	sound->flags &= ~SOUND_FLAGS_WAVEFORM_LOADING;
+	sound->tags &= ~SOUND_TAGS_WAVEFORM_LOADING;
 
 	sound->packedfile = direct_link_packedfile(fd, sound->packedfile);
 	sound->newpackedfile = direct_link_packedfile(fd, sound->newpackedfile);

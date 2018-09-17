@@ -20,14 +20,14 @@
  *		Monique Dewanchand
  */
 
-#ifndef _COM_FlipNode_h_
-#define _COM_FlipNode_h_
+#ifndef __COM_FLIPNODE_H__
+#define __COM_FLIPNODE_H__
 
 #include "COM_Node.h"
 
 /**
- * @brief FlipNode
- * @ingroup Node
+ * \brief FlipNode
+ * \ingroup Node
  */
 class FlipNode : public Node {
 public:

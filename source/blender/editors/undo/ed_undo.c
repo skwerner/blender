@@ -105,15 +105,11 @@ static int ed_undo_step(bContext *C, int step, const char *undoname)
 {
 	CLOG_INFO(&LOG, 1, "name='%s', step=%d", undoname, step);
 	wmWindowManager *wm = CTX_wm_manager(C);
-	wmWindow *win = CTX_wm_window(C);
-	// Main *bmain = CTX_data_main(C);
 	Scene *scene = CTX_data_scene(C);
 
 	/* undo during jobs are running can easily lead to freeing data using by jobs,
 	 * or they can just lead to freezing job in some other cases */
-	if (WM_jobs_test(wm, scene, WM_JOB_TYPE_ANY)) {
-		return OPERATOR_CANCELLED;
-	}
+	WM_jobs_kill_all(wm);
 
 	/* TODO(campbell): undo_system: use undo system */
 	/* grease pencil can be can be used in plenty of spaces, so check it first */
@@ -167,10 +163,6 @@ static int ed_undo_step(bContext *C, int step, const char *undoname)
 
 	WM_event_add_notifier(C, NC_WINDOW, NULL);
 	WM_event_add_notifier(C, NC_WM | ND_UNDO, NULL);
-
-	if (win) {
-		win->addmousemove = true;
-	}
 
 	return OPERATOR_FINISHED;
 }
@@ -249,7 +241,12 @@ static int ed_undo_exec(bContext *C, wmOperator *UNUSED(op))
 {
 	/* "last operator" should disappear, later we can tie this with undo stack nicer */
 	WM_operator_stack_clear(CTX_wm_manager(C));
-	return ed_undo_step(C, 1, NULL);
+	int ret = ed_undo_step(C, 1, NULL);
+	if (ret & OPERATOR_FINISHED) {
+		/* Keep button under the cursor active. */
+		WM_event_add_mousemove(C);
+	}
+	return ret;
 }
 
 static int ed_undo_push_exec(bContext *C, wmOperator *op)
@@ -262,14 +259,24 @@ static int ed_undo_push_exec(bContext *C, wmOperator *op)
 
 static int ed_redo_exec(bContext *C, wmOperator *UNUSED(op))
 {
-	return ed_undo_step(C, -1, NULL);
+	int ret = ed_undo_step(C, -1, NULL);
+	if (ret & OPERATOR_FINISHED) {
+		/* Keep button under the cursor active. */
+		WM_event_add_mousemove(C);
+	}
+	return ret;
 }
 
 static int ed_undo_redo_exec(bContext *C, wmOperator *UNUSED(op))
 {
 	wmOperator *last_op = WM_operator_last_redo(C);
-	const int ret = ED_undo_operator_repeat(C, last_op);
-	return ret ? OPERATOR_FINISHED : OPERATOR_CANCELLED;
+	int ret = ED_undo_operator_repeat(C, last_op);
+	ret = ret ? OPERATOR_FINISHED : OPERATOR_CANCELLED;
+	if (ret & OPERATOR_FINISHED) {
+		/* Keep button under the cursor active. */
+		WM_event_add_mousemove(C);
+	}
+	return ret;
 }
 
 static bool ed_undo_redo_poll(bContext *C)

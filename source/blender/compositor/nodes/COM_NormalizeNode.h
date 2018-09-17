@@ -19,14 +19,14 @@
  *		Dalai Felinto
  */
 
-#ifndef _COM_NormalizeNode_h_
-#define _COM_NormalizeNode_h_
+#ifndef __COM_NORMALIZENODE_H__
+#define __COM_NORMALIZENODE_H__
 
 #include "COM_Node.h"
 
 /**
- * @brief NormalizeNode
- * @ingroup Node
+ * \brief NormalizeNode
+ * \ingroup Node
  */
 class NormalizeNode : public Node {
 public:

@@ -20,14 +20,14 @@
  *		Monique Dewanchand
  */
 
-#ifndef _COM_BokehBlurNode_h_
-#define _COM_BokehBlurNode_h_
+#ifndef __COM_BOKEHBLURNODE_H__
+#define __COM_BOKEHBLURNODE_H__
 
 #include "COM_Node.h"
 
 /**
- * @brief BokehBlurNode
- * @ingroup Node
+ * \brief BokehBlurNode
+ * \ingroup Node
  */
 class BokehBlurNode : public Node {
 public:

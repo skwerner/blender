@@ -20,14 +20,14 @@
  *		Monique Dewanchand
  */
 
-#ifndef _COM_TimeNode_h_
-#define _COM_TimeNode_h_
+#ifndef __COM_TIMENODE_H__
+#define __COM_TIMENODE_H__
 
 #include "COM_Node.h"
 
 /**
- * @brief TimeNode
- * @ingroup Node
+ * \brief TimeNode
+ * \ingroup Node
  */
 class TimeNode : public Node {
 public:

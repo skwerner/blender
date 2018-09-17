@@ -20,14 +20,14 @@
  *		Monique Dewanchand
  */
 
-#ifndef _COM_VectorCurveNode_h_
-#define _COM_VectorCurveNode_h_
+#ifndef __COM_VECTORCURVENODE_H__
+#define __COM_VECTORCURVENODE_H__
 
 #include "COM_Node.h"
 
 /**
- * @brief VectorCurveNode
- * @ingroup Node
+ * \brief VectorCurveNode
+ * \ingroup Node
  */
 class VectorCurveNode : public Node {
 public:

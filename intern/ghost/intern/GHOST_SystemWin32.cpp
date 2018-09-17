@@ -1248,7 +1248,7 @@ LRESULT WINAPI GHOST_SystemWin32::s_wndProc(HWND hwnd, UINT msg, WPARAM wParam, 
 					 * will not be dispatched to OUR active window if we minimize one of OUR windows. */
 					if (LOWORD(wParam) == WA_INACTIVE)
 						window->lostMouseCapture();
-
+					window->processWin32TabletActivateEvent(GET_WM_ACTIVATE_STATE(wParam, lParam));
 					lResult = ::DefWindowProc(hwnd, msg, wParam, lParam);
 					break;
 				}
@@ -1332,9 +1332,9 @@ LRESULT WINAPI GHOST_SystemWin32::s_wndProc(HWND hwnd, UINT msg, WPARAM wParam, 
 					break;
 				case WM_DPICHANGED:
 					/* The WM_DPICHANGED message is sent when the effective dots per inch (dpi) for a window has changed.
-					* The DPI is the scale factor for a window. There are multiple events that can cause the DPI to
-					* change such as when the window is moved to a monitor with a different DPI.
-					*/
+					 * The DPI is the scale factor for a window. There are multiple events that can cause the DPI to
+					 * change such as when the window is moved to a monitor with a different DPI.
+					 */
 					{
 						WORD newYAxisDPI = HIWORD(wParam);
 						WORD newXAxisDPI = LOWORD(wParam);

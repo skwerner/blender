@@ -20,8 +20,8 @@
  *		Monique Dewanchand
  */
 
-#ifndef _COM_GaussianXBlurOperation_h
-#define _COM_GaussianXBlurOperation_h
+#ifndef __COM_GAUSSIANXBLUROPERATION_H__
+#define __COM_GAUSSIANXBLUROPERATION_H__
 #include "COM_NodeOperation.h"
 #include "COM_BlurBaseOperation.h"
 
@@ -37,7 +37,7 @@ public:
 	GaussianXBlurOperation();
 
 	/**
-	 * @brief the inner loop of this program
+	 * \brief the inner loop of this program
 	 */
 	void executePixel(float output[4], int x, int y, void *data);
 
@@ -47,12 +47,12 @@ public:
 	                   list<cl_kernel> *clKernelsToCleanUp);
 
 	/**
-	 * @brief initialize the execution
+	 * \brief initialize the execution
 	 */
 	void initExecution();
 
 	/**
-	 * @brief Deinitialize the execution
+	 * \brief Deinitialize the execution
 	 */
 	void deinitExecution();
 

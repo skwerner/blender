@@ -20,14 +20,14 @@
  *		Monique Dewanchand
  */
 
-#ifndef _COM_MathNode_h_
-#define _COM_MathNode_h_
+#ifndef __COM_MATHNODE_H__
+#define __COM_MATHNODE_H__
 
 #include "COM_Node.h"
 
 /**
- * @brief MathNode
- * @ingroup Node
+ * \brief MathNode
+ * \ingroup Node
  */
 class MathNode : public Node {
 public:

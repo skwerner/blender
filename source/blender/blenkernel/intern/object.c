@@ -1124,6 +1124,12 @@ void BKE_object_copy_data(Main *UNUSED(bmain), Object *ob_dst, const Object *ob_
 		ob_dst->matbits = MEM_dupallocN(ob_src->matbits);
 		ob_dst->totcol = ob_src->totcol;
 	}
+	else if (ob_dst->mat != NULL || ob_dst->matbits != NULL) {
+		/* This shall not be needed, but better be safe than sorry. */
+		BLI_assert(!"Object copy: non-NULL material pointers with zero counter, should not happen.");
+		ob_dst->mat = NULL;
+		ob_dst->matbits = NULL;
+	}
 
 	if (ob_src->iuser) ob_dst->iuser = MEM_dupallocN(ob_src->iuser);
 
@@ -3641,7 +3647,7 @@ bool BKE_object_modifier_update_subframe(
 		if (ob->track) no_update |= BKE_object_modifier_update_subframe(bmain, eval_ctx, scene, ob->track, 0, recursion, frame, type);
 
 		/* skip subframe if object is parented
-		 *  to vertex of a dynamic paint canvas */
+		 * to vertex of a dynamic paint canvas */
 		if (no_update && (ob->partype == PARVERT1 || ob->partype == PARVERT3))
 			return false;
 

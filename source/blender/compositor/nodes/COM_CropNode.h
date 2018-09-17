@@ -20,14 +20,14 @@
  *		Monique Dewanchand
  */
 
-#ifndef _COM_CropNode_h_
-#define _COM_CropNode_h_
+#ifndef __COM_CROPNODE_H__
+#define __COM_CROPNODE_H__
 
 #include "COM_Node.h"
 
 /**
- * @brief CropNode
- * @ingroup Node
+ * \brief CropNode
+ * \ingroup Node
  */
 class CropNode : public Node {
 public:

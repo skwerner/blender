@@ -20,14 +20,14 @@
  *		Monique Dewanchand
  */
 
-#ifndef _COM_LensDistortionNode_h_
-#define _COM_LensDistortionNode_h_
+#ifndef __COM_LENSDISTORTIONNODE_H__
+#define __COM_LENSDISTORTIONNODE_H__
 
 #include "COM_Node.h"
 
 /**
- * @brief LensDistortionNode
- * @ingroup Node
+ * \brief LensDistortionNode
+ * \ingroup Node
  */
 class LensDistortionNode : public Node {
 public:

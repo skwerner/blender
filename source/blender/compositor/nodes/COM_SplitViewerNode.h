@@ -20,14 +20,14 @@
  *		Monique Dewanchand
  */
 
-#ifndef _COM_SplitViewerNode_h_
-#define _COM_SplitViewerNode_h_
+#ifndef __COM_SPLITVIEWERNODE_H__
+#define __COM_SPLITVIEWERNODE_H__
 
 #include "COM_Node.h"
 #include "DNA_node_types.h"
 /**
- * @brief SplitViewerNode
- * @ingroup Node
+ * \brief SplitViewerNode
+ * \ingroup Node
  */
 class SplitViewerNode : public Node {
 public:

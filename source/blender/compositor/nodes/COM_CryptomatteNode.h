@@ -19,14 +19,14 @@
  *              Lukas Stockner
  */
 
-#ifndef _COM_CryptomatteNode_h_
-#define _COM_CryptomatteNode_h_
+#ifndef __COM_CRYPTOMATTENODE_H__
+#define __COM_CRYPTOMATTENODE_H__
 
 #include "COM_Node.h"
 
 /**
- * @brief CryptomatteNode
- * @ingroup Node
+ * \brief CryptomatteNode
+ * \ingroup Node
  */
 class CryptomatteNode : public Node {
 public:

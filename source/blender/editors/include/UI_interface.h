@@ -462,6 +462,11 @@ void UI_block_update_from_old(const struct bContext *C, struct uiBlock *block);
 
 uiBlock *UI_block_find_in_region(const char *name, struct ARegion *ar);
 
+enum {
+	UI_BLOCK_THEME_STYLE_REGULAR = 0,
+	UI_BLOCK_THEME_STYLE_POPUP = 1,
+};
+void UI_block_theme_style_set(uiBlock *block, char theme_style);
 void UI_block_emboss_set(uiBlock *block, char dt);
 
 void UI_block_free(const struct bContext *C, uiBlock *block);
@@ -1051,8 +1056,10 @@ void uiItemR(uiLayout *layout, struct PointerRNA *ptr, const char *propname, int
 void uiItemFullR(uiLayout *layout, struct PointerRNA *ptr, struct PropertyRNA *prop, int index, int value, int flag, const char *name, int icon);
 void uiItemEnumR_prop(uiLayout *layout, const char *name, int icon, struct PointerRNA *ptr, PropertyRNA *prop, int value);
 void uiItemEnumR(uiLayout *layout, const char *name, int icon, struct PointerRNA *ptr, const char *propname, int value);
+void uiItemEnumR_string_prop(uiLayout *layout, struct PointerRNA *ptr, PropertyRNA *prop, const char *value, const char *name, int icon);
 void uiItemEnumR_string(uiLayout *layout, struct PointerRNA *ptr, const char *propname, const char *value, const char *name, int icon);
 void uiItemsEnumR(uiLayout *layout, struct PointerRNA *ptr, const char *propname);
+void uiItemPointerR_prop(uiLayout *layout, struct PointerRNA *ptr, PropertyRNA *prop, struct PointerRNA *searchptr, PropertyRNA *searchprop, const char *name, int icon);
 void uiItemPointerR(uiLayout *layout, struct PointerRNA *ptr, const char *propname, struct PointerRNA *searchptr, const char *searchpropname, const char *name, int icon);
 void uiItemsFullEnumO(
         uiLayout *layout, const char *opname, const char *propname,

@@ -20,14 +20,14 @@
  *		Monique Dewanchand
  */
 
-#ifndef _COM_GammaNode_h_
-#define _COM_GammaNode_h_
+#ifndef __COM_GAMMANODE_H__
+#define __COM_GAMMANODE_H__
 
 #include "COM_Node.h"
 
 /**
- * @brief GammaNode
- * @ingroup Node
+ * \brief GammaNode
+ * \ingroup Node
  */
 class GammaNode : public Node {
 public:

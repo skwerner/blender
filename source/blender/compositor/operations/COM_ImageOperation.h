@@ -21,8 +21,8 @@
  */
 
 
-#ifndef _COM_ImageOperation_h
-#define _COM_ImageOperation_h
+#ifndef __COM_IMAGEOPERATION_H__
+#define __COM_IMAGEOPERATION_H__
 
 #include "COM_NodeOperation.h"
 #include "BLI_listbase.h"
@@ -35,7 +35,7 @@ extern "C" {
 }
 
 /**
- * @brief Base class for all image operations
+ * \brief Base class for all image operations
  */
 class BaseImageOperation : public NodeOperation {
 protected:

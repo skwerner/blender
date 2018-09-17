@@ -267,6 +267,7 @@ static uiBlock *id_search_menu(bContext *C, ARegion *ar, void *arg_litem)
 
 	block = UI_block_begin(C, ar, "_popup", UI_EMBOSS);
 	UI_block_flag_enable(block, UI_BLOCK_LOOP | UI_BLOCK_SEARCH_MENU);
+	UI_block_theme_style_set(block, UI_BLOCK_THEME_STYLE_POPUP);
 
 	/* preview thumbnails */
 	if (template_ui.prv_rows > 0 && template_ui.prv_cols > 0) {
@@ -1283,11 +1284,11 @@ static uiLayout *draw_constraint(uiLayout *layout, Object *ob, bConstraint *con)
 		short prev_proxylock, show_upbut, show_downbut;
 
 		/* Up/Down buttons:
-		 *	Proxy-constraints are not allowed to occur after local (non-proxy) constraints
-		 *	as that poses problems when restoring them, so disable the "up" button where
-		 *	it may cause this situation.
+		 * Proxy-constraints are not allowed to occur after local (non-proxy) constraints
+		 * as that poses problems when restoring them, so disable the "up" button where
+		 * it may cause this situation.
 		 *
-		 *  Up/Down buttons should only be shown (or not grayed - todo) if they serve some purpose.
+		 * Up/Down buttons should only be shown (or not grayed - todo) if they serve some purpose.
 		 */
 		if (BKE_constraints_proxylocked_owner(ob, pchan)) {
 			if (con->prev) {
@@ -1774,6 +1775,7 @@ static uiBlock *ui_icon_view_menu_cb(bContext *C, ARegion *ar, void *arg_litem)
 
 	block = UI_block_begin(C, ar, "_popup", UI_EMBOSS_PULLDOWN);
 	UI_block_flag_enable(block, UI_BLOCK_LOOP | UI_BLOCK_NO_FLIP);
+	UI_block_theme_style_set(block, UI_BLOCK_THEME_STYLE_POPUP);
 
 	RNA_property_enum_items(C, &args.ptr, args.prop, &item, NULL, &free);
 
@@ -3874,9 +3876,11 @@ void uiTemplateRunningJobs(uiLayout *layout, bContext *C)
 			UI_but_func_tooltip_set(but_progress, progress_tooltip_func, tip_arg);
 		}
 
-		uiDefIconTextBut(block, UI_BTYPE_BUT, handle_event, ICON_PANEL_CLOSE,
-		                 "", 0, 0, UI_UNIT_X, UI_UNIT_Y,
-		                 NULL, 0.0f, 0.0f, 0, 0, TIP_("Stop this job"));
+		if (!wm->is_interface_locked) {
+			uiDefIconTextBut(block, UI_BTYPE_BUT, handle_event, ICON_PANEL_CLOSE,
+			                 "", 0, 0, UI_UNIT_X, UI_UNIT_Y,
+			                 NULL, 0.0f, 0.0f, 0, 0, TIP_("Stop this job"));
+		}
 	}
 
 	if (screen->animtimer)

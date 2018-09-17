@@ -20,14 +20,14 @@
  *		Monique Dewanchand
  */
 
-#ifndef _COM_IDMaskNode_h_
-#define _COM_IDMaskNode_h_
+#ifndef __COM_IDMASKNODE_H__
+#define __COM_IDMASKNODE_H__
 
 #include "COM_Node.h"
 
 /**
- * @brief IDMaskNode
- * @ingroup Node
+ * \brief IDMaskNode
+ * \ingroup Node
  */
 class IDMaskNode : public Node {
 public:

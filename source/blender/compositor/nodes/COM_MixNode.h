@@ -20,14 +20,14 @@
  *		Monique Dewanchand
  */
 
-#ifndef _COM_MixNode_h_
-#define _COM_MixNode_h_
+#ifndef __COM_MIXNODE_H__
+#define __COM_MIXNODE_H__
 
 #include "COM_Node.h"
 #include "DNA_node_types.h"
 /**
- * @brief MixNode
- * @ingroup Node
+ * \brief MixNode
+ * \ingroup Node
  */
 class MixNode : public Node {
 public:

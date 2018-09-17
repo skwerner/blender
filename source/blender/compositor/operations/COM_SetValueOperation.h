@@ -20,8 +20,8 @@
  *		Monique Dewanchand
  */
 
-#ifndef _COM_SetValueOperation_h
-#define _COM_SetValueOperation_h
+#ifndef __COM_SETVALUEOPERATION_H__
+#define __COM_SETVALUEOPERATION_H__
 #include "COM_NodeOperation.h"
 
 
@@ -39,7 +39,7 @@ public:
 	 */
 	SetValueOperation();
 
-	const float getValue() { return this->m_value; }
+	float getValue() { return this->m_value; }
 	void setValue(float value) { this->m_value = value; }
 
 

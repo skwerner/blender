@@ -20,8 +20,8 @@
  *		Monique Dewanchand
  */
 
-#ifndef _COM_ConvertColorProfileOperation_h
-#define _COM_ConvertColorProfileOperation_h
+#ifndef __COM_CONVERTCOLORPROFILEOPERATION_H__
+#define __COM_CONVERTCOLORPROFILEOPERATION_H__
 #include "COM_NodeOperation.h"
 
 
@@ -37,17 +37,17 @@ private:
 	SocketReader *m_inputOperation;
 
 	/**
-	 * @brief color profile where to convert from
+	 * \brief color profile where to convert from
 	 */
 	int m_fromProfile;
 
 	/**
-	 * @brief color profile where to convert to
+	 * \brief color profile where to convert to
 	 */
 	int m_toProfile;
 
 	/**
-	 * @brief is color predivided
+	 * \brief is color predivided
 	 */
 	bool m_predivided;
 public:

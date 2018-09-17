@@ -20,14 +20,14 @@
  *		Monique Dewanchand
  */
 
-#ifndef _COM_ColorCurveNode_h_
-#define _COM_ColorCurveNode_h_
+#ifndef __COM_COLORCURVENODE_H__
+#define __COM_COLORCURVENODE_H__
 
 #include "COM_Node.h"
 
 /**
- * @brief ColorCurveNode
- * @ingroup Node
+ * \brief ColorCurveNode
+ * \ingroup Node
  */
 class ColorCurveNode : public Node {
 public:

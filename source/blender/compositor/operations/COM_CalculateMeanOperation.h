@@ -20,19 +20,19 @@
  *		Monique Dewanchand
  */
 
-#ifndef _COM_CalculateMeanOperation_h
-#define _COM_CalculateMeanOperation_h
+#ifndef __COM_CALCULATEMEANOPERATION_H__
+#define __COM_CALCULATEMEANOPERATION_H__
 #include "COM_NodeOperation.h"
 #include "DNA_node_types.h"
 
 /**
- * @brief base class of CalculateMean, implementing the simple CalculateMean
- * @ingroup operation
+ * \brief base class of CalculateMean, implementing the simple CalculateMean
+ * \ingroup operation
  */
 class CalculateMeanOperation : public NodeOperation {
 protected:
 	/**
-	 * @brief Cached reference to the reader
+	 * \brief Cached reference to the reader
 	 */
 	SocketReader *m_imageReader;
 

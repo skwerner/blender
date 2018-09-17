@@ -2113,7 +2113,7 @@ static void adjust_the_cycle_or_chain(BoundVert *vstart, bool iscycle)
 
 			/* residue np + 2*i (if cycle) else np - 1 + 2*i:
 			 * right offset for parm i matches its spec; weighted */
-			row = iscycle ? np + 2 * i : np - 1 + 2 *  i;
+			row = iscycle ? np + 2 * i : np - 1 + 2 * i;
 			EIG_linear_solver_matrix_add(solver, row, i, weight);
 			EIG_linear_solver_right_hand_side_add(solver, 0, row, weight * eright->offset_r);
 #ifdef DEBUG_ADJUST
@@ -4930,7 +4930,7 @@ static void find_even_superellipse_chords_general(int seg, float r, double *xval
 	double sum;
 	double temp;
 
-	bool precision_reached;
+	bool precision_reached = true;
 	bool seg_odd = seg % 2;
 	bool rbig;
 

@@ -131,13 +131,14 @@ public:
 /* Texture Cache Params */
 class TextureCacheParams {
 public:
-	TextureCacheParams() : cache_size(1024), tile_size(64), diffuse_blur(1.0f/64.f),
+	TextureCacheParams() : use_cache(false), cache_size(1024), tile_size(64), diffuse_blur(1.0f/64.f),
 	glossy_blur(0.0f), auto_convert(true), accept_unmipped(true), accept_untiled(true),
 	auto_tile(true), auto_mip(true) { }
 	
 	bool modified(const TextureCacheParams& params)
 	{
-		return !(cache_size == params.cache_size
+		return !(use_cache == use_cache
+		         && cache_size == params.cache_size
 				 && tile_size == params.tile_size
 				 && diffuse_blur == params.diffuse_blur
 				 && glossy_blur == params.glossy_blur
@@ -147,7 +148,8 @@ public:
 				 && auto_tile == params.auto_tile
 				 && auto_mip == params.auto_mip);
 	}
-	
+
+	bool use_cache;
 	int cache_size;
 	int tile_size;
 	float diffuse_blur;

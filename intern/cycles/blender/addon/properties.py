@@ -658,6 +658,12 @@ class CyclesRenderSettings(bpy.types.PropertyGroup):
             items=enum_texture_limit
         )
 
+        cls.use_texture_cache = BoolProperty(
+            name="Use Texture Cache",
+            default=True,
+            description="Enables out-of-core texturing to save RAM"
+        )
+
         cls.texture_cache_size = IntProperty(
             name="Texture Cache Size (MB)",
             default=0,

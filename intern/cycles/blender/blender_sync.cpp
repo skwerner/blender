@@ -689,6 +689,7 @@ SceneParams BlenderSync::get_scene_params(BL::Scene& b_scene,
 		params.bvh_layout = DebugFlags().cpu.bvh_layout;
 	}
 
+	params.texture.use_cache  = RNA_boolean_get(&cscene, "use_texture_cache");
 	params.texture.cache_size = RNA_int_get(&cscene, "texture_cache_size");
 	params.texture.auto_convert = RNA_boolean_get(&cscene, "texture_auto_convert");
 	params.texture.accept_unmipped = RNA_boolean_get(&cscene, "texture_accept_unmipped");

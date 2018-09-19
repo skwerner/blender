@@ -421,18 +421,6 @@ class CYCLES_RENDER_PT_performance(CyclesButtonsPanel, Panel):
                 subsub.active = False
         subsub.prop(cscene, "use_progressive_refine")
 
-        sub.separator()
-        sub.label(text="Texture Cache:")
-        sub.prop(cscene, "texture_cache_size")
-        sub.prop(cscene, "texture_auto_convert")
-        sub.prop(cscene, "texture_accept_unmipped")
-        sub.prop(cscene, "texture_accept_untiled")
-        sub.prop(cscene, "texture_auto_mip")
-        sub.prop(cscene, "texture_auto_tile")
-        sub.prop(cscene, "texture_tile_size")
-        sub.prop(cscene, "texture_blur_diffuse")
-        sub.prop(cscene, "texture_blur_glossy")
-
         col = split.column()
 
         col.label(text="Final Render:")
@@ -455,6 +443,36 @@ class CYCLES_RENDER_PT_performance(CyclesButtonsPanel, Panel):
         split.prop(rd, "preview_pixel_size", text="")
         split.prop(cscene, "preview_start_resolution")
 
+class CYCLES_RENDER_PT_texture_cache(CyclesButtonsPanel, Panel):
+    bl_label = "Texture Cache"
+    bl_options = {'DEFAULT_CLOSED'}
+
+    def draw_header(self, context):
+        cscene = context.scene.cycles
+
+        self.layout.prop(cscene, "use_texture_cache", text="")
+
+    def draw(self, context):
+        layout = self.layout
+
+        scene = context.scene
+        cscene = scene.cycles
+        rd = scene.render
+        layout.active = cscene.use_texture_cache
+
+        col = layout.column()
+        split = col.split()
+        col = split.column()
+        col.prop(cscene, "texture_auto_convert")
+        col.prop(cscene, "texture_accept_unmipped")
+        col.prop(cscene, "texture_accept_untiled")
+        col.prop(cscene, "texture_auto_mip")
+        col.prop(cscene, "texture_auto_tile")
+        col = split.column()
+        col.prop(cscene, "texture_cache_size")
+        col.prop(cscene, "texture_tile_size")
+        col.prop(cscene, "texture_blur_diffuse")
+        col.prop(cscene, "texture_blur_glossy")
 
 class CYCLES_RENDER_PT_layer_options(CyclesButtonsPanel, Panel):
     bl_label = "Layer"
@@ -1857,6 +1875,7 @@ classes = (
     CYCLES_RENDER_PT_motion_blur,
     CYCLES_RENDER_PT_film,
     CYCLES_RENDER_PT_performance,
+    CYCLES_RENDER_PT_texture_cache,
     CYCLES_RENDER_PT_layer_options,
     CYCLES_RENDER_PT_layer_passes,
     CYCLES_RENDER_PT_views,

@@ -39,10 +39,10 @@ ccl_device float fresnel_dielectric(
         float eta, const float3 N,
         const float3 I, float3 *R, float3 *T,
 #ifdef __RAY_DIFFERENTIALS__
-        const float3 dIdx, const float3 dIdy,
 #  ifdef __DNDU__
 		const float3 dNdx, const float3 dNdy,
 #  endif
+        const float3 dIdx, const float3 dIdy,
         float3 *dRdx, float3 *dRdy,
         float3 *dTdx, float3 *dTdy,
 #endif

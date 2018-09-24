@@ -147,7 +147,8 @@ ccl_device_noinline void shader_setup_from_ray(KernelGlobals *kg,
 	differential_incoming(&sd->dI, ray->dD);
 	differential_dudv(&sd->du, &sd->dv, sd->dPdu, sd->dPdv, sd->dP, sd->Ng);
 #  ifdef __DNDU__
-	if(sd->type & PRIMITIVE_TRIANGLE) {
+	if(sd->shader & SHADER_SMOOTH_NORMAL && sd->type & PRIMITIVE_TRIANGLE) {
+		// TODO stefan curves
 		/* dNdu/dNdv */
 		float3 dNdu, dNdv;
 		triangle_dNdudv(kg, sd->prim, &dNdu, &dNdv);

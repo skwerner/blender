@@ -109,6 +109,7 @@ ccl_device_noinline bool direct_emission(KernelGlobals *kg,
 	differential_reflect(&dD, sd->I, &sd->dI, sd->N, &dN);
 
 	/* evaluate closure */
+	emission_sd->dP = sd->dP;
 
 	float3 light_eval = direct_emissive_eval(kg,
 	                                         emission_sd,

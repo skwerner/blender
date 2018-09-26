@@ -660,14 +660,14 @@ class CyclesRenderSettings(bpy.types.PropertyGroup):
 
         cls.use_texture_cache = BoolProperty(
             name="Use Texture Cache",
-            default=True,
-            description="Enables out-of-core texturing to save RAM"
+            default=False,
+            description="Enables out-of-core texturing to conserve RAM"
         )
 
         cls.texture_cache_size = IntProperty(
             name="Texture Cache Size (MB)",
-            default=0,
-            description="The size of the OpenImageIO texture cache in MB. A value of 0 turns off texture caching. Typical values are in the range of 100s of MB",
+            default=1024,
+            description="The size of the OpenImageIO texture cache in MB",
             min=0
         )
 

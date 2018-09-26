@@ -64,7 +64,7 @@ color image_texture_lookup(string filename,
                            string interpolation,
                            string extension)
 {
-	color rgb = (color)texture(filename, u, 1.0 - v, "wrap", extension, "interp", interpolation, "alpha", Alpha);
+	color rgb = (color)texture(filename, u, v, "wrap", extension, "interp", interpolation, "alpha", Alpha);
 
 	if (use_alpha) {
 		rgb = color_unpremultiply(rgb, Alpha);
@@ -73,7 +73,7 @@ color image_texture_lookup(string filename,
 			rgb = min(rgb, 1.0);
 	}
 
-	if (color_space == "sRGB") {
+	if (color_space == "sRGB" && !endswith(filename, ".tx")) {
 		rgb = color_srgb_to_scene_linear(rgb);
 	}
 

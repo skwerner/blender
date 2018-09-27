@@ -205,6 +205,11 @@ void shader_setup_from_subsurface(
 	sd->v = isect->v;
 #  endif
 
+#  ifdef __DNDU__
+	sd->dNdx = make_float3(0.0f, 0.0f, 0.0f);
+	sd->dNdy = make_float3(0.0f, 0.0f, 0.0f);
+#  endif
+
 	/* fetch triangle data */
 	if(sd->type == PRIMITIVE_TRIANGLE) {
 		float3 Ng = triangle_normal(kg, sd);
@@ -224,10 +229,12 @@ void shader_setup_from_subsurface(
 #  endif
 #  ifdef __DNDU__
 		/* dNdu/dNdv */
-		float3 dNdu, dNdv;
-		triangle_dNdudv(kg, sd->prim, &dNdu, &dNdv);
-		sd->dNdx = dNdu * sd->du.dx + dNdv * sd->dv.dx;
-		sd->dNdy = dNdu * sd->du.dy + dNdv * sd->dv.dy;
+		if(sd->shader & SHADER_SMOOTH_NORMAL && sd->type & PRIMITIVE_TRIANGLE) {
+			float3 dNdu, dNdv;
+			triangle_dNdudv(kg, sd->prim, &dNdu, &dNdv);
+			sd->dNdx = dNdu * sd->du.dx + dNdv * sd->dv.dx;
+			sd->dNdy = dNdu * sd->du.dy + dNdv * sd->dv.dy;
+		}
 #  endif
 	}
 	else {
@@ -555,8 +562,9 @@ ccl_device_inline void shader_setup_from_volume(KernelGlobals *kg, ShaderData *s
 
 #  ifdef __RAY_DIFFERENTIALS__
 	/* differentials */
-	sd->dP = ray->dD;
-	differential_incoming(&sd->dI, sd->dP);
+	sd->dP.dx = ray->dP.dx + ray->t * ray->dD.dx;
+	sd->dP.dy = ray->dP.dy+ ray->t * ray->dD.dy;
+	differential_incoming(&sd->dI, ray->dD);
 	sd->du = differential_zero();
 	sd->dv = differential_zero();
 #  endif

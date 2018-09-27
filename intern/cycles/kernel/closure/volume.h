@@ -105,7 +105,9 @@ ccl_device float3 henyey_greenstrein_sample(float3 D, float g, float randu, floa
 
 	float sin_theta = safe_sqrtf(1.0f - cos_theta * cos_theta);
 	float phi = M_2PI_F * randv;
-	float3 dir = make_float3(sin_theta * cosf(phi), sin_theta * sinf(phi), cos_theta);
+	float cos_phi = cosf(phi);
+	float sin_phi = sinf(phi);
+	float3 dir = make_float3(sin_theta * cos_phi, sin_theta * sin_phi, cos_theta);
 
 	float3 T, B;
 	make_orthonormals(D, &T, &B);
@@ -113,12 +115,18 @@ ccl_device float3 henyey_greenstrein_sample(float3 D, float g, float randu, floa
 
 #ifdef __RAY_DIFFERENTIALS__
 	if(domega_in_dx && domega_in_dy) {
-		float cos_phi = cosf(phi);
-		float sin_phi = sinf(phi);
-		make_orthonormals(D - dIdx, &T, &B);
-		*domega_in_dx = sin_theta * cos_phi * T + sin_theta * sin_phi * B + cos_theta * (D - dIdx) - dir;
-		make_orthonormals(D - dIdy, &T, &B);
-		*domega_in_dy = sin_theta * cos_phi * T + sin_theta * sin_phi * B + cos_theta * (D - dIdy) - dir;
+		if(pdf && *pdf < 1.0f) {
+			float spread = 0.125f / sqrtf(*pdf);
+			make_orthonormals(dir, &T, &B);
+			*domega_in_dx = spread * T;
+			*domega_in_dy = spread * B;
+		}
+		else {
+			make_orthonormals(D - dIdx, &T, &B);
+			*domega_in_dx = sin_theta * cos_phi * T + sin_theta * sin_phi * B + cos_theta * (D - dIdx) - dir;
+			make_orthonormals(D - dIdy, &T, &B);
+			*domega_in_dy = sin_theta * cos_phi * T + sin_theta * sin_phi * B + cos_theta * (D - dIdy) - dir;
+		}
 	}
 #endif
 

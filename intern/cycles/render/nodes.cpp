@@ -337,6 +337,8 @@ void ImageTextureNode::compile(SVMCompiler& compiler)
 					0));
 		}
 		else {
+			/* Blend is a float between 0 and 1. Convert to 16 bit unsigned int to make room for vector_dx and vector_dy. */
+			uint blend = clamp(projection_blend, 0.0f, 1.0f) * 65535.0f;
 			compiler.add_node(NODE_TEX_IMAGE_BOX,
 				slot,
 				compiler.encode_uchar4(
@@ -344,7 +346,11 @@ void ImageTextureNode::compile(SVMCompiler& compiler)
 					compiler.stack_assign_if_linked(color_out),
 					compiler.stack_assign_if_linked(alpha_out),
 					srgb),
-				__float_as_int(projection_blend));
+				compiler.encode_uchar4(
+					blend >> 8,
+					blend & 0xff,
+					compiler.stack_assign(vector_dx),
+					compiler.stack_assign(vector_dy)));
 		}
 
 		tex_mapping.compile_end(compiler, vector_in, vector_offset);

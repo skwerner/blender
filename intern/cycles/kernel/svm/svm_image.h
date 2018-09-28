@@ -183,7 +183,9 @@ ccl_device void svm_node_tex_image_box(KernelGlobals *kg, ShaderData *sd, float 
 	 * 7 zones, with an if() test for each zone */
 
 	float3 weight = make_float3(0.0f, 0.0f, 0.0f);
-	float blend = __int_as_float(node.w);
+	uint blend_hi, blend_lo, dx_offset, dy_offset;
+	decode_node_uchar4(node.w, &blend_hi, &blend_lo, &dx_offset, &dy_offset);
+	float blend = ((blend_hi << 8) + blend_lo) / 65536.0f;
 	float limit = 0.5f*(1.0f + blend);
 
 	/* first test for corners with single texture */
@@ -235,20 +237,39 @@ ccl_device void svm_node_tex_image_box(KernelGlobals *kg, ShaderData *sd, float 
 	float4 f = make_float4(0.0f, 0.0f, 0.0f, 0.0f);
 	uint use_alpha = stack_valid(alpha_offset);
 
-	differential ds = differential_zero();
-	differential dt = differential_zero();
-
+	float3 co_dx = make_float3(0.0f, 0.0f, 0.0f);
+	float3 co_dy = make_float3(0.0f, 0.0f, 0.0f);
+	differential ds, dt;
+#ifdef __KERNEL_CPU__
+	if(stack_valid(dx_offset) && stack_valid(dy_offset)) {
+		co_dx = co - stack_load_float3(stack, dx_offset);
+		co_dy = co - stack_load_float3(stack, dy_offset);
+	}
+#endif
+	
 	/* Map so that no textures are flipped, rotation is somewhat arbitrary. */
 	if(weight.x > 0.0f) {
-		float2 uv = make_float2((signed_N.x < 0.0f)? 1.0f - co.y: co.y, co.z);
+		float2 uv = make_float2((signed_N.x < 0.0f) ? 1.0f - co.y: co.y, co.z);
+		ds.dx = co_dx.y;
+		ds.dy = co_dy.y;
+		dt.dx = co_dx.z;
+		dt.dy = co_dy.z;
 		f += weight.x*svm_image_texture(kg, id, uv.x, uv.y, ds, dt, srgb, use_alpha, false);
 	}
 	if(weight.y > 0.0f) {
-		float2 uv = make_float2((signed_N.y > 0.0f)? 1.0f - co.x: co.x, co.z);
+		float2 uv = make_float2((signed_N.y < 0.0f) ? 1.0f - co.x: co.x, co.z);
+		ds.dx = co_dx.x;
+		ds.dy = co_dy.x;
+		dt.dx = co_dx.z;
+		dt.dy = co_dy.z;
 		f += weight.y*svm_image_texture(kg, id, uv.x, uv.y, ds, dt, srgb, use_alpha, false);
 	}
 	if(weight.z > 0.0f) {
-		float2 uv = make_float2((signed_N.z > 0.0f)? 1.0f - co.y: co.y, co.x);
+		float2 uv = make_float2((signed_N.z < 0.0f) ? 1.0f - co.y: co.y, co.x);
+		ds.dx = co_dx.y;
+		ds.dy = co_dy.y;
+		dt.dx = co_dx.x;
+		dt.dy = co_dy.x;
 		f += weight.z*svm_image_texture(kg, id, uv.x, uv.y, ds, dt, srgb, use_alpha, false);
 	}
 	if(stack_valid(out_offset))

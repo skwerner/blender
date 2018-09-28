@@ -31,7 +31,7 @@ elseif(NOT WITH_CPU_SSE)
 	set(CXX_HAS_SSE FALSE)
 	set(CXX_HAS_AVX FALSE)
 	set(CXX_HAS_AVX2 FALSE)
-elseif(WIN32 AND MSVC)
+elseif(WIN32 AND MSVC AND NOT CMAKE_CXX_COMPILER_ID MATCHES "Clang")
 	set(CXX_HAS_SSE TRUE)
 	set(CXX_HAS_AVX TRUE)
 	set(CXX_HAS_AVX2 TRUE)
@@ -104,6 +104,54 @@ elseif(CMAKE_COMPILER_IS_GNUCC OR (CMAKE_CXX_COMPILER_ID MATCHES "Clang"))
 	endif()
 
 	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${CYCLES_KERNEL_FLAGS}")
+elseif(WIN32 AND CMAKE_CXX_COMPILER_ID MATCHES "Intel")
+	check_cxx_compiler_flag(/QxSSE2 CXX_HAS_SSE)
+	check_cxx_compiler_flag(/arch:AVX CXX_HAS_AVX)
+	check_cxx_compiler_flag(/QxCORE-AVX2 CXX_HAS_AVX2)
+
+	if(CXX_HAS_SSE)
+		set(CYCLES_SSE2_KERNEL_FLAGS "/QxSSE2")
+		set(CYCLES_SSE3_KERNEL_FLAGS "/QxSSSE3")
+		set(CYCLES_SSE41_KERNEL_FLAGS "/QxSSE4.1")
+
+		if(CXX_HAS_AVX)
+			set(CYCLES_AVX_KERNEL_FLAGS "/arch:AVX")
+		endif()
+
+		if(CXX_HAS_AVX2)
+			set(CYCLES_AVX2_KERNEL_FLAGS "/QxCORE-AVX2")
+		endif()
+	endif()
+elseif(CMAKE_CXX_COMPILER_ID MATCHES "Intel")
+	if(APPLE)
+		# ICC does not support SSE2 flag on MacOSX
+		check_cxx_compiler_flag(-xssse3 CXX_HAS_SSE)
+	else()
+		check_cxx_compiler_flag(-xsse2 CXX_HAS_SSE)
+	endif()
+
+	check_cxx_compiler_flag(-xavx CXX_HAS_AVX)
+	check_cxx_compiler_flag(-xcore-avx2 CXX_HAS_AVX2)
+
+	if(CXX_HAS_SSE)
+		if(APPLE)
+			# ICC does not support SSE2 flag on MacOSX
+			set(CYCLES_SSE2_KERNEL_FLAGS "-xssse3")
+		else()
+			set(CYCLES_SSE2_KERNEL_FLAGS "-xsse2")
+		endif()
+
+		set(CYCLES_SSE3_KERNEL_FLAGS "-xssse3")
+		set(CYCLES_SSE41_KERNEL_FLAGS "-xsse4.1")
+
+		if(CXX_HAS_AVX)
+			set(CYCLES_AVX_KERNEL_FLAGS "-xavx")
+		endif()
+
+		if(CXX_HAS_AVX2)
+			set(CYCLES_AVX2_KERNEL_FLAGS "-xcore-avx2")
+		endif()
+	endif()
 endif()
 
 if(CXX_HAS_SSE)
@@ -152,6 +200,9 @@ endif()
 
 if(WITH_CYCLES_OSL)
 	add_definitions(-DWITH_OSL)
+	#osl 1.9.x
+	add_definitions(-DOSL_STATIC_BUILD)
+	#pre 1.9
 	add_definitions(-DOSL_STATIC_LIBRARY)
 	include_directories(
 		SYSTEM
@@ -175,31 +226,6 @@ if(WITH_CYCLES_STANDALONE)
 endif()
 # TODO(sergey): Consider removing it, only causes confusion in interface.
 set(WITH_CYCLES_DEVICE_MULTI TRUE)
-
-if(CYCLES_STANDALONE_REPOSITORY)
-	TEST_UNORDERED_MAP_SUPPORT()
-endif()
-if(WITH_CXX11)
-	add_definitions(-DCYCLES_STD_UNORDERED_MAP)
-elseif(HAVE_STD_UNORDERED_MAP_HEADER)
-	if(HAVE_UNORDERED_MAP_IN_STD_NAMESPACE)
-		add_definitions(-DCYCLES_STD_UNORDERED_MAP)
-	else()
-		if(HAVE_UNORDERED_MAP_IN_TR1_NAMESPACE)
-			add_definitions(-DCYCLES_STD_UNORDERED_MAP_IN_TR1_NAMESPACE)
-		else()
-			add_definitions(-DCYCLES_NO_UNORDERED_MAP)
-			message(STATUS "Replacing unordered_map/set with map/set (warning: slower!)")
-		endif()
-	endif()
-else()
-	if(HAVE_UNORDERED_MAP_IN_TR1_NAMESPACE)
-		add_definitions(-DCYCLES_TR1_UNORDERED_MAP)
-	else()
-		add_definitions(-DCYCLES_NO_UNORDERED_MAP)
-		message(STATUS "Replacing unordered_map/set with map/set (warning: slower!)")
-	endif()
-endif()
 
 # Logging capabilities using GLog library.
 if(WITH_CYCLES_LOGGING)
@@ -258,7 +284,7 @@ if(WITH_CYCLES_CUDA_BINARIES AND (NOT WITH_CYCLES_CUBIN_COMPILER))
 		elseif(${CUDA_VERSION} EQUAL "9.1")
 			set(MAX_MSVC 1911)
 		endif()
-		if(NOT MSVC_VERSION LESS ${MAX_MSVC})
+		if(NOT MSVC_VERSION LESS ${MAX_MSVC} OR CMAKE_C_COMPILER_ID MATCHES "Clang")
 			message(STATUS "nvcc not supported for this compiler version, using cycles_cubin_cc instead.")
 			set(WITH_CYCLES_CUBIN_COMPILER ON)
 		endif()
@@ -276,6 +302,14 @@ endif()
 
 if(WITH_CYCLES_NETWORK)
 	add_definitions(-DWITH_NETWORK)
+endif()
+
+if(WITH_OPENCOLORIO)
+	add_definitions(-DWITH_OCIO)
+	include_directories(
+		SYSTEM
+		${OPENCOLORIO_INCLUDE_DIRS}
+	)
 endif()
 
 if(WITH_CYCLES_STANDALONE OR WITH_CYCLES_NETWORK OR WITH_CYCLES_CUBIN_COMPILER)
@@ -299,4 +333,3 @@ endif()
 if(NOT WITH_BLENDER AND WITH_CYCLES_STANDALONE)
 	delayed_do_install(${CMAKE_BINARY_DIR}/bin)
 endif()
-

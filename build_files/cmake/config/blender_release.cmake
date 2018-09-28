@@ -1,10 +1,11 @@
-# Turn everything ON thats expected for an official release builds.
+# Turn everything ON that's expected for an official release builds.
 #
 # Example usage:
 #   cmake -C../blender/build_files/cmake/config/blender_release.cmake  ../blender
 #
 
 set(WITH_ALEMBIC             ON  CACHE BOOL "" FORCE)
+set(WITH_ASSERT_ABORT        OFF CACHE BOOL "" FORCE)
 set(WITH_BUILDINFO           ON  CACHE BOOL "" FORCE)
 set(WITH_BULLET              ON  CACHE BOOL "" FORCE)
 set(WITH_CODEC_AVI           ON  CACHE BOOL "" FORCE)

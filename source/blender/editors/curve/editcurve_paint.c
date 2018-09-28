@@ -35,6 +35,7 @@
 #include "BKE_curve.h"
 #include "BKE_depsgraph.h"
 #include "BKE_fcurve.h"
+#include "BKE_main.h"
 #include "BKE_report.h"
 
 #include "WM_api.h"
@@ -185,7 +186,6 @@ static bool stroke_elem_project(
         float surface_offset, const float radius,
         float r_location_world[3], float r_normal_world[3])
 {
-	View3D *v3d = cdd->vc.v3d;
 	ARegion *ar = cdd->vc.ar;
 	RegionView3D *rv3d = cdd->vc.rv3d;
 
@@ -194,12 +194,7 @@ static bool stroke_elem_project(
 	/* project to 'location_world' */
 	if (cdd->project.use_plane) {
 		/* get the view vector to 'location' */
-		float ray_origin[3], ray_direction[3];
-		ED_view3d_win_to_ray(cdd->vc.ar, v3d, mval_fl, ray_origin, ray_direction, false);
-
-		float lambda;
-		if (isect_ray_plane_v3(ray_origin, ray_direction, cdd->project.plane, &lambda, true)) {
-			madd_v3_v3v3fl(r_location_world, ray_origin, ray_direction, lambda);
+		if (ED_view3d_win_to_3d_on_plane(ar, cdd->project.plane, mval_fl, true, r_location_world)) {
 			if (r_normal_world) {
 				zero_v3(r_normal_world);
 			}
@@ -581,7 +576,7 @@ static bool curve_draw_init(bContext *C, wmOperator *op, bool is_invoke)
 	struct CurveDrawData *cdd = MEM_callocN(sizeof(*cdd), __func__);
 
 	if (is_invoke) {
-		view3d_set_viewcontext(C, &cdd->vc);
+		ED_view3d_viewcontext_init(C, &cdd->vc);
 		if (ELEM(NULL, cdd->vc.ar, cdd->vc.rv3d, cdd->vc.v3d, cdd->vc.win, cdd->vc.scene)) {
 			MEM_freeN(cdd);
 			BKE_report(op->reports, RPT_ERROR, "Unable to access 3D viewport");
@@ -589,6 +584,7 @@ static bool curve_draw_init(bContext *C, wmOperator *op, bool is_invoke)
 		}
 	}
 	else {
+		cdd->vc.bmain = CTX_data_main(C);
 		cdd->vc.scene = CTX_data_scene(C);
 		cdd->vc.obedit = CTX_data_edit_object(C);
 	}
@@ -978,8 +974,15 @@ static int curve_draw_exec(bContext *C, wmOperator *op)
 		const struct StrokeElem *selem;
 
 		nu->pntsu = stroke_len;
+		nu->pntsv = 1;
 		nu->type = CU_POLY;
 		nu->bp = MEM_callocN(nu->pntsu * sizeof(BPoint), __func__);
+
+		/* Misc settings. */
+		nu->resolu = cu->resolu;
+		nu->resolv = 1;
+		nu->orderu = 4;
+		nu->orderv = 1;
 
 		BPoint *bp = nu->bp;
 
@@ -1071,7 +1074,7 @@ static int curve_draw_invoke(bContext *C, wmOperator *op, const wmEvent *event)
 				/* needed or else the draw matrix can be incorrect */
 				view3d_operator_needs_opengl(C);
 
-				ED_view3d_autodist_init(cdd->vc.scene, cdd->vc.ar, cdd->vc.v3d, 0);
+				ED_view3d_autodist_init(cdd->vc.bmain, cdd->vc.scene, cdd->vc.ar, cdd->vc.v3d, 0);
 
 				if (cdd->vc.rv3d->depths) {
 					cdd->vc.rv3d->depths->damaged = true;

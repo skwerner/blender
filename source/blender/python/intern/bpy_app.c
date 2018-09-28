@@ -230,23 +230,23 @@ PyDoc_STRVAR(bpy_app_debug_doc,
 );
 static PyObject *bpy_app_debug_get(PyObject *UNUSED(self), void *closure)
 {
-	const int flag = GET_INT_FROM_POINTER(closure);
+	const int flag = POINTER_AS_INT(closure);
 	return PyBool_FromLong(G.debug & flag);
 }
 
 static int bpy_app_debug_set(PyObject *UNUSED(self), PyObject *value, void *closure)
 {
-	const int flag = GET_INT_FROM_POINTER(closure);
+	const int flag = POINTER_AS_INT(closure);
 	const int param = PyObject_IsTrue(value);
 
 	if (param == -1) {
 		PyErr_SetString(PyExc_TypeError, "bpy.app.debug can only be True/False");
 		return -1;
 	}
-	
+
 	if (param)  G.debug |=  flag;
 	else        G.debug &= ~flag;
-	
+
 	return 0;
 }
 
@@ -297,7 +297,7 @@ static int bpy_app_debug_value_set(PyObject *UNUSED(self), PyObject *value, void
 		PyErr_SetString(PyExc_TypeError, "bpy.app.debug_value can only be set to a whole number");
 		return -1;
 	}
-	
+
 	G.debug_value = param;
 
 	WM_main_add_notifier(NC_WINDOW, NULL);
@@ -307,7 +307,7 @@ static int bpy_app_debug_value_set(PyObject *UNUSED(self), PyObject *value, void
 
 static PyObject *bpy_app_global_flag_get(PyObject *UNUSED(self), void *closure)
 {
-	const int flag = GET_INT_FROM_POINTER(closure);
+	const int flag = POINTER_AS_INT(closure);
 	return PyBool_FromLong(G.f & flag);
 }
 
@@ -339,7 +339,7 @@ PyDoc_STRVAR(bpy_app_preview_render_size_doc,
 );
 static PyObject *bpy_app_preview_render_size_get(PyObject *UNUSED(self), void *closure)
 {
-	return PyLong_FromLong((long)UI_preview_render_size(GET_INT_FROM_POINTER(closure)));
+	return PyLong_FromLong((long)UI_preview_render_size(POINTER_AS_INT(closure)));
 }
 
 static PyObject *bpy_app_autoexec_fail_message_get(PyObject *UNUSED(self), void *UNUSED(closure))
@@ -360,6 +360,8 @@ static PyGetSetDef bpy_app_getsets[] = {
 	{(char *)"debug_depsgraph_build", bpy_app_debug_get, bpy_app_debug_set, (char *)bpy_app_debug_doc, (void *)G_DEBUG_DEPSGRAPH_BUILD},
 	{(char *)"debug_depsgraph_eval", bpy_app_debug_get, bpy_app_debug_set, (char *)bpy_app_debug_doc, (void *)G_DEBUG_DEPSGRAPH_EVAL},
 	{(char *)"debug_depsgraph_tag", bpy_app_debug_get, bpy_app_debug_set, (char *)bpy_app_debug_doc, (void *)G_DEBUG_DEPSGRAPH_TAG},
+	{(char *)"debug_depsgraph_time", bpy_app_debug_get, bpy_app_debug_set, (char *)bpy_app_debug_doc, (void *)G_DEBUG_DEPSGRAPH_TIME},
+	{(char *)"debug_depsgraph_pretty", bpy_app_debug_get, bpy_app_debug_set, (char *)bpy_app_debug_doc, (void *)G_DEBUG_DEPSGRAPH_PRETTY},
 	{(char *)"debug_simdata",   bpy_app_debug_get, bpy_app_debug_set, (char *)bpy_app_debug_doc, (void *)G_DEBUG_SIMDATA},
 	{(char *)"debug_gpumem",    bpy_app_debug_get, bpy_app_debug_set, (char *)bpy_app_debug_doc, (void *)G_DEBUG_GPU_MEM},
 
@@ -394,7 +396,7 @@ static void py_struct_seq_getset_init(void)
 PyObject *BPY_app_struct(void)
 {
 	PyObject *ret;
-	
+
 	PyStructSequence_InitType(&BlenderAppType, &app_info_desc);
 
 	ret = make_app_info();

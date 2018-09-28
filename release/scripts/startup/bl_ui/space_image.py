@@ -104,7 +104,11 @@ class IMAGE_MT_view(Menu):
         ratios = ((1, 8), (1, 4), (1, 2), (1, 1), (2, 1), (4, 1), (8, 1))
 
         for a, b in ratios:
-            layout.operator("image.view_zoom_ratio", text=iface_("Zoom %d:%d") % (a, b), translate=False).ratio = a / b
+            layout.operator(
+                "image.view_zoom_ratio",
+                text=iface_(f"Zoom {a:d}:{b:d}"),
+                translate=False,
+            ).ratio = a / b
 
         layout.separator()
 
@@ -585,6 +589,7 @@ class IMAGE_PT_tools_mask(MASK_PT_tools, Panel):
     bl_space_type = 'IMAGE_EDITOR'
     bl_region_type = 'TOOLS'
     bl_category = 'Mask'
+
 
 class IMAGE_PT_tools_mask_add(MASK_PT_add, Panel):
     bl_space_type = 'IMAGE_EDITOR'
@@ -1171,8 +1176,6 @@ class IMAGE_PT_uv_sculpt(Panel, ImagePaintPanel):
             col.prop(toolsettings, "uv_relax_method")
 
         col.prop(uvsculpt, "show_brush")
-
-
 
 
 class IMAGE_PT_options_uvs(Panel, UVToolsPanel):

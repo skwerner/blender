@@ -15,19 +15,19 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
- * Contributor: 
- *		Jeroen Bakker 
+ * Contributor:
+ *		Jeroen Bakker
  *		Monique Dewanchand
  */
 
-#ifndef _COM_CalculateStandardDeviationOperation_h
-#define _COM_CalculateStandardDeviationOperation_h
+#ifndef __COM_CALCULATESTANDARDDEVIATIONOPERATION_H__
+#define __COM_CALCULATESTANDARDDEVIATIONOPERATION_H__
 #include "COM_NodeOperation.h"
 #include "DNA_node_types.h"
 #include "COM_CalculateMeanOperation.h"
 /**
- * @brief base class of CalculateStandardDeviation, implementing the simple CalculateStandardDeviation
- * @ingroup operation
+ * \brief base class of CalculateStandardDeviation, implementing the simple CalculateStandardDeviation
+ * \ingroup operation
  */
 class CalculateStandardDeviationOperation : public CalculateMeanOperation {
 protected:

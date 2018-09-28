@@ -61,6 +61,10 @@
 
 #include "mesh_intern.h"  /* own include */
 
+/* -------------------------------------------------------------------- */
+/** \name Path Select Struct & Properties
+ * \{ */
+
 struct PathSelectParams {
 	bool track_active;  /* ensure the active element is the last selected item (handy for picking) */
 	bool use_topology_distance;
@@ -100,8 +104,11 @@ struct UserData {
 	const struct PathSelectParams *op_params;
 };
 
+/** \} */
+
 /* -------------------------------------------------------------------- */
-/* Vert Path */
+/** \name Vert Path
+ * \{ */
 
 /* callbacks */
 static bool verttag_filter_cb(BMVert *v, void *UNUSED(user_data_v))
@@ -169,7 +176,8 @@ static void mouse_mesh_shortest_path_vert(
 			}
 		} while ((node = node->next));
 
-		int depth = 1;
+		/* We need to start as if just *after* a 'skip' block... */
+		int depth = op_params->interval_params.skip;
 		node = path;
 		do {
 			if ((is_path_ordered == false) ||
@@ -204,10 +212,11 @@ static void mouse_mesh_shortest_path_vert(
 	EDBM_update_generic(em, false, false);
 }
 
-
+/** \} */
 
 /* -------------------------------------------------------------------- */
-/* Edge Path */
+/** \name Edge Path
+ * \{ */
 
 /* callbacks */
 static bool edgetag_filter_cb(BMEdge *e, void *UNUSED(user_data_v))
@@ -358,7 +367,8 @@ static void mouse_mesh_shortest_path_edge(
 			}
 		} while ((node = node->next));
 
-		int depth = 1;
+		/* We need to start as if just *after* a 'skip' block... */
+		int depth = op_params->interval_params.skip;
 		node = path;
 		do {
 			if ((is_path_ordered == false) ||
@@ -427,10 +437,11 @@ static void mouse_mesh_shortest_path_edge(
 	EDBM_update_generic(em, false, false);
 }
 
-
+/** \} */
 
 /* -------------------------------------------------------------------- */
-/* Face Path */
+/** \name Face Path
+ * \{ */
 
 /* callbacks */
 static bool facetag_filter_cb(BMFace *f, void *UNUSED(user_data_v))
@@ -478,7 +489,6 @@ static void mouse_mesh_shortest_path_face(
 			        facetag_filter_cb, &user_data);
 		}
 
-
 		if (f_act != f_dst) {
 			if (path) {
 				if (op_params->track_active) {
@@ -503,7 +513,8 @@ static void mouse_mesh_shortest_path_face(
 			}
 		} while ((node = node->next));
 
-		int depth = 1;
+		/* We need to start as if just *after* a 'skip' block... */
+		int depth = op_params->interval_params.skip;
 		node = path;
 		do {
 			if ((is_path_ordered == false) ||
@@ -539,10 +550,11 @@ static void mouse_mesh_shortest_path_face(
 	EDBM_update_generic(em, false, false);
 }
 
-
+/** \} */
 
 /* -------------------------------------------------------------------- */
-/* Main Operator for vert/edge/face tag */
+/** \name Main Operator for vert/edge/face tag
+ * \{ */
 
 static bool edbm_shortest_path_pick_ex(
         Scene *scene, const struct PathSelectParams *op_params,
@@ -709,9 +721,11 @@ void MESH_OT_shortest_path_pick(wmOperatorType *ot)
 	RNA_def_property_flag(prop, PROP_HIDDEN | PROP_SKIP_SAVE);
 }
 
+/** \} */
 
 /* -------------------------------------------------------------------- */
-/* Select path between existing selection */
+/** \name Select Path Between Existing Selection
+ * \{ */
 
 static int edbm_shortest_path_select_exec(bContext *C, wmOperator *op)
 {
@@ -796,3 +810,5 @@ void MESH_OT_shortest_path_select(wmOperatorType *ot)
 	/* properties */
 	path_select_properties(ot);
 }
+
+/** \} */

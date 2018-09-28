@@ -234,7 +234,6 @@ class GreasePencilStrokeEditPanel:
         if is_3d_view:
             layout.separator()
 
-
         layout.separator()
         col = layout.column(align=True)
         col.operator("gpencil.stroke_subdivide", text="Subdivide")
@@ -546,7 +545,7 @@ class GPENCIL_MT_pie_settings_palette(Menu):
         gpd = context.gpencil_data
         gpl = context.active_gpencil_layer
         palcolor = context.active_gpencil_palettecolor
-        brush = context.active_gpencil_brush
+        # brush = context.active_gpencil_brush
 
         is_editmode = bool(gpd and gpd.use_stroke_edit_mode and context.editable_gpencil_strokes)
 
@@ -1075,11 +1074,11 @@ class GreasePencilPaletteColorPanel:
 
                 row = layout.row()
                 sub = row.row(align=True)
-                sub.label(text="Isolate:") # based on active color only
+                sub.label(text="Isolate:")  # based on active color only
                 sub.operator("gpencil.palettecolor_isolate", icon='LOCKED', text="").affect_visibility = False
                 sub.operator("gpencil.palettecolor_isolate", icon='RESTRICT_VIEW_OFF', text="").affect_visibility = True
                 sub = row.row(align=True)
-                sub.label(text="Lock:") # based on other stuff...
+                sub.label(text="Lock:")  # based on other stuff...
                 sub.operator("gpencil.stroke_lock_color", icon='BORDER_RECT', text="")
                 sub.operator("gpencil.palette_lock_layer", icon='COLOR', text="")
 

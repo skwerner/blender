@@ -335,10 +335,13 @@ static void create_mesh_volume_attribute(BL::Object& b_ob,
 	if(!b_domain)
 		return;
 
+	mesh->volume_isovalue = b_domain.clipping();
+
 	Attribute *attr = mesh->attributes.add(std);
 	VoxelAttribute *volume_data = attr->data_voxel();
-	bool is_float, is_linear;
+	ImageMetaData metadata;
 	bool animated = false;
+	bool use_alpha = true;
 
 	volume_data->manager = image_manager;
 	volume_data->slot = image_manager->add_image(
@@ -346,11 +349,10 @@ static void create_mesh_volume_attribute(BL::Object& b_ob,
 	        b_ob.ptr.data,
 	        animated,
 	        frame,
-	        is_float,
-	        is_linear,
 	        INTERPOLATION_LINEAR,
 	        EXTENSION_CLIP,
-	        true);
+	        use_alpha,
+	        metadata);
 }
 
 static void create_mesh_volume_attributes(Scene *scene,
@@ -399,7 +401,8 @@ static void attr_create_vertex_color(Scene *scene,
 				int n = p->loop_total();
 				for(int i = 0; i < n; i++) {
 					float3 color = get_float3(l->data[p->loop_start() + i].color());
-					*(cdata++) = color_float_to_byte(color_srgb_to_scene_linear_v3(color));
+					/* Encode vertex color using the sRGB curve. */
+					*(cdata++) = color_float_to_byte(color_srgb_to_linear_v3(color));
 				}
 			}
 		}
@@ -422,12 +425,13 @@ static void attr_create_vertex_color(Scene *scene,
 				int tri_a[3], tri_b[3];
 				face_split_tri_indices(face_flags[i], tri_a, tri_b);
 
+				/* Encode vertex color using the sRGB curve. */
 				uchar4 colors[4];
-				colors[0] = color_float_to_byte(color_srgb_to_scene_linear_v3(get_float3(c->color1())));
-				colors[1] = color_float_to_byte(color_srgb_to_scene_linear_v3(get_float3(c->color2())));
-				colors[2] = color_float_to_byte(color_srgb_to_scene_linear_v3(get_float3(c->color3())));
+				colors[0] = color_float_to_byte(color_srgb_to_linear_v3(get_float3(c->color1())));
+				colors[1] = color_float_to_byte(color_srgb_to_linear_v3(get_float3(c->color2())));
+				colors[2] = color_float_to_byte(color_srgb_to_linear_v3(get_float3(c->color3())));
 				if(nverts[i] == 4) {
-					colors[3] = color_float_to_byte(color_srgb_to_scene_linear_v3(get_float3(c->color4())));
+					colors[3] = color_float_to_byte(color_srgb_to_linear_v3(get_float3(c->color4())));
 				}
 
 				cdata[0] = colors[tri_a[0]];
@@ -1169,7 +1173,7 @@ Mesh *BlenderSync::sync_mesh(BL::Object& b_ob,
 		 * freed data from the blender side.
 		 */
 		if(preview && b_ob.type() != BL::Object::type_MESH)
-			b_ob.update_from_editmode();
+			b_ob.update_from_editmode(b_data);
 
 		bool need_undeformed = mesh->need_attribute(scene, ATTR_STD_GENERATED);
 
@@ -1246,36 +1250,10 @@ void BlenderSync::sync_mesh_motion(BL::Object& b_ob,
 	if(mesh_synced.find(mesh) == mesh_synced.end())
 		return;
 
-	/* for motion pass always compute, for motion blur it can be disabled */
-	int time_index = 0;
-
-	if(scene->need_motion() == Scene::MOTION_BLUR) {
-		if(!mesh->use_motion_blur)
-			return;
-
-		/* see if this mesh needs motion data at this time */
-		vector<float> object_times = object->motion_times();
-		bool found = false;
-
-		foreach(float object_time, object_times) {
-			if(motion_time == object_time) {
-				found = true;
-				break;
-			}
-			else
-				time_index++;
-		}
-
-		if(!found)
-			return;
-	}
-	else {
-		if(motion_time == -1.0f)
-			time_index = 0;
-		else if(motion_time == 1.0f)
-			time_index = 1;
-		else
-			return;
+	/* Find time matching motion step required by mesh. */
+	int motion_step = mesh->motion_step(motion_time);
+	if(motion_step < 0) {
+		return;
 	}
 
 	/* skip empty meshes */
@@ -1317,9 +1295,9 @@ void BlenderSync::sync_mesh_motion(BL::Object& b_ob,
 				float3 *P = &mesh->verts[0];
 				float3 *N = (attr_N)? attr_N->data_float3(): NULL;
 
-				memcpy(attr_mP->data_float3() + time_index*numverts, P, sizeof(float3)*numverts);
+				memcpy(attr_mP->data_float3() + motion_step*numverts, P, sizeof(float3)*numverts);
 				if(attr_mN)
-					memcpy(attr_mN->data_float3() + time_index*numverts, N, sizeof(float3)*numverts);
+					memcpy(attr_mN->data_float3() + motion_step*numverts, N, sizeof(float3)*numverts);
 			}
 		}
 
@@ -1329,7 +1307,7 @@ void BlenderSync::sync_mesh_motion(BL::Object& b_ob,
 
 			if(attr_mP) {
 				float3 *keys = &mesh->curve_keys[0];
-				memcpy(attr_mP->data_float3() + time_index*numkeys, keys, sizeof(float3)*numkeys);
+				memcpy(attr_mP->data_float3() + motion_step*numkeys, keys, sizeof(float3)*numkeys);
 			}
 		}
 
@@ -1352,8 +1330,8 @@ void BlenderSync::sync_mesh_motion(BL::Object& b_ob,
 			new_attribute = true;
 		}
 		/* Load vertex data from mesh. */
-		float3 *mP = attr_mP->data_float3() + time_index*numverts;
-		float3 *mN = (attr_mN)? attr_mN->data_float3() + time_index*numverts: NULL;
+		float3 *mP = attr_mP->data_float3() + motion_step*numverts;
+		float3 *mN = (attr_mN)? attr_mN->data_float3() + motion_step*numverts: NULL;
 		/* NOTE: We don't copy more that existing amount of vertices to prevent
 		 * possible memory corruption.
 		 */
@@ -1382,13 +1360,13 @@ void BlenderSync::sync_mesh_motion(BL::Object& b_ob,
 				if(attr_mN)
 					mesh->attributes.remove(ATTR_STD_MOTION_VERTEX_NORMAL);
 			}
-			else if(time_index > 0) {
+			else if(motion_step > 0) {
 				VLOG(1) << "Filling deformation motion for object " << b_ob.name();
 				/* motion, fill up previous steps that we might have skipped because
 				 * they had no motion, but we need them anyway now */
 				float3 *P = &mesh->verts[0];
 				float3 *N = (attr_N)? attr_N->data_float3(): NULL;
-				for(int step = 0; step < time_index; step++) {
+				for(int step = 0; step < motion_step; step++) {
 					memcpy(attr_mP->data_float3() + step*numverts, P, sizeof(float3)*numverts);
 					if(attr_mN)
 						memcpy(attr_mN->data_float3() + step*numverts, N, sizeof(float3)*numverts);
@@ -1398,7 +1376,7 @@ void BlenderSync::sync_mesh_motion(BL::Object& b_ob,
 		else {
 			if(b_mesh.vertices.length() != numverts) {
 				VLOG(1) << "Topology differs, discarding motion blur for object "
-				        << b_ob.name() << " at time " << time_index;
+				        << b_ob.name() << " at time " << motion_step;
 				memcpy(mP, &mesh->verts[0], sizeof(float3)*numverts);
 				if(mN != NULL) {
 					memcpy(mN, attr_N->data_float3(), sizeof(float3)*numverts);
@@ -1409,7 +1387,7 @@ void BlenderSync::sync_mesh_motion(BL::Object& b_ob,
 
 	/* hair motion */
 	if(numkeys)
-		sync_curves(mesh, b_mesh, b_ob, true, time_index);
+		sync_curves(mesh, b_mesh, b_ob, true, motion_step);
 
 	/* free derived mesh */
 	b_data.meshes.remove(b_mesh, false, true, false);

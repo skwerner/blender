@@ -50,6 +50,7 @@ set(SRC
 	intern/BLI_kdopbvh.c
 	intern/BLI_kdtree.c
 	intern/BLI_linklist.c
+	intern/BLI_linklist_lockfree.c
 	intern/BLI_memarena.c
 	intern/BLI_mempool.c
 	intern/DLRB_tree.c
@@ -73,6 +74,7 @@ set(SRC
 	intern/gsqueue.c
 	intern/hash_md5.c
 	intern/hash_mm2a.c
+	intern/hash_mm3.c
 	intern/jitter_2d.c
 	intern/lasso_2d.c
 	intern/list_sort_impl.h
@@ -128,6 +130,7 @@ set(SRC
 	BLI_array_store.h
 	BLI_array_store_utils.h
 	BLI_array_utils.h
+	BLI_assert.h
 	BLI_astar.h
 	BLI_bitmap.h
 	BLI_bitmap_draw_2d.h
@@ -138,6 +141,7 @@ set(SRC
 	BLI_compiler_attrs.h
 	BLI_compiler_compat.h
 	BLI_compiler_typecheck.h
+	BLI_console.h
 	BLI_convexhull_2d.h
 	BLI_dial_2d.h
 	BLI_dlrbTree.h
@@ -156,6 +160,7 @@ set(SRC
 	BLI_hash.h
 	BLI_hash_md5.h
 	BLI_hash_mm2a.h
+	BLI_hash_mm3.h
 	BLI_heap.h
 	BLI_jitter_2d.h
 	BLI_kdopbvh.h
@@ -163,6 +168,7 @@ set(SRC
 	BLI_lasso_2d.h
 	BLI_link_utils.h
 	BLI_linklist.h
+	BLI_linklist_lockfree.h
 	BLI_linklist_stack.h
 	BLI_listbase.h
 	BLI_math.h

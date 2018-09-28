@@ -31,6 +31,11 @@
 
 #include "util/util_foreach.h"
 
+#ifdef WITH_OCIO
+#  include <OpenColorIO/OpenColorIO.h>
+namespace OCIO = OCIO_NAMESPACE;
+#endif
+
 CCL_NAMESPACE_BEGIN
 
 thread_mutex ShaderManager::lookup_table_mutex;
@@ -308,7 +313,7 @@ void Shader::tag_update(Scene *scene)
 	if(has_displacement && displacement_method == DISPLACE_BOTH) {
 		attributes.add(ATTR_STD_POSITION_UNDISPLACED);
 	}
-	
+
 	/* compare if the attributes changed, mesh manager will check
 	 * need_update_mesh, update the relevant meshes and clear it. */
 	if(attributes.modified(prev_attributes)) {
@@ -338,6 +343,40 @@ ShaderManager::ShaderManager()
 {
 	need_update = true;
 	beckmann_table_offset = TABLE_OFFSET_INVALID;
+
+	xyz_to_r = make_float3( 3.2404542f, -1.5371385f, -0.4985314f);
+	xyz_to_g = make_float3(-0.9692660f,  1.8760108f,  0.0415560f);
+	xyz_to_b = make_float3( 0.0556434f, -0.2040259f,  1.0572252f);
+	rgb_to_y = make_float3( 0.2126729f,  0.7151522f,  0.0721750f);
+
+#ifdef WITH_OCIO
+	OCIO::ConstConfigRcPtr config = OCIO::GetCurrentConfig();
+	if(config) {
+		if(config->hasRole("XYZ") && config->hasRole("scene_linear")) {
+			OCIO::ConstProcessorRcPtr to_rgb_processor = config->getProcessor("XYZ", "scene_linear");
+			OCIO::ConstProcessorRcPtr to_xyz_processor = config->getProcessor("scene_linear", "XYZ");
+			if(to_rgb_processor && to_xyz_processor) {
+				float r[] = {1.0f, 0.0f, 0.0f};
+				float g[] = {0.0f, 1.0f, 0.0f};
+				float b[] = {0.0f, 0.0f, 1.0f};
+				to_xyz_processor->applyRGB(r);
+				to_xyz_processor->applyRGB(g);
+				to_xyz_processor->applyRGB(b);
+				rgb_to_y = make_float3(r[1], g[1], b[1]);
+
+				float x[] = {1.0f, 0.0f, 0.0f};
+				float y[] = {0.0f, 1.0f, 0.0f};
+				float z[] = {0.0f, 0.0f, 1.0f};
+				to_rgb_processor->applyRGB(x);
+				to_rgb_processor->applyRGB(y);
+				to_rgb_processor->applyRGB(z);
+				xyz_to_r = make_float3(x[0], y[0], z[0]);
+				xyz_to_g = make_float3(x[1], y[1], z[1]);
+				xyz_to_b = make_float3(x[2], y[2], z[2]);
+			}
+		}
+	}
+#endif
 }
 
 ShaderManager::~ShaderManager()
@@ -359,7 +398,7 @@ ShaderManager *ShaderManager::create(Scene *scene, int shadingsystem)
 	{
 		manager = new SVMShaderManager();
 	}
-	
+
 	add_default(scene);
 
 	return manager;
@@ -374,7 +413,7 @@ uint ShaderManager::get_attribute_id(ustring name)
 
 	if(it != unique_attribute_id.end())
 		return it->second;
-	
+
 	uint id = (uint)ATTR_STD_NUM + unique_attribute_id.size();
 	unique_attribute_id[name] = id;
 	return id;
@@ -393,10 +432,10 @@ int ShaderManager::get_shader_id(Shader *shader, bool smooth)
 	/* smooth flag */
 	if(smooth)
 		id |= SHADER_SMOOTH_NORMAL;
-	
+
 	/* default flags */
 	id |= SHADER_CAST_SHADOW|SHADER_AREA_LIGHT;
-	
+
 	return id;
 }
 
@@ -432,14 +471,12 @@ void ShaderManager::device_update_common(Device *device,
                                          Scene *scene,
                                          Progress& /*progress*/)
 {
-	dscene->shader_flag.free();
+	dscene->shaders.free();
 
 	if(scene->shaders.size() == 0)
 		return;
 
-	uint shader_flag_size = scene->shaders.size()*SHADER_SIZE;
-	uint *shader_flag = dscene->shader_flag.alloc(shader_flag_size);
-	uint i = 0;
+	KernelShader *kshader = dscene->shaders.alloc(scene->shaders.size());
 	bool has_volumes = false;
 	bool has_transparent_shadow = false;
 
@@ -487,16 +524,17 @@ void ShaderManager::device_update_common(Device *device,
 			flag |= SD_HAS_CONSTANT_EMISSION;
 
 		/* regular shader */
-		shader_flag[i++] = flag;
-		shader_flag[i++] = shader->pass_id;
-		shader_flag[i++] = __float_as_int(constant_emission.x);
-		shader_flag[i++] = __float_as_int(constant_emission.y);
-		shader_flag[i++] = __float_as_int(constant_emission.z);
+		kshader->flags = flag;
+		kshader->pass_id = shader->pass_id;
+		kshader->constant_emission[0] = constant_emission.x;
+		kshader->constant_emission[1] = constant_emission.y;
+		kshader->constant_emission[2] = constant_emission.z;
+		kshader++;
 
 		has_transparent_shadow |= (flag & SD_HAS_TRANSPARENT_SHADOW) != 0;
 	}
 
-	dscene->shader_flag.copy_to_device();
+	dscene->shaders.copy_to_device();
 
 	/* lookup tables */
 	KernelTables *ktables = &dscene->data.tables;
@@ -519,13 +557,21 @@ void ShaderManager::device_update_common(Device *device,
 	kintegrator->use_volumes = has_volumes;
 	/* TODO(sergey): De-duplicate with flags set in integrator.cpp. */
 	kintegrator->transparent_shadows = has_transparent_shadow;
+
+	/* film */
+	KernelFilm *kfilm = &dscene->data.film;
+	/* color space, needs to be here because e.g. displacement shaders could depend on it */
+	kfilm->xyz_to_r = float3_to_float4(xyz_to_r);
+	kfilm->xyz_to_g = float3_to_float4(xyz_to_g);
+	kfilm->xyz_to_b = float3_to_float4(xyz_to_b);
+	kfilm->rgb_to_y = float3_to_float4(rgb_to_y);
 }
 
 void ShaderManager::device_free_common(Device *, DeviceScene *dscene, Scene *scene)
 {
 	scene->lookup_tables->remove_table(&beckmann_table_offset);
 
-	dscene->shader_flag.free();
+	dscene->shaders.free();
 }
 
 void ShaderManager::add_default(Scene *scene)
@@ -644,5 +690,9 @@ void ShaderManager::free_memory()
 	beckmann_table.free_memory();
 }
 
-CCL_NAMESPACE_END
+float ShaderManager::linear_rgb_to_gray(float3 c)
+{
+	return dot(c, rgb_to_y);
+}
 
+CCL_NAMESPACE_END

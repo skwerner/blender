@@ -18,14 +18,14 @@
  * Contributor: Campbell Barton
  */
 
-#ifndef _COM_DespeckleNode_h_
-#define _COM_DespeckleNode_h_
+#ifndef __COM_DESPECKLENODE_H__
+#define __COM_DESPECKLENODE_H__
 
 #include "COM_Node.h"
 
 /**
- * @brief DespeckleNode
- * @ingroup Node
+ * \brief DespeckleNode
+ * \ingroup Node
  */
 class DespeckleNode : public Node {
 public:

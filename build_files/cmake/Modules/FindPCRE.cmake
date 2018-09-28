@@ -50,14 +50,19 @@ FIND_LIBRARY(PCRE_LIBRARY
     lib64 lib
   )
 
-# handle the QUIETLY and REQUIRED arguments and set PCRE_FOUND to TRUE if 
+# handle the QUIETLY and REQUIRED arguments and set PCRE_FOUND to TRUE if
 # all listed variables are TRUE
 INCLUDE(FindPackageHandleStandardArgs)
 FIND_PACKAGE_HANDLE_STANDARD_ARGS(PCRE DEFAULT_MSG
     PCRE_LIBRARY PCRE_INCLUDE_DIR)
 
+# With 'make deps' precompiled libs, opencollada ships with a copy of libpcre
+# but not the headers, ${PCRE_LIBRARY} will be valid in this case
+# but PCRE_FOUND will be FALSE. So we set this variable outside of
+# the IF(PCRE_FOUND) below to allow blender to successfully link.
+SET(PCRE_LIBRARIES ${PCRE_LIBRARY})
+
 IF(PCRE_FOUND)
-  SET(PCRE_LIBRARIES ${PCRE_LIBRARY})
   SET(PCRE_INCLUDE_DIRS ${PCRE_INCLUDE_DIR})
 ENDIF(PCRE_FOUND)
 

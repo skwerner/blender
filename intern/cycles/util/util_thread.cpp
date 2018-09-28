@@ -26,7 +26,7 @@ thread::thread(function<void(void)> run_cb, int group)
     joined_(false),
 	group_(group)
 {
-	pthread_create(&pthread_id_, NULL, run, (void*)this);
+	thread_ = std::thread(&thread::run, this);
 }
 
 thread::~thread()
@@ -60,7 +60,13 @@ void *thread::run(void *arg)
 bool thread::join()
 {
 	joined_ = true;
-	return pthread_join(pthread_id_, NULL) == 0;
+	try {
+		thread_.join();
+		return true;
+	}
+	catch (const std::system_error&) {
+		return false;
+	}
 }
 
 CCL_NAMESPACE_END

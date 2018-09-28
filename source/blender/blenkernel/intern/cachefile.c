@@ -42,7 +42,6 @@
 
 #include "BKE_animsys.h"
 #include "BKE_cachefile.h"
-#include "BKE_global.h"
 #include "BKE_library.h"
 #include "BKE_main.h"
 #include "BKE_modifier.h"
@@ -181,7 +180,6 @@ void BKE_cachefile_update_frame(Main *bmain, Scene *scene, const float ctime, co
 			ABC_free_handle(cache_file->handle);
 			cache_file->handle = ABC_create_handle(filename, NULL);
 #endif
-			break;
 		}
 	}
 }
@@ -200,7 +198,7 @@ bool BKE_cachefile_filepath_get(
 		char ext[32];
 		BLI_path_frame_strip(r_filepath, true, ext);
 		BLI_path_frame(r_filepath, frame, frame_len);
-		BLI_ensure_extension(r_filepath, FILE_MAX, ext);
+		BLI_path_extension_ensure(r_filepath, FILE_MAX, ext);
 
 		/* TODO(kevin): store sequence range? */
 		return BLI_exists(r_filepath);

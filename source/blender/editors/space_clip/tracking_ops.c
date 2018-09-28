@@ -1858,7 +1858,7 @@ static bool is_track_clean(MovieTrackingTrack *track, int frames, int del)
 		}
 	}
 
-	if (count == 0) {
+	if (del && count == 0) {
 		ok = 0;
 	}
 
@@ -2106,7 +2106,7 @@ void CLIP_OT_copy_tracks(wmOperatorType *ot)
 
 /********************* paste tracks from clipboard operator ********************/
 
-static int paste_tracks_poll(bContext *C)
+static bool paste_tracks_poll(bContext *C)
 {
 	if (ED_space_clip_tracking_poll(C)) {
 		return BKE_tracking_clipboard_has_tracks();

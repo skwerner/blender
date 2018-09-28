@@ -153,9 +153,12 @@ static LaplacianSystem *init_laplacian_system(int a_numEdges, int a_numFaces, in
 	return sys;
 }
 
-/* Compute weight between vertice v_i and all your neighbors
+/**
+ * Compute weight between vertice v_i and all your neighbors
  * weight between v_i and v_neighbor
+ * <pre>
  * Wij = cot(alpha) + cot(beta) / (4.0 * total area of all faces  * sum all weight)
+ *
  *        v_i *
  *          / | \
  *         /  |  \
@@ -163,6 +166,7 @@ static LaplacianSystem *init_laplacian_system(int a_numEdges, int a_numFaces, in
  *         \  |  /
  *          \ | /
  *            * v_neighbor
+ * </pre>
  */
 
 static void init_laplacian_matrix(LaplacianSystem *sys)
@@ -543,4 +547,3 @@ void bmo_smooth_laplacian_vert_exec(BMesh *bm, BMOperator *op)
 
 	delete_laplacian_system(sys);
 }
-

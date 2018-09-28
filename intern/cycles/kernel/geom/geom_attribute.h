@@ -53,9 +53,7 @@ ccl_device_inline AttributeDescriptor attribute_not_found()
 
 ccl_device_inline uint object_attribute_map_offset(KernelGlobals *kg, int object)
 {
-	int offset = object*OBJECT_SIZE + 15;
-	float4 f = kernel_tex_fetch(__objects, offset);
-	return __float_as_uint(f.y);
+	return kernel_tex_fetch(__objects, object).attribute_map_offset;
 }
 
 ccl_device_inline AttributeDescriptor find_attribute(KernelGlobals *kg, const ShaderData *sd, uint id)
@@ -68,7 +66,7 @@ ccl_device_inline AttributeDescriptor find_attribute(KernelGlobals *kg, const Sh
 	uint attr_offset = object_attribute_map_offset(kg, sd->object);
 	attr_offset += attribute_primitive_type(kg, sd);
 	uint4 attr_map = kernel_tex_fetch(__attributes_map, attr_offset);
-	
+
 	while(attr_map.x != id) {
 		if(UNLIKELY(attr_map.x == ATTR_STD_NONE)) {
 			return attribute_not_found();
@@ -79,7 +77,7 @@ ccl_device_inline AttributeDescriptor find_attribute(KernelGlobals *kg, const Sh
 
 	AttributeDescriptor desc;
 	desc.element = (AttributeElement)attr_map.y;
-	
+
 	if(sd->prim == PRIM_NONE &&
 	   desc.element != ATTR_ELEMENT_MESH &&
 	   desc.element != ATTR_ELEMENT_VOXEL &&
@@ -105,10 +103,8 @@ ccl_device Transform primitive_attribute_matrix(KernelGlobals *kg, const ShaderD
 	tfm.x = kernel_tex_fetch(__attributes_float3, desc.offset + 0);
 	tfm.y = kernel_tex_fetch(__attributes_float3, desc.offset + 1);
 	tfm.z = kernel_tex_fetch(__attributes_float3, desc.offset + 2);
-	tfm.w = kernel_tex_fetch(__attributes_float3, desc.offset + 3);
 
 	return tfm;
 }
 
 CCL_NAMESPACE_END
-

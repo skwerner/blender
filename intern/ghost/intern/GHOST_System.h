@@ -91,7 +91,7 @@ public:
 
 	/**
 	 * Installs a timer.
-	 * Note that, on most operating systems, messages need to be processed in order 
+	 * Note that, on most operating systems, messages need to be processed in order
 	 * for the timer callbacks to be invoked.
 	 * \param delay		The time to wait for the first call to the timerProc (in milliseconds)
 	 * \param interval	The interval between calls to the timerProc
@@ -114,7 +114,7 @@ public:
 	/***************************************************************************************
 	 * Display/window management functionality
 	 ***************************************************************************************/
-	
+
 	/**
 	 * Inherited from GHOST_ISystem but left pure virtual
 	 *
@@ -169,7 +169,7 @@ public:
 	 */
 	bool getFullScreen(void);
 
-	
+
 	/**
 	 * Native pixel size support (MacBook 'retina').
 	 * \return The pixel size in float.
@@ -184,7 +184,7 @@ public:
 	/**
 	 * Inherited from GHOST_ISystem but left pure virtual
 	 *
-	 *  virtual bool processEvents(bool waitForEvent) = 0;
+	 * virtual bool processEvents(bool waitForEvent) = 0;
 	 */
 
 
@@ -213,9 +213,12 @@ public:
 	 * Cursor management functionality
 	 ***************************************************************************************/
 
-	/** Inherited from GHOST_ISystem but left pure virtual
-	 *	GHOST_TSuccess getCursorPosition(GHOST_TInt32& x, GHOST_TInt32& y) const = 0;
-	 *  GHOST_TSuccess setCursorPosition(GHOST_TInt32 x, GHOST_TInt32 y)
+	/**
+	 * Inherited from GHOST_ISystem but left pure virtual
+	 * <pre>
+	 * GHOST_TSuccess getCursorPosition(GHOST_TInt32& x, GHOST_TInt32& y) const = 0;
+	 * GHOST_TSuccess setCursorPosition(GHOST_TInt32 x, GHOST_TInt32 y)
+	 * </pre>
 	 */
 
 	/***************************************************************************************
@@ -237,7 +240,7 @@ public:
 	 * \return			Indication of success.
 	 */
 	GHOST_TSuccess getButtonState(GHOST_TButtonMask mask, bool& isDown) const;
-	
+
 #ifdef WITH_INPUT_NDOF
 	/***************************************************************************************
 	 * Access to 3D mouse.
@@ -305,7 +308,7 @@ public:
 	 *
 	 */
 	virtual GHOST_TUns8 *getClipboard(bool selection) const = 0;
-	  
+
 	/**
 	 * Put data to the Clipboard
 	 * \param buffer		The buffer to copy to the clipboard
@@ -319,8 +322,12 @@ public:
 	 */
 	virtual int confirmQuit(GHOST_IWindow *window) const;
 
+	/**
+	 * Informs if the system provides native dialogs (eg. confirm quit)
+	 */
+	virtual bool supportsNativeDialogs(void);
 
-	
+
 protected:
 	/**
 	 * Initialize the system.
@@ -358,7 +365,7 @@ protected:
 	/** The N-degree of freedom device manager */
 	GHOST_NDOFManager *m_ndofManager;
 #endif
-	
+
 	/** Prints all the events. */
 #ifdef GHOST_DEBUG
 	GHOST_EventPrinter *m_eventPrinter;
@@ -366,7 +373,7 @@ protected:
 
 	/** Settings of the display before the display went fullscreen. */
 	GHOST_DisplaySetting m_preFullScreenSetting;
-	
+
 };
 
 inline GHOST_TimerManager *GHOST_System::getTimerManager() const
@@ -392,4 +399,3 @@ inline GHOST_NDOFManager *GHOST_System::getNDOFManager() const
 #endif
 
 #endif // __GHOST_SYSTEM_H__
-

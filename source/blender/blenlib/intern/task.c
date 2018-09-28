@@ -116,7 +116,7 @@ typedef struct Task {
  *   At this moment task queue owns the memory.
  *
  * - When task is done and task_free() is called the memory will be put to the
- *  pool which corresponds to a thread which handled the task.
+ *   pool which corresponds to a thread which handled the task.
  */
 typedef struct TaskMemPool {
 	/* Number of pre-allocated tasks in the pool. */
@@ -1310,11 +1310,11 @@ static void parallel_mempool_func(
 /**
  * This function allows to parallelize for loops over Mempool items.
  *
- * \param pool The iterable BLI_mempool to loop over.
- * \param userdata Common userdata passed to all instances of \a func.
- * \param func Callback function.
- * \param use_threading If \a true, actually split-execute loop in threads, else just do a sequential forloop
- *                      (allows caller to use any kind of test to switch on parallelization or not).
+ * \param mempool: The iterable BLI_mempool to loop over.
+ * \param userdata: Common userdata passed to all instances of \a func.
+ * \param func: Callback function.
+ * \param use_threading: If \a true, actually split-execute loop in threads, else just do a sequential for loop
+ * (allows caller to use any kind of test to switch on parallelization or not).
  *
  * \note There is no static scheduling here.
  */

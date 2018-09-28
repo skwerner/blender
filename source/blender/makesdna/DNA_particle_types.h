@@ -97,7 +97,7 @@ typedef struct ParticleData {
 	ParticleKey state;		/* current global coordinates */
 
 	ParticleKey prev_state; /* previous state */
-	
+
 	HairKey *hair;			/* hair vertices */
 
 	ParticleKey *keys;		/* keyed keys */
@@ -106,15 +106,15 @@ typedef struct ParticleData {
 
 	int totkey;				/* amount of hair or keyed keys*/
 
-	float time, lifetime;	/* dietime is not nescessarily time+lifetime as	*/
-	float dietime;			/* particles can die unnaturally (collision)	*/
+	float time, lifetime;	/* dietime is not necessarily time+lifetime as */
+	float dietime;			/* particles can die unnaturally (collision). */
 
 	/* WARNING! Those two indices, when not affected to vertices, are for !!! TESSELLATED FACES !!!, not POLYGONS! */
 	int num;				/* index to vert/edge/face */
 	int num_dmcache;		/* index to derived mesh data (face) to avoid slow lookups */
 
 	float fuv[4], foffset;	/* coordinates on face/edge number "num" and depth along*/
-							/* face normal for volume emission						*/
+							/* face normal for volume emission. */
 
 	float size;				/* size and multiplier so that we can update size when ever */
 
@@ -297,7 +297,7 @@ typedef struct ParticleSystem {
 	struct ListBase targets;				/* used for keyed and boid physics */
 
 	char name[64];							/* particle system name, MAX_NAME */
-	
+
 	float imat[4][4];	/* used for duplicators */
 	float cfra, tree_frame, bvhtree_frame;
 	int seed, child_seed;
@@ -355,7 +355,7 @@ typedef enum eParticleDrawFlag {
 } eParticleDrawFlag;
 
 /* part->type */
-/* hair is allways baked static in object/geometry space */
+/* hair is always baked static in object/geometry space */
 /* other types (normal particles) are in global space and not static baked */
 #define PART_EMITTER		0
 //#define PART_REACTOR		1
@@ -375,7 +375,7 @@ typedef enum eParticleDrawFlag {
 #define PART_UNBORN			32	/*show unborn particles*/
 #define PART_DIED			64	/*show died particles*/
 
-#define PART_TRAND			128	
+#define PART_TRAND			128
 #define PART_EDISTR			256	/* particle/face from face areas */
 
 #define PART_ROTATIONS		512	/* calculate particle rotations (and store them in pointcache) */
@@ -410,7 +410,7 @@ typedef enum eParticleDrawFlag {
 #define PART_FROM_VERT		0
 #define PART_FROM_FACE		1
 #define PART_FROM_VOLUME	2
-/* #define PART_FROM_PARTICLE	3  deprecated! */ 
+/* #define PART_FROM_PARTICLE	3  deprecated! */
 #define PART_FROM_CHILD		4
 
 /* part->distr */

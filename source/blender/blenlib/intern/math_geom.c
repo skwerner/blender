@@ -767,7 +767,7 @@ float dist_squared_ray_to_aabb_v3_simple(
 
 /* Adapted from "Real-Time Collision Detection" by Christer Ericson,
  * published by Morgan Kaufmann Publishers, copyright 2005 Elsevier Inc.
- * 
+ *
  * Set 'r' to the point in triangle (a, b, c) closest to point 'p' */
 void closest_on_tri_to_point_v3(float r[3], const float p[3],
                                 const float a[3], const float b[3], const float c[3])
@@ -2475,30 +2475,38 @@ bool isect_ray_aabb_v3(
 	return true;
 }
 
-/*
- * Test a bounding box (AABB) for ray intersection
- * assumes the ray is already local to the boundbox space
+/**
+ * Test a bounding box (AABB) for ray intersection.
+ * Assumes the ray is already local to the boundbox space.
+ *
+ * \note: \a direction should be normalized if you intend to use the \a tmin or \a tmax distance results!
  */
 bool isect_ray_aabb_v3_simple(
         const float orig[3], const float dir[3],
         const float bb_min[3], const float bb_max[3],
         float *tmin, float *tmax)
 {
-	double t[7];
+	double t[6];
 	float hit_dist[2];
-	t[1] = (double)(bb_min[0] - orig[0]) / dir[0];
-	t[2] = (double)(bb_max[0] - orig[0]) / dir[0];
-	t[3] = (double)(bb_min[1] - orig[1]) / dir[1];
-	t[4] = (double)(bb_max[1] - orig[1]) / dir[1];
-	t[5] = (double)(bb_min[2] - orig[2]) / dir[2];
-	t[6] = (double)(bb_max[2] - orig[2]) / dir[2];
-	hit_dist[0] = (float)fmax(fmax(fmin(t[1], t[2]), fmin(t[3], t[4])), fmin(t[5], t[6]));
-	hit_dist[1] = (float)fmin(fmin(fmax(t[1], t[2]), fmax(t[3], t[4])), fmax(t[5], t[6]));
-	if ((hit_dist[1] < 0 || hit_dist[0] > hit_dist[1]))
+	const double invdirx = (dir[0] > 1e-35f || dir[0] < -1e-35f) ? 1.0 / (double)dir[0] : DBL_MAX;
+	const double invdiry = (dir[1] > 1e-35f || dir[1] < -1e-35f) ? 1.0 / (double)dir[1] : DBL_MAX;
+	const double invdirz = (dir[2] > 1e-35f || dir[2] < -1e-35f) ? 1.0 / (double)dir[2] : DBL_MAX;
+	t[0] = (double)(bb_min[0] - orig[0]) * invdirx;
+	t[1] = (double)(bb_max[0] - orig[0]) * invdirx;
+	t[2] = (double)(bb_min[1] - orig[1]) * invdiry;
+	t[3] = (double)(bb_max[1] - orig[1]) * invdiry;
+	t[4] = (double)(bb_min[2] - orig[2]) * invdirz;
+	t[5] = (double)(bb_max[2] - orig[2]) * invdirz;
+	hit_dist[0] = (float)fmax(fmax(fmin(t[0], t[1]), fmin(t[2], t[3])), fmin(t[4], t[5]));
+	hit_dist[1] = (float)fmin(fmin(fmax(t[0], t[1]), fmax(t[2], t[3])), fmax(t[4], t[5]));
+	if ((hit_dist[1] < 0.0f || hit_dist[0] > hit_dist[1])) {
 		return false;
+	}
 	else {
-		if (tmin) *tmin = hit_dist[0];
-		if (tmax) *tmax = hit_dist[1];
+		if (tmin)
+			*tmin = hit_dist[0];
+		if (tmax)
+			*tmax = hit_dist[1];
 		return true;
 	}
 }
@@ -2610,8 +2618,9 @@ float line_plane_factor_v3(const float plane_co[3], const float plane_no[3],
 	return (dot != 0.0f) ? -dot_v3v3(plane_no, h) / dot : 0.0f;
 }
 
-/** Ensure the distance between these points is no greater than 'dist'.
- *  If it is, scale then both into the center.
+/**
+ * Ensure the distance between these points is no greater than 'dist'.
+ * If it is, scale then both into the center.
  */
 void limit_dist_v3(float v1[3], float v2[3], const float dist)
 {
@@ -3021,7 +3030,9 @@ bool barycentric_coords_v2(const float v1[2], const float v2[2], const float v3[
  * \note This is *exactly* the same calculation as #resolve_tri_uv_v2,
  * although it has double precision and is used for texture baking, so keep both.
  */
-void barycentric_weights_v2(const float v1[2], const float v2[2], const float v3[2], const float co[2], float w[3])
+void barycentric_weights_v2(
+        const float v1[2], const float v2[2], const float v3[2],
+        const float co[2], float w[3])
 {
 	float wtot;
 
@@ -3039,10 +3050,35 @@ void barycentric_weights_v2(const float v1[2], const float v2[2], const float v3
 }
 
 /**
+ * A version of #barycentric_weights_v2 that doesn't allow negative weights.
+ * Useful when negative values cause problems and points are only ever slightly outside of the triangle.
+ */
+void barycentric_weights_v2_clamped(
+        const float v1[2], const float v2[2], const float v3[2],
+        const float co[2], float w[3])
+{
+	float wtot;
+
+	w[0] = max_ff(cross_tri_v2(v2, v3, co), 0.0f);
+	w[1] = max_ff(cross_tri_v2(v3, v1, co), 0.0f);
+	w[2] = max_ff(cross_tri_v2(v1, v2, co), 0.0f);
+	wtot = w[0] + w[1] + w[2];
+
+	if (wtot != 0.0f) {
+		mul_v3_fl(w, 1.0f / wtot);
+	}
+	else { /* dummy values for zero area face */
+		copy_v3_fl(w, 1.0f / 3.0f);
+	}
+}
+
+/**
  * still use 2D X,Y space but this works for verts transformed by a perspective matrix,
  * using their 4th component as a weight
  */
-void barycentric_weights_v2_persp(const float v1[4], const float v2[4], const float v3[4], const float co[2], float w[3])
+void barycentric_weights_v2_persp(
+        const float v1[4], const float v2[4], const float v3[4],
+        const float co[2], float w[3])
 {
 	float wtot;
 
@@ -3064,8 +3100,9 @@ void barycentric_weights_v2_persp(const float v1[4], const float v2[4], const fl
  * note: untested for values outside the quad's bounds
  * this is #interp_weights_poly_v2 expanded for quads only
  */
-void barycentric_weights_v2_quad(const float v1[2], const float v2[2], const float v3[2], const float v4[2],
-                                 const float co[2], float w[4])
+void barycentric_weights_v2_quad(
+        const float v1[2], const float v2[2], const float v3[2], const float v4[2],
+        const float co[2], float w[4])
 {
 	/* note: fabsf() here is not needed for convex quads (and not used in interp_weights_poly_v2).
 	 *       but in the case of concave/bow-tie quads for the mask rasterizer it gives unreliable results
@@ -3144,8 +3181,8 @@ void transform_point_by_tri_v3(
 {
 	/* this works by moving the source triangle so its normal is pointing on the Z
 	 * axis where its barycentric weights can be calculated in 2D and its Z offset can
-	 *  be re-applied. The weights are applied directly to the targets 3D points and the
-	 *  z-depth is used to scale the targets normal as an offset.
+	 * be re-applied. The weights are applied directly to the targets 3D points and the
+	 * z-depth is used to scale the targets normal as an offset.
 	 * This saves transforming the target into its Z-Up orientation and back (which could also work) */
 	float no_tar[3], no_src[3];
 	float mat_src[3][3];
@@ -3637,11 +3674,11 @@ void resolve_quad_uv_v2_deriv(float r_uv[2], float r_deriv[2][2],
 
 	if (r_deriv) {
 		float tmp1[2], tmp2[2], s[2], t[2];
-		
+
 		/* clear outputs */
 		zero_v2(r_deriv[0]);
 		zero_v2(r_deriv[1]);
-		
+
 		sub_v2_v2v2(tmp1, st1, st0);
 		sub_v2_v2v2(tmp2, st2, st3);
 		interp_v2_v2v2(s, tmp1, tmp2, r_uv[1]);
@@ -3748,7 +3785,7 @@ void orthographic_m4(float matrix[4][4], const float left, const float right, co
 	matrix[3][0] = -(right + left) / Xdelta;
 	matrix[1][1] = 2.0f / Ydelta;
 	matrix[3][1] = -(top + bottom) / Ydelta;
-	matrix[2][2] = -2.0f / Zdelta; /* note: negate Z	*/
+	matrix[2][2] = -2.0f / Zdelta; /* note: negate Z */
 	matrix[3][2] = -(farClip + nearClip) / Zdelta;
 }
 
@@ -3767,7 +3804,7 @@ void perspective_m4(float mat[4][4], const float left, const float right, const 
 	}
 	mat[0][0] = nearClip * 2.0f / Xdelta;
 	mat[1][1] = nearClip * 2.0f / Ydelta;
-	mat[2][0] = (right + left) / Xdelta; /* note: negate Z	*/
+	mat[2][0] = (right + left) / Xdelta; /* note: negate Z */
 	mat[2][1] = (top + bottom) / Ydelta;
 	mat[2][2] = -(farClip + nearClip) / Zdelta;
 	mat[2][3] = -1.0f;
@@ -4930,7 +4967,7 @@ float cubic_tangent_factor_circle_v3(const float tan_l[3], const float tan_r[3])
 
 	/* -7f causes instability/glitches with Bendy Bones + Custom Refs  */
 	const float eps = 1e-5f;
-	
+
 	const float tan_dot = dot_v3v3(tan_l, tan_r);
 	if (tan_dot > 1.0f - eps) {
 		/* no angle difference (use fallback, length wont make any difference) */

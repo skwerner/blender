@@ -57,6 +57,7 @@ ccl_device_inline float3 clamp(const float3& a, const float3& mn, const float3& 
 ccl_device_inline float3 fabs(const float3& a);
 ccl_device_inline float3 mix(const float3& a, const float3& b, float t);
 ccl_device_inline float3 rcp(const float3& a);
+ccl_device_inline float3 sqrt(const float3& a);
 #endif  /* !__KERNEL_OPENCL__ */
 
 ccl_device_inline float min3(float3 a);
@@ -66,7 +67,7 @@ ccl_device_inline float len_squared(const float3 a);
 
 ccl_device_inline float3 saturate3(float3 a);
 ccl_device_inline float3 safe_normalize(const float3 a);
-ccl_device_inline float3 normalize_len(const float3 a, float *t);;
+ccl_device_inline float3 normalize_len(const float3 a, float *t);
 ccl_device_inline float3 safe_normalize_len(const float3 a, float *t);
 ccl_device_inline float3 interp(float3 a, float3 b, float t);
 
@@ -270,6 +271,15 @@ ccl_device_inline float3 fabs(const float3& a)
 #endif
 }
 
+ccl_device_inline float3 sqrt(const float3& a)
+{
+#ifdef __KERNEL_SSE__
+	return float3(_mm_sqrt_ps(a));
+#else
+	return make_float3(sqrtf(a.x), sqrtf(a.y), sqrtf(a.z));
+#endif
+}
+
 ccl_device_inline float3 mix(const float3& a, const float3& b, float t)
 {
 	return a + t*(b - a);
@@ -365,6 +375,33 @@ ccl_device_inline bool isequal_float3(const float3 a, const float3 b)
 	return all(a == b);
 #else
 	return a == b;
+#endif
+}
+
+ccl_device_inline float3 pow3(float3 v, float e)
+{
+	return make_float3(powf(v.x, e), powf(v.y, e), powf(v.z, e));
+}
+
+ccl_device_inline float3 exp3(float3 v)
+{
+	return make_float3(expf(v.x), expf(v.y), expf(v.z));
+}
+
+ccl_device_inline float3 log3(float3 v)
+{
+	return make_float3(logf(v.x), logf(v.y), logf(v.z));
+}
+
+ccl_device_inline int3 quick_floor_to_int3(const float3 a)
+{
+#ifdef __KERNEL_SSE__
+	int3 b = int3(_mm_cvttps_epi32(a.m128));
+	int3 isneg = int3(_mm_castps_si128(_mm_cmplt_ps(a.m128, _mm_set_ps1(0.0f))));
+	/* Unsaturated add 0xffffffff is the same as subtract -1. */
+	return b + isneg;
+#else
+	return make_int3(quick_floor_to_int(a.x), quick_floor_to_int(a.y), quick_floor_to_int(a.z));
 #endif
 }
 

@@ -112,7 +112,7 @@ static BMOpDefine bmo_smooth_vert_def = {
 	 {"use_axis_x", BMO_OP_SLOT_BOOL},      /* smooth vertices along X axis */
 	 {"use_axis_y", BMO_OP_SLOT_BOOL},      /* smooth vertices along Y axis */
 	 {"use_axis_z", BMO_OP_SLOT_BOOL},      /* smooth vertices along Z axis */
-	{{'\0'}},
+	 {{'\0'}},
 	},
 	{{{'\0'}}},  /* no output */
 	bmo_smooth_vert_exec,
@@ -135,7 +135,7 @@ static BMOpDefine bmo_smooth_laplacian_vert_def = {
 	 {"use_y", BMO_OP_SLOT_BOOL},           /* Smooth object along Y axis */
 	 {"use_z", BMO_OP_SLOT_BOOL},           /* Smooth object along Z axis */
 	 {"preserve_volume", BMO_OP_SLOT_BOOL}, /* Apply volume preservation after smooth */
-	{{'\0'}},
+	 {{'\0'}},
 	},
 	{{{'\0'}}},  /* no output */
 	bmo_smooth_laplacian_vert_exec,
@@ -839,7 +839,7 @@ static BMOpDefine bmo_bmesh_to_mesh_def = {
 	"bmesh_to_mesh",
 	/* slots_in */
 	{
-	/* pointer to a mesh structure to fill in */
+	 /* pointer to a mesh structure to fill in */
 	 {"mesh", BMO_OP_SLOT_PTR, {(int)BMO_OP_SLOT_SUBTYPE_PTR_MESH}},
 	/* pointer to an object structure */
 	 {"object", BMO_OP_SLOT_PTR, {(int)BMO_OP_SLOT_SUBTYPE_PTR_OBJECT}},
@@ -860,7 +860,7 @@ static BMOpDefine bmo_mesh_to_bmesh_def = {
 	"mesh_to_bmesh",
 	/* slots_in */
 	{
-	/* pointer to a Mesh structure */
+	 /* pointer to a Mesh structure */
 	 {"mesh", BMO_OP_SLOT_PTR, {(int)BMO_OP_SLOT_SUBTYPE_PTR_MESH}},
 	/* pointer to an Object structure */
 	 {"object", BMO_OP_SLOT_PTR, {(int)BMO_OP_SLOT_SUBTYPE_PTR_OBJECT}},
@@ -881,6 +881,7 @@ static BMOpDefine bmo_extrude_discrete_faces_def = {
 	"extrude_discrete_faces",
 	/* slots_in */
 	{{"faces", BMO_OP_SLOT_ELEMENT_BUF, {BM_FACE}},     /* input faces */
+	 {"use_normal_flip", BMO_OP_SLOT_BOOL},  /* Create faces with reversed direction. */
 	 {"use_select_history", BMO_OP_SLOT_BOOL},  /* pass to duplicate */
 	 {{'\0'}},
 	},
@@ -902,6 +903,7 @@ static BMOpDefine bmo_extrude_edge_only_def = {
 	"extrude_edge_only",
 	/* slots_in */
 	{{"edges", BMO_OP_SLOT_ELEMENT_BUF, {BM_EDGE}},    /* input vertices */
+	 {"use_normal_flip", BMO_OP_SLOT_BOOL},  /* Create faces with reversed direction. */
 	 {"use_select_history", BMO_OP_SLOT_BOOL},  /* pass to duplicate */
 	 {{'\0'}},
 	},
@@ -1037,6 +1039,7 @@ static BMOpDefine bmo_extrude_face_region_def = {
 	{{"geom", BMO_OP_SLOT_ELEMENT_BUF, {BM_VERT | BM_EDGE | BM_FACE}},     /* edges and faces */
 	 {"edges_exclude", BMO_OP_SLOT_MAPPING, {(int)BMO_OP_SLOT_SUBTYPE_MAP_EMPTY}},
 	 {"use_keep_orig", BMO_OP_SLOT_BOOL},   /* keep original geometry (requires ``geom`` to include edges). */
+	 {"use_normal_flip", BMO_OP_SLOT_BOOL},  /* Create faces with reversed direction. */
 	 {"use_select_history", BMO_OP_SLOT_BOOL},  /* pass to duplicate */
 	 {{'\0'}},
 	},
@@ -1337,7 +1340,7 @@ static BMOpDefine bmo_duplicate_def = {
 	 {"face_map.out", BMO_OP_SLOT_MAPPING, {(int)BMO_OP_SLOT_SUBTYPE_MAP_ELEM}},
 	 {"boundary_map.out", BMO_OP_SLOT_MAPPING, {(int)BMO_OP_SLOT_SUBTYPE_MAP_ELEM}},
 	 {"isovert_map.out", BMO_OP_SLOT_MAPPING, {(int)BMO_OP_SLOT_SUBTYPE_MAP_ELEM}},
-	{{'\0'}},
+	 {{'\0'}},
 	},
 	bmo_duplicate_exec,
 	(BMO_OPTYPE_FLAG_NORMALS_CALC |
@@ -1386,6 +1389,8 @@ static BMOpDefine bmo_spin_def = {
 	 {"angle", BMO_OP_SLOT_FLT},            /* total rotation angle (radians) */
 	 {"space", BMO_OP_SLOT_MAT},            /* matrix to define the space (typically object matrix) */
 	 {"steps", BMO_OP_SLOT_INT},            /* number of steps */
+	 {"use_merge", BMO_OP_SLOT_BOOL},       /* Merge first/last when the angle is a full revolution. */
+	 {"use_normal_flip", BMO_OP_SLOT_BOOL}, /* Create faces with reversed direction. */
 	 {"use_duplicate", BMO_OP_SLOT_BOOL},   /* duplicate or extrude? */
 	 {{'\0'}},
 	},
@@ -1424,7 +1429,7 @@ static BMOpDefine bmo_similar_faces_def = {
 /*
  * Similar Edges Search.
  *
- *  Find similar edges (length, direction, edge, seam, ...).
+ * Find similar edges (length, direction, edge, seam, ...).
  */
 static BMOpDefine bmo_similar_edges_def = {
 	"similar_edges",

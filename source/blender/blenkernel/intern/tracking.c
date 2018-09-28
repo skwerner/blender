@@ -213,14 +213,18 @@ static void tracking_tracks_copy(ListBase *tracks_dst, const ListBase *tracks_sr
 /* copy the whole list of plane tracks (need whole MovieTracking structures due to embedded pointers to tracks).
  * WARNING: implies tracking_[dst/src] and their tracks have already been copied. */
 static void tracking_plane_tracks_copy(
-        ListBase *plane_tracks_dst, const ListBase *plane_tracks_src, GHash *tracks_mapping, const int flag)
+        ListBase *plane_tracks_list_dst, const ListBase *plane_tracks_list_src,
+        GHash *tracks_mapping, const int flag)
 {
 	MovieTrackingPlaneTrack *plane_track_dst, *plane_track_src;
 
-	BLI_listbase_clear(plane_tracks_dst);
+	BLI_listbase_clear(plane_tracks_list_dst);
 
-	for (plane_track_src = plane_tracks_src->first; plane_track_src != NULL; plane_track_src = plane_track_src->next) {
-		plane_track_dst = MEM_dupallocN(plane_tracks_src);
+	for (plane_track_src = plane_tracks_list_src->first;
+	     plane_track_src != NULL;
+	     plane_track_src = plane_track_src->next)
+	{
+		plane_track_dst = MEM_dupallocN(plane_track_src);
 		if (plane_track_src->markers) {
 			plane_track_dst->markers = MEM_dupallocN(plane_track_src->markers);
 		}
@@ -231,7 +235,7 @@ static void tracking_plane_tracks_copy(
 		if ((flag & LIB_ID_CREATE_NO_USER_REFCOUNT) == 0) {
 			id_us_plus(&plane_track_dst->image->id);
 		}
-		BLI_addtail(plane_tracks_dst, plane_track_dst);
+		BLI_addtail(plane_tracks_list_dst, plane_track_dst);
 	}
 }
 
@@ -1602,7 +1606,7 @@ MovieTrackingPlaneMarker *BKE_tracking_plane_marker_insert(MovieTrackingPlaneTra
 		int a = plane_track->markersnr;
 
 		/* Find position in array where to add new marker. */
-		/* TODO(sergey): we coud use bisect to speed things up. */
+		/* TODO(sergey): we could use bisect to speed things up. */
 		while (a--) {
 			if (plane_track->markers[a].framenr < plane_marker->framenr) {
 				break;
@@ -1988,10 +1992,10 @@ void BKE_tracking_camera_to_blender(MovieTracking *tracking, Scene *scene, Camer
 	camera->sensor_fit = CAMERA_SENSOR_FIT_AUTO;
 	camera->lens = focal * camera->sensor_x / width;
 
-	scene->r.xsch = width * tracking->camera.pixel_aspect;
+	scene->r.xsch = width;
 	scene->r.ysch = height;
 
-	scene->r.xasp = 1.0f;
+	scene->r.xasp = tracking->camera.pixel_aspect;
 	scene->r.yasp = 1.0f;
 
 	BKE_tracking_camera_shift_get(tracking, width, height, &camera->shiftx, &camera->shifty);

@@ -35,6 +35,8 @@
 #include "MEM_guardedalloc.h"
 
 #include "BLI_utildefines.h"
+#include "BLI_console.h"
+#include "BLI_hash.h"
 #include "BLI_ghash.h"
 #include "BLI_listbase.h"
 
@@ -126,9 +128,9 @@ static bool pointer_to_component_node_criteria(
 		bPoseChannel *pchan = (bPoseChannel *)ptr->data;
 		if (prop != NULL && RNA_property_is_idprop(prop)) {
 			*type = DEG_NODE_TYPE_PARAMETERS;
-			*subdata = "";
-			*operation_code = DEG_OPCODE_PARAMETERS_EVAL;
-			*operation_name = pchan->name;;
+			*operation_code = DEG_OPCODE_ID_PROPERTY;
+			*operation_name = RNA_property_identifier((PropertyRNA *)prop);
+			*operation_name_tag = -1;
 		}
 		else {
 			/* Bone - generally, we just want the bone component. */
@@ -140,7 +142,7 @@ static bool pointer_to_component_node_criteria(
 	else if (ptr->type == &RNA_Bone) {
 		Bone *bone = (Bone *)ptr->data;
 		/* armature-level bone, but it ends up going to bone component anyway */
-		// NOTE: the ID in thise case will end up being bArmature.
+		// NOTE: the ID in this case will end up being bArmature.
 		*type = DEG_NODE_TYPE_BONE;
 		*subdata = bone->name;
 		return true;
@@ -212,12 +214,25 @@ static bool pointer_to_component_node_criteria(
 		*subdata = seq->name; // xxx?
 		return true;
 	}
+	else if (ptr->type == &RNA_Curve) {
+		*id = (ID *)ptr->id.data;
+		*type = DEG_NODE_TYPE_GEOMETRY;
+		return true;
+	}
 	if (prop != NULL) {
 		/* All unknown data effectively falls under "parameter evaluation". */
-		*type = DEG_NODE_TYPE_PARAMETERS;
-		*operation_code = DEG_OPCODE_PARAMETERS_EVAL;
-		*operation_name = "";
-		*operation_name_tag = -1;
+		if (RNA_property_is_idprop(prop)) {
+			*type = DEG_NODE_TYPE_PARAMETERS;
+			*operation_code = DEG_OPCODE_ID_PROPERTY;
+			*operation_name = RNA_property_identifier((PropertyRNA *)prop);
+			*operation_name_tag = -1;
+		}
+		else {
+			*type = DEG_NODE_TYPE_PARAMETERS;
+			*operation_code = DEG_OPCODE_PARAMETERS_EVAL;
+			*operation_name = "";
+			*operation_name_tag = -1;
+		}
 		return true;
 	}
 	return false;
@@ -450,6 +465,31 @@ void deg_editors_scene_update(Main *bmain, Scene *scene, bool updated)
 	}
 }
 
+bool deg_terminal_do_color(void)
+{
+	return (G.debug & G_DEBUG_DEPSGRAPH_PRETTY) != 0;
+}
+
+string deg_color_for_pointer(const void *pointer)
+{
+	if (!deg_terminal_do_color()) {
+		return "";
+	}
+	int r, g, b;
+	BLI_hash_pointer_to_color(pointer, &r, &g, &b);
+	char buffer[64];
+	BLI_snprintf(buffer, sizeof(buffer), TRUECOLOR_ANSI_COLOR_FORMAT, r, g, b);
+	return string(buffer);
+}
+
+string deg_color_end(void)
+{
+	if (!deg_terminal_do_color()) {
+		return "";
+	}
+	return string(TRUECOLOR_ANSI_COLOR_FINISH);
+}
+
 }  // namespace DEG
 
 /* **************** */
@@ -485,4 +525,94 @@ void DEG_editors_update_pre(Main *bmain, Scene *scene, bool time)
 	if (DEG::deg_editor_update_scene_pre_cb != NULL) {
 		DEG::deg_editor_update_scene_pre_cb(bmain, scene, time);
 	}
+}
+
+/* Evaluation and debug */
+
+void DEG_debug_print_eval(const char *function_name,
+                          const char *object_name,
+                          const void *object_address)
+{
+	if ((G.debug & G_DEBUG_DEPSGRAPH_EVAL) == 0) {
+		return;
+	}
+	fprintf(stdout,
+	        "%s on %s %s(%p)%s\n",
+	        function_name,
+	        object_name,
+	        DEG::deg_color_for_pointer(object_address).c_str(),
+	        object_address,
+	        DEG::deg_color_end().c_str());
+	fflush(stdout);
+}
+
+void DEG_debug_print_eval_subdata(const char *function_name,
+                                  const char *object_name,
+                                  const void *object_address,
+                                  const char *subdata_comment,
+                                  const char *subdata_name,
+                                  const void *subdata_address)
+{
+	if ((G.debug & G_DEBUG_DEPSGRAPH_EVAL) == 0) {
+		return;
+	}
+	fprintf(stdout,
+	        "%s on %s %s(%p)%s %s %s %s(%p)%s\n",
+	        function_name,
+	        object_name,
+	        DEG::deg_color_for_pointer(object_address).c_str(),
+	        object_address,
+	        DEG::deg_color_end().c_str(),
+	        subdata_comment,
+	        subdata_name,
+	        DEG::deg_color_for_pointer(subdata_address).c_str(),
+	        subdata_address,
+	        DEG::deg_color_end().c_str());
+	fflush(stdout);
+}
+
+void DEG_debug_print_eval_subdata_index(const char *function_name,
+                                        const char *object_name,
+                                        const void *object_address,
+                                        const char *subdata_comment,
+                                        const char *subdata_name,
+                                        const void *subdata_address,
+                                        const int subdata_index)
+{
+	if ((G.debug & G_DEBUG_DEPSGRAPH_EVAL) == 0) {
+		return;
+	}
+	fprintf(stdout,
+	        "%s on %s %s(%p)^%s %s %s[%d] %s(%p)%s\n",
+	        function_name,
+	        object_name,
+	        DEG::deg_color_for_pointer(object_address).c_str(),
+	        object_address,
+	        DEG::deg_color_end().c_str(),
+	        subdata_comment,
+	        subdata_name,
+	        subdata_index,
+	        DEG::deg_color_for_pointer(subdata_address).c_str(),
+	        subdata_address,
+	        DEG::deg_color_end().c_str());
+	fflush(stdout);
+}
+
+void DEG_debug_print_eval_time(const char *function_name,
+                               const char *object_name,
+                               const void *object_address,
+                               float time)
+{
+	if ((G.debug & G_DEBUG_DEPSGRAPH_EVAL) == 0) {
+		return;
+	}
+	fprintf(stdout,
+	        "%s on %s %s(%p)%s at time %f\n",
+	        function_name,
+	        object_name,
+	        DEG::deg_color_for_pointer(object_address).c_str(),
+	        object_address,
+	        DEG::deg_color_end().c_str(),
+	        time);
+	fflush(stdout);
 }

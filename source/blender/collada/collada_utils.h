@@ -63,11 +63,15 @@ extern "C" {
 
 typedef std::map<COLLADAFW::TextureMapId, std::vector<MTex *> > TexIndexTextureArrayMap;
 
+extern EvaluationContext *bc_get_evaluation_context(Main *bmain);
+extern void bc_update_scene(Main *bmain, Scene *scene, float ctime);
+
 extern float bc_get_float_value(const COLLADAFW::FloatOrDoubleArray& array, unsigned int index);
 extern int bc_test_parent_loop(Object *par, Object *ob);
 extern int bc_set_parent(Object *ob, Object *par, bContext *C, bool is_parent_space = true);
-extern Object *bc_add_object(Scene *scene, int type, const char *name);
-extern Mesh *bc_get_mesh_copy(Scene *scene, Object *ob, BC_export_mesh_type export_mesh_type, bool apply_modifiers, bool triangulate);
+extern Object *bc_add_object(Main *bmain, Scene *scene, int type, const char *name);
+extern Mesh *bc_get_mesh_copy(
+        Main *bmain, Scene *scene, Object *ob, BC_export_mesh_type export_mesh_type, bool apply_modifiers, bool triangulate);
 
 extern Object *bc_get_assigned_armature(Object *ob);
 extern Object *bc_get_highest_selected_ancestor_or_self(LinkNode *export_set, Object *ob);
@@ -86,8 +90,8 @@ extern void bc_bubble_sort_by_Object_name(LinkNode *export_set);
 extern bool bc_is_root_bone(Bone *aBone, bool deform_bones_only);
 extern int  bc_get_active_UVLayer(Object *ob);
 
-extern std::string bc_replace_string(std::string data, const std::string& pattern, const std::string& replacement); 
-extern std::string bc_url_encode(std::string data); 
+extern std::string bc_replace_string(std::string data, const std::string& pattern, const std::string& replacement);
+extern std::string bc_url_encode(std::string data);
 extern void bc_match_scale(Object *ob, UnitConverter &bc_unit, bool scale_to_scene);
 extern void bc_match_scale(std::vector<Object *> *objects_done, UnitConverter &unit_converter, bool scale_to_scene);
 
@@ -99,6 +103,13 @@ extern bool bc_is_leaf_bone(Bone *bone);
 extern EditBone *bc_get_edit_bone(bArmature * armature, char *name);
 extern int bc_set_layer(int bitfield, int layer, bool enable);
 extern int bc_set_layer(int bitfield, int layer);
+
+inline bool bc_in_range(float a, float b, float range) {
+	return fabsf(a - b) < range;
+}
+void bc_copy_m4_farray(float r[4][4], float *a);
+void bc_copy_farray_m4(float *r, float a[4][4]);
+
 extern void bc_sanitize_mat(float mat[4][4], int precision);
 extern void bc_sanitize_mat(double mat[4][4], int precision);
 
@@ -130,8 +141,8 @@ class BCPolygonNormalsIndices
 		normal_indices.push_back(index);
 	}
 
-	unsigned int operator[](unsigned int i) { 
-		return normal_indices[i]; 
+	unsigned int operator[](unsigned int i) {
+		return normal_indices[i];
 	}
 
 };
@@ -180,16 +191,16 @@ public:
 };
 
 /* a map to store bone extension maps
-| std:string     : an armature name
-| BoneExtended * : a map that contains extra data for bones
-*/
+ * std:string     : an armature name
+ * BoneExtended * : a map that contains extra data for bones
+ */
 typedef std::map<std::string, BoneExtended *> BoneExtensionMap;
 
 /*
-| A class to organise bone extendion data for multiple Armatures.
-| this is needed for the case where a Collada file contains 2 or more
-| separate armatures.
-*/
+ * A class to organise bone extendion data for multiple Armatures.
+ * this is needed for the case where a Collada file contains 2 or more
+ * separate armatures.
+ */
 class BoneExtensionManager {
 private:
 	std::map<std::string, BoneExtensionMap *> extended_bone_maps;

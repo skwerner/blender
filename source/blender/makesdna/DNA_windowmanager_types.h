@@ -4,7 +4,7 @@
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version. 
+ * of the License, or (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -18,7 +18,7 @@
  * The Original Code is Copyright (C) 2007 Blender Foundation.
  * All rights reserved.
  *
- * 
+ *
  * Contributor(s): Blender Foundation
  *
  * ***** END GPL LICENSE BLOCK *****
@@ -58,6 +58,7 @@ struct ReportList;
 struct Report;
 struct uiLayout;
 struct Stereo3dFormat;
+struct UndoStep;
 
 #define OP_MAX_TYPENAME 64
 #define KMAP_MAX_NAME   64
@@ -154,6 +155,8 @@ typedef struct wmWindowManager {
 	ListBase timers;                  /* active timers */
 	struct wmTimer *autosavetimer;    /* timer for auto save */
 
+	struct UndoStack *undo_stack;     /* all undo history (runtime only). */
+
 	char is_interface_locked;		/* indicates whether interface is locked for user interaction */
 	char par[7];
 } wmWindowManager;
@@ -171,7 +174,7 @@ enum {
 #  endif
 #endif
 
-/* the savable part, rest of data is local in ghostwinlay */
+/* the saveable part, rest of data is local in ghostwinlay */
 typedef struct wmWindow {
 	struct wmWindow *next, *prev;
 
@@ -230,7 +233,7 @@ typedef struct wmWindow {
 #endif
 
 /* These two Lines with # tell makesdna this struct can be excluded. */
-/* should be something like DNA_EXCLUDE 
+/* should be something like DNA_EXCLUDE
  * but the preprocessor first removes all comments, spaces etc */
 #
 #
@@ -314,7 +317,7 @@ typedef struct wmKeyMap {
 
 	/* runtime */
 	/** Verify if enabled in the current context, use #WM_keymap_poll instead of direct calls. */
-	int (*poll)(struct bContext *);
+	bool (*poll)(struct bContext *);
 	/** For modal, #EnumPropertyItem for now. */
 	const void *modal_items;
 } wmKeyMap;

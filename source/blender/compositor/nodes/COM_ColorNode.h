@@ -15,19 +15,19 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
- * Contributor: 
- *		Jeroen Bakker 
+ * Contributor:
+ *		Jeroen Bakker
  *		Monique Dewanchand
  */
 
-#ifndef _COM_ColorNode_h_
-#define _COM_ColorNode_h_
+#ifndef __COM_COLORNODE_H__
+#define __COM_COLORNODE_H__
 
 #include "COM_Node.h"
 
 /**
- * @brief ColorNode
- * @ingroup Node
+ * \brief ColorNode
+ * \ingroup Node
  */
 class ColorNode : public Node {
 public:

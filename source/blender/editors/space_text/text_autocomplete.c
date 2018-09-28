@@ -40,7 +40,10 @@
 #include "WM_api.h"
 #include "WM_types.h"
 
+#include "ED_text.h"
+#include "ED_undo.h"
 #include "ED_screen.h"
+
 #include "UI_interface.h"
 
 #include "text_format.h"
@@ -241,7 +244,7 @@ static void get_suggest_prefix(Text *text, int offset)
 	texttool_suggest_prefix(line + i, len);
 }
 
-static void confirm_suggestion(Text *text)
+static void confirm_suggestion(Text *text, TextUndoBuf *utxt)
 {
 	SuggItem *sel;
 	int i, over = 0;
@@ -260,7 +263,7 @@ static void confirm_suggestion(Text *text)
 //	for (i = 0; i < skipleft; i++)
 //		txt_move_left(text, 0);
 	BLI_assert(memcmp(sel->name, &line[i], over) == 0);
-	txt_insert_buf(text, sel->name + over);
+	txt_insert_buf(text, utxt, sel->name + over);
 
 //	for (i = 0; i < skipleft; i++)
 //		txt_move_right(text, 0);
@@ -284,9 +287,11 @@ static int text_autocomplete_invoke(bContext *C, wmOperator *op, const wmEvent *
 		ED_area_tag_redraw(CTX_wm_area(C));
 
 		if (texttool_suggest_first() == texttool_suggest_last()) {
-			confirm_suggestion(st->text);
+			TextUndoBuf *utxt = ED_text_undo_push_init(C);
+			confirm_suggestion(st->text, utxt);
 			text_update_line_edited(st->text->curl);
 			text_autocomplete_free(C, op);
+			ED_undo_push(C, op->type->name);
 			return OPERATOR_FINISHED;
 		}
 		else {
@@ -340,8 +345,10 @@ static int text_autocomplete_modal(bContext *C, wmOperator *op, const wmEvent *e
 		case MIDDLEMOUSE:
 			if (event->val == KM_PRESS) {
 				if (text_do_suggest_select(st, ar)) {
-					confirm_suggestion(st->text);
+					TextUndoBuf *utxt = ED_text_undo_push_init(C);
+					confirm_suggestion(st->text, utxt);
 					text_update_line_edited(st->text->curl);
+					ED_undo_push(C, op->type->name);
 					swallow = 1;
 				}
 				else {
@@ -375,8 +382,10 @@ static int text_autocomplete_modal(bContext *C, wmOperator *op, const wmEvent *e
 		case PADENTER:
 			if (event->val == KM_PRESS) {
 				if (tools & TOOL_SUGG_LIST) {
-					confirm_suggestion(st->text);
+					TextUndoBuf *utxt = ED_text_undo_push_init(C);
+					confirm_suggestion(st->text, utxt);
 					text_update_line_edited(st->text->curl);
+					ED_undo_push(C, op->type->name);
 					swallow = 1;
 					draw = 1;
 				}
@@ -588,5 +597,6 @@ void TEXT_OT_autocomplete(wmOperatorType *ot)
 	ot->poll = text_space_edit_poll;
 
 	/* flags */
+	/* Undo is handled conditionally by this operator. */
 	ot->flag = OPTYPE_BLOCKING;
 }

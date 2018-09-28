@@ -31,6 +31,7 @@
 #include "BLI_utildefines_variadic.h"
 
 void			PyC_ObSpit(const char *name, PyObject *var);
+void			PyC_ObSpitStr(char *result, size_t result_len, PyObject *var);
 void			PyC_LineSpit(void);
 void			PyC_StackSpit(void);
 PyObject *		PyC_ExceptionBuffer(void);
@@ -50,12 +51,15 @@ int             PyC_AsArray(
         const PyTypeObject *type, const bool is_double, const char *error_prefix);
 
 PyObject       *PyC_Tuple_PackArray_F32(const float *array, uint len);
+PyObject       *PyC_Tuple_PackArray_F64(const double *array, uint len);
 PyObject       *PyC_Tuple_PackArray_I32(const int *array, uint len);
 PyObject       *PyC_Tuple_PackArray_I32FromBool(const int *array, uint len);
 PyObject       *PyC_Tuple_PackArray_Bool(const bool *array, uint len);
 
 #define PyC_Tuple_Pack_F32(...) \
 	PyC_Tuple_PackArray_F32(((const float []){__VA_ARGS__}), VA_NARGS_COUNT(__VA_ARGS__))
+#define PyC_Tuple_Pack_F64(...) \
+	PyC_Tuple_PackArray_F64(((const double []){__VA_ARGS__}), VA_NARGS_COUNT(__VA_ARGS__))
 #define PyC_Tuple_Pack_I32(...) \
 	PyC_Tuple_PackArray_I32(((const int []){__VA_ARGS__}), VA_NARGS_COUNT(__VA_ARGS__))
 #define PyC_Tuple_Pack_I32FromBool(...) \
@@ -73,8 +77,9 @@ const char *    PyC_UnicodeAsByte(PyObject *py_str, PyObject **coerce); /* coerc
 const char *    PyC_UnicodeAsByteAndSize(PyObject *py_str, Py_ssize_t *size, PyObject **coerce);
 
 /* name namespace function for bpy & bge */
-PyObject *		PyC_DefaultNameSpace(const char *filename);
-void			PyC_RunQuicky(const char *filepath, int n, ...);
+PyObject *PyC_DefaultNameSpace(const char *filename);
+void PyC_RunQuicky(const char *filepath, int n, ...);
+bool PyC_NameSpace_ImportArray(PyObject *py_dict, const char *imports[]);
 
 void PyC_MainModule_Backup(PyObject **main_mod);
 void PyC_MainModule_Restore(PyObject *main_mod);
@@ -97,11 +102,13 @@ int       PyC_FlagSet_ValueFromID(PyC_FlagSet *item, const char *identifier, int
 int       PyC_FlagSet_ToBitfield(PyC_FlagSet *items, PyObject *value, int *r_value, const char *error_prefix);
 PyObject *PyC_FlagSet_FromBitfield(PyC_FlagSet *items, int flag);
 
-bool PyC_RunString_AsNumber(const char *expr, const char *filename, double *r_value);
-bool PyC_RunString_AsString(const char *expr, const char *filename, char **r_value);
+bool PyC_RunString_AsNumber(const char **imports, const char *expr, const char *filename, double *r_value);
+bool PyC_RunString_AsIntPtr(const char **imports, const char *expr, const char *filename, intptr_t *r_value);
+bool PyC_RunString_AsString(const char **imports, const char *expr, const char *filename, char **r_value);
 
 int PyC_ParseBool(PyObject *o, void *p);
 
+int PyC_CheckArgs_DeepCopy(PyObject *args);
 
 /* Integer parsing (with overflow checks), -1 on error. */
 int     PyC_Long_AsBool(PyObject *value);

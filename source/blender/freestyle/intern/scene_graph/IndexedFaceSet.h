@@ -90,7 +90,7 @@ public:
 	 *        - TRIANGLES     : the face indices describe single triangles
 	 *      If iCopy != 0, the array is copied; you must desallocate iFaceStyle. Else you must not.
 	 *    iVIndices,
-	 *      Array of vertices indices. 
+	 *      Array of vertices indices.
 	 *      The integers contained in this array must be multiple of 3.
 	 *      If iCopy != 0, the array is copied; you must desallocate iVIndices. Else you must not.
 	 *    iVISize
@@ -113,7 +113,7 @@ public:
 	 *      0 : the arrays are not copied. The pointers passed as arguments are used. IndexedFaceSet takes these
 	 *          arrays desallocation in charge.
 	 *      1 : the arrays are copied. The caller is in charge of the arrays, passed as arguments desallocation.
-	*/
+	 */
 	IndexedFaceSet(float *iVertices, unsigned iVSize, float *iNormals, unsigned iNSize, FrsMaterial **iMaterials,
 	               unsigned iMSize, float *iTexCoords, unsigned iTSize, unsigned iNumFaces, unsigned *iNumVertexPerFace,
 	               TRIANGLES_STYLE *iFaceStyle, FaceEdgeMark *iFaceEdgeMarks, unsigned *iVIndices, unsigned iVISize,

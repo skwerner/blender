@@ -38,13 +38,14 @@
 
 #include "python_utildefines.h"
 
+#include "BLI_string.h"
+
 #ifndef MATH_STANDALONE
 /* only for BLI_strncpy_wchar_from_utf8, should replace with py funcs but too late in release now */
 #include "BLI_string_utf8.h"
 #endif
 
 #ifdef _WIN32
-#include "BLI_path_util.h"  /* BLI_setenv() */
 #include "BLI_math_base.h"  /* isfinite() */
 #endif
 
@@ -89,7 +90,7 @@ int PyC_AsArray_FAST(
 		}
 	}
 	else if (type == &PyBool_Type) {
-		int *array_bool = array;
+		bool *array_bool = array;
 		for (i = 0; i < length; i++) {
 			array_bool[i] = (PyLong_AsLong(value_fast_items[i]) != 0);
 		}
@@ -136,6 +137,15 @@ int PyC_AsArray(
 
 /* array utility function */
 PyObject *PyC_Tuple_PackArray_F32(const float *array, uint len)
+{
+	PyObject *tuple = PyTuple_New(len);
+	for (uint i = 0; i < len; i++) {
+		PyTuple_SET_ITEM(tuple, i, PyFloat_FromDouble(array[i]));
+	}
+	return tuple;
+}
+
+PyObject *PyC_Tuple_PackArray_F64(const double *array, uint len)
 {
 	PyObject *tuple = PyTuple_New(len);
 	for (uint i = 0; i < len; i++) {
@@ -219,28 +229,61 @@ int PyC_ParseBool(PyObject *o, void *p)
 	return 1;
 }
 
+/* silly function, we dont use arg. just check its compatible with __deepcopy__ */
+int PyC_CheckArgs_DeepCopy(PyObject *args)
+{
+	PyObject *dummy_pydict;
+	return PyArg_ParseTuple(args, "|O!:__deepcopy__", &PyDict_Type, &dummy_pydict) != 0;
+}
 
 #ifndef MATH_STANDALONE
 
 /* for debugging */
 void PyC_ObSpit(const char *name, PyObject *var)
 {
+	const char *null_str = "<null>";
 	fprintf(stderr, "<%s> : ", name);
 	if (var == NULL) {
-		fprintf(stderr, "<NIL>");
+		fprintf(stderr, "%s\n", null_str);
 	}
 	else {
 		PyObject_Print(var, stderr, 0);
-		fprintf(stderr, " ref:%d ", (int)var->ob_refcnt);
-		fprintf(stderr, " ptr:%p", (void *)var);
-		
-		fprintf(stderr, " type:");
-		if (Py_TYPE(var))
-			fprintf(stderr, "%s", Py_TYPE(var)->tp_name);
-		else
-			fprintf(stderr, "<NIL>");
+		const PyTypeObject *type = Py_TYPE(var);
+		fprintf(stderr,
+		        " ref:%d, ptr:%p, type: %s\n",
+		        (int)var->ob_refcnt, (void *)var, type ? type->tp_name : null_str);
 	}
-	fprintf(stderr, "\n");
+}
+
+/**
+ * A version of #PyC_ObSpit that writes into a string (and doesn't take a name argument).
+ * Use for logging.
+ */
+void PyC_ObSpitStr(char *result, size_t result_len, PyObject *var)
+{
+	/* No name, creator of string can manage that. */
+	const char *null_str = "<null>";
+	if (var == NULL) {
+		BLI_snprintf(result, result_len, "%s", null_str);
+	}
+	else {
+		const PyTypeObject *type = Py_TYPE(var);
+		PyObject *var_str = PyObject_Repr(var);
+		if (var_str == NULL) {
+			/* We could print error here, but this may be used for generating errors - so don't for now. */
+			PyErr_Clear();
+		}
+		BLI_snprintf(
+		        result, result_len,
+		        " ref=%d, ptr=%p, type=%s, value=%.200s",
+		        (int)var->ob_refcnt,
+		        (void *)var,
+		        type ? type->tp_name : null_str,
+		        var_str ? _PyUnicode_AsString(var_str) : "<error>");
+		if (var_str != NULL) {
+			Py_DECREF(var_str);
+		}
+	}
 }
 
 void PyC_LineSpit(void)
@@ -257,7 +300,7 @@ void PyC_LineSpit(void)
 
 	PyErr_Clear();
 	PyC_FileAndNum(&filename, &lineno);
-	
+
 	fprintf(stderr, "%s:%d\n", filename, lineno);
 }
 
@@ -279,7 +322,7 @@ void PyC_StackSpit(void)
 void PyC_FileAndNum(const char **filename, int *lineno)
 {
 	PyFrameObject *frame;
-	
+
 	if (filename) *filename = NULL;
 	if (lineno)   *lineno = -1;
 
@@ -337,22 +380,22 @@ PyObject *PyC_Object_GetAttrStringArgs(PyObject *o, Py_ssize_t n, ...)
 	Py_ssize_t i;
 	PyObject *item = o;
 	const char *attr;
-	
+
 	va_list vargs;
 
 	va_start(vargs, n);
 	for (i = 0; i < n; i++) {
 		attr = va_arg(vargs, char *);
 		item = PyObject_GetAttrString(item, attr);
-		
-		if (item) 
+
+		if (item)
 			Py_DECREF(item);
 		else /* python will set the error value here */
 			break;
-		
+
 	}
 	va_end(vargs);
-	
+
 	Py_XINCREF(item); /* final value has is increfed, to match PyObject_GetAttrString */
 	return item;
 }
@@ -574,7 +617,7 @@ const char *PyC_UnicodeAsByteAndSize(PyObject *py_str, Py_ssize_t *size, PyObjec
 
 	if (result) {
 		/* 99% of the time this is enough but we better support non unicode
-		 * chars since blender doesnt limit this */
+		 * chars since blender doesn't limit this */
 		return result;
 	}
 	else {
@@ -627,7 +670,7 @@ PyObject *PyC_UnicodeFromByteAndSize(const char *str, Py_ssize_t size)
 	PyObject *result = PyUnicode_FromStringAndSize(str, size);
 	if (result) {
 		/* 99% of the time this is enough but we better support non unicode
-		 * chars since blender doesnt limit this */
+		 * chars since blender doesn't limit this */
 		return result;
 	}
 	else {
@@ -647,7 +690,7 @@ PyObject *PyC_UnicodeFromByte(const char *str)
  * Description: This function creates a new Python dictionary object.
  * note: dict is owned by sys.modules["__main__"] module, reference is borrowed
  * note: important we use the dict from __main__, this is what python expects
- *  for 'pickle' to work as well as strings like this...
+ * for 'pickle' to work as well as strings like this...
  * >> foo = 10
  * >> print(__import__("__main__").foo)
  *
@@ -670,6 +713,26 @@ PyObject *PyC_DefaultNameSpace(const char *filename)
 	PyModule_AddObject(mod_main, "__builtins__", interp->builtins);
 	Py_INCREF(interp->builtins); /* AddObject steals a reference */
 	return PyModule_GetDict(mod_main);
+}
+
+bool PyC_NameSpace_ImportArray(PyObject *py_dict, const char *imports[])
+{
+	for (int i = 0; imports[i]; i++) {
+		PyObject *name = PyUnicode_FromString(imports[i]);
+		PyObject *mod = PyImport_ImportModuleLevelObject(name, NULL, NULL, 0, 0);
+		bool ok = false;
+		if (mod) {
+			PyDict_SetItem(py_dict, name, mod);
+			ok = true;
+			Py_DECREF(mod);
+		}
+		Py_DECREF(name);
+
+		if (!ok) {
+			return false;
+		}
+	}
+	return true;
 }
 
 /* restore MUST be called after this */
@@ -740,7 +803,7 @@ bool PyC_IsInterpreterActive(void)
 }
 
 /* Would be nice if python had this built in
- * See: http://wiki.blender.org/index.php/Dev:Doc/Tools/Debugging/PyFromC
+ * See: https://wiki.blender.org/wiki/Tools/Debugging/PyFromC
  */
 void PyC_RunQuicky(const char *filepath, int n, ...)
 {
@@ -801,7 +864,7 @@ void PyC_RunQuicky(const char *filepath, int n, ...)
 			}
 		}
 		va_end(vargs);
-		
+
 		/* set the value so we can access it */
 		PyDict_SetItemString(py_dict, "values", values);
 		Py_DECREF(values);
@@ -827,7 +890,7 @@ void PyC_RunQuicky(const char *filepath, int n, ...)
 				for (i = 0; i * 2 < n; i++) {
 					const char *format = va_arg(vargs, char *);
 					void *ptr = va_arg(vargs, void *);
-					
+
 					PyObject *item;
 					PyObject *item_new;
 					/* prepend the string formatting and remake the tuple */
@@ -1032,7 +1095,7 @@ PyObject *PyC_FlagSet_FromBitfield(PyC_FlagSet *items, int flag)
  *
  * \note it is caller's responsibility to acquire & release GIL!
  */
-bool PyC_RunString_AsNumber(const char *expr, const char *filename, double *r_value)
+bool PyC_RunString_AsNumber(const char *imports[], const char *expr, const char *filename, double *r_value)
 {
 	PyObject *py_dict, *mod, *retval;
 	bool ok = true;
@@ -1052,9 +1115,10 @@ bool PyC_RunString_AsNumber(const char *expr, const char *filename, double *r_va
 		PyErr_Clear();
 	}
 
-	retval = PyRun_String(expr, Py_eval_input, py_dict, py_dict);
-
-	if (retval == NULL) {
+	if (imports && (!PyC_NameSpace_ImportArray(py_dict, imports))) {
+		ok = false;
+	}
+	else if ((retval = PyRun_String(expr, Py_eval_input, py_dict, py_dict)) == NULL) {
 		ok = false;
 	}
 	else {
@@ -1096,7 +1160,7 @@ bool PyC_RunString_AsNumber(const char *expr, const char *filename, double *r_va
 	return ok;
 }
 
-bool PyC_RunString_AsString(const char *expr, const char *filename, char **r_value)
+bool PyC_RunString_AsIntPtr(const char *imports[], const char *expr, const char *filename, intptr_t *r_value)
 {
 	PyObject *py_dict, *retval;
 	bool ok = true;
@@ -1106,9 +1170,45 @@ bool PyC_RunString_AsString(const char *expr, const char *filename, char **r_val
 
 	py_dict = PyC_DefaultNameSpace(filename);
 
-	retval = PyRun_String(expr, Py_eval_input, py_dict, py_dict);
+	if (imports && (!PyC_NameSpace_ImportArray(py_dict, imports))) {
+		ok = false;
+	}
+	else if ((retval = PyRun_String(expr, Py_eval_input, py_dict, py_dict)) == NULL) {
+		ok = false;
+	}
+	else {
+		intptr_t val;
 
-	if (retval == NULL) {
+		val = (intptr_t)PyLong_AsVoidPtr(retval);
+		if (val == 0 && PyErr_Occurred()) {
+			ok = false;
+		}
+		else {
+			*r_value = val;
+		}
+
+		Py_DECREF(retval);
+	}
+
+	PyC_MainModule_Restore(main_mod);
+
+	return ok;
+}
+
+bool PyC_RunString_AsString(const char *imports[], const char *expr, const char *filename, char **r_value)
+{
+	PyObject *py_dict, *retval;
+	bool ok = true;
+	PyObject *main_mod = NULL;
+
+	PyC_MainModule_Backup(&main_mod);
+
+	py_dict = PyC_DefaultNameSpace(filename);
+
+	if (imports && (!PyC_NameSpace_ImportArray(py_dict, imports))) {
+		ok = false;
+	}
+	else if ((retval = PyRun_String(expr, Py_eval_input, py_dict, py_dict)) == NULL) {
 		ok = false;
 	}
 	else {

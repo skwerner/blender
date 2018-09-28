@@ -585,7 +585,7 @@ static int ui_colorpicker_small_wheel_cb(const bContext *UNUSED(C), uiBlock *blo
 
 				ui_rgb_to_color_picker_compat_v(rgb, hsv);
 
-				hsv[2] = CLAMPIS(hsv[2] + add, 0.0f, 1.0f);
+				hsv[2] = clamp_f(hsv[2] + add, 0.0f, 1.0f);
 				ui_color_picker_to_rgb_v(hsv, rgb);
 
 				if (use_display_colorspace)
@@ -629,6 +629,7 @@ uiBlock *ui_block_func_COLOR(bContext *C, uiPopupBlockHandle *handle, void *arg_
 	ui_block_colorpicker(block, handle->retvec, &but->rnapoin, but->rnaprop, show_picker);
 
 	block->flag = UI_BLOCK_LOOP | UI_BLOCK_KEEP_OPEN | UI_BLOCK_OUT_1 | UI_BLOCK_MOVEMOUSE_QUIT;
+	UI_block_theme_style_set(block, UI_BLOCK_THEME_STYLE_POPUP);
 	UI_block_bounds_set_normal(block, 0.5 * UI_UNIT_X);
 
 	block->block_event_func = ui_colorpicker_small_wheel_cb;

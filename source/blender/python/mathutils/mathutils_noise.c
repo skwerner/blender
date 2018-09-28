@@ -61,11 +61,11 @@
  * This is a faster version by taking Shawn Cokus's optimization,
  * Matthe Bellew's simplification, Isaku Wada's real version.
  *
- * Before using, initialize the state by using init_genrand(seed) 
+ * Before using, initialize the state by using init_genrand(seed)
  * or init_by_array(init_key, key_length).
  *
  * Copyright (C) 1997 - 2002, Makoto Matsumoto and Takuji Nishimura,
- * All rights reserved.                          
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -78,8 +78,8 @@
  *      notice, this list of conditions and the following disclaimer in the
  *      documentation and/or other materials provided with the distribution.
  *
- *   3. The names of its contributors may not be used to endorse or promote 
- *      products derived from this software without specific prior written 
+ *   3. The names of its contributors may not be used to endorse or promote
+ *      products derived from this software without specific prior written
  *      permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
@@ -671,7 +671,7 @@ static PyObject *M_Noise_hybrid_multi_fractal(PyObject *UNUSED(self), PyObject *
 
 	if (mathutils_array_parse(vec, 3, 3, value, "hybrid_multi_fractal: invalid 'position' arg") == -1)
 		return NULL;
-	
+
 	return PyFloat_FromDouble(mg_HybridMultiFractal(vec[0], vec[1], vec[2], H, lac, oct, ofs, gn, nb));
 }
 
@@ -731,6 +731,7 @@ static PyObject *M_Noise_voronoi(PyObject *UNUSED(self), PyObject *args)
 {
 	PyObject *value;
 	PyObject *list;
+	PyObject *ret;
 	float vec[3];
 	float da[4], pa[12];
 	int dtype = 0;
@@ -749,10 +750,14 @@ static PyObject *M_Noise_voronoi(PyObject *UNUSED(self), PyObject *args)
 	voronoi(vec[0], vec[1], vec[2], da, pa, me, dtype);
 
 	for (i = 0; i < 4; i++) {
-		PyList_SET_ITEM(list, i, Vector_CreatePyObject(pa + 3 * i, 3, NULL));
+		PyObject *v = Vector_CreatePyObject(pa + 3 * i, 3, NULL);
+		PyList_SET_ITEM(list, i, v);
+		Py_DECREF(v);
 	}
 
-	return Py_BuildValue("[[ffff]O]", da[0], da[1], da[2], da[3], list);
+	ret = Py_BuildValue("[[ffff]O]", da[0], da[1], da[2], da[3], list);
+	Py_DECREF(list);
+	return ret;
 }
 
 PyDoc_STRVAR(M_Noise_cell_doc,
@@ -840,6 +845,7 @@ static struct PyModuleDef M_Noise_module_def = {
 /*----------------------------MODULE INIT-------------------------*/
 PyMODINIT_FUNC PyInit_mathutils_noise(void)
 {
+	PyObject *sys_modules = PyImport_GetModuleDict();
 	PyObject *submodule = PyModule_Create(&M_Noise_module_def);
 	PyObject *item_types, *item_metrics;
 
@@ -847,11 +853,11 @@ PyMODINIT_FUNC PyInit_mathutils_noise(void)
 	setRndSeed(0);
 
 	PyModule_AddObject(submodule, "types", (item_types = PyInit_mathutils_noise_types()));
-	PyDict_SetItemString(PyThreadState_GET()->interp->modules, "noise.types", item_types);
+	PyDict_SetItemString(sys_modules, "noise.types", item_types);
 	Py_INCREF(item_types);
 
 	PyModule_AddObject(submodule, "distance_metrics", (item_metrics = PyInit_mathutils_noise_metrics()));
-	PyDict_SetItemString(PyThreadState_GET()->interp->modules, "noise.distance_metrics", item_metrics);
+	PyDict_SetItemString(sys_modules, "noise.distance_metrics", item_metrics);
 	Py_INCREF(item_metrics);
 
 	return submodule;

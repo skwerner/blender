@@ -153,7 +153,7 @@ void ED_transverts_update_obedit(TransVertStore *tvs, Object *obedit)
 			}
 		}
 		if (arm->flag & ARM_MIRROR_EDIT)
-			transform_armature_mirror_update(obedit);
+			ED_armature_edit_transform_mirror_update(obedit);
 	}
 	else if (obedit->type == OB_LATTICE) {
 		Lattice *lt = obedit->data;
@@ -496,7 +496,7 @@ void ED_transverts_free(TransVertStore *tvs)
 	tvs->transverts_tot = 0;
 }
 
-int ED_transverts_poll(bContext *C)
+bool ED_transverts_poll(bContext *C)
 {
 	Object *obedit = CTX_data_edit_object(C);
 	if (obedit) {

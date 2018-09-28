@@ -19,10 +19,10 @@
 import bpy
 
 from bpy.types import (
-        Panel,
-        Menu,
-        Operator,
-        )
+    Panel,
+    Menu,
+    Operator,
+)
 
 
 class CYCLES_MT_sampling_presets(Menu):
@@ -85,6 +85,7 @@ def use_sample_all_lights(context):
     cscene = context.scene.cycles
 
     return cscene.sample_all_lights_direct or cscene.sample_all_lights_indirect
+
 
 def show_device_active(context):
     cscene = context.scene.cycles
@@ -809,7 +810,7 @@ class CYCLES_OBJECT_PT_motion_blur(CyclesButtonsPanel, Panel):
     def poll(cls, context):
         ob = context.object
         if CyclesButtonsPanel.poll(context) and ob:
-            if ob.type in {'MESH', 'CURVE', 'CURVE', 'SURFACE', 'FONT', 'META'}:
+            if ob.type in {'MESH', 'CURVE', 'CURVE', 'SURFACE', 'FONT', 'META', 'CAMERA'}:
                 return True
             if ob.dupli_type == 'GROUP' and ob.dupli_group:
                 return True
@@ -841,11 +842,9 @@ class CYCLES_OBJECT_PT_motion_blur(CyclesButtonsPanel, Panel):
         layout.active = (rd.use_motion_blur and cob.use_motion_blur)
 
         row = layout.row()
-        row.prop(cob, "use_deform_motion", text="Deformation")
-
-        sub = row.row()
-        sub.active = cob.use_deform_motion
-        sub.prop(cob, "motion_steps", text="Steps")
+        if ob.type != 'CAMERA':
+            row.prop(cob, "use_deform_motion", text="Deformation")
+        row.prop(cob, "motion_steps", text="Steps")
 
 
 class CYCLES_OBJECT_PT_cycles_settings(CyclesButtonsPanel, Panel):
@@ -967,9 +966,9 @@ class CYCLES_LAMP_PT_preview(CyclesButtonsPanel, Panel):
     @classmethod
     def poll(cls, context):
         return context.lamp and \
-               not (context.lamp.type == 'AREA' and
-                    context.lamp.cycles.is_portal) \
-               and CyclesButtonsPanel.poll(context)
+            not (context.lamp.type == 'AREA' and
+                 context.lamp.cycles.is_portal) \
+            and CyclesButtonsPanel.poll(context)
 
     def draw(self, context):
         self.layout.template_preview(context.lamp)
@@ -1037,7 +1036,7 @@ class CYCLES_LAMP_PT_nodes(CyclesButtonsPanel, Panel):
     def poll(cls, context):
         return context.lamp and not (context.lamp.type == 'AREA' and
                                      context.lamp.cycles.is_portal) and \
-               CyclesButtonsPanel.poll(context)
+            CyclesButtonsPanel.poll(context)
 
     def draw(self, context):
         layout = self.layout
@@ -1216,11 +1215,13 @@ class CYCLES_WORLD_PT_settings(CyclesButtonsPanel, Panel):
         col = split.column()
 
         col.label(text="Surface:")
-        col.prop(cworld, "sample_as_light", text="Multiple Importance")
+        col.prop(cworld, "sampling_method", text="Sampling")
 
         sub = col.column(align=True)
-        sub.active = cworld.sample_as_light
-        sub.prop(cworld, "sample_map_resolution")
+        sub.active = cworld.sampling_method != 'NONE'
+        subsub = sub.row(align=True)
+        subsub.active = cworld.sampling_method == 'MANUAL'
+        subsub.prop(cworld, "sample_map_resolution")
         if use_branched_path(context):
             subsub = sub.row(align=True)
             subsub.active = use_sample_all_lights(context)
@@ -1741,6 +1742,7 @@ class CYCLES_SCENE_PT_simplify(CyclesButtonsPanel, Panel):
         col = split.column()
         col.prop(cscene, "ao_bounces_render")
 
+
 def draw_device(self, context):
     scene = context.scene
     layout = self.layout
@@ -1823,7 +1825,7 @@ def get_panels():
         'WORLD_PT_mist',
         'WORLD_PT_preview',
         'WORLD_PT_world'
-        }
+    }
 
     panels = []
     for panel in bpy.types.Panel.__subclasses__():

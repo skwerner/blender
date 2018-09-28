@@ -221,8 +221,8 @@ void CustomData_copy_data_named(const struct CustomData *source,
                           struct CustomData *dest, int source_index,
                           int dest_index, int count);
 void CustomData_copy_elements(int type, void *src_data_ofs, void *dst_data_ofs, int count);
-void CustomData_bmesh_copy_data(const struct CustomData *source, 
-                                struct CustomData *dest, void *src_block, 
+void CustomData_bmesh_copy_data(const struct CustomData *source,
+                                struct CustomData *dest, void *src_block,
                                 void **dest_block);
 
 /* frees data in a CustomData object
@@ -348,9 +348,9 @@ void CustomData_bmesh_free_block_data(struct CustomData *data, void *block);
 
 /* copy custom data to/from layers as in mesh/derivedmesh, to editmesh
  * blocks of data. the CustomData's must not be compatible */
-void CustomData_to_bmesh_block(const struct CustomData *source, 
+void CustomData_to_bmesh_block(const struct CustomData *source,
                                struct CustomData *dest, int src_index, void **dest_block, bool use_default_init);
-void CustomData_from_bmesh_block(const struct CustomData *source, 
+void CustomData_from_bmesh_block(const struct CustomData *source,
                                  struct CustomData *dest, void *src_block, int dest_index);
 
 void CustomData_file_write_prepare(
@@ -472,7 +472,7 @@ typedef struct CustomDataTransferLayerMap {
 
 	size_t data_size;    /* Size of actual data we transfer. */
 	size_t data_offset;  /* Offset of actual data we transfer (in element contained in data_src/dst). */
-	uint64_t data_flag;  /* For bitflag transfer, flag(s) to affect in transfered data. */
+	uint64_t data_flag;  /* For bitflag transfer, flag(s) to affect in transferred data. */
 
 	void *interp_data;   /* Opaque pointer, to be used by specific interp callback (e.g. transformspace for normals). */
 
@@ -487,4 +487,3 @@ void CustomData_data_transfer(const struct MeshPairRemap *me_remap, const Custom
 #endif
 
 #endif
-

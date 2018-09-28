@@ -57,7 +57,7 @@ class OBJECT_PT_transform(ObjectButtonsPanel, Panel):
         if ob.rotation_mode == 'QUATERNION':
             row.column().prop(ob, "rotation_quaternion", text="Rotation")
         elif ob.rotation_mode == 'AXIS_ANGLE':
-            #row.column().label(text="Rotation")
+            # row.column().label(text="Rotation")
             #row.column().prop(pchan, "rotation_angle", text="Angle")
             #row.column().prop(pchan, "rotation_axis", text="Axis")
             row.column().prop(ob, "rotation_axis_angle", text="Rotation")
@@ -84,7 +84,7 @@ class OBJECT_PT_delta_transform(ObjectButtonsPanel, Panel):
         if ob.rotation_mode == 'QUATERNION':
             row.column().prop(ob, "delta_rotation_quaternion", text="Rotation")
         elif ob.rotation_mode == 'AXIS_ANGLE':
-            #row.column().label(text="Rotation")
+            # row.column().label(text="Rotation")
             #row.column().prop(pchan, "delta_rotation_angle", text="Angle")
             #row.column().prop(pchan, "delta_rotation_axis", text="Axis")
             #row.column().prop(ob, "delta_rotation_axis_angle", text="Rotation")
@@ -207,7 +207,7 @@ class OBJECT_PT_groups(ObjectButtonsPanel, Panel):
 
         obj_name = obj.name
         for group in bpy.data.groups:
-            # XXX this is slow and stupid!, we need 2 checks, one thats fast
+            # XXX this is slow and stupid!, we need 2 checks, one that's fast
             # and another that we can be sure its not a name collision
             # from linked library data
             group_objects = group.objects

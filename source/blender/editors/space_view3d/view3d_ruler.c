@@ -38,8 +38,9 @@
 #include "BLT_translation.h"
 
 #include "BKE_context.h"
-#include "BKE_unit.h"
 #include "BKE_gpencil.h"
+#include "BKE_main.h"
+#include "BKE_unit.h"
 
 #include "BIF_gl.h"
 
@@ -292,6 +293,7 @@ static void ruler_state_set(bContext *C, RulerInfo *ruler_info, int state)
 #define RULER_ID "RulerData3D"
 static bool view3d_ruler_to_gpencil(bContext *C, RulerInfo *ruler_info)
 {
+	Main *bmain = CTX_data_main(C);
 	Scene *scene = CTX_data_scene(C);
 	bGPDlayer *gpl;
 	bGPDframe *gpf;
@@ -303,7 +305,7 @@ static bool view3d_ruler_to_gpencil(bContext *C, RulerInfo *ruler_info)
 	bool changed = false;
 
 	if (scene->gpd == NULL) {
-		scene->gpd = BKE_gpencil_data_addnew("GPencil");
+		scene->gpd = BKE_gpencil_data_addnew(bmain, "GPencil");
 	}
 
 	gpl = BLI_findstring(&scene->gpd->layers, ruler_name, offsetof(bGPDlayer, info));
@@ -323,7 +325,7 @@ static bool view3d_ruler_to_gpencil(bContext *C, RulerInfo *ruler_info)
 	if (palcolor == NULL) {
 		palcolor = BKE_gpencil_palettecolor_addnew(palette, (char *)ruler_name, true);
 	}
-	
+
 	gpf = BKE_gpencil_layer_getframe(gpl, CFRA, true);
 	BKE_gpencil_free_strokes(gpf);
 
@@ -483,7 +485,7 @@ static void ruler_info_draw_pixel(const struct bContext *C, ARegion *ar, void *a
 				float quat[4];
 				float axis[3];
 				float angle;
-				const float px_scale = (ED_view3d_pixel_size(rv3d, ruler_item->co[1]) *
+				const float px_scale = (ED_view3d_pixel_size_no_ui_scale(rv3d, ruler_item->co[1]) *
 				                        min_fff(arc_size,
 				                                len_v2v2(co_ss[0], co_ss[1]) / 2.0f,
 				                                len_v2v2(co_ss[2], co_ss[1]) / 2.0f));

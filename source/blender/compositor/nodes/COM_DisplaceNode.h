@@ -19,14 +19,14 @@
  *		Dalai Felinto
  */
 
-#ifndef _COM_DisplaceNode_h_
-#define _COM_DisplaceNode_h_
+#ifndef __COM_DISPLACENODE_H__
+#define __COM_DISPLACENODE_H__
 
 #include "COM_Node.h"
 
 /**
- * @brief DisplaceNode
- * @ingroup Node
+ * \brief DisplaceNode
+ * \ingroup Node
  */
 class DisplaceNode : public Node {
 public:

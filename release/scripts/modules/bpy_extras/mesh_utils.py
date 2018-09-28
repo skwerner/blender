@@ -27,12 +27,12 @@ __all__ = (
     "edge_loops_from_edges",
     "ngon_tessellate",
     "face_random_points",
-    )
+)
 
 
 def mesh_linked_uv_islands(mesh):
     """
-    Splits the mesh into connected polygons, use this for seperating cubes from
+    Splits the mesh into connected polygons, use this for separating cubes from
     other mesh elements within 1 mesh datablock.
 
     :arg mesh: the mesh used to group with.
@@ -92,7 +92,7 @@ def mesh_linked_uv_islands(mesh):
 
 def mesh_linked_tessfaces(mesh):
     """
-    Splits the mesh into connected faces, use this for seperating cubes from
+    Splits the mesh into connected faces, use this for separating cubes from
     other mesh elements within 1 mesh datablock.
 
     :arg mesh: the mesh used to group with.
@@ -182,7 +182,7 @@ def edge_loops_from_tessfaces(mesh, tessfaces=None, seams=()):
     Edge loops defined by faces
 
     Takes me.tessfaces or a list of faces and returns the edge loops
-    These edge loops are the edges that sit between quads, so they dont touch
+    These edge loops are the edges that sit between quads, so they don't touch
     1 quad, note: not connected will make 2 edge loops,
     both only containing 2 edges.
 
@@ -252,7 +252,7 @@ def edge_loops_from_tessfaces(mesh, tessfaces=None, seams=()):
                 i = ed_adj.index(context_loop[-2])
                 context_loop.append(ed_adj[not i])
 
-                # Dont look at this again
+                # Don't look at this again
                 del ed_adj[:]
 
     return edge_loops
@@ -286,7 +286,7 @@ def edge_loops_from_edges(mesh, edges=None):
         ok = True
         while ok:
             ok = False
-            #for i, ed in enumerate(edges):
+            # for i, ed in enumerate(edges):
             i = len(edges)
             while i:
                 i -= 1
@@ -303,7 +303,7 @@ def edge_loops_from_edges(mesh, edges=None):
                     vert_end = line_poly[-1]
                     ok = 1
                     del edges[i]
-                    #break
+                    # break
                 elif v1 == vert_start:
                     line_poly.insert(0, v2)
                     vert_start = line_poly[0]
@@ -315,7 +315,7 @@ def edge_loops_from_edges(mesh, edges=None):
                     vert_start = line_poly[0]
                     ok = 1
                     del edges[i]
-                    #break
+                    # break
         line_polys.append(line_poly)
 
     return line_polys
@@ -377,7 +377,7 @@ def ngon_tessellate(from_data, indices, fix_loops=True):
 
     else:
         """
-        Seperate this loop into multiple loops be finding edges that are
+        Separate this loop into multiple loops be finding edges that are
         used twice. This is used by lightwave LWO files a lot
         """
 
@@ -481,7 +481,7 @@ def ngon_tessellate(from_data, indices, fix_loops=True):
                 ii += len(verts)
 
         fill = tessellate_polygon([[v[0] for v in loop] for loop in loop_list])
-        #draw_loops(loop_list)
+        # draw_loops(loop_list)
         #raise Exception("done loop")
         # map to original indices
         fill = [[vert_map[i] for i in reversed(f)] for f in fill]

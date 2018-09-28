@@ -31,9 +31,9 @@
 /** \file blender/bmesh/intern/bmesh_private.h
  *  \ingroup bmesh
  *
- *  Private function prototypes for bmesh public API.
- *  This file is a grab-bag of functions from various
- *  parts of the bmesh internals.
+ * Private function prototypes for bmesh public API.
+ * This file is a grab-bag of functions from various
+ * parts of the bmesh internals.
  */
 
 /* returns positive nonzero on error */
@@ -55,7 +55,7 @@ int bmesh_elem_check(void *element, const char htype);
 #endif
 
 int bmesh_radial_length(const BMLoop *l);
-int bmesh_disk_count_ex(const BMVert *v, const int count_max);
+int bmesh_disk_count_at_most(const BMVert *v, const int count_max);
 int bmesh_disk_count(const BMVert *v);
 
 /**

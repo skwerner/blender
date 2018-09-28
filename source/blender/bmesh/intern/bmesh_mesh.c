@@ -168,7 +168,7 @@ BMesh *BM_mesh_create(
 {
 	/* allocate the structure */
 	BMesh *bm = MEM_callocN(sizeof(BMesh), __func__);
-	
+
 	/* allocate the memory pools for the mesh elements */
 	bm_mempool_init(bm, allocsize, params->use_toolflags);
 
@@ -521,7 +521,7 @@ void BM_verts_calc_normal_vcos(BMesh *bm, const float (*fnos)[3], const float (*
 }
 
 /**
- * Helpers for #BM_mesh_loop_normals_update and #BM_loops_calc_normals_vnos
+ * Helpers for #BM_mesh_loop_normals_update and #BM_loops_calc_normal_vcos
  */
 static void bm_mesh_edges_sharp_tag(
         BMesh *bm,
@@ -597,9 +597,11 @@ static void bm_mesh_edges_sharp_tag(
 	bm->elem_index_dirty &= ~BM_EDGE;
 }
 
-/* Check whether gievn loop is part of an unknown-so-far cyclic smooth fan, or not.
- * Needed because cyclic smooth fans have no obvious 'entry point', and yet we need to walk them once, and only once. */
-static bool bm_mesh_loop_check_cyclic_smooth_fan(BMLoop *l_curr)
+/**
+ * Check whether given loop is part of an unknown-so-far cyclic smooth fan, or not.
+ * Needed because cyclic smooth fans have no obvious 'entry point', and yet we need to walk them once, and only once.
+ */
+bool BM_loop_check_cyclic_smooth_fan(BMLoop *l_curr)
 {
 	BMLoop *lfan_pivot_next = l_curr;
 	BMEdge *e_next = l_curr->e;
@@ -665,7 +667,7 @@ static void bm_mesh_loops_calc_normals(
 		r_lnors_spacearr = &_lnors_spacearr;
 	}
 	if (r_lnors_spacearr) {
-		BKE_lnor_spacearr_init(r_lnors_spacearr, bm->totloop);
+		BKE_lnor_spacearr_init(r_lnors_spacearr, bm->totloop, MLNOR_SPACEARR_BMLOOP_PTR);
 		edge_vectors = BLI_stack_new(sizeof(float[3]), __func__);
 	}
 
@@ -700,7 +702,7 @@ static void bm_mesh_loops_calc_normals(
 			 * However, this would complicate the code, add more memory usage, and BM_vert_step_fan_loop()
 			 * is quite cheap in term of CPU cycles, so really think it's not worth it. */
 			if (BM_elem_flag_test(l_curr->e, BM_ELEM_TAG) &&
-			    (BM_elem_flag_test(l_curr, BM_ELEM_TAG) || !bm_mesh_loop_check_cyclic_smooth_fan(l_curr)))
+			    (BM_elem_flag_test(l_curr, BM_ELEM_TAG) || !BM_loop_check_cyclic_smooth_fan(l_curr)))
 			{
 			}
 			else if (!BM_elem_flag_test(l_curr->e, BM_ELEM_TAG) &&
@@ -734,7 +736,7 @@ static void bm_mesh_loops_calc_normals(
 
 					BKE_lnor_space_define(lnor_space, r_lnos[l_curr_index], vec_curr, vec_prev, NULL);
 					/* We know there is only one loop in this space, no need to create a linklist in this case... */
-					BKE_lnor_space_add_loop(r_lnors_spacearr, lnor_space, l_curr_index, false);
+					BKE_lnor_space_add_loop(r_lnors_spacearr, lnor_space, l_curr_index, l_curr, true);
 
 					if (has_clnors) {
 						short (*clnor)[2] = clnors_data ? &clnors_data[l_curr_index] :
@@ -853,7 +855,7 @@ static void bm_mesh_loops_calc_normals(
 
 					if (r_lnors_spacearr) {
 						/* Assign current lnor space to current 'vertex' loop. */
-						BKE_lnor_space_add_loop(r_lnors_spacearr, lnor_space, lfan_pivot_index, true);
+						BKE_lnor_space_add_loop(r_lnors_spacearr, lnor_space, lfan_pivot_index, lfan_pivot, false);
 						if (e_next != e_org) {
 							/* We store here all edges-normalized vectors processed. */
 							BLI_stack_push(edge_vectors, vec_next);
@@ -1049,41 +1051,41 @@ static void UNUSED_FUNCTION(bm_mdisps_space_set)(Object *ob, BMesh *bm, int from
 		BMFace *f;
 		BMIter iter;
 		// int i = 0; // UNUSED
-		
+
 		multires_set_space(dm, ob, from, to);
-		
+
 		mdisps = CustomData_get_layer(&dm->loopData, CD_MDISPS);
-		
+
 		BM_ITER_MESH (f, &iter, bm, BM_FACES_OF_MESH) {
 			BMLoop *l;
 			BMIter liter;
 			BM_ITER_ELEM (l, &liter, f, BM_LOOPS_OF_FACE) {
 				MDisps *lmd = CustomData_bmesh_get(&bm->ldata, l->head.data, CD_MDISPS);
-				
+
 				if (!lmd->disps) {
 					printf("%s: warning - 'lmd->disps' == NULL\n", __func__);
 				}
-				
+
 				if (lmd->disps && lmd->totdisp == mdisps->totdisp) {
 					memcpy(lmd->disps, mdisps->disps, sizeof(float) * 3 * lmd->totdisp);
 				}
 				else if (mdisps->disps) {
 					if (lmd->disps)
 						MEM_freeN(lmd->disps);
-					
+
 					lmd->disps = MEM_dupallocN(mdisps->disps);
 					lmd->totdisp = mdisps->totdisp;
 					lmd->level = mdisps->level;
 				}
-				
+
 				mdisps++;
 				// i += 1;
 			}
 		}
-		
+
 		dm->needsFree = 1;
 		dm->release(dm);
-		
+
 		/* setting this to NULL prevents BKE_editmesh_free from freeing it */
 		em->bm = NULL;
 		BKE_editmesh_free(em);

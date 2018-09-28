@@ -15,8 +15,8 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
- * Contributor: 
- *		Jeroen Bakker 
+ * Contributor:
+ *		Jeroen Bakker
  *		Monique Dewanchand
  */
 
@@ -44,7 +44,7 @@ void ReadBufferOperation::determineResolution(unsigned int resolution[2], unsign
 		operation->determineResolution(resolution, preferredResolution);
 		operation->setResolution(resolution);
 
-		/// @todo: may not occur!, but does with blur node
+		/// \todo: may not occur!, but does with blur node
 		if (this->m_memoryProxy->getExecutor()) {
 			this->m_memoryProxy->getExecutor()->setResolution(resolution);
 		}
@@ -120,8 +120,8 @@ void ReadBufferOperation::readResolutionFromWriteBuffer()
 	}
 }
 
-void ReadBufferOperation::updateMemoryBuffer() 
+void ReadBufferOperation::updateMemoryBuffer()
 {
 	this->m_buffer = this->getMemoryProxy()->getBuffer();
-	
+
 }

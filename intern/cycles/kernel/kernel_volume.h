@@ -210,12 +210,13 @@ ccl_device void kernel_volume_transmission_residual_ratio(KernelGlobals *kg,
 	float t = 0.0f;
 	float T_c = expf(-sigma_c*ray->t);
 	float3 T_r = make_float3(1.0f, 1.0f, 1.0f);
+	uint lcg_state = lcg_state_init_addrspace(state, 0xabcdabcd);
 	/* Sometimes, excessive values for ray.t come in when a volume exit intersection is missed.
 	   Allow for a max number of steps to prevent this from stepping towards infinite lights.
 	   The original algorithm would be while(true) instead of a for loop.
 	 */
 	for(int i = 0; i < kernel_data.integrator.volume_max_steps; ++i) {
-		float s = lcg_step_float_addrspace(&state->rng_congruential);
+		float s = lcg_step_float_addrspace(&lcg_state);
 		t = t - (logf(1.f - s) / sigma_r);
 		if(t >= ray->t) {
 			break;
@@ -242,13 +243,14 @@ ccl_device void kernel_volume_transmission_woodcock(KernelGlobals *kg,
 	float t = 0.0f;
 	float3 sigma_t;
 	float s2;
+	uint lcg_state = lcg_state_init_addrspace(state, 0x12345678);
 	do {
-		float s = lcg_step_float_addrspace(&state->rng_congruential);
+		float s = lcg_step_float_addrspace(&lcg_state);
 		t = t - (logf(1.f - s) / sigma_m);
 		if(t >= ray->t) {
 			break;
 		}
-		s2 = lcg_step_float_addrspace(&state->rng_congruential);
+		s2 = lcg_step_float_addrspace(&lcg_state);
 		float3 new_P = ray->P + ray->D * t;
 		volume_shader_extinction_sample(kg, sd, state, new_P, &sigma_t);
 	} while(s2 > (average(sigma_t) / sigma_m));
@@ -342,7 +344,8 @@ ccl_device void kernel_volume_shadow_heterogeneous(KernelGlobals *kg,
 	float tr_mean = 0.0f;
 	const float inv_num_probes = 0.1f;
 	const float probe_step = ray->t * inv_num_probes;
-	float t = probe_step * lcg_step_float_addrspace(&state->rng_congruential);
+	uint lcg_state = lcg_state_init_addrspace(state, 0x87654321);
+	float t = probe_step * lcg_step_float_addrspace(&lcg_state);
 	for(; t < ray->t; t += probe_step) {
 		float3 new_P = ray->P + ray->D * t;
 		float3 sigma_t;
@@ -635,13 +638,15 @@ ccl_device VolumeIntegrateResult kernel_volume_integrate_heterogeneous_distance(
 																				PathRadiance *L,
 																				ccl_addr_space float3 *throughput)
 {
+
+	uint lcg_state = lcg_state_init_addrspace(state, 0x0f0f0f0f);
 	float3 tp = *throughput;
 	float t = 0.0f;
 	float sigma_samp = 1.0f / min(ray->t * 0.5f, kernel_data.integrator.volume_step_size);
 	float rphase = path_state_rng_1D(kg, state, PRNG_PHASE_CHANNEL);
 	do
 	{
-		float s = lcg_step_float_addrspace(&state->rng_congruential);
+		float s = lcg_step_float_addrspace(&lcg_state);
 		float dt = - (logf(1.f - s) / sigma_samp);
 		t = t + dt;
 		if(t > ray->t) {
@@ -662,7 +667,7 @@ ccl_device VolumeIntegrateResult kernel_volume_integrate_heterogeneous_distance(
 			qscat = qscat / qsum;
 			qtran = qtran / qsum;
 		}
-		float xi = lcg_step_float_addrspace(&state->rng_congruential);
+		float xi = lcg_step_float_addrspace(&lcg_state);
 		if(xi < qscat) {
 			tp = tp * r * a / qscat;
 

@@ -323,7 +323,6 @@ void ShaderGraph::simplify(Scene *scene)
 		default_inputs(scene->shader_manager->use_osl());
 		clean(scene);
 		refine_bump_nodes();
-		add_differentials();
 
 		simplified = true;
 	}

@@ -41,6 +41,7 @@
 
 #  include "kernel/kernel_accumulate.h"
 #  include "kernel/kernel_camera.h"
+#  include "kernel/kernel_light.h"
 #  include "kernel/kernel_shader.h"
 #endif  /* defined(__COMPILE_ONLY_MEGAKERNEL__) || !defined(__NO_BAKING__) */
 

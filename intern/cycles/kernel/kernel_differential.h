@@ -31,7 +31,7 @@ ccl_device void differential_transfer(ccl_addr_space differential3 *dP_, const d
 	dP_->dy = tmpy - dot(tmpy, Ng)*tmp;
 }
 
-ccl_device void differential_reflect(ccl_addr_space differential3 *dD_, float3 D, const differential3* dD, float3 N, const differential3* dN)
+ccl_device void differential_reflect(differential3 *dD_, float3 D, const ccl_addr_space differential3* dD, float3 N, const differential3* dN)
 {
 	/* ray differential transfer through homogeneous medium, to
 	 * compute dPdx/dy at a shading point from the incoming ray */

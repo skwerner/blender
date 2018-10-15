@@ -137,7 +137,7 @@ public:
 	
 	bool modified(const TextureCacheParams& params)
 	{
-		return !(use_cache == use_cache
+		return !(use_cache == params.use_cache
 		         && cache_size == params.cache_size
 				 && tile_size == params.tile_size
 				 && diffuse_blur == params.diffuse_blur

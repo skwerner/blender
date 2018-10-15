@@ -769,7 +769,7 @@ ccl_device bool lamp_light_eval(KernelGlobals *kg, int lamp, float3 P, float3 D,
 	return true;
 }
 
-ccl_device void lamp_light_dPdudv(KernelGlobals *kg, int lamp, float u, float v, float3 *dPdu, float3 *dPdv )
+ccl_device void lamp_light_dPdudv(KernelGlobals *kg, int lamp, float u, float v, ccl_addr_space float3 *dPdu, ccl_addr_space float3 *dPdv )
 {
 	const ccl_global KernelLight *klight = &kernel_tex_fetch(__lights, lamp);
 	LightType type = (LightType)klight->type;

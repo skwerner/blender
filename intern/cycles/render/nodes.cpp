@@ -338,7 +338,7 @@ void ImageTextureNode::compile(SVMCompiler& compiler)
 		}
 		else {
 			/* Blend is a float between 0 and 1. Convert to 16 bit unsigned int to make room for vector_dx and vector_dy. */
-			uint blend = clamp(projection_blend, 0.0f, 1.0f) * 65535.0f;
+			uint blend = clamp((uint)(projection_blend * 65535.0f), 0, 0xffff);
 			compiler.add_node(NODE_TEX_IMAGE_BOX,
 				slot,
 				compiler.encode_uchar4(

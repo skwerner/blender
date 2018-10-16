@@ -20,14 +20,14 @@
  *		Monique Dewanchand
  */
 
-#ifndef _COM_ViewLevelsNode_h_
-#define _COM_ViewLevelsNode_h_
+#ifndef __COM_VIEWLEVELSNODE_H__
+#define __COM_VIEWLEVELSNODE_H__
 
 #include "COM_Node.h"
 
 /**
- * @brief ViewLevelsNode
- * @ingroup Node
+ * \brief ViewLevelsNode
+ * \ingroup Node
  */
 class ViewLevelsNode : public Node {
 public:

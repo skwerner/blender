@@ -1508,12 +1508,12 @@ static void sample_derivedmesh(
 				interp_v3_v3v3v3(hit_normal, n1, n2, n3, weights);
 				normalize_v3(hit_normal);
 				/* apply normal directional and random velocity
-				 * - TODO: random disabled for now since it doesnt really work well as pressure calc smoothens it out... */
+				 * - TODO: random disabled for now since it doesn't really work well as pressure calc smoothens it out... */
 				velocity_map[index * 3]   += hit_normal[0] * sfs->vel_normal * 0.25f;
 				velocity_map[index * 3 + 1] += hit_normal[1] * sfs->vel_normal * 0.25f;
 				velocity_map[index * 3 + 2] += hit_normal[2] * sfs->vel_normal * 0.25f;
 				/* TODO: for fire emitted from mesh surface we can use
-				 *  Vf = Vs + (Ps/Pf - 1)*S to model gaseous expansion from solid to fuel */
+				 * Vf = Vs + (Ps/Pf - 1)*S to model gaseous expansion from solid to fuel */
 			}
 			/* apply object velocity */
 			if (has_velocity && sfs->vel_multi) {
@@ -2140,7 +2140,7 @@ static void update_flowsfluids(
 		VECSUB(new_shift, total_shift, sds->shift);
 		copy_v3_v3_int(sds->shift, total_shift);
 
-		/* calculate new domain boundary points so that smoke doesnt slide on sub-cell movement */
+		/* calculate new domain boundary points so that smoke doesn't slide on sub-cell movement */
 		sds->p0[0] = sds->dp0[0] - sds->cell_size[0] * (sds->shift_f[0] - total_shift[0] - 0.5f);
 		sds->p0[1] = sds->dp0[1] - sds->cell_size[1] * (sds->shift_f[1] - total_shift[1] - 0.5f);
 		sds->p0[2] = sds->dp0[2] - sds->cell_size[2] * (sds->shift_f[2] - total_shift[2] - 0.5f);
@@ -2713,7 +2713,7 @@ static DerivedMesh *createDomainGeometry(SmokeDomainSettings *sds, Object *ob)
 		ml[0].v = 1; ml[1].v = 0; ml[2].v = 4; ml[3].v = 5;
 
 		/* calculate required shift to match domain's global position
-		 *  it was originally simulated at (if object moves without smoke step) */
+		 * it was originally simulated at (if object moves without smoke step) */
 		invert_m4_m4(ob->imat, ob->obmat);
 		mul_m4_v3(ob->obmat, ob_loc);
 		mul_m4_v3(sds->obmat, ob_cache_loc);
@@ -3069,7 +3069,7 @@ static void smoke_calc_transparency(SmokeDomainSettings *sds, Scene *scene)
 }
 
 /* get smoke velocity and density at given coordinates
- *  returns fluid density or -1.0f if outside domain*/
+ * returns fluid density or -1.0f if outside domain. */
 float smoke_get_velocity_at(struct Object *ob, float position[3], float velocity[3])
 {
 	SmokeModifierData *smd = (SmokeModifierData *)modifiers_findByType(ob, eModifierType_Smoke);

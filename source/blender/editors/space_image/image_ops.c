@@ -1406,7 +1406,7 @@ static int image_open_invoke(bContext *C, wmOperator *op, const wmEvent *UNUSED(
 	return OPERATOR_RUNNING_MODAL;
 }
 
-static bool image_open_draw_check_prop(PointerRNA *UNUSED(ptr), PropertyRNA *prop)
+static bool image_open_draw_check_prop(PointerRNA *UNUSED(ptr), PropertyRNA *prop, void *UNUSED(user_data))
 {
 	const char *prop_id = RNA_property_identifier(prop);
 
@@ -1425,7 +1425,7 @@ static void image_open_draw(bContext *UNUSED(C), wmOperator *op)
 
 	/* main draw call */
 	RNA_pointer_create(NULL, op->type->srna, op->properties, &ptr);
-	uiDefAutoButsRNA(layout, &ptr, image_open_draw_check_prop, '\0');
+	uiDefAutoButsRNA(layout, &ptr, image_open_draw_check_prop, NULL, '\0');
 
 	/* image template */
 	RNA_pointer_create(NULL, &RNA_ImageFormatSettings, imf, &imf_ptr);
@@ -1855,6 +1855,8 @@ static bool save_image_doit(bContext *C, SpaceImage *sima, wmOperator *op, SaveI
 		rr = BKE_image_acquire_renderresult(scene, ima);
 		bool is_mono = rr ? BLI_listbase_count_at_most(&rr->views, 2) < 2 : BLI_listbase_count_at_most(&ima->views, 2) < 2;
 		bool is_exr_rr = rr && ELEM(imf->imtype, R_IMF_IMTYPE_OPENEXR, R_IMF_IMTYPE_MULTILAYER) && RE_HasFloatPixels(rr);
+		bool is_multilayer = is_exr_rr && (imf->imtype == R_IMF_IMTYPE_MULTILAYER);
+		int layer = (is_multilayer) ? -1 : sima->iuser.layer;
 
 		/* error handling */
 		if (!rr) {
@@ -1886,14 +1888,14 @@ static bool save_image_doit(bContext *C, SpaceImage *sima, wmOperator *op, SaveI
 		/* fancy multiview OpenEXR */
 		if (imf->views_format == R_IMF_VIEWS_MULTIVIEW && is_exr_rr) {
 			/* save render result */
-			ok = RE_WriteRenderResult(op->reports, rr, simopts->filepath, imf, NULL, sima->iuser.layer);
+			ok = RE_WriteRenderResult(op->reports, rr, simopts->filepath, imf, NULL, layer);
 			save_image_post(bmain, op, ibuf, ima, ok, true, relbase, relative, do_newpath, simopts->filepath);
 			ED_space_image_release_buffer(sima, ibuf, lock);
 		}
 		/* regular mono pipeline */
 		else if (is_mono) {
 			if (is_exr_rr) {
-				ok = RE_WriteRenderResult(op->reports, rr, simopts->filepath, imf, NULL, -1);
+				ok = RE_WriteRenderResult(op->reports, rr, simopts->filepath, imf, NULL, layer);
 			}
 			else {
 				colormanaged_ibuf = IMB_colormanagement_imbuf_for_write(ibuf, save_as_render, true, &imf->view_settings, &imf->display_settings, imf);
@@ -1921,7 +1923,7 @@ static bool save_image_doit(bContext *C, SpaceImage *sima, wmOperator *op, SaveI
 
 				if (is_exr_rr) {
 					BKE_scene_multiview_view_filepath_get(&scene->r, simopts->filepath, view, filepath);
-					ok_view = RE_WriteRenderResult(op->reports, rr, filepath, imf, view, -1);
+					ok_view = RE_WriteRenderResult(op->reports, rr, filepath, imf, view, layer);
 					save_image_post(bmain, op, ibuf, ima, ok_view, true, relbase, relative, do_newpath, filepath);
 				}
 				else {
@@ -1956,7 +1958,7 @@ static bool save_image_doit(bContext *C, SpaceImage *sima, wmOperator *op, SaveI
 		/* stereo (multiview) images */
 		else if (simopts->im_format.views_format == R_IMF_VIEWS_STEREO_3D) {
 			if (imf->imtype == R_IMF_IMTYPE_MULTILAYER) {
-				ok = RE_WriteRenderResult(op->reports, rr, simopts->filepath, imf, NULL, -1);
+				ok = RE_WriteRenderResult(op->reports, rr, simopts->filepath, imf, NULL, layer);
 				save_image_post(bmain, op, ibuf, ima, ok, true, relbase, relative, do_newpath, simopts->filepath);
 				ED_space_image_release_buffer(sima, ibuf, lock);
 			}
@@ -2120,7 +2122,7 @@ static void image_save_as_cancel(bContext *UNUSED(C), wmOperator *op)
 	image_save_as_free(op);
 }
 
-static bool image_save_as_draw_check_prop(PointerRNA *ptr, PropertyRNA *prop)
+static bool image_save_as_draw_check_prop(PointerRNA *ptr, PropertyRNA *prop, void *UNUSED(user_data))
 {
 	const char *prop_id = RNA_property_identifier(prop);
 
@@ -2145,7 +2147,7 @@ static void image_save_as_draw(bContext *UNUSED(C), wmOperator *op)
 
 	/* main draw call */
 	RNA_pointer_create(NULL, op->type->srna, op->properties, &ptr);
-	uiDefAutoButsRNA(layout, &ptr, image_save_as_draw_check_prop, '\0');
+	uiDefAutoButsRNA(layout, &ptr, image_save_as_draw_check_prop, NULL, '\0');
 
 	/* multiview template */
 	if (is_multiview)

@@ -21,8 +21,8 @@
  *		Lukas Tönne
  */
 
-#ifndef _COM_OutputFileOperation_h
-#define _COM_OutputFileOperation_h
+#ifndef __COM_OUTPUTFILEOPERATION_H__
+#define __COM_OUTPUTFILEOPERATION_H__
 #include "COM_NodeOperation.h"
 
 #include "BLI_rect.h"
@@ -57,7 +57,7 @@ public:
 	bool isOutputOperation(bool /*rendering*/) const { return true; }
 	void initExecution();
 	void deinitExecution();
-	const CompositorPriority getRenderPriority() const { return COM_PRIORITY_LOW; }
+	CompositorPriority getRenderPriority() const { return COM_PRIORITY_LOW; }
 
 	bool isFileOutputOperation() const { return true; }
 };
@@ -99,7 +99,7 @@ public:
 	bool isOutputOperation(bool /*rendering*/) const { return true; }
 	void initExecution();
 	void deinitExecution();
-	const CompositorPriority getRenderPriority() const { return COM_PRIORITY_LOW; }
+	CompositorPriority getRenderPriority() const { return COM_PRIORITY_LOW; }
 
 	bool isFileOutputOperation() const { return true; }
 };

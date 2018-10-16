@@ -778,7 +778,7 @@ static void surfaceGenerateGrid(struct DynamicPaintSurface *surface)
 			error = 1;
 
 		if (!error) {
-			/* calculate number of points withing each cell */
+			/* calculate number of points within each cell */
 			{
 				ParallelRangeSettings settings;
 				BLI_parallel_range_settings_defaults(&settings);
@@ -1373,7 +1373,7 @@ static void dynamicPaint_initAdjacencyData(DynamicPaintSurface *surface, const b
 		}
 
 		/* also add number of vertices to temp_data
-		 *  to locate points on "mesh edge" */
+		 * to locate points on "mesh edge" */
 		for (i = 0; i < numOfPolys; i++) {
 			for (int j = 0; j < mpoly[i].totloop; j++) {
 				temp_data[mloop[mpoly[i].loopstart + j].v]++;
@@ -1381,7 +1381,7 @@ static void dynamicPaint_initAdjacencyData(DynamicPaintSurface *surface, const b
 		}
 
 		/* now check if total number of edges+faces for
-		 *  each vertex is even, if not -> vertex is on mesh edge */
+		 * each vertex is even, if not -> vertex is on mesh edge */
 		for (i = 0; i < sData->total_points; i++) {
 			if ((temp_data[i] % 2) || (temp_data[i] < 4)) {
 				ad->flags[i] |= ADJ_ON_MESH_EDGE;
@@ -1415,7 +1415,7 @@ static void dynamicPaint_initAdjacencyData(DynamicPaintSurface *surface, const b
 	}
 	else if (surface->format == MOD_DPAINT_SURFACE_F_IMAGESEQ) {
 		/* for image sequences, only allocate memory.
-		 *  bake initialization takes care of rest */
+		 * bake initialization takes care of rest */
 	}
 
 	MEM_freeN(temp_data);
@@ -1583,7 +1583,7 @@ static void dynamicPaint_setInitialColor(const Scene *scene, DynamicPaintSurface
 			return;
 
 		/* for vertex surface loop through tfaces and find uv color
-		 *  that provides highest alpha */
+		 * that provides highest alpha */
 		if (surface->format == MOD_DPAINT_SURFACE_F_VERTEX) {
 			struct ImagePool *pool = BKE_image_pool_new();
 
@@ -1988,7 +1988,7 @@ static DerivedMesh *dynamicPaint_Modifier_apply(
 							DM_update_weight_mcol(ob, result, 0, weight, 0, NULL);
 						}
 
-						/* apply weights into a vertex group, if doesnt exists add a new layer */
+						/* apply weights into a vertex group, if doesn't exists add a new layer */
 						if (defgrp_index != -1 && !dvert && (surface->output_name[0] != '\0')) {
 							dvert = CustomData_add_layer(&result->vertData, CD_MDEFORMVERT, CD_CALLOC,
 							                             NULL, sData->total_points);
@@ -2908,7 +2908,7 @@ int dynamicPaint_createUVSurface(Scene *scene, DynamicPaintSurface *surface, flo
 			int cursor = 0;
 
 			/* Create a temporary array of final indexes (before unassigned
-			 *  pixels have been dropped) */
+			 * pixels have been dropped) */
 			for (int i = 0; i < w * h; i++) {
 				if (tempPoints[i].tri_index != -1) {
 					final_index[i] = cursor;
@@ -3223,7 +3223,7 @@ void dynamicPaint_outputSurfaceImage(DynamicPaintSurface *surface, char *filenam
 		setError(surface->canvas, N_("Image save failed: invalid surface"));
 		return;
 	}
-	/* if selected format is openexr, but current build doesnt support one */
+	/* if selected format is openexr, but current build doesn't support one */
 #ifndef WITH_OPENEXR
 	if (format == R_IMF_IMTYPE_OPENEXR)
 		format = R_IMF_IMTYPE_PNG;
@@ -3458,9 +3458,9 @@ static void mesh_tris_spherecast_dp(void *userdata, int index, const BVHTreeRay 
 }
 
 /* A modified callback to bvh tree nearest point. The tree must have been built using bvhtree_from_mesh_looptri.
- *  userdata must be a BVHMeshCallbackUserdata built from the same mesh as the tree.
+ * userdata must be a BVHMeshCallbackUserdata built from the same mesh as the tree.
  *
- *	To optimize brush detection speed this doesn't calculate hit normal.
+ * To optimize brush detection speed this doesn't calculate hit normal.
  */
 static void mesh_tris_nearest_point_dp(void *userdata, int index, const float co[3], BVHTreeNearest *nearest)
 {
@@ -3516,7 +3516,7 @@ static void dynamicPaint_mixPaintColors(
 
 		/* mix wetness and alpha depending on selected alpha mode */
 		if (paintFlags & MOD_DPAINT_ABS_ALPHA) {
-			/* update values to the brush level unless theyre higher already */
+			/* update values to the brush level unless they're higher already */
 			CLAMP_MIN(pPoint->e_color[3], paintAlpha);
 			CLAMP_MIN(pPoint->wetness, paintWetness);
 		}
@@ -4119,7 +4119,7 @@ static void dynamic_paint_paint_mesh_cell_point_cb_ex(
 			interp_weights_tri_v3(weights, mvert[v1].co, mvert[v2].co, mvert[v3].co, hitCoord);
 
 			/* simple check based on brush surface velocity,
-			 *  todo: perhaps implement something that handles volume movement as well */
+			 * todo: perhaps implement something that handles volume movement as well. */
 
 			/* interpolate vertex speed vectors to get hit point velocity */
 			interp_v3_v3v3v3(brushPointVelocity,
@@ -4858,7 +4858,7 @@ static void surface_determineForceTargetPoints(
 		const float closest_dot = dot_v3v3(bNeighs[n_index].dir, bNeighs[closest_id[0]].dir);
 
 		/* only accept neighbor at "other side" of the first one in relation to force dir
-		 *  so make sure angle between this and closest neigh is greater than first angle */
+		 * so make sure angle between this and closest neigh is greater than first angle. */
 		if (dir_dot > closest_d[1] && closest_dot < closest_d[0] && dir_dot > 0.0f) {
 			closest_d[1] = dir_dot;
 			closest_id[1] = n_index;
@@ -4875,7 +4875,7 @@ static void surface_determineForceTargetPoints(
 		float temp;
 
 		/* project force vector on the plane determined by these two neighbor points
-		 *  and calculate relative force angle from it*/
+		 * and calculate relative force angle from it. */
 		cross_v3_v3v3(tangent, bNeighs[closest_id[0]].dir, bNeighs[closest_id[1]].dir);
 		normalize_v3(tangent);
 		force_intersect = dot_v3v3(force, tangent);
@@ -5025,7 +5025,7 @@ static void dynamic_paint_prepare_effect_cb(
 	/* if global gravity is enabled, add it too */
 	if (scene->physics_settings.flag & PHYS_GLOBAL_GRAVITY)
 		/* also divide by 10 to about match default grav
-		 *  with default force strength (1.0) */
+		 * with default force strength (1.0). */
 		madd_v3_v3fl(forc, scene->physics_settings.gravity,
 		             surface->effector_weights->global_gravity * surface->effector_weights->weight[0] / 10.f);
 
@@ -5087,7 +5087,7 @@ static int dynamicPaint_prepareEffectStep(
 	}
 
 	/* Get number of required steps using average point distance
-	 *  so that just a few ultra close pixels wont up substeps to max */
+	 * so that just a few ultra close pixels wont up substeps to max. */
 
 	/* adjust number of required substep by fastest active effect */
 	if (surface->effect & MOD_DPAINT_EFFECT_DO_SPREAD)
@@ -5188,7 +5188,7 @@ static void dynamic_paint_effect_shrink_cb(
 		totalAlpha += pPoint_prev->e_color[3];
 
 		/* Check if neighboring point has lower alpha,
-		 *  if so, decrease this point's alpha as well*/
+		 * if so, decrease this point's alpha as well. */
 		if (pPoint->color[3] <= 0.0f && pPoint->e_color[3] <= 0.0f && pPoint->wetness <= 0.0f)
 			continue;
 
@@ -5573,7 +5573,7 @@ static void dynamic_paint_wave_step_cb(
 	}
 
 	if (data->reset_wave) {
-		/* if there wasnt any brush intersection, clear isect height */
+		/* if there wasn't any brush intersection, clear isect height */
 		if (wPoint->state == DPAINT_WAVE_NONE) {
 			wPoint->brush_isect = 0.0f;
 		}
@@ -5699,7 +5699,7 @@ static void dynamic_paint_surface_pre_step_cb(
 					/* now calculate new alpha for dry layer that keeps final blended color unchanged */
 					pPoint->color[3] = (f_color[3] - pPoint->e_color[3]) / (1.0f - pPoint->e_color[3]);
 					/* for each rgb component, calculate a new dry layer color that keeps the final blend color
-					 *  with these new alpha values. (wet layer color doesnt change)*/
+					 * with these new alpha values. (wet layer color doesn't change)*/
 					if (pPoint->color[3]) {
 						for (i = 0; i < 3; i++) {
 							pPoint->color[i] = (f_color[i] * f_color[3] - pPoint->e_color[i] * pPoint->e_color[3]) /

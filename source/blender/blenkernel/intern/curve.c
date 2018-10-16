@@ -632,6 +632,107 @@ void BKE_nurb_minmax(Nurb *nu, bool use_radius, float min[3], float max[3])
 	}
 }
 
+float BKE_nurb_calc_length(const Nurb *nu, int resolution)
+{
+	BezTriple *bezt, *prevbezt;
+	BPoint *bp, *prevbp;
+	int a, b;
+	float length = 0.0f;
+	int resolu = resolution ? resolution : nu->resolu;
+	int pntsu = nu->pntsu;
+	float *points, *pntsit, *prevpntsit;
+
+	if (nu->type == CU_POLY) {
+		a = nu->pntsu - 1;
+		bp = nu->bp;
+		if (nu->flagu & CU_NURB_CYCLIC) {
+			++a;
+			prevbp = nu->bp + (nu->pntsu - 1);
+		}
+		else {
+			prevbp = bp;
+			bp++;
+		}
+
+		while (a--) {
+			length += len_v3v3(prevbp->vec, bp->vec);
+			prevbp = bp;
+			++bp;
+		}
+	}
+	else if (nu->type == CU_BEZIER) {
+		points = MEM_mallocN(sizeof(float[3]) * (resolu + 1), "getLength_bezier");
+		a = nu->pntsu - 1;
+		bezt = nu->bezt;
+		if (nu->flagu & CU_NURB_CYCLIC) {
+			++a;
+			prevbezt = nu->bezt + (nu->pntsu - 1);
+		}
+		else {
+			prevbezt = bezt;
+			++bezt;
+		}
+
+		while (a--) {
+			if (prevbezt->h2 == HD_VECT && bezt->h1 == HD_VECT) {
+				length += len_v3v3(prevbezt->vec[1], bezt->vec[1]);
+			}
+			else {
+				for (int j = 0; j < 3; j++) {
+					BKE_curve_forward_diff_bezier(
+					        prevbezt->vec[1][j], prevbezt->vec[2][j],
+					        bezt->vec[0][j], bezt->vec[1][j],
+					        points + j, resolu, 3 * sizeof(float));
+				}
+
+				prevpntsit = pntsit = points;
+				b = resolu;
+				while (b--) {
+					pntsit += 3;
+					length += len_v3v3(prevpntsit, pntsit);
+					prevpntsit = pntsit;
+				}
+			}
+			prevbezt = bezt;
+			++bezt;
+		}
+
+		MEM_freeN(points);
+	}
+	else if (nu->type == CU_NURBS) {
+		if (nu->pntsv == 1) {
+			/* important to zero for BKE_nurb_makeCurve. */
+			points = MEM_callocN(sizeof(float[3]) * pntsu * resolu, "getLength_nurbs");
+
+			BKE_nurb_makeCurve(
+			        nu, points,
+			        NULL, NULL, NULL,
+			        resolu, sizeof(float[3]));
+
+			if (nu->flagu & CU_NURB_CYCLIC) {
+				b = pntsu * resolu + 1;
+				prevpntsit = points + 3 * (pntsu * resolu - 1);
+				pntsit = points;
+			}
+			else {
+				b = (pntsu - 1) * resolu;
+				prevpntsit = points;
+				pntsit = points + 3;
+			}
+
+			while (--b) {
+				length += len_v3v3(prevpntsit, pntsit);
+				prevpntsit = pntsit;
+				pntsit += 3;
+			}
+
+			MEM_freeN(points);
+		}
+	}
+
+	return length;
+}
+
 /* be sure to call makeknots after this */
 void BKE_nurb_points_add(Nurb *nu, int number)
 {
@@ -1080,9 +1181,10 @@ static void basisNurb(float t, short order, int pnts, float *knots, float *basis
 	}
 }
 
-
-void BKE_nurb_makeFaces(Nurb *nu, float *coord_array, int rowstride, int resolu, int resolv)
-/* coord_array  has to be (3 * 4 * resolu * resolv) in size, and zero-ed */
+/**
+ * \param coord_array: has to be (3 * 4 * resolu * resolv) in size, and zero-ed.
+ */
+void BKE_nurb_makeFaces(const Nurb *nu, float *coord_array, int rowstride, int resolu, int resolv)
 {
 	BPoint *bp;
 	float *basisu, *basis, *basisv, *sum, *fp, *in;
@@ -1258,8 +1360,9 @@ void BKE_nurb_makeFaces(Nurb *nu, float *coord_array, int rowstride, int resolu,
  * \param tilt_array   set when non-NULL
  * \param radius_array set when non-NULL
  */
-void BKE_nurb_makeCurve(Nurb *nu, float *coord_array, float *tilt_array, float *radius_array, float *weight_array,
-                        int resolu, int stride)
+void BKE_nurb_makeCurve(
+        const Nurb *nu, float *coord_array, float *tilt_array, float *radius_array, float *weight_array,
+        int resolu, int stride)
 {
 	const float eps = 1e-6f;
 	BPoint *bp;
@@ -1974,7 +2077,7 @@ static bool bevelinside(BevList *bl1, BevList *bl2)
 	copy_v3_v3(hvec2, hvec1);
 	hvec2[0] += 1000;
 
-	/* test it with all edges of potential surounding poly */
+	/* test it with all edges of potential surrounding poly */
 	/* count number of transitions left-right  */
 
 	bevp = bl1->bevpoints;
@@ -2537,7 +2640,7 @@ static void make_bevel_list_segment_2D(BevList *bl)
 static void make_bevel_list_2D(BevList *bl)
 {
 	/* note: bevp->dir and bevp->quat are not needed for beveling but are
-	 * used when making a path from a 2D curve, therefor they need to be set - Campbell */
+	 * used when making a path from a 2D curve, therefore they need to be set - Campbell */
 
 	BevPoint *bevp0, *bevp1, *bevp2;
 	int nr;
@@ -3835,7 +3938,7 @@ static void bezier_handle_calc_smooth_fcurve(BezTriple *bezt, int total, int sta
 	float first_handle_adj = 0.0f, last_handle_adj = 0.0f;
 
 	if (full_cycle) {
-		/* reduce the number of uknowns by one */
+		/* reduce the number of unknowns by one */
 		int i = solve_count = count - 1;
 
 		dx[0] = dx[i];

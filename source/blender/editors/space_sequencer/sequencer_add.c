@@ -166,7 +166,7 @@ static void sequencer_generic_invoke_xy__internal(bContext *C, wmOperator *op, i
 	RNA_int_set(op->ptr, "frame_start", cfra);
 
 	if ((flag & SEQPROP_ENDFRAME) && RNA_struct_property_is_set(op->ptr, "frame_end") == 0)
-		RNA_int_set(op->ptr, "frame_end", cfra + 25);  // XXX arbitary but ok for now.
+		RNA_int_set(op->ptr, "frame_end", cfra + 25);  // XXX arbitrary but ok for now.
 
 	if (!(flag & SEQPROP_NOPATHS)) {
 		sequencer_generic_invoke_path__internal(C, op, "filepath");
@@ -627,7 +627,7 @@ static void sequencer_add_cancel(bContext *UNUSED(C), wmOperator *op)
 	op->customdata = NULL;
 }
 
-static bool sequencer_add_draw_check_prop(PointerRNA *UNUSED(ptr), PropertyRNA *prop)
+static bool sequencer_add_draw_check_prop(PointerRNA *UNUSED(ptr), PropertyRNA *prop, void *UNUSED(user_data))
 {
 	const char *prop_id = RNA_property_identifier(prop);
 
@@ -693,7 +693,7 @@ static void sequencer_add_draw(bContext *UNUSED(C), wmOperator *op)
 
 	/* main draw call */
 	RNA_pointer_create(NULL, op->type->srna, op->properties, &ptr);
-	uiDefAutoButsRNA(layout, &ptr, sequencer_add_draw_check_prop, '\0');
+	uiDefAutoButsRNA(layout, &ptr, sequencer_add_draw_check_prop, NULL, '\0');
 
 	/* image template */
 	RNA_pointer_create(NULL, &RNA_ImageFormatSettings, imf, &imf_ptr);

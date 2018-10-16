@@ -503,7 +503,7 @@ static const char *texture_adrcodes_to_paths(int adrcode, int *array_index)
 		case TE_BRIGHT:
 			return "brightness";
 		case TE_CONTRA:
-			return "constrast";
+			return "contrast";
 	}
 
 	return NULL;
@@ -1732,8 +1732,7 @@ void do_versions_ipos_to_animato(Main *bmain)
 			/* IPO first to take into any non-NLA'd Object Animation */
 			if (ob->ipo) {
 				ipo_to_animdata(bmain, id, ob->ipo, NULL, NULL, NULL);
-
-				id_us_min(&ob->ipo->id);
+				/* No need to id_us_min ipo ID here, ipo_to_animdata already does it. */
 				ob->ipo = NULL;
 			}
 
@@ -1766,7 +1765,7 @@ void do_versions_ipos_to_animato(Main *bmain)
 			/* IPO second... */
 			if (ob->ipo) {
 				ipo_to_animdata(bmain, id, ob->ipo, NULL, NULL, NULL);
-				id_us_min(&ob->ipo->id);
+				/* No need to id_us_min ipo ID here, ipo_to_animdata already does it. */
 				ob->ipo = NULL;
 
 				{

@@ -152,7 +152,7 @@ static int customdata_compare(CustomData *c1, CustomData *c2, Mesh *m1, Mesh *m2
 			for (j = 0; j < vtot; j++, v1++, v2++) {
 				if (len_squared_v3v3(v1->co, v2->co) > thresh_sq)
 					return MESHCMP_VERTCOMISMATCH;
-				/* I don't care about normals, let's just do coodinates */
+				/* I don't care about normals, let's just do coordinates */
 			}
 		}
 
@@ -347,8 +347,9 @@ void BKE_mesh_ensure_skin_customdata(Mesh *me)
 
 			/* Mark an arbitrary vertex as root */
 			BM_ITER_MESH (v, &iter, bm, BM_VERTS_OF_MESH) {
-				vs = CustomData_bmesh_get(&bm->vdata, v->head.data,
-				                          CD_MVERT_SKIN);
+				vs = CustomData_bmesh_get(
+				        &bm->vdata, v->head.data,
+				        CD_MVERT_SKIN);
 				vs->flag |= MVERT_SKIN_ROOT;
 				break;
 			}
@@ -356,11 +357,12 @@ void BKE_mesh_ensure_skin_customdata(Mesh *me)
 	}
 	else {
 		if (!CustomData_has_layer(&me->vdata, CD_MVERT_SKIN)) {
-			vs = CustomData_add_layer(&me->vdata,
-			                          CD_MVERT_SKIN,
-			                          CD_DEFAULT,
-			                          NULL,
-			                          me->totvert);
+			vs = CustomData_add_layer(
+			        &me->vdata,
+			        CD_MVERT_SKIN,
+			        CD_DEFAULT,
+			        NULL,
+			        me->totvert);
 
 			/* Mark an arbitrary vertex as root */
 			if (vs) {
@@ -550,8 +552,9 @@ void BKE_mesh_make_local(Main *bmain, Mesh *me, const bool lib_local)
 	BKE_id_make_local_generic(bmain, &me->id, true, lib_local);
 }
 
-bool BKE_mesh_uv_cdlayer_rename_index(Mesh *me, const int poly_index, const int loop_index, const int face_index,
-                                      const char *new_name, const bool do_tessface)
+bool BKE_mesh_uv_cdlayer_rename_index(
+        Mesh *me, const int poly_index, const int loop_index, const int face_index,
+        const char *new_name, const bool do_tessface)
 {
 	CustomData *pdata, *ldata, *fdata;
 	CustomDataLayer *cdlp, *cdlu, *cdlf;
@@ -1037,9 +1040,10 @@ int poly_get_adj_loops_from_vert(
         const MLoop *mloop, unsigned int vert,
         unsigned int r_adj[2])
 {
-	int corner = poly_find_loop_from_vert(poly,
-	                                      &mloop[poly->loopstart],
-	                                      vert);
+	int corner = poly_find_loop_from_vert(
+	        poly,
+	        &mloop[poly->loopstart],
+	        vert);
 
 	if (corner != -1) {
 #if 0	/* unused - this loop */
@@ -1147,11 +1151,12 @@ void BKE_mesh_ensure_navmesh(Mesh *me)
 
 void BKE_mesh_tessface_calc(Mesh *mesh)
 {
-	mesh->totface = BKE_mesh_recalc_tessellation(&mesh->fdata, &mesh->ldata, &mesh->pdata,
-	                                             mesh->mvert,
-	                                             mesh->totface, mesh->totloop, mesh->totpoly,
-	                                             /* calc normals right after, don't copy from polys here */
-	                                             false);
+	mesh->totface = BKE_mesh_recalc_tessellation(
+	        &mesh->fdata, &mesh->ldata, &mesh->pdata,
+	        mesh->mvert,
+	        mesh->totface, mesh->totloop, mesh->totpoly,
+	        /* calc normals right after, don't copy from polys here */
+	        false);
 
 	BKE_mesh_update_customdata_pointers(mesh, true);
 }
@@ -1370,8 +1375,8 @@ void BKE_mesh_calc_normals_split_ex(Mesh *mesh, MLoopNorSpaceArray *r_lnors_spac
 	else {
 		polynors = MEM_malloc_arrayN(mesh->totpoly, sizeof(float[3]), __func__);
 		BKE_mesh_calc_normals_poly(
-		            mesh->mvert, NULL, mesh->totvert,
-		            mesh->mloop, mesh->mpoly, mesh->totloop, mesh->totpoly, polynors, false);
+		        mesh->mvert, NULL, mesh->totvert,
+		        mesh->mloop, mesh->mpoly, mesh->totloop, mesh->totpoly, polynors, false);
 		free_polynors = true;
 	}
 
@@ -1440,7 +1445,7 @@ static int split_faces_prepare_new_verts(
 
 			if ((*lnor_space)->flags & MLNOR_SPACE_IS_SINGLE) {
 				/* Single loop in this fan... */
-				BLI_assert(GET_INT_FROM_POINTER((*lnor_space)->loops) == loop_idx);
+				BLI_assert(POINTER_AS_INT((*lnor_space)->loops) == loop_idx);
 				BLI_BITMAP_ENABLE(done_loops, loop_idx);
 				if (vert_used) {
 					ml->v = new_vert_idx;
@@ -1448,7 +1453,7 @@ static int split_faces_prepare_new_verts(
 			}
 			else {
 				for (LinkNode *lnode = (*lnor_space)->loops; lnode; lnode = lnode->next) {
-					const int ml_fan_idx = GET_INT_FROM_POINTER(lnode->link);
+					const int ml_fan_idx = POINTER_AS_INT(lnode->link);
 					BLI_BITMAP_ENABLE(done_loops, ml_fan_idx);
 					if (vert_used) {
 						mloop[ml_fan_idx].v = new_vert_idx;
@@ -1509,7 +1514,7 @@ static int split_faces_prepare_new_edges(
 				if (BLI_BITMAP_TEST(edges_used, edge_idx)) {
 					/* Original edge has already been used, we need to define a new one. */
 					const int new_edge_idx = num_edges++;
-					*eval = SET_INT_IN_POINTER(new_edge_idx);
+					*eval = POINTER_FROM_INT(new_edge_idx);
 					ml_prev->e = new_edge_idx;
 
 					SplitFaceNewEdge *new_edge = BLI_memarena_alloc(memarena, sizeof(*new_edge));
@@ -1524,13 +1529,13 @@ static int split_faces_prepare_new_edges(
 					/* We can re-use original edge. */
 					medge[edge_idx].v1 = ml_prev->v;
 					medge[edge_idx].v2 = ml->v;
-					*eval = SET_INT_IN_POINTER(edge_idx);
+					*eval = POINTER_FROM_INT(edge_idx);
 					BLI_BITMAP_ENABLE(edges_used, edge_idx);
 				}
 			}
 			else {
 				/* Edge already known, just update loop's edge index. */
-				ml_prev->e = GET_INT_FROM_POINTER(*eval);
+				ml_prev->e = POINTER_AS_INT(*eval);
 			}
 
 			ml_prev = ml;
@@ -1650,8 +1655,9 @@ void BKE_mesh_split_faces(Mesh *mesh, bool free_loop_normals)
 
 /* **** Depsgraph evaluation **** */
 
-void BKE_mesh_eval_geometry(EvaluationContext *UNUSED(eval_ctx),
-                            Mesh *mesh)
+void BKE_mesh_eval_geometry(
+        EvaluationContext *UNUSED(eval_ctx),
+        Mesh *mesh)
 {
 	DEG_debug_print_eval(__func__, mesh->id.name, mesh);
 	if (mesh->bb == NULL || (mesh->bb->flag & BOUNDBOX_DIRTY)) {

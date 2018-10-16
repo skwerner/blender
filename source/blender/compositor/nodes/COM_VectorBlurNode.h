@@ -20,14 +20,14 @@
  *		Monique Dewanchand
  */
 
-#ifndef _COM_VectorBlurNode_h_
-#define _COM_VectorBlurNode_h_
+#ifndef __COM_VECTORBLURNODE_H__
+#define __COM_VECTORBLURNODE_H__
 
 #include "COM_Node.h"
 
 /**
- * @brief VectorBlurNode
- * @ingroup Node
+ * \brief VectorBlurNode
+ * \ingroup Node
  */
 class VectorBlurNode : public Node {
 public:

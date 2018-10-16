@@ -380,6 +380,10 @@ const EnumPropertyItem rna_enum_event_type_items[] = {
 	{NDOF_BUTTON_A, "NDOF_BUTTON_A", 0, "NDOF Button A", "NdofBA"},
 	{NDOF_BUTTON_B, "NDOF_BUTTON_B", 0, "NDOF Button B", "NdofBB"},
 	{NDOF_BUTTON_C, "NDOF_BUTTON_C", 0, "NDOF Button C", "NdofBC"},
+	/* Action Zones. */
+	{EVT_ACTIONZONE_AREA, "ACTIONZONE_AREA", 0, "ActionZone Area", "AZone Area"},
+	{EVT_ACTIONZONE_REGION, "ACTIONZONE_REGION", 0, "ActionZone Region", "AZone Region"},
+	{EVT_ACTIONZONE_FULLSCREEN, "ACTIONZONE_FULLSCREEN", 0, "ActionZone Fullscreen", "AZone FullScr"},
 	{0, NULL, 0, NULL, NULL}
 };
 
@@ -518,7 +522,7 @@ static int rna_Operator_name_length(PointerRNA *ptr)
 	return strlen(op->type->name);
 }
 
-static int rna_Operator_has_reports_get(PointerRNA *ptr)
+static bool rna_Operator_has_reports_get(PointerRNA *ptr)
 {
 	wmOperator *op = (wmOperator *)ptr->data;
 	return (op->reports && op->reports->list.first);
@@ -590,7 +594,7 @@ static float rna_Event_pressure_get(PointerRNA *ptr)
 	return WM_event_tablet_data(event, NULL, NULL);
 }
 
-static int rna_Event_is_tablet_get(PointerRNA *ptr)
+static bool rna_Event_is_tablet_get(PointerRNA *ptr)
 {
 	const wmEvent *event = ptr->data;
 	return WM_event_is_tablet(event);
@@ -785,7 +789,7 @@ static const EnumPropertyItem *rna_KeyMapItem_propvalue_itemf(bContext *C, Point
 	return rna_enum_keymap_propvalue_items; /* ERROR */
 }
 
-static int rna_KeyMapItem_any_get(PointerRNA *ptr)
+static bool rna_KeyMapItem_any_get(PointerRNA *ptr)
 {
 	wmKeyMapItem *kmi = (wmKeyMapItem *)ptr->data;
 
@@ -801,7 +805,7 @@ static int rna_KeyMapItem_any_get(PointerRNA *ptr)
 	}
 }
 
-static void rna_KeyMapItem_any_set(PointerRNA *ptr, int value)
+static void rna_KeyMapItem_any_set(PointerRNA *ptr, bool value)
 {
 	wmKeyMapItem *kmi = (wmKeyMapItem *)ptr->data;
 
@@ -813,25 +817,25 @@ static void rna_KeyMapItem_any_set(PointerRNA *ptr, int value)
 	}
 }
 
-static int rna_KeyMapItem_shift_get(PointerRNA *ptr)
+static bool rna_KeyMapItem_shift_get(PointerRNA *ptr)
 {
 	wmKeyMapItem *kmi = (wmKeyMapItem *)ptr->data;
 	return kmi->shift != 0;
 }
 
-static int rna_KeyMapItem_ctrl_get(PointerRNA *ptr)
+static bool rna_KeyMapItem_ctrl_get(PointerRNA *ptr)
 {
 	wmKeyMapItem *kmi = (wmKeyMapItem *)ptr->data;
 	return kmi->ctrl != 0;
 }
 
-static int rna_KeyMapItem_alt_get(PointerRNA *ptr)
+static bool rna_KeyMapItem_alt_get(PointerRNA *ptr)
 {
 	wmKeyMapItem *kmi = (wmKeyMapItem *)ptr->data;
 	return kmi->alt != 0;
 }
 
-static int rna_KeyMapItem_oskey_get(PointerRNA *ptr)
+static bool rna_KeyMapItem_oskey_get(PointerRNA *ptr)
 {
 	wmKeyMapItem *kmi = (wmKeyMapItem *)ptr->data;
 	return kmi->oskey != 0;
@@ -902,7 +906,7 @@ static int rna_wmKeyMapItem_name_length(PointerRNA *ptr)
 	return strlen(ot ? RNA_struct_ui_name(ot->srna) : kmi->idname);
 }
 
-static int rna_KeyMapItem_userdefined_get(PointerRNA *ptr)
+static bool rna_KeyMapItem_userdefined_get(PointerRNA *ptr)
 {
 	wmKeyMapItem *kmi = ptr->data;
 	return kmi->id < 0;

@@ -243,21 +243,35 @@ void IMB_close_anim_proxies(struct anim *anim)
 
 struct IDProperty *IMB_anim_load_metadata(struct anim *anim)
 {
+	switch (anim->curtype) {
+		case ANIM_FFMPEG:
+		{
 #ifdef WITH_FFMPEG
-	AVDictionaryEntry *entry = NULL;
+			AVDictionaryEntry *entry = NULL;
 
-	BLI_assert(anim->pFormatCtx != NULL);
-	av_log(anim->pFormatCtx, AV_LOG_DEBUG, "METADATA FETCH\n");
+			BLI_assert(anim->pFormatCtx != NULL);
+			av_log(anim->pFormatCtx, AV_LOG_DEBUG, "METADATA FETCH\n");
 
-	while (true) {
-		entry = av_dict_get(anim->pFormatCtx->metadata, "", entry, AV_DICT_IGNORE_SUFFIX);
-		if (entry == NULL) break;
+			while (true) {
+				entry = av_dict_get(anim->pFormatCtx->metadata, "", entry, AV_DICT_IGNORE_SUFFIX);
+				if (entry == NULL) break;
 
-		/* Delay creation of the property group until there is actual metadata to put in there. */
-		IMB_metadata_ensure(&anim->metadata);
-		IMB_metadata_set_field(anim->metadata, entry->key, entry->value);
-	}
+				/* Delay creation of the property group until there is actual metadata to put in there. */
+				IMB_metadata_ensure(&anim->metadata);
+				IMB_metadata_set_field(anim->metadata, entry->key, entry->value);
+			}
 #endif
+			break;
+		}
+		case ANIM_SEQUENCE:
+		case ANIM_AVI:
+		case ANIM_MOVIE:
+			/* TODO */
+			break;
+		case ANIM_NONE:
+		default:
+			break;
+	}
 	return anim->metadata;
 }
 
@@ -1255,7 +1269,7 @@ static ImBuf *anim_getnew(struct anim *anim)
 #ifdef WITH_AVI
 		case ANIM_AVI:
 			if (startavi(anim)) {
-				printf("couldnt start avi\n");
+				printf("couldn't start avi\n");
 				return (NULL);
 			}
 			ibuf = IMB_allocImBuf(anim->x, anim->y, 24, 0);

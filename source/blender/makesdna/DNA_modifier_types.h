@@ -870,7 +870,7 @@ typedef struct SimpleDeformModifierData {
 	float limit[2];         /* lower and upper limit */
 
 	char mode;              /* deform function */
-	char axis;              /* lock axis (for taper and strech) */
+	char axis;              /* lock axis (for taper and stretch) */
 	char deform_axis;       /* axis to perform the deform on (default is X, but can be overridden by origin */
 	char flag;
 
@@ -1009,10 +1009,10 @@ enum {
 
 enum {
 	MOD_OCEAN_REFRESH_RESET        = (1 << 0),
-	MOD_OCEAN_REFRESH_SIM          = (1 << 1),
-	MOD_OCEAN_REFRESH_ADD          = (1 << 2),
+	/* MOD_OCEAN_REFRESH_SIM          = (1 << 1), */
+	/* MOD_OCEAN_REFRESH_ADD          = (1 << 2), */
 	MOD_OCEAN_REFRESH_CLEAR_CACHE  = (1 << 3),
-	MOD_OCEAN_REFRESH_TOPOLOGY     = (1 << 4),
+	/* MOD_OCEAN_REFRESH_TOPOLOGY     = (1 << 4), */
 };
 
 enum {

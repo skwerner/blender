@@ -102,8 +102,9 @@ static struct WMInitStruct {
 	int windowstate;
 	WinOverrideFlag override_flag;
 
+	bool window_focus;
 	bool native_pixels;
-} wm_init_state = {0, 0, 0, 0, GHOST_kWindowStateNormal, 0, true};
+} wm_init_state = {0, 0, 0, 0, GHOST_kWindowStateNormal, 0, true, true};
 
 /* ******** win open & close ************ */
 
@@ -345,6 +346,7 @@ static uiBlock *block_create_confirm_quit(struct bContext *C, struct ARegion *ar
 	uiBlock *block = UI_block_begin(C, ar, "confirm_quit_popup", UI_EMBOSS);
 
 	UI_block_flag_enable(block, UI_BLOCK_KEEP_OPEN | UI_BLOCK_LOOP | UI_BLOCK_NO_WIN_CLIP | UI_BLOCK_NUMSELECT);
+	UI_block_theme_style_set(block, UI_BLOCK_THEME_STYLE_POPUP);
 	UI_block_emboss_set(block, UI_EMBOSS);
 
 	uiLayout *layout = UI_block_layout(
@@ -623,7 +625,9 @@ static void wm_window_ghostwindow_add(wmWindowManager *wm, const char *title, wm
 
 #ifndef __APPLE__
 		/* set the state here, so minimized state comes up correct on windows */
-		GHOST_SetWindowState(ghostwin, (GHOST_TWindowState)win->windowstate);
+		if (wm_init_state.window_focus) {
+			GHOST_SetWindowState(ghostwin, (GHOST_TWindowState)win->windowstate);
+		}
 #endif
 		/* until screens get drawn, make it nice gray */
 		glClearColor(0.55, 0.55, 0.55, 0.0);
@@ -719,13 +723,13 @@ void wm_window_ghostwindows_ensure(wmWindowManager *wm)
 			win->eventstate = MEM_callocN(sizeof(wmEvent), "window event state");
 
 		/* add keymap handlers (1 handler for all keys in map!) */
-		keymap = WM_keymap_find(wm->defaultconf, "Window", 0, 0);
+		keymap = WM_keymap_ensure(wm->defaultconf, "Window", 0, 0);
 		WM_event_add_keymap_handler(&win->handlers, keymap);
 
-		keymap = WM_keymap_find(wm->defaultconf, "Screen", 0, 0);
+		keymap = WM_keymap_ensure(wm->defaultconf, "Screen", 0, 0);
 		WM_event_add_keymap_handler(&win->handlers, keymap);
 
-		keymap = WM_keymap_find(wm->defaultconf, "Screen Editing", 0, 0);
+		keymap = WM_keymap_ensure(wm->defaultconf, "Screen Editing", 0, 0);
 		WM_event_add_keymap_handler(&win->modalhandlers, keymap);
 
 		/* add drop boxes */
@@ -808,7 +812,7 @@ wmWindow *WM_window_open_temp(bContext *C, int x, int y, int sizex, int sizey, i
 	sizex /= native_pixel_size;
 	sizey /= native_pixel_size;
 
-	/* calculate postition */
+	/* calculate position */
 	rcti rect;
 	rect.xmin = x + win_prev->posx - sizex / 2;
 	rect.ymin = y + win_prev->posy - sizey / 2;
@@ -1467,7 +1471,7 @@ static int wm_window_timer(const bContext *C)
 				else if (wt->event_type == TIMERAUTOSAVE)
 					wm_autosave_timer(C, wm, wt);
 				else if (wt->event_type == TIMERNOTIFIER)
-					WM_main_add_notifier(GET_UINT_FROM_POINTER(wt->customdata), NULL);
+					WM_main_add_notifier(POINTER_AS_UINT(wt->customdata), NULL);
 				else if (win) {
 					wmEvent event;
 					wm_event_init_from_window(win, &event);
@@ -1545,6 +1549,8 @@ void wm_ghost_init(bContext *C)
 		if (wm_init_state.native_pixels) {
 			GHOST_UseNativePixels();
 		}
+
+		GHOST_UseWindowFocus(wm_init_state.window_focus);
 	}
 }
 
@@ -1597,7 +1603,7 @@ wmTimer *WM_event_add_timer_notifier(wmWindowManager *wm, wmWindow *win, unsigne
 	wt->stime = wt->ltime;
 	wt->timestep = timestep;
 	wt->win = win;
-	wt->customdata = SET_UINT_IN_POINTER(type);
+	wt->customdata = POINTER_FROM_UINT(type);
 	wt->flags |= WM_TIMER_NO_FREE_CUSTOM_DATA;
 
 	BLI_addtail(&wm->timers, wt);
@@ -1829,6 +1835,11 @@ void WM_init_state_normal_set(void)
 {
 	wm_init_state.windowstate = GHOST_kWindowStateNormal;
 	wm_init_state.override_flag |= WIN_OVERRIDE_WINSTATE;
+}
+
+void WM_init_window_focus_set(bool do_it)
+{
+	wm_init_state.window_focus = do_it;
 }
 
 void WM_init_native_pixels(bool do_it)

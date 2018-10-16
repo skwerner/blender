@@ -911,6 +911,70 @@ int isect_seg_seg_v2(const float v1[2], const float v2[2], const float v3[2], co
 	return ISECT_LINE_LINE_NONE;
 }
 
+/* Returns a point on each segment that is closest to the other. */
+void isect_seg_seg_v3(
+        const float a0[3], const float a1[3],
+        const float b0[3], const float b1[3],
+        float r_a[3], float r_b[3])
+{
+	float fac_a, fac_b;
+	float a_dir[3], b_dir[3], a0b0[3], crs_ab[3];
+	sub_v3_v3v3(a_dir, a1, a0);
+	sub_v3_v3v3(b_dir, b1, b0);
+	sub_v3_v3v3(a0b0, b0, a0);
+	cross_v3_v3v3(crs_ab, b_dir, a_dir);
+	const float nlen = len_squared_v3(crs_ab);
+
+	if (nlen == 0.0f) {
+		/* Parallel Lines */
+		/* In this case return any point that
+		 * is between the closest segments. */
+		float a0b1[3], a1b0[3], len_a, len_b, fac1, fac2;
+		sub_v3_v3v3(a0b1, b1, a0);
+		sub_v3_v3v3(a1b0, b0, a1);
+		len_a = len_squared_v3(a_dir);
+		len_b = len_squared_v3(b_dir);
+
+		if (len_a) {
+			fac1 = dot_v3v3(a0b0, a_dir);
+			fac2 = dot_v3v3(a0b1, a_dir);
+			CLAMP(fac1, 0.0f, len_a);
+			CLAMP(fac2, 0.0f, len_a);
+			fac_a = (fac1 + fac2) / (2 * len_a);
+		}
+		else {
+			fac_a = 0.0f;
+		}
+
+		if (len_b) {
+			fac1 = -dot_v3v3(a0b0, b_dir);
+			fac2 = -dot_v3v3(a1b0, b_dir);
+			CLAMP(fac1, 0.0f, len_b);
+			CLAMP(fac2, 0.0f, len_b);
+			fac_b = (fac1 + fac2) / (2 * len_b);
+		}
+		else {
+			fac_b = 0.0f;
+		}
+	}
+	else {
+		float c[3], cray[3];
+		sub_v3_v3v3(c, crs_ab, a0b0);
+
+		cross_v3_v3v3(cray, c, b_dir);
+		fac_a = dot_v3v3(cray, crs_ab) / nlen;
+
+		cross_v3_v3v3(cray, c, a_dir);
+		fac_b = dot_v3v3(cray, crs_ab) / nlen;
+
+		CLAMP(fac_a, 0.0f, 1.0f);
+		CLAMP(fac_b, 0.0f, 1.0f);
+	}
+
+	madd_v3_v3v3fl(r_a, a0, a_dir, fac_a);
+	madd_v3_v3v3fl(r_b, b0, b_dir, fac_b);
+}
+
 /**
  * Get intersection point of two 2D segments.
  *
@@ -2475,30 +2539,38 @@ bool isect_ray_aabb_v3(
 	return true;
 }
 
-/*
- * Test a bounding box (AABB) for ray intersection
- * assumes the ray is already local to the boundbox space
+/**
+ * Test a bounding box (AABB) for ray intersection.
+ * Assumes the ray is already local to the boundbox space.
+ *
+ * \note: \a direction should be normalized if you intend to use the \a tmin or \a tmax distance results!
  */
 bool isect_ray_aabb_v3_simple(
         const float orig[3], const float dir[3],
         const float bb_min[3], const float bb_max[3],
         float *tmin, float *tmax)
 {
-	double t[7];
+	double t[6];
 	float hit_dist[2];
-	t[1] = (double)(bb_min[0] - orig[0]) / dir[0];
-	t[2] = (double)(bb_max[0] - orig[0]) / dir[0];
-	t[3] = (double)(bb_min[1] - orig[1]) / dir[1];
-	t[4] = (double)(bb_max[1] - orig[1]) / dir[1];
-	t[5] = (double)(bb_min[2] - orig[2]) / dir[2];
-	t[6] = (double)(bb_max[2] - orig[2]) / dir[2];
-	hit_dist[0] = (float)fmax(fmax(fmin(t[1], t[2]), fmin(t[3], t[4])), fmin(t[5], t[6]));
-	hit_dist[1] = (float)fmin(fmin(fmax(t[1], t[2]), fmax(t[3], t[4])), fmax(t[5], t[6]));
-	if ((hit_dist[1] < 0 || hit_dist[0] > hit_dist[1]))
+	const double invdirx = (dir[0] > 1e-35f || dir[0] < -1e-35f) ? 1.0 / (double)dir[0] : DBL_MAX;
+	const double invdiry = (dir[1] > 1e-35f || dir[1] < -1e-35f) ? 1.0 / (double)dir[1] : DBL_MAX;
+	const double invdirz = (dir[2] > 1e-35f || dir[2] < -1e-35f) ? 1.0 / (double)dir[2] : DBL_MAX;
+	t[0] = (double)(bb_min[0] - orig[0]) * invdirx;
+	t[1] = (double)(bb_max[0] - orig[0]) * invdirx;
+	t[2] = (double)(bb_min[1] - orig[1]) * invdiry;
+	t[3] = (double)(bb_max[1] - orig[1]) * invdiry;
+	t[4] = (double)(bb_min[2] - orig[2]) * invdirz;
+	t[5] = (double)(bb_max[2] - orig[2]) * invdirz;
+	hit_dist[0] = (float)fmax(fmax(fmin(t[0], t[1]), fmin(t[2], t[3])), fmin(t[4], t[5]));
+	hit_dist[1] = (float)fmin(fmin(fmax(t[0], t[1]), fmax(t[2], t[3])), fmax(t[4], t[5]));
+	if ((hit_dist[1] < 0.0f || hit_dist[0] > hit_dist[1])) {
 		return false;
+	}
 	else {
-		if (tmin) *tmin = hit_dist[0];
-		if (tmax) *tmax = hit_dist[1];
+		if (tmin)
+			*tmin = hit_dist[0];
+		if (tmax)
+			*tmax = hit_dist[1];
 		return true;
 	}
 }
@@ -2610,8 +2682,9 @@ float line_plane_factor_v3(const float plane_co[3], const float plane_no[3],
 	return (dot != 0.0f) ? -dot_v3v3(plane_no, h) / dot : 0.0f;
 }
 
-/** Ensure the distance between these points is no greater than 'dist'.
- *  If it is, scale then both into the center.
+/**
+ * Ensure the distance between these points is no greater than 'dist'.
+ * If it is, scale then both into the center.
  */
 void limit_dist_v3(float v1[3], float v2[3], const float dist)
 {
@@ -3172,8 +3245,8 @@ void transform_point_by_tri_v3(
 {
 	/* this works by moving the source triangle so its normal is pointing on the Z
 	 * axis where its barycentric weights can be calculated in 2D and its Z offset can
-	 *  be re-applied. The weights are applied directly to the targets 3D points and the
-	 *  z-depth is used to scale the targets normal as an offset.
+	 * be re-applied. The weights are applied directly to the targets 3D points and the
+	 * z-depth is used to scale the targets normal as an offset.
 	 * This saves transforming the target into its Z-Up orientation and back (which could also work) */
 	float no_tar[3], no_src[3];
 	float mat_src[3][3];

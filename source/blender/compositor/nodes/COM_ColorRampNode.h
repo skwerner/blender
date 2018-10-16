@@ -20,14 +20,14 @@
  *		Monique Dewanchand
  */
 
-#ifndef _COM_ColorRampNode_h_
-#define _COM_ColorRampNode_h_
+#ifndef __COM_COLORRAMPNODE_H__
+#define __COM_COLORRAMPNODE_H__
 
 #include "COM_Node.h"
 
 /**
- * @brief ColorRampNode
- * @ingroup Node
+ * \brief ColorRampNode
+ * \ingroup Node
  */
 class ColorRampNode : public Node {
 public:

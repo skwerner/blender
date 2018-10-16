@@ -370,7 +370,7 @@ static void ui_layer_but_cb(bContext *C, void *arg_but, void *arg_index)
 	uiBut *but = arg_but, *cbut;
 	PointerRNA *ptr = &but->rnapoin;
 	PropertyRNA *prop = but->rnaprop;
-	int i, index = GET_INT_FROM_POINTER(arg_index);
+	int i, index = POINTER_AS_INT(arg_index);
 	int shift = win->eventstate->shift;
 	int len = RNA_property_array_length(ptr, prop);
 
@@ -463,7 +463,7 @@ static void ui_item_array(
 
 				but = uiDefAutoButR(block, ptr, prop, layer_num, "", icon, x + butw * a, y + buth, butw, buth);
 				if (subtype == PROP_LAYER_MEMBER)
-					UI_but_func_set(but, ui_layer_but_cb, but, SET_INT_IN_POINTER(layer_num));
+					UI_but_func_set(but, ui_layer_but_cb, but, POINTER_FROM_INT(layer_num));
 			}
 			for (a = 0; a < colbuts; a++) {
 				const int layer_num  = a + len / 2 + b * colbuts;
@@ -481,7 +481,7 @@ static void ui_item_array(
 
 				but = uiDefAutoButR(block, ptr, prop, layer_num, "", icon, x + butw * a, y, butw, buth);
 				if (subtype == PROP_LAYER_MEMBER)
-					UI_but_func_set(but, ui_layer_but_cb, but, SET_INT_IN_POINTER(layer_num));
+					UI_but_func_set(but, ui_layer_but_cb, but, POINTER_FROM_INT(layer_num));
 			}
 			UI_block_align_end(block);
 
@@ -567,7 +567,7 @@ static void ui_item_enum_expand_handle(bContext *C, void *arg1, void *arg2)
 
 	if (!win->eventstate->shift) {
 		uiBut *but = (uiBut *)arg1;
-		int enum_value = GET_INT_FROM_POINTER(arg2);
+		int enum_value = POINTER_AS_INT(arg2);
 
 		int current_value = RNA_property_enum_get(&but->rnapoin, but->rnaprop);
 		if (!(current_value & enum_value)) {
@@ -645,7 +645,7 @@ static void ui_item_enum_expand(
 			but = uiDefButR_prop(block, UI_BTYPE_ROW, 0, name, 0, 0, itemw, h, ptr, prop, -1, 0, value, -1, -1, NULL);
 
 		if (RNA_property_flag(prop) & PROP_ENUM_FLAG) {
-			UI_but_func_set(but, ui_item_enum_expand_handle, but, SET_INT_IN_POINTER(value));
+			UI_but_func_set(but, ui_item_enum_expand_handle, but, POINTER_FROM_INT(value));
 		}
 
 		if (ui_layout_local_dir(layout) != UI_LAYOUT_HORIZONTAL)
@@ -678,7 +678,8 @@ static uiBut *ui_item_with_label(uiLayout *layout, uiBlock *block, const char *n
 	PropertySubType subtype;
 	int labelw;
 
-	sub = uiLayoutRow(layout, layout->align);
+	/* Always align item with label since text is already given enough space not to overlap. */
+	sub = uiLayoutRow(layout, true);
 	UI_block_layout_set_current(block, sub);
 
 	if (name[0]) {
@@ -1098,7 +1099,7 @@ void uiItemsFullEnumO_items(
 					uiItemS(target);
 				}
 				else {
-					/* XXX bug here, colums draw bottom item badly */
+					/* XXX bug here, columns draw bottom item badly */
 					uiItemS(target);
 				}
 			}
@@ -1438,6 +1439,10 @@ void uiItemFullR(uiLayout *layout, PointerRNA *ptr, PropertyRNA *prop, int index
 		}
 	}
 
+	if ((type == PROP_ENUM) && (RNA_property_flag(prop) & PROP_ENUM_FLAG)) {
+		flag |= UI_ITEM_R_EXPAND;
+	}
+
 	slider = (flag & UI_ITEM_R_SLIDER) != 0;
 	toggle = (flag & UI_ITEM_R_TOGGLE) != 0;
 	expand = (flag & UI_ITEM_R_EXPAND) != 0;
@@ -1463,8 +1468,9 @@ void uiItemFullR(uiLayout *layout, PointerRNA *ptr, PropertyRNA *prop, int index
 			uiDefButR_prop(block, UI_BTYPE_ROW, 0, name, 0, 0, w, h, ptr, prop, -1, 0, value, -1, -1, NULL);
 	}
 	/* expanded enum */
-	else if (type == PROP_ENUM && (expand || RNA_property_flag(prop) & PROP_ENUM_FLAG))
+	else if (type == PROP_ENUM && expand) {
 		ui_item_enum_expand(layout, block, ptr, prop, name, h, icon_only);
+	}
 	/* property with separate label */
 	else if (type == PROP_ENUM || type == PROP_STRING || type == PROP_POINTER) {
 		but = ui_item_with_label(layout, block, name, icon, ptr, prop, index, 0, 0, w, h, flag);
@@ -1540,22 +1546,26 @@ void uiItemEnumR(uiLayout *layout, const char *name, int icon, struct PointerRNA
 	uiItemFullR(layout, ptr, prop, RNA_ENUM_VALUE, value, 0, name, icon);
 }
 
-void uiItemEnumR_string(uiLayout *layout, struct PointerRNA *ptr, const char *propname, const char *value, const char *name, int icon)
+
+void uiItemEnumR_string_prop(
+        uiLayout *layout, struct PointerRNA *ptr, PropertyRNA *prop,
+        const char *value, const char *name, int icon)
 {
-	PropertyRNA *prop = RNA_struct_find_property(ptr, propname);
 	const EnumPropertyItem *item;
 	int ivalue, a;
 	bool free;
 
-	if (!prop || RNA_property_type(prop) != PROP_ENUM) {
+	if (UNLIKELY(RNA_property_type(prop) != PROP_ENUM)) {
+		const char *propname = RNA_property_identifier(prop);
 		ui_item_disabled(layout, propname);
-		RNA_warning("enum property not found: %s.%s", RNA_struct_identifier(ptr->type), propname);
+		RNA_warning("not an enum property: %s.%s", RNA_struct_identifier(ptr->type), propname);
 		return;
 	}
 
 	RNA_property_enum_items(layout->root->block->evil_C, ptr, prop, &item, NULL, &free);
 
 	if (!RNA_enum_value_from_id(item, value, &ivalue)) {
+		const char *propname = RNA_property_identifier(prop);
 		if (free) {
 			MEM_freeN((void *)item);
 		}
@@ -1577,6 +1587,19 @@ void uiItemEnumR_string(uiLayout *layout, struct PointerRNA *ptr, const char *pr
 	if (free) {
 		MEM_freeN((void *)item);
 	}
+}
+
+void uiItemEnumR_string(
+        uiLayout *layout, struct PointerRNA *ptr, const char *propname,
+        const char *value, const char *name, int icon)
+{
+	PropertyRNA *prop = RNA_struct_find_property(ptr, propname);
+	if (UNLIKELY(prop == NULL)) {
+		ui_item_disabled(layout, propname);
+		RNA_warning("enum property not found: %s.%s", RNA_struct_identifier(ptr->type), propname);
+		return;
+	}
+	uiItemEnumR_string_prop(layout, ptr, prop, value, name, icon);
 }
 
 void uiItemsEnumR(uiLayout *layout, struct PointerRNA *ptr, const char *propname)
@@ -1718,7 +1741,7 @@ static void rna_search_cb(const struct bContext *C, void *arg_but, const char *s
 
 	/* add search items from temporary list */
 	for (cis = items_list->first; cis; cis = cis->next) {
-		if (false == UI_search_item_add(items, cis->name, SET_INT_IN_POINTER(cis->index), cis->iconid)) {
+		if (false == UI_search_item_add(items, cis->name, POINTER_FROM_INT(cis->index), cis->iconid)) {
 			break;
 		}
 	}
@@ -1794,9 +1817,12 @@ void ui_but_add_search(uiBut *but, PointerRNA *ptr, PropertyRNA *prop, PointerRN
 	}
 }
 
-void uiItemPointerR(uiLayout *layout, struct PointerRNA *ptr, const char *propname, struct PointerRNA *searchptr, const char *searchpropname, const char *name, int icon)
+void uiItemPointerR_prop(
+        uiLayout *layout,
+        PointerRNA *ptr, PropertyRNA *prop,
+        PointerRNA *searchptr, PropertyRNA *searchprop,
+        const char *name, int icon)
 {
-	PropertyRNA *prop, *searchprop;
 	PropertyType type;
 	uiBut *but;
 	uiBlock *block;
@@ -1804,32 +1830,15 @@ void uiItemPointerR(uiLayout *layout, struct PointerRNA *ptr, const char *propna
 	int w, h;
 	char namestr[UI_MAX_NAME_STR];
 
-	/* validate arguments */
-	prop = RNA_struct_find_property(ptr, propname);
-
-	if (!prop) {
-		RNA_warning("property not found: %s.%s",
-		            RNA_struct_identifier(ptr->type), propname);
-		return;
-	}
-
 	type = RNA_property_type(prop);
 	if (!ELEM(type, PROP_POINTER, PROP_STRING, PROP_ENUM)) {
-		RNA_warning("Property %s must be a pointer, string or enum", propname);
+		RNA_warning("Property %s.%s must be a pointer, string or enum",
+		            RNA_struct_identifier(ptr->type), RNA_property_identifier(prop));
 		return;
 	}
-
-	searchprop = RNA_struct_find_property(searchptr, searchpropname);
-
-
-	if (!searchprop) {
-		RNA_warning("search collection property not found: %s.%s",
-		            RNA_struct_identifier(searchptr->type), searchpropname);
-		return;
-	}
-	else if (RNA_property_type(searchprop) != PROP_COLLECTION) {
+	if (RNA_property_type(searchprop) != PROP_COLLECTION) {
 		RNA_warning("search collection property is not a collection type: %s.%s",
-		            RNA_struct_identifier(searchptr->type), searchpropname);
+		            RNA_struct_identifier(searchptr->type), RNA_property_identifier(searchprop));
 		return;
 	}
 
@@ -1855,6 +1864,31 @@ void uiItemPointerR(uiLayout *layout, struct PointerRNA *ptr, const char *propna
 	but = ui_item_with_label(layout, block, name, icon, ptr, prop, 0, 0, 0, w, h, 0);
 
 	ui_but_add_search(but, ptr, prop, searchptr, searchprop);
+}
+
+void uiItemPointerR(
+        uiLayout *layout,
+        PointerRNA *ptr, const char *propname,
+        PointerRNA *searchptr, const char *searchpropname,
+        const char *name, int icon)
+{
+	PropertyRNA *prop, *searchprop;
+
+	/* validate arguments */
+	prop = RNA_struct_find_property(ptr, propname);
+	if (!prop) {
+		RNA_warning("property not found: %s.%s",
+		            RNA_struct_identifier(ptr->type), propname);
+		return;
+	}
+	searchprop = RNA_struct_find_property(searchptr, searchpropname);
+	if (!searchprop) {
+		RNA_warning("search collection property not found: %s.%s",
+		            RNA_struct_identifier(searchptr->type), searchpropname);
+		return;
+	}
+
+	uiItemPointerR_prop(layout, ptr, prop, searchptr, searchprop, name, icon);
 }
 
 /* menu item */

@@ -517,7 +517,7 @@ GHOST_WindowX11(GHOST_SystemX11 *system,
 			natom++;
 		}
 
-		if (m_system->m_atom.WM_TAKE_FOCUS) {
+		if (m_system->m_atom.WM_TAKE_FOCUS && m_system->m_windowFocus) {
 			atoms[natom] = m_system->m_atom.WM_TAKE_FOCUS;
 			natom++;
 		}
@@ -532,7 +532,7 @@ GHOST_WindowX11(GHOST_SystemX11 *system,
 	{
 		XWMHints *xwmhints = XAllocWMHints();
 		xwmhints->initial_state = NormalState;
-		xwmhints->input = True;
+		xwmhints->input = (m_system->m_windowFocus) ? True : False;
 		xwmhints->flags = InputHint | StateHint;
 		XSetWMHints(display, m_window, xwmhints);
 		XFree(xwmhints);
@@ -586,11 +586,15 @@ GHOST_WindowX11(GHOST_SystemX11 *system,
 
 	setTitle(title);
 
-	if (exclusive) {
+	if (exclusive && system->m_windowFocus) {
 		XMapRaised(m_display, m_window);
 	}
 	else {
 		XMapWindow(m_display, m_window);
+
+		if (!system->m_windowFocus) {
+			XLowerWindow(m_display, m_window);
+		}
 	}
 	GHOST_PRINT("Mapped window\n");
 
@@ -598,13 +602,15 @@ GHOST_WindowX11(GHOST_SystemX11 *system,
 }
 
 #if defined(WITH_X11_XINPUT) && defined(X_HAVE_UTF8_STRING)
-static void destroyICCallback(XIC /*xic*/, XPointer ptr, XPointer /*data*/)
+static Bool destroyICCallback(XIC /*xic*/, XPointer ptr, XPointer /*data*/)
 {
 	GHOST_PRINT("XIM input context destroyed\n");
 
 	if (ptr) {
 		*(XIC *)ptr = NULL;
 	}
+	/* Ignored by X11. */
+	return True;
 }
 
 bool GHOST_WindowX11::createX11_XIC()
@@ -1697,6 +1703,7 @@ getDPIHint()
 				}
 			}
 		}
+		XrmDestroyDatabase(xrdb);
 	}
 
 	/* Fallback to calculating DPI using X reported DPI, set using xrandr --dpi */

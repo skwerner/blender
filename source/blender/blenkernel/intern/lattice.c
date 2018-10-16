@@ -216,7 +216,9 @@ void BKE_lattice_resize(Lattice *lt, int uNew, int vNew, int wNew, Object *ltOb)
 		lt->typeu = lt->typev = lt->typew = KEY_LINEAR;
 
 		/* prevent using deformed locations */
-		BKE_displist_free(&ltOb->curve_cache->disp);
+		if (ltOb->curve_cache != NULL) {
+			BKE_displist_free(&ltOb->curve_cache->disp);
+		}
 
 		copy_m4_m4(mat, ltOb->obmat);
 		unit_m4(ltOb->obmat);
@@ -624,7 +626,7 @@ static bool calc_curve_deform(Scene *scene, Object *par, float co[3],
 	if (is_neg_axis) {
 		index = axis - 3;
 		if (cu->flag & CU_STRETCH)
-			fac = (-co[index] - cd->dmax[index]) / (cd->dmax[index] - cd->dmin[index]);
+			fac = -(co[index] - cd->dmax[index]) / (cd->dmax[index] - cd->dmin[index]);
 		else
 			fac = -(co[index] - cd->dmax[index]) / (par->curve_cache->path->totdist);
 	}

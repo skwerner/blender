@@ -127,7 +127,7 @@ static void rna_DynamicPaintSurface_changePreview(Main *bmain, Scene *scene, Poi
 	DynamicPaintSurface *surface = act_surface->canvas->surfaces.first;
 
 	/* since only one color surface can show preview at time
-	 *  disable preview on other surfaces*/
+	 * disable preview on other surfaces. */
 	for (; surface; surface = surface->next) {
 		if (surface != act_surface)
 			surface->flags &= ~MOD_DPAINT_PREVIEW;
@@ -223,7 +223,7 @@ static void rna_DynamicPaint_uvlayer_set(PointerRNA *ptr, const char *value)
 }
 
 /* is point cache used */
-static int rna_DynamicPaint_is_cache_user_get(PointerRNA *ptr)
+static bool rna_DynamicPaint_is_cache_user_get(PointerRNA *ptr)
 {
 	DynamicPaintSurface *surface = (DynamicPaintSurface *)ptr->data;
 
@@ -231,7 +231,7 @@ static int rna_DynamicPaint_is_cache_user_get(PointerRNA *ptr)
 }
 
 /* is some 3D view preview available */
-static int rna_DynamicPaint_use_color_preview_get(PointerRNA *ptr)
+static bool rna_DynamicPaint_use_color_preview_get(PointerRNA *ptr)
 {
 	DynamicPaintSurface *surface = (DynamicPaintSurface *)ptr->data;
 

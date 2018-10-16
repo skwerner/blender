@@ -20,14 +20,14 @@
  *		Monique Dewanchand
  */
 
-#ifndef _COM_InpaintNode_h_
-#define _COM_InpaintNode_h_
+#ifndef __COM_INPAINTNODE_H__
+#define __COM_INPAINTNODE_H__
 
 #include "COM_Node.h"
 
 /**
- * @brief InpaintNode
- * @ingroup Node
+ * \brief InpaintNode
+ * \ingroup Node
  */
 class InpaintNode : public Node {
 public:

@@ -20,14 +20,14 @@
  *		Monique Dewanchand
  */
 
-#ifndef _COM_TranslateNode_h_
-#define _COM_TranslateNode_h_
+#ifndef __COM_TRANSLATENODE_H__
+#define __COM_TRANSLATENODE_H__
 
 #include "COM_Node.h"
 
 /**
- * @brief TranslateNode
- * @ingroup Node
+ * \brief TranslateNode
+ * \ingroup Node
  */
 class TranslateNode : public Node {
 public:

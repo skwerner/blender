@@ -20,14 +20,14 @@
  *		Monique Dewanchand
  */
 
-#ifndef _COM_BokehImageNode_h_
-#define _COM_BokehImageNode_h_
+#ifndef __COM_BOKEHIMAGENODE_H__
+#define __COM_BOKEHIMAGENODE_H__
 
 #include "COM_Node.h"
 
 /**
- * @brief BokehImageNode
- * @ingroup Node
+ * \brief BokehImageNode
+ * \ingroup Node
  */
 class BokehImageNode : public Node {
 public:

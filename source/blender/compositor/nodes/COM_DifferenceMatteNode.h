@@ -20,14 +20,14 @@
  *		Monique Dewanchand
  */
 
-#ifndef _COM_DifferenceMatteNode_h_
-#define _COM_DifferenceMatteNode_h_
+#ifndef __COM_DIFFERENCEMATTENODE_H__
+#define __COM_DIFFERENCEMATTENODE_H__
 
 #include "COM_Node.h"
 
 /**
- * @brief DifferenceMatteNode
- * @ingroup Node
+ * \brief DifferenceMatteNode
+ * \ingroup Node
  */
 class DifferenceMatteNode : public Node {
 public:

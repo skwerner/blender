@@ -572,7 +572,7 @@ int area_getorientation(ScrArea *sa, ScrArea *sb)
 }
 
 /* Helper function to join 2 areas, it has a return value, 0=failed 1=success
- *  used by the split, join operators
+ * used by the split, join operators
  */
 int screen_area_join(bContext *C, bScreen *scr, ScrArea *sa1, ScrArea *sa2)
 {
@@ -1446,6 +1446,10 @@ bool ED_screen_delete_scene(bContext *C, Scene *scene)
 {
 	Main *bmain = CTX_data_main(C);
 	Scene *newscene;
+
+	/* kill running jobs */
+	wmWindowManager *wm = CTX_wm_manager(C);
+	WM_jobs_kill_type(wm, scene, WM_JOB_TYPE_ANY);
 
 	if (scene->id.prev)
 		newscene = scene->id.prev;

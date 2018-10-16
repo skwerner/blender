@@ -212,15 +212,16 @@ static int search_polyloop_cmp(const void *v1, const void *v2)
  *
  * \return false if no changes needed to be made.
  */
-bool BKE_mesh_validate_arrays(Mesh *mesh,
-                              MVert *mverts, unsigned int totvert,
-                              MEdge *medges, unsigned int totedge,
-                              MFace *mfaces, unsigned int totface,
-                              MLoop *mloops, unsigned int totloop,
-                              MPoly *mpolys, unsigned int totpoly,
-                              MDeformVert *dverts, /* assume totvert length */
-                              const bool do_verbose, const bool do_fixes,
-                              bool *r_changed)
+bool BKE_mesh_validate_arrays(
+        Mesh *mesh,
+        MVert *mverts, unsigned int totvert,
+        MEdge *medges, unsigned int totedge,
+        MFace *mfaces, unsigned int totface,
+        MLoop *mloops, unsigned int totloop,
+        MPoly *mpolys, unsigned int totpoly,
+        MDeformVert *dverts, /* assume totvert length */
+        const bool do_verbose, const bool do_fixes,
+        bool *r_changed)
 {
 #   define REMOVE_EDGE_TAG(_me) { _me->v2 = _me->v1; free_flag.edges = do_fixes; } (void)0
 #   define IS_REMOVED_EDGE(_me) (_me->v2 == _me->v1)
@@ -325,13 +326,13 @@ bool BKE_mesh_validate_arrays(Mesh *mesh,
 
 		if ((me->v1 != me->v2) && BLI_edgehash_haskey(edge_hash, me->v1, me->v2)) {
 			PRINT_ERR("\tEdge %u: is a duplicate of %d\n", i,
-			          GET_INT_FROM_POINTER(BLI_edgehash_lookup(edge_hash, me->v1, me->v2)));
+			          POINTER_AS_INT(BLI_edgehash_lookup(edge_hash, me->v1, me->v2)));
 			remove = do_fixes;
 		}
 
 		if (remove == false) {
 			if (me->v1 != me->v2) {
-				BLI_edgehash_insert(edge_hash, me->v1, me->v2, SET_INT_IN_POINTER(i));
+				BLI_edgehash_insert(edge_hash, me->v1, me->v2, POINTER_FROM_INT(i));
 			}
 		}
 		else {
@@ -361,7 +362,7 @@ bool BKE_mesh_validate_arrays(Mesh *mesh,
 		SortFace *sf_prev;
 		unsigned int totsortface = 0;
 
-		PRINT_ERR("No Polys, only tesselated Faces\n");
+		PRINT_ERR("No Polys, only tessellated Faces\n");
 
 		for (i = 0, mf = mfaces, sf = sort_faces; i < totface; i++, mf++) {
 			bool remove = false;
@@ -565,7 +566,7 @@ bool BKE_mesh_validate_arrays(Mesh *mesh,
 						 * We already know from previous text that a valid edge exists, use it (if allowed)! */
 						if (do_fixes) {
 							int prev_e = ml->e;
-							ml->e = GET_INT_FROM_POINTER(BLI_edgehash_lookup(edge_hash, v1, v2));
+							ml->e = POINTER_AS_INT(BLI_edgehash_lookup(edge_hash, v1, v2));
 							fix_flag.loops_edge = true;
 							PRINT_ERR("\tLoop %u has invalid edge reference (%d), fixed using edge %u\n",
 							          sp->loopstart + j, prev_e, ml->e);
@@ -582,7 +583,7 @@ bool BKE_mesh_validate_arrays(Mesh *mesh,
 							 * and we already know from previous test that a valid one exists, use it (if allowed)! */
 							if (do_fixes) {
 								int prev_e = ml->e;
-								ml->e = GET_INT_FROM_POINTER(BLI_edgehash_lookup(edge_hash, v1, v2));
+								ml->e = POINTER_AS_INT(BLI_edgehash_lookup(edge_hash, v1, v2));
 								fix_flag.loops_edge = true;
 								PRINT_ERR("\tPoly %u has invalid edge reference (%d, is_removed: %d), fixed using edge %u\n",
 								          sp->index, prev_e, IS_REMOVED_EDGE(me), ml->e);
@@ -875,9 +876,10 @@ bool BKE_mesh_validate_arrays(Mesh *mesh,
 	return is_valid;
 }
 
-static bool mesh_validate_customdata(CustomData *data, CustomDataMask mask,
-                                     const bool do_verbose, const bool do_fixes,
-                                     bool *r_change)
+static bool mesh_validate_customdata(
+        CustomData *data, CustomDataMask mask,
+        const bool do_verbose, const bool do_fixes,
+        bool *r_change)
 {
 	bool is_valid = true;
 	bool has_fixes = false;
@@ -928,11 +930,12 @@ static bool mesh_validate_customdata(CustomData *data, CustomDataMask mask,
 /**
  * \returns is_valid.
  */
-bool BKE_mesh_validate_all_customdata(CustomData *vdata, CustomData *edata,
-                                      CustomData *ldata, CustomData *pdata,
-                                      const bool check_meshmask,
-                                      const bool do_verbose, const bool do_fixes,
-                                      bool *r_change)
+bool BKE_mesh_validate_all_customdata(
+        CustomData *vdata, CustomData *edata,
+        CustomData *ldata, CustomData *pdata,
+        const bool check_meshmask,
+        const bool do_verbose, const bool do_fixes,
+        bool *r_change)
 {
 	bool is_valid = true;
 	bool is_change_v, is_change_e, is_change_l, is_change_p;
@@ -1268,9 +1271,10 @@ struct EdgeSort {
 };
 
 /* edges have to be added with lowest index first for sorting */
-static void to_edgesort(struct EdgeSort *ed,
-                        unsigned int v1, unsigned int v2,
-                        char is_loose, short is_draw)
+static void to_edgesort(
+        struct EdgeSort *ed,
+        unsigned int v1, unsigned int v2,
+        char is_loose, short is_draw)
 {
 	if (v1 < v2) {
 		ed->v1 = v1; ed->v2 = v2;
@@ -1386,7 +1390,7 @@ static void mesh_calc_edges_mdata(
 	/* set edge members of mloops */
 	hash = BLI_edgehash_new_ex(__func__, totedge_final);
 	for (edge_index = 0, med = medge; edge_index < totedge_final; edge_index++, med++) {
-		BLI_edgehash_insert(hash, med->v1, med->v2, SET_UINT_IN_POINTER(edge_index));
+		BLI_edgehash_insert(hash, med->v1, med->v2, POINTER_FROM_UINT(edge_index));
 	}
 
 	mpoly = allpoly;
@@ -1398,7 +1402,7 @@ static void mesh_calc_edges_mdata(
 		ml = &ml_next[i - 1];                  /* last loop */
 
 		while (i-- != 0) {
-			ml->e = GET_UINT_FROM_POINTER(BLI_edgehash_lookup(hash, ml->v, ml_next->v));
+			ml->e = POINTER_AS_UINT(BLI_edgehash_lookup(hash, ml->v, ml_next->v));
 			ml = ml_next;
 			ml_next++;
 		}
@@ -1419,9 +1423,10 @@ void BKE_mesh_calc_edges_legacy(Mesh *me, const bool use_old)
 	MEdge *medge;
 	int totedge = 0;
 
-	mesh_calc_edges_mdata(me->mvert, me->mface, me->mloop, me->mpoly,
-	                      me->totvert, me->totface, me->totloop, me->totpoly,
-	                      use_old, &medge, &totedge);
+	mesh_calc_edges_mdata(
+	        me->mvert, me->mface, me->mloop, me->mpoly,
+	        me->totvert, me->totface, me->totloop, me->totpoly,
+	        use_old, &medge, &totedge);
 
 	if (totedge == 0) {
 		/* flag that mesh has edges */
@@ -1506,7 +1511,7 @@ void BKE_mesh_calc_edges(Mesh *mesh, bool update, const bool select)
 		}
 
 		/* store the new edge index in the hash value */
-		BLI_edgehashIterator_setValue(ehi, SET_INT_IN_POINTER(i));
+		BLI_edgehashIterator_setValue(ehi, POINTER_FROM_INT(i));
 	}
 	BLI_edgehashIterator_free(ehi);
 
@@ -1519,7 +1524,7 @@ void BKE_mesh_calc_edges(Mesh *mesh, bool update, const bool select)
 			int j;
 			for (j = 0; j < mp->totloop; j++, l++) {
 				/* lookup hashed edge index */
-				med_index = GET_INT_FROM_POINTER(BLI_edgehash_lookup(eh, l_prev->v, l->v));
+				med_index = POINTER_AS_INT(BLI_edgehash_lookup(eh, l_prev->v, l->v));
 				l_prev->e = med_index;
 				l_prev = l;
 			}

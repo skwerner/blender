@@ -267,6 +267,7 @@ static uiBlock *id_search_menu(bContext *C, ARegion *ar, void *arg_litem)
 
 	block = UI_block_begin(C, ar, "_popup", UI_EMBOSS);
 	UI_block_flag_enable(block, UI_BLOCK_LOOP | UI_BLOCK_SEARCH_MENU);
+	UI_block_theme_style_set(block, UI_BLOCK_THEME_STYLE_POPUP);
 
 	/* preview thumbnails */
 	if (template_ui.prv_rows > 0 && template_ui.prv_cols > 0) {
@@ -348,7 +349,7 @@ static void template_id_cb(bContext *C, void *arg_litem, void *arg_event)
 	TemplateID *template_ui = (TemplateID *)arg_litem;
 	PointerRNA idptr = RNA_property_pointer_get(&template_ui->ptr, template_ui->prop);
 	ID *id = idptr.data;
-	int event = GET_INT_FROM_POINTER(arg_event);
+	int event = POINTER_AS_INT(arg_event);
 
 	switch (event) {
 		case UI_ID_BROWSE:
@@ -534,7 +535,7 @@ static void template_ID(
 		but = uiDefButR(
 		        block, UI_BTYPE_TEXT, 0, name, 0, 0, UI_UNIT_X * 6, UI_UNIT_Y,
 		        &idptr, "name", -1, 0, 0, -1, -1, RNA_struct_ui_description(type));
-		UI_but_funcN_set(but, template_id_cb, MEM_dupallocN(template_ui), SET_INT_IN_POINTER(UI_ID_RENAME));
+		UI_but_funcN_set(but, template_id_cb, MEM_dupallocN(template_ui), POINTER_FROM_INT(UI_ID_RENAME));
 		if (user_alert) UI_but_flag_enable(but, UI_BUT_REDALERT);
 
 		if (id->lib) {
@@ -552,7 +553,7 @@ static void template_ID(
 					UI_but_flag_enable(but, UI_BUT_DISABLED);
 			}
 
-			UI_but_funcN_set(but, template_id_cb, MEM_dupallocN(template_ui), SET_INT_IN_POINTER(UI_ID_LOCAL));
+			UI_but_funcN_set(but, template_id_cb, MEM_dupallocN(template_ui), POINTER_FROM_INT(UI_ID_LOCAL));
 		}
 
 		if (id->us > 1) {
@@ -567,7 +568,7 @@ static void template_ID(
 			        TIP_("Display number of users of this data (click to make a single-user copy)"));
 			but->flag |= UI_BUT_UNDO;
 
-			UI_but_funcN_set(but, template_id_cb, MEM_dupallocN(template_ui), SET_INT_IN_POINTER(UI_ID_ALONE));
+			UI_but_funcN_set(but, template_id_cb, MEM_dupallocN(template_ui), POINTER_FROM_INT(UI_ID_ALONE));
 			if (/* test only */
 			    (id_copy(CTX_data_main(C), id, NULL, true) == false) ||
 			    (idfrom && idfrom->lib) ||
@@ -625,13 +626,13 @@ static void template_ID(
 			but = uiDefIconTextButO(
 			        block, UI_BTYPE_BUT, newop, WM_OP_INVOKE_DEFAULT, ICON_ZOOMIN,
 			        (id) ? "" : CTX_IFACE_(template_id_context(type), "New"), 0, 0, w, UI_UNIT_Y, NULL);
-			UI_but_funcN_set(but, template_id_cb, MEM_dupallocN(template_ui), SET_INT_IN_POINTER(UI_ID_ADD_NEW));
+			UI_but_funcN_set(but, template_id_cb, MEM_dupallocN(template_ui), POINTER_FROM_INT(UI_ID_ADD_NEW));
 		}
 		else {
 			but = uiDefIconTextBut(
 			        block, UI_BTYPE_BUT, 0, ICON_ZOOMIN, (id) ? "" : CTX_IFACE_(template_id_context(type), "New"),
 			        0, 0, w, UI_UNIT_Y, NULL, 0, 0, 0, 0, NULL);
-			UI_but_funcN_set(but, template_id_cb, MEM_dupallocN(template_ui), SET_INT_IN_POINTER(UI_ID_ADD_NEW));
+			UI_but_funcN_set(but, template_id_cb, MEM_dupallocN(template_ui), POINTER_FROM_INT(UI_ID_ADD_NEW));
 		}
 
 		if ((idfrom && idfrom->lib) || !editable)
@@ -657,13 +658,13 @@ static void template_ID(
 			but = uiDefIconTextButO(
 			        block, UI_BTYPE_BUT, openop, WM_OP_INVOKE_DEFAULT, ICON_FILESEL, (id) ? "" : IFACE_("Open"),
 			        0, 0, w, UI_UNIT_Y, NULL);
-			UI_but_funcN_set(but, template_id_cb, MEM_dupallocN(template_ui), SET_INT_IN_POINTER(UI_ID_OPEN));
+			UI_but_funcN_set(but, template_id_cb, MEM_dupallocN(template_ui), POINTER_FROM_INT(UI_ID_OPEN));
 		}
 		else {
 			but = uiDefIconTextBut(
 			        block, UI_BTYPE_BUT, 0, ICON_FILESEL, (id) ? "" : IFACE_("Open"), 0, 0, w, UI_UNIT_Y,
 			        NULL, 0, 0, 0, 0, NULL);
-			UI_but_funcN_set(but, template_id_cb, MEM_dupallocN(template_ui), SET_INT_IN_POINTER(UI_ID_OPEN));
+			UI_but_funcN_set(but, template_id_cb, MEM_dupallocN(template_ui), POINTER_FROM_INT(UI_ID_OPEN));
 		}
 
 		if ((idfrom && idfrom->lib) || !editable)
@@ -687,7 +688,7 @@ static void template_ID(
 				        block, UI_BTYPE_BUT, 0, ICON_X, 0, 0, UI_UNIT_X, UI_UNIT_Y, NULL, 0, 0, 0, 0,
 				        TIP_("Unlink data-block "
 				             "(Shift + Click to set users to zero, data will then not be saved)"));
-				UI_but_funcN_set(but, template_id_cb, MEM_dupallocN(template_ui), SET_INT_IN_POINTER(UI_ID_DELETE));
+				UI_but_funcN_set(but, template_id_cb, MEM_dupallocN(template_ui), POINTER_FROM_INT(UI_ID_DELETE));
 
 				if (RNA_property_flag(template_ui->prop) & PROP_NEVER_NULL) {
 					UI_but_flag_enable(but, UI_BUT_DISABLED);
@@ -1143,7 +1144,7 @@ uiLayout *uiTemplateModifier(uiLayout *layout, bContext *C, PointerRNA *ptr)
 	/* find modifier and draw it */
 	cageIndex = modifiers_getCageIndex(scene, ob, &lastCageIndex, 0);
 
-	/* XXX virtual modifiers are not accesible for python */
+	/* XXX virtual modifiers are not accessible for python */
 	vmd = modifiers_getVirtualModifierList(ob, &virtualModifierData);
 
 	for (i = 0; vmd; i++, vmd = vmd->next) {
@@ -1283,11 +1284,11 @@ static uiLayout *draw_constraint(uiLayout *layout, Object *ob, bConstraint *con)
 		short prev_proxylock, show_upbut, show_downbut;
 
 		/* Up/Down buttons:
-		 *	Proxy-constraints are not allowed to occur after local (non-proxy) constraints
-		 *	as that poses problems when restoring them, so disable the "up" button where
-		 *	it may cause this situation.
+		 * Proxy-constraints are not allowed to occur after local (non-proxy) constraints
+		 * as that poses problems when restoring them, so disable the "up" button where
+		 * it may cause this situation.
 		 *
-		 *  Up/Down buttons should only be shown (or not grayed - todo) if they serve some purpose.
+		 * Up/Down buttons should only be shown (or not grayed - todo) if they serve some purpose.
 		 */
 		if (BKE_constraints_proxylocked_owner(ob, pchan)) {
 			if (con->prev) {
@@ -1774,6 +1775,7 @@ static uiBlock *ui_icon_view_menu_cb(bContext *C, ARegion *ar, void *arg_litem)
 
 	block = UI_block_begin(C, ar, "_popup", UI_EMBOSS_PULLDOWN);
 	UI_block_flag_enable(block, UI_BLOCK_LOOP | UI_BLOCK_NO_FLIP);
+	UI_block_theme_style_set(block, UI_BLOCK_THEME_STYLE_POPUP);
 
 	RNA_property_enum_items(C, &args.ptr, args.prop, &item, NULL, &free);
 
@@ -2037,7 +2039,7 @@ static uiBlock *curvemap_clipping_func(bContext *C, ARegion *ar, void *cumap_v)
 
 	block = UI_block_begin(C, ar, __func__, UI_EMBOSS);
 
-	/* use this for a fake extra empy space around the buttons */
+	/* use this for a fake extra empty space around the buttons */
 	uiDefBut(block, UI_BTYPE_LABEL, 0, "",           -4, 16, width + 8, 6 * UI_UNIT_Y, NULL, 0, 0, 0, 0, "");
 
 	bt = uiDefButBitI(
@@ -2572,13 +2574,31 @@ void uiTemplatePalette(uiLayout *layout, PointerRNA *ptr, const char *propname, 
 	}
 }
 
+void uiTemplateCryptoPicker(uiLayout *layout, PointerRNA *ptr, const char *propname)
+{
+	PropertyRNA *prop = RNA_struct_find_property(ptr, propname);
+	uiBlock *block;
+	uiBut *but;
+
+	if (!prop) {
+		RNA_warning("property not found: %s.%s", RNA_struct_identifier(ptr->type), propname);
+		return;
+	}
+
+	block = uiLayoutGetBlock(layout);
+
+	but = uiDefIconTextButO(block, UI_BTYPE_BUT, "UI_OT_eyedropper_color_crypto", WM_OP_INVOKE_DEFAULT, ICON_EYEDROPPER, RNA_property_ui_name(prop), 0, 0, UI_UNIT_X, UI_UNIT_Y, RNA_property_ui_description(prop));
+	but->rnapoin = *ptr;
+	but->rnaprop = prop;
+	but->rnaindex = -1;
+}
 
 /********************* Layer Buttons Template ************************/
 
 static void handle_layer_buttons(bContext *C, void *arg1, void *arg2)
 {
 	uiBut *but = arg1;
-	int cur = GET_INT_FROM_POINTER(arg2);
+	int cur = POINTER_AS_INT(arg2);
 	wmWindow *win = CTX_wm_window(C);
 	int i, tot, shift = win->eventstate->shift;
 
@@ -2662,7 +2682,7 @@ void uiTemplateLayers(
 					icon = ICON_LAYER_USED;
 
 				but = uiDefAutoButR(block, ptr, prop, layer, "", icon, 0, 0, UI_UNIT_X / 2, UI_UNIT_Y / 2);
-				UI_but_func_set(but, handle_layer_buttons, but, SET_INT_IN_POINTER(layer));
+				UI_but_func_set(but, handle_layer_buttons, but, POINTER_FROM_INT(layer));
 				but->type = UI_BTYPE_TOGGLE;
 			}
 		}
@@ -2733,7 +2753,7 @@ void uiTemplateGameStates(
 				but = uiDefIconButR_prop(
 				        block, UI_BTYPE_ICON_TOGGLE, 0, icon, 0, 0, UI_UNIT_X / 2, UI_UNIT_Y / 2, ptr, prop,
 				        state, 0, 0, -1, -1, sca_state_name_get(ob, state));
-				UI_but_func_set(but, handle_layer_buttons, but, SET_INT_IN_POINTER(state));
+				UI_but_func_set(but, handle_layer_buttons, but, POINTER_FROM_INT(state));
 				but->type = UI_BTYPE_TOGGLE;
 			}
 		}
@@ -3531,13 +3551,24 @@ static void ui_layout_operator_buts__reset_cb(bContext *UNUSED(C), void *op_pt, 
 }
 #endif
 
+struct uiTemplateOperatorPropertyPollParam {
+	const bContext *C;
+	wmOperator *op;
+};
+
+static bool ui_layout_operator_buts_poll_property(
+        struct PointerRNA *UNUSED(ptr), struct PropertyRNA *prop, void *user_data)
+{
+	struct uiTemplateOperatorPropertyPollParam *params = user_data;
+	return params->op->type->poll_property(params->C, params->op, prop);
+}
+
 /**
  * Draw Operator property buttons for redoing execution with different settings.
  * This function does not initialize the layout, functions can be called on the layout before and after.
  */
 void uiTemplateOperatorPropertyButs(
         const bContext *C, uiLayout *layout, wmOperator *op,
-        bool (*check_prop)(struct PointerRNA *, struct PropertyRNA *),
         const char label_align, const short flag)
 {
 	if (!op->properties) {
@@ -3593,11 +3624,16 @@ void uiTemplateOperatorPropertyButs(
 		wmWindowManager *wm = CTX_wm_manager(C);
 		PointerRNA ptr;
 		int empty;
+		struct uiTemplateOperatorPropertyPollParam user_data = {.C = C, .op = op};
 
 		RNA_pointer_create(&wm->id, op->type->srna, op->properties, &ptr);
 
 		/* main draw call */
-		empty = uiDefAutoButsRNA(layout, &ptr, check_prop, label_align) == 0;
+		empty = uiDefAutoButsRNA(
+		        layout, &ptr,
+		        op->type->poll_property ? ui_layout_operator_buts_poll_property : NULL,
+		        op->type->poll_property ? &user_data : NULL,
+		        label_align) == 0;
 
 		if (empty && (flag & UI_TEMPLATE_OP_PROPS_SHOW_EMPTY)) {
 			uiItemL(layout, IFACE_("No Properties"), ICON_NONE);
@@ -3840,9 +3876,11 @@ void uiTemplateRunningJobs(uiLayout *layout, bContext *C)
 			UI_but_func_tooltip_set(but_progress, progress_tooltip_func, tip_arg);
 		}
 
-		uiDefIconTextBut(block, UI_BTYPE_BUT, handle_event, ICON_PANEL_CLOSE,
-		                 "", 0, 0, UI_UNIT_X, UI_UNIT_Y,
-		                 NULL, 0.0f, 0.0f, 0, 0, TIP_("Stop this job"));
+		if (!wm->is_interface_locked) {
+			uiDefIconTextBut(block, UI_BTYPE_BUT, handle_event, ICON_PANEL_CLOSE,
+			                 "", 0, 0, UI_UNIT_X, UI_UNIT_Y,
+			                 NULL, 0.0f, 0.0f, 0, 0, TIP_("Stop this job"));
+		}
 	}
 
 	if (screen->animtimer)

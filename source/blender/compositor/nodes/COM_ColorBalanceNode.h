@@ -20,14 +20,14 @@
  *		Monique Dewanchand
  */
 
-#ifndef _COM_ColorBalanceNode_h_
-#define _COM_ColorBalanceNode_h_
+#ifndef __COM_COLORBALANCENODE_H__
+#define __COM_COLORBALANCENODE_H__
 
 #include "COM_Node.h"
 
 /**
- * @brief ColorBalanceNode
- * @ingroup Node
+ * \brief ColorBalanceNode
+ * \ingroup Node
  */
 class ColorBalanceNode : public Node {
 public:

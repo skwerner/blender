@@ -20,14 +20,14 @@
  *		Monique Dewanchand
  */
 
-#ifndef _COM_BlurNode_h_
-#define _COM_BlurNode_h_
+#ifndef __COM_BLURNODE_H__
+#define __COM_BLURNODE_H__
 
 #include "COM_Node.h"
 
 /**
- * @brief BlurNode
- * @ingroup Node
+ * \brief BlurNode
+ * \ingroup Node
  */
 class BlurNode : public Node {
 public:

@@ -42,6 +42,7 @@
 #include "DNA_object_fluidsim_types.h"
 
 #include "BLI_blenlib.h"
+#include "BLI_path_util.h"
 #include "BLI_math.h"
 #include "BLI_utildefines.h"
 
@@ -430,7 +431,7 @@ static void fluid_init_all_channels(bContext *C, Object *UNUSED(fsDomain), Fluid
 		for (fobj=fobjects->first; fobj; fobj=fobj->next) {
 			Object *ob = fobj->object;
 			FluidsimModifierData *fluidmd = (FluidsimModifierData *)modifiers_findByType(ob, eModifierType_Fluidsim);
-			float active= (float) ((fluidmd->fss->flag & OB_FLUIDSIM_ACTIVE) > 0 ? 1 : 0);
+			float active = (float) ((fluidmd->fss->flag & OB_FLUIDSIM_ACTIVE) ? 1 : 0);
 			float rot_d[3] = {0.f, 0.f, 0.f}, old_rot[3] = {0.f, 0.f, 0.f};
 
 			if (ELEM(fluidmd->fss->type, OB_FLUIDSIM_DOMAIN, OB_FLUIDSIM_PARTICLE))
@@ -868,8 +869,8 @@ static int fluidsimBake(bContext *C, ReportList *reports, Object *fsDomain, shor
 
 	fb= MEM_callocN(sizeof(FluidBakeJob), "fluid bake job");
 
-	if (getenv(strEnvName)) {
-		int dlevel = atoi(getenv(strEnvName));
+	if (BLI_getenv(strEnvName)) {
+		int dlevel = atoi(BLI_getenv(strEnvName));
 		elbeemSetDebugLevel(dlevel);
 		BLI_snprintf(debugStrBuffer, sizeof(debugStrBuffer), "fluidsimBake::msg: Debug messages activated due to envvar '%s'\n", strEnvName);
 		elbeemDebugOut(debugStrBuffer);

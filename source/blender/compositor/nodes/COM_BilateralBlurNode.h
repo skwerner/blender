@@ -20,14 +20,14 @@
  *		Monique Dewanchand
  */
 
-#ifndef _COM_BilateralBlurNode_h_
-#define _COM_BilateralBlurNode_h_
+#ifndef __COM_BILATERALBLURNODE_H__
+#define __COM_BILATERALBLURNODE_H__
 
 #include "COM_Node.h"
 
 /**
- * @brief BilateralBlurNode
- * @ingroup Node
+ * \brief BilateralBlurNode
+ * \ingroup Node
  */
 class BilateralBlurNode : public Node {
 public:

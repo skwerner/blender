@@ -1727,10 +1727,10 @@ static float check_zone(WipeZone *wipezone, int x, int y, Sequence *seq, float f
 			break;
 		case DO_CLOCK_WIPE:
 			/*
-			 *  temp1: angle of effect center in rads
-			 *  temp2: angle of line through (halfx, halfy) and (x, y) in rads
-			 *  temp3: angle of low side of blur
-			 *  temp4: angle of high side of blur
+			 * temp1: angle of effect center in rads
+			 * temp2: angle of line through (halfx, halfy) and (x, y) in rads
+			 * temp3: angle of low side of blur
+			 * temp4: angle of high side of blur
 			 */
 			output = 1.0f - facf0;
 			widthf = wipe->edgeWidth * 2.0f * (float)M_PI;
@@ -1772,8 +1772,9 @@ static float check_zone(WipeZone *wipezone, int x, int y, Sequence *seq, float f
 			/* BOX WIPE IS NOT WORKING YET */
 #if 0
 		case DO_BOX_WIPE:
-      if (!wipe->forward)
-        facf0 = 1.0f - facf0;  /* Go the other direction */
+			if (!wipe->forward) {
+				facf0 = 1.0f - facf0;  /* Go the other direction */
+			}
 
 			width = (int)(wipe->edgeWidth * ((xo + yo) / 2.0));
 			hwidth = (float)width / 2.0;
@@ -1806,8 +1807,9 @@ static float check_zone(WipeZone *wipezone, int x, int y, Sequence *seq, float f
 					output = in_band(hwidth, hyp2, 1, 1) * in_band(hwidth, hyp, 1, 1);
 			}
 
-      if (!wipe->forward)
-        facf0 = 1.0f - facf0;  /* Go the other direction */
+			if (!wipe->forward) {
+				facf0 = 1.0f - facf0;  /* Go the other direction */
+			}
 			angle = -1 / angle;
 			b1 = posy / 2 - (-angle) * posx / 2;
 			b3 = (yo - posy / 2) - (-angle) * (xo - posx / 2);
@@ -2173,7 +2175,7 @@ static ImBuf *do_transform_effect(
 static void RVBlurBitmap2_float(float *map, int width, int height, float blur, int quality)
 /*	MUUUCCH better than the previous blur. */
 /*	We do the blurring in two passes which is a whole lot faster. */
-/*	I changed the math arount to implement an actual Gaussian */
+/*	I changed the math around to implement an actual Gaussian */
 /*	distribution. */
 /* */
 /*	Watch out though, it tends to misbehaven with large blur values on */
@@ -3019,7 +3021,7 @@ static void do_gaussian_blur_effect_byte_x(
 	const int size_x = (int) (data->size_x + 0.5f);
 	int i, j;
 
-	/* Make gaussian weight tabke. */
+	/* Make gaussian weight table. */
 	float *gausstab_x;
 	gausstab_x = make_gaussian_blur_kernel(data->size_x, size_x);
 
@@ -3072,7 +3074,7 @@ static void do_gaussian_blur_effect_byte_y(
 	const int size_y = (int) (data->size_y + 0.5f);
 	int i, j;
 
-	/* Make gaussian weight tabke. */
+	/* Make gaussian weight table. */
 	float *gausstab_y;
 	gausstab_y = make_gaussian_blur_kernel(data->size_y, size_y);
 
@@ -3125,7 +3127,7 @@ static void do_gaussian_blur_effect_float_x(
 	const int size_x = (int) (data->size_x + 0.5f);
 	int i, j;
 
-	/* Make gaussian weight tabke. */
+	/* Make gaussian weight table. */
 	float *gausstab_x;
 	gausstab_x = make_gaussian_blur_kernel(data->size_x, size_x);
 
@@ -3169,7 +3171,7 @@ static void do_gaussian_blur_effect_float_y(
 	const int size_y = (int) (data->size_y + 0.5f);
 	int i, j;
 
-	/* Make gaussian weight tabke. */
+	/* Make gaussian weight table. */
 	float *gausstab_y;
 	gausstab_y = make_gaussian_blur_kernel(data->size_y, size_y);
 

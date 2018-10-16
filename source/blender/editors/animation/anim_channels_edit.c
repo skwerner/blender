@@ -2808,7 +2808,7 @@ static int mouse_anim_channels(bContext *C, bAnimContext *ac, int channel_index,
 				agrp->flag ^= AGRP_SELECTED;
 			}
 			else if (selectmode == -1) {
-				/* select all in group (and deselect everthing else) */
+				/* select all in group (and deselect everything else) */
 				FCurve *fcu;
 
 				/* deselect all other channels */
@@ -3184,7 +3184,7 @@ void ED_operatortypes_animchannels(void)
 // TODO: check on a poll callback for this, to get hotkeys into menus
 void ED_keymap_animchannels(wmKeyConfig *keyconf)
 {
-	wmKeyMap *keymap = WM_keymap_find(keyconf, "Animation Channels", 0, 0);
+	wmKeyMap *keymap = WM_keymap_ensure(keyconf, "Animation Channels", 0, 0);
 	wmKeyMapItem *kmi;
 
 	/* click-select */

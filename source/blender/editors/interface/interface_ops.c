@@ -1138,6 +1138,7 @@ void ED_operatortypes_ui(void)
 
 	/* external */
 	WM_operatortype_append(UI_OT_eyedropper_color);
+	WM_operatortype_append(UI_OT_eyedropper_color_crypto);
 	WM_operatortype_append(UI_OT_eyedropper_colorband);
 	WM_operatortype_append(UI_OT_eyedropper_colorband_point);
 	WM_operatortype_append(UI_OT_eyedropper_id);
@@ -1150,7 +1151,7 @@ void ED_operatortypes_ui(void)
  */
 void ED_keymap_ui(wmKeyConfig *keyconf)
 {
-	wmKeyMap *keymap = WM_keymap_find(keyconf, "User Interface", 0, 0);
+	wmKeyMap *keymap = WM_keymap_ensure(keyconf, "User Interface", 0, 0);
 	wmKeyMapItem *kmi;
 
 	/* eyedroppers - notice they all have the same shortcut, but pass the event

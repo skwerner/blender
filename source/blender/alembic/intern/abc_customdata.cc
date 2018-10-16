@@ -26,14 +26,7 @@
 
 #include <Alembic/AbcGeom/All.h>
 #include <algorithm>
-
-#if (__cplusplus > 199711L) || (defined(_MSC_VER) && _MSC_VER >= 1900)
 #include <unordered_map>
-typedef std::unordered_map<uint64_t, int> uv_index_map;
-#else
-#include <map>
-typedef std::map<uint64_t, int> uv_index_map;
-#endif
 
 extern "C" {
 #include "DNA_customdata_types.h"
@@ -59,6 +52,8 @@ using Alembic::Abc::V2fArraySample;
 using Alembic::AbcGeom::OV2fGeomParam;
 using Alembic::AbcGeom::OC4fGeomParam;
 
+
+typedef std::unordered_map<uint64_t, int> uv_index_map;
 
 static inline uint64_t uv_to_hash_key(Imath::V2f v)
 {
@@ -190,7 +185,11 @@ static void write_mcol(const OCompoundProperty &prop, const CDStreamConfig &conf
 	MLoop *mloops = config.mloop;
 	MCol *cfaces = static_cast<MCol *>(data);
 
-	std::vector<Imath::C4f> buffer(config.totvert);
+	std::vector<Imath::C4f> buffer;
+	std::vector<uint32_t> indices;
+
+	buffer.reserve(config.totvert);
+	indices.reserve(config.totvert);
 
 	Imath::C4f col;
 
@@ -208,7 +207,8 @@ static void write_mcol(const OCompoundProperty &prop, const CDStreamConfig &conf
 			col[2] = cface->g * cscale;
 			col[3] = cface->b * cscale;
 
-			buffer[mloop->v] = col;
+			buffer.push_back(col);
+			indices.push_back(buffer.size() - 1);
 		}
 	}
 
@@ -216,6 +216,7 @@ static void write_mcol(const OCompoundProperty &prop, const CDStreamConfig &conf
 
 	OC4fGeomParam::Sample sample(
 		C4fArraySample(&buffer.front(), buffer.size()),
+		UInt32ArraySample(&indices.front(), indices.size()),
 		kVertexScope);
 
 	param.set(sample);

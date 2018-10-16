@@ -123,9 +123,10 @@ void BKE_mesh_from_metaball(ListBase *lb, Mesh *me)
 /**
  * Specialized function to use when we _know_ existing edges don't overlap with poly edges.
  */
-static void make_edges_mdata_extend(MEdge **r_alledge, int *r_totedge,
-                                    const MPoly *mpoly, MLoop *mloop,
-                                    const int totpoly)
+static void make_edges_mdata_extend(
+        MEdge **r_alledge, int *r_totedge,
+        const MPoly *mpoly, MLoop *mloop,
+        const int totpoly)
 {
 	int totedge = *r_totedge;
 	int totedge_new;
@@ -144,7 +145,7 @@ static void make_edges_mdata_extend(MEdge **r_alledge, int *r_totedge,
 	totedge_new = BLI_edgehash_len(eh);
 
 #ifdef DEBUG
-	/* ensure that theres no overlap! */
+	/* ensure that there's no overlap! */
 	if (totedge_new) {
 		MEdge *medge = *r_alledge;
 		for (i = 0; i < totedge; i++, medge++) {
@@ -170,7 +171,7 @@ static void make_edges_mdata_extend(MEdge **r_alledge, int *r_totedge,
 		     BLI_edgehashIterator_step(ehi), ++medge, e_index++)
 		{
 			BLI_edgehashIterator_getKey(ehi, &medge->v1, &medge->v2);
-			BLI_edgehashIterator_setValue(ehi, SET_UINT_IN_POINTER(e_index));
+			BLI_edgehashIterator_setValue(ehi, POINTER_FROM_UINT(e_index));
 
 			medge->crease = medge->bweight = 0;
 			medge->flag = ME_EDGEDRAW | ME_EDGERENDER;
@@ -186,7 +187,7 @@ static void make_edges_mdata_extend(MEdge **r_alledge, int *r_totedge,
 			int j;
 			for (j = 0; j < mp->totloop; j++, l++) {
 				/* lookup hashed edge index */
-				l_prev->e = GET_UINT_FROM_POINTER(BLI_edgehash_lookup(eh, l_prev->v, l->v));
+				l_prev->e = POINTER_AS_UINT(BLI_edgehash_lookup(eh, l_prev->v, l->v));
 				l_prev = l;
 			}
 		}
@@ -498,10 +499,11 @@ void BKE_mesh_from_nurbs_displist(
 	cu = ob->data;
 
 	if (dm == NULL) {
-		if (BKE_mesh_nurbs_displist_to_mdata(ob, dispbase, &allvert, &totvert,
-		                                     &alledge, &totedge, &allloop,
-		                                     &allpoly, (use_orco_uv) ? &alluv : NULL,
-		                                     &totloop, &totpoly) != 0)
+		if (BKE_mesh_nurbs_displist_to_mdata(
+		            ob, dispbase, &allvert, &totvert,
+		            &alledge, &totedge, &allloop,
+		            &allpoly, (use_orco_uv) ? &alluv : NULL,
+		            &totloop, &totpoly) != 0)
 		{
 			/* Error initializing */
 			return;

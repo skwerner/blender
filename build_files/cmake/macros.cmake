@@ -199,7 +199,7 @@ endfunction()
 # Support per-target CMake flags
 # Read from: CMAKE_C_FLAGS_**** (made upper case) when set.
 #
-# 'name' should alway match the target name,
+# 'name' should always match the target name,
 # use this macro before add_library or add_executable.
 #
 # Optionally takes an arg passed to set(), eg PARENT_SCOPE.
@@ -448,7 +448,7 @@ function(setup_liblinks
 	if(WITH_IMAGE_OPENEXR)
 		target_link_libraries(${target} ${OPENEXR_LIBRARIES})
 	endif()
-	if(WITH_IMAGE_OPENJPEG AND WITH_SYSTEM_OPENJPEG)
+	if(WITH_IMAGE_OPENJPEG)
 		target_link_libraries(${target} ${OPENJPEG_LIBRARIES})
 	endif()
 	if(WITH_CODEC_FFMPEG)
@@ -509,7 +509,7 @@ function(setup_liblinks
 		target_link_libraries(${target} ${GFLAGS_LIBRARIES})
 	endif()
 
-	# We put CLEW and CUEW here because OPENSUBDIV_LIBRARIES dpeends on them..
+	# We put CLEW and CUEW here because OPENSUBDIV_LIBRARIES depends on them..
 	if(WITH_CYCLES OR WITH_COMPOSITOR OR WITH_OPENSUBDIV)
 		target_link_libraries(${target} "extern_clew")
 		if(WITH_CUDA_DYNLOAD)
@@ -856,164 +856,6 @@ endmacro()
 macro(message_first_run)
 	if(FIRST_RUN)
 		message(${ARGV})
-	endif()
-endmacro()
-
-macro(TEST_UNORDERED_MAP_SUPPORT)
-	# - Detect unordered_map availability
-	# Test if a valid implementation of unordered_map exists
-	# and define the include path
-	# This module defines
-	#  HAVE_UNORDERED_MAP, whether unordered_map implementation was found
-	#
-	#  HAVE_STD_UNORDERED_MAP_HEADER, <unordered_map.h> was found
-	#  HAVE_UNORDERED_MAP_IN_STD_NAMESPACE, unordered_map is in namespace std
-	#  HAVE_UNORDERED_MAP_IN_TR1_NAMESPACE, unordered_map is in namespace std::tr1
-	#
-	#  UNORDERED_MAP_INCLUDE_PREFIX, include path prefix for unordered_map, if found
-	#  UNORDERED_MAP_NAMESPACE, namespace for unordered_map, if found
-
-	include(CheckIncludeFileCXX)
-
-	# Workaround for newer GCC (6.x+) where C++11 was enabled by default, which lead us
-	# to a situation when there is <unordered_map> include but which can't be used uless
-	# C++11 is enabled.
-	if(CMAKE_COMPILER_IS_GNUCC AND (NOT "${CMAKE_C_COMPILER_VERSION}" VERSION_LESS "6.0") AND (NOT WITH_CXX11))
-		set(HAVE_STD_UNORDERED_MAP_HEADER False)
-	else()
-		CHECK_INCLUDE_FILE_CXX("unordered_map" HAVE_STD_UNORDERED_MAP_HEADER)
-	endif()
-	if(HAVE_STD_UNORDERED_MAP_HEADER)
-		# Even so we've found unordered_map header file it doesn't
-		# mean unordered_map and unordered_set will be declared in
-		# std namespace.
-		#
-		# Namely, MSVC 2008 have unordered_map header which declares
-		# unordered_map class in std::tr1 namespace. In order to support
-		# this, we do extra check to see which exactly namespace is
-		# to be used.
-
-		include(CheckCXXSourceCompiles)
-		CHECK_CXX_SOURCE_COMPILES("#include <unordered_map>
-		                          int main() {
-		                            std::unordered_map<int, int> map;
-		                            return 0;
-		                          }"
-		                          HAVE_UNORDERED_MAP_IN_STD_NAMESPACE)
-		if(HAVE_UNORDERED_MAP_IN_STD_NAMESPACE)
-			message_first_run(STATUS "Found unordered_map/set in std namespace.")
-
-			set(HAVE_UNORDERED_MAP "TRUE")
-			set(UNORDERED_MAP_INCLUDE_PREFIX "")
-			set(UNORDERED_MAP_NAMESPACE "std")
-		else()
-			CHECK_CXX_SOURCE_COMPILES("#include <unordered_map>
-			                          int main() {
-			                            std::tr1::unordered_map<int, int> map;
-			                            return 0;
-			                          }"
-			                          HAVE_UNORDERED_MAP_IN_TR1_NAMESPACE)
-			if(HAVE_UNORDERED_MAP_IN_TR1_NAMESPACE)
-				message_first_run(STATUS "Found unordered_map/set in std::tr1 namespace.")
-
-				set(HAVE_UNORDERED_MAP "TRUE")
-				set(UNORDERED_MAP_INCLUDE_PREFIX "")
-				set(UNORDERED_MAP_NAMESPACE "std::tr1")
-			else()
-				message_first_run(STATUS "Found <unordered_map> but cannot find either std::unordered_map "
-				                  "or std::tr1::unordered_map.")
-			endif()
-		endif()
-	else()
-		CHECK_INCLUDE_FILE_CXX("tr1/unordered_map" HAVE_UNORDERED_MAP_IN_TR1_NAMESPACE)
-		if(HAVE_UNORDERED_MAP_IN_TR1_NAMESPACE)
-			message_first_run(STATUS "Found unordered_map/set in std::tr1 namespace.")
-
-			set(HAVE_UNORDERED_MAP "TRUE")
-			set(UNORDERED_MAP_INCLUDE_PREFIX "tr1")
-			set(UNORDERED_MAP_NAMESPACE "std::tr1")
-		else()
-			message_first_run(STATUS "Unable to find <unordered_map> or <tr1/unordered_map>. ")
-		endif()
-	endif()
-endmacro()
-
-macro(TEST_SHARED_PTR_SUPPORT)
-	# This check are coming from Ceres library.
-	#
-	# Find shared pointer header and namespace.
-	#
-	# This module defines the following variables:
-	#
-	# SHARED_PTR_FOUND: TRUE if shared_ptr found.
-	# SHARED_PTR_TR1_MEMORY_HEADER: True if <tr1/memory> header is to be used
-	# for the shared_ptr object, otherwise use <memory>.
-	# SHARED_PTR_TR1_NAMESPACE: TRUE if shared_ptr is defined in std::tr1 namespace,
-	# otherwise it's assumed to be defined in std namespace.
-
-	include(CheckIncludeFileCXX)
-	include(CheckCXXSourceCompiles)
-	set(SHARED_PTR_FOUND FALSE)
-	# Workaround for newer GCC (6.x+) where C++11 was enabled by default, which lead us
-	# to a situation when there is <unordered_map> include but which can't be used uless
-	# C++11 is enabled.
-	if(CMAKE_COMPILER_IS_GNUCC AND (NOT "${CMAKE_C_COMPILER_VERSION}" VERSION_LESS "6.0") AND (NOT WITH_CXX11))
-		set(HAVE_STD_MEMORY_HEADER False)
-	else()
-		CHECK_INCLUDE_FILE_CXX(memory HAVE_STD_MEMORY_HEADER)
-	endif()
-	if(HAVE_STD_MEMORY_HEADER)
-		# Finding the memory header doesn't mean that shared_ptr is in std
-		# namespace.
-		#
-		# In particular, MSVC 2008 has shared_ptr declared in std::tr1.  In
-		# order to support this, we do an extra check to see which namespace
-		# should be used.
-		CHECK_CXX_SOURCE_COMPILES("#include <memory>
-		                           int main() {
-		                             std::shared_ptr<int> int_ptr;
-		                             return 0;
-		                           }"
-		                          HAVE_SHARED_PTR_IN_STD_NAMESPACE)
-
-		if(HAVE_SHARED_PTR_IN_STD_NAMESPACE)
-			message_first_run("-- Found shared_ptr in std namespace using <memory> header.")
-			set(SHARED_PTR_FOUND TRUE)
-		else()
-			CHECK_CXX_SOURCE_COMPILES("#include <memory>
-			                           int main() {
-			                           std::tr1::shared_ptr<int> int_ptr;
-			                           return 0;
-			                           }"
-			                          HAVE_SHARED_PTR_IN_TR1_NAMESPACE)
-			if(HAVE_SHARED_PTR_IN_TR1_NAMESPACE)
-				message_first_run("-- Found shared_ptr in std::tr1 namespace using <memory> header.")
-				set(SHARED_PTR_TR1_NAMESPACE TRUE)
-				set(SHARED_PTR_FOUND TRUE)
-			endif()
-		endif()
-	endif()
-
-	if(NOT SHARED_PTR_FOUND)
-		# Further, gcc defines shared_ptr in std::tr1 namespace and
-		# <tr1/memory> is to be included for this. And what makes things
-		# even more tricky is that gcc does have <memory> header, so
-		# all the checks above wouldn't find shared_ptr.
-		CHECK_INCLUDE_FILE_CXX("tr1/memory" HAVE_TR1_MEMORY_HEADER)
-		if(HAVE_TR1_MEMORY_HEADER)
-			CHECK_CXX_SOURCE_COMPILES("#include <tr1/memory>
-			                           int main() {
-			                           std::tr1::shared_ptr<int> int_ptr;
-			                           return 0;
-			                           }"
-			                           HAVE_SHARED_PTR_IN_TR1_NAMESPACE_FROM_TR1_MEMORY_HEADER)
-			if(HAVE_SHARED_PTR_IN_TR1_NAMESPACE_FROM_TR1_MEMORY_HEADER)
-				message_first_run("-- Found shared_ptr in std::tr1 namespace using <tr1/memory> header.")
-				set(SHARED_PTR_TR1_MEMORY_HEADER TRUE)
-				set(SHARED_PTR_TR1_NAMESPACE TRUE)
-				set(SHARED_PTR_FOUND TRUE)
-			endif()
-		endif()
 	endif()
 endmacro()
 

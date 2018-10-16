@@ -120,7 +120,7 @@ uiBut *uiDefAutoButR(uiBlock *block, PointerRNA *ptr, PropertyRNA *prop, int ind
 				but = uiDefButR_prop(block, UI_BTYPE_TEXT, 0, name, x1, y1, x2, y2, ptr, prop, index, 0, 0, -1, -1, NULL);
 
 			if (RNA_property_flag(prop) & PROP_TEXTEDIT_UPDATE) {
-				/* TEXTEDIT_UPDATE is usally used for search buttons. For these we also want
+				/* TEXTEDIT_UPDATE is usually used for search buttons. For these we also want
 				 * the 'x' icon to clear search string, so setting VALUE_CLEAR flag, too. */
 				UI_but_flag_enable(but, UI_BUT_TEXTEDIT_UPDATE | UI_BUT_VALUE_CLEAR);
 			}
@@ -159,7 +159,7 @@ uiBut *uiDefAutoButR(uiBlock *block, PointerRNA *ptr, PropertyRNA *prop, int ind
  */
 int uiDefAutoButsRNA(
         uiLayout *layout, PointerRNA *ptr,
-        bool (*check_prop)(PointerRNA *, PropertyRNA *),
+        bool (*check_prop)(PointerRNA *ptr, PropertyRNA *prop, void *user_data), void *user_data,
         const char label_align)
 {
 	uiLayout *split, *col;
@@ -172,8 +172,9 @@ int uiDefAutoButsRNA(
 	RNA_STRUCT_BEGIN (ptr, prop)
 	{
 		flag = RNA_property_flag(prop);
-		if (flag & PROP_HIDDEN || (check_prop && check_prop(ptr, prop) == 0))
+		if (flag & PROP_HIDDEN || (check_prop && check_prop(ptr, prop, user_data) == 0)) {
 			continue;
+		}
 
 		if (label_align != '\0') {
 			PropertyType type = RNA_property_type(prop);

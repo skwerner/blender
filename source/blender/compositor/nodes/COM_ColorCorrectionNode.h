@@ -20,14 +20,14 @@
  *		Monique Dewanchand
  */
 
-#ifndef _COM_ColorCorrectionNode_h_
-#define _COM_ColorCorrectionNode_h_
+#ifndef __COM_COLORCORRECTIONNODE_H__
+#define __COM_COLORCORRECTIONNODE_H__
 
 #include "COM_Node.h"
 
 /**
- * @brief ColorCorrectionNode
- * @ingroup Node
+ * \brief ColorCorrectionNode
+ * \ingroup Node
  */
 class ColorCorrectionNode : public Node {
 public:

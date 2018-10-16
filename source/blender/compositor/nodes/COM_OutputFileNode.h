@@ -21,15 +21,15 @@
  *		Lukas Tönne
  */
 
-#ifndef _COM_OutputFileNode_h_
-#define _COM_OutputFileNode_h_
+#ifndef __COM_OUTPUTFILENODE_H__
+#define __COM_OUTPUTFILENODE_H__
 
 #include "COM_Node.h"
 #include "DNA_node_types.h"
 
 /**
- * @brief OutputFileNode
- * @ingroup Node
+ * \brief OutputFileNode
+ * \ingroup Node
  */
 class OutputFileNode : public Node {
 public:

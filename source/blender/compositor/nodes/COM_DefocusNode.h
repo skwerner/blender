@@ -20,14 +20,14 @@
  *		Monique Dewanchand
  */
 
-#ifndef _COM_DefocusNode_h_
-#define _COM_DefocusNode_h_
+#ifndef __COM_DEFOCUSNODE_H__
+#define __COM_DEFOCUSNODE_H__
 
 #include "COM_Node.h"
 
 /**
- * @brief DefocusNode
- * @ingroup Node
+ * \brief DefocusNode
+ * \ingroup Node
  */
 class DefocusNode : public Node {
 public:

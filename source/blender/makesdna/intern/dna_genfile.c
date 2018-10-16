@@ -102,7 +102,7 @@
  *
  * ALLOWED AND TESTED CHANGES IN STRUCTS:
  *  - type change (a char to float will be divided by 255)
- *  - location within a struct (everthing can be randomly mixed up)
+ *  - location within a struct (everything can be randomly mixed up)
  *  - struct within struct (within struct etc), this is recursive
  *  - adding new elements, will be default initialized zero
  *  - removing elements
@@ -271,7 +271,7 @@ int DNA_struct_find_nr_ex(const SDNA *sdna, const char *str, unsigned int *index
 		index_p = BLI_ghash_lookup_p(sdna->structs_map, str);
 
 		if (index_p) {
-			a = GET_INT_FROM_POINTER(*index_p);
+			a = POINTER_AS_INT(*index_p);
 			*index_last = a;
 		}
 		else {
@@ -500,7 +500,7 @@ static bool init_structDNA(
 
 		for (intptr_t nr = 0; nr < sdna->nr_structs; nr++) {
 			sp = sdna->structs[nr];
-			BLI_ghash_insert(sdna->structs_map, (void *)sdna->types[sp[0]], SET_INT_IN_POINTER(nr));
+			BLI_ghash_insert(sdna->structs_map, (void *)sdna->types[sp[0]], POINTER_FROM_INT(nr));
 		}
 	}
 #endif
@@ -901,7 +901,7 @@ static int elem_strcmp(const char *name, const char *oname)
  * \param type  Current field type name
  * \param name  Current field name
  * \param old  Pointer to struct information in sdna
- * \return true when existsing, false otherwise.
+ * \return true when existing, false otherwise.
  */
 static bool elem_exists(
         const SDNA *sdna,
@@ -1259,7 +1259,7 @@ void DNA_struct_switch_endian(const SDNA *oldsdna, int oldSDNAnr, char *data)
 				else if (ELEM(spc[0], SDNA_TYPE_INT, SDNA_TYPE_FLOAT)) {
 					/* note, intentionally ignore long/ulong here these could be 4 or 8 bits,
 					 * but turns out we only used for runtime vars and
-					 * only once for a struct type thats no longer used. */
+					 * only once for a struct type that's no longer used. */
 
 					BLI_endian_switch_int32_array((int32_t *)cur, DNA_elem_array_size(name));
 				}

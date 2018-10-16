@@ -20,8 +20,8 @@
  *		Monique Dewanchand
  */
 
-#ifndef _COM_VectorBlurOperation_h
-#define _COM_VectorBlurOperation_h
+#ifndef __COM_VECTORBLUROPERATION_H__
+#define __COM_VECTORBLUROPERATION_H__
 #include "COM_NodeOperation.h"
 #include "DNA_node_types.h"
 #include "COM_QualityStepHelper.h"
@@ -29,14 +29,14 @@
 class VectorBlurOperation : public NodeOperation, public QualityStepHelper {
 private:
 	/**
-	 * @brief Cached reference to the inputProgram
+	 * \brief Cached reference to the inputProgram
 	 */
 	SocketReader *m_inputImageProgram;
 	SocketReader *m_inputSpeedProgram;
 	SocketReader *m_inputZProgram;
 
 	/**
-	 * @brief settings of the glare node.
+	 * \brief settings of the glare node.
 	 */
 	NodeBlurData *m_settings;
 

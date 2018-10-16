@@ -128,9 +128,9 @@ static bool pointer_to_component_node_criteria(
 		bPoseChannel *pchan = (bPoseChannel *)ptr->data;
 		if (prop != NULL && RNA_property_is_idprop(prop)) {
 			*type = DEG_NODE_TYPE_PARAMETERS;
-			*subdata = "";
-			*operation_code = DEG_OPCODE_PARAMETERS_EVAL;
-			*operation_name = pchan->name;
+			*operation_code = DEG_OPCODE_ID_PROPERTY;
+			*operation_name = RNA_property_identifier((PropertyRNA *)prop);
+			*operation_name_tag = -1;
 		}
 		else {
 			/* Bone - generally, we just want the bone component. */
@@ -142,7 +142,7 @@ static bool pointer_to_component_node_criteria(
 	else if (ptr->type == &RNA_Bone) {
 		Bone *bone = (Bone *)ptr->data;
 		/* armature-level bone, but it ends up going to bone component anyway */
-		// NOTE: the ID in thise case will end up being bArmature.
+		// NOTE: the ID in this case will end up being bArmature.
 		*type = DEG_NODE_TYPE_BONE;
 		*subdata = bone->name;
 		return true;

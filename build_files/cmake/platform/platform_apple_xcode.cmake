@@ -83,7 +83,7 @@ if(${XCODE_VERSION} VERSION_LESS 4.3)
 	# use guaranteed existing sdk
 	set(CMAKE_OSX_SYSROOT /Developer/SDKs/MacOSX${OSX_SYSTEM}.sdk CACHE PATH "" FORCE)
 else()
-	# note: xcode-select path could be ambigous,
+	# note: xcode-select path could be ambiguous,
 	# cause /Applications/Xcode.app/Contents/Developer or /Applications/Xcode.app would be allowed
 	# so i use a selfcomposed bundlepath here
 	set(OSX_SYSROOT_PREFIX ${XCODE_BUNDLE}/Contents/Developer/Platforms/MacOSX.platform)
@@ -97,14 +97,14 @@ else()
 endif()
 
 if(OSX_SYSTEM MATCHES 10.9)
-	# make sure syslibs and headers are looked up in sdk ( expecially for 10.9 openGL atm. )
+	# make sure syslibs and headers are looked up in sdk ( especially for 10.9 openGL atm. )
 	set(CMAKE_FIND_ROOT_PATH ${CMAKE_OSX_SYSROOT})
 endif()
 
 # 10.9 is our min. target, if you use higher sdk, weak linking happens
 if(CMAKE_OSX_DEPLOYMENT_TARGET)
 	if(${CMAKE_OSX_DEPLOYMENT_TARGET} VERSION_LESS 10.9)
-		message(STATUS "Setting deployment target to 10.9, lower versions are incompatible with WITH_CXX11")
+		message(STATUS "Setting deployment target to 10.9, lower versions are not supported")
 		set(CMAKE_OSX_DEPLOYMENT_TARGET "10.9" CACHE STRING "" FORCE)
 	endif()
 else()

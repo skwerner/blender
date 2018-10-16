@@ -20,14 +20,14 @@
  *		Monique Dewanchand
  */
 
-#ifndef _COM_NormalNode_h_
-#define _COM_NormalNode_h_
+#ifndef __COM_NORMALNODE_H__
+#define __COM_NORMALNODE_H__
 
 #include "COM_Node.h"
 
 /**
- * @brief NormalNode
- * @ingroup Node
+ * \brief NormalNode
+ * \ingroup Node
  */
 class NormalNode : public Node {
 public:

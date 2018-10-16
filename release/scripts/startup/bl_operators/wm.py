@@ -98,7 +98,7 @@ def operator_path_is_undo(context, data_path):
     # note that if we have data paths that use strings this could fail
     # luckily we don't do this!
     #
-    # When we cant find the data owner assume no undo is needed.
+    # When we can't find the data owner assume no undo is needed.
     data_path_head = data_path.rpartition(".")[0]
 
     if not data_path_head:
@@ -612,7 +612,7 @@ class WM_OT_operator_pie_enum(Operator):
         del op_mod_str, ob_id_str
 
         try:
-            op_rna = op.get_rna()
+            op_rna = op.get_rna_type()
         except KeyError:
             self.report({'ERROR'}, "Operator not found: bpy.ops.%s" % data_path)
             return {'CANCELLED'}
@@ -622,7 +622,7 @@ class WM_OT_operator_pie_enum(Operator):
             pie = layout.menu_pie()
             pie.operator_enum(data_path, prop_string)
 
-        wm.popup_menu_pie(draw_func=draw_cb, title=op_rna.bl_rna.name, event=event)
+        wm.popup_menu_pie(draw_func=draw_cb, title=op_rna.name, event=event)
 
         return {'FINISHED'}
 
@@ -1629,6 +1629,11 @@ class WM_OT_keyconfig_export(Operator):
     bl_idname = "wm.keyconfig_export"
     bl_label = "Export Key Configuration..."
 
+    all = BoolProperty(
+        name="All Keymaps",
+        default=False,
+        description="Write all keymaps (not just user modified)",
+    )
     filepath = StringProperty(
         subtype='FILE_PATH',
         default="keymap.py",
@@ -1664,6 +1669,7 @@ class WM_OT_keyconfig_export(Operator):
             wm,
             wm.keyconfigs.active,
             self.filepath,
+            all_keymaps=self.all,
         )
 
         return {'FINISHED'}
@@ -2260,7 +2266,6 @@ class WM_OT_app_template_install(Operator):
     def execute(self, context):
         import traceback
         import zipfile
-        import shutil
         import os
 
         filepath = self.filepath

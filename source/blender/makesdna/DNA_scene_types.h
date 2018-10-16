@@ -118,7 +118,7 @@ typedef enum eFFMpegPreset {
 	/* Used by WEBM/VP9 and h.264 to control encoding speed vs. file size.
 	 * WEBM/VP9 use these values directly, whereas h.264 map those to
 	 * respectively the MEDIUM, SLOWER, and SUPERFAST presets.
-	*/
+	 */
 	FFM_PRESET_GOOD = 10, /* the default and recommended for most applications */
 	FFM_PRESET_BEST, /* recommended if you have lots of time and want the best compression efficiency */
 	FFM_PRESET_REALTIME, /* recommended for live / fast encoding */
@@ -140,6 +140,14 @@ typedef enum eFFMpegCrf {
 	FFM_CRF_VERYLOW = 29,
 	FFM_CRF_LOWEST = 32,
 } eFFMpegCrf;
+
+typedef enum eFFMpegAudioChannels {
+	FFM_CHANNELS_MONO = 1,
+	FFM_CHANNELS_STEREO = 2,
+	FFM_CHANNELS_SURROUND4 = 4,
+	FFM_CHANNELS_SURROUND51 = 6,
+	FFM_CHANNELS_SURROUND71 = 8,
+} eFFMpegAudioChannels;
 
 typedef struct FFMpegCodecData {
 	int type;
@@ -374,8 +382,8 @@ typedef enum eStereo3dInterlaceType {
  * this is used for NodeImageFile and IMAGE_OT_save_as operator too.
  *
  * note: its a bit strange that even though this is an image format struct
- *  the imtype can still be used to select video formats.
- *  RNA ensures these enum's are only selectable for render output.
+ * the imtype can still be used to select video formats.
+ * RNA ensures these enum's are only selectable for render output.
  */
 typedef struct ImageFormatData {
 	char imtype;   /* R_IMF_IMTYPE_PNG, R_... */
@@ -1321,9 +1329,9 @@ typedef struct UnifiedPaintSettings {
 	float brush_rotation;
 	float brush_rotation_sec;
 
-	/*********************************************************************************
-	 *  all data below are used to communicate with cursor drawing and tex sampling  *
-	 *********************************************************************************/
+	/*******************************************************************************
+	 * all data below are used to communicate with cursor drawing and tex sampling *
+	 *******************************************************************************/
 	int anchored_size;
 
 	float overlap_factor; /* normalization factor due to accumulated value of curve along spacing.

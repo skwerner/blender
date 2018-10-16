@@ -20,14 +20,14 @@
  *		Monique Dewanchand
  */
 
-#ifndef _COM_MovieDistortionNode_h_
-#define _COM_MovieDistortionNode_h_
+#ifndef __COM_MOVIEDISTORTIONNODE_H__
+#define __COM_MOVIEDISTORTIONNODE_H__
 
 #include "COM_Node.h"
 
 /**
- * @brief MovieDistortionNode
- * @ingroup Node
+ * \brief MovieDistortionNode
+ * \ingroup Node
  */
 class MovieDistortionNode : public Node {
 public:

@@ -150,7 +150,7 @@ typedef struct TransDataExtension {
 	float  r_mtx[3][3];  /* The rotscale matrix of pose bone, to allow using snap-align in translation mode,
 	                      * when td->mtx is the loc pose bone matrix (and hence can't be used to apply rotation in some cases,
 	                      * namely when a bone is in "NoLocal" or "Hinge" mode)... */
-	float  r_smtx[3][3]; /* Invers of previous one. */
+	float  r_smtx[3][3]; /* Inverse of previous one. */
 	int    rotOrder;	/* rotation mode,  as defined in eRotationModes (DNA_action_types.h) */
 	float oloc[3], orot[3], oquat[4], orotAxis[3], orotAngle; /* Original object transformation used for rigid bodies */
 } TransDataExtension;
@@ -163,7 +163,7 @@ typedef struct TransData2D {
 	float ih1[2], ih2[2];
 } TransData2D;
 
-/* we need to store 2 handles for each transdata in case the other handle wasnt selected */
+/* we need to store 2 handles for each transdata in case the other handle wasn't selected */
 typedef struct TransDataCurveHandleFlags {
 	char ih1, ih2;
 	char *h1, *h2;
@@ -522,7 +522,7 @@ typedef struct TransInfo {
 
 #define T_AUTOVALUES		(1 << 20)
 
-	/* to specificy if we save back settings at the end */
+	/* to specify if we save back settings at the end */
 #define	T_MODAL				(1 << 21)
 
 	/* no retopo */
@@ -695,8 +695,8 @@ void snapGridIncrementAction(TransInfo *t, float *val, GearsType action);
 
 void snapSequenceBounds(TransInfo *t, const int mval[2]);
 
-bool activeSnap(TransInfo *t);
-bool validSnap(TransInfo *t);
+bool activeSnap(const TransInfo *t);
+bool validSnap(const TransInfo *t);
 
 void initSnapping(struct TransInfo *t, struct wmOperator *op);
 void freeSnapping(struct TransInfo *t);
@@ -706,10 +706,10 @@ void applySnapping(TransInfo *t, float *vec);
 void resetSnapping(TransInfo *t);
 eRedrawFlag handleSnapping(TransInfo *t, const struct wmEvent *event);
 void drawSnapping(const struct bContext *C, TransInfo *t);
-bool usingSnappingNormal(TransInfo *t);
-bool validSnappingNormal(TransInfo *t);
+bool usingSnappingNormal(const TransInfo *t);
+bool validSnappingNormal(const TransInfo *t);
 
-void getSnapPoint(TransInfo *t, float vec[3]);
+void getSnapPoint(const TransInfo *t, float vec[3]);
 void addSnapPoint(TransInfo *t);
 eRedrawFlag updateSelectedSnapPoint(TransInfo *t);
 void removeSnapPoint(TransInfo *t);
@@ -796,6 +796,8 @@ bool applyTransformOrientation(const struct bContext *C, float mat[3][3], char r
 #define ORIENTATION_VERT	2
 #define ORIENTATION_EDGE	3
 #define ORIENTATION_FACE	4
+#define ORIENTATION_USE_PLANE(ty) \
+	ELEM(ty, ORIENTATION_NORMAL, ORIENTATION_EDGE, ORIENTATION_FACE)
 
 int getTransformOrientation_ex(const struct bContext *C, float normal[3], float plane[3], const short around);
 int getTransformOrientation(const struct bContext *C, float normal[3], float plane[3]);

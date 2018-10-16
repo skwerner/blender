@@ -20,8 +20,8 @@
  *		Monique Dewanchand
  */
 
-#ifndef _COM_GaussianYBlurOperation_h
-#define _COM_GaussianYBlurOperation_h
+#ifndef __COM_GAUSSIANYBLUROPERATION_H__
+#define __COM_GAUSSIANYBLUROPERATION_H__
 #include "COM_NodeOperation.h"
 #include "COM_BlurBaseOperation.h"
 
@@ -47,7 +47,7 @@ public:
 	                   list<cl_kernel> *clKernelsToCleanUp);
 
 	/**
-	 * @brief initialize the execution
+	 * \brief initialize the execution
 	 */
 	void initExecution();
 

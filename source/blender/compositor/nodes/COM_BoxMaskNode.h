@@ -20,14 +20,14 @@
  *		Monique Dewanchand
  */
 
-#ifndef _COM_BoxMaskNode_h_
-#define _COM_BoxMaskNode_h_
+#ifndef __COM_BOXMASKNODE_H__
+#define __COM_BOXMASKNODE_H__
 
 #include "COM_Node.h"
 
 /**
- * @brief BoxMaskNode
- * @ingroup Node
+ * \brief BoxMaskNode
+ * \ingroup Node
  */
 class BoxMaskNode : public Node {
 public:

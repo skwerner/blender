@@ -20,14 +20,14 @@
  *		Monique Dewanchand
  */
 
-#ifndef _COM_AlphaOverNode_h_
-#define _COM_AlphaOverNode_h_
+#ifndef __COM_ALPHAOVERNODE_H__
+#define __COM_ALPHAOVERNODE_H__
 
 #include "COM_Node.h"
 
 /**
- * @brief AlphaOverNode
- * @ingroup Node
+ * \brief AlphaOverNode
+ * \ingroup Node
  */
 class AlphaOverNode : public Node {
 public:

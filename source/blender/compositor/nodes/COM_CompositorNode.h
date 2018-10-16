@@ -20,14 +20,14 @@
  *		Monique Dewanchand
  */
 
-#ifndef _COM_CompositorNode_h_
-#define _COM_CompositorNode_h_
+#ifndef __COM_COMPOSITORNODE_H__
+#define __COM_COMPOSITORNODE_H__
 
 #include "COM_Node.h"
 #include "DNA_node_types.h"
 /**
- * @brief CompositorNode
- * @ingroup Node
+ * \brief CompositorNode
+ * \ingroup Node
  */
 class CompositorNode : public Node {
 public:

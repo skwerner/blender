@@ -972,12 +972,12 @@ PyDoc_STRVAR(Quaternion_axis_doc,
 );
 static PyObject *Quaternion_axis_get(QuaternionObject *self, void *type)
 {
-	return Quaternion_item(self, GET_INT_FROM_POINTER(type));
+	return Quaternion_item(self, POINTER_AS_INT(type));
 }
 
 static int Quaternion_axis_set(QuaternionObject *self, PyObject *value, void *type)
 {
-	return Quaternion_ass_item(self, GET_INT_FROM_POINTER(type), value);
+	return Quaternion_ass_item(self, POINTER_AS_INT(type), value);
 }
 
 PyDoc_STRVAR(Quaternion_magnitude_doc,
@@ -1100,7 +1100,8 @@ static PyObject *Quaternion_new(PyTypeObject *type, PyObject *args, PyObject *kw
 {
 	PyObject *seq = NULL;
 	double angle = 0.0f;
-	float quat[QUAT_SIZE] = {0.0f, 0.0f, 0.0f, 0.0f};
+	float quat[QUAT_SIZE];
+	unit_qt(quat);
 
 	if (kwds && PyDict_Size(kwds)) {
 		PyErr_SetString(PyExc_TypeError,

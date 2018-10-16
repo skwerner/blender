@@ -56,6 +56,7 @@ typedef UINT (API * GHOST_WIN32_WTInfo)(UINT, UINT, LPVOID);
 typedef HCTX (API * GHOST_WIN32_WTOpen)(HWND, LPLOGCONTEXTA, BOOL);
 typedef BOOL (API * GHOST_WIN32_WTClose)(HCTX);
 typedef BOOL (API * GHOST_WIN32_WTPacket)(HCTX, UINT, LPVOID);
+typedef BOOL (API * GHOST_WIN32_WTEnable)(HCTX, BOOL);
 typedef BOOL (API * GHOST_WIN32_WTOverlap)(HCTX, BOOL);
 
 // typedefs for user32 functions to allow dynamic loading of Windows 10 DPI scaling functions
@@ -249,6 +250,7 @@ public:
 		return m_tabletData;
 	}
 
+	void processWin32TabletActivateEvent(WORD state);
 	void processWin32TabletInitEvent();
 	void processWin32TabletEvent(WPARAM wParam, LPARAM lParam);
 	void bringTabletContextToFront();
@@ -263,7 +265,7 @@ public:
 	bool m_inLiveResize;
 
 #ifdef WITH_INPUT_IME
-	GHOST_ImeWin32 *getImeInput() {return &m_imeImput;}
+	GHOST_ImeWin32 *getImeInput() {return &m_imeInput;}
 
 	void beginIME(
 	        GHOST_TInt32 x, GHOST_TInt32 y,
@@ -367,7 +369,7 @@ private:
 
 #ifdef WITH_INPUT_IME
 	/** Handle input method editors event */
-	GHOST_ImeWin32 m_imeImput;
+	GHOST_ImeWin32 m_imeInput;
 #endif
 	bool m_debug_context;
 };

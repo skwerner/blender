@@ -20,14 +20,14 @@
  *		Monique Dewanchand
  */
 
-#ifndef _COM_SocketProxyNode_h_
-#define _COM_SocketProxyNode_h_
+#ifndef __COM_SOCKETPROXYNODE_H__
+#define __COM_SOCKETPROXYNODE_H__
 
 #include "COM_Node.h"
 
 /**
- * @brief SocketProxyNode
- * @ingroup Node
+ * \brief SocketProxyNode
+ * \ingroup Node
  */
 class SocketProxyNode : public Node {
 public:

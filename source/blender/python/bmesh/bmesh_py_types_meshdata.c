@@ -182,13 +182,13 @@ PyDoc_STRVAR(bpy_bmloopuv_flag__select_edge_doc,
 
 static PyObject *bpy_bmloopuv_flag_get(BPy_BMLoopUV *self, void *flag_p)
 {
-	const int flag = GET_INT_FROM_POINTER(flag_p);
+	const int flag = POINTER_AS_INT(flag_p);
 	return PyBool_FromLong(self->data->flag & flag);
 }
 
 static int bpy_bmloopuv_flag_set(BPy_BMLoopUV *self, PyObject *value, void *flag_p)
 {
-	const int flag = GET_INT_FROM_POINTER(flag_p);
+	const int flag = POINTER_AS_INT(flag_p);
 
 	switch (PyC_Long_AsBool(value)) {
 		case true:
@@ -282,7 +282,7 @@ static int bpy_bmvertskin_radius_set(BPy_BMVertSkin *self, PyObject *value, void
 }
 
 PyDoc_STRVAR(bpy_bmvertskin_flag__use_root_doc,
-"Use as root vertex.\n\n:type: boolean"
+"Use as root vertex. Setting this flag does not clear other roots in the same mesh island.\n\n:type: boolean"
 );
 PyDoc_STRVAR(bpy_bmvertskin_flag__use_loose_doc,
 "Use loose vertex.\n\n:type: boolean"
@@ -290,13 +290,13 @@ PyDoc_STRVAR(bpy_bmvertskin_flag__use_loose_doc,
 
 static PyObject *bpy_bmvertskin_flag_get(BPy_BMVertSkin *self, void *flag_p)
 {
-	const int flag = GET_INT_FROM_POINTER(flag_p);
+	const int flag = POINTER_AS_INT(flag_p);
 	return PyBool_FromLong(self->data->flag & flag);
 }
 
 static int bpy_bmvertskin_flag_set(BPy_BMVertSkin *self, PyObject *value, void *flag_p)
 {
-	const int flag = GET_INT_FROM_POINTER(flag_p);
+	const int flag = POINTER_AS_INT(flag_p);
 
 	switch (PyC_Long_AsBool(value)) {
 		case true:
@@ -311,17 +311,16 @@ static int bpy_bmvertskin_flag_set(BPy_BMVertSkin *self, PyObject *value, void *
 	}
 }
 
-/* XXX Todo: Make root settable, currently the code to disable all other verts as roots sits within the modifier */
 static PyGetSetDef bpy_bmvertskin_getseters[] = {
 	/* attributes match rna_mesh_gen  */
 	{(char *)"radius",    (getter)bpy_bmvertskin_radius_get, (setter)bpy_bmvertskin_radius_set, (char *)bpy_bmvertskin_radius_doc, NULL},
-	{(char *)"use_root",  (getter)bpy_bmvertskin_flag_get,   (setter)NULL,					   (char *)bpy_bmvertskin_flag__use_root_doc,  (void *)MVERT_SKIN_ROOT},
+	{(char *)"use_root",  (getter)bpy_bmvertskin_flag_get,   (setter)bpy_bmvertskin_flag_set,   (char *)bpy_bmvertskin_flag__use_root_doc,  (void *)MVERT_SKIN_ROOT},
 	{(char *)"use_loose", (getter)bpy_bmvertskin_flag_get,   (setter)bpy_bmvertskin_flag_set,   (char *)bpy_bmvertskin_flag__use_loose_doc, (void *)MVERT_SKIN_LOOSE},
 
 	{NULL, NULL, NULL, NULL, NULL} /* Sentinel */
 };
 
-static PyTypeObject BPy_BMVertSkin_Type; /* bm.loops.layers.uv.active */
+static PyTypeObject BPy_BMVertSkin_Type; /* bm.loops.layers.skin.active */
 
 static void bm_init_types_bmvertskin(void)
 {
@@ -479,7 +478,7 @@ PyObject *BPy_BMLoopColor_CreatePyObject(struct MLoopCol *data)
  * This type could eventually be used to access lattice weights.
  *
  * \note: Many of blender-api's dict-like-wrappers act like ordered dicts,
- * This is intentional _not_ ordered, the weights can be in any order and it wont matter,
+ * This is intentionally _not_ ordered, the weights can be in any order and it won't matter,
  * the order should not be used in the api in any meaningful way (as with a python dict)
  * only expose as mapping, not a sequence.
  */

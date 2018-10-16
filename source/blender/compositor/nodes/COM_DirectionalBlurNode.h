@@ -20,14 +20,14 @@
  *		Monique Dewanchand
  */
 
-#ifndef _COM_DirectionalBlurNode_h_
-#define _COM_DirectionalBlurNode_h_
+#ifndef __COM_DIRECTIONALBLURNODE_H__
+#define __COM_DIRECTIONALBLURNODE_H__
 
 #include "COM_Node.h"
 
 /**
- * @brief DirectionalBlurNode
- * @ingroup Node
+ * \brief DirectionalBlurNode
+ * \ingroup Node
  */
 class DirectionalBlurNode : public Node {
 public:

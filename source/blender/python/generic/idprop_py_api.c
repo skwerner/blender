@@ -596,15 +596,15 @@ static IDProperty *idp_from_PyMapping(const char *name, PyObject *ob)
 	return prop;
 }
 
-static IDProperty *idp_from_DatablockPointer(const char *name, PyObject *ob, IDPropertyTemplate *val)
+static IDProperty *idp_from_DatablockPointer(const char *name, PyObject *ob)
 {
-	pyrna_id_FromPyObject(ob, &val->id);
-	return IDP_New(IDP_ID, val, name);
+	IDPropertyTemplate val = {0};
+	pyrna_id_FromPyObject(ob, &val.id);
+	return IDP_New(IDP_ID, &val, name);
 }
 
 static IDProperty *idp_from_PyObject(PyObject *name_obj, PyObject *ob)
 {
-	IDPropertyTemplate val = {0};
 	const char *name = idp_try_read_name(name_obj);
 	if (name == NULL) {
 		return NULL;
@@ -626,7 +626,7 @@ static IDProperty *idp_from_PyObject(PyObject *name_obj, PyObject *ob)
 		return idp_from_PySequence(name, ob);
 	}
 	else if (ob == Py_None || pyrna_id_CheckPyObject(ob)) {
-		return idp_from_DatablockPointer(name, ob, &val);
+		return idp_from_DatablockPointer(name, ob);
 	}
 	else if (PyMapping_Check(ob)) {
 		return idp_from_PyMapping(name, ob);
@@ -944,7 +944,7 @@ PyObject *BPy_Wrap_GetKeys(IDProperty *prop)
 		/* pass */
 	}
 
-	if (i != prop->len) { /* if the loop didnt finish, we know the length is wrong */
+	if (i != prop->len) { /* if the loop didn't finish, we know the length is wrong */
 		BPy_IDGroup_CorrectListLen(prop, list, i, __func__);
 		Py_DECREF(list); /*free the list*/
 		/*call self again*/
@@ -1795,7 +1795,7 @@ PyObject *BPyInit_idprop(void)
 {
 	PyObject *mod;
 	PyObject *submodule;
-	PyObject *sys_modules = PyThreadState_GET()->interp->modules;
+	PyObject *sys_modules = PyImport_GetModuleDict();
 
 	mod = PyModule_Create(&IDProp_module_def);
 

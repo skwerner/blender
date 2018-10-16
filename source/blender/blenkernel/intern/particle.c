@@ -1507,7 +1507,7 @@ int psys_particle_dm_face_lookup(
 		LinkNode *tessface_node = poly_nodes[pindex_orig];
 
 		for (; tessface_node; tessface_node = tessface_node->next) {
-			int findex_dst = GET_INT_FROM_POINTER(tessface_node->link);
+			int findex_dst = POINTER_AS_INT(tessface_node->link);
 			faceuv = osface_final[findex_dst].uv;
 
 			/* check that this intersects - Its possible this misses :/ -
@@ -2309,12 +2309,12 @@ static void psys_thread_create_path(ParticleTask *task, struct ChildParticle *cp
 
 		/*
 		 * NOTE: Should in theory be the same as:
-		 cpa_num = psys_particle_dm_face_lookup(
-		        ctx->sim.psmd->dm_final,
-		        ctx->sim.psmd->dm_deformed,
-		        pa->num, pa->fuv,
-		        NULL);
-		*/
+		 * cpa_num = psys_particle_dm_face_lookup(
+		 *        ctx->sim.psmd->dm_final,
+		 *        ctx->sim.psmd->dm_deformed,
+		 *        pa->num, pa->fuv,
+		 *        NULL);
+		 */
 		cpa_num = (ELEM(pa->num_dmcache, DMCACHE_ISCHILD, DMCACHE_NOTFOUND))
 		        ? pa->num
 		        : pa->num_dmcache;

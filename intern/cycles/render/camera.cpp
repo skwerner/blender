@@ -246,7 +246,7 @@ void Camera::update(Scene *scene)
 		cameratoscreen = projection_orthographic(nearclip, farclip);
 	else
 		cameratoscreen = projection_identity();
-	
+
 	ProjectionTransform screentocamera = projection_inverse(cameratoscreen);
 
 	rastertocamera = screentocamera * rastertoscreen;
@@ -716,7 +716,7 @@ float Camera::world_to_raster_size(float3 P)
 		float3 D = transform_point(&worldtocamera, P);
 		float dist = len(D);
 
-		Ray ray;
+		Ray ray = {{0}};
 
 		/* Distortion can become so great that the results become meaningless, there
 		 * may be a better way to do this, but calculating differentials from the

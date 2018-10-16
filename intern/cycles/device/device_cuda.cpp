@@ -1072,6 +1072,7 @@ public:
 		CUarray_format_enum format;
 		switch(mem.data_type) {
 			case TYPE_UCHAR: format = CU_AD_FORMAT_UNSIGNED_INT8; break;
+			case TYPE_UINT16: format = CU_AD_FORMAT_UNSIGNED_INT16; break;
 			case TYPE_UINT: format = CU_AD_FORMAT_UNSIGNED_INT32; break;
 			case TYPE_INT: format = CU_AD_FORMAT_SIGNED_INT32; break;
 			case TYPE_FLOAT: format = CU_AD_FORMAT_FLOAT; break;
@@ -1251,18 +1252,6 @@ public:
 		}
 	}
 
-	bool denoising_set_tiles(device_ptr *buffers, DenoisingTask *task)
-	{
-		TilesInfo *tiles = (TilesInfo*) task->tiles_mem.host_pointer;
-		for(int i = 0; i < 9; i++) {
-			tiles->buffers[i] = buffers[i];
-		}
-
-		task->tiles_mem.copy_to_device();
-
-		return !have_error();
-	}
-
 #define CUDA_GET_BLOCKSIZE(func, w, h)                                                                          \
 			int threads_per_block;                                                                              \
 			cuda_assert(cuFuncGetAttribute(&threads_per_block, CU_FUNC_ATTRIBUTE_MAX_THREADS_PER_BLOCK, func)); \
@@ -1305,23 +1294,19 @@ public:
 		float a = task->nlm_state.a;
 		float k_2 = task->nlm_state.k_2;
 
-		int shift_stride = stride*h;
+		int pass_stride = task->buffer.pass_stride;
 		int num_shifts = (2*r+1)*(2*r+1);
-		int mem_size = sizeof(float)*shift_stride*num_shifts;
 		int channel_offset = 0;
-
-		device_only_memory<uchar> temporary_mem(this, "Denoising temporary_mem");
-		temporary_mem.alloc_to_device(2*mem_size);
 
 		if(have_error())
 			return false;
 
-		CUdeviceptr difference     = cuda_device_ptr(temporary_mem.device_pointer);
-		CUdeviceptr blurDifference = difference + mem_size;
+		CUdeviceptr difference     = cuda_device_ptr(task->buffer.temporary_mem.device_pointer);
+		CUdeviceptr blurDifference = difference + sizeof(float)*pass_stride*num_shifts;
+		CUdeviceptr weightAccum = difference + 2*sizeof(float)*pass_stride*num_shifts;
 
-		CUdeviceptr weightAccum = task->nlm_state.temporary_3_ptr;
-		cuda_assert(cuMemsetD8(weightAccum, 0, sizeof(float)*shift_stride));
-		cuda_assert(cuMemsetD8(out_ptr, 0, sizeof(float)*shift_stride));
+		cuda_assert(cuMemsetD8(weightAccum, 0, sizeof(float)*pass_stride));
+		cuda_assert(cuMemsetD8(out_ptr, 0, sizeof(float)*pass_stride));
 
 		{
 			CUfunction cuNLMCalcDifference, cuNLMBlur, cuNLMCalcWeight, cuNLMUpdateOutput;
@@ -1337,10 +1322,10 @@ public:
 
 			CUDA_GET_BLOCKSIZE_1D(cuNLMCalcDifference, w*h, num_shifts);
 
-			void *calc_difference_args[] = {&guide_ptr, &variance_ptr, &difference, &w, &h, &stride, &shift_stride, &r, &channel_offset, &a, &k_2};
-			void *blur_args[]            = {&difference, &blurDifference, &w, &h, &stride, &shift_stride, &r, &f};
-			void *calc_weight_args[]     = {&blurDifference, &difference, &w, &h, &stride, &shift_stride, &r, &f};
-			void *update_output_args[]   = {&blurDifference, &image_ptr, &out_ptr, &weightAccum, &w, &h, &stride, &shift_stride, &r, &f};
+			void *calc_difference_args[] = {&guide_ptr, &variance_ptr, &difference, &w, &h, &stride, &pass_stride, &r, &channel_offset, &a, &k_2};
+			void *blur_args[]            = {&difference, &blurDifference, &w, &h, &stride, &pass_stride, &r, &f};
+			void *calc_weight_args[]     = {&blurDifference, &difference, &w, &h, &stride, &pass_stride, &r, &f};
+			void *update_output_args[]   = {&blurDifference, &image_ptr, &out_ptr, &weightAccum, &w, &h, &stride, &pass_stride, &r, &f};
 
 			CUDA_LAUNCH_KERNEL_1D(cuNLMCalcDifference, calc_difference_args);
 			CUDA_LAUNCH_KERNEL_1D(cuNLMBlur, blur_args);
@@ -1348,8 +1333,6 @@ public:
 			CUDA_LAUNCH_KERNEL_1D(cuNLMBlur, blur_args);
 			CUDA_LAUNCH_KERNEL_1D(cuNLMUpdateOutput, update_output_args);
 		}
-
-		temporary_mem.free();
 
 		{
 			CUfunction cuNLMNormalize;
@@ -1414,18 +1397,14 @@ public:
 		int h = task->reconstruction_state.source_h;
 		int stride = task->buffer.stride;
 
-		int shift_stride = stride*h;
+		int pass_stride = task->buffer.pass_stride;
 		int num_shifts = (2*r+1)*(2*r+1);
-		int mem_size = sizeof(float)*shift_stride*num_shifts;
-
-		device_only_memory<uchar> temporary_mem(this, "Denoising temporary_mem");
-		temporary_mem.alloc_to_device(2*mem_size);
 
 		if(have_error())
 			return false;
 
-		CUdeviceptr difference     = cuda_device_ptr(temporary_mem.device_pointer);
-		CUdeviceptr blurDifference = difference + mem_size;
+		CUdeviceptr difference     = cuda_device_ptr(task->buffer.temporary_mem.device_pointer);
+		CUdeviceptr blurDifference = difference + sizeof(float)*pass_stride*num_shifts;
 
 		{
 			CUfunction cuNLMCalcDifference, cuNLMBlur, cuNLMCalcWeight, cuNLMConstructGramian;
@@ -1443,9 +1422,9 @@ public:
 			                     task->reconstruction_state.source_w * task->reconstruction_state.source_h,
 			                     num_shifts);
 
-			void *calc_difference_args[] = {&color_ptr, &color_variance_ptr, &difference, &w, &h, &stride, &shift_stride, &r, &task->buffer.pass_stride, &a, &k_2};
-			void *blur_args[]            = {&difference, &blurDifference, &w, &h, &stride, &shift_stride, &r, &f};
-			void *calc_weight_args[]     = {&blurDifference, &difference, &w, &h, &stride, &shift_stride, &r, &f};
+			void *calc_difference_args[] = {&color_ptr, &color_variance_ptr, &difference, &w, &h, &stride, &pass_stride, &r, &pass_stride, &a, &k_2};
+			void *blur_args[]            = {&difference, &blurDifference, &w, &h, &stride, &pass_stride, &r, &f};
+			void *calc_weight_args[]     = {&blurDifference, &difference, &w, &h, &stride, &pass_stride, &r, &f};
 			void *construct_gramian_args[] = {&blurDifference,
 			                                  &task->buffer.mem.device_pointer,
 			                                  &task->storage.transform.device_pointer,
@@ -1454,9 +1433,8 @@ public:
 			                                  &task->storage.XtWY.device_pointer,
 			                                  &task->reconstruction_state.filter_window,
 			                                  &w, &h, &stride,
-			                                  &shift_stride, &r,
-			                                  &f,
-		                                      &task->buffer.pass_stride};
+			                                  &pass_stride, &r,
+			                                  &f};
 
 			CUDA_LAUNCH_KERNEL_1D(cuNLMCalcDifference, calc_difference_args);
 			CUDA_LAUNCH_KERNEL_1D(cuNLMBlur, blur_args);
@@ -1464,8 +1442,6 @@ public:
 			CUDA_LAUNCH_KERNEL_1D(cuNLMBlur, blur_args);
 			CUDA_LAUNCH_KERNEL_1D(cuNLMConstructGramian, construct_gramian_args);
 		}
-
-		temporary_mem.free();
 
 		{
 			CUfunction cuFinalize;
@@ -1534,7 +1510,7 @@ public:
 		                   task->rect.w-task->rect.y);
 
 		void *args[] = {&task->render_buffer.samples,
-		                &task->tiles_mem.device_pointer,
+		                &task->tile_info_mem.device_pointer,
 		                &a_ptr,
 		                &b_ptr,
 		                &sample_variance_ptr,
@@ -1542,7 +1518,7 @@ public:
 		                &buffer_variance_ptr,
 		                &task->rect,
 		                &task->render_buffer.pass_stride,
-		                &task->render_buffer.denoising_data_offset};
+		                &task->render_buffer.offset};
 		CUDA_LAUNCH_KERNEL(cuFilterDivideShadow, args);
 		cuda_assert(cuCtxSynchronize());
 
@@ -1568,14 +1544,14 @@ public:
 		                   task->rect.w-task->rect.y);
 
 		void *args[] = {&task->render_buffer.samples,
-		                &task->tiles_mem.device_pointer,
+		                &task->tile_info_mem.device_pointer,
 		                &mean_offset,
 		                &variance_offset,
 		                &mean_ptr,
 		                &variance_ptr,
 		                &task->rect,
 		                &task->render_buffer.pass_stride,
-		                &task->render_buffer.denoising_data_offset};
+		                &task->render_buffer.offset};
 		CUDA_LAUNCH_KERNEL(cuFilterGetFeature, args);
 		cuda_assert(cuCtxSynchronize());
 
@@ -1613,7 +1589,7 @@ public:
 		return !have_error();
 	}
 
-	void denoise(RenderTile &rtile, DenoisingTask& denoising, const DeviceTask &task)
+	void denoise(RenderTile &rtile, DenoisingTask& denoising)
 	{
 		denoising.functions.construct_transform = function_bind(&CUDADevice::denoising_construct_transform, this, &denoising);
 		denoising.functions.reconstruct = function_bind(&CUDADevice::denoising_reconstruct, this, _1, _2, _3, &denoising);
@@ -1622,21 +1598,12 @@ public:
 		denoising.functions.combine_halves = function_bind(&CUDADevice::denoising_combine_halves, this, _1, _2, _3, _4, _5, _6, &denoising);
 		denoising.functions.get_feature = function_bind(&CUDADevice::denoising_get_feature, this, _1, _2, _3, _4, &denoising);
 		denoising.functions.detect_outliers = function_bind(&CUDADevice::denoising_detect_outliers, this, _1, _2, _3, _4, &denoising);
-		denoising.functions.set_tiles = function_bind(&CUDADevice::denoising_set_tiles, this, _1, &denoising);
 
 		denoising.filter_area = make_int4(rtile.x, rtile.y, rtile.w, rtile.h);
 		denoising.render_buffer.samples = rtile.sample;
+		denoising.buffer.gpu_temporary_mem = true;
 
-		RenderTile rtiles[9];
-		rtiles[4] = rtile;
-		task.map_neighbor_tiles(rtiles, this);
-		denoising.tiles_from_rendertiles(rtiles);
-
-		denoising.init_from_devicetask(task);
-
-		denoising.run_denoising();
-
-		task.unmap_neighbor_tiles(rtiles, this);
+		denoising.run_denoising(&rtile);
 	}
 
 	void path_trace(DeviceTask& task, RenderTile& rtile, device_vector<WorkTile>& work_tiles)
@@ -1693,7 +1660,7 @@ public:
 		for(int sample = start_sample; sample < end_sample; sample += step_samples) {
 			/* Setup and copy work tile to device. */
 			wtile->start_sample = sample;
-			wtile->num_samples = min(step_samples, end_sample - sample);;
+			wtile->num_samples = min(step_samples, end_sample - sample);
 			work_tiles.copy_to_device();
 
 			CUdeviceptr d_work_tiles = cuda_device_ptr(work_tiles.device_pointer);
@@ -2074,7 +2041,7 @@ public:
 
 			/* keep rendering tiles until done */
 			RenderTile tile;
-			DenoisingTask denoising(this);
+			DenoisingTask denoising(this, *task);
 
 			while(task->acquire_tile(this, tile)) {
 				if(tile.task == RenderTile::PATH_TRACE) {
@@ -2089,7 +2056,7 @@ public:
 				else if(tile.task == RenderTile::DENOISE) {
 					tile.sample = tile.start_sample + tile.num_samples;
 
-					denoise(tile, denoising, *task);
+					denoise(tile, denoising);
 
 					task->update_progress(&tile, tile.w*tile.h);
 				}

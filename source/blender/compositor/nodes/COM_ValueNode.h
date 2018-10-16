@@ -20,14 +20,14 @@
  *		Monique Dewanchand
  */
 
-#ifndef _COM_ValueNode_h_
-#define _COM_ValueNode_h_
+#ifndef __COM_VALUENODE_H__
+#define __COM_VALUENODE_H__
 
 #include "COM_Node.h"
 
 /**
- * @brief ValueNode
- * @ingroup Node
+ * \brief ValueNode
+ * \ingroup Node
  */
 class ValueNode : public Node {
 public:

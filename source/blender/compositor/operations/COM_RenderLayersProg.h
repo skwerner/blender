@@ -21,8 +21,8 @@
  */
 
 
-#ifndef _COM_RenderLayersBaseProg_h
-#define _COM_RenderLayersBaseProg_h
+#ifndef __COM_RENDERLAYERSPROG_H__
+#define __COM_RENDERLAYERSPROG_H__
 
 #include "COM_NodeOperation.h"
 #include "DNA_scene_types.h"
@@ -36,7 +36,7 @@ extern "C" {
 /**
  * Base class for all renderlayeroperations
  *
- * @todo: rename to operation.
+ * \todo: rename to operation.
  */
 class RenderLayersProg : public NodeOperation {
 protected:
@@ -68,7 +68,7 @@ protected:
 	int m_elementsize;
 
 	/**
-	 * @brief render data used for active rendering
+	 * \brief render data used for active rendering
 	 */
 	const RenderData *m_rd;
 
@@ -90,7 +90,7 @@ public:
 	RenderLayersProg(const char *passName, DataType type, int elementsize);
 	/**
 	 * setter for the scene field. Will be called from
-	 * @see RenderLayerNode to set the actual scene where
+	 * \see RenderLayerNode to set the actual scene where
 	 * the data will be retrieved from.
 	 */
 	void setScene(Scene *scene) { this->m_scene = scene; }

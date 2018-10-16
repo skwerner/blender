@@ -285,7 +285,7 @@ static void rna_MaterialStrand_end_size_range(PointerRNA *ptr, float *min, float
 	}
 }
 
-static int rna_MaterialTextureSlot_use_get(PointerRNA *ptr)
+static bool rna_MaterialTextureSlot_use_get(PointerRNA *ptr)
 {
 	Material *ma = (Material *)ptr->id.data;
 	MTex *mtex = (MTex *)ptr->data;
@@ -298,7 +298,7 @@ static int rna_MaterialTextureSlot_use_get(PointerRNA *ptr)
 	return 0;
 }
 
-static void rna_MaterialTextureSlot_use_set(PointerRNA *ptr, int value)
+static void rna_MaterialTextureSlot_use_set(PointerRNA *ptr, bool value)
 {
 	Material *ma = (Material *)ptr->id.data;
 	MTex *mtex = (MTex *)ptr->data;
@@ -314,7 +314,7 @@ static void rna_MaterialTextureSlot_use_set(PointerRNA *ptr, int value)
 	}
 }
 
-static void rna_Material_use_diffuse_ramp_set(PointerRNA *ptr, int value)
+static void rna_Material_use_diffuse_ramp_set(PointerRNA *ptr, bool value)
 {
 	Material *ma = (Material *)ptr->data;
 
@@ -325,7 +325,7 @@ static void rna_Material_use_diffuse_ramp_set(PointerRNA *ptr, int value)
 		ma->ramp_col = BKE_colorband_add(false);
 }
 
-static void rna_Material_use_specular_ramp_set(PointerRNA *ptr, int value)
+static void rna_Material_use_specular_ramp_set(PointerRNA *ptr, bool value)
 {
 	Material *ma = (Material *)ptr->data;
 
@@ -434,6 +434,34 @@ void rna_mtex_texture_slots_clear(ID *self_id, struct bContext *C, ReportList *r
 	/* for redraw only */
 	WM_event_add_notifier(C, NC_TEXTURE, CTX_data_scene(C));
 }
+
+static void rna_TexPaintSlot_uv_layer_get(PointerRNA *ptr, char *value)
+{
+	TexPaintSlot *data = (TexPaintSlot *)(ptr->data);
+
+	if (data->uvname != NULL) {
+		BLI_strncpy_utf8(value, data->uvname, 64);
+	}
+	else {
+		value[0] = '\0';
+	}
+}
+
+static int rna_TexPaintSlot_uv_layer_length(PointerRNA *ptr)
+{
+	TexPaintSlot *data = (TexPaintSlot *)(ptr->data);
+	return data->uvname == NULL ? 0 : strlen(data->uvname);
+}
+
+static void rna_TexPaintSlot_uv_layer_set(PointerRNA *ptr, const char *value)
+{
+	TexPaintSlot *data = (TexPaintSlot *)(ptr->data);
+
+	if (data->uvname != NULL) {
+		BLI_strncpy_utf8(data->uvname, value, 64);
+	}
+}
+
 
 #else
 
@@ -2216,6 +2244,8 @@ static void rna_def_tex_slot(BlenderRNA *brna)
 	prop = RNA_def_property(srna, "uv_layer", PROP_STRING, PROP_NONE);
 	RNA_def_property_string_maxlength(prop, 64); /* else it uses the pointer size! */
 	RNA_def_property_string_sdna(prop, NULL, "uvname");
+	RNA_def_property_string_funcs(prop, "rna_TexPaintSlot_uv_layer_get", "rna_TexPaintSlot_uv_layer_length",
+	                              "rna_TexPaintSlot_uv_layer_set");
 	RNA_def_property_ui_text(prop, "UV Map", "Name of UV map");
 	RNA_def_property_update(prop, NC_GEOM | ND_DATA, "rna_Material_update");
 

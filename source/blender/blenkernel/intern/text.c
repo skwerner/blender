@@ -355,7 +355,7 @@ static void text_from_buf(Text *text, const unsigned char *buffer, const int len
 	 * - rest of line (if last line in file hasn't got \n terminator).
 	 *   in this case content of such line would be used to fill text line buffer
 	 * - file is empty. in this case new line is needed to start editing from.
-	 * - last characted in buffer is \n. in this case new line is needed to
+	 * - last character in buffer is \n. in this case new line is needed to
 	 *   deal with newline at end of file. (see [#28087]) (sergey) */
 	if (llen != 0 || text->nlines == 0 || buffer[len - 1] == '\n') {
 		TextLine *tmp;
@@ -1705,7 +1705,7 @@ static void txt_undo_add_blockop(Text *text, TextUndoBuf *utxt, int op, const ch
 	/* 4 bytes */
 	txt_undo_store_uint32(utxt->buf, &utxt->pos, length);
 	/* 'length' bytes */
-	BLI_strncpy(utxt->buf + utxt->pos, buf, length);
+	memcpy(utxt->buf + utxt->pos, buf, length);
 	utxt->pos += length;
 	/* 4 bytes */
 	txt_undo_store_uint32(utxt->buf, &utxt->pos, length);

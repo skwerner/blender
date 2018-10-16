@@ -2291,7 +2291,7 @@ static struct TransIslandData *editmesh_islands_info_calc(
 
 	vert_map = MEM_mallocN(sizeof(*vert_map) * bm->totvert, __func__);
 	/* we shouldn't need this, but with incorrect selection flushing
-	 * its possible we have a selected vertex thats not in a face, for now best not crash in that case. */
+	 * its possible we have a selected vertex that's not in a face, for now best not crash in that case. */
 	copy_vn_i(vert_map, bm->totvert, -1);
 
 	BM_mesh_elem_table_ensure(bm, htype);
@@ -2895,7 +2895,7 @@ void flushTransSeq(TransInfo *t)
 
 		if (seq != seq_prev) {
 			if (seq->depth == 0) {
-				/* test overlap, displayes red outline */
+				/* test overlap, displays red outline */
 				seq->flag &= ~SEQ_OVERLAP;
 				if (BKE_sequence_test_overlap(seqbasep, seq)) {
 					seq->flag |= SEQ_OVERLAP;
@@ -5784,7 +5784,7 @@ static void clear_trans_object_base_flags(TransInfo *t)
 }
 
 /* auto-keyframing feature - for objects
- *  tmode: should be a transform mode
+ * tmode: should be a transform mode
  */
 // NOTE: context may not always be available, so must check before using it as it's a luxury for a few cases
 void autokeyframe_ob_cb_func(bContext *C, Scene *scene, View3D *v3d, Object *ob, int tmode)
@@ -5900,8 +5900,8 @@ void autokeyframe_ob_cb_func(bContext *C, Scene *scene, View3D *v3d, Object *ob,
 }
 
 /* auto-keyframing feature - for poses/pose-channels
- *  tmode: should be a transform mode
- *	targetless_ik: has targetless ik been done on any channels?
+ * tmode: should be a transform mode
+ * targetless_ik: has targetless ik been done on any channels?
  */
 // NOTE: context may not always be available, so must check before using it as it's a luxury for a few cases
 void autokeyframe_pose_cb_func(bContext *C, Scene *scene, View3D *v3d, Object *ob, int tmode, short targetless_ik)

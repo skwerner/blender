@@ -20,14 +20,14 @@
  *		Monique Dewanchand
  */
 
-#ifndef _COM_HueSaturationValueNode_h_
-#define _COM_HueSaturationValueNode_h_
+#ifndef __COM_HUESATURATIONVALUENODE_H__
+#define __COM_HUESATURATIONVALUENODE_H__
 
 #include "COM_Node.h"
 
 /**
- * @brief HueSaturationValueNode
- * @ingroup Node
+ * \brief HueSaturationValueNode
+ * \ingroup Node
  */
 class HueSaturationValueNode : public Node {
 public:

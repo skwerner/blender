@@ -101,7 +101,7 @@ def write_subimage(sub_x, sub_y, sub_w, sub_h,
                 sub_w, sub_h,
                 sub_x, sub_y,
                 # redundant but including to maintain consistency
-                            pixel_w, pixel_h,
+                pixel_w, pixel_h,
             ))
 
         for y in range(sub_h):
@@ -130,7 +130,7 @@ def dice_icon_name(
             import re
 
             # Search for eg: DEF_ICON(BRUSH_NUDGE) --> BRUSH_NUDGE
-            re_icon = re.compile('^\s*DEF_ICON\(\s*([A-Za-z0-9_]+)\s*\).*$')
+            re_icon = re.compile(r'^\s*DEF_ICON\(\s*([A-Za-z0-9_]+)\s*\).*$')
 
             ui_icons_h = os.path.join(SOURCE_DIR, "source", "blender", "editors", "include", "UI_icons.h")
             with open(ui_icons_h, 'r', encoding="utf-8") as f:

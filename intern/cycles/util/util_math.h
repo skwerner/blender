@@ -55,6 +55,15 @@ CCL_NAMESPACE_BEGIN
 #ifndef M_2_PI_F
 #  define M_2_PI_F  (0.6366197723675813f)  /* 2/pi */
 #endif
+#ifndef M_1_2PI_F
+#  define M_1_2PI_F (0.1591549430918953f)  /* 1/(2*pi) */
+#endif
+#ifndef M_SQRT_PI_8_F
+#  define M_SQRT_PI_8_F (0.6266570686577501f) /* sqrt(pi/8) */
+#endif
+#ifndef M_LN_2PI_F
+#  define M_LN_2PI_F (1.8378770664093454f) /* ln(2*pi) */
+#endif
 
 /* Multiplication */
 #ifndef M_2PI_F
@@ -211,6 +220,30 @@ ccl_device_inline float __uint_as_float(uint i)
 	u.i = i;
 	return u.f;
 }
+
+ccl_device_inline int4 __float4_as_int4(float4 f)
+{
+#ifdef __KERNEL_SSE__
+	return int4(_mm_castps_si128(f.m128));
+	#else
+	return make_int4(__float_as_int(f.x),
+	                 __float_as_int(f.y),
+	                 __float_as_int(f.z),
+	                 __float_as_int(f.w));
+#endif
+}
+
+ccl_device_inline float4 __int4_as_float4(int4 i)
+{
+#ifdef __KERNEL_SSE__
+	return float4(_mm_castsi128_ps(i.m128));
+#else
+	return make_float4(__int_as_float(i.x),
+	                   __int_as_float(i.y),
+	                   __int_as_float(i.z),
+	                   __int_as_float(i.w));
+#endif
+}
 #endif /* __KERNEL_OPENCL__ */
 
 /* Versions of functions which are safe for fast math. */
@@ -264,6 +297,11 @@ ccl_device_inline int float_to_int(float f)
 ccl_device_inline int floor_to_int(float f)
 {
 	return float_to_int(floorf(f));
+}
+
+ccl_device_inline int quick_floor_to_int(float x)
+{
+	return float_to_int(x) - ((x < 0) ? 1 : 0);
 }
 
 ccl_device_inline int ceil_to_int(float f)
@@ -536,6 +574,16 @@ ccl_device_inline float sqr(float a)
 	return a * a;
 }
 
+ccl_device_inline float pow20(float a)
+{
+    return sqr(sqr(sqr(sqr(a))*a));
+}
+
+ccl_device_inline float pow22(float a)
+{
+    return sqr(a*sqr(sqr(sqr(a))*a));
+}
+
 ccl_device_inline float beta(float x, float y)
 {
 #ifndef __KERNEL_OPENCL__
@@ -548,6 +596,11 @@ ccl_device_inline float beta(float x, float y)
 ccl_device_inline float xor_signmask(float x, int y)
 {
 	return __int_as_float(__float_as_int(x) ^ y);
+}
+
+ccl_device float bits_to_01(uint bits)
+{
+	return bits * (1.0f/(float)0xFFFFFFFF);
 }
 
 /* projections */

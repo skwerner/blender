@@ -20,20 +20,20 @@
  *		Monique Dewanchand
  */
 
-#ifndef _COM_GlareScaleOperation_h
-#define _COM_GlareScaleOperation_h
+#ifndef __COM_GLARETHRESHOLDOPERATION_H__
+#define __COM_GLARETHRESHOLDOPERATION_H__
 #include "COM_NodeOperation.h"
 #include "DNA_lamp_types.h"
 
 class GlareThresholdOperation : public NodeOperation {
 private:
 	/**
-	 * @brief Cached reference to the inputProgram
+	 * \brief Cached reference to the inputProgram
 	 */
 	SocketReader *m_inputProgram;
 
 	/**
-	 * @brief settings of the glare node.
+	 * \brief settings of the glare node.
 	 */
 	NodeGlare *m_settings;
 public:

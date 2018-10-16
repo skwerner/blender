@@ -355,7 +355,7 @@ static void rna_EditBone_connected_check(EditBone *ebone)
 	}
 }
 
-static void rna_EditBone_connected_set(PointerRNA *ptr, int value)
+static void rna_EditBone_connected_set(PointerRNA *ptr, bool value)
 {
 	EditBone *ebone = (EditBone *)(ptr->data);
 
@@ -475,7 +475,7 @@ static void rna_Armature_bones_next(CollectionPropertyIterator *iter)
 	iter->valid = (internal->link != NULL);
 }
 
-static int rna_Armature_is_editmode_get(PointerRNA *ptr)
+static bool rna_Armature_is_editmode_get(PointerRNA *ptr)
 {
 	bArmature *arm = (bArmature *)ptr->id.data;
 	return (arm->edbo != NULL);
@@ -886,7 +886,7 @@ static void rna_def_edit_bone(BlenderRNA *brna)
 
 	/* calculated and read only, not actual data access */
 	prop = RNA_def_property(srna, "matrix", PROP_FLOAT, PROP_MATRIX);
-	/*RNA_def_property_float_sdna(prop, NULL, "");  *//* doesnt access any real data */
+	/*RNA_def_property_float_sdna(prop, NULL, "");  *//* doesn't access any real data */
 	RNA_def_property_multi_array(prop, 2, rna_matrix_dimsize_4x4);
 	//RNA_def_property_clear_flag(prop, PROP_EDITABLE);
 	RNA_def_property_flag(prop, PROP_THICK_WRAP); /* no reference to original data */

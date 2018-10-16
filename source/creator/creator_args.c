@@ -60,6 +60,8 @@
 #include "BKE_sound.h"
 #include "BKE_image.h"
 
+#include "DNA_screen_types.h"
+
 #include "DEG_depsgraph.h"
 
 #ifdef WITH_FFMPEG
@@ -512,6 +514,7 @@ static int arg_handle_print_help(int UNUSED(argc), const char **UNUSED(argv), vo
 	BLI_argsPrintArgDoc(ba, "--window-geometry");
 	BLI_argsPrintArgDoc(ba, "--start-console");
 	BLI_argsPrintArgDoc(ba, "--no-native-pixels");
+	BLI_argsPrintArgDoc(ba, "--no-window-focus");
 
 
 	printf("\n");
@@ -578,6 +581,7 @@ static int arg_handle_print_help(int UNUSED(argc), const char **UNUSED(argv), vo
 
 	printf("\n");
 	printf("Misc Options:\n");
+	BLI_argsPrintArgDoc(ba, "--app-template");
 	BLI_argsPrintArgDoc(ba, "--factory-startup");
 	printf("\n");
 	BLI_argsPrintArgDoc(ba, "--env-system-datafiles");
@@ -899,7 +903,7 @@ static const char arg_handle_debug_mode_generic_set_doc_gpumem[] =
 
 static int arg_handle_debug_mode_generic_set(int UNUSED(argc), const char **UNUSED(argv), void *data)
 {
-	G.debug |= GET_INT_FROM_POINTER(data);
+	G.debug |= POINTER_AS_INT(data);
 	return 0;
 }
 
@@ -989,6 +993,22 @@ static int arg_handle_debug_fpe_set(int UNUSED(argc), const char **UNUSED(argv),
 {
 	main_signal_setup_fpe();
 	return 0;
+}
+
+static const char arg_handle_app_template_doc[] =
+"\n\tSet the application template, use 'default' for none."
+;
+static int arg_handle_app_template(int argc, const char **argv, void *UNUSED(data))
+{
+	if (argc > 1) {
+		const char *app_template = STREQ(argv[1], "default") ? "" : argv[1];
+		WM_init_state_app_template_set(app_template);
+		return 1;
+	}
+	else {
+		printf("\nError: App template must follow '--app-template'.\n");
+		return 0;
+	}
 }
 
 static const char arg_handle_factory_startup_set_doc[] =
@@ -1112,6 +1132,15 @@ static const char arg_handle_without_borders_doc[] =
 static int arg_handle_without_borders(int UNUSED(argc), const char **UNUSED(argv), void *UNUSED(data))
 {
 	WM_init_state_fullscreen_set();
+	return 0;
+}
+
+static const char arg_handle_no_window_focus_doc[] =
+"\n\tOpen behind other windows and without taking focus."
+;
+static int arg_handle_no_window_focus(int UNUSED(argc), const char **UNUSED(argv), void *UNUSED(data))
+{
+	WM_init_window_focus_set(false);
 	return 0;
 }
 
@@ -1588,6 +1617,16 @@ static int arg_handle_scene_set(int argc, const char **argv, void *data)
 		Scene *scene = BKE_scene_set_name(CTX_data_main(C), argv[1]);
 		if (scene) {
 			CTX_data_scene_set(C, scene);
+
+			/* Set the scene of the first window, see: T55991,
+			 * otherwise scrips that run later won't get this scene back from the context. */
+			wmWindow *win = CTX_wm_window(C);
+			if (win == NULL) {
+				win = CTX_wm_manager(C)->windows.first;
+			}
+			if (win != NULL) {
+				win->screen->scene = scene;
+			}
 		}
 		return 1;
 	}
@@ -2031,6 +2070,7 @@ void main_args_setup(bContext *C, bArgs *ba, SYS_SystemHandle *syshandle)
 
 	BLI_argsAdd(ba, 1, NULL, "--verbose", CB(arg_handle_verbosity_set), NULL);
 
+	BLI_argsAdd(ba, 1, NULL, "--app-template", CB(arg_handle_app_template), NULL);
 	BLI_argsAdd(ba, 1, NULL, "--factory-startup", CB(arg_handle_factory_startup_set), NULL);
 
 	/* TODO, add user env vars? */
@@ -2042,6 +2082,7 @@ void main_args_setup(bContext *C, bArgs *ba, SYS_SystemHandle *syshandle)
 	BLI_argsAdd(ba, 2, "-p", "--window-geometry", CB(arg_handle_window_geometry), NULL);
 	BLI_argsAdd(ba, 2, "-w", "--window-border", CB(arg_handle_with_borders), NULL);
 	BLI_argsAdd(ba, 2, "-W", "--window-fullscreen", CB(arg_handle_without_borders), NULL);
+	BLI_argsAdd(ba, 2, NULL, "--no-window-focus", CB(arg_handle_no_window_focus), NULL);
 	BLI_argsAdd(ba, 2, "-con", "--start-console", CB(arg_handle_start_with_console), NULL);
 	BLI_argsAdd(ba, 2, "-R", NULL, CB(arg_handle_register_extension), NULL);
 	BLI_argsAdd(ba, 2, "-r", NULL, CB_EX(arg_handle_register_extension, silent), ba);

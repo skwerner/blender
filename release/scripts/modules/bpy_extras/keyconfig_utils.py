@@ -240,9 +240,9 @@ def _export_properties(prefix, properties, kmi_id, lines=None):
         lines = []
 
     def string_value(value):
-        if isinstance(value, str) or isinstance(value, bool) or isinstance(value, float) or isinstance(value, int):
+        if isinstance(value, (str, bool, float, int)):
             return repr(value)
-        elif getattr(value, '__len__', False):
+        elif hasattr(value, "__len__"):
             return repr(list(value))
 
         print("Export key configuration: can't write ", value)
@@ -296,8 +296,10 @@ def _kmistr(kmi, is_modal):
     return "".join(s)
 
 
-def keyconfig_export(wm, kc, filepath):
-
+def keyconfig_export(
+        wm, kc, filepath, *,
+        all_keymaps=False,
+):
     f = open(filepath, "w")
 
     f.write("import bpy\n")
@@ -327,7 +329,7 @@ def keyconfig_export(wm, kc, filepath):
         keymaps = []
     edited_kc = FakeKeyConfig()
     for km in wm.keyconfigs.user.keymaps:
-        if km.is_user_modified:
+        if all_keymaps or km.is_user_modified:
             edited_kc.keymaps.append(km)
     # merge edited keymaps with non-default keyconfig, if it exists
     if kc != wm.keyconfigs.default:

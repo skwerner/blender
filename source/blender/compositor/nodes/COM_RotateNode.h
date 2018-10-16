@@ -20,14 +20,14 @@
  *		Monique Dewanchand
  */
 
-#ifndef _COM_RotateNode_h_
-#define _COM_RotateNode_h_
+#ifndef __COM_ROTATENODE_H__
+#define __COM_ROTATENODE_H__
 
 #include "COM_Node.h"
 
 /**
- * @brief RotateNode
- * @ingroup Node
+ * \brief RotateNode
+ * \ingroup Node
  */
 class RotateNode : public Node {
 public:

@@ -239,7 +239,7 @@ IDProperty *rna_ID_idprops(PointerRNA *ptr, bool create)
 	return IDP_GetProperties(ptr->data, create);
 }
 
-void rna_ID_fake_user_set(PointerRNA *ptr, int value)
+void rna_ID_fake_user_set(PointerRNA *ptr, bool value)
 {
 	ID *id = (ID *)ptr->data;
 
@@ -376,7 +376,7 @@ static struct ID *rna_ID_make_local(struct ID *self, Main *bmain, bool clear_pro
 }
 
 
-static AnimData * rna_ID_animation_data_create(ID *id, Main *bmain)
+static AnimData *rna_ID_animation_data_create(ID *id, Main *bmain)
 {
 	AnimData *adt = BKE_animdata_add_id(id);
 	DAG_relations_tag_update(bmain);
@@ -647,7 +647,7 @@ static void rna_ImagePreview_pixels_float_set(PointerRNA *ptr, const float *valu
 }
 
 
-static void rna_ImagePreview_is_image_custom_set(PointerRNA *ptr, int value)
+static void rna_ImagePreview_is_image_custom_set(PointerRNA *ptr, bool value)
 {
 	rna_ImagePreview_is_custom_set(ptr, value, ICON_SIZE_PREVIEW);
 }
@@ -693,7 +693,7 @@ static void rna_ImagePreview_image_pixels_float_set(PointerRNA *ptr, const float
 }
 
 
-static void rna_ImagePreview_is_icon_custom_set(PointerRNA *ptr, int value)
+static void rna_ImagePreview_is_icon_custom_set(PointerRNA *ptr, bool value)
 {
 	rna_ImagePreview_is_custom_set(ptr, value, ICON_SIZE_ICON);
 }

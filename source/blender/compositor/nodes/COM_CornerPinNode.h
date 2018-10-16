@@ -19,8 +19,8 @@
  *		Lukas Toenne
  */
 
-#ifndef _COM_CornerPinNode_h
-#define _COM_CornerPinNode_h
+#ifndef __COM_CORNERPINNODE_H__
+#define __COM_CORNERPINNODE_H__
 
 #include "COM_Node.h"
 
@@ -29,8 +29,8 @@ extern "C" {
 }
 
 /**
- * @brief CornerPinNode
- * @ingroup Node
+ * \brief CornerPinNode
+ * \ingroup Node
  */
 class CornerPinNode : public Node {
 public:
@@ -38,4 +38,4 @@ public:
 	void convertToOperations(NodeConverter &converter, const CompositorContext &context) const;
 };
 
-#endif /* _COM_CornerPinNode_h */
+#endif /* __COM_CORNERPINNODE_H__ */

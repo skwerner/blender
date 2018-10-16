@@ -20,14 +20,14 @@
  *		Monique Dewanchand
  */
 
-#ifndef _COM_InvertNode_h_
-#define _COM_InvertNode_h_
+#ifndef __COM_INVERTNODE_H__
+#define __COM_INVERTNODE_H__
 
 #include "COM_Node.h"
 
 /**
- * @brief InvertNode
- * @ingroup Node
+ * \brief InvertNode
+ * \ingroup Node
  */
 class InvertNode : public Node {
 public:

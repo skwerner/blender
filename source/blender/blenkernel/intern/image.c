@@ -2898,7 +2898,7 @@ static RenderPass *image_render_pass_get(RenderLayer *rl, const int pass, const 
 }
 
 /* if layer or pass changes, we need an index for the imbufs list */
-/* note it is called for rendered results, but it doesnt use the index! */
+/* note it is called for rendered results, but it doesn't use the index! */
 /* and because rendered results use fake layer/passes, don't correct for wrong indices here */
 RenderPass *BKE_image_multilayer_index(RenderResult *rr, ImageUser *iuser)
 {
@@ -2950,7 +2950,7 @@ void BKE_image_multiview_index(Image *ima, ImageUser *iuser)
 }
 
 /* if layer or pass changes, we need an index for the imbufs list */
-/* note it is called for rendered results, but it doesnt use the index! */
+/* note it is called for rendered results, but it doesn't use the index! */
 /* and because rendered results use fake layer/passes, don't correct for wrong indices here */
 bool BKE_image_is_multilayer(Image *ima)
 {
@@ -3784,7 +3784,7 @@ static ImBuf *image_get_render_result(Image *ima, ImageUser *iuser, void **r_loc
 	 *
 	 * This is mainly to make it so color management treats byte buffer
 	 * from render result with Save Buffers enabled as final display buffer
-	 * and doesnt' apply any color management on it.
+	 * and doesn't apply any color management on it.
 	 *
 	 * For other cases we need to be sure it stays to default byte buffer space.
 	 */
@@ -4095,12 +4095,12 @@ ImBuf *BKE_image_acquire_ibuf(Image *ima, ImageUser *iuser, void **r_lock)
 
 void BKE_image_release_ibuf(Image *ima, ImBuf *ibuf, void *lock)
 {
-	if (lock) {
+	if (lock != NULL) {
 		/* for getting image during threaded render / compositing, need to release */
 		if (lock == ima) {
 			BLI_thread_unlock(LOCK_VIEWER); /* viewer image */
 		}
-		else if (lock) {
+		else {
 			RE_ReleaseResultImage(lock); /* render result */
 			BLI_thread_unlock(LOCK_VIEWER); /* view image imbuf */
 		}

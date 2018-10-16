@@ -500,7 +500,7 @@ enum {
 };
 
 enum {
-	CMP_NODEFLAG_MASK_AA          = (1 << 0),
+	/* CMP_NODEFLAG_MASK_AA          = (1 << 0), */  /* DEPRECATED */
 	CMP_NODEFLAG_MASK_NO_FEATHER  = (1 << 1),
 	CMP_NODEFLAG_MASK_MOTION_BLUR = (1 << 2),
 
@@ -778,6 +778,8 @@ typedef struct NodeTexNoise {
 typedef struct NodeTexVoronoi {
 	NodeTexBase base;
 	int coloring;
+	int distance;
+	int feature;
 	int pad;
 } NodeTexVoronoi;
 
@@ -905,6 +907,14 @@ typedef struct NodeSunBeams {
 	float ray_length;
 } NodeSunBeams;
 
+typedef struct NodeCryptomatte {
+	float add[3];
+	float remove[3];
+	char *matte_id;
+	int num_inputs;
+	int pad;
+} NodeCryptomatte;
+
 /* script node mode */
 #define NODE_SCRIPT_INTERNAL		0
 #define NODE_SCRIPT_EXTERNAL		1
@@ -953,6 +963,11 @@ typedef struct NodeSunBeams {
 #define SHD_HAIR_REFLECTION		0
 #define SHD_HAIR_TRANSMISSION		1
 
+/* principled hair parametrization */
+#define SHD_PRINCIPLED_HAIR_REFLECTANCE				0
+#define SHD_PRINCIPLED_HAIR_PIGMENT_CONCENTRATION	1
+#define SHD_PRINCIPLED_HAIR_DIRECT_ABSORPTION		2
+
 /* blend texture */
 #define SHD_BLEND_LINEAR			0
 #define SHD_BLEND_QUADRATIC			1
@@ -976,16 +991,19 @@ typedef struct NodeSunBeams {
 #define SHD_NOISE_HARD	1
 
 /* voronoi texture */
-#define SHD_VORONOI_DISTANCE_SQUARED	0
-#define SHD_VORONOI_ACTUAL_DISTANCE		1
-#define SHD_VORONOI_MANHATTAN			2
-#define SHD_VORONOI_CHEBYCHEV			3
-#define SHD_VORONOI_MINKOVSKY_H			4
-#define SHD_VORONOI_MINKOVSKY_4			5
-#define SHD_VORONOI_MINKOVSKY			6
+#define SHD_VORONOI_DISTANCE		0
+#define SHD_VORONOI_MANHATTAN		1
+#define SHD_VORONOI_CHEBYCHEV		2
+#define SHD_VORONOI_MINKOWSKI		3
 
 #define SHD_VORONOI_INTENSITY	0
 #define SHD_VORONOI_CELLS		1
+
+#define SHD_VORONOI_F1		0
+#define SHD_VORONOI_F2		1
+#define SHD_VORONOI_F3		2
+#define SHD_VORONOI_F4		3
+#define SHD_VORONOI_F2F1	4
 
 /* musgrave texture */
 #define SHD_MUSGRAVE_MULTIFRACTAL			0
@@ -1073,6 +1091,10 @@ enum {
 	NODE_MATH_MOD     = 17,
 	NODE_MATH_ABS     = 18,
 	NODE_MATH_ATAN2   = 19,
+	NODE_MATH_FLOOR   = 20,
+	NODE_MATH_CEIL    = 21,
+	NODE_MATH_FRACT   = 22,
+	NODE_MATH_SQRT    = 23,
 };
 
 /* mix rgb node flags */

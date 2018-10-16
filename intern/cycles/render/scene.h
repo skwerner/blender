@@ -225,7 +225,7 @@ public:
 		&& num_bvh_time_steps == params.num_bvh_time_steps
 		&& persistent_data == params.persistent_data
 		&& texture_limit == params.texture_limit)
-		&& !texture.modified(params.texture); }
+		|| texture.modified(params.texture); }
 };
 
 /* Scene */

@@ -641,35 +641,36 @@ ccl_device_inline float2 map_to_sphere(const float3 co)
 	return make_float2(u, v);
 }
 
-ccl_device_inline float2 encode_normal(float3 n)
-{
-	float2 projected;
-	const float invL1Norm = 1.0f / (fabsf(n.x) + fabsf(n.y) + fabsf(n.z));
-
-	if (n.z < 0.0f) {
-		projected[0] = (1.0f - float(fabsf(n[1] * invL1Norm)) * sign_not_zero(n[0]));
-		projected[1] = (1.0f - float(fabsf(n[0] * invL1Norm)) * sign_not_zero(n[1]));
-	}
-	else {
-		projected[0] = (n[0] * invL1Norm);
-		projected[1] = (n[1] * invL1Norm);
-	}
-	return projected;
-}
-
 ccl_device_inline float3 decode_normal(float2 f)
 {
 	float3 n;
 	n.x = f.x;
 	n.y = f.y;
-	n.z = 1.0f - (fabsf(f.x) + fabsf(f.y));
+	n.z = 1.0f - fabsf(f.x) - fabsf(f.y);
 
 	if (n.z < 0.0f) {
-		float oldX = n.x;
-		n.x = (1.0f - fabsf(n.y)) * sign_not_zero(oldX);
-		n.y = (1.0f - fabsf(oldX)) * sign_not_zero(n.y);
+		n.x = (1.0f - fabsf(f.y)) * sign_not_zero(f.x);
+		n.y = (1.0f - fabsf(f.x)) * sign_not_zero(f.y);
 	}
 	return normalize(n);
+}
+
+ccl_device_inline float2 encode_normal(float3 n)
+{
+	const float inv = 1.0f / (fabsf(n.x) + fabsf(n.y) + fabsf(n.z));
+	if(isfinite_safe(inv)) {
+		float2 projected;
+		projected.x = n.x * inv;
+		projected.y = n.y * inv;
+		if (n.z <= 0.0f) {
+			projected.x = (1.0f - fabsf(n.y * inv)) * sign_not_zero(n.x);
+			projected.y = (1.0f - fabsf(n.x * inv)) * sign_not_zero(n.y);
+		}
+		return projected;
+	}
+	else {
+		return make_float2(0.0f, 0.0f);
+	}
 }
 
 CCL_NAMESPACE_END

@@ -641,6 +641,9 @@ ccl_device_inline float2 map_to_sphere(const float3 co)
 	return make_float2(u, v);
 }
 
+/* Convert from octahedral normals to cartesian.
+ * See http://jcgt.org/published/0003/02/01/paper.pdf
+ * "A Survey of Efficient Representations for Independent Unit Vectors" */
 ccl_device_inline float3 decode_normal(float2 f)
 {
 	float3 n;
@@ -655,6 +658,7 @@ ccl_device_inline float3 decode_normal(float2 f)
 	return normalize(n);
 }
 
+/* Convert from cartesian to octahedral normals.  */
 ccl_device_inline float2 encode_normal(float3 n)
 {
 	const float inv = 1.0f / (fabsf(n.x) + fabsf(n.y) + fabsf(n.z));

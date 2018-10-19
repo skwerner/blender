@@ -460,8 +460,7 @@ class CYCLES_RENDER_PT_texture_cache(CyclesButtonsPanel, Panel):
         rd = scene.render
         layout.active = cscene.use_texture_cache
 
-        col = layout.column()
-        split = col.split()
+        split = layout.split()
         col = split.column()
         col.prop(cscene, "texture_auto_convert")
         col.prop(cscene, "texture_accept_unmipped")
@@ -473,6 +472,11 @@ class CYCLES_RENDER_PT_texture_cache(CyclesButtonsPanel, Panel):
         col.prop(cscene, "texture_tile_size")
         col.prop(cscene, "texture_blur_diffuse")
         col.prop(cscene, "texture_blur_glossy")
+        row = layout.row()
+        row.prop(cscene, "use_custom_cache_path")
+        row = layout.row()
+        row.active = cscene.use_custom_cache_path
+        row.prop(cscene, "custom_cache_path")
 
 class CYCLES_RENDER_PT_layer_options(CyclesButtonsPanel, Panel):
     bl_label = "Layer"

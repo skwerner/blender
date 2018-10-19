@@ -765,7 +765,9 @@ void ImageManager::device_load_image(Device *device,
 	if(oiio_texture_system && !img->builtin_data) {
 		/* Get or generate a mip mapped tile image file.
 		 * If we have a mip map, assume it's linear, not sRGB. */
-		bool have_mip = get_tx(img, progress, scene->params.texture.auto_convert);
+		const char *cache_path = scene->params.texture.use_custom_cache_path ?
+		                         scene->params.texture.custom_cache_path.c_str() : NULL;
+		bool have_mip = get_tx(img, progress, scene->params.texture.auto_convert, cache_path);
 
 		/* When using OIIO directly from SVM, store the TextureHandle
 		 * in an array for quicker lookup at shading time */
@@ -1145,7 +1147,7 @@ bool ImageManager::make_tx(const string &filename, const string &outputfilename,
 	return ImageBufAlgo::make_texture(ImageBufAlgo::MakeTxTexture, filename, outputfilename, config);
 }
 
-bool ImageManager::get_tx(Image *image, Progress *progress, bool auto_convert)
+bool ImageManager::get_tx(Image *image, Progress *progress, bool auto_convert, const char *cache_path)
 {
 	if(!path_exists(image->filename)) {
 		return false;
@@ -1160,6 +1162,10 @@ bool ImageManager::get_tx(Image *image, Progress *progress, bool auto_convert)
 	}
 	
 	string tx_name = image->filename.substr(0, idx) + ".tx";
+	if(cache_path) {
+		string filename = path_filename(tx_name);
+		tx_name = path_join(string(cache_path), filename);
+	}
 	if(path_exists(tx_name)) {
 		image->filename = tx_name;
 		return true;

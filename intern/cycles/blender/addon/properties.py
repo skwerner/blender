@@ -717,8 +717,21 @@ class CyclesRenderSettings(bpy.types.PropertyGroup):
         cls.texture_blur_glossy = FloatProperty(
             name="Glossy Blur",
             default=0.0,
-            description="The amount of texture blur applied to diffuse bounces",
+            description="The amount of texture blur applied to glossy bounces",
             min = 0.0, max = 1.0
+        )
+
+        cls.use_custom_cache_path = BoolProperty(
+            name="Use Custom Cache Path",
+            default=False,
+            description="Use a custom path for the texture cache, as oppoosed to placing cache files next to the original file"
+        )
+
+        cls.custom_cache_path = StringProperty(
+            name="Custom Cache Path",
+            default="",
+            subtype="DIR_PATH",
+            description="Custom path for the texture cache"
         )
 
         cls.ao_bounces = IntProperty(

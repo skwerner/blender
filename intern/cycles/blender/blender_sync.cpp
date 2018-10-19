@@ -699,6 +699,17 @@ SceneParams BlenderSync::get_scene_params(BL::Scene& b_scene,
 	params.texture.auto_tile = RNA_boolean_get(&cscene, "texture_auto_tile");
 	params.texture.diffuse_blur = RNA_float_get(&cscene, "texture_blur_diffuse");
 	params.texture.glossy_blur = RNA_float_get(&cscene, "texture_blur_glossy");
+	params.texture.use_custom_cache_path  = RNA_boolean_get(&cscene, "use_custom_cache_path");
+	if(params.texture.use_custom_cache_path) {
+		char *path = RNA_string_get_alloc(&cscene, "custom_cache_path", NULL, 0);
+		if(path) {
+			params.texture.custom_cache_path = path;
+			MEM_freeN(path);
+		}
+	}
+	else {
+		params.texture.custom_cache_path.clear();
+	}
 	
 	return params;
 }

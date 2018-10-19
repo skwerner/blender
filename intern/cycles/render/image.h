@@ -168,7 +168,7 @@ private:
 	                       ImageDataType type,
 	                       int slot);
 		
-	bool get_tx(Image *image, Progress *progress, bool auto_convert);
+	bool get_tx(Image *image, Progress *progress, bool auto_convert, const char *cache_path);
 };
 
 CCL_NAMESPACE_END

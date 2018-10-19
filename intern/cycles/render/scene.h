@@ -133,7 +133,7 @@ class TextureCacheParams {
 public:
 	TextureCacheParams() : use_cache(false), cache_size(1024), tile_size(64), diffuse_blur(1.0f/64.f),
 	glossy_blur(0.0f), auto_convert(true), accept_unmipped(true), accept_untiled(true),
-	auto_tile(true), auto_mip(true) { }
+	auto_tile(true), auto_mip(true), use_custom_cache_path(false) { }
 	
 	bool modified(const TextureCacheParams& params)
 	{
@@ -146,7 +146,9 @@ public:
 				 && accept_unmipped == params.accept_unmipped
 				 && accept_untiled == params.accept_untiled
 				 && auto_tile == params.auto_tile
-				 && auto_mip == params.auto_mip);
+				 && auto_mip == params.auto_mip
+				 && use_custom_cache_path == params.use_custom_cache_path
+				 && custom_cache_path == params.custom_cache_path);
 	}
 
 	bool use_cache;
@@ -159,6 +161,8 @@ public:
 	bool accept_untiled;
 	bool auto_tile;
 	bool auto_mip;
+	bool use_custom_cache_path;
+	string custom_cache_path;
 };
 
 /* Scene Parameters */

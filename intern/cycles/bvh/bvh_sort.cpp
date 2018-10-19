@@ -20,7 +20,6 @@
 #include "bvh/bvh_build.h"
 
 #include "util/util_algorithm.h"
-#include "util/util_debug.h"
 #include "util/util_task.h"
 
 CCL_NAMESPACE_BEGIN
@@ -202,4 +201,3 @@ void bvh_reference_sort(int start,
 }
 
 CCL_NAMESPACE_END
-

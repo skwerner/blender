@@ -174,8 +174,6 @@ PyDoc_STRVAR(bpyunits_to_value_doc,
 );
 static PyObject *bpyunits_to_value(PyObject *UNUSED(self), PyObject *args, PyObject *kw)
 {
-	static const char *kwlist[] = {"unit_system", "unit_category", "str_input", "str_ref_unit", NULL};
-
 	char *usys_str = NULL, *ucat_str = NULL, *inpt = NULL, *uref = NULL;
 	const float scale = 1.0f;
 
@@ -185,8 +183,13 @@ static PyObject *bpyunits_to_value(PyObject *UNUSED(self), PyObject *args, PyObj
 	int usys, ucat;
 	PyObject *ret;
 
-	if (!PyArg_ParseTupleAndKeywords(args, kw, "sss#|z:bpy.utils.units.to_value", (char **)kwlist,
-	                                 &usys_str, &ucat_str, &inpt, &str_len, &uref))
+	static const char *_keywords[] = {
+		"unit_system", "unit_category", "str_input", "str_ref_unit", NULL,
+	};
+	static _PyArg_Parser _parser = {"sss#|z:to_value", _keywords, 0};
+	if (!_PyArg_ParseTupleAndKeywordsFast(
+	        args, kw, &_parser,
+	        &usys_str, &ucat_str, &inpt, &str_len, &uref))
 	{
 		return NULL;
 	}
@@ -201,7 +204,7 @@ static PyObject *bpyunits_to_value(PyObject *UNUSED(self), PyObject *args, PyObj
 
 	bUnit_ReplaceString(str, (int)str_len, uref, scale, usys, ucat);
 
-	if (!PyC_RunString_AsNumber(str, "<bpy_units_api>", &result)) {
+	if (!PyC_RunString_AsNumber(NULL, str, "<bpy_units_api>", &result)) {
 		if (PyErr_Occurred()) {
 			PyErr_Print();
 			PyErr_Clear();
@@ -244,9 +247,6 @@ PyDoc_STRVAR(bpyunits_to_string_doc,
 );
 static PyObject *bpyunits_to_string(PyObject *UNUSED(self), PyObject *args, PyObject *kw)
 {
-	static const char *kwlist[] = {"unit_system", "unit_category", "value",
-	                               "precision", "split_unit", "compatible_unit", NULL};
-
 	char *usys_str = NULL, *ucat_str = NULL;
 	double value = 0.0;
 	int precision = 3;
@@ -254,9 +254,13 @@ static PyObject *bpyunits_to_string(PyObject *UNUSED(self), PyObject *args, PyOb
 
 	int usys, ucat;
 
-	if (!PyArg_ParseTupleAndKeywords(
-	        args, kw,
-	        "ssd|iO&O&:bpy.utils.units.to_string", (char **)kwlist,
+	static const char *_keywords[] = {
+		"unit_system", "unit_category", "value",
+		"precision", "split_unit", "compatible_unit", NULL,
+	};
+	static _PyArg_Parser _parser = {"ssd|iO&O&:to_string", _keywords, 0};
+	if (!_PyArg_ParseTupleAndKeywordsFast(
+	        args, kw, &_parser,
 	        &usys_str, &ucat_str, &value, &precision,
 	        PyC_ParseBool, &split_unit,
 	        PyC_ParseBool, &compatible_unit))

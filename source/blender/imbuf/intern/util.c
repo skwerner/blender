@@ -43,8 +43,6 @@
 #include "BLI_fileops.h"
 #include "BLI_string.h"
 
-#include "BKE_global.h"
-
 #include "imbuf.h"
 #include "IMB_imbuf_types.h"
 #include "IMB_imbuf.h"
@@ -52,11 +50,8 @@
 
 #include "IMB_anim.h"
 
-#ifdef WITH_QUICKTIME
-#include "quicktime_import.h"
-#endif
-
 #ifdef WITH_FFMPEG
+#include "BKE_global.h"  /* G.debug */
 #include <libavcodec/avcodec.h>
 #include <libavformat/avformat.h>
 #include <libavdevice/avdevice.h>
@@ -106,28 +101,6 @@ const char *imb_ext_image_filepath_only[] = {
 #endif
 	NULL
 };
-
-const char *imb_ext_image_qt[] = {
-	".gif",
-	".psd",
-	".pct", ".pict",
-	".pntg",
-	".qtif",
-	NULL
-};
-
-#if 0  /* UNUSED */
-const char *imb_ext_movie_qt[] = {
-	".avi",   
-	".flc",   
-	".dv",    
-	".r3d",   
-	".mov",   
-	".movie", 
-	".mv",
-	NULL
-};
-#endif
 
 const char *imb_ext_movie[] = {
 	".avi",
@@ -193,7 +166,7 @@ int IMB_ispic_type(const char *name)
 	BLI_assert(!BLI_path_is_rel(name));
 
 	if (UTIL_DEBUG) printf("%s: loading %s\n", __func__, name);
-	
+
 	if (BLI_stat(name, &st) == -1)
 		return false;
 	if (((st.st_mode) & S_IFMT) != S_IFREG)
@@ -246,13 +219,6 @@ static int isavi(const char *name)
 	return false;
 #endif
 }
-
-#ifdef WITH_QUICKTIME
-static int isqtime(const char *name)
-{
-	return anim_is_quicktime(name);
-}
-#endif
 
 #ifdef WITH_FFMPEG
 
@@ -315,7 +281,7 @@ static int isffmpeg(const char *filename)
 	AVCodec *pCodec;
 	AVCodecContext *pCodecCtx;
 
-	if (BLI_testextensie_n(
+	if (BLI_path_extension_check_n(
 	        filename,
 	        ".swf", ".jpg", ".png", ".dds", ".tga", ".bmp", ".tif", ".exr", ".cin", ".wav", NULL))
 	{
@@ -383,9 +349,6 @@ int imb_get_anim_type(const char *name)
 	if (UTIL_DEBUG) printf("%s: %s\n", __func__, name);
 
 #ifndef _WIN32
-#   ifdef WITH_QUICKTIME
-	if (isqtime(name)) return (ANIM_QTIME);
-#   endif
 #   ifdef WITH_FFMPEG
 	/* stat test below fails on large files > 4GB */
 	if (isffmpeg(name)) return (ANIM_FFMPEG);
@@ -401,9 +364,6 @@ int imb_get_anim_type(const char *name)
 	if (((st.st_mode) & S_IFMT) != S_IFREG) return(0);
 
 	if (ismovie(name)) return (ANIM_MOVIE);
-#   ifdef WITH_QUICKTIME
-	if (isqtime(name)) return (ANIM_QTIME);
-#   endif
 #   ifdef WITH_FFMPEG
 	if (isffmpeg(name)) return (ANIM_FFMPEG);
 #   endif
@@ -418,13 +378,13 @@ int imb_get_anim_type(const char *name)
 
 	return ANIM_NONE;
 }
- 
+
 bool IMB_isanim(const char *filename)
 {
 	int type;
 
 	type = imb_get_anim_type(filename);
-	
+
 	return (type && type != ANIM_SEQUENCE);
 }
 

@@ -32,7 +32,6 @@ SET(_spacenav_SEARCH_DIRS
   /usr/local
   /sw # Fink
   /opt/local # DarwinPorts
-  /opt/csw # Blastwave
 )
 
 FIND_PATH(SPACENAV_INCLUDE_DIR
@@ -53,7 +52,7 @@ FIND_LIBRARY(SPACENAV_LIBRARY
     lib64 lib
   )
 
-# handle the QUIETLY and REQUIRED arguments and set SPACENAV_FOUND to TRUE if 
+# handle the QUIETLY and REQUIRED arguments and set SPACENAV_FOUND to TRUE if
 # all listed variables are TRUE
 INCLUDE(FindPackageHandleStandardArgs)
 FIND_PACKAGE_HANDLE_STANDARD_ARGS(Spacenav DEFAULT_MSG

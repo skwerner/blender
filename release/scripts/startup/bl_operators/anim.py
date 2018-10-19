@@ -41,23 +41,23 @@ class ANIM_OT_keying_set_export(Operator):
     bl_label = "Export Keying Set..."
 
     filepath = StringProperty(
-            subtype='FILE_PATH',
-            )
+        subtype='FILE_PATH',
+    )
     filter_folder = BoolProperty(
-            name="Filter folders",
-            default=True,
-            options={'HIDDEN'},
-            )
+        name="Filter folders",
+        default=True,
+        options={'HIDDEN'},
+    )
     filter_text = BoolProperty(
-            name="Filter text",
-            default=True,
-            options={'HIDDEN'},
-            )
+        name="Filter text",
+        default=True,
+        options={'HIDDEN'},
+    )
     filter_python = BoolProperty(
-            name="Filter python",
-            default=True,
-            options={'HIDDEN'},
-            )
+        name="Filter python",
+        default=True,
+        options={'HIDDEN'},
+    )
 
     def execute(self, context):
         if not self.filepath:
@@ -137,6 +137,9 @@ class ANIM_OT_keying_set_export(Operator):
                         break
                 else:
                     self.report({'WARN'}, "Could not find scene using Compositor Node Tree - %s" % (ksp.id))
+            elif ksp.id.bl_rna.name == "Key":
+                # "keys" conflicts with a Python keyword, hence the simple solution won't work
+                id_bpy_path = "bpy.data.shape_keys[\"%s\"]" % (ksp.id.name)
             else:
                 idtype_list = ksp.id.bl_rna.name.lower() + "s"
                 id_bpy_path = "bpy.data.%s[\"%s\"]" % (idtype_list, ksp.id.name)
@@ -195,89 +198,88 @@ class ANIM_OT_keying_set_export(Operator):
 
 
 class BakeAction(Operator):
-    """Bake object/pose loc/scale/rotation animation to a new action"""
+    """Bake all selected objects loc/scale/rotation animation to an action"""
     bl_idname = "nla.bake"
     bl_label = "Bake Action"
     bl_options = {'REGISTER', 'UNDO'}
 
     frame_start = IntProperty(
-            name="Start Frame",
-            description="Start frame for baking",
-            min=0, max=300000,
-            default=1,
-            )
+        name="Start Frame",
+        description="Start frame for baking",
+        min=0, max=300000,
+        default=1,
+    )
     frame_end = IntProperty(
-            name="End Frame",
-            description="End frame for baking",
-            min=1, max=300000,
-            default=250,
-            )
+        name="End Frame",
+        description="End frame for baking",
+        min=1, max=300000,
+        default=250,
+    )
     step = IntProperty(
-            name="Frame Step",
-            description="Frame Step",
-            min=1, max=120,
-            default=1,
-            )
+        name="Frame Step",
+        description="Frame Step",
+        min=1, max=120,
+        default=1,
+    )
     only_selected = BoolProperty(
-            name="Only Selected",
-            description="Only key selected bones (Pose baking only)",
-            default=True,
-            )
+        name="Only Selected Bones",
+        description="Only key selected bones (Pose baking only)",
+        default=True,
+    )
     visual_keying = BoolProperty(
-            name="Visual Keying",
-            description="Keyframe from the final transformations (with constraints applied)",
-            default=False,
-            )
+        name="Visual Keying",
+        description="Keyframe from the final transformations (with constraints applied)",
+        default=False,
+    )
     clear_constraints = BoolProperty(
-            name="Clear Constraints",
-            description="Remove all constraints from keyed object/bones, and do 'visual' keying",
-            default=False,
-            )
+        name="Clear Constraints",
+        description="Remove all constraints from keyed object/bones, and do 'visual' keying",
+        default=False,
+    )
     clear_parents = BoolProperty(
-            name="Clear Parents",
-            description="Bake animation onto the object then clear parents (objects only)",
-            default=False,
-            )
+        name="Clear Parents",
+        description="Bake animation onto the object then clear parents (objects only)",
+        default=False,
+    )
     use_current_action = BoolProperty(
-            name="Overwrite Current Action",
-            description="Bake animation into current action, instead of creating a new one "
-                        "(useful for baking only part of bones in an armature)",
-            default=False,
-            )
+        name="Overwrite Current Action",
+        description="Bake animation into current action, instead of creating a new one "
+        "(useful for baking only part of bones in an armature)",
+        default=False,
+    )
     bake_types = EnumProperty(
-            name="Bake Data",
-            description="Which data's transformations to bake",
-            options={'ENUM_FLAG'},
-            items=(('POSE', "Pose", "Bake bones transformations"),
-                   ('OBJECT', "Object", "Bake object transformations"),
-                   ),
-            default={'POSE'},
-            )
+        name="Bake Data",
+        description="Which data's transformations to bake",
+        options={'ENUM_FLAG'},
+        items=(
+             ('POSE', "Pose", "Bake bones transformations"),
+             ('OBJECT', "Object", "Bake object transformations"),
+        ),
+        default={'POSE'},
+    )
 
     def execute(self, context):
-
         from bpy_extras import anim_utils
+        objects = context.selected_editable_objects
+        object_action_pairs = (
+            [(obj, getattr(obj.animation_data, "action", None)) for obj in objects]
+            if self.use_current_action else
+            [(obj, None) for obj in objects]
+        )
 
-        action = None
-        if self.use_current_action:
-            obj = context.object
-            if obj.animation_data:
-                action = obj.animation_data.action
+        actions = anim_utils.bake_action_objects(
+            object_action_pairs,
+            frames=range(self.frame_start, self.frame_end + 1, self.step),
+            only_selected=self.only_selected,
+            do_pose='POSE' in self.bake_types,
+            do_object='OBJECT' in self.bake_types,
+            do_visual_keying=self.visual_keying,
+            do_constraint_clear=self.clear_constraints,
+            do_parents_clear=self.clear_parents,
+            do_clean=True,
+        )
 
-        action = anim_utils.bake_action(self.frame_start,
-                                        self.frame_end,
-                                        frame_step=self.step,
-                                        only_selected=self.only_selected,
-                                        do_pose='POSE' in self.bake_types,
-                                        do_object='OBJECT' in self.bake_types,
-                                        do_visual_keying=self.visual_keying,
-                                        do_constraint_clear=self.clear_constraints,
-                                        do_parents_clear=self.clear_parents,
-                                        do_clean=True,
-                                        action=action,
-                                        )
-
-        if action is None:
+        if not any(actions):
             self.report({'INFO'}, "Nothing to bake")
             return {'CANCELLED'}
 
@@ -295,16 +297,16 @@ class BakeAction(Operator):
 
 class ClearUselessActions(Operator):
     """Mark actions with no F-Curves for deletion after save & reload of """ \
-    """file preserving \"action libraries\""""
+        """file preserving \"action libraries\""""
     bl_idname = "anim.clear_useless_actions"
     bl_label = "Clear Useless Actions"
     bl_options = {'REGISTER', 'UNDO'}
 
     only_unused = BoolProperty(
-            name="Only Unused",
-            description="Only unused (Fake User only) actions get considered",
-            default=True,
-            )
+        name="Only Unused",
+        description="Only unused (Fake User only) actions get considered",
+        default=True,
+    )
 
     @classmethod
     def poll(cls, context):
@@ -315,8 +317,10 @@ class ClearUselessActions(Operator):
 
         for action in bpy.data.actions:
             # if only user is "fake" user...
-            if ((self.only_unused is False) or
-                (action.use_fake_user and action.users == 1)):
+            if (
+                (self.only_unused is False) or
+                (action.use_fake_user and action.users == 1)
+            ):
 
                 # if it has F-Curves, then it's a "action library"
                 # (i.e. walk, wave, jump, etc.)
@@ -338,10 +342,10 @@ class UpdateAnimatedTransformConstraint(Operator):
     bl_options = {'REGISTER', 'UNDO'}
 
     use_convert_to_radians = BoolProperty(
-            name="Convert To Radians",
-            description="Convert fcurves/drivers affecting rotations to radians (Warning: use this only once!)",
-            default=True,
-            )
+        name="Convert To Radians",
+        description="Convert fcurves/drivers affecting rotations to radians (Warning: use this only once!)",
+        default=True,
+    )
 
     def execute(self, context):
         import animsys_refactor

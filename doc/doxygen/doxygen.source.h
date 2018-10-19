@@ -160,9 +160,6 @@
  *   merged in docs.
  */
 
-/** \defgroup quicktime QuickTime
- *  \ingroup blender
-
 /** \defgroup gui GUI */
 
 /** \defgroup wm Window Manager
@@ -196,6 +193,10 @@
  */
 
 /** \defgroup edinterface interface
+ *  \ingroup editors
+ */
+
+/** \defgroup edlattice lattice
  *  \ingroup editors
  */
 
@@ -312,6 +313,10 @@
  */
 
 /** \defgroup edutil editor utilities
+ *  \ingroup editors
+ */
+
+/** \defgroup edundo undo utilities
  *  \ingroup editors
  */
 

@@ -24,6 +24,7 @@
 
 CCL_NAMESPACE_BEGIN
 
+class MD5Hash;
 struct Node;
 struct NodeType;
 struct Transform;
@@ -88,9 +89,14 @@ struct Node
 	/* equals */
 	bool equals(const Node& other) const;
 
+	/* compute hash of node and its socket values */
+	void hash(MD5Hash& md5);
+
+	/* Get total size of this node. */
+	size_t get_total_size_in_bytes() const;
+
 	ustring name;
 	const NodeType *type;
 };
 
 CCL_NAMESPACE_END
-

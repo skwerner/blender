@@ -163,7 +163,7 @@ static int blf_search_available(void)
 	for (i = 0; i < BLF_MAX_FONT; i++)
 		if (!global_font[i])
 			return i;
-	
+
 	return -1;
 }
 
@@ -760,7 +760,7 @@ int BLF_height_max(int fontid)
 	FontBLF *font = blf_get(fontid);
 
 	if (font && font->glyph_cache) {
-		return font->glyph_cache->max_glyph_height;
+		return font->glyph_cache->glyph_height_max;
 	}
 
 	return 0;
@@ -771,7 +771,7 @@ float BLF_width_max(int fontid)
 	FontBLF *font = blf_get(fontid);
 
 	if (font && font->glyph_cache) {
-		return font->glyph_cache->max_glyph_width;
+		return font->glyph_cache->glyph_width_max;
 	}
 
 	return 0.0f;

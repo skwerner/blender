@@ -38,7 +38,7 @@
 #include "MEM_guardedalloc.h"
 
 #include "BLI_utildefines.h"
-#include "BLI_stackdefines.h"
+#include "BLI_utildefines_stack.h"
 #include "BLI_alloca.h"
 #include "BLI_linklist.h"
 #include "BLI_linklist_stack.h"
@@ -459,6 +459,9 @@ void BM_mesh_bisect_plane(
 	while ((f = BLI_LINKSTACK_POP(face_stack))) {
 		bm_face_bisect_verts(bm, f, plane, oflag_center, oflag_new);
 	}
+
+	/* Caused by access macros: BM_VERT_DIR, BM_VERT_SKIP. */
+	bm->elem_index_dirty |= BM_VERT;
 
 	/* now we have all faces to split in the stack */
 	BLI_LINKSTACK_FREE(face_stack);

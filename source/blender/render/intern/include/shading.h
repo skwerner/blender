@@ -44,9 +44,9 @@ struct Isect;
 /* needed to calculate shadow and AO for an entire pixel */
 typedef struct ShadeSample {
 	int tot;						/* amount of shi in use, can be 1 for not FULL_OSA */
-	
+
 	RenderLayer *rlpp[RE_MAX_OSA];	/* fast lookup from sample to renderlayer (fullsample buf) */
-	
+
 	/* could be malloced once */
 	ShadeInput shi[RE_MAX_OSA];
 	ShadeResult shr[RE_MAX_OSA];
@@ -57,7 +57,7 @@ typedef struct ShadeSample {
 void shade_material_loop(struct ShadeInput *shi, struct ShadeResult *shr);
 
 void shade_input_set_triangle_i(struct ShadeInput *shi, struct ObjectInstanceRen *obi, struct VlakRen *vlr, short i1, short i2, short i3);
-void shade_input_set_triangle(struct ShadeInput *shi, volatile int obi, volatile int facenr, int normal_flip);
+void shade_input_set_triangle(struct ShadeInput *shi, int obi, int facenr, int normal_flip);
 void shade_input_copy_triangle(struct ShadeInput *shi, struct ShadeInput *from);
 void shade_input_calc_viewco(struct ShadeInput *shi, float x, float y, float z, float view[3], float dxyview[2], float co[3], float dxco[3], float dyco[3]);
 void shade_input_set_viewco(struct ShadeInput *shi, float x, float y, float sx, float sy, float z);

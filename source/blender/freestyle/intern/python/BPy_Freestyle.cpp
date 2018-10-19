@@ -157,7 +157,7 @@ static PyObject *Freestyle_blendRamp(PyObject * /*self*/, PyObject *args)
 	return Vector_CreatePyObject(a, 3, NULL);
 }
 
-#include "BKE_texture.h" /* do_colorband() */
+#include "BKE_colorband.h" /* BKE_colorband_evaluate() */
 
 static char Freestyle_evaluateColorRamp___doc__[] =
 ".. function:: evaluateColorRamp(ramp, in)\n"
@@ -184,7 +184,7 @@ static PyObject *Freestyle_evaluateColorRamp(PyObject * /*self*/, PyObject *args
 		return NULL;
 	}
 	coba = (ColorBand *)py_srna->ptr.data;
-	if (!do_colorband(coba, in, out)) {
+	if (!BKE_colorband_evaluate(coba, in, out)) {
 		PyErr_SetString(PyExc_ValueError, "failed to evaluate the color ramp");
 		return NULL;
 	}
@@ -486,7 +486,7 @@ static PyModuleDef module_definition = {
 PyObject *Freestyle_Init(void)
 {
 	PyObject *module;
-	
+
 	// initialize modules
 	module = PyModule_Create(&module_definition);
 	if (!module)
@@ -509,9 +509,9 @@ PyObject *Freestyle_Init(void)
 	else {
 		printf("Freestyle: couldn't find 'scripts/freestyle/modules', Freestyle won't work properly.\n");
 	}
-	
+
 	// attach its classes (adding the object types to the module)
-	
+
 	// those classes have to be initialized before the others
 	MediumType_Init(module);
 	Nature_Init(module);

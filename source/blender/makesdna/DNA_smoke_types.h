@@ -113,7 +113,7 @@ enum {
 #define SM_HRES_LINEAR		1
 #define SM_HRES_FULLSAMPLE	2
 
-/* smoke data fileds (active_fields) */
+/* smoke data fields (active_fields) */
 #define SM_ACTIVE_HEAT		(1<<0)
 #define SM_ACTIVE_FIRE		(1<<1)
 #define SM_ACTIVE_COLORS	(1<<2)
@@ -174,7 +174,7 @@ typedef struct SmokeDomainSettings {
 	int flags; /* show up-res or low res, etc */
 	int viewsettings;
 	short noise; /* noise type: wave, curl, anisotropic */
-	short diss_percent; 
+	short diss_percent;
 	int diss_speed;/* in frames */
 	float strength;
 	int res_wt[3];
@@ -189,7 +189,7 @@ typedef struct SmokeDomainSettings {
 	char pad[2];
 
 	/* Smoke uses only one cache from now on (index [0]), but keeping the array for now for reading old files. */
-	struct PointCache *point_cache[2];	/* definition is in DNA_object_force.h */
+	struct PointCache *point_cache[2];	/* definition is in DNA_object_force_types.h */
 	struct ListBase ptcaches[2];
 	struct EffectorWeights *effector_weights;
 	int border_collisions;	/* How domain border collisions are handled */
@@ -217,6 +217,9 @@ typedef struct SmokeDomainSettings {
 	char use_coba;
 	char coba_field;  /* simulation field used for the color mapping */
 	char pad2;
+
+	float clipping;
+	float pad3;
 } SmokeDomainSettings;
 
 

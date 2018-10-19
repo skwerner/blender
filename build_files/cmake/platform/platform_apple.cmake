@@ -28,11 +28,10 @@ macro(find_package_wrapper)
 endmacro()
 
 if(NOT DEFINED LIBDIR)
-	if(WITH_CXX11)
-		set(LIBDIR ${CMAKE_SOURCE_DIR}/../lib/darwin)
-	else()
-		set(LIBDIR ${CMAKE_SOURCE_DIR}/../lib/darwin-9.x.universal)
-	endif()
+	set(LIBDIR ${CMAKE_SOURCE_DIR}/../lib/darwin)
+	# Prefer lib directory paths
+	file(GLOB LIB_SUBDIRS ${LIBDIR}/*)
+	set(CMAKE_PREFIX_PATH ${LIB_SUBDIRS})
 else()
 	message(STATUS "Using pre-compiled LIBDIR: ${LIBDIR}")
 endif()
@@ -44,7 +43,6 @@ if(WITH_OPENAL)
 	find_package(OpenAL)
 	if(OPENAL_FOUND)
 		set(WITH_OPENAL ON)
-		set(OPENAL_INCLUDE_DIR "${LIBDIR}/openal/include")
 	else()
 		set(WITH_OPENAL OFF)
 	endif()
@@ -87,13 +85,13 @@ if(WITH_CODEC_SNDFILE)
 endif()
 
 if(WITH_PYTHON)
-	# we use precompiled libraries for py 3.5 and up by default
-	set(PYTHON_VERSION 3.5)
+	# we use precompiled libraries for py 3.7 and up by default
+	set(PYTHON_VERSION 3.7)
 	if(NOT WITH_PYTHON_MODULE AND NOT WITH_PYTHON_FRAMEWORK)
 		# normally cached but not since we include them with blender
 		set(PYTHON_INCLUDE_DIR "${LIBDIR}/python/include/python${PYTHON_VERSION}m")
 		set(PYTHON_EXECUTABLE "${LIBDIR}/python/bin/python${PYTHON_VERSION}m")
-		set(PYTHON_LIBRARY python${PYTHON_VERSION}m)
+		set(PYTHON_LIBRARY ${LIBDIR}/python/lib/libpython${PYTHON_VERSION}m.a)
 		set(PYTHON_LIBPATH "${LIBDIR}/python/lib/python${PYTHON_VERSION}")
 		# set(PYTHON_LINKFLAGS "-u _PyMac_Error")  # won't  build with this enabled
 	else()
@@ -112,6 +110,9 @@ if(WITH_PYTHON)
 	# uncached vars
 	set(PYTHON_INCLUDE_DIRS "${PYTHON_INCLUDE_DIR}")
 	set(PYTHON_LIBRARIES  "${PYTHON_LIBRARY}")
+
+	# needed for Audaspace, numpy is installed into python site-packages
+	set(NUMPY_INCLUDE_DIRS "${PYTHON_LIBPATH}/site-packages/numpy/core/include")
 
 	if(NOT EXISTS "${PYTHON_EXECUTABLE}")
 		message(FATAL_ERROR "Python executable missing: ${PYTHON_EXECUTABLE}")
@@ -141,17 +142,12 @@ if(WITH_IMAGE_OPENEXR)
 	set(OPENEXR ${LIBDIR}/openexr)
 	set(OPENEXR_INCLUDE_DIR ${OPENEXR}/include)
 	set(OPENEXR_INCLUDE_DIRS ${OPENEXR_INCLUDE_DIR} ${OPENEXR}/include/OpenEXR)
-	if(WITH_CXX11)
-		set(OPENEXR_POSTFIX -2_2)
-	else()
-		set(OPENEXR_POSTFIX)
-	endif()
 	set(OPENEXR_LIBRARIES
-		Iex${OPENEXR_POSTFIX}
+		Iex
 		Half
-		IlmImf${OPENEXR_POSTFIX}
-		Imath${OPENEXR_POSTFIX}
-		IlmThread${OPENEXR_POSTFIX})
+		IlmImf
+		Imath
+		IlmThread)
 	set(OPENEXR_LIBPATH ${OPENEXR}/lib)
 endif()
 
@@ -160,22 +156,18 @@ if(WITH_CODEC_FFMPEG)
 	set(FFMPEG_INCLUDE_DIRS ${FFMPEG}/include)
 	set(FFMPEG_LIBRARIES
 		avcodec avdevice avformat avutil
-		mp3lame swscale x264 xvidcore theora theoradec theoraenc vorbis vorbisenc vorbisfile ogg
-	)
-	if(WITH_CXX11)
-		set(FFMPEG_LIBRARIES ${FFMPEG_LIBRARIES} schroedinger orc vpx webp swresample)
-	endif()
+		mp3lame swscale x264 xvidcore
+		theora theoradec theoraenc
+		vorbis vorbisenc vorbisfile ogg
+		vpx swresample)
 	set(FFMPEG_LIBPATH ${FFMPEG}/lib)
 endif()
 
-if(WITH_OPENJPEG OR WITH_CODEC_FFMPEG)
+if(WITH_IMAGE_OPENJPEG OR WITH_CODEC_FFMPEG)
 	# use openjpeg from libdir that is linked into ffmpeg
-	if(WITH_CXX11)
-		set(OPENJPEG ${LIBDIR}/openjpeg)
-		set(WITH_SYSTEM_OPENJPEG ON)
-		set(OPENJPEG_INCLUDE_DIRS ${OPENJPEG}/include)
-		set(OPENJPEG_LIBRARIES ${OPENJPEG}/lib/libopenjpeg.a)
-	endif()
+	set(OPENJPEG ${LIBDIR}/openjpeg)
+	set(OPENJPEG_INCLUDE_DIRS ${OPENJPEG}/include)
+	set(OPENJPEG_LIBRARIES ${OPENJPEG}/lib/libopenjp2.a)
 endif()
 
 find_library(SYSTEMSTUBS_LIBRARY
@@ -192,19 +184,8 @@ set(PLATFORM_CFLAGS "-pipe -funsigned-char")
 set(PLATFORM_LINKFLAGS
 	"-fexceptions -framework CoreServices -framework Foundation -framework IOKit -framework AppKit -framework Cocoa -framework Carbon -framework AudioUnit -framework AudioToolbox -framework CoreAudio"
 )
-if(WITH_CODEC_QUICKTIME)
-	set(PLATFORM_LINKFLAGS "${PLATFORM_LINKFLAGS} -framework QTKit")
-	if(CMAKE_OSX_ARCHITECTURES MATCHES i386)
-		set(PLATFORM_LINKFLAGS "${PLATFORM_LINKFLAGS} -framework QuickTime")
-		# libSDL still needs 32bit carbon quicktime
-	endif()
-endif()
 
-if(WITH_CXX11)
-	list(APPEND PLATFORM_LINKLIBS c++)
-else()
-	list(APPEND PLATFORM_LINKLIBS stdc++)
-endif()
+list(APPEND PLATFORM_LINKLIBS c++)
 
 if(WITH_JACK)
 	set(PLATFORM_LINKFLAGS "${PLATFORM_LINKFLAGS} -F/Library/Frameworks -weak_framework jackmp")
@@ -234,17 +215,14 @@ if(WITH_OPENCOLLADA)
 		-lOpenCOLLADAStreamWriter
 		-lMathMLSolver
 		-lGeneratedSaxParser
-		-lxml2 -lbuffer -lftoa
+		-lbuffer -lftoa -lUTF
+		${OPENCOLLADA_LIBPATH}/libxml2.a
 	)
-	# Use UTF functions from collada if LLVM is not enabled
-	if(NOT WITH_LLVM)
-		list(APPEND OPENCOLLADA_LIBRARIES -lUTF)
-	endif()
-	# pcre is bundled with openCollada
+	# PCRE is bundled with openCollada
 	#set(PCRE ${LIBDIR}/pcre)
 	#set(PCRE_LIBPATH ${PCRE}/lib)
 	set(PCRE_LIBRARIES pcre)
-	#libxml2 is used
+	# libxml2 is used
 	#set(EXPAT ${LIBDIR}/expat)
 	#set(EXPAT_LIBPATH ${EXPAT}/lib)
 	set(EXPAT_LIB)
@@ -255,11 +233,7 @@ if(WITH_SDL)
 	set(SDL_INCLUDE_DIR ${SDL}/include)
 	set(SDL_LIBRARY SDL2)
 	set(SDL_LIBPATH ${SDL}/lib)
-	if(WITH_CXX11)
-		set(PLATFORM_LINKFLAGS "${PLATFORM_LINKFLAGS} -framework ForceFeedback")
-	else()
-		set(PLATFORM_LINKFLAGS "${PLATFORM_LINKFLAGS} -lazy_framework ForceFeedback")
-	endif()
+	set(PLATFORM_LINKFLAGS "${PLATFORM_LINKFLAGS} -framework ForceFeedback")
 endif()
 
 set(PNG "${LIBDIR}/png")
@@ -280,11 +254,7 @@ endif()
 if(WITH_BOOST)
 	set(BOOST ${LIBDIR}/boost)
 	set(BOOST_INCLUDE_DIR ${BOOST}/include)
-	if(WITH_CXX11)
-		set(BOOST_POSTFIX)
-	else()
-		set(BOOST_POSTFIX -mt)
-	endif()
+	set(BOOST_POSTFIX)
 	set(BOOST_LIBRARIES
 		boost_date_time${BOOST_POSTFIX}
 		boost_filesystem${BOOST_POSTFIX}
@@ -319,11 +289,9 @@ if(WITH_OPENIMAGEIO)
 		${JPEG_LIBRARIES}
 		${TIFF_LIBRARY}
 		${OPENEXR_LIBRARIES}
+		${OPENJPEG_LIBRARIES}
 		${ZLIB_LIBRARIES}
 	)
-	if(WITH_CXX11)
-		set(OPENIMAGEIO_LIBRARIES ${OPENIMAGEIO_LIBRARIES} ${LIBDIR}/ffmpeg/lib/libwebp.a)
-	endif()
 	set(OPENIMAGEIO_LIBPATH
 		${OPENIMAGEIO}/lib
 		${JPEG_LIBPATH}
@@ -354,8 +322,8 @@ if(WITH_OPENVDB)
 endif()
 
 if(WITH_LLVM)
-	set(LLVM_ROOT_DIR ${LIBDIR}/llvm CACHE PATH	"Path to the LLVM installation")
-	set(LLVM_VERSION "3.4" CACHE STRING	"Version of LLVM to use")
+	set(LLVM_ROOT_DIR ${LIBDIR}/llvm)
+	set(LLVM_VERSION 3.4)
 	if(EXISTS "${LLVM_ROOT_DIR}/bin/llvm-config")
 		set(LLVM_CONFIG "${LLVM_ROOT_DIR}/bin/llvm-config")
 	else()
@@ -382,7 +350,7 @@ if(WITH_LLVM)
 			execute_process(COMMAND ${LLVM_CONFIG} --libfiles
 					OUTPUT_VARIABLE LLVM_LIBRARY
 					OUTPUT_STRIP_TRAILING_WHITESPACE)
-			string(REPLACE " " ";" LLVM_LIBRARY ${LLVM_LIBRARY})
+			string(REPLACE ".a /" ".a;/" LLVM_LIBRARY ${LLVM_LIBRARY})
 		else()
 			set(PLATFORM_LINKFLAGS "${PLATFORM_LINKFLAGS} -lLLVM-3.4")
 		endif()
@@ -392,7 +360,7 @@ if(WITH_LLVM)
 endif()
 
 if(WITH_CYCLES_OSL)
-	set(CYCLES_OSL ${LIBDIR}/osl CACHE PATH "Path to OpenShadingLanguage installation")
+	set(CYCLES_OSL ${LIBDIR}/osl)
 
 	find_library(OSL_LIB_EXEC NAMES oslexec PATHS ${CYCLES_OSL}/lib)
 	find_library(OSL_LIB_COMP NAMES oslcomp PATHS ${CYCLES_OSL}/lib)
@@ -417,22 +385,6 @@ if(WITH_OPENMP)
 		set(WITH_OPENMP OFF)
 	else() # vanilla gcc or clang_omp support OpenMP
 		message(STATUS "Using special OpenMP enabled compiler !") # letting find_package(OpenMP) module work for gcc
-		if(CMAKE_C_COMPILER_ID MATCHES "Clang") # clang-omp in darwin libs
-			set(OPENMP_FOUND ON)
-			set(OpenMP_C_FLAGS "-fopenmp" CACHE STRING "C compiler flags for OpenMP parallization" FORCE)
-			set(OpenMP_CXX_FLAGS "-fopenmp" CACHE STRING "C++ compiler flags for OpenMP parallization" FORCE)
-			include_directories(${LIBDIR}/openmp/include)
-			link_directories(${LIBDIR}/openmp/lib)
-			# This is a workaround for our helperbinaries ( datatoc, masgfmt, ... ),
-			# They are linked also to omp lib, so we need it in builddir for runtime exexcution,
-			# TODO: remove all unneeded dependencies from these
-
-			# for intermediate binaries, in respect to lib ID
-			execute_process(
-				COMMAND ditto -arch ${CMAKE_OSX_ARCHITECTURES}
-				${LIBDIR}/openmp/lib/libiomp5.dylib
-				${CMAKE_BINARY_DIR}/Resources/lib/libiomp5.dylib)
-		endif()
 	endif()
 endif()
 
@@ -456,15 +408,13 @@ if(${XCODE_VERSION} VERSION_EQUAL 5 OR ${XCODE_VERSION} VERSION_GREATER 5)
 	# Xcode 5 is always using CLANG, which has too low template depth of 128 for libmv
 	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -ftemplate-depth=1024")
 endif()
-# Get rid of eventually clashes, we export some symbols explicite as local
+# Get rid of eventually clashes, we export some symbols explicitly as local
 set(PLATFORM_LINKFLAGS
-	"${PLATFORM_LINKFLAGS} -Xlinker -unexported_symbols_list -Xlinker ${CMAKE_SOURCE_DIR}/source/creator/osx_locals.map"
+	"${PLATFORM_LINKFLAGS} -Xlinker -unexported_symbols_list -Xlinker '${CMAKE_SOURCE_DIR}/source/creator/osx_locals.map'"
 )
 
-if(WITH_CXX11)
-	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -stdlib=libc++")
-	set(PLATFORM_LINKFLAGS "${PLATFORM_LINKFLAGS} -stdlib=libc++")
-endif()
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -stdlib=libc++")
+set(PLATFORM_LINKFLAGS "${PLATFORM_LINKFLAGS} -stdlib=libc++")
 
 # Suppress ranlib "has no symbols" warnings (workaround for T48250)
 set(CMAKE_C_ARCHIVE_CREATE   "<CMAKE_AR> Scr <TARGET> <LINK_FLAGS> <OBJECTS>")

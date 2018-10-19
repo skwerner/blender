@@ -14,7 +14,6 @@
  * limitations under the License.
  */
 
-#include "util/util_debug.h"
 #include "util/util_foreach.h"
 #include "util/util_logging.h"
 #include "util/util_system.h"
@@ -123,7 +122,7 @@ void TaskPool::cancel()
 	do_cancel = true;
 
 	TaskScheduler::clear(this);
-	
+
 	{
 		thread_scoped_lock num_lock(num_mutex);
 
@@ -211,7 +210,7 @@ void TaskScheduler::init(int num_threads)
 		int current_group_threads = 0;
 		if(num_groups > 1) {
 			process_groups.resize(num_groups);
-			num_process_groups = system_cpu_process_groups(num_groups, 
+			num_process_groups = system_cpu_process_groups(num_groups,
 			                                               &process_groups[0]);
 			if(num_process_groups == 1) {
 				current_group_threads = system_cpu_group_thread_count(process_groups[0]);
@@ -252,7 +251,7 @@ void TaskScheduler::init(int num_threads)
 			}
 		}
 	}
-	
+
 	users++;
 }
 
@@ -296,7 +295,7 @@ bool TaskScheduler::thread_wait_pop(Entry& entry)
 		assert(do_exit);
 		return false;
 	}
-	
+
 	entry = queue.front();
 	queue.pop_front();
 
@@ -519,4 +518,3 @@ string TaskPool::Summary::full_report() const
 }
 
 CCL_NAMESPACE_END
-

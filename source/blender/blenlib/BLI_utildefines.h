@@ -39,34 +39,10 @@ extern "C" {
 /* avoid many includes for now */
 #include "BLI_sys_types.h"
 #include "BLI_compiler_compat.h"
+#include "BLI_utildefines_variadic.h"
 
-#ifndef NDEBUG /* for BLI_assert */
-#include <stdio.h>
-#endif
-
-
-/* varargs macros (keep first so others can use) */
-/* --- internal helpers --- */
-#define _VA_NARGS_GLUE(x, y) x y
-#define _VA_NARGS_RETURN_COUNT(\
-	_1_, _2_, _3_, _4_, _5_, _6_, _7_, _8_, _9_, _10_, _11_, _12_, _13_, _14_, _15_, _16_, \
-	_17_, _18_, _19_, _20_, _21_, _22_, _23_, _24_, _25_, _26_, _27_, _28_, _29_, _30_, _31_, _32_, \
-	_33_, _34_, _35_, _36_, _37_, _38_, _39_, _40_, _41_, _42_, _43_, _44_, _45_, _46_, _47_, _48_, \
-	_49_, _50_, _51_, _52_, _53_, _54_, _55_, _56_, _57_, _58_, _59_, _60_, _61_, _62_, _63_, _64_, \
-	count, ...) count
-#define _VA_NARGS_EXPAND(args) _VA_NARGS_RETURN_COUNT args
-/* 64 args max */
-#define _VA_NARGS_COUNT(...) _VA_NARGS_EXPAND((__VA_ARGS__, \
-	64, 63, 62, 61, 60, 59, 58, 57, 56, 55, 54, 53, 52, 51, 50, 49, \
-	48, 47, 46, 45, 44, 43, 42, 41, 40, 39, 38, 37, 36, 35, 34, 33, \
-	32, 31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, \
-	16, 15, 14, 13, 12, 11, 10,  9,  8,  7,  6,  5,  4,  3,  2, 1, 0))
-#define _VA_NARGS_OVERLOAD_MACRO2(name, count) name##count
-#define _VA_NARGS_OVERLOAD_MACRO1(name, count) _VA_NARGS_OVERLOAD_MACRO2(name, count)
-#define _VA_NARGS_OVERLOAD_MACRO(name,  count) _VA_NARGS_OVERLOAD_MACRO1(name, count)
-/* --- expose for re-use --- */
-#define VA_NARGS_CALL_OVERLOAD(name, ...) \
-	_VA_NARGS_GLUE(_VA_NARGS_OVERLOAD_MACRO(name, _VA_NARGS_COUNT(__VA_ARGS__)), (__VA_ARGS__))
+/* We could remove in future. */
+#include "BLI_assert.h"
 
 /* useful for finding bad use of min/max */
 #if 0
@@ -248,29 +224,6 @@ extern "C" {
 	b = tmp;                                                                  \
 } (void)0
 
-
-#define FTOCHAR(val) ((CHECK_TYPE_INLINE(val, float)), \
-		(char)(((val) <= 0.0f) ? 0 : (((val) > (1.0f - 0.5f / 255.0f)) ? 255 : ((255.0f * (val)) + 0.5f))))
-#define FTOUSHORT(val) ((CHECK_TYPE_INLINE(val, float)), \
-		(unsigned short)((val >= 1.0f - 0.5f / 65535) ? 65535 : (val <= 0.0f) ? 0 : (val * 65535.0f + 0.5f)))
-#define USHORTTOUCHAR(val) ((unsigned char)(((val) >= 65535 - 128) ? 255 : ((val) + 128) >> 8))
-#define F3TOCHAR3(v2, v1) {                                                   \
-		(v1)[0] = FTOCHAR((v2[0]));                                           \
-		(v1)[1] = FTOCHAR((v2[1]));                                           \
-		(v1)[2] = FTOCHAR((v2[2]));                                           \
-} (void)0
-#define F3TOCHAR4(v2, v1) {                                                   \
-		(v1)[0] = FTOCHAR((v2[0]));                                           \
-		(v1)[1] = FTOCHAR((v2[1]));                                           \
-		(v1)[2] = FTOCHAR((v2[2]));                                           \
-		(v1)[3] = 255;                                                        \
-} (void)0
-#define F4TOCHAR4(v2, v1) {                                                   \
-		(v1)[0] = FTOCHAR((v2[0]));                                           \
-		(v1)[1] = FTOCHAR((v2[1]));                                           \
-		(v1)[2] = FTOCHAR((v2[2]));                                           \
-		(v1)[3] = FTOCHAR((v2[3]));                                           \
-} (void)0
 #define VECCOPY(v1, v2) {                                                     \
 		*(v1) =   *(v2);                                                      \
 		*(v1 + 1) = *(v2 + 1);                                                \
@@ -420,22 +373,51 @@ extern "C" {
 #define UNPACK4_EX(pre, a, post)  UNPACK3_EX(pre, a, post), (pre((a)[3])post)
 
 /* array helpers */
-#define ARRAY_LAST_ITEM(arr_start, arr_dtype, tot) \
-	(arr_dtype *)((char *)(arr_start) + (sizeof(*((arr_dtype *)NULL)) * (size_t)(tot - 1)))
+#define ARRAY_LAST_ITEM(arr_start, arr_dtype, arr_len) \
+	(arr_dtype *)((char *)(arr_start) + (sizeof(*((arr_dtype *)NULL)) * (size_t)(arr_len - 1)))
 
-#define ARRAY_HAS_ITEM(arr_item, arr_start, tot)  ( \
+#define ARRAY_HAS_ITEM(arr_item, arr_start, arr_len)  ( \
 	CHECK_TYPE_PAIR_INLINE(arr_start, arr_item), \
-	((unsigned int)((arr_item) - (arr_start)) < (unsigned int)(tot)))
+	((unsigned int)((arr_item) - (arr_start)) < (unsigned int)(arr_len)))
 
-#define ARRAY_DELETE(arr, index, tot_delete, tot)  { \
-		BLI_assert(index + tot_delete <= tot);  \
-		memmove(&(arr)[(index)], \
-		        &(arr)[(index) + (tot_delete)], \
-		         (((tot) - (index)) - (tot_delete)) * sizeof(*(arr))); \
-	} (void)0
+/**
+ * \note use faster #ARRAY_DELETE_REORDER_LAST when we can re-order.
+ */
+#define ARRAY_DELETE(arr, index, delete_len, arr_len) \
+	{ \
+		BLI_assert((&arr[index] >= arr) && ((index) + delete_len <= arr_len));  \
+		memmove(&(arr)[index], \
+		        &(arr)[(index) + (delete_len)], \
+		         (((arr_len) - (index)) - (delete_len)) * sizeof(*(arr))); \
+	} ((void)0)
+
+/**
+ * Re-ordering array removal.
+ *
+ * When removing single items this compiles down to:
+ * `if (index + 1 != arr_len) { arr[index] = arr[arr_len - 1]; }` (typical reordering removal),
+ * with removing multiple items, overlap is detected to avoid memcpy errors.
+ */
+#define ARRAY_DELETE_REORDER_LAST(arr, index, delete_len, arr_len) \
+	{ \
+		BLI_assert((&arr[index] >= arr) && ((index) + delete_len <= arr_len));  \
+		if ((index) + (delete_len) != (arr_len)) { \
+			if (((delete_len) == 1) || ((delete_len) <= ((arr_len) - ((index) + (delete_len))))) { \
+				memcpy(&(arr)[index], \
+				       &(arr)[(arr_len) - (delete_len)], \
+				       (delete_len) * sizeof(*(arr))); \
+			} \
+			else { \
+				memcpy(&(arr)[index], \
+				       &(arr)[(arr_len) - ((arr_len) - ((index) + (delete_len)))], \
+				       ((arr_len) - ((index) + (delete_len))) * sizeof(*(arr))); \
+			} \
+		} \
+	} ((void)0)
+
 
 /* assuming a static array */
-#if defined(__GNUC__) && !defined(__cplusplus) && !defined(__clang__)
+#if defined(__GNUC__) && !defined(__cplusplus) && !defined(__clang__) && !defined(__INTEL_COMPILER)
 #  define ARRAY_SIZE(arr) \
 	((sizeof(struct {int isnt_array : ((const void *)&(arr) == &(arr)[0]);}) * 0) + \
 	 (sizeof(arr) / sizeof(*(arr))))
@@ -526,12 +508,22 @@ extern bool BLI_memory_is_zero(const void *arr, const size_t arr_size);
 
 /* Warning-free macros for storing ints in pointers. Use these _only_
  * for storing an int in a pointer, not a pointer in an int (64bit)! */
-#define SET_INT_IN_POINTER(i)    ((void *)(intptr_t)(i))
-#define GET_INT_FROM_POINTER(i)  ((void)0, ((int)(intptr_t)(i)))
+#define POINTER_FROM_INT(i)    ((void *)(intptr_t)(i))
+#define POINTER_AS_INT(i)  ((void)0, ((int)(intptr_t)(i)))
 
-#define SET_UINT_IN_POINTER(i)    ((void *)(uintptr_t)(i))
-#define GET_UINT_FROM_POINTER(i)  ((void)0, ((unsigned int)(uintptr_t)(i)))
+#define POINTER_FROM_UINT(i)    ((void *)(uintptr_t)(i))
+#define POINTER_AS_UINT(i)  ((void)0, ((unsigned int)(uintptr_t)(i)))
 
+/* Set flag from a single test */
+#define SET_FLAG_FROM_TEST(value, test, flag) \
+{ \
+	if (test) { \
+		(value) |=  (flag); \
+	} \
+	else { \
+		(value) &= ~(flag); \
+	} \
+} ((void)0)
 
 /* Macro to convert a value to string in the preprocessor
  * STRINGIFY_ARG: gives the argument as a string
@@ -560,13 +552,13 @@ extern bool BLI_memory_is_zero(const void *arr, const size_t arr_size);
 
 
 /* UNUSED macro, for function argument */
-#ifdef __GNUC__
+#if defined(__GNUC__) || defined(__clang__)
 #  define UNUSED(x) UNUSED_ ## x __attribute__((__unused__))
 #else
 #  define UNUSED(x) UNUSED_ ## x
 #endif
 
-#ifdef __GNUC__
+#if defined(__GNUC__) || defined(__clang__)
 #  define UNUSED_FUNCTION(x) __attribute__((__unused__)) UNUSED_ ## x
 #else
 #  define UNUSED_FUNCTION(x) UNUSED_ ## x
@@ -626,52 +618,6 @@ extern bool BLI_memory_is_zero(const void *arr, const size_t arr_size);
 #  define UNUSED_VARS_NDEBUG(...)
 #else
 #  define UNUSED_VARS_NDEBUG UNUSED_VARS
-#endif
-
-
-/* BLI_assert(), default only to print
- * for aborting need to define WITH_ASSERT_ABORT
- */
-#ifndef NDEBUG
-#  include "BLI_system.h"
-#  ifdef WITH_ASSERT_ABORT
-#    define _BLI_DUMMY_ABORT abort
-#  else
-#    define _BLI_DUMMY_ABORT() (void)0
-#  endif
-#  if defined(__GNUC__) || defined(_MSC_VER) /* check __func__ is available */
-#    define BLI_assert(a)                                                     \
-	(void)((!(a)) ?  (                                                        \
-		(                                                                     \
-		BLI_system_backtrace(stderr),                                         \
-		fprintf(stderr,                                                       \
-			"BLI_assert failed: %s:%d, %s(), at \'%s\'\n",                    \
-			__FILE__, __LINE__, __func__, STRINGIFY(a)),                      \
-		_BLI_DUMMY_ABORT(),                                                   \
-		NULL)) : NULL)
-#  else
-#    define BLI_assert(a)                                                     \
-	(void)((!(a)) ?  (                                                        \
-		(                                                                     \
-		fprintf(stderr,                                                       \
-			"BLI_assert failed: %s:%d, at \'%s\'\n",                          \
-			__FILE__, __LINE__, STRINGIFY(a)),                                \
-		_BLI_DUMMY_ABORT(),                                                   \
-		NULL)) : NULL)
-#  endif
-#else
-#  define BLI_assert(a) (void)0
-#endif
-
-/* C++ can't use _Static_assert, expects static_assert() but c++0x only,
- * Coverity also errors out. */
-#if (!defined(__cplusplus)) && \
-    (!defined(__COVERITY__)) && \
-    (defined(__GNUC__) && ((__GNUC__ * 100 + __GNUC_MINOR__) >= 406))  /* gcc4.6+ only */
-#  define BLI_STATIC_ASSERT(a, msg) __extension__ _Static_assert(a, msg);
-#else
-   /* TODO msvc, clang */
-#  define BLI_STATIC_ASSERT(a, msg)
 #endif
 
 /* hints for branch prediction, only use in code that runs a _lot_ where */

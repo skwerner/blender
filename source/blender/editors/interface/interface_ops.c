@@ -4,7 +4,7 @@
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version. 
+ * of the License, or (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -17,7 +17,7 @@
  *
  * The Original Code is Copyright (C) 2009 Blender Foundation.
  * All rights reserved.
- * 
+ *
  * Contributor(s): Blender Foundation, Joshua Leung
  *
  * ***** END GPL LICENSE BLOCK *****
@@ -72,7 +72,7 @@ static int reset_default_theme_exec(bContext *C, wmOperator *UNUSED(op))
 	ui_theme_init_default();
 	ui_style_init_default();
 	WM_event_add_notifier(C, NC_WINDOW, NULL);
-	
+
 	return OPERATOR_FINISHED;
 }
 
@@ -82,17 +82,17 @@ static void UI_OT_reset_default_theme(wmOperatorType *ot)
 	ot->name = "Reset to Default Theme";
 	ot->idname = "UI_OT_reset_default_theme";
 	ot->description = "Reset to the default theme colors";
-	
+
 	/* callbacks */
 	ot->exec = reset_default_theme_exec;
-	
+
 	/* flags */
 	ot->flag = OPTYPE_REGISTER;
 }
 
 /* Copy Data Path Operator ------------------------ */
 
-static int copy_data_path_button_poll(bContext *C)
+static bool copy_data_path_button_poll(bContext *C)
 {
 	PointerRNA ptr;
 	PropertyRNA *prop;
@@ -103,7 +103,7 @@ static int copy_data_path_button_poll(bContext *C)
 
 	if (ptr.id.data && ptr.data && prop) {
 		path = RNA_path_from_ID_to_property(&ptr, prop);
-		
+
 		if (path) {
 			MEM_freeN(path);
 			return 1;
@@ -171,7 +171,7 @@ static void UI_OT_copy_data_path_button(wmOperatorType *ot)
 	RNA_def_property_flag(prop, PROP_SKIP_SAVE);
 }
 
-static int copy_python_command_button_poll(bContext *C)
+static bool copy_python_command_button_poll(bContext *C)
 {
 	uiBut *but = UI_context_active_but_get(C);
 
@@ -242,14 +242,14 @@ static int operator_button_property_finish(bContext *C, PointerRNA *ptr, Propert
 	}
 }
 
-static int reset_default_button_poll(bContext *C)
+static bool reset_default_button_poll(bContext *C)
 {
 	PointerRNA ptr;
 	PropertyRNA *prop;
 	int index;
 
 	UI_context_active_but_prop_get(C, &ptr, &prop, &index);
-	
+
 	return (ptr.data && prop && RNA_property_editable(&ptr, prop));
 }
 
@@ -262,7 +262,7 @@ static int reset_default_button_exec(bContext *C, wmOperator *op)
 
 	/* try to reset the nominated setting to its default value */
 	UI_context_active_but_prop_get(C, &ptr, &prop, &index);
-	
+
 	/* if there is a valid property that is editable... */
 	if (ptr.data && prop && RNA_property_editable(&ptr, prop)) {
 		if (RNA_property_reset(&ptr, prop, (all) ? -1 : index))
@@ -285,7 +285,7 @@ static void UI_OT_reset_default_button(wmOperatorType *ot)
 
 	/* flags */
 	ot->flag = OPTYPE_UNDO;
-	
+
 	/* properties */
 	RNA_def_boolean(ot->srna, "all", 1, "All", "Reset to default values all elements of the array");
 }
@@ -359,6 +359,9 @@ bool UI_context_copy_to_selected_list(
 	}
 	else if (RNA_struct_is_a(ptr->type, &RNA_Sequence)) {
 		*r_lb = CTX_data_collection_get(C, "selected_editable_sequences");
+	}
+	else if (RNA_struct_is_a(ptr->type, &RNA_FCurve)) {
+		*r_lb = CTX_data_collection_get(C, "selected_editable_fcurves");
 	}
 	else if (RNA_struct_is_a(ptr->type, &RNA_Node) ||
 	         RNA_struct_is_a(ptr->type, &RNA_NodeSocket))
@@ -436,7 +439,7 @@ bool UI_context_copy_to_selected_list(
 
 					if ((id_data == NULL) ||
 					    (id_data->tag & LIB_TAG_DOIT) == 0 ||
-					    ID_IS_LINKED_DATABLOCK(id_data) ||
+					    ID_IS_LINKED(id_data) ||
 					    (GS(id_data->name) != id_code))
 					{
 						BLI_remlink(&lb, link);
@@ -494,51 +497,51 @@ static bool copy_to_selected_button(bContext *C, bool all, bool poll)
 		char *path = NULL;
 		bool use_path_from_id;
 		CollectionPointerLink *link;
-		ListBase lb;
+		ListBase lb = {NULL};
 
-		if (!UI_context_copy_to_selected_list(C, &ptr, prop, &lb, &use_path_from_id, &path))
-			return success;
+		if (UI_context_copy_to_selected_list(C, &ptr, prop, &lb, &use_path_from_id, &path) &&
+		    !BLI_listbase_is_empty(&lb))
+		{
+			for (link = lb.first; link; link = link->next) {
+				if (link->ptr.data != ptr.data) {
+					if (use_path_from_id) {
+						/* Path relative to ID. */
+						lprop = NULL;
+						RNA_id_pointer_create(link->ptr.id.data, &idptr);
+						RNA_path_resolve_property(&idptr, path, &lptr, &lprop);
+					}
+					else if (path) {
+						/* Path relative to elements from list. */
+						lprop = NULL;
+						RNA_path_resolve_property(&link->ptr, path, &lptr, &lprop);
+					}
+					else {
+						lptr = link->ptr;
+						lprop = prop;
+					}
 
-		for (link = lb.first; link; link = link->next) {
-			if (link->ptr.data != ptr.data) {
-				if (use_path_from_id) {
-					/* Path relative to ID. */
-					lprop = NULL;
-					RNA_id_pointer_create(link->ptr.id.data, &idptr);
-					RNA_path_resolve_property(&idptr, path, &lptr, &lprop);
-				}
-				else if (path) {
-					/* Path relative to elements from list. */
-					lprop = NULL;
-					RNA_path_resolve_property(&link->ptr, path, &lptr, &lprop);
-				}
-				else {
-					lptr = link->ptr;
-					lprop = prop;
-				}
+					if (lptr.data == ptr.data) {
+						/* lptr might not be the same as link->ptr! */
+						continue;
+					}
 
-				if (lptr.data == ptr.data) {
-					/* lptr might not be the same as link->ptr! */
-					continue;
-				}
-
-				if (lprop == prop) {
-					if (RNA_property_editable(&lptr, lprop)) {
-						if (poll) {
-							success = true;
-							break;
-						}
-						else {
-							if (RNA_property_copy(&lptr, &ptr, prop, (all) ? -1 : index)) {
-								RNA_property_update(C, &lptr, prop);
+					if (lprop == prop) {
+						if (RNA_property_editable(&lptr, lprop)) {
+							if (poll) {
 								success = true;
+								break;
+							}
+							else {
+								if (RNA_property_copy(&lptr, &ptr, prop, (all) ? -1 : index)) {
+									RNA_property_update(C, &lptr, prop);
+									success = true;
+								}
 							}
 						}
 					}
 				}
 			}
 		}
-
 		MEM_SAFE_FREE(path);
 		BLI_freelistN(&lb);
 	}
@@ -546,7 +549,7 @@ static bool copy_to_selected_button(bContext *C, bool all, bool poll)
 	return success;
 }
 
-static int copy_to_selected_button_poll(bContext *C)
+static bool copy_to_selected_button_poll(bContext *C)
 {
 	return copy_to_selected_button(C, false, true);
 }
@@ -582,11 +585,11 @@ static void UI_OT_copy_to_selected_button(wmOperatorType *ot)
 
 /* Reports to Textblock Operator ------------------------ */
 
-/* FIXME: this is just a temporary operator so that we can see all the reports somewhere 
+/* FIXME: this is just a temporary operator so that we can see all the reports somewhere
  * when there are too many to display...
  */
 
-static int reports_to_text_poll(bContext *C)
+static bool reports_to_text_poll(bContext *C)
 {
 	return CTX_wm_reports(C) != NULL;
 }
@@ -597,10 +600,10 @@ static int reports_to_text_exec(bContext *C, wmOperator *UNUSED(op))
 	Main *bmain = CTX_data_main(C);
 	Text *txt;
 	char *str;
-	
+
 	/* create new text-block to write to */
 	txt = BKE_text_add(bmain, "Recent Reports");
-	
+
 	/* convert entire list to a display string, and add this to the text-block
 	 *	- if commandline debug option enabled, show debug reports too
 	 *	- otherwise, up to info (which is what users normally see)
@@ -608,7 +611,8 @@ static int reports_to_text_exec(bContext *C, wmOperator *UNUSED(op))
 	str = BKE_reports_string(reports, (G.debug & G_DEBUG) ? RPT_DEBUG : RPT_INFO);
 
 	if (str) {
-		BKE_text_write(txt, str);
+		TextUndoBuf *utxt = NULL; // FIXME
+		BKE_text_write(txt, utxt, str);
 		MEM_freeN(str);
 
 		return OPERATOR_FINISHED;
@@ -624,7 +628,7 @@ static void UI_OT_reports_to_textblock(wmOperatorType *ot)
 	ot->name = "Reports to Text Block";
 	ot->idname = "UI_OT_reports_to_textblock";
 	ot->description = "Write the reports ";
-	
+
 	/* callbacks */
 	ot->poll = reports_to_text_poll;
 	ot->exec = reports_to_text_exec;
@@ -726,10 +730,13 @@ void UI_editsource_active_but_test(uiBut *but)
 
 static int editsource_text_edit(
         bContext *C, wmOperator *op,
-        char filepath[FILE_MAX], int line)
+        const char filepath[FILE_MAX], const int line)
 {
 	struct Main *bmain = CTX_data_main(C);
 	Text *text;
+
+	/* Developers may wish to copy-paste to an external editor. */
+	printf("%s:%d\n", filepath, line);
 
 	for (text = bmain->text.first; text; text = text->id.next) {
 		if (text->name && BLI_path_cmp(text->name, filepath) == 0) {
@@ -738,7 +745,7 @@ static int editsource_text_edit(
 	}
 
 	if (text == NULL) {
-		text = BKE_text_load(bmain, filepath, bmain->name);
+		text = BKE_text_load(bmain, filepath, BKE_main_blendfile_path(bmain));
 		id_us_ensure_real(&text->id);
 	}
 
@@ -802,9 +809,10 @@ static int editsource_exec(bContext *C, wmOperator *op)
 
 		if (but_store) {
 			if (but_store->py_dbg_ln != -1) {
-				ret = editsource_text_edit(C, op,
-				                           but_store->py_dbg_fn,
-				                           but_store->py_dbg_ln);
+				ret = editsource_text_edit(
+				        C, op,
+				        but_store->py_dbg_fn,
+				        but_store->py_dbg_ln);
 			}
 			else {
 				BKE_report(op->reports, RPT_ERROR, "Active button is not from a script, cannot edit source");
@@ -912,14 +920,18 @@ static int edittranslation_exec(bContext *C, wmOperator *op)
 		uiStringInfo rna_ctxt = {BUT_GET_RNA_LABEL_CONTEXT, NULL};
 
 		if (!BLI_is_dir(root)) {
-			BKE_report(op->reports, RPT_ERROR, "Please set your User Preferences' 'Translation Branches "
-			                                   "Directory' path to a valid directory");
+			BKE_report(
+			        op->reports, RPT_ERROR,
+			        "Please set your User Preferences' 'Translation Branches "
+			        "Directory' path to a valid directory");
 			return OPERATOR_CANCELLED;
 		}
 		ot = WM_operatortype_find(EDTSRC_I18N_OP_NAME, 0);
 		if (ot == NULL) {
-			BKE_reportf(op->reports, RPT_ERROR, "Could not find operator '%s'! Please enable ui_translate add-on "
-			                                    "in the User Preferences", EDTSRC_I18N_OP_NAME);
+			BKE_reportf(
+			        op->reports, RPT_ERROR,
+			        "Could not find operator '%s'! Please enable ui_translate add-on "
+			        "in the User Preferences", EDTSRC_I18N_OP_NAME);
 			return OPERATOR_CANCELLED;
 		}
 		/* Try to find a valid po file for current language... */
@@ -930,8 +942,9 @@ static int edittranslation_exec(bContext *C, wmOperator *op)
 			return OPERATOR_CANCELLED;
 		}
 
-		UI_but_string_info_get(C, but, &but_label, &rna_label, &enum_label, &but_tip, &rna_tip, &enum_tip,
-		                &rna_struct, &rna_prop, &rna_enum, &rna_ctxt, NULL);
+		UI_but_string_info_get(
+		        C, but, &but_label, &rna_label, &enum_label, &but_tip, &rna_tip, &enum_tip,
+		        &rna_struct, &rna_prop, &rna_enum, &rna_ctxt, NULL);
 
 		WM_operator_properties_create_ptr(&ptr, ot);
 		RNA_string_set(&ptr, "lang", uilng);
@@ -1011,7 +1024,7 @@ static void UI_OT_reloadtranslation(wmOperatorType *ot)
 	ot->exec = reloadtranslation_exec;
 }
 
-int UI_drop_color_poll(struct bContext *C, wmDrag *drag, const wmEvent *UNUSED(event))
+bool UI_drop_color_poll(struct bContext *C, wmDrag *drag, const wmEvent *UNUSED(event))
 {
 	/* should only return true for regions that include buttons, for now
 	 * return true always */
@@ -1125,6 +1138,9 @@ void ED_operatortypes_ui(void)
 
 	/* external */
 	WM_operatortype_append(UI_OT_eyedropper_color);
+	WM_operatortype_append(UI_OT_eyedropper_color_crypto);
+	WM_operatortype_append(UI_OT_eyedropper_colorband);
+	WM_operatortype_append(UI_OT_eyedropper_colorband_point);
 	WM_operatortype_append(UI_OT_eyedropper_id);
 	WM_operatortype_append(UI_OT_eyedropper_depth);
 	WM_operatortype_append(UI_OT_eyedropper_driver);
@@ -1135,12 +1151,14 @@ void ED_operatortypes_ui(void)
  */
 void ED_keymap_ui(wmKeyConfig *keyconf)
 {
-	wmKeyMap *keymap = WM_keymap_find(keyconf, "User Interface", 0, 0);
+	wmKeyMap *keymap = WM_keymap_ensure(keyconf, "User Interface", 0, 0);
 	wmKeyMapItem *kmi;
 
 	/* eyedroppers - notice they all have the same shortcut, but pass the event
 	 * through until a suitable eyedropper for the active button is found */
 	WM_keymap_add_item(keymap, "UI_OT_eyedropper_color", EKEY, KM_PRESS, 0, 0);
+	WM_keymap_add_item(keymap, "UI_OT_eyedropper_colorband", EKEY, KM_PRESS, 0, 0);
+	WM_keymap_add_item(keymap, "UI_OT_eyedropper_colorband_point", EKEY, KM_PRESS, KM_ALT, 0);
 	WM_keymap_add_item(keymap, "UI_OT_eyedropper_id", EKEY, KM_PRESS, 0, 0);
 	WM_keymap_add_item(keymap, "UI_OT_eyedropper_depth", EKEY, KM_PRESS, 0, 0);
 
@@ -1163,4 +1181,5 @@ void ED_keymap_ui(wmKeyConfig *keyconf)
 	WM_keymap_add_item(keymap, "ANIM_OT_keyingset_button_remove", KKEY, KM_PRESS, KM_ALT, 0);
 
 	eyedropper_modal_keymap(keyconf);
+	eyedropper_colorband_modal_keymap(keyconf);
 }

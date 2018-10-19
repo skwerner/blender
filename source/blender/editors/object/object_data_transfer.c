@@ -63,7 +63,7 @@
 /* All possible data to transfer.
  * Note some are 'fake' ones, i.e. they are not hold by real CDLayers. */
 /* Not shared with modifier, since we use a usual enum here, not a multi-choice one. */
-static EnumPropertyItem DT_layer_items[] = {
+static const EnumPropertyItem DT_layer_items[] = {
 	{0, "", 0, "Vertex Data", ""},
 	{DT_TYPE_MDEFORMVERT, "VGROUP_WEIGHTS", 0, "Vertex Group(s)", "Transfer active or all vertex groups"},
 #if 0  /* XXX For now, would like to finish/merge work from 2014 gsoc first. */
@@ -90,7 +90,7 @@ static EnumPropertyItem DT_layer_items[] = {
 };
 
 /* Note: rna_enum_dt_layers_select_src_items enum is from rna_modifier.c */
-static EnumPropertyItem *dt_layers_select_src_itemf(
+static const EnumPropertyItem *dt_layers_select_src_itemf(
         bContext *C, PointerRNA *ptr, PropertyRNA *UNUSED(prop), bool *r_free)
 {
 	EnumPropertyItem *item = NULL, tmp_item = {0};
@@ -183,7 +183,7 @@ static EnumPropertyItem *dt_layers_select_src_itemf(
 }
 
 /* Note: rna_enum_dt_layers_select_dst_items enum is from rna_modifier.c */
-static EnumPropertyItem *dt_layers_select_dst_itemf(
+static const EnumPropertyItem *dt_layers_select_dst_itemf(
         bContext *C, PointerRNA *ptr, PropertyRNA *UNUSED(prop), bool *r_free)
 {
 	EnumPropertyItem *item = NULL;
@@ -209,7 +209,7 @@ static EnumPropertyItem *dt_layers_select_dst_itemf(
 	return item;
 }
 
-static EnumPropertyItem *dt_layers_select_itemf(bContext *C, PointerRNA *ptr, PropertyRNA *prop, bool *r_free)
+static const EnumPropertyItem *dt_layers_select_itemf(bContext *C, PointerRNA *ptr, PropertyRNA *prop, bool *r_free)
 {
 	const bool reverse_transfer = RNA_boolean_get(ptr, "use_reverse_transfer");
 
@@ -230,7 +230,7 @@ static EnumPropertyItem *dt_layers_select_itemf(bContext *C, PointerRNA *ptr, Pr
 }
 
 /* Note: rna_enum_dt_mix_mode_items enum is from rna_modifier.c */
-static EnumPropertyItem *dt_mix_mode_itemf(bContext *C, PointerRNA *ptr, PropertyRNA *UNUSED(prop), bool *r_free)
+static const EnumPropertyItem *dt_mix_mode_itemf(bContext *C, PointerRNA *ptr, PropertyRNA *UNUSED(prop), bool *r_free)
 {
 	EnumPropertyItem *item = NULL;
 	int totitem = 0;
@@ -300,7 +300,7 @@ static void data_transfer_exec_preprocess_objects(
 		}
 
 		me = ob->data;
-		if (ID_IS_LINKED_DATABLOCK(me)) {
+		if (ID_IS_LINKED(me)) {
 			/* Do not transfer to linked data, not supported. */
 			BKE_reportf(op->reports, RPT_WARNING, "Skipping object '%s', linked data '%s' cannot be modified",
 			            ob->id.name + 2, me->id.name + 2);
@@ -330,7 +330,7 @@ static bool data_transfer_exec_is_object_valid(
 		me->id.tag &= ~LIB_TAG_DOIT;
 		return true;
 	}
-	else if (!ID_IS_LINKED_DATABLOCK(me)) {
+	else if (!ID_IS_LINKED(me)) {
 		/* Do not transfer apply operation more than once. */
 		/* XXX This is not nice regarding vgroups, which are half-Object data... :/ */
 		BKE_reportf(op->reports, RPT_WARNING,
@@ -387,7 +387,7 @@ static int data_transfer_exec(bContext *C, wmOperator *op)
 		return OPERATOR_FINISHED;
 	}
 
-	if (reverse_transfer && ID_IS_LINKED_DATABLOCK(ob_src->data)) {
+	if (reverse_transfer && ID_IS_LINKED(ob_src->data)) {
 		/* Do not transfer to linked data, not supported. */
 		return OPERATOR_CANCELLED;
 	}
@@ -445,7 +445,7 @@ static int data_transfer_exec(bContext *C, wmOperator *op)
 
 /* Used by both OBJECT_OT_data_transfer and OBJECT_OT_datalayout_transfer */
 /* Note this context poll is only really partial, it cannot check for all possible invalid cases. */
-static int data_transfer_poll(bContext *C)
+static bool data_transfer_poll(bContext *C)
 {
 	Object *ob = ED_object_active_context(C);
 	ID *data = (ob) ? ob->data : NULL;
@@ -453,8 +453,9 @@ static int data_transfer_poll(bContext *C)
 }
 
 /* Used by both OBJECT_OT_data_transfer and OBJECT_OT_datalayout_transfer */
-static bool data_transfer_draw_check_prop(PointerRNA *ptr, PropertyRNA *prop)
+static bool data_transfer_poll_property(const bContext *UNUSED(C), wmOperator *op, const PropertyRNA *prop)
 {
+	PointerRNA *ptr = op->ptr;
 	PropertyRNA *prop_other;
 
 	const char *prop_id = RNA_property_identifier(prop);
@@ -515,19 +516,6 @@ static bool data_transfer_draw_check_prop(PointerRNA *ptr, PropertyRNA *prop)
 	return true;
 }
 
-/* Used by both OBJECT_OT_data_transfer and OBJECT_OT_datalayout_transfer */
-static void data_transfer_ui(bContext *C, wmOperator *op)
-{
-	uiLayout *layout = op->layout;
-	wmWindowManager *wm = CTX_wm_manager(C);
-	PointerRNA ptr;
-
-	RNA_pointer_create(&wm->id, op->type->srna, op->properties, &ptr);
-
-	/* Main auto-draw call */
-	uiDefAutoButsRNA(layout, &ptr, data_transfer_draw_check_prop, '\0');
-}
-
 /* transfers weight from active to selected */
 void OBJECT_OT_data_transfer(wmOperatorType *ot)
 {
@@ -540,10 +528,10 @@ void OBJECT_OT_data_transfer(wmOperatorType *ot)
 
 	/* API callbacks.*/
 	ot->poll = data_transfer_poll;
+	ot->poll_property = data_transfer_poll_property;
 	ot->invoke = WM_menu_invoke;
 	ot->exec = data_transfer_exec;
 	ot->check = data_transfer_check;
-	ot->ui = data_transfer_ui;
 
 	/* Flags.*/
 	ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
@@ -613,7 +601,7 @@ void OBJECT_OT_data_transfer(wmOperatorType *ot)
  *       or as a DataTransfer modifier tool.
  */
 
-static int datalayout_transfer_poll(bContext *C)
+static bool datalayout_transfer_poll(bContext *C)
 {
 	return (edit_modifier_poll_generic(C, &RNA_DataTransferModifier, (1 << OB_MESH)) || data_transfer_poll(C));
 }
@@ -702,10 +690,10 @@ void OBJECT_OT_datalayout_transfer(wmOperatorType *ot)
 	ot->idname = "OBJECT_OT_datalayout_transfer";
 
 	ot->poll = datalayout_transfer_poll;
+	ot->poll_property = data_transfer_poll_property;
 	ot->invoke = datalayout_transfer_invoke;
 	ot->exec = datalayout_transfer_exec;
 	ot->check = data_transfer_check;
-	ot->ui = data_transfer_ui;
 
 	/* flags */
 	ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;

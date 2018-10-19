@@ -33,6 +33,7 @@
 #include <Python.h>
 
 #include "BLI_utildefines.h"
+#include "BLI_math_base.h"
 
 #include "MEM_guardedalloc.h"
 
@@ -159,7 +160,7 @@ static PyObject *bpy_bm_utils_vert_collapse_faces(PyObject *UNUSED(self), PyObje
 
 	bm = py_edge->bm;
 
-	e_new = BM_vert_collapse_faces(bm, py_edge->e, py_vert->v, CLAMPIS(fac, 0.0f, 1.0f), true, do_join_faces, true);
+	e_new = BM_vert_collapse_faces(bm, py_edge->e, py_vert->v, clamp_f(fac, 0.0f, 1.0f), true, do_join_faces, true);
 
 	if (e_new) {
 		return BPy_BMEdge_CreatePyObject(bm, e_new);
@@ -365,7 +366,7 @@ static PyObject *bpy_bm_utils_edge_split(PyObject *UNUSED(self), PyObject *args)
 
 	bm = py_edge->bm;
 
-	v_new = BM_edge_split(bm, py_edge->e, py_vert->v, &e_new, CLAMPIS(fac, 0.0f, 1.0f));
+	v_new = BM_edge_split(bm, py_edge->e, py_vert->v, &e_new, clamp_f(fac, 0.0f, 1.0f));
 
 	if (v_new && e_new) {
 		PyObject *ret = PyTuple_New(2);
@@ -437,7 +438,7 @@ PyDoc_STRVAR(bpy_bm_utils_face_split_doc,
 "   :type vert_a: :class:`bmesh.types.BMVert`\n"
 "   :arg vert_b: Second vertex to cut in the face (face must contain the vert).\n"
 "   :type vert_b: :class:`bmesh.types.BMVert`\n"
-"   :arg coords: Optional argument to define points inbetween *vert_a* and *vert_b*.\n"
+"   :arg coords: Optional argument to define points in between *vert_a* and *vert_b*.\n"
 "   :type coords: sequence of float triplets\n"
 "   :arg use_exist: .Use an existing edge if it exists (Only used when *coords* argument is empty or omitted)\n"
 "   :type use_exist: boolean\n"
@@ -565,6 +566,10 @@ PyDoc_STRVAR(bpy_bm_utils_face_split_edgenet_doc,
 "   :type edgenet: :class:`bmesh.types.BMEdge`\n"
 "   :return: The newly created faces.\n"
 "   :rtype: tuple of (:class:`bmesh.types.BMFace`)\n"
+"\n"
+"   .. note::\n"
+"\n"
+"      Regions defined by edges need to connect to the face, otherwise they're ignored as loose edges.\n"
 );
 static PyObject *bpy_bm_utils_face_split_edgenet(PyObject *UNUSED(self), PyObject *args, PyObject *kw)
 {
@@ -646,7 +651,7 @@ static PyObject *bpy_bm_utils_face_join(PyObject *UNUSED(self), PyObject *args)
 	bool do_remove = true;
 
 	if (!PyArg_ParseTuple(
-	        args, "O|i:face_join",
+	        args, "O|O&:face_join",
 	        &py_face_array,
 	        PyC_ParseBool, &do_remove))
 	{

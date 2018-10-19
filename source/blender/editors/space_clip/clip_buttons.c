@@ -76,7 +76,7 @@ void ED_clip_buttons_register(ARegionType *UNUSED(art))
 
 /********************* MovieClip Template ************************/
 
-void uiTemplateMovieClip(uiLayout *layout, bContext *C, PointerRNA *ptr, const char *propname, int compact)
+void uiTemplateMovieClip(uiLayout *layout, bContext *C, PointerRNA *ptr, const char *propname, bool compact)
 {
 	PropertyRNA *prop;
 	PointerRNA clipptr;
@@ -106,7 +106,7 @@ void uiTemplateMovieClip(uiLayout *layout, bContext *C, PointerRNA *ptr, const c
 	uiLayoutSetContextPointer(layout, "edit_movieclip", &clipptr);
 
 	if (!compact)
-		uiTemplateID(layout, C, ptr, propname, NULL, "CLIP_OT_open", NULL);
+		uiTemplateID(layout, C, ptr, propname, NULL, "CLIP_OT_open", NULL, UI_TEMPLATE_ID_FILTER_ALL);
 
 	if (clip) {
 		uiLayout *col;
@@ -332,7 +332,7 @@ static void marker_block_handler(bContext *C, void *arg_cb, int event)
 }
 
 void uiTemplateMarker(uiLayout *layout, PointerRNA *ptr, const char *propname, PointerRNA *userptr,
-                      PointerRNA *trackptr, int compact)
+                      PointerRNA *trackptr, bool compact)
 {
 	PropertyRNA *prop;
 	uiBlock *block;

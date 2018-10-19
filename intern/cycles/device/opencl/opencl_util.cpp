@@ -18,6 +18,7 @@
 
 #include "device/opencl/opencl.h"
 
+#include "util/util_debug.h"
 #include "util/util_logging.h"
 #include "util/util_md5.h"
 #include "util/util_path.h"
@@ -632,10 +633,10 @@ bool OpenCLInfo::device_supported(const string& platform_name,
 		}
 		const char *blacklist[] = {
 			/* GCN 1 */
-			"Tahiti", "Pitcairn", "Capeverde", "Oland",
+			"Tahiti", "Pitcairn", "Capeverde", "Oland", "Hainan",
 			NULL
 		};
-		for (int i = 0; blacklist[i] != NULL; i++) {
+		for(int i = 0; blacklist[i] != NULL; i++) {
 			if(device_name == blacklist[i]) {
 				VLOG(1) << "AMD device " << device_name << " not supported";
 				return false;
@@ -830,13 +831,15 @@ void OpenCLInfo::get_usable_devices(vector<OpenCLPlatformDevice> *usable_devices
 				FIRST_VLOG(2) << "Adding new device "
 				              << readable_device_name << ".";
 				string hardware_id = get_hardware_id(platform_name, device_id);
+				string device_extensions = get_device_extensions(device_id);
 				usable_devices->push_back(OpenCLPlatformDevice(
 				        platform_id,
 				        platform_name,
 				        device_id,
 				        device_type,
 				        readable_device_name,
-				        hardware_id));
+				        hardware_id,
+				        device_extensions));
 			}
 			else {
 				FIRST_VLOG(2) << "Ignoring device " << device_name
@@ -1046,6 +1049,40 @@ string OpenCLInfo::get_device_name(cl_device_id device_id)
 	return device_name;
 }
 
+bool OpenCLInfo::get_device_extensions(cl_device_id device_id,
+	string *device_extensions,
+	cl_int* error)
+{
+	char buffer[1024];
+	cl_int err;
+	if((err = clGetDeviceInfo(device_id,
+		CL_DEVICE_EXTENSIONS,
+		sizeof(buffer),
+		&buffer,
+		NULL)) != CL_SUCCESS)
+	{
+		if(error != NULL) {
+			*error = err;
+		}
+		*device_extensions = "";
+		return false;
+	}
+	if(error != NULL) {
+		*error = CL_SUCCESS;
+	}
+	*device_extensions = buffer;
+	return true;
+}
+
+string OpenCLInfo::get_device_extensions(cl_device_id device_id)
+{
+	string device_extensions;
+	if(!get_device_extensions(device_id, &device_extensions)) {
+		return "";
+	}
+	return device_extensions;
+}
+
 bool OpenCLInfo::get_device_type(cl_device_id device_id,
                                  cl_device_type *device_type,
                                  cl_int* error)
@@ -1080,6 +1117,7 @@ cl_device_type OpenCLInfo::get_device_type(cl_device_id device_id)
 
 string OpenCLInfo::get_readable_device_name(cl_device_id device_id)
 {
+	string name = "";
 	char board_name[1024];
 	size_t length = 0;
 	if(clGetDeviceInfo(device_id,
@@ -1089,11 +1127,36 @@ string OpenCLInfo::get_readable_device_name(cl_device_id device_id)
 	                   &length) == CL_SUCCESS)
 	{
 		if(length != 0 && board_name[0] != '\0') {
-			return board_name;
+			name = board_name;
 		}
 	}
+
 	/* Fallback to standard device name API. */
-	return get_device_name(device_id);
+	if(name.empty()) {
+		name = get_device_name(device_id);
+	}
+
+	/* Special exception for AMD Vega, need to be able to tell
+	 * Vega 56 from 64 apart.
+	 */
+	if(name == "Radeon RX Vega") {
+		cl_int max_compute_units = 0;
+		if(clGetDeviceInfo(device_id,
+		                   CL_DEVICE_MAX_COMPUTE_UNITS,
+		                   sizeof(max_compute_units),
+		                   &max_compute_units,
+		                   NULL) == CL_SUCCESS)
+		{
+			name += " " + to_string(max_compute_units);
+		}
+	}
+
+	/* Distinguish from our native CPU device. */
+	if(get_device_type(device_id) & CL_DEVICE_TYPE_CPU) {
+		name += " (OpenCL)";
+	}
+
+	return name;
 }
 
 bool OpenCLInfo::get_driver_version(cl_device_id device_id,
@@ -1124,7 +1187,7 @@ bool OpenCLInfo::get_driver_version(cl_device_id device_id,
 	return true;
 }
 
-int OpenCLInfo::mem_address_alignment(cl_device_id device_id)
+int OpenCLInfo::mem_sub_ptr_alignment(cl_device_id device_id)
 {
 	int base_align_bits;
 	if(clGetDeviceInfo(device_id,

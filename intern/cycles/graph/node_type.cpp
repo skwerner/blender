@@ -77,7 +77,7 @@ size_t SocketType::max_size()
 
 void *SocketType::zero_default_value()
 {
-	static Transform zero_transform = {{0, 0, 0, 0}, {0, 0, 0, 0}, {0, 0, 0, 0}, {0, 0, 0, 0}};
+	static Transform zero_transform = {{0, 0, 0, 0}, {0, 0, 0, 0}, {0, 0, 0, 0}};
 	return &zero_transform;
 }
 
@@ -134,7 +134,7 @@ NodeType::~NodeType()
 
 void NodeType::register_input(ustring name, ustring ui_name, SocketType::Type type, int struct_offset,
                               const void *default_value, const NodeEnum *enum_values,
-							  const NodeType **node_type, int flags, int extra_flags)
+                              const NodeType **node_type, int flags, int extra_flags)
 {
 	SocketType socket;
 	socket.name = name;
@@ -217,4 +217,3 @@ const NodeType *NodeType::find(ustring name)
 }
 
 CCL_NAMESPACE_END
-

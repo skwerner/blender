@@ -483,9 +483,10 @@ static void stitch_calculate_island_snapping(
 						int face_preview_pos = preview_position[BM_elem_index_get(element->l->f)].data_position;
 
 						stitch_uv_rotate(rotation_mat, island_stitch_data[i].medianPoint,
-						                 preview->preview_polys + face_preview_pos + 2 * element->tfindex, state->aspect);
+						                 preview->preview_polys + face_preview_pos + 2 * element->loop_of_poly_index,
+						                 state->aspect);
 
-						add_v2_v2(preview->preview_polys + face_preview_pos + 2 * element->tfindex,
+						add_v2_v2(preview->preview_polys + face_preview_pos + 2 * element->loop_of_poly_index,
 						          island_stitch_data[i].translation);
 					}
 				}
@@ -901,7 +902,7 @@ static void stitch_propagate_uv_final_position(
 			else {
 				int face_preview_pos = preview_position[BM_elem_index_get(element_iter->l->f)].data_position;
 				if (face_preview_pos != STITCH_NO_PREVIEW) {
-					copy_v2_v2(preview->preview_polys + face_preview_pos + 2 * element_iter->tfindex,
+					copy_v2_v2(preview->preview_polys + face_preview_pos + 2 * element_iter->loop_of_poly_index,
 					           final_position[index].uv);
 				}
 			}
@@ -954,9 +955,9 @@ static int stitch_process_data(StitchState *state, Scene *scene, int final)
 	/* store indices to editVerts and Faces. May be unneeded but ensuring anyway */
 	BM_mesh_elem_index_ensure(bm, BM_VERT | BM_FACE);
 
-	/*****************************************
-	 *  First determine stitchability of uvs *
-	 *****************************************/
+	/****************************************
+	 * First determine stitchability of uvs *
+	 ****************************************/
 
 	for (i = 0; i < state->selection_size; i++) {
 		if (state->mode == STITCH_VERT) {
@@ -1782,7 +1783,7 @@ static int stitch_init(bContext *C, wmOperator *op)
 		}
 	}
 
-	total_edges = BLI_ghash_size(edge_hash);
+	total_edges = BLI_ghash_len(edge_hash);
 	state->edges = edges = MEM_mallocN(sizeof(*edges) * total_edges, "stitch_edges");
 
 	/* I assume any system will be able to at least allocate an iterator :p */
@@ -2001,6 +2002,7 @@ static void stitch_exit(bContext *C, wmOperator *op, int finished)
 		RNA_enum_set(op->ptr, "stored_mode", state->mode);
 
 		/* Store selection for re-execution of stitch */
+		RNA_collection_clear(op->ptr, "selection");
 		for (i = 0; i < state->selection_size; i++) {
 			UvElement *element;
 			PointerRNA itemptr;
@@ -2013,7 +2015,7 @@ static void stitch_exit(bContext *C, wmOperator *op, int finished)
 			RNA_collection_add(op->ptr, "selection", &itemptr);
 
 			RNA_int_set(&itemptr, "face_index", BM_elem_index_get(element->l->f));
-			RNA_int_set(&itemptr, "element_index", element->tfindex);
+			RNA_int_set(&itemptr, "element_index", element->loop_of_poly_index);
 		}
 
 		uvedit_live_unwrap_update(sima, scene, obedit);
@@ -2058,16 +2060,16 @@ static void stitch_select(bContext *C, Scene *scene, const wmEvent *event, Stitc
 {
 	/* add uv under mouse to processed uv's */
 	float co[2];
-	NearestHit hit;
+	UvNearestHit hit = UV_NEAREST_HIT_INIT;
 	ARegion *ar = CTX_wm_region(C);
 	Image *ima = CTX_data_edit_image(C);
 
 	UI_view2d_region_to_view(&ar->v2d, event->mval[0], event->mval[1], &co[0], &co[1]);
 
 	if (state->mode == STITCH_VERT) {
-		uv_find_nearest_vert(scene, ima, state->em, co, NULL, &hit);
-
-		if (hit.efa) {
+		if (uv_find_nearest_vert(
+		            scene, ima, state->em, co, 0.0f, &hit))
+		{
 			/* Add vertex to selection, deselect all common uv's of vert other
 			 * than selected and update the preview. This behavior was decided so that
 			 * you can do stuff like deselect the opposite stitchable vertex and the initial still gets deselected */
@@ -2079,9 +2081,9 @@ static void stitch_select(bContext *C, Scene *scene, const wmEvent *event, Stitc
 		}
 	}
 	else {
-		uv_find_nearest_edge(scene, ima, state->em, co, &hit);
-
-		if (hit.efa) {
+		if (uv_find_nearest_edge(
+		            scene, ima, state->em, co, &hit))
+		{
 			UvEdge *edge = uv_edge_get(hit.l, state);
 			stitch_select_edge(edge, state, false);
 		}
@@ -2254,7 +2256,7 @@ void UV_OT_stitch(wmOperatorType *ot)
 {
 	PropertyRNA *prop;
 
-	static EnumPropertyItem stitch_modes[] = {
+	static const EnumPropertyItem stitch_modes[] = {
 	    {STITCH_VERT, "VERTEX", 0, "Vertex", ""},
 	    {STITCH_EDGE, "EDGE", 0, "Edge", ""},
 	    {0, NULL, 0, NULL, NULL}
@@ -2265,7 +2267,7 @@ void UV_OT_stitch(wmOperatorType *ot)
 	ot->description = "Stitch selected UV vertices by proximity";
 	ot->idname = "UV_OT_stitch";
 	ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
-	
+
 	/* api callbacks */
 	ot->invoke = stitch_invoke;
 	ot->modal = stitch_modal;

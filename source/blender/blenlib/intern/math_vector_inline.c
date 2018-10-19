@@ -658,6 +658,14 @@ MINLINE void invert_v2(float r[2])
 	r[1] = 1.0f / r[1];
 }
 
+MINLINE void invert_v3(float r[3])
+{
+	BLI_assert(!ELEM(0.0f, r[0], r[1], r[2]));
+	r[0] = 1.0f / r[0];
+	r[1] = 1.0f / r[1];
+	r[2] = 1.0f / r[2];
+}
+
 MINLINE void abs_v2(float r[2])
 {
 	r[0] = fabsf(r[0]);
@@ -743,6 +751,16 @@ MINLINE void cross_v3_v3v3(float r[3], const float a[3], const float b[3])
 	r[0] = a[1] * b[2] - a[2] * b[1];
 	r[1] = a[2] * b[0] - a[0] * b[2];
 	r[2] = a[0] * b[1] - a[1] * b[0];
+}
+
+/* cross product suffers from severe precision loss when vectors are
+ * nearly parallel or opposite; doing the computation in double helps a lot */
+MINLINE void cross_v3_v3v3_hi_prec(float r[3], const float a[3], const float b[3])
+{
+	BLI_assert(r != a && r != b);
+	r[0] = (float)((double)a[1] * (double)b[2] - (double)a[2] * (double)b[1]);
+	r[1] = (float)((double)a[2] * (double)b[0] - (double)a[0] * (double)b[2]);
+	r[2] = (float)((double)a[0] * (double)b[1] - (double)a[1] * (double)b[0]);
 }
 
 /* Newell's Method */
@@ -958,6 +976,12 @@ MINLINE float normalize_v3_length(float n[3], const float unit_length)
 MINLINE float normalize_v3(float n[3])
 {
 	return normalize_v3_v3(n, n);
+}
+
+MINLINE void normal_float_to_short_v2(short out[2], const float in[2])
+{
+	out[0] = (short) (in[0] * 32767.0f);
+	out[1] = (short) (in[1] * 32767.0f);
 }
 
 MINLINE void normal_short_to_float_v3(float out[3], const short in[3])

@@ -49,7 +49,6 @@
 
 #include "ED_screen.h"
 #include "ED_space_api.h"
-#include "ED_transform.h"
 #include "ED_transform_snap_object_context.h"
 
 #include "PIL_time.h" /* smoothview */
@@ -61,7 +60,7 @@
 
 #ifdef WITH_INPUT_NDOF
 //#  define NDOF_WALK_DEBUG
-//#  define NDOF_WALK_DRAW_TOOMUCH  /* is this needed for ndof? - commented so redraw doesnt thrash - campbell */
+//#  define NDOF_WALK_DRAW_TOOMUCH  /* is this needed for ndof? - commented so redraw doesn't thrash - campbell */
 #endif
 
 #define USE_TABLET_SUPPORT
@@ -129,19 +128,16 @@ typedef enum eWalkGravityState {
 /* called in transform_ops.c, on each regeneration of keymaps  */
 void walk_modal_keymap(wmKeyConfig *keyconf)
 {
-	static EnumPropertyItem modal_items[] = {
-		{WALK_MODAL_CANCEL, "CANCEL", 0, "Cancel", ""},
+	static const EnumPropertyItem modal_items[] = {
 		{WALK_MODAL_CONFIRM, "CONFIRM", 0, "Confirm", ""},
+		{WALK_MODAL_CANCEL, "CANCEL", 0, "Cancel", ""},
 
-		{WALK_MODAL_ACCELERATE, "ACCELERATE", 0, "Accelerate", ""},
-		{WALK_MODAL_DECELERATE, "DECELERATE", 0, "Decelerate", ""},
-
-		{WALK_MODAL_DIR_FORWARD, "FORWARD", 0, "Move Forward", ""},
-		{WALK_MODAL_DIR_BACKWARD, "BACKWARD", 0, "Move Backward", ""},
-		{WALK_MODAL_DIR_LEFT, "LEFT", 0, "Move Left (Strafe)", ""},
-		{WALK_MODAL_DIR_RIGHT, "RIGHT", 0, "Move Right (Strafe)", ""},
-		{WALK_MODAL_DIR_UP, "UP", 0, "Move Up", ""},
-		{WALK_MODAL_DIR_DOWN, "DOWN", 0, "Move Down", ""},
+		{WALK_MODAL_DIR_FORWARD, "FORWARD", 0, "Forward", ""},
+		{WALK_MODAL_DIR_BACKWARD, "BACKWARD", 0, "Backward", ""},
+		{WALK_MODAL_DIR_LEFT, "LEFT", 0, "Left (Strafe)", ""},
+		{WALK_MODAL_DIR_RIGHT, "RIGHT", 0, "Right (Strafe)", ""},
+		{WALK_MODAL_DIR_UP, "UP", 0, "Up", ""},
+		{WALK_MODAL_DIR_DOWN, "DOWN", 0, "Down", ""},
 
 		{WALK_MODAL_DIR_FORWARD_STOP, "FORWARD_STOP", 0, "Stop Move Forward", ""},
 		{WALK_MODAL_DIR_BACKWARD_STOP, "BACKWARD_STOP", 0, "Stop Mode Backward", ""},
@@ -152,14 +148,17 @@ void walk_modal_keymap(wmKeyConfig *keyconf)
 
 		{WALK_MODAL_TELEPORT, "TELEPORT", 0, "Teleport", "Move forward a few units at once"},
 
-		{WALK_MODAL_FAST_ENABLE, "FAST_ENABLE", 0, "Fast Enable", "Move faster (walk or fly)"},
-		{WALK_MODAL_FAST_DISABLE, "FAST_DISABLE", 0, "Fast Disable", "Resume regular speed"},
+		{WALK_MODAL_ACCELERATE, "ACCELERATE", 0, "Accelerate", ""},
+		{WALK_MODAL_DECELERATE, "DECELERATE", 0, "Decelerate", ""},
 
-		{WALK_MODAL_SLOW_ENABLE, "SLOW_ENABLE", 0, "Slow Enable", "Move slower (walk or fly)"},
-		{WALK_MODAL_SLOW_DISABLE, "SLOW_DISABLE", 0, "Slow Disable", "Resume regular speed"},
+		{WALK_MODAL_FAST_ENABLE, "FAST_ENABLE", 0, "Fast", "Move faster (walk or fly)"},
+		{WALK_MODAL_FAST_DISABLE, "FAST_DISABLE", 0, "Fast (Off)", "Resume regular speed"},
+
+		{WALK_MODAL_SLOW_ENABLE, "SLOW_ENABLE", 0, "Slow", "Move slower (walk or fly)"},
+		{WALK_MODAL_SLOW_DISABLE, "SLOW_DISABLE", 0, "Slow (Off)", "Resume regular speed"},
 
 		{WALK_MODAL_JUMP, "JUMP", 0, "Jump", "Jump when in walk mode"},
-		{WALK_MODAL_JUMP_STOP, "JUMP_STOP", 0, "Jump Stop", "Stop pushing jump"},
+		{WALK_MODAL_JUMP_STOP, "JUMP_STOP", 0, "Jump (Off)", "Stop pushing jump"},
 
 		{WALK_MODAL_TOGGLE, "GRAVITY_TOGGLE", 0, "Toggle Gravity", "Toggle gravity effect"},
 
@@ -174,8 +173,8 @@ void walk_modal_keymap(wmKeyConfig *keyconf)
 	keymap = WM_modalkeymap_add(keyconf, "View3D Walk Modal", modal_items);
 
 	/* items for modal map */
-	WM_modalkeymap_add_item(keymap, ESCKEY, KM_PRESS, KM_ANY, 0, WALK_MODAL_CANCEL);
 	WM_modalkeymap_add_item(keymap, RIGHTMOUSE, KM_ANY, KM_ANY, 0, WALK_MODAL_CANCEL);
+	WM_modalkeymap_add_item(keymap, ESCKEY, KM_PRESS, KM_ANY, 0, WALK_MODAL_CANCEL);
 
 	WM_modalkeymap_add_item(keymap, LEFTMOUSE, KM_ANY, KM_ANY, 0, WALK_MODAL_CONFIRM);
 	WM_modalkeymap_add_item(keymap, RETKEY, KM_PRESS, KM_ANY, 0, WALK_MODAL_CONFIRM);
@@ -436,7 +435,7 @@ static bool walk_floor_distance_get(
 	        ray_start, ray_normal, r_distance,
 	        r_location, r_normal_dummy);
 
-	/* artifically scale the distance to the scene size */
+	/* artificially scale the distance to the scene size */
 	*r_distance /= walk->grid;
 	return ret;
 }
@@ -475,7 +474,7 @@ static bool walk_ray_cast(
 		negate_v3(r_normal);
 	}
 
-	/* artifically scale the distance to the scene size */
+	/* artificially scale the distance to the scene size */
 	*ray_distance /= walk->grid;
 
 	return ret;
@@ -510,7 +509,7 @@ static bool initWalkInfo(bContext *C, WalkInfo *walk, wmOperator *op)
 		walk->rv3d->persp = RV3D_PERSP;
 	}
 
-	if (walk->rv3d->persp == RV3D_CAMOB && ID_IS_LINKED_DATABLOCK(walk->v3d->camera)) {
+	if (walk->rv3d->persp == RV3D_CAMOB && ID_IS_LINKED(walk->v3d->camera)) {
 		BKE_report(op->reports, RPT_ERROR, "Cannot navigate a camera from an external library");
 		return false;
 	}
@@ -700,7 +699,7 @@ static void walkEvent(bContext *C, wmOperator *op, WalkInfo *walk, const wmEvent
 			return;
 		}
 
-		if ((walk->is_cursor_absolute == false) && WM_event_is_absolute(event)) {
+		if ((walk->is_cursor_absolute == false) && event->is_motion_absolute) {
 			walk->is_cursor_absolute = true;
 			copy_v2_v2_int(walk->prev_mval, event->mval);
 			copy_v2_v2_int(walk->center_mval, event->mval);
@@ -1053,7 +1052,7 @@ static int walkApply(bContext *C, wmOperator *op, WalkInfo *walk)
 					/* speed factor */
 					y *= WALK_ROTATE_FAC;
 
-					/* user adjustement factor */
+					/* user adjustment factor */
 					y *= walk->mouse_speed;
 
 					/* clamp the angle limits */
@@ -1091,7 +1090,7 @@ static int walkApply(bContext *C, wmOperator *op, WalkInfo *walk)
 					/* speed factor */
 					x *= WALK_ROTATE_FAC;
 
-					/* user adjustement factor */
+					/* user adjustment factor */
 					x *= walk->mouse_speed;
 
 					/* Rotate about the relative up vec */

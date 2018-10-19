@@ -26,6 +26,7 @@
 
 CCL_NAMESPACE_BEGIN
 
+class ImageMetaData;
 class Scene;
 class Session;
 class RenderBuffers;
@@ -142,6 +143,8 @@ public:
 	static int start_resumable_chunk;
 	static int end_resumable_chunk;
 
+	static bool print_render_stats;
+
 protected:
 	void do_write_update_render_result(BL::RenderResult& b_rr,
 	                                   BL::RenderLayer& b_rlay,
@@ -152,12 +155,7 @@ protected:
 	int builtin_image_frame(const string &builtin_name);
 	void builtin_image_info(const string &builtin_name,
 	                        void *builtin_data,
-	                        bool &is_float,
-	                        int &width,
-	                        int &height,
-	                        int &depth,
-	                        int &channels,
-	                        bool &free_cache);
+	                        ImageMetaData& metadata);
 	bool builtin_image_pixels(const string &builtin_name,
 	                          void *builtin_data,
 	                          unsigned char *pixels,

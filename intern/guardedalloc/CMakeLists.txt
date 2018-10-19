@@ -38,6 +38,7 @@ set(SRC
 	./intern/mallocn_lockfree_impl.c
 
 	MEM_guardedalloc.h
+	./intern/mallocn_inline.h
 	./intern/mallocn_intern.h
 
 	# only so the header is known by cmake
@@ -50,6 +51,11 @@ if(WIN32 AND NOT UNIX)
 
 		mmap_win.h
 	)
+endif()
+
+# Jemalloc 5.0.0+ needs extra configuration.
+if(WITH_MEM_JEMALLOC AND NOT ("${JEMALLOC_VERSION}" VERSION_LESS "5.0.0"))
+	add_definitions(-DWITH_JEMALLOC_CONF)
 endif()
 
 blender_add_lib(bf_intern_guardedalloc "${SRC}" "${INC}" "${INC_SYS}")

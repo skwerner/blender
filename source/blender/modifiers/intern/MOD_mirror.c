@@ -48,6 +48,8 @@
 #include "depsgraph_private.h"
 #include "DEG_depsgraph_build.h"
 
+#include "MOD_modifiertypes.h"
+
 static void initData(ModifierData *md)
 {
 	MirrorModifierData *mmd = (MirrorModifierData *) md;
@@ -55,15 +57,6 @@ static void initData(ModifierData *md)
 	mmd->flag |= (MOD_MIR_AXIS_X | MOD_MIR_VGROUP);
 	mmd->tolerance = 0.001;
 	mmd->mirror_ob = NULL;
-}
-
-static void copyData(ModifierData *md, ModifierData *target)
-{
-#if 0
-	MirrorModifierData *mmd = (MirrorModifierData *) md;
-	MirrorModifierData *tmmd = (MirrorModifierData *) target;
-#endif
-	modifier_copyData_generic(md, target);
 }
 
 static void foreachObjectLink(
@@ -75,38 +68,31 @@ static void foreachObjectLink(
 	walk(userData, ob, &mmd->mirror_ob, IDWALK_CB_NOP);
 }
 
-static void updateDepgraph(ModifierData *md, DagForest *forest,
-                           struct Main *UNUSED(bmain),
-                           struct Scene *UNUSED(scene),
-                           Object *UNUSED(ob),
-                           DagNode *obNode)
+static void updateDepgraph(ModifierData *md, const ModifierUpdateDepsgraphContext *ctx)
 {
 	MirrorModifierData *mmd = (MirrorModifierData *) md;
 
 	if (mmd->mirror_ob) {
-		DagNode *latNode = dag_get_node(forest, mmd->mirror_ob);
+		DagNode *latNode = dag_get_node(ctx->forest, mmd->mirror_ob);
 
-		dag_add_relation(forest, latNode, obNode, DAG_RL_OB_DATA, "Mirror Modifier");
+		dag_add_relation(ctx->forest, latNode, ctx->obNode, DAG_RL_OB_DATA, "Mirror Modifier");
 	}
 }
 
-static void updateDepsgraph(ModifierData *md,
-                            struct Main *UNUSED(bmain),
-                            struct Scene *UNUSED(scene),
-                            Object *ob,
-                            struct DepsNodeHandle *node)
+static void updateDepsgraph(ModifierData *md, const ModifierUpdateDepsgraphContext *ctx)
 {
 	MirrorModifierData *mmd = (MirrorModifierData *)md;
 	if (mmd->mirror_ob != NULL) {
-		DEG_add_object_relation(node, mmd->mirror_ob, DEG_OB_COMP_TRANSFORM, "Mirror Modifier");
+		DEG_add_object_relation(ctx->node, mmd->mirror_ob, DEG_OB_COMP_TRANSFORM, "Mirror Modifier");
 	}
-	DEG_add_object_relation(node, ob, DEG_OB_COMP_TRANSFORM, "Mirror Modifier");
+	DEG_add_object_relation(ctx->node, ctx->object, DEG_OB_COMP_TRANSFORM, "Mirror Modifier");
 }
 
-static DerivedMesh *doMirrorOnAxis(MirrorModifierData *mmd,
-                                   Object *ob,
-                                   DerivedMesh *dm,
-                                   int axis)
+static DerivedMesh *doMirrorOnAxis(
+        MirrorModifierData *mmd,
+        Object *ob,
+        DerivedMesh *dm,
+        int axis)
 {
 	const float tolerance_sq = mmd->tolerance * mmd->tolerance;
 	const bool do_vtargetmap = (mmd->flag & MOD_MIR_NO_MERGE) == 0;
@@ -158,8 +144,8 @@ static DerivedMesh *doMirrorOnAxis(MirrorModifierData *mmd,
 	DM_copy_poly_data(dm, result, 0, 0, maxPolys);
 
 
-	/* subsurf for eg wont have mesh data in the */
-	/* now add mvert/medge/mface layers */
+	/* Subsurf for eg won't have mesh data in the custom data arrays.
+	 * now add mvert/medge/mpoly layers. */
 
 	if (!CustomData_has_layer(&dm->vertData, CD_MVERT)) {
 		dm->copyVertArray(dm, CDDM_get_verts(result));
@@ -181,7 +167,7 @@ static DerivedMesh *doMirrorOnAxis(MirrorModifierData *mmd,
 
 	if (do_vtargetmap) {
 		/* second half is filled with -1 */
-		vtargetmap = MEM_mallocN(sizeof(int) * maxVerts * 2, "MOD_mirror tarmap");
+		vtargetmap = MEM_malloc_arrayN(maxVerts, 2 * sizeof(int), "MOD_mirror tarmap");
 
 		vtmap_a = vtargetmap;
 		vtmap_b = vtargetmap + maxVerts;
@@ -214,7 +200,7 @@ static DerivedMesh *doMirrorOnAxis(MirrorModifierData *mmd,
 			vtmap_b++;
 		}
 	}
-	
+
 	/* handle shape keys */
 	totshape = CustomData_number_of_layers(&result->vertData, CD_SHAPEKEY);
 	for (a = 0; a < totshape; a++) {
@@ -223,14 +209,14 @@ static DerivedMesh *doMirrorOnAxis(MirrorModifierData *mmd,
 			mul_m4_v3(mtx, cos[i]);
 		}
 	}
-	
+
 	/* adjust mirrored edge vertex indices */
 	me = CDDM_get_edges(result) + maxEdges;
 	for (i = 0; i < maxEdges; i++, me++) {
 		me->v1 += maxVerts;
 		me->v2 += maxVerts;
 	}
-	
+
 	/* adjust mirrored poly loopstart indices, and reverse loop order (normals) */
 	mp = CDDM_get_polys(result) + maxPolys;
 	ml = CDDM_get_loops(result);
@@ -250,7 +236,7 @@ static DerivedMesh *doMirrorOnAxis(MirrorModifierData *mmd,
 			ml2[j].e = ml2[j + 1].e;
 		}
 		ml2[mp->totloop - 1].e = e;
-		
+
 		mp->loopstart += maxLoops;
 	}
 
@@ -263,7 +249,7 @@ static DerivedMesh *doMirrorOnAxis(MirrorModifierData *mmd,
 
 	/* handle uvs,
 	 * let tessface recalc handle updating the MTFace data */
-	if (mmd->flag & (MOD_MIR_MIRROR_U | MOD_MIR_MIRROR_V)) {
+	if (mmd->flag & (MOD_MIR_MIRROR_U | MOD_MIR_MIRROR_V) || (is_zero_v2(mmd->uv_offset_copy) == false)) {
 		const bool do_mirr_u = (mmd->flag & MOD_MIR_MIRROR_U) != 0;
 		const bool do_mirr_v = (mmd->flag & MOD_MIR_MIRROR_V) != 0;
 
@@ -276,6 +262,8 @@ static DerivedMesh *doMirrorOnAxis(MirrorModifierData *mmd,
 			for (; j-- > 0; dmloopuv++) {
 				if (do_mirr_u) dmloopuv->uv[0] = 1.0f - dmloopuv->uv[0] + mmd->uv_offset[0];
 				if (do_mirr_v) dmloopuv->uv[1] = 1.0f - dmloopuv->uv[1] + mmd->uv_offset[1];
+				dmloopuv->uv[0] += mmd->uv_offset_copy[0];
+				dmloopuv->uv[1] += mmd->uv_offset_copy[1];
 			}
 		}
 	}
@@ -286,7 +274,7 @@ static DerivedMesh *doMirrorOnAxis(MirrorModifierData *mmd,
 		int *flip_map = NULL, flip_map_len = 0;
 
 		flip_map = defgroup_flip_map(ob, &flip_map_len, false);
-		
+
 		if (flip_map) {
 			for (i = 0; i < maxVerts; dvert++, i++) {
 				/* merged vertices get both groups, others get flipped */
@@ -312,8 +300,9 @@ static DerivedMesh *doMirrorOnAxis(MirrorModifierData *mmd,
 	return result;
 }
 
-static DerivedMesh *mirrorModifier__doMirror(MirrorModifierData *mmd,
-                                             Object *ob, DerivedMesh *dm)
+static DerivedMesh *mirrorModifier__doMirror(
+        MirrorModifierData *mmd,
+        Object *ob, DerivedMesh *dm)
 {
 	DerivedMesh *result = dm;
 
@@ -335,9 +324,10 @@ static DerivedMesh *mirrorModifier__doMirror(MirrorModifierData *mmd,
 	return result;
 }
 
-static DerivedMesh *applyModifier(ModifierData *md, Object *ob,
-                                  DerivedMesh *derivedData,
-                                  ModifierApplyFlag UNUSED(flag))
+static DerivedMesh *applyModifier(
+        ModifierData *md, Object *ob,
+        DerivedMesh *derivedData,
+        ModifierApplyFlag UNUSED(flag))
 {
 	DerivedMesh *result;
 	MirrorModifierData *mmd = (MirrorModifierData *) md;
@@ -346,7 +336,7 @@ static DerivedMesh *applyModifier(ModifierData *md, Object *ob,
 
 	if (result != derivedData)
 		result->dirty |= DM_DIRTY_NORMALS;
-	
+
 	return result;
 }
 
@@ -364,7 +354,7 @@ ModifierTypeInfo modifierType_Mirror = {
 	                        /* this is only the case when 'MOD_MIR_VGROUP' is used */
 	                        eModifierTypeFlag_UsesPreview,
 
-	/* copyData */          copyData,
+	/* copyData */          modifier_copyData_generic,
 	/* deformVerts */       NULL,
 	/* deformMatrices */    NULL,
 	/* deformVertsEM */     NULL,

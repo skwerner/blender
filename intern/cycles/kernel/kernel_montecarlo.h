@@ -5,7 +5,7 @@
  * All Rights Reserved.
  *
  * Modifications Copyright 2011, Blender Foundation.
- * 
+ *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
  * met:
@@ -67,8 +67,8 @@ ccl_device_inline void sample_cos_hemisphere(const float3 N,
 
 /* sample direction uniformly distributed in hemisphere */
 ccl_device_inline void sample_uniform_hemisphere(const float3 N,
-                                               float randu, float randv,
-                                               float3 *omega_in, float *pdf)
+                                                 float randu, float randv,
+                                                 float3 *omega_in, float *pdf)
 {
 	float z = randu;
 	float r = sqrtf(max(0.0f, 1.0f - z*z));
@@ -84,8 +84,8 @@ ccl_device_inline void sample_uniform_hemisphere(const float3 N,
 
 /* sample direction uniformly distributed in cone */
 ccl_device_inline void sample_uniform_cone(const float3 N, float angle,
-                                         float randu, float randv,
-                                         float3 *omega_in, float *pdf)
+                                           float randu, float randv,
+                                           float3 *omega_in, float *pdf)
 {
 	float z = cosf(angle*randu);
 	float r = sqrtf(max(0.0f, 1.0f - z*z));
@@ -184,7 +184,35 @@ ccl_device float2 regular_polygon_sample(float corners, float rotation, float u,
 	return make_float2(cr*p.x - sr*p.y, sr*p.x + cr*p.y);
 }
 
+ccl_device float3 ensure_valid_reflection(float3 Ng, float3 I, float3 N)
+{
+	float3 R = 2*dot(N, I)*N - I;
+	if(dot(Ng, R) >= 0.05f) {
+		return N;
+	}
+
+	/* Form coordinate system with Ng as the Z axis and N inside the X-Z-plane.
+	 * The X axis is found by normalizing the component of N that's orthogonal to Ng.
+	 * The Y axis isn't actually needed.
+	 */
+	float3 X = normalize(N - dot(N, Ng)*Ng);
+
+	/* Calculate N.z and N.x in the local coordinate system. */
+	float Iz = dot(I, Ng);
+	float Ix2 = sqr(dot(I, X)), Iz2 = sqr(Iz);
+	float Ix2Iz2 = Ix2 + Iz2;
+
+	float a = safe_sqrtf(Ix2*(Ix2Iz2 - sqr(0.05f)));
+	float b = Iz*0.05f + Ix2Iz2;
+	float c = (a + b > 0.0f)? (a + b) : (-a + b);
+
+	float Nz = safe_sqrtf(0.5f * c * (1.0f / Ix2Iz2));
+	float Nx = safe_sqrtf(1.0f - sqr(Nz));
+
+	/* Transform back into global coordinates. */
+	return Nx*X + Nz*Ng;
+}
+
 CCL_NAMESPACE_END
 
 #endif /* __KERNEL_MONTECARLO_CL__ */
-

@@ -310,6 +310,13 @@ void MD5Hash::append(const uint8_t *data, int nbytes)
 		memcpy(buf, p, left);
 }
 
+void MD5Hash::append(const string& str)
+{
+	if(str.size()) {
+		append((const uint8_t*)str.c_str(), str.size());
+	}
+}
+
 bool MD5Hash::append_file(const string& filepath)
 {
 	FILE *f = path_fopen(filepath, "rb");
@@ -331,7 +338,7 @@ bool MD5Hash::append_file(const string& filepath)
 	bool success = (ferror(f) == 0);
 
 	fclose(f);
-	
+
 	return success;
 }
 
@@ -369,7 +376,7 @@ string MD5Hash::get_hex()
 	for(int i = 0; i < 16; i++)
 		sprintf(buf + i*2, "%02X", (unsigned int)digest[i]);
 	buf[sizeof(buf)-1] = '\0';
-	
+
 	return string(buf);
 }
 
@@ -381,4 +388,3 @@ string util_md5_string(const string& str)
 }
 
 CCL_NAMESPACE_END
-

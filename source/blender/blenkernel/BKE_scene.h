@@ -42,7 +42,6 @@ struct Base;
 struct EvaluationContext;
 struct Main;
 struct Object;
-struct QuicktimeCodecData;
 struct RenderData;
 struct SceneRenderLayer;
 struct Scene;
@@ -64,7 +63,6 @@ struct Main;
 struct Base *_setlooper_base_step(struct Scene **sce_iter, struct Base *base);
 
 void free_avicodecdata(struct AviCodecData *acd);
-void free_qtcodecdata(struct QuicktimeCodecData *acd);
 
 void BKE_scene_free(struct Scene *sce);
 void BKE_scene_init(struct Scene *sce);
@@ -89,7 +87,7 @@ typedef struct SceneBaseIter {
 	int phase;
 } SceneBaseIter;
 
-int BKE_scene_base_iter_next(struct EvaluationContext *eval_ctx, struct SceneBaseIter *iter,
+int BKE_scene_base_iter_next(struct Main *bmain, struct EvaluationContext *eval_ctx, struct SceneBaseIter *iter,
                              struct Scene **scene, int val, struct Base **base, struct Object **ob);
 
 void BKE_scene_base_flag_to_objects(struct Scene *scene);
@@ -98,6 +96,10 @@ void BKE_scene_base_flag_from_objects(struct Scene *scene);
 void BKE_scene_set_background(struct Main *bmain, struct Scene *sce);
 struct Scene *BKE_scene_set_name(struct Main *bmain, const char *name);
 
+struct ToolSettings *BKE_toolsettings_copy(struct ToolSettings *toolsettings, const int flag);
+void BKE_toolsettings_free(struct ToolSettings *toolsettings);
+
+void BKE_scene_copy_data(struct Main *bmain, struct Scene *sce_dst, const struct Scene *sce_src, const int flag);
 struct Scene *BKE_scene_copy(struct Main *bmain, struct Scene *sce, int type);
 void BKE_scene_groups_relink(struct Scene *sce);
 
@@ -111,6 +113,8 @@ int BKE_scene_camera_switch_update(struct Scene *scene);
 
 char *BKE_scene_find_marker_name(struct Scene *scene, int frame);
 char *BKE_scene_find_last_marker_name(struct Scene *scene, int frame);
+
+int BKE_scene_frame_snap_by_seconds(struct Scene *scene, double interval_in_seconds, int cfra);
 
 /* checks for cycle, returns 1 if it's all OK */
 bool BKE_scene_validate_setscene(struct Main *bmain, struct Scene *sce);
@@ -151,6 +155,8 @@ bool BKE_scene_check_rigidbody_active(const struct Scene *scene);
 int BKE_scene_num_threads(const struct Scene *scene);
 int BKE_render_num_threads(const struct RenderData *r);
 
+int BKE_render_preview_pixel_size(const struct RenderData *r);
+
 double BKE_scene_unit_scale(const struct UnitSettings *unit, const int unit_type, double value);
 
 /* multiview */
@@ -175,4 +181,3 @@ int         BKE_scene_multiview_num_videos_get(const struct RenderData *rd);
 #endif
 
 #endif
-

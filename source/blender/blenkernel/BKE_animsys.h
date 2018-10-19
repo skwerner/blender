@@ -35,6 +35,7 @@ struct ID;
 struct ListBase;
 struct Main;
 struct AnimData;
+struct FCurve;
 struct KeyingSet;
 struct KS_Path;
 struct PathResolvedRNA;
@@ -67,27 +68,29 @@ bool BKE_animdata_set_action(struct ReportList *reports, struct ID *id, struct b
 void BKE_animdata_free(struct ID *id, const bool do_id_user);
 
 /* Copy AnimData */
-struct AnimData *BKE_animdata_copy(struct AnimData *adt, const bool do_action);
+struct AnimData *BKE_animdata_copy(struct Main *bmain, struct AnimData *adt, const bool do_action);
 
 /* Copy AnimData */
-bool BKE_animdata_copy_id(struct ID *id_to, struct ID *id_from, const bool do_action);
+bool BKE_animdata_copy_id(struct Main *bmain, struct ID *id_to, struct ID *id_from, const bool do_action);
 
 /* Copy AnimData Actions */
-void BKE_animdata_copy_id_action(struct ID *id, const bool set_newid);
+void BKE_animdata_copy_id_action(struct Main *bmain, struct ID *id, const bool set_newid);
 
 /* Merge copies of data from source AnimData block */
 typedef enum eAnimData_MergeCopy_Modes {
 	/* Keep destination action */
 	ADT_MERGECOPY_KEEP_DST = 0,
-	
+
 	/* Use src action (make a new copy) */
 	ADT_MERGECOPY_SRC_COPY = 1,
-	
+
 	/* Use src action (but just reference the existing version) */
 	ADT_MERGECOPY_SRC_REF  = 2
 } eAnimData_MergeCopy_Modes;
 
-void BKE_animdata_merge_copy(struct ID *dst_id, struct ID *src_id, eAnimData_MergeCopy_Modes action_mode, bool fix_drivers);
+void BKE_animdata_merge_copy(
+        struct Main *bmain, struct ID *dst_id, struct ID *src_id,
+        eAnimData_MergeCopy_Modes action_mode, bool fix_drivers);
 
 /* ************************************* */
 /* KeyingSets API */
@@ -102,7 +105,7 @@ struct KS_Path *BKE_keyingset_add_path(struct KeyingSet *ks, struct ID *id, cons
 struct KS_Path *BKE_keyingset_find_path(struct KeyingSet *ks, struct ID *id, const char group_name[], const char rna_path[], int array_index, int group_mode);
 
 /* Copy all KeyingSets in the given list */
-void BKE_keyingsets_copy(struct ListBase *newlist, struct ListBase *list);
+void BKE_keyingsets_copy(struct ListBase *newlist, const struct ListBase *list);
 
 /* Free the given Keying Set path */
 void BKE_keyingset_free_path(struct KeyingSet *ks, struct KS_Path *ksp);
@@ -138,7 +141,8 @@ void BKE_animdata_fix_paths_remove(struct ID *id, const char *path);
 /* -------------------------------------- */
 
 /* Move animation data from src to destination if it's paths are based on basepaths */
-void BKE_animdata_separate_by_basepath(struct ID *srcID, struct ID *dstID, struct ListBase *basepaths);
+void BKE_animdata_separate_by_basepath(
+        struct Main *bmain, struct ID *srcID, struct ID *dstID, struct ListBase *basepaths);
 
 /* Move F-Curves from src to destination if it's path is based on basepath */
 void action_move_fcurves_by_basepath(struct bAction *srcAct, struct bAction *dstAct, const char basepath[]);
@@ -152,9 +156,15 @@ char *BKE_animdata_driver_path_hack(struct bContext *C, struct PointerRNA *ptr, 
 /* Define for callback looper used in BKE_animdata_main_cb */
 typedef void (*ID_AnimData_Edit_Callback)(struct ID *id, struct AnimData *adt, void *user_data);
 
+/* Define for callback looper used in BKE_fcurves_main_cb */
+typedef void (*ID_FCurve_Edit_Callback)(struct ID *id, struct FCurve *fcu, void *user_data);
+
 
 /* Loop over all datablocks applying callback */
-void BKE_animdata_main_cb(struct Main *main, ID_AnimData_Edit_Callback func, void *user_data);
+void BKE_animdata_main_cb(struct Main *bmain, ID_AnimData_Edit_Callback func, void *user_data);
+
+/* Loop over all datablocks applying callback to all its F-Curves */
+void BKE_fcurves_main_cb(struct Main *bmain, ID_FCurve_Edit_Callback func, void *user_data);
 
 /* ************************************* */
 // TODO: overrides, remapping, and path-finding api's
@@ -177,9 +187,9 @@ bool BKE_animsys_execute_fcurve(struct PointerRNA *ptr, struct AnimMapper *remap
 
 /* ------------ Specialized API --------------- */
 /* There are a few special tools which require these following functions. They are NOT to be used
- * for standard animation evaluation UNDER ANY CIRCUMSTANCES! 
+ * for standard animation evaluation UNDER ANY CIRCUMSTANCES!
  *
- * i.e. Pose Library (PoseLib) uses some of these for selectively applying poses, but 
+ * i.e. Pose Library (PoseLib) uses some of these for selectively applying poses, but
  *	    Particles/Sequencer performing funky time manipulation is not ok.
  */
 

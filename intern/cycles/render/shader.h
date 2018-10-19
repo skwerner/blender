@@ -89,11 +89,6 @@ public:
 	/* shader graph */
 	ShaderGraph *graph;
 
-	/* shader graph with auto bump mapping included, we compile two shaders,
-	 * with and without bump,  because the displacement method is a mesh
-	 * level setting, so we need to handle both */
-	ShaderGraph *graph_bump;
-
 	/* sampling */
 	bool use_mis;
 	bool use_transparent_shadow;
@@ -103,7 +98,7 @@ public:
 
 	/* synchronization */
 	bool need_update;
-	bool need_update_attributes;
+	bool need_update_mesh;
 
 	/* If the shader has only volume components, the surface is assumed to
 	 * be transparent.
@@ -121,10 +116,12 @@ public:
 	bool has_volume;
 	bool has_displacement;
 	bool has_surface_bssrdf;
+	bool has_bump;
 	bool has_bssrdf_bump;
 	bool has_surface_spatial_varying;
 	bool has_volume_spatial_varying;
 	bool has_object_dependency;
+	bool has_attribute_dependency;
 	bool has_integrator_dependency;
 
 	/* displacement */
@@ -158,7 +155,7 @@ public:
 };
 
 /* Shader Manager virtual base class
- * 
+ *
  * From this the SVM and OSL shader managers are derived, that do the actual
  * shader compiling and device updating. */
 
@@ -198,14 +195,17 @@ public:
 
 	static void free_memory();
 
+	float linear_rgb_to_gray(float3 c);
+
 protected:
 	ShaderManager();
 
 	typedef unordered_map<ustring, uint, ustringHash> AttributeIDMap;
 	AttributeIDMap unique_attribute_id;
 
-	thread_mutex lookup_table_mutex;
+	static thread_mutex lookup_table_mutex;
 	static vector<float> beckmann_table;
+	static bool beckmann_table_ready;
 
 	size_t beckmann_table_offset;
 
@@ -213,9 +213,13 @@ protected:
 	                                  DeviceRequestedFeatures *requested_features);
 
 	thread_spin_lock attribute_lock_;
+
+	float3 xyz_to_r;
+	float3 xyz_to_g;
+	float3 xyz_to_b;
+	float3 rgb_to_y;
 };
 
 CCL_NAMESPACE_END
 
 #endif /* __SHADER_H__ */
-

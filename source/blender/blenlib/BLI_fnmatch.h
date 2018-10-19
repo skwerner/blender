@@ -2,17 +2,17 @@
  *
  * NOTE: The canonical source of this file is maintained with the GNU C Library.
  * Bugs can be reported to bug-glibc@prep.ai.mit.edu.
- * 
+ *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
  * Free Software Foundation; either version 2, or (at your option) any
  * later version.
- * 
+ *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
- * 
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.  */
@@ -28,7 +28,7 @@
 extern "C" {
 #endif
 
-#if defined WIN32 && !defined _LIBC  || defined __sun
+#if defined WIN32 && !defined _LIBC
 
 #if defined(__cplusplus) || (defined(__STDC__) && __STDC__)
 #undef  __P
@@ -53,7 +53,7 @@ extern "C" {
 #define FNM_NOESCAPE    (1 << 1) /* Backslashes don't quote special chars.  */
 #define FNM_PERIOD      (1 << 2) /* Leading `.' is matched only explicitly.  */
 
-#if !defined(_POSIX_C_SOURCE) || _POSIX_C_SOURCE < 2 || defined(_GNU_SOURCE) || defined(__SUNPRO_C)
+#if !defined(_POSIX_C_SOURCE) || _POSIX_C_SOURCE < 2 || defined(_GNU_SOURCE)
 #define FNM_FILE_NAME   FNM_PATHNAME /* Preferred GNU name.  */
 #define FNM_LEADING_DIR (1 << 3) /* Ignore `/...' after a match.  */
 #define FNM_CASEFOLD    (1 << 4) /* Compare without regard to case.  */
@@ -72,7 +72,7 @@ extern int fnmatch __P((const char *__pattern, const char *__string,
 #    define _GNU_SOURCE
 #  endif
 #  include <fnmatch.h>
-#endif /* defined WIN32 && !defined _LIBC  || defined __sun */
+#endif /* defined WIN32 && !defined _LIBC */
 
 #ifdef  __cplusplus
 }

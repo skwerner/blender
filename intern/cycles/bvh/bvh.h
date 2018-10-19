@@ -73,6 +73,12 @@ struct PackedBVH {
 	}
 };
 
+enum BVH_TYPE {
+	bvh2,
+	bvh4,
+	bvh8
+};
+
 /* BVH */
 
 class BVH
@@ -90,6 +96,11 @@ public:
 
 protected:
 	BVH(const BVHParams& params, const vector<Object*>& objects);
+
+	/* Refit range of primitives. */
+	void refit_primitives(int start, int end, BoundBox& bbox, uint& visibility);
+	static __forceinline bool leaf_check(const BVHNode *node, BVH_TYPE bvh);
+	static bool node_is_unaligned(const BVHNode *node, BVH_TYPE bvh);
 
 	/* triangles and strands */
 	void pack_primitives();

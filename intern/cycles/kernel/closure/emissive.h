@@ -32,7 +32,31 @@
 
 CCL_NAMESPACE_BEGIN
 
+/* BACKGROUND CLOSURE */
+
+ccl_device void background_setup(ShaderData *sd, const float3 weight)
+{
+	if(sd->flag & SD_EMISSION) {
+		sd->closure_emission_background += weight;
+	}
+	else {
+		sd->flag |= SD_EMISSION;
+		sd->closure_emission_background = weight;
+	}
+}
+
 /* EMISSION CLOSURE */
+
+ccl_device void emission_setup(ShaderData *sd, const float3 weight)
+{
+	if(sd->flag & SD_EMISSION) {
+		sd->closure_emission_background += weight;
+	}
+	else {
+		sd->flag |= SD_EMISSION;
+		sd->closure_emission_background = weight;
+	}
+}
 
 /* return the probability distribution function in the direction I,
  * given the parameters and the light's surface normal.  This MUST match
@@ -52,9 +76,8 @@ ccl_device void emissive_sample(const float3 Ng, float randu, float randv,
 ccl_device float3 emissive_simple_eval(const float3 Ng, const float3 I)
 {
 	float res = emissive_pdf(Ng, I);
-	
+
 	return make_float3(res, res, res);
 }
 
 CCL_NAMESPACE_END
-

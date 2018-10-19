@@ -21,6 +21,7 @@
 #include "kernel/kernel_types.h"
 
 #include "util/util_algorithm.h"
+#include "util/util_debug.h"
 #include "util/util_foreach.h"
 #include "util/util_logging.h"
 #include "util/util_md5.h"
@@ -28,6 +29,15 @@
 #include "util/util_time.h"
 
 CCL_NAMESPACE_BEGIN
+
+struct texture_slot_t {
+	texture_slot_t(const string& name, int slot)
+		: name(name),
+		  slot(slot) {
+	}
+	string name;
+	int slot;
+};
 
 bool OpenCLDeviceBase::opencl_error(cl_int err)
 {
@@ -63,7 +73,9 @@ void OpenCLDeviceBase::opencl_assert_err(cl_int err, const char* where)
 }
 
 OpenCLDeviceBase::OpenCLDeviceBase(DeviceInfo& info, Stats &stats, bool background_)
-: Device(info, stats, background_)
+: Device(info, stats, background_),
+  memory_manager(this),
+  texture_info(this, "__texture_info", MEM_TEXTURE)
 {
 	cpPlatform = NULL;
 	cdDevice = NULL;
@@ -71,6 +83,7 @@ OpenCLDeviceBase::OpenCLDeviceBase(DeviceInfo& info, Stats &stats, bool backgrou
 	cqCommandQueue = NULL;
 	null_mem = 0;
 	device_initialized = false;
+	textures_need_update = true;
 
 	vector<OpenCLPlatformDevice> usable_devices;
 	OpenCLInfo::get_usable_devices(&usable_devices);
@@ -126,6 +139,10 @@ OpenCLDeviceBase::OpenCLDeviceBase(DeviceInfo& info, Stats &stats, bool backgrou
 		return;
 	}
 
+	/* Allocate this right away so that texture_info is placed at offset 0 in the device memory buffers */
+	texture_info.resize(1);
+	memory_manager.alloc("texture_info", texture_info);
+
 	fprintf(stderr, "Device init success\n");
 	device_initialized = true;
 }
@@ -134,12 +151,13 @@ OpenCLDeviceBase::~OpenCLDeviceBase()
 {
 	task_pool.stop();
 
+	memory_manager.free();
+
 	if(null_mem)
 		clReleaseMemObject(CL_MEM_PTR(null_mem));
 
 	ConstMemMap::iterator mt;
 	for(mt = const_mem_map.begin(); mt != const_mem_map.end(); mt++) {
-		mem_free(*(mt->second));
 		delete mt->second;
 	}
 
@@ -210,7 +228,8 @@ bool OpenCLDeviceBase::load_kernels(const DeviceRequestedFeatures& requested_fea
 	base_program = OpenCLProgram(this, "base", "kernel.cl", build_options_for_base_program(requested_features));
 	base_program.add_kernel(ustring("convert_to_byte"));
 	base_program.add_kernel(ustring("convert_to_half_float"));
-	base_program.add_kernel(ustring("shader"));
+	base_program.add_kernel(ustring("displace"));
+	base_program.add_kernel(ustring("background"));
 	base_program.add_kernel(ustring("bake"));
 	base_program.add_kernel(ustring("zero_buffer"));
 
@@ -227,7 +246,6 @@ bool OpenCLDeviceBase::load_kernels(const DeviceRequestedFeatures& requested_fea
 	denoising_program.add_kernel(ustring("filter_nlm_normalize"));
 	denoising_program.add_kernel(ustring("filter_nlm_construct_gramian"));
 	denoising_program.add_kernel(ustring("filter_finalize"));
-	denoising_program.add_kernel(ustring("filter_set_tiles"));
 
 	vector<OpenCLProgram*> programs;
 	programs.push_back(&base_program);
@@ -267,10 +285,10 @@ bool OpenCLDeviceBase::load_kernels(const DeviceRequestedFeatures& requested_fea
 	return true;
 }
 
-void OpenCLDeviceBase::mem_alloc(const char *name, device_memory& mem, MemoryType type)
+void OpenCLDeviceBase::mem_alloc(device_memory& mem)
 {
-	if(name) {
-		VLOG(1) << "Buffer allocate: " << name << ", "
+	if(mem.name) {
+		VLOG(1) << "Buffer allocate: " << mem.name << ", "
 			    << string_human_readable_number(mem.memory_size()) << " bytes. ("
 			    << string_human_readable_size(mem.memory_size()) << ")";
 	}
@@ -288,8 +306,8 @@ void OpenCLDeviceBase::mem_alloc(const char *name, device_memory& mem, MemoryTyp
 
 	if(size > max_alloc_size) {
 		string error = "Scene too complex to fit in available memory.";
-		if(name != NULL) {
-			error += string_printf(" (allocating buffer %s failed.)", name);
+		if(mem.name != NULL) {
+			error += string_printf(" (allocating buffer %s failed.)", mem.name);
 		}
 		set_error(error);
 
@@ -299,10 +317,8 @@ void OpenCLDeviceBase::mem_alloc(const char *name, device_memory& mem, MemoryTyp
 	cl_mem_flags mem_flag;
 	void *mem_ptr = NULL;
 
-	if(type == MEM_READ_ONLY)
+	if(mem.type == MEM_READ_ONLY || mem.type == MEM_TEXTURE)
 		mem_flag = CL_MEM_READ_ONLY;
-	else if(type == MEM_WRITE_ONLY)
-		mem_flag = CL_MEM_WRITE_ONLY;
 	else
 		mem_flag = CL_MEM_READ_WRITE;
 
@@ -329,17 +345,27 @@ void OpenCLDeviceBase::mem_alloc(const char *name, device_memory& mem, MemoryTyp
 
 void OpenCLDeviceBase::mem_copy_to(device_memory& mem)
 {
-	/* this is blocking */
-	size_t size = mem.memory_size();
-	if(size != 0) {
-		opencl_assert(clEnqueueWriteBuffer(cqCommandQueue,
-		                                   CL_MEM_PTR(mem.device_pointer),
-		                                   CL_TRUE,
-		                                   0,
-		                                   size,
-		                                   (void*)mem.data_pointer,
-		                                   0,
-		                                   NULL, NULL));
+	if(mem.type == MEM_TEXTURE) {
+		tex_free(mem);
+		tex_alloc(mem);
+	}
+	else {
+		if(!mem.device_pointer) {
+			mem_alloc(mem);
+		}
+
+		/* this is blocking */
+		size_t size = mem.memory_size();
+		if(size != 0) {
+			opencl_assert(clEnqueueWriteBuffer(cqCommandQueue,
+			                                   CL_MEM_PTR(mem.device_pointer),
+			                                   CL_TRUE,
+			                                   0,
+			                                   size,
+			                                   mem.host_pointer,
+			                                   0,
+			                                   NULL, NULL));
+		}
 	}
 }
 
@@ -353,7 +379,7 @@ void OpenCLDeviceBase::mem_copy_from(device_memory& mem, int y, int w, int h, in
 	                                  CL_TRUE,
 	                                  offset,
 	                                  size,
-	                                  (uchar*)mem.data_pointer + offset,
+	                                  (uchar*)mem.host_pointer + offset,
 	                                  0,
 	                                  NULL, NULL));
 }
@@ -391,19 +417,23 @@ void OpenCLDeviceBase::mem_zero_kernel(device_ptr mem, size_t size)
 
 void OpenCLDeviceBase::mem_zero(device_memory& mem)
 {
+	if(!mem.device_pointer) {
+		mem_alloc(mem);
+	}
+
 	if(mem.device_pointer) {
 		if(base_program.is_loaded()) {
 			mem_zero_kernel(mem.device_pointer, mem.memory_size());
 		}
 
-		if(mem.data_pointer) {
-			memset((void*)mem.data_pointer, 0, mem.memory_size());
+		if(mem.host_pointer) {
+			memset(mem.host_pointer, 0, mem.memory_size());
 		}
 
 		if(!base_program.is_loaded()) {
-			void* zero = (void*)mem.data_pointer;
+			void* zero = mem.host_pointer;
 
-			if(!mem.data_pointer) {
+			if(!mem.host_pointer) {
 				zero = util_aligned_malloc(mem.memory_size(), 16);
 				memset(zero, 0, mem.memory_size());
 			}
@@ -417,7 +447,7 @@ void OpenCLDeviceBase::mem_zero(device_memory& mem)
 			                                   0,
 			                                   NULL, NULL));
 
-			if(!mem.data_pointer) {
+			if(!mem.host_pointer) {
 				util_aligned_free(zero);
 			}
 		}
@@ -426,29 +456,32 @@ void OpenCLDeviceBase::mem_zero(device_memory& mem)
 
 void OpenCLDeviceBase::mem_free(device_memory& mem)
 {
-	if(mem.device_pointer) {
-		if(mem.device_pointer != null_mem) {
-			opencl_assert(clReleaseMemObject(CL_MEM_PTR(mem.device_pointer)));
-		}
-		mem.device_pointer = 0;
+	if(mem.type == MEM_TEXTURE) {
+		tex_free(mem);
+	}
+	else {
+		if(mem.device_pointer) {
+			if(mem.device_pointer != null_mem) {
+				opencl_assert(clReleaseMemObject(CL_MEM_PTR(mem.device_pointer)));
+			}
+			mem.device_pointer = 0;
 
-		stats.mem_free(mem.device_size);
-		mem.device_size = 0;
+			stats.mem_free(mem.device_size);
+			mem.device_size = 0;
+		}
 	}
 }
 
-int OpenCLDeviceBase::mem_address_alignment()
+int OpenCLDeviceBase::mem_sub_ptr_alignment()
 {
-	return OpenCLInfo::mem_address_alignment(cdDevice);
+	return OpenCLInfo::mem_sub_ptr_alignment(cdDevice);
 }
 
-device_ptr OpenCLDeviceBase::mem_alloc_sub_ptr(device_memory& mem, int offset, int size, MemoryType type)
+device_ptr OpenCLDeviceBase::mem_alloc_sub_ptr(device_memory& mem, int offset, int size)
 {
 	cl_mem_flags mem_flag;
-	if(type == MEM_READ_ONLY)
+	if(mem.type == MEM_READ_ONLY || mem.type == MEM_TEXTURE)
 		mem_flag = CL_MEM_READ_ONLY;
-	else if(type == MEM_WRITE_ONLY)
-		mem_flag = CL_MEM_WRITE_ONLY;
 	else
 		mem_flag = CL_MEM_READ_WRITE;
 
@@ -475,47 +508,49 @@ void OpenCLDeviceBase::mem_free_sub_ptr(device_ptr device_pointer)
 void OpenCLDeviceBase::const_copy_to(const char *name, void *host, size_t size)
 {
 	ConstMemMap::iterator i = const_mem_map.find(name);
+	device_vector<uchar> *data;
 
 	if(i == const_mem_map.end()) {
-		device_vector<uchar> *data = new device_vector<uchar>();
-		data->copy((uchar*)host, size);
-
-		mem_alloc(name, *data, MEM_READ_ONLY);
-		i = const_mem_map.insert(ConstMemMap::value_type(name, data)).first;
+		data = new device_vector<uchar>(this, name, MEM_READ_ONLY);
+		data->alloc(size);
+		const_mem_map.insert(ConstMemMap::value_type(name, data));
 	}
 	else {
-		device_vector<uchar> *data = i->second;
-		data->copy((uchar*)host, size);
+		data = i->second;
 	}
 
-	mem_copy_to(*i->second);
+	memcpy(data->data(), host, size);
+	data->copy_to_device();
 }
 
-void OpenCLDeviceBase::tex_alloc(const char *name,
-               device_memory& mem,
-               InterpolationType /*interpolation*/,
-               ExtensionType /*extension*/)
+void OpenCLDeviceBase::tex_alloc(device_memory& mem)
 {
-	VLOG(1) << "Texture allocate: " << name << ", "
+	VLOG(1) << "Texture allocate: " << mem.name << ", "
 	        << string_human_readable_number(mem.memory_size()) << " bytes. ("
 	        << string_human_readable_size(mem.memory_size()) << ")";
-	mem_alloc(NULL, mem, MEM_READ_ONLY);
-	mem_copy_to(mem);
-	assert(mem_map.find(name) == mem_map.end());
-	mem_map.insert(MemMap::value_type(name, mem.device_pointer));
+
+	memory_manager.alloc(mem.name, mem);
+	/* Set the pointer to non-null to keep code that inspects its value from thinking its unallocated. */
+	mem.device_pointer = 1;
+	textures[mem.name] = &mem;
+	textures_need_update = true;
 }
 
 void OpenCLDeviceBase::tex_free(device_memory& mem)
 {
 	if(mem.device_pointer) {
-		foreach(const MemMap::value_type& value, mem_map) {
-			if(value.second == mem.device_pointer) {
-				mem_map.erase(value.first);
+		mem.device_pointer = 0;
+
+		if(memory_manager.free(mem)) {
+			textures_need_update = true;
+		}
+
+		foreach(TexturesMap::value_type& value, textures) {
+			if(value.second == &mem) {
+				textures.erase(value.first);
 				break;
 			}
 		}
-
-		mem_free(mem);
 	}
 }
 
@@ -525,7 +560,7 @@ size_t OpenCLDeviceBase::global_size_round_up(int group_size, int global_size)
 	return global_size + ((r == 0)? 0: group_size - r);
 }
 
-void OpenCLDeviceBase::enqueue_kernel(cl_kernel kernel, size_t w, size_t h, size_t max_workgroup_size)
+void OpenCLDeviceBase::enqueue_kernel(cl_kernel kernel, size_t w, size_t h, bool x_workgroups, size_t max_workgroup_size)
 {
 	size_t workgroup_size, max_work_items[3];
 
@@ -539,8 +574,15 @@ void OpenCLDeviceBase::enqueue_kernel(cl_kernel kernel, size_t w, size_t h, size
 	}
 
 	/* Try to divide evenly over 2 dimensions. */
-	size_t sqrt_workgroup_size = max((size_t)sqrt((double)workgroup_size), 1);
-	size_t local_size[2] = {sqrt_workgroup_size, sqrt_workgroup_size};
+	size_t local_size[2];
+	if(x_workgroups) {
+		local_size[0] = workgroup_size;
+		local_size[1] = 1;
+	}
+	else {
+		size_t sqrt_workgroup_size = max((size_t)sqrt((double)workgroup_size), 1);
+		local_size[0] = local_size[1] = sqrt_workgroup_size;
+	}
 
 	/* Some implementations have max size 1 on 2nd dimension. */
 	if(local_size[1] > max_work_items[1]) {
@@ -581,6 +623,76 @@ void OpenCLDeviceBase::set_kernel_arg_mem(cl_kernel kernel, cl_uint *narg, const
 	opencl_assert(clSetKernelArg(kernel, (*narg)++, sizeof(ptr), (void*)&ptr));
 }
 
+void OpenCLDeviceBase::set_kernel_arg_buffers(cl_kernel kernel, cl_uint *narg)
+{
+	flush_texture_buffers();
+
+	memory_manager.set_kernel_arg_buffers(kernel, narg);
+}
+
+void OpenCLDeviceBase::flush_texture_buffers()
+{
+	if(!textures_need_update) {
+		return;
+	}
+	textures_need_update = false;
+
+	/* Setup slots for textures. */
+	int num_slots = 0;
+
+	vector<texture_slot_t> texture_slots;
+
+#define KERNEL_TEX(type, name) \
+	if(textures.find(#name) != textures.end()) { \
+		texture_slots.push_back(texture_slot_t(#name, num_slots)); \
+	} \
+	num_slots++;
+#include "kernel/kernel_textures.h"
+
+	int num_data_slots = num_slots;
+
+	foreach(TexturesMap::value_type& tex, textures) {
+		string name = tex.first;
+
+		if(string_startswith(name, "__tex_image")) {
+			int pos = name.rfind("_");
+			int id = atoi(name.data() + pos + 1);
+			texture_slots.push_back(texture_slot_t(name,
+				                                   num_data_slots + id));
+			num_slots = max(num_slots, num_data_slots + id + 1);
+		}
+	}
+
+	/* Realloc texture descriptors buffer. */
+	memory_manager.free(texture_info);
+	texture_info.resize(num_slots);
+	memory_manager.alloc("texture_info", texture_info);
+
+	/* Fill in descriptors */
+	foreach(texture_slot_t& slot, texture_slots) {
+		TextureInfo& info = texture_info[slot.slot];
+
+		MemoryManager::BufferDescriptor desc = memory_manager.get_descriptor(slot.name);
+		info.data = desc.offset;
+		info.cl_buffer = desc.device_buffer;
+
+		if(string_startswith(slot.name, "__tex_image")) {
+			device_memory *mem = textures[slot.name];
+
+			info.width = mem->data_width;
+			info.height = mem->data_height;
+			info.depth = mem->data_depth;
+
+			info.interpolation = mem->interpolation;
+			info.extension = mem->extension;
+		}
+	}
+
+	/* Force write of descriptors. */
+	memory_manager.free(texture_info);
+	memory_manager.alloc("texture_info", texture_info);
+}
+
 void OpenCLDeviceBase::film_convert(DeviceTask& task, device_ptr buffer, device_ptr rgba_byte, device_ptr rgba_half)
 {
 	/* cast arguments to cl types */
@@ -605,10 +717,7 @@ void OpenCLDeviceBase::film_convert(DeviceTask& task, device_ptr buffer, device_
 		                d_rgba,
 		                d_buffer);
 
-#define KERNEL_TEX(type, ttype, name) \
-set_kernel_arg_mem(ckFilmConvertKernel, &start_arg_index, #name);
-#include "kernel/kernel_textures.h"
-#undef KERNEL_TEX
+	set_kernel_arg_buffers(ckFilmConvertKernel, &start_arg_index);
 
 	start_arg_index += kernel_set_args(ckFilmConvertKernel,
 	                                   start_arg_index,
@@ -629,25 +738,31 @@ bool OpenCLDeviceBase::denoising_non_local_means(device_ptr image_ptr,
                                                  device_ptr out_ptr,
                                                  DenoisingTask *task)
 {
-	int4 rect = task->rect;
-	int w = rect.z-rect.x;
-	int h = rect.w-rect.y;
+	int stride = task->buffer.stride;
+	int w = task->buffer.width;
+	int h = task->buffer.h;
 	int r = task->nlm_state.r;
 	int f = task->nlm_state.f;
 	float a = task->nlm_state.a;
 	float k_2 = task->nlm_state.k_2;
 
-	cl_mem difference     = CL_MEM_PTR(task->nlm_state.temporary_1_ptr);
-	cl_mem blurDifference = CL_MEM_PTR(task->nlm_state.temporary_2_ptr);
-	cl_mem weightAccum    = CL_MEM_PTR(task->nlm_state.temporary_3_ptr);
+	int pass_stride = task->buffer.pass_stride;
+	int num_shifts = (2*r+1)*(2*r+1);
+
+	device_sub_ptr difference(task->buffer.temporary_mem, 0, pass_stride*num_shifts);
+	device_sub_ptr blurDifference(task->buffer.temporary_mem, pass_stride*num_shifts, pass_stride*num_shifts);
+	device_sub_ptr weightAccum(task->buffer.temporary_mem, 2*pass_stride*num_shifts, pass_stride);
+	cl_mem weightAccum_mem = CL_MEM_PTR(*weightAccum);
+	cl_mem difference_mem = CL_MEM_PTR(*difference);
+	cl_mem blurDifference_mem = CL_MEM_PTR(*blurDifference);
 
 	cl_mem image_mem = CL_MEM_PTR(image_ptr);
 	cl_mem guide_mem = CL_MEM_PTR(guide_ptr);
 	cl_mem variance_mem = CL_MEM_PTR(variance_ptr);
 	cl_mem out_mem = CL_MEM_PTR(out_ptr);
 
-	mem_zero_kernel(task->nlm_state.temporary_3_ptr, sizeof(float)*w*h);
-	mem_zero_kernel(out_ptr, sizeof(float)*w*h);
+	mem_zero_kernel(*weightAccum, sizeof(float)*pass_stride);
+	mem_zero_kernel(out_ptr, sizeof(float)*pass_stride);
 
 	cl_kernel ckNLMCalcDifference = denoising_program(ustring("filter_nlm_calc_difference"));
 	cl_kernel ckNLMBlur           = denoising_program(ustring("filter_nlm_blur"));
@@ -655,31 +770,42 @@ bool OpenCLDeviceBase::denoising_non_local_means(device_ptr image_ptr,
 	cl_kernel ckNLMUpdateOutput   = denoising_program(ustring("filter_nlm_update_output"));
 	cl_kernel ckNLMNormalize      = denoising_program(ustring("filter_nlm_normalize"));
 
-	for(int i = 0; i < (2*r+1)*(2*r+1); i++) {
-		int dy = i / (2*r+1) - r;
-		int dx = i % (2*r+1) - r;
-		int4 local_rect = make_int4(max(0, -dx), max(0, -dy), rect.z-rect.x - max(0, dx), rect.w-rect.y - max(0, dy));
-		kernel_set_args(ckNLMCalcDifference, 0,
-		                dx, dy, guide_mem, variance_mem,
-		                difference, local_rect, w, 0, a, k_2);
-		kernel_set_args(ckNLMBlur, 0,
-		                difference, blurDifference, local_rect, w, f);
-		kernel_set_args(ckNLMCalcWeight, 0,
-		                blurDifference, difference, local_rect, w, f);
-		kernel_set_args(ckNLMUpdateOutput, 0,
-		                dx, dy, blurDifference, image_mem,
-		                out_mem, weightAccum, local_rect, w, f);
+	kernel_set_args(ckNLMCalcDifference, 0,
+	                guide_mem,
+	                variance_mem,
+	                difference_mem,
+	                w, h, stride,
+	                pass_stride,
+	                r, 0, a, k_2);
+	kernel_set_args(ckNLMBlur, 0,
+	                difference_mem,
+	                blurDifference_mem,
+	                w, h, stride,
+	                pass_stride,
+	                r, f);
+	kernel_set_args(ckNLMCalcWeight, 0,
+	                blurDifference_mem,
+	                difference_mem,
+	                w, h, stride,
+	                pass_stride,
+	                r, f);
+	kernel_set_args(ckNLMUpdateOutput, 0,
+	                blurDifference_mem,
+	                image_mem,
+	                out_mem,
+	                weightAccum_mem,
+	                w, h, stride,
+	                pass_stride,
+	                r, f);
 
-		enqueue_kernel(ckNLMCalcDifference, w, h);
-		enqueue_kernel(ckNLMBlur,           w, h);
-		enqueue_kernel(ckNLMCalcWeight,     w, h);
-		enqueue_kernel(ckNLMBlur,           w, h);
-		enqueue_kernel(ckNLMUpdateOutput,   w, h);
-	}
+	enqueue_kernel(ckNLMCalcDifference, w*h, num_shifts, true);
+	enqueue_kernel(ckNLMBlur,           w*h, num_shifts, true);
+	enqueue_kernel(ckNLMCalcWeight,     w*h, num_shifts, true);
+	enqueue_kernel(ckNLMBlur,           w*h, num_shifts, true);
+	enqueue_kernel(ckNLMUpdateOutput,   w*h, num_shifts, true);
 
-	int4 local_rect = make_int4(0, 0, w, h);
 	kernel_set_args(ckNLMNormalize, 0,
-	                out_mem, weightAccum, local_rect, w);
+	                out_mem, weightAccum_mem, w, h, stride);
 	enqueue_kernel(ckNLMNormalize, w, h);
 
 	return true;
@@ -735,81 +861,59 @@ bool OpenCLDeviceBase::denoising_reconstruct(device_ptr color_ptr,
 	cl_kernel ckNLMConstructGramian = denoising_program(ustring("filter_nlm_construct_gramian"));
 	cl_kernel ckFinalize            = denoising_program(ustring("filter_finalize"));
 
-	cl_mem difference     = CL_MEM_PTR(task->reconstruction_state.temporary_1_ptr);
-	cl_mem blurDifference = CL_MEM_PTR(task->reconstruction_state.temporary_2_ptr);
+	int w = task->reconstruction_state.source_w;
+	int h = task->reconstruction_state.source_h;
+	int stride = task->buffer.stride;
 
 	int r = task->radius;
-	int f = 4;
-	float a = 1.0f;
-	for(int i = 0; i < (2*r+1)*(2*r+1); i++) {
-		int dy = i / (2*r+1) - r;
-		int dx = i % (2*r+1) - r;
+	int pass_stride = task->buffer.pass_stride;
+	int num_shifts = (2*r+1)*(2*r+1);
 
-		int local_rect[4] = {max(0, -dx), max(0, -dy),
-		                     task->reconstruction_state.source_w - max(0, dx),
-		                     task->reconstruction_state.source_h - max(0, dy)};
+	device_sub_ptr difference(task->buffer.temporary_mem, 0, pass_stride*num_shifts);
+	device_sub_ptr blurDifference(task->buffer.temporary_mem, pass_stride*num_shifts, pass_stride*num_shifts);
+	cl_mem difference_mem = CL_MEM_PTR(*difference);
+	cl_mem blurDifference_mem = CL_MEM_PTR(*blurDifference);
 
-		kernel_set_args(ckNLMCalcDifference, 0,
-		                dx, dy,
-		                color_mem,
-		                color_variance_mem,
-		                difference,
-		                local_rect,
-		                task->buffer.w,
-		                task->buffer.pass_stride,
-		                a, task->nlm_k_2);
-		enqueue_kernel(ckNLMCalcDifference,
-		               task->reconstruction_state.source_w,
-		               task->reconstruction_state.source_h);
+	kernel_set_args(ckNLMCalcDifference, 0,
+	                color_mem,
+	                color_variance_mem,
+	                difference_mem,
+	                w, h, stride,
+	                pass_stride,
+	                r,
+	                pass_stride,
+	                1.0f, task->nlm_k_2);
+	kernel_set_args(ckNLMBlur, 0,
+	                difference_mem,
+	                blurDifference_mem,
+	                w, h, stride,
+	                pass_stride,
+	                r, 4);
+	kernel_set_args(ckNLMCalcWeight, 0,
+	                blurDifference_mem,
+	                difference_mem,
+	                w, h, stride,
+	                pass_stride,
+	                r, 4);
+	kernel_set_args(ckNLMConstructGramian, 0,
+	                blurDifference_mem,
+	                buffer_mem,
+	                transform_mem,
+	                rank_mem,
+	                XtWX_mem,
+	                XtWY_mem,
+	                task->reconstruction_state.filter_window,
+	                w, h, stride,
+	                pass_stride,
+	                r, 4);
 
-		kernel_set_args(ckNLMBlur, 0,
-		                difference,
-		                blurDifference,
-		                local_rect,
-		                task->buffer.w,
-		                f);
-		enqueue_kernel(ckNLMBlur,
-		               task->reconstruction_state.source_w,
-		               task->reconstruction_state.source_h);
-
-		kernel_set_args(ckNLMCalcWeight, 0,
-		                blurDifference,
-		                difference,
-		                local_rect,
-		                task->buffer.w,
-		                f);
-		enqueue_kernel(ckNLMCalcWeight,
-		               task->reconstruction_state.source_w,
-		               task->reconstruction_state.source_h);
-
-		/* Reuse previous arguments. */
-		enqueue_kernel(ckNLMBlur,
-		               task->reconstruction_state.source_w,
-		               task->reconstruction_state.source_h);
-
-		kernel_set_args(ckNLMConstructGramian, 0,
-		                dx, dy,
-		                blurDifference,
-		                buffer_mem,
-		                transform_mem,
-		                rank_mem,
-		                XtWX_mem,
-		                XtWY_mem,
-		                local_rect,
-		                task->reconstruction_state.filter_rect,
-		                task->buffer.w,
-		                task->buffer.h,
-		                f,
-	                    task->buffer.pass_stride);
-		enqueue_kernel(ckNLMConstructGramian,
-		               task->reconstruction_state.source_w,
-		               task->reconstruction_state.source_h,
-		               256);
-	}
+	enqueue_kernel(ckNLMCalcDifference,   w*h, num_shifts, true);
+	enqueue_kernel(ckNLMBlur,             w*h, num_shifts, true);
+	enqueue_kernel(ckNLMCalcWeight,       w*h, num_shifts, true);
+	enqueue_kernel(ckNLMBlur,             w*h, num_shifts, true);
+	enqueue_kernel(ckNLMConstructGramian, w*h, num_shifts, true, 256);
 
 	kernel_set_args(ckFinalize, 0,
-	                task->buffer.w,
-	                task->buffer.h,
 	                output_mem,
 	                rank_mem,
 	                XtWX_mem,
@@ -817,9 +921,7 @@ bool OpenCLDeviceBase::denoising_reconstruct(device_ptr color_ptr,
 	                task->filter_area,
 	                task->reconstruction_state.buffer_params,
 	                task->render_buffer.samples);
-	enqueue_kernel(ckFinalize,
-	               task->reconstruction_state.source_w,
-	               task->reconstruction_state.source_h);
+	enqueue_kernel(ckFinalize, w, h);
 
 	return true;
 }
@@ -865,14 +967,20 @@ bool OpenCLDeviceBase::denoising_divide_shadow(device_ptr a_ptr,
 	cl_mem sv_variance_mem = CL_MEM_PTR(sv_variance_ptr);
 	cl_mem buffer_variance_mem = CL_MEM_PTR(buffer_variance_ptr);
 
-	cl_mem tiles_mem = CL_MEM_PTR(task->tiles_mem.device_pointer);
+	cl_mem tile_info_mem = CL_MEM_PTR(task->tile_info_mem.device_pointer);
 
 	cl_kernel ckFilterDivideShadow = denoising_program(ustring("filter_divide_shadow"));
 
-	char split_kernel = is_split_kernel()? 1 : 0;
-	kernel_set_args(ckFilterDivideShadow, 0,
-	                task->render_buffer.samples,
-	                tiles_mem,
+	int arg_ofs = kernel_set_args(ckFilterDivideShadow, 0,
+	                              task->render_buffer.samples,
+	                              tile_info_mem);
+	cl_mem buffers[9];
+	for(int i = 0; i < 9; i++) {
+		buffers[i] = CL_MEM_PTR(task->tile_info->buffers[i]);
+		arg_ofs += kernel_set_args(ckFilterDivideShadow, arg_ofs,
+		                           buffers[i]);
+	}
+	kernel_set_args(ckFilterDivideShadow, arg_ofs,
 	                a_mem,
 	                b_mem,
 	                sample_variance_mem,
@@ -880,8 +988,7 @@ bool OpenCLDeviceBase::denoising_divide_shadow(device_ptr a_ptr,
 	                buffer_variance_mem,
 	                task->rect,
 	                task->render_buffer.pass_stride,
-	                task->render_buffer.denoising_data_offset,
-	                split_kernel);
+	                task->render_buffer.offset);
 	enqueue_kernel(ckFilterDivideShadow,
 	               task->rect.z-task->rect.x,
 	               task->rect.w-task->rect.y);
@@ -898,22 +1005,27 @@ bool OpenCLDeviceBase::denoising_get_feature(int mean_offset,
 	cl_mem mean_mem = CL_MEM_PTR(mean_ptr);
 	cl_mem variance_mem = CL_MEM_PTR(variance_ptr);
 
-	cl_mem tiles_mem = CL_MEM_PTR(task->tiles_mem.device_pointer);
+	cl_mem tile_info_mem = CL_MEM_PTR(task->tile_info_mem.device_pointer);
 
 	cl_kernel ckFilterGetFeature = denoising_program(ustring("filter_get_feature"));
 
-	char split_kernel = is_split_kernel()? 1 : 0;
-	kernel_set_args(ckFilterGetFeature, 0,
-	                task->render_buffer.samples,
-	                tiles_mem,
+	int arg_ofs = kernel_set_args(ckFilterGetFeature, 0,
+	                              task->render_buffer.samples,
+	                              tile_info_mem);
+	cl_mem buffers[9];
+	for(int i = 0; i < 9; i++) {
+		buffers[i] = CL_MEM_PTR(task->tile_info->buffers[i]);
+		arg_ofs += kernel_set_args(ckFilterGetFeature, arg_ofs,
+		                           buffers[i]);
+	}
+	kernel_set_args(ckFilterGetFeature, arg_ofs,
 	                mean_offset,
 	                variance_offset,
 	                mean_mem,
 	                variance_mem,
 	                task->rect,
 	                task->render_buffer.pass_stride,
-	                task->render_buffer.denoising_data_offset,
-	                split_kernel);
+	                task->render_buffer.offset);
 	enqueue_kernel(ckFilterGetFeature,
 	               task->rect.z-task->rect.x,
 	               task->rect.w-task->rect.y);
@@ -948,32 +1060,8 @@ bool OpenCLDeviceBase::denoising_detect_outliers(device_ptr image_ptr,
 	return true;
 }
 
-bool OpenCLDeviceBase::denoising_set_tiles(device_ptr *buffers,
-                                           DenoisingTask *task)
+void OpenCLDeviceBase::denoise(RenderTile &rtile, DenoisingTask& denoising)
 {
-	mem_alloc("Denoising Tile Info", task->tiles_mem, MEM_READ_WRITE);
-	mem_copy_to(task->tiles_mem);
-
-	cl_mem tiles_mem = CL_MEM_PTR(task->tiles_mem.device_pointer);
-
-	cl_kernel ckFilterSetTiles = denoising_program(ustring("filter_set_tiles"));
-
-	kernel_set_args(ckFilterSetTiles, 0, tiles_mem);
-	for(int i = 0; i < 9; i++) {
-		cl_mem buffer_mem = CL_MEM_PTR(buffers[i]);
-		kernel_set_args(ckFilterSetTiles, i+1, buffer_mem);
-	}
-
-	enqueue_kernel(ckFilterSetTiles, 1, 1);
-
-	return true;
-}
-
-void OpenCLDeviceBase::denoise(RenderTile &rtile, const DeviceTask &task)
-{
-	DenoisingTask denoising(this);
-
-	denoising.functions.set_tiles = function_bind(&OpenCLDeviceBase::denoising_set_tiles, this, _1, &denoising);
 	denoising.functions.construct_transform = function_bind(&OpenCLDeviceBase::denoising_construct_transform, this, &denoising);
 	denoising.functions.reconstruct = function_bind(&OpenCLDeviceBase::denoising_reconstruct, this, _1, _2, _3, &denoising);
 	denoising.functions.divide_shadow = function_bind(&OpenCLDeviceBase::denoising_divide_shadow, this, _1, _2, _3, _4, _5, &denoising);
@@ -984,17 +1072,9 @@ void OpenCLDeviceBase::denoise(RenderTile &rtile, const DeviceTask &task)
 
 	denoising.filter_area = make_int4(rtile.x, rtile.y, rtile.w, rtile.h);
 	denoising.render_buffer.samples = rtile.sample;
+	denoising.buffer.gpu_temporary_mem = true;
 
-	RenderTile rtiles[9];
-	rtiles[4] = rtile;
-	task.map_neighbor_tiles(rtiles, this);
-	denoising.tiles_from_rendertiles(rtiles);
-
-	denoising.init_from_devicetask(task);
-
-	denoising.run_denoising();
-
-	task.unmap_neighbor_tiles(rtiles, this);
+	denoising.run_denoising(&rtile);
 }
 
 void OpenCLDeviceBase::shader(DeviceTask& task)
@@ -1003,7 +1083,6 @@ void OpenCLDeviceBase::shader(DeviceTask& task)
 	cl_mem d_data = CL_MEM_PTR(const_mem_map["__data"]->device_pointer);
 	cl_mem d_input = CL_MEM_PTR(task.shader_input);
 	cl_mem d_output = CL_MEM_PTR(task.shader_output);
-	cl_mem d_output_luma = CL_MEM_PTR(task.shader_output_luma);
 	cl_int d_shader_eval_type = task.shader_eval_type;
 	cl_int d_shader_filter = task.shader_filter;
 	cl_int d_shader_x = task.shader_x;
@@ -1012,10 +1091,15 @@ void OpenCLDeviceBase::shader(DeviceTask& task)
 
 	cl_kernel kernel;
 
-	if(task.shader_eval_type >= SHADER_EVAL_BAKE)
+	if(task.shader_eval_type >= SHADER_EVAL_BAKE) {
 		kernel = base_program(ustring("bake"));
-	else
-		kernel = base_program(ustring("shader"));
+	}
+	else if(task.shader_eval_type == SHADER_EVAL_DISPLACE) {
+		kernel = base_program(ustring("displace"));
+	}
+	else {
+		kernel = base_program(ustring("background"));
+	}
 
 	cl_uint start_arg_index =
 		kernel_set_args(kernel,
@@ -1024,16 +1108,7 @@ void OpenCLDeviceBase::shader(DeviceTask& task)
 		                d_input,
 		                d_output);
 
-	if(task.shader_eval_type < SHADER_EVAL_BAKE) {
-		start_arg_index += kernel_set_args(kernel,
-		                                   start_arg_index,
-		                                   d_output_luma);
-	}
-
-#define KERNEL_TEX(type, ttype, name) \
-	set_kernel_arg_mem(kernel, &start_arg_index, #name);
-#include "kernel/kernel_textures.h"
-#undef KERNEL_TEX
+	set_kernel_arg_buffers(kernel, &start_arg_index);
 
 	start_arg_index += kernel_set_args(kernel,
 	                                   start_arg_index,
@@ -1100,8 +1175,13 @@ string OpenCLDeviceBase::kernel_build_options(const string *debug_src)
 			build_options += "-g -s \"" + *debug_src + "\" ";
 	}
 
-	if(OpenCLInfo::use_debug())
+	if(info.has_half_images) {
+		build_options += "-D__KERNEL_CL_KHR_FP16__ ";
+	}
+
+	if(OpenCLInfo::use_debug()) {
 		build_options += "-D__KERNEL_OPENCL_DEBUG__ ";
+	}
 
 #ifdef WITH_CYCLES_DEBUG
 	build_options += "-D__KERNEL_DEBUG__ ";

@@ -113,7 +113,9 @@ static void setup_app_data(
         bContext *C, BlendFileData *bfd,
         const char *filepath, ReportList *reports)
 {
+	Main *bmain = G_MAIN;
 	Scene *curscene = NULL;
+	const bool is_startup = (bfd->filename[0] == '\0');
 	const bool recover = (G.fileflags & G_FILE_RECOVER) != 0;
 	enum {
 		LOAD_UI = 1,
@@ -129,7 +131,7 @@ static void setup_app_data(
 	else if (BLI_listbase_is_empty(&bfd->main->screen)) {
 		mode = LOAD_UNDO;
 	}
-	else if (G.fileflags & G_FILE_NO_UI) {
+	else if ((G.fileflags & G_FILE_NO_UI) && (is_startup == false)) {
 		mode = LOAD_UI_OFF;
 	}
 	else {
@@ -166,8 +168,8 @@ static void setup_app_data(
 		bool track_undo_scene;
 
 		/* comes from readfile.c */
-		SWAP(ListBase, G.main->wm, bfd->main->wm);
-		SWAP(ListBase, G.main->screen, bfd->main->screen);
+		SWAP(ListBase, bmain->wm, bfd->main->wm);
+		SWAP(ListBase, bmain->screen, bfd->main->screen);
 
 		/* we re-use current screen */
 		curscreen = CTX_wm_screen(C);
@@ -196,7 +198,7 @@ static void setup_app_data(
 			}
 		}
 
-		/* BKE_blender_globals_clear will free G.main, here we can still restore pointers */
+		/* BKE_blender_globals_clear will free G_MAIN, here we can still restore pointers */
 		blo_lib_link_screen_restore(bfd->main, curscreen, curscene);
 		/* curscreen might not be set when loading without ui (see T44217) so only re-assign if available */
 		if (curscreen) {
@@ -213,23 +215,21 @@ static void setup_app_data(
 		}
 	}
 
-	/* free G.main Main database */
+	/* free G_MAIN Main database */
 //	CTX_wm_manager_set(C, NULL);
 	BKE_blender_globals_clear();
 
 	/* clear old property update cache, in case some old references are left dangling */
 	RNA_property_update_cache_free();
 
-	G.main = bfd->main;
+	bmain = G_MAIN = bfd->main;
 
-	CTX_data_main_set(C, G.main);
+	CTX_data_main_set(C, bmain);
 
 	if (bfd->user) {
-
 		/* only here free userdef themes... */
-		BKE_blender_userdef_free_data(&U);
-
-		U = *bfd->user;
+		BKE_blender_userdef_data_set_and_free(bfd->user);
+		bfd->user = NULL;
 
 		/* Security issue: any blend file could include a USER block.
 		 *
@@ -240,8 +240,6 @@ static void setup_app_data(
 		 * enable scripts auto-execution by loading a '.blend' file.
 		 */
 		U.flag |= USER_SCRIPT_AUTOEXEC_DISABLE;
-
-		MEM_freeN(bfd->user);
 	}
 
 	/* case G_FILE_NO_UI or no screens in file */
@@ -250,8 +248,10 @@ static void setup_app_data(
 		CTX_data_scene_set(C, curscene);
 	}
 	else {
-		G.fileflags = bfd->fileflags;
-		CTX_wm_manager_set(C, G.main->wm.first);
+		/* Keep state from preferences. */
+		const int fileflags_skip = G_FILE_FLAGS_RUNTIME;
+		G.fileflags = (G.fileflags & fileflags_skip) | (bfd->fileflags & ~fileflags_skip);
+		CTX_wm_manager_set(C, bmain->wm.first);
 		CTX_wm_screen_set(C, bfd->curscreen);
 		CTX_data_scene_set(C, bfd->curscene);
 		CTX_wm_area_set(C, NULL);
@@ -263,10 +263,10 @@ static void setup_app_data(
 	/* this can happen when active scene was lib-linked, and doesn't exist anymore */
 	if (CTX_data_scene(C) == NULL) {
 		/* in case we don't even have a local scene, add one */
-		if (!G.main->scene.first)
-			BKE_scene_add(G.main, "Empty");
+		if (!bmain->scene.first)
+			BKE_scene_add(bmain, "Empty");
 
-		CTX_data_scene_set(C, G.main->scene.first);
+		CTX_data_scene_set(C, bmain->scene.first);
 		CTX_wm_screen(C)->scene = CTX_data_scene(C);
 		curscene = CTX_data_scene(C);
 	}
@@ -290,30 +290,30 @@ static void setup_app_data(
 
 	/* FIXME: this version patching should really be part of the file-reading code,
 	 * but we still get too many unrelated data-corruption crashes otherwise... */
-	if (G.main->versionfile < 250)
-		do_versions_ipos_to_animato(G.main);
+	if (bmain->versionfile < 250)
+		do_versions_ipos_to_animato(bmain);
 
-	G.main->recovered = 0;
+	bmain->recovered = 0;
 
 	/* startup.blend or recovered startup */
 	if (bfd->filename[0] == 0) {
-		G.main->name[0] = 0;
+		bmain->name[0] = '\0';
 	}
 	else if (recover && G.relbase_valid) {
 		/* in case of autosave or quit.blend, use original filename instead
 		 * use relbase_valid to make sure the file is saved, else we get <memory2> in the filename */
 		filepath = bfd->filename;
-		G.main->recovered = 1;
+		bmain->recovered = 1;
 
 		/* these are the same at times, should never copy to the same location */
-		if (G.main->name != filepath)
-			BLI_strncpy(G.main->name, filepath, FILE_MAX);
+		if (bmain->name != filepath)
+			BLI_strncpy(bmain->name, filepath, FILE_MAX);
 	}
 
 	/* baseflags, groups, make depsgraph, etc */
 	/* first handle case if other windows have different scenes visible */
 	if (mode == LOAD_UI) {
-		wmWindowManager *wm = G.main->wm.first;
+		wmWindowManager *wm = bmain->wm.first;
 
 		if (wm) {
 			wmWindow *win;
@@ -321,15 +321,15 @@ static void setup_app_data(
 			for (win = wm->windows.first; win; win = win->next) {
 				if (win->screen && win->screen->scene) /* zealous check... */
 					if (win->screen->scene != curscene)
-						BKE_scene_set_background(G.main, win->screen->scene);
+						BKE_scene_set_background(bmain, win->screen->scene);
 			}
 		}
 	}
-	BKE_scene_set_background(G.main, curscene);
+	BKE_scene_set_background(bmain, curscene);
 
 	if (mode != LOAD_UNDO) {
 		RE_FreeAllPersistentData();
-		IMB_colormanagement_check_file_config(G.main);
+		IMB_colormanagement_check_file_config(bmain);
 	}
 
 	MEM_freeN(bfd);
@@ -407,9 +407,10 @@ bool BKE_blendfile_read_from_memfile(
         bContext *C, struct MemFile *memfile,
         ReportList *reports, int skip_flags)
 {
+	Main *bmain = CTX_data_main(C);
 	BlendFileData *bfd;
 
-	bfd = BLO_read_from_memfile(CTX_data_main(C), G.main->name, memfile, reports, skip_flags);
+	bfd = BLO_read_from_memfile(bmain, BKE_main_blendfile_path(bmain), memfile, reports, skip_flags);
 	if (bfd) {
 		/* remove the unused screens and wm */
 		while (bfd->main->wm.first)
@@ -494,20 +495,47 @@ UserDef *BKE_blendfile_userdef_read_from_memory(
 }
 
 
-/* only write the userdef in a .blend */
-int BKE_blendfile_userdef_write(const char *filepath, ReportList *reports)
+/**
+ * Only write the userdef in a .blend
+ * \return success
+ */
+bool BKE_blendfile_userdef_write(const char *filepath, ReportList *reports)
 {
 	Main *mainb = MEM_callocN(sizeof(Main), "empty main");
-	int retval = 0;
+	bool ok = false;
 
 	if (BLO_write_file(mainb, filepath, G_FILE_USERPREFS, reports, NULL)) {
-		retval = 1;
+		ok = true;
 	}
 
 	MEM_freeN(mainb);
 
-	return retval;
+	return ok;
 }
+
+/**
+ * Only write the userdef in a .blend, merging with the existing blend file.
+ * \return success
+ *
+ * \note In the future we should re-evaluate user preferences,
+ * possibly splitting out system/hardware specific prefs.
+ */
+bool BKE_blendfile_userdef_write_app_template(const char *filepath, ReportList *reports)
+{
+	/* if it fails, overwrite is OK. */
+	UserDef *userdef_default = BKE_blendfile_userdef_read(filepath, NULL);
+	if (userdef_default == NULL) {
+		return BKE_blendfile_userdef_write(filepath, reports);
+	}
+
+	BKE_blender_userdef_app_template_data_swap(&U, userdef_default);
+	bool ok = BKE_blendfile_userdef_write(filepath, reports);
+	BKE_blender_userdef_app_template_data_swap(&U, userdef_default);
+	BKE_blender_userdef_data_free(userdef_default, false);
+	MEM_freeN(userdef_default);
+	return ok;
+}
+
 
 /** \} */
 
@@ -562,10 +590,6 @@ bool BKE_blendfile_write_partial(
 	 * (otherwise main->name will not be set at read time). */
 	BLI_strncpy(bmain_dst->name, bmain_src->name, sizeof(bmain_dst->name));
 
-	if (write_flags & G_FILE_RELATIVE_REMAP) {
-		path_list_backup = BKE_bpath_list_backup(bmain_src, path_list_flag);
-	}
-
 	BLO_main_expander(blendfile_write_partial_cb);
 	BLO_expand_main(NULL, bmain_src);
 
@@ -585,9 +609,26 @@ bool BKE_blendfile_write_partial(
 		}
 	}
 
+	/* Backup paths because remap relative will overwrite them.
+	 *
+	 * NOTE: we do this only on the list of datablocks that we are writing
+	 * because the restored full list is not guaranteed to be in the same
+	 * order as before, as expected by BKE_bpath_list_restore.
+	 *
+	 * This happens because id_sort_by_name does not take into account
+	 * string case or the library name, so the order is not strictly
+	 * defined for two linked datablocks with the same name! */
+	if (write_flags & G_FILE_RELATIVE_REMAP) {
+		path_list_backup = BKE_bpath_list_backup(bmain_dst, path_list_flag);
+	}
 
 	/* save the buffer */
 	retval = BLO_write_file(bmain_dst, filepath, write_flags, reports, NULL);
+
+	if (path_list_backup) {
+		BKE_bpath_list_restore(bmain_dst, path_list_flag, path_list_backup);
+		BKE_bpath_list_free(path_list_backup);
+	}
 
 	/* move back the main, now sorted again */
 	set_listbasepointers(bmain_src, lbarray_dst);
@@ -603,11 +644,6 @@ bool BKE_blendfile_write_partial(
 	}
 
 	MEM_freeN(bmain_dst);
-
-	if (path_list_backup) {
-		BKE_bpath_list_restore(bmain_src, path_list_flag, path_list_backup);
-		BKE_bpath_list_free(path_list_backup);
-	}
 
 	return retval;
 }

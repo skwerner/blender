@@ -1,7 +1,7 @@
 # - Find OpenCOLLADA library
 # Find the native OpenCOLLADA includes and library
 # This module defines
-#  OPENCOLLADA_INCLUDE_DIRS, where to find COLLADABaseUtils/ and 
+#  OPENCOLLADA_INCLUDE_DIRS, where to find COLLADABaseUtils/ and
 #                 COLLADAFramework/, Set when OPENCOLLADA_INCLUDE_DIR is found.
 #  OPENCOLLADA_LIBRARIES, libraries to link against to use OpenCOLLADA.
 #  OPENCOLLADA_ROOT_DIR, The base directory to search for OpenCOLLADA.
@@ -65,7 +65,6 @@ SET(_opencollada_SEARCH_DIRS
   /usr/local
   /sw # Fink
   /opt/local # DarwinPorts
-  /opt/csw # Blastwave
   /opt/lib/opencollada
 )
 
@@ -130,7 +129,7 @@ FOREACH(COMPONENT ${_opencollada_FIND_STATIC_COMPONENTS})
 ENDFOREACH()
 
 
-# handle the QUIETLY and REQUIRED arguments and set OPENCOLLADA_FOUND to TRUE if 
+# handle the QUIETLY and REQUIRED arguments and set OPENCOLLADA_FOUND to TRUE if
 # all listed variables are TRUE
 INCLUDE(FindPackageHandleStandardArgs)
 FIND_PACKAGE_HANDLE_STANDARD_ARGS(OpenCOLLADA  DEFAULT_MSG

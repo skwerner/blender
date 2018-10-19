@@ -21,7 +21,6 @@
 #include "subd/subd_patch.h"
 #include "subd/subd_split.h"
 
-#include "util/util_debug.h"
 #include "util/util_math.h"
 #include "util/util_types.h"
 
@@ -87,7 +86,7 @@ int DiagSplit::T(Patch *patch, float2 Pstart, float2 Pend)
 
 	if(tmax - tmin > params.split_threshold)
 		return DSPLIT_NON_UNIFORM;
-	
+
 	return tmax;
 }
 
@@ -259,4 +258,3 @@ void DiagSplit::split_quad(Patch *patch, QuadDice::SubPatch *subpatch)
 }
 
 CCL_NAMESPACE_END
-

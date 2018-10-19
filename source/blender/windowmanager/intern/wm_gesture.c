@@ -41,7 +41,7 @@
 #include "BLI_blenlib.h"
 #include "BLI_math.h"
 #include "BLI_utildefines.h"
-#include "BLI_lasso.h"
+#include "BLI_lasso_2d.h"
 
 #include "BKE_context.h"
 
@@ -65,29 +65,27 @@ wmGesture *WM_gesture_new(bContext *C, const wmEvent *event, int type)
 	wmWindow *window = CTX_wm_window(C);
 	ARegion *ar = CTX_wm_region(C);
 	int sx, sy;
-	
+
 	BLI_addtail(&window->gesture, gesture);
-	
+
 	gesture->type = type;
 	gesture->event_type = event->type;
 	gesture->swinid = ar->swinid;    /* means only in area-region context! */
-	
+	gesture->userdata_free = true;   /* Free if userdata is set. */
+	gesture->modal_state = GESTURE_MODAL_NOP;
+
 	wm_subwindow_origin_get(window, gesture->swinid, &sx, &sy);
-	
+
 	if (ELEM(type, WM_GESTURE_RECT, WM_GESTURE_CROSS_RECT, WM_GESTURE_TWEAK,
 	          WM_GESTURE_CIRCLE, WM_GESTURE_STRAIGHTLINE))
 	{
 		rcti *rect = MEM_callocN(sizeof(rcti), "gesture rect new");
-		
+
 		gesture->customdata = rect;
 		rect->xmin = event->x - sx;
 		rect->ymin = event->y - sy;
 		if (type == WM_GESTURE_CIRCLE) {
-#ifdef GESTURE_MEMORY
-			rect->xmax = circle_select_size;
-#else
-			rect->xmax = 25;    // XXX temp
-#endif
+			/* caller is responsible for initializing 'xmax' to radius. */
 		}
 		else {
 			rect->xmax = event->x - sx;
@@ -96,25 +94,25 @@ wmGesture *WM_gesture_new(bContext *C, const wmEvent *event, int type)
 	}
 	else if (ELEM(type, WM_GESTURE_LINES, WM_GESTURE_LASSO)) {
 		short *lasso;
-		gesture->customdata = lasso = MEM_callocN(2 * sizeof(short) * WM_LASSO_MIN_POINTS, "lasso points");
+		gesture->points_alloc = 1024;
+		gesture->customdata = lasso = MEM_mallocN(sizeof(short[2]) * gesture->points_alloc, "lasso points");
 		lasso[0] = event->x - sx;
 		lasso[1] = event->y - sy;
 		gesture->points = 1;
-		gesture->size = WM_LASSO_MIN_POINTS;
 	}
-	
+
 	return gesture;
 }
 
 void WM_gesture_end(bContext *C, wmGesture *gesture)
 {
 	wmWindow *win = CTX_wm_window(C);
-	
+
 	if (win->tweak == gesture)
 		win->tweak = NULL;
 	BLI_remlink(&win->gesture, gesture);
 	MEM_freeN(gesture->customdata);
-	if (gesture->userdata) {
+	if (gesture->userdata && gesture->userdata_free) {
 		MEM_freeN(gesture->userdata);
 	}
 	MEM_freeN(gesture);
@@ -123,7 +121,7 @@ void WM_gesture_end(bContext *C, wmGesture *gesture)
 void WM_gestures_remove(bContext *C)
 {
 	wmWindow *win = CTX_wm_window(C);
-	
+
 	while (win->gesture.first)
 		WM_gesture_end(C, win->gesture.first);
 }
@@ -137,7 +135,7 @@ int wm_gesture_evaluate(wmGesture *gesture)
 		int dx = BLI_rcti_size_x(rect);
 		int dy = BLI_rcti_size_y(rect);
 		if (abs(dx) + abs(dy) > U.tweak_threshold) {
-			int theta = iroundf(4.0f * atan2f((float)dy, (float)dx) / (float)M_PI);
+			int theta = round_fl_to_int(4.0f * atan2f((float)dy, (float)dx) / (float)M_PI);
 			int val = EVT_GESTURE_W;
 
 			if (theta == 0) val = EVT_GESTURE_E;
@@ -147,7 +145,7 @@ int wm_gesture_evaluate(wmGesture *gesture)
 			else if (theta == -1) val = EVT_GESTURE_SE;
 			else if (theta == -2) val = EVT_GESTURE_S;
 			else if (theta == -3) val = EVT_GESTURE_SW;
-			
+
 #if 0
 			/* debug */
 			if (val == 1) printf("tweak north\n");
@@ -171,7 +169,7 @@ int wm_gesture_evaluate(wmGesture *gesture)
 static void wm_gesture_draw_rect(wmGesture *gt)
 {
 	rcti *rect = (rcti *)gt->customdata;
-	
+
 	glEnable(GL_BLEND);
 	glColor4f(1.0, 1.0, 1.0, 0.05);
 	glBegin(GL_QUADS);
@@ -181,7 +179,7 @@ static void wm_gesture_draw_rect(wmGesture *gt)
 	glVertex2s(rect->xmin, rect->ymin);
 	glEnd();
 	glDisable(GL_BLEND);
-	
+
 	GPU_basic_shader_bind(GPU_SHADER_LINE | GPU_SHADER_STIPPLE | GPU_SHADER_USE_COLOR);
 	glColor3ub(96, 96, 96);
 	GPU_basic_shader_line_stipple(1, 0xCCCC);
@@ -195,7 +193,7 @@ static void wm_gesture_draw_rect(wmGesture *gt)
 static void wm_gesture_draw_line(wmGesture *gt)
 {
 	rcti *rect = (rcti *)gt->customdata;
-	
+
 	GPU_basic_shader_bind(GPU_SHADER_LINE | GPU_SHADER_STIPPLE);
 	glColor3ub(96, 96, 96);
 	GPU_basic_shader_line_stipple(1, 0xAAAA);
@@ -205,7 +203,7 @@ static void wm_gesture_draw_line(wmGesture *gt)
 	sdrawline(rect->xmin, rect->ymin, rect->xmax, rect->ymax);
 
 	GPU_basic_shader_bind(GPU_SHADER_USE_COLOR);
-	
+
 }
 
 static void wm_gesture_draw_circle(wmGesture *gt)
@@ -218,7 +216,7 @@ static void wm_gesture_draw_circle(wmGesture *gt)
 	glColor4f(1.0, 1.0, 1.0, 0.05);
 	glutil_draw_filled_arc(0.0, M_PI * 2.0, rect->xmax, 40);
 	glDisable(GL_BLEND);
-	
+
 	// for USE_GLSL works bad because of no relation between lines
 	GPU_basic_shader_bind(GPU_SHADER_LINE | GPU_SHADER_STIPPLE | GPU_SHADER_USE_COLOR);
 	glColor3ub(96, 96, 96);
@@ -227,10 +225,10 @@ static void wm_gesture_draw_circle(wmGesture *gt)
 	glColor3ub(255, 255, 255);
 	GPU_basic_shader_line_stipple(1, 0x5555);
 	glutil_draw_lined_arc(0.0, M_PI * 2.0, rect->xmax, 40);
-	
+
 	GPU_basic_shader_bind(GPU_SHADER_USE_COLOR);
 	glTranslatef(-rect->xmin, -rect->ymin, 0.0f);
-	
+
 }
 
 struct LassoFillData {
@@ -325,7 +323,7 @@ static void wm_gesture_draw_lasso(wmWindow *win, wmGesture *gt, bool filled)
 	if (gt->type == WM_GESTURE_LASSO)
 		glVertex2sv((short *)gt->customdata);
 	glEnd();
-	
+
 	glColor3ub(255, 255, 255);
 	GPU_basic_shader_line_stipple(1, 0x5555);
 	glBegin(GL_LINE_STRIP);
@@ -335,9 +333,9 @@ static void wm_gesture_draw_lasso(wmWindow *win, wmGesture *gt, bool filled)
 	if (gt->type == WM_GESTURE_LASSO)
 		glVertex2sv((short *)gt->customdata);
 	glEnd();
-	
+
 	GPU_basic_shader_bind(GPU_SHADER_USE_COLOR);
-	
+
 }
 
 static void wm_gesture_draw_cross(wmWindow *win, wmGesture *gt)
@@ -351,7 +349,7 @@ static void wm_gesture_draw_cross(wmWindow *win, wmGesture *gt)
 	GPU_basic_shader_line_stipple(1, 0xCCCC);
 	sdrawline(rect->xmin - winsize_x, rect->ymin, rect->xmin + winsize_x, rect->ymin);
 	sdrawline(rect->xmin, rect->ymin - winsize_y, rect->xmin, rect->ymin + winsize_y);
-	
+
 	glColor3ub(255, 255, 255);
 	GPU_basic_shader_line_stipple(1, 0x3333);
 	sdrawline(rect->xmin - winsize_x, rect->ymin, rect->xmin + winsize_x, rect->ymin);
@@ -363,12 +361,12 @@ static void wm_gesture_draw_cross(wmWindow *win, wmGesture *gt)
 void wm_gesture_draw(wmWindow *win)
 {
 	wmGesture *gt = (wmGesture *)win->gesture.first;
-	
+
 	GPU_basic_shader_line_width(1);
 	for (; gt; gt = gt->next) {
 		/* all in subwindow space */
 		wmSubWindowSet(win, gt->swinid);
-		
+
 		if (gt->type == WM_GESTURE_RECT)
 			wm_gesture_draw_rect(gt);
 //		else if (gt->type == WM_GESTURE_TWEAK)
@@ -376,10 +374,12 @@ void wm_gesture_draw(wmWindow *win)
 		else if (gt->type == WM_GESTURE_CIRCLE)
 			wm_gesture_draw_circle(gt);
 		else if (gt->type == WM_GESTURE_CROSS_RECT) {
-			if (gt->mode == 1)
+			if (gt->is_active) {
 				wm_gesture_draw_rect(gt);
-			else
+			}
+			else {
 				wm_gesture_draw_cross(win, gt);
+			}
 		}
 		else if (gt->type == WM_GESTURE_LINES)
 			wm_gesture_draw_lasso(win, gt, false);
@@ -395,7 +395,7 @@ void wm_gesture_tag_redraw(bContext *C)
 	wmWindow *win = CTX_wm_window(C);
 	bScreen *screen = CTX_wm_screen(C);
 	ARegion *ar = CTX_wm_region(C);
-	
+
 	if (screen)
 		screen->do_draw_gesture = true;
 

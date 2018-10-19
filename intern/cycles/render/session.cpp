@@ -46,7 +46,7 @@ Session::Session(const SessionParams& params_)
 : params(params_),
   tile_manager(params.progressive, params.samples, params.tile_size, params.start_resolution,
        params.background == false || params.progressive_refine, params.background, params.tile_order,
-       max(params.device.multi_devices.size(), 1)),
+       max(params.device.multi_devices.size(), 1), params.pixel_size),
   stats()
 {
 	device_use_gl = ((params.device.type != DEVICE_CPU) && !params.background);
@@ -55,7 +55,7 @@ Session::Session(const SessionParams& params_)
 
 	device = Device::create(params.device, stats, params.background);
 
-	if(params.background && params.output_path.empty()) {
+	if(params.background && !params.write_render_cb) {
 		buffers = NULL;
 		display = NULL;
 	}
@@ -101,22 +101,22 @@ Session::~Session()
 		wait();
 	}
 
-	if(!params.output_path.empty()) {
+	if(params.write_render_cb) {
 		/* tonemap and write out image if requested */
 		delete display;
 
 		display = new DisplayBuffer(device, false);
-		display->reset(device, buffers->params);
+		display->reset(buffers->params);
 		tonemap(params.samples);
 
-		progress.set_status("Writing Image", params.output_path);
-		display->write(device, params.output_path);
+		int w = display->draw_width;
+		int h = display->draw_height;
+		uchar4 *pixels = display->rgba_byte.copy_from_device(0, w, h);
+		params.write_render_cb((uchar*)pixels, w, h, 4);
 	}
 
 	/* clean up */
-	foreach(RenderTile &rtile, render_tiles)
-		delete rtile.buffers;
-	tile_manager.free_device();
+	tile_manager.device_free();
 
 	delete buffers;
 	delete display;
@@ -364,7 +364,7 @@ bool Session::acquire_tile(Device *tile_device, RenderTile& rtile)
 
 	if(!tile_manager.next_tile(tile, device_num))
 		return false;
-	
+
 	/* fill render tile */
 	rtile.x = tile_manager.state.buffer.full_x + tile->x;
 	rtile.y = tile_manager.state.buffer.full_y + tile->y;
@@ -380,20 +380,17 @@ bool Session::acquire_tile(Device *tile_device, RenderTile& rtile)
 
 	/* in case of a permanent buffer, return it, otherwise we will allocate
 	 * a new temporary buffer */
-	if(!(params.background && params.output_path.empty())) {
+	if(buffers) {
 		tile_manager.state.buffer.get_offset_stride(rtile.offset, rtile.stride);
 
 		rtile.buffer = buffers->buffer.device_pointer;
-		rtile.rng_state = buffers->rng_state.device_pointer;
 		rtile.buffers = buffers;
-		tile->buffers = buffers;
 
 		device->map_tile(tile_device, rtile);
 
 		return true;
 	}
 
-	bool store_rtile = false;
 	if(tile->buffers == NULL) {
 		/* fill buffer parameters */
 		BufferParams buffer_params = tile_manager.params;
@@ -403,53 +400,15 @@ bool Session::acquire_tile(Device *tile_device, RenderTile& rtile)
 		buffer_params.height = rtile.h;
 
 		/* allocate buffers */
-		if(params.progressive_refine) {
-			tile_lock.lock();
-
-			if(render_tiles.size() == 0) {
-				RenderTile nulltile;
-				nulltile.buffers = NULL;
-				render_tiles.resize(tile_manager.state.num_tiles, nulltile);
-			}
-
-			/* In certain circumstances number of tiles in the tile manager could
-			 * be changed. This is not supported by the progressive refine feature.
-			 */
-			assert(render_tiles.size() == tile_manager.state.num_tiles);
-
-			RenderTile &stored_rtile = render_tiles[tile->index];
-			if(stored_rtile.buffers == NULL) {
-				tile->buffers = new RenderBuffers(tile_device);
-				tile->buffers->reset(tile_device, buffer_params);
-				store_rtile = true;
-			}
-			else {
-				assert(rtile.x == stored_rtile.x &&
-				       rtile.y == stored_rtile.y &&
-				       rtile.w == stored_rtile.w &&
-				       rtile.h == stored_rtile.h);
-				tile_lock.unlock();
-				tile->buffers = stored_rtile.buffers;
-			}
-		}
-		else {
-			tile->buffers = new RenderBuffers(tile_device);
-
-			tile->buffers->reset(tile_device, buffer_params);
-		}
+		tile->buffers = new RenderBuffers(tile_device);
+		tile->buffers->reset(buffer_params);
 	}
 
 	tile->buffers->params.get_offset_stride(rtile.offset, rtile.stride);
 
 	rtile.buffer = tile->buffers->buffer.device_pointer;
-	rtile.rng_state = tile->buffers->rng_state.device_pointer;
 	rtile.buffers = tile->buffers;
-	rtile.sample = 0;
-
-	if(store_rtile) {
-		render_tiles[tile->index] = rtile;
-		tile_lock.unlock();
-	}
+	rtile.sample = tile_manager.state.sample;
 
 	/* this will tag tile as IN PROGRESS in blender-side render pipeline,
 	 * which is needed to highlight currently rendering tile before first
@@ -486,10 +445,11 @@ void Session::release_tile(RenderTile& rtile)
 	if(tile_manager.finish_tile(rtile.tile_index, delete_tile)) {
 		if(write_render_tile_cb && params.progressive_refine == false) {
 			write_render_tile_cb(rtile);
-			if(delete_tile) {
-				delete rtile.buffers;
-				tile_manager.state.tiles[rtile.tile_index].buffers = NULL;
-			}
+		}
+
+		if(delete_tile) {
+			delete rtile.buffers;
+			tile_manager.state.tiles[rtile.tile_index].buffers = NULL;
 		}
 	}
 	else {
@@ -542,6 +502,9 @@ void Session::map_neighbor_tiles(RenderTile *tiles, Device *tile_device)
 
 	assert(tiles[4].buffers);
 	device->map_neighbor_tiles(tile_device, tiles);
+
+	/* The denoised result is written back to the original tile. */
+	tiles[9] = tiles[4];
 }
 
 void Session::unmap_neighbor_tiles(RenderTile *tiles, Device *tile_device)
@@ -684,13 +647,11 @@ DeviceRequestedFeatures Session::get_requested_device_features()
 	DeviceRequestedFeatures requested_features;
 	requested_features.experimental = params.experimental;
 
-	requested_features.max_closure = get_max_closure_count();
 	scene->shader_manager->get_requested_features(
 	        scene,
 	        &requested_features);
 	if(!params.background) {
 		/* Avoid too much re-compilations for viewport render. */
-		requested_features.max_closure = 64;
 		requested_features.max_nodes_group = NODE_GROUP_LEVEL_MAX;
 		requested_features.nodes_features = NODE_FEATURE_ALL;
 	}
@@ -700,13 +661,13 @@ DeviceRequestedFeatures Session::get_requested_device_features()
 	 */
 	requested_features.use_hair = false;
 	requested_features.use_object_motion = false;
-	requested_features.use_camera_motion = scene->camera->use_motion;
+	requested_features.use_camera_motion = scene->camera->use_motion();
 	foreach(Object *object, scene->objects) {
 		Mesh *mesh = object->mesh;
 		if(mesh->num_curves()) {
 			requested_features.use_hair = true;
 		}
-		requested_features.use_object_motion |= object->use_motion | mesh->use_motion_blur;
+		requested_features.use_object_motion |= object->use_motion() | mesh->use_motion_blur;
 		requested_features.use_camera_motion |= mesh->use_motion_blur;
 #ifdef WITH_OPENSUBDIV
 		if(mesh->subdivision_type != Mesh::SUBDIVISION_NONE) {
@@ -721,7 +682,6 @@ DeviceRequestedFeatures Session::get_requested_device_features()
 	BakeManager *bake_manager = scene->bake_manager;
 	requested_features.use_baking = bake_manager->get_baking();
 	requested_features.use_integrator_branched = (scene->integrator->method == Integrator::BRANCHED_PATH);
-	requested_features.use_transparent &= scene->integrator->transparent_shadows;
 	requested_features.use_denoising = params.use_denoising;
 
 	return requested_features;
@@ -797,11 +757,11 @@ bool Session::draw(BufferParams& buffer_params, DeviceDrawParams &draw_params)
 
 void Session::reset_(BufferParams& buffer_params, int samples)
 {
-	if(buffers) {
-		if(buffer_params.modified(buffers->params)) {
-			gpu_draw_ready = false;
-			buffers->reset(device, buffer_params);
-			display->reset(device, buffer_params);
+	if(buffers && buffer_params.modified(tile_manager.params)) {
+		gpu_draw_ready = false;
+		buffers->reset(buffer_params);
+		if(display) {
+			display->reset(buffer_params);
 		}
 	}
 
@@ -822,15 +782,6 @@ void Session::reset(BufferParams& buffer_params, int samples)
 		reset_gpu(buffer_params, samples);
 	else
 		reset_cpu(buffer_params, samples);
-
-	if(params.progressive_refine) {
-		thread_scoped_lock buffers_lock(buffers_mutex);
-
-		foreach(RenderTile &rtile, render_tiles)
-			delete rtile.buffers;
-
-		render_tiles.clear();
-	}
 }
 
 void Session::set_samples(int samples)
@@ -910,6 +861,16 @@ void Session::update_scene()
 	if(scene->need_update()) {
 		load_kernels(false);
 
+		/* Update max_closures. */
+		KernelIntegrator *kintegrator = &scene->dscene.data.integrator;
+		if(params.background) {
+			kintegrator->max_closures = get_max_closure_count();
+		}
+		else {
+			/* Currently viewport render is faster with higher max_closures, needs investigating. */
+			kintegrator->max_closures = 64;
+		}
+
 		progress.set_status("Updating Scene");
 		MEM_GUARDED_CALL(&progress, scene->device_update, device, progress);
 	}
@@ -931,7 +892,7 @@ void Session::update_status_time(bool show_pause, bool show_done)
 		const bool rendering_finished = (tile == num_tiles);
 		const bool is_last_tile = (tile + 1) == num_tiles;
 
-		substatus = string_printf("Path Tracing Tile %d/%d", tile, num_tiles);
+		substatus = string_printf("Rendered %d/%d Tiles", tile, num_tiles);
 
 		if(!rendering_finished && (device->show_samples() || (is_cpu && is_last_tile))) {
 			/* Some devices automatically support showing the sample number:
@@ -955,7 +916,7 @@ void Session::update_status_time(bool show_pause, bool show_done)
 		substatus = string_printf("Path Tracing Sample %d/%d",
 		                          progressive_sample+1,
 		                          num_samples);
-	
+
 	if(show_pause) {
 		status = "Paused";
 	}
@@ -973,9 +934,14 @@ void Session::update_status_time(bool show_pause, bool show_done)
 
 void Session::render()
 {
-	/* add path trace task */
+	/* Clear buffers. */
+	if(buffers && tile_manager.state.sample == tile_manager.range_start_sample) {
+		buffers->zero();
+	}
+
+	/* Add path trace task. */
 	DeviceTask task(DeviceTask::RENDER);
-	
+
 	task.acquire_tile = function_bind(&Session::acquire_tile, this, _1, _2);
 	task.release_tile = function_bind(&Session::release_tile, this, _1);
 	task.map_neighbor_tiles = function_bind(&Session::map_neighbor_tiles, this, _1, _2);
@@ -1043,8 +1009,18 @@ bool Session::update_progressive_refine(bool cancel)
 	}
 
 	if(params.progressive_refine) {
-		foreach(RenderTile &rtile, render_tiles) {
+		foreach(Tile& tile, tile_manager.state.tiles) {
+			if(!tile.buffers) {
+				continue;
+			}
+
+			RenderTile rtile;
+			rtile.x = tile_manager.state.buffer.full_x + tile.x;
+			rtile.y = tile_manager.state.buffer.full_y + tile.y;
+			rtile.w = tile.w;
+			rtile.h = tile.h;
 			rtile.sample = sample;
+			rtile.buffers = tile.buffers;
 
 			if(write) {
 				if(write_render_tile_cb)
@@ -1066,11 +1042,7 @@ void Session::device_free()
 {
 	scene->device_free();
 
-	foreach(RenderTile &tile, render_tiles)
-		delete tile.buffers;
-	tile_manager.free_device();
-
-	render_tiles.clear();
+	tile_manager.device_free();
 
 	/* used from background render only, so no need to
 	 * re-create render/display buffers here

@@ -19,6 +19,9 @@
 
 #ifdef __QBVH__
 #  include "kernel/bvh/qbvh_volume.h"
+#ifdef __KERNEL_AVX2__
+#  include "kernel/bvh/obvh_volume.h"
+#endif
 #endif
 
 #if BVH_FEATURE(BVH_HAIR)
@@ -309,22 +312,29 @@ ccl_device_inline bool BVH_FUNCTION_NAME(KernelGlobals *kg,
                                          Intersection *isect,
                                          const uint visibility)
 {
-#ifdef __QBVH__
-	if(kernel_data.bvh.use_qbvh) {
-		return BVH_FUNCTION_FULL_NAME(QBVH)(kg,
-		                                    ray,
-		                                    isect,
-		                                    visibility);
-	}
-	else
+	switch(kernel_data.bvh.bvh_layout) {
+#ifdef __KERNEL_AVX2__
+		case BVH_LAYOUT_BVH8:
+			return BVH_FUNCTION_FULL_NAME(OBVH)(kg,
+			                                    ray,
+			                                    isect,
+			                                    visibility);
 #endif
-	{
-		kernel_assert(kernel_data.bvh.use_qbvh == false);
-		return BVH_FUNCTION_FULL_NAME(BVH)(kg,
-		                                   ray,
-		                                   isect,
-		                                   visibility);
+#ifdef __QBVH__
+		case BVH_LAYOUT_BVH4:
+			return BVH_FUNCTION_FULL_NAME(QBVH)(kg,
+			                                    ray,
+			                                    isect,
+			                                    visibility);
+#endif
+		case BVH_LAYOUT_BVH2:
+			return BVH_FUNCTION_FULL_NAME(BVH)(kg,
+			                                   ray,
+			                                   isect,
+			                                   visibility);
 	}
+	kernel_assert(!"Should not happen");
+	return false;
 }
 
 #undef BVH_FUNCTION_NAME

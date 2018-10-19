@@ -23,13 +23,15 @@
  * Contributor(s): none yet.
  *
  * ***** END GPL LICENSE BLOCK *****
- * 
+ *
  */
 
 /** \file blender/blenlib/intern/listbase.c
  *  \ingroup bli
  *
- * Manipulations on ListBase structs
+ * Manipulations on double-linked list (#ListBase structs).
+ *
+ * For single linked lists see 'BLI_linklist.h'
  */
 
 #include <string.h>
@@ -170,6 +172,34 @@ void BLI_listbase_swaplinks(ListBase *listbase, void *vlinka, void *vlinkb)
 }
 
 /**
+ * Swaps \a vlinka and \a vlinkb from their respective lists. Assumes they are both already in their lista!
+ */
+void BLI_listbases_swaplinks(ListBase *listbasea, ListBase *listbaseb, void *vlinka, void *vlinkb)
+{
+	Link *linka = vlinka;
+	Link *linkb = vlinkb;
+	Link linkc = {NULL};
+
+	if (!linka || !linkb) {
+		return;
+	}
+
+	/* Temporary link to use as placeholder of the links positions */
+	BLI_insertlinkafter(listbasea, linka, &linkc);
+
+	/* Bring linka into linkb position */
+	BLI_remlink(listbasea, linka);
+	BLI_insertlinkafter(listbaseb, linkb, linka);
+
+	/* Bring linkb into linka position */
+	BLI_remlink(listbaseb, linkb);
+	BLI_insertlinkafter(listbasea, &linkc, linkb);
+
+	/* Remove temporary link */
+	BLI_remlink(listbasea, &linkc);
+}
+
+/**
  * Removes the head from \a listbase and returns it.
  */
 void *BLI_pophead(ListBase *listbase)
@@ -278,7 +308,7 @@ void BLI_insertlinkafter(ListBase *listbase, void *vprevlink, void *vnewlink)
 		listbase->last = newlink;
 		return;
 	}
-	
+
 	/* insert at head of list */
 	if (prevlink == NULL) {
 		newlink->prev = NULL;
@@ -319,7 +349,7 @@ void BLI_insertlinkbefore(ListBase *listbase, void *vnextlink, void *vnewlink)
 		listbase->last = newlink;
 		return;
 	}
-	
+
 	/* insert at end of list */
 	if (nextlink == NULL) {
 		newlink->prev = listbase->last;
@@ -421,7 +451,7 @@ bool BLI_listbase_link_move(ListBase *listbase, void *vlink, int step)
 void BLI_freelist(ListBase *listbase)
 {
 	Link *link, *next;
-	
+
 	link = listbase->first;
 	while (link) {
 		next = link->next;
@@ -438,7 +468,7 @@ void BLI_freelist(ListBase *listbase)
 void BLI_freelistN(ListBase *listbase)
 {
 	Link *link, *next;
-	
+
 	link = listbase->first;
 	while (link) {
 		next = link->next;
@@ -454,7 +484,7 @@ void BLI_freelistN(ListBase *listbase)
  *
  * \note Use to avoid redundant looping.
  */
-int BLI_listbase_count_ex(const ListBase *listbase, const int count_max)
+int BLI_listbase_count_at_most(const ListBase *listbase, const int count_max)
 {
 	Link *link;
 	int count = 0;
@@ -526,16 +556,16 @@ int BLI_findindex(const ListBase *listbase, const void *vlink)
 	int number = 0;
 
 	if (vlink == NULL) return -1;
-	
+
 	link = listbase->first;
 	while (link) {
 		if (link == vlink)
 			return number;
-		
+
 		number++;
 		link = link->next;
 	}
-	
+
 	return -1;
 }
 
@@ -664,6 +694,46 @@ void *BLI_rfindptr(const ListBase *listbase, const void *ptr, const int offset)
 }
 
 /**
+ * Finds the first element of listbase which contains the specified bytes
+ * at the specified offset, returning NULL if not found.
+ */
+void *BLI_listbase_bytes_find(const ListBase *listbase, const void *bytes, const size_t bytes_size, const int offset)
+{
+	Link *link = NULL;
+	const void *ptr_iter;
+
+	for (link = listbase->first; link; link = link->next) {
+		ptr_iter = (const void *)(((const char *)link) + offset);
+
+		if (memcmp(bytes, ptr_iter, bytes_size) == 0) {
+			return link;
+		}
+	}
+
+	return NULL;
+}
+/* same as above but find reverse */
+/**
+ * Finds the last element of listbase which contains the specified bytes
+ * at the specified offset, returning NULL if not found.
+ */
+void *BLI_listbase_bytes_rfind(const ListBase *listbase, const void *bytes, const size_t bytes_size, const int offset)
+{
+	Link *link = NULL;
+	const void *ptr_iter;
+
+	for (link = listbase->last; link; link = link->prev) {
+		ptr_iter = (const void *)(((const char *)link) + offset);
+
+		if (memcmp(bytes, ptr_iter, bytes_size) == 0) {
+			return link;
+		}
+	}
+
+	return NULL;
+}
+
+/**
  * Returns the 0-based index of the first element of listbase which contains the specified
  * null-terminated string at the specified offset, or -1 if not found.
  */
@@ -760,13 +830,13 @@ void BLI_listbase_rotate_last(ListBase *lb, void *vlink)
 LinkData *BLI_genericNodeN(void *data)
 {
 	LinkData *ld;
-	
+
 	if (data == NULL)
 		return NULL;
-		
+
 	/* create new link, and make it hold the given data */
 	ld = MEM_callocN(sizeof(LinkData), __func__);
 	ld->data = data;
-	
+
 	return ld;
-} 
+}

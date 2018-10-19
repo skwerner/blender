@@ -61,10 +61,8 @@ def replace_line(f, i, text, keep_indent=True):
 
 def source_list(path, filename_check=None):
     for dirpath, dirnames, filenames in os.walk(path):
-
         # skip '.git'
-        if dirpath.startswith("."):
-            continue
+        dirnames[:] = [d for d in dirnames if not d.startswith(".")]
 
         for filename in filenames:
             if filename_check is None or filename_check(filename):
@@ -287,7 +285,7 @@ def main():
     ignore_used = [False] * len(IGNORE)
 
     # now check on files not accounted for.
-    print("\nC/C++ Files CMake doesnt know about...")
+    print("\nC/C++ Files CMake does not know about...")
     for cf in sorted(source_list(SOURCE_DIR, is_c)):
         if not is_ignore(cf, ignore_used):
             if cf not in global_c:
@@ -304,7 +302,7 @@ def main():
                     print("bad_c: ", cf)
             '''
 
-    print("\nC/C++ Headers CMake doesnt know about...")
+    print("\nC/C++ Headers CMake does not know about...")
     for hf in sorted(source_list(SOURCE_DIR, is_c_header)):
         if not is_ignore(hf, ignore_used):
             if hf not in global_h:

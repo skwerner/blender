@@ -52,6 +52,7 @@ struct GPUFXSettings;
 
 void BKE_camera_init(struct Camera *cam);
 void *BKE_camera_add(struct Main *bmain, const char *name);
+void BKE_camera_copy_data(struct Main *bmain, struct Camera *cam_dst, const struct Camera *cam_src, const int flag);
 struct Camera *BKE_camera_copy(struct Main *bmain, const struct Camera *cam);
 void BKE_camera_make_local(struct Main *bmain, struct Camera *cam, const bool lib_local);
 void BKE_camera_free(struct Camera *ca);
@@ -127,7 +128,7 @@ void BKE_camera_view_frame(
         float r_vec[4][3]);
 
 bool BKE_camera_view_frame_fit_to_scene(
-        struct Scene *scene, struct View3D *v3d, struct Object *camera_ob,
+        struct Main *bmain, struct Scene *scene, struct View3D *v3d, struct Object *camera_ob,
         float r_co[3], float *r_scale);
 bool BKE_camera_view_frame_fit_to_coords(
         const struct Scene *scene,
@@ -151,4 +152,3 @@ bool           BKE_camera_multiview_spherical_stereo(struct RenderData *rd, stru
 #endif
 
 #endif
-

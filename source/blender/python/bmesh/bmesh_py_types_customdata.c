@@ -43,6 +43,7 @@
 
 #include "../mathutils/mathutils.h"
 #include "../generic/python_utildefines.h"
+#include "../generic/py_capi_utils.h"
 
 #include "BKE_customdata.h"
 
@@ -130,7 +131,7 @@ PyDoc_STRVAR(bpy_bmlayeraccess_collection__freestyle_face_doc,
 
 static PyObject *bpy_bmlayeraccess_collection_get(BPy_BMLayerAccess *self, void *flag)
 {
-	const int type = (int)GET_INT_FROM_POINTER(flag);
+	const int type = (int)POINTER_AS_INT(flag);
 
 	BPY_BM_CHECK_OBJ(self);
 
@@ -1074,9 +1075,9 @@ int BPy_BMLayerItem_SetItem(BPy_BMElem *py_ele, BPy_BMLayerItem *py_layer, PyObj
 		}
 		case CD_PROP_INT:
 		{
-			int tmp_val = PyLong_AsLong(py_value);
+			int tmp_val = PyC_Long_AsI32(py_value);
 			if (UNLIKELY(tmp_val == -1 && PyErr_Occurred())) {
-				PyErr_Format(PyExc_TypeError, "expected an int, not a %.200s", Py_TYPE(py_value)->tp_name);
+				/* error is set */
 				ret = -1;
 			}
 			else {
@@ -1135,7 +1136,7 @@ int BPy_BMLayerItem_SetItem(BPy_BMElem *py_ele, BPy_BMLayerItem *py_layer, PyObj
 				ret = -1;
 			}
 			else {
-				*(float *)value = CLAMPIS(tmp_val, 0.0f, 1.0f);
+				*(float *)value = clamp_f(tmp_val, 0.0f, 1.0f);
 			}
 			break;
 		}
@@ -1147,7 +1148,7 @@ int BPy_BMLayerItem_SetItem(BPy_BMElem *py_ele, BPy_BMLayerItem *py_layer, PyObj
 				ret = -1;
 			}
 			else {
-				*(float *)value = CLAMPIS(tmp_val, 0.0f, 1.0f);
+				*(float *)value = clamp_f(tmp_val, 0.0f, 1.0f);
 			}
 			break;
 		}

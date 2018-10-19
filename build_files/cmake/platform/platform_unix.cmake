@@ -23,6 +23,26 @@
 
 # Libraries configuration for any *nix system including Linux and Unix.
 
+# Detect precompiled library directory
+if(NOT DEFINED LIBDIR)
+	set(LIBDIR_NAME ${CMAKE_SYSTEM_NAME}_${CMAKE_SYSTEM_PROCESSOR})
+	string(TOLOWER ${LIBDIR_NAME} LIBDIR_NAME)
+	set(LIBDIR ${CMAKE_SOURCE_DIR}/../lib/${LIBDIR_NAME})
+else()
+	message(STATUS "Using pre-compiled LIBDIR: ${LIBDIR}")
+endif()
+
+if(EXISTS ${LIBDIR})
+	file(GLOB LIB_SUBDIRS ${LIBDIR}/*)
+	# NOTE: Make sure "proper" compiled zlib comes first before the one
+	# which is a part of OpenCollada. They have different ABI, and we
+	# do need to use the official one.
+	set(CMAKE_PREFIX_PATH ${LIBDIR}/zlib ${LIB_SUBDIRS})
+	set(WITH_STATIC_LIBS ON)
+	set(WITH_OPENMP_STATIC ON)
+endif()
+
+# Wrapper to prefer static libraries
 macro(find_package_wrapper)
 	if(WITH_STATIC_LIBS)
 		find_package_static(${ARGV})
@@ -141,8 +161,15 @@ if(WITH_CODEC_SNDFILE)
 endif()
 
 if(WITH_CODEC_FFMPEG)
-	set(FFMPEG /usr CACHE PATH "FFMPEG Directory")
-	set(FFMPEG_LIBRARIES avformat avcodec avutil avdevice swscale CACHE STRING "FFMPEG Libraries")
+	if(EXISTS ${LIBDIR})
+		# For precompiled lib directory, all ffmpeg dependencies are in the same folder
+		file(GLOB ffmpeg_libs ${LIBDIR}/ffmpeg/lib/*.a ${LIBDIR}/sndfile/lib/*.a)
+		set(FFMPEG ${LIBDIR}/ffmpeg CACHE PATH "FFMPEG Directory")
+		set(FFMPEG_LIBRARIES ${ffmpeg_libs} ${ffmpeg_libs} CACHE STRING "FFMPEG Libraries")
+	else()
+		set(FFMPEG /usr CACHE PATH "FFMPEG Directory")
+		set(FFMPEG_LIBRARIES avformat avcodec avutil avdevice swscale CACHE STRING "FFMPEG Libraries")
+	endif()
 
 	mark_as_advanced(FFMPEG)
 
@@ -217,10 +244,14 @@ endif()
 if(WITH_OPENVDB)
 	find_package_wrapper(OpenVDB)
 	find_package_wrapper(TBB)
+	find_package_wrapper(Blosc)
 	if(NOT OPENVDB_FOUND OR NOT TBB_FOUND)
 		set(WITH_OPENVDB OFF)
 		set(WITH_OPENVDB_BLOSC OFF)
 		message(STATUS "OpenVDB not found, disabling it")
+	elseif(NOT BLOSC_FOUND)
+		set(WITH_OPENVDB_BLOSC OFF)
+		message(STATUS "Blosc not found, disabling it")
 	endif()
 endif()
 
@@ -274,7 +305,7 @@ if(WITH_BOOST)
 		if(Boost_USE_STATIC_LIBS AND WITH_BOOST_ICU)
 			find_package(IcuLinux)
 		endif()
-		mark_as_advanced(Boost_DIR)  # why doesnt boost do this?
+		mark_as_advanced(Boost_DIR)  # why doesn't boost do this?
 	endif()
 
 	set(BOOST_INCLUDE_DIR ${Boost_INCLUDE_DIRS})
@@ -329,7 +360,18 @@ if(WITH_OPENCOLORIO)
 endif()
 
 if(WITH_LLVM)
+	if(EXISTS ${LIBDIR})
+		set(LLVM_STATIC ON)
+	endif()
+
 	find_package_wrapper(LLVM)
+
+	# Symbol conflicts with same UTF library used by OpenCollada
+	if(EXISTS ${LIBDIR})
+		if(WITH_OPENCOLLADA AND (${LLVM_VERSION} VERSION_LESS "4.0.0"))
+			list(REMOVE_ITEM OPENCOLLADA_LIBRARIES ${OPENCOLLADA_UTF_LIBRARY})
+		endif()
+	endif()
 
 	if(NOT LLVM_FOUND)
 		set(WITH_LLVM OFF)
@@ -358,7 +400,11 @@ if(WITH_OPENSUBDIV OR WITH_CYCLES_OPENSUBDIV)
 endif()
 
 # OpenSuse needs lutil, ArchLinux not, for now keep, can avoid by using --as-needed
-list(APPEND PLATFORM_LINKLIBS -lutil -lc -lm)
+if(HAIKU)
+	list(APPEND PLATFORM_LINKLIBS -lnetwork)
+else()
+	list(APPEND PLATFORM_LINKLIBS -lutil -lc -lm)
+endif()
 
 find_package(Threads REQUIRED)
 list(APPEND PLATFORM_LINKLIBS ${CMAKE_THREAD_LIBS_INIT})
@@ -400,10 +446,6 @@ if(CMAKE_COMPILER_IS_GNUCC)
 # CLang is the same as GCC for now.
 elseif(CMAKE_C_COMPILER_ID MATCHES "Clang")
 	set(PLATFORM_CFLAGS "-pipe -fPIC -funsigned-char -fno-strict-aliasing")
-# Solaris CC
-elseif(CMAKE_C_COMPILER_ID MATCHES "SunPro")
-	set(PLATFORM_CFLAGS "-pipe -features=extensions -fPIC -D__FUNCTION__=__func__")
-
 # Intel C++ Compiler
 elseif(CMAKE_C_COMPILER_ID MATCHES "Intel")
 	# think these next two are broken

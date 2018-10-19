@@ -52,7 +52,9 @@ def _workaround_buggy_drivers():
 
 def _configure_argument_parser():
     import argparse
-    parser = argparse.ArgumentParser(description="Cycles Addon argument parser")
+    # No help because it conflicts with general Python scripts argument parsing
+    parser = argparse.ArgumentParser(description="Cycles Addon argument parser",
+                                     add_help=False)
     parser.add_argument("--cycles-resumable-num-chunks",
                         help="Number of chunks to split sample range into",
                         default=None)
@@ -65,6 +67,9 @@ def _configure_argument_parser():
     parser.add_argument("--cycles-resumable-end-chunk",
                         help="End chunk to render",
                         default=None)
+    parser.add_argument("--cycles-print-stats",
+                        help="Print rendering statistics to stderr",
+                        action='store_true')
     return parser
 
 
@@ -82,15 +87,20 @@ def _parse_command_line():
         if args.cycles_resumable_current_chunk is not None:
             import _cycles
             _cycles.set_resumable_chunk(
-                    int(args.cycles_resumable_num_chunks),
-                    int(args.cycles_resumable_current_chunk))
+                int(args.cycles_resumable_num_chunks),
+                int(args.cycles_resumable_current_chunk),
+            )
         elif args.cycles_resumable_start_chunk is not None and \
-             args.cycles_resumable_end_chunk:
+                args.cycles_resumable_end_chunk:
             import _cycles
             _cycles.set_resumable_chunk_range(
-                    int(args.cycles_resumable_num_chunks),
-                    int(args.cycles_resumable_start_chunk),
-                    int(args.cycles_resumable_end_chunk))
+                int(args.cycles_resumable_num_chunks),
+                int(args.cycles_resumable_start_chunk),
+                int(args.cycles_resumable_end_chunk),
+            )
+    if args.cycles_print_stats:
+        import _cycles
+        _cycles.enable_print_stats()
 
 
 def init():
@@ -206,6 +216,7 @@ def system_info():
     import _cycles
     return _cycles.system_info()
 
+
 def register_passes(engine, scene, srl):
     engine.register_pass(scene, srl, "Combined", 4, "RGBA", 'COLOR')
 
@@ -234,10 +245,13 @@ def register_passes(engine, scene, srl):
     if srl.use_pass_environment:           engine.register_pass(scene, srl, "Env",           3, "RGB",  'COLOR')
 
     crl = srl.cycles
-    if crl.pass_debug_bvh_traversed_nodes:     engine.register_pass(scene, srl, "Debug BVH Traversed Nodes",     1, "X", 'VALUE')
-    if crl.pass_debug_bvh_traversed_instances: engine.register_pass(scene, srl, "Debug BVH Traversed Instances", 1, "X", 'VALUE')
-    if crl.pass_debug_bvh_intersections:       engine.register_pass(scene, srl, "Debug BVH Intersections",       1, "X", 'VALUE')
-    if crl.pass_debug_ray_bounces:             engine.register_pass(scene, srl, "Debug Ray Bounces",             1, "X", 'VALUE')
+    if crl.pass_debug_render_time:             engine.register_pass(scene, srl, "Debug Render Time",             1, "X",   'VALUE')
+    if crl.pass_debug_bvh_traversed_nodes:     engine.register_pass(scene, srl, "Debug BVH Traversed Nodes",     1, "X",   'VALUE')
+    if crl.pass_debug_bvh_traversed_instances: engine.register_pass(scene, srl, "Debug BVH Traversed Instances", 1, "X",   'VALUE')
+    if crl.pass_debug_bvh_intersections:       engine.register_pass(scene, srl, "Debug BVH Intersections",       1, "X",   'VALUE')
+    if crl.pass_debug_ray_bounces:             engine.register_pass(scene, srl, "Debug Ray Bounces",             1, "X",   'VALUE')
+    if crl.use_pass_volume_direct:             engine.register_pass(scene, srl, "VolumeDir",                     3, "RGB", 'COLOR')
+    if crl.use_pass_volume_indirect:           engine.register_pass(scene, srl, "VolumeInd",                     3, "RGB", 'COLOR')
 
     cscene = scene.cycles
     if crl.use_denoising and crl.denoising_store_passes and not cscene.use_progressive_refine:
@@ -251,3 +265,10 @@ def register_passes(engine, scene, srl):
         engine.register_pass(scene, srl, "Denoising Shadow B",        3, "XYV", 'VECTOR')
         engine.register_pass(scene, srl, "Denoising Image",           3, "RGB", 'COLOR')
         engine.register_pass(scene, srl, "Denoising Image Variance",  3, "RGB", 'COLOR')
+
+        clean_options = ("denoising_diffuse_direct", "denoising_diffuse_indirect",
+                         "denoising_glossy_direct", "denoising_glossy_indirect",
+                         "denoising_transmission_direct", "denoising_transmission_indirect",
+                         "denoising_subsurface_direct", "denoising_subsurface_indirect")
+        if any(getattr(crl, option) for option in clean_options):
+            engine.register_pass(scene, srl, "Denoising Clean", 3, "RGB", 'COLOR')

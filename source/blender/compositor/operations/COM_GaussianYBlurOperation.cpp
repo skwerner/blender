@@ -15,8 +15,8 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
- * Contributor: 
- *		Jeroen Bakker 
+ * Contributor:
+ *		Jeroen Bakker
  *		Monique Dewanchand
  */
 
@@ -84,7 +84,7 @@ void GaussianYBlurOperation::updateGauss()
 
 void GaussianYBlurOperation::executePixel(float output[4], int x, int y, void *data)
 {
-	float color_accum[4] = {0.0f, 0.0f, 0.0f, 0.0f};
+	float ATTR_ALIGN(16) color_accum[4] = {0.0f, 0.0f, 0.0f, 0.0f};
 	float multiplier_accum = 0.0f;
 	MemoryBuffer *inputBuffer = (MemoryBuffer *)data;
 	float *buffer = inputBuffer->getBuffer();
@@ -172,7 +172,7 @@ void GaussianYBlurOperation::deinitExecution()
 bool GaussianYBlurOperation::determineDependingAreaOfInterest(rcti *input, ReadBufferOperation *readOperation, rcti *output)
 {
 	rcti newInput;
-	
+
 	if (!m_sizeavailable) {
 		rcti sizeInput;
 		sizeInput.xmin = 0;

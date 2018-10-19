@@ -26,7 +26,7 @@
  */
 
 #ifndef __BLI_THREADS_H__
-#define __BLI_THREADS_H__ 
+#define __BLI_THREADS_H__
 
 /** \file BLI_threads.h
  *  \ingroup bli
@@ -55,28 +55,28 @@ void BLI_threadapi_exit(void);
 
 struct TaskScheduler *BLI_task_scheduler_get(void);
 
-void    BLI_init_threads(struct ListBase *threadbase, void *(*do_thread)(void *), int tot);
+void    BLI_threadpool_init(struct ListBase *threadbase, void *(*do_thread)(void *), int tot);
 int     BLI_available_threads(struct ListBase *threadbase);
-int     BLI_available_thread_index(struct ListBase *threadbase);
-void    BLI_insert_thread(struct ListBase *threadbase, void *callerdata);
-void    BLI_remove_thread(struct ListBase *threadbase, void *callerdata);
-void    BLI_remove_thread_index(struct ListBase *threadbase, int index);
-void    BLI_remove_threads(struct ListBase *threadbase);
-void    BLI_end_threads(struct ListBase *threadbase);
+int     BLI_threadpool_available_thread_index(struct ListBase *threadbase);
+void    BLI_threadpool_insert(struct ListBase *threadbase, void *callerdata);
+void    BLI_threadpool_remove(struct ListBase *threadbase, void *callerdata);
+void    BLI_threadpool_remove_index(struct ListBase *threadbase, int index);
+void    BLI_threadpool_clear(struct ListBase *threadbase);
+void    BLI_threadpool_end(struct ListBase *threadbase);
 int     BLI_thread_is_main(void);
 
 
-void BLI_begin_threaded_malloc(void);
-void BLI_end_threaded_malloc(void);
+void BLI_threaded_malloc_begin(void);
+void BLI_threaded_malloc_end(void);
 
 /* System Information */
 
 int     BLI_system_thread_count(void); /* gets the number of threads the system can make use of */
 void    BLI_system_num_threads_override_set(int num);
 int     BLI_system_num_threads_override_get(void);
-	
+
 /* Global Mutex Locks
- * 
+ *
  * One custom lock available now. can be extended. */
 
 #define LOCK_IMAGE      0
@@ -91,8 +91,8 @@ int     BLI_system_num_threads_override_get(void);
 #define LOCK_FFTW       9
 #define LOCK_VIEW3D     10
 
-void    BLI_lock_thread(int type);
-void    BLI_unlock_thread(int type);
+void    BLI_thread_lock(int type);
+void    BLI_thread_unlock(int type);
 
 /* Mutex Lock */
 
@@ -111,8 +111,10 @@ void BLI_mutex_unlock(ThreadMutex *mutex);
 
 /* Spin Lock */
 
-#ifdef __APPLE__
+#if defined(__APPLE__)
 typedef OSSpinLock SpinLock;
+#elif defined(_MSC_VER)
+typedef volatile int SpinLock;
 #else
 typedef pthread_spinlock_t SpinLock;
 #endif
@@ -153,7 +155,7 @@ void BLI_ticket_mutex_lock(TicketMutex *ticket);
 void BLI_ticket_mutex_unlock(TicketMutex *ticket);
 
 /* Condition */
- 
+
 typedef pthread_cond_t ThreadCondition;
 
 void BLI_condition_init(ThreadCondition *cond);
@@ -175,7 +177,7 @@ void BLI_thread_queue_free(ThreadQueue *queue);
 void BLI_thread_queue_push(ThreadQueue *queue, void *work);
 void *BLI_thread_queue_pop(ThreadQueue *queue);
 void *BLI_thread_queue_pop_timeout(ThreadQueue *queue, int ms);
-int BLI_thread_queue_size(ThreadQueue *queue);
+int BLI_thread_queue_len(ThreadQueue *queue);
 bool BLI_thread_queue_is_empty(ThreadQueue *queue);
 
 void BLI_thread_queue_wait_finish(ThreadQueue *queue);
@@ -207,4 +209,3 @@ void BLI_thread_queue_nowait(ThreadQueue *queue);
 #endif
 
 #endif
-

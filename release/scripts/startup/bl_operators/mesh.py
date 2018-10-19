@@ -34,18 +34,20 @@ class MeshMirrorUV(Operator):
     bl_options = {'REGISTER', 'UNDO'}
 
     direction = EnumProperty(
-            name="Axis Direction",
-            items=(('POSITIVE', "Positive", ""),
-                   ('NEGATIVE', "Negative", "")),
-            )
+        name="Axis Direction",
+        items=(
+            ('POSITIVE', "Positive", ""),
+            ('NEGATIVE', "Negative", ""),
+        ),
+    )
 
     precision = IntProperty(
-            name="Precision",
-            description=("Tolerance for finding vertex duplicates"),
-            min=1, max=16,
-            soft_min=1, soft_max=16,
-            default=3,
-            )
+        name="Precision",
+        description=("Tolerance for finding vertex duplicates"),
+        min=1, max=16,
+        soft_min=1, soft_max=16,
+        default=3,
+    )
 
     @classmethod
     def poll(cls, context):
@@ -179,7 +181,7 @@ class MeshSelectNext(Operator):
 
 
 class MeshSelectPrev(Operator):
-    """Select the next element (using selection order)"""
+    """Select the previous element (using selection order)"""
     bl_idname = "mesh.select_prev_item"
     bl_label = "Select Previous Element"
     bl_options = {'REGISTER', 'UNDO'}

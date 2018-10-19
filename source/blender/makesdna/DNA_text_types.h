@@ -49,19 +49,16 @@ typedef struct TextLine {
 
 typedef struct Text {
 	ID id;
-	
+
 	char *name;
+	void *compiled;
 
 	int flags, nlines;
-	
+
 	ListBase lines;
 	TextLine *curl, *sell;
 	int curc, selc;
-	
-	char *undo_buf;
-	int undo_pos, undo_len;
-	
-	void *compiled;
+
 	double mtime;
 } Text;
 

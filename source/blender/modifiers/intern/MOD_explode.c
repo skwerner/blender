@@ -51,9 +51,9 @@
 #include "BKE_particle.h"
 #include "BKE_scene.h"
 
-
 #include "MEM_guardedalloc.h"
 
+#include "MOD_modifiertypes.h"
 
 static void initData(ModifierData *md)
 {
@@ -65,13 +65,13 @@ static void initData(ModifierData *md)
 static void freeData(ModifierData *md)
 {
 	ExplodeModifierData *emd = (ExplodeModifierData *) md;
-	
-	if (emd->facepa) MEM_freeN(emd->facepa);
+
+	MEM_SAFE_FREE(emd->facepa);
 }
-static void copyData(ModifierData *md, ModifierData *target)
+static void copyData(const ModifierData *md, ModifierData *target)
 {
 #if 0
-	ExplodeModifierData *emd = (ExplodeModifierData *) md;
+	const ExplodeModifierData *emd = (const ExplodeModifierData *) md;
 #endif
 	ExplodeModifierData *temd = (ExplodeModifierData *) target;
 
@@ -94,9 +94,10 @@ static CustomDataMask requiredDataMask(Object *UNUSED(ob), ModifierData *md)
 	return dataMask;
 }
 
-static void createFacepa(ExplodeModifierData *emd,
-                         ParticleSystemModifierData *psmd,
-                         DerivedMesh *dm)
+static void createFacepa(
+        ExplodeModifierData *emd,
+        ParticleSystemModifierData *psmd,
+        DerivedMesh *dm)
 {
 	ParticleSystem *psys = psmd->psys;
 	MFace *fa = NULL, *mface = NULL;
@@ -119,9 +120,9 @@ static void createFacepa(ExplodeModifierData *emd,
 	if (emd->facepa)
 		MEM_freeN(emd->facepa);
 
-	facepa = emd->facepa = MEM_callocN(sizeof(int) * totface, "explode_facepa");
+	facepa = emd->facepa = MEM_calloc_arrayN(totface, sizeof(int), "explode_facepa");
 
-	vertpa = MEM_callocN(sizeof(int) * totvert, "explode_vertpa");
+	vertpa = MEM_calloc_arrayN(totvert, sizeof(int), "explode_vertpa");
 
 	/* initialize all faces & verts to no particle */
 	for (i = 0; i < totface; i++)
@@ -188,10 +189,10 @@ static void createFacepa(ExplodeModifierData *emd,
 
 static int edgecut_get(EdgeHash *edgehash, unsigned int v1, unsigned int v2)
 {
-	return GET_INT_FROM_POINTER(BLI_edgehash_lookup(edgehash, v1, v2));
+	return POINTER_AS_INT(BLI_edgehash_lookup(edgehash, v1, v2));
 }
 
- 
+
 static const short add_faces[24] = {
 	0,
 	0, 0, 2, 0, 1, 2, 2, 0, 2, 1,
@@ -557,8 +558,8 @@ static DerivedMesh *cutEdges(ExplodeModifierData *emd, DerivedMesh *dm)
 	int totvert = dm->getNumVerts(dm);
 	int totface = dm->getNumTessFaces(dm);
 
-	int *facesplit = MEM_callocN(sizeof(int) * totface, "explode_facesplit");
-	int *vertpa = MEM_callocN(sizeof(int) * totvert, "explode_vertpa2");
+	int *facesplit = MEM_calloc_arrayN(totface, sizeof(int), "explode_facesplit");
+	int *vertpa = MEM_calloc_arrayN(totvert, sizeof(int), "explode_vertpa2");
 	int *facepa = emd->facepa;
 	int *fs, totesplit = 0, totfsplit = 0, curdupface = 0;
 	int i, v1, v2, v3, v4, esplit,
@@ -625,7 +626,7 @@ static DerivedMesh *cutEdges(ExplodeModifierData *emd, DerivedMesh *dm)
 	ehi = BLI_edgehashIterator_new(edgehash);
 	totesplit = totvert;
 	for (; !BLI_edgehashIterator_isDone(ehi); BLI_edgehashIterator_step(ehi)) {
-		BLI_edgehashIterator_setValue(ehi, SET_INT_IN_POINTER(totesplit));
+		BLI_edgehashIterator_setValue(ehi, POINTER_FROM_INT(totesplit));
 		totesplit++;
 	}
 	BLI_edgehashIterator_free(ehi);
@@ -633,7 +634,7 @@ static DerivedMesh *cutEdges(ExplodeModifierData *emd, DerivedMesh *dm)
 	/* count new faces due to splitting */
 	for (i = 0, fs = facesplit; i < totface; i++, fs++)
 		totfsplit += add_faces[*fs];
-	
+
 	splitdm = CDDM_from_template_ex(
 	        dm, totesplit, 0, totface + totfsplit, 0, 0,
 	        CD_MASK_DERIVEDMESH | CD_MASK_FACECORNERS);
@@ -656,7 +657,7 @@ static DerivedMesh *cutEdges(ExplodeModifierData *emd, DerivedMesh *dm)
 	 * later interpreted as tri's, for this to work right I think we probably
 	 * have to stop using tessface - campbell */
 
-	facepa = MEM_callocN(sizeof(int) * (totface + (totfsplit * 2)), "explode_facepa");
+	facepa = MEM_calloc_arrayN((totface + (totfsplit * 2)), sizeof(int), "explode_facepa");
 	//memcpy(facepa, emd->facepa, totface*sizeof(int));
 	emd->facepa = facepa;
 
@@ -664,7 +665,7 @@ static DerivedMesh *cutEdges(ExplodeModifierData *emd, DerivedMesh *dm)
 	ehi = BLI_edgehashIterator_new(edgehash);
 	for (; !BLI_edgehashIterator_isDone(ehi); BLI_edgehashIterator_step(ehi)) {
 		BLI_edgehashIterator_getKey(ehi, &ed_v1, &ed_v2);
-		esplit = GET_INT_FROM_POINTER(BLI_edgehashIterator_getValue(ehi));
+		esplit = POINTER_AS_INT(BLI_edgehashIterator_getValue(ehi));
 		mv = CDDM_get_vert(splitdm, ed_v2);
 		dupve = CDDM_get_vert(splitdm, esplit);
 
@@ -785,9 +786,10 @@ static DerivedMesh *cutEdges(ExplodeModifierData *emd, DerivedMesh *dm)
 
 	return splitdm;
 }
-static DerivedMesh *explodeMesh(ExplodeModifierData *emd,
-                                ParticleSystemModifierData *psmd, Scene *scene, Object *ob,
-                                DerivedMesh *to_explode)
+static DerivedMesh *explodeMesh(
+        ExplodeModifierData *emd,
+        ParticleSystemModifierData *psmd, Scene *scene, Object *ob,
+        DerivedMesh *to_explode)
 {
 	DerivedMesh *explode, *dm = to_explode;
 	MFace *mf = NULL, *mface;
@@ -841,7 +843,7 @@ static DerivedMesh *explodeMesh(ExplodeModifierData *emd,
 		 * with BLI_edgehashIterator_getKey */
 		if (facepa[i] == totpart || cfra < (pars + facepa[i])->time)
 			mindex = totvert + totpart;
-		else 
+		else
 			mindex = totvert + facepa[i];
 
 		mf = &mface[i];
@@ -857,7 +859,7 @@ static DerivedMesh *explodeMesh(ExplodeModifierData *emd,
 	/* make new vertice indexes & count total vertices after duplication */
 	ehi = BLI_edgehashIterator_new(vertpahash);
 	for (; !BLI_edgehashIterator_isDone(ehi); BLI_edgehashIterator_step(ehi)) {
-		BLI_edgehashIterator_setValue(ehi, SET_INT_IN_POINTER(totdup));
+		BLI_edgehashIterator_setValue(ehi, POINTER_FROM_INT(totdup));
 		totdup++;
 	}
 	BLI_edgehashIterator_free(ehi);
@@ -881,7 +883,7 @@ static DerivedMesh *explodeMesh(ExplodeModifierData *emd,
 		/* get particle + vertex from hash */
 		BLI_edgehashIterator_getKey(ehi, &ed_v1, &ed_v2);
 		ed_v2 -= totvert;
-		v = GET_INT_FROM_POINTER(BLI_edgehashIterator_getValue(ehi));
+		v = POINTER_AS_INT(BLI_edgehashIterator_getValue(ehi));
 
 		dm->getVert(dm, ed_v1, &source);
 		dest = CDDM_get_vert(explode, v);
@@ -932,12 +934,12 @@ static DerivedMesh *explodeMesh(ExplodeModifierData *emd,
 
 		dm->getTessFace(dm, i, &source);
 		mf = CDDM_get_tessface(explode, u);
-		
+
 		orig_v4 = source.v4;
 
 		if (facepa[i] != totpart && cfra < pa->time)
 			mindex = totvert + totpart;
-		else 
+		else
 			mindex = totvert + facepa[i];
 
 		source.v1 = edgecut_get(vertpahash, source.v1, mindex);
@@ -993,9 +995,10 @@ static ParticleSystemModifierData *findPrecedingParticlesystem(Object *ob, Modif
 	}
 	return psmd;
 }
-static DerivedMesh *applyModifier(ModifierData *md, Object *ob,
-                                  DerivedMesh *derivedData,
-                                  ModifierApplyFlag UNUSED(flag))
+static DerivedMesh *applyModifier(
+        ModifierData *md, Object *ob,
+        DerivedMesh *derivedData,
+        ModifierApplyFlag UNUSED(flag))
 {
 	DerivedMesh *dm = derivedData;
 	ExplodeModifierData *emd = (ExplodeModifierData *) md;
@@ -1018,7 +1021,7 @@ static DerivedMesh *applyModifier(ModifierData *md, Object *ob,
 		{
 			if (psmd->flag & eParticleSystemFlag_Pars)
 				psmd->flag &= ~eParticleSystemFlag_Pars;
-			
+
 			if (emd->flag & eExplodeFlag_CalcFaces)
 				emd->flag &= ~eExplodeFlag_CalcFaces;
 

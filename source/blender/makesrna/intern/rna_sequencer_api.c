@@ -61,7 +61,7 @@
 
 #include "WM_api.h"
 
-static void rna_Sequence_update_rnafunc(ID *id, Sequence *self, int do_data)
+static void rna_Sequence_update_rnafunc(ID *id, Sequence *self, bool do_data)
 {
 	if (do_data) {
 		BKE_sequencer_update_changed_seq_and_deps((Scene *)id, self, true, true);
@@ -74,7 +74,7 @@ static void rna_Sequence_update_rnafunc(ID *id, Sequence *self, int do_data)
 static void rna_Sequence_swap_internal(Sequence *seq_self, ReportList *reports, Sequence *seq_other)
 {
 	const char *error_msg;
-	
+
 	if (BKE_sequence_swap(seq_self, seq_other, &error_msg) == 0)
 		BKE_report(reports, RPT_ERROR, error_msg);
 }
@@ -457,7 +457,7 @@ void RNA_api_sequences(BlenderRNA *brna, PropertyRNA *cprop)
 	PropertyRNA *parm;
 	FunctionRNA *func;
 
-	static EnumPropertyItem seq_effect_items[] = {
+	static const EnumPropertyItem seq_effect_items[] = {
 		{SEQ_TYPE_CROSS, "CROSS", 0, "Cross", ""},
 		{SEQ_TYPE_ADD, "ADD", 0, "Add", ""},
 		{SEQ_TYPE_SUB, "SUBTRACT", 0, "Subtract", ""},
@@ -475,6 +475,7 @@ void RNA_api_sequences(BlenderRNA *brna, PropertyRNA *cprop)
 		{SEQ_TYPE_ADJUSTMENT, "ADJUSTMENT", 0, "Adjustment Layer", ""},
 		{SEQ_TYPE_GAUSSIAN_BLUR, "GAUSSIAN_BLUR", 0, "Gaussian Blur", ""},
 		{SEQ_TYPE_TEXT, "TEXT", 0, "Text", ""},
+		{SEQ_TYPE_COLORMIX, "COLORMIX", 0, "Color Mix", ""},
 		{0, NULL, 0, NULL, NULL}
 	};
 

@@ -53,13 +53,17 @@ echo "OK"
 # Create the tarball
 cd "$blender_srcdir"
 echo -n "Creating archive:            \"$BASE_DIR/$TARBALL\" ..."
-GZIP=-9 tar --transform "s,^,blender-$VERSION/,g" -zcf "$BASE_DIR/$TARBALL" -T "$BASE_DIR/$MANIFEST"
+tar --transform "s,^,blender-$VERSION/,g" \
+	--use-compress-program="gzip --best" \
+	--create \
+	--file="$BASE_DIR/$TARBALL" \
+	--files-from="$BASE_DIR/$MANIFEST"
 echo "OK"
 
 
 # Create checksum file
 cd "$BASE_DIR"
-echo -n "Createing checksum:          \"$BASE_DIR/$TARBALL.md5sum\" ..."
+echo -n "Creating checksum:          \"$BASE_DIR/$TARBALL.md5sum\" ..."
 md5sum "$TARBALL" > "$TARBALL.md5sum"
 echo "OK"
 

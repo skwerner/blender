@@ -19,24 +19,24 @@
  *		Dalai Felinto
  */
 
-#ifndef _COM_NormalizeOperation_h
-#define _COM_NormalizeOperation_h
+#ifndef __COM_NORMALIZEOPERATION_H__
+#define __COM_NORMALIZEOPERATION_H__
 #include "COM_NodeOperation.h"
 #include "DNA_node_types.h"
 
 /**
- * @brief base class of normalize, implementing the simple normalize
- * @ingroup operation
+ * \brief base class of normalize, implementing the simple normalize
+ * \ingroup operation
  */
 class NormalizeOperation : public NodeOperation {
 protected:
 	/**
-	 * @brief Cached reference to the reader
+	 * \brief Cached reference to the reader
 	 */
 	SocketReader *m_imageReader;
 
 	/**
-	 * @brief temporarily cache of the execution storage
+	 * \brief temporarily cache of the execution storage
 	 * it stores x->min and y->mult
 	 */
 	NodeTwoFloats *m_cachedInstance;

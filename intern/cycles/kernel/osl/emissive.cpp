@@ -5,7 +5,7 @@
  * All Rights Reserved.
  *
  * Modifications Copyright 2011, Blender Foundation.
- * 
+ *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
  * met:
@@ -56,8 +56,7 @@ class GenericEmissiveClosure : public CClosurePrimitive {
 public:
 	void setup(ShaderData *sd, int /* path_flag */, float3 weight)
 	{
-		closure_alloc(sd, sizeof(ShaderClosure), CLOSURE_EMISSION_ID, weight);
-		sd->flag |= SD_EMISSION;
+		emission_setup(sd, weight);
 	}
 };
 
@@ -73,4 +72,3 @@ ClosureParam *closure_emission_params()
 CCLOSURE_PREPARE(closure_emission_prepare, GenericEmissiveClosure)
 
 CCL_NAMESPACE_END
-

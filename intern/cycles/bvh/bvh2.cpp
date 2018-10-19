@@ -25,13 +25,6 @@
 
 CCL_NAMESPACE_BEGIN
 
-static bool node_bvh_is_unaligned(const BVHNode *node)
-{
-	const BVHNode *node0 = node->get_child(0),
-	              *node1 = node->get_child(1);
-	return node0->is_unaligned || node1->is_unaligned;
-}
-
 BVH2::BVH2(const BVHParams& params_, const vector<Object*>& objects_)
 : BVH(params_, objects_)
 {
@@ -195,7 +188,7 @@ void BVH2::pack_nodes(const BVHNode *root)
 	}
 	else {
 		stack.push_back(BVHStackEntry(root, nextNodeIdx));
-		nextNodeIdx += node_bvh_is_unaligned(root)
+		nextNodeIdx += node_is_unaligned(root, bvh2)
 		                       ? BVH_UNALIGNED_NODE_SIZE
 		                       : BVH_NODE_SIZE;
 	}
@@ -218,7 +211,7 @@ void BVH2::pack_nodes(const BVHNode *root)
 				}
 				else {
 					idx[i] = nextNodeIdx;
-					nextNodeIdx += node_bvh_is_unaligned(e.node->get_child(i))
+					nextNodeIdx += node_is_unaligned(e.node->get_child(i), bvh2)
 					                       ? BVH_UNALIGNED_NODE_SIZE
 					                       : BVH_NODE_SIZE;
 				}
@@ -247,74 +240,13 @@ void BVH2::refit_nodes()
 void BVH2::refit_node(int idx, bool leaf, BoundBox& bbox, uint& visibility)
 {
 	if(leaf) {
+		/* refit leaf node */
 		assert(idx + BVH_NODE_LEAF_SIZE <= pack.leaf_nodes.size());
 		const int4 *data = &pack.leaf_nodes[idx];
 		const int c0 = data[0].x;
 		const int c1 = data[0].y;
-		/* refit leaf node */
-		for(int prim = c0; prim < c1; prim++) {
-			int pidx = pack.prim_index[prim];
-			int tob = pack.prim_object[prim];
-			Object *ob = objects[tob];
 
-			if(pidx == -1) {
-				/* object instance */
-				bbox.grow(ob->bounds);
-			}
-			else {
-				/* primitives */
-				const Mesh *mesh = ob->mesh;
-
-				if(pack.prim_type[prim] & PRIMITIVE_ALL_CURVE) {
-					/* curves */
-					int str_offset = (params.top_level)? mesh->curve_offset: 0;
-					Mesh::Curve curve = mesh->get_curve(pidx - str_offset);
-					int k = PRIMITIVE_UNPACK_SEGMENT(pack.prim_type[prim]);
-
-					curve.bounds_grow(k, &mesh->curve_keys[0], &mesh->curve_radius[0], bbox);
-
-					visibility |= PATH_RAY_CURVE;
-
-					/* motion curves */
-					if(mesh->use_motion_blur) {
-						Attribute *attr = mesh->curve_attributes.find(ATTR_STD_MOTION_VERTEX_POSITION);
-
-						if(attr) {
-							size_t mesh_size = mesh->curve_keys.size();
-							size_t steps = mesh->motion_steps - 1;
-							float3 *key_steps = attr->data_float3();
-
-							for(size_t i = 0; i < steps; i++)
-								curve.bounds_grow(k, key_steps + i*mesh_size, &mesh->curve_radius[0], bbox);
-						}
-					}
-				}
-				else {
-					/* triangles */
-					int tri_offset = (params.top_level)? mesh->tri_offset: 0;
-					Mesh::Triangle triangle = mesh->get_triangle(pidx - tri_offset);
-					const float3 *vpos = &mesh->verts[0];
-
-					triangle.bounds_grow(vpos, bbox);
-
-					/* motion triangles */
-					if(mesh->use_motion_blur) {
-						Attribute *attr = mesh->attributes.find(ATTR_STD_MOTION_VERTEX_POSITION);
-
-						if(attr) {
-							size_t mesh_size = mesh->verts.size();
-							size_t steps = mesh->motion_steps - 1;
-							float3 *vert_steps = attr->data_float3();
-
-							for(size_t i = 0; i < steps; i++)
-								triangle.bounds_grow(vert_steps + i*mesh_size, bbox);
-						}
-					}
-				}
-			}
-
-			visibility |= ob->visibility;
-		}
+		BVH::refit_primitives(c0, c1, bbox, visibility);
 
 		/* TODO(sergey): De-duplicate with pack_leaf(). */
 		float4 leaf_data[BVH_NODE_LEAF_SIZE];

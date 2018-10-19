@@ -42,7 +42,6 @@ ccl_device void svm_node_tex_coord(KernelGlobals *kg,
 				tfm.x = read_node_float(kg, offset);
 				tfm.y = read_node_float(kg, offset);
 				tfm.z = read_node_float(kg, offset);
-				tfm.w = read_node_float(kg, offset);
 				data = transform_point(&tfm, data);
 			}
 			break;
@@ -123,7 +122,6 @@ ccl_device void svm_node_tex_coord_bump_dx(KernelGlobals *kg,
 				tfm.x = read_node_float(kg, offset);
 				tfm.y = read_node_float(kg, offset);
 				tfm.z = read_node_float(kg, offset);
-				tfm.w = read_node_float(kg, offset);
 				data = transform_point(&tfm, data);
 			}
 			break;
@@ -207,7 +205,6 @@ ccl_device void svm_node_tex_coord_bump_dy(KernelGlobals *kg,
 				tfm.x = read_node_float(kg, offset);
 				tfm.y = read_node_float(kg, offset);
 				tfm.z = read_node_float(kg, offset);
-				tfm.w = read_node_float(kg, offset);
 				data = transform_point(&tfm, data);
 			}
 			break;
@@ -326,7 +323,7 @@ ccl_device void svm_node_normal_map(KernelGlobals *kg, ShaderData *sd, float *st
 			color.y = -color.y;
 			color.z = -color.z;
 		}
-	
+
 		/* object, world space */
 		N = color;
 
@@ -347,6 +344,8 @@ ccl_device void svm_node_normal_map(KernelGlobals *kg, ShaderData *sd, float *st
 		strength = max(strength, 0.0f);
 		N = safe_normalize(sd->N + (N - sd->N)*strength);
 	}
+
+	N = ensure_valid_reflection(sd->Ng, sd->I, N);
 
 	if(is_zero(N)) {
 		N = sd->N;
@@ -395,4 +394,3 @@ ccl_device void svm_node_tangent(KernelGlobals *kg, ShaderData *sd, float *stack
 }
 
 CCL_NAMESPACE_END
-

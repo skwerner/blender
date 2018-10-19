@@ -43,7 +43,6 @@
 #include "BLI_listbase.h"
 
 #include "BKE_animsys.h"
-#include "BKE_global.h"
 #include "BKE_icons.h"
 #include "BKE_library.h"
 #include "BKE_library_query.h"
@@ -73,7 +72,7 @@ void BKE_world_free(World *wrld)
 	}
 
 	GPU_material_free(&wrld->gpumaterial);
-	
+
 	BKE_icon_id_delete((struct ID *)wrld);
 	BKE_previewimg_free(&wrld->preview);
 }
@@ -102,72 +101,90 @@ void BKE_world_init(World *wrld)
 	wrld->aobias = 0.05f;
 	wrld->ao_samp_method = WO_AOSAMP_HAMMERSLEY;
 	wrld->ao_approx_error = 0.25f;
-	
+
 	wrld->preview = NULL;
 	wrld->miststa = 5.0f;
 	wrld->mistdist = 25.0f;
 }
 
-World *add_world(Main *bmain, const char *name)
+World *BKE_world_add(Main *bmain, const char *name)
 {
 	World *wrld;
 
-	wrld = BKE_libblock_alloc(bmain, ID_WO, name);
+	wrld = BKE_libblock_alloc(bmain, ID_WO, name, 0);
 
 	BKE_world_init(wrld);
 
 	return wrld;
 }
 
-World *BKE_world_copy(Main *bmain, const World *wrld)
+/**
+ * Only copy internal data of World ID from source to already allocated/initialized destination.
+ * You probably nerver want to use that directly, use id_copy or BKE_id_copy_ex for typical needs.
+ *
+ * WARNING! This function will not handle ID user count!
+ *
+ * \param flag  Copying options (see BKE_library.h's LIB_ID_COPY_... flags for more).
+ */
+void BKE_world_copy_data(Main *bmain, World *wrld_dst, const World *wrld_src, const int flag)
 {
-	World *wrldn;
-	int a;
-	
-	wrldn = BKE_libblock_copy(bmain, &wrld->id);
-	
-	for (a = 0; a < MAX_MTEX; a++) {
-		if (wrld->mtex[a]) {
-			wrldn->mtex[a] = MEM_mallocN(sizeof(MTex), "BKE_world_copy");
-			memcpy(wrldn->mtex[a], wrld->mtex[a], sizeof(MTex));
-			id_us_plus((ID *)wrldn->mtex[a]->tex);
+	for (int a = 0; a < MAX_MTEX; a++) {
+		if (wrld_src->mtex[a]) {
+			wrld_dst->mtex[a] = MEM_dupallocN(wrld_src->mtex[a]);
 		}
 	}
 
-	if (wrld->nodetree) {
-		wrldn->nodetree = ntreeCopyTree(bmain, wrld->nodetree);
+	if (wrld_src->nodetree) {
+		/* Note: nodetree is *not* in bmain, however this specific case is handled at lower level
+		 *       (see BKE_libblock_copy_ex()). */
+		BKE_id_copy_ex(bmain, (ID *)wrld_src->nodetree, (ID **)&wrld_dst->nodetree, flag, false);
 	}
-	
-	BKE_previewimg_id_copy(&wrldn->id, &wrld->id);
 
-	BLI_listbase_clear(&wrldn->gpumaterial);
+	BLI_listbase_clear(&wrld_dst->gpumaterial);
 
-	BKE_id_copy_ensure_local(bmain, &wrld->id, &wrldn->id);
-
-	return wrldn;
+	if ((flag & LIB_ID_COPY_NO_PREVIEW) == 0) {
+		BKE_previewimg_id_copy(&wrld_dst->id, &wrld_src->id);
+	}
+	else {
+		wrld_dst->preview = NULL;
+	}
 }
 
-World *localize_world(World *wrld)
+World *BKE_world_copy(Main *bmain, const World *wrld)
 {
+	World *wrld_copy;
+	BKE_id_copy_ex(bmain, &wrld->id, (ID **)&wrld_copy, 0, false);
+	return wrld_copy;
+}
+
+World *BKE_world_localize(World *wrld)
+{
+	/* TODO replace with something like
+	 * 	World *wrld_copy;
+	 * 	BKE_id_copy_ex(bmain, &wrld->id, (ID **)&wrld_copy, LIB_ID_COPY_NO_MAIN | LIB_ID_COPY_NO_PREVIEW | LIB_ID_COPY_NO_USER_REFCOUNT, false);
+	 * 	return wrld_copy;
+	 *
+	 * ... Once f*** nodes are fully converted to that too :( */
+
 	World *wrldn;
 	int a;
-	
+
 	wrldn = BKE_libblock_copy_nolib(&wrld->id, false);
-	
+
 	for (a = 0; a < MAX_MTEX; a++) {
 		if (wrld->mtex[a]) {
-			wrldn->mtex[a] = MEM_mallocN(sizeof(MTex), "localize_world");
+			wrldn->mtex[a] = MEM_mallocN(sizeof(MTex), __func__);
 			memcpy(wrldn->mtex[a], wrld->mtex[a], sizeof(MTex));
 		}
 	}
 
 	if (wrld->nodetree)
 		wrldn->nodetree = ntreeLocalize(wrld->nodetree);
-	
+
 	wrldn->preview = NULL;
-	
+
 	BLI_listbase_clear(&wrldn->gpumaterial);
-	
+
 	return wrldn;
 }
 

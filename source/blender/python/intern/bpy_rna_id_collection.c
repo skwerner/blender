@@ -44,7 +44,7 @@
 #include "DNA_object_types.h"
 #include "DNA_key_types.h"
 
-#include "bpy_util.h"
+#include "bpy_capi_utils.h"
 #include "bpy_rna_id_collection.h"
 
 #include "../generic/py_capi_utils.h"
@@ -160,10 +160,9 @@ static PyObject *bpy_user_map(PyObject *UNUSED(self), PyObject *args, PyObject *
 	BPy_StructRNA *pyrna = (BPy_StructRNA *)self;
 	Main *bmain = pyrna->ptr.data;
 #else
-	Main *bmain = G.main;  /* XXX Ugly, but should work! */
+	Main *bmain = G_MAIN;  /* XXX Ugly, but should work! */
 #endif
 
-	static const char *kwlist[] = {"subset", "key_types", "value_types", NULL};
 	PyObject *subset = NULL;
 
 	PyObject *key_types = NULL;
@@ -173,9 +172,10 @@ static PyObject *bpy_user_map(PyObject *UNUSED(self), PyObject *args, PyObject *
 
 	PyObject *ret = NULL;
 
-
-	if (!PyArg_ParseTupleAndKeywords(
-	        args, kwds, "|O$O!O!:user_map", (char **)kwlist,
+	static const char *_keywords[] = {"subset", "key_types", "value_types", NULL};
+	static _PyArg_Parser _parser = {"|O$O!O!:user_map", _keywords, 0};
+	if (!_PyArg_ParseTupleAndKeywordsFast(
+	        args, kwds, &_parser,
 	        &subset,
 	        &PySet_Type, &key_types,
 	        &PySet_Type, &val_types))
@@ -230,7 +230,6 @@ static PyObject *bpy_user_map(PyObject *UNUSED(self), PyObject *args, PyObject *
 	lb_index = set_listbasepointers(bmain, lb_array);
 
 	while (lb_index--) {
-
 		if (val_types_bitmap && lb_array[lb_index]->first) {
 			if (!id_check_type(lb_array[lb_index]->first, val_types_bitmap)) {
 				continue;

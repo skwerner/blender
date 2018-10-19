@@ -81,6 +81,7 @@ struct ExportSettings {
 };
 
 class AbcExporter {
+	Main *m_bmain;
 	ExportSettings &m_settings;
 
 	const char *m_filename;
@@ -98,7 +99,7 @@ class AbcExporter {
 	std::vector<AbcObjectWriter *> m_shapes;
 
 public:
-	AbcExporter(Scene *scene, const char *filename, ExportSettings &settings);
+	AbcExporter(Main *bmain, Scene *scene, const char *filename, ExportSettings &settings);
 	~AbcExporter();
 
 	void operator()(Main *bmain, float &progress, bool &was_canceled);
@@ -113,7 +114,7 @@ private:
 	Alembic::Abc::TimeSamplingPtr createTimeSampling(double step);
 
 	void createTransformWritersHierarchy(EvaluationContext *eval_ctx);
-	AbcTransformWriter * createTransformWriter(Object *ob,  Object *parent, Object *dupliObParent);
+	AbcTransformWriter *createTransformWriter(Object *ob,  Object *parent, Object *dupliObParent);
 	void exploreTransform(EvaluationContext *eval_ctx, Object *ob, Object *parent, Object *dupliObParent = NULL);
 	void exploreObject(EvaluationContext *eval_ctx, Object *ob, Object *dupliObParent);
 	void createShapeWriters(EvaluationContext *eval_ctx);

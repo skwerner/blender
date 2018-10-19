@@ -90,11 +90,11 @@ class PHYSICS_PT_game_physics(PhysicsButtonsPanel, Panel):
             split = layout.split()
 
             col = split.column()
-            col.label(text="Linear velocity:")
+            col.label(text="Linear Velocity:")
             sub = col.column(align=True)
             sub.prop(game, "velocity_min", text="Minimum")
             sub.prop(game, "velocity_max", text="Maximum")
-            col.label(text="Angular velocity:")
+            col.label(text="Angular Velocity:")
             sub = col.column(align=True)
             sub.prop(game, "angular_velocity_min", text="Minimum")
             sub.prop(game, "angular_velocity_max", text="Maximum")
@@ -207,7 +207,7 @@ class PHYSICS_PT_game_collision_bounds(PhysicsButtonsPanel, Panel):
         game = context.object.game
         rd = context.scene.render
         return (rd.engine in cls.COMPAT_ENGINES) \
-                and (game.physics_type in {'SENSOR', 'STATIC', 'DYNAMIC', 'RIGID_BODY', 'CHARACTER', 'SOFT_BODY'})
+            and (game.physics_type in {'SENSOR', 'STATIC', 'DYNAMIC', 'RIGID_BODY', 'CHARACTER', 'SOFT_BODY'})
 
     def draw_header(self, context):
         game = context.active_object.game
@@ -248,7 +248,7 @@ class PHYSICS_PT_game_obstacles(PhysicsButtonsPanel, Panel):
         game = context.object.game
         rd = context.scene.render
         return (rd.engine in cls.COMPAT_ENGINES) \
-                and (game.physics_type in {'SENSOR', 'STATIC', 'DYNAMIC', 'RIGID_BODY', 'SOFT_BODY', 'CHARACTER', 'NO_COLLISION'})
+            and (game.physics_type in {'SENSOR', 'STATIC', 'DYNAMIC', 'RIGID_BODY', 'SOFT_BODY', 'CHARACTER', 'NO_COLLISION'})
 
     def draw_header(self, context):
         game = context.active_object.game

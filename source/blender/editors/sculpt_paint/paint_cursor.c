@@ -42,6 +42,7 @@
 #include "DNA_scene_types.h"
 #include "DNA_screen_types.h"
 #include "DNA_userdef_types.h"
+#include "DNA_view3d_types.h"
 
 #include "BKE_brush.h"
 #include "BKE_context.h"
@@ -150,7 +151,10 @@ typedef struct LoadTexData {
 	float radius;
 } LoadTexData;
 
-static void load_tex_task_cb_ex(void *userdata, void *UNUSED(userdata_chunck), const int j, const int thread_id)
+static void load_tex_task_cb_ex(
+        void *__restrict userdata,
+        const int j,
+        const ParallelRangeTLS *__restrict tls)
 {
 	LoadTexData *data = userdata;
 	Brush *br = data->br;
@@ -211,7 +215,7 @@ static void load_tex_task_cb_ex(void *userdata, void *UNUSED(userdata_chunck), c
 			if (col) {
 				float rgba[4];
 
-				paint_get_tex_pixel_col(mtex, x, y, rgba, pool, thread_id, convert_to_linear, colorspace);
+				paint_get_tex_pixel_col(mtex, x, y, rgba, pool, tls->thread_id, convert_to_linear, colorspace);
 
 				buffer[index * 4]     = rgba[0] * 255;
 				buffer[index * 4 + 1] = rgba[1] * 255;
@@ -219,7 +223,7 @@ static void load_tex_task_cb_ex(void *userdata, void *UNUSED(userdata_chunck), c
 				buffer[index * 4 + 3] = rgba[3] * 255;
 			}
 			else {
-				float avg = paint_get_tex_pixel(mtex, x, y, pool, thread_id);
+				float avg = paint_get_tex_pixel(mtex, x, y, pool, tls->thread_id);
 
 				avg += br->texture_sample_bias;
 
@@ -248,17 +252,18 @@ static int load_tex(Brush *br, ViewContext *vc, float zoom, bool col, bool prima
 	TexSnapshot *target;
 
 	MTex *mtex = (primary) ? &br->mtex : &br->mask_mtex;
-	OverlayControlFlags overlay_flags = BKE_paint_get_overlay_flags();
+	eOverlayControlFlags overlay_flags = BKE_paint_get_overlay_flags();
 	GLubyte *buffer = NULL;
 
 	int size;
 	bool refresh;
-	OverlayControlFlags invalid = (primary) ? (overlay_flags & PAINT_INVALID_OVERLAY_TEXTURE_PRIMARY) :
-	                                          (overlay_flags & PAINT_INVALID_OVERLAY_TEXTURE_SECONDARY);
-
+	eOverlayControlFlags invalid = (
+	        (primary) ?
+	        (overlay_flags & PAINT_INVALID_OVERLAY_TEXTURE_PRIMARY) :
+	        (overlay_flags & PAINT_INVALID_OVERLAY_TEXTURE_SECONDARY));
 	target = (primary) ? &primary_snap : &secondary_snap;
 
-	refresh = 
+	refresh =
 	    !target->overlay_texture ||
 	    (invalid != 0) ||
 	    !same_tex_snap(target, mtex, vc, col, zoom);
@@ -317,7 +322,9 @@ static int load_tex(Brush *br, ViewContext *vc, float zoom, bool col, bool prima
 		    .pool = pool, .size = size, .rotation = rotation, .radius = radius,
 		};
 
-		BLI_task_parallel_range_ex(0, size, &data, NULL, 0, load_tex_task_cb_ex, true, false);
+		ParallelRangeSettings settings;
+		BLI_parallel_range_settings_defaults(&settings);
+		BLI_task_parallel_range(0, size, &data, load_tex_task_cb_ex, &settings);
 
 		if (mtex->tex && mtex->tex->nodetree)
 			ntreeTexEndExecTree(mtex->tex->nodetree->execdata);
@@ -366,7 +373,10 @@ static int load_tex(Brush *br, ViewContext *vc, float zoom, bool col, bool prima
 	return 1;
 }
 
-static void load_tex_cursor_task_cb(void *userdata, const int j)
+static void load_tex_cursor_task_cb(
+        void *__restrict userdata,
+        const int j,
+        const ParallelRangeTLS *__restrict UNUSED(tls))
 {
 	LoadTexData *data = userdata;
 	Brush *br = data->br;
@@ -398,7 +408,7 @@ static int load_tex_cursor(Brush *br, ViewContext *vc, float zoom)
 {
 	bool init;
 
-	OverlayControlFlags overlay_flags = BKE_paint_get_overlay_flags();
+	eOverlayControlFlags overlay_flags = BKE_paint_get_overlay_flags();
 	GLubyte *buffer = NULL;
 
 	int size;
@@ -446,7 +456,9 @@ static int load_tex_cursor(Brush *br, ViewContext *vc, float zoom)
 		    .br = br, .buffer = buffer, .size = size,
 		};
 
-		BLI_task_parallel_range(0, size, &data, load_tex_cursor_task_cb, true);
+		ParallelRangeSettings settings;
+		BLI_parallel_range_settings_defaults(&settings);
+		BLI_task_parallel_range(0, size, &data, load_tex_cursor_task_cb, &settings);
 
 		if (!cursor_snap.overlay_texture)
 			glGenTextures(1, &cursor_snap.overlay_texture);
@@ -484,9 +496,10 @@ static int load_tex_cursor(Brush *br, ViewContext *vc, float zoom)
 
 
 
-static int project_brush_radius(ViewContext *vc,
-                                float radius,
-                                const float location[3])
+static int project_brush_radius(
+        ViewContext *vc,
+        float radius,
+        const float location[3])
 {
 	float view[3], nonortho[3], ortho[3], offset[3], p1[2], p2[2];
 
@@ -557,10 +570,8 @@ static bool sculpt_get_brush_geometry(
 	if (hit) {
 		Brush *brush = BKE_paint_brush(paint);
 
-		*pixel_radius =
-		        project_brush_radius(vc,
-		                             BKE_brush_unprojected_radius_get(scene, brush),
-		                             location);
+		*pixel_radius = project_brush_radius(
+		        vc, BKE_brush_unprojected_radius_get(scene, brush), location);
 
 		if (*pixel_radius == 0)
 			*pixel_radius = BKE_brush_size_get(scene, brush);
@@ -579,15 +590,18 @@ static bool sculpt_get_brush_geometry(
 
 /* Draw an overlay that shows what effect the brush's texture will
  * have on brush strength */
-static void paint_draw_tex_overlay(UnifiedPaintSettings *ups, Brush *brush,
-                                     ViewContext *vc, int x, int y, float zoom, bool col, bool primary)
+static void paint_draw_tex_overlay(
+        UnifiedPaintSettings *ups, Brush *brush,
+        ViewContext *vc, int x, int y, float zoom, bool col, bool primary)
 {
 	rctf quad;
 	/* check for overlay mode */
 
 	MTex *mtex = (primary) ? &brush->mtex : &brush->mask_mtex;
-	bool valid = (primary) ? (brush->overlay_flags & BRUSH_OVERLAY_PRIMARY) != 0 :
-	                         (brush->overlay_flags & BRUSH_OVERLAY_SECONDARY) != 0;
+	bool valid = (
+	        (primary) ?
+	        (brush->overlay_flags & BRUSH_OVERLAY_PRIMARY) != 0 :
+	        (brush->overlay_flags & BRUSH_OVERLAY_SECONDARY) != 0);
 	int overlay_alpha = (primary) ? brush->texture_overlay_alpha : brush->mask_overlay_alpha;
 
 	if (!(mtex->tex) || !((mtex->brush_map_mode == MTEX_MAP_MODE_STENCIL) ||
@@ -698,8 +712,9 @@ static void paint_draw_tex_overlay(UnifiedPaintSettings *ups, Brush *brush,
 
 /* Draw an overlay that shows what effect the brush's texture will
  * have on brush strength */
-static void paint_draw_cursor_overlay(UnifiedPaintSettings *ups, Brush *brush,
-                                      ViewContext *vc, int x, int y, float zoom)
+static void paint_draw_cursor_overlay(
+        UnifiedPaintSettings *ups, Brush *brush,
+        ViewContext *vc, int x, int y, float zoom)
 {
 	rctf quad;
 	/* check for overlay mode */
@@ -768,12 +783,13 @@ static void paint_draw_cursor_overlay(UnifiedPaintSettings *ups, Brush *brush,
 	}
 }
 
-static void paint_draw_alpha_overlay(UnifiedPaintSettings *ups, Brush *brush,
-                                     ViewContext *vc, int x, int y, float zoom, PaintMode mode)
+static void paint_draw_alpha_overlay(
+        UnifiedPaintSettings *ups, Brush *brush,
+        ViewContext *vc, int x, int y, float zoom, ePaintMode mode)
 {
 	/* color means that primary brush texture is colured and secondary is used for alpha/mask control */
 	bool col = ELEM(mode, ePaintTextureProjective, ePaintTexture2D, ePaintVertex) ? true : false;
-	OverlayControlFlags flags = BKE_paint_get_overlay_flags();
+	eOverlayControlFlags flags = BKE_paint_get_overlay_flags();
 	/* save lots of GL state
 	 * TODO: check on whether all of these are needed? */
 	glPushAttrib(GL_COLOR_BUFFER_BIT |
@@ -940,8 +956,9 @@ static void paint_draw_curve_cursor(Brush *brush)
 
 /* Special actions taken when paint cursor goes over mesh */
 /* TODO: sculpt only for now */
-static void paint_cursor_on_hit(UnifiedPaintSettings *ups, Brush *brush, ViewContext *vc,
-                                const float location[3])
+static void paint_cursor_on_hit(
+        UnifiedPaintSettings *ups, Brush *brush, ViewContext *vc,
+        const float location[3])
 {
 	float unprojected_radius, projected_radius;
 
@@ -956,10 +973,10 @@ static void paint_cursor_on_hit(UnifiedPaintSettings *ups, Brush *brush, ViewCon
 			else
 				projected_radius = BKE_brush_size_get(vc->scene, brush);
 		}
-	
+
 		/* convert brush radius from 2D to 3D */
-		unprojected_radius = paint_calc_object_space_radius(vc, location,
-		                                                    projected_radius);
+		unprojected_radius = paint_calc_object_space_radius(
+		        vc, location, projected_radius);
 
 		/* scale 3D brush radius by pressure */
 		if (ups->stroke_active && BKE_brush_use_size_pressure(vc->scene, brush))
@@ -970,7 +987,7 @@ static void paint_cursor_on_hit(UnifiedPaintSettings *ups, Brush *brush, ViewCon
 	}
 }
 
-static bool ommit_cursor_drawing(Paint *paint, PaintMode mode, Brush *brush)
+static bool ommit_cursor_drawing(Paint *paint, ePaintMode mode, Brush *brush)
 {
 	if (paint->flags & PAINT_SHOW_BRUSH) {
 		if (ELEM(mode, ePaintTexture2D, ePaintTextureProjective) && brush->imagepaint_tool == PAINT_TOOL_FILL) {
@@ -987,7 +1004,7 @@ static void paint_draw_cursor(bContext *C, int x, int y, void *UNUSED(unused))
 	UnifiedPaintSettings *ups = &scene->toolsettings->unified_paint_settings;
 	Paint *paint = BKE_paint_get_active_from_context(C);
 	Brush *brush = BKE_paint_brush(paint);
-	PaintMode mode = BKE_paintmode_get_active_from_context(C);
+	ePaintMode mode = BKE_paintmode_get_active_from_context(C);
 	ViewContext vc;
 	float final_radius;
 	float translation[2];
@@ -1000,16 +1017,20 @@ static void paint_draw_cursor(bContext *C, int x, int y, void *UNUSED(unused))
 
 	/* can't use stroke vc here because this will be called during
 	 * mouse over too, not just during a stroke */
-	view3d_set_viewcontext(C, &vc);
+	ED_view3d_viewcontext_init(C, &vc);
 
-	get_imapaint_zoom(C, &zoomx, &zoomy);
-	zoomx = max_ff(zoomx, zoomy);
+	if (vc.rv3d && (vc.rv3d->rflag & RV3D_NAVIGATING)) {
+		return;
+	}
 
 	/* skip everything and draw brush here */
 	if (brush->flag & BRUSH_CURVE) {
 		paint_draw_curve_cursor(brush);
 		return;
 	}
+
+	get_imapaint_zoom(C, &zoomx, &zoomy);
+	zoomx = max_ff(zoomx, zoomy);
 
 	/* set various defaults */
 	translation[0] = x;
@@ -1043,11 +1064,8 @@ static void paint_draw_cursor(bContext *C, int x, int y, void *UNUSED(unused))
 		/* check if brush is subtracting, use different color then */
 		/* TODO: no way currently to know state of pen flip or
 		 * invert key modifier without starting a stroke */
-		if (((ups->draw_inverted == 0) ^
-		     ((brush->flag & BRUSH_DIR_IN) == 0)) &&
-		    ELEM(brush->sculpt_tool, SCULPT_TOOL_DRAW,
-		          SCULPT_TOOL_INFLATE, SCULPT_TOOL_CLAY,
-		          SCULPT_TOOL_PINCH, SCULPT_TOOL_CREASE))
+		if (((ups->draw_inverted == 0) ^ ((brush->flag & BRUSH_DIR_IN) == 0)) &&
+		    BKE_brush_sculpt_has_secondary_color(brush))
 		{
 			outline_col = brush->sub_col;
 		}
@@ -1091,7 +1109,7 @@ static void paint_draw_cursor(bContext *C, int x, int y, void *UNUSED(unused))
 
 /* Public API */
 
-void paint_cursor_start(bContext *C, int (*poll)(bContext *C))
+void paint_cursor_start(bContext *C, bool (*poll)(bContext *C))
 {
 	Paint *p = BKE_paint_get_active_from_context(C);
 
@@ -1102,7 +1120,7 @@ void paint_cursor_start(bContext *C, int (*poll)(bContext *C))
 	BKE_paint_invalidate_overlay_all();
 }
 
-void paint_cursor_start_explicit(Paint *p, wmWindowManager *wm, int (*poll)(bContext *C))
+void paint_cursor_start_explicit(Paint *p, wmWindowManager *wm, bool (*poll)(bContext *C))
 {
 	if (p && !p->paint_cursor)
 		p->paint_cursor = WM_paint_cursor_activate(wm, poll, paint_draw_cursor, NULL);

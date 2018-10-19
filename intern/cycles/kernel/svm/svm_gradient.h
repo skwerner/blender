@@ -36,7 +36,7 @@ ccl_device float svm_gradient(float3 p, NodeGradientType type)
 	else if(type == NODE_BLEND_EASING) {
 		float r = fminf(fmaxf(x, 0.0f), 1.0f);
 		float t = r*r;
-		
+
 		return (3.0f*t - 2.0f*t*r);
 	}
 	else if(type == NODE_BLEND_DIAGONAL) {
@@ -46,7 +46,10 @@ ccl_device float svm_gradient(float3 p, NodeGradientType type)
 		return atan2f(y, x) / M_2PI_F + 0.5f;
 	}
 	else {
-		float r = fmaxf(1.0f - sqrtf(x*x + y*y + z*z), 0.0f);
+		/* Bias a little bit for the case where p is a unit length vector,
+		 * to get exactly zero instead of a small random value depending
+		 * on float precision. */
+		float r = fmaxf(0.999999f - sqrtf(x*x + y*y + z*z), 0.0f);
 
 		if(type == NODE_BLEND_QUADRATIC_SPHERE)
 			return r*r;
@@ -75,4 +78,3 @@ ccl_device void svm_node_tex_gradient(ShaderData *sd, float *stack, uint4 node)
 }
 
 CCL_NAMESPACE_END
-

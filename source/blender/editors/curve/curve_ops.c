@@ -4,7 +4,7 @@
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version. 
+ * of the License, or (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -18,7 +18,7 @@
  * The Original Code is Copyright (C) 2009 Blender Foundation.
  * All rights reserved.
  *
- * 
+ *
  * Contributor(s): Blender Foundation
  *
  * ***** END GPL LICENSE BLOCK *****
@@ -73,10 +73,10 @@ void ED_operatortypes_curve(void)
 
 	WM_operatortype_append(FONT_OT_change_character);
 	WM_operatortype_append(FONT_OT_change_spacing);
-	
+
 	WM_operatortype_append(FONT_OT_open);
 	WM_operatortype_append(FONT_OT_unlink);
-	
+
 	WM_operatortype_append(FONT_OT_textbox_add);
 	WM_operatortype_append(FONT_OT_textbox_remove);
 
@@ -94,23 +94,24 @@ void ED_operatortypes_curve(void)
 	WM_operatortype_append(CURVE_OT_spline_weight_set);
 	WM_operatortype_append(CURVE_OT_handle_type_set);
 	WM_operatortype_append(CURVE_OT_normals_make_consistent);
+	WM_operatortype_append(CURVE_OT_decimate);
 	WM_operatortype_append(CURVE_OT_shade_smooth);
 	WM_operatortype_append(CURVE_OT_shade_flat);
 	WM_operatortype_append(CURVE_OT_tilt_clear);
-	
+
 	WM_operatortype_append(CURVE_OT_primitive_bezier_curve_add);
 	WM_operatortype_append(CURVE_OT_primitive_bezier_circle_add);
 	WM_operatortype_append(CURVE_OT_primitive_nurbs_curve_add);
 	WM_operatortype_append(CURVE_OT_primitive_nurbs_circle_add);
 	WM_operatortype_append(CURVE_OT_primitive_nurbs_path_add);
-	
+
 	WM_operatortype_append(SURFACE_OT_primitive_nurbs_surface_curve_add);
 	WM_operatortype_append(SURFACE_OT_primitive_nurbs_surface_circle_add);
 	WM_operatortype_append(SURFACE_OT_primitive_nurbs_surface_surface_add);
 	WM_operatortype_append(SURFACE_OT_primitive_nurbs_surface_cylinder_add);
 	WM_operatortype_append(SURFACE_OT_primitive_nurbs_surface_sphere_add);
 	WM_operatortype_append(SURFACE_OT_primitive_nurbs_surface_torus_add);
-	
+
 	WM_operatortype_append(CURVE_OT_smooth);
 	WM_operatortype_append(CURVE_OT_smooth_weight);
 	WM_operatortype_append(CURVE_OT_smooth_radius);
@@ -167,10 +168,10 @@ void ED_keymap_curve(wmKeyConfig *keyconf)
 {
 	wmKeyMap *keymap;
 	wmKeyMapItem *kmi;
-	
-	keymap = WM_keymap_find(keyconf, "Font", 0, 0);
+
+	keymap = WM_keymap_ensure(keyconf, "Font", 0, 0);
 	keymap->poll = ED_operator_editfont;
-	
+
 	/* only set in editmode font, by space_view3d listener */
 	RNA_enum_set(WM_keymap_add_item(keymap, "FONT_OT_style_toggle", BKEY, KM_PRESS, KM_CTRL, 0)->ptr, "style", CU_CHINFO_BOLD);
 	RNA_enum_set(WM_keymap_add_item(keymap, "FONT_OT_style_toggle", IKEY, KM_PRESS, KM_CTRL, 0)->ptr, "style", CU_CHINFO_ITALIC);
@@ -178,9 +179,10 @@ void ED_keymap_curve(wmKeyConfig *keyconf)
 	RNA_enum_set(WM_keymap_add_item(keymap, "FONT_OT_style_toggle", PKEY, KM_PRESS, KM_CTRL, 0)->ptr, "style", CU_CHINFO_SMALLCAPS);
 
 	RNA_enum_set(WM_keymap_add_item(keymap, "FONT_OT_delete", DELKEY, KM_PRESS, 0, 0)->ptr, "type", DEL_NEXT_SEL);
+	RNA_enum_set(WM_keymap_add_item(keymap, "FONT_OT_delete", DELKEY, KM_PRESS, KM_CTRL, 0)->ptr, "type", DEL_NEXT_WORD);
 	RNA_enum_set(WM_keymap_add_item(keymap, "FONT_OT_delete", BACKSPACEKEY, KM_PRESS, 0, 0)->ptr, "type", DEL_PREV_SEL);
 	RNA_enum_set(WM_keymap_add_item(keymap, "FONT_OT_delete", BACKSPACEKEY, KM_PRESS, KM_SHIFT, 0)->ptr, "type", DEL_PREV_SEL); /* same as above [#26623] */
-	RNA_enum_set(WM_keymap_add_item(keymap, "FONT_OT_delete", BACKSPACEKEY, KM_PRESS, KM_CTRL, 0)->ptr, "type", DEL_ALL);
+	RNA_enum_set(WM_keymap_add_item(keymap, "FONT_OT_delete", BACKSPACEKEY, KM_PRESS, KM_CTRL, 0)->ptr, "type", DEL_PREV_WORD);
 
 	RNA_enum_set(WM_keymap_add_item(keymap, "FONT_OT_move", HOMEKEY, KM_PRESS, 0, 0)->ptr, "type", LINE_BEGIN);
 	RNA_enum_set(WM_keymap_add_item(keymap, "FONT_OT_move", ENDKEY, KM_PRESS, 0, 0)->ptr, "type", LINE_END);
@@ -227,16 +229,19 @@ void ED_keymap_curve(wmKeyConfig *keyconf)
 	RNA_boolean_set(kmi->ptr, "accent", true); /* accented characters */
 
 	/* only set in editmode curve, by space_view3d listener */
-	keymap = WM_keymap_find(keyconf, "Curve", 0, 0);
+	keymap = WM_keymap_ensure(keyconf, "Curve", 0, 0);
 	keymap->poll = ED_operator_editsurfcurve;
 
 	WM_keymap_add_menu(keymap, "INFO_MT_edit_curve_add", AKEY, KM_PRESS, KM_SHIFT, 0);
-	
+
 	WM_keymap_add_item(keymap, "CURVE_OT_handle_type_set", VKEY, KM_PRESS, 0, 0);
 
 	WM_keymap_add_item(keymap, "CURVE_OT_vertex_add", ACTIONMOUSE, KM_CLICK, KM_CTRL, 0);
 
 	kmi = WM_keymap_add_item(keymap, "CURVE_OT_draw", ACTIONMOUSE, KM_PRESS, KM_SHIFT, 0);
+	RNA_boolean_set(kmi->ptr, "wait_for_input", false);
+
+	kmi = WM_keymap_add_item(keymap, "CURVE_OT_draw", TABLET_STYLUS, KM_PRESS, KM_SHIFT, 0);
 	RNA_boolean_set(kmi->ptr, "wait_for_input", false);
 
 	kmi = WM_keymap_add_item(keymap, "CURVE_OT_select_all", AKEY, KM_PRESS, 0, 0);
@@ -284,7 +289,7 @@ void ED_keymap_curve(wmKeyConfig *keyconf)
 	WM_keymap_add_item(keymap, "CURVE_OT_normals_make_consistent", NKEY, KM_PRESS, KM_CTRL, 0);
 
 	WM_keymap_add_item(keymap, "OBJECT_OT_vertex_parent_set", PKEY, KM_PRESS, KM_CTRL, 0);
-	
+
 	WM_keymap_add_menu(keymap, "VIEW3D_MT_edit_curve_specials", WKEY, KM_PRESS, 0, 0);
 
 	/* menus */

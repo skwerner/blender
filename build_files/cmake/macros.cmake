@@ -51,7 +51,7 @@ endmacro()
 function(list_assert_duplicates
 	list_id
 	)
-	
+
 	# message(STATUS "list data: ${list_id}")
 
 	list(LENGTH list_id _len_before)
@@ -199,7 +199,7 @@ endfunction()
 # Support per-target CMake flags
 # Read from: CMAKE_C_FLAGS_**** (made upper case) when set.
 #
-# 'name' should alway match the target name,
+# 'name' should always match the target name,
 # use this macro before add_library or add_executable.
 #
 # Optionally takes an arg passed to set(), eg PARENT_SCOPE.
@@ -242,6 +242,13 @@ function(blender_add_lib__impl
 	# listed is helpful for IDE's (QtCreator/MSVC)
 	blender_source_group("${sources}")
 
+	#if enabled, set the FOLDER property for visual studio projects
+	if(WINDOWS_USE_VISUAL_STUDIO_FOLDERS)
+		get_filename_component(FolderDir ${CMAKE_CURRENT_SOURCE_DIR} DIRECTORY)
+		string(REPLACE ${CMAKE_SOURCE_DIR} "" FolderDir ${FolderDir})
+		set_target_properties(${name} PROPERTIES FOLDER ${FolderDir})
+	endif()
+
 	list_assert_duplicates("${sources}")
 	list_assert_duplicates("${includes}")
 	# Not for system includes because they can resolve to the same path
@@ -282,66 +289,73 @@ function(SETUP_LIBDIRS)
 	# NOTE: For all new libraries, use absolute library paths.
 	# This should eventually be phased out.
 
-	link_directories(${JPEG_LIBPATH} ${PNG_LIBPATH} ${ZLIB_LIBPATH} ${FREETYPE_LIBPATH})
+	if(NOT MSVC)
+		link_directories(${JPEG_LIBPATH} ${PNG_LIBPATH} ${ZLIB_LIBPATH} ${FREETYPE_LIBPATH})
 
-	if(WITH_PYTHON)  #  AND NOT WITH_PYTHON_MODULE  # WIN32 needs
-		link_directories(${PYTHON_LIBPATH})
-	endif()
-	if(WITH_SDL AND NOT WITH_SDL_DYNLOAD)
-		link_directories(${SDL_LIBPATH})
-	endif()
-	if(WITH_CODEC_FFMPEG)
-		link_directories(${FFMPEG_LIBPATH})
-	endif()
-	if(WITH_IMAGE_OPENEXR)
-		link_directories(${OPENEXR_LIBPATH})
-	endif()
-	if(WITH_IMAGE_TIFF)
-		link_directories(${TIFF_LIBPATH})
-	endif()
-	if(WITH_BOOST)
-		link_directories(${BOOST_LIBPATH})
-	endif()
-	if(WITH_OPENIMAGEIO)
-		link_directories(${OPENIMAGEIO_LIBPATH})
-	endif()
-	if(WITH_OPENCOLORIO)
-		link_directories(${OPENCOLORIO_LIBPATH})
-	endif()
-	if(WITH_OPENVDB)
-		link_directories(${OPENVDB_LIBPATH})
-	endif()
-	if(WITH_OPENAL)
-		link_directories(${OPENAL_LIBPATH})
-	endif()
-	if(WITH_JACK AND NOT WITH_JACK_DYNLOAD)
-		link_directories(${JACK_LIBPATH})
-	endif()
-	if(WITH_CODEC_SNDFILE)
-		link_directories(${SNDFILE_LIBPATH})
-	endif()
-	if(WITH_FFTW3)
-		link_directories(${FFTW3_LIBPATH})
-	endif()
-	if(WITH_OPENCOLLADA)
-		link_directories(${OPENCOLLADA_LIBPATH})
-		## Never set
-		# link_directories(${PCRE_LIBPATH})
-		# link_directories(${EXPAT_LIBPATH})
-	endif()
-	if(WITH_LLVM)
-		link_directories(${LLVM_LIBPATH})
-	endif()
+		if(WITH_PYTHON)  #  AND NOT WITH_PYTHON_MODULE  # WIN32 needs
+			link_directories(${PYTHON_LIBPATH})
+		endif()
+		if(WITH_SDL AND NOT WITH_SDL_DYNLOAD)
+			link_directories(${SDL_LIBPATH})
+		endif()
+		if(WITH_CODEC_FFMPEG)
+			link_directories(${FFMPEG_LIBPATH})
+		endif()
+		if(WITH_IMAGE_OPENEXR)
+			link_directories(${OPENEXR_LIBPATH})
+		endif()
+		if(WITH_IMAGE_TIFF)
+			link_directories(${TIFF_LIBPATH})
+		endif()
+		if(WITH_BOOST)
+			link_directories(${BOOST_LIBPATH})
+		endif()
+		if(WITH_OPENIMAGEIO)
+			link_directories(${OPENIMAGEIO_LIBPATH})
+		endif()
+		if(WITH_OPENCOLORIO)
+			link_directories(${OPENCOLORIO_LIBPATH})
+		endif()
+		if(WITH_OPENVDB)
+			link_directories(${OPENVDB_LIBPATH})
+		endif()
+		if(WITH_OPENAL)
+			link_directories(${OPENAL_LIBPATH})
+		endif()
+		if(WITH_JACK AND NOT WITH_JACK_DYNLOAD)
+			link_directories(${JACK_LIBPATH})
+		endif()
+		if(WITH_CODEC_SNDFILE)
+			link_directories(${SNDFILE_LIBPATH})
+		endif()
+		if(WITH_FFTW3)
+			link_directories(${FFTW3_LIBPATH})
+		endif()
+		if(WITH_OPENCOLLADA)
+			link_directories(${OPENCOLLADA_LIBPATH})
+			## Never set
+			# link_directories(${PCRE_LIBPATH})
+			# link_directories(${EXPAT_LIBPATH})
+		endif()
+		if(WITH_LLVM)
+			link_directories(${LLVM_LIBPATH})
+		endif()
 
-	if(WITH_ALEMBIC)
-		link_directories(${ALEMBIC_LIBPATH})
-		link_directories(${HDF5_LIBPATH})
-	endif()
+		if(WITH_ALEMBIC)
+			link_directories(${ALEMBIC_LIBPATH})
+			link_directories(${HDF5_LIBPATH})
+		endif()
 
-	if(WIN32 AND NOT UNIX)
-		link_directories(${PTHREADS_LIBPATH})
+		if(WIN32 AND NOT UNIX)
+			link_directories(${PTHREADS_LIBPATH})
+		endif()
 	endif()
 endfunction()
+
+macro(setup_platform_linker_flags)
+	set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${PLATFORM_LINKFLAGS}")
+	set(CMAKE_EXE_LINKER_FLAGS_DEBUG "${CMAKE_EXE_LINKER_FLAGS_DEBUG} ${PLATFORM_LINKFLAGS_DEBUG}")
+endmacro()
 
 function(setup_liblinks
 	target
@@ -403,9 +417,6 @@ function(setup_liblinks
 	if(WITH_SDL AND NOT WITH_SDL_DYNLOAD)
 		target_link_libraries(${target} ${SDL_LIBRARY})
 	endif()
-	if(WITH_CODEC_QUICKTIME)
-		target_link_libraries(${target} ${QUICKTIME_LIBRARIES})
-	endif()
 	if(WITH_IMAGE_TIFF)
 		target_link_libraries(${target} ${TIFF_LIBRARY})
 	endif()
@@ -419,7 +430,7 @@ function(setup_liblinks
 			target_link_libraries(${target} ${OPENSUBDIV_LIBRARIES})
 	endif()
 	if(WITH_OPENVDB)
-		target_link_libraries(${target} ${OPENVDB_LIBRARIES} ${TBB_LIBRARIES})
+		target_link_libraries(${target} ${OPENVDB_LIBRARIES} ${TBB_LIBRARIES} ${BLOSC_LIBRARIES})
 	endif()
 	if(WITH_CYCLES_OSL)
 		target_link_libraries(${target} ${OSL_LIBRARIES})
@@ -437,7 +448,7 @@ function(setup_liblinks
 	if(WITH_IMAGE_OPENEXR)
 		target_link_libraries(${target} ${OPENEXR_LIBRARIES})
 	endif()
-	if(WITH_IMAGE_OPENJPEG AND WITH_SYSTEM_OPENJPEG)
+	if(WITH_IMAGE_OPENJPEG)
 		target_link_libraries(${target} ${OPENJPEG_LIBRARIES})
 	endif()
 	if(WITH_CODEC_FFMPEG)
@@ -498,7 +509,7 @@ function(setup_liblinks
 		target_link_libraries(${target} ${GFLAGS_LIBRARIES})
 	endif()
 
-	# We put CLEW and CUEW here because OPENSUBDIV_LIBRARIES dpeends on them..
+	# We put CLEW and CUEW here because OPENSUBDIV_LIBRARIES depends on them..
 	if(WITH_CYCLES OR WITH_COMPOSITOR OR WITH_OPENSUBDIV)
 		target_link_libraries(${target} "extern_clew")
 		if(WITH_CUDA_DYNLOAD)
@@ -553,6 +564,8 @@ function(SETUP_BLENDER_SORTED_LIBS)
 	set(BLENDER_SORTED_LIBS
 		bf_windowmanager
 
+		bf_editor_undo
+
 		bf_editor_space_api
 		bf_editor_space_action
 		bf_editor_space_buttons
@@ -582,6 +595,7 @@ function(SETUP_BLENDER_SORTED_LIBS)
 		bf_editor_mesh
 		bf_editor_metaball
 		bf_editor_object
+		bf_editor_lattice
 		bf_editor_armature
 		bf_editor_physics
 		bf_editor_render
@@ -667,6 +681,7 @@ function(SETUP_BLENDER_SORTED_LIBS)
 		extern_sdlew
 
 		bf_intern_glew_mx
+		bf_intern_clog
 	)
 
 	if(NOT WITH_SYSTEM_GLOG)
@@ -713,14 +728,6 @@ function(SETUP_BLENDER_SORTED_LIBS)
 
 	if(WITH_IK_ITASC)
 		list(APPEND BLENDER_SORTED_LIBS bf_intern_itasc)
-	endif()
-
-	if(WITH_CODEC_QUICKTIME)
-		list(APPEND BLENDER_SORTED_LIBS bf_quicktime)
-	endif()
-
-	if(WITH_MOD_BOOLEAN)
-		list(APPEND BLENDER_SORTED_LIBS extern_carve)
 	endif()
 
 	if(WITH_GHOST_XDND)
@@ -805,7 +812,7 @@ macro(TEST_SSE_SUPPORT
 		endif()
 	elseif(CMAKE_C_COMPILER_ID MATCHES "Intel")
 		set(${_sse_flags} "")  # icc defaults to -msse
-		set(${_sse2_flags} "-msse2")
+		set(${_sse2_flags} "")  # icc defaults to -msse2
 	else()
 		message(WARNING "SSE flags for this compiler: '${CMAKE_C_COMPILER_ID}' not known")
 		set(${_sse_flags})
@@ -852,164 +859,6 @@ macro(message_first_run)
 	endif()
 endmacro()
 
-macro(TEST_UNORDERED_MAP_SUPPORT)
-	# - Detect unordered_map availability
-	# Test if a valid implementation of unordered_map exists
-	# and define the include path
-	# This module defines
-	#  HAVE_UNORDERED_MAP, whether unordered_map implementation was found
-	#
-	#  HAVE_STD_UNORDERED_MAP_HEADER, <unordered_map.h> was found
-	#  HAVE_UNORDERED_MAP_IN_STD_NAMESPACE, unordered_map is in namespace std
-	#  HAVE_UNORDERED_MAP_IN_TR1_NAMESPACE, unordered_map is in namespace std::tr1
-	#
-	#  UNORDERED_MAP_INCLUDE_PREFIX, include path prefix for unordered_map, if found
-	#  UNORDERED_MAP_NAMESPACE, namespace for unordered_map, if found
-
-	include(CheckIncludeFileCXX)
-
-	# Workaround for newer GCC (6.x+) where C++11 was enabled by default, which lead us
-	# to a situation when there is <unordered_map> include but which can't be used uless
-	# C++11 is enabled.
-	if(CMAKE_COMPILER_IS_GNUCC AND (NOT "${CMAKE_C_COMPILER_VERSION}" VERSION_LESS "6.0") AND (NOT WITH_CXX11))
-		set(HAVE_STD_UNORDERED_MAP_HEADER False)
-	else()
-		CHECK_INCLUDE_FILE_CXX("unordered_map" HAVE_STD_UNORDERED_MAP_HEADER)
-	endif()
-	if(HAVE_STD_UNORDERED_MAP_HEADER)
-		# Even so we've found unordered_map header file it doesn't
-		# mean unordered_map and unordered_set will be declared in
-		# std namespace.
-		#
-		# Namely, MSVC 2008 have unordered_map header which declares
-		# unordered_map class in std::tr1 namespace. In order to support
-		# this, we do extra check to see which exactly namespace is
-		# to be used.
-
-		include(CheckCXXSourceCompiles)
-		CHECK_CXX_SOURCE_COMPILES("#include <unordered_map>
-		                          int main() {
-		                            std::unordered_map<int, int> map;
-		                            return 0;
-		                          }"
-		                          HAVE_UNORDERED_MAP_IN_STD_NAMESPACE)
-		if(HAVE_UNORDERED_MAP_IN_STD_NAMESPACE)
-			message_first_run(STATUS "Found unordered_map/set in std namespace.")
-
-			set(HAVE_UNORDERED_MAP "TRUE")
-			set(UNORDERED_MAP_INCLUDE_PREFIX "")
-			set(UNORDERED_MAP_NAMESPACE "std")
-		else()
-			CHECK_CXX_SOURCE_COMPILES("#include <unordered_map>
-			                          int main() {
-			                            std::tr1::unordered_map<int, int> map;
-			                            return 0;
-			                          }"
-			                          HAVE_UNORDERED_MAP_IN_TR1_NAMESPACE)
-			if(HAVE_UNORDERED_MAP_IN_TR1_NAMESPACE)
-				message_first_run(STATUS "Found unordered_map/set in std::tr1 namespace.")
-
-				set(HAVE_UNORDERED_MAP "TRUE")
-				set(UNORDERED_MAP_INCLUDE_PREFIX "")
-				set(UNORDERED_MAP_NAMESPACE "std::tr1")
-			else()
-				message_first_run(STATUS "Found <unordered_map> but cannot find either std::unordered_map "
-				                  "or std::tr1::unordered_map.")
-			endif()
-		endif()
-	else()
-		CHECK_INCLUDE_FILE_CXX("tr1/unordered_map" HAVE_UNORDERED_MAP_IN_TR1_NAMESPACE)
-		if(HAVE_UNORDERED_MAP_IN_TR1_NAMESPACE)
-			message_first_run(STATUS "Found unordered_map/set in std::tr1 namespace.")
-
-			set(HAVE_UNORDERED_MAP "TRUE")
-			set(UNORDERED_MAP_INCLUDE_PREFIX "tr1")
-			set(UNORDERED_MAP_NAMESPACE "std::tr1")
-		else()
-			message_first_run(STATUS "Unable to find <unordered_map> or <tr1/unordered_map>. ")
-		endif()
-	endif()
-endmacro()
-
-macro(TEST_SHARED_PTR_SUPPORT)
-	# This check are coming from Ceres library.
-	#
-	# Find shared pointer header and namespace.
-	#
-	# This module defines the following variables:
-	#
-	# SHARED_PTR_FOUND: TRUE if shared_ptr found.
-	# SHARED_PTR_TR1_MEMORY_HEADER: True if <tr1/memory> header is to be used
-	# for the shared_ptr object, otherwise use <memory>.
-	# SHARED_PTR_TR1_NAMESPACE: TRUE if shared_ptr is defined in std::tr1 namespace,
-	# otherwise it's assumed to be defined in std namespace.
-
-	include(CheckIncludeFileCXX)
-	include(CheckCXXSourceCompiles)
-	set(SHARED_PTR_FOUND FALSE)
-	# Workaround for newer GCC (6.x+) where C++11 was enabled by default, which lead us
-	# to a situation when there is <unordered_map> include but which can't be used uless
-	# C++11 is enabled.
-	if(CMAKE_COMPILER_IS_GNUCC AND (NOT "${CMAKE_C_COMPILER_VERSION}" VERSION_LESS "6.0") AND (NOT WITH_CXX11))
-		set(HAVE_STD_MEMORY_HEADER False)
-	else()
-		CHECK_INCLUDE_FILE_CXX(memory HAVE_STD_MEMORY_HEADER)
-	endif()
-	if(HAVE_STD_MEMORY_HEADER)
-		# Finding the memory header doesn't mean that shared_ptr is in std
-		# namespace.
-		#
-		# In particular, MSVC 2008 has shared_ptr declared in std::tr1.  In
-		# order to support this, we do an extra check to see which namespace
-		# should be used.
-		CHECK_CXX_SOURCE_COMPILES("#include <memory>
-		                           int main() {
-		                             std::shared_ptr<int> int_ptr;
-		                             return 0;
-		                           }"
-		                          HAVE_SHARED_PTR_IN_STD_NAMESPACE)
-
-		if(HAVE_SHARED_PTR_IN_STD_NAMESPACE)
-			message_first_run("-- Found shared_ptr in std namespace using <memory> header.")
-			set(SHARED_PTR_FOUND TRUE)
-		else()
-			CHECK_CXX_SOURCE_COMPILES("#include <memory>
-			                           int main() {
-			                           std::tr1::shared_ptr<int> int_ptr;
-			                           return 0;
-			                           }"
-			                          HAVE_SHARED_PTR_IN_TR1_NAMESPACE)
-			if(HAVE_SHARED_PTR_IN_TR1_NAMESPACE)
-				message_first_run("-- Found shared_ptr in std::tr1 namespace using <memory> header.")
-				set(SHARED_PTR_TR1_NAMESPACE TRUE)
-				set(SHARED_PTR_FOUND TRUE)
-			endif()
-		endif()
-	endif()
-
-	if(NOT SHARED_PTR_FOUND)
-		# Further, gcc defines shared_ptr in std::tr1 namespace and
-		# <tr1/memory> is to be included for this. And what makes things
-		# even more tricky is that gcc does have <memory> header, so
-		# all the checks above wouldn't find shared_ptr.
-		CHECK_INCLUDE_FILE_CXX("tr1/memory" HAVE_TR1_MEMORY_HEADER)
-		if(HAVE_TR1_MEMORY_HEADER)
-			CHECK_CXX_SOURCE_COMPILES("#include <tr1/memory>
-			                           int main() {
-			                           std::tr1::shared_ptr<int> int_ptr;
-			                           return 0;
-			                           }"
-			                           HAVE_SHARED_PTR_IN_TR1_NAMESPACE_FROM_TR1_MEMORY_HEADER)
-			if(HAVE_SHARED_PTR_IN_TR1_NAMESPACE_FROM_TR1_MEMORY_HEADER)
-				message_first_run("-- Found shared_ptr in std::tr1 namespace using <tr1/memory> header.")
-				set(SHARED_PTR_TR1_MEMORY_HEADER TRUE)
-				set(SHARED_PTR_TR1_NAMESPACE TRUE)
-				set(SHARED_PTR_FOUND TRUE)
-			endif()
-		endif()
-	endif()
-endmacro()
-
 # when we have warnings as errors applied globally this
 # needs to be removed for some external libs which we dont maintain.
 
@@ -1034,10 +883,16 @@ macro(remove_cc_flag
 
 endmacro()
 
-macro(add_cc_flag
+macro(add_c_flag
 	flag)
 
 	set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${flag}")
+	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${flag}")
+endmacro()
+
+macro(add_cxx_flag
+	flag)
+
 	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${flag}")
 endmacro()
 
@@ -1063,7 +918,8 @@ macro(remove_strict_flags)
 		)
 
 		# negate flags implied by '-Wall'
-		add_cc_flag("${CC_REMOVE_STRICT_FLAGS}")
+		add_c_flag("${C_REMOVE_STRICT_FLAGS}")
+		add_cxx_flag("${CXX_REMOVE_STRICT_FLAGS}")
 	endif()
 
 	if(CMAKE_C_COMPILER_ID MATCHES "Clang")
@@ -1075,7 +931,8 @@ macro(remove_strict_flags)
 		)
 
 		# negate flags implied by '-Wall'
-		add_cc_flag("${CC_REMOVE_STRICT_FLAGS}")
+		add_c_flag("${C_REMOVE_STRICT_FLAGS}")
+		add_cxx_flag("${CXX_REMOVE_STRICT_FLAGS}")
 	endif()
 
 	if(MSVC)
@@ -1105,33 +962,46 @@ endmacro()
 # note, we can only append flags on a single file so we need to negate the options.
 # at the moment we cant shut up ffmpeg deprecations, so use this, but will
 # probably add more removals here.
-macro(remove_strict_flags_file
+macro(remove_strict_c_flags_file
 	filenames)
-
 	foreach(_SOURCE ${ARGV})
-
 		if(CMAKE_COMPILER_IS_GNUCC OR
-		  (CMAKE_C_COMPILER_ID MATCHES "Clang"))
-
+		   (CMAKE_C_COMPILER_ID MATCHES "Clang"))
 			set_source_files_properties(${_SOURCE}
 				PROPERTIES
-					COMPILE_FLAGS "${CC_REMOVE_STRICT_FLAGS}"
+					COMPILE_FLAGS "${C_REMOVE_STRICT_FLAGS}"
 			)
 		endif()
-
 		if(MSVC)
 			# TODO
 		endif()
-
 	endforeach()
-
 	unset(_SOURCE)
+endmacro()
 
+macro(remove_strict_cxx_flags_file
+	filenames)
+	remove_strict_c_flags_file(${filenames} ${ARHV})
+	foreach(_SOURCE ${ARGV})
+		if(CMAKE_COMPILER_IS_GNUCC OR
+		   (CMAKE_CXX_COMPILER_ID MATCHES "Clang"))
+			set_source_files_properties(${_SOURCE}
+				PROPERTIES
+					COMPILE_FLAGS "${CXX_REMOVE_STRICT_FLAGS}"
+			)
+		endif()
+		if(MSVC)
+			# TODO
+		endif()
+	endforeach()
+	unset(_SOURCE)
 endmacro()
 
 # External libs may need 'signed char' to be default.
 macro(remove_cc_flag_unsigned_char)
-	if(CMAKE_C_COMPILER_ID MATCHES "^(GNU|Clang|Intel)$")
+	if(CMAKE_COMPILER_IS_GNUCC OR
+	   (CMAKE_C_COMPILER_ID MATCHES "Clang") OR
+	   (CMAKE_C_COMPILER_ID MATCHES "Intel"))
 		remove_cc_flag("-funsigned-char")
 	elseif(MSVC)
 		remove_cc_flag("/J")
@@ -1362,6 +1232,8 @@ function(data_to_c_simple
 	get_filename_component(_file_to   ${CMAKE_CURRENT_BINARY_DIR}/${file_from}.c REALPATH)
 
 	list(APPEND ${list_to_add} ${_file_to})
+	source_group(Generated FILES ${_file_to})
+	list(APPEND ${list_to_add} ${file_from})
 	set(${list_to_add} ${${list_to_add}} PARENT_SCOPE)
 
 	get_filename_component(_file_to_path ${_file_to} PATH)
@@ -1377,7 +1249,7 @@ endfunction()
 
 # macro for converting pixmap directory to a png and then a c file
 function(data_to_c_simple_icons
-	path_from
+	path_from icon_prefix icon_names
 	list_to_add
 	)
 
@@ -1395,8 +1267,11 @@ function(data_to_c_simple_icons
 
 	get_filename_component(_file_to_path ${_file_to} PATH)
 
-	# ideally we wouldn't glob, but storing all names for all pixmaps is a bit heavy
-	file(GLOB _icon_files "${path_from}/*.dat")
+	# Construct a list of absolute paths from input
+	set(_icon_files)
+	foreach(_var ${icon_names})
+		list(APPEND _icon_files "${_path_from_abs}/${icon_prefix}${_var}.dat")
+	endforeach()
 
 	add_custom_command(
 		OUTPUT  ${_file_from} ${_file_to}
@@ -1508,6 +1383,7 @@ function(find_python_package
 		  PATH_SUFFIXES
 		    site-packages
 		    dist-packages
+		    vendor-packages
 		   NO_DEFAULT_PATH
 		)
 
@@ -1518,6 +1394,8 @@ function(find_python_package
 				"'${PYTHON_LIBPATH}/python${_PY_VER_MAJOR}/site-packages/${package}', "
 				"'${PYTHON_LIBPATH}/python${PYTHON_VERSION}/dist-packages/${package}', "
 				"'${PYTHON_LIBPATH}/python${_PY_VER_MAJOR}/dist-packages/${package}', "
+				"'${PYTHON_LIBPATH}/python${PYTHON_VERSION}/vendor-packages/${package}', "
+				"'${PYTHON_LIBPATH}/python${_PY_VER_MAJOR}/vendor-packages/${package}', "
 				"\n"
 				"The 'WITH_PYTHON_INSTALL_${_upper_package}' option will be ignored when installing Python.\n"
 				"The build will be usable, only add-ons that depend on this package won't be functional."
@@ -1551,11 +1429,11 @@ macro(openmp_delayload
 				SET_TARGET_PROPERTIES(${projectname} PROPERTIES LINK_FLAGS_DEBUG "/DELAYLOAD:${OPENMP_DLL_NAME}d.dll delayimp.lib")
 				SET_TARGET_PROPERTIES(${projectname} PROPERTIES LINK_FLAGS_RELWITHDEBINFO "/DELAYLOAD:${OPENMP_DLL_NAME}.dll delayimp.lib")
 				SET_TARGET_PROPERTIES(${projectname} PROPERTIES LINK_FLAGS_MINSIZEREL "/DELAYLOAD:${OPENMP_DLL_NAME}.dll delayimp.lib")
-			endif(WITH_OPENMP)
-		endif(MSVC)
+			endif()
+		endif()
 endmacro()
 
-MACRO(WINDOWS_SIGN_TARGET target)
+macro(WINDOWS_SIGN_TARGET target)
 	if(WITH_WINDOWS_CODESIGN)
 		if(!SIGNTOOL_EXE)
 			error("Codesigning is enabled, but signtool is not found")
@@ -1576,4 +1454,4 @@ MACRO(WINDOWS_SIGN_TARGET target)
 			)
 		endif()
 	endif()
-ENDMACRO()
+endmacro()

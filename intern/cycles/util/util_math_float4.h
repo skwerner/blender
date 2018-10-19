@@ -38,6 +38,7 @@ ccl_device_inline float4 operator+(const float4& a, const float4& b);
 ccl_device_inline float4 operator-(const float4& a, const float4& b);
 ccl_device_inline float4 operator+=(float4& a, const float4& b);
 ccl_device_inline float4 operator*=(float4& a, const float4& b);
+ccl_device_inline float4 operator*=(float4& a, float f);
 ccl_device_inline float4 operator/=(float4& a, float f);
 
 ccl_device_inline int4 operator<(const float4& a, const float4& b);
@@ -48,22 +49,30 @@ ccl_device_inline bool operator==(const float4& a, const float4& b);
 ccl_device_inline float dot(const float4& a, const float4& b);
 ccl_device_inline float len_squared(const float4& a);
 ccl_device_inline float4 rcp(const float4& a);
+ccl_device_inline float4 sqrt(const float4& a);
+ccl_device_inline float4 sqr(const float4& a);
 ccl_device_inline float4 cross(const float4& a, const float4& b);
 ccl_device_inline bool is_zero(const float4& a);
-ccl_device_inline float reduce_add(const float4& a);
 ccl_device_inline float average(const float4& a);
 ccl_device_inline float len(const float4& a);
 ccl_device_inline float4 normalize(const float4& a);
 ccl_device_inline float4 safe_normalize(const float4& a);
 ccl_device_inline float4 min(const float4& a, const float4& b);
 ccl_device_inline float4 max(const float4& a, const float4& b);
+ccl_device_inline float4 clamp(const float4& a, const float4& mn, const float4& mx);
+ccl_device_inline float4 fabs(const float4& a);
 #endif  /* !__KERNEL_OPENCL__*/
 
 #ifdef __KERNEL_SSE__
 template<size_t index_0, size_t index_1, size_t index_2, size_t index_3>
 __forceinline const float4 shuffle(const float4& b);
+template<size_t index_0, size_t index_1, size_t index_2, size_t index_3>
+__forceinline const float4 shuffle(const float4& a, const float4& b);
 
 template<> __forceinline const float4 shuffle<0, 1, 0, 1>(const float4& b);
+
+template<> __forceinline const float4 shuffle<0, 1, 0, 1>(const float4& a, const float4& b);
+template<> __forceinline const float4 shuffle<2, 3, 2, 3>(const float4& a, const float4& b);
 
 #  ifdef __KERNEL_SSE3__
 template<> __forceinline const float4 shuffle<0, 0, 2, 2>(const float4& b);
@@ -77,9 +86,7 @@ ccl_device_inline float4 select(const int4& mask,
                                 const float4& b);
 ccl_device_inline float4 reduce_min(const float4& a);
 ccl_device_inline float4 reduce_max(const float4& a);
-#  if 0
 ccl_device_inline float4 reduce_add(const float4& a);
-#  endif
 #endif  /* !__KERNEL_GPU__ */
 
 /*******************************************************************************
@@ -128,7 +135,7 @@ ccl_device_inline float4 operator/(const float4& a, float f)
 ccl_device_inline float4 operator/(const float4& a, const float4& b)
 {
 #ifdef __KERNEL_SSE__
-	return a * rcp(b);
+	return float4(_mm_div_ps(a.m128, b.m128));
 #else
 	return make_float4(a.x/b.x, a.y/b.y, a.z/b.z, a.w/b.w);
 #endif
@@ -163,6 +170,11 @@ ccl_device_inline float4 operator*=(float4& a, const float4& b)
 	return a = a * b;
 }
 
+ccl_device_inline float4 operator*=(float4& a, float f)
+{
+	return a = a * f;
+}
+
 ccl_device_inline float4 operator/=(float4& a, float f)
 {
 	return a = a / f;
@@ -171,8 +183,7 @@ ccl_device_inline float4 operator/=(float4& a, float f)
 ccl_device_inline int4 operator<(const float4& a, const float4& b)
 {
 #ifdef __KERNEL_SSE__
-	/* TODO(sergey): avoid cvt. */
-	return int4(_mm_cvtps_epi32(_mm_cmplt_ps(a.m128, b.m128)));
+	return int4(_mm_castps_si128(_mm_cmplt_ps(a.m128, b.m128)));
 #else
 	return make_int4(a.x < b.x, a.y < b.y, a.z < b.z, a.w < b.w);
 #endif
@@ -181,8 +192,7 @@ ccl_device_inline int4 operator<(const float4& a, const float4& b)
 ccl_device_inline int4 operator>=(const float4& a, const float4& b)
 {
 #ifdef __KERNEL_SSE__
-	/* TODO(sergey): avoid cvt. */
-	return int4(_mm_cvtps_epi32(_mm_cmpge_ps(a.m128, b.m128)));
+	return int4(_mm_castps_si128(_mm_cmpge_ps(a.m128, b.m128)));
 #else
 	return make_int4(a.x >= b.x, a.y >= b.y, a.z >= b.z, a.w >= b.w);
 #endif
@@ -191,8 +201,7 @@ ccl_device_inline int4 operator>=(const float4& a, const float4& b)
 ccl_device_inline int4 operator<=(const float4& a, const float4& b)
 {
 #ifdef __KERNEL_SSE__
-	/* TODO(sergey): avoid cvt. */
-	return int4(_mm_cvtps_epi32(_mm_cmple_ps(a.m128, b.m128)));
+	return int4(_mm_castps_si128(_mm_cmple_ps(a.m128, b.m128)));
 #else
 	return make_int4(a.x <= b.x, a.y <= b.y, a.z <= b.z, a.w <= b.w);
 #endif
@@ -224,12 +233,28 @@ ccl_device_inline float len_squared(const float4& a)
 ccl_device_inline float4 rcp(const float4& a)
 {
 #ifdef __KERNEL_SSE__
-	float4 r(_mm_rcp_ps(a.m128));
-	return float4(_mm_sub_ps(_mm_add_ps(r, r),
-	                         _mm_mul_ps(_mm_mul_ps(r, r), a)));
+	/* Don't use _mm_rcp_ps due to poor precision. */
+	return float4(_mm_div_ps(_mm_set_ps1(1.0f), a.m128));
 #else
 	return make_float4(1.0f/a.x, 1.0f/a.y, 1.0f/a.z, 1.0f/a.w);
 #endif
+}
+
+ccl_device_inline float4 sqrt(const float4& a)
+{
+#ifdef __KERNEL_SSE__
+	return float4(_mm_sqrt_ps(a.m128));
+#else
+	return make_float4(sqrtf(a.x),
+	                   sqrtf(a.y),
+	                   sqrtf(a.z),
+	                   sqrtf(a.w));
+#endif
+}
+
+ccl_device_inline float4 sqr(const float4& a)
+{
+	return a * a;
 }
 
 ccl_device_inline float4 cross(const float4& a, const float4& b)
@@ -254,20 +279,25 @@ ccl_device_inline bool is_zero(const float4& a)
 #endif
 }
 
-ccl_device_inline float reduce_add(const float4& a)
+ccl_device_inline float4 reduce_add(const float4& a)
 {
 #ifdef __KERNEL_SSE__
+#  ifdef __KERNEL_SSE3__
+    float4 h(_mm_hadd_ps(a.m128, a.m128));
+    return float4( _mm_hadd_ps(h.m128, h.m128));
+#  else
 	float4 h(shuffle<1,0,3,2>(a) + a);
-	/* TODO(sergey): Investigate efficiency. */
-	return _mm_cvtss_f32(shuffle<2,3,0,1>(h) + h);
+	return  shuffle<2,3,0,1>(h) + h;
+#  endif
 #else
-	return ((a.x + a.y) + (a.z + a.w));
+	float sum = (a.x + a.y) + (a.z + a.w);
+	return make_float4(sum, sum, sum, sum);
 #endif
 }
 
 ccl_device_inline float average(const float4& a)
 {
-	return reduce_add(a) * 0.25f;
+	return reduce_add(a).x * 0.25f;
 }
 
 ccl_device_inline float len(const float4& a)
@@ -309,6 +339,23 @@ ccl_device_inline float4 max(const float4& a, const float4& b)
 	                   max(a.w, b.w));
 #endif
 }
+
+ccl_device_inline float4 clamp(const float4& a, const float4& mn, const float4& mx)
+{
+	return min(max(a, mn), mx);
+}
+
+ccl_device_inline float4 fabs(const float4& a)
+{
+#ifdef __KERNEL_SSE__
+	return float4(_mm_and_ps(a.m128, _mm_castsi128_ps(_mm_set1_epi32(0x7fffffff))));
+#else
+	return make_float4(fabsf(a.x),
+	                   fabsf(a.y),
+	                   fabsf(a.z),
+	                   fabsf(a.w));
+#endif
+}
 #endif  /* !__KERNEL_OPENCL__*/
 
 #ifdef __KERNEL_SSE__
@@ -320,9 +367,26 @@ __forceinline const float4 shuffle(const float4& b)
 	                          _MM_SHUFFLE(index_3, index_2, index_1, index_0))));
 }
 
+template<size_t index_0, size_t index_1, size_t index_2, size_t index_3>
+__forceinline const float4 shuffle(const float4& a, const float4& b)
+{
+	return float4(_mm_shuffle_ps(a.m128, b.m128,
+	                             _MM_SHUFFLE(index_3, index_2, index_1, index_0)));
+}
+
 template<> __forceinline const float4 shuffle<0, 1, 0, 1>(const float4& b)
 {
 	return float4(_mm_castpd_ps(_mm_movedup_pd(_mm_castps_pd(b))));
+}
+
+template<> __forceinline const float4 shuffle<0, 1, 0, 1>(const float4& a, const float4& b)
+{
+	return float4(_mm_movelh_ps(a.m128, b.m128));
+}
+
+template<> __forceinline const float4 shuffle<2, 3, 2, 3>(const float4& a, const float4& b)
+{
+	return float4(_mm_movehl_ps(b.m128, a.m128));
 }
 
 #  ifdef __KERNEL_SSE3__
@@ -344,15 +408,20 @@ ccl_device_inline float4 select(const int4& mask,
                                 const float4& b)
 {
 #ifdef __KERNEL_SSE__
-	/* TODO(sergey): avoid cvt. */
-	return float4(_mm_or_ps(_mm_and_ps(_mm_cvtepi32_ps(mask), a),
-	                        _mm_andnot_ps(_mm_cvtepi32_ps(mask), b)));
+	return float4(_mm_blendv_ps(b.m128, a.m128, _mm_castsi128_ps(mask.m128)));
 #else
 	return make_float4((mask.x)? a.x: b.x,
 	                   (mask.y)? a.y: b.y,
 	                   (mask.z)? a.z: b.z,
 	                   (mask.w)? a.w: b.w);
 #endif
+}
+
+ccl_device_inline float4 mask(const int4& mask,
+                              const float4& a)
+{
+	/* Replace elements of x with zero where mask isn't set. */
+	return select(mask, a, make_float4(0.0f));
 }
 
 ccl_device_inline float4 reduce_min(const float4& a)
@@ -375,17 +444,15 @@ ccl_device_inline float4 reduce_max(const float4& a)
 #endif
 }
 
-#if 0
-ccl_device_inline float4 reduce_add(const float4& a)
+ccl_device_inline float4 load_float4(const float *v)
 {
 #ifdef __KERNEL_SSE__
-	float4 h = shuffle<1,0,3,2>(a) + a;
-	return shuffle<2,3,0,1>(h) + h;
+	return float4(_mm_loadu_ps(v));
 #else
-	return make_float4((a.x + a.y) + (a.z + a.w));
+	return make_float4(v[0], v[1], v[2], v[3]);
 #endif
 }
-#endif
+
 #endif  /* !__KERNEL_GPU__ */
 
 CCL_NAMESPACE_END

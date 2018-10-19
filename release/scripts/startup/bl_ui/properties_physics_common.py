@@ -79,7 +79,7 @@ class PHYSICS_PT_add(PhysicButtonsPanel, Panel):
 
         col = split.column()
 
-        if obj.type in {'MESH', 'LATTICE', 'CURVE'}:
+        if obj.type in {'MESH', 'LATTICE', 'CURVE', 'SURFACE', 'FONT'}:
             physics_add(self, col, context.soft_body, "Soft Body", 'SOFT_BODY', 'MOD_SOFT', True)
 
         if obj.type == 'MESH':
@@ -275,7 +275,7 @@ def basic_force_field_settings_ui(self, context, field):
     elif field.type == 'HARMONIC':
         col.prop(field, "use_multiple_springs")
     if field.type == 'FORCE':
-        col.prop(field, "use_gravity_falloff",  text="Gravitation")
+        col.prop(field, "use_gravity_falloff", text="Gravitation")
 
     split = layout.split()
 

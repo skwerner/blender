@@ -21,10 +21,10 @@
 import bpy
 from bpy.types import Operator
 from bpy.props import (
-        StringProperty,
-        BoolProperty,
-        CollectionProperty,
-        )
+    BoolProperty,
+    CollectionProperty,
+    StringProperty,
+)
 
 # ########## Datablock previews... ##########
 
@@ -38,59 +38,59 @@ class WM_OT_previews_batch_generate(Operator):
     # -----------
     # File props.
     files = CollectionProperty(
-            type=bpy.types.OperatorFileListElement,
-            options={'HIDDEN', 'SKIP_SAVE'},
-            )
+        type=bpy.types.OperatorFileListElement,
+        options={'HIDDEN', 'SKIP_SAVE'},
+    )
 
     directory = StringProperty(
-            maxlen=1024,
-            subtype='FILE_PATH',
-            options={'HIDDEN', 'SKIP_SAVE'},
-            )
+        maxlen=1024,
+        subtype='FILE_PATH',
+        options={'HIDDEN', 'SKIP_SAVE'},
+    )
 
     # Show only images/videos, and directories!
     filter_blender = BoolProperty(
-            default=True,
-            options={'HIDDEN', 'SKIP_SAVE'},
-            )
+        default=True,
+        options={'HIDDEN', 'SKIP_SAVE'},
+    )
     filter_folder = BoolProperty(
-            default=True,
-            options={'HIDDEN', 'SKIP_SAVE'},
-            )
+        default=True,
+        options={'HIDDEN', 'SKIP_SAVE'},
+    )
 
     # -----------
     # Own props.
     use_scenes = BoolProperty(
-            default=True,
-            name="Scenes",
-            description="Generate scenes' previews",
-            )
+        default=True,
+        name="Scenes",
+        description="Generate scenes' previews",
+    )
     use_groups = BoolProperty(
-            default=True,
-            name="Groups",
-            description="Generate groups' previews",
-            )
+        default=True,
+        name="Groups",
+        description="Generate groups' previews",
+    )
     use_objects = BoolProperty(
-            default=True,
-            name="Objects",
-            description="Generate objects' previews",
-            )
+        default=True,
+        name="Objects",
+        description="Generate objects' previews",
+    )
     use_intern_data = BoolProperty(
-            default=True,
-            name="Mat/Tex/...",
-            description="Generate 'internal' previews (materials, textures, images, etc.)",
-            )
+        default=True,
+        name="Mat/Tex/...",
+        description="Generate 'internal' previews (materials, textures, images, etc.)",
+    )
 
     use_trusted = BoolProperty(
-            default=False,
-            name="Trusted Blend Files",
-            description="Enable python evaluation for selected files",
-            )
+        default=False,
+        name="Trusted Blend Files",
+        description="Enable python evaluation for selected files",
+    )
     use_backups = BoolProperty(
-            default=True,
-            name="Save Backups",
-            description="Keep a backup (.blend1) version of the files when saving with generated previews",
-            )
+        default=True,
+        name="Save Backups",
+        description="Keep a backup (.blend1) version of the files when saving with generated previews",
+    )
 
     def invoke(self, context, event):
         context.window_manager.fileselect_add(self)
@@ -148,58 +148,58 @@ class WM_OT_previews_batch_clear(Operator):
     # -----------
     # File props.
     files = CollectionProperty(
-            type=bpy.types.OperatorFileListElement,
-            options={'HIDDEN', 'SKIP_SAVE'},
-            )
+        type=bpy.types.OperatorFileListElement,
+        options={'HIDDEN', 'SKIP_SAVE'},
+    )
 
     directory = StringProperty(
-            maxlen=1024,
-            subtype='FILE_PATH',
-            options={'HIDDEN', 'SKIP_SAVE'},
-            )
+        maxlen=1024,
+        subtype='FILE_PATH',
+        options={'HIDDEN', 'SKIP_SAVE'},
+    )
 
     # Show only images/videos, and directories!
     filter_blender = BoolProperty(
-            default=True,
-            options={'HIDDEN', 'SKIP_SAVE'},
-            )
+        default=True,
+        options={'HIDDEN', 'SKIP_SAVE'},
+    )
     filter_folder = BoolProperty(
-            default=True,
-            options={'HIDDEN', 'SKIP_SAVE'},
-            )
+        default=True,
+        options={'HIDDEN', 'SKIP_SAVE'},
+    )
 
     # -----------
     # Own props.
     use_scenes = BoolProperty(
-            default=True,
-            name="Scenes",
-            description="Clear scenes' previews",
-            )
+        default=True,
+        name="Scenes",
+        description="Clear scenes' previews",
+    )
     use_groups = BoolProperty(default=True,
-            name="Groups",
-            description="Clear groups' previews",
-            )
+                              name="Groups",
+                              description="Clear groups' previews",
+                              )
     use_objects = BoolProperty(
-            default=True,
-            name="Objects",
-            description="Clear objects' previews",
-            )
+        default=True,
+        name="Objects",
+        description="Clear objects' previews",
+    )
     use_intern_data = BoolProperty(
-            default=True,
-            name="Mat/Tex/...",
-            description="Clear 'internal' previews (materials, textures, images, etc.)",
-            )
+        default=True,
+        name="Mat/Tex/...",
+        description="Clear 'internal' previews (materials, textures, images, etc.)",
+    )
 
     use_trusted = BoolProperty(
-            default=False,
-            name="Trusted Blend Files",
-            description="Enable python evaluation for selected files",
-            )
+        default=False,
+        name="Trusted Blend Files",
+        description="Enable python evaluation for selected files",
+    )
     use_backups = BoolProperty(
-            default=True,
-            name="Save Backups",
-            description="Keep a backup (.blend1) version of the files when saving with cleared previews",
-            )
+        default=True,
+        name="Save Backups",
+        description="Keep a backup (.blend1) version of the files when saving with cleared previews",
+    )
 
     def invoke(self, context, event):
         context.window_manager.fileselect_add(self)
@@ -249,7 +249,61 @@ class WM_OT_previews_batch_clear(Operator):
         return {'FINISHED'}
 
 
+class WM_OT_blend_strings_utf8_validate(Operator):
+    """Check and fix all strings in current .blend file to be valid UTF-8 Unicode (needed for some old, 2.4x area files)"""
+    bl_idname = "wm.blend_strings_utf8_validate"
+    bl_label = "Validate .blend strings"
+    bl_options = {'REGISTER'}
+
+    def validate_strings(self, item, done_items):
+        if item is None:
+            return False
+
+        if item in done_items:
+            return False
+        done_items.add(item)
+
+        if getattr(item, 'library', None) is not None:
+            return False  # No point in checking library data, we cannot fix it anyway...
+
+        changed = False
+        for prop in item.bl_rna.properties:
+            if prop.identifier in {'bl_rna', 'rna_type'}:
+                continue  # Or we'd recurse 'till Hell freezes.
+            if prop.is_readonly:
+                continue
+            if prop.type == 'STRING':
+                val_bytes = item.path_resolve(prop.identifier, False).as_bytes()
+                val_utf8 = val_bytes.decode('utf-8', 'replace')
+                val_bytes_valid = val_utf8.encode('utf-8')
+                if val_bytes_valid != val_bytes:
+                    print("found bad utf8 encoded string %r, fixing to %r (%r)..."
+                          "" % (val_bytes, val_bytes_valid, val_utf8))
+                    setattr(item, prop.identifier, val_utf8)
+                    changed = True
+            elif prop.type == 'POINTER':
+                it = getattr(item, prop.identifier)
+                changed |= self.validate_strings(it, done_items)
+            elif prop.type == 'COLLECTION':
+                for it in getattr(item, prop.identifier):
+                    changed |= self.validate_strings(it, done_items)
+        return changed
+
+    def execute(self, context):
+        changed = False
+        done_items = set()
+        for prop in bpy.data.bl_rna.properties:
+            if prop.type == 'COLLECTION':
+                for it in getattr(bpy.data, prop.identifier):
+                    changed |= self.validate_strings(it, done_items)
+        if changed:
+            self.report({'WARNING'},
+                        "Some strings were fixed, don't forget to save the .blend file to keep those changes")
+        return {'FINISHED'}
+
+
 classes = (
     WM_OT_previews_batch_clear,
     WM_OT_previews_batch_generate,
+    WM_OT_blend_strings_utf8_validate,
 )

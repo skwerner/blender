@@ -57,6 +57,7 @@ public:
 	              ExportSettings &settings);
 
 	~AbcMeshWriter();
+	void setIsAnimated(bool is_animated);
 
 private:
 	virtual void do_write();
@@ -80,7 +81,7 @@ private:
 
 	void writeArbGeoParams(DerivedMesh *dm);
 	void getGeoGroups(DerivedMesh *dm, std::map<std::string, std::vector<int32_t> > &geoGroups);
-	
+
 	/* fluid surfaces support */
 	void getVelocities(DerivedMesh *dm, std::vector<Imath::V3f> &vels);
 
@@ -112,6 +113,11 @@ public:
 private:
 	void readFaceSetsSample(Main *bmain, Mesh *mesh, size_t poly_start,
 	                        const Alembic::AbcGeom::ISampleSelector &sample_sel);
+
+	void assign_facesets_to_mpoly(const Alembic::Abc::ISampleSelector &sample_sel,
+	                              size_t poly_start,
+	                              MPoly *mpoly, int totpoly,
+	                              std::map<std::string, int> & r_mat_map);
 };
 
 /* ************************************************************************** */

@@ -53,13 +53,11 @@ void OSLShader::thread_init(KernelGlobals *kg, KernelGlobals *kernel_globals, OS
 	OSL::ShadingSystem *ss = kg->osl->ss;
 	OSLThreadData *tdata = new OSLThreadData();
 
-	memset(&tdata->globals, 0, sizeof(OSL::ShaderGlobals));
+	memset((void *)&tdata->globals, 0, sizeof(OSL::ShaderGlobals));
 	tdata->globals.tracedata = &tdata->tracedata;
 	tdata->globals.flipHandedness = false;
 	tdata->osl_thread_info = ss->create_thread_info();
-
-	for(int i = 0; i < SHADER_CONTEXT_NUM; i++)
-		tdata->context[i] = ss->get_context(tdata->osl_thread_info);
+	tdata->context = ss->get_context(tdata->osl_thread_info);
 
 	tdata->oiio_thread_info = osl_globals->ts->get_perthread_info();
 
@@ -74,9 +72,7 @@ void OSLShader::thread_free(KernelGlobals *kg)
 
 	OSL::ShadingSystem *ss = (OSL::ShadingSystem*)kg->osl_ss;
 	OSLThreadData *tdata = kg->osl_tdata;
-
-	for(int i = 0; i < SHADER_CONTEXT_NUM; i++)
-		ss->release_context(tdata->context[i]);
+	ss->release_context(tdata->context);
 
 	ss->destroy_thread_info(tdata->osl_thread_info);
 
@@ -119,7 +115,7 @@ static void shaderdata_to_shaderglobals(KernelGlobals *kg, ShaderData *sd, PathS
 	globals->backfacing = (sd->flag & SD_BACKFACING);
 
 	/* shader data to be used in services callbacks */
-	globals->renderstate = sd; 
+	globals->renderstate = sd;
 
 	/* hacky, we leave it to services to fetch actual object matrix */
 	globals->shader2common = sd;
@@ -173,7 +169,7 @@ static void flatten_surface_closure_tree(ShaderData *sd,
 	}
 }
 
-void OSLShader::eval_surface(KernelGlobals *kg, ShaderData *sd, PathState *state, int path_flag, ShaderContext ctx)
+void OSLShader::eval_surface(KernelGlobals *kg, ShaderData *sd, PathState *state, int path_flag)
 {
 	/* setup shader globals from shader data */
 	OSLThreadData *tdata = kg->osl_tdata;
@@ -182,7 +178,7 @@ void OSLShader::eval_surface(KernelGlobals *kg, ShaderData *sd, PathState *state
 	/* execute shader for this point */
 	OSL::ShadingSystem *ss = (OSL::ShadingSystem*)kg->osl_ss;
 	OSL::ShaderGlobals *globals = &tdata->globals;
-	OSL::ShadingContext *octx = tdata->context[(int)ctx];
+	OSL::ShadingContext *octx = tdata->context;
 	int shader = sd->shader & SHADER_MASK;
 
 	/* automatic bump shader */
@@ -274,7 +270,7 @@ static void flatten_background_closure_tree(ShaderData *sd,
 	}
 }
 
-void OSLShader::eval_background(KernelGlobals *kg, ShaderData *sd, PathState *state, int path_flag, ShaderContext ctx)
+void OSLShader::eval_background(KernelGlobals *kg, ShaderData *sd, PathState *state, int path_flag)
 {
 	/* setup shader globals from shader data */
 	OSLThreadData *tdata = kg->osl_tdata;
@@ -283,7 +279,7 @@ void OSLShader::eval_background(KernelGlobals *kg, ShaderData *sd, PathState *st
 	/* execute shader for this point */
 	OSL::ShadingSystem *ss = (OSL::ShadingSystem*)kg->osl_ss;
 	OSL::ShaderGlobals *globals = &tdata->globals;
-	OSL::ShadingContext *octx = tdata->context[(int)ctx];
+	OSL::ShadingContext *octx = tdata->context;
 
 	if(kg->osl->background_state) {
 		ss->execute(octx, *(kg->osl->background_state), *globals);
@@ -329,7 +325,7 @@ static void flatten_volume_closure_tree(ShaderData *sd,
 	}
 }
 
-void OSLShader::eval_volume(KernelGlobals *kg, ShaderData *sd, PathState *state, int path_flag, ShaderContext ctx)
+void OSLShader::eval_volume(KernelGlobals *kg, ShaderData *sd, PathState *state, int path_flag)
 {
 	/* setup shader globals from shader data */
 	OSLThreadData *tdata = kg->osl_tdata;
@@ -338,13 +334,13 @@ void OSLShader::eval_volume(KernelGlobals *kg, ShaderData *sd, PathState *state,
 	/* execute shader */
 	OSL::ShadingSystem *ss = (OSL::ShadingSystem*)kg->osl_ss;
 	OSL::ShaderGlobals *globals = &tdata->globals;
-	OSL::ShadingContext *octx = tdata->context[(int)ctx];
+	OSL::ShadingContext *octx = tdata->context;
 	int shader = sd->shader & SHADER_MASK;
 
 	if(kg->osl->volume_state[shader]) {
 		ss->execute(octx, *(kg->osl->volume_state[shader]), *globals);
 	}
-	
+
 	/* flatten closure tree */
 	if(globals->Ci)
 		flatten_volume_closure_tree(sd, globals->Ci);
@@ -352,19 +348,17 @@ void OSLShader::eval_volume(KernelGlobals *kg, ShaderData *sd, PathState *state,
 
 /* Displacement */
 
-void OSLShader::eval_displacement(KernelGlobals *kg, ShaderData *sd, ShaderContext ctx)
+void OSLShader::eval_displacement(KernelGlobals *kg, ShaderData *sd, PathState *state)
 {
 	/* setup shader globals from shader data */
 	OSLThreadData *tdata = kg->osl_tdata;
 
-	PathState state = {0};
-
-	shaderdata_to_shaderglobals(kg, sd, &state, 0, tdata);
+	shaderdata_to_shaderglobals(kg, sd, state, 0, tdata);
 
 	/* execute shader */
 	OSL::ShadingSystem *ss = (OSL::ShadingSystem*)kg->osl_ss;
 	OSL::ShaderGlobals *globals = &tdata->globals;
-	OSL::ShadingContext *octx = tdata->context[(int)ctx];
+	OSL::ShadingContext *octx = tdata->context;
 	int shader = sd->shader & SHADER_MASK;
 
 	if(kg->osl->displacement_state[shader]) {
@@ -411,4 +405,3 @@ int OSLShader::find_attribute(KernelGlobals *kg, const ShaderData *sd, uint id, 
 }
 
 CCL_NAMESPACE_END
-

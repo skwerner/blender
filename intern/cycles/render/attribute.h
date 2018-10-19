@@ -120,8 +120,10 @@ public:
 
 	Attribute *find(AttributeRequest& req);
 
+	void remove(Attribute *attribute);
+
 	void resize(bool reserve_only = false);
-	void clear();
+	void clear(bool preserve_voxel_data = false);
 };
 
 /* AttributeRequest
@@ -157,6 +159,7 @@ public:
 	void add(ustring name);
 	void add(AttributeStandard std);
 	void add(AttributeRequestSet& reqs);
+	void add_standard(ustring name);
 
 	bool find(ustring name);
 	bool find(AttributeStandard std);
@@ -170,4 +173,3 @@ public:
 CCL_NAMESPACE_END
 
 #endif /* __ATTRIBUTE_H__ */
-

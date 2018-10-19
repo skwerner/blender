@@ -45,6 +45,7 @@
 #include "IMB_imbuf.h"
 #include "IMB_moviecache.h"
 
+#include "BKE_addon.h"
 #include "BKE_blender.h"  /* own include */
 #include "BKE_blender_version.h"  /* own include */
 #include "BKE_blendfile.h"
@@ -78,25 +79,29 @@ char versionstr[48] = "";
 /* only to be called on exit blender */
 void BKE_blender_free(void)
 {
-	/* samples are in a global list..., also sets G.main->sound->sample NULL */
-	BKE_main_free(G.main);
-	G.main = NULL;
+	/* samples are in a global list..., also sets G_MAIN->sound->sample NULL */
+	BKE_main_free(G_MAIN);
+	G_MAIN = NULL;
+
+	if (G.log.file != NULL) {
+		fclose(G.log.file);
+	}
 
 	BKE_spacetypes_free();      /* after free main, it uses space callbacks */
-	
+
 	IMB_exit();
 	BKE_cachefiles_exit();
 	BKE_images_exit();
 	DAG_exit();
 
 	BKE_brush_system_exit();
-	RE_texture_rng_exit();	
+	RE_texture_rng_exit();
 
 	BLI_callback_global_finalize();
 
 	BKE_sequencer_cache_destruct();
 	IMB_moviecache_destruct();
-	
+
 	free_nodesystem();
 }
 
@@ -115,10 +120,10 @@ void BKE_blender_version_string(char *version_str, size_t maxncpy, short version
 void BKE_blender_globals_init(void)
 {
 	memset(&G, 0, sizeof(Global));
-	
+
 	U.savetime = 1;
 
-	G.main = BKE_main_new();
+	G_MAIN = BKE_main_new();
 
 	strcpy(G.ima, "//");
 
@@ -129,13 +134,15 @@ void BKE_blender_globals_init(void)
 #else
 	G.f &= ~G_SCRIPT_AUTOEXEC;
 #endif
+
+	G.log.level = 1;
 }
 
 void BKE_blender_globals_clear(void)
 {
-	BKE_main_free(G.main);          /* free all lib data */
+	BKE_main_free(G_MAIN);          /* free all lib data */
 
-	G.main = NULL;
+	G_MAIN = NULL;
 }
 
 /***/
@@ -150,11 +157,21 @@ static void keymap_item_free(wmKeyMapItem *kmi)
 		MEM_freeN(kmi->ptr);
 }
 
-void BKE_blender_userdef_set_data(UserDef *userdef)
+void BKE_blender_userdef_data_swap(UserDef *userdef_a, UserDef *userdef_b)
 {
-	/* only here free userdef themes... */
-	BKE_blender_userdef_free_data(&U);
-	U = *userdef;
+	SWAP(UserDef, *userdef_a, *userdef_b);
+}
+
+void BKE_blender_userdef_data_set(UserDef *userdef)
+{
+	BKE_blender_userdef_data_swap(&U, userdef);
+	BKE_blender_userdef_data_free(userdef, true);
+}
+
+void BKE_blender_userdef_data_set_and_free(UserDef *userdef)
+{
+	BKE_blender_userdef_data_set(userdef);
+	MEM_freeN(userdef);
 }
 
 static void userdef_free_keymaps(UserDef *userdef)
@@ -188,11 +205,7 @@ static void userdef_free_addons(UserDef *userdef)
 {
 	for (bAddon *addon = userdef->addons.first, *addon_next; addon; addon = addon_next) {
 		addon_next = addon->next;
-		if (addon->prop) {
-			IDP_FreeProperty(addon->prop);
-			MEM_freeN(addon->prop);
-		}
-		MEM_freeN(addon);
+		BKE_addon_free(addon);
 	}
 	BLI_listbase_clear(&userdef->addons);
 }
@@ -201,7 +214,7 @@ static void userdef_free_addons(UserDef *userdef)
  * When loading a new userdef from file,
  * or when exiting Blender.
  */
-void BKE_blender_userdef_free_data(UserDef *userdef)
+void BKE_blender_userdef_data_free(UserDef *userdef, bool clear_fonts)
 {
 #define U _invalid_access_ /* ensure no accidental global access */
 #ifdef U  /* quiet warning */
@@ -210,11 +223,12 @@ void BKE_blender_userdef_free_data(UserDef *userdef)
 	userdef_free_keymaps(userdef);
 	userdef_free_addons(userdef);
 
-	for (uiFont *font = userdef->uifonts.first; font; font = font->next) {
-		BLF_unload_id(font->blf_id);
+	if (clear_fonts) {
+		for (uiFont *font = userdef->uifonts.first; font; font = font->next) {
+			BLF_unload_id(font->blf_id);
+		}
+		BLF_default_set(-1);
 	}
-
-	BLF_default_set(-1);
 
 	BLI_freelistN(&userdef->autoexec_paths);
 
@@ -229,38 +243,66 @@ void BKE_blender_userdef_free_data(UserDef *userdef)
  * Write U from userdef.
  * This function defines which settings a template will override for the user preferences.
  */
-void BKE_blender_userdef_set_app_template(UserDef *userdef)
+void BKE_blender_userdef_app_template_data_swap(UserDef *userdef_a, UserDef *userdef_b)
 {
 	/* TODO:
-	 * - keymaps
 	 * - various minor settings (add as needed).
 	 */
 
-#define LIST_OVERRIDE(id) { \
-	BLI_freelistN(&U.id); \
-	BLI_movelisttolist(&U.id, &userdef->id); \
+#define DATA_SWAP(id) \
+	{ \
+		UserDef userdef_tmp; \
+		memcpy(&(userdef_tmp.id), &(userdef_a->id), sizeof(userdef_tmp.id)); \
+		memcpy(&(userdef_a->id), &(userdef_b->id), sizeof(userdef_tmp.id)); \
+		memcpy(&(userdef_b->id), &(userdef_tmp.id), sizeof(userdef_tmp.id)); \
+	}
+
+#define LIST_SWAP(id) { \
+	SWAP(ListBase, userdef_a->id, userdef_b->id); \
 } ((void)0)
 
-#define MEMCPY_OVERRIDE(id) \
-	memcpy(U.id, userdef->id, sizeof(U.id));
+#define FLAG_SWAP(id, ty, flags) { \
+	CHECK_TYPE(&(userdef_a->id), ty *); \
+	const ty f = flags; \
+	const ty a = userdef_a->id; \
+	const ty b = userdef_b->id; \
+	userdef_a->id = (userdef_a->id & ~f) | (b & f); \
+	userdef_b->id = (userdef_b->id & ~f) | (a & f); \
+} ((void)0)
 
-	/* for some types we need custom free functions */
-	userdef_free_addons(&U);
-	userdef_free_keymaps(&U);
 
-	LIST_OVERRIDE(uistyles);
-	LIST_OVERRIDE(uifonts);
-	LIST_OVERRIDE(themes);
-	LIST_OVERRIDE(addons);
-	LIST_OVERRIDE(user_keymaps);
+	LIST_SWAP(uistyles);
+	LIST_SWAP(uifonts);
+	LIST_SWAP(themes);
+	LIST_SWAP(addons);
+	LIST_SWAP(user_keymaps);
 
-	MEMCPY_OVERRIDE(light);
+	DATA_SWAP(light);
 
-	MEMCPY_OVERRIDE(font_path_ui);
-	MEMCPY_OVERRIDE(font_path_ui_mono);
+	DATA_SWAP(font_path_ui);
+	DATA_SWAP(font_path_ui_mono);
+	DATA_SWAP(keyconfigstr);
 
-#undef LIST_OVERRIDE
-#undef MEMCPY_OVERRIDE
+	DATA_SWAP(app_flag);
+
+	/* We could add others. */
+	FLAG_SWAP(uiflag, int, USER_QUIT_PROMPT);
+
+#undef DATA_SWAP
+#undef LIST_SWAP
+#undef FLAG_SWAP
+}
+
+void BKE_blender_userdef_app_template_data_set(UserDef *userdef)
+{
+	BKE_blender_userdef_app_template_data_swap(&U, userdef);
+	BKE_blender_userdef_data_free(userdef, true);
+}
+
+void BKE_blender_userdef_app_template_data_set_and_free(UserDef *userdef)
+{
+	BKE_blender_userdef_app_template_data_set(userdef);
+	MEM_freeN(userdef);
 }
 
 /* *****************  testing for break ************* */
@@ -279,7 +321,7 @@ int BKE_blender_test_break(void)
 		if (blender_test_break_cb)
 			blender_test_break_cb();
 	}
-	
+
 	return (G.is_break == true);
 }
 

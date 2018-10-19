@@ -71,12 +71,6 @@ ccl_device bool BVH_FUNCTION_FULL_NAME(QBVH)(KernelGlobals *kg,
 	Transform ob_itfm;
 #endif
 
-#ifndef __KERNEL_SSE41__
-	if(!isfinite(P.x)) {
-		return false;
-	}
-#endif
-
 	isect->t = ray->t;
 	isect->u = 0.0f;
 	isect->v = 0.0f;
@@ -188,7 +182,7 @@ ccl_device bool BVH_FUNCTION_FULL_NAME(QBVH)(KernelGlobals *kg,
 					float4 cnodes;
 					/* TODO(sergey): Investigate whether moving cnodes upwards
 					 * gives a speedup (will be different cache pattern but will
-					 * avoid extra check here),
+					 * avoid extra check here).
 					 */
 #if BVH_FEATURE(BVH_HAIR)
 					if(__float_as_uint(inodes.x) & PATH_RAY_NODE_UNALIGNED) {
@@ -340,7 +334,7 @@ ccl_device bool BVH_FUNCTION_FULL_NAME(QBVH)(KernelGlobals *kg,
 								                      prim_addr)) {
 									tfar = ssef(isect->t);
 									/* Shadow ray early termination. */
-									if(visibility == PATH_RAY_SHADOW_OPAQUE) {
+									if(visibility & PATH_RAY_SHADOW_OPAQUE) {
 										return true;
 									}
 								}
@@ -362,7 +356,7 @@ ccl_device bool BVH_FUNCTION_FULL_NAME(QBVH)(KernelGlobals *kg,
 								                             prim_addr)) {
 									tfar = ssef(isect->t);
 									/* Shadow ray early termination. */
-									if(visibility == PATH_RAY_SHADOW_OPAQUE) {
+									if(visibility & PATH_RAY_SHADOW_OPAQUE) {
 										return true;
 									}
 								}
@@ -379,37 +373,37 @@ ccl_device bool BVH_FUNCTION_FULL_NAME(QBVH)(KernelGlobals *kg,
 								kernel_assert((curve_type & PRIMITIVE_ALL) == (type & PRIMITIVE_ALL));
 								bool hit;
 								if(kernel_data.curve.curveflags & CURVE_KN_INTERPOLATE) {
-									hit = bvh_cardinal_curve_intersect(kg,
-									                                   isect,
-									                                   P,
-									                                   dir,
-									                                   visibility,
-									                                   object,
-									                                   prim_addr,
-									                                   ray->time,
-									                                   curve_type,
-									                                   lcg_state,
-									                                   difl,
-									                                   extmax);
+									hit = cardinal_curve_intersect(kg,
+									                               isect,
+									                               P,
+									                               dir,
+									                               visibility,
+									                               object,
+									                               prim_addr,
+									                               ray->time,
+									                               curve_type,
+									                               lcg_state,
+									                               difl,
+									                               extmax);
 								}
 								else {
-									hit = bvh_curve_intersect(kg,
-									                          isect,
-									                          P,
-									                          dir,
-									                          visibility,
-									                          object,
-									                          prim_addr,
-									                          ray->time,
-									                          curve_type,
-									                          lcg_state,
-									                          difl,
-									                          extmax);
+									hit = curve_intersect(kg,
+									                      isect,
+									                      P,
+									                      dir,
+									                      visibility,
+									                      object,
+									                      prim_addr,
+									                      ray->time,
+									                      curve_type,
+									                      lcg_state,
+									                      difl,
+									                      extmax);
 								}
 								if(hit) {
 									tfar = ssef(isect->t);
 									/* Shadow ray early termination. */
-									if(visibility == PATH_RAY_SHADOW_OPAQUE) {
+									if(visibility & PATH_RAY_SHADOW_OPAQUE) {
 										return true;
 									}
 								}

@@ -22,13 +22,51 @@
 
 #include "bvh/bvh2.h"
 #include "bvh/bvh4.h"
+#include "bvh/bvh8.h"
 #include "bvh/bvh_build.h"
 #include "bvh/bvh_node.h"
 
 #include "util/util_foreach.h"
+#include "util/util_logging.h"
 #include "util/util_progress.h"
 
 CCL_NAMESPACE_BEGIN
+
+/* BVH Parameters. */
+
+const char *bvh_layout_name(BVHLayout layout)
+{
+	switch(layout) {
+		case BVH_LAYOUT_BVH2: return "BVH2";
+		case BVH_LAYOUT_BVH4: return "BVH4";
+		case BVH_LAYOUT_BVH8: return "BVH8";
+		case BVH_LAYOUT_NONE: return "NONE";
+		case BVH_LAYOUT_ALL:  return "ALL";
+	}
+	LOG(DFATAL) << "Unsupported BVH layout was passed.";
+	return "";
+}
+
+BVHLayout BVHParams::best_bvh_layout(BVHLayout requested_layout,
+                                     BVHLayoutMask supported_layouts)
+{
+	const BVHLayoutMask requested_layout_mask = (BVHLayoutMask)requested_layout;
+	/* Check whether requested layout is supported, if so -- no need to do
+	 * any extra computation.
+	 */
+	if(supported_layouts & requested_layout_mask) {
+		return requested_layout;
+	}
+	/* Some bit magic to get widest supported BVH layout. */
+	/* This is a mask of supported BVH layouts which are narrower than the
+	 * requested one.
+	 */
+	const BVHLayoutMask allowed_layouts_mask =
+	        (supported_layouts & (requested_layout_mask - 1));
+	/* We get widest from allowed ones and convert mask to actual layout. */
+	const BVHLayoutMask widest_allowed_layout_mask = __bsr(allowed_layouts_mask);
+	return (BVHLayout)(1 << widest_allowed_layout_mask);
+}
 
 /* Pack Utility */
 
@@ -51,10 +89,19 @@ BVH::BVH(const BVHParams& params_, const vector<Object*>& objects_)
 
 BVH *BVH::create(const BVHParams& params, const vector<Object*>& objects)
 {
-	if(params.use_qbvh)
-		return new BVH4(params, objects);
-	else
-		return new BVH2(params, objects);
+	switch(params.bvh_layout) {
+		case BVH_LAYOUT_BVH2:
+			return new BVH2(params, objects);
+		case BVH_LAYOUT_BVH4:
+			return new BVH4(params, objects);
+		case BVH_LAYOUT_BVH8:
+			return new BVH8(params, objects);
+		case BVH_LAYOUT_NONE:
+		case BVH_LAYOUT_ALL:
+			break;
+	}
+	LOG(DFATAL) << "Requested unsupported BVH layout.";
+	return NULL;
 }
 
 /* Building */
@@ -108,6 +155,105 @@ void BVH::refit(Progress& progress)
 	refit_nodes();
 }
 
+void BVH::refit_primitives(int start, int end, BoundBox& bbox, uint& visibility)
+{
+	/* Refit range of primitives. */
+	for(int prim = start; prim < end; prim++) {
+		int pidx = pack.prim_index[prim];
+		int tob = pack.prim_object[prim];
+		Object *ob = objects[tob];
+
+		if(pidx == -1) {
+			/* Object instance. */
+			bbox.grow(ob->bounds);
+		}
+		else {
+			/* Primitives. */
+			const Mesh *mesh = ob->mesh;
+
+			if(pack.prim_type[prim] & PRIMITIVE_ALL_CURVE) {
+				/* Curves. */
+				int str_offset = (params.top_level)? mesh->curve_offset: 0;
+				Mesh::Curve curve = mesh->get_curve(pidx - str_offset);
+				int k = PRIMITIVE_UNPACK_SEGMENT(pack.prim_type[prim]);
+
+				curve.bounds_grow(k, &mesh->curve_keys[0], &mesh->curve_radius[0], bbox);
+
+				visibility |= PATH_RAY_CURVE;
+
+				/* Motion curves. */
+				if(mesh->use_motion_blur) {
+					Attribute *attr = mesh->curve_attributes.find(ATTR_STD_MOTION_VERTEX_POSITION);
+
+					if(attr) {
+						size_t mesh_size = mesh->curve_keys.size();
+						size_t steps = mesh->motion_steps - 1;
+						float3 *key_steps = attr->data_float3();
+
+						for(size_t i = 0; i < steps; i++)
+							curve.bounds_grow(k, key_steps + i*mesh_size, &mesh->curve_radius[0], bbox);
+					}
+				}
+			}
+			else {
+				/* Triangles. */
+				int tri_offset = (params.top_level)? mesh->tri_offset: 0;
+				Mesh::Triangle triangle = mesh->get_triangle(pidx - tri_offset);
+				const float3 *vpos = &mesh->verts[0];
+
+				triangle.bounds_grow(vpos, bbox);
+
+				/* Motion triangles. */
+				if(mesh->use_motion_blur) {
+					Attribute *attr = mesh->attributes.find(ATTR_STD_MOTION_VERTEX_POSITION);
+
+					if(attr) {
+						size_t mesh_size = mesh->verts.size();
+						size_t steps = mesh->motion_steps - 1;
+						float3 *vert_steps = attr->data_float3();
+
+						for(size_t i = 0; i < steps; i++)
+							triangle.bounds_grow(vert_steps + i*mesh_size, bbox);
+					}
+				}
+			}
+		}
+		visibility |= ob->visibility_for_tracing();
+
+	}
+}
+
+bool BVH::leaf_check(const BVHNode *node, BVH_TYPE bvh)
+{
+	if(node->is_leaf()) {
+		return node->is_unaligned;
+	}
+	else {
+		return node_is_unaligned(node, bvh);
+	}
+}
+
+bool BVH::node_is_unaligned(const BVHNode *node, BVH_TYPE bvh)
+{
+	const BVHNode *node0 = node->get_child(0);
+	const BVHNode *node1 = node->get_child(1);
+
+	switch(bvh) {
+		case bvh2:
+			return node0->is_unaligned || node1->is_unaligned;
+			break;
+		case bvh4:
+			return leaf_check(node0, bvh2) || leaf_check(node1, bvh2);
+			break;
+		case bvh8:
+			return leaf_check(node0, bvh4) || leaf_check(node1, bvh4);
+			break;
+		default:
+			assert(0);
+			return false;
+	}
+}
+
 /* Triangles */
 
 void BVH::pack_triangle(int idx, float4 tri_verts[3])
@@ -153,7 +299,6 @@ void BVH::pack_primitives()
 		if(pack.prim_index[i] != -1) {
 			int tob = pack.prim_object[i];
 			Object *ob = objects[tob];
-
 			if((pack.prim_type[i] & PRIMITIVE_ALL_TRIANGLE) != 0) {
 				pack_triangle(i, (float4*)&pack.prim_tri_verts[3 * prim_triangle_index]);
 				pack.prim_tri_index[i] = 3 * prim_triangle_index;
@@ -162,11 +307,10 @@ void BVH::pack_primitives()
 			else {
 				pack.prim_tri_index[i] = -1;
 			}
-
-			pack.prim_visibility[i] = ob->visibility;
-
-			if(pack.prim_type[i] & PRIMITIVE_ALL_CURVE)
+			pack.prim_visibility[i] = ob->visibility_for_tracing();
+			if(pack.prim_type[i] & PRIMITIVE_ALL_CURVE) {
 				pack.prim_visibility[i] |= PATH_RAY_CURVE;
+			}
 		}
 		else {
 			pack.prim_tri_index[i] = -1;
@@ -183,7 +327,8 @@ void BVH::pack_instances(size_t nodes_size, size_t leaf_nodes_size)
 	 * BVH's are stored in global arrays. This function merges them into the
 	 * top level BVH, adjusting indexes and offsets where appropriate.
 	 */
-	const bool use_qbvh = params.use_qbvh;
+	const bool use_qbvh = (params.bvh_layout == BVH_LAYOUT_BVH4);
+	const bool use_obvh = (params.bvh_layout == BVH_LAYOUT_BVH8);
 
 	/* Adjust primitive index to point to the triangle in the global array, for
 	 * meshes with transform applied and already in the top level BVH.
@@ -360,14 +505,26 @@ void BVH::pack_instances(size_t nodes_size, size_t leaf_nodes_size)
 			for(size_t i = 0, j = 0; i < bvh_nodes_size; j++) {
 				size_t nsize, nsize_bbox;
 				if(bvh_nodes[i].x & PATH_RAY_NODE_UNALIGNED) {
-					nsize = use_qbvh
-					            ? BVH_UNALIGNED_QNODE_SIZE
-					            : BVH_UNALIGNED_NODE_SIZE;
-					nsize_bbox = (use_qbvh)? 13: 0;
+					if(use_obvh) {
+						nsize = BVH_UNALIGNED_ONODE_SIZE;
+						nsize_bbox = BVH_UNALIGNED_ONODE_SIZE-1;
+					}
+					else {
+						nsize = use_qbvh
+							? BVH_UNALIGNED_QNODE_SIZE
+							: BVH_UNALIGNED_NODE_SIZE;
+						nsize_bbox = (use_qbvh) ? BVH_UNALIGNED_QNODE_SIZE-1 : 0;
+					}
 				}
 				else {
-					nsize = (use_qbvh)? BVH_QNODE_SIZE: BVH_NODE_SIZE;
-					nsize_bbox = (use_qbvh)? 7: 0;
+					if(use_obvh) {
+						nsize = BVH_ONODE_SIZE;
+						nsize_bbox = BVH_ONODE_SIZE-1;
+					}
+					else {
+						nsize = (use_qbvh)? BVH_QNODE_SIZE: BVH_NODE_SIZE;
+						nsize_bbox = (use_qbvh)? BVH_QNODE_SIZE-1 : 0;
+					}
 				}
 
 				memcpy(pack_nodes + pack_nodes_offset,
@@ -376,16 +533,29 @@ void BVH::pack_instances(size_t nodes_size, size_t leaf_nodes_size)
 
 				/* Modify offsets into arrays */
 				int4 data = bvh_nodes[i + nsize_bbox];
-
-				data.z += (data.z < 0)? -noffset_leaf: noffset;
-				data.w += (data.w < 0)? -noffset_leaf: noffset;
-
-				if(use_qbvh) {
-					data.x += (data.x < 0)? -noffset_leaf: noffset;
-					data.y += (data.y < 0)? -noffset_leaf: noffset;
+				int4 data1 = bvh_nodes[i + nsize_bbox-1];
+				if(use_obvh) {
+					data.z += (data.z < 0) ? -noffset_leaf : noffset;
+					data.w += (data.w < 0) ? -noffset_leaf : noffset;
+					data.x += (data.x < 0) ? -noffset_leaf : noffset;
+					data.y += (data.y < 0) ? -noffset_leaf : noffset;
+					data1.z += (data1.z < 0) ? -noffset_leaf : noffset;
+					data1.w += (data1.w < 0) ? -noffset_leaf : noffset;
+					data1.x += (data1.x < 0) ? -noffset_leaf : noffset;
+					data1.y += (data1.y < 0) ? -noffset_leaf : noffset;
 				}
-
+				else {
+					data.z += (data.z < 0) ? -noffset_leaf : noffset;
+					data.w += (data.w < 0) ? -noffset_leaf : noffset;
+					if(use_qbvh) {
+						data.x += (data.x < 0)? -noffset_leaf: noffset;
+						data.y += (data.y < 0)? -noffset_leaf: noffset;
+					}
+				}
 				pack_nodes[pack_nodes_offset + nsize_bbox] = data;
+				if(use_obvh) {
+					pack_nodes[pack_nodes_offset + nsize_bbox - 1] = data1;
+				}
 
 				/* Usually this copies nothing, but we better
 				 * be prepared for possible node size extension.

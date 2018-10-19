@@ -47,16 +47,16 @@ struct ListBase;
 typedef struct PoseTarget {
 	struct PoseTarget *next, *prev;
 
-	struct bConstraint *con;        /* the constrait of this target */
+	struct bConstraint *con;        /* the constraint of this target */
 	int tip;                        /* index of tip pchan in PoseTree */
 } PoseTarget;
 
 typedef struct PoseTree {
 	struct PoseTree *next, *prev;
-	
+
 	int type;                       /* type of IK that this serves (CONSTRAINT_TYPE_KINEMATIC or ..._SPLINEIK) */
 	int totchannel;                 /* number of pose channels */
-	
+
 	struct ListBase targets;        /* list of targets of the tree */
 	struct bPoseChannel **pchan;    /* array of pose channels */
 	int     *parent;                /* and their parents */
@@ -77,6 +77,7 @@ int  BKE_armature_bonelist_count(struct ListBase *lb);
 void BKE_armature_bonelist_free(struct ListBase *lb);
 void BKE_armature_free(struct bArmature *arm);
 void BKE_armature_make_local(struct Main *bmain, struct bArmature *arm, const bool lib_local);
+void BKE_armature_copy_data(struct Main *bmain, struct bArmature *arm_dst, const struct bArmature *arm_src, const int flag);
 struct bArmature *BKE_armature_copy(struct Main *bmain, const struct bArmature *arm);
 
 /* Bounding box. */
@@ -168,36 +169,39 @@ void BKE_splineik_execute_tree(struct Scene *scene, struct Object *ob, struct bP
 
 void BKE_pose_eval_init(struct EvaluationContext *eval_ctx,
                         struct Scene *scene,
-                        struct Object *ob,
-                        struct bPose *pose);
+                        struct Object *ob);
+
+void BKE_pose_eval_init_ik(struct EvaluationContext *eval_ctx,
+                           struct Scene *scene,
+                           struct Object *ob);
 
 void BKE_pose_eval_bone(struct EvaluationContext *eval_ctx,
                         struct Scene *scene,
                         struct Object *ob,
-                        struct bPoseChannel *pchan);
+                        int pchan_index);
 
 void BKE_pose_constraints_evaluate(struct EvaluationContext *eval_ctx,
                                    struct Scene *scene,
                                    struct Object *ob,
-                                   struct bPoseChannel *pchan);
+                                   int pchan_index);
 
 void BKE_pose_bone_done(struct EvaluationContext *eval_ctx,
-                        struct bPoseChannel *pchan);
+                        struct Object *ob,
+                        int pchan_index);
 
 void BKE_pose_iktree_evaluate(struct EvaluationContext *eval_ctx,
                               struct Scene *scene,
                               struct Object *ob,
-                              struct bPoseChannel *rootchan);
+                              int rootchan_index);
 
 void BKE_pose_splineik_evaluate(struct EvaluationContext *eval_ctx,
                                 struct Scene *scene,
                                 struct Object *ob,
-                                struct bPoseChannel *rootchan);
+                                int rootchan_index);
 
 void BKE_pose_eval_flush(struct EvaluationContext *eval_ctx,
                          struct Scene *scene,
-                         struct Object *ob,
-                         struct bPose *pose);
+                         struct Object *ob);
 
 void BKE_pose_eval_proxy_copy(struct EvaluationContext *eval_ctx,
                               struct Object *ob);
@@ -207,4 +211,3 @@ void BKE_pose_eval_proxy_copy(struct EvaluationContext *eval_ctx,
 #endif
 
 #endif
-

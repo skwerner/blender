@@ -50,7 +50,7 @@
 
 /*********************** Add modifier operator *************************/
 
-static int strip_modifier_active_poll(bContext *C)
+static bool strip_modifier_active_poll(bContext *C)
 {
 	Scene *scene = CTX_data_scene(C);
 	Editing *ed = BKE_sequencer_editing_get(scene, false);
@@ -185,7 +185,7 @@ static int strip_modifier_move_exec(bContext *C, wmOperator *op)
 
 void SEQUENCER_OT_strip_modifier_move(wmOperatorType *ot)
 {
-	static EnumPropertyItem direction_items[] = {
+	static const EnumPropertyItem direction_items[] = {
 		{SEQ_MODIFIER_MOVE_UP, "UP", 0, "Up", "Move modifier up in the stack"},
 		{SEQ_MODIFIER_MOVE_DOWN, "DOWN", 0, "Down", "Move modifier down in the stack"},
 		{0, NULL, 0, NULL, NULL}
@@ -258,7 +258,7 @@ static int strip_modifier_copy_exec(bContext *C, wmOperator *op)
 
 void SEQUENCER_OT_strip_modifier_copy(wmOperatorType *ot)
 {
-	static EnumPropertyItem type_items[] = {
+	static const EnumPropertyItem type_items[] = {
 		{SEQ_MODIFIER_COPY_REPLACE, "REPLACE", 0, "Replace",
 		 "Replace modifiers in destination"},
 		{SEQ_MODIFIER_COPY_APPEND,  "APPEND",  0, "Append",
@@ -281,4 +281,3 @@ void SEQUENCER_OT_strip_modifier_copy(wmOperatorType *ot)
 	/* properties */
 	ot->prop = RNA_def_enum(ot->srna, "type", type_items, SEQ_MODIFIER_COPY_REPLACE, "Type", "");
 }
-

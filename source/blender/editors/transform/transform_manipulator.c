@@ -54,6 +54,7 @@
 #include "BKE_context.h"
 #include "BKE_curve.h"
 #include "BKE_global.h"
+#include "BKE_main.h"
 #include "BKE_particle.h"
 #include "BKE_pointcache.h"
 #include "BKE_editmesh.h"
@@ -107,15 +108,16 @@
 #define TW_AXIS_DOT_MIN 0.02f
 #define TW_AXIS_DOT_MAX 0.1f
 
-/* transform widget center calc helper for below */
-static void calc_tw_center(Scene *scene, const float co[3])
-{
-	float *twcent = scene->twcent;
-	float *min = scene->twmin;
-	float *max = scene->twmax;
+struct TransformBounds {
+	float center[3];		/* Center for transform widget. */
+	float min[3], max[3];	/* Boundbox of selection for transform widget. */
+};
 
-	minmax_v3v3_v3(min, max, co);
-	add_v3_v3(twcent, co);
+/* transform widget center calc helper for below */
+static void calc_tw_center(struct TransformBounds *tbounds, const float co[3])
+{
+	minmax_v3v3_v3(tbounds->min, tbounds->max, co);
+	add_v3_v3(tbounds->center, co);
 }
 
 static void protectflag_to_drawflags(short protectflag, short *drawflags)
@@ -260,8 +262,9 @@ bool gimbal_axis(Object *ob, float gmat[3][3])
 
 /* centroid, boundbox, of selection */
 /* returns total items selected */
-static int calc_manipulator_stats(const bContext *C)
+static int calc_manipulator_stats(const bContext *C, struct TransformBounds *tbounds)
 {
+	Main *bmain = CTX_data_main(C);
 	ScrArea *sa = CTX_wm_area(C);
 	ARegion *ar = CTX_wm_region(C);
 	Scene *scene = CTX_data_scene(C);
@@ -280,9 +283,9 @@ static int calc_manipulator_stats(const bContext *C)
 	rv3d->twdrawflag = 0xFFFF;
 
 	/* transform widget centroid/center */
-	INIT_MINMAX(scene->twmin, scene->twmax);
-	zero_v3(scene->twcent);
-	
+	INIT_MINMAX(tbounds->min, tbounds->max);
+	zero_v3(tbounds->center);
+
 	if (is_gp_edit) {
 		float diff_mat[4][4];
 		float fpt[3];
@@ -311,12 +314,12 @@ static int calc_manipulator_stats(const bContext *C)
 						for (i = 0, pt = gps->points; i < gps->totpoints; i++, pt++) {
 							if (pt->flag & GP_SPOINT_SELECT) {
 								if (gpl->parent == NULL) {
-									calc_tw_center(scene, &pt->x);
+									calc_tw_center(tbounds, &pt->x);
 									totsel++;
 								}
 								else {
 									mul_v3_m4v3(fpt, diff_mat, &pt->x);
-									calc_tw_center(scene, fpt);
+									calc_tw_center(tbounds, fpt);
 									totsel++;
 								}
 							}
@@ -329,7 +332,7 @@ static int calc_manipulator_stats(const bContext *C)
 
 		/* selection center */
 		if (totsel) {
-			mul_v3_fl(scene->twcent, 1.0f / (float)totsel);   /* centroid! */
+			mul_v3_fl(tbounds->center, 1.0f / (float)totsel);
 		}
 	}
 	else if (obedit) {
@@ -344,7 +347,7 @@ static int calc_manipulator_stats(const bContext *C)
 			/* USE LAST SELECTE WITH ACTIVE */
 			if ((v3d->around == V3D_AROUND_ACTIVE) && BM_select_history_active_get(em->bm, &ese)) {
 				BM_editselection_center(&ese, vec);
-				calc_tw_center(scene, vec);
+				calc_tw_center(tbounds, vec);
 				totsel = 1;
 			}
 			else {
@@ -357,7 +360,7 @@ static int calc_manipulator_stats(const bContext *C)
 					if (!BM_elem_flag_test(eve, BM_ELEM_HIDDEN)) {
 						if (BM_elem_flag_test(eve, BM_ELEM_SELECT)) {
 							totsel++;
-							calc_tw_center(scene, eve->co);
+							calc_tw_center(tbounds, eve->co);
 						}
 					}
 				}
@@ -370,13 +373,13 @@ static int calc_manipulator_stats(const bContext *C)
 			if ((v3d->around == V3D_AROUND_ACTIVE) && (ebo = arm->act_edbone)) {
 				/* doesn't check selection or visibility intentionally */
 				if (ebo->flag & BONE_TIPSEL) {
-					calc_tw_center(scene, ebo->tail);
+					calc_tw_center(tbounds, ebo->tail);
 					totsel++;
 				}
 				if ((ebo->flag & BONE_ROOTSEL) ||
 				    ((ebo->flag & BONE_TIPSEL) == false))  /* ensure we get at least one point */
 				{
-					calc_tw_center(scene, ebo->head);
+					calc_tw_center(tbounds, ebo->head);
 					totsel++;
 				}
 				protectflag_to_drawflags_ebone(rv3d, ebo);
@@ -385,7 +388,7 @@ static int calc_manipulator_stats(const bContext *C)
 				for (ebo = arm->edbo->first; ebo; ebo = ebo->next) {
 					if (EBONE_VISIBLE(arm, ebo)) {
 						if (ebo->flag & BONE_TIPSEL) {
-							calc_tw_center(scene, ebo->tail);
+							calc_tw_center(tbounds, ebo->tail);
 							totsel++;
 						}
 						if ((ebo->flag & BONE_ROOTSEL) &&
@@ -395,7 +398,7 @@ static int calc_manipulator_stats(const bContext *C)
 						     (ebo->parent->flag & BONE_TIPSEL) &&
 						     EBONE_VISIBLE(arm, ebo->parent)) == 0)
 						{
-							calc_tw_center(scene, ebo->head);
+							calc_tw_center(tbounds, ebo->head);
 							totsel++;
 						}
 						if (ebo->flag & BONE_SELECTED) {
@@ -410,7 +413,7 @@ static int calc_manipulator_stats(const bContext *C)
 			float center[3];
 
 			if (v3d->around == V3D_AROUND_ACTIVE && ED_curve_active_center(cu, center)) {
-				calc_tw_center(scene, center);
+				calc_tw_center(tbounds, center);
 				totsel++;
 			}
 			else {
@@ -431,21 +434,25 @@ static int calc_manipulator_stats(const bContext *C)
 							 */
 							if (cu->drawflag & CU_HIDE_HANDLES) {
 								if (bezt->f2 & SELECT) {
-									calc_tw_center(scene, bezt->vec[1]);
+									calc_tw_center(tbounds, bezt->vec[1]);
 									totsel++;
 								}
 							}
 							else if (bezt->f2 & SELECT) {
-								calc_tw_center(scene, bezt->vec[1]);
+								calc_tw_center(tbounds, bezt->vec[1]);
 								totsel++;
 							}
 							else {
 								if (bezt->f1 & SELECT) {
-									calc_tw_center(scene, bezt->vec[(v3d->around == V3D_AROUND_LOCAL_ORIGINS) ? 1 : 0]);
+									calc_tw_center(
+									        tbounds,
+									        bezt->vec[(v3d->around == V3D_AROUND_LOCAL_ORIGINS) ? 1 : 0]);
 									totsel++;
 								}
 								if (bezt->f3 & SELECT) {
-									calc_tw_center(scene, bezt->vec[(v3d->around == V3D_AROUND_LOCAL_ORIGINS) ? 1 : 2]);
+									calc_tw_center(
+									        tbounds,
+									        bezt->vec[(v3d->around == V3D_AROUND_LOCAL_ORIGINS) ? 1 : 2]);
 									totsel++;
 								}
 							}
@@ -457,7 +464,7 @@ static int calc_manipulator_stats(const bContext *C)
 						a = nu->pntsu * nu->pntsv;
 						while (a--) {
 							if (bp->f1 & SELECT) {
-								calc_tw_center(scene, bp->vec);
+								calc_tw_center(tbounds, bp->vec);
 								totsel++;
 							}
 							bp++;
@@ -472,13 +479,13 @@ static int calc_manipulator_stats(const bContext *C)
 			MetaElem *ml;
 
 			if ((v3d->around == V3D_AROUND_ACTIVE) && (ml = mb->lastelem)) {
-				calc_tw_center(scene, &ml->x);
+				calc_tw_center(tbounds, &ml->x);
 				totsel++;
 			}
 			else {
 				for (ml = mb->editelems->first; ml; ml = ml->next) {
 					if (ml->flag & SELECT) {
-						calc_tw_center(scene, &ml->x);
+						calc_tw_center(tbounds, &ml->x);
 						totsel++;
 					}
 				}
@@ -489,7 +496,7 @@ static int calc_manipulator_stats(const bContext *C)
 			BPoint *bp;
 
 			if ((v3d->around == V3D_AROUND_ACTIVE) && (bp = BKE_lattice_active_point_get(lt))) {
-				calc_tw_center(scene, bp->vec);
+				calc_tw_center(tbounds, bp->vec);
 				totsel++;
 			}
 			else {
@@ -497,7 +504,7 @@ static int calc_manipulator_stats(const bContext *C)
 				a = lt->pntsu * lt->pntsv * lt->pntsw;
 				while (a--) {
 					if (bp->f1 & SELECT) {
-						calc_tw_center(scene, bp->vec);
+						calc_tw_center(tbounds, bp->vec);
 						totsel++;
 					}
 					bp++;
@@ -507,10 +514,10 @@ static int calc_manipulator_stats(const bContext *C)
 
 		/* selection center */
 		if (totsel) {
-			mul_v3_fl(scene->twcent, 1.0f / (float)totsel);   // centroid!
-			mul_m4_v3(obedit->obmat, scene->twcent);
-			mul_m4_v3(obedit->obmat, scene->twmin);
-			mul_m4_v3(obedit->obmat, scene->twmax);
+			mul_v3_fl(tbounds->center, 1.0f / (float)totsel);
+			mul_m4_v3(obedit->obmat, tbounds->center);
+			mul_m4_v3(obedit->obmat, tbounds->min);
+			mul_m4_v3(obedit->obmat, tbounds->max);
 		}
 	}
 	else if (ob && (ob->mode & OB_MODE_POSE)) {
@@ -524,7 +531,7 @@ static int calc_manipulator_stats(const bContext *C)
 			/* doesn't check selection or visibility intentionally */
 			Bone *bone = pchan->bone;
 			if (bone) {
-				calc_tw_center(scene, pchan->pose_head);
+				calc_tw_center(tbounds, pchan->pose_head);
 				protectflag_to_drawflags_pchan(rv3d, pchan);
 				totsel = 1;
 				ok = true;
@@ -538,7 +545,7 @@ static int calc_manipulator_stats(const bContext *C)
 				for (pchan = ob->pose->chanbase.first; pchan; pchan = pchan->next) {
 					Bone *bone = pchan->bone;
 					if (bone && (bone->flag & BONE_TRANSFORM)) {
-						calc_tw_center(scene, pchan->pose_head);
+						calc_tw_center(tbounds, pchan->pose_head);
 						protectflag_to_drawflags_pchan(rv3d, pchan);
 					}
 				}
@@ -547,17 +554,17 @@ static int calc_manipulator_stats(const bContext *C)
 		}
 
 		if (ok) {
-			mul_v3_fl(scene->twcent, 1.0f / (float)totsel);   // centroid!
-			mul_m4_v3(ob->obmat, scene->twcent);
-			mul_m4_v3(ob->obmat, scene->twmin);
-			mul_m4_v3(ob->obmat, scene->twmax);
+			mul_v3_fl(tbounds->center, 1.0f / (float)totsel);
+			mul_m4_v3(ob->obmat, tbounds->center);
+			mul_m4_v3(ob->obmat, tbounds->min);
+			mul_m4_v3(ob->obmat, tbounds->max);
 		}
 	}
 	else if (ob && (ob->mode & OB_MODE_ALL_PAINT)) {
 		/* pass */
 	}
 	else if (ob && ob->mode & OB_MODE_PARTICLE_EDIT) {
-		PTCacheEdit *edit = PE_get_current(scene, ob);
+		PTCacheEdit *edit = PE_get_current(bmain, scene, ob);
 		PTCacheEditPoint *point;
 		PTCacheEditKey *ek;
 		int k;
@@ -569,7 +576,7 @@ static int calc_manipulator_stats(const bContext *C)
 
 				for (k = 0, ek = point->keys; k < point->totkey; k++, ek++) {
 					if (ek->flag & PEK_SELECT) {
-						calc_tw_center(scene, (ek->flag & PEK_USE_WCO) ? ek->world_co : ek->co);
+						calc_tw_center(tbounds, (ek->flag & PEK_USE_WCO) ? ek->world_co : ek->co);
 						totsel++;
 					}
 				}
@@ -577,7 +584,7 @@ static int calc_manipulator_stats(const bContext *C)
 
 			/* selection center */
 			if (totsel)
-				mul_v3_fl(scene->twcent, 1.0f / (float)totsel);  // centroid!
+				mul_v3_fl(tbounds->center, 1.0f / (float)totsel);
 		}
 	}
 	else {
@@ -590,7 +597,7 @@ static int calc_manipulator_stats(const bContext *C)
 			if (TESTBASELIB(v3d, base)) {
 				if (ob == NULL)
 					ob = base->object;
-				calc_tw_center(scene, base->object->obmat[3]);
+				calc_tw_center(tbounds, base->object->obmat[3]);
 				protectflag_to_drawflags(base->object->protectflag, &rv3d->twdrawflag);
 				totsel++;
 			}
@@ -598,7 +605,7 @@ static int calc_manipulator_stats(const bContext *C)
 
 		/* selection center */
 		if (totsel) {
-			mul_v3_fl(scene->twcent, 1.0f / (float)totsel);   // centroid!
+			mul_v3_fl(tbounds->center, 1.0f / (float)totsel);
 		}
 	}
 
@@ -606,7 +613,7 @@ static int calc_manipulator_stats(const bContext *C)
 	if (ob && totsel && !is_gp_edit) {
 
 		switch (v3d->twmode) {
-		
+
 			case V3D_MANIP_GLOBAL:
 			{
 				break; /* nothing to do */
@@ -709,12 +716,13 @@ static float screen_aligned(RegionView3D *rv3d, float mat[4][4])
 }
 
 
-/* radring = radius of doughnut rings
- * radhole = radius hole
- * start = starting segment (based on nrings)
- * end   = end segment
- * nsides = amount of points in ring
- * nrigns = amount of rings
+/**
+ * \param radring: Radius of doughnut rings.
+ * \param radhole: Radius hole.
+ * \param start: Starting segment (based on \a nrings).
+ * \param end: End segment.
+ * \param nsides: Number of points in ring.
+ * \param nrings: Number of rings.
  */
 static void partial_doughnut(float radring, float radhole, int start, int end, int nsides, int nrings)
 {
@@ -1029,7 +1037,7 @@ static void draw_manipulator_rotate(
 
 
 	ortho = is_orthogonal_m4(rv3d->twmat);
-	
+
 	/* apply the transform delta */
 	if (is_moving) {
 		copy_m4_m4(matt, rv3d->twmat); // to copy the parts outside of [3][3]
@@ -1643,9 +1651,10 @@ void BIF_draw_manipulator(const bContext *C)
 	if ((v3d->twtype & (V3D_MANIP_TRANSLATE | V3D_MANIP_ROTATE | V3D_MANIP_SCALE)) == 0) return;
 
 	{
+		struct TransformBounds tbounds;
 		v3d->twflag &= ~V3D_DRAW_MANIPULATOR;
 
-		totsel = calc_manipulator_stats(C);
+		totsel = calc_manipulator_stats(C, &tbounds);
 		if (totsel == 0) return;
 
 		v3d->twflag |= V3D_DRAW_MANIPULATOR;
@@ -1665,13 +1674,13 @@ void BIF_draw_manipulator(const bContext *C)
 					copy_v3_v3(rv3d->twmat[3], ob->obmat[3]);
 				}
 				else {
-					mid_v3_v3v3(rv3d->twmat[3], scene->twmin, scene->twmax);
+					mid_v3_v3v3(rv3d->twmat[3], tbounds.min, tbounds.max);
 				}
 				break;
 			}
 			case V3D_AROUND_LOCAL_ORIGINS:
 			case V3D_AROUND_CENTER_MEAN:
-				copy_v3_v3(rv3d->twmat[3], scene->twcent);
+				copy_v3_v3(rv3d->twmat[3], tbounds.center);
 				break;
 			case V3D_AROUND_CURSOR:
 				copy_v3_v3(rv3d->twmat[3], ED_view3d_cursor3d_get(scene, v3d));
@@ -1840,7 +1849,7 @@ int BIF_do_manipulator(bContext *C, const struct wmEvent *event, wmOperator *op)
 	ScrArea *sa = CTX_wm_area(C);
 	View3D *v3d = sa->spacedata.first;
 	ARegion *ar = CTX_wm_region(C);
-	int constraint_axis[3] = {0, 0, 0};
+	bool constraint_axis[3] = {false, false, false};
 	int val;
 	const bool use_planar = RNA_boolean_get(op->ptr, "use_planar_constraint");
 
@@ -1971,4 +1980,3 @@ int BIF_do_manipulator(bContext *C, const struct wmEvent *event, wmOperator *op)
 
 	return val;
 }
-

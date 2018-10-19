@@ -38,6 +38,7 @@ class Device;
 class DeviceScene;
 class Mesh;
 class Progress;
+class RenderStats;
 class Scene;
 class SceneParams;
 class AttributeRequest;
@@ -70,6 +71,10 @@ public:
 		                    size_t num_steps,
 		                    size_t step,
 		                    float3 r_verts[3]) const;
+
+		float3 compute_normal(const float3 *verts) const;
+
+		bool valid(const float3 *verts) const;
 	};
 
 	Triangle get_triangle(size_t i) const
@@ -198,7 +203,8 @@ public:
 	array<int> triangle_patch; /* must be < 0 for non subd triangles */
 	array<float2> vert_patch_uv;
 
-	bool has_volume;  /* Set in the device_update_flags(). */
+	float volume_isovalue;
+	bool has_volume;          /* Set in the device_update_flags(). */
 	bool has_surface_bssrdf;  /* Set in the device_update_flags(). */
 
 	array<float3> curve_keys;
@@ -246,6 +252,8 @@ public:
 	size_t face_offset;
 	size_t corner_offset;
 
+	size_t attr_map_offset;
+
 	size_t num_subd_verts;
 
 	/* Functions */
@@ -258,7 +266,7 @@ public:
 	void reserve_curves(int numcurves, int numkeys);
 	void resize_subd_faces(int numfaces, int num_ngons, int numcorners);
 	void reserve_subd_faces(int numfaces, int num_ngons, int numcorners);
-	void clear();
+	void clear(bool preserve_voxel_data = false);
 	void add_vertex(float3 P);
 	void add_vertex_slow(float3 P);
 	void add_triangle(int v0, int v1, int v2, int shader, bool smooth);
@@ -272,7 +280,8 @@ public:
 	void add_vertex_normals();
 	void add_undisplaced();
 
-	void pack_normals(Scene *scene, uint *shader, float4 *vnormal);
+	void pack_shaders(Scene *scene, uint *shader);
+	void pack_normals(float4 *vnormal);
 	void pack_verts(const vector<uint>& tri_prim_index,
 	                uint4 *tri_vindex,
 	                uint *tri_patch,
@@ -282,7 +291,8 @@ public:
 	void pack_curves(Scene *scene, float4 *curve_key_co, float4 *curve_data, size_t curvekey_offset);
 	void pack_patches(uint *patch_data, uint vert_offset, uint face_offset, uint corner_offset);
 
-	void compute_bvh(DeviceScene *dscene,
+	void compute_bvh(Device *device,
+	                 DeviceScene *dscene,
 	                 SceneParams *params,
 	                 Progress *progress,
 	                 int n,
@@ -295,6 +305,11 @@ public:
 
 	bool has_motion_blur() const;
 	bool has_true_displacement() const;
+
+	/* Convert between normalized -1..1 motion time and index
+	 * in the VERTEX_MOTION attribute. */
+	float motion_time(int step) const;
+	int motion_step(float time) const;
 
 	/* Check whether the mesh should have own BVH built separately. Briefly,
 	 * own BVH is needed for mesh, if:
@@ -316,8 +331,6 @@ public:
 
 class MeshManager {
 public:
-	BVH *bvh;
-
 	bool need_update;
 	bool need_flags_update;
 
@@ -330,12 +343,16 @@ public:
 	void update_osl_attributes(Device *device, Scene *scene, vector<AttributeRequestSet>& mesh_attributes);
 	void update_svm_attributes(Device *device, DeviceScene *dscene, Scene *scene, vector<AttributeRequestSet>& mesh_attributes);
 
+	void device_update_preprocess(Device *device, Scene *scene, Progress& progress);
 	void device_update(Device *device, DeviceScene *dscene, Scene *scene, Progress& progress);
-	void device_update_flags(Device *device, DeviceScene *dscene, Scene *scene, Progress& progress);
 
 	void device_free(Device *device, DeviceScene *dscene);
 
 	void tag_update(Scene *scene);
+
+	void create_volume_mesh(Scene *scene, Mesh *mesh, Progress &progress);
+
+	void collect_statistics(const Scene *scene, RenderStats *stats);
 
 protected:
 	/* Calculate verts/triangles/curves offsets in global arrays. */
@@ -363,12 +380,14 @@ protected:
 	                       Progress& progress);
 
 	void device_update_displacement_images(Device *device,
-	                                       DeviceScene *dscene,
 	                                       Scene *scene,
 	                                       Progress& progress);
+
+	void device_update_volume_images(Device *device,
+	                                 Scene *scene,
+	                                 Progress& progress);
 };
 
 CCL_NAMESPACE_END
 
 #endif /* __MESH_H__ */
-

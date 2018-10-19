@@ -356,7 +356,7 @@ typedef struct GridPaintMask {
 	int pad;
 } GridPaintMask;
 
-typedef enum MVertSkinFlag {
+typedef enum eMVertSkinFlag {
 	/* Marks a vertex as the edge-graph root, used for calculating rotations for all connected edges (recursively).
 	 * Also used to choose a root when generating an armature.
 	 */
@@ -366,13 +366,13 @@ typedef enum MVertSkinFlag {
 	 * directly hulled together, rather than the default of generating intermediate frames.
 	 */
 	MVERT_SKIN_LOOSE = 2,
-} MVertSkinFlag;
+} eMVertSkinFlag;
 
 typedef struct MVertSkin {
 	/* Radii of the skin, define how big the generated frames are. Currently only the first two elements are used. */
 	float radius[3];
 
-	/* MVertSkinFlag */
+	/* eMVertSkinFlag */
 	int flag;
 } MVertSkin;
 
@@ -401,7 +401,7 @@ enum {
 /*	SELECT              = (1 << 0), */
 	ME_VERT_TMP_TAG     = (1 << 2),
 	ME_HIDE             = (1 << 4),
-	ME_VERT_MERGED      = (1 << 6),
+/*	ME_VERT_MERGED      = (1 << 6), */
 	ME_VERT_PBVH_UPDATE = (1 << 7),
 };
 
@@ -437,7 +437,7 @@ enum {
 enum {
 	ME_SMOOTH   = (1 << 0),
 	ME_FACE_SEL = (1 << 1),
-/*	ME_HIDE     = (1 << 4), */ 
+/*	ME_HIDE     = (1 << 4), */
 };
 
 #define ME_POLY_LOOP_PREV(mloop, mp, i)  (&(mloop)[(mp)->loopstart + (((i) + (mp)->totloop - 1) % (mp)->totloop)])

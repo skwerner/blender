@@ -15,13 +15,13 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
- * Contributor: 
- *		Jeroen Bakker 
+ * Contributor:
+ *		Jeroen Bakker
  *		Monique Dewanchand
  */
 
-#ifndef _COM_MovieClipAttributeOperation_h
-#define _COM_MovieClipAttributeOperation_h
+#ifndef __COM_MOVIECLIPATTRIBUTEOPERATION_H__
+#define __COM_MOVIECLIPATTRIBUTEOPERATION_H__
 #include "COM_NodeOperation.h"
 #include "DNA_movieclip_types.h"
 
@@ -39,16 +39,18 @@ class MovieClipAttributeOperation : public NodeOperation {
 private:
 	MovieClip *m_clip;
 	float m_value;
-	bool m_valueSet;
 	int m_framenumber;
 	bool m_invert;
 	MovieClipAttribute m_attribute;
+
 public:
 	/**
 	 * Default constructor
 	 */
 	MovieClipAttributeOperation();
-	
+
+	void initExecution();
+
 	/**
 	 * the inner loop of this program
 	 */

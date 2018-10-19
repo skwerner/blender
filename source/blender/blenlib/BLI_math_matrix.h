@@ -17,7 +17,7 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- 
+
  * The Original Code is: some of this file.
  *
  * ***** END GPL LICENSE BLOCK *****
@@ -210,6 +210,7 @@ void scale_m4_fl(float R[4][4], float scale);
 
 float mat3_to_scale(float M[3][3]);
 float mat4_to_scale(float M[4][4]);
+float mat4_to_xy_scale(float M[4][4]);
 
 void size_to_mat3(float R[3][3], const float size[3]);
 void size_to_mat4(float R[4][4], const float size[3]);
@@ -282,4 +283,3 @@ void print_m4(const char *str, float M[4][4]);
 #endif
 
 #endif /* __BLI_MATH_MATRIX_H__ */
-

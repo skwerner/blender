@@ -42,6 +42,7 @@ class SVMCompiler;
 class OSLCompiler;
 class OutputNode;
 class ConstantFolder;
+class MD5Hash;
 
 /* Bump
  *
@@ -151,17 +152,20 @@ public:
 	virtual bool has_surface_emission() { return false; }
 	virtual bool has_surface_transparent() { return false; }
 	virtual bool has_surface_bssrdf() { return false; }
+	virtual bool has_bump() { return false; }
 	virtual bool has_bssrdf_bump() { return false; }
 	virtual bool has_spatial_varying() { return false; }
 	virtual bool has_object_dependency() { return false; }
+	virtual bool has_attribute_dependency() { return false; }
 	virtual bool has_integrator_dependency() { return false; }
 	virtual bool has_volume_support() { return false; }
+	virtual bool has_raytrace() { return false; }
 	vector<ShaderInput*> inputs;
 	vector<ShaderOutput*> outputs;
 
 	int id; /* index in graph node array */
 	ShaderBump bump; /* for bump mapping utility */
-	
+
 	ShaderNodeSpecialType special_type;	/* special node type */
 
 	/* ** Selective nodes compilation ** */
@@ -241,11 +245,10 @@ public:
 	size_t num_node_ids;
 	bool finalized;
 	bool simplified;
+	string displacement_hash;
 
 	ShaderGraph();
 	~ShaderGraph();
-
-	ShaderGraph *copy();
 
 	ShaderNode *add(ShaderNode *node);
 	OutputNode *output();
@@ -256,6 +259,7 @@ public:
 	void relink(ShaderNode *node, ShaderOutput *from, ShaderOutput *to);
 
 	void remove_proxy_nodes();
+	void compute_displacement_hash();
 	void simplify(Scene *scene);
 	void finalize(Scene *scene,
 	              bool do_bump = false,
@@ -281,7 +285,7 @@ protected:
 
 	/* Graph simplification routines. */
 	void clean(Scene *scene);
-	void constant_fold();
+	void constant_fold(Scene *scene);
 	void simplify_settings(Scene *scene);
 	void deduplicate_nodes();
 	void verify_volume_output();
@@ -290,4 +294,3 @@ protected:
 CCL_NAMESPACE_END
 
 #endif /* __GRAPH_H__ */
-

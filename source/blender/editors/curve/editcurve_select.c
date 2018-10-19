@@ -559,7 +559,7 @@ static int select_linked_pick_invoke(bContext *C, wmOperator *op, const wmEvent 
 	const bool select = !RNA_boolean_get(op->ptr, "deselect");
 
 	view3d_operator_needs_opengl(C);
-	view3d_set_viewcontext(C, &vc);
+	ED_view3d_viewcontext_init(C, &vc);
 
 	if (!ED_curve_pick_vert(&vc, 1, event->mval, &nu, &bezt, &bp, NULL)) {
 		return OPERATOR_CANCELLED;
@@ -1192,7 +1192,7 @@ enum {
 	SIM_CMP_LT,
 };
 
-static EnumPropertyItem curve_prop_similar_compare_types[] = {
+static const EnumPropertyItem curve_prop_similar_compare_types[] = {
 	{SIM_CMP_EQ, "EQUAL", 0, "Equal", ""},
 	{SIM_CMP_GT, "GREATER", 0, "Greater", ""},
 	{SIM_CMP_LT, "LESS", 0, "Less", ""},
@@ -1207,7 +1207,7 @@ enum {
 	SIMCURHAND_DIRECTION,
 };
 
-static EnumPropertyItem curve_prop_similar_types[] = {
+static const EnumPropertyItem curve_prop_similar_types[] = {
 	{SIMCURHAND_TYPE, "TYPE", 0, "Type", ""},
 	{SIMCURHAND_RADIUS, "RADIUS", 0, "Radius", ""},
 	{SIMCURHAND_WEIGHT, "WEIGHT", 0, "Weight", ""},
@@ -1607,7 +1607,7 @@ static void curve_select_shortest_path_surf(Nurb *nu, int vert_src, int vert_dst
 		int axis, sign;
 		int u, v;
 
-		vert_curr = *((int *)BLI_heap_popmin(heap));
+		vert_curr = *((int *)BLI_heap_pop_min(heap));
 		if (vert_curr == vert_dst) {
 			break;
 		}
@@ -1677,7 +1677,7 @@ static int edcu_shortest_path_pick_invoke(bContext *C, wmOperator *op, const wmE
 	}
 
 	view3d_operator_needs_opengl(C);
-	view3d_set_viewcontext(C, &vc);
+	ED_view3d_viewcontext_init(C, &vc);
 
 	if (!ED_curve_pick_vert(&vc, 1, event->mval, &nu_dst, &bezt_dst, &bp_dst, NULL)) {
 		return OPERATOR_PASS_THROUGH;

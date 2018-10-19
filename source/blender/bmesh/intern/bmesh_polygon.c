@@ -36,9 +36,11 @@
 #include "BLI_alloca.h"
 #include "BLI_math.h"
 #include "BLI_memarena.h"
-#include "BLI_polyfill2d.h"
-#include "BLI_polyfill2d_beautify.h"
+#include "BLI_polyfill_2d.h"
+#include "BLI_polyfill_2d_beautify.h"
 #include "BLI_linklist.h"
+#include "BLI_edgehash.h"
+#include "BLI_heap.h"
 
 #include "bmesh.h"
 #include "bmesh_tools.h"
@@ -176,7 +178,7 @@ void BM_face_calc_tessellation(
 		} while ((l_iter = l_iter->next) != l_first);
 
 		/* complete the loop */
-		BLI_polyfill_calc((const float (*)[2])projverts, f->len, -1, r_index);
+		BLI_polyfill_calc(projverts, f->len, -1, r_index);
 	}
 }
 
@@ -508,6 +510,18 @@ void BM_face_calc_tangent_auto(const BMFace *f, float r_tangent[3])
 }
 
 /**
+ * expands bounds (min/max must be initialized).
+ */
+void BM_face_calc_bounds_expand(const BMFace *f, float min[3], float max[3])
+{
+	const BMLoop *l_iter, *l_first;
+	l_iter = l_first = BM_FACE_FIRST_LOOP(f);
+	do {
+		minmax_v3v3_v3(min, max, l_iter->v->co);
+	} while ((l_iter = l_iter->next) != l_first);
+}
+
+/**
  * computes center of face in 3d.  uses center of bounding box.
  */
 void BM_face_calc_center_bounds(const BMFace *f, float r_cent[3])
@@ -597,7 +611,7 @@ void BM_edge_normals_update(BMEdge *e)
 {
 	BMIter iter;
 	BMFace *f;
-	
+
 	BM_ITER_ELEM (f, &iter, e, BM_FACES_OF_EDGE) {
 		BM_face_normal_update(f);
 	}
@@ -855,7 +869,7 @@ void BM_face_normal_flip(BMesh *bm, BMFace *f)
 }
 
 /**
- *  BM POINT IN FACE
+ * BM POINT IN FACE
  *
  * Projects co onto face f, and returns true if it is inside
  * the face bounds.
@@ -872,7 +886,7 @@ bool BM_face_point_inside_test(const BMFace *f, const float co[3])
 	float co_2d[2];
 	BMLoop *l_iter;
 	int i;
-	
+
 	BLI_assert(BM_face_is_normal_valid(f));
 
 	axis_dominant_v3_to_m3(axis_mat, f->no);
@@ -883,7 +897,7 @@ bool BM_face_point_inside_test(const BMFace *f, const float co[3])
 		mul_v2_m3v3(projverts[i], axis_mat, l_iter->v->co);
 	}
 
-	return isect_point_poly_v2(co_2d, (const float (*)[2])projverts, f->len, false);
+	return isect_point_poly_v2(co_2d, projverts, f->len, false);
 }
 
 /**
@@ -923,7 +937,7 @@ void BM_face_triangulate(
         MemArena *pf_arena,
 
         /* use for MOD_TRIANGULATE_NGON_BEAUTY only! */
-        struct Heap *pf_heap, struct EdgeHash *pf_ehash)
+        struct Heap *pf_heap)
 {
 	const int cd_loop_mdisp_offset = CustomData_get_offset(&bm->ldata, CD_MDISPS);
 	const bool use_beauty = (ngon_method == MOD_TRIANGULATE_NGON_BEAUTY);
@@ -1033,13 +1047,13 @@ void BM_face_triangulate(
 				mul_v2_m3v3(projverts[i], axis_mat, l_iter->v->co);
 			}
 
-			BLI_polyfill_calc_arena((const float (*)[2])projverts, f->len, 1, tris,
+			BLI_polyfill_calc_arena(projverts, f->len, 1, tris,
 			                        pf_arena);
 
 			if (use_beauty) {
 				BLI_polyfill_beautify(
-				        (const float (*)[2])projverts, f->len, tris,
-				        pf_arena, pf_heap, pf_ehash);
+				        projverts, f->len, tris,
+				        pf_arena, pf_heap);
 			}
 
 			BLI_memarena_clear(pf_arena);
@@ -1169,7 +1183,7 @@ void BM_face_splits_check_legal(BMesh *bm, BMFace *f, BMLoop *(*loops)[2], int l
 	}
 
 	/* first test for completely convex face */
-	if (is_poly_convex_v2((const float (*)[2])projverts, f->len)) {
+	if (is_poly_convex_v2(projverts, f->len)) {
 		return;
 	}
 
@@ -1185,7 +1199,7 @@ void BM_face_splits_check_legal(BMesh *bm, BMFace *f, BMLoop *(*loops)[2], int l
 		out[1] = max_ff(out[1], projverts[i][1]);
 	}
 	bm->elem_index_dirty |= BM_LOOP;
-	
+
 	/* ensure we are well outside the face bounds (value is arbitrary) */
 	add_v2_fl(out, 1.0f);
 
@@ -1198,7 +1212,7 @@ void BM_face_splits_check_legal(BMesh *bm, BMFace *f, BMLoop *(*loops)[2], int l
 	for (i = 0; i < len; i++) {
 		float mid[2];
 		mid_v2_v2v2(mid, edgeverts[i][0], edgeverts[i][1]);
-		
+
 		int isect = 0;
 		int j_prev;
 		for (j = 0, j_prev = f->len - 1; j < f->len; j_prev = j++) {
@@ -1270,7 +1284,7 @@ void BM_face_splits_check_optimal(BMFace *f, BMLoop *(*loops)[2], int len)
  * Small utility functions for fast access
  *
  * faster alternative to:
- *  BM_iter_as_array(bm, BM_VERTS_OF_FACE, f, (void **)v, 3);
+ * BM_iter_as_array(bm, BM_VERTS_OF_FACE, f, (void **)v, 3);
  */
 void BM_face_as_array_vert_tri(BMFace *f, BMVert *r_verts[3])
 {
@@ -1285,7 +1299,7 @@ void BM_face_as_array_vert_tri(BMFace *f, BMVert *r_verts[3])
 
 /**
  * faster alternative to:
- *  BM_iter_as_array(bm, BM_VERTS_OF_FACE, f, (void **)v, 4);
+ * BM_iter_as_array(bm, BM_VERTS_OF_FACE, f, (void **)v, 4);
  */
 void BM_face_as_array_vert_quad(BMFace *f, BMVert *r_verts[4])
 {
@@ -1304,7 +1318,7 @@ void BM_face_as_array_vert_quad(BMFace *f, BMVert *r_verts[4])
  * Small utility functions for fast access
  *
  * faster alternative to:
- *  BM_iter_as_array(bm, BM_LOOPS_OF_FACE, f, (void **)l, 3);
+ * BM_iter_as_array(bm, BM_LOOPS_OF_FACE, f, (void **)l, 3);
  */
 void BM_face_as_array_loop_tri(BMFace *f, BMLoop *r_loops[3])
 {
@@ -1319,7 +1333,7 @@ void BM_face_as_array_loop_tri(BMFace *f, BMLoop *r_loops[3])
 
 /**
  * faster alternative to:
- *  BM_iter_as_array(bm, BM_LOOPS_OF_FACE, f, (void **)l, 4);
+ * BM_iter_as_array(bm, BM_LOOPS_OF_FACE, f, (void **)l, 4);
  */
 void BM_face_as_array_loop_quad(BMFace *f, BMLoop *r_loops[4])
 {
@@ -1338,7 +1352,7 @@ void BM_face_as_array_loop_quad(BMFace *f, BMLoop *r_loops[4])
  * \brief BM_mesh_calc_tessellation get the looptris and its number from a certain bmesh
  * \param looptris
  *
- * \note \a looptris  Must be pre-allocated to at least the size of given by: poly_to_tri_count
+ * \note \a looptris Must be pre-allocated to at least the size of given by: poly_to_tri_count
  */
 void BM_mesh_calc_tessellation(BMesh *bm, BMLoop *(*looptris)[3], int *r_looptris_tot)
 {
@@ -1412,6 +1426,17 @@ void BM_mesh_calc_tessellation(BMesh *bm, BMLoop *(*looptris)[3], int *r_looptri
 			(l_ptr_a[2] = l_ptr_b[1] = l = l->next);
 			(             l_ptr_b[2] = l->next);
 #endif
+
+			if (UNLIKELY(is_quad_flip_v3_first_third_fast(
+			                     l_ptr_a[0]->v->co,
+			                     l_ptr_a[1]->v->co,
+			                     l_ptr_a[2]->v->co,
+			                     l_ptr_b[2]->v->co)))
+			{
+				/* flip out of degenerate 0-2 state. */
+				l_ptr_a[2] = l_ptr_b[2];
+				l_ptr_b[0] = l_ptr_a[1];
+			}
 		}
 
 #endif /* USE_TESSFACE_SPEEDUP */
@@ -1447,7 +1472,7 @@ void BM_mesh_calc_tessellation(BMesh *bm, BMLoop *(*looptris)[3], int *r_looptri
 				j++;
 			} while ((l_iter = l_iter->next) != l_first);
 
-			BLI_polyfill_calc_arena((const float (*)[2])projverts, efa->len, 1, tris, arena);
+			BLI_polyfill_calc_arena(projverts, efa->len, 1, tris, arena);
 
 			for (j = 0; j < totfilltri; j++) {
 				BMLoop **l_ptr = looptris[i++];
@@ -1472,5 +1497,146 @@ void BM_mesh_calc_tessellation(BMesh *bm, BMLoop *(*looptris)[3], int *r_looptri
 	BLI_assert(i <= looptris_tot);
 
 #undef USE_TESSFACE_SPEEDUP
+
+}
+
+
+/**
+ * A version of #BM_mesh_calc_tessellation that avoids degenerate triangles.
+ */
+void BM_mesh_calc_tessellation_beauty(BMesh *bm, BMLoop *(*looptris)[3], int *r_looptris_tot)
+{
+	/* this assumes all faces can be scan-filled, which isn't always true,
+	 * worst case we over alloc a little which is acceptable */
+#ifndef NDEBUG
+	const int looptris_tot = poly_to_tri_count(bm->totface, bm->totloop);
+#endif
+
+	BMIter iter;
+	BMFace *efa;
+	int i = 0;
+
+	MemArena *pf_arena = NULL;
+
+	/* use_beauty */
+	Heap *pf_heap = NULL;
+
+	BM_ITER_MESH (efa, &iter, bm, BM_FACES_OF_MESH) {
+		/* don't consider two-edged faces */
+		if (UNLIKELY(efa->len < 3)) {
+			/* do nothing */
+		}
+		else if (efa->len == 3) {
+			BMLoop *l;
+			BMLoop **l_ptr = looptris[i++];
+			l_ptr[0] = l = BM_FACE_FIRST_LOOP(efa);
+			l_ptr[1] = l = l->next;
+			l_ptr[2] = l->next;
+		}
+		else if (efa->len == 4) {
+			BMLoop *l_v1 = BM_FACE_FIRST_LOOP(efa);
+			BMLoop *l_v2 = l_v1->next;
+			BMLoop *l_v3 = l_v2->next;
+			BMLoop *l_v4 = l_v1->prev;
+
+			/* #BM_verts_calc_rotate_beauty performs excessive checks we don't need!
+			 * It's meant for rotating edges, it also calculates a new normal.
+			 *
+			 * Use #BLI_polyfill_beautify_quad_rotate_calc since we have the normal.
+			 */
+#if 0
+			const bool split_13 = (BM_verts_calc_rotate_beauty(
+			        l_v1->v, l_v2->v, l_v3->v, l_v4->v, 0, 0) < 0.0f);
+#else
+			float axis_mat[3][3], v_quad[4][2];
+			axis_dominant_v3_to_m3(axis_mat, efa->no);
+			mul_v2_m3v3(v_quad[0], axis_mat, l_v1->v->co);
+			mul_v2_m3v3(v_quad[1], axis_mat, l_v2->v->co);
+			mul_v2_m3v3(v_quad[2], axis_mat, l_v3->v->co);
+			mul_v2_m3v3(v_quad[3], axis_mat, l_v4->v->co);
+
+			const bool split_13 = BLI_polyfill_beautify_quad_rotate_calc(
+			        v_quad[0], v_quad[1], v_quad[2], v_quad[3]) < 0.0f;
+#endif
+
+			BMLoop **l_ptr_a = looptris[i++];
+			BMLoop **l_ptr_b = looptris[i++];
+			if (split_13) {
+				l_ptr_a[0] = l_v1;
+				l_ptr_a[1] = l_v2;
+				l_ptr_a[2] = l_v3;
+
+				l_ptr_b[0] = l_v1;
+				l_ptr_b[1] = l_v3;
+				l_ptr_b[2] = l_v4;
+			}
+			else {
+				l_ptr_a[0] = l_v1;
+				l_ptr_a[1] = l_v2;
+				l_ptr_a[2] = l_v4;
+
+				l_ptr_b[0] = l_v2;
+				l_ptr_b[1] = l_v3;
+				l_ptr_b[2] = l_v4;
+			}
+		}
+		else {
+			int j;
+
+			BMLoop *l_iter;
+			BMLoop *l_first;
+			BMLoop **l_arr;
+
+			float axis_mat[3][3];
+			float (*projverts)[2];
+			unsigned int (*tris)[3];
+
+			const int totfilltri = efa->len - 2;
+
+			if (UNLIKELY(pf_arena == NULL)) {
+				pf_arena = BLI_memarena_new(BLI_MEMARENA_STD_BUFSIZE, __func__);
+				pf_heap = BLI_heap_new_ex(BLI_POLYFILL_ALLOC_NGON_RESERVE);
+			}
+
+			tris = BLI_memarena_alloc(pf_arena, sizeof(*tris) * totfilltri);
+			l_arr = BLI_memarena_alloc(pf_arena, sizeof(*l_arr) * efa->len);
+			projverts = BLI_memarena_alloc(pf_arena, sizeof(*projverts) * efa->len);
+
+			axis_dominant_v3_to_m3_negate(axis_mat, efa->no);
+
+			j = 0;
+			l_iter = l_first = BM_FACE_FIRST_LOOP(efa);
+			do {
+				l_arr[j] = l_iter;
+				mul_v2_m3v3(projverts[j], axis_mat, l_iter->v->co);
+				j++;
+			} while ((l_iter = l_iter->next) != l_first);
+
+			BLI_polyfill_calc_arena(projverts, efa->len, 1, tris, pf_arena);
+
+			BLI_polyfill_beautify(projverts, efa->len, tris, pf_arena, pf_heap);
+
+			for (j = 0; j < totfilltri; j++) {
+				BMLoop **l_ptr = looptris[i++];
+				unsigned int *tri = tris[j];
+
+				l_ptr[0] = l_arr[tri[0]];
+				l_ptr[1] = l_arr[tri[1]];
+				l_ptr[2] = l_arr[tri[2]];
+			}
+
+			BLI_memarena_clear(pf_arena);
+		}
+	}
+
+	if (pf_arena) {
+		BLI_memarena_free(pf_arena);
+
+		BLI_heap_free(pf_heap, NULL);
+	}
+
+	*r_looptris_tot = i;
+
+	BLI_assert(i <= looptris_tot);
 
 }

@@ -72,24 +72,17 @@ ccl_device_inline float area_light_sample(float3 P,
 	float y0 = dot(dir, y);
 	float x1 = x0 + axisu_len;
 	float y1 = y0 + axisv_len;
-	/* Create vectors to four vertices. */
-	float3 v00 = make_float3(x0, y0, z0);
-	float3 v01 = make_float3(x0, y1, z0);
-	float3 v10 = make_float3(x1, y0, z0);
-	float3 v11 = make_float3(x1, y1, z0);
-	/* Compute normals to edges. */
-	float3 n0 = normalize(cross(v00, v10));
-	float3 n1 = normalize(cross(v10, v11));
-	float3 n2 = normalize(cross(v11, v01));
-	float3 n3 = normalize(cross(v01, v00));
 	/* Compute internal angles (gamma_i). */
-	float g0 = safe_acosf(-dot(n0, n1));
-	float g1 = safe_acosf(-dot(n1, n2));
-	float g2 = safe_acosf(-dot(n2, n3));
-	float g3 = safe_acosf(-dot(n3, n0));
+	float4 diff = make_float4(x0, y1, x1, y0) - make_float4(x1, y0, x0, y1);
+	float4 nz = make_float4(y0, x1, y1, x0) * diff;
+	nz = nz / sqrt(z0 * z0 * diff * diff + nz * nz);
+	float g0 = safe_acosf(-nz.x * nz.y);
+	float g1 = safe_acosf(-nz.y * nz.z);
+	float g2 = safe_acosf(-nz.z * nz.w);
+	float g3 = safe_acosf(-nz.w * nz.x);
 	/* Compute predefined constants. */
-	float b0 = n0.z;
-	float b1 = n2.z;
+	float b0 = nz.x;
+	float b1 = nz.z;
 	float b0sq = b0 * b0;
 	float k = M_2PI_F - g2 - g3;
 	/* Compute solid angle from internal angles. */
@@ -143,12 +136,13 @@ float3 background_map_sample(KernelGlobals *kg, float randu, float randv, float 
 	/* for the following, the CDF values are actually a pair of floats, with the
 	 * function value as X and the actual CDF as Y.  The last entry's function
 	 * value is the CDF total. */
-	int res = kernel_data.integrator.pdf_background_res;
-	int cdf_count = res + 1;
+	int res_x = kernel_data.integrator.pdf_background_res_x;
+	int res_y = kernel_data.integrator.pdf_background_res_y;
+	int cdf_width = res_x + 1;
 
 	/* this is basically std::lower_bound as used by pbrt */
 	int first = 0;
-	int count = res;
+	int count = res_y;
 
 	while(count > 0) {
 		int step = count >> 1;
@@ -163,24 +157,24 @@ float3 background_map_sample(KernelGlobals *kg, float randu, float randv, float 
 	}
 
 	int index_v = max(0, first - 1);
-	kernel_assert(index_v >= 0 && index_v < res);
+	kernel_assert(index_v >= 0 && index_v < res_y);
 
 	float2 cdf_v = kernel_tex_fetch(__light_background_marginal_cdf, index_v);
 	float2 cdf_next_v = kernel_tex_fetch(__light_background_marginal_cdf, index_v + 1);
-	float2 cdf_last_v = kernel_tex_fetch(__light_background_marginal_cdf, res);
+	float2 cdf_last_v = kernel_tex_fetch(__light_background_marginal_cdf, res_y);
 
 	/* importance-sampled V direction */
-	float dv = (randv - cdf_v.y) / (cdf_next_v.y - cdf_v.y);
-	float v = (index_v + dv) / res;
+	float dv = inverse_lerp(cdf_v.y, cdf_next_v.y, randv);
+	float v = (index_v + dv) / res_y;
 
 	/* this is basically std::lower_bound as used by pbrt */
 	first = 0;
-	count = res;
+	count = res_x;
 	while(count > 0) {
 		int step = count >> 1;
 		int middle = first + step;
 
-		if(kernel_tex_fetch(__light_background_conditional_cdf, index_v * cdf_count + middle).y < randu) {
+		if(kernel_tex_fetch(__light_background_conditional_cdf, index_v * cdf_width + middle).y < randu) {
 			first = middle + 1;
 			count -= step + 1;
 		}
@@ -189,15 +183,15 @@ float3 background_map_sample(KernelGlobals *kg, float randu, float randv, float 
 	}
 
 	int index_u = max(0, first - 1);
-	kernel_assert(index_u >= 0 && index_u < res);
+	kernel_assert(index_u >= 0 && index_u < res_x);
 
-	float2 cdf_u = kernel_tex_fetch(__light_background_conditional_cdf, index_v * cdf_count + index_u);
-	float2 cdf_next_u = kernel_tex_fetch(__light_background_conditional_cdf, index_v * cdf_count + index_u + 1);
-	float2 cdf_last_u = kernel_tex_fetch(__light_background_conditional_cdf, index_v * cdf_count + res);
+	float2 cdf_u = kernel_tex_fetch(__light_background_conditional_cdf, index_v * cdf_width + index_u);
+	float2 cdf_next_u = kernel_tex_fetch(__light_background_conditional_cdf, index_v * cdf_width + index_u + 1);
+	float2 cdf_last_u = kernel_tex_fetch(__light_background_conditional_cdf, index_v * cdf_width + res_x);
 
 	/* importance-sampled U direction */
-	float du = (randu - cdf_u.y) / (cdf_next_u.y - cdf_u.y);
-	float u = (index_u + du) / res;
+	float du = inverse_lerp(cdf_u.y, cdf_next_u.y, randu);
+	float u = (index_u + du) / res_x;
 
 	/* compute pdf */
 	float denom = cdf_last_u.x * cdf_last_v.x;
@@ -223,19 +217,21 @@ ccl_device
 float background_map_pdf(KernelGlobals *kg, float3 direction)
 {
 	float2 uv = direction_to_equirectangular(direction);
-	int res = kernel_data.integrator.pdf_background_res;
+	int res_x = kernel_data.integrator.pdf_background_res_x;
+	int res_y = kernel_data.integrator.pdf_background_res_y;
+	int cdf_width = res_x + 1;
 
 	float sin_theta = sinf(uv.y * M_PI_F);
 
 	if(sin_theta == 0.0f)
 		return 0.0f;
 
-	int index_u = clamp(float_to_int(uv.x * res), 0, res - 1);
-	int index_v = clamp(float_to_int(uv.y * res), 0, res - 1);
+	int index_u = clamp(float_to_int(uv.x * res_x), 0, res_x - 1);
+	int index_v = clamp(float_to_int(uv.y * res_y), 0, res_y - 1);
 
 	/* pdfs in V direction */
-	float2 cdf_last_u = kernel_tex_fetch(__light_background_conditional_cdf, index_v * (res + 1) + res);
-	float2 cdf_last_v = kernel_tex_fetch(__light_background_marginal_cdf, res);
+	float2 cdf_last_u = kernel_tex_fetch(__light_background_conditional_cdf, index_v * cdf_width + res_x);
+	float2 cdf_last_v = kernel_tex_fetch(__light_background_marginal_cdf, res_y);
 
 	float denom = cdf_last_u.x * cdf_last_v.x;
 
@@ -243,7 +239,7 @@ float background_map_pdf(KernelGlobals *kg, float3 direction)
 		return 0.0f;
 
 	/* pdfs in U direction */
-	float2 cdf_u = kernel_tex_fetch(__light_background_conditional_cdf, index_v * (res + 1) + index_u);
+	float2 cdf_u = kernel_tex_fetch(__light_background_conditional_cdf, index_v * cdf_width + index_u);
 	float2 cdf_v = kernel_tex_fetch(__light_background_marginal_cdf, index_v);
 
 	return (cdf_u.x * cdf_v.x)/(M_2PI_F * M_PI_F * sin_theta * denom);
@@ -255,11 +251,11 @@ ccl_device_inline bool background_portal_data_fetch_and_check_side(KernelGlobals
                                                                    float3 *lightpos,
                                                                    float3 *dir)
 {
-	float4 data0 = kernel_tex_fetch(__light_data, (index + kernel_data.integrator.portal_offset)*LIGHT_SIZE + 0);
-	float4 data3 = kernel_tex_fetch(__light_data, (index + kernel_data.integrator.portal_offset)*LIGHT_SIZE + 3);
+	int portal = kernel_data.integrator.portal_offset + index;
+	const ccl_global KernelLight *klight = &kernel_tex_fetch(__lights, portal);
 
-	*lightpos = make_float3(data0.y, data0.z, data0.w);
-	*dir = make_float3(data3.y, data3.z, data3.w);
+	*lightpos = make_float3(klight->co[0], klight->co[1], klight->co[2]);
+	*dir = make_float3(klight->area.dir[0], klight->area.dir[1], klight->area.dir[2]);
 
 	/* Check whether portal is on the right side. */
 	if(dot(*dir, P - *lightpos) > 1e-4f)
@@ -291,11 +287,10 @@ ccl_device_inline float background_portal_pdf(KernelGlobals *kg,
 		}
 		num_possible++;
 
-		float4 data1 = kernel_tex_fetch(__light_data, (p + kernel_data.integrator.portal_offset)*LIGHT_SIZE + 1);
-		float4 data2 = kernel_tex_fetch(__light_data, (p + kernel_data.integrator.portal_offset)*LIGHT_SIZE + 2);
-
-		float3 axisu = make_float3(data1.y, data1.z, data1.w);
-		float3 axisv = make_float3(data2.y, data2.z, data2.w);
+		int portal = kernel_data.integrator.portal_offset + p;
+		const ccl_global KernelLight *klight = &kernel_tex_fetch(__lights, portal);
+		float3 axisu = make_float3(klight->area.axisu[0], klight->area.axisu[1], klight->area.axisu[2]);
+		float3 axisv = make_float3(klight->area.axisv[0], klight->area.axisv[1], klight->area.axisv[2]);
 
 		if(!ray_quad_intersect(P, direction, 1e-4f, FLT_MAX, lightpos, axisu, axisv, dir, NULL, NULL, NULL, NULL))
 			continue;
@@ -346,10 +341,10 @@ ccl_device float3 background_portal_sample(KernelGlobals *kg,
 
 		if(portal == 0) {
 			/* p is the portal to be sampled. */
-			float4 data1 = kernel_tex_fetch(__light_data, (p + kernel_data.integrator.portal_offset)*LIGHT_SIZE + 1);
-			float4 data2 = kernel_tex_fetch(__light_data, (p + kernel_data.integrator.portal_offset)*LIGHT_SIZE + 2);
-			float3 axisu = make_float3(data1.y, data1.z, data1.w);
-			float3 axisv = make_float3(data2.y, data2.z, data2.w);
+			int portal = kernel_data.integrator.portal_offset + p;
+			const ccl_global KernelLight *klight = &kernel_tex_fetch(__lights, portal);
+			float3 axisu = make_float3(klight->area.axisu[0], klight->area.axisu[1], klight->area.axisu[2]);
+			float3 axisv = make_float3(klight->area.axisv[0], klight->area.axisv[1], klight->area.axisv[2]);
 
 			*pdf = area_light_sample(P, &lightpos,
 			                         axisu, axisv,
@@ -396,11 +391,13 @@ ccl_device_inline float3 background_light_sample(KernelGlobals *kg,
 					     + (1.0f - portal_sampling_pdf) * cdf_pdf);
 				}
 				return D;
-			} else {
+			}
+			else {
 				/* Sample map, but with nonzero portal_sampling_pdf for MIS. */
 				randu = (randu - portal_sampling_pdf) / (1.0f - portal_sampling_pdf);
 			}
-		} else {
+		}
+		else {
 			/* We can't sample a portal.
 			 * Check if we can sample the map instead.
 			 */
@@ -477,13 +474,9 @@ ccl_device float3 sphere_light_sample(float3 P, float3 center, float radius, flo
 	return disk_light_sample(normalize(P - center), randu, randv)*radius;
 }
 
-ccl_device float spot_light_attenuation(float4 data1, float4 data2, LightSample *ls)
+ccl_device float spot_light_attenuation(float3 dir, float spot_angle, float spot_smooth, LightSample *ls)
 {
-	float3 dir = make_float3(data2.y, data2.z, data2.w);
 	float3 I = ls->Ng;
-
-	float spot_angle = data1.w;
-	float spot_smooth = data2.x;
 
 	float attenuation = dot(dir, I);
 
@@ -506,7 +499,7 @@ ccl_device float lamp_light_pdf(KernelGlobals *kg, const float3 Ng, const float3
 
 	if(cos_pi <= 0.0f)
 		return 0.0f;
-	
+
 	return t*t/cos_pi;
 }
 
@@ -516,12 +509,10 @@ ccl_device_inline bool lamp_light_sample(KernelGlobals *kg,
                                          float3 P,
                                          LightSample *ls)
 {
-	float4 data0 = kernel_tex_fetch(__light_data, lamp*LIGHT_SIZE + 0);
-	float4 data1 = kernel_tex_fetch(__light_data, lamp*LIGHT_SIZE + 1);
-
-	LightType type = (LightType)__float_as_int(data0.x);
+	const ccl_global KernelLight *klight = &kernel_tex_fetch(__lights, lamp);
+	LightType type = (LightType)klight->type;
 	ls->type = type;
-	ls->shader = __float_as_int(data1.x);
+	ls->shader = klight->shader_id;
 	ls->object = PRIM_NONE;
 	ls->prim = PRIM_NONE;
 	ls->lamp = lamp;
@@ -530,10 +521,10 @@ ccl_device_inline bool lamp_light_sample(KernelGlobals *kg,
 
 	if(type == LIGHT_DISTANT) {
 		/* distant light */
-		float3 lightD = make_float3(data0.y, data0.z, data0.w);
+		float3 lightD = make_float3(klight->co[0], klight->co[1], klight->co[2]);
 		float3 D = lightD;
-		float radius = data1.y;
-		float invarea = data1.w;
+		float radius = klight->distant.radius;
+		float invarea = klight->distant.invarea;
 
 		if(radius > 0.0f)
 			D = distant_light_sample(D, radius, randu, randv);
@@ -545,7 +536,7 @@ ccl_device_inline bool lamp_light_sample(KernelGlobals *kg,
 
 		float costheta = dot(lightD, D);
 		ls->pdf = invarea/(costheta*costheta*costheta);
-		ls->eval_fac = ls->pdf*kernel_data.integrator.inv_pdf_lights;
+		ls->eval_fac = ls->pdf;
 	}
 #ifdef __BACKGROUND_MIS__
 	else if(type == LIGHT_BACKGROUND) {
@@ -557,14 +548,13 @@ ccl_device_inline bool lamp_light_sample(KernelGlobals *kg,
 		ls->D = -D;
 		ls->t = FLT_MAX;
 		ls->eval_fac = 1.0f;
-		ls->pdf *= kernel_data.integrator.pdf_lights;
 	}
 #endif
 	else {
-		ls->P = make_float3(data0.y, data0.z, data0.w);
+		ls->P = make_float3(klight->co[0], klight->co[1], klight->co[2]);
 
 		if(type == LIGHT_POINT || type == LIGHT_SPOT) {
-			float radius = data1.y;
+			float radius = klight->spot.radius;
 
 			if(radius > 0.0f)
 				/* sphere light */
@@ -573,14 +563,19 @@ ccl_device_inline bool lamp_light_sample(KernelGlobals *kg,
 			ls->D = normalize_len(ls->P - P, &ls->t);
 			ls->Ng = -ls->D;
 
-			float invarea = data1.z;
+			float invarea = klight->spot.invarea;
 			ls->eval_fac = (0.25f*M_1_PI_F)*invarea;
 			ls->pdf = invarea;
 
 			if(type == LIGHT_SPOT) {
 				/* spot light attenuation */
-				float4 data2 = kernel_tex_fetch(__light_data, lamp*LIGHT_SIZE + 2);
-				ls->eval_fac *= spot_light_attenuation(data1, data2, ls);
+				float3 dir = make_float3(klight->spot.dir[0],
+                                         klight->spot.dir[1],
+				                         klight->spot.dir[2]);
+				ls->eval_fac *= spot_light_attenuation(dir,
+				                                       klight->spot.spot_angle,
+				                                       klight->spot.spot_smooth,
+				                                       ls);
 				if(ls->eval_fac == 0.0f) {
 					return false;
 				}
@@ -593,12 +588,15 @@ ccl_device_inline bool lamp_light_sample(KernelGlobals *kg,
 		}
 		else {
 			/* area light */
-			float4 data2 = kernel_tex_fetch(__light_data, lamp*LIGHT_SIZE + 2);
-			float4 data3 = kernel_tex_fetch(__light_data, lamp*LIGHT_SIZE + 3);
-
-			float3 axisu = make_float3(data1.y, data1.z, data1.w);
-			float3 axisv = make_float3(data2.y, data2.z, data2.w);
-			float3 D = make_float3(data3.y, data3.z, data3.w);
+			float3 axisu = make_float3(klight->area.axisu[0],
+			                           klight->area.axisu[1],
+			                           klight->area.axisu[2]);
+			float3 axisv = make_float3(klight->area.axisv[0],
+			                           klight->area.axisv[1],
+			                           klight->area.axisv[2]);
+			float3 D = make_float3(klight->area.dir[0],
+			                       klight->area.dir[1],
+			                       klight->area.dir[2]);
 
 			if(dot(ls->P - P, D) > 0.0f) {
 				return false;
@@ -617,24 +615,22 @@ ccl_device_inline bool lamp_light_sample(KernelGlobals *kg,
 			ls->Ng = D;
 			ls->D = normalize_len(ls->P - P, &ls->t);
 
-			float invarea = data2.x;
+			float invarea = klight->area.invarea;
 			ls->eval_fac = 0.25f*invarea;
 		}
-
-		ls->eval_fac *= kernel_data.integrator.inv_pdf_lights;
 	}
+
+	ls->pdf *= kernel_data.integrator.pdf_lights;
 
 	return (ls->pdf > 0.0f);
 }
 
 ccl_device bool lamp_light_eval(KernelGlobals *kg, int lamp, float3 P, float3 D, float t, LightSample *ls)
 {
-	float4 data0 = kernel_tex_fetch(__light_data, lamp*LIGHT_SIZE + 0);
-	float4 data1 = kernel_tex_fetch(__light_data, lamp*LIGHT_SIZE + 1);
-
-	LightType type = (LightType)__float_as_int(data0.x);
+	const ccl_global KernelLight *klight = &kernel_tex_fetch(__lights, lamp);
+	LightType type = (LightType)klight->type;
 	ls->type = type;
-	ls->shader = __float_as_int(data1.x);
+	ls->shader = klight->shader_id;
 	ls->object = PRIM_NONE;
 	ls->prim = PRIM_NONE;
 	ls->lamp = lamp;
@@ -647,7 +643,7 @@ ccl_device bool lamp_light_eval(KernelGlobals *kg, int lamp, float3 P, float3 D,
 
 	if(type == LIGHT_DISTANT) {
 		/* distant light */
-		float radius = data1.y;
+		float radius = klight->distant.radius;
 
 		if(radius == 0.0f)
 			return false;
@@ -669,9 +665,9 @@ ccl_device bool lamp_light_eval(KernelGlobals *kg, int lamp, float3 P, float3 D,
 		 *             P
 		 */
 
-		float3 lightD = make_float3(data0.y, data0.z, data0.w);
+		float3 lightD = make_float3(klight->co[0], klight->co[1], klight->co[2]);
 		float costheta = dot(-lightD, D);
-		float cosangle = data1.z;
+		float cosangle = klight->distant.cosangle;
 
 		if(costheta < cosangle)
 			return false;
@@ -682,13 +678,14 @@ ccl_device bool lamp_light_eval(KernelGlobals *kg, int lamp, float3 P, float3 D,
 		ls->t = FLT_MAX;
 
 		/* compute pdf */
-		float invarea = data1.w;
+		float invarea = klight->distant.invarea;
 		ls->pdf = invarea/(costheta*costheta*costheta);
 		ls->eval_fac = ls->pdf;
 	}
 	else if(type == LIGHT_POINT || type == LIGHT_SPOT) {
-		float3 lightP = make_float3(data0.y, data0.z, data0.w);
-		float radius = data1.y;
+		float3 lightP = make_float3(klight->co[0], klight->co[1], klight->co[2]);
+
+		float radius = klight->spot.radius;
 
 		/* sphere light */
 		if(radius == 0.0f)
@@ -703,14 +700,19 @@ ccl_device bool lamp_light_eval(KernelGlobals *kg, int lamp, float3 P, float3 D,
 		ls->Ng = -D;
 		ls->D = D;
 
-		float invarea = data1.z;
+		float invarea = klight->spot.invarea;
 		ls->eval_fac = (0.25f*M_1_PI_F)*invarea;
 		ls->pdf = invarea;
 
 		if(type == LIGHT_SPOT) {
 			/* spot light attenuation */
-			float4 data2 = kernel_tex_fetch(__light_data, lamp*LIGHT_SIZE + 2);
-			ls->eval_fac *= spot_light_attenuation(data1, data2, ls);
+			float3 dir = make_float3(klight->spot.dir[0],
+			                         klight->spot.dir[1],
+			                         klight->spot.dir[2]);
+			ls->eval_fac *= spot_light_attenuation(dir,
+			                                       klight->spot.spot_angle,
+			                                       klight->spot.spot_smooth,
+			                                       ls);
 
 			if(ls->eval_fac == 0.0f)
 				return false;
@@ -725,22 +727,25 @@ ccl_device bool lamp_light_eval(KernelGlobals *kg, int lamp, float3 P, float3 D,
 	}
 	else if(type == LIGHT_AREA) {
 		/* area light */
-		float4 data2 = kernel_tex_fetch(__light_data, lamp*LIGHT_SIZE + 2);
-		float4 data3 = kernel_tex_fetch(__light_data, lamp*LIGHT_SIZE + 3);
-
-		float invarea = data2.x;
+		float invarea = klight->area.invarea;
 		if(invarea == 0.0f)
 			return false;
 
-		float3 axisu = make_float3(data1.y, data1.z, data1.w);
-		float3 axisv = make_float3(data2.y, data2.z, data2.w);
-		float3 Ng = make_float3(data3.y, data3.z, data3.w);
+		float3 axisu = make_float3(klight->area.axisu[0],
+		                           klight->area.axisu[1],
+		                           klight->area.axisu[2]);
+		float3 axisv = make_float3(klight->area.axisv[0],
+		                           klight->area.axisv[1],
+		                           klight->area.axisv[2]);
+		float3 Ng = make_float3(klight->area.dir[0],
+		                        klight->area.dir[1],
+		                        klight->area.dir[2]);
 
 		/* one sided */
 		if(dot(D, Ng) >= 0.0f)
 			return false;
 
-		float3 light_P = make_float3(data0.y, data0.z, data0.w);
+		float3 light_P = make_float3(klight->co[0], klight->co[1], klight->co[2]);
 
 		if(!ray_quad_intersect(P, D, 0.0f, t, light_P,
 		                       axisu, axisv, Ng,
@@ -755,86 +760,292 @@ ccl_device bool lamp_light_eval(KernelGlobals *kg, int lamp, float3 P, float3 D,
 		ls->pdf = area_light_sample(P, &light_P, axisu, axisv, 0, 0, false);
 		ls->eval_fac = 0.25f*invarea;
 	}
-	else
+	else {
 		return false;
+	}
+
+	ls->pdf *= kernel_data.integrator.pdf_lights;
 
 	return true;
 }
 
 /* Triangle Light */
 
-ccl_device void object_transform_light_sample(KernelGlobals *kg, LightSample *ls, int object, float time)
+/* returns true if the triangle is has motion blur or an instancing transform applied */
+ccl_device_inline bool triangle_world_space_vertices(KernelGlobals *kg, int object, int prim, float time, float3 V[3])
 {
+	bool has_motion = false;
+	const int object_flag = kernel_tex_fetch(__object_flag, object);
+
+	if(object_flag & SD_OBJECT_HAS_VERTEX_MOTION && time >= 0.0f) {
+		motion_triangle_vertices(kg, object, prim, time, V);
+		has_motion = true;
+	}
+	else {
+		triangle_vertices(kg, prim, V);
+	}
+
 #ifdef __INSTANCING__
-	/* instance transform */
-	if(!(kernel_tex_fetch(__object_flag, object) & SD_OBJECT_TRANSFORM_APPLIED)) {
+	if(!(object_flag & SD_OBJECT_TRANSFORM_APPLIED)) {
 #  ifdef __OBJECT_MOTION__
-		Transform itfm;
-		Transform tfm = object_fetch_transform_motion_test(kg, object, time, &itfm);
+		float object_time = (time >= 0.0f) ? time : 0.5f;
+		Transform tfm = object_fetch_transform_motion_test(kg, object, object_time, NULL);
 #  else
 		Transform tfm = object_fetch_transform(kg, object, OBJECT_TRANSFORM);
 #  endif
-
-		ls->P = transform_point(&tfm, ls->P);
-		ls->Ng = normalize(transform_direction(&tfm, ls->Ng));
+		V[0] = transform_point(&tfm, V[0]);
+		V[1] = transform_point(&tfm, V[1]);
+		V[2] = transform_point(&tfm, V[2]);
+		has_motion = true;
 	}
 #endif
+	return has_motion;
 }
 
-ccl_device void triangle_light_sample(KernelGlobals *kg, int prim, int object,
-	float randu, float randv, float time, LightSample *ls)
-{
-	float u, v;
-
-	/* compute random point in triangle */
-	randu = sqrtf(randu);
-
-	u = 1.0f - randu;
-	v = randv*randu;
-
-	/* triangle, so get position, normal, shader */
-	triangle_point_normal(kg, object, prim, u, v, &ls->P, &ls->Ng, &ls->shader);
-	ls->object = object;
-	ls->prim = prim;
-	ls->lamp = LAMP_NONE;
-	ls->shader |= SHADER_USE_MIS;
-	ls->t = 0.0f;
-	ls->u = u;
-	ls->v = v;
-	ls->type = LIGHT_TRIANGLE;
-	ls->eval_fac = 1.0f;
-
-	object_transform_light_sample(kg, ls, object, time);
-}
-
-ccl_device float triangle_light_pdf(KernelGlobals *kg,
-	const float3 Ng, const float3 I, float t)
+ccl_device_inline float triangle_light_pdf_area(KernelGlobals *kg, const float3 Ng, const float3 I, float t)
 {
 	float pdf = kernel_data.integrator.pdf_triangles;
 	float cos_pi = fabsf(dot(Ng, I));
 
 	if(cos_pi == 0.0f)
 		return 0.0f;
-	
+
 	return t*t*pdf/cos_pi;
+}
+
+ccl_device_forceinline float triangle_light_pdf(KernelGlobals *kg, ShaderData *sd, float t)
+{
+	/* A naive heuristic to decide between costly solid angle sampling
+	 * and simple area sampling, comparing the distance to the triangle plane
+	 * to the length of the edges of the triangle. */
+
+	float3 V[3];
+	bool has_motion = triangle_world_space_vertices(kg, sd->object, sd->prim, sd->time, V);
+
+	const float3 e0 = V[1] - V[0];
+	const float3 e1 = V[2] - V[0];
+	const float3 e2 = V[2] - V[1];
+	const float longest_edge_squared = max(len_squared(e0), max(len_squared(e1), len_squared(e2)));
+	const float3 N = cross(e0, e1);
+	const float distance_to_plane = fabsf(dot(N, sd->I * t))/dot(N, N);
+
+	if(longest_edge_squared > distance_to_plane*distance_to_plane) {
+		/* sd contains the point on the light source
+		 * calculate Px, the point that we're shading */
+		const float3 Px = sd->P + sd->I * t;
+		const float3 v0_p = V[0] - Px;
+		const float3 v1_p = V[1] - Px;
+		const float3 v2_p = V[2] - Px;
+
+		const float3 u01 = safe_normalize(cross(v0_p, v1_p));
+		const float3 u02 = safe_normalize(cross(v0_p, v2_p));
+		const float3 u12 = safe_normalize(cross(v1_p, v2_p));
+
+		const float alpha = fast_acosf(dot(u02, u01));
+		const float beta = fast_acosf(-dot(u01, u12));
+		const float gamma = fast_acosf(dot(u02, u12));
+		const float solid_angle =  alpha + beta + gamma - M_PI_F;
+
+		/* pdf_triangles is calculated over triangle area, but we're not sampling over its area */
+		if(UNLIKELY(solid_angle == 0.0f)) {
+			return 0.0f;
+		}
+		else {
+			float area = 1.0f;
+			if(has_motion) {
+				/* get the center frame vertices, this is what the PDF was calculated from */
+				triangle_world_space_vertices(kg, sd->object, sd->prim, -1.0f, V);
+				area = triangle_area(V[0], V[1], V[2]);
+			}
+			else {
+				area = 0.5f * len(N);
+			}
+			const float pdf = area * kernel_data.integrator.pdf_triangles;
+			return pdf / solid_angle;
+		}
+	}
+	else {
+		float pdf = triangle_light_pdf_area(kg, sd->Ng, sd->I, t);
+		if(has_motion) {
+			const float	area = 0.5f * len(N);
+			if(UNLIKELY(area == 0.0f)) {
+				return 0.0f;
+			}
+			/* scale the PDF.
+			 * area = the area the sample was taken from
+			 * area_pre = the are from which pdf_triangles was calculated from */
+			triangle_world_space_vertices(kg, sd->object, sd->prim, -1.0f, V);
+			const float area_pre = triangle_area(V[0], V[1], V[2]);
+			pdf = pdf * area_pre / area;
+		}
+		return pdf;
+	}
+}
+
+ccl_device_forceinline void triangle_light_sample(KernelGlobals *kg, int prim, int object,
+	float randu, float randv, float time, LightSample *ls, const float3 P)
+{
+	/* A naive heuristic to decide between costly solid angle sampling
+	 * and simple area sampling, comparing the distance to the triangle plane
+	 * to the length of the edges of the triangle. */
+
+	float3 V[3];
+	bool has_motion = triangle_world_space_vertices(kg, object, prim, time, V);
+
+	const float3 e0 = V[1] - V[0];
+	const float3 e1 = V[2] - V[0];
+	const float3 e2 = V[2] - V[1];
+	const float longest_edge_squared = max(len_squared(e0), max(len_squared(e1), len_squared(e2)));
+	const float3 N0 = cross(e0, e1);
+	float Nl = 0.0f;
+	ls->Ng = safe_normalize_len(N0, &Nl);
+	float area = 0.5f * Nl;
+
+	/* flip normal if necessary */
+	const int object_flag = kernel_tex_fetch(__object_flag, object);
+	if(object_flag & SD_OBJECT_NEGATIVE_SCALE_APPLIED) {
+		ls->Ng = -ls->Ng;
+	}
+	ls->eval_fac = 1.0f;
+	ls->shader = kernel_tex_fetch(__tri_shader, prim);
+	ls->object = object;
+	ls->prim = prim;
+	ls->lamp = LAMP_NONE;
+	ls->shader |= SHADER_USE_MIS;
+	ls->type = LIGHT_TRIANGLE;
+
+	float distance_to_plane = fabsf(dot(N0, V[0] - P)/dot(N0, N0));
+
+	if(longest_edge_squared > distance_to_plane*distance_to_plane) {
+		/* see James Arvo, "Stratified Sampling of Spherical Triangles"
+		 * http://www.graphics.cornell.edu/pubs/1995/Arv95c.pdf */
+
+		/* project the triangle to the unit sphere
+		 * and calculate its edges and angles */
+		const float3 v0_p = V[0] - P;
+		const float3 v1_p = V[1] - P;
+		const float3 v2_p = V[2] - P;
+
+		const float3 u01 = safe_normalize(cross(v0_p, v1_p));
+		const float3 u02 = safe_normalize(cross(v0_p, v2_p));
+		const float3 u12 = safe_normalize(cross(v1_p, v2_p));
+
+		const float3 A = safe_normalize(v0_p);
+		const float3 B = safe_normalize(v1_p);
+		const float3 C = safe_normalize(v2_p);
+
+		const float cos_alpha = dot(u02, u01);
+		const float cos_beta = -dot(u01, u12);
+		const float cos_gamma = dot(u02, u12);
+
+		/* calculate dihedral angles */
+		const float alpha = fast_acosf(cos_alpha);
+		const float beta = fast_acosf(cos_beta);
+		const float gamma = fast_acosf(cos_gamma);
+		/* the area of the unit spherical triangle = solid angle */
+		const float solid_angle =  alpha + beta + gamma - M_PI_F;
+
+		/* precompute a few things
+		 * these could be re-used to take several samples
+		 * as they are independent of randu/randv */
+		const float cos_c = dot(A, B);
+		const float sin_alpha = fast_sinf(alpha);
+		const float product = sin_alpha * cos_c;
+
+		/* Select a random sub-area of the spherical triangle
+		 * and calculate the third vertex C_ of that new triangle */
+		const float phi = randu * solid_angle - alpha;
+		float s, t;
+		fast_sincosf(phi, &s, &t);
+		const float u = t - cos_alpha;
+		const float v = s + product;
+
+		const float3 U = safe_normalize(C - dot(C, A) * A);
+
+		float q = 1.0f;
+		const float det = ((v * s + u * t) * sin_alpha);
+		if(det != 0.0f) {
+			q = ((v * t - u * s) * cos_alpha - v) / det;
+		}
+		const float temp = max(1.0f - q*q, 0.0f);
+
+		const float3 C_ = safe_normalize(q * A + sqrtf(temp) * U);
+
+		/* Finally, select a random point along the edge of the new triangle
+		 * That point on the spherical triangle is the sampled ray direction */
+		const float z = 1.0f - randv * (1.0f - dot(C_, B));
+		ls->D = z * B + safe_sqrtf(1.0f - z*z) * safe_normalize(C_ - dot(C_, B) * B);
+
+		/* calculate intersection with the planar triangle */
+		if(!ray_triangle_intersect(P, ls->D, FLT_MAX,
+#if defined(__KERNEL_SSE2__) && defined(__KERNEL_SSE__)
+		                           (ssef*)V,
+#else
+		                           V[0], V[1], V[2],
+#endif
+		                           &ls->u, &ls->v, &ls->t)) {
+			ls->pdf = 0.0f;
+			return;
+		}
+
+		ls->P = P + ls->D * ls->t;
+
+		/* pdf_triangles is calculated over triangle area, but we're sampling over solid angle */
+		if(UNLIKELY(solid_angle == 0.0f)) {
+			ls->pdf = 0.0f;
+			return;
+		}
+		else {
+			if(has_motion) {
+				/* get the center frame vertices, this is what the PDF was calculated from */
+				triangle_world_space_vertices(kg, object, prim, -1.0f, V);
+				area = triangle_area(V[0], V[1], V[2]);
+			}
+			const float pdf = area * kernel_data.integrator.pdf_triangles;
+			ls->pdf = pdf / solid_angle;
+		}
+	}
+	else {
+		/* compute random point in triangle */
+		randu = sqrtf(randu);
+
+		const float u = 1.0f - randu;
+		const float v = randv*randu;
+		const float t = 1.0f - u - v;
+		ls->P = u * V[0] + v * V[1] + t * V[2];
+		/* compute incoming direction, distance and pdf */
+		ls->D = normalize_len(ls->P - P, &ls->t);
+		ls->pdf = triangle_light_pdf_area(kg, ls->Ng, -ls->D, ls->t);
+		if(has_motion && area != 0.0f) {
+			/* scale the PDF.
+			 * area = the area the sample was taken from
+			 * area_pre = the are from which pdf_triangles was calculated from */
+			triangle_world_space_vertices(kg, object, prim, -1.0f, V);
+			const float area_pre = triangle_area(V[0], V[1], V[2]);
+			ls->pdf = ls->pdf * area_pre / area;
+		}
+		ls->u = u;
+		ls->v = v;
+	}
 }
 
 /* Light Distribution */
 
-ccl_device int light_distribution_sample(KernelGlobals *kg, float randt)
+ccl_device int light_distribution_sample(KernelGlobals *kg, float *randu)
 {
-	/* this is basically std::upper_bound as used by pbrt, to find a point light or
+	/* This is basically std::upper_bound as used by pbrt, to find a point light or
 	 * triangle to emit from, proportional to area. a good improvement would be to
 	 * also sample proportional to power, though it's not so well defined with
-	 * OSL shaders. */
+	 * arbitrary shaders. */
 	int first = 0;
 	int len = kernel_data.integrator.num_distribution + 1;
+	float r = *randu;
 
 	while(len > 0) {
 		int half_len = len >> 1;
 		int middle = first + half_len;
 
-		if(randt < kernel_tex_fetch(__light_distribution, middle).x) {
+		if(r < kernel_tex_fetch(__light_distribution, middle).totarea) {
 			len = half_len;
 		}
 		else {
@@ -843,21 +1054,27 @@ ccl_device int light_distribution_sample(KernelGlobals *kg, float randt)
 		}
 	}
 
-	/* clamping should not be needed but float rounding errors seem to
-	 * make this fail on rare occasions */
-	return clamp(first-1, 0, kernel_data.integrator.num_distribution-1);
+	/* Clamping should not be needed but float rounding errors seem to
+	 * make this fail on rare occasions. */
+	int index = clamp(first-1, 0, kernel_data.integrator.num_distribution-1);
+
+	/* Rescale to reuse random number. this helps the 2D samples within
+	 * each area light be stratified as well. */
+	float distr_min = kernel_tex_fetch(__light_distribution, index).totarea;
+	float distr_max = kernel_tex_fetch(__light_distribution, index+1).totarea;
+	*randu = (r - distr_min)/(distr_max - distr_min);
+
+	return index;
 }
 
 /* Generic Light */
 
 ccl_device bool light_select_reached_max_bounces(KernelGlobals *kg, int index, int bounce)
 {
-	float4 data4 = kernel_tex_fetch(__light_data, index*LIGHT_SIZE + 4);
-	return (bounce > __float_as_int(data4.x));
+	return (bounce > kernel_tex_fetch(__lights, index).max_bounces);
 }
 
 ccl_device_noinline bool light_sample(KernelGlobals *kg,
-                                      float randt,
                                       float randu,
                                       float randv,
                                       float time,
@@ -866,20 +1083,17 @@ ccl_device_noinline bool light_sample(KernelGlobals *kg,
                                       LightSample *ls)
 {
 	/* sample index */
-	int index = light_distribution_sample(kg, randt);
+	int index = light_distribution_sample(kg, &randu);
 
 	/* fetch light data */
-	float4 l = kernel_tex_fetch(__light_distribution, index);
-	int prim = __float_as_int(l.y);
+	const ccl_global KernelLightDistribution *kdistribution = &kernel_tex_fetch(__light_distribution, index);
+	int prim = kdistribution->prim;
 
 	if(prim >= 0) {
-		int object = __float_as_int(l.w);
-		int shader_flag = __float_as_int(l.z);
+		int object = kdistribution->mesh_light.object_id;
+		int shader_flag = kdistribution->mesh_light.shader_flag;
 
-		triangle_light_sample(kg, prim, object, randu, randv, time, ls);
-		/* compute incoming direction, distance and pdf */
-		ls->D = normalize_len(ls->P - P, &ls->t);
-		ls->pdf = triangle_light_pdf(kg, ls->Ng, -ls->D, ls->t);
+		triangle_light_sample(kg, prim, object, randu, randv, time, ls, P);
 		ls->shader |= shader_flag;
 		return (ls->pdf > 0.0f);
 	}
@@ -896,8 +1110,7 @@ ccl_device_noinline bool light_sample(KernelGlobals *kg,
 
 ccl_device int light_select_num_samples(KernelGlobals *kg, int index)
 {
-	float4 data3 = kernel_tex_fetch(__light_data, index*LIGHT_SIZE + 3);
-	return __float_as_int(data3.x);
+	return kernel_tex_fetch(__lights, index).samples;
 }
 
 CCL_NAMESPACE_END

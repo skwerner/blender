@@ -31,7 +31,7 @@
 /** \file blender/modifiers/intern/MOD_bevel.c
  *  \ingroup modifiers
  */
- 
+
 #include "DNA_object_types.h"
 
 #include "BLI_utildefines.h"
@@ -63,23 +63,6 @@ static void initData(ModifierData *md)
 	bmd->defgrp_name[0] = '\0';
 }
 
-static void copyData(ModifierData *md, ModifierData *target)
-{
-	BevelModifierData *bmd = (BevelModifierData *) md;
-	BevelModifierData *tbmd = (BevelModifierData *) target;
-
-	tbmd->value = bmd->value;
-	tbmd->res = bmd->res;
-	tbmd->flags = bmd->flags;
-	tbmd->val_flags = bmd->val_flags;
-	tbmd->lim_flags = bmd->lim_flags;
-	tbmd->e_flags = bmd->e_flags;
-	tbmd->mat = bmd->mat;
-	tbmd->profile = bmd->profile;
-	tbmd->bevel_angle = bmd->bevel_angle;
-	BLI_strncpy(tbmd->defgrp_name, bmd->defgrp_name, sizeof(tbmd->defgrp_name));
-}
-
 static CustomDataMask requiredDataMask(Object *UNUSED(ob), ModifierData *md)
 {
 	BevelModifierData *bmd = (BevelModifierData *)md;
@@ -94,9 +77,10 @@ static CustomDataMask requiredDataMask(Object *UNUSED(ob), ModifierData *md)
 /*
  * This calls the new bevel code (added since 2.64)
  */
-static DerivedMesh *applyModifier(ModifierData *md, struct Object *ob,
-                                  DerivedMesh *dm,
-                                  ModifierApplyFlag UNUSED(flag))
+static DerivedMesh *applyModifier(
+        ModifierData *md, struct Object *ob,
+        DerivedMesh *dm,
+        ModifierApplyFlag UNUSED(flag))
 {
 	DerivedMesh *result;
 	BMesh *bm;
@@ -202,7 +186,7 @@ ModifierTypeInfo modifierType_Bevel = {
 	                        eModifierTypeFlag_SupportsEditmode |
 	                        eModifierTypeFlag_EnableInEditmode,
 
-	/* copyData */          copyData,
+	/* copyData */          modifier_copyData_generic,
 	/* deformVerts */       NULL,
 	/* deformMatrices */    NULL,
 	/* deformVertsEM */     NULL,

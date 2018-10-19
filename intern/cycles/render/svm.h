@@ -55,7 +55,7 @@ protected:
 	void device_update_shader(Scene *scene,
 	                          Shader *shader,
 	                          Progress *progress,
-	                          vector<int4> *global_svm_nodes);
+	                          array<int4> *global_svm_nodes);
 };
 
 /* Graph Compiler */
@@ -73,9 +73,6 @@ public:
 
 		/* Time spent on surface graph finalization. */
 		double time_finalize;
-
-		/* Time spent on bump graph finalization. */
-		double time_finalize_bump;
 
 		/* Time spent on generating SVM nodes for surface shader. */
 		double time_generate_surface;
@@ -98,10 +95,12 @@ public:
 		string full_report() const;
 	};
 
-	SVMCompiler(ShaderManager *shader_manager, ImageManager *image_manager);
+	SVMCompiler(ShaderManager *shader_manager,
+	            ImageManager *image_manager,
+	            LightManager *light_manager);
 	void compile(Scene *scene,
 	             Shader *shader,
-	             vector<int4>& svm_nodes,
+	             array<int4>& svm_nodes,
 	             int index,
 	             Summary *summary = NULL);
 
@@ -120,6 +119,7 @@ public:
 	void add_node(const float4& f);
 	uint attribute(ustring name);
 	uint attribute(AttributeStandard std);
+	uint attribute_standard(ustring name);
 	uint encode_uchar4(uint x, uint y = 0, uint z = 0, uint w = 0);
 	uint closure_mix_weight_offset() { return mix_weight_offset; }
 
@@ -127,6 +127,7 @@ public:
 
 	ImageManager *image_manager;
 	ShaderManager *shader_manager;
+	LightManager *light_manager;
 	bool background;
 
 protected:
@@ -210,7 +211,7 @@ protected:
 	/* compile */
 	void compile_type(Shader *shader, ShaderGraph *graph, ShaderType type);
 
-	vector<int4> current_svm_nodes;
+	array<int4> current_svm_nodes;
 	ShaderType current_type;
 	Shader *current_shader;
 	ShaderGraph *current_graph;
@@ -223,4 +224,3 @@ protected:
 CCL_NAMESPACE_END
 
 #endif /* __SVM_H__ */
-

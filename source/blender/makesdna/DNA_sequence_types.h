@@ -126,7 +126,7 @@ typedef struct Strip {
  * each of the strips uses a different sequence structure.
  *
  * \warning The first part identical to ID (for use in ipo's)
- * the commend above is historic, probably we can drop the ID compatibility,
+ * the comment above is historic, probably we can drop the ID compatibility,
  * but take care making this change.
  *
  * \warning This is really a 'Strip' in the UI!, name is highly confusing.
@@ -215,7 +215,7 @@ typedef struct Editing {
 	ListBase *seqbasep; /* pointer to the current list of seq's being edited (can be within a meta strip) */
 	ListBase seqbase;   /* pointer to the top-most seq's */
 	ListBase metastack;
-	
+
 	/* Context vars, used to be static */
 	Sequence *act_seq;
 	char act_imagedir[1024]; /* 1024 = FILE_MAX */
@@ -233,7 +233,7 @@ typedef struct WipeVars {
 	short forward, wipetype;
 } WipeVars;
 
-typedef struct GlowVars {	
+typedef struct GlowVars {
 	float fMini;    /*	Minimum intensity to trigger a glow */
 	float fClamp;
 	float fBoost;   /*	Amount to multiply glow intensity */
@@ -300,6 +300,11 @@ enum {
 	SEQ_TEXT_ALIGN_Y_CENTER = 1,
 	SEQ_TEXT_ALIGN_Y_BOTTOM = 2,
 };
+
+typedef struct ColorMixVars {
+	int blend_effect;    /* value from SEQ_TYPE_XXX enumeration */
+	float factor;        /* blend factor [0.0f, 1.0f]           */
+} ColorMixVars;
 
 /* ***************** Sequence modifiers ****************** */
 
@@ -434,7 +439,7 @@ enum {
 	SEQ_AUDIO_PITCH_ANIMATED    = (1 << 25),
 	SEQ_AUDIO_PAN_ANIMATED      = (1 << 26),
 	SEQ_AUDIO_DRAW_WAVEFORM     = (1 << 27),
-	
+
 	/* don't include Grease Pencil in OpenGL previews of Scene strips */
 	SEQ_SCENE_NO_GPENCIL        = (1 << 28),
 	SEQ_USE_VIEWS               = (1 << 29),
@@ -442,7 +447,7 @@ enum {
 	/* access scene strips directly (like a metastrip) */
 	SEQ_SCENE_STRIPS            = (1 << 30),
 
-	SEQ_INVALID_EFFECT          = (1 << 31),
+	SEQ_INVALID_EFFECT          = (1u << 31),
 };
 
 /* StripProxy->storage */
@@ -516,8 +521,29 @@ enum {
 	SEQ_TYPE_ADJUSTMENT  = 31,
 	SEQ_TYPE_GAUSSIAN_BLUR = 40,
 	SEQ_TYPE_TEXT = 41,
+	SEQ_TYPE_COLORMIX    = 42,
 
-	SEQ_TYPE_MAX  = 41
+	/* Blend modes */
+	SEQ_TYPE_SCREEN      = 43,
+	SEQ_TYPE_LIGHTEN     = 44,
+	SEQ_TYPE_DODGE       = 45,
+	SEQ_TYPE_DARKEN      = 46,
+	SEQ_TYPE_BURN        = 47,
+	SEQ_TYPE_LINEAR_BURN = 48,
+	SEQ_TYPE_OVERLAY     = 49,
+	SEQ_TYPE_HARD_LIGHT  = 50,
+	SEQ_TYPE_SOFT_LIGHT  = 51,
+	SEQ_TYPE_PIN_LIGHT   = 52,
+	SEQ_TYPE_LIN_LIGHT   = 53,
+	SEQ_TYPE_VIVID_LIGHT = 54,
+	SEQ_TYPE_HUE         = 55,
+	SEQ_TYPE_SATURATION  = 56,
+	SEQ_TYPE_VALUE       = 57,
+	SEQ_TYPE_BLEND_COLOR = 58,
+	SEQ_TYPE_DIFFERENCE  = 59,
+	SEQ_TYPE_EXCLUSION   = 60,
+
+	SEQ_TYPE_MAX         = 60
 };
 
 #define SEQ_MOVIECLIP_RENDER_UNDISTORTED (1 << 0)

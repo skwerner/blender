@@ -59,11 +59,7 @@ public:
 
 	void shrink_to_fit(void)
 	{
-#if __cplusplus < 201103L
-		vector<value_type>().swap(*this);
-#else
 		std::vector<value_type, allocator_type>::shrink_to_fit();
-#endif
 	}
 
 	void free_memory(void)
@@ -86,9 +82,9 @@ public:
  *   this was actually showing up in profiles quite significantly. it
  *   also does not run any constructors/destructors
  * - if this is used, we are not tempted to use inefficient operations
- * - aligned allocation for SSE data types */
+ * - aligned allocation for CPU native data types */
 
-template<typename T, size_t alignment = 16>
+template<typename T, size_t alignment = MIN_ALIGNMENT_CPU_DATA_TYPES>
 class array
 {
 public:
@@ -131,7 +127,7 @@ public:
 	{
 		if(this != &from) {
 			resize(from.size());
-			memcpy(data_, from.data_, datasize_*sizeof(T));
+			memcpy((void*)data_, from.data_, datasize_*sizeof(T));
 		}
 
 		return *this;
@@ -162,6 +158,11 @@ public:
 		return memcmp(data_, other.data_, datasize_*sizeof(T)) == 0;
 	}
 
+	bool operator!=(const array<T>& other) const
+	{
+		return !(*this == other);
+	}
+
 	void steal_data(array& from)
 	{
 		if(this != &from) {
@@ -175,6 +176,14 @@ public:
 			from.datasize_ = 0;
 			from.capacity_ = 0;
 		}
+	}
+
+	T *steal_pointer()
+	{
+		T *ptr = data_;
+		data_ = NULL;
+		clear();
+		return ptr;
 	}
 
 	T* resize(size_t newsize)
@@ -191,7 +200,9 @@ public:
 					return NULL;
 				}
 				else if(data_ != NULL) {
-					memcpy(newdata, data_, ((datasize_ < newsize)? datasize_: newsize)*sizeof(T));
+					memcpy((void *)newdata,
+					       data_,
+					       ((datasize_ < newsize)? datasize_: newsize)*sizeof(T));
 					mem_free(data_, capacity_);
 				}
 				data_ = newdata;
@@ -199,6 +210,18 @@ public:
 			}
 			datasize_ = newsize;
 		}
+		return data_;
+	}
+
+	T* resize(size_t newsize, const T& value)
+	{
+		size_t oldsize = size();
+		resize(newsize);
+
+		for(size_t i = oldsize; i < size(); i++) {
+			data_[i] = value;
+		}
+
 		return data_;
 	}
 
@@ -273,6 +296,15 @@ public:
 		push_back_slow(t);
 	}
 
+	void append(const array<T>& from)
+	{
+		if(from.size()) {
+			size_t old_size = size();
+			resize(old_size + from.size());
+			memcpy(data_ + old_size, from.data(), sizeof(T) * from.size());
+		}
+	}
+
 protected:
 	inline T* mem_allocate(size_t N)
 	{
@@ -305,4 +337,3 @@ protected:
 CCL_NAMESPACE_END
 
 #endif /* __UTIL_VECTOR_H__ */
-

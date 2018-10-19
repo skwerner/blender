@@ -1,4 +1,4 @@
-# Turn everything ON thats expected for an official release builds.
+# Turn everything ON that's expected for an official release builds.
 #
 # Example usage:
 #   cmake -C../blender/build_files/cmake/config/blender_full.cmake  ../blender
@@ -34,7 +34,6 @@ set(WITH_INTERNATIONAL       ON  CACHE BOOL "" FORCE)
 set(WITH_JACK                ON  CACHE BOOL "" FORCE)
 set(WITH_LZMA                ON  CACHE BOOL "" FORCE)
 set(WITH_LZO                 ON  CACHE BOOL "" FORCE)
-set(WITH_MOD_BOOLEAN         ON  CACHE BOOL "" FORCE)
 set(WITH_MOD_FLUID           ON  CACHE BOOL "" FORCE)
 set(WITH_MOD_REMESH          ON  CACHE BOOL "" FORCE)
 set(WITH_MOD_SMOKE           ON  CACHE BOOL "" FORCE)
@@ -66,9 +65,7 @@ elseif(WIN32)
 	set(WITH_OPENSUBDIV          ON  CACHE BOOL "" FORCE)
 elseif(APPLE)
 	set(WITH_JACK                ON  CACHE BOOL "" FORCE)
-	set(WITH_CODEC_QUICKTIME     OFF CACHE BOOL "" FORCE)
 	set(WITH_OPENSUBDIV          OFF CACHE BOOL "" FORCE)
 
 #	include("${CMAKE_CURRENT_SOURCE_DIR}/../platform/platform_apple_xcode.cmake")
-#	apple_check_quicktime()
 endif()

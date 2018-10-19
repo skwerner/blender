@@ -145,10 +145,10 @@ static bool ED_uvedit_ensure_uvs(bContext *C, Scene *scene, Object *obedit)
 			}
 		}
 	}
-	
+
 	if (ima)
 		ED_uvedit_assign_image(bmain, scene, obedit, ima, NULL);
-	
+
 	/* select new UV's (ignore UV_SYNC_SELECTION in this case) */
 	BM_ITER_MESH (efa, &iter, em->bm, BM_FACES_OF_MESH) {
 		BMIter liter;
@@ -171,7 +171,7 @@ static bool uvedit_have_selection(Scene *scene, BMEditMesh *em, bool implicit)
 	BMLoop *l;
 	BMIter iter, liter;
 	const int cd_loop_uv_offset  = CustomData_get_offset(&em->bm->ldata, CD_MLOOPUV);
-	
+
 	if (cd_loop_uv_offset == -1) {
 		return (em->bm->totfacesel != 0);
 	}
@@ -185,15 +185,15 @@ static bool uvedit_have_selection(Scene *scene, BMEditMesh *em, bool implicit)
 		}
 		else if (!BM_elem_flag_test(efa, BM_ELEM_SELECT))
 			continue;
-	
+
 		BM_ITER_ELEM (l, &liter, efa, BM_LOOPS_OF_FACE) {
 			if (uvedit_uv_select_test(scene, l, cd_loop_uv_offset))
 				break;
 		}
-		
+
 		if (implicit && !l)
 			continue;
-		
+
 		return true;
 	}
 
@@ -267,7 +267,7 @@ static ParamHandle *construct_param_handle(Scene *scene, Object *ob, BMesh *bm,
 	BMEdge *eed;
 	BMIter iter, liter;
 	int i;
-	
+
 	const int cd_loop_uv_offset = CustomData_get_offset(&bm->ldata, CD_MLOOPUV);
 
 	handle = param_construct_begin();
@@ -280,10 +280,10 @@ static ParamHandle *construct_param_handle(Scene *scene, Object *ob, BMesh *bm,
 		if (aspx != aspy)
 			param_aspect_ratio(handle, aspx, aspy);
 	}
-	
+
 	/* we need the vert indices */
 	BM_mesh_elem_index_ensure(bm, BM_VERT);
-	
+
 	BM_ITER_MESH_INDEX (efa, &iter, bm, BM_FACES_OF_MESH, i) {
 
 		if ((BM_elem_flag_test(efa, BM_ELEM_HIDDEN)) || (sel && BM_elem_flag_test(efa, BM_ELEM_SELECT) == 0)) {
@@ -401,7 +401,7 @@ static ParamHandle *construct_param_handle_subsurfed(Scene *scene, Object *ob, B
 
 	smd.levels = smd_real->levels;
 	smd.subdivType = smd_real->subdivType;
-		
+
 	initialDerived = CDDM_from_editbmesh(em, false, false);
 	derivedMesh = subsurf_make_derived_from_derived(initialDerived, &smd,
 	                                                NULL, SUBSURF_IN_EDIT_MODE);
@@ -470,7 +470,7 @@ static ParamHandle *construct_param_handle_subsurfed(Scene *scene, Object *ob, B
 		co[1] = subsurfedVerts[mloop[1].v].co;
 		co[2] = subsurfedVerts[mloop[2].v].co;
 		co[3] = subsurfedVerts[mloop[3].v].co;
-		
+
 		/* This is where all the magic is done. If the vertex exists in the, we pass the original uv pointer to the solver, thus
 		 * flushing the solution to the edit mesh. */
 		texface_from_original_index(origFace, origVertIndices[mloop[0].v], &uv[0], &pin[0], &select[0], scene, cd_loop_uv_offset);
@@ -698,7 +698,7 @@ void UV_OT_minimize_stretch(wmOperatorType *ot)
 	ot->idname = "UV_OT_minimize_stretch";
 	ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO | OPTYPE_GRAB_CURSOR | OPTYPE_BLOCKING;
 	ot->description = "Reduce UV stretching by relaxing angles";
-	
+
 	/* api callbacks */
 	ot->exec = minimize_stretch_exec;
 	ot->invoke = minimize_stretch_invoke;
@@ -740,7 +740,7 @@ static int pack_islands_exec(bContext *C, wmOperator *op)
 		RNA_float_set(op->ptr, "margin", scene->toolsettings->uvcalc_margin);
 
 	ED_uvedit_pack_islands(scene, obedit, em->bm, true, true, do_rotate);
-	
+
 	DAG_id_tag_update(obedit->data, 0);
 	WM_event_add_notifier(C, NC_GEOM | ND_DATA, obedit->data);
 
@@ -755,7 +755,7 @@ void UV_OT_pack_islands(wmOperatorType *ot)
 	ot->description = "Transform all islands so that they fill up the UV space as much as possible";
 
 	ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
-	
+
 	/* api callbacks */
 	ot->exec = pack_islands_exec;
 	ot->poll = ED_operator_uvedit;
@@ -783,7 +783,7 @@ static int average_islands_scale_exec(bContext *C, wmOperator *UNUSED(op))
 	param_average(handle);
 	param_flush(handle);
 	param_delete(handle);
-	
+
 	DAG_id_tag_update(obedit->data, 0);
 	WM_event_add_notifier(C, NC_GEOM | ND_DATA, obedit->data);
 
@@ -798,7 +798,7 @@ void UV_OT_average_islands_scale(wmOperatorType *ot)
 	ot->description = "Average the size of separate UV islands, based on their area in 3D space";
 
 	ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
-	
+
 	/* api callbacks */
 	ot->exec = average_islands_scale_exec;
 	ot->poll = ED_operator_uvedit;
@@ -836,7 +836,7 @@ void ED_uvedit_live_unwrap_re_solve(void)
 		param_flush(liveHandle);
 	}
 }
-	
+
 void ED_uvedit_live_unwrap_end(short cancel)
 {
 	if (liveHandle) {
@@ -868,45 +868,88 @@ void ED_uvedit_live_unwrap(Scene *scene, Object *obedit)
 #define POLAR_ZX    0
 #define POLAR_ZY    1
 
-static void uv_map_transform_center(Scene *scene, View3D *v3d, float *result, 
-                                    Object *ob, BMEditMesh *em)
+static void uv_map_transform_calc_bounds(BMEditMesh *em, float r_min[3], float r_max[3])
 {
+	BMFace *efa;
+	BMIter iter;
+	INIT_MINMAX(r_min, r_max);
+	BM_ITER_MESH (efa, &iter, em->bm, BM_FACES_OF_MESH) {
+		if (BM_elem_flag_test(efa, BM_ELEM_SELECT)) {
+			BM_face_calc_bounds_expand(efa, r_min, r_max);
+		}
+	}
+}
+
+static void uv_map_transform_calc_center_median(BMEditMesh *em, float r_center[3])
+{
+	BMFace *efa;
+	BMIter iter;
+	uint center_accum_num = 0;
+	zero_v3(r_center);
+	BM_ITER_MESH (efa, &iter, em->bm, BM_FACES_OF_MESH) {
+		if (BM_elem_flag_test(efa, BM_ELEM_SELECT)) {
+			float center[3];
+			BM_face_calc_center_mean(efa, center);
+			add_v3_v3(r_center, center);
+			center_accum_num += 1;
+		}
+	}
+	mul_v3_fl(r_center, 1.0f / (float)center_accum_num);
+}
+
+static void uv_map_transform_center(
+        Scene *scene, View3D *v3d, Object *ob, BMEditMesh *em,
+        float r_center[3],
+        float r_bounds[2][3])
+{
+	/* only operates on the edit object - this is all that's needed now */
 	const int around = (v3d) ? v3d->around : V3D_AROUND_CENTER_BOUNDS;
 
-	/* only operates on the edit object - this is all that's needed now */
+	float bounds[2][3];
+	INIT_MINMAX(bounds[0], bounds[1]);
+	bool is_minmax_set = false;
 
 	switch (around) {
 		case V3D_AROUND_CENTER_BOUNDS: /* bounding box center */
 		{
-			BMFace *efa;
-			BMLoop *l;
-			BMIter iter, liter;
-			float min[3], max[3];
-
-			INIT_MINMAX(min, max);
-			
-			BM_ITER_MESH (efa, &iter, em->bm, BM_FACES_OF_MESH) {
-				if (BM_elem_flag_test(efa, BM_ELEM_SELECT)) {
-					BM_ITER_ELEM (l, &liter, efa, BM_LOOPS_OF_FACE) {
-						minmax_v3v3_v3(min, max, l->v->co);
-					}
-				}
-			}
-			mid_v3_v3v3(result, min, max);
+			uv_map_transform_calc_bounds(em, bounds[0], bounds[1]);
+			is_minmax_set = true;
+			mid_v3_v3v3(r_center, bounds[0], bounds[1]);
+			break;
+		}
+		case V3D_AROUND_CENTER_MEAN:
+		{
+			uv_map_transform_calc_center_median(em, r_center);
 			break;
 		}
 		case V3D_AROUND_CURSOR:  /* cursor center */
 		{
-			const float *curs = ED_view3d_cursor3d_get(scene, v3d);
-			/* shift to objects world */
-			sub_v3_v3v3(result, curs, ob->obmat[3]);
+			invert_m4_m4(ob->imat, ob->obmat);
+			mul_v3_m4v3(r_center, ob->imat, ED_view3d_cursor3d_get(scene, v3d));
 			break;
 		}
+		case V3D_AROUND_ACTIVE:
+		{
+			BMEditSelection ese;
+			if (BM_select_history_active_get(em->bm, &ese)) {
+				BM_editselection_center(&ese, r_center);
+				break;
+			}
+			ATTR_FALLTHROUGH;
+		}
 		case V3D_AROUND_LOCAL_ORIGINS:  /* object center */
-		case V3D_AROUND_CENTER_MEAN:    /* multiple objects centers, only one object here*/
 		default:
-			zero_v3(result);
+			zero_v3(r_center);
 			break;
+	}
+
+	/* if this is passed, always set! */
+	if (r_bounds) {
+		if (!is_minmax_set) {
+			uv_map_transform_calc_bounds(em, bounds[0], bounds[1]);
+		}
+		copy_v3_v3(r_bounds[0], bounds[0]);
+		copy_v3_v3(r_bounds[1], bounds[1]);
 	}
 }
 
@@ -958,21 +1001,16 @@ static void uv_map_rotation_matrix(float result[4][4], RegionView3D *rv3d, Objec
 	mul_m4_series(result, rotup, rotside, viewmatrix, rotobj);
 }
 
-static void uv_map_transform(bContext *C, wmOperator *op, float center[3], float rotmat[4][4])
+static void uv_map_transform(bContext *C, wmOperator *op, float rotmat[4][4])
 {
 	/* context checks are messy here, making it work in both 3d view and uv editor */
-	Scene *scene = CTX_data_scene(C);
 	Object *obedit = CTX_data_edit_object(C);
-	BMEditMesh *em = BKE_editmesh_from_object(obedit);
-	View3D *v3d = CTX_wm_view3d(C);
 	RegionView3D *rv3d = CTX_wm_region_view3d(C);
 	/* common operator properties */
 	int align = RNA_enum_get(op->ptr, "align");
 	int direction = RNA_enum_get(op->ptr, "direction");
 	float radius = RNA_struct_find_property(op->ptr, "radius") ? RNA_float_get(op->ptr, "radius") : 1.0f;
 	float upangledeg, sideangledeg;
-
-	uv_map_transform_center(scene, v3d, center, obedit, em);
 
 	if (direction == VIEW_ON_EQUATOR) {
 		upangledeg = 90.0f;
@@ -987,20 +1025,20 @@ static void uv_map_transform(bContext *C, wmOperator *op, float center[3], float
 	/* be compatible to the "old" sphere/cylinder mode */
 	if (direction == ALIGN_TO_OBJECT)
 		unit_m4(rotmat);
-	else 
+	else
 		uv_map_rotation_matrix(rotmat, rv3d, obedit, upangledeg, sideangledeg, radius);
 
 }
 
 static void uv_transform_properties(wmOperatorType *ot, int radius)
 {
-	static EnumPropertyItem direction_items[] = {
+	static const EnumPropertyItem direction_items[] = {
 		{VIEW_ON_EQUATOR, "VIEW_ON_EQUATOR", 0, "View on Equator", "3D view is on the equator"},
 		{VIEW_ON_POLES, "VIEW_ON_POLES", 0, "View on Poles", "3D view is on the poles"},
 		{ALIGN_TO_OBJECT, "ALIGN_TO_OBJECT", 0, "Align to Object", "Align according to object transform"},
 		{0, NULL, 0, NULL, NULL}
 	};
-	static EnumPropertyItem align_items[] = {
+	static const EnumPropertyItem align_items[] = {
 		{POLAR_ZX, "POLAR_ZX", 0, "Polar ZX", "Polar 0 is X"},
 		{POLAR_ZY, "POLAR_ZY", 0, "Polar ZY", "Polar 0 is Y"},
 		{0, NULL, 0, NULL, NULL}
@@ -1022,21 +1060,21 @@ static void correct_uv_aspect(Scene *scene, Object *ob, BMEditMesh *em)
 	MLoopUV *luv;
 	BMFace *efa;
 	float scale, aspx, aspy;
-	
+
 	const int cd_loop_uv_offset = CustomData_get_offset(&em->bm->ldata, CD_MLOOPUV);
 
 	ED_uvedit_get_aspect(scene, ob, em->bm, &aspx, &aspy);
-	
+
 	if (aspx == aspy)
 		return;
-		
+
 	if (aspx > aspy) {
 		scale = aspy / aspx;
 
 		BM_ITER_MESH (efa, &iter, em->bm, BM_FACES_OF_MESH) {
 			if (!BM_elem_flag_test(efa, BM_ELEM_SELECT))
 				continue;
-			
+
 			BM_ITER_ELEM (l, &liter, efa, BM_LOOPS_OF_FACE) {
 				luv = BM_ELEM_CD_GET_VOID_P(l, cd_loop_uv_offset);
 				luv->uv[0] = ((luv->uv[0] - 0.5f) * scale) + 0.5f;
@@ -1049,7 +1087,7 @@ static void correct_uv_aspect(Scene *scene, Object *ob, BMEditMesh *em)
 		BM_ITER_MESH (efa, &iter, em->bm, BM_FACES_OF_MESH) {
 			if (!BM_elem_flag_test(efa, BM_ELEM_SELECT))
 				continue;
-			
+
 			BM_ITER_ELEM (l, &liter, efa, BM_LOOPS_OF_FACE) {
 				luv = BM_ELEM_CD_GET_VOID_P(l, cd_loop_uv_offset);
 				luv->uv[1] = ((luv->uv[1] - 0.5f) * scale) + 0.5f;
@@ -1183,7 +1221,7 @@ static int unwrap_exec(bContext *C, wmOperator *op)
 	if (!uvedit_have_selection(scene, em, implicit)) {
 		return OPERATOR_CANCELLED;
 	}
-	
+
 	/* add uvs if they don't exist yet */
 	if (!ED_uvedit_ensure_uvs(C, scene, obedit)) {
 		return OPERATOR_CANCELLED;
@@ -1203,7 +1241,7 @@ static int unwrap_exec(bContext *C, wmOperator *op)
 	else
 		RNA_enum_set(op->ptr, "method", scene->toolsettings->unwrapper);
 
-	/* remember packing marging */
+	/* remember packing margin */
 	if (RNA_struct_property_is_set(op->ptr, "margin"))
 		scene->toolsettings->uvcalc_margin = RNA_float_get(op->ptr, "margin");
 	else
@@ -1235,7 +1273,7 @@ static int unwrap_exec(bContext *C, wmOperator *op)
 
 void UV_OT_unwrap(wmOperatorType *ot)
 {
-	static EnumPropertyItem method_items[] = {
+	static const EnumPropertyItem method_items[] = {
 		{0, "ANGLE_BASED", 0, "Angle Based", ""},
 		{1, "CONFORMAL", 0, "Conformal", ""},
 		{0, NULL, 0, NULL, NULL}
@@ -1246,7 +1284,7 @@ void UV_OT_unwrap(wmOperatorType *ot)
 	ot->description = "Unwrap the mesh of the object being edited";
 	ot->idname = "UV_OT_unwrap";
 	ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
-	
+
 	/* api callbacks */
 	ot->exec = unwrap_exec;
 	ot->poll = ED_operator_uvmap;
@@ -1307,7 +1345,7 @@ static int uv_from_view_exec(bContext *C, wmOperator *op)
 
 	if (RNA_boolean_get(op->ptr, "orthographic")) {
 		uv_map_rotation_matrix(rotmat, rv3d, obedit, 90.0f, 0.0f, 1.0f);
-		
+
 		BM_ITER_MESH (efa, &iter, em->bm, BM_FACES_OF_MESH) {
 			if (!BM_elem_flag_test(efa, BM_ELEM_SELECT))
 				continue;
@@ -1334,7 +1372,7 @@ static int uv_from_view_exec(bContext *C, wmOperator *op)
 					BLI_uvproject_from_camera(luv->uv, l->v->co, uci);
 				}
 			}
-			
+
 			MEM_freeN(uci);
 		}
 	}
@@ -1360,7 +1398,7 @@ static int uv_from_view_exec(bContext *C, wmOperator *op)
 	return OPERATOR_FINISHED;
 }
 
-static int uv_from_view_poll(bContext *C)
+static bool uv_from_view_poll(bContext *C)
 {
 	RegionView3D *rv3d = CTX_wm_region_view3d(C);
 
@@ -1378,7 +1416,7 @@ void UV_OT_project_from_view(wmOperatorType *ot)
 	ot->description = "Project the UV vertices of the mesh as seen in current 3D view";
 
 	ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
-	
+
 	/* api callbacks */
 	ot->invoke = uv_from_view_invoke;
 	ot->exec = uv_from_view_exec;
@@ -1409,7 +1447,7 @@ static int reset_exec(bContext *C, wmOperator *UNUSED(op))
 
 	DAG_id_tag_update(obedit->data, 0);
 	WM_event_add_notifier(C, NC_GEOM | ND_DATA, obedit->data);
-	
+
 	return OPERATOR_FINISHED;
 }
 
@@ -1421,7 +1459,7 @@ void UV_OT_reset(wmOperatorType *ot)
 	ot->description = "Reset UV projection";
 
 	ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
-	
+
 	/* api callbacks */
 	ot->exec = reset_exec;
 	ot->poll = ED_operator_uvmap;
@@ -1440,7 +1478,7 @@ static void uv_sphere_project(float target[2], float source[3], float center[3],
 
 	/* split line is always zero */
 	if (target[0] >= 1.0f)
-		target[0] -= 1.0f;  
+		target[0] -= 1.0f;
 }
 
 static void uv_map_mirror(BMEditMesh *em, BMFace *efa, MTexPoly *UNUSED(tf))
@@ -1476,6 +1514,7 @@ static int sphere_project_exec(bContext *C, wmOperator *op)
 {
 	Scene *scene = CTX_data_scene(C);
 	Object *obedit = CTX_data_edit_object(C);
+	View3D *v3d = CTX_wm_view3d(C);
 	BMEditMesh *em = BKE_editmesh_from_object(obedit);
 	BMFace *efa;
 	BMLoop *l;
@@ -1493,7 +1532,8 @@ static int sphere_project_exec(bContext *C, wmOperator *op)
 
 	cd_loop_uv_offset = CustomData_get_offset(&em->bm->ldata, CD_MLOOPUV);
 
-	uv_map_transform(C, op, center, rotmat);
+	uv_map_transform(C, op, rotmat);
+	uv_map_transform_center(scene, v3d, obedit, em, center, NULL);
 
 	BM_ITER_MESH (efa, &iter, em->bm, BM_FACES_OF_MESH) {
 		if (!BM_elem_flag_test(efa, BM_ELEM_SELECT))
@@ -1525,7 +1565,7 @@ void UV_OT_sphere_project(wmOperatorType *ot)
 	ot->description = "Project the UV vertices of the mesh over the curved surface of a sphere";
 
 	ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
-	
+
 	/* api callbacks */
 	ot->exec = sphere_project_exec;
 	ot->poll = ED_operator_uvmap;
@@ -1548,13 +1588,14 @@ static void uv_cylinder_project(float target[2], float source[3], float center[3
 
 	/* split line is always zero */
 	if (target[0] >= 1.0f)
-		target[0] -= 1.0f;  
+		target[0] -= 1.0f;
 }
 
 static int cylinder_project_exec(bContext *C, wmOperator *op)
 {
 	Scene *scene = CTX_data_scene(C);
 	Object *obedit = CTX_data_edit_object(C);
+	View3D *v3d = CTX_wm_view3d(C);
 	BMEditMesh *em = BKE_editmesh_from_object(obedit);
 	BMFace *efa;
 	BMLoop *l;
@@ -1572,12 +1613,13 @@ static int cylinder_project_exec(bContext *C, wmOperator *op)
 
 	cd_loop_uv_offset = CustomData_get_offset(&em->bm->ldata, CD_MLOOPUV);
 
-	uv_map_transform(C, op, center, rotmat);
+	uv_map_transform(C, op, rotmat);
+	uv_map_transform_center(scene, v3d, obedit, em, center, NULL);
 
 	BM_ITER_MESH (efa, &iter, em->bm, BM_FACES_OF_MESH) {
 		if (!BM_elem_flag_test(efa, BM_ELEM_SELECT))
 			continue;
-		
+
 		BM_ITER_ELEM (l, &liter, efa, BM_LOOPS_OF_FACE) {
 			luv = BM_ELEM_CD_GET_VOID_P(l, cd_loop_uv_offset);
 
@@ -1604,7 +1646,7 @@ void UV_OT_cylinder_project(wmOperatorType *ot)
 	ot->description = "Project the UV vertices of the mesh over the curved wall of a cylinder";
 
 	ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
-	
+
 	/* api callbacks */
 	ot->exec = cylinder_project_exec;
 	ot->poll = ED_operator_uvmap;
@@ -1616,68 +1658,79 @@ void UV_OT_cylinder_project(wmOperatorType *ot)
 
 /******************* Cube Project operator ****************/
 
-void ED_uvedit_unwrap_cube_project(Object *ob, BMesh *bm, float cube_size, bool use_select)
+void ED_uvedit_unwrap_cube_project(BMesh *bm, float cube_size, bool use_select, const float center[3])
 {
 	BMFace *efa;
 	BMLoop *l;
 	BMIter iter, liter;
 	/* MTexPoly *tf; */ /* UNUSED */
 	MLoopUV *luv;
-	float *loc, dx, dy;
+	float loc[3];
 	int cox, coy;
 
 	int cd_loop_uv_offset;
 
 	cd_loop_uv_offset = CustomData_get_offset(&bm->ldata, CD_MLOOPUV);
 
-	loc = ob->obmat[3];
+	if (center) {
+		copy_v3_v3(loc, center);
+	}
+	else {
+		zero_v3(loc);
+	}
 
 	/* choose x,y,z axis for projection depending on the largest normal
 	 * component, but clusters all together around the center of map. */
 
 	BM_ITER_MESH (efa, &iter, bm, BM_FACES_OF_MESH) {
-		int first = 1;
-
 		/* tf = CustomData_bmesh_get(&em->bm->pdata, efa->head.data, CD_MTEXPOLY); */ /* UNUSED */
 		if (use_select && !BM_elem_flag_test(efa, BM_ELEM_SELECT))
 			continue;
 
 		axis_dominant_v3(&cox, &coy, efa->no);
 
-		dx = dy = 0;
 		BM_ITER_ELEM (l, &liter, efa, BM_LOOPS_OF_FACE) {
 			luv = BM_ELEM_CD_GET_VOID_P(l, cd_loop_uv_offset);
-
-			luv->uv[0] = 0.5f + 0.5f * cube_size * (loc[cox] + l->v->co[cox]);
-			luv->uv[1] = 0.5f + 0.5f * cube_size * (loc[coy] + l->v->co[coy]);
-
-			if (first) {
-				dx = floor(luv->uv[0]);
-				dy = floor(luv->uv[1]);
-				first = 0;
-			}
-
-
-			luv->uv[0] -= dx;
-			luv->uv[1] -= dy;
+			luv->uv[0] = 0.5f + 0.5f * cube_size * (l->v->co[cox] - loc[cox]);
+			luv->uv[1] = 0.5f + 0.5f * cube_size * (l->v->co[coy] - loc[coy]);
 		}
 	}
-
 }
 
 static int cube_project_exec(bContext *C, wmOperator *op)
 {
 	Scene *scene = CTX_data_scene(C);
+	View3D *v3d = CTX_wm_view3d(C);
 	Object *obedit = CTX_data_edit_object(C);
 	BMEditMesh *em = BKE_editmesh_from_object(obedit);
-	float cube_size = RNA_float_get(op->ptr, "cube_size");
+	PropertyRNA *prop_cube_size = RNA_struct_find_property(op->ptr, "cube_size");
+	float cube_size = RNA_property_float_get(op->ptr, prop_cube_size);
+	float center[3];
+	float bounds[2][3];
+	float (*bounds_buf)[3] = NULL;
 
 	/* add uvs if they don't exist yet */
 	if (!ED_uvedit_ensure_uvs(C, scene, obedit)) {
 		return OPERATOR_CANCELLED;
 	}
 
-	ED_uvedit_unwrap_cube_project(obedit, em->bm, cube_size, true);
+	if (!RNA_property_is_set(op->ptr, prop_cube_size)) {
+		bounds_buf = bounds;
+	}
+
+	uv_map_transform_center(scene, v3d, obedit, em, center, bounds_buf);
+
+	/* calculate based on bounds */
+	if (bounds_buf) {
+		float dims[3];
+		sub_v3_v3v3(dims, bounds[1], bounds[0]);
+		cube_size = max_fff(UNPACK3(dims));
+		cube_size = cube_size ? 2.0f / cube_size : 1.0f;
+		RNA_property_float_set(op->ptr, prop_cube_size, cube_size);
+	}
+
+	ED_uvedit_unwrap_cube_project(em->bm, cube_size, true, center);
+
 	uv_map_clip_correct(scene, obedit, em, op);
 
 	DAG_id_tag_update(obedit->data, 0);
@@ -1694,7 +1747,7 @@ void UV_OT_cube_project(wmOperatorType *ot)
 	ot->description = "Project the UV vertices of the mesh over the six faces of a cube";
 
 	ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
-	
+
 	/* api callbacks */
 	ot->exec = cube_project_exec;
 	ot->poll = ED_operator_uvmap;

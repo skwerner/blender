@@ -86,11 +86,11 @@ IDProperty *IDP_NewIDPArray(const char *name)
 	prop->type = IDP_IDPARRAY;
 	prop->len = 0;
 	BLI_strncpy(prop->name, name, MAX_IDPROP_NAME);
-	
+
 	return prop;
 }
 
-IDProperty *IDP_CopyIDPArray(const IDProperty *array)
+IDProperty *IDP_CopyIDPArray(const IDProperty *array, const int flag)
 {
 	/* don't use MEM_dupallocN because this may be part of an array */
 	IDProperty *narray, *tmp;
@@ -109,18 +109,18 @@ IDProperty *IDP_CopyIDPArray(const IDProperty *array)
 		 * then free it.  this makes for more maintainable
 		 * code than simply reimplementing the copy functions
 		 * in this loop.*/
-		tmp = IDP_CopyProperty(GETPROP(narray, i));
+		tmp = IDP_CopyProperty_ex(GETPROP(narray, i), flag);
 		memcpy(GETPROP(narray, i), tmp, sizeof(IDProperty));
 		MEM_freeN(tmp);
 	}
-	
+
 	return narray;
 }
 
 static void IDP_FreeIDPArray(IDProperty *prop, const bool do_id_user)
 {
 	int i;
-	
+
 	BLI_assert(prop->type == IDP_IDPARRAY);
 
 	for (i = 0; i < prop->len; i++)
@@ -285,9 +285,9 @@ void IDP_FreeArray(IDProperty *prop)
 }
 
 
-static IDProperty *idp_generic_copy(const IDProperty *prop)
+static IDProperty *idp_generic_copy(const IDProperty *prop, const int UNUSED(flag))
 {
-	IDProperty *newp = MEM_callocN(sizeof(IDProperty), "IDProperty array dup");
+	IDProperty *newp = MEM_callocN(sizeof(IDProperty), __func__);
 
 	BLI_strncpy(newp->name, prop->name, MAX_IDPROP_NAME);
 	newp->type = prop->type;
@@ -298,9 +298,9 @@ static IDProperty *idp_generic_copy(const IDProperty *prop)
 	return newp;
 }
 
-static IDProperty *IDP_CopyArray(const IDProperty *prop)
+static IDProperty *IDP_CopyArray(const IDProperty *prop, const int flag)
 {
-	IDProperty *newp = idp_generic_copy(prop);
+	IDProperty *newp = idp_generic_copy(prop, flag);
 
 	if (prop->data.pointer) {
 		newp->data.pointer = MEM_dupallocN(prop->data.pointer);
@@ -310,7 +310,7 @@ static IDProperty *IDP_CopyArray(const IDProperty *prop)
 			int a;
 
 			for (a = 0; a < prop->len; a++)
-				array[a] = IDP_CopyProperty(array[a]);
+				array[a] = IDP_CopyProperty_ex(array[a], flag);
 		}
 	}
 	newp->len = prop->len;
@@ -363,12 +363,12 @@ IDProperty *IDP_NewString(const char *st, const char *name, int maxlen)
 	return prop;
 }
 
-static IDProperty *IDP_CopyString(const IDProperty *prop)
+static IDProperty *IDP_CopyString(const IDProperty *prop, const int flag)
 {
 	IDProperty *newp;
 
 	BLI_assert(prop->type == IDP_STRING);
-	newp = idp_generic_copy(prop);
+	newp = idp_generic_copy(prop, flag);
 
 	if (prop->data.pointer)
 		newp->data.pointer = MEM_dupallocN(prop->data.pointer);
@@ -442,15 +442,17 @@ void IDP_FreeString(IDProperty *prop)
 /** \name IDProperty ID API
  * \{ */
 
-static IDProperty *IDP_CopyID(const IDProperty *prop)
+static IDProperty *IDP_CopyID(const IDProperty *prop, const int flag)
 {
 	IDProperty *newp;
 
 	BLI_assert(prop->type == IDP_ID);
-	newp = idp_generic_copy(prop);
+	newp = idp_generic_copy(prop, flag);
 
 	newp->data.pointer = prop->data.pointer;
-	id_us_plus(IDP_Id(newp));
+	if ((flag & LIB_ID_CREATE_NO_USER_REFCOUNT) == 0) {
+		id_us_plus(IDP_Id(newp));
+	}
 
 	return newp;
 }
@@ -467,16 +469,16 @@ static IDProperty *IDP_CopyID(const IDProperty *prop)
 /**
  * Checks if a property with the same name as prop exists, and if so replaces it.
  */
-static IDProperty *IDP_CopyGroup(const IDProperty *prop)
+static IDProperty *IDP_CopyGroup(const IDProperty *prop, const int flag)
 {
 	IDProperty *newp, *link;
-	
+
 	BLI_assert(prop->type == IDP_GROUP);
-	newp = idp_generic_copy(prop);
+	newp = idp_generic_copy(prop, flag);
 	newp->len = prop->len;
 
 	for (link = prop->data.group.first; link; link = link->next) {
-		BLI_addtail(&newp->data.group, IDP_CopyProperty(link));
+		BLI_addtail(&newp->data.group, IDP_CopyProperty_ex(link, flag));
 	}
 
 	return newp;
@@ -577,10 +579,9 @@ void IDP_ReplaceGroupInGroup(IDProperty *dest, const IDProperty *src)
 void IDP_ReplaceInGroup_ex(IDProperty *group, IDProperty *prop, IDProperty *prop_exist)
 {
 	BLI_assert(group->type == IDP_GROUP);
-
 	BLI_assert(prop_exist == IDP_GetPropertyFromGroup(group, prop->name));
 
-	if ((prop_exist = IDP_GetPropertyFromGroup(group, prop->name))) {
+	if (prop_exist != NULL) {
 		BLI_insertlinkreplace(&group->data.group, prop_exist, prop);
 		IDP_FreeProperty(prop_exist);
 		MEM_freeN(prop_exist);
@@ -730,16 +731,21 @@ static void IDP_FreeGroup(IDProperty *prop, const bool do_id_user)
 
 /** \name IDProperty Main API
  * \{ */
-IDProperty *IDP_CopyProperty(const IDProperty *prop)
+IDProperty *IDP_CopyProperty_ex(const IDProperty *prop, const int flag)
 {
 	switch (prop->type) {
-		case IDP_GROUP: return IDP_CopyGroup(prop);
-		case IDP_STRING: return IDP_CopyString(prop);
-		case IDP_ID: return IDP_CopyID(prop);
-		case IDP_ARRAY: return IDP_CopyArray(prop);
-		case IDP_IDPARRAY: return IDP_CopyIDPArray(prop);
-		default: return idp_generic_copy(prop);
+		case IDP_GROUP: return IDP_CopyGroup(prop, flag);
+		case IDP_STRING: return IDP_CopyString(prop, flag);
+		case IDP_ID: return IDP_CopyID(prop, flag);
+		case IDP_ARRAY: return IDP_CopyArray(prop, flag);
+		case IDP_IDPARRAY: return IDP_CopyIDPArray(prop, flag);
+		default: return idp_generic_copy(prop, flag);
 	}
+}
+
+IDProperty *IDP_CopyProperty(const IDProperty *prop)
+{
+	return IDP_CopyProperty_ex(prop, 0);
 }
 
 /* Updates ID pointers after an object has been copied */
@@ -825,9 +831,9 @@ bool IDP_EqualsProperties_ex(IDProperty *prop1, IDProperty *prop2, const bool is
 				if ((p1 != p2) && ((fabsf(p1 - p2) / max_ff(p1, p2)) < 0.001f)) {
 					printf("WARNING: Comparing two float properties that have nearly the same value (%f vs. %f)\n", p1, p2);
 					printf("    p1: ");
-					IDP_spit(prop1);
+					IDP_print(prop1);
 					printf("    p2: ");
-					IDP_spit(prop2);
+					IDP_print(prop2);
 				}
 			}
 #endif
@@ -871,15 +877,15 @@ bool IDP_EqualsProperties_ex(IDProperty *prop1, IDProperty *prop2, const bool is
 			if (prop1->len != prop2->len)
 				return false;
 
-			for (i = 0; i < prop1->len; i++)
-				if (!IDP_EqualsProperties(&array1[i], &array2[i]))
+			for (i = 0; i < prop1->len; i++) {
+				if (!IDP_EqualsProperties_ex(&array1[i], &array2[i], is_strict))
 					return false;
+			}
 			return true;
 		}
 		case IDP_ID:
 			return (IDP_Id(prop1) == IDP_Id(prop2));
 		default:
-			/* should never get here */
 			BLI_assert(0);
 			break;
 	}
@@ -981,7 +987,8 @@ IDProperty *IDP_New(const char type, const IDPropertyTemplate *val, const char *
 					prop->data.pointer = MEM_mallocN(DEFAULT_ALLOC_FOR_NULL_STRINGS, "id property string 1");
 					*IDP_String(prop) = '\0';
 					prop->totallen = DEFAULT_ALLOC_FOR_NULL_STRINGS;
-					prop->len = 1; /*NULL string, has len of 1 to account for null byte.*/
+					/* NULL string, has len of 1 to account for null byte. */
+					prop->len = 1;
 				}
 				else {
 					BLI_assert((int)val->string.len <= (int)strlen(st) + 1);
@@ -996,8 +1003,8 @@ IDProperty *IDP_New(const char type, const IDPropertyTemplate *val, const char *
 		}
 		case IDP_GROUP:
 		{
+			/* Values are set properly by calloc. */
 			prop = MEM_callocN(sizeof(IDProperty), "IDProperty group");
-			/* heh I think all needed values are set properly by calloc anyway :) */
 			break;
 		}
 		case IDP_ID:
@@ -1017,7 +1024,7 @@ IDProperty *IDP_New(const char type, const IDPropertyTemplate *val, const char *
 
 	prop->type = type;
 	BLI_strncpy(prop->name, name, MAX_IDPROP_NAME);
-	
+
 	return prop;
 }
 

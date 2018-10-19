@@ -41,6 +41,7 @@
 #include "kernel/kernel_compat_cpu.h"
 #include "kernel/split/kernel_split_data_types.h"
 #include "kernel/kernel_globals.h"
+#include "kernel/kernel_color.h"
 #include "kernel/kernel_random.h"
 #include "kernel/kernel_projection.h"
 #include "kernel/kernel_differential.h"
@@ -62,11 +63,17 @@ CCL_NAMESPACE_BEGIN
 
 /* RenderServices implementation */
 
-#define COPY_MATRIX44(m1, m2)  { \
-	CHECK_TYPE(m1, OSL::Matrix44*); \
-	CHECK_TYPE(m2, Transform*); \
-	memcpy(m1, m2, sizeof(*m2)); \
-} (void)0
+static void copy_matrix(OSL::Matrix44& m, const Transform& tfm)
+{
+	ProjectionTransform t = projection_transpose(ProjectionTransform(tfm));
+	memcpy((void *)&m, &t, sizeof(m));
+}
+
+static void copy_matrix(OSL::Matrix44& m, const ProjectionTransform& tfm)
+{
+	ProjectionTransform t = projection_transpose(tfm);
+	memcpy((void *)&m, &t, sizeof(m));
+}
 
 /* static ustrings */
 ustring OSLRenderServices::u_distance("distance");
@@ -83,6 +90,7 @@ ustring OSLRenderServices::u_geom_dupli_uv("geom:dupli_uv");
 ustring OSLRenderServices::u_material_index("material:index");
 ustring OSLRenderServices::u_object_random("object:random");
 ustring OSLRenderServices::u_particle_index("particle:index");
+ustring OSLRenderServices::u_particle_random("particle:random");
 ustring OSLRenderServices::u_particle_age("particle:age");
 ustring OSLRenderServices::u_particle_lifetime("particle:lifetime");
 ustring OSLRenderServices::u_particle_location("particle:location");
@@ -96,11 +104,10 @@ ustring OSLRenderServices::u_geom_polyvertices("geom:polyvertices");
 ustring OSLRenderServices::u_geom_name("geom:name");
 ustring OSLRenderServices::u_geom_undisplaced("geom:undisplaced");
 ustring OSLRenderServices::u_is_smooth("geom:is_smooth");
-#ifdef __HAIR__
 ustring OSLRenderServices::u_is_curve("geom:is_curve");
 ustring OSLRenderServices::u_curve_thickness("geom:curve_thickness");
 ustring OSLRenderServices::u_curve_tangent_normal("geom:curve_tangent_normal");
-#endif
+ustring OSLRenderServices::u_curve_random("geom:curve_random");
 ustring OSLRenderServices::u_path_ray_length("path:ray_length");
 ustring OSLRenderServices::u_path_ray_depth("path:ray_depth");
 ustring OSLRenderServices::u_path_diffuse_depth("path:diffuse_depth");
@@ -117,6 +124,8 @@ ustring OSLRenderServices::u_I("I");
 ustring OSLRenderServices::u_u("u");
 ustring OSLRenderServices::u_v("v");
 ustring OSLRenderServices::u_empty;
+ustring OSLRenderServices::u_at_bevel("@bevel");
+ustring OSLRenderServices::u_at_ao("@ao");
 
 OSLRenderServices::OSLRenderServices()
 {
@@ -166,14 +175,12 @@ bool OSLRenderServices::get_matrix(OSL::ShaderGlobals *sg, OSL::Matrix44 &result
 #else
 			Transform tfm = object_fetch_transform(kg, object, OBJECT_TRANSFORM);
 #endif
-			tfm = transform_transpose(tfm);
-			COPY_MATRIX44(&result, &tfm);
+			copy_matrix(result, tfm);
 
 			return true;
 		}
 		else if(sd->type == PRIMITIVE_LAMP) {
-			Transform tfm = transform_transpose(sd->ob_tfm);
-			COPY_MATRIX44(&result, &tfm);
+			copy_matrix(result, sd->ob_tfm);
 
 			return true;
 		}
@@ -202,14 +209,12 @@ bool OSLRenderServices::get_inverse_matrix(OSL::ShaderGlobals *sg, OSL::Matrix44
 #else
 			Transform itfm = object_fetch_transform(kg, object, OBJECT_INVERSE_TRANSFORM);
 #endif
-			itfm = transform_transpose(itfm);
-			COPY_MATRIX44(&result, &itfm);
+			copy_matrix(result, itfm);
 
 			return true;
 		}
 		else if(sd->type == PRIMITIVE_LAMP) {
-			Transform tfm = transform_transpose(sd->ob_itfm);
-			COPY_MATRIX44(&result, &tfm);
+			copy_matrix(result, sd->ob_itfm);
 
 			return true;
 		}
@@ -223,23 +228,19 @@ bool OSLRenderServices::get_matrix(OSL::ShaderGlobals *sg, OSL::Matrix44 &result
 	KernelGlobals *kg = kernel_globals;
 
 	if(from == u_ndc) {
-		Transform tfm = transform_transpose(transform_quick_inverse(kernel_data.cam.worldtondc));
-		COPY_MATRIX44(&result, &tfm);
+		copy_matrix(result, kernel_data.cam.ndctoworld);
 		return true;
 	}
 	else if(from == u_raster) {
-		Transform tfm = transform_transpose(kernel_data.cam.rastertoworld);
-		COPY_MATRIX44(&result, &tfm);
+		copy_matrix(result, kernel_data.cam.rastertoworld);
 		return true;
 	}
 	else if(from == u_screen) {
-		Transform tfm = transform_transpose(kernel_data.cam.screentoworld);
-		COPY_MATRIX44(&result, &tfm);
+		copy_matrix(result, kernel_data.cam.screentoworld);
 		return true;
 	}
 	else if(from == u_camera) {
-		Transform tfm = transform_transpose(kernel_data.cam.cameratoworld);
-		COPY_MATRIX44(&result, &tfm);
+		copy_matrix(result, kernel_data.cam.cameratoworld);
 		return true;
 	}
 	else if(from == u_world) {
@@ -255,23 +256,19 @@ bool OSLRenderServices::get_inverse_matrix(OSL::ShaderGlobals *sg, OSL::Matrix44
 	KernelGlobals *kg = kernel_globals;
 
 	if(to == u_ndc) {
-		Transform tfm = transform_transpose(kernel_data.cam.worldtondc);
-		COPY_MATRIX44(&result, &tfm);
+		copy_matrix(result, kernel_data.cam.worldtondc);
 		return true;
 	}
 	else if(to == u_raster) {
-		Transform tfm = transform_transpose(kernel_data.cam.worldtoraster);
-		COPY_MATRIX44(&result, &tfm);
+		copy_matrix(result, kernel_data.cam.worldtoraster);
 		return true;
 	}
 	else if(to == u_screen) {
-		Transform tfm = transform_transpose(kernel_data.cam.worldtoscreen);
-		COPY_MATRIX44(&result, &tfm);
+		copy_matrix(result, kernel_data.cam.worldtoscreen);
 		return true;
 	}
 	else if(to == u_camera) {
-		Transform tfm = transform_transpose(kernel_data.cam.worldtocamera);
-		COPY_MATRIX44(&result, &tfm);
+		copy_matrix(result, kernel_data.cam.worldtocamera);
 		return true;
 	}
 	else if(to == u_world) {
@@ -297,14 +294,12 @@ bool OSLRenderServices::get_matrix(OSL::ShaderGlobals *sg, OSL::Matrix44 &result
 			KernelGlobals *kg = sd->osl_globals;
 			Transform tfm = object_fetch_transform(kg, object, OBJECT_TRANSFORM);
 #endif
-			tfm = transform_transpose(tfm);
-			COPY_MATRIX44(&result, &tfm);
+			copy_matrix(result, tfm);
 
 			return true;
 		}
 		else if(sd->type == PRIMITIVE_LAMP) {
-			Transform tfm = transform_transpose(sd->ob_tfm);
-			COPY_MATRIX44(&result, &tfm);
+			copy_matrix(result, sd->ob_tfm);
 
 			return true;
 		}
@@ -328,14 +323,12 @@ bool OSLRenderServices::get_inverse_matrix(OSL::ShaderGlobals *sg, OSL::Matrix44
 			KernelGlobals *kg = sd->osl_globals;
 			Transform tfm = object_fetch_transform(kg, object, OBJECT_INVERSE_TRANSFORM);
 #endif
-			tfm = transform_transpose(tfm);
-			COPY_MATRIX44(&result, &tfm);
+			copy_matrix(result, tfm);
 
 			return true;
 		}
 		else if(sd->type == PRIMITIVE_LAMP) {
-			Transform tfm = transform_transpose(sd->ob_itfm);
-			COPY_MATRIX44(&result, &tfm);
+			copy_matrix(result, sd->ob_itfm);
 
 			return true;
 		}
@@ -349,23 +342,19 @@ bool OSLRenderServices::get_matrix(OSL::ShaderGlobals *sg, OSL::Matrix44 &result
 	KernelGlobals *kg = kernel_globals;
 
 	if(from == u_ndc) {
-		Transform tfm = transform_transpose(transform_quick_inverse(kernel_data.cam.worldtondc));
-		COPY_MATRIX44(&result, &tfm);
+		copy_matrix(result, kernel_data.cam.ndctoworld);
 		return true;
 	}
 	else if(from == u_raster) {
-		Transform tfm = transform_transpose(kernel_data.cam.rastertoworld);
-		COPY_MATRIX44(&result, &tfm);
+		copy_matrix(result, kernel_data.cam.rastertoworld);
 		return true;
 	}
 	else if(from == u_screen) {
-		Transform tfm = transform_transpose(kernel_data.cam.screentoworld);
-		COPY_MATRIX44(&result, &tfm);
+		copy_matrix(result, kernel_data.cam.screentoworld);
 		return true;
 	}
 	else if(from == u_camera) {
-		Transform tfm = transform_transpose(kernel_data.cam.cameratoworld);
-		COPY_MATRIX44(&result, &tfm);
+		copy_matrix(result, kernel_data.cam.cameratoworld);
 		return true;
 	}
 
@@ -375,32 +364,28 @@ bool OSLRenderServices::get_matrix(OSL::ShaderGlobals *sg, OSL::Matrix44 &result
 bool OSLRenderServices::get_inverse_matrix(OSL::ShaderGlobals *sg, OSL::Matrix44 &result, ustring to)
 {
 	KernelGlobals *kg = kernel_globals;
-	
+
 	if(to == u_ndc) {
-		Transform tfm = transform_transpose(kernel_data.cam.worldtondc);
-		COPY_MATRIX44(&result, &tfm);
+		copy_matrix(result, kernel_data.cam.worldtondc);
 		return true;
 	}
 	else if(to == u_raster) {
-		Transform tfm = transform_transpose(kernel_data.cam.worldtoraster);
-		COPY_MATRIX44(&result, &tfm);
+		copy_matrix(result, kernel_data.cam.worldtoraster);
 		return true;
 	}
 	else if(to == u_screen) {
-		Transform tfm = transform_transpose(kernel_data.cam.worldtoscreen);
-		COPY_MATRIX44(&result, &tfm);
+		copy_matrix(result, kernel_data.cam.worldtoscreen);
 		return true;
 	}
 	else if(to == u_camera) {
-		Transform tfm = transform_transpose(kernel_data.cam.worldtocamera);
-		COPY_MATRIX44(&result, &tfm);
+		copy_matrix(result, kernel_data.cam.worldtocamera);
 		return true;
 	}
-	
+
 	return false;
 }
 
-bool OSLRenderServices::get_array_attribute(OSL::ShaderGlobals *sg, bool derivatives, 
+bool OSLRenderServices::get_array_attribute(OSL::ShaderGlobals *sg, bool derivatives,
                                             ustring object, TypeDesc type, ustring name,
                                             int index, void *val)
 {
@@ -569,8 +554,7 @@ static bool set_attribute_float3_3(float3 P[3], TypeDesc type, bool derivatives,
 static bool set_attribute_matrix(const Transform& tfm, TypeDesc type, void *val)
 {
 	if(type == TypeDesc::TypeMatrix) {
-		Transform transpose = transform_transpose(tfm);
-		memcpy(val, &transpose, sizeof(Transform));
+		copy_matrix(*(OSL::Matrix44*)val, tfm);
 		return true;
 	}
 
@@ -657,6 +641,12 @@ bool OSLRenderServices::get_object_standard_attribute(KernelGlobals *kg, ShaderD
 		float f = particle_index(kg, particle_id);
 		return set_attribute_float(f, type, derivatives, val);
 	}
+	else if(name == u_particle_random) {
+		int particle_id = object_particle_id(kg, sd->object);
+		float f = hash_int_01(particle_index(kg, particle_id));
+		return set_attribute_float(f, type, derivatives, val);
+	}
+
 	else if(name == u_particle_age) {
 		int particle_id = object_particle_id(kg, sd->object);
 		float f = particle_age(kg, particle_id);
@@ -694,17 +684,13 @@ bool OSLRenderServices::get_object_standard_attribute(KernelGlobals *kg, ShaderD
 		float3 f = particle_angular_velocity(kg, particle_id);
 		return set_attribute_float3(f, type, derivatives, val);
 	}
-	
+
 	/* Geometry Attributes */
 	else if(name == u_geom_numpolyvertices) {
 		return set_attribute_int(3, type, derivatives, val);
 	}
 	else if((name == u_geom_trianglevertices || name == u_geom_polyvertices)
-#ifdef __HAIR__
 		     && sd->type & PRIMITIVE_ALL_TRIANGLE)
-#else
-		)
-#endif
 	{
 		float3 P[3];
 
@@ -729,7 +715,6 @@ bool OSLRenderServices::get_object_standard_attribute(KernelGlobals *kg, ShaderD
 		float f = ((sd->shader & SHADER_SMOOTH_NORMAL) != 0);
 		return set_attribute_float(f, type, derivatives, val);
 	}
-#ifdef __HAIR__
 	/* Hair Attributes */
 	else if(name == u_is_curve) {
 		float f = (sd->type & PRIMITIVE_ALL_CURVE) != 0;
@@ -743,7 +728,6 @@ bool OSLRenderServices::get_object_standard_attribute(KernelGlobals *kg, ShaderD
 		float3 f = curve_tangent_normal(kg, sd);
 		return set_attribute_float3(f, type, derivatives, val);
 	}
-#endif
 	else
 		return false;
 }
@@ -889,7 +873,7 @@ bool OSLRenderServices::get_attribute(ShaderData *sd, bool derivatives, ustring 
 	return false;
 }
 
-bool OSLRenderServices::get_userdata(bool derivatives, ustring name, TypeDesc type, 
+bool OSLRenderServices::get_userdata(bool derivatives, ustring name, TypeDesc type,
                                      OSL::ShaderGlobals *sg, void *val)
 {
 	return false; /* disabled by lockgeom */
@@ -958,20 +942,61 @@ bool OSLRenderServices::texture(ustring filename,
 		return true;
 	}
 #endif
-	bool status;
+	bool status = false;
 
 	if(filename.length() && filename[0] == '@') {
-		int slot = atoi(filename.c_str() + 1);
-		float4 rgba = kernel_tex_image_interp(slot, s, 1.0f - t);
+		if(filename == u_at_bevel) {
+			/* Bevel shader hack. */
+			if(nchannels >= 3) {
+				PathState *state = sd->osl_path_state;
+				int num_samples = (int)s;
+				float radius = t;
+				float3 N = svm_bevel(kg, sd, state, radius, num_samples);
+				result[0] = N.x;
+				result[1] = N.y;
+				result[2] = N.z;
+				status = true;
+			}
+		}
+		else if(filename == u_at_ao) {
+			/* AO shader hack. */
+			PathState *state = sd->osl_path_state;
+			int num_samples = (int)s;
+			float radius = t;
+			float3 N = make_float3(dsdx, dtdx, dsdy);
+			int flags = 0;
+			if((int)dtdy) {
+				flags |= NODE_AO_INSIDE;
+			}
+			if((int)options.sblur) {
+				flags |= NODE_AO_ONLY_LOCAL;
+			}
+			if((int)options.tblur) {
+				flags |= NODE_AO_GLOBAL_RADIUS;
+			}
+			result[0] = svm_ao(kg, sd, N, state, radius, num_samples, flags);
+			status = true;
+		}
+		else if(filename[1] == 'l') {
+			/* IES light. */
+			int slot = atoi(filename.c_str() + 2);
+			result[0] = kernel_ies_interp(kg, slot, s, t);
+			status = true;
+		}
+		else {
+			/* Packed texture. */
+			int slot = atoi(filename.c_str() + 2);
+			float4 rgba = kernel_tex_image_interp(kg, slot, s, 1.0f - t);
 
-		result[0] = rgba[0];
-		if(nchannels > 1)
-			result[1] = rgba[1];
-		if(nchannels > 2)
-			result[2] = rgba[2];
-		if(nchannels > 3)
-			result[3] = rgba[3];
-		status = true;
+			result[0] = rgba[0];
+			if(nchannels > 1)
+				result[1] = rgba[1];
+			if(nchannels > 2)
+				result[2] = rgba[2];
+			if(nchannels > 3)
+				result[3] = rgba[3];
+			status = true;
+		}
 	}
 	else {
 		if(texture_handle != NULL) {
@@ -1043,7 +1068,7 @@ bool OSLRenderServices::texture3d(ustring filename,
 	bool status;
 	if(filename.length() && filename[0] == '@') {
 		int slot = atoi(filename.c_str() + 1);
-		float4 rgba = kernel_tex_image_interp_3d(slot, P.x, P.y, P.z);
+		float4 rgba = kernel_tex_image_interp_3d(kg, slot, P.x, P.y, P.z, INTERPOLATION_NONE);
 
 		result[0] = rgba[0];
 		if(nchannels > 1)
@@ -1197,8 +1222,9 @@ bool OSLRenderServices::trace(TraceOpt &options, OSL::ShaderGlobals *sg,
 	tracedata->init = true;
 	tracedata->sd.osl_globals = sd->osl_globals;
 
-	/* raytrace */
-	return scene_intersect(sd->osl_globals, ray, PATH_RAY_ALL_VISIBILITY, &tracedata->isect, NULL, 0.0f, 0.0f);
+	/* Raytrace, leaving out shadow opaque to avoid early exit. */
+	uint visibility = PATH_RAY_ALL_VISIBILITY - PATH_RAY_SHADOW_OPAQUE;
+	return scene_intersect(sd->osl_globals, ray, visibility, &tracedata->isect, NULL, 0.0f, 0.0f);
 }
 
 

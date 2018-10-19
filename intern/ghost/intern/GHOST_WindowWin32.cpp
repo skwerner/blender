@@ -99,7 +99,7 @@ GHOST_WindowWin32::GHOST_WindowWin32(GHOST_SystemWin32 *system,
 	if (state != GHOST_kWindowStateFullScreen) {
 		RECT rect;
 		MONITORINFO monitor;
-		GHOST_TUns32 tw, th; 
+		GHOST_TUns32 tw, th;
 
 #ifndef _MSC_VER
 		int cxsizeframe = GetSystemMetrics(SM_CXSIZEFRAME);
@@ -158,7 +158,7 @@ GHOST_WindowWin32::GHOST_WindowWin32(GHOST_SystemWin32 *system,
 			width = rect.right - rect.left;
 			height = rect.bottom - rect.top;
 		}
-		
+
 		wchar_t *title_16 = alloc_utf16_from_8((char *)(const char *)title, 0);
 		m_hWnd = ::CreateWindowW(
 			s_windowClassName,          // pointer to registered class name
@@ -201,6 +201,11 @@ GHOST_WindowWin32::GHOST_WindowWin32(GHOST_SystemWin32 *system,
 		// Store a pointer to this class in the window structure
 		::SetWindowLongPtr(m_hWnd, GWLP_USERDATA, (LONG_PTR) this);
 
+		if (!m_system->m_windowFocus) {
+			// Lower to bottom and don't activate if we don't want focus
+			::SetWindowPos(m_hWnd, HWND_BOTTOM, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+		}
+
 		// Store the device context
 		m_hDC = ::GetDC(m_hWnd);
 
@@ -214,18 +219,18 @@ GHOST_WindowWin32::GHOST_WindowWin32(GHOST_SystemWin32 *system,
 					nCmdShow = SW_SHOWMAXIMIZED;
 					break;
 				case GHOST_kWindowStateMinimized:
-					nCmdShow = SW_SHOWMINIMIZED;
+					nCmdShow = (m_system->m_windowFocus) ? SW_SHOWMINIMIZED : SW_SHOWMINNOACTIVE;
 					break;
 				case GHOST_kWindowStateNormal:
 				default:
-					nCmdShow = SW_SHOWNORMAL;
+					nCmdShow = (m_system->m_windowFocus) ? SW_SHOWNORMAL : SW_SHOWNOACTIVATE;
 					break;
 			}
 
 			::ShowWindow(m_hWnd, nCmdShow);
 #ifdef WIN32_COMPOSITING
 			if (alphaBackground && parentwindowhwnd == 0) {
-				
+
 				HRESULT hr = S_OK;
 
 				// Create and populate the Blur Behind structure
@@ -265,23 +270,22 @@ GHOST_WindowWin32::GHOST_WindowWin32(GHOST_SystemWin32 *system,
 		GHOST_WIN32_WTInfo fpWTInfo = (GHOST_WIN32_WTInfo) ::GetProcAddress(m_wintab, "WTInfoA");
 		GHOST_WIN32_WTOpen fpWTOpen = (GHOST_WIN32_WTOpen) ::GetProcAddress(m_wintab, "WTOpenA");
 
-		// let's see if we can initialize tablet here
-		/* check if WinTab available. */
-		if (fpWTInfo && fpWTInfo(0, 0, NULL)) {
+		// Let's see if we can initialize tablet here.
+		// Check if WinTab available by getting system context info.
+		LOGCONTEXT lc = { 0 };
+		lc.lcOptions |= CXO_SYSTEM;
+		if (fpWTInfo && fpWTInfo(WTI_DEFSYSCTX, 0, &lc)) {
 			// Now init the tablet
-			LOGCONTEXT lc;
 			/* The maximum tablet size, pressure and orientation (tilt) */
 			AXIS TabletX, TabletY, Pressure, Orientation[3];
 
 			// Open a Wintab context
 
-			// Get default context information
-			fpWTInfo(WTI_DEFCONTEXT, 0, &lc);
-
 			// Open the context
 			lc.lcPktData = PACKETDATA;
 			lc.lcPktMode = PACKETMODE;
-			lc.lcOptions |= CXO_MESSAGES | CXO_SYSTEM;
+			lc.lcOptions |= CXO_MESSAGES;
+			lc.lcMoveMask = PACKETDATA;
 
 			/* Set the entire tablet as active */
 			fpWTInfo(WTI_DEVICES, DVC_X, &TabletX);
@@ -309,10 +313,16 @@ GHOST_WindowWin32::GHOST_WindowWin32(GHOST_SystemWin32 *system,
 			}
 
 			if (fpWTOpen) {
-				m_tablet = fpWTOpen(m_hWnd, &lc, TRUE);
+				// The Wintab spec says we must open the context disabled if we are using cursor masks.
+				m_tablet = fpWTOpen(m_hWnd, &lc, FALSE);
 				if (m_tablet) {
 					m_tabletData = new GHOST_TabletData();
 					m_tabletData->Active = GHOST_kTabletModeNone;
+				}
+
+				GHOST_WIN32_WTEnable fpWTEnable = (GHOST_WIN32_WTEnable) ::GetProcAddress(m_wintab, "WTEnable");
+				if (fpWTEnable) {
+					fpWTEnable(m_tablet, TRUE);
 				}
 			}
 		}
@@ -402,21 +412,29 @@ void GHOST_WindowWin32::getClientBounds(GHOST_Rect &bounds) const
 {
 	RECT rect;
 	POINT coord;
-	::GetClientRect(m_hWnd, &rect);
+	if (!IsIconic(m_hWnd)) {
+		::GetClientRect(m_hWnd, &rect);
 
-	coord.x = rect.left;
-	coord.y = rect.top;
-	::ClientToScreen(m_hWnd, &coord);
+		coord.x = rect.left;
+		coord.y = rect.top;
+		::ClientToScreen(m_hWnd, &coord);
 
-	bounds.m_l = coord.x;
-	bounds.m_t = coord.y;
+		bounds.m_l = coord.x;
+		bounds.m_t = coord.y;
 
-	coord.x = rect.right;
-	coord.y = rect.bottom;
-	::ClientToScreen(m_hWnd, &coord);
+		coord.x = rect.right;
+		coord.y = rect.bottom;
+		::ClientToScreen(m_hWnd, &coord);
 
-	bounds.m_r = coord.x;
-	bounds.m_b = coord.y;
+		bounds.m_r = coord.x;
+		bounds.m_b = coord.y;
+	}
+	else {
+		bounds.m_b = 0;
+		bounds.m_l = 0;
+		bounds.m_r = 0;
+		bounds.m_t = 0;
+	}
 }
 
 
@@ -831,7 +849,7 @@ GHOST_TSuccess GHOST_WindowWin32::setWindowCursorGrab(GHOST_TGrabCursorMode mode
 		m_cursorGrabBounds.m_l = m_cursorGrabBounds.m_r = -1; /* disable */
 		registerMouseClickEvent(3);
 	}
-	
+
 	return GHOST_kSuccess;
 }
 
@@ -847,6 +865,23 @@ GHOST_TSuccess GHOST_WindowWin32::setWindowCursorShape(GHOST_TStandardCursor cur
 	}
 
 	return GHOST_kSuccess;
+}
+
+void GHOST_WindowWin32::processWin32TabletActivateEvent(WORD state)
+{
+	if (!m_tablet) {
+		return;
+	}
+
+	GHOST_WIN32_WTEnable fpWTEnable = (GHOST_WIN32_WTEnable) ::GetProcAddress(m_wintab, "WTEnable");
+	GHOST_WIN32_WTOverlap fpWTOverlap = (GHOST_WIN32_WTOverlap) ::GetProcAddress(m_wintab, "WTOverlap");
+
+	if (fpWTEnable) {
+		fpWTEnable(m_tablet, state);
+		if (fpWTOverlap && state) {
+			fpWTOverlap(m_tablet, TRUE);
+		}
+	}
 }
 
 void GHOST_WindowWin32::processWin32TabletInitEvent()
@@ -1055,7 +1090,7 @@ GHOST_TSuccess GHOST_WindowWin32::setWindowCustomCursorShape(
 
 
 GHOST_TSuccess GHOST_WindowWin32::setProgressBar(float progress)
-{	
+{
 	/*SetProgressValue sets state to TBPF_NORMAL automaticly*/
 	if (m_Bar && S_OK == m_Bar->SetProgressValue(m_hWnd, 10000 * progress, 10000))
 		return GHOST_kSuccess;
@@ -1075,12 +1110,12 @@ GHOST_TSuccess GHOST_WindowWin32::endProgressBar()
 #ifdef WITH_INPUT_IME
 void GHOST_WindowWin32::beginIME(GHOST_TInt32 x, GHOST_TInt32 y, GHOST_TInt32 w, GHOST_TInt32 h, int completed)
 {
-	m_imeImput.BeginIME(m_hWnd, GHOST_Rect(x, y - h, x, y), (bool)completed);
+	m_imeInput.BeginIME(m_hWnd, GHOST_Rect(x, y - h, x, y), (bool)completed);
 }
 
 
 void GHOST_WindowWin32::endIME()
 {
-	m_imeImput.EndIME(m_hWnd);
+	m_imeInput.EndIME(m_hWnd);
 }
 #endif /* WITH_INPUT_IME */

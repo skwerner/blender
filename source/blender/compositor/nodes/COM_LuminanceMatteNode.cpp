@@ -37,22 +37,19 @@ void LuminanceMatteNode::convertToOperations(NodeConverter &converter, const Com
 	NodeOutput *outputSocketImage = this->getOutputSocket(0);
 	NodeOutput *outputSocketMatte = this->getOutputSocket(1);
 
-	ConvertRGBToYUVOperation *rgbToYUV = new ConvertRGBToYUVOperation();
 	LuminanceMatteOperation *operationSet = new LuminanceMatteOperation();
 	operationSet->setSettings((NodeChroma *)editorsnode->storage);
-	converter.addOperation(rgbToYUV);
 	converter.addOperation(operationSet);
 
-	converter.mapInputSocket(inputSocket, rgbToYUV->getInputSocket(0));
-	converter.addLink(rgbToYUV->getOutputSocket(), operationSet->getInputSocket(0));
+	converter.mapInputSocket(inputSocket, operationSet->getInputSocket(0));
 	converter.mapOutputSocket(outputSocketMatte, operationSet->getOutputSocket(0));
 
 	SetAlphaOperation *operation = new SetAlphaOperation();
 	converter.addOperation(operation);
-	
+
 	converter.mapInputSocket(inputSocket, operation->getInputSocket(0));
 	converter.addLink(operationSet->getOutputSocket(), operation->getInputSocket(1));
 	converter.mapOutputSocket(outputSocketImage, operation->getOutputSocket());
-	
+
 	converter.addPreview(operation->getOutputSocket());
 }

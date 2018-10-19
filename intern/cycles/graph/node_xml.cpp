@@ -33,7 +33,7 @@ static const char *xml_write_boolean(bool value)
 }
 
 template<int VECTOR_SIZE, typename T>
-static void xml_read_float_array(T& value, pugi::xml_attribute attr)
+static void xml_read_float_array(T& value, xml_attribute attr)
 {
 	vector<string> tokens;
 	string_split(tokens, attr.value());
@@ -51,9 +51,9 @@ static void xml_read_float_array(T& value, pugi::xml_attribute attr)
 	}
 }
 
-void xml_read_node(XMLReader& reader, Node *node, pugi::xml_node xml_node)
+void xml_read_node(XMLReader& reader, Node *node, xml_node xml_node)
 {
-	pugi::xml_attribute name_attr = xml_node.attribute("name");
+	xml_attribute name_attr = xml_node.attribute("name");
 	if(name_attr) {
 		node->name = ustring(name_attr.value());
 	}
@@ -66,7 +66,7 @@ void xml_read_node(XMLReader& reader, Node *node, pugi::xml_node xml_node)
 			continue;
 		}
 
-		pugi::xml_attribute attr = xml_node.attribute(socket.name.c_str());
+		xml_attribute attr = xml_node.attribute(socket.name.c_str());
 
 		if(!attr) {
 			continue;
@@ -196,7 +196,7 @@ void xml_read_node(XMLReader& reader, Node *node, pugi::xml_node xml_node)
 			case SocketType::TRANSFORM:
 			{
 				array<Transform> value;
-				xml_read_float_array<16>(value, attr);
+				xml_read_float_array<12>(value, attr);
 				if(value.size() == 1) {
 					node->set(socket, value[0]);
 				}
@@ -205,7 +205,7 @@ void xml_read_node(XMLReader& reader, Node *node, pugi::xml_node xml_node)
 			case SocketType::TRANSFORM_ARRAY:
 			{
 				array<Transform> value;
-				xml_read_float_array<16>(value, attr);
+				xml_read_float_array<12>(value, attr);
 				node->set(socket, value);
 				break;
 			}
@@ -254,9 +254,9 @@ void xml_read_node(XMLReader& reader, Node *node, pugi::xml_node xml_node)
 		reader.node_map[node->name] = node;
 }
 
-pugi::xml_node xml_write_node(Node *node, pugi::xml_node xml_root)
+xml_node xml_write_node(Node *node, xml_node xml_root)
 {
-	pugi::xml_node xml_node = xml_root.append_child(node->type->name.c_str());
+	xml_node xml_node = xml_root.append_child(node->type->name.c_str());
 
 	xml_node.append_attribute("name") = node->name.c_str();
 
@@ -271,7 +271,7 @@ pugi::xml_node xml_write_node(Node *node, pugi::xml_node xml_root)
 			continue;
 		}
 
-		pugi::xml_attribute attr = xml_node.append_attribute(socket.name.c_str());
+		xml_attribute attr = xml_node.append_attribute(socket.name.c_str());
 
 		switch(socket.type)
 		{
@@ -400,12 +400,10 @@ pugi::xml_node xml_write_node(Node *node, pugi::xml_node xml_root)
 			{
 				Transform tfm = node->get_transform(socket);
 				std::stringstream ss;
-				for(int i = 0; i < 4; i++) {
-					ss << string_printf("%g %g %g %g", (double)tfm[i][0], (double)tfm[i][1], (double)tfm[i][2], (double)tfm[i][3]);
-					if(i != 3) {
-						ss << " ";
-					}
+				for(int i = 0; i < 3; i++) {
+					ss << string_printf("%g %g %g %g ", (double)tfm[i][0], (double)tfm[i][1], (double)tfm[i][2], (double)tfm[i][3]);
 				}
+				ss << string_printf("%g %g %g %g", 0.0, 0.0, 0.0, 1.0);
 				attr = ss.str().c_str();
 				break;
 			}
@@ -416,11 +414,12 @@ pugi::xml_node xml_write_node(Node *node, pugi::xml_node xml_root)
 				for(size_t j = 0; j < value.size(); j++) {
 					const Transform& tfm = value[j];
 
-					for(int i = 0; i < 4; i++) {
-						ss << string_printf("%g %g %g %g", (double)tfm[i][0], (double)tfm[i][1], (double)tfm[i][2], (double)tfm[i][3]);
-						if(j != value.size() - 1 || i != 3) {
-							ss << " ";
-						}
+					for(int i = 0; i < 3; i++) {
+						ss << string_printf("%g %g %g %g ", (double)tfm[i][0], (double)tfm[i][1], (double)tfm[i][2], (double)tfm[i][3]);
+					}
+					ss << string_printf("%g %g %g %g", 0.0, 0.0, 0.0, 1.0);
+					if(j != value.size() - 1) {
+						ss << " ";
 					}
 				}
 				attr = ss.str().c_str();
@@ -459,4 +458,3 @@ pugi::xml_node xml_write_node(Node *node, pugi::xml_node xml_root)
 }
 
 CCL_NAMESPACE_END
-

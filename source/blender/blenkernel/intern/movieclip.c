@@ -73,6 +73,8 @@
 #include "IMB_imbuf.h"
 #include "IMB_moviecache.h"
 
+#include "DEG_depsgraph.h"
+
 #ifdef WITH_OPENEXR
 #  include "intern/openexr/openexr_multi.h"
 #endif
@@ -169,7 +171,7 @@ static void get_sequence_fname(const MovieClip *clip,
 		BLI_strncpy(name, clip->name, sizeof(clip->name));
 	}
 
-	BLI_path_abs(name, ID_BLEND_PATH(G.main, &clip->id));
+	BLI_path_abs(name, ID_BLEND_PATH_FROM_GLOBAL(&clip->id));
 }
 
 /* supposed to work with sequences only */
@@ -197,7 +199,7 @@ static void get_proxy_fname(const MovieClip *clip,
 	else
 		BLI_snprintf(name, FILE_MAX, "%s/%s/proxy_%d/%08d", dir, clipfile, size, proxynr);
 
-	BLI_path_abs(name, G.main->name);
+	BLI_path_abs(name, BKE_main_blendfile_path_from_global());
 	BLI_path_frame(name, 1, 0);
 
 	strcat(name, ".jpg");
@@ -259,7 +261,7 @@ static void movieclip_open_anim_file(MovieClip *clip)
 
 	if (!clip->anim) {
 		BLI_strncpy(str, clip->name, FILE_MAX);
-		BLI_path_abs(str, ID_BLEND_PATH(G.main, &clip->id));
+		BLI_path_abs(str, ID_BLEND_PATH_FROM_GLOBAL(&clip->id));
 
 		/* FIXME: make several stream accessible in image editor, too */
 		clip->anim = openanim(str, IB_rect, 0, clip->colorspace_settings.name);
@@ -268,7 +270,7 @@ static void movieclip_open_anim_file(MovieClip *clip)
 			if (clip->flag & MCLIP_USE_PROXY_CUSTOM_DIR) {
 				char dir[FILE_MAX];
 				BLI_strncpy(dir, clip->proxy.dir, sizeof(dir));
-				BLI_path_abs(dir, G.main->name);
+				BLI_path_abs(dir, BKE_main_blendfile_path_from_global());
 				IMB_anim_set_index_dir(clip->anim, dir);
 			}
 		}
@@ -588,7 +590,7 @@ static MovieClip *movieclip_alloc(Main *bmain, const char *name)
 {
 	MovieClip *clip;
 
-	clip = BKE_libblock_alloc(bmain, ID_MC, name);
+	clip = BKE_libblock_alloc(bmain, ID_MC, name, 0);
 
 	clip->aspx = clip->aspy = 1.0f;
 
@@ -625,13 +627,13 @@ static void movieclip_load_get_size(MovieClip *clip)
 	}
 }
 
-static void detect_clip_source(MovieClip *clip)
+static void detect_clip_source(Main *bmain, MovieClip *clip)
 {
 	ImBuf *ibuf;
 	char name[FILE_MAX];
 
 	BLI_strncpy(name, clip->name, sizeof(name));
-	BLI_path_abs(name, G.main->name);
+	BLI_path_abs(name, BKE_main_blendfile_path(bmain));
 
 	ibuf = IMB_testiffname(name, IB_rect | IB_multilayer);
 	if (ibuf) {
@@ -654,7 +656,7 @@ MovieClip *BKE_movieclip_file_add(Main *bmain, const char *name)
 	char str[FILE_MAX];
 
 	BLI_strncpy(str, name, sizeof(str));
-	BLI_path_abs(str, bmain->name);
+	BLI_path_abs(str, BKE_main_blendfile_path(bmain));
 
 	/* exists? */
 	file = BLI_open(str, O_BINARY | O_RDONLY, 0);
@@ -668,7 +670,7 @@ MovieClip *BKE_movieclip_file_add(Main *bmain, const char *name)
 	clip = movieclip_alloc(bmain, BLI_path_basename(name));
 	BLI_strncpy(clip->name, name, sizeof(clip->name));
 
-	detect_clip_source(clip);
+	detect_clip_source(bmain, clip);
 
 	movieclip_load_get_size(clip);
 	if (clip->lastsize[0]) {
@@ -688,7 +690,7 @@ MovieClip *BKE_movieclip_file_add_exists_ex(Main *bmain, const char *filepath, b
 	char str[FILE_MAX], strtest[FILE_MAX];
 
 	BLI_strncpy(str, filepath, sizeof(str));
-	BLI_path_abs(str, bmain->name);
+	BLI_path_abs(str, BKE_main_blendfile_path(bmain));
 
 	/* first search an identical filepath */
 	for (clip = bmain->movieclip.first; clip; clip = clip->id.next) {
@@ -924,7 +926,7 @@ static ImBuf *movieclip_get_postprocessed_ibuf(MovieClip *clip,
 
 	/* cache isn't threadsafe itself and also loading of movies
 	 * can't happen from concurrent threads that's why we use lock here */
-	BLI_lock_thread(LOCK_MOVIECLIP);
+	BLI_thread_lock(LOCK_MOVIECLIP);
 
 	/* try to obtain cached postprocessed frame first */
 	if (need_postprocessed_frame(user, postprocess_flag)) {
@@ -974,7 +976,7 @@ static ImBuf *movieclip_get_postprocessed_ibuf(MovieClip *clip,
 		}
 	}
 
-	BLI_unlock_thread(LOCK_MOVIECLIP);
+	BLI_thread_unlock(LOCK_MOVIECLIP);
 
 	return ibuf;
 }
@@ -1200,6 +1202,23 @@ int BKE_movieclip_get_duration(MovieClip *clip)
 	return clip->len;
 }
 
+float BKE_movieclip_get_fps(MovieClip *clip)
+{
+	if (clip->source != MCLIP_SRC_MOVIE) {
+		return 0.0f;
+	}
+	movieclip_open_anim_file(clip);
+	if (clip->anim == NULL) {
+		return 0.0f;
+	}
+	short frs_sec;
+	float frs_sec_base;
+	if (IMB_anim_get_fps(clip->anim, &frs_sec, &frs_sec_base, true)) {
+		return (float)frs_sec / frs_sec_base;
+	}
+	return 0.0f;
+}
+
 void BKE_movieclip_get_aspect(MovieClip *clip, float *aspx, float *aspy)
 {
 	*aspx = 1.0;
@@ -1263,13 +1282,13 @@ void BKE_movieclip_clear_proxy_cache(MovieClip *clip)
 	}
 }
 
-void BKE_movieclip_reload(MovieClip *clip)
+void BKE_movieclip_reload(Main *bmain, MovieClip *clip)
 {
 	/* clear cache */
 	free_buffers(clip);
 
 	/* update clip source */
-	detect_clip_source(clip);
+	detect_clip_source(bmain, clip);
 
 	clip->lastsize[0] = clip->lastsize[1] = 0;
 	movieclip_load_get_size(clip);
@@ -1281,7 +1300,7 @@ void BKE_movieclip_reload(MovieClip *clip)
 	 */
 	{
 		Scene *scene;
-		for (scene = G.main->scene.first; scene; scene = scene->id.next) {
+		for (scene = bmain->scene.first; scene; scene = scene->id.next) {
 			if (scene->nodetree) {
 				nodeUpdateID(scene->nodetree, &clip->id);
 			}
@@ -1408,13 +1427,13 @@ static void movieclip_build_proxy_ibuf(MovieClip *clip, ImBuf *ibuf, int cfra, i
 	 *       could be solved in a way that thread only prepares memory
 	 *       buffer and write to disk happens separately
 	 */
-	BLI_lock_thread(LOCK_MOVIECLIP);
+	BLI_thread_lock(LOCK_MOVIECLIP);
 
 	BLI_make_existing_file(name);
 	if (IMB_saveiff(scaleibuf, name, IB_rect) == 0)
 		perror(name);
 
-	BLI_unlock_thread(LOCK_MOVIECLIP);
+	BLI_thread_unlock(LOCK_MOVIECLIP);
 
 	IMB_freeImBuf(scaleibuf);
 }
@@ -1488,25 +1507,33 @@ void BKE_movieclip_free(MovieClip *clip)
 	BKE_animdata_free((ID *) clip, false);
 }
 
+/**
+ * Only copy internal data of MovieClip ID from source to already allocated/initialized destination.
+ * You probably nerver want to use that directly, use id_copy or BKE_id_copy_ex for typical needs.
+ *
+ * WARNING! This function will not handle ID user count!
+ *
+ * \param flag  Copying options (see BKE_library.h's LIB_ID_COPY_... flags for more).
+ */
+void BKE_movieclip_copy_data(Main *UNUSED(bmain), MovieClip *clip_dst, const MovieClip *clip_src, const int flag)
+{
+	/* We never handle usercount here for own data. */
+	const int flag_subdata = flag | LIB_ID_CREATE_NO_USER_REFCOUNT;
+
+	clip_dst->anim = NULL;
+	clip_dst->cache = NULL;
+
+	BKE_tracking_copy(&clip_dst->tracking, &clip_src->tracking, flag_subdata);
+	clip_dst->tracking_context = NULL;
+
+	BKE_color_managed_colorspace_settings_copy(&clip_dst->colorspace_settings, &clip_src->colorspace_settings);
+}
+
 MovieClip *BKE_movieclip_copy(Main *bmain, const MovieClip *clip)
 {
-	MovieClip *clip_new;
-
-	clip_new = BKE_libblock_copy(bmain, &clip->id);
-
-	clip_new->anim = NULL;
-	clip_new->cache = NULL;
-
-	BKE_tracking_copy(&clip_new->tracking, &clip->tracking);
-	clip_new->tracking_context = NULL;
-
-	id_us_plus((ID *)clip_new->gpd);
-
-	BKE_color_managed_colorspace_settings_copy(&clip_new->colorspace_settings, &clip->colorspace_settings);
-
-	BKE_id_copy_ensure_local(bmain, &clip->id, &clip_new->id);
-
-	return clip_new;
+	MovieClip *clip_copy;
+	BKE_id_copy_ex(bmain, &clip->id, (ID **)&clip_copy, 0, false);
+	return clip_copy;
 }
 
 void BKE_movieclip_make_local(Main *bmain, MovieClip *clip, const bool lib_local)
@@ -1514,12 +1541,12 @@ void BKE_movieclip_make_local(Main *bmain, MovieClip *clip, const bool lib_local
 	BKE_id_make_local_generic(bmain, &clip->id, true, lib_local);
 }
 
-float BKE_movieclip_remap_scene_to_clip_frame(MovieClip *clip, float framenr)
+float BKE_movieclip_remap_scene_to_clip_frame(const MovieClip *clip, float framenr)
 {
 	return framenr - (float) clip->start_frame + 1.0f;
 }
 
-float BKE_movieclip_remap_clip_to_scene_frame(MovieClip *clip, float framenr)
+float BKE_movieclip_remap_clip_to_scene_frame(const MovieClip *clip, float framenr)
 {
 	return framenr + (float) clip->start_frame - 1.0f;
 }
@@ -1541,7 +1568,7 @@ void BKE_movieclip_filename_for_frame(MovieClip *clip, MovieClipUser *user, char
 	}
 	else {
 		BLI_strncpy(name, clip->name, FILE_MAX);
-		BLI_path_abs(name, ID_BLEND_PATH(G.main, &clip->id));
+		BLI_path_abs(name, ID_BLEND_PATH_FROM_GLOBAL(&clip->id));
 	}
 }
 
@@ -1550,9 +1577,9 @@ ImBuf *BKE_movieclip_anim_ibuf_for_frame(MovieClip *clip, MovieClipUser *user)
 	ImBuf *ibuf = NULL;
 
 	if (clip->source == MCLIP_SRC_MOVIE) {
-		BLI_lock_thread(LOCK_MOVIECLIP);
+		BLI_thread_lock(LOCK_MOVIECLIP);
 		ibuf = movieclip_load_movie_file(clip, user, user->framenr, clip->flag);
-		BLI_unlock_thread(LOCK_MOVIECLIP);
+		BLI_thread_unlock(LOCK_MOVIECLIP);
 	}
 
 	return ibuf;
@@ -1562,9 +1589,9 @@ bool BKE_movieclip_has_cached_frame(MovieClip *clip, MovieClipUser *user)
 {
 	bool has_frame = false;
 
-	BLI_lock_thread(LOCK_MOVIECLIP);
+	BLI_thread_lock(LOCK_MOVIECLIP);
 	has_frame = has_imbuf_cache(clip, user, clip->flag);
-	BLI_unlock_thread(LOCK_MOVIECLIP);
+	BLI_thread_unlock(LOCK_MOVIECLIP);
 
 	return has_frame;
 }
@@ -1575,9 +1602,15 @@ bool BKE_movieclip_put_frame_if_possible(MovieClip *clip,
 {
 	bool result;
 
-	BLI_lock_thread(LOCK_MOVIECLIP);
+	BLI_thread_lock(LOCK_MOVIECLIP);
 	result = put_imbuf_cache(clip, user, ibuf, clip->flag, false);
-	BLI_unlock_thread(LOCK_MOVIECLIP);
+	BLI_thread_unlock(LOCK_MOVIECLIP);
 
 	return result;
+}
+
+void BKE_movieclip_eval_update(struct EvaluationContext *UNUSED(eval_ctx), MovieClip *clip)
+{
+	DEG_debug_print_eval(__func__, clip->id.name, clip);
+	BKE_tracking_dopesheet_tag_update(&clip->tracking);
 }

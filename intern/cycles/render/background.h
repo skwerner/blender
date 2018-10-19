@@ -42,6 +42,9 @@ public:
 	Shader *shader;
 
 	bool transparent;
+	bool transparent_glass;
+	float transparent_roughness_threshold;
+
 	bool need_update;
 
 	Background();
@@ -57,4 +60,3 @@ public:
 CCL_NAMESPACE_END
 
 #endif /* __BACKGROUND_H__ */
-

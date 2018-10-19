@@ -57,7 +57,6 @@ static void recount_totsels(BMesh *bm)
 	tots[1] = &bm->totedgesel;
 	tots[2] = &bm->totfacesel;
 
-#pragma omp parallel for schedule(static) if (bm->totvert + bm->totedge + bm->totface >= BM_OMP_LIMIT)
 	for (i = 0; i < 3; i++) {
 		BMIter iter;
 		BMElem *ele;
@@ -253,44 +252,34 @@ void BM_mesh_select_mode_flush_ex(BMesh *bm, const short selectmode)
 
 	if (selectmode & SCE_SELECT_VERTEX) {
 		/* both loops only set edge/face flags and read off verts */
-#pragma omp parallel sections if (bm->totedge + bm->totface >= BM_OMP_LIMIT)
-		{
-#pragma omp section
+		BM_ITER_MESH (e, &eiter, bm, BM_EDGES_OF_MESH) {
+			if (BM_elem_flag_test(e->v1, BM_ELEM_SELECT) &&
+			    BM_elem_flag_test(e->v2, BM_ELEM_SELECT) &&
+			    !BM_elem_flag_test(e, BM_ELEM_HIDDEN))
 			{
-				BM_ITER_MESH (e, &eiter, bm, BM_EDGES_OF_MESH) {
-					if (BM_elem_flag_test(e->v1, BM_ELEM_SELECT) &&
-					    BM_elem_flag_test(e->v2, BM_ELEM_SELECT) &&
-					    !BM_elem_flag_test(e, BM_ELEM_HIDDEN))
-					{
-						BM_elem_flag_enable(e, BM_ELEM_SELECT);
-					}
-					else {
-						BM_elem_flag_disable(e, BM_ELEM_SELECT);
-					}
-				}
+				BM_elem_flag_enable(e, BM_ELEM_SELECT);
 			}
-#pragma omp section
-			{
-				BM_ITER_MESH (f, &fiter, bm, BM_FACES_OF_MESH) {
-					bool ok = true;
-					if (!BM_elem_flag_test(f, BM_ELEM_HIDDEN)) {
-						l_iter = l_first = BM_FACE_FIRST_LOOP(f);
-						do {
-							if (!BM_elem_flag_test(l_iter->v, BM_ELEM_SELECT)) {
-								ok = false;
-								break;
-							}
-						} while ((l_iter = l_iter->next) != l_first);
-					}
-					else {
-						ok = false;
-					}
-
-					BM_elem_flag_set(f, BM_ELEM_SELECT, ok);
-				}
+			else {
+				BM_elem_flag_disable(e, BM_ELEM_SELECT);
 			}
 		}
-		/* end sections */
+		BM_ITER_MESH (f, &fiter, bm, BM_FACES_OF_MESH) {
+			bool ok = true;
+			if (!BM_elem_flag_test(f, BM_ELEM_HIDDEN)) {
+				l_iter = l_first = BM_FACE_FIRST_LOOP(f);
+				do {
+					if (!BM_elem_flag_test(l_iter->v, BM_ELEM_SELECT)) {
+						ok = false;
+						break;
+					}
+				} while ((l_iter = l_iter->next) != l_first);
+			}
+			else {
+				ok = false;
+			}
+
+			BM_elem_flag_set(f, BM_ELEM_SELECT, ok);
+		}
 	}
 	else if (selectmode & SCE_SELECT_EDGE) {
 		BM_ITER_MESH (f, &fiter, bm, BM_FACES_OF_MESH) {
@@ -375,42 +364,31 @@ void BM_mesh_select_flush(BMesh *bm)
 
 	bool ok;
 
-	/* we can use 2 sections here because the second loop isnt checking edge selection */
-#pragma omp parallel sections if (bm->totedge + bm->totface >= BM_OMP_LIMIT)
-	{
-#pragma omp section
+	BM_ITER_MESH (e, &eiter, bm, BM_EDGES_OF_MESH) {
+		if (BM_elem_flag_test(e->v1, BM_ELEM_SELECT) &&
+		    BM_elem_flag_test(e->v2, BM_ELEM_SELECT) &&
+		    !BM_elem_flag_test(e, BM_ELEM_HIDDEN))
 		{
-			BM_ITER_MESH (e, &eiter, bm, BM_EDGES_OF_MESH) {
-				if (BM_elem_flag_test(e->v1, BM_ELEM_SELECT) &&
-				    BM_elem_flag_test(e->v2, BM_ELEM_SELECT) &&
-				    !BM_elem_flag_test(e, BM_ELEM_HIDDEN))
-				{
-					BM_elem_flag_enable(e, BM_ELEM_SELECT);
+			BM_elem_flag_enable(e, BM_ELEM_SELECT);
+		}
+	}
+	BM_ITER_MESH (f, &fiter, bm, BM_FACES_OF_MESH) {
+		ok = true;
+		if (!BM_elem_flag_test(f, BM_ELEM_HIDDEN)) {
+			l_iter = l_first = BM_FACE_FIRST_LOOP(f);
+			do {
+				if (!BM_elem_flag_test(l_iter->v, BM_ELEM_SELECT)) {
+					ok = false;
+					break;
 				}
-			}
+			} while ((l_iter = l_iter->next) != l_first);
+		}
+		else {
+			ok = false;
 		}
 
-#pragma omp section
-		{
-			BM_ITER_MESH (f, &fiter, bm, BM_FACES_OF_MESH) {
-				ok = true;
-				if (!BM_elem_flag_test(f, BM_ELEM_HIDDEN)) {
-					l_iter = l_first = BM_FACE_FIRST_LOOP(f);
-					do {
-						if (!BM_elem_flag_test(l_iter->v, BM_ELEM_SELECT)) {
-							ok = false;
-							break;
-						}
-					} while ((l_iter = l_iter->next) != l_first);
-				}
-				else {
-					ok = false;
-				}
-
-				if (ok) {
-					BM_elem_flag_enable(f, BM_ELEM_SELECT);
-				}
-			}
+		if (ok) {
+			BM_elem_flag_enable(f, BM_ELEM_SELECT);
 		}
 	}
 
@@ -631,7 +609,7 @@ void BM_mesh_select_mode_set(BMesh *bm, int selectmode)
 {
 	BMIter iter;
 	BMElem *ele;
-	
+
 	bm->selectmode = selectmode;
 
 	if (bm->selectmode & SCE_SELECT_VERTEX) {
@@ -759,13 +737,13 @@ BMFace *BM_mesh_active_face_get(BMesh *bm, const bool is_sloppy, const bool is_s
 		BMIter iter;
 		BMFace *f = NULL;
 		BMEditSelection *ese;
-		
+
 		/* Find the latest non-hidden face from the BMEditSelection */
 		ese = bm->selected.last;
 		for ( ; ese; ese = ese->prev) {
 			if (ese->htype == BM_FACE) {
 				f = (BMFace *)ese->ele;
-				
+
 				if (BM_elem_flag_test(f, BM_ELEM_HIDDEN)) {
 					f = NULL;
 				}
@@ -864,10 +842,10 @@ void BM_editselection_normal(BMEditSelection *ese, float r_normal[3])
 		BMEdge *eed = (BMEdge *)ese->ele;
 		float plane[3]; /* need a plane to correct the normal */
 		float vec[3]; /* temp vec storage */
-		
+
 		add_v3_v3v3(r_normal, eed->v1->no, eed->v2->no);
 		sub_v3_v3v3(plane, eed->v2->co, eed->v1->co);
-		
+
 		/* the 2 vertex normals will be close but not at rightangles to the edge
 		 * for rotate about edge we want them to be at right angles, so we need to
 		 * do some extra calculation to correct the vert normals,
@@ -875,7 +853,7 @@ void BM_editselection_normal(BMEditSelection *ese, float r_normal[3])
 		cross_v3_v3v3(vec, r_normal, plane);
 		cross_v3_v3v3(r_normal, plane, vec);
 		normalize_v3(r_normal);
-		
+
 	}
 	else if (ese->htype == BM_FACE) {
 		BMFace *efa = (BMFace *)ese->ele;
@@ -891,7 +869,7 @@ void BM_editselection_plane(BMEditSelection *ese, float r_plane[3])
 	if (ese->htype == BM_VERT) {
 		BMVert *eve = (BMVert *)ese->ele;
 		float vec[3] = {0.0f, 0.0f, 0.0f};
-		
+
 		if (ese->prev) { /* use previously selected data to make a useful vertex plane */
 			BM_editselection_center(ese->prev, vec);
 			sub_v3_v3v3(r_plane, vec, eve->co);
@@ -1107,8 +1085,6 @@ void BM_mesh_elem_hflag_disable_test(
 	{
 		/* fast path for deselect all, avoid topology loops
 		 * since we know all will be de-selected anyway. */
-
-#pragma omp parallel for schedule(static) if (bm->totvert + bm->totedge + bm->totface >= BM_OMP_LIMIT)
 		for (i = 0; i < 3; i++) {
 			BMIter iter;
 			BMElem *ele;
@@ -1285,7 +1261,7 @@ void BM_edge_hide_set(BMEdge *e, const bool hide)
 			BM_elem_flag_set(l_iter->f, BM_ELEM_HIDDEN, hide);
 		} while ((l_iter = l_iter->radial_next) != l_first);
 	}
-	
+
 	BM_elem_flag_set(e, BM_ELEM_HIDDEN, hide);
 
 	/* hide vertices if necessary */

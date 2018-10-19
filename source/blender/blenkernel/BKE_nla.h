@@ -34,27 +34,31 @@
  */
 
 struct AnimData;
+struct Main;
 struct NlaStrip;
 struct NlaTrack;
 struct bAction;
 struct Scene;
 struct Speaker;
 
+struct PointerRNA;
+struct PropertyRNA;
+
 /* ----------------------------- */
 /* Data Management */
 
-void free_nlastrip(ListBase *strips, struct NlaStrip *strip);
-void free_nlatrack(ListBase *tracks, struct NlaTrack *nlt);
-void free_nladata(ListBase *tracks);
+void BKE_nlastrip_free(ListBase *strips, struct NlaStrip *strip);
+void BKE_nlatrack_free(ListBase *tracks, struct NlaTrack *nlt);
+void BKE_nla_tracks_free(ListBase *tracks);
 
-struct NlaStrip *copy_nlastrip(struct NlaStrip *strip, const bool use_same_action);
-struct NlaTrack *copy_nlatrack(struct NlaTrack *nlt, const bool use_same_actions);
-void copy_nladata(ListBase *dst, ListBase *src);
+struct NlaStrip *BKE_nlastrip_copy(struct Main *bmain, struct NlaStrip *strip, const bool use_same_action);
+struct NlaTrack *BKE_nlatrack_copy(struct Main *bmain, struct NlaTrack *nlt, const bool use_same_actions);
+void BKE_nla_tracks_copy(struct Main *bmain, ListBase *dst, ListBase *src);
 
-struct NlaTrack *add_nlatrack(struct AnimData *adt, struct NlaTrack *prev);
-struct NlaStrip *add_nlastrip(struct bAction *act);
-struct NlaStrip *add_nlastrip_to_stack(struct AnimData *adt, struct bAction *act);
-struct NlaStrip *add_nla_soundstrip(struct Scene *scene, struct Speaker *spk);
+struct NlaTrack *BKE_nlatrack_add(struct AnimData *adt, struct NlaTrack *prev);
+struct NlaStrip *BKE_nlastrip_new(struct bAction *act);
+struct NlaStrip *BKE_nlastack_add_strip(struct AnimData *adt, struct bAction *act);
+struct NlaStrip *BKE_nla_add_soundstrip(struct Scene *scene, struct Speaker *spk);
 
 /* ----------------------------- */
 /* API */
@@ -103,6 +107,8 @@ bool BKE_nlatrack_has_animated_strips(struct NlaTrack *nlt);
 bool BKE_nlatracks_have_animated_strips(ListBase *tracks);
 void BKE_nlastrip_validate_fcurves(struct NlaStrip *strip);
 
+bool BKE_nlastrip_has_curves_for_property(const struct PointerRNA *ptr, const struct PropertyRNA *prop);
+
 void BKE_nla_validate_state(struct AnimData *adt);
 
 /* ............ */
@@ -135,4 +141,3 @@ enum eNlaTime_ConvertModes {
 float BKE_nla_tweakedit_remap(struct AnimData *adt, float cframe, short mode);
 
 #endif
-

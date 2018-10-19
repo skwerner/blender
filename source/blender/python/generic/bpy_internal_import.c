@@ -185,9 +185,9 @@ PyObject *bpy_text_import_name(const char *name, int *found)
 	Text *text;
 	char txtname[MAX_ID_NAME - 2];
 	int namelen = strlen(name);
-//XXX	Main *maggie = bpy_import_main ? bpy_import_main:G.main;
+//XXX	Main *maggie = bpy_import_main ? bpy_import_main : G_MAIN;
 	Main *maggie = bpy_import_main;
-	
+
 	*found = 0;
 
 	if (!maggie) {
@@ -220,7 +220,7 @@ PyObject *bpy_text_import_name(const char *name, int *found)
 		return NULL;
 	else
 		*found = 1;
-	
+
 	return bpy_text_import(text);
 }
 
@@ -234,16 +234,16 @@ PyObject *bpy_text_reimport(PyObject *module, int *found)
 	Text *text;
 	const char *name;
 	const char *filepath;
-//XXX	Main *maggie = bpy_import_main ? bpy_import_main:G.main;
+//XXX	Main *maggie = bpy_import_main ? bpy_import_main : G_MAIN;
 	Main *maggie = bpy_import_main;
-	
+
 	if (!maggie) {
 		printf("ERROR: bpy_import_main_set() was not called before running python. this is a bug.\n");
 		return NULL;
 	}
-	
+
 	*found = 0;
-	
+
 	/* get name, filename from the module itself */
 	if ((name = PyModule_GetName(module)) == NULL)
 		return NULL;
@@ -253,7 +253,7 @@ PyObject *bpy_text_reimport(PyObject *module, int *found)
 		if (module_file == NULL) {
 			return NULL;
 		}
-		filepath = (char *)_PyUnicode_AsString(module_file);
+		filepath = _PyUnicode_AsString(module_file);
 		Py_DECREF(module_file);
 		if (filepath == NULL) {
 			return NULL;
@@ -285,28 +285,28 @@ static PyObject *blender_import(PyObject *UNUSED(self), PyObject *args, PyObject
 	int found = 0;
 	PyObject *globals = NULL, *locals = NULL, *fromlist = NULL;
 	int level = 0; /* relative imports */
-	
 	PyObject *newmodule;
-	//PyObject_Print(args, stderr, 0);
-	static const char *kwlist[] = {"name", "globals", "locals", "fromlist", "level", NULL};
-	
-	if (!PyArg_ParseTupleAndKeywords(args, kw, "s|OOOi:bpy_import_meth", (char **)kwlist,
-	                                 &name, &globals, &locals, &fromlist, &level))
+
+	static const char *_keywords[] = {"name", "globals", "locals", "fromlist", "level", NULL};
+	static _PyArg_Parser _parser = {"s|OOOi:bpy_import_meth", _keywords, 0};
+	if (!_PyArg_ParseTupleAndKeywordsFast(
+	        args, kw, &_parser,
+	        &name, &globals, &locals, &fromlist, &level))
 	{
 		return NULL;
 	}
 
 	/* import existing builtin modules or modules that have been imported already */
 	newmodule = PyImport_ImportModuleLevel(name, globals, locals, fromlist, level);
-	
+
 	if (newmodule)
 		return newmodule;
-	
+
 	PyErr_Fetch(&exception, &err, &tb); /* get the python error in case we cant import as blender text either */
-	
+
 	/* importing from existing modules failed, see if we have this module as blender text */
 	newmodule = bpy_text_import_name(name, &found);
-	
+
 	if (newmodule) { /* found module as blender text, ignore above exception */
 		PyErr_Clear();
 		Py_XDECREF(exception);

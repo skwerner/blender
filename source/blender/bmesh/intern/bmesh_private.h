@@ -31,9 +31,9 @@
 /** \file blender/bmesh/intern/bmesh_private.h
  *  \ingroup bmesh
  *
- *  Private function prototypes for bmesh public API.
- *  This file is a grab-bag of functions from various
- *  parts of the bmesh internals.
+ * Private function prototypes for bmesh public API.
+ * This file is a grab-bag of functions from various
+ * parts of the bmesh internals.
  */
 
 /* returns positive nonzero on error */
@@ -44,17 +44,18 @@
 #  define BM_CHECK_ELEMENT(el)  (void)(el)
 #else
 int bmesh_elem_check(void *element, const char htype);
-#  define BM_CHECK_ELEMENT(el)                                                \
+#  define BM_CHECK_ELEMENT(el) {                                              \
 	if (bmesh_elem_check(el, ((BMHeader *)el)->htype)) {                      \
 	    printf("check_element failure, with code %i on line %i in file\n"     \
 	    "    \"%s\"\n\n",                                                     \
 	    bmesh_elem_check(el, ((BMHeader *)el)->htype),                        \
 	    __LINE__, __FILE__);                                                  \
-	} (void)0
+	} \
+} ((void)0)
 #endif
 
 int bmesh_radial_length(const BMLoop *l);
-int bmesh_disk_count_ex(const BMVert *v, const int count_max);
+int bmesh_disk_count_at_most(const BMVert *v, const int count_max);
 int bmesh_disk_count(const BMVert *v);
 
 /**

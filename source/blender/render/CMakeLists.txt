@@ -24,7 +24,7 @@
 # ***** END GPL LICENSE BLOCK *****
 
 
-set(INC 
+set(INC
 	extern/include
 	intern/include
 	../blenkernel
@@ -146,16 +146,6 @@ if(WITH_FREESTYLE)
 		../freestyle
 	)
 	add_definitions(-DWITH_FREESTYLE)
-endif()
-
-if(WITH_CODEC_QUICKTIME)
-	list(APPEND INC
-		../quicktime
-	)
-	list(APPEND INC_SYS
-		${QUICKTIME_INCLUDE_DIRS}
-	)
-	add_definitions(-DWITH_QUICKTIME)
 endif()
 
 if(WITH_GAMEENGINE)

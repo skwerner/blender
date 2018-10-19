@@ -33,7 +33,7 @@
 
 #include "BLI_math.h"
 #include "BLI_alloca.h"
-#include "BLI_stackdefines.h"
+#include "BLI_utildefines_stack.h"
 
 #include "BKE_customdata.h"
 
@@ -242,6 +242,7 @@ void bmo_offset_edgeloops_exec(BMesh *bm, BMOperator *op)
 #if 0
 						else if (BM_elem_index_get(l->prev->v) == -1) {
 							if (BM_elem_index_get(l->next->next->v) == -1) {
+								/* pass */
 							}
 						}
 #endif

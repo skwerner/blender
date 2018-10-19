@@ -4,7 +4,7 @@
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version. 
+ * of the License, or (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -55,6 +55,7 @@
 #include "BLI_threads.h"
 #include "BLI_utildefines.h"
 
+#include "BKE_colorband.h"
 #include "BKE_colortools.h"
 #include "BKE_global.h"
 #include "BKE_image.h"
@@ -79,7 +80,7 @@
 #include "GPU_material.h"
 
 
-int sh_node_poll_default(struct bNodeType *ntype, struct bNodeTree *ntree);
+bool sh_node_poll_default(struct bNodeType *ntype, struct bNodeTree *ntree);
 void sh_node_type_base(struct bNodeType *ntype, int type, const char *name, short nclass, short flag);
 
 

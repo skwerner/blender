@@ -11,6 +11,7 @@ set(INC_SYS
 set(SRC
 	util_aligned_malloc.cpp
 	util_debug.cpp
+	util_ies.cpp
 	util_logging.cpp
 	util_math_cdf.cpp
 	util_md5.cpp
@@ -38,12 +39,14 @@ set(SRC_HEADERS
 	util_atomic.h
 	util_boundbox.h
 	util_debug.h
+	util_defines.h
 	util_guarded_allocator.cpp
 	util_foreach.h
 	util_function.h
 	util_guarded_allocator.h
 	util_half.h
 	util_hash.h
+	util_ies.h
 	util_image.h
 	util_image_impl.h
 	util_list.h
@@ -66,13 +69,16 @@ set(SRC_HEADERS
 	util_param.h
 	util_path.h
 	util_progress.h
+	util_projection.h
 	util_queue.h
+	util_rect.h
 	util_set.h
 	util_simd.h
 	util_sky_model.cpp
 	util_sky_model.h
 	util_sky_model_data.h
 	util_avxf.h
+	util_avxb.h
 	util_sseb.h
 	util_ssef.h
 	util_ssei.h
@@ -93,7 +99,9 @@ set(SRC_HEADERS
 	util_types_float3_impl.h
 	util_types_float4.h
 	util_types_float4_impl.h
-	util_types_int2.h
+	util_types_float8.h
+	util_types_float8_impl.h
+		util_types_int2.h
 	util_types_int2_impl.h
 	util_types_int3.h
 	util_types_int3_impl.h
@@ -111,6 +119,7 @@ set(SRC_HEADERS
 	util_types_uint3_impl.h
 	util_types_uint4.h
 	util_types_uint4_impl.h
+	util_types_ushort4.h
 	util_types_vector3.h
 	util_types_vector3_impl.h
 	util_vector.h
@@ -125,4 +134,4 @@ include_directories(SYSTEM ${INC_SYS})
 
 add_definitions(${GL_DEFINITIONS})
 
-add_library(cycles_util ${SRC} ${SRC_HEADERS})
+cycles_add_library(cycles_util ${SRC} ${SRC_HEADERS})

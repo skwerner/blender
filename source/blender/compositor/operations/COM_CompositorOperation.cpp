@@ -22,6 +22,7 @@
 
 #include "COM_CompositorOperation.h"
 #include "BLI_listbase.h"
+#include "BKE_global.h"
 #include "BKE_image.h"
 
 extern "C" {
@@ -51,6 +52,7 @@ CompositorOperation::CompositorOperation() : NodeOperation()
 	this->m_useAlphaInput = false;
 	this->m_active = false;
 
+	this->m_scene = NULL;
 	this->m_sceneName[0] = '\0';
 	this->m_viewName = NULL;
 }
@@ -78,7 +80,7 @@ void CompositorOperation::deinitExecution()
 		return;
 
 	if (!isBreaked()) {
-		Render *re = RE_GetRender(this->m_sceneName);
+		Render *re = RE_GetSceneRender(this->m_scene);
 		RenderResult *rr = RE_AcquireResultWrite(re);
 
 		if (rr) {
@@ -92,6 +94,7 @@ void CompositorOperation::deinitExecution()
 				MEM_freeN(rv->rectz);
 			}
 			rv->rectz = this->m_depthBuffer;
+			rr->have_combined = true;
 		}
 		else {
 			if (this->m_outputBuffer) {
@@ -107,9 +110,9 @@ void CompositorOperation::deinitExecution()
 			re = NULL;
 		}
 
-		BLI_lock_thread(LOCK_DRAW_IMAGE);
-		BKE_image_signal(BKE_image_verify_viewer(IMA_TYPE_R_RESULT, "Render Result"), NULL, IMA_SIGNAL_FREE);
-		BLI_unlock_thread(LOCK_DRAW_IMAGE);
+		BLI_thread_lock(LOCK_DRAW_IMAGE);
+		BKE_image_signal(G.main, BKE_image_verify_viewer(G.main, IMA_TYPE_R_RESULT, "Render Result"), NULL, IMA_SIGNAL_FREE);
+		BLI_thread_unlock(LOCK_DRAW_IMAGE);
 	}
 	else {
 		if (this->m_outputBuffer) {
@@ -151,31 +154,31 @@ void CompositorOperation::executeRegion(rcti *rect, unsigned int /*tileNumber*/)
 	const RenderData *rd = this->m_rd;
 
 	if (rd->mode & R_BORDER && rd->mode & R_CROP) {
-	/*!
-	   When using cropped render result, need to re-position area of interest,
-	   so it'll natch bounds of render border within frame. By default, canvas
-	   will be centered between full frame and cropped frame, so we use such
-	   scheme to map cropped coordinates to full-frame coordinates
-
-		   ^ Y
-		   |                      Width
-		   +------------------------------------------------+
-		   |                                                |
-		   |                                                |
-		   |  Centered canvas, we map coordinate from it    |
-		   |              +------------------+              |
-		   |              |                  |              |  H
-		   |              |                  |              |  e
-		   |  +------------------+ . Center  |              |  i
-		   |  |           |      |           |              |  g
-		   |  |           |      |           |              |  h
-		   |  |....dx.... +------|-----------+              |  t
-		   |  |           . dy   |                          |
-		   |  +------------------+                          |
-		   |  Render border, we map coordinates to it       |
-		   |                                                |    X
-		   +------------------------------------------------+---->
-		                        Full frame
+		/**
+		 * When using cropped render result, need to re-position area of interest,
+		 * so it'll natch bounds of render border within frame. By default, canvas
+		 * will be centered between full frame and cropped frame, so we use such
+		 * scheme to map cropped coordinates to full-frame coordinates
+		 *
+		 * ^ Y
+		 * |                      Width
+		 * +------------------------------------------------+
+		 * |                                                |
+		 * |                                                |
+		 * |  Centered canvas, we map coordinate from it    |
+		 * |              +------------------+              |
+		 * |              |                  |              |  H
+		 * |              |                  |              |  e
+		 * |  +------------------+ . Center  |              |  i
+		 * |  |           |      |           |              |  g
+		 * |  |           |      |           |              |  h
+		 * |  |....dx.... +------|-----------+              |  t
+		 * |  |           . dy   |                          |
+		 * |  +------------------+                          |
+		 * |  Render border, we map coordinates to it       |
+		 * |                                                |    X
+		 * +------------------------------------------------+---->
+		 *                      Full frame
 		 */
 
 		int full_width  = rd->xsch * rd->size / 100;
@@ -217,7 +220,7 @@ void CompositorOperation::determineResolution(unsigned int resolution[2], unsign
 
 	// check actual render resolution with cropping it may differ with cropped border.rendering
 	// FIX for: [31777] Border Crop gives black (easy)
-	Render *re = RE_GetRender(this->m_sceneName);
+	Render *re = RE_GetSceneRender(this->m_scene);
 	if (re) {
 		RenderResult *rr = RE_AcquireResultRead(re);
 		if (rr) {

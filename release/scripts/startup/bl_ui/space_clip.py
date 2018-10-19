@@ -21,14 +21,15 @@
 import bpy
 from bpy.types import Panel, Header, Menu, UIList
 from bpy.app.translations import pgettext_iface as iface_
-from bl_ui.properties_grease_pencil_common import (
-        GreasePencilDrawingToolsPanel,
-        GreasePencilStrokeEditPanel,
-        GreasePencilStrokeSculptPanel,
-        GreasePencilBrushPanel,
-        GreasePencilBrushCurvesPanel,
-        GreasePencilDataPanel,
-        GreasePencilPaletteColorPanel)
+from .properties_grease_pencil_common import (
+    GreasePencilDrawingToolsPanel,
+    GreasePencilStrokeEditPanel,
+    GreasePencilStrokeSculptPanel,
+    GreasePencilBrushPanel,
+    GreasePencilBrushCurvesPanel,
+    GreasePencilDataPanel,
+    GreasePencilPaletteColorPanel,
+)
 
 
 class CLIP_UL_tracking_objects(UIList):
@@ -470,6 +471,7 @@ class CLIP_PT_tools_cleanup(CLIP_PT_tracking_panel, Panel):
         layout.prop(settings, "clean_frames", text="Frames")
         layout.prop(settings, "clean_error", text="Error")
         layout.prop(settings, "clean_action", text="")
+        layout.separator()
         layout.operator("clip.filter_tracks")
 
 
@@ -942,7 +944,7 @@ class CLIP_PT_stabilization(CLIP_PT_reconstruction_panel, Panel):
             sub.menu('CLIP_MT_stabilize_2d_specials', text="",
                      icon='DOWNARROW_HLT')
 
-            # Usually we don't hide things from iterface, but here every pixel of
+            # Usually we don't hide things from interface, but here every pixel of
             # vertical space is precious.
             if stab.use_stabilize_rotation:
                 box.label(text="Tracks For Rotation / Scale")
@@ -1026,18 +1028,20 @@ class CLIP_PT_proxy(CLIP_PT_clip_view_panel, Panel):
         if clip.use_proxy_custom_directory:
             col.prop(clip.proxy, "directory")
 
-        col.operator("clip.rebuild_proxy",
-                     text="Build Proxy / Timecode" if clip.source == 'MOVIE'
-                                                   else "Build Proxy")
+        col.operator(
+            "clip.rebuild_proxy",
+            text="Build Proxy / Timecode" if clip.source == 'MOVIE'
+            else "Build Proxy"
+        )
 
         if clip.source == 'MOVIE':
             col2 = col.column()
 
-            col2.label(text="Use timecode index:")
+            col2.label(text="Use Timecode Index:")
             col2.prop(clip.proxy, "timecode", text="")
 
         col2 = col.column()
-        col2.label(text="Proxy render size:")
+        col2.label(text="Proxy Render Size:")
 
         col.prop(sc.clip_user, "proxy_render_size", text="")
 
@@ -1045,16 +1049,16 @@ class CLIP_PT_proxy(CLIP_PT_clip_view_panel, Panel):
 # -----------------------------------------------------------------------------
 # Mask (similar code in space_image.py, keep in sync)
 
-from bl_ui.properties_mask_common import (
-        MASK_PT_mask,
-        MASK_PT_layers,
-        MASK_PT_spline,
-        MASK_PT_point,
-        MASK_PT_display,
-        MASK_PT_tools,
-        MASK_PT_transforms,
-        MASK_PT_add,
-        )
+from .properties_mask_common import (
+    MASK_PT_mask,
+    MASK_PT_layers,
+    MASK_PT_spline,
+    MASK_PT_point,
+    MASK_PT_display,
+    MASK_PT_tools,
+    MASK_PT_transforms,
+    MASK_PT_add,
+)
 
 
 class CLIP_PT_mask_layers(MASK_PT_layers, Panel):
@@ -1196,6 +1200,7 @@ class CLIP_PT_tools_grease_pencil_brush(GreasePencilBrushPanel, Panel):
 # Grease Pencil drawing curves
 class CLIP_PT_tools_grease_pencil_brushcurves(GreasePencilBrushCurvesPanel, Panel):
     bl_space_type = 'CLIP_EDITOR'
+
 
 class CLIP_MT_view(Menu):
     bl_label = "View"
@@ -1418,7 +1423,7 @@ class CLIP_MT_tracking_specials(Menu):
                         text="Enable Markers").action = 'ENABLE'
 
         layout.operator("clip.disable_markers",
-                        text="Disable markers").action = 'DISABLE'
+                        text="Disable Markers").action = 'DISABLE'
 
         layout.separator()
         layout.operator("clip.set_origin")

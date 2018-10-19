@@ -30,6 +30,7 @@
 #include "MEM_guardedalloc.h"
 
 #include "BLI_utildefines.h"
+#include "BLI_string.h"
 
 #include "idprop_py_api.h"
 
@@ -386,7 +387,7 @@ static IDProperty *idp_from_PyFloat(const char *name, PyObject *ob)
 static IDProperty *idp_from_PyLong(const char *name, PyObject *ob)
 {
 	IDPropertyTemplate val = {0};
-	val.i = _PyLong_AsInt(ob);
+	val.i = PyC_Long_AsI32(ob);
 	if (val.i == -1 && PyErr_Occurred()) {
 		return NULL;
 	}
@@ -499,7 +500,7 @@ static IDProperty *idp_from_PySequence_Fast(const char *name, PyObject *ob)
 			prop_data = IDP_Array(prop);
 			for (i = 0; i < val.array.len; i++) {
 				item = ob_seq_fast_items[i];
-				if (((prop_data[i] = _PyLong_AsInt(item)) == -1) && PyErr_Occurred()) {
+				if (((prop_data[i] = PyC_Long_AsI32(item)) == -1) && PyErr_Occurred()) {
 					return NULL;
 				}
 			}
@@ -595,15 +596,15 @@ static IDProperty *idp_from_PyMapping(const char *name, PyObject *ob)
 	return prop;
 }
 
-static IDProperty *idp_from_DatablockPointer(const char *name, PyObject *ob, IDPropertyTemplate *val)
+static IDProperty *idp_from_DatablockPointer(const char *name, PyObject *ob)
 {
-	pyrna_id_FromPyObject(ob, &val->id);
-	return IDP_New(IDP_ID, val, name);
+	IDPropertyTemplate val = {0};
+	pyrna_id_FromPyObject(ob, &val.id);
+	return IDP_New(IDP_ID, &val, name);
 }
 
 static IDProperty *idp_from_PyObject(PyObject *name_obj, PyObject *ob)
 {
-	IDPropertyTemplate val = {0};
 	const char *name = idp_try_read_name(name_obj);
 	if (name == NULL) {
 		return NULL;
@@ -625,7 +626,7 @@ static IDProperty *idp_from_PyObject(PyObject *name_obj, PyObject *ob)
 		return idp_from_PySequence(name, ob);
 	}
 	else if (ob == Py_None || pyrna_id_CheckPyObject(ob)) {
-		return idp_from_DatablockPointer(name, ob, &val);
+		return idp_from_DatablockPointer(name, ob);
 	}
 	else if (PyMapping_Check(ob)) {
 		return idp_from_PyMapping(name, ob);
@@ -854,7 +855,7 @@ static PyObject *BPy_IDGroup_MapDataToPy(IDProperty *prop)
 }
 
 PyDoc_STRVAR(BPy_IDGroup_pop_doc,
-".. method:: pop(key)\n"
+".. method:: pop(key, default)\n"
 "\n"
 "   Remove an item from the group, returning a Python representation.\n"
 "\n"
@@ -862,38 +863,40 @@ PyDoc_STRVAR(BPy_IDGroup_pop_doc,
 "\n"
 "   :arg key: Name of item to remove.\n"
 "   :type key: string\n"
+"   :arg default: Value to return when key isn't found, otherwise raise an exception.\n"
+"   :type default: Undefined\n"
 );
-static PyObject *BPy_IDGroup_pop(BPy_IDProperty *self, PyObject *value)
+static PyObject *BPy_IDGroup_pop(BPy_IDProperty *self, PyObject *args)
 {
 	IDProperty *idprop;
 	PyObject *pyform;
-	const char *name = _PyUnicode_AsString(value);
 
-	if (!name) {
-		PyErr_Format(PyExc_TypeError,
-		             "pop expected at least a string argument, not %.200s",
-		             Py_TYPE(value)->tp_name);
+	char *key;
+	PyObject *def = NULL;
+
+	if (!PyArg_ParseTuple(args, "s|O:get", &key, &def)) {
 		return NULL;
 	}
 
-	idprop = IDP_GetPropertyFromGroup(self->prop, name);
-
-	if (idprop) {
-		pyform = BPy_IDGroup_MapDataToPy(idprop);
-
-		if (!pyform) {
-			/* ok something bad happened with the pyobject,
-			 * so don't remove the prop from the group.  if pyform is
-			 * NULL, then it already should have raised an exception.*/
+	idprop = IDP_GetPropertyFromGroup(self->prop, key);
+	if (idprop == NULL) {
+		if (def == NULL) {
+			PyErr_SetString(PyExc_KeyError, "item not in group");
 			return NULL;
 		}
-
-		IDP_RemoveFromGroup(self->prop, idprop);
-		return pyform;
+		return Py_INCREF_RET(def);
 	}
 
-	PyErr_SetString(PyExc_KeyError, "item not in group");
-	return NULL;
+	pyform = BPy_IDGroup_MapDataToPy(idprop);
+	if (pyform == NULL) {
+		/* ok something bad happened with the pyobject,
+		 * so don't remove the prop from the group.  if pyform is
+		 * NULL, then it already should have raised an exception.*/
+		return NULL;
+	}
+
+	IDP_RemoveFromGroup(self->prop, idprop);
+	return pyform;
 }
 
 PyDoc_STRVAR(BPy_IDGroup_iter_items_doc,
@@ -941,7 +944,7 @@ PyObject *BPy_Wrap_GetKeys(IDProperty *prop)
 		/* pass */
 	}
 
-	if (i != prop->len) { /* if the loop didnt finish, we know the length is wrong */
+	if (i != prop->len) { /* if the loop didn't finish, we know the length is wrong */
 		BPy_IDGroup_CorrectListLen(prop, list, i, __func__);
 		Py_DECREF(list); /*free the list*/
 		/*call self again*/
@@ -1125,7 +1128,7 @@ static PyObject *BPy_IDGroup_get(BPy_IDProperty *self, PyObject *args)
 }
 
 static struct PyMethodDef BPy_IDGroup_methods[] = {
-	{"pop", (PyCFunction)BPy_IDGroup_pop, METH_O, BPy_IDGroup_pop_doc},
+	{"pop", (PyCFunction)BPy_IDGroup_pop, METH_VARARGS, BPy_IDGroup_pop_doc},
 	{"iteritems", (PyCFunction)BPy_IDGroup_iter_items, METH_NOARGS, BPy_IDGroup_iter_items_doc},
 	{"keys", (PyCFunction)BPy_IDGroup_keys, METH_NOARGS, BPy_IDGroup_keys_doc},
 	{"values", (PyCFunction)BPy_IDGroup_values, METH_NOARGS, BPy_IDGroup_values_doc},
@@ -1337,7 +1340,7 @@ static int BPy_IDArray_SetItem(BPy_IDArray *self, int index, PyObject *value)
 		}
 		case IDP_INT:
 		{
-			const int i = _PyLong_AsInt(value);
+			const int i = PyC_Long_AsI32(value);
 			if (i == -1 && PyErr_Occurred()) {
 				return -1;
 			}
@@ -1792,7 +1795,7 @@ PyObject *BPyInit_idprop(void)
 {
 	PyObject *mod;
 	PyObject *submodule;
-	PyObject *sys_modules = PyThreadState_GET()->interp->modules;
+	PyObject *sys_modules = PyImport_GetModuleDict();
 
 	mod = PyModule_Create(&IDProp_module_def);
 
@@ -1803,40 +1806,3 @@ PyObject *BPyInit_idprop(void)
 
 	return mod;
 }
-
-
-#ifndef NDEBUG
-/* -------------------------------------------------------------------- */
-/* debug only function */
-
-void IDP_spit(IDProperty *prop)
-{
-	if (prop) {
-		PyGILState_STATE gilstate;
-		bool use_gil = true; /* !PyC_IsInterpreterActive(); */
-		PyObject *ret_dict;
-		PyObject *ret_str;
-
-		if (use_gil) {
-			gilstate = PyGILState_Ensure();
-		}
-
-		/* to_dict() */
-		ret_dict = BPy_IDGroup_MapDataToPy(prop);
-		ret_str = PyObject_Repr(ret_dict);
-		Py_DECREF(ret_dict);
-
-		printf("IDProperty(%p): %s\n", prop, _PyUnicode_AsString(ret_str));
-
-		Py_DECREF(ret_str);
-
-		if (use_gil) {
-			PyGILState_Release(gilstate);
-		}
-	}
-	else {
-		printf("IDProperty: <NIL>\n");
-	}
-}
-
-#endif

@@ -19,6 +19,9 @@
 
 #ifdef __QBVH__
 #  include "kernel/bvh/qbvh_shadow_all.h"
+#ifdef __KERNEL_AVX2__
+#  include "kernel/bvh/obvh_shadow_all.h"
+#endif
 #endif
 
 #if BVH_FEATURE(BVH_HAIR)
@@ -45,7 +48,7 @@ ccl_device_inline
 bool BVH_FUNCTION_FULL_NAME(BVH)(KernelGlobals *kg,
                                  const Ray *ray,
                                  Intersection *isect_array,
-                                 const int skip_object,
+                                 const uint visibility,
                                  const uint max_hits,
                                  uint *num_hits)
 {
@@ -119,7 +122,7 @@ bool BVH_FUNCTION_FULL_NAME(BVH)(KernelGlobals *kg,
 				                               idir,
 				                               isect_t,
 				                               node_addr,
-				                               PATH_RAY_SHADOW,
+				                               visibility,
 				                               dist);
 #else // __KERNEL_SSE2__
 				traverse_mask = NODE_INTERSECT(kg,
@@ -134,7 +137,7 @@ bool BVH_FUNCTION_FULL_NAME(BVH)(KernelGlobals *kg,
 				                               idirsplat,
 				                               shufflexyz,
 				                               node_addr,
-				                               PATH_RAY_SHADOW,
+				                               visibility,
 				                               dist);
 #endif // __KERNEL_SSE2__
 
@@ -186,17 +189,6 @@ bool BVH_FUNCTION_FULL_NAME(BVH)(KernelGlobals *kg,
 					/* primitive intersection */
 					while(prim_addr < prim_addr2) {
 						kernel_assert((kernel_tex_fetch(__prim_type, prim_addr) & PRIMITIVE_ALL) == p_type);
-
-#ifdef __SHADOW_TRICKS__
-						uint tri_object = (object == OBJECT_NONE)
-						        ? kernel_tex_fetch(__prim_object, prim_addr)
-						        : object;
-						if(tri_object == skip_object) {
-							++prim_addr;
-							continue;
-						}
-#endif
-
 						bool hit;
 
 						/* todo: specialized intersect functions which don't fill in
@@ -209,7 +201,7 @@ bool BVH_FUNCTION_FULL_NAME(BVH)(KernelGlobals *kg,
 								                         isect_array,
 								                         P,
 								                         dir,
-								                         PATH_RAY_SHADOW,
+								                         visibility,
 								                         object,
 								                         prim_addr);
 								break;
@@ -221,7 +213,7 @@ bool BVH_FUNCTION_FULL_NAME(BVH)(KernelGlobals *kg,
 								                                P,
 								                                dir,
 								                                ray->time,
-								                                PATH_RAY_SHADOW,
+								                                visibility,
 								                                object,
 								                                prim_addr);
 								break;
@@ -232,30 +224,30 @@ bool BVH_FUNCTION_FULL_NAME(BVH)(KernelGlobals *kg,
 							case PRIMITIVE_MOTION_CURVE: {
 								const uint curve_type = kernel_tex_fetch(__prim_type, prim_addr);
 								if(kernel_data.curve.curveflags & CURVE_KN_INTERPOLATE) {
-									hit = bvh_cardinal_curve_intersect(kg,
-									                                   isect_array,
-									                                   P,
-									                                   dir,
-									                                   PATH_RAY_SHADOW,
-									                                   object,
-									                                   prim_addr,
-									                                   ray->time,
-									                                   curve_type,
-									                                   NULL,
-									                                   0, 0);
+									hit = cardinal_curve_intersect(kg,
+									                               isect_array,
+									                               P,
+									                               dir,
+									                               visibility,
+									                               object,
+									                               prim_addr,
+									                               ray->time,
+									                               curve_type,
+									                               NULL,
+									                               0, 0);
 								}
 								else {
-									hit = bvh_curve_intersect(kg,
-									                          isect_array,
-									                          P,
-									                          dir,
-									                          PATH_RAY_SHADOW,
-									                          object,
-									                          prim_addr,
-									                          ray->time,
-									                          curve_type,
-									                          NULL,
-									                          0, 0);
+									hit = curve_intersect(kg,
+									                      isect_array,
+									                      P,
+									                      dir,
+									                      visibility,
+									                      object,
+									                      prim_addr,
+									                      ray->time,
+									                      curve_type,
+									                      NULL,
+									                      0, 0);
 								}
 								break;
 							}
@@ -287,7 +279,7 @@ bool BVH_FUNCTION_FULL_NAME(BVH)(KernelGlobals *kg,
 								shader = __float_as_int(str.z);
 							}
 #endif
-							int flag = kernel_tex_fetch(__shader_flag, (shader & SHADER_MASK)*SHADER_SIZE);
+							int flag = kernel_tex_fetch(__shaders, (shader & SHADER_MASK)).flags;
 
 							/* if no transparent shadows, all light is blocked */
 							if(!(flag & SD_HAS_TRANSPARENT_SHADOW)) {
@@ -402,30 +394,39 @@ bool BVH_FUNCTION_FULL_NAME(BVH)(KernelGlobals *kg,
 ccl_device_inline bool BVH_FUNCTION_NAME(KernelGlobals *kg,
                                          const Ray *ray,
                                          Intersection *isect_array,
-                                         const int skip_object,
+                                         const uint visibility,
                                          const uint max_hits,
                                          uint *num_hits)
 {
-#ifdef __QBVH__
-	if(kernel_data.bvh.use_qbvh) {
-		return BVH_FUNCTION_FULL_NAME(QBVH)(kg,
-		                                    ray,
-		                                    isect_array,
-		                                    skip_object,
-		                                    max_hits,
-		                                    num_hits);
-	}
-	else
+	switch(kernel_data.bvh.bvh_layout) {
+#ifdef __KERNEL_AVX2__
+		case BVH_LAYOUT_BVH8:
+			return BVH_FUNCTION_FULL_NAME(OBVH)(kg,
+			                                    ray,
+			                                    isect_array,
+			                                    visibility,
+			                                    max_hits,
+			                                    num_hits);
 #endif
-	{
-		kernel_assert(kernel_data.bvh.use_qbvh == false);
-		return BVH_FUNCTION_FULL_NAME(BVH)(kg,
-		                                   ray,
-		                                   isect_array,
-		                                   skip_object,
-		                                   max_hits,
-		                                   num_hits);
+#ifdef __QBVH__
+		case BVH_LAYOUT_BVH4:
+			return BVH_FUNCTION_FULL_NAME(QBVH)(kg,
+			                                    ray,
+			                                    isect_array,
+			                                    visibility,
+			                                    max_hits,
+			                                    num_hits);
+#endif
+		case BVH_LAYOUT_BVH2:
+			return BVH_FUNCTION_FULL_NAME(BVH)(kg,
+			                                   ray,
+			                                   isect_array,
+			                                   visibility,
+			                                   max_hits,
+			                                   num_hits);
 	}
+	kernel_assert(!"Should not happen");
+	return false;
 }
 
 #undef BVH_FUNCTION_NAME

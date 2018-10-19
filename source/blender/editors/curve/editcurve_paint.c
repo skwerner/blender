@@ -35,6 +35,7 @@
 #include "BKE_curve.h"
 #include "BKE_depsgraph.h"
 #include "BKE_fcurve.h"
+#include "BKE_main.h"
 #include "BKE_report.h"
 
 #include "WM_api.h"
@@ -70,102 +71,6 @@
 /* Distance between start/end points to consider cyclic */
 #define STROKE_CYCLIC_DIST_PX     8
 
-
-/* -------------------------------------------------------------------- */
-
-/** \name Depth Utilities
- * \{ */
-
-
-static float depth_read_zbuf(const ViewContext *vc, int x, int y)
-{
-	ViewDepths *vd = vc->rv3d->depths;
-
-	if (vd && vd->depths && x > 0 && y > 0 && x < vd->w && y < vd->h)
-		return vd->depths[y * vd->w + x];
-	else
-		return -1.0f;
-}
-
-static bool depth_unproject(
-        const ARegion *ar, const bglMats *mats,
-        const int mval[2], const double depth,
-        float r_location_world[3])
-{
-	double p[3];
-	if (gluUnProject(
-	        (double)ar->winrct.xmin + mval[0] + 0.5,
-	        (double)ar->winrct.ymin + mval[1] + 0.5,
-	        depth, mats->modelview, mats->projection, (const GLint *)mats->viewport,
-	        &p[0], &p[1], &p[2]))
-	{
-		copy_v3fl_v3db(r_location_world, p);
-		return true;
-	}
-	return false;
-}
-
-static bool depth_read_normal(
-        const ViewContext *vc, const bglMats *mats, const int mval[2],
-        float r_normal[3])
-{
-	/* pixels surrounding */
-	bool  depths_valid[9] = {false};
-	float coords[9][3] = {{0}};
-
-	ARegion *ar = vc->ar;
-	const ViewDepths *depths = vc->rv3d->depths;
-
-	for (int x = 0, i = 0; x < 2; x++) {
-		for (int y = 0; y < 2; y++) {
-			const int mval_ofs[2] = {mval[0] + (x - 1), mval[1] + (y - 1)};
-
-			const double depth = (double)depth_read_zbuf(vc, mval_ofs[0], mval_ofs[1]);
-			if ((depth > depths->depth_range[0]) && (depth < depths->depth_range[1])) {
-				if (depth_unproject(ar, mats, mval_ofs, depth, coords[i])) {
-					depths_valid[i] = true;
-				}
-			}
-			i++;
-		}
-	}
-
-	const int edges[2][6][2] = {
-	    /* x edges */
-	    {{0, 1}, {1, 2},
-	     {3, 4}, {4, 5},
-	     {6, 7}, {7, 8}},
-	    /* y edges */
-	    {{0, 3}, {3, 6},
-	     {1, 4}, {4, 7},
-	     {2, 5}, {5, 8}},
-	};
-
-	float cross[2][3] = {{0.0f}};
-
-	for (int i = 0; i < 6; i++) {
-		for (int axis = 0; axis < 2; axis++) {
-			if (depths_valid[edges[axis][i][0]] && depths_valid[edges[axis][i][1]]) {
-				float delta[3];
-				sub_v3_v3v3(delta, coords[edges[axis][i][0]], coords[edges[axis][i][1]]);
-				add_v3_v3(cross[axis], delta);
-			}
-		}
-	}
-
-	cross_v3_v3v3(r_normal, cross[0], cross[1]);
-
-	if (normalize_v3(r_normal) != 0.0f) {
-		return true;
-	}
-	else {
-		return false;
-	}
-}
-
-/** \} */
-
-
 /* -------------------------------------------------------------------- */
 
 /** \name StrokeElem / #RNA_OperatorStrokeElement Conversion Functions
@@ -193,7 +98,7 @@ struct CurveDrawData {
 		bool use_plane;
 		float    plane[4];
 
-		/* use 'rv3d->depths', note that this will become 'damaged' while drawing, but thats OK. */
+		/* use 'rv3d->depths', note that this will become 'damaged' while drawing, but that's OK. */
 		bool use_depth;
 
 		/* offset projection by this value */
@@ -281,7 +186,6 @@ static bool stroke_elem_project(
         float surface_offset, const float radius,
         float r_location_world[3], float r_normal_world[3])
 {
-	View3D *v3d = cdd->vc.v3d;
 	ARegion *ar = cdd->vc.ar;
 	RegionView3D *rv3d = cdd->vc.rv3d;
 
@@ -290,12 +194,7 @@ static bool stroke_elem_project(
 	/* project to 'location_world' */
 	if (cdd->project.use_plane) {
 		/* get the view vector to 'location' */
-		float ray_origin[3], ray_direction[3];
-		ED_view3d_win_to_ray(cdd->vc.ar, v3d, mval_fl, ray_origin, ray_direction, false);
-
-		float lambda;
-		if (isect_ray_plane_v3(ray_origin, ray_direction, cdd->project.plane, &lambda, true)) {
-			madd_v3_v3v3fl(r_location_world, ray_origin, ray_direction, lambda);
+		if (ED_view3d_win_to_3d_on_plane(ar, cdd->project.plane, mval_fl, true, r_location_world)) {
 			if (r_normal_world) {
 				zero_v3(r_normal_world);
 			}
@@ -308,9 +207,9 @@ static bool stroke_elem_project(
 		    ((unsigned int)mval_i[0] < depths->w) &&
 		    ((unsigned int)mval_i[1] < depths->h))
 		{
-			const double depth = (double)depth_read_zbuf(&cdd->vc, mval_i[0], mval_i[1]);
+			const double depth = (double)ED_view3d_depth_read_cached(&cdd->vc, mval_i);
 			if ((depth > depths->depth_range[0]) && (depth < depths->depth_range[1])) {
-				if (depth_unproject(ar, &cdd->mats, mval_i, depth, r_location_world)) {
+				if (ED_view3d_depth_unproject(ar, &cdd->mats, mval_i, depth, r_location_world)) {
 					is_location_world_set = true;
 					if (r_normal_world) {
 						zero_v3(r_normal_world);
@@ -319,7 +218,7 @@ static bool stroke_elem_project(
 					if (surface_offset != 0.0f) {
 						const float offset = cdd->project.use_surface_offset_absolute ? 1.0f : radius;
 						float normal[3];
-						if (depth_read_normal(&cdd->vc, &cdd->mats, mval_i, normal)) {
+						if (ED_view3d_depth_read_cached_normal(&cdd->vc, &cdd->mats, mval_i, normal)) {
 							madd_v3_v3fl(r_location_world, normal, offset * surface_offset);
 							if (r_normal_world) {
 								copy_v3_v3(r_normal_world, normal);
@@ -455,7 +354,7 @@ static void curve_draw_stroke_3d(const struct bContext *UNUSED(C), ARegion *UNUS
 	wmOperator *op = arg;
 	struct CurveDrawData *cdd = op->customdata;
 
-	const int stroke_len = BLI_mempool_count(cdd->stroke_elem_pool);
+	const int stroke_len = BLI_mempool_len(cdd->stroke_elem_pool);
 
 	if (stroke_len == 0) {
 		return;
@@ -627,7 +526,7 @@ static void curve_draw_event_add_first(wmOperator *op, const wmEvent *event)
 		         CURVE_PAINT_SURFACE_PLANE_NORMAL_VIEW,
 		         CURVE_PAINT_SURFACE_PLANE_NORMAL_SURFACE))
 		{
-			if (depth_read_normal(&cdd->vc, &cdd->mats, event->mval, normal)) {
+			if (ED_view3d_depth_read_cached_normal(&cdd->vc, &cdd->mats, event->mval, normal)) {
 				if (cps->surface_plane == CURVE_PAINT_SURFACE_PLANE_NORMAL_VIEW) {
 					float cross_a[3], cross_b[3];
 					cross_v3_v3v3(cross_a, rv3d->viewinv[2], normal);
@@ -677,7 +576,7 @@ static bool curve_draw_init(bContext *C, wmOperator *op, bool is_invoke)
 	struct CurveDrawData *cdd = MEM_callocN(sizeof(*cdd), __func__);
 
 	if (is_invoke) {
-		view3d_set_viewcontext(C, &cdd->vc);
+		ED_view3d_viewcontext_init(C, &cdd->vc);
 		if (ELEM(NULL, cdd->vc.ar, cdd->vc.rv3d, cdd->vc.v3d, cdd->vc.win, cdd->vc.scene)) {
 			MEM_freeN(cdd);
 			BKE_report(op->reports, RPT_ERROR, "Unable to access 3D viewport");
@@ -685,6 +584,7 @@ static bool curve_draw_init(bContext *C, wmOperator *op, bool is_invoke)
 		}
 	}
 	else {
+		cdd->vc.bmain = CTX_data_main(C);
 		cdd->vc.scene = CTX_data_scene(C);
 		cdd->vc.obedit = CTX_data_edit_object(C);
 	}
@@ -773,7 +673,7 @@ static void curve_draw_exec_precalc(wmOperator *op)
 	if (!RNA_property_is_set(op->ptr, prop)) {
 		bool use_cyclic = false;
 
-		if (BLI_mempool_count(cdd->stroke_elem_pool) > 2) {
+		if (BLI_mempool_len(cdd->stroke_elem_pool) > 2) {
 			BLI_mempool_iter iter;
 			const struct StrokeElem *selem, *selem_first, *selem_last;
 
@@ -799,7 +699,7 @@ static void curve_draw_exec_precalc(wmOperator *op)
 	    (cps->radius_taper_end   != 0.0f))
 	{
 		/* note, we could try to de-duplicate the length calculations above */
-		const int stroke_len = BLI_mempool_count(cdd->stroke_elem_pool);
+		const int stroke_len = BLI_mempool_len(cdd->stroke_elem_pool);
 
 		BLI_mempool_iter iter;
 		struct StrokeElem *selem, *selem_prev;
@@ -859,14 +759,14 @@ static int curve_draw_exec(bContext *C, wmOperator *op)
 	Curve *cu = obedit->data;
 	ListBase *nurblist = object_editcurve_get(obedit);
 
-	int stroke_len = BLI_mempool_count(cdd->stroke_elem_pool);
+	int stroke_len = BLI_mempool_len(cdd->stroke_elem_pool);
 
 	const bool is_3d = (cu->flag & CU_3D) != 0;
 	invert_m4_m4(obedit->imat, obedit->obmat);
 
-	if (BLI_mempool_count(cdd->stroke_elem_pool) == 0) {
+	if (BLI_mempool_len(cdd->stroke_elem_pool) == 0) {
 		curve_draw_stroke_from_operator(op);
-		stroke_len = BLI_mempool_count(cdd->stroke_elem_pool);
+		stroke_len = BLI_mempool_len(cdd->stroke_elem_pool);
 	}
 
 	ED_curve_deselect_all(cu->editnurb);
@@ -876,7 +776,7 @@ static int curve_draw_exec(bContext *C, wmOperator *op)
 	const float radius_range = cps->radius_max - cps->radius_min;
 
 	Nurb *nu = MEM_callocN(sizeof(Nurb), __func__);
-	nu->pntsv = 1;
+	nu->pntsv = 0;
 	nu->resolu = cu->resolu;
 	nu->resolv = cu->resolv;
 	nu->flag |= CU_SMOOTH;
@@ -1074,8 +974,15 @@ static int curve_draw_exec(bContext *C, wmOperator *op)
 		const struct StrokeElem *selem;
 
 		nu->pntsu = stroke_len;
+		nu->pntsv = 1;
 		nu->type = CU_POLY;
 		nu->bp = MEM_callocN(nu->pntsu * sizeof(BPoint), __func__);
+
+		/* Misc settings. */
+		nu->resolu = cu->resolu;
+		nu->resolv = 1;
+		nu->orderu = 4;
+		nu->orderv = 1;
 
 		BPoint *bp = nu->bp;
 
@@ -1167,7 +1074,7 @@ static int curve_draw_invoke(bContext *C, wmOperator *op, const wmEvent *event)
 				/* needed or else the draw matrix can be incorrect */
 				view3d_operator_needs_opengl(C);
 
-				ED_view3d_autodist_init(cdd->vc.scene, cdd->vc.ar, cdd->vc.v3d, 0);
+				ED_view3d_autodist_init(cdd->vc.bmain, cdd->vc.scene, cdd->vc.ar, cdd->vc.v3d, 0);
 
 				if (cdd->vc.rv3d->depths) {
 					cdd->vc.rv3d->depths->damaged = true;

@@ -49,7 +49,7 @@
 #include "IMB_imbuf.h"
 
 #ifdef DEBUG_MESSAGES
-#  if defined __GNUC__ || defined __sun
+#  if defined __GNUC__
 #    define PRINT(format, args ...) printf(format, ##args)
 #  else
 #    define PRINT(format, ...) printf(__VA_ARGS__)
@@ -380,7 +380,7 @@ static void do_moviecache_put(MovieCache *cache, void *userkey, ImBuf *ibuf, boo
 	if (need_lock)
 		BLI_mutex_unlock(&limitor_lock);
 
-	/* cache limiter can't remove unused keys which points to destoryed values */
+	/* cache limiter can't remove unused keys which points to destroyed values */
 	check_unused_keys(cache);
 
 	if (cache->points) {
@@ -513,7 +513,7 @@ void IMB_moviecache_get_cache_segments(MovieCache *cache, int proxy, int render_
 		*points_r = cache->points;
 	}
 	else {
-		int totframe = BLI_ghash_size(cache->hash);
+		int totframe = BLI_ghash_len(cache->hash);
 		int *frames = MEM_callocN(totframe * sizeof(int), "movieclip cache frames");
 		int a, totseg = 0;
 		GHashIterator gh_iter;

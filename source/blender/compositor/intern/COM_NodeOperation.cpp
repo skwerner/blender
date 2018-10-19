@@ -15,8 +15,8 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
- * Contributor: 
- *		Jeroen Bakker 
+ * Contributor:
+ *		Jeroen Bakker
  *		Monique Dewanchand
  */
 
@@ -83,7 +83,7 @@ void NodeOperation::determineResolution(unsigned int resolution[2], unsigned int
 {
 	unsigned int temp[2];
 	unsigned int temp2[2];
-	
+
 	for (unsigned int index = 0; index < m_inputs.size(); index++) {
 		NodeOperationInput *input = m_inputs[index];
 		if (input->isConnected()) {
@@ -171,7 +171,7 @@ bool NodeOperation::determineDependingAreaOfInterest(rcti *input, ReadBufferOper
 		rcti tempOutput;
 		bool first = true;
 		for (int i = 0; i < getNumberOfInputSockets(); i ++) {
-			NodeOperation * inputOperation = this->getInputOperation(i);
+			NodeOperation *inputOperation = this->getInputOperation(i);
 			if (inputOperation && inputOperation->determineDependingAreaOfInterest(input, readOperation, &tempOutput)) {
 				if (first) {
 					output->xmin = tempOutput.xmin;

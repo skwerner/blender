@@ -28,6 +28,7 @@
 #include "abc_camera.h"
 #include "abc_curves.h"
 #include "abc_hair.h"
+#include "abc_mball.h"
 #include "abc_mesh.h"
 #include "abc_nurbs.h"
 #include "abc_points.h"
@@ -37,6 +38,7 @@
 extern "C" {
 #include "DNA_camera_types.h"
 #include "DNA_curve_types.h"
+#include "DNA_meta_types.h"
 #include "DNA_mesh_types.h"
 #include "DNA_modifier_types.h"
 #include "DNA_object_types.h"
@@ -54,6 +56,7 @@ extern "C" {
 #include "BKE_global.h"
 #include "BKE_idprop.h"
 #include "BKE_main.h"
+#include "BKE_mball.h"
 #include "BKE_modifier.h"
 #include "BKE_particle.h"
 #include "BKE_scene.h"
@@ -108,7 +111,7 @@ static bool object_is_smoke_sim(Object *ob)
 	return false;
 }
 
-static bool object_type_is_exportable(Object *ob)
+static bool object_type_is_exportable(Main *bmain, EvaluationContext *eval_ctx, Scene *scene, Object *ob)
 {
 	switch (ob->type) {
 		case OB_MESH:
@@ -122,6 +125,8 @@ static bool object_type_is_exportable(Object *ob)
 		case OB_SURF:
 		case OB_CAMERA:
 			return true;
+		case OB_MBALL:
+			return AbcMBallWriter::isBasisBall(bmain, eval_ctx, scene, ob);
 		default:
 			return false;
 	}
@@ -163,8 +168,9 @@ static bool export_object(const ExportSettings * const settings, Object *ob,
 
 /* ************************************************************************** */
 
-AbcExporter::AbcExporter(Scene *scene, const char *filename, ExportSettings &settings)
-    : m_settings(settings)
+AbcExporter::AbcExporter(Main *bmain, Scene *scene, const char *filename, ExportSettings &settings)
+    : m_bmain(bmain)
+    , m_settings(settings)
     , m_filename(filename)
     , m_trans_sampling_index(0)
     , m_shape_sampling_index(0)
@@ -361,11 +367,9 @@ void AbcExporter::createTransformWritersHierarchy(EvaluationContext *eval_ctx)
 		switch (ob->type) {
 			case OB_LAMP:
 			case OB_LATTICE:
-			case OB_MBALL:
 			case OB_SPEAKER:
 				/* We do not export transforms for objects of these classes. */
 				break;
-
 			default:
 				exploreTransform(eval_ctx, ob, ob->parent);
 		}
@@ -382,17 +386,17 @@ void AbcExporter::exploreTransform(EvaluationContext *eval_ctx, Object *ob, Obje
 		return;
 	}
 
-	if (object_type_is_exportable(ob)) {
+	if (object_type_is_exportable(m_bmain, eval_ctx, m_scene, ob)) {
 		createTransformWriter(ob, parent, dupliObParent);
 	}
 
-	ListBase *lb = object_duplilist(eval_ctx, m_scene, ob);
+	ListBase *lb = object_duplilist(m_bmain, eval_ctx, m_scene, ob);
 
 	if (lb) {
 		DupliObject *link = static_cast<DupliObject *>(lb->first);
 		Object *dupli_ob = NULL;
 		Object *dupli_parent = NULL;
-		
+
 		for (; link; link = link->next) {
 			/* This skips things like custom bone shapes. */
 			if (m_settings.renderable_only && link->no_draw) {
@@ -406,12 +410,12 @@ void AbcExporter::exploreTransform(EvaluationContext *eval_ctx, Object *ob, Obje
 				exploreTransform(eval_ctx, dupli_ob, dupli_parent, ob);
 			}
 		}
-	}
 
-	free_object_duplilist(lb);
+		free_object_duplilist(lb);
+	}
 }
 
-AbcTransformWriter * AbcExporter::createTransformWriter(Object *ob, Object *parent, Object *dupliObParent)
+AbcTransformWriter *AbcExporter::createTransformWriter(Object *ob, Object *parent, Object *dupliObParent)
 {
 	/* An object should not be its own parent, or we'll get infinite loops. */
 	BLI_assert(ob != parent);
@@ -501,8 +505,8 @@ void AbcExporter::exploreObject(EvaluationContext *eval_ctx, Object *ob, Object 
 	}
 
 	createShapeWriter(ob, dupliObParent);
-	
-	ListBase *lb = object_duplilist(eval_ctx, m_scene, ob);
+
+	ListBase *lb = object_duplilist(m_bmain, eval_ctx, m_scene, ob);
 
 	if (lb) {
 		DupliObject *link = static_cast<DupliObject *>(lb->first);
@@ -517,9 +521,9 @@ void AbcExporter::exploreObject(EvaluationContext *eval_ctx, Object *ob, Object 
 				exploreObject(eval_ctx, link->ob, ob);
 			}
 		}
-	}
 
-	free_object_duplilist(lb);
+		free_object_duplilist(lb);
+	}
 }
 
 void AbcExporter::createParticleSystemsWriters(Object *ob, AbcTransformWriter *xform)
@@ -547,7 +551,7 @@ void AbcExporter::createParticleSystemsWriters(Object *ob, AbcTransformWriter *x
 
 void AbcExporter::createShapeWriter(Object *ob, Object *dupliObParent)
 {
-	if (!object_type_is_exportable(ob)) {
+	if (!object_type_is_exportable(m_bmain, m_bmain->eval_ctx, m_scene, ob)) {
 		return;
 	}
 
@@ -559,7 +563,7 @@ void AbcExporter::createShapeWriter(Object *ob, Object *dupliObParent)
 	else {
 		name = get_object_dag_path_name(ob, dupliObParent);
 	}
-	
+
 	AbcTransformWriter *xform = getXForm(name);
 
 	if (!xform) {
@@ -611,6 +615,18 @@ void AbcExporter::createShapeWriter(Object *ob, Object *dupliObParent)
 				m_shapes.push_back(new AbcCameraWriter(m_scene, ob, xform, m_shape_sampling_index, m_settings));
 			}
 
+			break;
+		}
+		case OB_MBALL:
+		{
+			MetaBall *mball = static_cast<MetaBall *>(ob->data);
+			if (!mball) {
+				return;
+			}
+
+			m_shapes.push_back(new AbcMBallWriter(
+			                       m_bmain, m_scene, ob, xform,
+			                       m_shape_sampling_index, m_settings));
 			break;
 		}
 	}

@@ -35,10 +35,50 @@
 
 CCL_NAMESPACE_BEGIN
 
-ccl_device int bsdf_transparent_setup(ShaderClosure *sc)
+ccl_device void bsdf_transparent_setup(ShaderData *sd, const float3 weight, int path_flag)
 {
-	sc->type = CLOSURE_BSDF_TRANSPARENT_ID;
-	return SD_BSDF|SD_TRANSPARENT;
+	/* Check cutoff weight. */
+	float sample_weight = fabsf(average(weight));
+	if(!(sample_weight >= CLOSURE_WEIGHT_CUTOFF)) {
+		return;
+	}
+
+	if(sd->flag & SD_TRANSPARENT) {
+		sd->closure_transparent_extinction += weight;
+
+		/* Add weight to existing transparent BSDF. */
+		for(int i = 0; i < sd->num_closure; i++) {
+			ShaderClosure *sc = &sd->closure[i];
+
+			if(sc->type == CLOSURE_BSDF_TRANSPARENT_ID) {
+				sc->weight += weight;
+				sc->sample_weight += sample_weight;
+				break;
+			}
+		}
+	}
+	else {
+		sd->flag |= SD_BSDF|SD_TRANSPARENT;
+		sd->closure_transparent_extinction = weight;
+
+		if(path_flag & PATH_RAY_TERMINATE) {
+			/* In this case the number of closures is set to zero to disable
+			 * all others, but we still want to get transparency so increase
+			 * the number just for this. */
+			sd->num_closure_left = 1;
+		}
+
+		/* Create new transparent BSDF. */
+		ShaderClosure *bsdf = closure_alloc(sd, sizeof(ShaderClosure), CLOSURE_BSDF_TRANSPARENT_ID, weight);
+
+		if(bsdf) {
+			bsdf->sample_weight = sample_weight;
+			bsdf->N = sd->N;
+		}
+		else if(path_flag & PATH_RAY_TERMINATE) {
+			sd->num_closure_left = 0;
+		}
+	}
 }
 
 ccl_device float3 bsdf_transparent_eval_reflect(const ShaderClosure *sc, const float3 I, const float3 omega_in, float *pdf)
@@ -67,4 +107,3 @@ ccl_device int bsdf_transparent_sample(const ShaderClosure *sc, float3 Ng, float
 CCL_NAMESPACE_END
 
 #endif /* __BSDF_TRANSPARENT_H__ */
-

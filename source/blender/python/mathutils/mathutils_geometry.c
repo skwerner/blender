@@ -34,8 +34,8 @@
 #ifndef MATH_STANDALONE /* define when building outside blender */
 #  include "MEM_guardedalloc.h"
 #  include "BLI_blenlib.h"
-#  include "BLI_boxpack2d.h"
-#  include "BLI_convexhull2d.h"
+#  include "BLI_boxpack_2d.h"
+#  include "BLI_convexhull_2d.h"
 #  include "BKE_displist.h"
 #  include "BKE_curve.h"
 #endif
@@ -742,7 +742,7 @@ static PyObject *M_Geometry_intersect_point_line(PyObject *UNUSED(self), PyObjec
 	float lambda;
 	PyObject *ret;
 	int size = 2;
-	
+
 	if (!PyArg_ParseTuple(
 	        args, "OOO:intersect_point_line",
 	        &py_pt, &py_line_a, &py_line_b))
@@ -760,7 +760,7 @@ static PyObject *M_Geometry_intersect_point_line(PyObject *UNUSED(self), PyObjec
 
 	/* do the calculation */
 	lambda = closest_to_line_v3(pt_out, pt, line_a, line_b);
-	
+
 	ret = PyTuple_New(2);
 	PyTuple_SET_ITEMS(ret,
 	        Vector_CreatePyObject(pt_out, size, NULL),
@@ -882,7 +882,7 @@ static PyObject *M_Geometry_intersect_point_quad_2d(PyObject *UNUSED(self), PyOb
 	PyObject *py_pt, *py_quad[4];
 	float pt[2], quad[4][2];
 	int i;
-	
+
 	if (!PyArg_ParseTuple(
 	        args, "OOOOO:intersect_point_quad_2d",
 	        &py_pt, UNPACK4_EX(&, py_quad, )))
@@ -954,12 +954,12 @@ PyDoc_STRVAR(M_Geometry_barycentric_transform_doc,
 "   :type tri_a2: :class:`mathutils.Vector`\n"
 "   :arg tri_a3: source triangle vertex.\n"
 "   :type tri_a3: :class:`mathutils.Vector`\n"
-"   :arg tri_a1: target triangle vertex.\n"
-"   :type tri_a1: :class:`mathutils.Vector`\n"
-"   :arg tri_a2: target triangle vertex.\n"
-"   :type tri_a2: :class:`mathutils.Vector`\n"
-"   :arg tri_a3: target triangle vertex.\n"
-"   :type tri_a3: :class:`mathutils.Vector`\n"
+"   :arg tri_b1: target triangle vertex.\n"
+"   :type tri_b1: :class:`mathutils.Vector`\n"
+"   :arg tri_b2: target triangle vertex.\n"
+"   :type tri_b2: :class:`mathutils.Vector`\n"
+"   :arg tri_b3: target triangle vertex.\n"
+"   :type tri_b3: :class:`mathutils.Vector`\n"
 "   :return: The transformed point\n"
 "   :rtype: :class:`mathutils.Vector`'s\n"
 );
@@ -1265,7 +1265,7 @@ static PyObject *M_Geometry_tessellate_polygon(PyObject *UNUSED(self), PyObject 
 		BKE_displist_fill(&dispbase, &dispbase, NULL, false);
 
 		/* The faces are stored in a new DisplayList
-		 * thats added to the head of the listbase */
+		 * that's added to the head of the listbase */
 		dl = dispbase.first;
 
 		tri_list = PyList_New(dl->parts);
@@ -1279,7 +1279,7 @@ static PyObject *M_Geometry_tessellate_polygon(PyObject *UNUSED(self), PyObject 
 		index = 0;
 		dl_face = dl->index;
 		while (index < dl->parts) {
-			PyList_SET_ITEM(tri_list, index, Py_BuildValue("iii", dl_face[0], dl_face[1], dl_face[2]));
+			PyList_SET_ITEM(tri_list, index, PyC_Tuple_Pack_I32(dl_face[0], dl_face[1], dl_face[2]));
 			dl_face += 3;
 			index++;
 		}
@@ -1430,7 +1430,7 @@ static PyObject *M_Geometry_box_fit_2d(PyObject *UNUSED(self), PyObject *pointli
 
 	if (len) {
 		/* Non Python function */
-		angle = BLI_convexhull_aabb_fit_points_2d((const float (*)[2])points, len);
+		angle = BLI_convexhull_aabb_fit_points_2d(points, len);
 
 		PyMem_Free(points);
 	}
@@ -1468,7 +1468,7 @@ static PyObject *M_Geometry_convex_hull_2d(PyObject *UNUSED(self), PyObject *poi
 		index_map  = MEM_mallocN(sizeof(*index_map) * len * 2, __func__);
 
 		/* Non Python function */
-		len_ret = BLI_convexhull_2d((const float (*)[2])points, len, index_map);
+		len_ret = BLI_convexhull_2d(points, len, index_map);
 
 		ret = PyList_New(len_ret);
 		for (i = 0; i < len_ret; i++) {

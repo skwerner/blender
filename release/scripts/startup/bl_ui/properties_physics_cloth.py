@@ -20,10 +20,10 @@
 import bpy
 from bpy.types import Menu, Panel
 
-from bl_ui.properties_physics_common import (
-        point_cache_ui,
-        effector_weights_ui,
-        )
+from .properties_physics_common import (
+    point_cache_ui,
+    effector_weights_ui,
+)
 
 
 def cloth_panel_enabled(md):
@@ -255,6 +255,7 @@ class PHYSICS_PT_cloth_field_weights(PhysicButtonsPanel, Panel):
     def draw(self, context):
         cloth = context.cloth.settings
         effector_weights_ui(self, context, cloth.effector_weights, 'CLOTH')
+
 
 classes = (
     CLOTH_MT_presets,

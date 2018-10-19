@@ -15,13 +15,13 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
- * Contributor: 
- *		Jeroen Bakker 
+ * Contributor:
+ *		Jeroen Bakker
  *		Monique Dewanchand
  */
 
-#ifndef _COM_SetVectorOperation_h
-#define _COM_SetVectorOperation_h
+#ifndef __COM_SETVECTOROPERATION_H__
+#define __COM_SETVECTOROPERATION_H__
 #include "COM_NodeOperation.h"
 
 
@@ -41,16 +41,16 @@ public:
 	 * Default constructor
 	 */
 	SetVectorOperation();
-	
-	const float getX() { return this->m_x; }
+
+	float getX() { return this->m_x; }
 	void setX(float value) { this->m_x = value; }
-	const float getY() { return this->m_y; }
+	float getY() { return this->m_y; }
 	void setY(float value) { this->m_y = value; }
-	const float getZ() { return this->m_z; }
+	float getZ() { return this->m_z; }
 	void setZ(float value) { this->m_z = value; }
-	const float getW() { return this->m_w; }
+	float getW() { return this->m_w; }
 	void setW(float value) { this->m_w = value; }
-	
+
 	/**
 	 * the inner loop of this program
 	 */

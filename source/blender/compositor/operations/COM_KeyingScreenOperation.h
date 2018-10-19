@@ -22,8 +22,8 @@
  */
 
 
-#ifndef _COM_KeyingScreenOperation_h
-#define _COM_KeyingScreenOperation_h
+#ifndef __COM_KEYINGSCREENOPERATION_H__
+#define __COM_KEYINGSCREENOPERATION_H__
 
 #include <string.h>
 
@@ -35,7 +35,7 @@
 #include "BLI_string.h"
 
 extern "C" {
-#  include "BLI_voronoi.h"
+#  include "BLI_voronoi_2d.h"
 }
 
 /**

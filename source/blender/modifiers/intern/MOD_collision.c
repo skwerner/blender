@@ -40,7 +40,6 @@
 #include "BLI_math.h"
 #include "BLI_utildefines.h"
 
-
 #include "BKE_collision.h"
 #include "BKE_cdderivedmesh.h"
 #include "BKE_global.h"
@@ -48,10 +47,12 @@
 #include "BKE_pointcache.h"
 #include "BKE_scene.h"
 
-static void initData(ModifierData *md) 
+#include "MOD_modifiertypes.h"
+
+static void initData(ModifierData *md)
 {
 	CollisionModifierData *collmd = (CollisionModifierData *) md;
-	
+
 	collmd->x = NULL;
 	collmd->xnew = NULL;
 	collmd->current_x = NULL;
@@ -67,8 +68,8 @@ static void initData(ModifierData *md)
 static void freeData(ModifierData *md)
 {
 	CollisionModifierData *collmd = (CollisionModifierData *) md;
-	
-	if (collmd) {
+
+	if (collmd) {  /* Seriously? */
 		if (collmd->bvhtree) {
 			BLI_bvhtree_free(collmd->bvhtree);
 			collmd->bvhtree = NULL;
@@ -80,10 +81,7 @@ static void freeData(ModifierData *md)
 		MEM_SAFE_FREE(collmd->current_xnew);
 		MEM_SAFE_FREE(collmd->current_v);
 
-		if (collmd->tri) {
-			MEM_freeN((void *)collmd->tri);
-			collmd->tri = NULL;
-		}
+		MEM_SAFE_FREE(collmd->tri);
 
 		collmd->time_x = collmd->time_xnew = -1000;
 		collmd->mvert_num = 0;
@@ -97,39 +95,40 @@ static bool dependsOnTime(ModifierData *UNUSED(md))
 	return true;
 }
 
-static void deformVerts(ModifierData *md, Object *ob,
-                        DerivedMesh *derivedData,
-                        float (*vertexCos)[3],
-                        int UNUSED(numVerts),
-                        ModifierApplyFlag UNUSED(flag))
+static void deformVerts(
+        ModifierData *md, Object *ob,
+        DerivedMesh *derivedData,
+        float (*vertexCos)[3],
+        int UNUSED(numVerts),
+        ModifierApplyFlag UNUSED(flag))
 {
 	CollisionModifierData *collmd = (CollisionModifierData *) md;
 	DerivedMesh *dm = NULL;
 	MVert *tempVert = NULL;
-	
+
 	/* if possible use/create DerivedMesh */
 	if (derivedData) dm = CDDM_copy(derivedData);
 	else if (ob->type == OB_MESH) dm = CDDM_from_mesh(ob->data);
-	
+
 	if (!ob->pd) {
 		printf("CollisionModifier deformVerts: Should not happen!\n");
 		return;
 	}
-	
+
 	if (dm) {
 		float current_time = 0;
 		unsigned int mvert_num = 0;
 
 		CDDM_apply_vert_coords(dm, vertexCos);
 		CDDM_calc_normals(dm);
-		
+
 		current_time = BKE_scene_frame_get(md->scene);
-		
+
 		if (G.debug_value > 0)
 			printf("current_time %f, collmd->time_xnew %f\n", current_time, collmd->time_xnew);
-		
+
 		mvert_num = dm->getNumVerts(dm);
-		
+
 		if (current_time > collmd->time_xnew) {
 			unsigned int i;
 
@@ -145,21 +144,19 @@ static void deformVerts(ModifierData *md, Object *ob,
 					/* we save global positions */
 					mul_m4_v3(ob->obmat, collmd->x[i].co);
 				}
-				
+
 				collmd->xnew = MEM_dupallocN(collmd->x); // frame end position
 				collmd->current_x = MEM_dupallocN(collmd->x); // inter-frame
 				collmd->current_xnew = MEM_dupallocN(collmd->x); // inter-frame
 				collmd->current_v = MEM_dupallocN(collmd->x); // inter-frame
 
 				collmd->mvert_num = mvert_num;
-				
-				DM_ensure_looptri(dm);
 
 				collmd->tri_num = dm->getNumLoopTri(dm);
 				{
 					const MLoop *mloop = dm->getLoopArray(dm);
 					const MLoopTri *looptri = dm->getLoopTriArray(dm);
-					MVertTri *tri = MEM_mallocN(sizeof(*tri) * collmd->tri_num, __func__);
+					MVertTri *tri = MEM_malloc_arrayN(collmd->tri_num, sizeof(*tri), __func__);
 					DM_verttri_from_looptri(tri, mloop, looptri, collmd->tri_num);
 					collmd->tri = tri;
 				}
@@ -204,9 +201,9 @@ static void deformVerts(ModifierData *md, Object *ob,
 						        collmd->tri, collmd->tri_num,
 						        ob->pd->pdef_sboft);
 					}
-			
+
 				}
-				
+
 				/* happens on file load (ONLY when i decomment changes in readfile.c) */
 				if (!collmd->bvhtree) {
 					collmd->bvhtree = bvhtree_build_from_mvert(
@@ -229,7 +226,7 @@ static void deformVerts(ModifierData *md, Object *ob,
 			else if (mvert_num != collmd->mvert_num) {
 				freeData((ModifierData *)collmd);
 			}
-			
+
 		}
 		else if (current_time < collmd->time_xnew) {
 			freeData((ModifierData *)collmd);
@@ -240,7 +237,7 @@ static void deformVerts(ModifierData *md, Object *ob,
 			}
 		}
 	}
-	
+
 	if (dm)
 		dm->release(dm);
 }

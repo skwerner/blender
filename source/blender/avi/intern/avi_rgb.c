@@ -40,15 +40,16 @@
 #include "AVI_avi.h"
 #include "avi_rgb.h"
 
+#include "IMB_imbuf.h"
+
 /* implementation */
 
-void *avi_converter_from_avi_rgb(AviMovie *movie, int stream, unsigned char *buffer, int *size)
+void *avi_converter_from_avi_rgb(AviMovie *movie, int stream, unsigned char *buffer, size_t *size)
 {
-	int x, y, i, rowstride;
 	unsigned char *buf;
 	AviBitmapInfoHeader *bi;
 	short bits = 32;
-	
+
 	(void)size; /* unused */
 
 	bi = (AviBitmapInfoHeader *) movie->streams[stream].sf;
@@ -60,83 +61,86 @@ void *avi_converter_from_avi_rgb(AviMovie *movie, int stream, unsigned char *buf
 #ifdef __BIG_ENDIAN__
 		unsigned char  *pxla;
 #endif
-		
-		buf = MEM_mallocN(movie->header->Height * movie->header->Width * 3, "fromavirgbbuf");
 
-		y = movie->header->Height;
-		to = buf;
-				
-		while (y--) {
-			pxl = (unsigned short *) (buffer + y * movie->header->Width * 2);
-			
+		buf = imb_alloc_pixels(movie->header->Height, movie->header->Width, 3, sizeof(unsigned char),  "fromavirgbbuf");
+
+		if (buf) {
+			size_t y = movie->header->Height;
+			to = buf;
+
+			while (y--) {
+				pxl = (unsigned short *) (buffer + y * movie->header->Width * 2);
+
 #ifdef __BIG_ENDIAN__
-			pxla = (unsigned char *)pxl;
+				pxla = (unsigned char *)pxl;
 #endif
 
-			x = movie->header->Width;
-			while (x--) {
+				size_t x = movie->header->Width;
+				while (x--) {
 #ifdef __BIG_ENDIAN__
-				i = pxla[0];
-				pxla[0] = pxla[1];
-				pxla[1] = i;
-	
-				pxla += 2;
+					int i = pxla[0];
+					pxla[0] = pxla[1];
+					pxla[1] = i;
+
+					pxla += 2;
 #endif
-			
-				*(to++) = ((*pxl >> 10) & 0x1f) * 8;
-				*(to++) = ((*pxl >> 5) & 0x1f) * 8;
-				*(to++) = (*pxl & 0x1f) * 8;
-				pxl++;
+
+					*(to++) = ((*pxl >> 10) & 0x1f) * 8;
+					*(to++) = ((*pxl >> 5) & 0x1f) * 8;
+					*(to++) = (*pxl & 0x1f) * 8;
+					pxl++;
+				}
 			}
 		}
 
 		MEM_freeN(buffer);
-		
+
 		return buf;
 	}
 	else {
-		buf = MEM_mallocN(movie->header->Height * movie->header->Width * 3, "fromavirgbbuf");
-	
-		rowstride = movie->header->Width * 3;
-		if ((bits != 16) && (movie->header->Width % 2)) rowstride++;
-	
-		for (y = 0; y < movie->header->Height; y++) {
-			memcpy(&buf[y * movie->header->Width * 3], &buffer[((movie->header->Height - 1) - y) * rowstride], movie->header->Width * 3);
+		buf = imb_alloc_pixels(movie->header->Height, movie->header->Width, 3, sizeof(unsigned char),  "fromavirgbbuf");
+
+		if (buf) {
+			size_t rowstride = movie->header->Width * 3;
+			if ((bits != 16) && (movie->header->Width % 2)) rowstride++;
+
+			for (size_t y = 0; y < movie->header->Height; y++) {
+				memcpy(&buf[y * movie->header->Width * 3], &buffer[((movie->header->Height - 1) - y) * rowstride], movie->header->Width * 3);
+			}
+
+			for (size_t y = 0; y < (size_t)movie->header->Height * (size_t)movie->header->Width * 3; y += 3) {
+				int i = buf[y];
+				buf[y] = buf[y + 2];
+				buf[y + 2] = i;
+			}
 		}
-	
-		for (y = 0; y < movie->header->Height * movie->header->Width * 3; y += 3) {
-			i = buf[y];
-			buf[y] = buf[y + 2];
-			buf[y + 2] = i;
-		}
-	
+
 		MEM_freeN(buffer);
-	
+
 		return buf;
 	}
 }
 
-void *avi_converter_to_avi_rgb(AviMovie *movie, int stream, unsigned char *buffer, int *size)
+void *avi_converter_to_avi_rgb(AviMovie *movie, int stream, unsigned char *buffer, size_t *size)
 {
-	int y, x, i, rowstride;
 	unsigned char *buf;
 
 	(void)stream; /* unused */
 
-	rowstride = movie->header->Width * 3;
+	size_t rowstride = movie->header->Width * 3;
 	/* AVI files has uncompressed lines 4-byte aligned */
 	rowstride = (rowstride + 3) & ~3;
 
 	*size = movie->header->Height * rowstride;
 	buf = MEM_mallocN(*size, "toavirgbbuf");
 
-	for (y = 0; y < movie->header->Height; y++) {
+	for (size_t y = 0; y < movie->header->Height; y++) {
 		memcpy(&buf[y * rowstride], &buffer[((movie->header->Height - 1) - y) * movie->header->Width * 3], movie->header->Width * 3);
 	}
 
-	for (y = 0; y < movie->header->Height; y++) {
-		for (x = 0; x < movie->header->Width * 3; x += 3) {
-			i = buf[y * rowstride + x];
+	for (size_t y = 0; y < movie->header->Height; y++) {
+		for (size_t x = 0; x < movie->header->Width * 3; x += 3) {
+			int i = buf[y * rowstride + x];
 			buf[y * rowstride + x] = buf[y * rowstride + x + 2];
 			buf[y * rowstride + x + 2] = i;
 		}

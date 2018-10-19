@@ -38,18 +38,18 @@
  * There are three main mesh data structures in Blender:
  * #Mesh, #CDDerivedMesh and #BMesh.
  *
- * These, and a few others, all implement DerivedMesh interfaces, 
- * which contains unified drawing interfaces, a few utility interfaces, 
- * and a bunch of read-only interfaces intended mostly for conversion from 
+ * These, and a few others, all implement DerivedMesh interfaces,
+ * which contains unified drawing interfaces, a few utility interfaces,
+ * and a bunch of read-only interfaces intended mostly for conversion from
  * one format to another.
  *
  * All Mesh structures in blender make use of CustomData, which is used to store
  * per-element attributes and interpolate them (e.g. uvs, vcols, vgroups, etc).
- * 
+ *
  * Mesh is the "serialized" structure, used for storing object-mode mesh data
  * and also for saving stuff to disk.  It's interfaces are also what DerivedMesh
  * uses to communicate with.
- * 
+ *
  * CDDM is a little mesh library, that uses Mesh data structures in the backend.
  * It's mostly used for modifiers, and has the advantages of not taking much
  * resources.
@@ -166,7 +166,7 @@ typedef enum DMDirtyFlag {
 	DM_DIRTY_TESS_CDLAYERS = 1 << 0,
 	/* One of the MCOL layers have been updated, force updating of GPUDrawObject's colors buffer.
 	 * This is necessary with modern, VBO draw code, as e.g. in vpaint mode me->mcol may be updated
-	 * without actually rebuilding dm (hence by defautl keeping same GPUDrawObject, and same colors
+	 * without actually rebuilding dm (hence by default keeping same GPUDrawObject, and same colors
 	 * buffer, which prevents update during a stroke!). */
 	DM_DIRTY_MCOL_UPDATE_DRAW = 1 << 1,
 
@@ -193,7 +193,9 @@ struct DerivedMesh {
 	 * \warning Typical access is done via #getLoopTriArray, #getNumLoopTri.
 	 */
 	struct {
-		struct MLoopTri *array;
+		/* WARNING! swapping between array (ready-to-be-used data) and array_wip (where data is actually computed)
+		 *          shall always be protected by same lock as one used for looptris computing. */
+		struct MLoopTri *array, *array_wip;
 		int num;
 		int num_alloc;
 	} looptris;
@@ -220,7 +222,7 @@ struct DerivedMesh {
 	/** Recalculates mesh tessellation */
 	void (*recalcTessellation)(DerivedMesh *dm);
 
-	/** Loop tessellation cache */
+	/** Loop tessellation cache (WARNING! Only call inside threading-protected code!) */
 	void (*recalcLoopTri)(DerivedMesh *dm);
 	/** accessor functions */
 	const struct MLoopTri *(*getLoopTriArray)(DerivedMesh * dm);
@@ -299,12 +301,12 @@ struct DerivedMesh {
 	CustomData *(*getTessFaceDataLayout)(DerivedMesh * dm);
 	CustomData *(*getLoopDataLayout)(DerivedMesh * dm);
 	CustomData *(*getPolyDataLayout)(DerivedMesh * dm);
-	
+
 	/** Copies all customdata for an element source into dst at index dest */
 	void (*copyFromVertCData)(DerivedMesh *dm, int source, CustomData *dst, int dest);
 	void (*copyFromEdgeCData)(DerivedMesh *dm, int source, CustomData *dst, int dest);
 	void (*copyFromFaceCData)(DerivedMesh *dm, int source, CustomData *dst, int dest);
-	
+
 	/** Optional grid access for subsurf */
 	int (*getNumGrids)(DerivedMesh *dm);
 	int (*getGridSize)(DerivedMesh *dm);
@@ -313,7 +315,7 @@ struct DerivedMesh {
 	void (*getGridKey)(DerivedMesh *dm, struct CCGKey *key);
 	DMFlagMat *(*getGridFlagMats)(DerivedMesh * dm);
 	unsigned int **(*getGridHidden)(DerivedMesh * dm);
-	
+
 
 	/** Iterate over each mapped vertex in the derived mesh, calling the
 	 * given function with the original vert and the mapped vert's new
@@ -395,7 +397,7 @@ struct DerivedMesh {
 	 * Also called for *final* editmode DerivedMeshes
 	 */
 	void (*drawEdges)(DerivedMesh *dm, bool drawLooseEdges, bool drawAllEdges);
-	
+
 	/** Draw all loose edges (edges w/ no adjoining faces) */
 	void (*drawLooseEdges)(DerivedMesh *dm);
 
@@ -476,7 +478,7 @@ struct DerivedMesh {
 	 *
 	 * NOTE: This routine is optional!
 	 */
-	void (*drawMappedEdgesInterp)(DerivedMesh *dm, 
+	void (*drawMappedEdgesInterp)(DerivedMesh *dm,
 	                              DMSetDrawOptions setDrawOptions,
 	                              DMSetDrawInterpOptions setDrawInterpOptions,
 	                              void *userData);
@@ -625,7 +627,6 @@ void DM_ensure_normals(DerivedMesh *dm);
 void DM_ensure_tessface(DerivedMesh *dm);
 
 void DM_ensure_looptri_data(DerivedMesh *dm);
-void DM_ensure_looptri(DerivedMesh *dm);
 void DM_verttri_from_looptri(MVertTri *verttri, const MLoop *mloop, const MLoopTri *looptri, int looptri_num);
 
 void DM_update_tessface_data(DerivedMesh *dm);
@@ -832,11 +833,5 @@ struct MEdge *DM_get_edge_array(struct DerivedMesh *dm, bool *r_allocated);
 struct MLoop *DM_get_loop_array(struct DerivedMesh *dm, bool *r_allocated);
 struct MPoly *DM_get_poly_array(struct DerivedMesh *dm, bool *r_allocated);
 struct MFace *DM_get_tessface_array(struct DerivedMesh *dm, bool *r_allocated);
-const MLoopTri *DM_get_looptri_array(
-        DerivedMesh *dm,
-        const MVert *mvert,
-        const MPoly *mpoly, int mpoly_len,
-        const MLoop *mloop, int mloop_len,
-        bool *r_allocated);
 
 #endif  /* __BKE_DERIVEDMESH_H__ */

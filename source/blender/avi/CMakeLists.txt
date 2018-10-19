@@ -23,9 +23,10 @@
 #
 # ***** END GPL LICENSE BLOCK *****
 
-set(INC 
+set(INC
 	.
 	../blenlib
+	../imbuf
 	../../../intern/guardedalloc
 )
 

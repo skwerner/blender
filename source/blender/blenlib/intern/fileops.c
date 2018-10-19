@@ -64,7 +64,7 @@
 #include "BLI_sys_types.h" // for intptr_t support
 
 #if 0  /* UNUSED */
-/* gzip the file in from and write it to "to". 
+/* gzip the file in from and write it to "to".
  * return -1 if zlib fails, -2 if the originating file does not exist
  * note: will remove the "from" file
  */
@@ -95,14 +95,14 @@ int BLI_file_gzip(const char *from, const char *to)
 		}
 		else if (readsize == 0)
 			break;  /* done reading */
-		
+
 		if (gzwrite(gzfile, buffer, readsize) <= 0) {
 			rval = -1; /* error happened in writing */
 			fprintf(stderr, "Error writing gz file %s: %s.\n", to, gzerror(gzfile, &err));
 			break;
 		}
 	}
-	
+
 	gzclose(gzfile);
 	close(file);
 
@@ -141,7 +141,7 @@ char *BLI_file_ungzip_to_mem(const char *from_file, int *r_size)
 			break;
 		}
 	}
-	
+
 	gzclose(gzfile);
 
 	if (size == 0) {
@@ -317,7 +317,7 @@ static bool delete_recursive(const char *dir)
 {
 	struct direntry *filelist, *fl;
 	bool err = false;
-	unsigned int nbr, i;
+	uint nbr, i;
 
 	i = nbr = BLI_filelist_dir_contents(dir, &filelist);
 	fl = filelist;
@@ -389,7 +389,7 @@ int BLI_move(const char *file, const char *to)
 			strcat(str, BLI_last_slash(file) + 1);
 		}
 	}
-	
+
 	UTF16_ENCODE(file);
 	UTF16_ENCODE(str);
 	err = !MoveFileW(file_16, str_16);
@@ -500,7 +500,7 @@ int BLI_rename(const char *from, const char *to)
 	/* make sure the filenames are different (case insensitive) before removing */
 	if (BLI_exists(to) && BLI_strcasecmp(from, to))
 		if (BLI_delete(to, false, false)) return 1;
-	
+
 	return urename(from, to);
 }
 
@@ -621,7 +621,21 @@ static int recursive_operation(const char *startfrom, const char *startto,
 			if (to)
 				join_dirfile_alloc(&to_path, &to_alloc_len, to, dirent->d_name);
 
-			if (dirent->d_type == DT_DIR) {
+			bool is_dir;
+
+#ifdef __HAIKU__
+			{
+				struct stat st_dir;
+				char filename[FILE_MAX];
+				BLI_path_join(filename, sizeof(filename), startfrom, dirent->d_name, NULL);
+				lstat(filename, &st_dir);
+				is_dir = S_ISDIR(st_dir.st_mode);
+			}
+#else
+			is_dir = (dirent->d_type == DT_DIR);
+#endif
+
+			if (is_dir) {
 				/* recursively dig into a subfolder */
 				ret = recursive_operation(from_path, to_path, callback_dir_pre, callback_file, callback_dir_post);
 			}
@@ -1019,7 +1033,7 @@ bool BLI_dir_create_recursive(const char *dirname)
 #endif
 
 	BLI_strncpy(tmp, dirname, size);
-		
+
 	/* Avoids one useless recursion in case of '/foo/bar/' path... */
 	BLI_del_slash(tmp);
 
@@ -1050,7 +1064,7 @@ int BLI_rename(const char *from, const char *to)
 	if (!BLI_exists(from)) {
 		return 1;
 	}
-	
+
 	if (BLI_exists(to))
 		if (BLI_delete(to, false, false)) return 1;
 

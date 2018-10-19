@@ -15,8 +15,8 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
- * Contributor: 
- *		Jeroen Bakker 
+ * Contributor:
+ *		Jeroen Bakker
  *		Monique Dewanchand
  */
 
@@ -64,9 +64,21 @@ void COM_execute(RenderData *rd, Scene *scene, bNodeTree *editingtree, int rende
 	/* Make sure node tree has previews.
 	 * Don't create previews in advance, this is done when adding preview operations.
 	 * Reserved preview size is determined by render output for now.
+	 *
+	 * We fit the aspect into COM_PREVIEW_SIZE x COM_PREVIEW_SIZE image to avoid
+	 * insane preview resolution, which might even overflow preview dimensions.
 	 */
-	float aspect = rd->xsch > 0 ? (float)rd->ysch / (float)rd->xsch : 1.0f;
-	BKE_node_preview_init_tree(editingtree, COM_PREVIEW_SIZE, (int)(COM_PREVIEW_SIZE * aspect), false);
+	const float aspect = rd->xsch > 0 ? (float)rd->ysch / (float)rd->xsch : 1.0f;
+	int preview_width, preview_height;
+	if (aspect < 1.0f) {
+		preview_width = COM_PREVIEW_SIZE;
+		preview_height = (int)(COM_PREVIEW_SIZE * aspect);
+	}
+	else {
+		preview_width = (int)(COM_PREVIEW_SIZE / aspect);
+		preview_height = COM_PREVIEW_SIZE;
+	}
+	BKE_node_preview_init_tree(editingtree, preview_width, preview_height, false);
 
 	/* initialize workscheduler, will check if already done. TODO deinitialize somewhere */
 	bool use_opencl = (editingtree->flag & NTREE_COM_OPENCL) != 0;
@@ -76,13 +88,13 @@ void COM_execute(RenderData *rd, Scene *scene, bNodeTree *editingtree, int rende
 	editingtree->progress(editingtree->prh, 0.0);
 	editingtree->stats_draw(editingtree->sdh, IFACE_("Compositing"));
 
-	bool twopass = (editingtree->flag & NTREE_TWO_PASS) > 0 && !rendering;
+	bool twopass = (editingtree->flag & NTREE_TWO_PASS) && !rendering;
 	/* initialize execution system */
 	if (twopass) {
 		ExecutionSystem *system = new ExecutionSystem(rd, scene, editingtree, rendering, twopass, viewSettings, displaySettings, viewName);
 		system->execute();
 		delete system;
-		
+
 		if (editingtree->test_break(editingtree->tbh)) {
 			// during editing multiple calls to this method can be triggered.
 			// make sure one the last one will be doing the work.

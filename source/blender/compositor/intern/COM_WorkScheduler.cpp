@@ -15,8 +15,8 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
- * Contributor: 
- *		Jeroen Bakker 
+ * Contributor:
+ *		Jeroen Bakker
  *		Monique Dewanchand
  */
 
@@ -49,25 +49,25 @@
 #endif
 
 
-/// @brief list of all CPUDevices. for every hardware thread an instance of CPUDevice is created
+/// \brief list of all CPUDevices. for every hardware thread an instance of CPUDevice is created
 static vector<CPUDevice*> g_cpudevices;
 static ThreadLocal(CPUDevice *) g_thread_device;
 
 #if COM_CURRENT_THREADING_MODEL == COM_TM_QUEUE
-/// @brief list of all thread for every CPUDevice in cpudevices a thread exists
+/// \brief list of all thread for every CPUDevice in cpudevices a thread exists
 static ListBase g_cputhreads;
 static bool g_cpuInitialized = false;
-/// @brief all scheduled work for the cpu
+/// \brief all scheduled work for the cpu
 static ThreadQueue *g_cpuqueue;
 static ThreadQueue *g_gpuqueue;
 #ifdef COM_OPENCL_ENABLED
 static cl_context g_context;
 static cl_program g_program;
-/// @brief list of all OpenCLDevices. for every OpenCL GPU device an instance of OpenCLDevice is created
+/// \brief list of all OpenCLDevices. for every OpenCL GPU device an instance of OpenCLDevice is created
 static vector<OpenCLDevice *> g_gpudevices;
-/// @brief list of all thread for every GPUDevice in cpudevices a thread exists
+/// \brief list of all thread for every GPUDevice in cpudevices a thread exists
 static ListBase g_gputhreads;
-/// @brief all scheduled work for the gpu
+/// \brief all scheduled work for the gpu
 #ifdef COM_OPENCL_ENABLED
 static bool g_openclActive = false;
 static bool g_openclInitialized = false;
@@ -85,7 +85,7 @@ void *WorkScheduler::thread_execute_cpu(void *data)
 		device->execute(work);
 		delete work;
 	}
-	
+
 	return NULL;
 }
 
@@ -93,12 +93,12 @@ void *WorkScheduler::thread_execute_gpu(void *data)
 {
 	Device *device = (Device *)data;
 	WorkPackage *work;
-	
+
 	while ((work = (WorkPackage *)BLI_thread_queue_pop(g_gpuqueue))) {
 		device->execute(work);
 		delete work;
 	}
-	
+
 	return NULL;
 }
 #endif
@@ -131,18 +131,18 @@ void WorkScheduler::start(CompositorContext &context)
 #if COM_CURRENT_THREADING_MODEL == COM_TM_QUEUE
 	unsigned int index;
 	g_cpuqueue = BLI_thread_queue_init();
-	BLI_init_threads(&g_cputhreads, thread_execute_cpu, g_cpudevices.size());
+	BLI_threadpool_init(&g_cputhreads, thread_execute_cpu, g_cpudevices.size());
 	for (index = 0; index < g_cpudevices.size(); index++) {
 		Device *device = g_cpudevices[index];
-		BLI_insert_thread(&g_cputhreads, device);
+		BLI_threadpool_insert(&g_cputhreads, device);
 	}
 #ifdef COM_OPENCL_ENABLED
 	if (context.getHasActiveOpenCLDevices()) {
 		g_gpuqueue = BLI_thread_queue_init();
-		BLI_init_threads(&g_gputhreads, thread_execute_gpu, g_gpudevices.size());
+		BLI_threadpool_init(&g_gputhreads, thread_execute_gpu, g_gpudevices.size());
 		for (index = 0; index < g_gpudevices.size(); index++) {
 			Device *device = g_gpudevices[index];
-			BLI_insert_thread(&g_gputhreads, device);
+			BLI_threadpool_insert(&g_gputhreads, device);
 		}
 		g_openclActive = true;
 	}
@@ -172,13 +172,13 @@ void WorkScheduler::stop()
 {
 #if COM_CURRENT_THREADING_MODEL == COM_TM_QUEUE
 	BLI_thread_queue_nowait(g_cpuqueue);
-	BLI_end_threads(&g_cputhreads);
+	BLI_threadpool_end(&g_cputhreads);
 	BLI_thread_queue_free(g_cpuqueue);
 	g_cpuqueue = NULL;
 #ifdef COM_OPENCL_ENABLED
 	if (g_openclActive) {
 		BLI_thread_queue_nowait(g_gpuqueue);
-		BLI_end_threads(&g_gputhreads);
+		BLI_threadpool_end(&g_gputhreads);
 		BLI_thread_queue_free(g_gpuqueue);
 		g_gpuqueue = NULL;
 	}

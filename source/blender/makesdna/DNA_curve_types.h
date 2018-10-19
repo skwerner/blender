@@ -87,14 +87,12 @@ typedef struct BevList {
 	int charidx;
 	int *segbevcount;
 	float *seglen;
-
-	/* over-alloc */
-	BevPoint bevpoints[0];
+	BevPoint *bevpoints;
 } BevList;
 
 /**
  * Keyframes on F-Curves (allows code reuse of Bezier eval code) and
- * Points on Bezier Curves/Paths are generally BezTriples 
+ * Points on Bezier Curves/Paths are generally BezTriples
  *
  * \note alfa location in struct is abused by Key system
  *
@@ -112,19 +110,20 @@ typedef struct BevList {
 typedef struct BezTriple {
 	float vec[3][3];
 	float alfa, weight, radius;	/* alfa: tilt in 3D View, weight: used for softbody goal weight, radius: for bevel tapering */
-	
+
 	char ipo;					/* ipo: interpolation mode for segment from this BezTriple to the next */
-	
+
 	char h1, h2; 				/* h1, h2: the handle type of the two handles */
 	char f1, f2, f3;			/* f1, f2, f3: used for selection status */
-	
-	char hide;					/* hide: used to indicate whether BezTriple is hidden (3D), type of keyframe (eBezTriple_KeyframeTypes) */
-	
+
+	char hide;					/* hide: used to indicate whether BezTriple is hidden (3D), type of keyframe (eBezTriple_KeyframeType) */
+
 	char easing;				/* easing: easing type for interpolation mode (eBezTriple_Easing) */
 	float back;					/* BEZT_IPO_BACK */
 	float amplitude, period;	/* BEZT_IPO_ELASTIC */
 
-	char  pad[4];
+	char f5;					/* f5: used for auto handle to distinguish between normal handle and exception (extrema) */
+	char  pad[3];
 } BezTriple;
 
 /* note; alfa location in struct is abused by Key system */
@@ -149,14 +148,14 @@ typedef struct Nurb {
 	short resolu, resolv;	/* tessellation resolution in the U or V directions */
 	short orderu, orderv;
 	short flagu, flagv;
-	
+
 	float *knotsu, *knotsv;
 	BPoint *bp;
 	BezTriple *bezt;
 
 	short tilt_interp;	/* KEY_LINEAR, KEY_CARDINAL, KEY_BSPLINE */
 	short radius_interp;
-	
+
 	/* only used for dynamically generated Nurbs created from OB_FONT's */
 	int charidx;
 } Nurb;
@@ -188,19 +187,19 @@ typedef struct EditNurb {
 
 typedef struct Curve {
 	ID id;
-	struct AnimData *adt;		/* animation data (must be immediately after id for utilities to use it) */ 
-	
+	struct AnimData *adt;		/* animation data (must be immediately after id for utilities to use it) */
+
 	struct BoundBox *bb;
-	
+
 	ListBase nurb;		/* actual data, called splines in rna */
-	
+
 	EditNurb *editnurb;	/* edited data, not in file, use pointer so we can check for it */
-	
+
 	struct Object *bevobj, *taperobj, *textoncurve;
 	struct Ipo *ipo    DNA_DEPRECATED;  /* old animation system, deprecated for 2.5 */
 	struct Key *key;
 	struct Material **mat;
-	
+
 	/* texture space, copied as one block in editobject.c */
 	float loc[3];
 	float size[3];
@@ -216,7 +215,7 @@ typedef struct Curve {
 	short bevresol, totcol;
 	int flag;
 	float width, ext1, ext2;
-	
+
 	/* default */
 	short resolu, resolv;
 	short resolu_ren, resolv_ren;
@@ -251,10 +250,10 @@ typedef struct Curve {
 	struct VFont *vfontb;
 	struct VFont *vfonti;
 	struct VFont *vfontbi;
-	
+
 	struct TextBox *tb;
 	int totbox, actbox;
-	
+
 	struct CharInfo *strinfo;
 	struct CharInfo curinfo;
 	/* font part end */
@@ -379,6 +378,12 @@ enum {
 
 /* *************** BEZTRIPLE **************** */
 
+/* BezTriple.f1,2,3 */
+typedef enum eBezTriple_Flag {
+	/* SELECT */
+	BEZT_FLAG_TEMP_TAG = (1 << 1),  /* always clear. */
+} eBezTriple_Flag;
+
 /* h1 h2 (beztriple) */
 typedef enum eBezTriple_Handle {
 	HD_FREE = 0,
@@ -389,13 +394,19 @@ typedef enum eBezTriple_Handle {
 	HD_ALIGN_DOUBLESIDE = 5,  /* align handles, displayed both of them. used for masks */
 } eBezTriple_Handle;
 
+/* f5 (beztriple) */
+typedef enum eBezTriple_Auto_Type {
+	HD_AUTOTYPE_NORMAL = 0,
+	HD_AUTOTYPE_SPECIAL = 1
+} eBezTriple_Auto_Type;
+
 /* interpolation modes (used only for BezTriple->ipo) */
 typedef enum eBezTriple_Interpolation {
 	/* traditional interpolation */
 	BEZT_IPO_CONST = 0, /* constant interpolation */
 	BEZT_IPO_LIN = 1,   /* linear interpolation */
 	BEZT_IPO_BEZ = 2,   /* bezier interpolation */
-	
+
 	/* easing equations */
 	BEZT_IPO_BACK = 3,
 	BEZT_IPO_BOUNCE = 4,
@@ -412,7 +423,7 @@ typedef enum eBezTriple_Interpolation {
 /* easing modes (used only for Keyframes - BezTriple->easing) */
 typedef enum eBezTriple_Easing {
 	BEZT_IPO_EASE_AUTO = 0,
-	
+
 	BEZT_IPO_EASE_IN = 1,
 	BEZT_IPO_EASE_OUT = 2,
 	BEZT_IPO_EASE_IN_OUT = 3,
@@ -436,6 +447,8 @@ typedef enum eBezTriple_KeyframeType {
 #define BEZT_SEL_ALL(bezt)    { (bezt)->f1 |=  SELECT; (bezt)->f2 |=  SELECT; (bezt)->f3 |=  SELECT; } ((void)0)
 #define BEZT_DESEL_ALL(bezt)  { (bezt)->f1 &= ~SELECT; (bezt)->f2 &= ~SELECT; (bezt)->f3 &= ~SELECT; } ((void)0)
 
+#define BEZT_IS_AUTOH(bezt)   (ELEM((bezt)->h1, HD_AUTO, HD_AUTO_ANIM) && ELEM((bezt)->h2, HD_AUTO, HD_AUTO_ANIM))
+
 /* *************** CHARINFO **************** */
 
 /* CharInfo.flag */
@@ -456,4 +469,3 @@ enum {
 #define SURF_SEEN			4
 
 #endif
-

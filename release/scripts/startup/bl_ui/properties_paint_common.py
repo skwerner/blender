@@ -126,7 +126,7 @@ def brush_texpaint_common(panel, context, layout, brush, settings, projpaint=Fal
                     col.prop(brush, "gradient_stroke_mode", text="Mode")
                     if brush.gradient_stroke_mode in {'SPACING_REPEAT', 'SPACING_CLAMP'}:
                         col.prop(brush, "grad_spacing")
-                else: # if brush.image_tool == 'FILL':
+                else:  # if brush.image_tool == 'FILL':
                     col.prop(brush, "gradient_fill_mode")
             else:
                 row = col.row(align=True)
@@ -157,9 +157,9 @@ def brush_texpaint_common(panel, context, layout, brush, settings, projpaint=Fal
         col.separator()
         if projpaint:
             if settings.mode == 'MATERIAL':
-                col.prop(settings, "use_clone_layer", text="Clone from paint slot")
+                col.prop(settings, "use_clone_layer", text="Clone from Paint Slot")
             elif settings.mode == 'IMAGE':
-                col.prop(settings, "use_clone_layer", text="Clone from image/UV map")
+                col.prop(settings, "use_clone_layer", text="Clone from Image/UV Map")
 
             if settings.use_clone_layer:
                 ob = context.active_object

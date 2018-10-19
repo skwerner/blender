@@ -1,11 +1,10 @@
 /*
-
  * ***** BEGIN GPL LICENSE BLOCK *****
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version. 
+ * of the License, or (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -115,11 +114,11 @@ void RE_engines_exit(void)
 RenderEngineType *RE_engines_find(const char *idname)
 {
 	RenderEngineType *type;
-	
+
 	type = BLI_findstring(&R_engines, idname, offsetof(RenderEngineType, idname));
 	if (!type)
 		type = &internal_render_type;
-	
+
 	return type;
 }
 
@@ -144,7 +143,7 @@ RenderEngine *RE_engine_create_ex(RenderEngineType *type, bool use_for_viewport)
 	if (use_for_viewport) {
 		engine->flag |= RE_ENGINE_USED_FOR_VIEWPORT;
 
-		BLI_begin_threaded_malloc();
+		BLI_threaded_malloc_begin();
 	}
 
 	return engine;
@@ -159,7 +158,7 @@ void RE_engine_free(RenderEngine *engine)
 #endif
 
 	if (engine->flag & RE_ENGINE_USED_FOR_VIEWPORT) {
-		BLI_end_threaded_malloc();
+		BLI_threaded_malloc_end();
 	}
 
 	MEM_freeN(engine);
@@ -259,7 +258,7 @@ void RE_engine_add_pass(RenderEngine *engine, const char *name, int channels, co
 	render_result_add_pass(re->result, name, channels, chan_id, layername, NULL);
 }
 
-void RE_engine_end_result(RenderEngine *engine, RenderResult *result, int cancel, int highlight, int merge_results)
+void RE_engine_end_result(RenderEngine *engine, RenderResult *result, bool cancel, bool highlight, bool merge_results)
 {
 	Render *re = engine->re;
 
@@ -273,7 +272,7 @@ void RE_engine_end_result(RenderEngine *engine, RenderResult *result, int cancel
 		RenderPart *pa = get_part_from_result(re, result);
 
 		if (pa) {
-			pa->status = PART_STATUS_READY;
+			pa->status = (!cancel && merge_results)? PART_STATUS_MERGED: PART_STATUS_RENDERED;
 		}
 		else if (re->result->do_exr_tile) {
 			/* if written result does not match any tile and we are using save
@@ -284,7 +283,7 @@ void RE_engine_end_result(RenderEngine *engine, RenderResult *result, int cancel
 
 	if (!cancel || merge_results) {
 		if (re->result->do_exr_tile) {
-			if (!cancel) {
+			if (!cancel && merge_results) {
 				render_result_exr_file_merge(re->result, result, re->viewname);
 			}
 		}
@@ -303,15 +302,20 @@ void RE_engine_end_result(RenderEngine *engine, RenderResult *result, int cancel
 	render_result_free(result);
 }
 
+RenderResult *RE_engine_get_result(RenderEngine *engine)
+{
+	return engine->re->result;
+}
+
 /* Cancel */
 
-int RE_engine_test_break(RenderEngine *engine)
+bool RE_engine_test_break(RenderEngine *engine)
 {
 	Render *re = engine->re;
 
 	if (re)
 		return re->test_break(re->tbh);
-	
+
 	return 0;
 }
 
@@ -398,7 +402,7 @@ void RE_engine_active_view_set(RenderEngine *engine, const char *viewname)
 	RE_SetActiveRenderView(re, viewname);
 }
 
-float RE_engine_get_camera_shift_x(RenderEngine *engine, Object *camera, int use_spherical_stereo)
+float RE_engine_get_camera_shift_x(RenderEngine *engine, Object *camera, bool use_spherical_stereo)
 {
 	Render *re = engine->re;
 
@@ -409,7 +413,7 @@ float RE_engine_get_camera_shift_x(RenderEngine *engine, Object *camera, int use
 	return BKE_camera_multiview_shift_x(re ? &re->r : NULL, camera, re->viewname);
 }
 
-void RE_engine_get_camera_model_matrix(RenderEngine *engine, Object *camera, int use_spherical_stereo, float *r_modelmat)
+void RE_engine_get_camera_model_matrix(RenderEngine *engine, Object *camera, bool use_spherical_stereo, float *r_modelmat)
 {
 	Render *re = engine->re;
 
@@ -420,7 +424,7 @@ void RE_engine_get_camera_model_matrix(RenderEngine *engine, Object *camera, int
 	BKE_camera_multiview_model_matrix(re ? &re->r : NULL, camera, re->viewname, (float (*)[4])r_modelmat);
 }
 
-int RE_engine_get_spherical_stereo(RenderEngine *engine, Object *camera)
+bool RE_engine_get_spherical_stereo(RenderEngine *engine, Object *camera)
 {
 	Render *re = engine->re;
 	return BKE_camera_multiview_spherical_stereo(re ? &re->r : NULL, camera) ? 1 : 0;
@@ -449,7 +453,7 @@ rcti* RE_engine_get_current_tiles(Render *re, int *r_total_tiles, bool *r_needs_
 		if (pa->status == PART_STATUS_IN_PROGRESS) {
 			if (total_tiles >= allocation_size) {
 				/* Just in case we're using crazy network rendering with more
-				 * slaves as BLENDER_MAX_THREADS.
+				 * workers than BLENDER_MAX_THREADS.
 				 */
 				allocation_size += allocation_step;
 				if (tiles == tiles_static) {
@@ -503,7 +507,7 @@ bool RE_bake_engine(
         Render *re, Object *object,
         const int object_id, const BakePixel pixel_array[],
         const size_t num_pixels, const int depth,
-        const ScenePassType pass_type, const int pass_filter,
+        const eScenePassType pass_type, const int pass_filter,
         float result[])
 {
 	RenderEngineType *type = RE_engines_find(re->r.engine);
@@ -765,7 +769,7 @@ int RE_engine_render(Render *re, int do_all)
 
 	if (BKE_reports_contain(re->reports, RPT_ERROR))
 		G.is_break = true;
-	
+
 #ifdef WITH_FREESTYLE
 	if (re->r.mode & R_EDGE_FRS)
 		RE_RenderFreestyleExternal(re);
@@ -786,8 +790,9 @@ void RE_engine_register_pass(struct RenderEngine *engine, struct Scene *scene, s
 	/* Register the pass in all scenes that have a render layer node for this layer.
 	 * Since multiple scenes can be used in the compositor, the code must loop over all scenes
 	 * and check whether their nodetree has a node that needs to be updated. */
-	Scene *sce;
-	for (sce = G.main->scene.first; sce; sce = sce->id.next) {
+	/* NOTE: using G_MAIN seems valid here,
+	 * unless we want to register that for every other temp Main we could generate??? */
+	for (Scene *sce = G_MAIN->scene.first; sce; sce = sce->id.next) {
 		if (sce->nodetree) {
 			ntreeCompositRegisterPass(sce->nodetree, scene, srl, name, type);
 		}

@@ -41,7 +41,7 @@
 #include "BLI_math.h"
 
 #include "BKE_DerivedMesh.h"
-#include "BKE_texture.h"
+#include "BKE_colorband.h"
 #include "BKE_particle.h"
 
 #include "smoke_API.h"
@@ -112,7 +112,7 @@ static void create_flame_spectrum_texture(float *data)
 static void create_color_ramp(const ColorBand *coba, float *data)
 {
 	for (int i = 0; i < TFUNC_WIDTH; i++) {
-		do_colorband(coba, (float)i / TFUNC_WIDTH, &data[i * 4]);
+		BKE_colorband_evaluate(coba, (float)i / TFUNC_WIDTH, &data[i * 4]);
 	}
 }
 
@@ -297,7 +297,7 @@ static int create_view_aligned_slices(VolumeSlicer *slicer,
 	float plane_dist = min_dist;
 	float plane_dist_inc = (max_dist - min_dist) / (float)num_slices;
 
-	/* for all egdes */
+	/* for all edges */
 	for (int i = 0; i < 12; i++) {
 		copy_v3_v3(vec_start[i], vertices[edges[edge_list[max_index][i]][0]]);
 		copy_v3_v3(vec_dir[i],   vertices[edges[edge_list[max_index][i]][1]]);

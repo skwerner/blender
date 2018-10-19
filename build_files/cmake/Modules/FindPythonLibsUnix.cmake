@@ -38,7 +38,7 @@ IF(NOT PYTHON_ROOT_DIR AND NOT $ENV{PYTHON_ROOT_DIR} STREQUAL "")
   SET(PYTHON_ROOT_DIR $ENV{PYTHON_ROOT_DIR})
 ENDIF()
 
-SET(PYTHON_VERSION 3.5 CACHE STRING "Python Version (major and minor only)")
+SET(PYTHON_VERSION 3.7 CACHE STRING "Python Version (major and minor only)")
 MARK_AS_ADVANCED(PYTHON_VERSION)
 
 
@@ -75,17 +75,14 @@ SET(_python_SEARCH_DIRS
   "/opt/lib/python-${PYTHON_VERSION}"
 )
 
-# only search for the dirs if we havn't already
+# only search for the dirs if we haven't already
 IF((NOT _IS_INC_DEF) OR (NOT _IS_INC_CONF_DEF) OR (NOT _IS_LIB_DEF) OR (NOT _IS_LIB_PATH_DEF))
-
-  SET(_python_ABI_FLAGS
+  SET(_PYTHON_ABI_FLAGS_TEST
     "m;mu;u; "    # release
     "dm;dmu;du;d" # debug
   )
 
-
-
-  FOREACH(_CURRENT_ABI_FLAGS ${_python_ABI_FLAGS})
+  FOREACH(_CURRENT_ABI_FLAGS ${_PYTHON_ABI_FLAGS_TEST})
     #IF(CMAKE_BUILD_TYPE STREQUAL Debug)
     #  SET(_CURRENT_ABI_FLAGS "d${_CURRENT_ABI_FLAGS}")
     #ENDIF()
@@ -170,7 +167,7 @@ IF((NOT _IS_INC_DEF) OR (NOT _IS_INC_CONF_DEF) OR (NOT _IS_LIB_DEF) OR (NOT _IS_
   UNSET(_CURRENT_ABI_FLAGS)
   UNSET(_CURRENT_PATH)
 
-  UNSET(_python_ABI_FLAGS)
+  UNSET(_PYTHON_ABI_FLAGS_TEST)
 ENDIF()
 
 UNSET(_IS_INC_DEF)
@@ -178,7 +175,7 @@ UNSET(_IS_INC_CONF_DEF)
 UNSET(_IS_LIB_DEF)
 UNSET(_IS_LIB_PATH_DEF)
 
-# handle the QUIETLY and REQUIRED arguments and SET PYTHONLIBSUNIX_FOUND to TRUE IF 
+# handle the QUIETLY and REQUIRED arguments and SET PYTHONLIBSUNIX_FOUND to TRUE IF
 # all listed variables are TRUE
 INCLUDE(FindPackageHandleStandardArgs)
 FIND_PACKAGE_HANDLE_STANDARD_ARGS(PythonLibsUnix  DEFAULT_MSG

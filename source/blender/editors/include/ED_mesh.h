@@ -4,7 +4,7 @@
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version. 
+ * of the License, or (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -18,7 +18,7 @@
  * The Original Code is Copyright (C) 2008 Blender Foundation.
  * All rights reserved.
  *
- * 
+ *
  * Contributor(s): Blender Foundation
  *
  * ***** END GPL LICENSE BLOCK *****
@@ -47,6 +47,7 @@ struct bDeformGroup;
 struct MDeformVert;
 struct Scene;
 struct Mesh;
+struct MTexPoly;
 struct UvVertMap;
 struct UvMapVert;
 struct BMEditMesh;
@@ -61,6 +62,7 @@ struct UvMapVert;
 struct ToolSettings;
 struct Object;
 struct rcti;
+struct UndoType;
 
 /* editmesh_utils.c */
 void           EDBM_verts_mirror_cache_begin_ex(struct BMEditMesh *em, const int axis,
@@ -75,14 +77,13 @@ struct BMFace *EDBM_verts_mirror_get_face(struct BMEditMesh *em, struct BMFace *
 void           EDBM_verts_mirror_cache_clear(struct BMEditMesh *em, struct BMVert *v);
 void           EDBM_verts_mirror_cache_end(struct BMEditMesh *em);
 
-void EDBM_mesh_ensure_valid_dm_hack(struct Scene *scene, struct BMEditMesh *em);
 void EDBM_mesh_normals_update(struct BMEditMesh *em);
 void EDBM_mesh_clear(struct BMEditMesh *em);
 
 void EDBM_selectmode_to_scene(struct bContext *C);
-void EDBM_mesh_make(struct ToolSettings *ts, struct Object *ob, const bool add_key_index);
+void EDBM_mesh_make(struct Object *ob, const int select_mode, const bool add_key_index);
 void EDBM_mesh_free(struct BMEditMesh *em);
-void EDBM_mesh_load(struct Object *ob);
+void EDBM_mesh_load(struct Main *bmain, struct Object *ob);
 struct DerivedMesh *EDBM_mesh_deform_dm_get(struct BMEditMesh *em);
 
 /* flushes based on the current select mode.  if in vertex select mode,
@@ -98,12 +99,10 @@ void EDBM_selectmode_flush(struct BMEditMesh *em);
 void EDBM_deselect_flush(struct BMEditMesh *em);
 void EDBM_select_flush(struct BMEditMesh *em);
 
-void undo_push_mesh(struct bContext *C, const char *name);
-
 bool EDBM_vert_color_check(struct BMEditMesh *em);
 
 void EDBM_mesh_hide(struct BMEditMesh *em, bool swap);
-void EDBM_mesh_reveal(struct BMEditMesh *em);
+void EDBM_mesh_reveal(struct BMEditMesh *em, bool select);
 
 void EDBM_update_generic(struct BMEditMesh *em, const bool do_tessface, const bool is_destructive);
 
@@ -113,8 +112,10 @@ struct UvElementMap *BM_uv_element_map_create(
 void                 BM_uv_element_map_free(struct UvElementMap *vmap);
 struct UvElement    *BM_uv_element_get(struct UvElementMap *map, struct BMFace *efa, struct BMLoop *l);
 
-bool             EDBM_mtexpoly_check(struct BMEditMesh *em);
-struct MTexPoly *EDBM_mtexpoly_active_get(struct BMEditMesh *em, struct BMFace **r_act_efa, const bool sloppy, const bool selected);
+bool           EDBM_uv_check(struct BMEditMesh *em);
+struct BMFace *EDBM_uv_active_face_get(
+        struct BMEditMesh *em, const bool sloppy, const bool selected,
+        struct MTexPoly **r_tf);
 
 void              BM_uv_vert_map_free(struct UvVertMap *vmap);
 struct UvMapVert *BM_uv_vert_map_at_index(struct UvVertMap *vmap, unsigned int v);
@@ -128,6 +129,9 @@ void EDBM_flag_disable_all(struct BMEditMesh *em, const char hflag);
 bool BMBVH_EdgeVisible(struct BMBVHTree *tree, struct BMEdge *e,
                        struct ARegion *ar, struct View3D *v3d, struct Object *obedit);
 
+/* editmesh_undo.c */
+void ED_mesh_undosys_type(struct UndoType *ut);
+
 /* editmesh_select.c */
 void EDBM_select_mirrored(
         struct BMEditMesh *em, const int axis, const bool extend,
@@ -138,8 +142,9 @@ bool EDBM_backbuf_border_init(struct ViewContext *vc, short xmin, short ymin, sh
 bool EDBM_backbuf_check(unsigned int index);
 void EDBM_backbuf_free(void);
 
-bool EDBM_backbuf_border_mask_init(struct ViewContext *vc, const int mcords[][2], short tot,
-                                   short xmin, short ymin, short xmax, short ymax);
+bool EDBM_backbuf_border_mask_init(
+        struct ViewContext *vc, const int mcords[][2], short tot,
+        short xmin, short ymin, short xmax, short ymax);
 bool EDBM_backbuf_circle_init(struct ViewContext *vc, short xs, short ys, short rads);
 
 struct BMVert *EDBM_vert_find_nearest_ex(
@@ -193,7 +198,7 @@ void        ED_operatormacros_mesh(void);
 void        ED_keymap_mesh(struct wmKeyConfig *keyconf);
 
 /* editmesh_tools.c (could be moved) */
-void EMBM_project_snap_verts(struct bContext *C, struct ARegion *ar, struct BMEditMesh *em);
+void EDBM_project_snap_verts(struct bContext *C, struct ARegion *ar, struct BMEditMesh *em);
 
 
 /* editface.c */
@@ -205,7 +210,7 @@ void paintface_select_linked(struct bContext *C, struct Object *ob, const int mv
 bool paintface_minmax(struct Object *ob, float r_min[3], float r_max[3]);
 
 void paintface_hide(struct Object *ob, const bool unselected);
-void paintface_reveal(struct Object *ob);
+void paintface_reveal(struct Object *ob, const bool select);
 
 void paintvert_deselect_all_visible(struct Object *ob, int action, bool flush_flags);
 void paintvert_select_ungrouped(struct Object *ob, bool extend, bool flush_flags);
@@ -219,9 +224,11 @@ typedef struct MirrTopoStore_t {
 	int prev_ob_mode;
 } MirrTopoStore_t;
 
-bool ED_mesh_mirrtopo_recalc_check(struct Mesh *me, struct DerivedMesh *dm, const int ob_mode, MirrTopoStore_t *mesh_topo_store);
-void ED_mesh_mirrtopo_init(struct Mesh *me, struct DerivedMesh *dm, const int ob_mode, MirrTopoStore_t *mesh_topo_store,
-                           const bool skip_em_vert_array_init);
+bool ED_mesh_mirrtopo_recalc_check(
+        struct Mesh *me, struct DerivedMesh *dm, const int ob_mode, MirrTopoStore_t *mesh_topo_store);
+void ED_mesh_mirrtopo_init(
+        struct Mesh *me, struct DerivedMesh *dm, const int ob_mode, MirrTopoStore_t *mesh_topo_store,
+        const bool skip_em_vert_array_init);
 void ED_mesh_mirrtopo_free(MirrTopoStore_t *mesh_topo_store);
 
 
@@ -273,7 +280,7 @@ void ED_mesh_edges_remove(struct Mesh *mesh, struct ReportList *reports, int cou
 void ED_mesh_vertices_remove(struct Mesh *mesh, struct ReportList *reports, int count);
 
 void ED_mesh_calc_tessface(struct Mesh *mesh, bool free_mpoly);
-void ED_mesh_update(struct Mesh *mesh, struct bContext *C, int calc_edges, int calc_tessface);
+void ED_mesh_update(struct Mesh *mesh, struct bContext *C, bool calc_edges, bool calc_tessface);
 
 void ED_mesh_uv_texture_ensure(struct Mesh *me, const char *name);
 int  ED_mesh_uv_texture_add(struct Mesh *me, const char *name, const bool active_set);
@@ -282,6 +289,7 @@ bool ED_mesh_uv_texture_remove_active(struct Mesh *me);
 bool ED_mesh_uv_texture_remove_named(struct Mesh *me, const char *name);
 void ED_mesh_uv_loop_reset(struct bContext *C, struct Mesh *me);
 void ED_mesh_uv_loop_reset_ex(struct Mesh *me, const int layernum);
+bool ED_mesh_color_ensure(struct Mesh *me, const char *name);
 int  ED_mesh_color_add(struct Mesh *me, const char *name, const bool active_set);
 bool ED_mesh_color_remove_index(struct Mesh *me, const int n);
 bool ED_mesh_color_remove_active(struct Mesh *me);

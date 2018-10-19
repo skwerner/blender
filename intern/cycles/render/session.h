@@ -45,7 +45,6 @@ public:
 	DeviceInfo device;
 	bool background;
 	bool progressive_refine;
-	string output_path;
 
 	bool progressive;
 	bool experimental;
@@ -53,6 +52,7 @@ public:
 	int2 tile_size;
 	TileOrder tile_order;
 	int start_resolution;
+	int pixel_size;
 	int threads;
 
 	bool display_buffer_linear;
@@ -70,17 +70,22 @@ public:
 
 	ShadingSystem shadingsystem;
 
+	function<bool(const uchar *pixels,
+	              int width,
+	              int height,
+	              int channels)> write_render_cb;
+
 	SessionParams()
 	{
 		background = false;
 		progressive_refine = false;
-		output_path = "";
 
 		progressive = false;
 		experimental = false;
 		samples = INT_MAX;
 		tile_size = make_int2(64, 64);
 		start_resolution = INT_MAX;
+		pixel_size = 1;
 		threads = 0;
 
 		use_denoising = false;
@@ -104,12 +109,12 @@ public:
 	{ return !(device == params.device
 		&& background == params.background
 		&& progressive_refine == params.progressive_refine
-		&& output_path == params.output_path
 		/* && samples == params.samples */
 		&& progressive == params.progressive
 		&& experimental == params.experimental
 		&& tile_size == params.tile_size
 		&& start_resolution == params.start_resolution
+		&& pixel_size == params.pixel_size
 		&& threads == params.threads
 		&& display_buffer_linear == params.display_buffer_linear
 		&& cancel_timeout == params.cancel_timeout
@@ -218,8 +223,6 @@ protected:
 	double last_update_time;
 	bool update_progressive_refine(bool cancel);
 
-	vector<RenderTile> render_tiles;
-
 	DeviceRequestedFeatures get_requested_device_features();
 
 	/* ** Split kernel routines ** */
@@ -234,4 +237,3 @@ protected:
 CCL_NAMESPACE_END
 
 #endif /* __SESSION_H__ */
-

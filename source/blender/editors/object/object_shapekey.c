@@ -35,7 +35,7 @@
 #include <unistd.h>
 #else
 #include <io.h>
-#endif   
+#endif
 
 #include "MEM_guardedalloc.h"
 
@@ -76,8 +76,9 @@
 
 static void ED_object_shape_key_add(bContext *C, Object *ob, const bool from_mix)
 {
+	Main *bmain = CTX_data_main(C);
 	KeyBlock *kb;
-	if ((kb = BKE_object_shapekey_insert(ob, NULL, from_mix))) {
+	if ((kb = BKE_object_shapekey_insert(bmain, ob, NULL, from_mix))) {
 		Key *key = BKE_key_from_object(ob);
 		/* for absolute shape keys, new keys may not be added last */
 		ob->shapenr = BLI_findindex(&key->block, kb) + 1;
@@ -117,7 +118,7 @@ static bool object_shape_key_mirror(bContext *C, Object *ob,
 	key = BKE_key_from_object(ob);
 	if (key == NULL)
 		return 0;
-	
+
 	kb = BLI_findlink(&key->block, ob->shapenr - 1);
 
 	if (kb) {
@@ -209,7 +210,7 @@ static bool object_shape_key_mirror(bContext *C, Object *ob,
 
 		MEM_freeN(tag_elem);
 	}
-	
+
 	*r_totmirr = totmirr;
 	*r_totfail = totfail;
 
@@ -221,40 +222,40 @@ static bool object_shape_key_mirror(bContext *C, Object *ob,
 
 /********************** shape key operators *********************/
 
-static int shape_key_mode_poll(bContext *C)
+static bool shape_key_mode_poll(bContext *C)
 {
 	Object *ob = ED_object_context(C);
 	ID *data = (ob) ? ob->data : NULL;
-	return (ob && !ID_IS_LINKED_DATABLOCK(ob) && data && !ID_IS_LINKED_DATABLOCK(data) && ob->mode != OB_MODE_EDIT);
+	return (ob && !ID_IS_LINKED(ob) && data && !ID_IS_LINKED(data) && ob->mode != OB_MODE_EDIT);
 }
 
-static int shape_key_mode_exists_poll(bContext *C)
+static bool shape_key_mode_exists_poll(bContext *C)
 {
 	Object *ob = ED_object_context(C);
 	ID *data = (ob) ? ob->data : NULL;
 
 	/* same as shape_key_mode_poll */
-	return (ob && !ID_IS_LINKED_DATABLOCK(ob) && data && !ID_IS_LINKED_DATABLOCK(data) && ob->mode != OB_MODE_EDIT) &&
+	return (ob && !ID_IS_LINKED(ob) && data && !ID_IS_LINKED(data) && ob->mode != OB_MODE_EDIT) &&
 	       /* check a keyblock exists */
 	       (BKE_keyblock_from_object(ob) != NULL);
 }
 
-static int shape_key_move_poll(bContext *C)
+static bool shape_key_move_poll(bContext *C)
 {
 	/* Same as shape_key_mode_exists_poll above, but ensure we have at least two shapes! */
 	Object *ob = ED_object_context(C);
 	ID *data = (ob) ? ob->data : NULL;
 	Key *key = BKE_key_from_object(ob);
 
-	return (ob && !ID_IS_LINKED_DATABLOCK(ob) && data && !ID_IS_LINKED_DATABLOCK(data) &&
+	return (ob && !ID_IS_LINKED(ob) && data && !ID_IS_LINKED(data) &&
 	        ob->mode != OB_MODE_EDIT && key && key->totkey > 1);
 }
 
-static int shape_key_poll(bContext *C)
+static bool shape_key_poll(bContext *C)
 {
 	Object *ob = ED_object_context(C);
 	ID *data = (ob) ? ob->data : NULL;
-	return (ob && !ID_IS_LINKED_DATABLOCK(ob) && data && !ID_IS_LINKED_DATABLOCK(data));
+	return (ob && !ID_IS_LINKED(ob) && data && !ID_IS_LINKED(data));
 }
 
 static int shape_key_add_exec(bContext *C, wmOperator *op)
@@ -276,7 +277,7 @@ void OBJECT_OT_shape_key_add(wmOperatorType *ot)
 	ot->name = "Add Shape Key";
 	ot->idname = "OBJECT_OT_shape_key_add";
 	ot->description = "Add shape key to the object";
-	
+
 	/* api callbacks */
 	ot->poll = shape_key_mode_poll;
 	ot->exec = shape_key_add_exec;
@@ -319,7 +320,7 @@ void OBJECT_OT_shape_key_remove(wmOperatorType *ot)
 	ot->name = "Remove Shape Key";
 	ot->idname = "OBJECT_OT_shape_key_remove";
 	ot->description = "Remove shape key from the object";
-	
+
 	/* api callbacks */
 	ot->poll = shape_key_mode_exists_poll;
 	ot->exec = shape_key_remove_exec;
@@ -339,13 +340,13 @@ static int shape_key_clear_exec(bContext *C, wmOperator *UNUSED(op))
 
 	if (!key || !kb)
 		return OPERATOR_CANCELLED;
-	
+
 	for (kb = key->block.first; kb; kb = kb->next)
 		kb->curval = 0.0f;
 
 	DAG_id_tag_update(&ob->id, OB_RECALC_DATA);
 	WM_event_add_notifier(C, NC_OBJECT | ND_DRAW, ob);
-	
+
 	return OPERATOR_FINISHED;
 }
 
@@ -355,7 +356,7 @@ void OBJECT_OT_shape_key_clear(wmOperatorType *ot)
 	ot->name = "Clear Shape Keys";
 	ot->description = "Clear weights for all shape keys";
 	ot->idname = "OBJECT_OT_shape_key_clear";
-	
+
 	/* api callbacks */
 	ot->poll = shape_key_poll;
 	ot->exec = shape_key_clear_exec;
@@ -375,8 +376,10 @@ static int shape_key_retime_exec(bContext *C, wmOperator *UNUSED(op))
 	if (!key || !kb)
 		return OPERATOR_CANCELLED;
 
-	for (kb = key->block.first; kb; kb = kb->next)
-		kb->pos = (cfra += 0.1f);
+	for (kb = key->block.first; kb; kb = kb->next) {
+		kb->pos = cfra;
+		cfra += 0.1f;
+	}
 
 	DAG_id_tag_update(&ob->id, OB_RECALC_DATA);
 	WM_event_add_notifier(C, NC_OBJECT | ND_DRAW, ob);
@@ -477,7 +480,7 @@ static int shape_key_move_exec(bContext *C, wmOperator *op)
 
 void OBJECT_OT_shape_key_move(wmOperatorType *ot)
 {
-	static EnumPropertyItem slot_move[] = {
+	static const EnumPropertyItem slot_move[] = {
 		{KB_MOVE_TOP, "TOP", 0, "Top", "Top of the list"},
 		{KB_MOVE_UP, "UP", 0, "Up", ""},
 		{KB_MOVE_DOWN, "DOWN", 0, "Down", ""},
@@ -499,4 +502,3 @@ void OBJECT_OT_shape_key_move(wmOperatorType *ot)
 
 	RNA_def_enum(ot->srna, "type", slot_move, 0, "Type", "");
 }
-

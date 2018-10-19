@@ -20,8 +20,6 @@
 #include "subd/subd_dice.h"
 #include "subd/subd_patch.h"
 
-#include "util/util_debug.h"
-
 CCL_NAMESPACE_BEGIN
 
 /* EdgeDice Base */
@@ -350,4 +348,3 @@ void QuadDice::dice(SubPatch& sub, EdgeFactors& ef)
 }
 
 CCL_NAMESPACE_END
-

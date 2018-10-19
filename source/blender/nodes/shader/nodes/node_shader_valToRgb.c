@@ -4,7 +4,7 @@
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version. 
+ * of the License, or (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -48,19 +48,19 @@ static void node_shader_exec_valtorgb(void *UNUSED(data), int UNUSED(thread), bN
 {
 	/* stack order in: fac */
 	/* stack order out: col, alpha */
-	
+
 	if (node->storage) {
 		float fac;
 		nodestack_get_vec(&fac, SOCK_FLOAT, in[0]);
 
-		do_colorband(node->storage, fac, out[0]->vec);
+		BKE_colorband_evaluate(node->storage, fac, out[0]->vec);
 		out[1]->vec[0] = out[0]->vec[3];
 	}
 }
 
 static void node_shader_init_valtorgb(bNodeTree *UNUSED(ntree), bNode *node)
 {
-	node->storage = add_colorband(true);
+	node->storage = BKE_colorband_add(true);
 }
 
 static int gpu_shader_valtorgb(GPUMaterial *mat, bNode *node, bNodeExecData *UNUSED(execdata), GPUNodeStack *in, GPUNodeStack *out)
@@ -68,7 +68,7 @@ static int gpu_shader_valtorgb(GPUMaterial *mat, bNode *node, bNodeExecData *UNU
 	float *array;
 	int size;
 
-	colorband_table_RGBA(node->storage, &array, &size);
+	BKE_colorband_evaluate_table_rgba(node->storage, &array, &size);
 	return GPU_stack_link(mat, "valtorgb", in, out, GPU_texture(size, array));
 }
 

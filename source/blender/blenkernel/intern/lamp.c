@@ -47,7 +47,6 @@
 #include "BKE_animsys.h"
 #include "BKE_colortools.h"
 #include "BKE_icons.h"
-#include "BKE_global.h"
 #include "BKE_lamp.h"
 #include "BKE_library.h"
 #include "BKE_library_query.h"
@@ -101,7 +100,7 @@ void BKE_lamp_init(Lamp *la)
 	la->sky_colorspace = BLI_XYZ_CIE;
 	la->sky_exposure = 1.0f;
 	la->shadow_frustum_size = 10.0f;
-	
+
 	curvemapping_initialize(la->curfalloff);
 }
 
@@ -109,59 +108,79 @@ Lamp *BKE_lamp_add(Main *bmain, const char *name)
 {
 	Lamp *la;
 
-	la =  BKE_libblock_alloc(bmain, ID_LA, name);
+	la =  BKE_libblock_alloc(bmain, ID_LA, name, 0);
 
 	BKE_lamp_init(la);
 
 	return la;
 }
 
-Lamp *BKE_lamp_copy(Main *bmain, const Lamp *la)
+/**
+ * Only copy internal data of Lamp ID from source to already allocated/initialized destination.
+ * You probably nerver want to use that directly, use id_copy or BKE_id_copy_ex for typical needs.
+ *
+ * WARNING! This function will not handle ID user count!
+ *
+ * \param flag  Copying options (see BKE_library.h's LIB_ID_COPY_... flags for more).
+ */
+void BKE_lamp_copy_data(Main *bmain, Lamp *la_dst, const Lamp *la_src, const int flag)
 {
-	Lamp *lan;
-	int a;
-	
-	lan = BKE_libblock_copy(bmain, &la->id);
-
-	for (a = 0; a < MAX_MTEX; a++) {
-		if (lan->mtex[a]) {
-			lan->mtex[a] = MEM_mallocN(sizeof(MTex), "copylamptex");
-			memcpy(lan->mtex[a], la->mtex[a], sizeof(MTex));
-			id_us_plus((ID *)lan->mtex[a]->tex);
+	for (int a = 0; a < MAX_MTEX; a++) {
+		if (la_dst->mtex[a]) {
+			la_dst->mtex[a] = MEM_mallocN(sizeof(*la_dst->mtex[a]), __func__);
+			*la_dst->mtex[a] = *la_src->mtex[a];
 		}
 	}
-	
-	lan->curfalloff = curvemapping_copy(la->curfalloff);
 
-	if (la->nodetree)
-		lan->nodetree = ntreeCopyTree(bmain, la->nodetree);
+	la_dst->curfalloff = curvemapping_copy(la_src->curfalloff);
 
-	BKE_previewimg_id_copy(&lan->id, &la->id);
+	if (la_src->nodetree) {
+		/* Note: nodetree is *not* in bmain, however this specific case is handled at lower level
+		 *       (see BKE_libblock_copy_ex()). */
+		BKE_id_copy_ex(bmain, (ID *)la_src->nodetree, (ID **)&la_dst->nodetree, flag, false);
+	}
 
-	BKE_id_copy_ensure_local(bmain, &la->id, &lan->id);
-
-	return lan;
+	if ((flag & LIB_ID_COPY_NO_PREVIEW) == 0) {
+		BKE_previewimg_id_copy(&la_dst->id, &la_src->id);
+	}
+	else {
+		la_dst->preview = NULL;
+	}
 }
 
-Lamp *localize_lamp(Lamp *la)
+Lamp *BKE_lamp_copy(Main *bmain, const Lamp *la)
 {
+	Lamp *la_copy;
+	BKE_id_copy_ex(bmain, &la->id, (ID **)&la_copy, 0, false);
+	return la_copy;
+}
+
+Lamp *BKE_lamp_localize(Lamp *la)
+{
+	/* TODO replace with something like
+	 * 	Lamp *la_copy;
+	 * 	BKE_id_copy_ex(bmain, &la->id, (ID **)&la_copy, LIB_ID_COPY_NO_MAIN | LIB_ID_COPY_NO_PREVIEW | LIB_ID_COPY_NO_USER_REFCOUNT, false);
+	 * 	return la_copy;
+	 *
+	 * ... Once f*** nodes are fully converted to that too :( */
+
 	Lamp *lan;
 	int a;
-	
+
 	lan = BKE_libblock_copy_nolib(&la->id, false);
 
 	for (a = 0; a < MAX_MTEX; a++) {
 		if (lan->mtex[a]) {
-			lan->mtex[a] = MEM_mallocN(sizeof(MTex), "localize_lamp");
+			lan->mtex[a] = MEM_mallocN(sizeof(MTex), __func__);
 			memcpy(lan->mtex[a], la->mtex[a], sizeof(MTex));
 		}
 	}
-	
+
 	lan->curfalloff = curvemapping_copy(la->curfalloff);
 
 	if (la->nodetree)
 		lan->nodetree = ntreeLocalize(la->nodetree);
-	
+
 	lan->preview = NULL;
 
 	return lan;
@@ -179,7 +198,7 @@ void BKE_lamp_free(Lamp *la)
 	for (a = 0; a < MAX_MTEX; a++) {
 		MEM_SAFE_FREE(la->mtex[a]);
 	}
-	
+
 	BKE_animdata_free((ID *)la, false);
 
 	curvemapping_free(la->curfalloff);
@@ -190,7 +209,7 @@ void BKE_lamp_free(Lamp *la)
 		MEM_freeN(la->nodetree);
 		la->nodetree = NULL;
 	}
-	
+
 	BKE_previewimg_free(&la->preview);
 	BKE_icon_id_delete(&la->id);
 	la->id.icon_id = 0;
@@ -205,7 +224,7 @@ static void lamp_node_drivers_update(Scene *scene, bNodeTree *ntree, float ctime
 	/* nodetree itself */
 	if (ntree->adt && ntree->adt->drivers.first)
 		BKE_animsys_evaluate_animdata(scene, &ntree->id, ntree->adt, ctime, ADT_RECALC_DRIVERS);
-	
+
 	/* nodes */
 	for (node = ntree->nodes.first; node; node = node->next)
 		if (node->id && node->type == NODE_GROUP)
@@ -221,15 +240,14 @@ void lamp_drivers_update(Scene *scene, Lamp *la, float ctime)
 		return;
 
 	la->id.tag |= LIB_TAG_DOIT;
-	
+
 	/* lamp itself */
 	if (la->adt && la->adt->drivers.first)
 		BKE_animsys_evaluate_animdata(scene, &la->id, la->adt, ctime, ADT_RECALC_DRIVERS);
-	
+
 	/* nodes */
 	if (la->nodetree)
 		lamp_node_drivers_update(scene, la->nodetree, ctime);
 
 	la->id.tag &= ~LIB_TAG_DOIT;
 }
-

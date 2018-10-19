@@ -43,6 +43,16 @@ ifndef BUILD_DIR
 	BUILD_DIR:=$(shell dirname "$(BLENDER_DIR)")/build_$(OS_NCASE)
 endif
 
+# Dependencies DIR's
+DEPS_SOURCE_DIR:=$(BLENDER_DIR)/build_files/build_environment
+DEPS_BUILD_DIR:=$(BUILD_DIR)/deps
+DEPS_INSTALL_DIR:=$(shell dirname "$(BLENDER_DIR)")/lib/$(OS_NCASE)
+
+ifneq ($(OS_NCASE),darwin)
+	# Add processor type to directory name
+	DEPS_INSTALL_DIR:=$(DEPS_INSTALL_DIR)_$(shell uname -p)
+endif
+
 # Allow to use alternative binary (pypy3, etc)
 ifndef PYTHON
 	PYTHON:=python3
@@ -80,19 +90,23 @@ endif
 
 
 # -----------------------------------------------------------------------------
+# Blender binary path
+
+ifeq ($(OS), Darwin)
+	BLENDER_BIN="$(BUILD_DIR)/bin/blender.app/Contents/MacOS/blender"
+else
+	BLENDER_BIN="$(BUILD_DIR)/bin/blender"
+endif
+
+
+# -----------------------------------------------------------------------------
 # Get the number of cores for threaded build
 ifndef NPROCS
 	NPROCS:=1
 	ifeq ($(OS), Linux)
 		NPROCS:=$(shell nproc)
 	endif
-	ifeq ($(OS), Darwin)
-		NPROCS:=$(shell sysctl -n hw.ncpu)
-	endif
-	ifeq ($(OS), FreeBSD)
-		NPROCS:=$(shell sysctl -n hw.ncpu)
-	endif
-	ifeq ($(OS), NetBSD)
+	ifneq (,$(filter $(OS),Darwin FreeBSD NetBSD))
 		NPROCS:=$(shell sysctl -n hw.ncpu)
 	endif
 endif
@@ -136,7 +150,7 @@ all: .FORCE
 	$(MAKE) -C "$(BUILD_DIR)" -s -j $(NPROCS) install
 	@echo
 	@echo edit build configuration with: "$(BUILD_DIR)/CMakeCache.txt" run make again to rebuild.
-	@echo Blender successfully built, run from: "$(BUILD_DIR)/bin/blender"
+	@echo Blender successfully built, run from: $(BLENDER_BIN)
 	@echo
 
 debug: all
@@ -146,6 +160,27 @@ cycles: all
 headless: all
 bpy: all
 
+# -----------------------------------------------------------------------------
+# Build dependencies
+DEPS_TARGET = install
+ifneq "$(findstring clean, $(MAKECMDGOALS))" ""
+	DEPS_TARGET = clean
+endif
+
+deps: .FORCE
+	@echo
+	@echo Configuring dependencies in \"$(DEPS_BUILD_DIR)\"
+
+	@cmake -H"$(DEPS_SOURCE_DIR)" \
+	       -B"$(DEPS_BUILD_DIR)" \
+		   -DHARVEST_TARGET=$(DEPS_INSTALL_DIR)
+
+	@echo
+	@echo Building dependencies ...
+	$(MAKE) -C "$(DEPS_BUILD_DIR)" -s -j $(NPROCS) $(DEPS_TARGET)
+	@echo
+	@echo Dependencies successfully built and installed to $(DEPS_INSTALL_DIR).
+	@echo
 
 # -----------------------------------------------------------------------------
 # Configuration (save some cd'ing around)
@@ -164,6 +199,7 @@ help: .FORCE
 	@echo "  * headless  - build without an interface (renderfarm or server automation)"
 	@echo "  * cycles    - build Cycles standalone only, without Blender"
 	@echo "  * bpy       - build as a python module which can be loaded from python directly"
+	@echo "  * deps      - build library dependencies (intended only for platform maintainers)"
 	@echo ""
 	@echo "  * config    - run cmake configuration tool to set build options"
 	@echo ""
@@ -210,7 +246,9 @@ help: .FORCE
 	@echo "  * check_descriptions   - check for duplicate/invalid descriptions"
 	@echo ""
 	@echo "Utilities (not associated with building blender)"
-	@echo "  * icons    - updates PNG icons from SVG files."
+	@echo "  * icons    - Updates PNG icons from SVG files."
+	@echo "               Set environment variables 'BLENDER_BIN' and 'INKSCAPE_BIN'"
+	@echo "               to define your own commands."
 	@echo "  * tgz      - create a compressed archive of the source code."
 	@echo "  * update   - updates git and all submodules"
 	@echo ""
@@ -383,7 +421,7 @@ check_spelling_osl: .FORCE
 	    "$(BLENDER_DIR)/intern/cycles/kernel/shaders"
 
 check_descriptions: .FORCE
-	"$(BUILD_DIR)/bin/blender" --background -noaudio --factory-startup --python \
+	$(BLENDER_BIN) --background -noaudio --factory-startup --python \
 	    "$(BLENDER_DIR)/source/tools/check_source/check_descriptions.py"
 
 # -----------------------------------------------------------------------------
@@ -398,10 +436,16 @@ icons: .FORCE
 	"$(BLENDER_DIR)/release/datafiles/prvicons_update.py"
 
 update: .FORCE
+	if [ "$(OS_NCASE)" = "darwin" ] && [ ! -d "../lib/$(OS_NCASE)" ]; then \
+		svn checkout https://svn.blender.org/svnroot/bf-blender/trunk/lib/$(OS_NCASE) ../lib/$(OS_NCASE) ; \
+	fi
 	if [ -d "../lib" ]; then \
+		svn cleanup ../lib/* ; \
 		svn update ../lib/* ; \
 	fi
 	git pull --rebase
+	git submodule update --init --recursive
+	git submodule foreach git checkout master
 	git submodule foreach git pull --rebase origin master
 
 
@@ -411,7 +455,8 @@ update: .FORCE
 
 # Simple version of ./doc/python_api/sphinx_doc_gen.sh with no PDF generation.
 doc_py: .FORCE
-	"$(BUILD_DIR)/bin/blender" --background -noaudio --factory-startup \
+	ASAN_OPTIONS=halt_on_error=0 \
+	$(BLENDER_BIN) --background -noaudio --factory-startup \
 		--python doc/python_api/sphinx_doc_gen.py
 	cd doc/python_api ; sphinx-build -b html sphinx-in sphinx-out
 	@echo "docs written into: '$(BLENDER_DIR)/doc/python_api/sphinx-out/contents.html'"
@@ -421,23 +466,15 @@ doc_doxy: .FORCE
 	@echo "docs written into: '$(BLENDER_DIR)/doc/doxygen/html/index.html'"
 
 doc_dna: .FORCE
-	"$(BUILD_DIR)/bin/blender" --background -noaudio --factory-startup \
+	$(BLENDER_BIN) --background -noaudio --factory-startup \
 		--python doc/blender_file_format/BlendFileDnaExporter_25.py
 	@echo "docs written into: '$(BLENDER_DIR)/doc/blender_file_format/dna.html'"
 
 doc_man: .FORCE
-	$(PYTHON) doc/manpage/blender.1.py "$(BUILD_DIR)/bin/blender"
+	$(PYTHON) doc/manpage/blender.1.py $(BLENDER_BIN) blender.1
 
 help_features: .FORCE
-	@$(PYTHON) -c \
-		"import re; \
-		print('\n'.join([ \
-		w for l in open('"$(BLENDER_DIR)"/CMakeLists.txt', 'r').readlines() \
-		if not l.lstrip().startswith('#') \
-		for w in (re.sub(\
-		    r'.*\boption\s*\(\s*(WITH_[a-zA-Z0-9_]+)\s+(\".*\")\s*.*', r'\g<1> - \g<2>', l).strip('() \n'),) \
-		if w.startswith('WITH_')]))" | uniq
-
+	@$(PYTHON) "$(BLENDER_DIR)/build_files/cmake/cmake_print_build_options.py" $(BLENDER_DIR)"/CMakeLists.txt"
 
 clean: .FORCE
 	$(MAKE) -C "$(BUILD_DIR)" clean

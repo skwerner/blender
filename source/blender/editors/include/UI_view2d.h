@@ -4,7 +4,7 @@
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version. 
+ * of the License, or (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -18,12 +18,12 @@
  * The Original Code is Copyright (C) 2008 Blender Foundation.
  * All rights reserved.
  *
- * 
+ *
  * Contributor(s): Blender Foundation, Joshua Leung
  *
  *
  * Generic 2d view with should allow drawing grids,
- * panning, zooming, scrolling, .. 
+ * panning, zooming, scrolling, ..
  * ***** END GPL LICENSE BLOCK *****
  */
 
@@ -44,8 +44,8 @@
 /* generic value to use when coordinate lies out of view when converting */
 #define V2D_IS_CLIPPED  12000
 
-/* Common View2D view types 
- * NOTE: only define a type here if it completely sets all (+/- a few) of the relevant flags 
+/* Common View2D view types
+ * NOTE: only define a type here if it completely sets all (+/- a few) of the relevant flags
  *	    and settings for a View2D region, and that set of settings is used in more
  *	    than one specific place
  */
@@ -75,7 +75,7 @@ enum eView2D_Units {
 	V2D_UNIT_SECONDS = 0,
 	V2D_UNIT_FRAMES,
 	V2D_UNIT_FRAMESCALE,
-	
+
 	/* for drawing values */
 	V2D_UNIT_VALUES,
 	V2D_UNIT_DEGREES,
@@ -95,7 +95,7 @@ enum eView2D_Gridlines {
 	V2D_HORIZONTAL_AXIS         = (1 << 2),
 	V2D_VERTICAL_AXIS           = (1 << 3),
 	V2D_HORIZONTAL_FINELINES    = (1 << 4),
-	
+
 	V2D_GRIDLINES_MAJOR         = (V2D_VERTICAL_LINES | V2D_VERTICAL_AXIS | V2D_HORIZONTAL_LINES | V2D_HORIZONTAL_AXIS),
 	V2D_GRIDLINES_ALL           = (V2D_GRIDLINES_MAJOR | V2D_HORIZONTAL_FINELINES),
 };
@@ -169,7 +169,7 @@ void UI_view2d_view_restore(const struct bContext *C);
 View2DGrid *UI_view2d_grid_calc(struct Scene *scene, struct View2D *v2d,
                                 short xunits, short xclamp, short yunits, short yclamp, int winx, int winy);
 void UI_view2d_grid_draw(struct View2D *v2d, View2DGrid *grid, int flag);
-void UI_view2d_constant_grid_draw(struct View2D *v2d);
+void UI_view2d_constant_grid_draw(struct View2D *v2d, float step);
 void UI_view2d_multi_grid_draw(struct View2D *v2d, int colorid, float step, int level_size, int totlevels);
 void UI_view2d_grid_size(View2DGrid *grid, float *r_dx, float *r_dy);
 void UI_view2d_grid_free(View2DGrid *grid);
@@ -203,6 +203,7 @@ bool  UI_view2d_view_to_region_clip(struct View2D *v2d, float x, float y, int *r
 
 void  UI_view2d_view_to_region(struct View2D *v2d, float x, float y, int *r_region_x, int *r_region_y) ATTR_NONNULL();
 void  UI_view2d_view_to_region_fl(struct View2D *v2d, float x, float y, float *r_region_x, float *r_region_y) ATTR_NONNULL();
+void  UI_view2d_view_to_region_m4(struct View2D *v2d, float matrix[4][4]) ATTR_NONNULL();
 void  UI_view2d_view_to_region_rcti(struct View2D *v2d, const struct rctf *rect_src, struct rcti *rect_dst) ATTR_NONNULL();
 bool  UI_view2d_view_to_region_rcti_clip(struct View2D *v2d, const struct rctf *rect_src, struct rcti *rect_dst) ATTR_NONNULL();
 

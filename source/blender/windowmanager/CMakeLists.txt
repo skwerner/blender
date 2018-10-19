@@ -39,6 +39,7 @@ set(INC
 	../nodes
 	../render/extern/include
 	../../gameengine/BlenderRoutines
+	../../../intern/clog
 	../../../intern/ghost
 	../../../intern/guardedalloc
 	../../../intern/glew-mx
@@ -52,7 +53,6 @@ set(INC_SYS
 
 set(SRC
 	intern/wm.c
-	intern/wm_playanim.c
 	intern/wm_cursors.c
 	intern/wm_dragdrop.c
 	intern/wm_draw.c
@@ -60,14 +60,21 @@ set(SRC
 	intern/wm_files.c
 	intern/wm_files_link.c
 	intern/wm_gesture.c
+	intern/wm_gesture_ops.c
 	intern/wm_init_exit.c
 	intern/wm_jobs.c
 	intern/wm_keymap.c
+	intern/wm_keymap_utils.c
+	intern/wm_menu_type.c
 	intern/wm_operator_props.c
+	intern/wm_operator_type.c
 	intern/wm_operators.c
-	intern/wm_subwindow.c
-	intern/wm_window.c
+	intern/wm_playanim.c
 	intern/wm_stereo.c
+	intern/wm_subwindow.c
+	intern/wm_tooltip.c
+	intern/wm_uilist_type.c
+	intern/wm_window.c
 
 	WM_api.h
 	WM_keymap.h
@@ -98,16 +105,6 @@ endif()
 
 if(WITH_OPENCOLLADA)
 	add_definitions(-DWITH_COLLADA)
-endif()
-
-if(WITH_CODEC_QUICKTIME)
-	list(APPEND INC
-		../quicktime
-	)
-	list(APPEND INC_SYS
-		${QUICKTIME_INCLUDE_DIRS}
-	)
-	add_definitions(-DWITH_QUICKTIME)
 endif()
 
 if(WITH_CODEC_FFMPEG)

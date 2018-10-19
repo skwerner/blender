@@ -4,7 +4,7 @@
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version. 
+ * of the License, or (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -17,7 +17,7 @@
  *
  * The Original Code is Copyright (C) 2007 Blender Foundation.
  * All rights reserved.
- * 
+ *
  * Contributor(s): Blender Foundation
  *
  * ***** END GPL LICENSE BLOCK *****
@@ -58,39 +58,51 @@ void        WM_keyconfig_update_operatortype(void);
 void		WM_keymap_init		(struct bContext *C);
 void		WM_keymap_free		(struct wmKeyMap *keymap);
 
-wmKeyMapItem *WM_keymap_verify_item(struct wmKeyMap *keymap, const char *idname, int type, 
-                                    int val, int modifier, int keymodifier);
-wmKeyMapItem *WM_keymap_add_item(struct wmKeyMap *keymap, const char *idname, int type, 
-                                 int val, int modifier, int keymodifier);
-wmKeyMapItem *WM_keymap_add_menu(struct wmKeyMap *keymap, const char *idname, int type,
-                                 int val, int modifier, int keymodifier);
-wmKeyMapItem *WM_keymap_add_menu_pie(struct wmKeyMap *keymap, const char *idname, int type,
-                                     int val, int modifier, int keymodifier);
+wmKeyMapItem *WM_keymap_verify_item(
+        struct wmKeyMap *keymap, const char *idname, int type,
+        int val, int modifier, int keymodifier);
+wmKeyMapItem *WM_keymap_add_item(
+        struct wmKeyMap *keymap, const char *idname, int type,
+        int val, int modifier, int keymodifier);
 
 bool        WM_keymap_remove_item(struct wmKeyMap *keymap, struct wmKeyMapItem *kmi);
-int         WM_keymap_item_to_string(wmKeyMapItem *kmi, const bool compact, const int len, char *r_str);
+int         WM_keymap_item_to_string(wmKeyMapItem *kmi, const bool compact, char *result, const int result_len);
 
 wmKeyMap	*WM_keymap_list_find(ListBase *lb, const char *idname, int spaceid, int regionid);
-wmKeyMap	*WM_keymap_find(struct wmKeyConfig *keyconf, const char *idname, int spaceid, int regionid);
+wmKeyMap	*WM_keymap_ensure(struct wmKeyConfig *keyconf, const char *idname, int spaceid, int regionid);
 wmKeyMap	*WM_keymap_find_all(const struct bContext *C, const char *idname, int spaceid, int regionid);
 wmKeyMap	*WM_keymap_active(struct wmWindowManager *wm, struct wmKeyMap *keymap);
-wmKeyMap	*WM_keymap_guess_opname(const struct bContext *C, const char *opname);
 bool		 WM_keymap_remove(struct wmKeyConfig *keyconfig, struct wmKeyMap *keymap);
+bool         WM_keymap_poll(struct bContext *C, struct wmKeyMap *keymap);
 
 wmKeyMapItem *WM_keymap_item_find_id(struct wmKeyMap *keymap, int id);
-int			WM_keymap_item_compare(struct wmKeyMapItem *k1, struct wmKeyMapItem *k2);
+bool          WM_keymap_item_compare(struct wmKeyMapItem *k1, struct wmKeyMapItem *k2);
+
+/* keymap_utils.c */
+
+/** Wrappers for #WM_keymap_add_item */
+wmKeyMapItem *WM_keymap_add_menu(
+        struct wmKeyMap *keymap, const char *idname, int type,
+        int val, int modifier, int keymodifier);
+wmKeyMapItem *WM_keymap_add_menu_pie(
+        struct wmKeyMap *keymap, const char *idname, int type,
+        int val, int modifier, int keymodifier);
+
+wmKeyMap *WM_keymap_guess_opname(const struct bContext *C, const char *opname);
 
 /* Modal Keymap */
 
 int WM_modalkeymap_items_to_string(
-        struct wmKeyMap *km, const int propvalue, const bool compact, const int len, char *r_str);
+        struct wmKeyMap *km, const int propvalue, const bool compact,
+        char *result, const int result_len);
 int WM_modalkeymap_operator_items_to_string(
-        struct wmOperatorType *ot, const int propvalue, const bool compact, const int len, char *r_str);
+        struct wmOperatorType *ot, const int propvalue, const bool compact,
+        char *result, const int result_len);
 char *WM_modalkeymap_operator_items_to_string_buf(
         struct wmOperatorType *ot, const int propvalue, const bool compact,
-        const int max_len, int *r_available_len, char **r_str);
+        const int max_len, int *r_available_len, char **r_result);
 
-wmKeyMap	*WM_modalkeymap_add(struct wmKeyConfig *keyconf, const char *idname, struct EnumPropertyItem *items);
+wmKeyMap	*WM_modalkeymap_add(struct wmKeyConfig *keyconf, const char *idname, const struct EnumPropertyItem *items);
 wmKeyMap	*WM_modalkeymap_get(struct wmKeyConfig *keyconf, const char *idname);
 wmKeyMapItem *WM_modalkeymap_add_item(struct wmKeyMap *km, int type, int val, int modifier, int keymodifier, int value);
 wmKeyMapItem *WM_modalkeymap_add_item_str(struct wmKeyMap *km, int type, int val, int modifier, int keymodifier, const char *value);
@@ -109,14 +121,16 @@ int			WM_keymap_map_type_get(struct wmKeyMapItem *kmi);
 const char *WM_key_event_string(const short type, const bool compact);
 int WM_keymap_item_raw_to_string(
         const short shift, const short ctrl, const short alt, const short oskey, const short keymodifier,
-        const short val, const short type, const bool compact, const int len, char *r_str);
+        const short val, const short type, const bool compact,
+        char *result, const int result_len);
 wmKeyMapItem *WM_key_event_operator(
         const struct bContext *C, const char *opname, int opcontext,
         struct IDProperty *properties, const bool is_hotkey,
         struct wmKeyMap **r_keymap);
-char       *WM_key_event_operator_string(
+char *WM_key_event_operator_string(
         const struct bContext *C, const char *opname, int opcontext,
-        struct IDProperty *properties, const bool is_strict, int len, char *r_str);
+        struct IDProperty *properties, const bool is_strict,
+        char *result, const int result_len);
 
 const char *WM_bool_as_string(bool test);
 
@@ -125,4 +139,3 @@ const char *WM_bool_as_string(bool test);
 #endif
 
 #endif /* __WM_KEYMAP_H__ */
-

@@ -15,8 +15,8 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
- * Contributor: 
- *		Jeroen Bakker 
+ * Contributor:
+ *		Jeroen Bakker
  *		Monique Dewanchand
  */
 
@@ -48,12 +48,12 @@ RenderLayersProg::RenderLayersProg(const char *passName, DataType type, int elem
 void RenderLayersProg::initExecution()
 {
 	Scene *scene = this->getScene();
-	Render *re = (scene) ? RE_GetRender(scene->id.name) : NULL;
+	Render *re = (scene) ? RE_GetSceneRender(scene) : NULL;
 	RenderResult *rr = NULL;
-	
+
 	if (re)
 		rr = RE_AcquireResultRead(re);
-	
+
 	if (rr) {
 		SceneRenderLayer *srl = (SceneRenderLayer *)BLI_findlink(&scene->r.layers, getLayerId());
 		if (srl) {
@@ -179,15 +179,15 @@ void RenderLayersProg::deinitExecution()
 void RenderLayersProg::determineResolution(unsigned int resolution[2], unsigned int /*preferredResolution*/[2])
 {
 	Scene *sce = this->getScene();
-	Render *re = (sce) ? RE_GetRender(sce->id.name) : NULL;
+	Render *re = (sce) ? RE_GetSceneRender(sce) : NULL;
 	RenderResult *rr = NULL;
-	
+
 	resolution[0] = 0;
 	resolution[1] = 0;
-	
+
 	if (re)
 		rr = RE_AcquireResultRead(re);
-	
+
 	if (rr) {
 		SceneRenderLayer *srl   = (SceneRenderLayer *)BLI_findlink(&sce->r.layers, getLayerId());
 		if (srl) {
@@ -198,7 +198,7 @@ void RenderLayersProg::determineResolution(unsigned int resolution[2], unsigned 
 			}
 		}
 	}
-	
+
 	if (re)
 		RE_ReleaseResult(re);
 

@@ -51,6 +51,7 @@ struct Options {
 	SessionParams session_params;
 	bool quiet;
 	bool show_help, interactive, pause;
+	string output_path;
 } options;
 
 static void session_print(const string& str)
@@ -86,6 +87,34 @@ static void session_print_status()
 	session_print(status);
 }
 
+static bool write_render(const uchar *pixels, int w, int h, int channels)
+{
+	string msg = string_printf("Writing image %s", options.output_path.c_str());
+	session_print(msg);
+
+	ImageOutput *out = ImageOutput::create(options.output_path);
+	if(!out) {
+		return false;
+	}
+
+	ImageSpec spec(w, h, channels, TypeDesc::UINT8);
+	if(!out->open(options.output_path, spec)) {
+		return false;
+	}
+
+	/* conversion for different top/bottom convention */
+	out->write_image(TypeDesc::UINT8,
+		pixels + (h - 1) * w * channels,
+		AutoStride,
+		-w * channels,
+		AutoStride);
+
+	out->close();
+	delete out;
+
+	return true;
+}
+
 static BufferParams& session_buffer_params()
 {
 	static BufferParams buffer_params;
@@ -97,27 +126,9 @@ static BufferParams& session_buffer_params()
 	return buffer_params;
 }
 
-static void session_init()
-{
-	options.session = new Session(options.session_params);
-	options.session->reset(session_buffer_params(), options.session_params.samples);
-	options.session->scene = options.scene;
-
-	if(options.session_params.background && !options.quiet)
-		options.session->progress.set_update_callback(function_bind(&session_print_status));
-#ifdef WITH_CYCLES_STANDALONE_GUI
-	else
-		options.session->progress.set_update_callback(function_bind(&view_redraw));
-#endif
-
-	options.session->start();
-
-	options.scene = NULL;
-}
-
 static void scene_init()
 {
-	options.scene = new Scene(options.scene_params, options.session_params.device);
+	options.scene = new Scene(options.scene_params, options.session->device);
 
 	/* Read XML */
 	xml_read_file(options.scene, options.filepath.c_str());
@@ -136,15 +147,31 @@ static void scene_init()
 	options.scene->camera->compute_auto_viewplane();
 }
 
+static void session_init()
+{
+	options.session_params.write_render_cb = write_render;
+	options.session = new Session(options.session_params);
+
+	if(options.session_params.background && !options.quiet)
+		options.session->progress.set_update_callback(function_bind(&session_print_status));
+#ifdef WITH_CYCLES_STANDALONE_GUI
+	else
+		options.session->progress.set_update_callback(function_bind(&view_redraw));
+#endif
+
+	/* load scene */
+	scene_init();
+	options.session->scene = options.scene;
+
+	options.session->reset(session_buffer_params(), options.session_params.samples);
+	options.session->start();
+}
+
 static void session_exit()
 {
 	if(options.session) {
 		delete options.session;
 		options.session = NULL;
-	}
-	if(options.scene) {
-		delete options.scene;
-		options.scene = NULL;
 	}
 
 	if(options.session_params.background && !options.quiet) {
@@ -367,7 +394,7 @@ static void options_parse(int argc, const char **argv)
 		"--background", &options.session_params.background, "Render in background, without user interface",
 		"--quiet", &options.quiet, "In background mode, don't print progress messages",
 		"--samples %d", &options.session_params.samples, "Number of samples to render",
-		"--output %s", &options.session_params.output_path, "File path to write output image",
+		"--output %s", &options.output_path, "File path to write output image",
 		"--threads %d", &options.session_params.threads, "CPU Rendering Threads",
 		"--width  %d", &options.width, "Window width in pixel",
 		"--height %d", &options.height, "Window height in pixel",
@@ -430,7 +457,6 @@ static void options_parse(int argc, const char **argv)
 	/* find matching device */
 	DeviceType device_type = Device::type_from_string(devicename.c_str());
 	vector<DeviceInfo>& devices = Device::available_devices();
-	DeviceInfo device_info;
 	bool device_available = false;
 
 	foreach(DeviceInfo& device, devices) {
@@ -467,9 +493,6 @@ static void options_parse(int argc, const char **argv)
 
 	/* For smoother Viewport */
 	options.session_params.start_resolution = 64;
-
-	/* load scene */
-	scene_init();
 }
 
 CCL_NAMESPACE_END
@@ -501,4 +524,3 @@ int main(int argc, const char **argv)
 
 	return 0;
 }
-

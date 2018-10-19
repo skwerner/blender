@@ -23,6 +23,7 @@ set(SRC
 	mesh.cpp
 	mesh_displace.cpp
 	mesh_subdivision.cpp
+	mesh_volume.cpp
 	nodes.cpp
 	object.cpp
 	osl.cpp
@@ -32,6 +33,7 @@ set(SRC
 	session.cpp
 	shader.cpp
 	sobol.cpp
+	stats.cpp
 	svm.cpp
 	tables.cpp
 	tile.cpp
@@ -59,6 +61,7 @@ set(SRC_HEADERS
 	session.h
 	shader.h
 	sobol.h
+	stats.h
 	svm.h
 	tables.h
 	tile.h
@@ -71,4 +74,4 @@ include_directories(SYSTEM ${INC_SYS})
 
 add_definitions(${GL_DEFINITIONS})
 
-add_library(cycles_render ${SRC} ${SRC_HEADERS})
+cycles_add_library(cycles_render ${SRC} ${SRC_HEADERS})

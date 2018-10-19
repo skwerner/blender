@@ -41,7 +41,7 @@
 bool GHOST_EventPrinter::processEvent(GHOST_IEvent *event)
 {
 	bool handled = true;
-	
+
 	GHOST_ASSERT(event, "event==0");
 
 	if (event->getType() == GHOST_kEventWindowUpdate) return false;
@@ -95,7 +95,7 @@ bool GHOST_EventPrinter::processEvent(GHOST_IEvent *event)
 			std::cout << "GHOST_kEventKeyDown, key: " << str;
 		}
 		break;
-			
+
 		case GHOST_kEventDraggingEntered:
 		{
 			GHOST_TEventDragnDropData *dragnDropData = (GHOST_TEventDragnDropData *)((GHOST_IEvent *)event)->getData();
@@ -103,7 +103,7 @@ bool GHOST_EventPrinter::processEvent(GHOST_IEvent *event)
 			std::cout << " mouse at x=" << dragnDropData->x << " y=" << dragnDropData->y;
 		}
 		break;
-			
+
 		case GHOST_kEventDraggingUpdated:
 		{
 			GHOST_TEventDragnDropData *dragnDropData = (GHOST_TEventDragnDropData *)((GHOST_IEvent *)event)->getData();
@@ -118,7 +118,7 @@ bool GHOST_EventPrinter::processEvent(GHOST_IEvent *event)
 			std::cout << "GHOST_kEventDraggingExited, dragged object type : " << dragnDropData->dataType;
 		}
 		break;
-	
+
 		case GHOST_kEventDraggingDropDone:
 		{
 			GHOST_TEventDragnDropData *dragnDropData = (GHOST_TEventDragnDropData *)((GHOST_IEvent *)event)->getData();
@@ -148,14 +148,14 @@ bool GHOST_EventPrinter::processEvent(GHOST_IEvent *event)
 		case GHOST_kEventOpenMainFile:
 		{
 			GHOST_TEventDataPtr eventData = ((GHOST_IEvent *)event)->getData();
-			
+
 			if (eventData)
 				std::cout << "GHOST_kEventOpenMainFile for path : " << (char *)eventData;
 			else
 				std::cout << "GHOST_kEventOpenMainFile with no path specified!!";
 		}
 		break;
-			
+
 		case GHOST_kEventQuit:
 			std::cout << "GHOST_kEventQuit";
 			break;
@@ -193,16 +193,6 @@ void GHOST_EventPrinter::getKeyString(GHOST_TKey key, char str[32]) const
 	}
 	else if ((key >= GHOST_kKeyNumpad0) && (key <= GHOST_kKeyNumpad9)) {
 		sprintf(str, "Numpad %d", (key - GHOST_kKeyNumpad0));
-#if defined(__sun__) || defined(__sun)
-	}
-	else if (key == 268828432) {   /* solaris keyboards are messed up */
-		/* This should really test XK_F11 but that doesn't work */
-		strcpy(str, "F11");
-	}
-	else if (key == 268828433) {   /* solaris keyboards are messed up */
-		/* This should really test XK_F12 but that doesn't work */
-		strcpy(str, "F12");
-#endif
 	}
 	else if ((key >= GHOST_kKeyF1) && (key <= GHOST_kKeyF24)) {
 		sprintf(str, "F%d", key - GHOST_kKeyF1 + 1);
@@ -348,4 +338,3 @@ void GHOST_EventPrinter::getKeyString(GHOST_TKey key, char str[32]) const
 		sprintf(str, "%s", tstr);
 	}
 }
-

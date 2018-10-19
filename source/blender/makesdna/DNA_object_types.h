@@ -33,6 +33,8 @@
 #ifndef __DNA_OBJECT_TYPES_H__
 #define __DNA_OBJECT_TYPES_H__
 
+#include "DNA_object_enums.h"
+
 #include "DNA_defs.h"
 #include "DNA_listBase.h"
 #include "DNA_ID.h"
@@ -114,10 +116,10 @@ typedef struct LodLevel {
 
 typedef struct Object {
 	ID id;
-	struct AnimData *adt;		/* animation data (must be immediately after id for utilities to use it) */ 
+	struct AnimData *adt;		/* animation data (must be immediately after id for utilities to use it) */
 
 	struct SculptSession *sculpt;
-	
+
 	short type, partype;
 	int par1, par2, par3;	/* can be vertexnrs */
 	char parsubstr[64];	/* String describing subobject info, MAX_ID_NAME-2 */
@@ -132,12 +134,13 @@ typedef struct Object {
 	struct bAction *poselib;
 	struct bPose *pose;  /* pose data, armature objects only */
 	void *data;  /* pointer to objects data - an 'ID' or NULL */
-	
+
 	struct bGPdata *gpd;	/* Grease Pencil data */
-	
+
 	bAnimVizSettings avs;	/* settings for visualization of object-transform animation */
 	bMotionPath *mpath;		/* motion path cache for this object */
-	
+	void *pad1;
+
 	ListBase constraintChannels  DNA_DEPRECATED; // XXX deprecated... old animation system
 	ListBase effect  DNA_DEPRECATED;             // XXX deprecated... keep for readfile
 	ListBase defbase;   /* list of bDeformGroup (vertex groups) names and flag only */
@@ -151,7 +154,7 @@ typedef struct Object {
 	char *matbits;			/* a boolean field, with each byte 1 if corresponding material is linked to object */
 	int totcol;				/* copy of mesh, curve & meta struct member of same name (keep in sync) */
 	int actcol;				/* currently selected material in the UI */
-	
+
 	/* rot en drot have to be together! (transform('r' en 's')) */
 	float loc[3], dloc[3], orig[3];
 	float size[3];              /* scale in fact */
@@ -168,18 +171,18 @@ typedef struct Object {
 	                    /* note: this isn't assured to be valid as with 'obmat',
 	                     *       before using this value you should do...
 	                     *       invert_m4_m4(ob->imat, ob->obmat); */
-	
+
 	/* Previously 'imat' was used at render time, but as other places use it too
 	 * the interactive ui of 2.5 creates problems. So now only 'imat_ren' should
 	 * be used when ever the inverse of ob->obmat * re->viewmat is needed! - jahka
 	 */
 	float imat_ren[4][4];
-	
+
 	unsigned int lay;	/* copy of Base's layer in the scene */
 
 	short flag;			/* copy of Base */
 	short colbits DNA_DEPRECATED;		/* deprecated, use 'matbits' */
-	
+
 	short transflag, protectflag;	/* transformation settings and transform locks  */
 	short trackflag, upflag;
 	short nlaflag;				/* used for DopeSheet filtering settings (expanded/collapsed) */
@@ -197,7 +200,7 @@ typedef struct Object {
 	/* during realtime */
 
 	/* note that inertia is only called inertia for historical reasons
-	 * and is not changed to avoid DNA surgery. It actually reflects the 
+	 * and is not changed to avoid DNA surgery. It actually reflects the
 	 * Size value in the GameButtons (= radius) */
 
 	float mass, damping, inertia;
@@ -217,7 +220,7 @@ typedef struct Object {
 	float max_angvel; /* clamp the maximum angular velocity, 0.0 is disabled */
 	float min_angvel; /* clamp the minimum angular velocity, 0.0 is disabled */
 	float obstacleRad;
-	
+
 	/* "Character" physics properties */
 	float step_height;
 	float jump_speed;
@@ -238,7 +241,7 @@ typedef struct Object {
 	char empty_drawtype;
 	float empty_drawsize;
 	float dupfacesca;	/* dupliface scale */
-	
+
 	ListBase prop;			/* game logic property list (not to be confused with IDProperties) */
 	ListBase sensors;		/* game logic sensors */
 	ListBase controllers;	/* game logic controllers */
@@ -253,8 +256,6 @@ typedef struct Object {
 	int gameflag;
 	int gameflag2;
 
-	struct BulletSoftBody *bsoft;	/* settings for game engine bullet soft body */
-
 	char restrictflag;		/* for restricting view, select, render etc. accessible in outliner */
 	char recalc;			/* dependency flag */
 	short softflag;			/* softbody settings */
@@ -264,7 +265,8 @@ typedef struct Object {
 	ListBase nlastrips  DNA_DEPRECATED;			// XXX deprecated... old animation system
 	ListBase hooks  DNA_DEPRECATED;				// XXX deprecated... old animation system
 	ListBase particlesystem;	/* particle systems */
-	
+
+	struct BulletSoftBody *bsoft;	/* settings for game engine bullet soft body */
 	struct PartDeflect *pd;		/* particle deflector/attractor/collision data */
 	struct SoftBody *soft;		/* if exists, saved in file */
 	struct Group *dup_group;	/* object duplicator for group */
@@ -288,12 +290,13 @@ typedef struct Object {
 	ListBase gpulamp;		/* runtime, for glsl lamp display only */
 	ListBase pc_ids;
 	ListBase *duplilist;	/* for temporary dupli list storage, only for use by RNA API */
-	
+
 	struct RigidBodyOb *rigidbody_object;		/* settings for Bullet rigid body */
 	struct RigidBodyCon *rigidbody_constraint;	/* settings for Bullet constraint */
 
 	float ima_ofs[2];		/* offset for image empties */
 	ImageUser *iuser;		/* must be non-null when oject is an empty image */
+	void *pad3;
 
 	ListBase lodlevels;		/* contains data for levels of detail */
 	LodLevel *currentlod;
@@ -304,13 +307,13 @@ typedef struct Object {
 /* Warning, this is not used anymore because hooks are now modifiers */
 typedef struct ObHook {
 	struct ObHook *next, *prev;
-	
+
 	struct Object *parent;
 	float parentinv[4][4];	/* matrix making current transform unmodified */
 	float mat[4][4];		/* temp matrix while hooking */
 	float cent[3];			/* visualization of hook */
 	float falloff;			/* if not zero, falloff is distance where influence zero */
-	
+
 	char name[64];	/* MAX_NAME */
 
 	int *indexar;
@@ -374,6 +377,10 @@ enum {
 	(ELEM(_type, OB_MESH, OB_FONT, OB_CURVE, OB_SURF, OB_MBALL, OB_LATTICE, OB_ARMATURE))
 #define OB_TYPE_SUPPORT_PARVERT(_type) \
 	(ELEM(_type, OB_MESH, OB_SURF, OB_CURVE, OB_LATTICE))
+
+/** Matches #OB_TYPE_SUPPORT_EDITMODE. */
+#define OB_DATA_SUPPORT_EDITMODE(_type) \
+	(ELEM(_type, ID_ME, ID_CU, ID_MB, ID_LT, ID_AR))
 
 /* is this ID type used as object data */
 #define OB_DATA_SUPPORT_ID(_id_type) \
@@ -496,9 +503,13 @@ enum {
 
 /* also needed for base!!!!! or rather, they interfere....*/
 /* base->flag and ob->flag */
-#define BA_WAS_SEL          (1 << 1)
-#define BA_HAS_RECALC_OB    (1 << 2)
-#define BA_HAS_RECALC_DATA  (1 << 3)
+enum {
+	BA_WAS_SEL = (1 << 1),
+	/* NOTE: BA_HAS_RECALC_DATA can be re-used later if freed in readfile.c. */
+	// BA_HAS_RECALC_OB = (1 << 2),  /* DEPRECATED */
+	// BA_HAS_RECALC_DATA =  (1 << 3),  /* DEPRECATED */
+	BA_SNAP_FIX_DEPS_FIASCO = (1 << 2),  /* Yes, re-use deprecated bit, all fine since it's runtime only. */
+};
 
 	/* NOTE: this was used as a proper setting in past, so nullify before using */
 #define BA_TEMP_TAG         (1 << 5)
@@ -667,22 +678,6 @@ enum {
 	OB_LOCK_ROT4D   = 1 << 10,
 };
 
-/* ob->mode */
-typedef enum ObjectMode {
-	OB_MODE_OBJECT        = 0,
-	OB_MODE_EDIT          = 1 << 0,
-	OB_MODE_SCULPT        = 1 << 1,
-	OB_MODE_VERTEX_PAINT  = 1 << 2,
-	OB_MODE_WEIGHT_PAINT  = 1 << 3,
-	OB_MODE_TEXTURE_PAINT = 1 << 4,
-	OB_MODE_PARTICLE_EDIT = 1 << 5,
-	OB_MODE_POSE          = 1 << 6,
-	OB_MODE_GPENCIL       = 1 << 7,  /* NOTE: Just a dummy to make the UI nicer */
-} ObjectMode;
-
-/* any mode where the brush system is used */
-#define OB_MODE_ALL_PAINT (OB_MODE_SCULPT | OB_MODE_VERTEX_PAINT | OB_MODE_WEIGHT_PAINT | OB_MODE_TEXTURE_PAINT)
-
 #define MAX_DUPLI_RECUR 8
 
 #ifdef __cplusplus
@@ -690,4 +685,3 @@ typedef enum ObjectMode {
 #endif
 
 #endif
-

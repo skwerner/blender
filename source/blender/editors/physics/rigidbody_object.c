@@ -44,7 +44,6 @@
 
 #include "BKE_context.h"
 #include "BKE_depsgraph.h"
-#include "BKE_global.h"
 #include "BKE_group.h"
 #include "BKE_main.h"
 #include "BKE_report.h"
@@ -66,7 +65,7 @@
 /* ********************************************** */
 /* Helper API's for RigidBody Objects Editing */
 
-static int ED_operator_rigidbody_active_poll(bContext *C)
+static bool ED_operator_rigidbody_active_poll(bContext *C)
 {
 	if (ED_operator_object_active_editable(C)) {
 		Object *ob = ED_object_active_context(C);
@@ -76,7 +75,7 @@ static int ED_operator_rigidbody_active_poll(bContext *C)
 		return 0;
 }
 
-static int ED_operator_rigidbody_add_poll(bContext *C)
+static bool ED_operator_rigidbody_add_poll(bContext *C)
 {
 	if (ED_operator_object_active_editable(C)) {
 		Object *ob = ED_object_active_context(C);
@@ -133,7 +132,7 @@ void ED_rigidbody_object_remove(Main *bmain, Scene *scene, Object *ob)
 
 	BKE_rigidbody_remove_object(scene, ob);
 	if (rbw)
-		BKE_group_object_unlink(rbw->group, ob, scene, NULL);
+		BKE_group_object_unlink(bmain, rbw->group, ob, scene, NULL);
 
 	DAG_relations_tag_update(bmain);
 	DAG_id_tag_update(&ob->id, OB_RECALC_OB);
@@ -455,7 +454,7 @@ static const int NUM_RB_MATERIAL_PRESETS = sizeof(RB_MATERIAL_DENSITY_TABLE) / s
  * - Although there is a runtime cost, this has a lower maintenance cost
  *   in the long run than other two-list solutions...
  */
-static EnumPropertyItem *rigidbody_materials_itemf(bContext *UNUSED(C), PointerRNA *UNUSED(ptr), PropertyRNA *UNUSED(prop), bool *r_free)
+static const EnumPropertyItem *rigidbody_materials_itemf(bContext *UNUSED(C), PointerRNA *UNUSED(ptr), PropertyRNA *UNUSED(prop), bool *r_free)
 {
 	EnumPropertyItem item_tmp = {0};
 	EnumPropertyItem *item = NULL;

@@ -299,7 +299,7 @@ typedef struct BChunk {
 } BChunk;
 
 /**
- * Links to store #BChunk data in #BChunkList.chunks.
+ * Links to store #BChunk data in #BChunkList.chunk_refs.
  */
 typedef struct BChunkRef {
 	struct BChunkRef *next, *prev;
@@ -749,6 +749,7 @@ static void bchunk_list_fill_from_array(
 	ASSERT_CHUNKLIST_DATA(chunk_list, data);
 }
 
+/** \} */
 
 /* ---------------------------------------------------------------------------
  * Internal Table Lookup Functions
@@ -763,7 +764,7 @@ static void bchunk_list_fill_from_array(
 
 BLI_INLINE uint hash_data_single(const uchar p)
 {
-	return (HASH_INIT << 5) + HASH_INIT + (unsigned int)p;
+	return ((HASH_INIT << 5) + HASH_INIT) + (unsigned int)(*((signed char *)&p));
 }
 
 /* hash bytes, from BLI_ghashutil_strhash_n */
@@ -773,7 +774,7 @@ static uint hash_data(const uchar *key, size_t n)
 	unsigned int h = HASH_INIT;
 
 	for (p = (const signed char *)key; n--; p++) {
-		h = (h << 5) + h + (unsigned int)*p;
+		h = ((h << 5) + h) + (unsigned int)*p;
 	}
 
 	return h;
@@ -1012,6 +1013,10 @@ static const BChunkRef *table_lookup(
  * ---------------- */
 
 /** \} */
+
+/** \name Main Data De-Duplication Function
+ *
+ * \{ */
 
 /**
  * \param data: Data to store in the returned value.
@@ -1504,6 +1509,8 @@ void BLI_array_store_clear(
 	BLI_mempool_clear(bs->memory.chunk);
 }
 
+/** \} */
+
 /** \name BArrayStore Statistics
  * \{ */
 
@@ -1753,13 +1760,13 @@ bool BLI_array_store_is_valid(
 		}
 		GHASH_ITER (gh_iter, chunk_list_map) {
 			const struct BChunkList *chunk_list = BLI_ghashIterator_getKey(&gh_iter);
-			const int users =  GET_INT_FROM_POINTER(BLI_ghashIterator_getValue(&gh_iter));
+			const int users =  POINTER_AS_INT(BLI_ghashIterator_getValue(&gh_iter));
 			if (!(chunk_list->users == users)) {
 				ok = false;
 				goto user_finally;
 			}
 		}
-		if (!(BLI_mempool_count(bs->memory.chunk_list) == (int)BLI_ghash_size(chunk_list_map))) {
+		if (!(BLI_mempool_len(bs->memory.chunk_list) == (int)BLI_ghash_len(chunk_list_map))) {
 			ok = false;
 			goto user_finally;
 		}
@@ -1772,18 +1779,18 @@ bool BLI_array_store_is_valid(
 				totrefs += 1;
 			}
 		}
-		if (!(BLI_mempool_count(bs->memory.chunk) == (int)BLI_ghash_size(chunk_map))) {
+		if (!(BLI_mempool_len(bs->memory.chunk) == (int)BLI_ghash_len(chunk_map))) {
 			ok = false;
 			goto user_finally;
 		}
-		if (!(BLI_mempool_count(bs->memory.chunk_ref) == totrefs)) {
+		if (!(BLI_mempool_len(bs->memory.chunk_ref) == totrefs)) {
 			ok = false;
 			goto user_finally;
 		}
 
 		GHASH_ITER (gh_iter, chunk_map) {
 			const struct BChunk *chunk = BLI_ghashIterator_getKey(&gh_iter);
-			const int users =  GET_INT_FROM_POINTER(BLI_ghashIterator_getValue(&gh_iter));
+			const int users =  POINTER_AS_INT(BLI_ghashIterator_getValue(&gh_iter));
 			if (!(chunk->users == users)) {
 				ok = false;
 				goto user_finally;

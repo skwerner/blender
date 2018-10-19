@@ -526,7 +526,7 @@ bool RE_bake_pixels_populate_from_objects(
 
 		if (dm_highpoly[i]->getNumTessFaces(dm_highpoly[i]) != 0) {
 			/* Create a bvh-tree for each highpoly object */
-			bvhtree_from_mesh_faces(&treeData[i], dm_highpoly[i], 0.0, 2, 6);
+			bvhtree_from_mesh_get(&treeData[i], dm_highpoly[i], BVHTREE_FROM_FACES, 2);
 
 			if (treeData[i].tree == NULL) {
 				printf("Baking: out of memory while creating BHVTree for object \"%s\"\n", highpoly[i].ob->id.name + 2);
@@ -568,7 +568,8 @@ bool RE_bake_pixels_populate_from_objects(
 		/* cast ray */
 		if (!cast_ray_highpoly(treeData, tri_low, tris_high,
 		                       pixel_array_from, pixel_array_to, mat_low,
-		                       highpoly, co, dir, i, tot_highpoly)) {
+		                       highpoly, co, dir, i, tot_highpoly))
+		{
 			/* if it fails mask out the original pixel array */
 			pixel_array_from[i].primitive_id = -1;
 		}
@@ -734,7 +735,7 @@ static void normal_uncompress(float out[3], const float in[3])
 		out[i] = 2.0f * in[i] - 1.0f;
 }
 
-static void normal_compress(float out[3], const float in[3], const BakeNormalSwizzle normal_swizzle[3])
+static void normal_compress(float out[3], const float in[3], const eBakeNormalSwizzle normal_swizzle[3])
 {
 	const int swizzle_index[6] = {
 		0,  /* R_BAKE_POSX */
@@ -777,7 +778,7 @@ static void normal_compress(float out[3], const float in[3], const BakeNormalSwi
  */
 void RE_bake_normal_world_to_tangent(
         const BakePixel pixel_array[], const size_t num_pixels, const int depth,
-        float result[], Mesh *me, const BakeNormalSwizzle normal_swizzle[3],
+        float result[], Mesh *me, const eBakeNormalSwizzle normal_swizzle[3],
         float mat[4][4])
 {
 	size_t i;
@@ -888,7 +889,7 @@ void RE_bake_normal_world_to_tangent(
 
 void RE_bake_normal_world_to_object(
         const BakePixel pixel_array[], const size_t num_pixels, const int depth,
-        float result[], struct Object *ob, const BakeNormalSwizzle normal_swizzle[3])
+        float result[], struct Object *ob, const eBakeNormalSwizzle normal_swizzle[3])
 {
 	size_t i;
 	float iobmat[4][4];
@@ -916,7 +917,7 @@ void RE_bake_normal_world_to_object(
 
 void RE_bake_normal_world_to_world(
         const BakePixel pixel_array[], const size_t num_pixels, const int depth,
-        float result[], const BakeNormalSwizzle normal_swizzle[3])
+        float result[], const eBakeNormalSwizzle normal_swizzle[3])
 {
 	size_t i;
 
@@ -975,7 +976,7 @@ static bool bake_uv(const BakePixel pixel_array[], const size_t num_pixels, cons
 
 bool RE_bake_internal(
         Render *UNUSED(re), Object *UNUSED(object), const BakePixel pixel_array[],
-        const size_t num_pixels, const int depth, const ScenePassType pass_type, float result[])
+        const size_t num_pixels, const int depth, const eScenePassType pass_type, float result[])
 {
 	switch (pass_type) {
 		case SCE_PASS_UV:
@@ -988,7 +989,7 @@ bool RE_bake_internal(
 	return false;
 }
 
-int RE_pass_depth(const ScenePassType pass_type)
+int RE_pass_depth(const eScenePassType pass_type)
 {
 	/* IMB_buffer_byte_from_float assumes 4 channels
 	 * making it work for now - XXX */

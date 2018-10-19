@@ -87,10 +87,10 @@ static void pixel_from_buffer(struct ImBuf *ibuf, unsigned char **outI, float **
 
 {
 	size_t offset = ((size_t)ibuf->x) * y * 4 + 4 * x;
-	
+
 	if (ibuf->rect)
 		*outI = (unsigned char *)ibuf->rect + offset;
-	
+
 	if (ibuf->rect_float)
 		*outF = ibuf->rect_float + offset;
 }
@@ -112,13 +112,13 @@ void bicubic_interpolation(ImBuf *in, ImBuf *out, float u, float v, int xout, in
 {
 	unsigned char *outI = NULL;
 	float *outF = NULL;
-	
+
 	if (in == NULL || (in->rect == NULL && in->rect_float == NULL)) {
 		return;
 	}
-	
+
 	pixel_from_buffer(out, &outI, &outF, xout, yout); /* gcc warns these could be uninitialized, but its ok */
-	
+
 	bicubic_interpolation_color(in, outI, outF, u, v);
 }
 
@@ -145,8 +145,8 @@ void bilinear_interpolation_color_wrap(struct ImBuf *in, unsigned char outI[4], 
 	unsigned char *row1I, *row2I, *row3I, *row4I;
 	float a_b, ma_b, a_mb, ma_mb;
 	int y1, y2, x1, x2;
-	
-	
+
+
 	/* ImBuf in must have a valid rect or rect_float, assume this is already checked */
 
 	x1 = (int)floor(u);
@@ -194,7 +194,7 @@ void bilinear_interpolation_color_wrap(struct ImBuf *in, unsigned char outI[4], 
 		row2I = (unsigned char *)in->rect + ((size_t)in->x) * y2 * 4 + 4 * x1;
 		row3I = (unsigned char *)in->rect + ((size_t)in->x) * y1 * 4 + 4 * x2;
 		row4I = (unsigned char *)in->rect + ((size_t)in->x) * y2 * 4 + 4 * x2;
-		
+
 		/* need to add 0.5 to avoid rounding down (causes darken with the smear brush)
 		 * tested with white images and this should not wrap back to zero */
 		outI[0] = (ma_mb * row1I[0] + a_mb * row3I[0] + ma_b * row2I[0] + a_b * row4I[0]) + 0.5f;
@@ -208,13 +208,13 @@ void bilinear_interpolation(ImBuf *in, ImBuf *out, float u, float v, int xout, i
 {
 	unsigned char *outI = NULL;
 	float *outF = NULL;
-	
+
 	if (in == NULL || (in->rect == NULL && in->rect_float == NULL)) {
 		return;
 	}
-	
+
 	pixel_from_buffer(out, &outI, &outF, xout, yout); /* gcc warns these could be uninitialized, but its ok */
-	
+
 	bilinear_interpolation_color(in, outI, outF, u, v);
 }
 
@@ -227,7 +227,7 @@ void nearest_interpolation_color(struct ImBuf *in, unsigned char outI[4], float 
 	int y1, x1;
 
 	/* ImBuf in must have a valid rect or rect_float, assume this is already checked */
-	
+
 	x1 = (int)(u);
 	y1 = (int)(v);
 
@@ -316,9 +316,9 @@ void nearest_interpolation(ImBuf *in, ImBuf *out, float x, float y, int xout, in
 	if (in == NULL || (in->rect == NULL && in->rect_float == NULL)) {
 		return;
 	}
-	
+
 	pixel_from_buffer(out, &outI, &outF, xout, yout); /* gcc warns these could be uninitialized, but its ok */
-	
+
 	nearest_interpolation_color(in, outI, outF, x, y);
 }
 
@@ -391,7 +391,7 @@ static void processor_apply_scanline_func(TaskPool * __restrict pool,
                                           int UNUSED(threadid))
 {
 	ScanlineGlobalData *data = BLI_task_pool_userdata(pool);
-	int start_scanline = GET_INT_FROM_POINTER(taskdata);
+	int start_scanline = POINTER_AS_INT(taskdata);
 	int num_scanlines = min_ii(data->scanlines_per_task,
 	                           data->total_scanlines - start_scanline);
 	data->do_thread(data->custom_data,
@@ -415,7 +415,7 @@ void IMB_processor_apply_threaded_scanlines(int total_scanlines,
 	for (int i = 0, start_line = 0; i < total_tasks; i++) {
 		BLI_task_pool_push(task_pool,
 		                   processor_apply_scanline_func,
-		                   SET_INT_IN_POINTER(start_line),
+		                   POINTER_FROM_INT(start_line),
 		                   false,
 		                   TASK_PRIORITY_LOW);
 		start_line += scanlines_per_task;

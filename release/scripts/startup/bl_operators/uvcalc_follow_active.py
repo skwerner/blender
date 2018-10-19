@@ -18,7 +18,7 @@
 
 # <pep8 compliant>
 
-#for full docs see...
+# for full docs see...
 # http://mediawiki.blender.org/index.php/Scripts/Manual/UV_Calculate/Follow_active_quads
 
 import bpy
@@ -52,7 +52,7 @@ def extend(obj, operator, EXTEND_MODE):
 
     # our own local walker
     def walk_face_init(faces, f_act):
-        # first tag all faces True (so we dont uvmap them)
+        # first tag all faces True (so we don't uvmap them)
         for f in bm.faces:
             f.tag = True
         # then tag faces arg False
@@ -227,14 +227,14 @@ class FollowActiveQuads(Operator):
     bl_options = {'REGISTER', 'UNDO'}
 
     mode = bpy.props.EnumProperty(
-            name="Edge Length Mode",
-            description="Method to space UV edge loops",
-            items=(('EVEN', "Even", "Space all UVs evenly"),
-                   ('LENGTH', "Length", "Average space UVs edge length of each loop"),
-                   ('LENGTH_AVERAGE', "Length Average", "Average space UVs edge length of each loop"),
-                   ),
-            default='LENGTH_AVERAGE',
-            )
+        name="Edge Length Mode",
+        description="Method to space UV edge loops",
+        items=(('EVEN', "Even", "Space all UVs evenly"),
+               ('LENGTH', "Length", "Average space UVs edge length of each loop"),
+               ('LENGTH_AVERAGE', "Length Average", "Average space UVs edge length of each loop"),
+               ),
+        default='LENGTH_AVERAGE',
+    )
 
     @classmethod
     def poll(cls, context):

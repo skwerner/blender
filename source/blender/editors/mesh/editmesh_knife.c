@@ -18,7 +18,7 @@
  * The Original Code is Copyright (C) 2007 Blender Foundation.
  * All rights reserved.
  *
- * 
+ *
  * Contributor(s): Joseph Eagar, Joshua Leung, Howard Trickey,
  *                 Campbell Barton
  *
@@ -271,6 +271,8 @@ static bool knife_verts_edge_in_face(KnifeVert *v1, KnifeVert *v2, BMFace *f);
 
 static void knifetool_free_bmbvh(KnifeTool_OpData *kcd);
 
+static int knifetool_modal(bContext *C, wmOperator *op, const wmEvent *event);
+
 static void knife_update_header(bContext *C, wmOperator *op, KnifeTool_OpData *kcd)
 {
 	char header[UI_MAX_DRAW_STR];
@@ -477,7 +479,7 @@ static KnifeEdge *get_bm_knife_edge(KnifeTool_OpData *kcd, BMEdge *e)
 /* Record the index in kcd->em->looptris of first looptri triple for a given face,
  * given an index for some triple in that array.
  * This assumes that all of the triangles for a given face are contiguous
- * in that array (as they are by the current tesselation routines).
+ * in that array (as they are by the current tessellation routines).
  * Actually store index + 1 in the hash, because 0 looks like "no entry"
  * to hash lookup routine; will reverse this in the get routine.
  * Doing this lazily rather than all at once for all faces.
@@ -500,7 +502,7 @@ static void set_lowest_face_tri(KnifeTool_OpData *kcd, BMFace *f, int index)
 	if (i == -1)
 		i++;
 
-	BLI_ghash_insert(kcd->facetrimap, f, SET_INT_IN_POINTER(i + 1));
+	BLI_ghash_insert(kcd->facetrimap, f, POINTER_FROM_INT(i + 1));
 }
 
 /* This should only be called for faces that have had a lowest face tri set by previous function */
@@ -508,7 +510,7 @@ static int get_lowest_face_tri(KnifeTool_OpData *kcd, BMFace *f)
 {
 	int ans;
 
-	ans = GET_INT_FROM_POINTER(BLI_ghash_lookup(kcd->facetrimap, f));
+	ans = POINTER_AS_INT(BLI_ghash_lookup(kcd->facetrimap, f));
 	BLI_assert(ans != 0);
 	return ans - 1;
 }
@@ -855,7 +857,7 @@ static void knife_cut_face(KnifeTool_OpData *kcd, BMFace *f, ListBase *hits)
 {
 	Ref *r;
 
-	if (BLI_listbase_count_ex(hits, 2) != 2)
+	if (BLI_listbase_count_at_most(hits, 2) != 2)
 		return;
 
 	for (r = hits->first; r->next; r = r->next) {
@@ -1043,7 +1045,7 @@ static void knifetool_draw(const bContext *C, ARegion *UNUSED(ar), void *arg)
 			knifetool_draw_angle_snapping(kcd);
 
 		glColor3ubv(kcd->colors.line);
-		
+
 		glLineWidth(2.0);
 
 		glBegin(GL_LINES);
@@ -1206,6 +1208,7 @@ static bool knife_ray_intersect_face(
 
 	for (; tri_i < tottri; tri_i++) {
 		const float *lv1, *lv2, *lv3;
+		float ray_tri_uv[2];
 
 		tri = kcd->em->looptris[tri_i];
 		if (tri[0]->f != f)
@@ -1214,10 +1217,10 @@ static bool knife_ray_intersect_face(
 		lv2 = kcd->cagecos[BM_elem_index_get(tri[1]->v)];
 		lv3 = kcd->cagecos[BM_elem_index_get(tri[2]->v)];
 		/* using epsilon test in case ray is directly through an internal
-		 * tesselation edge and might not hit either tesselation tri with
+		 * tessellation edge and might not hit either tessellation tri with
 		 * an exact test;
 		 * we will exclude hits near real edges by a later test */
-		if (isect_ray_tri_epsilon_v3(v1, raydir, lv1, lv2, lv3, &lambda, NULL, KNIFE_FLT_EPS)) {
+		if (isect_ray_tri_epsilon_v3(v1, raydir, lv1, lv2, lv3, &lambda, ray_tri_uv, KNIFE_FLT_EPS)) {
 			/* check if line coplanar with tri */
 			normal_tri_v3(tri_norm, lv1, lv2, lv3);
 			plane_from_point_normal_v3(tri_plane, lv1, tri_norm);
@@ -1226,8 +1229,7 @@ static bool knife_ray_intersect_face(
 			{
 				return false;
 			}
-			copy_v3_v3(hit_cageco, v1);
-			madd_v3_v3fl(hit_cageco, raydir, lambda);
+			interp_v3_v3v3v3_uv(hit_cageco, lv1, lv2, lv3, ray_tri_uv);
 			/* Now check that far enough away from verts and edges */
 			lst = knife_get_face_kedges(kcd, f);
 			for (ref = lst->first; ref; ref = ref->next) {
@@ -1239,11 +1241,7 @@ static bool knife_ray_intersect_face(
 					return false;
 				}
 			}
-
-			transform_point_by_tri_v3(
-			        hit_co, hit_cageco,
-			        tri[0]->v->co, tri[1]->v->co, tri[2]->v->co,
-			        lv1, lv2, lv3);
+			interp_v3_v3v3v3_uv(hit_co, tri[0]->v->co, tri[1]->v->co, tri[2]->v->co, ray_tri_uv);
 			return true;
 		}
 	}
@@ -1544,8 +1542,8 @@ static void knife_find_line_hits(KnifeTool_OpData *kcd)
 	}
 
 	/* unproject screen line */
-	ED_view3d_win_to_segment(kcd->ar, kcd->vc.v3d, s1, v1, v3, true);
-	ED_view3d_win_to_segment(kcd->ar, kcd->vc.v3d, s2, v2, v4, true);
+	ED_view3d_win_to_segment_clipped(kcd->ar, kcd->vc.v3d, s1, v1, v3, true);
+	ED_view3d_win_to_segment_clipped(kcd->ar, kcd->vc.v3d, s2, v2, v4, true);
 
 	mul_m4_v3(kcd->ob->imat, v1);
 	mul_m4_v3(kcd->ob->imat, v2);
@@ -1553,7 +1551,7 @@ static void knife_find_line_hits(KnifeTool_OpData *kcd)
 	mul_m4_v3(kcd->ob->imat, v4);
 
 	/* numeric error, 'v1' -> 'v2', 'v2' -> 'v4' can end up being ~2000 units apart in otho mode
-	 * (from ED_view3d_win_to_segment_clip() above)
+	 * (from ED_view3d_win_to_segment_clipped() above)
 	 * this gives precision error; rather then solving properly
 	 * (which may involve using doubles everywhere!),
 	 * limit the distance between these points */
@@ -1764,7 +1762,7 @@ static void knife_find_line_hits(KnifeTool_OpData *kcd)
 	}
 
 	kcd->linehits = linehits;
-	kcd->totlinehit = BLI_array_count(linehits);
+	kcd->totlinehit = BLI_array_len(linehits);
 
 	/* find position along screen line, used for sorting */
 	for (i = 0; i < kcd->totlinehit; i++) {
@@ -1793,7 +1791,7 @@ static void knife_input_ray_segment(KnifeTool_OpData *kcd, const float mval[2], 
 	ED_view3d_unproject(&mats, r_origin_ofs, mval[0], mval[1], ofs);
 
 	/* transform into object space */
-	invert_m4_m4(kcd->ob->imat, kcd->ob->obmat); 
+	invert_m4_m4(kcd->ob->imat, kcd->ob->obmat);
 
 	mul_m4_v3(kcd->ob->imat, r_origin);
 	mul_m4_v3(kcd->ob->imat, r_origin_ofs);
@@ -1947,7 +1945,7 @@ static KnifeEdge *knife_find_closest_edge(KnifeTool_OpData *kcd, float p[3], flo
 
 			/* check if we're close enough and calculate 'lambda' */
 			if (kcd->is_angle_snapping) {
-			/* if snapping, check we're in bounds */
+				/* if snapping, check we're in bounds */
 				float sco_snap[2];
 				isect_line_line_v2_point(kfe->v1->sco, kfe->v2->sco, kcd->prev.mval, kcd->curr.mval, sco_snap);
 				lambda = line_point_factor_v2(sco_snap, kfe->v1->sco, kfe->v2->sco);
@@ -2196,7 +2194,7 @@ static int knife_update_active(KnifeTool_OpData *kcd)
 	/* if no hits are found this would normally default to (0, 0, 0) so instead
 	 * get a point at the mouse ray closest to the previous point.
 	 * Note that drawing lines in `free-space` isn't properly supported
-	 * but theres no guarantee (0, 0, 0) has any geometry either - campbell */
+	 * but there's no guarantee (0, 0, 0) has any geometry either - campbell */
 	if (kcd->curr.vert == NULL && kcd->curr.edge == NULL && kcd->curr.bmface == NULL) {
 		float origin[3];
 		float origin_ofs[3];
@@ -2286,7 +2284,7 @@ static void knife_make_face_cuts(KnifeTool_OpData *kcd, BMFace *f, ListBase *kfe
 	/* point to knife edges we've created edges in, edge_array aligned */
 	KnifeEdge **kfe_array = BLI_array_alloca(kfe_array, edge_array_len);
 
-	BLI_assert(BLI_gset_size(kcd->edgenet.edge_visit) == 0);
+	BLI_assert(BLI_gset_len(kcd->edgenet.edge_visit) == 0);
 
 	i = 0;
 	for (ref = kfedges->first; ref; ref = ref->next) {
@@ -2666,6 +2664,7 @@ static int knifetool_invoke(bContext *C, wmOperator *op, const wmEvent *event)
 {
 	const bool only_select = RNA_boolean_get(op->ptr, "only_selected");
 	const bool cut_through = !RNA_boolean_get(op->ptr, "use_occlude_geometry");
+	const bool wait_for_input = RNA_boolean_get(op->ptr, "wait_for_input");
 
 	KnifeTool_OpData *kcd;
 
@@ -2693,6 +2692,18 @@ static int knifetool_invoke(bContext *C, wmOperator *op, const wmEvent *event)
 
 	knifetool_update_mval_i(kcd, event->mval);
 
+	if (wait_for_input == false) {
+		/* Avoid copy-paste logic. */
+		wmEvent event_modal = {
+			.prevval = KM_NOTHING,
+			.type = EVT_MODAL_MAP,
+			.val = KNF_MODAL_ADD_CUT,
+		};
+		int ret = knifetool_modal(C, op, &event_modal);
+		BLI_assert(ret == OPERATOR_RUNNING_MODAL);
+		UNUSED_VARS_NDEBUG(ret);
+	}
+
 	knife_update_header(C, op, kcd);
 
 	return OPERATOR_RUNNING_MODAL;
@@ -2700,7 +2711,7 @@ static int knifetool_invoke(bContext *C, wmOperator *op, const wmEvent *event)
 
 wmKeyMap *knifetool_modal_keymap(wmKeyConfig *keyconf)
 {
-	static EnumPropertyItem modal_items[] = {
+	static const EnumPropertyItem modal_items[] = {
 		{KNF_MODAL_CANCEL, "CANCEL", 0, "Cancel", ""},
 		{KNF_MODAL_CONFIRM, "CONFIRM", 0, "Confirm", ""},
 		{KNF_MODAL_MIDPOINT_ON, "SNAP_MIDPOINTS_ON", 0, "Snap To Midpoints On", ""},
@@ -2959,8 +2970,13 @@ void MESH_OT_knife_tool(wmOperatorType *ot)
 	/* flags */
 	ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO | OPTYPE_BLOCKING;
 
+	/* properties */
+	PropertyRNA *prop;
 	RNA_def_boolean(ot->srna, "use_occlude_geometry", true, "Occlude Geometry", "Only cut the front most geometry");
 	RNA_def_boolean(ot->srna, "only_selected", false, "Only Selected", "Only cut selected geometry");
+
+	prop = RNA_def_boolean(ot->srna, "wait_for_input", true, "Wait for Input", "");
+	RNA_def_property_flag(prop, PROP_HIDDEN | PROP_SKIP_SAVE);
 }
 
 

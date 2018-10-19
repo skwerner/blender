@@ -48,6 +48,7 @@
 #include "util/util_logging.h"
 #include "util/util_map.h"
 #include "util/util_opengl.h"
+#include "util/util_optimization.h"
 #include "util/util_progress.h"
 #include "util/util_system.h"
 #include "util/util_thread.h"
@@ -85,41 +86,41 @@ public:
 		(void)kernel_avx;
 		(void)kernel_avx2;
 #ifdef WITH_CYCLES_OPTIMIZED_KERNEL_AVX2
-		if(system_cpu_support_avx2()) {
+		if(DebugFlags().cpu.has_avx2() && system_cpu_support_avx2()) {
 			architecture_name = "AVX2";
 			kernel = kernel_avx2;
 		}
 		else
 #endif
 #ifdef WITH_CYCLES_OPTIMIZED_KERNEL_AVX
-		if(system_cpu_support_avx()) {
+		if(DebugFlags().cpu.has_avx() && system_cpu_support_avx()) {
 			architecture_name = "AVX";
 			kernel = kernel_avx;
 		}
 		else
 #endif
 #ifdef WITH_CYCLES_OPTIMIZED_KERNEL_SSE41
-		if(system_cpu_support_sse41()) {
+		if(DebugFlags().cpu.has_sse41() && system_cpu_support_sse41()) {
 			architecture_name = "SSE4.1";
 			kernel = kernel_sse41;
 		}
 		else
 #endif
 #ifdef WITH_CYCLES_OPTIMIZED_KERNEL_SSE3
-		if(system_cpu_support_sse3()) {
+		if(DebugFlags().cpu.has_sse3() && system_cpu_support_sse3()) {
 			architecture_name = "SSE3";
 			kernel = kernel_sse3;
 		}
 		else
 #endif
 #ifdef WITH_CYCLES_OPTIMIZED_KERNEL_SSE2
-		if(system_cpu_support_sse2()) {
+		if(DebugFlags().cpu.has_sse2() && system_cpu_support_sse2()) {
 			architecture_name = "SSE2";
 			kernel = kernel_sse2;
 		}
 #endif
 
-		if(strstr(architecture_name, logged_architecture) != 0) {
+		if(strcmp(architecture_name, logged_architecture) != 0) {
 			VLOG(1) << "Will be using " << architecture_name << " kernels.";
 			logged_architecture = architecture_name;
 		}
@@ -162,6 +163,9 @@ public:
 	TaskPool task_pool;
 	KernelGlobals kernel_globals;
 
+	device_vector<TextureInfo> texture_info;
+	bool need_texture_info;
+
 #ifdef WITH_OSL
 	OSLGlobals osl_globals;
 #endif
@@ -170,28 +174,28 @@ public:
 
 	DeviceRequestedFeatures requested_features;
 
-	KernelFunctions<void(*)(KernelGlobals *, float *, unsigned int *, int, int, int, int, int)>   path_trace_kernel;
-	KernelFunctions<void(*)(KernelGlobals *, uchar4 *, float *, float, int, int, int, int)>       convert_to_half_float_kernel;
-	KernelFunctions<void(*)(KernelGlobals *, uchar4 *, float *, float, int, int, int, int)>       convert_to_byte_kernel;
-	KernelFunctions<void(*)(KernelGlobals *, uint4 *, float4 *, float*, int, int, int, int, int)> shader_kernel;
+	KernelFunctions<void(*)(KernelGlobals *, float *, int, int, int, int, int)>             path_trace_kernel;
+	KernelFunctions<void(*)(KernelGlobals *, uchar4 *, float *, float, int, int, int, int)> convert_to_half_float_kernel;
+	KernelFunctions<void(*)(KernelGlobals *, uchar4 *, float *, float, int, int, int, int)> convert_to_byte_kernel;
+	KernelFunctions<void(*)(KernelGlobals *, uint4 *, float4 *, int, int, int, int, int)>   shader_kernel;
 
-	KernelFunctions<void(*)(int, TilesInfo*, int, int, float*, float*, float*, float*, float*, int*, int, int, bool)> filter_divide_shadow_kernel;
-	KernelFunctions<void(*)(int, TilesInfo*, int, int, int, int, float*, float*, int*, int, int, bool)>               filter_get_feature_kernel;
-	KernelFunctions<void(*)(int, int, float*, float*, float*, float*, int*, int)>                                     filter_detect_outliers_kernel;
-	KernelFunctions<void(*)(int, int, float*, float*, float*, float*, int*, int)>                                     filter_combine_halves_kernel;
+	KernelFunctions<void(*)(int, TileInfo*, int, int, float*, float*, float*, float*, float*, int*, int, int)> filter_divide_shadow_kernel;
+	KernelFunctions<void(*)(int, TileInfo*, int, int, int, int, float*, float*, int*, int, int)>               filter_get_feature_kernel;
+	KernelFunctions<void(*)(int, int, float*, float*, float*, float*, int*, int)>                               filter_detect_outliers_kernel;
+	KernelFunctions<void(*)(int, int, float*, float*, float*, float*, int*, int)>                               filter_combine_halves_kernel;
 
-	KernelFunctions<void(*)(int, int, float*, float*, float*, int*, int, int, float, float)> filter_nlm_calc_difference_kernel;
-	KernelFunctions<void(*)(float*, float*, int*, int, int)>                                 filter_nlm_blur_kernel;
-	KernelFunctions<void(*)(float*, float*, int*, int, int)>                                 filter_nlm_calc_weight_kernel;
-	KernelFunctions<void(*)(int, int, float*, float*, float*, float*, int*, int, int)>       filter_nlm_update_output_kernel;
-	KernelFunctions<void(*)(float*, float*, int*, int)>                                      filter_nlm_normalize_kernel;
+	KernelFunctions<void(*)(int, int, float*, float*, float*, int*, int, int, float, float)>   filter_nlm_calc_difference_kernel;
+	KernelFunctions<void(*)(float*, float*, int*, int, int)>                                   filter_nlm_blur_kernel;
+	KernelFunctions<void(*)(float*, float*, int*, int, int)>                                   filter_nlm_calc_weight_kernel;
+	KernelFunctions<void(*)(int, int, float*, float*, float*, float*, float*, int*, int, int)> filter_nlm_update_output_kernel;
+	KernelFunctions<void(*)(float*, float*, int*, int)>                                        filter_nlm_normalize_kernel;
 
-	KernelFunctions<void(*)(float*, int, int, int, float*, int*, int*, int, int, float)>                              filter_construct_transform_kernel;
-	KernelFunctions<void(*)(int, int, float*, float*, float*, int*, float*, float3*, int*, int*, int, int, int, int)> filter_nlm_construct_gramian_kernel;
-	KernelFunctions<void(*)(int, int, int, int, int, float*, int*, float*, float3*, int*, int)>                       filter_finalize_kernel;
+	KernelFunctions<void(*)(float*, int, int, int, float*, int*, int*, int, int, float)>                         filter_construct_transform_kernel;
+	KernelFunctions<void(*)(int, int, float*, float*, float*, int*, float*, float3*, int*, int*, int, int, int)> filter_nlm_construct_gramian_kernel;
+	KernelFunctions<void(*)(int, int, int, float*, int*, float*, float3*, int*, int)>                            filter_finalize_kernel;
 
 	KernelFunctions<void(*)(KernelGlobals *, ccl_constant KernelData*, ccl_global void*, int, ccl_global char*,
-	                       ccl_global uint*, int, int, int, int, int, int, int, int, ccl_global int*, int,
+	                       int, int, int, int, int, int, int, int, ccl_global int*, int,
 	                       ccl_global char*, ccl_global unsigned int*, unsigned int, ccl_global float*)>        data_init_kernel;
 	unordered_map<string, KernelFunctions<void(*)(KernelGlobals*, KernelData*)> > split_kernels;
 
@@ -203,8 +207,9 @@ public:
 	      KERNEL_NAME_EVAL(cpu_avx, name), \
 	      KERNEL_NAME_EVAL(cpu_avx2, name)
 
-	CPUDevice(DeviceInfo& info, Stats &stats, bool background)
-	: Device(info, stats, background),
+	CPUDevice(DeviceInfo& info_, Stats &stats_, bool background_)
+	: Device(info_, stats_, background_),
+	  texture_info(this, "__texture_info", MEM_TEXTURE),
 #define REGISTER_KERNEL(name) name ## _kernel(KERNEL_FUNCTIONS(name))
 	  REGISTER_KERNEL(path_trace),
 	  REGISTER_KERNEL(convert_to_half_float),
@@ -225,6 +230,9 @@ public:
 	  REGISTER_KERNEL(data_init)
 #undef REGISTER_KERNEL
 	{
+		if(info.cpu_threads == 0) {
+			info.cpu_threads = TaskScheduler::num_threads();
+		}
 
 #ifdef WITH_OSL
 		kernel_globals.osl = &osl_globals;
@@ -233,6 +241,7 @@ public:
 		if(use_split_kernel) {
 			VLOG(1) << "Will be using split kernel.";
 		}
+		need_texture_info = false;
 
 #define REGISTER_SPLIT_KERNEL(name) split_kernels[#name] = KernelFunctions<void(*)(KernelGlobals*, KernelData*)>(KERNEL_FUNCTIONS(name))
 		REGISTER_SPLIT_KERNEL(path_init);
@@ -260,34 +269,65 @@ public:
 	~CPUDevice()
 	{
 		task_pool.stop();
+		texture_info.free();
 	}
 
 	virtual bool show_samples() const
 	{
-		return (TaskScheduler::num_threads() == 1);
+		return (info.cpu_threads == 1);
 	}
 
-	void mem_alloc(const char *name, device_memory& mem, MemoryType /*type*/)
+	void load_texture_info()
 	{
-		if(name) {
-			VLOG(1) << "Buffer allocate: " << name << ", "
-			        << string_human_readable_number(mem.memory_size()) << " bytes. ("
-			        << string_human_readable_size(mem.memory_size()) << ")";
+		if(need_texture_info) {
+			texture_info.copy_to_device();
+			need_texture_info = false;
 		}
-
-		mem.device_pointer = mem.data_pointer;
-
-		if(!mem.device_pointer) {
-			mem.device_pointer = (device_ptr)malloc(mem.memory_size());
-		}
-
-		mem.device_size = mem.memory_size();
-		stats.mem_alloc(mem.device_size);
 	}
 
-	void mem_copy_to(device_memory& /*mem*/)
+	void mem_alloc(device_memory& mem)
 	{
-		/* no-op */
+		if(mem.type == MEM_TEXTURE) {
+			assert(!"mem_alloc not supported for textures.");
+		}
+		else {
+			if(mem.name) {
+				VLOG(1) << "Buffer allocate: " << mem.name << ", "
+						<< string_human_readable_number(mem.memory_size()) << " bytes. ("
+						<< string_human_readable_size(mem.memory_size()) << ")";
+			}
+
+			if(mem.type == MEM_DEVICE_ONLY) {
+				assert(!mem.host_pointer);
+				size_t alignment = MIN_ALIGNMENT_CPU_DATA_TYPES;
+				void *data = util_aligned_malloc(mem.memory_size(), alignment);
+				mem.device_pointer = (device_ptr)data;
+			}
+			else {
+				mem.device_pointer = (device_ptr)mem.host_pointer;
+			}
+
+			mem.device_size = mem.memory_size();
+			stats.mem_alloc(mem.device_size);
+		}
+	}
+
+	void mem_copy_to(device_memory& mem)
+	{
+		if(mem.type == MEM_TEXTURE) {
+			tex_free(mem);
+			tex_alloc(mem);
+		}
+		else if(mem.type == MEM_PIXELS) {
+			assert(!"mem_copy_to not supported for pixels.");
+		}
+		else {
+			if(!mem.device_pointer) {
+				mem_alloc(mem);
+			}
+
+			/* copy is no-op */
+		}
 	}
 
 	void mem_copy_from(device_memory& /*mem*/,
@@ -299,14 +339,23 @@ public:
 
 	void mem_zero(device_memory& mem)
 	{
-		memset((void*)mem.device_pointer, 0, mem.memory_size());
+		if(!mem.device_pointer) {
+			mem_alloc(mem);
+		}
+
+		if(mem.device_pointer) {
+			memset((void*)mem.device_pointer, 0, mem.memory_size());
+		}
 	}
 
 	void mem_free(device_memory& mem)
 	{
-		if(mem.device_pointer) {
-			if(!mem.data_pointer) {
-				free((void*)mem.device_pointer);
+		if(mem.type == MEM_TEXTURE) {
+			tex_free(mem);
+		}
+		else if(mem.device_pointer) {
+			if(mem.type == MEM_DEVICE_ONLY) {
+				util_aligned_free((void*)mem.device_pointer);
 			}
 			mem.device_pointer = 0;
 			stats.mem_free(mem.device_size);
@@ -314,7 +363,7 @@ public:
 		}
 	}
 
-	virtual device_ptr mem_alloc_sub_ptr(device_memory& mem, int offset, int /*size*/, MemoryType /*type*/)
+	virtual device_ptr mem_alloc_sub_ptr(device_memory& mem, int offset, int /*size*/)
 	{
 		return (device_ptr) (((char*) mem.device_pointer) + mem.memory_elements_size(offset));
 	}
@@ -324,23 +373,49 @@ public:
 		kernel_const_copy(&kernel_globals, name, host, size);
 	}
 
-	void tex_alloc(const char *name,
-	               device_memory& mem,
-	               InterpolationType interpolation,
-	               ExtensionType extension)
+	void tex_alloc(device_memory& mem)
 	{
-		VLOG(1) << "Texture allocate: " << name << ", "
+		VLOG(1) << "Texture allocate: " << mem.name << ", "
 		        << string_human_readable_number(mem.memory_size()) << " bytes. ("
 		        << string_human_readable_size(mem.memory_size()) << ")";
-		kernel_tex_copy(&kernel_globals,
-		                name,
-		                mem.data_pointer,
-		                mem.data_width,
-		                mem.data_height,
-		                mem.data_depth,
-		                interpolation,
-		                extension);
-		mem.device_pointer = mem.data_pointer;
+
+		if(mem.interpolation == INTERPOLATION_NONE) {
+			/* Data texture. */
+			kernel_tex_copy(&kernel_globals,
+							mem.name,
+							mem.host_pointer,
+							mem.data_size);
+		}
+		else {
+			/* Image Texture. */
+			int flat_slot = 0;
+			if(string_startswith(mem.name, "__tex_image")) {
+				int pos =  string(mem.name).rfind("_");
+				flat_slot = atoi(mem.name + pos + 1);
+			}
+			else {
+				assert(0);
+			}
+
+			if(flat_slot >= texture_info.size()) {
+				/* Allocate some slots in advance, to reduce amount
+				 * of re-allocations. */
+				texture_info.resize(flat_slot + 128);
+			}
+
+			TextureInfo& info = texture_info[flat_slot];
+			info.data = (uint64_t)mem.host_pointer;
+			info.cl_buffer = 0;
+			info.interpolation = mem.interpolation;
+			info.extension = mem.extension;
+			info.width = mem.data_width;
+			info.height = mem.data_height;
+			info.depth = mem.data_depth;
+
+			need_texture_info = true;
+		}
+
+		mem.device_pointer = (device_ptr)mem.host_pointer;
 		mem.device_size = mem.memory_size();
 		stats.mem_alloc(mem.device_size);
 	}
@@ -351,6 +426,7 @@ public:
 			mem.device_pointer = 0;
 			stats.mem_free(mem.device_size);
 			mem.device_size = 0;
+			need_texture_info = true;
 		}
 	}
 
@@ -383,18 +459,6 @@ public:
 		}
 	};
 
-	bool denoising_set_tiles(device_ptr *buffers, DenoisingTask *task)
-	{
-		mem_alloc("Denoising Tile Info", task->tiles_mem, MEM_READ_ONLY);
-
-		TilesInfo *tiles = (TilesInfo*) task->tiles_mem.data_pointer;
-		for(int i = 0; i < 9; i++) {
-			tiles->buffers[i] = buffers[i];
-		}
-
-		return true;
-	}
-
 	bool denoising_non_local_means(device_ptr image_ptr, device_ptr guide_ptr, device_ptr variance_ptr, device_ptr out_ptr,
 	                               DenoisingTask *task)
 	{
@@ -407,9 +471,10 @@ public:
 		int w = align_up(rect.z-rect.x, 4);
 		int h = rect.w-rect.y;
 
-		float *blurDifference = (float*) task->nlm_state.temporary_1_ptr;
-		float *difference     = (float*) task->nlm_state.temporary_2_ptr;
-		float *weightAccum    = (float*) task->nlm_state.temporary_3_ptr;
+		float *temporary_mem = (float*) task->buffer.temporary_mem.device_pointer;
+		float *blurDifference = temporary_mem;
+		float *difference     = temporary_mem + task->buffer.pass_stride;
+		float *weightAccum    = temporary_mem + 2*task->buffer.pass_stride;
 
 		memset(weightAccum, 0, sizeof(float)*w*h);
 		memset((float*) out_ptr, 0, sizeof(float)*w*h);
@@ -434,6 +499,7 @@ public:
 			filter_nlm_update_output_kernel()(dx, dy,
 			                                  blurDifference,
 			                                  (float*) image_ptr,
+			                                  difference,
 			                                  (float*) out_ptr,
 			                                  weightAccum,
 			                                  local_rect,
@@ -473,8 +539,9 @@ public:
 		mem_zero(task->storage.XtWX);
 		mem_zero(task->storage.XtWY);
 
-		float *difference     = (float*) task->reconstruction_state.temporary_1_ptr;
-		float *blurDifference = (float*) task->reconstruction_state.temporary_2_ptr;
+		float *temporary_mem = (float*) task->buffer.temporary_mem.device_pointer;
+		float *difference     = temporary_mem;
+		float *blurDifference = temporary_mem + task->buffer.pass_stride;
 
 		int r = task->radius;
 		for(int i = 0; i < (2*r+1)*(2*r+1); i++) {
@@ -489,13 +556,13 @@ public:
 			                                    (float*) color_variance_ptr,
 			                                    difference,
 			                                    local_rect,
-			                                    task->buffer.w,
+			                                    task->buffer.stride,
 			                                    task->buffer.pass_stride,
 			                                    1.0f,
 			                                    task->nlm_k_2);
-			filter_nlm_blur_kernel()(difference, blurDifference, local_rect, task->buffer.w, 4);
-			filter_nlm_calc_weight_kernel()(blurDifference, difference, local_rect, task->buffer.w, 4);
-			filter_nlm_blur_kernel()(difference, blurDifference, local_rect, task->buffer.w, 4);
+			filter_nlm_blur_kernel()(difference, blurDifference, local_rect, task->buffer.stride, 4);
+			filter_nlm_calc_weight_kernel()(blurDifference, difference, local_rect, task->buffer.stride, 4);
+			filter_nlm_blur_kernel()(difference, blurDifference, local_rect, task->buffer.stride, 4);
 			filter_nlm_construct_gramian_kernel()(dx, dy,
 			                                      blurDifference,
 			                                      (float*)  task->buffer.mem.device_pointer,
@@ -504,9 +571,8 @@ public:
 			                                      (float*)  task->storage.XtWX.device_pointer,
 			                                      (float3*) task->storage.XtWY.device_pointer,
 			                                      local_rect,
-			                                      &task->reconstruction_state.filter_rect.x,
-			                                      task->buffer.w,
-			                                      task->buffer.h,
+			                                      &task->reconstruction_state.filter_window.x,
+			                                      task->buffer.stride,
 			                                      4,
 			                                      task->buffer.pass_stride);
 		}
@@ -515,8 +581,6 @@ public:
 				filter_finalize_kernel()(x,
 				                         y,
 				                         y*task->filter_area.z + x,
-				                         task->buffer.w,
-				                         task->buffer.h,
 				                         (float*)  output_ptr,
 				                         (int*)    task->storage.rank.device_pointer,
 				                         (float*)  task->storage.XtWX.device_pointer,
@@ -553,7 +617,7 @@ public:
 		for(int y = task->rect.y; y < task->rect.w; y++) {
 			for(int x = task->rect.x; x < task->rect.z; x++) {
 				filter_divide_shadow_kernel()(task->render_buffer.samples,
-				                              task->tiles,
+				                              task->tile_info,
 				                              x, y,
 				                              (float*) a_ptr,
 				                              (float*) b_ptr,
@@ -562,8 +626,7 @@ public:
 				                              (float*) buffer_variance_ptr,
 				                              &task->rect.x,
 				                              task->render_buffer.pass_stride,
-				                              task->render_buffer.denoising_data_offset,
-				                              use_split_kernel);
+				                              task->render_buffer.offset);
 			}
 		}
 		return true;
@@ -578,7 +641,7 @@ public:
 		for(int y = task->rect.y; y < task->rect.w; y++) {
 			for(int x = task->rect.x; x < task->rect.z; x++) {
 				filter_get_feature_kernel()(task->render_buffer.samples,
-				                            task->tiles,
+				                            task->tile_info,
 				                            mean_offset,
 				                            variance_offset,
 				                            x, y,
@@ -586,8 +649,7 @@ public:
 				                            (float*) variance_ptr,
 				                            &task->rect.x,
 				                            task->render_buffer.pass_stride,
-				                            task->render_buffer.denoising_data_offset,
-				                            use_split_kernel);
+				                            task->render_buffer.offset);
 			}
 		}
 		return true;
@@ -615,8 +677,9 @@ public:
 
 	void path_trace(DeviceTask &task, RenderTile &tile, KernelGlobals *kg)
 	{
+		scoped_timer timer(&tile.buffers->render_time);
+
 		float *render_buffer = (float*)tile.buffer;
-		uint *rng_state = (uint*)tile.rng_state;
 		int start_sample = tile.start_sample;
 		int end_sample = tile.start_sample + tile.num_samples;
 
@@ -628,7 +691,7 @@ public:
 
 			for(int y = tile.y; y < tile.y + tile.h; y++) {
 				for(int x = tile.x; x < tile.x + tile.w; x++) {
-					path_trace_kernel()(kg, render_buffer, rng_state,
+					path_trace_kernel()(kg, render_buffer,
 					                    sample, x, y, tile.offset, tile.stride);
 				}
 			}
@@ -639,11 +702,9 @@ public:
 		}
 	}
 
-	void denoise(DeviceTask &task, RenderTile &tile)
+	void denoise(DenoisingTask& denoising, RenderTile &tile)
 	{
 		tile.sample = tile.start_sample + tile.num_samples;
-
-		DenoisingTask denoising(this);
 
 		denoising.functions.construct_transform = function_bind(&CPUDevice::denoising_construct_transform, this, &denoising);
 		denoising.functions.reconstruct = function_bind(&CPUDevice::denoising_reconstruct, this, _1, _2, _3, &denoising);
@@ -652,23 +713,12 @@ public:
 		denoising.functions.combine_halves = function_bind(&CPUDevice::denoising_combine_halves, this, _1, _2, _3, _4, _5, _6, &denoising);
 		denoising.functions.get_feature = function_bind(&CPUDevice::denoising_get_feature, this, _1, _2, _3, _4, &denoising);
 		denoising.functions.detect_outliers = function_bind(&CPUDevice::denoising_detect_outliers, this, _1, _2, _3, _4, &denoising);
-		denoising.functions.set_tiles = function_bind(&CPUDevice::denoising_set_tiles, this, _1, &denoising);
 
 		denoising.filter_area = make_int4(tile.x, tile.y, tile.w, tile.h);
 		denoising.render_buffer.samples = tile.sample;
+		denoising.buffer.gpu_temporary_mem = false;
 
-		RenderTile rtiles[9];
-		rtiles[4] = tile;
-		task.map_neighbor_tiles(rtiles, this);
-		denoising.tiles_from_rendertiles(rtiles);
-
-		denoising.init_from_devicetask(task);
-
-		denoising.run_denoising();
-
-		task.unmap_neighbor_tiles(rtiles, this);
-
-		task.update_progress(&tile, tile.w*tile.h);
+		denoising.run_denoising(&tile);
 	}
 
 	void thread_render(DeviceTask& task)
@@ -679,38 +729,39 @@ public:
 		}
 
 		/* allocate buffer for kernel globals */
-		device_only_memory<KernelGlobals> kgbuffer;
-		kgbuffer.resize(1);
-		mem_alloc("kernel_globals", kgbuffer, MEM_READ_WRITE);
+		device_only_memory<KernelGlobals> kgbuffer(this, "kernel_globals");
+		kgbuffer.alloc_to_device(1);
 
 		KernelGlobals *kg = new ((void*) kgbuffer.device_pointer) KernelGlobals(thread_kernel_globals_init());
 
 		CPUSplitKernel *split_kernel = NULL;
 		if(use_split_kernel) {
 			split_kernel = new CPUSplitKernel(this);
-			requested_features.max_closure = MAX_CLOSURE;
 			if(!split_kernel->load_kernels(requested_features)) {
 				thread_kernel_globals_free((KernelGlobals*)kgbuffer.device_pointer);
-				mem_free(kgbuffer);
-
+				kgbuffer.free();
 				delete split_kernel;
 				return;
 			}
 		}
 
 		RenderTile tile;
+		DenoisingTask denoising(this, task);
+
 		while(task.acquire_tile(this, tile)) {
 			if(tile.task == RenderTile::PATH_TRACE) {
 				if(use_split_kernel) {
-					device_memory data;
-					split_kernel->path_trace(&task, tile, kgbuffer, data);
+					device_only_memory<uchar> void_buffer(this, "void_buffer");
+					split_kernel->path_trace(&task, tile, kgbuffer, void_buffer);
 				}
 				else {
 					path_trace(task, tile, kg);
 				}
 			}
 			else if(tile.task == RenderTile::DENOISE) {
-				denoise(task, tile);
+				denoise(denoising, tile);
+
+				task.update_progress(&tile, tile.w*tile.h);
 			}
 
 			task.release_tile(tile);
@@ -723,7 +774,7 @@ public:
 
 		thread_kernel_globals_free((KernelGlobals*)kgbuffer.device_pointer);
 		kg->~KernelGlobals();
-		mem_free(kgbuffer);
+		kgbuffer.free();
 		delete split_kernel;
 	}
 
@@ -758,7 +809,6 @@ public:
 				shader_kernel()(&kg,
 				                (uint4*)task.shader_input,
 				                (float4*)task.shader_output,
-				                (float*)task.shader_output_luma,
 				                task.shader_eval_type,
 				                task.shader_filter,
 				                x,
@@ -780,20 +830,23 @@ public:
 	int get_split_task_count(DeviceTask& task)
 	{
 		if(task.type == DeviceTask::SHADER)
-			return task.get_subtask_count(TaskScheduler::num_threads(), 256);
+			return task.get_subtask_count(info.cpu_threads, 256);
 		else
-			return task.get_subtask_count(TaskScheduler::num_threads());
+			return task.get_subtask_count(info.cpu_threads);
 	}
 
 	void task_add(DeviceTask& task)
 	{
+		/* Load texture info. */
+		load_texture_info();
+
 		/* split task into smaller ones */
 		list<DeviceTask> tasks;
 
 		if(task.type == DeviceTask::SHADER)
-			task.split(tasks, TaskScheduler::num_threads(), 256);
+			task.split(tasks, info.cpu_threads, 256);
 		else
-			task.split(tasks, TaskScheduler::num_threads());
+			task.split(tasks, info.cpu_threads);
 
 		foreach(DeviceTask& task, tasks)
 			task_pool.push(new CPUDeviceTask(this, task));
@@ -847,7 +900,7 @@ protected:
 #endif
 	}
 
-	virtual bool load_kernels(DeviceRequestedFeatures& requested_features_) {
+	virtual bool load_kernels(const DeviceRequestedFeatures& requested_features_) {
 		requested_features = requested_features_;
 
 		return true;
@@ -912,7 +965,6 @@ bool CPUSplitKernel::enqueue_split_kernel_data_init(const KernelDimensions& dim,
 			                           (void*)split_data.device_pointer,
 			                           num_global_elements,
 			                           (char*)ray_state.device_pointer,
-			                           (uint*)rtile.rng_state,
 			                           rtile.start_sample,
 			                           rtile.start_sample + rtile.num_samples,
 			                           rtile.x,
@@ -976,7 +1028,16 @@ void device_cpu_info(vector<DeviceInfo>& devices)
 	info.id = "CPU";
 	info.num = 0;
 	info.advanced_shading = true;
-	info.pack_images = false;
+	info.bvh_layout_mask = BVH_LAYOUT_BVH2;
+	if(system_cpu_support_sse2()) {
+		info.bvh_layout_mask |= BVH_LAYOUT_BVH4;
+	}
+	if(system_cpu_support_avx2()) {
+		info.bvh_layout_mask |= BVH_LAYOUT_BVH8;
+	}
+	info.has_volume_decoupled = true;
+	info.has_osl = true;
+	info.has_half_images = true;
 
 	devices.insert(devices.begin(), info);
 }

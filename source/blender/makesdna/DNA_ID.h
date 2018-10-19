@@ -127,11 +127,14 @@ typedef struct ID {
 	/**
 	 * LIB_TAG_... tags (runtime only, cleared at read time).
 	 */
-	short tag;
-	short pad_s1;
+	int tag;
 	int us;
 	int icon_id;
+	int recalc;
+	int pad;
 	IDProperty *properties;
+
+	void *py_instance;
 } ID;
 
 /**
@@ -150,7 +153,7 @@ typedef struct Library {
 	char filepath[1024];
 
 	struct Library *parent;	/* set for indirectly linked libs, used in the outliner and while reading */
-	
+
 	struct PackedFile *packedfile;
 
 	/* Temp data needed by read/write code. */
@@ -173,9 +176,9 @@ enum ePreviewImage_Flag {
 
 /* for PreviewImage->tag */
 enum  {
-	PRV_TAG_DEFFERED           = (1 << 0),  /* Actual loading of preview is deffered. */
-	PRV_TAG_DEFFERED_RENDERING = (1 << 1),  /* Deffered preview is being loaded. */
-	PRV_TAG_DEFFERED_DELETE    = (1 << 2),  /* Deffered preview should be deleted asap. */
+	PRV_TAG_DEFFERED           = (1 << 0),  /* Actual loading of preview is deferred. */
+	PRV_TAG_DEFFERED_RENDERING = (1 << 1),  /* Deferred preview is being loaded. */
+	PRV_TAG_DEFFERED_DELETE    = (1 << 2),  /* Deferred preview should be deleted asap. */
 };
 
 typedef struct PreviewImage {
@@ -279,16 +282,17 @@ typedef enum ID_Type {
 
 #define ID_CHECK_UNDO(id) ((GS((id)->name) != ID_SCR) && (GS((id)->name) != ID_WM))
 
-#define ID_BLEND_PATH(_bmain, _id) ((_id)->lib ? (_id)->lib->filepath : (_bmain)->name)
+#define ID_BLEND_PATH(_bmain, _id) ((_id)->lib ? (_id)->lib->filepath : BKE_main_blendfile_path((_bmain)))
+#define ID_BLEND_PATH_FROM_GLOBAL(_id) ((_id)->lib ? (_id)->lib->filepath : BKE_main_blendfile_path_from_global())
 
 #define ID_MISSING(_id) (((_id)->tag & LIB_TAG_MISSING) != 0)
 
-#define ID_IS_LINKED_DATABLOCK(_id) (((ID *)(_id))->lib != NULL)
+#define ID_IS_LINKED(_id) (((ID *)(_id))->lib != NULL)
 
 #ifdef GS
 #  undef GS
 #endif
-#define GS(a)	(CHECK_TYPE_ANY(a, char *, const char *, char [66], const char[66]), (*((const short *)(a))))
+#define GS(a)	(CHECK_TYPE_ANY(a, char *, const char *, char [66], const char[66]), (ID_Type)(*((const short *)(a))))
 
 #define ID_NEW_SET(_id, _idn) \
 	(((ID *)(_id))->newid = (ID *)(_idn), ((ID *)(_id))->newid->tag |= LIB_TAG_NEW, (void *)((ID *)(_id))->newid)
@@ -340,16 +344,26 @@ enum {
 	 * Also used internally in readfile.c to mark datablocks needing do_versions. */
 	LIB_TAG_NEW             = 1 << 8,
 	/* RESET_BEFORE_USE free test flag.
-     * TODO make it a RESET_AFTER_USE too. */
+	 * TODO make it a RESET_AFTER_USE too. */
 	LIB_TAG_DOIT            = 1 << 10,
 	/* RESET_AFTER_USE tag existing data before linking so we know what is new. */
 	LIB_TAG_PRE_EXISTING    = 1 << 11,
 
+	/* RESET_NEVER tag datablock for freeing etc. behavior (usually set when copying real one into temp/runtime one). */
+	LIB_TAG_NO_MAIN          = 1 << 12,  /* Datablock is not listed in Main database. */
+	LIB_TAG_NO_USER_REFCOUNT = 1 << 13,  /* Datablock does not refcount usages of other IDs. */
+	/* Datablock was not allocated by standard system (BKE_libblock_alloc), do not free its memory
+	 * (usual type-specific freeing is called though). */
+	LIB_TAG_NOT_ALLOCATED     = 1 << 14,
+};
+
+enum {
 	/* RESET_AFTER_USE, used by update code (depsgraph). */
-	LIB_TAG_ID_RECALC       = 1 << 12,
-	LIB_TAG_ID_RECALC_DATA  = 1 << 13,
-	LIB_TAG_ANIM_NO_RECALC  = 1 << 14,
-	LIB_TAG_ID_RECALC_ALL   = (LIB_TAG_ID_RECALC | LIB_TAG_ID_RECALC_DATA),
+	ID_RECALC_NONE  = 0,
+	ID_RECALC       = 1 << 0,
+	ID_RECALC_DATA  = 1 << 1,
+	ID_RECALC_SKIP_ANIM_TAG  = 1 << 2,
+	ID_RECALC_ALL   = (ID_RECALC | ID_RECALC_DATA),
 };
 
 /* To filter ID types (filter_id) */

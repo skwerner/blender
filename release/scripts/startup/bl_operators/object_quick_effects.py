@@ -24,9 +24,9 @@ from bpy.types import Operator
 from bpy.props import (
     BoolProperty,
     EnumProperty,
-    IntProperty,
     FloatProperty,
     FloatVectorProperty,
+    IntProperty,
 )
 
 
@@ -53,24 +53,26 @@ class QuickFur(Operator):
     bl_options = {'REGISTER', 'UNDO'}
 
     density = EnumProperty(
-            name="Fur Density",
-            items=(('LIGHT', "Light", ""),
-                   ('MEDIUM', "Medium", ""),
-                   ('HEAVY', "Heavy", "")),
-            default='MEDIUM',
-            )
+        name="Fur Density",
+        items=(
+            ('LIGHT', "Light", ""),
+            ('MEDIUM', "Medium", ""),
+            ('HEAVY', "Heavy", "")
+        ),
+        default='MEDIUM',
+    )
     view_percentage = IntProperty(
-            name="View %",
-            min=1, max=100,
-            soft_min=1, soft_max=100,
-            default=10,
-            )
+        name="View %",
+        min=1, max=100,
+        soft_min=1, soft_max=100,
+        default=10,
+    )
     length = FloatProperty(
-            name="Length",
-            min=0.001, max=100,
-            soft_min=0.01, soft_max=10,
-            default=0.1,
-            )
+        name="Length",
+        min=0.001, max=100,
+        soft_min=0.01, soft_max=10,
+        default=0.1,
+    )
 
     def execute(self, context):
         fake_context = context.copy()
@@ -117,49 +119,51 @@ class QuickExplode(Operator):
     bl_options = {'REGISTER', 'UNDO'}
 
     style = EnumProperty(
-            name="Explode Style",
-            items=(('EXPLODE', "Explode", ""),
-                   ('BLEND', "Blend", "")),
-            default='EXPLODE',
-            )
+        name="Explode Style",
+        items=(
+            ('EXPLODE', "Explode", ""),
+            ('BLEND', "Blend", ""),
+        ),
+        default='EXPLODE',
+    )
     amount = IntProperty(
-            name="Amount of pieces",
-            min=2, max=10000,
-            soft_min=2, soft_max=10000,
-            default=100,
-            )
+        name="Amount of pieces",
+        min=2, max=10000,
+        soft_min=2, soft_max=10000,
+        default=100,
+    )
     frame_duration = IntProperty(
-            name="Duration",
-            min=1, max=300000,
-            soft_min=1, soft_max=10000,
-            default=50,
-            )
+        name="Duration",
+        min=1, max=300000,
+        soft_min=1, soft_max=10000,
+        default=50,
+    )
 
     frame_start = IntProperty(
-            name="Start Frame",
-            min=1, max=300000,
-            soft_min=1, soft_max=10000,
-            default=1,
-            )
+        name="Start Frame",
+        min=1, max=300000,
+        soft_min=1, soft_max=10000,
+        default=1,
+    )
     frame_end = IntProperty(
-            name="End Frame",
-            min=1, max=300000,
-            soft_min=1, soft_max=10000,
-            default=10,
-            )
+        name="End Frame",
+        min=1, max=300000,
+        soft_min=1, soft_max=10000,
+        default=10,
+    )
 
     velocity = FloatProperty(
-            name="Outwards Velocity",
-            min=0, max=300000,
-            soft_min=0, soft_max=10,
-            default=1,
-            )
+        name="Outwards Velocity",
+        min=0, max=300000,
+        soft_min=0, soft_max=10,
+        default=1,
+    )
 
     fade = BoolProperty(
-            name="Fade",
-            description="Fade the pieces over time",
-            default=True,
-            )
+        name="Fade",
+        description="Fade the pieces over time",
+        default=True,
+    )
 
     def execute(self, context):
         fake_context = context.copy()
@@ -303,19 +307,20 @@ class QuickSmoke(Operator):
     bl_options = {'REGISTER', 'UNDO'}
 
     style = EnumProperty(
-            name="Smoke Style",
-            items=(('SMOKE', "Smoke", ""),
-                   ('FIRE', "Fire", ""),
-                   ('BOTH', "Smoke + Fire", ""),
-                   ),
-            default='SMOKE',
-            )
+        name="Smoke Style",
+        items=(
+            ('SMOKE', "Smoke", ""),
+            ('FIRE', "Fire", ""),
+            ('BOTH', "Smoke + Fire", ""),
+        ),
+        default='SMOKE',
+    )
 
     show_flows = BoolProperty(
-            name="Render Smoke Objects",
-            description="Keep the smoke objects visible during rendering",
-            default=False,
-            )
+        name="Render Smoke Objects",
+        description="Keep the smoke objects visible during rendering",
+        default=False,
+    )
 
     def execute(self, context):
         if not bpy.app.build_options.mod_smoke:
@@ -387,102 +392,16 @@ class QuickSmoke(Operator):
             node_out = nodes.new(type='ShaderNodeOutputMaterial')
             node_out.location = grid_location(6, 1)
 
-            # Add shader 1
-            node_add_shader_1 = nodes.new(type='ShaderNodeAddShader')
-            node_add_shader_1.location = grid_location(5, 1)
-            links.new(node_add_shader_1.outputs["Shader"],
-                    node_out.inputs["Volume"])
+            # Add Principled Volume
+            node_principled = nodes.new(type='ShaderNodeVolumePrincipled')
+            node_principled.location = grid_location(4, 1)
+            links.new(node_principled.outputs["Volume"],
+                      node_out.inputs["Volume"])
 
-            if self.style in {'SMOKE', 'FIRE', 'BOTH'}:
-                # Smoke
-
-                # Add shader 2
-                node_add_shader_2 = nodes.new(type='ShaderNodeAddShader')
-                node_add_shader_2.location = grid_location(4, 2)
-                links.new(node_add_shader_2.outputs["Shader"],
-                        node_add_shader_1.inputs[0])
-
-                # Volume scatter
-                node_scatter = nodes.new(type='ShaderNodeVolumeScatter')
-                node_scatter.location = grid_location(3, 3)
-                links.new(node_scatter.outputs["Volume"],
-                        node_add_shader_2.inputs[0])
-
-                # Volume absorption
-                node_absorption = nodes.new(type='ShaderNodeVolumeAbsorption')
-                node_absorption.location = grid_location(3, 2)
-                links.new(node_absorption.outputs["Volume"],
-                        node_add_shader_2.inputs[1])
-
-                # Density Multiplier
-                node_densmult = nodes.new(type='ShaderNodeMath')
-                node_densmult.location = grid_location(2, 2)
-                node_densmult.operation = 'MULTIPLY'
-                node_densmult.inputs[1].default_value = 5.0
-                links.new(node_densmult.outputs["Value"],
-                        node_scatter.inputs["Density"])
-                links.new(node_densmult.outputs["Value"],
-                        node_absorption.inputs["Density"])
-
-                # Attribute "density"
-                node_attrib_density = nodes.new(type='ShaderNodeAttribute')
-                node_attrib_density.attribute_name = "density"
-                node_attrib_density.location = grid_location(1, 2)
-                links.new(node_attrib_density.outputs["Fac"],
-                        node_densmult.inputs[0])
-
-                # Attribute "color"
-                node_attrib_color = nodes.new(type='ShaderNodeAttribute')
-                node_attrib_color.attribute_name = "color"
-                node_attrib_color.location = grid_location(2, 3)
-                links.new(node_attrib_color.outputs["Color"],
-                        node_scatter.inputs["Color"])
-                links.new(node_attrib_color.outputs["Color"],
-                        node_absorption.inputs["Color"])
+            node_principled.inputs["Density"].default_value = 5.0
 
             if self.style in {'FIRE', 'BOTH'}:
-                # Fire
-
-                # Emission
-                node_emission = nodes.new(type='ShaderNodeEmission')
-                node_emission.inputs["Color"].default_value = (0.8, 0.1, 0.01, 1.0)
-                node_emission.location = grid_location(4, 1)
-                links.new(node_emission.outputs["Emission"],
-                        node_add_shader_1.inputs[1])
-
-                # Flame strength multiplier
-                node_flame_strength_mult = nodes.new(type='ShaderNodeMath')
-                node_flame_strength_mult.location = grid_location(3, 1)
-                node_flame_strength_mult.operation = 'MULTIPLY'
-                node_flame_strength_mult.inputs[1].default_value = 2.5
-                links.new(node_flame_strength_mult.outputs["Value"],
-                        node_emission.inputs["Strength"])
-
-                # Color ramp Flame
-                node_flame_ramp = nodes.new(type='ShaderNodeValToRGB')
-                node_flame_ramp.location = grid_location(1, 1)
-                ramp = node_flame_ramp.color_ramp
-                ramp.interpolation = 'EASE'
-
-                # orange
-                elem = ramp.elements.new(0.5)
-                elem.color = (1.0, 0.128, 0.0, 1.0)
-
-                # yellow
-                elem = ramp.elements.new(0.9)
-                elem.color = (0.9, 0.6, 0.1, 1.0)
-
-                links.new(node_flame_ramp.outputs["Color"],
-                        node_emission.inputs["Color"])
-
-                # Attribute "flame"
-                node_attrib_flame = nodes.new(type='ShaderNodeAttribute')
-                node_attrib_flame.attribute_name = "flame"
-                node_attrib_flame.location = grid_location(0, 1)
-                links.new(node_attrib_flame.outputs["Fac"],
-                        node_flame_ramp.inputs["Fac"])
-                links.new(node_attrib_flame.outputs["Fac"],
-                        node_flame_strength_mult.inputs[0])
+                node_principled.inputs["Blackbody Intensity"].default_value = 1.0
 
         # Blender Internal
         else:
@@ -542,29 +461,31 @@ class QuickFluid(Operator):
     bl_options = {'REGISTER', 'UNDO'}
 
     style = EnumProperty(
-            name="Fluid Style",
-            items=(('INFLOW', "Inflow", ""),
-                   ('BASIC', "Basic", "")),
-            default='BASIC',
-            )
+        name="Fluid Style",
+        items=(
+            ('INFLOW', "Inflow", ""),
+            ('BASIC', "Basic", ""),
+        ),
+        default='BASIC',
+    )
     initial_velocity = FloatVectorProperty(
-            name="Initial Velocity",
-            description="Initial velocity of the fluid",
-            min=-100.0, max=100.0,
-            default=(0.0, 0.0, 0.0),
-            subtype='VELOCITY',
-            )
+        name="Initial Velocity",
+        description="Initial velocity of the fluid",
+        min=-100.0, max=100.0,
+        default=(0.0, 0.0, 0.0),
+        subtype='VELOCITY',
+    )
     show_flows = BoolProperty(
-            name="Render Fluid Objects",
-            description="Keep the fluid objects visible during rendering",
-            default=False,
-            )
+        name="Render Fluid Objects",
+        description="Keep the fluid objects visible during rendering",
+        default=False,
+    )
     start_baking = BoolProperty(
-            name="Start Fluid Bake",
-            description=("Start baking the fluid immediately "
-                         "after creating the domain object"),
-            default=False,
-            )
+        name="Start Fluid Bake",
+        description=("Start baking the fluid immediately "
+                     "after creating the domain object"),
+        default=False,
+    )
 
     def execute(self, context):
         if not bpy.app.build_options.mod_fluid:

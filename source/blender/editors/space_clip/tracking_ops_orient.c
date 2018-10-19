@@ -42,7 +42,6 @@
 #include "BKE_context.h"
 #include "BKE_constraint.h"
 #include "BKE_tracking.h"
-#include "BKE_global.h"
 #include "BKE_depsgraph.h"
 #include "BKE_object.h"
 #include "BKE_report.h"
@@ -107,7 +106,7 @@ static Object *get_orientation_object(bContext *C)
 	return object;
 }
 
-static int set_orientation_poll(bContext *C)
+static bool set_orientation_poll(bContext *C)
 {
 	SpaceClip *sc = CTX_wm_space_clip(C);
 	if (sc != NULL) {
@@ -504,7 +503,7 @@ static int set_plane_exec(bContext *C, wmOperator *op)
 
 void CLIP_OT_set_plane(wmOperatorType *ot)
 {
-	static EnumPropertyItem plane_items[] = {
+	static const EnumPropertyItem plane_items[] = {
 		{0, "FLOOR", 0, "Floor", "Set floor plane"},
 		{1, "WALL", 0, "Wall", "Set wall plane"},
 		{0, NULL, 0, NULL, NULL}
@@ -578,7 +577,7 @@ static int set_axis_exec(bContext *C, wmOperator *op)
 
 void CLIP_OT_set_axis(wmOperatorType *ot)
 {
-	static EnumPropertyItem axis_actions[] = {
+	static const EnumPropertyItem axis_actions[] = {
 		{0, "X", 0, "X", "Align bundle align X axis"},
 		{1, "Y", 0, "Y", "Align bundle align Y axis"},
 		{0, NULL, 0, NULL, NULL}
@@ -747,7 +746,7 @@ void CLIP_OT_set_scale(wmOperatorType *ot)
 
 /********************** set solution scale operator *********************/
 
-static int set_solution_scale_poll(bContext *C)
+static bool set_solution_scale_poll(bContext *C)
 {
 	SpaceClip *sc = CTX_wm_space_clip(C);
 	if (sc != NULL) {
@@ -807,7 +806,7 @@ void CLIP_OT_set_solution_scale(wmOperatorType *ot)
 
 /********************** apply solution scale operator *********************/
 
-static int apply_solution_scale_poll(bContext *C)
+static bool apply_solution_scale_poll(bContext *C)
 {
 	SpaceClip *sc = CTX_wm_space_clip(C);
 	if (sc != NULL) {

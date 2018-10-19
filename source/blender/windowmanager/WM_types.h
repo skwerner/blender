@@ -4,7 +4,7 @@
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version. 
+ * of the License, or (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -18,7 +18,7 @@
  * The Original Code is Copyright (C) 2007 Blender Foundation.
  * All rights reserved.
  *
- * 
+ *
  * Contributor(s): Blender Foundation
  *
  * ***** END GPL LICENSE BLOCK *****
@@ -188,6 +188,7 @@ enum {
 #define KM_RELEASE	2
 #define KM_CLICK	3
 #define KM_DBL_CLICK	4
+#define KM_CLICK_DRAG	5
 
 
 /* ************** UI Handler ***************** */
@@ -199,15 +200,15 @@ enum {
 
 typedef struct wmNotifier {
 	struct wmNotifier *next, *prev;
-	
+
 	struct wmWindowManager *wm;
 	struct wmWindow *window;
-	
+
 	int swinid;			/* can't rely on this, notifiers can be added without context, swinid of 0 */
 	unsigned int category, data, subtype, action;
-	
+
 	void *reference;
-	
+
 } wmNotifier;
 
 
@@ -260,7 +261,6 @@ typedef struct wmNotifier {
 	/* NC_SCREEN screen */
 #define ND_SCREENBROWSE		(1<<16)
 #define ND_SCREENDELETE		(2<<16)
-#define ND_SCREENCAST		(3<<16)
 #define ND_ANIMPLAY			(4<<16)
 #define ND_GPENCIL			(5<<16)
 #define ND_EDITOR_CHANGED	(6<<16) /*sent to new editors after switching to them*/
@@ -322,7 +322,7 @@ typedef struct wmNotifier {
 	/* NC_TEXT Text */
 #define ND_CURSOR			(50<<16)
 #define ND_DISPLAY			(51<<16)
-	
+
 	/* NC_ANIMATION Animato */
 #define ND_KEYFRAME			(70<<16)
 #define ND_KEYFRAME_PROP	(71<<16)
@@ -409,12 +409,18 @@ typedef struct wmNotifier {
 typedef struct wmGesture {
 	struct wmGesture *next, *prev;
 	int event_type;	/* event->type */
-	int mode;		/* for modal callback */
 	int type;		/* gesture type define */
 	int swinid;		/* initial subwindow id where it started */
 	int points;		/* optional, amount of points stored */
-	int size;		/* optional, maximum amount of points stored */
-	
+	int points_alloc;	/* optional, maximum amount of points stored */
+	int modal_state;
+
+	/* For modal operators which may be running idle, waiting for an event to activate the gesture.
+	 * Typically this is set when the user is click-dragging the gesture (border and circle select for eg). */
+	uint is_active : 1;
+	/* Use for gestures that support both immediate or delayed activation. */
+	uint wait_for_input : 1;
+
 	void *customdata;
 	/* customdata for border is a recti */
 	/* customdata for circle is recti, (xmin, ymin) is center, xmax radius */
@@ -423,6 +429,7 @@ typedef struct wmGesture {
 
 	/* free pointer to use for operator allocs (if set, its freed on exit)*/
 	void *userdata;
+	bool  userdata_free;
 } wmGesture;
 
 /* ************** wmEvent ************************ */
@@ -431,7 +438,7 @@ typedef struct wmGesture {
 /* event comes from eventmanager and from keymap */
 typedef struct wmEvent {
 	struct wmEvent *next, *prev;
-	
+
 	short type;			/* event code itself (short, is also in keymap) */
 	short val;			/* press, release, scrollvalue */
 	int x, y;			/* mouse pointer position, screen coord */
@@ -448,14 +455,16 @@ typedef struct wmEvent {
 	int prevx, prevy;
 	double prevclicktime;
 	int prevclickx, prevclicky;
-	
+
 	/* modifier states */
 	short shift, ctrl, alt, oskey;	/* oskey is apple or windowskey, value denotes order of pressed */
 	short keymodifier;				/* rawkey modifier */
-	
+
 	/* set in case a KM_PRESS went by unhandled */
-	short check_click;
-	
+	char check_click;
+	char check_drag;
+	char is_motion_absolute;
+
 	/* keymap item, set by handler (weak?) */
 	const char *keymap_idname;
 
@@ -467,7 +476,7 @@ typedef struct wmEvent {
 	short customdatafree;
 	int pad2;
 	void *customdata;	/* ascii, unicode, mouse coords, angles, vectors, dragdrop info */
-	
+
 } wmEvent;
 
 /* ************** custom wmEvent data ************** */
@@ -500,22 +509,27 @@ typedef struct wmNDOFMotionData {
 } wmNDOFMotionData;
 #endif /* WITH_INPUT_NDOF */
 
+typedef enum {  /* Timer flags */
+	WM_TIMER_NO_FREE_CUSTOM_DATA  = 1 << 0,  /* Do not attempt to free customdata pointer even if non-NULL. */
+} wmTimerFlags;
+
 typedef struct wmTimer {
 	struct wmTimer *next, *prev;
-	
+
 	struct wmWindow *win;	/* window this timer is attached to (optional) */
 
 	double timestep;		/* set by timer user */
 	int event_type;			/* set by timer user, goes to event system */
+	wmTimerFlags flags;		/* Various flags controlling timer options, see below. */
 	void *customdata;		/* set by timer user, to allow custom values */
-	
+
 	double duration;		/* total running time in seconds */
 	double delta;			/* time since previous step in seconds */
-	
+
 	double ltime;			/* internal, last time timer was activated */
 	double ntime;			/* internal, next time we want to activate the timer */
 	double stime;			/* internal, when the timer started */
-	int sleep;				/* internal, put timers to sleep when needed */
+	bool sleep;				/* internal, put timers to sleep when needed */
 } wmTimer;
 
 typedef struct wmOperatorType {
@@ -555,7 +569,13 @@ typedef struct wmOperatorType {
 
 	/* verify if the operator can be executed in the current context, note
 	 * that the operator might still fail to execute even if this return true */
-	int (*poll)(struct bContext *) ATTR_WARN_UNUSED_RESULT;
+	bool (*poll)(struct bContext *) ATTR_WARN_UNUSED_RESULT;
+
+	/* Use to check of properties should be displayed in auto-generated UI.
+	 * Use 'check' callback to enforce refreshing. */
+	bool (*poll_property)(
+	        const struct bContext *C, struct wmOperator *op,
+	        const PropertyRNA *prop) ATTR_WARN_UNUSED_RESULT;
 
 	/* optional panel for redo and repeat, autogenerated if not set */
 	void (*ui)(struct bContext *, struct wmOperator *);
@@ -577,7 +597,7 @@ typedef struct wmOperatorType {
 	struct wmKeyMap *modalkeymap;
 
 	/* python needs the operator type as well */
-	int (*pyop_poll)(struct bContext *, struct wmOperatorType *ot) ATTR_WARN_UNUSED_RESULT;
+	bool (*pyop_poll)(struct bContext *, struct wmOperatorType *ot) ATTR_WARN_UNUSED_RESULT;
 
 	/* RNA integration */
 	ExtensionRNA ext;
@@ -609,26 +629,6 @@ typedef struct wmIMEData {
 
 typedef void (*wmPaintCursorDraw)(struct bContext *C, int, int, void *customdata);
 
-
-/* ****************** Messages ********************* */
-
-enum {
-	WM_LOG_DEBUG				= 0,
-	WM_LOG_INFO					= 1000,
-	WM_LOG_WARNING				= 2000,
-	WM_ERROR_UNDEFINED			= 3000,
-	WM_ERROR_INVALID_INPUT		= 3001,
-	WM_ERROR_INVALID_CONTEXT	= 3002,
-	WM_ERROR_OUT_OF_MEMORY		= 3003
-};
-
-typedef struct wmReport {
-	struct wmReport *next, *prev;
-	const char *typestr;
-	char *message;
-	int type;
-} wmReport;
-
 /* *************** Drag and drop *************** */
 
 #define WM_DRAG_ID		0
@@ -647,16 +647,16 @@ typedef enum wmDragFlags {
 
 typedef struct wmDrag {
 	struct wmDrag *next, *prev;
-	
+
 	int icon, type;					/* type, see WM_DRAG defines above */
 	void *poin;
 	char path[1024]; /* FILE_MAX */
 	double value;
-	
+
 	struct ImBuf *imb;						/* if no icon but imbuf should be drawn around cursor */
 	float scale;
 	int sx, sy;
-	
+
 	char opname[200]; /* if set, draws operator name*/
 	unsigned int flags;
 } wmDrag;
@@ -665,13 +665,13 @@ typedef struct wmDrag {
 /* allocation and free is on startup and exit */
 typedef struct wmDropBox {
 	struct wmDropBox *next, *prev;
-	
+
 	/* test if the dropbox is active, then can print optype name */
-	int (*poll)(struct bContext *, struct wmDrag *, const wmEvent *);
+	bool (*poll)(struct bContext *, struct wmDrag *, const wmEvent *);
 
 	/* before exec, this copies drag info to wmDrop properties */
 	void (*copy)(struct wmDrag *, struct wmDropBox *);
-	
+
 	/* if poll survives, operator is called */
 	wmOperatorType *ot;				/* not saved in file, so can be pointer */
 
@@ -682,6 +682,23 @@ typedef struct wmDropBox {
 
 } wmDropBox;
 
+/**
+ * Struct to store tool-tip timer and possible creation if the time is reached.
+ * Allows UI code to call #WM_tooltip_timer_init without each user having to handle the timer.
+ */
+typedef struct wmTooltipState {
+	/** Create tooltip on this event. */
+	struct wmTimer *timer;
+	/** The region the tooltip is created in. */
+	struct ARegion *region_from;
+	/** The tooltip region. */
+	struct ARegion *region;
+	/** Create the tooltip region (assign to 'region'). */
+	struct ARegion *(*init)(struct bContext *, struct ARegion *, bool *r_exit_on_event);
+	/** Exit on any event, not needed for buttons since their highlight state is used. */
+	bool exit_on_event;
+} wmTooltipState;
+
 /* *************** migrated stuff, clean later? ************** */
 
 typedef struct RecentFile {
@@ -689,10 +706,17 @@ typedef struct RecentFile {
 	char *filepath;
 } RecentFile;
 
+/* Logging */
+struct CLG_LogRef;
+/* wm_init_exit.c */
+extern struct CLG_LogRef *WM_LOG_OPERATORS;
+extern struct CLG_LogRef *WM_LOG_HANDLERS;
+extern struct CLG_LogRef *WM_LOG_EVENTS;
+extern struct CLG_LogRef *WM_LOG_KEYMAPS;
+
 
 #ifdef __cplusplus
 }
 #endif
 
 #endif /* __WM_TYPES_H__ */
-

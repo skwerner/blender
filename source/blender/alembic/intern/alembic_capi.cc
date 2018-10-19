@@ -259,7 +259,7 @@ static void export_startjob(void *customdata, short *stop, short *do_update, flo
 
 	try {
 		Scene *scene = data->scene;
-		AbcExporter exporter(scene, data->filename, data->settings);
+		AbcExporter exporter(data->bmain, scene, data->filename, data->settings);
 
 		const int orig_frame = CFRA;
 
@@ -293,7 +293,7 @@ static void export_endjob(void *customdata)
 
 	if (!data->settings.logger.empty()) {
 		std::cerr << data->settings.logger;
-		WM_report(RPT_ERROR, "Errors occured during the export, look in the console to know more...");
+		WM_report(RPT_ERROR, "Errors occurred during the export, look in the console to know more...");
 	}
 
 	G.is_rendering = false;
@@ -318,7 +318,7 @@ bool ABC_export(
 	 * ExportJobData contains an ExportSettings containing a SimpleLogger.
 	 *
 	 * Since ExportJobData is a C-style struct dynamically allocated with
-	 * MEM_mallocN (see above), its construtor is never called, therefore the
+	 * MEM_mallocN (see above), its constructor is never called, therefore the
 	 * ExportSettings constructor is not called which implies that the
 	 * SimpleLogger one is not called either. SimpleLogger in turn does not call
 	 * the constructor of its data members which ultimately means that its
@@ -797,7 +797,7 @@ static void import_endjob(void *user_data)
 		for (iter = data->readers.begin(); iter != data->readers.end(); ++iter) {
 			Object *ob = (*iter)->object();
 
-			/* It's possible that cancellation occured between the creation of
+			/* It's possible that cancellation occurred between the creation of
 			 * the reader and the creation of the Blender object. */
 			if (ob == NULL) continue;
 
@@ -990,6 +990,10 @@ CacheReader *CacheReader_open_alembic_object(AbcArchiveHandle *handle, CacheRead
 
 	ImportSettings settings;
 	AbcObjectReader *abc_reader = create_reader(iobject, settings);
+	if (abc_reader == NULL) {
+		/* This object is not supported */
+		return NULL;
+	}
 	abc_reader->object(object);
 	abc_reader->incref();
 

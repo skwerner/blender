@@ -45,18 +45,18 @@ class OSLRenderServices : public OSL::RendererServices
 public:
 	OSLRenderServices();
 	~OSLRenderServices();
-	
+
 	void thread_init(KernelGlobals *kernel_globals, OSL::TextureSystem *ts);
 
 	bool get_matrix(OSL::ShaderGlobals *sg, OSL::Matrix44 &result, OSL::TransformationPtr xform, float time);
 	bool get_inverse_matrix(OSL::ShaderGlobals *sg, OSL::Matrix44 &result, OSL::TransformationPtr xform, float time);
-	
+
 	bool get_matrix(OSL::ShaderGlobals *sg, OSL::Matrix44 &result, ustring from, float time);
 	bool get_inverse_matrix(OSL::ShaderGlobals *sg, OSL::Matrix44 &result, ustring to, float time);
-	
+
 	bool get_matrix(OSL::ShaderGlobals *sg, OSL::Matrix44 &result, OSL::TransformationPtr xform);
 	bool get_inverse_matrix(OSL::ShaderGlobals *sg, OSL::Matrix44 &result, OSL::TransformationPtr xform);
-	
+
 	bool get_matrix(OSL::ShaderGlobals *sg, OSL::Matrix44 &result, ustring from);
 	bool get_inverse_matrix(OSL::ShaderGlobals *sg, OSL::Matrix44 &result, ustring from);
 
@@ -147,6 +147,7 @@ public:
 	static ustring u_material_index;
 	static ustring u_object_random;
 	static ustring u_particle_index;
+	static ustring u_particle_random;
 	static ustring u_particle_age;
 	static ustring u_particle_lifetime;
 	static ustring u_particle_location;
@@ -163,6 +164,7 @@ public:
 	static ustring u_is_curve;
 	static ustring u_curve_thickness;
 	static ustring u_curve_tangent_normal;
+	static ustring u_curve_random;
 	static ustring u_path_ray_length;
 	static ustring u_path_ray_depth;
 	static ustring u_path_diffuse_depth;
@@ -179,6 +181,8 @@ public:
 	static ustring u_u;
 	static ustring u_v;
 	static ustring u_empty;
+	static ustring u_at_bevel;
+	static ustring u_at_ao;
 
 private:
 	KernelGlobals *kernel_globals;
@@ -191,4 +195,3 @@ private:
 CCL_NAMESPACE_END
 
 #endif /* __OSL_SERVICES_H__  */
-

@@ -19,7 +19,7 @@ CCL_NAMESPACE_BEGIN
 ccl_device_inline void kernel_filter_construct_gramian(int x, int y,
                                                        int storage_stride,
                                                        int dx, int dy,
-                                                       int w, int h,
+                                                       int buffer_stride,
                                                        int pass_stride,
                                                        const ccl_global float *ccl_restrict buffer,
                                                        const ccl_global float *ccl_restrict transform,
@@ -33,8 +33,8 @@ ccl_device_inline void kernel_filter_construct_gramian(int x, int y,
 		return;
 	}
 
-	int p_offset =  y    *w +  x;
-	int q_offset = (y+dy)*w + (x+dx);
+	int p_offset =  y     * buffer_stride +  x;
+	int q_offset = (y+dy) * buffer_stride + (x+dx);
 
 #ifdef __KERNEL_GPU__
 	const int stride = storage_stride;
@@ -61,11 +61,16 @@ ccl_device_inline void kernel_filter_construct_gramian(int x, int y,
 	                                make_int2(x+dx, y+dy), buffer + q_offset,
 	                                pass_stride, *rank, design_row, transform, stride);
 
+#ifdef __KERNEL_GPU__
 	math_trimatrix_add_gramian_strided(XtWX, (*rank)+1, design_row, weight, stride);
 	math_vec3_add_strided(XtWY, (*rank)+1, design_row, weight * q_color, stride);
+#else
+	math_trimatrix_add_gramian(XtWX, (*rank)+1, design_row, weight);
+	math_vec3_add(XtWY, (*rank)+1, design_row, weight * q_color);
+#endif
 }
 
-ccl_device_inline void kernel_filter_finalize(int x, int y, int w, int h,
+ccl_device_inline void kernel_filter_finalize(int x, int y,
                                               ccl_global float *buffer,
                                               ccl_global int *rank,
                                               int storage_stride,

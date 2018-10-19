@@ -5,7 +5,7 @@
  * All Rights Reserved.
  *
  * Modifications Copyright 2011, Blender Foundation.
- * 
+ *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
  * met:
@@ -38,6 +38,7 @@
 
 #include "kernel/kernel_compat_cpu.h"
 #include "kernel/closure/alloc.h"
+#include "kernel/closure/emissive.h"
 
 CCL_NAMESPACE_BEGIN
 
@@ -53,7 +54,7 @@ class GenericBackgroundClosure : public CClosurePrimitive {
 public:
 	void setup(ShaderData *sd, int /* path_flag */, float3 weight)
 	{
-		closure_alloc(sd, sizeof(ShaderClosure), CLOSURE_BACKGROUND_ID, weight);
+		background_setup(sd, weight);
 	}
 };
 
@@ -70,21 +71,6 @@ public:
 	{
 		closure_alloc(sd, sizeof(ShaderClosure), CLOSURE_HOLDOUT_ID, weight);
 		sd->flag |= SD_HOLDOUT;
-	}
-};
-
-/// ambient occlusion closure
-///
-/// We only have a ambient occlusion closure for the shaders
-/// to return a color in ambient occlusion shaders. No methods,
-/// only the weight is taking into account
-///
-class AmbientOcclusionClosure : public CClosurePrimitive {
-public:
-	void setup(ShaderData *sd, int /* path_flag */, float3 weight)
-	{
-		closure_alloc(sd, sizeof(ShaderClosure), CLOSURE_AMBIENT_OCCLUSION_ID, weight);
-		sd->flag |= SD_AO;
 	}
 };
 
@@ -109,16 +95,4 @@ ClosureParam *closure_holdout_params()
 
 CCLOSURE_PREPARE(closure_holdout_prepare, HoldoutClosure)
 
-ClosureParam *closure_ambient_occlusion_params()
-{
-	static ClosureParam params[] = {
-		CLOSURE_STRING_KEYPARAM(AmbientOcclusionClosure, label, "label"),
-		CLOSURE_FINISH_PARAM(AmbientOcclusionClosure)
-	};
-	return params;
-}
-
-CCLOSURE_PREPARE(closure_ambient_occlusion_prepare, AmbientOcclusionClosure)
-
 CCL_NAMESPACE_END
-

@@ -4,7 +4,7 @@
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version. 
+ * of the License, or (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -18,7 +18,7 @@
  * The Original Code is Copyright (C) 2009 Blender Foundation.
  * All rights reserved.
  *
- * 
+ *
  * Contributor(s): Blender Foundation
  *
  * ***** END GPL LICENSE BLOCK *****
@@ -93,12 +93,12 @@ bool gp_point_xy_to_3d(GP_SpaceConversion *gsc, struct Scene *scene, const float
 /* Poll Callbacks ------------------------------------ */
 /* gpencil_utils.c */
 
-int gp_add_poll(struct bContext *C);
-int gp_active_layer_poll(struct bContext *C);
-int gp_active_brush_poll(struct bContext *C);
-int gp_active_palette_poll(struct bContext *C);
-int gp_active_palettecolor_poll(struct bContext *C);
-int gp_brush_crt_presets_poll(bContext *C);
+bool gp_add_poll(struct bContext *C);
+bool gp_active_layer_poll(struct bContext *C);
+bool gp_active_brush_poll(struct bContext *C);
+bool gp_active_palette_poll(struct bContext *C);
+bool gp_active_palettecolor_poll(struct bContext *C);
+bool gp_brush_crt_presets_poll(bContext *C);
 
 /* Copy/Paste Buffer --------------------------------- */
 /* gpencil_edit.c */
@@ -121,16 +121,22 @@ void gp_randomize_stroke(bGPDstroke *gps, bGPDbrush *brush);
 
 /* Layers Enums -------------------------------------- */
 
-struct EnumPropertyItem *ED_gpencil_layers_enum_itemf(struct bContext *C, struct PointerRNA *ptr, struct PropertyRNA *prop, bool *r_free);
-struct EnumPropertyItem *ED_gpencil_layers_with_new_enum_itemf(struct bContext *C, struct PointerRNA *ptr, struct PropertyRNA *prop, bool *r_free);
+const struct EnumPropertyItem *ED_gpencil_layers_enum_itemf(
+        struct bContext *C, struct PointerRNA *ptr, struct PropertyRNA *prop,
+        bool *r_free);
+const struct EnumPropertyItem *ED_gpencil_layers_with_new_enum_itemf(
+        struct bContext *C, struct PointerRNA *ptr, struct PropertyRNA *prop,
+        bool *r_free);
 
 /* Enums of GP Brushes */
-EnumPropertyItem *ED_gpencil_brushes_enum_itemf(bContext *C, PointerRNA *UNUSED(ptr), PropertyRNA *UNUSED(prop),
-                                                bool *r_free);
+const EnumPropertyItem *ED_gpencil_brushes_enum_itemf(
+        bContext *C, PointerRNA *UNUSED(ptr), PropertyRNA *UNUSED(prop),
+        bool *r_free);
 
 /* Enums of GP palettes */
-EnumPropertyItem *ED_gpencil_palettes_enum_itemf(bContext *C, PointerRNA *UNUSED(ptr), PropertyRNA *UNUSED(prop),
-                                                 bool *r_free);
+const EnumPropertyItem *ED_gpencil_palettes_enum_itemf(
+        bContext *C, PointerRNA *UNUSED(ptr), PropertyRNA *UNUSED(prop),
+        bool *r_free);
 
 /* ***************************************************** */
 /* Operator Defines */
@@ -313,15 +319,15 @@ typedef enum ACTCONT_TYPES {
 /* Stroke Iteration Utilities */
 
 /**
-* Iterate over all editable strokes in the current context,
-* stopping on each usable layer + stroke pair (i.e. gpl and gps)
-* to perform some operations on the stroke.
-*
-* \param gpl  The identifier to use for the layer of the stroke being processed.
-*                    Choose a suitable value to avoid name clashes.
-* \param gps The identifier to use for current stroke being processed.
-*                    Choose a suitable value to avoid name clashes.
-*/
+ * Iterate over all editable strokes in the current context,
+ * stopping on each usable layer + stroke pair (i.e. gpl and gps)
+ * to perform some operations on the stroke.
+ *
+ * \param gpl  The identifier to use for the layer of the stroke being processed.
+ *                    Choose a suitable value to avoid name clashes.
+ * \param gps The identifier to use for current stroke being processed.
+ *                    Choose a suitable value to avoid name clashes.
+ */
 #define GP_EDITABLE_STROKES_BEGIN(C, gpl, gps)                                          \
 {                                                                                       \
 	CTX_DATA_BEGIN(C, bGPDlayer*, gpl, editable_gpencil_layers)                         \

@@ -168,10 +168,6 @@ elseif(APPLE AND NOT WITH_X11)
 		)
 	endif()
 
-	if(WITH_CODEC_QUICKTIME)
-		add_definitions(-DWITH_QUICKTIME)
-	endif()
-
 elseif(WITH_X11)
 	list(APPEND INC_SYS
 		${X11_X11_INCLUDE_PATH}
@@ -181,10 +177,12 @@ elseif(WITH_X11)
 		intern/GHOST_DisplayManagerX11.cpp
 		intern/GHOST_SystemX11.cpp
 		intern/GHOST_WindowX11.cpp
+		intern/GHOST_TaskbarX11.cpp
 
 		intern/GHOST_DisplayManagerX11.h
 		intern/GHOST_SystemX11.h
 		intern/GHOST_WindowX11.h
+		intern/GHOST_TaskbarX11.h
 	)
 
 	if(NOT WITH_GL_EGL)
@@ -220,6 +218,13 @@ elseif(WITH_X11)
 		add_definitions(-DWITH_X11_XF86VMODE)
 		list(APPEND INC_SYS
 			${X11_xf86vmode_INCLUDE_PATH}
+		)
+	endif()
+
+	if(WITH_X11_XFIXES)
+		add_definitions(-DWITH_X11_XFIXES)
+		list(APPEND INC_SYS
+			${X11_Xfixes_INCLUDE_PATH}
 		)
 	endif()
 
@@ -274,7 +279,7 @@ elseif(WIN32)
 	if(NOT WITH_GL_EGL)
 		list(APPEND SRC
 			intern/GHOST_ContextWGL.cpp
-				
+
 			intern/GHOST_ContextWGL.h
 		)
 	endif()
@@ -301,7 +306,7 @@ endif()
 if(WITH_GL_EGL AND NOT (WITH_HEADLESS OR WITH_GHOST_SDL))
 	list(APPEND SRC
 		intern/GHOST_ContextEGL.cpp
-			
+
 		intern/GHOST_ContextEGL.h
 	)
 endif()

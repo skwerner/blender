@@ -59,6 +59,7 @@ set(SRC
 	composite/nodes/node_composite_composite.c
 	composite/nodes/node_composite_cornerpin.c
 	composite/nodes/node_composite_crop.c
+	composite/nodes/node_composite_cryptomatte.c
 	composite/nodes/node_composite_curves.c
 	composite/nodes/node_composite_despeckle.c
 	composite/nodes/node_composite_doubleEdgeMask.c
@@ -172,11 +173,13 @@ set(SRC
 	shader/nodes/node_shader_bsdf_transparent.c
 	shader/nodes/node_shader_bsdf_velvet.c
 	shader/nodes/node_shader_bsdf_hair.c
+	shader/nodes/node_shader_bsdf_hair_principled.c
 	shader/nodes/node_shader_bump.c
 	shader/nodes/node_shader_emission.c
 	shader/nodes/node_shader_fresnel.c
 	shader/nodes/node_shader_geometry.c
 	shader/nodes/node_shader_holdout.c
+	shader/nodes/node_shader_ies_light.c
 	shader/nodes/node_shader_layer_weight.c
 	shader/nodes/node_shader_light_falloff.c
 	shader/nodes/node_shader_light_path.c
@@ -192,6 +195,9 @@ set(SRC
 	shader/nodes/node_shader_script.c
 	shader/nodes/node_shader_subsurface_scattering.c
 	shader/nodes/node_shader_tangent.c
+	shader/nodes/node_shader_bevel.c
+	shader/nodes/node_shader_displacement.c
+	shader/nodes/node_shader_vector_displacement.c
 	shader/nodes/node_shader_tex_brick.c
 	shader/nodes/node_shader_tex_checker.c
 	shader/nodes/node_shader_tex_coord.c
@@ -207,6 +213,7 @@ set(SRC
 	shader/nodes/node_shader_tex_wave.c
 	shader/nodes/node_shader_volume_scatter.c
 	shader/nodes/node_shader_volume_absorption.c
+	shader/nodes/node_shader_volume_principled.c
 	shader/nodes/node_shader_uvAlongStroke.c
 	shader/nodes/node_shader_uvmap.c
 	shader/node_shader_tree.c

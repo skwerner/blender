@@ -24,7 +24,7 @@
  *
  * ***** END GPL LICENSE BLOCK *****
  */
- 
+
 #ifndef __BLI_LINKLIST_STACK_H__
 #define __BLI_LINKLIST_STACK_H__
 
@@ -60,7 +60,7 @@
 } (void)0
 
 #define BLI_LINKSTACK_SIZE(var) \
-	BLI_mempool_count(var##_pool_)
+	BLI_mempool_len(var##_pool_)
 
 /* check for typeof() */
 #ifdef __GNUC__
@@ -199,4 +199,3 @@
 /** \} */
 
 #endif  /* __BLI_LINKLIST_STACK_H__ */
-

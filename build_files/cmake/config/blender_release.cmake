@@ -1,10 +1,11 @@
-# Turn everything ON thats expected for an official release builds.
+# Turn everything ON that's expected for an official release builds.
 #
 # Example usage:
 #   cmake -C../blender/build_files/cmake/config/blender_release.cmake  ../blender
 #
 
 set(WITH_ALEMBIC             ON  CACHE BOOL "" FORCE)
+set(WITH_ASSERT_ABORT        OFF CACHE BOOL "" FORCE)
 set(WITH_BUILDINFO           ON  CACHE BOOL "" FORCE)
 set(WITH_BULLET              ON  CACHE BOOL "" FORCE)
 set(WITH_CODEC_AVI           ON  CACHE BOOL "" FORCE)
@@ -34,7 +35,6 @@ set(WITH_INTERNATIONAL       ON  CACHE BOOL "" FORCE)
 set(WITH_JACK                ON  CACHE BOOL "" FORCE)
 set(WITH_LZMA                ON  CACHE BOOL "" FORCE)
 set(WITH_LZO                 ON  CACHE BOOL "" FORCE)
-set(WITH_MOD_BOOLEAN         ON  CACHE BOOL "" FORCE)
 set(WITH_MOD_FLUID           ON  CACHE BOOL "" FORCE)
 set(WITH_MOD_REMESH          ON  CACHE BOOL "" FORCE)
 set(WITH_MOD_SMOKE           ON  CACHE BOOL "" FORCE)
@@ -55,7 +55,7 @@ set(WITH_X11_XF86VMODE       ON  CACHE BOOL "" FORCE)
 set(WITH_PLAYER              ON  CACHE BOOL "" FORCE)
 set(WITH_MEM_JEMALLOC        ON  CACHE BOOL "" FORCE)
 set(WITH_CYCLES_CUDA_BINARIES ON  CACHE BOOL "" FORCE)
-set(CYCLES_CUDA_BINARIES_ARCH sm_20;sm_21;sm_30;sm_35;sm_37;sm_50;sm_52;sm_60;sm_61 CACHE STRING "" FORCE)
+set(CYCLES_CUDA_BINARIES_ARCH sm_30;sm_35;sm_37;sm_50;sm_52;sm_60;sm_61 CACHE STRING "" FORCE)
 
 # platform dependent options
 if(UNIX AND NOT APPLE)
@@ -67,9 +67,7 @@ elseif(WIN32)
 	set(WITH_OPENSUBDIV          ON  CACHE BOOL "" FORCE)
 elseif(APPLE)
 	set(WITH_JACK                ON  CACHE BOOL "" FORCE)
-	set(WITH_CODEC_QUICKTIME     OFF CACHE BOOL "" FORCE)
 	set(WITH_OPENSUBDIV          OFF CACHE BOOL "" FORCE)
 
 #	include("${CMAKE_CURRENT_SOURCE_DIR}/../platform/platform_apple_xcode.cmake")
-#	apple_check_quicktime()
 endif()

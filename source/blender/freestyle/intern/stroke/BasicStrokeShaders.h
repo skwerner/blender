@@ -405,7 +405,7 @@ public:
 class BackboneStretcherShader : public StrokeShader
 {
 private:
-	float _amount; 
+	float _amount;
 
 public:
 	/*! Builds the shader.
@@ -428,7 +428,7 @@ public:
 
 /*! [ Geometry Shader. ]
  *  Resamples the stroke.
- *  @see Stroke::Resample(float).
+ *  \see Stroke::Resample(float).
  */
 class SamplingShader: public StrokeShader
 {
@@ -479,7 +479,7 @@ public:
 /*! [ Geometry Shader ].
  *  Transforms the stroke backbone geometry so that it corresponds to a Bezier Curve approximation of the
  *  original backbone geometry.
- *  @see \htmlonly <a href=bezier/bezier.html>bezier/bezier.html</a> \endhtmlonly
+ *  \see \htmlonly <a href=bezier/bezier.html>bezier/bezier.html</a> \endhtmlonly
  */
 class BezierCurveShader : public StrokeShader
 {
@@ -524,7 +524,7 @@ public:
 	 *    The smaller, the closer the new stroke to the orinal one.
 	 *    This error corresponds to the maximum distance between the new stroke and the old one.
 	 */
-	PolygonalizationShader(float iError) : StrokeShader() 
+	PolygonalizationShader(float iError) : StrokeShader()
 	{
 		_error = iError;
 	}
@@ -594,7 +594,7 @@ public:
 	virtual int shade(Stroke &stroke) const;
 
 protected:
-	real _tipLength; 
+	real _tipLength;
 };
 
 /*! [ Texture Shader ].

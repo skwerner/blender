@@ -19,14 +19,14 @@
  *		Dalai Felinto
  */
 
-#ifndef _COM_DistanceMatteNode_h_
-#define _COM_DistanceMatteNode_h_
+#ifndef __COM_DISTANCEMATTENODE_H__
+#define __COM_DISTANCEMATTENODE_H__
 
 #include "COM_Node.h"
 
 /**
- * @brief DistanceMatteNode
- * @ingroup Node
+ * \brief DistanceMatteNode
+ * \ingroup Node
  */
 class DistanceMatteNode : public Node {
 public:

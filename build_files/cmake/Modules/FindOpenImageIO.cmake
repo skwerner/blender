@@ -34,7 +34,6 @@ SET(_openimageio_SEARCH_DIRS
   /usr/local
   /sw # Fink
   /opt/local # DarwinPorts
-  /opt/csw # Blastwave
   /opt/lib/oiio
 )
 
@@ -65,7 +64,7 @@ FIND_FILE(OPENIMAGEIO_IDIFF
     bin
 )
 
-# handle the QUIETLY and REQUIRED arguments and set OPENIMAGEIO_FOUND to TRUE if 
+# handle the QUIETLY and REQUIRED arguments and set OPENIMAGEIO_FOUND to TRUE if
 # all listed variables are TRUE
 INCLUDE(FindPackageHandleStandardArgs)
 FIND_PACKAGE_HANDLE_STANDARD_ARGS(OpenImageIO DEFAULT_MSG
@@ -76,6 +75,8 @@ IF(OPENIMAGEIO_FOUND)
   SET(OPENIMAGEIO_INCLUDE_DIRS ${OPENIMAGEIO_INCLUDE_DIR})
   IF(EXISTS ${OPENIMAGEIO_INCLUDE_DIR}/OpenImageIO/pugixml.hpp)
     SET(OPENIMAGEIO_PUGIXML_FOUND TRUE)
+  ELSE()
+    SET(OPENIMAGEIO_PUGIXML_FOUND FALSE)
   ENDIF()
 ELSE()
   SET(OPENIMAGEIO_PUGIXML_FOUND FALSE)

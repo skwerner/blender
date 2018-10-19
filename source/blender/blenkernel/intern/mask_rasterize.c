@@ -35,7 +35,7 @@
  * - free the handle.
  *
  * This file is admittedly a bit confusticated, in quite few areas speed was chosen over readability,
- * though it is commented - so shouldn't be so hard to see whats going on.
+ * though it is commented - so shouldn't be so hard to see what's going on.
  *
  *
  * Implementation:
@@ -80,6 +80,7 @@
 
 #include "BLI_math.h"
 #include "BLI_rect.h"
+#include "BLI_task.h"
 #include "BLI_listbase.h"
 #include "BLI_linklist.h"
 
@@ -485,7 +486,7 @@ static void layer_bucket_init(MaskRasterLayer *layer, const float pixel_size)
 					unsigned int xi_max = (unsigned int) ((xmax - layer->bounds.xmin) * layer->buckets_xy_scalar[0]);
 					unsigned int yi_min = (unsigned int) ((ymin - layer->bounds.ymin) * layer->buckets_xy_scalar[1]);
 					unsigned int yi_max = (unsigned int) ((ymax - layer->bounds.ymin) * layer->buckets_xy_scalar[1]);
-					void *face_index_void = SET_UINT_IN_POINTER(face_index);
+					void *face_index_void = POINTER_FROM_UINT(face_index);
 
 					unsigned int xi, yi;
 
@@ -537,7 +538,7 @@ static void layer_bucket_init(MaskRasterLayer *layer, const float pixel_size)
 					buckets_face[bucket_index] = bucket;
 
 					for (bucket_node = bucketstore[bucket_index]; bucket_node; bucket_node = bucket_node->next) {
-						*bucket = GET_UINT_FROM_POINTER(bucket_node->link);
+						*bucket = POINTER_AS_UINT(bucket_node->link);
 						bucket++;
 					}
 					*bucket = TRI_TERMINATOR_ID;
@@ -1423,15 +1424,42 @@ float BKE_maskrasterize_handle_sample(MaskRasterHandle *mr_handle, const float x
 	return value;
 }
 
+
+typedef struct MaskRasterizeBufferData {
+	MaskRasterHandle *mr_handle;
+	float x_inv, y_inv;
+	float x_px_ofs, y_px_ofs;
+	uint width;
+
+	float *buffer;
+} MaskRasterizeBufferData;
+
+static void maskrasterize_buffer_cb(
+        void *__restrict userdata,
+        const int y,
+        const ParallelRangeTLS *__restrict UNUSED(tls))
+{
+	MaskRasterizeBufferData *data = userdata;
+
+	MaskRasterHandle *mr_handle = data->mr_handle;
+	float *buffer = data->buffer;
+
+	const uint width = data->width;
+	const float x_inv = data->x_inv;
+	const float x_px_ofs = data->x_px_ofs;
+
+	uint i = (uint)y * width;
+	float xy[2];
+	xy[1] = ((float)y * data->y_inv) + data->y_px_ofs;
+	for (uint x = 0; x < width; x++, i++) {
+		xy[0] = ((float)x * x_inv) + x_px_ofs;
+
+		buffer[i] = BKE_maskrasterize_handle_sample(mr_handle, xy);
+	}
+}
+
 /**
- * \brief Rasterize a buffer from a single mask
- *
- * We could get some speedup by inlining #BKE_maskrasterize_handle_sample
- * and calculating each layer then blending buffers, but this function is only
- * used by the sequencer - so better have the caller thread.
- *
- * Since #BKE_maskrasterize_handle_sample is used threaded elsewhere,
- * we can simply use openmp here for some speedup.
+ * \brief Rasterize a buffer from a single mask (threaded execution).
  */
 void BKE_maskrasterize_buffer(MaskRasterHandle *mr_handle,
                               const unsigned int width, const unsigned int height,
@@ -1439,33 +1467,21 @@ void BKE_maskrasterize_buffer(MaskRasterHandle *mr_handle,
 {
 	const float x_inv = 1.0f / (float)width;
 	const float y_inv = 1.0f / (float)height;
-	const float x_px_ofs = x_inv * 0.5f;
-	const float y_px_ofs = y_inv * 0.5f;
-#ifdef _MSC_VER
-	int y;  /* msvc requires signed for some reason */
 
-	/* ignore sign mismatch */
-#  pragma warning(push)
-#  pragma warning(disable:4018)
-#else
-	unsigned int y;
-#endif
-
-#pragma omp parallel for private(y)
-	for (y = 0; y < height; y++) {
-		unsigned int i = y * width;
-		unsigned int x;
-		float xy[2];
-		xy[1] = ((float)y * y_inv) + y_px_ofs;
-		for (x = 0; x < width; x++, i++) {
-			xy[0] = ((float)x * x_inv) + x_px_ofs;
-
-			buffer[i] = BKE_maskrasterize_handle_sample(mr_handle, xy);
-		}
-	}
-
-#ifdef _MSC_VER
-#  pragma warning(pop)
-#endif
-
+	MaskRasterizeBufferData data = {
+	    .mr_handle = mr_handle,
+	    .x_inv = x_inv,
+	    .y_inv = y_inv,
+	    .x_px_ofs = x_inv * 0.5f,
+	    .y_px_ofs = y_inv * 0.5f,
+	    .width = width,
+	    .buffer = buffer
+	};
+	ParallelRangeSettings settings;
+	BLI_parallel_range_settings_defaults(&settings);
+	settings.use_threading = ((size_t)height * width > 10000);
+	BLI_task_parallel_range(0, (int)height,
+	                        &data,
+	                        maskrasterize_buffer_cb,
+	                        &settings);
 }

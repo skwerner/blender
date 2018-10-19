@@ -58,8 +58,7 @@
 
 #define MVAL_PIXEL_MARGIN  5.0f
 
-/* until implement profile = 0 case, need to clamp somewhat above zero */
-#define PROFILE_HARD_MIN 0.15f
+#define PROFILE_HARD_MIN 0.0f
 
 #define SEGMENTS_HARD_MAX 1000
 
@@ -80,7 +79,7 @@ typedef struct {
 	BMEditMesh *em;
 	float initial_length[NUM_VALUE_KINDS];
 	float scale[NUM_VALUE_KINDS];
-	NumInput num_input[NUM_VALUE_KINDS]; 
+	NumInput num_input[NUM_VALUE_KINDS];
 	float shift_value[NUM_VALUE_KINDS]; /* The current value when shift is pressed. Negative when shift not active. */
 	bool is_modal;
 
@@ -140,6 +139,10 @@ static bool edbm_bevel_init(bContext *C, wmOperator *op, const bool is_modal)
 		return false;
 	}
 
+	if (is_modal) {
+		RNA_float_set(op->ptr, "offset", 0.0f);
+	}
+
 	op->customdata = opdata = MEM_mallocN(sizeof(BevelData), "beveldata_mesh_operator");
 
 	opdata->em = em;
@@ -150,8 +153,9 @@ static bool edbm_bevel_init(bContext *C, wmOperator *op, const bool is_modal)
 
 	for (i = 0; i < NUM_VALUE_KINDS; i++) {
 		opdata->shift_value[i] = -1.0f;
+		opdata->initial_length[i] = -1.0f;
 		/* note: scale for OFFSET_VALUE will get overwritten in edbm_bevel_invoke */
-		opdata->scale[i] = value_scale_per_inch[i] / pixels_per_inch; 
+		opdata->scale[i] = value_scale_per_inch[i] / pixels_per_inch;
 
 		initNumInput(&opdata->num_input[i]);
 		opdata->num_input[i].idx_max = 0;
@@ -300,8 +304,8 @@ static void edbm_bevel_calc_initial_length(wmOperator *op, const wmEvent *event,
 	mlen[1] = opdata->mcenter[1] - event->mval[1];
 	len = len_v2(mlen);
 	vmode = opdata->value_mode;
-	if (mode_changed) {
-		/* If current value is not default start value, adjust len so that 
+	if (mode_changed || opdata->initial_length[vmode] == -1.0f) {
+		/* If current value is not default start value, adjust len so that
 		 * the scaling and offset in edbm_bevel_mouse_set_value will
 		 * start at current value */
 		value = (vmode == SEGMENTS_VALUE) ?
@@ -334,10 +338,11 @@ static int edbm_bevel_invoke(bContext *C, wmOperator *op, const wmEvent *event)
 		 * ideally this will never happen and should be checked for above */
 		opdata->mcenter[0] = opdata->mcenter[1] = 0;
 	}
-	edbm_bevel_calc_initial_length(op, event, false);
 
 	/* for OFFSET_VALUE only, the scale is the size of a pixel under the mouse in 3d space */
 	opdata->scale[OFFSET_VALUE] = rv3d ? ED_view3d_pixel_size(rv3d, center_3d) : 1.0f;
+
+	edbm_bevel_calc_initial_length(op, event, false);
 
 	edbm_bevel_update_header(C, op);
 
@@ -506,13 +511,15 @@ static int edbm_bevel_modal(bContext *C, wmOperator *op, const wmEvent *event)
 					else if (opdata->value_mode == OFFSET_VALUE_PERCENT && type != BEVEL_AMT_PERCENT)
 						opdata->value_mode = OFFSET_VALUE;
 					RNA_property_enum_set(op->ptr, prop, type);
+					if (opdata->initial_length[opdata->value_mode] == -1.0f)
+						edbm_bevel_calc_initial_length(op, event, true);
 				}
 				/* Update offset accordingly to new offset_type. */
 				if (!has_numinput &&
 				    (opdata->value_mode == OFFSET_VALUE || opdata->value_mode == OFFSET_VALUE_PERCENT))
 				{
 					edbm_bevel_mouse_set_value(op, event);
-				}		
+				}
 				edbm_bevel_calc(op);
 				edbm_bevel_update_header(C, op);
 				handled = true;
@@ -554,7 +561,7 @@ static int edbm_bevel_modal(bContext *C, wmOperator *op, const wmEvent *event)
 			case VKEY:
 				if (event->val == KM_RELEASE)
 					break;
-				
+
 				{
 					PropertyRNA *prop = RNA_struct_find_property(op->ptr, "vertex_only");
 					RNA_property_boolean_set(op->ptr, prop, !RNA_property_boolean_get(op->ptr, prop));
@@ -563,7 +570,7 @@ static int edbm_bevel_modal(bContext *C, wmOperator *op, const wmEvent *event)
 				edbm_bevel_update_header(C, op);
 				handled = true;
 				break;
-				
+
 		}
 
 		/* Modal numinput inactive, try to handle numeric inputs last... */
@@ -593,7 +600,7 @@ void MESH_OT_bevel(wmOperatorType *ot)
 {
 	PropertyRNA *prop;
 
-	static EnumPropertyItem offset_type_items[] = {
+	static const EnumPropertyItem offset_type_items[] = {
 		{BEVEL_AMT_OFFSET, "OFFSET", 0, "Offset", "Amount is offset of new edges from original"},
 		{BEVEL_AMT_WIDTH, "WIDTH", 0, "Width", "Amount is width of new face"},
 		{BEVEL_AMT_DEPTH, "DEPTH", 0, "Depth", "Amount is perpendicular distance from original edge to bevel face"},
@@ -617,7 +624,7 @@ void MESH_OT_bevel(wmOperatorType *ot)
 	ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO | OPTYPE_GRAB_CURSOR | OPTYPE_BLOCKING;
 
 	RNA_def_enum(ot->srna, "offset_type", offset_type_items, 0, "Amount Type", "What distance Amount measures");
-	prop = RNA_def_float(ot->srna, "offset", 0.0f, -1e6f, 1e6f, "Amount", "", 0.0f, 1.0f);
+	prop = RNA_def_float(ot->srna, "offset", 0.0f, -1e6f, 1e6f, "Amount", "", 0.0f, 100.0f);
 	RNA_def_property_float_array_funcs_runtime(prop, NULL, NULL, mesh_ot_bevel_offset_range_func);
 	RNA_def_int(ot->srna, "segments", 1, 1, SEGMENTS_HARD_MAX, "Segments", "Segments for curved edge", 1, 8);
 	RNA_def_float(ot->srna, "profile", 0.5f, PROFILE_HARD_MIN, 1.0f, "Profile",

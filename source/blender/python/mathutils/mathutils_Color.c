@@ -33,6 +33,7 @@
 #include "BLI_utildefines.h"
 
 #include "../generic/python_utildefines.h"
+#include "../generic/py_capi_utils.h"
 
 #ifndef MATH_STANDALONE
 #  include "BLI_dynstr.h"
@@ -113,8 +114,9 @@ static PyObject *Color_copy(ColorObject *self)
 }
 static PyObject *Color_deepcopy(ColorObject *self, PyObject *args)
 {
-	if (!mathutils_deepcopy_args_check(args))
+	if (!PyC_CheckArgs_DeepCopy(args)) {
 		return NULL;
+	}
 	return Color_copy(self);
 }
 
@@ -704,12 +706,12 @@ PyDoc_STRVAR(Color_channel_b_doc, "Blue color channel.\n\n:type: float");
 
 static PyObject *Color_channel_get(ColorObject *self, void *type)
 {
-	return Color_item(self, GET_INT_FROM_POINTER(type));
+	return Color_item(self, POINTER_AS_INT(type));
 }
 
 static int Color_channel_set(ColorObject *self, PyObject *value, void *type)
 {
-	return Color_ass_item(self, GET_INT_FROM_POINTER(type), value);
+	return Color_ass_item(self, POINTER_AS_INT(type), value);
 }
 
 /* color channel (HSV), color.h/s/v */
@@ -720,7 +722,7 @@ PyDoc_STRVAR(Color_channel_hsv_v_doc, "HSV Value component in [0, 1].\n\n:type: 
 static PyObject *Color_channel_hsv_get(ColorObject *self, void *type)
 {
 	float hsv[3];
-	int i = GET_INT_FROM_POINTER(type);
+	int i = POINTER_AS_INT(type);
 
 	if (BaseMath_ReadCallback(self) == -1)
 		return NULL;
@@ -733,7 +735,7 @@ static PyObject *Color_channel_hsv_get(ColorObject *self, void *type)
 static int Color_channel_hsv_set(ColorObject *self, PyObject *value, void *type)
 {
 	float hsv[3];
-	int i = GET_INT_FROM_POINTER(type);
+	int i = POINTER_AS_INT(type);
 	float f = PyFloat_AsDouble(value);
 
 	if (f == -1 && PyErr_Occurred()) {

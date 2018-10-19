@@ -64,7 +64,6 @@
 #include "BKE_DerivedMesh.h"
 #include "BKE_deform.h"
 #include "BKE_displist.h"
-#include "BKE_global.h"
 #include "BKE_idprop.h"
 #include "BKE_library.h"
 #include "BKE_library_query.h"
@@ -83,7 +82,7 @@ bArmature *BKE_armature_add(Main *bmain, const char *name)
 {
 	bArmature *arm;
 
-	arm = BKE_libblock_alloc(bmain, ID_AR, name);
+	arm = BKE_libblock_alloc(bmain, ID_AR, name, 0);
 	arm->deformflag = ARM_DEF_VGROUP | ARM_DEF_ENVELOPE;
 	arm->flag = ARM_COL_CUSTOM; /* custom bone-group colors */
 	arm->layer = 1;
@@ -150,54 +149,70 @@ void BKE_armature_make_local(Main *bmain, bArmature *arm, const bool lib_local)
 	BKE_id_make_local_generic(bmain, &arm->id, true, lib_local);
 }
 
-static void copy_bonechildren(Bone *newBone, const Bone *oldBone, const Bone *actBone, Bone **newActBone)
+static void copy_bonechildren(
+        Bone *bone_dst, const Bone *bone_src, const Bone *bone_src_act, Bone **r_bone_dst_act, const int flag)
 {
-	Bone *curBone, *newChildBone;
+	Bone *bone_src_child, *bone_dst_child;
 
-	if (oldBone == actBone)
-		*newActBone = newBone;
+	if (bone_src == bone_src_act) {
+		*r_bone_dst_act = bone_dst;
+	}
 
-	if (oldBone->prop)
-		newBone->prop = IDP_CopyProperty(oldBone->prop);
+	if (bone_src->prop) {
+		bone_dst->prop = IDP_CopyProperty_ex(bone_src->prop, flag);
+	}
 
 	/* Copy this bone's list */
-	BLI_duplicatelist(&newBone->childbase, &oldBone->childbase);
+	BLI_duplicatelist(&bone_dst->childbase, &bone_src->childbase);
 
 	/* For each child in the list, update it's children */
-	newChildBone = newBone->childbase.first;
-	for (curBone = oldBone->childbase.first; curBone; curBone = curBone->next) {
-		newChildBone->parent = newBone;
-		copy_bonechildren(newChildBone, curBone, actBone, newActBone);
-		newChildBone = newChildBone->next;
+	for (bone_src_child = bone_src->childbase.first, bone_dst_child = bone_dst->childbase.first;
+	     bone_src_child;
+	     bone_src_child = bone_src_child->next, bone_dst_child = bone_dst_child->next)
+	{
+		bone_dst_child->parent = bone_dst;
+		copy_bonechildren(bone_dst_child, bone_src_child, bone_src_act, r_bone_dst_act, flag);
 	}
+}
+
+/**
+ * Only copy internal data of Armature ID from source to already allocated/initialized destination.
+ * You probably nerver want to use that directly, use id_copy or BKE_id_copy_ex for typical needs.
+ *
+ * WARNING! This function will not handle ID user count!
+ *
+ * \param flag  Copying options (see BKE_library.h's LIB_ID_COPY_... flags for more).
+ */
+void BKE_armature_copy_data(Main *UNUSED(bmain), bArmature *arm_dst, const bArmature *arm_src, const int flag)
+{
+	Bone *bone_src, *bone_dst;
+	Bone *bone_dst_act = NULL;
+
+	/* We never handle usercount here for own data. */
+	const int flag_subdata = flag | LIB_ID_CREATE_NO_USER_REFCOUNT;
+
+	BLI_duplicatelist(&arm_dst->bonebase, &arm_src->bonebase);
+
+	/* Duplicate the childrens' lists */
+	bone_dst = arm_dst->bonebase.first;
+	for (bone_src = arm_src->bonebase.first; bone_src; bone_src = bone_src->next) {
+		bone_dst->parent = NULL;
+		copy_bonechildren(bone_dst, bone_src, arm_src->act_bone, &bone_dst_act, flag_subdata);
+		bone_dst = bone_dst->next;
+	}
+
+	arm_dst->act_bone = bone_dst_act;
+
+	arm_dst->edbo = NULL;
+	arm_dst->act_edbone = NULL;
+	arm_dst->sketch = NULL;
 }
 
 bArmature *BKE_armature_copy(Main *bmain, const bArmature *arm)
 {
-	bArmature *newArm;
-	Bone *oldBone, *newBone;
-	Bone *newActBone = NULL;
-
-	newArm = BKE_libblock_copy(bmain, &arm->id);
-	BLI_duplicatelist(&newArm->bonebase, &arm->bonebase);
-
-	/* Duplicate the childrens' lists */
-	newBone = newArm->bonebase.first;
-	for (oldBone = arm->bonebase.first; oldBone; oldBone = oldBone->next) {
-		newBone->parent = NULL;
-		copy_bonechildren(newBone, oldBone, arm->act_bone, &newActBone);
-		newBone = newBone->next;
-	}
-
-	newArm->act_bone = newActBone;
-
-	newArm->edbo = NULL;
-	newArm->act_edbone = NULL;
-	newArm->sketch = NULL;
-
-	BKE_id_copy_ensure_local(bmain, &arm->id, &newArm->id);
-
-	return newArm;
+	bArmature *arm_copy;
+	BKE_id_copy_ex(bmain, &arm->id, (ID **)&arm_copy, 0, false);
+	return arm_copy;
 }
 
 static Bone *get_named_bone_bonechildren(ListBase *lb, const char *name)
@@ -598,8 +613,10 @@ void b_bone_spline_setup(bPoseChannel *pchan, int rest, Mat4 result_array[MAX_BB
 	{
 		const float circle_factor = length * (cubic_tangent_factor_circle_v3(h1, h2) / 0.75f);
 
-		const float hlength1 = bone->ease1 * circle_factor;
-		const float hlength2 = bone->ease2 * circle_factor;
+		const float combined_ease1 = bone->ease1 + (!rest ? pchan->ease1 : 0.0f);
+		const float combined_ease2 = bone->ease2 + (!rest ? pchan->ease2 : 0.0f);
+		const float hlength1 = combined_ease1 * circle_factor;
+		const float hlength2 = combined_ease2 * circle_factor;
 
 		/* and only now negate h2 */
 		mul_v3_fl(h1,  hlength1);
@@ -624,17 +641,17 @@ void b_bone_spline_setup(bPoseChannel *pchan, int rest, Mat4 result_array[MAX_BB
 		/* add extra rolls */
 		roll1 += bone->roll1 + (!rest ? pchan->roll1 : 0.0f);
 		roll2 += bone->roll2 + (!rest ? pchan->roll2 : 0.0f);
-		
+
 		if (bone->flag & BONE_ADD_PARENT_END_ROLL) {
 			if (prev) {
 				if (prev->bone)
 					roll1 += prev->bone->roll2;
-				
+
 				if (!rest)
 					roll1 += prev->roll2;
 			}
 		}
-		
+
 		/* extra curve x / y */
 		/* NOTE: Scale correction factors here are to compensate for some random floating-point glitches
 		 *       when scaling up the bone or it's parent by a factor of approximately 8.15/6, which results
@@ -642,14 +659,14 @@ void b_bone_spline_setup(bPoseChannel *pchan, int rest, Mat4 result_array[MAX_BB
 		 */
 		const float xscale_correction = (do_scale) ? scale[0] : 1.0f;
 		const float yscale_correction = (do_scale) ? scale[2] : 1.0f;
-		
+
 		h1[0] += (bone->curveInX + (!rest ? pchan->curveInX : 0.0f)) * xscale_correction;
 		h1[2] += (bone->curveInY + (!rest ? pchan->curveInY : 0.0f)) * yscale_correction;
-		
+
 		h2[0] += (bone->curveOutX + (!rest ? pchan->curveOutX : 0.0f)) * xscale_correction;
 		h2[2] += (bone->curveOutY + (!rest ? pchan->curveOutY : 0.0f)) * yscale_correction;
 	}
-	
+
 	/* make curve */
 	if (bone->segments > MAX_BBONE_SUBDIV)
 		bone->segments = MAX_BBONE_SUBDIV;
@@ -665,39 +682,39 @@ void b_bone_spline_setup(bPoseChannel *pchan, int rest, Mat4 result_array[MAX_BB
 	for (a = 0, fp = data[0]; a < bone->segments; a++, fp += 4) {
 		sub_v3_v3v3(h1, fp + 4, fp);
 		vec_roll_to_mat3(h1, fp[3], mat3); /* fp[3] is roll */
-		
+
 		copy_m4_m3(result_array[a].mat, mat3);
 		copy_v3_v3(result_array[a].mat[3], fp);
-		
+
 		if (do_scale) {
 			/* correct for scaling when this matrix is used in scaled space */
 			mul_m4_series(result_array[a].mat, iscalemat, result_array[a].mat, scalemat);
 		}
-		
+
 		/* BBone scale... */
 		{
 			const int num_segments = bone->segments;
-			
+
 			const float scaleIn = bone->scaleIn * (!rest ? pchan->scaleIn : 1.0f);
 			const float scaleFactorIn  = 1.0f + (scaleIn  - 1.0f) * ((float)(num_segments - a) / (float)num_segments);
-			
+
 			const float scaleOut = bone->scaleOut * (!rest ? pchan->scaleOut : 1.0f);
 			const float scaleFactorOut = 1.0f + (scaleOut - 1.0f) * ((float)(a + 1)            / (float)num_segments);
-			
+
 			const float scalefac = scaleFactorIn * scaleFactorOut;
 			float bscalemat[4][4], bscale[3];
-			
+
 			bscale[0] = scalefac;
 			bscale[1] = 1.0f;
 			bscale[2] = scalefac;
-			
+
 			size_to_mat4(bscalemat, bscale);
-			
+
 			/* Note: don't multiply by inverse scale mat here, as it causes problems with scaling shearing and breaking segment chains */
 			/*mul_m4_series(result_array[a].mat, ibscalemat, result_array[a].mat, bscalemat);*/
 			mul_m4_series(result_array[a].mat, result_array[a].mat, bscalemat);
 		}
-		
+
 	}
 }
 
@@ -756,10 +773,10 @@ static void b_bone_deform(bPoseChanDeform *pdef_info, Bone *bone, float co[3], D
 	float (*mat)[4] = b_bone[0].mat;
 	float segment, y;
 	int a;
-	
+
 	/* need to transform co back to bonespace, only need y */
 	y = mat[0][1] * co[0] + mat[1][1] * co[1] + mat[2][1] * co[2] + mat[3][1];
-	
+
 	/* now calculate which of the b_bones are deforming this */
 	segment = bone->length / ((float)bone->segments);
 	a = (int)(y / segment);
@@ -1051,7 +1068,7 @@ void armature_deform_verts(Object *armOb, Object *target, DerivedMesh *dm, float
 				GHash *idx_hash = BLI_ghash_ptr_new("pose channel index by name");
 				int pchan_index = 0;
 				for (pchan = armOb->pose->chanbase.first; pchan != NULL; pchan = pchan->next, ++pchan_index) {
-					BLI_ghash_insert(idx_hash, pchan, SET_INT_IN_POINTER(pchan_index));
+					BLI_ghash_insert(idx_hash, pchan, POINTER_FROM_INT(pchan_index));
 				}
 				for (i = 0, dg = target->defbase.first; dg; i++, dg = dg->next) {
 					defnrToPC[i] = BKE_pose_channel_find_name(armOb->pose, dg->name);
@@ -1061,7 +1078,7 @@ void armature_deform_verts(Object *armOb, Object *target, DerivedMesh *dm, float
 							defnrToPC[i] = NULL;
 						}
 						else {
-							defnrToPCIndex[i] = GET_INT_FROM_POINTER(BLI_ghash_lookup(idx_hash, defnrToPC[i]));
+							defnrToPCIndex[i] = POINTER_AS_INT(BLI_ghash_lookup(idx_hash, defnrToPC[i]));
 						}
 					}
 				}
@@ -1801,7 +1818,7 @@ static void pose_proxy_synchronize(Object *ob, Object *from, int layer_protected
 
 	for (pchan = pose->chanbase.first; pchan; pchan = pchan->next) {
 		pchanp = BKE_pose_channel_find_name(frompose, pchan->name);
-		
+
 		if (UNLIKELY(pchanp == NULL)) {
 			/* happens for proxies that become invalid because of a missing link
 			 * for regular cases it shouldn't happen at all */
@@ -1809,7 +1826,7 @@ static void pose_proxy_synchronize(Object *ob, Object *from, int layer_protected
 		else if (pchan->bone->layer & layer_protected) {
 			ListBase proxylocal_constraints = {NULL, NULL};
 			bPoseChannel pchanw;
-			
+
 			/* copy posechannel to temp, but restore important pointers */
 			pchanw = *pchanp;
 			pchanw.bone = pchan->bone;
@@ -1825,13 +1842,13 @@ static void pose_proxy_synchronize(Object *ob, Object *from, int layer_protected
 			/* this is freed so copy a copy, else undo crashes */
 			if (pchanw.prop) {
 				pchanw.prop = IDP_CopyProperty(pchanw.prop);
-				
+
 				/* use the values from the existing props */
 				if (pchan->prop) {
 					IDP_SyncGroupValues(pchanw.prop, pchan->prop);
 				}
 			}
-			
+
 			/* constraints - proxy constraints are flushed... local ones are added after
 			 *     1. extract constraints not from proxy (CONSTRAINT_PROXY_LOCAL) from pchan's constraints
 			 *     2. copy proxy-pchan's constraints on-to new
@@ -1843,29 +1860,29 @@ static void pose_proxy_synchronize(Object *ob, Object *from, int layer_protected
 			BKE_constraints_proxylocal_extract(&proxylocal_constraints, &pchan->constraints);
 			BKE_constraints_copy(&pchanw.constraints, &pchanp->constraints, false);
 			BLI_movelisttolist(&pchanw.constraints, &proxylocal_constraints);
-			
+
 			/* constraints - set target ob pointer to own object */
 			for (con = pchanw.constraints.first; con; con = con->next) {
 				const bConstraintTypeInfo *cti = BKE_constraint_typeinfo_get(con);
 				ListBase targets = {NULL, NULL};
 				bConstraintTarget *ct;
-				
+
 				if (cti && cti->get_constraint_targets) {
 					cti->get_constraint_targets(con, &targets);
-					
+
 					for (ct = targets.first; ct; ct = ct->next) {
 						if (ct->tar == from)
 							ct->tar = ob;
 					}
-					
+
 					if (cti->flush_constraint_targets)
 						cti->flush_constraint_targets(con, &targets, 0);
 				}
 			}
-			
+
 			/* free stuff from current channel */
 			BKE_pose_channel_free(pchan);
-			
+
 			/* copy data in temp back over to the cleaned-out (but still allocated) original channel */
 			*pchan = pchanw;
 			if (pchan->custom) {

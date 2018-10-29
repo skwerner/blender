@@ -262,7 +262,7 @@ char *WM_operator_pystring_ex(bContext *C, wmOperator *op, const bool all_args, 
 		}
 	}
 	else {
-		/* only to get the orginal props for comparisons */
+		/* only to get the original props for comparisons */
 		PointerRNA opptr_default;
 		const bool macro_args_test = ot->macro.first ? macro_args : true;
 
@@ -607,7 +607,7 @@ void WM_operator_properties_sanitize(PointerRNA *ptr, const bool no_context)
 /** set all props to their default,
  * \param do_update Only update un-initialized props.
  *
- * \note, theres nothing specific to operators here.
+ * \note, there's nothing specific to operators here.
  * this could be made a general function.
  */
 bool WM_operator_properties_default(PointerRNA *ptr, const bool do_update)
@@ -1813,7 +1813,7 @@ static void WM_OT_console_toggle(wmOperatorType *ot)
  * - draw(bContext): drawing callback for paint cursor
  */
 
-void *WM_paint_cursor_activate(
+wmPaintCursor *WM_paint_cursor_activate(
         wmWindowManager *wm, bool (*poll)(bContext *C),
         wmPaintCursorDraw draw, void *customdata)
 {
@@ -1828,7 +1828,7 @@ void *WM_paint_cursor_activate(
 	return pc;
 }
 
-void WM_paint_cursor_end(wmWindowManager *wm, void *handle)
+bool WM_paint_cursor_end(wmWindowManager *wm, wmPaintCursor *handle)
 {
 	wmPaintCursor *pc;
 
@@ -1836,9 +1836,15 @@ void WM_paint_cursor_end(wmWindowManager *wm, void *handle)
 		if (pc == (wmPaintCursor *)handle) {
 			BLI_remlink(&wm->paintcursors, pc);
 			MEM_freeN(pc);
-			return;
+			return true;
 		}
 	}
+	return false;
+}
+
+void *WM_paint_cursor_customdata_get(wmPaintCursor *pc)
+{
+	return pc->customdata;
 }
 
 /* *********************** radial control ****************** */

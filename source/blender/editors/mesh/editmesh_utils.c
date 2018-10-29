@@ -433,14 +433,14 @@ void EDBM_selectmode_flush(BMEditMesh *em)
 
 void EDBM_deselect_flush(BMEditMesh *em)
 {
-	/* function below doesnt use. just do this to keep the values in sync */
+	/* function below doesn't use. just do this to keep the values in sync */
 	em->bm->selectmode = em->selectmode;
 	BM_mesh_deselect_flush(em->bm);
 }
 
 void EDBM_select_flush(BMEditMesh *em)
 {
-	/* function below doesnt use. just do this to keep the values in sync */
+	/* function below doesn't use. just do this to keep the values in sync */
 	em->bm->selectmode = em->selectmode;
 	BM_mesh_select_flush(em->bm);
 }
@@ -1499,7 +1499,7 @@ bool BMBVH_EdgeVisible(struct BMBVHTree *tree, BMEdge *e, ARegion *ar, View3D *v
 		ar->winy / 2.0f,
 	};
 
-	ED_view3d_win_to_segment(ar, v3d, mval_f, origin, end, false);
+	ED_view3d_win_to_segment_clipped(ar, v3d, mval_f, origin, end, false);
 
 	invert_m4_m4(invmat, obedit->obmat);
 	mul_m4_v3(invmat, origin);

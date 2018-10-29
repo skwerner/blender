@@ -199,7 +199,7 @@ endfunction()
 # Support per-target CMake flags
 # Read from: CMAKE_C_FLAGS_**** (made upper case) when set.
 #
-# 'name' should alway match the target name,
+# 'name' should always match the target name,
 # use this macro before add_library or add_executable.
 #
 # Optionally takes an arg passed to set(), eg PARENT_SCOPE.
@@ -509,7 +509,7 @@ function(setup_liblinks
 		target_link_libraries(${target} ${GFLAGS_LIBRARIES})
 	endif()
 
-	# We put CLEW and CUEW here because OPENSUBDIV_LIBRARIES dpeends on them..
+	# We put CLEW and CUEW here because OPENSUBDIV_LIBRARIES depends on them..
 	if(WITH_CYCLES OR WITH_COMPOSITOR OR WITH_OPENSUBDIV)
 		target_link_libraries(${target} "extern_clew")
 		if(WITH_CUDA_DYNLOAD)
@@ -666,10 +666,10 @@ function(SETUP_BLENDER_SORTED_LIBS)
 		bf_intern_mikktspace
 		bf_intern_dualcon
 		bf_intern_cycles
+		cycles_device
 		cycles_render
 		cycles_graph
 		cycles_bvh
-		cycles_device
 		cycles_kernel
 		cycles_util
 		cycles_subd
@@ -1195,7 +1195,11 @@ function(delayed_do_install
 		foreach(i RANGE ${n})
 			list(GET files ${i} f)
 			list(GET destinations ${i} d)
-			install(FILES ${f} DESTINATION ${targetdir}/${d})
+			if(NOT IS_ABSOLUTE ${d})
+				install(FILES ${f} DESTINATION ${targetdir}/${d})
+			else()
+				install(FILES ${f} DESTINATION ${d})
+			endif()
 		endforeach()
 	endif()
 endfunction()
@@ -1232,6 +1236,8 @@ function(data_to_c_simple
 	get_filename_component(_file_to   ${CMAKE_CURRENT_BINARY_DIR}/${file_from}.c REALPATH)
 
 	list(APPEND ${list_to_add} ${_file_to})
+	source_group(Generated FILES ${_file_to})
+	list(APPEND ${list_to_add} ${file_from})
 	set(${list_to_add} ${${list_to_add}} PARENT_SCOPE)
 
 	get_filename_component(_file_to_path ${_file_to} PATH)

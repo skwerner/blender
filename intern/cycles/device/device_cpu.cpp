@@ -42,6 +42,7 @@
 #include "kernel/osl/osl_globals.h"
 
 #include "render/buffers.h"
+#include "render/coverage.h"
 
 #include "util/util_debug.h"
 #include "util/util_foreach.h"
@@ -186,11 +187,11 @@ public:
 	KernelFunctions<void(*)(int, int, float*, float*, float*, float*, int*, int)>                               filter_detect_outliers_kernel;
 	KernelFunctions<void(*)(int, int, float*, float*, float*, float*, int*, int)>                               filter_combine_halves_kernel;
 
-	KernelFunctions<void(*)(int, int, float*, float*, float*, int*, int, int, float, float)> filter_nlm_calc_difference_kernel;
-	KernelFunctions<void(*)(float*, float*, int*, int, int)>                                 filter_nlm_blur_kernel;
-	KernelFunctions<void(*)(float*, float*, int*, int, int)>                                 filter_nlm_calc_weight_kernel;
-	KernelFunctions<void(*)(int, int, float*, float*, float*, float*, int*, int, int)>       filter_nlm_update_output_kernel;
-	KernelFunctions<void(*)(float*, float*, int*, int)>                                      filter_nlm_normalize_kernel;
+	KernelFunctions<void(*)(int, int, float*, float*, float*, int*, int, int, float, float)>   filter_nlm_calc_difference_kernel;
+	KernelFunctions<void(*)(float*, float*, int*, int, int)>                                   filter_nlm_blur_kernel;
+	KernelFunctions<void(*)(float*, float*, int*, int, int)>                                   filter_nlm_calc_weight_kernel;
+	KernelFunctions<void(*)(int, int, float*, float*, float*, float*, float*, int*, int, int)> filter_nlm_update_output_kernel;
+	KernelFunctions<void(*)(float*, float*, int*, int)>                                        filter_nlm_normalize_kernel;
 
 	KernelFunctions<void(*)(float*, int, int, int, float*, int*, int*, int, int, float)>                         filter_construct_transform_kernel;
 	KernelFunctions<void(*)(int, int, float*, float*, float*, int*, float*, float3*, int*, int*, int, int, int)> filter_nlm_construct_gramian_kernel;
@@ -515,6 +516,7 @@ public:
 			filter_nlm_update_output_kernel()(dx, dy,
 			                                  blurDifference,
 			                                  (float*) image_ptr,
+			                                  difference,
 			                                  (float*) out_ptr,
 			                                  weightAccum,
 			                                  local_rect,
@@ -692,7 +694,14 @@ public:
 
 	void path_trace(DeviceTask &task, RenderTile &tile, KernelGlobals *kg)
 	{
+		const bool use_coverage = kernel_data.film.cryptomatte_passes & CRYPT_ACCURATE;
+
 		scoped_timer timer(&tile.buffers->render_time);
+
+		Coverage coverage(kg, tile);
+		if(use_coverage) {
+			coverage.init_path_trace();
+		}
 
 		float *render_buffer = (float*)tile.buffer;
 		int start_sample = tile.start_sample;
@@ -706,6 +715,9 @@ public:
 
 			for(int y = tile.y; y < tile.y + tile.h; y++) {
 				for(int x = tile.x; x < tile.x + tile.w; x++) {
+					if(use_coverage) {
+						coverage.init_pixel(x, y);
+					}
 					path_trace_kernel()(kg, render_buffer,
 					                    sample, x, y, tile.offset, tile.stride);
 				}
@@ -714,6 +726,9 @@ public:
 			tile.sample = sample + 1;
 
 			task.update_progress(&tile, tile.w*tile.h);
+		}
+		if(use_coverage) {
+			coverage.finalize();
 		}
 	}
 
@@ -775,7 +790,6 @@ public:
 			}
 			else if(tile.task == RenderTile::DENOISE) {
 				denoise(denoising, tile);
-
 				task.update_progress(&tile, tile.w*tile.h);
 			}
 

@@ -603,7 +603,7 @@ inline bool isInteger(const std::string & s)
 {
 	if (s.empty() || ((!isdigit(s[0])) && (s[0] != '-') && (s[0] != '+'))) return false;
 
-	char * p;
+	char *p;
 	strtol(s.c_str(), &p, 10);
 
 	return (*p == 0);
@@ -768,7 +768,7 @@ float bc_get_property(Bone *bone, std::string key, float def)
 
 /**
  * Read a custom bone property and convert to matrix
- * Return true if conversion was succesfull
+ * Return true if conversion was successful
  *
  * Return false if:
  * - the property does not exist

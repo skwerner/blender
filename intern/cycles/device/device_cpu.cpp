@@ -41,7 +41,7 @@
 #include "kernel/osl/osl_globals.h"
 
 #include "render/buffers.h"
-#include "render/stats.h"
+#include "render/perf_stats.h"
 
 #include "util/util_debug.h"
 #include "util/util_foreach.h"

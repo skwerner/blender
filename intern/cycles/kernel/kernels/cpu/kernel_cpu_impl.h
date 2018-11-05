@@ -22,7 +22,7 @@
 
 #include "kernel/kernel_compat_cpu.h"
 
-#include "render/stats.h"
+#include "render/perf_stats.h"
 
 #ifndef KERNEL_STUB
 #  ifndef __SPLIT_KERNEL__

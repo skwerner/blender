@@ -17,9 +17,9 @@
 #include "render/camera.h"
 #include "render/mesh.h"
 #include "render/object.h"
+#include "render/perf_stats.h"
 #include "render/scene.h"
 #include "render/tables.h"
-#include "render/stats.h"
 
 #include "device/device.h"
 

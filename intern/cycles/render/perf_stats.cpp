@@ -32,7 +32,7 @@
 
 #define PBRT_HAVE_ITIMER 1
 
-#include "stats.h"
+#include "perf_stats.h"
 #include "stringprint.h"
 #include <signal.h>
 #include <algorithm>

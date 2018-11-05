@@ -27,8 +27,8 @@
 
 #include "render/mesh.h"
 #include "render/object.h"
+#include "render/perf_stats.h"
 #include "render/scene.h"
-#include "render/stats.h"
 
 #include "kernel/osl/osl_closures.h"
 #include "kernel/osl/osl_globals.h"

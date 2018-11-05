@@ -27,12 +27,12 @@ set(SRC
 	object.cpp
 	osl.cpp
 	particles.cpp
+	perf_stats.cpp
 	curves.cpp
 	scene.cpp
 	session.cpp
 	shader.cpp
 	sobol.cpp
-	stats.cpp
 	svm.cpp
 	tables.cpp
 	tile.cpp
@@ -55,12 +55,12 @@ set(SRC_HEADERS
 	object.h
 	osl.h
 	particles.h
+	perf_stats.h
 	curves.h
 	scene.h
 	session.h
 	shader.h
 	sobol.h
-	stats.h
 	stringprint.h
 	svm.h
 	tables.h

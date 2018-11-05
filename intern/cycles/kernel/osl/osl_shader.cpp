@@ -32,7 +32,7 @@
 #include "util/util_foreach.h"
 
 #include "render/attribute.h"
-#include "render/stats.h"
+#include "render/perf_stats.h"
 
 
 CCL_NAMESPACE_BEGIN

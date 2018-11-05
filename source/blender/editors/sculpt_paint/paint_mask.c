@@ -76,9 +76,10 @@ static const EnumPropertyItem mode_items[] = {
 	{0}};
 
 
-static void mask_flood_fill_set_elem(float *elem,
-                                     PaintMaskFloodMode mode,
-                                     float value)
+static void mask_flood_fill_set_elem(
+        float *elem,
+        PaintMaskFloodMode mode,
+        float value)
 {
 	switch (mode) {
 		case PAINT_MASK_FLOOD_VALUE:
@@ -162,8 +163,9 @@ static int mask_flood_fill_exec(bContext *C, wmOperator *op)
 	BLI_parallel_range_settings_defaults(&settings);
 	settings.use_threading = ((sd->flags & SCULPT_USE_OPENMP) && totnode > SCULPT_THREADED_LIMIT);
 	BLI_task_parallel_range(
-	            0, totnode, &data, mask_flood_fill_task_cb,
-	            &settings);
+
+	        0, totnode, &data, mask_flood_fill_task_cb,
+	        &settings);
 
 	if (multires)
 		multires_mark_as_modified(ob, MULTIRES_COORDS_MODIFIED);
@@ -443,7 +445,7 @@ static int paint_mask_gesture_lasso_exec(bContext *C, wmOperator *op)
 		/* Calculations of individual vertices are done in 2D screen space to diminish the amount of
 		 * calculations done. Bounding box PBVH collision is not computed against enclosing rectangle
 		 * of lasso */
-		view3d_set_viewcontext(C, &vc);
+		ED_view3d_viewcontext_init(C, &vc);
 		view3d_get_transformation(vc.ar, vc.rv3d, vc.obact, &mats);
 
 		/* lasso data calculations */

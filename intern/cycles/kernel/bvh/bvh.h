@@ -32,6 +32,9 @@ CCL_NAMESPACE_BEGIN
 /* Common QBVH functions. */
 #ifdef __QBVH__
 #  include "kernel/bvh/qbvh_nodes.h"
+#ifdef __KERNEL_AVX2__
+#  include "kernel/bvh/obvh_nodes.h"
+#endif
 #endif
 
 /* Regular BVH traversal */
@@ -157,6 +160,19 @@ CCL_NAMESPACE_BEGIN
 #undef BVH_NAME_EVAL
 #undef BVH_FUNCTION_FULL_NAME
 
+ccl_device_inline bool scene_intersect_valid(const Ray *ray)
+{
+	/* NOTE: Due to some vectorization code  non-finite origin point might
+	 * cause lots of false-positive intersections which will overflow traversal
+	 * stack.
+	 * This code is a quick way to perform early output, to avoid crashes in
+	 * such cases.
+	 * From production scenes so far it seems it's enough to test first element
+	 * only.
+	 */
+	return isfinite(ray->P.x);
+}
+
 /* Note: ray is passed by value to work around a possible CUDA compiler bug. */
 ccl_device_intersect bool scene_intersect(KernelGlobals *kg,
                                           const Ray ray,
@@ -167,6 +183,9 @@ ccl_device_intersect bool scene_intersect(KernelGlobals *kg,
                                           float extmax)
 {
 	ProfilePhase p(Prof::scene_intersect);
+	if (!scene_intersect_valid(&ray)) {
+		return false;
+	}
 #ifdef __OBJECT_MOTION__
 	if(kernel_data.bvh.have_motion) {
 #  ifdef __HAIR__
@@ -204,7 +223,7 @@ ccl_device_intersect bool scene_intersect(KernelGlobals *kg,
 
 #ifdef __BVH_LOCAL__
 /* Note: ray is passed by value to work around a possible CUDA compiler bug. */
-ccl_device_intersect void scene_intersect_local(KernelGlobals *kg,
+ccl_device_intersect bool scene_intersect_local(KernelGlobals *kg,
                                                 const Ray ray,
                                                 LocalIntersection *local_isect,
                                                 int local_object,
@@ -212,6 +231,9 @@ ccl_device_intersect void scene_intersect_local(KernelGlobals *kg,
                                                 int max_hits)
 {
 	ProfilePhase p(Prof::scene_intersect_local);
+	if (!scene_intersect_valid(&ray)) {
+		return false;
+	}
 #ifdef __OBJECT_MOTION__
 	if(kernel_data.bvh.have_motion) {
 		return bvh_intersect_local_motion(kg,
@@ -240,6 +262,9 @@ ccl_device_intersect bool scene_intersect_shadow_all(KernelGlobals *kg,
                                                      uint *num_hits)
 {
 	ProfilePhase p(Prof::scene_intersect_shadow_all);
+	if (!scene_intersect_valid(ray)) {
+		return false;
+	}
 #  ifdef __OBJECT_MOTION__
 	if(kernel_data.bvh.have_motion) {
 #    ifdef __HAIR__
@@ -300,6 +325,9 @@ ccl_device_intersect bool scene_intersect_volume(KernelGlobals *kg,
                                                  const uint visibility)
 {
 	ProfilePhase p(Prof::scene_intersect_volume);
+	if (!scene_intersect_valid(ray)) {
+		return false;
+	}
 #  ifdef __OBJECT_MOTION__
 	if(kernel_data.bvh.have_motion) {
 		return bvh_intersect_volume_motion(kg, ray, isect, visibility);
@@ -327,8 +355,10 @@ ccl_device_intersect uint scene_intersect_volume_all(KernelGlobals *kg,
                                                      Intersection *isect,
                                                      const uint max_hits,
                                                      const uint visibility)
-{
-	ProfilePhase p(Prof::scene_intersect_volume_all);
+{	ProfilePhase p(Prof::scene_intersect_volume_all);
+	if (!scene_intersect_valid(ray)) {
+		return false;
+	}
 #  ifdef __OBJECT_MOTION__
 	if(kernel_data.bvh.have_motion) {
 		return bvh_intersect_volume_all_motion(kg, ray, isect, max_hits, visibility);

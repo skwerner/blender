@@ -101,10 +101,10 @@ class RENDER_PT_dimensions(RenderButtonsPanel, Panel):
         custom_framerate = (fps_rate not in {23.98, 24, 25, 29.97, 30, 50, 59.94, 60})
 
         if custom_framerate is True:
-            fps_label_text = "Custom (%r fps)" % fps_rate
+            fps_label_text = f"Custom ({fps_rate!r} fps)"
             show_framerate = True
         else:
-            fps_label_text = "%r fps" % fps_rate
+            fps_label_text = f"{fps_rate!r} fps"
             show_framerate = (preset_label == "Custom")
 
         RENDER_PT_dimensions._frame_rate_args_prev = args
@@ -369,6 +369,7 @@ class RENDER_PT_stamp(RenderButtonsPanel, Panel):
         col.prop(rd, "use_stamp_camera", text="Camera")
         col.prop(rd, "use_stamp_lens", text="Lens")
         col.prop(rd, "use_stamp_filename", text="Filename")
+        col.prop(rd, "use_stamp_frame_range", text="Frame range")
         col.prop(rd, "use_stamp_marker", text="Marker")
         col.prop(rd, "use_stamp_sequencer_strip", text="Seq. Strip")
 
@@ -391,7 +392,6 @@ class RENDER_PT_output(RenderButtonsPanel, Panel):
 
         rd = context.scene.render
         image_settings = rd.image_settings
-        file_format = image_settings.file_format
 
         layout.prop(rd, "filepath", text="")
 
@@ -433,17 +433,38 @@ class RENDER_PT_encoding(RenderButtonsPanel, Panel):
         split.prop(rd.ffmpeg, "format")
         split.prop(ffmpeg, "use_autosplit")
 
+        # Video:
         layout.separator()
+        self.draw_vcodec(context)
+
+        # Audio:
+        layout.separator()
+        if ffmpeg.format != 'MP3':
+            layout.prop(ffmpeg, "audio_codec", text="Audio Codec")
+
+        if ffmpeg.audio_codec != 'NONE':
+            row = layout.row()
+            row.prop(ffmpeg, "audio_bitrate")
+            row.prop(ffmpeg, "audio_volume", slider=True)
+
+    def draw_vcodec(self, context):
+        """Video codec options."""
+        layout = self.layout
+        ffmpeg = context.scene.render.ffmpeg
 
         needs_codec = ffmpeg.format in {'AVI', 'QUICKTIME', 'MKV', 'OGG', 'MPEG4'}
         if needs_codec:
             layout.prop(ffmpeg, "codec")
 
+        if needs_codec and ffmpeg.codec == 'NONE':
+            return
+
         if ffmpeg.codec in {'DNXHD'}:
             layout.prop(ffmpeg, "use_lossless_output")
 
         # Output quality
-        if needs_codec and ffmpeg.codec in {'H264', 'MPEG4'}:
+        use_crf = needs_codec and ffmpeg.codec in {'H264', 'MPEG4', 'WEBM'}
+        if use_crf:
             layout.prop(ffmpeg, "constant_rate_factor")
 
         # Encoding speed
@@ -457,7 +478,7 @@ class RENDER_PT_encoding(RenderButtonsPanel, Panel):
         pbox.prop(ffmpeg, "max_b_frames", text="")
         pbox.enabled = ffmpeg.use_max_b_frames
 
-        if ffmpeg.constant_rate_factor == 'NONE':
+        if not use_crf or ffmpeg.constant_rate_factor == 'NONE':
             split = layout.split()
             col = split.column()
             col.label(text="Rate:")
@@ -470,17 +491,6 @@ class RENDER_PT_encoding(RenderButtonsPanel, Panel):
             col.label(text="Mux:")
             col.prop(ffmpeg, "muxrate", text="Rate")
             col.prop(ffmpeg, "packetsize", text="Packet Size")
-
-        layout.separator()
-
-        # Audio:
-        if ffmpeg.format != 'MP3':
-            layout.prop(ffmpeg, "audio_codec", text="Audio Codec")
-
-        if ffmpeg.audio_codec != 'NONE':
-            row = layout.row()
-            row.prop(ffmpeg, "audio_bitrate")
-            row.prop(ffmpeg, "audio_volume", slider=True)
 
 
 class RENDER_PT_bake(RenderButtonsPanel, Panel):

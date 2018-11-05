@@ -471,11 +471,11 @@ void Controller::ComputeViewMap()
 
 	// retrieve the 3D viewpoint and transformations information
 	//----------------------------------------------------------
-	// Save the viewpoint context at the view level in order 
+	// Save the viewpoint context at the view level in order
 	// to be able to restore it later:
 
 	// Restore the context of view:
-	// we need to perform all these operations while the 
+	// we need to perform all these operations while the
 	// 3D context is on.
 	Vec3f vp(UNPACK3(g_freestyle.viewpoint));
 
@@ -642,11 +642,11 @@ void Controller::ComputeSteerableViewMap()
 	NodeShape *completeNS = new NodeShape;
 	completeNS->material().setDiffuse(c,c,c,1);
 	ng[Canvas::NB_STEERABLE_VIEWMAP-1]->AddChild(completeNS);
-	SteerableViewMap * svm = _Canvas->getSteerableViewMap();
+	SteerableViewMap *svm = _Canvas->getSteerableViewMap();
 	svm->Reset();
 
 	ViewMap::fedges_container& fedges = _ViewMap->FEdges();
-	LineRep * fRep;
+	LineRep *fRep;
 	NodeShape *ns;
 	for (ViewMap::fedges_container::iterator f = fedges.begin(), fend = fedges.end();
 	     f != fend;
@@ -722,7 +722,7 @@ void Controller::ComputeSteerableViewMap()
 
 void Controller::saveSteerableViewMapImages()
 {
-	SteerableViewMap * svm = _Canvas->getSteerableViewMap();
+	SteerableViewMap *svm = _Canvas->getSteerableViewMap();
 	if (!svm) {
 		cerr << "the Steerable ViewMap has not been computed yet" << endl;
 		return;
@@ -928,7 +928,7 @@ Render *Controller::RenderStrokes(Render *re, bool render)
 
 void Controller::InsertStyleModule(unsigned index, const char *iFileName)
 {
-	if (!BLI_testextensie(iFileName, ".py")) {
+	if (!BLI_path_extension_check(iFileName, ".py")) {
 		cerr << "Error: Cannot load \"" << string(iFileName) << "\", unknown extension" << endl;
 		return;
 	}
@@ -1003,7 +1003,7 @@ void Controller::resetModified(bool iMod)
 	_Canvas->resetModified(iMod);
 }
 
-NodeGroup * Controller::BuildRep(vector<ViewEdge*>::iterator vedges_begin, vector<ViewEdge*>::iterator vedges_end)
+NodeGroup *Controller::BuildRep(vector<ViewEdge*>::iterator vedges_begin, vector<ViewEdge*>::iterator vedges_end)
 {
 	ViewMapTesselator2D tesselator2D;
 	FrsMaterial mat;
@@ -1052,7 +1052,7 @@ void Controller::resetInterpreter()
 
 void Controller::displayDensityCurves(int x, int y)
 {
-	SteerableViewMap * svm = _Canvas->getSteerableViewMap();
+	SteerableViewMap *svm = _Canvas->getSteerableViewMap();
 	if (!svm)
 		return;
 

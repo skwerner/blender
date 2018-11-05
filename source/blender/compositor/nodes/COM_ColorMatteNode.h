@@ -19,14 +19,14 @@
  *		Dalai Felinto
  */
 
-#ifndef _COM_ColorMatteNode_h_
-#define _COM_ColorMatteNode_h_
+#ifndef __COM_COLORMATTENODE_H__
+#define __COM_COLORMATTENODE_H__
 
 #include "COM_Node.h"
 
 /**
- * @brief ColorMatteNode
- * @ingroup Node
+ * \brief ColorMatteNode
+ * \ingroup Node
  */
 class ColorMatteNode : public Node {
 public:

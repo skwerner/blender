@@ -15,20 +15,20 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
- * Contributor: 
- *		Jeroen Bakker 
+ * Contributor:
+ *		Jeroen Bakker
  *		Monique Dewanchand
  */
 
-#ifndef _COM_SwitchNode_h_
-#define _COM_SwitchNode_h_
+#ifndef __COM_SWITCHNODE_H__
+#define __COM_SWITCHNODE_H__
 
 #include "COM_Node.h"
 #include "COM_NodeOperation.h"
 #include "DNA_node_types.h"
 /**
- * @brief SwitchNode
- * @ingroup Node
+ * \brief SwitchNode
+ * \ingroup Node
  */
 class SwitchNode : public Node {
 public:

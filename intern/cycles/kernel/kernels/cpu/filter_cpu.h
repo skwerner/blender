@@ -17,7 +17,7 @@
 /* Templated common declaration part of all CPU kernels. */
 
 void KERNEL_FUNCTION_FULL_NAME(filter_divide_shadow)(int sample,
-                                                     TilesInfo *tiles,
+                                                     TileInfo *tile_info,
                                                      int x,
                                                      int y,
                                                      float *unfilteredA,
@@ -30,7 +30,7 @@ void KERNEL_FUNCTION_FULL_NAME(filter_divide_shadow)(int sample,
                                                      int buffer_denoising_offset);
 
 void KERNEL_FUNCTION_FULL_NAME(filter_get_feature)(int sample,
-                                                   TilesInfo *tiles,
+                                                   TileInfo *tile_info,
                                                    int m_offset,
                                                    int v_offset,
                                                    int x,
@@ -95,6 +95,7 @@ void KERNEL_FUNCTION_FULL_NAME(filter_nlm_update_output)(int dx,
                                                          int dy,
                                                          float *difference_image,
                                                          float *image,
+                                                         float *temp_image,
                                                          float *out_image,
                                                          float *accum_image,
                                                          int* rect,

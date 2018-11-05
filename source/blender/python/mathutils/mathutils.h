@@ -170,10 +170,8 @@ Py_hash_t mathutils_array_hash(const float *float_array, size_t array_len);
 int column_vector_multiplication(float rvec[4], VectorObject *vec, MatrixObject *mat);
 
 #ifndef MATH_STANDALONE
-/* dynstr as python string utility funcions */
+/* dynstr as python string utility functions */
 PyObject *mathutils_dynstr_to_py(struct DynStr *ds);
 #endif
-
-int mathutils_deepcopy_args_check(PyObject *args);
 
 #endif /* __MATHUTILS_H__ */

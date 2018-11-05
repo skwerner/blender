@@ -96,7 +96,8 @@ BlenderStrokeRenderer::BlenderStrokeRenderer(Render *re, int render_count) : Str
 	//freestyle_scene->r.maximsize = old_scene->r.maximsize; /* DEPRECATED */
 	freestyle_scene->r.ocres = old_scene->r.ocres;
 	freestyle_scene->r.color_mgt_flag = 0; // old_scene->r.color_mgt_flag;
-	freestyle_scene->r.scemode = old_scene->r.scemode & ~(R_SINGLE_LAYER | R_NO_FRAME_UPDATE | R_MULTIVIEW);
+	freestyle_scene->r.scemode = (old_scene->r.scemode & ~(R_SINGLE_LAYER | R_NO_FRAME_UPDATE | R_MULTIVIEW)) &
+	                             (re->r.scemode | ~R_FULL_SAMPLE);
 	freestyle_scene->r.flag = old_scene->r.flag;
 	freestyle_scene->r.threads = old_scene->r.threads;
 	freestyle_scene->r.border.xmin = old_scene->r.border.xmin;
@@ -113,7 +114,7 @@ BlenderStrokeRenderer::BlenderStrokeRenderer(Render *re, int render_count) : Str
 	freestyle_scene->r.gauss = old_scene->r.gauss;
 	freestyle_scene->r.dither_intensity = old_scene->r.dither_intensity;
 	BLI_strncpy(freestyle_scene->r.engine, old_scene->r.engine, sizeof(freestyle_scene->r.engine));
-	freestyle_scene->r.im_format.planes = R_IMF_PLANES_RGBA; 
+	freestyle_scene->r.im_format.planes = R_IMF_PLANES_RGBA;
 	freestyle_scene->r.im_format.imtype = R_IMF_IMTYPE_PNG;
 
 	if (G.debug & G_DEBUG_FREESTYLE) {
@@ -176,17 +177,17 @@ BlenderStrokeRenderer::~BlenderStrokeRenderer()
 		}
 #endif
 		switch (ob->type) {
-		case OB_MESH:
-			BKE_libblock_free(freestyle_bmain, ob);
-			BKE_libblock_free(freestyle_bmain, data);
-			break;
-		case OB_CAMERA:
-			BKE_libblock_free(freestyle_bmain, ob);
-			BKE_libblock_free(freestyle_bmain, data);
-			freestyle_scene->camera = NULL;
-			break;
-		default:
-			cerr << "Warning: unexpected object in the scene: " << name[0] << name[1] << ":" << (name + 2) << endl;
+			case OB_MESH:
+				BKE_libblock_free(freestyle_bmain, ob);
+				BKE_libblock_free(freestyle_bmain, data);
+				break;
+			case OB_CAMERA:
+				BKE_libblock_free(freestyle_bmain, ob);
+				BKE_libblock_free(freestyle_bmain, data);
+				freestyle_scene->camera = NULL;
+				break;
+			default:
+				cerr << "Warning: unexpected object in the scene: " << name[0] << name[1] << ":" << (name + 2) << endl;
 		}
 	}
 	BLI_freelistN(&freestyle_scene->base);
@@ -907,7 +908,7 @@ void BlenderStrokeRenderer::GenerateStrokeMesh(StrokeGroup *group, bool hasTex)
 		material_index++;
 	} // loop over strokes
 
-	test_object_materials(object_mesh, (ID *)mesh);
+	test_object_materials(freestyle_bmain, object_mesh, (ID *)mesh);
 
 #if 0 // XXX
 	BLI_assert(mesh->totvert == vertex_index);

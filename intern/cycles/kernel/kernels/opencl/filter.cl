@@ -23,7 +23,7 @@
 /* kernels */
 
 __kernel void kernel_ocl_filter_divide_shadow(int sample,
-                                              ccl_global TilesInfo *tiles,
+                                              CCL_FILTER_TILE_INFO,
                                               ccl_global float *unfilteredA,
                                               ccl_global float *unfilteredB,
                                               ccl_global float *sampleVariance,
@@ -37,7 +37,7 @@ __kernel void kernel_ocl_filter_divide_shadow(int sample,
 	int y = prefilter_rect.y + get_global_id(1);
 	if(x < prefilter_rect.z && y < prefilter_rect.w) {
 		kernel_filter_divide_shadow(sample,
-		                            tiles,
+		                            CCL_FILTER_TILE_INFO_ARG,
 		                            x, y,
 		                            unfilteredA,
 		                            unfilteredB,
@@ -51,7 +51,7 @@ __kernel void kernel_ocl_filter_divide_shadow(int sample,
 }
 
 __kernel void kernel_ocl_filter_get_feature(int sample,
-                                            ccl_global TilesInfo *tiles,
+                                            CCL_FILTER_TILE_INFO,
                                             int m_offset,
                                             int v_offset,
                                             ccl_global float *mean,
@@ -64,7 +64,7 @@ __kernel void kernel_ocl_filter_get_feature(int sample,
 	int y = prefilter_rect.y + get_global_id(1);
 	if(x < prefilter_rect.z && y < prefilter_rect.w) {
 		kernel_filter_get_feature(sample,
-		                          tiles,
+		                          CCL_FILTER_TILE_INFO_ARG,
 		                          m_offset, v_offset,
 		                          x, y,
 		                          mean, variance,
@@ -132,7 +132,7 @@ __kernel void kernel_ocl_filter_nlm_calc_difference(const ccl_global float *ccl_
                                                     int w,
                                                     int h,
                                                     int stride,
-                                                    int shift_stride,
+                                                    int pass_stride,
                                                     int r,
                                                     int channel_offset,
                                                     float a,
@@ -140,7 +140,7 @@ __kernel void kernel_ocl_filter_nlm_calc_difference(const ccl_global float *ccl_
 {
 	int4 co, rect;
 	int ofs;
-	if(get_nlm_coords(w, h, r, shift_stride, &rect, &co, &ofs)) {
+	if(get_nlm_coords(w, h, r, pass_stride, &rect, &co, &ofs)) {
 		kernel_filter_nlm_calc_difference(co.x, co.y, co.z, co.w,
 		                                  weight_image,
 		                                  variance_image,
@@ -155,13 +155,13 @@ __kernel void kernel_ocl_filter_nlm_blur(const ccl_global float *ccl_restrict di
                                          int w,
                                          int h,
                                          int stride,
-                                         int shift_stride,
+                                         int pass_stride,
                                          int r,
                                          int f)
 {
 	int4 co, rect;
 	int ofs;
-	if(get_nlm_coords(w, h, r, shift_stride, &rect, &co, &ofs)) {
+	if(get_nlm_coords(w, h, r, pass_stride, &rect, &co, &ofs)) {
 		kernel_filter_nlm_blur(co.x, co.y,
 		                       difference_image + ofs,
 		                       out_image + ofs,
@@ -174,13 +174,13 @@ __kernel void kernel_ocl_filter_nlm_calc_weight(const ccl_global float *ccl_rest
                                                 int w,
                                                 int h,
                                                 int stride,
-                                                int shift_stride,
+                                                int pass_stride,
                                                 int r,
                                                 int f)
 {
 	int4 co, rect;
 	int ofs;
-	if(get_nlm_coords(w, h, r, shift_stride, &rect, &co, &ofs)) {
+	if(get_nlm_coords(w, h, r, pass_stride, &rect, &co, &ofs)) {
 		kernel_filter_nlm_calc_weight(co.x, co.y,
 		                              difference_image + ofs,
 		                              out_image + ofs,
@@ -195,13 +195,13 @@ __kernel void kernel_ocl_filter_nlm_update_output(const ccl_global float *ccl_re
                                                   int w,
                                                   int h,
                                                   int stride,
-                                                  int shift_stride,
+                                                  int pass_stride,
                                                   int r,
                                                   int f)
 {
 	int4 co, rect;
 	int ofs;
-	if(get_nlm_coords(w, h, r, shift_stride, &rect, &co, &ofs)) {
+	if(get_nlm_coords(w, h, r, pass_stride, &rect, &co, &ofs)) {
 		kernel_filter_nlm_update_output(co.x, co.y, co.z, co.w,
 		                                difference_image + ofs,
 		                                image,
@@ -234,14 +234,13 @@ __kernel void kernel_ocl_filter_nlm_construct_gramian(const ccl_global float *cc
                                                       int w,
                                                       int h,
                                                       int stride,
-                                                      int shift_stride,
+                                                      int pass_stride,
                                                       int r,
-                                                      int f,
-                                                      int pass_stride)
+                                                      int f)
 {
 	int4 co, rect;
 	int ofs;
-	if(get_nlm_coords_window(w, h, r, shift_stride, &rect, &co, &ofs, filter_window)) {
+	if(get_nlm_coords_window(w, h, r, pass_stride, &rect, &co, &ofs, filter_window)) {
 		kernel_filter_nlm_construct_gramian(co.x, co.y,
 		                                    co.z, co.w,
 		                                    difference_image + ofs,
@@ -274,29 +273,5 @@ __kernel void kernel_ocl_filter_finalize(ccl_global float *buffer,
 		                       filter_area.z*filter_area.w,
 		                       XtWX, XtWY,
 		                       buffer_params, sample);
-	}
-}
-
-__kernel void kernel_ocl_filter_set_tiles(ccl_global TilesInfo* tiles,
-                                          ccl_global float *buffer_1,
-                                          ccl_global float *buffer_2,
-                                          ccl_global float *buffer_3,
-                                          ccl_global float *buffer_4,
-                                          ccl_global float *buffer_5,
-                                          ccl_global float *buffer_6,
-                                          ccl_global float *buffer_7,
-                                          ccl_global float *buffer_8,
-                                          ccl_global float *buffer_9)
-{
-	if((get_global_id(0) == 0) && (get_global_id(1) == 0)) {
-		tiles->buffers[0] = buffer_1;
-		tiles->buffers[1] = buffer_2;
-		tiles->buffers[2] = buffer_3;
-		tiles->buffers[3] = buffer_4;
-		tiles->buffers[4] = buffer_5;
-		tiles->buffers[5] = buffer_6;
-		tiles->buffers[6] = buffer_7;
-		tiles->buffers[7] = buffer_8;
-		tiles->buffers[8] = buffer_9;
 	}
 }

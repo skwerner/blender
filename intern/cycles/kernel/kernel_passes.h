@@ -14,11 +14,13 @@
  * limitations under the License.
  */
 
-CCL_NAMESPACE_BEGIN
-
 #if defined(__SPLIT_KERNEL__) || defined(__KERNEL_CUDA__)
 #define __ATOMIC_PASS_WRITE__
 #endif
+
+#include "kernel/kernel_id_passes.h"
+
+CCL_NAMESPACE_BEGIN
 
 ccl_device_inline void kernel_write_pass_float(ccl_global float *buffer, float value)
 {
@@ -140,7 +142,7 @@ ccl_device_inline void kernel_update_denoising_features(KernelGlobals *kg,
 		/* All closures contribute to the normal feature, but only diffuse-like ones to the albedo. */
 		normal += sc->N * sc->sample_weight;
 		sum_weight += sc->sample_weight;
-		if(bsdf_get_roughness_squared(sc) > sqr(0.075f)) {
+		if(bsdf_get_specular_roughness_squared(sc) > sqr(0.075f)) {
 			albedo += sc->weight;
 			sum_nonspecular_weight += sc->sample_weight;
 		}
@@ -189,6 +191,23 @@ ccl_device_inline void kernel_write_debug_passes(KernelGlobals *kg,
 }
 #endif /* __KERNEL_DEBUG__ */
 
+#ifdef __KERNEL_CPU__
+#define WRITE_ID_SLOT(buffer, depth, id, matte_weight, name) kernel_write_id_pass_cpu(buffer, depth * 2, id, matte_weight, kg->coverage_##name)
+ccl_device_inline size_t kernel_write_id_pass_cpu(float *buffer, size_t depth, float id, float matte_weight, CoverageMap *map)
+{
+	if(map) {
+		(*map)[id] += matte_weight;
+		return 0;
+	}
+#else /* __KERNEL_CPU__ */
+#define WRITE_ID_SLOT(buffer, depth, id, matte_weight, name) kernel_write_id_slots_gpu(buffer, depth * 2, id, matte_weight) 
+ccl_device_inline size_t kernel_write_id_slots_gpu(ccl_global float *buffer, size_t depth, float id, float matte_weight)
+{
+#endif /* __KERNEL_CPU__ */
+	kernel_write_id_slots(buffer, depth, id, matte_weight);
+	return depth * 2;
+}
+
 ccl_device_inline void kernel_write_data_passes(KernelGlobals *kg, ccl_global float *buffer, PathRadiance *L,
 	ShaderData *sd, ccl_addr_space PathState *state, float3 throughput)
 {
@@ -203,7 +222,7 @@ ccl_device_inline void kernel_write_data_passes(KernelGlobals *kg, ccl_global fl
 
 	if(!((flag | light_flag) & PASS_ANY))
 		return;
-	
+
 	if(!(path_flag & PATH_RAY_SINGLE_PASS_DONE)) {
 		if(!(sd->flag & SD_TRANSPARENT) ||
 		   kernel_data.film.pass_alpha_threshold == 0.0f ||
@@ -241,6 +260,26 @@ ccl_device_inline void kernel_write_data_passes(KernelGlobals *kg, ccl_global fl
 			state->flag |= PATH_RAY_SINGLE_PASS_DONE;
 		}
 	}
+
+	if(kernel_data.film.cryptomatte_passes) {
+		const float matte_weight = average(throughput) * (1.0f - average(shader_bsdf_transparency(kg, sd)));
+		if(matte_weight > 0.0f) {
+			ccl_global float *cryptomatte_buffer = buffer + kernel_data.film.pass_cryptomatte;
+			if(kernel_data.film.cryptomatte_passes & CRYPT_OBJECT) {
+				float id = object_cryptomatte_id(kg, sd->object);
+				cryptomatte_buffer += WRITE_ID_SLOT(cryptomatte_buffer, kernel_data.film.cryptomatte_depth, id, matte_weight, object);
+			}
+			if(kernel_data.film.cryptomatte_passes & CRYPT_MATERIAL) {
+				float id = shader_cryptomatte_id(kg, sd->shader);
+				cryptomatte_buffer += WRITE_ID_SLOT(cryptomatte_buffer, kernel_data.film.cryptomatte_depth, id, matte_weight, material);
+			}
+			if(kernel_data.film.cryptomatte_passes & CRYPT_ASSET) {
+				float id = object_cryptomatte_asset_id(kg, sd->object);
+				cryptomatte_buffer += WRITE_ID_SLOT(cryptomatte_buffer, kernel_data.film.cryptomatte_depth, id, matte_weight, asset);
+			}
+		}
+	}
+
 
 	if(light_flag & PASSMASK_COMPONENT(DIFFUSE))
 		L->color_diffuse += shader_bsdf_diffuse(kg, sd)*throughput;
@@ -285,7 +324,7 @@ ccl_device_inline void kernel_write_light_passes(KernelGlobals *kg, ccl_global f
 
 	if(!kernel_data.film.use_light_pass)
 		return;
-	
+
 	if(light_flag & PASSMASK(DIFFUSE_INDIRECT))
 		kernel_write_pass_float3(buffer + kernel_data.film.pass_diffuse_indirect, L->indirect_diffuse);
 	if(light_flag & PASSMASK(GLOSSY_INDIRECT))
@@ -393,4 +432,3 @@ ccl_device_inline void kernel_write_result(KernelGlobals *kg,
 }
 
 CCL_NAMESPACE_END
-

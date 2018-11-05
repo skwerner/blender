@@ -8,6 +8,7 @@ import shutil
 import subprocess
 import sys
 
+
 def screenshot():
     import bpy
 
@@ -18,6 +19,7 @@ def screenshot():
     bpy.ops.screen.screenshot(filepath=output_path, full=True)
 
     bpy.ops.wm.quit_blender()
+
 
 # When run from inside Blender, take screenshot and exit.
 try:
@@ -34,6 +36,9 @@ if inside_blender:
 def render_file(filepath, output_filepath):
     command = (
         BLENDER,
+        "--no-window-focus",
+        "--window-geometry",
+        "0", "0", "1024", "768",
         "-noaudio",
         "--factory-startup",
         "--enable-autoexec",
@@ -92,6 +97,7 @@ def main():
     ok = report.run(test_dir, render_file)
 
     sys.exit(not ok)
+
 
 if __name__ == "__main__":
     main()

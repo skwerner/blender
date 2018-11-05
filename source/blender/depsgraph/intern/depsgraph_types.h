@@ -43,6 +43,7 @@
  */
 #include <string>
 #include <vector>
+#include <algorithm>
 
 struct bAction;
 struct ChannelDriver;
@@ -137,6 +138,7 @@ typedef enum eDepsOperation_Code {
 	DEG_OPCODE_OPERATION = 0,
 
 	/* Generic parameters evaluation. */
+	DEG_OPCODE_ID_PROPERTY,
 	DEG_OPCODE_PARAMETERS_EVAL,
 
 	// XXX: Placeholder while porting depsgraph code
@@ -196,7 +198,7 @@ typedef enum eDepsOperation_Code {
 	 * - "READY"  This (internal, noop is used to signal that all pre-IK
 	 *            operations are done. Its role is to help mediate situations
 	 *            where cyclic relations may otherwise form (i.e. one bone in
-	 *            chain targetting another in same chain,
+	 *            chain targeting another in same chain,
 	 *
 	 * - "DONE"   This noop is used to signal that the bone's final pose
 	 *            transform can be read by others

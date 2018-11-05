@@ -85,7 +85,7 @@
  */
 char *BLI_current_working_dir(char *dir, const size_t maxncpy)
 {
-	const char *pwd = getenv("PWD");
+	const char *pwd = BLI_getenv("PWD");
 	if (pwd) {
 		size_t srclen = BLI_strnlen(pwd, maxncpy);
 		if (srclen != maxncpy) {
@@ -185,7 +185,7 @@ size_t BLI_file_size(const char *path)
 }
 
 /**
- * Returns the st_mode from statting the specified path name, or 0 if it couldn't be statted
+ * Returns the st_mode from stat-ing the specified path name, or 0 if stat fails
  * (most likely doesn't exist or no access).
  */
 int BLI_exists(const char *name)

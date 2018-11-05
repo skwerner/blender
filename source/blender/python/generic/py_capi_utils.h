@@ -30,18 +30,19 @@
 #include "BLI_sys_types.h"
 #include "BLI_utildefines_variadic.h"
 
-void			PyC_ObSpit(const char *name, PyObject *var);
-void			PyC_LineSpit(void);
-void			PyC_StackSpit(void);
-PyObject *		PyC_ExceptionBuffer(void);
-PyObject *		PyC_ExceptionBuffer_Simple(void);
-PyObject *		PyC_Object_GetAttrStringArgs(PyObject *o, Py_ssize_t n, ...);
-PyObject *		PyC_FrozenSetFromStrings(const char **strings);
-PyObject *		PyC_Err_Format_Prefix(PyObject *exception_type_prefix, const char *format, ...);
-void			PyC_Err_PrintWithFunc(PyObject *py_func);
+void      PyC_ObSpit(const char *name, PyObject *var);
+void      PyC_ObSpitStr(char *result, size_t result_len, PyObject *var);
+void      PyC_LineSpit(void);
+void      PyC_StackSpit(void);
+PyObject *PyC_ExceptionBuffer(void);
+PyObject *PyC_ExceptionBuffer_Simple(void);
+PyObject *PyC_Object_GetAttrStringArgs(PyObject *o, Py_ssize_t n, ...);
+PyObject *PyC_FrozenSetFromStrings(const char **strings);
+PyObject *PyC_Err_Format_Prefix(PyObject *exception_type_prefix, const char *format, ...);
+void      PyC_Err_PrintWithFunc(PyObject *py_func);
 
-void			PyC_FileAndNum(const char **filename, int *lineno);
-void			PyC_FileAndNum_Safe(const char **filename, int *lineno); /* checks python is running */
+void	PyC_FileAndNum(const char **filename, int *lineno);
+void	PyC_FileAndNum_Safe(const char **filename, int *lineno); /* checks python is running */
 int             PyC_AsArray_FAST(
         void *array, PyObject *value_fast, const Py_ssize_t length,
         const PyTypeObject *type, const bool is_double, const char *error_prefix);
@@ -50,12 +51,15 @@ int             PyC_AsArray(
         const PyTypeObject *type, const bool is_double, const char *error_prefix);
 
 PyObject       *PyC_Tuple_PackArray_F32(const float *array, uint len);
+PyObject       *PyC_Tuple_PackArray_F64(const double *array, uint len);
 PyObject       *PyC_Tuple_PackArray_I32(const int *array, uint len);
 PyObject       *PyC_Tuple_PackArray_I32FromBool(const int *array, uint len);
 PyObject       *PyC_Tuple_PackArray_Bool(const bool *array, uint len);
 
 #define PyC_Tuple_Pack_F32(...) \
 	PyC_Tuple_PackArray_F32(((const float []){__VA_ARGS__}), VA_NARGS_COUNT(__VA_ARGS__))
+#define PyC_Tuple_Pack_F64(...) \
+	PyC_Tuple_PackArray_F64(((const double []){__VA_ARGS__}), VA_NARGS_COUNT(__VA_ARGS__))
 #define PyC_Tuple_Pack_I32(...) \
 	PyC_Tuple_PackArray_I32(((const int []){__VA_ARGS__}), VA_NARGS_COUNT(__VA_ARGS__))
 #define PyC_Tuple_Pack_I32FromBool(...) \
@@ -67,14 +71,15 @@ void            PyC_Tuple_Fill(PyObject *tuple, PyObject *value);
 void            PyC_List_Fill(PyObject *list, PyObject *value);
 
 /* follow http://www.python.org/dev/peps/pep-0383/ */
-PyObject *      PyC_UnicodeFromByte(const char *str);
-PyObject *      PyC_UnicodeFromByteAndSize(const char *str, Py_ssize_t size);
-const char *    PyC_UnicodeAsByte(PyObject *py_str, PyObject **coerce); /* coerce must be NULL */
-const char *    PyC_UnicodeAsByteAndSize(PyObject *py_str, Py_ssize_t *size, PyObject **coerce);
+PyObject   *PyC_UnicodeFromByte(const char *str);
+PyObject   *PyC_UnicodeFromByteAndSize(const char *str, Py_ssize_t size);
+const char *PyC_UnicodeAsByte(PyObject *py_str, PyObject **coerce); /* coerce must be NULL */
+const char *PyC_UnicodeAsByteAndSize(PyObject *py_str, Py_ssize_t *size, PyObject **coerce);
 
 /* name namespace function for bpy & bge */
-PyObject *		PyC_DefaultNameSpace(const char *filename);
-void			PyC_RunQuicky(const char *filepath, int n, ...);
+PyObject *PyC_DefaultNameSpace(const char *filename);
+void PyC_RunQuicky(const char *filepath, int n, ...);
+bool PyC_NameSpace_ImportArray(PyObject *py_dict, const char *imports[]);
 
 void PyC_MainModule_Backup(PyObject **main_mod);
 void PyC_MainModule_Restore(PyObject *main_mod);
@@ -97,11 +102,13 @@ int       PyC_FlagSet_ValueFromID(PyC_FlagSet *item, const char *identifier, int
 int       PyC_FlagSet_ToBitfield(PyC_FlagSet *items, PyObject *value, int *r_value, const char *error_prefix);
 PyObject *PyC_FlagSet_FromBitfield(PyC_FlagSet *items, int flag);
 
-bool PyC_RunString_AsNumber(const char *expr, const char *filename, double *r_value);
-bool PyC_RunString_AsString(const char *expr, const char *filename, char **r_value);
+bool PyC_RunString_AsNumber(const char **imports, const char *expr, const char *filename, double *r_value);
+bool PyC_RunString_AsIntPtr(const char **imports, const char *expr, const char *filename, intptr_t *r_value);
+bool PyC_RunString_AsString(const char **imports, const char *expr, const char *filename, char **r_value);
 
 int PyC_ParseBool(PyObject *o, void *p);
 
+int PyC_CheckArgs_DeepCopy(PyObject *args);
 
 /* Integer parsing (with overflow checks), -1 on error. */
 int     PyC_Long_AsBool(PyObject *value);

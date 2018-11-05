@@ -22,7 +22,7 @@
 
 # This module can get render info without running from inside blender.
 #
-# This struct wont change according to Ton.
+# This struct won't change according to Ton.
 # Note that the size differs on 32/64bit
 #
 # typedef struct BHead {
@@ -97,6 +97,7 @@ def main():
         if arg.lower().endswith('.blend'):
             for value in read_blend_rend_chunk(arg):
                 print("%d %d %s" % value)
+
 
 if __name__ == '__main__':
     main()

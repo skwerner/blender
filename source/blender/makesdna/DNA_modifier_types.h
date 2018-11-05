@@ -174,7 +174,7 @@ typedef struct BuildModifierData {
 
 	float start, length;
 	short flag;
-	
+
 	short randomize;      /* (bool) whether order of vertices is randomized - legacy files (for readfile conversion) */
 	int seed;             /* (int) random seed */
 } BuildModifierData;
@@ -192,8 +192,9 @@ typedef struct MaskModifierData {
 	struct Object *ob_arm;  /* armature to use to in place of hardcoded vgroup */
 	char vgroup[64];        /* name of vertex group to use to mask, MAX_VGROUP_NAME */
 
-	int mode;               /* using armature or hardcoded vgroup */
-	int flag;               /* flags for various things */
+	short mode;               /* using armature or hardcoded vgroup */
+	short flag;               /* flags for various things */
+	float threshold;
 } MaskModifierData;
 
 /* Mask Modifier -> mode */
@@ -612,7 +613,7 @@ typedef struct ClothModifierData {
 	float hair_grid_max[3];
 	int hair_grid_res[3];
 	float hair_grid_cellsize;
-	
+
 	struct ClothSolverResult *solver_result;
 } ClothModifierData;
 
@@ -753,12 +754,21 @@ typedef enum {
 	eParticleInstanceFlag_UseSize   = (1 << 7),
 } ParticleInstanceModifierFlag;
 
+typedef enum {
+	eParticleInstanceSpace_World    = 0,
+	eParticleInstanceSpace_Local    = 1,
+} ParticleInstanceModifierSpace;
+
 typedef struct ParticleInstanceModifierData {
 	ModifierData modifier;
 
 	struct Object *ob;
-	short psys, flag, axis, pad;
+	short psys, flag, axis, space;
 	float position, random_position;
+	float rotation, random_rotation;
+	float particle_amount, particle_offset;
+	char index_layer_name[64]; /* MAX_CUSTOMDATA_LAYER_NAME */
+	char value_layer_name[64]; /* MAX_CUSTOMDATA_LAYER_NAME */
 } ParticleInstanceModifierData;
 
 typedef enum {
@@ -861,7 +871,7 @@ typedef struct SimpleDeformModifierData {
 	float limit[2];         /* lower and upper limit */
 
 	char mode;              /* deform function */
-	char axis;              /* lock axis (for taper and strech) */
+	char axis;              /* lock axis (for taper and stretch) */
 	char deform_axis;       /* axis to perform the deform on (default is X, but can be overridden by origin */
 	char flag;
 
@@ -951,7 +961,7 @@ typedef struct OceanModifierData {
 
 	struct Ocean *ocean;
 	struct OceanCache *oceancache;
-	
+
 	int resolution;
 	int spatial_size;
 
@@ -1000,10 +1010,10 @@ enum {
 
 enum {
 	MOD_OCEAN_REFRESH_RESET        = (1 << 0),
-	MOD_OCEAN_REFRESH_SIM          = (1 << 1),
-	MOD_OCEAN_REFRESH_ADD          = (1 << 2),
+	/* MOD_OCEAN_REFRESH_SIM          = (1 << 1), */
+	/* MOD_OCEAN_REFRESH_ADD          = (1 << 2), */
 	MOD_OCEAN_REFRESH_CLEAR_CACHE  = (1 << 3),
-	MOD_OCEAN_REFRESH_TOPOLOGY     = (1 << 4),
+	/* MOD_OCEAN_REFRESH_TOPOLOGY     = (1 << 4), */
 };
 
 enum {
@@ -1550,6 +1560,7 @@ enum {
 enum {
 	MOD_NORMALEDIT_INVERT_VGROUP            = (1 << 0),
 	MOD_NORMALEDIT_USE_DIRECTION_PARALLEL   = (1 << 1),
+	MOD_NORMALEDIT_NO_POLYNORS_FIX             = (1 << 2),
 };
 
 /* NormalEditModifierData.mix_mode */

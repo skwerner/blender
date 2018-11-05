@@ -19,10 +19,10 @@
 import bpy
 
 from bpy.types import (
-        Panel,
-        Menu,
-        Operator,
-        )
+    Panel,
+    Menu,
+    Operator,
+)
 
 
 class CYCLES_MT_sampling_presets(Menu):
@@ -85,6 +85,7 @@ def use_sample_all_lights(context):
     cscene = context.scene.cycles
 
     return cscene.sample_all_lights_direct or cscene.sample_all_lights_indirect
+
 
 def show_device_active(context):
     cscene = context.scene.cycles
@@ -516,6 +517,8 @@ class CYCLES_RENDER_PT_layer_passes(CyclesButtonsPanel, Panel):
         col.prop(rl, "use_pass_shadow")
         col.prop(rl, "use_pass_ambient_occlusion")
         col.separator()
+        col.prop(crl, "denoising_store_passes", text="Denoising Data")
+        col.separator()
         col.prop(rl, "pass_alpha_threshold")
 
         col = split.column()
@@ -548,12 +551,6 @@ class CYCLES_RENDER_PT_layer_passes(CyclesButtonsPanel, Panel):
         col.prop(rl, "use_pass_emit", text="Emission")
         col.prop(rl, "use_pass_environment")
 
-        if context.scene.cycles.feature_set == 'EXPERIMENTAL':
-            col.separator()
-            sub = col.column()
-            sub.active = crl.use_denoising
-            sub.prop(crl, "denoising_store_passes", text="Denoising")
-
         col = layout.column()
         col.prop(crl, "pass_debug_render_time")
         if _cycles.with_cycles_debug:
@@ -562,6 +559,17 @@ class CYCLES_RENDER_PT_layer_passes(CyclesButtonsPanel, Panel):
             col.prop(crl, "pass_debug_bvh_intersections")
             col.prop(crl, "pass_debug_ray_bounces")
 
+        crl = rl.cycles
+        layout.label("Cryptomatte:")
+        row = layout.row(align=True)
+        row.prop(crl, "use_pass_crypto_object", text="Object", toggle=True)
+        row.prop(crl, "use_pass_crypto_material", text="Material", toggle=True)
+        row.prop(crl, "use_pass_crypto_asset", text="Asset", toggle=True)
+        row = layout.row(align=True)
+        row.prop(crl, "pass_crypto_depth")
+        row = layout.row(align=True)
+        row.active = use_cpu(context)
+        row.prop(crl, "pass_crypto_accurate", text="Accurate Mode")
 
 class CYCLES_RENDER_PT_views(CyclesButtonsPanel, Panel):
     bl_label = "Views"
@@ -629,9 +637,8 @@ class CYCLES_RENDER_PT_denoising(CyclesButtonsPanel, Panel):
         rl = rd.layers.active
         crl = rl.cycles
 
-        layout.active = crl.use_denoising
-
         split = layout.split()
+        split.active = crl.use_denoising
 
         col = split.column()
         sub = col.column(align=True)
@@ -646,24 +653,28 @@ class CYCLES_RENDER_PT_denoising(CyclesButtonsPanel, Panel):
         layout.separator()
 
         row = layout.row()
+        row.active = crl.use_denoising or crl.denoising_store_passes
         row.label(text="Diffuse:")
         sub = row.row(align=True)
         sub.prop(crl, "denoising_diffuse_direct", text="Direct", toggle=True)
         sub.prop(crl, "denoising_diffuse_indirect", text="Indirect", toggle=True)
 
         row = layout.row()
+        row.active = crl.use_denoising or crl.denoising_store_passes
         row.label(text="Glossy:")
         sub = row.row(align=True)
         sub.prop(crl, "denoising_glossy_direct", text="Direct", toggle=True)
         sub.prop(crl, "denoising_glossy_indirect", text="Indirect", toggle=True)
 
         row = layout.row()
+        row.active = crl.use_denoising or crl.denoising_store_passes
         row.label(text="Transmission:")
         sub = row.row(align=True)
         sub.prop(crl, "denoising_transmission_direct", text="Direct", toggle=True)
         sub.prop(crl, "denoising_transmission_indirect", text="Indirect", toggle=True)
 
         row = layout.row()
+        row.active = crl.use_denoising or crl.denoising_store_passes
         row.label(text="Subsurface:")
         sub = row.row(align=True)
         sub.prop(crl, "denoising_subsurface_direct", text="Direct", toggle=True)
@@ -809,7 +820,7 @@ class CYCLES_OBJECT_PT_motion_blur(CyclesButtonsPanel, Panel):
     def poll(cls, context):
         ob = context.object
         if CyclesButtonsPanel.poll(context) and ob:
-            if ob.type in {'MESH', 'CURVE', 'CURVE', 'SURFACE', 'FONT', 'META'}:
+            if ob.type in {'MESH', 'CURVE', 'CURVE', 'SURFACE', 'FONT', 'META', 'CAMERA'}:
                 return True
             if ob.dupli_type == 'GROUP' and ob.dupli_group:
                 return True
@@ -841,11 +852,9 @@ class CYCLES_OBJECT_PT_motion_blur(CyclesButtonsPanel, Panel):
         layout.active = (rd.use_motion_blur and cob.use_motion_blur)
 
         row = layout.row()
-        row.prop(cob, "use_deform_motion", text="Deformation")
-
-        sub = row.row()
-        sub.active = cob.use_deform_motion
-        sub.prop(cob, "motion_steps", text="Steps")
+        if ob.type != 'CAMERA':
+            row.prop(cob, "use_deform_motion", text="Deformation")
+        row.prop(cob, "motion_steps", text="Steps")
 
 
 class CYCLES_OBJECT_PT_cycles_settings(CyclesButtonsPanel, Panel):
@@ -967,9 +976,9 @@ class CYCLES_LAMP_PT_preview(CyclesButtonsPanel, Panel):
     @classmethod
     def poll(cls, context):
         return context.lamp and \
-               not (context.lamp.type == 'AREA' and
-                    context.lamp.cycles.is_portal) \
-               and CyclesButtonsPanel.poll(context)
+            not (context.lamp.type == 'AREA' and
+                 context.lamp.cycles.is_portal) \
+            and CyclesButtonsPanel.poll(context)
 
     def draw(self, context):
         self.layout.template_preview(context.lamp)
@@ -1037,7 +1046,7 @@ class CYCLES_LAMP_PT_nodes(CyclesButtonsPanel, Panel):
     def poll(cls, context):
         return context.lamp and not (context.lamp.type == 'AREA' and
                                      context.lamp.cycles.is_portal) and \
-               CyclesButtonsPanel.poll(context)
+            CyclesButtonsPanel.poll(context)
 
     def draw(self, context):
         layout = self.layout
@@ -1216,11 +1225,13 @@ class CYCLES_WORLD_PT_settings(CyclesButtonsPanel, Panel):
         col = split.column()
 
         col.label(text="Surface:")
-        col.prop(cworld, "sample_as_light", text="Multiple Importance")
+        col.prop(cworld, "sampling_method", text="Sampling")
 
         sub = col.column(align=True)
-        sub.active = cworld.sample_as_light
-        sub.prop(cworld, "sample_map_resolution")
+        sub.active = cworld.sampling_method != 'NONE'
+        subsub = sub.row(align=True)
+        subsub.active = cworld.sampling_method == 'MANUAL'
+        subsub.prop(cworld, "sample_map_resolution")
         if use_branched_path(context):
             subsub = sub.row(align=True)
             subsub.active = use_sample_all_lights(context)
@@ -1741,6 +1752,7 @@ class CYCLES_SCENE_PT_simplify(CyclesButtonsPanel, Panel):
         col = split.column()
         col.prop(cscene, "ao_bounces_render")
 
+
 def draw_device(self, context):
     scene = context.scene
     layout = self.layout
@@ -1823,7 +1835,7 @@ def get_panels():
         'WORLD_PT_mist',
         'WORLD_PT_preview',
         'WORLD_PT_world'
-        }
+    }
 
     panels = []
     for panel in bpy.types.Panel.__subclasses__():

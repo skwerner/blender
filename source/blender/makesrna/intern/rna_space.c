@@ -63,28 +63,38 @@
 const EnumPropertyItem rna_enum_space_type_items[] = {
 	/* empty must be here for python, is skipped for UI */
 	{SPACE_EMPTY, "EMPTY", ICON_NONE, "Empty", ""},
+
+	/* General */
+	{0, "", ICON_NONE, "General", ""},
 	{SPACE_VIEW3D, "VIEW_3D", ICON_VIEW3D, "3D View", "3D viewport"},
-	{0, "", ICON_NONE, NULL, NULL},
+	{SPACE_IMAGE, "IMAGE_EDITOR", ICON_IMAGE_COL, "UV/Image Editor", "View and edit images and UV Maps"},
+	{SPACE_NODE, "NODE_EDITOR", ICON_NODETREE, "Node Editor", "Editor for node-based shading and compositing tools"},
+	{SPACE_SEQ, "SEQUENCE_EDITOR", ICON_SEQUENCE, "Video Sequencer", "Video editing tools"},
+	{SPACE_CLIP, "CLIP_EDITOR", ICON_CLIP, "Movie Clip Editor", "Motion tracking tools"},
+
+	/* Animation */
+	{0, "", ICON_NONE, "Animation", ""},
 	{SPACE_TIME, "TIMELINE", ICON_TIME, "Timeline", "Timeline and playback controls"},
 	{SPACE_IPO, "GRAPH_EDITOR", ICON_IPO, "Graph Editor", "Edit drivers and keyframe interpolation"},
 	{SPACE_ACTION, "DOPESHEET_EDITOR", ICON_ACTION, "Dope Sheet", "Adjust timing of keyframes"},
 	{SPACE_NLA, "NLA_EDITOR", ICON_NLA, "NLA Editor", "Combine and layer Actions"},
-	{0, "", ICON_NONE, NULL, NULL},
-	{SPACE_IMAGE, "IMAGE_EDITOR", ICON_IMAGE_COL, "UV/Image Editor", "View and edit images and UV Maps"},
-	{SPACE_CLIP, "CLIP_EDITOR", ICON_CLIP, "Movie Clip Editor", "Motion tracking tools"},
-	{SPACE_SEQ, "SEQUENCE_EDITOR", ICON_SEQUENCE, "Video Sequence Editor", "Video editing tools"},
-	{SPACE_NODE, "NODE_EDITOR", ICON_NODETREE, "Node Editor", "Editor for node-based shading and compositing tools"},
+
+	/* Scripting */
+	{0, "", ICON_NONE, "Scripting", ""},
 	{SPACE_TEXT, "TEXT_EDITOR", ICON_TEXT, "Text Editor", "Edit scripts and in-file documentation"},
 	{SPACE_LOGIC, "LOGIC_EDITOR", ICON_LOGIC, "Logic Editor", "Game logic editing"},
-	{0, "", ICON_NONE, NULL, NULL},
-	{SPACE_BUTS, "PROPERTIES", ICON_BUTS, "Properties", "Edit properties of active object and related data-blocks"},
+	{SPACE_CONSOLE, "CONSOLE", ICON_CONSOLE, "Python Console", "Interactive programmatic console for "
+	                "advanced editing and script development"},
+	{SPACE_INFO, "INFO", ICON_INFO, "Info", "Main menu bar and list of error messages "
+	             "(drag down to expand and display)"},
+
+	/* Data */
+	{0, "", ICON_NONE, "Data", ""},
 	{SPACE_OUTLINER, "OUTLINER", ICON_OOPS, "Outliner", "Overview of scene graph and all available data-blocks"},
-	{SPACE_USERPREF, "USER_PREFERENCES", ICON_PREFERENCES, "User Preferences", "Edit persistent configuration settings"},
-	{SPACE_INFO, "INFO", ICON_INFO, "Info", "Main menu bar and list of error messages (drag down to expand and display)"},
-	{0, "", ICON_NONE, NULL, NULL},
+	{SPACE_BUTS, "PROPERTIES", ICON_BUTS, "Properties", "Edit properties of active object and related data-blocks"},
 	{SPACE_FILE, "FILE_BROWSER", ICON_FILESEL, "File Browser", "Browse for files and assets"},
-	{0, "", ICON_NONE, NULL, NULL},
-	{SPACE_CONSOLE, "CONSOLE", ICON_CONSOLE, "Python Console", "Interactive programmatic console for advanced editing and script development"},
+	{SPACE_USERPREF, "USER_PREFERENCES", ICON_PREFERENCES, "User Preferences",
+	                 "Edit persistent configuration settings"},
 	{0, NULL, 0, NULL, NULL}
 };
 
@@ -248,12 +258,15 @@ const EnumPropertyItem rna_enum_file_sort_items[] = {
 #include "DNA_userdef_types.h"
 
 #include "BLI_math.h"
+#include "BLI_path_util.h"
+#include "BLI_string.h"
 
 #include "BKE_animsys.h"
 #include "BKE_brush.h"
 #include "BKE_colortools.h"
 #include "BKE_context.h"
 #include "BKE_depsgraph.h"
+#include "BKE_global.h"
 #include "BKE_nla.h"
 #include "BKE_paint.h"
 #include "BKE_scene.h"
@@ -354,7 +367,7 @@ static void rna_area_region_from_regiondata(PointerRNA *ptr, ScrArea **r_sa, ARe
 	area_region_from_regiondata(sc, regiondata, r_sa, r_ar);
 }
 
-static int rna_Space_view2d_sync_get(PointerRNA *ptr)
+static bool rna_Space_view2d_sync_get(PointerRNA *ptr)
 {
 	ScrArea *sa;
 	ARegion *ar;
@@ -369,7 +382,7 @@ static int rna_Space_view2d_sync_get(PointerRNA *ptr)
 	return false;
 }
 
-static void rna_Space_view2d_sync_set(PointerRNA *ptr, int value)
+static void rna_Space_view2d_sync_set(PointerRNA *ptr, bool value)
 {
 	ScrArea *sa;
 	ARegion *ar;
@@ -464,7 +477,7 @@ static void rna_SpaceView3D_camera_update(Main *bmain, Scene *scene, PointerRNA 
 	}
 }
 
-static void rna_SpaceView3D_lock_camera_and_layers_set(PointerRNA *ptr, int value)
+static void rna_SpaceView3D_lock_camera_and_layers_set(PointerRNA *ptr, bool value)
 {
 	View3D *v3d = (View3D *)(ptr->data);
 	bScreen *sc = (bScreen *)ptr->id.data;
@@ -516,7 +529,7 @@ static float rna_View3D_GridScaleUnit_get(PointerRNA *ptr)
 	return ED_view3d_grid_scale(scene, v3d, NULL);
 }
 
-static void rna_SpaceView3D_layer_set(PointerRNA *ptr, const int *values)
+static void rna_SpaceView3D_layer_set(PointerRNA *ptr, const bool *values)
 {
 	View3D *v3d = (View3D *)(ptr->data);
 
@@ -759,7 +772,7 @@ static PointerRNA rna_SpaceImageEditor_uvedit_get(PointerRNA *ptr)
 
 static void rna_SpaceImageEditor_mode_update(Main *bmain, Scene *scene, PointerRNA *UNUSED(ptr))
 {
-	ED_space_image_paint_update(bmain->wm.first, scene);
+	ED_space_image_paint_update(bmain, bmain->wm.first, scene);
 }
 
 
@@ -773,7 +786,7 @@ static void rna_SpaceImageEditor_show_stereo_set(PointerRNA *ptr, int value)
 		sima->iuser.flag &= ~IMA_SHOW_STEREO;
 }
 
-static int rna_SpaceImageEditor_show_stereo_get(PointerRNA *ptr)
+static bool rna_SpaceImageEditor_show_stereo_get(PointerRNA *ptr)
 {
 	SpaceImage *sima = (SpaceImage *)(ptr->data);
 	return (sima->iuser.flag & IMA_SHOW_STEREO) != 0;
@@ -794,26 +807,26 @@ static void rna_SpaceImageEditor_show_stereo_update(Main *UNUSED(bmain), Scene *
 	}
 }
 
-static int rna_SpaceImageEditor_show_render_get(PointerRNA *ptr)
+static bool rna_SpaceImageEditor_show_render_get(PointerRNA *ptr)
 {
 	SpaceImage *sima = (SpaceImage *)(ptr->data);
 	return ED_space_image_show_render(sima);
 }
 
-static int rna_SpaceImageEditor_show_paint_get(PointerRNA *ptr)
+static bool rna_SpaceImageEditor_show_paint_get(PointerRNA *ptr)
 {
 	SpaceImage *sima = (SpaceImage *)(ptr->data);
 	return ED_space_image_show_paint(sima);
 }
 
-static int rna_SpaceImageEditor_show_uvedit_get(PointerRNA *ptr)
+static bool rna_SpaceImageEditor_show_uvedit_get(PointerRNA *ptr)
 {
 	SpaceImage *sima = (SpaceImage *)(ptr->data);
 	bScreen *sc = (bScreen *)ptr->id.data;
 	return ED_space_image_show_uvedit(sima, sc->scene->obedit);
 }
 
-static int rna_SpaceImageEditor_show_maskedit_get(PointerRNA *ptr)
+static bool rna_SpaceImageEditor_show_maskedit_get(PointerRNA *ptr)
 {
 	SpaceImage *sima = (SpaceImage *)(ptr->data);
 	bScreen *sc = (bScreen *)ptr->id.data;
@@ -825,7 +838,8 @@ static void rna_SpaceImageEditor_image_set(PointerRNA *ptr, PointerRNA value)
 	SpaceImage *sima = (SpaceImage *)(ptr->data);
 	bScreen *sc = (bScreen *)ptr->id.data;
 
-	ED_space_image_set(sima, sc->scene, sc->scene->obedit, (Image *)value.data);
+	BLI_assert(BKE_id_is_in_gobal_main(value.data));
+	ED_space_image_set(G_MAIN, sima, sc->scene, sc->scene->obedit, (Image *)value.data);
 }
 
 static void rna_SpaceImageEditor_mask_set(PointerRNA *ptr, PointerRNA value)
@@ -979,7 +993,7 @@ static const EnumPropertyItem *rna_SpaceImageEditor_pivot_itemf(bContext *UNUSED
 
 /* Space Text Editor */
 
-static void rna_SpaceTextEditor_word_wrap_set(PointerRNA *ptr, int value)
+static void rna_SpaceTextEditor_word_wrap_set(PointerRNA *ptr, bool value)
 {
 	SpaceText *st = (SpaceText *)(ptr->data);
 
@@ -1386,7 +1400,7 @@ static void rna_SpaceGraphEditor_display_mode_update(Main *UNUSED(bmain), Scene 
 	ED_area_tag_refresh(sa);
 }
 
-static int rna_SpaceGraphEditor_has_ghost_curves_get(PointerRNA *ptr)
+static bool rna_SpaceGraphEditor_has_ghost_curves_get(PointerRNA *ptr)
 {
 	SpaceIpo *sipo = (SpaceIpo *)(ptr->data);
 	return (BLI_listbase_is_empty(&sipo->ghostCurves) == false);
@@ -1465,7 +1479,7 @@ static void rna_SpaceNodeEditor_node_tree_set(PointerRNA *ptr, const PointerRNA 
 	ED_node_tree_start(snode, (bNodeTree *)value.data, NULL, NULL);
 }
 
-static int rna_SpaceNodeEditor_node_tree_poll(PointerRNA *ptr, const PointerRNA value)
+static bool rna_SpaceNodeEditor_node_tree_poll(PointerRNA *ptr, const PointerRNA value)
 {
 	SpaceNode *snode = (SpaceNode *)ptr->data;
 	bNodeTree *ntree = (bNodeTree *)value.data;
@@ -1489,7 +1503,7 @@ static void rna_SpaceNodeEditor_tree_type_set(PointerRNA *ptr, int value)
 	SpaceNode *snode = (SpaceNode *)ptr->data;
 	ED_node_set_tree_type(snode, rna_node_tree_type_from_enum(value));
 }
-static int rna_SpaceNodeEditor_tree_type_poll(void *Cv, bNodeTreeType *type)
+static bool rna_SpaceNodeEditor_tree_type_poll(void *Cv, bNodeTreeType *type)
 {
 	bContext *C = (bContext *)Cv;
 	if (type->poll)
@@ -1592,7 +1606,7 @@ static void rna_SpaceClipEditor_view_type_update(Main *UNUSED(bmain), Scene *UNU
 
 /* File browser. */
 
-static int rna_FileSelectParams_use_lib_get(PointerRNA *ptr)
+static bool rna_FileSelectParams_use_lib_get(PointerRNA *ptr)
 {
 	FileSelectParams *params = ptr->data;
 
@@ -1621,6 +1635,16 @@ static const EnumPropertyItem *rna_FileSelectParams_recursion_level_itemf(
 
 	*r_free = false;
 	return fileselectparams_recursion_level_items;
+}
+
+static void rna_FileSelectPrams_filter_glob_set(PointerRNA *ptr, const char *value)
+{
+	FileSelectParams *params = ptr->data;
+
+	BLI_strncpy(params->filter_glob, value, sizeof(params->filter_glob));
+
+	/* Remove stupi things like last group being a wildcard-only one... */
+	BLI_path_extension_glob_validate(params->filter_glob);
 }
 
 static void rna_FileBrowser_FSMenuEntry_path_get(PointerRNA *ptr, char *value)
@@ -2597,7 +2621,7 @@ static void rna_def_space_view3d(BlenderRNA *brna)
 	RNA_def_property_update(prop, NC_SPACE | ND_SPACE_VIEW3D, NULL);
 
 	prop = RNA_def_property(srna, "show_world", PROP_BOOLEAN, PROP_NONE);
-	RNA_def_property_boolean_sdna(prop, NULL, "flag3", V3D_SHOW_WORLD);
+	RNA_def_property_boolean_sdna(prop, NULL, "flag2", V3D_SHOW_WORLD);
 	RNA_def_property_ui_text(prop, "World Background", "Display world colors in the background");
 	RNA_def_property_update(prop, NC_SPACE | ND_SPACE_VIEW3D, NULL);
 
@@ -4027,7 +4051,10 @@ static void rna_def_fileselect_params(BlenderRNA *brna)
 
 	prop = RNA_def_property(srna, "filter_glob", PROP_STRING, PROP_NONE);
 	RNA_def_property_string_sdna(prop, NULL, "filter_glob");
-	RNA_def_property_ui_text(prop, "Extension Filter", "");
+	RNA_def_property_ui_text(prop, "Extension Filter",
+	                         "UNIX shell-like filename patterns matching, supports wildcards ('*') "
+	                         "and list of patterns separated by ';'");
+	RNA_def_property_string_funcs(prop, NULL, NULL, "rna_FileSelectPrams_filter_glob_set");
 	RNA_def_property_update(prop, NC_SPACE | ND_SPACE_FILE_LIST, NULL);
 
 	prop = RNA_def_property(srna, "filter_search", PROP_STRING, PROP_NONE);

@@ -944,7 +944,7 @@ class CLIP_PT_stabilization(CLIP_PT_reconstruction_panel, Panel):
             sub.menu('CLIP_MT_stabilize_2d_specials', text="",
                      icon='DOWNARROW_HLT')
 
-            # Usually we don't hide things from iterface, but here every pixel of
+            # Usually we don't hide things from interface, but here every pixel of
             # vertical space is precious.
             if stab.use_stabilize_rotation:
                 box.label(text="Tracks For Rotation / Scale")
@@ -1028,9 +1028,11 @@ class CLIP_PT_proxy(CLIP_PT_clip_view_panel, Panel):
         if clip.use_proxy_custom_directory:
             col.prop(clip.proxy, "directory")
 
-        col.operator("clip.rebuild_proxy",
-                     text="Build Proxy / Timecode" if clip.source == 'MOVIE'
-                                                   else "Build Proxy")
+        col.operator(
+            "clip.rebuild_proxy",
+            text="Build Proxy / Timecode" if clip.source == 'MOVIE'
+            else "Build Proxy"
+        )
 
         if clip.source == 'MOVIE':
             col2 = col.column()
@@ -1198,6 +1200,7 @@ class CLIP_PT_tools_grease_pencil_brush(GreasePencilBrushPanel, Panel):
 # Grease Pencil drawing curves
 class CLIP_PT_tools_grease_pencil_brushcurves(GreasePencilBrushCurvesPanel, Panel):
     bl_space_type = 'CLIP_EDITOR'
+
 
 class CLIP_MT_view(Menu):
     bl_label = "View"

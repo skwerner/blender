@@ -41,19 +41,29 @@ FIND_PATH(OPENJPEG_INCLUDE_DIR
     ${_openjpeg_SEARCH_DIRS}
   PATH_SUFFIXES
     include
-    include/openjpeg-1.5
+    # Support future versions
+    openjpeg-2.9
+    openjpeg-2.8
+    openjpeg-2.7
+    openjpeg-2.6
+    openjpeg-2.5
+    openjpeg-2.4
+    openjpeg-2.3
+    openjpeg-2.2
+    openjpeg-2.1
+    openjpeg-2.0
 )
 
 FIND_LIBRARY(OPENJPEG_LIBRARY
   NAMES
-    openjpeg
+    openjp2
   HINTS
     ${_openjpeg_SEARCH_DIRS}
   PATH_SUFFIXES
     lib64 lib
   )
 
-# handle the QUIETLY and REQUIRED arguments and set OPENJPEG_FOUND to TRUE if 
+# handle the QUIETLY and REQUIRED arguments and set OPENJPEG_FOUND to TRUE if
 # all listed variables are TRUE
 INCLUDE(FindPackageHandleStandardArgs)
 FIND_PACKAGE_HANDLE_STANDARD_ARGS(OpenJPEG DEFAULT_MSG

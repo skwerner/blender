@@ -66,9 +66,9 @@ public:
 	               void **python_thread_state,
 	               const char *layer = 0);
 	void sync_render_layers(BL::SpaceView3D& b_v3d, const char *layer);
-	array<Pass> sync_render_passes(BL::RenderLayer& b_rlay,
-	                               BL::SceneRenderLayer& b_srlay,
-	                               const SessionParams &session_params);
+	vector<Pass> sync_render_passes(BL::RenderLayer& b_rlay,
+	                                BL::SceneRenderLayer& b_srlay,
+	                                const SessionParams &session_params);
 	void sync_integrator();
 	void sync_camera(BL::RenderSettings& b_render,
 	                 BL::Object& b_override,
@@ -118,7 +118,7 @@ private:
 	                 BL::Mesh& b_mesh,
 	                 BL::Object& b_ob,
 	                 bool motion,
-	                 int time_index = 0);
+	                 int motion_step = 0);
 	Object *sync_object(BL::Object& b_parent,
 	                    int persistent_id[OBJECT_PERSISTENT_ID_SIZE],
 	                    BL::DupliObject& b_dupli_ob,
@@ -214,4 +214,3 @@ private:
 CCL_NAMESPACE_END
 
 #endif /* __BLENDER_SYNC_H__ */
-

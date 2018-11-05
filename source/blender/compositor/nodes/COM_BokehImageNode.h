@@ -15,19 +15,19 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
- * Contributor: 
- *		Jeroen Bakker 
+ * Contributor:
+ *		Jeroen Bakker
  *		Monique Dewanchand
  */
 
-#ifndef _COM_BokehImageNode_h_
-#define _COM_BokehImageNode_h_
+#ifndef __COM_BOKEHIMAGENODE_H__
+#define __COM_BOKEHIMAGENODE_H__
 
 #include "COM_Node.h"
 
 /**
- * @brief BokehImageNode
- * @ingroup Node
+ * \brief BokehImageNode
+ * \ingroup Node
  */
 class BokehImageNode : public Node {
 public:

@@ -753,6 +753,16 @@ MINLINE void cross_v3_v3v3(float r[3], const float a[3], const float b[3])
 	r[2] = a[0] * b[1] - a[1] * b[0];
 }
 
+/* cross product suffers from severe precision loss when vectors are
+ * nearly parallel or opposite; doing the computation in double helps a lot */
+MINLINE void cross_v3_v3v3_hi_prec(float r[3], const float a[3], const float b[3])
+{
+	BLI_assert(r != a && r != b);
+	r[0] = (float)((double)a[1] * (double)b[2] - (double)a[2] * (double)b[1]);
+	r[1] = (float)((double)a[2] * (double)b[0] - (double)a[0] * (double)b[2]);
+	r[2] = (float)((double)a[0] * (double)b[1] - (double)a[1] * (double)b[0]);
+}
+
 /* Newell's Method */
 /* excuse this fairly specific function,
  * its used for polygon normals all over the place
@@ -1077,24 +1087,23 @@ MINLINE bool compare_v4v4_relative(const float v1[4], const float v2[4], const f
 
 MINLINE bool compare_len_v3v3(const float v1[3], const float v2[3], const float limit)
 {
-	float x, y, z;
-
-	x = v1[0] - v2[0];
-	y = v1[1] - v2[1];
-	z = v1[2] - v2[2];
-
-	return ((x * x + y * y + z * z) <= (limit * limit));
+	float d[3];
+	sub_v3_v3v3(d, v1, v2);
+	return (dot_v3v3(d, d) <= (limit * limit));
 }
 
 MINLINE bool compare_len_squared_v3v3(const float v1[3], const float v2[3], const float limit_sq)
 {
-	float x, y, z;
+	float d[3];
+	sub_v3_v3v3(d, v1, v2);
+	return (dot_v3v3(d, d) <= limit_sq);
+}
 
-	x = v1[0] - v2[0];
-	y = v1[1] - v2[1];
-	z = v1[2] - v2[2];
-
-	return ((x * x + y * y + z * z) <= limit_sq);
+MINLINE bool compare_len_squared_v4v4(const float v1[4], const float v2[4], const float limit_sq)
+{
+	float d[4];
+	sub_v4_v4v4(d, v1, v2);
+	return (dot_v4v4(d, d) <= limit_sq);
 }
 
 /**

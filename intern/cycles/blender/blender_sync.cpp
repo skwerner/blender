@@ -40,6 +40,8 @@
 
 CCL_NAMESPACE_BEGIN
 
+static const char *cryptomatte_prefix = "Crypto";
+
 /* Constructor */
 
 BlenderSync::BlenderSync(BL::RenderEngine& b_engine,
@@ -142,7 +144,7 @@ bool BlenderSync::sync_recalc()
 			if(b_ob->is_updated_data() || b_ob->data().is_updated())
 				light_map.set_recalc(*b_ob);
 		}
-		
+
 		if(b_ob->is_updated_data()) {
 			BL::Object::particle_systems_iterator b_psys;
 			for(b_ob->particle_systems.begin(b_psys); b_psys != b_ob->particle_systems.end(); ++b_psys)
@@ -301,7 +303,7 @@ void BlenderSync::sync_integrator()
 		integrator->mesh_light_samples = mesh_light_samples * mesh_light_samples;
 		integrator->subsurface_samples = subsurface_samples * subsurface_samples;
 		integrator->volume_samples = volume_samples * volume_samples;
-	} 
+	}
 	else {
 		integrator->diffuse_samples = diffuse_samples;
 		integrator->glossy_samples = glossy_samples;
@@ -336,7 +338,7 @@ void BlenderSync::sync_film()
 
 	Film *film = scene->film;
 	Film prevfilm = *film;
-	
+
 	film->exposure = get_float(cscene, "film_exposure");
 	film->filter_type = (FilterType)get_enum(cscene,
 	                                         "pixel_filter_type",
@@ -517,6 +519,9 @@ PassType BlenderSync::get_pass_type(BL::RenderPass& b_pass)
 	MAP_PASS("Debug Ray Bounces", PASS_RAY_BOUNCES);
 #endif
 	MAP_PASS("Debug Render Time", PASS_RENDER_TIME);
+	if(string_startswith(name, cryptomatte_prefix)) {
+		return PASS_CRYPTOMATTE;
+	}
 #undef MAP_PASS
 
 	return PASS_NONE;
@@ -525,6 +530,9 @@ PassType BlenderSync::get_pass_type(BL::RenderPass& b_pass)
 int BlenderSync::get_denoising_pass(BL::RenderPass& b_pass)
 {
 	string name = b_pass.name();
+
+	if(name == "Noisy Image") return DENOISING_PASS_COLOR;
+
 	if(name.substr(0, 10) != "Denoising ") {
 		return -1;
 	}
@@ -539,18 +547,18 @@ int BlenderSync::get_denoising_pass(BL::RenderPass& b_pass)
 	MAP_PASS("Depth Variance", DENOISING_PASS_DEPTH_VAR);
 	MAP_PASS("Shadow A", DENOISING_PASS_SHADOW_A);
 	MAP_PASS("Shadow B", DENOISING_PASS_SHADOW_B);
-	MAP_PASS("Image", DENOISING_PASS_COLOR);
 	MAP_PASS("Image Variance", DENOISING_PASS_COLOR_VAR);
+	MAP_PASS("Clean", DENOISING_PASS_CLEAN);
 #undef MAP_PASS
 
 	return -1;
 }
 
-array<Pass> BlenderSync::sync_render_passes(BL::RenderLayer& b_rlay,
-                                            BL::SceneRenderLayer& b_srlay,
-                                            const SessionParams &session_params)
+vector<Pass> BlenderSync::sync_render_passes(BL::RenderLayer& b_rlay,
+                                             BL::SceneRenderLayer& b_srlay,
+                                             const SessionParams &session_params)
 {
-	array<Pass> passes;
+	vector<Pass> passes;
 	Pass::add(PASS_COMBINED, passes);
 
 	if(!session_params.device.advanced_shading) {
@@ -571,9 +579,24 @@ array<Pass> BlenderSync::sync_render_passes(BL::RenderLayer& b_rlay,
 	}
 
 	PointerRNA crp = RNA_pointer_get(&b_srlay.ptr, "cycles");
-	if(get_boolean(crp, "denoising_store_passes") &&
-	   get_boolean(crp, "use_denoising"))
-	{
+	bool use_denoising = get_boolean(crp, "use_denoising");
+	bool store_denoising_passes = get_boolean(crp, "denoising_store_passes");
+	scene->film->denoising_flags = 0;
+	if(use_denoising || store_denoising_passes) {
+#define MAP_OPTION(name, flag) if(!get_boolean(crp, name)) scene->film->denoising_flags |= flag;
+		MAP_OPTION("denoising_diffuse_direct",        DENOISING_CLEAN_DIFFUSE_DIR);
+		MAP_OPTION("denoising_diffuse_indirect",      DENOISING_CLEAN_DIFFUSE_IND);
+		MAP_OPTION("denoising_glossy_direct",         DENOISING_CLEAN_GLOSSY_DIR);
+		MAP_OPTION("denoising_glossy_indirect",       DENOISING_CLEAN_GLOSSY_IND);
+		MAP_OPTION("denoising_transmission_direct",   DENOISING_CLEAN_TRANSMISSION_DIR);
+		MAP_OPTION("denoising_transmission_indirect", DENOISING_CLEAN_TRANSMISSION_IND);
+		MAP_OPTION("denoising_subsurface_direct",     DENOISING_CLEAN_SUBSURFACE_DIR);
+		MAP_OPTION("denoising_subsurface_indirect",   DENOISING_CLEAN_SUBSURFACE_IND);
+#undef MAP_OPTION
+		b_engine.add_pass("Noisy Image", 4, "RGBA", b_srlay.name().c_str());
+	}
+
+	if(store_denoising_passes) {
 		b_engine.add_pass("Denoising Normal",          3, "XYZ", b_srlay.name().c_str());
 		b_engine.add_pass("Denoising Normal Variance", 3, "XYZ", b_srlay.name().c_str());
 		b_engine.add_pass("Denoising Albedo",          3, "RGB", b_srlay.name().c_str());
@@ -582,8 +605,11 @@ array<Pass> BlenderSync::sync_render_passes(BL::RenderLayer& b_rlay,
 		b_engine.add_pass("Denoising Depth Variance",  1, "Z",   b_srlay.name().c_str());
 		b_engine.add_pass("Denoising Shadow A",        3, "XYV", b_srlay.name().c_str());
 		b_engine.add_pass("Denoising Shadow B",        3, "XYV", b_srlay.name().c_str());
-		b_engine.add_pass("Denoising Image",           3, "RGB", b_srlay.name().c_str());
 		b_engine.add_pass("Denoising Image Variance",  3, "RGB", b_srlay.name().c_str());
+
+		if(scene->film->denoising_flags & DENOISING_CLEAN_ALL_PASSES) {
+			b_engine.add_pass("Denoising Clean",   3, "RGB", b_srlay.name().c_str());
+		}
 	}
 #ifdef __KERNEL_DEBUG__
 	if(get_boolean(crp, "pass_debug_bvh_traversed_nodes")) {
@@ -616,6 +642,39 @@ array<Pass> BlenderSync::sync_render_passes(BL::RenderLayer& b_rlay,
 		Pass::add(PASS_VOLUME_INDIRECT, passes);
 	}
 
+	/* Cryptomatte stores two ID/weight pairs per RGBA layer.
+	 * User facing paramter is the number of pairs. */
+	int crypto_depth = min(16, get_int(crp, "pass_crypto_depth")) / 2;
+	scene->film->cryptomatte_depth = crypto_depth;
+	scene->film->cryptomatte_passes = CRYPT_NONE;
+	if(get_boolean(crp, "use_pass_crypto_object")) {
+		for(int i = 0; i < crypto_depth; ++i) {
+			string passname = cryptomatte_prefix + string_printf("Object%02d", i);
+			b_engine.add_pass(passname.c_str(), 4, "RGBA", b_srlay.name().c_str());
+			Pass::add(PASS_CRYPTOMATTE, passes, passname.c_str());
+		}
+		scene->film->cryptomatte_passes = (CryptomatteType)(scene->film->cryptomatte_passes | CRYPT_OBJECT);
+	}
+	if(get_boolean(crp, "use_pass_crypto_material")) {
+		for(int i = 0; i < crypto_depth; ++i) {
+			string passname = cryptomatte_prefix + string_printf("Material%02d", i);
+			b_engine.add_pass(passname.c_str(), 4, "RGBA", b_srlay.name().c_str());
+			Pass::add(PASS_CRYPTOMATTE, passes, passname.c_str());
+		}
+		scene->film->cryptomatte_passes = (CryptomatteType)(scene->film->cryptomatte_passes | CRYPT_MATERIAL);
+	}
+	if(get_boolean(crp, "use_pass_crypto_asset")) {
+		for(int i = 0; i < crypto_depth; ++i) {
+			string passname = cryptomatte_prefix + string_printf("Asset%02d", i);
+			b_engine.add_pass(passname.c_str(), 4, "RGBA", b_srlay.name().c_str());
+			Pass::add(PASS_CRYPTOMATTE, passes, passname.c_str());
+		}
+		scene->film->cryptomatte_passes = (CryptomatteType)(scene->film->cryptomatte_passes | CRYPT_ASSET);
+	}
+	if(get_boolean(crp, "pass_crypto_accurate") && scene->film->cryptomatte_passes != CRYPT_NONE) {
+		scene->film->cryptomatte_passes = (CryptomatteType)(scene->film->cryptomatte_passes | CRYPT_ACCURATE);
+	}
+
 	return passes;
 }
 
@@ -633,7 +692,7 @@ SceneParams BlenderSync::get_scene_params(BL::Scene& b_scene,
 		params.shadingsystem = SHADINGSYSTEM_SVM;
 	else if(shadingsystem == 1)
 		params.shadingsystem = SHADINGSYSTEM_OSL;
-	
+
 	if(background || DebugFlags().viewport_static_bvh)
 		params.bvh_type = SceneParams::BVH_STATIC;
 	else
@@ -662,7 +721,15 @@ SceneParams BlenderSync::get_scene_params(BL::Scene& b_scene,
 		params.texture_limit = 0;
 	}
 
-	params.bvh_layout = DebugFlags().cpu.bvh_layout;
+	/* TODO(sergey): Once OSL supports per-microarchitecture optimization get
+	 * rid of this.
+	 */
+	if(params.shadingsystem == SHADINGSYSTEM_OSL) {
+		params.bvh_layout = BVH_LAYOUT_BVH4;
+	}
+	else {
+		params.bvh_layout = DebugFlags().cpu.bvh_layout;
+	}
 
 	return params;
 }
@@ -698,7 +765,7 @@ SessionParams BlenderSync::get_session_params(BL::RenderEngine& b_engine,
 
 	/* device type */
 	vector<DeviceInfo>& devices = Device::available_devices();
-	
+
 	/* device default CPU */
 	foreach(DeviceInfo& device, devices) {
 		if(device.type == DEVICE_CPU) {
@@ -773,7 +840,7 @@ SessionParams BlenderSync::get_session_params(BL::RenderEngine& b_engine,
 	int aa_samples = get_int(cscene, "aa_samples");
 	int preview_samples = get_int(cscene, "preview_samples");
 	int preview_aa_samples = get_int(cscene, "preview_aa_samples");
-	
+
 	if(get_boolean(cscene, "use_square_samples")) {
 		aa_samples = aa_samples * aa_samples;
 		preview_aa_samples = preview_aa_samples * preview_aa_samples;
@@ -869,7 +936,7 @@ SessionParams BlenderSync::get_session_params(BL::RenderEngine& b_engine,
 		params.shadingsystem = SHADINGSYSTEM_SVM;
 	else if(shadingsystem == 1)
 		params.shadingsystem = SHADINGSYSTEM_OSL;
-	
+
 	/* color managagement */
 #ifdef GLEW_MX
 	/* When using GLEW MX we need to check whether we've got an OpenGL
@@ -894,4 +961,3 @@ SessionParams BlenderSync::get_session_params(BL::RenderEngine& b_engine,
 }
 
 CCL_NAMESPACE_END
-

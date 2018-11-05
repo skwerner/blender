@@ -447,8 +447,15 @@ ccl_device void kernel_path_indirect(KernelGlobals *kg,
 			break;
 		}
 
-		/* Setup and evaluate shader. */
+		/* Setup shader data. */
 		shader_setup_from_ray(kg, sd, &isect, ray);
+
+		/* Skip most work for volume bounding surface. */
+#ifdef __VOLUME__
+		if(!(sd->flag & SD_HAS_ONLY_VOLUME)) {
+#endif
+
+		/* Evaluate shader. */
 		shader_eval_surface(kg, sd, state, state->flag);
 		shader_prepare_closures(sd, state);
 
@@ -486,7 +493,7 @@ ccl_device void kernel_path_indirect(KernelGlobals *kg,
 
 #ifdef __AO__
 		/* ambient occlusion */
-		if(kernel_data.integrator.use_ambient_occlusion || (sd->flag & SD_AO)) {
+		if(kernel_data.integrator.use_ambient_occlusion) {
 			kernel_path_ao(kg, sd, emission_sd, L, state, throughput, make_float3(0.0f, 0.0f, 0.0f));
 		}
 #endif  /* __AO__ */
@@ -524,6 +531,10 @@ ccl_device void kernel_path_indirect(KernelGlobals *kg,
 			                                           all);
 		}
 #endif  /* defined(__EMISSION__) */
+
+#ifdef __VOLUME__
+		}
+#endif
 
 		if(!kernel_path_surface_bounce(kg, sd, &throughput, state, &L->state, ray))
 			break;
@@ -608,8 +619,15 @@ ccl_device_forceinline void kernel_path_integrate(
 			break;
 		}
 
-		/* Setup and evaluate shader. */
+		/* Setup shader data. */
 		shader_setup_from_ray(kg, &sd, &isect, ray);
+
+		/* Skip most work for volume bounding surface. */
+#ifdef __VOLUME__
+		if(!(sd.flag & SD_HAS_ONLY_VOLUME)) {
+#endif
+
+		/* Evaluate shader. */
 		shader_eval_surface(kg, &sd, state, state->flag);
 		shader_prepare_closures(&sd, state);
 
@@ -646,7 +664,7 @@ ccl_device_forceinline void kernel_path_integrate(
 
 #ifdef __AO__
 		/* ambient occlusion */
-		if(kernel_data.integrator.use_ambient_occlusion || (sd.flag & SD_AO)) {
+		if(kernel_data.integrator.use_ambient_occlusion) {
 			kernel_path_ao(kg, &sd, emission_sd, L, state, throughput, shader_bsdf_alpha(kg, &sd));
 		}
 #endif  /* __AO__ */
@@ -671,6 +689,10 @@ ccl_device_forceinline void kernel_path_integrate(
 
 		/* direct lighting */
 		kernel_path_surface_connect_light(kg, &sd, emission_sd, throughput, state, L);
+
+#ifdef __VOLUME__
+		}
+#endif
 
 		/* compute direct lighting and next bounce */
 		if(!kernel_path_surface_bounce(kg, &sd, &throughput, state, &L->state, ray))
@@ -743,4 +765,3 @@ ccl_device void kernel_path_trace(KernelGlobals *kg,
 #endif  /* __SPLIT_KERNEL__ */
 
 CCL_NAMESPACE_END
-

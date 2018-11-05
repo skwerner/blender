@@ -50,7 +50,7 @@
 
 #define BEND_EPS 0.000001f
 
-/* Re-maps the indicies for X Y Z by shifting them up and wrapping, such that
+/* Re-maps the indices for X Y Z by shifting them up and wrapping, such that
  * X = Y, Y = Z, Z = X (for X axis), and X = Z, Y = X, Z = Y (for Y axis). This
  * exists because the deformations (excluding bend) are based on the Z axis.
  * Having this helps avoid long, drawn out switches. */
@@ -183,8 +183,9 @@ static void simpleDeform_bend(const float factor, const int axis, const float dc
 
 
 /* simple deform modifier */
-static void SimpleDeformModifier_do(SimpleDeformModifierData *smd, struct Object *ob, struct DerivedMesh *dm,
-                                    float (*vertexCos)[3], int numVerts)
+static void SimpleDeformModifier_do(
+        SimpleDeformModifierData *smd, struct Object *ob, struct DerivedMesh *dm,
+        float (*vertexCos)[3], int numVerts)
 {
 	const float base_limit[2] = {0.0f, 0.0f};
 
@@ -198,7 +199,7 @@ static void SimpleDeformModifier_do(SimpleDeformModifierData *smd, struct Object
 	/* This is historically the lock axis, _not_ the deform axis as the name would imply */
 	const int deform_axis = smd->deform_axis;
 	int lock_axis = smd->axis;
-	if (smd->mode == MOD_SIMPLEDEFORM_MODE_BEND) { /* Bend mode shouln't have any lock axis */
+	if (smd->mode == MOD_SIMPLEDEFORM_MODE_BEND) { /* Bend mode shouldn't have any lock axis */
 		lock_axis = 0;
 	}
 	else {
@@ -262,7 +263,7 @@ static void SimpleDeformModifier_do(SimpleDeformModifierData *smd, struct Object
 		}
 
 
-		/* SMD values are normalized to the BV, calculate the absolut values */
+		/* SMD values are normalized to the BV, calculate the absolute values */
 		smd_limit[1] = lower + (upper - lower) * smd->limit[1];
 		smd_limit[0] = lower + (upper - lower) * smd->limit[0];
 
@@ -349,15 +350,6 @@ static void initData(ModifierData *md)
 	smd->limit[1] =  1.0f;
 }
 
-static void copyData(ModifierData *md, ModifierData *target)
-{
-#if 0
-	SimpleDeformModifierData *smd  = (SimpleDeformModifierData *)md;
-	SimpleDeformModifierData *tsmd = (SimpleDeformModifierData *)target;
-#endif
-	modifier_copyData_generic(md, target);
-}
-
 static CustomDataMask requiredDataMask(Object *UNUSED(ob), ModifierData *md)
 {
 	SimpleDeformModifierData *smd = (SimpleDeformModifierData *)md;
@@ -394,11 +386,12 @@ static void updateDepsgraph(ModifierData *md, const ModifierUpdateDepsgraphConte
 	}
 }
 
-static void deformVerts(ModifierData *md, Object *ob,
-                        DerivedMesh *derivedData,
-                        float (*vertexCos)[3],
-                        int numVerts,
-                        ModifierApplyFlag UNUSED(flag))
+static void deformVerts(
+        ModifierData *md, Object *ob,
+        DerivedMesh *derivedData,
+        float (*vertexCos)[3],
+        int numVerts,
+        ModifierApplyFlag UNUSED(flag))
 {
 	DerivedMesh *dm = derivedData;
 	CustomDataMask dataMask = requiredDataMask(ob, md);
@@ -414,11 +407,12 @@ static void deformVerts(ModifierData *md, Object *ob,
 		dm->release(dm);
 }
 
-static void deformVertsEM(ModifierData *md, Object *ob,
-                          struct BMEditMesh *editData,
-                          DerivedMesh *derivedData,
-                          float (*vertexCos)[3],
-                          int numVerts)
+static void deformVertsEM(
+        ModifierData *md, Object *ob,
+        struct BMEditMesh *editData,
+        DerivedMesh *derivedData,
+        float (*vertexCos)[3],
+        int numVerts)
 {
 	DerivedMesh *dm = derivedData;
 	CustomDataMask dataMask = requiredDataMask(ob, md);
@@ -447,7 +441,7 @@ ModifierTypeInfo modifierType_SimpleDeform = {
 	                        eModifierTypeFlag_SupportsEditmode |
 	                        eModifierTypeFlag_EnableInEditmode,
 
-	/* copyData */          copyData,
+	/* copyData */          modifier_copyData_generic,
 	/* deformVerts */       deformVerts,
 	/* deformMatrices */    NULL,
 	/* deformVertsEM */     deformVertsEM,

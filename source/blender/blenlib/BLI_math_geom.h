@@ -186,6 +186,11 @@ void limit_dist_v3(float v1[3], float v2[3], const float dist);
 #define ISECT_LINE_LINE_CROSS        2
 
 int  isect_seg_seg_v2(const float a1[2], const float a2[2], const float b1[2], const float b2[2]);
+void isect_seg_seg_v3(
+        const float a0[3], const float a1[3],
+        const float b0[3], const float b1[3],
+        float r_a[3], float r_b[3]);
+
 int  isect_seg_seg_v2_int(const int a1[2], const int a2[2], const int b1[2], const int b2[2]);
 int  isect_seg_seg_v2_point_ex(
         const float v0[2], const float v1[2], const float v2[2], const float v3[2], const float endpoint_bias,
@@ -356,12 +361,18 @@ void transform_point_by_seg_v3(
         const float l_dst_p1[3], const float l_dst_p2[3],
         const float l_src_p1[3], const float l_src_p2[3]);
 
-void barycentric_weights_v2(const float v1[2], const float v2[2], const float v3[2],
-                            const float co[2], float w[3]);
-void barycentric_weights_v2_persp(const float v1[4], const float v2[4], const float v3[4],
-                                  const float co[2], float w[3]);
-void barycentric_weights_v2_quad(const float v1[2], const float v2[2], const float v3[2], const float v4[2],
-                                 const float co[2], float w[4]);
+void barycentric_weights_v2(
+        const float v1[2], const float v2[2], const float v3[2],
+        const float co[2], float w[3]);
+void barycentric_weights_v2_clamped(
+        const float v1[2], const float v2[2], const float v3[2],
+        const float co[2], float w[3]);
+void barycentric_weights_v2_persp(
+        const float v1[4], const float v2[4], const float v3[4],
+        const float co[2], float w[3]);
+void barycentric_weights_v2_quad(
+        const float v1[2], const float v2[2], const float v3[2], const float v4[2],
+        const float co[2], float w[4]);
 
 bool barycentric_coords_v2(const float v1[2], const float v2[2], const float v3[2], const float co[2], float w[3]);
 int barycentric_inside_triangle_v2(const float w[3]);
@@ -379,7 +390,7 @@ void interp_barycentric_tri_v3(float data[3][3], float u, float v, float res[3])
 
 /***************************** View & Projection *****************************/
 
-void lookat_m4(float mat[4][4], float vx, float vy, 
+void lookat_m4(float mat[4][4], float vx, float vy,
                float vz, float px, float py, float pz, float twist);
 void polarview_m4(float mat[4][4], float dist, float azimuth,
                   float incidence, float twist);
@@ -502,4 +513,3 @@ float cubic_tangent_factor_circle_v3(const float tan_l[3], const float tan_r[3])
 #endif
 
 #endif /* __BLI_MATH_GEOM_H__ */
-

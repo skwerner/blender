@@ -21,7 +21,6 @@
 
 #include "util/util_foreach.h"
 #include "util/util_hash.h"
-#include "util/util_image.h"
 #include "util/util_math.h"
 #include "util/util_opengl.h"
 #include "util/util_time.h"
@@ -148,7 +147,7 @@ bool RenderBuffers::copy_from_device()
 	return true;
 }
 
-bool RenderBuffers::get_denoising_pass_rect(int offset, float exposure, int sample, int components, float *pixels)
+bool RenderBuffers::get_denoising_pass_rect(int type, float exposure, int sample, int components, float *pixels)
 {
 	if(buffer.data() == NULL) {
 		return false;
@@ -156,19 +155,20 @@ bool RenderBuffers::get_denoising_pass_rect(int offset, float exposure, int samp
 
 	float invsample = 1.0f/sample;
 	float scale = invsample;
-	bool variance = (offset == DENOISING_PASS_NORMAL_VAR) ||
-	                (offset == DENOISING_PASS_ALBEDO_VAR) ||
-	                (offset == DENOISING_PASS_DEPTH_VAR) ||
-	                (offset == DENOISING_PASS_COLOR_VAR);
+	bool variance = (type == DENOISING_PASS_NORMAL_VAR) ||
+	                (type == DENOISING_PASS_ALBEDO_VAR) ||
+	                (type == DENOISING_PASS_DEPTH_VAR) ||
+	                (type == DENOISING_PASS_COLOR_VAR);
 
-	if(offset == DENOISING_PASS_COLOR) {
-		scale *= exposure;
+	float scale_exposure = scale;
+	if(type == DENOISING_PASS_COLOR || type == DENOISING_PASS_CLEAN) {
+		scale_exposure *= exposure;
 	}
-	else if(offset == DENOISING_PASS_COLOR_VAR) {
-		scale *= exposure*exposure;
+	else if(type == DENOISING_PASS_COLOR_VAR) {
+		scale_exposure *= exposure*exposure;
 	}
 
-	offset += params.get_denoising_offset();
+	int offset = type + params.get_denoising_offset();
 	int pass_stride = params.get_passes_size();
 	int size = params.width*params.height;
 
@@ -182,14 +182,14 @@ bool RenderBuffers::get_denoising_pass_rect(int offset, float exposure, int samp
 
 		if(components == 1) {
 			for(int i = 0; i < size; i++, mean += pass_stride, var += pass_stride, pixels++) {
-				pixels[0] = max(0.0f, var[0] - mean[0]*mean[0]*invsample)*scale;
+				pixels[0] = max(0.0f, var[0] - mean[0]*mean[0]*invsample)*scale_exposure;
 			}
 		}
 		else if(components == 3) {
 			for(int i = 0; i < size; i++, mean += pass_stride, var += pass_stride, pixels += 3) {
-				pixels[0] = max(0.0f, var[0] - mean[0]*mean[0]*invsample)*scale;
-				pixels[1] = max(0.0f, var[1] - mean[1]*mean[1]*invsample)*scale;
-				pixels[2] = max(0.0f, var[2] - mean[2]*mean[2]*invsample)*scale;
+				pixels[0] = max(0.0f, var[0] - mean[0]*mean[0]*invsample)*scale_exposure;
+				pixels[1] = max(0.0f, var[1] - mean[1]*mean[1]*invsample)*scale_exposure;
+				pixels[2] = max(0.0f, var[2] - mean[2]*mean[2]*invsample)*scale_exposure;
 			}
 		}
 		else {
@@ -201,14 +201,28 @@ bool RenderBuffers::get_denoising_pass_rect(int offset, float exposure, int samp
 
 		if(components == 1) {
 			for(int i = 0; i < size; i++, in += pass_stride, pixels++) {
-				pixels[0] = in[0]*scale;
+				pixels[0] = in[0]*scale_exposure;
 			}
 		}
 		else if(components == 3) {
 			for(int i = 0; i < size; i++, in += pass_stride, pixels += 3) {
-				pixels[0] = in[0]*scale;
-				pixels[1] = in[1]*scale;
-				pixels[2] = in[2]*scale;
+				pixels[0] = in[0]*scale_exposure;
+				pixels[1] = in[1]*scale_exposure;
+				pixels[2] = in[2]*scale_exposure;
+			}
+		}
+		else if(components == 4) {
+			assert(type == DENOISING_PASS_COLOR);
+
+			/* Since the alpha channel is not involved in denoising, output the Combined alpha channel. */
+			assert(params.passes[0].type == PASS_COMBINED);
+			float *in_combined = buffer.data();
+
+			for(int i = 0; i < size; i++, in += pass_stride, in_combined += pass_stride, pixels += 4) {
+				pixels[0] = in[0]*scale_exposure;
+				pixels[1] = in[1]*scale_exposure;
+				pixels[2] = in[2]*scale_exposure;
+				pixels[3] = saturate(in_combined[3]*scale);
 			}
 		}
 		else {
@@ -219,7 +233,7 @@ bool RenderBuffers::get_denoising_pass_rect(int offset, float exposure, int samp
 	return true;
 }
 
-bool RenderBuffers::get_pass_rect(PassType type, float exposure, int sample, int components, float *pixels)
+bool RenderBuffers::get_pass_rect(PassType type, float exposure, int sample, int components, float *pixels, const string &name)
 {
 	if(buffer.data() == NULL) {
 		return false;
@@ -233,6 +247,14 @@ bool RenderBuffers::get_pass_rect(PassType type, float exposure, int sample, int
 		if(pass.type != type) {
 			pass_offset += pass.components;
 			continue;
+		}
+
+		/* Tell Cryptomatte passes apart by their name. */
+		if(pass.type == PASS_CRYPTOMATTE) {
+			if(pass.name != name) {
+				pass_offset += pass.components;
+				continue;
+			}
 		}
 
 		float *in = buffer.data() + pass_offset;
@@ -371,6 +393,17 @@ bool RenderBuffers::get_pass_rect(PassType type, float exposure, int sample, int
 					pixels[3] = f.w*invw;
 				}
 			}
+			else if(type == PASS_CRYPTOMATTE) {
+				for(int i = 0; i < size; i++, in += pass_stride, pixels += 4) {
+					float4 f = make_float4(in[0], in[1], in[2], in[3]);
+					/* x and z contain integer IDs, don't rescale them.
+					   y and w contain matte weights, they get scaled. */
+					pixels[0] = f.x;
+					pixels[1] = f.y * scale;
+					pixels[2] = f.z;
+					pixels[3] = f.w * scale;
+				}
+			}
 			else {
 				for(int i = 0; i < size; i++, in += pass_stride, pixels += 4) {
 					float4 f = make_float4(in[0], in[1], in[2], in[3]);
@@ -448,37 +481,4 @@ bool DisplayBuffer::draw_ready()
 	return (draw_width != 0 && draw_height != 0);
 }
 
-void DisplayBuffer::write(const string& filename)
-{
-	int w = draw_width;
-	int h = draw_height;
-
-	if(w == 0 || h == 0)
-		return;
-	
-	if(half_float)
-		return;
-
-	/* read buffer from device */
-	uchar4 *pixels = rgba_byte.copy_from_device(0, w, h);
-
-	/* write image */
-	ImageOutput *out = ImageOutput::create(filename);
-	ImageSpec spec(w, h, 4, TypeDesc::UINT8);
-
-	out->open(filename, spec);
-
-	/* conversion for different top/bottom convention */
-	out->write_image(TypeDesc::UINT8,
-		(uchar*)(pixels + (h-1)*w),
-		AutoStride,
-		-w*sizeof(uchar4),
-		AutoStride);
-
-	out->close();
-
-	delete out;
-}
-
 CCL_NAMESPACE_END
-

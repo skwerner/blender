@@ -23,7 +23,7 @@
 /** \file blender/python/intern/bpy_path.c
  *  \ingroup pythonintern
  *
- * This file defines '_bpy_path' module, Some 'C' funtionality used by 'bpy.path'
+ * This file defines '_bpy_path' module, Some 'C' functionality used by 'bpy.path'
  */
 
 #include <Python.h>
@@ -64,4 +64,3 @@ PyObject *BPyInit__bpy_path(void)
 
 	return submodule;
 }
-

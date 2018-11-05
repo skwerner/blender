@@ -30,7 +30,7 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
-	
+
 #include "BLI_sys_types.h" // for intptr_t support
 
 typedef void ParamHandle;	/* handle to a set of charts */
@@ -62,8 +62,7 @@ void param_face_add(ParamHandle *handle,
                     float *co[4],
                     float *uv[4],
                     ParamBool *pin,
-                    ParamBool *select,
-                    float face_normal[3]);
+                    ParamBool *select);
 
 void param_edge_set_seam(ParamHandle *handle,
                          ParamKey *vkeys);
@@ -77,7 +76,7 @@ void param_delete(ParamHandle *chart);
  * - lscm is divided in three steps:
  * - begin: compute matrix and it's factorization (expensive)
  * - solve using pinned coordinates (cheap)
- * - end: clean up 
+ * - end: clean up
  * - uv coordinates are allowed to change within begin/end, for
  *   quick re-solving
  */
@@ -120,4 +119,3 @@ void param_flush_restore(ParamHandle *handle);
 #endif
 
 #endif /*__UVEDIT_PARAMETRIZER_H__*/
-

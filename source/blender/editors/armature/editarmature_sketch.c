@@ -157,7 +157,7 @@ void BIF_makeListTemplates(const bContext *C)
 
 		if (ob != obedit && ob->type == OB_ARMATURE) {
 			index++;
-			BLI_ghash_insert(TEMPLATES_HASH, SET_INT_IN_POINTER(index), ob);
+			BLI_ghash_insert(TEMPLATES_HASH, POINTER_FROM_INT(index), ob);
 
 			if (ob == ts->skgen_template) {
 				TEMPLATES_CURRENT = index;
@@ -187,7 +187,7 @@ const char *BIF_listTemplates(const bContext *UNUSED(C))
 
 	while (!BLI_ghashIterator_done(&ghi)) {
 		Object *ob = BLI_ghashIterator_getValue(&ghi);
-		int key = GET_INT_FROM_POINTER(BLI_ghashIterator_getKey(&ghi));
+		int key = POINTER_AS_INT(BLI_ghashIterator_getKey(&ghi));
 
 		p += sprintf(p, "|%s %%x%i", ob->id.name + 2, key);
 
@@ -208,7 +208,7 @@ int   BIF_currentTemplate(const bContext *C)
 
 		while (!BLI_ghashIterator_done(&ghi)) {
 			Object *ob = BLI_ghashIterator_getValue(&ghi);
-			int key = GET_INT_FROM_POINTER(BLI_ghashIterator_getKey(&ghi));
+			int key = POINTER_AS_INT(BLI_ghashIterator_getKey(&ghi));
 
 			if (ob == ts->skgen_template) {
 				TEMPLATES_CURRENT = key;
@@ -302,7 +302,7 @@ void  BIF_setTemplate(bContext *C, int index)
 {
 	ToolSettings *ts = CTX_data_tool_settings(C);
 	if (index > 0) {
-		ts->skgen_template = BLI_ghash_lookup(TEMPLATES_HASH, SET_INT_IN_POINTER(index));
+		ts->skgen_template = BLI_ghash_lookup(TEMPLATES_HASH, POINTER_FROM_INT(index));
 	}
 	else {
 		ts->skgen_template = NULL;
@@ -465,7 +465,7 @@ static void sk_drawNormal(GLUquadric *quad, SK_Point *pt, float size, float heig
 {
 	float vec2[3] = {0, 0, 1}, axis[3];
 	float angle;
-	
+
 	glPushMatrix();
 
 	cross_v3_v3v3(axis, vec2, pt->no);
@@ -905,7 +905,7 @@ static void sk_interpolateDepth(bContext *C, SK_Stroke *stk, int start, int end,
 		float pval[2] = {0, 0};
 
 		ED_view3d_project_float_global(ar, stk->points[i].p, pval, V3D_PROJ_TEST_NOP);
-		ED_view3d_win_to_ray(ar, v3d, pval, ray_start, ray_normal, false);
+		ED_view3d_win_to_ray_clipped(ar, v3d, pval, ray_start, ray_normal, false);
 
 		mul_v3_fl(ray_normal, distance * progress / length);
 		add_v3_v3(stk->points[i].p, ray_normal);
@@ -1334,7 +1334,7 @@ static void sk_convertStroke(bContext *C, SK_Stroke *stk)
 				}
 
 				if (bone == NULL) {
-					bone = ED_armature_edit_bone_add(arm, "Bone");
+					bone = ED_armature_ebone_add(arm, "Bone");
 
 					copy_v3_v3(bone->head, head->p);
 					copy_v3_v3(bone->tail, pt->p);
@@ -1502,7 +1502,7 @@ static int sk_getIntersections(bContext *C, ListBase *list, SK_Sketch *sketch, S
 
 					mval[0] = vi[0];
 					mval[1] = vi[1];
-					ED_view3d_win_to_segment(ar, v3d, mval, ray_start, ray_end, true);
+					ED_view3d_win_to_segment_clipped(ar, v3d, mval, ray_start, ray_end, true);
 
 					isect_line_line_v3(stk->points[s_i].p,
 					                   stk->points[s_i + 1].p,
@@ -1905,7 +1905,7 @@ static bool sk_selectStroke(bContext *C, SK_Sketch *sketch, const int mval[2], c
 	unsigned int buffer[MAXPICKBUF];
 	short hits;
 
-	view3d_set_viewcontext(C, &vc);
+	ED_view3d_viewcontext_init(C, &vc);
 
 	BLI_rcti_init_pt_radius(&rect, mval, 5);
 
@@ -2051,7 +2051,7 @@ static void sk_drawSketch(Scene *scene, View3D *UNUSED(v3d), SK_Sketch *sketch, 
 
 		for (p = sketch->depth_peels.first; p; p = p->next)
 		{
-			int index = GET_INT_FROM_POINTER(p->ob);
+			int index = POINTER_AS_INT(p->ob);
 			index = (index >> 5) & 7;
 
 			glColor3fv(colors[index]);
@@ -2126,7 +2126,7 @@ static int sk_draw_stroke(bContext *C, SK_Sketch *sketch, SK_Stroke *stk, SK_Dra
 		sk_addStrokePoint(C, sketch, stk, dd, snap);
 		sk_updateDrawData(dd);
 		sk_updateNextPoint(sketch, stk);
-		
+
 		return 1;
 	}
 
@@ -2246,7 +2246,7 @@ SK_Sketch *contextSketch(const bContext *C, int create)
 
 	if (obedit && obedit->type == OB_ARMATURE) {
 		bArmature *arm = obedit->data;
-	
+
 		if (arm->sketch == NULL && create) {
 			arm->sketch = createSketch();
 		}
@@ -2263,7 +2263,7 @@ SK_Sketch *viewcontextSketch(ViewContext *vc, int create)
 
 	if (obedit && obedit->type == OB_ARMATURE) {
 		bArmature *arm = obedit->data;
-	
+
 		if (arm->sketch == NULL && create) {
 			arm->sketch = createSketch();
 		}
@@ -2456,7 +2456,7 @@ static int sketch_draw_preview(bContext *C, wmOperator *op, const wmEvent *event
 
 /* ============================================== Poll Functions ============================================= */
 
-int ED_operator_sketch_mode_active_stroke(bContext *C)
+bool ED_operator_sketch_mode_active_stroke(bContext *C)
 {
 	ToolSettings *ts = CTX_data_tool_settings(C);
 	SK_Sketch *sketch = contextSketch(C, 0);
@@ -2472,7 +2472,7 @@ int ED_operator_sketch_mode_active_stroke(bContext *C)
 	}
 }
 
-static int ED_operator_sketch_mode_gesture(bContext *C)
+static bool ED_operator_sketch_mode_gesture(bContext *C)
 {
 	ToolSettings *ts = CTX_data_tool_settings(C);
 	SK_Sketch *sketch = contextSketch(C, 0);
@@ -2489,7 +2489,7 @@ static int ED_operator_sketch_mode_gesture(bContext *C)
 	}
 }
 
-int ED_operator_sketch_full_mode(bContext *C)
+bool ED_operator_sketch_full_mode(bContext *C)
 {
 	Object *obedit = CTX_data_edit_object(C);
 	ToolSettings *ts = CTX_data_tool_settings(C);
@@ -2506,7 +2506,7 @@ int ED_operator_sketch_full_mode(bContext *C)
 	}
 }
 
-int ED_operator_sketch_mode(const bContext *C)
+bool ED_operator_sketch_mode(const bContext *C)
 {
 	Object *obedit = CTX_data_edit_object(C);
 	ToolSettings *ts = CTX_data_tool_settings(C);
@@ -2634,7 +2634,7 @@ void SKETCH_OT_draw_stroke(wmOperatorType *ot)
 	ot->modal  = sketch_draw_stroke_modal;
 	ot->cancel = sketch_draw_stroke_cancel;
 
-	ot->poll = (int (*)(bContext *))ED_operator_sketch_mode;
+	ot->poll = (bool (*)(bContext *))ED_operator_sketch_mode;
 
 	RNA_def_boolean(ot->srna, "snap", 0, "Snap", "");
 
@@ -2661,4 +2661,3 @@ void SKETCH_OT_gesture(wmOperatorType *ot)
 	/* flags */
 	ot->flag = OPTYPE_BLOCKING; // OPTYPE_UNDO
 }
-

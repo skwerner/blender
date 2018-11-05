@@ -113,12 +113,16 @@ static void sclip_zoom_set(const bContext *C, float zoom, float location[2])
 	}
 
 	if ((U.uiflag & USER_ZOOM_TO_MOUSEPOS) && location) {
-		float dx, dy;
+		float aspx, aspy, w, h, dx, dy;
 
 		ED_space_clip_get_size(sc, &width, &height);
+		ED_space_clip_get_aspect(sc, &aspx, &aspy);
 
-		dx = ((location[0] - 0.5f) * width - sc->xof) * (sc->zoom - oldzoom) / sc->zoom;
-		dy = ((location[1] - 0.5f) * height - sc->yof) * (sc->zoom - oldzoom) / sc->zoom;
+		w = width * aspx;
+		h = height * aspy;
+
+		dx = ((location[0] - 0.5f) * w - sc->xof) * (sc->zoom - oldzoom) / sc->zoom;
+		dy = ((location[1] - 0.5f) * h - sc->yof) * (sc->zoom - oldzoom) / sc->zoom;
 
 		if (sc->flag & SC_LOCK_SELECTION) {
 			sc->xlockof += dx;
@@ -196,8 +200,9 @@ static int open_exec(bContext *C, wmOperator *op)
 		bool relative = RNA_boolean_get(op->ptr, "relative_path");
 
 		RNA_string_get(op->ptr, "directory", dir_only);
-		if (relative)
-			BLI_path_rel(dir_only, G.main->name);
+		if (relative) {
+			BLI_path_rel(dir_only, CTX_data_main(C)->name);
+		}
 
 		prop = RNA_struct_find_property(op->ptr, "files");
 		RNA_property_collection_lookup_int(op->ptr, prop, 0, &fileptr);
@@ -266,7 +271,7 @@ static int open_invoke(bContext *C, wmOperator *op, const wmEvent *UNUSED(event)
 	if (clip) {
 		BLI_strncpy(path, clip->name, sizeof(path));
 
-		BLI_path_abs(path, G.main->name);
+		BLI_path_abs(path, CTX_data_main(C)->name);
 		BLI_parent_dir(path);
 	}
 	else {
@@ -316,7 +321,7 @@ static int reload_exec(bContext *C, wmOperator *UNUSED(op))
 	if (!clip)
 		return OPERATOR_CANCELLED;
 
-	BKE_movieclip_reload(clip);
+	BKE_movieclip_reload(CTX_data_main(C), clip);
 
 	WM_event_add_notifier(C, NC_MOVIECLIP | NA_EDITED, clip);
 
@@ -897,7 +902,7 @@ void CLIP_OT_view_selected(wmOperatorType *ot)
 
 /********************** change frame operator *********************/
 
-static int change_frame_poll(bContext *C)
+static bool change_frame_poll(bContext *C)
 {
 	/* prevent changes during render */
 	if (G.is_rendering)
@@ -1313,7 +1318,7 @@ static void proxy_endjob(void *pjv)
 
 	if (pj->clip->source == MCLIP_SRC_MOVIE) {
 		/* Timecode might have changed, so do a full reload to deal with this. */
-		BKE_movieclip_reload(pj->clip);
+		BKE_movieclip_reload(pj->main, pj->clip);
 	}
 	else {
 		/* For image sequences we'll preserve original cache. */
@@ -1584,7 +1589,7 @@ void CLIP_OT_cursor_set(wmOperatorType *ot)
 	                     "Cursor location in normalized clip coordinates", -10.0f, 10.0f);
 }
 
-/********************** macroses *********************/
+/********************** macros *********************/
 
 void ED_operatormacros_clip(void)
 {

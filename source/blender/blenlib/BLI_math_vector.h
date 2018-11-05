@@ -169,6 +169,7 @@ MINLINE double dot_v3db_v3fl(const double a[3], const float b[3]) ATTR_WARN_UNUS
 
 MINLINE float cross_v2v2(const float a[2], const float b[2]) ATTR_WARN_UNUSED_RESULT;
 MINLINE void cross_v3_v3v3(float r[3], const float a[3], const float b[3]);
+MINLINE void cross_v3_v3v3_hi_prec(float r[3], const float a[3], const float b[3]);
 
 MINLINE void add_newell_cross_v3_v3v3(float n[3], const float v_prev[3], const float v_curr[3]);
 
@@ -271,6 +272,7 @@ MINLINE bool compare_v4v4_relative(const float a[4], const float b[4], const flo
 
 MINLINE bool compare_len_v3v3(const float a[3], const float b[3], const float limit)  ATTR_WARN_UNUSED_RESULT;
 MINLINE bool compare_len_squared_v3v3(const float a[3], const float b[3], const float limit)  ATTR_WARN_UNUSED_RESULT;
+MINLINE bool compare_len_squared_v4v4(const float a[4], const float b[4], const float limit)  ATTR_WARN_UNUSED_RESULT;
 
 MINLINE float line_point_side_v2(const float l1[2], const float l2[2], const float pt[2]) ATTR_WARN_UNUSED_RESULT;
 
@@ -353,6 +355,8 @@ void range_vn_u(unsigned int *array_tar, const int size, const unsigned int star
 void range_vn_fl(float *array_tar, const int size, const float start, const float step);
 void negate_vn(float *array_tar, const int size);
 void negate_vn_vn(float *array_tar, const float *array_src, const int size);
+void mul_vn_vn(float *array_tar, const float *array_src, const int size);
+void mul_vn_vnvn(float *array_tar, const float *array_src_a, const float *array_src_b, const int size);
 void mul_vn_fl(float *array_tar, const int size, const float f);
 void mul_vn_vn_fl(float *array_tar, const float *array_src, const int size, const float f);
 void add_vn_vn(float *array_tar, const float *array_src, const int size);

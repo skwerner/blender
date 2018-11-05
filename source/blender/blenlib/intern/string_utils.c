@@ -21,7 +21,7 @@
  * Contributor(s): none yet.
  *
  * ***** END GPL LICENSE BLOCK *****
- * 
+ *
  */
 
 /** \file blender/blenlib/intern/string_utils.c
@@ -326,15 +326,13 @@ bool BLI_uniquename_cb(
 #  define GIVE_STRADDR(data, offset) ( ((char *)data) + offset)
 #endif
 
-/* Generic function to set a unique name. It is only designed to be used in situations
+/**
+ * Generic function to set a unique name. It is only designed to be used in situations
  * where the name is part of the struct.
  *
  * For places where this is used, see constraint.c for example...
  *
- *  name_offs: should be calculated using offsetof(structname, membername) macro from stddef.h
- *  len: maximum length of string (to prevent overflows, etc.)
- *  defname: the name that should be used by default if none is specified already
- *  delim: the character which acts as a delimiter between parts of the name
+ * \param name_offs: should be calculated using offsetof(structname, membername) macro from stddef.h
  */
 static bool uniquename_find_dupe(ListBase *list, void *vlink, const char *name, int name_offs)
 {
@@ -404,7 +402,7 @@ char *BLI_string_join_arrayN(
 	for (uint i = 0; i < strings_len; i++) {
 		total_len += strlen(strings[i]);
 	}
-	char *result = MEM_mallocN(sizeof(char) * total_len, __func__); 
+	char *result = MEM_mallocN(sizeof(char) * total_len, __func__);
 	char *c = result;
 	for (uint i = 0; i < strings_len; i++) {
 		c += BLI_strcpy_rlen(c, strings[i]);
@@ -426,7 +424,7 @@ char *BLI_string_join_array_by_sep_charN(
 		total_len = 1;
 	}
 
-	char *result = MEM_mallocN(sizeof(char) * total_len, __func__); 
+	char *result = MEM_mallocN(sizeof(char) * total_len, __func__);
 	char *c = result;
 	if (strings_len != 0) {
 		for (uint i = 0; i < strings_len; i++) {
@@ -455,7 +453,7 @@ char *BLI_string_join_array_by_sep_char_with_tableN(
 		total_len = 1;
 	}
 
-	char *result = MEM_mallocN(sizeof(char) * total_len, __func__); 
+	char *result = MEM_mallocN(sizeof(char) * total_len, __func__);
 	char *c = result;
 	if (strings_len != 0) {
 		for (uint i = 0; i < strings_len; i++) {

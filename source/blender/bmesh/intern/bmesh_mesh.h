@@ -52,6 +52,9 @@ void BM_loops_calc_normal_vcos(
         const bool use_split_normals, const float split_angle, float (*r_lnos)[3],
         struct MLoopNorSpaceArray *r_lnors_spacearr, short (*clnors_data)[2], const int cd_loop_clnors_offset);
 
+bool BM_loop_check_cyclic_smooth_fan(BMLoop *l_curr);
+
+
 void BM_edges_sharp_from_angle_set(BMesh *bm, const float split_angle);
 
 void bmesh_edit_begin(BMesh *bm, const BMOpTypeFlag type_flag);
@@ -72,9 +75,24 @@ void           BM_mesh_elem_table_ensure(BMesh *bm, const char htype);
 void           BM_mesh_elem_table_init(BMesh *bm, const char htype);
 void           BM_mesh_elem_table_free(BMesh *bm, const char htype);
 
-BMVert *BM_vert_at_index(BMesh *bm, const int index);
-BMEdge *BM_edge_at_index(BMesh *bm, const int index);
-BMFace *BM_face_at_index(BMesh *bm, const int index);
+BLI_INLINE BMVert *BM_vert_at_index(BMesh *bm, const int index)
+{
+	BLI_assert((index >= 0) && (index < bm->totvert));
+	BLI_assert((bm->elem_table_dirty & BM_VERT) == 0);
+	return bm->vtable[index];
+}
+BLI_INLINE BMEdge *BM_edge_at_index(BMesh *bm, const int index)
+{
+	BLI_assert((index >= 0) && (index < bm->totedge));
+	BLI_assert((bm->elem_table_dirty & BM_EDGE) == 0);
+	return bm->etable[index];
+}
+BLI_INLINE BMFace *BM_face_at_index(BMesh *bm, const int index)
+{
+	BLI_assert((index >= 0) && (index < bm->totface));
+	BLI_assert((bm->elem_table_dirty & BM_FACE) == 0);
+	return bm->ftable[index];
+}
 
 BMVert *BM_vert_at_index_find(BMesh *bm, const int index);
 BMEdge *BM_edge_at_index_find(BMesh *bm, const int index);
@@ -116,7 +134,7 @@ extern const BMAllocTemplate bm_mesh_chunksize_default;
 	(dm)->getNumEdges(dm),		\
 	(dm)->getNumLoops(dm),		\
 	(dm)->getNumPolys(dm),		\
-	}
+}
 #define _VA_BMALLOC_TEMPLATE_FROM_DM_2(dm_a, dm_b) { \
 	(CHECK_TYPE_INLINE(dm_a, DerivedMesh *), \
 	 CHECK_TYPE_INLINE(dm_b, DerivedMesh *), \
@@ -124,7 +142,7 @@ extern const BMAllocTemplate bm_mesh_chunksize_default;
 	(dm_a)->getNumEdges(dm_a)  + (dm_b)->getNumEdges(dm_b),	\
 	(dm_a)->getNumLoops(dm_a)  + (dm_b)->getNumLoops(dm_b),	\
 	(dm_a)->getNumPolys(dm_a)  + (dm_b)->getNumPolys(dm_b),	\
-	}
+}
 
 #define BMALLOC_TEMPLATE_FROM_DM(...) VA_NARGS_CALL_OVERLOAD(_VA_BMALLOC_TEMPLATE_FROM_DM_, __VA_ARGS__)
 

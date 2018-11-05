@@ -48,6 +48,7 @@ set(INC
 	../../../intern/mikktspace
 	../../../intern/smoke/extern
 	../../../intern/atomic
+	../../../intern/clog
 	../../../intern/libmv
 	../../../extern/curve_fit_nd
 )
@@ -102,6 +103,7 @@ set(SRC
 	intern/displist.c
 	intern/dynamicpaint.c
 	intern/editderivedmesh.c
+	intern/editlattice.c
 	intern/editmesh.c
 	intern/editmesh_bvh.c
 	intern/effect.c
@@ -115,6 +117,7 @@ set(SRC
 	intern/icons.c
 	intern/idcode.c
 	intern/idprop.c
+	intern/idprop_utils.c
 	intern/image.c
 	intern/image_gen.c
 	intern/ipo.c
@@ -133,6 +136,7 @@ set(SRC
 	intern/mball.c
 	intern/mball_tessellate.c
 	intern/mesh.c
+	intern/mesh_convert.c
 	intern/mesh_evaluate.c
 	intern/mesh_mapping.c
 	intern/mesh_remap.c
@@ -186,6 +190,7 @@ set(SRC
 	intern/tracking_solver.c
 	intern/tracking_stabilize.c
 	intern/tracking_util.c
+	intern/undo_system.c
 	intern/unit.c
 	intern/world.c
 	intern/writeavi.c
@@ -230,6 +235,7 @@ set(SRC
 	BKE_depsgraph.h
 	BKE_displist.h
 	BKE_dynamicpaint.h
+	BKE_editlattice.h
 	BKE_editmesh.h
 	BKE_editmesh_bvh.h
 	BKE_effect.h
@@ -293,6 +299,7 @@ set(SRC
 	BKE_text.h
 	BKE_texture.h
 	BKE_tracking.h
+	BKE_undo_system.h
 	BKE_unit.h
 	BKE_world.h
 	BKE_writeavi.h
@@ -402,7 +409,7 @@ if(WITH_CODEC_FFMPEG)
 	)
 	add_definitions(-DWITH_FFMPEG)
 
-	remove_strict_flags_file(
+	remove_strict_c_flags_file(
 		intern/writeffmpeg.c
 	)
 endif()

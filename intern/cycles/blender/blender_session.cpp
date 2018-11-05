@@ -29,6 +29,7 @@
 #include "render/scene.h"
 #include "render/session.h"
 #include "render/shader.h"
+#include "render/stats.h"
 
 #include "util/util_color.h"
 #include "util/util_foreach.h"
@@ -49,6 +50,7 @@ int BlenderSession::num_resumable_chunks = 0;
 int BlenderSession::current_resumable_chunk = 0;
 int BlenderSession::start_resumable_chunk = 0;
 int BlenderSession::end_resumable_chunk = 0;
+bool BlenderSession::print_render_stats = false;
 
 BlenderSession::BlenderSession(BL::RenderEngine& b_engine,
                                BL::UserPreferences& b_userpref,
@@ -136,7 +138,7 @@ void BlenderSession::create_session()
 	scene = new Scene(scene_params, session->device);
 
 	/* setup callbacks for builtin image support */
-	scene->image_manager->builtin_image_info_cb = function_bind(&BlenderSession::builtin_image_info, this, _1, _2, _3, _4, _5, _6, _7, _8);
+	scene->image_manager->builtin_image_info_cb = function_bind(&BlenderSession::builtin_image_info, this, _1, _2, _3);
 	scene->image_manager->builtin_image_pixels_cb = function_bind(&BlenderSession::builtin_image_pixels, this, _1, _2, _3, _4, _5);
 	scene->image_manager->builtin_image_float_pixels_cb = function_bind(&BlenderSession::builtin_image_float_pixels, this, _1, _2, _3, _4, _5);
 
@@ -253,6 +255,8 @@ static ShaderEvalType get_shader_type(const string& pass_type)
 		return SHADER_EVAL_NORMAL;
 	else if(strcmp(shader_type, "UV")==0)
 		return SHADER_EVAL_UV;
+	else if(strcmp(shader_type, "ROUGHNESS")==0)
+		return SHADER_EVAL_ROUGHNESS;
 	else if(strcmp(shader_type, "DIFFUSE_COLOR")==0)
 		return SHADER_EVAL_DIFFUSE_COLOR;
 	else if(strcmp(shader_type, "GLOSSY_COLOR")==0)
@@ -402,31 +406,26 @@ void BlenderSession::render()
 		BL::RenderLayer b_rlay = *b_single_rlay;
 
 		/* add passes */
-		array<Pass> passes = sync->sync_render_passes(b_rlay, *b_layer_iter, session_params);
+		vector<Pass> passes = sync->sync_render_passes(b_rlay, *b_layer_iter, session_params);
 		buffer_params.passes = passes;
 
 		PointerRNA crl = RNA_pointer_get(&b_layer_iter->ptr, "cycles");
 		bool use_denoising = get_boolean(crl, "use_denoising");
-		buffer_params.denoising_data_pass = use_denoising;
+		bool denoising_passes = use_denoising || get_boolean(crl, "denoising_store_passes");
+
 		session->tile_manager.schedule_denoising = use_denoising;
+		buffer_params.denoising_data_pass = denoising_passes;
+		buffer_params.denoising_clean_pass = (scene->film->denoising_flags & DENOISING_CLEAN_ALL_PASSES);
+
 		session->params.use_denoising = use_denoising;
-		scene->film->denoising_data_pass = buffer_params.denoising_data_pass;
-		scene->film->denoising_flags = 0;
-		if(!get_boolean(crl, "denoising_diffuse_direct"))        scene->film->denoising_flags |= DENOISING_CLEAN_DIFFUSE_DIR;
-		if(!get_boolean(crl, "denoising_diffuse_indirect"))      scene->film->denoising_flags |= DENOISING_CLEAN_DIFFUSE_IND;
-		if(!get_boolean(crl, "denoising_glossy_direct"))         scene->film->denoising_flags |= DENOISING_CLEAN_GLOSSY_DIR;
-		if(!get_boolean(crl, "denoising_glossy_indirect"))       scene->film->denoising_flags |= DENOISING_CLEAN_GLOSSY_IND;
-		if(!get_boolean(crl, "denoising_transmission_direct"))   scene->film->denoising_flags |= DENOISING_CLEAN_TRANSMISSION_DIR;
-		if(!get_boolean(crl, "denoising_transmission_indirect")) scene->film->denoising_flags |= DENOISING_CLEAN_TRANSMISSION_IND;
-		if(!get_boolean(crl, "denoising_subsurface_direct"))     scene->film->denoising_flags |= DENOISING_CLEAN_SUBSURFACE_DIR;
-		if(!get_boolean(crl, "denoising_subsurface_indirect"))   scene->film->denoising_flags |= DENOISING_CLEAN_SUBSURFACE_IND;
-		scene->film->denoising_clean_pass = (scene->film->denoising_flags & DENOISING_CLEAN_ALL_PASSES);
-		buffer_params.denoising_clean_pass = scene->film->denoising_clean_pass;
+		session->params.denoising_passes = denoising_passes;
 		session->params.denoising_radius = get_int(crl, "denoising_radius");
 		session->params.denoising_strength = get_float(crl, "denoising_strength");
 		session->params.denoising_feature_strength = get_float(crl, "denoising_feature_strength");
 		session->params.denoising_relative_pca = get_boolean(crl, "denoising_relative_pca");
 
+		scene->film->denoising_data_pass = buffer_params.denoising_data_pass;
+		scene->film->denoising_clean_pass = buffer_params.denoising_clean_pass;
 		scene->film->pass_alpha_threshold = b_layer_iter->pass_alpha_threshold();
 		scene->film->tag_passes_update(scene, passes);
 		scene->film->tag_update(scene);
@@ -491,6 +490,12 @@ void BlenderSession::render()
 
 		/* free result without merging */
 		end_render_result(b_engine, b_rr, true, true, false);
+
+		if(!b_engine.is_preview() && background && print_render_stats) {
+			RenderStats stats;
+			session->scene->collect_statistics(&stats);
+			printf("Render statistics:\n%s\n", stats.full_report().c_str());
+		}
 
 		if(session->progress.get_cancel())
 			break;
@@ -699,7 +704,7 @@ void BlenderSession::do_write_update_render_result(BL::RenderResult& b_rr,
 			bool read = false;
 			if(pass_type != PASS_NONE) {
 				/* copy pixels */
-				read = buffers->get_pass_rect(pass_type, exposure, sample, components, &pixels[0]);
+				read = buffers->get_pass_rect(pass_type, exposure, sample, components, &pixels[0], b_pass.name());
 			}
 			else {
 				int denoising_offset = BlenderSync::get_denoising_pass(b_pass);
@@ -718,7 +723,7 @@ void BlenderSession::do_write_update_render_result(BL::RenderResult& b_rr,
 	else {
 		/* copy combined pass */
 		BL::RenderPass b_combined_pass(b_rlay.passes.find_by_name("Combined", b_rview_name.c_str()));
-		if(buffers->get_pass_rect(PASS_COMBINED, exposure, sample, 4, &pixels[0]))
+		if(buffers->get_pass_rect(PASS_COMBINED, exposure, sample, 4, &pixels[0], "Combined"))
 			b_combined_pass.rect(&pixels[0]);
 	}
 
@@ -1020,20 +1025,11 @@ int BlenderSession::builtin_image_frame(const string &builtin_name)
 
 void BlenderSession::builtin_image_info(const string &builtin_name,
                                         void *builtin_data,
-                                        bool &is_float,
-                                        int &width,
-                                        int &height,
-                                        int &depth,
-                                        int &channels,
-                                        bool& free_cache)
+                                        ImageMetaData& metadata)
 {
 	/* empty image */
-	is_float = false;
-	width = 1;
-	height = 1;
-	depth = 0;
-	channels = 0;
-	free_cache = false;
+	metadata.width = 1;
+	metadata.height = 1;
 
 	if(!builtin_data)
 		return;
@@ -1047,21 +1043,21 @@ void BlenderSession::builtin_image_info(const string &builtin_name,
 		/* image data */
 		BL::Image b_image(b_id);
 
-		free_cache = !b_image.has_data();
-		is_float = b_image.is_float();
-		width = b_image.size()[0];
-		height = b_image.size()[1];
-		depth = 1;
-		channels = b_image.channels();
+		metadata.builtin_free_cache = !b_image.has_data();
+		metadata.is_float = b_image.is_float();
+		metadata.width = b_image.size()[0];
+		metadata.height = b_image.size()[1];
+		metadata.depth = 1;
+		metadata.channels = b_image.channels();
 	}
 	else if(b_id.is_a(&RNA_Object)) {
 		/* smoke volume data */
 		BL::Object b_ob(b_id);
 		BL::SmokeDomainSettings b_domain = object_smoke_domain_find(b_ob);
 
-		is_float = true;
-		depth = 1;
-		channels = 1;
+		metadata.is_float = true;
+		metadata.depth = 1;
+		metadata.channels = 1;
 
 		if(!b_domain)
 			return;
@@ -1070,11 +1066,11 @@ void BlenderSession::builtin_image_info(const string &builtin_name,
 		   builtin_name == Attribute::standard_name(ATTR_STD_VOLUME_FLAME) ||
 		   builtin_name == Attribute::standard_name(ATTR_STD_VOLUME_HEAT) ||
 		   builtin_name == Attribute::standard_name(ATTR_STD_VOLUME_TEMPERATURE))
-			channels = 1;
+			metadata.channels = 1;
 		else if(builtin_name == Attribute::standard_name(ATTR_STD_VOLUME_COLOR))
-			channels = 4;
+			metadata.channels = 4;
 		else if(builtin_name == Attribute::standard_name(ATTR_STD_VOLUME_VELOCITY))
-			channels = 3;
+			metadata.channels = 3;
 		else
 			return;
 
@@ -1088,9 +1084,9 @@ void BlenderSession::builtin_image_info(const string &builtin_name,
 			amplify = 1;
 		}
 
-		width = resolution.x * amplify;
-		height = resolution.y * amplify;
-		depth = resolution.z * amplify;
+		metadata.width = resolution.x * amplify;
+		metadata.height = resolution.y * amplify;
+		metadata.depth = resolution.z * amplify;
 	}
 	else {
 		/* TODO(sergey): Check we're indeed in shader node tree. */
@@ -1099,9 +1095,11 @@ void BlenderSession::builtin_image_info(const string &builtin_name,
 		BL::Node b_node(ptr);
 		if(b_node.is_a(&RNA_ShaderNodeTexPointDensity)) {
 			BL::ShaderNodeTexPointDensity b_point_density_node(b_node);
-			channels = 4;
-			width = height = depth = b_point_density_node.resolution();
-			is_float = true;
+			metadata.channels = 4;
+			metadata.width = b_point_density_node.resolution();
+			metadata.height = metadata.width;
+			metadata.depth = metadata.width;
+			metadata.is_float = true;
 		}
 	}
 }

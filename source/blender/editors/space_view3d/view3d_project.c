@@ -4,7 +4,7 @@
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version. 
+ * of the License, or (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -18,7 +18,7 @@
  * The Original Code is Copyright (C) 2008 Blender Foundation.
  * All rights reserved.
  *
- * 
+ *
  * Contributor(s): Blender Foundation
  *
  * ***** END GPL LICENSE BLOCK *****
@@ -58,13 +58,13 @@
 void ED_view3d_project_float_v2_m4(const ARegion *ar, const float co[3], float r_co[2], float mat[4][4])
 {
 	float vec4[4];
-	
+
 	copy_v3_v3(vec4, co);
 	vec4[3] = 1.0;
 	/* r_co[0] = IS_CLIPPED; */ /* always overwritten */
-	
+
 	mul_m4_v4(mat, vec4);
-	
+
 	if (vec4[3] > FLT_EPSILON) {
 		r_co[0] = (float)(ar->winx / 2.0f) + (ar->winx / 2.0f) * vec4[0] / vec4[3];
 		r_co[1] = (float)(ar->winy / 2.0f) + (ar->winy / 2.0f) * vec4[1] / vec4[3];
@@ -80,13 +80,13 @@ void ED_view3d_project_float_v2_m4(const ARegion *ar, const float co[3], float r
 void ED_view3d_project_float_v3_m4(const ARegion *ar, const float vec[3], float r_co[3], float mat[4][4])
 {
 	float vec4[4];
-	
+
 	copy_v3_v3(vec4, vec);
 	vec4[3] = 1.0;
 	/* r_co[0] = IS_CLIPPED; */ /* always overwritten */
-	
+
 	mul_m4_v4(mat, vec4);
-	
+
 	if (vec4[3] > FLT_EPSILON) {
 		r_co[0] = (float)(ar->winx / 2.0f) + (ar->winx / 2.0f) * vec4[0] / vec4[3];
 		r_co[1] = (float)(ar->winy / 2.0f) + (ar->winy / 2.0f) * vec4[1] / vec4[3];
@@ -283,6 +283,11 @@ float ED_view3d_pixel_size(const RegionView3D *rv3d, const float co[3])
 	return mul_project_m4_v3_zfac((float(*)[4])rv3d->persmat, co) * rv3d->pixsize * U.pixelsize;
 }
 
+float ED_view3d_pixel_size_no_ui_scale(const RegionView3D *rv3d, const float co[3])
+{
+	return mul_project_m4_v3_zfac((float(*)[4])rv3d->persmat, co) * rv3d->pixsize;
+}
+
 /**
  * Calculate a depth value from \a co, use with #ED_view3d_win_to_delta
  */
@@ -362,19 +367,19 @@ bool ED_view3d_clip_segment(const RegionView3D *rv3d, float ray_start[3], float 
  * \param r_ray_co The world-space point where the ray intersects the window plane.
  * \param r_ray_normal The normalized world-space direction of towards mval.
  * \param r_ray_start The world-space starting point of the ray.
- * \param do_clip Optionally clip the start of the ray by the view clipping planes.
+ * \param do_clip_planes Optionally clip the start of the ray by the view clipping planes.
  * \return success, false if the ray is totally clipped.
  */
-bool ED_view3d_win_to_ray_ex(
+bool ED_view3d_win_to_ray_clipped_ex(
         const ARegion *ar, const View3D *v3d, const float mval[2],
-        float r_ray_co[3], float r_ray_normal[3], float r_ray_start[3], bool do_clip)
+        float r_ray_co[3], float r_ray_normal[3], float r_ray_start[3], bool do_clip_planes)
 {
 	float ray_end[3];
 
 	view3d_win_to_ray_segment(ar, v3d, mval, r_ray_co, r_ray_normal, r_ray_start, ray_end);
 
 	/* bounds clipping */
-	if (do_clip) {
+	if (do_clip_planes) {
 		return ED_view3d_clip_segment(ar->regiondata, r_ray_start, ray_end);
 	}
 
@@ -391,14 +396,32 @@ bool ED_view3d_win_to_ray_ex(
  * \param mval The area relative 2d location (such as event->mval, converted into float[2]).
  * \param r_ray_start The world-space point where the ray intersects the window plane.
  * \param r_ray_normal The normalized world-space direction of towards mval.
- * \param do_clip Optionally clip the start of the ray by the view clipping planes.
+ * \param do_clip_planes Optionally clip the start of the ray by the view clipping planes.
  * \return success, false if the ray is totally clipped.
  */
-bool ED_view3d_win_to_ray(
+bool ED_view3d_win_to_ray_clipped(
         const ARegion *ar, const View3D *v3d, const float mval[2],
-        float r_ray_start[3], float r_ray_normal[3], const bool do_clip)
+        float r_ray_start[3], float r_ray_normal[3], const bool do_clip_planes)
 {
-	return ED_view3d_win_to_ray_ex(ar, v3d, mval, NULL, r_ray_normal, r_ray_start, do_clip);
+	return ED_view3d_win_to_ray_clipped_ex(ar, v3d, mval, NULL, r_ray_normal, r_ray_start, do_clip_planes);
+}
+
+/**
+ * Calculate a 3d viewpoint and direction vector from 2d window coordinates.
+ * This ray_start is located at the viewpoint, ray_normal is the direction towards mval.
+ * \param ar The region (used for the window width and height).
+ * \param mval The area relative 2d location (such as event->mval, converted into float[2]).
+ * \param r_ray_start The world-space point where the ray intersects the window plane.
+ * \param r_ray_normal The normalized world-space direction of towards mval.
+ *
+ * \note Ignores view near/far clipping, to take this into account use #ED_view3d_win_to_ray_clipped.
+ */
+void ED_view3d_win_to_ray(
+        const ARegion *ar, const float mval[2],
+        float r_ray_start[3], float r_ray_normal[3])
+{
+	ED_view3d_win_to_origin(ar, mval, r_ray_start);
+	ED_view3d_win_to_vector(ar, mval, r_ray_normal);
 }
 
 /**
@@ -532,6 +555,31 @@ void ED_view3d_win_to_3d_int(
 	ED_view3d_win_to_3d(v3d, ar, depth_pt, mval_fl, r_out);
 }
 
+bool ED_view3d_win_to_3d_on_plane(
+        const ARegion *ar,
+        const float plane[4], const float mval[2], const bool do_clip,
+        float r_out[3])
+{
+	float ray_co[3], ray_no[3];
+	ED_view3d_win_to_origin(ar, mval, ray_co);
+	ED_view3d_win_to_vector(ar, mval, ray_no);
+	float lambda;
+	if (isect_ray_plane_v3(ray_co, ray_no, plane, &lambda, do_clip)) {
+		madd_v3_v3v3fl(r_out, ray_co, ray_no, lambda);
+		return true;
+	}
+	return false;
+}
+
+bool ED_view3d_win_to_3d_on_plane_int(
+        const ARegion *ar,
+        const float plane[4], const int mval[2], const bool do_clip,
+        float r_out[3])
+{
+	const float mval_fl[2] = {mval[0], mval[1]};
+	return ED_view3d_win_to_3d_on_plane(ar, plane, mval_fl, do_clip, r_out);
+}
+
 /**
  * Calculate a 3d difference vector from 2d window offset.
  * note that ED_view3d_calc_zfac() must be called first to determine
@@ -544,10 +592,10 @@ void ED_view3d_win_to_delta(const ARegion *ar, const float mval[2], float out[3]
 {
 	RegionView3D *rv3d = ar->regiondata;
 	float dx, dy;
-	
+
 	dx = 2.0f * mval[0] * zfac / ar->winx;
 	dy = 2.0f * mval[1] * zfac / ar->winy;
-	
+
 	out[0] = (rv3d->persinv[0][0] * dx + rv3d->persinv[1][0] * dy);
 	out[1] = (rv3d->persinv[0][1] * dx + rv3d->persinv[1][1] * dy);
 	out[2] = (rv3d->persinv[0][2] * dx + rv3d->persinv[1][2] * dy);
@@ -625,16 +673,17 @@ void ED_view3d_win_to_vector(const ARegion *ar, const float mval[2], float out[3
  * \param mval The area relative 2d location (such as event->mval, converted into float[2]).
  * \param r_ray_start The world-space starting point of the segment.
  * \param r_ray_end The world-space end point of the segment.
- * \param do_clip Optionally clip the ray by the view clipping planes.
+ * \param do_clip_planes Optionally clip the ray by the view clipping planes.
  * \return success, false if the segment is totally clipped.
  */
-bool ED_view3d_win_to_segment(const ARegion *ar, View3D *v3d, const float mval[2],
-                              float r_ray_start[3], float r_ray_end[3], const bool do_clip)
+bool ED_view3d_win_to_segment_clipped(
+        const ARegion *ar, View3D *v3d, const float mval[2],
+        float r_ray_start[3], float r_ray_end[3], const bool do_clip_planes)
 {
 	view3d_win_to_ray_segment(ar, v3d, mval, NULL, NULL, r_ray_start, r_ray_end);
 
 	/* bounds clipping */
-	if (do_clip) {
+	if (do_clip_planes) {
 		return ED_view3d_clip_segment((RegionView3D *)ar->regiondata, r_ray_start, r_ray_end);
 	}
 

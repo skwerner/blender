@@ -54,7 +54,6 @@
 #include "BKE_customdata.h"
 #include "BKE_DerivedMesh.h"
 #include "BKE_fluidsim.h"
-#include "BKE_global.h"
 #include "BKE_modifier.h"
 #include "BKE_mesh.h"
 
@@ -105,4 +104,3 @@ void initElbeemMesh(struct Scene *scene, struct Object *ob,
 
 	dm->release(dm);
 }
-

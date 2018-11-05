@@ -45,7 +45,6 @@ public:
 	DeviceInfo device;
 	bool background;
 	bool progressive_refine;
-	string output_path;
 
 	bool progressive;
 	bool experimental;
@@ -59,6 +58,7 @@ public:
 	bool display_buffer_linear;
 
 	bool use_denoising;
+	bool denoising_passes;
 	int denoising_radius;
 	float denoising_strength;
 	float denoising_feature_strength;
@@ -71,11 +71,15 @@ public:
 
 	ShadingSystem shadingsystem;
 
+	function<bool(const uchar *pixels,
+	              int width,
+	              int height,
+	              int channels)> write_render_cb;
+
 	SessionParams()
 	{
 		background = false;
 		progressive_refine = false;
-		output_path = "";
 
 		progressive = false;
 		experimental = false;
@@ -86,6 +90,7 @@ public:
 		threads = 0;
 
 		use_denoising = false;
+		denoising_passes = false;
 		denoising_radius = 8;
 		denoising_strength = 0.0f;
 		denoising_feature_strength = 0.0f;
@@ -106,7 +111,6 @@ public:
 	{ return !(device == params.device
 		&& background == params.background
 		&& progressive_refine == params.progressive_refine
-		&& output_path == params.output_path
 		/* && samples == params.samples */
 		&& progressive == params.progressive
 		&& experimental == params.experimental
@@ -235,4 +239,3 @@ protected:
 CCL_NAMESPACE_END
 
 #endif /* __SESSION_H__ */
-

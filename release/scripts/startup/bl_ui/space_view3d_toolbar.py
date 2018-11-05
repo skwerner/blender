@@ -1582,11 +1582,11 @@ class VIEW3D_PT_sculpt_dyntopo(Panel, View3DPaintPanel):
     def draw_header(self, context):
         layout = self.layout
         layout.operator(
-                "sculpt.dynamic_topology_toggle",
-                icon='CHECKBOX_HLT' if context.sculpt_object.use_dynamic_topology_sculpting else 'CHECKBOX_DEHLT',
-                text="",
-                emboss=False,
-                )
+            "sculpt.dynamic_topology_toggle",
+            icon='CHECKBOX_HLT' if context.sculpt_object.use_dynamic_topology_sculpting else 'CHECKBOX_DEHLT',
+            text="",
+            emboss=False,
+        )
 
     def draw(self, context):
         layout = self.layout
@@ -1808,7 +1808,6 @@ class VIEW3D_PT_tools_vertexpaint(Panel, View3DPaintPanel):
         layout = self.layout
 
         toolsettings = context.tool_settings
-        vpaint = toolsettings.vertex_paint
 
         col = layout.column()
 
@@ -2032,6 +2031,8 @@ class VIEW3D_PT_tools_grease_pencil_brush(GreasePencilBrushPanel, Panel):
     bl_space_type = 'VIEW_3D'
 
 # Grease Pencil drawingcurves
+
+
 class VIEW3D_PT_tools_grease_pencil_brushcurves(GreasePencilBrushCurvesPanel, Panel):
     bl_space_type = 'VIEW_3D'
 

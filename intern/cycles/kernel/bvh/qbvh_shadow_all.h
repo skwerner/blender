@@ -66,11 +66,6 @@ ccl_device bool BVH_FUNCTION_FULL_NAME(QBVH)(KernelGlobals *kg,
 	*num_hits = 0;
 	isect_array->t = tmax;
 
-#ifndef __KERNEL_SSE41__
-	if(!isfinite(P.x)) {
-		return false;
-	}
-#endif
 
 #if BVH_FEATURE(BVH_INSTANCING)
 	int num_hits_in_instance = 0;
@@ -358,7 +353,7 @@ ccl_device bool BVH_FUNCTION_FULL_NAME(QBVH)(KernelGlobals *kg,
 								shader = __float_as_int(str.z);
 							}
 #endif
-							int flag = kernel_tex_fetch(__shader_flag, (shader & SHADER_MASK)*SHADER_SIZE);
+							int flag = kernel_tex_fetch(__shaders, (shader & SHADER_MASK)).flags;
 
 							/* if no transparent shadows, all light is blocked */
 							if(!(flag & SD_HAS_TRANSPARENT_SHADOW)) {

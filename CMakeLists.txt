@@ -62,25 +62,21 @@ if(NOT DEFINED CMAKE_BUILD_TYPE_INIT)
 	set(CMAKE_BUILD_TYPE_INIT "Release")
 endif()
 
+# Omit superfluous "Up-to-date" messages.
+if(NOT DEFINED CMAKE_INSTALL_MESSAGE)
+	set(CMAKE_INSTALL_MESSAGE "LAZY")
+endif()
+
 # quiet output for Makefiles, 'make -s' helps too
 # set_property(GLOBAL PROPERTY RULE_MESSAGES OFF)
 
 # global compile definitions since add_definitions() adds for all.
-
-if(NOT (${CMAKE_VERSION} VERSION_LESS 3.0))
-	set_property(DIRECTORY APPEND PROPERTY COMPILE_DEFINITIONS
-		$<$<CONFIG:Debug>:DEBUG;_DEBUG>
-		$<$<CONFIG:Release>:NDEBUG>
-		$<$<CONFIG:MinSizeRel>:NDEBUG>
-		$<$<CONFIG:RelWithDebInfo>:NDEBUG>
-	)
-else()
-	# keep until CMake-3.0 is min requirement
-	set_property(DIRECTORY APPEND PROPERTY COMPILE_DEFINITIONS_DEBUG           DEBUG _DEBUG)
-	set_property(DIRECTORY APPEND PROPERTY COMPILE_DEFINITIONS_RELEASE         NDEBUG)
-	set_property(DIRECTORY APPEND PROPERTY COMPILE_DEFINITIONS_MINSIZEREL      NDEBUG)
-	set_property(DIRECTORY APPEND PROPERTY COMPILE_DEFINITIONS_RELWITHDEBINFO  NDEBUG)
-endif()
+set_property(DIRECTORY APPEND PROPERTY COMPILE_DEFINITIONS
+	$<$<CONFIG:Debug>:DEBUG;_DEBUG>
+	$<$<CONFIG:Release>:NDEBUG>
+	$<$<CONFIG:MinSizeRel>:NDEBUG>
+	$<$<CONFIG:RelWithDebInfo>:NDEBUG>
+)
 
 #-----------------------------------------------------------------------------
 # Set policy
@@ -119,7 +115,11 @@ enable_testing()
 
 set(EXECUTABLE_OUTPUT_PATH ${CMAKE_BINARY_DIR}/bin CACHE INTERNAL "" FORCE)
 set(LIBRARY_OUTPUT_PATH ${CMAKE_BINARY_DIR}/lib CACHE INTERNAL "" FORCE)
-set(TESTS_OUTPUT_DIR ${EXECUTABLE_OUTPUT_PATH}/tests CACHE INTERNAL "" FORCE)
+if(MSVC)
+	set(TESTS_OUTPUT_DIR ${EXECUTABLE_OUTPUT_PATH}/tests/$<CONFIG>/ CACHE INTERNAL "" FORCE)
+else()
+	set(TESTS_OUTPUT_DIR ${EXECUTABLE_OUTPUT_PATH}/tests/ CACHE INTERNAL "" FORCE)
+endif()
 
 #-----------------------------------------------------------------------------
 # Set default config options
@@ -206,11 +206,11 @@ mark_as_advanced(WITH_BLENDER)
 option(WITH_INTERNATIONAL "Enable I18N (International fonts and text)" ON)
 
 option(WITH_PYTHON        "Enable Embedded Python API  (only disable for development)" ON)
-option(WITH_PYTHON_SECURITY "Disables execution of scripts within blend files by default" ON) 
-mark_as_advanced(WITH_PYTHON)  # dont want people disabling this unless they really know what they are doing.
+option(WITH_PYTHON_SECURITY "Disables execution of scripts within blend files by default" ON)
+mark_as_advanced(WITH_PYTHON)  # don't want people disabling this unless they really know what they are doing.
 mark_as_advanced(WITH_PYTHON_SECURITY)  # some distributions see this as a security issue, rather than have them patch it, make a build option.
 
-option(WITH_PYTHON_SAFETY "Enable internal API error checking to track invalid data to prevent crash on access (at the expense of some effeciency, only enable for development)." OFF)
+option(WITH_PYTHON_SAFETY "Enable internal API error checking to track invalid data to prevent crash on access (at the expense of some efficiency, only enable for development)." OFF)
 mark_as_advanced(WITH_PYTHON_SAFETY)
 option(WITH_PYTHON_MODULE "Enable building as a python module which runs without a user interface, like running regular blender in background mode (experimental, only enable for development), installs to PYTHON_SITE_PACKAGES (or CMAKE_INSTALL_PREFIX if WITH_INSTALL_PORTABLE is enabled)." OFF)
 if(APPLE)
@@ -222,8 +222,8 @@ if(${CMAKE_VERSION} VERSION_LESS 2.8.8)
 	# add_library OBJECT arg unsupported
 	set(WITH_BUILDINFO OFF)
 endif()
-set(BUILDINFO_OVERRIDE_DATE "" CACHE STRING "Use instead of the current date for reproducable builds (empty string disables this option)")
-set(BUILDINFO_OVERRIDE_TIME "" CACHE STRING "Use instead of the current time for reproducable builds (empty string disables this option)")
+set(BUILDINFO_OVERRIDE_DATE "" CACHE STRING "Use instead of the current date for reproducible builds (empty string disables this option)")
+set(BUILDINFO_OVERRIDE_TIME "" CACHE STRING "Use instead of the current time for reproducible builds (empty string disables this option)")
 set(CPACK_OVERRIDE_PACKAGENAME "" CACHE STRING "Use instead of the standard packagename (empty string disables this option)")
 mark_as_advanced(CPACK_OVERRIDE_PACKAGENAME)
 mark_as_advanced(BUILDINFO_OVERRIDE_DATE)
@@ -251,6 +251,8 @@ option(WITH_OPENSUBDIV    "Enable OpenSubdiv for surface subdivision" _init_OPEN
 
 option(WITH_OPENVDB       "Enable features relying on OpenVDB" OFF)
 option(WITH_OPENVDB_BLOSC "Enable blosc compression for OpenVDB, only enable if OpenVDB was built with blosc support" OFF)
+option(WITH_OPENVDB_3_ABI_COMPATIBLE "Assume OpenVDB library has been compiled with version 3 ABI compatibility" OFF)
+mark_as_advanced(WITH_OPENVDB_3_ABI_COMPATIBLE)
 
 # GHOST Windowing Library Options
 option(WITH_GHOST_DEBUG   "Enable debugging output for the GHOST library" OFF)
@@ -298,9 +300,6 @@ else()
 	set(WITH_SYSTEM_GLES OFF)
 endif()
 
-
-# (unix defaults to System OpenJPEG On)
-option(WITH_SYSTEM_OPENJPEG "Use the operating systems OpenJPEG library" OFF)
 
 if(UNIX AND NOT APPLE)
 	option(WITH_SYSTEM_EIGEN3 "Use the systems Eigen3 library" OFF)
@@ -409,6 +408,8 @@ option(WITH_CYCLES_OSL				"Build Cycles with OSL support" ${_init_CYCLES_OSL})
 option(WITH_CYCLES_OPENSUBDIV		"Build Cycles with OpenSubdiv support" ${_init_CYCLES_OPENSUBDIV})
 option(WITH_CYCLES_CUDA_BINARIES	"Build Cycles CUDA binaries" OFF)
 option(WITH_CYCLES_CUBIN_COMPILER	"Build cubins with nvrtc based compiler instead of nvcc" OFF)
+option(WITH_CYCLES_CUDA_BUILD_SERIAL "Build cubins one after another (useful on machines with limited RAM)" OFF)
+mark_as_advanced(WITH_CYCLES_CUDA_BUILD_SERIAL)
 set(CYCLES_CUDA_BINARIES_ARCH sm_30 sm_35 sm_37 sm_50 sm_52 sm_60 sm_61 CACHE STRING "CUDA architectures to build binaries for")
 mark_as_advanced(CYCLES_CUDA_BINARIES_ARCH)
 unset(PLATFORM_DEFAULT)
@@ -451,7 +452,7 @@ mark_as_advanced(WITH_MEM_VALGRIND)
 option(WITH_CXX_GUARDEDALLOC "Enable GuardedAlloc for C++ memory allocation tracking (only enable for development)" OFF)
 mark_as_advanced(WITH_CXX_GUARDEDALLOC)
 
-option(WITH_ASSERT_ABORT "Call abort() when raising an assertion through BLI_assert()" OFF)
+option(WITH_ASSERT_ABORT "Call abort() when raising an assertion through BLI_assert()" ON)
 mark_as_advanced(WITH_ASSERT_ABORT)
 
 option(WITH_BOOST					"Enable features depending on boost" ON)
@@ -507,31 +508,53 @@ if(WIN32)
 	set(CPACK_INSTALL_PREFIX ${CMAKE_GENERIC_PROGRAM_FILES}/${})
 endif()
 
-# Experimental support of C11 and C++11
-#
-# We default options to whatever default standard in the current compiler.
-if(APPLE)
-	set(_c11_init ON)
-	set(_cxx11_init ON)
-	set(WITH_C11 ON)
-	set(WITH_CXX11 ON)
-elseif(CMAKE_COMPILER_IS_GNUCC AND (NOT "${CMAKE_C_COMPILER_VERSION}" VERSION_LESS "6.0") AND (NOT WITH_CXX11))
-	set(_c11_init ON)
-	set(_cxx11_init ON)
-else()
-	set(_c11_init OFF)
-	set(_cxx11_init OFF)
-endif()
-
-option(WITH_C11 "Build with C11 standard enabled, for development use only!" ${_c11_init})
-mark_as_advanced(WITH_C11)
-option(WITH_CXX11 "Build with C++11 standard enabled, for development use only!" ${_cxx11_init})
-mark_as_advanced(WITH_CXX11)
-
 # Compiler toolchain
 if(CMAKE_COMPILER_IS_GNUCC)
 	option(WITH_LINKER_GOLD "Use ld.gold linker which is usually faster than ld.bfd" ON)
 	mark_as_advanced(WITH_LINKER_GOLD)
+endif()
+
+if(CMAKE_COMPILER_IS_GNUCC OR CMAKE_C_COMPILER_ID MATCHES "Clang")
+	option(WITH_COMPILER_ASAN "Build and link against address sanitizer (only for Debug & RelWithDebInfo targets)." OFF)
+	mark_as_advanced(WITH_COMPILER_ASAN)
+
+	if(WITH_COMPILER_ASAN)
+		set(_asan_defaults "\
+-fsanitize=address \
+-fsanitize=bool \
+-fsanitize=bounds \
+-fsanitize=enum \
+-fsanitize=float-cast-overflow \
+-fsanitize=float-divide-by-zero \
+-fsanitize=nonnull-attribute \
+-fsanitize=returns-nonnull-attribute \
+-fsanitize=signed-integer-overflow \
+-fsanitize=undefined \
+-fsanitize=vla-bound \
+-fno-sanitize=alignment \
+")
+
+		if(NOT MSVC) # not all sanitizers are supported with clang-cl, these two however are very vocal about it
+			set(_asan_defaults "${_asan_defaults} -fsanitize=leak -fsanitize=object-size" )
+		endif()
+		set(COMPILER_ASAN_CFLAGS "${_asan_defaults}" CACHE STRING "C flags for address sanitizer")
+		mark_as_advanced(COMPILER_ASAN_CFLAGS)
+		set(COMPILER_ASAN_CXXFLAGS "${_asan_defaults}" CACHE STRING "C++ flags for address sanitizer")
+		mark_as_advanced(COMPILER_ASAN_CXXFLAGS)
+
+		unset(_asan_defaults)
+
+		if(NOT MSVC)
+			find_library(COMPILER_ASAN_LIBRARY asan ${CMAKE_C_IMPLICIT_LINK_DIRECTORIES})
+		else()
+			find_library( COMPILER_ASAN_LIBRARY NAMES clang_rt.asan-x86_64
+				PATHS
+				[HKEY_LOCAL_MACHINE\\SOFTWARE\\Wow6432Node\\LLVM\\LLVM;]/lib/clang/7.0.0/lib/windows
+				[HKEY_LOCAL_MACHINE\\SOFTWARE\\Wow6432Node\\LLVM\\LLVM;]/lib/clang/6.0.0/lib/windows
+			)
+		endif()
+		mark_as_advanced(COMPILER_ASAN_LIBRARY)
+	endif()
 endif()
 
 # Dependency graph
@@ -554,6 +577,9 @@ if(WIN32)
 
 	option(WINDOWS_USE_VISUAL_STUDIO_FOLDERS "Organize the visual studio project according to source folders." ON)
 	mark_as_advanced(WINDOWS_USE_VISUAL_STUDIO_FOLDERS)
+
+	option(WINDOWS_PYTHON_DEBUG "Include the files needed for debugging python scripts with visual studio 2017+." OFF)
+	mark_as_advanced(WINDOWS_PYTHON_DEBUG)
 endif()
 
 # avoid using again
@@ -602,10 +628,12 @@ endif()
 
 if(NOT WITH_AUDASPACE)
 	if(WITH_OPENAL)
-		message(FATAL_ERROR "WITH_OPENAL requires WITH_AUDASPACE")
+		message(WARNING "WITH_OPENAL requires WITH_AUDASPACE which is disabled")
+		set(WITH_OPENAL OFF)
 	endif()
 	if(WITH_JACK)
-		message(FATAL_ERROR "WITH_JACK requires WITH_AUDASPACE")
+		message(WARNING "WITH_JACK requires WITH_AUDASPACE which is disabled")
+		set(WITH_JACK OFF)
 	endif()
 	if(WITH_GAMEENGINE)
 		message(FATAL_ERROR "WITH_GAMEENGINE requires WITH_AUDASPACE")
@@ -660,11 +688,8 @@ elseif(WITH_CYCLES OR WITH_OPENIMAGEIO OR WITH_AUDASPACE OR WITH_INTERNATIONAL O
        WITH_OPENVDB OR WITH_OPENCOLORIO)
 	# Keep enabled
 else()
-	# New dependency graph needs either Boost or C++11 for function bindings.
-	if(NOT WITH_CXX11)
-		# Enabled but we don't need it
-		set(WITH_BOOST OFF)
-	endif()
+	# Disable boost if not needed.
+	set(WITH_BOOST OFF)
 endif()
 
 # auto enable openimageio for cycles
@@ -720,9 +745,6 @@ if(WITH_BUILDINFO)
 		set(WITH_BUILDINFO OFF)
 	endif()
 endif()
-
-TEST_SHARED_PTR_SUPPORT()
-TEST_UNORDERED_MAP_SUPPORT()
 
 if(WITH_AUDASPACE)
 	if(WITH_SYSTEM_AUDASPACE)
@@ -817,7 +839,8 @@ set(C_WARNINGS)
 set(CXX_WARNINGS)
 
 # for gcc -Wno-blah-blah
-set(CC_REMOVE_STRICT_FLAGS)
+set(C_REMOVE_STRICT_FLAGS)
+set(CXX_REMOVE_STRICT_FLAGS)
 
 # libraries to link the binary with passed to target_link_libraries()
 # known as LLIBS to scons
@@ -829,6 +852,21 @@ set(PLATFORM_LINKLIBS "")
 set(PLATFORM_LINKFLAGS "")
 set(PLATFORM_LINKFLAGS_DEBUG "")
 
+if (NOT CMAKE_BUILD_TYPE MATCHES "Release")
+	if(WITH_COMPILER_ASAN)
+		set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} ${COMPILER_ASAN_CFLAGS}")
+		set(CMAKE_C_FLAGS_RELWITHDEBINFO "${CMAKE_C_FLAGS_RELWITHDEBINFO} ${COMPILER_ASAN_CFLAGS}")
+
+		set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} ${COMPILER_ASAN_CXXFLAGS}")
+		set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "${CMAKE_CXX_FLAGS_RELWITHDEBINFO} ${COMPILER_ASAN_CXXFLAGS}")
+		if(MSVC)
+			set(COMPILER_ASAN_LINKER_FLAGS "/FUNCTIONPADMIN:6")
+		endif()
+		set(PLATFORM_LINKLIBS "${PLATFORM_LINKLIBS};${COMPILER_ASAN_LIBRARY}")
+		set(PLATFORM_LINKFLAGS "${COMPILER_ASAN_LIBRARY} ${COMPILER_ASAN_LINKER_FLAGS}")
+		set(PLATFORM_LINKFLAGS_DEBUG "${COMPILER_ASAN_LIBRARY} ${COMPILER_ASAN_LINKER_FLAGS}")
+	endif()
+endif()
 
 #-----------------------------------------------------------------------------
 #Platform specifics
@@ -850,7 +888,7 @@ if(WITH_X11)
 	endif()
 
 	if(WITH_X11_XF86VMODE)
-		# XXX, why dont cmake make this available?
+		# XXX, why doesn't cmake make this available?
 		find_library(X11_Xxf86vmode_LIB Xxf86vm   ${X11_LIB_SEARCH_PATH})
 		mark_as_advanced(X11_Xxf86vmode_LIB)
 		if(X11_Xxf86vmode_LIB)
@@ -947,7 +985,7 @@ endif()
 if(SUPPORT_SSE2_BUILD)
 	set(PLATFORM_CFLAGS " ${PLATFORM_CFLAGS} ${COMPILER_SSE2_FLAG}")
 	add_definitions(-D__SSE2__)
-	if(NOT SUPPORT_SSE_BUILD) # dont double up
+	if(NOT SUPPORT_SSE_BUILD) # don't double up
 		add_definitions(-D__MMX__)
 	endif()
 endif()
@@ -960,7 +998,7 @@ if(MSVC)
 
 # OSX-Note: as we do cross-compiling with specific set architecture,
 # endianess-detection and auto-setting is counterproductive
-# so we just set endianess according CMAKE_OSX_ARCHITECTURES
+# so we just set endianness according CMAKE_OSX_ARCHITECTURES
 
 elseif(CMAKE_OSX_ARCHITECTURES MATCHES i386 OR CMAKE_OSX_ARCHITECTURES MATCHES x86_64)
 	add_definitions(-D__LITTLE_ENDIAN__)
@@ -978,16 +1016,11 @@ else()
 	unset(_SYSTEM_BIG_ENDIAN)
 endif()
 if(WITH_IMAGE_OPENJPEG)
-	if(WITH_SYSTEM_OPENJPEG)
-		# dealt with above
-		set(OPENJPEG_DEFINES "")
-	else()
-		set(OPENJPEG_INCLUDE_DIRS "${CMAKE_SOURCE_DIR}/extern/libopenjpeg")
-		set(OPENJPEG_DEFINES "-DOPJ_STATIC")
-	endif()
 	# Special handling of Windows platform where openjpeg is always static.
 	if(WIN32)
 		set(OPENJPEG_DEFINES "-DOPJ_STATIC")
+	else()
+		set(OPENJPEG_DEFINES "")
 	endif()
 endif()
 
@@ -1223,7 +1256,7 @@ else()
 
 		list(APPEND GL_DEFINITIONS -DGLEW_STATIC)
 
-		# This won't affect the non-experimental glew library, 
+		# This won't affect the non-experimental glew library,
 		# but is used for conditional compilation elsewhere.
 		list(APPEND GL_DEFINITIONS -DGLEW_NO_ES)
 
@@ -1294,7 +1327,7 @@ if(WITH_LIBMV OR WITH_GTESTS OR (WITH_CYCLES AND WITH_CYCLES_LOGGING))
 		if(WIN32)
 			set(GLOG_INCLUDE_DIRS ${CMAKE_SOURCE_DIR}/extern/glog/src/windows)
 		else()
-			set(GLOG_INCLUDE_DIRS ${CMAKE_SOURCE_DIR}/extern/glog/src)
+			set(GLOG_INCLUDE_DIRS ${CMAKE_SOURCE_DIR}/extern/glog/include)
 		endif()
 	endif()
 endif()
@@ -1303,42 +1336,8 @@ endif()
 # Configure Ceres
 
 if(WITH_LIBMV)
-	set(CERES_DEFINES)
-
-	if(WITH_CXX11)
-		# nothing to be done
-	elseif(SHARED_PTR_FOUND)
-		if(SHARED_PTR_TR1_MEMORY_HEADER)
-			list(APPEND CERES_DEFINES -DCERES_TR1_MEMORY_HEADER)
-		endif()
-		if(SHARED_PTR_TR1_NAMESPACE)
-			list(APPEND CERES_DEFINES -DCERES_TR1_SHARED_PTR)
-		endif()
-	else()
-		message(FATAL_ERROR "Ceres: Unable to find shared_ptr.")
-	endif()
-
-	if(WITH_CXX11)
-		list(APPEND CERES_DEFINES -DCERES_STD_UNORDERED_MAP)
-	elseif(HAVE_STD_UNORDERED_MAP_HEADER)
-		if(HAVE_UNORDERED_MAP_IN_STD_NAMESPACE)
-			list(APPEND CERES_DEFINES -DCERES_STD_UNORDERED_MAP)
-		else()
-			if(HAVE_UNORDERED_MAP_IN_TR1_NAMESPACE)
-				list(APPEND CERES_DEFINES -DCERES_STD_UNORDERED_MAP_IN_TR1_NAMESPACE)
-			else()
-				list(APPEND CERES_DEFINES -DCERES_NO_UNORDERED_MAP)
-				message(STATUS "Ceres: Replacing unordered_map/set with map/set (warning: slower!)")
-			endif()
-		endif()
-	else()
-		if(HAVE_UNORDERED_MAP_IN_TR1_NAMESPACE)
-			list(APPEND CERES_DEFINES -DCERES_TR1_UNORDERED_MAP)
-		else()
-			list(APPEND CERES_DEFINES -DCERES_NO_UNORDERED_MAP)
-			message(STATUS "Ceres: Replacing unordered_map/set with map/set (warning: slower!)")
-		endif()
-	endif()
+	# We always have C++11 which includes unordered_map.
+	set(CERES_DEFINES -DCERES_STD_UNORDERED_MAP)
 endif()
 
 #-----------------------------------------------------------------------------
@@ -1429,15 +1428,22 @@ if(CMAKE_COMPILER_IS_GNUCC)
 	endif()
 
 	# flags to undo strict flags
-	ADD_CHECK_C_COMPILER_FLAG(CC_REMOVE_STRICT_FLAGS C_WARN_NO_DEPRECATED_DECLARATIONS -Wno-deprecated-declarations)
-	ADD_CHECK_C_COMPILER_FLAG(CC_REMOVE_STRICT_FLAGS C_WARN_NO_UNUSED_PARAMETER        -Wno-unused-parameter)
+	ADD_CHECK_C_COMPILER_FLAG(C_REMOVE_STRICT_FLAGS C_WARN_NO_DEPRECATED_DECLARATIONS -Wno-deprecated-declarations)
+	ADD_CHECK_C_COMPILER_FLAG(C_REMOVE_STRICT_FLAGS C_WARN_NO_UNUSED_PARAMETER        -Wno-unused-parameter)
+	ADD_CHECK_C_COMPILER_FLAG(C_REMOVE_STRICT_FLAGS C_WARN_NO_UNUSED_FUNCTION         -Wno-unused-function)
+	ADD_CHECK_C_COMPILER_FLAG(C_REMOVE_STRICT_FLAGS C_WARN_NO_TYPE_LIMITS             -Wno-type-limits)
+	ADD_CHECK_C_COMPILER_FLAG(C_REMOVE_STRICT_FLAGS C_WARN_NO_INT_IN_BOOL_CONTEXT     -Wno-int-in-bool-context)
+	ADD_CHECK_C_COMPILER_FLAG(C_REMOVE_STRICT_FLAGS C_WARN_NO_FORMAT                  -Wno-format)
+	ADD_CHECK_C_COMPILER_FLAG(C_REMOVE_STRICT_FLAGS C_WARN_NO_SWITCH                  -Wno-switch)
+
+	ADD_CHECK_CXX_COMPILER_FLAG(CXX_REMOVE_STRICT_FLAGS CXX_WARN_NO_CLASS_MEMACCESS     -Wno-class-memaccess)
 
 	if(CMAKE_COMPILER_IS_GNUCC AND (NOT "${CMAKE_C_COMPILER_VERSION}" VERSION_LESS "7.0"))
-		ADD_CHECK_C_COMPILER_FLAG(CC_REMOVE_STRICT_FLAGS C_WARN_NO_IMPLICIT_FALLTHROUGH    -Wno-implicit-fallthrough)
+		ADD_CHECK_C_COMPILER_FLAG(C_REMOVE_STRICT_FLAGS C_WARN_NO_IMPLICIT_FALLTHROUGH    -Wno-implicit-fallthrough)
 	endif()
 
 	if(NOT APPLE)
-		ADD_CHECK_C_COMPILER_FLAG(CC_REMOVE_STRICT_FLAGS C_WARN_NO_ERROR_UNUSED_BUT_SET_VARIABLE -Wno-error=unused-but-set-variable)
+		ADD_CHECK_C_COMPILER_FLAG(C_REMOVE_STRICT_FLAGS C_WARN_NO_ERROR_UNUSED_BUT_SET_VARIABLE -Wno-error=unused-but-set-variable)
 	endif()
 
 elseif(CMAKE_C_COMPILER_ID MATCHES "Clang")
@@ -1466,23 +1472,23 @@ elseif(CMAKE_C_COMPILER_ID MATCHES "Clang")
 	# ADD_CHECK_CXX_COMPILER_FLAG(CXX_WARNINGS CXX_WARN_UNUSED_MACROS          -Wunused-macros)
 
 	# flags to undo strict flags
-	ADD_CHECK_C_COMPILER_FLAG(CC_REMOVE_STRICT_FLAGS C_WARN_NO_UNUSED_PARAMETER -Wno-unused-parameter)
-	ADD_CHECK_C_COMPILER_FLAG(CC_REMOVE_STRICT_FLAGS C_WARN_NO_UNUSED_MACROS    -Wno-unused-macros)
+	ADD_CHECK_C_COMPILER_FLAG(C_REMOVE_STRICT_FLAGS C_WARN_NO_UNUSED_PARAMETER -Wno-unused-parameter)
+	ADD_CHECK_C_COMPILER_FLAG(C_REMOVE_STRICT_FLAGS C_WARN_NO_UNUSED_MACROS    -Wno-unused-macros)
 
-	ADD_CHECK_C_COMPILER_FLAG(CC_REMOVE_STRICT_FLAGS C_WARN_NO_MISSING_VARIABLE_DECLARATIONS -Wno-missing-variable-declarations)
-	ADD_CHECK_C_COMPILER_FLAG(CC_REMOVE_STRICT_FLAGS C_WARN_NO_INCOMPAT_PTR_DISCARD_QUAL -Wno-incompatible-pointer-types-discards-qualifiers)
-	ADD_CHECK_C_COMPILER_FLAG(CC_REMOVE_STRICT_FLAGS C_WARN_NO_UNUSED_FUNCTION -Wno-unused-function)
-	ADD_CHECK_C_COMPILER_FLAG(CC_REMOVE_STRICT_FLAGS C_WARN_NO_INT_TO_VOID_POINTER_CAST -Wno-int-to-void-pointer-cast)
-	ADD_CHECK_C_COMPILER_FLAG(CC_REMOVE_STRICT_FLAGS C_WARN_NO_MISSING_PROTOTYPES -Wno-missing-prototypes)
-	ADD_CHECK_C_COMPILER_FLAG(CC_REMOVE_STRICT_FLAGS C_WARN_NO_DUPLICATE_ENUM -Wno-duplicate-enum)
-	ADD_CHECK_C_COMPILER_FLAG(CC_REMOVE_STRICT_FLAGS C_WARN_NO_UNDEF -Wno-undef)
-	ADD_CHECK_C_COMPILER_FLAG(CC_REMOVE_STRICT_FLAGS C_WARN_NO_MISSING_NORETURN -Wno-missing-noreturn)
+	ADD_CHECK_C_COMPILER_FLAG(C_REMOVE_STRICT_FLAGS C_WARN_NO_MISSING_VARIABLE_DECLARATIONS -Wno-missing-variable-declarations)
+	ADD_CHECK_C_COMPILER_FLAG(C_REMOVE_STRICT_FLAGS C_WARN_NO_INCOMPAT_PTR_DISCARD_QUAL -Wno-incompatible-pointer-types-discards-qualifiers)
+	ADD_CHECK_C_COMPILER_FLAG(C_REMOVE_STRICT_FLAGS C_WARN_NO_UNUSED_FUNCTION -Wno-unused-function)
+	ADD_CHECK_C_COMPILER_FLAG(C_REMOVE_STRICT_FLAGS C_WARN_NO_INT_TO_VOID_POINTER_CAST -Wno-int-to-void-pointer-cast)
+	ADD_CHECK_C_COMPILER_FLAG(C_REMOVE_STRICT_FLAGS C_WARN_NO_MISSING_PROTOTYPES -Wno-missing-prototypes)
+	ADD_CHECK_C_COMPILER_FLAG(C_REMOVE_STRICT_FLAGS C_WARN_NO_DUPLICATE_ENUM -Wno-duplicate-enum)
+	ADD_CHECK_C_COMPILER_FLAG(C_REMOVE_STRICT_FLAGS C_WARN_NO_UNDEF -Wno-undef)
+	ADD_CHECK_C_COMPILER_FLAG(C_REMOVE_STRICT_FLAGS C_WARN_NO_MISSING_NORETURN -Wno-missing-noreturn)
 
-	ADD_CHECK_CXX_COMPILER_FLAG(CC_REMOVE_STRICT_FLAGS CXX_WARN_NO_UNUSED_PRIVATE_FIELD -Wno-unused-private-field)
-	ADD_CHECK_CXX_COMPILER_FLAG(CC_REMOVE_STRICT_FLAGS CXX_WARN_NO_CXX11_NARROWING -Wno-c++11-narrowing)
-	ADD_CHECK_CXX_COMPILER_FLAG(CC_REMOVE_STRICT_FLAGS CXX_WARN_NO_NON_VIRTUAL_DTOR -Wno-non-virtual-dtor)
-	ADD_CHECK_CXX_COMPILER_FLAG(CC_REMOVE_STRICT_FLAGS CXX_WARN_NO_UNUSED_MACROS -Wno-unused-macros)
-	ADD_CHECK_CXX_COMPILER_FLAG(CC_REMOVE_STRICT_FLAGS CXX_WARN_NO_REORDER -Wno-reorder)
+	ADD_CHECK_CXX_COMPILER_FLAG(CXX_REMOVE_STRICT_FLAGS CXX_WARN_NO_UNUSED_PRIVATE_FIELD -Wno-unused-private-field)
+	ADD_CHECK_CXX_COMPILER_FLAG(CXX_REMOVE_STRICT_FLAGS CXX_WARN_NO_CXX11_NARROWING -Wno-c++11-narrowing)
+	ADD_CHECK_CXX_COMPILER_FLAG(CXX_REMOVE_STRICT_FLAGS CXX_WARN_NO_NON_VIRTUAL_DTOR -Wno-non-virtual-dtor)
+	ADD_CHECK_CXX_COMPILER_FLAG(CXX_REMOVE_STRICT_FLAGS CXX_WARN_NO_UNUSED_MACROS -Wno-unused-macros)
+	ADD_CHECK_CXX_COMPILER_FLAG(CXX_REMOVE_STRICT_FLAGS CXX_WARN_NO_REORDER -Wno-reorder)
 
 elseif(CMAKE_C_COMPILER_ID MATCHES "Intel")
 
@@ -1495,8 +1501,8 @@ elseif(CMAKE_C_COMPILER_ID MATCHES "Intel")
 	ADD_CHECK_CXX_COMPILER_FLAG(CXX_WARNINGS CXX_WARN_NO_SIGN_COMPARE -Wno-sign-compare)
 
 	# disable numbered, false positives
-	set(C_WARNINGS "${C_WARNINGS} -wd188,186,144,913,556")
-	set(CXX_WARNINGS "${CXX_WARNINGS} -wd188,186,144,913,556")
+	set(C_WARNINGS "${C_WARNINGS} -wd188,186,144,913,556,858,597,177,1292,167,279,592,94,2722,3199")
+	set(CXX_WARNINGS "${CXX_WARNINGS} -wd188,186,144,913,556,858,597,177,1292,167,279,592,94,2722,3199")
 elseif(CMAKE_C_COMPILER_ID MATCHES "MSVC")
 	# most msvc warnings are C & C++
 	set(_WARNINGS
@@ -1514,6 +1520,8 @@ elseif(CMAKE_C_COMPILER_ID MATCHES "MSVC")
 		"/wd4267"  # conversion from 'size_t' to 'type', possible loss of data
 		"/wd4305"  # truncation from 'type1' to 'type2'
 		"/wd4800"  # forcing value to bool 'true' or 'false'
+		"/wd4828"  # The file contains a character that is illegal
+		"/wd4996"  # identifier was declared deprecated
 		# errors:
 		"/we4013"  # 'function' undefined; assuming extern returning int
 		"/we4133"  # incompatible pointer types
@@ -1552,28 +1560,26 @@ if(WITH_PYTHON)
 	endif()
 endif()
 
-if(WITH_CXX11)
-	if(CMAKE_COMPILER_IS_GNUCC OR CMAKE_C_COMPILER_ID MATCHES "Clang")
-		# TODO(sergey): Do we want c++11 or gnu-c++11 here?
-		set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
-	elseif(MSVC)
-		# Nothing special is needed, C++11 features are available by default.
-	else()
-		message(FATAL_ERROR "Compiler ${CMAKE_C_COMPILER_ID} is not supported for C++11 build yet")
-	endif()
+if(
+	CMAKE_COMPILER_IS_GNUCC OR
+	CMAKE_C_COMPILER_ID MATCHES "Clang" OR
+	CMAKE_C_COMPILER_ID MATCHES "Intel"
+)
+	# TODO(sergey): Do we want c++11 or gnu-c++11 here?
+	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
+elseif(MSVC)
+	# Nothing special is needed, C++11 features are available by default.
 else()
-	# GCC-6 switched to C++11 by default, which would break linking with existing libraries
-	# by default. So we explicitly disable C++11 for a new GCC so no linking issues happens.
-	if(CMAKE_COMPILER_IS_GNUCC AND (NOT "${CMAKE_C_COMPILER_VERSION}" VERSION_LESS "6.0"))
-		set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=gnu++98")
-		# We also disable any of C++11 ABI from usage, so we wouldn't even try to
-		# link to stuff from std::__cxx11 namespace.
-		add_definitions("-D_GLIBCXX_USE_CXX11_ABI=0")
-	endif()
+	message(FATAL_ERROR "Unknown compiler ${CMAKE_C_COMPILER_ID}, can't enable C++11 build")
 endif()
 
 # Visual Studio has all standards it supports available by default
-if(CMAKE_COMPILER_IS_GNUCC OR CMAKE_C_COMPILER_ID MATCHES "Clang" OR CMAKE_C_COMPILER_ID MATCHES "Intel")
+# Clang on windows copies this behavior and does not support these switches
+if(
+	CMAKE_COMPILER_IS_GNUCC OR
+	(CMAKE_C_COMPILER_ID MATCHES "Clang" AND (NOT MSVC)) OR
+	(CMAKE_C_COMPILER_ID MATCHES "Intel")
+)
 	# Use C99 + GNU extensions, works with GCC, Clang, ICC
 	if(WITH_C11)
 		set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -std=gnu11")
@@ -1738,7 +1744,6 @@ if(FIRST_RUN)
 	info_cfg_option(WITH_MEM_JEMALLOC)
 	info_cfg_option(WITH_MEM_VALGRIND)
 	info_cfg_option(WITH_SYSTEM_GLEW)
-	info_cfg_option(WITH_SYSTEM_OPENJPEG)
 
 	info_cfg_text("Image Formats:")
 	info_cfg_option(WITH_OPENIMAGEIO)

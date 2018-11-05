@@ -20,14 +20,14 @@
  *		Monique Dewanchand
  */
 
-#ifndef _COM_ColorSpillNode_h_
-#define _COM_ColorSpillNode_h_
+#ifndef __COM_COLORSPILLNODE_H__
+#define __COM_COLORSPILLNODE_H__
 
 #include "COM_Node.h"
 
 /**
- * @brief ColorSpillNode
- * @ingroup Node
+ * \brief ColorSpillNode
+ * \ingroup Node
  */
 class ColorSpillNode : public Node {
 public:

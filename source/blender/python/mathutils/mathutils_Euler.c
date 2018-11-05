@@ -32,6 +32,7 @@
 #include "BLI_math.h"
 #include "BLI_utildefines.h"
 #include "../generic/python_utildefines.h"
+#include "../generic/py_capi_utils.h"
 
 #ifndef MATH_STANDALONE
 #  include "BLI_dynstr.h"
@@ -160,7 +161,7 @@ PyDoc_STRVAR(Euler_to_matrix_doc,
 "\n"
 "   Return a matrix representation of the euler.\n"
 "\n"
-"   :return: A 3x3 roation matrix representation of the euler.\n"
+"   :return: A 3x3 rotation matrix representation of the euler.\n"
 "   :rtype: :class:`Matrix`\n"
 );
 static PyObject *Euler_to_matrix(EulerObject *self)
@@ -312,8 +313,9 @@ static PyObject *Euler_copy(EulerObject *self)
 }
 static PyObject *Euler_deepcopy(EulerObject *self, PyObject *args)
 {
-	if (!mathutils_deepcopy_args_check(args))
+	if (!PyC_CheckArgs_DeepCopy(args)) {
 		return NULL;
+	}
 	return Euler_copy(self);
 }
 
@@ -610,12 +612,12 @@ PyDoc_STRVAR(Euler_axis_doc,
 );
 static PyObject *Euler_axis_get(EulerObject *self, void *type)
 {
-	return Euler_item(self, GET_INT_FROM_POINTER(type));
+	return Euler_item(self, POINTER_AS_INT(type));
 }
 
 static int Euler_axis_set(EulerObject *self, PyObject *value, void *type)
 {
-	return Euler_ass_item(self, GET_INT_FROM_POINTER(type), value);
+	return Euler_ass_item(self, POINTER_AS_INT(type), value);
 }
 
 /* rotation order */
@@ -688,6 +690,8 @@ PyDoc_STRVAR(euler_doc,
 ".. class:: Euler(angles, order='XYZ')\n"
 "\n"
 "   This object gives access to Eulers in Blender.\n"
+"\n"
+"   .. seealso:: `Euler angles <https://en.wikipedia.org/wiki/Euler_angles>`__ on Wikipedia.\n"
 "\n"
 "   :param angles: Three angles, in radians.\n"
 "   :type angles: 3d vector\n"

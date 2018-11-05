@@ -153,7 +153,7 @@ typedef struct Library {
 	char filepath[1024];
 
 	struct Library *parent;	/* set for indirectly linked libs, used in the outliner and while reading */
-	
+
 	struct PackedFile *packedfile;
 
 	/* Temp data needed by read/write code. */
@@ -176,9 +176,9 @@ enum ePreviewImage_Flag {
 
 /* for PreviewImage->tag */
 enum  {
-	PRV_TAG_DEFFERED           = (1 << 0),  /* Actual loading of preview is deffered. */
-	PRV_TAG_DEFFERED_RENDERING = (1 << 1),  /* Deffered preview is being loaded. */
-	PRV_TAG_DEFFERED_DELETE    = (1 << 2),  /* Deffered preview should be deleted asap. */
+	PRV_TAG_DEFFERED           = (1 << 0),  /* Actual loading of preview is deferred. */
+	PRV_TAG_DEFFERED_RENDERING = (1 << 1),  /* Deferred preview is being loaded. */
+	PRV_TAG_DEFFERED_DELETE    = (1 << 2),  /* Deferred preview should be deleted asap. */
 };
 
 typedef struct PreviewImage {
@@ -282,7 +282,8 @@ typedef enum ID_Type {
 
 #define ID_CHECK_UNDO(id) ((GS((id)->name) != ID_SCR) && (GS((id)->name) != ID_WM))
 
-#define ID_BLEND_PATH(_bmain, _id) ((_id)->lib ? (_id)->lib->filepath : (_bmain)->name)
+#define ID_BLEND_PATH(_bmain, _id) ((_id)->lib ? (_id)->lib->filepath : BKE_main_blendfile_path((_bmain)))
+#define ID_BLEND_PATH_FROM_GLOBAL(_id) ((_id)->lib ? (_id)->lib->filepath : BKE_main_blendfile_path_from_global())
 
 #define ID_MISSING(_id) (((_id)->tag & LIB_TAG_MISSING) != 0)
 

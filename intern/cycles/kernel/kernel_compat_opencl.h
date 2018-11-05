@@ -123,6 +123,7 @@
 #define fmaxf(x, y) fmax(((float)(x)), ((float)(y)))
 #define fminf(x, y) fmin(((float)(x)), ((float)(y)))
 #define fmodf(x, y) fmod((float)(x), (float)(y))
+#define sinhf(x) sinh(((float)(x)))
 
 #ifndef __CL_USE_NATIVE__
 #  define sinf(x) native_sin(((float)(x)))
@@ -144,13 +145,18 @@
 
 /* data lookup defines */
 #define kernel_data (*kg->data)
-#define kernel_tex_fetch(tex, index) ((const ccl_global tex##_t*)(kg->buffers[kg->tex.cl_buffer] + kg->tex.data))[(index)]
+#define kernel_tex_array(tex) ((const ccl_global tex##_t*)(kg->buffers[kg->tex.cl_buffer] + kg->tex.data))
+#define kernel_tex_fetch(tex, index) kernel_tex_array(tex)[(index)]
 
 /* define NULL */
 #define NULL 0
+
+/* enable extensions */
+#ifdef __KERNEL_CL_KHR_FP16__
+#pragma OPENCL EXTENSION cl_khr_fp16 : enable
+#endif
 
 #include "util/util_half.h"
 #include "util/util_types.h"
 
 #endif /* __KERNEL_COMPAT_OPENCL_H__ */
-

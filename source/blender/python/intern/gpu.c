@@ -4,7 +4,7 @@
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version. 
+ * of the License, or (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -62,7 +62,7 @@ static struct PyModuleDef gpumodule = {
 	"gpu",     /* name of module */
 	M_gpu_doc, /* module documentation */
 	-1,        /* size of per-interpreter state of the module,
-	            *  or -1 if the module keeps state in global variables. */
+	            * or -1 if the module keeps state in global variables. */
 	NULL, NULL, NULL, NULL, NULL
 };
 
@@ -326,7 +326,7 @@ PyObject *GPU_initPython(void)
 {
 	PyObject *module;
 	PyObject *submodule;
-	PyObject *sys_modules = PyThreadState_GET()->interp->modules;
+	PyObject *sys_modules = PyImport_GetModuleDict();
 
 	module = PyInit_gpu();
 
@@ -337,7 +337,6 @@ PyObject *GPU_initPython(void)
 	PyDict_SetItem(sys_modules, PyModule_GetNameObject(submodule), submodule);
 	Py_INCREF(submodule);
 
-	PyDict_SetItem(PyImport_GetModuleDict(), PyModule_GetNameObject(module), module);
+	PyDict_SetItem(sys_modules, PyModule_GetNameObject(module), module);
 	return module;
 }
-

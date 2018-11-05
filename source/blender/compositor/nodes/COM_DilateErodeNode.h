@@ -15,22 +15,22 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
- * Contributor: 
- *		Jeroen Bakker 
+ * Contributor:
+ *		Jeroen Bakker
  *		Monique Dewanchand
  */
 
-#ifndef _COM_DilateErodeNode_h_
-#define _COM_DilateErodeNode_h_
+#ifndef __COM_DILATEERODENODE_H__
+#define __COM_DILATEERODENODE_H__
 
 #include "COM_Node.h"
 
 /**
- * @brief DilateErodeNode
- * @ingroup Node
+ * \brief DilateErodeNode
+ * \ingroup Node
  */
 class DilateErodeNode : public Node {
-	NodeBlurData m_alpha_blur; /* only used for blurring alpha, since the dilate/erode node doesnt have this */
+	NodeBlurData m_alpha_blur; /* only used for blurring alpha, since the dilate/erode node doesn't have this */
 public:
 	DilateErodeNode(bNode *editorNode);
 	void convertToOperations(NodeConverter &converter, const CompositorContext &context) const;

@@ -131,7 +131,7 @@ PyDoc_STRVAR(bpy_bmlayeraccess_collection__freestyle_face_doc,
 
 static PyObject *bpy_bmlayeraccess_collection_get(BPy_BMLayerAccess *self, void *flag)
 {
-	const int type = (int)GET_INT_FROM_POINTER(flag);
+	const int type = (int)POINTER_AS_INT(flag);
 
 	BPY_BM_CHECK_OBJ(self);
 
@@ -1136,7 +1136,7 @@ int BPy_BMLayerItem_SetItem(BPy_BMElem *py_ele, BPy_BMLayerItem *py_layer, PyObj
 				ret = -1;
 			}
 			else {
-				*(float *)value = CLAMPIS(tmp_val, 0.0f, 1.0f);
+				*(float *)value = clamp_f(tmp_val, 0.0f, 1.0f);
 			}
 			break;
 		}
@@ -1148,7 +1148,7 @@ int BPy_BMLayerItem_SetItem(BPy_BMElem *py_ele, BPy_BMLayerItem *py_layer, PyObj
 				ret = -1;
 			}
 			else {
-				*(float *)value = CLAMPIS(tmp_val, 0.0f, 1.0f);
+				*(float *)value = clamp_f(tmp_val, 0.0f, 1.0f);
 			}
 			break;
 		}

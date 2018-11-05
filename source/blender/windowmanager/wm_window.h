@@ -4,7 +4,7 @@
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version. 
+ * of the License, or (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -18,7 +18,7 @@
  * The Original Code is Copyright (C) 2007 Blender Foundation.
  * All rights reserved.
  *
- * 
+ *
  * Contributor(s): Blender Foundation
  *
  * ***** END GPL LICENSE BLOCK *****
@@ -78,6 +78,7 @@ void		wm_window_IME_end	(wmWindow *win);
 int			wm_window_close_exec(bContext *C, struct wmOperator *op);
 int			wm_window_duplicate_exec(bContext *C, struct wmOperator *op);
 int			wm_window_fullscreen_toggle_exec(bContext *C, struct wmOperator *op);
+void		wm_quit_with_optional_confirmation_prompt(bContext *C, wmWindow *win) ATTR_NONNULL();
 
 /* Initial (unmaximized) size to start with for
  * systems that can't find it for themselves (X11).
@@ -87,4 +88,3 @@ int			wm_window_fullscreen_toggle_exec(bContext *C, struct wmOperator *op);
 #define WM_WIN_INIT_PAD 40
 
 #endif /* __WM_WINDOW_H__ */
-

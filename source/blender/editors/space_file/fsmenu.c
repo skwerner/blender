@@ -352,7 +352,7 @@ void fsmenu_remove_entry(struct FSMenu *fsmenu, FSMenuCategory category, int idx
 		idx--;
 
 	if (fsm_iter) {
-		/* you should only be able to remove entries that were 
+		/* you should only be able to remove entries that were
 		 * not added by default, like windows drives.
 		 * also separators (where path == NULL) shouldn't be removed */
 		if (fsm_iter->save && fsm_iter->path) {
@@ -439,7 +439,7 @@ void fsmenu_read_bookmarks(struct FSMenu *fsmenu, const char *filename)
 					line[len - 1] = '\0';
 				}
 				/* don't do this because it can be slow on network drives,
-				 * having a bookmark from a drive thats ejected or so isn't
+				 * having a bookmark from a drive that's ejected or so isn't
 				 * all _that_ bad */
 #if 0
 				if (BLI_exists(line))
@@ -512,18 +512,18 @@ void fsmenu_read_system(struct FSMenu *fsmenu, int read_bookmarks)
 		/* Get mounted volumes better method OSX 10.6 and higher, see: */
 		/*https://developer.apple.com/library/mac/#documentation/CoreFOundation/Reference/CFURLRef/Reference/reference.html*/
 		/* we get all volumes sorted including network and do not relay on user-defined finder visibility, less confusing */
-		
+
 		CFURLRef cfURL = NULL;
 		CFURLEnumeratorResult result = kCFURLEnumeratorSuccess;
 		CFURLEnumeratorRef volEnum = CFURLEnumeratorCreateForMountedVolumes(NULL, kCFURLEnumeratorSkipInvisibles, NULL);
-		
+
 		while (result != kCFURLEnumeratorEnd) {
 			char defPath[FILE_MAX];
 
 			result = CFURLEnumeratorGetNextURL(volEnum, &cfURL, NULL);
 			if (result != kCFURLEnumeratorSuccess)
 				continue;
-			
+
 			CFURLGetFileSystemRepresentation(cfURL, false, (UInt8 *)defPath, FILE_MAX);
 
 			/* Add end slash for consistency with other platforms */
@@ -531,29 +531,29 @@ void fsmenu_read_system(struct FSMenu *fsmenu, int read_bookmarks)
 
 			fsmenu_insert_entry(fsmenu, FS_CATEGORY_SYSTEM, defPath, NULL, FS_INSERT_SORTED);
 		}
-		
+
 		CFRelease(volEnum);
-		
+
 		/* Finally get user favorite places */
 		if (read_bookmarks) {
 			UInt32 seed;
 			LSSharedFileListRef list = LSSharedFileListCreate(NULL, kLSSharedFileListFavoriteItems, NULL);
 			CFArrayRef pathesArray = LSSharedFileListCopySnapshot(list, &seed);
 			CFIndex pathesCount = CFArrayGetCount(pathesArray);
-			
+
 			for (CFIndex i = 0; i < pathesCount; i++) {
 				LSSharedFileListItemRef itemRef = (LSSharedFileListItemRef)CFArrayGetValueAtIndex(pathesArray, i);
-				
+
 				CFURLRef cfURL = NULL;
-				OSErr err = LSSharedFileListItemResolve(itemRef, 
+				OSErr err = LSSharedFileListItemResolve(itemRef,
 				                                        kLSSharedFileListNoUserInteraction |
 				                                        kLSSharedFileListDoNotMountVolumes,
 				                                        &cfURL, NULL);
 				if (err != noErr || !cfURL)
 					continue;
-				
+
 				CFStringRef pathString = CFURLCopyFileSystemPath(cfURL, kCFURLPOSIXPathStyle);
-				
+
 				if (pathString == NULL || !CFStringGetCString(pathString, line, sizeof(line), kCFStringEncodingUTF8))
 					continue;
 
@@ -565,11 +565,11 @@ void fsmenu_read_system(struct FSMenu *fsmenu, int read_bookmarks)
 				if (!strstr(line, "myDocuments.cannedSearch") && (*line != '\0')) {
 					fsmenu_insert_entry(fsmenu, FS_CATEGORY_SYSTEM_BOOKMARKS, line, NULL, FS_INSERT_LAST);
 				}
-				
+
 				CFRelease(pathString);
 				CFRelease(cfURL);
 			}
-			
+
 			CFRelease(pathesArray);
 			CFRelease(list);
 		}
@@ -577,7 +577,7 @@ void fsmenu_read_system(struct FSMenu *fsmenu, int read_bookmarks)
 #else
 	/* unix */
 	{
-		const char *home = getenv("HOME");
+		const char *home = BLI_getenv("HOME");
 
 		if (read_bookmarks && home) {
 			BLI_snprintf(line, sizeof(line), "%s/", home);
@@ -604,6 +604,8 @@ void fsmenu_read_system(struct FSMenu *fsmenu, int read_bookmarks)
 				while ((mnt = getmntent(fp))) {
 					/* not sure if this is right, but seems to give the relevant mnts */
 					if (!STREQLEN(mnt->mnt_fsname, "/dev", 4))
+						continue;
+					if (STREQLEN(mnt->mnt_fsname, "/dev/loop", 9))
 						continue;
 
 					len = strlen(mnt->mnt_dir);

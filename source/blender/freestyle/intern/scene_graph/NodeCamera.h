@@ -52,7 +52,7 @@ public:
 	} CameraType;
 
 	/*! Default matrices: Identity for both projection and modelview. */
-	NodeCamera(CameraType camera_type = GENERIC); 
+	NodeCamera(CameraType camera_type = GENERIC);
 #if 0  /* UNUSED, gives warning in gcc */
 	NodeCamera(const NodeCamera& iBrother);
 #endif
@@ -68,12 +68,12 @@ public:
 	/*! Matrix is copied */
 	void setProjectionMatrix(double projection_matrix[16]);
 
-	double * modelViewMatrix()
+	double *modelViewMatrix()
 	{
 		return modelview_matrix_;
 	}
 
-	double * projectionMatrix()
+	double *projectionMatrix()
 	{
 		return projection_matrix_;
 	}

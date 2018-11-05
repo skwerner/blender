@@ -19,14 +19,14 @@
  *		Dalai Felinto
  */
 
-#ifndef _COM_MapUVNode_h_
-#define _COM_MapUVNode_h_
+#ifndef __COM_MAPUVNODE_H__
+#define __COM_MAPUVNODE_H__
 
 #include "COM_Node.h"
 
 /**
- * @brief MapUVNode
- * @ingroup Node
+ * \brief MapUVNode
+ * \ingroup Node
  */
 class MapUVNode : public Node {
 public:

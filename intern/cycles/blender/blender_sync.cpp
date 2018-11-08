@@ -730,6 +730,9 @@ SceneParams BlenderSync::get_scene_params(BL::Scene& b_scene,
 	else {
 		params.bvh_layout = DebugFlags().cpu.bvh_layout;
 	}
+#ifdef WITH_EMBREE
+	params.bvh_layout = RNA_boolean_get(&cscene, "use_bvh_embree") ? BVH_LAYOUT_EMBREE : params.bvh_layout;
+#endif
 
 	params.texture.use_cache  = RNA_boolean_get(&cscene, "use_texture_cache");
 	params.texture.cache_size = RNA_int_get(&cscene, "texture_cache_size");
@@ -752,7 +755,7 @@ SceneParams BlenderSync::get_scene_params(BL::Scene& b_scene,
 	else {
 		params.texture.custom_cache_path.clear();
 	}
-	
+
 	return params;
 }
 

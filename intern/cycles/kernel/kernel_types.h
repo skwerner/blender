@@ -17,6 +17,12 @@
 #ifndef __KERNEL_TYPES_H__
 #define __KERNEL_TYPES_H__
 
+#if !defined(__KERNEL_GPU__) && defined(WITH_EMBREE)
+#  include <embree3/rtcore.h>
+#  include <embree3/rtcore_scene.h>
+#  define __EMBREE__
+#endif
+
 #include "kernel/kernel_math.h"
 #include "kernel/svm/svm_types.h"
 #include "util/util_static_assert.h"
@@ -724,6 +730,9 @@ typedef struct Ray {
 /* Intersection */
 
 typedef struct Intersection {
+#ifdef __EMBREE__
+	float3 Ng;
+#endif
 	float t, u, v;
 	int prim;
 	int object;
@@ -1285,12 +1294,10 @@ typedef struct KernelFilm {
 	float mist_start;
 	float mist_inv_depth;
 	float mist_falloff;
-	
+
 	int pass_denoising_data;
 	int pass_denoising_clean;
 	int denoising_flags;
-
-	int pad1, pad2;
 
 	/* XYZ to rendering color space transform. float4 instead of float3 to
 	 * ensure consistent padding/alignment across devices. */
@@ -1405,7 +1412,7 @@ typedef enum KernelBVHLayout {
 	BVH_LAYOUT_BVH2 = (1 << 0),
 	BVH_LAYOUT_BVH4 = (1 << 1),
 	BVH_LAYOUT_BVH8 = (1 << 2),
-
+	BVH_LAYOUT_EMBREE = (1 << 3),
 	BVH_LAYOUT_DEFAULT = BVH_LAYOUT_BVH8,
 	BVH_LAYOUT_ALL = (unsigned int)(-1),
 } KernelBVHLayout;
@@ -1418,7 +1425,13 @@ typedef struct KernelBVH {
 	int have_instancing;
 	int bvh_layout;
 	int use_bvh_steps;
-	int pad1, pad2;
+	int pad1;
+#ifdef __EMBREE__
+	RTCScene scene;
+#else
+	void *unused;
+#endif
+	int pad2, pad3;
 } KernelBVH;
 static_assert_align(KernelBVH, 16);
 

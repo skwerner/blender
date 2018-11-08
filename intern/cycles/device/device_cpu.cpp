@@ -289,6 +289,20 @@ public:
 		return (info.cpu_threads == 1);
 	}
 
+	virtual BVHLayoutMask get_bvh_layout_mask() const {
+		BVHLayoutMask bvh_layout_mask = BVH_LAYOUT_BVH2;
+		if(DebugFlags().cpu.has_sse2() && system_cpu_support_sse2()) {
+			bvh_layout_mask |= BVH_LAYOUT_BVH4;
+		}
+		if(DebugFlags().cpu.has_avx2() && system_cpu_support_avx2()) {
+			bvh_layout_mask |= BVH_LAYOUT_BVH8;
+		}
+#ifdef WITH_EMBREE
+		bvh_layout_mask |= BVH_LAYOUT_EMBREE;
+#endif /* WITH_EMBREE */
+		return bvh_layout_mask;
+	}
+
 	void load_texture_info()
 	{
 		if(need_texture_info) {
@@ -707,6 +721,9 @@ public:
 		int start_sample = tile.start_sample;
 		int end_sample = tile.start_sample + tile.num_samples;
 
+		_MM_SET_FLUSH_ZERO_MODE(_MM_FLUSH_ZERO_ON);
+		_MM_SET_DENORMALS_ZERO_MODE(_MM_DENORMALS_ZERO_ON);
+		
 		for(int sample = start_sample; sample < end_sample; sample++) {
 			if(task.get_cancel() || task_pool.canceled()) {
 				if(task.need_finish_queue == false)
@@ -1068,13 +1085,6 @@ void device_cpu_info(vector<DeviceInfo>& devices)
 	info.id = "CPU";
 	info.num = 0;
 	info.advanced_shading = true;
-	info.bvh_layout_mask = BVH_LAYOUT_BVH2;
-	if(system_cpu_support_sse2()) {
-		info.bvh_layout_mask |= BVH_LAYOUT_BVH4;
-	}
-	if(system_cpu_support_avx2()) {
-		info.bvh_layout_mask |= BVH_LAYOUT_BVH8;
-	}
 	info.has_volume_decoupled = true;
 	info.has_osl = true;
 	info.has_half_images = true;

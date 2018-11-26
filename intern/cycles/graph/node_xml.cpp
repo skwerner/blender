@@ -254,7 +254,7 @@ void xml_read_node(XMLReader& reader, Node *node, xml_node xml_node)
 		reader.node_map[node->name] = node;
 }
 
-xml_node xml_write_node(Node *node, xml_node xml_root)
+xml_node xml_write_node(const Node *node, xml_node xml_root)
 {
 	xml_node xml_node = xml_root.append_child(node->type->name.c_str());
 
@@ -403,7 +403,6 @@ xml_node xml_write_node(Node *node, xml_node xml_root)
 				for(int i = 0; i < 3; i++) {
 					ss << string_printf("%g %g %g %g ", (double)tfm[i][0], (double)tfm[i][1], (double)tfm[i][2], (double)tfm[i][3]);
 				}
-				ss << string_printf("%g %g %g %g", 0.0, 0.0, 0.0, 1.0);
 				attr = ss.str().c_str();
 				break;
 			}
@@ -417,7 +416,6 @@ xml_node xml_write_node(Node *node, xml_node xml_root)
 					for(int i = 0; i < 3; i++) {
 						ss << string_printf("%g %g %g %g ", (double)tfm[i][0], (double)tfm[i][1], (double)tfm[i][2], (double)tfm[i][3]);
 					}
-					ss << string_printf("%g %g %g %g", 0.0, 0.0, 0.0, 1.0);
 					if(j != value.size() - 1) {
 						ss << " ";
 					}

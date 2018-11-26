@@ -29,6 +29,6 @@ struct XMLReader {
 };
 
 void xml_read_node(XMLReader& reader, Node *node, xml_node xml_node);
-xml_node xml_write_node(Node *node, xml_node xml_root);
+xml_node xml_write_node(const Node *node, xml_node xml_root);
 
 CCL_NAMESPACE_END

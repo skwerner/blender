@@ -48,6 +48,9 @@
 
 CCL_NAMESPACE_BEGIN
 
+#define CYCLES_XML_VERSION_MAJOR 1
+#define CYCLES_XML_VERSION_MINOR 0
+
 /* XML reading state */
 
 struct XMLReadState : public XMLReader {
@@ -57,12 +60,16 @@ struct XMLReadState : public XMLReader {
 	Shader *shader;		/* current shader */
 	string base;		/* base path to current file*/
 	float dicing_rate;	/* current dicing rate */
+	int version_major;	/* File format version */
+	int version_minor;
 
 	XMLReadState()
 	  : scene(NULL),
 	    smooth(false),
 	    shader(NULL),
-	    dicing_rate(1.0f)
+	    dicing_rate(1.0f),
+	    version_major(CYCLES_XML_VERSION_MAJOR),
+	    version_minor(CYCLES_XML_VERSION_MINOR)
 	{
 		tfm = transform_identity();
 	}
@@ -128,6 +135,15 @@ static bool xml_read_float_array(vector<float>& value, xml_node node, const char
 	return false;
 }
 
+static void xml_write_float_array(const vector<float>& value, pugi::xml_node node, const char* name)
+{
+	std::string value_string;
+	foreach(float f, value) {
+		value_string += std::to_string(f) + " ";
+	}
+	node.append_attribute(name) = value_string.c_str();
+}
+
 static bool xml_read_float3(float3 *value, xml_node node, const char *name)
 {
 	vector<float> array;
@@ -188,6 +204,19 @@ static bool xml_equal_string(xml_node node, const char *name, const char *value)
 	return false;
 }
 
+static xml_node xml_write_transform(const Transform& tfm, pugi::xml_node node)
+{
+	pugi::xml_node tfm_node = node.append_child("Transform");
+	vector<float> matrix;
+	const float* tfm_f = (const float*)(&tfm);
+	for(int i = 0; i < 12; ++i) {
+		matrix.push_back(tfm_f[i]);
+	}
+	xml_write_float_array(matrix, tfm_node, "matrix");
+
+	return tfm_node;
+}
+
 /* Camera */
 
 static void xml_read_camera(XMLReadState& state, xml_node node)
@@ -208,6 +237,12 @@ static void xml_read_camera(XMLReadState& state, xml_node node)
 	cam->update(state.scene);
 }
 
+static void xml_write_camera(Camera *cam, pugi::xml_node node)
+{
+	pugi::xml_node transform = 	xml_write_transform(cam->matrix, node);
+	xml_write_node(cam, transform);
+}
+
 /* Shader */
 
 static void xml_read_shader_graph(XMLReadState& state, Shader *shader, xml_node graph_node)
@@ -225,53 +260,44 @@ static void xml_read_shader_graph(XMLReadState& state, Shader *shader, xml_node 
 
 		if(node_name == "connect") {
 			/* connect nodes */
-			vector<string> from_tokens, to_tokens;
+			ustring from_node_name(node.attribute("from").value());
+			ustring from_socket_name(node.attribute("output").value());
+			ustring to_node_name(node.attribute("to").value());
+			ustring to_socket_name(node.attribute("input").value());
 
-			string_split(from_tokens, node.attribute("from").value());
-			string_split(to_tokens, node.attribute("to").value());
+			/* find nodes and sockets */
+			ShaderOutput *output = NULL;
+			ShaderInput *input = NULL;
 
-			if(from_tokens.size() == 2 && to_tokens.size() == 2) {
-				ustring from_node_name(from_tokens[0]);
-				ustring from_socket_name(from_tokens[1]);
-				ustring to_node_name(to_tokens[0]);
-				ustring to_socket_name(to_tokens[1]);
+			if(graph_reader.node_map.find(from_node_name) != graph_reader.node_map.end()) {
+				ShaderNode *fromnode = (ShaderNode*)graph_reader.node_map[from_node_name];
 
-				/* find nodes and sockets */
-				ShaderOutput *output = NULL;
-				ShaderInput *input = NULL;
+				foreach(ShaderOutput *out, fromnode->outputs)
+					if(string_iequals(out->socket_type.name.string(), from_socket_name.string()))
+						output = out;
 
-				if(graph_reader.node_map.find(from_node_name) != graph_reader.node_map.end()) {
-					ShaderNode *fromnode = (ShaderNode*)graph_reader.node_map[from_node_name];
-
-					foreach(ShaderOutput *out, fromnode->outputs)
-						if(string_iequals(out->socket_type.name.string(), from_socket_name.string()))
-							output = out;
-
-					if(!output)
-						fprintf(stderr, "Unknown output socket name \"%s\" on \"%s\".\n", from_node_name.c_str(), from_socket_name.c_str());
-				}
-				else
-					fprintf(stderr, "Unknown shader node name \"%s\".\n", from_node_name.c_str());
-
-				if(graph_reader.node_map.find(to_node_name) != graph_reader.node_map.end()) {
-					ShaderNode *tonode = (ShaderNode*)graph_reader.node_map[to_node_name];
-
-					foreach(ShaderInput *in, tonode->inputs)
-						if(string_iequals(in->socket_type.name.string(), to_socket_name.string()))
-							input = in;
-
-					if(!input)
-						fprintf(stderr, "Unknown input socket name \"%s\" on \"%s\".\n", to_socket_name.c_str(), to_node_name.c_str());
-				}
-				else
-					fprintf(stderr, "Unknown shader node name \"%s\".\n", to_node_name.c_str());
-
-				/* connect */
-				if(output && input)
-					graph->connect(output, input);
+				if(!output)
+					fprintf(stderr, "Unknown output socket name \"%s\" on \"%s\".\n", from_node_name.c_str(), from_socket_name.c_str());
 			}
 			else
-				fprintf(stderr, "Invalid from or to value for connect node.\n");
+				fprintf(stderr, "Unknown shader node name \"%s\".\n", from_node_name.c_str());
+
+			if(graph_reader.node_map.find(to_node_name) != graph_reader.node_map.end()) {
+				ShaderNode *tonode = (ShaderNode*)graph_reader.node_map[to_node_name];
+
+				foreach(ShaderInput *in, tonode->inputs)
+					if(string_iequals(in->socket_type.name.string(), to_socket_name.string()))
+						input = in;
+
+				if(!input)
+					fprintf(stderr, "Unknown input socket name \"%s\" on \"%s\".\n", to_socket_name.c_str(), to_node_name.c_str());
+			}
+			else
+				fprintf(stderr, "Unknown shader node name \"%s\".\n", to_node_name.c_str());
+
+			/* connect */
+			if(output && input)
+				graph->connect(output, input);
 
 			continue;
 		}
@@ -349,11 +375,50 @@ static void xml_read_shader_graph(XMLReadState& state, Shader *shader, xml_node 
 	shader->tag_update(state.scene);
 }
 
+static void xml_write_shader_graph(const ShaderGraph* graph, xml_node node)
+{
+	/* Write the individual nodes first, then write the connections. */
+	foreach(ShaderNode *n, graph->nodes) {
+		/* Skip the output node, that one gets added by default. */
+		if(n->name != "output") {
+			xml_node shader_node = xml_write_node(n, node);
+			/* Make sure the nodes have unique names. */
+			shader_node.attribute("name") = ustring::format("%s.%d", n->name.c_str(), n->id).c_str();
+		}
+	}
+
+	foreach(ShaderNode *n, graph->nodes) {
+		foreach(ShaderInput *in, n->inputs) {
+			if(in->link && in->link->parent) {
+				xml_node connection = node.append_child("connect");
+				connection.append_attribute("from") = ustring::format("%s.%d", in->link->parent->name.c_str(),
+				                                                      in->link->parent->id).c_str();
+				if(n->name == "output") {
+					connection.append_attribute("to") = n->name.c_str();
+				}
+				else {
+					connection.append_attribute("to") = ustring::format("%s.%d", n->name.c_str(), n->id).c_str();
+				}
+				connection.append_attribute("input") = in->socket_type.name.c_str();
+				connection.append_attribute("output") = in->link->socket_type.name.c_str();
+			}
+		}
+	}
+}
+
 static void xml_read_shader(XMLReadState& state, xml_node node)
 {
 	Shader *shader = new Shader();
 	xml_read_shader_graph(state, shader, node);
 	state.scene->shaders.push_back(shader);
+}
+
+static void xml_write_shader(const Shader* shader, pugi::xml_node node)
+{
+	xml_node shader_node = xml_write_node(shader, node);
+	if(shader->graph) {
+		xml_write_shader_graph(shader->graph, shader_node);
+	}
 }
 
 /* Background */
@@ -366,6 +431,17 @@ static void xml_read_background(XMLReadState& state, xml_node node)
 	/* Background Shader */
 	Shader *shader = state.scene->default_background;
 	xml_read_shader_graph(state, shader, node);
+}
+
+static void xml_write_background(Background* background, pugi::xml_node node)
+{
+	/* Background Settings */
+	pugi::xml_node background_node = xml_write_node(background, node);
+
+	if(background->shader) {
+		/* Background Shader */
+		xml_write_shader(background->shader, background_node);
+	}
 }
 
 /* Mesh */
@@ -529,6 +605,83 @@ static void xml_read_mesh(const XMLReadState& state, xml_node node)
 	}
 }
 
+static const unsigned char base64_table[65] =
+"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+
+/* https://stackoverflow.com/questions/342409/how-do-i-base64-encode-decode-in-c */
+static string base64_encode(const unsigned char *src, size_t len)
+{
+	unsigned char *out, *pos;
+	const unsigned char *end, *in;
+
+	size_t olen;
+
+	olen = 4*((len + 2) / 3); /* 3-byte blocks to 4-byte */
+
+	if (olen < len) {
+		return string(); /* integer overflow */
+	}
+	string outStr;
+	outStr.resize(olen);
+	out = (unsigned char*)&outStr[0];
+
+	end = src + len;
+	in = src;
+	pos = out;
+	while(end - in >= 3) {
+		*pos++ = base64_table[in[0] >> 2];
+		*pos++ = base64_table[((in[0] & 0x03) << 4) | (in[1] >> 4)];
+		*pos++ = base64_table[((in[1] & 0x0f) << 2) | (in[2] >> 6)];
+		*pos++ = base64_table[in[2] & 0x3f];
+		in += 3;
+	}
+
+	if(end - in) {
+		*pos++ = base64_table[in[0] >> 2];
+		if (end - in == 1) {
+			*pos++ = base64_table[(in[0] & 0x03) << 4];
+			*pos++ = '=';
+		}
+		else {
+			*pos++ = base64_table[((in[0] & 0x03) << 4) |
+								  (in[1] >> 4)];
+			*pos++ = base64_table[(in[1] & 0x0f) << 2];
+		}
+		*pos++ = '=';
+	}
+
+	return outStr;
+}
+
+static void xml_write_mesh(const Mesh* mesh, xml_node node)
+{
+	xml_node mesh_node = xml_write_node(mesh, node);
+
+	std::stringstream ss;
+	for(size_t i = 0; i < mesh->used_shaders.size(); ++i) {
+		const Shader *shader = mesh->used_shaders[i];
+		ss << shader->name.c_str();
+		if(i != mesh->used_shaders.size() - 1) {
+			ss << " ";
+		}
+	}
+	mesh_node.append_attribute("used_shaders") = ss.str().c_str();
+
+	/* Wrtie mesh attributes */
+	foreach(const Attribute& attr, mesh->attributes.attributes) {
+		xml_node attribute = mesh_node.append_child("attribute");
+		attribute.append_attribute("name") = attr.name.c_str();
+		attribute.append_attribute("standard") = attr.std;
+		attribute.append_attribute("type.basetype") = attr.type.basetype;
+		attribute.append_attribute("type.aggregate") = attr.type.aggregate;
+		attribute.append_attribute("type.vecsemantics") = attr.type.vecsemantics;
+		attribute.append_attribute("element") = attr.element;
+		string encoded = base64_encode((const unsigned char*)attr.data(), attr.buffer.size());
+		attribute.append_child(pugi::node_pcdata).set_value(encoded.c_str());
+	}
+}
+
 /* Light */
 
 static void xml_read_light(XMLReadState& state, xml_node node)
@@ -654,6 +807,33 @@ static void xml_read_scene(XMLReadState& state, xml_node scene_node)
 	}
 }
 
+static void xml_write_scene(const Scene *scene, pugi::xml_node &node)
+{
+	xml_write_node(scene->film, node);
+	xml_write_node(scene->integrator, node);
+	xml_write_camera(scene->camera, node);
+
+	/* Write shaders first, the following elements will use them. */
+	foreach(Shader *shader, scene->shaders) {
+		xml_write_shader(shader, node);
+	}
+
+	xml_write_background(scene->background, node);
+
+	foreach(Light *light, scene->lights) {
+		xml_write_node(light, node);
+	}
+
+	foreach(Mesh *mesh, scene->meshes) {
+		xml_write_mesh(mesh, node);
+	}
+
+	foreach(Object *object, scene->objects) {
+		xml_write_node(object, node);
+	}
+
+}
+
 /* Include */
 
 static void xml_read_include(XMLReadState& state, const string& src)
@@ -695,5 +875,18 @@ void xml_read_file(Scene *scene, const char *filepath)
 
 	scene->params.bvh_type = SceneParams::BVH_STATIC;
 }
+
+void xml_write_file(const Scene *scene, const char *filepath)
+{
+	xml_document doc;
+
+	xml_node cycles = doc.append_child("cycles");
+	cycles.append_attribute("version") = ustring::format("%d.%d", CYCLES_XML_VERSION_MAJOR, CYCLES_XML_VERSION_MINOR).c_str();
+
+	xml_write_scene(scene, cycles);
+
+	doc.save_file(filepath);
+}
+
 
 CCL_NAMESPACE_END

@@ -22,6 +22,7 @@ CCL_NAMESPACE_BEGIN
 class Scene;
 
 void xml_read_file(Scene *scene, const char *filepath);
+void xml_write_file(const Scene *scene, const char *filepath);
 
 /* macros for importing */
 #define RAD2DEGF(_rad) ((_rad) * (float)(180.0 / M_PI))

@@ -97,7 +97,7 @@ void Node::set(const SocketType& input, float value)
 
 void Node::set(const SocketType& input, float2 value)
 {
-	assert(input.type == SocketType::FLOAT);
+	assert(input.type == SocketType::POINT2);
 	get_socket_value<float2>(this, input) = value;
 }
 
@@ -219,7 +219,7 @@ float Node::get_float(const SocketType& input) const
 
 float2 Node::get_float2(const SocketType& input) const
 {
-	assert(input.type == SocketType::FLOAT);
+	assert(input.type == SocketType::POINT2);
 	return get_socket_value<float2>(this, input);
 }
 

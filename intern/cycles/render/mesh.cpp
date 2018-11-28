@@ -416,6 +416,12 @@ NODE_DEFINE(Mesh)
 	SOCKET_INT_ARRAY(curve_first_key, "Curve First Key", array<int>());
 	SOCKET_INT_ARRAY(curve_shader, "Curve Shader", array<int>());
 
+	static NodeEnum subdivision_type_enum;
+	subdivision_type_enum.insert("none", SUBDIVISION_NONE);
+	subdivision_type_enum.insert("linear", SUBDIVISION_LINEAR);
+	subdivision_type_enum.insert("catmull-clark", SUBDIVISION_CATMULL_CLARK);
+	SOCKET_ENUM(subdivision_type, "subdivision", subdivision_type_enum, SUBDIVISION_NONE);
+
 	return type;
 }
 

@@ -41,7 +41,7 @@ CCL_NAMESPACE_BEGIN
 
 NODE_DEFINE(SessionParams)
 {
-	NodeType* type = NodeType::add("light", create);
+	NodeType* type = NodeType::add("SessionParams", create);
 
 	SOCKET_BOOLEAN(experimental, "Experimental", false);
 	SOCKET_INT(samples, "Samples", INT_MAX);
@@ -49,7 +49,6 @@ NODE_DEFINE(SessionParams)
 	SOCKET_INT(tile_size.y, "Tile Size Y", 64);
 	SOCKET_INT(start_resolution, "Start Resolution", INT_MAX);
 	SOCKET_BOOLEAN(use_profiling, "Profiling", false);
-
 
 	SOCKET_BOOLEAN(use_denoising, "Denoising", false);
 	SOCKET_BOOLEAN(denoising_passes,"Denoising Passes", false);

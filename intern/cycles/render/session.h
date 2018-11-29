@@ -17,6 +17,9 @@
 #ifndef __SESSION_H__
 #define __SESSION_H__
 
+
+#include "graph/node.h"
+
 #include "render/buffers.h"
 #include "device/device.h"
 #include "render/shader.h"
@@ -41,8 +44,9 @@ class Scene;
 
 /* Session Parameters */
 
-class SessionParams {
+class SessionParams : public Node {
 public:
+	NODE_DECLARE;
 	DeviceInfo device;
 	bool background;
 	bool progressive_refine;
@@ -79,7 +83,7 @@ public:
 	              int height,
 	              int channels)> write_render_cb;
 
-	SessionParams()
+	SessionParams() : Node(node_type)
 	{
 		background = false;
 		progressive_refine = false;

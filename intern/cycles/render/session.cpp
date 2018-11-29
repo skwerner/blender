@@ -38,6 +38,43 @@
 
 CCL_NAMESPACE_BEGIN
 
+
+NODE_DEFINE(SessionParams)
+{
+	NodeType* type = NodeType::add("light", create);
+
+	SOCKET_BOOLEAN(experimental, "Experimental", false);
+	SOCKET_INT(samples, "Samples", INT_MAX);
+	SOCKET_INT(tile_size.x, "Tile Size X", 64);
+	SOCKET_INT(tile_size.y, "Tile Size Y", 64);
+	SOCKET_INT(start_resolution, "Start Resolution", INT_MAX);
+	SOCKET_BOOLEAN(use_profiling, "Profiling", false);
+
+
+	SOCKET_BOOLEAN(use_denoising, "Denoising", false);
+	SOCKET_BOOLEAN(denoising_passes,"Denoising Passes", false);
+	SOCKET_INT(denoising_radius,"Denoising Radius", 8);
+	SOCKET_FLOAT(denoising_strength, "Denoising Strength", 0.0f);
+	SOCKET_FLOAT(denoising_feature_strength, "Denoising Feature Strength", 0.0f);
+	SOCKET_BOOLEAN(denoising_relative_pca, "Denoising Relative PCA", false);
+
+	static NodeEnum order_enum;
+	order_enum.insert("Center", TILE_CENTER);
+	order_enum.insert("Right to Left", TILE_RIGHT_TO_LEFT);
+	order_enum.insert("Left to Right", TILE_LEFT_TO_RIGHT);
+	order_enum.insert("Top to Bottom", TILE_TOP_TO_BOTTOM);
+	order_enum.insert("Bottom to top", TILE_BOTTOM_TO_TOP);
+	order_enum.insert("Hilbert Spiral", TILE_HILBERT_SPIRAL);
+	SOCKET_ENUM(tile_order, "Tile Order", order_enum, TILE_CENTER);
+
+	static NodeEnum shadingsystem_enum;
+	shadingsystem_enum.insert("OSL", SHADINGSYSTEM_OSL);
+	shadingsystem_enum.insert("SVM", SHADINGSYSTEM_SVM);
+	SOCKET_ENUM(shadingsystem, "Shading System", shadingsystem_enum, SHADINGSYSTEM_SVM);
+
+	return type;
+}
+
 /* Note about  preserve_tile_device option for tile manager:
  * progressive refine and viewport rendering does requires tiles to
  * always be allocated for the same device

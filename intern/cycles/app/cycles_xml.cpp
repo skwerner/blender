@@ -383,7 +383,7 @@ static void xml_write_shader_graph(const ShaderGraph* graph, xml_node node)
 		if(n->name != "output") {
 			xml_node shader_node = xml_write_node(n, node);
 			/* Make sure the nodes have unique names. */
-			shader_node.attribute("name") = ustring::format("%s.%d", n->name.c_str(), n->id).c_str();
+			shader_node.attribute("name") = ustring::format("%d.%s", n->id, n->name.c_str()).c_str();
 		}
 	}
 
@@ -391,13 +391,13 @@ static void xml_write_shader_graph(const ShaderGraph* graph, xml_node node)
 		foreach(ShaderInput *in, n->inputs) {
 			if(in->link && in->link->parent) {
 				xml_node connection = node.append_child("connect");
-				connection.append_attribute("from") = ustring::format("%s.%d", in->link->parent->name.c_str(),
-				                                                      in->link->parent->id).c_str();
+				connection.append_attribute("from") = ustring::format("%d.%s", in->link->parent->id,
+				                                                      in->link->parent->name.c_str()).c_str();
 				if(n->name == "output") {
 					connection.append_attribute("to") = n->name.c_str();
 				}
 				else {
-					connection.append_attribute("to") = ustring::format("%s.%d", n->name.c_str(), n->id).c_str();
+					connection.append_attribute("to") = ustring::format("%d.%s", n->id, n->name.c_str()).c_str();
 				}
 				connection.append_attribute("input") = in->socket_type.name.c_str();
 				connection.append_attribute("output") = in->link->socket_type.name.c_str();
@@ -608,7 +608,6 @@ static void xml_read_mesh(const XMLReadState& state, xml_node node)
 static const unsigned char base64_table[65] =
 "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
-
 /* https://stackoverflow.com/questions/342409/how-do-i-base64-encode-decode-in-c */
 static string base64_encode(const unsigned char *src, size_t len)
 {
@@ -657,6 +656,7 @@ static string base64_encode(const unsigned char *src, size_t len)
 static void xml_write_mesh(const Mesh* mesh, xml_node node)
 {
 	xml_node mesh_node = xml_write_node(mesh, node);
+	mesh_node.attribute("name") = ustring::format("%s:%zx", mesh->name.c_str(), mesh).c_str();
 
 	std::stringstream ss;
 	for(size_t i = 0; i < mesh->used_shaders.size(); ++i) {
@@ -668,7 +668,7 @@ static void xml_write_mesh(const Mesh* mesh, xml_node node)
 	}
 	mesh_node.append_attribute("used_shaders") = ss.str().c_str();
 
-	/* Wrtie mesh attributes */
+	/* Wrtie mesh attributes. Encode as base64, which saves meory but takes away human readability. */
 	foreach(const Attribute& attr, mesh->attributes.attributes) {
 		xml_node attribute = mesh_node.append_child("attribute");
 		attribute.append_attribute("name") = attr.name.c_str();
@@ -724,6 +724,17 @@ static void xml_read_transform(xml_node node, Transform& tfm)
 		tfm = tfm * transform_scale(scale);
 	}
 }
+
+/* Object */
+
+static void xml_write_object(const Object* object, xml_node node)
+{
+	xml_node object_node = xml_write_node(object, node);
+	if(object->mesh) {
+		object_node.attribute("mesh") = ustring::format("%s:%zx", object->mesh->name.c_str(), object->mesh).c_str();
+	}
+}
+
 
 /* State */
 
@@ -829,7 +840,7 @@ static void xml_write_scene(const Scene *scene, pugi::xml_node &node)
 	}
 
 	foreach(Object *object, scene->objects) {
-		xml_write_node(object, node);
+		xml_write_object(object, node);
 	}
 
 }
@@ -876,6 +887,11 @@ void xml_read_file(Scene *scene, const char *filepath)
 	scene->params.bvh_type = SceneParams::BVH_STATIC;
 }
 
+/* Writes the scene to an XML file. This may end up using quite some memory, as pugixml has to keep everything
+   in RAM before it is finally writing the data to a file. This should eventually be optimized with a better
+   XML library or even with a different file format than XML.
+   An alternative would be to write separate files for different parts of the scene and use the inlcude feature.
+ */
 void xml_write_file(const Scene *scene, const char *filepath)
 {
 	xml_document doc;

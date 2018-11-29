@@ -1436,8 +1436,6 @@ void BlenderSync::sync_lamps(bool update_all)
 
 			/* create nodes */
 			if(b_lamp->use_nodes() && b_lamp->node_tree()) {
-				shader->name = b_lamp->name().c_str();
-
 				BL::ShaderNodeTree b_ntree(b_lamp->node_tree());
 
 				add_nodes(scene, b_engine, b_data, b_scene, !preview, graph, b_ntree);
@@ -1461,6 +1459,7 @@ void BlenderSync::sync_lamps(bool update_all)
 				graph->connect(emission->output("Emission"), out->input("Surface"));
 			}
 
+			shader->name = ustring::format("%s:%zx", b_lamp->name().c_str(), shader);
 			shader->set_graph(graph);
 			shader->tag_update(scene);
 		}

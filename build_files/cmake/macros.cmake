@@ -370,6 +370,11 @@ function(setup_liblinks
 	set(CMAKE_MODULE_LINKER_FLAGS "${CMAKE_MODULE_LINKER_FLAGS} ${PLATFORM_LINKFLAGS}" PARENT_SCOPE)
 	set(CMAKE_MODULE_LINKER_FLAGS_DEBUG "${CMAKE_MODULE_LINKER_FLAGS_DEBUG} ${PLATFORM_LINKFLAGS_DEBUG}" PARENT_SCOPE)
 
+	# jemalloc must be early in the list, to be before pthread (see T57998)
+	if(WITH_MEM_JEMALLOC)
+		target_link_libraries(${target} ${JEMALLOC_LIBRARIES})
+	endif()
+
 	target_link_libraries(
 		${target}
 		${PNG_LIBRARIES}
@@ -426,7 +431,7 @@ function(setup_liblinks
 	if(WITH_OPENCOLORIO)
 		target_link_libraries(${target} ${OPENCOLORIO_LIBRARIES})
 	endif()
-	if(WITH_OPENSUBDIV OR WITH_CYCLES_OPENSUBDIV)
+	if(WITH_OPENSUBDIV)
 			target_link_libraries(${target} ${OPENSUBDIV_LIBRARIES})
 	endif()
 	if(WITH_OPENVDB)
@@ -484,9 +489,6 @@ function(setup_liblinks
 				${EXPAT_LIB}
 			)
 		endif()
-	endif()
-	if(WITH_MEM_JEMALLOC)
-		target_link_libraries(${target} ${JEMALLOC_LIBRARIES})
 	endif()
 	if(WITH_MOD_CLOTH_ELTOPO)
 		target_link_libraries(${target} ${LAPACK_LIBRARIES})
@@ -685,6 +687,7 @@ function(SETUP_BLENDER_SORTED_LIBS)
 
 		bf_intern_glew_mx
 		bf_intern_clog
+		bf_intern_numaapi
 	)
 
 	if(NOT WITH_SYSTEM_GLOG)
@@ -761,7 +764,7 @@ function(SETUP_BLENDER_SORTED_LIBS)
 		list(APPEND BLENDER_SORTED_LIBS bf_intern_gpudirect)
 	endif()
 
-	if(WITH_OPENSUBDIV OR WITH_CYCLES_OPENSUBDIV)
+	if(WITH_OPENSUBDIV)
 		list(APPEND BLENDER_SORTED_LIBS bf_intern_opensubdiv)
 	endif()
 

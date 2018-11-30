@@ -378,6 +378,7 @@ ccl_device void kernel_branched_path_integrate(KernelGlobals *kg,
 
   /* shader data memory used for both volumes and surfaces, saves stack space */
   ShaderData sd;
+  sd.P = ray.P;
   /* shader data used by emission, shadows, volume stacks, indirect path */
   ShaderDataTinyStorage emission_sd_storage;
   ShaderData *emission_sd = AS_SHADER_DATA(&emission_sd_storage);

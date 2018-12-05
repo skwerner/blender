@@ -988,7 +988,7 @@ static TreeElement *outliner_add_element(SpaceOops *soops, ListBase *lb, void *i
 
 					for (dvar = driver->variables.first; dvar; dvar = dvar->next) {
 						/* loop over all targets used here */
-						DRIVER_TARGETS_USED_LOOPER(dvar)
+						DRIVER_TARGETS_USED_LOOPER_BEGIN(dvar)
 						{
 							if (lastadded != dtar->id) {
 								// XXX this lastadded check is rather lame, and also fails quite badly...
@@ -996,7 +996,7 @@ static TreeElement *outliner_add_element(SpaceOops *soops, ListBase *lb, void *i
 								lastadded = dtar->id;
 							}
 						}
-						DRIVER_TARGETS_LOOPER_END
+						DRIVER_TARGETS_LOOPER_END;
 					}
 				}
 			}
@@ -1592,10 +1592,10 @@ static int outliner_filter_tree(SpaceOops *soops, ListBase *lb)
 
 		if (!outliner_filter_has_name(te, search_string, soops->search_flags)) {
 			/* item isn't something we're looking for, but...
-			 *  - if the subtree is expanded, check if there are any matches that can be easily found
-			 *		so that searching for "cu" in the default scene will still match the Cube
-			 *	- otherwise, we can't see within the subtree and the item doesn't match,
-			 *		so these can be safely ignored (i.e. the subtree can get freed)
+			 * - if the subtree is expanded, check if there are any matches that can be easily found
+			 *     so that searching for "cu" in the default scene will still match the Cube
+			 * - otherwise, we can't see within the subtree and the item doesn't match,
+			 *     so these can be safely ignored (i.e. the subtree can get freed)
 			 */
 			tselem = TREESTORE(te);
 

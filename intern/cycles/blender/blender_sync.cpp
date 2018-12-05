@@ -846,7 +846,7 @@ SessionParams BlenderSync::get_session_params(BL::RenderEngine& b_engine,
 						}
 					}
 				}
-			} RNA_END
+			} RNA_END;
 
 			if(used_devices.size() == 1) {
 				params.device = used_devices[0];
@@ -896,7 +896,8 @@ SessionParams BlenderSync::get_session_params(BL::RenderEngine& b_engine,
 	}
 
 	/* tiles */
-	if(params.device.type != DEVICE_CPU && !background) {
+	const bool is_cpu = (params.device.type == DEVICE_CPU);
+	if(!is_cpu && !background) {
 		/* currently GPU could be much slower than CPU when using tiles,
 		 * still need to be investigated, but meanwhile make it possible
 		 * to work in viewport smoothly
@@ -981,6 +982,9 @@ SessionParams BlenderSync::get_session_params(BL::RenderEngine& b_engine,
 		 */
 		params.progressive_update_timeout = 0.1;
 	}
+
+	params.use_profiling = params.device.has_profiling && !b_engine.is_preview() &&
+	                       background && BlenderSession::print_render_stats;
 
 	return params;
 }

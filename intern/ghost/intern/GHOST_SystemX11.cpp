@@ -2163,11 +2163,8 @@ int GHOST_X11_ApplicationIOErrorHandler(Display * /*display*/)
 }
 
 #ifdef WITH_X11_XINPUT
-/* These C functions are copied from Wine 1.1.13's wintab.c */
-#define BOOL int
-#define TRUE 1
-#define FALSE 0
 
+/* These C functions are copied from Wine 3.12's wintab.c */
 static bool match_token(const char *haystack, const char *needle)
 {
 	const char *p, *q;
@@ -2180,14 +2177,13 @@ static bool match_token(const char *haystack, const char *needle)
 		for (q = needle; *q && *p && tolower(*p) == tolower(*q); q++)
 			p++;
 		if (!*q && (isspace(*p) || !*p))
-			return TRUE;
+			return true;
 
 		while (*p && !isspace(*p))
 			p++;
 	}
-	return FALSE;
+	return false;
 }
-
 
 /* Determining if an X device is a Tablet style device is an imperfect science.
  * We rely on common conventions around device names as well as the type reported
@@ -2199,63 +2195,39 @@ static bool match_token(const char *haystack, const char *needle)
  * Wacoms x11 config "cursor" refers to its device slot (which we mirror with
  * our gSysCursors) for puck like devices (tablet mice essentially).
  */
-#if 0 // unused
-static BOOL is_tablet_cursor(const char *name, const char *type)
+static GHOST_TTabletMode tablet_mode_from_name(const char *name, const char *type)
 {
 	int i;
-	static const char *tablet_cursor_whitelist[] = {
-		"wacom",
-		"wizardpen",
-		"acecad",
-		"tablet",
-		"cursor",
-		"stylus",
-		"eraser",
-		"pad",
-		NULL
-	};
-
-	for (i = 0; tablet_cursor_whitelist[i] != NULL; i++) {
-		if (name && match_token(name, tablet_cursor_whitelist[i]))
-			return TRUE;
-		if (type && match_token(type, tablet_cursor_whitelist[i]))
-			return TRUE;
-	}
-	return FALSE;
-}
-#endif
-static BOOL is_stylus(const char *name, const char *type)
-{
-	int i;
-	static const char *tablet_stylus_whitelist[] = {
+	static const char* tablet_stylus_whitelist[] = {
 		"stylus",
 		"wizardpen",
 		"acecad",
+		"pen",
 		NULL
 	};
 
-	for (i = 0; tablet_stylus_whitelist[i] != NULL; i++) {
-		if (name && match_token(name, tablet_stylus_whitelist[i]))
-			return TRUE;
-		if (type && match_token(type, tablet_stylus_whitelist[i]))
-			return TRUE;
+	/* First check device type to avoid cases where name is "Pen and Eraser" and type is "ERASER" */
+	for (i=0; tablet_stylus_whitelist[i] != NULL; i++) {
+		if (type && match_token(type, tablet_stylus_whitelist[i])) {
+			return GHOST_kTabletModeStylus;
+		}
+	}
+	if (type && match_token(type, "eraser")) {
+		return GHOST_kTabletModeEraser;
+	}
+	for (i=0; tablet_stylus_whitelist[i] != NULL; i++) {
+		if (name && match_token(name, tablet_stylus_whitelist[i])) {
+			return GHOST_kTabletModeStylus;
+		}
+	}
+	if (name && match_token(name, "eraser")) {
+		return GHOST_kTabletModeEraser;
 	}
 
-	return FALSE;
+	return GHOST_kTabletModeNone;
 }
 
-static BOOL is_eraser(const char *name, const char *type)
-{
-	if (name && match_token(name, "eraser"))
-		return TRUE;
-	if (type && match_token(type, "eraser"))
-		return TRUE;
-	return FALSE;
-}
-#undef BOOL
-#undef TRUE
-#undef FALSE
-/* end code copied from wine */
+/* End code copied from Wine. */
 
 void GHOST_SystemX11::refreshXInputDevices()
 {
@@ -2284,9 +2256,11 @@ void GHOST_SystemX11::refreshXInputDevices()
 
 //				printf("Tablet type:'%s', name:'%s', index:%d\n", device_type, device_info[i].name, i);
 
+				GHOST_TTabletMode tablet_mode = tablet_mode_from_name(device_info[i].name, device_type);
 
 				if ((m_xtablet.StylusDevice == NULL) &&
-				    (is_stylus(device_info[i].name, device_type) || (device_info[i].type == m_atom.TABLET)))
+				    ((tablet_mode == GHOST_kTabletModeStylus) && (device_info[i].type != m_atom.TABLET)))
+				    /* for libinput to work reliable, only lookup ValuatorClass in Tablet type:'STYLUS' */
 				{
 //					printf("\tfound stylus\n");
 					m_xtablet.StylusID = device_info[i].id;
@@ -2295,6 +2269,8 @@ void GHOST_SystemX11::refreshXInputDevices()
 					if (m_xtablet.StylusDevice != NULL) {
 						/* Find how many pressure levels tablet has */
 						XAnyClassPtr ici = device_info[i].inputclassinfo;
+						bool found_valuator_class = false;
+
 						for (int j = 0; j < m_xtablet.StylusDevice->num_classes; ++j) {
 							if (ici->c_class == ValuatorClass) {
 //								printf("\t\tfound ValuatorClass\n");
@@ -2312,10 +2288,22 @@ void GHOST_SystemX11::refreshXInputDevices()
 									m_xtablet.YtiltLevels = 0;
 								}
 
+								found_valuator_class = true;
+
 								break;
 							}
 
 							ici = (XAnyClassPtr)(((char *)ici) + ici->length);
+						}
+
+						if (!found_valuator_class) {
+							/* In case our name matching detects a device that
+							 * isn't actually a stylus. For example there can
+							 * be "XPPEN Tablet" and "XPPEN Tablet Pen", but
+							 * only the latter is a stylus. */
+							XCloseDevice(m_display, m_xtablet.StylusDevice);
+							m_xtablet.StylusDevice = NULL;
+							m_xtablet.StylusID = 0;
 						}
 					}
 					else {
@@ -2323,7 +2311,7 @@ void GHOST_SystemX11::refreshXInputDevices()
 					}
 				}
 				else if ((m_xtablet.EraserDevice == NULL) &&
-				         (is_eraser(device_info[i].name, device_type)))
+				         (tablet_mode == GHOST_kTabletModeEraser))
 				{
 //					printf("\tfound eraser\n");
 					m_xtablet.EraserID = device_info[i].id;

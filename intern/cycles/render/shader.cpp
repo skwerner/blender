@@ -396,7 +396,7 @@ ShaderManager *ShaderManager::create(Scene *scene, int shadingsystem)
 {
 	ShaderManager *manager;
 
-	(void)shadingsystem;  /* Ignored when built without OSL. */
+	(void) shadingsystem;  /* Ignored when built without OSL. */
 
 #ifdef WITH_OSL
 	if(shadingsystem == SHADINGSYSTEM_OSL) {
@@ -552,7 +552,7 @@ void ShaderManager::device_update_common(Device *device,
 			flag |= SD_HAS_CONSTANT_EMISSION;
 
 		uint32_t cryptomatte_id = util_murmur_hash3(shader->name.c_str(), shader->name.length(), 0);
-		
+
 		/* regular shader */
 		kshader->flags = flag;
 		kshader->pass_id = shader->pass_id;
@@ -740,6 +740,22 @@ void ShaderManager::texture_system_free()
 float ShaderManager::linear_rgb_to_gray(float3 c)
 {
 	return dot(c, rgb_to_y);
+}
+
+string ShaderManager::get_cryptomatte_materials(Scene *scene)
+{
+	string manifest = "{";
+	unordered_set<ustring, ustringHash> materials;
+	foreach(Shader *shader, scene->shaders) {
+		if(materials.count(shader->name)) {
+			continue;
+		}
+		materials.insert(shader->name);
+		uint32_t cryptomatte_id = util_murmur_hash3(shader->name.c_str(), shader->name.length(), 0);
+		manifest += string_printf("\"%s\":\"%08x\",", shader->name.c_str(), cryptomatte_id);
+	}
+	manifest[manifest.size()-1] = '}';
+	return manifest;
 }
 
 CCL_NAMESPACE_END

@@ -1314,10 +1314,10 @@ void BKE_scene_frame_set(struct Scene *scene, double cfra)
 
 #ifdef WITH_LEGACY_DEPSGRAPH
 /* drivers support/hacks
- *  - this method is called from scene_update_tagged_recursive(), so gets included in viewport + render
- *	- these are always run since the depsgraph can't handle non-object data
- *	- these happen after objects are all done so that we can read in their final transform values,
- *	  though this means that objects can't refer to scene info for guidance...
+ * - this method is called from scene_update_tagged_recursive(), so gets included in viewport + render
+ * - these are always run since the depsgraph can't handle non-object data
+ * - these happen after objects are all done so that we can read in their final transform values,
+ *   though this means that objects can't refer to scene info for guidance...
  */
 static void scene_update_drivers(Main *UNUSED(bmain), Scene *scene)
 {
@@ -1940,13 +1940,13 @@ void BKE_scene_update_tagged(EvaluationContext *eval_ctx, Main *bmain, Scene *sc
 	if (!use_new_eval && DAG_id_type_tagged(bmain, ID_NT)) {
 		float ctime = BKE_scene_frame_get(scene);
 
-		FOREACH_NODETREE(bmain, ntree, id)
+		FOREACH_NODETREE_BEGIN(bmain, ntree, id)
 		{
 			AnimData *adt = BKE_animdata_from_id(&ntree->id);
 			if (adt && (adt->recalc & ADT_RECALC_ANIM))
 				BKE_animsys_evaluate_animdata(scene, &ntree->id, adt, ctime, 0);
 		}
-		FOREACH_NODETREE_END
+		FOREACH_NODETREE_END;
 	}
 #endif
 

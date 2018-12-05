@@ -82,11 +82,11 @@ public:
 
 		/* Silence potential warnings about unused variables
 		 * when compiling without some architectures. */
-		(void)kernel_sse2;
-		(void)kernel_sse3;
-		(void)kernel_sse41;
-		(void)kernel_avx;
-		(void)kernel_avx2;
+		(void) kernel_sse2;
+		(void) kernel_sse3;
+		(void) kernel_sse41;
+		(void) kernel_avx;
+		(void) kernel_avx2;
 #ifdef WITH_CYCLES_OPTIMIZED_KERNEL_AVX2
 		if(DebugFlags().cpu.has_avx2() && system_cpu_support_avx2()) {
 			architecture_name = "AVX2";
@@ -210,8 +210,8 @@ public:
 	      KERNEL_NAME_EVAL(cpu_avx, name), \
 	      KERNEL_NAME_EVAL(cpu_avx2, name)
 
-	CPUDevice(DeviceInfo& info_, Stats &stats_, bool background_)
-	: Device(info_, stats_, background_),
+	CPUDevice(DeviceInfo& info_, Stats &stats_, Profiler &profiler_, bool background_)
+	: Device(info_, stats_, profiler_, background_),
 	  texture_info(this, "__texture_info", MEM_TEXTURE),
 #define REGISTER_KERNEL(name) name ## _kernel(KERNEL_FUNCTIONS(name))
 	  REGISTER_KERNEL(path_trace),
@@ -299,7 +299,7 @@ public:
 		}
 #ifdef WITH_EMBREE
 		bvh_layout_mask |= BVH_LAYOUT_EMBREE;
-#endif /* WITH_EMBREE */
+#endif  /* WITH_EMBREE */
 		return bvh_layout_mask;
 	}
 
@@ -493,6 +493,8 @@ public:
 	bool denoising_non_local_means(device_ptr image_ptr, device_ptr guide_ptr, device_ptr variance_ptr, device_ptr out_ptr,
 	                               DenoisingTask *task)
 	{
+		ProfilingHelper profiling(task->profiler, PROFILING_DENOISING_NON_LOCAL_MEANS);
+
 		int4 rect = task->rect;
 		int   r   = task->nlm_state.r;
 		int   f   = task->nlm_state.f;
@@ -545,6 +547,8 @@ public:
 
 	bool denoising_construct_transform(DenoisingTask *task)
 	{
+		ProfilingHelper profiling(task->profiler, PROFILING_DENOISING_CONSTRUCT_TRANSFORM);
+
 		for(int y = 0; y < task->filter_area.w; y++) {
 			for(int x = 0; x < task->filter_area.z; x++) {
 				filter_construct_transform_kernel()((float*) task->buffer.mem.device_pointer,
@@ -567,6 +571,8 @@ public:
 	                           device_ptr output_ptr,
 	                           DenoisingTask *task)
 	{
+		ProfilingHelper profiling(task->profiler, PROFILING_DENOISING_RECONSTRUCT);
+
 		mem_zero(task->storage.XtWX);
 		mem_zero(task->storage.XtWY);
 
@@ -625,8 +631,10 @@ public:
 
 	bool denoising_combine_halves(device_ptr a_ptr, device_ptr b_ptr,
 	                              device_ptr mean_ptr, device_ptr variance_ptr,
-	                              int r, int4 rect, DenoisingTask * /*task*/)
+	                              int r, int4 rect, DenoisingTask *task)
 	{
+		ProfilingHelper profiling(task->profiler, PROFILING_DENOISING_COMBINE_HALVES);
+
 		for(int y = rect.y; y < rect.w; y++) {
 			for(int x = rect.x; x < rect.z; x++) {
 				filter_combine_halves_kernel()(x, y,
@@ -645,6 +653,8 @@ public:
 	                             device_ptr sample_variance_ptr, device_ptr sv_variance_ptr,
 	                             device_ptr buffer_variance_ptr, DenoisingTask *task)
 	{
+		ProfilingHelper profiling(task->profiler, PROFILING_DENOISING_DIVIDE_SHADOW);
+
 		for(int y = task->rect.y; y < task->rect.w; y++) {
 			for(int x = task->rect.x; x < task->rect.z; x++) {
 				filter_divide_shadow_kernel()(task->render_buffer.samples,
@@ -669,6 +679,8 @@ public:
 	                           device_ptr variance_ptr,
 	                           DenoisingTask *task)
 	{
+		ProfilingHelper profiling(task->profiler, PROFILING_DENOISING_GET_FEATURE);
+
 		for(int y = task->rect.y; y < task->rect.w; y++) {
 			for(int x = task->rect.x; x < task->rect.z; x++) {
 				filter_get_feature_kernel()(task->render_buffer.samples,
@@ -692,6 +704,8 @@ public:
 	                               device_ptr output_ptr,
 	                               DenoisingTask *task)
 	{
+		ProfilingHelper profiling(task->profiler, PROFILING_DENOISING_DETECT_OUTLIERS);
+
 		for(int y = task->rect.y; y < task->rect.w; y++) {
 			for(int x = task->rect.x; x < task->rect.z; x++) {
 				filter_detect_outliers_kernel()(x, y,
@@ -723,7 +737,7 @@ public:
 
 		_MM_SET_FLUSH_ZERO_MODE(_MM_FLUSH_ZERO_ON);
 		_MM_SET_DENORMALS_ZERO_MODE(_MM_DENORMALS_ZERO_ON);
-		
+
 		for(int sample = start_sample; sample < end_sample; sample++) {
 			if(task.get_cancel() || task_pool.canceled()) {
 				if(task.need_finish_queue == false)
@@ -751,6 +765,8 @@ public:
 
 	void denoise(DenoisingTask& denoising, RenderTile &tile)
 	{
+		ProfilingHelper profiling(denoising.profiler, PROFILING_DENOISING);
+
 		tile.sample = tile.start_sample + tile.num_samples;
 
 		denoising.functions.construct_transform = function_bind(&CPUDevice::denoising_construct_transform, this, &denoising);
@@ -781,6 +797,8 @@ public:
 
 		KernelGlobals *kg = new ((void*) kgbuffer.device_pointer) KernelGlobals(thread_kernel_globals_init());
 
+		profiler.add_state(&kg->profiler);
+
 		CPUSplitKernel *split_kernel = NULL;
 		if(use_split_kernel) {
 			split_kernel = new CPUSplitKernel(this);
@@ -794,6 +812,7 @@ public:
 
 		RenderTile tile;
 		DenoisingTask denoising(this, task);
+		denoising.profiler = &kg->profiler;
 
 		while(task.acquire_tile(this, tile)) {
 			if(tile.task == RenderTile::PATH_TRACE) {
@@ -817,6 +836,8 @@ public:
 					break;
 			}
 		}
+
+		profiler.remove_state(&kg->profiler);
 
 		thread_kernel_globals_free((KernelGlobals*)kgbuffer.device_pointer);
 		kg->~KernelGlobals();
@@ -1071,9 +1092,9 @@ uint64_t CPUSplitKernel::state_buffer_size(device_memory& kernel_globals, device
 	return split_data_buffer_size(kg, num_threads);
 }
 
-Device *device_cpu_create(DeviceInfo& info, Stats &stats, bool background)
+Device *device_cpu_create(DeviceInfo& info, Stats &stats, Profiler &profiler, bool background)
 {
-	return new CPUDevice(info, stats, background);
+	return new CPUDevice(info, stats, profiler, background);
 }
 
 void device_cpu_info(vector<DeviceInfo>& devices)
@@ -1088,11 +1109,12 @@ void device_cpu_info(vector<DeviceInfo>& devices)
 	info.has_volume_decoupled = true;
 	info.has_osl = true;
 	info.has_half_images = true;
+	info.has_profiling = true;
 
 	devices.insert(devices.begin(), info);
 }
 
-string device_cpu_capabilities(void)
+string device_cpu_capabilities()
 {
 	string capabilities = "";
 	capabilities += system_cpu_support_sse2() ? "SSE2 " : "";

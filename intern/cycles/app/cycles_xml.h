@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2013 Blender Foundation
+ * Copyright 2011-2018 Blender Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,9 +20,10 @@
 CCL_NAMESPACE_BEGIN
 
 class Scene;
+class SessionParams;
 
 void xml_read_file(Scene *scene, const char *filepath);
-void xml_write_file(const Scene *scene, const char *filepath);
+void xml_write_file(const Scene *scene, const SessionParams *params, const char *filepath);
 
 /* macros for importing */
 #define RAD2DEGF(_rad) ((_rad) * (float)(180.0 / M_PI))

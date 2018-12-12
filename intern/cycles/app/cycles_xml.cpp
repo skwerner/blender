@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2013 Blender Foundation
+ * Copyright 2011-2018 Blender Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -32,8 +32,10 @@
 #include "render/nodes.h"
 #include "render/object.h"
 #include "render/osl.h"
-#include "render/shader.h"
 #include "render/scene.h"
+#include "render/session.h"
+#include "render/shader.h"
+
 
 #include "subd/subd_patch.h"
 #include "subd/subd_split.h"
@@ -106,6 +108,32 @@ static bool xml_read_int_array(vector<int>& value, xml_node node, const char *na
 	return false;
 }
 
+static void xml_write_int_array(const vector<int>& value, xml_node node, const char *name)
+{
+	xml_attribute attr = node.append_attribute(name);
+
+	if(attr) {
+		string tokens;
+		foreach(int i, value) {
+			tokens += std::to_string(i) + " ";
+		}
+		attr.set_value(tokens.c_str());
+	}
+}
+
+static void xml_write_bool_array(const vector<bool>& value, xml_node node, const char *name)
+{
+	xml_attribute attr = node.append_attribute(name);
+
+	if(attr) {
+		string tokens;
+		foreach(bool b, value) {
+			tokens += b ? "true " : "false ";
+		}
+		attr.set_value(tokens.c_str());
+	}
+}
+
 static bool xml_read_float(float *value, xml_node node, const char *name)
 {
 	xml_attribute attr = node.attribute(name);
@@ -135,7 +163,7 @@ static bool xml_read_float_array(vector<float>& value, xml_node node, const char
 	return false;
 }
 
-static void xml_write_float_array(const vector<float>& value, pugi::xml_node node, const char* name)
+static void xml_write_float_array(const vector<float>& value, xml_node node, const char* name)
 {
 	std::string value_string;
 	foreach(float f, value) {
@@ -204,9 +232,9 @@ static bool xml_equal_string(xml_node node, const char *name, const char *value)
 	return false;
 }
 
-static xml_node xml_write_transform(const Transform& tfm, pugi::xml_node node)
+static xml_node xml_write_transform(const Transform& tfm, xml_node node)
 {
-	pugi::xml_node tfm_node = node.append_child("Transform");
+	xml_node tfm_node = node.append_child("Transform");
 	vector<float> matrix;
 	const float* tfm_f = (const float*)(&tfm);
 	for(int i = 0; i < 12; ++i) {
@@ -237,9 +265,9 @@ static void xml_read_camera(XMLReadState& state, xml_node node)
 	cam->update(state.scene);
 }
 
-static void xml_write_camera(Camera *cam, pugi::xml_node node)
+static void xml_write_camera(Camera *cam, xml_node node)
 {
-	pugi::xml_node transform = 	xml_write_transform(cam->matrix, node);
+	xml_node transform = 	xml_write_transform(cam->matrix, node);
 	xml_write_node(cam, transform);
 }
 
@@ -413,7 +441,7 @@ static void xml_read_shader(XMLReadState& state, xml_node node)
 	state.scene->shaders.push_back(shader);
 }
 
-static void xml_write_shader(const Shader* shader, pugi::xml_node node)
+static void xml_write_shader(const Shader* shader, xml_node node)
 {
 	xml_node shader_node = xml_write_node(shader, node);
 	if(shader->graph) {
@@ -433,10 +461,10 @@ static void xml_read_background(XMLReadState& state, xml_node node)
 	xml_read_shader_graph(state, shader, node);
 }
 
-static void xml_write_background(Background* background, pugi::xml_node node)
+static void xml_write_background(Background* background, xml_node node)
 {
 	/* Background Settings */
-	pugi::xml_node background_node = xml_write_node(background, node);
+	xml_node background_node = xml_write_node(background, node);
 
 	if(background->shader) {
 		/* Background Shader */
@@ -653,11 +681,51 @@ static string base64_encode(const unsigned char *src, size_t len)
 	return outStr;
 }
 
+static void xml_write_attribute(const Attribute& attr, xml_node attribute)
+{
+	attribute.append_attribute("name") = attr.name.c_str();
+	attribute.append_attribute("standard") = attr.std;
+	attribute.append_attribute("type.basetype") = attr.type.basetype;
+	attribute.append_attribute("type.aggregate") = attr.type.aggregate;
+	attribute.append_attribute("type.vecsemantics") = attr.type.vecsemantics;
+	attribute.append_attribute("element") = attr.element;
+	string encoded = base64_encode((const unsigned char*)attr.data(), attr.buffer.size());
+	attribute.append_child(pugi::node_pcdata).set_value(encoded.c_str());
+}
+
 static void xml_write_mesh(const Mesh* mesh, xml_node node)
 {
 	xml_node mesh_node = xml_write_node(mesh, node);
 	mesh_node.attribute("name") = ustring::format("%s:%zx", mesh->name.c_str(), mesh).c_str();
 
+	/* Subdivison surfaces must be written explicitly. */
+	vector<int> start_corners;
+	vector<int> num_corners;
+	vector<int> shader;
+	vector<bool> smooth;
+	vector<int> ptex_offset;
+	for(size_t i = 0; i < mesh->subd_faces.size(); ++i) {
+		const Mesh::SubdFace& face = mesh->subd_faces[i];
+		start_corners.push_back(face.start_corner);
+		num_corners.push_back(face.num_corners);
+		shader.push_back(face.shader);
+		smooth.push_back(face.smooth);
+		ptex_offset.push_back(face.ptex_offset);
+	}
+	xml_write_int_array(start_corners, mesh_node, "subd.start_corners");
+	xml_write_int_array(num_corners, mesh_node, "subd.num_corners");
+	xml_write_int_array(shader, mesh_node, "subd.shader");
+	xml_write_bool_array(smooth, mesh_node, "subd.num_corners");
+	xml_write_int_array(ptex_offset, mesh_node, "subd.ptex_offset");
+
+	if(mesh->subd_params) {
+		mesh_node.append_attribute("subd_params.ptex").set_value(mesh->subd_params->ptex);
+		mesh_node.append_attribute("subd_params.test_steps").set_value(mesh->subd_params->test_steps);
+		mesh_node.append_attribute("subd_params.split_threshold").set_value(mesh->subd_params->split_threshold);
+		mesh_node.append_attribute("subd_params.dicing_rate").set_value(mesh->subd_params->dicing_rate);
+		mesh_node.append_attribute("subd_params.max_level").set_value(mesh->subd_params->max_level);
+	}
+	
 	std::stringstream ss;
 	for(size_t i = 0; i < mesh->used_shaders.size(); ++i) {
 		const Shader *shader = mesh->used_shaders[i];
@@ -668,17 +736,15 @@ static void xml_write_mesh(const Mesh* mesh, xml_node node)
 	}
 	mesh_node.append_attribute("used_shaders") = ss.str().c_str();
 
-	/* Wrtie mesh attributes. Encode as base64, which saves meory but takes away human readability. */
+	/* Write mesh attributes. Encode as base64, which saves meory but takes away human readability. */
 	foreach(const Attribute& attr, mesh->attributes.attributes) {
-		xml_node attribute = mesh_node.append_child("attribute");
-		attribute.append_attribute("name") = attr.name.c_str();
-		attribute.append_attribute("standard") = attr.std;
-		attribute.append_attribute("type.basetype") = attr.type.basetype;
-		attribute.append_attribute("type.aggregate") = attr.type.aggregate;
-		attribute.append_attribute("type.vecsemantics") = attr.type.vecsemantics;
-		attribute.append_attribute("element") = attr.element;
-		string encoded = base64_encode((const unsigned char*)attr.data(), attr.buffer.size());
-		attribute.append_child(pugi::node_pcdata).set_value(encoded.c_str());
+		xml_write_attribute(attr, mesh_node.append_child("attribute"));
+	}
+	foreach(const Attribute& attr, mesh->curve_attributes.attributes) {
+		xml_write_attribute(attr, mesh_node.append_child("curve_attribute"));
+	}
+	foreach(const Attribute& attr, mesh->subd_attributes.attributes) {
+		xml_write_attribute(attr, mesh_node.append_child("subd_attribute"));
 	}
 }
 
@@ -818,8 +884,9 @@ static void xml_read_scene(XMLReadState& state, xml_node scene_node)
 	}
 }
 
-static void xml_write_scene(const Scene *scene, pugi::xml_node &node)
+static void xml_write_scene(const Scene *scene, const SessionParams *params, xml_node &node)
 {
+	xml_write_node(params, node);
 	xml_write_node(scene->film, node);
 	xml_write_node(scene->integrator, node);
 	xml_write_camera(scene->camera, node);
@@ -892,14 +959,14 @@ void xml_read_file(Scene *scene, const char *filepath)
    XML library or even with a different file format than XML.
    An alternative would be to write separate files for different parts of the scene and use the inlcude feature.
  */
-void xml_write_file(const Scene *scene, const char *filepath)
+void xml_write_file(const Scene *scene, const SessionParams *params, const char *filepath)
 {
 	xml_document doc;
 
 	xml_node cycles = doc.append_child("cycles");
 	cycles.append_attribute("version") = ustring::format("%d.%d", CYCLES_XML_VERSION_MAJOR, CYCLES_XML_VERSION_MINOR).c_str();
 
-	xml_write_scene(scene, cycles);
+	xml_write_scene(scene, params, cycles);
 
 	doc.save_file(filepath);
 }

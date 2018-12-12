@@ -416,6 +416,11 @@ NODE_DEFINE(Mesh)
 	SOCKET_INT_ARRAY(curve_first_key, "Curve First Key", array<int>());
 	SOCKET_INT_ARRAY(curve_shader, "Curve Shader", array<int>());
 
+	SOCKET_INT_ARRAY(subd_face_corners, "Subd Face Corners", array<int>());
+	SOCKET_INT(num_ngons, "Num Ngons", 0);
+	SOCKET_INT_ARRAY(triangle_patch, "Triangle Patch", array<int>());
+	SOCKET_POINT2_ARRAY(vert_patch_uv, "Vert Patch UV", array<float2>());
+
 	static NodeEnum subdivision_type_enum;
 	subdivision_type_enum.insert("none", SUBDIVISION_NONE);
 	subdivision_type_enum.insert("linear", SUBDIVISION_LINEAR);

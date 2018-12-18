@@ -42,6 +42,7 @@ ccl_device void svm_node_tex_voxel(KernelGlobals *kg,
 		co = transform_point(&tfm, co);
 	}
 
+	PROFILING_COUNT(kg, PROFILING_COUNT_TEX3D);
 	float4 r = kernel_tex_image_interp_3d(kg, id, co.x, co.y, co.z, INTERPOLATION_NONE);
 #else
 	float4 r = make_float4(0.0f, 0.0f, 0.0f, 0.0f);

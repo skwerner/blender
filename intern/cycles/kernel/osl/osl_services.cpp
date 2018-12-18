@@ -1003,6 +1003,7 @@ bool OSLRenderServices::texture(ustring filename,
 		}
 		else {
 			/* Packed texture. */
+			PROFILING_COUNT(kg, PROFILING_COUNT_TEX2D);
 			int slot = atoi(filename.c_str() + 2);
 			float4 rgba = kernel_tex_image_interp(kg, slot, s, 1.0f - t);
 
@@ -1086,6 +1087,7 @@ bool OSLRenderServices::texture3d(ustring filename,
 	bool status;
 	if(filename.length() && filename[0] == '@') {
 		int slot = atoi(filename.c_str() + 1);
+		PROFILING_COUNT(kg, PROFILING_COUNT_TEX3D);
 		float4 rgba = kernel_tex_image_interp_3d(kg, slot, P.x, P.y, P.z, INTERPOLATION_NONE);
 
 		result[0] = rgba[0];

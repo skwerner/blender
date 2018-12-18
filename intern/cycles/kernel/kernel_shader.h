@@ -985,6 +985,7 @@ ccl_device float3 shader_bssrdf_sum(ShaderData *sd, float3 *N_, float *texture_b
 
 ccl_device float3 shader_emissive_eval(KernelGlobals *kg, ShaderData *sd)
 {
+	PROFILING_COUNT(kg, PROFILING_COUNT_SHADER_EMISSION);
 	if(sd->flag & SD_EMISSION) {
 		return emissive_simple_eval(sd->Ng, sd->I) * sd->closure_emission_background;
 	}
@@ -1015,6 +1016,7 @@ ccl_device void shader_eval_surface(KernelGlobals *kg, ShaderData *sd,
 	ccl_addr_space PathState *state, int path_flag)
 {
 	PROFILING_INIT(kg, PROFILING_SHADER_EVAL);
+	PROFILING_COUNT(kg, PROFILING_COUNT_SHADER_SURFACE);
 
 	/* If path is being terminated, we are tracing a shadow ray or evaluating
 	 * emission, then we don't need to store closures. The emission and shadow
@@ -1059,6 +1061,7 @@ ccl_device void shader_eval_surface(KernelGlobals *kg, ShaderData *sd,
 ccl_device float3 shader_eval_background(KernelGlobals *kg, ShaderData *sd,
 	ccl_addr_space PathState *state, int path_flag)
 {
+	PROFILING_COUNT(kg, PROFILING_COUNT_SHADER_BACKGROUND);
 	sd->num_closure = 0;
 	sd->num_closure_left = 0;
 
@@ -1209,6 +1212,7 @@ ccl_device_inline void shader_eval_volume(KernelGlobals *kg,
                                           ccl_addr_space VolumeStack *stack,
                                           int path_flag)
 {
+	PROFILING_COUNT(kg, PROFILING_COUNT_SHADER_VOLUME);
 	/* If path is being terminated, we are tracing a shadow ray or evaluating
 	 * emission, then we don't need to store closures. The emission and shadow
 	 * shader data also do not have a closure array to save GPU memory. */
@@ -1273,6 +1277,7 @@ ccl_device_inline void shader_eval_volume(KernelGlobals *kg,
 
 ccl_device void shader_eval_displacement(KernelGlobals *kg, ShaderData *sd, ccl_addr_space PathState *state)
 {
+	PROFILING_COUNT(kg, PROFILING_COUNT_SHADER_DISPLACEMENT);
 	sd->num_closure = 0;
 	sd->num_closure_left = 0;
 

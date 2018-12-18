@@ -61,6 +61,7 @@ ccl_device_noinline float svm_ao(KernelGlobals *kg,
 		ray.t = max_dist;
 		ray.time = sd->time;
 
+		PROFILING_COUNT(kg, PROFILING_COUNT_AO_RAY);
 		if(flags & NODE_AO_ONLY_LOCAL) {
 			if(!scene_intersect_local(kg,
 			                          ray,

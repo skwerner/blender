@@ -53,6 +53,8 @@ enum ProfilingEvent : uint32_t {
 	PROFILING_CLOSURE_VOLUME_EVAL,
 	PROFILING_CLOSURE_VOLUME_SAMPLE,
 
+	PROFILING_LIGHT_SAMPLE,
+
 	PROFILING_DENOISING,
 	PROFILING_DENOISING_CONSTRUCT_TRANSFORM,
 	PROFILING_DENOISING_RECONSTRUCT,
@@ -63,6 +65,23 @@ enum ProfilingEvent : uint32_t {
 	PROFILING_DENOISING_DETECT_OUTLIERS,
 
 	PROFILING_NUM_EVENTS,
+};
+
+
+enum ProfilingCounters : uint32_t {
+	PROFILING_COUNT_PRIMARY_RAY,
+	PROFILING_COUNT_INDIRECT_RAY,
+	PROFILING_COUNT_SHADOW_RAY,
+	PROFILING_COUNT_AO_RAY,
+	PROFILING_COUNT_SSS_RAY,
+	PROFILING_COUNT_SHADER_SURFACE,
+	PROFILING_COUNT_SHADER_VOLUME,
+	PROFILING_COUNT_SHADER_EMISSION,
+	PROFILING_COUNT_SHADER_BACKGROUND,
+	PROFILING_COUNT_SHADER_DISPLACEMENT,
+	PROFILING_COUNT_TEX2D,
+	PROFILING_COUNT_TEX3D,
+	PROFILING_NUM_COUNTERS,
 };
 
 /* Contains the current execution state of a worker thread.
@@ -86,6 +105,7 @@ struct ProfilingState {
 
 	vector<uint64_t> shader_hits;
 	vector<uint64_t> object_hits;
+	vector<uint64_t> counter_hits;
 };
 
 class Profiler {
@@ -93,7 +113,7 @@ public:
 	Profiler();
 	~Profiler();
 
-	void reset(int num_shaders, int num_objects);
+	void reset(int num_shaders, int num_objects, int num_counters=PROFILING_NUM_COUNTERS);
 
 	void start();
 	void stop();
@@ -104,6 +124,7 @@ public:
 	uint64_t get_event(ProfilingEvent event);
 	bool get_shader(int shader, uint64_t &samples, uint64_t &hits);
 	bool get_object(int object, uint64_t &samples, uint64_t &hits);
+	uint64_t get_counter(int counter);
 
 protected:
 	void run();
@@ -121,6 +142,7 @@ protected:
 	 * to index __object_flag and __shaders. */
 	vector<uint64_t> shader_hits;
 	vector<uint64_t> object_hits;
+	vector<uint64_t> counter_hits;
 
 	volatile bool do_stop_worker;
 	thread *worker;

@@ -70,7 +70,7 @@ void Profiler::run()
 	}
 }
 
-void Profiler::reset(int num_shaders, int num_objects)
+void Profiler::reset(int num_shaders, int num_objects, int num_counters)
 {
 	bool running = (worker != NULL);
 	if(running) {
@@ -80,6 +80,7 @@ void Profiler::reset(int num_shaders, int num_objects)
 	/* Resize and clear the accumulation vectors. */
 	shader_hits.assign(num_shaders, 0);
 	object_hits.assign(num_objects, 0);
+	counter_hits.assign(num_counters, 0);
 
 	event_samples.assign(PROFILING_NUM_EVENTS, 0);
 	shader_samples.assign(num_shaders, 0);
@@ -119,6 +120,7 @@ void Profiler::add_state(ProfilingState *state)
 	/* Resize thread-local hit counters. */
 	state->shader_hits.assign(shader_hits.size(), 0);
 	state->object_hits.assign(object_hits.size(), 0);
+	state->counter_hits.assign(counter_hits.size(), 0);
 
 	/* Initialize the state. */
 	state->event = PROFILING_UNKNOWN;
@@ -144,6 +146,11 @@ void Profiler::remove_state(ProfilingState *state)
 	assert(object_hits.size() == state->object_hits.size());
 	for(int i = 0; i < object_hits.size(); i++) {
 		object_hits[i] += state->object_hits[i];
+	}
+
+	assert(counter_hits.size() == state->counter_hits.size());
+	for(int i = 0; i < counter_hits.size(); i++) {
+		counter_hits[i] += state->counter_hits[i];
 	}
 }
 
@@ -173,6 +180,12 @@ bool Profiler::get_object(int object, uint64_t &samples, uint64_t &hits)
 	samples = object_samples[object];
 	hits = object_hits[object];
 	return true;
+}
+
+uint64_t Profiler::get_counter(int counter)
+{
+	assert(counter < PROFILING_NUM_COUNTERS);
+	return counter < PROFILING_NUM_COUNTERS ? counter_hits[counter] : 0;
 }
 
 CCL_NAMESPACE_END

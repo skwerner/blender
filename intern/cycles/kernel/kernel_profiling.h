@@ -35,6 +35,8 @@ CCL_NAMESPACE_BEGIN
 #  define PROFILING_OBJECT(object)
 #endif  /* __KERNEL_CPU__ */
 
+#define PROFILING_COUNT(kg, counter) if((counter) < kg->profiler.counter_hits.size()) (++kg->profiler.counter_hits[counter]);
+
 CCL_NAMESPACE_END
 
 #endif  /* __KERNEL_PROFILING_H__ */

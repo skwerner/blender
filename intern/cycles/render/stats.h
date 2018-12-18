@@ -109,6 +109,18 @@ public:
 	entry_map entries;
 };
 
+/* Plain counters, unsorted. */
+class NamedCountStats {
+public:
+	NamedCountStats();
+
+	string full_report(int indent_level = 0);
+	void add(const string& name, uint64_t hits);
+
+	vector<pair<string, uint64_t> > entries;
+};
+
+
 /* Statistics about mesh in the render database. */
 class MeshStats {
 public:
@@ -153,6 +165,7 @@ public:
 	NamedNestedSampleStats kernel;
 	NamedSampleCountStats shaders;
 	NamedSampleCountStats objects;
+	NamedCountStats counters;
 };
 
 CCL_NAMESPACE_END

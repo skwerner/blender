@@ -51,6 +51,7 @@ ccl_device float volume_attribute_float(KernelGlobals *kg, const ShaderData *sd,
 {
 	float3 P = volume_normalized_position(kg, sd, sd->P);
 	InterpolationType interp = (sd->flag & SD_VOLUME_CUBIC)? INTERPOLATION_CUBIC: INTERPOLATION_NONE;
+	PROFILING_COUNT(kg, PROFILING_COUNT_TEX3D);
 	float4 r = kernel_tex_image_interp_3d(kg, desc.offset, P.x, P.y, P.z, interp);
 
 	if(dx) *dx = 0.0f;
@@ -63,6 +64,7 @@ ccl_device float3 volume_attribute_float3(KernelGlobals *kg, const ShaderData *s
 {
 	float3 P = volume_normalized_position(kg, sd, sd->P);
 	InterpolationType interp = (sd->flag & SD_VOLUME_CUBIC)? INTERPOLATION_CUBIC: INTERPOLATION_NONE;
+	PROFILING_COUNT(kg, PROFILING_COUNT_TEX3D);
 	float4 r = kernel_tex_image_interp_3d(kg, desc.offset, P.x, P.y, P.z, interp);
 
 	if(dx) *dx = make_float3(0.0f, 0.0f, 0.0f);

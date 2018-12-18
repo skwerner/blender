@@ -1082,6 +1082,7 @@ ccl_device_noinline bool light_sample(KernelGlobals *kg,
                                       int bounce,
                                       LightSample *ls)
 {
+	PROFILING_INIT(kg, PROFILING_LIGHT_SAMPLE);
 	/* sample index */
 	int index = light_distribution_sample(kg, &randu);
 

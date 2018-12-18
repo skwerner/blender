@@ -195,6 +195,26 @@ string NamedSampleCountStats::full_report(int indent_level)
 	return result;
 }
 
+NamedCountStats::NamedCountStats()
+{}
+
+
+string NamedCountStats::full_report(int indent_level)
+{
+	const string indent(indent_level * kIndentNumSpaces, ' ');
+	string result = "";
+	foreach(const auto& entry, entries) {
+		result += indent + string_printf("%-32s: %lld\n",
+										 entry.first.c_str(),
+										 entry.second);
+	}
+	return result;
+}
+void NamedCountStats::add(const string& name, uint64_t hits)
+{
+	entries.emplace_back(std::make_pair(name, hits));
+}
+
 /* Mesh statistics. */
 
 MeshStats::MeshStats() {
@@ -249,6 +269,7 @@ void RenderStats::collect_profiling(Scene *scene, Profiler& prof)
 	shading.add_entry("Subsurface", prof.get_event(PROFILING_SUBSURFACE));
 
 	integrator.add_entry("Connect Light", prof.get_event(PROFILING_CONNECT_LIGHT));
+	integrator.add_entry("Sample Light", prof.get_event(PROFILING_LIGHT_SAMPLE));
 	integrator.add_entry("Surface Bounce", prof.get_event(PROFILING_SURFACE_BOUNCE));
 
 	NamedNestedSampleStats &intersection = kernel.add_entry("Intersection", 0);
@@ -290,6 +311,28 @@ void RenderStats::collect_profiling(Scene *scene, Profiler& prof)
 			objects.add(object->name, samples, hits);
 		}
 	}
+
+	counters.entries.clear();
+	uint64_t rays = prof.get_counter(PROFILING_COUNT_PRIMARY_RAY);
+	uint64_t total_rays = rays;
+	counters.add("Camera Rays", rays);
+	rays = prof.get_counter(PROFILING_COUNT_INDIRECT_RAY);
+	total_rays += rays;
+	counters.add("Secondary Rays", rays);
+	rays = prof.get_counter(PROFILING_COUNT_SHADOW_RAY);
+	total_rays += rays;
+	counters.add("Shadow Rays", rays);
+	rays = prof.get_counter(PROFILING_COUNT_SSS_RAY);
+	total_rays += rays;
+	counters.add("SSS Rays", rays);
+	counters.add("Totaly rays", total_rays);
+	counters.add("Surface shaders", prof.get_counter(PROFILING_COUNT_SHADER_SURFACE));
+	counters.add("Volume shaders", prof.get_counter(PROFILING_COUNT_SHADER_VOLUME));
+	counters.add("Emission shaders", prof.get_counter(PROFILING_COUNT_SHADER_EMISSION));
+	counters.add("Background shaders", prof.get_counter(PROFILING_COUNT_SHADER_BACKGROUND));
+	counters.add("Displacement shaders", prof.get_counter(PROFILING_COUNT_SHADER_DISPLACEMENT));
+	counters.add("2D texture lookups", prof.get_counter(PROFILING_COUNT_TEX2D));
+	counters.add("3D texture lookups", prof.get_counter(PROFILING_COUNT_TEX3D));
 }
 
 string RenderStats::full_report()
@@ -305,6 +348,7 @@ string RenderStats::full_report()
 	else {
 		result += "Profiling information not available (only works with CPU rendering)";
 	}
+	result += "Counter statistics:\n" + counters.full_report(1);
 	return result;
 }
 

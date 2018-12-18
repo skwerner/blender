@@ -231,6 +231,7 @@ ccl_device_inline int subsurface_scatter_disk(
 
 	/* intersect with the same object. if multiple intersections are found it
 	 * will use at most BSSRDF_MAX_HITS hits, a random subset of all hits */
+	PROFILING_COUNT(kg, PROFILING_COUNT_SSS_RAY);
 	scene_intersect_local(kg,
 	                      *ray,
 	                      ss_isect,
@@ -443,6 +444,7 @@ ccl_device_noinline bool subsurface_random_walk(
 		float t = -logf(1.0f - rdist)/sample_sigma_t;
 
 		ray->t = t;
+		PROFILING_COUNT(kg, PROFILING_COUNT_SSS_RAY);
 		scene_intersect_local(kg, *ray, ss_isect, sd->object, NULL, 1);
 		hit = (ss_isect->num_hits > 0);
 

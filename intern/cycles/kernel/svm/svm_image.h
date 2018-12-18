@@ -18,6 +18,7 @@ CCL_NAMESPACE_BEGIN
 
 ccl_device float4 svm_image_texture(KernelGlobals *kg, int id, float x, float y, uint srgb, uint use_alpha)
 {
+	PROFILING_COUNT(kg, PROFILING_COUNT_TEX2D);
 	float4 r = kernel_tex_image_interp(kg, id, x, y);
 	const float alpha = r.w;
 

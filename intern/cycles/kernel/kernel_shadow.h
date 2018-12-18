@@ -110,6 +110,7 @@ ccl_device bool shadow_blocked_opaque(KernelGlobals *kg,
                                       Intersection *isect,
                                       float3 *shadow)
 {
+	PROFILING_COUNT(kg, PROFILING_COUNT_SHADOW_RAY);
 	const bool blocked = scene_intersect(kg,
 	                                     *ray,
 	                                     visibility & PATH_RAY_SHADOW_OPAQUE,
@@ -356,6 +357,7 @@ ccl_device bool shadow_blocked_transparent_stepped_loop(
 			if(bounce >= kernel_data.integrator.transparent_max_bounce) {
 				return true;
 			}
+			PROFILING_COUNT(kg, PROFILING_COUNT_SHADOW_RAY);
 			if(!scene_intersect(kg,
 			                    *ray,
 			                    visibility & PATH_RAY_SHADOW_TRANSPARENT,
@@ -424,6 +426,7 @@ ccl_device bool shadow_blocked_transparent_stepped(
         Intersection *isect,
         float3 *shadow)
 {
+	PROFILING_COUNT(kg, PROFILING_COUNT_SHADOW_RAY);
 	bool blocked = scene_intersect(kg,
 	                               *ray,
 	                               visibility & PATH_RAY_SHADOW_OPAQUE,
@@ -505,6 +508,7 @@ ccl_device_inline bool shadow_blocked(KernelGlobals *kg,
 	 * TODO(sergey): Check why using record-all behavior causes slowdown in such
 	 * cases. Could that be caused by a higher spill pressure?
 	 */
+	PROFILING_COUNT(kg, PROFILING_COUNT_SHADOW_RAY);
 	const bool blocked = scene_intersect(kg,
 	                                     *ray,
 	                                     visibility & PATH_RAY_SHADOW_OPAQUE,

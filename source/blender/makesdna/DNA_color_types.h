@@ -48,9 +48,9 @@ typedef struct CurveMapPoint {
 
 /* curvepoint->flag */
 enum {
-	CUMA_SELECT = 1,
-	CUMA_HANDLE_VECTOR = 2,
-	CUMA_HANDLE_AUTO_ANIM = 4,
+	CUMA_SELECT = (1 << 0),
+	CUMA_HANDLE_VECTOR = (1 << 1),
+	CUMA_HANDLE_AUTO_ANIM = (1 << 2),
 };
 
 typedef struct CurveMap {
@@ -82,13 +82,16 @@ typedef struct CurveMapping {
 	float bwmul[3];					/* black/white point multiply value, for speed */
 
 	float sample[3];				/* sample values, if flag set it draws line and intersection */
+
+	short tone;
+	short pad[3];
 } CurveMapping;
 
 /* cumapping->flag */
-#define CUMA_DO_CLIP			1
-#define CUMA_PREMULLED			2
-#define CUMA_DRAW_CFRA			4
-#define CUMA_DRAW_SAMPLE		8
+#define CUMA_DO_CLIP            (1 << 0)
+#define CUMA_PREMULLED          (1 << 1)
+#define CUMA_DRAW_CFRA          (1 << 2)
+#define CUMA_DRAW_SAMPLE        (1 << 3)
 
 /* cumapping->preset */
 typedef enum eCurveMappingPreset {
@@ -99,7 +102,15 @@ typedef enum eCurveMappingPreset {
 	CURVE_PRESET_MID9   = 4,
 	CURVE_PRESET_ROUND  = 5,
 	CURVE_PRESET_ROOT   = 6,
+	CURVE_PRESET_GAUSS  = 7,
+	CURVE_PRESET_BELL   = 8,
 } eCurveMappingPreset;
+
+/* CurveMapping->tone */
+typedef enum eCurveMappingTone {
+	CURVE_TONE_STANDARD = 0,
+	CURVE_TONE_FILMLIKE = 2,
+} eCurveMappingTone;
 
 /* histogram->mode */
 enum {

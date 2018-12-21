@@ -61,6 +61,7 @@
 #include "BKE_movieclip.h"
 #include "BKE_object.h"
 #include "BKE_scene.h"
+#include "BKE_layer.h"
 
 #include "IMB_imbuf_types.h"
 #include "IMB_imbuf.h"
@@ -404,11 +405,11 @@ void BKE_tracking_get_camera_object_matrix(Scene *scene, Object *ob, float mat[4
 		if (scene->camera)
 			ob = scene->camera;
 		else
-			ob = BKE_scene_camera_find(scene);
+			ob = BKE_view_layer_camera_find(BKE_view_layer_context_active_PLACEHOLDER(scene));
 	}
 
 	if (ob)
-		BKE_object_where_is_calc_mat4(scene, ob, mat);
+		BKE_object_where_is_calc_mat4(ob, mat);
 	else
 		unit_m4(mat);
 }

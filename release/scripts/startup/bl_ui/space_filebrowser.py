@@ -18,7 +18,7 @@
 
 # <pep8 compliant>
 import bpy
-from bpy.types import Header, Panel, Menu
+from bpy.types import Header, Panel, Menu, UIList
 
 
 class FILEBROWSER_HT_header(Header):
@@ -33,8 +33,7 @@ class FILEBROWSER_HT_header(Header):
         if st.active_operator is None:
             layout.template_header()
 
-        row = layout.row()
-        row.separator()
+        layout.menu("FILEBROWSER_MT_view")
 
         row = layout.row(align=True)
         row.operator("file.previous", text="", icon='BACK')
@@ -42,10 +41,8 @@ class FILEBROWSER_HT_header(Header):
         row.operator("file.parent", text="", icon='FILE_PARENT')
         row.operator("file.refresh", text="", icon='FILE_REFRESH')
 
-        layout.separator()
         layout.operator_context = 'EXEC_DEFAULT'
         layout.operator("file.directory_new", icon='NEWFOLDER', text="")
-        layout.separator()
 
         layout.operator_context = 'INVOKE_DEFAULT'
 
@@ -53,26 +50,25 @@ class FILEBROWSER_HT_header(Header):
         if params:
             is_lib_browser = params.use_library_browsing
 
-            layout.prop(params, "recursion_level", text="")
-
             layout.prop(params, "display_type", expand=True, text="")
-
-            layout.prop(params, "display_size", text="")
-
             layout.prop(params, "sort_method", expand=True, text="")
-
             layout.prop(params, "show_hidden", text="", icon='FILE_HIDDEN')
+
+        layout.separator_spacer()
+
+        layout.template_running_jobs()
+
+        if params:
             layout.prop(params, "use_filter", text="", icon='FILTER')
 
             row = layout.row(align=True)
             row.active = params.use_filter
-
             row.prop(params, "use_filter_folder", text="")
 
             if params.filter_glob:
                 # if st.active_operator and hasattr(st.active_operator, "filter_glob"):
                 #     row.prop(params, "filter_glob", text="")
-                row.label(params.filter_glob)
+                row.label(text=params.filter_glob)
             else:
                 row.prop(params, "use_filter_blender", text="")
                 row.prop(params, "use_filter_backup", text="")
@@ -92,10 +88,8 @@ class FILEBROWSER_HT_header(Header):
             row.separator()
             row.prop(params, "filter_search", text="", icon='VIEWZOOM')
 
-        layout.template_running_jobs()
 
-
-class FILEBROWSER_UL_dir(bpy.types.UIList):
+class FILEBROWSER_UL_dir(UIList):
     def draw_item(self, context, layout, data, item, icon, active_data, active_propname, index):
         direntry = item
         # space = context.space_data
@@ -147,7 +141,7 @@ class FILEBROWSER_PT_system_bookmarks(Panel):
 
     @classmethod
     def poll(cls, context):
-        return not context.user_preferences.filepaths.hide_system_bookmarks
+        return not context.preferences.filepaths.hide_system_bookmarks
 
     def draw(self, context):
         layout = self.layout
@@ -189,8 +183,8 @@ class FILEBROWSER_PT_bookmarks(Panel):
                               rows=(2 if num_rows < 2 else 4), maxrows=10)
 
             col = row.column(align=True)
-            col.operator("file.bookmark_add", icon='ZOOMIN', text="")
-            col.operator("file.bookmark_delete", icon='ZOOMOUT', text="")
+            col.operator("file.bookmark_add", icon='ADD', text="")
+            col.operator("file.bookmark_delete", icon='REMOVE', text="")
             col.menu("FILEBROWSER_MT_bookmarks_specials", icon='DOWNARROW_HLT', text="")
 
             if num_rows > 1:
@@ -198,7 +192,7 @@ class FILEBROWSER_PT_bookmarks(Panel):
                 col.operator("file.bookmark_move", icon='TRIA_UP', text="").direction = 'UP'
                 col.operator("file.bookmark_move", icon='TRIA_DOWN', text="").direction = 'DOWN'
         else:
-            layout.operator("file.bookmark_add", icon='ZOOMIN')
+            layout.operator("file.bookmark_add", icon='ADD')
 
 
 class FILEBROWSER_PT_recent_folders(Panel):
@@ -209,7 +203,7 @@ class FILEBROWSER_PT_recent_folders(Panel):
 
     @classmethod
     def poll(cls, context):
-        return not context.user_preferences.filepaths.hide_recent_locations
+        return not context.preferences.filepaths.hide_recent_locations
 
     def draw(self, context):
         layout = self.layout
@@ -248,6 +242,22 @@ class FILEBROWSER_PT_advanced_filter(Panel):
                 col.prop(params, "filter_id")
 
 
+class FILEBROWSER_MT_view(Menu):
+    bl_label = "View"
+
+    def draw(self, context):
+        layout = self.layout
+        st = context.space_data
+        params = st.params
+
+        layout.prop_menu_enum(params, "display_size")
+        layout.prop_menu_enum(params, "recursion_level")
+
+        layout.separator()
+
+        layout.menu("INFO_MT_area")
+
+
 classes = (
     FILEBROWSER_HT_header,
     FILEBROWSER_UL_dir,
@@ -257,6 +267,7 @@ classes = (
     FILEBROWSER_PT_bookmarks,
     FILEBROWSER_PT_recent_folders,
     FILEBROWSER_PT_advanced_filter,
+    FILEBROWSER_MT_view,
 )
 
 if __name__ == "__main__":  # only for live edit.

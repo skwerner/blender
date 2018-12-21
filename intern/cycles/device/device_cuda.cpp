@@ -73,12 +73,12 @@ const char *cuewErrorString(CUresult result)
 	return error.c_str();
 }
 
-const char *cuewCompilerPath(void)
+const char *cuewCompilerPath()
 {
 	return CYCLES_CUDA_NVCC_EXECUTABLE;
 }
 
-int cuewCompilerVersion(void)
+int cuewCompilerVersion()
 {
 	return (CUDA_VERSION / 100) + (CUDA_VERSION % 100 / 10);
 }
@@ -181,6 +181,10 @@ public:
 		return true;
 	}
 
+	virtual BVHLayoutMask get_bvh_layout_mask() const {
+		return BVH_LAYOUT_BVH2;
+	}
+
 /*#ifdef NDEBUG
 #define cuda_abort()
 #else
@@ -207,7 +211,7 @@ public:
 			/*cuda_abort();*/ \
 			cuda_error_documentation(); \
 		} \
-	} (void)0
+	} (void) 0
 
 	bool cuda_error_(CUresult result, const string& stmt)
 	{
@@ -232,8 +236,8 @@ public:
 		cuda_error_documentation();
 	}
 
-	CUDADevice(DeviceInfo& info, Stats &stats, bool background_)
-	: Device(info, stats, background_),
+	CUDADevice(DeviceInfo& info, Stats &stats, Profiler &profiler, bool background_)
+	: Device(info, stats, profiler, background_),
 	  texture_info(this, "__texture_info", MEM_TEXTURE)
 	{
 		first_error = true;
@@ -1860,7 +1864,7 @@ public:
 		glGenTextures(1, &pmem.cuTexId);
 		glBindTexture(GL_TEXTURE_2D, pmem.cuTexId);
 		if(mem.data_type == TYPE_HALF)
-			glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F_ARB, pmem.w, pmem.h, 0, GL_RGBA, GL_HALF_FLOAT, NULL);
+			glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, pmem.w, pmem.h, 0, GL_RGBA, GL_HALF_FLOAT, NULL);
 		else
 			glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, pmem.w, pmem.h, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
@@ -1920,12 +1924,16 @@ public:
 		}
 	}
 
-	void draw_pixels(device_memory& mem, int y, int w, int h, int dx, int dy, int width, int height, bool transparent,
+	void draw_pixels(
+	    device_memory& mem, int y,
+	    int w, int h, int width, int height,
+	    int dx, int dy, int dw, int dh, bool transparent,
 		const DeviceDrawParams &draw_params)
 	{
 		assert(mem.type == MEM_PIXELS);
 
 		if(!background) {
+			const bool use_fallback_shader = (draw_params.bind_display_space_shader_cb == NULL);
 			PixelMem pmem = pixel_mem_map[mem.device_pointer];
 			float *vpointer;
 
@@ -1942,27 +1950,34 @@ public:
 
 			glBindBuffer(GL_PIXEL_UNPACK_BUFFER, pmem.cuPBO);
 			glBindTexture(GL_TEXTURE_2D, pmem.cuTexId);
-			if(mem.data_type == TYPE_HALF)
+			if(mem.data_type == TYPE_HALF) {
 				glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, w, h, GL_RGBA, GL_HALF_FLOAT, (void*)offset);
-			else
+			}
+			else {
 				glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, w, h, GL_RGBA, GL_UNSIGNED_BYTE, (void*)offset);
+			}
 			glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
-
-			glEnable(GL_TEXTURE_2D);
 
 			if(transparent) {
 				glEnable(GL_BLEND);
 				glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
 			}
 
-			glColor3f(1.0f, 1.0f, 1.0f);
-
-			if(draw_params.bind_display_space_shader_cb) {
+			GLint shader_program;
+			if(use_fallback_shader) {
+				if(!bind_fallback_display_space_shader(dw, dh)) {
+					return;
+				}
+				shader_program = fallback_shader_program;
+			}
+			else {
 				draw_params.bind_display_space_shader_cb();
+				glGetIntegerv(GL_CURRENT_PROGRAM, &shader_program);
 			}
 
-			if(!vertex_buffer)
+			if(!vertex_buffer) {
 				glGenBuffers(1, &vertex_buffer);
+			}
 
 			glBindBuffer(GL_ARRAY_BUFFER, vertex_buffer);
 			/* invalidate old contents - avoids stalling if buffer is still waiting in queue to be rendered */
@@ -1995,33 +2010,40 @@ public:
 				glUnmapBuffer(GL_ARRAY_BUFFER);
 			}
 
-			glTexCoordPointer(2, GL_FLOAT, 4 * sizeof(float), 0);
-			glVertexPointer(2, GL_FLOAT, 4 * sizeof(float), (char *)NULL + 2 * sizeof(float));
+			GLuint vertex_array_object;
+			GLuint position_attribute, texcoord_attribute;
 
-			glEnableClientState(GL_VERTEX_ARRAY);
-			glEnableClientState(GL_TEXTURE_COORD_ARRAY);
+			glGenVertexArrays(1, &vertex_array_object);
+			glBindVertexArray(vertex_array_object);
+
+			texcoord_attribute = glGetAttribLocation(shader_program, "texCoord");
+			position_attribute = glGetAttribLocation(shader_program, "pos");
+
+			glEnableVertexAttribArray(texcoord_attribute);
+			glEnableVertexAttribArray(position_attribute);
+
+			glVertexAttribPointer(texcoord_attribute, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (const GLvoid *)0);
+			glVertexAttribPointer(position_attribute, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (const GLvoid *)(sizeof(float) * 2));
 
 			glDrawArrays(GL_TRIANGLE_FAN, 0, 4);
 
-			glDisableClientState(GL_TEXTURE_COORD_ARRAY);
-			glDisableClientState(GL_VERTEX_ARRAY);
-
-			glBindBuffer(GL_ARRAY_BUFFER, 0);
-
-			if(draw_params.unbind_display_space_shader_cb) {
+			if(use_fallback_shader) {
+				glUseProgram(0);
+			}
+			else {
 				draw_params.unbind_display_space_shader_cb();
 			}
 
-			if(transparent)
+			if(transparent) {
 				glDisable(GL_BLEND);
+			}
 
 			glBindTexture(GL_TEXTURE_2D, 0);
-			glDisable(GL_TEXTURE_2D);
 
 			return;
 		}
 
-		Device::draw_pixels(mem, y, w, h, dx, dy, width, height, transparent, draw_params);
+		Device::draw_pixels(mem, y, w, h, width, height, dx, dy, dw, dh, transparent, draw_params);
 	}
 
 	void thread_run(DeviceTask *task)
@@ -2142,7 +2164,7 @@ public:
 			/*cuda_abort();*/ \
 			device->cuda_error_documentation(); \
 		} \
-	} (void)0
+	} (void) 0
 
 
 /* CUDA context scope. */
@@ -2351,7 +2373,7 @@ int2 CUDASplitKernel::split_kernel_global_size(device_memory& kg, device_memory&
 	return global_size;
 }
 
-bool device_cuda_init(void)
+bool device_cuda_init()
 {
 #ifdef WITH_CUDA_DYNLOAD
 	static bool initialized = false;
@@ -2389,12 +2411,12 @@ bool device_cuda_init(void)
 	return result;
 #else  /* WITH_CUDA_DYNLOAD */
 	return true;
-#endif /* WITH_CUDA_DYNLOAD */
+#endif  /* WITH_CUDA_DYNLOAD */
 }
 
-Device *device_cuda_create(DeviceInfo& info, Stats &stats, bool background)
+Device *device_cuda_create(DeviceInfo& info, Stats &stats, Profiler &profiler, bool background)
 {
-	return new CUDADevice(info, stats, background);
+	return new CUDADevice(info, stats, profiler, background);
 }
 
 static CUresult device_cuda_safe_init()
@@ -2459,7 +2481,6 @@ void device_cuda_info(vector<DeviceInfo>& devices)
 		info.advanced_shading = (major >= 3);
 		info.has_half_images = (major >= 3);
 		info.has_volume_decoupled = false;
-		info.bvh_layout_mask = BVH_LAYOUT_BVH2;
 
 		int pci_location[3] = {0, 0, 0};
 		cuDeviceGetAttribute(&pci_location[0], CU_DEVICE_ATTRIBUTE_PCI_DOMAIN_ID, num);
@@ -2494,7 +2515,7 @@ void device_cuda_info(vector<DeviceInfo>& devices)
 		devices.insert(devices.end(), display_devices.begin(), display_devices.end());
 }
 
-string device_cuda_capabilities(void)
+string device_cuda_capabilities()
 {
 	CUresult result = device_cuda_safe_init();
 	if(result != CUDA_SUCCESS) {
@@ -2527,7 +2548,7 @@ string device_cuda_capabilities(void)
 				capabilities += string_printf("\t\tCU_DEVICE_ATTRIBUTE_" #attr "\t\t\t%d\n", \
 				                              value); \
 			} \
-		} (void)0
+		} (void) 0
 		/* TODO(sergey): Strip all attributes which are not useful for us
 		 * or does not depend on the driver.
 		 */

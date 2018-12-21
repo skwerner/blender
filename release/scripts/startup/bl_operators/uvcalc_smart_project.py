@@ -89,7 +89,7 @@ def pointInTri2D(v, v1, v2, v3):
 
         dict_matrix[key] = mtx
 
-    uvw = (v - v1) * mtx
+    uvw = (v - v1) @ mtx
     return 0 <= uvw[0] and 0 <= uvw[1] and uvw[0] + uvw[1] <= 1
 
 
@@ -143,9 +143,9 @@ def island2Edge(island):
     unique_points = {}
 
     for f in island:
-        f_uvkey = map(tuple, f.uv)
+        f_uvkey = list(map(tuple, f.uv))
 
-        for vIdx, edkey in enumerate(f.edge_keys):
+        for vIdx in range(len(f_uvkey)):
             unique_points[f_uvkey[vIdx]] = f.uv[vIdx]
 
             if f.v[vIdx].index > f.v[vIdx - 1].index:
@@ -158,18 +158,14 @@ def island2Edge(island):
             try:
                 edges[f_uvkey[i1], f_uvkey[i2]] *= 0  # sets any edge with more than 1 user to 0 are not returned.
             except:
-                edges[f_uvkey[i1], f_uvkey[i2]] = (f.uv[i1] - f.uv[i2]).length,
+                edges[f_uvkey[i1], f_uvkey[i2]] = (f.uv[i1] - f.uv[i2]).length
 
     # If 2 are the same then they will be together, but full [a,b] order is not correct.
 
     # Sort by length
-
     length_sorted_edges = [(Vector(key[0]), Vector(key[1]), value) for key, value in edges.items() if value != 0]
 
-    try:
-        length_sorted_edges.sort(key=lambda A: -A[2])  # largest first
-    except:
-        length_sorted_edges.sort(lambda A, B: cmp(B[2], A[2]))
+    length_sorted_edges.sort(key=lambda a: -a[2])  # largest first
 
     # Its okay to leave the length in there.
     # for e in length_sorted_edges:
@@ -177,30 +173,6 @@ def island2Edge(island):
 
     # return edges and unique points
     return length_sorted_edges, [v.to_3d() for v in unique_points.values()]
-
-
-# ========================= NOT WORKING????
-# Find if a points inside an edge loop, unordered.
-# pt is and x/y
-# edges are a non ordered loop of edges.
-# offsets are the edge x and y offset.
-"""
-def pointInEdges(pt, edges):
-    #
-    x1 = pt[0]
-    y1 = pt[1]
-
-    # Point to the left of this line.
-    x2 = -100000
-    y2 = -10000
-    intersectCount = 0
-    for ed in edges:
-        xi, yi = lineIntersection2D(x1,y1, x2,y2, ed[0][0], ed[0][1], ed[1][0], ed[1][1])
-        if xi is not None: # Is there an intersection.
-            intersectCount+=1
-
-    return intersectCount % 2
-"""
 
 
 def pointInIsland(pt, island):
@@ -258,7 +230,7 @@ def rotate_uvs(uv_points, angle):
     if angle != 0.0:
         mat = Matrix.Rotation(angle, 2)
         for uv in uv_points:
-            uv[:] = mat * uv
+            uv[:] = mat @ uv
 
 
 def optiRotateUvIsland(faces):
@@ -756,11 +728,10 @@ def main(context,
     USER_FILL_HOLES_QUALITY = 50  # Only for hole filling.
     USER_VIEW_INIT = 0  # Only for hole filling.
 
+    obList = [ob for ob in context.selected_editable_objects if ob and ob.type == 'MESH']
     is_editmode = (context.active_object.mode == 'EDIT')
-    if is_editmode:
-        obList = [ob for ob in [context.active_object] if ob and ob.type == 'MESH']
-    else:
-        obList = [ob for ob in context.selected_editable_objects if ob and ob.type == 'MESH']
+
+    if not is_editmode:
         USER_ONLY_SELECTED_FACES = False
 
     if not obList:
@@ -772,23 +743,11 @@ def main(context,
     else:
         ob = "Unwrap %i Selected Meshes"
 
-    # HACK, loop until mouse is lifted.
-    '''
-    while Window.GetMouseButtons() != 0:
-        time.sleep(10)
-    '''
-
-# ~ XXX	if not Draw.PupBlock(ob % len(obList), pup_block):
-# ~ XXX		return
-# ~ XXX	del ob
-
     # Convert from being button types
-
     USER_PROJECTION_LIMIT_CONVERTED = cos(USER_PROJECTION_LIMIT * DEG_TO_RAD)
     USER_PROJECTION_LIMIT_HALF_CONVERTED = cos((USER_PROJECTION_LIMIT / 2) * DEG_TO_RAD)
 
     # Toggle Edit mode
-    is_editmode = (context.active_object.mode == 'EDIT')
     if is_editmode:
         bpy.ops.object.mode_set(mode='OBJECT')
     # Assume face select mode! an annoying hack to toggle face select mode because Mesh doesn't like faceSelectMode.
@@ -798,12 +757,9 @@ def main(context,
         obList.sort(key=lambda ob: ob.data.name)
         collected_islandList = []
 
-# XXX	Window.WaitCursor(1)
-
     time1 = time.time()
 
     # Tag as False so we don't operate on the same mesh twice.
-# XXX	bpy.data.meshes.tag = False
     for me in bpy.data.meshes:
         me.tag = False
 
@@ -816,8 +772,8 @@ def main(context,
         # Tag as used
         me.tag = True
 
-        if not me.uv_textures:  # Mesh has no UV Coords, don't bother.
-            me.uv_textures.new()
+        if not me.uv_layers:  # Mesh has no UV Coords, don't bother.
+            me.uv_layers.new()
 
         uv_layer = me.uv_layers.active.data
         me_verts = list(me.vertices)
@@ -826,8 +782,6 @@ def main(context,
             meshFaces = [thickface(f, uv_layer, me_verts) for i, f in enumerate(me.polygons) if f.select]
         else:
             meshFaces = [thickface(f, uv_layer, me_verts) for i, f in enumerate(me.polygons)]
-
-# XXX		Window.DrawProgressBar(0.1, 'SmartProj UV Unwrapper, mapping "%s", %i faces.' % (me.name, len(meshFaces)))
 
         # =======
         # Generate a projection list from face normals, this is meant to be smart :)
@@ -858,7 +812,7 @@ def main(context,
         # Initialize projectVecs
         if USER_VIEW_INIT:
             # Generate Projection
-            projectVecs = [Vector(Window.GetViewVector()) * ob.matrix_world.inverted().to_3x3()]  # We add to this along the way
+            projectVecs = [Vector(Window.GetViewVector()) @ ob.matrix_world.inverted().to_3x3()]  # We add to this along the way
         else:
             projectVecs = []
 
@@ -974,8 +928,7 @@ def main(context,
             for f in faceProjectionGroupList[i]:
                 f_uv = f.uv
                 for j, v in enumerate(f.v):
-                    # XXX - note, between mathutils in 2.4 and 2.5 the order changed.
-                    f_uv[j][:] = (MatQuat * v.co).xy
+                    f_uv[j][:] = (MatQuat @ v.co).xy
 
         if USER_SHARE_SPACE:
             # Should we collect and pack later?
@@ -991,11 +944,9 @@ def main(context,
 
     # We want to pack all in 1 go, so pack now
     if USER_SHARE_SPACE:
-        # XXX        Window.DrawProgressBar(0.9, "Box Packing for all objects...")
         packIslands(collected_islandList)
 
     print("Smart Projection time: %.2f" % (time.time() - time1))
-    # Window.DrawProgressBar(0.9, "Smart Projections done, time: %.2f sec" % (time.time() - time1))
 
     # aspect correction is only done in edit mode - and only smart unwrap supports currently
     if is_editmode:
@@ -1024,25 +975,6 @@ def main(context,
 
     dict_matrix.clear()
 
-# XXX	Window.DrawProgressBar(1.0, "")
-# XXX	Window.WaitCursor(0)
-# XXX	Window.RedrawAll()
-
-
-"""
-    pup_block = [\
-    'Projection',\
-    ('Selected Faces Only', USER_ONLY_SELECTED_FACES, 'Use only selected faces from all selected meshes.'),\
-    ('Init from view', USER_VIEW_INIT, 'The first projection will be from the view vector.'),\
-    '',\
-    'UV Layout',\
-    ('Share Tex Space', USER_SHARE_SPACE, 'Objects Share texture space, map all objects into 1 uvmap.'),\
-    ('Island Margin:', USER_ISLAND_MARGIN, 0.0, 0.5, ''),\
-    'Fill in empty areas',\
-    ('Fill Holes', USER_FILL_HOLES, 'Fill in empty areas reduced texture waistage (slow).'),\
-    ('Fill Quality:', USER_FILL_HOLES_QUALITY, 1, 100, 'Depends on fill holes, how tightly to fill UV holes, (higher is slower)'),\
-    ]
-"""
 
 from bpy.props import FloatProperty, BoolProperty
 
@@ -1055,31 +987,30 @@ class SmartProject(Operator):
     bl_label = "Smart UV Project"
     bl_options = {'REGISTER', 'UNDO'}
 
-    angle_limit = FloatProperty(
+    angle_limit: FloatProperty(
         name="Angle Limit",
         description="Lower for more projection groups, higher for less distortion",
         min=1.0, max=89.0,
         default=66.0,
     )
-    island_margin = FloatProperty(
+    island_margin: FloatProperty(
         name="Island Margin",
         description="Margin to reduce bleed from adjacent islands",
-        unit='LENGTH', subtype='DISTANCE',
         min=0.0, max=1.0,
         default=0.0,
     )
-    user_area_weight = FloatProperty(
+    user_area_weight: FloatProperty(
         name="Area Weight",
         description="Weight projections vector by faces with larger areas",
         min=0.0, max=1.0,
         default=0.0,
     )
-    use_aspect = BoolProperty(
+    use_aspect: BoolProperty(
         name="Correct Aspect",
         description="Map UVs taking image aspect ratio into account",
         default=True
     )
-    stretch_to_bounds = BoolProperty(
+    stretch_to_bounds: BoolProperty(
         name="Stretch to UV Bounds",
         description="Stretch the final output to texture bounds",
         default=True,

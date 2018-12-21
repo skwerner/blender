@@ -46,7 +46,6 @@
 #include "RNA_types.h"
 
 #include "bpy.h"
-#include "gpu.h"
 #include "bpy_rna.h"
 #include "bpy_path.h"
 #include "bpy_capi_utils.h"
@@ -59,9 +58,9 @@
 
 #include "BKE_appdir.h"
 #include "BKE_context.h"
-#include "BKE_text.h"
-#include "BKE_main.h"
 #include "BKE_global.h" /* only for script checking */
+#include "BKE_main.h"
+#include "BKE_text.h"
 
 #include "CCL_api.h"
 
@@ -75,6 +74,7 @@
 #include "../generic/blf_py_api.h"
 #include "../generic/idprop_py_api.h"
 #include "../generic/imbuf_py_api.h"
+#include "../gpu/gpu_py_api.h"
 #include "../bmesh/bmesh_py_api.h"
 #include "../mathutils/mathutils.h"
 
@@ -233,7 +233,7 @@ static struct _inittab bpy_internal_modules[] = {
 #ifdef WITH_CYCLES
 	{"_cycles", CCL_initPython},
 #endif
-	{"gpu", GPU_initPython},
+	{"gpu", BPyInit_gpu},
 	{"idprop", BPyInit_idprop},
 	{NULL, NULL}
 };
@@ -537,7 +537,8 @@ static bool python_script_exec(
 
 	if (py_dict) {
 #ifdef PYMODULE_CLEAR_WORKAROUND
-		PyModuleObject *mmod = (PyModuleObject *)PyDict_GetItemString(PyImport_GetModuleDict(), "__main__");
+		PyModuleObject *mmod = (PyModuleObject *)PyDict_GetItem(
+		        PyImport_GetModuleDict(), bpy_intern_str___main__);
 		PyObject *dict_back = mmod->md_dict;
 		/* freeing the module will clear the namespace,
 		 * gives problems running classes defined in this namespace being used later. */
@@ -692,7 +693,9 @@ bool BPY_execute_string_as_intptr(
 	return ok;
 }
 
-bool BPY_execute_string_ex(bContext *C, const char *expr, bool use_eval)
+bool BPY_execute_string_ex(
+        bContext *C, const char *imports[],
+        const char *expr, bool use_eval)
 {
 	BLI_assert(expr);
 	PyGILState_STATE gilstate;
@@ -714,13 +717,18 @@ bool BPY_execute_string_ex(bContext *C, const char *expr, bool use_eval)
 	bmain_back = bpy_import_main_get();
 	bpy_import_main_set(CTX_data_main(C));
 
-	retval = PyRun_String(expr, use_eval ? Py_eval_input : Py_file_input, py_dict, py_dict);
+	if (imports && (!PyC_NameSpace_ImportArray(py_dict, imports))) {
+		Py_DECREF(py_dict);
+		retval = NULL;
+	}
+	else {
+		retval = PyRun_String(expr, use_eval ? Py_eval_input : Py_file_input, py_dict, py_dict);
+	}
 
 	bpy_import_main_set(bmain_back);
 
 	if (retval == NULL) {
 		ok = false;
-
 		BPy_errors_to_report(CTX_wm_reports(C));
 	}
 	else {
@@ -734,9 +742,11 @@ bool BPY_execute_string_ex(bContext *C, const char *expr, bool use_eval)
 	return ok;
 }
 
-bool BPY_execute_string(bContext *C, const char *expr)
+bool BPY_execute_string(
+        bContext *C, const char *imports[],
+        const char *expr)
 {
-	return BPY_execute_string_ex(C, expr, true);
+	return BPY_execute_string_ex(C, imports, expr, true);
 }
 
 void BPY_modules_load_user(bContext *C)
@@ -994,7 +1004,7 @@ bool BPY_string_is_keyword(const char *str)
 	 */
 	const char *kwlist[] = {
 	    "False", "None", "True",
-	    "and", "as", "assert", "break",
+	    "and", "as", "assert", "async", "await", "break",
 	    "class", "continue", "def", "del", "elif", "else", "except",
 	    "finally", "for", "from", "global", "if", "import", "in",
 	    "is", "lambda", "nonlocal", "not", "or", "pass", "raise",

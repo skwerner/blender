@@ -60,6 +60,10 @@ link_directories(${OPENIMAGEIO_LIBPATH}
                  ${TIFF_LIBPATH}
                  ${OPENEXR_LIBPATH})
 
+if(WITH_OPENCOLORIO)
+	link_directories(${OPENCOLORIO_LIBPATH})
+endif()
+
 add_definitions(${GL_DEFINITIONS})
 
 include_directories(${INC})
@@ -77,11 +81,13 @@ macro(cycles_target_link_libraries target)
 	if(WITH_CYCLES_OSL)
 		target_link_libraries(${target} ${OSL_LIBRARIES} ${LLVM_LIBRARIES})
 	endif()
-	if(WITH_CYCLES_OPENSUBDIV)
+	if(WITH_CYCLES_EMBREE)
+		target_link_libraries(${target} ${EMBREE_LIBRARIES})
+	endif()
+	if(WITH_OPENSUBDIV)
 		target_link_libraries(${target} ${OPENSUBDIV_LIBRARIES})
 	endif()
 	if(WITH_OPENCOLORIO)
-		link_directories(${OPENCOLORIO_LIBPATH})
 		target_link_libraries(${target} ${OPENCOLORIO_LIBRARIES})
 	endif()
 	target_link_libraries(

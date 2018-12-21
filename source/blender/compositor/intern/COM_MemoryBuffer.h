@@ -16,8 +16,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
  * Contributor:
- *		Jeroen Bakker
- *		Monique Dewanchand
+ *      Jeroen Bakker
+ *      Monique Dewanchand
  */
 
 class MemoryBuffer;
@@ -279,7 +279,7 @@ public:
 
 	/**
 	 * \brief add the content from otherBuffer to this MemoryBuffer
-	 * \param otherBuffer source buffer
+	 * \param otherBuffer: source buffer
 	 *
 	 * \note take care when running this on a new buffer since it wont fill in
 	 *       uninitialized values in areas where the buffers don't overlap.

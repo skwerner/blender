@@ -41,8 +41,12 @@ class TEXT_HT_header(Header):
             sub.alert = True
             sub.operator("text.resolve_conflict", text="", icon='HELP')
 
+        layout.separator_spacer()
+
         row = layout.row(align=True)
         row.template_ID(st, "text", new="text.new", unlink="text.unlink", open="text.open")
+
+        layout.separator_spacer()
 
         row = layout.row(align=True)
         row.prop(st, "show_line_numbers", text="")
@@ -52,35 +56,34 @@ class TEXT_HT_header(Header):
         if text:
             is_osl = text.name.endswith((".osl", ".osl"))
 
+            row = layout.row()
+            if text.filepath:
+                if text.is_dirty:
+                    row.label(
+                        text=iface_(f"File: *{text.filepath:s} (unsaved)"),
+                        translate=False,
+                    )
+                else:
+                    row.label(
+                        text=iface_(f"File: {text.filepath:s}"),
+                        translate=False,
+                    )
+            else:
+                row.label(
+                    text="Text: External"
+                    if text.library
+                    else "Text: Internal"
+                )
             if is_osl:
                 row = layout.row()
                 row.operator("node.shader_script_update")
             else:
                 row = layout.row()
-                row.operator("text.run_script")
-
-                row = layout.row()
                 row.active = text.name.endswith(".py")
                 row.prop(text, "use_module")
 
-            row = layout.row()
-            if text.filepath:
-                if text.is_dirty:
-                    row.label(
-                        iface_(f"File: *{text.filepath:s} (unsaved)"),
-                        translate=False,
-                    )
-                else:
-                    row.label(
-                        iface_(f"File: {text.filepath:s}"),
-                        translate=False,
-                    )
-            else:
-                row.label(
-                    "Text: External"
-                    if text.library
-                    else "Text: Internal"
-                )
+                row = layout.row()
+                row.operator("text.run_script")
 
 
 class TEXT_MT_editor_menus(Menu):
@@ -88,10 +91,7 @@ class TEXT_MT_editor_menus(Menu):
     bl_label = ""
 
     def draw(self, context):
-        self.draw_menus(self.layout, context)
-
-    @staticmethod
-    def draw_menus(layout, context):
+        layout = self.layout
         st = context.space_data
         text = st.text
 
@@ -108,6 +108,7 @@ class TEXT_MT_editor_menus(Menu):
 class TEXT_PT_properties(Panel):
     bl_space_type = 'TEXT_EDITOR'
     bl_region_type = 'UI'
+    bl_category = "Text"
     bl_label = "Properties"
 
     def draw(self, context):
@@ -139,6 +140,7 @@ class TEXT_PT_properties(Panel):
 class TEXT_PT_find(Panel):
     bl_space_type = 'TEXT_EDITOR'
     bl_region_type = 'UI'
+    bl_category = "Text"
     bl_label = "Find"
 
     def draw(self, context):
@@ -186,9 +188,7 @@ class TEXT_MT_view(Menu):
 
         layout.separator()
 
-        layout.operator("screen.area_dupli")
-        layout.operator("screen.screen_full_area")
-        layout.operator("screen.screen_full_area", text="Toggle Fullscreen Area").use_hide_panels = True
+        layout.menu("INFO_MT_area")
 
 
 class TEXT_MT_text(Menu):
@@ -307,8 +307,8 @@ class TEXT_MT_edit(Menu):
         layout.separator()
 
         layout.operator("text.cut")
-        layout.operator("text.copy")
-        layout.operator("text.paste")
+        layout.operator("text.copy", icon='COPYDOWN')
+        layout.operator("text.paste", icon='PASTEDOWN')
         layout.operator("text.duplicate_line")
 
         layout.separator()

@@ -65,7 +65,6 @@
 
 #include "BKE_context.h"
 #include "BKE_global.h"
-#include "BKE_library.h"
 #include "BKE_icons.h"
 #include "BKE_idcode.h"
 #include "BKE_main.h"
@@ -215,7 +214,7 @@ typedef struct FileListInternEntry {
 	int blentype;  /* ID type, in case typeflag has FILE_TYPE_BLENDERLIB set. */
 
 	char *relpath;
-	char *name;  /* not striclty needed, but used during sorting, avoids to have to recompute it there... */
+	char *name;  /* not strictly needed, but used during sorting, avoids to have to recompute it there... */
 
 	BLI_stat_t st;
 } FileListInternEntry;
@@ -236,7 +235,7 @@ typedef struct FileListEntryCache {
 	/* This one gathers all entries from both block and misc caches. Used for easy bulk-freing. */
 	ListBase cached_entries;
 
-	/* Block cache: all entries between start and end index. used for part of the list on diplay. */
+	/* Block cache: all entries between start and end index. used for part of the list on display. */
 	FileDirEntry **block_entries;
 	int block_start_index, block_end_index, block_center_index, block_cursor;
 
@@ -2357,7 +2356,7 @@ static void filelist_readjob_main_rec(Main *bmain, FileList *filelist)
 		filelist->filelist.entries[9].entry->relpath = BLI_strdup("Ika");
 		filelist->filelist.entries[10].entry->relpath = BLI_strdup("Wave");
 		filelist->filelist.entries[11].entry->relpath = BLI_strdup("Lattice");
-		filelist->filelist.entries[12].entry->relpath = BLI_strdup("Lamp");
+		filelist->filelist.entries[12].entry->relpath = BLI_strdup("Light");
 		filelist->filelist.entries[13].entry->relpath = BLI_strdup("Camera");
 		filelist->filelist.entries[14].entry->relpath = BLI_strdup("Ipo");
 		filelist->filelist.entries[15].entry->relpath = BLI_strdup("World");

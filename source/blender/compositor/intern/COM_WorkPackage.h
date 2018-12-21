@@ -16,8 +16,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
  * Contributor:
- *		Jeroen Bakker
- *		Monique Dewanchand
+ *      Jeroen Bakker
+ *      Monique Dewanchand
  */
 
 class WorkPackage;
@@ -45,8 +45,8 @@ private:
 public:
 	/**
 	 * constructor
-	 * \param group the ExecutionGroup
-	 * \param chunkNumber the number of the chunk
+	 * \param group: the ExecutionGroup
+	 * \param chunkNumber: the number of the chunk
 	 */
 	WorkPackage(ExecutionGroup *group, unsigned int chunkNumber);
 

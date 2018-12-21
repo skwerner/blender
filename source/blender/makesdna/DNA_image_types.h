@@ -51,7 +51,7 @@ typedef struct ImageUser {
 	int framenr;				/* movies, sequences: current to display */
 	int frames;					/* total amount of frames to use */
 	int offset, sfra;			/* offset within movie, start frame in global time */
-	char fie_ima, cycl;		/* fields/image in movie, cyclic flag */
+	char _pad, cycl;		/* cyclic flag */
 	char ok;
 
 	char multiview_eye;			/* multiview current eye - for internal use of drawing routines */
@@ -80,15 +80,17 @@ typedef struct ImagePackedFile {
 } ImagePackedFile;
 
 typedef struct RenderSlot {
+	struct RenderSlot *next, *prev;
 	char name[64];  /* 64 = MAX_NAME */
+	struct RenderResult *render;
 } RenderSlot;
 
 /* iuser->flag */
-#define	IMA_ANIM_ALWAYS		1
-#define IMA_ANIM_REFRESHED	2
-/* #define IMA_DO_PREMUL	4 */
-#define IMA_NEED_FRAME_RECALC	8
-#define IMA_SHOW_STEREO		16
+#define IMA_ANIM_ALWAYS         (1 << 0)
+#define IMA_ANIM_REFRESHED      (1 << 1)
+/* #define IMA_DO_PREMUL        (1 << 2) */
+#define IMA_NEED_FRAME_RECALC   (1 << 3)
+#define IMA_SHOW_STEREO         (1 << 4)
 
 enum {
 	TEXTARGET_TEXTURE_2D = 0,
@@ -108,7 +110,7 @@ typedef struct Image {
 	ListBase anims;
 	struct RenderResult *rr;
 
-	struct RenderResult *renders[8]; /* IMA_MAX_RENDER_SLOT */
+	ListBase renderslots;
 	short render_slot, last_render_slot;
 
 	int flag;
@@ -116,23 +118,17 @@ typedef struct Image {
 	int lastframe;
 
 	/* texture page */
-	short tpageflag, totbind;
-	short xrep, yrep;
-	short twsta, twend;
-	unsigned int bindcode[2]; /* only for current image... 2 = TEXTARGET_COUNT */
-	char pad1[4];
-	unsigned int *repbind;	/* for repeat of parts of images */
+	short tpageflag;
+	short pad2;
+	unsigned int pad3;
 
 	struct PackedFile *packedfile DNA_DEPRECATED; /* deprecated */
 	struct ListBase packedfiles;
 	struct PreviewImage *preview;
 
-	/* game engine tile animation */
-	float lastupdate;
 	int lastused;
-	short animspeed;
-
 	short ok;
+	short pad4[3];
 
 	/* for generated images */
 	int gen_x, gen_y;
@@ -154,8 +150,6 @@ typedef struct Image {
 	char views_format;
 	ListBase views;  /* ImageView */
 	struct Stereo3dFormat *stereo3d_format;
-
-	RenderSlot render_slots[8];  /* 8 = IMA_MAX_RENDER_SLOT */
 } Image;
 
 
@@ -163,41 +157,40 @@ typedef struct Image {
 
 /* Image.flag */
 enum {
-	IMA_FIELDS              = (1 << 0),
-	IMA_STD_FIELD           = (1 << 1),
+	IMA_FLAG_DEPRECATED_0   = (1 << 0),  /* cleared */
+	IMA_FLAG_DEPRECATED_1   = (1 << 1),  /* cleared */
 #ifdef DNA_DEPRECATED
-	IMA_DO_PREMUL           = (1 << 2),  /* deprecated, should not be used */
+	IMA_DO_PREMUL           = (1 << 2),
 #endif
-	IMA_REFLECT             = (1 << 4),
+	IMA_FLAG_DEPRECATED_4   = (1 << 4),  /* cleared */
 	IMA_NOCOLLECT           = (1 << 5),
-	//IMA_DONE_TAG          = (1 << 6),  // UNUSED
+	IMA_FLAG_DEPRECATED_6   = (1 << 6),  /* cleared */
 	IMA_OLD_PREMUL          = (1 << 7),
-	// IMA_CM_PREDIVIDE     = (1 << 8),  /* deprecated, should not be used */
+	IMA_FLAG_DEPRECATED_8   = (1 << 8),  /* cleared */
 	IMA_USED_FOR_RENDER     = (1 << 9),
 	IMA_USER_FRAME_IN_RANGE = (1 << 10), /* for image user, but these flags are mixed */
 	IMA_VIEW_AS_RENDER      = (1 << 11),
 	IMA_IGNORE_ALPHA        = (1 << 12),
 	IMA_DEINTERLACE         = (1 << 13),
 	IMA_USE_VIEWS           = (1 << 14),
-	// IMA_IS_STEREO        = (1 << 15), /* deprecated */
-	// IMA_IS_MULTIVIEW     = (1 << 16), /* deprecated */
+	IMA_FLAG_DEPRECATED_15  = (1 << 15),  /* cleared */
+	IMA_FLAG_DEPRECATED_16  = (1 << 16),  /* cleared */
 };
 
 /* Image.tpageflag */
-#define IMA_TILES			1
-#define IMA_TWINANIM		2
-#define IMA_COLCYCLE		4	/* Depreciated */
-#define IMA_MIPMAP_COMPLETE 8   /* all mipmap levels in OpenGL texture set? */
-#define IMA_CLAMP_U			16
-#define IMA_CLAMP_V			32
-#define IMA_TPAGE_REFRESH	64
-#define IMA_GLBIND_IS_DATA	128 /* opengl image texture bound as non-color data */
+#define IMA_TPAGEFLAG_DEPRECATED_0      (1 << 0)  /* cleared */
+#define IMA_TPAGEFLAG_DEPRECATED_1      (1 << 1)  /* cleared */
+#define IMA_TPAGEFLAG_DEPRECATED_2      (1 << 2)  /* cleared */
+#define IMA_MIPMAP_COMPLETE             (1 << 3)  /* all mipmap levels in OpenGL texture set? */
+#define IMA_TPAGEFLAG_DEPRECATED_4      (1 << 4)  /* cleared */
+#define IMA_TPAGEFLAG_DEPRECATED_5      (1 << 5)  /* cleared */
+#define IMA_TPAGE_REFRESH               (1 << 6)
+#define IMA_GLBIND_IS_DATA              (1 << 7) /* opengl image texture bound as non-color data */
 
 /* ima->type and ima->source moved to BKE_image.h, for API */
 
 /* render */
-#define IMA_MAX_RENDER_TEXT		512
-#define IMA_MAX_RENDER_SLOT		8
+#define IMA_MAX_RENDER_TEXT		(1 << 9)
 
 /* gen_flag */
 #define IMA_GEN_FLOAT		1

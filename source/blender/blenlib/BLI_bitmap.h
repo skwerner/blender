@@ -69,6 +69,12 @@ typedef unsigned int BLI_bitmap;
 	 ((_bitmap)[(_index) >> _BITMAP_POWER] & \
 	  (1u << ((_index) & _BITMAP_MASK))))
 
+#define BLI_BITMAP_TEST_AND_SET_ATOMIC(_bitmap, _index) \
+	(CHECK_TYPE_ANY(_bitmap, BLI_bitmap *, const BLI_bitmap *), \
+	(atomic_fetch_and_or_uint32((uint32_t*)&(_bitmap)[(_index) >> _BITMAP_POWER], \
+	                            (1u << ((_index) & _BITMAP_MASK))) & \
+	                            (1u << ((_index) & _BITMAP_MASK))))
+
 #define BLI_BITMAP_TEST_BOOL(_bitmap, _index) \
 	(CHECK_TYPE_ANY(_bitmap, BLI_bitmap *, const BLI_bitmap *), \
 	 (BLI_BITMAP_TEST(_bitmap, _index) != 0))
@@ -101,21 +107,17 @@ typedef unsigned int BLI_bitmap;
 			BLI_BITMAP_DISABLE(_bitmap, _index); \
 	} (void)0
 
-/* set or clear the value of the whole bitmap (needs size info) */
-#define BLI_BITMAP_SET_ALL(_bitmap, _set, _tot) \
-	{ \
-		CHECK_TYPE(_bitmap, BLI_bitmap *); \
-		if (_set) \
-			memset(_bitmap, UCHAR_MAX, BLI_BITMAP_SIZE(_tot)); \
-		else \
-			memset(_bitmap, 0, BLI_BITMAP_SIZE(_tot)); \
-	} (void)0
-
 /* resize bitmap to have space for '_tot' bits */
 #define BLI_BITMAP_RESIZE(_bitmap, _tot) \
 	{ \
 		CHECK_TYPE(_bitmap, BLI_bitmap *); \
 		(_bitmap) = MEM_reallocN(_bitmap, BLI_BITMAP_SIZE(_tot)); \
 	} (void)0
+
+void BLI_bitmap_set_all(BLI_bitmap *bitmap, bool set, size_t bits);
+void BLI_bitmap_flip_all(BLI_bitmap *bitmap, size_t bits);
+void BLI_bitmap_copy_all(BLI_bitmap *dst, const BLI_bitmap *src, size_t bits);
+void BLI_bitmap_and_all(BLI_bitmap *dst, const BLI_bitmap *src, size_t bits);
+void BLI_bitmap_or_all(BLI_bitmap *dst, const BLI_bitmap *src, size_t bits);
 
 #endif

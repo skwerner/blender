@@ -27,37 +27,43 @@ class UnifiedPaintPanel:
 
     @staticmethod
     def paint_settings(context):
-        toolsettings = context.tool_settings
+        tool_settings = context.tool_settings
 
         if context.sculpt_object:
-            return toolsettings.sculpt
+            return tool_settings.sculpt
         elif context.vertex_paint_object:
-            return toolsettings.vertex_paint
+            return tool_settings.vertex_paint
         elif context.weight_paint_object:
-            return toolsettings.weight_paint
+            return tool_settings.weight_paint
         elif context.image_paint_object:
-            if (toolsettings.image_paint and toolsettings.image_paint.detect_data()):
-                return toolsettings.image_paint
+            if (tool_settings.image_paint and tool_settings.image_paint.detect_data()):
+                return tool_settings.image_paint
 
             return None
         elif context.particle_edit_object:
-            return toolsettings.particle_edit
+            return tool_settings.particle_edit
 
         return None
 
     @staticmethod
     def unified_paint_settings(parent, context):
         ups = context.tool_settings.unified_paint_settings
-        parent.label(text="Unified Settings:")
-        row = parent.row()
-        row.prop(ups, "use_unified_size", text="Size")
-        row.prop(ups, "use_unified_strength", text="Strength")
+
+        flow = parent.grid_flow(row_major=True, columns=0, even_columns=True, even_rows=False, align=False)
+
+        col = flow.column()
+        col.prop(ups, "use_unified_size", text="Size")
+        col = flow.column()
+        col.prop(ups, "use_unified_strength", text="Strength")
         if context.weight_paint_object:
-            parent.prop(ups, "use_unified_weight", text="Weight")
+            col = flow.column()
+            col.prop(ups, "use_unified_weight", text="Weight")
         elif context.vertex_paint_object or context.image_paint_object:
-            parent.prop(ups, "use_unified_color", text="Color")
+            col = flow.column()
+            col.prop(ups, "use_unified_color", text="Color")
         else:
-            parent.prop(ups, "use_unified_color", text="Color")
+            col = flow.column()
+            col.prop(ups, "use_unified_color", text="Color")
 
     @staticmethod
     def prop_unified_size(parent, context, brush, prop_name, icon='NONE', text="", slider=False):
@@ -96,9 +102,9 @@ class VIEW3D_MT_tools_projectpaint_clone(Menu):
     def draw(self, context):
         layout = self.layout
 
-        for i, tex in enumerate(context.active_object.data.uv_textures):
-            props = layout.operator("wm.context_set_int", text=tex.name, translate=False)
-            props.data_path = "active_object.data.uv_texture_clone_index"
+        for i, uv_layer in enumerate(context.active_object.data.uv_layers):
+            props = layout.operator("wm.context_set_int", text=uv_layer.name, translate=False)
+            props.data_path = "active_object.data.uv_layer_clone_index"
             props.value = i
 
 
@@ -116,11 +122,11 @@ def brush_texpaint_common(panel, context, layout, brush, settings, projpaint=Fal
                 col.template_palette(settings, "palette", color=True)
 
             if brush.use_gradient:
-                col.label("Gradient Colors")
+                col.label(text="Gradient Colors")
                 col.template_color_ramp(brush, "gradient", expand=True)
 
                 if brush.image_tool == 'DRAW':
-                    col.label("Background Color")
+                    col.label(text="Background Color")
                     row = col.row(align=True)
                     panel.prop_unified_color(row, context, brush, "secondary_color", text="")
                     col.prop(brush, "gradient_stroke_mode", text="Mode")
@@ -167,14 +173,14 @@ def brush_texpaint_common(panel, context, layout, brush, settings, projpaint=Fal
 
                 if settings.mode == 'MATERIAL':
                     if len(ob.material_slots) > 1:
-                        col.label("Materials")
+                        col.label(text="Materials")
                         col.template_list("MATERIAL_UL_matslots", "",
                                           ob, "material_slots",
                                           ob, "active_material_index", rows=2)
 
                     mat = ob.active_material
                     if mat:
-                        col.label("Source Clone Slot")
+                        col.label(text="Source Clone Slot")
                         col.template_list("TEXTURE_UL_texpaintslots", "",
                                           mat, "texture_paint_images",
                                           mat, "paint_clone_slot", rows=2)
@@ -182,10 +188,10 @@ def brush_texpaint_common(panel, context, layout, brush, settings, projpaint=Fal
                 elif settings.mode == 'IMAGE':
                     mesh = ob.data
 
-                    clone_text = mesh.uv_texture_clone.name if mesh.uv_texture_clone else ""
-                    col.label("Source Clone Image")
+                    clone_text = mesh.uv_layer_clone.name if mesh.uv_layer_clone else ""
+                    col.label(text="Source Clone Image")
                     col.template_ID(settings, "clone_image")
-                    col.label("Source Clone UV Map")
+                    col.label(text="Source Clone UV Map")
                     col.menu("VIEW3D_MT_tools_projectpaint_clone", text=clone_text, translate=False)
         else:
             col.prop(brush, "clone_image", text="Image")
@@ -230,15 +236,16 @@ def brush_texpaint_common(panel, context, layout, brush, settings, projpaint=Fal
 def brush_texture_settings(layout, brush, sculpt):
     tex_slot = brush.texture_slot
 
-    layout.label(text="Brush Mapping:")
+    layout.use_property_split = True
+    layout.use_property_decorate = False
 
     # map_mode
     if sculpt:
-        layout.row().prop(tex_slot, "map_mode", text="")
-        layout.separator()
+        layout.prop(tex_slot, "map_mode", text="Mapping")
     else:
-        layout.row().prop(tex_slot, "tex_paint_map_mode", text="")
-        layout.separator()
+        layout.prop(tex_slot, "tex_paint_map_mode", text="Mapping")
+
+    layout.separator()
 
     if tex_slot.map_mode == 'STENCIL':
         if brush.texture and brush.texture.type == 'IMAGE':
@@ -248,8 +255,7 @@ def brush_texture_settings(layout, brush, sculpt):
     # angle and texture_angle_source
     if tex_slot.has_texture_angle:
         col = layout.column()
-        col.label(text="Angle:")
-        col.prop(tex_slot, "angle", text="")
+        col.prop(tex_slot, "angle", text="Angle")
         if tex_slot.has_texture_angle_source:
             col.prop(tex_slot, "use_rake", text="Rake")
 
@@ -258,32 +264,29 @@ def brush_texture_settings(layout, brush, sculpt):
                     if brush.sculpt_capabilities.has_random_texture_angle:
                         col.prop(tex_slot, "use_random", text="Random")
                         if tex_slot.use_random:
-                            col.prop(tex_slot, "random_angle", text="")
+                            col.prop(tex_slot, "random_angle", text="Raandom Angle")
                 else:
                     col.prop(tex_slot, "use_random", text="Random")
                     if tex_slot.use_random:
-                        col.prop(tex_slot, "random_angle", text="")
+                        col.prop(tex_slot, "random_angle", text="Random Angle")
 
     # scale and offset
-    split = layout.split()
-    split.prop(tex_slot, "offset")
-    split.prop(tex_slot, "scale")
+    layout.prop(tex_slot, "offset")
+    layout.prop(tex_slot, "scale")
 
     if sculpt:
         # texture_sample_bias
-        col = layout.column(align=True)
-        col.label(text="Sample Bias:")
-        col.prop(brush, "texture_sample_bias", slider=True, text="")
+        layout.prop(brush, "texture_sample_bias", slider=True, text="Sample Bias")
 
 
 def brush_mask_texture_settings(layout, brush):
     mask_tex_slot = brush.mask_texture_slot
 
-    layout.label(text="Mask Mapping:")
+    layout.use_property_split = True
+    layout.use_property_decorate = False
 
     # map_mode
-    layout.row().prop(mask_tex_slot, "mask_map_mode", text="")
-    layout.separator()
+    layout.row().prop(mask_tex_slot, "mask_map_mode", text="Mask Mapping")
 
     if mask_tex_slot.map_mode == 'STENCIL':
         if brush.mask_texture and brush.mask_texture.type == 'IMAGE':
@@ -291,24 +294,22 @@ def brush_mask_texture_settings(layout, brush):
         layout.operator("brush.stencil_reset_transform").mask = True
 
     col = layout.column()
-    col.prop(brush, "use_pressure_masking", text="")
+    col.prop(brush, "use_pressure_masking", text="Pressure Masking")
     # angle and texture_angle_source
     if mask_tex_slot.has_texture_angle:
         col = layout.column()
-        col.label(text="Angle:")
-        col.prop(mask_tex_slot, "angle", text="")
+        col.prop(mask_tex_slot, "angle", text="Angle")
         if mask_tex_slot.has_texture_angle_source:
             col.prop(mask_tex_slot, "use_rake", text="Rake")
 
             if brush.brush_capabilities.has_random_texture_angle and mask_tex_slot.has_random_texture_angle:
                 col.prop(mask_tex_slot, "use_random", text="Random")
                 if mask_tex_slot.use_random:
-                    col.prop(mask_tex_slot, "random_angle", text="")
+                    col.prop(mask_tex_slot, "random_angle", text="Random Angle")
 
     # scale and offset
-    split = layout.split()
-    split.prop(mask_tex_slot, "offset")
-    split.prop(mask_tex_slot, "scale")
+    col.prop(mask_tex_slot, "offset")
+    col.prop(mask_tex_slot, "scale")
 
 
 classes = (

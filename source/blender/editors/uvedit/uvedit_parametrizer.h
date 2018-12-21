@@ -62,8 +62,7 @@ void param_face_add(ParamHandle *handle,
                     float *co[4],
                     float *uv[4],
                     ParamBool *pin,
-                    ParamBool *select,
-                    float face_normal[3]);
+                    ParamBool *select);
 
 void param_edge_set_seam(ParamHandle *handle,
                          ParamKey *vkeys);
@@ -99,11 +98,11 @@ void param_smooth_area(ParamHandle *handle);
 
 /* Packing */
 
-void param_pack(ParamHandle *handle, float margin, bool do_rotate);
+void param_pack(ParamHandle *handle, float margin, bool do_rotate, bool ignore_pinned);
 
 /* Average area for all charts */
 
-void param_average(ParamHandle *handle);
+void param_average(ParamHandle *handle, bool ignore_pinned);
 
 /* Simple x,y scale */
 

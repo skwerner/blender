@@ -16,8 +16,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
  * Contributor:
- *		Jeroen Bakker
- *		Monique Dewanchand
+ *      Jeroen Bakker
+ *      Monique Dewanchand
  */
 
 #ifndef __COM_WORKSCHEDULER_H__
@@ -61,8 +61,8 @@ public:
 	 * when ExecutionGroup.isOpenCL is set the work will be handled by a OpenCLDevice
 	 * otherwise the work is scheduled for an CPUDevice
 	 * \see ExecutionGroup.execute
-	 * \param group the execution group
-	 * \param chunkNumber the number of the chunk in the group to be executed
+	 * \param group: the execution group
+	 * \param chunkNumber: the number of the chunk in the group to be executed
 	 */
 	static void schedule(ExecutionGroup *group, int chunkNumber);
 

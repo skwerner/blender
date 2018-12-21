@@ -62,6 +62,8 @@ static void curveinterp_v3_v3v3v3v3(float3 *p,
 
 static float shaperadius(float shape, float root, float tip, float time)
 {
+	assert(time >= 0.0f);
+	assert(time <= 1.0f);
 	float radius = 1.0f - time;
 
 	if(shape != 0.0f) {
@@ -134,9 +136,9 @@ static bool ObtainCacheParticleData(Mesh *mesh,
 
 			if((b_part.render_type() == BL::ParticleSettings::render_type_PATH) && (b_part.type() == BL::ParticleSettings::type_HAIR)) {
 				int shader = clamp(b_part.material()-1, 0, mesh->used_shaders.size()-1);
-				int draw_step = background ? b_part.render_step() : b_part.draw_step();
+				int display_step = background ? b_part.render_step() : b_part.display_step();
 				int totparts = b_psys.particles.length();
-				int totchild = background ? b_psys.child_particles.length() : (int)((float)b_psys.child_particles.length() * (float)b_part.draw_percentage() / 100.0f);
+				int totchild = background ? b_psys.child_particles.length() : (int)((float)b_psys.child_particles.length() * (float)b_part.display_percentage() / 100.0f);
 				int totcurves = totchild;
 
 				if(b_part.child_type() == 0 || totchild == 0)
@@ -145,22 +147,20 @@ static bool ObtainCacheParticleData(Mesh *mesh,
 				if(totcurves == 0)
 					continue;
 
-				int ren_step = (1 << draw_step) + 1;
+				int ren_step = (1 << display_step) + 1;
 				if(b_part.kink() == BL::ParticleSettings::kink_SPIRAL)
 					ren_step += b_part.kink_extra_steps();
-
-				PointerRNA cpsys = RNA_pointer_get(&b_part.ptr, "cycles");
 
 				CData->psys_firstcurve.push_back_slow(curvenum);
 				CData->psys_curvenum.push_back_slow(totcurves);
 				CData->psys_shader.push_back_slow(shader);
 
-				float radius = get_float(cpsys, "radius_scale") * 0.5f;
+				float radius = b_part.radius_scale() * 0.5f;
 
-				CData->psys_rootradius.push_back_slow(radius * get_float(cpsys, "root_width"));
-				CData->psys_tipradius.push_back_slow(radius * get_float(cpsys, "tip_width"));
-				CData->psys_shape.push_back_slow(get_float(cpsys, "shape"));
-				CData->psys_closetip.push_back_slow(get_boolean(cpsys, "use_closetip"));
+				CData->psys_rootradius.push_back_slow(radius * b_part.root_radius());
+				CData->psys_tipradius.push_back_slow(radius * b_part.tip_radius());
+				CData->psys_shape.push_back_slow(b_part.shape());
+				CData->psys_closetip.push_back_slow(b_part.use_close_tip());
 
 				int pa_no = 0;
 				if(!(b_part.child_type() == 0) && totchild != 0)
@@ -229,7 +229,7 @@ static bool ObtainCacheParticleUV(Mesh *mesh,
 
 			if((b_part.render_type() == BL::ParticleSettings::render_type_PATH) && (b_part.type() == BL::ParticleSettings::type_HAIR)) {
 				int totparts = b_psys.particles.length();
-				int totchild = background ? b_psys.child_particles.length() : (int)((float)b_psys.child_particles.length() * (float)b_part.draw_percentage() / 100.0f);
+				int totchild = background ? b_psys.child_particles.length() : (int)((float)b_psys.child_particles.length() * (float)b_part.display_percentage() / 100.0f);
 				int totcurves = totchild;
 
 				if(b_part.child_type() == 0 || totchild == 0)
@@ -249,11 +249,11 @@ static bool ObtainCacheParticleUV(Mesh *mesh,
 				b_psys.particles.begin(b_pa);
 				for(; pa_no < totparts+totchild; pa_no++) {
 					/* Add UVs */
-					BL::Mesh::tessface_uv_textures_iterator l;
-					b_mesh->tessface_uv_textures.begin(l);
+					BL::Mesh::uv_layers_iterator l;
+					b_mesh->uv_layers.begin(l);
 
 					float3 uv = make_float3(0.0f, 0.0f, 0.0f);
-					if(b_mesh->tessface_uv_textures.length())
+					if(b_mesh->uv_layers.length())
 						b_psys.uv_on_emitter(psmd, *b_pa, pa_no, uv_num, &uv.x);
 					CData->curve_uv.push_back_slow(uv);
 
@@ -288,7 +288,7 @@ static bool ObtainCacheParticleVcol(Mesh *mesh,
 
 			if((b_part.render_type() == BL::ParticleSettings::render_type_PATH) && (b_part.type() == BL::ParticleSettings::type_HAIR)) {
 				int totparts = b_psys.particles.length();
-				int totchild = background ? b_psys.child_particles.length() : (int)((float)b_psys.child_particles.length() * (float)b_part.draw_percentage() / 100.0f);
+				int totchild = background ? b_psys.child_particles.length() : (int)((float)b_psys.child_particles.length() * (float)b_part.display_percentage() / 100.0f);
 				int totcurves = totchild;
 
 				if(b_part.child_type() == 0 || totchild == 0)
@@ -308,11 +308,11 @@ static bool ObtainCacheParticleVcol(Mesh *mesh,
 				b_psys.particles.begin(b_pa);
 				for(; pa_no < totparts+totchild; pa_no++) {
 					/* Add vertex colors */
-					BL::Mesh::tessface_vertex_colors_iterator l;
-					b_mesh->tessface_vertex_colors.begin(l);
+					BL::Mesh::vertex_colors_iterator l;
+					b_mesh->vertex_colors.begin(l);
 
 					float3 vcol = make_float3(0.0f, 0.0f, 0.0f);
-					if(b_mesh->tessface_vertex_colors.length())
+					if(b_mesh->vertex_colors.length())
 						b_psys.mcol_on_emitter(psmd, *b_pa, pa_no, vcol_num, &vcol.x);
 					CData->curve_vcol.push_back_slow(vcol);
 
@@ -324,18 +324,6 @@ static bool ObtainCacheParticleVcol(Mesh *mesh,
 	}
 
 	return true;
-}
-
-static void set_resolution(BL::BlendData *b_data, BL::Object *b_ob, BL::Scene *scene, bool render)
-{
-	BL::Object::modifiers_iterator b_mod;
-	for(b_ob->modifiers.begin(b_mod); b_mod != b_ob->modifiers.end(); ++b_mod) {
-		if((b_mod->type() == b_mod->type_PARTICLE_SYSTEM) && ((b_mod->show_viewport()) || (b_mod->show_render()))) {
-			BL::ParticleSystemModifier psmd((const PointerRNA)b_mod->ptr);
-			BL::ParticleSystem b_psys((const PointerRNA)psmd.particle_system().ptr);
-			b_psys.set_resolution(*b_data, *scene, *b_ob, (render)? 2: 1);
-		}
-	}
 }
 
 static void ExportCurveTrianglePlanes(Mesh *mesh, ParticleCurveData *CData,
@@ -650,21 +638,24 @@ static float4 CurveSegmentMotionCV(ParticleCurveData *CData, int sys, int curve,
 
 static float4 LerpCurveSegmentMotionCV(ParticleCurveData *CData, int sys, int curve, float step)
 {
-	step = clamp(step, 0.0f, 1.0f);
-	float curve_key_f = step * (CData->curve_keynum[curve] - 1);
+	assert(step >= 0.0f);
+	assert(step <= 1.0f);
+	const int first_curve_key = CData->curve_firstkey[curve];
+	const float curve_key_f = step * (CData->curve_keynum[curve] - 1);
 	int curvekey = (int)floorf(curve_key_f);
-	float remainder = curve_key_f - curvekey;
+	const float remainder = curve_key_f - curvekey;
 	if(remainder == 0.0f) {
-		return CurveSegmentMotionCV(CData, sys, curve, curvekey);
+		return CurveSegmentMotionCV(CData, sys, curve, first_curve_key + curvekey);
 	}
 	int curvekey2 = curvekey + 1;
 	if(curvekey2 >= (CData->curve_keynum[curve] - 1)) {
 		curvekey2 = (CData->curve_keynum[curve] - 1);
 		curvekey = curvekey2 - 1;
 	}
-
-	float4 mP = CurveSegmentMotionCV(CData, sys, curve, curvekey);
-	float4 mP2 = CurveSegmentMotionCV(CData, sys, curve, curvekey2);
+	const float4 mP = CurveSegmentMotionCV(
+	        CData, sys, curve, first_curve_key + curvekey);
+	const float4 mP2 = CurveSegmentMotionCV(
+	        CData, sys, curve, first_curve_key + curvekey2);
 	return lerp(mP, mP2, remainder);
 }
 
@@ -701,10 +692,10 @@ static void ExportCurveSegmentsMotion(Mesh *mesh, ParticleCurveData *CData, int 
 
 			/* Curve lengths may not match! Curves can be clipped. */
 			int curve_key_end = (num_curves+1 < (int)mesh->curve_first_key.size() ? mesh->curve_first_key[num_curves+1] : (int)mesh->curve_keys.size());
-			int center_curve_len = curve_key_end - mesh->curve_first_key[num_curves];
-			int diff = CData->curve_keynum[curve] - center_curve_len;
+			const int num_center_curve_keys = curve_key_end - mesh->curve_first_key[num_curves];
+			const int is_num_keys_different = CData->curve_keynum[curve] - num_center_curve_keys;
 
-			if(diff == 0) {
+			if(!is_num_keys_different) {
 				for(int curvekey = CData->curve_firstkey[curve]; curvekey < CData->curve_firstkey[curve] + CData->curve_keynum[curve]; curvekey++) {
 					if(i < mesh->curve_keys.size()) {
 						mP[i] = CurveSegmentMotionCV(CData, sys, curve, curvekey);
@@ -722,12 +713,16 @@ static void ExportCurveSegmentsMotion(Mesh *mesh, ParticleCurveData *CData, int 
 				}
 			}
 			else {
-				/* Number of keys has changed. Genereate an interpolated version to preserve motion blur. */
-				float step = 0;
-				float step_size = 1.0f / (center_curve_len-1);
-				for(; i < curve_key_end; i++) {
+				/* Number of keys has changed. Genereate an interpolated version
+				 * to preserve motion blur. */
+				float step_size = 1.0f / (num_center_curve_keys-1);
+				for(int step_index = 0;
+				    step_index < num_center_curve_keys;
+				    ++step_index)
+				{
+					const float step = step_index * step_size;
 					mP[i] = LerpCurveSegmentMotionCV(CData, sys, curve, step);
-					step = i * step_size;
+					i++;
 				}
 				have_motion = true;
 			}
@@ -965,9 +960,6 @@ void BlenderSync::sync_curves(Mesh *mesh,
 
 	ParticleCurveData CData;
 
-	if(!preview)
-		set_resolution(&b_data, &b_ob, &b_scene, true);
-
 	ObtainCacheParticleData(mesh, &b_mesh, &b_ob, &CData, !preview);
 
 	/* add hair geometry to mesh */
@@ -1030,10 +1022,10 @@ void BlenderSync::sync_curves(Mesh *mesh,
 
 	/* create vertex color attributes */
 	if(!motion) {
-		BL::Mesh::tessface_vertex_colors_iterator l;
+		BL::Mesh::vertex_colors_iterator l;
 		int vcol_num = 0;
 
-		for(b_mesh.tessface_vertex_colors.begin(l); l != b_mesh.tessface_vertex_colors.end(); ++l, vcol_num++) {
+		for(b_mesh.vertex_colors.begin(l); l != b_mesh.vertex_colors.end(); ++l, vcol_num++) {
 			if(!mesh->need_attribute(scene, ustring(l->name().c_str())))
 				continue;
 
@@ -1067,10 +1059,10 @@ void BlenderSync::sync_curves(Mesh *mesh,
 
 	/* create UV attributes */
 	if(!motion) {
-		BL::Mesh::tessface_uv_textures_iterator l;
+		BL::Mesh::uv_layers_iterator l;
 		int uv_num = 0;
 
-		for(b_mesh.tessface_uv_textures.begin(l); l != b_mesh.tessface_uv_textures.end(); ++l, uv_num++) {
+		for(b_mesh.uv_layers.begin(l); l != b_mesh.uv_layers.end(); ++l, uv_num++) {
 			bool active_render = l->active_render();
 			AttributeStandard std = (active_render)? ATTR_STD_UV: ATTR_STD_NONE;
 			ustring name = ustring(l->name().c_str());
@@ -1110,9 +1102,6 @@ void BlenderSync::sync_curves(Mesh *mesh,
 			}
 		}
 	}
-
-	if(!preview)
-		set_resolution(&b_data, &b_ob, &b_scene, false);
 
 	mesh->compute_bounds();
 }

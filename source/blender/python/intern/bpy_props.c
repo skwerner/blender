@@ -3083,9 +3083,10 @@ PyObject *BPy_CollectionProperty(PyObject *self, PyObject *args, PyObject *kw)
 			return NULL;
 
 		if (!RNA_struct_is_a(ptype, &RNA_PropertyGroup)) {
-			PyErr_Format(PyExc_TypeError,
-				"CollectionProperty(...) expected an RNA type derived from %.200s",
-				RNA_struct_ui_name(&RNA_ID), RNA_struct_ui_name(&RNA_PropertyGroup));
+			PyErr_Format(
+			        PyExc_TypeError,
+			        "CollectionProperty(...) expected an RNA type derived from %.200s",
+			        RNA_struct_ui_name(&RNA_ID), RNA_struct_ui_name(&RNA_PropertyGroup));
 			return NULL;
 		}
 
@@ -3202,11 +3203,6 @@ PyObject *BPY_rna_props(void)
 
 	submodule = PyModule_Create(&props_module);
 	PyDict_SetItemString(PyImport_GetModuleDict(), props_module.m_name, submodule);
-
-	/* INCREF since its its assumed that all these functions return the
-	 * module with a new ref like PyDict_New, since they are passed to
-	 * PyModule_AddObject which steals a ref */
-	Py_INCREF(submodule);
 
 	/* api needs the PyObjects internally */
 	submodule_dict = PyModule_GetDict(submodule);

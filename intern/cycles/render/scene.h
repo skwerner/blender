@@ -235,6 +235,9 @@ public:
 
 class Scene {
 public:
+	/* Optional name. Is used for logging and reporting. */
+	string name;
+
 	/* data */
 	Camera *camera;
 	Camera *dicing_camera;

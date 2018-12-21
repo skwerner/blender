@@ -30,7 +30,7 @@ __all__ = (
 )
 
 import bpy as _bpy
-_user_preferences = _bpy.context.user_preferences
+_preferences = _bpy.context.preferences
 
 error_encoding = False
 # (name, file, path)
@@ -43,7 +43,7 @@ def _initialize():
     path_list = paths()
     for path in path_list:
         _bpy.utils._sys_path_ensure(path)
-    for addon in _user_preferences.addons:
+    for addon in _preferences.addons:
         enable(addon.module)
 
 
@@ -231,7 +231,7 @@ def check(module_name):
     :rtype: tuple of booleans
     """
     import sys
-    loaded_default = module_name in _user_preferences.addons
+    loaded_default = module_name in _preferences.addons
 
     mod = sys.modules.get(module_name)
     loaded_state = (
@@ -258,7 +258,7 @@ def check(module_name):
 
 
 def _addon_ensure(module_name):
-    addons = _user_preferences.addons
+    addons = _preferences.addons
     addon = addons.get(module_name)
     if not addon:
         addon = addons.new()
@@ -266,7 +266,7 @@ def _addon_ensure(module_name):
 
 
 def _addon_remove(module_name):
-    addons = _user_preferences.addons
+    addons = _preferences.addons
 
     while module_name in addons:
         addon = addons.get(module_name)
@@ -362,8 +362,31 @@ def enable(module_name, *, default_set=False, persistent=False, handle_error=Non
                 _addon_remove(module_name)
             return None
 
+        # 1.1) fail when add-on is too old
+        # This is a temporary 2.8x migration check, so we can manage addons that are supported.
+
+        # Silent default, we know these need updating.
+        if module_name in {
+            "io_scene_3ds",
+            "io_scene_x3d",
+        }:
+            return None
+
+        try:
+            if mod.bl_info.get("blender", (0, 0, 0)) < (2, 80, 0):
+                raise Exception(f"Add-on '{module_name:s}' has not been upgraded to 2.8, ignoring")
+        except Exception as ex:
+            handle_error(ex)
+            return None
+
         # 2) try register collected modules
         # removed, addons need to handle own registration now.
+
+        use_owner = mod.bl_info.get("use_owner", True)
+        if use_owner:
+            from _bpy import _bl_owner_id_get, _bl_owner_id_set
+            owner_id_prev = _bl_owner_id_get()
+            _bl_owner_id_set(module_name)
 
         # 3) try run the modules register function
         try:
@@ -378,6 +401,9 @@ def enable(module_name, *, default_set=False, persistent=False, handle_error=Non
             if default_set:
                 _addon_remove(module_name)
             return None
+        finally:
+            if use_owner:
+                _bl_owner_id_set(owner_id_prev)
 
     # * OK loaded successfully! *
     mod.__addon_enabled__ = True
@@ -496,6 +522,7 @@ def module_bl_info(mod, info_basis=None):
             "category": "",
             "warning": "",
             "show_expanded": False,
+            "use_owner": True,
         }
 
     addon_info = getattr(mod, "bl_info", {})
@@ -512,6 +539,10 @@ def module_bl_info(mod, info_basis=None):
 
     if not addon_info["name"]:
         addon_info["name"] = mod.__name__
+
+    # Temporary auto-magic, don't use_owner for import export menus.
+    if mod.bl_info["category"] == "Import-Export":
+        mod.bl_info["use_owner"] = False
 
     addon_info["_init"] = None
     return addon_info

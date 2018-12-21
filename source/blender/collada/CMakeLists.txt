@@ -24,8 +24,7 @@
 # ***** END GPL LICENSE BLOCK *****
 
 remove_strict_flags()
-
-FIND_FILE(_opencollada_with_animation_clip
+FIND_FILE(OPENCOLLADA_ANIMATION_CLIP
       NAMES
         COLLADAFWAnimationClip.h
       PATHS
@@ -33,8 +32,11 @@ FIND_FILE(_opencollada_with_animation_clip
       NO_DEFAULT_PATH
     )
 
-IF(_opencollada_with_animation_clip)
-   add_compile_definitions(OPENCOLLADA_WITH_ANIMATION_CLIP)
+IF(OPENCOLLADA_ANIMATION_CLIP)
+   message(STATUS "Found opencollada: ${OPENCOLLADA_ANIMATION_CLIP} ")
+   add_definitions(-DWITH_OPENCOLLADA_ANIMATION_CLIP)
+ELSE()
+   message(STATUS "opencollada: Build without animation clip support")
 ENDIF()
 
 set(INC
@@ -42,6 +44,7 @@ set(INC
 	../blenkernel
 	../blenlib
 	../blentranslation
+	../depsgraph
 	../editors/include
 	../makesdna
 	../makesrna
@@ -60,8 +63,13 @@ set(INC_SYS
 set(SRC
 	AnimationImporter.cpp
 	AnimationExporter.cpp
+	AnimationClipExporter.cpp
 	ArmatureExporter.cpp
 	ArmatureImporter.cpp
+	BlenderContext.cpp
+	BCAnimationCurve.cpp
+	BCAnimationSampler.cpp
+	BCSampleData.cpp
 	CameraExporter.cpp
 	ControllerExporter.cpp
 	DocumentExporter.cpp
@@ -79,6 +87,7 @@ set(SRC
 	MaterialExporter.cpp
 	MeshImporter.cpp
 	SkinInfo.cpp
+	Materials.cpp
 	SceneExporter.cpp
 	TransformReader.cpp
 	TransformWriter.cpp
@@ -88,8 +97,13 @@ set(SRC
 
 	AnimationImporter.h
 	AnimationExporter.h
+	AnimationClipExporter.h
 	ArmatureExporter.h
 	ArmatureImporter.h
+	BlenderContext.h
+	BCAnimationCurve.h
+	BCAnimationSampler.h
+	BCSampleData.h
 	CameraExporter.h
 	ControllerExporter.h
 	DocumentExporter.h
@@ -106,6 +120,7 @@ set(SRC
 	LightExporter.h
 	MaterialExporter.h
 	MeshImporter.h
+	Materials.h
 	SkinInfo.h
 	SceneExporter.h
 	TransformReader.h

@@ -94,11 +94,11 @@ static uiStyle *ui_style_new(ListBase *styles, const char *name, short uifont_id
 	style->paneltitle.uifont_id = uifont_id;
 	style->paneltitle.points = 12;
 	style->paneltitle.kerning = 1;
-	style->paneltitle.shadow = 1;
+	style->paneltitle.shadow = 3;
 	style->paneltitle.shadx = 0;
 	style->paneltitle.shady = -1;
-	style->paneltitle.shadowalpha = 0.15f;
-	style->paneltitle.shadowcolor = 1.0f;
+	style->paneltitle.shadowalpha = 0.5f;
+	style->paneltitle.shadowcolor = 0.0f;
 
 	style->grouplabel.uifont_id = uifont_id;
 	style->grouplabel.points = 12;
@@ -106,7 +106,8 @@ static uiStyle *ui_style_new(ListBase *styles, const char *name, short uifont_id
 	style->grouplabel.shadow = 3;
 	style->grouplabel.shadx = 0;
 	style->grouplabel.shady = -1;
-	style->grouplabel.shadowalpha = 0.25f;
+	style->grouplabel.shadowalpha = 0.5f;
+	style->grouplabel.shadowcolor = 0.0f;
 
 	style->widgetlabel.uifont_id = uifont_id;
 	style->widgetlabel.points = 11;
@@ -114,13 +115,16 @@ static uiStyle *ui_style_new(ListBase *styles, const char *name, short uifont_id
 	style->widgetlabel.shadow = 3;
 	style->widgetlabel.shadx = 0;
 	style->widgetlabel.shady = -1;
-	style->widgetlabel.shadowalpha = 0.15f;
-	style->widgetlabel.shadowcolor = 1.0f;
+	style->widgetlabel.shadowalpha = 0.5f;
+	style->widgetlabel.shadowcolor = 0.0f;
 
 	style->widget.uifont_id = uifont_id;
 	style->widget.points = 11;
 	style->widget.kerning = 1;
-	style->widget.shadowalpha = 0.25f;
+	style->widget.shadow = 1;
+	style->widget.shady = -1;
+	style->widget.shadowalpha = 0.5f;
+	style->widget.shadowcolor = 0.0f;
 
 	style->columnspace = 8;
 	style->templatespace = 5;
@@ -149,7 +153,8 @@ static uiFont *uifont_to_blfont(int id)
 
 
 void UI_fontstyle_draw_ex(
-        const uiFontStyle *fs, const rcti *rect, const char *str,
+        const uiFontStyle *fs, const rcti *rect, const char *str, const uchar col[4],
+        const struct uiFontStyleDraw_Params *fs_params,
         size_t len, float *r_xofs, float *r_yofs)
 {
 	int xofs = 0, yofs;
@@ -167,35 +172,37 @@ void UI_fontstyle_draw_ex(
 	if (fs->kerning == 1) {
 		font_flag |= BLF_KERNING_DEFAULT;
 	}
-	if (fs->word_wrap == 1) {
+	if (fs_params->word_wrap == 1) {
 		font_flag |= BLF_WORD_WRAP;
 	}
 
 	BLF_enable(fs->uifont_id, font_flag);
 
-	if (fs->word_wrap == 1) {
+	if (fs_params->word_wrap == 1) {
 		/* draw from boundbox top */
 		yofs = BLI_rcti_size_y(rect) - BLF_height_max(fs->uifont_id);
 	}
 	else {
 		/* draw from boundbox center */
-		yofs = ceil(0.5f * (BLI_rcti_size_y(rect) - BLF_ascender(fs->uifont_id)));
+		float height = BLF_ascender(fs->uifont_id) + BLF_descender(fs->uifont_id);
+		yofs = ceil(0.5f * (BLI_rcti_size_y(rect) - height));
 	}
 
-	if (fs->align == UI_STYLE_TEXT_CENTER) {
+	if (fs_params->align == UI_STYLE_TEXT_CENTER) {
 		xofs = floor(0.5f * (BLI_rcti_size_x(rect) - BLF_width(fs->uifont_id, str, len)));
 		/* don't center text if it chops off the start of the text, 2 gives some margin */
 		if (xofs < 2) {
 			xofs = 2;
 		}
 	}
-	else if (fs->align == UI_STYLE_TEXT_RIGHT) {
+	else if (fs_params->align == UI_STYLE_TEXT_RIGHT) {
 		xofs = BLI_rcti_size_x(rect) - BLF_width(fs->uifont_id, str, len) - 0.1f * U.widget_unit;
 	}
 
 	/* clip is very strict, so we give it some space */
 	BLF_clipping(fs->uifont_id, rect->xmin - 2, rect->ymin - 4, rect->xmax + 1, rect->ymax + 4);
 	BLF_position(fs->uifont_id, rect->xmin + xofs, rect->ymin + yofs, 0.0f);
+	BLF_color4ubv(fs->uifont_id, col);
 
 	BLF_draw(fs->uifont_id, str, len);
 
@@ -205,17 +212,19 @@ void UI_fontstyle_draw_ex(
 	*r_yofs = yofs;
 }
 
-void UI_fontstyle_draw(const uiFontStyle *fs, const rcti *rect, const char *str)
+void UI_fontstyle_draw(
+        const uiFontStyle *fs, const rcti *rect, const char *str, const uchar col[4],
+        const struct uiFontStyleDraw_Params *fs_params)
 {
 	float xofs, yofs;
 
 	UI_fontstyle_draw_ex(
-	        fs, rect, str,
+	        fs, rect, str, col, fs_params,
 	        BLF_DRAW_STR_DUMMY_MAX, &xofs, &yofs);
 }
 
 /* drawn same as above, but at 90 degree angle */
-void UI_fontstyle_draw_rotated(const uiFontStyle *fs, const rcti *rect, const char *str)
+void UI_fontstyle_draw_rotated(const uiFontStyle *fs, const rcti *rect, const char *str, const uchar col[4])
 {
 	float height;
 	int xofs, yofs;
@@ -224,7 +233,7 @@ void UI_fontstyle_draw_rotated(const uiFontStyle *fs, const rcti *rect, const ch
 
 	UI_fontstyle_set(fs);
 
-	height = BLF_ascender(fs->uifont_id);
+	height = BLF_ascender(fs->uifont_id) + BLF_descender(fs->uifont_id);
 	/* becomes x-offset when rotated */
 	xofs = ceil(0.5f * (BLI_rcti_size_y(rect) - height));
 
@@ -249,6 +258,7 @@ void UI_fontstyle_draw_rotated(const uiFontStyle *fs, const rcti *rect, const ch
 
 	BLF_enable(fs->uifont_id, BLF_ROTATION);
 	BLF_rotation(fs->uifont_id, angle);
+	BLF_color4ubv(fs->uifont_id, col);
 
 	if (fs->shadow) {
 		BLF_enable(fs->uifont_id, BLF_SHADOW);
@@ -275,13 +285,14 @@ void UI_fontstyle_draw_rotated(const uiFontStyle *fs, const rcti *rect, const ch
  *
  * For drawing on-screen labels.
  */
-void UI_fontstyle_draw_simple(const uiFontStyle *fs, float x, float y, const char *str)
+void UI_fontstyle_draw_simple(const uiFontStyle *fs, float x, float y, const char *str, const uchar col[4])
 {
 	if (fs->kerning == 1)
 		BLF_enable(fs->uifont_id, BLF_KERNING_DEFAULT);
 
 	UI_fontstyle_set(fs);
 	BLF_position(fs->uifont_id, x, y, 0.0f);
+	BLF_color4ubv(fs->uifont_id, col);
 	BLF_draw(fs->uifont_id, str, BLF_DRAW_STR_DUMMY_MAX);
 
 	if (fs->kerning == 1)
@@ -293,7 +304,7 @@ void UI_fontstyle_draw_simple(const uiFontStyle *fs, float x, float y, const cha
  */
 void UI_fontstyle_draw_simple_backdrop(
         const uiFontStyle *fs, float x, float y, const char *str,
-        const unsigned char fg[4], const unsigned char bg[4])
+        const float col_fg[4], const float col_bg[4])
 {
 	if (fs->kerning == 1)
 		BLF_enable(fs->uifont_id, BLF_KERNING_DEFAULT);
@@ -307,21 +318,20 @@ void UI_fontstyle_draw_simple_backdrop(
 		const float margin = height / 4.0f;
 
 		/* backdrop */
-		glColor4ubv(bg);
+		float color[4] = { col_bg[0], col_bg[1], col_bg[2], 0.5f };
 
-		UI_draw_roundbox_corner_set(UI_CNR_ALL | UI_RB_ALPHA);
-		UI_draw_roundbox(
+		UI_draw_roundbox_corner_set(UI_CNR_ALL);
+		UI_draw_roundbox_aa(
+		        true,
 		        x - margin,
 		        (y + decent) - margin,
 		        x + width + margin,
 		        (y + decent) + height + margin,
-		        margin);
-
-		glColor4ubv(fg);
+		        margin, color);
 	}
 
-
 	BLF_position(fs->uifont_id, x, y, 0.0f);
+	BLF_color4fv(fs->uifont_id, col_fg);
 	BLF_draw(fs->uifont_id, str, BLF_DRAW_STR_DUMMY_MAX);
 
 	if (fs->kerning == 1)
@@ -401,7 +411,7 @@ void uiStyleInit(void)
 	uiFont *font;
 	uiStyle *style = U.uistyles.first;
 	int monofont_size = datatoc_bmonofont_ttf_size;
-	unsigned char *monofont_ttf = (unsigned char *)datatoc_bmonofont_ttf;
+	uchar *monofont_ttf = (uchar *)datatoc_bmonofont_ttf;
 
 	/* recover from uninitialized dpi */
 	if (U.dpi == 0)
@@ -444,7 +454,7 @@ void uiStyleInit(void)
 		if (font->uifont_id == UIFONT_DEFAULT) {
 #ifdef WITH_INTERNATIONAL
 			int font_size = datatoc_bfont_ttf_size;
-			unsigned char *font_ttf = (unsigned char *)datatoc_bfont_ttf;
+			uchar *font_ttf = (uchar *)datatoc_bfont_ttf;
 			static int last_font_size = 0;
 
 			/* use unicode font for translation */
@@ -454,7 +464,7 @@ void uiStyleInit(void)
 				if (!font_ttf) {
 					/* fall back if not found */
 					font_size = datatoc_bfont_ttf_size;
-					font_ttf = (unsigned char *)datatoc_bfont_ttf;
+					font_ttf = (uchar *)datatoc_bfont_ttf;
 				}
 			}
 
@@ -466,13 +476,13 @@ void uiStyleInit(void)
 
 			font->blf_id = BLF_load_mem("default", font_ttf, font_size);
 #else
-			font->blf_id = BLF_load_mem("default", (unsigned char *)datatoc_bfont_ttf, datatoc_bfont_ttf_size);
+			font->blf_id = BLF_load_mem("default", (uchar *)datatoc_bfont_ttf, datatoc_bfont_ttf_size);
 #endif
 		}
 		else {
 			font->blf_id = BLF_load(font->filename);
 			if (font->blf_id == -1) {
-				font->blf_id = BLF_load_mem("default", (unsigned char *)datatoc_bfont_ttf, datatoc_bfont_ttf_size);
+				font->blf_id = BLF_load_mem("default", (uchar *)datatoc_bfont_ttf, datatoc_bfont_ttf_size);
 			}
 		}
 
@@ -505,7 +515,7 @@ void uiStyleInit(void)
 		if (!monofont_ttf) {
 			/* fall back if not found */
 			monofont_size = datatoc_bmonofont_ttf_size;
-			monofont_ttf = (unsigned char *)datatoc_bmonofont_ttf;
+			monofont_ttf = (uchar *)datatoc_bmonofont_ttf;
 		}
 	}
 #endif
@@ -523,10 +533,11 @@ void uiStyleInit(void)
 
 	/* Set default flags based on UI preferences (not render fonts) */
 	{
-		int flag_disable = BLF_MONOCHROME |
-		                   BLF_HINTING_NONE |
-		                   BLF_HINTING_SLIGHT |
-		                   BLF_HINTING_FULL;
+		int flag_disable = (
+		        BLF_MONOCHROME |
+		        BLF_HINTING_NONE |
+		        BLF_HINTING_SLIGHT |
+		        BLF_HINTING_FULL);
 		int flag_enable = 0;
 
 		if (U.text_render & USER_TEXT_HINTING_NONE) {

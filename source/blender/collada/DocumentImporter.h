@@ -57,8 +57,8 @@ class DocumentImporter : COLLADAFW::IWriter
 public:
 	//! Enumeration to denote the stage of import
 	enum ImportStage {
-		General,		//!< First pass to collect all data except controller
-		Controller,		//!< Second pass to collect controller data
+		Fetching_Scene_data, /* First pass to collect all data except controller */
+		Fetching_Controller_data, /* Second pass to collect controller data */
 	};
 	/** Constructor */
 	DocumentImporter(bContext *C, const ImportSettings *import_settings);
@@ -75,7 +75,6 @@ public:
 	Object* create_instance_node(Object*, COLLADAFW::Node*, COLLADAFW::Node*, Scene*, bool);
 	void create_constraints(ExtraTags *et, Object *ob);
 	std::vector<Object *> *write_node(COLLADAFW::Node*, COLLADAFW::Node*, Scene*, Object*, bool);
-	MTex* create_texture(COLLADAFW::EffectCommon*, COLLADAFW::Texture&, Material*, int, TexIndexTextureArrayMap&);
 	void write_profile_COMMON(COLLADAFW::EffectCommon*, Material*);
 
 	void translate_anim_recursive(COLLADAFW::Node*, COLLADAFW::Node*, Object*);
@@ -147,6 +146,7 @@ private:
 	ImportStage mImportStage;
 
 	bContext *mContext;
+	ViewLayer *view_layer;
 
 	UnitConverter unit_converter;
 	ArmatureImporter armature_importer;
@@ -158,7 +158,7 @@ private:
 	/** Tags map of unique id as a string and ExtraTags instance. */
 	TagsMap uid_tags_map;
 
-	std::map<COLLADAFW::UniqueId, Image*> uid_image_map;
+	UidImageMap uid_image_map;
 	std::map<COLLADAFW::UniqueId, Material*> uid_material_map;
 	std::map<COLLADAFW::UniqueId, Material*> uid_effect_map;
 	std::map<COLLADAFW::UniqueId, Camera*> uid_camera_map;
@@ -175,6 +175,7 @@ private:
 	std::string import_from_version;
 
 	void report_unknown_reference(const COLLADAFW::Node &node, const std::string object_type);
+
 };
 
 #endif

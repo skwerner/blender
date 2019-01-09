@@ -648,37 +648,26 @@ bool GHOST_WindowX11::createX11_XIC()
 void GHOST_WindowX11::refreshXInputDevices()
 {
 	if (m_system->m_xinput_version.present) {
-		GHOST_SystemX11::GHOST_TabletX11 &xtablet = m_system->GetXTablet();
-		XEventClass xevents[8], ev;
-		int dcount = 0;
+		std::vector<XEventClass> xevents;
 
-		/* With modern XInput (xlib 1.6.2 at least and/or evdev 2.9.0) and some 'no-name' tablets
-		 * like 'UC-LOGIC Tablet WP5540U', we also need to 'select' ButtonPress for motion event,
-		 * otherwise we do not get any tablet motion event once pen is pressed... See T43367.
-		 */
+		for (GHOST_SystemX11::GHOST_TabletX11& xtablet: m_system->GetXTablets()) {
+			/* With modern XInput (xlib 1.6.2 at least and/or evdev 2.9.0) and some 'no-name' tablets
+			 * like 'UC-LOGIC Tablet WP5540U', we also need to 'select' ButtonPress for motion event,
+			 * otherwise we do not get any tablet motion event once pen is pressed... See T43367.
+			 */
+			XEventClass ev;
 
-		if (xtablet.StylusDevice) {
-			DeviceMotionNotify(xtablet.StylusDevice, xtablet.MotionEvent, ev);
-			if (ev) xevents[dcount++] = ev;
-			DeviceButtonPress(xtablet.StylusDevice, xtablet.PressEvent, ev);
-			if (ev) xevents[dcount++] = ev;
-			ProximityIn(xtablet.StylusDevice, xtablet.ProxInEvent, ev);
-			if (ev) xevents[dcount++] = ev;
-			ProximityOut(xtablet.StylusDevice, xtablet.ProxOutEvent, ev);
-			if (ev) xevents[dcount++] = ev;
-		}
-		if (xtablet.EraserDevice) {
-			DeviceMotionNotify(xtablet.EraserDevice, xtablet.MotionEventEraser, ev);
-			if (ev) xevents[dcount++] = ev;
-			DeviceButtonPress(xtablet.EraserDevice, xtablet.PressEventEraser, ev);
-			if (ev) xevents[dcount++] = ev;
-			ProximityIn(xtablet.EraserDevice, xtablet.ProxInEventEraser, ev);
-			if (ev) xevents[dcount++] = ev;
-			ProximityOut(xtablet.EraserDevice, xtablet.ProxOutEventEraser, ev);
-			if (ev) xevents[dcount++] = ev;
+			DeviceMotionNotify(xtablet.Device, xtablet.MotionEvent, ev);
+			if (ev) xevents.push_back(ev);
+			DeviceButtonPress(xtablet.Device, xtablet.PressEvent, ev);
+			if (ev) xevents.push_back(ev);
+			ProximityIn(xtablet.Device, xtablet.ProxInEvent, ev);
+			if (ev) xevents.push_back(ev);
+			ProximityOut(xtablet.Device, xtablet.ProxOutEvent, ev);
+			if (ev) xevents.push_back(ev);
 		}
 
-		XSelectExtensionEvent(m_display, m_window, xevents, dcount);
+		XSelectExtensionEvent(m_display, m_window, xevents.data(), (int)xevents.size());
 	}
 }
 
@@ -1321,92 +1310,78 @@ GHOST_WindowX11::
 GHOST_Context *GHOST_WindowX11::newDrawingContext(GHOST_TDrawingContextType type)
 {
 	if (type == GHOST_kDrawingContextTypeOpenGL) {
-#if !defined(WITH_GL_EGL)
+
+		// During development:
+		//   try 4.x compatibility profile
+		//   try 3.3 compatibility profile
+		//   fall back to 3.0 if needed
+		//
+		// Final Blender 2.8:
+		//   try 4.x core profile
+		//   try 3.3 core profile
+		//   no fallbacks
 
 #if defined(WITH_GL_PROFILE_CORE)
-		GHOST_Context *context = new GHOST_ContextGLX(
-		        m_wantStereoVisual,
-		        m_wantNumOfAASamples,
-		        m_window,
-		        m_display,
-		        m_visualInfo,
-		        (GLXFBConfig)m_fbconfig,
-		        GLX_CONTEXT_CORE_PROFILE_BIT_ARB,
-		        3, 2,
-		        GHOST_OPENGL_GLX_CONTEXT_FLAGS | (m_is_debug_context ? GLX_CONTEXT_DEBUG_BIT_ARB : 0),
-		        GHOST_OPENGL_GLX_RESET_NOTIFICATION_STRATEGY);
-#elif defined(WITH_GL_PROFILE_ES20)
-		GHOST_Context *context = new GHOST_ContextGLX(
-		        m_wantStereoVisual,
-		        m_wantNumOfAASamples,
-		        m_window,
-		        m_display,
-		        m_visualInfo,
-		        (GLXFBConfig)m_fbconfig,
-		        GLX_CONTEXT_ES2_PROFILE_BIT_EXT,
-		        2, 0,
-		        GHOST_OPENGL_GLX_CONTEXT_FLAGS | (m_is_debug_context ? GLX_CONTEXT_DEBUG_BIT_ARB : 0),
-		        GHOST_OPENGL_GLX_RESET_NOTIFICATION_STRATEGY);
-#elif defined(WITH_GL_PROFILE_COMPAT)
-		GHOST_Context *context = new GHOST_ContextGLX(
-		        m_wantStereoVisual,
-		        m_wantNumOfAASamples,
-		        m_window,
-		        m_display,
-		        m_visualInfo,
-		        (GLXFBConfig)m_fbconfig,
-		        0, // profile bit
-		        0, 0,
-		        GHOST_OPENGL_GLX_CONTEXT_FLAGS | (m_is_debug_context ? GLX_CONTEXT_DEBUG_BIT_ARB : 0),
-		        GHOST_OPENGL_GLX_RESET_NOTIFICATION_STRATEGY);
-#else
-#  error
+		{
+			const char *version_major = (char*)glewGetString(GLEW_VERSION_MAJOR);
+			if (version_major != NULL && version_major[0] == '1') {
+				fprintf(stderr, "Error: GLEW version 2.0 and above is required.\n");
+				abort();
+			}
+		}
 #endif
 
-#else
-
+		const int profile_mask =
 #if defined(WITH_GL_PROFILE_CORE)
-		GHOST_Context *context = new GHOST_ContextEGL(
-		        m_wantStereoVisual,
-		        m_wantNumOfAASamples,
-		        m_window,
-		        m_display,
-		        EGL_CONTEXT_OPENGL_CORE_PROFILE_BIT,
-		        3, 2,
-		        GHOST_OPENGL_EGL_CONTEXT_FLAGS,
-		        GHOST_OPENGL_EGL_RESET_NOTIFICATION_STRATEGY,
-		        EGL_OPENGL_API);
-#elif defined(WITH_GL_PROFILE_ES20)
-		GHOST_Context *context = new GHOST_ContextEGL(
-		        m_wantStereoVisual,
-		        m_wantNumOfAASamples,
-		        m_window,
-		        m_display,
-		        0, // profile bit
-		        2, 0,
-		        GHOST_OPENGL_EGL_CONTEXT_FLAGS,
-		        GHOST_OPENGL_EGL_RESET_NOTIFICATION_STRATEGY,
-		        EGL_OPENGL_ES_API);
+			GLX_CONTEXT_CORE_PROFILE_BIT_ARB;
 #elif defined(WITH_GL_PROFILE_COMPAT)
-		GHOST_Context *context = new GHOST_ContextEGL(
-		        m_wantStereoVisual,
-		        m_wantNumOfAASamples,
-		        m_window,
-		        m_display,
-		        0, // profile bit
-		        0, 0,
-		        GHOST_OPENGL_EGL_CONTEXT_FLAGS,
-		        GHOST_OPENGL_EGL_RESET_NOTIFICATION_STRATEGY,
-		        EGL_OPENGL_API);
+			GLX_CONTEXT_COMPATIBILITY_PROFILE_BIT_ARB;
 #else
-#  error
+#  error // must specify either core or compat at build time
 #endif
 
-#endif
+		GHOST_Context *context;
+
+		for (int minor = 5; minor >= 0; --minor) {
+			context = new GHOST_ContextGLX(
+			        m_wantStereoVisual,
+			        m_wantNumOfAASamples,
+			        m_window,
+			        m_display,
+			        (GLXFBConfig)m_fbconfig,
+			        profile_mask,
+			        4, minor,
+			        GHOST_OPENGL_GLX_CONTEXT_FLAGS | (m_is_debug_context ? GLX_CONTEXT_DEBUG_BIT_ARB : 0),
+			        GHOST_OPENGL_GLX_RESET_NOTIFICATION_STRATEGY);
+
+			if (context->initializeDrawingContext())
+				return context;
+			else
+				delete context;
+		}
+
+		context = new GHOST_ContextGLX(
+		        m_wantStereoVisual,
+		        m_wantNumOfAASamples,
+		        m_window,
+		        m_display,
+		        (GLXFBConfig)m_fbconfig,
+		        profile_mask,
+		        3, 3,
+		        GHOST_OPENGL_GLX_CONTEXT_FLAGS | (m_is_debug_context ? GLX_CONTEXT_DEBUG_BIT_ARB : 0),
+		        GHOST_OPENGL_GLX_RESET_NOTIFICATION_STRATEGY);
+
 		if (context->initializeDrawingContext())
 			return context;
 		else
 			delete context;
+
+		/* Ugly, but we get crashes unless a whole bunch of systems are patched. */
+		fprintf(stderr, "Error! Unsupported graphics driver.\n");
+		fprintf(stderr, "Blender requires a graphics driver with at least OpenGL 3.3 support.\n");
+		fprintf(stderr, "The program will now close.\n");
+		fflush(stderr);
+		exit(1);
 	}
 
 	return NULL;

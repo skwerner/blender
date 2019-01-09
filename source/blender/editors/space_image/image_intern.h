@@ -70,7 +70,6 @@ void IMAGE_OT_view_ndof(struct wmOperatorType *ot);
 
 void IMAGE_OT_new(struct wmOperatorType *ot);
 void IMAGE_OT_open(struct wmOperatorType *ot);
-void IMAGE_OT_unlink(struct wmOperatorType *ot);
 void IMAGE_OT_match_movie_length(struct wmOperatorType *ot);
 void IMAGE_OT_replace(struct wmOperatorType *ot);
 void IMAGE_OT_reload(struct wmOperatorType *ot);
@@ -83,6 +82,9 @@ void IMAGE_OT_unpack(struct wmOperatorType *ot);
 void IMAGE_OT_invert(struct wmOperatorType *ot);
 
 void IMAGE_OT_cycle_render_slot(struct wmOperatorType *ot);
+void IMAGE_OT_clear_render_slot(struct wmOperatorType *ot);
+void IMAGE_OT_add_render_slot(struct wmOperatorType *ot);
+void IMAGE_OT_remove_render_slot(struct wmOperatorType *ot);
 
 void IMAGE_OT_sample(struct wmOperatorType *ot);
 void IMAGE_OT_sample_line(struct wmOperatorType *ot);
@@ -90,7 +92,7 @@ void IMAGE_OT_curves_point_set(struct wmOperatorType *ot);
 
 void IMAGE_OT_change_frame(struct wmOperatorType *ot);
 
-void IMAGE_OT_read_renderlayers(struct wmOperatorType *ot);
+void IMAGE_OT_read_viewlayers(struct wmOperatorType *ot);
 void IMAGE_OT_render_border(struct wmOperatorType *ot);
 void IMAGE_OT_clear_render_border(struct wmOperatorType *ot);
 

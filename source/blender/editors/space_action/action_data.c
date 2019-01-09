@@ -53,12 +53,12 @@
 
 #include "BKE_animsys.h"
 #include "BKE_action.h"
+#include "BKE_context.h"
 #include "BKE_fcurve.h"
-#include "BKE_library.h"
 #include "BKE_key.h"
+#include "BKE_library.h"
 #include "BKE_nla.h"
 #include "BKE_scene.h"
-#include "BKE_context.h"
 #include "BKE_report.h"
 
 #include "UI_view2d.h"
@@ -566,11 +566,11 @@ void ED_animedit_unlink_action(bContext *C, ID *id, AnimData *adt, bAction *act,
 
 						if (strip->act == act) {
 							/* Remove this strip, and the track too if it doesn't have anything else */
-							BKE_nlastrip_free(&nlt->strips, strip);
+							BKE_nlastrip_free(&nlt->strips, strip, true);
 
 							if (nlt->strips.first == NULL) {
 								BLI_assert(nstrip == NULL);
-								BKE_nlatrack_free(&adt->nla_tracks, nlt);
+								BKE_nlatrack_free(&adt->nla_tracks, nlt, true);
 							}
 						}
 					}
@@ -647,7 +647,7 @@ static int action_unlink_exec(bContext *C, wmOperator *op)
 
 static int action_unlink_invoke(bContext *C, wmOperator *op, const wmEvent *evt)
 {
-	/* NOTE: this is hardcoded to match the behaviour for the unlink button (in interface_templates.c) */
+	/* NOTE: this is hardcoded to match the behavior for the unlink button (in interface_templates.c) */
 	RNA_boolean_set(op->ptr, "force_delete", evt->shift != 0);
 	return action_unlink_exec(C, op);
 }

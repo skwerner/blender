@@ -176,6 +176,26 @@ public:
 	    const GHOST_TEmbedderWindowID parentWindow = 0
 	    );
 
+
+	/**
+	 * Create a new offscreen context.
+	 * Never explicitly delete the context, use disposeContext() instead.
+	 * \return  The new context (or 0 if creation failed).
+	 */
+	GHOST_IContext *
+	createOffscreenContext(
+	    );
+
+	/**
+	 * Dispose of a context.
+	 * \param   context Pointer to the context to be disposed.
+	 * \return  Indication of success.
+	 */
+	GHOST_TSuccess
+	disposeContext(
+	    GHOST_IContext *context
+	    );
+
 	/**
 	 * Retrieves events from the system and stores them in the queue.
 	 * \param waitForEvent Flag to wait for an event (or return immediately).
@@ -289,28 +309,22 @@ public:
 
 #ifdef WITH_X11_XINPUT
 	typedef struct GHOST_TabletX11 {
-		XDevice *StylusDevice;
-		XDevice *EraserDevice;
-
-		XID StylusID, EraserID;
+		GHOST_TTabletMode mode;
+		XDevice *Device;
+		XID ID;
 
 		int MotionEvent;
 		int ProxInEvent;
 		int ProxOutEvent;
 		int PressEvent;
 
-		int MotionEventEraser;
-		int ProxInEventEraser;
-		int ProxOutEventEraser;
-		int PressEventEraser;
-
 		int PressureLevels;
 		int XtiltLevels, YtiltLevels;
 	} GHOST_TabletX11;
 
-	GHOST_TabletX11 &GetXTablet()
+	std::vector<GHOST_TabletX11> &GetXTablets()
 	{
-		return m_xtablet;
+		return m_xtablets;
 	}
 #endif // WITH_X11_XINPUT
 
@@ -364,7 +378,7 @@ private:
 
 #ifdef WITH_X11_XINPUT
 	/* Tablet devices */
-	GHOST_TabletX11 m_xtablet;
+	std::vector<GHOST_TabletX11> m_xtablets;
 #endif
 
 	/// The vector of windows that need to be updated.
@@ -394,6 +408,7 @@ private:
 #endif
 
 #ifdef WITH_X11_XINPUT
+	void clearXInputDevices();
 	void refreshXInputDevices();
 #endif
 

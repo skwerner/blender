@@ -33,15 +33,20 @@
 #include "MEM_guardedalloc.h"
 
 #include "DNA_meshdata_types.h"
+#include "DNA_modifier_types.h"
+#include "DNA_scene_types.h"
 
 #include "BLI_array.h"
 #include "BLI_alloca.h"
 #include "BLI_gsqueue.h"
+#include "BLI_linklist_stack.h"
 #include "BLI_math.h"
 #include "BLI_memarena.h"
+#include "BLI_utildefines.h"
 
 #include "BKE_customdata.h"
 #include "BKE_deform.h"
+#include "BKE_mesh.h"
 
 #include "eigen_capi.h"
 
@@ -149,6 +154,8 @@ typedef struct BoundVert {
 	Profile profile;    /* edge profile between this and next BoundVert */
 	bool any_seam;      /* are any of the edges attached here seams? */
 	bool visited;       /* used during delta adjust pass */
+	int seam_len;		/* length of seam starting from current boundvert to next boundvert with ccw ordering */
+	int sharp_len;		/* Same as seam_len but defines length of sharp edges */
 //	int _pad;
 } BoundVert;
 
@@ -163,7 +170,6 @@ typedef struct VMesh {
 		M_POLY,         /* a simple polygon */
 		M_ADJ,          /* "adjacent edges" mesh pattern */
 		M_TRI_FAN,      /* a simple polygon - fan filled */
-		M_QUAD_STRIP,   /* a simple polygon - cut into parallel strips */
 	} mesh_kind;
 //	int _pad;
 } VMesh;
@@ -182,11 +188,21 @@ typedef struct BevVert {
 	VMesh *vmesh;           /* mesh structure for replacing vertex */
 } BevVert;
 
+/* face classification: note depend on F_RECON > F_EDGE > F_VERT */
+typedef enum {
+	F_NONE,				/* used when there is no face at all */
+	F_ORIG,				/* original face, not touched */
+	F_VERT,				/* face for construction aroun a vert */
+	F_EDGE,				/* face for a beveled edge */
+	F_RECON,			/* reconstructed original face with some new verts */
+} FKind;
+
+// static const char* fkind_names[] = {"F_NONE", "F_ORIG", "F_VERT", "F_EDGE", "F_RECON"}; /* DEBUG */
+
 /* Bevel parameters and state */
 typedef struct BevelParams {
-	/* hash of BevVert for each vertex involved in bevel
-	 * GHash: (key=(BMVert *), value=(BevVert *)) */
-	GHash    *vert_hash;
+	GHash    *vert_hash;	/* records BevVerts made: key BMVert*, value BevVert* */
+	GHash    *face_hash;    /* records new faces: key BMFace*, value one of {VERT/EDGE/RECON}_POLY */
 	MemArena *mem_arena;    /* use for all allocs while bevel runs, if we need to free we can switch to mempool */
 	ProfileSpacing pro_spacing; /* parameter values for evenly spaced profiles */
 
@@ -199,9 +215,14 @@ typedef struct BevelParams {
 	bool loop_slide;	    /* should bevel prefer to slide along edges rather than keep widths spec? */
 	bool limit_offset;      /* should offsets be limited by collisions? */
 	bool offset_adjust;     /* should offsets be adjusted to try to get even widths? */
+	bool mark_seam;         /* should we propagate seam edge markings? */
+	bool mark_sharp;        /* should we propagate sharp edge markings? */
+	bool harden_normals;    /* should we harden normals? */
 	const struct MDeformVert *dvert; /* vertex group array, maybe set if vertex_only */
 	int vertex_group;       /* vertex group index, maybe set if vertex_only */
 	int mat_nr;             /* if >= 0, material number for bevel; else material comes from adjacent faces */
+	int face_strength_mode; /* setting face strength if > 0 */
+	float smoothresh;		/* mesh's smoothresh, used if hardening */
 } BevelParams;
 
 // #pragma GCC diagnostic ignored "-Wpadded"
@@ -214,8 +235,10 @@ static int bev_debug_flags = 0;
 #define DEBUG_OLD_PROJ_TO_PERP_PLANE (bev_debug_flags & 2)
 #define DEBUG_OLD_FLAT_MID (bev_debug_flags & 4)
 
+/* use the unused _BM_ELEM_TAG_ALT flag to flag the 'long' loops (parallel to beveled edge) of edge-polygons */
+#define BM_ELEM_LONG_TAG (1<<6)
 
-/* this flag values will get set on geom we want to return in 'out' slots for edges and verts */
+/* these flag values will get set on geom we want to return in 'out' slots for edges and verts */
 #define EDGE_OUT 4
 #define VERT_OUT 8
 
@@ -236,6 +259,18 @@ static void disable_flag_out_edge(BMesh *bm, BMEdge *bme)
 {
 	if (bm->use_toolflags)
 		BMO_edge_flag_disable(bm, bme, EDGE_OUT);
+}
+
+static void record_face_kind(BevelParams *bp, BMFace *f, FKind fkind)
+{
+	if (bp->face_hash)
+		BLI_ghash_insert(bp->face_hash, f, POINTER_FROM_INT(fkind));
+}
+
+static FKind get_face_kind(BevelParams *bp, BMFace *f)
+{
+	void *val = BLI_ghash_lookup(bp->face_hash, f);
+	return val ? (FKind)POINTER_AS_INT(val) : F_ORIG;
 }
 
 /* Are d1 and d2 parallel or nearly so? */
@@ -766,6 +801,11 @@ static void offset_meet(EdgeHalf *e1, EdgeHalf *e2, BMVert *v, BMFace *f, bool e
 		sub_v3_v3v3(dir1n, BM_edge_other_vert(e1next->e, v)->co, v->co);
 		sub_v3_v3v3(dir2p, v->co, BM_edge_other_vert(e2prev->e, v)->co);
 	}
+	else {
+		/* shup up 'maybe unused' warnings */
+		zero_v3(dir1n);
+		zero_v3(dir2p);
+	}
 
 	ang = angle_v3v3(dir1, dir2);
 	if (ang < BEVEL_EPSILON_ANG) {
@@ -1247,31 +1287,36 @@ static bool make_unit_square_map(
 
 	sub_v3_v3v3(va_vmid, vmid, va);
 	sub_v3_v3v3(vb_vmid, vmid, vb);
-	if (fabsf(angle_v3v3(va_vmid, vb_vmid) - (float)M_PI) > BEVEL_EPSILON_ANG) {
-		sub_v3_v3v3(vo, va, vb_vmid);
-		cross_v3_v3v3(vddir, vb_vmid, va_vmid);
-		normalize_v3(vddir);
-		add_v3_v3v3(vd, vo, vddir);
 
-		/* The cols of m are: {vmid - va, vmid - vb, vmid + vd - va -vb, va + vb - vmid;
-		 * blender transform matrices are stored such that m[i][*] is ith column;
-		 * the last elements of each col remain as they are in unity matrix */
-		sub_v3_v3v3(&r_mat[0][0], vmid, va);
-		r_mat[0][3] = 0.0f;
-		sub_v3_v3v3(&r_mat[1][0], vmid, vb);
-		r_mat[1][3] = 0.0f;
-		add_v3_v3v3(&r_mat[2][0], vmid, vd);
-		sub_v3_v3(&r_mat[2][0], va);
-		sub_v3_v3(&r_mat[2][0], vb);
-		r_mat[2][3] = 0.0f;
-		add_v3_v3v3(&r_mat[3][0], va, vb);
-		sub_v3_v3(&r_mat[3][0], vmid);
-		r_mat[3][3] = 1.0f;
-
-		return true;
-	}
-	else
+	if (is_zero_v3(va_vmid) || is_zero_v3(vb_vmid)) {
 		return false;
+	}
+
+	if (fabsf(angle_v3v3(va_vmid, vb_vmid) - (float)M_PI) <= BEVEL_EPSILON_ANG) {
+		return false;
+	}
+
+	sub_v3_v3v3(vo, va, vb_vmid);
+	cross_v3_v3v3(vddir, vb_vmid, va_vmid);
+	normalize_v3(vddir);
+	add_v3_v3v3(vd, vo, vddir);
+
+	/* The cols of m are: {vmid - va, vmid - vb, vmid + vd - va -vb, va + vb - vmid;
+		* blender transform matrices are stored such that m[i][*] is ith column;
+		* the last elements of each col remain as they are in unity matrix */
+	sub_v3_v3v3(&r_mat[0][0], vmid, va);
+	r_mat[0][3] = 0.0f;
+	sub_v3_v3v3(&r_mat[1][0], vmid, vb);
+	r_mat[1][3] = 0.0f;
+	add_v3_v3v3(&r_mat[2][0], vmid, vd);
+	sub_v3_v3(&r_mat[2][0], va);
+	sub_v3_v3(&r_mat[2][0], vb);
+	r_mat[2][3] = 0.0f;
+	add_v3_v3v3(&r_mat[3][0], va, vb);
+	sub_v3_v3(&r_mat[3][0], vmid);
+	r_mat[3][3] = 1.0f;
+
+	return true;
 }
 
 /* Like make_unit_square_map, but this one makes a matrix that transforms the
@@ -1521,8 +1566,349 @@ static void snap_to_superellipsoid(float co[3], const float super_r, bool midlin
 	co[2] = z;
 }
 
+#define BEV_EXTEND_EDGE_DATA_CHECK(eh, flag) (BM_elem_flag_test(eh->e, flag))
+
+static void check_edge_data_seam_sharp_edges(BevVert *bv, int flag, bool neg)
+{
+	EdgeHalf *e = &bv->edges[0], *efirst = &bv->edges[0];
+
+	/* First first edge with seam or sharp edge data */
+	while ((!neg && !BEV_EXTEND_EDGE_DATA_CHECK(e, flag)) || (neg && BEV_EXTEND_EDGE_DATA_CHECK(e, flag))) {
+		e = e->next;
+		if (e == efirst)
+			break;
+	}
+
+	/* If no such edge found, return */
+	if ((!neg && !BEV_EXTEND_EDGE_DATA_CHECK(e, flag)) || (neg && BEV_EXTEND_EDGE_DATA_CHECK(e, flag)))
+		return;
+
+	/* Set efirst to this first encountered edge. */
+	efirst = e;
+
+	do {
+		int flag_count = 0;
+		EdgeHalf *ne = e->next;
+
+		while (((!neg && !BEV_EXTEND_EDGE_DATA_CHECK(ne, flag)) || (neg && BEV_EXTEND_EDGE_DATA_CHECK(ne, flag))) &&
+		       ne != efirst)
+		{
+			if (ne->is_bev)
+				flag_count++;
+			ne = ne->next;
+		}
+		if (ne == e || (ne == efirst && ((!neg && !BEV_EXTEND_EDGE_DATA_CHECK(efirst, flag)) ||
+		                                 (neg && BEV_EXTEND_EDGE_DATA_CHECK(efirst, flag)))))
+		{
+			break;
+		}
+		/* Set seam_len / sharp_len of starting edge */
+		if (flag == BM_ELEM_SEAM) {
+			e->rightv->seam_len = flag_count;
+		}
+		else if (flag == BM_ELEM_SMOOTH) {
+			e->rightv->sharp_len = flag_count;
+		}
+		e = ne;
+	} while (e != efirst);
+}
+
+static void bevel_extend_edge_data(BevVert *bv)
+{
+	VMesh *vm = bv->vmesh;
+
+	BoundVert *bcur = bv->vmesh->boundstart, *start = bcur;
+
+	do {
+		/* If current boundvert has a seam length > 0 then it has a seam running along its edges */
+		if (bcur->seam_len) {
+			if (!bv->vmesh->boundstart->seam_len && start == bv->vmesh->boundstart)
+				start = bcur;			/* set start to first boundvert with seam_len > 0 */
+
+			/* Now for all the mesh_verts starting at current index and ending at idxlen
+			 * We go through outermost ring and through all its segments and add seams
+			 * for those edges */
+			int idxlen = bcur->index + bcur->seam_len;
+			for (int i = bcur->index; i < idxlen; i++) {
+				BMVert *v1 = mesh_vert(vm, i % vm->count, 0, 0)->v, *v2;
+				BMEdge *e;
+				for (int k = 1; k < vm->seg; k++) {
+					v2 = mesh_vert(vm, i % vm->count, 0, k)->v;
+
+					/* Here v1 & v2 are current and next BMverts, we find common edge and set its edge data */
+					e = v1->e;
+					while (e->v1 != v2 && e->v2 != v2) {
+						if (e->v1 == v1)
+							e = e->v1_disk_link.next;
+						else
+							e = e->v2_disk_link.next;
+					}
+					BM_elem_flag_set(e, BM_ELEM_SEAM, true);
+					v1 = v2;
+				}
+				BMVert *v3 = mesh_vert(vm, (i + 1) % vm->count, 0, 0)->v;
+				e = v1->e;			//Do same as above for first and last vert
+				while (e->v1 != v3 && e->v2 != v3) {
+					if (e->v1 == v1)
+						e = e->v1_disk_link.next;
+					else
+						e = e->v2_disk_link.next;
+				}
+				BM_elem_flag_set(e, BM_ELEM_SEAM, true);
+				bcur = bcur->next;
+			}
+		}
+		else
+			bcur = bcur->next;
+	} while (bcur != start);
+
+
+	bcur = bv->vmesh->boundstart;
+	start = bcur;
+	do {
+		if (bcur->sharp_len) {
+			if (!bv->vmesh->boundstart->sharp_len && start == bv->vmesh->boundstart)
+				start = bcur;
+
+			int idxlen = bcur->index + bcur->sharp_len;
+			for (int i = bcur->index; i < idxlen; i++) {
+				BMVert *v1 = mesh_vert(vm, i % vm->count, 0, 0)->v, *v2;
+				BMEdge *e;
+				for (int k = 1; k < vm->seg; k++) {
+					v2 = mesh_vert(vm, i % vm->count, 0, k)->v;
+
+					e = v1->e;
+					while (e->v1 != v2 && e->v2 != v2) {
+						if (e->v1 == v1)
+							e = e->v1_disk_link.next;
+						else
+							e = e->v2_disk_link.next;
+					}
+					BM_elem_flag_set(e, BM_ELEM_SMOOTH, false);
+					v1 = v2;
+				}
+				BMVert *v3 = mesh_vert(vm, (i + 1) % vm->count, 0, 0)->v;
+				e = v1->e;
+				while (e->v1 != v3 && e->v2 != v3) {
+					if (e->v1 == v1)
+						e = e->v1_disk_link.next;
+					else
+						e = e->v2_disk_link.next;
+				}
+				BM_elem_flag_set(e, BM_ELEM_SMOOTH, false);
+				bcur = bcur->next;
+			}
+		}
+		else
+			bcur = bcur->next;
+	} while (bcur != start);
+}
+
+/* Mark edges as sharp if they are between a smooth recon face and a new face. */
+static void bevel_edges_sharp_boundary(BMesh *bm, BevelParams *bp)
+{
+	BMIter fiter, liter;
+	BMFace *f, *fother;
+	BMLoop *l, *lother;
+	FKind fkind;
+
+	BM_ITER_MESH(f, &fiter, bm, BM_FACES_OF_MESH) {
+		if (!BM_elem_flag_test(f, BM_ELEM_SMOOTH))
+			continue;
+		if (get_face_kind(bp, f) != F_RECON)
+			continue;
+		BM_ITER_ELEM(l, &liter, f, BM_LOOPS_OF_FACE) {
+			/* cases we care about will have exactly one adjacent face */
+			lother = l->radial_next;
+			fother = lother->f;
+			if (lother != l && fother) {
+				fkind = get_face_kind(bp, lother->f);
+				if (ELEM(fkind, F_EDGE, F_VERT)) {
+					BM_elem_flag_disable(l->e, BM_ELEM_SMOOTH);
+				}
+			}
+		}
+	}
+}
+
+/*
+ * Harden normals for bevel.
+ * The desired effect is that the newly created F_EDGE and F_VERT faces appear smoothly shaded
+ * with the the normals at the boundaries with F_RECON faces matching those recon faces.
+ * And at boundaries between F_EDGE and F_VERT faces, the normals should match the F_EDGE ones.
+ * Assumes custom loop normals are in use.
+ */
+static void bevel_harden_normals(BMesh *bm, BevelParams *bp)
+{
+	BMIter liter, fiter;
+	BMFace *f;
+	BMLoop *l, *lnext, *lprev, *lprevprev, *lnextnext;
+	BMEdge *estep;
+	FKind fkind, fprevkind, fnextkind, fprevprevkind, fnextnextkind;
+	int cd_clnors_offset, l_index;
+	short *clnors;
+	float *pnorm, norm[3];
+
+	if (bp->offset == 0.0 || !bp->harden_normals)
+		return;
+
+	/* recalculate all face and vertex normals; side effect: ensures vertex, edge, face indices */
+	/* I suspect this is not necessary: TODO: test that guess */
+	BM_mesh_normals_update(bm);
+
+	cd_clnors_offset = CustomData_get_offset(&bm->ldata, CD_CUSTOMLOOPNORMAL);
+
+	/* If there is not already a custom split normal layer then making one (with BM_lnorspace_update)
+	 * will not respect the autosmooth angle between smooth faces. To get that to happen, we have
+	 * to mark the sharpen the edges that are only sharp because of the angle test -- otherwise would be smooth.
+	 */
+	if (cd_clnors_offset == -1) {
+		BM_edges_sharp_from_angle_set(bm, bp->smoothresh);
+		bevel_edges_sharp_boundary(bm, bp);
+	}
+
+	/* ensure that bm->lnor_spacearr has properly stored loop normals; side effect: ensures loop indices */
+	BM_lnorspace_update(bm);
+
+	if (cd_clnors_offset == -1)
+		cd_clnors_offset = CustomData_get_offset(&bm->ldata, CD_CUSTOMLOOPNORMAL);
+
+	BM_ITER_MESH(f, &fiter, bm, BM_FACES_OF_MESH) {
+		fkind = get_face_kind(bp, f);
+		if (fkind == F_ORIG || fkind == F_RECON)
+			continue;
+		BM_ITER_ELEM(l, &liter, f, BM_LOOPS_OF_FACE) {
+			estep = l->prev->e;  /* causes CW walk around l->v fan */
+			lprev = BM_vert_step_fan_loop(l, &estep);
+			estep = l->e;  /* causes CCW walk around l->v fan */
+			lnext = BM_vert_step_fan_loop(l, &estep);
+			fprevkind = lprev ? get_face_kind(bp, lprev->f) : F_NONE;
+			fnextkind = lnext ? get_face_kind(bp, lnext->f) : F_NONE;
+			pnorm = NULL;
+			if (fkind == F_EDGE) {
+				if (fprevkind == F_EDGE && BM_elem_flag_test(l, BM_ELEM_LONG_TAG)) {
+					add_v3_v3v3(norm, f->no, lprev->f->no);
+					pnorm = norm;
+				}
+				else if (fnextkind == F_EDGE && BM_elem_flag_test(lnext, BM_ELEM_LONG_TAG)) {
+					add_v3_v3v3(norm, f->no, lnext->f->no);
+					pnorm = norm;
+				}
+				else if (fprevkind == F_RECON && BM_elem_flag_test(l, BM_ELEM_LONG_TAG)) {
+					pnorm = lprev->f->no;
+				}
+				else if (fnextkind == F_RECON && BM_elem_flag_test(l->prev, BM_ELEM_LONG_TAG)) {
+					pnorm = lnext->f->no;
+				}
+				else {
+					/* printf("unexpected harden case (edge)\n"); */
+				}
+			}
+			else if (fkind == F_VERT) {
+				if (fprevkind == F_VERT && fnextkind == F_VERT) {
+					pnorm = l->v->no;
+				}
+				else if (fprevkind == F_RECON) {
+					pnorm = lprev->f->no;
+				}
+				else if (fnextkind == F_RECON) {
+					pnorm = lnext->f->no;
+				}
+				else {
+					if (lprev) {
+						estep = lprev->prev->e;
+						lprevprev = BM_vert_step_fan_loop(lprev, &estep);
+					}
+					else {
+						lprevprev = NULL;
+					}
+					if (lnext) {
+						estep = lnext->e;
+						lnextnext = BM_vert_step_fan_loop(lnext, &estep);
+					}
+					else {
+						lnextnext = NULL;
+					}
+					fprevprevkind = lprevprev ? get_face_kind(bp, lprevprev->f) : F_NONE;
+					fnextnextkind = lnextnext ? get_face_kind(bp, lnextnext->f) : F_NONE;
+					if (fprevkind == F_EDGE && fprevprevkind == F_RECON) {
+						pnorm = lprevprev->f->no;
+					}
+					else if (fprevkind == F_EDGE && fnextkind == F_VERT && fprevprevkind == F_EDGE) {
+						add_v3_v3v3(norm, lprev->f->no, lprevprev->f->no);
+						pnorm = norm;
+					}
+					else if (fnextkind == F_EDGE && fprevkind == F_VERT && fnextnextkind == F_EDGE) {
+						add_v3_v3v3(norm, lnext->f->no, lnextnext->f->no);
+						pnorm = norm;
+					}
+					else {
+						/* printf("unexpected harden case (vert)\n"); */
+					}
+				}
+			}
+			if (pnorm) {
+				if (pnorm == norm)
+					normalize_v3(norm);
+				l_index = BM_elem_index_get(l);
+				clnors = BM_ELEM_CD_GET_VOID_P(l, cd_clnors_offset);
+				BKE_lnor_space_custom_normal_to_data(
+					bm->lnor_spacearr->lspacearr[l_index], pnorm, clnors);
+			}
+		}
+	}
+}
+
+static void bevel_set_weighted_normal_face_strength(BMesh *bm, BevelParams *bp)
+{
+	BMFace *f;
+	BMIter fiter;
+	FKind fkind;
+	int strength;
+	int mode = bp->face_strength_mode;
+	bool do_set_strength;
+	const char *wn_layer_id = MOD_WEIGHTEDNORMALS_FACEWEIGHT_CDLAYER_ID;
+	int cd_prop_int_idx = CustomData_get_named_layer_index(&bm->pdata, CD_PROP_INT, wn_layer_id);
+
+	if (cd_prop_int_idx == -1) {
+		BM_data_layer_add_named(bm, &bm->pdata, CD_PROP_INT, wn_layer_id);
+		cd_prop_int_idx = CustomData_get_named_layer_index(&bm->pdata, CD_PROP_INT, wn_layer_id);
+	}
+	cd_prop_int_idx -= CustomData_get_layer_index(&bm->pdata, CD_PROP_INT);
+	const int cd_prop_int_offset = CustomData_get_n_offset(&bm->pdata, CD_PROP_INT, cd_prop_int_idx);
+
+	BM_ITER_MESH(f, &fiter, bm, BM_FACES_OF_MESH) {
+		fkind = get_face_kind(bp, f);
+		do_set_strength = true;
+		switch (fkind) {
+			case F_VERT:
+				strength = FACE_STRENGTH_WEAK;
+				do_set_strength = (mode >= BEVEL_FACE_STRENGTH_NEW);
+				break;
+			case F_EDGE:
+				strength = FACE_STRENGTH_MEDIUM;
+				do_set_strength = (mode >= BEVEL_FACE_STRENGTH_NEW);
+				break;
+			case F_RECON:
+				strength = FACE_STRENGTH_STRONG;
+				do_set_strength = (mode >= BEVEL_FACE_STRENGTH_AFFECTED);
+				break;
+			case F_ORIG:
+				strength = FACE_STRENGTH_STRONG;
+				do_set_strength = (mode == BEVEL_FACE_STRENGTH_ALL);
+				break;
+			default:
+				do_set_strength = false;
+		}
+		if (do_set_strength) {
+			int *strength_ptr = BM_ELEM_CD_GET_VOID_P(f, cd_prop_int_offset);
+			*strength_ptr = strength;
+		}
+	}
+}
+
 /* Set the any_seam property for a BevVert and all its BoundVerts */
-static void set_bound_vert_seams(BevVert *bv)
+static void set_bound_vert_seams(BevVert *bv, bool mark_seam, bool mark_sharp)
 {
 	BoundVert *v;
 	EdgeHalf *e;
@@ -1538,6 +1924,13 @@ static void set_bound_vert_seams(BevVert *bv)
 		}
 		bv->any_seam |= v->any_seam;
 	} while ((v = v->next) != bv->vmesh->boundstart);
+
+	if (mark_seam) {
+		check_edge_data_seam_sharp_edges(bv, BM_ELEM_SEAM, false);
+	}
+	if (mark_sharp) {
+		check_edge_data_seam_sharp_edges(bv, BM_ELEM_SMOOTH, true);
+	}
 }
 
 static int count_bound_vert_seams(BevVert *bv)
@@ -1608,7 +2001,7 @@ static void build_boundary_vertex_only(BevelParams *bp, BevVert *bv, bool constr
 	calculate_vm_profiles(bp, bv, vm);
 
 	if (construct) {
-		set_bound_vert_seams(bv);
+		set_bound_vert_seams(bv, bp->mark_seam, bp->mark_sharp);
 		if (vm->count == 2)
 			vm->mesh_kind = M_NONE;
 		else if (bp->seg == 1)
@@ -1663,7 +2056,7 @@ static void build_boundary_terminal_edge(BevelParams *bp, BevVert *bv, EdgeHalf 
 			e->next->leftv = e->next->rightv = v;
 			/* could use M_POLY too, but tri-fan looks nicer)*/
 			vm->mesh_kind = M_TRI_FAN;
-			set_bound_vert_seams(bv);
+			set_bound_vert_seams(bv, bp->mark_seam, bp->mark_sharp);
 		}
 		else {
 			adjust_bound_vert(e->next->leftv, co);
@@ -1722,7 +2115,7 @@ static void build_boundary_terminal_edge(BevelParams *bp, BevVert *bv, EdgeHalf 
 	}
 
 	if (construct) {
-		set_bound_vert_seams(bv);
+		set_bound_vert_seams(bv, bp->mark_seam, bp->mark_sharp);
 
 		if (vm->count == 2 && bv->edgecount == 3) {
 			vm->mesh_kind = M_NONE;
@@ -1735,22 +2128,6 @@ static void build_boundary_terminal_edge(BevelParams *bp, BevVert *bv, EdgeHalf 
 		}
 	}
 }
-
-#if 0
-/* Return a value that is v if v is within BEVEL_MAX_ADJUST_PCT of the spec (assumed positive),
- * else clamp to make it at most that far away from spec */
-static float clamp_adjust(float v, float spec)
-{
-	float allowed_delta = spec * (BEVEL_MAX_ADJUST_PCT / 100.0f);
-
-	if (v - spec > allowed_delta)
-		return spec + allowed_delta;
-	else if (spec - v > allowed_delta)
-		return spec - allowed_delta;
-	else
-		return v;
-}
-#endif
 
 /* Make a circular list of BoundVerts for bv, each of which has the coordinates
  * of a vertex on the boundary of the beveled vertex bv->v.
@@ -1864,7 +2241,7 @@ static void build_boundary(BevelParams *bp, BevVert *bv, bool construct)
 	calculate_vm_profiles(bp, bv, vm);
 
 	if (construct) {
-		set_bound_vert_seams(bv);
+		set_bound_vert_seams(bv, bp->mark_seam, bp->mark_sharp);
 
 		if (vm->count == 2) {
 			vm->mesh_kind = M_NONE;
@@ -1962,7 +2339,7 @@ static void print_adjust_stats(BoundVert *vstart)
  * residual in terms of that one degree of freedom.
  * Unfortunately, the results are in some cases worse than the general least squares solution
  * for the combined (with weights) problem, so this code is not used.
- * But keep it here for a while in case peformance issues demand that it be used sometimes. */
+ * But keep it here for a while in case performance issues demand that it be used sometimes. */
 static bool adjust_the_cycle_or_chain_fast(BoundVert *vstart, int np, bool iscycle)
 {
 	BoundVert *v;
@@ -2191,7 +2568,7 @@ static void adjust_the_cycle_or_chain(BoundVert *vstart, bool iscycle)
 
 /* Adjust the offsets to try to make them, as much as possible,
  * have even-width bevels with offsets that match their specs.
- * The problem that we can try to amelieroate is that when loop slide
+ * The problem that we can try to ameliorate is that when loop slide
  * is active, the meet point will probably not be the one that makes
  * both sides have their specified width. And because both ends may be
  * on loop slide edges, the widths at each end could be different.
@@ -2918,29 +3295,36 @@ static VMesh *make_cube_corner_adj_vmesh(BevelParams *bp)
 }
 
 /* Is this a good candidate for using tri_corner_adj_vmesh? */
-static bool tri_corner_test(BevelParams *bp, BevVert *bv)
+static int tri_corner_test(BevelParams *bp, BevVert *bv)
 {
 	float ang, totang, angdiff;
 	EdgeHalf *e;
 	int i;
+	int in_plane_e = 0;
 
-	if (bv->edgecount != 3 || bv->selcount != 3)
-		return false;
+	if (bp->vertex_only)
+		return -1;
 	totang = 0.0f;
-	for (i = 0; i < 3; i++) {
+	for (i = 0; i < bv->edgecount; i++) {
 		e = &bv->edges[i];
 		ang = BM_edge_calc_face_angle_signed_ex(e->e, 0.0f);
-		if (ang <= (float) M_PI_4 || ang >= 3.0f * (float) M_PI_4)
-			return false;
+		if (ang <= M_PI_4)
+			in_plane_e++;
+		else if (ang >= 3.0f * (float) M_PI_4)
+			return -1;
 		totang += ang;
 	}
+	if (in_plane_e != bv->edgecount - 3)
+		return -1;
 	angdiff = fabsf(totang - 3.0f * (float)M_PI_2);
 	if ((bp->pro_super_r == PRO_SQUARE_R && angdiff > (float)M_PI / 16.0f) ||
 	    (angdiff > (float)M_PI_4))
 	{
-		return false;
+		return -1;
 	}
-	return true;
+	if (bv->edgecount != 3 || bv->selcount != 3)
+		return 0;
+	return 1;
 }
 
 static VMesh *tri_corner_adj_vmesh(BevelParams *bp, BevVert *bv)
@@ -2951,7 +3335,7 @@ static VMesh *tri_corner_adj_vmesh(BevelParams *bp, BevVert *bv)
 	VMesh *vm;
 	BoundVert *bndv;
 
-	BLI_assert(bv->edgecount == 3 && bv->selcount == 3);
+	/*BLI_assert(bv->edgecount == 3 && bv->selcount == 3);		Add support for in plane edges */
 	bndv = bv->vmesh->boundstart;
 	copy_v3_v3(co0, bndv->nv.co);
 	bndv = bndv->next;
@@ -2984,9 +3368,14 @@ static VMesh *adj_vmesh(BevelParams *bp, BevVert *bv)
 	BoundVert *bndv;
 	MemArena *mem_arena = bp->mem_arena;
 	float r, fac, fullness;
+	n = bv->vmesh->count;
+
+	/* Same bevel as that of 3 edges of vert in a cube */
+	if (n == 3 && tri_corner_test(bp, bv) != -1 && bp->pro_super_r != PRO_SQUARE_IN_R) {
+		return tri_corner_adj_vmesh(bp, bv);
+	}
 
 	/* First construct an initial control mesh, with nseg==2 */
-	n = bv->vmesh->count;
 	ns = bv->vmesh->seg;
 	vm0 = new_adj_vmesh(mem_arena, n, 2, bv->vmesh->boundstart);
 
@@ -3171,12 +3560,12 @@ static float snap_face_dist_squared(float *co, BMFace *f, BMEdge **r_snap_e, flo
 	return beste_d2;
 }
 
-static void build_center_ngon(BMesh *bm, BevVert *bv, int mat_nr)
+static void build_center_ngon(BevelParams *bp, BMesh *bm, BevVert *bv, int mat_nr)
 {
 	VMesh *vm = bv->vmesh;
 	BoundVert *v;
 	int i, ns2;
-	BMFace *frep;
+	BMFace *frep, *f;
 	BMEdge *frep_e1, *frep_e2, *frep_e;
 	BMVert **vv = NULL;
 	BMFace **vf = NULL;
@@ -3208,7 +3597,8 @@ static void build_center_ngon(BMesh *bm, BevVert *bv, int mat_nr)
 			BLI_array_append(ve, NULL);
 		}
 	} while ((v = v->next) != vm->boundstart);
-	bev_create_ngon(bm, vv, BLI_array_len(vv), vf, frep, ve, mat_nr, true);
+	f = bev_create_ngon(bm, vv, BLI_array_len(vv), vf, frep, ve, mat_nr, true);
+	record_face_kind(bp, f, F_VERT);
 
 	BLI_array_free(vv);
 	BLI_array_free(vf);
@@ -3248,7 +3638,7 @@ static void build_square_in_vmesh(BevelParams *bp, BMesh *bm, BevVert *bv, VMesh
 		for (i = 0; i < n; i++) {
 			mesh_vert(vm, i, ns2, ns2)->v = mesh_vert(vm, i, 0, ns2)->v;
 		}
-		build_center_ngon(bm, bv, bp->mat_nr);
+		build_center_ngon(bp, bm, bv, bp->mat_nr);
 	}
 }
 
@@ -3429,7 +3819,7 @@ static void bevel_build_rings(BevelParams *bp, BMesh *bm, BevVert *bv)
 	VMesh *vm1, *vm;
 	BoundVert *v;
 	BMVert *bmv1, *bmv2, *bmv3, *bmv4;
-	BMFace *f, *f2;
+	BMFace *f, *f2, *r_f;
 	BMEdge *bme, *bme1, *bme2, *bme3;
 	EdgeHalf *e;
 	BoundVert *vpipe;
@@ -3441,6 +3831,17 @@ static void bevel_build_rings(BevelParams *bp, BMesh *bm, BevVert *bv)
 	odd = ns % 2;
 	BLI_assert(n >= 3 && ns > 1);
 
+	/* Add support for profiles in vertex only in-plane bevels */
+	if (bp->vertex_only) {
+		v = bv->vmesh->boundstart;
+		do {
+			Profile *pro = &v->profile;
+			pro->super_r = bp->pro_super_r;
+			copy_v3_v3(pro->midco, bv->v->co);
+			calculate_profile(bp, v);
+			v = v->next;
+		} while (v != bv->vmesh->boundstart);
+	}
 
 	vpipe = pipe_test(bv);
 
@@ -3450,7 +3851,7 @@ static void bevel_build_rings(BevelParams *bp, BMesh *bm, BevVert *bv)
 	else if (vpipe) {
 		vm1 = pipe_adj_vmesh(bp, bv, vpipe);
 	}
-	else if (tri_corner_test(bp, bv)) {
+	else if (tri_corner_test(bp, bv) == 1) {
 		vm1 = tri_corner_adj_vmesh(bp, bv);
 		/* the PRO_SQUARE_IN_R profile has boundary edges that merge
 		 * and no internal ring polys except possibly center ngon */
@@ -3504,24 +3905,24 @@ static void bevel_build_rings(BevelParams *bp, BMesh *bm, BevVert *bv)
 				if (bp->vertex_only) {
 					if (j < k) {
 						if (k == ns2 && j == ns2 - 1) {
-							bev_create_quad_ex(bm, bmv1, bmv2, bmv3, bmv4, f2, f2, f2, f2,
+							r_f = bev_create_quad_ex(bm, bmv1, bmv2, bmv3, bmv4, f2, f2, f2, f2,
 							                   NULL, NULL, v->next->efirst->e, bme, mat_nr);
 						}
 						else {
-							bev_create_quad(bm, bmv1, bmv2, bmv3, bmv4, f2, f2, f2, f2, mat_nr);
+							r_f = bev_create_quad(bm, bmv1, bmv2, bmv3, bmv4, f2, f2, f2, f2, mat_nr);
 						}
 					}
 					else if (j > k) {
-						bev_create_quad(bm, bmv1, bmv2, bmv3, bmv4, f2, f2, f2, f2, mat_nr);
+						r_f = bev_create_quad(bm, bmv1, bmv2, bmv3, bmv4, f2, f2, f2, f2, mat_nr);
 					}
 					else { /* j == k */
 						/* only one edge attached to v, since vertex_only */
 						if (e->is_seam) {
-							bev_create_quad_ex(bm, bmv1, bmv2, bmv3, bmv4, f2, f2, f2, f2,
+							r_f = bev_create_quad_ex(bm, bmv1, bmv2, bmv3, bmv4, f2, f2, f2, f2,
 							                   bme, NULL, bme, NULL, mat_nr);
 						}
 						else {
-							bev_create_quad_ex(bm, bmv1, bmv2, bmv3, bmv4, f2, f2, f2, f,
+							r_f = bev_create_quad_ex(bm, bmv1, bmv2, bmv3, bmv4, f2, f2, f2, f,
 							                   bme, NULL, bme, NULL, mat_nr);
 						}
 					}
@@ -3530,25 +3931,26 @@ static void bevel_build_rings(BevelParams *bp, BMesh *bm, BevVert *bv)
 					if (odd) {
 						if (k == ns2) {
 							if (e->is_seam) {
-								bev_create_quad_ex(bm, bmv1, bmv2, bmv3, bmv4, f, f, f, f,
+								r_f = bev_create_quad_ex(bm, bmv1, bmv2, bmv3, bmv4, f, f, f, f,
 								                   NULL, bme, bme, NULL, mat_nr);
 							}
 							else {
-								bev_create_quad(bm, bmv1, bmv2, bmv3, bmv4, f, f2, f2, f, mat_nr);
+								r_f = bev_create_quad(bm, bmv1, bmv2, bmv3, bmv4, f, f2, f2, f, mat_nr);
 							}
 						}
 						else {
-							bev_create_quad(bm, bmv1, bmv2, bmv3, bmv4, f, f, f, f, mat_nr);
+							r_f = bev_create_quad(bm, bmv1, bmv2, bmv3, bmv4, f, f, f, f, mat_nr);
 						}
 					}
 					else {
 						bme1 = k == ns2 - 1 ? bme : NULL;
 						bme3 = j == ns2 - 1 ? v->prev->ebev->e : NULL;
 						bme2 = bme1 != NULL ? bme1 : bme3;
-						bev_create_quad_ex(bm, bmv1, bmv2, bmv3, bmv4, f, f, f, f,
+						r_f = bev_create_quad_ex(bm, bmv1, bmv2, bmv3, bmv4, f, f, f, f,
 						                   NULL, bme1, bme2, bme3, mat_nr);
 					}
 				}
+				record_face_kind(bp, r_f, F_VERT);
 			}
 		}
 	} while ((v = v->next) != vm->boundstart);
@@ -3574,7 +3976,7 @@ static void bevel_build_rings(BevelParams *bp, BMesh *bm, BevVert *bv)
 
 	/* center ngon */
 	if (odd) {
-		build_center_ngon(bm, bv, mat_nr);
+		build_center_ngon(bp, bm, bv, mat_nr);
 	}
 }
 
@@ -3666,6 +4068,7 @@ static BMFace *bevel_build_poly(BevelParams *bp, BMesh *bm, BevVert *bv)
 	} while ((v = v->next) != vm->boundstart);
 	if (n > 2) {
 		f = bev_create_ngon(bm, vv, n, vf, frep, ve, bp->mat_nr, true);
+		record_face_kind(bp, f, F_VERT);
 	}
 	else {
 		f = NULL;
@@ -3708,45 +4111,7 @@ static void bevel_build_trifan(BevelParams *bp, BMesh *bm, BevVert *bv)
 				else if (l_fan->prev->v == v_fan) { l_fan = l_fan->prev; }
 				else { BLI_assert(0); }
 			}
-		}
-	}
-}
-
-static void bevel_build_quadstrip(BevelParams *bp, BMesh *bm, BevVert *bv)
-{
-	BMFace *f;
-	BLI_assert(bv->selcount == 2);
-
-	f = bevel_build_poly(bp, bm, bv);
-
-	if (f) {
-		/* we have a polygon which we know starts at this vertex, make it into strips */
-		EdgeHalf *eh_a = bv->vmesh->boundstart->elast;
-		EdgeHalf *eh_b = next_bev(bv, eh_a->next);  /* since (selcount == 2) we know this is valid */
-		BMLoop *l_a = BM_face_vert_share_loop(f, eh_a->rightv->nv.v);
-		BMLoop *l_b = BM_face_vert_share_loop(f, eh_b->leftv->nv.v);
-		int split_count = bv->vmesh->seg + 1;  /* ensure we don't walk past the segments */
-
-		while (f->len > 4 && split_count > 0) {
-			BMLoop *l_new;
-			BLI_assert(l_a->f == f);
-			BLI_assert(l_b->f == f);
-
-			if (l_a-> v == l_b->v || l_a->next == l_b) {
-				/* l_a->v and l_b->v can be the same or such that we'd make a 2-vertex poly */
-				l_a = l_a->prev;
-				l_b = l_b->next;
-			}
-			else {
-				BM_face_split(bm, f, l_a, l_b, &l_new, NULL, false);
-				f = l_new->f;
-				flag_out_edge(bm, l_new->e);
-
-				/* walk around the new face to get the next verts to split */
-				l_a = l_new->prev;
-				l_b = l_new->next->next;
-			}
-			split_count--;
+			record_face_kind(bp, f_new, F_VERT);
 		}
 	}
 }
@@ -3908,9 +4273,6 @@ static void build_vmesh(BevelParams *bp, BMesh *bm, BevVert *bv)
 			break;
 		case M_TRI_FAN:
 			bevel_build_trifan(bp, bm, bv);
-			break;
-		case M_QUAD_STRIP:
-			bevel_build_quadstrip(bp, bm, bv);
 			break;
 	}
 }
@@ -4536,6 +4898,7 @@ static bool bev_rebuild_polygon(BMesh *bm, BevelParams *bp, BMFace *f)
 
 		/* don't select newly or return created boundary faces... */
 		if (f_new) {
+			record_face_kind(bp, f_new, F_RECON);
 			BM_elem_flag_disable(f_new, BM_ELEM_TAG);
 			/* Also don't want new edges that aren't part of a new bevel face */
 			BM_ITER_ELEM(bme, &eiter, f_new, BM_EDGES_OF_FACE) {
@@ -4721,10 +5084,12 @@ static void bevel_build_edge_polygons(BMesh *bm, BevelParams *bp, BMEdge *bme)
 	VMesh *vm1, *vm2;
 	EdgeHalf *e1, *e2;
 	BMEdge *bme1, *bme2, *center_bme;
-	BMFace *f1, *f2, *f;
+	BMFace *f1, *f2, *f, *r_f;
 	BMVert *verts[4];
 	BMFace *faces[4];
 	BMEdge *edges[4];
+	BMLoop *l;
+	BMIter iter;
 	int k, nseg, i1, i2, odd, mid;
 	int mat_nr = bp->mat_nr;
 
@@ -4783,18 +5148,18 @@ static void bevel_build_edge_polygons(BMesh *bm, BevelParams *bp, BMEdge *bme)
 				/* straddles a seam: choose to interpolate in f1 and snap right edge to bme */
 				edges[0] = edges[1] = NULL;
 				edges[2] = edges[3] = bme;
-				bev_create_ngon(bm, verts, 4, NULL, f1, edges, mat_nr, true);
+				r_f = bev_create_ngon(bm, verts, 4, NULL, f1, edges, mat_nr, true);
 			}
 			else {
 				/* straddles but not a seam: interpolate left half in f1, right half in f2 */
-				bev_create_ngon(bm, verts, 4, faces, NULL, NULL, mat_nr, true);
+				r_f = bev_create_ngon(bm, verts, 4, faces, NULL, NULL, mat_nr, true);
 			}
 		}
 		else if (!odd && k == mid) {
 			/* left poly that touches an even center line on right */
 			edges[0] = edges[1] = NULL;
 			edges[2] = edges[3] = bme;
-			bev_create_ngon(bm, verts, 4, NULL, f1, edges, mat_nr, true);
+			r_f = bev_create_ngon(bm, verts, 4, NULL, f1, edges, mat_nr, true);
 			center_bme = BM_edge_exists(verts[2], verts[3]);
 			BLI_assert(center_bme != NULL);
 		}
@@ -4802,12 +5167,18 @@ static void bevel_build_edge_polygons(BMesh *bm, BevelParams *bp, BMEdge *bme)
 			/* right poly that touches an even center line on left */
 			edges[0] = edges[1] = bme;
 			edges[2] = edges[3] = NULL;
-			bev_create_ngon(bm, verts, 4, NULL, f2, edges, mat_nr, true);
+			r_f = bev_create_ngon(bm, verts, 4, NULL, f2, edges, mat_nr, true);
 		}
 		else {
 			/* doesn't cross or touch the center line, so interpolate in appropriate f1 or f2 */
 			f = (k <= mid) ? f1 : f2;
-			bev_create_ngon(bm, verts, 4, NULL, f, NULL, mat_nr, true);
+			r_f = bev_create_ngon(bm, verts, 4, NULL, f, NULL, mat_nr, true);
+		}
+		record_face_kind(bp, r_f, F_EDGE);
+		/* tag the long edges: those out of verts[0] and verts[2] */
+		BM_ITER_ELEM(l, &iter, r_f, BM_LOOPS_OF_FACE) {
+			if (l->v == verts[0] || l->v == verts[2])
+				BM_elem_flag_enable(l, BM_ELEM_LONG_TAG);
 		}
 		verts[0] = verts[3];
 		verts[1] = verts[2];
@@ -4841,7 +5212,6 @@ static void bevel_build_edge_polygons(BMesh *bm, BevelParams *bp, BMEdge *bme)
 		weld_cross_attrs_copy(bm, bv2, vm2, i2, e2);
 	}
 }
-
 
 /* Find xnew > x0 so that distance((x0,y0), (xnew, ynew)) = dtarget.
  * False position Illinois method used because the function is somewhat linear
@@ -5348,11 +5718,14 @@ void BM_mesh_bevel(
         const float segments, const float profile,
         const bool vertex_only, const bool use_weights, const bool limit_offset,
         const struct MDeformVert *dvert, const int vertex_group, const int mat,
-        const bool loop_slide)
+        const bool loop_slide, const bool mark_seam, const bool mark_sharp,
+        const bool harden_normals, const int face_strength_mode, const float smoothresh)
 {
-	BMIter iter;
+	BMIter iter, liter;
 	BMVert *v, *v_next;
 	BMEdge *e;
+	BMFace *f;
+	BMLoop *l;
 	BevVert *bv;
 	BevelParams bp = {NULL};
 	GHashIterator giter;
@@ -5369,8 +5742,14 @@ void BM_mesh_bevel(
 	bp.dvert = dvert;
 	bp.vertex_group = vertex_group;
 	bp.mat_nr = mat;
+	bp.mark_seam = mark_seam;
+	bp.mark_sharp = mark_sharp;
+	bp.harden_normals = harden_normals;
+	bp.face_strength_mode = face_strength_mode;
+	bp.smoothresh = smoothresh;
+	bp.face_hash = NULL;
 
-	if (profile >= 0.999f) {  /* r ~ 692, so PRO_SQUARE_R is 1e4 */
+	if (profile >= 0.950f) {  /* r ~ 692, so PRO_SQUARE_R is 1e4 */
 		bp.pro_super_r = PRO_SQUARE_R;
 	}
 
@@ -5380,6 +5759,9 @@ void BM_mesh_bevel(
 		bp.mem_arena = BLI_memarena_new(MEM_SIZE_OPTIMAL(1 << 16), __func__);
 		BLI_memarena_use_calloc(bp.mem_arena);
 		set_profile_spacing(&bp);
+
+		bp.face_hash = BLI_ghash_ptr_new(__func__);
+		BLI_ghash_flag_set(bp.face_hash, GHASH_FLAG_ALLOW_DUPES);
 
 		/* Analyze input vertices, sorting edges and assigning initial new vertex positions */
 		BM_ITER_MESH (v, &iter, bm, BM_VERTS_OF_MESH) {
@@ -5425,6 +5807,12 @@ void BM_mesh_bevel(
 			}
 		}
 
+		/* Extend edge data like sharp edges and precompute normals for harden */
+		GHASH_ITER(giter, bp.vert_hash) {
+			bv = BLI_ghashIterator_getValue(&giter);
+			bevel_extend_edge_data(bv);
+		}
+
 		/* Rebuild face polygons around affected vertices */
 		BM_ITER_MESH (v, &iter, bm, BM_VERTS_OF_MESH) {
 			if (BM_elem_flag_test(v, BM_ELEM_TAG)) {
@@ -5438,6 +5826,13 @@ void BM_mesh_bevel(
 				BLI_assert(find_bevvert(&bp, v) != NULL);
 				BM_vert_kill(bm, v);
 			}
+		}
+
+		if (bp.harden_normals) {
+			bevel_harden_normals(bm, &bp);
+		}
+		if (bp.face_strength_mode != BEVEL_FACE_STRENGTH_NONE) {
+			bevel_set_weighted_normal_face_strength(bm, &bp);
 		}
 
 		/* When called from operator (as opposed to modifier), bm->use_toolflags
@@ -5454,8 +5849,18 @@ void BM_mesh_bevel(
 			}
 		}
 
+		/* clear the BM_ELEM_LONG_TAG tags, which were only set on some edges in F_EDGE faces */
+		BM_ITER_MESH(f, &iter, bm, BM_FACES_OF_MESH) {
+			if (get_face_kind(&bp, f) != F_EDGE)
+				continue;
+			BM_ITER_ELEM(l, &liter, f, BM_LOOPS_OF_FACE) {
+				BM_elem_flag_disable(l, BM_ELEM_LONG_TAG);
+			}
+		}
+
 		/* primary free */
 		BLI_ghash_free(bp.vert_hash, NULL, NULL);
+		BLI_ghash_free(bp.face_hash, NULL, NULL);
 		BLI_memarena_free(bp.mem_arena);
 	}
 }

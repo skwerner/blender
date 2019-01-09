@@ -193,9 +193,10 @@ void sub_qt_qtqt(float q[4], const float q1[4], const float q2[4])
 	mul_qt_qtqt(q, q1, nq2);
 }
 
-/* angular mult factor */
-void mul_fac_qt_fl(float q[4], const float fac)
+/* raise a unit quaternion to the specified power */
+void pow_qt_fl_normalized(float q[4], const float fac)
 {
+	BLI_ASSERT_UNIT_QUAT(q);
 	const float angle = fac * saacos(q[0]); /* quat[0] = cos(0.5 * angle), but now the 0.5 and 2.0 rule out */
 	const float co = cosf(angle);
 	const float si = sinf(angle);
@@ -1872,19 +1873,24 @@ void dquat_to_mat4(float mat[4][4], const DualQuat *dq)
 
 	/* normalize */
 	len = sqrtf(dot_qtqt(q0, q0));
-	if (len != 0.0f)
-		mul_qt_fl(q0, 1.0f / len);
+	if (len != 0.0f) {
+		len = 1.0f / len;
+	}
+	mul_qt_fl(q0, len);
 
 	/* rotation */
 	quat_to_mat4(mat, q0);
 
 	/* translation */
 	t = dq->trans;
-	mat[3][0] = 2.0f * (-t[0] * q0[1] + t[1] * q0[0] - t[2] * q0[3] + t[3] * q0[2]);
-	mat[3][1] = 2.0f * (-t[0] * q0[2] + t[1] * q0[3] + t[2] * q0[0] - t[3] * q0[1]);
-	mat[3][2] = 2.0f * (-t[0] * q0[3] - t[1] * q0[2] + t[2] * q0[1] + t[3] * q0[0]);
+	mat[3][0] = 2.0f * (-t[0] * q0[1] + t[1] * q0[0] - t[2] * q0[3] + t[3] * q0[2]) * len;
+	mat[3][1] = 2.0f * (-t[0] * q0[2] + t[1] * q0[3] + t[2] * q0[0] - t[3] * q0[1]) * len;
+	mat[3][2] = 2.0f * (-t[0] * q0[3] - t[1] * q0[2] + t[2] * q0[1] + t[3] * q0[0]) * len;
 
-	/* note: this does not handle scaling */
+	/* scaling */
+	if (dq->scale_weight) {
+		mul_m4_m4m4(mat, mat, dq->scale);
+	}
 }
 
 void add_weighted_dq_dq(DualQuat *dqsum, const DualQuat *dq, float weight)

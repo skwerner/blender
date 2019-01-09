@@ -379,7 +379,8 @@ def dump_rna_messages(msgs, reports, settings, verbose=False):
         km_i18n_context = bpy.app.translations.contexts.id_windowmanager
         for lvl in hier:
             msgsrc = msgsrc_prev + "." + lvl[1]
-            process_msg(msgs, km_i18n_context, lvl[0], msgsrc, reports, None, settings)
+            if isinstance(lvl[0], str):  # Can be a function too, now, with tool system...
+                process_msg(msgs, km_i18n_context, lvl[0], msgsrc, reports, None, settings)
             if lvl[3]:
                 walk_keymap_hierarchy(lvl[3], msgsrc)
 
@@ -391,7 +392,7 @@ def dump_rna_messages(msgs, reports, settings, verbose=False):
             return
 
         def full_class_id(cls):
-            """Gives us 'ID.Lamp.AreaLamp' which is best for sorting."""
+            """Gives us 'ID.Light.AreaLight' which is best for sorting."""
             # Always the same issue, some classes listed in blacklist should actually no more exist (they have been
             # unregistered), but are still listed by __subclasses__() calls... :/
             if cls in blacklist_rna_class:
@@ -437,8 +438,8 @@ def dump_rna_messages(msgs, reports, settings, verbose=False):
                     reports, check_ctxt_rna, settings)
 
     # And parse keymaps!
-    from bpy_extras.keyconfig_utils import KM_HIERARCHY
-    walk_keymap_hierarchy(KM_HIERARCHY, "KM_HIERARCHY")
+    from bl_keymap_utils import keymap_hierarchy
+    walk_keymap_hierarchy(keymap_hierarchy.generate(), "KM_HIERARCHY")
 
 
 ##### Python source code #####
@@ -987,7 +988,7 @@ def main():
     args = parser.parse_args(argv)
 
     settings = settings_i18n.I18nSettings()
-    settings.from_json(args.settings)
+    settings.load(args.settings)
 
     if args.output:
         settings.FILE_NAME_POT = args.output

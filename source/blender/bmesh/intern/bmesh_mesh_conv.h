@@ -35,11 +35,9 @@
 struct Main;
 struct Mesh;
 
-void BM_mesh_cd_validate(BMesh *bm);
 void BM_mesh_cd_flag_ensure(BMesh *bm, struct Mesh *mesh, const char cd_flag);
 void BM_mesh_cd_flag_apply(BMesh *bm, const char cd_flag);
 char BM_mesh_cd_flag_from_bmesh(BMesh *bm);
-
 
 struct BMeshFromMeshParams {
 	uint calc_face_normal : 1;
@@ -49,9 +47,10 @@ struct BMeshFromMeshParams {
 	uint use_shapekey : 1;
 	/* define the active shape key (index + 1) */
 	int active_shapekey;
+	int64_t cd_mask_extra;
 };
 void BM_mesh_bm_from_me(
-        BMesh *bm, struct Mesh *me,
+        BMesh *bm, const struct Mesh *me,
         const struct BMeshFromMeshParams *params)
 ATTR_NONNULL(1, 3);
 
@@ -64,5 +63,10 @@ void BM_mesh_bm_to_me(
         struct Main *bmain, BMesh *bm, struct Mesh *me,
         const struct BMeshToMeshParams *params)
 ATTR_NONNULL(2, 3, 4);
+
+void BM_mesh_bm_to_me_for_eval(
+        BMesh *bm, struct Mesh *me, const int64_t cd_mask_extra)
+ATTR_NONNULL(1, 2);
+
 
 #endif /* __BMESH_MESH_CONV_H__ */

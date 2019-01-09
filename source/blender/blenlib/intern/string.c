@@ -35,6 +35,7 @@
 #include <stdlib.h>
 #include <stdarg.h>
 #include <ctype.h>
+#include <inttypes.h>
 
 #include "MEM_guardedalloc.h"
 
@@ -384,7 +385,7 @@ char *BLI_str_quoted_substrN(const char *__restrict str, const char *__restrict 
 	if (startMatch) {
 		const size_t prefixLen = strlen(prefix);
 		startMatch += prefixLen + 1;
-		/* get the end point (i.e. where the next occurance of " is after the starting point) */
+		/* get the end point (i.e. where the next occurrence of " is after the starting point) */
 
 		endMatch = startMatch;
 		while ((endMatch = strchr(endMatch, '"'))) {
@@ -779,6 +780,21 @@ void BLI_str_toupper_ascii(char *str, const size_t len)
 }
 
 /**
+ * Strip whitespace from end of the string.
+ */
+void BLI_str_rstrip(char *str)
+{
+	for (int i = (int)strlen(str) - 1; i > 0; i--) {
+		if (isspace(str[i])) {
+			str[i] = '\0';
+		}
+		else {
+			break;
+		}
+	}
+}
+
+/**
  * Strip trailing zeros from a float, eg:
  *   0.0000 -> 0.0
  *   2.0010 -> 2.001
@@ -960,24 +976,13 @@ size_t BLI_str_partition_ex(
 	return end ? (size_t)(end - str) : strlen(str);
 }
 
-/**
- * Format ints with decimal grouping.
- * 1000 -> 1,000
- *
- * \param dst: The resulting string
- * \param num: Number to format
- * \return The length of \a dst
- */
-size_t BLI_str_format_int_grouped(char dst[16], int num)
+static size_t BLI_str_format_int_grouped_ex(char src[16], char dst[16], int num_len)
 {
-	char src[16];
 	char *p_src = src;
 	char *p_dst = dst;
 
 	const char separator = ',';
-	int num_len, commas;
-
-	num_len = sprintf(src, "%d", num);
+	int commas;
 
 	if (*p_src == '-') {
 		*p_dst++ = *p_src++;
@@ -993,6 +998,40 @@ size_t BLI_str_format_int_grouped(char dst[16], int num)
 	*--p_dst = '\0';
 
 	return (size_t)(p_dst - dst);
+}
+
+/**
+ * Format ints with decimal grouping.
+ * 1000 -> 1,000
+ *
+ * \param dst: The resulting string
+ * \param num: Number to format
+ * \return The length of \a dst
+ */
+size_t BLI_str_format_int_grouped(char dst[16], int num)
+{
+	char src[16];
+	int num_len = sprintf(src, "%d", num);
+
+	return BLI_str_format_int_grouped_ex(src, dst, num_len);
+}
+
+/**
+ * Format uint64_t with decimal grouping.
+ * 1000 -> 1,000
+ *
+ * \param dst: The resulting string
+ * \param num: Number to format
+ * \return The length of \a dst
+ */
+size_t BLI_str_format_uint64_grouped(char dst[16], uint64_t num)
+{
+	/* NOTE: Buffer to hold maximum unsigned int64, which is 1.8e+19. but
+	 * we also need space for commas and null-terminator. */
+	char src[27];
+	int num_len = sprintf(src, "%"PRIu64"", num);
+
+	return BLI_str_format_int_grouped_ex(src, dst, num_len);
 }
 
 /**

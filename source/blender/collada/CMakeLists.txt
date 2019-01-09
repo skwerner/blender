@@ -44,6 +44,7 @@ set(INC
 	../blenkernel
 	../blenlib
 	../blentranslation
+	../depsgraph
 	../editors/include
 	../makesdna
 	../makesrna
@@ -62,8 +63,13 @@ set(INC_SYS
 set(SRC
 	AnimationImporter.cpp
 	AnimationExporter.cpp
+	AnimationClipExporter.cpp
 	ArmatureExporter.cpp
 	ArmatureImporter.cpp
+	BlenderContext.cpp
+	BCAnimationCurve.cpp
+	BCAnimationSampler.cpp
+	BCSampleData.cpp
 	CameraExporter.cpp
 	ControllerExporter.cpp
 	DocumentExporter.cpp
@@ -81,6 +87,7 @@ set(SRC
 	MaterialExporter.cpp
 	MeshImporter.cpp
 	SkinInfo.cpp
+	Materials.cpp
 	SceneExporter.cpp
 	TransformReader.cpp
 	TransformWriter.cpp
@@ -90,8 +97,13 @@ set(SRC
 
 	AnimationImporter.h
 	AnimationExporter.h
+	AnimationClipExporter.h
 	ArmatureExporter.h
 	ArmatureImporter.h
+	BlenderContext.h
+	BCAnimationCurve.h
+	BCAnimationSampler.h
+	BCSampleData.h
 	CameraExporter.h
 	ControllerExporter.h
 	DocumentExporter.h
@@ -108,6 +120,7 @@ set(SRC
 	LightExporter.h
 	MaterialExporter.h
 	MeshImporter.h
+	Materials.h
 	SkinInfo.h
 	SceneExporter.h
 	TransformReader.h

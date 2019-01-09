@@ -188,7 +188,7 @@ const unsigned char hash[512] = {
 };
 
 
-const float hashvectf[768] = {
+static const float hashvectf[768] = {
 	0.33783, 0.715698, -0.611206, -0.944031, -0.326599, -0.045624, -0.101074, -0.416443, -0.903503, 0.799286, 0.49411,
 	-0.341949, -0.854645, 0.518036, 0.033936, 0.42514, -0.437866, -0.792114, -0.358948, 0.597046, 0.717377, -0.985413,
 	0.144714, 0.089294, -0.601776, -0.33728, -0.723907, -0.449921, 0.594513, 0.666382, 0.208313, -0.10791, 0.972076,
@@ -1092,26 +1092,6 @@ static float noise3_perlin(float vec[3])
 #undef SURVE
 }
 
-#if 0
-static float turbulence_perlin(const float point[3], float lofreq, float hifreq)
-{
-	float freq, t, p[3];
-
-	p[0] = point[0] + 123.456;
-	p[1] = point[1];
-	p[2] = point[2];
-
-	t = 0;
-	for (freq = lofreq; freq < hifreq; freq *= 2.0) {
-		t += fabsf(noise3_perlin(p)) / freq;
-		p[0] *= 2.0f;
-		p[1] *= 2.0f;
-		p[2] *= 2.0f;
-	}
-	return t - 0.3; /* readjust to make mean value = 0.0 */
-}
-#endif
-
 /* for use with BLI_gNoise/gTurbulence, returns signed noise */
 static float orgPerlinNoise(float x, float y, float z)
 {
@@ -1146,19 +1126,6 @@ float BLI_hnoisep(float noisesize, float x, float y, float z)
 
 	return noise3_perlin(vec);
 }
-
-#if 0
-static float turbulencep(float noisesize, float x, float y, float z, int nr)
-{
-	float vec[3];
-
-	vec[0] = x / noisesize;
-	vec[1] = y / noisesize;
-	vec[2] = z / noisesize;
-	nr++;
-	return turbulence_perlin(vec, 1.0, (float)(1 << nr));
-}
-#endif
 
 /******************/
 /* VORONOI/WORLEY */

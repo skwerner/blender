@@ -41,6 +41,7 @@
 #include "BKE_context.h"
 #include "BKE_global.h"
 #include "BKE_main.h"
+#include "BKE_scene.h"
 
 /* **************** IMAGE (and RenderResult, multilayer image) ******************** */
 
@@ -51,14 +52,14 @@ static bNodeSocketTemplate cmp_node_rlayers_out[] = {
 	{	SOCK_VECTOR, 0, N_(RE_PASSNAME_NORMAL),					0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f},
 	{	SOCK_VECTOR, 0, N_(RE_PASSNAME_UV),						1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f},
 	{	SOCK_VECTOR, 0, N_(RE_PASSNAME_VECTOR),					1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f},
-	{	SOCK_RGBA,   0, N_(RE_PASSNAME_RGBA),					0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f},
-	{	SOCK_RGBA,   0, N_(RE_PASSNAME_DIFFUSE),				0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f},
-	{	SOCK_RGBA,   0, N_(RE_PASSNAME_SPEC),					0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f},
+	{	SOCK_RGBA,   0, N_(RE_PASSNAME_DEPRECATED),				0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f},
+	{	SOCK_RGBA,   0, N_(RE_PASSNAME_DEPRECATED),				0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f},
+	{	SOCK_RGBA,   0, N_(RE_PASSNAME_DEPRECATED),				0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f},
 	{	SOCK_RGBA,   0, N_(RE_PASSNAME_SHADOW),					0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f},
 	{	SOCK_RGBA,   0, N_(RE_PASSNAME_AO),						0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f},
-	{	SOCK_RGBA,   0, N_(RE_PASSNAME_REFLECT),				0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f},
-	{	SOCK_RGBA,   0, N_(RE_PASSNAME_REFRACT),				0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f},
-	{	SOCK_RGBA,   0, N_(RE_PASSNAME_INDIRECT),				0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f},
+	{	SOCK_RGBA,   0, N_(RE_PASSNAME_DEPRECATED),				0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f},
+	{	SOCK_RGBA,   0, N_(RE_PASSNAME_DEPRECATED),				0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f},
+	{	SOCK_RGBA,   0, N_(RE_PASSNAME_DEPRECATED),				0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f},
 	{	SOCK_FLOAT,  0, N_(RE_PASSNAME_INDEXOB),				0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f},
 	{	SOCK_FLOAT,  0, N_(RE_PASSNAME_INDEXMA),				0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f},
 	{	SOCK_FLOAT,  0, N_(RE_PASSNAME_MIST),					0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f},
@@ -190,16 +191,16 @@ typedef struct RLayerUpdateData {
 	int prev_index;
 } RLayerUpdateData;
 
-void node_cmp_rlayers_register_pass(bNodeTree *ntree, bNode *node, Scene *scene, SceneRenderLayer *srl, const char *name, int type)
+void node_cmp_rlayers_register_pass(bNodeTree *ntree, bNode *node, Scene *scene, ViewLayer *view_layer, const char *name, int type)
 {
 	RLayerUpdateData *data = node->storage;
 
-	if (scene == NULL || srl == NULL || data == NULL || node->id != (ID *)scene) {
+	if (scene == NULL || view_layer == NULL || data == NULL || node->id != (ID *)scene) {
 		return;
 	}
 
-	SceneRenderLayer *node_srl = BLI_findlink(&scene->r.layers, node->custom1);
-	if (node_srl != srl) {
+	ViewLayer *node_view_layer = BLI_findlink(&scene->view_layers, node->custom1);
+	if (node_view_layer != view_layer) {
 		return;
 	}
 
@@ -220,15 +221,15 @@ static void cmp_node_rlayer_create_outputs(bNodeTree *ntree, bNode *node, LinkNo
 	if (scene) {
 		RenderEngineType *engine_type = RE_engines_find(scene->r.engine);
 		if (engine_type && engine_type->update_render_passes) {
-			SceneRenderLayer *srl = BLI_findlink(&scene->r.layers, node->custom1);
-			if (srl) {
+			ViewLayer *view_layer = BLI_findlink(&scene->view_layers, node->custom1);
+			if (view_layer) {
 				RLayerUpdateData *data = MEM_mallocN(sizeof(RLayerUpdateData), "render layer update data");
 				data->available_sockets = available_sockets;
 				data->prev_index = -1;
 				node->storage = data;
 
 				RenderEngine *engine = RE_engine_create(engine_type);
-				engine_type->update_render_passes(engine, scene, srl);
+				engine_type->update_render_passes(engine, scene, view_layer);
 				RE_engine_free(engine);
 
 				MEM_freeN(data);
@@ -305,8 +306,8 @@ static void node_composit_init_image(bNodeTree *ntree, bNode *node)
 	node->storage = iuser;
 	iuser->frames = 1;
 	iuser->sfra = 1;
-	iuser->fie_ima = 2;
 	iuser->ok = 1;
+	iuser->flag |= IMA_ANIM_ALWAYS;
 
 	/* setup initial outputs */
 	cmp_node_image_verify_outputs(ntree, node, false);
@@ -359,9 +360,9 @@ const char *node_cmp_rlayers_sock_to_pass(int sock_index)
 {
 	const char *sock_to_passname[] = {
 		RE_PASSNAME_COMBINED, RE_PASSNAME_COMBINED,
-		RE_PASSNAME_Z, RE_PASSNAME_NORMAL, RE_PASSNAME_UV, RE_PASSNAME_VECTOR, RE_PASSNAME_RGBA,
-		RE_PASSNAME_DIFFUSE, RE_PASSNAME_SPEC, RE_PASSNAME_SHADOW, RE_PASSNAME_AO,
-		RE_PASSNAME_REFLECT, RE_PASSNAME_REFRACT, RE_PASSNAME_INDIRECT,
+		RE_PASSNAME_Z, RE_PASSNAME_NORMAL, RE_PASSNAME_UV, RE_PASSNAME_VECTOR, RE_PASSNAME_DEPRECATED,
+		RE_PASSNAME_DEPRECATED, RE_PASSNAME_DEPRECATED, RE_PASSNAME_SHADOW, RE_PASSNAME_AO,
+		RE_PASSNAME_DEPRECATED, RE_PASSNAME_DEPRECATED, RE_PASSNAME_DEPRECATED,
 		RE_PASSNAME_INDEXOB, RE_PASSNAME_INDEXMA, RE_PASSNAME_MIST, RE_PASSNAME_EMIT, RE_PASSNAME_ENVIRONMENT,
 		RE_PASSNAME_DIFFUSE_DIRECT, RE_PASSNAME_DIFFUSE_INDIRECT, RE_PASSNAME_DIFFUSE_COLOR,
 		RE_PASSNAME_GLOSSY_DIRECT, RE_PASSNAME_GLOSSY_INDIRECT, RE_PASSNAME_GLOSSY_COLOR,
@@ -413,8 +414,11 @@ static void node_composit_free_rlayers(bNode *node)
 	bNodeSocket *sock;
 
 	/* free extra socket info */
-	for (sock = node->outputs.first; sock; sock = sock->next)
-		MEM_freeN(sock->storage);
+	for (sock = node->outputs.first; sock; sock = sock->next) {
+		if (sock->storage) {
+			MEM_freeN(sock->storage);
+		}
+	}
 }
 
 static void node_composit_copy_rlayers(bNodeTree *UNUSED(dest_ntree), bNode *UNUSED(dest_node), bNode *src_node)
@@ -422,8 +426,11 @@ static void node_composit_copy_rlayers(bNodeTree *UNUSED(dest_ntree), bNode *UNU
 	bNodeSocket *sock;
 
 	/* copy extra socket info */
-	for (sock = src_node->outputs.first; sock; sock = sock->next)
-		sock->new_sock->storage = MEM_dupallocN(sock->storage);
+	for (sock = src_node->outputs.first; sock; sock = sock->next) {
+		if (sock->storage) {
+			sock->new_sock->storage = MEM_dupallocN(sock->storage);
+		}
+	}
 }
 
 static void cmp_node_rlayers_update(bNodeTree *ntree, bNode *node)
@@ -444,6 +451,7 @@ void register_node_type_cmp_rlayers(void)
 	node_type_storage(&ntype, NULL, node_composit_free_rlayers, node_composit_copy_rlayers);
 	node_type_update(&ntype, cmp_node_rlayers_update, NULL);
 	node_type_init(&ntype, node_cmp_rlayers_outputs);
+	node_type_size_preset(&ntype, NODE_SIZE_LARGE);
 
 	nodeRegisterType(&ntype);
 }

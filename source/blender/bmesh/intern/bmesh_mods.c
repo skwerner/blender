@@ -329,7 +329,7 @@ BMFace *BM_face_split(
  *
  * \param bm: The bmesh
  * \param f: the original face
- * \param l_a, l_b: Vertices which define the split edge, must be different.
+ * \param l_a, l_b: Vertices which define the split edge, must be different
  * \param cos: Array of coordinates for intermediate points
  * \param n: Length of \a cos (must be > 0)
  * \param r_l: pointer which will receive the BMLoop for the first split edge (from \a l_a) in the new face

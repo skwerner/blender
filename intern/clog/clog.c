@@ -29,7 +29,7 @@
 #include <assert.h>
 
 /* For 'isatty' to check for color. */
-#if defined(__unix__) || defined(__APPLE__)
+#if defined(__unix__) || defined(__APPLE__) || defined(__HAIKU__)
 #  include <unistd.h>
 #endif
 
@@ -413,7 +413,8 @@ void CLG_log_str(
 	clg_str_append(&cstr, "\n");
 
 	/* could be optional */
-	write(lg->ctx->output, cstr.data, cstr.len);
+	int bytes_written = write(lg->ctx->output, cstr.data, cstr.len);
+	(void)bytes_written;
 
 	clg_str_free(&cstr);
 
@@ -448,7 +449,8 @@ void CLG_logf(
 	clg_str_append(&cstr, "\n");
 
 	/* could be optional */
-	write(lg->ctx->output, cstr.data, cstr.len);
+	int bytes_written = write(lg->ctx->output, cstr.data, cstr.len);
+	(void)bytes_written;
 
 	clg_str_free(&cstr);
 

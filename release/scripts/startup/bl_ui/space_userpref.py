@@ -27,586 +27,680 @@ from bpy.app.translations import pgettext_iface as iface_
 from bpy.app.translations import contexts as i18n_contexts
 
 
-def opengl_lamp_buttons(column, lamp):
-    split = column.row()
-
-    split.prop(lamp, "use", text="", icon='OUTLINER_OB_LAMP' if lamp.use else 'LAMP_DATA')
-
-    col = split.column()
-    col.active = lamp.use
-    row = col.row()
-    row.label(text="Diffuse:")
-    row.prop(lamp, "diffuse_color", text="")
-    row = col.row()
-    row.label(text="Specular:")
-    row.prop(lamp, "specular_color", text="")
-
-    col = split.column()
-    col.active = lamp.use
-    col.prop(lamp, "direction", text="")
-
-
 class USERPREF_HT_header(Header):
-    bl_space_type = 'USER_PREFERENCES'
+    bl_space_type = 'PREFERENCES'
 
     def draw(self, context):
         layout = self.layout
+        layout.operator_context = 'EXEC_AREA'
 
         layout.template_header()
 
-        userpref = context.user_preferences
 
-        layout.operator_context = 'EXEC_AREA'
-        layout.operator("wm.save_userpref")
-
-        layout.operator_context = 'INVOKE_DEFAULT'
-
-        if userpref.active_section == 'INPUT':
-            layout.operator("wm.keyconfig_import")
-            layout.operator("wm.keyconfig_export")
-        elif userpref.active_section == 'ADDONS':
-            layout.operator("wm.addon_install", icon='FILESEL')
-            layout.operator("wm.addon_refresh", icon='FILE_REFRESH')
-            layout.menu("USERPREF_MT_addons_online_resources")
-        elif userpref.active_section == 'THEMES':
-            layout.operator("ui.reset_default_theme")
-            layout.operator("wm.theme_install")
-
-
-class USERPREF_PT_tabs(Panel):
-    bl_label = ""
-    bl_space_type = 'USER_PREFERENCES'
-    bl_region_type = 'WINDOW'
+class USERPREF_PT_navigation(Panel):
+    bl_label = "Preferences Navigation"
+    bl_space_type = 'PREFERENCES'
+    bl_region_type = 'NAVIGATION_BAR'
     bl_options = {'HIDE_HEADER'}
 
     def draw(self, context):
         layout = self.layout
 
-        userpref = context.user_preferences
+        prefs = context.preferences
 
-        layout.row().prop(userpref, "active_section", expand=True)
+        col = layout.column()
 
-
-class USERPREF_MT_interaction_presets(Menu):
-    bl_label = "Presets"
-    preset_subdir = "interaction"
-    preset_operator = "script.execute_preset"
-    draw = Menu.draw_preset
+        col.scale_x = 1.3
+        col.scale_y = 1.3
+        col.prop(prefs, "active_section", expand=True)
 
 
-class USERPREF_MT_app_templates(Menu):
-    bl_label = "Application Templates"
-    preset_subdir = "app_templates"
-
-    def draw_ex(self, context, *, use_splash=False, use_default=False, use_install=False):
-        import os
-
-        layout = self.layout
-
-        # now draw the presets
-        layout.operator_context = 'EXEC_DEFAULT'
-
-        if use_default:
-            props = layout.operator("wm.read_homefile", text="Default")
-            props.use_splash = True
-            props.app_template = ""
-            layout.separator()
-
-        template_paths = bpy.utils.app_template_paths()
-
-        # expand template paths
-        app_templates = []
-        for path in template_paths:
-            for d in os.listdir(path):
-                if d.startswith(("__", ".")):
-                    continue
-                template = os.path.join(path, d)
-                if os.path.isdir(template):
-                    # template_paths_expand.append(template)
-                    app_templates.append(d)
-
-        for d in sorted(app_templates):
-            props = layout.operator(
-                "wm.read_homefile",
-                text=bpy.path.display_name(d),
-            )
-            props.use_splash = True
-            props.app_template = d
-
-        if use_install:
-            layout.separator()
-            layout.operator_context = 'INVOKE_DEFAULT'
-            props = layout.operator("wm.app_template_install")
-
-    def draw(self, context):
-        self.draw_ex(context, use_splash=False, use_default=True, use_install=True)
-
-
-class USERPREF_MT_templates_splash(Menu):
-    bl_label = "Startup Templates"
-    preset_subdir = "templates"
-
-    def draw(self, context):
-        USERPREF_MT_app_templates.draw_ex(self, context, use_splash=True, use_default=True)
-
-
-class USERPREF_MT_appconfigs(Menu):
-    bl_label = "AppPresets"
-    preset_subdir = "keyconfig"
-    preset_operator = "wm.appconfig_activate"
-
-    def draw(self, context):
-        self.layout.operator("wm.appconfig_default", text="Blender (default)")
-
-        # now draw the presets
-        Menu.draw_preset(self, context)
-
-
-class USERPREF_MT_splash(Menu):
-    bl_label = "Splash"
+class USERPREF_PT_save_preferences(Panel):
+    bl_label = "Save Preferences"
+    bl_space_type = 'PREFERENCES'
+    bl_region_type = 'EXECUTE'
+    bl_options = {'HIDE_HEADER'}
 
     def draw(self, context):
         layout = self.layout
+        layout.operator_context = 'EXEC_AREA'
 
-        split = layout.split()
-        row = split.row()
+        prefs = context.preferences
 
-        if any(bpy.utils.app_template_paths()):
-            row.label("Template:")
-            template = context.user_preferences.app_template
-            row.menu(
-                "USERPREF_MT_templates_splash",
-                text=bpy.path.display_name(template) if template else "Default",
-            )
-        else:
-            row.label("")
+        layout.scale_x = 1.3
+        layout.scale_y = 1.3
 
-        row = split.row()
-        row.label("Interaction:")
-
-        text = bpy.path.display_name(context.window_manager.keyconfigs.active.name)
-        if not text:
-            text = "Blender (default)"
-        row.menu("USERPREF_MT_appconfigs", text=text)
+        layout.operator("wm.save_userpref")
 
 
-# only for addons
-class USERPREF_MT_splash_footer(Menu):
-    bl_label = ""
+class PreferencePanel(Panel):
+    """
+    Base class for panels to center align contents with some horizontal margin.
+    Deriving classes need to implement a ``draw_props(context, layout)`` function.
+    """
+
+    bl_space_type = 'PREFERENCES'
+    bl_region_type = 'WINDOW'
+
+    def draw(self, context):
+        layout = self.layout
+        width = context.region.width
+        pixel_size = context.preferences.system.pixel_size
+
+        layout.use_property_split = True
+        layout.use_property_decorate = False  # No animation.
+
+        row = layout.row()
+        if width > (350 * pixel_size):  # No horizontal margin if region is rather small.
+            row.label()  # Needed so col below is centered.
+
+        col = row.column()
+        col.ui_units_x = 50
+
+        # draw_props implemented by deriving classes.
+        self.draw_props(context, col)
+
+        if width > (350 * pixel_size):  # No horizontal margin if region is rather small.
+            row.label()  # Needed so col above is centered.
+
+
+class USERPREF_PT_interface_display(PreferencePanel):
+    bl_label = "Display"
+
+    @classmethod
+    def poll(cls, context):
+        prefs = context.preferences
+        return (prefs.active_section == 'INTERFACE')
+
+    def draw_props(self, context, layout):
+        prefs = context.preferences
+        view = prefs.view
+
+        flow = layout.grid_flow(row_major=False, columns=0, even_columns=True, even_rows=False, align=False)
+
+        flow.prop(view, "ui_scale", text="Resolution Scale")
+        flow.prop(view, "ui_line_width", text="Line Width")
+
+
+class USERPREF_PT_interface_display_info(PreferencePanel):
+    bl_label = "Information"
+    bl_parent_id = "USERPREF_PT_interface_display"
+
+    def draw_props(self, context, layout):
+        prefs = context.preferences
+        view = prefs.view
+
+        flow = layout.grid_flow(row_major=False, columns=0, even_columns=True, even_rows=False, align=False)
+
+        flow.prop(view, "show_tooltips")
+        flow.prop(view, "show_object_info", text="Object Info")
+        flow.prop(view, "show_large_cursors")
+        flow.prop(view, "show_view_name", text="View Name")
+        flow.prop(view, "show_playback_fps", text="Playback FPS")
+
+
+class USERPREF_PT_interface_text(PreferencePanel):
+    bl_label = "Text"
+    bl_options = {'DEFAULT_CLOSED'}
+
+    @classmethod
+    def poll(cls, context):
+        prefs = context.preferences
+        return (prefs.active_section == 'INTERFACE')
+
+    def draw_props(self, context, layout):
+        prefs = context.preferences
+        view = prefs.view
+
+        flow = layout.grid_flow(row_major=False, columns=0, even_columns=True, even_rows=False, align=False)
+
+        flow.prop(view, "use_text_antialiasing", text="Anti-aliasing")
+        sub = flow.column()
+        sub.active = view.use_text_antialiasing
+        sub.prop(view, "text_hinting", text="Hinting")
+
+        flow.prop(view, "font_path_ui")
+        flow.prop(view, "font_path_ui_mono")
+
+
+class USERPREF_PT_interface_text_translate(PreferencePanel):
+    bl_label = "Translate UI"
+    bl_parent_id = "USERPREF_PT_interface_text"
+
+    @classmethod
+    def poll(cls, context):
+        prefs = context.preferences
+        if bpy.app.build_options.international:
+            return (prefs.active_section == 'INTERFACE')
+
+    def draw_header(self, context):
+        prefs = context.preferences
+        view = prefs.view
+
+        self.layout.prop(view, "use_international_fonts", text="")
+
+    def draw_props(self, context, layout):
+        prefs = context.preferences
+        view = prefs.view
+
+        layout.active = view.use_international_fonts
+
+        flow = layout.grid_flow(row_major=False, columns=0, even_columns=True, even_rows=False, align=False)
+
+        flow.prop(view, "language")
+
+        flow.prop(view, "use_translate_tooltips", text="Translate Tooltips")
+        flow.prop(view, "use_translate_interface", text="Translate Interface")
+        flow.prop(view, "use_translate_new_dataname", text="Translate New Data")
+
+
+class USERPREF_PT_interface_develop(PreferencePanel):
+    bl_label = "Develop"
+    bl_options = {'DEFAULT_CLOSED'}
+
+    @classmethod
+    def poll(cls, context):
+        prefs = context.preferences
+        return (prefs.active_section == 'INTERFACE')
+
+    def draw_props(self, context, layout):
+        prefs = context.preferences
+        view = prefs.view
+
+        flow = layout.grid_flow(row_major=False, columns=0, even_columns=True, even_rows=False, align=False)
+
+        flow.prop(view, "show_tooltips_python")
+        flow.prop(view, "show_developer_ui")
+
+
+class USERPREF_PT_interface_viewports(PreferencePanel):
+    bl_label = "Viewports"
+    bl_options = {'DEFAULT_CLOSED'}
+
+    @classmethod
+    def poll(cls, context):
+        prefs = context.preferences
+        return (prefs.active_section == 'INTERFACE')
 
     def draw(self, context):
         pass
 
 
-class USERPREF_PT_interface(Panel):
-    bl_space_type = 'USER_PREFERENCES'
-    bl_label = "Interface"
-    bl_region_type = 'WINDOW'
-    bl_options = {'HIDE_HEADER'}
+class USERPREF_PT_interface_viewports_3d(PreferencePanel):
+    bl_label = "3D Viewports"
+    bl_parent_id = "USERPREF_PT_interface_viewports"
 
-    @classmethod
-    def poll(cls, context):
-        userpref = context.user_preferences
-        return (userpref.active_section == 'INTERFACE')
+    def draw_props(self, context, layout):
+        prefs = context.preferences
+        view = prefs.view
 
-    def draw(self, context):
-        layout = self.layout
+        flow = layout.grid_flow(row_major=False, columns=0, even_columns=True, even_rows=False, align=False)
 
-        userpref = context.user_preferences
-        view = userpref.view
+        col = flow.column()
 
-        row = layout.row()
+        col.prop(view, "smooth_view")
+        col.prop(view, "rotation_angle")
+        col.separator()
 
-        col = row.column()
-        col.label(text="Display:")
-        col.prop(view, "ui_scale", text="Scale")
-        col.prop(view, "ui_line_width", text="Line Width")
-        col.prop(view, "show_tooltips")
-        col.prop(view, "show_tooltips_python")
-        col.prop(view, "show_developer_ui")
-        col.prop(view, "show_object_info", text="Object Info")
-        col.prop(view, "show_large_cursors")
-        col.prop(view, "show_view_name", text="View Name")
-        col.prop(view, "show_playback_fps", text="Playback FPS")
-        col.prop(view, "use_global_scene")
+        col = flow.column()
+
         col.prop(view, "object_origin_size")
-
-        col.separator()
-        col.separator()
+        col.prop(view, "gizmo_size", text="Gizmo Size")
         col.separator()
 
-        col.prop(view, "show_mini_axis", text="Display Mini Axis")
+        col = flow.column()
+
+        col.prop(view, "mini_axis_type", text="3D Viewport Axis")
+
         sub = col.column()
-        sub.active = view.show_mini_axis
+        sub.active = view.mini_axis_type == 'MINIMAL'
         sub.prop(view, "mini_axis_size", text="Size")
         sub.prop(view, "mini_axis_brightness", text="Brightness")
 
-        col.separator()
 
-        col.label("Warnings")
-        col.prop(view, "use_quit_dialog")
+class USERPREF_PT_interface_viewports_3d_weight_paint(PreferencePanel):
+    bl_label = "Custom Weight Paint Range"
+    bl_options = {'DEFAULT_CLOSED'}
+    bl_parent_id = "USERPREF_PT_interface_viewports_3d"
 
-        row.separator()
-        row.separator()
+    def draw_header(self, context):
+        prefs = context.preferences
+        view = prefs.view
 
-        col = row.column()
-        col.label(text="View Manipulation:")
-        col.prop(view, "use_mouse_depth_cursor")
-        col.prop(view, "use_cursor_lock_adjust")
-        col.prop(view, "use_mouse_depth_navigate")
-        col.prop(view, "use_zoom_to_mouse")
-        col.prop(view, "use_rotate_around_active")
-        col.prop(view, "use_global_pivot")
-        col.prop(view, "use_camera_lock_parent")
+        self.layout.prop(view, "use_weight_color_range", text="")
 
-        col.separator()
+    def draw_props(self, context, layout):
+        prefs = context.preferences
+        view = prefs.view
 
-        col.prop(view, "use_auto_perspective")
-        col.prop(view, "smooth_view")
-        col.prop(view, "rotation_angle")
+        layout.active = view.use_weight_color_range
+        layout.template_color_ramp(view, "weight_color_range", expand=True)
 
-        col.separator()
-        col.separator()
 
-        col.label(text="2D Viewports:")
-        col.prop(view, "view2d_grid_spacing_min", text="Minimum Grid Spacing")
-        col.prop(view, "timecode_style")
-        col.prop(view, "view_frame_type")
+class USERPREF_PT_interface_viewports_2d(PreferencePanel):
+    bl_label = "2D Viewports"
+    bl_parent_id = "USERPREF_PT_interface_viewports"
+
+    def draw_props(self, context, layout):
+        prefs = context.preferences
+        view = prefs.view
+
+        flow = layout.grid_flow(row_major=False, columns=0, even_columns=True, even_rows=False, align=False)
+
+        flow.prop(view, "view2d_grid_spacing_min", text="Minimum Grid Spacing")
+        flow.prop(view, "timecode_style")
+        flow.prop(view, "view_frame_type")
         if view.view_frame_type == 'SECONDS':
-            col.prop(view, "view_frame_seconds")
+            flow.prop(view, "view_frame_seconds")
         elif view.view_frame_type == 'KEYFRAMES':
-            col.prop(view, "view_frame_keyframes")
-
-        row.separator()
-        row.separator()
-
-        col = row.column()
-        # Toolbox doesn't exist yet
-        # col.label(text="Toolbox:")
-        #col.prop(view, "show_column_layout")
-        #col.label(text="Open Toolbox Delay:")
-        #col.prop(view, "open_left_mouse_delay", text="Hold LMB")
-        #col.prop(view, "open_right_mouse_delay", text="Hold RMB")
-        col.prop(view, "show_manipulator")
-        sub = col.column()
-        sub.active = view.show_manipulator
-        sub.prop(view, "manipulator_size", text="Size")
-        sub.prop(view, "manipulator_handle_size", text="Handle Size")
-        sub.prop(view, "manipulator_hotspot", text="Hotspot")
-
-        col.separator()
-        col.separator()
-        col.separator()
-
-        col.label(text="Menus:")
-        col.prop(view, "use_mouse_over_open")
-        sub = col.column()
-        sub.active = view.use_mouse_over_open
-
-        sub.prop(view, "open_toplevel_delay", text="Top Level")
-        sub.prop(view, "open_sublevel_delay", text="Sub Level")
-
-        col.separator()
-        col.label(text="Pie Menus:")
-        sub = col.column(align=True)
-        sub.prop(view, "pie_animation_timeout")
-        sub.prop(view, "pie_initial_timeout")
-        sub.prop(view, "pie_menu_radius")
-        sub.prop(view, "pie_menu_threshold")
-        sub.prop(view, "pie_menu_confirm")
-        col.separator()
-
-        col.prop(view, "show_splash")
-        col.separator()
-
-        col.label(text="App Template:")
-        col.label(text="Options intended for use with app-templates only.")
-        col.prop(view, "show_layout_ui")
-        col.prop(view, "show_view3d_cursor")
+            flow.prop(view, "view_frame_keyframes")
 
 
-class USERPREF_PT_edit(Panel):
-    bl_space_type = 'USER_PREFERENCES'
-    bl_label = "Edit"
-    bl_region_type = 'WINDOW'
-    bl_options = {'HIDE_HEADER'}
+class USERPREF_PT_interface_menus(PreferencePanel):
+    bl_label = "Menus"
+    bl_options = {'DEFAULT_CLOSED'}
 
     @classmethod
     def poll(cls, context):
-        userpref = context.user_preferences
-        return (userpref.active_section == 'EDITING')
+        prefs = context.preferences
+        return (prefs.active_section == 'INTERFACE')
 
-    def draw(self, context):
-        layout = self.layout
+    def draw_props(self, context, layout):
+        prefs = context.preferences
+        view = prefs.view
+        system = prefs.system
 
-        userpref = context.user_preferences
-        edit = userpref.edit
+        flow = layout.grid_flow(row_major=False, columns=0, even_columns=True, even_rows=False, align=False)
 
-        row = layout.row()
+        flow.prop(view, "color_picker_type")
+        flow.row().prop(view, "header_align_default", expand=True)
+        flow.prop(system, "use_region_overlap")
+        flow.prop(view, "show_splash")
+        flow.prop(view, "use_quit_dialog")
 
-        col = row.column()
-        col.label(text="Link Materials To:")
-        col.prop(edit, "material_link", text="")
 
-        col.separator()
-        col.separator()
-        col.separator()
+class USERPREF_PT_interface_menus_mouse_over(PreferencePanel):
+    bl_label = "Open on Mouse Over"
+    bl_parent_id = "USERPREF_PT_interface_menus"
 
-        col.label(text="New Objects:")
-        col.prop(edit, "use_enter_edit_mode")
-        col.label(text="Align To:")
-        col.prop(edit, "object_align", text="")
+    def draw_header(self, context):
+        prefs = context.preferences
+        view = prefs.view
 
-        col.separator()
-        col.separator()
-        col.separator()
+        self.layout.prop(view, "use_mouse_over_open", text="")
 
-        col.label(text="Undo:")
-        col.prop(edit, "use_global_undo")
-        col.prop(edit, "undo_steps", text="Steps")
-        col.prop(edit, "undo_memory_limit", text="Memory Limit")
+    def draw_props(self, context, layout):
+        prefs = context.preferences
+        view = prefs.view
 
-        row.separator()
-        row.separator()
+        layout.active = view.use_mouse_over_open
 
-        col = row.column()
-        col.label(text="Grease Pencil:")
-        col.prop(edit, "grease_pencil_eraser_radius", text="Eraser Radius")
-        col.separator()
-        col.prop(edit, "grease_pencil_manhattan_distance", text="Manhattan Distance")
-        col.prop(edit, "grease_pencil_euclidean_distance", text="Euclidean Distance")
-        col.separator()
-        col.prop(edit, "grease_pencil_default_color", text="Default Color")
-        col.separator()
-        col.prop(edit, "use_grease_pencil_simplify_stroke", text="Simplify Stroke")
-        col.separator()
-        col.separator()
-        col.separator()
-        col.separator()
-        col.label(text="Playback:")
-        col.prop(edit, "use_negative_frames")
-        col.separator()
-        col.separator()
-        col.separator()
-        col.label(text="Node Editor:")
-        col.prop(edit, "node_margin")
-        col.label(text="Animation Editors:")
-        col.prop(edit, "fcurve_unselected_alpha", text="F-Curve Visibility")
+        flow = layout.grid_flow(row_major=False, columns=0, even_columns=True, even_rows=False, align=False)
 
-        row.separator()
-        row.separator()
+        flow.prop(view, "open_toplevel_delay", text="Top Level")
+        flow.prop(view, "open_sublevel_delay", text="Sub Level")
 
-        col = row.column()
-        col.label(text="Keyframing:")
-        col.prop(edit, "use_visual_keying")
-        col.prop(edit, "use_keyframe_insert_needed", text="Only Insert Needed")
 
-        col.separator()
+class USERPREF_PT_interface_menus_pie(PreferencePanel):
+    bl_label = "Pie Menus"
+    bl_parent_id = "USERPREF_PT_interface_menus"
 
-        col.prop(edit, "use_auto_keying", text="Auto Keyframing:")
-        col.prop(edit, "use_auto_keying_warning")
+    def draw_props(self, context, layout):
+        prefs = context.preferences
+        view = prefs.view
 
-        sub = col.column()
+        flow = layout.grid_flow(row_major=False, columns=0, even_columns=True, even_rows=False, align=False)
 
-        # ~ sub.active = edit.use_keyframe_insert_auto # incorrect, time-line can enable
-        sub.prop(edit, "use_keyframe_insert_available", text="Only Insert Available")
+        flow.prop(view, "pie_animation_timeout")
+        flow.prop(view, "pie_initial_timeout")
+        flow.prop(view, "pie_menu_radius")
+        flow.prop(view, "pie_menu_threshold")
+        flow.prop(view, "pie_menu_confirm")
 
-        col.separator()
 
-        col.label(text="New F-Curve Defaults:")
-        col.prop(edit, "keyframe_new_interpolation_type", text="Interpolation")
-        col.prop(edit, "keyframe_new_handle_type", text="Handles")
-        col.prop(edit, "use_insertkey_xyz_to_rgb", text="XYZ to RGB")
+class USERPREF_PT_interface_templates(PreferencePanel):
+    bl_label = "Application Templates"
+    bl_options = {'DEFAULT_CLOSED'}
+    bl_parent_id = "USERPREF_PT_interface_develop"
 
-        col.separator()
-        col.separator()
-        col.separator()
+    @classmethod
+    def poll(cls, context):
+        prefs = context.preferences
+        return (prefs.active_section == 'INTERFACE')
 
-        col.label(text="Transform:")
-        col.prop(edit, "use_drag_immediately")
+    def draw_props(self, context, layout):
+        prefs = context.preferences
+        view = prefs.view
 
-        row.separator()
-        row.separator()
+        layout.label(text="Options intended for developing application templates only")
+        layout.prop(view, "show_layout_ui")
 
-        col = row.column()
-        col.prop(edit, "sculpt_paint_overlay_color", text="Sculpt Overlay Color")
 
-        col.separator()
-        col.separator()
-        col.separator()
+class USERPREF_PT_edit_objects(PreferencePanel):
+    bl_label = "Objects"
 
-        col.label(text="Duplicate Data:")
-        col.prop(edit, "use_duplicate_mesh", text="Mesh")
-        col.prop(edit, "use_duplicate_surface", text="Surface")
-        col.prop(edit, "use_duplicate_curve", text="Curve")
-        col.prop(edit, "use_duplicate_text", text="Text")
-        col.prop(edit, "use_duplicate_metaball", text="Metaball")
-        col.prop(edit, "use_duplicate_armature", text="Armature")
-        col.prop(edit, "use_duplicate_lamp", text="Lamp")
-        col.prop(edit, "use_duplicate_material", text="Material")
-        col.prop(edit, "use_duplicate_texture", text="Texture")
-        #col.prop(edit, "use_duplicate_fcurve", text="F-Curve")
+    @classmethod
+    def poll(cls, context):
+        prefs = context.preferences
+        return (prefs.active_section == 'EDITING')
+
+    def draw_props(self, context, layout):
+        prefs = context.preferences
+        edit = prefs.edit
+
+        flow = layout.grid_flow(row_major=False, columns=0, even_columns=True, even_rows=False, align=False)
+
+        flow.prop(edit, "material_link", text="Link Materials to")
+        flow.prop(edit, "object_align", text="Align New Objects to")
+        flow.prop(edit, "use_enter_edit_mode", text="Enter Edit Mode for New Objects")
+
+
+class USERPREF_PT_edit_animation(PreferencePanel):
+    bl_label = "Animation"
+    bl_options = {'DEFAULT_CLOSED'}
+
+    @classmethod
+    def poll(cls, context):
+        prefs = context.preferences
+        return (prefs.active_section == 'EDITING')
+
+    def draw_props(self, context, layout):
+        prefs = context.preferences
+        edit = prefs.edit
+
+        flow = layout.grid_flow(row_major=False, columns=0, even_columns=True, even_rows=False, align=False)
+
+        flow.prop(edit, "use_negative_frames")
+        flow.prop(edit, "use_visual_keying")
+        flow.prop(edit, "use_keyframe_insert_needed", text="Only Insert Needed")
+
+
+class USERPREF_PT_edit_animation_autokey(PreferencePanel):
+    bl_label = "Auto-Keyframing"
+    bl_parent_id = "USERPREF_PT_edit_animation"
+
+    def draw_header(self, context):
+        prefs = context.preferences
+        edit = prefs.edit
+
+        self.layout.prop(edit, "use_auto_keying", text="")
+
+    def draw_props(self, context, layout):
+        prefs = context.preferences
+        edit = prefs.edit
+
+        flow = layout.grid_flow(row_major=False, columns=0, even_columns=True, even_rows=False, align=False)
+
+        flow.prop(edit, "use_auto_keying_warning")
+        flow.prop(edit, "use_keyframe_insert_available", text="Only Insert Available")
+
+
+class USERPREF_PT_edit_animation_fcurves(PreferencePanel):
+    bl_label = "F-Curves"
+    bl_parent_id = "USERPREF_PT_edit_animation"
+
+    def draw_props(self, context, layout):
+        prefs = context.preferences
+        edit = prefs.edit
+
+        flow = layout.grid_flow(row_major=False, columns=0, even_columns=True, even_rows=False, align=False)
+
+        flow.prop(edit, "fcurve_unselected_alpha", text="F-Curve Visibility")
+        flow.prop(edit, "keyframe_new_interpolation_type", text="Default Interpolation")
+        flow.prop(edit, "keyframe_new_handle_type", text="Default Handles")
+        flow.prop(edit, "use_insertkey_xyz_to_rgb", text="XYZ to RGB")
+
+
+class USERPREF_PT_edit_duplicate_data(PreferencePanel):
+    bl_label = "Duplicate Data"
+    bl_options = {'DEFAULT_CLOSED'}
+    bl_parent_id = "USERPREF_PT_edit_objects"
+
+    @classmethod
+    def poll(cls, context):
+        prefs = context.preferences
+        return (prefs.active_section == 'EDITING')
+
+    def draw_props(self, context, layout):
+        prefs = context.preferences
+        edit = prefs.edit
+
+        flow = layout.grid_flow(row_major=False, columns=0, even_columns=True, even_rows=False, align=True)
+
+        col = flow.column()
         col.prop(edit, "use_duplicate_action", text="Action")
+        col.prop(edit, "use_duplicate_armature", text="Armature")
+        col.prop(edit, "use_duplicate_curve", text="Curve")
+        # col.prop(edit, "use_duplicate_fcurve", text="F-Curve")
+        col.prop(edit, "use_duplicate_light", text="Light")
+        col = flow.column()
+        col.prop(edit, "use_duplicate_material", text="Material")
+        col.prop(edit, "use_duplicate_mesh", text="Mesh")
+        col.prop(edit, "use_duplicate_metaball", text="Metaball")
         col.prop(edit, "use_duplicate_particle", text="Particle")
+        col = flow.column()
+        col.prop(edit, "use_duplicate_surface", text="Surface")
+        col.prop(edit, "use_duplicate_text", text="Text")
+        col.prop(edit, "use_duplicate_texture", text="Texture")
 
 
-class USERPREF_PT_system(Panel):
-    bl_space_type = 'USER_PREFERENCES'
-    bl_label = "System"
-    bl_region_type = 'WINDOW'
-    bl_options = {'HIDE_HEADER'}
+class USERPREF_PT_edit_gpencil(PreferencePanel):
+    bl_label = "Grease Pencil"
+    bl_options = {'DEFAULT_CLOSED'}
 
     @classmethod
     def poll(cls, context):
-        userpref = context.user_preferences
-        return (userpref.active_section == 'SYSTEM')
+        prefs = context.preferences
+        return (prefs.active_section == 'EDITING')
 
-    def draw(self, context):
-        import sys
-        layout = self.layout
+    def draw_props(self, context, layout):
+        prefs = context.preferences
+        edit = prefs.edit
 
-        userpref = context.user_preferences
-        system = userpref.system
+        flow = layout.grid_flow(row_major=False, columns=0, even_columns=True, even_rows=False, align=False)
 
-        split = layout.split()
+        flow.prop(edit, "grease_pencil_manhattan_distance", text="Manhattan Distance")
+        flow.prop(edit, "grease_pencil_euclidean_distance", text="Euclidean Distance")
 
-        # 1. Column
-        column = split.column()
-        colsplit = column.split(percentage=0.85)
 
-        col = colsplit.column()
-        col.label(text="General:")
+class USERPREF_PT_edit_annotations(PreferencePanel):
+    bl_label = "Annotations"
+    bl_options = {'DEFAULT_CLOSED'}
 
-        col.prop(system, "frame_server_port")
-        col.prop(system, "scrollback", text="Console Scrollback")
+    @classmethod
+    def poll(cls, context):
+        prefs = context.preferences
+        return (prefs.active_section == 'EDITING')
 
-        col.separator()
+    def draw_props(self, context, layout):
+        prefs = context.preferences
+        edit = prefs.edit
 
-        col.label(text="Sound:")
-        col.row().prop(system, "audio_device", expand=False)
-        sub = col.column()
+        flow = layout.grid_flow(row_major=False, columns=0, even_columns=True, even_rows=False, align=False)
+
+        flow.prop(edit, "grease_pencil_default_color", text="Default Color")
+        flow.prop(edit, "grease_pencil_eraser_radius", text="Eraser Radius")
+        flow.prop(edit, "use_grease_pencil_simplify_stroke", text="Simplify Stroke")
+
+
+class USERPREF_PT_edit_misc(PreferencePanel):
+    bl_label = "Miscellaneous"
+    bl_options = {'DEFAULT_CLOSED'}
+
+    @classmethod
+    def poll(cls, context):
+        prefs = context.preferences
+        return (prefs.active_section == 'EDITING')
+
+    def draw_props(self, context, layout):
+        prefs = context.preferences
+        edit = prefs.edit
+
+        flow = layout.grid_flow(row_major=False, columns=0, even_columns=True, even_rows=False, align=False)
+
+        flow.prop(edit, "sculpt_paint_overlay_color", text="Sculpt Overlay Color")
+        flow.prop(edit, "node_margin", text="Node Auto-offset Margin")
+
+
+class USERPREF_PT_edit_cursor(PreferencePanel):
+    bl_label = "3D Cursor"
+    bl_options = {'DEFAULT_CLOSED'}
+
+    @classmethod
+    def poll(cls, context):
+        prefs = context.preferences
+        return (prefs.active_section == 'EDITING')
+
+    def draw_props(self, context, layout):
+        prefs = context.preferences
+        edit = prefs.edit
+
+        flow = layout.grid_flow(row_major=False, columns=0, even_columns=True, even_rows=False, align=False)
+
+        flow.prop(edit, "use_mouse_depth_cursor")
+        flow.prop(edit, "use_cursor_lock_adjust")
+
+
+class USERPREF_PT_system_sound(PreferencePanel):
+    bl_label = "Sound"
+    bl_options = {'DEFAULT_CLOSED'}
+
+    @classmethod
+    def poll(cls, context):
+        prefs = context.preferences
+        return (prefs.active_section == 'SYSTEM_GENERAL')
+
+    def draw_props(self, context, layout):
+        prefs = context.preferences
+        system = prefs.system
+
+        flow = layout.grid_flow(row_major=False, columns=0, even_columns=True, even_rows=False, align=False)
+
+        flow.prop(system, "audio_device", expand=False)
+        sub = flow.grid_flow(row_major=False, columns=0, even_columns=False, even_rows=False, align=False)
         sub.active = system.audio_device not in {'NONE', 'Null'}
-        #sub.prop(system, "use_preview_images")
         sub.prop(system, "audio_channels", text="Channels")
         sub.prop(system, "audio_mixing_buffer", text="Mixing Buffer")
         sub.prop(system, "audio_sample_rate", text="Sample Rate")
         sub.prop(system, "audio_sample_format", text="Sample Format")
 
-        col.separator()
+
+class USERPREF_PT_system_compute_device(PreferencePanel):
+    bl_label = "Cycles Compute Device"
+    bl_options = {'DEFAULT_CLOSED'}
+
+    @classmethod
+    def poll(cls, context):
+        prefs = context.preferences
+        return (prefs.active_section == 'SYSTEM_GENERAL')
+
+    def draw_props(self, context, layout):
+        prefs = context.preferences
+        system = prefs.system
+
+        col = layout.column()
 
         if bpy.app.build_options.cycles:
-            addon = userpref.addons.get("cycles")
+            addon = prefs.addons.get("cycles")
             if addon is not None:
                 addon.preferences.draw_impl(col, context)
             del addon
 
-        if hasattr(system, "opensubdiv_compute_type"):
-            col.label(text="OpenSubdiv compute:")
-            col.row().prop(system, "opensubdiv_compute_type", text="")
+        # NOTE: Disabled for until GPU side of OpenSubdiv is brought back.
+        # if hasattr(system, "opensubdiv_compute_type"):
+        #     col.label(text="OpenSubdiv compute:")
+        #     col.row().prop(system, "opensubdiv_compute_type", text="")
 
-        # 2. Column
-        column = split.column()
-        colsplit = column.split(percentage=0.85)
 
-        col = colsplit.column()
-        col.label(text="OpenGL:")
-        col.prop(system, "gl_clip_alpha", slider=True)
-        col.prop(system, "use_mipmaps")
-        col.prop(system, "use_gpu_mipmap")
-        col.prop(system, "use_16bit_textures")
+class USERPREF_PT_system_opengl(PreferencePanel):
+    bl_label = "OpenGL"
 
-        col.separator()
-        col.label(text="Selection")
-        col.prop(system, "select_method", text="")
-        col.prop(system, "use_select_pick_depth")
+    @classmethod
+    def poll(cls, context):
+        prefs = context.preferences
+        return (prefs.active_section == 'SYSTEM_GENERAL')
 
-        col.separator()
+    def draw_props(self, context, layout):
+        import sys
+        prefs = context.preferences
+        system = prefs.system
 
-        col.label(text="Anisotropic Filtering")
-        col.prop(system, "anisotropic_filter", text="")
+        flow = layout.grid_flow(row_major=False, columns=0, even_columns=True, even_rows=False, align=False)
 
-        col.separator()
+        flow.prop(system, "gpu_viewport_quality")
+        flow.prop(system, "gl_clip_alpha", slider=True)
+        flow.prop(system, "multi_sample", text="Multisampling")
+        flow.prop(system, "gpencil_multi_sample", text="Grease Pencil Multisampling")
 
-        col.label(text="Window Draw Method:")
-        col.prop(system, "window_draw_method", text="")
-        col.prop(system, "multi_sample", text="")
         if sys.platform == "linux" and system.multi_sample != 'NONE':
-            col.label(text="Might fail for Mesh editing selection!")
-            col.separator()
-        col.prop(system, "use_region_overlap")
+            layout.label(text="Might fail for Mesh editing selection!")
 
-        col.separator()
 
-        col.label(text="Text Draw Options:")
-        col.prop(system, "use_text_antialiasing", text="Anti-aliasing")
-        sub = col.column()
-        sub.active = system.use_text_antialiasing
-        sub.prop(system, "text_hinting", text="Hinting")
+class USERPREF_PT_system_opengl_textures(PreferencePanel):
+    bl_label = "Textures"
+    bl_parent_id = "USERPREF_PT_system_opengl"
 
-        col.separator()
+    @classmethod
+    def poll(cls, context):
+        prefs = context.preferences
+        return (prefs.active_section == 'SYSTEM_GENERAL')
 
-        col.label(text="Textures:")
-        col.prop(system, "gl_texture_limit", text="Limit Size")
-        col.prop(system, "texture_time_out", text="Time Out")
-        col.prop(system, "texture_collection_rate", text="Collection Rate")
+    def draw_props(self, context, layout):
+        prefs = context.preferences
+        system = prefs.system
 
-        col.separator()
+        flow = layout.grid_flow(row_major=False, columns=0, even_columns=True, even_rows=False, align=False)
 
-        col.label(text="Images Draw Method:")
-        col.prop(system, "image_draw_method", text="")
+        flow.prop(system, "gl_texture_limit", text="Limit Size")
+        flow.prop(system, "anisotropic_filter")
+        flow.prop(system, "texture_time_out", text="Time Out")
+        flow.prop(system, "texture_collection_rate", text="Garbage Collection Rate")
+        flow.prop(system, "image_draw_method", text="Image Display Method")
 
-        col.separator()
+        flow.prop(system, "use_16bit_textures")
+        flow.prop(system, "use_gpu_mipmap")
 
-        col.label(text="Sequencer/Clip Editor:")
-        # currently disabled in the code
-        # col.prop(system, "prefetch_frames")
-        col.prop(system, "memory_cache_limit")
 
-        # 3. Column
-        column = split.column()
+class USERPREF_PT_system_opengl_selection(PreferencePanel):
+    bl_label = "Selection"
+    bl_parent_id = "USERPREF_PT_system_opengl"
 
-        column.label(text="Solid OpenGL Lights:")
+    def draw_props(self, context, layout):
+        prefs = context.preferences
+        system = prefs.system
 
-        split = column.split(percentage=0.1)
-        split.label()
-        split.label(text="Colors:")
-        split.label(text="Direction:")
+        flow = layout.grid_flow(row_major=False, columns=0, even_columns=True, even_rows=False, align=False)
 
-        lamp = system.solid_lights[0]
-        opengl_lamp_buttons(column, lamp)
+        flow.prop(system, "select_method", text="Selection Method")
+        flow.prop(system, "use_select_pick_depth")
 
-        lamp = system.solid_lights[1]
-        opengl_lamp_buttons(column, lamp)
 
-        lamp = system.solid_lights[2]
-        opengl_lamp_buttons(column, lamp)
+class USERPREF_PT_system_memory(PreferencePanel):
+    bl_label = "Memory/Limits"
+    bl_options = {'DEFAULT_CLOSED'}
 
-        column.separator()
+    @classmethod
+    def poll(cls, context):
+        prefs = context.preferences
+        return (prefs.active_section == 'SYSTEM_GENERAL')
 
-        column.label(text="Color Picker Type:")
-        column.row().prop(system, "color_picker_type", text="")
+    def draw_props(self, context, layout):
+        prefs = context.preferences
+        system = prefs.system
+        edit = prefs.edit
 
-        column.separator()
+        flow = layout.grid_flow(row_major=False, columns=0, even_columns=True, even_rows=False, align=False)
 
-        column.prop(system, "use_weight_color_range", text="Custom Weight Paint Range")
-        sub = column.column()
-        sub.active = system.use_weight_color_range
-        sub.template_color_ramp(system, "weight_color_range", expand=True)
+        flow.prop(edit, "undo_steps", text="Undo Steps")
+        flow.prop(edit, "undo_memory_limit", text="Undo Memory Limit")
+        flow.prop(edit, "use_global_undo")
 
-        column.separator()
-        column.prop(system, "font_path_ui")
-        column.prop(system, "font_path_ui_mono")
+        layout.separator()
 
-        if bpy.app.build_options.international:
-            column.prop(system, "use_international_fonts")
-            if system.use_international_fonts:
-                column.prop(system, "language")
-                row = column.row()
-                row.label(text="Translate:", text_ctxt=i18n_contexts.id_windowmanager)
-                row = column.row(align=True)
-                row.prop(system, "use_translate_interface", text="Interface", toggle=True)
-                row.prop(system, "use_translate_tooltips", text="Tooltips", toggle=True)
-                row.prop(system, "use_translate_new_dataname", text="New Data", toggle=True)
+        flow = layout.grid_flow(row_major=False, columns=0, even_columns=True, even_rows=False, align=False)
+
+        flow.prop(system, "memory_cache_limit", text="Sequencer Cache Limit")
+        flow.prop(system, "scrollback", text="Console Scrollback Lines")
 
 
 class USERPREF_MT_interface_theme_presets(Menu):
@@ -615,17 +709,285 @@ class USERPREF_MT_interface_theme_presets(Menu):
     preset_operator = "script.execute_preset"
     preset_type = 'XML'
     preset_xml_map = (
-        ("user_preferences.themes[0]", "Theme"),
-        ("user_preferences.ui_styles[0]", "ThemeStyle"),
+        ("preferences.themes[0]", "Theme"),
+        ("preferences.ui_styles[0]", "ThemeStyle"),
     )
     draw = Menu.draw_preset
 
+    def reset_cb(context):
+        bpy.ops.ui.reset_default_theme()
+
 
 class USERPREF_PT_theme(Panel):
-    bl_space_type = 'USER_PREFERENCES'
+    bl_space_type = 'PREFERENCES'
     bl_label = "Themes"
     bl_region_type = 'WINDOW'
     bl_options = {'HIDE_HEADER'}
+
+    @classmethod
+    def poll(cls, context):
+        prefs = context.preferences
+        return (prefs.active_section == 'THEMES')
+
+    def draw(self, context):
+        layout = self.layout
+
+        theme = context.preferences.themes[0]
+
+        row = layout.row()
+
+        row.operator("wm.theme_install", text="Install...", icon='IMPORT')
+        row.operator("ui.reset_default_theme", text="Reset", icon='LOOP_BACK')
+
+        subrow = row.row(align=True)
+        subrow.menu("USERPREF_MT_interface_theme_presets", text=USERPREF_MT_interface_theme_presets.bl_label)
+        subrow.operator("wm.interface_theme_preset_add", text="", icon='ADD')
+        subrow.operator("wm.interface_theme_preset_add", text="", icon='REMOVE').remove_active = True
+
+
+class USERPREF_PT_theme_user_interface(PreferencePanel):
+    bl_space_type = 'PREFERENCES'
+    bl_region_type = 'WINDOW'
+    bl_label = "User Interface"
+    bl_options = {'DEFAULT_CLOSED'}
+
+    @classmethod
+    def poll(cls, context):
+        prefs = context.preferences
+        return (prefs.active_section == 'THEMES')
+
+    def draw_header(self, context):
+        layout = self.layout
+
+        layout.label(icon='WORKSPACE')
+
+    def draw(self, context):
+        pass
+
+
+# Base class for dynamically defined widget color panels.
+class PreferenceThemeWidgetColorPanel(Panel):
+    bl_space_type = 'PREFERENCES'
+    bl_region_type = 'WINDOW'
+    bl_parent_id = "USERPREF_PT_theme_user_interface"
+
+    @staticmethod
+    def draw(self, context):
+        theme = context.preferences.themes[0]
+        ui = theme.user_interface
+        widget_style = getattr(ui, self.wcol)
+        layout = self.layout
+
+        layout.use_property_split = True
+
+        flow = layout.grid_flow(row_major=False, columns=0, even_columns=True, even_rows=False, align=False)
+
+        col = flow.column()
+        col.prop(widget_style, "outline")
+        col.prop(widget_style, "item", slider=True)
+        col.prop(widget_style, "inner", slider=True)
+        col.prop(widget_style, "inner_sel", slider=True)
+
+        col = flow.column()
+        col.prop(widget_style, "text")
+        col.prop(widget_style, "text_sel")
+        col.prop(widget_style, "roundness")
+
+        col = flow.column()
+        col.prop(widget_style, "show_shaded")
+
+        colsub = col.column()
+        colsub.active = widget_style.show_shaded
+        colsub.prop(widget_style, "shadetop")
+        colsub.prop(widget_style, "shadedown")
+
+    @classmethod
+    def poll(cls, context):
+        prefs = context.preferences
+        return (prefs.active_section == 'THEMES')
+
+
+class USERPREF_PT_theme_interface_state(PreferencePanel):
+    bl_label = "State"
+    bl_options = {'DEFAULT_CLOSED'}
+    bl_parent_id = "USERPREF_PT_theme_user_interface"
+
+    def draw_props(self, context, layout):
+        theme = context.preferences.themes[0]
+        ui = theme.user_interface
+        ui_state = theme.user_interface.wcol_state
+
+        flow = layout.grid_flow(row_major=False, columns=0, even_columns=True, even_rows=False, align=False)
+
+        col = flow.column(align=True)
+        col.prop(ui_state, "inner_anim")
+        col.prop(ui_state, "inner_anim_sel")
+
+        col = flow.column(align=True)
+        col.prop(ui_state, "inner_driven")
+        col.prop(ui_state, "inner_driven_sel")
+
+        col = flow.column(align=True)
+        col.prop(ui_state, "inner_key")
+        col.prop(ui_state, "inner_key_sel")
+
+        col = flow.column(align=True)
+        col.prop(ui_state, "inner_overridden")
+        col.prop(ui_state, "inner_overridden_sel")
+
+        col = flow.column(align=True)
+        col.prop(ui_state, "inner_changed")
+        col.prop(ui_state, "inner_changed_sel")
+
+        col = flow.column(align=True)
+        col.prop(ui_state, "blend")
+
+
+class USERPREF_PT_theme_interface_styles(PreferencePanel):
+    bl_label = "Styles"
+    bl_options = {'DEFAULT_CLOSED'}
+    bl_parent_id = "USERPREF_PT_theme_user_interface"
+
+    def draw_props(self, context, layout):
+        theme = context.preferences.themes[0]
+        ui = theme.user_interface
+
+        flow = layout.grid_flow(row_major=False, columns=0, even_columns=True, even_rows=False, align=False)
+
+        flow.prop(ui, "menu_shadow_fac")
+        flow.prop(ui, "icon_alpha")
+        flow.prop(ui, "icon_saturation")
+        flow.prop(ui, "editor_outline")
+        flow.prop(ui, "menu_shadow_width")
+        flow.prop(ui, "widget_emboss")
+
+
+class USERPREF_PT_theme_interface_gizmos(PreferencePanel):
+    bl_label = "Axis & Gizmo Colors"
+    bl_options = {'DEFAULT_CLOSED'}
+    bl_parent_id = "USERPREF_PT_theme_user_interface"
+
+    def draw_props(self, context, layout):
+        theme = context.preferences.themes[0]
+        ui = theme.user_interface
+
+        flow = layout.grid_flow(row_major=False, columns=0, even_columns=True, even_rows=True, align=False)
+
+        col = flow.column(align=True)
+        col.prop(ui, "axis_x", text="Axis X")
+        col.prop(ui, "axis_y", text="Y")
+        col.prop(ui, "axis_z", text="Z")
+
+        col = flow.column()
+        col.prop(ui, "gizmo_primary")
+        col.prop(ui, "gizmo_secondary")
+
+        col = flow.column()
+        col.prop(ui, "gizmo_a")
+        col.prop(ui, "gizmo_b")
+
+
+class USERPREF_PT_theme_interface_icons(PreferencePanel):
+    bl_label = "Icon Colors"
+    bl_options = {'DEFAULT_CLOSED'}
+    bl_parent_id = "USERPREF_PT_theme_user_interface"
+
+    def draw_props(self, context, layout):
+        theme = context.preferences.themes[0]
+        ui = theme.user_interface
+
+        flow = layout.grid_flow(row_major=False, columns=0, even_columns=True, even_rows=False, align=False)
+
+        flow.prop(ui, "icon_collection")
+        flow.prop(ui, "icon_object")
+        flow.prop(ui, "icon_object_data")
+        flow.prop(ui, "icon_modifier")
+        flow.prop(ui, "icon_shading")
+
+
+class USERPREF_PT_theme_text_style(PreferencePanel):
+    bl_label = "Text Style"
+    bl_options = {'DEFAULT_CLOSED'}
+
+    @classmethod
+    def poll(cls, context):
+        prefs = context.preferences
+        return (prefs.active_section == 'THEMES')
+
+    @staticmethod
+    def _ui_font_style(layout, font_style):
+        layout.use_property_split = True
+        flow = layout.grid_flow(row_major=False, columns=0, even_columns=True, even_rows=False, align=True)
+
+        col = flow.column()
+        col.row().prop(font_style, "font_kerning_style", expand=True)
+        col.prop(font_style, "points")
+
+        col = flow.column(align=True)
+        col.prop(font_style, "shadow_offset_x", text="Shadow Offset X")
+        col.prop(font_style, "shadow_offset_y", text="Y")
+
+        col = flow.column()
+        col.prop(font_style, "shadow")
+        col.prop(font_style, "shadow_alpha")
+        col.prop(font_style, "shadow_value")
+
+    def draw_header(self, context):
+        layout = self.layout
+
+        layout.label(icon='FONTPREVIEW')
+
+    def draw_props(self, context, layout):
+        style = context.preferences.ui_styles[0]
+
+        layout.label(text="Panel Title")
+        self._ui_font_style(layout, style.panel_title)
+
+        layout.separator()
+
+        layout.label(text="Widget")
+        self._ui_font_style(layout, style.widget)
+
+        layout.separator()
+
+        layout.label(text="Widget Label")
+        self._ui_font_style(layout, style.widget_label)
+
+
+class USERPREF_PT_theme_bone_color_sets(PreferencePanel):
+    bl_label = "Bone Color Sets"
+    bl_options = {'DEFAULT_CLOSED'}
+
+    @classmethod
+    def poll(cls, context):
+        prefs = context.preferences
+        return (prefs.active_section == 'THEMES')
+
+    def draw_header(self, context):
+        layout = self.layout
+
+        layout.label(icon='COLOR')
+
+    def draw_props(self, context, layout):
+        theme = context.preferences.themes[0]
+
+        layout.use_property_split = True
+
+        for i, ui in enumerate(theme.bone_color_sets, 1):
+            layout.label(text=iface_(f"Color Set {i:d}"), translate=False)
+
+            flow = layout.grid_flow(row_major=False, columns=0, even_columns=True, even_rows=False, align=False)
+
+            flow.prop(ui, "normal")
+            flow.prop(ui, "select")
+            flow.prop(ui, "active")
+            flow.prop(ui, "show_colored_constraints")
+
+
+# Base class for dynamically defined theme-space panels.
+class PreferenceThemeSpacePanel(Panel):
+    bl_space_type = 'PREFERENCES'
+    bl_region_type = 'WINDOW'
 
     # not essential, hard-coded UI delimiters for the theme layout
     ui_delimiters = {
@@ -652,442 +1014,280 @@ class USERPREF_PT_theme(Panel):
         }
     }
 
+    # TODO theme_area should be deprecated
     @staticmethod
-    def _theme_generic(split, themedata, theme_area):
+    def _theme_generic(layout, themedata, theme_area):
 
-        col = split.column()
+        layout.use_property_split = True
 
-        def theme_generic_recurse(data):
-            col.label(data.rna_type.name)
-            row = col.row()
-            subsplit = row.split(percentage=0.95)
+        flow = layout.grid_flow(row_major=False, columns=0, even_columns=True, even_rows=False, align=False)
 
-            padding1 = subsplit.split(percentage=0.15)
-            padding1.column()
+        props_type = {}
 
-            subsplit = row.split(percentage=0.85)
+        for i, prop in enumerate(themedata.rna_type.properties):
+            if prop.identifier == "rna_type":
+                continue
 
-            padding2 = subsplit.split(percentage=0.15)
-            padding2.column()
+            props_type.setdefault((prop.type, prop.subtype), []).append(prop)
 
-            colsub_pair = padding1.column(), padding2.column()
+        th_delimiters = PreferenceThemeSpacePanel.ui_delimiters.get(theme_area)
+        for props_type, props_ls in sorted(props_type.items()):
+            if props_type[0] == 'POINTER':
+                continue
 
+            if th_delimiters is None:
+                # simple, no delimiters
+                for i, prop in enumerate(props_ls):
+                    flow.prop(themedata, prop.identifier)
+            else:
+
+                for prop in props_ls:
+                    flow.prop(themedata, prop.identifier)
+
+    @staticmethod
+    def draw_header(self, context):
+        if hasattr(self, "icon") and self.icon != 'NONE':
+            layout = self.layout
+            layout.label(icon=self.icon)
+
+    @staticmethod
+    def draw(self, context):
+        layout = self.layout
+        theme = context.preferences.themes[0]
+
+        datapath_list = self.datapath.split(".")
+        data = theme
+        for datapath_item in datapath_list:
+            data = getattr(data, datapath_item)
+        PreferenceThemeSpacePanel._theme_generic(layout, data, self.theme_area)
+
+    @classmethod
+    def poll(cls, context):
+        prefs = context.preferences
+        return (prefs.active_section == 'THEMES')
+
+
+class ThemeGenericClassGenerator():
+    generated_classes = []
+
+    @staticmethod
+    def generate_panel_classes_for_wcols():
+        wcols = [
+            ("Regular", "wcol_regular"),
+            ("Tool", "wcol_tool"),
+            ("Toolbar Item", "wcol_toolbar_item"),
+            ("Radio Buttons", "wcol_radio"),
+            ("Text", "wcol_text"),
+            ("Option", "wcol_option"),
+            ("Toggle", "wcol_toggle"),
+            ("Number Field", "wcol_num"),
+            ("Value Slider", "wcol_numslider"),
+            ("Box", "wcol_box"),
+            ("Menu", "wcol_menu"),
+            ("Pie Menu", "wcol_pie_menu"),
+            ("Pulldown", "wcol_pulldown"),
+            ("Menu Back", "wcol_menu_back"),
+            ("Tooltip", "wcol_tooltip"),
+            ("Menu Item", "wcol_menu_item"),
+            ("Scroll Bar", "wcol_scroll"),
+            ("Progress Bar", "wcol_progress"),
+            ("List Item", "wcol_list_item"),
+            ("Tab", "wcol_tab"),
+        ]
+
+        for (name, wcol) in wcols:
+            panel_id = "USERPREF_PT_theme_interface_" + wcol
+            paneltype = type(panel_id, (PreferenceThemeWidgetColorPanel,), {
+                "bl_label": name,
+                "bl_options": {'DEFAULT_CLOSED'},
+                "draw": PreferenceThemeWidgetColorPanel.draw,
+                "wcol": wcol,
+            })
+
+            ThemeGenericClassGenerator.generated_classes.append(paneltype)
+
+    @staticmethod
+    def generate_theme_area_child_panel_classes(parent_id, rna_type, theme_area, datapath):
+        def generate_child_panel_classes_recurse(parent_id, rna_type, theme_area, datapath):
             props_type = {}
 
-            for i, prop in enumerate(data.rna_type.properties):
+            for i, prop in enumerate(rna_type.properties):
                 if prop.identifier == "rna_type":
                     continue
 
                 props_type.setdefault((prop.type, prop.subtype), []).append(prop)
 
-            th_delimiters = USERPREF_PT_theme.ui_delimiters.get(theme_area)
             for props_type, props_ls in sorted(props_type.items()):
                 if props_type[0] == 'POINTER':
                     for i, prop in enumerate(props_ls):
-                        theme_generic_recurse(getattr(data, prop.identifier))
-                else:
-                    if th_delimiters is None:
-                        # simple, no delimiters
-                        for i, prop in enumerate(props_ls):
-                            colsub_pair[i % 2].row().prop(data, prop.identifier)
-                    else:
-                        # add hard coded delimiters
-                        i = 0
-                        for prop in props_ls:
-                            colsub = colsub_pair[i]
-                            colsub.row().prop(data, prop.identifier)
-                            i = (i + 1) % 2
-                            if prop.identifier in th_delimiters:
-                                if i:
-                                    colsub = colsub_pair[1]
-                                    colsub.row().label("")
-                                colsub_pair[0].row().label("")
-                                colsub_pair[1].row().label("")
-                                i = 0
+                        new_datapath = datapath + "." + prop.identifier if datapath else prop.identifier
+                        panel_id = parent_id + "_" + prop.identifier
+                        paneltype = type(panel_id, (PreferenceThemeSpacePanel,), {
+                            "bl_label": rna_type.properties[prop.identifier].name,
+                            "bl_parent_id": parent_id,
+                            "bl_options": {'DEFAULT_CLOSED'},
+                            "draw": PreferenceThemeSpacePanel.draw,
+                            "theme_area": theme_area.identifier,
+                            "datapath": new_datapath,
+                        })
 
-        theme_generic_recurse(themedata)
+                        ThemeGenericClassGenerator.generated_classes.append(paneltype)
+                        generate_child_panel_classes_recurse(panel_id, prop.fixed_type, theme_area, new_datapath)
+
+        generate_child_panel_classes_recurse(parent_id, rna_type, theme_area, datapath)
 
     @staticmethod
-    def _theme_widget_style(layout, widget_style):
-
-        row = layout.row()
-
-        subsplit = row.split(percentage=0.95)
-
-        padding = subsplit.split(percentage=0.15)
-        colsub = padding.column()
-        colsub = padding.column()
-        colsub.row().prop(widget_style, "outline")
-        colsub.row().prop(widget_style, "item", slider=True)
-        colsub.row().prop(widget_style, "inner", slider=True)
-        colsub.row().prop(widget_style, "inner_sel", slider=True)
-
-        subsplit = row.split(percentage=0.85)
-
-        padding = subsplit.split(percentage=0.15)
-        colsub = padding.column()
-        colsub = padding.column()
-        colsub.row().prop(widget_style, "text")
-        colsub.row().prop(widget_style, "text_sel")
-        colsub.prop(widget_style, "show_shaded")
-        subsub = colsub.column(align=True)
-        subsub.active = widget_style.show_shaded
-        subsub.prop(widget_style, "shadetop")
-        subsub.prop(widget_style, "shadedown")
-
-        layout.separator()
-
-    @staticmethod
-    def _ui_font_style(layout, font_style):
-
-        split = layout.split()
-
-        col = split.column()
-        col.label(text="Kerning Style:")
-        col.row().prop(font_style, "font_kerning_style", expand=True)
-        col.prop(font_style, "points")
-
-        col = split.column()
-        col.label(text="Shadow Offset:")
-        col.prop(font_style, "shadow_offset_x", text="X")
-        col.prop(font_style, "shadow_offset_y", text="Y")
-
-        col = split.column()
-        col.prop(font_style, "shadow")
-        col.prop(font_style, "shadow_alpha")
-        col.prop(font_style, "shadow_value")
-
-        layout.separator()
-
-    @classmethod
-    def poll(cls, context):
-        userpref = context.user_preferences
-        return (userpref.active_section == 'THEMES')
-
-    def draw(self, context):
-        layout = self.layout
-
-        theme = context.user_preferences.themes[0]
-
-        split_themes = layout.split(percentage=0.2)
-
-        sub = split_themes.column()
-
-        sub.label(text="Presets:")
-        subrow = sub.row(align=True)
-
-        subrow.menu("USERPREF_MT_interface_theme_presets", text=USERPREF_MT_interface_theme_presets.bl_label)
-        subrow.operator("wm.interface_theme_preset_add", text="", icon='ZOOMIN')
-        subrow.operator("wm.interface_theme_preset_add", text="", icon='ZOOMOUT').remove_active = True
-        sub.separator()
-
-        sub.prop(theme, "theme_area", expand=True)
-
-        split = layout.split(percentage=0.4)
-
-        layout.separator()
-        layout.separator()
-
-        split = split_themes.split()
-
-        if theme.theme_area == 'USER_INTERFACE':
-            col = split.column()
-            ui = theme.user_interface
-
-            col.label(text="Regular:")
-            self._theme_widget_style(col, ui.wcol_regular)
-
-            col.label(text="Tool:")
-            self._theme_widget_style(col, ui.wcol_tool)
-
-            col.label(text="Radio Buttons:")
-            self._theme_widget_style(col, ui.wcol_radio)
-
-            col.label(text="Text:")
-            self._theme_widget_style(col, ui.wcol_text)
-
-            col.label(text="Option:")
-            self._theme_widget_style(col, ui.wcol_option)
-
-            col.label(text="Toggle:")
-            self._theme_widget_style(col, ui.wcol_toggle)
-
-            col.label(text="Number Field:")
-            self._theme_widget_style(col, ui.wcol_num)
-
-            col.label(text="Value Slider:")
-            self._theme_widget_style(col, ui.wcol_numslider)
-
-            col.label(text="Box:")
-            self._theme_widget_style(col, ui.wcol_box)
-
-            col.label(text="Menu:")
-            self._theme_widget_style(col, ui.wcol_menu)
-
-            col.label(text="Pie Menu:")
-            self._theme_widget_style(col, ui.wcol_pie_menu)
-
-            col.label(text="Pulldown:")
-            self._theme_widget_style(col, ui.wcol_pulldown)
-
-            col.label(text="Menu Back:")
-            self._theme_widget_style(col, ui.wcol_menu_back)
-
-            col.label(text="Tooltip:")
-            self._theme_widget_style(col, ui.wcol_tooltip)
-
-            col.label(text="Menu Item:")
-            self._theme_widget_style(col, ui.wcol_menu_item)
-
-            col.label(text="Scroll Bar:")
-            self._theme_widget_style(col, ui.wcol_scroll)
-
-            col.label(text="Progress Bar:")
-            self._theme_widget_style(col, ui.wcol_progress)
-
-            col.label(text="List Item:")
-            self._theme_widget_style(col, ui.wcol_list_item)
-
-            ui_state = theme.user_interface.wcol_state
-            col.label(text="State:")
-
-            row = col.row()
-
-            subsplit = row.split(percentage=0.95)
-
-            padding = subsplit.split(percentage=0.15)
-            colsub = padding.column()
-            colsub = padding.column()
-            colsub.row().prop(ui_state, "inner_anim")
-            colsub.row().prop(ui_state, "inner_anim_sel")
-            colsub.row().prop(ui_state, "inner_driven")
-            colsub.row().prop(ui_state, "inner_driven_sel")
-
-            subsplit = row.split(percentage=0.85)
-
-            padding = subsplit.split(percentage=0.15)
-            colsub = padding.column()
-            colsub = padding.column()
-            colsub.row().prop(ui_state, "inner_key")
-            colsub.row().prop(ui_state, "inner_key_sel")
-            colsub.row().prop(ui_state, "blend")
-
-            col.separator()
-            col.separator()
-
-            col.label("Styles:")
-
-            row = col.row()
-
-            subsplit = row.split(percentage=0.95)
-
-            padding = subsplit.split(percentage=0.15)
-            colsub = padding.column()
-            colsub = padding.column()
-            colsub.row().prop(ui, "menu_shadow_fac")
-
-            subsplit = row.split(percentage=0.85)
-
-            padding = subsplit.split(percentage=0.15)
-            colsub = padding.column()
-            colsub = padding.column()
-            colsub.row().prop(ui, "menu_shadow_width")
-
-            row = col.row()
-
-            subsplit = row.split(percentage=0.95)
-
-            padding = subsplit.split(percentage=0.15)
-            colsub = padding.column()
-            colsub = padding.column()
-            colsub.row().prop(ui, "icon_alpha")
-
-            subsplit = row.split(percentage=0.85)
-
-            padding = subsplit.split(percentage=0.15)
-            colsub = padding.column()
-            colsub = padding.column()
-            colsub.row().prop(ui, "widget_emboss")
-
-            col.separator()
-            col.separator()
-
-            col.label("Axis Colors:")
-
-            row = col.row()
-
-            subsplit = row.split(percentage=0.95)
-
-            padding = subsplit.split(percentage=0.15)
-            colsub = padding.column()
-            colsub = padding.column()
-            colsub.row().prop(ui, "axis_x")
-            colsub.row().prop(ui, "axis_y")
-            colsub.row().prop(ui, "axis_z")
-
-            subsplit = row.split(percentage=0.85)
-
-            padding = subsplit.split(percentage=0.15)
-            colsub = padding.column()
-            colsub = padding.column()
-
-            layout.separator()
-            layout.separator()
-        elif theme.theme_area == 'BONE_COLOR_SETS':
-            col = split.column()
-
-            for i, ui in enumerate(theme.bone_color_sets, 1):
-                col.label(iface_(f"Color Set {i:d}"), translate=False)
-
-                row = col.row()
-
-                subsplit = row.split(percentage=0.95)
-
-                padding = subsplit.split(percentage=0.15)
-                colsub = padding.column()
-                colsub = padding.column()
-                colsub.row().prop(ui, "normal")
-                colsub.row().prop(ui, "select")
-                colsub.row().prop(ui, "active")
-
-                subsplit = row.split(percentage=0.85)
-
-                padding = subsplit.split(percentage=0.15)
-                colsub = padding.column()
-                colsub = padding.column()
-                colsub.row().prop(ui, "show_colored_constraints")
-        elif theme.theme_area == 'STYLE':
-            col = split.column()
-
-            style = context.user_preferences.ui_styles[0]
-
-            col.label(text="Panel Title:")
-            self._ui_font_style(col, style.panel_title)
-
-            col.separator()
-
-            col.label(text="Widget:")
-            self._ui_font_style(col, style.widget)
-
-            col.separator()
-
-            col.label(text="Widget Label:")
-            self._ui_font_style(col, style.widget_label)
-        else:
-            self._theme_generic(split, getattr(theme, theme.theme_area.lower()), theme.theme_area)
-
-
-class USERPREF_PT_file(Panel):
-    bl_space_type = 'USER_PREFERENCES'
-    bl_label = "Files"
+    def generate_panel_classes_from_theme_areas():
+        from bpy.types import Theme
+
+        for theme_area in Theme.bl_rna.properties['theme_area'].enum_items_static:
+            if theme_area.identifier in {'USER_INTERFACE', 'STYLE', 'BONE_COLOR_SETS'}:
+                continue
+
+            panel_id = "USERPREF_PT_theme_" + theme_area.identifier.lower()
+            # Generate panel-class from theme_area
+            paneltype = type(panel_id, (PreferenceThemeSpacePanel,), {
+                "bl_label": theme_area.name,
+                "bl_options": {'DEFAULT_CLOSED'},
+                "draw_header": PreferenceThemeSpacePanel.draw_header,
+                "draw": PreferenceThemeSpacePanel.draw,
+                "theme_area": theme_area.identifier,
+                "icon": theme_area.icon,
+                "datapath": theme_area.identifier.lower(),
+            })
+
+            ThemeGenericClassGenerator.generated_classes.append(paneltype)
+            ThemeGenericClassGenerator.generate_theme_area_child_panel_classes(
+                panel_id, Theme.bl_rna.properties[theme_area.identifier.lower()].fixed_type,
+                theme_area, theme_area.identifier.lower())
+
+
+class USERPREF_PT_file_paths(Panel):
+    bl_space_type = 'PREFERENCES'
     bl_region_type = 'WINDOW'
-    bl_options = {'HIDE_HEADER'}
+    bl_label = "File Paths"
 
     @classmethod
     def poll(cls, context):
-        userpref = context.user_preferences
-        return (userpref.active_section == 'FILES')
+        prefs = context.preferences
+        return (prefs.active_section == 'SYSTEM_FILES')
 
     def draw(self, context):
         layout = self.layout
+        prefs = context.preferences
+        paths = prefs.filepaths
+        system = prefs.system
 
-        userpref = context.user_preferences
-        paths = userpref.filepaths
-        system = userpref.system
+        layout.use_property_split = True
+        layout.use_property_decorate = False  # No animation.
 
-        split = layout.split(percentage=0.7)
+        flow = layout.grid_flow(row_major=False, columns=0, even_columns=True, even_rows=False, align=False)
 
-        col = split.column()
-        col.label(text="File Paths:")
+        flow.prop(paths, "render_output_directory", text="Render Output")
+        flow.prop(paths, "render_cache_directory", text="Render Cache")
+        flow.prop(paths, "font_directory", text="Fonts")
+        flow.prop(paths, "texture_directory", text="Textures")
+        flow.prop(paths, "script_directory", text="Scripts")
+        flow.prop(paths, "sound_directory", text="Sounds")
+        flow.prop(paths, "temporary_directory", text="Temp")
+        flow.prop(paths, "i18n_branches_directory", text="I18n Branches")
+        flow.prop(paths, "image_editor", text="Image Editor")
+        flow.prop(paths, "animation_player_preset", text="Playback Preset")
 
-        colsplit = col.split(percentage=0.95)
-        col1 = colsplit.split(percentage=0.3)
+        if paths.animation_player_preset == 'CUSTOM':
+            flow.prop(paths, "animation_player", text="Animation Player")
 
-        sub = col1.column()
-        sub.label(text="Fonts:")
-        sub.label(text="Textures:")
-        sub.label(text="Render Output:")
-        sub.label(text="Scripts:")
-        sub.label(text="Sounds:")
-        sub.label(text="Temp:")
-        sub.label(text="Render Cache:")
-        sub.label(text="I18n Branches:")
-        sub.label(text="Image Editor:")
-        sub.label(text="Animation Player:")
 
-        sub = col1.column()
-        sub.prop(paths, "font_directory", text="")
-        sub.prop(paths, "texture_directory", text="")
-        sub.prop(paths, "render_output_directory", text="")
-        sub.prop(paths, "script_directory", text="")
-        sub.prop(paths, "sound_directory", text="")
-        sub.prop(paths, "temporary_directory", text="")
-        sub.prop(paths, "render_cache_directory", text="")
-        sub.prop(paths, "i18n_branches_directory", text="")
-        sub.prop(paths, "image_editor", text="")
-        subsplit = sub.split(percentage=0.3)
-        subsplit.prop(paths, "animation_player_preset", text="")
-        subsplit.prop(paths, "animation_player", text="")
+class USERPREF_PT_file_autorun(Panel):
+    bl_space_type = 'PREFERENCES'
+    bl_region_type = 'WINDOW'
+    bl_label = "Auto Run Python Scripts"
+    bl_options = {'DEFAULT_CLOSED'}
 
-        col.separator()
-        col.separator()
+    @classmethod
+    def poll(cls, context):
+        prefs = context.preferences
+        return (prefs.active_section == 'SYSTEM_FILES')
 
-        colsplit = col.split(percentage=0.95)
-        sub = colsplit.column()
+    def draw_header(self, context):
+        prefs = context.preferences
+        paths = prefs.filepaths
 
-        row = sub.split(percentage=0.3)
-        row.label(text="Auto Execution:")
-        row.prop(system, "use_scripts_auto_execute")
+        self.layout.prop(paths, "use_scripts_auto_execute", text="")
 
-        if system.use_scripts_auto_execute:
-            box = sub.box()
+    def draw(self, context):
+        layout = self.layout
+        prefs = context.preferences
+        paths = prefs.filepaths
+
+        layout.use_property_split = True
+        layout.use_property_decorate = False  # No animation.
+
+        layout.active = paths.use_scripts_auto_execute
+
+        box = layout.box()
+        row = box.row()
+        row.label(text="Excluded Paths:")
+        row.operator("wm.userpref_autoexec_path_add", text="", icon='ADD', emboss=False)
+        for i, path_cmp in enumerate(prefs.autoexec_paths):
             row = box.row()
-            row.label(text="Excluded Paths:")
-            row.operator("wm.userpref_autoexec_path_add", text="", icon='ZOOMIN', emboss=False)
-            for i, path_cmp in enumerate(userpref.autoexec_paths):
-                row = box.row()
-                row.prop(path_cmp, "path", text="")
-                row.prop(path_cmp, "use_glob", text="", icon='FILTER')
-                row.operator("wm.userpref_autoexec_path_remove", text="", icon='X', emboss=False).index = i
+            row.prop(path_cmp, "path", text="")
+            row.prop(path_cmp, "use_glob", text="", icon='FILTER')
+            row.operator("wm.userpref_autoexec_path_remove", text="", icon='X', emboss=False).index = i
 
-        col = split.column()
-        col.label(text="Save & Load:")
-        col.prop(paths, "use_relative_paths")
-        col.prop(paths, "use_file_compression")
-        col.prop(paths, "use_load_ui")
-        col.prop(paths, "use_filter_files")
-        col.prop(paths, "show_hidden_files_datablocks")
-        col.prop(paths, "hide_recent_locations")
-        col.prop(paths, "hide_system_bookmarks")
-        col.prop(paths, "show_thumbnails")
 
-        col.separator()
+class USERPREF_PT_file_saveload(PreferencePanel):
+    bl_label = "Save & Load"
+    bl_options = {'DEFAULT_CLOSED'}
 
-        col.prop(paths, "save_version")
-        col.prop(paths, "recent_files")
-        col.prop(paths, "use_save_preview_images")
+    @classmethod
+    def poll(cls, context):
+        prefs = context.preferences
+        return (prefs.active_section == 'SYSTEM_FILES')
 
-        col.separator()
+    def draw_props(self, context, layout):
+        prefs = context.preferences
+        paths = prefs.filepaths
+        system = prefs.system
 
-        col.label(text="Auto Save:")
-        col.prop(paths, "use_keep_session")
-        col.prop(paths, "use_auto_save_temporary_files")
-        sub = col.column()
+        flow = layout.grid_flow(row_major=False, columns=0, even_columns=True, even_rows=False, align=False)
+
+        flow.prop(paths, "use_relative_paths")
+        flow.prop(paths, "use_file_compression")
+        flow.prop(paths, "use_load_ui")
+        flow.prop(paths, "use_filter_files")
+        flow.prop(paths, "show_hidden_files_datablocks")
+        flow.prop(paths, "hide_recent_locations")
+        flow.prop(paths, "hide_system_bookmarks")
+        flow.prop(paths, "show_thumbnails")
+        flow.prop(paths, "use_save_preview_images")
+        flow.prop(paths, "use_tabs_as_spaces")
+
+        layout.separator()
+
+        flow = layout.grid_flow(row_major=False, columns=0, even_columns=True, even_rows=False, align=False)
+
+        flow.prop(paths, "save_version")
+        flow.prop(paths, "recent_files")
+        flow.prop(paths, "author", text="Author")
+
+
+class USERPREF_PT_file_saveload_autosave(PreferencePanel):
+    bl_label = "Auto Save"
+    bl_parent_id = "USERPREF_PT_file_saveload"
+
+    def draw_props(self, context, layout):
+        prefs = context.preferences
+        paths = prefs.filepaths
+        system = prefs.system
+
+        flow = layout.grid_flow(row_major=False, columns=0, even_columns=True, even_rows=False, align=False)
+
+        flow.prop(paths, "use_keep_session")
+        flow.prop(paths, "use_auto_save_temporary_files")
+        sub = flow.column()
         sub.active = paths.use_auto_save_temporary_files
         sub.prop(paths, "auto_save_time", text="Timer (mins)")
-
-        col.separator()
-
-        col.label(text="Text Editor:")
-        col.prop(system, "use_tabs_as_spaces")
-
-        colsplit = col.split(percentage=0.95)
-        col1 = colsplit.split(percentage=0.3)
-
-        sub = col1.column()
-        sub.label(text="Author:")
-        sub = col1.column()
-        sub.prop(system, "author", text="")
 
 
 class USERPREF_MT_ndof_settings(Menu):
@@ -1097,7 +1297,7 @@ class USERPREF_MT_ndof_settings(Menu):
     def draw(self, context):
         layout = self.layout
 
-        input_prefs = context.user_preferences.inputs
+        input_prefs = context.preferences.inputs
 
         is_view3d = context.space_data.type == 'VIEW_3D'
 
@@ -1137,158 +1337,253 @@ class USERPREF_MT_ndof_settings(Menu):
             layout.prop(input_prefs, "ndof_lock_horizon", icon='NDOF_DOM')
 
 
+class USERPREF_PT_input_devices(PreferencePanel):
+    bl_label = "Devices"
+
+    @classmethod
+    def poll(cls, context):
+        prefs = context.preferences
+        return (prefs.active_section == 'INPUT')
+
+    def draw(self, context):
+        pass
+
+
+class USERPREF_PT_input_devices_keyboard(PreferencePanel):
+    bl_label = "Keyboard"
+    bl_parent_id = "USERPREF_PT_input_devices"
+
+    def draw_props(self, context, layout):
+        prefs = context.preferences
+        inputs = prefs.inputs
+
+        flow = layout.grid_flow(row_major=False, columns=0, even_columns=True, even_rows=False, align=False)
+
+        flow.prop(inputs, "use_emulate_numpad")
+        flow.prop(inputs, "use_numeric_input_advanced")
+
+
+class USERPREF_PT_input_devices_mouse(PreferencePanel):
+    bl_label = "Mouse"
+    bl_parent_id = "USERPREF_PT_input_devices"
+
+    def draw_props(self, context, layout):
+        prefs = context.preferences
+        inputs = prefs.inputs
+
+        flow = layout.grid_flow(row_major=False, columns=0, even_columns=True, even_rows=False, align=False)
+
+        flow.prop(inputs, "drag_threshold")
+        flow.prop(inputs, "tweak_threshold")
+        flow.prop(inputs, "mouse_double_click_time", text="Double Click Speed")
+        flow.prop(inputs, "use_mouse_emulate_3_button")
+        flow.prop(inputs, "use_mouse_continuous")
+        flow.prop(inputs, "use_drag_immediately")
+
+
+class USERPREF_PT_input_view(PreferencePanel):
+    bl_label = "View Navigation"
+    bl_options = {'DEFAULT_CLOSED'}
+
+    @classmethod
+    def poll(cls, context):
+        prefs = context.preferences
+        return (prefs.active_section == 'INPUT')
+
+    def draw(self, context):
+        pass
+
+
+class USERPREF_PT_input_view_orbit(PreferencePanel):
+    bl_label = "Orbit & Pan"
+    bl_parent_id = "USERPREF_PT_input_view"
+
+    def draw_props(self, context, layout):
+        import sys
+        prefs = context.preferences
+        inputs = prefs.inputs
+
+        flow = layout.grid_flow(row_major=False, columns=0, even_columns=True, even_rows=False, align=False)
+
+        flow.row().prop(inputs, "view_rotate_method", expand=True)
+        flow.prop(inputs, "use_rotate_around_active")
+        flow.prop(inputs, "use_auto_perspective")
+        flow.prop(inputs, "use_mouse_depth_navigate")
+
+        if sys.platform == "darwin":
+            flow.prop(inputs, "use_trackpad_natural", text="Natural Trackpad Direction")
+
+
+class USERPREF_PT_input_view_zoom(PreferencePanel):
+    bl_label = "Zoom"
+    bl_parent_id = "USERPREF_PT_input_view"
+
+    def draw_props(self, context, layout):
+        prefs = context.preferences
+        inputs = prefs.inputs
+
+        flow = layout.grid_flow(row_major=False, columns=0, even_columns=True, even_rows=False, align=False)
+
+        flow.row().prop(inputs, "view_zoom_method", text="Zoom Method", expand=True)
+        if inputs.view_zoom_method in {'DOLLY', 'CONTINUE'}:
+            flow.row().prop(inputs, "view_zoom_axis", expand=True)
+            flow.prop(inputs, "invert_mouse_zoom", text="Invert Mouse Zoom Direction")
+
+        flow.prop(inputs, "invert_zoom_wheel", text="Invert Wheel Zoom Direction")
+        # sub.prop(view, "wheel_scroll_lines", text="Scroll Lines")
+        flow.prop(inputs, "use_zoom_to_mouse")
+
+
+class USERPREF_PT_input_view_fly_walk(PreferencePanel):
+    bl_label = "Fly & Walk"
+    bl_parent_id = "USERPREF_PT_input_view"
+
+    def draw_props(self, context, layout):
+        prefs = context.preferences
+        inputs = prefs.inputs
+
+        flow = layout.grid_flow(row_major=False, columns=0, even_columns=True, even_rows=False, align=False)
+
+        flow.row().prop(inputs, "navigation_mode", expand=True)
+        flow.prop(inputs, "use_camera_lock_parent")
+
+
+class USERPREF_PT_input_view_fly_walk_navigation(PreferencePanel):
+    bl_label = "Walk"
+    bl_parent_id = "USERPREF_PT_input_view_fly_walk"
+    bl_options = {'DEFAULT_CLOSED'}
+
+    @classmethod
+    def poll(cls, context):
+        prefs = context.preferences
+        return prefs.inputs.navigation_mode == 'WALK'
+
+    def draw_props(self, context, layout):
+        prefs = context.preferences
+        inputs = prefs.inputs
+        walk = inputs.walk_navigation
+
+        flow = layout.grid_flow(row_major=False, columns=0, even_columns=True, even_rows=False, align=False)
+
+        flow.prop(walk, "use_mouse_reverse")
+        flow.prop(walk, "mouse_speed")
+        flow.prop(walk, "teleport_time")
+
+        sub = flow.column(align=True)
+        sub.prop(walk, "walk_speed")
+        sub.prop(walk, "walk_speed_factor")
+
+
+class USERPREF_PT_input_view_fly_walk_gravity(PreferencePanel):
+    bl_label = "Gravity"
+    bl_parent_id = "USERPREF_PT_input_view_fly_walk"
+    bl_options = {'DEFAULT_CLOSED'}
+
+    @classmethod
+    def poll(cls, context):
+        prefs = context.preferences
+        return prefs.inputs.navigation_mode == 'WALK'
+
+    def draw_header(self, context):
+        prefs = context.preferences
+        inputs = prefs.inputs
+        walk = inputs.walk_navigation
+
+        self.layout.prop(walk, "use_gravity", text="")
+
+    def draw_props(self, context, layout):
+        prefs = context.preferences
+        inputs = prefs.inputs
+        walk = inputs.walk_navigation
+
+        layout.active = walk.use_gravity
+
+        flow = layout.grid_flow(row_major=False, columns=0, even_columns=True, even_rows=False, align=False)
+
+        flow.prop(walk, "view_height")
+        flow.prop(walk, "jump_height")
+
+
+class USERPREF_PT_input_devices_tablet(PreferencePanel):
+    bl_label = "Tablet"
+    bl_parent_id = "USERPREF_PT_input_devices"
+
+    def draw_props(self, context, layout):
+        prefs = context.preferences
+        inputs = prefs.inputs
+
+        flow = layout.grid_flow(row_major=False, columns=0, even_columns=True, even_rows=False, align=False)
+
+        flow.prop(inputs, "pressure_threshold_max")
+        flow.prop(inputs, "pressure_softness")
+
+
+class USERPREF_PT_input_devices_ndof(PreferencePanel):
+    bl_label = "NDOF"
+    bl_options = {'DEFAULT_CLOSED'}
+    bl_parent_id = "USERPREF_PT_input_devices"
+
+    @classmethod
+    def poll(cls, context):
+        prefs = context.preferences
+        inputs = prefs.inputs
+        if inputs.use_ndof:
+            return (prefs.active_section == 'INPUT')
+
+    def draw_props(self, context, layout):
+        prefs = context.preferences
+        inputs = prefs.inputs
+
+        flow = layout.grid_flow(row_major=False, columns=0, even_columns=True, even_rows=False, align=False)
+
+        flow.prop(inputs, "ndof_sensitivity", text="Pan Sensitivity")
+        flow.prop(inputs, "ndof_orbit_sensitivity", text="Orbit Sensitivity")
+        flow.prop(inputs, "ndof_deadzone", text="Deadzone")
+
+        layout.separator()
+
+        flow.row().prop(inputs, "ndof_view_navigate_method", expand=True)
+        flow.row().prop(inputs, "ndof_view_rotate_method", expand=True)
+
+
 class USERPREF_MT_keyconfigs(Menu):
     bl_label = "KeyPresets"
     preset_subdir = "keyconfig"
     preset_operator = "wm.keyconfig_activate"
 
     def draw(self, context):
-        props = self.layout.operator("wm.context_set_value", text="Blender (default)")
-        props.data_path = "window_manager.keyconfigs.active"
-        props.value = "context.window_manager.keyconfigs.default"
-
-        # now draw the presets
         Menu.draw_preset(self, context)
 
 
-class USERPREF_PT_input(Panel):
-    bl_space_type = 'USER_PREFERENCES'
-    bl_label = "Input"
+class USERPREF_PT_keymap(Panel):
+    bl_space_type = 'PREFERENCES'
+    bl_label = "Keymap"
     bl_region_type = 'WINDOW'
     bl_options = {'HIDE_HEADER'}
 
     @classmethod
     def poll(cls, context):
-        userpref = context.user_preferences
-        return (userpref.active_section == 'INPUT')
-
-    @staticmethod
-    def draw_input_prefs(inputs, layout):
-        import sys
-
-        # General settings
-        row = layout.row()
-        col = row.column()
-
-        sub = col.column()
-        sub.label(text="Presets:")
-        subrow = sub.row(align=True)
-
-        subrow.menu("USERPREF_MT_interaction_presets", text=bpy.types.USERPREF_MT_interaction_presets.bl_label)
-        subrow.operator("wm.interaction_preset_add", text="", icon='ZOOMIN')
-        subrow.operator("wm.interaction_preset_add", text="", icon='ZOOMOUT').remove_active = True
-        sub.separator()
-
-        sub.label(text="Mouse:")
-        sub1 = sub.column()
-        sub1.active = (inputs.select_mouse == 'RIGHT')
-        sub1.prop(inputs, "use_mouse_emulate_3_button")
-        sub.prop(inputs, "use_mouse_continuous")
-        sub.prop(inputs, "drag_threshold")
-        sub.prop(inputs, "tweak_threshold")
-
-        sub.label(text="Select With:")
-        sub.row().prop(inputs, "select_mouse", expand=True)
-
-        sub = col.column()
-        sub.label(text="Double Click:")
-        sub.prop(inputs, "mouse_double_click_time", text="Speed")
-
-        sub.separator()
-
-        sub.prop(inputs, "use_emulate_numpad")
-
-        sub.separator()
-
-        sub.label(text="Orbit Style:")
-        sub.row().prop(inputs, "view_rotate_method", expand=True)
-
-        sub.separator()
-
-        sub.label(text="Zoom Style:")
-        sub.row().prop(inputs, "view_zoom_method", text="")
-        if inputs.view_zoom_method in {'DOLLY', 'CONTINUE'}:
-            sub.row().prop(inputs, "view_zoom_axis", expand=True)
-            sub.prop(inputs, "invert_mouse_zoom", text="Invert Mouse Zoom Direction")
-
-        #sub.prop(inputs, "use_mouse_mmb_paste")
-
-        # col.separator()
-
-        sub = col.column()
-        sub.prop(inputs, "invert_zoom_wheel", text="Invert Wheel Zoom Direction")
-        #sub.prop(view, "wheel_scroll_lines", text="Scroll Lines")
-
-        if sys.platform == "darwin":
-            sub = col.column()
-            sub.prop(inputs, "use_trackpad_natural", text="Natural Trackpad Direction")
-
-        col.separator()
-        sub = col.column()
-        sub.label(text="View Navigation:")
-        sub.row().prop(inputs, "navigation_mode", expand=True)
-
-        sub.label(text="Walk Navigation:")
-
-        walk = inputs.walk_navigation
-
-        sub.prop(walk, "use_mouse_reverse")
-        sub.prop(walk, "mouse_speed")
-        sub.prop(walk, "teleport_time")
-
-        sub = col.column(align=True)
-        sub.prop(walk, "walk_speed")
-        sub.prop(walk, "walk_speed_factor")
-
-        sub.separator()
-        sub.prop(walk, "use_gravity")
-        sub = col.column(align=True)
-        sub.active = walk.use_gravity
-        sub.prop(walk, "view_height")
-        sub.prop(walk, "jump_height")
-
-        if inputs.use_ndof:
-            col.separator()
-            col.label(text="NDOF Device:")
-            sub = col.column(align=True)
-            sub.prop(inputs, "ndof_sensitivity", text="Pan Sensitivity")
-            sub.prop(inputs, "ndof_orbit_sensitivity", text="Orbit Sensitivity")
-            sub.prop(inputs, "ndof_deadzone", text="Deadzone")
-
-            sub.separator()
-            col.label(text="Navigation Style:")
-            sub = col.column(align=True)
-            sub.row().prop(inputs, "ndof_view_navigate_method", expand=True)
-
-            sub.separator()
-            col.label(text="Rotation Style:")
-            sub = col.column(align=True)
-            sub.row().prop(inputs, "ndof_view_rotate_method", expand=True)
-
-        row.separator()
+        prefs = context.preferences
+        return (prefs.active_section == 'KEYMAP')
 
     def draw(self, context):
         from rna_keymap_ui import draw_keymaps
 
         layout = self.layout
 
-        #import time
+        # import time
 
-        #start = time.time()
+        # start = time.time()
 
-        userpref = context.user_preferences
+        prefs = context.preferences
+        keymappref = prefs.keymap
 
-        inputs = userpref.inputs
-
-        split = layout.split(percentage=0.25)
-
-        # Input settings
-        self.draw_input_prefs(inputs, split)
+        col = layout.column()
 
         # Keymap Settings
-        draw_keymaps(context, split)
+        draw_keymaps(context, col)
 
-        #print("runtime", time.time() - start)
+        # print("runtime", time.time() - start)
 
 
 class USERPREF_MT_addons_online_resources(Menu):
@@ -1319,21 +1614,21 @@ class USERPREF_MT_addons_online_resources(Menu):
 
 
 class USERPREF_PT_addons(Panel):
-    bl_space_type = 'USER_PREFERENCES'
+    bl_space_type = 'PREFERENCES'
     bl_label = "Add-ons"
     bl_region_type = 'WINDOW'
     bl_options = {'HIDE_HEADER'}
 
     _support_icon_mapping = {
         'OFFICIAL': 'FILE_BLEND',
-        'COMMUNITY': 'POSE_DATA',
-        'TESTING': 'MOD_EXPLODE',
+        'COMMUNITY': 'COMMUNITY',
+        'TESTING': 'EXPERIMENTAL',
     }
 
     @classmethod
     def poll(cls, context):
-        userpref = context.user_preferences
-        return (userpref.active_section == 'ADDONS')
+        prefs = context.preferences
+        return (prefs.active_section == 'ADDONS')
 
     @staticmethod
     def is_user_addon(mod, user_addon_paths):
@@ -1357,10 +1652,10 @@ class USERPREF_PT_addons(Panel):
         lines = message.split("\n")
         box = layout.box()
         sub = box.row()
-        sub.label(lines[0])
+        sub.label(text=lines[0])
         sub.label(icon='ERROR')
         for l in lines[1:]:
-            box.label(l)
+            box.label(text=l)
 
     def draw(self, context):
         import os
@@ -1368,16 +1663,21 @@ class USERPREF_PT_addons(Panel):
 
         layout = self.layout
 
-        userpref = context.user_preferences
-        used_ext = {ext.module for ext in userpref.addons}
+        prefs = context.preferences
+        used_ext = {ext.module for ext in prefs.addons}
 
         addon_user_dirs = tuple(
             p for p in (
-                os.path.join(userpref.filepaths.script_directory, "addons"),
+                os.path.join(prefs.filepaths.script_directory, "addons"),
                 bpy.utils.user_resource('SCRIPTS', "addons"),
             )
             if p
         )
+
+        # Development option for 2.8x, don't show users bundled addons
+        # unless they have been updated for 2.8x.
+        # Developers can turn them on with '--debug'
+        show_official_27x_addons = bpy.app.debug
 
         # collect the categories that can be filtered on
         addons = [
@@ -1385,31 +1685,33 @@ class USERPREF_PT_addons(Panel):
             for mod in addon_utils.modules(refresh=False)
         ]
 
-        split = layout.split(percentage=0.2)
-        col = split.column()
-        col.prop(context.window_manager, "addon_search", text="", icon='VIEWZOOM')
+        row = layout.row()
+        row.operator("wm.addon_install", icon='IMPORT', text="Install...")
+        row.operator("wm.addon_refresh", icon='FILE_REFRESH', text="Refresh")
+        row.menu("USERPREF_MT_addons_online_resources", text="Online Resources")
 
-        col.label(text="Supported Level")
-        col.prop(context.window_manager, "addon_support", expand=True)
+        layout.separator()
 
-        col.label(text="Categories")
-        col.prop(context.window_manager, "addon_filter", expand=True)
+        row = layout.row()
+        row.prop(context.window_manager, "addon_support", expand=True)
+        row.prop(context.window_manager, "addon_filter", text="")
+        row.prop(context.window_manager, "addon_search", text="", icon='VIEWZOOM')
 
-        col = split.column()
+        col = layout.column()
 
         # set in addon_utils.modules_refresh()
         if addon_utils.error_duplicates:
             box = col.box()
             row = box.row()
-            row.label("Multiple add-ons with the same name found!")
+            row.label(text="Multiple add-ons with the same name found!")
             row.label(icon='ERROR')
-            box.label("Please delete one of each pair:")
+            box.label(text="Delete one of each pair to resolve:")
             for (addon_name, addon_file, addon_path) in addon_utils.error_duplicates:
                 box.separator()
                 sub_col = box.column(align=True)
-                sub_col.label(addon_name + ":")
-                sub_col.label("    " + addon_file)
-                sub_col.label("    " + addon_path)
+                sub_col.label(text=addon_name + ":")
+                sub_col.label(text="    " + addon_file)
+                sub_col.label(text="    " + addon_path)
 
         if addon_utils.error_encoding:
             self.draw_error(
@@ -1448,6 +1750,15 @@ class USERPREF_PT_addons(Panel):
                     else:
                         continue
 
+                # Skip 2.7x add-ons included with Blender, unless in debug mode.
+                is_addon_27x = info.get("blender", (0,)) < (2, 80)
+                if (
+                        is_addon_27x and
+                        (not show_official_27x_addons) and
+                        (not mod.__file__.startswith(addon_user_dirs))
+                ):
+                    continue
+
                 # Addon UI Code
                 col_box = col.column()
                 box = col_box.box()
@@ -1456,7 +1767,7 @@ class USERPREF_PT_addons(Panel):
 
                 row.operator(
                     "wm.addon_expand",
-                    icon='TRIA_DOWN' if info["show_expanded"] else 'TRIA_RIGHT',
+                    icon='DISCLOSURE_TRI_DOWN' if info["show_expanded"] else 'DISCLOSURE_TRI_RIGHT',
                     emboss=False,
                 ).module = module_name
 
@@ -1469,7 +1780,14 @@ class USERPREF_PT_addons(Panel):
                 sub = row.row()
                 sub.active = is_enabled
                 sub.label(text="%s: %s" % (info["category"], info["name"]))
-                if info["warning"]:
+
+                # WARNING: 2.8x exception, may be removed
+                # use disabled state for old add-ons, chances are they are broken.
+                if is_addon_27x:
+                    sub.label(text="upgrade to 2.8x required")
+                    sub.label(icon='ERROR')
+                # Remove code above after 2.8x migration is complete.
+                elif info["warning"]:
                     sub.label(icon='ERROR')
 
                 # icon showing support level.
@@ -1478,27 +1796,27 @@ class USERPREF_PT_addons(Panel):
                 # Expanded UI (only if additional info is available)
                 if info["show_expanded"]:
                     if info["description"]:
-                        split = colsub.row().split(percentage=0.15)
+                        split = colsub.row().split(factor=0.15)
                         split.label(text="Description:")
                         split.label(text=info["description"])
                     if info["location"]:
-                        split = colsub.row().split(percentage=0.15)
+                        split = colsub.row().split(factor=0.15)
                         split.label(text="Location:")
                         split.label(text=info["location"])
                     if mod:
-                        split = colsub.row().split(percentage=0.15)
+                        split = colsub.row().split(factor=0.15)
                         split.label(text="File:")
                         split.label(text=mod.__file__, translate=False)
                     if info["author"]:
-                        split = colsub.row().split(percentage=0.15)
+                        split = colsub.row().split(factor=0.15)
                         split.label(text="Author:")
                         split.label(text=info["author"], translate=False)
                     if info["version"]:
-                        split = colsub.row().split(percentage=0.15)
+                        split = colsub.row().split(factor=0.15)
                         split.label(text="Version:")
                         split.label(text=".".join(str(x) for x in info["version"]), translate=False)
                     if info["warning"]:
-                        split = colsub.row().split(percentage=0.15)
+                        split = colsub.row().split(factor=0.15)
                         split.label(text="Warning:")
                         split.label(text="  " + info["warning"], icon='ERROR')
 
@@ -1506,7 +1824,7 @@ class USERPREF_PT_addons(Panel):
                     tot_row = bool(info["wiki_url"]) + bool(user_addon)
 
                     if tot_row:
-                        split = colsub.row().split(percentage=0.15)
+                        split = colsub.row().split(factor=0.15)
                         split.label(text="Internet:")
                         if info["wiki_url"]:
                             split.operator(
@@ -1526,18 +1844,18 @@ class USERPREF_PT_addons(Panel):
                                 "wm.addon_remove", text="Remove", icon='CANCEL',
                             ).module = mod.__name__
 
-                        for i in range(4 - tot_row):
+                        for _ in range(4 - tot_row):
                             split.separator()
 
                     # Show addon user preferences
                     if is_enabled:
-                        addon_preferences = userpref.addons[module_name].preferences
+                        addon_preferences = prefs.addons[module_name].preferences
                         if addon_preferences is not None:
                             draw = getattr(addon_preferences, "draw", None)
                             if draw is not None:
                                 addon_preferences_class = type(addon_preferences)
                                 box_prefs = col_box.box()
-                                box_prefs.label("Preferences:")
+                                box_prefs.label(text="Preferences:")
                                 addon_preferences_class.layout = box_prefs
                                 try:
                                     draw(context)
@@ -1574,27 +1892,226 @@ class USERPREF_PT_addons(Panel):
                 row.label(text=module_name, translate=False)
 
 
-classes = (
+class USERPREF_PT_studiolight_add(PreferencePanel):
+    bl_space_type = 'PREFERENCES'
+    bl_label = "Add Lights"
+    bl_region_type = 'WINDOW'
+    bl_options = {'HIDE_HEADER'}
+
+    @classmethod
+    def poll(cls, context):
+        prefs = context.preferences
+        return (prefs.active_section == 'LIGHTS')
+
+    def draw(self, context):
+        layout = self.layout
+        prefs = context.preferences
+
+        row = layout.row()
+        row.operator("wm.studiolight_install", icon='IMPORT', text="Add MatCap...").type = 'MATCAP'
+        row.operator("wm.studiolight_install", icon='IMPORT', text="Add LookDev HDRI...").type = 'WORLD'
+        op = row.operator("wm.studiolight_install", icon='IMPORT', text="Add Studio Light...")
+        op.type = 'STUDIO'
+        op.filter_glob = ".sl"
+
+
+class StudioLightPanelMixin():
+    bl_space_type = 'PREFERENCES'
+    bl_region_type = 'WINDOW'
+
+    @classmethod
+    def poll(cls, context):
+        prefs = context.preferences
+        return (prefs.active_section == 'LIGHTS')
+
+    def _get_lights(self, prefs):
+        return [light for light in prefs.studio_lights if light.is_user_defined and light.type == self.sl_type]
+
+    def draw(self, context):
+        layout = self.layout
+        prefs = context.preferences
+        lights = self._get_lights(prefs)
+
+        self.draw_light_list(layout, lights)
+
+    def draw_light_list(self, layout, lights):
+        if lights:
+            flow = layout.grid_flow(row_major=False, columns=0, even_columns=False, even_rows=False, align=False)
+            for studio_light in lights:
+                self.draw_studio_light(flow, studio_light)
+        else:
+            layout.label(text="No custom {} configured".format(self.bl_label))
+
+    def draw_studio_light(self, layout, studio_light):
+        box = layout.box()
+        row = box.row()
+
+        row.template_icon(layout.icon(studio_light), scale=6.0)
+        col = row.column()
+        op = col.operator("wm.studiolight_uninstall", text="", icon='REMOVE')
+        op.index = studio_light.index
+
+        if studio_light.type == 'STUDIO':
+            op = col.operator("wm.studiolight_copy_settings", text="", icon='IMPORT')
+            op.index = studio_light.index
+
+        box.label(text=studio_light.name)
+
+
+class USERPREF_PT_studiolight_matcaps(Panel, StudioLightPanelMixin):
+    bl_label = "MatCaps"
+    sl_type = 'MATCAP'
+
+
+class USERPREF_PT_studiolight_world(Panel, StudioLightPanelMixin):
+    bl_label = "LookDev HDRIs"
+    sl_type = 'WORLD'
+
+
+class USERPREF_PT_studiolight_lights(Panel, StudioLightPanelMixin):
+    bl_label = "Studio Lights"
+    sl_type = 'STUDIO'
+
+
+class USERPREF_PT_studiolight_light_editor(Panel):
+    bl_label = "Studio Light Editor"
+    bl_parent_id = "USERPREF_PT_studiolight_lights"
+    bl_space_type = 'PREFERENCES'
+    bl_region_type = 'WINDOW'
+    bl_options = {'DEFAULT_CLOSED'}
+
+    def opengl_light_buttons(self, layout, light):
+
+        col = layout.column()
+        col.active = light.use
+
+        col.prop(light, "use", text="Use Light")
+        col.prop(light, "diffuse_color", text="Diffuse")
+        col.prop(light, "specular_color", text="Specular")
+        col.prop(light, "smooth")
+        col.prop(light, "direction")
+
+    def draw(self, context):
+        layout = self.layout
+
+        prefs = context.preferences
+        system = prefs.system
+
+        row = layout.row()
+        row.prop(system, "edit_studio_light", toggle=True)
+        row.operator("wm.studiolight_new", text="Save as Studio light", icon='FILE_TICK')
+
+        layout.separator()
+
+        layout.use_property_split = True
+        column = layout.split()
+        column.active = system.edit_studio_light
+
+        light = system.solid_lights[0]
+        colsplit = column.split(factor=0.85)
+        self.opengl_light_buttons(colsplit, light)
+
+        light = system.solid_lights[1]
+        colsplit = column.split(factor=0.85)
+        self.opengl_light_buttons(colsplit, light)
+
+        light = system.solid_lights[2]
+        colsplit = column.split(factor=0.85)
+        self.opengl_light_buttons(colsplit, light)
+
+        light = system.solid_lights[3]
+        self.opengl_light_buttons(column, light)
+
+        layout.separator()
+
+        layout.prop(system, "light_ambient")
+
+
+ThemeGenericClassGenerator.generate_panel_classes_for_wcols()
+
+# Order of registration defines order in UI, so dynamically generated classes are 'injected' in the intended order.
+classes = (USERPREF_PT_theme_user_interface,) + tuple(ThemeGenericClassGenerator.generated_classes)
+
+classes += (
     USERPREF_HT_header,
-    USERPREF_PT_tabs,
-    USERPREF_MT_interaction_presets,
-    USERPREF_MT_templates_splash,
-    USERPREF_MT_app_templates,
-    USERPREF_MT_appconfigs,
-    USERPREF_MT_splash,
-    USERPREF_MT_splash_footer,
-    USERPREF_PT_interface,
-    USERPREF_PT_edit,
-    USERPREF_PT_system,
+    USERPREF_PT_navigation,
+    USERPREF_PT_save_preferences,
+
+    USERPREF_PT_interface_display,
+    USERPREF_PT_interface_display_info,
+    USERPREF_PT_interface_text,
+    USERPREF_PT_interface_text_translate,
+    USERPREF_PT_interface_viewports,
+    USERPREF_PT_interface_viewports_3d,
+    USERPREF_PT_interface_viewports_3d_weight_paint,
+    USERPREF_PT_interface_viewports_2d,
+    USERPREF_PT_interface_menus,
+    USERPREF_PT_interface_menus_mouse_over,
+    USERPREF_PT_interface_menus_pie,
+    USERPREF_PT_interface_develop,
+    USERPREF_PT_interface_templates,
+
+    USERPREF_PT_edit_objects,
+    USERPREF_PT_edit_animation,
+    USERPREF_PT_edit_animation_autokey,
+    USERPREF_PT_edit_animation_fcurves,
+    USERPREF_PT_edit_duplicate_data,
+    USERPREF_PT_edit_gpencil,
+    USERPREF_PT_edit_annotations,
+    USERPREF_PT_edit_cursor,
+    USERPREF_PT_edit_misc,
+
+    USERPREF_PT_system_opengl,
+    USERPREF_PT_system_opengl_textures,
+    USERPREF_PT_system_opengl_selection,
+    USERPREF_PT_system_sound,
+    USERPREF_PT_system_compute_device,
+    USERPREF_PT_system_memory,
+
     USERPREF_MT_interface_theme_presets,
     USERPREF_PT_theme,
-    USERPREF_PT_file,
+    USERPREF_PT_theme_interface_state,
+    USERPREF_PT_theme_interface_styles,
+    USERPREF_PT_theme_interface_gizmos,
+    USERPREF_PT_theme_interface_icons,
+    USERPREF_PT_theme_text_style,
+    USERPREF_PT_theme_bone_color_sets,
+
+    USERPREF_PT_file_paths,
+    USERPREF_PT_file_autorun,
+    USERPREF_PT_file_saveload,
+    USERPREF_PT_file_saveload_autosave,
+
     USERPREF_MT_ndof_settings,
     USERPREF_MT_keyconfigs,
-    USERPREF_PT_input,
+
+    USERPREF_PT_input_devices,
+    USERPREF_PT_input_devices_keyboard,
+    USERPREF_PT_input_devices_mouse,
+    USERPREF_PT_input_devices_tablet,
+    USERPREF_PT_input_devices_ndof,
+    USERPREF_PT_input_view,
+    USERPREF_PT_input_view_orbit,
+    USERPREF_PT_input_view_zoom,
+    USERPREF_PT_input_view_fly_walk,
+    USERPREF_PT_input_view_fly_walk_navigation,
+    USERPREF_PT_input_view_fly_walk_gravity,
+
+    USERPREF_PT_keymap,
     USERPREF_MT_addons_online_resources,
     USERPREF_PT_addons,
+
+    USERPREF_PT_studiolight_add,
+    USERPREF_PT_studiolight_lights,
+    USERPREF_PT_studiolight_light_editor,
+    USERPREF_PT_studiolight_matcaps,
+    USERPREF_PT_studiolight_world,
 )
+
+# Add dynamically generated editor theme panels last, so they show up last in the theme section.
+ThemeGenericClassGenerator.generated_classes.clear()
+ThemeGenericClassGenerator.generate_panel_classes_from_theme_areas()
+classes += tuple(ThemeGenericClassGenerator.generated_classes)
 
 if __name__ == "__main__":  # only for live edit.
     from bpy.utils import register_class

@@ -37,6 +37,7 @@ extern "C" {
 #endif
 
 #include "DNA_listBase.h"
+#include "DNA_defs.h"
 
 /* pd->forcefield:  Effector Fields types */
 typedef enum ePFieldType {
@@ -112,11 +113,20 @@ typedef struct PartDeflect {
 	float f_noise;		/* noise of force						*/
 	int seed;			/* noise random seed					*/
 
+	/* Display Size */
+	float drawvec1[4]; /* Runtime only : start of the curve or draw scale */
+	float drawvec2[4]; /* Runtime only : end of the curve */
+	float drawvec_falloff_min[3], pad1; /* Runtime only */
+	float drawvec_falloff_max[3], pad2; /* Runtime only */
+
 	struct Object *f_source; /* force source object */
+
+	float pdef_cfrict;	/* Friction of cloth collisions. */
+	float pad;
 } PartDeflect;
 
 typedef struct EffectorWeights {
-	struct Group *group;		/* only use effectors from this group of objects */
+	struct Collection *group;		/* only use effectors from this group of objects */
 
 	float weight[14];			/* effector type specific weights */
 	float global_gravity;
@@ -212,58 +222,14 @@ typedef struct SBVertex {
 	float vec[4];
 } SBVertex;
 
-typedef struct BulletSoftBody {
-	int flag;				/* various boolean options */
-	float linStiff;			/* linear stiffness 0..1 */
-	float	angStiff;		/* angular stiffness 0..1 */
-	float	volume;			/* volume preservation 0..1 */
-
-	int	viterations;		/* Velocities solver iterations */
-	int	piterations;		/* Positions solver iterations */
-	int	diterations;		/* Drift solver iterations */
-	int	citerations;		/* Cluster solver iterations */
-
-	float	kSRHR_CL;		/* Soft vs rigid hardness [0,1] (cluster only) */
-	float	kSKHR_CL;		/* Soft vs kinetic hardness [0,1] (cluster only) */
-	float	kSSHR_CL;		/* Soft vs soft hardness [0,1] (cluster only) */
-	float	kSR_SPLT_CL;	/* Soft vs rigid impulse split [0,1] (cluster only) */
-
-	float	kSK_SPLT_CL;	/* Soft vs rigid impulse split [0,1] (cluster only) */
-	float	kSS_SPLT_CL;	/* Soft vs rigid impulse split [0,1] (cluster only) */
-	float	kVCF;			/* Velocities correction factor (Baumgarte) */
-	float	kDP;			/* Damping coefficient [0,1] */
-
-	float	kDG;			/* Drag coefficient [0,+inf] */
-	float	kLF;			/* Lift coefficient [0,+inf] */
-	float	kPR;			/* Pressure coefficient [-inf,+inf] */
-	float	kVC;			/* Volume conversation coefficient [0,+inf] */
-
-	float	kDF;			/* Dynamic friction coefficient [0,1] */
-	float	kMT;			/* Pose matching coefficient [0,1] */
-	float	kCHR;			/* Rigid contacts hardness [0,1] */
-	float	kKHR;			/* Kinetic contacts hardness [0,1] */
-
-	float	kSHR;			/* Soft contacts hardness [0,1] */
-	float	kAHR;			/* Anchors hardness [0,1] */
-	int		collisionflags;	/* Vertex/Face or Signed Distance Field(SDF) or Clusters, Soft versus Soft or Rigid */
-	int		numclusteriterations;	/* number of iterations to refine collision clusters*/
-	float	welding;		/* welding limit to remove duplicate/nearby vertices, 0.0..0.01 */
-	float   margin;			/* margin specific to softbody */
-} BulletSoftBody;
-
-/* BulletSoftBody.flag */
-#define OB_BSB_SHAPE_MATCHING	2
-// #define OB_BSB_UNUSED 4
-#define OB_BSB_BENDING_CONSTRAINTS 8
-#define OB_BSB_AERO_VPOINT 16 /* aero model, Vertex normals are oriented toward velocity*/
-// #define OB_BSB_AERO_VTWOSIDE 32 /* aero model, Vertex normals are flipped to match velocity */
-
-/* BulletSoftBody.collisionflags */
-#define OB_BSB_COL_SDF_RS	2 /* SDF based rigid vs soft */
-#define OB_BSB_COL_CL_RS	4 /* Cluster based rigid vs soft */
-#define OB_BSB_COL_CL_SS	8 /* Cluster based soft vs soft */
-#define OB_BSB_COL_VF_SS	16 /* Vertex/Face based soft vs soft */
-
+/* Container for data that is shared among CoW copies.
+ *
+ * This is placed in a separate struct so that values can be changed
+ * without having to update all CoW copies. */
+typedef struct SoftBody_Shared {
+	struct PointCache *pointcache;
+	struct ListBase ptcaches;
+} SoftBody_Shared;
 
 typedef struct SoftBody {
 	/* dynamic data */
@@ -336,10 +302,11 @@ typedef struct SoftBody {
 	float shearstiff;
 	float inpush;
 
-	struct PointCache *pointcache;
-	struct ListBase ptcaches;
+	struct SoftBody_Shared *shared;
+	struct PointCache *pointcache DNA_DEPRECATED;  /* Moved to SoftBody_Shared */
+	struct ListBase ptcaches DNA_DEPRECATED;  /* Moved to SoftBody_Shared */
 
-	struct Group *collision_group;
+	struct Collection *collision_group;
 
 	struct EffectorWeights *effector_weights;
 	/* reverse esimated obmatrix .. no need to store in blend file .. how ever who cares */
@@ -352,27 +319,29 @@ typedef struct SoftBody {
 
 
 /* pd->flag: various settings */
-#define PFIELD_USEMAX			1
-/*#define PDEFLE_DEFORM			2*/			/*UNUSED*/
-#define PFIELD_GUIDE_PATH_ADD	4			/* TODO: do_versions for below */
-#define PFIELD_PLANAR			8			/* used for do_versions */
-#define PDEFLE_KILL_PART		16
-#define PFIELD_POSZ				32			/* used for do_versions */
-#define PFIELD_TEX_OBJECT		64
-#define PFIELD_GLOBAL_CO		64			/* used for turbulence */
-#define PFIELD_TEX_2D			128
-#define PFIELD_MULTIPLE_SPRINGS	128			/* used for harmonic force */
-#define PFIELD_USEMIN			256
-#define PFIELD_USEMAXR			512
-#define PFIELD_USEMINR			1024
-#define PFIELD_TEX_ROOTCO		2048
-#define PFIELD_SURFACE			(1<<12)		/* used for do_versions */
-#define PFIELD_VISIBILITY		(1<<13)
-#define PFIELD_DO_LOCATION		(1<<14)
-#define PFIELD_DO_ROTATION		(1<<15)
-#define PFIELD_GUIDE_PATH_WEIGHT (1<<16)	/* apply curve weights */
-#define PFIELD_SMOKE_DENSITY    (1<<17)		/* multiply smoke force by density */
-#define PFIELD_GRAVITATION		(1<<18)             /* used for (simple) force */
+#define PFIELD_USEMAX           (1 << 0)
+/*#define PDEFLE_DEFORM         (1 << 1)*/      /*UNUSED*/
+#define PFIELD_GUIDE_PATH_ADD   (1 << 2)        /* TODO: do_versions for below */
+#define PFIELD_PLANAR           (1 << 3)        /* used for do_versions */
+#define PDEFLE_KILL_PART        (1 << 4)
+#define PFIELD_POSZ             (1 << 5)        /* used for do_versions */
+#define PFIELD_TEX_OBJECT       (1 << 6)
+#define PFIELD_GLOBAL_CO        (1 << 6)        /* used for turbulence */
+#define PFIELD_TEX_2D           (1 << 7)
+#define PFIELD_MULTIPLE_SPRINGS (1 << 7)        /* used for harmonic force */
+#define PFIELD_USEMIN           (1 << 8)
+#define PFIELD_USEMAXR          (1 << 9)
+#define PFIELD_USEMINR          (1 << 10)
+#define PFIELD_TEX_ROOTCO       (1 << 11)
+#define PFIELD_SURFACE          (1 << 12)       /* used for do_versions */
+#define PFIELD_VISIBILITY       (1 << 13)
+#define PFIELD_DO_LOCATION      (1 << 14)
+#define PFIELD_DO_ROTATION      (1 << 15)
+#define PFIELD_GUIDE_PATH_WEIGHT (1 << 16)      /* apply curve weights */
+#define PFIELD_SMOKE_DENSITY    (1 << 17)       /* multiply smoke force by density */
+#define PFIELD_GRAVITATION      (1 << 18)             /* used for (simple) force */
+#define PFIELD_CLOTH_USE_CULLING (1<< 19)       /* Enable cloth collision side detection based on normal. */
+#define PFIELD_CLOTH_USE_NORMAL (1 << 20)       /* Replace collision direction with collider normal. */
 
 /* pd->falloff */
 #define PFIELD_FALL_SPHERE		0
@@ -384,6 +353,7 @@ typedef struct SoftBody {
 #define PFIELD_SHAPE_PLANE		1
 #define PFIELD_SHAPE_SURFACE	2
 #define PFIELD_SHAPE_POINTS		3
+#define PFIELD_SHAPE_LINE		4
 
 /* pd->tex_mode */
 #define PFIELD_TEX_RGB	0
@@ -396,22 +366,22 @@ typedef struct SoftBody {
 #define PFIELD_Z_NEG	2
 
 /* pointcache->flag */
-#define PTCACHE_BAKED				1
-#define PTCACHE_OUTDATED			2
-#define PTCACHE_SIMULATION_VALID	4
-#define PTCACHE_BAKING				8
-//#define PTCACHE_BAKE_EDIT			16
-//#define PTCACHE_BAKE_EDIT_ACTIVE	32
-#define PTCACHE_DISK_CACHE			64
-//#define PTCACHE_QUICK_CACHE		128  /* removed since 2.64 - [#30974], could be added back in a more useful way */
-#define PTCACHE_FRAMES_SKIPPED		256
-#define PTCACHE_EXTERNAL			512
-#define PTCACHE_READ_INFO			1024
+#define PTCACHE_BAKED               (1 << 0)
+#define PTCACHE_OUTDATED            (1 << 1)
+#define PTCACHE_SIMULATION_VALID    (1 << 2)
+#define PTCACHE_BAKING              (1 << 3)
+//#define PTCACHE_BAKE_EDIT         (1 << 4)
+//#define PTCACHE_BAKE_EDIT_ACTIVE  (1 << 5)
+#define PTCACHE_DISK_CACHE          (1 << 6)
+//#define PTCACHE_QUICK_CACHE       (1 << 7)  /* removed since 2.64 - [#30974], could be added back in a more useful way */
+#define PTCACHE_FRAMES_SKIPPED      (1 << 8)
+#define PTCACHE_EXTERNAL            (1 << 9)
+#define PTCACHE_READ_INFO           (1 << 10)
 /* don't use the filename of the blendfile the data is linked from (write a local cache) */
-#define PTCACHE_IGNORE_LIBPATH		2048
+#define PTCACHE_IGNORE_LIBPATH      (1 << 11)
 /* high resolution cache is saved for smoke for backwards compatibility, so set this flag to know it's a "fake" cache */
-#define PTCACHE_FAKE_SMOKE			(1<<12)
-#define PTCACHE_IGNORE_CLEAR		(1<<13)
+#define PTCACHE_FAKE_SMOKE          (1 << 12)
+#define PTCACHE_IGNORE_CLEAR        (1 << 13)
 
 /* PTCACHE_OUTDATED + PTCACHE_FRAMES_SKIPPED */
 #define PTCACHE_REDO_NEEDED			258

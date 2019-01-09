@@ -32,20 +32,28 @@
  *  \ingroup modifiers
  */
 
+#include "MEM_guardedalloc.h"
+
+#include "DNA_mesh_types.h"
+#include "DNA_meshdata_types.h"
 #include "DNA_object_types.h"
+#include "DNA_scene_types.h"
 
 #include "BLI_utildefines.h"
+#include "BLI_linklist_stack.h"
 #include "BLI_math.h"
 #include "BLI_string.h"
 
-#include "BKE_cdderivedmesh.h"
 #include "BKE_deform.h"
+#include "BKE_mesh.h"
 #include "BKE_modifier.h"
 
 #include "MOD_util.h"
 
 #include "bmesh.h"
 #include "bmesh_tools.h"
+
+#include "DEG_depsgraph_query.h"
 
 static void initData(ModifierData *md)
 {
@@ -57,10 +65,22 @@ static void initData(ModifierData *md)
 	bmd->val_flags = MOD_BEVEL_AMT_OFFSET;
 	bmd->lim_flags = 0;
 	bmd->e_flags = 0;
+	bmd->edge_flags = 0;
+	bmd->face_str_mode = MOD_BEVEL_FACE_STRENGTH_NONE;
 	bmd->mat = -1;
 	bmd->profile = 0.5f;
 	bmd->bevel_angle = DEG2RADF(30.0f);
 	bmd->defgrp_name[0] = '\0';
+	bmd->clnordata.faceHash = NULL;
+}
+
+static void copyData(const ModifierData *md_src, ModifierData *md_dst, const int UNUSED(flag))
+{
+	BevelModifierData *bmd_src = (BevelModifierData *)md_src;
+	BevelModifierData *bmd_dst = (BevelModifierData *)md_dst;
+
+	*bmd_dst = *bmd_src;
+	bmd_dst->clnordata.faceHash = NULL;
 }
 
 static CustomDataMask requiredDataMask(Object *UNUSED(ob), ModifierData *md)
@@ -77,12 +97,9 @@ static CustomDataMask requiredDataMask(Object *UNUSED(ob), ModifierData *md)
 /*
  * This calls the new bevel code (added since 2.64)
  */
-static DerivedMesh *applyModifier(
-        ModifierData *md, struct Object *ob,
-        DerivedMesh *dm,
-        ModifierApplyFlag UNUSED(flag))
+static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, Mesh *mesh)
 {
-	DerivedMesh *result;
+	Mesh *result;
 	BMesh *bm;
 	BMIter iter;
 	BMEdge *e;
@@ -95,12 +112,26 @@ static DerivedMesh *applyModifier(
 	const bool vertex_only = (bmd->flags & MOD_BEVEL_VERT) != 0;
 	const bool do_clamp = !(bmd->flags & MOD_BEVEL_OVERLAP_OK);
 	const int offset_type = bmd->val_flags;
-	const int mat = CLAMPIS(bmd->mat, -1, ob->totcol - 1);
+	const int mat = CLAMPIS(bmd->mat, -1, ctx->object->totcol - 1);
 	const bool loop_slide = (bmd->flags & MOD_BEVEL_EVEN_WIDTHS) == 0;
+	const bool mark_seam = (bmd->edge_flags & MOD_BEVEL_MARK_SEAM);
+	const bool mark_sharp = (bmd->edge_flags & MOD_BEVEL_MARK_SHARP);
+	bool harden_normals = (bmd->flags & MOD_BEVEL_HARDEN_NORMALS);
+	const int face_strength_mode = bmd->face_str_mode;
 
-	bm = DM_to_bmesh(dm, true);
+	bm = BKE_mesh_to_bmesh_ex(
+	        mesh,
+	        &(struct BMeshCreateParams){0},
+	        &(struct BMeshFromMeshParams){
+	            .calc_face_normal = true,
+	            .add_key_index = false,
+	            .use_shapekey = true,
+	            .active_shapekey = ctx->object->shapenr,
+	            .cd_mask_extra = CD_MASK_ORIGINDEX,
+	        });
+
 	if ((bmd->lim_flags & MOD_BEVEL_VGROUP) && bmd->defgrp_name[0])
-		modifier_get_vgroup(ob, dm, bmd->defgrp_name, &dvert, &vgroup);
+		MOD_get_vgroup(ctx->object, mesh, bmd->defgrp_name, &dvert, &vgroup);
 
 	if (vertex_only) {
 		BM_ITER_MESH (v, &iter, bm, BM_VERTS_OF_MESH) {
@@ -156,18 +187,27 @@ static DerivedMesh *applyModifier(
 		}
 	}
 
+	if (harden_normals && !(((Mesh *)ctx->object->data)->flag & ME_AUTOSMOOTH)) {
+		modifier_setError(md, "Enable 'Auto Smooth' option in mesh settings for hardening");
+		harden_normals = false;
+	}
+
 	BM_mesh_bevel(bm, bmd->value, offset_type, bmd->res, bmd->profile,
 	              vertex_only, bmd->lim_flags & MOD_BEVEL_WEIGHT, do_clamp,
-	              dvert, vgroup, mat, loop_slide);
+	              dvert, vgroup, mat, loop_slide, mark_seam, mark_sharp,
+	              harden_normals, face_strength_mode, mesh->smoothresh);
 
-	result = CDDM_from_bmesh(bm, true);
+	result = BKE_mesh_from_bmesh_for_eval_nomain(bm, 0);
 
 	BLI_assert(bm->vtoolflagpool == NULL &&
 	           bm->etoolflagpool == NULL &&
 	           bm->ftoolflagpool == NULL);  /* make sure we never alloc'd these */
 	BM_mesh_free(bm);
 
-	result->dirty |= DM_DIRTY_NORMALS;
+	if (bmd->clnordata.faceHash)
+		BLI_ghash_free(bmd->clnordata.faceHash, NULL, NULL);
+
+	result->runtime.cd_dirty_vert |= CD_MASK_NORMAL;
 
 	return result;
 }
@@ -184,20 +224,27 @@ ModifierTypeInfo modifierType_Bevel = {
 	/* type */              eModifierTypeType_Constructive,
 	/* flags */             eModifierTypeFlag_AcceptsMesh |
 	                        eModifierTypeFlag_SupportsEditmode |
-	                        eModifierTypeFlag_EnableInEditmode,
+	                        eModifierTypeFlag_EnableInEditmode |
+	                        eModifierTypeFlag_AcceptsCVs,
 
-	/* copyData */          modifier_copyData_generic,
+	/* copyData */          copyData,
+
+	/* deformVerts_DM */    NULL,
+	/* deformMatrices_DM */ NULL,
+	/* deformVertsEM_DM */  NULL,
+	/* deformMatricesEM_DM*/NULL,
+	/* applyModifier_DM */  NULL,
+
 	/* deformVerts */       NULL,
 	/* deformMatrices */    NULL,
 	/* deformVertsEM */     NULL,
 	/* deformMatricesEM */  NULL,
 	/* applyModifier */     applyModifier,
-	/* applyModifierEM */   NULL,
+
 	/* initData */          initData,
 	/* requiredDataMask */  requiredDataMask,
 	/* freeData */          NULL,
 	/* isDisabled */        NULL,
-	/* updateDepgraph */    NULL,
 	/* updateDepsgraph */   NULL,
 	/* dependsOnTime */     NULL,
 	/* dependsOnNormals */  dependsOnNormals,

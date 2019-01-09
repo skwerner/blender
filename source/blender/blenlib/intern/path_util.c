@@ -83,7 +83,7 @@ static bool BLI_path_is_abs(const char *name);
  * \param string: String to scan.
  * \param head: Optional area to return copy of part of string prior to digits, or before dot if no digits.
  * \param tail: Optional area to return copy of part of string following digits, or from dot if no digits.
- * \param numlen: Optional to return number of digits found.
+ * \param r_num_len: Optional to return number of digits found.
  */
 int BLI_stringdec(const char *string, char *head, char *tail, ushort *r_num_len)
 {
@@ -243,7 +243,7 @@ void BLI_cleanup_path(const char *relabase, char *path)
 
 			/* Note: previous version of following call used an offset of 3 instead of 4,
 			 * which meant that the "/../home/me" example actually became "home/me".
-			 * Using offset of 3 gives behaviour consistent with the abovementioned
+			 * Using offset of 3 gives behavior consistent with the abovementioned
 			 * Python routine. */
 			memmove(path, path + 3, strlen(path + 3) + 1);
 		}
@@ -928,6 +928,48 @@ bool BLI_path_frame_check_chars(const char *path)
 }
 
 /**
+ * Creates a display string from path to be used menus and the user interface.
+ * Like bpy.path.display_name().
+ */
+void BLI_path_to_display_name(char *display_name, int maxlen, const char *name)
+{
+	/* Strip leading underscores and spaces. */
+	int strip_offset = 0;
+	while (ELEM(name[strip_offset], '_', ' ')) {
+		strip_offset++;
+	}
+
+	BLI_strncpy(display_name, name + strip_offset, maxlen);
+
+	/* Replace underscores with spaces. */
+	BLI_str_replace_char(display_name, '_', ' ');
+
+	/* Strip extension. */
+	BLI_path_extension_replace(display_name, maxlen, "");
+
+	/* Test if string has any upper case characters. */
+	bool all_lower = true;
+	for (int i = 0; display_name[i]; i++) {
+		if (isupper(display_name[i])) {
+			all_lower = false;
+			break;
+		}
+	}
+
+	if (all_lower) {
+		/* For full lowercase string, use title case. */
+		bool prevspace = true;
+		for (int i = 0; display_name[i]; i++) {
+			if (prevspace) {
+				display_name[i] = toupper(display_name[i]);
+			}
+
+			prevspace = isspace(display_name[i]);
+		}
+	}
+}
+
+/**
  * If path begins with "//", strips that and replaces it with basepath directory.
  *
  * \note Also converts drive-letter prefix to something more sensible
@@ -1300,16 +1342,6 @@ void BLI_make_file_string(const char *relabase, char *string, const char *dir, c
 	else {
 		return; /* string is NULL, probably shouldnt happen but return anyway */
 	}
-
-
-	/* we first push all slashes into unix mode, just to make sure we don't get
-	 * any mess with slashes later on. -jesterKing */
-	/* constant strings can be passed for those parameters - don't change them - elubie */
-#if 0
-	BLI_str_replace_char(relabase, '\\', '/');
-	BLI_str_replace_char(dir, '\\', '/');
-	BLI_str_replace_char(file, '\\', '/');
-#endif
 
 	/* Resolve relative references */
 	if (relabase && dir[0] == '/' && dir[1] == '/') {

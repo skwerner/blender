@@ -139,7 +139,7 @@ public:
 		int users;
 	};
 
-	static bool make_tx(const string& filename, const string& outputfilename, bool srgb);
+	static bool make_tx(const string& filename, const string& outputfilename, bool srgb, ExtensionType extension);
 
 private:
 	int tex_num_images[IMAGE_DATA_NUM_TYPES];

@@ -607,12 +607,13 @@ static PyObject *oiio_make_tx(PyObject * /*self*/, PyObject *args)
 {
 	const char *inputfile = NULL, *outputfile = NULL;
 	int srgb = 1;
+	int extension = EXTENSION_CLIP;
 
-	if(!PyArg_ParseTuple(args, "ssp", &inputfile, &outputfile, &srgb))
+	if(!PyArg_ParseTuple(args, "sspi", &inputfile, &outputfile, &srgb, &extension))
 		return NULL;
 	
 	/* return */
-	if(!ImageManager::make_tx(inputfile, outputfile, srgb))
+	if(!ImageManager::make_tx(inputfile, outputfile, srgb, (ExtensionType)extension))
 		Py_RETURN_FALSE;
 
 	Py_RETURN_TRUE;

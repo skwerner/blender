@@ -1155,15 +1155,30 @@ void ImageManager::device_free(Device *device)
 	}
 }
 
-bool ImageManager::make_tx(const string &filename, const string &outputfilename, bool srgb)
+bool ImageManager::make_tx(const string &filename, const string &outputfilename, bool srgb, ExtensionType extension)
 {
 	ImageSpec config;
 	config.attribute("maketx:filtername", "lanczos3");
 	config.attribute("maketx:opaque_detect", 1);
 	config.attribute("maketx:highlightcomp", 1);
-	config.attribute("maketx:updatemode", 1);
 	config.attribute("maketx:oiio_options", 1);
 	config.attribute("maketx:updatemode", 1);
+
+	switch(extension) {
+		case EXTENSION_CLIP:
+			config.attribute("maketx:wrap", "black");
+			break;
+		case EXTENSION_REPEAT:
+			config.attribute("maketx:wrap", "periodic");
+			break;
+		case EXTENSION_EXTEND:
+			config.attribute("maketx:wrap", "clamp");
+			break;
+		default:
+			assert(0);
+			break;
+	}
+
 	/* Convert textures to linear color space before mip mapping. */
 	if(srgb) {
 		config.attribute("maketx:incolorspace", "sRGB");
@@ -1200,7 +1215,7 @@ bool ImageManager::get_tx(Image *image, Progress *progress, bool auto_convert, c
 	if(auto_convert) {
 		progress->set_status("Updating Images", "Converting " + image->filename);
 	
-		bool ok = make_tx(image->filename, tx_name, image->srgb);
+		bool ok = make_tx(image->filename, tx_name, image->srgb, image->extension);
 		if(ok) {
 			image->filename = tx_name;
 		return true;

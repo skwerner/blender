@@ -313,16 +313,16 @@ void RenderStats::collect_profiling(Scene *scene, Profiler& prof)
 	}
 
 	counters.entries.clear();
-	uint64_t rays = prof.get_counter(PROFILING_COUNT_PRIMARY_RAY);
+	uint64_t rays = prof.get_counter(PROFILING_COUNT_RAY_PRIMARY);
 	uint64_t total_rays = rays;
 	counters.add("Camera Rays", rays);
-	rays = prof.get_counter(PROFILING_COUNT_INDIRECT_RAY);
+	rays = prof.get_counter(PROFILING_COUNT_RAY_INDIRECT);
 	total_rays += rays;
 	counters.add("Secondary Rays", rays);
-	rays = prof.get_counter(PROFILING_COUNT_SHADOW_RAY);
+	rays = prof.get_counter(PROFILING_COUNT_RAY_SHADOW);
 	total_rays += rays;
 	counters.add("Shadow Rays", rays);
-	rays = prof.get_counter(PROFILING_COUNT_SSS_RAY);
+	rays = prof.get_counter(PROFILING_COUNT_RAY_SSS);
 	total_rays += rays;
 	counters.add("SSS Rays", rays);
 	counters.add("Totaly rays", total_rays);

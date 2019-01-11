@@ -332,7 +332,7 @@ ccl_device_intersect bool scene_intersect_shadow_all(KernelGlobals *kg,
                                                      uint *num_hits)
 {
 	PROFILING_INIT(kg, PROFILING_INTERSECT_SHADOW_ALL);
-	PROFILING_COUNT(kg, PROFILING_COUNT_SHADOW_RAY);
+	PROFILING_COUNT(kg, PROFILING_COUNT_RAY_SHADOW);
 
 	if(!scene_intersect_valid(ray)) {
 		return false;
@@ -415,7 +415,7 @@ ccl_device_intersect bool scene_intersect_volume(KernelGlobals *kg,
                                                  const uint visibility)
 {
 	PROFILING_INIT(kg, PROFILING_INTERSECT_VOLUME);
-	PROFILING_COUNT(kg, PROFILING_COUNT_INDIRECT_RAY);
+	PROFILING_COUNT(kg, PROFILING_COUNT_RAY_INDIRECT);
 
 	if(!scene_intersect_valid(ray)) {
 		return false;
@@ -449,7 +449,7 @@ ccl_device_intersect uint scene_intersect_volume_all(KernelGlobals *kg,
                                                      const uint visibility)
 {
 	PROFILING_INIT(kg, PROFILING_INTERSECT_VOLUME_ALL);
-	PROFILING_COUNT(kg, PROFILING_COUNT_INDIRECT_RAY);
+	PROFILING_COUNT(kg, PROFILING_COUNT_RAY_INDIRECT);
 
 	if(!scene_intersect_valid(ray)) {
 		return false;

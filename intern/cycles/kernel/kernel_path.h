@@ -58,7 +58,7 @@ ccl_device_forceinline bool kernel_path_scene_intersect(
 	PathRadiance *L)
 {
 	PROFILING_INIT(kg, PROFILING_SCENE_INTERSECT);
-	PROFILING_COUNT(kg, (state->bounce == 0 ? PROFILING_COUNT_PRIMARY_RAY : PROFILING_COUNT_INDIRECT_RAY));
+	PROFILING_COUNT(kg, (state->bounce == 0 ? PROFILING_COUNT_RAY_PRIMARY : PROFILING_COUNT_RAY_INDIRECT));
 
 	uint visibility = path_state_ray_visibility(kg, state);
 

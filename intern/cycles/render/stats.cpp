@@ -269,7 +269,6 @@ void RenderStats::collect_profiling(Scene *scene, Profiler& prof)
 	shading.add_entry("Subsurface", prof.get_event(PROFILING_SUBSURFACE));
 
 	integrator.add_entry("Connect Light", prof.get_event(PROFILING_CONNECT_LIGHT));
-	integrator.add_entry("Sample Light", prof.get_event(PROFILING_LIGHT_SAMPLE));
 	integrator.add_entry("Surface Bounce", prof.get_event(PROFILING_SURFACE_BOUNCE));
 
 	NamedNestedSampleStats &intersection = kernel.add_entry("Intersection", 0);
@@ -326,11 +325,11 @@ void RenderStats::collect_profiling(Scene *scene, Profiler& prof)
 	total_rays += rays;
 	counters.add("SSS Rays", rays);
 	counters.add("Totaly rays", total_rays);
-	counters.add("Surface shaders", prof.get_counter(PROFILING_COUNT_SHADER_SURFACE));
-	counters.add("Volume shaders", prof.get_counter(PROFILING_COUNT_SHADER_VOLUME));
-	counters.add("Emission shaders", prof.get_counter(PROFILING_COUNT_SHADER_EMISSION));
-	counters.add("Background shaders", prof.get_counter(PROFILING_COUNT_SHADER_BACKGROUND));
-	counters.add("Displacement shaders", prof.get_counter(PROFILING_COUNT_SHADER_DISPLACEMENT));
+	counters.add("Surface shader callss", prof.get_counter(PROFILING_COUNT_SHADER_SURFACE));
+	counters.add("Volume shader calls", prof.get_counter(PROFILING_COUNT_SHADER_VOLUME));
+	counters.add("Emission shader calls", prof.get_counter(PROFILING_COUNT_SHADER_EMISSION));
+	counters.add("Background shader calls", prof.get_counter(PROFILING_COUNT_SHADER_BACKGROUND));
+	counters.add("Displacement shader calls", prof.get_counter(PROFILING_COUNT_SHADER_DISPLACEMENT));
 	counters.add("2D texture lookups", prof.get_counter(PROFILING_COUNT_TEX2D));
 	counters.add("3D texture lookups", prof.get_counter(PROFILING_COUNT_TEX3D));
 }
@@ -344,11 +343,11 @@ string RenderStats::full_report()
 		result += "Kernel statistics:\n" + kernel.full_report(1);
 		result += "Shader statistics:\n" + shaders.full_report(1);
 		result += "Object statistics:\n" + objects.full_report(1);
+		result += "Counter statistics:\n" + counters.full_report(1);
 	}
 	else {
 		result += "Profiling information not available (only works with CPU rendering)";
 	}
-	result += "Counter statistics:\n" + counters.full_report(1);
 	return result;
 }
 

@@ -669,6 +669,83 @@ class CyclesRenderSettings(bpy.types.PropertyGroup):
         min=0, max=1024,
     )
 
+    ignore_shaders: BoolProperty   (
+        name="Ignore Shaders",
+        default=False,
+        description="Ignore all shaders and render with a dummy material instead"
+    )
+
+    ignore_textures: BoolProperty   (
+        name="Ignore Textures",
+        default=False,
+        description="Ignore all image tetxures and use a neutral grey instead"
+    )
+    ignore_atmosphere: BoolProperty   (
+        name="Ignore Atmosphere",
+        default=False,
+        description="Ignore all atmosphere"
+    )
+
+    ignore_lights: BoolProperty   (
+        name="Ignore Lights",
+        default=False,
+        description="Ignore all lights"
+    )
+
+    ignore_shadows: BoolProperty   (
+        name="Ignore Shadows",
+        default=False,
+        description="Ignore all shadows"
+    )
+
+    ignore_atmosphere: BoolProperty   (
+        name="Ignore Atmosphere",
+        default=False,
+        description="Ignore all atmosphere"
+    )
+
+    ignore_subdivision: BoolProperty   (
+        name="Ignore Subdivision",
+        default=False,
+        description="Ignore all subdivision"
+    )
+
+    ignore_displacement: BoolProperty   (
+        name="Ignore Displacement",
+        default=False,
+        description="Ignore all displacement"
+    )
+
+    ignore_bump: BoolProperty   (
+        name="Ignore Bump",
+        default=False,
+        description="Ignore all bump mapping"
+    )
+
+    ignore_polygon_smoothing: BoolProperty   (
+        name="Ignore Polygon Smoothing",
+        default=False,
+        description="Ignore all smooth normals, render with geometry normals instead"
+    )
+
+    ignore_motion_blur: BoolProperty   (
+        name="Ignore Motion Blur",
+        default=False,
+        description="Ignore all motion blur"
+    )
+
+    ignore_depth_of_field: BoolProperty   (
+        name="Ignore Depth of Field",
+        default=False,
+        description="Ignore all Depth of Field"
+    )
+
+    ignore_subsurface_scattering: BoolProperty   (
+        name="Ignore Subsurface Scattering",
+        default=False,
+        description="Ignore all subsurface scattering, substute with diffuse shading instead"
+    )
+
     # Various fine-tuning debug flags
 
     def _devices_update_callback(self, context):

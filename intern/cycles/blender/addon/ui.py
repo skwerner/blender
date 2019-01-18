@@ -1848,6 +1848,31 @@ class CYCLES_RENDER_PT_bake(CyclesButtonsPanel, Panel):
             layout.operator("object.bake", icon='RENDER_STILL').type = cscene.bake_type
 
 
+class CYCLES_RENDER_PT_diagnostics(CyclesButtonsPanel, Panel):
+    bl_label = "Diagnostics"
+    bl_context = "render"
+    COMPAT_ENGINES = {'CYCLES'}
+
+    def draw(self, context):
+        layout = self.layout
+
+        scene = context.scene
+        cscene = scene.cycles
+
+        col = layout.column()
+        col.prop(cscene, "ignore_shaders")
+        col.prop(cscene, "ignore_textures")
+        col.prop(cscene, "ignore_atmosphere")
+        col.prop(cscene, "ignore_lights")
+        col.prop(cscene, "ignore_shadows")
+        col.prop(cscene, "ignore_subdivision")
+        col.prop(cscene, "ignore_displacement")
+        col.prop(cscene, "ignore_bump")
+        col.prop(cscene, "ignore_polygon_smoothing")
+        col.prop(cscene, "ignore_motion_blur")
+        col.prop(cscene, "ignore_depth_of_field")
+        col.prop(cscene, "ignore_subsurface_scattering")
+
 class CYCLES_RENDER_PT_debug(CyclesButtonsPanel, Panel):
     bl_label = "Debug"
     bl_context = "render"
@@ -2158,6 +2183,7 @@ classes = (
     CYCLES_MATERIAL_PT_settings_surface,
     CYCLES_MATERIAL_PT_settings_volume,
     CYCLES_RENDER_PT_bake,
+    CYCLES_RENDER_PT_diagnostics,
     CYCLES_RENDER_PT_debug,
     CYCLES_NODE_PT_settings,
     CYCLES_NODE_PT_settings_surface,

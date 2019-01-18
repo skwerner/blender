@@ -74,6 +74,10 @@ ccl_device void camera_sample_perspective(KernelGlobals *kg, float raster_x, flo
 	/* modify ray for depth of field */
 	float aperturesize = kernel_data.cam.aperturesize;
 
+	if(kernel_data.integrator.feature_overrides & IGNORE_DEPTH_OF_FIELD) {
+		aperturesize = 0.0f;
+	}
+
 	if(aperturesize > 0.0f) {
 		/* sample point on aperture */
 		float2 lensuv = camera_sample_aperture(&kernel_data.cam, lens_u, lens_v)*aperturesize;
@@ -178,6 +182,10 @@ ccl_device void camera_sample_orthographic(KernelGlobals *kg, float raster_x, fl
 
 	/* modify ray for depth of field */
 	float aperturesize = kernel_data.cam.aperturesize;
+
+	if(kernel_data.integrator.feature_overrides & IGNORE_DEPTH_OF_FIELD) {
+		aperturesize = 0.0f;
+	}
 
 	if(aperturesize > 0.0f) {
 		/* sample point on aperture */

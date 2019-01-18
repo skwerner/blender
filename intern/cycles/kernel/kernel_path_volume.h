@@ -153,45 +153,47 @@ ccl_device void kernel_branched_path_volume_connect_light(
 
 	if(sample_all_lights) {
 		/* lamp sampling */
-		for(int i = 0; i < kernel_data.integrator.num_all_lights; i++) {
-			if(UNLIKELY(light_select_reached_max_bounces(kg, i, state->bounce)))
-				continue;
-
-			int num_samples = light_select_num_samples(kg, i);
-			float num_samples_inv = 1.0f/(num_samples*kernel_data.integrator.num_all_lights);
-			uint lamp_rng_hash = cmj_hash(state->rng_hash, i);
-
-			for(int j = 0; j < num_samples; j++) {
-				/* sample random position on given light */
-				float light_u, light_v;
-				path_branched_rng_2D(kg, lamp_rng_hash, state, j, num_samples, PRNG_LIGHT_U, &light_u, &light_v);
-
-				LightSample ls;
-				lamp_light_sample(kg, i, light_u, light_v, ray->P, &ls);
-
-				float3 tp = throughput;
-
-				/* sample position on volume segment */
-				float rphase = path_branched_rng_1D(kg, state->rng_hash, state, j, num_samples, PRNG_PHASE_CHANNEL);
-				float rscatter = path_branched_rng_1D(kg, state->rng_hash, state, j, num_samples, PRNG_SCATTER_DISTANCE);
-
-				VolumeIntegrateResult result = kernel_volume_decoupled_scatter(kg,
-					state, ray, sd, &tp, rphase, rscatter, segment, (ls.t != FLT_MAX)? &ls.P: NULL, false);
-
-				/* todo: split up light_sample so we don't have to call it again with new position */
-				if(result == VOLUME_PATH_SCATTERED &&
-				   lamp_light_sample(kg, i, light_u, light_v, sd->P, &ls)) {
-					if(kernel_data.integrator.pdf_triangles != 0.0f)
-						ls.pdf *= 2.0f;
-
-					float terminate = path_branched_rng_light_termination(kg, state->rng_hash, state, j, num_samples);
-					if(direct_emission(kg, sd, emission_sd, &ls, state, &light_ray, &L_light, &is_lamp, terminate)) {
-						/* trace shadow ray */
-						float3 shadow;
-
-						if(!shadow_blocked(kg, sd, emission_sd, state, &light_ray, &shadow)) {
-							/* accumulate */
-							path_radiance_accum_light(L, state, tp*num_samples_inv, &L_light, shadow, num_samples_inv, is_lamp);
+		if(!(kernel_data.integrator.feature_overrides & IGNORE_LIGHTS)) {
+			for(int i = 0; i < kernel_data.integrator.num_all_lights; i++) {
+				if(UNLIKELY(light_select_reached_max_bounces(kg, i, state->bounce)))
+					continue;
+	
+				int num_samples = light_select_num_samples(kg, i);
+				float num_samples_inv = 1.0f/(num_samples*kernel_data.integrator.num_all_lights);
+				uint lamp_rng_hash = cmj_hash(state->rng_hash, i);
+	
+				for(int j = 0; j < num_samples; j++) {
+					/* sample random position on given light */
+					float light_u, light_v;
+					path_branched_rng_2D(kg, lamp_rng_hash, state, j, num_samples, PRNG_LIGHT_U, &light_u, &light_v);
+	
+					LightSample ls;
+					lamp_light_sample(kg, i, light_u, light_v, ray->P, &ls);
+	
+					float3 tp = throughput;
+	
+					/* sample position on volume segment */
+					float rphase = path_branched_rng_1D(kg, state->rng_hash, state, j, num_samples, PRNG_PHASE_CHANNEL);
+					float rscatter = path_branched_rng_1D(kg, state->rng_hash, state, j, num_samples, PRNG_SCATTER_DISTANCE);
+	
+					VolumeIntegrateResult result = kernel_volume_decoupled_scatter(kg,
+						state, ray, sd, &tp, rphase, rscatter, segment, (ls.t != FLT_MAX)? &ls.P: NULL, false);
+	
+					/* todo: split up light_sample so we don't have to call it again with new position */
+					if(result == VOLUME_PATH_SCATTERED &&
+					   lamp_light_sample(kg, i, light_u, light_v, sd->P, &ls)) {
+						if(kernel_data.integrator.pdf_triangles != 0.0f)
+							ls.pdf *= 2.0f;
+	
+						float terminate = path_branched_rng_light_termination(kg, state->rng_hash, state, j, num_samples);
+						if(direct_emission(kg, sd, emission_sd, &ls, state, &light_ray, &L_light, &is_lamp, terminate)) {
+							/* trace shadow ray */
+							float3 shadow;
+	
+							if(!shadow_blocked(kg, sd, emission_sd, state, &light_ray, &shadow)) {
+								/* accumulate */
+								path_radiance_accum_light(L, state, tp*num_samples_inv, &L_light, shadow, num_samples_inv, is_lamp);
+							}
 						}
 					}
 				}
@@ -209,7 +211,7 @@ ccl_device void kernel_branched_path_volume_connect_light(
 				path_branched_rng_2D(kg, state->rng_hash, state, j, num_samples, PRNG_LIGHT_U, &light_u, &light_v);
 
 				/* only sample triangle lights */
-				if(kernel_data.integrator.num_all_lights)
+				if(kernel_data.integrator.num_all_lights || kernel_data.integrator.feature_overrides & IGNORE_LIGHTS)
 					light_u = 0.5f*light_u;
 
 				LightSample ls;

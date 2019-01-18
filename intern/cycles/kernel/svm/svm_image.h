@@ -16,8 +16,14 @@
 
 CCL_NAMESPACE_BEGIN
 
+#define TEX_IGNORE_VALUE 0.5773502691896257f
+
 ccl_device float4 svm_image_texture(KernelGlobals *kg, int id, float x, float y, uint srgb, uint use_alpha)
 {
+	if(kernel_data.integrator.feature_overrides & IGNORE_TEXTURES) {
+		return make_float4(TEX_IGNORE_VALUE, TEX_IGNORE_VALUE, TEX_IGNORE_VALUE, 1.0f);
+	}
+
 	float4 r = kernel_tex_image_interp(kg, id, x, y);
 	const float alpha = r.w;
 

@@ -913,6 +913,18 @@ bool OSLRenderServices::texture(ustring filename,
 	ShaderData *sd = (ShaderData *)(sg->renderstate);
 	KernelGlobals *kg = sd->osl_globals;
 
+	if(kernel_data.integrator.feature_overrides & IGNORE_TEXTURES) {
+		if(nchannels == 3 || nchannels == 4) {
+			result[0] = TEX_IGNORE_VALUE;
+			result[1] = TEX_IGNORE_VALUE;
+			result[2] = TEX_IGNORE_VALUE;
+
+			if(nchannels == 4)
+				result[3] = 1.0f;
+		}
+		return true;
+	}
+
 	if(texture_thread_info == NULL) {
 		OSLThreadData *tdata = kg->osl_tdata;
 		texture_thread_info = tdata->oiio_thread_info;

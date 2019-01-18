@@ -76,7 +76,8 @@ ccl_device_inline void compute_light_pass(KernelGlobals *kg,
 
 #ifdef __SUBSURFACE__
 		/* sample subsurface scattering */
-		if((pass_filter & BAKE_FILTER_SUBSURFACE) && (sd->flag & SD_BSSRDF)) {
+		if((pass_filter & BAKE_FILTER_SUBSURFACE) && (sd->flag & SD_BSSRDF)
+		    && !(kernel_data.integrator.feature_overrides & IGNORE_SUBUSURFACE_SCATTERING)) {
 			/* when mixing BSSRDF and BSDF closures we should skip BSDF lighting if scattering was successful */
 			SubsurfaceIndirectRays ss_indirect;
 			kernel_path_subsurface_init_indirect(&ss_indirect);
@@ -143,7 +144,8 @@ ccl_device_inline void compute_light_pass(KernelGlobals *kg,
 
 #ifdef __SUBSURFACE__
 		/* sample subsurface scattering */
-		if((pass_filter & BAKE_FILTER_SUBSURFACE) && (sd->flag & SD_BSSRDF)) {
+		if((pass_filter & BAKE_FILTER_SUBSURFACE) && (sd->flag & SD_BSSRDF)
+		    && !(kernel_data.integrator.feature_overrides & IGNORE_SUBUSURFACE_SCATTERING)) {
 			/* when mixing BSSRDF and BSDF closures we should skip BSDF lighting if scattering was successful */
 			kernel_branched_path_subsurface_scatter(kg, sd, &indirect_sd,
 				&emission_sd, &L_sample, &state, &ray, throughput);

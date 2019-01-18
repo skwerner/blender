@@ -43,36 +43,38 @@ ccl_device_noinline void kernel_branched_path_surface_connect_light(
 
 	if(sample_all_lights) {
 		/* lamp sampling */
-		for(int i = 0; i < kernel_data.integrator.num_all_lights; i++) {
-			if(UNLIKELY(light_select_reached_max_bounces(kg, i, state->bounce)))
-				continue;
+		if(!(kernel_data.integrator.feature_overrides & IGNORE_LIGHTS)) {
+			for(int i = 0; i < kernel_data.integrator.num_all_lights; i++) {
+				if(UNLIKELY(light_select_reached_max_bounces(kg, i, state->bounce)))
+					continue;
 
-			int num_samples = ceil_to_int(num_samples_adjust*light_select_num_samples(kg, i));
-			float num_samples_inv = num_samples_adjust/(num_samples*kernel_data.integrator.num_all_lights);
-			uint lamp_rng_hash = cmj_hash(state->rng_hash, i);
+				int num_samples = ceil_to_int(num_samples_adjust*light_select_num_samples(kg, i));
+				float num_samples_inv = num_samples_adjust/(num_samples*kernel_data.integrator.num_all_lights);
+				uint lamp_rng_hash = cmj_hash(state->rng_hash, i);
 
-			for(int j = 0; j < num_samples; j++) {
-				float light_u, light_v;
-				path_branched_rng_2D(kg, lamp_rng_hash, state, j, num_samples, PRNG_LIGHT_U, &light_u, &light_v);
-				float terminate = path_branched_rng_light_termination(kg, lamp_rng_hash, state, j, num_samples);
+				for(int j = 0; j < num_samples; j++) {
+					float light_u, light_v;
+					path_branched_rng_2D(kg, lamp_rng_hash, state, j, num_samples, PRNG_LIGHT_U, &light_u, &light_v);
+					float terminate = path_branched_rng_light_termination(kg, lamp_rng_hash, state, j, num_samples);
 
-				LightSample ls;
-				if(lamp_light_sample(kg, i, light_u, light_v, sd->P, &ls)) {
-					/* The sampling probability returned by lamp_light_sample assumes that all lights were sampled.
-					 * However, this code only samples lamps, so if the scene also had mesh lights, the real probability is twice as high. */
-					if(kernel_data.integrator.pdf_triangles != 0.0f)
-						ls.pdf *= 2.0f;
+					LightSample ls;
+					if(lamp_light_sample(kg, i, light_u, light_v, sd->P, &ls)) {
+						/* The sampling probability returned by lamp_light_sample assumes that all lights were sampled.
+						 * However, this code only samples lamps, so if the scene also had mesh lights, the real probability is twice as high. */
+						if(kernel_data.integrator.pdf_triangles != 0.0f)
+							ls.pdf *= 2.0f;
 
-					if(direct_emission(kg, sd, emission_sd, &ls, state, &light_ray, &L_light, &is_lamp, terminate)) {
-						/* trace shadow ray */
-						float3 shadow;
+						if(direct_emission(kg, sd, emission_sd, &ls, state, &light_ray, &L_light, &is_lamp, terminate)) {
+							/* trace shadow ray */
+							float3 shadow;
 
-						if(!shadow_blocked(kg, sd, emission_sd, state, &light_ray, &shadow)) {
-							/* accumulate */
-							path_radiance_accum_light(L, state, throughput*num_samples_inv, &L_light, shadow, num_samples_inv, is_lamp);
-						}
-						else {
-							path_radiance_accum_total_light(L, state, throughput*num_samples_inv, &L_light);
+							if(!shadow_blocked(kg, sd, emission_sd, state, &light_ray, &shadow)) {
+								/* accumulate */
+								path_radiance_accum_light(L, state, throughput*num_samples_inv, &L_light, shadow, num_samples_inv, is_lamp);
+							}
+							else {
+								path_radiance_accum_total_light(L, state, throughput*num_samples_inv, &L_light);
+							}
 						}
 					}
 				}
@@ -90,7 +92,7 @@ ccl_device_noinline void kernel_branched_path_surface_connect_light(
 				float terminate = path_branched_rng_light_termination(kg, state->rng_hash, state, j, num_samples);
 
 				/* only sample triangle lights */
-				if(kernel_data.integrator.num_all_lights)
+				if(kernel_data.integrator.num_all_lights || kernel_data.integrator.feature_overrides & IGNORE_LIGHTS)
 					light_u = 0.5f*light_u;
 
 				LightSample ls;

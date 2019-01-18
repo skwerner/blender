@@ -231,7 +231,7 @@ ccl_device void kernel_subsurface_scatter(KernelGlobals *kg)
 		ShaderData *sd = kernel_split_sd(sd, ray_index);
 		ShaderData *emission_sd = AS_SHADER_DATA(&kernel_split_state.sd_DL_shadow[ray_index]);
 
-		if(sd->flag & SD_BSSRDF) {
+		if(sd->flag & SD_BSSRDF && (!kernel_data.integrator.feature_overrides & IGNORE_SUBUSURFACE_SCATTERING)) {
 
 #ifdef __BRANCHED_PATH__
 			if(!kernel_data.integrator.branched ||

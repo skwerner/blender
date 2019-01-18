@@ -80,6 +80,11 @@ public:
 
 	SamplingPattern sampling_pattern;
 
+	/* diagnostics */
+	bool ignore_shaders, ignore_atmosphere, ignore_lights, ignore_shadows, ignore_subdivision;
+	bool ignore_displacement, ignore_bump, ignore_polygon_smoothing, ignore_motion_blur;
+	bool ignore_depth_of_field, ignore_subsurface_scattering, ignore_textures;
+
 	bool need_update;
 
 	Integrator();

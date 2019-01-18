@@ -262,12 +262,14 @@ ccl_device_noinline void kernel_volume_shadow(KernelGlobals *kg,
                                               Ray *ray,
                                               float3 *throughput)
 {
-	shader_setup_from_volume(kg, shadow_sd, ray);
+	if(!(kernel_data.integrator.feature_overrides & IGNORE_ATMOSPHERE)) {
+		shader_setup_from_volume(kg, shadow_sd, ray);
 
-	if(volume_stack_is_heterogeneous(kg, state->volume_stack))
-		kernel_volume_shadow_heterogeneous(kg, state, ray, shadow_sd, throughput);
-	else
-		kernel_volume_shadow_homogeneous(kg, state, ray, shadow_sd, throughput);
+		if(volume_stack_is_heterogeneous(kg, state->volume_stack))
+			kernel_volume_shadow_heterogeneous(kg, state, ray, shadow_sd, throughput);
+		else
+			kernel_volume_shadow_homogeneous(kg, state, ray, shadow_sd, throughput);
+	}
 }
 
 #endif  /* __VOLUME__ */

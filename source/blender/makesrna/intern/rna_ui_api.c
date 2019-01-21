@@ -941,7 +941,8 @@ void RNA_api_ui_layout(StructRNA *srna)
 	RNA_def_function_ui_description(func, "Enum. Large widget showing Icon previews");
 	api_ui_item_rna_common(func);
 	RNA_def_boolean(func, "show_labels", false, "", "Show enum label in preview buttons");
-	RNA_def_float(func, "scale", 5.0f, 1.0f, 100.0f, "Scale", "Scale the icon size (by the button size)", 1.0f, 100.0f);
+	RNA_def_float(func, "scale", 6.0f, 1.0f, 100.0f, "UI Units", "Scale the button icon size (by the button size)", 1.0f, 100.0f);
+	RNA_def_float(func, "scale_popup", 5.0f, 1.0f, 100.0f, "Scale", "Scale the popup icon size (by the button size)", 1.0f, 100.0f);
 
 	func = RNA_def_function(srna, "template_histogram", "uiTemplateHistogram");
 	RNA_def_function_ui_description(func, "Item. A histogramm widget to analyze imaga data");
@@ -1063,7 +1064,8 @@ void RNA_api_ui_layout(StructRNA *srna)
 	RNA_def_int(func, "maxrows", 5, 0, INT_MAX, "", "Default maximum number of rows to display", 0, INT_MAX);
 	RNA_def_enum(func, "type", rna_enum_uilist_layout_type_items, UILST_LAYOUT_DEFAULT, "Type", "Type of layout to use");
 	RNA_def_int(func, "columns", 9, 0, INT_MAX, "", "Number of items to display per row, for GRID layout", 0, INT_MAX);
-	RNA_def_boolean(func, "reverse", false, "", "Display items in reverse order");
+	RNA_def_boolean(func, "sort_reverse", false, "", "Display items in reverse order by default");
+	RNA_def_boolean(func, "sort_lock", false, "", "Lock display order to default value");
 
 	func = RNA_def_function(srna, "template_running_jobs", "uiTemplateRunningJobs");
 	RNA_def_function_flag(func, FUNC_USE_CONTEXT);

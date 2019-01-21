@@ -100,7 +100,7 @@ KerningCacheBLF *blf_kerning_cache_new(FontBLF *font)
 			/* Cannot fail since it has been added just before. */
 			GlyphBLF *g_prev = blf_glyph_search(font->glyph_cache, j);
 
-			FT_Vector delta = {.x = 0, .y = 0};
+			FT_Vector delta = { .x = 0, .y = 0, };
 			if (FT_Get_Kerning(font->face, g_prev->idx, g->idx, kc->mode, &delta) == 0) {
 				kc->table[i][j] = (int)delta.x >> 6;
 			}
@@ -413,7 +413,7 @@ static void blf_texture5_draw(const unsigned char color_in[4], int tex_w, int te
 	float ofs[2] = { 2 / (float)tex_w, 2 / (float)tex_h };
 	float uv_flag[2][2];
 	copy_v4_v4((float *)uv_flag, (float *)uv);
-	/* flag the x and y component signs for 5x5 bluring */
+	/* flag the x and y component signs for 5x5 blurring */
 	uv_flag[0][0] = -(uv_flag[0][0] - ofs[0]);
 	uv_flag[0][1] = -(uv_flag[0][1] - ofs[1]);
 	uv_flag[1][0] = -(uv_flag[1][0] + ofs[0]);
@@ -428,7 +428,7 @@ static void blf_texture3_draw(const unsigned char color_in[4], int tex_w, int te
 	float ofs[2] = { 1 / (float)tex_w, 1 / (float)tex_h };
 	float uv_flag[2][2];
 	copy_v4_v4((float *)uv_flag, (float *)uv);
-	/* flag the x component sign for 3x3 bluring */
+	/* flag the x component sign for 3x3 blurring */
 	uv_flag[0][0] = -(uv_flag[0][0] - ofs[0]);
 	uv_flag[0][1] =  (uv_flag[0][1] - ofs[1]);
 	uv_flag[1][0] = -(uv_flag[1][0] + ofs[0]);

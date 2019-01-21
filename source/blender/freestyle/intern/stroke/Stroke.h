@@ -303,9 +303,12 @@ private:
 	typedef std::map<const char *, Vec2f, StringUtils::ltstr> Vec2fMap;
 	typedef std::map<const char *, Vec3f, StringUtils::ltstr> Vec3fMap;
 
-	float _color[3];      //! the color
-	float _alpha;         //! alpha
-	float _thickness[2];  //! the thickness on the right and on the left of the backbone vertex (the stroke is oriented)
+	//! the color
+	float _color[3];
+	//! alpha
+	float _alpha;
+	//! the thickness on the right and on the left of the backbone vertex (the stroke is oriented)
+	float _thickness[2];
 	bool _visible;
 	realMap *_userAttributesReal;
 	Vec2fMap *_userAttributesVec2f;
@@ -522,7 +525,7 @@ public: // Implementation of Interface1D
 	/*! The different blending modes available to similate the interaction media-medium. */
 	typedef enum {
 		DRY_MEDIUM,     /*!< To simulate a dry medium such as Pencil or Charcoal.*/
-		HUMID_MEDIUM,   /*!< To simulate ink painting (color substraction blending).*/
+		HUMID_MEDIUM,   /*!< To simulate ink painting (color subtraction blending).*/
 		OPAQUE_MEDIUM,  /*!< To simulate an opaque medium (oil, spray...).*/
 	} MediumType;
 

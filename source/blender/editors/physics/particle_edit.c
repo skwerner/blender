@@ -1325,25 +1325,26 @@ void recalc_emitter_field(Depsgraph *UNUSED(depsgraph), Object *UNUSED(ob), Part
 
 		mvert = &mesh->mvert[mface->v1];
 		copy_v3_v3(vec, mvert->co);
-		VECCOPY(nor, mvert->no);
+		copy_v3fl_v3s(nor, mvert->no);
 
 		mvert = &mesh->mvert[mface->v2];
 		add_v3_v3v3(vec, vec, mvert->co);
-		VECADD(nor, nor, mvert->no);
+		add_v3fl_v3fl_v3s(nor, nor, mvert->no);
 
 		mvert = &mesh->mvert[mface->v3];
 		add_v3_v3v3(vec, vec, mvert->co);
-		VECADD(nor, nor, mvert->no);
+		add_v3fl_v3fl_v3s(nor, nor, mvert->no);
 
 		if (mface->v4) {
 			mvert = &mesh->mvert[mface->v4];
 			add_v3_v3v3(vec, vec, mvert->co);
-			VECADD(nor, nor, mvert->no);
+			add_v3fl_v3fl_v3s(nor, nor, mvert->no);
 
 			mul_v3_fl(vec, 0.25);
 		}
-		else
+		else {
 			mul_v3_fl(vec, 1.0f / 3.0f);
+		}
 
 		normalize_v3(nor);
 
@@ -3384,7 +3385,10 @@ static void brush_puff(PEData *data, int point_index)
 			/* find root coordinate and normal on emitter */
 			copy_v3_v3(co, key->co);
 			mul_m4_v3(mat, co);
-			mul_v3_m4v3(kco, data->ob->imat, co); /* use 'kco' as the object space version of worldspace 'co', ob->imat is set before calling */
+
+			/* use 'kco' as the object space version of worldspace 'co',
+			 * ob->imat is set before calling */
+			mul_v3_m4v3(kco, data->ob->imat, co);
 
 			point_index = BLI_kdtree_find_nearest(edit->emitter_field, kco, NULL);
 			if (point_index == -1) return;
@@ -3468,7 +3472,10 @@ static void brush_puff(PEData *data, int point_index)
 						float oco[3], onor[3];
 						copy_v3_v3(oco, key->co);
 						mul_m4_v3(mat, oco);
-						mul_v3_m4v3(kco, data->ob->imat, oco); /* use 'kco' as the object space version of worldspace 'co', ob->imat is set before calling */
+
+						/* use 'kco' as the object space version of worldspace 'co',
+						 * ob->imat is set before calling */
+						mul_v3_m4v3(kco, data->ob->imat, oco);
 
 						point_index = BLI_kdtree_find_nearest(edit->emitter_field, kco, NULL);
 						if (point_index != -1) {
@@ -4354,7 +4361,7 @@ static void brush_edit_apply_event(bContext *C, wmOperator *op, const wmEvent *e
 	PointerRNA itemptr;
 	float mouse[2];
 
-	VECCOPY2D(mouse, event->mval);
+	copy_v2fl_v2i(mouse, event->mval);
 
 	/* fill in stroke */
 	RNA_collection_add(op->ptr, "stroke", &itemptr);
@@ -4649,25 +4656,6 @@ int PE_minmax(Scene *scene, ViewLayer *view_layer, float min[3], float max[3])
 }
 
 /************************ particle edit toggle operator ************************/
-
-static struct ParticleSystem *psys_eval_get(
-        Depsgraph *depsgraph,
-        Object *object,
-        ParticleSystem *psys)
-{
-	Object *object_eval = DEG_get_evaluated_object(depsgraph, object);
-	if (object_eval == object) {
-		return psys;
-	}
-	ParticleSystem *psys_eval = object_eval->particlesystem.first;
-	while (psys_eval != NULL) {
-		if (psys_eval->orig_psys == psys) {
-			return psys_eval;
-		}
-		psys_eval = psys_eval->next;
-	}
-	return psys_eval;
-}
 
 /* initialize needed data for bake edit */
 void PE_create_particle_edit(

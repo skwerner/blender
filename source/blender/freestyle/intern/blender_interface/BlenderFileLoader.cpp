@@ -116,7 +116,7 @@ NodeGroup *BlenderFileLoader::Load()
 
 		if (mesh) {
 			insertShapeNode(ob, mesh, ++id);
-			BKE_libblock_free_ex(_re->main, &mesh->id, true, false);
+			BKE_id_free_ex(_re->main, &mesh->id, LIB_ID_FREE_NO_UI_USER, true);
 		}
 	}
 	DEG_OBJECT_ITER_END;
@@ -733,7 +733,7 @@ void BlenderFileLoader::insertShapeNode(Object *ob, Mesh *me, int id)
 	// sets the id of the rep
 	rep->setId(Id(id, 0));
 	rep->setName(ob->id.name + 2);
-	rep->setLibraryPath(ob->id.lib ? ob->id.lib->name : NULL);
+	rep->setLibraryPath(ob->id.lib ? ob->id.lib->name : "");
 
 	const BBox<Vec3r> bbox = BBox<Vec3r>(Vec3r(ls.minBBox[0], ls.minBBox[1], ls.minBBox[2]),
 	                                     Vec3r(ls.maxBBox[0], ls.maxBBox[1], ls.maxBBox[2]));

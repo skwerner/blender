@@ -187,52 +187,6 @@ void ED_area_do_refresh(bContext *C, ScrArea *sa)
 }
 
 /**
- * Action zones are only updated if the mouse is inside of them, but in some cases (currently only fullscreen icon)
- * it might be needed to update their properties and redraw if the mouse isn't inside.
- */
-void ED_area_azones_update(ScrArea *sa, const int mouse_xy[2])
-{
-	AZone *az;
-	bool changed = false;
-
-	for (az = sa->actionzones.first; az; az = az->next) {
-		if (az->type == AZONE_FULLSCREEN) {
-			/* only if mouse is not hovering the azone */
-			if (BLI_rcti_isect_pt_v(&az->rect, mouse_xy) == false) {
-				az->alpha = 0.0f;
-				changed = true;
-
-				/* can break since currently only this is handled here */
-				break;
-			}
-		}
-		else if (az->type == AZONE_REGION_SCROLL) {
-			/* only if mouse is not hovering the azone */
-			if (BLI_rcti_isect_pt_v(&az->rect, mouse_xy) == false) {
-				View2D *v2d = &az->ar->v2d;
-
-				if (az->direction == AZ_SCROLL_VERT) {
-					az->alpha = v2d->alpha_vert = 0;
-					changed = true;
-				}
-				else if (az->direction == AZ_SCROLL_HOR) {
-					az->alpha = v2d->alpha_hor = 0;
-					changed = true;
-				}
-				else {
-					BLI_assert(0);
-				}
-			}
-		}
-	}
-
-	if (changed) {
-		sa->flag &= ~AREA_FLAG_ACTIONZONES_UPDATE;
-		ED_area_tag_redraw_no_rebuild(sa);
-	}
-}
-
-/**
  * \brief Corner widget use for quitting fullscreen.
  */
 static void area_draw_azone_fullscreen(short x1, short y1, short x2, short y2, float alpha)
@@ -256,7 +210,7 @@ static void area_draw_azone_fullscreen(short x1, short y1, short x2, short y2, f
 	 * The click_rect is the same as defined in fullscreen_click_rcti_init
 	 * Keep them both in sync */
 
-	if (G.debug_value == 1) {
+	if (G.debug_value == 101) {
 		rcti click_rect;
 		float icon_size = UI_DPI_ICON_SIZE + 7 * UI_DPI_FAC;
 
@@ -412,17 +366,10 @@ static void region_draw_azones(ScrArea *sa, ARegion *ar)
 			}
 			else if (az->type == AZONE_FULLSCREEN) {
 				area_draw_azone_fullscreen(az->x1, az->y1, az->x2, az->y2, az->alpha);
-
-				if (az->alpha != 0.0f) {
-					area_azone_tag_update(sa);
-				}
 			}
-			else if (az->type == AZONE_REGION_SCROLL) {
-				if (az->alpha != 0.0f) {
-					area_azone_tag_update(sa);
-				}
-				/* Don't draw this azone. */
-			}
+		}
+		if (!IS_EQF(az->alpha, 0.0f) && ELEM(az->type, AZONE_FULLSCREEN, AZONE_REGION_SCROLL)) {
+			area_azone_tag_update(sa);
 		}
 	}
 
@@ -957,12 +904,26 @@ static void region_azone_tab_plus(ScrArea *sa, AZone *az, ARegion *ar)
 	BLI_rcti_init(&az->rect, az->x1, az->x2, az->y1, az->y2);
 }
 
+static bool region_azone_edge_poll(const ARegion *ar, const bool is_fullscreen)
+{
+	const bool is_hidden = (ar->flag & (RGN_FLAG_HIDDEN | RGN_FLAG_TOO_SMALL));
+
+	if (is_hidden && is_fullscreen) {
+		return false;
+	}
+	if (!is_hidden && ar->regiontype == RGN_TYPE_HEADER) {
+		return false;
+	}
+
+	return true;
+}
+
 static void region_azone_edge_initialize(ScrArea *sa, ARegion *ar, AZEdge edge, const bool is_fullscreen)
 {
 	AZone *az = NULL;
 	const bool is_hidden = (ar->flag & (RGN_FLAG_HIDDEN | RGN_FLAG_TOO_SMALL));
 
-	if (is_hidden && is_fullscreen) {
+	if (!region_azone_edge_poll(ar, is_fullscreen)) {
 		return;
 	}
 
@@ -975,7 +936,7 @@ static void region_azone_edge_initialize(ScrArea *sa, ARegion *ar, AZEdge edge, 
 	if (is_hidden) {
 		region_azone_tab_plus(sa, az, ar);
 	}
-	else if (!is_hidden && (ar->regiontype != RGN_TYPE_HEADER)) {
+	else {
 		region_azone_edge(az, ar);
 	}
 }
@@ -1236,8 +1197,8 @@ static void region_rect_recursive(ScrArea *sa, ARegion *ar, rcti *remainder, rct
 		        max_ii(0, BLI_rcti_size_y(overlap_remainder) - UI_UNIT_Y / 2));
 		ar->winrct.xmin = overlap_remainder_margin.xmin;
 		ar->winrct.ymin = overlap_remainder_margin.ymin;
-		ar->winrct.xmax = ar->winrct.xmin + ar->sizex - 1;
-		ar->winrct.ymax = ar->winrct.ymin + ar->sizey - 1;
+		ar->winrct.xmax = ar->winrct.xmin + prefsizex - 1;
+		ar->winrct.ymax = ar->winrct.ymin + prefsizey - 1;
 
 		BLI_rcti_isect(&ar->winrct, &overlap_remainder_margin, &ar->winrct);
 
@@ -1591,6 +1552,7 @@ void ED_area_update_region_sizes(wmWindowManager *wm, wmWindow *win, ScrArea *ar
 	if (!(area->flag & AREA_FLAG_REGION_SIZE_UPDATE)) {
 		return;
 	}
+	const bScreen *screen = WM_window_get_active_screen(win);
 
 	WM_window_rect_calc(win, &window_rect);
 	area_calc_totrct(area, &window_rect);
@@ -1600,6 +1562,9 @@ void ED_area_update_region_sizes(wmWindowManager *wm, wmWindow *win, ScrArea *ar
 	overlap_rect = rect;
 	region_rect_recursive(area, area->regionbase.first, &rect, &overlap_rect, 0);
 
+	/* Dynamically sized regions may have changed region sizes, so we have to force azone update. */
+	area_azone_initialize(win, screen, area);
+
 	for (ARegion *ar = area->regionbase.first; ar; ar = ar->next) {
 		region_subwindow(ar);
 
@@ -1607,7 +1572,11 @@ void ED_area_update_region_sizes(wmWindowManager *wm, wmWindow *win, ScrArea *ar
 		if (ar->type->init) {
 			ar->type->init(wm, ar);
 		}
+
+		/* Some AZones use View2D data which is only updated in region init, so call that first! */
+		region_azones_add(screen, area, ar, ar->alignment & ~RGN_SPLIT_PREV);
 	}
+	ED_area_azones_update(area, &win->eventstate->x);
 
 	area->flag &= ~AREA_FLAG_REGION_SIZE_UPDATE;
 }
@@ -2294,8 +2263,8 @@ void ED_region_panels_layout_ex(
 		Panel *panel = ar->panels.last;
 		if (panel != NULL) {
 			int size_dyn[2] = {
-				UI_UNIT_X * ((panel->flag & PNL_CLOSED) ? 8 : 14),
-				UI_panel_size_y(panel),
+				UI_UNIT_X * ((panel->flag & PNL_CLOSED) ? 8 : 14) / UI_DPI_FAC,
+				UI_panel_size_y(panel) / UI_DPI_FAC,
 			};
 			/* region size is layout based and needs to be updated */
 			if ((ar->sizex != size_dyn[0]) ||
@@ -2305,7 +2274,7 @@ void ED_region_panels_layout_ex(
 				ar->sizey = size_dyn[1];
 				sa->flag |= AREA_FLAG_REGION_SIZE_UPDATE;
 			}
-			y = ABS(ar->sizey - 1);
+			y = ABS(ar->sizey * UI_DPI_FAC - 1);
 		}
 	}
 	else if (vertical) {
@@ -2371,6 +2340,9 @@ void ED_region_panels_draw(const bContext *C, ARegion *ar)
 
 	/* set the view */
 	UI_view2d_view_ortho(v2d);
+
+	/* View2D matrix might have changed due to dynamic sized regions. */
+	UI_blocklist_update_window_matrix(C, &ar->uiblocks);
 
 	/* draw panels */
 	UI_panels_draw(C, ar);

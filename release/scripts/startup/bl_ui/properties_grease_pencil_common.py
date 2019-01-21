@@ -191,6 +191,7 @@ class GreasePencilStrokeEditPanel:
         col.operator("gpencil.duplicate_move", text="Duplicate")
         if is_3d_view:
             col.operator("gpencil.stroke_cyclical_set", text="Toggle Cyclic").type = 'TOGGLE'
+            col.operator_menu_enum("gpencil.stroke_caps_set", text="Toggle Caps...", property="type")
 
         layout.separator()
 
@@ -212,11 +213,12 @@ class GreasePencilStrokeEditPanel:
         col.operator("gpencil.stroke_subdivide", text="Subdivide")
         row = col.row(align=True)
         row.operator("gpencil.stroke_simplify_fixed", text="Simplify")
-        row.operator("gpencil.stroke_simplify", text="Adaptative")
+        row.operator("gpencil.stroke_simplify", text="Adaptive")
 
         col.separator()
 
         row = col.row(align=True)
+        row.operator("gpencil.stroke_merge", text="Merge")
         row.operator("gpencil.stroke_join", text="Join").type = 'JOIN'
         row.operator("gpencil.stroke_join", text="& Copy").type = 'JOINCOPY'
 
@@ -253,29 +255,11 @@ class GreasePencilStrokeSculptPanel:
 
         layout.template_icon_view(settings, "sculpt_tool", show_labels=True)
 
-        row = layout.row(align=True)
-        row.prop(brush, "size", slider=True)
-        sub = row.row(align=True)
-        sub.enabled = tool not in {'GRAB', 'CLONE'}
-        sub.prop(brush, "use_pressure_radius", text="")
-
-        row = layout.row(align=True)
-        row.prop(brush, "strength", slider=True)
-        row.prop(brush, "use_pressure_strength", text="")
-
-        layout.prop(brush, "use_falloff")
-
-        layout.use_property_split = False
-        if tool in {'THICKNESS', 'STRENGTH'}:
-            layout.row().prop(brush, "direction", expand=True)
-        elif tool == 'PINCH':
-            row = layout.row(align=True)
-            row.prop_enum(brush, "direction", value='ADD', text="Pinch")
-            row.prop_enum(brush, "direction", value='SUBTRACT', text="Inflate")
-        elif tool == 'TWIST':
-            row = layout.row(align=True)
-            row.prop_enum(brush, "direction", value='ADD', text="CCW")
-            row.prop_enum(brush, "direction", value='SUBTRACT', text="CW")
+        if not self.is_popover:
+            from .properties_paint_common import (
+                brush_basic_gpencil_sculpt_settings,
+            )
+            brush_basic_gpencil_sculpt_settings(layout, context, brush)
 
 
 class GreasePencilSculptOptionsPanel:
@@ -359,7 +343,7 @@ class GreasePencilAppearancePanel:
 
             if tool in {'THICKNESS', 'STRENGTH'}:
                 col.prop(brush, "cursor_color_add", text="Add")
-                col.prop(brush, "cursor_color_sub", text="Substract")
+                col.prop(brush, "cursor_color_sub", text="Subtract")
             elif tool == 'PINCH':
                 col.prop(brush, "cursor_color_add", text="Pinch")
                 col.prop(brush, "cursor_color_sub", text="Inflate")
@@ -745,7 +729,7 @@ class AnnotationDataPanel:
         else:
             layer_rows = 3
         col.template_list("GPENCIL_UL_annotation_layer", "", gpd, "layers", gpd.layers, "active_index",
-                          rows=layer_rows, reverse=True)
+                          rows=layer_rows, sort_reverse=True, sort_lock=True)
 
         col = row.column()
 

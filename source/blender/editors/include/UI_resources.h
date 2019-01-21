@@ -29,10 +29,10 @@
  *  \ingroup editorui
  */
 
-#include "BLI_sys_types.h"
-
 #ifndef __UI_RESOURCES_H__
 #define __UI_RESOURCES_H__
+
+#include "BLI_sys_types.h"
 
 /* Define icon enum. */
 #define DEF_ICON(name) ICON_##name,
@@ -58,6 +58,8 @@ typedef enum ThemeColorID {
 // common colors among spaces
 
 	TH_BACK,
+	/** Use when 'TH_SHOW_BACK_GRAD' is set (the lower, darker color). */
+	TH_BACK_GRAD,
 	TH_TEXT,
 	TH_TEXT_HI,
 	TH_TITLE,
@@ -296,8 +298,6 @@ typedef enum ThemeColorID {
 	TH_GIZMO_A,
 	TH_GIZMO_B,
 
-	TH_LOW_GRAD,
-	TH_HIGH_GRAD,
 	TH_SHOW_BACK_GRAD,
 
 	TH_INFO_SELECTED,
@@ -343,6 +343,7 @@ int     UI_GetThemeValueType(int colorid, int spacetype);
 void    UI_GetThemeColor3fv(int colorid, float col[3]);
 void    UI_GetThemeColorBlend3ubv(int colorid1, int colorid2, float fac, unsigned char col[3]);
 void    UI_GetThemeColorBlend3f(int colorid1, int colorid2, float fac, float r_col[3]);
+void    UI_GetThemeColorBlend4f(int colorid1, int colorid2, float fac, float r_col[4]);
 // get the color, range 0.0-1.0, complete with shading offset
 void    UI_GetThemeColorShade3fv(int colorid, int offset, float col[3]);
 void    UI_GetThemeColorShade3ubv(int colorid, int offset, unsigned char col[3]);
@@ -369,7 +370,8 @@ void UI_GetThemeColor3ubv(int colorid, unsigned char col[3]);
 void UI_GetThemeColor4ubv(int colorid, unsigned char col[4]);
 
 // get a theme color from specified space type
-void UI_GetThemeColorType4ubv(int colorid, int spacetype, char col[4]);
+void UI_GetThemeColorType3ubv(int colorid, int spacetype, unsigned char col[3]);
+void UI_GetThemeColorType4ubv(int colorid, int spacetype, unsigned char col[4]);
 
 // get theme color for coloring monochrome icons
 bool    UI_GetIconThemeColor4fv(int colorid, float col[4]);

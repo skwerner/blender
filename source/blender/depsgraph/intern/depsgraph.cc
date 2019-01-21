@@ -150,6 +150,12 @@ static bool pointer_to_component_node_criteria(
 			/* Bone - generally, we just want the bone component. */
 			*type = DEG_NODE_TYPE_BONE;
 			*subdata = pchan->name;
+			/* But B-Bone properties should connect to the actual operation. */
+			if (!ELEM(NULL, pchan->bone, prop) && pchan->bone->segments > 1 &&
+			    STRPREFIX(RNA_property_identifier(prop), "bbone_"))
+			{
+				*operation_code = DEG_OPCODE_BONE_SEGMENTS;
+			}
 		}
 		return true;
 	}
@@ -255,7 +261,7 @@ static bool pointer_to_component_node_criteria(
 		*type = DEG_NODE_TYPE_SHADING;
 		return true;
 	}
-	else if (ptr->type == &RNA_Curve) {
+	else if (ELEM(ptr->type, &RNA_Curve, &RNA_TextCurve)) {
 		*id = (ID *)ptr->id.data;
 		*type = DEG_NODE_TYPE_GEOMETRY;
 		return true;

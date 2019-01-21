@@ -44,7 +44,9 @@
 
 #include "BKE_appdir.h"
 #include "BKE_brush.h"
+#include "BKE_colorband.h"
 #include "BKE_colortools.h"
+#include "BKE_idprop.h"
 #include "BKE_keyconfig.h"
 #include "BKE_layer.h"
 #include "BKE_library.h"
@@ -73,6 +75,15 @@ void BLO_update_defaults_userpref_blend(void)
 	U.flag &= ~USER_SCRIPT_AUTOEXEC_DISABLE;
 #endif
 
+	/* Clear addon preferences. */
+	for (bAddon *addon = U.addons.first; addon; addon = addon->next) {
+		if (addon->prop) {
+			IDP_FreeProperty(addon->prop);
+			MEM_freeN(addon->prop);
+			addon->prop = NULL;
+		}
+	}
+
 	/* Transform tweak with single click and drag. */
 	U.flag |= USER_RELEASECONFIRM;
 
@@ -89,6 +100,15 @@ void BLO_update_defaults_userpref_blend(void)
 	/* Only enable tooltips translation by default, without actually enabling translation itself, for now. */
 	U.transopts = USER_TR_TOOLTIPS;
 	U.memcachelimit = 4096;
+
+	/* Auto perspective. */
+	U.uiflag |= USER_AUTOPERSP;
+
+	/* Init weight paint range. */
+	BKE_colorband_init(&U.coba_weight, true);
+
+	/* Default visible section. */
+	U.userpref = USER_SECTION_INTERFACE;
 
 	/* Default to left click select. */
 	BKE_keyconfig_pref_set_select_mouse(&U, 0, true);
@@ -118,10 +138,16 @@ void BLO_update_defaults_startup_blend(Main *bmain, const char *app_template)
 					case SPACE_VIEW3D:
 					{
 						View3D *v3d = (View3D *)sl;
+						v3d->overlay.texture_paint_mode_opacity = 1.0f;
 						v3d->overlay.weight_paint_mode_opacity = 1.0f;
+						v3d->overlay.vertex_paint_mode_opacity = 1.0f;
 						/* grease pencil settings */
 						v3d->vertex_opacity = 1.0f;
 						v3d->gp_flag |= V3D_GP_SHOW_EDIT_LINES;
+						/* Skip startups that use the viewport color by default. */
+						if (v3d->shading.background_type != V3D_SHADING_BACKGROUND_VIEWPORT) {
+							copy_v3_fl(v3d->shading.background_color, 0.05f);
+						}
 						break;
 					}
 					case SPACE_FILE:

@@ -86,29 +86,42 @@
 /* define a single unit */
 typedef struct bUnitDef {
 	const char *name;
-	const char *name_plural; /* abused a bit for the display name */
-	const char *name_short; /* this is used for display*/
-	const char *name_alt; /* keyboard-friendly ASCII-only version of name_short, can be NULL */
+	/** abused a bit for the display name */
+	const char *name_plural;
+	/** this is used for display*/
+	const char *name_short;
+	/** keyboard-friendly ASCII-only version of name_short, can be NULL */
+	const char *name_alt;
 	/* if name_short has non-ASCII chars, name_alt should be present */
 
-	const char *name_display; /* can be NULL */
-	const char *identifier; /* when NULL, a transformed version of the name will be taken */
+	/** can be NULL */
+	const char *name_display;
+	/** when NULL, a transformed version of the name will be taken */
+	const char *identifier;
 
 	double scalar;
-	double bias; /* not used yet, needed for converting temperature */
+	/** not used yet, needed for converting temperature */
+	double bias;
 	int flag;
 } bUnitDef;
 
-#define B_UNIT_DEF_NONE 0
-#define B_UNIT_DEF_SUPPRESS 1 /* Use for units that are not used enough to be translated into for common use */
-#define B_UNIT_DEF_TENTH 2 /* Display a unit even if its value is 0.1, eg 0.1mm instead of 100um */
+enum {
+	B_UNIT_DEF_NONE = 0,
+	/** Use for units that are not used enough to be translated into for common use */
+	B_UNIT_DEF_SUPPRESS = 1,
+	/** Display a unit even if its value is 0.1, eg 0.1mm instead of 100um */
+	B_UNIT_DEF_TENTH = 2,
+};
 
 /* define a single unit */
 typedef struct bUnitCollection {
 	const struct bUnitDef *units;
-	int base_unit; /* basic unit index (when user doesn't specify unit explicitly) */
-	int flag; /* options for this system */
-	int length; /* to quickly find the last item */
+	/** basic unit index (when user doesn't specify unit explicitly) */
+	int base_unit;
+	/** options for this system */
+	int flag;
+	/** to quickly find the last item */
+	int length;
 } bUnitCollection;
 
 #define UNIT_COLLECTION_LENGTH(def) (sizeof(def) / sizeof(bUnitDef) - 1)
@@ -484,7 +497,7 @@ static bool is_valid_unit_collection(const bUnitCollection *usys)
 	return usys != NULL && usys->units[0].name != NULL;
 }
 
-static const bUnitDef *get_preferred_unit_if_used(int type, PreferredUnits units)
+static const bUnitDef *get_preferred_display_unit_if_used(int type, PreferredUnits units)
 {
 	const bUnitCollection *usys = unit_get_system(units.system, type);
 	if (!is_valid_unit_collection(usys)) return NULL;
@@ -525,7 +538,7 @@ static size_t unit_as_string_main(
 		usys = &buDummyCollection;
 	}
 	else {
-		main_unit = get_preferred_unit_if_used(type, units);
+		main_unit = get_preferred_display_unit_if_used(type, units);
 	}
 
 	if (split && unit_should_be_split(type)) {
@@ -595,9 +608,9 @@ static const char *unit_find_str(const char *str, const char *substr)
 /* Note that numbers are added within brackets
  * ") " - is used to detect numbers we added so we can detect if commas need to be added
  *
- * "1m1cm+2mm"				- Original value
- * "1*1#1*0.01#+2*0.001#"	- Replace numbers
- * "1*1+1*0.01 +2*0.001 "	- Add add signs if ( + - * / | & ~ < > ^ ! = % ) not found in between
+ * "1m1cm+2mm"              - Original value
+ * "1*1#1*0.01#+2*0.001#"   - Replace numbers
+ * "1*1+1*0.01 +2*0.001 "   - Add add signs if ( + - * / | & ~ < > ^ ! = % ) not found in between
  *
  */
 
@@ -721,25 +734,27 @@ static const bUnitDef *unit_detect_from_str(const bUnitCollection *usys, const c
 	return unit;
 }
 
-bool bUnit_ContainsUnit(const char *str, int system, int type)
+bool bUnit_ContainsUnit(const char *str, int type)
 {
-	const bUnitCollection *usys = unit_get_system(system, type);
-	if (!is_valid_unit_collection(usys)) return false;
+	for (int system = 0; system < UNIT_SYSTEM_TOT; system++) {
+		const bUnitCollection *usys = unit_get_system(system, type);
+		if (!is_valid_unit_collection(usys)) continue;
 
-	for (int i = 0; i < usys->length; i++) {
-		if (unit_find(str, usys->units + i)) {
-			return true;
+		for (int i = 0; i < usys->length; i++) {
+			if (unit_find(str, usys->units + i)) {
+				return true;
+			}
 		}
 	}
 	return false;
 }
 
-double bUnit_PreferredUnitScalar(const struct UnitSettings *settings, int type)
+double bUnit_PreferredInputUnitScalar(const struct UnitSettings *settings, int type)
 {
 	PreferredUnits units = preferred_units_from_UnitSettings(settings);
-	const bUnitDef *unit = get_preferred_unit_if_used(type, units);
-	if (unit == NULL) return 1.0;
-	else return unit->scalar;
+	const bUnitDef *unit = get_preferred_display_unit_if_used(type, units);
+	if (unit) return unit->scalar;
+	else return bUnit_BaseScalar(units.system, type);
 }
 
 /* make a copy of the string that replaces the units with numbers
@@ -905,7 +920,8 @@ double bUnit_ClosestScalar(double value, int system, int type)
 double bUnit_BaseScalar(int system, int type)
 {
 	const bUnitCollection *usys = unit_get_system(system, type);
-	return unit_default(usys)->scalar;
+	if (usys) return unit_default(usys)->scalar;
+	else return 1.0;
 }
 
 /* external access */

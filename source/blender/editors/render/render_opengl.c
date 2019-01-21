@@ -602,11 +602,13 @@ static bool screen_opengl_render_init(bContext *C, wmOperator *op)
 	oglrender->prevar = prevar;
 
 	if (is_view_context) {
-		ED_view3d_context_user_region(C, &oglrender->v3d, &oglrender->ar); /* so quad view renders camera */
+		/* so quad view renders camera */
+		ED_view3d_context_user_region(C, &oglrender->v3d, &oglrender->ar);
+
 		oglrender->rv3d = oglrender->ar->regiondata;
 
 		/* MUST be cleared on exit */
-		oglrender->scene->customdata_mask_modal = ED_view3d_datamask(oglrender->scene, oglrender->v3d);
+		oglrender->scene->customdata_mask_modal = ED_view3d_datamask(C, oglrender->scene, oglrender->v3d);
 
 		/* apply immediately in case we're rendering from a script,
 		 * running notifiers again will overwrite */

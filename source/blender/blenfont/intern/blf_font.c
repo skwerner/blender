@@ -86,7 +86,7 @@ static SpinLock ft_lib_mutex;
 /**
  * Drawcalls are precious! make them count!
  * Since most of the Text elems are not covered by other UI elements, we can
- * group some strings together and render them in one drawcall. This behaviour
+ * group some strings together and render them in one drawcall. This behavior
  * is on demand only, between BLF_batch_start() and BLF_batch_end().
  **/
 static void blf_batch_draw_init(void)
@@ -191,7 +191,7 @@ void blf_batch_draw(void)
 	UI_widgetbase_draw_cache_flush();
 
 	GPU_texture_bind(g_batch.tex_bind_state, 0);
-	GPU_vertbuf_vertex_count_set(g_batch.verts, g_batch.glyph_len);
+	GPU_vertbuf_data_len_set(g_batch.verts, g_batch.glyph_len);
 	GPU_vertbuf_use(g_batch.verts); /* send data */
 
 	GPUBuiltinShader shader = (g_batch.simple_shader) ? GPU_SHADER_TEXT_SIMPLE : GPU_SHADER_TEXT;

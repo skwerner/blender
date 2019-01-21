@@ -58,33 +58,42 @@ typedef struct LayerCollection {
 	short flag;
 	short runtime_flag;
 	short pad[2];
-	ListBase layer_collections; /* synced with collection->children */
+	/** Synced with collection->children. */
+	ListBase layer_collections;
 } LayerCollection;
 
 typedef struct ViewLayer {
 	struct ViewLayer *next, *prev;
-	char name[64]; /* MAX_NAME */
+	/** MAX_NAME. */
+	char name[64];
 	short flag;
 	short runtime_flag;
 	short pad[2];
-	ListBase object_bases;      /* ObjectBase */
-	struct SceneStats *stats;   /* default allocated now */
+	/** ObjectBase. */
+	ListBase object_bases;
+	/** Default allocated now. */
+	struct SceneStats *stats;
 	struct Base *basact;
-	ListBase layer_collections; /* LayerCollection */
+	/** LayerCollection. */
+	ListBase layer_collections;
 	LayerCollection *active_collection;
 
 	/* Old SceneRenderLayer data. */
 	int layflag;
-	int passflag;			/* pass_xor has to be after passflag */
-	int pass_xor;
+	/** Pass_xor has to be after passflag. */
+	int passflag;
 	float pass_alpha_threshold;
+	int samples;
 
-	struct IDProperty *id_properties; /* Equivalent to datablocks ID properties. */
+	struct Material *mat_override;
+	/** Equivalent to datablocks ID properties. */
+	struct IDProperty *id_properties;
 
 	struct FreestyleConfig freestyle_config;
 
 	/* Runtime data */
-	ListBase drawdata;    /* ViewLayerEngineData */
+	/** ViewLayerEngineData. */
+	ListBase drawdata;
 	struct Base **object_bases_array;
 	struct GHash *object_bases_hash;
 } ViewLayer;
@@ -98,7 +107,7 @@ enum {
 	/* Runtime evaluated flags. */
 	BASE_VISIBLE          = (1 << 1), /* Object is enabled and visible. */
 	BASE_SELECTABLE       = (1 << 2), /* Object can be selected. */
-	BASE_FROMDUPLI        = (1 << 3), /* Object comes from duplicator. */
+	BASE_FROM_DUPLI       = (1 << 3), /* Object comes from duplicator. */
 	/* BASE_DEPRECATED    = (1 << 4), */
 	BASE_FROM_SET         = (1 << 5), /* Object comes from set. */
 	BASE_ENABLED_VIEWPORT = (1 << 6), /* Object is enabled in viewport. */
@@ -147,13 +156,17 @@ enum {
 
 typedef struct SceneCollection {
 	struct SceneCollection *next, *prev;
-	char name[64]; /* MAX_NAME */
-	int active_object_index; /* for UI */
+	/** MAX_NAME. */
+	char name[64];
+	/** For UI. */
+	int active_object_index;
 	short flag;
 	char type;
 	char pad;
-	ListBase objects;           /* (Object *)LinkData->data */
-	ListBase scene_collections; /* nested collections */
+	/** (Object *)LinkData->data. */
+	ListBase objects;
+	/** Nested collections. */
+	ListBase scene_collections;
 } SceneCollection;
 
 #ifdef __cplusplus

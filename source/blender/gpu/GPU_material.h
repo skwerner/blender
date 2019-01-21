@@ -90,7 +90,7 @@ typedef enum GPUType {
 	GPU_CLOSURE = 1006,
 
 	/* Opengl Attributes */
-	GPU_ATTRIB = 3001
+	GPU_ATTRIB = 3001,
 } GPUType;
 
 typedef enum GPUBuiltin {
@@ -130,7 +130,7 @@ typedef enum GPUBlendMode {
 	GPU_BLEND_ALPHA = 2,
 	GPU_BLEND_CLIP = 4,
 	GPU_BLEND_ALPHA_SORT = 8,
-	GPU_BLEND_ALPHA_TO_COVERAGE = 16
+	GPU_BLEND_ALPHA_TO_COVERAGE = 16,
 } GPUBlendMode;
 
 typedef struct GPUNodeStack {
@@ -155,7 +155,6 @@ GPUNodeLink *GPU_uniform(float *num);
 GPUNodeLink *GPU_image(struct Image *ima, struct ImageUser *iuser, bool is_data);
 GPUNodeLink *GPU_color_band(GPUMaterial *mat, int size, float *pixels, float *layer);
 GPUNodeLink *GPU_builtin(GPUBuiltin builtin);
-void GPU_node_link_set_type(GPUNodeLink *link, GPUType type);
 
 bool GPU_link(GPUMaterial *mat, const char *name, ...);
 bool GPU_stack_link(GPUMaterial *mat, struct bNode *node, const char *name, GPUNodeStack *in, GPUNodeStack *out, ...);

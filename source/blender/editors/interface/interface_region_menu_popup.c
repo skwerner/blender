@@ -393,7 +393,8 @@ uiPopupMenu *UI_popup_menu_begin_ex(bContext *C, const char *title, const char *
 	pup->layout = UI_block_layout(pup->block, UI_LAYOUT_VERTICAL, UI_LAYOUT_MENU, 0, 0, 200, 0, MENU_PADDING, style);
 
 	/* note, this intentionally differs from the menu & submenu default because many operators
-	 * use popups like this to select one of their options - where having invoke doesn't make sense */
+	 * use popups like this to select one of their options -
+	 * where having invoke doesn't make sense */
 	uiLayoutSetOperatorContext(pup->layout, WM_OP_EXEC_REGION_WIN);
 
 	/* create in advance so we can let buttons point to retval already */
@@ -640,12 +641,29 @@ void UI_popup_block_close(bContext *C, wmWindow *win, uiBlock *block)
 			UI_popup_handlers_remove(&win->modalhandlers, block->handle);
 			ui_popup_block_free(C, block->handle);
 
-			/* In the case we have nested popups, closing one may need to redraw another, see: T48874 */
+			/* In the case we have nested popups,
+			 * closing one may need to redraw another, see: T48874 */
 			for (ARegion *ar = screen->regionbase.first; ar; ar = ar->next) {
 				ED_region_tag_refresh_ui(ar);
 			}
 		}
 	}
+}
+
+bool UI_popup_block_name_exists(bContext *C, const char *name)
+{
+	bScreen *sc = CTX_wm_screen(C);
+	uiBlock *block;
+	ARegion *ar;
+
+	for (ar = sc->regionbase.first; ar; ar = ar->next) {
+		for (block = ar->uiblocks.first; block; block = block->next) {
+			if (STREQ(block->name, name)) {
+				return true;
+			}
+		}
+	}
+	return false;
 }
 
 /** \} */

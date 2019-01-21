@@ -61,49 +61,51 @@ typedef enum eUIFont_ID {
 
 	/* free slots */
 	UIFONT_CUSTOM1	= 2,
-	UIFONT_CUSTOM2	= 3
+	UIFONT_CUSTOM2	= 3,
 } eUIFont_ID;
 
 /* default fonts to load/initialize */
 /* first font is the default (index 0), others optional */
 typedef struct uiFont {
 	struct uiFont *next, *prev;
-	char filename[1024];/* 1024 = FILE_MAX */
-	short blf_id;		/* from blfont lib */
-	short uifont_id;	/* own id (eUIFont_ID) */
-	short r_to_l;		/* fonts that read from left to right */
+	/** 1024 = FILE_MAX. */
+	char filename[1024];
+	/** From blfont lib. */
+	short blf_id;
+	/** Own id (eUIFont_ID). */
+	short uifont_id;
+	/** Fonts that read from left to right. */
+	short r_to_l;
 	short pad;
 } uiFont;
 
 /* this state defines appearance of text */
 typedef struct uiFontStyle {
-	short uifont_id;		/* saved in file, 0 is default */
-	short points;			/* actual size depends on 'global' dpi */
-	short kerning;			/* unfitted or default kerning value. */
-	char word_wrap;			/* enable word-wrap when drawing */
-	char pad[5];
-	short italic, bold;		/* style hint */
-	short shadow;			/* value is amount of pixels blur */
-	short shadx, shady;		/* shadow offset in pixels */
-	short align;			/* text align hint */
-	float shadowalpha;		/* total alpha */
-	float shadowcolor;		/* 1 value, typically white or black anyway */
+	/** Saved in file, 0 is default. */
+	short uifont_id;
+	/** Actual size depends on 'global' dpi. */
+	short points;
+	/** Unfitted or default kerning value. */
+	short kerning;
+	/** Style hint. */
+	short italic, bold;
+	/** Value is amount of pixels blur. */
+	short shadow;
+	/** Shadow offset in pixels. */
+	short shadx, shady;
+	/** Total alpha. */
+	float shadowalpha;
+	/** 1 value, typically white or black anyway. */
+	float shadowcolor;
 } uiFontStyle;
-
-/* uiFontStyle.align */
-typedef enum eFontStyle_Align {
-	UI_STYLE_TEXT_LEFT		= 0,
-	UI_STYLE_TEXT_CENTER	= 1,
-	UI_STYLE_TEXT_RIGHT		= 2
-} eFontStyle_Align;
-
 
 /* this is fed to the layout engine and widget code */
 
 typedef struct uiStyle {
 	struct uiStyle *next, *prev;
 
-	char name[64];			/* MAX_STYLE_NAME */
+	/** MAX_STYLE_NAME. */
+	char name[64];
 
 	uiFontStyle paneltitle;
 	uiFontStyle grouplabel;
@@ -112,8 +114,10 @@ typedef struct uiStyle {
 
 	float panelzoom;
 
-	short minlabelchars;	/* in characters */
-	short minwidgetchars;	/* in characters */
+	/** In characters. */
+	short minlabelchars;
+	/** In characters. */
+	short minwidgetchars;
 
 	short columnspace;
 	short templatespace;
@@ -160,13 +164,6 @@ typedef struct uiPanelColors {
 	char pad2[4];
 } uiPanelColors;
 
-typedef struct uiGradientColors {
-	char gradient[4];
-	char high_gradient[4];
-	int show_grad;
-	int pad2;
-} uiGradientColors;
-
 typedef struct ThemeUI {
 	/* Interface Elements (buttons, menus, icons) */
 	uiWidgetColors wcol_regular, wcol_tool, wcol_toolbar_item, wcol_text;
@@ -177,7 +174,8 @@ typedef struct ThemeUI {
 
 	uiWidgetStateColors wcol_state;
 
-	uiPanelColors panel; /* deprecated, but we keep it for do_versions (2.66.1) */
+	/** Deprecated, but we keep it for do_versions (2.66.1). */
+	uiPanelColors panel;
 
 	char widget_emboss[4];
 
@@ -204,11 +202,16 @@ typedef struct ThemeUI {
 	char gizmo_b[4];
 
 	/* Icon Colors. */
-	char icon_collection[4];  /* Collection items */
-	char icon_object[4];      /* Object items */
-	char icon_object_data[4]; /* Object data items */
-	char icon_modifier[4];    /* Modifier and constraint items */
-	char icon_shading[4];     /* Shading related items */
+	/** Collection items. */
+	char icon_collection[4];
+	/** Object items. */
+	char icon_object[4];
+	/** Object data items. */
+	char icon_object_data[4];
+	/** Modifier and constraint items. */
+	char icon_modifier[4];
+	/** Shading related items. */
+	char icon_shading[4];
 } ThemeUI;
 
 /* try to put them all in one, if needed a special struct can be created as well
@@ -217,13 +220,21 @@ typedef struct ThemeUI {
 typedef struct ThemeSpace {
 	/* main window colors */
 	char back[4];
-	char title[4]; 	/* panel title */
+	char back_grad[4];
+
+	char show_back_grad;
+	char _pad0[3];
+
+	/** Panel title. */
+	char title[4];
 	char text[4];
 	char text_hi[4];
 
 	/* header colors */
-	char header[4];			/* region background */
-	char header_title[4];	/* unused */
+	/** Region background. */
+	char header[4];
+	/** Unused. */
+	char header_title[4];
 	char header_text[4];
 	char header_text_hi[4];
 
@@ -234,20 +245,26 @@ typedef struct ThemeSpace {
 	char tab_outline[4];
 
 	/* button/tool regions */
-	char button[4];			/* region background */
-	char button_title[4];	/* panel title */
+	/** Region background. */
+	char button[4];
+	/** Panel title. */
+	char button_title[4];
 	char button_text[4];
 	char button_text_hi[4];
 
 	/* listview regions */
-	char list[4];			/* region background */
-	char list_title[4]; 	/* panel title */
+	/** Region background. */
+	char list[4];
+	/** Panel title. */
+	char list_title[4];
 	char list_text[4];
 	char list_text_hi[4];
 
 	/* navigation bar regions */
-	char navigation_bar[4];			/* region background */
-	int pad2;
+	/** Region background. */
+	char navigation_bar[4];
+	/** Region background. */
+	char execution_buts[4];
 
 	/* float panel */
 /*	char panel[4];			unused */
@@ -257,8 +274,6 @@ typedef struct ThemeSpace {
 
 	/* note, cannot use name 'panel' because of DNA mapping old files */
 	uiPanelColors panelcolors;
-
-	uiGradientColors gradients;
 
 	char shade1[4];
 	char shade2[4];
@@ -274,8 +289,10 @@ typedef struct ThemeSpace {
 	char vertex[4], vertex_select[4], vertex_bevel[4], vertex_unreferenced[4];
 	char edge[4], edge_select[4];
 	char edge_seam[4], edge_sharp[4], edge_facesel[4], edge_crease[4], edge_bevel[4];
-	char face[4], face_select[4];	/* solid faces */
-	char face_dot[4];				/*  selected color */
+	/** Solid faces. */
+	char face[4], face_select[4];
+	/**  selected color. */
+	char face_dot[4];
 	char extra_edge_len[4], extra_edge_angle[4], extra_face_angle[4], extra_face_area[4];
 	char normal[4];
 	char vertex_normal[4];
@@ -292,9 +309,12 @@ typedef struct ThemeSpace {
 	char handle_free[4], handle_auto[4], handle_vect[4], handle_align[4], handle_auto_clamped[4];
 	char handle_sel_free[4], handle_sel_auto[4], handle_sel_vect[4], handle_sel_align[4], handle_sel_auto_clamped[4];
 
-	char ds_channel[4], ds_subchannel[4], ds_ipoline[4]; /* dopesheet */
-	char keytype_keyframe[4], keytype_extreme[4], keytype_breakdown[4], keytype_jitter[4], keytype_movehold[4]; /* keytypes */
-	char keytype_keyframe_select[4], keytype_extreme_select[4], keytype_breakdown_select[4], keytype_jitter_select[4], keytype_movehold_select[4]; /* keytypes */
+	/** Dopesheet. */
+	char ds_channel[4], ds_subchannel[4], ds_ipoline[4];
+	/** Keytypes. */
+	char keytype_keyframe[4], keytype_extreme[4], keytype_breakdown[4], keytype_jitter[4], keytype_movehold[4];
+	/** Keytypes. */
+	char keytype_keyframe_select[4], keytype_extreme_select[4], keytype_breakdown_select[4], keytype_jitter_select[4], keytype_movehold_select[4];
 	char keyborder[4], keyborder_select[4];
 	char pad[4];
 
@@ -315,10 +335,12 @@ typedef struct ThemeSpace {
 	char nodeclass_shader[4], nodeclass_script[4];
 	char nodeclass_pattern[4], nodeclass_layout[4];
 
-	char movie[4], movieclip[4], mask[4], image[4], scene[4], audio[4];		/* for sequence editor */
+	/** For sequence editor. */
+	char movie[4], movieclip[4], mask[4], image[4], scene[4], audio[4];
 	char effect[4], transition[4], meta[4], text_strip[4];
 
-	float keyframe_scale_fac; /* for dopesheet - scale factor for size of keyframes (i.e. height of channels) */
+	/** For dopesheet - scale factor for size of keyframes (i.e. height of channels). */
+	float keyframe_scale_fac;
 
 	char editmesh_active[4];
 
@@ -346,26 +368,39 @@ typedef struct ThemeSpace {
 	char preview_stitch_unstitchable[4];
 	char preview_stitch_active[4];
 
-	char uv_shadow[4]; /* two uses, for uvs with modifier applied on mesh and uvs during painting */
-	char uv_others[4]; /* uvs of other objects */
+	/** Two uses, for uvs with modifier applied on mesh and uvs during painting. */
+	char uv_shadow[4];
+	/** Uvs of other objects. */
+	char uv_others[4];
 
-	char match[4];				/* outliner - filter match */
-	char selected_highlight[4];	/* outliner - selected item */
+	/** Outliner - filter match. */
+	char match[4];
+	/** Outliner - selected item. */
+	char selected_highlight[4];
 
-	char skin_root[4]; /* Skin modifier root color */
+	/** Skin modifier root color. */
+	char skin_root[4];
 
 	/* NLA */
-	char anim_active[4];	 /* Active Action + Summary Channel */
-	char anim_non_active[4]; /* Active Action = NULL */
-	char anim_preview_range[4]; /* Preview range overlay */
+	/** Active Action + Summary Channel. */
+	char anim_active[4];
+	/** Active Action = NULL. */
+	char anim_non_active[4];
+	/** Preview range overlay. */
+	char anim_preview_range[4];
 	char anim_pad[4];
 
-	char nla_tweaking[4];   /* NLA 'Tweaking' action/strip */
-	char nla_tweakdupli[4]; /* NLA - warning color for duplicate instances of tweaking strip */
+	/** NLA 'Tweaking' action/strip. */
+	char nla_tweaking[4];
+	/** NLA - warning color for duplicate instances of tweaking strip. */
+	char nla_tweakdupli[4];
 
-	char nla_transition[4], nla_transition_sel[4]; /* NLA "Transition" strips */
-	char nla_meta[4], nla_meta_sel[4];             /* NLA "Meta" strips */
-	char nla_sound[4], nla_sound_sel[4];           /* NLA "Sound" strips */
+	/** NLA "Transition" strips. */
+	char nla_transition[4], nla_transition_sel[4];
+	/** NLA "Meta" strips. */
+	char nla_meta[4], nla_meta_sel[4];
+	/** NLA "Sound" strips. */
+	char nla_sound[4], nla_sound_sel[4];
 
 	/* info */
 	char info_selected[4], info_selected_text[4];
@@ -388,7 +423,8 @@ typedef struct ThemeWireColor {
 	char	select[4];
 	char 	active[4];
 
-	short 	flag;  /* eWireColor_Flags */
+	/** #eWireColor_Flags. */
+	short 	flag;
 	short 	pad;
 } ThemeWireColor;
 
@@ -439,12 +475,14 @@ typedef struct bTheme {
 typedef struct bAddon {
 	struct bAddon *next, *prev;
 	char module[64];
-	IDProperty *prop;  /* User-Defined Properties on this  Addon (for storing preferences) */
+	/** User-Defined Properties on this  Addon (for storing preferences). */
+	IDProperty *prop;
 } bAddon;
 
 typedef struct bPathCompare {
 	struct bPathCompare *next, *prev;
-	char path[768];  /* FILE_MAXDIR */
+	/** FILE_MAXDIR. */
+	char path[768];
 	char flag, pad[7];
 } bPathCompare;
 
@@ -501,12 +539,14 @@ typedef struct SolidLight {
 } SolidLight;
 
 typedef struct WalkNavigation {
-	float mouse_speed;  /* speed factor for look around */
+	/** Speed factor for look around. */
+	float mouse_speed;
 	float walk_speed;
 	float walk_speed_factor;
 	float view_height;
 	float jump_height;
-	float teleport_time;  /* duration to use for teleporting */
+	/** Duration to use for teleporting. */
+	float teleport_time;
 	short flag;
 	short pad[3];
 } WalkNavigation;
@@ -515,32 +555,43 @@ typedef struct UserDef {
 	/* UserDef has separate do-version handling, and can be read from other files */
 	int versionfile, subversionfile;
 
-	int flag;  /* eUserPref_Flag */
-	int dupflag;  /* eDupli_ID_Flags */
+	/** #eUserPref_Flag. */
+	int flag;
+	/** #eDupli_ID_Flags. */
+	int dupflag;
 	int savetime;
-	char tempdir[768];	/* FILE_MAXDIR length */
+	/** FILE_MAXDIR length. */
+	char tempdir[768];
 	char fontdir[768];
-	char renderdir[1024]; /* FILE_MAX length */
+	/** FILE_MAX length. */
+	char renderdir[1024];
 	/* EXR cache path */
-	char render_cachedir[768];  /* 768 = FILE_MAXDIR */
+	/** 768 = FILE_MAXDIR. */
+	char render_cachedir[768];
 	char textudir[768];
 	char pythondir[768];
 	char sounddir[768];
 	char i18ndir[768];
-	char image_editor[1024];    /* 1024 = FILE_MAX */
-	char anim_player[1024];	    /* 1024 = FILE_MAX */
+	/** 1024 = FILE_MAX. */
+	char image_editor[1024];
+	/** 1024 = FILE_MAX. */
+	char anim_player[1024];
 	int anim_player_preset;
 
-	short v2d_min_gridsize;		/* minimum spacing between gridlines in View2D grids */
-	short timecode_style;		/* eTimecodeStyles, style of timecode display */
+	/** Minimum spacing between gridlines in View2D grids. */
+	short v2d_min_gridsize;
+	/** #eTimecodeStyles, style of timecode display. */
+	short timecode_style;
 
 	short versions;
 	short dbl_click_time;
 
 	short pad;
 	short wheellinescroll;
-	int uiflag;   /* eUserpref_UI_Flag */
-	int uiflag2;  /* eUserpref_UI_Flag2 */
+	/** #eUserpref_UI_Flag. */
+	int uiflag;
+	/** #eUserpref_UI_Flag2. */
+	int uiflag2;
 	/* Experimental flag for app-templates to make changes to behavior
 	 * which are outside the scope of typical preferences. */
 	short app_flag;
@@ -555,17 +606,26 @@ typedef struct UserDef {
 	int audioformat;
 	int audiochannels;
 
-	float ui_scale;     /* setting for UI scale */
-	int ui_line_width;  /* setting for UI line width */
-	int dpi;            /* runtime, full DPI divided by pixelsize */
-	float dpi_fac;      /* runtime, multiplier to scale UI elements based on DPI */
-	float pixelsize;	/* runtime, line width and point size based on DPI */
-	int virtual_pixel;	/* deprecated, for forward compatibility */
+	/** Setting for UI scale. */
+	float ui_scale;
+	/** Setting for UI line width. */
+	int ui_line_width;
+	/** Runtime, full DPI divided by pixelsize. */
+	int dpi;
+	/** Runtime, multiplier to scale UI elements based on DPI. */
+	float dpi_fac;
+	/** Runtime, line width and point size based on DPI. */
+	float pixelsize;
+	/** Deprecated, for forward compatibility. */
+	int virtual_pixel;
 
-	int scrollback;     /* console scrollback limit */
-	char node_margin;   /* node insert offset (aka auto-offset) margin, but might be useful for later stuff as well */
+	/** Console scrollback limit. */
+	int scrollback;
+	/** Node insert offset (aka auto-offset) margin, but might be useful for later stuff as well. */
+	char node_margin;
 	char pad2[5];
-	short transopts;    /* eUserpref_Translation_Flags */
+	/** #eUserpref_Translation_Flags. */
+	short transopts;
 	short menuthreshold1, menuthreshold2;
 
 	/* startup template */
@@ -575,10 +635,12 @@ typedef struct UserDef {
 	struct ListBase uifonts;
 	struct ListBase uistyles;
 	struct ListBase user_keymaps;
-	struct ListBase user_keyconfig_prefs; /* wmKeyConfigPref. */
+	/** #wmKeyConfigPref. */
+	struct ListBase user_keyconfig_prefs;
 	struct ListBase addons;
 	struct ListBase autoexec_paths;
-	struct ListBase user_menus; /* bUserMenu */
+	/** #bUserMenu. */
+	struct ListBase user_menus;
 
 	char keyconfigstr[64];
 
@@ -587,9 +649,11 @@ typedef struct UserDef {
 	int undomemory;
 	float gpu_viewport_quality;
 	short gp_manhattendist, gp_euclideandist, gp_eraser;
-	short gp_settings;  /* eGP_UserdefSettings */
+	/** #eGP_UserdefSettings. */
+	short gp_settings;
 	short tb_leftmouse, tb_rightmouse;
-	/* struct SolidLight light[3] DNA_DEPRECATED; */ /* Was using non-aligned struct! */
+	/* Was using non-aligned struct! */
+	/* struct SolidLight light[3] DNA_DEPRECATED; */
 	struct SolidLight light_param[4];
 	float light_ambient[3], pad7;
 	short gizmo_flag, gizmo_size;
@@ -599,61 +663,84 @@ typedef struct UserDef {
 	short dragthreshold;
 	int memcachelimit;
 	int prefetchframes;
-	float pad_rot_angle; /* control the rotation step of the view when PAD2, PAD4, PAD6&PAD8 is use */
+	/** Control the rotation step of the view when PAD2, PAD4, PAD6&PAD8 is use. */
+	float pad_rot_angle;
 	short _pad0;
 	short obcenter_dia;
-	short rvisize;			/* rotating view icon size */
-	short rvibright;		/* rotating view icon brightness */
-	short recent_files;		/* maximum number of recently used files to remember  */
-	short smooth_viewtx;	/* milliseconds to spend spinning the view */
+	/** Rotating view icon size. */
+	short rvisize;
+	/** Rotating view icon brightness. */
+	short rvibright;
+	/** Maximum number of recently used files to remember . */
+	short recent_files;
+	/** Milliseconds to spend spinning the view. */
+	short smooth_viewtx;
 	short glreslimit;
 	short curssize;
-	short color_picker_type;  /* eColorPicker_Types */
-	char  ipo_new;			/* interpolation mode for newly added F-Curves */
-	char  keyhandles_new;	/* handle types for newly added keyframes */
-	char  gpu_select_method;
+	/** #eColorPicker_Types. */
+	short color_picker_type;
+	/** Interpolation mode for newly added F-Curves. */
+	char  ipo_new;
+	/** Handle types for newly added keyframes. */
+	char  keyhandles_new;
 	char  gpu_select_pick_deph;
-	char  pad0;
-	char  view_frame_type;  /* eZoomFrame_Mode */
+	char  pad0[2];
+	/** #eZoomFrame_Mode. */
+	char  view_frame_type;
 
-	int view_frame_keyframes; /* number of keyframes to zoom around current frame */
-	float view_frame_seconds; /* seconds to zoom around current frame */
+	/** Number of keyframes to zoom around current frame. */
+	int view_frame_keyframes;
+	/** Seconds to zoom around current frame. */
+	float view_frame_seconds;
 
-	char _pad1[4];
+	char _pad1[6];
 
-	short widget_unit;		/* private, defaults to 20 for 72 DPI setting */
+	/** Private, defaults to 20 for 72 DPI setting. */
+	short widget_unit;
 	short anisotropic_filter;
-	short use_16bit_textures, use_gpu_mipmap;
 
-	float pressure_threshold_max; /* raw tablet pressure that maps to 100% */
-	float pressure_softness;      /* curve non-linearity parameter */
+	/** Tablet API to use (Windows only). */
+	short tablet_api;
 
-	float ndof_sensitivity;	/* overall sensitivity of 3D mouse */
+	/** Raw tablet pressure that maps to 100%. */
+	float pressure_threshold_max;
+	/** Curve non-linearity parameter. */
+	float pressure_softness;
+
+	/** Overall sensitivity of 3D mouse. */
+	float ndof_sensitivity;
 	float ndof_orbit_sensitivity;
-	float ndof_deadzone; /* deadzone of 3D mouse */
-	int ndof_flag;			/* eNdof_Flag, flags for 3D mouse */
+	/** Deadzone of 3D mouse. */
+	float ndof_deadzone;
+	/** #eNdof_Flag, flags for 3D mouse. */
+	int ndof_flag;
 
-	short ogl_multisamples;	/* eMultiSample_Type, amount of samples for OpenGL FSA, if zero no FSA */
+	/** #eMultiSample_Type, amount of samples for OpenGL FSA, if zero no FSA. */
+	short ogl_multisamples;
 
-	/* eImageDrawMethod, Method to be used to draw the images (AUTO, GLSL, Textures or DrawPixels) */
+	/** eImageDrawMethod, Method to be used to draw the images
+	 * (AUTO, GLSL, Textures or DrawPixels) */
 	short image_draw_method;
 
 	float glalphaclip;
 
-	short autokey_mode;		/* eAutokey_Mode, autokeying mode */
-	short autokey_flag;		/* flags for autokeying */
+	/** #eAutokey_Mode, autokeying mode. */
+	short autokey_mode;
+	/** Flags for autokeying. */
+	short autokey_flag;
 
-	short text_render, pad9;		/* options for text rendering */
+	/** Options for text rendering. */
+	short text_render, pad9;
 
-	struct ColorBand coba_weight;	/* from texture.h */
+	/** From texture.h. */
+	struct ColorBand coba_weight;
 
 	float sculpt_paint_overlay_col[3];
-	float gpencil_new_layer_col[4]; /* default color for newly created Grease Pencil layers */
+	/** Default color for newly created Grease Pencil layers. */
+	float gpencil_new_layer_col[4];
 
 	short tweak_threshold;
 	char navigation_mode, pad10;
-
-	char author[80];	/* author name for file formats supporting it */
 
 	char font_path_ui[1024];
 	char font_path_ui_mono[1024];
@@ -661,52 +748,63 @@ typedef struct UserDef {
 	int compute_device_type;
 	int compute_device_id;
 
-	float fcu_inactive_alpha;	/* opacity of inactive F-Curves in F-Curve Editor */
+	/** Opacity of inactive F-Curves in F-Curve Editor. */
+	float fcu_inactive_alpha;
 
-	short pie_interaction_type;     /* if keeping a pie menu spawn button pressed after this time, it turns into
-	                             * a drag/release pie menu */
-	short pie_initial_timeout;  /* direction in the pie menu will always be calculated from the initial position
-	                             * within this time limit */
+	/**
+	 * If keeping a pie menu spawn button pressed after this time,
+	 * it turns into a drag/release pie menu.
+	 */
+	short pie_tap_timeout;
+	/**
+	 * Direction in the pie menu will always be calculated from the
+	 * initial position within this time limit.
+	 */
+	short pie_initial_timeout;
 	short pie_animation_timeout;
 	short pie_menu_confirm;
-	short pie_menu_radius;        /* pie menu radius */
-	short pie_menu_threshold;     /* pie menu distance from center before a direction is set */
+	/** Pie menu radius. */
+	short pie_menu_radius;
+	/** Pie menu distance from center before a direction is set. */
+	short pie_menu_threshold;
 
 	struct WalkNavigation walk_navigation;
 
 	short opensubdiv_compute_type;
-	short gpencil_multisamples;	/* eMultiSample_Type, amount of samples for Grease Pencil */
+	/** #eMultiSample_Type, amount of samples for Grease Pencil. */
+	short gpencil_multisamples;
 
 	char pad5[4];
 } UserDef;
 
-extern UserDef U; /* from blenkernel blender.c */
+/* from blenkernel blender.c */
+extern UserDef U;
 
 /* ***************** USERDEF ****************** */
 
 /* Toggles for unfinished 2.8 UserPref design. */
 //#define WITH_USERDEF_WORKSPACES
-//#define WITH_USERDEF_SYSTEM_SPLIT
 
 /* UserDef.userpref (UI active_section) */
 typedef enum eUserPref_Section {
 	USER_SECTION_INTERFACE         = 0,
-	USER_SECTION_EDIT              = 1,
-	USER_SECTION_SYSTEM_FILES      = 2,
-	USER_SECTION_SYSTEM_GENERAL    = 3,
+	USER_SECTION_EDITING           = 1,
+	USER_SECTION_SAVE_LOAD         = 2,
+	USER_SECTION_SYSTEM            = 3,
 	USER_SECTION_THEME             = 4,
 	USER_SECTION_INPUT             = 5,
 	USER_SECTION_ADDONS            = 6,
 	USER_SECTION_LIGHT             = 7,
+	USER_SECTION_KEYMAP            = 8,
 #ifdef WITH_USERDEF_WORKSPACES
-	USER_SECTION_WORKSPACE_CONFIG  = 8,
-	USER_SECTION_WORKSPACE_ADDONS  = 9,
-	USER_SECTION_WORKSPACE_KEYMAPS = 10,
+	USER_SECTION_WORKSPACE_CONFIG  = 9,
+	USER_SECTION_WORKSPACE_ADDONS  = 10,
+	USER_SECTION_WORKSPACE_KEYMAPS = 11,
 #endif
-#ifdef WITH_USERDEF_SYSTEM_SPLIT
-	USER_SECTION_SYSTEM_DISPLAY    = 11,
-	USER_SECTION_SYSTEM_DEVICES    = 12,
-#endif
+	USER_SECTION_VIEWPORT          = 12,
+	USER_SECTION_ANIMATION         = 13,
+	USER_SECTION_NAVIGATION        = 14,
+	USER_SECTION_FILE_PATHS        = 15,
 } eUserPref_Section;
 
 /* UserDef.userpref_flag (State of the user preferences UI). */
@@ -761,7 +859,7 @@ typedef enum ePathCompare_Flag {
 typedef enum eViewZoom_Style {
 	USER_ZOOM_CONT			= 0,
 	USER_ZOOM_SCALE			= 1,
-	USER_ZOOM_DOLLY			= 2
+	USER_ZOOM_DOLLY			= 2,
 } eViewZoom_Style;
 
 /* UserDef.navigation_mode */
@@ -808,7 +906,7 @@ typedef enum eUserpref_UI_Flag {
 	USER_HIDE_RECENT            = (1 << 28),
 	USER_SHOW_THUMBNAILS        = (1 << 29),
 	USER_QUIT_PROMPT            = (1 << 30),
-	USER_HIDE_SYSTEM_BOOKMARKS  = (1u << 31)
+	USER_HIDE_SYSTEM_BOOKMARKS  = (1u << 31),
 } eUserpref_UI_Flag;
 
 /* UserDef.uiflag2 */
@@ -817,6 +915,13 @@ typedef enum eUserpref_UI_Flag2 {
 	USER_REGION_OVERLAP			= (1 << 1),
 	USER_TRACKPAD_NATURAL		= (1 << 2),
 } eUserpref_UI_Flag2;
+
+/* UserDef.tablet_api */
+typedef enum eUserpref_TableAPI {
+	USER_TABLET_AUTOMATIC = 0,
+	USER_TABLET_NATIVE = 1,
+	USER_TABLET_WINTAB = 2,
+} eUserpref_TabletAPI;
 
 /* UserDef.app_flag */
 typedef enum eUserpref_APP_Flag {
@@ -829,9 +934,10 @@ typedef enum eAutokey_Mode {
 	/* AUTOKEY_ON is a bitflag */
 	AUTOKEY_ON             = 1,
 
-	/* AUTOKEY_ON + 2**n...  (i.e. AUTOKEY_MODE_NORMAL = AUTOKEY_ON + 2) to preserve setting, even when autokey turned off  */
+	/** AUTOKEY_ON + 2**n...  (i.e. AUTOKEY_MODE_NORMAL = AUTOKEY_ON + 2)
+	 * to preserve setting, even when autokey turned off  */
 	AUTOKEY_MODE_NORMAL    = 3,
-	AUTOKEY_MODE_EDITKEYS  = 5
+	AUTOKEY_MODE_EDITKEYS  = 5,
 } eAutokey_Mode;
 
 /* Zoom to frame mode.
@@ -839,7 +945,7 @@ typedef enum eAutokey_Mode {
 typedef enum eZoomFrame_Mode {
 	ZOOM_FRAME_MODE_KEEP_RANGE = 0,
 	ZOOM_FRAME_MODE_SECONDS = 1,
-	ZOOM_FRAME_MODE_KEYFRAMES = 2
+	ZOOM_FRAME_MODE_KEYFRAMES = 2,
 } eZoomFrame_Mode;
 
 /* Auto-Keying flag
@@ -885,15 +991,8 @@ typedef enum eDupli_ID_Flags {
 	USER_DUP_TEX			= (1 << 8),
 	USER_DUP_ARM			= (1 << 9),
 	USER_DUP_ACT			= (1 << 10),
-	USER_DUP_PSYS			= (1 << 11)
+	USER_DUP_PSYS			= (1 << 11),
 } eDupli_ID_Flags;
-
-/* selection method for opengl gpu_select_method */
-typedef enum eOpenGL_SelectOptions {
-	USER_SELECT_AUTO = 0,
-	USER_SELECT_USE_OCCLUSION_QUERY = 1,
-	USER_SELECT_USE_SELECT_RENDERMODE = 2
-} eOpenGL_SelectOptions;
 
 /* max anti alias draw method UserDef.gpu_viewport_antialias */
 typedef enum eOpenGL_AntiAliasMethod {
@@ -968,7 +1067,7 @@ typedef enum eTheme_DrawTypes {
 	TH_ROUNDSHADED	= 1,
 	TH_ROUNDED  	= 2,
 	TH_OLDSKOOL 	= 3,
-	TH_SHADED   	= 4
+	TH_SHADED   	= 4,
 } eTheme_DrawTypes;
 
 /* UserDef.ndof_flag (3D mouse options) */

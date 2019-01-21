@@ -58,6 +58,7 @@
 #include "BKE_global.h"
 #include "BKE_scene.h"
 
+#include "DEG_depsgraph.h"
 #include "DEG_depsgraph_build.h"
 
 #include "UI_view2d.h"
@@ -706,7 +707,7 @@ typedef enum eRearrangeAnimChan_Mode {
 	REARRANGE_ANIMCHAN_TOP = -2,
 	REARRANGE_ANIMCHAN_UP = -1,
 	REARRANGE_ANIMCHAN_DOWN = 1,
-	REARRANGE_ANIMCHAN_BOTTOM = 2
+	REARRANGE_ANIMCHAN_BOTTOM = 2,
 } eRearrangeAnimChan_Mode;
 
 /* defines for rearranging channels */
@@ -880,7 +881,8 @@ static void rearrange_animchannel_add_to_islands(ListBase *islands, ListBase *sr
                                                  Link *channel, eAnim_ChannelType type,
                                                  const bool is_hidden)
 {
-	tReorderChannelIsland *island = islands->last;  /* always try to add to last island if possible */
+	/* always try to add to last island if possible */
+	tReorderChannelIsland *island = islands->last;
 	bool is_sel = false, is_untouchable = false;
 
 	/* get flags - selected and untouchable from the channel */
@@ -1354,6 +1356,7 @@ static int animchannels_rearrange_exec(bContext *C, wmOperator *op)
 			switch (ac.datatype) {
 				case ANIMCONT_NLA: /* NLA-tracks only */
 					rearrange_nla_channels(&ac, adt, mode);
+					DEG_id_tag_update(ale->id, ID_RECALC_ANIMATION | ID_RECALC_COPY_ON_WRITE);
 					break;
 
 				case ANIMCONT_DRIVERS: /* Drivers list only */
@@ -1559,7 +1562,8 @@ static void ANIM_OT_channels_group(wmOperatorType *ot)
 	ot->prop = RNA_def_string(ot->srna, "name", "New Group",
 	                          sizeof(((bActionGroup *)NULL)->name),
 	                          "Name", "Name of newly created group");
-	/* RNA_def_property_flag(ot->prop, PROP_SKIP_SAVE); */ /* XXX: still not too sure about this - keeping same text is confusing... */
+	/* XXX: still not too sure about this - keeping same text is confusing... */
+	// RNA_def_property_flag(ot->prop, PROP_SKIP_SAVE);
 }
 
 /* ----------------------------------------------------------- */
@@ -1672,8 +1676,10 @@ static int animchannels_delete_exec(bContext *C, wmOperator *UNUSED(op))
 				}
 
 				/* free the group itself */
-				if (adt->action)
+				if (adt->action) {
 					BLI_freelinkN(&adt->action->groups, agrp);
+					DEG_id_tag_update_ex(CTX_data_main(C), &adt->action->id, ID_RECALC_COPY_ON_WRITE);
+				}
 				else
 					MEM_freeN(agrp);
 			}
@@ -1698,6 +1704,7 @@ static int animchannels_delete_exec(bContext *C, wmOperator *UNUSED(op))
 
 				/* try to free F-Curve */
 				ANIM_fcurve_delete_from_animdata(&ac, adt, fcu);
+				ale->update = ANIM_UPDATE_DEPS;
 				break;
 			}
 			case ANIMTYPE_NLACURVE:
@@ -1719,6 +1726,7 @@ static int animchannels_delete_exec(bContext *C, wmOperator *UNUSED(op))
 				/* unlink and free the F-Curve */
 				BLI_remlink(&strip->fcurves, fcu);
 				free_fcurve(fcu);
+				ale->update = ANIM_UPDATE_DEPS;
 				break;
 			}
 			case ANIMTYPE_GPLAYER:
@@ -1729,6 +1737,7 @@ static int animchannels_delete_exec(bContext *C, wmOperator *UNUSED(op))
 
 				/* try to delete the layer's data and the layer itself */
 				BKE_gpencil_layer_delete(gpd, gpl);
+				ale->update = ANIM_UPDATE_DEPS;
 				break;
 			}
 			case ANIMTYPE_MASKLAYER:
@@ -1745,6 +1754,7 @@ static int animchannels_delete_exec(bContext *C, wmOperator *UNUSED(op))
 	}
 
 	/* cleanup */
+	ANIM_animdata_update(&ac, &anim_data);
 	ANIM_animdata_freelist(&anim_data);
 
 	/* send notifier that things have changed */
@@ -2731,7 +2741,7 @@ static int mouse_anim_channels(bContext *C, bAnimContext *ac, int channel_index,
 
 				/* ensure we exit editmode on whatever object was active before to avoid getting stuck there - T48747 */
 				if (ob != CTX_data_edit_object(C)) {
-					ED_object_editmode_exit(C, EM_FREEDATA | EM_WAITCURSOR);
+					ED_object_editmode_exit(C, EM_FREEDATA);
 				}
 
 				notifierFlags |= (ND_ANIMCHAN | NA_SELECTED);
@@ -2940,7 +2950,8 @@ static int mouse_anim_channels(bContext *C, bAnimContext *ac, int channel_index,
 				BKE_gpencil_layer_setactive(gpd, gpl);
 			}
 
-			WM_event_add_notifier(C, NC_GPENCIL | ND_DATA | NA_EDITED | ND_SPACE_PROPERTIES, NULL); /* Grease Pencil updates */
+			/* Grease Pencil updates */
+			WM_event_add_notifier(C, NC_GPENCIL | ND_DATA | NA_EDITED | ND_SPACE_PROPERTIES, NULL);
 			notifierFlags |= (ND_ANIMCHAN | NA_EDITED); /* Animation Editors updates */
 			break;
 		}
@@ -3010,17 +3021,24 @@ static int animchannels_mouseclick_invoke(bContext *C, wmOperator *op, const wmE
 	v2d = &ar->v2d;
 
 	/* select mode is either replace (deselect all, then add) or add/extend */
-	if (RNA_boolean_get(op->ptr, "extend"))
+	if (RNA_boolean_get(op->ptr, "extend")) {
 		selectmode = SELECT_INVERT;
-	else if (RNA_boolean_get(op->ptr, "children_only"))
-		selectmode = -1;  /* this is a bit of a special case for ActionGroups only... should it be removed or extended to all instead? */
-	else
+	}
+	else if (RNA_boolean_get(op->ptr, "children_only")) {
+		/* this is a bit of a special case for ActionGroups only...
+		 * should it be removed or extended to all instead? */
+		selectmode = -1;
+	}
+	else {
 		selectmode = SELECT_REPLACE;
+	}
 
 	/* figure out which channel user clicked in
-	 * Note: although channels technically start at (y = ACHANNEL_FIRST), we need to adjust by half a channel's height
-	 *       so that the tops of channels get caught ok. Since ACHANNEL_FIRST is really ACHANNEL_HEIGHT, we simply use
-	 *       ACHANNEL_HEIGHT_HALF.
+	 *
+	 * Note:
+	 * although channels technically start at (y = ACHANNEL_FIRST),
+	 * we need to adjust by half a channel's height so that the tops of channels get caught ok.
+	 * Since ACHANNEL_FIRST is really ACHANNEL_HEIGHT, we simply use ACHANNEL_HEIGHT_HALF.
 	 */
 	UI_view2d_region_to_view(v2d, event->mval[0], event->mval[1], &x, &y);
 	UI_view2d_listview_view_to_cell(v2d, ACHANNEL_NAMEWIDTH, ACHANNEL_STEP(&ac), 0, (float)ACHANNEL_HEIGHT_HALF(&ac), x, y, NULL, &channel_index);
@@ -3051,7 +3069,7 @@ static void ANIM_OT_channels_click(wmOperatorType *ot)
 	ot->flag = OPTYPE_UNDO;
 
 	/* properties */
-	/* NOTE: don't save settings, otherwise, can end up with some weird behaviour (sticky extend) */
+	/* NOTE: don't save settings, otherwise, can end up with some weird behavior (sticky extend) */
 	prop = RNA_def_boolean(ot->srna, "extend", false, "Extend Select", ""); // SHIFTKEY
 	RNA_def_property_flag(prop, PROP_SKIP_SAVE);
 

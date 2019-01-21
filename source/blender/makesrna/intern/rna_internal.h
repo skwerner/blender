@@ -136,7 +136,6 @@ void RNA_def_action(struct BlenderRNA *brna);
 void RNA_def_animation(struct BlenderRNA *brna);
 void RNA_def_animviz(struct BlenderRNA *brna);
 void RNA_def_armature(struct BlenderRNA *brna);
-void RNA_def_actuator(struct BlenderRNA *brna);
 void RNA_def_boid(struct BlenderRNA *brna);
 void RNA_def_brush(struct BlenderRNA *brna);
 void RNA_def_cachefile(struct BlenderRNA *brna);
@@ -181,7 +180,6 @@ void RNA_def_scene(struct BlenderRNA *brna);
 void RNA_def_view_layer(struct BlenderRNA *brna);
 void RNA_def_screen(struct BlenderRNA *brna);
 void RNA_def_sculpt_paint(struct BlenderRNA *brna);
-void RNA_def_sensor(struct BlenderRNA *brna);
 void RNA_def_sequencer(struct BlenderRNA *brna);
 void RNA_def_smoke(struct BlenderRNA *brna);
 void RNA_def_space(struct BlenderRNA *brna);
@@ -224,7 +222,7 @@ void rna_def_mtex_common(struct BlenderRNA *brna, struct StructRNA *srna, const 
                          const char *activeset, const char *activeeditable, const char *structname,
                          const char *structname_slots, const char *update, const char *update_index);
 void rna_def_texpaint_slots(struct BlenderRNA *brna, struct StructRNA *srna);
-void rna_def_view_layer_common(struct StructRNA *srna, int scene);
+void rna_def_view_layer_common(struct StructRNA *srna, bool scene);
 
 void rna_def_actionbone_group_common(struct StructRNA *srna, int update_flag, const char *update_cb);
 void rna_ActionGroup_colorset_set(struct PointerRNA *ptr, int value);
@@ -274,6 +272,7 @@ void rna_Scene_use_view_map_cache_update(struct Main *bmain, struct Scene *scene
 void rna_Scene_glsl_update(struct Main *bmain, struct Scene *scene, struct PointerRNA *ptr);
 void rna_Scene_freestyle_update(struct Main *bmain, struct Scene *scene, struct PointerRNA *ptr);
 void rna_ViewLayer_name_set(struct PointerRNA *ptr, const char *value);
+void rna_ViewLayer_material_override_update(struct Main *bmain, struct Scene *activescene, struct PointerRNA *ptr);
 void rna_ViewLayer_pass_update(struct Main *bmain, struct Scene *activescene, struct PointerRNA *ptr);
 
 /* named internal so as not to conflict with obj.update() rna func */
@@ -330,7 +329,6 @@ void RNA_api_material(StructRNA *srna);
 void RNA_api_mesh(struct StructRNA *srna);
 void RNA_api_meta(struct StructRNA *srna);
 void RNA_api_object(struct StructRNA *srna);
-void RNA_api_object_base_legacy(struct StructRNA *srna);
 void RNA_api_pose(struct StructRNA *srna);
 void RNA_api_pose_channel(struct StructRNA *srna);
 void RNA_api_scene(struct StructRNA *srna);
@@ -343,11 +341,7 @@ void RNA_api_wm(struct StructRNA *srna);
 void RNA_api_space_node(struct StructRNA *srna);
 void RNA_api_space_text(struct StructRNA *srna);
 void RNA_api_region_view3d(struct StructRNA *srna);
-void RNA_api_sensor(struct StructRNA *srna);
-void RNA_api_controller(struct StructRNA *srna);
-void RNA_api_actuator(struct StructRNA *srna);
 void RNA_api_texture(struct StructRNA *srna);
-void RNA_api_environment_map(struct StructRNA *srna);
 void RNA_api_sequences(BlenderRNA *brna, PropertyRNA *cprop);
 void RNA_api_sequence_elements(BlenderRNA *brna, PropertyRNA *cprop);
 void RNA_api_sound(struct StructRNA *srna);
@@ -504,7 +498,6 @@ const char *rna_translate_ui_text(
         const char *text, const char *text_ctxt, struct StructRNA *type, struct PropertyRNA *prop, bool translate);
 
 /* Internal functions that cycles uses so we need to declare (tsk tsk) */
-void rna_RenderLayer_rect_set(PointerRNA *ptr, const float *values);
 void rna_RenderPass_rect_set(PointerRNA *ptr, const float *values);
 
 #ifdef RNA_RUNTIME

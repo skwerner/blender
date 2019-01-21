@@ -820,7 +820,7 @@ void EEVEE_lightbake_render_world(EEVEE_ViewLayerData *UNUSED(sldata), EEVEE_Dat
 {
 	EEVEE_BakeRenderData brdata = {
 		.vedata = vedata,
-		.face_fb = face_fb
+		.face_fb = face_fb,
 	};
 
 	render_cubemap(lightbake_render_world_face, &brdata, (float[3]){0.0f}, 1.0f, 10.0f);
@@ -854,7 +854,7 @@ void EEVEE_lightbake_render_scene(
 	EEVEE_BakeRenderData brdata = {
 		.vedata = vedata,
 		.sldata = sldata,
-		.face_fb = face_fb
+		.face_fb = face_fb,
 	};
 
 	render_cubemap(lightbake_render_scene_face, &brdata, pos, near_clip, far_clip);
@@ -898,7 +898,7 @@ static void lightbake_render_scene_reflected(int layer, EEVEE_BakeRenderData *us
 	sldata->clip_data.clip_planes[0][3] += eplanar->clipsta;
 	/* Set clipping plane */
 	DRW_uniformbuffer_update(sldata->clip_ubo, &sldata->clip_data);
-	DRW_state_clip_planes_count_set(1);
+	DRW_state_clip_planes_len_set(1);
 
 	GPU_framebuffer_bind(fbl->planarref_fb);
 	GPU_framebuffer_clear_depth(fbl->planarref_fb, 1.0);

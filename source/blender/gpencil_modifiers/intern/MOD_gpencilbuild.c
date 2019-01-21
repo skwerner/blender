@@ -57,7 +57,7 @@ static void initData(GpencilModifierData *md)
 	BuildGpencilModifierData *gpmd = (BuildGpencilModifierData *)md;
 
 	/* We deliberately set this range to the half the default
-	 * frame-range to have an immediate effect ot suggest use-cases
+	 * frame-range to have an immediate effect to suggest use-cases
 	 */
 	gpmd->start_frame = 1;
 	gpmd->end_frame = 125;
@@ -178,7 +178,7 @@ static void reduce_stroke_points(bGPDstroke *gps, const int num_points, const eB
 	gps->totpoints = num_points;
 
 	/* mark stroke as needing to have its geometry caches rebuilt */
-	gps->flag |= GP_STROKE_RECALC_CACHES;
+	gps->flag |= GP_STROKE_RECALC_GEOMETRY;
 	gps->tot_triangles = 0;
 	MEM_SAFE_FREE(gps->triangles);
 }

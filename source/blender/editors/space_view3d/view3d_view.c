@@ -212,7 +212,8 @@ void ED_view3d_smooth_view_ex(
 			}
 			/* grid draw as floor */
 			if ((rv3d->viewlock & RV3D_LOCKED) == 0) {
-				/* use existing if exists, means multiple calls to smooth view wont loose the original 'view' setting */
+				/* use existing if exists, means multiple calls to smooth view
+				 * wont loose the original 'view' setting */
 				rv3d->view = RV3D_VIEW_USER;
 			}
 
@@ -224,7 +225,8 @@ void ED_view3d_smooth_view_ex(
 			 * this means small rotations wont lag */
 			if (sview->quat && !sview->ofs && !sview->dist) {
 				/* scale the time allowed by the rotation */
-				sms.time_allowed *= (double)fabsf(angle_signed_normalized_qtqt(sms.dst.quat, sms.src.quat)) / M_PI; /* 180deg == 1.0 */
+				/* 180deg == 1.0 */
+				sms.time_allowed *= (double)fabsf(angle_signed_normalized_qtqt(sms.dst.quat, sms.src.quat)) / M_PI;
 			}
 
 			/* ensure it shows correct */
@@ -239,8 +241,8 @@ void ED_view3d_smooth_view_ex(
 
 			rv3d->rflag |= RV3D_NAVIGATING;
 
-			/* not essential but in some cases the caller will tag the area for redraw,
-			 * and in that case we can get a flicker of the 'org' user view but we want to see 'src' */
+			/* not essential but in some cases the caller will tag the area for redraw, and in that
+			 * case we can get a flicker of the 'org' user view but we want to see 'src' */
 			view3d_smooth_view_state_restore(&sms.src, v3d, rv3d);
 
 			/* keep track of running timer! */
@@ -252,7 +254,8 @@ void ED_view3d_smooth_view_ex(
 				WM_event_remove_timer(wm, win, rv3d->smooth_timer);
 			}
 			/* TIMER1 is hardcoded in keymap */
-			rv3d->smooth_timer = WM_event_add_timer(wm, win, TIMER1, 1.0 / 100.0); /* max 30 frs/sec */
+			/* max 30 frs/sec */
+			rv3d->smooth_timer = WM_event_add_timer(wm, win, TIMER1, 1.0 / 100.0);
 
 			ok = true;
 		}
@@ -605,7 +608,8 @@ static void sync_viewport_camera_smoothview(bContext *C, View3D *v3d, Object *ob
 										            .ofs = other_rv3d->ofs,
 										            .quat = other_rv3d->viewquat,
 										            .dist = &other_rv3d->dist,
-										            .lens = &other_v3d->lens});
+										            .lens = &other_v3d->lens,
+										        });
 									}
 									else {
 										other_v3d->camera = ob;
@@ -651,7 +655,8 @@ static int view3d_setobjectascamera_exec(bContext *C, wmOperator *op)
 			        &(const V3D_SmoothParams) {
 			            .camera_old = camera_old, .camera = v3d->camera,
 			            .ofs = rv3d->ofs, .quat = rv3d->viewquat,
-			            .dist = &rv3d->dist, .lens = &v3d->lens});
+			            .dist = &rv3d->dist, .lens = &v3d->lens,
+			        });
 		}
 
 		if (v3d->scenelock) {
@@ -944,8 +949,7 @@ int view3d_opengl_select(
 	const bool is_pick_select = (U.gpu_select_pick_deph != 0);
 	const bool do_passes = (
 	        (is_pick_select == false) &&
-	        (select_mode == VIEW3D_SELECT_PICK_NEAREST) &&
-	        GPU_select_query_check_active());
+	        (select_mode == VIEW3D_SELECT_PICK_NEAREST));
 	const bool use_nearest = (is_pick_select && select_mode == VIEW3D_SELECT_PICK_NEAREST);
 	bool draw_surface = true;
 
@@ -1184,7 +1188,7 @@ static bool view3d_localview_init(
 		}
 		else {
 			for (base = FIRSTBASE(view_layer); base; base = base->next) {
-				if (TESTBASE(v3d, base)) {
+				if (BASE_SELECTED(v3d, base)) {
 					BKE_object_minmax(base->object, min, max, false);
 					base->local_view_bits |= local_view_bit;
 					ok = true;
@@ -1245,7 +1249,8 @@ static bool view3d_localview_init(
 				            &(const V3D_SmoothParams) {
 				                .camera_old = camera_old,
 				                .ofs = ofs_new, .quat = rv3d->viewquat,
-				                .dist = ok_dist ? &dist_new : NULL, .lens = &v3d->lens});
+				                .dist = ok_dist ? &dist_new : NULL, .lens = &v3d->lens,
+				            });
 			}
 		}
 
@@ -1303,7 +1308,8 @@ static void restore_localviewdata(
 				        &(const V3D_SmoothParams) {
 				            .camera_old = camera_old_rv3d, .camera = camera_new_rv3d,
 				            .ofs = rv3d->localvd->ofs, .quat = rv3d->localvd->viewquat,
-				            .dist = &rv3d->localvd->dist});
+				            .dist = &rv3d->localvd->dist,
+				        });
 
 				if (free) {
 					MEM_freeN(rv3d->localvd);
@@ -1417,7 +1423,7 @@ static int localview_remove_from_exec(bContext *C, wmOperator *op)
 	bool changed = false;
 
 	for (Base *base = FIRSTBASE(view_layer); base; base = base->next) {
-		if (TESTBASE(v3d, base)) {
+		if (BASE_SELECTED(v3d, base)) {
 			base->local_view_bits &= ~v3d->local_view_uuid;
 			ED_object_base_select(base, BA_DESELECT);
 

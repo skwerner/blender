@@ -1209,9 +1209,6 @@ static void render_scene(Render *re, Scene *sce, int cfra)
 	resc->main = re->main;
 	resc->scene = sce;
 
-	/* ensure scene has depsgraph, base flags etc OK */
-	BKE_scene_set_background(re->main, sce);
-
 	/* copy callbacks */
 	resc->display_update = re->display_update;
 	resc->duh = re->duh;
@@ -1260,7 +1257,6 @@ static void ntree_render_scenes(Render *re)
 	bNode *node;
 	int cfra = re->scene->r.cfra;
 	Scene *restore_scene = re->scene;
-	bool scene_changed = false;
 
 	if (re->scene->nodetree == NULL) return;
 
@@ -1269,22 +1265,15 @@ static void ntree_render_scenes(Render *re)
 	for (node = re->scene->nodetree->nodes.first; node; node = node->next) {
 		if (node->type == CMP_NODE_R_LAYERS && (node->flag & NODE_MUTED) == 0) {
 			if (node->id && node->id != (ID *)re->scene) {
-				if (node->flag & NODE_TEST) {
-					Scene *scene = (Scene *)node->id;
+				Scene *scene = (Scene *)node->id;
 
-					scene_changed |= scene != restore_scene;
+				if (render_scene_has_layers_to_render(scene, false)) {
 					render_scene(re, scene, cfra);
-					node->flag &= ~NODE_TEST;
-
 					nodeUpdate(restore_scene->nodetree, node);
 				}
 			}
 		}
 	}
-
-	/* restore scene if we rendered another last */
-	if (scene_changed)
-		BKE_scene_set_background(re->main, re->scene);
 }
 
 /* bad call... need to think over proper method still */
@@ -1357,7 +1346,7 @@ static void free_all_freestyle_renders(void)
 				freestyle_scene = freestyle_render->scene;
 				RE_FreeRender(freestyle_render);
 				BKE_libblock_unlink(re1->freestyle_bmain, freestyle_scene, false, false);
-				BKE_libblock_free(re1->freestyle_bmain, freestyle_scene);
+				BKE_id_free(re1->freestyle_bmain, freestyle_scene);
 			}
 		}
 		BLI_freelistN(&re1->freestyle_renders);
@@ -2783,16 +2772,10 @@ RenderPass *RE_pass_find_by_type(volatile RenderLayer *rl, int passtype, const c
 	CHECK_PASS(VECTOR);
 	CHECK_PASS(NORMAL);
 	CHECK_PASS(UV);
-	CHECK_PASS(RGBA);
 	CHECK_PASS(EMIT);
-	CHECK_PASS(DIFFUSE);
-	CHECK_PASS(SPEC);
 	CHECK_PASS(SHADOW);
 	CHECK_PASS(AO);
 	CHECK_PASS(ENVIRONMENT);
-	CHECK_PASS(INDIRECT);
-	CHECK_PASS(REFLECT);
-	CHECK_PASS(REFRACT);
 	CHECK_PASS(INDEXOB);
 	CHECK_PASS(INDEXMA);
 	CHECK_PASS(MIST);

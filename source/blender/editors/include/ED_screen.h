@@ -143,7 +143,7 @@ void    ED_area_tag_redraw_no_rebuild(ScrArea *sa);
 void    ED_area_tag_redraw_regiontype(ScrArea *sa, int type);
 void    ED_area_tag_refresh(ScrArea *sa);
 void    ED_area_do_refresh(struct bContext *C, ScrArea *sa);
-void    ED_area_azones_update(ScrArea *sa, const int mouse_xy[]);
+struct AZone *ED_area_azones_update(ScrArea *sa, const int mouse_xy[]);
 void    ED_area_status_text(ScrArea *sa, const char *str);
 void    ED_area_newspace(struct bContext *C, ScrArea *sa, int type, const bool skip_ar_exit);
 void    ED_area_prevspace(struct bContext *C, ScrArea *sa);
@@ -310,7 +310,7 @@ bool ED_operator_camera(struct bContext *C);
 
 /* screen_user_menu.c */
 
-struct bUserMenu *ED_screen_user_menu_find(struct bContext *C);
+bUserMenu **ED_screen_user_menus_find(const struct bContext *C, uint *r_len);
 struct bUserMenu *ED_screen_user_menu_ensure(struct bContext *C);
 
 

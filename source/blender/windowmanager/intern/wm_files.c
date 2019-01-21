@@ -40,12 +40,15 @@
 #include "zlib.h" /* wm_read_exotic() */
 
 #ifdef WIN32
-#  include <windows.h> /* need to include windows.h so _WIN32_IE is defined  */
+   /* Need to include windows.h so _WIN32_IE is defined. */
+#  include <windows.h>
 #  ifndef _WIN32_IE
-#    define _WIN32_IE 0x0400 /* minimal requirements for SHGetSpecialFolderPath on MINGW MSVC has this defined already */
+     /* Minimal requirements for SHGetSpecialFolderPath on MINGW MSVC has this defined already. */
+#    define _WIN32_IE 0x0400
 #  endif
-#  include <shlobj.h>  /* for SHGetSpecialFolderPath, has to be done before BLI_winstuff
-                        * because 'near' is disabled through BLI_windstuff */
+   /* For SHGetSpecialFolderPath, has to be done before BLI_winstuff
+    * because 'near' is disabled through BLI_windstuff */
+#  include <shlobj.h>
 #  include "BLI_winstuff.h"
 #endif
 
@@ -181,7 +184,7 @@ static void wm_window_match_init(bContext *C, ListBase *wmlist)
 	 *     (see T47632), so for now just handling this specific case here. */
 	CTX_wm_menu_set(C, NULL);
 
-	ED_editors_exit(C);
+	ED_editors_exit(G_MAIN, true);
 }
 
 static void wm_window_substitute_old(wmWindowManager *oldwm, wmWindowManager *wm, wmWindow *oldwin, wmWindow *win)
@@ -853,7 +856,7 @@ void wm_homefile_read(
 		            app_template, app_template_system, sizeof(app_template_system)))
 		{
 			/* Can safely continue with code below, just warn it's not found. */
-			BKE_reportf(reports, RPT_WARNING, "Application Template '%s' not found.", app_template);
+			BKE_reportf(reports, RPT_WARNING, "Application Template '%s' not found", app_template);
 		}
 
 		/* Insert template name into startup file. */
@@ -1293,7 +1296,7 @@ static bool wm_file_write(bContext *C, const char *filepath, int fileflags, Repo
 	/* don't forget not to return without! */
 	WM_cursor_wait(1);
 
-	ED_editors_flush_edits(C, false);
+	ED_editors_flush_edits(bmain, false);
 
 	fileflags |= G_FILE_HISTORY; /* write file history */
 
@@ -1425,12 +1428,13 @@ void wm_autosave_timer(const bContext *C, wmWindowManager *wm, wmTimer *UNUSED(w
 	}
 	else {
 		/*  save as regular blend file */
+		Main *bmain = CTX_data_main(C);
 		int fileflags = G.fileflags & ~(G_FILE_COMPRESS | G_FILE_HISTORY);
 
-		ED_editors_flush_edits(C, false);
+		ED_editors_flush_edits(bmain, false);
 
 		/* Error reporting into console */
-		BLO_write_file(CTX_data_main(C), filepath, fileflags, NULL, NULL);
+		BLO_write_file(bmain, filepath, fileflags, NULL, NULL);
 	}
 	/* do timer after file write, just in case file write takes a long time */
 	wm->autosavetimer = WM_event_add_timer(wm, NULL, TIMERAUTOSAVE, U.savetime * 60.0);
@@ -1551,7 +1555,7 @@ static int wm_homefile_write_exec(bContext *C, wmOperator *op)
 
 	printf("Writing homefile: '%s' ", filepath);
 
-	ED_editors_flush_edits(C, false);
+	ED_editors_flush_edits(bmain, false);
 
 	/*  force save as regular blend file */
 	fileflags = G.fileflags & ~(G_FILE_COMPRESS | G_FILE_HISTORY);
@@ -1684,7 +1688,7 @@ void WM_OT_save_userpref(wmOperatorType *ot)
 {
 	ot->name = "Save Preferences";
 	ot->idname = "WM_OT_save_userpref";
-	ot->description = "Save user preferences separately, overrides startup file preferences";
+	ot->description = "Save preferences separately, overrides startup file preferences";
 
 	ot->invoke = WM_operator_confirm;
 	ot->exec = wm_userpref_write_exec;
@@ -1825,7 +1829,7 @@ void WM_OT_read_factory_settings(wmOperatorType *ot)
 
 	ot->name = "Load Factory Settings";
 	ot->idname = "WM_OT_read_factory_settings";
-	ot->description = "Load default file and user preferences";
+	ot->description = "Load default file and preferences";
 
 	ot->invoke = WM_operator_confirm;
 	ot->exec = wm_homefile_read_exec;
@@ -2419,12 +2423,12 @@ static uiBlock *block_create_autorun_warning(struct bContext *C, struct ARegion 
 	uiLayout *sub = uiLayoutRow(col, true);
 	uiLayoutSetRedAlert(sub, true);
 	uiItemL(sub, G.autoexec_fail, ICON_BLANK1);
-	uiItemL(col, IFACE_("This may lead to unexpected behavior."), ICON_BLANK1);
+	uiItemL(col, IFACE_("This may lead to unexpected behavior"), ICON_BLANK1);
 
 	uiItemS(layout);
 
 	PointerRNA pref_ptr;
-	RNA_pointer_create(NULL, &RNA_PreferencesSystem, &U, &pref_ptr);
+	RNA_pointer_create(NULL, &RNA_PreferencesFilePaths, &U, &pref_ptr);
 	uiItemR(layout, &pref_ptr, "use_scripts_auto_execute", 0, IFACE_("Permanently allow execution of scripts"), ICON_NONE);
 
 	uiItemS(layout);

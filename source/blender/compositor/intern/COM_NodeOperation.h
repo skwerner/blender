@@ -68,7 +68,7 @@ typedef enum InputResizeMode {
 	/** \brief Fit the width or the height of the input image to the width or height of the working area of the node, image will be larger than the working area */
 	COM_SC_FIT = NS_CR_FIT,
 	/** \brief Fit the width and the height of the input image to the width and height of the working area of the node, image will be equally larger than the working area */
-	COM_SC_STRETCH = NS_CR_STRETCH
+	COM_SC_STRETCH = NS_CR_STRETCH,
 } InputResizeMode;
 
 /**
@@ -151,7 +151,7 @@ public:
 	/**
 	 * \brief isOutputOperation determines whether this operation is an output of the ExecutionSystem during rendering or editing.
 	 *
-	 * Default behaviour if not overridden, this operation will not be evaluated as being an output of the ExecutionSystem.
+	 * Default behavior if not overridden, this operation will not be evaluated as being an output of the ExecutionSystem.
 	 *
 	 * \see ExecutionSystem
 	 * \group check

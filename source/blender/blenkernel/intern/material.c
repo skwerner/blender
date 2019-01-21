@@ -512,9 +512,9 @@ void BKE_material_clear_id(Main *bmain, ID *id, bool update_data)
 	}
 }
 
-Material *give_current_material(Object *ob, short act)
+Material **give_current_material_p(Object *ob, short act)
 {
-	Material ***matarar, *ma;
+	Material ***matarar, **ma_p;
 	const short *totcolp;
 
 	if (ob == NULL) return NULL;
@@ -534,7 +534,7 @@ Material *give_current_material(Object *ob, short act)
 	}
 
 	if (ob->matbits && ob->matbits[act - 1]) {    /* in object */
-		ma = ob->mat[act - 1];
+		ma_p = &ob->mat[act - 1];
 	}
 	else {                              /* in data */
 
@@ -545,12 +545,21 @@ Material *give_current_material(Object *ob, short act)
 
 		matarar = give_matarar(ob);
 
-		if (matarar && *matarar) ma = (*matarar)[act - 1];
-		else ma = NULL;
-
+		if (matarar && *matarar) {
+			ma_p = &(*matarar)[act - 1];
+		}
+		else {
+			ma_p = NULL;
+		}
 	}
 
-	return ma;
+	return ma_p;
+}
+
+Material *give_current_material(Object *ob, short act)
+{
+	Material **ma_p = give_current_material_p(ob, act);
+	return ma_p ? *ma_p : NULL;
 }
 
 MaterialGPencilStyle *BKE_material_gpencil_settings_get(Object *ob, short act)
@@ -1054,7 +1063,9 @@ static void fill_texpaint_slots_recursive(bNodeTree *nodetree, bNode *active_nod
 			if (active_node == node) {
 				ma->paint_active_slot = *index;
 			}
+
 			ma->texpaintslot[*index].ima = (Image *)node->id;
+			ma->texpaintslot[*index].interp = ((NodeTexImage *)node->storage)->interpolation;
 
 			/* for new renderer, we need to traverse the treeback in search of a UV node */
 			bNode *uvnode = nodetree_uv_node_recursive(node);
@@ -1388,7 +1399,10 @@ void copy_matcopybuf(Main *bmain, Material *ma)
 
 	memcpy(&matcopybuf, ma, sizeof(Material));
 
-	matcopybuf.nodetree = ntreeCopyTree_ex(ma->nodetree, bmain, false);
+	if (ma->nodetree != NULL) {
+		matcopybuf.nodetree = ntreeCopyTree_ex(ma->nodetree, bmain, false);
+	}
+
 	matcopybuf.preview = NULL;
 	BLI_listbase_clear(&matcopybuf.gpumaterial);
 	/* TODO Duplicate Engine Settings and set runtime to NULL */
@@ -1414,7 +1428,9 @@ void paste_matcopybuf(Main *bmain, Material *ma)
 	memcpy(ma, &matcopybuf, sizeof(Material));
 	(ma->id) = id;
 
-	ma->nodetree = ntreeCopyTree_ex(matcopybuf.nodetree, bmain, false);
+	if (matcopybuf.nodetree != NULL) {
+		ma->nodetree = ntreeCopyTree_ex(matcopybuf.nodetree, bmain, false);
+	}
 }
 
 void BKE_material_eval(struct Depsgraph *depsgraph, Material *material)

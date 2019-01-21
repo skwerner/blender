@@ -438,7 +438,7 @@ class IMAGE_MT_uvs_select_mode(Menu):
             props.data_path = "tool_settings.uv_select_mode"
 
 
-class IMAGE_MT_specials(Menu):
+class IMAGE_MT_uvs_specials(Menu):
     bl_label = "UV Context Menu"
 
     def draw(self, context):
@@ -498,8 +498,8 @@ class IMAGE_MT_uvs_snap_pie(Menu):
         layout.operator_context = 'EXEC_REGION_WIN'
 
         pie.operator("uv.snap_selected", text="Selected to Pixels", icon='RESTRICT_SELECT_OFF').target = 'PIXELS'
-        pie.operator("uv.snap_cursor", text="Cursor to Pixels", icon='CURSOR').target = 'PIXELS'
-        pie.operator("uv.snap_cursor", text="Cursor to Selected", icon='CURSOR').target = 'SELECTED'
+        pie.operator("uv.snap_cursor", text="Cursor to Pixels", icon='PIVOT_CURSOR').target = 'PIXELS'
+        pie.operator("uv.snap_cursor", text="Cursor to Selected", icon='PIVOT_CURSOR').target = 'SELECTED'
         pie.operator("uv.snap_selected", text="Selected to Cursor", icon='RESTRICT_SELECT_OFF').target = 'CURSOR'
         pie.operator("uv.snap_selected", text="Selected to Cursor (Offset)", icon='RESTRICT_SELECT_OFF').target = 'CURSOR_OFFSET'
         pie.operator("uv.snap_selected", text="Selected to Adjacent Unselected", icon='RESTRICT_SELECT_OFF').target = 'ADJACENT_UNSELECTED'
@@ -1325,7 +1325,7 @@ classes = (
     IMAGE_MT_uvs_mirror,
     IMAGE_MT_uvs_weldalign,
     IMAGE_MT_uvs_select_mode,
-    IMAGE_MT_specials,
+    IMAGE_MT_uvs_specials,
     IMAGE_MT_pivot_pie,
     IMAGE_MT_uvs_snap_pie,
     IMAGE_HT_header,

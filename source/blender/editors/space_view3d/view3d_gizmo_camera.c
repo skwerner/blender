@@ -47,6 +47,8 @@
 #include "WM_types.h"
 #include "WM_message.h"
 
+#include "DEG_depsgraph.h"
+
 #include "view3d_intern.h"  /* own include */
 
 
@@ -72,7 +74,7 @@ static bool WIDGETGROUP_camera_poll(const bContext *C, wmGizmoGroupType *UNUSED(
 
 	ViewLayer *view_layer = CTX_data_view_layer(C);
 	Base *base = BASACT(view_layer);
-	if (base && BASE_VISIBLE(v3d, base)) {
+	if (base && BASE_SELECTABLE(v3d, base)) {
 		Object *ob = base->object;
 		if (ob->type == OB_CAMERA) {
 			Camera *camera = ob->data;
@@ -312,6 +314,9 @@ void VIEW3D_GGT_camera(wmGizmoGroupType *gzgt)
  * \{ */
 
 struct CameraViewWidgetGroup {
+	Scene *scene;
+	bool is_camera;
+
 	wmGizmo *border;
 
 	struct {
@@ -348,7 +353,11 @@ static void gizmo_render_border_prop_matrix_set(
 
 	BLI_rctf_resize(border, len_v3(matrix[0]), len_v3(matrix[1]));
 	BLI_rctf_recenter(border, matrix[3][0], matrix[3][1]);
-	BLI_rctf_isect(&(rctf){.xmin = 0, .ymin = 0, .xmax = 1, .ymax = 1}, border, border);
+	BLI_rctf_isect(&(rctf){ .xmin = 0, .ymin = 0, .xmax = 1, .ymax = 1, }, border, border);
+
+	if (viewgroup->is_camera) {
+		DEG_id_tag_update(&viewgroup->scene->id, ID_RECALC_COPY_ON_WRITE);
+	}
 }
 
 static bool WIDGETGROUP_camera_view_poll(const bContext *C, wmGizmoGroupType *UNUSED(gzgt))
@@ -416,7 +425,7 @@ static void WIDGETGROUP_camera_view_draw_prepare(const bContext *C, wmGizmoGroup
 		ED_view3d_calc_camera_border(scene, depsgraph, ar, v3d, rv3d, &viewgroup->state.view_border, false);
 	}
 	else {
-		viewgroup->state.view_border = (rctf){.xmin = 0, .ymin = 0, .xmax = ar->winx, .ymax = ar->winy};
+		viewgroup->state.view_border = (rctf){ .xmin = 0, .ymin = 0, .xmax = ar->winx, .ymax = ar->winy, };
 	}
 
 	wmGizmo *gz = viewgroup->border;
@@ -436,6 +445,8 @@ static void WIDGETGROUP_camera_view_refresh(const bContext *C, wmGizmoGroup *gzg
 	RegionView3D *rv3d = ar->regiondata;
 	Scene *scene = CTX_data_scene(C);
 
+	viewgroup->scene = scene;
+
 	{
 		wmGizmo *gz = viewgroup->border;
 		WM_gizmo_set_flag(gz, WM_GIZMO_HIDDEN, false);
@@ -445,9 +456,11 @@ static void WIDGETGROUP_camera_view_refresh(const bContext *C, wmGizmoGroup *gzg
 
 		if (rv3d->persp == RV3D_CAMOB) {
 			viewgroup->state.edit_border = &scene->r.border;
+			viewgroup->is_camera = true;
 		}
 		else {
 			viewgroup->state.edit_border = &v3d->render_border;
+			viewgroup->is_camera = false;
 		}
 
 		WM_gizmo_target_property_def_func(

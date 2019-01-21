@@ -2657,8 +2657,9 @@ static const EnumPropertyItem *renderresult_layers_add_enum(RenderLayer *rl)
 	return item;
 }
 
-static const EnumPropertyItem *rna_Node_image_layer_itemf(bContext *UNUSED(C), PointerRNA *ptr,
-                                                    PropertyRNA *UNUSED(prop), bool *r_free)
+static const EnumPropertyItem *rna_Node_image_layer_itemf(
+        bContext *UNUSED(C), PointerRNA *ptr,
+        PropertyRNA *UNUSED(prop), bool *r_free)
 {
 	bNode *node = (bNode *)ptr->data;
 	Image *ima = (Image *)node->id;
@@ -2724,8 +2725,9 @@ static const EnumPropertyItem *renderresult_views_add_enum(RenderView *rv)
 	return item;
 }
 
-static const EnumPropertyItem *rna_Node_image_view_itemf(bContext *UNUSED(C), PointerRNA *ptr,
-                                                   PropertyRNA *UNUSED(prop), bool *r_free)
+static const EnumPropertyItem *rna_Node_image_view_itemf(
+        bContext *UNUSED(C), PointerRNA *ptr,
+        PropertyRNA *UNUSED(prop), bool *r_free)
 {
 	bNode *node = (bNode *)ptr->data;
 	Image *ima = (Image *)node->id;
@@ -2745,8 +2747,9 @@ static const EnumPropertyItem *rna_Node_image_view_itemf(bContext *UNUSED(C), Po
 	return item;
 }
 
-static const EnumPropertyItem *rna_Node_view_layer_itemf(bContext *UNUSED(C), PointerRNA *ptr,
-                                                    PropertyRNA *UNUSED(prop), bool *r_free)
+static const EnumPropertyItem *rna_Node_view_layer_itemf(
+        bContext *UNUSED(C), PointerRNA *ptr,
+        PropertyRNA *UNUSED(prop), bool *r_free)
 {
 	bNode *node = (bNode *)ptr->data;
 	Scene *sce = (Scene *)node->id;
@@ -2774,8 +2777,9 @@ static void rna_Node_view_layer_update(Main *bmain, Scene *scene, PointerRNA *pt
 	}
 }
 
-static const EnumPropertyItem *rna_Node_channel_itemf(bContext *UNUSED(C), PointerRNA *ptr,
-                                                PropertyRNA *UNUSED(prop), bool *r_free)
+static const EnumPropertyItem *rna_Node_channel_itemf(
+        bContext *UNUSED(C), PointerRNA *ptr,
+        PropertyRNA *UNUSED(prop), bool *r_free)
 {
 	bNode *node = (bNode *)ptr->data;
 	EnumPropertyItem *item = NULL;
@@ -3310,32 +3314,36 @@ static const EnumPropertyItem node_glass_items[] = {
 	{SHD_GLOSSY_BECKMANN,          "BECKMANN",          0, "Beckmann", ""},
 	{SHD_GLOSSY_GGX,               "GGX",               0, "GGX",      ""},
 	{SHD_GLOSSY_MULTI_GGX,         "MULTI_GGX",         0, "Multiscatter GGX", ""},
-	{0, NULL, 0, NULL, NULL}
+	{0, NULL, 0, NULL, NULL},
 };
 
 static const EnumPropertyItem node_refraction_items[] = {
 	{SHD_GLOSSY_SHARP,             "SHARP",             0, "Sharp",    ""},
 	{SHD_GLOSSY_BECKMANN,          "BECKMANN",          0, "Beckmann", ""},
 	{SHD_GLOSSY_GGX,               "GGX",               0, "GGX",      ""},
-	{0, NULL, 0, NULL, NULL}
+	{0, NULL, 0, NULL, NULL},
 };
 
 static const EnumPropertyItem node_toon_items[] = {
 	{SHD_TOON_DIFFUSE,    "DIFFUSE",  0, "Diffuse", ""},
 	{SHD_TOON_GLOSSY,     "GLOSSY",   0, "Glossy",  ""},
-	{0, NULL, 0, NULL, NULL}
+	{0, NULL, 0, NULL, NULL},
 };
 
 static const EnumPropertyItem node_hair_items[] = {
 	{SHD_HAIR_REFLECTION,     "Reflection",    0,   "Reflection", ""},
 	{SHD_HAIR_TRANSMISSION,   "Transmission",    0,  "Transmission", ""},
-	{0, NULL, 0, NULL, NULL}
+	{0, NULL, 0, NULL, NULL},
 };
 
 static const EnumPropertyItem node_principled_hair_items[] = {
-	{SHD_PRINCIPLED_HAIR_DIRECT_ABSORPTION,     "ABSORPTION", 0, "Absorption coefficient",   "Directly set the absorption coefficient sigma_a. This is not the most intuitive way to color hair."},
-	{SHD_PRINCIPLED_HAIR_PIGMENT_CONCENTRATION, "MELANIN",    0, "Melanin concentration",    "Define the melanin concentrations below to get the most realistic-looking hair. You can get the concentrations for different types of hair online."},
-	{SHD_PRINCIPLED_HAIR_REFLECTANCE,           "COLOR",      0, "Direct coloring",          "Choose the color of your preference, and the shader will approximate the absorption coefficient to render lookalike hair."},
+	{SHD_PRINCIPLED_HAIR_DIRECT_ABSORPTION,     "ABSORPTION", 0, "Absorption coefficient",
+	 "Directly set the absorption coefficient sigma_a (this is not the most intuitive way to color hair)"},
+	{SHD_PRINCIPLED_HAIR_PIGMENT_CONCENTRATION, "MELANIN",    0, "Melanin concentration",
+	 "Define the melanin concentrations below to get the most realistic-looking hair"
+	 "(you can get the concentrations for different types of hair online)"},
+	{SHD_PRINCIPLED_HAIR_REFLECTANCE,           "COLOR",      0, "Direct coloring",
+	 "Choose the color of your preference, and the shader will approximate the absorption coefficient to render lookalike hair"},
 	{0, NULL, 0, NULL, NULL}
 };
 
@@ -4429,7 +4437,7 @@ static void def_sh_displacement(StructRNA *srna)
 static void def_sh_vector_displacement(StructRNA *srna)
 {
 	static const EnumPropertyItem prop_space_items[] = {
-		{SHD_SPACE_TANGENT, "TANGENT", 0, "Tangent Space", "Tagent space vector displacement mapping"},
+		{SHD_SPACE_TANGENT, "TANGENT", 0, "Tangent Space", "Tangent space vector displacement mapping"},
 		{SHD_SPACE_OBJECT, "OBJECT", 0, "Object Space", "Object space vector displacement mapping"},
 		{SHD_SPACE_WORLD, "WORLD", 0, "World Space", "World space vector displacement mapping"},
 		{0, NULL, 0, NULL, NULL}

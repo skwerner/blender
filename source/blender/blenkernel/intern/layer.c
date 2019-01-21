@@ -727,6 +727,7 @@ static short layer_collection_sync(
 			}
 
 			if (base->flag & BASE_HIDDEN) {
+				base->flag &= ~BASE_VISIBLE;
 				view_layer->runtime_flag |= VIEW_LAYER_HAS_HIDE;
 				lc->runtime_flag |= LAYER_COLLECTION_HAS_HIDDEN_OBJECTS;
 			}
@@ -1057,39 +1058,6 @@ bool BKE_scene_has_object(Scene *scene, Object *ob)
 	return false;
 }
 
-/* ---------------------------------------------------------------------- */
-/* Override */
-
-/**
- * Add a new datablock override
- */
-void BKE_override_view_layer_datablock_add(
-        ViewLayer *view_layer, int id_type, const char *data_path, const ID *owner_id)
-{
-	UNUSED_VARS(view_layer, id_type, data_path, owner_id);
-	TODO_LAYER_OVERRIDE;
-}
-
-/**
- * Add a new int override
- */
-void BKE_override_view_layer_int_add(
-        ViewLayer *view_layer, int id_type, const char *data_path, const int value)
-{
-	UNUSED_VARS(view_layer, id_type, data_path, value);
-	TODO_LAYER_OVERRIDE;
-}
-
-/**
- * Add a new boolean override
- */
-void BKE_override_layer_collection_boolean_add(
-        struct LayerCollection *layer_collection, int id_type, const char *data_path, const bool value)
-{
-	UNUSED_VARS(layer_collection, id_type, data_path, value);
-	TODO_LAYER_OVERRIDE;
-}
-
 /** \} */
 
 /* Iterators */
@@ -1103,29 +1071,9 @@ typedef struct LayerObjectBaseIteratorData {
 	Base *base;
 } LayerObjectBaseIteratorData;
 
-static bool object_bases_iterator_is_valid_ex(View3D *v3d, Base *base, const int flag)
+static bool object_bases_iterator_is_valid(View3D *v3d, Base *base, const int flag)
 {
-	if (v3d != NULL) {
-		BLI_assert(v3d->spacetype == SPACE_VIEW3D);
-		if ((v3d->object_type_exclude_viewport & (1 << base->object->type)) != 0) {
-			return false;
-		}
-
-		if (v3d->localvd && ((base->local_view_bits & v3d->local_view_uuid) == 0)) {
-			return false;
-		}
-	}
-
-	if ((base->flag & flag) == 0) {
-		return false;
-	}
-
-	return true;
-}
-
-static bool object_bases_iterator_is_valid(View3D *v3d, Base *base)
-{
-	return object_bases_iterator_is_valid_ex(v3d, base, ~(0));
+	return BASE_VISIBLE(v3d, base) && ((base->flag & flag) == flag);
 }
 
 static void object_bases_iterator_begin(BLI_Iterator *iter, void *data_in_v, const int flag)
@@ -1148,7 +1096,7 @@ static void object_bases_iterator_begin(BLI_Iterator *iter, void *data_in_v, con
 	data->v3d = v3d;
 	data->base = base;
 
-	if (object_bases_iterator_is_valid_ex(v3d, base, flag) == false) {
+	if (object_bases_iterator_is_valid(v3d, base, flag) == false) {
 		object_bases_iterator_next(iter, flag);
 	}
 	else {
@@ -1162,7 +1110,7 @@ static void object_bases_iterator_next(BLI_Iterator *iter, const int flag)
 	Base *base = data->base->next;
 
 	while (base) {
-		if (object_bases_iterator_is_valid_ex(data->v3d, base, flag)) {
+		if (object_bases_iterator_is_valid(data->v3d, base, flag)) {
 			iter->current = base;
 			data->base = base;
 			return;
@@ -1229,12 +1177,12 @@ void BKE_view_layer_selected_objects_iterator_end(BLI_Iterator *iter)
 
 void BKE_view_layer_visible_objects_iterator_begin(BLI_Iterator *iter, void *data_in)
 {
-	objects_iterator_begin(iter, data_in, BASE_VISIBLE);
+	objects_iterator_begin(iter, data_in, 0);
 }
 
 void BKE_view_layer_visible_objects_iterator_next(BLI_Iterator *iter)
 {
-	objects_iterator_next(iter, BASE_VISIBLE);
+	objects_iterator_next(iter, 0);
 }
 
 void BKE_view_layer_visible_objects_iterator_end(BLI_Iterator *iter)
@@ -1305,12 +1253,12 @@ void BKE_view_layer_selected_bases_iterator_end(BLI_Iterator *iter)
 
 void BKE_view_layer_visible_bases_iterator_begin(BLI_Iterator *iter, void *data_in)
 {
-	object_bases_iterator_begin(iter, data_in, BASE_VISIBLE);
+	object_bases_iterator_begin(iter, data_in, 0);
 }
 
 void BKE_view_layer_visible_bases_iterator_next(BLI_Iterator *iter)
 {
-	object_bases_iterator_next(iter, BASE_VISIBLE);
+	object_bases_iterator_next(iter, 0);
 }
 
 void BKE_view_layer_visible_bases_iterator_end(BLI_Iterator *iter)
@@ -1321,103 +1269,14 @@ void BKE_view_layer_visible_bases_iterator_end(BLI_Iterator *iter)
 /** \} */
 
 /* -------------------------------------------------------------------- */
-/** \name BKE_view_layer_renderable_objects_iterator
- * \{ */
-
-void BKE_view_layer_renderable_objects_iterator_begin(BLI_Iterator *iter, void *data_in)
-{
-	struct ObjectsRenderableIteratorData *data = data_in;
-
-	/* Tag objects to prevent going over the same object twice. */
-	for (Scene *scene = data->scene; scene; scene = scene->set) {
-		for (ViewLayer *view_layer = scene->view_layers.first; view_layer; view_layer = view_layer->next) {
-			for (Base *base = view_layer->object_bases.first; base; base = base->next) {
-				 base->object->id.flag |= LIB_TAG_DOIT;
-			}
-		}
-	}
-
-	ViewLayer *view_layer = data->scene->view_layers.first;
-	data->iter.view_layer = view_layer;
-
-	data->base_temp.next = view_layer->object_bases.first;
-	data->iter.base = &data->base_temp;
-
-	data->iter.set = NULL;
-
-	iter->data = data_in;
-	BKE_view_layer_renderable_objects_iterator_next(iter);
-}
-
-void BKE_view_layer_renderable_objects_iterator_next(BLI_Iterator *iter)
-{
-	/* Set it early in case we need to exit and we are running from within a loop. */
-	iter->skip = true;
-
-	struct ObjectsRenderableIteratorData *data = iter->data;
-	Base *base = data->iter.base->next;
-
-	/* There is still a base in the current scene layer. */
-	if (base != NULL) {
-		Object *ob = base->object;
-
-		/* We need to set the iter.base even if the rest fail otherwise
-		 * we keep checking the exactly same base over and over again. */
-		data->iter.base = base;
-
-		if (ob->id.flag & LIB_TAG_DOIT) {
-			ob->id.flag &= ~LIB_TAG_DOIT;
-
-			if ((base->flag & BASE_VISIBLE) != 0) {
-				iter->skip = false;
-				iter->current = ob;
-			}
-		}
-		return;
-	}
-
-	/* Time to go to the next scene layer. */
-	if (data->iter.set == NULL) {
-		while ((data->iter.view_layer = data->iter.view_layer->next)) {
-			ViewLayer *view_layer = data->iter.view_layer;
-			if (view_layer->flag & VIEW_LAYER_RENDER) {
-				data->base_temp.next = view_layer->object_bases.first;
-				data->iter.base = &data->base_temp;
-				return;
-			}
-		}
-
-		/* Setup the "set" for the next iteration. */
-		data->scene_temp.set = data->scene;
-		data->iter.set = &data->scene_temp;
-		return;
-	}
-
-	/* Look for an object in the next set. */
-	while ((data->iter.set = data->iter.set->set)) {
-		ViewLayer *view_layer = BKE_view_layer_default_render(data->iter.set);
-		data->base_temp.next = view_layer->object_bases.first;
-		data->iter.base = &data->base_temp;
-		return;
-	}
-
-	iter->valid = false;
-}
-
-void BKE_view_layer_renderable_objects_iterator_end(BLI_Iterator *UNUSED(iter))
-{
-	/* Do nothing - iter->data was static allocated, we can't free it. */
-}
-
-/** \} */
-
-/* -------------------------------------------------------------------- */
 /** \name BKE_view_layer_bases_in_mode_iterator
  * \{ */
 
 static bool base_is_in_mode(struct ObjectsInModeIteratorData *data, Base *base)
 {
-	return (base->object->type == data->object_type) && (base->object->mode & data->object_mode) != 0;
+	return BASE_VISIBLE(data->v3d, base) &&
+	       (base->object->type == data->object_type) &&
+	       (base->object->mode & data->object_mode) != 0;
 }
 
 void BKE_view_layer_bases_in_mode_iterator_begin(BLI_Iterator *iter, void *data_in)
@@ -1438,7 +1297,7 @@ void BKE_view_layer_bases_in_mode_iterator_begin(BLI_Iterator *iter, void *data_
 		data->object_type = base->object->type;
 	}
 
-	if (object_bases_iterator_is_valid(data->v3d, base) == false || !base_is_in_mode(data, base)) {
+	if (!base_is_in_mode(data, base)) {
 		BKE_view_layer_bases_in_mode_iterator_next(iter);
 	}
 }
@@ -1460,10 +1319,7 @@ void BKE_view_layer_bases_in_mode_iterator_next(BLI_Iterator *iter)
 	}
 
 	while (base) {
-		if ((base != data->base_active) &&
-		    base_is_in_mode(data, base) &&
-		    object_bases_iterator_is_valid(data->v3d, base))
-		{
+		if ((base != data->base_active) && base_is_in_mode(data, base)) {
 			iter->current = base;
 			return;
 		}

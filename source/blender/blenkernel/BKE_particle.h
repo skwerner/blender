@@ -303,7 +303,19 @@ void psys_set_current_num(Object *ob, int index);
 
 struct LatticeDeformData *psys_create_lattice_deform_data(struct ParticleSimulationData *sim);
 
+/* For a given evaluated particle system get its original.
+ *
+ * If this input is an original particle system already, the return value is the
+ * same as the input. */
 struct ParticleSystem *psys_orig_get(struct ParticleSystem *psys);
+
+
+/* For a given original object and its particle system, get evaluated particle
+ * system within a given dependency graph. */
+struct ParticleSystem *psys_eval_get(struct Depsgraph *depsgraph,
+                                     struct Object *object,
+                                     struct ParticleSystem *psys);
+
 bool psys_in_edit_mode(struct Depsgraph *depsgraph, const struct ParticleSystem *psys);
 bool psys_check_enabled(struct Object *ob, struct ParticleSystem *psys, const bool use_render_params);
 bool psys_check_edited(struct ParticleSystem *psys);
@@ -471,11 +483,11 @@ void BKE_particle_settings_eval_reset(
 void BKE_particle_system_eval_init(struct Depsgraph *depsgraph,
                                    struct Object *object);
 
-#endif
-
 /* Draw Cache */
 enum {
 	BKE_PARTICLE_BATCH_DIRTY_ALL = 0,
 };
 void BKE_particle_batch_cache_dirty_tag(struct ParticleSystem *psys, int mode);
 void BKE_particle_batch_cache_free(struct ParticleSystem *psys);
+
+#endif  /* __BKE_PARTICLE_H__ */

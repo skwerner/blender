@@ -147,6 +147,7 @@ extern const EnumPropertyItem rna_enum_light_type_items[];
 extern const EnumPropertyItem rna_enum_unpack_method_items[];
 
 extern const EnumPropertyItem rna_enum_object_type_items[];
+extern const EnumPropertyItem rna_enum_object_rotation_mode_items[];
 
 extern const EnumPropertyItem rna_enum_object_type_curve_items[];
 
@@ -173,8 +174,6 @@ extern const EnumPropertyItem rna_enum_wm_report_items[];
 extern const EnumPropertyItem rna_enum_transform_pivot_items_full[];
 extern const EnumPropertyItem rna_enum_transform_orientation_items[];
 extern const EnumPropertyItem rna_enum_transform_mode_types[];
-
-extern const EnumPropertyItem rna_enum_posebone_rotmode_items[];
 
 extern const EnumPropertyItem rna_enum_property_type_items[];
 extern const EnumPropertyItem rna_enum_property_subtype_items[];
@@ -242,8 +241,6 @@ struct PointerRNA;
 struct PropertyRNA;
 
 const EnumPropertyItem *rna_TransformOrientation_itemf(struct bContext *C, struct PointerRNA *ptr, struct PropertyRNA *prop, bool *r_free);
-const EnumPropertyItem *rna_Sensor_type_itemf(struct bContext *C, struct PointerRNA *ptr, struct PropertyRNA *prop, bool *r_free);
-const EnumPropertyItem *rna_Actuator_type_itemf(struct bContext *C, struct PointerRNA *ptr, struct PropertyRNA *prop, bool *r_free);
 
 /* Generic functions, return an enum from library data, index is the position
  * in the linked list can add more for different types as needed */

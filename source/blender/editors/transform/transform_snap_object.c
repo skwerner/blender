@@ -225,7 +225,7 @@ static void iter_snap_objects(
 
 	Base *base_act = view_layer->basact;
 	for (Base *base = view_layer->object_bases.first; base != NULL; base = base->next) {
-		if ((BASE_VISIBLE_BGMODE(v3d, base)) && (base->flag_legacy & BA_SNAP_FIX_DEPS_FIASCO) == 0 &&
+		if ((BASE_VISIBLE(v3d, base)) && (base->flag_legacy & BA_SNAP_FIX_DEPS_FIASCO) == 0 &&
 		    !((snap_select == SNAP_NOT_SELECTED && ((base->flag & BASE_SELECTED) || (base->flag_legacy & BA_WAS_SEL))) ||
 		      (snap_select == SNAP_NOT_ACTIVE && base == base_act)))
 		{
@@ -454,7 +454,7 @@ static bool raycastMesh(
 		retval = data.retval;
 	}
 	else {
-		BVHTreeRayHit hit = {.index = -1, .dist = local_depth};
+		BVHTreeRayHit hit = { .index = -1, .dist = local_depth, };
 
 		if (BLI_bvhtree_ray_cast(
 		        treedata->tree, ray_start_local, ray_normal_local, 0.0f,
@@ -564,22 +564,27 @@ static bool raycastEditMesh(
 	if (treedata->tree == NULL) {
 		BVHCache **bvh_cache = NULL;
 		BLI_bitmap *elem_mask = NULL;
+		BMEditMesh *em_orig;
 		int looptri_num_active = -1;
 
+		/* Get original version of the edit_btmesh. */
+		em_orig = BKE_editmesh_from_object(DEG_get_original_object(ob));
+
 		if (sctx->callbacks.edit_mesh.test_face_fn) {
-			elem_mask = BLI_BITMAP_NEW(em->tottri, __func__);
+			BMesh *bm = em_orig->bm;
+			BLI_assert(poly_to_tri_count(bm->totface, bm->totloop) == em_orig->tottri);
+
+			elem_mask = BLI_BITMAP_NEW(em_orig->tottri, __func__);
 			looptri_num_active = BM_iter_mesh_bitmap_from_filter_tessface(
-			        em->bm, elem_mask,
-			        sctx->callbacks.edit_mesh.test_face_fn, sctx->callbacks.edit_mesh.user_data);
+			        bm, elem_mask,
+			        sctx->callbacks.edit_mesh.test_face_fn,
+			        sctx->callbacks.edit_mesh.user_data);
 		}
 		else {
 			/* Only cache if bvhtree is created without a mask.
 			 * This helps keep a standardized bvhtree in cache. */
 			bvh_cache = &em_bvh_cache;
 		}
-
-		/* Get original version of the edit_btmesh. */
-		BMEditMesh *em_orig = BKE_editmesh_from_object(DEG_get_original_object(ob));
 
 		bvhtree_from_editmesh_looptri_ex(
 		        treedata, em_orig, elem_mask, looptri_num_active,
@@ -617,7 +622,7 @@ static bool raycastEditMesh(
 		retval = data.retval;
 	}
 	else {
-		BVHTreeRayHit hit = {.index = -1, .dist = local_depth};
+		BVHTreeRayHit hit = { .index = -1, .dist = local_depth, };
 
 		if (BLI_bvhtree_ray_cast(
 		        treedata->tree, ray_start_local, ray_normal_local, 0.0f,
@@ -990,7 +995,8 @@ static bool test_projected_edge_dist(
 typedef void (*Nearest2DGetVertCoCallback)(const int index, const float **co, void *data);
 typedef void (*Nearest2DGetEdgeVertsCallback)(const int index, int v_index[2], void *data);
 typedef void (*Nearest2DGetTriVertsCallback)(const int index, int v_index[3], void *data);
-typedef void (*Nearest2DGetTriEdgesCallback)(const int index, int e_index[3], void *data); /* Equal the previous one */
+/* Equal the previous one */
+typedef void (*Nearest2DGetTriEdgesCallback)(const int index, int e_index[3], void *data);
 typedef void (*Nearest2DCopyVertNoCallback)(const int index, float r_no[3], void *data);
 
 typedef struct Nearest2dUserData {

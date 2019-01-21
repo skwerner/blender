@@ -1651,12 +1651,9 @@ static int wm_search_menu_invoke(bContext *C, wmOperator *UNUSED(op), const wmEv
 	}
 
 
-	struct SearchPopupInit_Data data = {
-		.size = {
-		    UI_searchbox_size_x() * 2,
-		    UI_searchbox_size_y(),
-		},
-	};
+	static struct SearchPopupInit_Data data;
+	data.size[0] = UI_searchbox_size_x() * 2;
+	data.size[1] = UI_searchbox_size_y();
 
 	UI_popup_block_invoke(C, wm_block_search_menu, &data);
 
@@ -2800,7 +2797,7 @@ static const EnumPropertyItem redraw_timer_type_items[] = {
 	{eRTAnimationStep, "ANIM_STEP", 0, "Anim Step", "Animation Steps"},
 	{eRTAnimationPlay, "ANIM_PLAY", 0, "Anim Play", "Animation Playback"},
 	{eRTUndo, "UNDO", 0, "Undo/Redo", "Undo/Redo"},
-	{0, NULL, 0, NULL, NULL}
+	{0, NULL, 0, NULL, NULL},
 };
 
 
@@ -3053,7 +3050,7 @@ static const EnumPropertyItem preview_id_type_items[] = {
 #if 0  /* XXX TODO */
     {FILTER_ID_BR, "BRUSH", 0, "Brushes", ""},
 #endif
-    {0, NULL, 0, NULL, NULL}
+    {0, NULL, 0, NULL, NULL},
 };
 
 static int previews_clear_exec(bContext *C, wmOperator *op)
@@ -3313,7 +3310,7 @@ static void gesture_box_modal_keymap(wmKeyConfig *keyconf)
 	WM_modalkeymap_assign(keymap, "CLIP_OT_graph_select_box");
 	WM_modalkeymap_assign(keymap, "MASK_OT_select_box");
 	WM_modalkeymap_assign(keymap, "VIEW2D_OT_zoom_border");
-//	WM_modalkeymap_assign(keymap, "VIEW3D_OT_clip_border"); /* TODO */
+	WM_modalkeymap_assign(keymap, "VIEW3D_OT_clip_border");
 	WM_modalkeymap_assign(keymap, "VIEW3D_OT_render_border");
 	WM_modalkeymap_assign(keymap, "VIEW3D_OT_select_box");
 	WM_modalkeymap_assign(keymap, "VIEW3D_OT_zoom_border"); /* XXX TODO: zoom border should perhaps map rightmouse to zoom out instead of in+cancel */

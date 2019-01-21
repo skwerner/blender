@@ -127,7 +127,7 @@ typedef enum eGP_GetFrame_Mode {
 	/* Add a new empty/blank frame */
 	GP_GETFRAME_ADD_NEW   = 1,
 	/* Make a copy of the active frame */
-	GP_GETFRAME_ADD_COPY  = 2
+	GP_GETFRAME_ADD_COPY  = 2,
 } eGP_GetFrame_Mode;
 
 struct bGPDframe *BKE_gpencil_layer_getframe(struct bGPDlayer *gpl, int cframe, eGP_GetFrame_Mode addnew);
@@ -167,6 +167,13 @@ void BKE_gpencil_stroke_normal(const struct bGPDstroke *gps, float r_normal[3]);
 void BKE_gpencil_simplify_stroke(struct bGPDstroke *gps, float factor);
 void BKE_gpencil_simplify_fixed(struct bGPDstroke *gps);
 void BKE_gpencil_subdivide(struct bGPDstroke *gps, int level, int flag);
+
+void BKE_gpencil_stroke_2d_flat(
+	const struct bGPDspoint *points, int totpoints, float(*points2d)[2], int *r_direction);
+void BKE_gpencil_stroke_2d_flat_ref(
+	const struct bGPDspoint *ref_points, int ref_totpoints,
+	const struct bGPDspoint *points, int totpoints,
+	float(*points2d)[2], const float scale, int *r_direction);
 
 void BKE_gpencil_transform(struct bGPdata *gpd, float mat[4][4]);
 

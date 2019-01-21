@@ -15,7 +15,7 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
- * Contributor(s): Chingiz Dyussenov, Arystanbek Dyussenov, Nathan Letwory.
+ * Contributor(s): Chingiz Dyussenov, Arystanbek Dyussenov, Nathan Letwory, Trevor Glauz.
  *
  * ***** END GPL LICENSE BLOCK *****
  */
@@ -1105,7 +1105,7 @@ Object *MeshImporter::create_mesh_object(COLLADAFW::Node *node, COLLADAFW::Insta
 	BKE_mesh_calc_normals(new_mesh);
 
 	id_us_plus(&old_mesh->id);  /* Because BKE_mesh_assign_object would have already decreased it... */
-	BKE_libblock_free_us(m_bmain, old_mesh);
+	BKE_id_free_us(m_bmain, old_mesh);
 
 	COLLADAFW::MaterialBindingArray& mat_array =
 	    geom->getMaterialBindings();
@@ -1122,6 +1122,9 @@ Object *MeshImporter::create_mesh_object(COLLADAFW::Node *node, COLLADAFW::Insta
 			fprintf(stderr, "invalid referenced material for %s\n", mat_array[i].getName().c_str());
 		}
 	}
+
+	// clean up the mesh
+	BKE_mesh_validate((Mesh *)ob->data, false, false);
 
 	return ob;
 }
@@ -1154,13 +1157,7 @@ bool MeshImporter::write_geometry(const COLLADAFW::Geometry *geom)
 
 	read_vertices(mesh, me);
 	read_polys(mesh, me);
-
-	// must validate before calculating edges
-	BKE_mesh_calc_normals(me);
-	BKE_mesh_validate(me, false, false);
-	// validation does this
-	// BKE_mesh_calc_edges(me, false, false);
-
+	BKE_mesh_calc_edges(me, false, false);
 	// read_lines() must be called after the face edges have been generated.
 	// Otherwise the loose edges will be silently deleted again.
 	read_lines(mesh, me);

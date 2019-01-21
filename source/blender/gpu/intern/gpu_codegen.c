@@ -1274,7 +1274,7 @@ void GPU_nodes_extract_dynamic_inputs(GPUShader *shader, ListBase *inputs, ListB
 
 			if (input->source == GPU_SOURCE_TEX) {
 				if (input->bindtex) {
-					input->shaderloc = GPU_shader_get_uniform(shader, input->shadername);
+					input->shaderloc = GPU_shader_get_uniform_ensure(shader, input->shadername);
 					/* extract nodes */
 					BLI_remlink(&node->inputs, input);
 					BLI_addtail(inputs, input);
@@ -1904,7 +1904,7 @@ static int count_active_texture_sampler(GPUShader *shader, char *source)
 			if (*code != '\0') {
 				char sampler_name[64];
 				code = gpu_str_skip_token(code, sampler_name, sizeof(sampler_name));
-				int id = GPU_shader_get_uniform(shader, sampler_name);
+				int id = GPU_shader_get_uniform_ensure(shader, sampler_name);
 
 				if (id == -1) {
 					continue;
@@ -1972,7 +1972,7 @@ void GPU_pass_compile(GPUPass *pass, const char *shname)
 		        shname);
 
 		/* NOTE: Some drivers / gpu allows more active samplers than the opengl limit.
-		 * We need to make sure to count active samplers to avoid undefined behaviour. */
+		 * We need to make sure to count active samplers to avoid undefined behavior. */
 		if (!gpu_pass_shader_validate(pass)) {
 			if (pass->shader != NULL) {
 				fprintf(stderr, "GPUShader: error: too many samplers in shader.\n");

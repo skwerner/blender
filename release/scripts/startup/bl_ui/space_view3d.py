@@ -246,6 +246,18 @@ class VIEW3D_HT_header(Header):
                 icon=lk_icon,
             )
 
+        if object_mode in {'PAINT_GPENCIL'}:
+            if context.workspace.tools.from_space_view3d_mode(object_mode).name == "Draw":
+                settings = tool_settings.gpencil_sculpt.guide
+                row = layout.row(align=True)
+                row.prop(settings, "use_guide", text="", icon='GRID')
+                sub = row.row(align=True)
+                sub.active = settings.use_guide
+                sub.popover(
+                    panel="VIEW3D_PT_gpencil_guide",
+                    text="Guides"
+                )
+
         layout.separator_spacer()
 
         # Collection Visibility
@@ -772,7 +784,7 @@ class VIEW3D_MT_view_borders(Menu):
 
     def draw(self, context):
         layout = self.layout
-        # layout.operator("view3d.clip_border", text="Clipping Border...")
+        layout.operator("view3d.clip_border", text="Clipping Border...")
         layout.operator("view3d.render_border", text="Render Border...")
 
         layout.separator()
@@ -1652,7 +1664,11 @@ class VIEW3D_MT_object(Menu):
 
         layout.separator()
 
-        layout.operator_menu_enum("object.convert", "target")
+        ob = context.active_object
+        if ob and ob.type == 'GPENCIL' and context.gpencil_data:
+            layout.operator_menu_enum("gpencil.convert", "type", text="Convert to")
+        else:
+            layout.operator_menu_enum("object.convert", "target")
 
         layout.separator()
 
@@ -1747,15 +1763,15 @@ class VIEW3D_MT_object_specials(Menu):
         '''
 
         # If something is selected
-        if obj is None:
-            pass
-        elif obj.type == 'MESH':
-
+        if obj is not None and obj.type in {'MESH', 'CURVE', 'SURFACE'}:
             layout.operator("object.shade_smooth", text="Shade Smooth")
             layout.operator("object.shade_flat", text="Shade Flat")
 
             layout.separator()
 
+        if obj is None:
+            pass
+        elif obj.type == 'MESH':
             layout.operator_context = 'INVOKE_REGION_WIN'
             layout.operator_menu_enum("object.origin_set", text="Set Origin...", property="type")
 
@@ -3848,7 +3864,7 @@ class VIEW3D_MT_gpencil_simplify(Menu):
     def draw(self, context):
         layout = self.layout
         layout.operator("gpencil.stroke_simplify_fixed", text="Fixed")
-        layout.operator("gpencil.stroke_simplify", text="Adaptative")
+        layout.operator("gpencil.stroke_simplify", text="Adaptive")
 
 
 class VIEW3D_MT_paint_gpencil(Menu):
@@ -3876,7 +3892,8 @@ class VIEW3D_MT_assign_material(Menu):
 
         for slot in ob.material_slots:
             mat = slot.material
-            layout.operator("gpencil.stroke_change_color", text=mat.name).material = mat.name
+            if mat:
+                layout.operator("gpencil.stroke_change_color", text=mat.name).material = mat.name
 
 
 class VIEW3D_MT_gpencil_copy_layer(Menu):
@@ -3931,6 +3948,7 @@ class VIEW3D_MT_edit_gpencil(Menu):
 
         layout.operator_menu_enum("gpencil.stroke_separate", "mode", text="Separate...")
         layout.operator("gpencil.stroke_split", text="Split")
+        layout.operator("gpencil.stroke_merge", text="Merge")
         layout.operator_menu_enum("gpencil.stroke_join", "type", text="Join...")
         layout.operator("gpencil.stroke_flip", text="Flip Direction")
 
@@ -3948,12 +3966,9 @@ class VIEW3D_MT_edit_gpencil(Menu):
 
         layout.separator()
 
-        layout.operator_menu_enum("gpencil.convert", "type", text="Convert to Geometry...")
-
-        layout.separator()
-
         layout.menu("VIEW3D_MT_edit_gpencil_delete")
         layout.operator("gpencil.stroke_cyclical_set", text="Toggle Cyclic").type = 'TOGGLE'
+        layout.operator_menu_enum("gpencil.stroke_caps_set", text="Toggle Caps...", property="type")
 
         layout.separator()
 
@@ -4057,10 +4072,7 @@ class VIEW3D_MT_shading_pie(Menu):
 
         view = context.space_data
 
-        pie.prop_enum(view.shading, "type", value='WIREFRAME')
-        pie.prop_enum(view.shading, "type", value='SOLID')
-        pie.prop_enum(view.shading, "type", value='MATERIAL')
-        pie.prop_enum(view.shading, "type", value='RENDERED')
+        pie.prop(view.shading, "type", expand=True)
 
 
 class VIEW3D_MT_shading_ex_pie(Menu):
@@ -4425,7 +4437,7 @@ class VIEW3D_PT_shading_lighting(Panel):
 
                 if not system.edit_studio_light:
                     sub.scale_y = 0.6  # smaller studiolight preview
-                    sub.template_icon_view(shading, "studio_light", scale=3)
+                    sub.template_icon_view(shading, "studio_light", scale_popup=3.0)
                 else:
                     sub.prop(system, "edit_studio_light", text="Disable Studio Light Edit", icon='NONE', toggle=True)
 
@@ -4445,7 +4457,7 @@ class VIEW3D_PT_shading_lighting(Panel):
             elif shading.light == 'MATCAP':
                 sub.scale_y = 0.6  # smaller matcap preview
 
-                sub.template_icon_view(shading, "studio_light", scale=3)
+                sub.template_icon_view(shading, "studio_light", scale_popup=3.0)
 
                 col = split.column()
                 col.operator("wm.studiolight_userpref_show", emboss=False, text="", icon='PREFERENCES')
@@ -4462,7 +4474,7 @@ class VIEW3D_PT_shading_lighting(Panel):
                 col = split.column()
                 sub = col.row()
                 sub.scale_y = 0.6
-                sub.template_icon_view(shading, "studio_light", scale=3)
+                sub.template_icon_view(shading, "studio_light", scale_popup=3)
 
                 col = split.column()
                 col.operator("wm.studiolight_userpref_show", emboss=False, text="", icon='PREFERENCES')
@@ -5320,6 +5332,46 @@ class VIEW3D_PT_gpencil_lock(Panel):
         col.prop(context.tool_settings.gpencil_sculpt, "lock_axis", expand=True)
 
 
+class VIEW3D_PT_gpencil_guide(Panel):
+    bl_space_type = 'VIEW_3D'
+    bl_region_type = 'HEADER'
+    bl_label = "Guides"
+
+    @staticmethod
+    def draw(self, context):
+        from math import pi
+        settings = context.tool_settings.gpencil_sculpt.guide
+
+        layout = self.layout
+        layout.label(text="Guides")
+
+        col = layout.column()
+        col.active = settings.use_guide
+        col.prop(settings, "type", expand=True)
+
+        if settings.type in {'PARALLEL'}:
+            col.prop(settings, "angle")
+            row = col.row(align=True)
+
+        col.prop(settings, "use_snapping")
+        if settings.use_snapping:
+
+            if settings.type in {'RADIAL'}:
+                col.prop(settings, "angle_snap")
+            else:
+                col.prop(settings, "spacing")
+
+        col.label(text="Reference Point")
+        row = col.row(align=True)
+        row.prop(settings, "reference_point", expand=True)
+        if settings.reference_point in {'CUSTOM'}:
+            col.prop(settings, "location", text="Custom Location")
+        if settings.reference_point in {'OBJECT'}:
+            col.prop(settings, "reference_object", text="Object Location")
+            if not settings.reference_object:
+                col.label(text="No object selected, using cursor")
+
+
 class VIEW3D_PT_overlay_gpencil_options(Panel):
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'HEADER'
@@ -5542,7 +5594,7 @@ class VIEW3D_MT_gpencil_edit_specials(Menu):
         layout.operator("gpencil.stroke_smooth", text="Smooth")
         layout.operator("gpencil.stroke_subdivide", text="Subdivide")
         layout.operator("gpencil.stroke_simplify_fixed", text="Simplify")
-        layout.operator("gpencil.stroke_simplify", text="Simplify Adaptative")
+        layout.operator("gpencil.stroke_simplify", text="Simplify Adaptive")
 
         layout.separator()
         layout.menu("GPENCIL_MT_separate", text="Separate")
@@ -5558,9 +5610,11 @@ class VIEW3D_MT_gpencil_edit_specials(Menu):
 
         layout.separator()
 
+        layout.operator("gpencil.stroke_merge", text="Merge")
         layout.operator("gpencil.stroke_join", text="Join").type = 'JOIN'
         layout.operator("gpencil.stroke_join", text="Join & Copy").type = 'JOINCOPY'
         layout.operator("gpencil.stroke_flip", text="Flip Direction")
+        layout.operator_menu_enum("gpencil.stroke_caps_set", text="Toggle Caps...", property="type")
 
         layout.separator()
         layout.operator("gpencil.frame_duplicate", text="Duplicate Active Frame")
@@ -5588,7 +5642,7 @@ class VIEW3D_MT_gpencil_sculpt_specials(Menu):
 
         layout.operator("gpencil.stroke_subdivide", text="Subdivide")
         layout.operator("gpencil.stroke_simplify_fixed", text="Simplify")
-        layout.operator("gpencil.stroke_simplify", text="Simplify Adaptative")
+        layout.operator("gpencil.stroke_simplify", text="Simplify Adaptive")
 
         if context.mode == 'WEIGHT_GPENCIL':
             layout.separator()
@@ -5788,6 +5842,7 @@ classes = (
     VIEW3D_PT_snapping,
     VIEW3D_PT_gpencil_origin,
     VIEW3D_PT_gpencil_lock,
+    VIEW3D_PT_gpencil_guide,
     VIEW3D_PT_transform_orientations,
     VIEW3D_PT_overlay_gpencil_options,
     VIEW3D_PT_context_properties,

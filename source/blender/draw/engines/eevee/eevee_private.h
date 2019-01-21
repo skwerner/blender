@@ -372,7 +372,8 @@ typedef struct EEVEE_ShadowCube {
 } EEVEE_ShadowCube;
 
 typedef struct EEVEE_ShadowCascade {
-	float shadowmat[MAX_CASCADE_NUM][4][4]; /* World->Lamp->NDC->Tex : used for sampling the shadow map. */
+	/* World->Lamp->NDC->Tex : used for sampling the shadow map. */
+	float shadowmat[MAX_CASCADE_NUM][4][4];
 	float split_start[4];
 	float split_end[4];
 } EEVEE_ShadowCascade;
@@ -729,7 +730,8 @@ typedef struct EEVEE_ShadowCubeData {
 
 typedef struct EEVEE_ShadowCascadeData {
 	short light_id, shadow_id, cascade_id, layer_id;
-	float viewprojmat[MAX_CASCADE_NUM][4][4]; /* World->Lamp->NDC : used for rendering the shadow map. */
+	/* World->Lamp->NDC : used for rendering the shadow map. */
+	float viewprojmat[MAX_CASCADE_NUM][4][4];
 	float projmat[MAX_CASCADE_NUM][4][4];
 	float viewmat[4][4], viewinv[4][4];
 	float radius[MAX_CASCADE_NUM];
@@ -742,7 +744,7 @@ typedef struct EEVEE_LampEngineData {
 	DrawData dd;
 
 	bool need_update;
-	/* This needs to be out of the union to avoid undefined behaviour. */
+	/* This needs to be out of the union to avoid undefined behavior. */
 	short prev_cube_shadow_id;
 	union {
 		struct EEVEE_LightData ld;
@@ -992,7 +994,6 @@ void EEVEE_effects_cache_init(EEVEE_ViewLayerData *sldata, EEVEE_Data *vedata);
 void EEVEE_create_minmax_buffer(EEVEE_Data *vedata, struct GPUTexture *depth_src, int layer);
 void EEVEE_downsample_buffer(EEVEE_Data *vedata, struct GPUTexture *texture_src, int level);
 void EEVEE_downsample_cube_buffer(EEVEE_Data *vedata, struct GPUTexture *texture_src, int level);
-void EEVEE_effects_do_gtao(EEVEE_ViewLayerData *sldata, EEVEE_Data *vedata);
 void EEVEE_draw_effects(EEVEE_ViewLayerData *sldata, EEVEE_Data *vedata);
 void EEVEE_effects_free(void);
 

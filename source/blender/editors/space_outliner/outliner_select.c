@@ -102,10 +102,10 @@ static void do_outliner_activate_obdata(bContext *C, Scene *scene, ViewLayer *vi
 		if (ob->type == obact->type) {
 			bool ok;
 			if (BKE_object_is_in_editmode(ob)) {
-				ok = ED_object_editmode_exit_ex(bmain, scene, ob, EM_FREEDATA | EM_WAITCURSOR);
+				ok = ED_object_editmode_exit_ex(bmain, scene, ob, EM_FREEDATA);
 			}
 			else {
-				ok = ED_object_editmode_enter_ex(CTX_data_main(C), scene, ob, EM_WAITCURSOR | EM_NO_CONTEXT);
+				ok = ED_object_editmode_enter_ex(CTX_data_main(C), scene, ob, EM_NO_CONTEXT);
 			}
 			if (ok) {
 				ED_object_base_select(base, (ob->mode & OB_MODE_EDIT) ? BA_SELECT : BA_DESELECT);
@@ -304,7 +304,8 @@ static eOLDrawState tree_element_set_active_object(
 
 			/* Only in object mode so we can switch the active object,
 			 * keeping all objects in the current 'mode' selected, useful for multi-pose/edit mode.
-			 * This keeps the convention that all objects in the current mode are also selected. see T55246. */
+			 * This keeps the convention that all objects in the current mode are also selected.
+			 * see T55246. */
 			if ((scene->toolsettings->object_flag & SCE_OBJECT_MODE_LOCK) ? (ob->mode == OB_MODE_OBJECT) : true) {
 				BKE_view_layer_base_deselect_all(view_layer);
 			}
@@ -323,7 +324,7 @@ static eOLDrawState tree_element_set_active_object(
 		}
 
 		if (ob != OBEDIT_FROM_VIEW_LAYER(view_layer)) {
-			ED_object_editmode_exit(C, EM_FREEDATA | EM_WAITCURSOR);
+			ED_object_editmode_exit(C, EM_FREEDATA);
 		}
 	}
 	return OL_DRAWSEL_NORMAL;

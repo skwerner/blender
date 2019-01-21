@@ -18,8 +18,8 @@
  * ***** END GPL LICENSE BLOCK *****
  */
 
-#ifndef __CLOG_H__
-#define __CLOG_H__
+#ifndef __CLG_LOG_H__
+#define __CLG_LOG_H__
 
 /** \file clog/CLG_log.h
  *  \ingroup clog
@@ -90,11 +90,6 @@ extern "C" {
 #  define _CLOG_ATTR_PRINTF_FORMAT(format_param, dots_param)
 #endif
 
-#if defined(_MSC_VER) && !defined(__func__)
-#  define __func__MSVC
-#  define __func__ __FUNCTION__
-#endif
-
 #define STRINGIFY_ARG(x) "" #x
 #define STRINGIFY_APPEND(a, b) "" a #b
 #define STRINGIFY(x) STRINGIFY_APPEND("", x)
@@ -145,6 +140,7 @@ void CLG_exit(void);
 
 void CLG_output_set(void *file_handle);
 void CLG_output_use_basename_set(int value);
+void CLG_output_use_timestamp_set(int value);
 void CLG_fatal_fn_set(void (*fatal_fn)(void *file_handle));
 void CLG_backtrace_fn_set(void (*fatal_fn)(void *file_handle));
 
@@ -203,12 +199,8 @@ void CLG_logref_init(CLG_LogRef *clg_ref);
 #define CLOG_STR_ERROR_N(clg_ref, ...)       CLOG_STR_AT_SEVERITY_N(clg_ref, CLG_SEVERITY_ERROR, 0, __VA_ARGS__)
 #define CLOG_STR_FATAL_N(clg_ref, ...)       CLOG_STR_AT_SEVERITY_N(clg_ref, CLG_SEVERITY_FATAL, 0, __VA_ARGS__)
 
-#ifdef __func__MSVC
-#  undef __func__MSVC
-#endif
-
 #ifdef __cplusplus
 }
 #endif
 
-#endif /* __CLOG_H__ */
+#endif /* __CLG_LOG_H__ */

@@ -46,6 +46,10 @@
 /* Use draw manager to call GPU_select, see: DRW_draw_select_loop */
 #define USE_GPU_SELECT
 
+#define DRW_DEBUG_USE_UNIFORM_NAME 0
+#define DRW_UNIFORM_BUFFER_NAME 64
+#define DRW_UNIFORM_BUFFER_NAME_INC 1024
+
 /* ------------ Profiling --------------- */
 
 #define USE_PROFILE
@@ -186,8 +190,6 @@ typedef enum {
 	DRW_UNIFORM_BLOCK_PERSIST
 } DRWUniformType;
 
-#define MAX_UNIFORM_NAME 13
-
 struct DRWUniform {
 	DRWUniform *next; /* single-linked list */
 	union {
@@ -197,13 +199,11 @@ struct DRWUniform {
 		float fvalue;
 		int ivalue;
 	};
+	int name_ofs; /* name offset in name buffer. */
 	int location;
 	char type; /* DRWUniformType */
 	char length; /* cannot be more than 16 */
 	char arraysize; /* cannot be more than 16 too */
-#ifndef NDEBUG
-	char name[MAX_UNIFORM_NAME];
-#endif
 };
 
 typedef enum {
@@ -362,7 +362,7 @@ typedef struct DRWManager {
 	/* View dependent uniforms. */
 	DRWMatrixState original_mat; /* Original rv3d matrices. */
 	int override_mat;            /* Bitflag of which matrices are overridden. */
-	int num_clip_planes;         /* Number of active clipplanes. */
+	int clip_planes_len;         /* Number of active clipplanes. */
 	bool dirty_mat;
 
 	/* keep in sync with viewBlock */
@@ -402,6 +402,12 @@ typedef struct DRWManager {
 		DRWDebugLine *lines;
 		DRWDebugSphere *spheres;
 	} debug;
+
+	struct {
+		char *buffer;
+		uint buffer_len;
+		uint buffer_ofs;
+	} uniform_names;
 } DRWManager;
 
 extern DRWManager DST; /* TODO : get rid of this and allow multithreaded rendering */
@@ -409,9 +415,6 @@ extern DRWManager DST; /* TODO : get rid of this and allow multithreaded renderi
 /* --------------- FUNCTIONS ------------- */
 
 void drw_texture_set_parameters(GPUTexture *tex, DRWTextureFlag flags);
-void drw_texture_get_format(
-        GPUTextureFormat format, bool is_framebuffer,
-        GPUTextureFormat *r_data_type, int *r_channels, bool *r_is_depth);
 
 void *drw_viewport_engine_data_ensure(void *engine_type);
 

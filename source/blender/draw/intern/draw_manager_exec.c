@@ -270,7 +270,7 @@ void drw_state_set(DRWState state)
 		int test;
 		if ((test = CHANGED_TO(DRW_STATE_CLIP_PLANES))) {
 			if (test == 1) {
-				for (int i = 0; i < DST.num_clip_planes; ++i) {
+				for (int i = 0; i < DST.clip_planes_len; ++i) {
 					glEnable(GL_CLIP_DISTANCE0 + i);
 				}
 			}
@@ -436,15 +436,15 @@ void DRW_state_invert_facing(void)
  * and if the shaders have support for it (see usage of gl_ClipDistance).
  * Be sure to call DRW_state_clip_planes_reset() after you finish drawing.
  **/
-void DRW_state_clip_planes_count_set(uint plane_len)
+void DRW_state_clip_planes_len_set(uint plane_len)
 {
 	BLI_assert(plane_len <= MAX_CLIP_PLANES);
-	DST.num_clip_planes = plane_len;
+	DST.clip_planes_len = plane_len;
 }
 
 void DRW_state_clip_planes_reset(void)
 {
-	DST.num_clip_planes = 0;
+	DST.clip_planes_len = 0;
 }
 
 /** \} */
@@ -532,21 +532,26 @@ static void draw_clipping_setup_from_view(void)
 
 	/* Compute clip planes using the world space frustum corners. */
 	for (int p = 0; p < 6; p++) {
-		int q, r;
+		int q, r, s;
 		switch (p) {
-			case 0:  q = 1; r = 2; break; /* -X */
-			case 1:  q = 0; r = 5; break; /* -Y */
-			case 2:  q = 1; r = 5; break; /* +Z (far) */
-			case 3:  q = 2; r = 6; break; /* +Y */
-			case 4:  q = 0; r = 3; break; /* -Z (near) */
-			default: q = 4; r = 7; break; /* +X */
+			case 0:  q = 1; r = 2; s = 3; break; /* -X */
+			case 1:  q = 0; r = 4; s = 5; break; /* -Y */
+			case 2:  q = 1; r = 5; s = 6; break; /* +Z (far) */
+			case 3:  q = 2; r = 6; s = 7; break; /* +Y */
+			case 4:  q = 0; r = 3; s = 7; break; /* -Z (near) */
+			default: q = 4; r = 7; s = 6; break; /* +X */
 		}
 		if (DST.frontface == GL_CW) {
 			SWAP(int, q, r);
 		}
 
-		normal_tri_v3(DST.clipping.frustum_planes[p], bbox.vec[p], bbox.vec[q], bbox.vec[r]);
-		DST.clipping.frustum_planes[p][3] = -dot_v3v3(DST.clipping.frustum_planes[p], bbox.vec[p]);
+		normal_quad_v3(DST.clipping.frustum_planes[p], bbox.vec[p], bbox.vec[q], bbox.vec[r], bbox.vec[s]);
+		/* Increase precision and use the mean of all 4 corners. */
+		DST.clipping.frustum_planes[p][3]  = -dot_v3v3(DST.clipping.frustum_planes[p], bbox.vec[p]);
+		DST.clipping.frustum_planes[p][3] += -dot_v3v3(DST.clipping.frustum_planes[p], bbox.vec[q]);
+		DST.clipping.frustum_planes[p][3] += -dot_v3v3(DST.clipping.frustum_planes[p], bbox.vec[r]);
+		DST.clipping.frustum_planes[p][3] += -dot_v3v3(DST.clipping.frustum_planes[p], bbox.vec[s]);
+		DST.clipping.frustum_planes[p][3] *= 0.25f;
 	}
 
 	/* Extract Bounding Sphere */
@@ -927,7 +932,7 @@ static void bind_ubo(GPUUniformBuffer *ubo, char bind_type)
 				return;
 			}
 		}
-		/* printf so user can report bad behaviour */
+		/* printf so user can report bad behavior */
 		printf("Not enough ubo slots! This should not happen!\n");
 		/* This is not depending on user input.
 		 * It is our responsibility to make sure there is enough slots. */
@@ -1050,6 +1055,12 @@ static void draw_shgroup(DRWShadingGroup *shgroup, DRWState pass_state)
 
 	/* Binding Uniform */
 	for (DRWUniform *uni = shgroup->uniforms; uni; uni = uni->next) {
+		if (uni->location == -2) {
+			uni->location = GPU_shader_get_uniform_ensure(shgroup->shader, DST.uniform_names.buffer + uni->name_ofs);
+			if (uni->location == -1) {
+				continue;
+			}
+		}
 		switch (uni->type) {
 			case DRW_UNIFORM_SHORT_TO_INT:
 				val = (int)*((short *)uni->pvalue);
@@ -1146,7 +1157,7 @@ static void draw_shgroup(DRWShadingGroup *shgroup, DRWState pass_state)
 			GPU_select_load_id(select_id[_start]);                   \
 		}
 
-# define GPU_SELECT_LOAD_IF_PICKSEL_LIST_END(_start, _count) \
+#  define GPU_SELECT_LOAD_IF_PICKSEL_LIST_END(_start, _count) \
 		_start += _count;                                    \
 	}
 

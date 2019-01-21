@@ -48,9 +48,11 @@ typedef struct GlobalsUboStorage {
 	float colorWireEdit[4];
 	float colorActive[4];
 	float colorSelect[4];
-	float colorTransform[4];
+	float colorDupliSelect[4];
+	float colorDupli[4];
 	float colorLibrarySelect[4];
 	float colorLibrary[4];
+	float colorTransform[4];
 	float colorLamp[4];
 	float colorSpeaker[4];
 	float colorCamera[4];
@@ -123,6 +125,8 @@ BLI_STATIC_ASSERT_ALIGN(GlobalsUboStorage, 16)
 void DRW_globals_update(void);
 void DRW_globals_free(void);
 
+void DRW_shgroup_world_clip_planes_from_rv3d(struct DRWShadingGroup *shgrp, const RegionView3D *rv3d);
+
 struct DRWShadingGroup *shgroup_dynlines_flat_color(struct DRWPass *pass);
 struct DRWShadingGroup *shgroup_dynlines_dashed_uniform_color(struct DRWPass *pass, float color[4]);
 struct DRWShadingGroup *shgroup_dynpoints_uniform_color(struct DRWPass *pass, float color[4], float *size);
@@ -133,10 +137,9 @@ struct DRWShadingGroup *shgroup_instance_solid(struct DRWPass *pass, struct GPUB
 struct DRWShadingGroup *shgroup_instance_wire(struct DRWPass *pass, struct GPUBatch *geom);
 struct DRWShadingGroup *shgroup_instance_screen_aligned(struct DRWPass *pass, struct GPUBatch *geom);
 struct DRWShadingGroup *shgroup_instance_empty_axes(struct DRWPass *pass, struct GPUBatch *geom);
-struct DRWShadingGroup *shgroup_instance_image_plane(struct DRWPass *pass, struct GPUBatch *geom);
 struct DRWShadingGroup *shgroup_instance_scaled(struct DRWPass *pass, struct GPUBatch *geom);
 struct DRWShadingGroup *shgroup_instance(struct DRWPass *pass, struct GPUBatch *geom);
-struct DRWShadingGroup *shgroup_instance_alpha(struct DRWPass *pass, struct GPUBatch *geom, float alpha);
+struct DRWShadingGroup *shgroup_instance_alpha(struct DRWPass *pass, struct GPUBatch *geom);
 struct DRWShadingGroup *shgroup_instance_outline(struct DRWPass *pass, struct GPUBatch *geom, int *baseid);
 struct DRWShadingGroup *shgroup_camera_instance(struct DRWPass *pass, struct GPUBatch *geom);
 struct DRWShadingGroup *shgroup_distance_lines_instance(struct DRWPass *pass, struct GPUBatch *geom);

@@ -59,11 +59,10 @@ struct wmWindowManager;
 enum {
 	DRAW_PICKING     = (1 << 0),
 	DRAW_CONSTCOLOR  = (1 << 1),
-	DRAW_SCENESET    = (1 << 2)
+	DRAW_SCENESET    = (1 << 2),
 };
 
 /* view3d_header.c */
-void VIEW3D_OT_layers(struct wmOperatorType *ot);
 void VIEW3D_OT_toggle_matcap_flip(struct wmOperatorType *ot);
 
 /* view3d_ops.c */
@@ -98,7 +97,7 @@ void VIEW3D_OT_background_image_add(struct wmOperatorType *ot);
 void VIEW3D_OT_background_image_remove(struct wmOperatorType *ot);
 void VIEW3D_OT_view_orbit(struct wmOperatorType *ot);
 void VIEW3D_OT_view_roll(struct wmOperatorType *ot);
-// void VIEW3D_OT_clip_border(struct wmOperatorType *ot);
+void VIEW3D_OT_clip_border(struct wmOperatorType *ot);
 void VIEW3D_OT_cursor3d(struct wmOperatorType *ot);
 void VIEW3D_OT_render_border(struct wmOperatorType *ot);
 void VIEW3D_OT_clear_render_border(struct wmOperatorType *ot);
@@ -130,9 +129,6 @@ void VIEW3D_OT_fly(struct wmOperatorType *ot);
 /* view3d_walk.c */
 void VIEW3D_OT_walk(struct wmOperatorType *ot);
 
-/* view3d_ruler.c */
-void VIEW3D_OT_ruler(struct wmOperatorType *ot);
-
 /* drawobject.c */
 void draw_object_backbufsel(
         struct Depsgraph *depsgraph, Scene *scene,
@@ -158,8 +154,6 @@ void ED_view3d_draw_select_loop(
 
 void ED_view3d_draw_depth_loop(
         struct Depsgraph *depsgraph, Scene *scene, struct ARegion *ar, View3D *v3d);
-
-void ED_view3d_after_add(ListBase *lb, Base *base, const short dflag);
 
 void view3d_update_depths_rect(struct ARegion *ar, struct ViewDepths *d, struct rcti *rect);
 float view3d_depth_near(struct ViewDepths *d);
@@ -275,13 +269,6 @@ void VIEW3D_GT_ruler_item(struct wmGizmoType *gzt);
 void VIEW3D_OT_ruler_add(struct wmOperatorType *ot);
 
 void VIEW3D_GT_navigate_rotate(struct wmGizmoType *gzt);
-
-/* draw_volume.c */
-void draw_smoke_volume(struct SmokeDomainSettings *sds, struct Object *ob,
-                       const float min[3], const float max[3],
-                       const float viewnormal[3]);
-
-void draw_smoke_velocity(struct SmokeDomainSettings *domain, float viewnormal[3]);
 
 /* workaround for trivial but noticeable camera bug caused by imprecision
  * between view border calculation in 2D/3D space, workaround for bug [#28037].

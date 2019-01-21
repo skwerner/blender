@@ -351,7 +351,7 @@ void EEVEE_lights_cache_add(EEVEE_ViewLayerData *sldata, Object *ob)
 		eevee_light_setup(ob, evli);
 
 		/* We do not support shadowmaps for dupli lamps. */
-		if ((ob->base_flag & BASE_FROMDUPLI) != 0) {
+		if ((ob->base_flag & BASE_FROM_DUPLI) != 0) {
 			linfo->num_light++;
 			return;
 		}
@@ -463,7 +463,7 @@ void EEVEE_lights_cache_shcaster_material_add(
 /* Make that object update shadow casting lamps inside its influence bounding box. */
 void EEVEE_lights_cache_shcaster_object_add(EEVEE_ViewLayerData *sldata, Object *ob)
 {
-	if ((ob->base_flag & BASE_FROMDUPLI) != 0) {
+	if ((ob->base_flag & BASE_FROM_DUPLI) != 0) {
 		/* TODO: Special case for dupli objects because we cannot save the object pointer. */
 		return;
 	}
@@ -1236,7 +1236,7 @@ void EEVEE_draw_shadows(EEVEE_ViewLayerData *sldata, EEVEE_Data *vedata)
 		Lamp *la = (Lamp *)ob->data;
 		BoundSphere bsphere = {
 			.center = {ob->obmat[3][0], ob->obmat[3][1], ob->obmat[3][2]},
-			.radius = light_attenuation_radius_get(la, light_threshold)
+			.radius = light_attenuation_radius_get(la, light_threshold),
 		};
 		cube_visible[i] = DRW_culling_sphere_test(&bsphere);
 	}

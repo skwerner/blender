@@ -188,8 +188,8 @@ static void hud_region_layout(const bContext *C, ARegion *ar)
 
 	if (ar->panels.first && (ar->sizey != size_y)) {
 		View2D *v2d = &ar->v2d;
-		ar->winx = ar->sizex;
-		ar->winy = ar->sizey;
+		ar->winx = ar->sizex * UI_DPI_FAC;
+		ar->winy = ar->sizey * UI_DPI_FAC;
 
 		ar->winrct.xmax = (ar->winrct.xmin + ar->winx) - 1;
 		ar->winrct.ymax = (ar->winrct.ymin + ar->winy) - 1;
@@ -213,7 +213,7 @@ static void hud_region_draw(const bContext *C, ARegion *ar)
 	GPU_clear(GPU_COLOR_BIT);
 
 	if ((ar->flag & RGN_FLAG_HIDDEN) == 0) {
-		ui_draw_menu_back(NULL, NULL, &(rcti){.xmax = ar->winx, .ymax = ar->winy});
+		ui_draw_menu_back(NULL, NULL, &(rcti){ .xmax = ar->winx, .ymax = ar->winy, });
 		ED_region_panels_draw(C, ar);
 	}
 }
@@ -337,7 +337,7 @@ void ED_area_type_hud_ensure(bContext *C, ScrArea *sa)
 	ED_region_tag_redraw(ar);
 
 	/* Reset zoom level (not well supported). */
-	ar->v2d.cur = ar->v2d.tot = (rctf){.xmax = ar->winx, .ymax = ar->winy};
+	ar->v2d.cur = ar->v2d.tot = (rctf){ .xmax = ar->winx, .ymax = ar->winy, };
 	ar->v2d.minzoom = 1.0f;
 	ar->v2d.maxzoom = 1.0f;
 
@@ -352,7 +352,7 @@ void ED_area_type_hud_ensure(bContext *C, ScrArea *sa)
 		if (was_hidden) {
 			ar->winx = ar->v2d.winx;
 			ar->winy = ar->v2d.winy;
-			ar->v2d.cur = ar->v2d.tot = (rctf){.xmax = ar->winx, .ymax = ar->winy};
+			ar->v2d.cur = ar->v2d.tot = (rctf){ .xmax = ar->winx, .ymax = ar->winy, };
 		}
 		CTX_wm_region_set((bContext *)C, ar_prev);
 	}

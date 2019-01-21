@@ -117,16 +117,6 @@ bool BKE_layer_collection_has_selected_objects(
 void BKE_base_set_visible(struct Scene *scene, struct ViewLayer *view_layer, struct Base *base, bool extend);
 void BKE_layer_collection_set_visible(struct Scene *scene, struct ViewLayer *view_layer, struct LayerCollection *lc, bool extend);
 
-/* override */
-
-void BKE_override_view_layer_datablock_add(
-        struct ViewLayer *view_layer, int id_type, const char *data_path, const struct ID *owner_id);
-void BKE_override_view_layer_int_add(
-        struct ViewLayer *view_layer, int id_type, const char *data_path, const int value);
-
-void BKE_override_layer_collection_boolean_add(
-        struct LayerCollection *layer_collection, int id_type, const char *data_path, const bool value);
-
 /* evaluation */
 
 void BKE_layer_eval_view_layer(
@@ -165,10 +155,6 @@ struct ObjectsInModeIteratorData {
 	struct View3D *v3d;
 	struct Base *base_active;
 };
-
-void BKE_view_layer_renderable_objects_iterator_begin(BLI_Iterator *iter, void *data_in);
-void BKE_view_layer_renderable_objects_iterator_next(BLI_Iterator *iter);
-void BKE_view_layer_renderable_objects_iterator_end(BLI_Iterator *iter);
 
 void BKE_view_layer_bases_in_mode_iterator_begin(BLI_Iterator *iter, void *data_in);
 void BKE_view_layer_bases_in_mode_iterator_next(BLI_Iterator *iter);
@@ -329,34 +315,6 @@ void BKE_view_layer_visible_bases_iterator_end(BLI_Iterator *iter);
 #define FOREACH_OBJECT_FLAG_END                                               \
 	ITER_END;                                                                 \
 } ((void)0)
-
-struct ObjectsRenderableIteratorData {
-	struct Scene *scene;
-	struct Base base_temp;
-	struct Scene scene_temp;
-
-	struct {
-		struct ViewLayer *view_layer;
-		struct Base *base;
-		struct Scene *set;
-	} iter;
-};
-
-#define FOREACH_OBJECT_RENDERABLE_BEGIN(scene_, _instance)                    \
-{                                                                             \
-	struct ObjectsRenderableIteratorData data_ = {                            \
-	    .scene = (scene_),                                                    \
-	};                                                                        \
-	ITER_BEGIN(BKE_view_layer_renderable_objects_iterator_begin,              \
-	           BKE_view_layer_renderable_objects_iterator_next,               \
-	           BKE_view_layer_renderable_objects_iterator_end,                \
-	           &data_, Object *, _instance)
-
-
-#define FOREACH_OBJECT_RENDERABLE_END                                         \
-	ITER_END;                                                                 \
-} ((void)0)
-
 
 /* layer_utils.c */
 

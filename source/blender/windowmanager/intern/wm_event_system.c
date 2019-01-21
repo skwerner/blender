@@ -314,7 +314,7 @@ void wm_event_do_depsgraph(bContext *C)
 		const Scene *scene = WM_window_get_active_scene(win);
 		const bScreen *screen = WM_window_get_active_screen(win);
 
-		win_combine_v3d_datamask |= ED_view3d_screen_datamask(scene, screen);
+		win_combine_v3d_datamask |= ED_view3d_screen_datamask(C, scene, screen);
 	}
 	/* Update all the dependency graphs of visible vew layers. */
 	for (wmWindow *win = wm->windows.first; win; win = win->next) {
@@ -2292,7 +2292,7 @@ static int wm_handlers_do_intern(bContext *C, wmEvent *event, ListBase *handlers
 	        /* comment this out to flood the console! (if you really want to test) */
 	        !ELEM(event->type, MOUSEMOVE, INBETWEEN_MOUSEMOVE)
 	        ;
-# define PRINT if (do_debug_handler) printf
+#define PRINT if (do_debug_handler) printf
 
 	wmWindowManager *wm = CTX_wm_manager(C);
 	wmEventHandler *handler, *nexthandler;
@@ -4623,6 +4623,7 @@ void WM_window_cursor_keymap_status_refresh(bContext *C, wmWindow *win)
 		wmEvent test_event = *win->eventstate;
 		test_event.type = event_data[data_index].event_type;
 		test_event.val = event_data[data_index].event_value;
+		wm_eventemulation(&test_event);
 		wmKeyMapItem *kmi = NULL;
 		for (int handler_index = 0; handler_index < ARRAY_SIZE(handlers); handler_index++) {
 			kmi = wm_kmi_from_event(C, wm, handlers[handler_index], &test_event);

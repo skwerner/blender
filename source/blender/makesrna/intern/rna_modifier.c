@@ -1554,7 +1554,7 @@ static void rna_def_modifier_mirror(BlenderRNA *brna)
 	prop = RNA_def_property(srna, "use_bisect_axis", PROP_BOOLEAN, PROP_NONE);
 	RNA_def_property_boolean_sdna(prop, NULL, "flag", MOD_MIR_BISECT_AXIS_X);
 	RNA_def_property_array(prop, 3);
-	RNA_def_property_ui_text(prop, "Bisect Axis", "Cuts the mesh across the mirrorplane");
+	RNA_def_property_ui_text(prop, "Bisect Axis", "Cuts the mesh across the mirror plane");
 	RNA_def_property_update(prop, 0, "rna_Modifier_update");
 
 	prop = RNA_def_property(srna, "use_bisect_flip_axis", PROP_BOOLEAN, PROP_NONE);
@@ -3049,10 +3049,18 @@ static void rna_def_modifier_bevel(BlenderRNA *brna)
 	};
 
 	static EnumPropertyItem prop_harden_normals_items[] = {
-		{ MOD_BEVEL_HN_NONE, "HN_NONE", 0, "Off", "Do not use Harden Normals" },
-		{ MOD_BEVEL_HN_FACE, "HN_FACE", 0, "Face Area", "Use faces as weight" },
-		{ MOD_BEVEL_HN_ADJ, "HN_ADJ", 0, "Vertex average", "Use adjacent vertices as weight" },
-		{ MOD_BEVEL_FIX_SHA, "FIX_SHA", 0, "Fix shading", "Fix normal shading continuity" },
+		{ MOD_BEVEL_FACE_STRENGTH_NONE, "FSTR_NONE", 0, "None", "Do not set face strength" },
+		{ MOD_BEVEL_FACE_STRENGTH_NEW, "FSTR_NEW", 0, "New", "Set face strength on new faces only" },
+		{ MOD_BEVEL_FACE_STRENGTH_AFFECTED, "FSTR_AFFECTED", 0, "Affected",
+			"Set face strength on new and affected faces only" },
+		{ MOD_BEVEL_FACE_STRENGTH_ALL, "FSTR_ALL", 0, "All", "Set face strength on all faces" },
+		{ 0, NULL, 0, NULL, NULL },
+	};
+
+	static EnumPropertyItem prop_miter_items[] = {
+		{ MOD_BEVEL_MITER_SHARP, "MITER_SHARP", 0, "Sharp", "Default sharp miter" },
+		{ MOD_BEVEL_MITER_PATCH, "MITER_PATCH", 0, "Patch", "Miter with extra corner" },
+		{ MOD_BEVEL_MITER_ARC, "MITER_ARC", 0, "Arc", "Miter with curved arc" },
 		{ 0, NULL, 0, NULL, NULL },
 	};
 
@@ -3065,7 +3073,14 @@ static void rna_def_modifier_bevel(BlenderRNA *brna)
 	RNA_def_property_float_sdna(prop, NULL, "value");
 	RNA_def_property_range(prop, 0, FLT_MAX);
 	RNA_def_property_ui_range(prop, 0.0f, 100.0f, 0.1, 4);
-	RNA_def_property_ui_text(prop, "Width", "Bevel value/amount");
+	RNA_def_property_ui_text(prop, "Width", "Bevel amount");
+	RNA_def_property_update(prop, 0, "rna_Modifier_update");
+
+	prop = RNA_def_property(srna, "width_pct", PROP_FLOAT, PROP_FACTOR);
+	RNA_def_property_float_sdna(prop, NULL, "value");
+	RNA_def_property_range(prop, 0, FLT_MAX);
+	RNA_def_property_ui_range(prop, 0.0f, 100.0f, 5.0, 2);
+	RNA_def_property_ui_text(prop, "Width Percent", "Bevel amount for percentage method");
 	RNA_def_property_update(prop, 0, "rna_Modifier_update");
 
 	prop = RNA_def_property(srna, "segments", PROP_INT, PROP_NONE);
@@ -3143,21 +3158,35 @@ static void rna_def_modifier_bevel(BlenderRNA *brna)
 	RNA_def_property_ui_text(prop, "Mark Sharp", "Mark beveled edges as sharp");
 	RNA_def_property_update(prop, 0, "rna_Modifier_update");
 
-	prop = RNA_def_property(srna, "hnmode", PROP_ENUM, PROP_NONE);
+	prop = RNA_def_property(srna, "harden_normals", PROP_BOOLEAN, PROP_NONE);
+	RNA_def_property_boolean_sdna(prop, NULL, "flags", MOD_BEVEL_HARDEN_NORMALS);
+	RNA_def_property_ui_text(prop, "Harden Normals",
+		"Match normals of new faces to adjacent faces");
+	RNA_def_property_update(prop, 0, "rna_Modifier_update");
+
+	prop = RNA_def_property(srna, "face_strength_mode", PROP_ENUM, PROP_NONE);
+	RNA_def_property_enum_sdna(prop, NULL, "face_str_mode");
 	RNA_def_property_enum_items(prop, prop_harden_normals_items);
-	RNA_def_property_ui_text(prop, "Normal Mode", "Weighting mode for Harden Normals");
+	RNA_def_property_ui_text(prop, "Set Face Strength", "Whether to set face strength, and which faces to set it on");
 	RNA_def_property_update(prop, 0, "rna_Modifier_update");
 
-	prop = RNA_def_property(srna, "hn_strength", PROP_FLOAT, PROP_NONE);
-	RNA_def_property_float_default(prop, 0.5f);
-	RNA_def_property_range(prop, 0, 1);
-	RNA_def_property_ui_range(prop, 0, 1, 1, 2);
-	RNA_def_property_ui_text(prop, "Normal Strength", "Strength of calculated normal");
+	prop = RNA_def_property(srna, "miter_outer", PROP_ENUM, PROP_NONE);
+	RNA_def_property_enum_sdna(prop, NULL, "miter_outer");
+	RNA_def_property_enum_items(prop, prop_miter_items);
+	RNA_def_property_ui_text(prop, "Outer Miter", "Pattern to use for outside of miters");
 	RNA_def_property_update(prop, 0, "rna_Modifier_update");
 
-	prop = RNA_def_property(srna, "set_wn_strength", PROP_BOOLEAN, PROP_NONE);
-	RNA_def_property_boolean_sdna(prop, NULL, "flags", MOD_BEVEL_SET_WN_STR);
-	RNA_def_property_ui_text(prop, "Face Strength", "Set face strength of beveled faces for use in WN Modifier");
+	prop = RNA_def_property(srna, "miter_inner", PROP_ENUM, PROP_NONE);
+	RNA_def_property_enum_sdna(prop, NULL, "miter_inner");
+	RNA_def_property_enum_items(prop, prop_miter_items);
+	RNA_def_property_ui_text(prop, "Inner Miter", "Pattern to use for inside of miters");
+	RNA_def_property_update(prop, 0, "rna_Modifier_update");
+
+	prop = RNA_def_property(srna, "spread", PROP_FLOAT, PROP_DISTANCE);
+	RNA_def_property_float_sdna(prop, NULL, "spread");
+	RNA_def_property_range(prop, 0, FLT_MAX);
+	RNA_def_property_ui_range(prop, 0.0f, 100.0f, 0.1, 4);
+	RNA_def_property_ui_text(prop, "Spread", "Spread distance for inner miter arcs");
 	RNA_def_property_update(prop, 0, "rna_Modifier_update");
 }
 

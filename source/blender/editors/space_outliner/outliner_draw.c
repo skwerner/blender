@@ -341,6 +341,7 @@ static void namebutton_cb(bContext *C, void *tsep, char *oldname)
 					if (ob->type == OB_MBALL) {
 						DEG_id_tag_update(&ob->id, ID_RECALC_GEOMETRY);
 					}
+					DEG_id_tag_update(&ob->id, ID_RECALC_COPY_ON_WRITE);
 					WM_event_add_notifier(C, NC_ID | NA_RENAME, NULL); break;
 				}
 				default:
@@ -891,7 +892,7 @@ TreeElementIcon tree_element_get_icon(TreeStoreElem *tselem, TreeElement *te)
 				data.icon = ICON_CONSTRAINT;
 				break;
 			case TSE_MODIFIER_BASE:
-				data.icon = ICON_MODIFIER;
+				data.icon = ICON_MODIFIER_DATA;
 				break;
 			case TSE_LINKED_OB:
 				data.icon = ICON_OBJECT_DATA;
@@ -1339,6 +1340,10 @@ TreeElementIcon tree_element_get_icon(TreeStoreElem *tselem, TreeElement *te)
 				case ID_SCR:
 				case ID_WS:
 					data.icon = ICON_WORKSPACE; break;
+				case ID_MSK:
+					data.icon = ICON_MOD_MASK; break;
+				case ID_MC:
+					data.icon = ICON_SEQUENCE; break;
 				default:
 					break;
 			}
@@ -1627,7 +1632,7 @@ static void outliner_draw_tree_element(
 				const bool is_selected = (base != NULL) && ((base->flag & BASE_SELECTED) != 0);
 
 				if (ob == obact || is_selected) {
-					char col[4] = {0, 0, 0, 0};
+					uchar col[4] = {0, 0, 0, 0};
 
 					/* outliner active ob: always white text, circle color now similar to view3d */
 
@@ -2159,6 +2164,9 @@ void draw_outliner(const bContext *C)
 	/* get extents of data */
 	outliner_height(soops, &soops->tree, &sizey);
 
+	/* extend size to allow for horizontal scrollbar */
+	sizey += V2D_SCROLL_HEIGHT;
+
 	if (soops->outlinevis == SO_DATA_API) {
 		/* RNA has two columns:
 		 * - column 1 is (max_width + OL_RNA_COL_SPACEX) or
@@ -2177,7 +2185,8 @@ void draw_outliner(const bContext *C)
 		has_restrict_icons = false;
 	}
 	else {
-		/* width must take into account restriction columns (if visible) so that entries will still be visible */
+		/* width must take into account restriction columns (if visible)
+		 * so that entries will still be visible */
 		//outliner_width(soops, &soops->tree, &sizex);
 		// XXX should use outliner_width instead when te->xend will be set correctly...
 		outliner_rna_width(soops, &soops->tree, &sizex, 0);

@@ -188,7 +188,7 @@ const unsigned char hash[512] = {
 };
 
 
-const float hashvectf[768] = {
+static const float hashvectf[768] = {
 	0.33783, 0.715698, -0.611206, -0.944031, -0.326599, -0.045624, -0.101074, -0.416443, -0.903503, 0.799286, 0.49411,
 	-0.341949, -0.854645, 0.518036, 0.033936, 0.42514, -0.437866, -0.792114, -0.358948, 0.597046, 0.717377, -0.985413,
 	0.144714, 0.089294, -0.601776, -0.33728, -0.723907, -0.449921, 0.594513, 0.666382, 0.208313, -0.10791, 0.972076,
@@ -288,7 +288,9 @@ static float newPerlin(float x, float y, float z)
 {
 	int A, AA, AB, B, BA, BB;
 	float u = floor(x), v = floor(y), w = floor(z);
-	int X = ((int)u) & 255, Y = ((int)v) & 255, Z = ((int)w) & 255;   /* FIND UNIT CUBE THAT CONTAINS POINT */
+	int X = ((int)u) & 255,
+		Y = ((int)v) & 255,
+		Z = ((int)w) & 255;   /* FIND UNIT CUBE THAT CONTAINS POINT */
 	x -= u;             /* FIND RELATIVE X,Y,Z */
 	y -= v;             /* OF POINT IN CUBE. */
 	z -= w;
@@ -1304,7 +1306,8 @@ static float voronoi_Cr(float x, float y, float z)
 }
 
 
-/* Signed version of all 6 of the above, just 2x-1, not really correct though (range is potentially (0, sqrt(6)).
+/* Signed version of all 6 of the above, just 2x-1, not really correct though
+ * (range is potentially (0, sqrt(6)).
  * Used in the musgrave functions */
 static float voronoi_F1S(float x, float y, float z)
 {

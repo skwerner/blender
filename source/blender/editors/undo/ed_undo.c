@@ -125,7 +125,7 @@ static int ed_undo_step(bContext *C, int step, const char *undoname, ReportList 
 	if (G.debug & G_DEBUG_IO) {
 		Main *bmain = CTX_data_main(C);
 		if (bmain->lock != NULL) {
-			BKE_report(reports, RPT_INFO, "Checking sanity of current .blend file *BEFORE* undo step.");
+			BKE_report(reports, RPT_INFO, "Checking sanity of current .blend file *BEFORE* undo step");
 			BLO_main_validate_libraries(bmain, reports);
 		}
 	}
@@ -199,14 +199,14 @@ static int ed_undo_step(bContext *C, int step, const char *undoname, ReportList 
 		Main *bmain = CTX_data_main(C);
 		scene = CTX_data_scene(C);
 		wm->op_undo_depth++;
-		BLI_callback_exec(bmain, &scene->id, step_for_callback > 0 ? BLI_CB_EVT_UNDO_PRE : BLI_CB_EVT_REDO_PRE);
+		BLI_callback_exec(bmain, &scene->id, step_for_callback > 0 ? BLI_CB_EVT_UNDO_POST : BLI_CB_EVT_REDO_POST);
 		wm->op_undo_depth--;
 	}
 
 	if (G.debug & G_DEBUG_IO) {
 		Main *bmain = CTX_data_main(C);
 		if (bmain->lock != NULL) {
-			BKE_report(reports, RPT_INFO, "Checking sanity of current .blend file *AFTER* undo step.");
+			BKE_report(reports, RPT_INFO, "Checking sanity of current .blend file *AFTER* undo step");
 			BLO_main_validate_libraries(bmain, reports);
 		}
 	}
@@ -272,6 +272,23 @@ bool ED_undo_is_valid(const bContext *C, const char *undoname)
 	wmWindowManager *wm = CTX_wm_manager(C);
 	return BKE_undosys_stack_has_undo(wm->undo_stack, undoname);
 }
+
+bool ED_undo_is_memfile_compatible(const bContext *C)
+{
+	/* Some modes don't co-exist with memfile undo, disable their use: T60593
+	 * (this matches 2.7x behavior). */
+	ViewLayer *view_layer = CTX_data_view_layer(C);
+	if (view_layer != NULL) {
+		Object *obact = OBACT(view_layer);
+		if (obact != NULL) {
+			if (obact->mode & (OB_MODE_SCULPT | OB_MODE_EDIT)) {
+				return false;
+			}
+		}
+	}
+	return true;
+}
+
 
 /**
  * Ideally we wont access the stack directly,

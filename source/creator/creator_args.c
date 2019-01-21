@@ -527,6 +527,7 @@ static int arg_handle_print_help(int UNUSED(argc), const char **UNUSED(argv), vo
 	BLI_argsPrintArgDoc(ba, "--log-level");
 	BLI_argsPrintArgDoc(ba, "--log-show-basename");
 	BLI_argsPrintArgDoc(ba, "--log-show-backtrace");
+	BLI_argsPrintArgDoc(ba, "--log-show-timestamp");
 	BLI_argsPrintArgDoc(ba, "--log-file");
 
 	printf("\n");
@@ -746,6 +747,15 @@ static int arg_handle_log_show_backtrace_set(int UNUSED(argc), const char **UNUS
 	/* Ensure types don't become incompatible. */
 	void (*fn)(FILE *fp) = BLI_system_backtrace;
 	CLG_backtrace_fn_set((void (*)(void *))fn);
+	return 0;
+}
+
+static const char arg_handle_log_show_timestamp_set_doc[] =
+"\n\tShow a timestamp for each log message in seconds since start."
+;
+static int arg_handle_log_show_timestamp_set(int UNUSED(argc), const char **UNUSED(argv), void *UNUSED(data))
+{
+	CLG_output_use_timestamp_set(true);
 	return 0;
 }
 
@@ -1615,6 +1625,7 @@ static int arg_handle_python_file_run(int argc, const char **argv, void *data)
 		BPY_CTX_SETUP(ok = BPY_execute_filepath(C, filename, NULL));
 		if (!ok && app_state.exit_code_on_error.python) {
 			printf("\nError: script failed, file: '%s', exiting.\n", argv[1]);
+			BPY_python_end();
 			exit(app_state.exit_code_on_error.python);
 		}
 		return 1;
@@ -1656,6 +1667,7 @@ static int arg_handle_python_text_run(int argc, const char **argv, void *data)
 
 		if (!ok && app_state.exit_code_on_error.python) {
 			printf("\nError: script failed, text: '%s', exiting.\n", argv[1]);
+			BPY_python_end();
 			exit(app_state.exit_code_on_error.python);
 		}
 
@@ -1687,6 +1699,7 @@ static int arg_handle_python_expr_run(int argc, const char **argv, void *data)
 		BPY_CTX_SETUP(ok = BPY_execute_string_ex(C, NULL, argv[1], false));
 		if (!ok && app_state.exit_code_on_error.python) {
 			printf("\nError: script failed, expr: '%s', exiting.\n", argv[1]);
+			BPY_python_end();
 			exit(app_state.exit_code_on_error.python);
 		}
 		return 1;
@@ -1821,7 +1834,8 @@ static int arg_handle_load_file(int UNUSED(argc), const char **argv, void *data)
 		}
 
 		if (BLO_has_bfile_extension(filename)) {
-			/* Just pretend a file was loaded, so the user can press Save and it'll save at the filename from the CLI. */
+			/* Just pretend a file was loaded, so the user can press Save and it'll
+			 * save at the filename from the CLI. */
 			BLI_strncpy(G_MAIN->name, filename, FILE_MAX);
 			G.relbase_valid = true;
 			G.save_over = true;
@@ -1872,6 +1886,7 @@ void main_args_setup(bContext *C, bArgs *ba)
 	BLI_argsAdd(ba, 1, NULL, "--log-level", CB(arg_handle_log_level_set), ba);
 	BLI_argsAdd(ba, 1, NULL, "--log-show-basename", CB(arg_handle_log_show_basename_set), ba);
 	BLI_argsAdd(ba, 1, NULL, "--log-show-backtrace", CB(arg_handle_log_show_backtrace_set), ba);
+	BLI_argsAdd(ba, 1, NULL, "--log-show-timestamp", CB(arg_handle_log_show_timestamp_set), ba);
 	BLI_argsAdd(ba, 1, NULL, "--log-file", CB(arg_handle_log_file_set), ba);
 
 	BLI_argsAdd(ba, 1, "-d", "--debug", CB(arg_handle_debug_mode_set), ba);

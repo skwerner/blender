@@ -301,7 +301,7 @@ ccl_device void svm_node_normal_map(KernelGlobals *kg, ShaderData *sd, float *st
 		float sign = primitive_attribute_float(kg, sd, attr_sign, NULL, NULL);
 		float3 normal;
 
-		if(sd->shader & SHADER_SMOOTH_NORMAL) {
+		if(sd->shader & SHADER_SMOOTH_NORMAL && !(kernel_data.integrator.feature_overrides & IGNORE_POLYGON_SMOOTHING)) {
 			normal = primitive_attribute_float3(kg, sd, attr_normal, NULL, NULL);
 		}
 		else {

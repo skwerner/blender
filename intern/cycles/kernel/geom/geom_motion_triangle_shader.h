@@ -95,7 +95,7 @@ ccl_device_noinline void motion_triangle_shader_setup(KernelGlobals *kg,
 	sd->dPdv = (verts[1] - verts[2]);
 #endif
 	/* Compute smooth normal. */
-	if(sd->shader & SHADER_SMOOTH_NORMAL) {
+	if(sd->shader & SHADER_SMOOTH_NORMAL && !(kernel_data.integrator.feature_overrides & IGNORE_POLYGON_SMOOTHING)) {
 		/* Find attribute. */
 		AttributeElement elem;
 		int offset = find_attribute_motion(kg,

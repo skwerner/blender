@@ -324,16 +324,26 @@ void BlenderSync::sync_integrator()
 	integrator->ignore_lights = get_boolean(cscene, "ignore_lights");
 	integrator->ignore_shadows = get_boolean(cscene, "ignore_shadows");
 	integrator->ignore_subdivision = get_boolean(cscene, "ignore_subdivision");
-	integrator->ignore_displacement = get_boolean(cscene, "ignore_displacement");
+	integrator->ignore_bump = get_boolean(cscene, "ignore_bump");
 	integrator->ignore_textures = get_boolean(cscene, "ignore_textures");
 	integrator->ignore_polygon_smoothing = get_boolean(cscene, "ignore_polygon_smoothing");
 	integrator->ignore_motion_blur = get_boolean(cscene, "ignore_motion_blur");
 	integrator->ignore_depth_of_field = get_boolean(cscene, "ignore_depth_of_field");
 	integrator->ignore_subsurface_scattering = get_boolean(cscene, "ignore_subsurface_scattering");
-	bool ignore_bump = get_boolean(cscene, "ignore_bump");
-	if(integrator->ignore_bump != ignore_bump) {
-		integrator->ignore_bump = ignore_bump;
-		scene->shader_manager->reset(scene);
+
+	bool ignore_displacement = get_boolean(cscene, "ignore_displacement");
+	if(integrator->ignore_displacement != ignore_displacement) {
+		integrator->ignore_displacement = ignore_displacement;
+
+		/* For displacement, iterate over all shaders and manually trigger updates. */
+		foreach(Shader *shader, scene->shaders) {
+			if(shader->has_displacement) {
+				if(shader->displacement_method != DISPLACE_BUMP) {
+					shader->need_update_mesh = true;
+				}
+				shader->tag_update(scene);
+			}
+		}
 	}
 
 	if(integrator->modified(previntegrator))

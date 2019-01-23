@@ -16,6 +16,7 @@
 
 #include "device/device.h"
 
+#include "render/integrator.h"
 #include "render/mesh.h"
 #include "render/object.h"
 #include "render/scene.h"
@@ -44,7 +45,7 @@ static float3 compute_face_normal(const Mesh::Triangle& t, float3 *verts)
 bool MeshManager::displace(Device *device, DeviceScene *dscene, Scene *scene, Mesh *mesh, Progress& progress)
 {
 	/* verify if we have a displacement shader */
-	if(!mesh->has_true_displacement()) {
+	if(!mesh->has_true_displacement() || scene->integrator->ignore_displacement) {
 		return false;
 	}
 

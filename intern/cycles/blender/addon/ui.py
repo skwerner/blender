@@ -1860,18 +1860,16 @@ class CYCLES_RENDER_PT_diagnostics(CyclesButtonsPanel, Panel):
         cscene = scene.cycles
 
         col = layout.column()
-        col.prop(cscene, "ignore_shaders")
-        col.prop(cscene, "ignore_textures")
-        col.prop(cscene, "ignore_atmosphere")
         col.prop(cscene, "ignore_lights")
         col.prop(cscene, "ignore_shadows")
-        col.prop(cscene, "ignore_subdivision")
-        col.prop(cscene, "ignore_displacement")
-        col.prop(cscene, "ignore_bump")
-        col.prop(cscene, "ignore_polygon_smoothing")
-        col.prop(cscene, "ignore_motion_blur")
-        col.prop(cscene, "ignore_depth_of_field")
+        col.prop(cscene, "ignore_shaders")
         col.prop(cscene, "ignore_subsurface_scattering")
+        col.prop(cscene, "ignore_textures")
+        col.prop(cscene, "ignore_bump")
+        col.prop(cscene, "ignore_atmosphere")
+        col.prop(cscene, "ignore_displacement")
+        col.prop(cscene, "ignore_polygon_smoothing")
+        col.prop(cscene, "ignore_depth_of_field")
 
 class CYCLES_RENDER_PT_debug(CyclesButtonsPanel, Panel):
     bl_label = "Debug"

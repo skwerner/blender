@@ -683,7 +683,7 @@ class CyclesRenderSettings(bpy.types.PropertyGroup):
     ignore_atmosphere: BoolProperty   (
         name="Ignore Atmosphere",
         default=False,
-        description="Ignore all atmosphere"
+        description="Ignore all atmosphere shaders"
     )
 
     ignore_lights: BoolProperty   (
@@ -696,18 +696,6 @@ class CyclesRenderSettings(bpy.types.PropertyGroup):
         name="Ignore Shadows",
         default=False,
         description="Ignore all shadows"
-    )
-
-    ignore_atmosphere: BoolProperty   (
-        name="Ignore Atmosphere",
-        default=False,
-        description="Ignore all atmosphere"
-    )
-
-    ignore_subdivision: BoolProperty   (
-        name="Ignore Subdivision",
-        default=False,
-        description="Ignore all subdivision"
     )
 
     ignore_displacement: BoolProperty   (
@@ -728,12 +716,6 @@ class CyclesRenderSettings(bpy.types.PropertyGroup):
         description="Ignore all smooth normals, render with geometry normals instead"
     )
 
-    ignore_motion_blur: BoolProperty   (
-        name="Ignore Motion Blur",
-        default=False,
-        description="Ignore all motion blur"
-    )
-
     ignore_depth_of_field: BoolProperty   (
         name="Ignore Depth of Field",
         default=False,
@@ -743,7 +725,7 @@ class CyclesRenderSettings(bpy.types.PropertyGroup):
     ignore_subsurface_scattering: BoolProperty   (
         name="Ignore Subsurface Scattering",
         default=False,
-        description="Ignore all subsurface scattering, substute with diffuse shading instead"
+        description="Ignore all subsurface scattering"
     )
 
     # Various fine-tuning debug flags

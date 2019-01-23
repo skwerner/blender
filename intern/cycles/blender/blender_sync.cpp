@@ -323,11 +323,9 @@ void BlenderSync::sync_integrator()
 	integrator->ignore_atmosphere = get_boolean(cscene, "ignore_atmosphere");
 	integrator->ignore_lights = get_boolean(cscene, "ignore_lights");
 	integrator->ignore_shadows = get_boolean(cscene, "ignore_shadows");
-	integrator->ignore_subdivision = get_boolean(cscene, "ignore_subdivision");
 	integrator->ignore_bump = get_boolean(cscene, "ignore_bump");
 	integrator->ignore_textures = get_boolean(cscene, "ignore_textures");
 	integrator->ignore_polygon_smoothing = get_boolean(cscene, "ignore_polygon_smoothing");
-	integrator->ignore_motion_blur = get_boolean(cscene, "ignore_motion_blur");
 	integrator->ignore_depth_of_field = get_boolean(cscene, "ignore_depth_of_field");
 	integrator->ignore_subsurface_scattering = get_boolean(cscene, "ignore_subsurface_scattering");
 

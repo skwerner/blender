@@ -526,14 +526,12 @@ typedef enum FeatureOverrides : uint32_t {
 	IGNORE_ATMOSPHERE             = (1 << 1),
 	IGNORE_LIGHTS                 = (1 << 2),
 	IGNORE_SHADOWS                = (1 << 3),
-	IGNORE_SUBDIVISION            = (1 << 4),
-	IGNORE_DISPLACEMENT           = (1 << 5),
-	IGNORE_BUMP                   = (1 << 6),
-	IGNORE_POLYGON_SMOOTHING      = (1 << 7),
-	IGNORE_MOTION_BLUR            = (1 << 8),
-	IGNORE_DEPTH_OF_FIELD         = (1 << 9),
-	IGNORE_SUBUSURFACE_SCATTERING = (1 << 10),
-	IGNORE_TEXTURES               = (1 << 11)
+	IGNORE_DISPLACEMENT           = (1 << 4),
+	IGNORE_BUMP                   = (1 << 5),
+	IGNORE_POLYGON_SMOOTHING      = (1 << 6),
+	IGNORE_DEPTH_OF_FIELD         = (1 << 7),
+	IGNORE_SUBUSURFACE_SCATTERING = (1 << 8),
+	IGNORE_TEXTURES               = (1 << 9)
 } FeatureOverrides;
 
 #ifdef __KERNEL_DEBUG__

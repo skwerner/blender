@@ -81,11 +81,9 @@ NODE_DEFINE(Integrator)
 	SOCKET_BOOLEAN(ignore_shaders, "Ignore Shaders", false);
 	SOCKET_BOOLEAN(ignore_lights, "Ignore Lights", false);
 	SOCKET_BOOLEAN(ignore_shadows, "Ignore Shadows", false);
-	SOCKET_BOOLEAN(ignore_subdivision, "Ignore Subdivisoin", false);
 	SOCKET_BOOLEAN(ignore_displacement, "Ignore Displacement", false);
 	SOCKET_BOOLEAN(ignore_bump, "Ignore Bump", false);
 	SOCKET_BOOLEAN(ignore_polygon_smoothing, "Ignore Polygon Smoothing", false);
-	SOCKET_BOOLEAN(ignore_motion_blur, "Ignore Motion Blur", false);
 	SOCKET_BOOLEAN(ignore_depth_of_field, "Ignore Depth of Field", false);
 	SOCKET_BOOLEAN(ignore_subsurface_scattering, "Ignore Subsurface Scattering", false);
 	SOCKET_BOOLEAN(ignore_textures, "Ignore Textures", false);
@@ -228,11 +226,9 @@ void Integrator::device_update(Device *device, DeviceScene *dscene, Scene *scene
 	kintegrator->feature_overrides |= ignore_atmosphere            ? IGNORE_ATMOSPHERE             : 0;
 	kintegrator->feature_overrides |= ignore_lights                ? IGNORE_LIGHTS                 : 0;
 	kintegrator->feature_overrides |= ignore_shadows               ? IGNORE_SHADOWS                : 0;
-	kintegrator->feature_overrides |= ignore_subdivision           ? IGNORE_SUBDIVISION            : 0;
 	kintegrator->feature_overrides |= ignore_displacement          ? IGNORE_DISPLACEMENT           : 0;
 	kintegrator->feature_overrides |= ignore_bump                  ? IGNORE_BUMP                   : 0;
 	kintegrator->feature_overrides |= ignore_polygon_smoothing     ? IGNORE_POLYGON_SMOOTHING      : 0;
-	kintegrator->feature_overrides |= ignore_motion_blur           ? IGNORE_MOTION_BLUR            : 0;
 	kintegrator->feature_overrides |= ignore_depth_of_field        ? IGNORE_DEPTH_OF_FIELD         : 0;
 	kintegrator->feature_overrides |= ignore_subsurface_scattering ? IGNORE_SUBUSURFACE_SCATTERING : 0;
 	kintegrator->feature_overrides |= ignore_textures              ? IGNORE_TEXTURES               : 0;

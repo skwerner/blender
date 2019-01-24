@@ -92,7 +92,8 @@ ccl_device_noinline void kernel_branched_path_surface_connect_light(
 				float terminate = path_branched_rng_light_termination(kg, state->rng_hash, state, j, num_samples);
 
 				/* only sample triangle lights */
-				if(kernel_data.integrator.num_all_lights || kernel_data.integrator.feature_overrides & IGNORE_LIGHTS)
+				if(kernel_data.integrator.num_all_lights ||
+				   (kernel_data.integrator.feature_overrides & IGNORE_LIGHTS))
 					light_u = 0.5f*light_u;
 
 				LightSample ls;

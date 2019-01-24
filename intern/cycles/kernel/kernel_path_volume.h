@@ -211,7 +211,7 @@ ccl_device void kernel_branched_path_volume_connect_light(
 				path_branched_rng_2D(kg, state->rng_hash, state, j, num_samples, PRNG_LIGHT_U, &light_u, &light_v);
 
 				/* only sample triangle lights */
-				if(kernel_data.integrator.num_all_lights || kernel_data.integrator.feature_overrides & IGNORE_LIGHTS)
+				if(kernel_data.integrator.num_all_lights || (kernel_data.integrator.feature_overrides & IGNORE_LIGHTS))
 					light_u = 0.5f*light_u;
 
 				LightSample ls;

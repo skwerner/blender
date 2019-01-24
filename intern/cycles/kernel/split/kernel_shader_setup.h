@@ -71,8 +71,22 @@ ccl_device void kernel_shader_setup(KernelGlobals *kg,
 			ASSIGN_RAY_STATE(kernel_split_state.ray_state, ray_index, RAY_HAS_ONLY_VOLUME);
 		}
 #endif
-	}
 
+#ifdef __VOLUME__
+		if(!(sd->flag & SD_HAS_ONLY_VOLUME && kernel_data.integrator.feature_overrides & IGNORE_ATMOSPHERE))
+#endif
+		if(kernel_data.integrator.feature_overrides & IGNORE_SHADERS) {
+			float n_dot_eye = fabsf(dot(ray.D, sd->N));
+			PathRadiance *L = &kernel_split_state.path_radiance[ray_index];
+			if(L->use_light_pass) {
+				L->direct_diffuse = make_float3(n_dot_eye, n_dot_eye, n_dot_eye);
+			}
+			else {
+				L->emission = make_float3(n_dot_eye, n_dot_eye, n_dot_eye);
+			}
+			ASSIGN_RAY_STATE(kernel_split_state.ray_state, ray_index, RAY_UPDATE_BUFFER);
+		}
+	}
 }
 
 CCL_NAMESPACE_END

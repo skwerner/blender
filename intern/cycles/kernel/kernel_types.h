@@ -521,7 +521,7 @@ typedef enum DenoiseFlag {
 	DENOISING_CLEAN_ALL_PASSES       = (1 << 8)-1,
 } DenoiseFlag;
 
-typedef enum FeatureOverrides : uint32_t {
+typedef enum FeatureOverrides {
 	IGNORE_SHADERS                = (1 << 0),
 	IGNORE_ATMOSPHERE             = (1 << 1),
 	IGNORE_LIGHTS                 = (1 << 2),

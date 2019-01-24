@@ -514,7 +514,8 @@ ccl_device void kernel_path_indirect(KernelGlobals *kg,
 #ifdef __SUBSURFACE__
 		/* bssrdf scatter to a different location on the same object, replacing
 		 * the closures with a diffuse BSDF */
-		if(sd->flag & SD_BSSRDF && !(kernel_data.integrator.feature_overrides & IGNORE_SUBUSURFACE_SCATTERING)) {
+		if(sd->flag & SD_BSSRDF &&
+		   !(kernel_data.integrator.feature_overrides & IGNORE_SUBUSURFACE_SCATTERING)) {
 			if(kernel_path_subsurface_scatter(kg,
 			                                  sd,
 			                                  emission_sd,
@@ -600,15 +601,21 @@ ccl_device_forceinline void kernel_path_integrate(
 		Intersection isect;
 		bool hit = kernel_path_scene_intersect(kg, state, ray, &isect, L);
 
-		if(hit && kernel_data.integrator.feature_overrides & IGNORE_SHADERS) {
+		if(hit && (kernel_data.integrator.feature_overrides & IGNORE_SHADERS)) {
 			shader_setup_from_ray(kg, &sd, &isect, ray);
-			if(L->use_light_pass) {
-				L->direct_diffuse = make_float3(fabsf(dot(ray->D, sd.N)));
+#ifdef __VOLUME__
+			if(!(sd.flag & SD_HAS_ONLY_VOLUME && kernel_data.integrator.feature_overrides & IGNORE_ATMOSPHERE))
+#endif
+			{
+				float n_dot_eye = fabsf(dot(ray->D, sd.N));
+				if(L->use_light_pass) {
+					L->direct_diffuse = make_float3(n_dot_eye, n_dot_eye, n_dot_eye);
+				}
+				else {
+					L->emission = make_float3(n_dot_eye, n_dot_eye, n_dot_eye);
+				}
+				return;
 			}
-			else {
-				L->emission = make_float3(fabsf(dot(ray->D, sd.N)));
-			}
-			return;
 		}
 
 		/* Find intersection with lamps and compute emission for MIS. */
@@ -698,7 +705,8 @@ ccl_device_forceinline void kernel_path_integrate(
 #ifdef __SUBSURFACE__
 		/* bssrdf scatter to a different location on the same object, replacing
 		 * the closures with a diffuse BSDF */
-		if(sd.flag & SD_BSSRDF && !(kernel_data.integrator.feature_overrides & IGNORE_SUBUSURFACE_SCATTERING)) {
+		if((sd.flag & SD_BSSRDF) &&
+		   !(kernel_data.integrator.feature_overrides & IGNORE_SUBUSURFACE_SCATTERING)) {
 			if(kernel_path_subsurface_scatter(kg,
 			                                  &sd,
 			                                  emission_sd,

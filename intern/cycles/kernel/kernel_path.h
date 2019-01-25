@@ -604,7 +604,7 @@ ccl_device_forceinline void kernel_path_integrate(
 		if(hit && (kernel_data.integrator.feature_overrides & IGNORE_SHADERS)) {
 			shader_setup_from_ray(kg, &sd, &isect, ray);
 #ifdef __VOLUME__
-			if(!(sd.flag & SD_HAS_ONLY_VOLUME && kernel_data.integrator.feature_overrides & IGNORE_ATMOSPHERE))
+			if(!(sd.flag & SD_HAS_ONLY_VOLUME && kernel_data.integrator.feature_overrides & IGNORE_VOLUMES))
 #endif
 			{
 				float n_dot_eye = fabsf(dot(ray->D, sd.N));
@@ -622,7 +622,7 @@ ccl_device_forceinline void kernel_path_integrate(
 		kernel_path_lamp_emission(kg, state, ray, throughput, &isect, &sd, L);
 
 #ifdef __VOLUME__
-		if(!(kernel_data.integrator.feature_overrides & IGNORE_ATMOSPHERE)) {
+		if(!(kernel_data.integrator.feature_overrides & IGNORE_VOLUMES)) {
 			/* Volume integration. */
 			VolumeIntegrateResult result = kernel_path_volume(kg,
 															   &sd,

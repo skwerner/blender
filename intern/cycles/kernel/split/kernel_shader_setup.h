@@ -73,7 +73,7 @@ ccl_device void kernel_shader_setup(KernelGlobals *kg,
 #endif
 
 #ifdef __VOLUME__
-		if(!(sd->flag & SD_HAS_ONLY_VOLUME && kernel_data.integrator.feature_overrides & IGNORE_ATMOSPHERE))
+		if(!(sd->flag & SD_HAS_ONLY_VOLUME && kernel_data.integrator.feature_overrides & IGNORE_VOLUMES))
 #endif
 		if(kernel_data.integrator.feature_overrides & IGNORE_SHADERS) {
 			float n_dot_eye = fabsf(dot(ray.D, sd->N));

@@ -523,7 +523,7 @@ typedef enum DenoiseFlag {
 
 typedef enum FeatureOverrides {
 	IGNORE_SHADERS                = (1 << 0),
-	IGNORE_ATMOSPHERE             = (1 << 1),
+	IGNORE_VOLUMES             = (1 << 1),
 	IGNORE_LIGHTS                 = (1 << 2),
 	IGNORE_SHADOWS                = (1 << 3),
 	IGNORE_DISPLACEMENT           = (1 << 4),

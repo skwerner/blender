@@ -79,7 +79,7 @@ NODE_DEFINE(Integrator)
 	SOCKET_ENUM(sampling_pattern, "Sampling Pattern", sampling_pattern_enum, SAMPLING_PATTERN_SOBOL);
 
 	SOCKET_BOOLEAN(ignore_shaders, "Ignore Shaders", false);
-	SOCKET_BOOLEAN(ignore_atmosphere, "Ignore Atmosphere", false);
+	SOCKET_BOOLEAN(ignore_volumes, "Ignore Volumes", false);
 	SOCKET_BOOLEAN(ignore_lights, "Ignore Lights", false);
 	SOCKET_BOOLEAN(ignore_shadows, "Ignore Shadows", false);
 	SOCKET_BOOLEAN(ignore_displacement, "Ignore Displacement", false);
@@ -224,7 +224,7 @@ void Integrator::device_update(Device *device, DeviceScene *dscene, Scene *scene
 
 	/* diagnostics */
 	kintegrator->feature_overrides  = ignore_shaders               ? IGNORE_SHADERS                : 0;
-	kintegrator->feature_overrides |= ignore_atmosphere            ? IGNORE_ATMOSPHERE             : 0;
+	kintegrator->feature_overrides |= ignore_volumes               ? IGNORE_VOLUMES                : 0;
 	kintegrator->feature_overrides |= ignore_lights                ? IGNORE_LIGHTS                 : 0;
 	kintegrator->feature_overrides |= ignore_shadows               ? IGNORE_SHADOWS                : 0;
 	kintegrator->feature_overrides |= ignore_displacement          ? IGNORE_DISPLACEMENT           : 0;

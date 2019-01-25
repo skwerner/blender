@@ -680,10 +680,10 @@ class CyclesRenderSettings(bpy.types.PropertyGroup):
         default=False,
         description="Ignore all image tetxures and use a neutral grey instead"
     )
-    ignore_atmosphere: BoolProperty   (
-        name="Ignore Atmosphere",
+    ignore_volumes: BoolProperty   (
+        name="Ignore Volumes",
         default=False,
-        description="Ignore all atmosphere shaders"
+        description="Ignore all volume shaders"
     )
 
     ignore_lights: BoolProperty   (

@@ -1851,6 +1851,7 @@ class CYCLES_RENDER_PT_bake(CyclesButtonsPanel, Panel):
 class CYCLES_RENDER_PT_diagnostics(CyclesButtonsPanel, Panel):
     bl_label = "Diagnostics"
     bl_context = "render"
+    bl_options = {'DEFAULT_CLOSED'}
     COMPAT_ENGINES = {'CYCLES'}
 
     def draw(self, context):
@@ -1866,7 +1867,7 @@ class CYCLES_RENDER_PT_diagnostics(CyclesButtonsPanel, Panel):
         col.prop(cscene, "ignore_subsurface_scattering")
         col.prop(cscene, "ignore_textures")
         col.prop(cscene, "ignore_bump")
-        col.prop(cscene, "ignore_atmosphere")
+        col.prop(cscene, "ignore_volumes")
         col.prop(cscene, "ignore_displacement")
         col.prop(cscene, "ignore_polygon_smoothing")
         col.prop(cscene, "ignore_depth_of_field")

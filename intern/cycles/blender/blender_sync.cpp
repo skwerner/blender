@@ -320,7 +320,7 @@ void BlenderSync::sync_integrator()
 	}
 
 	integrator->ignore_shaders = get_boolean(cscene, "ignore_shaders");
-	integrator->ignore_atmosphere = get_boolean(cscene, "ignore_atmosphere");
+	integrator->ignore_volumes = get_boolean(cscene, "ignore_volumes");
 	integrator->ignore_lights = get_boolean(cscene, "ignore_lights");
 	integrator->ignore_shadows = get_boolean(cscene, "ignore_shadows");
 	integrator->ignore_bump = get_boolean(cscene, "ignore_bump");

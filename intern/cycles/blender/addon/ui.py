@@ -1848,9 +1848,10 @@ class CYCLES_RENDER_PT_bake(CyclesButtonsPanel, Panel):
             layout.operator("object.bake", icon='RENDER_STILL').type = cscene.bake_type
 
 
-class CYCLES_RENDER_PT_diagnostics(CyclesButtonsPanel, Panel):
+class CYCLES_RENDER_PT_simplify_diagnostics(CyclesButtonsPanel, Panel):
     bl_label = "Diagnostics"
     bl_context = "render"
+    bl_parent_id = "CYCLES_RENDER_PT_simplify"
     bl_options = {'DEFAULT_CLOSED'}
     COMPAT_ENGINES = {'CYCLES'}
 
@@ -1858,7 +1859,12 @@ class CYCLES_RENDER_PT_diagnostics(CyclesButtonsPanel, Panel):
         layout = self.layout
 
         scene = context.scene
+        rd = scene.render
         cscene = scene.cycles
+
+        layout.use_property_split = True
+        layout.use_property_decorate = False
+        layout.active = rd.use_simplify
 
         col = layout.column()
         col.prop(cscene, "ignore_lights")
@@ -2132,6 +2138,7 @@ classes = (
     CYCLES_RENDER_PT_simplify_viewport,
     CYCLES_RENDER_PT_simplify_render,
     CYCLES_RENDER_PT_simplify_culling,
+    CYCLES_RENDER_PT_simplify_diagnostics,
     CYCLES_RENDER_PT_motion_blur,
     CYCLES_RENDER_PT_motion_blur_curve,
     CYCLES_RENDER_PT_film,
@@ -2182,7 +2189,6 @@ classes = (
     CYCLES_MATERIAL_PT_settings_surface,
     CYCLES_MATERIAL_PT_settings_volume,
     CYCLES_RENDER_PT_bake,
-    CYCLES_RENDER_PT_diagnostics,
     CYCLES_RENDER_PT_debug,
     CYCLES_NODE_PT_settings,
     CYCLES_NODE_PT_settings_surface,

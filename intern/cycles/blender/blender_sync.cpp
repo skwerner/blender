@@ -335,12 +335,12 @@ void BlenderSync::sync_integrator()
 	{
 		integrator->tag_update(scene);
 
-		if(integrator->ignore_volumes != previntegrator.ignore_volumes ||
-		   integrator->ignore_bump != previntegrator.ignore_bump ||
-		   integrator->ignore_textures != previntegrator.ignore_textures ||
-		   integrator->ignore_subsurface_scattering != previntegrator.ignore_subsurface_scattering ||
-		   integrator->ignore_polygon_smoothing != previntegrator.ignore_polygon_smoothing ||
-		   integrator->ignore_displacement != previntegrator.ignore_displacement) {
+		if(integrator->ignore_polygon_smoothing != previntegrator.ignore_polygon_smoothing) {
+			foreach(Shader *shader, scene->shaders) {
+				shader->need_update_mesh = true;
+			}
+		}
+		else if(integrator->ignore_displacement != previntegrator.ignore_displacement) {
 			/* For displacement, iterate over all shaders and manually trigger updates. */
 			foreach(Shader *shader, scene->shaders) {
 				if(shader->has_displacement) {
@@ -349,6 +349,14 @@ void BlenderSync::sync_integrator()
 					}
 				}
 			}
+		}
+
+		if(integrator->ignore_volumes != previntegrator.ignore_volumes ||
+		   integrator->ignore_bump != previntegrator.ignore_bump ||
+		   integrator->ignore_textures != previntegrator.ignore_textures ||
+		   integrator->ignore_subsurface_scattering != previntegrator.ignore_subsurface_scattering ||
+		   integrator->ignore_polygon_smoothing != previntegrator.ignore_polygon_smoothing ||
+		   integrator->ignore_displacement != previntegrator.ignore_displacement) {
 			shader_recalc = true;
 		}
 		if(integrator->ignore_lights != previntegrator.ignore_lights ||

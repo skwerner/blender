@@ -27,11 +27,6 @@ ccl_device void svm_node_set_bump(KernelGlobals *kg, ShaderData *sd, float *stac
 
 	float3 normal_in = stack_valid(normal_offset)? stack_load_float3(stack, normal_offset): sd->N;
 
-	if(kernel_data.integrator.feature_overrides & IGNORE_BUMP) {
-		stack_store_float3(stack, node.w, normal_in);
-		return;
-	}
-
 	float3 dPdx = sd->dP.dx;
 	float3 dPdy = sd->dP.dy;
 

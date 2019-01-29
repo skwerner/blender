@@ -142,8 +142,7 @@ ccl_device_inline void path_state_next(KernelGlobals *kg, ccl_addr_space PathSta
 		}
 
 		/* diffuse/glossy/singular */
-		if(label & LABEL_DIFFUSE ||
-			(kernel_data.integrator.feature_overrides & IGNORE_SUBUSURFACE_SCATTERING)) {
+		if(label & LABEL_DIFFUSE) {
 			state->flag |= PATH_RAY_DIFFUSE|PATH_RAY_DIFFUSE_ANCESTOR;
 		}
 		else if(label & LABEL_GLOSSY) {

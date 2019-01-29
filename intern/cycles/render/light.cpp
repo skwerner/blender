@@ -164,6 +164,9 @@ bool Light::has_contribution(Scene *scene)
 	if(type == LIGHT_BACKGROUND) {
 		return true;
 	}
+	if(scene->integrator->ignore_lights) {
+		return false;
+	}
 	return (shader) ? shader->has_surface_emission : scene->default_light->has_surface_emission;
 }
 
@@ -669,7 +672,7 @@ void LightManager::device_update_points(Device *,
 		int max_bounces = light->max_bounces;
 		float random = (float)light->random_id * (1.0f/(float)0xFFFFFFFF);
 
-		if(!light->cast_shadow)
+		if(!light->cast_shadow || scene->integrator->ignore_shadows)
 			shader_id &= ~SHADER_CAST_SHADOW;
 
 		if(!light->use_diffuse) {

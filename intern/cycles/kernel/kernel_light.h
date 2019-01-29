@@ -1126,16 +1126,6 @@ ccl_device_noinline bool light_sample(KernelGlobals *kg,
                                       int bounce,
                                       LightSample *ls)
 {
-	if(kernel_data.integrator.feature_overrides & IGNORE_LIGHTS) {
-		/* if we are to ignore lights, either rescale randu to guarantee a mesh light sample
-		   or return if there are no mesh lights. */
-		if(kernel_data.integrator.pdf_triangles != 0.0f) {
-			randu = 0.5f * randu;
-		}
-		else {
-			return false;
-		}
-	}
 	/* sample index */
 	int index = light_distribution_sample(kg, &randu);
 

@@ -150,8 +150,7 @@ ccl_device void kernel_do_volume(KernelGlobals *kg)
 			kernel_volume_clean_stack(kg, state->volume_stack);
 		}
 		/* volume attenuation, emission, scatter */
-		if(state->volume_stack[0].shader != SHADER_NONE &&
-		   !(kernel_data.integrator.feature_overrides & IGNORE_VOLUMES)) {
+		if(state->volume_stack[0].shader != SHADER_NONE) {
 			Ray volume_ray = *ray;
 			volume_ray.t = (hit)? isect->t: FLT_MAX;
 

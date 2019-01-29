@@ -109,10 +109,6 @@ ccl_device_forceinline void kernel_path_lamp_emission(
 {
 	PROFILING_INIT(kg, PROFILING_INDIRECT_EMISSION);
 
-	if(kernel_data.integrator.feature_overrides & IGNORE_LIGHTS) {
-		return;
-	}
-
 #ifdef __LAMP_MIS__
 	if(kernel_data.integrator.use_lamp_mis && !(state->flag & PATH_RAY_CAMERA)) {
 		/* ray starting from previous non-transparent bounce */
@@ -514,8 +510,7 @@ ccl_device void kernel_path_indirect(KernelGlobals *kg,
 #ifdef __SUBSURFACE__
 		/* bssrdf scatter to a different location on the same object, replacing
 		 * the closures with a diffuse BSDF */
-		if(sd->flag & SD_BSSRDF &&
-		   !(kernel_data.integrator.feature_overrides & IGNORE_SUBUSURFACE_SCATTERING)) {
+		if(sd->flag & SD_BSSRDF) {
 			if(kernel_path_subsurface_scatter(kg,
 			                                  sd,
 			                                  emission_sd,
@@ -622,24 +617,22 @@ ccl_device_forceinline void kernel_path_integrate(
 		kernel_path_lamp_emission(kg, state, ray, throughput, &isect, &sd, L);
 
 #ifdef __VOLUME__
-		if(!(kernel_data.integrator.feature_overrides & IGNORE_VOLUMES)) {
-			/* Volume integration. */
-			VolumeIntegrateResult result = kernel_path_volume(kg,
-															   &sd,
-															   state,
-															   ray,
-															   &throughput,
-															   &isect,
-															   hit,
-															   emission_sd,
-															   L);
+		/* Volume integration. */
+		VolumeIntegrateResult result = kernel_path_volume(kg,
+		                                                   &sd,
+		                                                   state,
+		                                                   ray,
+		                                                   &throughput,
+		                                                   &isect,
+		                                                   hit,
+		                                                   emission_sd,
+		                                                   L);
 
-			if(result == VOLUME_PATH_SCATTERED) {
-				continue;
-			}
-			else if(result == VOLUME_PATH_MISSED) {
-				break;
-			}
+		if(result == VOLUME_PATH_SCATTERED) {
+			continue;
+		}
+		else if(result == VOLUME_PATH_MISSED) {
+			break;
 		}
 #endif  /* __VOLUME__*/
 
@@ -705,8 +698,7 @@ ccl_device_forceinline void kernel_path_integrate(
 #ifdef __SUBSURFACE__
 		/* bssrdf scatter to a different location on the same object, replacing
 		 * the closures with a diffuse BSDF */
-		if((sd.flag & SD_BSSRDF) &&
-		   !(kernel_data.integrator.feature_overrides & IGNORE_SUBUSURFACE_SCATTERING)) {
+		if(sd.flag & SD_BSSRDF) {
 			if(kernel_path_subsurface_scatter(kg,
 			                                  &sd,
 			                                  emission_sd,

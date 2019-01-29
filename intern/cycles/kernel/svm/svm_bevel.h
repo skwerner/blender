@@ -153,7 +153,7 @@ ccl_device_noinline float3 svm_bevel(
 			int prim = kernel_tex_fetch(__prim_index, isect.hits[hit].prim);
 			int shader = kernel_tex_fetch(__tri_shader, prim);
 
-			if(shader & SHADER_SMOOTH_NORMAL && !(kernel_data.integrator.feature_overrides & IGNORE_POLYGON_SMOOTHING)) {
+			if(shader & SHADER_SMOOTH_NORMAL) {
 				float u = isect.hits[hit].u;
 				float v = isect.hits[hit].v;
 

@@ -60,6 +60,7 @@ BlenderSync::BlenderSync(BL::RenderEngine& b_engine,
   particle_system_map(&scene->particle_systems),
   world_map(NULL),
   world_recalc(false),
+  shader_recalc(false),
   scene(scene),
   preview(preview),
   experimental(false),
@@ -325,27 +326,39 @@ void BlenderSync::sync_integrator()
 	integrator->ignore_shadows = get_boolean(cscene, "ignore_shadows");
 	integrator->ignore_bump = get_boolean(cscene, "ignore_bump");
 	integrator->ignore_textures = get_boolean(cscene, "ignore_textures");
+	integrator->ignore_displacement =  get_boolean(cscene, "ignore_displacement");
 	integrator->ignore_polygon_smoothing = get_boolean(cscene, "ignore_polygon_smoothing");
 	integrator->ignore_depth_of_field = get_boolean(cscene, "ignore_depth_of_field");
 	integrator->ignore_subsurface_scattering = get_boolean(cscene, "ignore_subsurface_scattering");
 
-	bool ignore_displacement = get_boolean(cscene, "ignore_displacement");
-	if(integrator->ignore_displacement != ignore_displacement) {
-		integrator->ignore_displacement = ignore_displacement;
+	if(integrator->modified(previntegrator))
+	{
+		integrator->tag_update(scene);
 
-		/* For displacement, iterate over all shaders and manually trigger updates. */
-		foreach(Shader *shader, scene->shaders) {
-			if(shader->has_displacement) {
-				if(shader->displacement_method != DISPLACE_BUMP) {
-					shader->need_update_mesh = true;
+		if(integrator->ignore_volumes != previntegrator.ignore_volumes ||
+		   integrator->ignore_bump != previntegrator.ignore_bump ||
+		   integrator->ignore_textures != previntegrator.ignore_textures ||
+		   integrator->ignore_subsurface_scattering != previntegrator.ignore_subsurface_scattering ||
+		   integrator->ignore_polygon_smoothing != previntegrator.ignore_polygon_smoothing ||
+		   integrator->ignore_displacement != previntegrator.ignore_displacement) {
+			/* For displacement, iterate over all shaders and manually trigger updates. */
+			foreach(Shader *shader, scene->shaders) {
+				if(shader->has_displacement) {
+					if(shader->displacement_method != DISPLACE_BUMP) {
+						shader->need_update_mesh = true;
+					}
 				}
-				shader->tag_update(scene);
 			}
+			shader_recalc = true;
+		}
+		if(integrator->ignore_lights != previntegrator.ignore_lights ||
+		   integrator->ignore_shadows != previntegrator.ignore_shadows) {
+			scene->light_manager->tag_update(scene);
+		}
+		if(integrator->ignore_depth_of_field != previntegrator.ignore_depth_of_field) {
+			scene->camera->tag_update();
 		}
 	}
-
-	if(integrator->modified(previntegrator))
-		integrator->tag_update(scene);
 }
 
 /* Film */

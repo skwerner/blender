@@ -15,6 +15,7 @@
  */
 
 #include "render/camera.h"
+#include "render/integrator.h"
 #include "render/mesh.h"
 #include "render/object.h"
 #include "render/scene.h"
@@ -376,7 +377,7 @@ void Camera::update(Scene *scene)
 	}
 
 	/* depth of field */
-	kcam->aperturesize = aperturesize;
+	kcam->aperturesize = scene->integrator->ignore_depth_of_field ? 0.0f : aperturesize;
 	kcam->focaldistance = focaldistance;
 	kcam->blades = (blades < 3)? 0.0f: blades;
 	kcam->bladesrotation = bladesrotation;

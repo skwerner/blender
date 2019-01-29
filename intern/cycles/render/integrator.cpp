@@ -223,17 +223,9 @@ void Integrator::device_update(Device *device, DeviceScene *dscene, Scene *scene
 	}
 
 	/* diagnostics */
-	kintegrator->feature_overrides  = ignore_shaders               ? IGNORE_SHADERS                : 0;
-	kintegrator->feature_overrides |= ignore_volumes               ? IGNORE_VOLUMES                : 0;
-	kintegrator->feature_overrides |= ignore_lights                ? IGNORE_LIGHTS                 : 0;
-	kintegrator->feature_overrides |= ignore_shadows               ? IGNORE_SHADOWS                : 0;
-	kintegrator->feature_overrides |= ignore_displacement          ? IGNORE_DISPLACEMENT           : 0;
-	kintegrator->feature_overrides |= ignore_bump                  ? IGNORE_BUMP                   : 0;
-	kintegrator->feature_overrides |= ignore_polygon_smoothing     ? IGNORE_POLYGON_SMOOTHING      : 0;
-	kintegrator->feature_overrides |= ignore_depth_of_field        ? IGNORE_DEPTH_OF_FIELD         : 0;
-	kintegrator->feature_overrides |= ignore_subsurface_scattering ? IGNORE_SUBUSURFACE_SCATTERING : 0;
-	kintegrator->feature_overrides |= ignore_textures              ? IGNORE_TEXTURES               : 0;
-
+	kintegrator->feature_overrides = 0;
+	kintegrator->feature_overrides  = ignore_shaders               ? IGNORE_SHADERS : 0;
+	kintegrator->feature_overrides |= ignore_volumes               ? IGNORE_VOLUMES : 0;
 	need_update = false;
 }
 

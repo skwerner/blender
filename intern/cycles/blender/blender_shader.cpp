@@ -1462,6 +1462,11 @@ void BlenderSync::sync_shaders(BL::Depsgraph& b_depsgraph)
 		ImageManager *image_manager = scene->image_manager;
 		int frame = b_scene.frame_current();
 		auto_refresh_update = image_manager->set_animation_frame_update(frame);
+
+		if(shader_recalc) {
+			auto_refresh_update = true;
+			shader_recalc = false;
+		}
 	}
 
 	shader_map.pre_sync();

@@ -461,7 +461,7 @@ ccl_device void kernel_branched_path_integrate(KernelGlobals *kg,
 		/* Find intersection with objects in scene. */
 		Intersection isect;
 		bool hit = kernel_path_scene_intersect(kg, &state, &ray, &isect, L);
-
+		
 		if(hit && (kernel_data.integrator.feature_overrides & IGNORE_SHADERS)) {
 			shader_setup_from_ray(kg, &sd, &isect, &ray);
 #ifdef __VOLUME__
@@ -480,19 +480,17 @@ ccl_device void kernel_branched_path_integrate(KernelGlobals *kg,
 		}
 
 #ifdef __VOLUME__
-		if(!(kernel_data.integrator.feature_overrides & IGNORE_VOLUMES)) {
-			/* Volume integration. */
-			kernel_branched_path_volume(kg,
-										&sd,
-										&state,
-										&ray,
-										&throughput,
-										&isect,
-										hit,
-										&indirect_sd,
-										emission_sd,
-										L);
-		}
+		/* Volume integration. */
+		kernel_branched_path_volume(kg,
+		                            &sd,
+		                            &state,
+		                            &ray,
+		                            &throughput,
+		                            &isect,
+		                            hit,
+		                            &indirect_sd,
+		                            emission_sd,
+		                            L);
 #endif  /* __VOLUME__ */
 
 		/* Shade background. */
@@ -556,7 +554,7 @@ ccl_device void kernel_branched_path_integrate(KernelGlobals *kg,
 
 #ifdef __SUBSURFACE__
 		/* bssrdf scatter to a different location on the same object */
-		if(sd.flag & SD_BSSRDF && !(kernel_data.integrator.feature_overrides & IGNORE_SUBUSURFACE_SCATTERING)) {
+		if(sd.flag & SD_BSSRDF) {
 			kernel_branched_path_subsurface_scatter(kg, &sd, &indirect_sd, emission_sd,
 			                                        L, &state, &ray, throughput);
 		}

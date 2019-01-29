@@ -268,11 +268,6 @@ ccl_device void svm_node_normal_map(KernelGlobals *kg, ShaderData *sd, float *st
 	uint color_offset, strength_offset, normal_offset, space;
 	decode_node_uchar4(node.y, &color_offset, &strength_offset, &normal_offset, &space);
 
-	if(kernel_data.integrator.feature_overrides & IGNORE_BUMP) {
-		stack_store_float3(stack, normal_offset, sd->N);
-		return;
-	}
-	
 	float3 color = stack_load_float3(stack, color_offset);
 	color = 2.0f*make_float3(color.x - 0.5f, color.y - 0.5f, color.z - 0.5f);
 
@@ -301,7 +296,7 @@ ccl_device void svm_node_normal_map(KernelGlobals *kg, ShaderData *sd, float *st
 		float sign = primitive_attribute_float(kg, sd, attr_sign, NULL, NULL);
 		float3 normal;
 
-		if(sd->shader & SHADER_SMOOTH_NORMAL && !(kernel_data.integrator.feature_overrides & IGNORE_POLYGON_SMOOTHING)) {
+		if(sd->shader & SHADER_SMOOTH_NORMAL) {
 			normal = primitive_attribute_float3(kg, sd, attr_normal, NULL, NULL);
 		}
 		else {

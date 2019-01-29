@@ -454,17 +454,14 @@ ccl_device_inline bool shadow_blocked(KernelGlobals *kg,
                                       ccl_addr_space PathState *state,
                                       Ray *ray_input,
                                       float3 *shadow)
-{	Ray *ray = ray_input;
+{
+	Ray *ray = ray_input;
 	Intersection isect;
 	/* Some common early checks. */
 	*shadow = make_float3(1.0f, 1.0f, 1.0f);
 	if(ray->t == 0.0f) {
 		return false;
 	}
-	if(kernel_data.integrator.feature_overrides & IGNORE_SHADOWS) {
-		return false;
-	}
-
 #ifdef __SHADOW_TRICKS__
 	const uint visibility = (state->flag & PATH_RAY_SHADOW_CATCHER)
 		? PATH_RAY_SHADOW_NON_CATCHER

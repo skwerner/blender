@@ -22,6 +22,7 @@
 #include "device/device.h"
 #include "render/graph.h"
 #include "render/shader.h"
+#include "render/integrator.h"
 #include "render/light.h"
 #include "render/mesh.h"
 #include "render/nodes.h"
@@ -894,7 +895,9 @@ void Mesh::pack_shaders(Scene *scene, uint *tri_shader)
 	for(size_t i = 0; i < triangles_size; i++) {
 		if(shader_ptr[i] != last_shader || last_smooth != smooth[i]) {
 			last_shader = shader_ptr[i];
-			last_smooth = smooth[i];
+			if(!scene->integrator->ignore_polygon_smoothing) {
+				last_smooth = smooth[i];
+			}
 			Shader *shader = (last_shader < used_shaders.size()) ?
 				used_shaders[last_shader] : scene->default_surface;
 			shader_id = scene->shader_manager->get_shader_id(shader, last_smooth);

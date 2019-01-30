@@ -40,9 +40,7 @@
 #include "DNA_scene_types.h"
 
 #include "BLI_utildefines.h"
-#include "BLI_linklist_stack.h"
 #include "BLI_math.h"
-#include "BLI_string.h"
 
 #include "BKE_deform.h"
 #include "BKE_mesh.h"
@@ -132,8 +130,8 @@ static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, Mes
 	        &(struct BMeshFromMeshParams){
 	            .calc_face_normal = true,
 	            .add_key_index = false,
-	            .use_shapekey = true,
-	            .active_shapekey = ctx->object->shapenr,
+	            .use_shapekey = false,
+	            .active_shapekey = 0,
 	            .cd_mask_extra = CD_MASK_ORIGINDEX,
 	        });
 

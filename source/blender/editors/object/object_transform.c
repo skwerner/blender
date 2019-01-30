@@ -786,9 +786,9 @@ void OBJECT_OT_transform_apply(wmOperatorType *ot)
 	/* flags */
 	ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
 
-	RNA_def_boolean(ot->srna, "location", 0, "Location", "");
-	RNA_def_boolean(ot->srna, "rotation", 0, "Rotation", "");
-	RNA_def_boolean(ot->srna, "scale", 0, "Scale", "");
+	RNA_def_boolean(ot->srna, "location", true, "Location", "");
+	RNA_def_boolean(ot->srna, "rotation", true, "Rotation", "");
+	RNA_def_boolean(ot->srna, "scale", true, "Scale", "");
 	RNA_def_boolean(ot->srna, "properties", true, "Apply Properties",
 	                "Modify properties such as curve vertex radius, font size and bone envelope");
 }
@@ -1134,7 +1134,7 @@ static int object_origin_set_exec(bContext *C, wmOperator *op)
 						float inverse_diff_mat[4][4];
 
 						/* recalculate all strokes
-						 * (all layers are considered without evaluating lock attributtes) */
+						 * (all layers are considered without evaluating lock attributes) */
 						for (bGPDlayer *gpl = gpd->layers.first; gpl; gpl = gpl->next) {
 							/* calculate difference matrix */
 							ED_gpencil_parent_location(depsgraph, obact, gpd, gpl, diff_mat);
@@ -1291,7 +1291,6 @@ void OBJECT_OT_origin_set(wmOperatorType *ot)
 }
 
 /* -------------------------------------------------------------------- */
-
 /** \name Transform Axis Target
  *
  * Note this is an experemental operator to point lamps/cameras at objects.

@@ -32,19 +32,19 @@
 #ifndef __DNA_VIEW3D_TYPES_H__
 #define __DNA_VIEW3D_TYPES_H__
 
-struct ViewDepths;
-struct Object;
-struct Image;
-struct SpaceLink;
 struct BoundBox;
+struct GPUViewport;
+struct Image;
+struct Material;
 struct MovieClip;
 struct MovieClipUser;
+struct Object;
 struct RenderEngine;
-struct bGPdata;
 struct SmoothView3DStore;
+struct SpaceLink;
+struct ViewDepths;
+struct bGPdata;
 struct wmTimer;
-struct Material;
-struct GPUViewport;
 
 #include "DNA_defs.h"
 #include "DNA_listBase.h"
@@ -439,6 +439,7 @@ enum {
 	V3D_SHADING_XRAY_BONE           = (1 << 8),
 	V3D_SHADING_WORLD_ORIENTATION   = (1 << 9),
 	V3D_SHADING_BACKFACE_CULLING    = (1 << 10),
+	V3D_SHADING_DEPTH_OF_FIELD      = (1 << 11),
 };
 
 /* View3DShading->color_type */

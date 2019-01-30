@@ -30,10 +30,10 @@ typedef void* CCGVertHDL;
 typedef void* CCGEdgeHDL;
 typedef void* CCGFaceHDL;
 
-typedef struct CCGSubSurf CCGSubSurf;
-typedef struct CCGVert CCGVert;
 typedef struct CCGEdge CCGEdge;
 typedef struct CCGFace CCGFace;
+typedef struct CCGSubSurf CCGSubSurf;
+typedef struct CCGVert CCGVert;
 
 typedef struct CCGMeshIFC {
 	int			vertUserSize, edgeUserSize, faceUserSize;
@@ -70,8 +70,6 @@ typedef enum {
 } CCGError;
 
 /***/
-
-#define CCG_OMP_LIMIT	1000000
 
 /* TODO(sergey): This actually depends on subsurf level as well. */
 #define CCG_TASK_LIMIT 16
@@ -176,9 +174,9 @@ int			ccgSubSurf_getNumFinalFaces		(const CCGSubSurf *ss);
 
 /***/
 
-typedef struct _EHashIterator CCGVertIterator;
 typedef struct _EHashIterator CCGEdgeIterator;
 typedef struct _EHashIterator CCGFaceIterator;
+typedef struct _EHashIterator CCGVertIterator;
 
 void		ccgSubSurf_initVertIterator(CCGSubSurf *ss, CCGVertIterator *viter);
 void		ccgSubSurf_initEdgeIterator(CCGSubSurf *ss, CCGEdgeIterator *eiter);

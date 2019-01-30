@@ -39,8 +39,6 @@
 
 #include "BLI_threads.h"
 
-struct bNode;
-struct bNodeTree;
 struct BakePixel;
 struct Depsgraph;
 struct IDProperty;
@@ -55,6 +53,8 @@ struct RenderResult;
 struct ReportList;
 struct Scene;
 struct ViewLayer;
+struct bNode;
+struct bNodeTree;
 
 /* External Engine */
 
@@ -78,11 +78,6 @@ struct ViewLayer;
 #define RE_ENGINE_RENDERING		16
 #define RE_ENGINE_HIGHLIGHT_TILES	32
 #define RE_ENGINE_USED_FOR_VIEWPORT	64
-
-/* RenderEngine.update_flag, used by internal now */
-#define RE_ENGINE_UPDATE_MA			1
-#define RE_ENGINE_UPDATE_OTHER		2
-#define RE_ENGINE_UPDATE_DATABASE	4
 
 extern ListBase R_engines;
 
@@ -137,10 +132,6 @@ typedef struct RenderEngine {
 
 	/* Depsgraph */
 	struct Depsgraph *depsgraph;
-
-	/* for blender internal only */
-	int update_flag;
-	int job_update_flag;
 
 	/* callback for render pass query */
 	ThreadMutex update_render_passes_mutex;

@@ -2336,6 +2336,10 @@ class VIEW3D_MT_sculpt(Menu):
         tool_settings = context.tool_settings
         sculpt = tool_settings.sculpt
 
+        layout.operator("sculpt.dynamic_topology_toggle", text="Toggle Dynamic Topology")
+
+        layout.separator()
+
         layout.prop(sculpt, "use_symmetry_x")
         layout.prop(sculpt, "use_symmetry_y")
         layout.prop(sculpt, "use_symmetry_z")
@@ -4206,7 +4210,10 @@ class VIEW3D_PT_view3d_properties(Panel):
         col = flow.column()
 
         subcol = col.column()
-        subcol.enabled = not view.lock_camera_and_layers
+        subcol.prop(view, "use_local_camera")
+
+        subcol = col.column()
+        subcol.enabled = view.use_local_camera
         subcol.prop(view, "camera", text="Local Camera")
 
         subcol = col.column(align=True)
@@ -4301,7 +4308,9 @@ class VIEW3D_PT_collections(Panel):
             subrow = sub.row()
             subrow.alignment = 'LEFT'
             subrow.active = has_visible_objects
-            subrow.operator("object.hide_collection", text=child.name, icon=icon, emboss=False).collection_index = index
+            subrow.operator(
+                "object.hide_collection", text=child.name, icon=icon, emboss=False,
+            ).collection_index = index
 
             sub = row.split()
             subrow = sub.row(align=True)
@@ -4589,6 +4598,10 @@ class VIEW3D_PT_shading_options(Panel):
                     sub = col.row(align=True)
                     sub.prop(shading, "curvature_ridge_factor", text="Ridge")
                     sub.prop(shading, "curvature_valley_factor", text="Valley")
+
+            row = col.row()
+            row.active = not shading.show_xray
+            row.prop(shading, "use_dof", text="Depth Of Field")
 
         if shading.type in {'WIREFRAME', 'SOLID'}:
             row = layout.split()

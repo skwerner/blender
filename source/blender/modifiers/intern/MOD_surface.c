@@ -59,6 +59,21 @@ static void initData(ModifierData *md)
 	SurfaceModifierData *surmd = (SurfaceModifierData *) md;
 
 	surmd->bvhtree = NULL;
+	surmd->mesh = NULL;
+	surmd->x = NULL;
+	surmd->v = NULL;
+}
+
+static void copyData(const ModifierData *md_src, ModifierData *md_dst, const int flag)
+{
+	SurfaceModifierData *surmd_dst = (SurfaceModifierData *)md_dst;
+
+	modifier_copyData_generic(md_src, md_dst, flag);
+
+	surmd_dst->bvhtree = NULL;
+	surmd_dst->mesh = NULL;
+	surmd_dst->x = NULL;
+	surmd_dst->v = NULL;
 }
 
 static void freeData(ModifierData *md)
@@ -96,8 +111,15 @@ static void deformVerts(
 	SurfaceModifierData *surmd = (SurfaceModifierData *) md;
 	const int cfra = (int)DEG_get_ctime(ctx->depsgraph);
 
+	/* Free mesh and BVH cache. */
+	if (surmd->bvhtree) {
+		free_bvhtree_from_mesh(surmd->bvhtree);
+		MEM_SAFE_FREE(surmd->bvhtree);
+	}
+
 	if (surmd->mesh) {
 		BKE_id_free(NULL, surmd->mesh);
+		surmd->mesh = NULL;
 	}
 
 	if (mesh) {
@@ -168,10 +190,7 @@ static void deformVerts(
 
 		surmd->cfra = cfra;
 
-		if (surmd->bvhtree)
-			free_bvhtree_from_mesh(surmd->bvhtree);
-		else
-			surmd->bvhtree = MEM_callocN(sizeof(BVHTreeFromMesh), "BVHTreeFromMesh");
+		surmd->bvhtree = MEM_callocN(sizeof(BVHTreeFromMesh), "BVHTreeFromMesh");
 
 		if (surmd->mesh->totpoly)
 			BKE_bvhtree_from_mesh_get(surmd->bvhtree, surmd->mesh, BVHTREE_FROM_LOOPTRI, 2);
@@ -190,7 +209,7 @@ ModifierTypeInfo modifierType_Surface = {
 	                        eModifierTypeFlag_AcceptsCVs |
 	                        eModifierTypeFlag_NoUserAdd,
 
-	/* copyData */          NULL,
+	/* copyData */          copyData,
 
 	/* deformVerts_DM */    NULL,
 	/* deformMatrices_DM */ NULL,

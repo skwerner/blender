@@ -114,6 +114,33 @@ void BLO_update_defaults_userpref_blend(void)
 	BKE_keyconfig_pref_set_select_mouse(&U, 0, true);
 }
 
+
+/**
+ * Rename if the ID doesn't exist.
+ */
+static ID *rename_id_for_versioning(Main *bmain, const short id_type, const char *name_src, const char *name_dst)
+{
+	/* We can ignore libraries */
+	ListBase *lb = which_libbase(bmain, id_type);
+	ID *id = NULL;
+	for (ID *idtest = lb->first; idtest; idtest = idtest->next) {
+		if (idtest->lib == NULL) {
+			if (STREQ(idtest->name + 2, name_src)) {
+				id = idtest;
+			}
+			if (STREQ(idtest->name + 2, name_dst)) {
+				return NULL;
+			}
+		}
+	}
+	if (id != NULL) {
+		BLI_strncpy(id->name + 2, name_dst, sizeof(id->name) - 2);
+		/* We know it's unique, this just sorts. */
+		BLI_libblock_ensure_unique_name(bmain, id->name);
+	}
+	return id;
+}
+
 /**
  * Update defaults in startup.blend, without having to save and embed the file.
  * This function can be emptied each time the startup.blend is updated. */
@@ -176,6 +203,7 @@ void BLO_update_defaults_startup_blend(Main *bmain, const char *app_template)
 				WorkSpaceLayout *layout = BKE_workspace_hook_layout_for_workspace_get(win->workspace_hook, workspace);
 				bScreen *screen = layout->screen;
 				BLI_strncpy(screen->id.name + 2, workspace->id.name + 2, sizeof(screen->id.name) - 2);
+				BLI_libblock_ensure_unique_name(bmain, screen->id.name);
 			}
 		}
 
@@ -277,8 +305,12 @@ void BLO_update_defaults_startup_blend(Main *bmain, const char *app_template)
 			scene->r.cfra = 1.0f;
 			scene->r.displaymode = R_OUTPUT_WINDOW;
 
-			/* AV Sync break physics sim caching, disable until that is fixed. */
-			if (!(app_template && STREQ(app_template, "Video_Editing"))) {
+			if (app_template && STREQ(app_template, "Video_Editing")) {
+				/* Filmic is too slow, use default until it is optimized. */
+				STRNCPY(scene->view_settings.view_transform, "Default");
+			}
+			else {
+				/* AV Sync break physics sim caching, disable until that is fixed. */
 				scene->audio.flag &= ~AUDIO_SYNC;
 				scene->flag &= ~SCE_FRAME_DROP;
 			}
@@ -296,50 +328,12 @@ void BLO_update_defaults_startup_blend(Main *bmain, const char *app_template)
 		}
 
 		/* Rename lamp objects. */
-		for (Object *ob = bmain->object.first; ob; ob = ob->id.next) {
-			if (STREQ(ob->id.name, "OBLamp")) {
-				STRNCPY(ob->id.name, "OBLight");
-			}
-		}
-		for (Lamp *lamp = bmain->lamp.first; lamp; lamp = lamp->id.next) {
-			if (STREQ(lamp->id.name, "LALamp")) {
-				STRNCPY(lamp->id.name, "LALight");
-			}
-		}
+		rename_id_for_versioning(bmain, ID_OB, "Lamp", "Light");
+		rename_id_for_versioning(bmain, ID_LA, "Lamp", "Light");
 
 		for (Mesh *mesh = bmain->mesh.first; mesh; mesh = mesh->id.next) {
 			/* Match default for new meshes. */
 			mesh->smoothresh = DEG2RADF(30);
-		}
-
-		/* Grease Pencil New Eraser Brush */
-		Brush *br;
-		/* Rename old Hard Eraser */
-		br = (Brush *)BKE_libblock_find_name(bmain, ID_BR, "Eraser Hard");
-		if (br) {
-			strcpy(br->id.name, "BREraser Point");
-		}
-		for (Scene *scene = bmain->scene.first; scene; scene = scene->id.next) {
-			ToolSettings *ts = scene->toolsettings;
-			/* create new hard brush (only create one, but need ToolSettings) */
-			br = (Brush *)BKE_libblock_find_name(bmain, ID_BR, "Eraser Hard");
-			if (!br) {
-				Paint *paint = &ts->gp_paint->paint;
-				Brush *old_brush = paint->brush;
-
-				br = BKE_brush_add_gpencil(bmain, ts, "Eraser Hard");
-				br->size = 30.0f;
-				br->gpencil_settings->draw_strength = 1.0f;
-				br->gpencil_settings->flag = (GP_BRUSH_ENABLE_CURSOR | GP_BRUSH_DEFAULT_ERASER);
-				br->gpencil_settings->icon_id = GP_BRUSH_ICON_ERASE_HARD;
-				br->gpencil_tool = GPAINT_TOOL_ERASE;
-				br->gpencil_settings->eraser_mode = GP_BRUSH_ERASER_SOFT;
-				br->gpencil_settings->era_strength_f = 100.0f;
-				br->gpencil_settings->era_thickness_f = 50.0f;
-
-				/* back to default brush */
-				BKE_paint_brush_set(paint, old_brush);
-			}
 		}
 	}
 

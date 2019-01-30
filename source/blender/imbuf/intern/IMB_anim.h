@@ -86,14 +86,13 @@
 #define ANIM_SEQUENCE   (1 << 0)
 #define ANIM_MOVIE      (1 << 4)
 #define ANIM_AVI        (1 << 6)
-#define ANIM_QTIME      (1 << 7)
 #define ANIM_FFMPEG     (1 << 8)
 
 #define MAXNUMSTREAMS       50
 
+struct IDProperty;
 struct _AviMovie;
 struct anim_index;
-struct IDProperty;
 
 struct anim {
 	int ib_flags;

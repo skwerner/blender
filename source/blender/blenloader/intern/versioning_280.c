@@ -35,7 +35,6 @@
 #include "BLI_math.h"
 #include "BLI_mempool.h"
 #include "BLI_string.h"
-#include "BLI_string_utf8.h"
 #include "BLI_utildefines.h"
 
 #include "DNA_object_types.h"
@@ -2784,7 +2783,18 @@ void blo_do_versions_280(FileData *fd, Library *UNUSED(lib), Main *bmain)
 		}
 	}
 
+	if (!MAIN_VERSION_ATLEAST(bmain, 280, 43)) {
+		ListBase *lb = which_libbase(bmain, ID_BR);
+		BKE_main_id_repair_duplicate_names_listbase(lb);
+	}
+
 	{
 		/* Versioning code until next subversion bump goes here. */
+
+		if (!DNA_struct_elem_find(fd->filesdna, "Material", "float", "a")) {
+			for (Material *mat = bmain->mat.first; mat; mat = mat->id.next) {
+				mat->a = 1.0f;
+			}
+		}
 	}
 }

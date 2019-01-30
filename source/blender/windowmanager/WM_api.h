@@ -46,41 +46,41 @@
 extern "C" {
 #endif
 
+struct ARegion;
+struct GHashIterator;
+struct GPUViewport;
+struct IDProperty;
+struct ImBuf;
+struct ImageFormatData;
+struct Main;
+struct MenuType;
+struct PointerRNA;
+struct PropertyRNA;
+struct ScrArea;
+struct ViewLayer;
 struct bContext;
 struct bToolRef_Runtime;
-struct GHashIterator;
-struct IDProperty;
+struct rcti;
+struct wmDrag;
+struct wmDropBox;
 struct wmEvent;
 struct wmEventHandler;
 struct wmGesture;
 struct wmJob;
 struct wmMsgSubscribeKey;
 struct wmMsgSubscribeValue;
-struct wmOperatorType;
 struct wmOperator;
+struct wmOperatorType;
 struct wmPaintCursor;
-struct rcti;
-struct PointerRNA;
-struct PropertyRNA;
-struct MenuType;
-struct wmDropBox;
-struct wmDrag;
-struct ImBuf;
-struct ImageFormatData;
-struct ARegion;
-struct ScrArea;
-struct Main;
-struct ViewLayer;
-struct GPUViewport;
 
 #ifdef WITH_INPUT_NDOF
 struct wmNDOFMotionData;
 #endif
 
-typedef struct wmJob wmJob;
 typedef struct wmGizmo wmGizmo;
 typedef struct wmGizmoMap wmGizmoMap;
 typedef struct wmGizmoMapType wmGizmoMapType;
+typedef struct wmJob wmJob;
 
 /* general API */
 void		WM_init_state_app_template_set(const char *app_template);
@@ -322,6 +322,7 @@ int         WM_operator_call_ex(struct bContext *C, struct wmOperator *op, const
 int			WM_operator_call		(struct bContext *C, struct wmOperator *op);
 int			WM_operator_call_notest(struct bContext *C, struct wmOperator *op);
 int			WM_operator_repeat		(struct bContext *C, struct wmOperator *op);
+int			WM_operator_repeat_interactive(struct bContext *C, struct wmOperator *op);
 bool        WM_operator_repeat_check(const struct bContext *C, struct wmOperator *op);
 bool        WM_operator_is_repeat(const struct bContext *C, const struct wmOperator *op);
 int         WM_operator_name_call_ptr(struct bContext *C, struct wmOperatorType *ot, short context, struct PointerRNA *properties);

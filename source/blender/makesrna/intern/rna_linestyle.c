@@ -28,7 +28,6 @@
 #include <stdlib.h>
 
 #include "BLI_utildefines.h"
-#include "BLI_string_utils.h"
 
 #include "RNA_define.h"
 #include "RNA_enum_types.h"
@@ -98,6 +97,8 @@ const EnumPropertyItem rna_enum_linestyle_geometry_modifier_type_items[] = {
 };
 
 #ifdef RNA_RUNTIME
+
+#include "BLI_string_utils.h"
 
 #include "BKE_linestyle.h"
 #include "BKE_texture.h"
@@ -551,11 +552,6 @@ static void rna_def_linestyle_mtex(BlenderRNA *brna)
 	prop = RNA_def_property(srna, "use_map_alpha", PROP_BOOLEAN, PROP_NONE);
 	RNA_def_property_boolean_sdna(prop, NULL, "mapto", MAP_ALPHA);
 	RNA_def_property_ui_text(prop, "Alpha", "The texture affects the alpha value");
-	RNA_def_property_update(prop, 0, "rna_LineStyle_update");
-
-	prop = RNA_def_property(srna, "use_tips", PROP_BOOLEAN, PROP_NONE);
-	RNA_def_property_boolean_sdna(prop, NULL, "texflag", MTEX_TIPS);
-	RNA_def_property_ui_text(prop, "Use Tips", "Lower half of the texture is for tips of the stroke");
 	RNA_def_property_update(prop, 0, "rna_LineStyle_update");
 
 	prop = RNA_def_property(srna, "texture_coords", PROP_ENUM, PROP_NONE);

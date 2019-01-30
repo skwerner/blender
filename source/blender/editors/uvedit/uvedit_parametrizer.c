@@ -27,7 +27,6 @@
 #include "MEM_guardedalloc.h"
 
 #include "BLI_utildefines.h"
-#include "BLI_alloca.h"
 #include "BLI_memarena.h"
 #include "BLI_math.h"
 #include "BLI_rand.h"
@@ -92,11 +91,11 @@ typedef struct PHash {
 
 
 
-struct PVert;
+struct PChart;
 struct PEdge;
 struct PFace;
-struct PChart;
 struct PHandle;
+struct PVert;
 
 /* Simplices */
 

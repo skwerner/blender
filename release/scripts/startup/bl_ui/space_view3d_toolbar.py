@@ -270,6 +270,14 @@ class VIEW3D_PT_tools_brush(Panel, View3DPaintPanel):
             if not self.is_popover:
                 brush_basic_sculpt_settings(col, context, brush)
 
+            # topology_rake_factor
+            if (capabilities.has_topology_rake and
+                context.sculpt_object.use_dynamic_topology_sculpting
+            ):
+                col.separator()
+                row = col.row()
+                row.prop(brush, "topology_rake_factor", slider=True)
+
             # auto_smooth_factor and use_inverse_smooth_pressure
             if capabilities.has_auto_smooth:
                 col.separator()
@@ -606,7 +614,10 @@ class VIEW3D_PT_tools_brush_overlay(Panel, View3DPaintPanel):
         sub = row.row(align=True)
         sub.prop(brush, "cursor_overlay_alpha", text="Curve Alpha")
         sub.prop(brush, "use_cursor_overlay_override", toggle=True, text="", icon='BRUSH_DATA')
-        row.prop(brush, "use_cursor_overlay", text="", toggle=True, icon='HIDE_OFF' if brush.use_cursor_overlay else 'HIDE_ON')
+        row.prop(
+            brush, "use_cursor_overlay", text="", toggle=True,
+            icon='HIDE_OFF' if brush.use_cursor_overlay else 'HIDE_ON',
+        )
 
         col.active = brush.brush_capabilities.has_overlay
 
@@ -617,7 +628,10 @@ class VIEW3D_PT_tools_brush_overlay(Panel, View3DPaintPanel):
             sub.prop(brush, "texture_overlay_alpha", text="Texture Alpha")
             sub.prop(brush, "use_primary_overlay_override", toggle=True, text="", icon='BRUSH_DATA')
             if tex_slot.map_mode != 'STENCIL':
-                row.prop(brush, "use_primary_overlay", text="", toggle=True, icon='HIDE_OFF' if brush.use_primary_overlay else 'HIDE_ON')
+                row.prop(
+                    brush, "use_primary_overlay", text="", toggle=True,
+                    icon='HIDE_OFF' if brush.use_primary_overlay else 'HIDE_ON',
+                )
 
         if context.image_paint_object:
             row = col.row(align=True)
@@ -626,7 +640,10 @@ class VIEW3D_PT_tools_brush_overlay(Panel, View3DPaintPanel):
             sub.prop(brush, "mask_overlay_alpha", text="Mask Texture Alpha")
             sub.prop(brush, "use_secondary_overlay_override", toggle=True, text="", icon='BRUSH_DATA')
             if tex_slot_mask.map_mode != 'STENCIL':
-                row.prop(brush, "use_secondary_overlay", text="", toggle=True, icon='HIDE_OFF' if brush.use_secondary_overlay else 'HIDE_ON')
+                row.prop(
+                    brush, "use_secondary_overlay", text="", toggle=True,
+                    icon='HIDE_OFF' if brush.use_secondary_overlay else 'HIDE_ON',
+                )
 
 
 # TODO, move to space_view3d.py

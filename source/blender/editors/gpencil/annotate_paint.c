@@ -67,7 +67,6 @@
 #include "ED_view3d.h"
 #include "ED_clip.h"
 
-#include "BIF_glutil.h"
 
 #include "GPU_immediate.h"
 #include "GPU_immediate_util.h"
@@ -1911,6 +1910,11 @@ static int gpencil_draw_invoke(bContext *C, wmOperator *op, const wmEvent *event
 	ScrArea *sa = CTX_wm_area(C);
 	Scene *scene = CTX_data_scene(C);
 	tGPsdata *p = NULL;
+
+	/* support for tablets eraser pen */
+	if (gpencil_is_tablet_eraser_active(event)) {
+		RNA_enum_set(op->ptr, "mode", GP_PAINTMODE_ERASER);
+	}
 
 	/* if try to do annotations with a gp object selected, first
 	 * unselect the object to avoid conflicts.

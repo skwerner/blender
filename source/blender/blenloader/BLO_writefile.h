@@ -34,8 +34,8 @@
  */
 
 struct BlendThumbnail;
-struct MemFile;
 struct Main;
+struct MemFile;
 struct ReportList;
 
 extern bool BLO_write_file(
@@ -43,7 +43,5 @@ extern bool BLO_write_file(
         struct ReportList *reports, const struct BlendThumbnail *thumb);
 extern bool BLO_write_file_mem(
         struct Main *mainvar, struct MemFile *compare, struct MemFile *current, int write_flags);
-
-bool BLO_main_validate_libraries(struct Main *bmain, struct ReportList *reports);
 
 #endif

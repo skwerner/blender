@@ -1,5 +1,5 @@
 /*
- * Copyright 2016, Blender Foundation.
+ * ***** BEGIN GPL LICENSE BLOCK *****
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -15,7 +15,10 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
+ * Copyright 2016, Blender Foundation.
  * Contributor(s): Blender Institute
+ *
+ * ***** END GPL LICENSE BLOCK *****
  *
  */
 
@@ -29,29 +32,28 @@
 #include "BLI_sys_types.h"  /* for bool */
 
 struct ARegion;
-struct CollectionEngineSettings;
-struct Depsgraph;
-struct DRWPass;
 struct DRWInstanceDataList;
-struct Main;
-struct Material;
-struct Scene;
+struct DRWPass;
+struct Depsgraph;
 struct DrawEngineType;
-struct ID;
-struct IDProperty;
-struct bContext;
-struct Object;
-struct ViewLayer;
-struct ViewContext;
-struct ViewportEngineData;
-struct View3D;
-struct rcti;
 struct GPUMaterial;
 struct GPUOffScreen;
 struct GPUViewport;
+struct ID;
+struct IDProperty;
+struct Main;
+struct Material;
+struct Object;
 struct RenderEngine;
 struct RenderEngineType;
+struct Scene;
+struct View3D;
+struct ViewContext;
+struct ViewLayer;
+struct ViewportEngineData;
 struct WorkSpace;
+struct bContext;
+struct rcti;
 
 #include "DNA_object_enums.h"
 

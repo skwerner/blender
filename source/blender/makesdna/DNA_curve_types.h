@@ -39,15 +39,15 @@
 
 #define MAXTEXTBOX 256  /* used in readfile.c and editfont.c */
 
+struct AnimData;
 struct BoundBox;
-struct Object;
+struct EditFont;
+struct GHash;
 struct Ipo;
 struct Key;
 struct Material;
+struct Object;
 struct VFont;
-struct AnimData;
-struct EditFont;
-struct GHash;
 
 /* These two Lines with # tell makesdna this struct can be excluded. */
 #
@@ -236,7 +236,8 @@ typedef struct Curve {
 
 	/** Keep a short because of BKE_object_obdata_texspace_get(). */
 	short texflag;
-	short drawflag, twist_mode;
+	char _pad0[2];
+	short twist_mode;
 	float twist_smooth, smallcaps_scale;
 
 	int pathlen;

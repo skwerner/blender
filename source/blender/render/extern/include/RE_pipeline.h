@@ -36,8 +36,6 @@
 #include "DNA_vec_types.h"
 #include "DEG_depsgraph.h"
 
-struct bMovieHandle;
-struct bNodeTree;
 struct Depsgraph;
 struct Image;
 struct ImageFormatData;
@@ -48,8 +46,10 @@ struct RenderData;
 struct RenderResult;
 struct ReportList;
 struct Scene;
-struct ViewLayer;
 struct StampData;
+struct ViewLayer;
+struct bMovieHandle;
+struct bNodeTree;
 
 /* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
 /* this include is what is exposed of render to outside world */
@@ -257,7 +257,6 @@ void RE_SetOrtho(struct Render *re, const rctf *viewplane, float clipsta, float 
 void RE_SetView(struct Render *re, float mat[4][4]);
 
 /* get current view and window transform */
-void RE_GetView(struct Render *re, float mat[4][4]);
 void RE_GetViewPlane(struct Render *re, rctf *r_viewplane, rcti *r_disprect);
 
 /* set the render threads based on the commandline and autothreads setting */

@@ -57,8 +57,6 @@
 
 #include "BKE_colorband.h"
 #include "BKE_library.h"
-#include "BKE_library_query.h"
-#include "BKE_library_remap.h"
 #include "BKE_image.h"
 #include "BKE_material.h"
 #include "BKE_texture.h"
@@ -309,7 +307,6 @@ void BKE_texture_mtex_default(MTex *mtex)
 	mtex->size[1] = 1.0;
 	mtex->size[2] = 1.0;
 	mtex->tex = NULL;
-	mtex->texflag = MTEX_3TAP_BUMP | MTEX_BUMP_OBJECTSPACE | MTEX_MAPTO_BOUNDS;
 	mtex->colormodel = 0;
 	mtex->r = 1.0;
 	mtex->g = 0.0;

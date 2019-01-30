@@ -35,7 +35,6 @@
 #include "BLI_utildefines.h"
 #include "BLI_math_vector.h"
 #include "BLI_math_bits.h"
-#include "BLI_math_color.h"
 #include "BLI_string.h"
 #include "BLI_alloca.h"
 #include "BLI_edgehash.h"
@@ -43,7 +42,6 @@
 #include "DNA_mesh_types.h"
 #include "DNA_meshdata_types.h"
 #include "DNA_object_types.h"
-#include "DNA_space_types.h"
 #include "DNA_scene_types.h"
 
 #include "BKE_customdata.h"
@@ -54,23 +52,16 @@
 #include "BKE_mesh.h"
 #include "BKE_mesh_tangent.h"
 #include "BKE_mesh_runtime.h"
-#include "BKE_object.h"
 #include "BKE_object_deform.h"
-#include "BKE_colorband.h"
-#include "BKE_cdderivedmesh.h"
 
-#include "DEG_depsgraph_query.h"
 
 #include "bmesh.h"
 
 #include "GPU_batch.h"
-#include "GPU_batch_presets.h"
-#include "GPU_draw.h"
 #include "GPU_material.h"
 
 #include "DRW_render.h"
 
-#include "ED_image.h"
 #include "ED_mesh.h"
 #include "ED_uvedit.h"
 
@@ -99,7 +90,6 @@ enum {
 };
 
 /* ---------------------------------------------------------------------- */
-
 /** \name Mesh/BMesh Interface (direct access to basic data).
  * \{ */
 
@@ -137,7 +127,6 @@ static int UNUSED_FUNCTION(mesh_render_loops_len_get)(Mesh *me)
 
 
 /* ---------------------------------------------------------------------- */
-
 /** \name Mesh/BMesh Interface (indirect, partially cached access to complex data).
  * \{ */
 
@@ -387,15 +376,15 @@ static void mesh_cd_calc_used_gpu_layers(
 	const CustomData *cd_ldata = (me->edit_btmesh) ? &me->edit_btmesh->bm->ldata : &me->ldata;
 
 	/* See: DM_vertex_attributes_from_gpu for similar logic */
-	GPUVertexAttribs gattribs = {{{0}}};
+	GPUVertAttrLayers gpu_attrs = {{{0}}};
 
 	for (int i = 0; i < gpumat_array_len; i++) {
 		GPUMaterial *gpumat = gpumat_array[i];
 		if (gpumat) {
-			GPU_material_vertex_attributes(gpumat, &gattribs);
-			for (int j = 0; j < gattribs.totlayer; j++) {
-				const char *name = gattribs.layer[j].name;
-				int type = gattribs.layer[j].type;
+			GPU_material_vertex_attrs(gpumat, &gpu_attrs);
+			for (int j = 0; j < gpu_attrs.totlayer; j++) {
+				const char *name = gpu_attrs.layer[j].name;
+				int type = gpu_attrs.layer[j].type;
 				int layer = -1;
 
 				if (type == CD_AUTO_FROM_NAME) {
@@ -1135,7 +1124,6 @@ static MeshRenderData *mesh_render_data_create(Mesh *me, const int types)
 /** \} */
 
 /* ---------------------------------------------------------------------- */
-
 /** \name Accessor Functions
  * \{ */
 
@@ -1483,7 +1471,6 @@ fallback:
 /** \} */
 
 /* ---------------------------------------------------------------------- */
-
 /** \name Internal Cache Generation
  * \{ */
 
@@ -1491,11 +1478,13 @@ static uchar mesh_render_data_looptri_flag(MeshRenderData *rdata, const BMFace *
 {
 	uchar fflag = 0;
 
-	if (efa == rdata->efa_act)
+	if (efa == rdata->efa_act) {
 		fflag |= VFLAG_FACE_ACTIVE;
+	}
 
-	if (BM_elem_flag_test(efa, BM_ELEM_SELECT))
+	if (BM_elem_flag_test(efa, BM_ELEM_SELECT)) {
 		fflag |= VFLAG_FACE_SELECTED;
+	}
 
 #ifdef WITH_FREESTYLE
 	if (rdata->cd.offset.freestyle_face != -1) {
@@ -1515,17 +1504,21 @@ static void mesh_render_data_edge_flag(
 {
 	eattr->e_flag |= VFLAG_EDGE_EXISTS;
 
-	if (eed == rdata->eed_act)
+	if (eed == rdata->eed_act) {
 		eattr->e_flag |= VFLAG_EDGE_ACTIVE;
+	}
 
-	if (BM_elem_flag_test(eed, BM_ELEM_SELECT))
+	if (BM_elem_flag_test(eed, BM_ELEM_SELECT)) {
 		eattr->e_flag |= VFLAG_EDGE_SELECTED;
+	}
 
-	if (BM_elem_flag_test(eed, BM_ELEM_SEAM))
+	if (BM_elem_flag_test(eed, BM_ELEM_SEAM)) {
 		eattr->e_flag |= VFLAG_EDGE_SEAM;
+	}
 
-	if (!BM_elem_flag_test(eed, BM_ELEM_SMOOTH))
+	if (!BM_elem_flag_test(eed, BM_ELEM_SMOOTH)) {
 		eattr->e_flag |= VFLAG_EDGE_SHARP;
+	}
 
 	/* Use a byte for value range */
 	if (rdata->cd.offset.crease != -1) {
@@ -1558,11 +1551,13 @@ static uchar mesh_render_data_vertex_flag(MeshRenderData *rdata, const BMVert *e
 	uchar vflag = VFLAG_VERTEX_EXISTS;
 
 	/* Current vertex */
-	if (eve == rdata->eve_act)
+	if (eve == rdata->eve_act) {
 		vflag |= VFLAG_VERTEX_ACTIVE;
+	}
 
-	if (BM_elem_flag_test(eve, BM_ELEM_SELECT))
+	if (BM_elem_flag_test(eve, BM_ELEM_SELECT)) {
 		vflag |= VFLAG_VERTEX_SELECTED;
+	}
 
 	return vflag;
 }
@@ -1917,7 +1912,6 @@ static bool add_edit_facedot_mapped(
 /** \} */
 
 /* ---------------------------------------------------------------------- */
-
 /** \name Vertex Group Selection
  * \{ */
 
@@ -1993,7 +1987,6 @@ static void drw_mesh_weight_state_extract(
 /** \} */
 
 /* ---------------------------------------------------------------------- */
-
 /** \name Mesh GPUBatch Cache
  * \{ */
 
@@ -2108,7 +2101,7 @@ typedef struct MeshBatchCache {
 	GPUBatch **surf_per_mat;
 
 	/* arrays of bool uniform names (and value) that will be use to
-	 * set srgb conversion for auto attribs.*/
+	 * set srgb conversion for auto attributes.*/
 	char *auto_layer_names;
 	int *auto_layer_is_srgb;
 	int auto_layer_len;
@@ -3110,15 +3103,15 @@ static void mesh_create_loop_uv_and_tan(MeshRenderData *rdata, GPUVertBuf *vbo)
 	GPUVertFormat format = { 0 };
 
 	for (uint i = 0; i < uv_len; i++) {
-		const char *attrib_name = mesh_render_data_uv_layer_uuid_get(rdata, i);
+		const char *attr_name = mesh_render_data_uv_layer_uuid_get(rdata, i);
 #if 0 /* these are clamped. Maybe use them as an option in the future */
-		uv_id[i] = GPU_vertformat_attr_add(&format, attrib_name, GPU_COMP_I16, 2, GPU_FETCH_INT_TO_FLOAT_UNIT);
+		uv_id[i] = GPU_vertformat_attr_add(&format, attr_name, GPU_COMP_I16, 2, GPU_FETCH_INT_TO_FLOAT_UNIT);
 #else
-		uv_id[i] = GPU_vertformat_attr_add(&format, attrib_name, GPU_COMP_F32, 2, GPU_FETCH_FLOAT);
+		uv_id[i] = GPU_vertformat_attr_add(&format, attr_name, GPU_COMP_F32, 2, GPU_FETCH_FLOAT);
 #endif
 		/* Auto Name */
-		attrib_name = mesh_render_data_uv_auto_layer_uuid_get(rdata, i);
-		GPU_vertformat_alias_add(&format, attrib_name);
+		attr_name = mesh_render_data_uv_auto_layer_uuid_get(rdata, i);
+		GPU_vertformat_alias_add(&format, attr_name);
 
 		if (i == rdata->cd.layers.uv_active) {
 			GPU_vertformat_alias_add(&format, "u");
@@ -3126,18 +3119,18 @@ static void mesh_create_loop_uv_and_tan(MeshRenderData *rdata, GPUVertBuf *vbo)
 	}
 
 	for (uint i = 0; i < tangent_len; i++) {
-		const char *attrib_name = mesh_render_data_tangent_layer_uuid_get(rdata, i);
+		const char *attr_name = mesh_render_data_tangent_layer_uuid_get(rdata, i);
 #ifdef USE_COMP_MESH_DATA
-		tangent_id[i] = GPU_vertformat_attr_add(&format, attrib_name, GPU_COMP_I16, 4, GPU_FETCH_INT_TO_FLOAT_UNIT);
+		tangent_id[i] = GPU_vertformat_attr_add(&format, attr_name, GPU_COMP_I16, 4, GPU_FETCH_INT_TO_FLOAT_UNIT);
 #else
-		tangent_id[i] = GPU_vertformat_attr_add(&format, attrib_name, GPU_COMP_F32, 4, GPU_FETCH_FLOAT);
+		tangent_id[i] = GPU_vertformat_attr_add(&format, attr_name, GPU_COMP_F32, 4, GPU_FETCH_FLOAT);
 #endif
 		if (i == rdata->cd.layers.tangent_active) {
 			GPU_vertformat_alias_add(&format, "t");
 		}
 	}
 
-	/* HACK: Create a dummy attrib in case there is no valid UV/tangent layer. */
+	/* HACK: Create a dummy attribute in case there is no valid UV/tangent layer. */
 	if (layers_combined_len == 0) {
 		GPU_vertformat_attr_add(&format, "dummy", GPU_COMP_U8, 1, GPU_FETCH_INT_TO_FLOAT_UNIT);
 	}
@@ -3225,12 +3218,12 @@ static void mesh_create_loop_vcol(MeshRenderData *rdata, GPUVertBuf *vbo)
 	GPUVertFormat format = { 0 };
 
 	for (uint i = 0; i < vcol_len; i++) {
-		const char *attrib_name = mesh_render_data_vcol_layer_uuid_get(rdata, i);
-		vcol_id[i] = GPU_vertformat_attr_add(&format, attrib_name, GPU_COMP_U8, 3, GPU_FETCH_INT_TO_FLOAT_UNIT);
+		const char *attr_name = mesh_render_data_vcol_layer_uuid_get(rdata, i);
+		vcol_id[i] = GPU_vertformat_attr_add(&format, attr_name, GPU_COMP_U8, 3, GPU_FETCH_INT_TO_FLOAT_UNIT);
 		/* Auto layer */
 		if (rdata->cd.layers.auto_vcol[i]) {
-			attrib_name = mesh_render_data_vcol_auto_layer_uuid_get(rdata, i);
-			GPU_vertformat_alias_add(&format, attrib_name);
+			attr_name = mesh_render_data_vcol_auto_layer_uuid_get(rdata, i);
+			GPU_vertformat_alias_add(&format, attr_name);
 		}
 		if (i == rdata->cd.layers.vcol_active) {
 			GPU_vertformat_alias_add(&format, "c");
@@ -4240,7 +4233,7 @@ static void mesh_create_edit_loops_points_lines(MeshRenderData *rdata, GPUIndexB
 		/* Loose verts */
 		if (ibo_verts) {
 			for (i = 0; i < lvert_len; ++i) {
-				int vidx = v_origindex[rdata->mapped.loose_edges[i]];
+				int vidx = v_origindex[rdata->mapped.loose_verts[i]];
 				if (vidx != ORIGINDEX_NONE) {
 					GPU_indexbuf_add_generic_vert(&elb_vert, loop_idx);
 				}
@@ -4373,7 +4366,6 @@ static void mesh_create_edit_loops_tris(MeshRenderData *rdata, GPUIndexBuf *ibo)
 
 
 /* ---------------------------------------------------------------------- */
-
 /** \name Public API
  * \{ */
 
@@ -4570,7 +4562,6 @@ GPUBatch *DRW_mesh_batch_cache_get_surface_vertpaint(Mesh *me)
 /** \} */
 
 /* ---------------------------------------------------------------------- */
-
 /** \name Edit Mode selection API
  * \{ */
 
@@ -4601,7 +4592,6 @@ GPUBatch *DRW_mesh_batch_cache_get_verts_with_select_id(Mesh *me)
 /** \} */
 
 /* ---------------------------------------------------------------------- */
-
 /** \name UV Image editor API
  * \{ */
 
@@ -4803,8 +4793,9 @@ static void uvedit_fill_buffer_data(
 		float (*av)[3], (*auv)[2];
 		ushort area_stretch;
 		/* Skip hidden faces. */
-		if (!BM_elem_flag_test(efa, BM_ELEM_TAG))
+		if (!BM_elem_flag_test(efa, BM_ELEM_TAG)) {
 			continue;
+		}
 
 		uchar face_flag = edit_uv_get_face_flag(efa, efa_act, cd_loop_uv_offset, &scene);
 		/* Face preprocess */
@@ -4969,7 +4960,6 @@ static void mesh_create_uvedit_buffers(
 
 
 /* ---------------------------------------------------------------------- */
-
 /** \name Grouped batch generation
  * \{ */
 
@@ -4990,7 +4980,7 @@ void DRW_mesh_batch_cache_create_requested(
 		drw_mesh_weight_state_clear(&wstate);
 	}
 
-	/* Verify that all surface batches have needed attrib layers. */
+	/* Verify that all surface batches have needed attribute layers. */
 	/* TODO(fclem): We could be a bit smarter here and only do it per material. */
 	bool cd_overlap = mesh_cd_layers_type_overlap(cache->cd_vused, cache->cd_lused,
 	                                              cache->cd_vneeded, cache->cd_lneeded);

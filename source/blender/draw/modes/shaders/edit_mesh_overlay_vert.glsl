@@ -9,12 +9,6 @@ uniform mat4 ModelViewProjectionMatrix;
 uniform mat4 ModelMatrix;
 uniform ivec4 dataMask = ivec4(0xFF);
 
-#ifdef USE_WORLD_CLIP_PLANES
-uniform vec4 WorldClipPlanes[6];
-uniform int  WorldClipPlanesLen;
-#endif
-
-
 in vec3 pos;
 #ifdef VERTEX_FACING
 in vec3 vnor;
@@ -43,12 +37,7 @@ void main()
 #  endif
 
 #  ifdef USE_WORLD_CLIP_PLANES
-	{
-		vec3 worldPosition = (ModelMatrix * vec4(pos, 1.0)).xyz;
-		for (int i = 0; i < WorldClipPlanesLen; i++) {
-			gl_ClipDistance[i] = dot(WorldClipPlanes[i].xyz, worldPosition) + WorldClipPlanes[i].w;
-		}
-	}
+	world_clip_planes_calc_clip_distance((ModelMatrix * vec4(pos, 1.0)).xyz);
 #  endif
 }
 
@@ -93,14 +82,18 @@ void main()
 	}
 
 	/* Face */
-	if ((vData[0].x & FACE_ACTIVE) != 0)
+	if ((vData[0].x & FACE_ACTIVE) != 0) {
 		faceColor = colorFaceSelect;
-	else if ((vData[0].x & FACE_SELECTED) != 0)
+	}
+	else if ((vData[0].x & FACE_SELECTED) != 0) {
 		faceColor = colorFaceSelect;
-	else if ((vData[0].x & FACE_FREESTYLE) != 0)
+	}
+	else if ((vData[0].x & FACE_FREESTYLE) != 0) {
 		faceColor = colorFaceFreestyle;
-	else
+	}
+	else {
 		faceColor = colorFace;
+	}
 
 #  ifdef VERTEX_SELECTION
 	vertexColor = EDIT_MESH_vertex_color(data0.x).rgb;
@@ -115,12 +108,7 @@ void main()
 #  endif
 
 #  ifdef USE_WORLD_CLIP_PLANES
-	{
-		vec3 worldPosition = (ModelMatrix * vec4(pos, 1.0)).xyz;
-		for (int i = 0; i < WorldClipPlanesLen; i++) {
-			gl_ClipDistance[i] = dot(WorldClipPlanes[i].xyz, worldPosition) + WorldClipPlanes[i].w;
-		}
-	}
+	world_clip_planes_calc_clip_distance((ModelMatrix * vec4(pos, 1.0)).xyz);
 #  endif
 }
 

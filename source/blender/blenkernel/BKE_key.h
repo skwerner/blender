@@ -32,15 +32,15 @@
  *  \since March 2001
  *  \author nzc
  */
+struct Curve;
+struct ID;
 struct Key;
 struct KeyBlock;
-struct ID;
-struct ListBase;
-struct Curve;
-struct Object;
 struct Lattice;
+struct ListBase;
 struct Main;
 struct Mesh;
+struct Object;
 struct WeightsArrayCache;
 
 /* Kernel prototypes */
@@ -65,6 +65,8 @@ float *BKE_key_evaluate_object_ex(
         float *arr, size_t arr_size);
 float *BKE_key_evaluate_object(
         struct Object *ob, int *r_totelem);
+
+bool BKE_key_idtype_support(const short id_type);
 
 struct Key     **BKE_key_from_id_p(struct ID *id);
 struct Key      *BKE_key_from_id(struct ID *id);

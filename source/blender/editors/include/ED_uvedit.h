@@ -31,19 +31,19 @@
 #define __ED_UVEDIT_H__
 
 struct ARegionType;
-struct BMesh;
 struct BMEditMesh;
 struct BMFace;
 struct BMLoop;
+struct BMesh;
 struct Depsgraph;
 struct Image;
 struct ImageUser;
 struct Main;
 struct Object;
 struct Scene;
+struct SpaceImage;
 struct View3D;
 struct ViewLayer;
-struct SpaceImage;
 struct bNode;
 struct wmKeyConfig;
 
@@ -127,11 +127,8 @@ void ED_uvedit_live_unwrap_begin(struct Scene *scene, struct Object *obedit);
 void ED_uvedit_live_unwrap_re_solve(void);
 void ED_uvedit_live_unwrap_end(short cancel);
 
-void ED_uvedit_live_unwrap(struct Scene *scene, struct Object *obedit);
+void ED_uvedit_live_unwrap(struct Scene *scene, struct Object **objects, int objects_len);
 void ED_uvedit_add_simple_uvs(struct Main *bmain, struct Scene *scene, struct Object *ob);
-
-/* single call up unwrap using scene settings, used for edge tag unwrapping */
-void ED_unwrap_lscm(struct Scene *scene, struct Object *obedit, const short sel, const bool pack);
 
 
 /* uvedit_draw.c */

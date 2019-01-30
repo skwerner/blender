@@ -1,5 +1,5 @@
 /*
- * Copyright 2016, Blender Foundation.
+ * ***** BEGIN GPL LICENSE BLOCK *****
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -15,7 +15,10 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
+ * Copyright 2016, Blender Foundation.
  * Contributor(s): Blender Institute
+ *
+ * ***** END GPL LICENSE BLOCK *****
  *
  */
 
@@ -26,7 +29,6 @@
 #include "DRW_render.h"
 
 #include "BLI_utildefines.h"
-#include "BLI_string_utils.h"
 #include "BLI_rand.h"
 
 #include "DNA_world_types.h"
@@ -41,15 +43,12 @@
 
 #include "GPU_material.h"
 #include "GPU_texture.h"
-#include "GPU_glew.h"
 
 #include "DEG_depsgraph_query.h"
 
-#include "eevee_engine.h"
 #include "eevee_lightcache.h"
 #include "eevee_private.h"
 
-#include "ED_screen.h"
 
 #include "WM_api.h"
 #include "WM_types.h"
@@ -65,7 +64,6 @@ static struct {
 	struct GPUVertFormat *format_probe_display_planar;
 } e_data = {NULL}; /* Engine data */
 
-extern GlobalsUboStorage ts;
 
 /* *********** FUNCTIONS *********** */
 
@@ -76,15 +74,18 @@ bool EEVEE_lightprobes_obj_visibility_cb(bool vis_in, void *user_data)
 	EEVEE_ObjectEngineData *oed = (EEVEE_ObjectEngineData *)user_data;
 
 	/* test disabled if group is NULL */
-	if (oed->test_data->collection == NULL)
+	if (oed->test_data->collection == NULL) {
 		return vis_in;
+	}
 
-	if (oed->test_data->cached == false)
+	if (oed->test_data->cached == false) {
 		oed->ob_vis_dirty = true;
+	}
 
 	/* early out, don't need to compute ob_vis yet. */
-	if (vis_in == false)
+	if (vis_in == false) {
 		return vis_in;
+	}
 
 	if (oed->ob_vis_dirty) {
 		oed->ob_vis_dirty = false;
@@ -316,7 +317,7 @@ void EEVEE_lightprobes_cache_init(EEVEE_ViewLayerData *sldata, EEVEE_Data *vedat
 		Scene *scene = draw_ctx->scene;
 		World *wo = scene->world;
 
-		float *col = ts.colorBackground;
+		const float *col = G_draw.block.colorBackground;
 
 		/* LookDev */
 		EEVEE_lookdev_cache_init(vedata, &grp, psl->probe_background, wo, pinfo);
@@ -328,7 +329,7 @@ void EEVEE_lightprobes_cache_init(EEVEE_ViewLayerData *sldata, EEVEE_Data *vedat
 				static float error_col[3] = {1.0f, 0.0f, 1.0f};
 				struct GPUMaterial *gpumat = EEVEE_material_world_lightprobe_get(scene, wo);
 
-				GPUMaterialStatus status = GPU_material_status(gpumat);
+				eGPUMaterialStatus status = GPU_material_status(gpumat);
 
 				switch (status) {
 					case GPU_MAT_SUCCESS:
@@ -407,8 +408,8 @@ void EEVEE_lightprobes_cache_init(EEVEE_ViewLayerData *sldata, EEVEE_Data *vedat
 
 		/* Planar Display */
 		DRW_shgroup_instance_format(e_data.format_probe_display_planar, {
-		    {"probe_id", DRW_ATTRIB_INT, 1},
-		    {"probe_mat", DRW_ATTRIB_FLOAT, 16},
+		    {"probe_id", DRW_ATTR_INT, 1},
+		    {"probe_mat", DRW_ATTR_FLOAT, 16},
 		});
 
 		DRWShadingGroup *grp = DRW_shgroup_instance_create(
@@ -742,7 +743,6 @@ void EEVEE_lightprobes_cache_finish(EEVEE_ViewLayerData *sldata, EEVEE_Data *ved
 }
 
 /* -------------------------------------------------------------------- */
-
 /** \name Rendering
  * \{ */
 
@@ -953,7 +953,6 @@ static void eevee_lightbake_render_scene_to_planars(
 /** \} */
 
 /* -------------------------------------------------------------------- */
-
 /** \name Filtering
  * \{ */
 

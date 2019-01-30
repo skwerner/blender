@@ -1,8 +1,34 @@
+/*
+ * ***** BEGIN GPL LICENSE BLOCK *****
+ *
+ * This program is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU General Public License
+ * as published by the Free Software Foundation; either version 2
+ * of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software Foundation,
+ * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
+ *
+ * Copyright 2018, Blender Foundation.
+ * Contributor(s): Blender Institute
+ *
+ * ***** END GPL LICENSE BLOCK *****
+ *
+ */
+
 #include "workbench_private.h"
 
 #include "DNA_userdef_types.h"
 
 #include "UI_resources.h"
+
+#include "GPU_batch.h"
 
 
 void workbench_effect_info_init(WORKBENCH_EffectInfo *effect_info)
@@ -16,6 +42,7 @@ void workbench_private_data_init(WORKBENCH_PrivateData *wpd)
 	const DRWContextState *draw_ctx = DRW_context_state_get();
 	const Scene *scene = draw_ctx->scene;
 	wpd->material_hash = BLI_ghash_ptr_new(__func__);
+	wpd->material_transp_hash = BLI_ghash_ptr_new(__func__);
 	wpd->preferences = &U;
 
 	View3D *v3d = draw_ctx->v3d;
@@ -49,6 +76,12 @@ void workbench_private_data_init(WORKBENCH_PrivateData *wpd)
 		        wpd->shading.studio_light, STUDIOLIGHT_TYPE_STUDIO);
 	}
 
+
+	float shadow_focus = scene->display.shadow_focus;
+	/* Clamp to avoid overshadowing and shading errors. */
+	CLAMP(shadow_focus, 0.0001f, 0.99999f);
+	wpd->shadow_shift = scene->display.shadow_shift;
+	wpd->shadow_focus = 1.0f - shadow_focus * (1.0f - wpd->shadow_shift);
 	wpd->shadow_multiplier = 1.0 - wpd->shading.shadow_intensity;
 
 	WORKBENCH_UBO_World *wd = &wpd->world_data;
@@ -88,15 +121,17 @@ void workbench_private_data_init(WORKBENCH_PrivateData *wpd)
 	wd->curvature_ridge = 0.5f / max_ff(SQUARE(wpd->shading.curvature_ridge_factor), 1e-4f);
 	wd->curvature_valley = 0.7f / max_ff(SQUARE(wpd->shading.curvature_valley_factor), 1e-4f);
 
-	{
+	/* Will be NULL when rendering. */
+	if (draw_ctx->rv3d != NULL) {
 		RegionView3D *rv3d = draw_ctx->rv3d;
 		if (rv3d->rflag & RV3D_CLIPPING) {
-			wpd->world_clip_planes_len = (rv3d->viewlock & RV3D_BOXCLIP) ? 4 : 6;
-			memcpy(wpd->world_clip_planes, rv3d->clip, sizeof(float[4]) * wpd->world_clip_planes_len);
-			DRW_state_clip_planes_len_set(wpd->world_clip_planes_len);
+			wpd->world_clip_planes = rv3d->clip;
+			DRW_state_clip_planes_set_from_rv3d(rv3d);
+			UI_GetThemeColor4fv(TH_V3D_CLIPPING_BORDER, wpd->world_clip_planes_color);
+			srgb_to_linearrgb_v3_v3(wpd->world_clip_planes_color, wpd->world_clip_planes_color);
 		}
 		else {
-			wpd->world_clip_planes_len = 0;
+			wpd->world_clip_planes = NULL;
 		}
 	}
 
@@ -141,8 +176,9 @@ void workbench_private_data_init(WORKBENCH_PrivateData *wpd)
 			/* normalized trick see:
 			 * http://www.derschmale.com/2014/01/26/reconstructing-positions-from-the-depth-buffer */
 			mul_v3_fl(viewvecs[i], 1.0f / viewvecs[i][3]);
-			if (is_persp)
+			if (is_persp) {
 				mul_v3_fl(viewvecs[i], 1.0f / viewvecs[i][2]);
+			}
 			viewvecs[i][3] = 1.0;
 
 			copy_v4_v4(wpd->viewvecs[i], viewvecs[i]);
@@ -187,5 +223,8 @@ void workbench_private_data_get_light_direction(WORKBENCH_PrivateData *wpd, floa
 void workbench_private_data_free(WORKBENCH_PrivateData *wpd)
 {
 	BLI_ghash_free(wpd->material_hash, NULL, MEM_freeN);
+	BLI_ghash_free(wpd->material_transp_hash, NULL, MEM_freeN);
 	DRW_UBO_FREE_SAFE(wpd->world_ubo);
+	DRW_UBO_FREE_SAFE(wpd->dof_ubo);
+	GPU_BATCH_DISCARD_SAFE(wpd->world_clip_planes_batch);
 }

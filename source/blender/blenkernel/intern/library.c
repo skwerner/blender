@@ -78,9 +78,7 @@
 #include "BLI_ghash.h"
 #include "BLI_linklist.h"
 #include "BLI_memarena.h"
-#include "BLI_mempool.h"
 #include "BLI_string_utils.h"
-#include "BLI_threads.h"
 
 #include "BLT_translation.h"
 
@@ -104,7 +102,6 @@
 #include "BKE_lamp.h"
 #include "BKE_lattice.h"
 #include "BKE_library.h"
-#include "BKE_library_override.h"
 #include "BKE_library_query.h"
 #include "BKE_library_remap.h"
 #include "BKE_linestyle.h"
@@ -1002,6 +999,37 @@ void BKE_main_id_flag_all(Main *bmain, const int flag, const bool value)
 	}
 }
 
+void BKE_main_id_repair_duplicate_names_listbase(ListBase *lb)
+{
+	int lb_len = 0;
+	for (ID *id = lb->first; id; id = id->next) {
+		if (id->lib == NULL) {
+			lb_len += 1;
+		}
+	}
+	if (lb_len <= 1) {
+		return;
+	}
+
+	/* Fill an array because renaming sorts. */
+	ID **id_array = MEM_mallocN(sizeof(*id_array) * lb_len, __func__);
+	GSet *gset = BLI_gset_str_new_ex(__func__, lb_len);
+	int i = 0;
+	for (ID *id = lb->first; id; id = id->next) {
+		if (id->lib == NULL) {
+			id_array[i] = id;
+			i++;
+		}
+	}
+	for (i = 0; i < lb_len; i++) {
+		if (!BLI_gset_add(gset, id_array[i]->name + 2)) {
+			new_id(lb, id_array[i], NULL);
+		}
+	}
+	BLI_gset_free(gset, NULL);
+	MEM_freeN(id_array);
+}
+
 void BKE_main_lib_objects_recalc_all(Main *bmain)
 {
 	Object *ob;
@@ -1649,8 +1677,11 @@ void id_clear_lib_data_ex(Main *bmain, ID *id, const bool id_in_mainlist)
 
 	id->lib = NULL;
 	id->tag &= ~(LIB_TAG_INDIRECT | LIB_TAG_EXTERN);
-	if (id_in_mainlist)
-		new_id(which_libbase(bmain, GS(id->name)), id, NULL);
+	if (id_in_mainlist) {
+		if (new_id(which_libbase(bmain, GS(id->name)), id, NULL)) {
+			bmain->is_memfile_undo_written = false;
+		}
+	}
 
 	/* Internal bNodeTree blocks inside datablocks also stores id->lib, make sure this stays in sync. */
 	if ((ntree = ntreeFromID(id))) {
@@ -2018,9 +2049,11 @@ void BLI_libblock_ensure_unique_name(Main *bmain, const char *name)
 
 	/* search for id */
 	idtest = BLI_findstring(lb, name + 2, offsetof(ID, name) + 2);
-
-	if (idtest && !new_id(lb, idtest, idtest->name + 2)) {
-		id_sort_by_name(lb, idtest);
+	if (idtest != NULL) {
+		if (!new_id(lb, idtest, idtest->name + 2)) {
+			id_sort_by_name(lb, idtest);
+		}
+		bmain->is_memfile_undo_written = false;
 	}
 }
 
@@ -2030,7 +2063,9 @@ void BLI_libblock_ensure_unique_name(Main *bmain, const char *name)
 void BKE_libblock_rename(Main *bmain, ID *id, const char *name)
 {
 	ListBase *lb = which_libbase(bmain, GS(id->name));
-	new_id(lb, id, name);
+	if (new_id(lb, id, name)) {
+		bmain->is_memfile_undo_written = false;
+	}
 }
 
 /**

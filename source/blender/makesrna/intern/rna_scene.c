@@ -43,7 +43,6 @@
 #include "IMB_imbuf_types.h"
 
 #include "BLI_math.h"
-#include "BLI_string_utils.h"
 
 #include "BLT_translation.h"
 
@@ -484,6 +483,8 @@ const EnumPropertyItem rna_enum_transform_orientation_items[] = {
 
 #ifdef RNA_RUNTIME
 
+#include "BLI_string_utils.h"
+
 #include "DNA_anim_types.h"
 #include "DNA_color_types.h"
 #include "DNA_node_types.h"
@@ -688,6 +689,11 @@ static void rna_Scene_volume_set(PointerRNA *ptr, float value)
 	scene->audio.volume = value;
 	if (scene->sound_scene)
 		BKE_sound_set_scene_volume(scene, value);
+}
+
+static const char *rna_Scene_statistics_string_get(Scene *scene, Main *bmain, ViewLayer *view_layer)
+{
+	return ED_info_stats_string(bmain, scene, view_layer);
 }
 
 static void rna_Scene_framelen_update(Main *UNUSED(bmain), Scene *scene, PointerRNA *UNUSED(ptr))
@@ -5707,7 +5713,7 @@ static void rna_def_display_safe_areas(BlenderRNA *brna)
 	static float default_action_center[2] = {0.15f, 0.05f};
 
 	srna = RNA_def_struct(brna, "DisplaySafeAreas", NULL);
-	RNA_def_struct_ui_text(srna, "Safe Areas", "Safe Areas used in 3D view and the VSE");
+	RNA_def_struct_ui_text(srna, "Safe Areas", "Safe areas used in 3D view and the sequencer");
 	RNA_def_struct_sdna(srna, "DisplaySafeAreas");
 
 	/* SAFE AREAS */
@@ -6128,7 +6134,7 @@ static void rna_def_scene_eevee(BlenderRNA *brna)
 	RNA_def_property_ui_text(prop, "Depth of Field", "Enable depth of field using the values from the active camera");
 	RNA_def_property_override_flag(prop, PROPOVERRIDE_OVERRIDABLE_STATIC);
 
-	prop = RNA_def_property(srna, "bokeh_max_size", PROP_FLOAT, PROP_FACTOR);
+	prop = RNA_def_property(srna, "bokeh_max_size", PROP_FLOAT, PROP_PIXEL);
 	RNA_def_property_float_default(prop, 100.0f);
 	RNA_def_property_ui_text(prop, "Max Size", "Max size of the bokeh shape for the depth of field (lower is faster)");
 	RNA_def_property_range(prop, 0.0f, 2000.0f);
@@ -6632,7 +6638,8 @@ void RNA_def_scene(BlenderRNA *brna)
 	RNA_def_property_float_funcs(prop, NULL, "rna_Scene_volume_set", NULL);
 
 	/* Statistics */
-	func = RNA_def_function(srna, "statistics", "ED_info_stats_string");
+	func = RNA_def_function(srna, "statistics", "rna_Scene_statistics_string_get");
+	RNA_def_function_flag(func, FUNC_USE_MAIN);
 	parm = RNA_def_pointer(func, "view_layer", "ViewLayer", "", "Active layer");
 	RNA_def_parameter_flags(parm, PROP_NEVER_NULL, PARM_REQUIRED);
 	parm = RNA_def_string(func, "statistics", NULL, 0, "Statistics", "");

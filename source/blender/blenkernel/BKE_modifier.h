@@ -32,19 +32,19 @@
 #include "BLI_compiler_attrs.h"
 #include "BKE_customdata.h"
 
-struct ID;
+struct BMEditMesh;
+struct DepsNodeHandle;
 struct Depsgraph;
 struct DerivedMesh;
+struct ID;
+struct ListBase;
+struct Main;
 struct Mesh;
+struct ModifierData;
 struct Object;
 struct Scene;
 struct ViewLayer;
-struct ListBase;
 struct bArmature;
-struct Main;
-struct ModifierData;
-struct BMEditMesh;
-struct DepsNodeHandle;
 
 typedef enum {
 	/* Should not be used, only for None modifier type */
@@ -425,16 +425,6 @@ void modwrap_deformVertsEM(
         ModifierData *md, const struct ModifierEvalContext *ctx,
         struct BMEditMesh *em, struct Mesh *me,
         float (*vertexCos)[3], int numVerts);
-
-#define applyModifier_DM_wrapper(NEW_FUNC_NAME, OLD_FUNC_NAME) \
-	static Mesh *NEW_FUNC_NAME(ModifierData *md, const ModifierEvalContext *ctx, Mesh *mesh) \
-	{ \
-		DerivedMesh *dm = CDDM_from_mesh_ex(mesh, CD_REFERENCE, CD_MASK_EVERYTHING); \
-		DerivedMesh *ndm = OLD_FUNC_NAME(md, ctx, dm); \
-		if (ndm != dm) dm->release(dm); \
-		DM_to_mesh(ndm, mesh, ctx->object, CD_MASK_EVERYTHING, true); \
-		return mesh; \
-	}
 
 /* wrappers for modifier callbacks that accept Mesh and select the proper implementation
  * depending on if the modifier has been ported to Mesh or is still using DerivedMesh

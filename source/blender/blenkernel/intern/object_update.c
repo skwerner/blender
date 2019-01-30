@@ -48,13 +48,10 @@
 #include "BKE_displist.h"
 #include "BKE_editmesh.h"
 #include "BKE_effect.h"
-#include "BKE_global.h"
 #include "BKE_image.h"
 #include "BKE_key.h"
 #include "BKE_lamp.h"
 #include "BKE_lattice.h"
-#include "BKE_library.h"
-#include "BKE_main.h"
 #include "BKE_material.h"
 #include "BKE_mball.h"
 #include "BKE_mesh.h"
@@ -148,7 +145,9 @@ void BKE_object_eval_constraints(Depsgraph *depsgraph,
 void BKE_object_eval_transform_final(Depsgraph *depsgraph, Object *ob)
 {
 	DEG_debug_print_eval(depsgraph, __func__, ob->id.name, ob);
-
+	/* Make sure inverse matrix is always up to date. This way users of it
+	 * do not need to worry about relcalculating it. */
+	invert_m4_m4(ob->imat, ob->obmat);
 	/* Set negative scale flag in object. */
 	if (is_negative_m4(ob->obmat)) ob->transflag |= OB_NEG_SCALE;
 	else ob->transflag &= ~OB_NEG_SCALE;

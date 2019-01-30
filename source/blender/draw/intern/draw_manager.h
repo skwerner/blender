@@ -1,5 +1,5 @@
 /*
- * Copyright 2016, Blender Foundation.
+ * ***** BEGIN GPL LICENSE BLOCK *****
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -15,7 +15,10 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
+ * Copyright 2016, Blender Foundation.
  * Contributor(s): Blender Institute
+ *
+ * ***** END GPL LICENSE BLOCK *****
  *
  */
 
@@ -132,11 +135,16 @@ typedef struct DRWCallState {
 } DRWCallState;
 
 typedef enum {
-	DRW_CALL_SINGLE,                 /* A single batch */
-	DRW_CALL_RANGE,                  /* Like single but only draw a range of vertices/indices. */
-	DRW_CALL_INSTANCES,              /* Draw instances without any instancing attribs. */
-	DRW_CALL_GENERATE,               /* Uses a callback to draw with any number of batches. */
-	DRW_CALL_PROCEDURAL,             /* Generate a drawcall without any GPUBatch. */
+	/** A single batch. */
+	DRW_CALL_SINGLE,
+	/** Like single but only draw a range of vertices/indices. */
+	DRW_CALL_RANGE,
+	/** Draw instances without any instancing attributes. */
+	DRW_CALL_INSTANCES,
+	/** Uses a callback to draw with any number of batches. */
+	DRW_CALL_GENERATE,
+	/** Generate a drawcall without any #GPUBatch. */
+	DRW_CALL_PROCEDURAL,
 } DRWCallType;
 
 typedef struct DRWCall {
@@ -265,7 +273,7 @@ struct DRWShadingGroup {
 
 	DRWPass *pass_parent; /* backlink to pass we're in */
 #ifndef NDEBUG
-	char attribs_count;
+	char attrs_count;
 #endif
 #ifdef USE_GPU_SELECT
 	GPUVertBuf *inst_selectid;

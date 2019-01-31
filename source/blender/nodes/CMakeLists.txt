@@ -65,6 +65,7 @@ set(SRC
 	composite/nodes/node_composite_despeckle.c
 	composite/nodes/node_composite_doubleEdgeMask.c
 	composite/nodes/node_composite_defocus.c
+	composite/nodes/node_composite_denoise.c
 	composite/nodes/node_composite_diffMatte.c
 	composite/nodes/node_composite_dilate.c
 	composite/nodes/node_composite_directionalblur.c

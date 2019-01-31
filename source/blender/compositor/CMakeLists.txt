@@ -296,6 +296,8 @@ set(SRC
 	nodes/COM_BokehBlurNode.h
 	nodes/COM_DirectionalBlurNode.cpp
 	nodes/COM_DirectionalBlurNode.h
+	nodes/COM_DenoiseNode.cpp
+	nodes/COM_DenoiseNode.h
 	operations/COM_GaussianAlphaXBlurOperation.cpp
 	operations/COM_GaussianAlphaXBlurOperation.h
 	operations/COM_GaussianAlphaYBlurOperation.cpp
@@ -322,6 +324,8 @@ set(SRC
 	operations/COM_MovieDistortionOperation.h
 	operations/COM_GammaCorrectOperation.h
 	operations/COM_GammaCorrectOperation.cpp
+	operations/COM_DenoiseOperation.h
+	operations/COM_DenoiseOperation.cpp
 
 	# Matte nodes
 	nodes/COM_BoxMaskNode.cpp

@@ -2508,6 +2508,14 @@ static void node_composit_buts_brightcontrast(uiLayout *layout, bContext *UNUSED
 	uiItemR(layout, ptr, "use_premultiply", 0, NULL, ICON_NONE);
 }
 
+static void node_composit_buts_denoise(uiLayout *layout, bContext *UNUSED(C), PointerRNA *ptr)
+{
+	uiItemR(layout, ptr, "use_hdr", 0, NULL, ICON_NONE);
+	uiLayout *col = uiLayoutColumn(layout, false);
+	uiLayoutSetActive(col, RNA_boolean_get(ptr, "use_hdr") == false);
+	uiItemR(col, ptr, "use_srgb", 0, NULL, ICON_NONE);
+}
+
 /* only once called */
 static void node_composit_set_butfunc(bNodeType *ntype)
 {
@@ -2741,6 +2749,9 @@ static void node_composit_set_butfunc(bNodeType *ntype)
 			break;
 		case CMP_NODE_BRIGHTCONTRAST:
 			ntype->draw_buttons = node_composit_buts_brightcontrast;
+		case CMP_NODE_DENOISE:
+			ntype->draw_buttons = node_composit_buts_denoise;
+			break;
 	}
 }
 

@@ -103,7 +103,7 @@ void DenoiseOperation::generateDenoise(float *data, MemoryBuffer *inputTileColor
 	BLI_assert(settings);
 	if(settings) {
 		filter.set("hdr", settings->hdr > 0 ? true : false);
-		filter.set("srgb", settings->srgb && !settings->hdr > 0 ? true : false);
+		filter.set("srgb", settings->srgb && !(settings->hdr > 0) ? true : false);
 	}
 
 	filter.commit();
@@ -112,7 +112,7 @@ void DenoiseOperation::generateDenoise(float *data, MemoryBuffer *inputTileColor
 	/* copy the alpha channel, OpenImageDenoise currently only supports RGB */
 	int numPixels = inputTileColor->getWidth() * inputTileColor->getHeight();
 #	pragma omp parallel for
-	for(int i = 0; i < inputTileColor->getWidth() * inputTileColor->getHeight(); ++i) {
+	for(int i = 0; i < numPixels; ++i) {
 		data[i * 4 + 3] = inputBufferColor[i * 4 + 3];
 	}
 }

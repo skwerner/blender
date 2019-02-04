@@ -206,6 +206,8 @@ class CYCLES_RENDER_PT_sampling(CyclesButtonsPanel, Panel):
             col.prop(cscene, "sample_all_lights_indirect")
 
         layout.row().prop(cscene, "sampling_pattern", text="Pattern")
+        if cscene.sampling_pattern != "CORRELATED_MUTI_JITTER":
+            layout.row().prop(cscene, "scrambling_distance", text="Scrambling Distance")
 
         for rl in scene.render.layers:
             if rl.samples > 0:

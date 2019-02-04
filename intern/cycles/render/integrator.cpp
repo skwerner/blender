@@ -77,6 +77,7 @@ NODE_DEFINE(Integrator)
 	sampling_pattern_enum.insert("sobol", SAMPLING_PATTERN_SOBOL);
 	sampling_pattern_enum.insert("cmj", SAMPLING_PATTERN_CMJ);
 	SOCKET_ENUM(sampling_pattern, "Sampling Pattern", sampling_pattern_enum, SAMPLING_PATTERN_SOBOL);
+	SOCKET_FLOAT(scrambling_distance, "Scrambling Distance", 1.0f);
 
 	return type;
 }
@@ -166,6 +167,7 @@ void Integrator::device_update(Device *device, DeviceScene *dscene, Scene *scene
 	}
 
 	kintegrator->sampling_pattern = sampling_pattern;
+	kintegrator->scrambling_distance = scrambling_distance;
 	kintegrator->aa_samples = aa_samples;
 
 	if(light_sampling_threshold > 0.0f) {

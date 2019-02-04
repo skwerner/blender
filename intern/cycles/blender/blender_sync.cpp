@@ -266,6 +266,7 @@ void BlenderSync::sync_integrator()
 	        "sampling_pattern",
 	        SAMPLING_NUM_PATTERNS,
 	        SAMPLING_PATTERN_SOBOL);
+	integrator->scrambling_distance = get_float(cscene, "scrambling_distance");
 
 	integrator->sample_clamp_direct = get_float(cscene, "sample_clamp_direct");
 	integrator->sample_clamp_indirect = get_float(cscene, "sample_clamp_indirect");

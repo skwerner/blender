@@ -285,6 +285,14 @@ class CyclesRenderSettings(bpy.types.PropertyGroup):
             default='USE',
         )
 
+        cls.scrambling_distance = FloatProperty(
+            name="Scrambling distance",
+            description="The amount of pixel-dependent scrambling applied to the Sobol sequence,"
+                        "lower values might speed up rendering but can cause visible artifacts",
+            min=0.0, max=1.0,
+            default=1.0,
+        )
+
         cls.sample_all_lights_direct = BoolProperty(
             name="Sample All Direct Lights",
             description="Sample all lights (for direct samples), rather than randomly picking one",

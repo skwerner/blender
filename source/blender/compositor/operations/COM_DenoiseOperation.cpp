@@ -83,7 +83,7 @@ void DenoiseOperation::generateDenoise(float *data, MemoryBuffer *inputTileColor
 {
 	float *inputBufferColor = inputTileColor->getBuffer();
 	BLI_assert(inputBufferColor);
-	if(!inputBufferColor) {
+	if (!inputBufferColor) {
 		return;
 	}
 
@@ -92,16 +92,16 @@ void DenoiseOperation::generateDenoise(float *data, MemoryBuffer *inputTileColor
 
 	oidn::FilterRef filter = device.newFilter("RT");
 	filter.setImage("color", inputBufferColor, oidn::Format::Float3, inputTileColor->getWidth(), inputTileColor->getHeight(), 0, 4 * sizeof(float));
-	if(inputTileAlbedo && inputTileAlbedo->getBuffer()) {
+	if (inputTileAlbedo && inputTileAlbedo->getBuffer()) {
 		filter.setImage("albedo", inputTileAlbedo->getBuffer(), oidn::Format::Float3, inputTileAlbedo->getWidth(), inputTileAlbedo->getHeight(), 0, 4 * sizeof(float));
 	}
-	if(inputTileNormal && inputTileNormal->getBuffer()) {
+	if (inputTileNormal && inputTileNormal->getBuffer()) {
 		filter.setImage("normal", inputTileNormal->getBuffer(), oidn::Format::Float3, inputTileNormal->getWidth(), inputTileNormal->getHeight(), 0, 4 * sizeof(float));
 	}
 	filter.setImage("output", data, oidn::Format::Float3, inputTileColor->getWidth(), inputTileColor->getHeight(), 0, 4 * sizeof(float));
 
 	BLI_assert(settings);
-	if(settings) {
+	if (settings) {
 		filter.set("hdr", settings->hdr > 0 ? true : false);
 		filter.set("srgb", settings->srgb && !(settings->hdr > 0) ? true : false);
 	}
@@ -112,7 +112,7 @@ void DenoiseOperation::generateDenoise(float *data, MemoryBuffer *inputTileColor
 	/* copy the alpha channel, OpenImageDenoise currently only supports RGB */
 	int numPixels = inputTileColor->getWidth() * inputTileColor->getHeight();
 #	pragma omp parallel for
-	for(int i = 0; i < numPixels; ++i) {
+	for (int i = 0; i < numPixels; ++i) {
 		data[i * 4 + 3] = inputBufferColor[i * 4 + 3];
 	}
 }

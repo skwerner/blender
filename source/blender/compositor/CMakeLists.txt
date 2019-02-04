@@ -296,8 +296,6 @@ set(SRC
 	nodes/COM_BokehBlurNode.h
 	nodes/COM_DirectionalBlurNode.cpp
 	nodes/COM_DirectionalBlurNode.h
-	nodes/COM_DenoiseNode.cpp
-	nodes/COM_DenoiseNode.h
 	operations/COM_GaussianAlphaXBlurOperation.cpp
 	operations/COM_GaussianAlphaXBlurOperation.h
 	operations/COM_GaussianAlphaYBlurOperation.cpp
@@ -324,8 +322,6 @@ set(SRC
 	operations/COM_MovieDistortionOperation.h
 	operations/COM_GammaCorrectOperation.h
 	operations/COM_GammaCorrectOperation.cpp
-	operations/COM_DenoiseOperation.h
-	operations/COM_DenoiseOperation.cpp
 
 	# Matte nodes
 	nodes/COM_BoxMaskNode.cpp
@@ -559,6 +555,20 @@ add_definitions(-DCL_USE_DEPRECATED_OPENCL_1_1_APIS)
 
 if(WITH_INTERNATIONAL)
 	add_definitions(-DWITH_INTERNATIONAL)
+endif()
+
+if(WITH_OPENIMAGEDENOISE)
+	add_definitions(-DWITH_OPENIMAGEDENOISE)
+	list(APPEND INC_SYS
+		${OPENIMAGEDENOISE_INCLUDE_DIRS}
+	)
+	message(${INC_SYS})
+	list(APPEND SRC
+		nodes/COM_DenoiseNode.h
+		nodes/COM_DenoiseNode.cpp
+		operations/COM_DenoiseOperation.h
+		operations/COM_DenoiseOperation.cpp
+	)
 endif()
 
 blender_add_lib(bf_compositor "${SRC}" "${INC}" "${INC_SYS}")

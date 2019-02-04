@@ -1,0 +1,30 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 394e7c1..873bf8d 100644
+--- a/CMakeLists.txt
++++ b//CMakeLists.txt
+@@ -160,7 +160,9 @@ set_property(TARGET ${PROJECT_NAME} PROPERTY SOVERSION "0")
+ ## Open Image Denoise examples
+ ## ----------------------------------------------------------------------------
+ 
+-add_subdirectory(examples)
++if(WITH_EXAMPLE)
++  add_subdirectory(examples)
++endif()
+ 
+ ## ----------------------------------------------------------------------------
+ ## Open Image Denoise install and packaging
+diff --git a/mkl-dnn/cmake/TBB.cmake b/mkl-dnn/cmake/TBB.cmake
+index 0711e69..da1e820 100644
+--- a/mkl-dnn/cmake/TBB.cmake
++++ b/mkl-dnn/cmake/TBB.cmake
+@@ -143,8 +143,8 @@ else()
+         else()
+             find_path(TBB_INCLUDE_DIR tbb/task_scheduler_init.h PATHS ${TBB_ROOT}/include NO_DEFAULT_PATH)
+             set(TBB_HINTS HINTS ${TBB_ROOT}/lib/intel64/gcc4.4 ${TBB_ROOT}/lib ${TBB_ROOT}/lib64 PATHS /usr/libx86_64-linux-gnu/)
+-            find_library(TBB_LIBRARY tbb ${TBB_HINTS})
+-            find_library(TBB_LIBRARY_MALLOC tbbmalloc ${TBB_HINTS})
++            find_library(TBB_LIBRARY tbb_static ${TBB_HINTS})
++            find_library(TBB_LIBRARY_MALLOC tbbmalloc_static ${TBB_HINTS})
+         endif()
+     endif()
+ 

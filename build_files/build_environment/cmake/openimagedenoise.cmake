@@ -21,9 +21,7 @@ set(OIDN_EXTRA_ARGS
 	-DWITH_EXAMPLE=OFF
 	-DWITH_TEST=OFF
 	-DTBB_ROOT=${LIBDIR}/tbb
-	-DTBB_INCLUDE_DIR=${LIBDIR}/tbb/include
-	-DTBB_LIBRARY=${LIBDIR}/tbb/lib/libtbb_static.a
-	-DTBB_LIBRARY_MALLOC=${LIBDIR}/tbb/lib/libtbbmalloc_static.a
+	-DTBB_STATIC_LIB=ON
 )
 
 ExternalProject_Add(external_openimagedenoise
@@ -32,5 +30,6 @@ ExternalProject_Add(external_openimagedenoise
 	URL_HASH MD5=${OIDN_HASH}
 	PREFIX ${BUILD_DIR}/openimagedenoise
 	CMAKE_ARGS -DCMAKE_INSTALL_PREFIX=${LIBDIR}/openimagedenoise ${DEFAULT_CMAKE_FLAGS} ${OIDN_EXTRA_ARGS}
+	PATCH_COMMAND ${PATCH_CMD} --verbose -p 1 -N -d ${BUILD_DIR}/openimagedenoise/src/external_openimagedenoise < ${PATCH_DIR}/openimagedenoise.diff
 	INSTALL_DIR ${LIBDIR}/openimagedenoise
 )

@@ -303,6 +303,6 @@ set(EMBREE_VERSION 3.2.4)
 set(EMBREE_URI https://github.com/embree/embree/archive/v${EMBREE_VERSION}.zip)
 set(EMBREE_HASH 3d4a1147002ff43939d45140aa9d6fb8)
 
-set(OIDN_VERSION 0.8.0)
+set(OIDN_VERSION 0.8.1)
 set(OIDN_URI https://github.com/OpenImageDenoise/oidn/releases/download/v${OIDN_VERSION}/oidn-${OIDN_VERSION}.src.zip)
-set(OIDN_HASH 964533665b2dc943ca3a4d13a88a2a56)
+set(OIDN_HASH 24574bb396d6cc4c0420f691393b502a)

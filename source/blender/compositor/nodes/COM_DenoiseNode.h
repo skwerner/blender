@@ -20,7 +20,7 @@
  */
 
 #ifndef __COM_DENOISENODE_H__
-#define __COM_DENSOISENODE_H__
+#define __COM_DENOISENODE_H__
 
 #include "COM_Node.h"
 

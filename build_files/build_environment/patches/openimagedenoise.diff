@@ -17,7 +17,14 @@ diff --git a/mkl-dnn/cmake/TBB.cmake b/mkl-dnn/cmake/TBB.cmake
 index 0711e69..da1e820 100644
 --- a/mkl-dnn/cmake/TBB.cmake
 +++ b/mkl-dnn/cmake/TBB.cmake
-@@ -143,8 +143,8 @@ else()
+@@ -138,13 +138,13 @@ else()
+         set(TBB_LIBRARY_MALLOC TBB_LIBRARY_MALLOC-NOTFOUND)
+         if(APPLE)
+             find_path(TBB_INCLUDE_DIR tbb/task_scheduler_init.h PATHS ${TBB_ROOT}/include NO_DEFAULT_PATH)
+-            find_library(TBB_LIBRARY tbb PATHS ${TBB_ROOT}/lib NO_DEFAULT_PATH)
+-            find_library(TBB_LIBRARY_MALLOC tbbmalloc PATHS ${TBB_ROOT}/lib NO_DEFAULT_PATH)
++            find_library(TBB_LIBRARY tbb_static PATHS ${TBB_ROOT}/lib NO_DEFAULT_PATH)
++            find_library(TBB_LIBRARY_MALLOC tbbmalloc_static PATHS ${TBB_ROOT}/lib NO_DEFAULT_PATH)
          else()
              find_path(TBB_INCLUDE_DIR tbb/task_scheduler_init.h PATHS ${TBB_ROOT}/include NO_DEFAULT_PATH)
              set(TBB_HINTS HINTS ${TBB_ROOT}/lib/intel64/gcc4.4 ${TBB_ROOT}/lib ${TBB_ROOT}/lib64 PATHS /usr/libx86_64-linux-gnu/)

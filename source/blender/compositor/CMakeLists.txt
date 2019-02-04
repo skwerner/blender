@@ -562,7 +562,6 @@ if(WITH_OPENIMAGEDENOISE)
 	list(APPEND INC_SYS
 		${OPENIMAGEDENOISE_INCLUDE_DIRS}
 	)
-	message(${INC_SYS})
 	list(APPEND SRC
 		nodes/COM_DenoiseNode.h
 		nodes/COM_DenoiseNode.cpp

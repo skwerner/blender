@@ -385,6 +385,10 @@ if(WITH_CYCLES_EMBREE)
 	set(PLATFORM_LINKFLAGS "${PLATFORM_LINKFLAGS} -Xlinker -stack_size -Xlinker 0x100000")
 endif()
 
+if(WITH_OPENIMAGEDENOISE)
+	find_package(OpenImageDenoise REQUIRED)
+endif()
+
 if(WITH_OPENMP)
 	execute_process(COMMAND ${CMAKE_C_COMPILER} --version OUTPUT_VARIABLE COMPILER_VENDOR)
 	string(SUBSTRING "${COMPILER_VENDOR}" 0 5 VENDOR_NAME) # truncate output

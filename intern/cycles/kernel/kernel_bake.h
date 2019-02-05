@@ -275,7 +275,7 @@ ccl_device void kernel_bake_evaluate(KernelGlobals *kg, ccl_global uint4 *input,
 	int num_samples = kernel_data.integrator.aa_samples;
 
 	/* random number generator */
-	uint rng_hash = cmj_hash(offset + i, kernel_data.integrator.seed);
+	uint rng_hash = path_rng_hash(offset + i, kernel_data.integrator.seed);
 
 	float filter_x, filter_y;
 	if(sample == 0) {

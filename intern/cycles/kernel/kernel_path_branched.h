@@ -277,7 +277,7 @@ ccl_device_noinline void kernel_branched_path_surface_indirect_light(KernelGloba
 			float shadow_transparency = L->shadow_transparency;
 #endif
 
-			ps.rng_hash = cmj_hash(state->rng_hash, i);
+			ps.rng_hash = path_rng_hash(state->rng_hash, i);
 
 			if(!kernel_branched_path_surface_bounce(kg,
 			                                        sd,
@@ -335,7 +335,7 @@ ccl_device void kernel_branched_path_subsurface_scatter(KernelGlobals *kg,
 		uint lcg_state = lcg_state_init(state, 0x68bc21eb);
 		int num_samples = kernel_data.integrator.subsurface_samples * 3;
 		float num_samples_inv = 1.0f/num_samples;
-		uint bssrdf_rng_hash = cmj_hash(state->rng_hash, i);
+		uint bssrdf_rng_hash = path_rng_hash(state->rng_hash, i);
 
 		/* do subsurface scatter step with copy of shader data, this will
 		 * replace the BSSRDF with a diffuse BSDF closure */

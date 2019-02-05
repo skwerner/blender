@@ -414,7 +414,7 @@ ccl_device_noinline bool subsurface_random_walk(
 	/* Modify state for RNGs, decorrelated from other paths. */
 	uint prev_rng_offset = state->rng_offset;
 	uint prev_rng_hash = state->rng_hash;
-	state->rng_hash = cmj_hash(state->rng_hash + state->rng_offset, 0xdeadbeef);
+	state->rng_hash = path_rng_hash(state->rng_hash + state->rng_offset, 0xdeadbeef);
 
 	/* Random walk until we hit the surface again. */
 	bool hit = false;

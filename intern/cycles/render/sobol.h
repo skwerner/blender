@@ -25,6 +25,8 @@ CCL_NAMESPACE_BEGIN
 #define SOBOL_MAX_DIMENSIONS 21201
 
 void sobol_generate_direction_vectors(uint vectors[][SOBOL_BITS], int dimensions);
+int sobol_dither_matrix_size();
+void sobol_generate_dither_matrix(float2 *matrix);
 
 CCL_NAMESPACE_END
 

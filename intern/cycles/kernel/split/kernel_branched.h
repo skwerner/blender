@@ -176,7 +176,7 @@ ccl_device_noinline bool kernel_split_branched_path_surface_indirect_light_iter(
 				*ps = branched_state->path_state;
 			}
 
-			ps->rng_hash = cmj_hash(branched_state->path_state.rng_hash, i);
+			ps->rng_hash = path_rng_hash(branched_state->path_state.rng_hash, i);
 
 			ccl_global float3 *tp = &kernel_split_state.throughput[ray_index];
 			*tp = throughput;

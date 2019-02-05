@@ -61,7 +61,7 @@ ccl_device_noinline bool kernel_split_branched_path_subsurface_indirect_light_it
 		}
 		int num_samples = kernel_data.integrator.subsurface_samples * 3;
 		float num_samples_inv = 1.0f/num_samples;
-		uint bssrdf_rng_hash = cmj_hash(branched_state->path_state.rng_hash, i);
+		uint bssrdf_rng_hash = path_rng_hash(branched_state->path_state.rng_hash, i);
 
 		/* do subsurface scatter step with copy of shader data, this will
 		 * replace the BSSRDF with a diffuse BSDF closure */

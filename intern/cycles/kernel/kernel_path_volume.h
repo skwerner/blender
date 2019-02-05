@@ -159,7 +159,7 @@ ccl_device void kernel_branched_path_volume_connect_light(
 
 			int num_samples = light_select_num_samples(kg, i);
 			float num_samples_inv = 1.0f/(num_samples*kernel_data.integrator.num_all_lights);
-			uint lamp_rng_hash = cmj_hash(state->rng_hash, i);
+			uint lamp_rng_hash = path_rng_hash(state->rng_hash, i);
 
 			for(int j = 0; j < num_samples; j++) {
 				/* sample random position on given light */

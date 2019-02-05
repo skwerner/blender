@@ -77,6 +77,7 @@ DeviceScene::DeviceScene(Device *device)
   shaders(device, "__shaders", MEM_TEXTURE),
   lookup_table(device, "__lookup_table", MEM_TEXTURE),
   sobol_directions(device, "__sobol_directions", MEM_TEXTURE),
+  sobol_dither(device, "__sobol_dither", MEM_TEXTURE),
   ies_lights(device, "__ies", MEM_TEXTURE)
 {
 	memset((void*)&data, 0, sizeof(data));

@@ -261,11 +261,23 @@ void BlenderSync::sync_integrator()
 		}
 	}
 
-	integrator->sampling_pattern = (SamplingPattern)get_enum(
-	        cscene,
-	        "sampling_pattern",
-	        SAMPLING_NUM_PATTERNS,
-	        SAMPLING_PATTERN_SOBOL);
+	int sampling_pattern = get_enum(cscene, "sampling_pattern");
+	switch(sampling_pattern) {
+		case 1: /* Dithered Sobol */
+			integrator->sampling_pattern = SAMPLING_PATTERN_SOBOL;
+			integrator->use_dithered_sampling = true;
+			break;
+		case 2: /* Correlated Multi-Jittered */
+			integrator->sampling_pattern = SAMPLING_PATTERN_CMJ;
+			integrator->use_dithered_sampling = false;
+			break;
+		case 0: /* Sobol */
+		default:
+			integrator->sampling_pattern = SAMPLING_PATTERN_SOBOL;
+			integrator->use_dithered_sampling = false;
+			break;
+	}
+
 	integrator->scrambling_distance = get_float(cscene, "scrambling_distance");
 
 	integrator->sample_clamp_direct = get_float(cscene, "sample_clamp_direct");

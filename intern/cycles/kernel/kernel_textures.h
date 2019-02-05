@@ -77,6 +77,7 @@ KERNEL_TEX(float, __lookup_table)
 
 /* sobol */
 KERNEL_TEX(uint, __sobol_directions)
+KERNEL_TEX(float2, __sobol_dither)
 
 /* image textures */
 KERNEL_TEX(TextureInfo, __texture_info)

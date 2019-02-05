@@ -556,4 +556,17 @@ if(WITH_INTERNATIONAL)
 	add_definitions(-DWITH_INTERNATIONAL)
 endif()
 
+if(WITH_OPENIMAGEDENOISE)
+	add_definitions(-DWITH_OPENIMAGEDENOISE)
+	list(APPEND INC_SYS
+		${OPENIMAGEDENOISE_INCLUDE_DIRS}
+	)
+	list(APPEND SRC
+		nodes/COM_DenoiseNode.h
+		nodes/COM_DenoiseNode.cpp
+		operations/COM_DenoiseOperation.h
+		operations/COM_DenoiseOperation.cpp
+	)
+endif()
+
 blender_add_lib(bf_compositor "${SRC}" "${INC}" "${INC_SYS}")

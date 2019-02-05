@@ -940,6 +940,7 @@ void            ntreeGPUMaterialNodes(struct bNodeTree *ntree, struct GPUMateria
 #define CMP_NODE_CORNERPIN          321
 #define CMP_NODE_SWITCH_VIEW    322
 #define CMP_NODE_CRYPTOMATTE	323
+#define CMP_NODE_DENOISE		324
 
 /* channel toggles */
 #define CMP_CHAN_RGB		1

@@ -53,6 +53,9 @@ extern "C" {
 #include "COM_CropNode.h"
 #include "COM_CryptomatteNode.h"
 #include "COM_DefocusNode.h"
+#ifdef WITH_OPENIMAGEDENOISE
+#  include "COM_DenoiseNode.h"
+#endif
 #include "COM_DespeckleNode.h"
 #include "COM_DifferenceMatteNode.h"
 #include "COM_DilateErodeNode.h"
@@ -127,7 +130,8 @@ bool Converter::is_fast_node(bNode *b_node)
 	         b_node->type == CMP_NODE_MOVIEDISTORTION ||
 	         b_node->type == CMP_NODE_LENSDIST ||
 	         b_node->type == CMP_NODE_DOUBLEEDGEMASK ||
-	         b_node->type == CMP_NODE_DILATEERODE);
++	         b_node->type == CMP_NODE_DILATEERODE ||
++	         b_node->type == CMP_NODE_DENOISE);
 }
 
 Node *Converter::convert(bNode *b_node)
@@ -406,6 +410,11 @@ Node *Converter::convert(bNode *b_node)
 		case CMP_NODE_CRYPTOMATTE:
 			node = new CryptomatteNode(b_node);
 			break;
+#ifdef WITH_OPENIMAGEDENOISE
+		case CMP_NODE_DENOISE:
+			node = new DenoiseNode(b_node);
+			break;
+#endif
 	}
 	return node;
 }

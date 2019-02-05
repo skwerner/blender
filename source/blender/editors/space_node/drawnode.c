@@ -1176,6 +1176,14 @@ static void node_shader_buts_ambient_occlusion(uiLayout *layout, bContext *UNUSE
 	uiItemR(layout, ptr, "inside", 0, NULL, ICON_NONE);
 	uiItemR(layout, ptr, "only_local", 0, NULL, ICON_NONE);
 }
+ 
+static void node_composit_buts_denoise(uiLayout *layout, bContext *UNUSED(C), PointerRNA *ptr)
+{
+	uiItemR(layout, ptr, "use_hdr", 0, NULL, ICON_NONE);
+	uiLayout *col = uiLayoutColumn(layout, false);
+	uiLayoutSetActive(col, RNA_boolean_get(ptr, "use_hdr") == false);
+	uiItemR(col, ptr, "use_srgb", 0, NULL, ICON_NONE);
+}
 
 /* only once called */
 static void node_shader_set_butfunc(bNodeType *ntype)
@@ -2804,6 +2812,10 @@ static void node_composit_set_butfunc(bNodeType *ntype)
 			break;
 		case CMP_NODE_BRIGHTCONTRAST:
 			ntype->draw_buttons = node_composit_buts_brightcontrast;
+			break;
+		case CMP_NODE_DENOISE:
+			ntype->draw_buttons = node_composit_buts_denoise;
+			break;
 	}
 }
 

@@ -923,6 +923,12 @@ typedef struct NodeCryptomatte {
 	int pad;
 } NodeCryptomatte;
 
+typedef struct NodeDenoise {
+	char hdr;
+	char srgb;
+	char pad[6];
+} NodeDenoise;
+
 /* script node mode */
 #define NODE_SCRIPT_INTERNAL		0
 #define NODE_SCRIPT_EXTERNAL		1

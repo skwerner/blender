@@ -288,6 +288,11 @@ if(WITH_COMPOSITOR)
 		../compositor
 	)
 	add_definitions(-DWITH_COMPOSITOR)
+	if(WITH_OPENIMAGEDENOISE)
+		list(APPEND SRC
+			composite/nodes/node_composite_denoise.c
+		)
+	endif()
 endif()
 
 add_definitions(${GL_DEFINITIONS})

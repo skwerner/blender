@@ -635,6 +635,10 @@ if(WITH_CYCLES_EMBREE)
 	endif()
 endif()
 
+if(WITH_OPENIMAGEDENOISE)
+	find_package(OpenImageDenoise REQUIRED)
+endif()
+
 if (WINDOWS_PYTHON_DEBUG)
 	# Include the system scripts in the blender_python_system_scripts project.
 	FILE(GLOB_RECURSE inFiles "${CMAKE_SOURCE_DIR}/release/scripts/*.*" )

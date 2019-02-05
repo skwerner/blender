@@ -21,7 +21,9 @@
 
 #include "COM_DenoiseOperation.h"
 #include "BLI_math.h"
-#include <OpenImageDenoise/oidn.hpp>
+#ifdef WITH_OPENIMAGEDENOISE
+#  include <OpenImageDenoise/oidn.hpp>
+#endif
 #include <iostream>
 
 DenoiseOperation::DenoiseOperation() : SingleThreadedOperation()
@@ -86,7 +88,7 @@ void DenoiseOperation::generateDenoise(float *data, MemoryBuffer *inputTileColor
 	if (!inputBufferColor) {
 		return;
 	}
-
+#ifdef WITH_OPENIMAGEDENOISE
 	oidn::DeviceRef device = oidn::newDevice();
 	device.commit();
 
@@ -110,9 +112,11 @@ void DenoiseOperation::generateDenoise(float *data, MemoryBuffer *inputTileColor
 	filter.execute();
 
 	/* copy the alpha channel, OpenImageDenoise currently only supports RGB */
-	int numPixels = inputTileColor->getWidth() * inputTileColor->getHeight();
-#	pragma omp parallel for
-	for (int i = 0; i < numPixels; ++i) {
+	size_t numPixels = inputTileColor->getWidth() * inputTileColor->getHeight();
+	for (size_t i = 0; i < numPixels; ++i) {
 		data[i * 4 + 3] = inputBufferColor[i * 4 + 3];
 	}
+#else
+	::memcpy(data, inputBufferColor, inputTileColor->getWidth() * inputTileColor->getHeight() * sizeof(float) * 4);
+#endif
 }

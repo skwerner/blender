@@ -3435,9 +3435,7 @@ static void registerCompositNodes(void)
 	register_node_type_cmp_despeckle();
 	register_node_type_cmp_defocus();
 	register_node_type_cmp_sunbeams();
-#ifdef WITH_OPENIMAGEDENOISE
 	register_node_type_cmp_denoise();
-#endif
 
 	register_node_type_cmp_valtorgb();
 	register_node_type_cmp_rgbtobw();

@@ -65,6 +65,7 @@ set(SRC
 	composite/nodes/node_composite_despeckle.c
 	composite/nodes/node_composite_doubleEdgeMask.c
 	composite/nodes/node_composite_defocus.c
+	composite/nodes/node_composite_denoise.c
 	composite/nodes/node_composite_diffMatte.c
 	composite/nodes/node_composite_dilate.c
 	composite/nodes/node_composite_directionalblur.c
@@ -286,11 +287,6 @@ if(WITH_COMPOSITOR)
 		../compositor
 	)
 	add_definitions(-DWITH_COMPOSITOR)
-	if(WITH_OPENIMAGEDENOISE)
-		list(APPEND SRC
-			composite/nodes/node_composite_denoise.c
-		)
-	endif()
 endif()
 
 add_definitions(${GL_DEFINITIONS})

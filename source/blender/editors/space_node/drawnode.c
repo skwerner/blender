@@ -2749,6 +2749,7 @@ static void node_composit_set_butfunc(bNodeType *ntype)
 			break;
 		case CMP_NODE_BRIGHTCONTRAST:
 			ntype->draw_buttons = node_composit_buts_brightcontrast;
+			break;
 		case CMP_NODE_DENOISE:
 			ntype->draw_buttons = node_composit_buts_denoise;
 			break;

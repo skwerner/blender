@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,15 +15,9 @@
  *
  * The Original Code is Copyright (C) 2007 Blender Foundation.
  * All rights reserved.
- *
- *
- * Contributor(s): Blender Foundation
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/windowmanager/intern/wm_init_exit.c
- *  \ingroup wm
+/** \file \ingroup wm
  *
  * Manage initializing resources and correctly shutting down.
  */
@@ -271,8 +263,9 @@ void WM_init(bContext *C, int argc, const char **argv)
 		WM_init_opengl(G_MAIN);
 
 		UI_init();
-		BKE_studiolight_init();
 	}
+
+	BKE_studiolight_init();
 
 	ED_spacemacros_init();
 

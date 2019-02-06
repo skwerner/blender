@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,19 +15,9 @@
  *
  * The Original Code is Copyright (C) 2005 by the Blender Foundation.
  * All rights reserved.
- *
- * Contributor(s): Daniel Dunbar
- *                 Ton Roosendaal,
- *                 Ben Batt,
- *                 Brecht Van Lommel,
- *                 Campbell Barton
- *
- * ***** END GPL LICENSE BLOCK *****
- *
  */
 
-/** \file blender/modifiers/intern/MOD_subsurf.c
- *  \ingroup modifiers
+/** \file \ingroup modifiers
  */
 
 
@@ -75,6 +63,7 @@ static void copyData(const ModifierData *md, ModifierData *target, const int fla
 	modifier_copyData_generic(md, target, flag);
 
 	tsmd->emCache = tsmd->mCache = NULL;
+	tsmd->subdiv = NULL;
 }
 
 static void freeData(ModifierData *md)
@@ -206,6 +195,7 @@ static Mesh *applyModifier(ModifierData *md,
 	if (subdiv_settings.level == 0) {
 		return result;
 	}
+	BKE_subdiv_settings_validate_for_mesh(&subdiv_settings, mesh);
 	Subdiv *subdiv = subdiv_descriptor_ensure(smd, &subdiv_settings, mesh);
 	if (subdiv == NULL) {
 		/* Happens on bad topology, but also on empty input mesh. */

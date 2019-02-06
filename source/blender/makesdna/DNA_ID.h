@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,9 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file DNA_ID.h
- *  \ingroup DNA
+/** \file \ingroup DNA
  *  \brief ID and Library types, which are fundamental for sdna.
  */
 
@@ -39,11 +30,11 @@
 extern "C" {
 #endif
 
-struct Library;
 struct FileData;
-struct ID;
-struct PackedFile;
 struct GPUTexture;
+struct ID;
+struct Library;
+struct PackedFile;
 
 /* Runtime display data */
 struct DrawData;
@@ -306,7 +297,7 @@ enum eIconSizes {
 	ICON_SIZE_ICON = 0,
 	ICON_SIZE_PREVIEW = 1,
 
-	NUM_ICON_SIZES
+	NUM_ICON_SIZES,
 };
 
 /* for PreviewImage->flag */

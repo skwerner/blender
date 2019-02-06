@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,14 +12,9 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * Contributor(s): Willian P. Germano, Campbell Barton
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/python/generic/bgl.c
- *  \ingroup pygen
+/** \file \ingroup pygen
  *
  * This file is the 'bgl' module which wraps OpenGL functions and constants,
  * allowing script writers to make OpenGL calls in their Python scripts.
@@ -43,7 +36,6 @@
 
 
 /* -------------------------------------------------------------------- */
-
 /** \name Local utility defines for wrapping OpenGL
  * \{ */
 
@@ -456,7 +448,6 @@ static int Buffer_ass_subscript(Buffer *self, PyObject *item, PyObject *value);
 
 
 /* -------------------------------------------------------------------- */
-
 /** \name Utility Functions
  * \{ */
 
@@ -512,7 +503,6 @@ static bool compare_dimensions(int ndim, int *dim1, Py_ssize_t *dim2)
 
 
 /* -------------------------------------------------------------------- */
-
 /** \name Buffer API
  * \{ */
 
@@ -587,12 +577,12 @@ static PyObject *Buffer_dimensions(Buffer *self, void *UNUSED(arg))
 static PyMethodDef Buffer_methods[] = {
 	{"to_list", (PyCFunction)Buffer_to_list_recursive, METH_NOARGS,
 	 "return the buffer as a list"},
-	{NULL, NULL, 0, NULL}
+	{NULL, NULL, 0, NULL},
 };
 
 static PyGetSetDef Buffer_getseters[] = {
 	{(char *)"dimensions", (getter)Buffer_dimensions, NULL, NULL, NULL},
-	{NULL, NULL, NULL, NULL, NULL}
+	{NULL, NULL, NULL, NULL, NULL},
 };
 
 
@@ -1055,7 +1045,6 @@ static PyObject *Buffer_repr(Buffer *self)
 
 
 /* -------------------------------------------------------------------- */
-
 /** \name OpenGL API Wrapping
  * \{ */
 
@@ -1336,7 +1325,6 @@ BGL_Wrap(TexImage3DMultisample,     void,      (GLenum, GLsizei, GLenum, GLsizei
 
 
 /* -------------------------------------------------------------------- */
-
 /** \name Module Definition
  * \{ */
 

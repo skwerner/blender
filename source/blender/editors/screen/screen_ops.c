@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,13 +15,9 @@
  *
  * The Original Code is Copyright (C) 2008 Blender Foundation.
  * All rights reserved.
- *
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/screen/screen_ops.c
- *  \ingroup edscr
+/** \file \ingroup edscr
  */
 
 
@@ -709,7 +703,7 @@ static AZone *area_actionzone_refresh_xy(ScrArea *sa, const int xy[2], const boo
 					}
 					else {
 						const int mouse_sq = SQUARE(xy[0] - az->x2) + SQUARE(xy[1] - az->y2);
-						const int spot_sq = SQUARE(AZONESPOT);
+						const int spot_sq = SQUARE(AZONESPOTW);
 						const int fadein_sq = SQUARE(AZONEFADEIN);
 						const int fadeout_sq = SQUARE(AZONEFADEOUT);
 
@@ -916,10 +910,19 @@ static int actionzone_modal(bContext *C, wmOperator *op, const wmEvent *event)
 			const int delta_x = (event->x - sad->x);
 			const int delta_y = (event->y - sad->y);
 
-			/* calculate gesture direction */
+			/* Movement in dominant direction. */
+			const int delta_max = max_ii(ABS(delta_x), ABS(delta_y));
+			/* Movement in secondary direction. */
+			const int delta_min = min_ii(ABS(delta_x), ABS(delta_y));
+			/* Movement required in dominant direction. */
+			const int delta_threshold = (0.2 * U.widget_unit);
+			/* Must be over threshold and 2:1 ratio or more. */
+			const int delta_okay = (delta_max > delta_threshold) && (delta_min * 2 <= delta_max);
+
+			/* Calculate gesture cardinal direction. */
 			if (delta_y > ABS(delta_x))
 				sad->gesture_dir = 'n';
-			else if (delta_x > ABS(delta_y))
+			else if (delta_x >= ABS(delta_y))
 				sad->gesture_dir = 'e';
 			else if (delta_y < -ABS(delta_x))
 				sad->gesture_dir = 's';
@@ -933,13 +936,12 @@ static int actionzone_modal(bContext *C, wmOperator *op, const wmEvent *event)
 				WM_window_screen_rect_calc(win, &screen_rect);
 				/* once we drag outside the actionzone, register a gesture
 				 * check we're not on an edge so join finds the other area */
-				is_gesture = ((ED_area_actionzone_find_xy(sad->sa1, &event->x) != sad->az) &&
+				is_gesture = (delta_okay && (ED_area_actionzone_find_xy(sad->sa1, &event->x) != sad->az) &&
 				              (screen_geom_area_map_find_active_scredge(
 				                   AREAMAP_FROM_SCREEN(sc), &screen_rect, event->x, event->y) == NULL));
 			}
 			else {
-				const int delta_min = 1;
-				is_gesture = (ABS(delta_x) > delta_min || ABS(delta_y) > delta_min);
+				is_gesture = delta_okay;
 			}
 
 			/* gesture is large enough? */
@@ -1272,7 +1274,7 @@ static void area_move_set_limits(
 			int size_min = ED_area_global_min_size_y(area) - 1;
 			int size_max = ED_area_global_max_size_y(area) - 1;
 
-			size_min = MAX2(size_min, 0);
+			size_min = max_ii(size_min, 0);
 			BLI_assert(size_min < size_max);
 
 			/* logic here is only tested for lower edge :) */
@@ -2183,7 +2185,7 @@ static int area_split_modal(bContext *C, wmOperator *op, const wmEvent *event)
 static const EnumPropertyItem prop_direction_items[] = {
 	{'h', "HORIZONTAL", 0, "Horizontal", ""},
 	{'v', "VERTICAL", 0, "Vertical", ""},
-	{0, NULL, 0, NULL, NULL}
+	{0, NULL, 0, NULL, NULL},
 };
 
 static void SCREEN_OT_area_split(wmOperatorType *ot)
@@ -3351,7 +3353,7 @@ static int repeat_last_exec(bContext *C, wmOperator *UNUSED(op))
 
 	if (lastop) {
 		WM_operator_free_all_after(wm, lastop);
-		WM_operator_repeat(C, lastop);
+		WM_operator_repeat_interactive(C, lastop);
 	}
 
 	return OPERATOR_CANCELLED;
@@ -4697,6 +4699,12 @@ static void SCREEN_OT_region_blend(wmOperatorType *ot)
 /** \name Space Type Set or Cycle Operator
  * \{ */
 
+static bool space_type_set_or_cycle_poll(bContext *C)
+{
+	ScrArea *sa = CTX_wm_area(C);
+	return (sa && !ELEM(sa->spacetype, SPACE_TOPBAR, SPACE_STATUSBAR));
+}
+
 static int space_type_set_or_cycle_exec(bContext *C, wmOperator *op)
 {
 	const int space_type = RNA_enum_get(op->ptr, "space_type");
@@ -4745,7 +4753,7 @@ static void SCREEN_OT_space_type_set_or_cycle(wmOperatorType *ot)
 
 	/* api callbacks */
 	ot->exec = space_type_set_or_cycle_exec;
-	ot->poll = ED_operator_areaactive;
+	ot->poll = space_type_set_or_cycle_poll;
 
 	ot->flag = 0;
 
@@ -4762,7 +4770,7 @@ static void SCREEN_OT_space_type_set_or_cycle(wmOperatorType *ot)
 static const EnumPropertyItem space_context_cycle_direction[] = {
 	{SPACE_CONTEXT_CYCLE_PREV, "PREV", 0, "Previous", ""},
 	{SPACE_CONTEXT_CYCLE_NEXT, "NEXT", 0, "Next", ""},
-	{0, NULL, 0, NULL, NULL}
+	{0, NULL, 0, NULL, NULL},
 };
 
 static bool space_context_cycle_poll(bContext *C)
@@ -4978,7 +4986,8 @@ static void keymap_modal_set(wmKeyConfig *keyconf)
 		{KM_MODAL_APPLY, "APPLY", 0, "Apply", ""},
 		{KM_MODAL_SNAP_ON, "SNAP", 0, "Snap on", ""},
 		{KM_MODAL_SNAP_OFF, "SNAP_OFF", 0, "Snap off", ""},
-		{0, NULL, 0, NULL, NULL}};
+		{0, NULL, 0, NULL, NULL},
+	};
 	wmKeyMap *keymap;
 
 	/* Standard Modal keymap ------------------------------------------------ */

@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,9 @@
  *
  * The Original Code is Copyright (C) 2009 Blender Foundation, Joshua Leung
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): Joshua Leung (full recode)
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/blenkernel/intern/anim_sys.c
- *  \ingroup bke
+/** \file \ingroup bke
  */
 
 
@@ -79,6 +70,10 @@
 #include "nla_private.h"
 
 #include "atomic_ops.h"
+
+#include "CLG_log.h"
+
+static CLG_LogRef LOG = {"bke.anim_sys"};
 
 /* ***************************************** */
 /* AnimData API */
@@ -288,8 +283,8 @@ AnimData *BKE_animdata_copy(Main *bmain, AnimData *adt, const int flag)
 	/* make a copy of action - at worst, user has to delete copies... */
 	if (do_action) {
 		BLI_assert(bmain != NULL);
-		BKE_id_copy_ex(bmain, (ID *)dadt->action, (ID **)&dadt->action, 0, false);
-		BKE_id_copy_ex(bmain, (ID *)dadt->tmpact, (ID **)&dadt->tmpact, 0, false);
+		BKE_id_copy(bmain, (ID *)dadt->action, (ID **)&dadt->action);
+		BKE_id_copy(bmain, (ID *)dadt->tmpact, (ID **)&dadt->tmpact);
 	}
 	else if (do_id_user) {
 		id_us_plus((ID *)dadt->action);
@@ -363,7 +358,7 @@ void BKE_animdata_merge_copy(
 
 	// TODO: we must unset all "tweakmode" flags
 	if ((src->flag & ADT_NLA_EDIT_ON) || (dst->flag & ADT_NLA_EDIT_ON)) {
-		printf("ERROR: Merging AnimData blocks while editing NLA is dangerous as it may cause data corruption\n");
+		CLOG_ERROR(&LOG, "Merging AnimData blocks while editing NLA is dangerous as it may cause data corruption");
 		return;
 	}
 
@@ -450,8 +445,8 @@ void action_move_fcurves_by_basepath(bAction *srcAct, bAction *dstAct, const cha
 	/* sanity checks */
 	if (ELEM(NULL, srcAct, dstAct, basepath)) {
 		if (G.debug & G_DEBUG) {
-			printf("ERROR: action_partition_fcurves_by_basepath(%p, %p, %p) has insufficient info to work with\n",
-			       (void *)srcAct, (void *)dstAct, (void *)basepath);
+			CLOG_ERROR(&LOG, "srcAct: %p, dstAct: %p, basepath: %p has insufficient info to work with",
+			           (void *)srcAct, (void *)dstAct, (void *)basepath);
 		}
 		return;
 	}
@@ -532,7 +527,7 @@ void BKE_animdata_separate_by_basepath(
 	/* sanity checks */
 	if (ELEM(NULL, srcID, dstID)) {
 		if (G.debug & G_DEBUG)
-			printf("ERROR: no source or destination ID to separate AnimData with\n");
+			CLOG_ERROR(&LOG, "no source or destination ID to separate AnimData with");
 		return;
 	}
 
@@ -542,7 +537,7 @@ void BKE_animdata_separate_by_basepath(
 
 	if (ELEM(NULL, srcAdt, dstAdt)) {
 		if (G.debug & G_DEBUG)
-			printf("ERROR: no AnimData for this pair of ID's\n");
+			CLOG_ERROR(&LOG, "no AnimData for this pair of ID's");
 		return;
 	}
 
@@ -553,8 +548,9 @@ void BKE_animdata_separate_by_basepath(
 			dstAdt->action = BKE_action_add(bmain, srcAdt->action->id.name + 2);
 		}
 		else if (dstAdt->action == srcAdt->action) {
-			printf("Argh! Source and Destination share animation! ('%s' and '%s' both use '%s') Making new empty action\n",
-			       srcID->name, dstID->name, srcAdt->action->id.name);
+			CLOG_WARN(&LOG, "Argh! Source and Destination share animation! "
+			          "('%s' and '%s' both use '%s') Making new empty action",
+			          srcID->name, dstID->name, srcAdt->action->id.name);
 
 			/* TODO: review this... */
 			id_us_min(&dstAdt->action->id);
@@ -709,90 +705,97 @@ static char *rna_path_rename_fix(ID *owner_id, const char *prefix, const char *o
 }
 
 /* Check RNA-Paths for a list of F-Curves */
-static void fcurves_path_rename_fix(ID *owner_id, const char *prefix, const char *oldName, const char *newName,
+static bool fcurves_path_rename_fix(ID *owner_id, const char *prefix, const char *oldName, const char *newName,
                                     const char *oldKey, const char *newKey, ListBase *curves, bool verify_paths)
 {
 	FCurve *fcu;
-
-	/* we need to check every curve... */
+	bool is_changed = false;
+	/* We need to check every curve. */
 	for (fcu = curves->first; fcu; fcu = fcu->next) {
-		if (fcu->rna_path) {
-			const char *old_path = fcu->rna_path;
-
-			/* firstly, handle the F-Curve's own path */
-			fcu->rna_path = rna_path_rename_fix(owner_id, prefix, oldKey, newKey, fcu->rna_path, verify_paths);
-
-			/* if path changed and the F-Curve is grouped, check if its group also needs renaming
-			 * (i.e. F-Curve is first of a bone's F-Curves; hence renaming this should also trigger rename)
-			 */
-			if (fcu->rna_path != old_path) {
-				bActionGroup *agrp = fcu->grp;
-
-				if ((agrp) && STREQ(oldName, agrp->name)) {
-					BLI_strncpy(agrp->name, newName, sizeof(agrp->name));
-				}
+		if (fcu->rna_path == NULL) {
+			continue;
+		}
+		const char *old_path = fcu->rna_path;
+		/* Firstly, handle the F-Curve's own path. */
+		fcu->rna_path = rna_path_rename_fix(owner_id, prefix, oldKey, newKey, fcu->rna_path, verify_paths);
+		/* if path changed and the F-Curve is grouped, check if its group also needs renaming
+		 * (i.e. F-Curve is first of a bone's F-Curves; hence renaming this should also trigger rename) */
+		if (fcu->rna_path != old_path) {
+			bActionGroup *agrp = fcu->grp;
+			is_changed = true;
+			if ((agrp != NULL) && STREQ(oldName, agrp->name)) {
+				BLI_strncpy(agrp->name, newName, sizeof(agrp->name));
 			}
 		}
 	}
+	return is_changed;
 }
 
 /* Check RNA-Paths for a list of Drivers */
-static void drivers_path_rename_fix(ID *owner_id, ID *ref_id, const char *prefix, const char *oldName, const char *newName,
+static bool drivers_path_rename_fix(ID *owner_id, ID *ref_id, const char *prefix, const char *oldName, const char *newName,
                                     const char *oldKey, const char *newKey, ListBase *curves, bool verify_paths)
 {
+	bool is_changed = false;
 	FCurve *fcu;
-
-	/* we need to check every curve - drivers are F-Curves too! */
+	/* We need to check every curve - drivers are F-Curves too. */
 	for (fcu = curves->first; fcu; fcu = fcu->next) {
 		/* firstly, handle the F-Curve's own path */
-		if (fcu->rna_path)
+		if (fcu->rna_path != NULL) {
+			const char *old_rna_path = fcu->rna_path;
 			fcu->rna_path = rna_path_rename_fix(owner_id, prefix, oldKey, newKey, fcu->rna_path, verify_paths);
-
-		/* driver? */
-		if (fcu->driver) {
-			ChannelDriver *driver = fcu->driver;
-			DriverVar *dvar;
-
-			/* driver variables */
-			for (dvar = driver->variables.first; dvar; dvar = dvar->next) {
-				/* only change the used targets, since the others will need fixing manually anyway */
-				DRIVER_TARGETS_USED_LOOPER_BEGIN(dvar)
-				{
-					/* rename RNA path */
-					if (dtar->rna_path && dtar->id)
-						dtar->rna_path = rna_path_rename_fix(dtar->id, prefix, oldKey, newKey, dtar->rna_path, verify_paths);
-
-					/* also fix the bone-name (if applicable) */
-					if (strstr(prefix, "bones")) {
-						if ( ((dtar->id) && (GS(dtar->id->name) == ID_OB) && (!ref_id || ((Object *)(dtar->id))->data == ref_id)) &&
-						     (dtar->pchan_name[0]) && STREQ(oldName, dtar->pchan_name) )
-						{
-							BLI_strncpy(dtar->pchan_name, newName, sizeof(dtar->pchan_name));
-						}
+			is_changed |= (fcu->rna_path != old_rna_path);
+		}
+		if (fcu->driver == NULL) {
+			continue;
+		}
+		ChannelDriver *driver = fcu->driver;
+		DriverVar *dvar;
+		/* driver variables */
+		for (dvar = driver->variables.first; dvar; dvar = dvar->next) {
+			/* only change the used targets, since the others will need fixing manually anyway */
+			DRIVER_TARGETS_USED_LOOPER_BEGIN(dvar)
+			{
+				/* rename RNA path */
+				if (dtar->rna_path && dtar->id) {
+					const char *old_rna_path = dtar->rna_path;
+					dtar->rna_path = rna_path_rename_fix(dtar->id, prefix, oldKey, newKey, dtar->rna_path, verify_paths);
+					is_changed |= (dtar->rna_path != old_rna_path);
+				}
+				/* also fix the bone-name (if applicable) */
+				if (strstr(prefix, "bones")) {
+					if ( ((dtar->id) && (GS(dtar->id->name) == ID_OB) && (!ref_id || ((Object *)(dtar->id))->data == ref_id)) &&
+					     (dtar->pchan_name[0]) && STREQ(oldName, dtar->pchan_name) )
+					{
+						is_changed = true;
+						BLI_strncpy(dtar->pchan_name, newName, sizeof(dtar->pchan_name));
 					}
 				}
-				DRIVER_TARGETS_LOOPER_END;
 			}
+			DRIVER_TARGETS_LOOPER_END;
 		}
 	}
+	return is_changed;
 }
 
 /* Fix all RNA-Paths for Actions linked to NLA Strips */
-static void nlastrips_path_rename_fix(ID *owner_id, const char *prefix, const char *oldName, const char *newName,
+static bool nlastrips_path_rename_fix(ID *owner_id, const char *prefix, const char *oldName, const char *newName,
                                       const char *oldKey, const char *newKey, ListBase *strips, bool verify_paths)
 {
 	NlaStrip *strip;
-
-	/* recursively check strips, fixing only actions... */
+	bool is_changed = false;
+	/* Recursively check strips, fixing only actions. */
 	for (strip = strips->first; strip; strip = strip->next) {
 		/* fix strip's action */
-		if (strip->act)
-			fcurves_path_rename_fix(owner_id, prefix, oldName, newName, oldKey, newKey, &strip->act->curves, verify_paths);
-		/* ignore own F-Curves, since those are local...  */
-
-		/* check sub-strips (if metas) */
-		nlastrips_path_rename_fix(owner_id, prefix, oldName, newName, oldKey, newKey, &strip->strips, verify_paths);
+		if (strip->act != NULL) {
+			is_changed |= fcurves_path_rename_fix(
+			        owner_id, prefix, oldName, newName, oldKey, newKey, &strip->act->curves, verify_paths);
+		}
+		/* Ignore own F-Curves, since those are local.  */
+		/* Check sub-strips (if metas) */
+		is_changed |= nlastrips_path_rename_fix(
+		        owner_id, prefix, oldName, newName, oldKey, newKey, &strip->strips, verify_paths);
 	}
+	return is_changed;
 }
 
 /* Rename Sub-ID Entities in RNA Paths ----------------------- */
@@ -813,7 +816,7 @@ char *BKE_animsys_fix_rna_path_rename(ID *owner_id, char *old_path, const char *
 
 	/* if no action, no need to proceed */
 	if (ELEM(NULL, owner_id, old_path)) {
-		if (G.debug & G_DEBUG) printf("%s: early abort\n", __func__);
+		if (G.debug & G_DEBUG) CLOG_WARN(&LOG, "early abort");
 		return old_path;
 	}
 
@@ -900,14 +903,14 @@ void BKE_animdata_fix_paths_rename(ID *owner_id, AnimData *adt, ID *ref_id, cons
 {
 	NlaTrack *nlt;
 	char *oldN, *newN;
-
-	/* if no AnimData, no need to proceed */
-	if (ELEM(NULL, owner_id, adt))
+	/* If no AnimData, no need to proceed. */
+	if (ELEM(NULL, owner_id, adt)) {
 		return;
-
-	/* Name sanitation logic - shared with BKE_action_fix_paths_rename() */
+	}
+	bool is_self_changed = false;
+	/* Name sanitation logic - shared with BKE_action_fix_paths_rename(). */
 	if ((oldName != NULL) && (newName != NULL)) {
-		/* pad the names with [" "] so that only exact matches are made */
+		/* Pad the names with [" "] so that only exact matches are made. */
 		const size_t name_old_len = strlen(oldName);
 		const size_t name_new_len = strlen(newName);
 		char *name_old_esc = BLI_array_alloca(name_old_esc, (name_old_len * 2) + 1);
@@ -922,20 +925,33 @@ void BKE_animdata_fix_paths_rename(ID *owner_id, AnimData *adt, ID *ref_id, cons
 		oldN = BLI_sprintfN("[%d]", oldSubscript);
 		newN = BLI_sprintfN("[%d]", newSubscript);
 	}
-
-	/* Active action and temp action */
-	if (adt->action)
-		fcurves_path_rename_fix(owner_id, prefix, oldName, newName, oldN, newN, &adt->action->curves, verify_paths);
-	if (adt->tmpact)
-		fcurves_path_rename_fix(owner_id, prefix, oldName, newName, oldN, newN, &adt->tmpact->curves, verify_paths);
-
+	/* Active action and temp action. */
+	if (adt->action != NULL) {
+		if (fcurves_path_rename_fix(owner_id, prefix, oldName, newName,
+		                            oldN, newN, &adt->action->curves, verify_paths))
+		{
+			DEG_id_tag_update(&adt->action->id, ID_RECALC_COPY_ON_WRITE);
+		}
+	}
+	if (adt->tmpact) {
+		if (fcurves_path_rename_fix(owner_id, prefix, oldName, newName,
+		                            oldN, newN, &adt->tmpact->curves, verify_paths))
+		{
+			DEG_id_tag_update(&adt->tmpact->id, ID_RECALC_COPY_ON_WRITE);
+		}
+	}
 	/* Drivers - Drivers are really F-Curves */
-	drivers_path_rename_fix(owner_id, ref_id, prefix, oldName, newName, oldN, newN, &adt->drivers, verify_paths);
-
+	is_self_changed |= drivers_path_rename_fix(
+	         owner_id, ref_id, prefix, oldName, newName, oldN, newN, &adt->drivers, verify_paths);
 	/* NLA Data - Animation Data for Strips */
-	for (nlt = adt->nla_tracks.first; nlt; nlt = nlt->next)
-		nlastrips_path_rename_fix(owner_id, prefix, oldName, newName, oldN, newN, &nlt->strips, verify_paths);
-
+	for (nlt = adt->nla_tracks.first; nlt; nlt = nlt->next) {
+		is_self_changed |= nlastrips_path_rename_fix(
+		        owner_id, prefix, oldName, newName, oldN, newN, &nlt->strips, verify_paths);
+	}
+	/* Tag owner ID if it */
+	if (is_self_changed) {
+		DEG_id_tag_update(owner_id, ID_RECALC_COPY_ON_WRITE);
+	}
 	/* free the temp names */
 	MEM_freeN(oldN);
 	MEM_freeN(newN);
@@ -1357,20 +1373,20 @@ KS_Path *BKE_keyingset_add_path(KeyingSet *ks, ID *id, const char group_name[], 
 
 	/* sanity checks */
 	if (ELEM(NULL, ks, rna_path)) {
-		printf("ERROR: no Keying Set and/or RNA Path to add path with\n");
+		CLOG_ERROR(&LOG, "no Keying Set and/or RNA Path to add path with");
 		return NULL;
 	}
 
 	/* ID is required for all types of KeyingSets */
 	if (id == NULL) {
-		printf("ERROR: No ID provided for Keying Set Path\n");
+		CLOG_ERROR(&LOG, "No ID provided for Keying Set Path");
 		return NULL;
 	}
 
 	/* don't add if there is already a matching KS_Path in the KeyingSet */
 	if (BKE_keyingset_find_path(ks, id, group_name, rna_path, array_index, groupmode)) {
 		if (G.debug & G_DEBUG)
-			printf("ERROR: destination already exists in Keying Set\n");
+			CLOG_ERROR(&LOG, "destination already exists in Keying Set");
 		return NULL;
 	}
 
@@ -1493,9 +1509,9 @@ static bool animsys_store_rna_setting(
 
 				if (array_len && array_index >= array_len) {
 					if (G.debug & G_DEBUG) {
-						printf("Animato: Invalid array index. ID = '%s',  '%s[%d]', array length is %d\n",
-						       (ptr->id.data) ? (((ID *)ptr->id.data)->name + 2) : "<No ID>",
-						       path, array_index, array_len - 1);
+						CLOG_WARN(&LOG, "Animato: Invalid array index. ID = '%s',  '%s[%d]', array length is %d",
+						          (ptr->id.data) ? (((ID *)ptr->id.data)->name + 2) : "<No ID>",
+						          path, array_index, array_len - 1);
 					}
 				}
 				else {
@@ -1509,9 +1525,9 @@ static bool animsys_store_rna_setting(
 			/* XXX don't tag as failed yet though, as there are some legit situations (Action Constraint)
 			 * where some channels will not exist, but shouldn't lock up Action */
 			if (G.debug & G_DEBUG) {
-				printf("Animato: Invalid path. ID = '%s',  '%s[%d]'\n",
-				       (ptr->id.data) ? (((ID *)ptr->id.data)->name + 2) : "<No ID>",
-				       path, array_index);
+				CLOG_WARN(&LOG, "Animato: Invalid path. ID = '%s',  '%s[%d]'",
+				          (ptr->id.data) ? (((ID *)ptr->id.data)->name + 2) : "<No ID>",
+				          path, array_index);
 			}
 		}
 	}
@@ -1744,7 +1760,7 @@ static void animsys_evaluate_drivers(PointerRNA *ptr, AnimData *adt, float ctime
 		if ((fcu->flag & (FCURVE_MUTED | FCURVE_DISABLED)) == 0) {
 			/* check if driver itself is tagged for recalculation */
 			/* XXX driver recalc flag is not set yet by depsgraph! */
-			if ((driver) && !(driver->flag & DRIVER_FLAG_INVALID) /*&& (driver->flag & DRIVER_FLAG_RECALC)*/) {
+			if ((driver) && !(driver->flag & DRIVER_FLAG_INVALID)) {
 				/* evaluate this using values set already in other places
 				 * NOTE: for 'layering' option later on, we should check if we should remove old value before adding
 				 *       new to only be done when drivers only changed */
@@ -1754,9 +1770,6 @@ static void animsys_evaluate_drivers(PointerRNA *ptr, AnimData *adt, float ctime
 					const float curval = calculate_fcurve(&anim_rna, fcu, ctime);
 					ok = animsys_write_rna_setting(&anim_rna, curval);
 				}
-
-				/* clear recalc flag */
-				driver->flag &= ~DRIVER_FLAG_RECALC;
 
 				/* set error-flag if evaluation failed */
 				if (ok == 0)
@@ -2410,8 +2423,8 @@ static NlaEvalChannel *nlaevalchan_verify(PointerRNA *ptr, NlaEvalData *nlaeval,
 	if (!RNA_path_resolve_property(ptr, path, &key.ptr, &key.prop)) {
 		/* Report failure to resolve the path. */
 		if (G.debug & G_DEBUG) {
-			printf("Animato: Invalid path. ID = '%s',  '%s'\n",
-			       (ptr->id.data) ? (((ID *)ptr->id.data)->name + 2) : "<No ID>", path);
+			CLOG_WARN(&LOG, "Animato: Invalid path. ID = '%s',  '%s'",
+			          (ptr->id.data) ? (((ID *)ptr->id.data)->name + 2) : "<No ID>", path);
 		}
 
 		/* Cache NULL result. */
@@ -2632,8 +2645,8 @@ static bool nlaeval_blend_value(NlaBlendData *blend, NlaEvalChannel *nec, int ar
 	if (index < 0) {
 		if (G.debug & G_DEBUG) {
 			ID *id = nec->key.ptr.id.data;
-			printf("Animato: Invalid array index. ID = '%s',  '%s[%d]', array length is %d\n",
-			       id ? (id->name + 2) : "<No ID>", nec->rna_path, array_index, nec->base_snapshot.length);
+			CLOG_WARN(&LOG, "Animato: Invalid array index. ID = '%s',  '%s[%d]', array length is %d",
+    		          id ? (id->name + 2) : "<No ID>", nec->rna_path, array_index, nec->base_snapshot.length);
 		}
 
 		return false;
@@ -2807,7 +2820,7 @@ static void nlastrip_evaluate_actionclip(PointerRNA *ptr, NlaEvalData *channels,
 		return;
 
 	if (strip->act == NULL) {
-		printf("NLA-Strip Eval Error: Strip '%s' has no Action\n", strip->name);
+		CLOG_ERROR(&LOG, "NLA-Strip Eval Error: Strip '%s' has no Action", strip->name);
 		return;
 	}
 
@@ -3266,7 +3279,7 @@ static void animsys_calculate_nla(Depsgraph *depsgraph, PointerRNA *ptr, AnimDat
 	else {
 		/* special case - evaluate as if there isn't any NLA data */
 		/* TODO: this is really just a stop-gap measure... */
-		if (G.debug & G_DEBUG) printf("NLA Eval: Stopgap for active action on NLA Stack - no strips case\n");
+		if (G.debug & G_DEBUG) CLOG_WARN(&LOG, "NLA Eval: Stopgap for active action on NLA Stack - no strips case");
 
 		animsys_evaluate_action(depsgraph, ptr, adt->action, ctime);
 	}
@@ -3493,7 +3506,7 @@ void BKE_animsys_evaluate_animdata(Depsgraph *depsgraph, Scene *scene, ID *id, A
 	 *   that overrides 'rough' work in NLA
 	 */
 	/* TODO: need to double check that this all works correctly */
-	if ((recalc & ADT_RECALC_ANIM) || (adt->recalc & ADT_RECALC_ANIM)) {
+	if (recalc & ADT_RECALC_ANIM) {
 		/* evaluate NLA data */
 		if ((adt->nla_tracks.first) && !(adt->flag & ADT_NLA_EVAL_OFF)) {
 			/* evaluate NLA-stack
@@ -3504,9 +3517,6 @@ void BKE_animsys_evaluate_animdata(Depsgraph *depsgraph, Scene *scene, ID *id, A
 		/* evaluate Active Action only */
 		else if (adt->action)
 			animsys_evaluate_action_ex(depsgraph, &id_ptr, adt->action, ctime);
-
-		/* reset tag */
-		adt->recalc &= ~ADT_RECALC_ANIM;
 	}
 
 	/* recalculate drivers
@@ -3514,10 +3524,7 @@ void BKE_animsys_evaluate_animdata(Depsgraph *depsgraph, Scene *scene, ID *id, A
 	 *   or be layered on top of existing animation data.
 	 * - Drivers should be in the appropriate order to be evaluated without problems...
 	 */
-	if ((recalc & ADT_RECALC_DRIVERS)
-	    /* XXX for now, don't check yet, as depsgraph hasn't been updated */
-	    /* && (adt->recalc & ADT_RECALC_DRIVERS)*/)
-	{
+	if (recalc & ADT_RECALC_DRIVERS) {
 		animsys_evaluate_drivers(&id_ptr, adt, ctime);
 	}
 
@@ -3535,9 +3542,6 @@ void BKE_animsys_evaluate_animdata(Depsgraph *depsgraph, Scene *scene, ID *id, A
 		RNA_property_update_cache_flush(bmain, scene);
 		RNA_property_update_cache_free();
 	}
-
-	/* clear recalc flag now */
-	adt->recalc = 0;
 }
 
 /* Evaluation of all ID-blocks with Animation Data blocks - Animation Data Only
@@ -3685,8 +3689,7 @@ void BKE_animsys_eval_animdata(Depsgraph *depsgraph, ID *id)
 	                      * which should get handled as part of the dependency graph instead...
 	                      */
 	DEG_debug_print_eval_time(depsgraph, __func__, id->name, id, ctime);
-	short recalc = ADT_RECALC_ANIM;
-	BKE_animsys_evaluate_animdata(depsgraph, scene, id, adt, ctime, recalc);
+	BKE_animsys_evaluate_animdata(depsgraph, scene, id, adt, ctime, ADT_RECALC_ANIM);
 }
 
 void BKE_animsys_update_driver_array(ID *id)
@@ -3738,7 +3741,7 @@ void BKE_animsys_eval_driver(Depsgraph *depsgraph,
 	if ((fcu->flag & (FCURVE_MUTED | FCURVE_DISABLED)) == 0) {
 		/* check if driver itself is tagged for recalculation */
 		/* XXX driver recalc flag is not set yet by depsgraph! */
-		if ((driver_orig) && !(driver_orig->flag & DRIVER_FLAG_INVALID) /*&& (driver_orig->flag & DRIVER_FLAG_RECALC)*/) {
+		if ((driver_orig) && !(driver_orig->flag & DRIVER_FLAG_INVALID)) {
 			/* evaluate this using values set already in other places
 			 * NOTE: for 'layering' option later on, we should check if we should remove old value before adding
 			 *       new to only be done when drivers only changed */
@@ -3777,14 +3780,9 @@ void BKE_animsys_eval_driver(Depsgraph *depsgraph,
 				}
 			}
 
-			//printf("\tnew val = %f\n", fcu->curval);
-
-			/* clear recalc flag */
-			driver_orig->flag &= ~DRIVER_FLAG_RECALC;
-
 			/* set error-flag if evaluation failed */
 			if (ok == 0) {
-				printf("invalid driver - %s[%d]\n", fcu->rna_path, fcu->array_index);
+				CLOG_ERROR(&LOG, "invalid driver - %s[%d]", fcu->rna_path, fcu->array_index);
 				driver_orig->flag |= DRIVER_FLAG_INVALID;
 			}
 		}

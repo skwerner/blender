@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,14 +15,9 @@
  *
  * The Original Code is Copyright (C) 2018 by Blender Foundation.
  * All rights reserved.
- *
- * Contributor(s): Sergey Sharybin.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/blenkernel/intern/subdiv_foreach.c
- *  \ingroup bke
+/** \file \ingroup bke
  */
 
 #include "BKE_subdiv_foreach.h"
@@ -35,9 +28,7 @@
 #include "DNA_meshdata_types.h"
 #include "DNA_key_types.h"
 
-#include "BLI_alloca.h"
 #include "BLI_bitmap.h"
-#include "BLI_math_vector.h"
 #include "BLI_task.h"
 
 #include "BKE_mesh.h"

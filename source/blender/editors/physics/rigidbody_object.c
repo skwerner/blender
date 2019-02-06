@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,9 @@
  *
  * The Original Code is Copyright (C) 2013 Blender Foundation
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): Joshua Leung, Sergej Reich
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file rigidbody_object.c
- *  \ingroup editor_physics
+/** \file \ingroup editor_physics
  *  \brief Rigid Body object editing operators
  */
 
@@ -447,7 +438,7 @@ static rbMaterialDensityItem RB_MATERIAL_DENSITY_TABLE[] = {
 	{N_("Steel"), 7860.0f},
 	{N_("Stone"), 2515.0f},
 	{N_("Stone (Crushed)"), 1602.0f},
-	{N_("Timber"), 610.0f}
+	{N_("Timber"), 610.0f},
 };
 static const int NUM_RB_MATERIAL_PRESETS = sizeof(RB_MATERIAL_DENSITY_TABLE) / sizeof(rbMaterialDensityItem);
 

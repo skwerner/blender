@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,14 +15,9 @@
  *
  * The Original Code is Copyright (C) 2008/2018, Blender Foundation
  * This is a new part of Blender
- *
- * Contributor(s): Joshua Leung
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/gpencil/annotate_paint.c
- *  \ingroup edgpencil
+/** \file \ingroup edgpencil
  */
 
 
@@ -67,7 +60,6 @@
 #include "ED_view3d.h"
 #include "ED_clip.h"
 
-#include "BIF_glutil.h"
 
 #include "GPU_immediate.h"
 #include "GPU_immediate_util.h"
@@ -1912,6 +1904,11 @@ static int gpencil_draw_invoke(bContext *C, wmOperator *op, const wmEvent *event
 	Scene *scene = CTX_data_scene(C);
 	tGPsdata *p = NULL;
 
+	/* support for tablets eraser pen */
+	if (gpencil_is_tablet_eraser_active(event)) {
+		RNA_enum_set(op->ptr, "mode", GP_PAINTMODE_ERASER);
+	}
+
 	/* if try to do annotations with a gp object selected, first
 	 * unselect the object to avoid conflicts.
 	 * The solution is not perfect but we can keep running the annotations while
@@ -2342,7 +2339,7 @@ static const EnumPropertyItem prop_gpencil_drawmodes[] = {
 	{GP_PAINTMODE_DRAW_STRAIGHT, "DRAW_STRAIGHT", 0, "Draw Straight Lines", "Draw straight line segment(s)"},
 	{GP_PAINTMODE_DRAW_POLY, "DRAW_POLY", 0, "Draw Poly Line", "Click to place endpoints of straight line segments (connected)"},
 	{GP_PAINTMODE_ERASER, "ERASER", 0, "Eraser", "Erase Annotation strokes"},
-	{0, NULL, 0, NULL, NULL}
+	{0, NULL, 0, NULL, NULL},
 };
 
 void GPENCIL_OT_annotate(wmOperatorType *ot)

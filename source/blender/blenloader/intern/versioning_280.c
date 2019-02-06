@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,15 +12,9 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * Contributor(s): Dalai Felinto
- *
- * ***** END GPL LICENSE BLOCK *****
- *
  */
 
-/** \file blender/blenloader/intern/versioning_280.c
- *  \ingroup blenloader
+/** \file \ingroup blenloader
  */
 
 /* allow readfile to use deprecated functionality */
@@ -35,7 +27,6 @@
 #include "BLI_math.h"
 #include "BLI_mempool.h"
 #include "BLI_string.h"
-#include "BLI_string_utf8.h"
 #include "BLI_utildefines.h"
 
 #include "DNA_object_types.h"
@@ -2784,7 +2775,18 @@ void blo_do_versions_280(FileData *fd, Library *UNUSED(lib), Main *bmain)
 		}
 	}
 
+	if (!MAIN_VERSION_ATLEAST(bmain, 280, 43)) {
+		ListBase *lb = which_libbase(bmain, ID_BR);
+		BKE_main_id_repair_duplicate_names_listbase(lb);
+	}
+
 	{
 		/* Versioning code until next subversion bump goes here. */
+
+		if (!DNA_struct_elem_find(fd->filesdna, "Material", "float", "a")) {
+			for (Material *mat = bmain->mat.first; mat; mat = mat->id.next) {
+				mat->a = 1.0f;
+			}
+		}
 	}
 }

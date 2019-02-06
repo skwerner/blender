@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,15 +15,9 @@
  *
  * The Original Code is Copyright (C) 2009 Blender Foundation.
  * All rights reserved.
- *
- *
- * Contributor(s): Blender Foundation
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/blenfont/intern/blf_font.c
- *  \ingroup blf
+/** \file \ingroup blf
  *
  * Deals with drawing text to OpenGL or bitmap buffers.
  *
@@ -53,9 +45,7 @@
 #include "BLI_string.h"
 #include "BLI_string_utf8.h"
 #include "BLI_threads.h"
-#include "BLI_alloca.h"
 
-#include "BIF_gl.h"
 #include "BLF_api.h"
 
 #include "UI_interface.h"
@@ -194,7 +184,7 @@ void blf_batch_draw(void)
 	GPU_vertbuf_data_len_set(g_batch.verts, g_batch.glyph_len);
 	GPU_vertbuf_use(g_batch.verts); /* send data */
 
-	GPUBuiltinShader shader = (g_batch.simple_shader) ? GPU_SHADER_TEXT_SIMPLE : GPU_SHADER_TEXT;
+	eGPUBuiltinShader shader = (g_batch.simple_shader) ? GPU_SHADER_TEXT_SIMPLE : GPU_SHADER_TEXT;
 	GPU_batch_program_set_builtin(g_batch.batch, shader);
 	GPU_batch_uniform_1i(g_batch.batch, "glyph", 0);
 	GPU_batch_draw(g_batch.batch);

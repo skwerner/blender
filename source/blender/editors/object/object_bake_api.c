@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,9 @@
  *
  * The Original Code is Copyright (C) 2004 by Blender Foundation
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s):
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/object/object_bake_api.c
- *  \ingroup edobj
+/** \file \ingroup edobj
  */
 
 
@@ -41,9 +32,7 @@
 #include "RNA_enum_types.h"
 
 #include "BLI_listbase.h"
-#include "BLI_string.h"
 #include "BLI_fileops.h"
-#include "BLI_math_geom.h"
 #include "BLI_path_util.h"
 
 #include "BKE_context.h"

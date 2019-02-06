@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,9 @@
  *
  * The Original Code is Copyright (C) 2007 by Nicholas Bishop
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/blenkernel/intern/multires.c
- *  \ingroup bke
+/** \file \ingroup bke
  */
 
 
@@ -49,7 +40,6 @@
 #include "BKE_pbvh.h"
 #include "BKE_ccg.h"
 #include "BKE_cdderivedmesh.h"
-#include "BKE_library.h"
 #include "BKE_mesh.h"
 #include "BKE_mesh_mapping.h"
 #include "BKE_mesh_runtime.h"
@@ -679,10 +669,12 @@ void multiresModifier_del_levels(MultiresModifierData *mmd, Scene *scene, Object
 	multires_set_tot_level(ob, mmd, lvl);
 }
 
-static DerivedMesh *multires_dm_create_local(Scene *scene, Object *ob, DerivedMesh *dm, int lvl, int totlvl, int simple, bool alloc_paint_mask)
+static DerivedMesh *multires_dm_create_local(
+        Scene *scene, Object *ob, DerivedMesh *dm,
+        int lvl, int totlvl, int simple, bool alloc_paint_mask,
+        int flags)
 {
 	MultiresModifierData mmd = {{NULL}};
-	MultiresFlags flags = MULTIRES_USE_LOCAL_MMD;
 
 	mmd.lvl = lvl;
 	mmd.sculptlvl = lvl;
@@ -690,6 +682,7 @@ static DerivedMesh *multires_dm_create_local(Scene *scene, Object *ob, DerivedMe
 	mmd.totlvl = totlvl;
 	mmd.simple = simple;
 
+	flags |= MULTIRES_USE_LOCAL_MMD;
 	if (alloc_paint_mask)
 		flags |= MULTIRES_ALLOC_PAINT_MASK;
 
@@ -700,10 +693,10 @@ static DerivedMesh *subsurf_dm_create_local(
         Scene *scene, Object *ob, DerivedMesh *dm,
         int lvl,
         bool is_simple, bool is_optimal, bool is_plain_uv, bool alloc_paint_mask,
-        bool for_render)
+        bool for_render,
+        SubsurfFlags flags)
 {
 	SubsurfModifierData smd = {{NULL}};
-	SubsurfFlags flags = 0;
 
 	smd.levels = smd.renderLevels = lvl;
 	smd.quality = 3;
@@ -766,7 +759,7 @@ void multiresModifier_base_apply(MultiresModifierData *mmd, Scene *scene, Object
 	/* generate highest level with displacements */
 	cddm = CDDM_from_mesh(me);
 	DM_set_only_copy(cddm, CD_MASK_BAREMESH);
-	dispdm = multires_dm_create_local(scene, ob, cddm, totlvl, totlvl, 0, 0);
+	dispdm = multires_dm_create_local(scene, ob, cddm, totlvl, totlvl, 0, 0, MULTIRES_IGNORE_SIMPLIFY);
 	cddm->release(cddm);
 
 	/* copy the new locations of the base verts into the mesh */
@@ -862,7 +855,9 @@ void multiresModifier_base_apply(MultiresModifierData *mmd, Scene *scene, Object
 	/* subdivide the mesh to highest level without displacements */
 	cddm = CDDM_from_mesh(me);
 	DM_set_only_copy(cddm, CD_MASK_BAREMESH);
-	origdm = subsurf_dm_create_local(scene, ob, cddm, totlvl, 0, 0, mmd->uv_smooth == SUBSURF_UV_SMOOTH_NONE, 0, false);
+	origdm = subsurf_dm_create_local(
+	        scene, ob, cddm, totlvl, 0, 0, mmd->uv_smooth == SUBSURF_UV_SMOOTH_NONE,
+	        0, false, SUBSURF_IGNORE_SIMPLIFY);
 	cddm->release(cddm);
 
 	/* calc disps */
@@ -903,11 +898,13 @@ static void multires_subdivide(
 		/* create subsurf DM from original mesh at high level */
 		cddm = CDDM_from_mesh(me);
 		DM_set_only_copy(cddm, CD_MASK_BAREMESH);
-		highdm = subsurf_dm_create_local(scene, ob, cddm, totlvl, simple, 0, mmd->uv_smooth == SUBSURF_UV_SMOOTH_NONE, has_mask, false);
+		highdm = subsurf_dm_create_local(
+		        NULL, ob, cddm, totlvl, simple, 0, mmd->uv_smooth == SUBSURF_UV_SMOOTH_NONE,
+		        has_mask, false, SUBSURF_IGNORE_SIMPLIFY);
 		ss = ((CCGDerivedMesh *)highdm)->ss;
 
 		/* create multires DM from original mesh at low level */
-		lowdm = multires_dm_create_local(scene, ob, cddm, lvl, lvl, simple, has_mask);
+		lowdm = multires_dm_create_local(scene, ob, cddm, lvl, lvl, simple, has_mask, MULTIRES_IGNORE_SIMPLIFY);
 		BLI_assert(lowdm != cddm);
 		cddm->release(cddm);
 
@@ -1224,11 +1221,13 @@ void multires_modifier_update_mdisps(struct DerivedMesh *dm, Scene *scene)
 			else cddm = CDDM_from_mesh(me);
 			DM_set_only_copy(cddm, CD_MASK_BAREMESH);
 
-			highdm = subsurf_dm_create_local(scene, ob, cddm, totlvl, mmd->simple, 0, mmd->uv_smooth == SUBSURF_UV_SMOOTH_NONE, has_mask, false);
+			highdm = subsurf_dm_create_local(
+			        scene, ob, cddm, totlvl, mmd->simple, 0, mmd->uv_smooth == SUBSURF_UV_SMOOTH_NONE,
+			        has_mask, false, SUBSURF_IGNORE_SIMPLIFY);
 			ss = ((CCGDerivedMesh *)highdm)->ss;
 
 			/* create multires DM from original mesh and displacements */
-			lowdm = multires_dm_create_local(scene, ob, cddm, lvl, totlvl, mmd->simple, has_mask);
+			lowdm = multires_dm_create_local(scene, ob, cddm, lvl, totlvl, mmd->simple, has_mask, MULTIRES_IGNORE_SIMPLIFY);
 			cddm->release(cddm);
 
 			/* gather grid data */
@@ -1286,7 +1285,9 @@ void multires_modifier_update_mdisps(struct DerivedMesh *dm, Scene *scene)
 			else cddm = CDDM_from_mesh(me);
 			DM_set_only_copy(cddm, CD_MASK_BAREMESH);
 
-			subdm = subsurf_dm_create_local(scene, ob, cddm, mmd->totlvl, mmd->simple, 0, mmd->uv_smooth == SUBSURF_UV_SMOOTH_NONE, has_mask, false);
+			subdm = subsurf_dm_create_local(
+			        scene, ob, cddm, mmd->totlvl, mmd->simple, 0, mmd->uv_smooth == SUBSURF_UV_SMOOTH_NONE,
+			        has_mask, false, SUBSURF_IGNORE_SIMPLIFY);
 			cddm->release(cddm);
 
 			multiresModifier_disp_run(dm, me, NULL, CALC_DISPLACEMENTS, subdm->getGridData(subdm), mmd->totlvl);
@@ -1374,11 +1375,13 @@ DerivedMesh *multires_make_derived_from_derived(DerivedMesh *dm,
 	if (lvl == 0)
 		return dm;
 
+	const int subsurf_flags = ignore_simplify ? SUBSURF_IGNORE_SIMPLIFY : 0;
+
 	result = subsurf_dm_create_local(scene, ob, dm, lvl,
 	                                 mmd->simple, mmd->flags & eMultiresModifierFlag_ControlEdges,
 	                                 mmd->uv_smooth == SUBSURF_UV_SMOOTH_NONE,
 	                                 flags & MULTIRES_ALLOC_PAINT_MASK,
-	                                 render);
+	                                 render, subsurf_flags);
 
 	if (!(flags & MULTIRES_USE_LOCAL_MMD)) {
 		ccgdm = (CCGDerivedMesh *)result;

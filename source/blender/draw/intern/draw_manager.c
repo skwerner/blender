@@ -1,6 +1,4 @@
 /*
- * Copyright 2016, Blender Foundation.
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -15,12 +13,10 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
- * Contributor(s): Blender Institute
- *
+ * Copyright 2016, Blender Foundation.
  */
 
-/** \file blender/draw/intern/draw_manager.c
- *  \ingroup draw
+/** \file \ingroup draw
  */
 
 #include <stdio.h>
@@ -35,11 +31,9 @@
 
 #include "BKE_colortools.h"
 #include "BKE_global.h"
-#include "BKE_mesh.h"
 #include "BKE_object.h"
 #include "BKE_particle.h"
 #include "BKE_pointcache.h"
-#include "BKE_workspace.h"
 
 #include "draw_manager.h"
 #include "DNA_camera_types.h"
@@ -50,7 +44,6 @@
 #include "ED_space_api.h"
 #include "ED_screen.h"
 #include "ED_gpencil.h"
-#include "ED_particle.h"
 #include "ED_view3d.h"
 
 #include "GPU_draw.h"
@@ -66,7 +59,6 @@
 #include "RE_engine.h"
 #include "RE_pipeline.h"
 
-#include "UI_interface.h"
 #include "UI_resources.h"
 
 #include "WM_api.h"
@@ -156,7 +148,6 @@ struct DRWTextStore *DRW_text_cache_ensure(void)
 
 
 /* -------------------------------------------------------------------- */
-
 /** \name Settings
  * \{ */
 
@@ -259,12 +250,11 @@ struct DupliObject *DRW_object_get_dupli(const Object *UNUSED(ob))
 
 
 /* -------------------------------------------------------------------- */
-
 /** \name Color Management
  * \{ */
 
 /* Use color management profile to draw texture to framebuffer */
-void DRW_transform_to_display(GPUTexture *tex, bool use_view_settings)
+void DRW_transform_to_display(GPUTexture *tex, bool use_view_transform, bool use_render_settings)
 {
 	drw_state_set(DRW_STATE_WRITE_COLOR);
 
@@ -280,19 +270,26 @@ void DRW_transform_to_display(GPUTexture *tex, bool use_view_settings)
 	if (!(DST.options.is_image_render && !DST.options.is_scene_render)) {
 		Scene *scene = DST.draw_ctx.scene;
 		ColorManagedDisplaySettings *display_settings = &scene->display_settings;
-		ColorManagedViewSettings *active_view_settings;
-		ColorManagedViewSettings default_view_settings;
-		if (use_view_settings) {
-			active_view_settings = &scene->view_settings;
+		ColorManagedViewSettings view_settings;
+		if (use_render_settings) {
+			/* Use full render settings, for renders with scene lighting. */
+			view_settings = scene->view_settings;
+		}
+		else if (use_view_transform) {
+			/* Use only view transform + look and nothing else for lookdev without
+			 * scene lighting, as exposure depends on scene light intensity. */
+			BKE_color_managed_view_settings_init_render(&view_settings, display_settings, NULL);
+			STRNCPY(view_settings.view_transform, scene->view_settings.view_transform);
+			STRNCPY(view_settings.look, scene->view_settings.look);
 		}
 		else {
-			BKE_color_managed_view_settings_init_render(
-			        &default_view_settings,
-			        display_settings);
-			active_view_settings = &default_view_settings;
+			/* For workbench use only default view transform in configuration,
+			 * using no scene settings. */
+			BKE_color_managed_view_settings_init_render(&view_settings, display_settings, NULL);
 		}
+
 		use_ocio = IMB_colormanagement_setup_glsl_draw_from_space(
-		        active_view_settings, display_settings, NULL, dither, false);
+		        &view_settings, display_settings, NULL, dither, false);
 	}
 
 	if (!use_ocio) {
@@ -362,7 +359,6 @@ void DRW_transform_none(GPUTexture *tex)
 
 
 /* -------------------------------------------------------------------- */
-
 /** \name Multisample Resolve
  * \{ */
 
@@ -434,7 +430,6 @@ void DRW_multisamples_resolve(GPUTexture *src_depth, GPUTexture *src_color, bool
 /** \} */
 
 /* -------------------------------------------------------------------- */
-
 /** \name Viewport (DRW_viewport)
  * \{ */
 
@@ -539,6 +534,11 @@ static void drw_context_state_init(void)
 	}
 	else {
 		DST.draw_ctx.object_pose = NULL;
+	}
+
+	DST.draw_ctx.shader_cfg = GPU_SHADER_CFG_DEFAULT;
+	if (DST.draw_ctx.rv3d && DST.draw_ctx.rv3d->rflag & RV3D_CLIPPING) {
+		DST.draw_ctx.shader_cfg = GPU_SHADER_CFG_CLIPPED;
 	}
 }
 
@@ -799,7 +799,6 @@ void **DRW_view_layer_engine_data_ensure(DrawEngineType *engine_type, void (*cal
 
 
 /* -------------------------------------------------------------------- */
-
 /** \name Draw Data (DRW_drawdata)
  * \{ */
 
@@ -833,8 +832,9 @@ static bool id_type_can_have_drawdata(const short id_type)
 static bool id_can_have_drawdata(const ID *id)
 {
 	/* sanity check */
-	if (id == NULL)
+	if (id == NULL) {
 		return false;
+	}
 
 	return id_type_can_have_drawdata(GS(id->name));
 }
@@ -852,16 +852,18 @@ DrawDataList *DRW_drawdatalist_from_id(ID *id)
 		IdDdtTemplate *idt = (IdDdtTemplate *)id;
 		return &idt->drawdata;
 	}
-	else
+	else {
 		return NULL;
+	}
 }
 
 DrawData *DRW_drawdata_get(ID *id, DrawEngineType *engine_type)
 {
 	DrawDataList *drawdata = DRW_drawdatalist_from_id(id);
 
-	if (drawdata == NULL)
+	if (drawdata == NULL) {
 		return NULL;
+	}
 
 	LISTBASE_FOREACH(DrawData *, dd, drawdata) {
 		if (dd->engine_type == engine_type) {
@@ -921,8 +923,9 @@ void DRW_drawdata_free(ID *id)
 {
 	DrawDataList *drawdata = DRW_drawdatalist_from_id(id);
 
-	if (drawdata == NULL)
+	if (drawdata == NULL) {
 		return;
+	}
 
 	LISTBASE_FOREACH(DrawData *, dd, drawdata) {
 		if (dd->free != NULL) {
@@ -939,8 +942,9 @@ static void drw_drawdata_unlink_dupli(ID *id)
 	if ((GS(id->name) == ID_OB) && (((Object *)id)->base_flag & BASE_FROM_DUPLI) != 0) {
 		DrawDataList *drawdata = DRW_drawdatalist_from_id(id);
 
-		if (drawdata == NULL)
+		if (drawdata == NULL) {
 			return;
+		}
 
 		BLI_listbase_clear((ListBase *)drawdata);
 	}
@@ -950,7 +954,6 @@ static void drw_drawdata_unlink_dupli(ID *id)
 
 
 /* -------------------------------------------------------------------- */
-
 /** \name Rendering (DRW_engines)
  * \{ */
 
@@ -1336,7 +1339,6 @@ static uint DRW_engines_get_hash(void)
 }
 
 /* -------------------------------------------------------------------- */
-
 /** \name View Update
  * \{ */
 
@@ -1395,7 +1397,6 @@ void DRW_notify_view_update(const DRWUpdateContext *update_ctx)
 /** \} */
 
 /* -------------------------------------------------------------------- */
-
 /** \name Main Draw Loops (DRW_draw)
  * \{ */
 
@@ -1763,7 +1764,7 @@ void DRW_render_gpencil(struct RenderEngine *engine, struct Depsgraph *depsgraph
 	drw_viewport_var_init();
 
 	/* set default viewport */
-	gpuPushAttrib(GPU_ENABLE_BIT | GPU_VIEWPORT_BIT);
+	gpuPushAttr(GPU_ENABLE_BIT | GPU_VIEWPORT_BIT);
 	glDisable(GL_SCISSOR_TEST);
 	glViewport(0, 0, size[0], size[1]);
 
@@ -1788,7 +1789,7 @@ void DRW_render_gpencil(struct RenderEngine *engine, struct Depsgraph *depsgraph
 	glDisable(GL_DEPTH_TEST);
 
 	/* Restore Drawing area. */
-	gpuPopAttrib();
+	gpuPopAttr();
 	glEnable(GL_SCISSOR_TEST);
 	GPU_framebuffer_restore();
 
@@ -2391,7 +2392,6 @@ void DRW_draw_depth_loop(
 
 
 /* -------------------------------------------------------------------- */
-
 /** \name Draw Manager State (DRW_state)
  * \{ */
 
@@ -2497,7 +2497,6 @@ bool DRW_state_draw_background(void)
 
 
 /* -------------------------------------------------------------------- */
-
 /** \name Context State (DRW_context_state)
  * \{ */
 
@@ -2510,7 +2509,6 @@ const DRWContextState *DRW_context_state_get(void)
 
 
 /* -------------------------------------------------------------------- */
-
 /** \name Init/Exit (DRW_engines)
  * \{ */
 
@@ -2591,9 +2589,6 @@ void DRW_engines_register(void)
 }
 
 extern struct GPUVertFormat *g_pos_format; /* draw_shgroup.c */
-extern struct GPUUniformBuffer *globals_ubo; /* draw_common.c */
-extern struct GPUTexture *globals_ramp; /* draw_common.c */
-extern struct GPUTexture *globals_weight_ramp; /* draw_common.c */
 void DRW_engines_free(void)
 {
 	DRW_opengl_context_enable();
@@ -2616,10 +2611,10 @@ void DRW_engines_free(void)
 		}
 	}
 
-	DRW_UBO_FREE_SAFE(globals_ubo);
+	DRW_UBO_FREE_SAFE(G_draw.block_ubo);
 	DRW_UBO_FREE_SAFE(view_ubo);
-	DRW_TEXTURE_FREE_SAFE(globals_ramp);
-	DRW_TEXTURE_FREE_SAFE(globals_weight_ramp);
+	DRW_TEXTURE_FREE_SAFE(G_draw.ramp);
+	DRW_TEXTURE_FREE_SAFE(G_draw.weight_ramp);
 	MEM_SAFE_FREE(g_pos_format);
 
 	MEM_SAFE_FREE(DST.RST.bound_texs);

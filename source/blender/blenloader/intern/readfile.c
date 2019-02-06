@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,9 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- *
- * Contributor(s): Blender Foundation
- *
- * ***** END GPL LICENSE BLOCK *****
- *
  */
 
-/** \file blender/blenloader/intern/readfile.c
- *  \ingroup blenloader
+/** \file \ingroup blenloader
  */
 
 
@@ -129,7 +120,6 @@
 #include "BKE_collection.h"
 #include "BKE_colortools.h"
 #include "BKE_constraint.h"
-#include "BKE_context.h"
 #include "BKE_curve.h"
 #include "BKE_effect.h"
 #include "BKE_fcurve.h"
@@ -171,9 +161,10 @@
 #include "NOD_common.h"
 #include "NOD_socket.h"
 
+#include "BLO_blend_defs.h"
+#include "BLO_blend_validate.h"
 #include "BLO_readfile.h"
 #include "BLO_undofile.h"
-#include "BLO_blend_defs.h"
 
 #include "RE_engine.h"
 
@@ -1573,14 +1564,17 @@ static void change_idid_adr(ListBase *mainlist, FileData *basefd, void *old, voi
 /* lib linked proxy objects point to our local data, we need
  * to clear that pointer before reading the undo memfile since
  * the object might be removed, it is set again in reading
- * if the local object still exists */
+ * if the local object still exists.
+ * This is only valid for local proxy objects though, linked ones should not be affected here.
+ */
 void blo_clear_proxy_pointers_from_lib(Main *oldmain)
 {
 	Object *ob = oldmain->object.first;
 
 	for (; ob; ob = ob->id.next) {
-		if (ob->id.lib)
+		if (ob->id.lib != NULL && ob->proxy_from != NULL && ob->proxy_from->id.lib == NULL) {
 			ob->proxy_from = NULL;
+		}
 	}
 }
 
@@ -3943,6 +3937,12 @@ static void direct_link_image(FileData *fd, Image *ima)
 		}
 		ima->rr = NULL;
 	}
+	else {
+		for (int i = 0; i < TEXTARGET_COUNT; i++) {
+			ima->gputexture[i] = newimaadr(fd, ima->gputexture[i]);
+		}
+		ima->rr = newimaadr(fd, ima->rr);
+	}
 
 	/* undo system, try to restore render buffers */
 	link_list(fd, &(ima->renderslots));
@@ -4177,7 +4177,7 @@ static const char *ptcache_data_struct[] = {
 	"", // BPHYS_DATA_AVELOCITY / BPHYS_DATA_XCONST */
 	"", // BPHYS_DATA_SIZE:
 	"", // BPHYS_DATA_TIMES:
-	"BoidData" // case BPHYS_DATA_BOIDS:
+	"BoidData", // case BPHYS_DATA_BOIDS:
 };
 
 static void direct_link_pointcache_cb(FileData *fd, void *data)
@@ -6501,9 +6501,9 @@ static void direct_link_scene(FileData *fd, Scene *sce)
 
 	if (sce->master_collection) {
 		sce->master_collection = newdataadr(fd, sce->master_collection);
-		direct_link_collection(fd, sce->master_collection);
 		/* Needed because this is an ID outside of Main. */
-		sce->master_collection->id.py_instance = NULL;
+		direct_link_id(fd, &sce->master_collection->id);
+		direct_link_collection(fd, sce->master_collection);
 	}
 
 	/* insert into global old-new map for reading without UI (link_global accesses it again) */
@@ -8873,6 +8873,10 @@ static void lib_link_all(FileData *fd, Main *main)
 	lib_link_workspaces(fd, main);
 
 	lib_link_library(fd, main);    /* only init users */
+
+	/* We could integrate that to mesh/curve/lattice lib_link, but this is really cheap process,
+	 * so simpler to just use it directly in this single call. */
+	BLO_main_validate_shapekeys(main, NULL);
 }
 
 static void direct_link_keymapitem(FileData *fd, wmKeyMapItem *kmi)

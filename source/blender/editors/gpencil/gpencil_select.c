@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,14 +15,9 @@
  *
  * The Original Code is Copyright (C) 2014, Blender Foundation
  * This is a new part of Blender
- *
- * Contributor(s): Joshua Leung
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/gpencil/gpencil_select.c
- *  \ingroup edgpencil
+/** \file \ingroup edgpencil
  */
 
 #include <stdio.h>
@@ -509,7 +502,7 @@ void GPENCIL_OT_select_grouped(wmOperatorType *ot)
 	static const EnumPropertyItem prop_select_grouped_types[] = {
 		{GP_SEL_SAME_LAYER, "LAYER", 0, "Layer", "Shared layers"},
 		{GP_SEL_SAME_MATERIAL, "MATERIAL", 0, "Material", "Shared materials"},
-		{0, NULL, 0, NULL, NULL}
+		{0, NULL, 0, NULL, NULL},
 	};
 
 	/* identifiers */

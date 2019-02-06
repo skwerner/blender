@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -16,14 +14,9 @@
  *
  * The Original Code is Copyright (C) 2009 Blender Foundation.
  * All rights reserved.
- *
- * Contributor(s): Blender Foundation
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/render/render_shading.c
- *  \ingroup edrend
+/** \file \ingroup edrend
  */
 
 #include <stdlib.h>
@@ -499,7 +492,7 @@ void OBJECT_OT_material_slot_move(wmOperatorType *ot)
 	static const EnumPropertyItem material_slot_move[] = {
 		{1, "UP", 0, "Up", ""},
 		{-1, "DOWN", 0, "Down", ""},
-		{0, NULL, 0, NULL, NULL}
+		{0, NULL, 0, NULL, NULL},
 	};
 
 	/* identifiers */
@@ -718,6 +711,12 @@ void SCENE_OT_view_layer_add(wmOperatorType *ot)
 	ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO | OPTYPE_INTERNAL;
 }
 
+static bool view_layer_remove_poll(bContext *C)
+{
+	Scene *scene = CTX_data_scene(C);
+	return (scene->view_layers.first != scene->view_layers.last);
+}
+
 static int view_layer_remove_exec(bContext *C, wmOperator *UNUSED(op))
 {
 	Main *bmain = CTX_data_main(C);
@@ -742,6 +741,7 @@ void SCENE_OT_view_layer_remove(wmOperatorType *ot)
 
 	/* api callbacks */
 	ot->exec = view_layer_remove_exec;
+	ot->poll = view_layer_remove_poll;
 
 	/* flags */
 	ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO | OPTYPE_INTERNAL;
@@ -865,7 +865,7 @@ void SCENE_OT_light_cache_bake(wmOperatorType *ot)
 		{LIGHTCACHE_SUBSET_DIRTY, "DIRTY", 0, "Dirty Only", "Only bake lightprobes that are marked as dirty"},
 		{LIGHTCACHE_SUBSET_CUBE, "CUBEMAPS", 0, "Cubemaps Only", "Try to only bake reflection cubemaps if irradiance "
 	                                                             "grids are up to date"},
-		{0, NULL, 0, NULL, NULL}
+		{0, NULL, 0, NULL, NULL},
 	};
 
 	/* identifiers */
@@ -920,9 +920,9 @@ static int light_cache_free_exec(bContext *C, wmOperator *UNUSED(op))
 void SCENE_OT_light_cache_free(wmOperatorType *ot)
 {
 	/* identifiers */
-	ot->name = "Free Light Cache";
+	ot->name = "Delete Light Cache";
 	ot->idname = "SCENE_OT_light_cache_free";
-	ot->description = "Free cached indirect lighting";
+	ot->description = "Delete cached indirect lighting";
 
 	/* api callbacks */
 	ot->exec = light_cache_free_exec;
@@ -1094,7 +1094,7 @@ void SCENE_OT_freestyle_module_move(wmOperatorType *ot)
 	static const EnumPropertyItem direction_items[] = {
 		{-1, "UP", 0, "Up", ""},
 		{1, "DOWN", 0, "Down", ""},
-		{0, NULL, 0, NULL, NULL}
+		{0, NULL, 0, NULL, NULL},
 	};
 
 	/* identifiers */
@@ -1252,7 +1252,7 @@ void SCENE_OT_freestyle_lineset_move(wmOperatorType *ot)
 	static const EnumPropertyItem direction_items[] = {
 		{-1, "UP", 0, "Up", ""},
 		{1, "DOWN", 0, "Down", ""},
-		{0, NULL, 0, NULL, NULL}
+		{0, NULL, 0, NULL, NULL},
 	};
 
 	/* identifiers */
@@ -1621,7 +1621,7 @@ void SCENE_OT_freestyle_modifier_move(wmOperatorType *ot)
 	static const EnumPropertyItem direction_items[] = {
 		{-1, "UP", 0, "Up", ""},
 		{1, "DOWN", 0, "Down", ""},
-		{0, NULL, 0, NULL, NULL}
+		{0, NULL, 0, NULL, NULL},
 	};
 
 	/* identifiers */
@@ -1724,7 +1724,7 @@ void TEXTURE_OT_slot_move(wmOperatorType *ot)
 	static const EnumPropertyItem slot_move[] = {
 		{-1, "UP", 0, "Up", ""},
 		{1, "DOWN", 0, "Down", ""},
-		{0, NULL, 0, NULL, NULL}
+		{0, NULL, 0, NULL, NULL},
 	};
 
 	/* identifiers */

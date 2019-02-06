@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,14 +12,9 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * Contributor(s): Lukas Toenne, Campbell Barton
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/python/mathutils/mathutils_bvhtree.c
- *  \ingroup mathutils
+/** \file \ingroup mathutils
  *
  * This file defines the 'mathutils.bvhtree' module, a general purpose module to access
  * blenders bvhtree for mesh surface nearest-element search and ray casting.
@@ -69,7 +62,6 @@
 
 
 /* -------------------------------------------------------------------- */
-
 /** \name Docstring (snippets)
  * \{ */
 
@@ -119,7 +111,6 @@ typedef struct {
 
 
 /* -------------------------------------------------------------------- */
-
 /** \name Utility helper functions
  * \{ */
 
@@ -152,7 +143,6 @@ static PyObject *bvhtree_CreatePyObject(
 
 
 /* -------------------------------------------------------------------- */
-
 /** \name BVHTreeRayHit to Python utilities
  * \{ */
 
@@ -209,7 +199,6 @@ static PyObject *py_bvhtree_raycast_to_py_and_check(const BVHTreeRayHit *hit)
 
 
 /* -------------------------------------------------------------------- */
-
 /** \name BVHTreeNearest to Python utilities
  * \{ */
 
@@ -281,7 +270,6 @@ static void py_bvhtree__tp_dealloc(PyBVHTree *self)
 
 
 /* -------------------------------------------------------------------- */
-
 /** \name Methods
  * \{ */
 
@@ -661,7 +649,6 @@ static PyObject *py_bvhtree_overlap(PyBVHTree *self, PyBVHTree *other)
 
 
 /* -------------------------------------------------------------------- */
-
 /** \name Class Methods
  * \{ */
 
@@ -1240,7 +1227,6 @@ static PyObject *C_BVHTree_FromObject(PyObject *UNUSED(cls), PyObject *args, PyO
 
 
 /* -------------------------------------------------------------------- */
-
 /** \name Module & Type definition
  * \{ */
 
@@ -1256,7 +1242,7 @@ static PyMethodDef py_bvhtree_methods[] = {
 	{"FromBMesh", (PyCFunction) C_BVHTree_FromBMesh, METH_VARARGS | METH_KEYWORDS | METH_CLASS, C_BVHTree_FromBMesh_doc},
 	{"FromObject", (PyCFunction) C_BVHTree_FromObject, METH_VARARGS | METH_KEYWORDS | METH_CLASS, C_BVHTree_FromObject_doc},
 #endif
-	{NULL, NULL, 0, NULL}
+	{NULL, NULL, 0, NULL},
 };
 
 PyTypeObject PyBVHTree_Type = {

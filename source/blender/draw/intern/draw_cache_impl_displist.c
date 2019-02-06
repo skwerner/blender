@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,19 +15,15 @@
  *
  * The Original Code is Copyright (C) 2017 by Blender Foundation.
  * All rights reserved.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file draw_cache_impl_displist.c
- *  \ingroup draw
+/** \file \ingroup draw
  *
  * \brief DispList API for render engines
  *
  * \note DispList may be removed soon! This is a utility for object types that use render.
  */
 
-#include "MEM_guardedalloc.h"
 
 #include "BLI_alloca.h"
 #include "BLI_utildefines.h"

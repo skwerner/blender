@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,17 +15,10 @@
  *
  * The Original Code is Copyright (C) 2008, Blender Foundation
  * This is a new part of Blender
- *
- * Contributor(s): Joshua Leung
- *                 Bastien Montagne
- *
- * ***** END GPL LICENSE BLOCK *****
- *
  * Operator for converting Grease Pencil data to geometry
  */
 
-/** \file blender/editors/gpencil/gpencil_convert.c
- *  \ingroup edgpencil
+/** \file \ingroup edgpencil
  */
 
 
@@ -68,7 +59,6 @@
 #include "BKE_object.h"
 #include "BKE_report.h"
 #include "BKE_scene.h"
-#include "BKE_screen.h"
 #include "BKE_tracking.h"
 
 #include "DEG_depsgraph.h"
@@ -115,7 +105,7 @@ static const EnumPropertyItem prop_gpencil_convertmodes[] = {
 	{GP_STROKECONVERT_PATH, "PATH", ICON_CURVE_PATH, "Path", "Animation path"},
 	{GP_STROKECONVERT_CURVE, "CURVE", ICON_CURVE_BEZCURVE, "Bezier Curve", "Smooth Bezier curve"},
 	{GP_STROKECONVERT_POLY, "POLY", ICON_MESH_DATA, "Polygon Curve", "Bezier curve with straight-line segments (vector handles)"},
-	{0, NULL, 0, NULL, NULL}
+	{0, NULL, 0, NULL, NULL},
 };
 
 static const EnumPropertyItem prop_gpencil_convert_timingmodes_restricted[] = {

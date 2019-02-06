@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,14 +15,9 @@
  *
  * The Original Code is Copyright (C) 2008, Blender Foundation
  * This is a new part of Blender (with some old code)
- *
- * Contributor(s): Joshua Leung
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file ED_keyframing.h
- *  \ingroup editors
+/** \file \ingroup editors
  */
 
 #ifndef __ED_KEYFRAMING_H__
@@ -34,27 +27,27 @@
 extern "C" {
 #endif
 
-struct Main;
-struct ListBase;
 struct ID;
+struct ListBase;
+struct Main;
 struct Scene;
 
 struct KeyingSet;
 
-struct bAction;
-struct FCurve;
 struct BezTriple;
+struct FCurve;
+struct bAction;
 
 struct bPoseChannel;
 
-struct bContext;
 struct ReportList;
+struct bContext;
 
 struct Depsgraph;
 
+struct EnumPropertyItem;
 struct PointerRNA;
 struct PropertyRNA;
-struct EnumPropertyItem;
 
 struct NlaKeyframingContext;
 
@@ -133,8 +126,8 @@ short delete_keyframe(
 /* ************ Keying Sets ********************** */
 
 /* forward decl. for this struct which is declared a bit later... */
-struct KeyingSetInfo;
 struct ExtensionRNA;
+struct KeyingSetInfo;
 
 /* Polling Callback for KeyingSets */
 typedef bool (*cbKeyingSet_Poll)(struct KeyingSetInfo *ksi, struct bContext *C);

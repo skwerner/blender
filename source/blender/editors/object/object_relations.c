@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,14 +15,9 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * Contributor(s): Blender Foundation, 2002-2008 full recode
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/object/object_relations.c
- *  \ingroup edobj
+/** \file \ingroup edobj
  */
 
 
@@ -70,7 +63,6 @@
 #include "BKE_DerivedMesh.h"
 #include "BKE_displist.h"
 #include "BKE_editmesh.h"
-#include "BKE_global.h"
 #include "BKE_gpencil.h"
 #include "BKE_fcurve.h"
 #include "BKE_idprop.h"
@@ -453,7 +445,7 @@ EnumPropertyItem prop_clear_parent_types[] = {
 	 "As 'Clear Parent', but keep the current visual transformations of the object"},
 	{CLEAR_PARENT_INVERSE, "CLEAR_INVERSE", 0, "Clear Parent Inverse",
 	 "Reset the transform corrections applied to the parenting relationship, does not remove parenting itself"},
-	{0, NULL, 0, NULL, NULL}
+	{0, NULL, 0, NULL, NULL},
 };
 
 /* Helper for ED_object_parent_clear() - Remove deform-modifiers associated with parent */
@@ -613,7 +605,7 @@ EnumPropertyItem prop_make_parent_types[] = {
 	{PAR_LATTICE, "LATTICE", 0, "Lattice Deform", ""},
 	{PAR_VERTEX, "VERTEX", 0, "Vertex", ""},
 	{PAR_VERTEX_TRI, "VERTEX_TRI", 0, "Vertex (Triangle)", ""},
-	{0, NULL, 0, NULL, NULL}
+	{0, NULL, 0, NULL, NULL},
 };
 
 bool ED_object_parent_set(ReportList *reports, const bContext *C, Scene *scene, Object *ob, Object *par,
@@ -920,7 +912,7 @@ static int parent_set_exec(bContext *C, wmOperator *op)
 
 static int parent_set_invoke(bContext *C, wmOperator *UNUSED(op), const wmEvent *UNUSED(event))
 {
-	Object *ob = ED_object_active_context(C);
+	Object *parent = ED_object_active_context(C);
 	uiPopupMenu *pup = UI_popup_menu_begin(C, IFACE_("Set Parent To"), ICON_NONE);
 	uiLayout *layout = UI_popup_menu_layout(pup);
 
@@ -940,26 +932,46 @@ static int parent_set_invoke(bContext *C, wmOperator *UNUSED(op), const wmEvent 
 	RNA_enum_set(&opptr, "type", PAR_OBJECT);
 	RNA_boolean_set(&opptr, "keep_transform", true);
 #endif
-	/* ob becomes parent, make the associated menus */
-	if (ob->type == OB_ARMATURE) {
+
+	struct {
+		bool mesh, gpencil;
+	} has_children_of_type = { 0 };
+
+	CTX_DATA_BEGIN (C, Object *, child, selected_editable_objects)
+	{
+		if (child == parent) {
+			continue;
+		}
+		if (child->type == OB_MESH) {
+			has_children_of_type.mesh = true;
+		}
+		if (child->type == OB_GPENCIL) {
+			has_children_of_type.gpencil = true;
+		}
+	}
+	CTX_DATA_END;
+
+	if (parent->type == OB_ARMATURE) {
 		uiItemEnumO_ptr(layout, ot, NULL, 0, "type", PAR_ARMATURE);
 		uiItemEnumO_ptr(layout, ot, NULL, 0, "type", PAR_ARMATURE_NAME);
 		uiItemEnumO_ptr(layout, ot, NULL, 0, "type", PAR_ARMATURE_ENVELOPE);
-		uiItemEnumO_ptr(layout, ot, NULL, 0, "type", PAR_ARMATURE_AUTO);
+		if (has_children_of_type.mesh || has_children_of_type.gpencil) {
+			uiItemEnumO_ptr(layout, ot, NULL, 0, "type", PAR_ARMATURE_AUTO);
+		}
 		uiItemEnumO_ptr(layout, ot, NULL, 0, "type", PAR_BONE);
 		uiItemEnumO_ptr(layout, ot, NULL, 0, "type", PAR_BONE_RELATIVE);
 	}
-	else if (ob->type == OB_CURVE) {
+	else if (parent->type == OB_CURVE) {
 		uiItemEnumO_ptr(layout, ot, NULL, 0, "type", PAR_CURVE);
 		uiItemEnumO_ptr(layout, ot, NULL, 0, "type", PAR_FOLLOW);
 		uiItemEnumO_ptr(layout, ot, NULL, 0, "type", PAR_PATH_CONST);
 	}
-	else if (ob->type == OB_LATTICE) {
+	else if (parent->type == OB_LATTICE) {
 		uiItemEnumO_ptr(layout, ot, NULL, 0, "type", PAR_LATTICE);
 	}
 
 	/* vertex parenting */
-	if (OB_TYPE_SUPPORT_PARVERT(ob->type)) {
+	if (OB_TYPE_SUPPORT_PARVERT(parent->type)) {
 		uiItemEnumO_ptr(layout, ot, NULL, 0, "type", PAR_VERTEX);
 		uiItemEnumO_ptr(layout, ot, NULL, 0, "type", PAR_VERTEX_TRI);
 	}
@@ -1062,83 +1074,6 @@ void OBJECT_OT_parent_no_inverse_set(wmOperatorType *ot)
 	ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
 }
 
-/************************ Clear Slow Parent Operator *********************/
-
-static int object_slow_parent_clear_exec(bContext *C, wmOperator *UNUSED(op))
-{
-	Depsgraph *depsgraph = CTX_data_depsgraph(C);
-	Scene *scene = CTX_data_scene(C);
-
-	CTX_DATA_BEGIN (C, Object *, ob, selected_editable_objects)
-	{
-		if (ob->parent) {
-			if (ob->partype & PARSLOW) {
-				ob->partype -= PARSLOW;
-				BKE_object_where_is_calc(depsgraph, scene, ob);
-				ob->partype |= PARSLOW;
-				DEG_id_tag_update(&ob->id, ID_RECALC_TRANSFORM);
-			}
-		}
-	}
-	CTX_DATA_END;
-
-	WM_event_add_notifier(C, NC_SCENE, scene);
-
-	return OPERATOR_FINISHED;
-}
-
-void OBJECT_OT_slow_parent_clear(wmOperatorType *ot)
-{
-	/* identifiers */
-	ot->name = "Clear Slow Parent";
-	ot->description = "Clear the object's slow parent";
-	ot->idname = "OBJECT_OT_slow_parent_clear";
-
-	/* api callbacks */
-	ot->invoke = WM_operator_confirm;
-	ot->exec = object_slow_parent_clear_exec;
-	ot->poll = ED_operator_view3d_active;
-
-	/* flags */
-	ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
-}
-
-/********************** Make Slow Parent Operator *********************/
-
-static int object_slow_parent_set_exec(bContext *C, wmOperator *UNUSED(op))
-{
-	Scene *scene = CTX_data_scene(C);
-
-	CTX_DATA_BEGIN (C, Object *, ob, selected_editable_objects)
-	{
-		if (ob->parent)
-			ob->partype |= PARSLOW;
-
-		DEG_id_tag_update(&ob->id, ID_RECALC_TRANSFORM);
-	}
-	CTX_DATA_END;
-
-	WM_event_add_notifier(C, NC_SCENE, scene);
-
-	return OPERATOR_FINISHED;
-}
-
-void OBJECT_OT_slow_parent_set(wmOperatorType *ot)
-{
-	/* identifiers */
-	ot->name = "Set Slow Parent";
-	ot->description = "Set the object's slow parent";
-	ot->idname = "OBJECT_OT_slow_parent_set";
-
-	/* api callbacks */
-	ot->invoke = WM_operator_confirm;
-	ot->exec = object_slow_parent_set_exec;
-	ot->poll = ED_operator_view3d_active;
-
-	/* flags */
-	ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
-}
-
 /* ******************** Clear Track Operator ******************* */
 
 enum {
@@ -1149,7 +1084,7 @@ enum {
 static const EnumPropertyItem prop_clear_track_types[] = {
 	{CLEAR_TRACK, "CLEAR", 0, "Clear Track", ""},
 	{CLEAR_TRACK_KEEP_TRANSFORM, "CLEAR_KEEP_TRANSFORM", 0, "Clear and Keep Transformation (Clear Track)", ""},
-	{0, NULL, 0, NULL, NULL}
+	{0, NULL, 0, NULL, NULL},
 };
 
 /* note, poll should check for editable scene */
@@ -1219,7 +1154,7 @@ static const EnumPropertyItem prop_make_track_types[] = {
 	{CREATE_TRACK_DAMPTRACK, "DAMPTRACK", 0, "Damped Track Constraint", ""},
 	{CREATE_TRACK_TRACKTO, "TRACKTO", 0, "Track To Constraint", ""},
 	{CREATE_TRACK_LOCKTRACK, "LOCKTRACK", 0, "Lock Track Constraint", ""},
-	{0, NULL, 0, NULL, NULL}
+	{0, NULL, 0, NULL, NULL},
 };
 
 static int track_set_exec(bContext *C, wmOperator *op)
@@ -1607,11 +1542,12 @@ void OBJECT_OT_make_links_data(wmOperatorType *ot)
 		{MAKE_LINKS_OBDATA,     "OBDATA", 0, "Object Data", ""},
 		{MAKE_LINKS_MATERIALS,  "MATERIAL", 0, "Materials", ""},
 		{MAKE_LINKS_ANIMDATA,   "ANIMATION", 0, "Animation Data", ""},
-		{MAKE_LINKS_GROUP,      "GROUPS", 0, "Group", ""},
-		{MAKE_LINKS_DUPLICOLLECTION, "DUPLICOLLECTION", 0, "DupliGroup", ""},
+		{MAKE_LINKS_GROUP,      "GROUPS", 0, "Collection", ""},
+		{MAKE_LINKS_DUPLICOLLECTION, "DUPLICOLLECTION", 0, "Instance Collection", ""},
 		{MAKE_LINKS_MODIFIERS,  "MODIFIERS", 0, "Modifiers", ""},
 		{MAKE_LINKS_FONTS,      "FONTS", 0, "Fonts", ""},
-		{0, NULL, 0, NULL, NULL}};
+		{0, NULL, 0, NULL, NULL},
+	};
 
 	/* identifiers */
 	ot->name = "Link Data";
@@ -2189,7 +2125,7 @@ void OBJECT_OT_make_local(wmOperatorType *ot)
 		{MAKE_LOCAL_SELECT_OBDATA, "SELECT_OBDATA", 0, "Selected Objects and Data", ""},
 		{MAKE_LOCAL_SELECT_OBDATA_MATERIAL, "SELECT_OBDATA_MATERIAL", 0, "Selected Objects, Data and Materials", ""},
 		{MAKE_LOCAL_ALL, "ALL", 0, "All", ""},
-		{0, NULL, 0, NULL, NULL}
+		{0, NULL, 0, NULL, NULL},
 	};
 
 	/* identifiers */
@@ -2497,7 +2433,8 @@ void OBJECT_OT_make_single_user(wmOperatorType *ot)
 	static const EnumPropertyItem type_items[] = {
 		{MAKE_SINGLE_USER_SELECTED, "SELECTED_OBJECTS", 0, "Selected Objects", ""},
 		{MAKE_SINGLE_USER_ALL, "ALL", 0, "All", ""},
-		{0, NULL, 0, NULL, NULL}};
+		{0, NULL, 0, NULL, NULL},
+	};
 
 	/* identifiers */
 	ot->name = "Make Single User";

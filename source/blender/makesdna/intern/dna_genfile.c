@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,17 +15,10 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  * DNA handling
  */
 
-/** \file blender/makesdna/intern/dna_genfile.c
- *  \ingroup DNA
+/** \file \ingroup DNA
  *
  * Lowest-level functions for decoding the parts of a saved .blend
  * file, including interpretation of its SDNA block and conversion of
@@ -131,7 +122,6 @@
  *    - long: 8 aligned
  *    - struct: 8 aligned
  *  - the sdna functions have several error prints builtin, always check blender running from a console.
- *
  */
 
 /* ************************* MAKE DNA ********************** */

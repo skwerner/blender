@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,14 +15,9 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * Contributor(s): Blender Foundation, 2002-2008 full recode
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/object/object_edit.c
- *  \ingroup edobj
+/** \file \ingroup edobj
  */
 
 #include <stdlib.h>
@@ -38,10 +31,8 @@
 #include "MEM_guardedalloc.h"
 
 #include "BLI_blenlib.h"
-#include "BLI_math.h"
 #include "BLI_utildefines.h"
 #include "BLI_ghash.h"
-#include "BLI_string_utils.h"
 
 #include "BLT_translation.h"
 
@@ -73,7 +64,6 @@
 #include "BKE_image.h"
 #include "BKE_lattice.h"
 #include "BKE_layer.h"
-#include "BKE_library.h"
 #include "BKE_main.h"
 #include "BKE_material.h"
 #include "BKE_mball.h"
@@ -81,6 +71,7 @@
 #include "BKE_modifier.h"
 #include "BKE_object.h"
 #include "BKE_paint.h"
+#include "BKE_particle.h"
 #include "BKE_pointcache.h"
 #include "BKE_softbody.h"
 #include "BKE_editmesh.h"
@@ -291,9 +282,12 @@ static int object_hide_collection_exec(bContext *C, wmOperator *op)
 		return OPERATOR_CANCELLED;
 	}
 
-	BKE_layer_collection_set_visible(scene, view_layer, lc, extend);
-
 	DEG_id_tag_update(&scene->id, ID_RECALC_BASE_FLAGS);
+
+	if (BKE_layer_collection_isolate(scene, view_layer, lc, extend)) {
+		DEG_relations_tag_update(CTX_data_main(C));
+	}
+
 	WM_event_add_notifier(C, NC_SCENE | ND_OB_SELECT, scene);
 
 	return OPERATOR_FINISHED;
@@ -366,7 +360,7 @@ static int object_hide_collection_invoke(bContext *C, wmOperator *op, const wmEv
 void OBJECT_OT_hide_collection(wmOperatorType *ot)
 {
 	/* identifiers */
-	ot->name = "Hide Objects By Collection";
+	ot->name = "Hide Collection";
 	ot->description = "Show only objects in collection (Shift to extend)";
 	ot->idname = "OBJECT_OT_hide_collection";
 
@@ -540,6 +534,7 @@ bool ED_object_editmode_exit_ex(Main *bmain, Scene *scene, Object *obedit, int f
 		}
 		BLI_freelistN(&pidlist);
 
+		BKE_particlesystem_reset_all(obedit);
 		BKE_ptcache_object_reset(scene, obedit, PTCACHE_RESET_OUTDATED);
 
 		/* also flush ob recalc, doesn't take much overhead, but used for particles */
@@ -652,15 +647,11 @@ bool ED_object_editmode_enter(bContext *C, int flag)
 {
 	Main *bmain = CTX_data_main(C);
 	Scene *scene = CTX_data_scene(C);
-	ViewLayer *view_layer = CTX_data_view_layer(C);
 	Object *ob;
 
-	if ((flag & EM_IGNORE_LAYER) == 0) {
-		ob = CTX_data_active_object(C); /* active layer checked here for view3d */
-	}
-	else {
-		ob = view_layer->basact->object;
-	}
+	/* Active layer checked here for view3d,
+	 * callers that don't want view context can call the extended version. */
+	ob = CTX_data_active_object(C);
 	if ((ob == NULL) || ID_IS_LINKED(ob)) {
 		return false;
 	}

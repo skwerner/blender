@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,9 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/blenkernel/intern/displist.c
- *  \ingroup bke
+/** \file \ingroup bke
  */
 
 
@@ -48,12 +39,10 @@
 #include "BLI_scanfill.h"
 #include "BLI_utildefines.h"
 
-#include "BKE_global.h"
 #include "BKE_displist.h"
 #include "BKE_cdderivedmesh.h"
 #include "BKE_object.h"
 #include "BKE_library.h"
-#include "BKE_main.h"
 #include "BKE_mball.h"
 #include "BKE_mball_tessellate.h"
 #include "BKE_mesh.h"
@@ -1009,10 +998,7 @@ static void curve_calc_modifiers_post(
 			if (modified) {
 				if (vertCos) {
 					Mesh *temp_mesh;
-					BKE_id_copy_ex(NULL, &modified->id, (ID **)&temp_mesh,
-					               LIB_ID_CREATE_NO_MAIN | LIB_ID_CREATE_NO_USER_REFCOUNT |
-					               LIB_ID_CREATE_NO_DEG_TAG | LIB_ID_COPY_NO_PREVIEW,
-					               false);
+					BKE_id_copy_ex(NULL, &modified->id, (ID **)&temp_mesh, LIB_ID_COPY_LOCALIZE);
 					BKE_id_free(NULL, modified);
 					modified = temp_mesh;
 
@@ -1055,10 +1041,7 @@ static void curve_calc_modifiers_post(
 	if (vertCos) {
 		if (modified) {
 			Mesh *temp_mesh;
-			BKE_id_copy_ex(NULL, &modified->id, (ID **)&temp_mesh,
-			               LIB_ID_CREATE_NO_MAIN | LIB_ID_CREATE_NO_USER_REFCOUNT |
-			               LIB_ID_CREATE_NO_DEG_TAG | LIB_ID_COPY_NO_PREVIEW,
-			               false);
+			BKE_id_copy_ex(NULL, &modified->id, (ID **)&temp_mesh, LIB_ID_COPY_LOCALIZE);
 			BKE_id_free(NULL, modified);
 			modified = temp_mesh;
 

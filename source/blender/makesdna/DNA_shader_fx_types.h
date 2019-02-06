@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,12 +12,9 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file DNA_shader_fx_types.h
- *  \ingroup DNA
+/** \file \ingroup DNA
  */
 
 #ifndef __DNA_SHADER_FX_TYPES_H__
@@ -76,6 +71,8 @@ typedef struct ShaderFxData {
 
 /* Runtime temp data */
 typedef struct ShaderFxData_Runtime {
+	float loc[3];
+	char _pad[4];
 	struct DRWShadingGroup *fx_sh;
 	struct DRWShadingGroup *fx_sh_b;
 	struct DRWShadingGroup *fx_sh_c;

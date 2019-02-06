@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,9 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/imbuf/IMB_imbuf.h
- *  \ingroup imbuf
+/** \file \ingroup imbuf
  */
 
 /**
@@ -36,8 +27,6 @@
  * \ingroup imbuf
  *
  * \page IMB Imbuf module external interface
- *
- *
  * \section imb_about About the IMB module
  *
  * External interface of the IMage Buffer module. This module offers

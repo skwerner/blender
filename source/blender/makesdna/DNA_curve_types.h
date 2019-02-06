@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,9 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file DNA_curve_types.h
- *  \ingroup DNA
+/** \file \ingroup DNA
  */
 
 #ifndef __DNA_CURVE_TYPES_H__
@@ -39,15 +30,15 @@
 
 #define MAXTEXTBOX 256  /* used in readfile.c and editfont.c */
 
+struct AnimData;
 struct BoundBox;
-struct Object;
+struct EditFont;
+struct GHash;
 struct Ipo;
 struct Key;
 struct Material;
+struct Object;
 struct VFont;
-struct AnimData;
-struct EditFont;
-struct GHash;
 
 /* These two Lines with # tell makesdna this struct can be excluded. */
 #
@@ -236,7 +227,8 @@ typedef struct Curve {
 
 	/** Keep a short because of BKE_object_obdata_texspace_get(). */
 	short texflag;
-	short drawflag, twist_mode;
+	char _pad0[2];
+	short twist_mode;
 	float twist_smooth, smallcaps_scale;
 
 	int pathlen;

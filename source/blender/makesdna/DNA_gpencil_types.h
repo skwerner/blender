@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,14 +15,9 @@
  *
  * The Original Code is Copyright (C) 2008, Blender Foundation.
  * This is a new part of Blender
- *
- * Contributor(s): Joshua Leung, Antonio Vazquez
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file DNA_gpencil_types.h
- *  \ingroup DNA
+/** \file \ingroup DNA
  */
 
 #ifndef __DNA_GPENCIL_TYPES_H__

@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,15 +15,9 @@
  *
  * The Original Code is Copyright (C) 2009 Blender Foundation, Joshua Leung
  * All rights reserved.
- *
- *
- * Contributor(s): Joshua Leung (major recode)
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/space_nla/nla_edit.c
- *  \ingroup spnla
+/** \file \ingroup spnla
  */
 
 
@@ -2102,7 +2094,7 @@ static const EnumPropertyItem prop_nlaedit_snap_types[] = {
 	{NLAEDIT_SNAP_NEAREST_FRAME, "NEAREST_FRAME", 0, "Nearest Frame", ""}, // XXX as single entry?
 	{NLAEDIT_SNAP_NEAREST_SECOND, "NEAREST_SECOND", 0, "Nearest Second", ""}, // XXX as single entry?
 	{NLAEDIT_SNAP_NEAREST_MARKER, "NEAREST_MARKER", 0, "Nearest Marker", ""},
-	{0, NULL, 0, NULL, NULL}
+	{0, NULL, 0, NULL, NULL},
 };
 
 static int nlaedit_snap_exec(bContext *C, wmOperator *op)

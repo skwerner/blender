@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,17 +15,12 @@
  *
  * The Original Code is Copyright (C) 2007 Blender Foundation.
  * All rights reserved.
- *
- * Contributor(s): Blender Foundation
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
 #ifndef __WM_KEYMAP_H__
 #define __WM_KEYMAP_H__
 
-/** \file blender/windowmanager/WM_keymap.h
- *  \ingroup wm
+/** \file \ingroup wm
  */
 
 /* dna-savable wmStructs here */

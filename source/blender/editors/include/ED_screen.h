@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,15 +15,9 @@
  *
  * The Original Code is Copyright (C) 2008 Blender Foundation.
  * All rights reserved.
- *
- *
- * Contributor(s): Blender Foundation
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file ED_screen.h
- *  \ingroup editors
+/** \file \ingroup editors
  */
 
 #ifndef __ED_SCREEN_H__
@@ -41,29 +33,30 @@
 
 #include "BLI_compiler_attrs.h"
 
+struct ARegion;
 struct Depsgraph;
-struct wmWindowManager;
-struct wmWindow;
-struct wmNotifier;
-struct wmEvent;
-struct wmKeyConfig;
+struct IDProperty;
+struct Main;
+struct MenuType;
+struct PropertyRNA;
+struct Scene;
+struct ViewLayer;
 struct WorkSpace;
 struct WorkSpaceInstanceHook;
 struct bContext;
-struct Scene;
-struct ViewLayer;
 struct bScreen;
-struct ARegion;
-struct uiBlock;
 struct rcti;
-struct Main;
+struct uiBlock;
+struct uiLayout;
+struct wmEvent;
+struct wmKeyConfig;
 struct wmMsgBus;
 struct wmMsgSubscribeKey;
 struct wmMsgSubscribeValue;
+struct wmNotifier;
 struct wmOperatorType;
-struct IDProperty;
-struct MenuType;
-struct PropertyRNA;
+struct wmWindow;
+struct wmWindowManager;
 
 /* regions */
 void    ED_region_do_listen(
@@ -106,6 +99,7 @@ void    ED_region_visibility_change_update(struct bContext *C, struct ARegion *a
 void    ED_region_info_draw(struct ARegion *ar, const char *text, float fill_color[4], const bool full_redraw);
 void    ED_region_info_draw_multiline(ARegion *ar, const char *text_array[], float fill_color[4], const bool full_redraw);
 void    ED_region_image_metadata_draw(int x, int y, struct ImBuf *ibuf, const rctf *frame, float zoomx, float zoomy);
+void    ED_region_image_metadata_panel_draw(struct ImBuf *ibuf, struct uiLayout *layout);
 void    ED_region_grid_draw(struct ARegion *ar, float zoomx, float zoomy);
 float	ED_region_blend_alpha(struct ARegion *ar);
 void	ED_region_visible_rect(struct ARegion *ar, struct rcti *rect);

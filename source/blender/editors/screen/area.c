@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,15 +15,9 @@
  *
  * The Original Code is Copyright (C) 2008 Blender Foundation.
  * All rights reserved.
- *
- *
- * Contributor(s): Blender Foundation
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/screen/area.c
- *  \ingroup edscr
+/** \file \ingroup edscr
  */
 
 
@@ -760,21 +752,21 @@ static void area_azone_initialize(wmWindow *win, const bScreen *screen, ScrArea 
 	    /* Bottom-left. */
 	    {sa->totrct.xmin,
 	     sa->totrct.ymin,
-	     sa->totrct.xmin + (AZONESPOT - 1),
-	     sa->totrct.ymin + (AZONESPOT - 1)},
+	     sa->totrct.xmin + AZONESPOTW,
+	     sa->totrct.ymin + AZONESPOTH},
 	    /* Bottom-right. */
-	    {sa->totrct.xmax - (AZONESPOT - 1),
+	    {sa->totrct.xmax - AZONESPOTW,
 	     sa->totrct.ymin,
 	     sa->totrct.xmax,
-	     sa->totrct.ymin + (AZONESPOT - 1)},
+	     sa->totrct.ymin + AZONESPOTH},
 	    /* Top-left. */
 	    {sa->totrct.xmin,
-	     sa->totrct.ymax - (AZONESPOT - 1),
-	     sa->totrct.xmin + (AZONESPOT - 1),
+	     sa->totrct.ymax - AZONESPOTH,
+	     sa->totrct.xmin + AZONESPOTW,
 	     sa->totrct.ymax},
 	    /* Top-right. */
-	    {sa->totrct.xmax - (AZONESPOT - 1),
-	     sa->totrct.ymax - (AZONESPOT - 1),
+	    {sa->totrct.xmax - AZONESPOTW,
+	     sa->totrct.ymax - AZONESPOTH,
 	     sa->totrct.xmax,
 	     sa->totrct.ymax}};
 
@@ -2678,7 +2670,7 @@ static const char *meta_data_list[] =
 	"Time",
 	"Frame",
 	"Camera",
-	"Scene"
+	"Scene",
 };
 
 BLI_INLINE bool metadata_is_valid(ImBuf *ibuf, char *r_str, short index, int offset)
@@ -2764,7 +2756,7 @@ static void metadata_draw_imbuf(ImBuf *ibuf, const rctf *rect, int fontid, const
 		for (i = 5; i < 10; i++) {
 			len = BLI_snprintf_rlen(temp_str, MAX_METADATA_STR, "%s: ", meta_data_list[i]);
 			if (metadata_is_valid(ibuf, temp_str, i, len)) {
-				BLF_position(fontid, xmin + ofs_x, ymin, 0.0f);
+				BLF_position(fontid, xmin + ofs_x, ymin + ofs_y, 0.0f);
 				BLF_draw(fontid, temp_str, BLF_DRAW_STR_DUMMY_MAX);
 
 				ofs_x += BLF_width(fontid, temp_str, BLF_DRAW_STR_DUMMY_MAX) + UI_UNIT_X;
@@ -2810,6 +2802,7 @@ static float metadata_box_height_get(ImBuf *ibuf, int fontid, const bool is_top)
 		for (i = 5; i < 10; i++) {
 			if (metadata_is_valid(ibuf, str, i, 0)) {
 				count = 1;
+				break;
 			}
 		}
 	}
@@ -2892,6 +2885,28 @@ void ED_region_image_metadata_draw(int x, int y, ImBuf *ibuf, const rctf *frame,
 	}
 
 	GPU_matrix_pop();
+}
+
+typedef struct MetadataPanelDrawContext {
+	uiLayout *layout;
+} MetadataPanelDrawContext;
+
+static void metadata_panel_draw_field(
+        const char *field,
+        const char *value,
+        void *ctx_v)
+{
+	MetadataPanelDrawContext *ctx = (MetadataPanelDrawContext *)ctx_v;
+	uiLayout *row = uiLayoutRow(ctx->layout, false);
+	uiItemL(row, field, ICON_NONE);
+	uiItemL(row, value, ICON_NONE);
+}
+
+void ED_region_image_metadata_panel_draw(ImBuf *ibuf, uiLayout *layout)
+{
+	MetadataPanelDrawContext ctx;
+	ctx.layout = layout;
+	IMB_metadata_foreach(ibuf, metadata_panel_draw_field, &ctx);
 }
 
 void ED_region_grid_draw(ARegion *ar, float zoomx, float zoomy)

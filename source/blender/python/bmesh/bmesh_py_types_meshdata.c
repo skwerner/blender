@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,14 +15,9 @@
  *
  * The Original Code is Copyright (C) 2012 Blender Foundation.
  * All rights reserved.
- *
- * Contributor(s): Campbell Barton
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/python/bmesh/bmesh_py_types_meshdata.c
- *  \ingroup pybmesh
+/** \file \ingroup pybmesh
  *
  * This file defines customdata types which can't be accessed as primitive
  * python types such as MDeformVert, MLoopUV, MTexPoly
@@ -655,7 +648,7 @@ static struct PyMethodDef bpy_bmdeformvert_methods[] = {
 	{"get",     (PyCFunction)bpy_bmdeformvert_get,     METH_VARARGS, bpy_bmdeformvert_get_doc},
 	/* BMESH_TODO pop, popitem, update */
 	{"clear",   (PyCFunction)bpy_bmdeformvert_clear,   METH_NOARGS,  bpy_bmdeformvert_clear_doc},
-	{NULL, NULL, 0, NULL}
+	{NULL, NULL, 0, NULL},
 };
 
 PyTypeObject BPy_BMDeformVert_Type; /* bm.loops.layers.uv.active */

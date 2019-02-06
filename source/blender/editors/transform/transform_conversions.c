@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,9 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/transform/transform_conversions.c
- *  \ingroup edtransform
+/** \file \ingroup edtransform
  */
 
 #include <string.h>
@@ -2087,7 +2078,6 @@ static void createTransParticleVerts(bContext *C, TransInfo *t)
 		ParticleEditSettings *pset = PE_settings(t->scene);
 		PTCacheEdit *edit = PE_get_current(t->scene, ob);
 		ParticleSystem *psys = NULL;
-		ParticleSystemModifierData *psmd = NULL;
 		PTCacheEditPoint *point;
 		PTCacheEditKey *key;
 		float mat[4][4];
@@ -2098,9 +2088,6 @@ static void createTransParticleVerts(bContext *C, TransInfo *t)
 		if (edit == NULL || t->settings->particle.selectmode == SCE_SELECT_PATH) return;
 
 		psys = edit->psys;
-
-		if (psys)
-			psmd = psys_get_modifier(ob, psys);
 
 		for (i = 0, point = edit->points; i < edit->totpoint; i++, point++) {
 			point->flag &= ~PEP_TRANSFORM;
@@ -2146,8 +2133,10 @@ static void createTransParticleVerts(bContext *C, TransInfo *t)
 
 			if (!(point->flag & PEP_TRANSFORM)) continue;
 
-			if (psys && !(psys->flag & PSYS_GLOBAL_HAIR))
-				psys_mat_hair_to_global(ob, psmd->mesh_final, psys->part->from, psys->particles + i, mat);
+			if (psys && !(psys->flag & PSYS_GLOBAL_HAIR)) {
+				ParticleSystemModifierData *psmd_eval = edit->psmd_eval;
+				psys_mat_hair_to_global(ob, psmd_eval->mesh_final, psys->part->from, psys->particles + i, mat);
+			}
 
 			for (k = 0, key = point->keys; k < point->totkey; k++, key++) {
 				if (key->flag & PEK_USE_WCO) {
@@ -2206,16 +2195,12 @@ void flushTransParticles(TransInfo *t)
 		Object *ob = OBACT(view_layer);
 		PTCacheEdit *edit = PE_get_current(scene, ob);
 		ParticleSystem *psys = edit->psys;
-		ParticleSystemModifierData *psmd = NULL;
 		PTCacheEditPoint *point;
 		PTCacheEditKey *key;
 		TransData *td;
 		float mat[4][4], imat[4][4], co[3];
 		int i, k;
 		const bool is_prop_edit = (t->flag & T_PROP_EDIT) != 0;
-
-		if (psys)
-			psmd = psys_get_modifier(ob, psys);
 
 		/* we do transform in world space, so flush world space position
 		 * back to particle local space (only for hair particles) */
@@ -2224,7 +2209,8 @@ void flushTransParticles(TransInfo *t)
 			if (!(point->flag & PEP_TRANSFORM)) continue;
 
 			if (psys && !(psys->flag & PSYS_GLOBAL_HAIR)) {
-				psys_mat_hair_to_global(ob, psmd->mesh_final, psys->part->from, psys->particles + i, mat);
+				ParticleSystemModifierData *psmd_eval = edit->psmd_eval;
+				psys_mat_hair_to_global(ob, psmd_eval->mesh_final, psys->part->from, psys->particles + i, mat);
 				invert_m4_m4(imat, mat);
 
 				for (k = 0, key = point->keys; k < point->totkey; k++, key++) {
@@ -2244,6 +2230,7 @@ void flushTransParticles(TransInfo *t)
 		}
 
 		PE_update_object(t->depsgraph, scene, OBACT(view_layer), 1);
+		DEG_id_tag_update(&ob->id, ID_RECALC_SHADING);
 	}
 }
 
@@ -3326,7 +3313,8 @@ finally:
 void flushTransUVs(TransInfo *t)
 {
 	SpaceImage *sima = t->sa->spacedata.first;
-	const bool use_pixel_snap = ((sima->flag & SI_PIXELSNAP) && (t->state != TRANS_CANCEL));
+	const bool use_pixel_snap = ((sima->pixel_snap_mode != SI_PIXEL_SNAP_DISABLED) &&
+	                             (t->state != TRANS_CANCEL));
 
 	FOREACH_TRANS_DATA_CONTAINER (t, tc) {
 		TransData2D *td;
@@ -3349,8 +3337,22 @@ void flushTransUVs(TransInfo *t)
 			td->loc2d[1] = td->loc[1] * aspect_inv[1];
 
 			if (use_pixel_snap) {
-				td->loc2d[0] = roundf(td->loc2d[0] * size[0]) / size[0];
-				td->loc2d[1] = roundf(td->loc2d[1] * size[1]) / size[1];
+				td->loc2d[0] *= size[0];
+				td->loc2d[1] *= size[1];
+
+				switch (sima->pixel_snap_mode) {
+					case SI_PIXEL_SNAP_CENTER:
+						td->loc2d[0] = roundf(td->loc2d[0] - 0.5f) + 0.5f;
+						td->loc2d[1] = roundf(td->loc2d[1] - 0.5f) + 0.5f;
+						break;
+					case SI_PIXEL_SNAP_CORNER:
+						td->loc2d[0] = roundf(td->loc2d[0]);
+						td->loc2d[1] = roundf(td->loc2d[1]);
+						break;
+				}
+
+				td->loc2d[0] /= size[0];
+				td->loc2d[1] /= size[1];
 			}
 		}
 	}
@@ -5780,7 +5782,7 @@ static void ObjectToTransData(TransInfo *t, TransData *td, Object *ob)
 		skip_invert = true;
 
 	if (skip_invert == false && constinv == false) {
-		ob->transflag |= OB_NO_CONSTRAINTS;  /* BKE_object_where_is_calc_time checks this */
+		ob->transflag |= OB_NO_CONSTRAINTS;  /* BKE_object_where_is_calc checks this */
 		BKE_object_where_is_calc(t->depsgraph, t->scene, ob);
 		ob->transflag &= ~OB_NO_CONSTRAINTS;
 	}

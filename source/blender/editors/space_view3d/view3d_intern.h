@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,15 +15,9 @@
  *
  * The Original Code is Copyright (C) 2008 Blender Foundation.
  * All rights reserved.
- *
- *
- * Contributor(s): Blender Foundation
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/space_view3d/view3d_intern.h
- *  \ingroup spview3d
+/** \file \ingroup spview3d
  */
 
 #ifndef __VIEW3D_INTERN_H__
@@ -39,20 +31,20 @@ struct ARegion;
 struct ARegionType;
 struct Base;
 struct BoundBox;
-struct GPUBatch;
 struct Depsgraph;
+struct GPUBatch;
+struct Mesh;
 struct Object;
 struct SmokeDomainSettings;
+struct ViewLayer;
 struct bAnimVizSettings;
 struct bContext;
 struct bMotionPath;
 struct bPoseChannel;
-struct Mesh;
-struct ViewLayer;
-struct wmOperatorType;
-struct wmKeyConfig;
 struct wmGizmoGroupType;
 struct wmGizmoType;
+struct wmKeyConfig;
+struct wmOperatorType;
 struct wmWindowManager;
 
 /* drawing flags: */

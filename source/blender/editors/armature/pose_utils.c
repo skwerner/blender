@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,14 +15,9 @@
  *
  * The Original Code is Copyright (C) 2009, Blender Foundation, Joshua Leung
  * This is a new part of Blender
- *
- * Contributor(s): Joshua Leung
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/armature/pose_utils.c
- *  \ingroup edarmature
+/** \file \ingroup edarmature
  */
 
 #include "MEM_guardedalloc.h"
@@ -41,7 +34,6 @@
 #include "BKE_armature.h"
 #include "BKE_idprop.h"
 #include "BKE_layer.h"
-#include "BKE_main.h"
 #include "BKE_object.h"
 
 #include "BKE_context.h"

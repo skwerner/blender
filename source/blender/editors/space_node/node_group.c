@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,9 @@
  *
  * The Original Code is Copyright (C) 2005 Blender Foundation.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): David Millan Escriva, Juho Vepsäläinen, Nathan Letwory
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/space_node/node_group.c
- *  \ingroup spnode
+/** \file \ingroup spnode
  */
 
 #include <stdlib.h>
@@ -45,7 +36,6 @@
 #include "BKE_action.h"
 #include "BKE_animsys.h"
 #include "BKE_context.h"
-#include "BKE_global.h"
 #include "BKE_library.h"
 #include "BKE_main.h"
 #include "BKE_report.h"
@@ -526,7 +516,7 @@ typedef enum eNodeGroupSeparateType {
 static const EnumPropertyItem node_group_separate_types[] = {
 	{NODE_GS_COPY, "COPY", 0, "Copy", "Copy to parent node tree, keep group intact"},
 	{NODE_GS_MOVE, "MOVE", 0, "Move", "Move to parent node tree, remove from group"},
-	{0, NULL, 0, NULL, NULL}
+	{0, NULL, 0, NULL, NULL},
 };
 
 static int node_group_separate_exec(bContext *C, wmOperator *op)

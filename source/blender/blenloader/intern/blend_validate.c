@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,20 +12,13 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * Contributor(s): Bastien Montagne
- *
- * ***** END GPL LICENSE BLOCK *****
- *
  */
 
-/** \file blender/blenloader/intern/blend_validate.c
- *  \ingroup blenloader
+/** \file \ingroup blenloader
  *
  * Utils to check/validate a Main is in sane state, only checks relations between datablocks and libraries for now.
  *
  * \note Does not *fix* anything, only reports found errors.
- *
  */
 
 #include <string.h> // for strrchr strncmp strstr
@@ -40,19 +31,21 @@
 #include "MEM_guardedalloc.h"
 
 #include "DNA_sdna_types.h"
+#include "DNA_key_types.h"
 #include "DNA_windowmanager_types.h"
 
+#include "BKE_key.h"
 #include "BKE_library.h"
 #include "BKE_main.h"
 #include "BKE_report.h"
 
+#include "BLO_blend_validate.h"
 #include "BLO_readfile.h"
-#include "BLO_writefile.h"
 
 #include "readfile.h"
 
-/* Does not fix anything, but checks that all linked data-blocks are still valid (i.e. pointing to the right library). */
-bool BLO_main_validate_libraries(struct Main *bmain, struct ReportList *reports)
+/** Check (but do *not* fix) that all linked data-blocks are still valid (i.e. pointing to the right library). */
+bool BLO_main_validate_libraries(Main *bmain, ReportList *reports)
 {
 	ListBase mainlist;
 	bool is_valid = true;
@@ -146,6 +139,39 @@ bool BLO_main_validate_libraries(struct Main *bmain, struct ReportList *reports)
 
 	BLI_assert(BLI_listbase_is_single(&mainlist));
 	BLI_assert(mainlist.first == (void *)bmain);
+
+	BKE_main_unlock(bmain);
+
+	return is_valid;
+}
+
+/** Check (and fix if needed) that shape key's 'from' pointer is valid. */
+bool BLO_main_validate_shapekeys(Main *bmain, ReportList *reports)
+{
+	bool is_valid = true;
+
+	BKE_main_lock(bmain);
+
+	ListBase *lbarray[MAX_LIBARRAY];
+	int i = set_listbasepointers(bmain, lbarray);
+	while (i--) {
+		for (ID *id = lbarray[i]->first; id != NULL; id = id->next) {
+			if (!BKE_key_idtype_support(GS(id->name))) {
+				break;
+			}
+			if (id->lib == NULL) {
+				/* We assume lib data is valid... */
+				Key *shapekey = BKE_key_from_id(id);
+				if (shapekey != NULL && shapekey->from != id) {
+					is_valid = false;
+					BKE_reportf(reports, RPT_ERROR,
+					            "ID %s uses shapekey %s, but its 'from' pointer is invalid (%p), fixing...",
+					            id->name, shapekey->id.name, shapekey->from);
+					shapekey->from = id;
+				}
+			}
+		}
+	}
 
 	BKE_main_unlock(bmain);
 

@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,9 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/blenkernel/intern/library.c
- *  \ingroup bke
+/** \file \ingroup bke
  *
  * Contains management of ID's and libraries
  * allocate and free of all library data
@@ -38,6 +29,8 @@
 #include <stdlib.h>
 #include <stddef.h>
 #include <assert.h>
+
+#include "CLG_log.h"
 
 #include "MEM_guardedalloc.h"
 
@@ -78,9 +71,7 @@
 #include "BLI_ghash.h"
 #include "BLI_linklist.h"
 #include "BLI_memarena.h"
-#include "BLI_mempool.h"
 #include "BLI_string_utils.h"
-#include "BLI_threads.h"
 
 #include "BLT_translation.h"
 
@@ -104,7 +95,6 @@
 #include "BKE_lamp.h"
 #include "BKE_lattice.h"
 #include "BKE_library.h"
-#include "BKE_library_override.h"
 #include "BKE_library_query.h"
 #include "BKE_library_remap.h"
 #include "BKE_linestyle.h"
@@ -143,6 +133,8 @@
 #  include "PIL_time_utildefines.h"
 #endif
 
+static CLG_LogRef LOG = {"bke.library"};
+
 /* GS reads the memory pointed at in a specific ordering.
  * only use this definition, makes little and big endian systems
  * work fine, in conjunction with MAKE_ID */
@@ -169,8 +161,9 @@ void id_lib_extern(ID *id)
 	if (id && ID_IS_LINKED(id)) {
 		BLI_assert(BKE_idcode_is_linkable(GS(id->name)));
 		if (id->tag & LIB_TAG_INDIRECT) {
-			id->tag -= LIB_TAG_INDIRECT;
+			id->tag &= ~LIB_TAG_INDIRECT;
 			id->tag |= LIB_TAG_EXTERN;
+			id->lib->parent = NULL;
 		}
 	}
 }
@@ -187,7 +180,7 @@ void id_us_ensure_real(ID *id)
 		id->tag |= LIB_TAG_EXTRAUSER;
 		if (id->us <= limit) {
 			if (id->us < limit || ((id->us == limit) && (id->tag & LIB_TAG_EXTRAUSER_SET))) {
-				printf("ID user count error: %s (from '%s')\n", id->name, id->lib ? id->lib->filepath : "[Main]");
+				CLOG_ERROR(&LOG, "ID user count error: %s (from '%s')", id->name, id->lib ? id->lib->filepath : "[Main]");
 				BLI_assert(0);
 			}
 			id->us = limit + 1;
@@ -243,8 +236,8 @@ void id_us_min(ID *id)
 		const int limit = ID_FAKE_USERS(id);
 
 		if (id->us <= limit) {
-			printf("ID user decrement error: %s (from '%s'): %d <= %d\n",
-			       id->name, id->lib ? id->lib->filepath : "[Main]", id->us, limit);
+			CLOG_ERROR(&LOG, "ID user decrement error: %s (from '%s'): %d <= %d",
+			           id->name, id->lib ? id->lib->filepath : "[Main]", id->us, limit);
 			BLI_assert(0);
 			id->us = limit;
 		}
@@ -346,8 +339,8 @@ void BKE_id_make_local_generic(Main *bmain, ID *id, const bool id_in_mainlist, c
 		else {
 			ID *id_new;
 
-			/* Should not fail in expected usecases, but id_copy does not copy Scene e.g. */
-			if (id_copy(bmain, id, &id_new, false)) {
+			/* Should not fail in expected usecases, but a few ID types cannot be copied (LIB, WM, SCR...). */
+			if (BKE_id_copy(bmain, id, &id_new)) {
 				id_new->us = 0;
 
 				/* setting newid is mandatory for complex make_lib_local logic... */
@@ -544,6 +537,16 @@ static void id_copy_clear_runtime_pointers(ID *id, int UNUSED(flag))
 	}
 }
 
+bool BKE_id_copy_is_allowed(const ID *id)
+{
+#define LIB_ID_TYPES_NOCOPY ID_LI, ID_SCR, ID_WM,  /* Not supported */ \
+                            ID_IP  /* Deprecated */
+
+	return !ELEM(GS(id->name), LIB_ID_TYPES_NOCOPY);
+
+#undef LIB_ID_TYPES_NOCOPY
+}
+
 /**
  * Generic entry point for copying a datablock (new API).
  *
@@ -556,24 +559,17 @@ static void id_copy_clear_runtime_pointers(ID *id, int UNUSED(flag))
  * \param id: Source datablock.
  * \param r_newid: Pointer to new (copied) ID pointer.
  * \param flag: Set of copy options, see DNA_ID.h enum for details (leave to zero for default, full copy).
- * \param test: If set, do not do any copy, just test whether copy is supported.
  * \return False when copying that ID type is not supported, true otherwise.
  */
-/* XXX TODO remove test thing, *all* IDs should be copyable that way! */
-bool BKE_id_copy_ex(Main *bmain, const ID *id, ID **r_newid, const int flag, const bool test)
+bool BKE_id_copy_ex(Main *bmain, const ID *id, ID **r_newid, const int flag)
 {
-#define LIB_ID_TYPES_NOCOPY ID_LI, ID_SCR, ID_WM,  /* Not supported */ \
-                            ID_IP  /* Deprecated */
-
-	BLI_assert(test || (r_newid != NULL));
+	BLI_assert(r_newid != NULL);
 	/* Make sure destination pointer is all good. */
 	if ((flag & LIB_ID_CREATE_NO_ALLOCATE) == 0) {
-		if (r_newid != NULL) {
-			*r_newid = NULL;
-		}
+		*r_newid = NULL;
 	}
 	else {
-		if (r_newid != NULL && *r_newid != NULL) {
+		if (*r_newid != NULL) {
 			/* Allow some garbage non-initialized memory to go in, and clean it up here. */
 			const size_t size = BKE_libblock_get_alloc_info(GS(id->name), NULL);
 			memset(*r_newid, 0, size);
@@ -584,11 +580,8 @@ bool BKE_id_copy_ex(Main *bmain, const ID *id, ID **r_newid, const int flag, con
 	if (id == NULL) {
 		return false;
 	}
-	if (ELEM(GS(id->name), LIB_ID_TYPES_NOCOPY)) {
+	if (!BKE_id_copy_is_allowed(id)) {
 		return false;
-	}
-	else if (test) {
-		return true;
 	}
 
 	BKE_libblock_copy_ex(bmain, id, r_newid, flag);
@@ -719,9 +712,9 @@ bool BKE_id_copy_ex(Main *bmain, const ID *id, ID **r_newid, const int flag, con
  * Invokes the appropriate copy method for the block and returns the result in
  * newid, unless test. Returns true if the block can be copied.
  */
-bool id_copy(Main *bmain, const ID *id, ID **newid, bool test)
+bool BKE_id_copy(Main *bmain, const ID *id, ID **newid)
 {
-	return BKE_id_copy_ex(bmain, id, newid, LIB_ID_COPY_SHAPEKEY, test);
+	return BKE_id_copy_ex(bmain, id, newid, LIB_ID_COPY_DEFAULT);
 }
 
 /** Does a mere memory swap over the whole IDs data (including type-specific memory).
@@ -803,7 +796,7 @@ bool id_single_user(bContext *C, ID *id, PointerRNA *ptr, PropertyRNA *prop)
 		/* if property isn't editable, we're going to have an extra block hanging around until we save */
 		if (RNA_property_editable(ptr, prop)) {
 			Main *bmain = CTX_data_main(C);
-			if (id_copy(bmain, id, &newid, false) && newid) {
+			if (BKE_id_copy(bmain, id, &newid) && newid) {
 				/* copy animation actions too */
 				BKE_animdata_copy_id_action(bmain, id, false);
 				/* us is 1 by convention with new IDs, but RNA_property_pointer_set
@@ -1000,6 +993,37 @@ void BKE_main_id_flag_all(Main *bmain, const int flag, const bool value)
 	while (a--) {
 		BKE_main_id_flag_listbase(lbarray[a], flag, value);
 	}
+}
+
+void BKE_main_id_repair_duplicate_names_listbase(ListBase *lb)
+{
+	int lb_len = 0;
+	for (ID *id = lb->first; id; id = id->next) {
+		if (id->lib == NULL) {
+			lb_len += 1;
+		}
+	}
+	if (lb_len <= 1) {
+		return;
+	}
+
+	/* Fill an array because renaming sorts. */
+	ID **id_array = MEM_mallocN(sizeof(*id_array) * lb_len, __func__);
+	GSet *gset = BLI_gset_str_new_ex(__func__, lb_len);
+	int i = 0;
+	for (ID *id = lb->first; id; id = id->next) {
+		if (id->lib == NULL) {
+			id_array[i] = id;
+			i++;
+		}
+	}
+	for (i = 0; i < lb_len; i++) {
+		if (!BLI_gset_add(gset, id_array[i]->name + 2)) {
+			new_id(lb, id_array[i], NULL);
+		}
+	}
+	BLI_gset_free(gset, NULL);
+	MEM_freeN(id_array);
 }
 
 void BKE_main_lib_objects_recalc_all(Main *bmain)
@@ -1383,22 +1407,11 @@ void *BKE_libblock_copy(Main *bmain, const ID *id)
 	return idn;
 }
 
-void *BKE_libblock_copy_nolib(const ID *id, const bool do_action)
-{
-	ID *idn;
-
-	BKE_libblock_copy_ex(NULL, id, &idn, LIB_ID_CREATE_NO_MAIN | LIB_ID_CREATE_NO_USER_REFCOUNT | (do_action ? LIB_ID_COPY_ACTIONS : 0));
-
-	return idn;
-}
-
+/* XXX TODO: get rid of this useless wrapper at some point... */
 void *BKE_libblock_copy_for_localize(const ID *id)
 {
 	ID *idn;
-	BKE_libblock_copy_ex(NULL, id, &idn, (LIB_ID_CREATE_NO_MAIN |
-	                                      LIB_ID_CREATE_NO_USER_REFCOUNT |
-	                                      LIB_ID_COPY_ACTIONS |
-	                                      LIB_ID_COPY_NO_ANIMDATA));
+	BKE_libblock_copy_ex(NULL, id, &idn, LIB_ID_COPY_LOCALIZE | LIB_ID_COPY_NO_ANIMDATA);
 	return idn;
 }
 
@@ -1649,8 +1662,11 @@ void id_clear_lib_data_ex(Main *bmain, ID *id, const bool id_in_mainlist)
 
 	id->lib = NULL;
 	id->tag &= ~(LIB_TAG_INDIRECT | LIB_TAG_EXTERN);
-	if (id_in_mainlist)
-		new_id(which_libbase(bmain, GS(id->name)), id, NULL);
+	if (id_in_mainlist) {
+		if (new_id(which_libbase(bmain, GS(id->name)), id, NULL)) {
+			bmain->is_memfile_undo_written = false;
+		}
+	}
 
 	/* Internal bNodeTree blocks inside datablocks also stores id->lib, make sure this stays in sync. */
 	if ((ntree = ntreeFromID(id))) {
@@ -1945,8 +1961,8 @@ void BKE_library_make_local(
 
 			/* Proxies only work when the proxified object is linked-in from a library. */
 			if (ob->proxy->id.lib == NULL) {
-				printf("Warning, proxy object %s will loose its link to %s, because the "
-				       "proxified object is local.\n", id->newid->name, ob->proxy->id.name);
+				CLOG_WARN(&LOG, "proxy object %s will loose its link to %s, because the "
+				       "proxified object is local.", id->newid->name, ob->proxy->id.name);
 				continue;
 			}
 
@@ -1956,8 +1972,8 @@ void BKE_library_make_local(
 			 * referred to from a library. Not checking for local use; if new local proxy
 			 * was not used locally would be a nasty bug! */
 			if (is_local || is_lib) {
-				printf("Warning, made-local proxy object %s will loose its link to %s, "
-				       "because the linked-in proxy is referenced (is_local=%i, is_lib=%i).\n",
+				CLOG_WARN(&LOG, "made-local proxy object %s will loose its link to %s, "
+				       "because the linked-in proxy is referenced (is_local=%i, is_lib=%i).",
 				       id->newid->name, ob->proxy->id.name, is_local, is_lib);
 			}
 			else {
@@ -2018,9 +2034,11 @@ void BLI_libblock_ensure_unique_name(Main *bmain, const char *name)
 
 	/* search for id */
 	idtest = BLI_findstring(lb, name + 2, offsetof(ID, name) + 2);
-
-	if (idtest && !new_id(lb, idtest, idtest->name + 2)) {
-		id_sort_by_name(lb, idtest);
+	if (idtest != NULL) {
+		if (!new_id(lb, idtest, idtest->name + 2)) {
+			id_sort_by_name(lb, idtest);
+		}
+		bmain->is_memfile_undo_written = false;
 	}
 }
 
@@ -2030,7 +2048,9 @@ void BLI_libblock_ensure_unique_name(Main *bmain, const char *name)
 void BKE_libblock_rename(Main *bmain, ID *id, const char *name)
 {
 	ListBase *lb = which_libbase(bmain, GS(id->name));
-	new_id(lb, id, name);
+	if (new_id(lb, id, name)) {
+		bmain->is_memfile_undo_written = false;
+	}
 }
 
 /**

@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,17 +15,8 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
-/** \file DNA_space_types.h
- *  \ingroup DNA
- *  \since mar-2001
- *  \author nzc
+/** \file \ingroup DNA
  *
  * Structs for each of space type in the user interface.
  */
@@ -47,25 +36,25 @@
 /* Hum ... Not really nice... but needed for spacebuts. */
 #include "DNA_view2d_types.h"
 
-struct ID;
-struct Text;
-struct Script;
-struct Image;
-struct Scopes;
-struct Histogram;
-struct SpaceIpo;
-struct bNodeTree;
-struct FileList;
-struct bGPdata;
-struct bDopeSheet;
-struct FileSelectParams;
+struct BLI_mempool;
 struct FileLayout;
-struct wmOperator;
-struct wmTimer;
+struct FileList;
+struct FileSelectParams;
+struct Histogram;
+struct ID;
+struct Image;
+struct Mask;
 struct MovieClip;
 struct MovieClipScopes;
-struct Mask;
-struct BLI_mempool;
+struct Scopes;
+struct Script;
+struct SpaceIpo;
+struct Text;
+struct bDopeSheet;
+struct bGPdata;
+struct bNodeTree;
+struct wmOperator;
+struct wmTimer;
 
 /* TODO 2.8: We don't write the global areas to files currently. Uncomment
  * define to enable writing (should become the default in a bit). */
@@ -785,7 +774,6 @@ enum eFileSortType {
 
 #define FILE_LOADLIB        1
 #define FILE_MAIN           2
-#define FILE_LOADFONT       3
 
 /* filesel op property -> action */
 typedef enum eFileSel_Action {
@@ -845,8 +833,6 @@ typedef enum eDirEntry_SelectFlag {
 	FILE_SEL_SELECTED       = (1 << 3),
 	FILE_SEL_EDITING        = (1 << 4),
 } eDirEntry_SelectFlag;
-
-#define FILE_LIST_MAX_RECURSION 4
 
 /* ***** Related to file browser, but never saved in DNA, only here to help with RNA. ***** */
 
@@ -1020,9 +1006,10 @@ typedef struct SpaceImage {
 	char dt_uvstretch;
 	char around;
 
-	int pad2;
-
 	int flag;
+
+	char pixel_snap_mode;
+	char pad[3];
 
 	MaskSpaceInfo mask_info;
 } SpaceImage;
@@ -1041,6 +1028,13 @@ typedef enum eSpaceImage_UVDT_Stretch {
 	SI_UVDT_STRETCH_ANGLE = 0,
 	SI_UVDT_STRETCH_AREA = 1,
 } eSpaceImage_UVDT_Stretch;
+
+/* SpaceImage.pixel_snap_mode */
+typedef enum eSpaceImage_PixelSnapMode {
+	SI_PIXEL_SNAP_DISABLED = 0,
+	SI_PIXEL_SNAP_CENTER = 1,
+	SI_PIXEL_SNAP_CORNER = 2,
+} eSpaceImage_Snap_Mode;
 
 /* SpaceImage.mode */
 typedef enum eSpaceImage_Mode {
@@ -1071,7 +1065,7 @@ typedef enum eSpaceImage_Flag {
 	SI_FLAG_DEPRECATED_7  = (1 << 7),  /* cleared */
 	SI_FLAG_DEPRECATED_8  = (1 << 8),  /* cleared */
 	SI_COORDFLOATS        = (1 << 9),
-	SI_PIXELSNAP          = (1 << 10),
+	SI_FLAG_DEPRECATED_10 = (1 << 10),
 	SI_LIVE_UNWRAP        = (1 << 11),
 	SI_USE_ALPHA          = (1 << 12),
 	SI_SHOW_ALPHA         = (1 << 13),

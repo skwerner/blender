@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,9 @@
  *
  * The Original Code is Copyright (C) 2004 Blender Foundation.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): Joshua Leung
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/space_outliner/outliner_edit.c
- *  \ingroup spoutliner
+/** \file \ingroup spoutliner
  */
 
 #include <string.h>
@@ -43,9 +34,6 @@
 #include "BLI_blenlib.h"
 #include "BLI_utildefines.h"
 #include "BLI_path_util.h"
-#include "BLI_mempool.h"
-#include "BLI_stack.h"
-#include "BLI_string.h"
 
 #include "BLT_translation.h"
 

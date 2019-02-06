@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,15 +15,9 @@
  *
  * The Original Code is Copyright (C) 2008 Blender Foundation.
  * All rights reserved.
- *
- *
- * Contributor(s): Blender Foundation
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/space_view3d/view3d_view.c
- *  \ingroup spview3d
+/** \file \ingroup spview3d
  */
 
 #include "DNA_camera_types.h"
@@ -984,6 +976,8 @@ int view3d_opengl_select(
 		}
 	}
 
+	/* Important to use 'vc->obact', not 'OBACT(vc->view_layer)' below,
+	 * so it will be NULL when hidden. */
 	struct {
 		DRW_ObjectFilterFn fn;
 		void *user_data;
@@ -991,7 +985,7 @@ int view3d_opengl_select(
 	switch (select_filter) {
 		case VIEW3D_SELECT_FILTER_OBJECT_MODE_LOCK:
 		{
-			Object *obact = OBACT(vc->view_layer);
+			Object *obact = vc->obact;
 			if (obact && obact->mode != OB_MODE_OBJECT) {
 				object_filter.fn = drw_select_filter_object_mode_lock;
 				object_filter.user_data = obact;
@@ -1000,7 +994,7 @@ int view3d_opengl_select(
 		}
 		case VIEW3D_SELECT_FILTER_WPAINT_POSE_MODE_LOCK:
 		{
-			Object *obact = OBACT(vc->view_layer);
+			Object *obact = vc->obact;
 			BLI_assert(obact && (obact->mode & OB_MODE_WEIGHT_PAINT));
 			Object *ob_pose = BKE_object_pose_armature_get(obact);
 
@@ -1029,7 +1023,7 @@ int view3d_opengl_select(
 	/* All of the queries need to be perform on the drawing context. */
 	DRW_opengl_context_enable();
 
-	G.f |= G_PICKSEL;
+	G.f |= G_FLAG_PICKSEL;
 
 	/* Important we use the 'viewmat' and don't re-calculate since
 	 * the object & bone view locking takes 'rect' into account, see: T51629. */
@@ -1087,7 +1081,7 @@ int view3d_opengl_select(
 		hits = drw_select_loop_user_data.hits;
 	}
 
-	G.f &= ~G_PICKSEL;
+	G.f &= ~G_FLAG_PICKSEL;
 	ED_view3d_draw_setup_view(vc->win, depsgraph, scene, ar, v3d, vc->rv3d->viewmat, NULL, NULL);
 
 	if (v3d->shading.type > OB_WIRE) {

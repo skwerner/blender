@@ -62,9 +62,8 @@ class Params:
             use_v3d_tab_menu=False,
             use_v3d_shade_ex_pie=False,
     ):
-        import platform
-
-        self.apple = platform.system() == 'Darwin'
+        from sys import platform
+        self.apple = (platform == 'darwin')
         self.legacy = legacy
 
         if select_mouse == 'RIGHT':
@@ -2946,8 +2945,6 @@ def km_grease_pencil_stroke_edit_mode(params):
         ("gpencil.paste", {"type": 'V', "value": 'PRESS', "ctrl": True}, None),
         # Snap
         op_menu("GPENCIL_MT_snap", {"type": 'S', "value": 'PRESS', "shift": True}),
-        # Convert to geometry
-        ("gpencil.convert", {"type": 'C', "value": 'PRESS', "alt": True}, None),
         # Show/hide
         ("gpencil.reveal", {"type": 'H', "value": 'PRESS', "alt": True}, None),
         ("gpencil.hide", {"type": 'H', "value": 'PRESS'},
@@ -2992,6 +2989,12 @@ def km_grease_pencil_stroke_edit_mode(params):
         items.extend([
             ("gpencil.copy", {"type": 'C', "value": 'PRESS', "oskey": True}, None),
             ("gpencil.paste", {"type": 'V', "value": 'PRESS', "oskey": True}, None),
+        ])
+
+    if params.legacy:
+        items.extend([
+            # Convert to geometry
+            ("gpencil.convert", {"type": 'C', "value": 'PRESS', "alt": True}, None),
         ])
 
     return keymap
@@ -5122,7 +5125,6 @@ def km_node_editor_tool_links_cut(params):
             ("node.links_cut", {"type": params.tool_mouse, "value": 'PRESS'}, None),
         ]},
     )
-
 
 
 def km_3d_view_tool_cursor(params):

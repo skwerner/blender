@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,15 +15,9 @@
  *
  * The Original Code is Copyright (C) 2008 Blender Foundation, Joshua Leung
  * All rights reserved.
- *
- *
- * Contributor(s): Joshua Leung (original author)
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/animation/anim_filter.c
- *  \ingroup edanimation
+/** \file \ingroup edanimation
  */
 
 
@@ -1910,7 +1902,7 @@ static size_t animdata_filter_mask(Main *bmain, ListBase *anim_data, void *UNUSE
 		if (tmp_items) {
 			/* include data-expand widget first */
 			if (filter_mode & ANIMFILTER_LIST_CHANNELS) {
-				/* add gpd as channel too (if for drawing, and it has layers) */
+				/* add mask datablock as channel too (if for drawing, and it has layers) */
 				ANIMCHANNEL_NEW_CHANNEL(mask, ANIMTYPE_MASKDATABLOCK, NULL, NULL);
 			}
 
@@ -2987,9 +2979,11 @@ static size_t animdata_filter_dopesheet(bAnimContext *ac, ListBase *anim_data, b
 	}
 
 	/* Cache files level animations (frame duration and such). */
-	CacheFile *cache_file = ac->bmain->cachefiles.first;
-	for (; cache_file; cache_file = cache_file->id.next) {
-		items += animdata_filter_ds_cachefile(ac, anim_data, ads, cache_file, filter_mode);
+	if (!(ads->filterflag2 & ADS_FILTER_NOCACHEFILES) && !(ads->filterflag & ADS_FILTER_ONLYSEL)) {
+		CacheFile *cache_file = ac->bmain->cachefiles.first;
+		for (; cache_file; cache_file = cache_file->id.next) {
+			items += animdata_filter_ds_cachefile(ac, anim_data, ads, cache_file, filter_mode);
+		}
 	}
 
 	/* movie clip's animation */

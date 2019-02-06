@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,14 +15,9 @@
  *
  * The Original Code is Copyright (C) 2008, Blender Foundation
  * This is a new part of Blender
- *
- * Contributor(s): Joshua Leung, Antonio Vazquez
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/blenkernel/intern/gpencil.c
- *  \ingroup bke
+/** \file \ingroup bke
  */
 
 
@@ -34,15 +27,14 @@
 #include <stddef.h>
 #include <math.h>
 
+#include "CLG_log.h"
+
 #include "MEM_guardedalloc.h"
 
 #include "BLI_blenlib.h"
 #include "BLI_utildefines.h"
 #include "BLI_math_vector.h"
-#include "BLI_math_color.h"
 #include "BLI_string_utils.h"
-#include "BLI_rand.h"
-#include "BLI_ghash.h"
 
 #include "BLT_translation.h"
 
@@ -54,11 +46,9 @@
 #include "DNA_scene_types.h"
 #include "DNA_object_types.h"
 
-#include "BKE_context.h"
 #include "BKE_action.h"
 #include "BKE_animsys.h"
 #include "BKE_deform.h"
-#include "BKE_global.h"
 #include "BKE_gpencil.h"
 #include "BKE_colortools.h"
 #include "BKE_icons.h"
@@ -68,6 +58,8 @@
 #include "BKE_material.h"
 
 #include "DEG_depsgraph.h"
+
+static CLG_LogRef LOG = {"bke.gpencil"};
 
 /* ************************************************** */
 /* Draw Engine */
@@ -267,7 +259,7 @@ bGPDframe *BKE_gpencil_frame_addnew(bGPDlayer *gpl, int cframe)
 
 	/* check whether frame was added successfully */
 	if (state == -1) {
-		printf("Error: Frame (%d) existed already for this layer. Using existing frame\n", cframe);
+		CLOG_ERROR(&LOG, "Frame (%d) existed already for this layer. Using existing frame", cframe);
 
 		/* free the newly created one, and use the old one instead */
 		MEM_freeN(gpf);
@@ -617,7 +609,7 @@ bGPDlayer *BKE_gpencil_layer_duplicate(const bGPDlayer *gpl_src)
 
 /**
  * Only copy internal data of GreasePencil ID from source to already allocated/initialized destination.
- * You probably never want to use that directly, use id_copy or BKE_id_copy_ex for typical needs.
+ * You probably never want to use that directly, use BKE_id_copy or BKE_id_copy_ex for typical needs.
  *
  * WARNING! This function will not handle ID user count!
  *
@@ -644,7 +636,7 @@ void BKE_gpencil_copy_data(bGPdata *gpd_dst, const bGPdata *gpd_src, const int U
 bGPdata *BKE_gpencil_copy(Main *bmain, const bGPdata *gpd)
 {
 	bGPdata *gpd_copy;
-	BKE_id_copy_ex(bmain, &gpd->id, (ID **)&gpd_copy, 0, false);
+	BKE_id_copy(bmain, &gpd->id, (ID **)&gpd_copy);
 	return gpd_copy;
 }
 
@@ -669,7 +661,7 @@ bGPdata *BKE_gpencil_data_duplicate(Main *bmain, const bGPdata *gpd_src, bool in
 	}
 	else {
 		BLI_assert(bmain != NULL);
-		BKE_id_copy_ex(bmain, &gpd_src->id, (ID **)&gpd_dst, 0, false);
+		BKE_id_copy(bmain, &gpd_src->id, (ID **)&gpd_dst);
 	}
 
 	/* Copy internal data (layers, etc.) */
@@ -892,7 +884,7 @@ bGPDframe *BKE_gpencil_layer_getframe(bGPDlayer *gpl, int cframe, eGP_GetFrame_M
 			gpl->actframe = gpf;
 		else {
 			/* unresolved errogenous situation! */
-			printf("Error: cannot find appropriate gp-frame\n");
+			CLOG_STR_ERROR(&LOG, "cannot find appropriate gp-frame");
 			/* gpl->actframe should still be NULL */
 		}
 	}

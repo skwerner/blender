@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,13 +15,9 @@
  *
  * The Original Code is Copyright (C) 2008 Blender Foundation.
  * All rights reserved.
- *
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/screen/screen_edit.c
- *  \ingroup edscr
+/** \file \ingroup edscr
  */
 
 
@@ -38,7 +32,6 @@
 #include "DNA_workspace_types.h"
 #include "DNA_userdef_types.h"
 
-#include "BLI_math.h"
 #include "BLI_blenlib.h"
 #include "BLI_utildefines.h"
 
@@ -48,7 +41,6 @@
 #include "BKE_image.h"
 #include "BKE_layer.h"
 #include "BKE_library.h"
-#include "BKE_library_remap.h"
 #include "BKE_main.h"
 #include "BKE_node.h"
 #include "BKE_screen.h"
@@ -483,6 +475,12 @@ void ED_screens_initialize(Main *bmain, wmWindowManager *wm)
 		ED_screen_refresh(wm, win);
 		if (win->eventstate) {
 			ED_screen_set_active_region(NULL, win, &win->eventstate->x);
+		}
+	}
+
+	if (U.uiflag & USER_HEADER_FROM_PREF) {
+		for (bScreen *screen = bmain->screen.first; screen; screen = screen->id.next) {
+			BKE_screen_header_alignment_reset(screen);
 		}
 	}
 }

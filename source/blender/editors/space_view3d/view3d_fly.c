@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,14 +12,9 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * Contributor(s): Campbell Barton
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/space_view3d/view3d_fly.c
- *  \ingroup spview3d
+/** \file \ingroup spview3d
  */
 
 /* defines VIEW3D_OT_fly modal operator */
@@ -44,7 +37,6 @@
 
 #include "BLT_translation.h"
 
-#include "BIF_gl.h"
 
 #include "WM_api.h"
 #include "WM_types.h"
@@ -130,7 +122,8 @@ void fly_modal_keymap(wmKeyConfig *keyconf)
 		{FLY_MODAL_FREELOOK_ENABLE, "FREELOOK_ENABLE", 0, "Rotation", ""},
 		{FLY_MODAL_FREELOOK_DISABLE, "FREELOOK_DISABLE", 0, "Rotation (Off)", ""},
 
-		{0, NULL, 0, NULL, NULL}};
+		{0, NULL, 0, NULL, NULL},
+	};
 
 	wmKeyMap *keymap = WM_modalkeymap_get(keyconf, "View3D Fly Modal");
 

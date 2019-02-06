@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,9 @@
  *
  * The Original Code is Copyright (C) Blender Foundation
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/physics/intern/implicit_blender.c
- *  \ingroup bph
+/** \file \ingroup bph
  */
 
 #include "implicit.h"
@@ -42,7 +33,6 @@
 #include "DNA_texture_types.h"
 
 #include "BLI_math.h"
-#include "BLI_linklist.h"
 #include "BLI_utildefines.h"
 
 #include "BKE_cloth.h"

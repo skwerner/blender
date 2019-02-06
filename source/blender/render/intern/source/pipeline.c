@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,9 @@
  *
  * The Original Code is Copyright (C) 2006 Blender Foundation.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/render/intern/source/pipeline.c
- *  \ingroup render
+/** \file \ingroup render
  */
 
 #include <math.h>
@@ -56,7 +47,6 @@
 #include "BLI_timecode.h"
 #include "BLI_fileops.h"
 #include "BLI_threads.h"
-#include "BLI_rand.h"
 #include "BLI_callbacks.h"
 
 #include "BLT_translation.h"
@@ -70,6 +60,7 @@
 #include "BKE_layer.h"
 #include "BKE_library.h"
 #include "BKE_library_remap.h"
+#include "BKE_mask.h"
 #include "BKE_modifier.h"
 #include "BKE_node.h"
 #include "BKE_object.h"
@@ -132,7 +123,6 @@
  *
  * 5) Image Files
  * - save file or append in movie
- *
  */
 
 
@@ -965,13 +955,6 @@ void RE_SetOrtho(Render *re, const rctf *viewplane, float clipsta, float clipend
 	                re->viewplane.ymin, re->viewplane.ymax, re->clipsta, re->clipend);
 }
 
-void RE_SetView(Render *re, float mat[4][4])
-{
-	/* re->ok flag? */
-	copy_m4_m4(re->viewmat, mat);
-	invert_m4_m4(re->viewinv, re->viewmat);
-}
-
 void RE_GetViewPlane(Render *re, rctf *r_viewplane, rcti *r_disprect)
 {
 	*r_viewplane = re->viewplane;
@@ -983,11 +966,6 @@ void RE_GetViewPlane(Render *re, rctf *r_viewplane, rcti *r_disprect)
 	else {
 		BLI_rcti_init(r_disprect, 0, 0, 0, 0);
 	}
-}
-
-void RE_GetView(Render *re, float mat[4][4])
-{
-	copy_m4_m4(mat, re->viewmat);
 }
 
 /* image and movie output has to move to either imbuf or kernel */
@@ -1246,7 +1224,7 @@ bool RE_allow_render_generic_object(Object *ob)
 	if (ob->transflag & OB_DUPLIPARTS) {
 		/* pass */  /* let particle system(s) handle showing vs. not showing */
 	}
-	else if ((ob->transflag & OB_DUPLI) && !(ob->transflag & OB_DUPLIFRAMES)) {
+	else if (ob->transflag & OB_DUPLI) {
 		return false;
 	}
 	return true;
@@ -1334,19 +1312,21 @@ static void add_freestyle(Render *re, int render)
 /* releases temporary scenes and renders for Freestyle stroke rendering */
 static void free_all_freestyle_renders(void)
 {
-	Render *re1, *freestyle_render;
-	Scene *freestyle_scene;
+	Render *re1;
 	LinkData *link;
 
 	for (re1= RenderGlobal.renderlist.first; re1; re1= re1->next) {
 		for (link = (LinkData *)re1->freestyle_renders.first; link; link = link->next) {
-			freestyle_render = (Render *)link->data;
+			Render *freestyle_render = (Render *)link->data;
 
 			if (freestyle_render) {
-				freestyle_scene = freestyle_render->scene;
+				Scene *freestyle_scene = freestyle_render->scene;
 				RE_FreeRender(freestyle_render);
-				BKE_libblock_unlink(re1->freestyle_bmain, freestyle_scene, false, false);
-				BKE_id_free(re1->freestyle_bmain, freestyle_scene);
+
+				if (freestyle_scene) {
+					BKE_libblock_unlink(re1->freestyle_bmain, freestyle_scene, false, false);
+					BKE_id_free(re1->freestyle_bmain, freestyle_scene);
+				}
 			}
 		}
 		BLI_freelistN(&re1->freestyle_renders);
@@ -1627,6 +1607,9 @@ static void do_render_all_options(Render *re)
 	 * like the render engine, but sequencer and compositing do not (yet?)
 	 * work with copy-on-write. */
 	BKE_animsys_evaluate_all_animation(re->main, NULL, re->scene, (float)cfra);
+
+	/* Update for masks (these do not use animsys but own lighter weight structure to define animation). */
+	BKE_mask_evaluate_all_masks(re->main, (float)cfra, true);
 
 	if (RE_engine_render(re, 1)) {
 		/* in this case external render overrides all */
@@ -2049,28 +2032,6 @@ void RE_RenderFreestyleExternal(Render *re)
 
 		for (rv = re->result->views.first; rv; rv = rv->next) {
 			RE_SetActiveRenderView(re, rv->name);
-
-			/* scene needs to be set to get camera */
-			Object *camera = RE_GetCamera(re);
-
-			/* if no camera, viewmat should have been set! */
-			if (camera) {
-				/* called before but need to call again in case of lens animation from the
-				 * above call to BKE_scene_graph_update_for_newframe, fixes bug. [#22702].
-				 * following calls don't depend on 'RE_SetCamera' */
-				float mat[4][4];
-
-				RE_SetCamera(re, camera);
-				RE_GetCameraModelMatrix(re, camera, mat);
-				invert_m4(mat);
-				RE_SetView(re, mat);
-
-				/* force correct matrix for scaled cameras */
-				DEG_id_tag_update_ex(re->main, &camera->id, ID_RECALC_TRANSFORM);
-			}
-
-			printf("add freestyle\n");
-
 			add_freestyle(re, 1);
 		}
 	}

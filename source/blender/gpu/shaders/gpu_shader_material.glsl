@@ -3,7 +3,7 @@ uniform mat4 ModelViewMatrix;
 uniform mat4 ModelViewMatrixInverse;
 uniform mat3 NormalMatrix;
 
-#ifndef ATTRIB
+#ifndef USE_ATTR
 uniform mat4 ModelMatrix;
 uniform mat4 ModelMatrixInverse;
 #endif
@@ -858,7 +858,7 @@ void hue_sat(float hue, float sat, float value, float fac, vec4 col, out vec4 ou
 
 	hsv[0] = fract(hsv[0] + (hue - 0.5));
 	hsv[1] = clamp(hsv[1] * sat, 0.0, 1.0);
-	hsv[2] = clamp(hsv[2] * value, 0.0, 1.0);
+	hsv[2] = hsv[2] * value;
 
 	hsv_to_rgb(hsv, outcol);
 

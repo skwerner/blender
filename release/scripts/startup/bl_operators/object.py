@@ -133,7 +133,7 @@ class SelectCamera(Operator):
         scene = context.scene
         view_layer = context.view_layer
         view = context.space_data
-        if view.type == 'VIEW_3D' and not view.lock_camera_and_layers:
+        if view.type == 'VIEW_3D' and view.use_local_camera:
             camera = view.camera
         else:
             camera = scene.camera
@@ -953,7 +953,8 @@ class LoadReferenceImage(LoadImageAsEmpty, Operator):
 
 
 class OBJECT_OT_assign_property_defaults(Operator):
-    """Assign the current values of custom properties as their defaults, for use as part of the rest pose state in NLA track mixing"""
+    """Assign the current values of custom properties as their defaults, """ \
+    """for use as part of the rest pose state in NLA track mixing"""
     bl_idname = "object.assign_property_defaults"
     bl_label = "Assign Custom Property Values as Default"
     bl_options = {'UNDO', 'REGISTER'}

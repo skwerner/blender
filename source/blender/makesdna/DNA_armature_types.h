@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,14 +15,9 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * Contributor(s): Full recode, Ton Roosendaal, Crete 2005
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file DNA_armature_types.h
- *  \ingroup DNA
+/** \file \ingroup DNA
  */
 
 #ifndef __DNA_ARMATURE_TYPES_H__
@@ -42,7 +35,6 @@ struct AnimData;
  * 2) Armature Space;  the rest position, in Object space, Bones Spaces are applied hierarchical
  * 3) Pose Space;      the animation position, in Object space
  * 4) World Space;     Object matrix applied to Pose or Armature space
- *
  */
 
 typedef struct Bone {
@@ -137,19 +129,6 @@ typedef struct bArmature {
 	unsigned int layer_used;
 	/** For buttons to work, both variables in this order together. */
 	unsigned int layer, layer_protected;
-
-// XXX deprecated... old animation system (armature only viz) ---
-	/** Number of frames to ghosts to show, and step between them . */
-	short       ghostep, ghostsize;
-	/** Ghost drawing options and number of frames between points of path. */
-	short       ghosttype, pathsize;
-	/** Start and end frames of ghost-drawing range. */
-	int         ghostsf, ghostef;
-	/** Start and end frames of path-calculation range for all bones. */
-	int         pathsf, pathef;
-	/** Number of frames before/after current frame of path-calculation for all bones . */
-	int         pathbc, pathac;
-// XXX end of deprecated code ----------------------------------
 } bArmature;
 
 /* armature->flag */
@@ -215,14 +194,6 @@ typedef enum eArmature_PathFlag {
 	ARM_PATH_KFNOS		= (1<<4),
 } eArmature_PathFlag;
 #endif
-
-/* armature->ghosttype */
-// XXX deprecated... old animation system (armature only viz)
-typedef enum eArmature_GhostType {
-	ARM_GHOST_CUR = 0,
-	ARM_GHOST_RANGE = 1,
-	ARM_GHOST_KEYS = 2,
-} eArmature_GhostType;
 
 /* bone->flag */
 typedef enum eBone_Flag {

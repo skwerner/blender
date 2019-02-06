@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,9 @@
  *
  * The Original Code is Copyright (C) 2004 by Blender Foundation
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/mesh/meshtools.c
- *  \ingroup edmesh
+/** \file \ingroup edmesh
  *
  * meshtools.c: no editmode (violated already :), mirror & join),
  * tools operating on meshes
@@ -586,7 +577,7 @@ int join_mesh_exec(bContext *C, wmOperator *op)
 	/* free temp copy of destination shapekeys (if applicable) */
 	if (nkey) {
 		/* We can assume nobody is using that ID currently. */
-		BKE_id_free_ex(bmain, nkey, LIB_ID_FREE_NO_MAIN | LIB_ID_FREE_NO_UI_USER | LIB_ID_FREE_NO_USER_REFCOUNT, false);
+		BKE_id_free_ex(bmain, nkey, LIB_ID_FREE_NO_UI_USER, false);
 	}
 
 	/* ensure newly inserted keys are time sorted */

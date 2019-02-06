@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,10 @@
  *
  * The Original Code is Copyright (C) 2016, Blender Foundation
  * This is a new part of Blender
- *
- * Contributor(s): Antonio Vazquez, Joshua Leung
- *
- * ***** END GPL LICENSE BLOCK *****
- *
  * Operators for interpolating new Grease Pencil frames from existing strokes
  */
 
-/** \file blender/editors/gpencil/gpencil_interpolate.c
- *  \ingroup edgpencil
+/** \file \ingroup edgpencil
  */
 
 
@@ -57,10 +49,8 @@
 #include "BKE_colortools.h"
 #include "BKE_context.h"
 #include "BKE_deform.h"
-#include "BKE_global.h"
 #include "BKE_gpencil.h"
 #include "BKE_report.h"
-#include "BKE_screen.h"
 
 #include "UI_interface.h"
 #include "UI_resources.h"

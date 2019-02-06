@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,14 +15,9 @@
  *
  * The Original Code is Copyright (C) 2012 Blender Foundation.
  * All rights reserved.
- *
- * Contributor(s): Campbell Barton
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/python/bmesh/bmesh_py_ops.c
- *  \ingroup pybmesh
+/** \file \ingroup pybmesh
  *
  * This file defines the 'bmesh.ops' module.
  * Operators from 'opdefines' are wrapped.
@@ -271,7 +264,7 @@ static PyObject *bpy_bmesh_ops_fakemod_dir(PyObject *UNUSED(self))
 
 static struct PyMethodDef bpy_bmesh_ops_fakemod_methods[] = {
 	{"__dir__", (PyCFunction)bpy_bmesh_ops_fakemod_dir, METH_NOARGS, NULL},
-	{NULL, NULL, 0, NULL}
+	{NULL, NULL, 0, NULL},
 };
 
 static PyTypeObject bmesh_ops_fakemod_Type = {

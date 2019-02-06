@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,14 +12,9 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * Contributor(s): Blender Foundation 2009.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/interface/interface_templates.c
- *  \ingroup edinterface
+/** \file \ingroup edinterface
  */
 
 
@@ -739,8 +732,7 @@ static void template_ID(
 			but->flag |= UI_BUT_UNDO;
 
 			UI_but_funcN_set(but, template_id_cb, MEM_dupallocN(template_ui), POINTER_FROM_INT(UI_ID_ALONE));
-			if (/* test only */
-			    (id_copy(CTX_data_main(C), id, NULL, true) == false) ||
+			if ((!BKE_id_copy_is_allowed(id)) ||
 			    (idfrom && idfrom->lib) ||
 			    (!editable) ||
 			    /* object in editmode - don't change data */

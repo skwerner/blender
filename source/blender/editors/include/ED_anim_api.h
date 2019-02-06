@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,41 +15,35 @@
  *
  * The Original Code is Copyright (C) 2008 Blender Foundation.
  * All rights reserved.
- *
- *
- * Contributor(s): Joshua Leung
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file ED_anim_api.h
- *  \ingroup editors
+/** \file \ingroup editors
  */
 
 #ifndef __ED_ANIM_API_H__
 #define __ED_ANIM_API_H__
 
+struct AnimData;
 struct ID;
 struct ListBase;
-struct AnimData;
 
-struct bContext;
+struct ARegion;
 struct Main;
-struct wmKeyConfig;
 struct ReportList;
 struct ScrArea;
 struct SpaceLink;
-struct ARegion;
 struct View2D;
+struct bContext;
+struct wmKeyConfig;
 
-struct Scene;
 struct Object;
+struct Scene;
 
 struct bDopeSheet;
 
-struct bAction;
 struct FCurve;
 struct FModifier;
+struct bAction;
 
 struct uiBlock;
 struct uiLayout;
@@ -178,7 +170,7 @@ typedef struct bAnimListElem {
 	 * action's ID. But if this is a f-curve which is a driver, then the owner
 	 * is set to, for example, object.
 	 *
-	 * Note, that this is different from id above. The if above will be set to
+	 * Note, that this is different from id above. The id above will be set to
 	 * an object if the f-curve is coming from action associated with that
 	 * object. */
 	struct ID *fcurve_owner_id;

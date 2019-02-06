@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,9 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file DNA_lamp_types.h
- *  \ingroup DNA
+/** \file \ingroup DNA
  */
 
 #ifndef __DNA_LAMP_TYPES_H__
@@ -40,10 +31,10 @@
 #endif
 
 struct AnimData;
-struct bNodeTree;
 struct CurveMapping;
 struct Ipo;
 struct MTex;
+struct bNodeTree;
 
 typedef struct Lamp {
 	ID id;
@@ -150,8 +141,8 @@ typedef struct Lamp {
 /* area shape */
 #define LA_AREA_SQUARE	0
 #define LA_AREA_RECT	1
-#define LA_AREA_CUBE	2
-#define LA_AREA_BOX		3
+/* #define LA_AREA_CUBE 2 */ /* UNUSED */
+/* #define LA_AREA_BOX  3 */ /* UNUSED */
 #define LA_AREA_DISK	4
 #define LA_AREA_ELLIPSE	5
 

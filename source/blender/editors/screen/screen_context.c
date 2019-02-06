@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,13 +15,9 @@
  *
  * The Original Code is Copyright (C) 2008 Blender Foundation.
  * All rights reserved.
- *
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/screen/screen_context.c
- *  \ingroup edscr
+/** \file \ingroup edscr
  */
 
 #include <stdio.h>
@@ -51,10 +45,8 @@
 #include "BKE_action.h"
 #include "BKE_armature.h"
 #include "BKE_paint.h"
-#include "BKE_main.h"
 #include "BKE_gpencil.h"
 #include "BKE_layer.h"
-#include "BKE_screen.h"
 #include "BKE_sequencer.h"
 #include "BKE_workspace.h"
 

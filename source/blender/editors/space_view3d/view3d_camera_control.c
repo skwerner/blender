@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,21 +12,14 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * Contributor(s): Campbell Barton
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/space_view3d/view3d_camera_control.c
- *  \ingroup spview3d
+/** \file \ingroup spview3d
  *
  * The purpose of View3DCameraControl is to allow editing \a rv3d manipulation
  * (mainly \a ofs and \a viewquat) for the purpose of view navigation
  * without having to worry about positioning the camera, its parent...
  * or other details.
- *
- *
  * Typical view-control usage:
  *
  * - acquire a view-control (#ED_view3d_cameracontrol_acquire).
@@ -54,7 +45,6 @@
 #include "BLI_utildefines.h"
 
 #include "BKE_object.h"
-#include "BKE_context.h"
 
 #include "DEG_depsgraph.h"
 

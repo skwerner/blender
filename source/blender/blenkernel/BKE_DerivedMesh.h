@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,19 +15,12 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
 #ifndef __BKE_DERIVEDMESH_H__
 #define __BKE_DERIVEDMESH_H__
 
-/** \file BKE_DerivedMesh.h
- *  \ingroup bke
+/** \file \ingroup bke
  *
  * Basic design of the DerivedMesh system:
  *
@@ -80,22 +71,22 @@
 #include "BKE_customdata.h"
 #include "BKE_bvhutils.h"
 
+struct BMEditMesh;
 struct CCGElem;
 struct CCGKey;
-struct MVert;
+struct Depsgraph;
 struct MEdge;
 struct MFace;
-struct Object;
-struct Scene;
-struct Mesh;
 struct MLoopNorSpaceArray;
-struct BMEditMesh;
+struct MVert;
+struct Mesh;
 struct ModifierData;
-struct Depsgraph;
+struct Object;
 struct PBVH;
+struct Scene;
 
 /* number of sub-elements each mesh element has (for interpolation) */
-#define SUB_ELEMS_VERT 0
+// #define SUB_ELEMS_VERT 0 /* UNUSED */
 #define SUB_ELEMS_EDGE 2
 #define SUB_ELEMS_FACE 50
 

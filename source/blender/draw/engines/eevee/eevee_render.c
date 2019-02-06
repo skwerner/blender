@@ -1,6 +1,4 @@
 /*
- * Copyright 2016, Blender Foundation.
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -15,12 +13,10 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
- * Contributor(s): Blender Institute
- *
+ * Copyright 2016, Blender Foundation.
  */
 
-/** \file eevee_render.c
- *  \ingroup draw_engine
+/** \file \ingroup draw_engine
  */
 
 /**
@@ -33,7 +29,6 @@
 #include "DNA_node_types.h"
 #include "DNA_object_types.h"
 
-#include "BKE_camera.h"
 #include "BKE_object.h"
 
 #include "BLI_rand.h"
@@ -42,7 +37,6 @@
 #include "DEG_depsgraph_query.h"
 
 #include "GPU_framebuffer.h"
-#include "GPU_glew.h"
 #include "GPU_state.h"
 
 #include "RE_pipeline.h"
@@ -285,8 +279,9 @@ static void eevee_render_result_normal(
 	EEVEE_PrivateData *g_data = stl->g_data;
 
 	/* Only read the center texel. */
-	if (stl->effects->taa_current_sample > 1)
+	if (stl->effects->taa_current_sample > 1) {
 		return;
+	}
 
 	if ((view_layer->passflag & SCE_PASS_NORMAL) != 0) {
 		RenderPass *rp = RE_pass_find_by_name(rl, RE_PASSNAME_NORMAL, viewname);
@@ -333,8 +328,9 @@ static void eevee_render_result_z(
 	EEVEE_PrivateData *g_data = stl->g_data;
 
 	/* Only read the center texel. */
-	if (stl->effects->taa_current_sample > 1)
+	if (stl->effects->taa_current_sample > 1) {
 		return;
+	}
 
 	if ((view_layer->passflag & SCE_PASS_Z) != 0) {
 		RenderPass *rp = RE_pass_find_by_name(rl, RE_PASSNAME_Z, viewname);
@@ -475,7 +471,7 @@ void EEVEE_render_draw(EEVEE_Data *vedata, RenderEngine *engine, RenderLayer *rl
 	/* Sort transparents before the loop. */
 	DRW_pass_sort_shgroup_z(psl->transparent_pass);
 
-	/* Push instances attribs to the GPU. */
+	/* Push instances attributes to the GPU. */
 	DRW_render_instance_buffer_finish();
 
 	/* Need to be called after DRW_render_instance_buffer_finish() */

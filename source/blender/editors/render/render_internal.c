@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,13 +15,9 @@
  *
  * The Original Code is Copyright (C) 2008 Blender Foundation.
  * All rights reserved.
- *
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/render/render_internal.c
- *  \ingroup edrend
+/** \file \ingroup edrend
  */
 
 
@@ -34,7 +28,6 @@
 #include "MEM_guardedalloc.h"
 
 #include "BLI_listbase.h"
-#include "BLI_rect.h"
 #include "BLI_timecode.h"
 #include "BLI_math.h"
 #include "BLI_threads.h"
@@ -86,9 +79,6 @@
 #include "IMB_imbuf_types.h"
 
 #include "GPU_shader.h"
-
-#include "BIF_gl.h"
-#include "BIF_glutil.h"
 
 #include "RNA_access.h"
 #include "RNA_define.h"
@@ -1100,7 +1090,8 @@ void RENDER_OT_shutter_curve_preset(wmOperatorType *ot)
 		{CURVE_PRESET_LINE, "LINE", 0, "Line", ""},
 		{CURVE_PRESET_ROUND, "ROUND", 0, "Round", ""},
 		{CURVE_PRESET_ROOT, "ROOT", 0, "Root", ""},
-		{0, NULL, 0, NULL, NULL}};
+		{0, NULL, 0, NULL, NULL},
+	};
 
 	ot->name = "Shutter Curve Preset";
 	ot->description = "Set shutter curve";

@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -16,14 +14,9 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
  * The Original Code is Copyright (C) 2009/2018 by the Blender Foundation.
- *
- * Contributor(s): Joshua Leung
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/draw/intern/draw_anim_viz.c
- *  \ingroup draw
+/** \file \ingroup draw
  */
 
 
@@ -33,20 +26,12 @@
 
 #include "BLI_sys_types.h"
 
-#include "DNA_anim_types.h"
 #include "DNA_armature_types.h"
 #include "DNA_scene_types.h"
-#include "DNA_screen_types.h"
 #include "DNA_view3d_types.h"
 #include "DNA_object_types.h"
 
 #include "BLI_math.h"
-#include "BLI_dlrbTree.h"
-
-#include "BKE_animsys.h"
-#include "BKE_action.h"
-
-#include "ED_keyframes_draw.h"
 
 #include "UI_resources.h"
 
@@ -57,14 +42,9 @@
 
 #include "GPU_shader.h"
 #include "GPU_immediate.h"
-#include "GPU_matrix.h"
 
 #include "draw_common.h"
 #include "draw_manager_text.h"
-
-#include "draw_mode_engines.h"
-
-extern struct GPUUniformBuffer *globals_ubo; /* draw_common.c */
 
 /* ********************************* Lists ************************************** */
 /* All lists are per viewport specific datas.
@@ -230,7 +210,7 @@ static void MPATH_cache_motion_path(MPATH_PassList *psl,
 		DRW_shgroup_uniform_bool_copy(shgrp, "selected", sel);
 		DRW_shgroup_uniform_bool_copy(shgrp, "useCustomColor", use_custom_col);
 		DRW_shgroup_uniform_vec2(shgrp, "viewportSize", DRW_viewport_size_get(), 1);
-		DRW_shgroup_uniform_block(shgrp, "globalsBlock", globals_ubo);
+		DRW_shgroup_uniform_block(shgrp, "globalsBlock", G_draw.block_ubo);
 		if (use_custom_col) {
 			DRW_shgroup_uniform_vec3(shgrp, "customColor", mpath->color, 1);
 		}
@@ -247,7 +227,7 @@ static void MPATH_cache_motion_path(MPATH_PassList *psl,
 	DRW_shgroup_uniform_bool_copy(shgrp, "selected", sel);
 	DRW_shgroup_uniform_bool_copy(shgrp, "showKeyFrames", show_keyframes);
 	DRW_shgroup_uniform_bool_copy(shgrp, "useCustomColor", use_custom_col);
-	DRW_shgroup_uniform_block(shgrp, "globalsBlock", globals_ubo);
+	DRW_shgroup_uniform_block(shgrp, "globalsBlock", G_draw.block_ubo);
 	if (use_custom_col) {
 		DRW_shgroup_uniform_vec3(shgrp, "customColor", mpath->color, 1);
 	}

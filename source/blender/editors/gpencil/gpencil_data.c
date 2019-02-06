@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -15,18 +13,12 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
- * The Original Code is Copyright (C) 2008, Blender Foundation, Joshua Leung
+ * The Original Code is Copyright (C) 2008, Blender Foundation
  * This is a new part of Blender
- *
- * Contributor(s): Joshua Leung, Antonio Vazquez
- *
- * ***** END GPL LICENSE BLOCK *****
- *
  * Operators for dealing with GP datablocks and layers
  */
 
-/** \file blender/editors/gpencil/gpencil_data.c
- *  \ingroup edgpencil
+/** \file \ingroup edgpencil
  */
 
 
@@ -62,7 +54,6 @@
 #include "BKE_context.h"
 #include "BKE_deform.h"
 #include "BKE_fcurve.h"
-#include "BKE_global.h"
 #include "BKE_gpencil.h"
 #include "BKE_gpencil_modifier.h"
 #include "BKE_library.h"
@@ -73,7 +64,6 @@
 #include "BKE_paint.h"
 #include "BKE_report.h"
 #include "BKE_scene.h"
-#include "BKE_screen.h"
 
 #include "UI_interface.h"
 #include "UI_resources.h"
@@ -363,7 +353,7 @@ void GPENCIL_OT_layer_move(wmOperatorType *ot)
 	static const EnumPropertyItem slot_move[] = {
 		{GP_LAYER_MOVE_UP, "UP", 0, "Up", ""},
 		{GP_LAYER_MOVE_DOWN, "DOWN", 0, "Down", ""},
-		{0, NULL, 0, NULL, NULL}
+		{0, NULL, 0, NULL, NULL},
 	};
 
 	/* identifiers */
@@ -539,7 +529,7 @@ void GPENCIL_OT_layer_duplicate_object(wmOperatorType *ot)
 	static const EnumPropertyItem copy_mode[] = {
 		{GP_LAYER_COPY_OBJECT_ALL_FRAME, "ALL", 0, "All Frames", ""},
 		{GP_LAYER_COPY_OBJECT_ACT_FRAME, "ACTIVE", 0, "Active Frame", ""},
-		{0, NULL, 0, NULL, NULL}
+		{0, NULL, 0, NULL, NULL},
 	};
 
 	/* identifiers */
@@ -602,7 +592,7 @@ void GPENCIL_OT_frame_duplicate(wmOperatorType *ot)
 	static const EnumPropertyItem duplicate_mode[] = {
 		{GP_FRAME_DUP_ACTIVE, "ACTIVE", 0, "Active", "Duplicate frame in active layer only"},
 		{GP_FRAME_DUP_ALL, "ALL", 0, "All", "Duplicate active frames in all layers"},
-		{0, NULL, 0, NULL, NULL}
+		{0, NULL, 0, NULL, NULL},
 	};
 
 	/* identifiers */
@@ -689,7 +679,7 @@ void GPENCIL_OT_frame_clean_fill(wmOperatorType *ot)
 	static const EnumPropertyItem duplicate_mode[] = {
 		{GP_FRAME_CLEAN_FILL_ACTIVE, "ACTIVE", 0, "Active Frame Only", "Clean active frame only"},
 		{GP_FRAME_CLEAN_FILL_ALL, "ALL", 0, "All Frames", "Clean all frames in all layers"},
-		{0, NULL, 0, NULL, NULL}
+		{0, NULL, 0, NULL, NULL},
 	};
 
 	/* identifiers */

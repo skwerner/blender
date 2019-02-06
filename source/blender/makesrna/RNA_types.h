@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,14 +12,9 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * Contributor(s): Blender Foundation (2008).
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/makesrna/RNA_types.h
- *  \ingroup RNA
+/** \file \ingroup RNA
  */
 
 #ifndef __RNA_TYPES_H__
@@ -33,14 +26,14 @@
 extern "C" {
 #endif
 
-struct ParameterList;
-struct FunctionRNA;
-struct PropertyRNA;
-struct StructRNA;
 struct BlenderRNA;
-struct bContext;
+struct FunctionRNA;
 struct Main;
+struct ParameterList;
+struct PropertyRNA;
 struct ReportList;
+struct StructRNA;
+struct bContext;
 
 /** Pointer
  *

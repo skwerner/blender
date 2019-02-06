@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,14 +15,9 @@
  *
  * The Original Code is Copyright (C) 2008, Blender Foundation
  * This is a new part of Blender
- *
- * Contributor(s): Antonio Vazquez
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file draw/engines/gpencil/gpencil_draw_cache_impl.c
- *  \ingroup draw
+/** \file \ingroup draw
  */
 
 #include "BLI_polyfill_2d.h"
@@ -35,14 +28,11 @@
 #include "DNA_screen_types.h"
 #include "DNA_view3d_types.h"
 
-#include "BKE_action.h"
 #include "BKE_deform.h"
 #include "BKE_gpencil.h"
 
 #include "DRW_render.h"
 
-#include "GPU_immediate.h"
-#include "GPU_draw.h"
 
 #include "ED_gpencil.h"
 #include "ED_view3d.h"

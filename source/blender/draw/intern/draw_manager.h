@@ -1,6 +1,4 @@
 /*
- * Copyright 2016, Blender Foundation.
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -15,12 +13,10 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
- * Contributor(s): Blender Institute
- *
+ * Copyright 2016, Blender Foundation.
  */
 
-/** \file draw_manager.h
- *  \ingroup draw
+/** \file \ingroup draw
  */
 
 /* Private functions / structs of the draw manager */
@@ -132,11 +128,16 @@ typedef struct DRWCallState {
 } DRWCallState;
 
 typedef enum {
-	DRW_CALL_SINGLE,                 /* A single batch */
-	DRW_CALL_RANGE,                  /* Like single but only draw a range of vertices/indices. */
-	DRW_CALL_INSTANCES,              /* Draw instances without any instancing attribs. */
-	DRW_CALL_GENERATE,               /* Uses a callback to draw with any number of batches. */
-	DRW_CALL_PROCEDURAL,             /* Generate a drawcall without any GPUBatch. */
+	/** A single batch. */
+	DRW_CALL_SINGLE,
+	/** Like single but only draw a range of vertices/indices. */
+	DRW_CALL_RANGE,
+	/** Draw instances without any instancing attributes. */
+	DRW_CALL_INSTANCES,
+	/** Uses a callback to draw with any number of batches. */
+	DRW_CALL_GENERATE,
+	/** Generate a drawcall without any #GPUBatch. */
+	DRW_CALL_PROCEDURAL,
 } DRWCallType;
 
 typedef struct DRWCall {
@@ -265,7 +266,7 @@ struct DRWShadingGroup {
 
 	DRWPass *pass_parent; /* backlink to pass we're in */
 #ifndef NDEBUG
-	char attribs_count;
+	char attrs_count;
 #endif
 #ifdef USE_GPU_SELECT
 	GPUVertBuf *inst_selectid;

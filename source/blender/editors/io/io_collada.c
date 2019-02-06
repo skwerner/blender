@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,15 +15,9 @@
  *
  * The Original Code is Copyright (C) 2008 Blender Foundation.
  * All rights reserved.
- *
- *
- * Contributor(s): Blender Foundation
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/io/io_collada.c
- *  \ingroup collada
+/** \file \ingroup collada
  */
 #ifdef WITH_COLLADA
 #include "DNA_space_types.h"
@@ -419,7 +411,7 @@ void WM_OT_collada_export(wmOperatorType *ot)
 	static const EnumPropertyItem prop_bc_export_mesh_type[] = {
 		{BC_MESH_TYPE_VIEW, "view", 0, "View", "Apply modifier's view settings"},
 		{BC_MESH_TYPE_RENDER, "render", 0, "Render", "Apply modifier's render settings"},
-		{0, NULL, 0, NULL, NULL}
+		{0, NULL, 0, NULL, NULL},
 	};
 
 	static const EnumPropertyItem prop_bc_export_transformation_type[] = {

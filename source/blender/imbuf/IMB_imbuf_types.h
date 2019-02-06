@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,12 +15,6 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
 #ifndef __IMB_IMBUF_TYPES_H__
@@ -30,9 +22,7 @@
 
 #include "DNA_vec_types.h"  /* for rcti */
 
-/**
- * \file IMB_imbuf_types.h
- * \ingroup imbuf
+/** \file \ingroup imbuf
  * \brief Contains defines and structs used throughout the imbuf module.
  * \todo Clean up includes.
  *
@@ -67,7 +57,6 @@ typedef struct DDSData {
  * imbuf operations.
  *
  * Also; add new variables to the end to save pain!
- *
  */
 
 

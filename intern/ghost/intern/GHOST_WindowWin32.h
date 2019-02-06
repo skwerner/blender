@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,9 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file ghost/intern/GHOST_WindowWin32.h
- *  \ingroup GHOST
+/** \file \ingroup GHOST
  * Declaration of GHOST_WindowWin32 class.
  */
 
@@ -143,8 +134,6 @@ typedef BOOL (API * GHOST_WIN32_GetPointerPenInfo)(UINT32 pointerId, POINTER_PEN
 
 /**
  * GHOST window on M$ Windows OSs.
- * \author	Maarten Gribnau
- * \date	May 10, 2001
  */
 class GHOST_WindowWin32 : public GHOST_Window {
 public:

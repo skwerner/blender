@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,14 +12,9 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * Contributor(s): Campbell Barton
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/python/intern/bpy_rna.c
- *  \ingroup pythonintern
+/** \file \ingroup pythonintern
  *
  * This file is the main interface between python and blenders data api (RNA),
  * exposing RNA to python so blender data can be accessed in a python like way.
@@ -5265,7 +5258,7 @@ static struct PyMethodDef pyrna_struct_methods[] = {
 	{"callback_add", (PyCFunction)pyrna_callback_classmethod_add, METH_VARARGS | METH_CLASS, NULL},
 	{"callback_remove", (PyCFunction)pyrna_callback_classmethod_remove, METH_VARARGS | METH_CLASS, NULL},
 #endif
-	{NULL, NULL, 0, NULL}
+	{NULL, NULL, 0, NULL},
 };
 
 static struct PyMethodDef pyrna_prop_methods[] = {
@@ -5273,7 +5266,7 @@ static struct PyMethodDef pyrna_prop_methods[] = {
 	{"as_bytes", (PyCFunction)pyrna_prop_as_bytes, METH_NOARGS, pyrna_prop_as_bytes_doc},
 	{"update", (PyCFunction)pyrna_prop_update, METH_NOARGS, pyrna_prop_update_doc},
 	{"__dir__", (PyCFunction)pyrna_prop_dir, METH_NOARGS, NULL},
-	{NULL, NULL, 0, NULL}
+	{NULL, NULL, 0, NULL},
 };
 
 static struct PyMethodDef pyrna_prop_array_methods[] = {
@@ -5290,7 +5283,7 @@ static struct PyMethodDef pyrna_prop_collection_methods[] = {
 
 	{"get", (PyCFunction)pyrna_prop_collection_get, METH_VARARGS, pyrna_prop_collection_get_doc},
 	{"find", (PyCFunction)pyrna_prop_collection_find, METH_O, pyrna_prop_collection_find_doc},
-	{NULL, NULL, 0, NULL}
+	{NULL, NULL, 0, NULL},
 };
 
 static struct PyMethodDef pyrna_prop_collection_idprop_methods[] = {
@@ -5298,7 +5291,7 @@ static struct PyMethodDef pyrna_prop_collection_idprop_methods[] = {
 	{"remove", (PyCFunction)pyrna_prop_collection_idprop_remove, METH_O, NULL},
 	{"clear", (PyCFunction)pyrna_prop_collection_idprop_clear, METH_NOARGS, NULL},
 	{"move", (PyCFunction)pyrna_prop_collection_idprop_move, METH_VARARGS, NULL},
-	{NULL, NULL, 0, NULL}
+	{NULL, NULL, 0, NULL},
 };
 
 /* only needed for subtyping, so a new class gets a valid BPy_StructRNA
@@ -7187,7 +7180,7 @@ static PyObject *pyrna_unregister_class(PyObject *self, PyObject *py_class);
 
 static struct PyMethodDef pyrna_basetype_methods[] = {
 	{"__dir__", (PyCFunction)pyrna_basetype_dir, METH_NOARGS, ""},
-	{NULL, NULL, 0, NULL}
+	{NULL, NULL, 0, NULL},
 };
 
 /* used to call ..._keys() direct, but we need to filter out operator subclasses */
@@ -8259,16 +8252,20 @@ static PyObject *pyrna_register_class(PyObject *UNUSED(self), PyObject *py_class
 		return NULL;
 
 	/* call classed register method () */
-	py_cls_meth = PyObject_GetAttr(py_class, bpy_intern_str_register);
-	if (py_cls_meth == NULL) {
-		PyErr_Clear();
-	}
-	else {
-		PyObject *ret = PyObject_CallObject(py_cls_meth, NULL);
-		if (ret) {
-			Py_DECREF(ret);
+	switch (_PyObject_LookupAttr(py_class, bpy_intern_str_register, &py_cls_meth)) {
+		case 1:
+		{
+			PyObject *ret = PyObject_CallObject(py_cls_meth, NULL);
+			if (ret) {
+				Py_DECREF(ret);
+			}
+			else {
+				return NULL;
+			}
+			break;
 		}
-		else {
+		case -1:
+		{
 			return NULL;
 		}
 	}
@@ -8359,16 +8356,20 @@ static PyObject *pyrna_unregister_class(PyObject *UNUSED(self), PyObject *py_cla
 	}
 
 	/* call classed unregister method */
-	py_cls_meth = PyObject_GetAttr(py_class, bpy_intern_str_unregister);
-	if (py_cls_meth == NULL) {
-		PyErr_Clear();
-	}
-	else {
-		PyObject *ret = PyObject_CallObject(py_cls_meth, NULL);
-		if (ret) {
-			Py_DECREF(ret);
+	switch (_PyObject_LookupAttr(py_class, bpy_intern_str_unregister, &py_cls_meth)) {
+		case 1:
+		{
+			PyObject *ret = PyObject_CallObject(py_cls_meth, NULL);
+			if (ret) {
+				Py_DECREF(ret);
+			}
+			else {
+				return NULL;
+			}
+			break;
 		}
-		else {
+		case -1:
+		{
 			return NULL;
 		}
 	}
@@ -8500,7 +8501,7 @@ static struct BPyRNA_CallBack pyrna_cb_methods[] = {
 
 	{{"draw_cursor_add",    (PyCFunction)pyrna_callback_classmethod_add,    METH_VARARGS | METH_STATIC, ""}, &RNA_WindowManager},
 	{{"draw_cursor_remove", (PyCFunction)pyrna_callback_classmethod_remove, METH_VARARGS | METH_STATIC, ""}, &RNA_WindowManager},
-	{{NULL, NULL, 0, NULL}, NULL}
+	{{NULL, NULL, 0, NULL}, NULL},
 };
 
 void BPY_rna_register_cb(void)

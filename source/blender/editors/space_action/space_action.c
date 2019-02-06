@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,17 +15,10 @@
  *
  * The Original Code is Copyright (C) 2008 Blender Foundation.
  * All rights reserved.
- *
- *
- * Contributor(s): Blender Foundation
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/space_action/space_action.c
- *  \ingroup spaction
+/** \file \ingroup spaction
  */
-
 
 #include <string.h>
 #include <stdio.h>
@@ -40,7 +31,6 @@
 #include "MEM_guardedalloc.h"
 
 #include "BLI_blenlib.h"
-#include "BLI_math.h"
 #include "BLI_utildefines.h"
 
 #include "BKE_context.h"
@@ -53,8 +43,6 @@
 #include "WM_api.h"
 #include "WM_types.h"
 #include "WM_message.h"
-
-#include "BIF_gl.h"
 
 #include "UI_resources.h"
 #include "UI_view2d.h"
@@ -570,44 +558,33 @@ static void action_listener(
 			}
 			break;
 		case NC_SCENE:
-			if (saction->mode == SACTCONT_TIMELINE) {
-				switch (wmn->data) {
-					case ND_RENDER_RESULT:
-						ED_area_tag_redraw(sa);
-						break;
-					case ND_OB_ACTIVE:
-					case ND_FRAME:
-						ED_area_tag_refresh(sa);
-						break;
-					case ND_FRAME_RANGE:
-					{
-						ARegion *ar;
-						Scene *scene = wmn->reference;
-
-						for (ar = sa->regionbase.first; ar; ar = ar->next) {
-							if (ar->regiontype == RGN_TYPE_WINDOW) {
-								ar->v2d.tot.xmin = (float)(SFRA - 4);
-								ar->v2d.tot.xmax = (float)(EFRA + 4);
-								break;
-							}
+			switch (wmn->data) {
+				case ND_OB_ACTIVE:
+				case ND_OB_SELECT:
+					/* Selection changed, so force refresh to flush
+					 * (needs flag set to do syncing). */
+					saction->runtime.flag |= SACTION_RUNTIME_FLAG_NEED_CHAN_SYNC;
+					ED_area_tag_refresh(sa);
+					break;
+				case ND_RENDER_RESULT:
+					ED_area_tag_redraw(sa);
+					break;
+				case ND_FRAME_RANGE:
+					for (ARegion *ar = sa->regionbase.first; ar; ar = ar->next) {
+						if (ar->regiontype == RGN_TYPE_WINDOW) {
+							Scene *scene = wmn->reference;
+							ar->v2d.tot.xmin = (float)(SFRA - 4);
+							ar->v2d.tot.xmax = (float)(EFRA + 4);
+							break;
 						}
-						break;
 					}
-				}
-			}
-			else {
-				switch (wmn->data) {
-					case ND_OB_ACTIVE:  /* selection changed, so force refresh to flush
-					                     * (needs flag set to do syncing) */
-					case ND_OB_SELECT:
-						saction->runtime.flag |= SACTION_RUNTIME_FLAG_NEED_CHAN_SYNC;
-						ED_area_tag_refresh(sa);
-						break;
-
-					default: /* just redrawing the view will do */
+					break;
+				default:
+					if (saction->mode != SACTCONT_TIMELINE) {
+						/* Just redrawing the view will do. */
 						ED_area_tag_redraw(sa);
-						break;
-				}
+					}
+					break;
 			}
 			break;
 		case NC_OBJECT:

@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,9 @@
  *
  * The Original Code is Copyright (C) 2004 Blender Foundation.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): Joshua Leung
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/space_outliner/outliner_select.c
- *  \ingroup spoutliner
+/** \file \ingroup spoutliner
  */
 
 #include <stdlib.h>
@@ -549,7 +540,7 @@ static eOLDrawState tree_element_active_posechannel(
 			}
 
 			WM_event_add_notifier(C, NC_OBJECT | ND_BONE_ACTIVE, ob);
-
+			DEG_id_tag_update(&arm->id, ID_RECALC_SELECT);
 		}
 	}
 	else {

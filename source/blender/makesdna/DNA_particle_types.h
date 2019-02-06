@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,9 @@
  *
  * The Original Code is Copyright (C) 2007 by Janne Karhu.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file DNA_particle_types.h
- *  \ingroup DNA
+/** \file \ingroup DNA
  */
 
 #ifndef __DNA_PARTICLE_TYPES_H__
@@ -532,11 +523,6 @@ typedef enum eParticleShapeFlag {
 #define PART_DRAW_COL_VEL		2
 #define PART_DRAW_COL_ACC		3
 
-
-/* part->simplify_flag */
-#define PART_SIMPLIFY_ENABLE	1
-#define PART_SIMPLIFY_VIEWPORT	2
-
 /* part->time_flag */
 #define PART_TIME_AUTOSF	1 /* Automatic subframes */
 
@@ -615,8 +601,8 @@ typedef enum eParticleShapeFlag {
 #define	PSYS_KEYED_TIMING	8
 //#define PSYS_ENABLED		16	/* deprecated */
 #define PSYS_HAIR_UPDATED	32  /* signal for updating hair particle mode */
-#define PSYS_DRAWING		64
-#define PSYS_USE_IMAT		128
+/* #define PSYS_DRAWING		64 */ /* deprecated */
+/* #define PSYS_USE_IMAT		128 */ /* deprecated */
 #define PSYS_DELETE			256	/* remove particlesystem as soon as possible */
 #define PSYS_HAIR_DONE		512
 #define PSYS_KEYED			1024

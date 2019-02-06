@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -16,14 +14,9 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
  * The Original Code is Copyright (C) Blender Foundation
- *
- * Contributor(s): Joshua Leung (2009 Recode)
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/space_graph/graph_draw.c
- *  \ingroup spgraph
+/** \file \ingroup spgraph
  */
 
 
@@ -46,7 +39,6 @@
 #include "BKE_curve.h"
 #include "BKE_fcurve.h"
 
-#include "BIF_glutil.h"
 
 #include "GPU_draw.h"
 #include "GPU_immediate.h"

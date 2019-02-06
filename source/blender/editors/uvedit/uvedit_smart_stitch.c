@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,9 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): Antony Riakiotakis.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/uvedit/uvedit_smart_stitch.c
- *  \ingroup eduv
+/** \file \ingroup eduv
  */
 
 
@@ -47,8 +38,6 @@
 #include "BLI_string.h"
 
 #include "BLT_translation.h"
-
-#include "BIF_gl.h"
 
 #include "BKE_context.h"
 #include "BKE_customdata.h"
@@ -234,7 +223,7 @@ typedef struct PreviewPosition {
 
 enum StitchModes {
 	STITCH_VERT,
-	STITCH_EDGE
+	STITCH_EDGE,
 };
 
 /* UvElement identification. */
@@ -2713,7 +2702,7 @@ void UV_OT_stitch(wmOperatorType *ot)
 	static const EnumPropertyItem stitch_modes[] = {
 	    {STITCH_VERT, "VERTEX", 0, "Vertex", ""},
 	    {STITCH_EDGE, "EDGE", 0, "Edge", ""},
-	    {0, NULL, 0, NULL, NULL}
+	    {0, NULL, 0, NULL, NULL},
 	};
 
 	/* identifiers */

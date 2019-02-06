@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,14 +12,9 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * Contributor(s): Blender Foundation 2009.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/space_node/node_templates.c
- *  \ingroup edinterface
+/** \file \ingroup edinterface
  */
 
 #include <stdlib.h>
@@ -39,7 +32,6 @@
 #include "BLT_translation.h"
 
 #include "BKE_context.h"
-#include "BKE_global.h"
 #include "BKE_library.h"
 #include "BKE_main.h"
 #include "BKE_scene.h"

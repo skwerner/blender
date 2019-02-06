@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,14 +12,9 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * Contributor(s): Bastien Montagne
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/python/intern/bpy_rna_id_collection.c
- *  \ingroup pythonintern
+/** \file \ingroup pythonintern
  *
  * This file adds some helpers related to ID/Main handling, that cannot fit well in RNA itself.
  */
@@ -43,6 +36,9 @@
 /* Those folowing are only to support hack of not listing some internal 'backward' pointers in generated user_map... */
 #include "DNA_object_types.h"
 #include "DNA_key_types.h"
+
+#include "WM_api.h"
+#include "WM_types.h"
 
 #include "bpy_capi_utils.h"
 #include "bpy_rna_id_collection.h"
@@ -351,6 +347,8 @@ static PyObject *bpy_batch_remove(PyObject *UNUSED(self), PyObject *args, PyObje
 		Py_DECREF(ids_fast);
 
 		BKE_id_multi_tagged_delete(bmain);
+		/* Force full redraw, mandatory to avoid crashes when running this from UI... */
+		WM_main_add_notifier(NC_WINDOW, NULL);
 	}
 	else {
 		goto error;

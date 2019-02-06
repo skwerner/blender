@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,17 +15,12 @@
  *
  * The Original Code is Copyright (C) 2018 by Blender Foundation.
  * All rights reserved.
- *
- * Contributor(s): Sergey Sharybin.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
 #ifndef __SUBDIV_CONVERTER_H__
 #define __SUBDIV_CONVERTER_H__
 
-/** \file blender/blenkernel/intern/subdiv_converter.h
- *  \ingroup bke
+/** \file \ingroup bke
  */
 
 #include "BKE_subdiv.h"

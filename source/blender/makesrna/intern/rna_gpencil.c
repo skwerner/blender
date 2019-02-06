@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,15 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * Contributor(s): Blender Foundation (2009), Joshua Leung, Antonio Vazquez
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
- /** \file blender/makesrna/intern/rna_gpencil.c
-  *  \ingroup RNA
-  */
+/** \file \ingroup RNA
+ */
 
 #include <stdlib.h>
 
@@ -36,7 +29,6 @@
 
 #include "MEM_guardedalloc.h"
 
-#include "BLI_string_utils.h"
 #include "BLI_utildefines.h"
 
 #include "BLT_translation.h"
@@ -54,7 +46,7 @@ static const EnumPropertyItem parent_type_items[] = {
 	{PAROBJECT, "OBJECT", 0, "Object", "The layer is parented to an object"},
 	{PARSKEL, "ARMATURE", 0, "Armature", ""},
 	{PARBONE, "BONE", 0, "Bone", "The layer is parented to a bone"},
-	{0, NULL, 0, NULL, NULL}
+	{0, NULL, 0, NULL, NULL},
 };
 
 #ifndef RNA_RUNTIME
@@ -62,20 +54,20 @@ static EnumPropertyItem rna_enum_gpencil_xraymodes_items[] = {
 	{GP_XRAY_FRONT, "FRONT", 0, "Front", "Draw all strokes in front"},
 	{GP_XRAY_3DSPACE, "3DSPACE", 0, "3D Space", "Draw strokes relative to other objects in 3D space"},
 	{GP_XRAY_BACK, "BACK", 0, "Back", "Draw all strokes last"},
-	{0, NULL, 0, NULL, NULL}
+	{0, NULL, 0, NULL, NULL},
 };
 
 static EnumPropertyItem rna_enum_gpencil_onion_modes_items[] = {
 	{GP_ONION_MODE_ABSOLUTE, "ABSOLUTE", 0, "Frames", "Frames in absolute range of the scene frame"},
 	{GP_ONION_MODE_RELATIVE, "RELATIVE", 0, "Keyframes", "Frames in relative range of the Grease Pencil keyframes"},
 	{GP_ONION_MODE_SELECTED, "SELECTED", 0, "Selected", "Only selected keyframes"},
-	{0, NULL, 0, NULL, NULL}
+	{0, NULL, 0, NULL, NULL},
 };
 
 static const EnumPropertyItem rna_enum_gplayer_move_type_items[] = {
    {-1, "UP", 0, "Up", ""},
    {1, "DOWN", 0, "Down", ""},
-   {0, NULL, 0, NULL, NULL}
+   {0, NULL, 0, NULL, NULL},
 };
 
 static const EnumPropertyItem rna_enum_layer_blend_modes_items[] = {
@@ -91,13 +83,14 @@ static const EnumPropertyItem rna_enum_layer_blend_modes_items[] = {
 static EnumPropertyItem rna_enum_gpencil_caps_modes_items[] = {
 	{GP_STROKE_CAP_ROUND, "ROUND", 0, "Rounded", ""},
 	{GP_STROKE_CAP_FLAT, "FLAT", 0, "Flat", ""},
-	{0, NULL, 0, NULL, NULL}
+	{0, NULL, 0, NULL, NULL},
 };
 #endif
 
 #ifdef RNA_RUNTIME
 
 #include "BLI_ghash.h"
+#include "BLI_string_utils.h"
 
 #include "WM_api.h"
 
@@ -922,7 +915,7 @@ static void rna_def_gpencil_stroke(BlenderRNA *brna)
 		{GP_STROKE_3DSPACE, "3DSPACE", 0, "3D Space", "Stroke is in 3D-space"},
 		{GP_STROKE_2DSPACE, "2DSPACE", 0, "2D Space", "Stroke is in 2D-space"},
 		{GP_STROKE_2DIMAGE, "2DIMAGE", 0, "2D Image", "Stroke is in 2D-space (but with special 'image' scaling)"},
-		{0, NULL, 0, NULL, NULL}
+		{0, NULL, 0, NULL, NULL},
 	};
 
 	srna = RNA_def_struct(brna, "GPencilStroke", NULL);

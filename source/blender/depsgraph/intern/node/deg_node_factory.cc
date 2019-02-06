@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -15,35 +13,33 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
- * The Original Code is Copyright (C) 2013 Blender Foundation.
+ * The Original Code is Copyright (C) 2019 Blender Foundation.
  * All rights reserved.
- *
- * Original Author: Joshua Leung
- * Contributor(s): None Yet
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/depsgraph/intern/nodes/deg_node_time.cc
- *  \ingroup depsgraph
+/** \file \ingroup depsgraph
  */
 
-#include "intern/nodes/deg_node_time.h"
-
-#include "intern/depsgraph_intern.h"
-#include "util/deg_util_foreach.h"
-
-#include "DNA_scene_types.h"
+#include "intern/node/deg_node_factory.h"
 
 namespace DEG {
 
-void TimeSourceDepsNode::tag_update(Depsgraph *graph,
-                                    eDepsTag_Source /*source*/)
+/* Global type registry */
+static DepsNodeFactory *
+node_typeinfo_registry[static_cast<int>(NodeType::NUM_TYPES)] = {NULL};
+
+void register_node_typeinfo(DepsNodeFactory *factory)
 {
-	foreach (DepsRelation *rel, outlinks) {
-		DepsNode *node = rel->to;
-		node->tag_update(graph, DEG_UPDATE_SOURCE_TIME);
-	}
+	BLI_assert(factory != NULL);
+	const int type_as_int = static_cast<int>(factory->type());
+	node_typeinfo_registry[type_as_int] = factory;
+}
+
+DepsNodeFactory *type_get_factory(const NodeType type)
+{
+	/* Look up type - at worst, it doesn't exist in table yet, and we fail. */
+	const int type_as_int = static_cast<int>(type);
+	return node_typeinfo_registry[type_as_int];
 }
 
 }  // namespace DEG

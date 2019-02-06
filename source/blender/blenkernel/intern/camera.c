@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,9 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/blenkernel/intern/camera.c
- *  \ingroup bke
+/** \file \ingroup bke
  */
 
 #include <stdlib.h>
@@ -50,8 +41,6 @@
 #include "BKE_object.h"
 #include "BKE_layer.h"
 #include "BKE_library.h"
-#include "BKE_library_query.h"
-#include "BKE_library_remap.h"
 #include "BKE_main.h"
 #include "BKE_scene.h"
 #include "BKE_screen.h"
@@ -99,7 +88,7 @@ void *BKE_camera_add(Main *bmain, const char *name)
 
 /**
  * Only copy internal data of Camera ID from source to already allocated/initialized destination.
- * You probably nerver want to use that directly, use id_copy or BKE_id_copy_ex for typical needs.
+ * You probably never want to use that directly, use BKE_id_copy or BKE_id_copy_ex for typical needs.
  *
  * WARNING! This function will not handle ID user count!
  *
@@ -113,7 +102,7 @@ void BKE_camera_copy_data(Main *UNUSED(bmain), Camera *cam_dst, const Camera *ca
 Camera *BKE_camera_copy(Main *bmain, const Camera *cam)
 {
 	Camera *cam_copy;
-	BKE_id_copy_ex(bmain, &cam->id, (ID **)&cam_copy, 0, false);
+	BKE_id_copy(bmain, &cam->id, (ID **)&cam_copy);
 	return cam_copy;
 }
 

@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,17 +15,9 @@
  *
  * The Original Code is Copyright (C) Blender Foundation.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): Daniel Genrich
- *                 Blender Foundation
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/blenkernel/intern/smoke.c
- *  \ingroup bke
+/** \file \ingroup bke
  */
 
 
@@ -42,12 +32,9 @@
 
 #include "BLI_blenlib.h"
 #include "BLI_math.h"
-#include "BLI_kdtree.h"
 #include "BLI_kdopbvh.h"
-#include "BLI_task.h"
 #include "BLI_threads.h"
 #include "BLI_utildefines.h"
-#include "BLI_voxel.h"
 
 #include "DNA_anim_types.h"
 #include "DNA_armature_types.h"
@@ -72,9 +59,7 @@
 #include "BKE_customdata.h"
 #include "BKE_deform.h"
 #include "BKE_effect.h"
-#include "BKE_global.h"
 #include "BKE_library.h"
-#include "BKE_main.h"
 #include "BKE_mesh.h"
 #include "BKE_mesh_runtime.h"
 #include "BKE_modifier.h"
@@ -104,6 +89,10 @@
 #include "smoke_API.h"
 
 #ifdef WITH_SMOKE
+
+#include "BLI_task.h"
+#include "BLI_kdtree.h"
+#include "BLI_voxel.h"
 
 static ThreadMutex object_update_lock = BLI_MUTEX_INITIALIZER;
 
@@ -681,6 +670,8 @@ void smokeModifier_copy(const struct SmokeModifierData *smd, struct SmokeModifie
 		if (sds->coba) {
 			tsds->coba = MEM_dupallocN(sds->coba);
 		}
+
+		tsds->clipping = sds->clipping;
 	}
 	else if (tsmd->flow) {
 		SmokeFlowSettings *tsfs = tsmd->flow;
@@ -2898,15 +2889,21 @@ struct Mesh *smokeModifier_do(
 		BLI_rw_mutex_unlock(smd->domain->fluid_mutex);
 
 	/* return generated geometry for adaptive domain */
+	Mesh *result;
 	if (smd->type & MOD_SMOKE_TYPE_DOMAIN && smd->domain &&
 	    smd->domain->flags & MOD_SMOKE_ADAPTIVE_DOMAIN &&
 	    smd->domain->base_res[0])
 	{
-		return createDomainGeometry(smd->domain, ob);
+		result = createDomainGeometry(smd->domain, ob);
 	}
 	else {
-		return BKE_mesh_copy_for_eval(me, false);
+		result = BKE_mesh_copy_for_eval(me, false);
 	}
+	/* XXX This is really not a nice hack, but until root of the problem is understood,
+	 * this should be an acceptable workaround I think.
+	 * See T58492 for details on the issue. */
+	result->texflag |= ME_AUTOSPACE;
+	return result;
 }
 
 static float calc_voxel_transp(float *result, float *input, int res[3], int *pixel, float *tRay, float correct)

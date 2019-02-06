@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,9 @@
  *
  * The Original Code is Copyright (C) 2007 Blender Foundation.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/space_file/filelist.c
- *  \ingroup spfile
+/** \file \ingroup spfile
  */
 
 
@@ -51,7 +42,6 @@
 #include "BLI_fileops_types.h"
 #include "BLI_fnmatch.h"
 #include "BLI_ghash.h"
-#include "BLI_hash_md5.h"
 #include "BLI_linklist.h"
 #include "BLI_math.h"
 #include "BLI_stack.h"
@@ -354,7 +344,7 @@ enum {
 	SPECIAL_IMG_UNKNOWNFILE = 9,
 	SPECIAL_IMG_LOADING     = 10,
 	SPECIAL_IMG_BACKUP      = 11,
-	SPECIAL_IMG_MAX
+	SPECIAL_IMG_MAX,
 };
 
 static ImBuf *gSpecialFileImages[SPECIAL_IMG_MAX];

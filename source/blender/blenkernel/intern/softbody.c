@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,9 @@
  *
  * The Original Code is Copyright (C) Blender Foundation
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/blenkernel/intern/softbody.c
- *  \ingroup bke
+/** \file \ingroup bke
  */
 
 
@@ -35,7 +26,7 @@
  * <pre>
  * float mediafrict;  friction to env
  * float nodemass;	  softbody mass of *vertex*
- * float grav;        softbody amount of gravitaion to apply
+ * float grav;        softbody amount of gravitation to apply
  *
  * float goalspring;  softbody goal springs
  * float goalfrict;   softbody goal springs friction
@@ -51,6 +42,8 @@
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
+
+#include "CLG_log.h"
 
 #include "MEM_guardedalloc.h"
 
@@ -86,6 +79,8 @@
 #include "DEG_depsgraph_query.h"
 
 #include  "PIL_time.h"
+
+static CLG_LogRef LOG = {"bke.softbody"};
 
 /* callbacks for errors and interrupts and some goo */
 static int (*SB_localInterruptCallBack)(void) = NULL;
@@ -235,7 +230,7 @@ static float _final_goal(Object *ob, BodyPoint *bp)/*jow_go_for2_5 */
 			return (f);
 		}
 	}
-	printf("_final_goal failed! sb or bp ==NULL\n");
+	CLOG_ERROR(&LOG, "sb or bp == NULL");
 	return f; /*using crude but spot able values some times helps debuggin */
 }
 
@@ -247,7 +242,7 @@ static float _final_mass(Object *ob, BodyPoint *bp)
 			return(bp->mass*sb->nodemass);
 		}
 	}
-	printf("_final_mass failed! sb or bp ==NULL\n");
+	CLOG_ERROR(&LOG, "sb or bp == NULL");
 	return 1.0f;
 }
 /* helper functions for everything is animateble jow_go_for2_5 ------*/
@@ -654,7 +649,7 @@ static void add_2nd_order_roller(Object *ob, float UNUSED(stiffness), int *count
 					notthis = bs->v1;
 				}
 				else {
-					printf("oops we should not get here -  add_2nd_order_springs");
+					CLOG_ERROR(&LOG, "oops we should not get here");
 				}
 			}
 			if (bpo) {/* so now we have a 2nd order humpdidump */
@@ -1010,7 +1005,7 @@ static int sb_detect_aabb_collisionCached(float UNUSED(force[3]), struct Object 
 				}
 				else {
 					/*aye that should be cached*/
-					printf("missing cache error\n");
+					CLOG_ERROR(&LOG, "missing cache error");
 					BLI_ghashIterator_step(ihash);
 					continue;
 				}
@@ -1080,7 +1075,7 @@ static int sb_detect_face_pointCached(float face_v1[3], float face_v2[3], float 
 				}
 				else {
 					/*aye that should be cached*/
-					printf("missing cache error\n");
+					CLOG_ERROR(&LOG, "missing cache error");
 					BLI_ghashIterator_step(ihash);
 					continue;
 				}
@@ -1179,7 +1174,7 @@ static int sb_detect_face_collisionCached(float face_v1[3], float face_v2[3], fl
 				}
 				else {
 					/*aye that should be cached*/
-					printf("missing cache error\n");
+					CLOG_ERROR(&LOG, "missing cache error");
 					BLI_ghashIterator_step(ihash);
 					continue;
 				}
@@ -1361,7 +1356,7 @@ static int sb_detect_edge_collisionCached(float edge_v1[3], float edge_v2[3], fl
 				}
 				else {
 					/*aye that should be cached*/
-					printf("missing cache error\n");
+					CLOG_ERROR(&LOG, "missing cache error");
 					BLI_ghashIterator_step(ihash);
 					continue;
 				}
@@ -1658,7 +1653,7 @@ static int sb_detect_vertex_collisionCached(
 				}
 				else {
 					/*aye that should be cached*/
-					printf("missing cache error\n");
+					CLOG_ERROR(&LOG, "missing cache error");
 					BLI_ghashIterator_step(ihash);
 					continue;
 				}
@@ -1867,7 +1862,7 @@ static void sb_spring_force(Object *ob, int bpi, BodySpring *bs, float iks, floa
 	else {
 		/* TODO make this debug option */
 		/**/
-		printf("bodypoint <bpi> is not attached to spring  <*bs> --> sb_spring_force()\n");
+		CLOG_WARN(&LOG, "bodypoint <bpi> is not attached to spring  <*bs>");
 		return;
 	}
 
@@ -1922,7 +1917,7 @@ static int _softbody_calc_forces_slice_in_a_thread(Scene *scene, Object *ob, flo
 	float iks;
 	int bb, do_selfcollision, do_springcollision, do_aero;
 	int number_of_points_here = ilast - ifirst;
-	SoftBody *sb= ob->soft;	/* is supposed to be there */
+	SoftBody *sb = ob->soft;	/* is supposed to be there */
 	BodyPoint  *bp;
 
 	/* initialize */
@@ -1935,7 +1930,7 @@ static int _softbody_calc_forces_slice_in_a_thread(Scene *scene, Object *ob, flo
 		/* --- could be done on object level to squeeze out the last bits of it */
 	}
 	else {
-		printf("Error expected a SB here\n");
+		CLOG_ERROR(&LOG, "expected a SB here");
 		return (999);
 	}
 
@@ -1978,7 +1973,8 @@ static int _softbody_calc_forces_slice_in_a_thread(Scene *scene, Object *ob, flo
 						bs = sb->bspring + obp->springs[b-1];
 						if (( ilast-bb == bs->v2) || ( ilast-bb == bs->v1)) {
 							attached=1;
-							continue;}
+							continue;
+						}
 					}
 					if (!attached) {
 						float f = bstune / (distance) + bstune / (compare * compare) * distance - 2.0f * bstune / compare;
@@ -2324,7 +2320,9 @@ static void softbody_apply_forces(Object *ob, float forcetime, int mode, float *
 				}
 
 			}
-			else { add_v3_v3(bp->pos, dx);}
+			else {
+				add_v3_v3(bp->pos, dx);
+			}
 		}/*snap*/
 		/* so while we are looping BPs anyway do statistics on the fly */
 		minmax_v3v3_v3(aabbmin, aabbmax, bp->pos);
@@ -2625,7 +2623,7 @@ static void mesh_to_softbody(Scene *scene, Object *ob)
 				build_bps_springlist(ob); /* yes we need to do it again*/
 			}
 			springs_from_mesh(ob); /* write the 'rest'-length of the springs */
-			if (ob->softflag & OB_SB_SELF) {calculate_collision_balls(ob);}
+			if (ob->softflag & OB_SB_SELF) { calculate_collision_balls(ob); }
 
 		}
 
@@ -2934,7 +2932,7 @@ static void curve_surf_to_softbody(Scene *scene, Object *ob)
 
 	if (totspring) {
 		build_bps_springlist(ob); /* link bps to springs */
-		if (ob->softflag & OB_SB_SELF) {calculate_collision_balls(ob);}
+		if (ob->softflag & OB_SB_SELF) { calculate_collision_balls(ob); }
 	}
 }
 
@@ -3336,7 +3334,7 @@ static void softbody_step(struct Depsgraph *depsgraph, Scene *scene, Object *ob,
 
 	}/*SOLVER SELECT*/
 	else {
-		printf("softbody no valid solver ID!");
+		CLOG_ERROR(&LOG, "softbody no valid solver ID!");
 	}/*SOLVER SELECT*/
 	if (sb->plastic) { apply_spring_memory(ob);}
 
@@ -3344,6 +3342,16 @@ static void softbody_step(struct Depsgraph *depsgraph, Scene *scene, Object *ob,
 		sct=PIL_check_seconds_timer();
 		if ((sct - sst > 0.5) || (G.debug & G_DEBUG)) printf(" solver time %f sec %s\n", sct-sst, ob->id.name);
 	}
+}
+
+static void sbStoreLastFrame(struct Depsgraph *depsgraph, Object *object, float framenr)
+{
+	if (!DEG_is_active(depsgraph)) {
+		return;
+	}
+	Object *object_orig = DEG_get_original_object(object);
+	object->soft->last_frame = framenr;
+	object_orig->soft->last_frame = framenr;
 }
 
 /* simulates one step. framenr is in frames */
@@ -3417,7 +3425,7 @@ void sbObjectStep(struct Depsgraph *depsgraph, Scene *scene, Object *ob, float c
 		BKE_ptcache_validate(cache, framenr);
 		cache->flag &= ~PTCACHE_REDO_NEEDED;
 
-		sb->last_frame = framenr;
+		sbStoreLastFrame(depsgraph, ob, framenr);
 
 		return;
 	}
@@ -3438,7 +3446,7 @@ void sbObjectStep(struct Depsgraph *depsgraph, Scene *scene, Object *ob, float c
 		if (cache_result == PTCACHE_READ_INTERPOLATED && cache->flag & PTCACHE_REDO_NEEDED && can_write_cache)
 			BKE_ptcache_write(&pid, framenr);
 
-		sb->last_frame = framenr;
+		sbStoreLastFrame(depsgraph, ob, framenr);
 
 		return;
 	}
@@ -3473,5 +3481,5 @@ void sbObjectStep(struct Depsgraph *depsgraph, Scene *scene, Object *ob, float c
 	BKE_ptcache_validate(cache, framenr);
 	BKE_ptcache_write(&pid, framenr);
 
-	sb->last_frame = framenr;
+	sbStoreLastFrame(depsgraph, ob, framenr);
 }

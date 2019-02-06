@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,9 @@
  *
  * The Original Code is Copyright (C) 2004 Blender Foundation.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): Joshua Leung
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/space_outliner/outliner_tree.c
- *  \ingroup spoutliner
+/** \file \ingroup spoutliner
  */
 
 #include <math.h>
@@ -1321,8 +1312,7 @@ static void outliner_add_layer_collections_recursive(
 
 		const bool exclude = (lc->flag & LAYER_COLLECTION_EXCLUDE) != 0;
 		if (exclude ||
-		    ((layer->runtime_flag & VIEW_LAYER_HAS_HIDE) &&
-		     !(lc->runtime_flag & LAYER_COLLECTION_HAS_VISIBLE_OBJECTS)))
+		    ((lc->runtime_flag & LAYER_COLLECTION_VISIBLE) == 0))
 		{
 			ten->flag |= TE_DISABLED;
 		}

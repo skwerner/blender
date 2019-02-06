@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,10 @@
  *
  * The Original Code is Copyright (C) 2015, Blender Foundation
  * This is a new part of Blender
- *
- * Contributor(s): Joshua Leung, Antonio Vazquez
- *
- * ***** END GPL LICENSE BLOCK *****
- *
  * Brush based operators for editing Grease Pencil strokes
  */
 
-/** \file blender/editors/gpencil/gpencil_brush.c
- *  \ingroup edgpencil
+/** \file \ingroup edgpencil
  */
 
 
@@ -63,7 +55,6 @@
 #include "BKE_material.h"
 #include "BKE_object_deform.h"
 #include "BKE_report.h"
-#include "BKE_screen.h"
 
 #include "UI_interface.h"
 

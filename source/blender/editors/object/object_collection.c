@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,9 @@
  *
  * The Original Code is Copyright (C) Blender Foundation
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/object/object_collection.c
- *  \ingroup edobj
+/** \file \ingroup edobj
  */
 
 
@@ -42,7 +33,6 @@
 #include "BKE_collection.h"
 #include "BKE_context.h"
 #include "BKE_library.h"
-#include "BKE_library_remap.h"
 #include "BKE_main.h"
 #include "BKE_object.h"
 #include "BKE_report.h"

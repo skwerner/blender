@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,14 +15,9 @@
  *
  * The Original Code is Copyright (C) 2008 Blender Foundation.
  * All rights reserved.
- *
- * Contributor(s): Blender Foundation, Joshua Leung
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/interface/view2d.c
- *  \ingroup edinterface
+/** \file \ingroup edinterface
  */
 
 
@@ -1057,7 +1050,7 @@ bool UI_view2d_tab_set(View2D *v2d, int tab)
 
 void UI_view2d_zoom_cache_reset(void)
 {
-	/* TODO(sergey): This way we avoid threading conflict with VSE rendering
+	/* TODO(sergey): This way we avoid threading conflict with sequencer rendering
 	 * text strip. But ideally we want to make glyph cache to be fully safe
 	 * for threading.
 	 */

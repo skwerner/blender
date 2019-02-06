@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,9 @@
  *
  * The Original Code is Copyright (C) 2006 by NaN Holding BV.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): Daniel Genrich, Andre Pinto
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/blenlib/intern/BLI_kdopbvh.c
- *  \ingroup bli
+/** \file \ingroup bli
  *  \brief BVH-tree implementation.
  *
  * k-DOP BVH (Discrete Oriented Polytope, Bounding Volume Hierarchy).
@@ -83,7 +74,6 @@
 
 
 /* -------------------------------------------------------------------- */
-
 /** \name Struct Definitions
  * \{ */
 
@@ -194,12 +184,11 @@ typedef struct BVHNearestProjectedData {
 const float bvhtree_kdop_axes[13][3] = {
 	{1.0, 0, 0}, {0, 1.0, 0}, {0, 0, 1.0},
 	{1.0, 1.0, 1.0}, {1.0, -1.0, 1.0}, {1.0, 1.0, -1.0}, {1.0, -1.0, -1.0},
-	{1.0, 1.0, 0}, {1.0, 0, 1.0}, {0, 1.0, 1.0}, {1.0, -1.0, 0}, {1.0, 0, -1.0}, {0, 1.0, -1.0}
+	{1.0, 1.0, 0}, {1.0, 0, 1.0}, {0, 1.0, 1.0}, {1.0, -1.0, 0}, {1.0, 0, -1.0}, {0, 1.0, -1.0},
 };
 
 
 /* -------------------------------------------------------------------- */
-
 /** \name Utility Functions
  * \{ */
 
@@ -238,7 +227,6 @@ static void node_minmax_init(const BVHTree *tree, BVHNode *node)
 
 
 /* -------------------------------------------------------------------- */
-
 /** \name Balance Utility Functions
  * \{ */
 
@@ -614,8 +602,6 @@ static int implicit_leafs_index(const BVHBuildHelper *data, const int depth, con
  * - No need to store child/parent relations (they are implicit);
  * - Any node child always has an index greater than the parent;
  * - Brother nodes are sequential in memory;
- *
- *
  * Some math relations derived for general implicit trees:
  *
  *   K = tree_type, ( 2 <= K )
@@ -826,7 +812,6 @@ static void non_recursive_bvh_div_nodes(
 
 
 /* -------------------------------------------------------------------- */
-
 /** \name BLI_bvhtree API
  * \{ */
 
@@ -908,23 +893,17 @@ BVHTree *BLI_bvhtree_new(int maxsize, float epsilon, char tree_type, char axis)
 
 
 fail:
-	MEM_SAFE_FREE(tree->nodes);
-	MEM_SAFE_FREE(tree->nodebv);
-	MEM_SAFE_FREE(tree->nodechild);
-	MEM_SAFE_FREE(tree->nodearray);
-
-	MEM_freeN(tree);
-
+	BLI_bvhtree_free(tree);
 	return NULL;
 }
 
 void BLI_bvhtree_free(BVHTree *tree)
 {
 	if (tree) {
-		MEM_freeN(tree->nodes);
-		MEM_freeN(tree->nodearray);
-		MEM_freeN(tree->nodebv);
-		MEM_freeN(tree->nodechild);
+		MEM_SAFE_FREE(tree->nodes);
+		MEM_SAFE_FREE(tree->nodearray);
+		MEM_SAFE_FREE(tree->nodebv);
+		MEM_SAFE_FREE(tree->nodechild);
 		MEM_freeN(tree);
 	}
 }
@@ -1048,7 +1027,6 @@ float BLI_bvhtree_get_epsilon(const BVHTree *tree)
 
 
 /* -------------------------------------------------------------------- */
-
 /** \name BLI_bvhtree_overlap
  * \{ */
 
@@ -1266,7 +1244,6 @@ BVHTreeOverlap *BLI_bvhtree_overlap(
 
 
 /* -------------------------------------------------------------------- */
-
 /** \name BLI_bvhtree_find_nearest
  * \{ */
 
@@ -1435,7 +1412,6 @@ int BLI_bvhtree_find_nearest(
 
 
 /* -------------------------------------------------------------------- */
-
 /** \name BLI_bvhtree_ray_cast
  *
  * raycast is done by performing a DFS on the BVHTree and saving the closest hit.
@@ -1731,7 +1707,6 @@ void BLI_bvhtree_ray_cast_all(
 /** \} */
 
 /* -------------------------------------------------------------------- */
-
 /** \name BLI_bvhtree_range_query
  *
  * Allocs and fills an array with the indexs of node that are on the given spherical range (center, radius).
@@ -1817,7 +1792,6 @@ int BLI_bvhtree_range_query(
 
 
 /* -------------------------------------------------------------------- */
-
 /** \name BLI_bvhtree_nearest_projected
 * \{ */
 
@@ -2009,7 +1983,6 @@ int BLI_bvhtree_find_nearest_projected(
 
 
 /* -------------------------------------------------------------------- */
-
 /** \name BLI_bvhtree_walk_dfs
  * \{ */
 

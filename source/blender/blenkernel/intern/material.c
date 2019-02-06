@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,22 +15,17 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/blenkernel/intern/material.c
- *  \ingroup bke
+/** \file \ingroup bke
  */
 
 
 #include <string.h>
 #include <math.h>
 #include <stddef.h>
+
+#include "CLG_log.h"
 
 #include "MEM_guardedalloc.h"
 
@@ -53,19 +46,15 @@
 #include "BLI_math.h"
 #include "BLI_listbase.h"
 #include "BLI_utildefines.h"
-#include "BLI_string.h"
 #include "BLI_array_utils.h"
 
 #include "BKE_animsys.h"
 #include "BKE_brush.h"
 #include "BKE_displist.h"
-#include "BKE_global.h"
 #include "BKE_gpencil.h"
 #include "BKE_icons.h"
 #include "BKE_image.h"
 #include "BKE_library.h"
-#include "BKE_library_query.h"
-#include "BKE_library_remap.h"
 #include "BKE_main.h"
 #include "BKE_material.h"
 #include "BKE_mesh.h"
@@ -82,6 +71,8 @@
 
 /* used in UI and render */
 Material defmaterial;
+
+static CLG_LogRef LOG = {"bke.material"};
 
 /* called on startup, creator.c */
 void init_def_material(void)
@@ -139,7 +130,7 @@ void BKE_material_init(Material *ma)
 
 	ma->r = ma->g = ma->b = 0.8;
 	ma->specr = ma->specg = ma->specb = 1.0;
-	// ma->alpha = 1.0;  /* DEPRECATED */
+	ma->a = 1.0f;
 	ma->spec = 0.5;
 
 	ma->roughness = 0.25f;
@@ -181,7 +172,7 @@ Material *BKE_material_add_gpencil(Main *bmain, const char *name)
 
 /**
  * Only copy internal data of Material ID from source to already allocated/initialized destination.
- * You probably nerver want to use that directly, use id_copy or BKE_id_copy_ex for typical needs.
+ * You probably never want to use that directly, use BKE_id_copy or BKE_id_copy_ex for typical needs.
  *
  * WARNING! This function will not handle ID user count!
  *
@@ -192,7 +183,7 @@ void BKE_material_copy_data(Main *bmain, Material *ma_dst, const Material *ma_sr
 	if (ma_src->nodetree) {
 		/* Note: nodetree is *not* in bmain, however this specific case is handled at lower level
 		 *       (see BKE_libblock_copy_ex()). */
-		BKE_id_copy_ex(bmain, (ID *)ma_src->nodetree, (ID **)&ma_dst->nodetree, flag, false);
+		BKE_id_copy_ex(bmain, (ID *)ma_src->nodetree, (ID **)&ma_dst->nodetree, flag);
 	}
 
 	if ((flag & LIB_ID_COPY_NO_PREVIEW) == 0) {
@@ -218,7 +209,7 @@ void BKE_material_copy_data(Main *bmain, Material *ma_dst, const Material *ma_sr
 Material *BKE_material_copy(Main *bmain, const Material *ma)
 {
 	Material *ma_copy;
-	BKE_id_copy_ex(bmain, &ma->id, (ID **)&ma_copy, 0, false);
+	BKE_id_copy(bmain, &ma->id, (ID **)&ma_copy);
 	return ma_copy;
 }
 
@@ -528,7 +519,7 @@ Material **give_current_material_p(Object *ob, short act)
 		return NULL;
 	else if (act <= 0) {
 		if (act < 0) {
-			printf("Negative material index!\n");
+			CLOG_ERROR(&LOG, "Negative material index!");
 		}
 		return NULL;
 	}
@@ -942,7 +933,7 @@ bool BKE_object_material_slot_remove(Main *bmain, Object *ob)
 
 	/* this should never happen and used to crash */
 	if (ob->actcol <= 0) {
-		printf("%s: invalid material index %d, report a bug!\n", __func__, ob->actcol);
+		CLOG_ERROR(&LOG, "invalid material index %d, report a bug!", ob->actcol);
 		BLI_assert(0);
 		return false;
 	}
@@ -1096,6 +1087,9 @@ void BKE_texpaint_slot_refresh_cache(Scene *scene, Material *ma)
 
 	if (!ma)
 		return;
+
+	/* COW needed when adding texture slot on an object with no materials. */
+	DEG_id_tag_update(&ma->id, ID_RECALC_SHADING | ID_RECALC_COPY_ON_WRITE);
 
 	if (ma->texpaintslot) {
 		MEM_freeN(ma->texpaintslot);

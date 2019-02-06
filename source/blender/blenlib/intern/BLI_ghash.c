@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,9 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/blenlib/intern/BLI_ghash.c
- *  \ingroup bli
+/** \file \ingroup bli
  *
  * A general (pointer -> pointer) chaining hash table
  * for 'Abstract Data Types' (known as an ADT Hash Table).
@@ -66,7 +57,7 @@ const uint hashsizes[] = {
 	5, 11, 17, 37, 67, 131, 257, 521, 1031, 2053, 4099, 8209,
 	16411, 32771, 65537, 131101, 262147, 524309, 1048583, 2097169,
 	4194319, 8388617, 16777259, 33554467, 67108879, 134217757,
-	268435459
+	268435459,
 };
 
 #ifdef GHASH_USE_MODULO_BUCKETS

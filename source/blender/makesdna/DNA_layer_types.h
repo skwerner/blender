@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,14 +12,9 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * Contributor(s): Dalai Felinto
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file DNA_layer_types.h
- *  \ingroup DNA
+/** \file \ingroup DNA
  */
 
 #ifndef __DNA_LAYER_TYPES_H__
@@ -126,6 +119,7 @@ enum {
 	LAYER_COLLECTION_EXCLUDE = (1 << 4),
 	LAYER_COLLECTION_HOLDOUT = (1 << 5),
 	LAYER_COLLECTION_INDIRECT_ONLY = (1 << 6),
+	LAYER_COLLECTION_RESTRICT_VIEW = (1 << 7),
 };
 
 /* Layer Collection->runtime_flag */
@@ -134,6 +128,7 @@ enum {
 	LAYER_COLLECTION_HAS_VISIBLE_OBJECTS = (1 << 1),
 	LAYER_COLLECTION_HAS_HIDDEN_OBJECTS = (1 << 2),
 	LAYER_COLLECTION_HAS_ENABLED_OBJECTS = (1 << 3),
+	LAYER_COLLECTION_VISIBLE = (1 << 4),
 };
 
 /* ViewLayer->flag */

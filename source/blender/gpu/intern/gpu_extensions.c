@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,9 @@
  *
  * The Original Code is Copyright (C) 2005 Blender Foundation.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): Brecht Van Lommel.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/gpu/intern/gpu_extensions.c
- *  \ingroup gpu
+/** \file \ingroup gpu
  *
  * Wrap OpenGL features such as textures, shaders and GLSL
  * with checks for drivers and GPU support.
@@ -77,9 +68,9 @@ static struct GPUGlobal {
 	GLint maxubobinds;
 	int colordepth;
 	int samples_color_texture_max;
-	GPUDeviceType device;
-	GPUOSType os;
-	GPUDriverType driver;
+	eGPUDeviceType device;
+	eGPUOSType os;
+	eGPUDriverType driver;
 	float line_width_range[2];
 	/* workaround for different calculation of dfdy factors on GPUs. Some GPUs/drivers
 	 * calculate dfdy in shader differently when drawing to an offscreen buffer. First
@@ -132,7 +123,7 @@ static void gpu_detect_mip_render_workaround(void)
 
 /* GPU Types */
 
-bool GPU_type_matches(GPUDeviceType device, GPUOSType os, GPUDriverType driver)
+bool GPU_type_matches(eGPUDeviceType device, eGPUOSType os, eGPUDriverType driver)
 {
 	return (GG.device & device) && (GG.os & os) && (GG.driver & driver);
 }

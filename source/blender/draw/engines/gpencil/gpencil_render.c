@@ -1,6 +1,4 @@
 /*
- * Copyright 2017, Blender Foundation.
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -15,19 +13,15 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
- * Contributor(s): Antonio Vazquez
- *
+ * Copyright 2017, Blender Foundation.
  */
 
-/** \file blender/draw/engines/gpencil/gpencil_render.c
- *  \ingroup draw
+/** \file \ingroup draw
  */
 #include "BLI_rect.h"
 
-#include "DRW_engine.h"
 #include "DRW_render.h"
 
-#include "BKE_camera.h"
 #include "BKE_object.h"
 
 #include "DNA_gpencil_types.h"
@@ -147,7 +141,7 @@ static void GPENCIL_render_update_viewvecs(float invproj[4][4], float winmat[4][
 		{-1.0f, -1.0f, -1.0f, 1.0f},
 		{1.0f, -1.0f, -1.0f, 1.0f},
 		{-1.0f,  1.0f, -1.0f, 1.0f},
-		{-1.0f, -1.0f,  1.0f, 1.0f}
+		{-1.0f, -1.0f,  1.0f, 1.0f},
 	};
 
 	/* convert the view vectors to view space */
@@ -338,7 +332,12 @@ void GPENCIL_render_to_image(void *vedata, RenderEngine *engine, struct RenderLa
 					}
 					else {
 						/* blend gp render */
-						blend_pixel(tmp, gp_pixel_rgba);
+						if (tmp[3] < 1.0f) {
+							blend_pixel(tmp, gp_pixel_rgba);
+						}
+						else {
+							copy_v4_v4(gp_pixel_rgba, tmp);
+						}
 					}
 				}
 			}

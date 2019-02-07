@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,12 +12,9 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file ED_undo.h
- *  \ingroup editors
+/** \file \ingroup editors
  */
 
 #ifndef __ED_UNDO_H__
@@ -27,11 +22,11 @@
 
 #include "BLI_compiler_attrs.h"
 
-struct bContext;
 struct CLG_LogRef;
+struct UndoStack;
+struct bContext;
 struct wmOperator;
 struct wmOperatorType;
-struct UndoStack;
 
 /* undo.c */
 void    ED_undo_push(struct bContext *C, const char *str);
@@ -53,6 +48,8 @@ void    ED_undo_operator_repeat_cb(struct bContext *C, void *arg_op, void *arg_u
 void    ED_undo_operator_repeat_cb_evt(struct bContext *C, void *arg_op, int arg_unused);
 
 bool    ED_undo_is_valid(const struct bContext *C, const char *undoname);
+
+bool    ED_undo_is_memfile_compatible(const struct bContext *C);
 
 struct UndoStack *ED_undo_stack_get(void);
 

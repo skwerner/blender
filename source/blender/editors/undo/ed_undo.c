@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,9 @@
  *
  * The Original Code is Copyright (C) 2004 Blender Foundation
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/undo/ed_undo.c
- *  \ingroup edundo
+/** \file \ingroup edundo
  */
 
 #include <string.h>
@@ -56,7 +47,7 @@
 #include "BKE_workspace.h"
 #include "BKE_paint.h"
 
-#include "BLO_writefile.h"
+#include "BLO_blend_validate.h"
 
 #include "ED_gpencil.h"
 #include "ED_render.h"
@@ -110,9 +101,13 @@ void ED_undo_push(bContext *C, const char *str)
 	WM_file_tag_modified();
 }
 
-/* note: also check undo_history_exec() in bottom if you change notifiers */
+/**
+ * \note Also check #undo_history_exec in bottom if you change notifiers.
+ */
 static int ed_undo_step(bContext *C, int step, const char *undoname, ReportList *reports)
 {
+	/* Mutually exclusives, ensure correct input. */
+	BLI_assert((undoname && !step) || (!undoname && step));
 	CLOG_INFO(&LOG, 1, "name='%s', step=%d", undoname, step);
 	wmWindowManager *wm = CTX_wm_manager(C);
 	Scene *scene = CTX_data_scene(C);
@@ -125,7 +120,7 @@ static int ed_undo_step(bContext *C, int step, const char *undoname, ReportList 
 	if (G.debug & G_DEBUG_IO) {
 		Main *bmain = CTX_data_main(C);
 		if (bmain->lock != NULL) {
-			BKE_report(reports, RPT_INFO, "Checking sanity of current .blend file *BEFORE* undo step.");
+			BKE_report(reports, RPT_INFO, "Checking sanity of current .blend file *BEFORE* undo step");
 			BLO_main_validate_libraries(bmain, reports);
 		}
 	}
@@ -173,7 +168,12 @@ static int ed_undo_step(bContext *C, int step, const char *undoname, ReportList 
 			BKE_undosys_step_undo_with_data(wm->undo_stack, C, step_data_from_name);
 		}
 		else {
-			BKE_undosys_step_undo_compat_only(wm->undo_stack, C, step);
+			if (step == 1) {
+				BKE_undosys_step_undo(wm->undo_stack, C);
+			}
+			else {
+				BKE_undosys_step_redo(wm->undo_stack, C);
+			}
 		}
 
 		/* Set special modes for grease pencil */
@@ -199,14 +199,14 @@ static int ed_undo_step(bContext *C, int step, const char *undoname, ReportList 
 		Main *bmain = CTX_data_main(C);
 		scene = CTX_data_scene(C);
 		wm->op_undo_depth++;
-		BLI_callback_exec(bmain, &scene->id, step_for_callback > 0 ? BLI_CB_EVT_UNDO_PRE : BLI_CB_EVT_REDO_PRE);
+		BLI_callback_exec(bmain, &scene->id, step_for_callback > 0 ? BLI_CB_EVT_UNDO_POST : BLI_CB_EVT_REDO_POST);
 		wm->op_undo_depth--;
 	}
 
 	if (G.debug & G_DEBUG_IO) {
 		Main *bmain = CTX_data_main(C);
 		if (bmain->lock != NULL) {
-			BKE_report(reports, RPT_INFO, "Checking sanity of current .blend file *AFTER* undo step.");
+			BKE_report(reports, RPT_INFO, "Checking sanity of current .blend file *AFTER* undo step");
 			BLO_main_validate_libraries(bmain, reports);
 		}
 	}
@@ -273,6 +273,23 @@ bool ED_undo_is_valid(const bContext *C, const char *undoname)
 	return BKE_undosys_stack_has_undo(wm->undo_stack, undoname);
 }
 
+bool ED_undo_is_memfile_compatible(const bContext *C)
+{
+	/* Some modes don't co-exist with memfile undo, disable their use: T60593
+	 * (this matches 2.7x behavior). */
+	ViewLayer *view_layer = CTX_data_view_layer(C);
+	if (view_layer != NULL) {
+		Object *obact = OBACT(view_layer);
+		if (obact != NULL) {
+			if (obact->mode & (OB_MODE_SCULPT | OB_MODE_EDIT)) {
+				return false;
+			}
+		}
+	}
+	return true;
+}
+
+
 /**
  * Ideally we wont access the stack directly,
  * this is needed for modes which handle undo themselves (bypassing #ED_undo_push).
@@ -334,11 +351,31 @@ static int ed_undo_redo_exec(bContext *C, wmOperator *UNUSED(op))
 	return ret;
 }
 
+/* Disable in background mode, we could support if it's useful, T60934. */
+
+static bool ed_undo_is_init_poll(bContext *C)
+{
+	wmWindowManager *wm = CTX_wm_manager(C);
+	if (wm->undo_stack == NULL) {
+		CTX_wm_operator_poll_msg_set(C, "Undo disabled in background mode or at startup");
+		return false;
+	}
+	return true;
+}
+
+static bool ed_undo_is_init_and_screenactive_poll(bContext *C)
+{
+	if (ed_undo_is_init_poll(C) == false) {
+		return false;
+	}
+	return ED_operator_screenactive(C);
+}
+
 static bool ed_undo_redo_poll(bContext *C)
 {
 	wmOperator *last_op = WM_operator_last_redo(C);
-	return last_op && ED_operator_screenactive(C) &&
-		WM_operator_check_ui_enabled(C, last_op->type->name);
+	return (last_op && ed_undo_is_init_and_screenactive_poll(C) &&
+	        WM_operator_check_ui_enabled(C, last_op->type->name));
 }
 
 void ED_OT_undo(wmOperatorType *ot)
@@ -350,7 +387,7 @@ void ED_OT_undo(wmOperatorType *ot)
 
 	/* api callbacks */
 	ot->exec = ed_undo_exec;
-	ot->poll = ED_operator_screenactive;
+	ot->poll = ed_undo_is_init_and_screenactive_poll;
 }
 
 void ED_OT_undo_push(wmOperatorType *ot)
@@ -362,6 +399,7 @@ void ED_OT_undo_push(wmOperatorType *ot)
 
 	/* api callbacks */
 	ot->exec = ed_undo_push_exec;
+	ot->poll = ed_undo_is_init_poll;
 
 	ot->flag = OPTYPE_INTERNAL;
 
@@ -377,7 +415,7 @@ void ED_OT_redo(wmOperatorType *ot)
 
 	/* api callbacks */
 	ot->exec = ed_redo_exec;
-	ot->poll = ED_operator_screenactive;
+	ot->poll = ed_undo_is_init_and_screenactive_poll;
 }
 
 void ED_OT_undo_redo(wmOperatorType *ot)
@@ -588,7 +626,7 @@ void ED_OT_undo_history(wmOperatorType *ot)
 	/* api callbacks */
 	ot->invoke = undo_history_invoke;
 	ot->exec = undo_history_exec;
-	ot->poll = ED_operator_screenactive;
+	ot->poll = ed_undo_is_init_and_screenactive_poll;
 
 	RNA_def_int(ot->srna, "item", 0, 0, INT_MAX, "Item", "", 0, INT_MAX);
 

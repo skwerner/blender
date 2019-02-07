@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,14 +15,9 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * Contributor(s): Blender Foundation, 2002-2009 full recode.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/armature/editarmature_undo.c
- *  \ingroup edarmature
+/** \file \ingroup edarmature
  */
 
 #include "MEM_guardedalloc.h"
@@ -35,7 +28,6 @@
 #include "DNA_armature_types.h"
 #include "DNA_object_types.h"
 
-#include "BLI_math.h"
 #include "BLI_array_utils.h"
 
 #include "BKE_context.h"
@@ -150,7 +142,7 @@ static bool armature_undosys_poll(bContext *C)
 	return editarm_object_from_context(C) != NULL;
 }
 
-static bool armature_undosys_step_encode(struct bContext *C, UndoStep *us_p)
+static bool armature_undosys_step_encode(struct bContext *C, struct Main *UNUSED(bmain), UndoStep *us_p)
 {
 	ArmatureUndoStep *us = (ArmatureUndoStep *)us_p;
 
@@ -174,7 +166,7 @@ static bool armature_undosys_step_encode(struct bContext *C, UndoStep *us_p)
 	return true;
 }
 
-static void armature_undosys_step_decode(struct bContext *C, UndoStep *us_p, int UNUSED(dir))
+static void armature_undosys_step_decode(struct bContext *C, struct Main *UNUSED(bmain), UndoStep *us_p, int UNUSED(dir))
 {
 	/* TODO(campbell): undo_system: use low-level API to set mode. */
 	ED_object_mode_set(C, OB_MODE_EDIT);
@@ -234,7 +226,6 @@ void ED_armature_undosys_type(UndoType *ut)
 
 	ut->step_foreach_ID_ref = armature_undosys_foreach_ID_ref;
 
-	ut->mode = BKE_UNDOTYPE_MODE_STORE;
 	ut->use_context = true;
 
 	ut->step_size = sizeof(ArmatureUndoStep);

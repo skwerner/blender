@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,14 +15,9 @@
  *
  * The Original Code is Copyright (C) 2014 by Blender Foundation.
  * All rights reserved.
- *
- * Contributor(s): Sergey Sharybin.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/blenkernel/intern/library_query.c
- *  \ingroup bke
+/** \file \ingroup bke
  */
 
 #include <stdlib.h>
@@ -64,7 +57,6 @@
 #include "DNA_world_types.h"
 
 #include "BLI_utildefines.h"
-#include "BLI_listbase.h"
 #include "BLI_ghash.h"
 #include "BLI_linklist_stack.h"
 
@@ -82,6 +74,7 @@
 #include "BKE_particle.h"
 #include "BKE_rigidbody.h"
 #include "BKE_sequencer.h"
+#include "BKE_shader_fx.h"
 #include "BKE_tracking.h"
 #include "BKE_workspace.h"
 
@@ -196,6 +189,15 @@ static void library_foreach_modifiersForeachIDLink(
 }
 
 static void library_foreach_gpencil_modifiersForeachIDLink(
+        void *user_data, Object *UNUSED(object), ID **id_pointer, int cb_flag)
+{
+	LibraryForeachIDData *data = (LibraryForeachIDData *) user_data;
+	FOREACH_CALLBACK_INVOKE_ID_PP(data, id_pointer, cb_flag);
+
+	FOREACH_FINALIZE_VOID;
+}
+
+static void library_foreach_shaderfxForeachIDLink(
         void *user_data, Object *UNUSED(object), ID **id_pointer, int cb_flag)
 {
 	LibraryForeachIDData *data = (LibraryForeachIDData *) user_data;
@@ -425,6 +427,11 @@ void BKE_library_foreach_ID_link(Main *bmain, ID *id, LibraryIDLinkCallback call
 						for (SequenceModifierData *smd = seq->modifiers.first; smd; smd = smd->next) {
 							CALLBACK_INVOKE(smd->mask_id, IDWALK_CB_USER);
 						}
+
+						if (seq->type == SEQ_TYPE_TEXT && seq->effectdata) {
+							TextVars *text_data = seq->effectdata;
+							CALLBACK_INVOKE(text_data->text_font, IDWALK_CB_USER);
+						}
 					} SEQ_END;
 				}
 
@@ -438,6 +445,8 @@ void BKE_library_foreach_ID_link(Main *bmain, ID *id, LibraryIDLinkCallback call
 
 				ViewLayer *view_layer;
 				for (view_layer = scene->view_layers.first; view_layer; view_layer = view_layer->next) {
+					CALLBACK_INVOKE(view_layer->mat_override, IDWALK_CB_USER);
+
 					for (Base *base = view_layer->object_bases.first; base; base = base->next) {
 						CALLBACK_INVOKE(base->object, IDWALK_CB_NOP);
 					}
@@ -491,6 +500,9 @@ void BKE_library_foreach_ID_link(Main *bmain, ID *id, LibraryIDLinkCallback call
 					if (toolsett->gp_paint) {
 						library_foreach_paint(&data, &toolsett->gp_paint->paint);
 					}
+
+					CALLBACK_INVOKE(toolsett->gp_sculpt.guide.reference_object, IDWALK_CB_NOP);
+
 				}
 
 				if (scene->rigidbody_world) {
@@ -583,6 +595,7 @@ void BKE_library_foreach_ID_link(Main *bmain, ID *id, LibraryIDLinkCallback call
 				modifiers_foreachIDLink(object, library_foreach_modifiersForeachIDLink, &data);
 				BKE_gpencil_modifiers_foreachIDLink(object, library_foreach_gpencil_modifiersForeachIDLink, &data);
 				BKE_constraints_id_loop(&object->constraints, library_foreach_constraintObjectLooper, &data);
+				BKE_shaderfx_foreachIDLink(object, library_foreach_shaderfxForeachIDLink, &data);
 
 				for (psys = object->particlesystem.first; psys; psys = psys->next) {
 					BKE_particlesystem_id_loop(psys, library_foreach_particlesystemsObjectLooper, &data);

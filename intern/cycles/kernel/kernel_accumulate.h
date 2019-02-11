@@ -236,6 +236,11 @@ ccl_device_inline void path_radiance_init(PathRadiance *L, int use_light_pass)
 	L->denoising_depth = 0.0f;
 #endif
 
+#ifdef __ADAPTIVE_SAMPLING__
+	L->min_value = make_float3(FLT_MAX, FLT_MAX, FLT_MAX);
+	L->min_value = make_float3(FLT_MIN, FLT_MIN, FLT_MIN);
+#endif
+
 #ifdef __KERNEL_DEBUG__
 	L->debug_data.num_bvh_traversed_nodes = 0;
 	L->debug_data.num_bvh_traversed_instances = 0;

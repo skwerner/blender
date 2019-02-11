@@ -431,6 +431,19 @@ ccl_device_inline void kernel_write_result(KernelGlobals *kg,
 #ifdef __KERNEL_DEBUG__
 	kernel_write_debug_passes(kg, buffer, L);
 #endif
+
+	if(sample % 2) {
+		 kernel_write_pass_float4(buffer + kernel_data.film.pass_adaptive_min_max, make_float4(L_sum.x, L_sum.y, L_sum.z, 0.0f));
+	}
+	if(sample > kernel_data.integrator.adaptive_min_samples) {
+		float4 I = *(float4*)buffer;
+		float4 A = *(float4*)(buffer + kernel_data.film.pass_adaptive_min_max);
+		A = A * 2.0f;
+		float error = (fabsf(I.x - A.x) + fabsf(I.y - A.y) + fabsf(I.z - A.z))/sqrtf(I.x + I.y + I.z);
+		if(error < kernel_data.integrator.adaptive_threshold) {
+			kernel_write_pass_float4(buffer + kernel_data.film.pass_adaptive_min_max, make_float4(0.0f, 0.0f, 0.0f, sample));
+		}
+	}
 }
 
 CCL_NAMESPACE_END

@@ -164,6 +164,9 @@ void Pass::add(PassType type, vector<Pass>& passes, const char *name)
 		case PASS_CRYPTOMATTE:
 			pass.components = 4;
 			break;
+		case PASS_ADAPTIVE_MIN_MAX:
+			pass.components = 4;
+			break;
 		default:
 			assert(false);
 			break;
@@ -458,6 +461,9 @@ void Film::device_update(Device *device, DeviceScene *dscene, Scene *scene)
 			case PASS_CRYPTOMATTE:
 				kfilm->pass_cryptomatte = have_cryptomatte ? min(kfilm->pass_cryptomatte, kfilm->pass_stride) : kfilm->pass_stride;
 				have_cryptomatte = true;
+				break;
+			case PASS_ADAPTIVE_MIN_MAX:
+				kfilm->pass_adaptive_min_max =  kfilm->pass_stride;
 				break;
 			default:
 				assert(false);

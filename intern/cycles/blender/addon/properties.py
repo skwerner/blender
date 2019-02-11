@@ -296,6 +296,20 @@ class CyclesRenderSettings(bpy.types.PropertyGroup):
         default=0.01,
     )
 
+    adaptive_threshold: FloatProperty(
+        name="Adaptive Sampling Threshold",
+        description="Zero disables adaptive sampling",
+        min=0.0, max=1.0,
+        default=0.01,
+    )
+
+    adaptive_min_samples: IntProperty(
+        name="Adaptive Min Samples",
+        description="Minimum AA samples for adaptive sampling",
+        min=4, max=1024,
+        default=16,
+    )
+
     caustics_reflective: BoolProperty(
         name="Reflective Caustics",
         description="Use reflective caustics, resulting in a brighter image (more noise but added realism)",

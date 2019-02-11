@@ -364,6 +364,7 @@ typedef enum PassType {
 #endif
 	PASS_RENDER_TIME,
 	PASS_CRYPTOMATTE,
+	PASS_ADAPTIVE_MIN_MAX,
 	PASS_CATEGORY_MAIN_END = 31,
 
 	PASS_MIST = 32,
@@ -562,6 +563,11 @@ typedef ccl_addr_space struct PathRadiance {
 	float3 denoising_albedo;
 	float denoising_depth;
 #endif  /* __DENOISING_FEATURES__ */
+
+#ifdef __ADAPTIVE_SAMPLING__
+	float3 max_value;
+	float3 min_value;
+#endif /* __ADAPTIVE_SAMPLING__ */
 
 #ifdef __KERNEL_DEBUG__
 	DebugData debug_data;
@@ -1233,6 +1239,8 @@ typedef struct KernelFilm {
 	int cryptomatte_depth;
 	int pass_cryptomatte;
 
+	int pass_adaptive_min_max;
+
 	int pass_mist;
 	float mist_start;
 	float mist_inv_depth;
@@ -1255,6 +1263,8 @@ typedef struct KernelFilm {
 	int pass_bvh_intersections;
 	int pass_ray_bounces;
 #endif
+
+	int pad1, pad2, pad3;
 } KernelFilm;
 static_assert_align(KernelFilm, 16);
 
@@ -1334,6 +1344,8 @@ typedef struct KernelIntegrator {
 	/* sampler */
 	int sampling_pattern;
 	int aa_samples;
+	int adaptive_min_samples;
+	float adaptive_threshold;
 
 	/* volume render */
 	int use_volumes;
@@ -1345,7 +1357,7 @@ typedef struct KernelIntegrator {
 
 	int max_closures;
 
-	int pad1, pad2, pad3;
+	int pad1;
 } KernelIntegrator;
 static_assert_align(KernelIntegrator, 16);
 

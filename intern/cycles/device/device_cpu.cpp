@@ -764,23 +764,35 @@ public:
 		/* Needed for Embree. */
 		SIMD_SET_FLUSH_TO_ZERO;
 
-		for(int sample = start_sample; sample < end_sample; sample++) {
+		for(int y = tile.y; y < tile.y + tile.h; y++) {
 			if(task.get_cancel() || task_pool.canceled()) {
 				if(task.need_finish_queue == false)
 					break;
 			}
 
-			for(int y = tile.y; y < tile.y + tile.h; y++) {
-				for(int x = tile.x; x < tile.x + tile.w; x++) {
+			for(int x = tile.x; x < tile.x + tile.w; x++) {
+				for(int sample = start_sample; sample < end_sample; sample++) {
 					if(use_coverage) {
 						coverage.init_pixel(x, y);
 					}
 					path_trace_kernel()(kg, render_buffer,
 					                    sample, x, y, tile.offset, tile.stride);
-				}
-			}
 
-			tile.sample = sample + 1;
+
+					int index = tile.offset + x + y*tile.stride;
+					int pass_stride = kernel_data.film.pass_stride;
+
+					float4 minmax = *(float4*)(render_buffer + index*pass_stride + kernel_data.film.pass_adaptive_min_max);
+					if(minmax.w > 0.0f) {
+						float4 scaled_value = *(float4*)(render_buffer + index*pass_stride);
+						scaled_value *= (float)end_sample / (float)sample;
+						*(float4*)(render_buffer + index*pass_stride) = scaled_value;
+						break;
+					}
+					tile.sample = sample + 1;
+				}
+				tile.sample = end_sample;
+			}
 
 			task.update_progress(&tile, tile.w*tile.h);
 		}

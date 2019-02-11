@@ -281,6 +281,9 @@ void BlenderSync::sync_integrator()
 	integrator->sample_all_lights_indirect = get_boolean(cscene, "sample_all_lights_indirect");
 	integrator->light_sampling_threshold = get_float(cscene, "light_sampling_threshold");
 
+	integrator->adaptive_min_samples = get_int(cscene, "adaptive_min_samples");
+	integrator->adaptive_threshold = get_float(cscene, "adaptive_threshold");
+
 	int diffuse_samples = get_int(cscene, "diffuse_samples");
 	int glossy_samples = get_int(cscene, "glossy_samples");
 	int transmission_samples = get_int(cscene, "transmission_samples");
@@ -471,6 +474,7 @@ PassType BlenderSync::get_pass_type(BL::RenderPass& b_pass)
 	MAP_PASS("Debug Ray Bounces", PASS_RAY_BOUNCES);
 #endif
 	MAP_PASS("Debug Render Time", PASS_RENDER_TIME);
+	MAP_PASS("Adaptive Sampling Min/Max", PASS_ADAPTIVE_MIN_MAX);
 	if(string_startswith(name, cryptomatte_prefix)) {
 		return PASS_CRYPTOMATTE;
 	}
@@ -615,6 +619,11 @@ vector<Pass> BlenderSync::sync_render_passes(BL::RenderLayer& b_rlay,
 	}
 	if(get_boolean(crp, "pass_crypto_accurate") && scene->film->cryptomatte_passes != CRYPT_NONE) {
 		scene->film->cryptomatte_passes = (CryptomatteType)(scene->film->cryptomatte_passes | CRYPT_ACCURATE);
+	}
+
+	if(1 || get_boolean(crp, "pass_adaptive_min_max")) {
+		b_engine.add_pass("AdaptiveMinMax", 4, "RGBA", b_view_layer.name().c_str());
+		Pass::add(PASS_ADAPTIVE_MIN_MAX, passes);
 	}
 
 	return passes;

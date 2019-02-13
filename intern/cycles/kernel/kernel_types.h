@@ -365,6 +365,7 @@ typedef enum PassType {
 	PASS_RENDER_TIME,
 	PASS_CRYPTOMATTE,
 	PASS_ADAPTIVE_MIN_MAX,
+	PASS_SAMPLE_COUNT,
 	PASS_CATEGORY_MAIN_END = 31,
 
 	PASS_MIST = 32,
@@ -1240,6 +1241,7 @@ typedef struct KernelFilm {
 	int pass_cryptomatte;
 
 	int pass_adaptive_min_max;
+	int pass_sample_count;
 
 	int pass_mist;
 	float mist_start;
@@ -1264,7 +1266,7 @@ typedef struct KernelFilm {
 	int pass_ray_bounces;
 #endif
 
-	int pad1, pad2, pad3;
+	int pad1, pad2;
 } KernelFilm;
 static_assert_align(KernelFilm, 16);
 

@@ -1277,6 +1277,12 @@ class CyclesRenderLayerSettings(bpy.types.PropertyGroup):
         default=False,
         update=update_render_passes,
     )
+    pass_debug_sample_count: BoolProperty(
+        name="Debug Sample Count",
+        description="Number of samples/camera rays per pixel",
+        default=False,
+        update=update_render_passes,
+    )
     use_pass_volume_direct: BoolProperty(
         name="Volume Direct",
         description="Deliver direct volumetric scattering pass",

@@ -167,6 +167,10 @@ void Pass::add(PassType type, vector<Pass>& passes, const char *name)
 		case PASS_ADAPTIVE_MIN_MAX:
 			pass.components = 4;
 			break;
+		case PASS_SAMPLE_COUNT:
+			pass.components = 1;
+			pass.exposure = false;
+			break;
 		default:
 			assert(false);
 			break;
@@ -464,6 +468,9 @@ void Film::device_update(Device *device, DeviceScene *dscene, Scene *scene)
 				break;
 			case PASS_ADAPTIVE_MIN_MAX:
 				kfilm->pass_adaptive_min_max =  kfilm->pass_stride;
+				break;
+			case PASS_SAMPLE_COUNT:
+				kfilm->pass_sample_count =  kfilm->pass_stride;
 				break;
 			default:
 				assert(false);

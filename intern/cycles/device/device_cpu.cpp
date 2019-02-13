@@ -771,6 +771,11 @@ public:
 			}
 
 			for(int x = tile.x; x < tile.x + tile.w; x++) {
+				int index = tile.offset + x + y*tile.stride;
+				int pass_stride = kernel_data.film.pass_stride;
+				if(kernel_data.film.pass_sample_count) {
+					*(render_buffer + index*pass_stride + kernel_data.film.pass_sample_count) = 1.0f;
+				}
 				for(int sample = start_sample; sample < end_sample; sample++) {
 					if(use_coverage) {
 						coverage.init_pixel(x, y);
@@ -778,15 +783,14 @@ public:
 					path_trace_kernel()(kg, render_buffer,
 					                    sample, x, y, tile.offset, tile.stride);
 
-
-					int index = tile.offset + x + y*tile.stride;
-					int pass_stride = kernel_data.film.pass_stride;
-
 					float4 minmax = *(float4*)(render_buffer + index*pass_stride + kernel_data.film.pass_adaptive_min_max);
 					if(minmax.w > 0.0f) {
 						float4 scaled_value = *(float4*)(render_buffer + index*pass_stride);
 						scaled_value *= (float)end_sample / (float)sample;
 						*(float4*)(render_buffer + index*pass_stride) = scaled_value;
+						if(kernel_data.film.pass_sample_count) {
+							*(render_buffer + index*pass_stride + kernel_data.film.pass_sample_count) = (float)sample / (float)end_sample;
+						}
 						break;
 					}
 					tile.sample = sample + 1;

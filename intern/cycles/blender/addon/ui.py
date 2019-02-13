@@ -799,6 +799,8 @@ class CYCLES_RENDER_PT_passes_data(CyclesButtonsPanel, Panel):
         col.prop(cycles_view_layer, "denoising_store_passes", text="Denoising Data")
         col = flow.column()
         col.prop(cycles_view_layer, "pass_debug_render_time", text="Render Time")
+        col = flow.column()
+        col.prop(cycles_view_layer, "pass_debug_sample_count", text="Sample Count")
 
         layout.separator()
 

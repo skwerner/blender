@@ -474,7 +474,7 @@ PassType BlenderSync::get_pass_type(BL::RenderPass& b_pass)
 	MAP_PASS("Debug Ray Bounces", PASS_RAY_BOUNCES);
 #endif
 	MAP_PASS("Debug Render Time", PASS_RENDER_TIME);
-	MAP_PASS("Adaptive Sampling Min/Max", PASS_ADAPTIVE_MIN_MAX);
+	MAP_PASS("AdaptiveMinMax", PASS_ADAPTIVE_MIN_MAX);
 	MAP_PASS("Debug Sample Count", PASS_SAMPLE_COUNT);
 	if(string_startswith(name, cryptomatte_prefix)) {
 		return PASS_CRYPTOMATTE;

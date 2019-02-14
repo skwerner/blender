@@ -441,14 +441,17 @@ ccl_device_inline void kernel_write_result(KernelGlobals *kg,
 			                          make_float4(L_sum.x * 2.0f, L_sum.y* 2.0f, L_sum.z * 2.0f, 0.0f));
 		}
 		if(sample > 0 && ((sample+1) % kernel_data.integrator.adaptive_min_samples) == 0) {
-			float4 I = *(float4*)buffer;
-			float4 A = *(float4*)(buffer + kernel_data.film.pass_adaptive_min_max);
+			float4 I = *(ccl_global float4*)buffer;
+			float4 A = *(ccl_global float4*)(buffer + kernel_data.film.pass_adaptive_min_max);
 			/* The per pixel error as seen in section 2.1 of the aforementioned paper. */
 			float error = (fabsf(I.x - A.x) + fabsf(I.y - A.y) + fabsf(I.z - A.z))/sqrtf(I.x + I.y + I.z);
 			if(error < kernel_data.integrator.adaptive_threshold * (float)sample) {
 				kernel_write_pass_float4(buffer + kernel_data.film.pass_adaptive_min_max, make_float4(0.0f, 0.0f, 0.0f, sample));
 			}
 		}
+	}
+	if(kernel_data.film.pass_sample_count) {
+		*(buffer + kernel_data.film.pass_sample_count) += 1.0f;
 	}
 }
 

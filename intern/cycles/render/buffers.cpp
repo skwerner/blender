@@ -300,7 +300,8 @@ bool RenderBuffers::get_pass_rect(PassType type, float exposure, int sample, int
 #endif
 			else if(type == PASS_SAMPLE_COUNT) {
 				for(int i = 0; i < size; i++, in += pass_stride, pixels++) {
-					pixels[0] = *in;
+					float f = *in;
+					pixels[0] = f * scale;
 				}
 			}
 			else {

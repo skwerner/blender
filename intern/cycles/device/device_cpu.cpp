@@ -764,39 +764,32 @@ public:
 		/* Needed for Embree. */
 		SIMD_SET_FLUSH_TO_ZERO;
 
-		for(int y = tile.y; y < tile.y + tile.h; y++) {
+		for(int sample = start_sample; sample < end_sample; sample++) {
 			if(task.get_cancel() || task_pool.canceled()) {
 				if(task.need_finish_queue == false)
 					break;
 			}
 
-			for(int x = tile.x; x < tile.x + tile.w; x++) {
-				int index = tile.offset + x + y*tile.stride;
-				int pass_stride = kernel_data.film.pass_stride;
-				if(kernel_data.film.pass_sample_count) {
-					*(render_buffer + index*pass_stride + kernel_data.film.pass_sample_count) = 1.0f;
-				}
-				for(int sample = start_sample; sample < end_sample; sample++) {
+			for(int y = tile.y; y < tile.y + tile.h; y++) {
+				for(int x = tile.x; x < tile.x + tile.w; x++) {
+					int index = tile.offset + x + y*tile.stride;
+					int pass_stride = kernel_data.film.pass_stride;
+					float4 *minmax = (float4*)(render_buffer + index * pass_stride + kernel_data.film.pass_adaptive_min_max);
+					if(minmax->w > 0.0f) {
+						float4 scaled_value = *(float4*)(render_buffer + index * pass_stride);
+						scaled_value *= (float)sample / (float)(sample-1);
+						*(float4*)(render_buffer + index * pass_stride) = scaled_value;
+						continue;
+					}
+
 					if(use_coverage) {
 						coverage.init_pixel(x, y);
 					}
 					path_trace_kernel()(kg, render_buffer,
 					                    sample, x, y, tile.offset, tile.stride);
-
-					float4 minmax = *(float4*)(render_buffer + index*pass_stride + kernel_data.film.pass_adaptive_min_max);
-					if(minmax.w > 0.0f) {
-						float4 scaled_value = *(float4*)(render_buffer + index*pass_stride);
-						scaled_value *= (float)end_sample / (float)sample;
-						*(float4*)(render_buffer + index*pass_stride) = scaled_value;
-						if(kernel_data.film.pass_sample_count) {
-							*(render_buffer + index*pass_stride + kernel_data.film.pass_sample_count) = (float)sample / (float)end_sample;
-						}
-						break;
-					}
-					tile.sample = sample + 1;
 				}
-				tile.sample = end_sample;
 			}
+			tile.sample = sample + 1;
 
 			task.update_progress(&tile, tile.w*tile.h);
 		}

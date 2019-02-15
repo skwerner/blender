@@ -772,16 +772,6 @@ public:
 
 			for(int y = tile.y; y < tile.y + tile.h; y++) {
 				for(int x = tile.x; x < tile.x + tile.w; x++) {
-					int index = tile.offset + x + y*tile.stride;
-					int pass_stride = kernel_data.film.pass_stride;
-					float4 *minmax = (float4*)(render_buffer + index * pass_stride + kernel_data.film.pass_adaptive_min_max);
-					if(minmax->w > 0.0f) {
-						float4 scaled_value = *(float4*)(render_buffer + index * pass_stride);
-						scaled_value *= (float)sample / (float)(sample-1);
-						*(float4*)(render_buffer + index * pass_stride) = scaled_value;
-						continue;
-					}
-
 					if(use_coverage) {
 						coverage.init_pixel(x, y);
 					}

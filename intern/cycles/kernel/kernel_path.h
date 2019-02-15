@@ -739,6 +739,20 @@ ccl_device void kernel_path_trace(KernelGlobals *kg,
 
 	buffer += index*pass_stride;
 
+	if(kernel_data.film.pass_adaptive_min_max) {
+		ccl_global float4 *minmax = (ccl_global float4*)(buffer + kernel_data.film.pass_adaptive_min_max);
+		if(minmax->w > 0.0f) {
+			float4 scaled_value = *(ccl_global float4*)(buffer);
+			scaled_value *= (float)(sample + 1) / (float)sample;
+			*(ccl_global float4*)(buffer) = scaled_value;
+
+			scaled_value = *(ccl_global float4*)(buffer + kernel_data.film.pass_adaptive_min_max);
+			scaled_value *= (float)(sample + 1) / (float)sample;
+			*(ccl_global float4*)(buffer + kernel_data.film.pass_adaptive_min_max) = scaled_value;
+			return;
+		}
+	}
+
 	/* Initialize random numbers and sample ray. */
 	uint rng_hash;
 	Ray ray;

@@ -18,6 +18,7 @@
 #include "render/background.h"
 #include "render/integrator.h"
 #include "render/film.h"
+#include "render/jitter.h"
 #include "render/light.h"
 #include "render/scene.h"
 #include "render/shader.h"
@@ -79,6 +80,7 @@ NODE_DEFINE(Integrator)
 	static NodeEnum sampling_pattern_enum;
 	sampling_pattern_enum.insert("sobol", SAMPLING_PATTERN_SOBOL);
 	sampling_pattern_enum.insert("cmj", SAMPLING_PATTERN_CMJ);
+	sampling_pattern_enum.insert("pmj", SAMPLING_PATTERN_PMJ);
 	SOCKET_ENUM(sampling_pattern, "Sampling Pattern", sampling_pattern_enum, SAMPLING_PATTERN_SOBOL);
 
 	return type;
@@ -202,11 +204,24 @@ void Integrator::device_update(Device *device, DeviceScene *dscene, Scene *scene
 	int dimensions = PRNG_BASE_NUM + max_samples*PRNG_BOUNCE_NUM;
 	dimensions = min(dimensions, SOBOL_MAX_DIMENSIONS);
 
-	uint *directions = dscene->sobol_directions.alloc(SOBOL_BITS*dimensions);
+	if(sampling_pattern == SAMPLING_PATTERN_SOBOL) {
+		uint *directions = dscene->sobol_directions.alloc(SOBOL_BITS*dimensions);
 
-	sobol_generate_direction_vectors((uint(*)[SOBOL_BITS])directions, dimensions);
+		sobol_generate_direction_vectors((uint(*)[SOBOL_BITS])directions, dimensions);
 
-	dscene->sobol_directions.copy_to_device();
+		dscene->sobol_directions.copy_to_device();
+	}
+	else {
+		constexpr int sequence_size = 64 * 64;
+		constexpr int num_sequences = 48;
+		float2 *directions = (float2*)dscene->sobol_directions.alloc(sequence_size * num_sequences * 2);
+		for(int j = 0; j < num_sequences; ++j) {
+			srand(j);
+			float2 *sequence = directions + j * sequence_size;
+			progressive_multi_jitter_generate_2D(sequence, sequence_size);
+		}
+		dscene->sobol_directions.copy_to_device();
+	}
 
 	/* Clamping. */
 	bool use_sample_clamp = (sample_clamp_direct != 0.0f ||

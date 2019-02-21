@@ -783,7 +783,7 @@ public:
 
 			task.update_progress(&tile, tile.w*tile.h);
 
-			if(kernel_data.film.pass_adaptive_min_max && (sample & 1) && sample > kernel_data.integrator.adaptive_min_samples) {
+			if(kernel_data.film.pass_adaptive_min_max && (sample & 0x3) == 3 && sample > kernel_data.integrator.adaptive_min_samples) {
 				/* Introducing: Arguably the worst box filter in the universe. 
 				   When a pixel asks for more adaptive samples, make its neighbors render more samples too. */
 				for(int y = tile.y; y < tile.y + tile.h; ++y) {

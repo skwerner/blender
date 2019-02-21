@@ -436,18 +436,21 @@ ccl_device_inline void kernel_write_result(KernelGlobals *kg,
 	   This is the heuristic from "A hierarchical automatic stopping condition for Monte Carlo global illumination"
 	   except that here it is applied per pixel and not in hierarchical tiles. */
 	if(kernel_data.film.pass_adaptive_min_max && kernel_data.integrator.adaptive_threshold > 0.0f) {
-		if(sample & 1) {
+		if(bool(sample & 2) ^ bool(sample & 8) ^ bool(sample & 0x20) ^ bool(sample & 0x20) ^ bool(sample & 0x80)
+		   ^ bool(sample & 0x200) ^ bool(sample & 0x800) ^ bool(sample & 0x2000) ^ bool(sample & 0x2000)
+		   ^ bool(sample & 0x20000) ^ bool(sample & 0x80000) ^ bool(sample & 0x200000) ^ bool(sample & 0x200000)
+		   ^ bool(sample & 0x2000000) ^ bool(sample & 0x8000000) ^ bool(sample & 0x20000000) ^ bool(sample & 0x20000000)) {
 			kernel_write_pass_float4(buffer + kernel_data.film.pass_adaptive_min_max,
 				make_float4(L_sum.x * 2.0f, L_sum.y* 2.0f, L_sum.z * 2.0f, 0.0f));
-			if(sample > kernel_data.integrator.adaptive_min_samples) {
-				/* TODO Stefan: Is this better in linear, sRGB or something else? */
-				float4 I = *((ccl_global float4*)buffer);
-				float4 A = *(ccl_global float4*)(buffer + kernel_data.film.pass_adaptive_min_max);
-				/* The per pixel error as seen in section 2.1 of the aforementioned paper. */
-				float error = (fabsf(I.x - A.x) + fabsf(I.y - A.y) + fabsf(I.z - A.z)) / sqrtf(I.x + I.y + I.z);
-				if(error < kernel_data.integrator.adaptive_threshold * (float)sample) {
-					kernel_write_pass_float4(buffer + kernel_data.film.pass_adaptive_min_max, make_float4(0.0f, 0.0f, 0.0f, 1.0f));
-				}
+		}
+		if(sample > kernel_data.integrator.adaptive_min_samples && (sample & 0x3) == 3) {
+			/* TODO Stefan: Is this better in linear, sRGB or something else? */
+			float4 I = *((ccl_global float4*)buffer);
+			float4 A = *(ccl_global float4*)(buffer + kernel_data.film.pass_adaptive_min_max);
+			/* The per pixel error as seen in section 2.1 of the aforementioned paper. */
+			float error = (fabsf(I.x - A.x) + fabsf(I.y - A.y) + fabsf(I.z - A.z)) / sqrtf(I.x + I.y + I.z);
+			if(error < kernel_data.integrator.adaptive_threshold * (float)sample) {
+				kernel_write_pass_float4(buffer + kernel_data.film.pass_adaptive_min_max, make_float4(0.0f, 0.0f, 0.0f, 1.0f));
 			}
 		}
 	}

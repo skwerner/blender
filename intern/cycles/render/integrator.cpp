@@ -216,7 +216,6 @@ void Integrator::device_update(Device *device, DeviceScene *dscene, Scene *scene
 		constexpr int num_sequences = 48;
 		float2 *directions = (float2*)dscene->sobol_directions.alloc(sequence_size * num_sequences * 2);
 		for(int j = 0; j < num_sequences; ++j) {
-			srand(j);
 			float2 *sequence = directions + j * sequence_size;
 			progressive_multi_jitter_02_generate_2D(sequence, sequence_size, j);
 		}

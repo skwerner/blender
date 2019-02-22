@@ -436,10 +436,10 @@ ccl_device_inline void kernel_write_result(KernelGlobals *kg,
 	   This is the heuristic from "A hierarchical automatic stopping condition for Monte Carlo global illumination"
 	   except that here it is applied per pixel and not in hierarchical tiles. */
 	if(kernel_data.film.pass_adaptive_min_max && kernel_data.integrator.adaptive_threshold > 0.0f) {
-		if(bool(sample & 2) ^ bool(sample & 8) ^ bool(sample & 0x20) ^ bool(sample & 0x20) ^ bool(sample & 0x80)
-		   ^ bool(sample & 0x200) ^ bool(sample & 0x800) ^ bool(sample & 0x2000) ^ bool(sample & 0x2000)
-		   ^ bool(sample & 0x20000) ^ bool(sample & 0x80000) ^ bool(sample & 0x200000) ^ bool(sample & 0x200000)
-		   ^ bool(sample & 0x2000000) ^ bool(sample & 0x8000000) ^ bool(sample & 0x20000000) ^ bool(sample & 0x20000000)) {
+		if((bool)(sample & 2) ^ (bool)(sample & 8) ^ (bool)(sample & 0x20) ^ (bool)(sample & 0x20) ^ (bool)(sample & 0x80)
+		   ^ (bool)(sample & 0x200) ^ (bool)(sample & 0x800) ^ (bool)(sample & 0x2000) ^ (bool)(sample & 0x2000)
+		   ^ (bool)(sample & 0x20000) ^ (bool)(sample & 0x80000) ^ (bool)(sample & 0x200000) ^ (bool)(sample & 0x200000)
+		   ^ (bool)(sample & 0x2000000) ^ (bool)(sample & 0x8000000) ^ (bool)(sample & 0x20000000) ^ (bool)(sample & 0x20000000)) {
 			kernel_write_pass_float4(buffer + kernel_data.film.pass_adaptive_min_max,
 				make_float4(L_sum.x * 2.0f, L_sum.y* 2.0f, L_sum.z * 2.0f, 0.0f));
 		}

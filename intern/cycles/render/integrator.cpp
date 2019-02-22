@@ -218,18 +218,7 @@ void Integrator::device_update(Device *device, DeviceScene *dscene, Scene *scene
 		for(int j = 0; j < num_sequences; ++j) {
 			srand(j);
 			float2 *sequence = directions + j * sequence_size;
-			progressive_multi_jitter_generate_2D(sequence, sequence_size);
-			if(j > 0) {
-				for(int yy = 0; yy < sequence_size / 16; ++yy) {
-					for(int xx = 0; xx < 16; ++xx) {
-						int other = drand48() * (16 - xx) + xx;
-						float2 tmp = sequence[xx + yy * 16];
-						tmp = sequence[other + yy * 16];
-						sequence[other + yy * 16] = sequence[xx + yy * 16];
-						sequence[xx + yy * 16] = tmp;
-					}
-				}
-			}
+			progressive_multi_jitter_02_generate_2D(sequence, sequence_size, j);
 		}
 		dscene->sobol_directions.copy_to_device();
 	}

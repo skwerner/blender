@@ -257,7 +257,7 @@ protected:
 		do {
 			int xstratum = xdivs * pt.x;
 			int ystratum = ydivs * pt.y;
-			occupiedStrata[shape][ystratum & xdivs + xstratum] = true;
+			occupiedStrata[shape][ystratum * xdivs + xstratum] = true;
 			shape = shape + 1;
 			xdivs = xdivs / 2;
 			ydivs = ydivs * 2;

@@ -37,15 +37,6 @@ static uint cmj_hash(uint i, uint p)
 	return i;
 }
 
-static uint cmj_hash_simple(uint i, uint p)
-{
-	i = (i ^ 61) ^ p;
-	i += i << 3;
-	i ^= i >> 4;
-	i *= 0x27d4eb2d;
-	return i;
-}
-
 static float cmj_randfloat(uint i, uint p)
 {
 	return cmj_hash(i, p) * (1.0f / 4294967808.0f);
@@ -236,10 +227,10 @@ protected:
 	void mark_occupied_strata(float2 points[], int N) override
 	{
 		int NN = 2 * N;
-		int num_shapes = log2f(NN);
-		occupiedStrata.resize(num_shapes, std::vector<bool>(NN));
-		/* is it all false by default? */
+		int num_shapes = log2f(NN) + 1;
+		occupiedStrata.resize(num_shapes);
 		for(int shape = 0; shape < num_shapes; ++shape) {
+			occupiedStrata[shape].resize(NN);
 			for(int n = 0; n < NN; ++n) {
 				occupiedStrata[shape][n] = false;
 			}

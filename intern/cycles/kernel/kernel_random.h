@@ -64,16 +64,14 @@ ccl_device_forceinline float path_rng_1D(KernelGlobals *kg,
 	return (float)drand48();
 #endif
 	if(kernel_data.integrator.sampling_pattern == SAMPLING_PATTERN_PMJ) {
-		/* Cranley-Patterson rotation using rng seed */
-		float shift;
-		/* Hash rng with dimension to solve correlation issues.
-		 * See T38710, T50116.
-		 */
+		/* Fallback to random */
+		if(sample > NUM_PJ_SAMPLES) {
+			int p = rng_hash + dimension;
+			return cmj_randfloat(sample, p);
+		}
 		uint tmp_rng = cmj_hash_simple(dimension, rng_hash);
 		int index = ((dimension % NUM_PJ_PATTERNS) * NUM_PJ_SAMPLES + sample) * 2;
-		float r = __uint_as_float(kernel_tex_fetch(__sobol_directions, index));
-		shift = tmp_rng * (1.0f/(float)0xFFFFFFFF);
-		return r + shift - floorf(r + shift);
+		return __uint_as_float(kernel_tex_fetch(__sobol_directions, index) ^ (tmp_rng & 0x007fffff)) - 1.0f;
 	}
 #ifdef __CMJ__
 #  ifdef __SOBOL__
@@ -116,17 +114,16 @@ ccl_device_forceinline void path_rng_2D(KernelGlobals *kg,
 	return;
 #endif
 	if(kernel_data.integrator.sampling_pattern == SAMPLING_PATTERN_PMJ) {
-
+		if(sample > NUM_PJ_SAMPLES) {
+			int p = rng_hash + dimension;
+			*fx = cmj_randfloat(sample, p);
+			*fy = cmj_randfloat(sample, p + 1);
+		}
 		uint tmp_rng = cmj_hash_simple(dimension, rng_hash);
 		int index = ((dimension % NUM_PJ_PATTERNS) * NUM_PJ_SAMPLES + sample) * 2;
-		float r = __uint_as_float(kernel_tex_fetch(__sobol_directions, index));
-		float shift = tmp_rng * (1.0f/(float)0xFFFFFFFF);
-		*fx = r + shift - floorf(r + shift);
-
-		r = __uint_as_float(kernel_tex_fetch(__sobol_directions, index + 1));
+		*fx = __uint_as_float(kernel_tex_fetch(__sobol_directions, index) ^ (tmp_rng & 0x007fffff)) - 1.0f;
 		tmp_rng = cmj_hash_simple(dimension+ 1, rng_hash);
-		shift = tmp_rng * (1.0f/(float)0xFFFFFFFF);
-		*fy = r + shift - floorf(r + shift);
+		*fy = __uint_as_float(kernel_tex_fetch(__sobol_directions, index + 1) ^ (tmp_rng & 0x007fffff)) - 1.0f;
 		return;
 	}
 #ifdef __CMJ__

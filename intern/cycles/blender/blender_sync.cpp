@@ -281,8 +281,14 @@ void BlenderSync::sync_integrator()
 	integrator->sample_all_lights_indirect = get_boolean(cscene, "sample_all_lights_indirect");
 	integrator->light_sampling_threshold = get_float(cscene, "light_sampling_threshold");
 
-	integrator->adaptive_min_samples = get_int(cscene, "adaptive_min_samples");
-	integrator->adaptive_threshold = get_float(cscene, "adaptive_threshold");
+	if(integrator->sampling_pattern == SAMPLING_PATTERN_PMJ) {
+		integrator->adaptive_min_samples = get_int(cscene, "adaptive_min_samples");
+		integrator->adaptive_threshold = get_float(cscene, "adaptive_threshold");
+	}
+	else {
+		integrator->adaptive_min_samples = INT_MAX;
+		integrator->adaptive_threshold = 0.0f;
+	}
 
 	int diffuse_samples = get_int(cscene, "diffuse_samples");
 	int glossy_samples = get_int(cscene, "glossy_samples");
@@ -300,6 +306,7 @@ void BlenderSync::sync_integrator()
 		integrator->mesh_light_samples = mesh_light_samples * mesh_light_samples;
 		integrator->subsurface_samples = subsurface_samples * subsurface_samples;
 		integrator->volume_samples = volume_samples * volume_samples;
+		integrator->adaptive_min_samples = min(integrator->adaptive_min_samples * integrator->adaptive_min_samples, INT_MAX);
 	}
 	else {
 		integrator->diffuse_samples = diffuse_samples;

@@ -231,6 +231,10 @@ class CYCLES_RENDER_PT_sampling_advanced(CyclesButtonsPanel, Panel):
         row.prop(cscene, "use_animated_seed", text="", icon='TIME')
 
         layout.prop(cscene, "sampling_pattern", text="Pattern")
+        col = layout.column(align=True)
+        col.active = cscene.sampling_pattern == 'PROGRESSIVE_MUTI_JITTER'
+        col.prop(cscene, "adaptive_min_samples", text="Adaptive Min Samples")
+        col.prop(cscene, "adaptive_threshold", text="Adaptive Threshold")
 
         layout.prop(cscene, "use_square_samples")
 
@@ -238,11 +242,6 @@ class CYCLES_RENDER_PT_sampling_advanced(CyclesButtonsPanel, Panel):
 
         col = layout.column(align=True)
         col.prop(cscene, "light_sampling_threshold", text="Light Threshold")
-        
-        layout.separator()
-        col = layout.column(align=True)
-        col.prop(cscene, "adaptive_min_samples", text="Adaptive Min Samples")
-        col.prop(cscene, "adaptive_threshold", text="Adaptive Threshold")
 
         if cscene.progressive != 'PATH' and use_branched_path(context):
             col = layout.column(align=True)

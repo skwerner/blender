@@ -71,7 +71,7 @@ protected:
 
 	void extend_sequence(float2 points[], int N)
 	{
-		int n = sqrtf(N);
+		int n = (int)sqrtf(N);
 		for(int s = 0; s < N; ++s) {
 			float2 oldpt = points[s];
 			float i = floorf(n * oldpt.x);
@@ -125,8 +125,8 @@ protected:
 			occupied1Dx[s] = occupied1Dy[s] = false;
 		}
 		for(int s = 0; s < N; ++s) {
-			int xstratum = NN * points[s].x;
-			int ystratum = NN * points[s].y;
+			int xstratum = (int)(NN * points[s].x);
+			int ystratum = (int)(NN * points[s].y);
 			occupied1Dx[xstratum] = true;
 			occupied1Dy[ystratum] = true;
 		}
@@ -139,11 +139,11 @@ protected:
 		int xstratum, ystratum;
 		do {
 			pt.x = (i + 0.5f * (xhalf + rnd())) / n;
-			xstratum = NN * pt.x;
+			xstratum = (int)(NN * pt.x);
 		} while(occupied1Dx[xstratum]);
 		do {
 			pt.y = (j + 0.5f * (yhalf + rnd())) / n;
-			ystratum = NN * pt.y;
+			ystratum = (int)(NN * pt.y);
 		} while(occupied1Dy[ystratum]);
 		occupied1Dx[xstratum] = true;
 		occupied1Dy[ystratum] = true;
@@ -153,7 +153,7 @@ protected:
 
 	void extend_sequence_even(float2 points[], int N)
 	{
-		int n = sqrtf(N);
+		int n = (int)sqrtf(N);
 		occupied1Dx.resize(2*N);
 		occupied1Dy.resize(2*N);
 		mark_occupied_strata(points, N);
@@ -171,7 +171,7 @@ protected:
 
 	void extend_sequence_odd(float2 points[], int N)
 	{
-		int n = sqrtf(N/2);
+		int n = (int)sqrtf(N/2);
 		occupied1Dx.resize(2*N);
 		occupied1Dy.resize(2*N);
 		mark_occupied_strata(points,N);
@@ -227,7 +227,7 @@ protected:
 	void mark_occupied_strata(float2 points[], int N) override
 	{
 		int NN = 2 * N;
-		int num_shapes = log2f(NN) + 1;
+		int num_shapes = (int)log2f(NN) + 1;
 		occupiedStrata.resize(num_shapes);
 		for(int shape = 0; shape < num_shapes; ++shape) {
 			occupiedStrata[shape].resize(NN);
@@ -246,8 +246,8 @@ protected:
 		int xdivs = NN;
 		int ydivs = 1;
 		do {
-			int xstratum = xdivs * pt.x;
-			int ystratum = ydivs * pt.y;
+			int xstratum = (int)(xdivs * pt.x);
+			int ystratum = (int)(ydivs * pt.y);
 			occupiedStrata[shape][ystratum * xdivs + xstratum] = true;
 			shape = shape + 1;
 			xdivs = xdivs / 2;
@@ -261,8 +261,8 @@ protected:
 		int xdivs = NN;
 		int ydivs = 1;
 		do {
-			int xstratum = xdivs * pt.x;
-			int ystratum = ydivs * pt.y;
+			int xstratum = (int)(xdivs * pt.x);
+			int ystratum = (int)(ydivs * pt.y);
 			if(occupiedStrata[shape][ystratum * xdivs + xstratum]) {
 				return true;
 			}
@@ -291,7 +291,7 @@ static void shuffle(float2 points[], int size, int rng_seed)
 	int rng_index = 0;
 	for(int yy = 0; yy < size / 16; ++yy) {
 		for(int xx = 0; xx < 16; ++xx) {
-			int other = cmj_randfloat(++rng_index, rng_seed) * (16 - xx) + xx;
+			int other = (int)(cmj_randfloat(++rng_index, rng_seed) * (16.0f - xx) + xx);
 			float2 tmp = points[xx + yy * 16];
 			tmp = points[other + yy * 16];
 			points[other + yy * 16] = points[xx + yy * 16];

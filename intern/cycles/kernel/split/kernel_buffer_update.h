@@ -111,7 +111,29 @@ ccl_device void kernel_buffer_update(KernelGlobals *kg,
 		uint total_work_size = kernel_split_params.total_work_size;
 		uint work_index;
 
-		if(!get_next_work(kg, work_pools, total_work_size, ray_index, &work_index)) {
+		bool got_work = false;
+		if(kernel_data.film.pass_adaptive_min_max) {
+			do {
+				got_work = get_next_work(kg, work_pools, total_work_size, ray_index, &work_index);
+				if(got_work) {
+					ccl_global WorkTile *tile = &kernel_split_params.tile;
+					uint x, y, sample;
+					get_work_pixel(tile, work_index, &x, &y, &sample);
+					uint buffer_offset = (tile->offset + x + y * tile->stride) * kernel_data.film.pass_stride;
+					ccl_global float *buffer = kernel_split_params.tile.buffer + buffer_offset;
+					ccl_global float4 *minmax = (ccl_global float4*)(buffer + kernel_data.film.pass_adaptive_min_max);
+					if(minmax->w == 0.0f) {
+						break;
+					}
+				}
+			}
+			while(got_work);
+		}
+		else {
+			got_work = get_next_work(kg, work_pools, total_work_size, ray_index, &work_index);
+		}
+
+		if(!got_work) {
 			/* If work is invalid, this means no more work is available and the thread may exit */
 			ASSIGN_RAY_STATE(ray_state, ray_index, RAY_INACTIVE);
 		}

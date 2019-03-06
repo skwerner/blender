@@ -239,17 +239,21 @@ bool RenderBuffers::get_pass_rect(PassType type, float exposure, int sample, int
 		return false;
 	}
 
-	int sample_offset = 0;
+	float *sample_count = NULL;
 	if(params.per_pixel_samples) {
+		int sample_offset = 0;
 		for(size_t j = 0; j < params.passes.size(); j++) {
 			Pass& pass = params.passes[j];
 			if(pass.type != PASS_SAMPLE_COUNT) {
 				sample_offset += pass.components;
 				continue;
 			}
+			else {
+				sample_count =  buffer.data() + sample_offset;
+				break;
+			}
 		}
 	}
-	float *sample_count = sample_offset? buffer.data() + sample_offset: NULL;
 
 	int pass_offset = 0;
 
@@ -290,7 +294,7 @@ bool RenderBuffers::get_pass_rect(PassType type, float exposure, int sample, int
 			/* Scalar */
 			if(type == PASS_DEPTH) {
 				for(int i = 0; i < size; i++, in += pass_stride, pixels++) {
-					if(sample_offset) {
+					if(sample_count) {
 						scale = (pass.filter)? 1.0f / sample_count[i * pass_stride]: 1.0f;
 						scale_exposure = (pass.exposure)? scale * exposure: scale;
 					}
@@ -300,7 +304,7 @@ bool RenderBuffers::get_pass_rect(PassType type, float exposure, int sample, int
 			}
 			else if(type == PASS_MIST) {
 				for(int i = 0; i < size; i++, in += pass_stride, pixels++) {
-					if(sample_offset) {
+					if(sample_count) {
 						scale = (pass.filter) ? 1.0f / sample_count[i * pass_stride] : 1.0f;
 						scale_exposure = (pass.exposure) ? scale * exposure : scale;
 					}
@@ -329,7 +333,7 @@ bool RenderBuffers::get_pass_rect(PassType type, float exposure, int sample, int
 			}
 			else {
 				for(int i = 0; i < size; i++, in += pass_stride, pixels++) {
-					if(sample_offset) {
+					if(sample_count) {
 						scale = (pass.filter) ? 1.0f / sample_count[i * pass_stride] : 1.0f;
 						scale_exposure = (pass.exposure) ? scale * exposure : scale;
 					}
@@ -378,7 +382,7 @@ bool RenderBuffers::get_pass_rect(PassType type, float exposure, int sample, int
 			else {
 				/* RGB/vector */
 				for(int i = 0; i < size; i++, in += pass_stride, pixels += 3) {
-					if(sample_offset) {
+					if(sample_count) {
 						scale = (pass.filter) ? 1.0f / (sample_count[i * pass_stride]) : 1.0f;
 						scale_exposure = (pass.exposure) ? scale * exposure : scale;
 					}
@@ -430,7 +434,7 @@ bool RenderBuffers::get_pass_rect(PassType type, float exposure, int sample, int
 			}
 			else if(type == PASS_CRYPTOMATTE) {
 				for(int i = 0; i < size; i++, in += pass_stride, pixels += 4) {
-					if(sample_offset) {
+					if(sample_count) {
 						scale = (pass.filter) ? 1.0f / (sample_count[i * pass_stride]) : 1.0f;
 					}
 					float4 f = make_float4(in[0], in[1], in[2], in[3]);
@@ -444,7 +448,7 @@ bool RenderBuffers::get_pass_rect(PassType type, float exposure, int sample, int
 			}
 			else {
 				for(int i = 0; i < size; i++, in += pass_stride, pixels += 4) {
-					if(sample_offset) {
+					if(sample_count) {
 						scale = (pass.filter) ? 1.0f / (sample_count[i * pass_stride]) : 1.0f;
 						scale_exposure = (pass.exposure) ? scale * exposure : scale;
 					}

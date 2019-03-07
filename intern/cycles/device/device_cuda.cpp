@@ -1685,6 +1685,12 @@ public:
 		}
 
 		cuda_assert(cuFuncSetCacheConfig(cuPathTrace, CU_FUNC_CACHE_PREFER_L1));
+		
+		CUfunction cuAdaptiveUpdate;
+		if (task.integrator_adaptive) {
+			cuda_assert(cuModuleGetFunction(&cuAdaptiveUpdate, cuModule, "kernel_cuda_adaptive_update_buffers"));
+			cuda_assert(cuFuncSetCacheConfig(cuAdaptiveUpdate, CU_FUNC_CACHE_PREFER_L1));
+		}
 
 		/* Allocate work tile. */
 		work_tiles.alloc(1);
@@ -1731,6 +1737,17 @@ public:
 			                           num_blocks, 1, 1,
 			                           num_threads_per_block, 1, 1,
 			                           0, 0, args, 0));
+
+			if (task.integrator_adaptive) {
+				/* pass in parameters */
+				total_work_size = wtile->w * wtile->h;
+				num_blocks = divide_up(total_work_size, num_threads_per_block);
+				void* args2[] = { &d_work_tiles, &sample, };
+				cuda_assert(cuLaunchKernel(cuAdaptiveUpdate,
+					num_blocks, 1, 1,
+					num_threads_per_block, 1, 1,
+					0, 0, args2, 0));
+			}
 
 			cuda_assert(cuCtxSynchronize());
 

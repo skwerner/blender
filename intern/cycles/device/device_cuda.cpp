@@ -1686,10 +1686,12 @@ public:
 
 		cuda_assert(cuFuncSetCacheConfig(cuPathTrace, CU_FUNC_CACHE_PREFER_L1));
 		
-		CUfunction cuAdaptiveUpdate;
+		CUfunction cuAdaptiveFilterX, cuAdaptiveFilterY;
 		if (task.integrator_adaptive) {
-			cuda_assert(cuModuleGetFunction(&cuAdaptiveUpdate, cuModule, "kernel_cuda_adaptive_update_buffers"));
-			cuda_assert(cuFuncSetCacheConfig(cuAdaptiveUpdate, CU_FUNC_CACHE_PREFER_L1));
+			cuda_assert(cuModuleGetFunction(&cuAdaptiveFilterX, cuModule, "kernel_cuda_adaptive_filter_x"));
+			cuda_assert(cuFuncSetCacheConfig(cuAdaptiveFilterX, CU_FUNC_CACHE_PREFER_L1));
+			cuda_assert(cuModuleGetFunction(&cuAdaptiveFilterY, cuModule, "kernel_cuda_adaptive_filter_y"));
+			cuda_assert(cuFuncSetCacheConfig(cuAdaptiveFilterY, CU_FUNC_CACHE_PREFER_L1));
 		}
 
 		/* Allocate work tile. */
@@ -1749,12 +1751,17 @@ public:
 			                           0, 0, args, 0));
 
 			if(task.integrator_adaptive) {
-				/* pass in parameters */
-				total_work_size = wtile->w * wtile->h;
-				num_blocks = divide_up(total_work_size, num_threads_per_block);
 				uint filter_sample = sample + step_samples - 1;
 				void* args2[] = { &d_work_tiles, &filter_sample };
-				cuda_assert(cuLaunchKernel(cuAdaptiveUpdate,
+				total_work_size = wtile->h;
+				num_blocks = divide_up(total_work_size, num_threads_per_block);
+				cuda_assert(cuLaunchKernel(cuAdaptiveFilterX,
+					num_blocks, 1, 1,
+					num_threads_per_block, 1, 1,
+					0, 0, args2, 0));
+				total_work_size = wtile->w;
+				num_blocks = divide_up(total_work_size, num_threads_per_block);
+				cuda_assert(cuLaunchKernel(cuAdaptiveFilterY,
 					num_blocks, 1, 1,
 					num_threads_per_block, 1, 1,
 					0, 0, args2, 0));

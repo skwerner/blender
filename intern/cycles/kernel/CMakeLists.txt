@@ -90,6 +90,7 @@ set(SRC_BVH_HEADERS
 
 set(SRC_HEADERS
 	kernel_accumulate.h
+	kernel_adaptive_sampling.h
 	kernel_bake.h
 	kernel_camera.h
 	kernel_color.h

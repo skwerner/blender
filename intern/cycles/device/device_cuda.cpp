@@ -1713,7 +1713,17 @@ public:
 			min_blocks *= 8;
 		}
 
-		uint step_samples = task.integrator_adaptive ? 1 : divide_up(min_blocks * num_threads_per_block, wtile->w * wtile->h);
+		uint step_samples = divide_up(min_blocks * num_threads_per_block, wtile->w * wtile->h);
+
+		if(task.integrator_adaptive) {
+			/* Force to either 1, 2 or multiple of 4 samples so that we can run the adaptive sampler properly. */
+			if(step_samples == 3) {
+				step_samples = 2;
+			}
+			else if(step_samples > 4) {
+				step_samples &= 0xfffffffc;
+			}
+		}
 
 		/* Render all samples. */
 		int start_sample = rtile.start_sample;
@@ -1742,7 +1752,8 @@ public:
 				/* pass in parameters */
 				total_work_size = wtile->w * wtile->h;
 				num_blocks = divide_up(total_work_size, num_threads_per_block);
-				void* args2[] = { &d_work_tiles, &sample, };
+				uint filter_sample = sample + step_samples - 1;
+				void* args2[] = { &d_work_tiles, &filter_sample };
 				cuda_assert(cuLaunchKernel(cuAdaptiveUpdate,
 					num_blocks, 1, 1,
 					num_threads_per_block, 1, 1,

@@ -1021,6 +1021,7 @@ void Session::render()
 	task.update_progress_sample = function_bind(&Progress::add_samples, &this->progress, _1, _2);
 	task.need_finish_queue = params.progressive_refine;
 	task.integrator_branched = scene->integrator->method == Integrator::BRANCHED_PATH;
+	task.integrator_adaptive = scene->integrator->adaptive_threshold > 0.0f;
 	task.requested_tile_size = params.tile_size;
 	task.passes_size = tile_manager.params.get_passes_size();
 

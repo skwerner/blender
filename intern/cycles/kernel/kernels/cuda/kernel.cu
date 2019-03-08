@@ -83,6 +83,65 @@ kernel_cuda_branched_path_trace(WorkTile *tile, uint total_work_size)
 
 extern "C" __global__ void
 CUDA_LAUNCH_BOUNDS(CUDA_THREADS_BLOCK_WIDTH, CUDA_KERNEL_MAX_REGISTERS)
+kernel_cuda_adaptive_update_buffers(WorkTile *tile, int sample)
+{	
+	if(kernel_data.film.pass_adaptive_min_max && (sample & 0x3) == 3 && sample > kernel_data.integrator.adaptive_min_samples) {
+		/* Introducing: Arguably the worst box filter in the universe. 
+			When a pixel asks for more adaptive samples, make its neighbors render more samples too. */
+		if(ccl_global_id(0) < tile->h) {
+			int y = tile->y + ccl_global_id(0);
+			bool prev = false;
+			for(int x = tile->x; x < tile->x + tile->w; ++x) {
+				int index = tile->offset + x + y * tile->stride;
+				float *buffer = (float*)tile->buffer + index * kernel_data.film.pass_stride;
+				float4 *minmax = (float4*)(buffer + kernel_data.film.pass_adaptive_min_max);
+				if(minmax->w == 0.0f) {
+					prev = true;
+					if(x > tile->x) {
+						index = index - 1;
+						buffer = (float*)tile->buffer + index * kernel_data.film.pass_stride;
+						minmax = (float4*)(buffer + kernel_data.film.pass_adaptive_min_max);
+						minmax->w = 0.0f;
+					}
+				}
+				else {
+					if(prev) {
+						minmax->w = 0.0f;
+					}
+					prev = false;
+				}
+			}
+		}
+		__syncthreads();
+		if(ccl_global_id(0) < tile->w) {
+			int x = tile->x + ccl_global_id(0);
+			bool prev = false;
+			for(int y = tile->y; y < tile->y + tile->h; ++y) {
+				int index = tile->offset + x + y * tile->stride;
+				float *buffer = (float*)tile->buffer + index * kernel_data.film.pass_stride;
+				float4 *minmax = (float4*)(buffer + kernel_data.film.pass_adaptive_min_max);
+				if(minmax->w == 0.0f) {
+					prev = true;
+					if(y > tile->y) {
+						index = index - tile->stride;
+						buffer = (float*)tile->buffer + index * kernel_data.film.pass_stride;
+						minmax = (float4*)(buffer + kernel_data.film.pass_adaptive_min_max);
+						minmax->w = 0.0f;
+					}
+				}
+				else {
+					if(prev) {
+						minmax->w = 0.0f;
+					}
+					prev = false;
+				}
+			}
+		}
+	}
+}
+
+extern "C" __global__ void
+CUDA_LAUNCH_BOUNDS(CUDA_THREADS_BLOCK_WIDTH, CUDA_KERNEL_MAX_REGISTERS)
 kernel_cuda_convert_to_byte(uchar4 *rgba, float *buffer, float sample_scale, int sx, int sy, int sw, int sh, int offset, int stride)
 {
 	int x = sx + blockDim.x*blockIdx.x + threadIdx.x;

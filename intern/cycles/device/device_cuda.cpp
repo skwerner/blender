@@ -1713,7 +1713,7 @@ public:
 			min_blocks *= 8;
 		}
 
-		uint step_samples = divide_up(min_blocks * num_threads_per_block, wtile->w * wtile->h);
+		uint step_samples = task.integrator_adaptive ? 1 : divide_up(min_blocks * num_threads_per_block, wtile->w * wtile->h);
 
 		/* Render all samples. */
 		int start_sample = rtile.start_sample;
@@ -1738,7 +1738,7 @@ public:
 			                           num_threads_per_block, 1, 1,
 			                           0, 0, args, 0));
 
-			if (task.integrator_adaptive) {
+			if(task.integrator_adaptive) {
 				/* pass in parameters */
 				total_work_size = wtile->w * wtile->h;
 				num_blocks = divide_up(total_work_size, num_threads_per_block);

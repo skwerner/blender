@@ -1,6 +1,4 @@
 /*
- * Copyright 2016, Blender Foundation.
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -15,12 +13,11 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
- * Contributor(s): Blender Institute
- *
+ * Copyright 2016, Blender Foundation.
  */
 
-/** \file eevee_private.h
- *  \ingroup DNA
+/** \file
+ * \ingroup DNA
  */
 
 #ifndef __EEVEE_PRIVATE_H__
@@ -28,12 +25,12 @@
 
 #include "DNA_lightprobe_types.h"
 
-struct Object;
 struct EEVEE_BoundSphere;
 struct EEVEE_ShadowCasterBuffer;
+struct GPUFrameBuffer;
+struct Object;
 struct RenderLayer;
 struct RenderResult;
-struct GPUFrameBuffer;
 
 extern struct DrawEngineType draw_engine_eevee_type;
 
@@ -113,7 +110,7 @@ extern struct DrawEngineType draw_engine_eevee_type;
 	}                                              \
 } ((void)0)
 
-#define OVERLAY_ENABLED(v3d) ((v3d) && (v3d->flag2 & V3D_RENDER_OVERRIDE) == 0)
+#define OVERLAY_ENABLED(v3d) ((v3d) && (v3d->flag2 & V3D_HIDE_OVERLAYS) == 0)
 #define LOOK_DEV_MODE_ENABLED(v3d) ((v3d) && (v3d->shading.type == OB_MATERIAL))
 #define LOOK_DEV_OVERLAY_ENABLED(v3d) (LOOK_DEV_MODE_ENABLED(v3d) && OVERLAY_ENABLED(v3d) && (v3d->overlay.flag & V3D_OVERLAY_LOOK_DEV))
 #define USE_SCENE_LIGHT(v3d) ((!v3d) || (!LOOK_DEV_MODE_ENABLED(v3d)) || ((LOOK_DEV_MODE_ENABLED(v3d) && (v3d->shading.flag & V3D_SHADING_SCENE_LIGHTS))))
@@ -355,10 +352,10 @@ typedef struct EEVEE_Light {
 	float spotsize, spotblend, radius, shadowid;
 	float rightvec[3], sizex;
 	float upvec[3], sizey;
-	float forwardvec[3], lamptype;
+	float forwardvec[3], light_type;
 } EEVEE_Light;
 
-/* Special type for elliptic area lamps, matches lamps_lib.glsl */
+/* Special type for elliptic area lights, matches lamps_lib.glsl */
 #define LAMPTYPE_AREA_ELLIPSE 100.0f
 
 typedef struct EEVEE_Shadow {
@@ -372,7 +369,8 @@ typedef struct EEVEE_ShadowCube {
 } EEVEE_ShadowCube;
 
 typedef struct EEVEE_ShadowCascade {
-	float shadowmat[MAX_CASCADE_NUM][4][4]; /* World->Lamp->NDC->Tex : used for sampling the shadow map. */
+	/* World->Light->NDC->Tex : used for sampling the shadow map. */
+	float shadowmat[MAX_CASCADE_NUM][4][4];
 	float split_start[4];
 	float split_end[4];
 } EEVEE_ShadowCascade;
@@ -407,7 +405,7 @@ typedef struct EEVEE_ShadowCasterBuffer {
 } EEVEE_ShadowCasterBuffer;
 
 /* ************ LIGHT DATA ************* */
-typedef struct EEVEE_LampsInfo {
+typedef struct EEVEE_LightsInfo {
 	int num_light, cache_num_light;
 	int num_cube_layer, cache_num_cube_layer;
 	int num_cascade_layer, cache_num_cascade_layer;
@@ -438,15 +436,15 @@ typedef struct EEVEE_LampsInfo {
 	/* Pointers only. */
 	struct EEVEE_ShadowCasterBuffer *shcaster_frontbuffer;
 	struct EEVEE_ShadowCasterBuffer *shcaster_backbuffer;
-} EEVEE_LampsInfo;
+} EEVEE_LightsInfo;
 
-/* EEVEE_LampsInfo->shadow_casters_flag */
+/* EEVEE_LightsInfo->shadow_casters_flag */
 enum {
 	SHADOW_CASTER_PRUNED = (1 << 0),
 	SHADOW_CASTER_UPDATED = (1 << 1),
 };
 
-/* EEVEE_LampsInfo->update_flag */
+/* EEVEE_LightsInfo->update_flag */
 enum {
 	LIGHT_UPDATE_SHADOW_CUBE = (1 << 0),
 };
@@ -648,7 +646,7 @@ typedef struct EEVEE_CommonUniformBuffer {
 	int sss_toggle; /* bool */
 	/* Specular */
 	int spec_toggle; /* bool */
-	/* Lamps */
+	/* Lights */
 	int la_num_light; /* int */
 	/* Probes */
 	int prb_num_planar; /* int */
@@ -678,8 +676,8 @@ typedef struct EEVEE_ClipPlanesUniformBuffer {
 
 /* ************** SCENE LAYER DATA ************** */
 typedef struct EEVEE_ViewLayerData {
-	/* Lamps */
-	struct EEVEE_LampsInfo *lamps;
+	/* Lights */
+	struct EEVEE_LightsInfo *lights;
 
 	struct GPUUniformBuffer *light_ubo;
 	struct GPUUniformBuffer *shadow_ubo;
@@ -729,7 +727,8 @@ typedef struct EEVEE_ShadowCubeData {
 
 typedef struct EEVEE_ShadowCascadeData {
 	short light_id, shadow_id, cascade_id, layer_id;
-	float viewprojmat[MAX_CASCADE_NUM][4][4]; /* World->Lamp->NDC : used for rendering the shadow map. */
+	/* World->Light->NDC : used for rendering the shadow map. */
+	float viewprojmat[MAX_CASCADE_NUM][4][4];
 	float projmat[MAX_CASCADE_NUM][4][4];
 	float viewmat[4][4], viewinv[4][4];
 	float radius[MAX_CASCADE_NUM];
@@ -738,18 +737,18 @@ typedef struct EEVEE_ShadowCascadeData {
 /* Theses are the structs stored inside Objects.
  * It works with even if the object is in multiple layers
  * because we don't get the same "Object *" for each layer. */
-typedef struct EEVEE_LampEngineData {
+typedef struct EEVEE_LightEngineData {
 	DrawData dd;
 
 	bool need_update;
-	/* This needs to be out of the union to avoid undefined behaviour. */
+	/* This needs to be out of the union to avoid undefined behavior. */
 	short prev_cube_shadow_id;
 	union {
 		struct EEVEE_LightData ld;
 		struct EEVEE_ShadowCubeData scd;
 		struct EEVEE_ShadowCascadeData scad;
 	} data;
-} EEVEE_LampEngineData;
+} EEVEE_LightEngineData;
 
 typedef struct EEVEE_LightProbeEngineData {
 	DrawData dd;
@@ -816,7 +815,7 @@ typedef struct EEVEE_PrivateData {
 	float mist_start, mist_inv_dist, mist_falloff;
 
 	/* Color Management */
-	bool use_color_view_settings;
+	bool use_color_render_settings;
 } EEVEE_PrivateData; /* Transient data */
 
 /* eevee_data.c */
@@ -828,8 +827,8 @@ EEVEE_ObjectEngineData *EEVEE_object_data_get(Object *ob);
 EEVEE_ObjectEngineData *EEVEE_object_data_ensure(Object *ob);
 EEVEE_LightProbeEngineData *EEVEE_lightprobe_data_get(Object *ob);
 EEVEE_LightProbeEngineData *EEVEE_lightprobe_data_ensure(Object *ob);
-EEVEE_LampEngineData *EEVEE_lamp_data_get(Object *ob);
-EEVEE_LampEngineData *EEVEE_lamp_data_ensure(Object *ob);
+EEVEE_LightEngineData *EEVEE_light_data_get(Object *ob);
+EEVEE_LightEngineData *EEVEE_light_data_ensure(Object *ob);
 EEVEE_WorldEngineData *EEVEE_world_data_get(World *wo);
 EEVEE_WorldEngineData *EEVEE_world_data_ensure(World *wo);
 
@@ -992,7 +991,6 @@ void EEVEE_effects_cache_init(EEVEE_ViewLayerData *sldata, EEVEE_Data *vedata);
 void EEVEE_create_minmax_buffer(EEVEE_Data *vedata, struct GPUTexture *depth_src, int layer);
 void EEVEE_downsample_buffer(EEVEE_Data *vedata, struct GPUTexture *texture_src, int level);
 void EEVEE_downsample_cube_buffer(EEVEE_Data *vedata, struct GPUTexture *texture_src, int level);
-void EEVEE_effects_do_gtao(EEVEE_ViewLayerData *sldata, EEVEE_Data *vedata);
 void EEVEE_draw_effects(EEVEE_ViewLayerData *sldata, EEVEE_Data *vedata);
 void EEVEE_effects_free(void);
 
@@ -1003,7 +1001,9 @@ void EEVEE_render_draw(EEVEE_Data *vedata, struct RenderEngine *engine, struct R
 void EEVEE_render_update_passes(struct RenderEngine *engine, struct Scene *scene, struct ViewLayer *view_layer);
 
 /** eevee_lookdev.c */
-void EEVEE_lookdev_cache_init(EEVEE_Data *vedata, DRWShadingGroup **grp, DRWPass *pass, struct World *world, EEVEE_LightProbesInfo *pinfo);
+void EEVEE_lookdev_cache_init(
+        EEVEE_Data *vedata, DRWShadingGroup **grp, DRWPass *pass, float background_alpha,
+        struct World *world, EEVEE_LightProbesInfo *pinfo);
 void EEVEE_lookdev_draw_background(EEVEE_Data *vedata);
 
 /** eevee_engine.c */
@@ -1014,7 +1014,7 @@ static const float texcomat[4][4] = { /* From NDC to TexCo */
 	{0.5f, 0.0f, 0.0f, 0.0f},
 	{0.0f, 0.5f, 0.0f, 0.0f},
 	{0.0f, 0.0f, 0.5f, 0.0f},
-	{0.5f, 0.5f, 0.5f, 1.0f}
+	{0.5f, 0.5f, 0.5f, 1.0f},
 };
 
 /* Cubemap Matrices */

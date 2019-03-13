@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,10 @@
  *
  * The Original Code is Copyright (C) 2005 Blender Foundation.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): Blender Foundation.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/blenkernel/intern/mesh_runtime.c
- *  \ingroup bke
+/** \file
+ * \ingroup bke
  */
 
 #include "atomic_ops.h"
@@ -63,9 +55,10 @@ void BKE_mesh_runtime_reset(Mesh *mesh)
 /* Clear all pointers which we don't want to be shared on copying the datablock.
  * However, keep all the flags which defines what the mesh is (for example, that
  * it's deformed only, or that its custom data layers are out of date.) */
-void BKE_mesh_runtime_reset_on_copy(Mesh *mesh)
+void BKE_mesh_runtime_reset_on_copy(Mesh *mesh, const int UNUSED(flag))
 {
 	Mesh_Runtime *runtime = &mesh->runtime;
+
 	runtime->edit_data = NULL;
 	runtime->batch_cache = NULL;
 	runtime->subdiv_ccg = NULL;
@@ -85,7 +78,7 @@ void BKE_mesh_runtime_clear_cache(Mesh *mesh)
 /**
  * Ensure the array is large enough
  *
- * /note This function must always be thread-protected by caller. It should only be used by internal code.
+ * \note This function must always be thread-protected by caller. It should only be used by internal code.
  */
 static void mesh_ensure_looptri_data(Mesh *mesh)
 {

@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,29 +15,19 @@
  *
  * The Original Code is Copyright (C) 2005 by the Blender Foundation.
  * All rights reserved.
- *
- * Contributor(s): Daniel Dunbar
- *                 Ton Roosendaal,
- *                 Ben Batt,
- *                 Brecht Van Lommel,
- *                 Campbell Barton
- *
- * ***** END GPL LICENSE BLOCK *****
- *
  */
 
-/** \file blender/modifiers/intern/MOD_shrinkwrap.c
- *  \ingroup modifiers
+/** \file
+ * \ingroup modifiers
  */
 
 
 #include <string.h>
 
+#include "BLI_utildefines.h"
+
 #include "DNA_mesh_types.h"
 #include "DNA_object_types.h"
-
-#include "BLI_math.h"
-#include "BLI_utildefines.h"
 
 #include "BKE_editmesh.h"
 #include "BKE_library.h"
@@ -66,22 +54,20 @@ static void initData(ModifierData *md)
 	smd->auxTarget  = NULL;
 }
 
-static CustomDataMask requiredDataMask(Object *UNUSED(ob), ModifierData *md)
+static void requiredDataMask(Object *UNUSED(ob), ModifierData *md, CustomData_MeshMasks *r_cddata_masks)
 {
 	ShrinkwrapModifierData *smd = (ShrinkwrapModifierData *)md;
-	CustomDataMask dataMask = 0;
 
 	/* ask for vertexgroups if we need them */
-	if (smd->vgroup_name[0])
-		dataMask |= CD_MASK_MDEFORMVERT;
+	if (smd->vgroup_name[0] != '\0') {
+		r_cddata_masks->vmask |= CD_MASK_MDEFORMVERT;
+	}
 
 	if ((smd->shrinkType == MOD_SHRINKWRAP_PROJECT) &&
 	    (smd->projAxis == MOD_SHRINKWRAP_PROJECT_OVER_NORMAL))
 	{
-		dataMask |= CD_MASK_MVERT;
+		r_cddata_masks->vmask |= CD_MASK_MVERT;  /* XXX Really? These should always be present, always... */
 	}
-
-	return dataMask;
 }
 
 static bool isDisabled(const struct Scene *UNUSED(scene), ModifierData *md, bool UNUSED(useRenderParams))
@@ -148,16 +134,17 @@ static void deformVertsEM(
 static void updateDepsgraph(ModifierData *md, const ModifierUpdateDepsgraphContext *ctx)
 {
 	ShrinkwrapModifierData *smd = (ShrinkwrapModifierData *)md;
-	CustomDataMask mask = 0;
+	CustomData_MeshMasks mask = {0};
 
 	if (BKE_shrinkwrap_needs_normals(smd->shrinkType, smd->shrinkMode)) {
-		mask |= CD_MASK_NORMAL | CD_MASK_CUSTOMLOOPNORMAL;
+		mask.vmask |= CD_MASK_NORMAL;
+		mask.lmask |= CD_MASK_NORMAL | CD_MASK_CUSTOMLOOPNORMAL;
 	}
 
 	if (smd->target != NULL) {
 		DEG_add_object_relation(ctx->node, smd->target, DEG_OB_COMP_TRANSFORM, "Shrinkwrap Modifier");
 		DEG_add_object_relation(ctx->node, smd->target, DEG_OB_COMP_GEOMETRY, "Shrinkwrap Modifier");
-		DEG_add_customdata_mask(ctx->node, smd->target, mask);
+		DEG_add_customdata_mask(ctx->node, smd->target, &mask);
 		if (smd->shrinkType == MOD_SHRINKWRAP_TARGET_PROJECT) {
 			DEG_add_special_eval_flag(ctx->node, &smd->target->id, DAG_EVAL_NEED_SHRINKWRAP_BOUNDARY);
 		}
@@ -165,12 +152,12 @@ static void updateDepsgraph(ModifierData *md, const ModifierUpdateDepsgraphConte
 	if (smd->auxTarget != NULL) {
 		DEG_add_object_relation(ctx->node, smd->auxTarget, DEG_OB_COMP_TRANSFORM, "Shrinkwrap Modifier");
 		DEG_add_object_relation(ctx->node, smd->auxTarget, DEG_OB_COMP_GEOMETRY, "Shrinkwrap Modifier");
-		DEG_add_customdata_mask(ctx->node, smd->auxTarget, mask);
+		DEG_add_customdata_mask(ctx->node, smd->auxTarget, &mask);
 		if (smd->shrinkType == MOD_SHRINKWRAP_TARGET_PROJECT) {
 			DEG_add_special_eval_flag(ctx->node, &smd->auxTarget->id, DAG_EVAL_NEED_SHRINKWRAP_BOUNDARY);
 		}
 	}
-	DEG_add_object_relation(ctx->node, ctx->object, DEG_OB_COMP_TRANSFORM, "Shrinkwrap Modifier");
+	DEG_add_modifier_to_transform_relation(ctx->node, "Shrinkwrap Modifier");
 }
 
 static bool dependsOnNormals(ModifierData *md)

@@ -1,6 +1,4 @@
 /*
- * Copyright 2016, Blender Foundation.
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -15,12 +13,11 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
- * Contributor(s): Blender Institute
- *
+ * Copyright 2016, Blender Foundation.
  */
 
-/** \file blender/draw/intern/draw_view.c
- *  \ingroup draw
+/** \file
+ * \ingroup draw
  *
  * Contains dynamic drawing using immediate mode
  */
@@ -28,27 +25,21 @@
 #include "DNA_brush_types.h"
 #include "DNA_screen_types.h"
 #include "DNA_userdef_types.h"
-#include "DNA_world_types.h"
 #include "DNA_view3d_types.h"
 
 #include "ED_screen.h"
-#include "ED_transform.h"
 #include "ED_view3d.h"
 
-#include "GPU_draw.h"
 #include "GPU_shader.h"
 #include "GPU_immediate.h"
 #include "GPU_matrix.h"
 
 #include "UI_resources.h"
 
-#include "WM_api.h"
 #include "WM_types.h"
 
-#include "BKE_global.h"
 #include "BKE_object.h"
 #include "BKE_paint.h"
-#include "BKE_unit.h"
 
 #include "DRW_render.h"
 
@@ -95,8 +86,8 @@ void DRW_draw_background(void)
 
 		immBindBuiltinProgram(GPU_SHADER_2D_SMOOTH_COLOR_DITHER);
 
-		UI_GetThemeColor3ubv(TH_LOW_GRAD, col_lo);
-		UI_GetThemeColor3ubv(TH_HIGH_GRAD, col_hi);
+		UI_GetThemeColor3ubv(TH_BACK_GRAD, col_lo);
+		UI_GetThemeColor3ubv(TH_BACK, col_hi);
 
 		immBegin(GPU_PRIM_TRI_FAN, 4);
 		immAttr3ubv(color, col_lo);
@@ -118,17 +109,52 @@ void DRW_draw_background(void)
 	}
 	else {
 		/* Solid background Color */
-		UI_ThemeClearColorAlpha(TH_HIGH_GRAD, 1.0f);
+		UI_ThemeClearColorAlpha(TH_BACK, 1.0f);
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
 	}
 }
+
+GPUBatch *DRW_draw_background_clipping_batch_from_rv3d(const RegionView3D *rv3d)
+{
+	const BoundBox *bb = rv3d->clipbb;
+	const uint clipping_index[6][4] = {
+		{0, 1, 2, 3},
+		{0, 4, 5, 1},
+		{4, 7, 6, 5},
+		{7, 3, 2, 6},
+		{1, 5, 6, 2},
+		{7, 4, 0, 3},
+	};
+	GPUVertBuf *vbo;
+	GPUIndexBuf *el;
+	GPUIndexBufBuilder elb = {0};
+
+	/* Elements */
+	GPU_indexbuf_init(&elb, GPU_PRIM_TRIS, ARRAY_SIZE(clipping_index) * 2, ARRAY_SIZE(bb->vec));
+	for (int i = 0; i < ARRAY_SIZE(clipping_index); i++) {
+		const uint *idx = clipping_index[i];
+		GPU_indexbuf_add_tri_verts(&elb, idx[0], idx[1], idx[2]);
+		GPU_indexbuf_add_tri_verts(&elb, idx[0], idx[2], idx[3]);
+	}
+	el = GPU_indexbuf_build(&elb);
+
+	GPUVertFormat format = {0};
+	uint pos_id = GPU_vertformat_attr_add(&format, "pos", GPU_COMP_F32, 3, GPU_FETCH_FLOAT);
+
+	vbo = GPU_vertbuf_create_with_format(&format);
+	GPU_vertbuf_data_alloc(vbo, ARRAY_SIZE(bb->vec));
+	GPU_vertbuf_attr_fill(vbo, pos_id, bb->vec);
+
+	return GPU_batch_create_ex(GPU_PRIM_TRIS, vbo, el, GPU_BATCH_OWNS_VBO | GPU_BATCH_OWNS_INDEX);
+}
+
 
 /* **************************** 3D Cursor ******************************** */
 
 static bool is_cursor_visible(const DRWContextState *draw_ctx, Scene *scene, ViewLayer *view_layer)
 {
 	View3D *v3d = draw_ctx->v3d;
-	if ((v3d->flag2 & V3D_RENDER_OVERRIDE) || (v3d->overlay.flag & V3D_OVERLAY_HIDE_CURSOR)) {
+	if ((v3d->flag2 & V3D_HIDE_OVERLAYS) || (v3d->overlay.flag & V3D_OVERLAY_HIDE_CURSOR)) {
 		return false;
 	}
 
@@ -175,11 +201,17 @@ void DRW_draw_cursor(void)
 
 	if (is_cursor_visible(draw_ctx, scene, view_layer)) {
 		int co[2];
+
+		/* Get cursor data into quaternion form */
 		const View3DCursor *cursor = &scene->cursor;
+
 		if (ED_view3d_project_int_global(
 		            ar, cursor->location, co, V3D_PROJ_TEST_NOP | V3D_PROJ_TEST_CLIP_NEAR) == V3D_PROJ_RET_OK)
 		{
 			RegionView3D *rv3d = ar->regiondata;
+
+			float cursor_quat[4];
+			BKE_scene_cursor_rot_to_quat(cursor, cursor_quat);
 
 			/* Draw nice Anti Aliased cursor. */
 			GPU_line_width(1.0f);
@@ -188,7 +220,12 @@ void DRW_draw_cursor(void)
 
 			float eps = 1e-5f;
 			rv3d->viewquat[0] = -rv3d->viewquat[0];
-			const bool is_aligned = compare_v4v4(cursor->rotation, rv3d->viewquat, eps);
+			bool is_aligned = compare_v4v4(cursor_quat, rv3d->viewquat, eps);
+			if (is_aligned == false) {
+				float tquat[4];
+				rotation_between_quats_to_quat(tquat, rv3d->viewquat, cursor_quat);
+				is_aligned = tquat[0] - eps < -1.0f;
+			}
 			rv3d->viewquat[0] = -rv3d->viewquat[0];
 
 			/* Draw lines */
@@ -215,7 +252,7 @@ void DRW_draw_cursor(void)
 				for (int axis = 0; axis < 3; axis++) {
 					float axis_vec[3] = {0};
 					axis_vec[axis] = scale;
-					mul_qt_v3(cursor->rotation, axis_vec);
+					mul_qt_v3(cursor_quat, axis_vec);
 					CURSOR_EDGE(axis_vec, axis, +);
 					CURSOR_EDGE(axis_vec, axis, -);
 				}

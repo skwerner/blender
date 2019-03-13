@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,14 +15,10 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * Contributor(s): Blender Foundation, 2002-2009
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/space_image/image_buttons.c
- *  \ingroup spimage
+/** \file
+ * \ingroup spimage
  */
 
 #include <string.h>
@@ -151,7 +145,6 @@ struct ImageUser *ntree_get_active_iuser(bNodeTree *ntree)
  * otherwise refresh preview
  *
  * XXX if you put this back, also check XXX in image_main_region_draw() */
- * /
 void image_preview_event(int event)
 {
 	int exec = 0;
@@ -181,7 +174,8 @@ void image_preview_event(int event)
 
 		BIF_store_spare();
 
-		ntreeCompositExecTree(scene->nodetree, &scene->r, 1, &scene->view_settings, &scene->display_settings);   /* 1 is do_previews */
+		/* 1 is do_previews */
+		ntreeCompositExecTree(scene->nodetree, &scene->r, 1, &scene->view_settings, &scene->display_settings);
 
 		G.scene->nodetree->timecursor = NULL;
 		G.scene->nodetree->test_break = NULL;
@@ -863,7 +857,7 @@ void uiTemplateImage(uiLayout *layout, bContext *C, PointerRNA *ptr, const char 
 	ima = imaptr.data;
 	iuser = userptr->data;
 
-	BKE_image_user_check_frame_calc(iuser, (int)scene->r.cfra);
+	BKE_image_user_frame_calc(iuser, (int)scene->r.cfra);
 
 	cb = MEM_callocN(sizeof(RNAUpdateCb), "RNAUpdateCb");
 	cb->ptr = *ptr;
@@ -937,17 +931,6 @@ void uiTemplateImage(uiLayout *layout, bContext *C, PointerRNA *ptr, const char 
 				uiItemR(row, &imaptr, "filepath", 0, "", ICON_NONE);
 				uiItemO(row, "", ICON_FILE_REFRESH, "image.reload");
 			}
-
-			// XXX what was this for?
-#if 0
-			/* check for re-render, only buttons */
-			if (imagechanged == B_IMAGECHANGED) {
-				if (iuser->flag & IMA_ANIM_REFRESHED) {
-					iuser->flag &= ~IMA_ANIM_REFRESHED;
-					WM_event_add_notifier(C, NC_IMAGE, ima);
-				}
-			}
-#endif
 
 			/* multilayer? */
 			if (ima->type == IMA_TYPE_MULTILAYER && ima->rr) {
@@ -1259,6 +1242,7 @@ void uiTemplateImageLayers(uiLayout *layout, bContext *C, Image *ima, ImageUser 
 
 void uiTemplateImageInfo(uiLayout *layout, bContext *C, Image *ima, ImageUser *iuser)
 {
+	Scene *scene = CTX_data_scene(C);
 	ImBuf *ibuf;
 	char str[MAX_IMAGE_INFO_LEN];
 	void *lock;
@@ -1268,16 +1252,44 @@ void uiTemplateImageInfo(uiLayout *layout, bContext *C, Image *ima, ImageUser *i
 
 	ibuf = BKE_image_acquire_ibuf(ima, iuser, &lock);
 
-	image_info(CTX_data_scene(C), iuser, ima, ibuf, str, MAX_IMAGE_INFO_LEN);
+	BKE_image_user_frame_calc(iuser, (int)scene->r.cfra);
+	image_info(scene, iuser, ima, ibuf, str, MAX_IMAGE_INFO_LEN);
 	BKE_image_release_ibuf(ima, ibuf, lock);
 	uiItemL(layout, str, ICON_NONE);
 }
 
 #undef MAX_IMAGE_INFO_LEN
 
-void image_buttons_register(ARegionType *UNUSED(art))
+static bool metadata_panel_context_poll(const bContext *C, PanelType *UNUSED(pt))
 {
+	SpaceImage *space_image = CTX_wm_space_image(C);
+	return space_image != NULL && space_image->image != NULL;
+}
 
+static void metadata_panel_context_draw(const bContext *C, Panel *panel)
+{
+	void *lock;
+	SpaceImage *space_image = CTX_wm_space_image(C);
+	Image *image = space_image->image;
+	ImBuf *ibuf = BKE_image_acquire_ibuf(image, &space_image->iuser, &lock);
+	if (ibuf != NULL) {
+		ED_region_image_metadata_panel_draw(ibuf, panel->layout);
+	}
+	BKE_image_release_ibuf(image, ibuf, lock);
+}
+
+void image_buttons_register(ARegionType *art)
+{
+	PanelType *pt;
+
+	pt = MEM_callocN(sizeof(PanelType), "spacetype image panel metadata");
+	strcpy(pt->idname, "IMAGE_PT_metadata");
+	strcpy(pt->label, N_("Metadata"));
+	strcpy(pt->translation_context, BLT_I18NCONTEXT_DEFAULT_BPYRNA);
+	pt->poll = metadata_panel_context_poll;
+	pt->draw = metadata_panel_context_draw;
+	pt->flag |= PNL_DEFAULT_CLOSED;
+	BLI_addtail(&art->paneltypes, pt);
 }
 
 static int image_properties_toggle_exec(bContext *C, wmOperator *UNUSED(op))

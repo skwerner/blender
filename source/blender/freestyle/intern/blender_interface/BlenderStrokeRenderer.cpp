@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,12 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/freestyle/intern/blender_interface/BlenderStrokeRenderer.cpp
- *  \ingroup freestyle
+/** \file
+ * \ingroup freestyle
  */
 
 #include "BlenderStrokeRenderer.h"
@@ -126,8 +122,10 @@ BlenderStrokeRenderer::BlenderStrokeRenderer(Render *re, int render_count) : Str
 		freestyle_scene->id.properties = IDP_CopyProperty_ex(old_scene->id.properties, 0);
 	}
 
+	/* Render with transparent background. */
+	freestyle_scene->r.alphamode = R_ALPHAPREMUL;
+
 	if (STREQ(freestyle_scene->r.engine, RE_engine_id_CYCLES)) {
-		/* Render with transparent background. */
 		PointerRNA freestyle_scene_ptr;
 		RNA_id_pointer_create(&freestyle_scene->id, &freestyle_scene_ptr);
 		PointerRNA freestyle_cycles_ptr = RNA_pointer_get(&freestyle_scene_ptr, "cycles");
@@ -150,11 +148,11 @@ BlenderStrokeRenderer::BlenderStrokeRenderer(Render *re, int render_count) : Str
 	Camera *camera = (Camera *)object_camera->data;
 	camera->type = CAM_ORTHO;
 	camera->ortho_scale = max(re->rectx, re->recty);
-	camera->clipsta = 0.1f;
-	camera->clipend = 100.0f;
+	camera->clip_start = 0.1f;
+	camera->clip_end = 100.0f;
 
 	_z_delta = 0.00001f;
-	_z = camera->clipsta + _z_delta;
+	_z = camera->clip_start + _z_delta;
 
 	object_camera->loc[0] = re->disprect.xmin + 0.5f * re->rectx;
 	object_camera->loc[1] = re->disprect.ymin + 0.5f * re->recty;
@@ -183,10 +181,11 @@ BlenderStrokeRenderer::~BlenderStrokeRenderer()
 	// compositor has finished.
 
 	// release objects and data blocks
+	Base *base_next = NULL;
 	ViewLayer *view_layer = (ViewLayer *)freestyle_scene->view_layers.first;
-	for (Base *b = (Base *)view_layer->object_bases.first; b; b = b->next) {
+	for (Base *b = (Base *)view_layer->object_bases.first; b; b = base_next) {
+		base_next = b->next;
 		Object *ob = b->object;
-		void *data = ob->data;
 		char *name = ob->id.name;
 #if 0
 		if (G.debug & G_DEBUG_FREESTYLE) {
@@ -194,31 +193,28 @@ BlenderStrokeRenderer::~BlenderStrokeRenderer()
 		}
 #endif
 		switch (ob->type) {
-			case OB_MESH:
-				BKE_libblock_free(freestyle_bmain, ob);
-				BKE_libblock_free(freestyle_bmain, data);
-				break;
 			case OB_CAMERA:
-				BKE_libblock_free(freestyle_bmain, ob);
-				BKE_libblock_free(freestyle_bmain, data);
 				freestyle_scene->camera = NULL;
+				ATTR_FALLTHROUGH;
+			case OB_MESH:
+				BKE_scene_collections_object_remove(freestyle_bmain,
+				                                    freestyle_scene,
+				                                    ob,
+				                                    true);
 				break;
 			default:
 				cerr << "Warning: unexpected object in the scene: " << name[0] << name[1] << ":" << (name + 2) << endl;
 		}
 	}
 
-	// Make sure we don't have any bases which might reference freed objects.
-	BKE_main_collection_sync(freestyle_bmain);
-
 	// release materials
-	Link *lnk = (Link *)freestyle_bmain->mat.first;
+	Link *lnk = (Link *)freestyle_bmain->materials.first;
 
 	while (lnk)
 	{
 		Material *ma = (Material*)lnk;
 		lnk = lnk->next;
-		BKE_libblock_free(freestyle_bmain, ma);
+		BKE_id_free(freestyle_bmain, ma);
 	}
 
 	BLI_ghash_free(_nodetree_hash, NULL, NULL);
@@ -877,11 +873,11 @@ Object *BlenderStrokeRenderer::NewMesh() const
 Render *BlenderStrokeRenderer::RenderScene(Render * /*re*/, bool render)
 {
 	Camera *camera = (Camera *)freestyle_scene->camera->data;
-	if (camera->clipend < _z)
-		camera->clipend = _z + _z_delta * 100.0f;
+	if (camera->clip_end < _z)
+		camera->clip_end = _z + _z_delta * 100.0f;
 #if 0
 	if (G.debug & G_DEBUG_FREESTYLE) {
-		cout << "clipsta " << camera->clipsta << ", clipend " << camera->clipend << endl;
+		cout << "clip_start " << camera->clip_start << ", clip_end " << camera->clip_end << endl;
 	}
 #endif
 

@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,14 +15,10 @@
  *
  * The Original Code is Copyright (C) 2008 Blender Foundation.
  * All rights reserved.
- *
- * Contributor(s): Blender Foundation
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/interface/interface_region_popover.c
- *  \ingroup edinterface
+/** \file
+ * \ingroup edinterface
  *
  * Pop-Over Region
  *
@@ -54,6 +48,7 @@
 
 #include "BLI_rect.h"
 #include "BLI_utildefines.h"
+#include "BLI_math_vector.h"
 
 #include "BKE_context.h"
 #include "BKE_screen.h"
@@ -82,7 +77,7 @@ struct uiPopover {
 	/* Needed for keymap removal. */
 	wmWindow *window;
 	wmKeyMap *keymap;
-	struct wmEventHandler *keymap_handler;
+	struct wmEventHandler_Keymap *keymap_handler;
 
 	uiMenuCreateFunc menu_func;
 	void *menu_arg;
@@ -165,13 +160,14 @@ static uiBlock *ui_block_func_POPOVER(bContext *C, uiPopupBlockHandle *handle, v
 		if (!handle->refresh) {
 			float center[2] = {BLI_rctf_cent_x(&pup->but->rect), BLI_rctf_cent_y(&pup->but->rect)};
 			ui_block_to_window_fl(handle->ctx_region, pup->but->block, &center[0], &center[1]);
-			/* These variables aren't used for popovers, we could add new variables if there is a conflict. */
-			handle->prev_mx = block->mx = (int)center[0];
-			handle->prev_my = block->my = (int)center[1];
+			/* These variables aren't used for popovers,
+			 * we could add new variables if there is a conflict. */
+			block->bounds_offset[0] = (int)center[0];
+			block->bounds_offset[1] = (int)center[1];
+			copy_v2_v2_int(handle->prev_bounds_offset, block->bounds_offset);
 		}
 		else {
-			block->mx = handle->prev_mx;
-			block->my = handle->prev_my;
+			copy_v2_v2_int(block->bounds_offset, handle->prev_bounds_offset);
 		}
 
 		if (!slideout) {
@@ -197,14 +193,13 @@ static uiBlock *ui_block_func_POPOVER(bContext *C, uiPopupBlockHandle *handle, v
 	}
 	else {
 		/* Not attached to a button. */
-		int offset[2] = {0, 0};
+		int bounds_offset[2] = {0, 0};
 		UI_block_flag_enable(block, UI_BLOCK_LOOP);
 		UI_block_theme_style_set(block, UI_BLOCK_THEME_STYLE_POPUP);
 		UI_block_direction_set(block, block->direction);
 		block->minbounds = UI_MENU_WIDTH_MIN;
-		bool use_place_under_active = !handle->refresh;
 
-		if (use_place_under_active) {
+		if (!handle->refresh) {
 			uiBut *but = NULL;
 			for (but = block->buttons.first; but; but = but->next) {
 				if (but->flag & (UI_SELECT | UI_SELECT_DRAW)) {
@@ -213,12 +208,16 @@ static uiBlock *ui_block_func_POPOVER(bContext *C, uiPopupBlockHandle *handle, v
 			}
 
 			if (but) {
-				offset[0] = -(but->rect.xmin + 0.8f * BLI_rctf_size_x(&but->rect));
-				offset[1] = -(but->rect.ymin + 0.5f * BLI_rctf_size_y(&but->rect));
+				bounds_offset[0] = -(but->rect.xmin + 0.8f * BLI_rctf_size_x(&but->rect));
+				bounds_offset[1] = -(but->rect.ymin + 0.5f * BLI_rctf_size_y(&but->rect));
 			}
+			copy_v2_v2_int(handle->prev_bounds_offset, bounds_offset);
+		}
+		else {
+			copy_v2_v2_int(bounds_offset, handle->prev_bounds_offset);
 		}
 
-		UI_block_bounds_set_popup(block, block_margin, offset[0], offset[1]);
+		UI_block_bounds_set_popup(block, block_margin, bounds_offset);
 	}
 
 	return block;
@@ -353,7 +352,7 @@ void UI_popover_end(bContext *C, uiPopover *pup, wmKeyMap *keymap)
 		UI_block_flag_enable(pup->block, UI_BLOCK_SHOW_SHORTCUT_ALWAYS);
 		pup->keymap = keymap;
 		pup->keymap_handler = WM_event_add_keymap_handler_priority(&window->modalhandlers, keymap, 0);
-		WM_event_set_keymap_handler_callback(pup->keymap_handler, popover_keymap_fn, pup);
+		WM_event_set_keymap_handler_post_callback(pup->keymap_handler, popover_keymap_fn, pup);
 	}
 
 	handle = ui_popup_block_create(C, NULL, NULL, NULL, ui_block_func_POPOVER, pup);

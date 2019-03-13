@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,28 +12,24 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software  Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * Contributor(s): Bastien Montagne
- *
- * ***** END GPL LICENSE BLOCK *****
- *
  */
 
-/** \file blender/modifiers/intern/MOD_normal_edit.c
- *  \ingroup modifiers
+/** \file
+ * \ingroup modifiers
  */
 
 #include <string.h>
 
 #include "MEM_guardedalloc.h"
 
+#include "BLI_utildefines.h"
+
+#include "BLI_bitmap.h"
+#include "BLI_math.h"
+
 #include "DNA_object_types.h"
 #include "DNA_meshdata_types.h"
 #include "DNA_mesh_types.h"
-
-#include "BLI_math.h"
-#include "BLI_utildefines.h"
-#include "BLI_bitmap.h"
 
 #include "BKE_library.h"
 #include "BKE_library_query.h"
@@ -68,8 +62,11 @@ static void generate_vert_coordinates(
 	/* Get size (i.e. deformation of the spheroid generating normals), either from target object, or own geometry. */
 	if (r_size != NULL) {
 		if (ob_center != NULL) {
+			/* Using 'scale' as 'size' here. The input object is typically an empty
+			 * who's scale is used to define an ellipsoid instead of a simple sphere. */
+
 			/* Not we are not interested in signs here - they are even troublesome actually, due to security clamping! */
-			abs_v3_v3(r_size, ob_center->size);
+			abs_v3_v3(r_size, ob_center->scale);
 		}
 		else {
 			/* Set size. */
@@ -418,13 +415,7 @@ static Mesh *normalEditModifier_do(
 	if (mesh->medge == ((Mesh *)ob->data)->medge) {
 		/* We need to duplicate data here, otherwise setting custom normals (which may also affect sharp edges) could
 		 * modify org mesh, see T43671. */
-		BKE_id_copy_ex(
-		        NULL, &mesh->id, (ID **)&result,
-		        LIB_ID_CREATE_NO_MAIN |
-		        LIB_ID_CREATE_NO_USER_REFCOUNT |
-		        LIB_ID_CREATE_NO_DEG_TAG |
-		        LIB_ID_COPY_NO_PREVIEW,
-		        false);
+		BKE_id_copy_ex(NULL, &mesh->id, (ID **)&result, LIB_ID_COPY_LOCALIZE);
 	}
 	else {
 		result = mesh;
@@ -508,17 +499,16 @@ static void initData(ModifierData *md)
 	enmd->mix_limit = M_PI;
 }
 
-static CustomDataMask requiredDataMask(Object *UNUSED(ob), ModifierData *md)
+static void requiredDataMask(Object *UNUSED(ob), ModifierData *md, CustomData_MeshMasks *r_cddata_masks)
 {
 	NormalEditModifierData *enmd = (NormalEditModifierData *)md;
-	CustomDataMask dataMask = CD_MASK_CUSTOMLOOPNORMAL;
+
+	r_cddata_masks->lmask |= CD_MASK_CUSTOMLOOPNORMAL;
 
 	/* Ask for vertexgroups if we need them. */
-	if (enmd->defgrp_name[0]) {
-		dataMask |= (CD_MASK_MDEFORMVERT);
+	if (enmd->defgrp_name[0] != '\0') {
+		r_cddata_masks->vmask |= CD_MASK_MDEFORMVERT;
 	}
-
-	return dataMask;
 }
 
 static bool dependsOnNormals(ModifierData *UNUSED(md))
@@ -545,7 +535,7 @@ static void updateDepsgraph(ModifierData *md, const ModifierUpdateDepsgraphConte
 	NormalEditModifierData *enmd = (NormalEditModifierData *) md;
 	if (enmd->target) {
 		DEG_add_object_relation(ctx->node, enmd->target, DEG_OB_COMP_TRANSFORM, "NormalEdit Modifier");
-		DEG_add_object_relation(ctx->node, ctx->object, DEG_OB_COMP_TRANSFORM, "NormalEdit Modifier");
+		DEG_add_modifier_to_transform_relation(ctx->node, "NormalEdit Modifier");
 	}
 }
 

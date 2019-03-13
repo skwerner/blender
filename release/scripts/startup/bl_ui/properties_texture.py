@@ -35,7 +35,7 @@ from rna_prop_ui import PropertyPanel
 from .properties_paint_common import brush_texture_settings
 
 
-class TEXTURE_MT_specials(Menu):
+class TEXTURE_MT_context_menu(Menu):
     bl_label = "Texture Specials"
     COMPAT_ENGINES = {'BLENDER_RENDER'}
 
@@ -745,9 +745,6 @@ class TEXTURE_PT_mapping(TextureSlotPanel, Panel):
             elif tex.texture_coords == 'OBJECT':
                 col.prop(tex, "object", text="Object")
 
-            elif tex.texture_coords == 'ALONG_STROKE':
-                col.prop(tex, "use_tips", text="Use Tips")
-
             col.separator()
 
             if isinstance(idblock, FreestyleLineStyle):
@@ -840,14 +837,9 @@ class TEXTURE_PT_influence(TextureSlotPanel, Panel):
             col = flow.column()
 
             col.prop(tex, "blend_type", text="Blend")
-            col.prop(tex, "use_rgb_to_intensity")
 
-            # color is used on gray-scale textures even when use_rgb_to_intensity is disabled.
+            # Color is used on gray-scale textures
             col.prop(tex, "color", text="")
-
-            col = flow.column()
-            col.prop(tex, "invert", text="Negative")
-            col.prop(tex, "use_stencil")
 
 
 class TextureColorsPoll:
@@ -921,7 +913,7 @@ class TEXTURE_PT_custom_props(TextureButtonsPanel, PropertyPanel, Panel):
 
 
 classes = (
-    TEXTURE_MT_specials,
+    TEXTURE_MT_context_menu,
     TEXTURE_UL_texslots,
     TEXTURE_PT_preview,
     TEXTURE_PT_context,

@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,10 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/blenlib/intern/rand.c
- *  \ingroup bli
+/** \file
+ * \ingroup bli
  */
 
 
@@ -54,7 +46,8 @@
 #define ADDEND      0xB
 #define LOWSEED     0x330E
 
-extern unsigned char hash[];    // noise.c
+extern unsigned char BLI_noise_hash_uchar_512[512];  /* noise.c */
+#define hash BLI_noise_hash_uchar_512
 
 /**
  * Random Number Generator.
@@ -82,6 +75,11 @@ RNG *BLI_rng_new_srandom(unsigned int seed)
 	BLI_rng_srandom(rng, seed);
 
 	return rng;
+}
+
+RNG *BLI_rng_copy(RNG *rng)
+{
+	return MEM_dupallocN(rng);
 }
 
 void BLI_rng_free(RNG *rng)

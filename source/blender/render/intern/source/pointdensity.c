@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,14 +15,10 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * Contributors: Matt Ebb
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/render/intern/source/pointdensity.c
- *  \ingroup render
+/** \file
+ * \ingroup render
  */
 
 
@@ -52,7 +46,6 @@
 #include "BKE_colorband.h"
 #include "BKE_deform.h"
 #include "BKE_lattice.h"
-#include "BKE_main.h"
 #include "BKE_object.h"
 #include "BKE_particle.h"
 #include "BKE_scene.h"
@@ -370,18 +363,21 @@ static void pointdensity_cache_object(PointDensity *pd,
 {
 	float *data_color;
 	int i;
-	CustomDataMask mask = CD_MASK_BAREMESH | CD_MASK_MTFACE | CD_MASK_MCOL;
 	MVert *mvert = NULL, *mv;
 	Mesh *mesh = ob->data;
 
+#if 0  /* UNUSED */
+	CustomData_MeshMasks mask = CD_MASK_BAREMESH;
+	mask.fmask |= CD_MASK_MTFACE | CD_MASK_MCOL;
 	switch (pd->ob_color_source) {
 		case TEX_PD_COLOR_VERTCOL:
-			mask |= CD_MASK_MLOOPCOL;
+			mask.lmask |= CD_MASK_MLOOPCOL;
 			break;
 		case TEX_PD_COLOR_VERTWEIGHT:
-			mask |= CD_MASK_MDEFORMVERT;
+			mask.vmask |= CD_MASK_MDEFORMVERT;
 			break;
 	}
+#endif
 
 	mvert = mesh->mvert; /* local object space */
 	pd->totpoints = mesh->totvert;

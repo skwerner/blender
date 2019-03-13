@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,29 +15,21 @@
  *
  * The Original Code is Copyright (C) 2005 by the Blender Foundation.
  * All rights reserved.
- *
- * Contributor(s): Daniel Dunbar
- *                 Ton Roosendaal,
- *                 Ben Batt,
- *                 Brecht Van Lommel,
- *                 Campbell Barton
- *
- * ***** END GPL LICENSE BLOCK *****
- *
  */
 
-/** \file blender/modifiers/intern/MOD_displace.c
- *  \ingroup modifiers
+/** \file
+ * \ingroup modifiers
  */
 
+
+#include "BLI_utildefines.h"
+
+#include "BLI_math.h"
+#include "BLI_task.h"
 
 #include "DNA_mesh_types.h"
 #include "DNA_meshdata_types.h"
 #include "DNA_object_types.h"
-
-#include "BLI_utildefines.h"
-#include "BLI_math.h"
-#include "BLI_task.h"
 
 #include "BKE_customdata.h"
 #include "BKE_editmesh.h"
@@ -75,22 +65,23 @@ static void initData(ModifierData *md)
 	dmd->space = MOD_DISP_SPACE_LOCAL;
 }
 
-static CustomDataMask requiredDataMask(Object *UNUSED(ob), ModifierData *md)
+static void requiredDataMask(Object *UNUSED(ob), ModifierData *md, CustomData_MeshMasks *r_cddata_masks)
 {
 	DisplaceModifierData *dmd = (DisplaceModifierData *)md;
-	CustomDataMask dataMask = 0;
 
 	/* ask for vertexgroups if we need them */
-	if (dmd->defgrp_name[0]) dataMask |= CD_MASK_MDEFORMVERT;
-
-	/* ask for UV coordinates if we need them */
-	if (dmd->texmapping == MOD_DISP_MAP_UV) dataMask |= CD_MASK_MTFACE;
-
-	if (dmd->direction == MOD_DISP_DIR_CLNOR) {
-		dataMask |= CD_MASK_CUSTOMLOOPNORMAL;
+	if (dmd->defgrp_name[0] != '\0') {
+		r_cddata_masks->vmask |= CD_MASK_MDEFORMVERT;
 	}
 
-	return dataMask;
+	/* ask for UV coordinates if we need them */
+	if (dmd->texmapping == MOD_DISP_MAP_UV) {
+		r_cddata_masks->fmask |= CD_MASK_MTFACE;
+	}
+
+	if (dmd->direction == MOD_DISP_DIR_CLNOR) {
+		r_cddata_masks->lmask |= CD_MASK_CUSTOMLOOPNORMAL;
+	}
 }
 
 static bool dependsOnTime(ModifierData *md)
@@ -148,14 +139,14 @@ static void updateDepsgraph(ModifierData *md, const ModifierUpdateDepsgraphConte
 {
 	DisplaceModifierData *dmd = (DisplaceModifierData *)md;
 	if (dmd->map_object != NULL && dmd->texmapping == MOD_DISP_MAP_OBJECT) {
-		DEG_add_object_relation(ctx->node, ctx->object, DEG_OB_COMP_TRANSFORM, "Displace Modifier");
+		DEG_add_modifier_to_transform_relation(ctx->node, "Displace Modifier");
 		DEG_add_object_relation(ctx->node, dmd->map_object, DEG_OB_COMP_TRANSFORM, "Displace Modifier");
 	}
 	if (dmd->texmapping == MOD_DISP_MAP_GLOBAL ||
 	    (ELEM(dmd->direction, MOD_DISP_DIR_X, MOD_DISP_DIR_Y, MOD_DISP_DIR_Z, MOD_DISP_DIR_RGB_XYZ) &&
 	    dmd->space == MOD_DISP_SPACE_GLOBAL))
 	{
-		DEG_add_object_relation(ctx->node, ctx->object, DEG_OB_COMP_TRANSFORM, "Displace Modifier");
+		DEG_add_modifier_to_transform_relation(ctx->node, "Displace Modifier");
 	}
 	if (dmd->texture != NULL) {
 		DEG_add_generic_id_relation(ctx->node, &dmd->texture->id, "Displace Modifier");

@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,15 +15,10 @@
  *
  * The Original Code is Copyright (C) 2008 Blender Foundation.
  * All rights reserved.
- *
- *
- * Contributor(s): Blender Foundation
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/space_sequencer/space_sequencer.c
- *  \ingroup spseq
+/** \file
+ * \ingroup spseq
  */
 
 
@@ -123,7 +116,7 @@ static SpaceLink *sequencer_new(const ScrArea *UNUSED(sa), const Scene *scene)
 	sseq->chanshown = 0;
 	sseq->view = SEQ_VIEW_SEQUENCE;
 	sseq->mainb = SEQ_DRAW_IMG_IMBUF;
-	sseq->flag = SEQ_SHOW_GPENCIL | SEQ_USE_ALPHA;
+	sseq->flag = SEQ_SHOW_GPENCIL | SEQ_USE_ALPHA | SEQ_SHOW_MARKER_LINES;
 
 	/* header */
 	ar = MEM_callocN(sizeof(ARegion), "header for sequencer");
@@ -439,6 +432,7 @@ static void sequencer_dropboxes(void)
 /* ************* end drop *********** */
 
 /* DO NOT make this static, this hides the symbol and breaks API generation script. */
+extern const char *sequencer_context_dir[];  /* quiet warning. */
 const char *sequencer_context_dir[] = {"edit_mask", NULL};
 
 static int sequencer_context(const bContext *C, const char *member, bContextDataResult *result)
@@ -636,7 +630,7 @@ static void sequencer_preview_region_draw(const bContext *C, ARegion *ar)
 	if (sseq->mainb == SEQ_DRAW_SEQUENCE) sseq->mainb = SEQ_DRAW_IMG_IMBUF;
 
 	if (!show_split || sseq->overlay_type != SEQ_DRAW_OVERLAY_REFERENCE)
-		draw_image_seq(C, scene, ar, sseq, scene->r.cfra, 0, false, false);
+		sequencer_draw_preview(C, scene, ar, sseq, scene->r.cfra, 0, false, false);
 
 	if (show_split && sseq->overlay_type != SEQ_DRAW_OVERLAY_CURRENT) {
 		int over_cfra;
@@ -647,14 +641,14 @@ static void sequencer_preview_region_draw(const bContext *C, ARegion *ar)
 			over_cfra = scene->r.cfra + scene->ed->over_ofs;
 
 		if (over_cfra != scene->r.cfra || sseq->overlay_type != SEQ_DRAW_OVERLAY_RECT)
-			draw_image_seq(C, scene, ar, sseq, scene->r.cfra, over_cfra - scene->r.cfra, true, false);
+			sequencer_draw_preview(C, scene, ar, sseq, scene->r.cfra, over_cfra - scene->r.cfra, true, false);
 	}
 
 	if ((U.uiflag & USER_SHOW_FPS) && ED_screen_animation_no_scrub(wm)) {
 		rcti rect;
 		ED_region_visible_rect(ar, &rect);
 		int xoffset = rect.xmin + U.widget_unit;
-		int yoffset = rect.xmax;
+		int yoffset = rect.ymax;
 		ED_scene_draw_fps(scene, xoffset, &yoffset);
 	}
 }

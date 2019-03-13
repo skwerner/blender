@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,17 +15,10 @@
  *
  * The Original Code is Copyright (C) Blender Foundation.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): Daniel Genrich
- *                 Blender Foundation
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/blenkernel/intern/smoke.c
- *  \ingroup bke
+/** \file
+ * \ingroup bke
  */
 
 
@@ -42,18 +33,15 @@
 
 #include "BLI_blenlib.h"
 #include "BLI_math.h"
-#include "BLI_kdtree.h"
 #include "BLI_kdopbvh.h"
-#include "BLI_task.h"
 #include "BLI_threads.h"
 #include "BLI_utildefines.h"
-#include "BLI_voxel.h"
 
 #include "DNA_anim_types.h"
 #include "DNA_armature_types.h"
 #include "DNA_constraint_types.h"
 #include "DNA_customdata_types.h"
-#include "DNA_lamp_types.h"
+#include "DNA_light_types.h"
 #include "DNA_mesh_types.h"
 #include "DNA_meshdata_types.h"
 #include "DNA_modifier_types.h"
@@ -72,9 +60,7 @@
 #include "BKE_customdata.h"
 #include "BKE_deform.h"
 #include "BKE_effect.h"
-#include "BKE_global.h"
 #include "BKE_library.h"
-#include "BKE_main.h"
 #include "BKE_mesh.h"
 #include "BKE_mesh_runtime.h"
 #include "BKE_modifier.h"
@@ -98,12 +84,16 @@
 //#define DEBUG_TIME
 
 #ifdef DEBUG_TIME
-#	include "PIL_time.h"
+#  include "PIL_time.h"
 #endif
 
 #include "smoke_API.h"
 
 #ifdef WITH_SMOKE
+
+#include "BLI_task.h"
+#include "BLI_kdtree.h"
+#include "BLI_voxel.h"
 
 static ThreadMutex object_update_lock = BLI_MUTEX_INITIALIZER;
 
@@ -132,13 +122,13 @@ void smoke_initBlenderRNA(struct FLUID_3D *UNUSED(fluid), float *UNUSED(alpha), 
                           int *UNUSED(border_colli), float *UNUSED(burning_rate), float *UNUSED(flame_smoke), float *UNUSED(flame_smoke_color),
                           float *UNUSED(flame_vorticity), float *UNUSED(flame_ignition_temp), float *UNUSED(flame_max_temp)) {}
 struct Mesh *smokeModifier_do(SmokeModifierData *UNUSED(smd), Depsgraph *UNUSED(depsgraph), Scene *UNUSED(scene), Object *UNUSED(ob), Mesh *UNUSED(me)) { return NULL; }
-float smoke_get_velocity_at(struct Object *UNUSED(ob), float UNUSED(position[3]), float UNUSED(velocity[3])) { return 0.0f; }
+float BKE_smoke_get_velocity_at(struct Object *UNUSED(ob), float UNUSED(position[3]), float UNUSED(velocity[3])) { return 0.0f; }
 
 #endif /* WITH_SMOKE */
 
 #ifdef WITH_SMOKE
 
-void smoke_reallocate_fluid(SmokeDomainSettings *sds, float dx, int res[3], int free_old)
+void BKE_smoke_reallocate_fluid(SmokeDomainSettings *sds, float dx, int res[3], int free_old)
 {
 	int use_heat = (sds->active_fields & SM_ACTIVE_HEAT);
 	int use_fire = (sds->active_fields & SM_ACTIVE_FIRE);
@@ -160,7 +150,7 @@ void smoke_reallocate_fluid(SmokeDomainSettings *sds, float dx, int res[3], int 
 	sds->shadow = MEM_callocN(sizeof(float) * res[0] * res[1] * res[2], "SmokeDomainShadow");
 }
 
-void smoke_reallocate_highres_fluid(SmokeDomainSettings *sds, float dx, int res[3], int free_old)
+void BKE_smoke_reallocate_highres_fluid(SmokeDomainSettings *sds, float dx, int res[3], int free_old)
 {
 	int use_fire = (sds->active_fields & (SM_ACTIVE_HEAT | SM_ACTIVE_FIRE));
 	int use_colors = (sds->active_fields & SM_ACTIVE_COLORS);
@@ -235,7 +225,7 @@ static void smoke_set_domain_from_mesh(SmokeDomainSettings *sds, Object *ob, Mes
 	}
 	/* apply object scale */
 	for (i = 0; i < 3; i++) {
-		size[i] = fabsf(size[i] * ob->size[i]);
+		size[i] = fabsf(size[i] * ob->scale[i]);
 	}
 	copy_v3_v3(sds->global_size, size);
 	copy_v3_v3(sds->dp0, min);
@@ -249,21 +239,21 @@ static void smoke_set_domain_from_mesh(SmokeDomainSettings *sds, Object *ob, Mes
 	/* define grid resolutions from longest domain side */
 	if (size[0] >= MAX2(size[1], size[2])) {
 		scale = res / size[0];
-		sds->scale = size[0] / fabsf(ob->size[0]);
+		sds->scale = size[0] / fabsf(ob->scale[0]);
 		sds->base_res[0] = res;
 		sds->base_res[1] = max_ii((int)(size[1] * scale + 0.5f), 4);
 		sds->base_res[2] = max_ii((int)(size[2] * scale + 0.5f), 4);
 	}
 	else if (size[1] >= MAX2(size[0], size[2])) {
 		scale = res / size[1];
-		sds->scale = size[1] / fabsf(ob->size[1]);
+		sds->scale = size[1] / fabsf(ob->scale[1]);
 		sds->base_res[0] = max_ii((int)(size[0] * scale + 0.5f), 4);
 		sds->base_res[1] = res;
 		sds->base_res[2] = max_ii((int)(size[2] * scale + 0.5f), 4);
 	}
 	else {
 		scale = res / size[2];
-		sds->scale = size[2] / fabsf(ob->size[2]);
+		sds->scale = size[2] / fabsf(ob->scale[2]);
 		sds->base_res[0] = max_ii((int)(size[0] * scale + 0.5f), 4);
 		sds->base_res[1] = max_ii((int)(size[1] * scale + 0.5f), 4);
 		sds->base_res[2] = res;
@@ -296,21 +286,21 @@ static int smokeModifier_init(SmokeModifierData *smd, Object *ob, int scene_fram
 			res[0] = res[1] = res[2] = 1; /* use minimum res for adaptive init */
 		}
 		else {
-			VECCOPY(res, sds->base_res);
+			copy_v3_v3_int(res, sds->base_res);
 		}
-		VECCOPY(sds->res, res);
+		copy_v3_v3_int(sds->res, res);
 		sds->total_cells = sds->res[0] * sds->res[1] * sds->res[2];
 		sds->res_min[0] = sds->res_min[1] = sds->res_min[2] = 0;
-		VECCOPY(sds->res_max, res);
+		copy_v3_v3_int(sds->res_max, res);
 
 		/* allocate fluid */
-		smoke_reallocate_fluid(sds, sds->dx, sds->res, 0);
+		BKE_smoke_reallocate_fluid(sds, sds->dx, sds->res, 0);
 
 		smd->time = scene_framenr;
 
 		/* allocate highres fluid */
 		if (sds->flags & MOD_SMOKE_HIGHRES) {
-			smoke_reallocate_highres_fluid(sds, sds->dx, sds->res, 0);
+			BKE_smoke_reallocate_highres_fluid(sds, sds->dx, sds->res, 0);
 		}
 		/* allocate shadow buffer */
 		if (!sds->shadow)
@@ -537,7 +527,7 @@ void smokeModifier_createType(struct SmokeModifierData *smd)
 			smd->domain->flame_smoke_color[1] = 0.7f;
 			smd->domain->flame_smoke_color[2] = 0.7f;
 
-			smd->domain->viewsettings = MOD_SMOKE_VIEW_SHOWBIG;
+			smd->domain->viewsettings = MOD_SMOKE_VIEW_SHOW_HIGHRES;
 			smd->domain->effector_weights = BKE_effector_add_weights(NULL);
 
 #ifdef WITH_OPENVDB_BLOSC
@@ -681,6 +671,8 @@ void smokeModifier_copy(const struct SmokeModifierData *smd, struct SmokeModifie
 		if (sds->coba) {
 			tsds->coba = MEM_dupallocN(sds->coba);
 		}
+
+		tsds->clipping = sds->clipping;
 	}
 	else if (tsmd->flow) {
 		SmokeFlowSettings *tsfs = tsmd->flow;
@@ -723,28 +715,28 @@ void smokeModifier_copy(const struct SmokeModifierData *smd, struct SmokeModifie
 static void smoke_calc_transparency(SmokeDomainSettings *sds, ViewLayer *view_layer);
 static float calc_voxel_transp(float *result, float *input, int res[3], int *pixel, float *tRay, float correct);
 
-static int get_lamp(ViewLayer *view_layer, float *light)
+static int get_light(ViewLayer *view_layer, float *light)
 {
 	Base *base_tmp = NULL;
-	int found_lamp = 0;
+	int found_light = 0;
 
 	// try to find a lamp, preferably local
 	for (base_tmp = FIRSTBASE(view_layer); base_tmp; base_tmp = base_tmp->next) {
 		if (base_tmp->object->type == OB_LAMP) {
-			Lamp *la = base_tmp->object->data;
+			Light *la = base_tmp->object->data;
 
 			if (la->type == LA_LOCAL) {
 				copy_v3_v3(light, base_tmp->object->obmat[3]);
 				return 1;
 			}
-			else if (!found_lamp) {
+			else if (!found_light) {
 				copy_v3_v3(light, base_tmp->object->obmat[3]);
-				found_lamp = 1;
+				found_light = 1;
 			}
 		}
 	}
 
-	return found_lamp;
+	return found_light;
 }
 
 /**********************************************************
@@ -881,7 +873,7 @@ static void obstacles_from_mesh(
 			normal_float_to_short_v3(mvert[i].no, n);
 
 			/* vert velocity */
-			VECADD(co, mvert[i].co, sds->shift);
+			add_v3fl_v3fl_v3i(co, mvert[i].co, sds->shift);
 			if (has_velocity)
 			{
 				sub_v3_v3v3(&vert_vel[i * 3], co, &scs->verts_old[i * 3]);
@@ -896,7 +888,7 @@ static void obstacles_from_mesh(
 			    .tree = &treeData, .obstacle_map = obstacle_map,
 			    .has_velocity = has_velocity, .vert_vel = vert_vel,
 			    .velocityX = velocityX, .velocityY = velocityY, .velocityZ = velocityZ,
-			    .num_obstacles = num_obstacles
+			    .num_obstacles = num_obstacles,
 			};
 			ParallelRangeSettings settings;
 			BLI_parallel_range_settings_defaults(&settings);
@@ -1254,8 +1246,7 @@ static void emit_from_particles_task_cb(
 					                       1.0f : (1.0f - (nearest.dist - data->solid) / data->smooth);
 					/* Uses particle velocity as initial velocity for smoke */
 					if (sfs->flags & MOD_SMOKE_FLOW_INITVELOCITY && (sfs->psys->part->phystype != PART_PHYS_NO)) {
-						VECADDFAC(&em->velocity[index * 3], &em->velocity[index * 3],
-						          &data->particle_vel[nearest.index * 3], sfs->vel_multi);
+						madd_v3_v3fl(&em->velocity[index * 3], &data->particle_vel[nearest.index * 3], sfs->vel_multi);
 					}
 				}
 			}
@@ -1414,7 +1405,7 @@ static void emit_from_particles(
 				/* Uses particle velocity as initial velocity for smoke */
 				if (sfs->flags & MOD_SMOKE_FLOW_INITVELOCITY && (psys->part->phystype != PART_PHYS_NO))
 				{
-					VECADDFAC(&em->velocity[index * 3], &em->velocity[index * 3], &particle_vel[p * 3], sfs->vel_multi);
+					madd_v3_v3fl(&em->velocity[index * 3], &particle_vel[p * 3], sfs->vel_multi);
 				}
 			}   // particles loop
 		}
@@ -1736,7 +1727,7 @@ static void emit_from_mesh(Object *flow_ob, SmokeDomainSettings *sds, SmokeFlowS
 			/* vert velocity */
 			if (sfs->flags & MOD_SMOKE_FLOW_INITVELOCITY) {
 				float co[3];
-				VECADD(co, mvert[i].co, sds->shift);
+				add_v3fl_v3fl_v3i(co, mvert[i].co, sds->shift);
 				if (has_velocity) {
 					sub_v3_v3v3(&vert_vel[i * 3], co, &sfs->verts_old[i * 3]);
 					mul_v3_fl(&vert_vel[i * 3], sds->dx / dt);
@@ -1939,9 +1930,9 @@ static void adjustDomainResolution(SmokeDomainSettings *sds, int new_shift[3], E
 		struct FLUID_3D *fluid_old = sds->fluid;
 		struct WTURBULENCE *turb_old = sds->wt;
 		/* allocate new fluid data */
-		smoke_reallocate_fluid(sds, sds->dx, res, 0);
+		BKE_smoke_reallocate_fluid(sds, sds->dx, res, 0);
 		if (sds->flags & MOD_SMOKE_HIGHRES) {
-			smoke_reallocate_highres_fluid(sds, sds->dx, res, 0);
+			BKE_smoke_reallocate_highres_fluid(sds, sds->dx, res, 0);
 		}
 
 		/* copy values from old fluid to new */
@@ -2052,9 +2043,9 @@ static void adjustDomainResolution(SmokeDomainSettings *sds, int new_shift[3], E
 			smoke_turbulence_free(turb_old);
 
 		/* set new domain dimensions */
-		VECCOPY(sds->res_min, min);
-		VECCOPY(sds->res_max, max);
-		VECCOPY(sds->res, res);
+		copy_v3_v3_int(sds->res_min, min);
+		copy_v3_v3_int(sds->res_max, max);
+		copy_v3_v3_int(sds->res, res);
 		sds->total_cells = total_cells;
 	}
 }
@@ -2150,7 +2141,7 @@ static void update_flowsfluids(
 
 		mul_m4_v3(ob->obmat, ob_loc);
 
-		VECSUB(frame_shift_f, ob_loc, sds->prev_loc);
+		sub_v3_v3v3(frame_shift_f, ob_loc, sds->prev_loc);
 		copy_v3_v3(sds->prev_loc, ob_loc);
 		/* convert global space shift to local "cell" space */
 		mul_mat3_m4_v3(sds->imat, frame_shift_f);
@@ -2158,12 +2149,12 @@ static void update_flowsfluids(
 		frame_shift_f[1] = frame_shift_f[1] / sds->cell_size[1];
 		frame_shift_f[2] = frame_shift_f[2] / sds->cell_size[2];
 		/* add to total shift */
-		VECADD(sds->shift_f, sds->shift_f, frame_shift_f);
+		add_v3_v3(sds->shift_f, frame_shift_f);
 		/* convert to integer */
-		total_shift[0] = floor(sds->shift_f[0]);
-		total_shift[1] = floor(sds->shift_f[1]);
-		total_shift[2] = floor(sds->shift_f[2]);
-		VECSUB(new_shift, total_shift, sds->shift);
+		total_shift[0] = (int)(floorf(sds->shift_f[0]));
+		total_shift[1] = (int)(floorf(sds->shift_f[1]));
+		total_shift[2] = (int)(floorf(sds->shift_f[2]));
+		sub_v3_v3v3_int(new_shift, total_shift, sds->shift);
 		copy_v3_v3_int(sds->shift, total_shift);
 
 		/* calculate new domain boundary points so that smoke doesn't slide on sub-cell movement */
@@ -2689,8 +2680,8 @@ static Mesh *createDomainGeometry(SmokeDomainSettings *sds, Object *ob)
 
 	if (num_verts) {
 		/* volume bounds */
-		VECMADD(min, sds->p0, sds->cell_size, sds->res_min);
-		VECMADD(max, sds->p0, sds->cell_size, sds->res_max);
+		madd_v3fl_v3fl_v3fl_v3i(min, sds->p0, sds->cell_size, sds->res_min);
+		madd_v3fl_v3fl_v3fl_v3i(max, sds->p0, sds->cell_size, sds->res_max);
 
 		/* set vertices */
 		/* top slab */
@@ -2729,7 +2720,7 @@ static Mesh *createDomainGeometry(SmokeDomainSettings *sds, Object *ob)
 		invert_m4_m4(ob->imat, ob->obmat);
 		mul_m4_v3(ob->obmat, ob_loc);
 		mul_m4_v3(sds->obmat, ob_cache_loc);
-		VECSUB(sds->obj_shift_f, ob_cache_loc, ob_loc);
+		sub_v3_v3v3(sds->obj_shift_f, ob_cache_loc, ob_loc);
 		/* convert shift to local space and apply to vertices */
 		mul_mat3_m4_v3(ob->imat, sds->obj_shift_f);
 		/* apply */
@@ -2899,15 +2890,21 @@ struct Mesh *smokeModifier_do(
 		BLI_rw_mutex_unlock(smd->domain->fluid_mutex);
 
 	/* return generated geometry for adaptive domain */
+	Mesh *result;
 	if (smd->type & MOD_SMOKE_TYPE_DOMAIN && smd->domain &&
 	    smd->domain->flags & MOD_SMOKE_ADAPTIVE_DOMAIN &&
 	    smd->domain->base_res[0])
 	{
-		return createDomainGeometry(smd->domain, ob);
+		result = createDomainGeometry(smd->domain, ob);
 	}
 	else {
-		return BKE_mesh_copy_for_eval(me, false);
+		result = BKE_mesh_copy_for_eval(me, false);
 	}
+	/* XXX This is really not a nice hack, but until root of the problem is understood,
+	 * this should be an acceptable workaround I think.
+	 * See T58492 for details on the issue. */
+	result->texflag |= ME_AUTOSPACE;
+	return result;
 }
 
 static float calc_voxel_transp(float *result, float *input, int res[3], int *pixel, float *tRay, float correct)
@@ -3016,7 +3013,7 @@ static void smoke_calc_transparency(SmokeDomainSettings *sds, ViewLayer *view_la
 	float *density = smoke_get_density(sds->fluid);
 	float correct = -7.0f * sds->dx;
 
-	if (!get_lamp(view_layer, light)) return;
+	if (!get_light(view_layer, light)) return;
 
 	/* convert light pos to sim cell space */
 	mul_m4_v3(sds->imat, light);
@@ -3081,7 +3078,7 @@ static void smoke_calc_transparency(SmokeDomainSettings *sds, ViewLayer *view_la
 
 /* get smoke velocity and density at given coordinates
  * returns fluid density or -1.0f if outside domain. */
-float smoke_get_velocity_at(struct Object *ob, float position[3], float velocity[3])
+float BKE_smoke_get_velocity_at(struct Object *ob, float position[3], float velocity[3])
 {
 	SmokeModifierData *smd = (SmokeModifierData *)modifiers_findByType(ob, eModifierType_Smoke);
 	zero_v3(velocity);
@@ -3135,7 +3132,7 @@ float smoke_get_velocity_at(struct Object *ob, float position[3], float velocity
 	return -1.0f;
 }
 
-int smoke_get_data_flags(SmokeDomainSettings *sds)
+int BKE_smoke_get_data_flags(SmokeDomainSettings *sds)
 {
 	int flags = 0;
 
@@ -3152,3 +3149,14 @@ int smoke_get_data_flags(SmokeDomainSettings *sds)
 }
 
 #endif /* WITH_SMOKE */
+
+bool BKE_smoke_show_highres(Scene *scene, SmokeDomainSettings *sds)
+{
+	if ((sds->viewsettings & MOD_SMOKE_VIEW_SHOW_HIGHRES) == 0) {
+		return false;
+	}
+	if (scene->r.mode & R_SIMPLIFY) {
+		return !scene->r.simplify_smoke_ignore_highres;
+	}
+	return true;
+}

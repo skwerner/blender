@@ -151,6 +151,8 @@ public:
 	static bool print_render_stats;
 
 protected:
+	void stamp_view_layer_metadata(Scene *scene, const string& view_layer_name);
+
 	void do_write_update_render_result(BL::RenderResult& b_rr,
 	                                   BL::RenderLayer& b_rlay,
 	                                   RenderTile& rtile,

@@ -41,12 +41,14 @@ typedef std::mutex thread_mutex;
 typedef std::unique_lock<std::mutex> thread_scoped_lock;
 typedef std::condition_variable thread_condition_variable;
 
-/* own pthread based implementation, to avoid boost version conflicts with
- * dynamically loaded blender plugins */
+/* Own thread implementation similar to std::thread, so we can set a
+ * custom stack size on macOS. */
 
 class thread {
 public:
-	thread(function<void()> run_cb, int group = -1);
+	/* NOTE: Node index of -1 means that affinity will be inherited from the
+	 * parent thread and no override on top of that will happen. */
+	thread(function<void()> run_cb, int node = -1);
 	~thread();
 
 	static void *run(void *arg);
@@ -54,9 +56,13 @@ public:
 
 protected:
 	function<void()> run_cb_;
-	std::thread thread_;
+#ifdef __APPLE__
+	pthread_t pthread_id;
+#else
+	std::thread std_thread;
+#endif
 	bool joined_;
-	int group_;
+	int node_;
 };
 
 /* Own wrapper around pthread's spin lock to make it's use easier. */

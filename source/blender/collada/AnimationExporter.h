@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,10 +12,6 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * Contributor(s): Chingiz Dyussenov, Arystanbek Dyussenov, Jan Diederich, Tod Liverseed.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
 #ifndef __BC_ANIMATION_EXPORTER_H__
@@ -36,7 +30,7 @@ extern "C"
 #include "DNA_anim_types.h"
 #include "DNA_action_types.h"
 #include "DNA_curve_types.h"
-#include "DNA_lamp_types.h"
+#include "DNA_light_types.h"
 #include "DNA_camera_types.h"
 #include "DNA_armature_types.h"
 #include "DNA_material_types.h"

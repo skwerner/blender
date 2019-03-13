@@ -189,12 +189,12 @@ def point_cache_ui(self, context, cache, enabled, cachetype):
             flow = layout.grid_flow(row_major=True, columns=0, even_columns=True, even_rows=False, align=True)
             flow.enabled = enabled and is_saved
 
-            col = flow.column()
+            col = flow.column(align=True)
             col.prop(cache, "use_disk_cache")
 
             subcol = col.column()
             subcol.active = cache.use_disk_cache
-            subcol.prop(cache, "use_library_path", text="Use Lib Path")
+            subcol.prop(cache, "use_library_path", text="Use Library Path")
 
             col = flow.column()
             col.active = cache.use_disk_cache
@@ -217,7 +217,7 @@ def point_cache_ui(self, context, cache, enabled, cachetype):
         col.active = can_bake
 
         if cache.is_baked is True:
-            col.operator("ptcache.free_bake", text="Free Bake")
+            col.operator("ptcache.free_bake", text="Delete Bake")
         else:
             col.operator("ptcache.bake", text="Bake").bake = True
 
@@ -231,7 +231,7 @@ def point_cache_ui(self, context, cache, enabled, cachetype):
 
         col = flow.column()
         col.operator("ptcache.bake_all", text="Bake All Dynamics").bake = True
-        col.operator("ptcache.free_bake_all", text="Free All Bakes")
+        col.operator("ptcache.free_bake_all", text="Delete All Bakes")
         col.operator("ptcache.bake_all", text="Update All To Frame").bake = False
 
 

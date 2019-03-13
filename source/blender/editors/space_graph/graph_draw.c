@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -16,14 +14,10 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
  * The Original Code is Copyright (C) Blender Foundation
- *
- * Contributor(s): Joshua Leung (2009 Recode)
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/space_graph/graph_draw.c
- *  \ingroup spgraph
+/** \file
+ * \ingroup spgraph
  */
 
 
@@ -46,7 +40,6 @@
 #include "BKE_curve.h"
 #include "BKE_fcurve.h"
 
-#include "BIF_glutil.h"
 
 #include "GPU_draw.h"
 #include "GPU_immediate.h"
@@ -245,13 +238,19 @@ static void draw_fcurve_selected_handle_vertices(FCurve *fcu, View2D *v2d, bool 
 		 */
 		if (!sel_handle_only || BEZT_ISSEL_ANY(bezt)) {
 			if ((!prevbezt && (bezt->ipo == BEZT_IPO_BEZ)) || (prevbezt && (prevbezt->ipo == BEZT_IPO_BEZ))) {
-				if ((bezt->f1 & SELECT) == sel) /* && v2d->cur.xmin < bezt->vec[0][0] < v2d->cur.xmax)*/
+				if ((bezt->f1 & SELECT) == sel
+				    /* && v2d->cur.xmin < bezt->vec[0][0] < v2d->cur.xmax) */ )
+				{
 					immVertex2fv(pos, bezt->vec[0]);
+				}
 			}
 
 			if (bezt->ipo == BEZT_IPO_BEZ) {
-				if ((bezt->f3 & SELECT) == sel) /* && v2d->cur.xmin < bezt->vec[2][0] < v2d->cur.xmax)*/
+				if ((bezt->f3 & SELECT) == sel
+				    /* && v2d->cur.xmin < bezt->vec[2][0] < v2d->cur.xmax) */ )
+				{
 					immVertex2fv(pos, bezt->vec[2]);
+				}
 			}
 		}
 	}
@@ -291,7 +290,8 @@ static void draw_fcurve_vertices(ARegion *ar, FCurve *fcu, bool do_handles, bool
 	GPU_blend(true);
 	GPU_enable_program_point_size();
 
-	/* draw the two handles first (if they're shown, the curve doesn't have just a single keyframe, and the curve is being edited) */
+	/* draw the two handles first (if they're shown, the curve doesn't
+	 * have just a single keyframe, and the curve is being edited) */
 	if (do_handles) {
 		draw_fcurve_handle_vertices(fcu, v2d, sel_handle_only, pos);
 	}
@@ -305,16 +305,23 @@ static void draw_fcurve_vertices(ARegion *ar, FCurve *fcu, bool do_handles, bool
 
 /* Handles ---------------- */
 
-static bool draw_fcurve_handles_check(SpaceIpo *sipo, FCurve *fcu)
+static bool draw_fcurve_handles_check(SpaceGraph *sipo, FCurve *fcu)
 {
 	/* don't draw handle lines if handles are not to be shown */
-	if (    (sipo->flag & SIPO_NOHANDLES) || /* handles shouldn't be shown anywhere */
-	        (fcu->flag & FCURVE_PROTECTED) || /* keyframes aren't editable */
+	if (
+	        /* handles shouldn't be shown anywhere */
+	        (sipo->flag & SIPO_NOHANDLES) ||
+	        /* keyframes aren't editable */
+	        (fcu->flag & FCURVE_PROTECTED) ||
 #if 0       /* handles can still be selected and handle types set, better draw - campbell */
-	        (fcu->flag & FCURVE_INT_VALUES) || /* editing the handles here will cause weird/incorrect interpolation issues */
+	        /* editing the handles here will cause weird/incorrect interpolation issues */
+	        (fcu->flag & FCURVE_INT_VALUES) ||
 #endif
-	        ((fcu->grp) && (fcu->grp->flag & AGRP_PROTECTED)) || /* group that curve belongs to is not editable */
-	        (fcu->totvert <= 1) /* do not show handles if there is only 1 keyframe, otherwise they all clump together in an ugly ball */
+	        /* group that curve belongs to is not editable */
+	        ((fcu->grp) && (fcu->grp->flag & AGRP_PROTECTED)) ||
+	        /* do not show handles if there is only 1 keyframe,
+	         * otherwise they all clump together in an ugly ball */
+	        (fcu->totvert <= 1)
 	        )
 	{
 		return false;
@@ -326,7 +333,7 @@ static bool draw_fcurve_handles_check(SpaceIpo *sipo, FCurve *fcu)
 
 /* draw lines for F-Curve handles only (this is only done in EditMode)
  * note: draw_fcurve_handles_check must be checked before running this. */
-static void draw_fcurve_handles(SpaceIpo *sipo, FCurve *fcu)
+static void draw_fcurve_handles(SpaceGraph *sipo, FCurve *fcu)
 {
 	int sel, b;
 
@@ -440,7 +447,7 @@ static void draw_fcurve_sample_control(float x, float y, float xscale, float ysc
 }
 
 /* helper func - draw keyframe vertices only for an F-Curve */
-static void draw_fcurve_samples(SpaceIpo *sipo, ARegion *ar, FCurve *fcu)
+static void draw_fcurve_samples(SpaceGraph *sipo, ARegion *ar, FCurve *fcu)
 {
 	FPoint *first, *last;
 	float hsize, xscale, yscale;
@@ -477,10 +484,9 @@ static void draw_fcurve_samples(SpaceIpo *sipo, ARegion *ar, FCurve *fcu)
 /* Curve ---------------- */
 
 /* helper func - just draw the F-Curve by sampling the visible region (for drawing curves with modifiers) */
-static void draw_fcurve_curve(bAnimContext *ac, ID *id, FCurve *fcu, View2D *v2d, View2DGrid *grid, unsigned int pos)
+static void draw_fcurve_curve(bAnimContext *ac, ID *id, FCurve *fcu_, View2D *v2d, View2DGrid *grid, unsigned int pos)
 {
-	SpaceIpo *sipo = (SpaceIpo *)ac->sl;
-	ChannelDriver *driver;
+	SpaceGraph *sipo = (SpaceGraph *)ac->sl;
 	float samplefreq;
 	float stime, etime;
 	float unitFac, offset;
@@ -495,12 +501,12 @@ static void draw_fcurve_curve(bAnimContext *ac, ID *id, FCurve *fcu, View2D *v2d
 		return;
 
 
-	/* disable any drivers temporarily */
-	driver = fcu->driver;
-	fcu->driver = NULL;
+	/* disable any drivers */
+	FCurve fcurve_for_draw = *fcu_;
+	fcurve_for_draw.driver = NULL;
 
 	/* compute unit correction factor */
-	unitFac = ANIM_unit_mapping_get_factor(ac->scene, id, fcu, mapping_flag, &offset);
+	unitFac = ANIM_unit_mapping_get_factor(ac->scene, id, &fcurve_for_draw, mapping_flag, &offset);
 
 	/* Note about sampling frequency:
 	 * Ideally, this is chosen such that we have 1-2 pixels = 1 segment
@@ -514,7 +520,8 @@ static void draw_fcurve_curve(bAnimContext *ac, ID *id, FCurve *fcu, View2D *v2d
 	 * loop (i.e. too close to 0), then clamp it to a determined "safe" value. The value
 	 *  chosen here is just the coarsest value which still looks reasonable...
 	 */
-	/* grid->dx represents the number of 'frames' between gridlines, but we divide by U.v2d_min_gridsize to get pixels-steps */
+	/* grid->dx represents the number of 'frames' between gridlines,
+	 * but we divide by U.v2d_min_gridsize to get pixels-steps */
 	/* TODO: perhaps we should have 1.0 frames as upper limit so that curves don't get too distorted? */
 	samplefreq = dx / (U.v2d_min_gridsize * U.pixelsize);
 
@@ -555,14 +562,11 @@ static void draw_fcurve_curve(bAnimContext *ac, ID *id, FCurve *fcu, View2D *v2d
 
 		for (i = 0; i <= n; i++) {
 			float ctime = stime + i * samplefreq;
-			immVertex2f(pos, ctime, (evaluate_fcurve(fcu, ctime) + offset) * unitFac);
+			immVertex2f(pos, ctime, (evaluate_fcurve(&fcurve_for_draw, ctime) + offset) * unitFac);
 		}
 
 		immEnd();
 	}
-
-	/* restore driver */
-	fcu->driver = driver;
 }
 
 /* helper func - draw a samples-based F-Curve */
@@ -726,7 +730,8 @@ static void draw_fcurve_curve_bezts(bAnimContext *ac, ID *id, FCurve *fcu, View2
 	/* TODO: optimize this to not have to calc stuff out of view too? */
 	while (b--) {
 		if (prevbezt->ipo == BEZT_IPO_CONST) {
-			/* Constant-Interpolation: draw segment between previous keyframe and next, but holding same value */
+			/* Constant-Interpolation: draw segment between previous keyframe and next,
+			 * but holding same value */
 			v1[0] = prevbezt->vec[1][0];
 			v1[1] = prevbezt->vec[1][1];
 			immVertex2fv(pos, v1);
@@ -746,7 +751,8 @@ static void draw_fcurve_curve_bezts(bAnimContext *ac, ID *id, FCurve *fcu, View2
 			 * - resol determines number of points to sample in between keyframes
 			 */
 
-			/* resol depends on distance between points (not just horizontal) OR is a fixed high res */
+			/* resol depends on distance between points
+			 * (not just horizontal) OR is a fixed high res */
 			/* TODO: view scale should factor into this someday too... */
 			if (fcu->driver) {
 				resol = 32;
@@ -956,7 +962,7 @@ static void graph_draw_driver_debug(bAnimContext *ac, ID *id, FCurve *fcu)
 /* Draw the 'ghost' F-Curves (i.e. snapshots of the curve)
  * NOTE: unit mapping has already been applied to the values, so do not try and apply again
  */
-void graph_draw_ghost_curves(bAnimContext *ac, SpaceIpo *sipo, ARegion *ar)
+void graph_draw_ghost_curves(bAnimContext *ac, SpaceGraph *sipo, ARegion *ar)
 {
 	FCurve *fcu;
 
@@ -1004,7 +1010,7 @@ void graph_draw_ghost_curves(bAnimContext *ac, SpaceIpo *sipo, ARegion *ar)
 /* This is called twice from space_graph.c -> graph_main_region_draw()
  * Unselected then selected F-Curves are drawn so that they do not occlude each other.
  */
-void graph_draw_curves(bAnimContext *ac, SpaceIpo *sipo, ARegion *ar, View2DGrid *grid, short sel)
+void graph_draw_curves(bAnimContext *ac, SpaceGraph *sipo, ARegion *ar, View2DGrid *grid, short sel)
 {
 	ListBase anim_data = {NULL, NULL};
 	bAnimListElem *ale;

@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,15 +15,10 @@
  *
  * The Original Code is Copyright (C) 2008 Blender Foundation.
  * All rights reserved.
- *
- *
- * Contributor(s): Blender Foundation
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/space_view3d/view3d_ops.c
- *  \ingroup spview3d
+/** \file
+ * \ingroup spview3d
  */
 
 
@@ -82,7 +75,7 @@ static int view3d_copybuffer_exec(bContext *C, wmOperator *op)
 	}
 	CTX_DATA_END;
 
-	for (Collection *collection = bmain->collection.first; collection; collection = collection->id.next) {
+	for (Collection *collection = bmain->collections.first; collection; collection = collection->id.next) {
 		for (CollectionObject *cob = collection->gobject.first; cob; cob = cob->next) {
 			Object *object = cob->ob;
 
@@ -192,7 +185,7 @@ void view3d_operatortypes(void)
 	WM_operatortype_append(VIEW3D_OT_view_center_lock);
 	WM_operatortype_append(VIEW3D_OT_select);
 	WM_operatortype_append(VIEW3D_OT_select_box);
-	// WM_operatortype_append(VIEW3D_OT_clip_border);
+	WM_operatortype_append(VIEW3D_OT_clip_border);
 	WM_operatortype_append(VIEW3D_OT_select_circle);
 	WM_operatortype_append(VIEW3D_OT_smoothview);
 	WM_operatortype_append(VIEW3D_OT_render_border);
@@ -229,6 +222,7 @@ void view3d_operatortypes(void)
 	WM_operatortype_append(VIEW3D_OT_toggle_matcap_flip);
 
 	WM_operatortype_append(VIEW3D_OT_ruler_add);
+	WM_operatortype_append(VIEW3D_OT_ruler_remove);
 
 	transform_operatortypes();
 }

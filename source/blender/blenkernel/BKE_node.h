@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,19 +15,13 @@
  *
  * The Original Code is Copyright (C) 2005 Blender Foundation.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): Bob Holcomb.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
 #ifndef __BKE_NODE_H__
 #define __BKE_NODE_H__
 
-/** \file BKE_node.h
- *  \ingroup bke
+/** \file
+ * \ingroup bke
  */
 
 #include "BLI_compiler_compat.h"
@@ -38,7 +30,7 @@
 #include "DNA_listBase.h"
 
 /* for FOREACH_NODETREE_BEGIN */
-#include "DNA_lamp_types.h"
+#include "DNA_light_types.h"
 #include "DNA_material_types.h"
 #include "DNA_node_types.h"
 #include "DNA_scene_types.h"
@@ -51,35 +43,35 @@
 /* not very important, but the stack solver likes to know a maximum */
 #define MAX_SOCKET	512
 
-struct bContext;
-struct bNode;
-struct bNodeLink;
-struct bNodeSocket;
-struct bNodeStack;
-struct bNodeTree;
-struct bNodeTreeType;
-struct bNodeTreeExec;
-struct bNodeExecContext;
-struct bNodeExecData;
+struct ARegion;
+struct ColorManagedDisplaySettings;
+struct ColorManagedViewSettings;
 struct GPUMaterial;
 struct GPUNodeStack;
 struct ID;
 struct ImBuf;
 struct ImageFormatData;
 struct ListBase;
-struct Main;
-struct uiLayout;
 struct MTex;
+struct Main;
 struct PointerRNA;
 struct RenderData;
 struct Scene;
+struct SpaceNode;
 struct Tex;
 struct ViewRender;
-struct SpaceNode;
-struct ARegion;
-struct ColorManagedViewSettings;
-struct ColorManagedDisplaySettings;
+struct bContext;
+struct bNode;
+struct bNodeExecContext;
+struct bNodeExecData;
 struct bNodeInstanceHash;
+struct bNodeLink;
+struct bNodeSocket;
+struct bNodeStack;
+struct bNodeTree;
+struct bNodeTreeExec;
+struct bNodeTreeType;
+struct uiLayout;
 
 /* -------------------------------------------------------------------- */
 /** \name Node Type Definitions
@@ -459,7 +451,6 @@ void            nodeFreeNode(struct bNodeTree *ntree, struct bNode *node);
 void            nodeDeleteNode(struct Main *bmain, struct bNodeTree *ntree, struct bNode *node);
 
 struct bNode    *BKE_node_copy_ex(struct bNodeTree *ntree, struct bNode *node_src, const int flag);
-struct bNode	*nodeCopyNode(struct bNodeTree *ntree, struct bNode *node);
 
 struct bNodeLink *nodeAddLink(struct bNodeTree *ntree, struct bNode *fromnode, struct bNodeSocket *fromsock, struct bNode *tonode, struct bNodeSocket *tosock);
 void            nodeRemLink(struct bNodeTree *ntree, struct bNodeLink *link);
@@ -671,7 +662,7 @@ struct NodeTreeIterStore {
 	Scene *scene;
 	Material *mat;
 	Tex *tex;
-	Lamp *lamp;
+	Light *light;
 	World *world;
 	FreestyleLineStyle *linestyle;
 };
@@ -1073,5 +1064,8 @@ struct Depsgraph;
 void BKE_nodetree_shading_params_eval(struct Depsgraph *depsgraph,
                                       struct bNodeTree *ntree_dst,
                                       const struct bNodeTree *ntree_src);
+
+extern struct bNodeType NodeTypeUndefined;
+extern struct bNodeSocketType NodeSocketTypeUndefined;
 
 #endif  /* __BKE_NODE_H__ */

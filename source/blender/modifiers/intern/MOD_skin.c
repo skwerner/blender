@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,15 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software  Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * Contributor(s): Nicholas Bishop
- *
- * ***** END GPL LICENSE BLOCK *****
- *
  */
 
-/** \file blender/modifiers/intern/MOD_skin.c
- *  \ingroup modifiers
+/** \file
+ * \ingroup modifiers
  */
 
 /* Implementation based in part off the paper "B-Mesh: A Fast Modeling
@@ -59,17 +52,18 @@
 
 #include "MEM_guardedalloc.h"
 
+#include "BLI_utildefines.h"
+
+#include "BLI_array.h"
+#include "BLI_bitmap.h"
+#include "BLI_heap_simple.h"
+#include "BLI_math.h"
+#include "BLI_stack.h"
+
 #include "DNA_mesh_types.h"
 #include "DNA_meshdata_types.h"
 #include "DNA_object_types.h"
 #include "DNA_modifier_types.h"
-
-#include "BLI_utildefines.h"
-#include "BLI_array.h"
-#include "BLI_heap_simple.h"
-#include "BLI_math.h"
-#include "BLI_stack.h"
-#include "BLI_bitmap.h"
 
 #include "BKE_deform.h"
 #include "BKE_library.h"
@@ -92,7 +86,7 @@ typedef enum {
 	CAP_START = 1,
 	CAP_END = 2,
 	SEAM_FRAME = 4,
-	ROOT = 8
+	ROOT = 8,
 } SkinNodeFlag;
 
 typedef struct Frame {
@@ -1881,7 +1875,7 @@ static Mesh *base_skin(Mesh *origmesh,
 	if (!bm)
 		return NULL;
 
-	result = BKE_mesh_from_bmesh_for_eval_nomain(bm, 0);
+	result = BKE_mesh_from_bmesh_for_eval_nomain(bm, NULL);
 	BM_mesh_free(bm);
 
 	result->runtime.cd_dirty_vert |= CD_MASK_NORMAL;
@@ -1932,10 +1926,9 @@ static Mesh *applyModifier(ModifierData *md,
 	return result;
 }
 
-static CustomDataMask requiredDataMask(Object *UNUSED(ob),
-                                       ModifierData *UNUSED(md))
+static void requiredDataMask(Object *UNUSED(ob), ModifierData *UNUSED(md), CustomData_MeshMasks *r_cddata_masks)
 {
-	return CD_MASK_MVERT_SKIN | CD_MASK_MDEFORMVERT;
+	r_cddata_masks->vmask |= CD_MASK_MVERT_SKIN | CD_MASK_MDEFORMVERT;
 }
 
 ModifierTypeInfo modifierType_Skin = {

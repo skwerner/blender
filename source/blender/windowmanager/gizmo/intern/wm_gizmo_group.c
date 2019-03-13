@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,14 +15,10 @@
  *
  * The Original Code is Copyright (C) 2014 Blender Foundation.
  * All rights reserved.
- *
- * Contributor(s): Blender Foundation
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/windowmanager/gizmo/intern/wm_gizmo_group.c
- *  \ingroup wm
+/** \file
+ * \ingroup wm
  *
  * \name Gizmo-Group
  *
@@ -197,7 +191,7 @@ void wm_gizmogroup_intersectable_gizmos_to_list(const wmGizmoGroup *gzgroup, Lis
 	}
 }
 
-void wm_gizmogroup_ensure_initialized(wmGizmoGroup *gzgroup, const bContext *C)
+void WM_gizmogroup_ensure_init(const bContext *C, wmGizmoGroup *gzgroup)
 {
 	/* prepare for first draw */
 	if (UNLIKELY((gzgroup->init_flag & WM_GIZMOGROUP_INIT_SETUP) == 0)) {
@@ -404,7 +398,7 @@ static bool gizmo_tweak_start_and_finish(
 				gz->parent_gzgroup->type->invoke_prepare(C, gz->parent_gzgroup, gz);
 			}
 			/* Allow for 'button' gizmos, single click to run an action. */
-			WM_operator_name_call_ptr(C, gzop->type, WM_OP_INVOKE_DEFAULT, &gzop->ptr);
+			WM_gizmo_operator_invoke(C, gz, gzop);
 		}
 		return true;
 	}
@@ -635,7 +629,7 @@ static wmKeyMap *gizmogroup_tweak_modal_keymap(wmKeyConfig *keyconf, const char 
 		{TWEAK_MODAL_PRECISION_OFF, "PRECISION_OFF", 0, "Disable Precision", ""},
 		{TWEAK_MODAL_SNAP_ON, "SNAP_ON", 0, "Enable Snap", ""},
 		{TWEAK_MODAL_SNAP_OFF, "SNAP_OFF", 0, "Disable Snap", ""},
-		{0, NULL, 0, NULL, NULL}
+		{0, NULL, 0, NULL, NULL},
 	};
 
 
@@ -792,19 +786,20 @@ void WM_gizmomaptype_group_init_runtime(
         const Main *bmain, wmGizmoMapType *gzmap_type,
         wmGizmoGroupType *gzgt)
 {
+	/* Tools add themselves. */
+	if (gzgt->flag & WM_GIZMOGROUPTYPE_TOOL_INIT) {
+		return;
+	}
+
 	/* now create a gizmo for all existing areas */
-	for (bScreen *sc = bmain->screen.first; sc; sc = sc->id.next) {
+	for (bScreen *sc = bmain->screens.first; sc; sc = sc->id.next) {
 		for (ScrArea *sa = sc->areabase.first; sa; sa = sa->next) {
 			for (SpaceLink *sl = sa->spacedata.first; sl; sl = sl->next) {
 				ListBase *lb = (sl == sa->spacedata.first) ? &sa->regionbase : &sl->regionbase;
 				for (ARegion *ar = lb->first; ar; ar = ar->next) {
 					wmGizmoMap *gzmap = ar->gizmo_map;
 					if (gzmap && gzmap->type == gzmap_type) {
-						wm_gizmogroup_new_from_type(gzmap, gzgt);
-
-						/* just add here, drawing will occur on next update */
-						wm_gizmomap_highlight_set(gzmap, NULL, NULL, 0);
-						ED_region_tag_redraw(ar);
+						WM_gizmomaptype_group_init_runtime_with_region(gzmap_type, gzgt, ar);
 					}
 				}
 			}
@@ -812,6 +807,22 @@ void WM_gizmomaptype_group_init_runtime(
 	}
 }
 
+wmGizmoGroup *WM_gizmomaptype_group_init_runtime_with_region(
+        wmGizmoMapType *gzmap_type,
+        wmGizmoGroupType *gzgt, ARegion *ar)
+{
+	wmGizmoMap *gzmap = ar->gizmo_map;
+	BLI_assert(gzmap && gzmap->type == gzmap_type);
+	UNUSED_VARS_NDEBUG(gzmap_type);
+
+	wmGizmoGroup *gzgroup = wm_gizmogroup_new_from_type(gzmap, gzgt);
+
+	wm_gizmomap_highlight_set(gzmap, NULL, NULL, 0);
+
+	ED_region_tag_redraw(ar);
+
+	return gzgroup;
+}
 
 /**
  * Unlike #WM_gizmomaptype_group_unlink this doesn't maintain correct state, simply free.
@@ -826,7 +837,7 @@ void WM_gizmomaptype_group_unlink(
         const wmGizmoGroupType *gzgt)
 {
 	/* Free instances. */
-	for (bScreen *sc = bmain->screen.first; sc; sc = sc->id.next) {
+	for (bScreen *sc = bmain->screens.first; sc; sc = sc->id.next) {
 		for (ScrArea *sa = sc->areabase.first; sa; sa = sa->next) {
 			for (SpaceLink *sl = sa->spacedata.first; sl; sl = sl->next) {
 				ListBase *lb = (sl == sa->spacedata.first) ? &sa->regionbase : &sl->regionbase;

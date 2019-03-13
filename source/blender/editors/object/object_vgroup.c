@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,10 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): Ove M Henriksen.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/object/object_vgroup.c
- *  \ingroup edobj
+/** \file
+ * \ingroup edobj
  */
 
 #include <string.h>
@@ -50,7 +42,6 @@
 #include "BLI_math.h"
 #include "BLI_blenlib.h"
 #include "BLI_utildefines.h"
-#include "BLI_linklist_stack.h"
 #include "BLI_utildefines_stack.h"
 
 
@@ -90,7 +81,9 @@ static bool vertex_group_use_vert_sel(Object *ob)
 	if (ob->mode == OB_MODE_EDIT) {
 		return true;
 	}
-	else if (ob->type == OB_MESH && ((Mesh *)ob->data)->editflag & ME_EDIT_PAINT_VERT_SEL) {
+	else if ((ob->type == OB_MESH) &&
+	         ((Mesh *)ob->data)->editflag & (ME_EDIT_PAINT_VERT_SEL | ME_EDIT_PAINT_FACE_SEL))
+	{
 		return true;
 	}
 	else {
@@ -155,8 +148,8 @@ bool ED_vgroup_parray_alloc(ID *id, MDeformVert ***dvert_arr, int *dvert_tot, co
 			{
 				Mesh *me = (Mesh *)id;
 
-				if (me->edit_btmesh) {
-					BMEditMesh *em = me->edit_btmesh;
+				if (me->edit_mesh) {
+					BMEditMesh *em = me->edit_mesh;
 					BMesh *bm = em->bm;
 					const int cd_dvert_offset  = CustomData_get_offset(&bm->vdata, CD_MDEFORMVERT);
 					BMIter iter;
@@ -514,7 +507,7 @@ static void ED_mesh_defvert_mirror_update_em(
         const int cd_dvert_offset)
 {
 	Mesh *me = ob->data;
-	BMEditMesh *em = me->edit_btmesh;
+	BMEditMesh *em = me->edit_mesh;
 	BMVert *eve_mirr;
 	bool use_topology = (me->editflag & ME_EDIT_MIRROR_TOPO) != 0;
 
@@ -551,7 +544,7 @@ static void ED_mesh_defvert_mirror_update_ob(Object *ob, int def_nr, int vidx)
 void ED_vgroup_vert_active_mirror(Object *ob, int def_nr)
 {
 	Mesh *me = ob->data;
-	BMEditMesh *em = me->edit_btmesh;
+	BMEditMesh *em = me->edit_mesh;
 	MDeformVert *dvert_act;
 
 	if (me->editflag & ME_EDIT_MIRROR_X) {
@@ -588,7 +581,7 @@ static void vgroup_remove_weight(Object *ob, const int def_nr)
 static bool vgroup_normalize_active_vertex(Object *ob, eVGroupSelect subset_type)
 {
 	Mesh *me = ob->data;
-	BMEditMesh *em = me->edit_btmesh;
+	BMEditMesh *em = me->edit_mesh;
 	BMVert *eve_act;
 	int v_act;
 	MDeformVert *dvert_act;
@@ -627,7 +620,7 @@ static bool vgroup_normalize_active_vertex(Object *ob, eVGroupSelect subset_type
 static void vgroup_copy_active_to_sel(Object *ob, eVGroupSelect subset_type)
 {
 	Mesh *me = ob->data;
-	BMEditMesh *em = me->edit_btmesh;
+	BMEditMesh *em = me->edit_mesh;
 	MDeformVert *dvert_act;
 	int i, vgroup_tot, subset_count;
 	const bool *vgroup_validmap = BKE_object_defgroup_subset_from_select_type(ob, subset_type, &vgroup_tot, &subset_count);
@@ -683,7 +676,7 @@ static const EnumPropertyItem WT_vertex_group_select_item[] = {
 	 "BONE_DEFORM", 0, "Deform Pose Bones", "All Vertex Groups assigned to Deform Bones"},
 	{WT_VGROUP_ALL,
 	 "ALL", 0, "All Groups", "All Vertex Groups"},
-	{0, NULL, 0, NULL, NULL}
+	{0, NULL, 0, NULL, NULL},
 };
 
 const EnumPropertyItem *ED_object_vgroup_selection_itemf_helper(
@@ -903,8 +896,8 @@ static float get_vert_def_nr(Object *ob, const int def_nr, const int vertnum)
 	if (ob->type == OB_MESH) {
 		Mesh *me = ob->data;
 
-		if (me->edit_btmesh) {
-			BMEditMesh *em = me->edit_btmesh;
+		if (me->edit_mesh) {
+			BMEditMesh *em = me->edit_mesh;
 			const int cd_dvert_offset = CustomData_get_offset(&em->bm->vdata, CD_MDEFORMVERT);
 			/* warning, this lookup is _not_ fast */
 
@@ -960,7 +953,9 @@ float ED_vgroup_vert_weight(Object *ob, bDeformGroup *dg, int vertnum)
 }
 
 void ED_vgroup_select_by_name(Object *ob, const char *name)
-{   /* note: ob->actdef==0 signals on painting to create a new one, if a bone in posemode is selected */
+{
+	/* note: ob->actdef==0 signals on painting to create a new one,
+     * if a bone in posemode is selected */
 	ob->actdef = defgroup_name_index(ob, name) + 1;
 }
 
@@ -978,8 +973,8 @@ static void vgroup_select_verts(Object *ob, int select)
 	if (ob->type == OB_MESH) {
 		Mesh *me = ob->data;
 
-		if (me->edit_btmesh) {
-			BMEditMesh *em = me->edit_btmesh;
+		if (me->edit_mesh) {
+			BMEditMesh *em = me->edit_mesh;
 			const int cd_dvert_offset = CustomData_get_offset(&em->bm->vdata, CD_MDEFORMVERT);
 
 			if (cd_dvert_offset != -1) {
@@ -1294,7 +1289,7 @@ static void moveCloserToDistanceFromPlane(
 	float originalDistToBe = distToBe;
 	do {
 		wasChange = false;
-		me_deform = mesh_get_eval_deform(depsgraph, scene, ob, CD_MASK_BAREMESH);
+		me_deform = mesh_get_eval_deform(depsgraph, scene, ob, &CD_MASK_BAREMESH);
 		m = me_deform->mvert[index];
 		copy_v3_v3(oldPos, m.co);
 		distToStart = dot_v3v3(norm, oldPos) + d;
@@ -1334,7 +1329,7 @@ static void moveCloserToDistanceFromPlane(
 				if (dw->weight > 1) {
 					dw->weight = 1;
 				}
-				me_deform = mesh_get_eval_deform(depsgraph, scene, ob, CD_MASK_BAREMESH);
+				me_deform = mesh_get_eval_deform(depsgraph, scene, ob, &CD_MASK_BAREMESH);
 				m = me_deform->mvert[index];
 				getVerticalAndHorizontalChange(norm, d, coord, oldPos, distToStart, m.co, changes, dists, i);
 				dw->weight = oldw;
@@ -1464,7 +1459,7 @@ static void vgroup_fix(const bContext *C, Scene *scene, Object *ob, float distTo
 				MVert *p = MEM_callocN(sizeof(MVert) * (count), "deformedPoints");
 				int k;
 
-				Mesh *me_deform = mesh_get_eval_deform(depsgraph, scene, ob, CD_MASK_BAREMESH);
+				Mesh *me_deform = mesh_get_eval_deform(depsgraph, scene, ob, &CD_MASK_BAREMESH);
 				k = count;
 				while (k--) {
 					p[k] = me_deform->mvert[verts[k]];
@@ -1623,7 +1618,7 @@ enum {
 	VGROUP_TOGGLE,
 	VGROUP_LOCK,
 	VGROUP_UNLOCK,
-	VGROUP_INVERT
+	VGROUP_INVERT,
 };
 
 static const EnumPropertyItem vgroup_lock_actions[] = {
@@ -1631,7 +1626,7 @@ static const EnumPropertyItem vgroup_lock_actions[] = {
 	{VGROUP_LOCK, "LOCK", 0, "Lock", "Lock all vertex groups"},
 	{VGROUP_UNLOCK, "UNLOCK", 0, "Unlock", "Unlock all vertex groups"},
 	{VGROUP_INVERT, "INVERT", 0, "Invert", "Invert the lock state of all vertex groups"},
-	{0, NULL, 0, NULL, NULL}
+	{0, NULL, 0, NULL, NULL},
 };
 
 static void vgroup_lock_all(Object *ob, int action)
@@ -1946,20 +1941,22 @@ static int inv_cmp_mdef_vert_weights(const void *a1, const void *a2)
 {
 	/* qsort sorts in ascending order.  We want descending order to save a memcopy
 	 * so this compare function is inverted from the standard greater than comparison qsort needs.
-	 * A normal compare function is called with two pointer arguments and should return an integer less than, equal to,
-	 * or greater than zero corresponding to whether its first argument is considered less than, equal to,
-	 * or greater than its second argument.  This does the opposite. */
+	 * A normal compare function is called with two pointer arguments and should return an integer
+	 * less than, equal to, or greater than zero corresponding to whether its first argument is
+	 * considered less than, equal to, or greater than its second argument.
+	 * This does the opposite. */
 	const struct MDeformWeight *dw1 = a1, *dw2 = a2;
 
 	if      (dw1->weight < dw2->weight) return  1;
 	else if (dw1->weight > dw2->weight) return -1;
-	else if (&dw1 < &dw2)               return  1; /* compare addresses so we have a stable sort algorithm */
+	else if (&dw1 < &dw2)               return  1; /* compare address for stable sort algorithm */
 	else                                return -1;
 }
 
 /* Used for limiting the number of influencing bones per vertex when exporting
  * skinned meshes.  if all_deform_weights is True, limit all deform modifiers
- * to max_weights regardless of type, otherwise, only limit the number of influencing bones per vertex*/
+ * to max_weights regardless of type, otherwise,
+ * only limit the number of influencing bones per vertex. */
 static int vgroup_limit_total_subset(
         Object *ob,
         const bool *vgroup_validmap,
@@ -2214,7 +2211,7 @@ void ED_vgroup_mirror(
 	/* only the active group */
 	if (ob->type == OB_MESH) {
 		Mesh *me = ob->data;
-		BMEditMesh *em = me->edit_btmesh;
+		BMEditMesh *em = me->edit_mesh;
 
 		if (em) {
 			const int cd_dvert_offset = CustomData_get_offset(&em->bm->vdata, CD_MDEFORMVERT);
@@ -2391,8 +2388,8 @@ static void vgroup_assign_verts(Object *ob, const float weight)
 	if (ob->type == OB_MESH) {
 		Mesh *me = ob->data;
 
-		if (me->edit_btmesh) {
-			BMEditMesh *em = me->edit_btmesh;
+		if (me->edit_mesh) {
+			BMEditMesh *em = me->edit_mesh;
 			int cd_dvert_offset;
 
 			BMIter iter;
@@ -2679,8 +2676,10 @@ void OBJECT_OT_vertex_group_remove(wmOperatorType *ot)
 	ot->flag = /*OPTYPE_REGISTER|*/ OPTYPE_UNDO;
 
 	/* properties */
-	RNA_def_boolean(ot->srna, "all", 0, "All", "Remove all vertex groups");
-	RNA_def_boolean(ot->srna, "all_unlocked", 0, "All Unlocked", "Remove all unlocked vertex groups");
+	PropertyRNA *prop = RNA_def_boolean(ot->srna, "all", 0, "All", "Remove all vertex groups");
+	RNA_def_property_flag(prop, PROP_SKIP_SAVE);
+	prop = RNA_def_boolean(ot->srna, "all_unlocked", 0, "All Unlocked", "Remove all unlocked vertex groups");
+	RNA_def_property_flag(prop, PROP_SKIP_SAVE);
 }
 
 static int vertex_group_assign_exec(bContext *C, wmOperator *UNUSED(op))
@@ -3626,7 +3625,7 @@ static void vgroup_sort_bone_hierarchy(Object *ob, ListBase *bonebase)
 
 enum {
 	SORT_TYPE_NAME          = 0,
-	SORT_TYPE_BONEHIERARCHY = 1
+	SORT_TYPE_BONEHIERARCHY = 1,
 };
 
 static int vertex_group_sort_exec(bContext *C, wmOperator *op)
@@ -3667,7 +3666,7 @@ void OBJECT_OT_vertex_group_sort(wmOperatorType *ot)
 	static const EnumPropertyItem vgroup_sort_type[] = {
 		{SORT_TYPE_NAME, "NAME", 0, "Name", ""},
 		{SORT_TYPE_BONEHIERARCHY, "BONE_HIERARCHY", 0, "Bone Hierarchy", ""},
-		{0, NULL, 0, NULL, NULL}
+		{0, NULL, 0, NULL, NULL},
 	};
 
 	ot->name = "Sort Vertex Groups";
@@ -3718,7 +3717,7 @@ void OBJECT_OT_vertex_group_move(wmOperatorType *ot)
 	static const EnumPropertyItem vgroup_slot_move[] = {
 		{-1, "UP", 0, "Up", ""},
 		{1, "DOWN", 0, "Down", ""},
-		{0, NULL, 0, NULL, NULL}
+		{0, NULL, 0, NULL, NULL},
 	};
 
 	/* identifiers */
@@ -3742,7 +3741,7 @@ static void vgroup_copy_active_to_sel_single(Object *ob, const int def_nr)
 	MDeformVert *dvert_act;
 
 	Mesh *me = ob->data;
-	BMEditMesh *em = me->edit_btmesh;
+	BMEditMesh *em = me->edit_mesh;
 	float weight_act;
 	int i;
 

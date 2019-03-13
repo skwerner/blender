@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,19 +15,14 @@
  *
  * The Original Code is Copyright (C) 2008 Blender Foundation.
  * All rights reserved.
- *
- *
- * Contributor(s): Blender Foundation
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/space_node/space_node.c
- *  \ingroup spnode
+/** \file
+ * \ingroup spnode
  */
 
 #include "DNA_gpencil_types.h"
-#include "DNA_lamp_types.h"
+#include "DNA_light_types.h"
 #include "DNA_material_types.h"
 #include "DNA_node_types.h"
 #include "DNA_world_types.h"
@@ -538,7 +531,7 @@ static void node_area_refresh(const struct bContext *C, ScrArea *sa)
 					ED_preview_shader_job(C, sa, snode->id, NULL, NULL, 100, 100, PR_NODE_RENDER);
 			}
 			else if (GS(snode->id->name) == ID_LA) {
-				Lamp *la = (Lamp *)snode->id;
+				Light *la = (Light *)snode->id;
 				if (la->use_nodes)
 					ED_preview_shader_job(C, sa, snode->id, NULL, NULL, 100, 100, PR_NODE_RENDER);
 			}
@@ -670,7 +663,8 @@ static void node_main_region_draw(const bContext *C, ARegion *ar)
 static bool node_ima_drop_poll(bContext *UNUSED(C), wmDrag *drag, const wmEvent *UNUSED(event), const char **UNUSED(tooltip))
 {
 	if (drag->type == WM_DRAG_PATH) {
-		return (ELEM(drag->icon, 0, ICON_FILE_IMAGE, ICON_FILE_MOVIE));   /* rule might not work? */
+		/* rule might not work? */
+		return (ELEM(drag->icon, 0, ICON_FILE_IMAGE, ICON_FILE_MOVIE));
 	}
 	else {
 		return WM_drag_ID(drag, ID_IM) != NULL;
@@ -981,7 +975,7 @@ void ED_spacetype_node(void)
 	art->regionid = RGN_TYPE_WINDOW;
 	art->init = node_main_region_init;
 	art->draw = node_main_region_draw;
-	art->keymapflag = ED_KEYMAP_UI | ED_KEYMAP_GIZMO | ED_KEYMAP_VIEW2D | ED_KEYMAP_FRAMES | ED_KEYMAP_GPENCIL;
+	art->keymapflag = ED_KEYMAP_UI | ED_KEYMAP_GIZMO | ED_KEYMAP_TOOL | ED_KEYMAP_VIEW2D | ED_KEYMAP_FRAMES | ED_KEYMAP_GPENCIL;
 	art->listener = node_region_listener;
 	art->cursor = node_cursor;
 	art->event_cursor = true;

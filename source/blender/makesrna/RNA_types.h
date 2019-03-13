@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,34 +12,29 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * Contributor(s): Blender Foundation (2008).
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/makesrna/RNA_types.h
- *  \ingroup RNA
+/** \file
+ * \ingroup RNA
  */
-
-
-#include "../blenlib/BLI_sys_types.h"
 
 #ifndef __RNA_TYPES_H__
 #define __RNA_TYPES_H__
+
+#include "../blenlib/BLI_sys_types.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-struct ParameterList;
-struct FunctionRNA;
-struct PropertyRNA;
-struct StructRNA;
 struct BlenderRNA;
-struct bContext;
+struct FunctionRNA;
 struct Main;
+struct ParameterList;
+struct PropertyRNA;
 struct ReportList;
+struct StructRNA;
+struct bContext;
 
 /** Pointer
  *
@@ -98,6 +91,7 @@ typedef enum PropertyUnit {
 	PROP_UNIT_VELOCITY     = (7 << 16),   /* m/s */
 	PROP_UNIT_ACCELERATION = (8 << 16),   /* m/(s^2) */
 	PROP_UNIT_CAMERA       = (9 << 16),   /* mm */
+	PROP_UNIT_POWER        = (10 << 16),  /* W */
 } PropertyUnit;
 
 #define RNA_SUBTYPE_UNIT(subtype)       ((subtype) &  0x00FF0000)
@@ -154,6 +148,9 @@ typedef enum PropertySubType {
 	/* booleans */
 	PROP_LAYER             = 40,
 	PROP_LAYER_MEMBER      = 41,
+
+	/* light */
+	PROP_POWER             = 42 | PROP_UNIT_POWER,
 } PropertySubType;
 
 /* Make sure enums are updated with these */

@@ -40,13 +40,23 @@ class RenderTile;
 /* Device Types */
 
 enum DeviceType {
-	DEVICE_NONE,
+	DEVICE_NONE = 0,
 	DEVICE_CPU,
 	DEVICE_OPENCL,
 	DEVICE_CUDA,
 	DEVICE_NETWORK,
 	DEVICE_MULTI
 };
+
+enum DeviceTypeMask {
+	DEVICE_MASK_CPU = (1 << DEVICE_CPU),
+	DEVICE_MASK_OPENCL = (1 << DEVICE_OPENCL),
+	DEVICE_MASK_CUDA = (1 << DEVICE_CUDA),
+	DEVICE_MASK_NETWORK = (1 << DEVICE_NETWORK),
+	DEVICE_MASK_ALL = ~0
+};
+
+#define DEVICE_MASK(type) (DeviceTypeMask)(1 << type)
 
 class DeviceInfo {
 public:
@@ -139,6 +149,12 @@ public:
 	/* Use raytracing in shaders. */
 	bool use_shader_raytrace;
 
+	/* Use true displacement */
+	bool use_true_displacement;
+
+	/* Use background lights */
+	bool use_background_light;
+
 	DeviceRequestedFeatures()
 	{
 		/* TODO(sergey): Find more meaningful defaults. */
@@ -158,6 +174,8 @@ public:
 		use_principled = false;
 		use_denoising = false;
 		use_shader_raytrace = false;
+		use_true_displacement = false;
+		use_background_light = false;
 	}
 
 	bool modified(const DeviceRequestedFeatures& requested_features)
@@ -177,7 +195,9 @@ public:
 		         use_shadow_tricks == requested_features.use_shadow_tricks &&
 		         use_principled == requested_features.use_principled &&
 		         use_denoising == requested_features.use_denoising &&
-		         use_shader_raytrace == requested_features.use_shader_raytrace);
+		         use_shader_raytrace == requested_features.use_shader_raytrace &&
+		         use_true_displacement == requested_features.use_true_displacement &&
+		         use_background_light == requested_features.use_background_light);
 	}
 
 	/* Convert the requested features structure to a build options,
@@ -345,9 +365,9 @@ public:
 
 	static DeviceType type_from_string(const char *name);
 	static string string_from_type(DeviceType type);
-	static vector<DeviceType>& available_types();
-	static vector<DeviceInfo>& available_devices();
-	static string device_capabilities();
+	static vector<DeviceType> available_types();
+	static vector<DeviceInfo> available_devices(uint device_type_mask = DEVICE_MASK_ALL);
+	static string device_capabilities(uint device_type_mask = DEVICE_MASK_ALL);
 	static DeviceInfo get_multi_device(const vector<DeviceInfo>& subdevices,
 	                                   int threads,
 	                                   bool background);
@@ -374,8 +394,11 @@ private:
 	/* Indicted whether device types and devices lists were initialized. */
 	static bool need_types_update, need_devices_update;
 	static thread_mutex device_mutex;
-	static vector<DeviceType> types;
-	static vector<DeviceInfo> devices;
+	static vector<DeviceInfo> cuda_devices;
+	static vector<DeviceInfo> opencl_devices;
+	static vector<DeviceInfo> cpu_devices;
+	static vector<DeviceInfo> network_devices;
+	static uint devices_initialized_mask;
 };
 
 CCL_NAMESPACE_END

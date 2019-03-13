@@ -13,9 +13,6 @@
 # You should have received a copy of the GNU General Public License
 # along with this program; if not, write to the Free Software Foundation,
 # Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
-#
-# Contributor(s): Jacques Beaurain.
-#
 # ***** END GPL LICENSE BLOCK *****
 
 # --env-system-scripts allows to run without the install target.
@@ -558,6 +555,7 @@ if(OPENIMAGEIO_IDIFF AND EXISTS "${TEST_SRC_DIR}/render/ctests/shader")
 	add_cycles_render_test(bake)
 	add_cycles_render_test(bsdf)
 	add_cycles_render_test(denoise)
+	add_cycles_render_test(denoise_animation)
 	add_cycles_render_test(displacement)
 	add_cycles_render_test(hair)
 	add_cycles_render_test(image_data_types)
@@ -579,17 +577,19 @@ endif()
 
 if(WITH_OPENGL_DRAW_TESTS)
 	if(OPENIMAGEIO_IDIFF AND EXISTS "${TEST_SRC_DIR}/opengl")
-		# Use all test folders
-		file(GLOB children RELATIVE ${TEST_SRC_DIR} ${TEST_SRC_DIR}/*)
+		# Use all subdirectories of opengl folder.
+		file(GLOB children RELATIVE ${TEST_SRC_DIR}/opengl ${TEST_SRC_DIR}/opengl/*)
 		foreach(child ${children})
-			if(IS_DIRECTORY ${TEST_SRC_DIR}/${child})
-				file(GLOB_RECURSE blends "${TEST_SRC_DIR}/${child}/*.blend")
+			# Resolve symlinks, useful to test production files with linked libraries.
+			get_filename_component(child_path ${TEST_SRC_DIR}/opengl/${child} REALPATH)
+			if(IS_DIRECTORY ${child_path})
+				file(GLOB_RECURSE blends "${child_path}/*.blend")
 				if(blends)
 					add_python_test(
 						opengl_draw_${child}_test
 						${CMAKE_CURRENT_LIST_DIR}/opengl_draw_tests.py
 						-blender "$<TARGET_FILE:blender>"
-						-testdir "${TEST_SRC_DIR}/${child}"
+						-testdir "${child_path}"
 						-idiff "${OPENIMAGEIO_IDIFF}"
 						-outdir "${TEST_OUT_DIR}/opengl_draw"
 					)

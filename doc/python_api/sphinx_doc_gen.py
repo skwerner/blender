@@ -14,8 +14,6 @@
 #  along with this program; if not, write to the Free Software Foundation,
 #  Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
 #
-# Contributor(s): Campbell Barton
-#
 # ##### END GPL LICENSE BLOCK #####
 
 # <pep8 compliant>
@@ -1030,6 +1028,7 @@ context_type_map = {
     "particle_system": ("ParticleSystem", False),
     "particle_system_editable": ("ParticleSystem", False),
     "pose_bone": ("PoseBone", False),
+    "pose_object": ("Object", False),
     "scene": ("Scene", False),
     "sculpt_object": ("Object", False),
     "selectable_bases": ("ObjectBase", True),

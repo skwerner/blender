@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,19 +12,14 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * Contributor(s): Dalai Felinto
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/blenkernel/intern/layer.c
- *  \ingroup bke
+/** \file
+ * \ingroup bke
  */
 
 #include <string.h>
 
-#include "BLI_array.h"
 #include "BLI_listbase.h"
 #include "BLI_string.h"
 #include "BLI_string_utf8.h"
@@ -37,7 +30,6 @@
 #include "BKE_animsys.h"
 #include "BKE_collection.h"
 #include "BKE_freestyle.h"
-#include "BKE_global.h"
 #include "BKE_idprop.h"
 #include "BKE_layer.h"
 #include "BKE_main.h"
@@ -62,6 +54,14 @@
 
 #include "MEM_guardedalloc.h"
 
+/* Set of flags which are dependent on a collection settings. */
+static const short g_base_collection_flags = (
+        BASE_VISIBLE |
+        BASE_SELECTABLE |
+        BASE_ENABLED_VIEWPORT |
+        BASE_ENABLED_RENDER |
+        BASE_HOLDOUT |
+        BASE_INDIRECT_ONLY);
 
 /* prototype */
 static void object_bases_iterator_next(BLI_Iterator *iter, const int flag);
@@ -611,7 +611,7 @@ int BKE_layer_collection_findindex(ViewLayer *view_layer, const LayerCollection 
 static short layer_collection_sync(
         ViewLayer *view_layer, const ListBase *lb_scene,
         ListBase *lb_layer, ListBase *new_object_bases,
-        short parent_exclude, short parent_restrict)
+        short parent_exclude, short parent_restrict, short parent_layer_restrict)
 {
 	/* TODO: support recovery after removal of intermediate collections, reordering, ..
 	 * For local edits we can make editing operating do the appropriate thing, but for
@@ -656,15 +656,17 @@ static short layer_collection_sync(
 
 		/* Collection restrict is inherited. */
 		short child_restrict = parent_restrict;
+		short child_layer_restrict = parent_layer_restrict;
 		if (!(collection->flag & COLLECTION_IS_MASTER)) {
 			child_restrict |= collection->flag;
+			child_layer_restrict |= lc->flag;
 		}
 
 		/* Sync child collections. */
 		short child_runtime_flag = layer_collection_sync(
 		        view_layer, &collection->children,
 		        &lc->layer_collections, new_object_bases,
-		        lc->flag, child_restrict);
+		        lc->flag, child_restrict, child_layer_restrict);
 
 		/* Layer collection exclude is not inherited. */
 		if (lc->flag & LAYER_COLLECTION_EXCLUDE) {
@@ -673,6 +675,12 @@ static short layer_collection_sync(
 		}
 		else {
 			lc->runtime_flag = child_runtime_flag;
+		}
+
+		if (((child_restrict & COLLECTION_RESTRICT_VIEW) == 0) &&
+		    ((child_layer_restrict & LAYER_COLLECTION_RESTRICT_VIEW) == 0))
+		{
+			lc->runtime_flag |= LAYER_COLLECTION_VISIBLE;
 		}
 
 		/* Sync objects, except if collection was excluded. */
@@ -700,49 +708,32 @@ static short layer_collection_sync(
 				BLI_addtail(new_object_bases, base);
 			}
 
-			int object_restrict = base->object->restrictflag;
-
-			if (((child_restrict & COLLECTION_RESTRICT_VIEW) == 0) &&
-			    ((object_restrict & OB_RESTRICT_VIEW) == 0))
-			{
-				base->flag |= BASE_VISIBLE | BASE_ENABLED | BASE_ENABLED_VIEWPORT;
-
-				if (((child_restrict & COLLECTION_RESTRICT_SELECT) == 0) &&
-				    ((object_restrict & OB_RESTRICT_SELECT) == 0))
-				{
-					base->flag |= BASE_SELECTABLE;
+			if ((child_restrict & COLLECTION_RESTRICT_VIEW) == 0) {
+				base->flag_from_collection |= BASE_ENABLED_VIEWPORT;
+				if ((child_layer_restrict & LAYER_COLLECTION_RESTRICT_VIEW) == 0) {
+					base->flag_from_collection |= BASE_VISIBLE;
+					if (((child_restrict & COLLECTION_RESTRICT_SELECT) == 0)) {
+						base->flag_from_collection |= BASE_SELECTABLE;
+					}
 				}
 			}
 
-			if (((child_restrict & COLLECTION_RESTRICT_RENDER) == 0) &&
-			    ((object_restrict & OB_RESTRICT_RENDER) == 0))
-
-			{
-				base->flag |= BASE_ENABLED_RENDER;
-			}
-
-			/* Update runtime flags used for display and tools. */
-			if (base->flag & BASE_VISIBLE) {
-				lc->runtime_flag |= LAYER_COLLECTION_HAS_ENABLED_OBJECTS;
-			}
-
-			if (base->flag & BASE_HIDDEN) {
-				view_layer->runtime_flag |= VIEW_LAYER_HAS_HIDE;
-				lc->runtime_flag |= LAYER_COLLECTION_HAS_HIDDEN_OBJECTS;
-			}
-			else if (base->flag & BASE_VISIBLE) {
-				lc->runtime_flag |= LAYER_COLLECTION_HAS_VISIBLE_OBJECTS;
+			if ((child_restrict & COLLECTION_RESTRICT_RENDER) == 0) {
+				base->flag_from_collection |= BASE_ENABLED_RENDER;
 			}
 
 			/* Holdout and indirect only */
 			if (lc->flag & LAYER_COLLECTION_HOLDOUT) {
-				base->flag |= BASE_HOLDOUT;
+				base->flag_from_collection |= BASE_HOLDOUT;
 			}
 			if (lc->flag & LAYER_COLLECTION_INDIRECT_ONLY) {
-				base->flag |= BASE_INDIRECT_ONLY;
+				base->flag_from_collection |= BASE_INDIRECT_ONLY;
 			}
 
 			lc->runtime_flag |= LAYER_COLLECTION_HAS_OBJECTS;
+
+			/* Make sure flags on base are usable right away. */
+			BKE_base_eval_flags(base);
 		}
 
 		runtime_flag |= lc->runtime_flag;
@@ -777,27 +768,20 @@ void BKE_layer_collection_sync(const Scene *scene, ViewLayer *view_layer)
 
 	/* Clear visible and selectable flags to be reset. */
 	for (Base *base = view_layer->object_bases.first; base; base = base->next) {
-		base->flag &= ~(BASE_VISIBLE |
-		                BASE_ENABLED |
-		                BASE_SELECTABLE |
-		                BASE_ENABLED_VIEWPORT |
-		                BASE_ENABLED_RENDER |
-		                BASE_HOLDOUT |
-		                BASE_INDIRECT_ONLY);
+		base->flag &= ~g_base_collection_flags;
+		base->flag_from_collection &= ~g_base_collection_flags;
 	}
-
-	view_layer->runtime_flag = 0;
 
 	/* Generate new layer connections and object bases when collections changed. */
 	CollectionChild child = {NULL, NULL, scene->master_collection};
 	const ListBase collections = {&child, &child};
 	ListBase new_object_bases = {NULL, NULL};
 
-	const short parent_exclude = 0, parent_restrict = 0;
+	const short parent_exclude = 0, parent_restrict = 0, parent_layer_restrict = 0;
 	layer_collection_sync(
 	        view_layer, &collections,
 	        &view_layer->layer_collections, &new_object_bases,
-	        parent_exclude, parent_restrict);
+	        parent_exclude, parent_restrict, parent_layer_restrict);
 
 	/* Any remaning object bases are to be removed. */
 	for (Base *base = view_layer->object_bases.first; base; base = base->next) {
@@ -838,7 +822,7 @@ void BKE_main_collection_sync(const Main *bmain)
 
 	/* TODO: optimize for file load so only linked collections get checked? */
 
-	for (const Scene *scene = bmain->scene.first; scene; scene = scene->id.next) {
+	for (const Scene *scene = bmain->scenes.first; scene; scene = scene->id.next) {
 		BKE_scene_collection_sync(scene);
 	}
 }
@@ -848,7 +832,7 @@ void BKE_main_collection_sync_remap(const Main *bmain)
 	/* On remapping of object or collection pointers free caches. */
 	/* TODO: try to make this faster */
 
-	for (const Scene *scene = bmain->scene.first; scene; scene = scene->id.next) {
+	for (const Scene *scene = bmain->scenes.first; scene; scene = scene->id.next) {
 		for (ViewLayer *view_layer = scene->view_layers.first; view_layer; view_layer = view_layer->next) {
 			MEM_SAFE_FREE(view_layer->object_bases_array);
 
@@ -859,7 +843,7 @@ void BKE_main_collection_sync_remap(const Main *bmain)
 		}
 	}
 
-	for (Collection *collection = bmain->collection.first; collection; collection = collection->id.next) {
+	for (Collection *collection = bmain->collections.first; collection; collection = collection->id.next) {
 		BKE_collection_object_cache_free(collection);
 		DEG_id_tag_update_ex((Main *)bmain, &collection->id, ID_RECALC_COPY_ON_WRITE);
 	}
@@ -921,7 +905,7 @@ bool BKE_layer_collection_has_selected_objects(ViewLayer *view_layer, LayerColle
 		for (CollectionObject *cob = lc->collection->gobject.first; cob; cob = cob->next) {
 			Base *base = BKE_view_layer_base_find(view_layer, cob->ob);
 
-			if (base && (base->flag & BASE_SELECTED)) {
+			if (base && (base->flag & BASE_SELECTED) && (base->flag & BASE_VISIBLE)) {
 				return true;
 			}
 		}
@@ -933,6 +917,20 @@ bool BKE_layer_collection_has_selected_objects(ViewLayer *view_layer, LayerColle
 		}
 	}
 
+	return false;
+}
+
+bool BKE_layer_collection_has_layer_collection(LayerCollection *lc_parent, LayerCollection *lc_child)
+{
+	if (lc_parent == lc_child) {
+		return true;
+	}
+
+	for (LayerCollection *lc_iter = lc_parent->layer_collections.first; lc_iter; lc_iter = lc_iter->next) {
+		if (BKE_layer_collection_has_layer_collection(lc_iter, lc_child)) {
+			return true;
+		}
+	}
 	return false;
 }
 
@@ -957,47 +955,147 @@ void BKE_base_set_visible(Scene *scene, ViewLayer *view_layer, Base *base, bool 
 	BKE_layer_collection_sync(scene, view_layer);
 }
 
-void BKE_layer_collection_set_visible(Scene *scene, ViewLayer *view_layer, LayerCollection *lc, bool extend)
+static void layer_collection_flag_set_recursive(LayerCollection *lc, const int flag)
 {
+	lc->flag |= flag;
+	for (LayerCollection *lc_iter = lc->layer_collections.first; lc_iter; lc_iter = lc_iter->next) {
+		layer_collection_flag_set_recursive(lc_iter, flag);
+	}
+}
+
+static void layer_collection_flag_unset_recursive(LayerCollection *lc, const int flag)
+{
+	lc->flag &= ~flag;
+	for (LayerCollection *lc_iter = lc->layer_collections.first; lc_iter; lc_iter = lc_iter->next) {
+		layer_collection_flag_unset_recursive(lc_iter, flag);
+	}
+}
+
+/**
+ * Isolate the collection - hide all other collections but this one.
+ * Make sure to show all the direct parents and all children of the layer collection as well.
+ * When extending we simply show the collections and its direct family.
+ *
+ * If the collection or any of its parents is disabled, make it enabled.
+ * Don't change the children disable state though.
+ *
+ * Return whether depsgraph needs update.
+ */
+bool BKE_layer_collection_isolate(Scene *scene, ViewLayer *view_layer, LayerCollection *lc, bool extend)
+{
+	bool depsgraph_need_update = false;
+	LayerCollection *lc_master = view_layer->layer_collections.first;
+
+	if (!ID_IS_LINKED(lc->collection)) {
+		if (lc->collection->flag & COLLECTION_RESTRICT_VIEW) {
+			lc->collection->flag &= ~COLLECTION_RESTRICT_VIEW;
+			depsgraph_need_update = true;
+		}
+	}
+
 	if (!extend) {
-		/* Make only objects from one collection visible. */
-		for (Base *base = view_layer->object_bases.first; base; base = base->next) {
-			base->flag |= BASE_HIDDEN;
+		/* Hide all collections . */
+		for (LayerCollection *lc_iter = lc_master->layer_collections.first; lc_iter; lc_iter = lc_iter->next) {
+			layer_collection_flag_set_recursive(lc_iter, LAYER_COLLECTION_RESTRICT_VIEW);
 		}
+	}
 
-		FOREACH_COLLECTION_OBJECT_RECURSIVE_BEGIN(lc->collection, ob)
-		{
-			Base *base = BLI_ghash_lookup(view_layer->object_bases_hash, ob);
+	/* Make all the direct parents visible. */
+	LayerCollection *lc_parent = lc;
+	for (LayerCollection *lc_iter = lc_master->layer_collections.first; lc_iter; lc_iter = lc_iter->next) {
+		if (BKE_layer_collection_has_layer_collection(lc_iter, lc)) {
+			lc_parent = lc_iter;
+			break;
+		}
+	}
 
-			if (base) {
-				base->flag &= ~BASE_HIDDEN;
+	while (lc_parent != lc) {
+		if (!ID_IS_LINKED(lc_parent->collection)) {
+			if (lc_parent->collection->flag & COLLECTION_RESTRICT_VIEW) {
+				lc_parent->collection->flag &= ~COLLECTION_RESTRICT_VIEW;
+				depsgraph_need_update = true;
 			}
 		}
-		FOREACH_COLLECTION_OBJECT_RECURSIVE_END;
 
-		BKE_layer_collection_activate(view_layer, lc);
-	}
-	else {
-		/* Toggle visibility of objects from collection. */
-		bool hide = (lc->runtime_flag & LAYER_COLLECTION_HAS_VISIBLE_OBJECTS) != 0;
+		lc_parent->flag &= ~LAYER_COLLECTION_RESTRICT_VIEW;
 
-		FOREACH_COLLECTION_OBJECT_RECURSIVE_BEGIN(lc->collection, ob)
-		{
-			Base *base = BLI_ghash_lookup(view_layer->object_bases_hash, ob);
-
-			if (base) {
-				if (hide) {
-					base->flag |= BASE_HIDDEN;
-				}
-				else {
-					base->flag &= ~BASE_HIDDEN;
-				}
+		for (LayerCollection *lc_iter = lc_parent->layer_collections.first; lc_iter; lc_iter = lc_iter->next) {
+			if (BKE_layer_collection_has_layer_collection(lc_iter, lc)) {
+				lc_parent = lc_iter;
+				break;
 			}
 		}
-		FOREACH_COLLECTION_OBJECT_RECURSIVE_END;
 	}
+
+	/* Make all the children visible, but respect their disable state. */
+	layer_collection_flag_unset_recursive(lc, LAYER_COLLECTION_RESTRICT_VIEW);
+
+	BKE_layer_collection_activate(view_layer, lc);
 
 	BKE_layer_collection_sync(scene, view_layer);
+
+	return depsgraph_need_update;
+}
+
+static void layer_collection_bases_show_recursive(ViewLayer *view_layer, LayerCollection *lc)
+{
+	for (CollectionObject *cob = lc->collection->gobject.first; cob; cob = cob->next) {
+		Base *base = BKE_view_layer_base_find(view_layer, cob->ob);
+		base->flag &= ~BASE_HIDDEN;
+	}
+	for (LayerCollection *lc_iter = lc->layer_collections.first; lc_iter; lc_iter = lc_iter->next) {
+		layer_collection_bases_show_recursive(view_layer, lc_iter);
+	}
+}
+
+static void layer_collection_bases_hide_recursive(ViewLayer *view_layer, LayerCollection *lc)
+{
+	for (CollectionObject *cob = lc->collection->gobject.first; cob; cob = cob->next) {
+		Base *base = BKE_view_layer_base_find(view_layer, cob->ob);
+		base->flag |= BASE_HIDDEN;
+	}
+	for (LayerCollection *lc_iter = lc->layer_collections.first; lc_iter; lc_iter = lc_iter->next) {
+		layer_collection_bases_hide_recursive(view_layer, lc_iter);
+	}
+}
+
+/**
+ * Hide/show all the elements of a collection.
+ * Don't change the collection children enable/disable state, but it may change it for the collection itself.
+ *
+ * Return true if depsgraph needs update.
+ */
+bool BKE_layer_collection_set_visible(ViewLayer *view_layer, LayerCollection *lc, const bool visible, const bool hierarchy)
+{
+	bool depsgraph_changed = false;
+
+	if (visible &&
+	    (!ID_IS_LINKED(lc->collection)) &&
+	    ((lc->collection->flag & COLLECTION_RESTRICT_VIEW) != 0))
+	{
+		lc->collection->flag &= ~COLLECTION_RESTRICT_VIEW;
+		depsgraph_changed = true;
+	}
+
+	if (hierarchy) {
+		if (visible) {
+			layer_collection_flag_unset_recursive(lc, LAYER_COLLECTION_RESTRICT_VIEW);
+			layer_collection_bases_show_recursive(view_layer, lc);
+		}
+		else {
+			layer_collection_flag_set_recursive(lc, LAYER_COLLECTION_RESTRICT_VIEW);
+			layer_collection_bases_hide_recursive(view_layer, lc);
+		}
+	}
+	else {
+		if (visible) {
+			lc->flag &= ~LAYER_COLLECTION_RESTRICT_VIEW;
+		}
+		else {
+			lc->flag |= LAYER_COLLECTION_RESTRICT_VIEW;
+		}
+	}
+	return depsgraph_changed;
 }
 
 /* ---------------------------------------------------------------------- */
@@ -1057,39 +1155,6 @@ bool BKE_scene_has_object(Scene *scene, Object *ob)
 	return false;
 }
 
-/* ---------------------------------------------------------------------- */
-/* Override */
-
-/**
- * Add a new datablock override
- */
-void BKE_override_view_layer_datablock_add(
-        ViewLayer *view_layer, int id_type, const char *data_path, const ID *owner_id)
-{
-	UNUSED_VARS(view_layer, id_type, data_path, owner_id);
-	TODO_LAYER_OVERRIDE;
-}
-
-/**
- * Add a new int override
- */
-void BKE_override_view_layer_int_add(
-        ViewLayer *view_layer, int id_type, const char *data_path, const int value)
-{
-	UNUSED_VARS(view_layer, id_type, data_path, value);
-	TODO_LAYER_OVERRIDE;
-}
-
-/**
- * Add a new boolean override
- */
-void BKE_override_layer_collection_boolean_add(
-        struct LayerCollection *layer_collection, int id_type, const char *data_path, const bool value)
-{
-	UNUSED_VARS(layer_collection, id_type, data_path, value);
-	TODO_LAYER_OVERRIDE;
-}
-
 /** \} */
 
 /* Iterators */
@@ -1103,29 +1168,17 @@ typedef struct LayerObjectBaseIteratorData {
 	Base *base;
 } LayerObjectBaseIteratorData;
 
-static bool object_bases_iterator_is_valid_ex(View3D *v3d, Base *base, const int flag)
+static bool object_bases_iterator_is_valid(View3D *v3d, Base *base, const int flag)
 {
-	if (v3d != NULL) {
-		BLI_assert(v3d->spacetype == SPACE_VIEW3D);
-		if ((v3d->object_type_exclude_viewport & (1 << base->object->type)) != 0) {
-			return false;
-		}
+	BLI_assert((v3d == NULL) || (v3d->spacetype == SPACE_VIEW3D));
 
-		if (v3d->localvd && ((base->local_view_bits & v3d->local_view_uuid) == 0)) {
-			return false;
-		}
+	/* Any flag satisfies the condition. */
+	if (flag == ~0) {
+		return (base->flag != 0);
 	}
 
-	if ((base->flag & flag) == 0) {
-		return false;
-	}
-
-	return true;
-}
-
-static bool object_bases_iterator_is_valid(View3D *v3d, Base *base)
-{
-	return object_bases_iterator_is_valid_ex(v3d, base, ~(0));
+	/* Flags may be more than one flag, so we can't check != 0. */
+	return BASE_VISIBLE(v3d, base) && ((base->flag & flag) == flag);
 }
 
 static void object_bases_iterator_begin(BLI_Iterator *iter, void *data_in_v, const int flag)
@@ -1148,7 +1201,7 @@ static void object_bases_iterator_begin(BLI_Iterator *iter, void *data_in_v, con
 	data->v3d = v3d;
 	data->base = base;
 
-	if (object_bases_iterator_is_valid_ex(v3d, base, flag) == false) {
+	if (object_bases_iterator_is_valid(v3d, base, flag) == false) {
 		object_bases_iterator_next(iter, flag);
 	}
 	else {
@@ -1162,7 +1215,7 @@ static void object_bases_iterator_next(BLI_Iterator *iter, const int flag)
 	Base *base = data->base->next;
 
 	while (base) {
-		if (object_bases_iterator_is_valid_ex(data->v3d, base, flag)) {
+		if (object_bases_iterator_is_valid(data->v3d, base, flag)) {
 			iter->current = base;
 			data->base = base;
 			return;
@@ -1208,12 +1261,12 @@ static void objects_iterator_end(BLI_Iterator *iter)
 
 void BKE_view_layer_selected_objects_iterator_begin(BLI_Iterator *iter, void *data_in)
 {
-	objects_iterator_begin(iter, data_in, BASE_SELECTED);
+	objects_iterator_begin(iter, data_in, BASE_VISIBLE | BASE_SELECTED);
 }
 
 void BKE_view_layer_selected_objects_iterator_next(BLI_Iterator *iter)
 {
-	objects_iterator_next(iter, BASE_SELECTED);
+	objects_iterator_next(iter, BASE_VISIBLE | BASE_SELECTED);
 }
 
 void BKE_view_layer_selected_objects_iterator_end(BLI_Iterator *iter)
@@ -1229,12 +1282,12 @@ void BKE_view_layer_selected_objects_iterator_end(BLI_Iterator *iter)
 
 void BKE_view_layer_visible_objects_iterator_begin(BLI_Iterator *iter, void *data_in)
 {
-	objects_iterator_begin(iter, data_in, BASE_VISIBLE);
+	objects_iterator_begin(iter, data_in, 0);
 }
 
 void BKE_view_layer_visible_objects_iterator_next(BLI_Iterator *iter)
 {
-	objects_iterator_next(iter, BASE_VISIBLE);
+	objects_iterator_next(iter, 0);
 }
 
 void BKE_view_layer_visible_objects_iterator_end(BLI_Iterator *iter)
@@ -1250,7 +1303,7 @@ void BKE_view_layer_visible_objects_iterator_end(BLI_Iterator *iter)
 
 void BKE_view_layer_selected_editable_objects_iterator_begin(BLI_Iterator *iter, void *data_in)
 {
-	objects_iterator_begin(iter, data_in, BASE_SELECTED);
+	objects_iterator_begin(iter, data_in, BASE_VISIBLE | BASE_SELECTED);
 	if (iter->valid) {
 		if (BKE_object_is_libdata((Object *)iter->current) == false) {
 			// First object is valid (selectable and not libdata) -> all good.
@@ -1267,7 +1320,7 @@ void BKE_view_layer_selected_editable_objects_iterator_next(BLI_Iterator *iter)
 {
 	// Search while there are objects and the one we have is not editable (editable = not libdata).
 	do {
-		objects_iterator_next(iter, BASE_SELECTED);
+		objects_iterator_next(iter, BASE_VISIBLE | BASE_SELECTED);
 	} while (iter->valid && BKE_object_is_libdata((Object *)iter->current) != false);
 }
 
@@ -1284,12 +1337,12 @@ void BKE_view_layer_selected_editable_objects_iterator_end(BLI_Iterator *iter)
 
 void BKE_view_layer_selected_bases_iterator_begin(BLI_Iterator *iter, void *data_in)
 {
-	objects_iterator_begin(iter, data_in, BASE_SELECTED);
+	objects_iterator_begin(iter, data_in, BASE_VISIBLE | BASE_SELECTED);
 }
 
 void BKE_view_layer_selected_bases_iterator_next(BLI_Iterator *iter)
 {
-	object_bases_iterator_next(iter, BASE_SELECTED);
+	object_bases_iterator_next(iter, BASE_VISIBLE | BASE_SELECTED);
 }
 
 void BKE_view_layer_selected_bases_iterator_end(BLI_Iterator *iter)
@@ -1305,12 +1358,12 @@ void BKE_view_layer_selected_bases_iterator_end(BLI_Iterator *iter)
 
 void BKE_view_layer_visible_bases_iterator_begin(BLI_Iterator *iter, void *data_in)
 {
-	object_bases_iterator_begin(iter, data_in, BASE_VISIBLE);
+	object_bases_iterator_begin(iter, data_in, 0);
 }
 
 void BKE_view_layer_visible_bases_iterator_next(BLI_Iterator *iter)
 {
-	object_bases_iterator_next(iter, BASE_VISIBLE);
+	object_bases_iterator_next(iter, 0);
 }
 
 void BKE_view_layer_visible_bases_iterator_end(BLI_Iterator *iter)
@@ -1321,103 +1374,14 @@ void BKE_view_layer_visible_bases_iterator_end(BLI_Iterator *iter)
 /** \} */
 
 /* -------------------------------------------------------------------- */
-/** \name BKE_view_layer_renderable_objects_iterator
- * \{ */
-
-void BKE_view_layer_renderable_objects_iterator_begin(BLI_Iterator *iter, void *data_in)
-{
-	struct ObjectsRenderableIteratorData *data = data_in;
-
-	/* Tag objects to prevent going over the same object twice. */
-	for (Scene *scene = data->scene; scene; scene = scene->set) {
-		for (ViewLayer *view_layer = scene->view_layers.first; view_layer; view_layer = view_layer->next) {
-			for (Base *base = view_layer->object_bases.first; base; base = base->next) {
-				 base->object->id.flag |= LIB_TAG_DOIT;
-			}
-		}
-	}
-
-	ViewLayer *view_layer = data->scene->view_layers.first;
-	data->iter.view_layer = view_layer;
-
-	data->base_temp.next = view_layer->object_bases.first;
-	data->iter.base = &data->base_temp;
-
-	data->iter.set = NULL;
-
-	iter->data = data_in;
-	BKE_view_layer_renderable_objects_iterator_next(iter);
-}
-
-void BKE_view_layer_renderable_objects_iterator_next(BLI_Iterator *iter)
-{
-	/* Set it early in case we need to exit and we are running from within a loop. */
-	iter->skip = true;
-
-	struct ObjectsRenderableIteratorData *data = iter->data;
-	Base *base = data->iter.base->next;
-
-	/* There is still a base in the current scene layer. */
-	if (base != NULL) {
-		Object *ob = base->object;
-
-		/* We need to set the iter.base even if the rest fail otherwise
-		 * we keep checking the exactly same base over and over again. */
-		data->iter.base = base;
-
-		if (ob->id.flag & LIB_TAG_DOIT) {
-			ob->id.flag &= ~LIB_TAG_DOIT;
-
-			if ((base->flag & BASE_VISIBLE) != 0) {
-				iter->skip = false;
-				iter->current = ob;
-			}
-		}
-		return;
-	}
-
-	/* Time to go to the next scene layer. */
-	if (data->iter.set == NULL) {
-		while ((data->iter.view_layer = data->iter.view_layer->next)) {
-			ViewLayer *view_layer = data->iter.view_layer;
-			if (view_layer->flag & VIEW_LAYER_RENDER) {
-				data->base_temp.next = view_layer->object_bases.first;
-				data->iter.base = &data->base_temp;
-				return;
-			}
-		}
-
-		/* Setup the "set" for the next iteration. */
-		data->scene_temp.set = data->scene;
-		data->iter.set = &data->scene_temp;
-		return;
-	}
-
-	/* Look for an object in the next set. */
-	while ((data->iter.set = data->iter.set->set)) {
-		ViewLayer *view_layer = BKE_view_layer_default_render(data->iter.set);
-		data->base_temp.next = view_layer->object_bases.first;
-		data->iter.base = &data->base_temp;
-		return;
-	}
-
-	iter->valid = false;
-}
-
-void BKE_view_layer_renderable_objects_iterator_end(BLI_Iterator *UNUSED(iter))
-{
-	/* Do nothing - iter->data was static allocated, we can't free it. */
-}
-
-/** \} */
-
-/* -------------------------------------------------------------------- */
 /** \name BKE_view_layer_bases_in_mode_iterator
  * \{ */
 
 static bool base_is_in_mode(struct ObjectsInModeIteratorData *data, Base *base)
 {
-	return (base->object->type == data->object_type) && (base->object->mode & data->object_mode) != 0;
+	return BASE_VISIBLE(data->v3d, base) &&
+	       (base->object->type == data->object_type) &&
+	       (base->object->mode & data->object_mode) != 0;
 }
 
 void BKE_view_layer_bases_in_mode_iterator_begin(BLI_Iterator *iter, void *data_in)
@@ -1438,7 +1402,7 @@ void BKE_view_layer_bases_in_mode_iterator_begin(BLI_Iterator *iter, void *data_
 		data->object_type = base->object->type;
 	}
 
-	if (object_bases_iterator_is_valid(data->v3d, base) == false || !base_is_in_mode(data, base)) {
+	if (!base_is_in_mode(data, base)) {
 		BKE_view_layer_bases_in_mode_iterator_next(iter);
 	}
 }
@@ -1460,10 +1424,7 @@ void BKE_view_layer_bases_in_mode_iterator_next(BLI_Iterator *iter)
 	}
 
 	while (base) {
-		if ((base != data->base_active) &&
-		    base_is_in_mode(data, base) &&
-		    object_bases_iterator_is_valid(data->v3d, base))
-		{
+		if ((base != data->base_active) && base_is_in_mode(data, base)) {
 			iter->current = base;
 			return;
 		}
@@ -1481,18 +1442,46 @@ void BKE_view_layer_bases_in_mode_iterator_end(BLI_Iterator *UNUSED(iter))
 
 /* Evaluation  */
 
-void BKE_layer_eval_view_layer(
+/* Applies object's restrict flags on top of flags coming from the collection
+ * and stores those in base->flag. BASE_VISIBLE is based on viewport visibility. */
+void BKE_base_eval_flags(Base *base)
+{
+	/* Apply collection flags. */
+	base->flag &= ~g_base_collection_flags;
+	base->flag |= (base->flag_from_collection & g_base_collection_flags);
+
+	/* Apply object restrictions. */
+	const int object_restrict = base->object->restrictflag;
+	if (object_restrict & OB_RESTRICT_VIEW) {
+		base->flag &= ~BASE_ENABLED_VIEWPORT;
+	}
+	if (object_restrict & OB_RESTRICT_RENDER) {
+		base->flag &= ~BASE_ENABLED_RENDER;
+	}
+	if (object_restrict & OB_RESTRICT_SELECT) {
+		base->flag &= ~BASE_SELECTABLE;
+	}
+
+	/* Apply viewport visibility by default. The dependency graph for render
+	 * can change these again, but for tools we always want the viewport
+	 * visibility to be in sync regardless if depsgraph was evaluated. */
+	if (!(base->flag & BASE_ENABLED_VIEWPORT) || (base->flag & BASE_HIDDEN)) {
+		base->flag &= ~(BASE_VISIBLE | BASE_SELECTABLE);
+	}
+
+	/* Deselect unselectable objects. */
+	if (!(base->flag & BASE_SELECTABLE)) {
+		base->flag &= ~BASE_SELECTED;
+	}
+}
+
+static void layer_eval_view_layer(
         struct Depsgraph *depsgraph,
         struct Scene *UNUSED(scene),
         ViewLayer *view_layer)
 {
 	DEG_debug_print_eval(depsgraph, __func__, view_layer->name, view_layer);
 
-	/* Visibility based on depsgraph mode. */
-	const eEvaluationMode mode = DEG_get_mode(depsgraph);
-	const int base_visible_flag = (mode == DAG_EVAL_VIEWPORT)
-	        ? BASE_ENABLED_VIEWPORT
-	        : BASE_ENABLED_RENDER;
 	/* Create array of bases, for fast index-based lookup. */
 	const int num_object_bases = BLI_listbase_count(&view_layer->object_bases);
 	MEM_SAFE_FREE(view_layer->object_bases_array);
@@ -1500,34 +1489,7 @@ void BKE_layer_eval_view_layer(
 	        num_object_bases, sizeof(Base *), "view_layer->object_bases_array");
 	int base_index = 0;
 	for (Base *base = view_layer->object_bases.first; base; base = base->next) {
-		/* Compute visibility for depsgraph evaluation mode. */
-		if (base->flag & base_visible_flag) {
-			base->flag |= BASE_ENABLED | BASE_VISIBLE;
-			if (mode == DAG_EVAL_VIEWPORT && (base->flag & BASE_HIDDEN)) {
-				base->flag &= ~BASE_VISIBLE;
-			}
-		}
-		else {
-			base->flag &= ~(BASE_ENABLED | BASE_VISIBLE | BASE_SELECTABLE);
-		}
-		/* If base is not selectabled, clear select. */
-		if ((base->flag & BASE_SELECTABLE) == 0) {
-			base->flag &= ~BASE_SELECTED;
-		}
 		view_layer->object_bases_array[base_index++] = base;
-	}
-	/* Flush back base flag to the original view layer for editing. */
-	if (view_layer == DEG_get_evaluated_view_layer(depsgraph)) {
-		ViewLayer *view_layer_orig = DEG_get_input_view_layer(depsgraph);
-		Base *base_orig = view_layer_orig->object_bases.first;
-		const Base *base_eval = view_layer->object_bases.first;
-		while (base_orig != NULL) {
-			if (base_orig->flag & base_visible_flag) {
-				base_orig->flag = base_eval->flag;
-				base_eval = base_eval->next;
-			}
-			base_orig = base_orig->next;
-		}
 	}
 }
 
@@ -1539,5 +1501,5 @@ void BKE_layer_eval_view_layer_indexed(
 	BLI_assert(view_layer_index >= 0);
 	ViewLayer *view_layer = BLI_findlink(&scene->view_layers, view_layer_index);
 	BLI_assert(view_layer != NULL);
-	BKE_layer_eval_view_layer(depsgraph, scene, view_layer);
+	layer_eval_view_layer(depsgraph, scene, view_layer);
 }

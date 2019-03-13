@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,15 +15,10 @@
  *
  * The Original Code is Copyright (C) 2008 Blender Foundation.
  * All rights reserved.
- *
- *
- * Contributor(s): Blender Foundation
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file ED_view3d.h
- *  \ingroup editors
+/** \file
+ * \ingroup editors
  */
 
 #ifndef __ED_VIEW3D_H__
@@ -34,6 +27,7 @@
 /* ********* exports for space_view3d/ module ********** */
 struct ARegion;
 struct BMEdge;
+struct BMElem;
 struct BMFace;
 struct BMVert;
 struct BPoint;
@@ -41,8 +35,13 @@ struct Base;
 struct BezTriple;
 struct BoundBox;
 struct Camera;
+struct CustomData_MeshMasks;
 struct Depsgraph;
 struct EditBone;
+struct GPUFX;
+struct GPUFXSettings;
+struct GPUOffScreen;
+struct GPUViewport;
 struct ImBuf;
 struct MVert;
 struct Main;
@@ -53,24 +52,22 @@ struct RV3DMatrixStore;
 struct RegionView3D;
 struct RenderEngineType;
 struct Scene;
-struct ViewLayer;
 struct ScrArea;
 struct View3D;
 struct ViewContext;
+struct ViewLayer;
+struct WorkSpace;
 struct bContext;
 struct bPoseChannel;
 struct bScreen;
 struct rctf;
 struct rcti;
+struct wmGizmo;
 struct wmOperator;
 struct wmOperatorType;
 struct wmWindow;
 struct wmWindowManager;
-struct GPUFX;
-struct GPUOffScreen;
-struct GPUFXSettings;
-struct GPUViewport;
-struct WorkSpace;
+
 enum eGPUFXFlags;
 
 /* for derivedmesh drawing callbacks, for view3d_select, .... */
@@ -155,11 +152,16 @@ void  ED_view3d_depth_tag_update(struct RegionView3D *rv3d);
 /* return values for ED_view3d_project_...() */
 typedef enum {
 	V3D_PROJ_RET_OK   = 0,
-	V3D_PROJ_RET_CLIP_NEAR = 1,  /* can't avoid this when in perspective mode, (can't avoid) */
-	V3D_PROJ_RET_CLIP_ZERO = 2,  /* so close to zero we can't apply a perspective matrix usefully */
-	V3D_PROJ_RET_CLIP_BB   = 3,  /* bounding box clip - RV3D_CLIPPING */
-	V3D_PROJ_RET_CLIP_WIN  = 4,  /* outside window bounds */
-	V3D_PROJ_RET_OVERFLOW  = 5   /* outside range (mainly for short), (can't avoid) */
+	/** can't avoid this when in perspective mode, (can't avoid) */
+	V3D_PROJ_RET_CLIP_NEAR = 1,
+	/** so close to zero we can't apply a perspective matrix usefully */
+	V3D_PROJ_RET_CLIP_ZERO = 2,
+	/** bounding box clip - RV3D_CLIPPING */
+	V3D_PROJ_RET_CLIP_BB   = 3,
+	/** outside window bounds */
+	V3D_PROJ_RET_CLIP_WIN  = 4,
+	/** outside range (mainly for short), (can't avoid) */
+	V3D_PROJ_RET_OVERFLOW  = 5,
 } eV3DProjStatus;
 
 /* some clipping tests are optional */
@@ -168,7 +170,7 @@ typedef enum {
 	V3D_PROJ_TEST_CLIP_BB    = (1 << 0),
 	V3D_PROJ_TEST_CLIP_WIN   = (1 << 1),
 	V3D_PROJ_TEST_CLIP_NEAR  = (1 << 2),
-	V3D_PROJ_TEST_CLIP_ZERO  = (1 << 3)
+	V3D_PROJ_TEST_CLIP_ZERO  = (1 << 3),
 } eV3DProjTest;
 
 #define V3D_PROJ_TEST_CLIP_DEFAULT \
@@ -485,8 +487,12 @@ char ED_view3d_lock_view_from_index(int index);
 char ED_view3d_axis_view_opposite(char view);
 bool ED_view3d_lock(struct RegionView3D *rv3d);
 
-uint64_t ED_view3d_datamask(const struct Scene *scene, const struct View3D *v3d);
-uint64_t ED_view3d_screen_datamask(const struct Scene *scene, const struct bScreen *screen);
+void ED_view3d_datamask(
+        const struct bContext *C, const struct Scene *scene, const struct View3D *v3d,
+        struct CustomData_MeshMasks *r_cddata_masks);
+void ED_view3d_screen_datamask(
+        const struct bContext *C, const struct Scene *scene, const struct bScreen *screen,
+        struct CustomData_MeshMasks *r_cddata_masks);
 
 bool ED_view3d_offset_lock_check(const struct View3D *v3d, const struct RegionView3D *rv3d);
 void ED_view3d_persp_switch_from_camera(
@@ -546,13 +552,16 @@ void ED_view3d_shade_update(struct Main *bmain, struct View3D *v3d, struct ScrAr
 #define V3D_XRAY_FLAG(v3d)   (((v3d)->shading.type == OB_WIRE) ? V3D_SHADING_XRAY_BONE : V3D_SHADING_XRAY)
 #define V3D_IS_ZBUF(v3d)     (((v3d)->shading.flag & V3D_XRAY_FLAG(v3d)) == 0)
 
-void ED_view3d_id_remap(struct View3D *v3d, const struct ID *old_id, struct ID *new_id);
-
 /* view3d_draw_legacy.c */
 /* Try avoid using these more move out of legacy. */
 void ED_view3d_draw_bgpic_test(
         struct Scene *scene, struct Depsgraph *depsgraph,
         struct ARegion *ar, struct View3D *v3d,
         const bool do_foreground, const bool do_camera_frame);
+
+/* view3d_gizmo_preselect_type.c */
+void ED_view3d_gizmo_mesh_preselect_get_active(
+        struct bContext *C, struct wmGizmo *gz,
+        struct Base **r_base, struct BMElem **r_ele);
 
 #endif /* __ED_VIEW3D_H__ */

@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,28 +15,19 @@
  *
  * The Original Code is Copyright (C) 2005 by the Blender Foundation.
  * All rights reserved.
- *
- * Contributor(s): Daniel Dunbar
- *                 Ton Roosendaal,
- *                 Ben Batt,
- *                 Brecht Van Lommel,
- *                 Campbell Barton,
- *                 Patrice Bertrand
- *
- * ***** END GPL LICENSE BLOCK *****
- *
  */
 
-/** \file blender/modifiers/intern/MOD_array.c
- *  \ingroup modifiers
+/** \file
+ * \ingroup modifiers
  *
  * Array modifier: duplicates the object multiple times along an axis.
  */
 
 #include "MEM_guardedalloc.h"
 
-#include "BLI_math.h"
 #include "BLI_utildefines.h"
+
+#include "BLI_math.h"
 
 #include "DNA_curve_types.h"
 #include "DNA_mesh_types.h"
@@ -108,7 +97,7 @@ static void updateDepsgraph(ModifierData *md, const ModifierUpdateDepsgraphConte
 	if (amd->offset_ob != NULL) {
 		DEG_add_object_relation(ctx->node, amd->offset_ob, DEG_OB_COMP_TRANSFORM, "Array Modifier Offset");
 	}
-	DEG_add_object_relation(ctx->node, ctx->object, DEG_OB_COMP_TRANSFORM, "Array Modifier");
+	DEG_add_modifier_to_transform_relation(ctx->node, "Array Modifier");
 }
 
 BLI_INLINE float sum_v3(const float v[3])
@@ -372,7 +361,6 @@ static Mesh *arrayModifier_doArray(
 	int first_chunk_start, first_chunk_nverts, last_chunk_start, last_chunk_nverts;
 
 	Mesh *result, *start_cap_mesh = NULL, *end_cap_mesh = NULL;
-	bool start_cap_mesh_free, end_cap_mesh_free;
 
 	int *vgroup_start_cap_remap = NULL;
 	int vgroup_start_cap_remap_len = 0;
@@ -391,7 +379,7 @@ static Mesh *arrayModifier_doArray(
 		vgroup_start_cap_remap = BKE_object_defgroup_index_map_create(
 		                             start_cap_ob, ctx->object, &vgroup_start_cap_remap_len);
 
-		start_cap_mesh = BKE_modifier_get_evaluated_mesh_from_evaluated_object(start_cap_ob, &start_cap_mesh_free);
+		start_cap_mesh = BKE_modifier_get_evaluated_mesh_from_evaluated_object(start_cap_ob, false);
 		if (start_cap_mesh) {
 			start_cap_nverts = start_cap_mesh->totvert;
 			start_cap_nedges = start_cap_mesh->totedge;
@@ -404,7 +392,7 @@ static Mesh *arrayModifier_doArray(
 		vgroup_end_cap_remap = BKE_object_defgroup_index_map_create(
 		                           end_cap_ob, ctx->object, &vgroup_end_cap_remap_len);
 
-		end_cap_mesh = BKE_modifier_get_evaluated_mesh_from_evaluated_object(end_cap_ob, &end_cap_mesh_free);
+		end_cap_mesh = BKE_modifier_get_evaluated_mesh_from_evaluated_object(end_cap_ob, false);
 		if (end_cap_mesh) {
 			end_cap_nverts = end_cap_mesh->totvert;
 			end_cap_nedges = end_cap_mesh->totedge;
@@ -739,12 +727,6 @@ static Mesh *arrayModifier_doArray(
 	}
 	if (vgroup_end_cap_remap) {
 		MEM_freeN(vgroup_end_cap_remap);
-	}
-	if (start_cap_mesh != NULL && start_cap_mesh_free) {
-		BKE_id_free(NULL, start_cap_mesh);
-	}
-	if (end_cap_mesh != NULL && end_cap_mesh_free) {
-		BKE_id_free(NULL, end_cap_mesh);
 	}
 
 	return result;

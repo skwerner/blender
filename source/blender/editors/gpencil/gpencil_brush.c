@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,11 @@
  *
  * The Original Code is Copyright (C) 2015, Blender Foundation
  * This is a new part of Blender
- *
- * Contributor(s): Joshua Leung, Antonio Vazquez
- *
- * ***** END GPL LICENSE BLOCK *****
- *
  * Brush based operators for editing Grease Pencil strokes
  */
 
-/** \file blender/editors/gpencil/gpencil_brush.c
- *  \ingroup edgpencil
+/** \file
+ * \ingroup edgpencil
  */
 
 
@@ -63,7 +56,6 @@
 #include "BKE_material.h"
 #include "BKE_object_deform.h"
 #include "BKE_report.h"
-#include "BKE_screen.h"
 
 #include "UI_interface.h"
 
@@ -224,13 +216,13 @@ static GP_Sculpt_Data *gpsculpt_get_brush(Scene *scene, bool is_weight_mode)
 
 /* Brush Operations ------------------------------- */
 
-/* Invert behaviour of brush? */
+/* Invert behavior of brush? */
 static bool gp_brush_invert_check(tGP_BrushEditData *gso)
 {
 	/* The basic setting is the brush's setting (from the panel) */
 	bool invert = ((gso->gp_brush->flag & GP_SCULPT_FLAG_INVERT) != 0);
 
-	/* During runtime, the user can hold down the Ctrl key to invert the basic behaviour */
+	/* During runtime, the user can hold down the Ctrl key to invert the basic behavior */
 	if (gso->flag & GP_SCULPT_FLAG_INVERT) {
 		invert ^= true;
 	}
@@ -319,7 +311,7 @@ static bool gp_brush_smooth_apply(
 		BKE_gpencil_smooth_stroke_uv(gps, pt_index, inf);
 	}
 
-	gps->flag |= GP_STROKE_RECALC_CACHES;
+	gps->flag |= GP_STROKE_RECALC_GEOMETRY;
 
 	return true;
 }
@@ -535,7 +527,7 @@ static void gp_brush_grab_apply_cached(
 		/* compute lock axis */
 		gpsculpt_compute_lock_axis(gso, pt, save_pt);
 	}
-	gps->flag |= GP_STROKE_RECALC_CACHES;
+	gps->flag |= GP_STROKE_RECALC_GEOMETRY;
 }
 
 /* free customdata used for handling this stroke */
@@ -575,7 +567,7 @@ static bool gp_brush_push_apply(
 	/* compute lock axis */
 	gpsculpt_compute_lock_axis(gso, pt, save_pt);
 
-	gps->flag |= GP_STROKE_RECALC_CACHES;
+	gps->flag |= GP_STROKE_RECALC_GEOMETRY;
 
 	/* done */
 	return true;
@@ -661,7 +653,7 @@ static bool gp_brush_pinch_apply(
 	/* compute lock axis */
 	gpsculpt_compute_lock_axis(gso, pt, save_pt);
 
-	gps->flag |= GP_STROKE_RECALC_CACHES;
+	gps->flag |= GP_STROKE_RECALC_GEOMETRY;
 
 	/* done */
 	return true;
@@ -707,7 +699,8 @@ static bool gp_brush_twist_apply(
 		axis_angle_normalized_to_mat3(rmat, axis, angle);
 
 		/* Rotate point (no matrix-space transforms needed, as GP points are in world space) */
-		sub_v3_v3v3(vec, &pt->x, gso->dvec); /* make relative to center (center is stored in dvec) */
+		sub_v3_v3v3(vec, &pt->x, gso->dvec); /* make relative to center
+		                                      * (center is stored in dvec) */
 		mul_m3_v3(rmat, vec);
 		add_v3_v3v3(&pt->x, vec, gso->dvec); /* restore */
 
@@ -743,7 +736,7 @@ static bool gp_brush_twist_apply(
 		}
 	}
 
-	gps->flag |= GP_STROKE_RECALC_CACHES;
+	gps->flag |= GP_STROKE_RECALC_GEOMETRY;
 
 	/* done */
 	return true;
@@ -867,7 +860,7 @@ static bool gp_brush_randomize_apply(
 		CLAMP(pt->uv_rot, -M_PI_2, M_PI_2);
 	}
 
-	gps->flag |= GP_STROKE_RECALC_CACHES;
+	gps->flag |= GP_STROKE_RECALC_GEOMETRY;
 
 	/* done */
 	return true;
@@ -914,7 +907,7 @@ static bool gp_brush_weight_apply(
 	}
 
 	/* verify target weight */
-	CLAMP_MAX(curweight, gso->gp_brush->target_weight);
+	CLAMP_MAX(curweight, gso->gp_brush->weight);
 
 	CLAMP(curweight, 0.0f, 1.0f);
 	if (dw) {
@@ -1252,9 +1245,8 @@ static bool gpsculpt_brush_init(bContext *C, wmOperator *op)
 	gso->is_multiframe = (bool)GPENCIL_MULTIEDIT_SESSIONS_ON(gso->gpd);
 	gso->use_multiframe_falloff = (ts->gp_sculpt.flag & GP_SCULPT_SETT_FLAG_FRAME_FALLOFF) != 0;
 
-	/* init multiedit falloff curve data before doing anything,
-	 * so we won't have to do it again later
-	 */
+	/* Init multi-edit falloff curve data before doing anything,
+	 * so we won't have to do it again later. */
 	if (gso->is_multiframe) {
 		curvemapping_initialize(ts->gp_sculpt.cur_falloff);
 	}
@@ -1609,7 +1601,7 @@ static bool gpsculpt_brush_do_frame(
 		}
 		/* Triangulation must be calculated if changed */
 		if (changed) {
-			gps->flag |= GP_STROKE_RECALC_CACHES;
+			gps->flag |= GP_STROKE_RECALC_GEOMETRY;
 			gps->tot_triangles = 0;
 		}
 	}

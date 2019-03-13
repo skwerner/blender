@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,33 +15,26 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 #ifndef __BKE_CURVE_H__
 #define __BKE_CURVE_H__
 
-/** \file BKE_curve.h
- *  \ingroup bke
- *  \since March 2001
- *  \author nzc
+/** \file
+ * \ingroup bke
  */
 
 struct BezTriple;
 struct Curve;
-struct EditNurb;
 struct Depsgraph;
+struct EditNurb;
 struct GHash;
+struct LinkNode;
 struct ListBase;
 struct Main;
 struct Nurb;
 struct Object;
-struct Scene;
 struct Path;
+struct Scene;
 struct TextBox;
 struct rctf;
 
@@ -130,7 +121,8 @@ void BKE_curve_bevelList_free(struct ListBase *bev);
 void BKE_curve_bevelList_make(struct Object *ob, struct ListBase *nurbs, bool for_render);
 void BKE_curve_bevel_make(
         struct Depsgraph *depsgraph, struct Scene *scene, struct Object *ob,  struct ListBase *disp,
-        const bool for_render, const bool use_render_resolution);
+        const bool for_render, const bool use_render_resolution,
+        struct LinkNode *ob_cyclic_list);
 
 void BKE_curve_forward_diff_bezier(float q0, float q1, float q2, float q3, float *p, int it, int stride);
 void BKE_curve_forward_diff_tangent_bezier(float q0, float q1, float q2, float q3, float *p, int it, int stride);
@@ -243,5 +235,8 @@ unsigned int BKE_curve_decimate_bezt_array(
 void BKE_curve_decimate_nurb(
         struct Nurb *nu, const unsigned int resolu,
         const float error_sq_max, const unsigned int error_target_len);
+
+extern void (*BKE_curve_batch_cache_dirty_tag_cb)(struct Curve *cu, int mode);
+extern void (*BKE_curve_batch_cache_free_cb)(struct Curve *cu);
 
 #endif  /* __BKE_CURVE_H__ */

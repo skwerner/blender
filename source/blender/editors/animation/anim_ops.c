@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,15 +15,10 @@
  *
  * The Original Code is Copyright (C) 2008 Blender Foundation.
  * All rights reserved.
- *
- *
- * Contributor(s): Blender Foundation, Joshua Leung
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/animation/anim_ops.c
- *  \ingroup edanimation
+/** \file
+ * \ingroup edanimation
  */
 
 
@@ -79,7 +72,7 @@ static bool change_frame_poll(bContext *C)
 		if (ELEM(sa->spacetype, SPACE_ACTION, SPACE_NLA, SPACE_SEQ, SPACE_CLIP)) {
 			return true;
 		}
-		else if (sa->spacetype == SPACE_IPO) {
+		else if (sa->spacetype == SPACE_GRAPH) {
 			/* NOTE: Graph Editor has special version which does some extra stuff.
 			 * No need to show the generic error message for that case though!
 			 */
@@ -294,7 +287,7 @@ static bool anim_set_end_frames_poll(bContext *C)
 	 * this shouldn't show up in 3D editor (or others without 2D timeline view) via search
 	 */
 	if (sa) {
-		if (ELEM(sa->spacetype, SPACE_ACTION, SPACE_IPO, SPACE_NLA, SPACE_SEQ, SPACE_CLIP)) {
+		if (ELEM(sa->spacetype, SPACE_ACTION, SPACE_GRAPH, SPACE_NLA, SPACE_SEQ, SPACE_CLIP)) {
 			return true;
 		}
 	}

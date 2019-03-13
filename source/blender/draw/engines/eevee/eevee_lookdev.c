@@ -1,6 +1,4 @@
 /*
- * Copyright 2016, Blender Foundation.
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -15,12 +13,11 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
- * Contributor(s): Blender Institute
- *
+ * Copyright 2016, Blender Foundation.
  */
 
-/** \file eevee_lookdev.c
- *  \ingroup draw_engine
+/** \file
+ * \ingroup draw_engine
  */
 #include "DRW_render.h"
 
@@ -55,6 +52,7 @@ static void eevee_lookdev_lightcache_delete(EEVEE_Data *vedata)
 
 void EEVEE_lookdev_cache_init(
         EEVEE_Data *vedata, DRWShadingGroup **grp, DRWPass *pass,
+        float background_alpha,
         World *UNUSED(world), EEVEE_LightProbesInfo *pinfo)
 {
 	EEVEE_StorageList *stl = vedata->stl;
@@ -109,7 +107,7 @@ void EEVEE_lookdev_cache_init(
 			stl->g_data->light_cache = stl->lookdev_lightcache;
 
 			static float background_color[4];
-			UI_GetThemeColor4fv(TH_HIGH_GRAD, background_color);
+			UI_GetThemeColor4fv(TH_BACK, background_color);
 			/* XXX: Really quick conversion to avoid washed out background.
 			 * Needs to be addressed properly (color managed using ocio). */
 			srgb_to_linearrgb_v4(background_color, background_color);
@@ -117,7 +115,7 @@ void EEVEE_lookdev_cache_init(
 			*grp = DRW_shgroup_create(shader, pass);
 			axis_angle_to_mat3_single(stl->g_data->studiolight_matrix, 'Z', v3d->shading.studiolight_rot_z);
 			DRW_shgroup_uniform_mat3(*grp, "StudioLightMatrix", stl->g_data->studiolight_matrix);
-			DRW_shgroup_uniform_float(*grp, "backgroundAlpha", &stl->g_data->background_alpha, 1);
+			DRW_shgroup_uniform_float_copy(*grp, "backgroundAlpha", background_alpha);
 			DRW_shgroup_uniform_vec3(*grp, "color", background_color, 1);
 			DRW_shgroup_call_add(*grp, geom, NULL);
 			if (!pinfo) {
@@ -191,8 +189,8 @@ void EEVEE_lookdev_draw_background(EEVEE_Data *vedata)
 		params.offsety = 0.0f;
 		params.shiftx = 0.0f;
 		params.shifty = 0.0f;
-		params.clipsta = 0.001f;
-		params.clipend = 20.0f;
+		params.clip_start = 0.001f;
+		params.clip_end = 20.0f;
 		BKE_camera_params_compute_viewplane(&params, ar->winx, ar->winy, aspect[0], aspect[1]);
 		BKE_camera_params_compute_matrix(&params);
 

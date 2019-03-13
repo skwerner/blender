@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,11 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * Contributor(s): Blender Foundation, 2002-2008 full recode
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/object/object_select.c
- *  \ingroup edobj
+/** \file
+ * \ingroup edobj
  */
-
 
 #include <ctype.h>
 #include <stdio.h>
@@ -39,7 +32,7 @@
 #include "DNA_modifier_types.h"
 #include "DNA_scene_types.h"
 #include "DNA_armature_types.h"
-#include "DNA_lamp_types.h"
+#include "DNA_light_types.h"
 #include "DNA_workspace_types.h"
 #include "DNA_gpencil_types.h"
 
@@ -72,6 +65,7 @@
 
 #include "WM_api.h"
 #include "WM_types.h"
+#include "WM_message.h"
 
 #include "ED_armature.h"
 #include "ED_object.h"
@@ -88,7 +82,9 @@
 
 #include "object_intern.h"
 
-/************************ Exported **************************/
+/* -------------------------------------------------------------------- */
+/** \name Public Object Selection API
+ * \{ */
 
 /* simple API for object selection, rather than just using the flag
  * this takes into account the 'restrict selection in 3d view' flag.
@@ -126,11 +122,13 @@ void ED_object_base_select(Base *base, eObjectSelect_Mode mode)
  */
 void ED_object_base_activate(bContext *C, Base *base)
 {
+	struct wmMsgBus *mbus = CTX_wm_message_bus(C);
 	Scene *scene = CTX_data_scene(C);
 	ViewLayer *view_layer = CTX_data_view_layer(C);
 	view_layer->basact = base;
 
 	WM_event_add_notifier(C, NC_SCENE | ND_OB_ACTIVE, scene);
+	WM_msg_publish_rna_prop(mbus, &scene->id, view_layer, LayerObjects, active);
 	DEG_id_tag_update(&CTX_data_scene(C)->id, ID_RECALC_SELECT);
 }
 
@@ -195,7 +193,11 @@ bool ED_object_base_deselect_all(ViewLayer *view_layer, View3D *v3d, int action)
 	return ED_object_base_deselect_all_ex(view_layer, v3d, action, NULL);
 }
 
-/********************** Jump To Object Utilities **********************/
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Jump To Object Utilities
+ * \{ */
 
 static int get_base_select_priority(Base *base)
 {
@@ -370,7 +372,11 @@ bool ED_object_jump_to_bone(
 	return false;
 }
 
-/********************** Selection Operators **********************/
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Select Operator Utils
+ * \{ */
 
 static bool objects_selectable_poll(bContext *C)
 {
@@ -386,7 +392,11 @@ static bool objects_selectable_poll(bContext *C)
 	return 1;
 }
 
-/************************ Select by Type *************************/
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Select by Type
+ * \{ */
 
 static int object_select_by_type_exec(bContext *C, wmOperator *op)
 {
@@ -434,9 +444,14 @@ void OBJECT_OT_select_by_type(wmOperatorType *ot)
 	/* properties */
 	RNA_def_boolean(ot->srna, "extend", false, "Extend", "Extend selection instead of deselecting everything first");
 	ot->prop = RNA_def_enum(ot->srna, "type", rna_enum_object_type_items, 1, "Type", "");
+	RNA_def_property_translation_context(ot->prop, BLT_I18NCONTEXT_ID_ID);
 }
 
-/*********************** Selection by Links *********************/
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Selection by Links
+ * \{ */
 
 enum {
 	OBJECT_SELECT_LINKED_IPO = 1,
@@ -445,7 +460,7 @@ enum {
 	OBJECT_SELECT_LINKED_DUPGROUP,
 	OBJECT_SELECT_LINKED_PARTICLE,
 	OBJECT_SELECT_LINKED_LIBRARY,
-	OBJECT_SELECT_LINKED_LIBRARY_OBDATA
+	OBJECT_SELECT_LINKED_LIBRARY_OBDATA,
 };
 
 static const EnumPropertyItem prop_select_linked_types[] = {
@@ -456,7 +471,7 @@ static const EnumPropertyItem prop_select_linked_types[] = {
 	{OBJECT_SELECT_LINKED_PARTICLE, "PARTICLE", 0, "Particle System", ""},
 	{OBJECT_SELECT_LINKED_LIBRARY, "LIBRARY", 0, "Library", ""},
 	{OBJECT_SELECT_LINKED_LIBRARY_OBDATA, "LIBRARY_OBDATA", 0, "Library (Object Data)", ""},
-	{0, NULL, 0, NULL, NULL}
+	{0, NULL, 0, NULL, NULL},
 };
 
 static bool object_select_all_by_obdata(bContext *C, void *obdata)
@@ -503,16 +518,16 @@ static bool object_select_all_by_material(bContext *C, Material *mat)
 	return changed;
 }
 
-static bool object_select_all_by_dup_group(bContext *C, Object *ob)
+static bool object_select_all_by_instance_collection(bContext *C, Object *ob)
 {
 	bool changed = false;
-	Collection *dup_group = (ob->transflag & OB_DUPLICOLLECTION) ? ob->dup_group : NULL;
+	Collection *instance_collection = (ob->transflag & OB_DUPLICOLLECTION) ? ob->instance_collection : NULL;
 
 	CTX_DATA_BEGIN (C, Base *, base, visible_bases)
 	{
 		if (((base->flag & BASE_SELECTED) == 0) && ((base->flag & BASE_SELECTABLE) != 0)) {
-			Collection *dup_group_other = (base->object->transflag & OB_DUPLICOLLECTION) ? base->object->dup_group : NULL;
-			if (dup_group == dup_group_other) {
+			Collection *instance_collection_other = (base->object->transflag & OB_DUPLICOLLECTION) ? base->object->instance_collection : NULL;
+			if (instance_collection == instance_collection_other) {
 				ED_object_base_select(base, BA_SELECT);
 				changed = true;
 			}
@@ -652,10 +667,10 @@ static int object_select_linked_exec(bContext *C, wmOperator *op)
 		changed = object_select_all_by_material(C, mat);
 	}
 	else if (nr == OBJECT_SELECT_LINKED_DUPGROUP) {
-		if (ob->dup_group == NULL)
+		if (ob->instance_collection == NULL)
 			return OPERATOR_CANCELLED;
 
-		changed = object_select_all_by_dup_group(C, ob);
+		changed = object_select_all_by_instance_collection(C, ob);
 	}
 	else if (nr == OBJECT_SELECT_LINKED_PARTICLE) {
 		if (BLI_listbase_is_empty(&ob->particlesystem))
@@ -705,7 +720,11 @@ void OBJECT_OT_select_linked(wmOperatorType *ot)
 	ot->prop = RNA_def_enum(ot->srna, "type", prop_select_linked_types, 0, "Type", "");
 }
 
-/*********************** Selected Grouped ********************/
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Selected Grouped
+ * \{ */
 
 enum {
 	OBJECT_GRPSEL_CHILDREN_RECURSIVE =  0,
@@ -733,7 +752,7 @@ static const EnumPropertyItem prop_select_grouped_types[] = {
 	{OBJECT_GRPSEL_COLOR, "COLOR", 0, "Color", "Object Color"},
 	{OBJECT_GRPSEL_KEYINGSET, "KEYINGSET", 0, "Keying Set", "Objects included in active Keying Set"},
 	{OBJECT_GRPSEL_LIGHT_TYPE, "LIGHT_TYPE", 0, "Light Type", "Matching light types"},
-	{0, NULL, 0, NULL, NULL}
+	{0, NULL, 0, NULL, NULL},
 };
 
 static bool select_grouped_children(bContext *C, Object *ob, const bool recursive)
@@ -781,7 +800,8 @@ static bool select_grouped_parent(bContext *C) /* Makes parent active and de-sel
 
 
 #define COLLECTION_MENU_MAX  24
-static bool select_grouped_collection(bContext *C, Object *ob)  /* Select objects in the same group as the active */
+/* Select objects in the same group as the active */
+static bool select_grouped_collection(bContext *C, Object *ob)
 {
 	bool changed = false;
 	Collection *collection, *ob_collections[COLLECTION_MENU_MAX];
@@ -789,7 +809,7 @@ static bool select_grouped_collection(bContext *C, Object *ob)  /* Select object
 	uiPopupMenu *pup;
 	uiLayout *layout;
 
-	for (collection = CTX_data_main(C)->collection.first; collection && collection_count < COLLECTION_MENU_MAX; collection = collection->id.next) {
+	for (collection = CTX_data_main(C)->collections.first; collection && collection_count < COLLECTION_MENU_MAX; collection = collection->id.next) {
 		if (BKE_collection_has_object(collection, ob)) {
 			ob_collections[collection_count] = collection;
 			collection_count++;
@@ -867,16 +887,16 @@ static bool select_grouped_siblings(bContext *C, Object *ob)
 	CTX_DATA_END;
 	return changed;
 }
-static bool select_grouped_lamptype(bContext *C, Object *ob)
+static bool select_grouped_lighttype(bContext *C, Object *ob)
 {
-	Lamp *la = ob->data;
+	Light *la = ob->data;
 
 	bool changed = false;
 
 	CTX_DATA_BEGIN (C, Base *, base, selectable_bases)
 	{
 		if (base->object->type == OB_LAMP) {
-			Lamp *la_test = base->object->data;
+			Light *la_test = base->object->data;
 			if ((la->type == la_test->type) && ((base->flag & BASE_SELECTED) == 0)) {
 				ED_object_base_select(base, BA_SELECT);
 				changed = true;
@@ -922,7 +942,7 @@ static bool select_grouped_color(bContext *C, Object *ob)
 
 	CTX_DATA_BEGIN (C, Base *, base, selectable_bases)
 	{
-		if (((base->flag & BASE_SELECTED) == 0) && (compare_v3v3(base->object->col, ob->col, 0.005f))) {
+		if (((base->flag & BASE_SELECTED) == 0) && (compare_v3v3(base->object->color, ob->color, 0.005f))) {
 			ED_object_base_select(base, BA_SELECT);
 			changed = true;
 		}
@@ -1039,7 +1059,7 @@ static int object_select_grouped_exec(bContext *C, wmOperator *op)
 				BKE_report(op->reports, RPT_ERROR, "Active object must be a light");
 				break;
 			}
-			changed |= select_grouped_lamptype(C, ob);
+			changed |= select_grouped_lighttype(C, ob);
 			break;
 		default:
 			break;
@@ -1074,7 +1094,11 @@ void OBJECT_OT_select_grouped(wmOperatorType *ot)
 	ot->prop = RNA_def_enum(ot->srna, "type", prop_select_grouped_types, 0, "Type", "");
 }
 
-/**************************** (De)select All ****************************/
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name (De)select All
+ * \{ */
 
 static int object_select_all_exec(bContext *C, wmOperator *op)
 {
@@ -1120,7 +1144,11 @@ void OBJECT_OT_select_all(wmOperatorType *ot)
 	WM_operator_properties_select_all(ot);
 }
 
-/**************************** Select In The Same Collection ****************************/
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Select In The Same Collection
+ * \{ */
 
 static int object_select_same_collection_exec(bContext *C, wmOperator *op)
 {
@@ -1174,7 +1202,12 @@ void OBJECT_OT_select_same_collection(wmOperatorType *ot)
 	RNA_def_string(ot->srna, "collection", NULL, MAX_ID_NAME, "Collection", "Name of the collection to select");
 }
 
-/**************************** Select Mirror ****************************/
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Select Mirror
+ * \{ */
+
 static int object_select_mirror_exec(bContext *C, wmOperator *op)
 {
 	Main *bmain = CTX_data_main(C);
@@ -1231,7 +1264,9 @@ void OBJECT_OT_select_mirror(wmOperatorType *ot)
 	RNA_def_boolean(ot->srna, "extend", 0, "Extend", "Extend selection instead of deselecting everything first");
 }
 
+/** \} */
 
+/* -------------------------------------------------------------------- */
 /** \name Select More/Less
  * \{ */
 
@@ -1259,7 +1294,6 @@ static bool object_select_more_less(bContext *C, const bool select)
 		ob->flag |= OB_DONE;
 	}
 	CTX_DATA_END;
-
 
 
 	for (ctx_base = ctx_base_list.first; ctx_base; ctx_base = ctx_base->next) {
@@ -1352,8 +1386,9 @@ void OBJECT_OT_select_less(wmOperatorType *ot)
 
 /** \} */
 
-
-/**************************** Select Random ****************************/
+/* -------------------------------------------------------------------- */
+/** \name Select Random
+ * \{ */
 
 static int object_select_random_exec(bContext *C, wmOperator *op)
 {
@@ -1398,3 +1433,5 @@ void OBJECT_OT_select_random(wmOperatorType *ot)
 	/* properties */
 	WM_operator_properties_select_random(ot);
 }
+
+/** \} */

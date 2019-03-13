@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,13 +15,10 @@
  *
  * The Original Code is Copyright (C) 2008 Blender Foundation.
  * All rights reserved.
- *
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/screen/screen_ops.c
- *  \ingroup edscr
+/** \file
+ * \ingroup edscr
  */
 
 
@@ -211,7 +206,7 @@ bool ED_operator_animview_active(bContext *C)
 {
 	if (ED_operator_areaactive(C)) {
 		SpaceLink *sl = (SpaceLink *)CTX_wm_space_data(C);
-		if (sl && (ELEM(sl->spacetype, SPACE_SEQ, SPACE_ACTION, SPACE_NLA, SPACE_IPO)))
+		if (sl && (ELEM(sl->spacetype, SPACE_SEQ, SPACE_ACTION, SPACE_NLA, SPACE_GRAPH)))
 			return true;
 	}
 
@@ -249,7 +244,7 @@ bool ED_operator_action_active(bContext *C)
 
 bool ED_operator_buttons_active(bContext *C)
 {
-	return ed_spacetype_test(C, SPACE_BUTS);
+	return ed_spacetype_test(C, SPACE_PROPERTIES);
 }
 
 bool ED_operator_node_active(bContext *C)
@@ -274,7 +269,7 @@ bool ED_operator_node_editable(bContext *C)
 
 bool ED_operator_graphedit_active(bContext *C)
 {
-	return ed_spacetype_test(C, SPACE_IPO);
+	return ed_spacetype_test(C, SPACE_GRAPH);
 }
 
 bool ED_operator_sequencer_active(bContext *C)
@@ -650,15 +645,17 @@ typedef struct sActionzoneData {
 static bool actionzone_area_poll(bContext *C)
 {
 	wmWindow *win = CTX_wm_window(C);
-	ScrArea *sa = CTX_wm_area(C);
+	bScreen *screen = WM_window_get_active_screen(win);
 
-	if (sa && win && win->eventstate) {
+	if (screen && win && win->eventstate) {
 		const int *xy = &win->eventstate->x;
 		AZone *az;
 
-		for (az = sa->actionzones.first; az; az = az->next)
-			if (BLI_rcti_isect_pt_v(&az->rect, xy))
-				return 1;
+		for (ScrArea *sa = screen->areabase.first; sa; sa = sa->next) {
+			for (az = sa->actionzones.first; az; az = az->next)
+				if (BLI_rcti_isect_pt_v(&az->rect, xy))
+					return 1;
+		}
 	}
 	return 0;
 }
@@ -688,11 +685,7 @@ static AZone *area_actionzone_refresh_xy(ScrArea *sa, const int xy[2], const boo
 	for (az = sa->actionzones.first; az; az = az->next) {
 		if (BLI_rcti_isect_pt_v(&az->rect, xy)) {
 			if (az->type == AZONE_AREA) {
-				/* no triangle intersect but a hotspot circle based on corner */
-				int radius_sq = SQUARE(xy[0] - az->x1) + SQUARE(xy[1] - az->y1);
-				if (radius_sq <= SQUARE(AZONESPOT)) {
-					break;
-				}
+				break;
 			}
 			else if (az->type == AZONE_REGION) {
 				break;
@@ -713,7 +706,7 @@ static AZone *area_actionzone_refresh_xy(ScrArea *sa, const int xy[2], const boo
 					}
 					else {
 						const int mouse_sq = SQUARE(xy[0] - az->x2) + SQUARE(xy[1] - az->y2);
-						const int spot_sq = SQUARE(AZONESPOT);
+						const int spot_sq = SQUARE(AZONESPOTW);
 						const int fadein_sq = SQUARE(AZONEFADEIN);
 						const int fadeout_sq = SQUARE(AZONEFADEOUT);
 
@@ -802,9 +795,60 @@ static AZone *area_actionzone_refresh_xy(ScrArea *sa, const int xy[2], const boo
 				}
 			}
 		}
+		else if (!test_only && !IS_EQF(az->alpha, 0.0f)) {
+			bool changed = false;
+
+			if (az->type == AZONE_FULLSCREEN) {
+				az->alpha = 0.0f;
+				changed = true;
+			}
+			else if (az->type == AZONE_REGION_SCROLL) {
+				if (az->direction == AZ_SCROLL_VERT) {
+					az->alpha = az->ar->v2d.alpha_vert = 0;
+					changed = true;
+				}
+				else if (az->direction == AZ_SCROLL_HOR) {
+					az->alpha = az->ar->v2d.alpha_hor = 0;
+					changed = true;
+				}
+				else {
+					BLI_assert(0);
+				}
+			}
+
+			if (changed) {
+				sa->flag &= ~AREA_FLAG_ACTIONZONES_UPDATE;
+				ED_area_tag_redraw_no_rebuild(sa);
+			}
+		}
 	}
 
 	return az;
+}
+
+/* Finds an actionzone by position in entire screen so azones can overlap */
+static AZone *screen_actionzone_find_xy(bScreen *sc, const int xy[2])
+{
+	for (ScrArea *sa = sc->areabase.first; sa; sa = sa->next) {
+		AZone *az = area_actionzone_refresh_xy(sa, xy, true);
+		if (az != NULL) {
+			return az;
+		}
+	}
+	return NULL;
+}
+
+/* Returns the area that the azone belongs to */
+static ScrArea *screen_actionzone_area(bScreen *sc, const AZone *az)
+{
+	for (ScrArea *area = sc->areabase.first; area; area = area->next) {
+		for (AZone *zone = area->actionzones.first; zone; zone = zone->next) {
+			if (zone == az) {
+				return area;
+			}
+		}
+	}
+	return NULL;
 }
 
 AZone *ED_area_actionzone_find_xy(ScrArea *sa, const int xy[2])
@@ -812,7 +856,7 @@ AZone *ED_area_actionzone_find_xy(ScrArea *sa, const int xy[2])
 	return area_actionzone_refresh_xy(sa, xy, true);
 }
 
-AZone *ED_area_actionzone_refresh_xy(ScrArea *sa, const int xy[2])
+AZone *ED_area_azones_update(ScrArea *sa, const int xy[2])
 {
 	return area_actionzone_refresh_xy(sa, xy, false);
 }
@@ -852,8 +896,8 @@ static void actionzone_apply(bContext *C, wmOperator *op, int type)
 
 static int actionzone_invoke(bContext *C, wmOperator *op, const wmEvent *event)
 {
-	ScrArea *sa = CTX_wm_area(C);
-	AZone *az = ED_area_actionzone_find_xy(sa, &event->x);
+	bScreen *sc = CTX_wm_screen(C);
+	AZone *az = screen_actionzone_find_xy(sc, &event->x);
 	sActionzoneData *sad;
 
 	/* quick escape - Scroll azones only hide/unhide the scroll-bars, they have their own handling. */
@@ -862,7 +906,7 @@ static int actionzone_invoke(bContext *C, wmOperator *op, const wmEvent *event)
 
 	/* ok we do the actionzone */
 	sad = op->customdata = MEM_callocN(sizeof(sActionzoneData), "sActionzoneData");
-	sad->sa1 = sa;
+	sad->sa1 = screen_actionzone_area(sc, az);
 	sad->az = az;
 	sad->x = event->x; sad->y = event->y;
 
@@ -894,10 +938,18 @@ static int actionzone_modal(bContext *C, wmOperator *op, const wmEvent *event)
 			const int delta_x = (event->x - sad->x);
 			const int delta_y = (event->y - sad->y);
 
-			/* calculate gesture direction */
+			/* Movement in dominant direction. */
+			const int delta_max = max_ii(ABS(delta_x), ABS(delta_y));
+
+			/* Movement in dominant direction before action taken. */
+			const int join_threshold  = (0.6 * U.widget_unit);
+			const int split_threshold = (1.2 * U.widget_unit);
+			const int area_threshold  = (0.1 * U.widget_unit);
+
+			/* Calculate gesture cardinal direction. */
 			if (delta_y > ABS(delta_x))
 				sad->gesture_dir = 'n';
-			else if (delta_x > ABS(delta_y))
+			else if (delta_x >= ABS(delta_y))
 				sad->gesture_dir = 'e';
 			else if (delta_y < -ABS(delta_x))
 				sad->gesture_dir = 's';
@@ -905,19 +957,42 @@ static int actionzone_modal(bContext *C, wmOperator *op, const wmEvent *event)
 				sad->gesture_dir = 'w';
 
 			if (sad->az->type == AZONE_AREA) {
-				const wmWindow *win = CTX_wm_window(C);
+				wmWindow *win = CTX_wm_window(C);
 				rcti screen_rect;
 
 				WM_window_screen_rect_calc(win, &screen_rect);
-				/* once we drag outside the actionzone, register a gesture
-				 * check we're not on an edge so join finds the other area */
-				is_gesture = ((ED_area_actionzone_find_xy(sad->sa1, &event->x) != sad->az) &&
-				              (screen_geom_area_map_find_active_scredge(
-				                   AREAMAP_FROM_SCREEN(sc), &screen_rect, event->x, event->y) == NULL));
+
+				/* Have we dragged off the zone and are not on an edge? */
+				if ((ED_area_actionzone_find_xy(sad->sa1, &event->x) != sad->az) &&
+				    (screen_geom_area_map_find_active_scredge(
+				            AREAMAP_FROM_SCREEN(sc), &screen_rect, event->x, event->y) == NULL))
+				{
+					/* Are we still in same area? */
+					if (BKE_screen_find_area_xy(sc, SPACE_TYPE_ANY, event->x, event->y) == sad->sa1) {
+						/* Same area, so possible split. */
+						WM_cursor_set(win, (ELEM(sad->gesture_dir, 'n', 's')) ? BC_V_SPLITCURSOR : BC_H_SPLITCURSOR);
+						is_gesture = (delta_max > split_threshold);
+					}
+					else {
+						/* Different area, so posible join. */
+						if (sad->gesture_dir == 'n')
+							WM_cursor_set(win, BC_N_ARROWCURSOR);
+						else if (sad->gesture_dir == 's')
+							WM_cursor_set(win, BC_S_ARROWCURSOR);
+						else if (sad->gesture_dir == 'e')
+							WM_cursor_set(win, BC_E_ARROWCURSOR);
+						else
+							WM_cursor_set(win, BC_W_ARROWCURSOR);
+						is_gesture = (delta_max > join_threshold);
+					}
+				}
+				else {
+					WM_cursor_set(CTX_wm_window(C), BC_CROSSCURSOR);
+					is_gesture = false;
+				}
 			}
 			else {
-				const int delta_min = 1;
-				is_gesture = (ABS(delta_x) > delta_min || ABS(delta_y) > delta_min);
+				is_gesture = (delta_max > area_threshold);
 			}
 
 			/* gesture is large enough? */
@@ -1250,7 +1325,7 @@ static void area_move_set_limits(
 			int size_min = ED_area_global_min_size_y(area) - 1;
 			int size_max = ED_area_global_max_size_y(area) - 1;
 
-			size_min = MAX2(size_min, 0);
+			size_min = max_ii(size_min, 0);
 			BLI_assert(size_min < size_max);
 
 			/* logic here is only tested for lower edge :) */
@@ -1867,7 +1942,7 @@ static void area_split_preview_update_cursor(bContext *C, wmOperator *op)
 {
 	wmWindow *win = CTX_wm_window(C);
 	int dir = RNA_enum_get(op->ptr, "direction");
-	WM_cursor_set(win, (dir == 'v') ? CURSOR_X_MOVE : CURSOR_Y_MOVE);
+	WM_cursor_set(win, (dir == 'n' || dir == 's') ? BC_V_SPLITCURSOR : BC_H_SPLITCURSOR);
 }
 
 /* UI callback, adds new handler */
@@ -2161,7 +2236,7 @@ static int area_split_modal(bContext *C, wmOperator *op, const wmEvent *event)
 static const EnumPropertyItem prop_direction_items[] = {
 	{'h', "HORIZONTAL", 0, "Horizontal", ""},
 	{'v', "VERTICAL", 0, "Vertical", ""},
-	{0, NULL, 0, NULL, NULL}
+	{0, NULL, 0, NULL, NULL},
 };
 
 static void SCREEN_OT_area_split(wmOperatorType *ot)
@@ -2386,8 +2461,12 @@ static int region_scale_modal(bContext *C, wmOperator *op, const wmEvent *event)
 					if (!(rmd->ar->flag & RGN_FLAG_HIDDEN))
 						region_scale_toggle_hidden(C, rmd);
 				}
-				else if (rmd->ar->flag & RGN_FLAG_HIDDEN)
+				else if (rmd->ar->flag & RGN_FLAG_HIDDEN) {
 					region_scale_toggle_hidden(C, rmd);
+				}
+				else if (rmd->ar->flag & RGN_FLAG_DYNAMIC_SIZE) {
+					rmd->ar->sizex = rmd->origval;
+				}
 			}
 			else {
 				int maxsize = region_scale_get_maxsize(rmd);
@@ -2415,10 +2494,15 @@ static int region_scale_modal(bContext *C, wmOperator *op, const wmEvent *event)
 					if (!(rmd->ar->flag & RGN_FLAG_HIDDEN))
 						region_scale_toggle_hidden(C, rmd);
 				}
-				else if (maxsize > 0 && (rmd->ar->sizey > maxsize))
+				else if (maxsize > 0 && (rmd->ar->sizey > maxsize)) {
 					rmd->ar->sizey = maxsize;
-				else if (rmd->ar->flag & RGN_FLAG_HIDDEN)
+				}
+				else if (rmd->ar->flag & RGN_FLAG_HIDDEN) {
 					region_scale_toggle_hidden(C, rmd);
+				}
+				else if (rmd->ar->flag & RGN_FLAG_DYNAMIC_SIZE) {
+					rmd->ar->sizey = rmd->origval;
+				}
 			}
 			ED_area_tag_redraw(rmd->sa);
 			WM_event_add_notifier(C, NC_SCREEN | NA_EDITED, NULL);
@@ -2495,7 +2579,7 @@ static void areas_do_frame_follow(bContext *C, bool middle)
 				/* do follow here if editor type supports it */
 				if ((scr->redraws_flag & TIME_FOLLOW)) {
 					if ((ar->regiontype == RGN_TYPE_WINDOW &&
-					     ELEM(sa->spacetype, SPACE_SEQ, SPACE_IPO, SPACE_ACTION, SPACE_NLA)) ||
+					     ELEM(sa->spacetype, SPACE_SEQ, SPACE_GRAPH, SPACE_ACTION, SPACE_NLA)) ||
 					    (sa->spacetype == SPACE_CLIP && ar->regiontype == RGN_TYPE_PREVIEW))
 					{
 						float w = BLI_rctf_size_x(&ar->v2d.cur);
@@ -2958,7 +3042,6 @@ static int area_join_init(bContext *C, wmOperator *op)
 	sAreaJoinData *jd = NULL;
 	int x1, y1;
 	int x2, y2;
-	int shared = 0;
 
 	/* required properties, make negative to get return 0 if not set by caller */
 	x1 = RNA_int_get(op->ptr, "min_x");
@@ -2979,16 +3062,6 @@ static int area_join_init(bContext *C, wmOperator *op)
 		return 0;
 	}
 	else if (sa1 == NULL || sa2 == NULL || sa1 == sa2) {
-		return 0;
-	}
-
-	/* do areas share an edge? */
-	if (sa1->v1 == sa2->v1 || sa1->v1 == sa2->v2 || sa1->v1 == sa2->v3 || sa1->v1 == sa2->v4) shared++;
-	if (sa1->v2 == sa2->v1 || sa1->v2 == sa2->v2 || sa1->v2 == sa2->v3 || sa1->v2 == sa2->v4) shared++;
-	if (sa1->v3 == sa2->v1 || sa1->v3 == sa2->v2 || sa1->v3 == sa2->v3 || sa1->v3 == sa2->v4) shared++;
-	if (sa1->v4 == sa2->v1 || sa1->v4 == sa2->v2 || sa1->v4 == sa2->v3 || sa1->v4 == sa2->v4) shared++;
-	if (shared != 2) {
-		printf("areas don't share edge\n");
 		return 0;
 	}
 
@@ -3071,10 +3144,10 @@ static int area_join_invoke(bContext *C, wmOperator *op, const wmEvent *event)
 			return OPERATOR_PASS_THROUGH;
 
 		/* prepare operator state vars */
-		RNA_int_set(op->ptr, "min_x", sad->x);
-		RNA_int_set(op->ptr, "min_y", sad->y);
-		RNA_int_set(op->ptr, "max_x", event->x);
-		RNA_int_set(op->ptr, "max_y", event->y);
+		RNA_int_set(op->ptr, "min_x", sad->sa1->totrct.xmin);
+		RNA_int_set(op->ptr, "min_y", sad->sa1->totrct.ymin);
+		RNA_int_set(op->ptr, "max_x", sad->sa2->totrct.xmin);
+		RNA_int_set(op->ptr, "max_y", sad->sa2->totrct.ymin);
 	}
 
 
@@ -3098,6 +3171,7 @@ static void area_join_cancel(bContext *C, wmOperator *op)
 static int area_join_modal(bContext *C, wmOperator *op, const wmEvent *event)
 {
 	bScreen *sc = CTX_wm_screen(C);
+	wmWindow *win = CTX_wm_window(C);
 	sAreaJoinData *jd = (sAreaJoinData *)op->customdata;
 
 	/* execute the events */
@@ -3106,7 +3180,7 @@ static int area_join_modal(bContext *C, wmOperator *op, const wmEvent *event)
 		case MOUSEMOVE:
 		{
 			ScrArea *sa = BKE_screen_find_area_xy(sc, SPACE_TYPE_ANY, event->x, event->y);
-			int dir;
+			int dir = -1;
 
 			if (sa) {
 				if (jd->sa1 != sa) {
@@ -3150,6 +3224,18 @@ static int area_join_modal(bContext *C, wmOperator *op, const wmEvent *event)
 					WM_event_add_notifier(C, NC_WINDOW, NULL);
 				}
 			}
+
+			if (dir == 1)
+				WM_cursor_set(win, BC_N_ARROWCURSOR);
+			else if (dir == 3)
+				WM_cursor_set(win, BC_S_ARROWCURSOR);
+			else if (dir == 2)
+				WM_cursor_set(win, BC_E_ARROWCURSOR);
+			else if (dir == 0)
+				WM_cursor_set(win, BC_W_ARROWCURSOR);
+			else
+				WM_cursor_set(win, BC_STOPCURSOR);
+
 			break;
 		}
 		case LEFTMOUSE:
@@ -3267,7 +3353,7 @@ static int spacedata_cleanup_exec(bContext *C, wmOperator *op)
 	ScrArea *sa;
 	int tot = 0;
 
-	for (screen = bmain->screen.first; screen; screen = screen->id.next) {
+	for (screen = bmain->screens.first; screen; screen = screen->id.next) {
 		for (sa = screen->areabase.first; sa; sa = sa->next) {
 			if (sa->spacedata.first != sa->spacedata.last) {
 				SpaceLink *sl = sa->spacedata.first;
@@ -3320,7 +3406,7 @@ static int repeat_last_exec(bContext *C, wmOperator *UNUSED(op))
 
 	if (lastop) {
 		WM_operator_free_all_after(wm, lastop);
-		WM_operator_repeat(C, lastop);
+		WM_operator_repeat_interactive(C, lastop);
 	}
 
 	return OPERATOR_CANCELLED;
@@ -3828,7 +3914,7 @@ static int match_region_with_redraws(int spacetype, int regiontype, int redraws,
 				if ((redraws & TIME_ALL_3D_WIN) || from_anim_edit)
 					return 1;
 				break;
-			case SPACE_IPO:
+			case SPACE_GRAPH:
 			case SPACE_NLA:
 				if ((redraws & TIME_ALL_ANIM_WIN) || from_anim_edit)
 					return 1;
@@ -3840,7 +3926,7 @@ static int match_region_with_redraws(int spacetype, int regiontype, int redraws,
 				if ((redraws & (TIME_ALL_ANIM_WIN | TIME_REGION | TIME_ALL_3D_WIN)) || from_anim_edit)
 					return 1;
 				break;
-			case SPACE_BUTS:
+			case SPACE_PROPERTIES:
 				if (redraws & TIME_ALL_BUTS_WIN)
 					return 1;
 				break;
@@ -3865,7 +3951,7 @@ static int match_region_with_redraws(int spacetype, int regiontype, int redraws,
 	}
 	else if (regiontype == RGN_TYPE_CHANNELS) {
 		switch (spacetype) {
-			case SPACE_IPO:
+			case SPACE_GRAPH:
 			case SPACE_ACTION:
 			case SPACE_NLA:
 				if (redraws & TIME_ALL_ANIM_WIN)
@@ -4049,7 +4135,7 @@ static int screen_animation_step(bContext *C, wmOperator *UNUSED(op), const wmEv
 						/* do follow here if editor type supports it */
 						if ((sad->redraws & TIME_FOLLOW)) {
 							if ((ar->regiontype == RGN_TYPE_WINDOW &&
-							     ELEM(sa->spacetype, SPACE_SEQ, SPACE_IPO, SPACE_ACTION, SPACE_NLA)) ||
+							     ELEM(sa->spacetype, SPACE_SEQ, SPACE_GRAPH, SPACE_ACTION, SPACE_NLA)) ||
 							    (sa->spacetype == SPACE_CLIP && ar->regiontype == RGN_TYPE_PREVIEW))
 							{
 								float w = BLI_rctf_size_x(&ar->v2d.cur);
@@ -4077,8 +4163,8 @@ static int screen_animation_step(bContext *C, wmOperator *UNUSED(op), const wmEv
 		 */
 		ED_refresh_viewport_fps(C);
 
-		/* recalculate the timestep for the timer now that we've finished calculating this,
-		 * since the frames-per-second value may have been changed
+		/* Recalculate the time-step for the timer now that we've finished calculating this,
+		 * since the frames-per-second value may have been changed.
 		 */
 		/* TODO: this may make evaluation a bit slower if the value doesn't change... any way to avoid this? */
 		wt->timestep = (1.0 / FPS);
@@ -4152,7 +4238,8 @@ int ED_screen_animation_play(bContext *C, int sync, int mode)
 		WM_event_add_notifier(C, NC_SCENE | ND_FRAME, scene);
 	}
 	else {
-		int refresh = SPACE_ACTION; /* these settings are currently only available from a menu in the TimeLine */
+		/* these settings are currently only available from a menu in the TimeLine */
+		int refresh = SPACE_ACTION;
 
 		if (mode == 1)  /* XXX only play audio forwards!? */
 			BKE_sound_play_scene(scene);
@@ -4353,11 +4440,16 @@ static void SCREEN_OT_back_to_previous(struct wmOperatorType *ot)
 
 static int userpref_show_invoke(bContext *C, wmOperator *op, const wmEvent *event)
 {
-	int sizex = (800 + UI_NAVIGATION_REGION_WIDTH) * UI_DPI_FAC;
-	int sizey = 500 * UI_DPI_FAC;
+	int sizex = (500 + UI_NAVIGATION_REGION_WIDTH) * UI_DPI_FAC;
+	int sizey = 520 * UI_DPI_FAC;
 
 	/* changes context! */
 	if (WM_window_open_temp(C, event->x, event->y, sizex, sizey, WM_WINDOW_USERPREFS) != NULL) {
+		/* The header only contains the editor switcher and looks empty.
+		 * So hiding in the temp window makes sense. */
+		ScrArea *area = CTX_wm_area(C);
+		ARegion *region = BKE_area_find_region_type(area, RGN_TYPE_HEADER);
+		region->flag |= RGN_FLAG_HIDDEN;
 		return OPERATOR_FINISHED;
 	}
 	else {
@@ -4660,6 +4752,12 @@ static void SCREEN_OT_region_blend(wmOperatorType *ot)
 /** \name Space Type Set or Cycle Operator
  * \{ */
 
+static bool space_type_set_or_cycle_poll(bContext *C)
+{
+	ScrArea *sa = CTX_wm_area(C);
+	return (sa && !ELEM(sa->spacetype, SPACE_TOPBAR, SPACE_STATUSBAR));
+}
+
 static int space_type_set_or_cycle_exec(bContext *C, wmOperator *op)
 {
 	const int space_type = RNA_enum_get(op->ptr, "space_type");
@@ -4703,12 +4801,12 @@ static void SCREEN_OT_space_type_set_or_cycle(wmOperatorType *ot)
 {
 	/* identifiers */
 	ot->name = "Cycle Space Type Set";
-	ot->description = "Set the space type or cycle subtype";
+	ot->description = "Set the space type or cycle sub-type";
 	ot->idname = "SCREEN_OT_space_type_set_or_cycle";
 
 	/* api callbacks */
 	ot->exec = space_type_set_or_cycle_exec;
-	ot->poll = ED_operator_areaactive;
+	ot->poll = space_type_set_or_cycle_poll;
 
 	ot->flag = 0;
 
@@ -4725,14 +4823,14 @@ static void SCREEN_OT_space_type_set_or_cycle(wmOperatorType *ot)
 static const EnumPropertyItem space_context_cycle_direction[] = {
 	{SPACE_CONTEXT_CYCLE_PREV, "PREV", 0, "Previous", ""},
 	{SPACE_CONTEXT_CYCLE_NEXT, "NEXT", 0, "Next", ""},
-	{0, NULL, 0, NULL, NULL}
+	{0, NULL, 0, NULL, NULL},
 };
 
 static bool space_context_cycle_poll(bContext *C)
 {
 	ScrArea *sa = CTX_wm_area(C);
 	/* sa might be NULL if called out of window bounds */
-	return (sa && ELEM(sa->spacetype, SPACE_BUTS, SPACE_USERPREF));
+	return (sa && ELEM(sa->spacetype, SPACE_PROPERTIES, SPACE_USERPREF));
 }
 
 /**
@@ -4746,7 +4844,7 @@ static void context_cycle_prop_get(
 	const char *propname;
 
 	switch (sa->spacetype) {
-		case SPACE_BUTS:
+		case SPACE_PROPERTIES:
 			RNA_pointer_create(&screen->id, &RNA_SpaceProperties, sa->spacedata.first, r_ptr);
 			propname = "context";
 			break;
@@ -4941,7 +5039,8 @@ static void keymap_modal_set(wmKeyConfig *keyconf)
 		{KM_MODAL_APPLY, "APPLY", 0, "Apply", ""},
 		{KM_MODAL_SNAP_ON, "SNAP", 0, "Snap on", ""},
 		{KM_MODAL_SNAP_OFF, "SNAP_OFF", 0, "Snap off", ""},
-		{0, NULL, 0, NULL, NULL}};
+		{0, NULL, 0, NULL, NULL},
+	};
 	wmKeyMap *keymap;
 
 	/* Standard Modal keymap ------------------------------------------------ */

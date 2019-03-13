@@ -1,27 +1,18 @@
 /*
-* ***** BEGIN GPL LICENSE BLOCK *****
-*
-* This program is free software; you can redistribute it and/or
-* modify it under the terms of the GNU General Public License
-* as published by the Free Software Foundation; either version 2
-* of the License, or (at your option) any later version.
-*
-* This program is distributed in the hope that it will be useful,
-* but WITHOUT ANY WARRANTY; without even the implied warranty of
-* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-* GNU General Public License for more details.
-*
-* You should have received a copy of the GNU General Public License
-* along with this program; if not, write to the Free Software Foundation,
-* Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
-*
-* The Original Code is Copyright (C) 2008 Blender Foundation.
-* All rights reserved.
-*
-* Contributor(s): Blender Foundation
-*
-* ***** END GPL LICENSE BLOCK *****
-*/
+ * This program is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU General Public License
+ * as published by the Free Software Foundation; either version 2
+ * of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software Foundation,
+ * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
+ */
 
 #ifndef __BC_ANIMATION_CURVE_CONTAINER_H__
 #define __BC_ANIMATION_CURVE_CONTAINER_H__
@@ -65,7 +56,7 @@ public:
 		if (reference && reference->id.us == 0)
 		{
 			Main *bmain = CTX_data_main(mContext);
-			BKE_libblock_delete(bmain, &reference->id);
+			BKE_id_delete(bmain, &reference->id);
 		}
 		curve_map.clear();
 	}
@@ -117,28 +108,28 @@ typedef std::map<int, BCSampleFrame> BCSampleFrameMap;
 class BCSampleFrameContainer {
 
 	/*
-	* The BCSampleFrameContainer stores a map of BCSampleFrame objects
-	* with the timeline frame as key.
-	*
-	* Some details on the purpose:
-	* An Animation is made of multiple FCurves where each FCurve can
-	* have multiple keyframes. When we want to export the animation we
-	* also can decide whether we want to export the keyframes or a set
-	* of sample frames at equidistant locations (sample period).
-	* In any case we must resample first need to resample it fully
-	* to resolve things like:
-	*
-	* - animations by constraints
-	* - animations by drivers
-	*
-	* For this purpose we need to step through the entire animation and
-	* then sample each frame that contains at least one keyFrame or
-	* sampleFrame. Then for each frame we have to store the transform
-	* information for all exported objects in a BCSampleframe
-	*
-	* The entire set of BCSampleframes is finally collected into
-	* a BCSampleframneContainer
-	*/
+	 * The BCSampleFrameContainer stores a map of BCSampleFrame objects
+	 * with the timeline frame as key.
+	 *
+	 * Some details on the purpose:
+	 * An Animation is made of multiple FCurves where each FCurve can
+	 * have multiple keyframes. When we want to export the animation we
+	 * also can decide whether we want to export the keyframes or a set
+	 * of sample frames at equidistant locations (sample period).
+	 * In any case we must resample first need to resample it fully
+	 * to resolve things like:
+	 *
+	 * - animations by constraints
+	 * - animations by drivers
+	 *
+	 * For this purpose we need to step through the entire animation and
+	 * then sample each frame that contains at least one keyFrame or
+	 * sampleFrame. Then for each frame we have to store the transform
+	 * information for all exported objects in a BCSampleframe
+	 *
+	 * The entire set of BCSampleframes is finally collected into
+	 * a BCSampleframneContainer
+	 */
 
 private:
 	BCSampleFrameMap sample_frames;

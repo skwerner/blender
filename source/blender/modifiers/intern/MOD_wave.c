@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,21 +15,14 @@
  *
  * The Original Code is Copyright (C) 2005 by the Blender Foundation.
  * All rights reserved.
- *
- * Contributor(s): Daniel Dunbar
- *                 Ton Roosendaal,
- *                 Ben Batt,
- *                 Brecht Van Lommel,
- *                 Campbell Barton
- *
- * ***** END GPL LICENSE BLOCK *****
- *
  */
 
-/** \file blender/modifiers/intern/MOD_wave.c
- *  \ingroup modifiers
+/** \file
+ * \ingroup modifiers
  */
 
+
+#include "BLI_utildefines.h"
 
 #include "BLI_math.h"
 
@@ -39,9 +30,6 @@
 #include "DNA_meshdata_types.h"
 #include "DNA_object_types.h"
 #include "DNA_scene_types.h"
-
-#include "BLI_utildefines.h"
-
 
 #include "BKE_deform.h"
 #include "BKE_editmesh.h"
@@ -124,28 +112,26 @@ static void updateDepsgraph(ModifierData *md, const ModifierUpdateDepsgraphConte
 		DEG_add_object_relation(ctx->node, wmd->map_object, DEG_OB_COMP_TRANSFORM, "Wave Modifier");
 	}
 	if (wmd->objectcenter != NULL || wmd->map_object != NULL) {
-		DEG_add_object_relation(ctx->node, ctx->object, DEG_OB_COMP_TRANSFORM, "Wave Modifier");
+		DEG_add_modifier_to_transform_relation(ctx->node, "Wave Modifier");
 	}
 	if (wmd->texture != NULL) {
 		DEG_add_generic_id_relation(ctx->node, &wmd->texture->id, "Wave Modifier");
 	}
 }
 
-static CustomDataMask requiredDataMask(Object *UNUSED(ob), ModifierData *md)
+static void requiredDataMask(Object *UNUSED(ob), ModifierData *md, CustomData_MeshMasks *r_cddata_masks)
 {
 	WaveModifierData *wmd = (WaveModifierData *)md;
-	CustomDataMask dataMask = 0;
-
 
 	/* ask for UV coordinates if we need them */
-	if (wmd->texture && wmd->texmapping == MOD_DISP_MAP_UV)
-		dataMask |= CD_MASK_MTFACE;
+	if (wmd->texture && wmd->texmapping == MOD_DISP_MAP_UV) {
+		r_cddata_masks->fmask |= CD_MASK_MTFACE;
+	}
 
 	/* ask for vertexgroups if we need them */
-	if (wmd->defgrp_name[0])
-		dataMask |= CD_MASK_MDEFORMVERT;
-
-	return dataMask;
+	if (wmd->defgrp_name[0] != '\0') {
+		r_cddata_masks->vmask |= CD_MASK_MDEFORMVERT;
+	}
 }
 
 static bool dependsOnNormals(ModifierData *md)

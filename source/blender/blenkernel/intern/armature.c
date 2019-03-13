@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,14 +15,10 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * Contributor(s): Full recode, Ton Roosendaal, Crete 2005
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/blenkernel/intern/armature.c
- *  \ingroup bke
+/** \file
+ * \ingroup bke
  */
 
 #include <ctype.h>
@@ -64,8 +58,6 @@
 #include "BKE_displist.h"
 #include "BKE_idprop.h"
 #include "BKE_library.h"
-#include "BKE_library_query.h"
-#include "BKE_library_remap.h"
 #include "BKE_lattice.h"
 #include "BKE_main.h"
 #include "BKE_object.h"
@@ -77,6 +69,10 @@
 
 #include "atomic_ops.h"
 
+#include "CLG_log.h"
+
+static CLG_LogRef LOG = {"bke.armature"};
+
 /* **************** Generic Functions, data level *************** */
 
 bArmature *BKE_armature_add(Main *bmain, const char *name)
@@ -87,7 +83,6 @@ bArmature *BKE_armature_add(Main *bmain, const char *name)
 	arm->deformflag = ARM_DEF_VGROUP | ARM_DEF_ENVELOPE;
 	arm->flag = ARM_COL_CUSTOM; /* custom bone-group colors */
 	arm->layer = 1;
-	arm->ghostsize = 1;
 	return arm;
 }
 
@@ -172,7 +167,7 @@ static void copy_bonechildren(
 
 /**
  * Only copy internal data of Armature ID from source to already allocated/initialized destination.
- * You probably nerver want to use that directly, use id_copy or BKE_id_copy_ex for typical needs.
+ * You probably never want to use that directly, use BKE_id_copy or BKE_id_copy_ex for typical needs.
  *
  * WARNING! This function will not handle ID user count!
  *
@@ -205,7 +200,7 @@ void BKE_armature_copy_data(Main *UNUSED(bmain), bArmature *arm_dst, const bArma
 bArmature *BKE_armature_copy(Main *bmain, const bArmature *arm)
 {
 	bArmature *arm_copy;
-	BKE_id_copy_ex(bmain, &arm->id, (ID **)&arm_copy, 0, false);
+	BKE_id_copy(bmain, &arm->id, (ID **)&arm_copy);
 	return arm_copy;
 }
 
@@ -842,7 +837,7 @@ typedef struct ObjectBBoneDeform {
 
 static void allocate_bbone_cache(bPoseChannel *pchan, int segments)
 {
-	bPoseChannelRuntime *runtime = &pchan->runtime;
+	bPoseChannel_Runtime *runtime = &pchan->runtime;
 
 	if (runtime->bbone_segments != segments) {
 		if (runtime->bbone_segments != 0) {
@@ -850,17 +845,17 @@ static void allocate_bbone_cache(bPoseChannel *pchan, int segments)
 		}
 
 		runtime->bbone_segments = segments;
-		runtime->bbone_rest_mats = MEM_malloc_arrayN(sizeof(Mat4), (uint)segments, "bPoseChannelRuntime::bbone_rest_mats");
-		runtime->bbone_pose_mats = MEM_malloc_arrayN(sizeof(Mat4), (uint)segments, "bPoseChannelRuntime::bbone_pose_mats");
-		runtime->bbone_deform_mats = MEM_malloc_arrayN(sizeof(Mat4), 1 + (uint)segments, "bPoseChannelRuntime::bbone_deform_mats");
-		runtime->bbone_dual_quats = MEM_malloc_arrayN(sizeof(DualQuat), (uint)segments, "bPoseChannelRuntime::bbone_dual_quats");
+		runtime->bbone_rest_mats = MEM_malloc_arrayN(sizeof(Mat4), (uint)segments, "bPoseChannel_Runtime::bbone_rest_mats");
+		runtime->bbone_pose_mats = MEM_malloc_arrayN(sizeof(Mat4), (uint)segments, "bPoseChannel_Runtime::bbone_pose_mats");
+		runtime->bbone_deform_mats = MEM_malloc_arrayN(sizeof(Mat4), 1 + (uint)segments, "bPoseChannel_Runtime::bbone_deform_mats");
+		runtime->bbone_dual_quats = MEM_malloc_arrayN(sizeof(DualQuat), (uint)segments, "bPoseChannel_Runtime::bbone_dual_quats");
 	}
 }
 
 /** Compute and cache the B-Bone shape in the channel runtime struct. */
 void BKE_pchan_bbone_segments_cache_compute(bPoseChannel *pchan)
 {
-	bPoseChannelRuntime *runtime = &pchan->runtime;
+	bPoseChannel_Runtime *runtime = &pchan->runtime;
 	Bone *bone = pchan->bone;
 	int segments = bone->segments;
 
@@ -903,8 +898,8 @@ void BKE_pchan_bbone_segments_cache_compute(bPoseChannel *pchan)
 /** Copy cached B-Bone segments from one channel to another */
 void BKE_pchan_bbone_segments_cache_copy(bPoseChannel *pchan, bPoseChannel *pchan_from)
 {
-	bPoseChannelRuntime *runtime = &pchan->runtime;
-	bPoseChannelRuntime *runtime_from = &pchan_from->runtime;
+	bPoseChannel_Runtime *runtime = &pchan->runtime;
+	bPoseChannel_Runtime *runtime_from = &pchan_from->runtime;
 	int segments = runtime_from->bbone_segments;
 
 	if (segments <= 1) {
@@ -1075,7 +1070,7 @@ static void pchan_bone_deform(bPoseChannel *pchan, const bPoseChanDeform *pdef_i
 	copy_v3_v3(cop, co);
 
 	if (vec) {
-		if (pchan->bone->segments > 1)
+		if (pchan->bone->segments > 1 && pdef_info->b_bone_mats != NULL)
 			/* applies on cop and bbonemat */
 			b_bone_deform(pdef_info, pchan->bone, cop, NULL, (mat) ? bbonemat : NULL);
 		else
@@ -1089,7 +1084,7 @@ static void pchan_bone_deform(bPoseChannel *pchan, const bPoseChanDeform *pdef_i
 			pchan_deform_mat_add(pchan, weight, bbonemat, mat);
 	}
 	else {
-		if (pchan->bone->segments > 1) {
+		if (pchan->bone->segments > 1 && pdef_info->b_bone_mats != NULL) {
 			b_bone_deform(pdef_info, pchan->bone, cop, &bbonedq, NULL);
 			add_weighted_dq_dq(dq, &bbonedq, weight);
 		}
@@ -1115,11 +1110,17 @@ static void armature_bbone_defmats_cb(void *userdata, Link *iter, int index)
 		bPoseChanDeform *pdef_info = &data->pdef_info_array[index];
 		const bool use_quaternion = data->use_quaternion;
 
-		if (pchan->bone->segments > 1) {
-			BLI_assert(pchan->runtime.bbone_segments == pchan->bone->segments);
+		pdef_info->b_bone_mats = NULL;
+		pdef_info->b_bone_dual_quats = NULL;
 
-			pdef_info->b_bone_mats = pchan->runtime.bbone_deform_mats;
-			pdef_info->b_bone_dual_quats = pchan->runtime.bbone_dual_quats;
+		if (pchan->bone->segments > 1) {
+			if (pchan->runtime.bbone_segments == pchan->bone->segments) {
+				pdef_info->b_bone_mats = pchan->runtime.bbone_deform_mats;
+				pdef_info->b_bone_dual_quats = pchan->runtime.bbone_dual_quats;
+			}
+			else {
+				BLI_assert(!"invalid B-Bone shape data");
+			}
 		}
 
 		if (use_quaternion) {
@@ -1155,7 +1156,7 @@ void armature_deform_verts(
 	}
 
 	if ((armOb->pose->flag & POSE_RECALC) != 0) {
-		printf("ERROR! Trying to evaluate influence of armature '%s' which needs Pose recalc!\n", armOb->id.name);
+		CLOG_ERROR(&LOG, "Trying to evaluate influence of armature '%s' which needs Pose recalc!", armOb->id.name);
 		BLI_assert(0);
 	}
 
@@ -1171,7 +1172,7 @@ void armature_deform_verts(
 	ObjectBBoneDeform *bbone_deform =
 	        BKE_armature_cached_bbone_deformation_get(armOb);
 	if (bbone_deform == NULL || bbone_deform->pdef_info_array == NULL) {
-		fprintf(stderr,
+		CLOG_ERROR(&LOG,
 		        "Armature does not have bbone cache %s, "
 		        "usually happens due to a dependency cycle.\n",
 		        armOb->id.name + 2);
@@ -1377,9 +1378,7 @@ void armature_deform_verts(
 				smat = summat;
 			}
 			else {
-				if (target->type != OB_GPENCIL) {
-					mul_v3_fl(vec, armature_weight / contrib);
-				}
+				mul_v3_fl(vec, armature_weight / contrib);
 				add_v3_v3v3(co, vec, co);
 			}
 
@@ -2001,7 +2000,7 @@ static void pose_proxy_synchronize(Object *ob, Object *from, int layer_protected
 	for (pchan = pose->chanbase.first; pchan; pchan = pchan->next) {
 		if (pchan->bone->layer & layer_protected) {
 			if (BKE_pose_channel_find_name(frompose, pchan->name) == NULL) {
-				printf("failed to sync proxy armature because '%s' is missing pose channel '%s'\n",
+				CLOG_ERROR(&LOG, "failed to sync proxy armature because '%s' is missing pose channel '%s'",
 				       from->id.name, pchan->name);
 				error = 1;
 			}
@@ -2474,10 +2473,10 @@ static void boundbox_armature(Object *ob)
 	BoundBox *bb;
 	float min[3], max[3];
 
-	if (ob->bb == NULL) {
-		ob->bb = MEM_callocN(sizeof(BoundBox), "Armature boundbox");
+	if (ob->runtime.bb == NULL) {
+		ob->runtime.bb = MEM_callocN(sizeof(BoundBox), "Armature boundbox");
 	}
-	bb = ob->bb;
+	bb = ob->runtime.bb;
 
 	INIT_MINMAX(min, max);
 	if (!minmax_armature(ob, min, max)) {
@@ -2494,7 +2493,7 @@ BoundBox *BKE_armature_boundbox_get(Object *ob)
 {
 	boundbox_armature(ob);
 
-	return ob->bb;
+	return ob->runtime.bb;
 }
 
 bool BKE_pose_minmax(Object *ob, float r_min[3], float r_max[3], bool use_hidden, bool use_select)
@@ -2641,7 +2640,7 @@ void BKE_armature_cached_bbone_deformation_update(Object *object)
 	ArmatureBBoneDefmatsData data = {
 		.pdef_info_array = pdef_info_array,
 		.dualquats = dualquats,
-		.use_quaternion = use_quaternion
+		.use_quaternion = use_quaternion,
 	};
 	BLI_task_parallel_listbase(&pose->chanbase,
 	                           &data,

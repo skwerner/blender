@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,12 +15,10 @@
  *
  * The Original Code is Copyright (C) 2008 Blender Foundation.
  * All rights reserved.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/space_view3d/view3d_utils.c
- *  \ingroup spview3d
+/** \file
+ * \ingroup spview3d
  *
  * 3D View checks and manipulation (no operators).
  */
@@ -47,14 +43,13 @@
 
 #include "BKE_camera.h"
 #include "BKE_context.h"
-#include "BKE_main.h"
 #include "BKE_object.h"
 #include "BKE_screen.h"
+#include "BKE_scene.h"
 
 #include "DEG_depsgraph.h"
 #include "DEG_depsgraph_query.h"
 
-#include "BIF_gl.h"
 #include "BIF_glutil.h"
 
 #include "GPU_matrix.h"
@@ -88,25 +83,28 @@ void ED_view3d_background_color_get(const Scene *scene, const View3D *v3d, float
 		return;
 	}
 
-	UI_GetThemeColor3fv(TH_HIGH_GRAD, r_color);
+	UI_GetThemeColor3fv(TH_BACK, r_color);
 }
 
 void ED_view3d_cursor3d_calc_mat3(const Scene *scene, float mat[3][3])
 {
 	const View3DCursor *cursor = &scene->cursor;
-	quat_to_mat3(mat, cursor->rotation);
+	BKE_scene_cursor_rot_to_mat3(cursor, mat);
 }
 
 void ED_view3d_cursor3d_calc_mat4(const Scene *scene, float mat[4][4])
 {
 	const View3DCursor *cursor = &scene->cursor;
-	quat_to_mat4(mat, cursor->rotation);
+	float mat3[3][3];
+	BKE_scene_cursor_rot_to_mat3(cursor, mat3);
+	copy_m4_m3(mat, mat3);
 	copy_v3_v3(mat[3], cursor->location);
 }
 
 Camera *ED_view3d_camera_data_get(View3D *v3d, RegionView3D *rv3d)
 {
-	/* establish the camera object, so we can default to view mapping if anything is wrong with it */
+	/* establish the camera object,
+	 * so we can default to view mapping if anything is wrong with it */
 	if ((rv3d->persp == RV3D_CAMOB) && v3d->camera && (v3d->camera->type == OB_CAMERA)) {
 		return v3d->camera->data;
 	}
@@ -120,7 +118,7 @@ void ED_view3d_dist_range_get(
         float r_dist_range[2])
 {
 	r_dist_range[0] = v3d->grid * 0.001f;
-	r_dist_range[1] = v3d->far * 10.0f;
+	r_dist_range[1] = v3d->clip_end * 10.0f;
 }
 
 /**
@@ -138,13 +136,13 @@ bool ED_view3d_clip_range_get(
 	BKE_camera_params_from_view3d(&params, depsgraph, v3d, rv3d);
 
 	if (use_ortho_factor && params.is_ortho) {
-		const float fac = 2.0f / (params.clipend - params.clipsta);
-		params.clipsta *= fac;
-		params.clipend *= fac;
+		const float fac = 2.0f / (params.clip_end - params.clip_start);
+		params.clip_start *= fac;
+		params.clip_end *= fac;
 	}
 
-	if (r_clipsta) *r_clipsta = params.clipsta;
-	if (r_clipend) *r_clipend = params.clipend;
+	if (r_clipsta) *r_clipsta = params.clip_start;
+	if (r_clipend) *r_clipend = params.clip_end;
 
 	return params.is_ortho;
 }
@@ -152,7 +150,7 @@ bool ED_view3d_clip_range_get(
 bool ED_view3d_viewplane_get(
         Depsgraph *depsgraph,
         const View3D *v3d, const RegionView3D *rv3d, int winx, int winy,
-        rctf *r_viewplane, float *r_clipsta, float *r_clipend, float *r_pixsize)
+        rctf *r_viewplane, float *r_clip_start, float *r_clip_end, float *r_pixsize)
 {
 	CameraParams params;
 
@@ -161,8 +159,8 @@ bool ED_view3d_viewplane_get(
 	BKE_camera_params_compute_viewplane(&params, winx, winy, 1.0f, 1.0f);
 
 	if (r_viewplane) *r_viewplane = params.viewplane;
-	if (r_clipsta) *r_clipsta = params.clipsta;
-	if (r_clipend) *r_clipend = params.clipend;
+	if (r_clip_start) *r_clip_start = params.clip_start;
+	if (r_clip_end) *r_clip_end = params.clip_end;
 	if (r_pixsize) *r_pixsize = params.viewdx;
 
 	return params.is_ortho;
@@ -438,7 +436,8 @@ bool ED_view3d_persp_ensure(const Depsgraph *depsgraph, View3D *v3d, ARegion *ar
 
 	if (rv3d->persp != RV3D_PERSP) {
 		if (rv3d->persp == RV3D_CAMOB) {
-			/* If autopersp and previous view was an axis one, switch back to PERSP mode, else reuse previous mode. */
+			/* If autopersp and previous view was an axis one,
+			 * switch back to PERSP mode, else reuse previous mode. */
 			char persp = (autopersp && RV3D_VIEW_IS_AXIS(rv3d->lview)) ? RV3D_PERSP : rv3d->lpersp;
 			ED_view3d_persp_switch_from_camera(depsgraph, v3d, rv3d, persp);
 		}
@@ -1095,8 +1094,8 @@ float ED_view3d_radius_to_dist(
 		if (persp == RV3D_CAMOB) {
 			CameraParams params;
 			BKE_camera_params_init(&params);
-			params.clipsta = v3d->near;
-			params.clipend = v3d->far;
+			params.clip_start = v3d->clip_start;
+			params.clip_end = v3d->clip_end;
 			Object *camera_eval = DEG_get_evaluated_object(depsgraph, v3d->camera);
 			BKE_camera_params_from_object(&params, camera_eval);
 
@@ -1114,7 +1113,8 @@ float ED_view3d_radius_to_dist(
 
 		angle = focallength_to_fov(lens, sensor_size);
 
-		/* zoom influences lens, correct this by scaling the angle as a distance (by the zoom-level) */
+		/* zoom influences lens, correct this by scaling the angle as a distance
+		 * (by the zoom-level) */
 		angle = atanf(tanf(angle / 2.0f) * zoom) * 2.0f;
 
 		dist = ED_view3d_radius_to_dist_persp(angle, radius);
@@ -1337,7 +1337,7 @@ void ED_view3d_to_m4(float mat[4][4], const float ofs[3], const float quat[4], c
  * \param ofs: The view offset to be set, normally from RegionView3D.ofs.
  * \param quat: The view rotation to be set, quaternion normally from RegionView3D.viewquat.
  * \param dist: The view distance from ofs to be set, normally from RegionView3D.dist.
- * \param lens: The view lens angle set for cameras and lamps, normally from View3D.lens.
+ * \param lens: The view lens angle set for cameras and lights, normally from View3D.lens.
  */
 void ED_view3d_from_object(const Object *ob, float ofs[3], float quat[4], float *dist, float *lens)
 {

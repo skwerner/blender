@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,14 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * Contributor(s): Joseph Eagar, Geoffrey Bantle, Campbell Barton
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/bmesh/intern/bmesh_query.c
- *  \ingroup bmesh
+/** \file
+ * \ingroup bmesh
  *
  * This file contains functions for answering common
  * Topological and geometric queries about a mesh, such
@@ -382,6 +376,13 @@ BMFace *BM_vert_pair_share_face_by_angle(
 BMLoop *BM_vert_find_first_loop(BMVert *v)
 {
 	return v->e ? bmesh_disk_faceloop_find_first(v->e, v) : NULL;
+}
+/**
+ * A version of #BM_vert_find_first_loop that ignores hidden loops.
+ */
+BMLoop *BM_vert_find_first_loop_visible(BMVert *v)
+{
+	return v->e ? bmesh_disk_faceloop_find_first_visible(v->e, v) : NULL;
 }
 
 /**
@@ -1678,13 +1679,13 @@ float BM_edge_calc_face_angle(const BMEdge *e)
 }
 
 /**
-* \brief BMESH EDGE/FACE ANGLE
-*
-* Calculates the angle between two faces in world space.
-* Assumes the face normals are correct.
-*
-* \return angle in radians
-*/
+ * \brief BMESH EDGE/FACE ANGLE
+ *
+ * Calculates the angle between two faces in world space.
+ * Assumes the face normals are correct.
+ *
+ * \return angle in radians
+ */
 float BM_edge_calc_face_angle_with_imat3_ex(const BMEdge *e, const float imat3[3][3], const float fallback)
 {
 	if (BM_edge_is_manifold(e)) {
@@ -2002,6 +2003,24 @@ BMEdge *BM_edge_find_double(BMEdge *e)
 		}
 	}
 
+	return NULL;
+}
+
+/**
+ * Only #BMEdge.l access us needed, however when we want the first visible loop,
+ * a utility function is needed.
+ */
+BMLoop *BM_edge_find_first_loop_visible(BMEdge *e)
+{
+	if (e->l != NULL) {
+		BMLoop *l_iter, *l_first;
+		l_iter = l_first = e->l;
+		do {
+			if (!BM_elem_flag_test(l_iter->f, BM_ELEM_HIDDEN)) {
+				return l_iter;
+			}
+		} while ((l_iter = l_iter->radial_next) != l_first);
+	}
 	return NULL;
 }
 

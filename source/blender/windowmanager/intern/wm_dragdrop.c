@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,15 +15,10 @@
  *
  * The Original Code is Copyright (C) 2010 Blender Foundation.
  * All rights reserved.
- *
- *
- * Contributor(s): Blender Foundation
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/windowmanager/intern/wm_dragdrop.c
- *  \ingroup wm
+/** \file
+ * \ingroup wm
  *
  * Our own drag-and-drop, drag state and drop boxes.
  */
@@ -201,16 +194,17 @@ void WM_drag_free_list(struct ListBase *lb)
 
 static const char *dropbox_active(bContext *C, ListBase *handlers, wmDrag *drag, const wmEvent *event)
 {
-	wmEventHandler *handler = handlers->first;
-	for (; handler; handler = handler->next) {
-		if (handler->dropboxes) {
-			wmDropBox *drop = handler->dropboxes->first;
-			for (; drop; drop = drop->next) {
-				const char *tooltip = NULL;
-				if (drop->poll(C, drag, event, &tooltip)) {
-					/* XXX Doing translation here might not be ideal, but later we have no more
-					 *     access to ot (and hence op context)... */
-					return (tooltip) ? tooltip : RNA_struct_ui_name(drop->ot->srna);
+	LISTBASE_FOREACH (wmEventHandler *, handler_base, handlers) {
+		if (handler_base->type == WM_HANDLER_TYPE_DROPBOX) {
+			wmEventHandler_Dropbox *handler = (wmEventHandler_Dropbox *)handler_base;
+			if (handler->dropboxes) {
+				for (wmDropBox *drop = handler->dropboxes->first; drop; drop = drop->next) {
+					const char *tooltip = NULL;
+					if (drop->poll(C, drag, event, &tooltip)) {
+						/* XXX Doing translation here might not be ideal, but later we have no more
+						 *     access to ot (and hence op context)... */
+						return (tooltip) ? tooltip : RNA_struct_ui_name(drop->ot->srna);
+					}
 				}
 			}
 		}

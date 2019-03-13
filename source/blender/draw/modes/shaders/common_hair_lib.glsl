@@ -71,7 +71,7 @@ int hair_get_base_id(float local_time, int strand_segments, out float interp_tim
 	return int(ratio);
 }
 
-void hair_get_interp_attribs(out vec4 data0, out vec4 data1, out vec4 data2, out vec4 data3, out float interp_time)
+void hair_get_interp_attrs(out vec4 data0, out vec4 data1, out vec4 data2, out vec4 data3, out float interp_time)
 {
 	float local_time = float(gl_VertexID % hairStrandsRes) / float(hairStrandsRes - 1);
 
@@ -136,6 +136,10 @@ float hair_shaperadius(float shape, float root, float tip, float time)
 	return (radius * (root - tip)) + tip;
 }
 
+#ifdef OS_MAC
+in float dummy;
+#endif
+
 void hair_get_pos_tan_binor_time(
         bool is_persp, mat4 invmodel_mat, vec3 camera_pos, vec3 camera_z,
         out vec3 wpos, out vec3 wtan, out vec3 wbinor, out float time, out float thickness, out float thick_time)
@@ -144,6 +148,13 @@ void hair_get_pos_tan_binor_time(
 	vec4 data = texelFetch(hairPointBuffer, id);
 	wpos = data.point_position;
 	time = data.point_time;
+
+#ifdef OS_MAC
+	/* Generate a dummy read to avoid the driver bug with shaders having no
+	 * vertex reads on macOS (T60171) */
+	wpos.y += dummy * 0.0;
+#endif
+
 	if (time == 0.0) {
 		/* Hair root */
 		wtan = texelFetch(hairPointBuffer, id + 1).point_position - wpos;

@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,12 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/mesh/editmesh_extrude_spin_gizmo.c
- *  \ingroup edmesh
+/** \file
+ * \ingroup edmesh
  */
 
 #include "BLI_math.h"
@@ -144,7 +140,7 @@ static void gizmo_mesh_spin_init_setup(const bContext *UNUSED(C), wmGizmoGroup *
 			WM_gizmo_set_scale(gz, scale_button);
 			gz->color[3] = 0.6f;
 
-			gz->flag |= WM_GIZMO_DRAW_OFFSET_SCALE;
+			gz->flag |= WM_GIZMO_DRAW_OFFSET_SCALE | WM_GIZMO_OPERATOR_TOOL_INIT;
 
 			ggd->gizmos.icon_button[i][j] = gz;
 		}
@@ -247,7 +243,7 @@ static void gizmo_mesh_spin_init_draw_prepare(
 		Scene *scene = CTX_data_scene(C);
 		const TransformOrientationSlot *orient_slot = BKE_scene_orientation_slot_get(scene, SCE_GIZMO_SHOW_ROTATE);
 		switch (orient_slot->type) {
-			case V3D_MANIP_VIEW:
+			case V3D_ORIENT_VIEW:
 			{
 				if (!equals_m3m3(viewinv_m3, ggd->prev.viewinv_m3)) {
 					/* Take care calling refresh from draw_prepare,
@@ -442,23 +438,15 @@ static void gizmo_mesh_spin_init_message_subscribe(
 		.notify = WM_gizmo_do_msg_notify_tag_refresh,
 	};
 
-	PointerRNA scene_ptr;
-	RNA_id_pointer_create(&scene->id, &scene_ptr);
-
-	{
-		extern PropertyRNA rna_Scene_cursor_location;
-		const PropertyRNA *props[] = {
-			&rna_Scene_cursor_location,
-		};
-		for (int i = 0; i < ARRAY_SIZE(props); i++) {
-			WM_msg_subscribe_rna(mbus, &scene_ptr, props[i], &msg_sub_value_gz_tag_refresh, __func__);
-		}
-	}
+	PointerRNA cursor_ptr;
+	RNA_pointer_create(&scene->id, &RNA_View3DCursor, &scene->cursor, &cursor_ptr);
+	/* All cursor properties. */
+	WM_msg_subscribe_rna(mbus, &cursor_ptr, NULL, &msg_sub_value_gz_tag_refresh, __func__);
 
 	WM_msg_subscribe_rna_params(
 	        mbus,
 	        &(const wmMsgParams_RNA){
-	            .ptr = (PointerRNA){.type = gzgroup->type->srna},
+	            .ptr = (PointerRNA){ .type = gzgroup->type->srna, },
 	            .prop = ggd->data.gzgt_axis_prop,
 	        },
 	        &msg_sub_value_gz_tag_refresh, __func__);

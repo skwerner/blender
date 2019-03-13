@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,12 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/blenkernel/intern/blender_copybuffer.c
- *  \ingroup bke
+/** \file
+ * \ingroup bke
  *
  * Used for copy/paste operator, (using a temporary file).
  */
@@ -36,7 +32,6 @@
 
 #include "BLI_blenlib.h"
 #include "BLI_utildefines.h"
-#include "BLI_callbacks.h"
 
 #include "IMB_imbuf.h"
 #include "IMB_moviecache.h"
@@ -60,7 +55,6 @@
 
 
 /* -------------------------------------------------------------------- */
-
 /** \name Copy/Paste `.blend`, partial saves.
  * \{ */
 
@@ -103,7 +97,7 @@ bool BKE_copybuffer_read(Main *bmain_dst, const char *libname, ReportList *repor
 	BKE_main_lib_objects_recalc_all(bmain_dst);
 	IMB_colormanagement_check_file_config(bmain_dst);
 	/* Append, rather than linking. */
-	Library *lib = BLI_findstring(&bmain_dst->library, libname, offsetof(Library, filepath));
+	Library *lib = BLI_findstring(&bmain_dst->libraries, libname, offsetof(Library, filepath));
 	BKE_library_make_local(bmain_dst, lib, NULL, true, false);
 	/* Important we unset, otherwise these object wont
 	 * link into other scenes from this blend file.
@@ -153,7 +147,7 @@ bool BKE_copybuffer_paste(bContext *C, const char *libname, const short flag, Re
 	IMB_colormanagement_check_file_config(bmain);
 
 	/* append, rather than linking */
-	lib = BLI_findstring(&bmain->library, libname, offsetof(Library, filepath));
+	lib = BLI_findstring(&bmain->libraries, libname, offsetof(Library, filepath));
 	BKE_library_make_local(bmain, lib, NULL, true, false);
 
 	/* important we unset, otherwise these object wont

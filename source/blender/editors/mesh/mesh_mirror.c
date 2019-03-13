@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,14 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * Contributor(s): Blender Foundation, Campbell Barton
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/mesh/mesh_mirror.c
- *  \ingroup edmesh
+/** \file
+ * \ingroup edmesh
  *
  * Mirror calculation for edit-mode and object mode.
  */
@@ -29,7 +23,6 @@
 #include "MEM_guardedalloc.h"
 
 #include "BLI_math.h"
-#include "BLI_bitmap.h"
 
 #include "DNA_mesh_types.h"
 #include "DNA_meshdata_types.h"
@@ -71,7 +64,7 @@ int ED_mesh_mirror_spatial_table(Object *ob, BMEditMesh *em, Mesh *me_eval, cons
 	}
 	else if (mode == 's') {   /* start table */
 		Mesh *me = ob->data;
-		const bool use_em = (!me_eval && em && me->edit_btmesh == em);
+		const bool use_em = (!me_eval && em && me->edit_mesh == em);
 		const int totvert = use_em ? em->bm->totvert : me_eval ? me_eval->totvert : me->totvert;
 
 		if (MirrKdStore.tree) /* happens when entering this call without ending it */
@@ -144,7 +137,7 @@ static int mirrtopo_vert_sort(const void *v1, const void *v2)
 
 bool ED_mesh_mirrtopo_recalc_check(Mesh *me, Mesh *me_eval, MirrTopoStore_t *mesh_topo_store)
 {
-	const bool is_editmode = (me->edit_btmesh != NULL);
+	const bool is_editmode = (me->edit_mesh != NULL);
 	int totvert;
 	int totedge;
 
@@ -152,9 +145,9 @@ bool ED_mesh_mirrtopo_recalc_check(Mesh *me, Mesh *me_eval, MirrTopoStore_t *mes
 		totvert = me_eval->totvert;
 		totedge = me_eval->totedge;
 	}
-	else if (me->edit_btmesh) {
-		totvert = me->edit_btmesh->bm->totvert;
-		totedge = me->edit_btmesh->bm->totedge;
+	else if (me->edit_mesh) {
+		totvert = me->edit_mesh->bm->totvert;
+		totedge = me->edit_mesh->bm->totedge;
 	}
 	else {
 		totvert = me->totvert;
@@ -178,9 +171,9 @@ void ED_mesh_mirrtopo_init(
         Mesh *me, Mesh *me_eval, MirrTopoStore_t *mesh_topo_store,
         const bool skip_em_vert_array_init)
 {
-	const bool is_editmode = (me->edit_btmesh != NULL);
+	const bool is_editmode = (me->edit_mesh != NULL);
 	MEdge *medge = NULL, *med;
-	BMEditMesh *em = me_eval ?  NULL : me->edit_btmesh;
+	BMEditMesh *em = me_eval ?  NULL : me->edit_mesh;
 
 	/* editmode*/
 	BMEdge *eed;
@@ -216,7 +209,7 @@ void ED_mesh_mirrtopo_init(
 
 	/* Initialize the vert-edge-user counts used to detect unique topology */
 	if (em) {
-		totedge = me->edit_btmesh->bm->totedge;
+		totedge = me->edit_mesh->bm->totedge;
 
 		BM_ITER_MESH (eed, &iter, em->bm, BM_EDGES_OF_MESH) {
 			const int i1 = BM_elem_index_get(eed->v1), i2 = BM_elem_index_get(eed->v2);
@@ -317,7 +310,8 @@ void ED_mesh_mirrtopo_init(
 	if (em) {
 		BMVert **vtable = em->bm->vtable;
 		for (a = 1; a <= totvert; a++) {
-			/* printf("I %d %ld %d\n", (a - last), MirrTopoPairs[a].hash, MirrTopoPairs[a].v_indexs); */
+			// printf("I %d %ld %d\n",
+			//        (a - last), MirrTopoPairs[a].hash, MirrTopoPairs[a].v_indexs);
 			if ((a == totvert) || (topo_pairs[a - 1].hash != topo_pairs[a].hash)) {
 				const int match_count = a - last;
 				if (match_count == 2) {

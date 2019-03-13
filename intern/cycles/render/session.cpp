@@ -22,6 +22,7 @@
 #include "device/device.h"
 #include "render/graph.h"
 #include "render/integrator.h"
+#include "render/light.h"
 #include "render/mesh.h"
 #include "render/object.h"
 #include "render/scene.h"
@@ -129,7 +130,9 @@ Session::~Session()
 
 void Session::start()
 {
-	session_thread = new thread(function_bind(&Session::run, this));
+	if (!session_thread) {
+		session_thread = new thread(function_bind(&Session::run, this));
+	}
 }
 
 bool Session::ready_to_reset()
@@ -655,25 +658,23 @@ DeviceRequestedFeatures Session::get_requested_device_features()
 	scene->shader_manager->get_requested_features(
 	        scene,
 	        &requested_features);
-	if(!params.background) {
-		/* Avoid too much re-compilations for viewport render. */
-		requested_features.max_nodes_group = NODE_GROUP_LEVEL_MAX;
-		requested_features.nodes_features = NODE_FEATURE_ALL;
-	}
 
 	/* This features are not being tweaked as often as shaders,
 	 * so could be done selective magic for the viewport as well.
 	 */
+	bool use_motion = scene->need_motion() == Scene::MotionType::MOTION_BLUR;
 	requested_features.use_hair = false;
 	requested_features.use_object_motion = false;
-	requested_features.use_camera_motion = scene->camera->use_motion();
+	requested_features.use_camera_motion = use_motion && scene->camera->use_motion();
 	foreach(Object *object, scene->objects) {
 		Mesh *mesh = object->mesh;
 		if(mesh->num_curves()) {
 			requested_features.use_hair = true;
 		}
-		requested_features.use_object_motion |= object->use_motion() | mesh->use_motion_blur;
-		requested_features.use_camera_motion |= mesh->use_motion_blur;
+		if (use_motion) {
+			requested_features.use_object_motion |= object->use_motion() | mesh->use_motion_blur;
+			requested_features.use_camera_motion |= mesh->use_motion_blur;
+		}
 #ifdef WITH_OPENSUBDIV
 		if(mesh->subdivision_type != Mesh::SUBDIVISION_NONE) {
 			requested_features.use_patch_evaluation = true;
@@ -682,12 +683,15 @@ DeviceRequestedFeatures Session::get_requested_device_features()
 		if(object->is_shadow_catcher) {
 			requested_features.use_shadow_tricks = true;
 		}
+		requested_features.use_true_displacement |= mesh->has_true_displacement();
 	}
+
+	requested_features.use_background_light = scene->light_manager->has_background_light(scene);
 
 	BakeManager *bake_manager = scene->bake_manager;
 	requested_features.use_baking = bake_manager->get_baking();
 	requested_features.use_integrator_branched = (scene->integrator->method == Integrator::BRANCHED_PATH);
-	if(params.denoising_passes) {
+	if(params.run_denoising) {
 		requested_features.use_denoising = true;
 		requested_features.use_shadow_tricks = true;
 	}
@@ -830,8 +834,10 @@ void Session::set_pause(bool pause_)
 
 void Session::wait()
 {
-	session_thread->join();
-	delete session_thread;
+	if (session_thread) {
+		session_thread->join();
+		delete session_thread;
+	}
 
 	session_thread = NULL;
 }
@@ -882,7 +888,7 @@ bool Session::update_scene()
 		}
 		else {
 			/* Currently viewport render is faster with higher max_closures, needs investigating. */
-			kintegrator->max_closures = 64;
+			kintegrator->max_closures = MAX_CLOSURE;
 		}
 
 		progress.set_status("Updating Scene");
@@ -923,8 +929,11 @@ void Session::update_status_time(bool show_pause, bool show_done)
 			 */
 			substatus += string_printf(", Sample %d/%d", progress.get_current_sample(), num_samples);
 		}
-		if(params.use_denoising) {
+		if(params.full_denoising) {
 			substatus += string_printf(", Denoised %d tiles", progress.get_denoised_tiles());
+		}
+		else if(params.run_denoising) {
+			substatus += string_printf(", Prefiltered %d tiles", progress.get_denoised_tiles());
 		}
 	}
 	else if(tile_manager.num_samples == INT_MAX)
@@ -971,16 +980,18 @@ void Session::render()
 	task.requested_tile_size = params.tile_size;
 	task.passes_size = tile_manager.params.get_passes_size();
 
-	if(params.use_denoising) {
-		task.denoising_radius = params.denoising_radius;
-		task.denoising_strength = params.denoising_strength;
-		task.denoising_feature_strength = params.denoising_feature_strength;
-		task.denoising_relative_pca = params.denoising_relative_pca;
+	if(params.run_denoising) {
+		task.denoising = params.denoising;
 
 		assert(!scene->film->need_update);
 		task.pass_stride = scene->film->pass_stride;
+		task.target_pass_stride = task.pass_stride;
 		task.pass_denoising_data = scene->film->denoising_data_offset;
 		task.pass_denoising_clean = scene->film->denoising_clean_offset;
+
+		task.denoising_from_render = true;
+		task.denoising_do_filter = params.full_denoising;
+		task.denoising_write_passes = params.write_denoising_passes;
 	}
 
 	device->task_add(task);
@@ -1082,6 +1093,20 @@ int Session::get_max_closure_count()
 		max_closures = max(max_closures, num_closures);
 	}
 	max_closure_global = max(max_closure_global, max_closures);
+
+	if (max_closure_global > MAX_CLOSURE) {
+		/* This is usually harmless as more complex shader tend to get many
+		 * closures discarded due to mixing or low weights. We need to limit
+		 * to MAX_CLOSURE as this is hardcoded in CPU/mega kernels, and it
+		 * avoids excessive memory usage for split kernels. */
+		VLOG(2) << "Maximum number of closures exceeded: "
+				<< max_closure_global
+				<< " > "
+				<< MAX_CLOSURE;
+
+		max_closure_global = MAX_CLOSURE;
+	}
+
 	return max_closure_global;
 }
 

@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,15 +15,10 @@
  *
  * The Original Code is Copyright (C) 2008 Blender Foundation.
  * All rights reserved.
- *
- *
- * Contributor(s): Blender Foundation
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/space_buttons/space_buttons.c
- *  \ingroup spbuttons
+/** \file
+ * \ingroup spbuttons
  */
 
 #include <string.h>
@@ -61,10 +54,10 @@
 static SpaceLink *buttons_new(const ScrArea *UNUSED(area), const Scene *UNUSED(scene))
 {
 	ARegion *ar;
-	SpaceButs *sbuts;
+	SpaceProperties *sbuts;
 
-	sbuts = MEM_callocN(sizeof(SpaceButs), "initbuts");
-	sbuts->spacetype = SPACE_BUTS;
+	sbuts = MEM_callocN(sizeof(SpaceProperties), "initbuts");
+	sbuts->spacetype = SPACE_PROPERTIES;
 
 	sbuts->mainb = sbuts->mainbuser = BCONTEXT_OBJECT;
 
@@ -102,7 +95,7 @@ static SpaceLink *buttons_new(const ScrArea *UNUSED(area), const Scene *UNUSED(s
 /* not spacelink itself */
 static void buttons_free(SpaceLink *sl)
 {
-	SpaceButs *sbuts = (SpaceButs *) sl;
+	SpaceProperties *sbuts = (SpaceProperties *) sl;
 
 	if (sbuts->path)
 		MEM_freeN(sbuts->path);
@@ -121,7 +114,7 @@ static void buttons_init(struct wmWindowManager *UNUSED(wm), ScrArea *UNUSED(sa)
 
 static SpaceLink *buttons_duplicate(SpaceLink *sl)
 {
-	SpaceButs *sbutsn = MEM_dupallocN(sl);
+	SpaceProperties *sbutsn = MEM_dupallocN(sl);
 
 	/* clear or remove stuff from old */
 	sbutsn->path = NULL;
@@ -137,11 +130,11 @@ static void buttons_main_region_init(wmWindowManager *wm, ARegion *ar)
 
 	ED_region_panels_init(wm, ar);
 
-	keymap = WM_keymap_ensure(wm->defaultconf, "Property Editor", SPACE_BUTS, 0);
+	keymap = WM_keymap_ensure(wm->defaultconf, "Property Editor", SPACE_PROPERTIES, 0);
 	WM_event_add_keymap_handler(&ar->handlers, keymap);
 }
 
-static void buttons_main_region_layout_properties(const bContext *C, SpaceButs *sbuts, ARegion *ar)
+static void buttons_main_region_layout_properties(const bContext *C, SpaceProperties *sbuts, ARegion *ar)
 {
 	buttons_context_compute(C, sbuts);
 
@@ -318,7 +311,7 @@ static void buttons_main_region_layout_tool(const bContext *C, ARegion *ar)
 static void buttons_main_region_layout(const bContext *C, ARegion *ar)
 {
 	/* draw entirely, view changes should be handled here */
-	SpaceButs *sbuts = CTX_wm_space_buts(C);
+	SpaceProperties *sbuts = CTX_wm_space_properties(C);
 
 	if (sbuts->mainb == BCONTEXT_TOOL) {
 		buttons_main_region_layout_tool(C, ar);
@@ -353,7 +346,7 @@ static void buttons_operatortypes(void)
 
 static void buttons_keymap(struct wmKeyConfig *keyconf)
 {
-	WM_keymap_ensure(keyconf, "Property Editor", SPACE_BUTS, 0);
+	WM_keymap_ensure(keyconf, "Property Editor", SPACE_PROPERTIES, 0);
 }
 
 /* add handlers, stuff you only do once or on area/region changes */
@@ -371,7 +364,7 @@ static void buttons_header_region_init(wmWindowManager *UNUSED(wm), ARegion *ar)
 
 static void buttons_header_region_draw(const bContext *C, ARegion *ar)
 {
-	SpaceButs *sbuts = CTX_wm_space_buts(C);
+	SpaceProperties *sbuts = CTX_wm_space_properties(C);
 
 	/* Needed for RNA to get the good values! */
 	buttons_context_compute(C, sbuts);
@@ -385,14 +378,14 @@ static void buttons_header_region_message_subscribe(
         bScreen *UNUSED(screen), ScrArea *sa, ARegion *ar,
         struct wmMsgBus *mbus)
 {
-	SpaceButs *sbuts = sa->spacedata.first;
+	SpaceProperties *sbuts = sa->spacedata.first;
 	wmMsgSubscribeValue msg_sub_value_region_tag_redraw = {
 		.owner = ar,
 		.user_data = ar,
 		.notify = ED_region_do_msg_notify_tag_redraw,
 	};
 
-	/* Don't check for SpaceButs.mainb here, we may toggle between view-layers
+	/* Don't check for SpaceProperties.mainb here, we may toggle between view-layers
 	 * where one has no active object, so that available contexts changes. */
 	WM_msg_subscribe_rna_anon_prop(mbus, Window, view_layer, &msg_sub_value_region_tag_redraw);
 
@@ -411,7 +404,7 @@ static void buttons_header_region_message_subscribe(
 
 static void buttons_navigation_bar_region_init(wmWindowManager *wm, ARegion *ar)
 {
-	wmKeyMap *keymap = WM_keymap_ensure(wm->defaultconf, "Property Editor", SPACE_BUTS, 0);
+	wmKeyMap *keymap = WM_keymap_ensure(wm->defaultconf, "Property Editor", SPACE_PROPERTIES, 0);
 	WM_event_add_keymap_handler(&ar->handlers, keymap);
 
 	ar->flag |= RGN_FLAG_PREFSIZE_OR_HIDDEN;
@@ -427,7 +420,8 @@ static void buttons_navigation_bar_region_draw(const bContext *C, ARegion *ar)
 	}
 
 	ED_region_panels_layout(C, ar);
-	ar->v2d.scroll &= ~V2D_SCROLL_VERTICAL; /* ED_region_panels_layout adds vertical scrollbars, we don't want them. */
+	/* ED_region_panels_layout adds vertical scrollbars, we don't want them. */
+	ar->v2d.scroll &= ~V2D_SCROLL_VERTICAL;
 	ED_region_panels_draw(C, ar);
 }
 
@@ -450,7 +444,7 @@ static void buttons_navigation_bar_region_message_subscribe(
  * showing that button set, to reduce unnecessary drawing. */
 static void buttons_area_redraw(ScrArea *sa, short buttons)
 {
-	SpaceButs *sbuts = sa->spacedata.first;
+	SpaceProperties *sbuts = sa->spacedata.first;
 
 	/* if the area's current button set is equal to the one to redraw */
 	if (sbuts->mainb == buttons)
@@ -461,7 +455,7 @@ static void buttons_area_redraw(ScrArea *sa, short buttons)
 static void buttons_area_listener(
         wmWindow *UNUSED(win), ScrArea *sa, wmNotifier *wmn, Scene *UNUSED(scene))
 {
-	SpaceButs *sbuts = sa->spacedata.first;
+	SpaceProperties *sbuts = sa->spacedata.first;
 
 	/* context changes */
 	switch (wmn->category) {
@@ -643,7 +637,7 @@ static void buttons_area_listener(
 
 static void buttons_id_remap(ScrArea *UNUSED(sa), SpaceLink *slink, ID *old_id, ID *new_id)
 {
-	SpaceButs *sbuts = (SpaceButs *)slink;
+	SpaceProperties *sbuts = (SpaceProperties *)slink;
 
 	if (sbuts->pinid == old_id) {
 		sbuts->pinid = new_id;
@@ -700,7 +694,7 @@ void ED_spacetype_buttons(void)
 	SpaceType *st = MEM_callocN(sizeof(SpaceType), "spacetype buttons");
 	ARegionType *art;
 
-	st->spaceid = SPACE_BUTS;
+	st->spaceid = SPACE_PROPERTIES;
 	strncpy(st->name, "Buttons", BKE_ST_MAXNAME);
 
 	st->new = buttons_new;
@@ -743,7 +737,8 @@ void ED_spacetype_buttons(void)
 	/* regions: navigation bar */
 	art = MEM_callocN(sizeof(ARegionType), "spacetype nav buttons region");
 	art->regionid = RGN_TYPE_NAV_BAR;
-	art->prefsizex = AREAMINX - 3; /* XXX Works and looks best, should we update AREAMINX accordingly? */
+	art->prefsizex = AREAMINX - 3; /* XXX Works and looks best,
+	                                * should we update AREAMINX accordingly? */
 	art->keymapflag = ED_KEYMAP_UI | ED_KEYMAP_FRAMES;
 	art->init = buttons_navigation_bar_region_init;
 	art->draw = buttons_navigation_bar_region_draw;

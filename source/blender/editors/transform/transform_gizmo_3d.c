@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,12 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/transform/transform_gizmo_3d.c
- *  \ingroup edtransform
+/** \file
+ * \ingroup edtransform
  *
  * \name 3D Transform Gizmo
  *
@@ -58,8 +54,6 @@
 #include "BKE_scene.h"
 #include "BKE_workspace.h"
 #include "BKE_object.h"
-
-#include "BIF_gl.h"
 
 #include "DEG_depsgraph.h"
 
@@ -657,11 +651,11 @@ void ED_transform_calc_orientation_from_type_ex(
 	bool ok = false;
 
 	switch (orientation_type) {
-		case V3D_MANIP_GLOBAL:
+		case V3D_ORIENT_GLOBAL:
 		{
 			break; /* nothing to do */
 		}
-		case V3D_MANIP_GIMBAL:
+		case V3D_ORIENT_GIMBAL:
 		{
 			if (gimbal_axis(ob, r_mat)) {
 				ok = true;
@@ -670,7 +664,7 @@ void ED_transform_calc_orientation_from_type_ex(
 			/* if not gimbal, fall through to normal */
 			ATTR_FALLTHROUGH;
 		}
-		case V3D_MANIP_NORMAL:
+		case V3D_ORIENT_NORMAL:
 		{
 			if (obedit || ob->mode & OB_MODE_POSE) {
 				ED_getTransformOrientationMatrix(C, r_mat, pivot_point);
@@ -680,7 +674,7 @@ void ED_transform_calc_orientation_from_type_ex(
 			/* no break we define 'normal' as 'local' in Object mode */
 			ATTR_FALLTHROUGH;
 		}
-		case V3D_MANIP_LOCAL:
+		case V3D_ORIENT_LOCAL:
 		{
 			if (ob->mode & OB_MODE_POSE) {
 				/* each bone moves on its own local axis, but  to avoid confusion,
@@ -696,7 +690,7 @@ void ED_transform_calc_orientation_from_type_ex(
 			ok = true;
 			break;
 		}
-		case V3D_MANIP_VIEW:
+		case V3D_ORIENT_VIEW:
 		{
 			if (rv3d != NULL) {
 				copy_m3_m4(r_mat, rv3d->viewinv);
@@ -705,13 +699,13 @@ void ED_transform_calc_orientation_from_type_ex(
 			}
 			break;
 		}
-		case V3D_MANIP_CURSOR:
+		case V3D_ORIENT_CURSOR:
 		{
 			ED_view3d_cursor3d_calc_mat3(scene, r_mat);
 			ok = true;
 			break;
 		}
-		case V3D_MANIP_CUSTOM:
+		case V3D_ORIENT_CUSTOM:
 		{
 			TransformOrientation *custom_orientation = BKE_scene_transform_orientation_find(
 			        scene, orientation_index_custom);
@@ -1088,7 +1082,7 @@ int ED_transform_calc_gizmo_stats(
 		if (base && ((base->flag & BASE_SELECTED) == 0)) ob = NULL;
 
 		for (base = view_layer->object_bases.first; base; base = base->next) {
-			if (!TESTBASELIB(v3d, base)) {
+			if (!BASE_SELECTED_EDITABLE(v3d, base)) {
 				continue;
 			}
 			if (ob == NULL) {
@@ -1211,8 +1205,6 @@ static void gizmo_xform_message_subscribe(
         wmGizmoGroup *gzgroup, struct wmMsgBus *mbus,
         Scene *scene, bScreen *UNUSED(screen), ScrArea *UNUSED(sa), ARegion *ar, const void *type_fn)
 {
-	GizmoGroup *ggd = gzgroup->customdata;
-
 	/* Subscribe to view properties */
 	wmMsgSubscribeValue msg_sub_value_gz_tag_refresh = {
 		.owner = ar,
@@ -1220,26 +1212,44 @@ static void gizmo_xform_message_subscribe(
 		.notify = WM_gizmo_do_msg_notify_tag_refresh,
 	};
 
+	int orient_flag = 0;
+	if (type_fn == TRANSFORM_GGT_gizmo) {
+		GizmoGroup *ggd = gzgroup->customdata;
+		orient_flag = ggd->twtype_init;
+	}
+	else if (type_fn == VIEW3D_GGT_xform_cage) {
+		orient_flag = SCE_GIZMO_SHOW_SCALE;
+		/* pass */
+	}
+	else if (type_fn == VIEW3D_GGT_xform_shear) {
+		orient_flag = SCE_GIZMO_SHOW_ROTATE;
+	}
+	TransformOrientationSlot *orient_slot = BKE_scene_orientation_slot_get(scene, orient_flag);
+	PointerRNA orient_ref_ptr;
+	RNA_pointer_create(&scene->id, &RNA_TransformOrientationSlot, orient_slot, &orient_ref_ptr);
+	const ToolSettings *ts = scene->toolsettings;
+
 	PointerRNA scene_ptr;
 	RNA_id_pointer_create(&scene->id, &scene_ptr);
-
 	{
 		extern PropertyRNA rna_Scene_transform_orientation_slots;
-		extern PropertyRNA rna_Scene_cursor_location;
 		const PropertyRNA *props[] = {
 			&rna_Scene_transform_orientation_slots,
-			(scene->toolsettings->transform_pivot_point == V3D_AROUND_CURSOR) ? &rna_Scene_cursor_location : NULL,
 		};
 		for (int i = 0; i < ARRAY_SIZE(props); i++) {
-			if (props[i]) {
-				WM_msg_subscribe_rna(mbus, &scene_ptr, props[i], &msg_sub_value_gz_tag_refresh, __func__);
-			}
+			WM_msg_subscribe_rna(mbus, &scene_ptr, props[i], &msg_sub_value_gz_tag_refresh, __func__);
 		}
 	}
 
-	TransformOrientationSlot *orient_slot = BKE_scene_orientation_slot_get(scene, ggd->twtype_init);
-	PointerRNA orient_ref_ptr;
-	RNA_pointer_create(&scene->id, &RNA_TransformOrientationSlot, orient_slot, &orient_ref_ptr);
+	if ((ts->transform_pivot_point == V3D_AROUND_CURSOR) ||
+	    (orient_slot->type == V3D_ORIENT_CURSOR))
+	{
+		/* We could be more specific here, for now subscribe to any cursor change. */
+		PointerRNA cursor_ptr;
+		RNA_pointer_create(&scene->id, &RNA_View3DCursor, &scene->cursor, &cursor_ptr);
+		WM_msg_subscribe_rna(mbus, &cursor_ptr, NULL, &msg_sub_value_gz_tag_refresh, __func__);
+	}
+
 	{
 		extern PropertyRNA rna_TransformOrientationSlot_type;
 		extern PropertyRNA rna_TransformOrientationSlot_use;
@@ -1258,9 +1268,12 @@ static void gizmo_xform_message_subscribe(
 	RNA_pointer_create(&scene->id, &RNA_ToolSettings, scene->toolsettings, &toolsettings_ptr);
 
 	if (type_fn == TRANSFORM_GGT_gizmo) {
+		GizmoGroup *ggd = gzgroup->customdata;
 		extern PropertyRNA rna_ToolSettings_transform_pivot_point;
+		extern PropertyRNA rna_ToolSettings_use_gizmo_mode;
 		const PropertyRNA *props[] = {
 			&rna_ToolSettings_transform_pivot_point,
+			ggd->use_twtype_refresh ? &rna_ToolSettings_use_gizmo_mode : NULL,
 		};
 		for (int i = 0; i < ARRAY_SIZE(props); i++) {
 			WM_msg_subscribe_rna(mbus, &toolsettings_ptr, props[i], &msg_sub_value_gz_tag_refresh, __func__);
@@ -1283,7 +1296,7 @@ static void gizmo_xform_message_subscribe(
 void drawDial3d(const TransInfo *t)
 {
 	if (t->mode == TFM_ROTATION && t->spacetype == SPACE_VIEW3D) {
-		wmGizmo *gz = wm_gizmomap_highlight_get(t->ar->gizmo_map);
+		wmGizmo *gz = wm_gizmomap_modal_get(t->ar->gizmo_map);
 		if (gz == NULL) {
 			/* We only draw Dial3d if the operator has been called by a gizmo. */
 			return;
@@ -1316,7 +1329,7 @@ void drawDial3d(const TransInfo *t)
 		}
 		else {
 			axis_idx = MAN_AXIS_ROT_C;
-			negate_v3_v3(mat_basis[2], t->axis);
+			negate_v3_v3(mat_basis[2], t->orient_matrix[t->orient_axis]);
 			scale *= 1.2f;
 			line_with -= 1.0f;
 		}
@@ -1785,7 +1798,7 @@ static void WIDGETGROUP_gizmo_draw_prepare(const bContext *C, wmGizmoGroup *gzgr
 			Scene *scene = CTX_data_scene(C);
 			const TransformOrientationSlot *orient_slot = BKE_scene_orientation_slot_get(scene, ggd->twtype_init);
 			switch (orient_slot->type) {
-				case V3D_MANIP_VIEW:
+				case V3D_ORIENT_VIEW:
 				{
 					WIDGETGROUP_gizmo_refresh(C, gzgroup);
 					break;
@@ -1808,15 +1821,15 @@ static void WIDGETGROUP_gizmo_invoke_prepare(
 		Scene *scene = CTX_data_scene(C);
 		wmGizmoOpElem *gzop = WM_gizmo_operator_get(gz, 0);
 		PointerRNA *ptr = &gzop->ptr;
-		PropertyRNA *prop_constraint_orientation = RNA_struct_find_property(ptr, "constraint_orientation");
+		PropertyRNA *prop_orient_type = RNA_struct_find_property(ptr, "orient_type");
 		const TransformOrientationSlot *orient_slot = BKE_scene_orientation_slot_get(scene, ggd->twtype_init);
 		if (orient_slot == &scene->orientation_slots[SCE_ORIENT_DEFAULT]) {
-			RNA_property_unset(ptr, prop_constraint_orientation);
+			RNA_property_unset(ptr, prop_orient_type);
 		}
 		else {
 			/* TODO: APIfunction */
 			int index = BKE_scene_orientation_slot_get_index(orient_slot);
-			RNA_property_enum_set(ptr, prop_constraint_orientation, index);
+			RNA_property_enum_set(ptr, prop_orient_type, index);
 		}
 	}
 
@@ -1895,7 +1908,7 @@ void TRANSFORM_GGT_gizmo(wmGizmoGroupType *gzgt)
 		{SCE_GIZMO_SHOW_ROTATE, "ROTATE", 0, "Rotate", ""},
 		{SCE_GIZMO_SHOW_SCALE, "SCALE", 0, "Scale", ""},
 		{0, "NONE", 0, "None", ""},
-		{0, NULL, 0, NULL, NULL}
+		{0, NULL, 0, NULL, NULL},
 	};
 	RNA_def_enum(gzgt->srna, "drag_action", rna_enum_gizmo_items, SCE_GIZMO_SHOW_TRANSLATE, "Drag Action", "");
 }
@@ -2068,7 +2081,7 @@ static void WIDGETGROUP_xform_cage_draw_prepare(const bContext *C, wmGizmoGroup 
 		Scene *scene = CTX_data_scene(C);
 		const TransformOrientationSlot *orient_slot = BKE_scene_orientation_slot_get(scene, SCE_GIZMO_SHOW_SCALE);
 		switch (orient_slot->type) {
-			case V3D_MANIP_VIEW:
+			case V3D_ORIENT_VIEW:
 			{
 				float viewinv_m3[3][3];
 				copy_m3_m4(viewinv_m3, rv3d->viewinv);
@@ -2157,15 +2170,20 @@ static void WIDGETGROUP_xform_shear_setup(const bContext *UNUSED(C), wmGizmoGrou
 
 static void WIDGETGROUP_xform_shear_refresh(const bContext *C, wmGizmoGroup *gzgroup)
 {
+	Scene *scene = CTX_data_scene(C);
 	ARegion *ar = CTX_wm_region(C);
 	RegionView3D *rv3d = ar->regiondata;
 
 	struct XFormShearWidgetGroup *xgzgroup = gzgroup->customdata;
 	struct TransformBounds tbounds;
 
+	const TransformOrientationSlot *orient_slot = BKE_scene_orientation_slot_get(scene, SCE_GIZMO_SHOW_ROTATE);
+
 	if (ED_transform_calc_gizmo_stats(
 	            C, &(struct TransformCalcParams) {
 	                .use_local_axis = false,
+	                .orientation_type = orient_slot->type + 1,
+	                .orientation_index_custom = orient_slot->index_custom,
 	            }, &tbounds) == 0)
 	{
 		for (int i = 0; i < 3; i++) {
@@ -2189,15 +2207,12 @@ static void WIDGETGROUP_xform_shear_refresh(const bContext *C, wmGizmoGroup *gzg
 				WM_gizmo_set_matrix_rotation_from_yz_axis(gz, rv3d->twmat[i_ortho_a], rv3d->twmat[i]);
 				WM_gizmo_set_matrix_location(gz, rv3d->twmat[3]);
 
-				float axis[3];
-				if (j == 0) {
-					copy_v3_v3(axis, tbounds.axis[i_ortho_b]);
-				}
-				else {
-					negate_v3_v3(axis, tbounds.axis[i_ortho_b]);
-				}
-				RNA_float_set_array(&gzop->ptr, "axis", axis);
-				RNA_float_set_array(&gzop->ptr, "axis_ortho", tbounds.axis[i_ortho_a]);
+				RNA_float_set_array(&gzop->ptr, "orient_matrix", &tbounds.axis[0][0]);
+				RNA_enum_set(&gzop->ptr, "orient_type", orient_slot->type);
+
+				RNA_enum_set(&gzop->ptr, "orient_axis", i_ortho_b);
+				RNA_enum_set(&gzop->ptr, "orient_axis_ortho", i_ortho_a);
+
 				mul_v3_fl(gz->matrix_basis[0], 0.5f);
 				mul_v3_fl(gz->matrix_basis[1], 6.0f);
 			}
@@ -2227,7 +2242,7 @@ static void WIDGETGROUP_xform_shear_draw_prepare(const bContext *C, wmGizmoGroup
 		/* Shear is like rotate, use the rotate setting. */
 		const TransformOrientationSlot *orient_slot = BKE_scene_orientation_slot_get(scene, SCE_GIZMO_SHOW_ROTATE);
 		switch (orient_slot->type) {
-			case V3D_MANIP_VIEW:
+			case V3D_ORIENT_VIEW:
 			{
 				float viewinv_m3[3][3];
 				copy_m3_m4(viewinv_m3, rv3d->viewinv);
@@ -2246,7 +2261,8 @@ static void WIDGETGROUP_xform_shear_draw_prepare(const bContext *C, wmGizmoGroup
 		LISTBASE_FOREACH (wmGizmo *, gz, &gzgroup->gizmos) {
 			/* Since we have two pairs of each axis,
 			 * bias the values so gizmos that are orthogonal to the view get priority.
-			 * This means we never default to shearing along the view axis in the case of an overlap. */
+			 * This means we never default to shearing along
+			 * the view axis in the case of an overlap. */
 			float axis_order[3], axis_bias[3];
 			copy_v3_v3(axis_order, gz->matrix_basis[2]);
 			copy_v3_v3(axis_bias, gz->matrix_basis[1]);

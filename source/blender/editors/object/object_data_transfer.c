@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,10 @@
  *
  * The Original Code is Copyright (C) 2014 by Blender Foundation.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): Bastien Montagne.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/object/object_data_transfer.c
- *  \ingroup edobj
+/** \file
+ * \ingroup edobj
  */
 
 #include "DNA_mesh_types.h"
@@ -71,7 +63,8 @@ static const EnumPropertyItem DT_layer_items[] = {
 #if 0  /* XXX For now, would like to finish/merge work from 2014 gsoc first. */
 	{DT_TYPE_SHAPEKEY, "SHAPEKEYS", 0, "Shapekey(s)", "Transfer active or all shape keys"},
 #endif
-#if 0  /* XXX When SkinModifier is enabled, it seems to erase its own CD_MVERT_SKIN layer from final DM :( */
+#if 0  /* XXX When SkinModifier is enabled,
+        * it seems to erase its own CD_MVERT_SKIN layer from final DM :( */
 	{DT_TYPE_SKIN, "SKIN", 0, "Skin Weight", "Transfer skin weights"},
 #endif
 	{DT_TYPE_BWEIGHT_VERT, "BEVEL_WEIGHT_VERT", 0, "Bevel Weight", "Transfer bevel weights"},
@@ -88,7 +81,7 @@ static const EnumPropertyItem DT_layer_items[] = {
 	{0, "", 0, "Face Data", ""},
 	{DT_TYPE_SHARP_FACE, "SMOOTH", 0, "Smooth", "Transfer flat/smooth mark"},
 	{DT_TYPE_FREESTYLE_FACE, "FREESTYLE_FACE", 0, "Freestyle Mark", "Transfer Freestyle face mark"},
-	{0, NULL, 0, NULL, NULL}
+	{0, NULL, 0, NULL, NULL},
 };
 
 /* Note: rna_enum_dt_layers_select_src_items enum is from rna_modifier.c */
@@ -142,7 +135,9 @@ static const EnumPropertyItem *dt_layers_select_src_itemf(
 			Scene *scene_eval = DEG_get_evaluated_scene(depsgraph);
 			Object *ob_src_eval = DEG_get_evaluated_object(depsgraph, ob_src);
 
-			me_eval = mesh_get_eval_final(depsgraph, scene_eval, ob_src_eval, CD_MASK_BAREMESH | CD_MLOOPUV);
+			CustomData_MeshMasks cddata_masks = CD_MASK_BAREMESH;
+			cddata_masks.lmask |= CD_MASK_MLOOPUV;
+			me_eval = mesh_get_eval_final(depsgraph, scene_eval, ob_src_eval, &cddata_masks);
 			num_data = CustomData_number_of_layers(&me_eval->ldata, CD_MLOOPUV);
 
 			RNA_enum_item_add_separator(&item, &totitem);
@@ -164,7 +159,9 @@ static const EnumPropertyItem *dt_layers_select_src_itemf(
 			Scene *scene_eval = DEG_get_evaluated_scene(depsgraph);
 			Object *ob_src_eval = DEG_get_evaluated_object(depsgraph, ob_src);
 
-			me_eval = mesh_get_eval_final(depsgraph, scene_eval, ob_src_eval, CD_MASK_BAREMESH | CD_MLOOPCOL);
+			CustomData_MeshMasks cddata_masks = CD_MASK_BAREMESH;
+			cddata_masks.lmask |= CD_MASK_MLOOPCOL;
+			me_eval = mesh_get_eval_final(depsgraph, scene_eval, ob_src_eval, &cddata_masks);
 			num_data = CustomData_number_of_layers(&me_eval->ldata, CD_MLOOPCOL);
 
 			RNA_enum_item_add_separator(&item, &totitem);

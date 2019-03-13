@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,10 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file DNA_world_types.h
- *  \ingroup DNA
+/** \file
+ * \ingroup DNA
  */
 
 #ifndef __DNA_WORLD_TYPES_H__
@@ -36,9 +28,9 @@
 #include "DNA_ID.h"
 
 struct AnimData;
-struct bNodeTree;
 struct Ipo;
 struct MTex;
+struct bNodeTree;
 
 #ifndef MAX_MTEX
 #define MAX_MTEX	18
@@ -50,8 +42,10 @@ struct MTex;
  * gravity, color model etc. It mixes rendering data and modeling data. */
 typedef struct World {
 	ID id;
-	struct AnimData *adt;	/* animation data (must be immediately after id for utilities to use it) */
-	DrawDataList drawdata; /* runtime (must be immediately after id for utilities to use it). */
+	/** Animation data (must be immediately after id for utilities to use it). */
+	struct AnimData *adt;
+	/* runtime (must be immediately after id for utilities to use it). */
+	DrawDataList drawdata;
 
 	char _pad0[4];
 	short texact, mistype;
@@ -70,19 +64,22 @@ typedef struct World {
 	 * Some world modes
 	 * bit 0: Do mist
 	 */
-	short mode;												// partially moved to scene->gamedata in 2.5
-	short pad2[3];
+	short mode;
+	char _pad2[6];
 
 	float misi, miststa, mistdist, misthi;
 
-	/* ambient occlusion */
+	/** Ambient occlusion. */
 	float aodist, aoenergy;
 
-	/* assorted settings  */
-	short flag, pad3[3];
+	/** Assorted settings. */
+	short flag;
+	char _pad3[6];
 
-	struct Ipo *ipo  DNA_DEPRECATED;  /* old animation system, deprecated for 2.5 */
-	short pr_texture, use_nodes, pad[2];
+	/** Old animation system, deprecated for 2.5. */
+	struct Ipo *ipo  DNA_DEPRECATED;
+	short pr_texture, use_nodes;
+	char _pad[4];
 
 	/* previews */
 	struct PreviewImage *preview;
@@ -90,8 +87,11 @@ typedef struct World {
 	/* nodes */
 	struct bNodeTree *nodetree;
 
-	float mistend, pad1;        /* runtime : miststa + mistdist, used for drawing camera */
-	ListBase gpumaterial;		/* runtime */
+	/** Runtime : miststa + mistdist, used for drawing camera. */
+	float mistend;
+	char _pad1[4];
+	/** Runtime. */
+	ListBase gpumaterial;
 } World;
 
 /* **************** WORLD ********************* */

@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,10 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/sculpt_paint/paint_vertex.c
- *  \ingroup edsculpt
+/** \file
+ * \ingroup edsculpt
  *
  * Used for vertex color & weight paint and mode switching.
  *
@@ -246,7 +238,7 @@ bool vertex_paint_poll(bContext *C)
 
 bool vertex_paint_poll_ignore_tool(bContext *C)
 {
-	return vertex_paint_poll_ex(C, true);
+	return vertex_paint_poll_ex(C, false);
 }
 
 bool weight_paint_mode_poll(bContext *C)
@@ -823,7 +815,8 @@ static void do_weight_paint_vertex_single(
 			        dv, wpi->defbase_tot, wpi->vgroup_validmap, wpi->lock_flags, wpi->active.lock);
 
 			if (index_mirr != -1) {
-				/* only normalize if this is not a center vertex, else we get a conflict, normalizing twice */
+				/* only normalize if this is not a center vertex,
+				 * else we get a conflict, normalizing twice */
 				if (index != index_mirr) {
 					do_weight_paint_normalize_all_locked_try_active(
 					        dv_mirr, wpi->defbase_tot, wpi->vgroup_validmap, wpi->lock_flags, wpi->mirror.lock);
@@ -1690,7 +1683,7 @@ static void do_wpaint_brush_blur_task_cb_ex(
 	{
 		/* Test to see if the vertex coordinates are within the spherical brush region. */
 		if (sculpt_brush_test_sq_fn(&test, vd.co)) {
-			/* For grid based pbvh, take the vert whose loop coopresponds to the current grid.
+			/* For grid based pbvh, take the vert whose loop corresponds to the current grid.
 			 * Otherwise, take the current vert. */
 			const int v_index = has_grids ? data->me->mloop[vd.grid_indices[vd.g]].v : vd.vert_indices[vd.i];
 			const float grid_alpha = has_grids ? 1.0f / vd.gridsize : 1.0f;
@@ -1787,7 +1780,7 @@ static void do_wpaint_brush_smear_task_cb_ex(
 		{
 			/* Test to see if the vertex coordinates are within the spherical brush region. */
 			if (sculpt_brush_test_sq_fn(&test, vd.co)) {
-				/* For grid based pbvh, take the vert whose loop cooresponds to the current grid.
+				/* For grid based pbvh, take the vert whose loop corresponds to the current grid.
 				 * Otherwise, take the current vert. */
 				const int v_index = has_grids ? data->me->mloop[vd.grid_indices[vd.g]].v : vd.vert_indices[vd.i];
 				const float grid_alpha = has_grids ? 1.0f / vd.gridsize : 1.0f;
@@ -2136,7 +2129,8 @@ static void wpaint_do_radial_symmetry(
 	}
 }
 
-/* near duplicate of: sculpt.c's, 'do_symmetrical_brush_actions' and 'vpaint_do_symmetrical_brush_actions'. */
+/* near duplicate of: sculpt.c's,
+ * 'do_symmetrical_brush_actions' and 'vpaint_do_symmetrical_brush_actions'. */
 static void wpaint_do_symmetrical_brush_actions(
         bContext *C, Object *ob, VPaint *wp, Sculpt *sd, struct WPaintData *wpd, WeightPaintInfo *wpi)
 {
@@ -2155,7 +2149,8 @@ static void wpaint_do_symmetrical_brush_actions(
 
 	cache->symmetry = symm;
 
-	/* symm is a bit combination of XYZ - 1 is mirror X; 2 is Y; 3 is XY; 4 is Z; 5 is XZ; 6 is YZ; 7 is XYZ */
+	/* symm is a bit combination of XYZ - 1 is mirror
+	 * X; 2 is Y; 3 is XY; 4 is Z; 5 is XZ; 6 is YZ; 7 is XYZ */
 	for (i = 1; i <= symm; i++) {
 		if ((symm & i && (symm != 5 || i != 3) && (symm != 6 || (i != 3 && i != 5)))) {
 			cache->mirror_symmetry_pass = i;
@@ -2820,7 +2815,8 @@ static void do_vpaint_brush_blur_task_cb_ex(
 						col[2] = round_fl_to_uchar(sqrtf(divide_round_i(blend[2], total_hit_loops)));
 						col[3] = round_fl_to_uchar(sqrtf(divide_round_i(blend[3], total_hit_loops)));
 
-						/* For each poly owning this vert, paint each loop belonging to this vert. */
+						/* For each poly owning this vert,
+						 * paint each loop belonging to this vert. */
 						for (int j = 0; j < gmap->vert_to_poly[v_index].count; j++) {
 							const int p_index = gmap->vert_to_poly[v_index].indices[j];
 							const int l_index = gmap->vert_to_loop[v_index].indices[j];
@@ -2917,7 +2913,8 @@ static void do_vpaint_brush_smear_task_cb_ex(
 						 * to neighbor direction is 0.0, meaning orthogonal. */
 						float stroke_dot_max = 0.0f;
 
-						/* Get the color of the loop in the opposite direction of the brush movement */
+						/* Get the color of the loop in the opposite
+						 * direction of the brush movement */
 						uint color_final = 0;
 						for (int j = 0; j < gmap->vert_to_poly[v_index].count; j++) {
 							const int p_index = gmap->vert_to_poly[v_index].indices[j];
@@ -2932,7 +2929,8 @@ static void do_vpaint_brush_smear_task_cb_ex(
 									if (v_other_index != v_index) {
 										const MVert *mv_other = &data->me->mvert[v_other_index];
 
-										/* Get the direction from the selected vert to the neighbor. */
+										/* Get the direction from the
+										 * selected vert to the neighbor. */
 										float other_dir[3];
 										sub_v3_v3v3(other_dir, mv_curr->co, mv_other->co);
 										project_plane_v3_v3v3(other_dir, other_dir, cache->view_normal);
@@ -2956,7 +2954,8 @@ static void do_vpaint_brush_smear_task_cb_ex(
 							        255 * brush_fade * brush_strength *
 							        brush_alpha_pressure * grid_alpha;
 
-							/* For each poly owning this vert, paint each loop belonging to this vert. */
+							/* For each poly owning this vert,
+							 * paint each loop belonging to this vert. */
 							for (int j = 0; j < gmap->vert_to_poly[v_index].count; j++) {
 								const int p_index = gmap->vert_to_poly[v_index].indices[j];
 								const int l_index = gmap->vert_to_loop[v_index].indices[j];
@@ -3097,7 +3096,8 @@ static void vpaint_do_radial_symmetry(
 	}
 }
 
-/* near duplicate of: sculpt.c's, 'do_symmetrical_brush_actions' and 'wpaint_do_symmetrical_brush_actions'. */
+/* near duplicate of: sculpt.c's,
+ * 'do_symmetrical_brush_actions' and 'wpaint_do_symmetrical_brush_actions'. */
 static void vpaint_do_symmetrical_brush_actions(
         bContext *C, Sculpt *sd, VPaint *vp, struct VPaintData *vpd, Object *ob)
 {
@@ -3116,7 +3116,8 @@ static void vpaint_do_symmetrical_brush_actions(
 
 	cache->symmetry = symm;
 
-	/* symm is a bit combination of XYZ - 1 is mirror X; 2 is Y; 3 is XY; 4 is Z; 5 is XZ; 6 is YZ; 7 is XYZ */
+	/* symm is a bit combination of XYZ - 1 is mirror
+	 * X; 2 is Y; 3 is XY; 4 is Z; 5 is XZ; 6 is YZ; 7 is XYZ */
 	for (i = 1; i <= symm; i++) {
 		if (symm & i && (symm != 5 || i != 3) && (symm != 6 || (i != 3 && i != 5))) {
 			cache->mirror_symmetry_pass = i;

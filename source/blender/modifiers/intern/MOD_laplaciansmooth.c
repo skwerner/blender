@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,24 +15,20 @@
  *
  * The Original Code is Copyright (C) 2005 by the Blender Foundation.
  * All rights reserved.
- *
- * Contributor(s): Alexander Pinzon
- *
- * ***** END GPL LICENSE BLOCK *****
- *
  */
 
-/** \file blender/modifiers/intern/MOD_laplaciansmooth.c
- *  \ingroup modifiers
+/** \file
+ * \ingroup modifiers
  */
 
+
+#include "BLI_utildefines.h"
+
+#include "BLI_math.h"
 
 #include "DNA_mesh_types.h"
 #include "DNA_meshdata_types.h"
 #include "DNA_object_types.h"
-
-#include "BLI_math.h"
-#include "BLI_utildefines.h"
 
 #include "MEM_guardedalloc.h"
 
@@ -47,11 +41,6 @@
 #include "MOD_util.h"
 
 #include "eigen_capi.h"
-
-#if 0
-#define MOD_LAPLACIANSMOOTH_MAX_EDGE_PERCENTAGE 1.8f
-#define MOD_LAPLACIANSMOOTH_MIN_EDGE_PERCENTAGE 0.02f
-#endif
 
 struct BLaplacianSystem {
 	float *eweights;        /* Length weights per Edge */
@@ -80,7 +69,7 @@ struct BLaplacianSystem {
 };
 typedef struct BLaplacianSystem LaplacianSystem;
 
-static CustomDataMask required_data_mask(Object *ob, ModifierData *md);
+static void required_data_mask(Object *ob, ModifierData *md, CustomData_MeshMasks *r_cddata_masks);
 static bool is_disabled(const struct Scene *UNUSED(scene), ModifierData *md, bool useRenderParams);
 static float compute_volume(const float center[3], float (*vertexCos)[3], const MPoly *mpoly, int numPolys, const MLoop *mloop);
 static LaplacianSystem *init_laplacian_system(int a_numEdges, int a_numPolys, int a_numLoops, int a_numVerts);
@@ -487,15 +476,14 @@ static bool is_disabled(const struct Scene *UNUSED(scene), ModifierData *md, boo
 	return 0;
 }
 
-static CustomDataMask required_data_mask(Object *UNUSED(ob), ModifierData *md)
+static void required_data_mask(Object *UNUSED(ob), ModifierData *md, CustomData_MeshMasks *r_cddata_masks)
 {
 	LaplacianSmoothModifierData *smd = (LaplacianSmoothModifierData *)md;
-	CustomDataMask dataMask = 0;
 
 	/* ask for vertexgroups if we need them */
-	if (smd->defgrp_name[0]) dataMask |= CD_MASK_MDEFORMVERT;
-
-	return dataMask;
+	if (smd->defgrp_name[0] != '\0') {
+		r_cddata_masks->vmask |= CD_MASK_MDEFORMVERT;
+	}
 }
 
 static void deformVerts(

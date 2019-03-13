@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,29 +15,19 @@
  *
  * The Original Code is Copyright (C) 2005 by the Blender Foundation.
  * All rights reserved.
- *
- * Contributor(s): Daniel Dunbar
- *                 Ton Roosendaal,
- *                 Ben Batt,
- *                 Brecht Van Lommel,
- *                 Campbell Barton
- *
- * ***** END GPL LICENSE BLOCK *****
- *
  */
 
-/** \file blender/modifiers/intern/MOD_particlesystem.c
- *  \ingroup modifiers
+/** \file
+ * \ingroup modifiers
  */
 
 
 #include <stddef.h>
 
-#include "DNA_material_types.h"
-#include "DNA_mesh_types.h"
-
 #include "BLI_utildefines.h"
 
+#include "DNA_material_types.h"
+#include "DNA_mesh_types.h"
 
 #include "BKE_editmesh.h"
 #include "BKE_mesh.h"
@@ -93,10 +81,11 @@ static void copyData(const ModifierData *md, ModifierData *target, const int fla
 	tpsmd->totdmvert = tpsmd->totdmedge = tpsmd->totdmface = 0;
 }
 
-static CustomDataMask requiredDataMask(Object *UNUSED(ob), ModifierData *md)
+static void requiredDataMask(Object *UNUSED(ob), ModifierData *md, CustomData_MeshMasks *r_cddata_masks)
 {
 	ParticleSystemModifierData *psmd = (ParticleSystemModifierData *) md;
-	return psys_emitter_customdata_mask(psmd->psys);
+
+	psys_emitter_customdata_mask(psmd->psys, r_cddata_masks);
 }
 
 /* saves the current emitter state for a particle system and calculates particles */
@@ -127,6 +116,7 @@ static void deformVerts(
 	}
 
 	/* clear old dm */
+	bool had_mesh_final = (psmd->mesh_final != NULL);
 	if (psmd->mesh_final) {
 		BKE_id_free(NULL, psmd->mesh_final);
 		psmd->mesh_final = NULL;
@@ -138,9 +128,12 @@ static void deformVerts(
 	else if (psmd->flag & eParticleSystemFlag_file_loaded) {
 		/* in file read mesh just wasn't saved in file so no need to reset everything */
 		psmd->flag &= ~eParticleSystemFlag_file_loaded;
-	}
-	else {
-		/* no dm before, so recalc particles fully */
+		if (psys->particles == NULL) {
+			psys->recalc |= ID_RECALC_PSYS_RESET;
+		}
+		/* TODO(sergey): This is not how particles were working prior to copy on
+		 * write, but now evaluation is similar to case when one duplicates the
+		 * object. In that case particles were doing reset here. */
 		psys->recalc |= ID_RECALC_PSYS_RESET;
 	}
 
@@ -158,11 +151,11 @@ static void deformVerts(
 		Mesh *mesh_original = NULL;
 
 		if (ctx->object->type == OB_MESH) {
-			BMEditMesh *edit_btmesh = BKE_editmesh_from_object(ctx->object);
+			BMEditMesh *em = BKE_editmesh_from_object(ctx->object);
 
-			if (edit_btmesh) {
+			if (em) {
 				/* In edit mode get directly from the edit mesh. */
-				psmd->mesh_original = BKE_mesh_from_bmesh_for_eval_nomain(edit_btmesh->bm, 0);
+				psmd->mesh_original = BKE_mesh_from_bmesh_for_eval_nomain(em->bm, NULL);
 			}
 			else {
 				/* Otherwise get regular mesh. */
@@ -187,13 +180,16 @@ static void deformVerts(
 		BKE_id_free(NULL, mesh_src);
 	}
 
-	/* report change in mesh structure */
-	if (psmd->mesh_final->totvert != psmd->totdmvert ||
-	    psmd->mesh_final->totedge != psmd->totdmedge ||
-	    psmd->mesh_final->totface != psmd->totdmface)
+	/* Report change in mesh structure.
+	 * This is an unreliable check for the topology check, but allows some
+	 * handy configuration like emitting particles from inside particle
+	 * instance. */
+	if (had_mesh_final &&
+	    (psmd->mesh_final->totvert != psmd->totdmvert ||
+	     psmd->mesh_final->totedge != psmd->totdmedge ||
+	     psmd->mesh_final->totface != psmd->totdmface))
 	{
 		psys->recalc |= ID_RECALC_PSYS_RESET;
-
 		psmd->totdmvert = psmd->mesh_final->totvert;
 		psmd->totdmedge = psmd->mesh_final->totedge;
 		psmd->totdmface = psmd->mesh_final->totface;
@@ -204,6 +200,14 @@ static void deformVerts(
 		psmd->flag &= ~eParticleSystemFlag_psys_updated;
 		particle_system_update(ctx->depsgraph, scene, ctx->object, psys, (ctx->flag & MOD_APPLY_RENDER) != 0);
 		psmd->flag |= eParticleSystemFlag_psys_updated;
+	}
+
+	if (DEG_is_active(ctx->depsgraph)) {
+		Object *object_orig = DEG_get_original_object(ctx->object);
+		ModifierData *md_orig = modifiers_findByName(object_orig, psmd->modifier.name);
+		BLI_assert(md_orig != NULL);
+		ParticleSystemModifierData *psmd_orig = (ParticleSystemModifierData *) md_orig;
+		psmd_orig->flag = psmd->flag;
 	}
 }
 

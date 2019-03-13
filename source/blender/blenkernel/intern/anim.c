@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,10 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/blenkernel/intern/anim.c
- *  \ingroup bke
+/** \file
+ * \ingroup bke
  */
 
 #include "MEM_guardedalloc.h"
@@ -47,9 +39,7 @@
 #include "BKE_anim.h"
 #include "BKE_animsys.h"
 #include "BKE_action.h"
-#include "BKE_context.h"
 #include "BKE_curve.h"
-#include "BKE_global.h"
 #include "BKE_key.h"
 #include "BKE_main.h"
 #include "BKE_object.h"
@@ -62,6 +52,10 @@
 #include "DEG_depsgraph_build.h"
 
 #include "GPU_batch.h"
+
+#include "CLG_log.h"
+
+static CLG_LogRef LOG = {"bke.anim"};
 
 // XXX bad level call...
 extern short compare_ak_cfraPtr(void *node, void *data);
@@ -80,15 +74,6 @@ void animviz_settings_init(bAnimVizSettings *avs)
 	/* sanity check */
 	if (avs == NULL)
 		return;
-
-	/* ghosting settings */
-	avs->ghost_bc = avs->ghost_ac = 10;
-
-	avs->ghost_sf = 1; /* xxx - take from scene instead? */
-	avs->ghost_ef = 250; /* xxx - take from scene instead? */
-
-	avs->ghost_step = 1;
-
 
 	/* path settings */
 	avs->path_bc = avs->path_ac = 10;
@@ -495,7 +480,7 @@ void animviz_calc_motionpaths(Depsgraph *depsgraph,
 	}
 
 	/* calculate path over requested range */
-	printf("Calculating MotionPaths between frames %d - %d (%d frames)\n", sfra, efra, efra - sfra + 1);
+	CLOG_INFO(&LOG, 1, "Calculating MotionPaths between frames %d - %d (%d frames)", sfra, efra, efra - sfra + 1);
 	for (CFRA = sfra; CFRA <= efra; CFRA++) {
 		if (current_frame_only) {
 			/* For current frame, only update tagged. */
@@ -659,7 +644,7 @@ void calc_curvepath(Object *ob, ListBase *nurbs)
 		}
 
 		interp_v3_v3v3(pp->vec, bevp->vec, bevpn->vec, fac2);
-		pp->vec[3] = fac1 * bevp->alfa   + fac2 * bevpn->alfa;
+		pp->vec[3] = fac1 * bevp->tilt   + fac2 * bevpn->tilt;
 		pp->radius = fac1 * bevp->radius + fac2 * bevpn->radius;
 		pp->weight = fac1 * bevp->weight + fac2 * bevpn->weight;
 		interp_qt_qtqt(pp->quat, bevp->quat, bevpn->quat, fac2);
@@ -706,7 +691,7 @@ int where_on_path(Object *ob, float ctime, float vec[4], float dir[3], float qua
 	if (ob == NULL || ob->type != OB_CURVE) return 0;
 	cu = ob->data;
 	if (ob->runtime.curve_cache == NULL || ob->runtime.curve_cache->path == NULL || ob->runtime.curve_cache->path->data == NULL) {
-		printf("no path!\n");
+		CLOG_WARN(&LOG, "no path!");
 		return 0;
 	}
 	path = ob->runtime.curve_cache->path;

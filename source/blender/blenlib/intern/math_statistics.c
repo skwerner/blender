@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,14 +15,10 @@
  *
  * The Original Code is Copyright (C) 2015 by Blender Foundation.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * ***** END GPL LICENSE BLOCK *****
  * */
 
-/** \file blender/blenlib/intern/math_statistics.c
- *  \ingroup bli
+/** \file
+ * \ingroup bli
  */
 
 #include "MEM_guardedalloc.h"
@@ -60,7 +54,7 @@ static void covariance_m_vn_ex_task_cb(
 
 	int k;
 
-	/* Covariance matrices are always symetrical, so we can compute only one half of it,
+	/* Covariance matrices are always symmetrical, so we can compute only one half of it,
 	 * and mirror it to the other half (at the end of the func).
 	 *
 	 * This allows using a flat loop of n*n with same results as imbricated one over half the matrix:

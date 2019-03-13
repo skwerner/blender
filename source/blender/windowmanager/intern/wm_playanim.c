@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,10 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): Campbell Barton
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/windowmanager/intern/wm_playanim.c
- *  \ingroup wm
+/** \file
+ * \ingroup wm
  *
  * Animation player for image sequences & video's with sound support.
  * Launched in a separate process from Blender's #RENDER_OT_play_rendered_anim
@@ -63,7 +55,6 @@
 
 #include "BKE_image.h"
 
-#include "BIF_gl.h"
 #include "BIF_glutil.h"
 
 #include "GPU_matrix.h"
@@ -181,7 +172,7 @@ typedef enum eWS_Qual {
 	WS_QUAL_LMOUSE  = (1 << 16),
 	WS_QUAL_MMOUSE  = (1 << 17),
 	WS_QUAL_RMOUSE  = (1 << 18),
-	WS_QUAL_MOUSE   = (WS_QUAL_LMOUSE | WS_QUAL_MMOUSE | WS_QUAL_RMOUSE)
+	WS_QUAL_MOUSE   = (WS_QUAL_LMOUSE | WS_QUAL_MMOUSE | WS_QUAL_RMOUSE),
 } eWS_Qual;
 
 static struct WindowStateGlobal {
@@ -215,30 +206,24 @@ static void playanim_event_qual_update(void)
 
 	/* Shift */
 	GHOST_GetModifierKeyState(g_WS.ghost_system, GHOST_kModifierKeyLeftShift, &val);
-	if (val) g_WS.qual |=  WS_QUAL_LSHIFT;
-	else     g_WS.qual &= ~WS_QUAL_LSHIFT;
+	SET_FLAG_FROM_TEST(g_WS.qual, val, WS_QUAL_LSHIFT);
 
 	GHOST_GetModifierKeyState(g_WS.ghost_system, GHOST_kModifierKeyRightShift, &val);
-	if (val) g_WS.qual |=  WS_QUAL_RSHIFT;
-	else     g_WS.qual &= ~WS_QUAL_RSHIFT;
+	SET_FLAG_FROM_TEST(g_WS.qual, val, WS_QUAL_RSHIFT);
 
 	/* Control */
 	GHOST_GetModifierKeyState(g_WS.ghost_system, GHOST_kModifierKeyLeftControl, &val);
-	if (val) g_WS.qual |=  WS_QUAL_LCTRL;
-	else     g_WS.qual &= ~WS_QUAL_LCTRL;
+	SET_FLAG_FROM_TEST(g_WS.qual, val, WS_QUAL_LCTRL);
 
 	GHOST_GetModifierKeyState(g_WS.ghost_system, GHOST_kModifierKeyRightControl, &val);
-	if (val) g_WS.qual |=  WS_QUAL_RCTRL;
-	else     g_WS.qual &= ~WS_QUAL_RCTRL;
+	SET_FLAG_FROM_TEST(g_WS.qual, val, WS_QUAL_RCTRL);
 
 	/* Alt */
 	GHOST_GetModifierKeyState(g_WS.ghost_system, GHOST_kModifierKeyLeftAlt, &val);
-	if (val) g_WS.qual |=  WS_QUAL_LALT;
-	else     g_WS.qual &= ~WS_QUAL_LALT;
+	SET_FLAG_FROM_TEST(g_WS.qual, val, WS_QUAL_LALT);
 
 	GHOST_GetModifierKeyState(g_WS.ghost_system, GHOST_kModifierKeyRightAlt, &val);
-	if (val) g_WS.qual |=  WS_QUAL_RALT;
-	else     g_WS.qual &= ~WS_QUAL_RALT;
+	SET_FLAG_FROM_TEST(g_WS.qual, val, WS_QUAL_RALT);
 }
 
 typedef struct PlayAnimPict {
@@ -930,7 +915,7 @@ static int ghost_event_proc(GHOST_EventHandle evt, GHOST_TUserDataPtr ps_void)
 				{
 					if (val == 0) break;
 					if (g_WS.qual & WS_QUAL_CTRL) {
-						playanim_window_zoom(ps, 1.0f);
+						playanim_window_zoom(ps, 0.1f);
 					}
 					else {
 						if (swaptime > ps->fstep / 60.0) {
@@ -945,7 +930,7 @@ static int ghost_event_proc(GHOST_EventHandle evt, GHOST_TUserDataPtr ps_void)
 				{
 					if (val == 0) break;
 					if (g_WS.qual & WS_QUAL_CTRL) {
-						playanim_window_zoom(ps, -1.0f);
+						playanim_window_zoom(ps, -0.1f);
 					}
 					else {
 						if (swaptime < ps->fstep / 5.0) {
@@ -1047,10 +1032,6 @@ static int ghost_event_proc(GHOST_EventHandle evt, GHOST_TUserDataPtr ps_void)
 
 			/* zoom always show entire image */
 			ps->zoom = MIN2(zoomx, zoomy);
-
-			/* zoom steps of 2 for speed */
-			ps->zoom = floor(ps->zoom + 0.5f);
-			if (ps->zoom < 1.0f) ps->zoom = 1.0f;
 
 			glViewport(0, 0, ps->win_x, ps->win_y);
 			glScissor(0, 0, ps->win_x, ps->win_y);
@@ -1275,8 +1256,6 @@ static char *wm_main_playanim_intern(int argc, const char **argv)
 		GHOST_AddEventConsumer(g_WS.ghost_system, consumer);
 
 		playanim_window_open("Blender:Anim", start_x, start_y, ibuf->x, ibuf->y);
-
-		playanim_gl_matrix();
 	}
 
 	GHOST_GetMainDisplayDimensions(g_WS.ghost_system, &maxwinx, &maxwiny);
@@ -1305,6 +1284,12 @@ static char *wm_main_playanim_intern(int argc, const char **argv)
 
 	glClearColor(0.1, 0.1, 0.1, 0.0);
 	glClear(GL_COLOR_BUFFER_BIT);
+
+	int win_x, win_y;
+	playanim_window_get_size(&win_x, &win_y);
+	glViewport(0, 0, win_x, win_y);
+	glScissor(0, 0, win_x, win_y);
+	playanim_gl_matrix();
 
 	GHOST_SwapWindowBuffers(g_WS.ghost_window);
 
@@ -1555,6 +1540,8 @@ static char *wm_main_playanim_intern(int argc, const char **argv)
 
 	GPU_shader_free_builtin_shaders();
 
+	immDeactivate();
+
 	if (g_WS.gpu_context) {
 		GPU_context_active_set(g_WS.gpu_context);
 		GPU_context_discard(g_WS.gpu_context);
@@ -1563,7 +1550,6 @@ static char *wm_main_playanim_intern(int argc, const char **argv)
 
 	BLF_exit();
 
-	immDeactivate();
 	GPU_exit();
 
 	GHOST_DisposeWindow(g_WS.ghost_system, g_WS.ghost_window);

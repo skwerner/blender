@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,36 +15,26 @@
  *
  * The Original Code is Copyright (C) 2005 by the Blender Foundation.
  * All rights reserved.
- *
- * Contributor(s): Daniel Dunbar
- *                 Ton Roosendaal,
- *                 Ben Batt,
- *                 Brecht Van Lommel,
- *                 Campbell Barton
- *
- * ***** END GPL LICENSE BLOCK *****
- *
  */
 
-/** \file blender/modifiers/intern/MOD_uvproject.c
- *  \ingroup modifiers
+/** \file
+ * \ingroup modifiers
  */
 
 
 /* UV Project modifier: Generates UVs projected from an object */
+
+#include "BLI_utildefines.h"
+
+#include "BLI_math.h"
+#include "BLI_uvproject.h"
 
 #include "DNA_mesh_types.h"
 #include "DNA_meshdata_types.h"
 #include "DNA_camera_types.h"
 #include "DNA_object_types.h"
 
-#include "BLI_math.h"
-#include "BLI_uvproject.h"
-#include "BLI_utildefines.h"
-
-
 #include "BKE_camera.h"
-#include "BKE_library.h"
 #include "BKE_library_query.h"
 #include "BKE_material.h"
 #include "BKE_mesh.h"
@@ -69,14 +57,10 @@ static void initData(ModifierData *md)
 	umd->scalex = umd->scaley = 1.0f;
 }
 
-static CustomDataMask requiredDataMask(Object *UNUSED(ob), ModifierData *UNUSED(md))
+static void requiredDataMask(Object *UNUSED(ob), ModifierData *UNUSED(md), CustomData_MeshMasks *r_cddata_masks)
 {
-	CustomDataMask dataMask = 0;
-
 	/* ask for UV coordinates */
-	dataMask |= CD_MLOOPUV;
-
-	return dataMask;
+	r_cddata_masks->lmask |= CD_MLOOPUV;
 }
 
 static void foreachObjectLink(
@@ -112,7 +96,7 @@ static void updateDepsgraph(ModifierData *md, const ModifierUpdateDepsgraphConte
 		}
 	}
 	if (do_add_own_transform) {
-		DEG_add_object_relation(ctx->node, ctx->object, DEG_OB_COMP_TRANSFORM, "UV Project Modifier");
+		DEG_add_modifier_to_transform_relation(ctx->node, "UV Project Modifier");
 	}
 }
 

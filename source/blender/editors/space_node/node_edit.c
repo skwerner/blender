@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,21 +15,15 @@
  *
  * The Original Code is Copyright (C) 2005 Blender Foundation.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): David Millan Escriva, Juho Vepsäläinen, Nathan Letwory
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/space_node/node_edit.c
- *  \ingroup spnode
+/** \file
+ * \ingroup spnode
  */
 
 #include "MEM_guardedalloc.h"
 
-#include "DNA_lamp_types.h"
+#include "DNA_light_types.h"
 #include "DNA_material_types.h"
 #include "DNA_node_types.h"
 #include "DNA_text_types.h"
@@ -56,6 +48,7 @@
 
 
 #include "ED_node.h"  /* own include */
+#include "ED_select_utils.h"
 #include "ED_screen.h"
 #include "ED_render.h"
 
@@ -84,7 +77,7 @@
 
 enum {
 	COM_RECALC_COMPOSITE = 1,
-	COM_RECALC_VIEWER    = 2
+	COM_RECALC_VIEWER    = 2,
 };
 
 typedef struct CompoJob {
@@ -421,7 +414,7 @@ void ED_node_shader_default(const bContext *C, ID *id)
 		}
 		case ID_LA:
 		{
-			Lamp *la = (Lamp *)id;
+			Light *la = (Light *)id;
 			la->nodetree = ntree;
 
 			output_type = SH_NODE_OUTPUT_LIGHT;
@@ -648,11 +641,11 @@ void ED_node_set_active(Main *bmain, bNodeTree *ntree, bNode *node)
 				Material *ma;
 				World *wo;
 
-				for (ma = bmain->mat.first; ma; ma = ma->id.next)
+				for (ma = bmain->materials.first; ma; ma = ma->id.next)
 					if (ma->nodetree && ma->use_nodes && ntreeHasTree(ma->nodetree, ntree))
 						GPU_material_free(&ma->gpumaterial);
 
-				for (wo = bmain->world.first; wo; wo = wo->id.next)
+				for (wo = bmain->worlds.first; wo; wo = wo->id.next)
 					if (wo->nodetree && wo->use_nodes && ntreeHasTree(wo->nodetree, ntree))
 						GPU_material_free(&wo->gpumaterial);
 
@@ -1121,15 +1114,10 @@ static int node_duplicate_exec(bContext *C, wmOperator *op)
 	lastnode = ntree->nodes.last;
 	for (node = ntree->nodes.first; node; node = node->next) {
 		if (node->flag & SELECT) {
-			newnode = nodeCopyNode(ntree, node);
+			newnode = BKE_node_copy_ex(ntree, node, LIB_ID_COPY_DEFAULT);
 
-			if (newnode->id) {
-				/* simple id user adjustment, node internal functions don't touch this
-				 * but operators and readfile.c do. */
-				id_us_plus(newnode->id);
-				/* to ensure redraws or rerenders happen */
-				ED_node_tag_update_id(snode->id);
-			}
+			/* to ensure redraws or rerenders happen */
+			ED_node_tag_update_id(snode->id);
 		}
 
 		/* make sure we don't copy new nodes again! */
@@ -1229,18 +1217,38 @@ void NODE_OT_duplicate(wmOperatorType *ot)
 }
 
 bool ED_node_select_check(ListBase *lb)
-
-
 {
-	bNode *node;
-
-	for (node = lb->first; node; node = node->next) {
+	for (bNode *node = lb->first; node; node = node->next) {
 		if (node->flag & NODE_SELECT) {
 			return true;
 		}
 	}
 
 	return false;
+}
+
+void ED_node_select_all(ListBase *lb, int action)
+{
+	if (action == SEL_TOGGLE) {
+		if (ED_node_select_check(lb))
+			action = SEL_DESELECT;
+		else
+			action = SEL_SELECT;
+	}
+
+	for (bNode *node = lb->first; node; node = node->next) {
+		switch (action) {
+			case SEL_SELECT:
+				nodeSetSelected(node, true);
+				break;
+			case SEL_DESELECT:
+				nodeSetSelected(node, false);
+				break;
+			case SEL_INVERT:
+				nodeSetSelected(node, !(node->flag & SELECT));
+				break;
+		}
+	}
 }
 
 /* ******************************** */
@@ -1258,7 +1266,7 @@ static int node_read_viewlayers_exec(bContext *C, wmOperator *UNUSED(op))
 	ED_preview_kill_jobs(CTX_wm_manager(C), bmain);
 
 	/* first tag scenes unread */
-	for (scene = bmain->scene.first; scene; scene = scene->id.next)
+	for (scene = bmain->scenes.first; scene; scene = scene->id.next)
 		scene->id.tag |= LIB_TAG_DOIT;
 
 	for (node = snode->edittree->nodes.first; node; node = node->next) {
@@ -1935,8 +1943,8 @@ static int node_clipboard_copy_exec(bContext *C, wmOperator *UNUSED(op))
 
 	for (node = ntree->nodes.first; node; node = node->next) {
 		if (node->flag & SELECT) {
-			bNode *new_node;
-			new_node = nodeCopyNode(NULL, node);
+			/* No ID refcounting, this node is virtual, detached from any actual Blender data currently. */
+			bNode *new_node = BKE_node_copy_ex(NULL, node, LIB_ID_CREATE_NO_USER_REFCOUNT);
 			BKE_node_clipboard_add_node(new_node);
 		}
 	}
@@ -1947,7 +1955,8 @@ static int node_clipboard_copy_exec(bContext *C, wmOperator *UNUSED(op))
 
 			/* ensure valid pointers */
 			if (new_node->parent) {
-				/* parent pointer must be redirected to new node or detached if parent is not copied */
+				/* parent pointer must be redirected to new node or detached if parent is
+				 * not copied */
 				if (new_node->parent->flag & NODE_SELECT) {
 					new_node->parent = new_node->parent->new_node;
 				}
@@ -2055,10 +2064,7 @@ static int node_clipboard_paste_exec(bContext *C, wmOperator *op)
 
 	/* copy nodes from clipboard */
 	for (node = clipboard_nodes_lb->first; node; node = node->next) {
-		bNode *new_node = nodeCopyNode(ntree, node);
-
-		/* needed since nodeCopyNode() doesn't increase ID's */
-		id_us_plus(node->id);
+		bNode *new_node = BKE_node_copy_ex(ntree, node, LIB_ID_COPY_DEFAULT);
 
 		/* pasted nodes are selected */
 		nodeSetSelected(new_node, true);
@@ -2629,7 +2635,7 @@ void NODE_OT_cryptomatte_layer_remove(wmOperatorType *ot)
 {
 	/* identifiers */
 	ot->name = "Remove Cryptomatte Socket";
-	ot->description = "Remove layer from a Crytpomatte node";
+	ot->description = "Remove layer from a Cryptomatte node";
 	ot->idname = "NODE_OT_cryptomatte_layer_remove";
 
 	/* callbacks */

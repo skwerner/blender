@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,10 @@
  *
  * The Original Code is Copyright (C) 2006 Blender Foundation.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/render/intern/source/render_result.c
- *  \ingroup render
+/** \file
+ * \ingroup render
  */
 
 #include <stdio.h>
@@ -56,6 +48,8 @@
 #include "IMB_colormanagement.h"
 
 #include "intern/openexr/openexr_multi.h"
+
+#include "RE_engine.h"
 
 #include "render_result.h"
 #include "render_types.h"
@@ -307,7 +301,6 @@ RenderResult *render_result_new(Render *re, rcti *partrct, int crop, int savebuf
 		BLI_strncpy(rl->name, view_layer->name, sizeof(rl->name));
 		rl->layflag = view_layer->layflag;
 		rl->passflag = view_layer->passflag; /* for debugging: view_layer->passflag | SCE_PASS_RAYHITS; */
-		rl->pass_xor = view_layer->pass_xor;
 		rl->rectx = rectx;
 		rl->recty = recty;
 
@@ -350,26 +343,14 @@ RenderResult *render_result_new(Render *re, rcti *partrct, int crop, int savebuf
 				RENDER_LAYER_ADD_PASS_SAFE(rr, rl, 3, RE_PASSNAME_NORMAL, view, "XYZ");
 			if (view_layer->passflag  & SCE_PASS_UV)
 				RENDER_LAYER_ADD_PASS_SAFE(rr, rl, 3, RE_PASSNAME_UV, view, "UVA");
-			if (view_layer->passflag  & SCE_PASS_RGBA)
-				RENDER_LAYER_ADD_PASS_SAFE(rr, rl, 4, RE_PASSNAME_RGBA, view, "RGBA");
 			if (view_layer->passflag  & SCE_PASS_EMIT)
 				RENDER_LAYER_ADD_PASS_SAFE(rr, rl, 3, RE_PASSNAME_EMIT, view, "RGB");
-			if (view_layer->passflag  & SCE_PASS_DIFFUSE)
-				RENDER_LAYER_ADD_PASS_SAFE(rr, rl, 3, RE_PASSNAME_DIFFUSE, view, "RGB");
-			if (view_layer->passflag  & SCE_PASS_SPEC)
-				RENDER_LAYER_ADD_PASS_SAFE(rr, rl, 3, RE_PASSNAME_SPEC, view, "RGB");
 			if (view_layer->passflag  & SCE_PASS_AO)
 				RENDER_LAYER_ADD_PASS_SAFE(rr, rl, 3, RE_PASSNAME_AO, view, "RGB");
 			if (view_layer->passflag  & SCE_PASS_ENVIRONMENT)
 				RENDER_LAYER_ADD_PASS_SAFE(rr, rl, 3, RE_PASSNAME_ENVIRONMENT, view, "RGB");
-			if (view_layer->passflag  & SCE_PASS_INDIRECT)
-				RENDER_LAYER_ADD_PASS_SAFE(rr, rl, 3, RE_PASSNAME_INDIRECT, view, "RGB");
 			if (view_layer->passflag  & SCE_PASS_SHADOW)
 				RENDER_LAYER_ADD_PASS_SAFE(rr, rl, 3, RE_PASSNAME_SHADOW, view, "RGB");
-			if (view_layer->passflag  & SCE_PASS_REFLECT)
-				RENDER_LAYER_ADD_PASS_SAFE(rr, rl, 3, RE_PASSNAME_REFLECT, view, "RGB");
-			if (view_layer->passflag  & SCE_PASS_REFRACT)
-				RENDER_LAYER_ADD_PASS_SAFE(rr, rl, 3, RE_PASSNAME_REFRACT, view, "RGB");
 			if (view_layer->passflag  & SCE_PASS_INDEXOB)
 				RENDER_LAYER_ADD_PASS_SAFE(rr, rl, 1, RE_PASSNAME_INDEXOB, view, "X");
 			if (view_layer->passflag  & SCE_PASS_INDEXMA)
@@ -495,6 +476,7 @@ void render_result_add_pass(RenderResult *rr, const char *name, int channels, co
 			for (rp = rl->passes.first; rp; rp = rp->next) {
 				if (!STREQ(rp->name, name)) continue;
 				if (!STREQ(rp->view, view)) continue;
+				break;
 			}
 
 			if (!rp) {
@@ -517,16 +499,10 @@ static int passtype_from_name(const char *name)
 	CHECK_PASS(VECTOR);
 	CHECK_PASS(NORMAL);
 	CHECK_PASS(UV);
-	CHECK_PASS(RGBA);
 	CHECK_PASS(EMIT);
-	CHECK_PASS(DIFFUSE);
-	CHECK_PASS(SPEC);
 	CHECK_PASS(SHADOW);
 	CHECK_PASS(AO);
 	CHECK_PASS(ENVIRONMENT);
-	CHECK_PASS(INDIRECT);
-	CHECK_PASS(REFLECT);
-	CHECK_PASS(REFRACT);
 	CHECK_PASS(INDEXOB);
 	CHECK_PASS(INDEXMA);
 	CHECK_PASS(MIST);
@@ -1082,15 +1058,56 @@ void render_result_save_empty_result_tiles(Render *re)
 	}
 }
 
-/* begin write of exr tile file */
-void render_result_exr_file_begin(Render *re)
+/* Compute list of passes needed by render engine. */
+static void templates_register_pass_cb(void *userdata, Scene *UNUSED(scene), ViewLayer *UNUSED(view_layer),
+                                       const char *name, int channels, const char *chan_id, int UNUSED(type))
 {
-	RenderResult *rr;
-	RenderLayer *rl;
+	ListBase *templates = userdata;
+	RenderPass *pass = MEM_callocN(sizeof(RenderPass), "RenderPassTemplate");
+
+	pass->channels = channels;
+	BLI_strncpy(pass->name, name, sizeof(pass->name));
+	BLI_strncpy(pass->chan_id, chan_id, sizeof(pass->chan_id));
+
+	BLI_addtail(templates, pass);
+}
+
+static void render_result_get_pass_templates(RenderEngine *engine, Render *re, RenderLayer *rl, ListBase *templates)
+{
+	BLI_listbase_clear(templates);
+
+	if (engine && engine->type->update_render_passes) {
+		ViewLayer *view_layer = BLI_findstring(&re->view_layers, rl->name, offsetof(ViewLayer, name));
+		if (view_layer) {
+			RE_engine_update_render_passes(engine, re->scene, view_layer, templates_register_pass_cb, templates);
+		}
+	}
+}
+
+/* begin write of exr tile file */
+void render_result_exr_file_begin(Render *re, RenderEngine *engine)
+{
 	char str[FILE_MAX];
 
-	for (rr = re->result; rr; rr = rr->next) {
-		for (rl = rr->layers.first; rl; rl = rl->next) {
+	for (RenderResult *rr = re->result; rr; rr = rr->next) {
+		for (RenderLayer *rl = rr->layers.first; rl; rl = rl->next) {
+			/* Get passes needed by engine. Normally we would wait for the
+			 * engine to create them, but for EXR file we need to know in
+			 * advance. */
+			ListBase templates;
+			render_result_get_pass_templates(engine, re, rl, &templates);
+
+			/* Create render passes requested by engine. Only this part is
+			 * mutex locked to avoid deadlock with Python GIL. */
+			BLI_rw_mutex_lock(&re->resultmutex, THREAD_LOCK_WRITE);
+			for (RenderPass *pass = templates.first; pass; pass = pass->next) {
+				render_result_add_pass(re->result, pass->name, pass->channels, pass->chan_id, rl->name, NULL);
+			}
+			BLI_rw_mutex_unlock(&re->resultmutex);
+
+			BLI_freelistN(&templates);
+
+			/* Open EXR file for writing. */
 			render_result_exr_file_path(re->scene, rl->name, rr->sample_nr, str);
 			printf("write exr tmp file, %dx%d, %s\n", rr->rectx, rr->recty, str);
 			IMB_exrtile_begin_write(rl->exrhandle, str, 0, rr->rectx, rr->recty, re->partx, re->party);
@@ -1099,13 +1116,11 @@ void render_result_exr_file_begin(Render *re)
 }
 
 /* end write of exr tile file, read back first sample */
-void render_result_exr_file_end(Render *re)
+void render_result_exr_file_end(Render *re, RenderEngine *engine)
 {
-	RenderResult *rr;
-	RenderLayer *rl;
-
-	for (rr = re->result; rr; rr = rr->next) {
-		for (rl = rr->layers.first; rl; rl = rl->next) {
+	/* Close EXR files. */
+	for (RenderResult *rr = re->result; rr; rr = rr->next) {
+		for (RenderLayer *rl = rr->layers.first; rl; rl = rl->next) {
 			IMB_exr_close(rl->exrhandle);
 			rl->exrhandle = NULL;
 		}
@@ -1113,10 +1128,36 @@ void render_result_exr_file_end(Render *re)
 		rr->do_exr_tile = false;
 	}
 
+	/* Create new render result in memory instead of on disk. */
+	BLI_rw_mutex_lock(&re->resultmutex, THREAD_LOCK_WRITE);
 	render_result_free_list(&re->fullresult, re->result);
-	re->result = NULL;
+	re->result = render_result_new(re, &re->disprect, 0, RR_USE_MEM, RR_ALL_LAYERS, RR_ALL_VIEWS);
+	BLI_rw_mutex_unlock(&re->resultmutex);
 
-	render_result_exr_file_read_sample(re, 0);
+	for (RenderLayer *rl = re->result->layers.first; rl; rl = rl->next) {
+		/* Get passes needed by engine. */
+		ListBase templates;
+		render_result_get_pass_templates(engine, re, rl, &templates);
+
+		/* Create render passes requested by engine. Only this part is
+		 * mutex locked to avoid deadlock with Python GIL. */
+		BLI_rw_mutex_lock(&re->resultmutex, THREAD_LOCK_WRITE);
+		for (RenderPass *pass = templates.first; pass; pass = pass->next) {
+			render_result_add_pass(re->result, pass->name, pass->channels, pass->chan_id, rl->name, NULL);
+		}
+
+		BLI_freelistN(&templates);
+
+		/* Render passes contents from file. */
+		char str[FILE_MAXFILE + MAX_ID_NAME + MAX_ID_NAME + 100] = "";
+		render_result_exr_file_path(re->scene, rl->name, 0, str);
+		printf("read exr tmp file: %s\n", str);
+
+		if (!render_result_exr_file_read_path(re->result, rl, str)) {
+			printf("cannot read: %s\n", str);
+		}
+		BLI_rw_mutex_unlock(&re->resultmutex);
+	}
 }
 
 /* save part into exr file */
@@ -1143,29 +1184,6 @@ void render_result_exr_file_path(Scene *scene, const char *layname, int sample, 
 	BLI_filename_make_safe(name);
 
 	BLI_make_file_string("/", filepath, BKE_tempdir_session(), name);
-}
-
-/* only for temp buffer, makes exact copy of render result */
-int render_result_exr_file_read_sample(Render *re, int sample)
-{
-	RenderLayer *rl;
-	char str[FILE_MAXFILE + MAX_ID_NAME + MAX_ID_NAME + 100] = "";
-	bool success = true;
-
-	RE_FreeRenderResult(re->result);
-	re->result = render_result_new(re, &re->disprect, 0, RR_USE_MEM, RR_ALL_LAYERS, RR_ALL_VIEWS);
-
-	for (rl = re->result->layers.first; rl; rl = rl->next) {
-		render_result_exr_file_path(re->scene, rl->name, sample, str);
-		printf("read exr tmp file: %s\n", str);
-
-		if (!render_result_exr_file_read_path(re->result, rl, str)) {
-			printf("cannot read: %s\n", str);
-			success = false;
-		}
-	}
-
-	return success;
 }
 
 /* called for reading temp files, and for external engines */
@@ -1510,6 +1528,6 @@ RenderResult *RE_DuplicateRenderResult(RenderResult *rr)
 	if (new_rr->rectz != NULL) {
 		new_rr->rectz = MEM_dupallocN(new_rr->rectz);
 	}
-	new_rr->stamp_data = MEM_dupallocN(new_rr->stamp_data);
+	new_rr->stamp_data = BKE_stamp_data_copy(new_rr->stamp_data);
 	return new_rr;
 }

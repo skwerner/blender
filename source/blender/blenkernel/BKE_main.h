@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,28 +15,19 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 #ifndef __BKE_MAIN_H__
 #define __BKE_MAIN_H__
 
-/** \file BKE_main.h
- *  \ingroup bke
- *  \since March 2001
- *  \author nzc
- *  \section aboutmain Main struct
+/** \file
+ * \ingroup bke
+ * \section aboutmain Main struct
  * Main is the root of the 'database' of a Blender context. All data
  * is stuffed into lists, and all these lists are knotted to here. A
  * Blender file is not much more but a binary dump of these
  * lists. This list of lists is not serialized itself.
  *
  * Oops... this should be a _types.h file.
- *
  */
 #include "DNA_listBase.h"
 
@@ -49,10 +38,11 @@
 extern "C" {
 #endif
 
-struct BlendThumbnail;
 struct BLI_mempool;
+struct BlendThumbnail;
 struct Depsgraph;
 struct GHash;
+struct GSet;
 struct ImBuf;
 struct Library;
 struct MainLock;
@@ -94,40 +84,40 @@ typedef struct Main {
 	BlendThumbnail *blen_thumb;
 
 	struct Library *curlib;
-	ListBase scene;
-	ListBase library;
-	ListBase object;
-	ListBase mesh;
-	ListBase curve;
-	ListBase mball;
-	ListBase mat;
-	ListBase tex;
-	ListBase image;
-	ListBase latt;
-	ListBase lamp;
-	ListBase camera;
-	ListBase ipo;   // XXX deprecated
-	ListBase key;
-	ListBase world;
-	ListBase screen;
-	ListBase vfont;
-	ListBase text;
-	ListBase speaker;
-	ListBase lightprobe;
-	ListBase sound;
-	ListBase collection;
-	ListBase armature;
-	ListBase action;
-	ListBase nodetree;
-	ListBase brush;
-	ListBase particle;
+	ListBase scenes;
+	ListBase libraries;
+	ListBase objects;
+	ListBase meshes;
+	ListBase curves;
+	ListBase metaballs;
+	ListBase materials;
+	ListBase textures;
+	ListBase images;
+	ListBase lattices;
+	ListBase lights;
+	ListBase cameras;
+	ListBase ipo;  /* Deprecated (only for versioning). */
+	ListBase shapekeys;
+	ListBase worlds;
+	ListBase screens;
+	ListBase fonts;
+	ListBase texts;
+	ListBase speakers;
+	ListBase lightprobes;
+	ListBase sounds;
+	ListBase collections;
+	ListBase armatures;
+	ListBase actions;
+	ListBase nodetrees;
+	ListBase brushes;
+	ListBase particles;
 	ListBase palettes;
 	ListBase paintcurves;
-	ListBase wm;
-	ListBase gpencil;
-	ListBase movieclip;
-	ListBase mask;
-	ListBase linestyle;
+	ListBase wm;  /* Singleton (exception). */
+	ListBase gpencils;
+	ListBase movieclips;
+	ListBase masks;
+	ListBase linestyles;
 	ListBase cachefiles;
 	ListBase workspaces;
 
@@ -147,6 +137,47 @@ void BKE_main_unlock(struct Main *bmain);
 
 void BKE_main_relations_create(struct Main *bmain);
 void BKE_main_relations_free(struct Main *bmain);
+
+struct GSet *BKE_main_gset_create(struct Main *bmain, struct GSet *gset);
+
+/* *** Generic utils to loop over whole Main database. *** */
+
+#define FOREACH_MAIN_LISTBASE_ID_BEGIN(_lb, _id)                          \
+	{                                                                     \
+		ID *_id_next = _lb->first;                                        \
+		for (_id = _id_next; _id != NULL; _id = _id_next) {               \
+			_id_next = _id->next;
+
+#define FOREACH_MAIN_LISTBASE_ID_END                                      \
+		}                                                                 \
+	} ((void)0)
+
+
+#define FOREACH_MAIN_ID_BEGIN(_bmain, _id)                                \
+	{                                                                     \
+		ListBase *_lbarray[MAX_LIBARRAY];                                 \
+		int _i = set_listbasepointers(_bmain, _lbarray);                  \
+		while (_i--) {                                                    \
+			FOREACH_MAIN_LISTBASE_ID_BEGIN(_lbarray[_i], _id)
+
+#define FOREACH_MAIN_ID_END                                               \
+			FOREACH_MAIN_LISTBASE_ID_END;                                 \
+		}                                                                 \
+	} ((void)0)
+
+/** \param _do_break A boolean, to allow breaking iteration (only used to break by type,
+ *                   you must also use an explicit `break;` operation if you want to
+ *                   immediately break from inner by-ID loop).
+ */
+#define FOREACH_MAIN_ID_BREAKABLE_BEGIN(_bmain, _id, _do_break)           \
+	{                                                                     \
+		ListBase *_lbarray[MAX_LIBARRAY];                                 \
+		int i = set_listbasepointers(_bmain, _lbarray);                   \
+		while (i-- && !_do_break) {                                       \
+			FOREACH_MAIN_LISTBASE_ID_BEGIN(_lbarray[i], _id)              \
+
+#define FOREACH_MAIN_ID_BREAKABLE_END FOREACH_MAIN_ID_END
+
 
 struct BlendThumbnail *BKE_main_thumbnail_from_imbuf(struct Main *bmain, struct ImBuf *img);
 struct ImBuf *BKE_main_thumbnail_to_imbuf(struct Main *bmain, struct BlendThumbnail *data);
@@ -168,8 +199,12 @@ int set_listbasepointers(struct Main *main, struct ListBase *lb[MAX_LIBARRAY]);
 
 #define BLEN_THUMB_SIZE 128
 
-#define BLEN_THUMB_MEMSIZE(_x, _y) (sizeof(BlendThumbnail) + ((size_t)(_x) * (size_t)(_y)) * sizeof(int))
-#define BLEN_THUMB_SAFE_MEMSIZE(_x, _y) ((uint64_t)_x * (uint64_t)_y < (SIZE_MAX / (sizeof(int) * 4)))
+#define BLEN_THUMB_MEMSIZE(_x, _y) \
+	(sizeof(BlendThumbnail) + ((size_t)(_x) * (size_t)(_y)) * sizeof(int))
+/** Protect against buffer overflow vulnerability & negative sizes. */
+#define BLEN_THUMB_MEMSIZE_IS_VALID(_x, _y) \
+	(((_x) > 0 && (_y) > 0) && \
+	 ((uint64_t)(_x) * (uint64_t)(_y) < (SIZE_MAX / (sizeof(int) * 4))))
 
 #ifdef __cplusplus
 }

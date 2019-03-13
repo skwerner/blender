@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -15,18 +13,13 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
- * The Original Code is Copyright (C) 2008, Blender Foundation, Joshua Leung
+ * The Original Code is Copyright (C) 2008, Blender Foundation
  * This is a new part of Blender
- *
- * Contributor(s): Joshua Leung, Antonio Vazquez
- *
- * ***** END GPL LICENSE BLOCK *****
- *
  * Operators for dealing with GP datablocks and layers
  */
 
-/** \file blender/editors/gpencil/gpencil_data.c
- *  \ingroup edgpencil
+/** \file
+ * \ingroup edgpencil
  */
 
 
@@ -62,7 +55,6 @@
 #include "BKE_context.h"
 #include "BKE_deform.h"
 #include "BKE_fcurve.h"
-#include "BKE_global.h"
 #include "BKE_gpencil.h"
 #include "BKE_gpencil_modifier.h"
 #include "BKE_library.h"
@@ -73,7 +65,6 @@
 #include "BKE_paint.h"
 #include "BKE_report.h"
 #include "BKE_scene.h"
-#include "BKE_screen.h"
 
 #include "UI_interface.h"
 #include "UI_resources.h"
@@ -98,6 +89,18 @@
 /* Datablock Operators */
 
 /* ******************* Add New Data ************************ */
+static bool gp_data_add_poll(bContext *C)
+{
+	Object *obact = CTX_data_active_object(C);
+	if (obact && obact->type == OB_GPENCIL) {
+		if (obact->mode != OB_MODE_OBJECT) {
+			return false;
+		}
+	}
+
+	/* the base line we have is that we have somewhere to add Grease Pencil data */
+	return ED_gpencil_data_get_pointers(C, NULL) != NULL;
+}
 
 /* add new datablock - wrapper around API */
 static int gp_data_add_exec(bContext *C, wmOperator *op)
@@ -112,7 +115,8 @@ static int gp_data_add_exec(bContext *C, wmOperator *op)
 	}
 	else {
 		/* decrement user count and add new datablock */
-		/* TODO: if a datablock exists, we should make a copy of it instead of starting fresh (as in other areas) */
+		/* TODO: if a datablock exists,
+		 * we should make a copy of it instead of starting fresh (as in other areas) */
 		Main *bmain = CTX_data_main(C);
 
 		/* decrement user count of old GP datablock */
@@ -137,7 +141,8 @@ static int gp_data_add_exec(bContext *C, wmOperator *op)
 			*gpd_ptr = BKE_gpencil_data_addnew(bmain, DATA_("GPencil"));
 
 			/* add default sets of colors and brushes */
-			ED_gpencil_add_defaults(C);
+			Object *ob = CTX_data_active_object(C);
+			ED_gpencil_add_defaults(C, ob);
 
 			/* add new layer */
 			BKE_gpencil_layer_addnew(*gpd_ptr, DATA_("GP_Layer"), true);
@@ -160,7 +165,7 @@ void GPENCIL_OT_data_add(wmOperatorType *ot)
 
 	/* callbacks */
 	ot->exec = gp_data_add_exec;
-	ot->poll = gp_add_poll;
+	ot->poll = gp_data_add_poll;
 }
 
 /* ******************* Unlink Data ************************ */
@@ -245,7 +250,8 @@ static int gp_layer_add_exec(bContext *C, wmOperator *op)
 			*gpd_ptr = BKE_gpencil_data_addnew(bmain, DATA_("GPencil"));
 
 			/* add default sets of colors and brushes */
-			ED_gpencil_add_defaults(C);
+			Object *ob = CTX_data_active_object(C);
+			ED_gpencil_add_defaults(C, ob);
 		}
 	}
 
@@ -332,7 +338,7 @@ void GPENCIL_OT_layer_remove(wmOperatorType *ot)
 
 enum {
 	GP_LAYER_MOVE_UP   = -1,
-	GP_LAYER_MOVE_DOWN = 1
+	GP_LAYER_MOVE_DOWN = 1,
 };
 
 static int gp_layer_move_exec(bContext *C, wmOperator *op)
@@ -360,7 +366,7 @@ void GPENCIL_OT_layer_move(wmOperatorType *ot)
 	static const EnumPropertyItem slot_move[] = {
 		{GP_LAYER_MOVE_UP, "UP", 0, "Up", ""},
 		{GP_LAYER_MOVE_DOWN, "DOWN", 0, "Down", ""},
-		{0, NULL, 0, NULL, NULL}
+		{0, NULL, 0, NULL, NULL},
 	};
 
 	/* identifiers */
@@ -423,7 +429,7 @@ void GPENCIL_OT_layer_duplicate(wmOperatorType *ot)
 /* ********************* Duplicate Layer in a new object ************************** */
 enum {
 	GP_LAYER_COPY_OBJECT_ALL_FRAME = 0,
-	GP_LAYER_COPY_OBJECT_ACT_FRAME = 1
+	GP_LAYER_COPY_OBJECT_ACT_FRAME = 1,
 };
 
 static bool gp_layer_duplicate_object_poll(bContext *C)
@@ -536,7 +542,7 @@ void GPENCIL_OT_layer_duplicate_object(wmOperatorType *ot)
 	static const EnumPropertyItem copy_mode[] = {
 		{GP_LAYER_COPY_OBJECT_ALL_FRAME, "ALL", 0, "All Frames", ""},
 		{GP_LAYER_COPY_OBJECT_ACT_FRAME, "ACTIVE", 0, "Active Frame", ""},
-		{0, NULL, 0, NULL, NULL}
+		{0, NULL, 0, NULL, NULL},
 	};
 
 	/* identifiers */
@@ -560,7 +566,7 @@ void GPENCIL_OT_layer_duplicate_object(wmOperatorType *ot)
 /* ********************* Duplicate Frame ************************** */
 enum {
 	GP_FRAME_DUP_ACTIVE = 0,
-	GP_FRAME_DUP_ALL = 1
+	GP_FRAME_DUP_ALL = 1,
 };
 
 static int gp_frame_duplicate_exec(bContext *C, wmOperator *op)
@@ -599,7 +605,7 @@ void GPENCIL_OT_frame_duplicate(wmOperatorType *ot)
 	static const EnumPropertyItem duplicate_mode[] = {
 		{GP_FRAME_DUP_ACTIVE, "ACTIVE", 0, "Active", "Duplicate frame in active layer only"},
 		{GP_FRAME_DUP_ALL, "ALL", 0, "All", "Duplicate active frames in all layers"},
-		{0, NULL, 0, NULL, NULL}
+		{0, NULL, 0, NULL, NULL},
 	};
 
 	/* identifiers */
@@ -620,7 +626,7 @@ void GPENCIL_OT_frame_duplicate(wmOperatorType *ot)
 /* ********************* Clean Fill Boundaries on Frame ************************** */
 enum {
 	GP_FRAME_CLEAN_FILL_ACTIVE = 0,
-	GP_FRAME_CLEAN_FILL_ALL = 1
+	GP_FRAME_CLEAN_FILL_ALL = 1,
 };
 
 static int gp_frame_clean_fill_exec(bContext *C, wmOperator *op)
@@ -686,7 +692,7 @@ void GPENCIL_OT_frame_clean_fill(wmOperatorType *ot)
 	static const EnumPropertyItem duplicate_mode[] = {
 		{GP_FRAME_CLEAN_FILL_ACTIVE, "ACTIVE", 0, "Active Frame Only", "Clean active frame only"},
 		{GP_FRAME_CLEAN_FILL_ALL, "ALL", 0, "All Frames", "Clean all frames in all layers"},
-		{0, NULL, 0, NULL, NULL}
+		{0, NULL, 0, NULL, NULL},
 	};
 
 	/* identifiers */
@@ -1215,7 +1221,7 @@ enum {
 	GP_STROKE_MOVE_UP = -1,
 	GP_STROKE_MOVE_DOWN = 1,
 	GP_STROKE_MOVE_TOP = 2,
-	GP_STROKE_MOVE_BOTTOM = 3
+	GP_STROKE_MOVE_BOTTOM = 3,
 };
 
 static int gp_stroke_arrange_exec(bContext *C, wmOperator *op)
@@ -1794,6 +1800,10 @@ static int gpencil_vertex_group_smooth_exec(bContext *C, wmOperator *op)
 
 	CTX_DATA_BEGIN(C, bGPDstroke *, gps, editable_gpencil_strokes)
 	{
+		if (gps->dvert == NULL) {
+			continue;
+		}
+
 		for (int s = 0; s < repeat; s++) {
 			for (int i = 0; i < gps->totpoints; i++) {
 				/* previous point */
@@ -1828,6 +1838,7 @@ static int gpencil_vertex_group_smooth_exec(bContext *C, wmOperator *op)
 				MDeformWeight *dw = defvert_verify_index(dvertb, def_nr);
 				if (dw) {
 					dw->weight = interpf(wb, optimal, fac);
+					CLAMP(dw->weight, 0.0, 1.0f);
 				}
 			}
 		}
@@ -1885,7 +1896,8 @@ static void joined_gpencil_fix_animdata_cb(ID *id, FCurve *fcu, void *user_data)
 			const char *old_name = BLI_ghashIterator_getKey(&gh_iter);
 			const char *new_name = BLI_ghashIterator_getValue(&gh_iter);
 
-			/* only remap if changed; this still means there will be some waste if there aren't many drivers/keys */
+			/* only remap if changed;
+			 * this still means there will be some waste if there aren't many drivers/keys */
 			if (!STREQ(old_name, new_name) && strstr(fcu->rna_path, old_name)) {
 				fcu->rna_path = BKE_animsys_fix_rna_path_rename(
 				        id, fcu->rna_path, "layers",
@@ -2140,6 +2152,7 @@ int ED_gpencil_join_objects_exec(bContext *C, wmOperator *op)
 						BKE_animdata_merge_copy(bmain, &gpd_dst->id, &gpd_src->id, ADT_MERGECOPY_KEEP_DST, false);
 					}
 				}
+				DEG_id_tag_update(&gpd_src->id, ID_RECALC_TRANSFORM | ID_RECALC_GEOMETRY | ID_RECALC_COPY_ON_WRITE);
 			}
 
 			/* Free the old object */
@@ -2148,6 +2161,7 @@ int ED_gpencil_join_objects_exec(bContext *C, wmOperator *op)
 	}
 	CTX_DATA_END;
 
+	DEG_id_tag_update(&gpd_dst->id, ID_RECALC_TRANSFORM | ID_RECALC_GEOMETRY | ID_RECALC_COPY_ON_WRITE);
 	DEG_relations_tag_update(bmain);  /* because we removed object(s) */
 
 	WM_event_add_notifier(C, NC_SCENE | ND_OB_ACTIVE, scene);

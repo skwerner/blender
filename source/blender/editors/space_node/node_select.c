@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,15 +15,10 @@
  *
  * The Original Code is Copyright (C) 2008 Blender Foundation.
  * All rights reserved.
- *
- *
- * Contributor(s): Blender Foundation, Nathan Letwory
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/space_node/node_select.c
- *  \ingroup spnode
+/** \file
+ * \ingroup spnode
  */
 
 #include <stdlib.h>
@@ -61,7 +54,9 @@
 
 #include "node_intern.h"  /* own include */
 
-/* ****** helpers ****** */
+/* -------------------------------------------------------------------- */
+/** \name Public Node Selection API
+ * \{ */
 
 static bNode *node_under_mouse_select(bNodeTree *ntree, int mx, int my)
 {
@@ -232,6 +227,12 @@ void node_deselect_all_output_sockets(SpaceNode *snode, const bool deselect_node
 	}
 }
 
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Select Grouped Operator
+ * \{ */
+
 /* Return true if we need redraw, otherwise false. */
 
 static bool node_select_grouped_type(SpaceNode *snode, bNode *node_act)
@@ -363,7 +364,7 @@ void NODE_OT_select_grouped(wmOperatorType *ot)
 		{NODE_SELECT_GROUPED_COLOR, "COLOR", 0, "Color", ""},
 		{NODE_SELECT_GROUPED_PREFIX, "PREFIX", 0, "Prefix", ""},
 		{NODE_SELECT_GROUPED_SUFIX, "SUFFIX", 0, "Suffix", ""},
-		{0, NULL, 0, NULL, NULL}
+		{0, NULL, 0, NULL, NULL},
 	};
 
 	/* identifiers */
@@ -384,6 +385,12 @@ void NODE_OT_select_grouped(wmOperatorType *ot)
 	ot->prop = RNA_def_enum(ot->srna, "type", prop_select_grouped_types, 0, "Type", "");
 }
 
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Select (Cursor Pick) Operator
+ * \{ */
+
 void node_select_single(bContext *C, bNode *node)
 {
 	Main *bmain = CTX_data_main(C);
@@ -402,8 +409,6 @@ void node_select_single(bContext *C, bNode *node)
 
 	WM_event_add_notifier(C, NC_NODE | NA_SELECTED, NULL);
 }
-
-/* ****** Click Select ****** */
 
 static int node_mouse_select(Main *bmain, SpaceNode *snode, ARegion *ar, const int mval[2], short extend)
 {
@@ -541,21 +546,28 @@ void NODE_OT_select(wmOperatorType *ot)
 	RNA_def_boolean(ot->srna, "extend", 0, "Extend", "");
 }
 
-/* ****** Box Select ****** */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Box Select Operator
+ * \{ */
 
 static int node_box_select_exec(bContext *C, wmOperator *op)
 {
 	SpaceNode *snode = CTX_wm_space_node(C);
 	ARegion *ar = CTX_wm_region(C);
-	bNode *node;
 	rctf rectf;
-	const bool select = !RNA_boolean_get(op->ptr, "deselect");
-	const bool extend = RNA_boolean_get(op->ptr, "extend");
 
 	WM_operator_properties_border_to_rctf(op, &rectf);
 	UI_view2d_region_to_view_rctf(&ar->v2d, &rectf, &rectf);
 
-	for (node = snode->edittree->nodes.first; node; node = node->next) {
+	const eSelectOp sel_op = RNA_enum_get(op->ptr, "mode");
+	const bool select = (sel_op != SEL_OP_SUB);
+	if (SEL_OP_USE_PRE_DESELECT(sel_op)) {
+		ED_node_select_all(&snode->edittree->nodes, SEL_DESELECT);
+	}
+
+	for (bNode *node = snode->edittree->nodes.first; node; node = node->next) {
 		bool is_inside;
 		if (node->type == NODE_FRAME) {
 			is_inside = BLI_rctf_inside_rctf(&rectf, &node->totr);
@@ -566,9 +578,6 @@ static int node_box_select_exec(bContext *C, wmOperator *op)
 
 		if (is_inside) {
 			nodeSetSelected(node, select);
-		}
-		else if (!extend) {
-			nodeSetSelected(node, false);
 		}
 	}
 
@@ -608,12 +617,18 @@ void NODE_OT_select_box(wmOperatorType *ot)
 	/* flags */
 	ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
 
-	/* rna */
-	WM_operator_properties_gesture_box_select(ot);
+	/* properties */
 	RNA_def_boolean(ot->srna, "tweak", 0, "Tweak", "Only activate when mouse is not over a node - useful for tweak gesture");
+
+	WM_operator_properties_gesture_box(ot);
+	WM_operator_properties_select_operation_simple(ot);
 }
 
-/* ****** Circle Select ****** */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Circle Select Operator
+ * \{ */
 
 static int node_circleselect_exec(bContext *C, wmOperator *op)
 {
@@ -626,7 +641,12 @@ static int node_circleselect_exec(bContext *C, wmOperator *op)
 
 	float zoom  = (float)(BLI_rcti_size_x(&ar->winrct)) / (float)(BLI_rctf_size_x(&ar->v2d.cur));
 
-	const bool select = !RNA_boolean_get(op->ptr, "deselect");
+	const eSelectOp sel_op = ED_select_op_modal(
+	        RNA_enum_get(op->ptr, "mode"), WM_gesture_is_modal_first(op->customdata));
+	const bool select = (sel_op != SEL_OP_SUB);
+	if (SEL_OP_USE_PRE_DESELECT(sel_op)) {
+		ED_node_select_all(&snode->edittree->nodes, SEL_DESELECT);
+	}
 
 	/* get operator properties */
 	x = RNA_int_get(op->ptr, "x");
@@ -664,10 +684,15 @@ void NODE_OT_select_circle(wmOperatorType *ot)
 	ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
 
 	/* properties */
-	WM_operator_properties_gesture_circle_select(ot);
+	WM_operator_properties_gesture_circle(ot);
+	WM_operator_properties_select_operation_simple(ot);
 }
 
-/* ****** Lasso Select ****** */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Lasso Select Operator
+ * \{ */
 
 static int node_lasso_select_invoke(bContext *C, wmOperator *op, const wmEvent *event)
 {
@@ -680,7 +705,7 @@ static int node_lasso_select_invoke(bContext *C, wmOperator *op, const wmEvent *
 	return WM_gesture_lasso_invoke(C, op, event);
 }
 
-static bool do_lasso_select_node(bContext *C, const int mcords[][2], short moves, bool select, bool extend)
+static bool do_lasso_select_node(bContext *C, const int mcords[][2], short moves, eSelectOp sel_op)
 {
 	SpaceNode *snode = CTX_wm_space_node(C);
 	bNode *node;
@@ -690,13 +715,19 @@ static bool do_lasso_select_node(bContext *C, const int mcords[][2], short moves
 	rcti rect;
 	bool changed = false;
 
+	const bool select = (sel_op != SEL_OP_SUB);
+	if (SEL_OP_USE_PRE_DESELECT(sel_op)) {
+		ED_node_select_all(&snode->edittree->nodes, SEL_DESELECT);
+		changed = true;
+	}
+
 	/* get rectangle from operator */
 	BLI_lasso_boundbox(&rect, mcords, moves);
 
 	/* do actual selection */
 	for (node = snode->edittree->nodes.first; node; node = node->next) {
 
-		if (node->flag & NODE_SELECT && select && extend) {
+		if (select && (node->flag & NODE_SELECT)) {
 			continue;
 		}
 
@@ -710,10 +741,6 @@ static bool do_lasso_select_node(bContext *C, const int mcords[][2], short moves
 		    BLI_lasso_is_point_inside(mcords, moves, screen_co[0], screen_co[1], INT_MAX))
 		{
 			nodeSetSelected(node, select);
-			changed = true;
-		}
-		else if (select && !extend) {
-			nodeSetSelected(node, false);
 			changed = true;
 		}
 	}
@@ -731,9 +758,9 @@ static int node_lasso_select_exec(bContext *C, wmOperator *op)
 	const int (*mcords)[2] = WM_gesture_lasso_path_to_array(C, op, &mcords_tot);
 
 	if (mcords) {
-		const bool select = !RNA_boolean_get(op->ptr, "deselect");
-		const bool extend = RNA_boolean_get(op->ptr, "extend");
-		do_lasso_select_node(C, mcords, mcords_tot, select, extend);
+		const eSelectOp sel_op = RNA_enum_get(op->ptr, "mode");
+
+		do_lasso_select_node(C, mcords, mcords_tot, sel_op);
 
 		MEM_freeN((void *)mcords);
 
@@ -760,39 +787,25 @@ void NODE_OT_select_lasso(wmOperatorType *ot)
 	ot->flag = OPTYPE_UNDO;
 
 	/* properties */
-	WM_operator_properties_gesture_lasso_select(ot);
 	RNA_def_boolean(ot->srna, "tweak", 0, "Tweak", "Only activate when mouse is not over a node - useful for tweak gesture");
+
+	WM_operator_properties_gesture_lasso(ot);
+	WM_operator_properties_select_operation_simple(ot);
 }
 
-/* ****** Select/Deselect All ****** */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name (De)select All Operator
+ * \{ */
 
 static int node_select_all_exec(bContext *C, wmOperator *op)
 {
 	SpaceNode *snode = CTX_wm_space_node(C);
 	ListBase *node_lb = &snode->edittree->nodes;
-	bNode *node;
 	int action = RNA_enum_get(op->ptr, "action");
 
-	if (action == SEL_TOGGLE) {
-		if (ED_node_select_check(node_lb))
-			action = SEL_DESELECT;
-		else
-			action = SEL_SELECT;
-	}
-
-	for (node = node_lb->first; node; node = node->next) {
-		switch (action) {
-			case SEL_SELECT:
-				nodeSetSelected(node, true);
-				break;
-			case SEL_DESELECT:
-				nodeSetSelected(node, false);
-				break;
-			case SEL_INVERT:
-				nodeSetSelected(node, !(node->flag & SELECT));
-				break;
-		}
-	}
+	ED_node_select_all(node_lb, action);
 
 	ED_node_sort(snode->edittree);
 
@@ -817,7 +830,11 @@ void NODE_OT_select_all(wmOperatorType *ot)
 	WM_operator_properties_select_all(ot);
 }
 
-/* ****** Select Linked To ****** */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Select Linked To Operator
+ * \{ */
 
 static int node_select_linked_to_exec(bContext *C, wmOperator *UNUSED(op))
 {
@@ -861,7 +878,11 @@ void NODE_OT_select_linked_to(wmOperatorType *ot)
 	ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
 }
 
-/* ****** Select Linked From ****** */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Select Linked From Operator
+ * \{ */
 
 static int node_select_linked_from_exec(bContext *C, wmOperator *UNUSED(op))
 {
@@ -904,6 +925,12 @@ void NODE_OT_select_linked_from(wmOperatorType *ot)
 	/* flags */
 	ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
 }
+
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Select Same Type Step Operator
+ * \{ */
 
 static int node_select_same_type_step_exec(bContext *C, wmOperator *op)
 {
@@ -994,7 +1021,11 @@ void NODE_OT_select_same_type_step(wmOperatorType *ot)
 
 }
 
-/* *************** find a node **************** */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Find Node by Name Operator
+ * \{ */
 
 /* generic  search invoke */
 static void node_find_cb(const struct bContext *C, void *UNUSED(arg), const char *str, uiSearchItems *items)
@@ -1055,7 +1086,8 @@ static uiBlock *node_find_menu(bContext *C, ARegion *ar, void *arg_op)
 	/* fake button, it holds space for search items */
 	uiDefBut(block, UI_BTYPE_LABEL, 0, "", 10, 10 - UI_searchbox_size_y(), UI_searchbox_size_x(), UI_searchbox_size_y(), NULL, 0, 0, 0, 0, NULL);
 
-	UI_block_bounds_set_popup(block, 6, 0, -UI_UNIT_Y); /* move it downwards, mouse over button */
+	/* Move it downwards, mouse over button. */
+	UI_block_bounds_set_popup(block, 6, (const int[2]){0, -UI_UNIT_Y});
 
 	//	UI_but_active_only(C, ar, block, but); XXX using this here makes Blender hang - investigate
 	wm_event_init_from_window(win, &event);
@@ -1093,3 +1125,5 @@ void NODE_OT_find_node(wmOperatorType *ot)
 	RNA_def_boolean(ot->srna, "prev", 0, "Previous", "");
 
 }
+
+/** \} */

@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,15 +15,10 @@
  *
  * The Original Code is Copyright (C) 2008 Blender Foundation.
  * All rights reserved.
- *
- *
- * Contributor(s): Blender Foundation
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/space_view3d/space_view3d.c
- *  \ingroup spview3d
+/** \file
+ * \ingroup spview3d
  */
 
 
@@ -324,11 +317,11 @@ static SpaceLink *view3d_new(const ScrArea *UNUSED(sa), const Scene *scene)
 	v3d->gridsubdiv = 10;
 	BKE_screen_view3d_shading_init(&v3d->shading);
 
-	v3d->overlay.wireframe_threshold = 0.5f;
+	v3d->overlay.wireframe_threshold = 1.0f;
 	v3d->overlay.xray_alpha_bone = 0.5f;
-	v3d->overlay.texture_paint_mode_opacity = 0.8;
+	v3d->overlay.texture_paint_mode_opacity = 1.0f;
 	v3d->overlay.weight_paint_mode_opacity = 1.0f;
-	v3d->overlay.vertex_paint_mode_opacity = 0.8;
+	v3d->overlay.vertex_paint_mode_opacity = 1.0f;
 	v3d->overlay.edit_flag = V3D_OVERLAY_EDIT_FACES |
 	                         V3D_OVERLAY_EDIT_SEAMS |
 	                         V3D_OVERLAY_EDIT_SHARP |
@@ -346,8 +339,8 @@ static SpaceLink *view3d_new(const ScrArea *UNUSED(sa), const Scene *scene)
 	v3d->flag2 = V3D_SHOW_RECONSTRUCTION | V3D_SHOW_ANNOTATION;
 
 	v3d->lens = 50.0f;
-	v3d->near = 0.01f;
-	v3d->far = 1000.0f;
+	v3d->clip_start = 0.01f;
+	v3d->clip_end = 1000.0f;
 
 	v3d->overlay.gpencil_paper_opacity = 0.5f;
 	v3d->overlay.gpencil_grid_opacity = 0.9f;
@@ -568,7 +561,8 @@ static bool view3d_mat_drop_poll(bContext *UNUSED(C), wmDrag *drag, const wmEven
 static bool view3d_ima_drop_poll(bContext *UNUSED(C), wmDrag *drag, const wmEvent *UNUSED(event), const char **UNUSED(tooltip))
 {
 	if (drag->type == WM_DRAG_PATH) {
-		return (ELEM(drag->icon, 0, ICON_FILE_IMAGE, ICON_FILE_MOVIE));   /* rule might not work? */
+		/* rule might not work? */
+		return (ELEM(drag->icon, 0, ICON_FILE_IMAGE, ICON_FILE_MOVIE));
 	}
 	else {
 		return WM_drag_ID(drag, ID_IM) != NULL;
@@ -692,9 +686,9 @@ static void view3d_widgets(void)
 	wmGizmoMapType *gzmap_type = WM_gizmomaptype_ensure(
 	        &(const struct wmGizmoMapType_Params){SPACE_VIEW3D, RGN_TYPE_WINDOW});
 
-	WM_gizmogrouptype_append_and_link(gzmap_type, VIEW3D_GGT_lamp_spot);
-	WM_gizmogrouptype_append_and_link(gzmap_type, VIEW3D_GGT_lamp_area);
-	WM_gizmogrouptype_append_and_link(gzmap_type, VIEW3D_GGT_lamp_target);
+	WM_gizmogrouptype_append_and_link(gzmap_type, VIEW3D_GGT_light_spot);
+	WM_gizmogrouptype_append_and_link(gzmap_type, VIEW3D_GGT_light_area);
+	WM_gizmogrouptype_append_and_link(gzmap_type, VIEW3D_GGT_light_target);
 	WM_gizmogrouptype_append_and_link(gzmap_type, VIEW3D_GGT_force_field);
 	WM_gizmogrouptype_append_and_link(gzmap_type, VIEW3D_GGT_camera);
 	WM_gizmogrouptype_append_and_link(gzmap_type, VIEW3D_GGT_camera_view);
@@ -794,7 +788,7 @@ static void view3d_main_region_listener(
 						ED_region_tag_redraw(ar);
 					break;
 				case ND_ANIMCHAN:
-					if (wmn->action == NA_SELECTED)
+					if (ELEM(wmn->action, NA_EDITED, NA_ADDED, NA_REMOVED, NA_SELECTED))
 						ED_region_tag_redraw(ar);
 					break;
 			}
@@ -1093,6 +1087,9 @@ static void view3d_main_region_message_subscribe(
 		WM_msg_subscribe_rna_anon_prop(
 		        mbus, Object, mode,
 		        &msg_sub_value_region_tag_refresh);
+		WM_msg_subscribe_rna_anon_prop(
+		        mbus, LayerObjects, active,
+		        &msg_sub_value_region_tag_refresh);
 	}
 }
 
@@ -1325,7 +1322,7 @@ static void space_view3d_listener(
 		case NC_SCENE:
 			switch (wmn->data) {
 				case ND_WORLD:
-					if (v3d->flag2 & V3D_RENDER_OVERRIDE)
+					if (v3d->flag2 & V3D_HIDE_OVERLAYS)
 						ED_area_tag_redraw_regiontype(sa, RGN_TYPE_WINDOW);
 					break;
 			}
@@ -1363,12 +1360,13 @@ static void space_view3d_refresh(const bContext *C, ScrArea *UNUSED(sa))
 }
 
 const char *view3d_context_dir[] = {
-	"active_base", "active_object", NULL
+	"active_base", "active_object", NULL,
 };
 
 static int view3d_context(const bContext *C, const char *member, bContextDataResult *result)
 {
-	/* fallback to the scene layer, allows duplicate and other object operators to run outside the 3d view */
+	/* fallback to the scene layer,
+	 * allows duplicate and other object operators to run outside the 3d view */
 
 	if (CTX_data_dir(member)) {
 		CTX_data_dir_set(result, view3d_context_dir);
@@ -1436,7 +1434,8 @@ static void view3d_id_remap(ScrArea *sa, SpaceLink *slink, ID *old_id, ID *new_i
 		if (is_local == false) {
 			if ((ID *)v3d->ob_centre == old_id) {
 				v3d->ob_centre = (Object *)new_id;
-				/* Otherwise, bonename may remain valid... We could be smart and check this, too? */
+				/* Otherwise, bonename may remain valid...
+				 * We could be smart and check this, too? */
 				if (new_id == NULL) {
 					v3d->ob_centre_bone[0] = '\0';
 				}
@@ -1474,7 +1473,7 @@ void ED_spacetype_view3d(void)
 	/* regions: main window */
 	art = MEM_callocN(sizeof(ARegionType), "spacetype view3d main region");
 	art->regionid = RGN_TYPE_WINDOW;
-	art->keymapflag = ED_KEYMAP_GIZMO | ED_KEYMAP_GPENCIL;
+	art->keymapflag = ED_KEYMAP_GIZMO | ED_KEYMAP_TOOL | ED_KEYMAP_GPENCIL;
 	art->draw = view3d_main_region_draw;
 	art->init = view3d_main_region_init;
 	art->exit = view3d_main_region_exit;

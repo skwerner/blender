@@ -1,6 +1,4 @@
 /*
- * Copyright 2016, Blender Foundation.
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -15,47 +13,39 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
- * Contributor(s): Blender Institute
- *
+ * Copyright 2016, Blender Foundation.
  */
 
-/** \file blender/draw/intern/draw_manager_exec.c
- *  \ingroup draw
+/** \file
+ * \ingroup draw
  */
 
 #include "draw_manager.h"
 
 #include "BLI_mempool.h"
 
-#include "BIF_glutil.h"
 
 #include "BKE_global.h"
-#include "BKE_object.h"
 
 #include "GPU_draw.h"
 #include "GPU_extensions.h"
 #include "intern/gpu_shader_private.h"
 
 #ifdef USE_GPU_SELECT
-#  include "ED_view3d.h"
-#  include "ED_armature.h"
 #  include "GPU_select.h"
 #endif
 
 #ifdef USE_GPU_SELECT
 void DRW_select_load_id(uint id)
 {
-	BLI_assert(G.f & G_PICKSEL);
+	BLI_assert(G.f & G_FLAG_PICKSEL);
 	DST.select_id = id;
 }
 #endif
 
 #define DEBUG_UBO_BINDING
 
-struct GPUUniformBuffer *view_ubo;
-
 /* -------------------------------------------------------------------- */
-
 /** \name Draw State (DRW_state)
  * \{ */
 
@@ -107,15 +97,8 @@ void drw_state_set(DRWState state)
 
 	/* Raster Discard */
 	{
-		if (CHANGED_ANY(DRW_STATE_WRITE_DEPTH | DRW_STATE_WRITE_COLOR |
-		                DRW_STATE_WRITE_STENCIL |
-		                DRW_STATE_WRITE_STENCIL_SHADOW_PASS |
-		                DRW_STATE_WRITE_STENCIL_SHADOW_FAIL))
-		{
-			if ((state & (DRW_STATE_WRITE_DEPTH | DRW_STATE_WRITE_COLOR |
-			              DRW_STATE_WRITE_STENCIL | DRW_STATE_WRITE_STENCIL_SHADOW_PASS |
-			              DRW_STATE_WRITE_STENCIL_SHADOW_FAIL)) != 0)
-			{
+		if (CHANGED_ANY(DRW_STATE_RASTERIZER_ENABLED)) {
+			if ((state & DRW_STATE_RASTERIZER_ENABLED) != 0) {
 				glDisable(GL_RASTERIZER_DISCARD);
 			}
 			else {
@@ -191,15 +174,23 @@ void drw_state_set(DRWState state)
 
 	/* Wire Width */
 	{
-		if (CHANGED_ANY(DRW_STATE_WIRE | DRW_STATE_WIRE_SMOOTH)) {
-			if ((state & DRW_STATE_WIRE_SMOOTH) != 0) {
+		int test;
+		if (CHANGED_ANY_STORE_VAR(
+		        DRW_STATE_WIRE | DRW_STATE_WIRE_WIDE | DRW_STATE_WIRE_SMOOTH,
+		        test))
+		{
+			if (test & DRW_STATE_WIRE_WIDE) {
+				GPU_line_width(3.0f);
+			}
+			else if (test & DRW_STATE_WIRE_SMOOTH) {
 				GPU_line_width(2.0f);
 				GPU_line_smooth(true);
 			}
-			else if ((state & DRW_STATE_WIRE) != 0) {
+			else if (test & DRW_STATE_WIRE) {
 				GPU_line_width(1.0f);
 			}
 			else {
+				GPU_line_width(1.0f);
 				GPU_line_smooth(false);
 			}
 		}
@@ -270,7 +261,7 @@ void drw_state_set(DRWState state)
 		int test;
 		if ((test = CHANGED_TO(DRW_STATE_CLIP_PLANES))) {
 			if (test == 1) {
-				for (int i = 0; i < DST.num_clip_planes; ++i) {
+				for (int i = 0; i < DST.clip_planes_len; ++i) {
 					glEnable(GL_CLIP_DISTANCE0 + i);
 				}
 			}
@@ -436,21 +427,33 @@ void DRW_state_invert_facing(void)
  * and if the shaders have support for it (see usage of gl_ClipDistance).
  * Be sure to call DRW_state_clip_planes_reset() after you finish drawing.
  **/
-void DRW_state_clip_planes_count_set(uint plane_len)
+void DRW_state_clip_planes_len_set(uint plane_len)
 {
 	BLI_assert(plane_len <= MAX_CLIP_PLANES);
-	DST.num_clip_planes = plane_len;
+	DST.clip_planes_len = plane_len;
 }
 
 void DRW_state_clip_planes_reset(void)
 {
-	DST.num_clip_planes = 0;
+	DST.clip_planes_len = 0;
+}
+
+void DRW_state_clip_planes_set_from_rv3d(RegionView3D *rv3d)
+{
+	int max_len = 6;
+	int real_len = (rv3d->viewlock & RV3D_BOXCLIP) ? 4 : max_len;
+	while (real_len < max_len) {
+		/* Fill in dummy values that wont change results (6 is hard coded in shaders). */
+		copy_v4_v4(rv3d->clip[real_len], rv3d->clip[3]);
+		real_len++;
+	}
+
+	DRW_state_clip_planes_len_set(max_len);
 }
 
 /** \} */
 
 /* -------------------------------------------------------------------- */
-
 /** \name Clipping (DRW_clipping)
  * \{ */
 
@@ -505,8 +508,9 @@ static void draw_frustum_boundbox_calc(const float(*projmat)[4], BoundBox *r_bbo
 
 static void draw_clipping_setup_from_view(void)
 {
-	if (DST.clipping.updated)
+	if (DST.clipping.updated) {
 		return;
+	}
 
 	float (*viewinv)[4] = DST.view_data.matstate.mat[DRW_MAT_VIEWINV];
 	float (*projmat)[4] = DST.view_data.matstate.mat[DRW_MAT_WIN];
@@ -532,21 +536,26 @@ static void draw_clipping_setup_from_view(void)
 
 	/* Compute clip planes using the world space frustum corners. */
 	for (int p = 0; p < 6; p++) {
-		int q, r;
+		int q, r, s;
 		switch (p) {
-			case 0:  q = 1; r = 2; break; /* -X */
-			case 1:  q = 0; r = 5; break; /* -Y */
-			case 2:  q = 1; r = 5; break; /* +Z (far) */
-			case 3:  q = 2; r = 6; break; /* +Y */
-			case 4:  q = 0; r = 3; break; /* -Z (near) */
-			default: q = 4; r = 7; break; /* +X */
+			case 0:  q = 1; r = 2; s = 3; break; /* -X */
+			case 1:  q = 0; r = 4; s = 5; break; /* -Y */
+			case 2:  q = 1; r = 5; s = 6; break; /* +Z (far) */
+			case 3:  q = 2; r = 6; s = 7; break; /* +Y */
+			case 4:  q = 0; r = 3; s = 7; break; /* -Z (near) */
+			default: q = 4; r = 7; s = 6; break; /* +X */
 		}
 		if (DST.frontface == GL_CW) {
-			SWAP(int, q, r);
+			SWAP(int, q, s);
 		}
 
-		normal_tri_v3(DST.clipping.frustum_planes[p], bbox.vec[p], bbox.vec[q], bbox.vec[r]);
-		DST.clipping.frustum_planes[p][3] = -dot_v3v3(DST.clipping.frustum_planes[p], bbox.vec[p]);
+		normal_quad_v3(DST.clipping.frustum_planes[p], bbox.vec[p], bbox.vec[q], bbox.vec[r], bbox.vec[s]);
+		/* Increase precision and use the mean of all 4 corners. */
+		DST.clipping.frustum_planes[p][3]  = -dot_v3v3(DST.clipping.frustum_planes[p], bbox.vec[p]);
+		DST.clipping.frustum_planes[p][3] += -dot_v3v3(DST.clipping.frustum_planes[p], bbox.vec[q]);
+		DST.clipping.frustum_planes[p][3] += -dot_v3v3(DST.clipping.frustum_planes[p], bbox.vec[r]);
+		DST.clipping.frustum_planes[p][3] += -dot_v3v3(DST.clipping.frustum_planes[p], bbox.vec[s]);
+		DST.clipping.frustum_planes[p][3] *= 0.25f;
 	}
 
 	/* Extract Bounding Sphere */
@@ -663,14 +672,16 @@ bool DRW_culling_sphere_test(BoundSphere *bsphere)
 	draw_clipping_setup_from_view();
 
 	/* Bypass test if radius is negative. */
-	if (bsphere->radius < 0.0f)
+	if (bsphere->radius < 0.0f) {
 		return true;
+	}
 
 	/* Do a rough test first: Sphere VS Sphere intersect. */
 	BoundSphere *frustum_bsphere = &DST.clipping.frustum_bsphere;
 	float center_dist = len_squared_v3v3(bsphere->center, frustum_bsphere->center);
-	if (center_dist > SQUARE(bsphere->radius + frustum_bsphere->radius))
+	if (center_dist > SQUARE(bsphere->radius + frustum_bsphere->radius)) {
 		return false;
+	}
 
 	/* Test against the 6 frustum planes. */
 	for (int p = 0; p < 6; p++) {
@@ -741,7 +752,6 @@ void DRW_culling_frustum_planes_get(float planes[6][4])
 /** \} */
 
 /* -------------------------------------------------------------------- */
-
 /** \name Draw (DRW_draw)
  * \{ */
 
@@ -927,7 +937,7 @@ static void bind_ubo(GPUUniformBuffer *ubo, char bind_type)
 				return;
 			}
 		}
-		/* printf so user can report bad behaviour */
+		/* printf so user can report bad behavior */
 		printf("Not enough ubo slots! This should not happen!\n");
 		/* This is not depending on user input.
 		 * It is our responsibility to make sure there is enough slots. */
@@ -991,8 +1001,9 @@ static void release_texture_slots(bool with_persist)
 	}
 	else {
 		for (int i = 0; i < GPU_max_textures(); ++i) {
-			if (DST.RST.bound_tex_slots[i] != BIND_PERSIST)
+			if (DST.RST.bound_tex_slots[i] != BIND_PERSIST) {
 				DST.RST.bound_tex_slots[i] = BIND_NONE;
+			}
 		}
 	}
 
@@ -1008,8 +1019,9 @@ static void release_ubo_slots(bool with_persist)
 	}
 	else {
 		for (int i = 0; i < GPU_max_ubo_binds(); ++i) {
-			if (DST.RST.bound_ubo_slots[i] != BIND_PERSIST)
+			if (DST.RST.bound_ubo_slots[i] != BIND_PERSIST) {
 				DST.RST.bound_ubo_slots[i] = BIND_NONE;
+			}
 		}
 	}
 
@@ -1050,6 +1062,12 @@ static void draw_shgroup(DRWShadingGroup *shgroup, DRWState pass_state)
 
 	/* Binding Uniform */
 	for (DRWUniform *uni = shgroup->uniforms; uni; uni = uni->next) {
+		if (uni->location == -2) {
+			uni->location = GPU_shader_get_uniform_ensure(shgroup->shader, DST.uniform_names.buffer + uni->name_ofs);
+			if (uni->location == -1) {
+				continue;
+			}
+		}
 		switch (uni->type) {
 			case DRW_UNIFORM_SHORT_TO_INT:
 				val = (int)*((short *)uni->pvalue);
@@ -1112,12 +1130,12 @@ static void draw_shgroup(DRWShadingGroup *shgroup, DRWState pass_state)
 
 #ifdef USE_GPU_SELECT
 #  define GPU_SELECT_LOAD_IF_PICKSEL(_select_id) \
-	if (G.f & G_PICKSEL) { \
+	if (G.f & G_FLAG_PICKSEL) { \
 		GPU_select_load_id(_select_id); \
 	} ((void)0)
 
 #  define GPU_SELECT_LOAD_IF_PICKSEL_CALL(_call) \
-	if ((G.f & G_PICKSEL) && (_call)) { \
+	if ((G.f & G_FLAG_PICKSEL) && (_call)) { \
 		GPU_select_load_id((_call)->select_id); \
 	} ((void)0)
 
@@ -1125,7 +1143,7 @@ static void draw_shgroup(DRWShadingGroup *shgroup, DRWState pass_state)
 	_start = 0;                                                      \
 	_count = _shgroup->instance_count;                     \
 	int *select_id = NULL;                                           \
-	if (G.f & G_PICKSEL) {                                           \
+	if (G.f & G_FLAG_PICKSEL) {                                           \
 		if (_shgroup->override_selectid == -1) {                        \
 			/* Hack : get vbo data without actually drawing. */     \
 			GPUVertBufRaw raw;                   \
@@ -1146,7 +1164,7 @@ static void draw_shgroup(DRWShadingGroup *shgroup, DRWState pass_state)
 			GPU_select_load_id(select_id[_start]);                   \
 		}
 
-# define GPU_SELECT_LOAD_IF_PICKSEL_LIST_END(_start, _count) \
+#  define GPU_SELECT_LOAD_IF_PICKSEL_LIST_END(_start, _count) \
 		_start += _count;                                    \
 	}
 
@@ -1256,9 +1274,6 @@ static void draw_shgroup(DRWShadingGroup *shgroup, DRWState pass_state)
 	if (use_tfeedback) {
 		GPU_shader_transform_feedback_disable(shgroup->shader);
 	}
-
-	/* TODO: remove, (currently causes alpha issue with sculpt, need to investigate) */
-	DRW_state_reset();
 }
 
 static void drw_update_view(void)
@@ -1267,7 +1282,7 @@ static void drw_update_view(void)
 		DST.state_cache_id++;
 		DST.dirty_mat = false;
 
-		DRW_uniformbuffer_update(view_ubo, &DST.view_data);
+		DRW_uniformbuffer_update(G_draw.view_ubo, &DST.view_data);
 
 		/* Catch integer wrap around. */
 		if (UNLIKELY(DST.state_cache_id == 0)) {
@@ -1290,14 +1305,19 @@ static void drw_update_view(void)
 
 static void drw_draw_pass_ex(DRWPass *pass, DRWShadingGroup *start_group, DRWShadingGroup *end_group)
 {
-	if (start_group == NULL)
+	if (start_group == NULL) {
 		return;
+	}
 
 	DST.shader = NULL;
 
 	BLI_assert(DST.buffer_finish_called && "DRW_render_instance_buffer_finish had not been called before drawing");
 
 	drw_update_view();
+
+	/* GPU_framebuffer_clear calls can change the state outside the DRW module.
+	 * Force reset the affected states to avoid problems later. */
+	drw_state_set(DST.state | DRW_STATE_WRITE_DEPTH | DRW_STATE_WRITE_COLOR);
 
 	drw_state_set(pass->state);
 
@@ -1330,6 +1350,13 @@ static void drw_draw_pass_ex(DRWPass *pass, DRWShadingGroup *start_group, DRWSha
 	if (DST.shader) {
 		GPU_shader_unbind();
 		DST.shader = NULL;
+	}
+
+	/* HACK: Rasterized discard can affect clear commands which are not
+	 * part of a DRWPass (as of now). So disable rasterized discard here
+	 * if it has been enabled. */
+	if ((DST.state & DRW_STATE_RASTERIZER_ENABLED) == 0) {
+		drw_state_set((DST.state & ~DRW_STATE_RASTERIZER_ENABLED) | DRW_STATE_DEFAULT);
 	}
 
 	DRW_stats_query_end();

@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,14 +15,10 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * Contributor(s): Blender Foundation, 2003-2009, Campbell Barton
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/space_sequencer/sequencer_select.c
- *  \ingroup spseq
+/** \file
+ * \ingroup spseq
  */
 
 
@@ -351,7 +345,8 @@ static int sequencer_select_invoke(bContext *C, wmOperator *op, const wmEvent *e
 				marker->flag |= SELECT;
 		}
 		else {
-			/* deselect_markers(0, 0); */ /* XXX, in 2.4x, seq selection used to deselect all, need to re-thnik this for 2.5 */
+			/* XXX, in 2.4x, seq selection used to deselect all, need to re-thnik this for 2.5 */
+			/* deselect_markers(0, 0); */
 			marker->flag |= SELECT;
 		}
 
@@ -554,7 +549,7 @@ void SEQUENCER_OT_select(wmOperatorType *ot)
 		{SEQ_SELECT_LR_MOUSE, "MOUSE", 0, "Mouse", "Use mouse position for selection"},
 		{SEQ_SELECT_LR_LEFT, "LEFT", 0, "Left", "Select left"},
 		{SEQ_SELECT_LR_RIGHT, "RIGHT", 0, "Right", "Select right"},
-		{0, NULL, 0, NULL, NULL}
+		{0, NULL, 0, NULL, NULL},
 	};
 
 	/* identifiers */
@@ -886,29 +881,27 @@ static int sequencer_box_select_exec(bContext *C, wmOperator *op)
 {
 	Scene *scene = CTX_data_scene(C);
 	Editing *ed = BKE_sequencer_editing_get(scene, false);
+	if (ed == NULL) {
+		return OPERATOR_CANCELLED;
+	}
+
 	View2D *v2d = UI_view2d_fromcontext(C);
 
-	Sequence *seq;
-	rctf rectf, rq;
-	const bool select = !RNA_boolean_get(op->ptr, "deselect");
-	const bool extend = RNA_boolean_get(op->ptr, "extend");
+	const eSelectOp sel_op = RNA_enum_get(op->ptr, "mode");
+	const bool select = (sel_op != SEL_OP_SUB);
+	if (SEL_OP_USE_PRE_DESELECT(sel_op)) {
+		ED_sequencer_deselect_all(scene);
+	}
 
-	if (ed == NULL)
-		return OPERATOR_CANCELLED;
-
+	rctf rectf;
 	WM_operator_properties_border_to_rctf(op, &rectf);
 	UI_view2d_region_to_view_rctf(v2d, &rectf, &rectf);
 
-	for (seq = ed->seqbasep->first; seq; seq = seq->next) {
+	for (Sequence *seq = ed->seqbasep->first; seq; seq = seq->next) {
+		rctf rq;
 		seq_rectf(seq, &rq);
-
 		if (BLI_rctf_isect(&rq, &rectf, NULL)) {
-			if (select) seq->flag |= SELECT;
-			else seq->flag &= ~SEQ_ALLSEL;
-			recurs_sel_seq(seq);
-		}
-		else if (!extend) {
-			seq->flag &= ~SEQ_ALLSEL;
+			SET_FLAG_FROM_TEST(seq->flag, select, SELECT);
 			recurs_sel_seq(seq);
 		}
 	}
@@ -938,8 +931,9 @@ void SEQUENCER_OT_select_box(wmOperatorType *ot)
 	/* flags */
 	ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
 
-	/* rna */
-	WM_operator_properties_gesture_box_select(ot);
+	/* properties */
+	WM_operator_properties_gesture_box(ot);
+	WM_operator_properties_select_operation_simple(ot);
 }
 
 /* ****** Selected Grouped ****** */
@@ -964,7 +958,7 @@ static const EnumPropertyItem sequencer_prop_select_grouped_types[] = {
 	{SEQ_SELECT_GROUP_EFFECT_LINK, "EFFECT_LINK", 0, "Effect/Linked",
 	 "Other strips affected by the active one (sharing some time, and below or effect-assigned)"},
 	{SEQ_SELECT_GROUP_OVERLAP, "OVERLAP", 0, "Overlap", "Overlapping time"},
-	{0, NULL, 0, NULL, NULL}
+	{0, NULL, 0, NULL, NULL},
 };
 
 #define SEQ_IS_SOUND(_seq) ((_seq->type & SEQ_TYPE_SOUND_RAM) && !(_seq->type & SEQ_TYPE_EFFECT))

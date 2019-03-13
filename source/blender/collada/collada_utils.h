@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,14 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * Contributor(s): Chingiz Dyussenov, Arystanbek Dyussenov, Nathan Letwory.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file collada_utils.h
- *  \ingroup collada
+/** \file
+ * \ingroup collada
  */
 
 #ifndef __COLLADA_UTILS_H__
@@ -45,7 +39,7 @@ extern "C" {
 #include "DNA_anim_types.h"
 #include "DNA_constraint_types.h"
 #include "DNA_mesh_types.h"
-#include "DNA_lamp_types.h"
+#include "DNA_light_types.h"
 #include "DNA_camera_types.h"
 
 #include "DNA_customdata_types.h"
@@ -96,13 +90,13 @@ inline bAction *bc_getSceneObjectAction(Object *ob)
 	return (ob->adt && ob->adt->action) ? ob->adt->action : NULL;
 }
 
-/* Returns Lamp Action or NULL */
-inline bAction *bc_getSceneLampAction(Object *ob)
+/* Returns Light Action or NULL */
+inline bAction *bc_getSceneLightAction(Object *ob)
 {
 	if (ob->type != OB_LAMP)
 		return NULL;
 
-	Lamp *lamp = (Lamp *)ob->data;
+	Light *lamp = (Light *)ob->data;
 	return (lamp->adt && lamp->adt->action) ? lamp->adt->action : NULL;
 }
 
@@ -180,11 +174,13 @@ inline bool bc_startswith(std::string const & value, std::string const & startin
 	return (value.substr(0, starting.size()) == starting);
 }
 
+#if 0  /* UNUSED */
 inline bool bc_endswith(std::string const & value, std::string const & ending)
 {
 	if (ending.size() > value.size()) return false;
 	return std::equal(ending.rbegin(), ending.rend(), value.rbegin());
 }
+#endif
 
 extern std::string bc_replace_string(std::string data, const std::string& pattern, const std::string& replacement);
 extern std::string bc_url_encode(std::string data);
@@ -314,8 +310,8 @@ void bc_add_default_shader(bContext *C, Material *ma);
 bNode *bc_get_master_shader(Material *ma);
 COLLADASW::ColorOrTexture bc_get_cot(float r, float g, float b, float a);
 COLLADASW::ColorOrTexture bc_get_base_color(bNode *shader);
+bool bc_get_reflectivity(bNode *shader, double &reflectivity);
+double bc_get_reflectivity(Material *ma);
 COLLADASW::ColorOrTexture bc_get_base_color(Material *ma);
-COLLADASW::ColorOrTexture bc_get_specular_color(bNode *shader);
-COLLADASW::ColorOrTexture bc_get_specular_color(Material *ma, bool use_fallback);
 
 #endif

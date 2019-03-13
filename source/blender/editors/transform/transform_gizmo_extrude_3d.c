@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,12 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/transform/transform_gizmo_extrude_3d.c
- *  \ingroup edmesh
+/** \file
+ * \ingroup edmesh
  */
 
 #include "BLI_utildefines.h"
@@ -84,7 +80,7 @@ typedef struct GizmoExtrudeGroup {
 	/* Copied from the transform operator,
 	 * use to redo with the same settings. */
 	struct {
-		float constraint_matrix[3][3];
+		float orient_matrix[3][3];
 		bool  constraint_axis[3];
 		float value[4];
 	} redo_xform;
@@ -149,17 +145,22 @@ static void gizmo_mesh_extrude_setup(const bContext *C, wmGizmoGroup *gzgroup)
 	}
 
 	{
-		const Object *obedit = CTX_data_edit_object(C);
 		const char *op_idname = NULL;
-		if (obedit->type == OB_MESH) {
+		/* grease pencil does not use obedit */
+		/* GPXX: Remove if OB_MODE_EDIT_GPENCIL is merged with OB_MODE_EDIT */
+		const Object *obact = CTX_data_active_object(C);
+		if (obact->type == OB_GPENCIL) {
+			op_idname = "GPENCIL_OT_extrude_move";
+		}
+		else if (obact->type == OB_MESH) {
 			op_idname = "MESH_OT_extrude_context_move";
 			ggd->normal_axis = 2;
 		}
-		else if (obedit->type == OB_ARMATURE) {
+		else if (obact->type == OB_ARMATURE) {
 			op_idname = "ARMATURE_OT_extrude_move";
 			ggd->normal_axis = 1;
 		}
-		else if (obedit->type == OB_CURVE) {
+		else if (obact->type == OB_CURVE) {
 			op_idname = "CURVE_OT_extrude_move";
 			ggd->normal_axis = 2;
 		}
@@ -235,7 +236,7 @@ static void gizmo_mesh_extrude_refresh(const bContext *C, wmGizmoGroup *gzgroup)
 
 	ggd->data.orientation_type = scene->orientation_slots[SCE_ORIENT_DEFAULT].type;
 	const bool use_normal = (
-	        (ggd->data.orientation_type != V3D_MANIP_NORMAL) ||
+	        (ggd->data.orientation_type != V3D_ORIENT_NORMAL) ||
 	        (axis_type == EXTRUDE_AXIS_NORMAL));
 	const int axis_len_used = use_normal ? 4 : 3;
 
@@ -245,7 +246,7 @@ static void gizmo_mesh_extrude_refresh(const bContext *C, wmGizmoGroup *gzgroup)
 		struct TransformBounds tbounds_normal;
 		if (!ED_transform_calc_gizmo_stats(
 		            C, &(struct TransformCalcParams){
-		                .orientation_type = V3D_MANIP_NORMAL + 1,
+		                .orientation_type = V3D_ORIENT_NORMAL + 1,
 		            }, &tbounds_normal))
 		{
 			unit_m3(tbounds_normal.axis);
@@ -286,7 +287,7 @@ static void gizmo_mesh_extrude_refresh(const bContext *C, wmGizmoGroup *gzgroup)
 		gz_adjust = ggd->adjust[1];
 		/* We can't access this from 'ot->last_properties'
 		 * because some properties use skip-save. */
-		RNA_float_get_array(op_xform->ptr, "constraint_matrix", &ggd->redo_xform.constraint_matrix[0][0]);
+		RNA_float_get_array(op_xform->ptr, "orient_matrix", &ggd->redo_xform.orient_matrix[0][0]);
 		RNA_boolean_get_array(op_xform->ptr, "constraint_axis", ggd->redo_xform.constraint_axis);
 		RNA_float_get_array(op_xform->ptr, "value", ggd->redo_xform.value);
 
@@ -315,7 +316,7 @@ static void gizmo_mesh_extrude_refresh(const bContext *C, wmGizmoGroup *gzgroup)
 
 	if (has_redo) {
 		if (gz_adjust == ggd->adjust[0]) {
-			gizmo_mesh_extrude_orientation_matrix_set_for_adjust(ggd, ggd->redo_xform.constraint_matrix);
+			gizmo_mesh_extrude_orientation_matrix_set_for_adjust(ggd, ggd->redo_xform.orient_matrix);
 			if (adjust_is_flip) {
 				negate_v3(ggd->adjust[0]->matrix_basis[2]);
 			}
@@ -358,7 +359,7 @@ static void gizmo_mesh_extrude_draw_prepare(const bContext *C, wmGizmoGroup *gzg
 {
 	GizmoExtrudeGroup *ggd = gzgroup->customdata;
 	switch (ggd->data.orientation_type) {
-		case V3D_MANIP_VIEW:
+		case V3D_ORIENT_VIEW:
 		{
 			RegionView3D *rv3d = CTX_wm_region_view3d(C);
 			float mat[3][3];
@@ -393,8 +394,9 @@ static void gizmo_mesh_extrude_invoke_prepare(const bContext *UNUSED(C), wmGizmo
 		wmGizmoOpElem *gzop = WM_gizmo_operator_get(gz, 0);
 		PointerRNA macroptr = RNA_pointer_get(&gzop->ptr, "TRANSFORM_OT_translate");
 		if (gz == ggd->adjust[0]) {
-			RNA_float_set_array(&macroptr, "constraint_matrix", &ggd->redo_xform.constraint_matrix[0][0]);
 			RNA_boolean_set_array(&macroptr, "constraint_axis", ggd->redo_xform.constraint_axis);
+			RNA_float_set_array(&macroptr, "orient_matrix", &ggd->redo_xform.orient_matrix[0][0]);
+			RNA_enum_set(&macroptr, "orient_type", V3D_ORIENT_NORMAL);
 		}
 		RNA_float_set_array(&macroptr, "value", ggd->redo_xform.value);
 	}
@@ -406,13 +408,14 @@ static void gizmo_mesh_extrude_invoke_prepare(const bContext *UNUSED(C), wmGizmo
 		if (i == 3) {
 			use_normal_matrix = true;
 		}
-		else if (ggd->data.orientation_type == V3D_MANIP_NORMAL) {
+		else if (ggd->data.orientation_type == V3D_ORIENT_NORMAL) {
 			use_normal_matrix = true;
 		}
 		if (use_normal_matrix) {
 			wmGizmoOpElem *gzop = WM_gizmo_operator_get(gz, 0);
 			PointerRNA macroptr = RNA_pointer_get(&gzop->ptr, "TRANSFORM_OT_translate");
-			RNA_float_set_array(&macroptr, "constraint_matrix", &ggd->data.normal_mat3[0][0]);
+			RNA_float_set_array(&macroptr, "orient_matrix", &ggd->data.normal_mat3[0][0]);
+			RNA_enum_set(&macroptr, "orient_type", V3D_ORIENT_NORMAL);
 		}
 	}
 }
@@ -438,7 +441,7 @@ static void gizmo_mesh_extrude_message_subscribe(
 	WM_msg_subscribe_rna_params(
 	        mbus,
 	        &(const wmMsgParams_RNA){
-	            .ptr = (PointerRNA){.type = gzgroup->type->srna},
+	            .ptr = (PointerRNA){ .type = gzgroup->type->srna, },
 	            .prop = ggd->gzgt_axis_type_prop,
 	        },
 	        &msg_sub_value_gz_tag_refresh, __func__);
@@ -462,9 +465,9 @@ void VIEW3D_GGT_xform_extrude(struct wmGizmoGroupType *gzgt)
 	gzgt->message_subscribe = gizmo_mesh_extrude_message_subscribe;
 
 	static const EnumPropertyItem axis_type_items[] = {
-		{EXTRUDE_AXIS_NORMAL, "NORMAL", 0, "Normal", "Only show normal axis"},
+		{EXTRUDE_AXIS_NORMAL, "NORMAL", 0, "Regular", "Only show normal axis"},
 		{EXTRUDE_AXIS_XYZ, "XYZ", 0, "XYZ", "Follow scene orientation"},
-		{0, NULL, 0, NULL, NULL}
+		{0, NULL, 0, NULL, NULL},
 	};
 	RNA_def_enum(gzgt->srna, "axis_type", axis_type_items, 0, "Axis Type", "");
 }

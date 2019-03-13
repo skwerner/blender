@@ -1,6 +1,4 @@
 /*
- * Copyright 2016, Blender Foundation.
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -15,12 +13,11 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
- * Contributor(s): Blender Institute
- *
+ * Copyright 2016, Blender Foundation.
  */
 
-/** \file eevee_volumes.c
- *  \ingroup draw_engine
+/** \file
+ * \ingroup draw_engine
  *
  * Volumetric effects rendering using frostbite approach.
  */
@@ -34,10 +31,9 @@
 #include "DNA_smoke_types.h"
 #include "DNA_world_types.h"
 
-#include "BKE_global.h" /* for G.debug_value */
 #include "BKE_modifier.h"
 #include "BKE_mesh.h"
-#include "BKE_object.h"
+#include "BKE_smoke.h"
 
 #include "ED_screen.h"
 
@@ -50,11 +46,11 @@
 
 static struct {
 	char *volumetric_common_lib;
-	char *volumetric_common_lamps_lib;
+	char *volumetric_common_lights_lib;
 
 	struct GPUShader *volumetric_clear_sh;
 	struct GPUShader *volumetric_scatter_sh;
-	struct GPUShader *volumetric_scatter_with_lamps_sh;
+	struct GPUShader *volumetric_scatter_with_lights_sh;
 	struct GPUShader *volumetric_integration_sh;
 	struct GPUShader *volumetric_resolve_sh;
 
@@ -70,7 +66,7 @@ extern char datatoc_common_uniforms_lib_glsl[];
 extern char datatoc_common_view_lib_glsl[];
 extern char datatoc_octahedron_lib_glsl[];
 extern char datatoc_irradiance_lib_glsl[];
-extern char datatoc_lamps_lib_glsl[];
+extern char datatoc_lights_lib_glsl[];
 extern char datatoc_volumetric_frag_glsl[];
 extern char datatoc_volumetric_geom_glsl[];
 extern char datatoc_volumetric_vert_glsl[];
@@ -88,13 +84,13 @@ static void eevee_create_shader_volumes(void)
 	        datatoc_bsdf_common_lib_glsl,
 	        datatoc_volumetric_lib_glsl);
 
-	e_data.volumetric_common_lamps_lib = BLI_string_joinN(
+	e_data.volumetric_common_lights_lib = BLI_string_joinN(
 	        datatoc_common_view_lib_glsl,
 	        datatoc_common_uniforms_lib_glsl,
 	        datatoc_bsdf_common_lib_glsl,
 	        datatoc_octahedron_lib_glsl,
 	        datatoc_irradiance_lib_glsl,
-	        datatoc_lamps_lib_glsl,
+	        datatoc_lights_lib_glsl,
 	        datatoc_volumetric_lib_glsl);
 
 	e_data.volumetric_clear_sh = DRW_shader_create_with_lib(
@@ -108,15 +104,15 @@ static void eevee_create_shader_volumes(void)
 	        datatoc_volumetric_vert_glsl,
 	        datatoc_volumetric_geom_glsl,
 	        datatoc_volumetric_scatter_frag_glsl,
-	        e_data.volumetric_common_lamps_lib,
+	        e_data.volumetric_common_lights_lib,
 	        SHADER_DEFINES
 	        "#define VOLUMETRICS\n"
 	        "#define VOLUME_SHADOW\n");
-	e_data.volumetric_scatter_with_lamps_sh = DRW_shader_create_with_lib(
+	e_data.volumetric_scatter_with_lights_sh = DRW_shader_create_with_lib(
 	        datatoc_volumetric_vert_glsl,
 	        datatoc_volumetric_geom_glsl,
 	        datatoc_volumetric_scatter_frag_glsl,
-	        e_data.volumetric_common_lamps_lib,
+	        e_data.volumetric_common_lights_lib,
 	        SHADER_DEFINES
 	        "#define VOLUMETRICS\n"
 	        "#define VOLUME_LIGHTING\n"
@@ -420,7 +416,7 @@ void EEVEE_volumes_cache_init(EEVEE_ViewLayerData *sldata, EEVEE_Data *vedata)
 		psl->volumetric_objects_ps = DRW_pass_create("Volumetric Properties", DRW_STATE_WRITE_COLOR |
 		                                                                      DRW_STATE_ADDITIVE);
 
-		struct GPUShader *scatter_sh = (common_data->vol_use_lights) ? e_data.volumetric_scatter_with_lamps_sh
+		struct GPUShader *scatter_sh = (common_data->vol_use_lights) ? e_data.volumetric_scatter_with_lights_sh
 		                                                      : e_data.volumetric_scatter_sh;
 		psl->volumetric_scatter_ps = DRW_pass_create("Volumetric Scattering", DRW_STATE_WRITE_COLOR);
 		grp = DRW_shgroup_empty_tri_batch_create(scatter_sh, psl->volumetric_scatter_ps,
@@ -497,7 +493,7 @@ void EEVEE_volumes_cache_object_add(EEVEE_ViewLayerData *sldata, EEVEE_Data *ved
 	DRW_shgroup_uniform_vec3(grp, "volumeOrcoSize", texcosize, 1);
 
 	/* Smoke Simulation */
-	if (((ob->base_flag & BASE_FROMDUPLI) == 0) &&
+	if (((ob->base_flag & BASE_FROM_DUPLI) == 0) &&
 	    (md = modifiers_findByType(ob, eModifierType_Smoke)) &&
 	    (modifier_isEnabled(scene, md, eModifierMode_Realtime)))
 	{
@@ -512,10 +508,11 @@ void EEVEE_volumes_cache_object_add(EEVEE_ViewLayerData *sldata, EEVEE_Data *ved
 		const bool show_smoke = ((int)DEG_get_ctime(draw_ctx->depsgraph) >= sds->point_cache[0]->startframe);
 
 		if (sds->fluid && show_smoke) {
-			if (!sds->wt || !(sds->viewsettings & MOD_SMOKE_VIEW_SHOWBIG)) {
+			const bool show_highres = BKE_smoke_show_highres(scene, sds);
+			if (!sds->wt || !show_highres) {
 				GPU_create_smoke(smd, 0);
 			}
-			else if (sds->wt && (sds->viewsettings & MOD_SMOKE_VIEW_SHOWBIG)) {
+			else if (sds->wt && show_highres) {
 				GPU_create_smoke(smd, 1);
 			}
 			BLI_addtail(&e_data.smoke_domains, BLI_genericNodeN(smd));
@@ -611,11 +608,11 @@ void EEVEE_volumes_free_smoke_textures(void)
 void EEVEE_volumes_free(void)
 {
 	MEM_SAFE_FREE(e_data.volumetric_common_lib);
-	MEM_SAFE_FREE(e_data.volumetric_common_lamps_lib);
+	MEM_SAFE_FREE(e_data.volumetric_common_lights_lib);
 
 	DRW_SHADER_FREE_SAFE(e_data.volumetric_clear_sh);
 	DRW_SHADER_FREE_SAFE(e_data.volumetric_scatter_sh);
-	DRW_SHADER_FREE_SAFE(e_data.volumetric_scatter_with_lamps_sh);
+	DRW_SHADER_FREE_SAFE(e_data.volumetric_scatter_with_lights_sh);
 	DRW_SHADER_FREE_SAFE(e_data.volumetric_integration_sh);
 	DRW_SHADER_FREE_SAFE(e_data.volumetric_resolve_sh);
 }

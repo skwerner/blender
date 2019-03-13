@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,14 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/blenkernel/intern/brush.c
- *  \ingroup bke
+/** \file
+ * \ingroup bke
  */
 
 #include "MEM_guardedalloc.h"
@@ -32,13 +26,11 @@
 #include "DNA_gpencil_types.h"
 
 #include "BLI_math.h"
-#include "BLI_blenlib.h"
 #include "BLI_rand.h"
 
 #include "BKE_brush.h"
 #include "BKE_colortools.h"
 #include "BKE_context.h"
-#include "BKE_global.h"
 #include "BKE_library.h"
 #include "BKE_library_query.h"
 #include "BKE_library_remap.h"
@@ -79,6 +71,7 @@ static void brush_defaults(Brush *brush)
 	brush->size = 35; /* radius of the brush in pixels */
 	brush->alpha = 0.5f; /* brush strength/intensity probably variable should be renamed? */
 	brush->autosmooth_factor = 0.0f;
+	brush->topology_rake_factor = 0.0f;
 	brush->crease_pinch_factor = 0.5f;
 	brush->sculpt_plane = SCULPT_DISP_DIR_AREA;
 	brush->plane_offset = 0.0f; /* how far above or below the plane that is found by averaging the faces */
@@ -138,7 +131,7 @@ static void brush_defaults(Brush *brush)
 
 void BKE_brush_init(Brush *brush)
 {
-	BLI_assert(MEMCMP_STRUCT_OFS_IS_ZERO(brush, id));
+	BLI_assert(MEMCMP_STRUCT_AFTER_IS_ZERO(brush, id));
 
 	/* enable fake user by default */
 	id_fake_user_set(&brush->id);
@@ -182,6 +175,7 @@ void BKE_brush_init_gpencil_settings(Brush *brush)
 	brush->gpencil_settings->draw_jitter = 0.0f;
 	brush->gpencil_settings->flag |= GP_BRUSH_USE_JITTER_PRESSURE;
 	brush->gpencil_settings->icon_id = GP_BRUSH_ICON_PEN;
+	brush->gpencil_settings->flag |= GP_BRUSH_ENABLE_CURSOR;
 
 	/* curves */
 	brush->gpencil_settings->curve_sensitivity = curvemapping_add(1, 0.0f, 0.0f, 1.0f, 1.0f);
@@ -533,7 +527,7 @@ void BKE_brush_gpencil_presets(bContext *C)
 
 void BKE_brush_update_material(Main *bmain, Material *ma, Brush *exclude_brush)
 {
-	for (Brush *brush = bmain->brush.first; brush; brush = brush->id.next) {
+	for (Brush *brush = bmain->brushes.first; brush; brush = brush->id.next) {
 		if ((exclude_brush != NULL) && (brush == exclude_brush)) {
 			continue;
 		}
@@ -553,7 +547,7 @@ struct Brush *BKE_brush_first_search(struct Main *bmain, const eObjectMode ob_mo
 {
 	Brush *brush;
 
-	for (brush = bmain->brush.first; brush; brush = brush->id.next) {
+	for (brush = bmain->brushes.first; brush; brush = brush->id.next) {
 		if (brush->ob_mode & ob_mode)
 			return brush;
 	}
@@ -562,7 +556,7 @@ struct Brush *BKE_brush_first_search(struct Main *bmain, const eObjectMode ob_mo
 
 /**
  * Only copy internal data of Brush ID from source to already allocated/initialized destination.
- * You probably nerver want to use that directly, use id_copy or BKE_id_copy_ex for typical needs.
+ * You probably never want to use that directly, use BKE_id_copy or BKE_id_copy_ex for typical needs.
  *
  * WARNING! This function will not handle ID user count!
  *
@@ -596,7 +590,7 @@ void BKE_brush_copy_data(Main *UNUSED(bmain), Brush *brush_dst, const Brush *bru
 Brush *BKE_brush_copy(Main *bmain, const Brush *brush)
 {
 	Brush *brush_copy;
-	BKE_id_copy_ex(bmain, &brush->id, (ID **)&brush_copy, 0, false);
+	BKE_id_copy(bmain, &brush->id, (ID **)&brush_copy);
 	return brush_copy;
 }
 
@@ -737,6 +731,8 @@ void BKE_brush_debug_print_state(Brush *br)
 	BR_TEST(plane_offset, f);
 
 	BR_TEST(autosmooth_factor, f);
+
+	BR_TEST(topology_rake_factor, f);
 
 	BR_TEST(crease_pinch_factor, f);
 

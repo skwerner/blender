@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,29 +15,21 @@
  *
  * The Original Code is Copyright (C) 2005 by the Blender Foundation.
  * All rights reserved.
- *
- * Contributor(s): Daniel Dunbar
- *                 Ton Roosendaal,
- *                 Ben Batt,
- *                 Brecht Van Lommel,
- *                 Campbell Barton
- *
- * ***** END GPL LICENSE BLOCK *****
- *
  */
 
-/** \file blender/modifiers/intern/MOD_meshdeform.c
- *  \ingroup modifiers
+/** \file
+ * \ingroup modifiers
  */
+
+#include "BLI_utildefines.h"
+
+#include "BLI_math.h"
+#include "BLI_task.h"
 
 #include "DNA_mesh_types.h"
 #include "DNA_meshdata_types.h"
 #include "DNA_object_types.h"
 #include "DNA_scene_types.h"
-
-#include "BLI_math.h"
-#include "BLI_task.h"
-#include "BLI_utildefines.h"
 
 #include "BKE_global.h"
 #include "BKE_library.h"
@@ -99,15 +89,14 @@ static void copyData(const ModifierData *md, ModifierData *target, const int fla
 	if (mmd->bindcos) tmmd->bindcos = MEM_dupallocN(mmd->bindcos);  /* deprecated */
 }
 
-static CustomDataMask requiredDataMask(Object *UNUSED(ob), ModifierData *md)
+static void requiredDataMask(Object *UNUSED(ob), ModifierData *md, CustomData_MeshMasks *r_cddata_masks)
 {
 	MeshDeformModifierData *mmd = (MeshDeformModifierData *)md;
-	CustomDataMask dataMask = 0;
 
 	/* ask for vertexgroups if we need them */
-	if (mmd->defgrp_name[0]) dataMask |= CD_MASK_MDEFORMVERT;
-
-	return dataMask;
+	if (mmd->defgrp_name[0] != '\0') {
+		r_cddata_masks->vmask |= CD_MASK_MDEFORMVERT;
+	}
 }
 
 static bool isDisabled(const struct Scene *UNUSED(scene), ModifierData *md, bool UNUSED(useRenderParams))
@@ -291,7 +280,6 @@ static void meshdeformModifier_do(
 	int a, totvert, totcagevert, defgrp_index;
 	float (*cagecos)[3] = NULL;
 	MeshdeformUserdata data;
-	bool free_cagemesh = false;
 
 	static int recursive_bind_sentinel = 0;
 
@@ -309,12 +297,12 @@ static void meshdeformModifier_do(
 	 * We'll support this case once granular dependency graph is landed.
 	 */
 	Object *ob_target = DEG_get_evaluated_object(ctx->depsgraph, mmd->object);
-	cagemesh = BKE_modifier_get_evaluated_mesh_from_evaluated_object(ob_target, &free_cagemesh);
+	cagemesh = BKE_modifier_get_evaluated_mesh_from_evaluated_object(ob_target, false);
 #if 0  /* This shall not be needed if we always get evaluated target object... */
 	if (cagemesh == NULL && mmd->bindcagecos == NULL && ob == DEG_get_original_object(ob)) {
 		/* Special case, binding happens outside of depsgraph evaluation, so we can build our own
 		 * target mesh if needed. */
-		cagemesh = mesh_create_eval_final_view(ctx->depsgraph, DEG_get_input_scene(ctx->depsgraph), mmd->object, 0);
+		cagemesh = mesh_create_eval_final_view(ctx->depsgraph, DEG_get_input_scene(ctx->depsgraph), mmd->object, &CD_MASK_BAREMESH);
 		free_cagemesh = cagemesh != NULL;
 	}
 #endif
@@ -411,9 +399,6 @@ static void meshdeformModifier_do(
 finally:
 	MEM_SAFE_FREE(dco);
 	MEM_SAFE_FREE(cagecos);
-	if (cagemesh != NULL && free_cagemesh) {
-		BKE_id_free(NULL, cagemesh);
-	}
 }
 
 static void deformVerts(

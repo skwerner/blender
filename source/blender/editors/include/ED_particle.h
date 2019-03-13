@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,30 +15,24 @@
  *
  * The Original Code is Copyright (C) 2007 by Janne Karhu.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file ED_particle.h
- *  \ingroup editors
+/** \file
+ * \ingroup editors
  */
 
 #ifndef __ED_PARTICLE_H__
 #define __ED_PARTICLE_H__
 
-struct bContext;
 struct Object;
-struct ParticleSystem;
-struct ParticleEditSettings;
-struct rcti;
 struct PTCacheEdit;
+struct ParticleEditSettings;
+struct ParticleSystem;
 struct Scene;
-struct ViewLayer;
 struct UndoType;
+struct ViewLayer;
+struct bContext;
+struct rcti;
 
 /* particle edit mode */
 void PE_free_ptcache_edit(struct PTCacheEdit *edit);
@@ -63,7 +55,7 @@ void PE_update_object(
 /* selection tools */
 int PE_mouse_particles(struct bContext *C, const int mval[2], bool extend, bool deselect, bool toggle);
 int PE_box_select(struct bContext *C, const struct rcti *rect, const int sel_op);
-int PE_circle_select(struct bContext *C, int selecting, const int mval[2], float rad);
+bool PE_circle_select(struct bContext *C, int sel_op, const int mval[2], float rad);
 int PE_lasso_select(struct bContext *C, const int mcords[][2], const short moves, const int sel_op);
 void PE_deselect_all_visible(struct PTCacheEdit *edit);
 

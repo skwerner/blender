@@ -1,6 +1,4 @@
 /*
- * Copyright 2016, Blender Foundation.
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -15,12 +13,11 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
- * Contributor(s): Blender Institute
- *
+ * Copyright 2016, Blender Foundation.
  */
 
-/** \file eevee_subsurface.c
- *  \ingroup draw_engine
+/** \file
+ * \ingroup draw_engine
  *
  * Screen space subsurface scattering technique.
  */
@@ -79,11 +76,6 @@ int EEVEE_subsurface_init(EEVEE_ViewLayerData *sldata, EEVEE_Data *vedata)
 		effects->sss_sample_count = 1 + scene_eval->eevee.sss_samples * 2;
 		effects->sss_separate_albedo = (scene_eval->eevee.flag & SCE_EEVEE_SSS_SEPARATE_ALBEDO) != 0;
 		common_data->sss_jitter_threshold = scene_eval->eevee.sss_jitter_threshold;
-
-		/* Force separate albedo for final render */
-		if (DRW_state_is_image_render()) {
-			effects->sss_separate_albedo = true;
-		}
 
 		/* Shaders */
 		if (!e_data.sss_sh[0]) {

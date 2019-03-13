@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,14 +15,10 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * Contributor(s): Blender Foundation, 2002-2009 full recode.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/armature/pose_transform.c
- *  \ingroup edarmature
+/** \file
+ * \ingroup edarmature
  */
 
 #include "DNA_anim_types.h"
@@ -45,7 +39,6 @@
 #include "BKE_blender_copybuffer.h"
 #include "BKE_context.h"
 #include "BKE_deform.h"
-#include "BKE_global.h"
 #include "BKE_idprop.h"
 #include "BKE_layer.h"
 #include "BKE_main.h"
@@ -72,7 +65,8 @@
 /* ********************************************** */
 /* Pose Apply */
 
-/* helper for apply_armature_pose2bones - fixes parenting of objects that are bone-parented to armature */
+/* helper for apply_armature_pose2bones - fixes parenting of objects
+ * that are bone-parented to armature */
 static void applyarmature_fix_boneparents(const bContext *C, Scene *scene, Object *armob)
 {
 	Depsgraph *depsgraph = CTX_data_depsgraph(C);
@@ -80,7 +74,7 @@ static void applyarmature_fix_boneparents(const bContext *C, Scene *scene, Objec
 	Object workob, *ob;
 
 	/* go through all objects in database */
-	for (ob = bmain->object.first; ob; ob = ob->id.next) {
+	for (ob = bmain->objects.first; ob; ob = ob->id.next) {
 		/* if parent is bone in this armature, apply corrections */
 		if ((ob->parent == armob) && (ob->partype == PARBONE)) {
 			/* apply current transform from parent (not yet destroyed),
@@ -100,7 +94,8 @@ static int apply_armature_pose2bones_exec(bContext *C, wmOperator *op)
 	Main *bmain = CTX_data_main(C);
 	Depsgraph *depsgraph = CTX_data_depsgraph(C);
 	Scene *scene = CTX_data_scene(C);
-	Object *ob = BKE_object_pose_armature_get(CTX_data_active_object(C)); // must be active object, not edit-object
+	// must be active object, not edit-object
+	Object *ob = BKE_object_pose_armature_get(CTX_data_active_object(C));
 	const Object *ob_eval = DEG_get_evaluated_object(depsgraph, ob);
 	bArmature *arm = BKE_armature_from_object(ob);
 	bPose *pose;
@@ -111,7 +106,7 @@ static int apply_armature_pose2bones_exec(bContext *C, wmOperator *op)
 	if (ob->type != OB_ARMATURE)
 		return OPERATOR_CANCELLED;
 	if (BKE_object_obdata_is_libdata(ob)) {
-		BKE_report(op->reports, RPT_ERROR, "Cannot apply pose to lib-linked armature"); /* error_libdata(); */
+		BKE_report(op->reports, RPT_ERROR, "Cannot apply pose to lib-linked armature");
 		return OPERATOR_CANCELLED;
 	}
 
@@ -476,8 +471,8 @@ static int pose_copy_exec(bContext *C, wmOperator *op)
 	Object ob_copy = *ob;
 	bArmature arm_copy = *((bArmature *)ob->data);
 	ob_copy.data = &arm_copy;
-	BLI_addtail(&temp_bmain->object, &ob_copy);
-	BLI_addtail(&temp_bmain->armature, &arm_copy);
+	BLI_addtail(&temp_bmain->objects, &ob_copy);
+	BLI_addtail(&temp_bmain->armatures, &arm_copy);
 	/* begin copy buffer on a temp bmain. */
 	BKE_copybuffer_begin(temp_bmain);
 	/* Store the whole object to the copy buffer because pose can't be
@@ -490,8 +485,8 @@ static int pose_copy_exec(bContext *C, wmOperator *op)
 	 * This is required because objects in temp bmain shares same pointers
 	 * as the real ones.
 	 */
-	BLI_listbase_clear(&temp_bmain->object);
-	BLI_listbase_clear(&temp_bmain->armature);
+	BLI_listbase_clear(&temp_bmain->objects);
+	BLI_listbase_clear(&temp_bmain->armatures);
 	BKE_main_free(temp_bmain);
 	/* We are all done! */
 	BKE_report(op->reports, RPT_INFO, "Copied pose to buffer");
@@ -541,13 +536,13 @@ static int pose_paste_exec(bContext *C, wmOperator *op)
 		return OPERATOR_CANCELLED;
 	}
 	/* Make sure data from this file is usable for pose paste. */
-	if (BLI_listbase_count_at_most(&tmp_bmain->object, 2) != 1) {
+	if (BLI_listbase_count_at_most(&tmp_bmain->objects, 2) != 1) {
 		BKE_report(op->reports, RPT_ERROR, "Copy buffer is not from pose mode");
 		BKE_main_free(tmp_bmain);
 		return OPERATOR_CANCELLED;
 	}
 
-	Object *object_from = tmp_bmain->object.first;
+	Object *object_from = tmp_bmain->objects.first;
 	bPose *pose_from = object_from->pose;
 	if (pose_from == NULL) {
 		BKE_report(op->reports, RPT_ERROR, "Copy buffer has no pose");
@@ -745,7 +740,8 @@ static void pchan_clear_rot(bPoseChannel *pchan)
 		}
 	}
 
-	/* Clear also Bendy Bone stuff - Roll is obvious, but Curve X/Y stuff is also kindof rotational in nature... */
+	/* Clear also Bendy Bone stuff - Roll is obvious,
+	 * but Curve X/Y stuff is also kindof rotational in nature... */
 	pchan->roll1 = 0.0f;
 	pchan->roll2 = 0.0f;
 

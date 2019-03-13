@@ -1033,7 +1033,7 @@ typedef struct NodeCryptomatte {
 typedef struct NodeDenoise {
 	char hdr;
 	char srgb;
-	char pad[6];
+	char _pad[6];
 } NodeDenoise;
 
 /* script node mode */

@@ -17,7 +17,8 @@
  * All rights reserved.
  */
 
-/** \file \ingroup DNA
+/** \file
+ * \ingroup DNA
  */
 
 #ifndef __DNA_USERDEF_TYPES_H__
@@ -252,12 +253,6 @@ typedef struct ThemeSpace {
 	/** Region background. */
 	char execution_buts[4];
 
-	/* float panel */
-/*	char panel[4];			unused */
-/*	char panel_title[4];	unused */
-/*	char panel_text[4];		unused */
-/*	char panel_text_hi[4];	unused */
-
 	/* note, cannot use name 'panel' because of DNA mapping old files */
 	uiPanelColors panelcolors;
 
@@ -429,24 +424,23 @@ typedef struct bTheme {
 
 	/* Individual Spacetypes */
 	/* note: ensure UI_THEMESPACE_END is updated when adding */
-	ThemeSpace tbuts;
-	ThemeSpace tv3d;
-	ThemeSpace tfile;
-	ThemeSpace tipo;
-	ThemeSpace tinfo;
-	ThemeSpace tact;
-	ThemeSpace tnla;
-	ThemeSpace tseq;
-	ThemeSpace tima;
-	ThemeSpace text;
-	ThemeSpace toops;
-	ThemeSpace ttime;
-	ThemeSpace tnode;
-	ThemeSpace tuserpref;
-	ThemeSpace tconsole;
-	ThemeSpace tclip;
-	ThemeSpace ttopbar;
-	ThemeSpace tstatusbar;
+	ThemeSpace space_properties;
+	ThemeSpace space_view3d;
+	ThemeSpace space_file;
+	ThemeSpace space_graph;
+	ThemeSpace space_info;
+	ThemeSpace space_action;
+	ThemeSpace space_nla;
+	ThemeSpace space_sequencer;
+	ThemeSpace space_image;
+	ThemeSpace space_text;
+	ThemeSpace space_outliner;
+	ThemeSpace space_node;
+	ThemeSpace space_preferences;
+	ThemeSpace space_console;
+	ThemeSpace space_clip;
+	ThemeSpace space_topbar;
+	ThemeSpace space_statusbar;
 
 	/* 20 sets of bone colors for this theme */
 	ThemeWireColor tarm[20];
@@ -647,7 +641,7 @@ typedef struct UserDef {
 	short edit_studio_light;
 	char _pad6[4];
 	short textimeout, texcollectrate;
-	short dragthreshold;
+	char _pad14[2];
 	int memcachelimit;
 	int prefetchframes;
 	/** Control the rotation step of the view when PAD2, PAD4, PAD6&PAD8 is use. */
@@ -865,7 +859,8 @@ typedef enum eWalkNavigation_Flag {
 
 /** #UserDef.uiflag */
 typedef enum eUserpref_UI_Flag {
-	/* flags 0 and 1 were old flags (for autokeying) that aren't used anymore */
+	USER_UIFLAG_DEPRECATED_0    = (1 << 0),  /* cleared */
+	USER_UIFLAG_DEPRECATED_1    = (1 << 1),  /* cleared */
 	USER_WHEELZOOMDIR           = (1 << 2),
 	USER_FILTERFILEEXTS         = (1 << 3),
 	USER_DRAWVIEWINFO           = (1 << 4),
@@ -895,15 +890,16 @@ typedef enum eUserpref_UI_Flag {
 	USER_SPLASH_DISABLE         = (1 << 27),
 	USER_HIDE_RECENT            = (1 << 28),
 	USER_SHOW_THUMBNAILS        = (1 << 29),
-	USER_QUIT_PROMPT            = (1 << 30),
+	USER_SAVE_PROMPT            = (1 << 30),
 	USER_HIDE_SYSTEM_BOOKMARKS  = (1u << 31),
 } eUserpref_UI_Flag;
 
 /** #UserDef.uiflag2 */
 typedef enum eUserpref_UI_Flag2 {
-	USER_KEEP_SESSION			= (1 << 0),
+	USER_UIFLAG2_DEPRECATED_0   = (1 << 0),
 	USER_REGION_OVERLAP			= (1 << 1),
 	USER_TRACKPAD_NATURAL		= (1 << 2),
+	USER_EDIT_MODE_SMOOTH_WIRE	= (1 << 3),
 } eUserpref_UI_Flag2;
 
 /** #UserDef.tablet_api */
@@ -1005,7 +1001,7 @@ typedef enum eText_Draw_Options {
 /** Grease Pencil Settings.
  * #UserDef.gp_settings */
 typedef enum eGP_UserdefSettings {
-	// GP_PAINT_DOSMOOTH		    = (1 << 0),  /* UNUSED */
+	GP_PAINT_DEPRECATED_0       = (1 << 0),
 	GP_PAINT_DOSIMPLIFY		    = (1 << 1),
 } eGP_UserdefSettings;
 

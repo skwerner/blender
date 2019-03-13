@@ -17,7 +17,8 @@
 #ifndef __BMESH_MODS_H__
 #define __BMESH_MODS_H__
 
-/** \file \ingroup bmesh
+/** \file
+ * \ingroup bmesh
  */
 
 bool BM_vert_dissolve(BMesh *bm, BMVert *v);
@@ -55,6 +56,8 @@ BMVert *BM_edge_collapse(
 BMVert *BM_edge_split(BMesh *bm, BMEdge *e, BMVert *v, BMEdge **r_e, float percent);
 
 BMVert *BM_edge_split_n(BMesh *bm, BMEdge *e, int numcuts, BMVert **r_varr);
+
+void BM_edge_verts_swap(BMEdge *e);
 
 bool    BM_face_validate(BMFace *face, FILE *err);
 

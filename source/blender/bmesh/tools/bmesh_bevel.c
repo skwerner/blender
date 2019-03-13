@@ -14,7 +14,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-/** \file \ingroup bmesh
+/** \file
+ * \ingroup bmesh
  *
  * Main functions for beveling a BMesh (used by the tool and modifier)
  */
@@ -76,6 +77,7 @@ typedef struct EdgeHalf {
 	BMFace *fnext;              /* face between this edge and next, if any */
 	struct BoundVert *leftv;    /* left boundary vert (looking along edge to end) */
 	struct BoundVert *rightv;   /* right boundary vert, if beveled */
+	int profile_index;          /* offset into profile to attach non-beveled edge */
 	int   seg;                  /* how many segments for the bevel */
 	float offset_l;             /* offset for this edge, on left side */
 	float offset_r;             /* offset for this edge, on right side */
@@ -755,8 +757,11 @@ static int edges_angle_kind(EdgeHalf *e1, EdgeHalf *e2, BMVert *v)
 	v2 = BM_edge_other_vert(e2->e, v);
 	sub_v3_v3v3(dir1, v->co, v1->co);
 	sub_v3_v3v3(dir2, v->co, v2->co);
+	normalize_v3(dir1);
+	normalize_v3(dir2);
 	/* angles are in [0,pi]. need to compare cross product with normal to see if they are reflex */
 	cross_v3_v3v3(cross, dir1, dir2);
+	normalize_v3(cross);
 	if (e1->fnext)
 		no = e1->fnext->no;
 	else if (e2->fprev)
@@ -846,6 +851,9 @@ static void offset_meet(EdgeHalf *e1, EdgeHalf *e2, BMVert *v, BMFace *f, bool e
 	if (ang < BEVEL_EPSILON_ANG) {
 		/* special case: e1 and e2 are parallel; put offset point perp to both, from v.
 		 * need to find a suitable plane.
+		 * this code used to just use offset and dir1, but that makes for visible errors
+		 * on a circle with > 200 sides, which trips this "nearly perp" code (see T61214).
+		 * so use the average of the two, and the offset formula for angle bisector.
 		 * if offsets are different, we're out of luck:
 		 * use the max of the two (so get consistent looking results if the same situation
 		 * arises elsewhere in the object but with opposite roles for e1 and e2 */
@@ -853,10 +861,12 @@ static void offset_meet(EdgeHalf *e1, EdgeHalf *e2, BMVert *v, BMFace *f, bool e
 			copy_v3_v3(norm_v, f->no);
 		else
 			copy_v3_v3(norm_v, v->no);
+		add_v3_v3(dir1, dir2);
 		cross_v3_v3v3(norm_perp1, dir1, norm_v);
 		normalize_v3(norm_perp1);
 		copy_v3_v3(off1a, v->co);
 		d = max_ff(e1->offset_r, e2->offset_l);
+		d = d / cos(ang / 2.0f);
 		madd_v3_v3fl(off1a, norm_perp1, d);
 		copy_v3_v3(meetco, off1a);
 	}
@@ -1347,8 +1357,8 @@ static bool make_unit_square_map(
 	add_v3_v3v3(vd, vo, vddir);
 
 	/* The cols of m are: {vmid - va, vmid - vb, vmid + vd - va -vb, va + vb - vmid;
-		* blender transform matrices are stored such that m[i][*] is ith column;
-		* the last elements of each col remain as they are in unity matrix */
+	 * blender transform matrices are stored such that m[i][*] is ith column;
+	 * the last elements of each col remain as they are in unity matrix. */
 	sub_v3_v3v3(&r_mat[0][0], vmid, va);
 	r_mat[0][3] = 0.0f;
 	sub_v3_v3v3(&r_mat[1][0], vmid, vb);
@@ -1776,11 +1786,11 @@ static void bevel_edges_sharp_boundary(BMesh *bm, BevelParams *bp)
 	}
 }
 
-/*
+/**
  * Harden normals for bevel.
- * The desired effect is that the newly created F_EDGE and F_VERT faces appear smoothly shaded
- * with the the normals at the boundaries with F_RECON faces matching those recon faces.
- * And at boundaries between F_EDGE and F_VERT faces, the normals should match the F_EDGE ones.
+ * The desired effect is that the newly created #F_EDGE and F_VERT faces appear smoothly shaded
+ * with the normals at the boundaries with #F_RECON faces matching those recon faces.
+ * And at boundaries between #F_EDGE and #F_VERT faces, the normals should match the #F_EDGE ones.
  * Assumes custom loop normals are in use.
  */
 static void bevel_harden_normals(BMesh *bm, BevelParams *bp)
@@ -2212,7 +2222,7 @@ static void adjust_miter_coords(BevelParams *bp, BevVert *bv, EdgeHalf *emiter)
 	adjust_bound_vert(v1, co1);
 
 	/* co3 is similar, but plane is through v3next and line is other side of miter edge */
-	emiter_other = v3->efirst;
+	emiter_other = v3->elast; /*v3->efirst;*/
 	vother = BM_edge_other_vert(emiter_other->e, bv->v);
 	sub_v3_v3v3(edge_dir, bv->v->co,  vother->co);
 	normalize_v3(edge_dir);
@@ -2366,17 +2376,33 @@ static void build_boundary(BevelParams *bp, BevVert *bv, bool construct)
 				e3->leftv = e3->rightv = v;
 			}
 			ang_kind = edges_angle_kind(e, e2, bv->v);
+
+			/* Are we doing special mitering?
+			 * ang_kind is -1, 0, 1 as angle is <, =, > 180 degrees.
+			 * There can only be one outer reflex angle, so only one outer miter,
+			 * and emiter will be set to the first edge of such an edge.
+			 * A miter kind of BEVEL_MITER_SHARP means no special miter */
+
 			if ((miter_outer != BEVEL_MITER_SHARP && !emiter && ang_kind == 1) ||
 			    (miter_inner != BEVEL_MITER_SHARP && ang_kind == -1))
 			{
 				if (ang_kind == 1)
-					emiter = e;  /* a reflex angle, i.e., the (only) outer miter, if any */
+					emiter = e;
 				/* make one or two more boundverts; for now all will have same co */
 				v1 = v;
 				v1->ebev = NULL;
+				if (ang_kind == 1 && miter_outer == BEVEL_MITER_PATCH)
+					v2 = add_new_bound_vert(mem_arena, vm, co);
+				else
+					v2 = NULL;
+				v3 = add_new_bound_vert(mem_arena, vm, co);
+				v3->ebev = e2;
+				v3->efirst = e2;
+				v3->elast = e2;
+				v3->eon = NULL;
+				e2->leftv = v3;
 				if (ang_kind == 1 && miter_outer == BEVEL_MITER_PATCH) {
 					v1->is_patch_start = true;
-					v2 = add_new_bound_vert(mem_arena, vm, co);
 					v2->eon = v1->eon;
 					v2->sinratio = v1->sinratio;
 					v2->ebev = NULL;
@@ -2398,22 +2424,29 @@ static void build_boundary(BevelParams *bp, BevVert *bv, bool construct)
 				else {
 					v1->is_arc_start = true;
 					copy_v3_v3(v1->profile.midco, co);
-					v2 = NULL;
 					if (e->next == e2) {
 						v1->elast = v1->efirst;
 					}
 					else {
+						int between = nip + nnip;
+						int bet2 = between / 2;
+						bool betodd = (between % 2) == 1;
+						int i = 0;
+						/* Put first half of in-between edges at index 0,
+						 * second half at index bp->seg.
+						 * If between is odd, put middle one at midindex */
 						for (e3 = e->next; e3 != e2; e3 = e3->next) {
 							v1->elast = e3;
+							if (i < bet2)
+								e3->profile_index = 0;
+							else if (betodd && i == bet2)
+								e3->profile_index = bp->seg / 2;
+							else
+								e3->profile_index = bp->seg;
+							i++;
 						}
 					}
 				}
-				v3 = add_new_bound_vert(mem_arena, vm, co);
-				v3->ebev = e2;
-				v3->efirst = e2;
-				v3->elast = e2;
-				v3->eon = NULL;
-				e2->leftv = v3;
 			}
 		}
 		else {
@@ -2792,10 +2825,11 @@ static void adjust_the_cycle_or_chain(BoundVert *vstart, bool iscycle)
 static void adjust_offsets(BevelParams *bp)
 {
 	BevVert *bv, *bvcur;
-	BoundVert *v, *vanchor, *vchainstart, *vnext;
+	BoundVert *v, *vanchor, *vchainstart, *vchainend, *vnext;
 	EdgeHalf *enext;
 	GHashIterator giter;
 	bool iscycle;
+	int chainlen;
 
 	/* find and process chains and cycles of unvisited BoundVerts that have eon set */
 	GHASH_ITER(giter, bp->vert_hash) {
@@ -2816,14 +2850,21 @@ static void adjust_offsets(BevelParams *bp)
 			 * pairs with the right side of the next edge in the cycle or chain. */
 
 			/* first follow paired edges in left->right direction */
-			v = vchainstart = vanchor;
+			v = vchainstart = vchainend = vanchor;
 			iscycle = false;
+			chainlen = 1;
 			while (v->eon && !v->visited && !iscycle) {
+				v->visited = true;
+				if (!v->efirst)
+					break;
 				enext = find_other_end_edge_half(bp, v->efirst, &bvcur);
+				if (!enext)
+					break;
 				BLI_assert(enext != NULL);
 				vnext = enext->leftv;
 				v->adjchain = vnext;
-				v->visited = true;
+				vchainend = vnext;
+				chainlen++;
 				if (vnext->visited) {
 					if (vnext != vchainstart) {
 						break;
@@ -2838,15 +2879,20 @@ static void adjust_offsets(BevelParams *bp)
 				v = vchainstart;
 				bvcur = bv;
 				do {
+					v->visited = true;
+					if (!v->elast)
+						break;
 					enext = find_other_end_edge_half(bp, v->elast, &bvcur);
-					BLI_assert(enext != NULL);
+					if (!enext)
+						break;
 					vnext = enext->rightv;
 					vnext->adjchain = v;
+					chainlen++;
 					vchainstart = vnext;
-					v->visited = true;
 					v = vnext;
 				} while (!v->visited && v->eon);
-				adjust_the_cycle_or_chain(vchainstart, false);
+				if (chainlen >= 3 && !vchainstart->eon && !vchainend->eon)
+					adjust_the_cycle_or_chain(vchainstart, false);
 			}
 		} while ((vanchor = vanchor->next) != bv->vmesh->boundstart);
 	}
@@ -4933,6 +4979,8 @@ static BevVert *bevel_vert_construct(BMesh *bm, BevelParams *bp, BMVert *v)
 			e->seg = 0;
 		}
 		e->is_rev = (bme->v2 == v);
+		e->leftv = e->rightv = NULL;
+		e->profile_index = 0;
 	}
 
 	/* now done with tag flag */
@@ -5059,9 +5107,9 @@ static bool bev_rebuild_polygon(BMesh *bm, BevelParams *bp, BMFace *f)
 	BoundVert *v, *vstart, *vend;
 	EdgeHalf *e, *eprev;
 	VMesh *vm;
-	int i, k, n;
+	int i, k, n, kstart, kend;
 	bool do_rebuild = false;
-	bool go_ccw, corner3special, keep;
+	bool go_ccw, corner3special, keep, on_profile_start;
 	BMVert *bmv;
 	BMEdge *bme, *bme_new, *bme_prev;
 	BMFace *f_new, *f_other;
@@ -5108,56 +5156,85 @@ static bool bev_rebuild_polygon(BMesh *bm, BevelParams *bp, BMFace *f)
 					go_ccw = false;
 				}
 			}
+			on_profile_start = false;
 			if (go_ccw) {
 				vstart = eprev->rightv;
 				vend = e->leftv;
+				if (e->profile_index > 0) {
+					vstart = vstart->prev;
+					on_profile_start = true;
+				}
 			}
 			else {
 				vstart = eprev->leftv;
 				vend = e->rightv;
+				if (eprev->profile_index > 0) {
+					vstart = vstart->next;
+					on_profile_start = true;
+				}
 			}
 			BLI_assert(vstart != NULL && vend != NULL);
 			v = vstart;
-			BLI_array_append(vv, v->nv.v);
-			BLI_array_append(ee, bme);
-			/* check for special case: multisegment 3rd face opposite a beveled edge with no vmesh */
-			corner3special = (vm->mesh_kind == M_NONE && v->ebev != e && v->ebev != eprev);
+			if (!on_profile_start) {
+				BLI_array_append(vv, v->nv.v);
+				BLI_array_append(ee, bme);
+			}
 			while (v != vend) {
+				/* check for special case: multisegment 3rd face opposite a beveled edge with no vmesh */
+				corner3special = (vm->mesh_kind == M_NONE && v->ebev != e && v->ebev != eprev);
 				if (go_ccw) {
-					if (vm->seg > 1) {
-						if (vm->mesh_kind == M_ADJ || bp->vertex_only || corner3special) {
-							i = v->index;
-							for (k = 1; k < vm->seg; k++) {
-								bmv = mesh_vert(vm, i, 0, k)->v;
-								BLI_array_append(vv, bmv);
-								BLI_array_append(ee, bme); /* TODO: maybe better edge here */
-								if (corner3special && v->ebev && !v->ebev->is_seam)
-									BLI_array_append(vv_fix, bmv);
-							}
+					i = v->index;
+					if (on_profile_start) {
+						kstart = e->profile_index;
+						on_profile_start = false;
+					}
+					else {
+						kstart = 1;
+					}
+					if (eprev->rightv == v && eprev->profile_index > 0) {
+						kend = eprev->profile_index;
+					}
+					else {
+						kend = vm->seg;
+					}
+					for (k = kstart; k <= kend; k++) {
+						bmv = mesh_vert(vm, i, 0, k)->v;
+						if (bmv) {
+							BLI_array_append(vv, bmv);
+							BLI_array_append(ee, bme); /* TODO: maybe better edge here */
+							if (corner3special && v->ebev && !v->ebev->is_seam && k != vm->seg)
+								BLI_array_append(vv_fix, bmv);
 						}
 					}
 					v = v->next;
 				}
 				else {
 					/* going cw */
-					if (vm->seg > 1) {
-						if (vm->mesh_kind == M_ADJ || bp->vertex_only ||
-						    (vm->mesh_kind == M_NONE && v->ebev != e && v->ebev != eprev))
-						{
-							i = v->prev->index;
-							for (k = vm->seg - 1; k > 0; k--) {
-								bmv = mesh_vert(vm, i, 0, k)->v;
-								BLI_array_append(vv, bmv);
-								BLI_array_append(ee, bme);
-								if (corner3special && v->ebev && !v->ebev->is_seam)
-									BLI_array_append(vv_fix, bmv);
-							}
+					i = v->prev->index;
+					if (on_profile_start) {
+						kstart = eprev->profile_index;
+						on_profile_start = false;
+					}
+					else {
+						kstart = vm->seg - 1;
+					}
+					if (e->rightv == v->prev && e->profile_index > 0) {
+						kend = e->profile_index;
+					}
+					else {
+						kend = 0;
+					}
+					for (k = kstart; k >= kend; k--) {
+						bmv = mesh_vert(vm, i, 0, k)->v;
+						if (bmv) {
+							BLI_array_append(vv, bmv);
+							BLI_array_append(ee, bme);
+							if (corner3special && v->ebev && !v->ebev->is_seam && k != 0)
+								BLI_array_append(vv_fix, bmv);
 						}
 					}
 					v = v->prev;
 				}
-				BLI_array_append(vv, v->nv.v);
-				BLI_array_append(ee, bme);
 			}
 			do_rebuild = true;
 		}
@@ -5816,7 +5893,7 @@ static void set_profile_spacing(BevelParams *bp)
  * Assume we have a situation like:
  *
  * a                 d
- *  \               /
+ * \               /
  * A \             / C
  *    \ th1    th2/
  *     b---------c
@@ -6047,7 +6124,7 @@ void BM_mesh_bevel(
 	bp.use_weights = use_weights;
 	bp.loop_slide = loop_slide;
 	bp.limit_offset = limit_offset;
-	bp.offset_adjust = false; // DEBUG true;
+	bp.offset_adjust = true;
 	bp.dvert = dvert;
 	bp.vertex_group = vertex_group;
 	bp.mat_nr = mat;

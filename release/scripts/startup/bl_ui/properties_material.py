@@ -24,7 +24,7 @@ from bpy.app.translations import pgettext_iface as iface_
 from bpy_extras.node_utils import find_node_input
 
 
-class MATERIAL_MT_specials(Menu):
+class MATERIAL_MT_context_menu(Menu):
     bl_label = "Material Specials"
 
     def draw(self, context):
@@ -60,7 +60,8 @@ class MaterialButtonsPanel:
 
     @classmethod
     def poll(cls, context):
-        return context.material and (context.engine in cls.COMPAT_ENGINES)
+        mat = context.material
+        return mat and (context.engine in cls.COMPAT_ENGINES) and not mat.grease_pencil
 
 
 class MATERIAL_PT_preview(MaterialButtonsPanel, Panel):
@@ -86,11 +87,13 @@ class EEVEE_MATERIAL_PT_context_material(MaterialButtonsPanel, Panel):
 
     @classmethod
     def poll(cls, context):
-        if context.active_object and context.active_object.type == 'GPENCIL':
+        ob = context.object
+        mat = context.material
+
+        if (ob and ob.type == 'GPENCIL') or (mat and mat.grease_pencil):
             return False
-        else:
-            engine = context.engine
-            return (context.material or context.object) and (engine in cls.COMPAT_ENGINES)
+
+        return (ob or mat) and (context.engine in cls.COMPAT_ENGINES)
 
     def draw(self, context):
         layout = self.layout
@@ -116,7 +119,7 @@ class EEVEE_MATERIAL_PT_context_material(MaterialButtonsPanel, Panel):
 
             col.separator()
 
-            col.menu("MATERIAL_MT_specials", icon='DOWNARROW_HLT', text="")
+            col.menu("MATERIAL_MT_context_menu", icon='DOWNARROW_HLT', text="")
 
             if is_sortable:
                 col.separator()
@@ -161,11 +164,6 @@ class EEVEE_MATERIAL_PT_surface(MaterialButtonsPanel, Panel):
     bl_context = "material"
     COMPAT_ENGINES = {'BLENDER_EEVEE'}
 
-    @classmethod
-    def poll(cls, context):
-        engine = context.engine
-        return context.material and (engine in cls.COMPAT_ENGINES)
-
     def draw(self, context):
         layout = self.layout
 
@@ -194,7 +192,7 @@ class EEVEE_MATERIAL_PT_volume(MaterialButtonsPanel, Panel):
     def poll(cls, context):
         engine = context.engine
         mat = context.material
-        return mat and mat.use_nodes and (engine in cls.COMPAT_ENGINES)
+        return mat and mat.use_nodes and (engine in cls.COMPAT_ENGINES) and not mat.grease_pencil
 
     def draw(self, context):
         layout = self.layout
@@ -208,11 +206,6 @@ class EEVEE_MATERIAL_PT_settings(MaterialButtonsPanel, Panel):
     bl_label = "Settings"
     bl_context = "material"
     COMPAT_ENGINES = {'BLENDER_EEVEE'}
-
-    @classmethod
-    def poll(cls, context):
-        engine = context.engine
-        return context.material and (engine in cls.COMPAT_ENGINES)
 
     @staticmethod
     def draw_shared(self, mat):
@@ -247,7 +240,8 @@ class MATERIAL_PT_viewport(MaterialButtonsPanel, Panel):
 
     @classmethod
     def poll(cls, context):
-        return context.material
+        mat = context.material
+        return mat and not mat.grease_pencil
 
     @staticmethod
     def draw_shared(self, mat):
@@ -264,7 +258,7 @@ class MATERIAL_PT_viewport(MaterialButtonsPanel, Panel):
 
 
 classes = (
-    MATERIAL_MT_specials,
+    MATERIAL_MT_context_menu,
     MATERIAL_UL_matslots,
     MATERIAL_PT_preview,
     EEVEE_MATERIAL_PT_context_material,

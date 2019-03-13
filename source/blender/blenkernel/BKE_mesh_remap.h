@@ -17,10 +17,12 @@
 #ifndef __BKE_MESH_REMAP_H__
 #define __BKE_MESH_REMAP_H__
 
-/** \file \ingroup bke
+/** \file
+ * \ingroup bke
  */
 
 struct CustomData;
+struct CustomData_MeshMasks;
 struct MVert;
 struct MemArena;
 struct Mesh;
@@ -134,6 +136,10 @@ enum {
 	/* ***** Same topology, applies to all four elements types. ***** */
 	MREMAP_MODE_TOPOLOGY                 = MREMAP_MODE_VERT | MREMAP_MODE_EDGE | MREMAP_MODE_LOOP | MREMAP_MODE_POLY,
 };
+
+void BKE_mesh_remap_calc_source_cddata_masks_from_map_modes(
+        const int vert_mode, const int edge_mode, const int loop_mode, const int poly_mode,
+        struct CustomData_MeshMasks *cddata_mask);
 
 float BKE_mesh_remap_calc_difference_from_mesh(
         const struct SpaceTransform *space_transform,

@@ -17,8 +17,15 @@
  * All rights reserved.
  */
 
-/** \file \ingroup modifiers
+/** \file
+ * \ingroup modifiers
  */
+
+#include "BLI_utildefines.h"
+
+#include "BLI_math.h"
+#include "BLI_math_inline.h"
+#include "BLI_task.h"
 
 #include "DNA_customdata_types.h"
 #include "DNA_object_types.h"
@@ -26,11 +33,6 @@
 #include "DNA_meshdata_types.h"
 #include "DNA_modifier_types.h"
 #include "DNA_scene_types.h"
-
-#include "BLI_math.h"
-#include "BLI_math_inline.h"
-#include "BLI_task.h"
-#include "BLI_utildefines.h"
 
 #include "BKE_library.h"
 #include "BKE_mesh.h"
@@ -148,22 +150,17 @@ static void copyData(const ModifierData *md, ModifierData *target, const int fla
 }
 
 #ifdef WITH_OCEANSIM
-static CustomDataMask requiredDataMask(Object *UNUSED(ob), ModifierData *md)
+static void requiredDataMask(Object *UNUSED(ob), ModifierData *md, CustomData_MeshMasks *r_cddata_masks)
 {
 	OceanModifierData *omd = (OceanModifierData *)md;
-	CustomDataMask dataMask = 0;
 
-	if (omd->flag & MOD_OCEAN_GENERATE_FOAM)
-		dataMask |= CD_MASK_MCOL;
-
-	return dataMask;
+	if (omd->flag & MOD_OCEAN_GENERATE_FOAM) {
+		r_cddata_masks->fmask |= CD_MASK_MCOL;  /* XXX Should be loop cddata I guess? */
+	}
 }
 #else /* WITH_OCEANSIM */
-static CustomDataMask requiredDataMask(Object *UNUSED(ob), ModifierData *md)
+static void requiredDataMask(Object *UNUSED(ob), ModifierData *UNUSED(md), CustomData_MeshMasks *UNUSED(r_cddata_masks))
 {
-	/* unused */
-	(void)md;
-	return 0;
 }
 #endif /* WITH_OCEANSIM */
 

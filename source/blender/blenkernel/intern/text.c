@@ -17,7 +17,8 @@
  * All rights reserved.
  */
 
-/** \file \ingroup bke
+/** \file
+ * \ingroup bke
  */
 
 #include <stdlib.h> /* abort */
@@ -204,7 +205,7 @@ void BKE_text_init(Text *ta)
 {
 	TextLine *tmp;
 
-	BLI_assert(MEMCMP_STRUCT_OFS_IS_ZERO(ta, id));
+	BLI_assert(MEMCMP_STRUCT_AFTER_IS_ZERO(ta, id));
 
 	ta->name = NULL;
 

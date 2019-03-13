@@ -17,7 +17,8 @@
  * All rights reserved.
  */
 
-/** \file \ingroup gpu
+/** \file
+ * \ingroup gpu
  */
 
 #ifndef __GPU_EXTENSIONS_H__
@@ -46,6 +47,7 @@ void GPU_get_dfdy_factors(float fac[2]);
 bool GPU_mip_render_workaround(void);
 bool GPU_depth_blitting_workaround(void);
 bool GPU_unused_fb_slot_workaround(void);
+bool GPU_crappy_amd_driver(void);
 
 bool GPU_mem_stats_supported(void);
 void GPU_mem_stats_get(int *totalmem, int *freemem);

@@ -17,7 +17,8 @@
  * All rights reserved.
  */
 
-/** \file \ingroup gpu
+/** \file
+ * \ingroup gpu
  */
 
 #ifndef __GPU_SHADER_H__
@@ -313,7 +314,7 @@ typedef enum eGPUBuiltinShader {
 	/* lines */
 	GPU_SHADER_2D_LINE_DASHED_UNIFORM_COLOR,
 	GPU_SHADER_3D_LINE_DASHED_UNIFORM_COLOR,
-	/* lamp drawing */
+	/* light drawing */
 	GPU_SHADER_3D_GROUNDPOINT,
 	GPU_SHADER_3D_GROUNDLINE,
 	GPU_SHADER_3D_SCREENSPACE_VARIYING_COLOR,
@@ -365,6 +366,13 @@ typedef enum eGPUShaderConfig {
 } eGPUShaderConfig;
 #define GPU_SHADER_CFG_LEN (GPU_SHADER_CFG_CLIPPED + 1)
 
+typedef struct GPUShaderConfigData {
+	const char *lib;
+	const char *def;
+} GPUShaderConfigData;
+/* gpu_shader.c */
+extern const GPUShaderConfigData GPU_shader_cfg_data[GPU_SHADER_CFG_LEN];
+
 /** Keep these in sync with:
  * - `gpu_shader_image_interlace_frag.glsl`
  * - `gpu_shader_image_rect_interlace_frag.glsl`
@@ -376,7 +384,7 @@ typedef enum eGPUInterlaceShader {
 } eGPUInterlaceShader;
 
 GPUShader *GPU_shader_get_builtin_shader_with_config(
-        eGPUBuiltinShader shader, eGPUShaderConfig shader_cfg);
+        eGPUBuiltinShader shader, eGPUShaderConfig sh_cfg);
 GPUShader *GPU_shader_get_builtin_shader(
         eGPUBuiltinShader shader);
 

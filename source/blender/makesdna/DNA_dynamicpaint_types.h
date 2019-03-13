@@ -14,7 +14,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-/** \file \ingroup DNA
+/** \file
+ * \ingroup DNA
  */
 
 #ifndef __DNA_DYNAMICPAINT_TYPES_H__
@@ -113,11 +114,13 @@ typedef struct DynamicPaintSurface {
 	short effect_ui;
 	/** Surface output id to preview. */
 	short preview_id;
-	short init_color_type, pad_s;
+	short init_color_type;
+	char _pad0[2];
 	int flags, effect;
 
 	int image_resolution, substeps;
-	int start_frame, end_frame, pad;
+	int start_frame, end_frame;
+	char _pad[4];
 
 	/* initial color */
 	float init_color[4];
@@ -137,7 +140,7 @@ typedef struct DynamicPaintSurface {
 
 	/* wave settings */
 	float wave_damping, wave_speed, wave_timescale, wave_spring, wave_smoothness;
-	int pad2;
+	char _pad2[4];
 
 	/** MAX_CUSTOMDATA_LAYER_NAME. */
 	char uvlayer_name[64];
@@ -170,7 +173,7 @@ typedef struct DynamicPaintCanvasSettings {
 
 	struct ListBase surfaces;
 	short active_sur, flags;
-	int pad;
+	char _pad[4];
 
 	/** Bake error description. */
 	char error[64];
@@ -266,7 +269,7 @@ typedef struct DynamicPaintBrushSettings {
 	short proximity_falloff;
 	short wave_type;
 	short ray_dir;
-	short pad;
+	char _pad[2];
 
 	float wave_factor, wave_clamp;
 	float max_velocity, smudge_strength;

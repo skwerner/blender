@@ -17,7 +17,8 @@
  * This is a new part of Blender
  */
 
-/** \file \ingroup edgpencil
+/** \file
+ * \ingroup edgpencil
  */
 
 
@@ -713,7 +714,7 @@ static void gp_draw_stroke_3d(tGPDdraw *tgpw, short thickness, const float ink[4
 	immBindBuiltinProgram(GPU_SHADER_GPENCIL_STROKE);
 	immUniform2fv("Viewport", viewport);
 	immUniform1f("pixsize", tgpw->rv3d->pixsize);
-	float obj_scale = tgpw->ob ? (tgpw->ob->size[0] + tgpw->ob->size[1] + tgpw->ob->size[2]) / 3.0f : 1.0f;
+	float obj_scale = tgpw->ob ? (tgpw->ob->scale[0] + tgpw->ob->scale[1] + tgpw->ob->scale[2]) / 3.0f : 1.0f;
 
 	immUniform1f("objscale", obj_scale);
 	int keep_size = (int)((tgpw->gpd) && (tgpw->gpd->flag & GP_DATA_STROKE_KEEPTHICKNESS));
@@ -1667,7 +1668,7 @@ void ED_gpencil_draw_view3d(
 		dflag |= (GP_DRAWDATA_ONLY3D | GP_DRAWDATA_NOSTATUS);
 	}
 
-	if (v3d->flag2 & V3D_RENDER_OVERRIDE) {
+	if (v3d->flag2 & V3D_HIDE_OVERLAYS) {
 		/* don't draw status text when "only render" flag is set */
 		dflag |= GP_DRAWDATA_NOSTATUS;
 	}
@@ -1723,13 +1724,13 @@ void ED_gpencil_draw_view3d_object(wmWindowManager *wm, Scene *scene, Depsgraph 
 		dflag |= (GP_DRAWDATA_ONLY3D | GP_DRAWDATA_NOSTATUS);
 	}
 
-	if (v3d->flag2 & V3D_RENDER_OVERRIDE) {
+	if (v3d->flag2 & V3D_HIDE_OVERLAYS) {
 		/* don't draw status text when "only render" flag is set */
 		dflag |= GP_DRAWDATA_NOSTATUS;
 	}
 
 	if ((wm == NULL) || ED_screen_animation_playing(wm)) {
-		/* don't show onionskins during animation playback/scrub (i.e. it obscures the poses)
+		/* don't show onion-skins during animation playback/scrub (i.e. it obscures the poses)
 		 * OpenGL Renders (i.e. final output), or depth buffer (i.e. not real strokes)
 		 */
 		dflag |= GP_DRAWDATA_NO_ONIONS;

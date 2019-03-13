@@ -17,7 +17,8 @@
  * All rights reserved.
  */
 
-/** \file \ingroup depsgraph
+/** \file
+ * \ingroup depsgraph
  */
 
 #pragma once
@@ -35,7 +36,9 @@
 #include "BLI_utildefines.h"
 #include "BLI_string.h"
 
+#include "intern/builder/deg_builder.h"
 #include "intern/builder/deg_builder_map.h"
+#include "intern/builder/deg_builder_rna.h"
 #include "intern/depsgraph.h"
 #include "intern/node/deg_node.h"
 #include "intern/node/deg_node_component.h"
@@ -50,8 +53,8 @@ struct FCurve;
 struct GHash;
 struct ID;
 struct Key;
-struct Lamp;
 struct LayerCollection;
+struct Light;
 struct LightProbe;
 struct ListBase;
 struct MTex;
@@ -80,12 +83,12 @@ struct PropertyRNA;
 namespace DEG {
 
 struct ComponentNode;
-struct Node;
 struct DepsNodeHandle;
-struct Relation;
 struct Depsgraph;
 struct IDNode;
+struct Node;
 struct OperationNode;
+struct Relation;
 struct RootPChanMap;
 struct TimeSourceNode;
 
@@ -170,8 +173,9 @@ struct RNAPathKey
 	RNAPointerSource source;
 };
 
-struct DepsgraphRelationBuilder
+class DepsgraphRelationBuilder : public DepsgraphBuilder
 {
+public:
 	DepsgraphRelationBuilder(Main *bmain, Depsgraph *graph);
 
 	void begin_build();
@@ -194,7 +198,14 @@ struct DepsgraphRelationBuilder
 	                                   const char *description,
 	                                   int flags = 0);
 
-	void add_customdata_mask(Object *object, uint64_t mask);
+	/* Adds relation from proper transformation opertation to the modifier.
+	 * Takes care of checking for possible physics solvers modifying position
+	 * of this object. */
+	void add_modifier_to_transform_relation(const DepsNodeHandle *handle,
+	                                        const char *description);
+
+	void add_customdata_mask(Object *object,
+	                         const DEGCustomDataMeshMasks &customdata_masks);
 	void add_special_eval_flag(ID *object, uint32_t flag);
 
 	void build_id(ID *id);
@@ -209,7 +220,7 @@ struct DepsgraphRelationBuilder
 	void build_object_data_camera(Object *object);
 	void build_object_data_geometry(Object *object);
 	void build_object_data_geometry_datablock(ID *obdata);
-	void build_object_data_lamp(Object *object);
+	void build_object_data_light(Object *object);
 	void build_object_data_lightprobe(Object *object);
 	void build_object_data_speaker(Object *object);
 	void build_object_parent(Object *object);
@@ -230,10 +241,13 @@ struct DepsgraphRelationBuilder
 	                                     OperationNode *operation_from,
 	                                     ListBase *strips);
 	void build_animdata_drivers(ID *id);
+	void build_animation_images(ID *id);
 	void build_action(bAction *action);
 	void build_driver(ID *id, FCurve *fcurve);
 	void build_driver_data(ID *id, FCurve *fcurve);
 	void build_driver_variables(ID *id, FCurve *fcurve);
+	void build_driver_id_property(ID *id, const char *rna_path);
+	void build_parameters(ID *id);
 	void build_world(World *world);
 	void build_rigidbody(Scene *scene);
 	void build_particle_systems(Object *object);
@@ -254,7 +268,7 @@ struct DepsgraphRelationBuilder
 	void build_shapekeys(Key *key);
 	void build_armature(bArmature *armature);
 	void build_camera(Camera *camera);
-	void build_lamp(Lamp *lamp);
+	void build_light(Light *lamp);
 	void build_nodetree(bNodeTree *ntree);
 	void build_material(Material *ma);
 	void build_texture(Tex *tex);
@@ -292,7 +306,7 @@ protected:
 	TimeSourceNode *get_node(const TimeSourceKey &key) const;
 	ComponentNode *get_node(const ComponentKey &key) const;
 	OperationNode *get_node(const OperationKey &key) const;
-	Node *get_node(const RNAPathKey &key) const;
+	Node *get_node(const RNAPathKey &key);
 
 	OperationNode *find_node(const OperationKey &key) const;
 	bool has_node(const OperationKey &key) const;
@@ -341,14 +355,11 @@ private:
 	                            bool is_reference,
 	                            void *user_data);
 
-	/* State which never changes, same for the whole builder time. */
-	Main *bmain_;
-	Depsgraph *graph_;
-
 	/* State which demotes currently built entities. */
 	Scene *scene_;
 
 	BuilderMap built_map_;
+	RNANodeQuery rna_node_query_;
 };
 
 struct DepsNodeHandle

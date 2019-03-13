@@ -17,7 +17,8 @@
  * All rights reserved.
  */
 
-/** \file \ingroup edinterface
+/** \file
+ * \ingroup edinterface
  */
 
 
@@ -319,6 +320,9 @@ struct uiBut {
 	void *editcoba;
 	void *editcumap;
 
+	uiButPushedStateFunc pushed_state_func;
+	void *pushed_state_arg;
+
 	/* pointer back */
 	uiBlock *block;
 };
@@ -436,7 +440,8 @@ struct uiBlock {
 
 	/** for doing delayed */
 	eBlockBoundsCalc bounds_type;
-	int mx, my;
+	/** Offset to use when calculating bounds (in pixels). */
+	int bounds_offset[2];
 	/** for doing delayed */
 	int bounds, minbounds;
 
@@ -483,6 +488,7 @@ void ui_fontscale(short *points, float aspect);
 extern void ui_block_to_window_fl(const struct ARegion *ar, uiBlock *block, float *x, float *y);
 extern void ui_block_to_window(const struct ARegion *ar, uiBlock *block, int *x, int *y);
 extern void ui_block_to_window_rctf(const struct ARegion *ar, uiBlock *block, rctf *rct_dst, const rctf *rct_src);
+extern float ui_block_to_window_scale(const struct ARegion *ar, uiBlock *block);
 extern void ui_window_to_block_fl(const struct ARegion *ar, uiBlock *block, float *x, float *y);
 extern void ui_window_to_block(const struct ARegion *ar, uiBlock *block, int *x, int *y);
 extern void ui_window_to_region(const ARegion *ar, int *x, int *y);
@@ -608,7 +614,7 @@ struct uiPopupBlockHandle {
 	rctf prev_block_rect;
 	rctf prev_butrct;
 	short prev_dir1, prev_dir2;
-	int prev_mx, prev_my;
+	int prev_bounds_offset[2];
 
 	/* Maximum estimated size to avoid having to reposition on refresh. */
 	float max_size_x, max_size_y;
@@ -816,8 +822,6 @@ void icon_draw_rect_input(
 
 /* resources.c */
 void init_userdef_do_versions(struct Main *bmain);
-void ui_theme_init_default(void);
-void ui_style_init_default(void);
 void ui_resources_init(void);
 void ui_resources_free(void);
 

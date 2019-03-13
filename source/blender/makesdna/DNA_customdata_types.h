@@ -17,7 +17,8 @@
  * All rights reserved.
  */
 
-/** \file \ingroup DNA
+/** \file
+ * \ingroup DNA
  *
  * Used for custom mesh data types (stored per vert/edge/loop/face)
  */
@@ -72,7 +73,7 @@ typedef struct CustomData {
 	 * Correct size is ensured in CustomData_update_typemap assert().
 	 */
 	int typemap[42];
-	int pad_i1;
+	char _pad0[4];
 	/** Number of layers, size of layers array. */
 	int totlayer, maxlayer;
 	/** In editmode, total size of all data layers. */
@@ -188,6 +189,19 @@ typedef enum CustomDataType {
 #define CD_MASK_MLOOPTANGENT    (1LL << CD_MLOOPTANGENT)
 #define CD_MASK_TESSLOOPNORMAL  (1LL << CD_TESSLOOPNORMAL)
 #define CD_MASK_CUSTOMLOOPNORMAL (1LL << CD_CUSTOMLOOPNORMAL)
+
+/** Data types that may be defined for all mesh elements types. */
+#define CD_MASK_GENERIC_DATA (CD_MASK_PROP_FLT | CD_MASK_PROP_INT | CD_MASK_PROP_STR)
+
+
+typedef struct CustomData_MeshMasks {
+	uint64_t vmask;
+	uint64_t emask;
+	uint64_t fmask;
+	uint64_t pmask;
+	uint64_t lmask;
+} CustomData_MeshMasks;
+
 
 /* CustomData.flag */
 enum {

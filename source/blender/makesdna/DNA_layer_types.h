@@ -14,7 +14,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-/** \file \ingroup DNA
+/** \file
+ * \ingroup DNA
  */
 
 #ifndef __DNA_LAYER_TYPES_H__
@@ -29,12 +30,26 @@ extern "C" {
 
 typedef struct Base {
 	struct Base *next, *prev;
+
+	/* Flags which are based on the collections flags evaluation, does not
+	 * include flags from object's restrictions. */
+	short flag_from_collection;
+
+	/* Final flags, including both accumulated collection flags and object's
+	 * restriction flags. */
 	short flag;
+
 	unsigned short local_view_bits;
 	short sx, sy;
+	char _pad1[6];
 	struct Object *object;
 	unsigned int lay DNA_DEPRECATED;
 	int flag_legacy;
+
+	/* Pointer to an original base. Is initialized for evaluated view layer.
+	 * NOTE: Only allowed to be accessed from within active dependency graph. */
+	struct Base *base_orig;
+	void *_pad;
 } Base;
 
 typedef struct ViewLayerEngineData {
@@ -50,7 +65,7 @@ typedef struct LayerCollection {
 	struct SceneCollection *scene_collection DNA_DEPRECATED;
 	short flag;
 	short runtime_flag;
-	short pad[2];
+	char _pad[4];
 	/** Synced with collection->children. */
 	ListBase layer_collections;
 } LayerCollection;
@@ -60,8 +75,7 @@ typedef struct ViewLayer {
 	/** MAX_NAME. */
 	char name[64];
 	short flag;
-	short runtime_flag;
-	short pad[2];
+	char _pad[6];
 	/** ObjectBase. */
 	ListBase object_bases;
 	/** Default allocated now. */
@@ -105,7 +119,7 @@ enum {
 	BASE_FROM_SET         = (1 << 5), /* Object comes from set. */
 	BASE_ENABLED_VIEWPORT = (1 << 6), /* Object is enabled in viewport. */
 	BASE_ENABLED_RENDER   = (1 << 7), /* Object is enabled in final render */
-	BASE_ENABLED          = (1 << 9), /* Object is enabled. */
+	/* BASE_DEPRECATED          = (1 << 9), */
 	BASE_HOLDOUT          = (1 << 10), /* Object masked out from render */
 	BASE_INDIRECT_ONLY    = (1 << 11), /* Object only contributes indirectly to render */
 };
@@ -125,10 +139,7 @@ enum {
 /* Layer Collection->runtime_flag */
 enum {
 	LAYER_COLLECTION_HAS_OBJECTS = (1 << 0),
-	LAYER_COLLECTION_HAS_VISIBLE_OBJECTS = (1 << 1),
-	LAYER_COLLECTION_HAS_HIDDEN_OBJECTS = (1 << 2),
-	LAYER_COLLECTION_HAS_ENABLED_OBJECTS = (1 << 3),
-	LAYER_COLLECTION_VISIBLE = (1 << 4),
+	LAYER_COLLECTION_VISIBLE = (1 << 1),
 };
 
 /* ViewLayer->flag */
@@ -136,11 +147,6 @@ enum {
 	VIEW_LAYER_RENDER = (1 << 0),
 	/* VIEW_LAYER_DEPRECATED  = (1 << 1), */
 	VIEW_LAYER_FREESTYLE = (1 << 2),
-};
-
-/* ViewLayer->runtime_flag */
-enum {
-	VIEW_LAYER_HAS_HIDE = (1 << 0),
 };
 
 /****************************** Deprecated ******************************/
@@ -157,7 +163,7 @@ typedef struct SceneCollection {
 	int active_object_index;
 	short flag;
 	char type;
-	char pad;
+	char _pad;
 	/** (Object *)LinkData->data. */
 	ListBase objects;
 	/** Nested collections. */

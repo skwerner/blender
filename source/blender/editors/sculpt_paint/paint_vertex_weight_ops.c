@@ -14,7 +14,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-/** \file \ingroup edsculpt
+/** \file
+ * \ingroup edsculpt
  */
 
 #include "MEM_guardedalloc.h"
@@ -787,7 +788,11 @@ static int paint_weight_gradient_exec(bContext *C, wmOperator *op)
 	Scene *scene_eval = DEG_get_evaluated_scene(depsgraph);
 	Object *ob_eval = DEG_get_evaluated_object(depsgraph, ob);
 
-	Mesh *me_eval = mesh_get_eval_final(depsgraph, scene_eval, ob_eval, scene->customdata_mask | CD_MASK_ORIGINDEX);
+	CustomData_MeshMasks cddata_masks = scene->customdata_mask;
+	cddata_masks.vmask |= CD_MASK_ORIGINDEX;
+	cddata_masks.emask |= CD_MASK_ORIGINDEX;
+	cddata_masks.pmask |= CD_MASK_ORIGINDEX;
+	Mesh *me_eval = mesh_get_eval_final(depsgraph, scene_eval, ob_eval, &cddata_masks);
 	if (data.is_init) {
 		data.vert_visit = BLI_BITMAP_NEW(me->totvert, __func__);
 

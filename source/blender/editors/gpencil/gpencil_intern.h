@@ -17,7 +17,8 @@
  * All rights reserved.
  */
 
-/** \file \ingroup edgpencil
+/** \file
+ * \ingroup edgpencil
  */
 
 #ifndef __GPENCIL_INTERN_H__
@@ -388,6 +389,7 @@ void GPENCIL_OT_delete(struct wmOperatorType *ot);
 void GPENCIL_OT_dissolve(struct wmOperatorType *ot);
 void GPENCIL_OT_copy(struct wmOperatorType *ot);
 void GPENCIL_OT_paste(struct wmOperatorType *ot);
+void GPENCIL_OT_extrude(struct wmOperatorType *ot);
 
 void GPENCIL_OT_move_to_layer(struct wmOperatorType *ot);
 void GPENCIL_OT_layer_change(struct wmOperatorType *ot);
@@ -466,6 +468,7 @@ void GPENCIL_OT_stroke_split(struct wmOperatorType *ot);
 void GPENCIL_OT_stroke_smooth(struct wmOperatorType *ot);
 void GPENCIL_OT_stroke_merge(struct wmOperatorType *ot);
 void GPENCIL_OT_stroke_cutter(struct wmOperatorType *ot);
+void GPENCIL_OT_stroke_trim(struct wmOperatorType *ot);
 
 void GPENCIL_OT_brush_presets_create(struct wmOperatorType *ot);
 

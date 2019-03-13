@@ -17,7 +17,8 @@
  * All rights reserved.
  */
 
-/** \file \ingroup spnode
+/** \file
+ * \ingroup spnode
  */
 
 #include "MEM_guardedalloc.h"
@@ -128,7 +129,7 @@ static bool node_group_has_output(Main *bmain, bNode *node)
 	if (ntree == NULL) {
 		return false;
 	}
-	BKE_main_id_tag_listbase(&bmain->nodetree, LIB_TAG_DOIT, false);
+	BKE_main_id_tag_listbase(&bmain->nodetrees, LIB_TAG_DOIT, false);
 	return node_group_has_output_dfs(node);
 }
 

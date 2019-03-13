@@ -393,12 +393,25 @@ static void add_cryptomatte_layer(BL::RenderResult& b_rr, string name, string ma
 	render_add_metadata(b_rr, prefix+"manifest", manifest);
 }
 
-void BlenderSession::stamp_view_layer_metadata_do(const string& prefix)
+/* TODO(sergey): Ideally this will be an utility function in util string.h, but
+ * currently is relying on Blender side function, so can not do that. */
+static string make_human_readable_time(double time)
+{
+	char time_str[128];
+	BLI_timecode_string_from_time_simple(time_str, sizeof(time_str), time);
+	return time_str;
+}
+
+void BlenderSession::stamp_view_layer_metadata(Scene *scene, const string& view_layer_name)
 {
 	BL::RenderResult b_rr = b_engine.get_result();
+	string prefix = "cycles." + view_layer_name + ".";
+
 	/* Configured number of samples for the view layer. */
-	b_rr.stamp_data_add_field((prefix + "samples").c_str(),
-	                          to_string(session->params.samples).c_str());
+	b_rr.stamp_data_add_field(
+		(prefix + "samples").c_str(),
+		to_string(session->params.samples).c_str());
+
 	/* Store ranged samples information. */
 	if(session->tile_manager.range_num_samples != -1) {
 		b_rr.stamp_data_add_field(
@@ -408,11 +421,30 @@ void BlenderSession::stamp_view_layer_metadata_do(const string& prefix)
 		        (prefix + "range_num_samples").c_str(),
 		        to_string(session->tile_manager.range_num_samples).c_str());
 	}
-}
 
-void BlenderSession::stamp_view_layer_metadata(const string& view_layer_name)
-{
-	stamp_view_layer_metadata_do("cycles." + view_layer_name + ".");
+	/* Write cryptomatte metadata. */
+	if(scene->film->cryptomatte_passes & CRYPT_OBJECT) {
+		add_cryptomatte_layer(b_rr, view_layer_name + ".CryptoObject",
+		                      scene->object_manager->get_cryptomatte_objects(scene));
+	}
+	if(scene->film->cryptomatte_passes & CRYPT_MATERIAL) {
+		add_cryptomatte_layer(b_rr, view_layer_name + ".CryptoMaterial",
+		                      scene->shader_manager->get_cryptomatte_materials(scene));
+	}
+	if(scene->film->cryptomatte_passes & CRYPT_ASSET) {
+		add_cryptomatte_layer(b_rr, view_layer_name + ".CryptoAsset",
+		                      scene->object_manager->get_cryptomatte_assets(scene));
+	}
+
+	/* Store synchronization and bare-render times. */
+	double total_time, render_time;
+	session->progress.get_time(total_time, render_time);
+	b_rr.stamp_data_add_field((prefix + "total_time").c_str(),
+	                          make_human_readable_time(total_time).c_str());
+	b_rr.stamp_data_add_field((prefix + "render_time").c_str(),
+	                          make_human_readable_time(render_time).c_str());
+	b_rr.stamp_data_add_field((prefix + "synchronization_time").c_str(),
+	                          make_human_readable_time(total_time - render_time).c_str());
 }
 
 void BlenderSession::render(BL::Depsgraph& b_depsgraph_)
@@ -455,18 +487,14 @@ void BlenderSession::render(BL::Depsgraph& b_depsgraph_)
 	session->params.run_denoising = run_denoising;
 	session->params.full_denoising = full_denoising;
 	session->params.write_denoising_passes = write_denoising_passes;
-	session->params.denoising_radius = get_int(crl, "denoising_radius");
-	session->params.denoising_strength = get_float(crl, "denoising_strength");
-	session->params.denoising_feature_strength = get_float(crl, "denoising_feature_strength");
-	session->params.denoising_relative_pca = get_boolean(crl, "denoising_relative_pca");
+	session->params.denoising.radius = get_int(crl, "denoising_radius");
+	session->params.denoising.strength = get_float(crl, "denoising_strength");
+	session->params.denoising.feature_strength = get_float(crl, "denoising_feature_strength");
+	session->params.denoising.relative_pca = get_boolean(crl, "denoising_relative_pca");
 
 	scene->film->denoising_data_pass = buffer_params.denoising_data_pass;
 	scene->film->denoising_clean_pass = buffer_params.denoising_clean_pass;
 	scene->film->denoising_prefiltered_pass = buffer_params.denoising_prefiltered_pass;
-	session->params.denoising_radius = get_int(crl, "denoising_radius");
-	session->params.denoising_strength = get_float(crl, "denoising_strength");
-	session->params.denoising_feature_strength = get_float(crl, "denoising_feature_strength");
-	session->params.denoising_relative_pca = get_boolean(crl, "denoising_relative_pca");
 
 	scene->film->pass_alpha_threshold = b_view_layer.pass_alpha_threshold();
 	scene->film->tag_passes_update(scene, passes);
@@ -544,21 +572,8 @@ void BlenderSession::render(BL::Depsgraph& b_depsgraph_)
 			break;
 	}
 
-	stamp_view_layer_metadata(b_rlay_name);
-
-	/* Write cryptomatte metadata. */
-	if(scene->film->cryptomatte_passes & CRYPT_OBJECT) {
-		add_cryptomatte_layer(b_rr, b_rlay_name+".CryptoObject",
-							  scene->object_manager->get_cryptomatte_objects(scene));
-	}
-	if(scene->film->cryptomatte_passes & CRYPT_MATERIAL) {
-		add_cryptomatte_layer(b_rr, b_rlay_name+".CryptoMaterial",
-							  scene->shader_manager->get_cryptomatte_materials(scene));
-	}
-	if(scene->film->cryptomatte_passes & CRYPT_ASSET) {
-		add_cryptomatte_layer(b_rr, b_rlay_name+".CryptoAsset",
-							  scene->object_manager->get_cryptomatte_assets(scene));
-	}
+	/* add metadata */
+	stamp_view_layer_metadata(scene, b_rlay_name);
 
 	/* free result without merging */
 	end_render_result(b_engine, b_rr, true, true, false);

@@ -9,10 +9,6 @@ vec4 EDIT_MESH_edge_color_outer(int edge_flag, int face_flag, float crease, floa
 	color = (crease > 0.0) ? vec4(colorEdgeCrease.rgb, crease) : color;
 	color = (bweight > 0.0) ? vec4(colorEdgeBWeight.rgb, bweight) : color;
 	color = ((edge_flag & EDGE_SEAM) != 0) ? colorEdgeSeam : color;
-
-	if ((face_flag & FACE_ACTIVE) != 0) {
-		color = colorEditMeshActive;
-	}
 	return color;
 }
 
@@ -47,7 +43,7 @@ vec4 EDIT_MESH_vertex_color(int vertex_flag)
 vec4 EDIT_MESH_face_color(int face_flag)
 {
 	if ((face_flag & FACE_ACTIVE) != 0) {
-		return colorFaceSelect;
+		return mix(colorFaceSelect, colorEditMeshActive, 0.5);
 	}
 	else if ((face_flag & FACE_SELECTED) != 0) {
 		return colorFaceSelect;
@@ -62,7 +58,10 @@ vec4 EDIT_MESH_face_color(int face_flag)
 
 vec4 EDIT_MESH_facedot_color(float facedot_flag)
 {
-	if (facedot_flag != 0.0) {
+	if (facedot_flag < 0.0f) {
+		return colorEditMeshActive;
+	}
+	else if (facedot_flag > 0.0f) {
 		return colorFaceDot;
 	}
 	else {

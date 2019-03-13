@@ -14,7 +14,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-/** \file \ingroup bke
+/** \file
+ * \ingroup bke
  */
 
 #include "DNA_object_types.h"
@@ -31,7 +32,7 @@
 
 void BKE_speaker_init(Speaker *spk)
 {
-	BLI_assert(MEMCMP_STRUCT_OFS_IS_ZERO(spk, id));
+	BLI_assert(MEMCMP_STRUCT_AFTER_IS_ZERO(spk, id));
 
 	spk->attenuation = 1.0f;
 	spk->cone_angle_inner = 360.0f;

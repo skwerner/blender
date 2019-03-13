@@ -16,7 +16,8 @@
  * Copyright 2016, Blender Foundation.
  */
 
-/** \file \ingroup draw_engine
+/** \file
+ * \ingroup draw_engine
  */
 #include "DRW_render.h"
 
@@ -51,6 +52,7 @@ static void eevee_lookdev_lightcache_delete(EEVEE_Data *vedata)
 
 void EEVEE_lookdev_cache_init(
         EEVEE_Data *vedata, DRWShadingGroup **grp, DRWPass *pass,
+        float background_alpha,
         World *UNUSED(world), EEVEE_LightProbesInfo *pinfo)
 {
 	EEVEE_StorageList *stl = vedata->stl;
@@ -113,7 +115,7 @@ void EEVEE_lookdev_cache_init(
 			*grp = DRW_shgroup_create(shader, pass);
 			axis_angle_to_mat3_single(stl->g_data->studiolight_matrix, 'Z', v3d->shading.studiolight_rot_z);
 			DRW_shgroup_uniform_mat3(*grp, "StudioLightMatrix", stl->g_data->studiolight_matrix);
-			DRW_shgroup_uniform_float(*grp, "backgroundAlpha", &stl->g_data->background_alpha, 1);
+			DRW_shgroup_uniform_float_copy(*grp, "backgroundAlpha", background_alpha);
 			DRW_shgroup_uniform_vec3(*grp, "color", background_color, 1);
 			DRW_shgroup_call_add(*grp, geom, NULL);
 			if (!pinfo) {
@@ -187,8 +189,8 @@ void EEVEE_lookdev_draw_background(EEVEE_Data *vedata)
 		params.offsety = 0.0f;
 		params.shiftx = 0.0f;
 		params.shifty = 0.0f;
-		params.clipsta = 0.001f;
-		params.clipend = 20.0f;
+		params.clip_start = 0.001f;
+		params.clip_end = 20.0f;
 		BKE_camera_params_compute_viewplane(&params, ar->winx, ar->winy, aspect[0], aspect[1]);
 		BKE_camera_params_compute_matrix(&params);
 

@@ -4,33 +4,26 @@ layout(triangle_strip, max_vertices = 4) out;
 
 uniform vec2 viewportSize;
 uniform vec2 viewportSizeInv;
+uniform float edgeScale;
 
-in VertexData {
-	vec4 finalColor;
-#if defined(EDGE) && !defined(FLAT)
-	int selectOveride;
-#endif
-} v[];
+in vec4 finalColor[2];
+in vec4 finalColorOuter[2];
+in int selectOveride[2];
 
-#ifdef FLAT
-#  define interp_col flat
-#else
-#  define interp_col
-#endif
+flat out vec4 finalColorOuter_f;
+out vec4 finalColor_f;
+out float edgeCoord_f;
 
-interp_col out vec4 finalColor;
-#if defined(EDGE) && !defined(FLAT)
-flat out int selectOveride;
-#endif
-
-void do_vertex(const int i, vec2 offset)
+void do_vertex(const int i, float coord, vec2 offset)
 {
-	finalColor = v[i].finalColor;
-#if defined(EDGE) && !defined(FLAT)
-	selectOveride = v[0].selectOveride;
-#endif
+	finalColor_f = (selectOveride[0] == 0) ? finalColor[i] : finalColor[0];
+	edgeCoord_f = coord;
 	gl_Position = gl_in[i].gl_Position;
-	gl_Position.xy += offset * gl_Position.w;
+	/* Multiply offset by 2 because gl_Position range is [-1..1]. */
+	gl_Position.xy += offset * 2.0 * gl_Position.w;
+#ifdef USE_WORLD_CLIP_PLANES
+	world_clip_planes_set_clip_distance(gl_in[i].gl_ClipDistance);
+#endif
 	EmitVertex();
 }
 
@@ -41,24 +34,27 @@ void main()
 	ss_pos[1] = gl_in[1].gl_Position.xy / gl_in[1].gl_Position.w;
 
 	vec2 line = ss_pos[0] - ss_pos[1];
+	line = abs(line) * viewportSize;
 
-	vec3 edge_ofs = sizeEdge * 2.0 * viewportSizeInv.xyy * vec3(1.0, 1.0, 0.0);
+	finalColorOuter_f = finalColorOuter[0];
+	float half_size = sizeEdge * edgeScale;
+	/* Enlarge edge for flag display. */
+	half_size += (finalColorOuter_f.a > 0.0) ? max(sizeEdge * edgeScale, 1.0) : 0.0;
 
-#ifdef EDGE_DECORATION
-	edge_ofs *= 3.0;
-
-	if (finalColor.a == 0.0) {
-		return;
-	}
+#ifdef USE_SMOOTH_WIRE
+	/* Add 1 px for AA */
+	half_size += 0.5;
 #endif
 
-	bool horizontal = abs(line.x) > abs(line.y);
+	vec3 edge_ofs = half_size * viewportSizeInv.xyy * vec3(1.0, 1.0, 0.0);
+
+	bool horizontal = line.x > line.y;
 	edge_ofs = (horizontal) ? edge_ofs.zyz : edge_ofs.xzz;
 
-	do_vertex(0,  edge_ofs.xy);
-	do_vertex(0, -edge_ofs.xy);
-	do_vertex(1,  edge_ofs.xy);
-	do_vertex(1, -edge_ofs.xy);
+	do_vertex(0,  half_size,  edge_ofs.xy);
+	do_vertex(0, -half_size, -edge_ofs.xy);
+	do_vertex(1,  half_size,  edge_ofs.xy);
+	do_vertex(1, -half_size, -edge_ofs.xy);
 
 	EndPrimitive();
 }

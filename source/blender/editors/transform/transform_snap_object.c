@@ -14,7 +14,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-/** \file \ingroup edtransform
+/** \file
+ * \ingroup edtransform
  */
 
 #include <stdlib.h>
@@ -204,7 +205,7 @@ typedef void(*IterSnapObjsCallback)(SnapObjectContext *sctx, bool is_obedit, Obj
  * Walks through all objects in the scene to create the list of objects to snap.
  *
  * \param sctx: Snap context to store data.
- * \param snap_select : from enum eSnapSelect.
+ * \param snap_select: from enum #eSnapSelect.
  */
 static void iter_snap_objects(
         SnapObjectContext *sctx,
@@ -561,7 +562,7 @@ static bool raycastEditMesh(
 		BMEditMesh *em_orig;
 		int looptri_num_active = -1;
 
-		/* Get original version of the edit_btmesh. */
+		/* Get original version of the edit_mesh. */
 		em_orig = BKE_editmesh_from_object(DEG_get_original_object(ob));
 
 		if (sctx->callbacks.edit_mesh.test_face_fn) {
@@ -640,7 +641,7 @@ static bool raycastEditMesh(
 				retval = true;
 
 				if (r_index) {
-					/* Get original version of the edit_btmesh. */
+					/* Get original version of the edit_mesh. */
 					BMEditMesh *em_orig = BKE_editmesh_from_object(DEG_get_original_object(ob));
 
 					*r_index = BM_elem_index_get(em_orig->looptris[hit.index][0]->f);
@@ -684,6 +685,11 @@ static bool raycastObj(
 	switch (ob->type) {
 		case OB_MESH:
 		{
+			if (ob->dt == OB_BOUNDBOX || ob->dt == OB_WIRE) {
+				/* Do not hit objects that are in wire or bounding box display mode */
+				return false;
+			}
+
 			Mesh *me = ob->data;
 			if (BKE_object_is_in_editmode(ob)) {
 				BMEditMesh *em = BKE_editmesh_from_object(ob);
@@ -761,8 +767,8 @@ static void raycast_obj_cb(SnapObjectContext *sctx, bool use_obedit, Object *ob,
  * Walks through all objects in the scene to find the `hit` on object surface.
  *
  * \param sctx: Snap context to store data.
- * \param snap_select : from enum eSnapSelect.
- * \param use_object_edit_cage : Uses the coordinates of BMesh(if any) to do the snapping.
+ * \param snap_select: from enum eSnapSelect.
+ * \param use_object_edit_cage: Uses the coordinates of BMesh(if any) to do the snapping.
  * \param obj_list: List with objects to snap (created in `create_object_list`).
  *
  * Read/Write Args
@@ -1537,7 +1543,7 @@ static short snapCurve(
 					if (nu->bezt) {
 						/* don't snap to selected (moving) or hidden */
 						if (nu->bezt[u].f2 & SELECT || nu->bezt[u].hide != 0) {
-							break;
+							continue;
 						}
 						has_snap |= test_projected_vert_dist(
 						        &neasrest_precalc,
@@ -1567,7 +1573,7 @@ static short snapCurve(
 					else {
 						/* don't snap to selected (moving) or hidden */
 						if (nu->bp[u].f1 & SELECT || nu->bp[u].hide != 0) {
-							break;
+							continue;
 						}
 						has_snap |= test_projected_vert_dist(
 						        &neasrest_precalc,
@@ -2182,6 +2188,11 @@ static short snapObject(
 					me = em->mesh_eval_final;
 				}
 			}
+			else if (ob->dt == OB_BOUNDBOX) {
+				/* Do not snap to objects that are in bounding box display mode */
+				return 0;
+			}
+
 			retval = snapMesh(
 			        sctx, snapdata, ob, me, obmat,
 			        dist_px,

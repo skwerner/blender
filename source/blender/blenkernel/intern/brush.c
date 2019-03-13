@@ -14,7 +14,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-/** \file \ingroup bke
+/** \file
+ * \ingroup bke
  */
 
 #include "MEM_guardedalloc.h"
@@ -130,7 +131,7 @@ static void brush_defaults(Brush *brush)
 
 void BKE_brush_init(Brush *brush)
 {
-	BLI_assert(MEMCMP_STRUCT_OFS_IS_ZERO(brush, id));
+	BLI_assert(MEMCMP_STRUCT_AFTER_IS_ZERO(brush, id));
 
 	/* enable fake user by default */
 	id_fake_user_set(&brush->id);
@@ -526,7 +527,7 @@ void BKE_brush_gpencil_presets(bContext *C)
 
 void BKE_brush_update_material(Main *bmain, Material *ma, Brush *exclude_brush)
 {
-	for (Brush *brush = bmain->brush.first; brush; brush = brush->id.next) {
+	for (Brush *brush = bmain->brushes.first; brush; brush = brush->id.next) {
 		if ((exclude_brush != NULL) && (brush == exclude_brush)) {
 			continue;
 		}
@@ -546,7 +547,7 @@ struct Brush *BKE_brush_first_search(struct Main *bmain, const eObjectMode ob_mo
 {
 	Brush *brush;
 
-	for (brush = bmain->brush.first; brush; brush = brush->id.next) {
+	for (brush = bmain->brushes.first; brush; brush = brush->id.next) {
 		if (brush->ob_mode & ob_mode)
 			return brush;
 	}

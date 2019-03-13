@@ -17,7 +17,8 @@
  * All rights reserved.
  */
 
-/** \file \ingroup edtransform
+/** \file
+ * \ingroup edtransform
  */
 
 #include <string.h>
@@ -404,15 +405,39 @@ static void createTransCursor_view3d(TransInfo *t)
 	td->ob = NULL;
 
 	unit_m3(td->mtx);
-	quat_to_mat3(td->axismtx, cursor->rotation);
+	BKE_scene_cursor_rot_to_mat3(cursor, td->axismtx);
 	normalize_m3(td->axismtx);
 	pseudoinverse_m3_m3(td->smtx, td->mtx, PSEUDOINVERSE_EPSILON);
 
 	td->loc = cursor->location;
 	copy_v3_v3(td->iloc, cursor->location);
 
-	td->ext->quat = cursor->rotation;
-	copy_qt_qt(td->ext->iquat, cursor->rotation);
+	if (cursor->rotation_mode > 0) {
+		td->ext->rot = cursor->rotation_euler;
+		td->ext->rotAxis = NULL;
+		td->ext->rotAngle = NULL;
+		td->ext->quat = NULL;
+
+		copy_v3_v3(td->ext->irot, cursor->rotation_euler);
+	}
+	else if (cursor->rotation_mode == ROT_MODE_AXISANGLE) {
+		td->ext->rot = NULL;
+		td->ext->rotAxis = cursor->rotation_axis;
+		td->ext->rotAngle = &cursor->rotation_angle;
+		td->ext->quat = NULL;
+
+		td->ext->irotAngle = cursor->rotation_angle;
+		copy_v3_v3(td->ext->irotAxis, cursor->rotation_axis);
+	}
+	else {
+		td->ext->rot = NULL;
+		td->ext->rotAxis = NULL;
+		td->ext->rotAngle = NULL;
+		td->ext->quat = cursor->rotation_quaternion;
+
+		copy_qt_qt(td->ext->iquat, cursor->rotation_quaternion);
+	}
+	td->ext->rotOrder = cursor->rotation_mode;
 }
 
 /** \} */
@@ -1862,8 +1887,8 @@ static void createTransCurveVerts(TransInfo *t)
 								td->ival = bezt->radius;
 							}
 							else if (t->mode == TFM_TILT) {
-								td->val = &(bezt->alfa);
-								td->ival = bezt->alfa;
+								td->val = &(bezt->tilt);
+								td->ival = bezt->tilt;
 							}
 							else {
 								td->val = NULL;
@@ -1973,8 +1998,8 @@ static void createTransCurveVerts(TransInfo *t)
 								td->ival = bp->radius;
 							}
 							else {
-								td->val = &(bp->alfa);
-								td->ival = bp->alfa;
+								td->val = &(bp->tilt);
+								td->ival = bp->tilt;
 							}
 
 							copy_m3_m3(td->smtx, smtx);
@@ -4507,7 +4532,7 @@ static void graph_key_shortest_dist(TransInfo *t, FCurve *fcu, TransData *td_sta
 
 static void createTransGraphEditData(bContext *C, TransInfo *t)
 {
-	SpaceIpo *sipo = (SpaceIpo *)t->sa->spacedata.first;
+	SpaceGraph *sipo = (SpaceGraph *)t->sa->spacedata.first;
 	Scene *scene = t->scene;
 	ARegion *ar = t->ar;
 	View2D *v2d = &ar->v2d;
@@ -4996,7 +5021,7 @@ static void beztmap_to_data(TransInfo *t, FCurve *fcu, BeztMap *bezms, int totve
  */
 void remake_graph_transdata(TransInfo *t, ListBase *anim_data)
 {
-	SpaceIpo *sipo = (SpaceIpo *)t->sa->spacedata.first;
+	SpaceGraph *sipo = (SpaceGraph *)t->sa->spacedata.first;
 	bAnimListElem *ale;
 	const bool use_handle = (sipo->flag & SIPO_NOHANDLES) == 0;
 
@@ -5030,7 +5055,7 @@ void remake_graph_transdata(TransInfo *t, ListBase *anim_data)
  */
 void flushTransGraphData(TransInfo *t)
 {
-	SpaceIpo *sipo = (SpaceIpo *)t->sa->spacedata.first;
+	SpaceGraph *sipo = (SpaceGraph *)t->sa->spacedata.first;
 	TransData *td;
 	TransData2D *td2d;
 	TransDataGraph *tdg;
@@ -5781,13 +5806,34 @@ static void ObjectToTransData(TransInfo *t, TransData *td, Object *ob)
 	if (t->mode == TFM_DUMMY)
 		skip_invert = true;
 
+	/* NOTE: This is not really following copy-on-write design and we shoud not
+	 * be re-evaluating the evaluated object. But as the comment above mentioned
+	 * this is part of a hack.
+	 * More proper solution would be to make a shallwe copy of the object  and
+	 * evaluate that, and access matrix of that evaluated copy of the object.
+	 * Might be more tricky than it sounds, if some logic later on accesses the
+	 * object matrix via td->ob->obmat. */
+	Object *object_eval = DEG_get_evaluated_object(t->depsgraph, ob);
 	if (skip_invert == false && constinv == false) {
-		ob->transflag |= OB_NO_CONSTRAINTS;  /* BKE_object_where_is_calc checks this */
-		BKE_object_where_is_calc(t->depsgraph, t->scene, ob);
-		ob->transflag &= ~OB_NO_CONSTRAINTS;
+		object_eval->transflag |= OB_NO_CONSTRAINTS;  /* BKE_object_where_is_calc checks this */
+		/* It is possiblre to have transform data initialization prior to a
+		 * complete dependency graph evaluated. Happens, for example, when
+		 * changing transformation mode. */
+		BKE_object_tfm_copy(object_eval, ob);
+		BKE_object_where_is_calc(t->depsgraph, t->scene, object_eval);
+		object_eval->transflag &= ~OB_NO_CONSTRAINTS;
 	}
-	else
-		BKE_object_where_is_calc(t->depsgraph, t->scene, ob);
+	else {
+		BKE_object_where_is_calc(t->depsgraph, t->scene, object_eval);
+	}
+	/* Copy newly evaluated fields to the original object, similar to how
+	 * active dependency graph will do it. */
+	copy_m4_m4(ob->obmat, object_eval->obmat);
+	/* Only copy negative scale flag, this is the only flag which is modifed by
+	 * the BKE_object_where_is_calc(). The rest of the flags we need to keep,
+	 * otherwise we might loose dupli flags  (see T61787). */
+	ob->transflag &= ~OB_NEG_SCALE;
+	ob->transflag |= (object_eval->transflag & OB_NEG_SCALE);
 
 	td->ob = ob;
 
@@ -5825,8 +5871,8 @@ static void ObjectToTransData(TransInfo *t, TransData *td, Object *ob)
 	}
 	td->ext->rotOrder = ob->rotmode;
 
-	td->ext->size = ob->size;
-	copy_v3_v3(td->ext->isize, ob->size);
+	td->ext->size = ob->scale;
+	copy_v3_v3(td->ext->isize, ob->scale);
 	copy_v3_v3(td->ext->dscale, ob->dscale);
 
 	copy_v3_v3(td->center, ob->obmat[3]);
@@ -6650,7 +6696,7 @@ void special_aftertrans_update(bContext *C, TransInfo *t)
 
 				// XXX: BAD! this get gpencil datablocks directly from main db...
 				// but that's how this currently works :/
-				for (gpd = bmain->gpencil.first; gpd; gpd = gpd->id.next) {
+				for (gpd = bmain->gpencils.first; gpd; gpd = gpd->id.next) {
 					if (ID_REAL_USERS(gpd))
 						posttrans_gpd_clean(gpd);
 				}
@@ -6670,7 +6716,7 @@ void special_aftertrans_update(bContext *C, TransInfo *t)
 
 				// XXX: BAD! this get gpencil datablocks directly from main db...
 				// but that's how this currently works :/
-				for (mask = bmain->mask.first; mask; mask = mask->id.next) {
+				for (mask = bmain->masks.first; mask; mask = mask->id.next) {
 					if (ID_REAL_USERS(mask))
 						posttrans_mask_clean(mask);
 				}
@@ -6705,8 +6751,8 @@ void special_aftertrans_update(bContext *C, TransInfo *t)
 		/* clear flag that was set for time-slide drawing */
 		saction->flag &= ~SACTION_MOVING;
 	}
-	else if (t->spacetype == SPACE_IPO) {
-		SpaceIpo *sipo = (SpaceIpo *)t->sa->spacedata.first;
+	else if (t->spacetype == SPACE_GRAPH) {
+		SpaceGraph *sipo = (SpaceGraph *)t->sa->spacedata.first;
 		bAnimContext ac;
 		const bool use_handle = (sipo->flag & SIPO_NOHANDLES) == 0;
 
@@ -6962,7 +7008,7 @@ int special_transform_moving(TransInfo *t)
 	if (t->spacetype == SPACE_SEQ) {
 		return G_TRANSFORM_SEQ;
 	}
-	else if (t->spacetype == SPACE_IPO) {
+	else if (t->spacetype == SPACE_GRAPH) {
 		return G_TRANSFORM_FCURVES;
 	}
 	else if ((t->flag & T_EDIT) || (t->flag & T_POSE)) {
@@ -8599,6 +8645,7 @@ void createTransData(bContext *C, TransInfo *t)
 	ViewLayer *view_layer = t->view_layer;
 	Object *ob = OBACT(view_layer);
 
+	bool has_transform_context = true;
 	t->data_len_all = -1;
 
 	/* if tests must match recalcData for correct updates */
@@ -8671,6 +8718,9 @@ void createTransData(bContext *C, TransInfo *t)
 				createTransPaintCurveVerts(C, t);
 				countAndCleanTransDataContainer(t);
 			}
+			else {
+				has_transform_context = false;
+			}
 		}
 		else if (t->obedit_type == OB_MESH) {
 
@@ -8685,6 +8735,9 @@ void createTransData(bContext *C, TransInfo *t)
 				set_prop_dist(t, 1);
 				sort_trans_data_dist(t);
 			}
+		}
+		else {
+			has_transform_context = false;
 		}
 	}
 	else if (t->spacetype == SPACE_ACTION) {
@@ -8716,7 +8769,7 @@ void createTransData(bContext *C, TransInfo *t)
 		createTransSeqData(C, t);
 		countAndCleanTransDataContainer(t);
 	}
-	else if (t->spacetype == SPACE_IPO) {
+	else if (t->spacetype == SPACE_GRAPH) {
 		t->flag |= T_POINTS | T_2D_EDIT;
 		t->obedit_type = -1;
 
@@ -8764,6 +8817,9 @@ void createTransData(bContext *C, TransInfo *t)
 				set_prop_dist(t, true);
 				sort_trans_data_dist(t);
 			}
+		}
+		else {
+			has_transform_context = false;
 		}
 	}
 	else if (t->obedit_type != -1) {
@@ -8839,6 +8895,7 @@ void createTransData(bContext *C, TransInfo *t)
 	else if (ob && (ob->mode & OB_MODE_WEIGHT_PAINT) && !(t->options & CTX_PAINT_CURVE)) {
 		/* important that ob_armature can be set even when its not selected [#23412]
 		 * lines below just check is also visible */
+		has_transform_context = false;
 		Object *ob_armature = modifiers_isDeformedByArmature(ob);
 		if (ob_armature && ob_armature->mode & OB_MODE_POSE) {
 			Base *base_arm = BKE_view_layer_base_find(t->view_layer, ob_armature);
@@ -8851,12 +8908,9 @@ void createTransData(bContext *C, TransInfo *t)
 					initTransDataContainers_FromObjectData(t, ob_armature, objects, objects_len);
 					createTransPose(t);
 					countAndCleanTransDataContainer(t);
+					has_transform_context = true;
 				}
 			}
-		}
-		/* Mark as initialized if above checks fail. */
-		if (t->data_len_all == -1) {
-			t->data_len_all = 0;
 		}
 	}
 	else if (ob && (ob->mode & OB_MODE_PARTICLE_EDIT) && PE_start_edit(PE_get_current(scene, ob))) {
@@ -8876,9 +8930,8 @@ void createTransData(bContext *C, TransInfo *t)
 			createTransPaintCurveVerts(C, t);
 			countAndCleanTransDataContainer(t);
 		}
-		/* Mark as initialized if above checks fail. */
-		if (t->data_len_all == -1) {
-			t->data_len_all = 0;
+		else {
+			has_transform_context = false;
 		}
 	}
 	else {
@@ -8906,7 +8959,13 @@ void createTransData(bContext *C, TransInfo *t)
 	}
 
 	/* Check that 'countAndCleanTransDataContainer' ran. */
-	BLI_assert(t->data_len_all != -1);
+	if (has_transform_context) {
+		BLI_assert(t->data_len_all != -1);
+	}
+	else {
+		BLI_assert(t->data_len_all == -1);
+		t->data_len_all = 0;
+	}
 
 	BLI_assert((!(t->flag & T_EDIT)) == (!(t->obedit_type != -1)));
 }

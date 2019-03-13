@@ -17,7 +17,8 @@
  * All rights reserved.
  */
 
-/** \file \ingroup edutil
+/** \file
+ * \ingroup edutil
  */
 
 #include <stdlib.h>
@@ -117,7 +118,7 @@ void ED_editors_init(bContext *C)
 	 * active object in this scene. */
 	Object *obact = CTX_data_active_object(C);
 	if (obact != NULL) {
-		for (Object *ob = bmain->object.first; ob; ob = ob->id.next) {
+		for (Object *ob = bmain->objects.first; ob; ob = ob->id.next) {
 			int mode = ob->mode;
 			if (mode == OB_MODE_OBJECT) {
 				continue;
@@ -146,7 +147,7 @@ void ED_editors_init(bContext *C)
 				else if (mode & OB_MODE_ALL_SCULPT) {
 					if (obact == ob) {
 						if (mode == OB_MODE_SCULPT) {
-							ED_object_sculptmode_enter_ex(bmain, depsgraph, scene, ob, reports);
+							ED_object_sculptmode_enter_ex(bmain, depsgraph, scene, ob, true, reports);
 						}
 						else if (mode == OB_MODE_VERTEX_PAINT) {
 							ED_object_vpaintmode_enter_ex(bmain, depsgraph, wm, scene, ob);
@@ -205,13 +206,13 @@ void ED_editors_exit(Main *bmain, bool do_undo_system)
 		}
 	}
 
-	for (Object *ob = bmain->object.first; ob; ob = ob->id.next) {
+	for (Object *ob = bmain->objects.first; ob; ob = ob->id.next) {
 		if (ob->type == OB_MESH) {
 			Mesh *me = ob->data;
-			if (me->edit_btmesh) {
-				EDBM_mesh_free(me->edit_btmesh);
-				MEM_freeN(me->edit_btmesh);
-				me->edit_btmesh = NULL;
+			if (me->edit_mesh) {
+				EDBM_mesh_free(me->edit_mesh);
+				MEM_freeN(me->edit_mesh);
+				me->edit_mesh = NULL;
 			}
 		}
 		else if (ob->type == OB_ARMATURE) {
@@ -237,7 +238,7 @@ bool ED_editors_flush_edits(Main *bmain, bool for_render)
 	/* loop through all data to find edit mode or object mode, because during
 	 * exiting we might not have a context for edit object and multiple sculpt
 	 * objects can exist at the same time */
-	for (ob = bmain->object.first; ob; ob = ob->id.next) {
+	for (ob = bmain->objects.first; ob; ob = ob->id.next) {
 		if (ob->mode & OB_MODE_SCULPT) {
 			/* Don't allow flushing while in the middle of a stroke (frees data in use).
 			 * Auto-save prevents this from happening but scripts

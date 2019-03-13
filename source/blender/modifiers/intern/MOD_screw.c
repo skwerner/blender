@@ -17,20 +17,22 @@
  * All rights reserved.
  */
 
-/** \file \ingroup modifiers
+/** \file
+ * \ingroup modifiers
  */
 
 
 /* Screw modifier: revolves the edges about an axis */
 #include <limits.h>
 
-#include "DNA_mesh_types.h"
-#include "DNA_meshdata_types.h"
-#include "DNA_object_types.h"
+#include "BLI_utildefines.h"
 
 #include "BLI_math.h"
 #include "BLI_alloca.h"
-#include "BLI_utildefines.h"
+
+#include "DNA_mesh_types.h"
+#include "DNA_meshdata_types.h"
+#include "DNA_object_types.h"
 
 #include "BKE_library_query.h"
 #include "BKE_mesh.h"
@@ -1107,7 +1109,7 @@ static void updateDepsgraph(ModifierData *md, const ModifierUpdateDepsgraphConte
 	ScrewModifierData *ltmd = (ScrewModifierData *)md;
 	if (ltmd->ob_axis != NULL) {
 		DEG_add_object_relation(ctx->node, ltmd->ob_axis, DEG_OB_COMP_TRANSFORM, "Screw Modifier");
-		DEG_add_object_relation(ctx->node, ctx->object, DEG_OB_COMP_TRANSFORM, "Screw Modifier");
+		DEG_add_modifier_to_transform_relation(ctx->node, "Screw Modifier");
 	}
 }
 

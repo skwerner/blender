@@ -14,6 +14,10 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
+/** \file
+ * \ingroup balembic
+ */
+
 #include "abc_mesh.h"
 
 #include <algorithm>
@@ -550,7 +554,7 @@ Mesh *AbcGenericMeshWriter::getFinalMesh(bool &r_needsfree)
 
 		BM_mesh_triangulate(bm, quad_method, ngon_method, tag_only, NULL, NULL, NULL);
 
-		Mesh *result = BKE_mesh_from_bmesh_for_eval_nomain(bm, 0);
+		Mesh *result = BKE_mesh_from_bmesh_for_eval_nomain(bm, NULL);
 		BM_mesh_free(bm);
 
 		if (r_needsfree) {
@@ -667,7 +671,7 @@ AbcMeshWriter::~AbcMeshWriter()
 
 Mesh *AbcMeshWriter::getEvaluatedMesh(Scene *scene_eval, Object *ob_eval, bool &UNUSED(r_needsfree))
 {
-	return mesh_get_eval_final(m_settings.depsgraph, scene_eval, ob_eval, CD_MASK_MESH);
+	return mesh_get_eval_final(m_settings.depsgraph, scene_eval, ob_eval, &CD_MASK_MESH);
 }
 
 
@@ -678,7 +682,7 @@ namespace utils {
 
 static void build_mat_map(const Main *bmain, std::map<std::string, Material *> &mat_map)
 {
-	Material *material = static_cast<Material *>(bmain->mat.first);
+	Material *material = static_cast<Material *>(bmain->materials.first);
 
 	for (; material; material = static_cast<Material *>(material->id.next)) {
 		mat_map[material->id.name + 2] = material;
@@ -1055,7 +1059,7 @@ void AbcMeshReader::readObjectData(Main *bmain, const Alembic::Abc::ISampleSelec
 	m_object->data = mesh;
 
 	Mesh *read_mesh = this->read_mesh(mesh, sample_sel, MOD_MESHSEQ_READ_ALL, NULL);
-	BKE_mesh_nomain_to_mesh(read_mesh, mesh, m_object, CD_MASK_MESH, true);
+	BKE_mesh_nomain_to_mesh(read_mesh, mesh, m_object, &CD_MASK_MESH, true);
 
 	if (m_settings->validate_meshes) {
 		BKE_mesh_validate(mesh, false, false);
@@ -1338,7 +1342,7 @@ void AbcSubDReader::readObjectData(Main *bmain, const Alembic::Abc::ISampleSelec
 	m_object->data = mesh;
 
 	Mesh *read_mesh = this->read_mesh(mesh, sample_sel, MOD_MESHSEQ_READ_ALL, NULL);
-	BKE_mesh_nomain_to_mesh(read_mesh, mesh, m_object, CD_MASK_MESH, true);
+	BKE_mesh_nomain_to_mesh(read_mesh, mesh, m_object, &CD_MASK_MESH, true);
 
 	ISubDSchema::Sample sample;
 	try {

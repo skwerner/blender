@@ -65,6 +65,8 @@ class GRAPH_HT_header(Header):
             icon='FILTER',
         )
 
+        layout.prop(st, "pivot_point", icon_only=True)
+
         layout.prop(st, "auto_snap", text="")
 
         row = layout.row(align=True)
@@ -72,8 +74,6 @@ class GRAPH_HT_header(Header):
         sub = row.row(align=True)
         sub.active = tool_settings.use_proportional_fcurve
         sub.prop(tool_settings, "proportional_edit_falloff", text="", icon_only=True)
-
-        layout.prop(st, "pivot_point", icon_only=True)
 
 
 class GRAPH_PT_filters(DopesheetFilterPopoverBase, Panel):
@@ -120,6 +120,7 @@ class GRAPH_MT_view(Menu):
         layout.prop(st, "show_cursor")
         layout.prop(st, "show_sliders")
         layout.prop(st, "show_group_colors")
+        layout.prop(st, "show_marker_lines")
         layout.prop(st, "use_auto_merge_keyframes")
 
         layout.separator()
@@ -209,7 +210,7 @@ class GRAPH_MT_marker(Menu):
         layout = self.layout
 
         from .space_time import marker_menu_generic
-        marker_menu_generic(layout)
+        marker_menu_generic(layout, context)
 
         # TODO: pose markers for action edit mode only?
 
@@ -323,7 +324,7 @@ class GRAPH_MT_delete(Menu):
         layout.operator("graph.clean", text="Clean Channels").channels = True
 
 
-class GRAPH_MT_specials(Menu):
+class GRAPH_MT_context_menu(Menu):
     bl_label = "F-Curve Context Menu"
 
     def draw(self, context):
@@ -378,7 +379,7 @@ class GRAPH_MT_snap_pie(Menu):
         pie.operator("graph.snap", text="Flatten Handles").type = 'HORIZONTAL'
 
 
-class GRAPH_MT_channel_specials(Menu):
+class GRAPH_MT_channel_context_menu(Menu):
     bl_label = "F-Curve Channel Context Menu"
 
     def draw(self, context):
@@ -429,8 +430,8 @@ classes = (
     GRAPH_MT_key,
     GRAPH_MT_key_transform,
     GRAPH_MT_delete,
-    GRAPH_MT_specials,
-    GRAPH_MT_channel_specials,
+    GRAPH_MT_context_menu,
+    GRAPH_MT_channel_context_menu,
     GRAPH_MT_pivot_pie,
     GRAPH_MT_snap_pie,
     GRAPH_PT_filters,

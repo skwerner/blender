@@ -17,7 +17,8 @@
  * All rights reserved.
  */
 
-/** \file \ingroup spoutliner
+/** \file
+ * \ingroup spoutliner
  */
 
 #include "MEM_guardedalloc.h"
@@ -92,6 +93,7 @@ void outliner_operatortypes(void)
 
 	/* collections */
 	WM_operatortype_append(OUTLINER_OT_collection_new);
+	WM_operatortype_append(OUTLINER_OT_collection_duplicate_linked);
 	WM_operatortype_append(OUTLINER_OT_collection_duplicate);
 	WM_operatortype_append(OUTLINER_OT_collection_delete);
 	WM_operatortype_append(OUTLINER_OT_collection_objects_select);
@@ -114,6 +116,8 @@ void outliner_operatortypes(void)
 	WM_operatortype_append(OUTLINER_OT_collection_enable_render);
 	WM_operatortype_append(OUTLINER_OT_collection_hide_inside);
 	WM_operatortype_append(OUTLINER_OT_collection_show_inside);
+	WM_operatortype_append(OUTLINER_OT_hide);
+	WM_operatortype_append(OUTLINER_OT_unhide_all);
 }
 
 void outliner_keymap(wmKeyConfig *keyconf)

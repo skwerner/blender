@@ -17,15 +17,16 @@
  * All rights reserved.
  */
 
-/** \file \ingroup modifiers
+/** \file
+ * \ingroup modifiers
  */
 
+
+#include "BLI_math.h"
 
 #include "DNA_mesh_types.h"
 #include "DNA_meshdata_types.h"
 #include "DNA_object_types.h"
-
-#include "BLI_math.h"
 
 #include "BKE_library.h"
 #include "BKE_library_query.h"
@@ -66,7 +67,7 @@ static void updateDepsgraph(ModifierData *md, const ModifierUpdateDepsgraphConte
 	MirrorModifierData *mmd = (MirrorModifierData *)md;
 	if (mmd->mirror_ob != NULL) {
 		DEG_add_object_relation(ctx->node, mmd->mirror_ob, DEG_OB_COMP_TRANSFORM, "Mirror Modifier");
-		DEG_add_object_relation(ctx->node, ctx->object, DEG_OB_COMP_TRANSFORM, "Mirror Modifier");
+		DEG_add_modifier_to_transform_relation(ctx->node, "Mirror Modifier");
 	}
 }
 
@@ -90,12 +91,12 @@ static Mesh *doBiscetOnMirrorPlane(
 	BMVert *v, *v_next;
 
 	bm = BKE_mesh_to_bmesh_ex(
-		mesh,
-		&(struct BMeshCreateParams){0},
-		&(struct BMeshFromMeshParams){
-			.calc_face_normal = true,
-			.cd_mask_extra = CD_MASK_ORIGINDEX,
-		});
+	        mesh,
+	        &(struct BMeshCreateParams){0},
+	        &(struct BMeshFromMeshParams){
+	            .calc_face_normal = true,
+	            .cd_mask_extra = {.vmask = CD_MASK_ORIGINDEX, .emask = CD_MASK_ORIGINDEX, .pmask = CD_MASK_ORIGINDEX},
+	        });
 
 	/* Define bisecting plane (aka mirror plane). */
 	float plane[4];
@@ -121,7 +122,7 @@ static Mesh *doBiscetOnMirrorPlane(
 		}
 	}
 
-	result = BKE_mesh_from_bmesh_for_eval_nomain(bm, 0);
+	result = BKE_mesh_from_bmesh_for_eval_nomain(bm, NULL);
 	BM_mesh_free(bm);
 
 	return result;

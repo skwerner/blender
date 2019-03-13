@@ -14,7 +14,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-/** \file \ingroup collada
+/** \file
+ * \ingroup collada
  */
 
 
@@ -97,14 +98,14 @@ void EffectsExporter::set_shader_type(COLLADASW::EffectProfile &ep, Material *ma
 
 void EffectsExporter::set_transparency(COLLADASW::EffectProfile &ep, Material *ma)
 {
-	if (ma->alpha == 1.0f) {
-		return; // have no transparency
+	COLLADASW::ColorOrTexture cot = bc_get_base_color(ma);
+	float transparency = cot.getColor().getAlpha();
+	if (transparency < 1) {
+		// Tod: because we are in A_ONE mode transparency is calculated like this:
+		COLLADASW::ColorOrTexture cot = getcol(1.0f, 1.0f, 1.0f, transparency);
+		ep.setTransparent(cot);
+		ep.setOpaque(COLLADASW::EffectProfile::A_ONE);
 	}
-
-	// Tod: because we are in A_ONE mode transparency is calculated like this:
-	COLLADASW::ColorOrTexture cot = getcol(1.0f, 1.0f, 1.0f, ma->alpha);
-	ep.setTransparent(cot);
-	ep.setOpaque(COLLADASW::EffectProfile::A_ONE);
 }
 void EffectsExporter::set_diffuse_color(COLLADASW::EffectProfile &ep, Material *ma)
 {
@@ -113,11 +114,10 @@ void EffectsExporter::set_diffuse_color(COLLADASW::EffectProfile &ep, Material *
 	ep.setDiffuse(cot, false, "diffuse");
 }
 
-void EffectsExporter::set_specular_color(COLLADASW::EffectProfile &ep, Material *ma)
+void EffectsExporter::set_reflectivity(COLLADASW::EffectProfile &ep, Material *ma)
 {
-	bool use_fallback = ep.getShaderType() != COLLADASW::EffectProfile::LAMBERT;
-	COLLADASW::ColorOrTexture cot = bc_get_specular_color(ma, use_fallback);
-	ep.setSpecular(cot, false, "specular");
+	double reflectivity = bc_get_reflectivity(ma);
+	ep.setReflectivity(reflectivity, false, "specular");
 }
 
 void EffectsExporter::set_emission(COLLADASW::EffectProfile &ep, Material *ma)
@@ -181,7 +181,7 @@ void EffectsExporter::operator()(Material *ma, Object *ob)
 
 	set_transparency(ep, ma);
 	set_diffuse_color(ep, ma);
-	set_specular_color(ep, ma);
+	set_reflectivity(ep, ma);
 	set_emission(ep, ma);
 
 	get_images(ma, material_image_map);

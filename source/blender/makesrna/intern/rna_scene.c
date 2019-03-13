@@ -14,7 +14,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-/** \file \ingroup RNA
+/** \file
+ * \ingroup RNA
  */
 
 #include <stdlib.h>
@@ -39,6 +40,7 @@
 
 #include "BLT_translation.h"
 
+#include "BKE_armature.h"
 #include "BKE_editmesh.h"
 #include "BKE_paint.h"
 
@@ -120,7 +122,7 @@ const EnumPropertyItem rna_enum_proportional_falloff_items[] = {
 	{PROP_SMOOTH, "SMOOTH", ICON_SMOOTHCURVE, "Smooth", "Smooth falloff"},
 	{PROP_SPHERE, "SPHERE", ICON_SPHERECURVE, "Sphere", "Spherical falloff"},
 	{PROP_ROOT, "ROOT", ICON_ROOTCURVE, "Root", "Root falloff"},
-	{PROP_INVSQUARE, "INVERSE_SQUARE", ICON_ROOTCURVE, "Inverse Square", "Inverse Square falloff"},
+	{PROP_INVSQUARE, "INVERSE_SQUARE", ICON_INVERSESQUARECURVE, "Inverse Square", "Inverse Square falloff"},
 	{PROP_SHARP, "SHARP", ICON_SHARPCURVE, "Sharp", "Sharp falloff"},
 	{PROP_LIN, "LINEAR", ICON_LINCURVE, "Linear", "Linear falloff"},
 	{PROP_CONST, "CONSTANT", ICON_NOCURVE, "Constant", "Constant falloff"},
@@ -143,7 +145,7 @@ const EnumPropertyItem rna_enum_proportional_falloff_curve_only_items[] = {
 const EnumPropertyItem rna_enum_proportional_editing_items[] = {
 	{PROP_EDIT_OFF, "DISABLED", ICON_PROP_OFF, "Disable", "Proportional Editing disabled"},
 	{PROP_EDIT_ON, "ENABLED", ICON_PROP_ON, "Enable", "Proportional Editing enabled"},
-	{PROP_EDIT_PROJECTED, "PROJECTED", ICON_PROP_ON, "Projected (2D)",
+	{PROP_EDIT_PROJECTED, "PROJECTED", ICON_PROP_PROJECTED, "Projected (2D)",
 	                      "Proportional Editing using screen space locations"},
 	{PROP_EDIT_CONNECTED, "CONNECTED", ICON_PROP_CON, "Connected",
 	                      "Proportional Editing using connected geometry only"},
@@ -463,15 +465,15 @@ const EnumPropertyItem rna_enum_transform_pivot_items_full[] = {
 
 /* Icons could be made a consistent set of images. */
 const EnumPropertyItem rna_enum_transform_orientation_items[] = {
-	{V3D_MANIP_GLOBAL, "GLOBAL", ICON_ORIENTATION_GLOBAL, "Global", "Align the transformation axes to world space"},
-	{V3D_MANIP_LOCAL, "LOCAL", ICON_ORIENTATION_LOCAL, "Local", "Align the transformation axes to the selected objects' local space"},
-	{V3D_MANIP_NORMAL, "NORMAL", ICON_ORIENTATION_NORMAL, "Normal",
+	{V3D_ORIENT_GLOBAL, "GLOBAL", ICON_ORIENTATION_GLOBAL, "Global", "Align the transformation axes to world space"},
+	{V3D_ORIENT_LOCAL, "LOCAL", ICON_ORIENTATION_LOCAL, "Local", "Align the transformation axes to the selected objects' local space"},
+	{V3D_ORIENT_NORMAL, "NORMAL", ICON_ORIENTATION_NORMAL, "Normal",
 	                   "Align the transformation axes to average normal of selected elements "
 	                   "(bone Y axis for pose mode)"},
-	{V3D_MANIP_GIMBAL, "GIMBAL", ICON_ORIENTATION_GIMBAL, "Gimbal", "Align each axis to the Euler rotation axis as used for input"},
-	{V3D_MANIP_VIEW, "VIEW", ICON_ORIENTATION_VIEW, "View", "Align the transformation axes to the window"},
-	{V3D_MANIP_CURSOR, "CURSOR", ICON_PIVOT_CURSOR, "Cursor", "Align the transformation axes to the 3D cursor"},
-	// {V3D_MANIP_CUSTOM, "CUSTOM", 0, "Custom", "Use a custom transform orientation"},
+	{V3D_ORIENT_GIMBAL, "GIMBAL", ICON_ORIENTATION_GIMBAL, "Gimbal", "Align each axis to the Euler rotation axis as used for input"},
+	{V3D_ORIENT_VIEW, "VIEW", ICON_ORIENTATION_VIEW, "View", "Align the transformation axes to the window"},
+	{V3D_ORIENT_CURSOR, "CURSOR", ICON_PIVOT_CURSOR, "Cursor", "Align the transformation axes to the 3D cursor"},
+	// {V3D_ORIENT_CUSTOM, "CUSTOM", 0, "Custom", "Use a custom transform orientation"},
 	{0, NULL, 0, NULL, NULL},
 };
 
@@ -657,12 +659,13 @@ void rna_Scene_set_update(Main *bmain, Scene *UNUSED(scene), PointerRNA *ptr)
 	}
 }
 
-static void rna_Scene_view3d_update(Main *bmain, Scene *UNUSED(scene_unused), PointerRNA *ptr)
+static void rna_Scene_camera_update(Main *bmain, Scene *UNUSED(scene_unused), PointerRNA *ptr)
 {
 	wmWindowManager *wm = bmain->wm.first;
 	Scene *scene = (Scene *)ptr->data;
 
 	WM_windows_scene_data_sync(&wm->windows, scene);
+	DEG_id_tag_update(&scene->id, ID_RECALC_COPY_ON_WRITE);
 }
 
 static void rna_Scene_fps_update(Main *UNUSED(bmain), Scene *scene, PointerRNA *UNUSED(ptr))
@@ -1484,9 +1487,9 @@ static void rna_Scene_editmesh_select_mode_set(PointerRNA *ptr, const bool *valu
 
 			if (view_layer && view_layer->basact) {
 				Mesh *me = BKE_mesh_from_object(view_layer->basact->object);
-				if (me && me->edit_btmesh && me->edit_btmesh->selectmode != flag) {
-					me->edit_btmesh->selectmode = flag;
-					EDBM_selectmode_set(me->edit_btmesh);
+				if (me && me->edit_mesh && me->edit_mesh->selectmode != flag) {
+					me->edit_mesh->selectmode = flag;
+					EDBM_selectmode_set(me->edit_mesh);
 				}
 			}
 		}
@@ -1500,7 +1503,7 @@ static void rna_Scene_editmesh_select_mode_update(bContext *C, PointerRNA *UNUSE
 
 	if (view_layer->basact) {
 		me = BKE_mesh_from_object(view_layer->basact->object);
-		if (me && me->edit_btmesh == NULL)
+		if (me && me->edit_mesh == NULL)
 			me = NULL;
 	}
 
@@ -1530,10 +1533,10 @@ static void object_simplify_update(Object *ob)
 	for (psys = ob->particlesystem.first; psys; psys = psys->next)
 		psys->recalc |= ID_RECALC_PSYS_CHILD;
 
-	if (ob->dup_group) {
+	if (ob->instance_collection) {
 		CollectionObject *cob;
 
-		for (cob = ob->dup_group->gobject.first; cob; cob = cob->next)
+		for (cob = ob->instance_collection->gobject.first; cob; cob = cob->next)
 			object_simplify_update(cob->ob);
 	}
 }
@@ -1544,7 +1547,7 @@ static void rna_Scene_use_simplify_update(Main *bmain, Scene *UNUSED(scene), Poi
 	Scene *sce_iter;
 	Base *base;
 
-	BKE_main_id_tag_listbase(&bmain->object, LIB_TAG_DOIT, true);
+	BKE_main_id_tag_listbase(&bmain->objects, LIB_TAG_DOIT, true);
 	FOREACH_SCENE_OBJECT_BEGIN(sce, ob)
 	{
 		object_simplify_update(ob);
@@ -1556,6 +1559,7 @@ static void rna_Scene_use_simplify_update(Main *bmain, Scene *UNUSED(scene), Poi
 	}
 
 	WM_main_add_notifier(NC_GEOM | ND_DATA, NULL);
+	WM_main_add_notifier(NC_OBJECT | ND_DRAW, NULL);
 	DEG_id_tag_update(&sce->id, 0);
 }
 
@@ -1632,7 +1636,33 @@ static void rna_Scene_sync_mode_set(PointerRNA *ptr, int value)
 	}
 }
 
+static void rna_View3DCursor_rotation_mode_set(PointerRNA *ptr, int value)
+{
+	View3DCursor *cursor = ptr->data;
 
+	/* use API Method for conversions... */
+	BKE_rotMode_change_values(
+	        cursor->rotation_quaternion,
+	        cursor->rotation_euler,
+	        cursor->rotation_axis, &cursor->rotation_angle, cursor->rotation_mode, (short)value);
+
+	/* finally, set the new rotation type */
+	cursor->rotation_mode = value;
+}
+
+static void rna_View3DCursor_rotation_axis_angle_get(PointerRNA *ptr, float *value)
+{
+	View3DCursor *cursor = ptr->data;
+	value[0] = cursor->rotation_angle;
+	copy_v3_v3(&value[1], cursor->rotation_axis);
+}
+
+static void rna_View3DCursor_rotation_axis_angle_set(PointerRNA *ptr, const float *value)
+{
+	View3DCursor *cursor = ptr->data;
+	cursor->rotation_angle = value[0];
+	copy_v3_v3(cursor->rotation_axis, &value[1]);
+}
 
 static TimeMarker *rna_TimeLine_add(Scene *scene, const char name[], int frame)
 {
@@ -1741,7 +1771,7 @@ static void rna_EditMesh_update(bContext *C, PointerRNA *UNUSED(ptr))
 
 	if (view_layer->basact) {
 		me = BKE_mesh_from_object(view_layer->basact->object);
-		if (me && me->edit_btmesh == NULL)
+		if (me && me->edit_mesh == NULL)
 			me = NULL;
 	}
 
@@ -1984,7 +2014,7 @@ static void rna_ViewLayer_remove(
 }
 
 /* Fake value, used internally (not saved to DNA). */
-#define V3D_MANIP_DEFAULT -1
+#define V3D_ORIENT_DEFAULT -1
 
 static int rna_TransformOrientationSlot_type_get(PointerRNA *ptr)
 {
@@ -1992,7 +2022,7 @@ static int rna_TransformOrientationSlot_type_get(PointerRNA *ptr)
 	TransformOrientationSlot *orient_slot = ptr->data;
 	if (orient_slot != &scene->orientation_slots[SCE_ORIENT_DEFAULT]) {
 		if ((orient_slot->flag & SELECT) == 0) {
-			return V3D_MANIP_DEFAULT;
+			return V3D_ORIENT_DEFAULT;
 		}
 	}
 	return BKE_scene_orientation_slot_get_index(orient_slot);
@@ -2004,7 +2034,7 @@ void rna_TransformOrientationSlot_type_set(PointerRNA *ptr, int value)
 	TransformOrientationSlot *orient_slot = ptr->data;
 
 	if (orient_slot != &scene->orientation_slots[SCE_ORIENT_DEFAULT]) {
-		if (value == V3D_MANIP_DEFAULT) {
+		if (value == V3D_ORIENT_DEFAULT) {
 			orient_slot->flag &= ~SELECT;
 			return;
 		}
@@ -2021,7 +2051,7 @@ static PointerRNA rna_TransformOrientationSlot_get(PointerRNA *ptr)
 	Scene *scene = ptr->id.data;
 	TransformOrientationSlot *orient_slot = ptr->data;
 	TransformOrientation *orientation;
-	if (orient_slot->type < V3D_MANIP_CUSTOM) {
+	if (orient_slot->type < V3D_ORIENT_CUSTOM) {
 		orientation = NULL;
 	}
 	else {
@@ -2036,13 +2066,13 @@ static const EnumPropertyItem *rna_TransformOrientation_impl_itemf(
 {
 	EnumPropertyItem tmp = {0, "", 0, "", ""};
 	EnumPropertyItem *item = NULL;
-	int i = V3D_MANIP_CUSTOM, totitem = 0;
+	int i = V3D_ORIENT_CUSTOM, totitem = 0;
 
 	if (include_default) {
 		tmp.identifier = "DEFAULT";
 		tmp.name = "Default";
 		tmp.description = "Use the scene orientation";
-		tmp.value = V3D_MANIP_DEFAULT;
+		tmp.value = V3D_ORIENT_DEFAULT;
 		tmp.icon = ICON_OBJECT_ORIGIN;
 		RNA_enum_item_add(&item, &totitem, &tmp);
 		tmp.icon = 0;
@@ -2092,7 +2122,7 @@ const EnumPropertyItem *rna_TransformOrientation_with_scene_itemf(
 	return rna_TransformOrientation_impl_itemf(scene, include_default, r_free);
 }
 
-#undef V3D_MANIP_DEFAULT
+#undef V3D_ORIENT_DEFAULT
 
 void rna_TransformOrientationSlot_ui_info(
         ID *scene_id, TransformOrientationSlot *orient_slot,
@@ -2100,7 +2130,7 @@ void rna_TransformOrientationSlot_ui_info(
 {
 	Scene *scene = (Scene *)scene_id;
 
-	if (orient_slot->type < V3D_MANIP_CUSTOM) {
+	if (orient_slot->type < V3D_ORIENT_CUSTOM) {
 		const EnumPropertyItem *items = rna_enum_transform_orientation_items;
 		const int i = RNA_enum_from_value(items, orient_slot->type);
 		strcpy(r_name, items[i].name);
@@ -2316,6 +2346,52 @@ static void rna_def_transform_orientation_slot(BlenderRNA *brna)
 	RNA_def_function_output(func, parm);
 }
 
+static void rna_def_view3d_cursor(BlenderRNA *brna)
+{
+	StructRNA *srna;
+	PropertyRNA *prop;
+
+	srna = RNA_def_struct(brna, "View3DCursor", NULL);
+	RNA_def_struct_sdna(srna, "View3DCursor");
+	RNA_def_struct_ui_text(srna, "3D Cursor", "");
+
+	prop = RNA_def_property(srna, "location", PROP_FLOAT, PROP_XYZ_LENGTH);
+	RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
+	RNA_def_property_float_sdna(prop, NULL, "location");
+	RNA_def_property_ui_text(prop, "Location", "");
+	RNA_def_property_ui_range(prop, -10000.0, 10000.0, 10, 4);
+	RNA_def_property_update(prop, NC_WINDOW, NULL);
+
+	prop = RNA_def_property(srna, "rotation_quaternion", PROP_FLOAT, PROP_QUATERNION);
+	RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
+	RNA_def_property_float_sdna(prop, NULL, "rotation_quaternion");
+	RNA_def_property_float_array_default(prop, rna_default_quaternion);
+	RNA_def_property_ui_text(prop, "Quaternion Rotation", "Rotation in quaternions (keep normalized)");
+	RNA_def_property_update(prop, NC_WINDOW, NULL);
+
+	prop = RNA_def_property(srna, "rotation_axis_angle", PROP_FLOAT, PROP_AXISANGLE);
+	RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
+	RNA_def_property_array(prop, 4);
+	RNA_def_property_float_funcs(prop, "rna_View3DCursor_rotation_axis_angle_get",
+	                             "rna_View3DCursor_rotation_axis_angle_set", NULL);
+	RNA_def_property_float_array_default(prop, rna_default_axis_angle);
+	RNA_def_property_ui_text(prop, "Axis-Angle Rotation", "Angle of Rotation for Axis-Angle rotation representation");
+	RNA_def_property_update(prop, NC_WINDOW, NULL);
+
+	prop = RNA_def_property(srna, "rotation_euler", PROP_FLOAT, PROP_EULER);
+	RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
+	RNA_def_property_float_sdna(prop, NULL, "rotation_euler");
+	RNA_def_property_ui_text(prop, "Euler Rotation", "3D rotation");
+	RNA_def_property_update(prop, NC_WINDOW, NULL);
+
+	prop = RNA_def_property(srna, "rotation_mode", PROP_ENUM, PROP_NONE);
+	RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
+	RNA_def_property_enum_sdna(prop, NULL, "rotation_mode");
+	RNA_def_property_enum_items(prop, rna_enum_object_rotation_mode_items);
+	RNA_def_property_enum_funcs(prop, NULL, "rna_View3DCursor_rotation_mode_set", NULL);
+	RNA_def_property_ui_text(prop, "Rotation Mode", "");
+	RNA_def_property_update(prop, NC_WINDOW, NULL);
+}
 
 static void rna_def_tool_settings(BlenderRNA  *brna)
 {
@@ -2372,7 +2448,7 @@ static void rna_def_tool_settings(BlenderRNA  *brna)
 	};
 
 	static const EnumPropertyItem gpencil_stroke_snap_items[] = {
-		{0, "NONE", 0, "All points", "No snap"},
+		{0, "NONE", 0, "All points", "Snap to all points"},
 		{GP_PROJECT_DEPTH_STROKE_ENDPOINTS, "ENDS", 0, "End points", "Snap to first and last points and interpolate" },
 		{GP_PROJECT_DEPTH_STROKE_FIRST, "FIRST", 0, "First point", "Snap to first point" },
 		{0, NULL, 0, NULL, NULL},
@@ -2381,8 +2457,7 @@ static void rna_def_tool_settings(BlenderRNA  *brna)
 	static const EnumPropertyItem gpencil_selectmode_items[] = {
 		{GP_SELECTMODE_POINT, "POINT", ICON_GP_SELECT_POINTS, "Point", "Select only points"},
 		{GP_SELECTMODE_STROKE, "STROKE", ICON_GP_SELECT_STROKES, "Stroke", "Select all stroke points" },
-		/* GPXX need better icon for segment */
-		{GP_SELECTMODE_SEGMENT, "SEGMENT", ICON_SHADERFX, "Segment", "Select all stroke points between other strokes" },
+		{GP_SELECTMODE_SEGMENT, "SEGMENT", ICON_GP_SELECT_BETWEEN_STROKES, "Segment", "Select all stroke points between other strokes" },
 		{0, NULL, 0, NULL, NULL},
 	};
 
@@ -2734,6 +2809,7 @@ static void rna_def_tool_settings(BlenderRNA  *brna)
 	prop = RNA_def_property(srna, "annotation_stroke_placement_view3d", PROP_ENUM, PROP_NONE);
 	RNA_def_property_enum_bitflag_sdna(prop, NULL, "annotate_v3d_align");
 	RNA_def_property_enum_items(prop, annotation_stroke_placement_items);
+	RNA_def_property_enum_default(prop, GP_PROJECT_VIEWSPACE | GP_PROJECT_CURSOR);
 	RNA_def_property_ui_text(prop, "Annotation Stroke Placement (3D View)", "How annotation strokes are orientated in 3D space");
 	RNA_def_property_update(prop, NC_GPENCIL | ND_DATA, NULL);
 
@@ -2816,7 +2892,7 @@ static void rna_def_tool_settings(BlenderRNA  *brna)
 	RNA_def_property_enum_items(prop, edge_tag_items);
 	RNA_def_property_ui_text(prop, "Edge Tag Mode", "The edge flag to tag when selecting the shortest path");
 
-	prop = RNA_def_property(srna, "edge_path_live_unwrap", PROP_BOOLEAN, PROP_NONE);
+	prop = RNA_def_property(srna, "use_edge_path_live_unwrap", PROP_BOOLEAN, PROP_NONE);
 	RNA_def_property_boolean_sdna(prop, NULL, "edge_mode_live_unwrap", 1);
 	RNA_def_property_ui_text(prop, "Live Unwrap", "Changing edges seam re-calculates UV unwrap");
 
@@ -3943,7 +4019,7 @@ static void rna_def_bake_data(BlenderRNA *brna)
 	RNA_def_property_ui_text(prop, "Margin", "Extends the baked result as a post process filter");
 	RNA_def_property_update(prop, NC_SCENE | ND_RENDER_OPTIONS, NULL);
 
-	prop = RNA_def_property(srna, "cage_extrusion", PROP_FLOAT, PROP_NONE);
+	prop = RNA_def_property(srna, "cage_extrusion", PROP_FLOAT, PROP_DISTANCE);
 	RNA_def_property_range(prop, 0.0, FLT_MAX);
 	RNA_def_property_ui_range(prop, 0.0, 1.0, 1, 3);
 	RNA_def_property_ui_text(prop, "Cage Extrusion",
@@ -5041,9 +5117,10 @@ static void rna_def_scene_render_data(BlenderRNA *brna)
 	RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
 	RNA_def_property_update(prop, NC_SCENE | ND_RENDER_OPTIONS, "rna_Scene_glsl_update");
 
-	prop = RNA_def_property(srna, "motion_blur_shutter", PROP_FLOAT, PROP_UNSIGNED);
+	prop = RNA_def_property(srna, "motion_blur_shutter", PROP_FLOAT, PROP_FACTOR);
 	RNA_def_property_float_sdna(prop, NULL, "blurfac");
-	RNA_def_property_ui_range(prop, 0.01f, 2.0f, 1, 2);
+	RNA_def_property_range(prop, 0.01f, 2.0f);
+	RNA_def_property_ui_range(prop, 0.01f, 1.0f, 1, 2);
 	RNA_def_property_ui_text(prop, "Shutter", "Time taken in frames between shutter open and close");
 	RNA_def_property_update(prop, NC_SCENE | ND_RENDER_OPTIONS, "rna_Scene_glsl_update");
 
@@ -5067,41 +5144,41 @@ static void rna_def_scene_render_data(BlenderRNA *brna)
 	prop = RNA_def_property(srna, "use_border", PROP_BOOLEAN, PROP_NONE);
 	RNA_def_property_boolean_sdna(prop, NULL, "mode", R_BORDER);
 	RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
-	RNA_def_property_ui_text(prop, "Border", "Render a user-defined border region, within the frame size ");
+	RNA_def_property_ui_text(prop, "Render Region", "Render a user-defined render region, within the frame size");
 	RNA_def_property_update(prop, NC_SCENE | ND_RENDER_OPTIONS, NULL);
 
 	prop = RNA_def_property(srna, "border_min_x", PROP_FLOAT, PROP_NONE);
 	RNA_def_property_float_sdna(prop, NULL, "border.xmin");
 	RNA_def_property_range(prop, 0.0f, 1.0f);
 	RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
-	RNA_def_property_ui_text(prop, "Border Minimum X", "Minimum X value for the render border");
+	RNA_def_property_ui_text(prop, "Region Minimum X", "Minimum X value for the render region");
 	RNA_def_property_update(prop, NC_SCENE | ND_RENDER_OPTIONS, NULL);
 
 	prop = RNA_def_property(srna, "border_min_y", PROP_FLOAT, PROP_NONE);
 	RNA_def_property_float_sdna(prop, NULL, "border.ymin");
 	RNA_def_property_range(prop, 0.0f, 1.0f);
 	RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
-	RNA_def_property_ui_text(prop, "Border Minimum Y", "Minimum Y value for the render border");
+	RNA_def_property_ui_text(prop, "Region Minimum Y", "Minimum Y value for the render region");
 	RNA_def_property_update(prop, NC_SCENE | ND_RENDER_OPTIONS, NULL);
 
 	prop = RNA_def_property(srna, "border_max_x", PROP_FLOAT, PROP_NONE);
 	RNA_def_property_float_sdna(prop, NULL, "border.xmax");
 	RNA_def_property_range(prop, 0.0f, 1.0f);
 	RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
-	RNA_def_property_ui_text(prop, "Border Maximum X", "Maximum X value for the render border");
+	RNA_def_property_ui_text(prop, "Region Maximum X", "Maximum X value for the render region");
 	RNA_def_property_update(prop, NC_SCENE | ND_RENDER_OPTIONS, NULL);
 
 	prop = RNA_def_property(srna, "border_max_y", PROP_FLOAT, PROP_NONE);
 	RNA_def_property_float_sdna(prop, NULL, "border.ymax");
 	RNA_def_property_range(prop, 0.0f, 1.0f);
 	RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
-	RNA_def_property_ui_text(prop, "Border Maximum Y", "Maximum Y value for the render border");
+	RNA_def_property_ui_text(prop, "Region Maximum Y", "Maximum Y value for the render region");
 	RNA_def_property_update(prop, NC_SCENE | ND_RENDER_OPTIONS, NULL);
 
 	prop = RNA_def_property(srna, "use_crop_to_border", PROP_BOOLEAN, PROP_NONE);
 	RNA_def_property_boolean_sdna(prop, NULL, "mode", R_CROP);
 	RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
-	RNA_def_property_ui_text(prop, "Crop to Border", "Crop the rendered frame to the defined border size");
+	RNA_def_property_ui_text(prop, "Crop to Render Region", "Crop the rendered frame to the defined render region size");
 	RNA_def_property_update(prop, NC_SCENE | ND_RENDER_OPTIONS, NULL);
 
 	prop = RNA_def_property(srna, "use_placeholder", PROP_BOOLEAN, PROP_NONE);
@@ -5209,7 +5286,7 @@ static void rna_def_scene_render_data(BlenderRNA *brna)
 	prop = RNA_def_property(srna, "bake_type", PROP_ENUM, PROP_NONE);
 	RNA_def_property_enum_bitflag_sdna(prop, NULL, "bake_mode");
 	RNA_def_property_enum_items(prop, bake_mode_items);
-	RNA_def_property_ui_text(prop, "Bake Mode", "Choose shading information to bake into the image");
+	RNA_def_property_ui_text(prop, "Bake Type", "Choose shading information to bake into the image");
 	RNA_def_property_update(prop, NC_SCENE | ND_RENDER_OPTIONS, NULL);
 
 	prop = RNA_def_property(srna, "use_bake_selected_to_active", PROP_BOOLEAN, PROP_NONE);
@@ -5359,7 +5436,7 @@ static void rna_def_scene_render_data(BlenderRNA *brna)
 	RNA_def_property_ui_text(prop, "Stamp Hostname", "Include the hostname of the machine that rendered the frame");
 	RNA_def_property_update(prop, NC_SCENE | ND_RENDER_OPTIONS, NULL);
 
-	prop = RNA_def_property(srna, "stamp_font_size", PROP_INT, PROP_NONE);
+	prop = RNA_def_property(srna, "stamp_font_size", PROP_INT, PROP_PIXEL);
 	RNA_def_property_int_sdna(prop, NULL, "stamp_font_id");
 	RNA_def_property_range(prop, 8, 64);
 	RNA_def_property_ui_text(prop, "Font Size", "Size of the font used when rendering stamp text");
@@ -5489,6 +5566,11 @@ static void rna_def_scene_render_data(BlenderRNA *brna)
 	RNA_def_property_float_sdna(prop, NULL, "simplify_particles_render");
 	RNA_def_property_ui_text(prop, "Simplify Child Particles", "Global child particles percentage during rendering");
 	RNA_def_property_update(prop, 0, "rna_Scene_simplify_update");
+
+	prop = RNA_def_property(srna, "use_simplify_smoke_highres", PROP_BOOLEAN, PROP_NONE);
+	RNA_def_property_boolean_negative_sdna(prop, NULL, "simplify_smoke_ignore_highres", 1);
+	RNA_def_property_ui_text(prop, "Use High-resolution Smoke", "Display high-resolution smoke in the viewport");
+	RNA_def_property_update(prop, NC_OBJECT | ND_DRAW, NULL);
 
 	/* Grease Pencil - Simplify Options */
 	prop = RNA_def_property(srna, "simplify_gpencil", PROP_BOOLEAN, PROP_NONE);
@@ -5904,13 +5986,13 @@ static void rna_def_scene_eevee(BlenderRNA *brna)
 	RNA_def_property_ui_text(prop, "Show Cubemap Cache", "Display captured cubemaps in the viewport");
 	RNA_def_property_override_flag(prop, PROPOVERRIDE_OVERRIDABLE_STATIC);
 
-	prop = RNA_def_property(srna, "gi_irradiance_display_size", PROP_FLOAT, PROP_NONE);
+	prop = RNA_def_property(srna, "gi_irradiance_display_size", PROP_FLOAT, PROP_DISTANCE);
 	RNA_def_property_float_sdna(prop, NULL, "gi_irradiance_draw_size");
 	RNA_def_property_range(prop, 0.05f, 10.0f);
 	RNA_def_property_float_default(prop, 0.1f);
 	RNA_def_property_ui_text(prop, "Irradiance Display Size", "Size of the irradiance sample spheres to debug captured light");
 
-	prop = RNA_def_property(srna, "gi_cubemap_display_size", PROP_FLOAT, PROP_NONE);
+	prop = RNA_def_property(srna, "gi_cubemap_display_size", PROP_FLOAT, PROP_DISTANCE);
 	RNA_def_property_float_sdna(prop, NULL, "gi_cubemap_draw_size");
 	RNA_def_property_range(prop, 0.05f, 10.0f);
 	RNA_def_property_float_default(prop, 0.3f);
@@ -6206,10 +6288,11 @@ static void rna_def_scene_eevee(BlenderRNA *brna)
 	RNA_def_property_range(prop, 1, 64);
 	RNA_def_property_override_flag(prop, PROPOVERRIDE_OVERRIDABLE_STATIC);
 
-	prop = RNA_def_property(srna, "motion_blur_shutter", PROP_FLOAT, PROP_UNSIGNED);
+	prop = RNA_def_property(srna, "motion_blur_shutter", PROP_FLOAT, PROP_FACTOR);
 	RNA_def_property_float_default(prop, 1.0f);
 	RNA_def_property_ui_text(prop, "Shutter", "Time taken in frames between shutter open and close");
-	RNA_def_property_ui_range(prop, 0.01f, 2.0f, 1, 2);
+	RNA_def_property_range(prop, 0.01f, 2.0f);
+	RNA_def_property_ui_range(prop, 0.01f, 1.0f, 1, 2);
 	RNA_def_property_override_flag(prop, PROPOVERRIDE_OVERRIDABLE_STATIC);
 
 	/* Shadows */
@@ -6306,7 +6389,7 @@ void RNA_def_scene(BlenderRNA *brna)
 	RNA_def_property_flag(prop, PROP_EDITABLE);
 	RNA_def_property_pointer_funcs(prop, NULL, NULL, NULL, "rna_Camera_object_poll");
 	RNA_def_property_ui_text(prop, "Camera", "Active camera, used for rendering the scene");
-	RNA_def_property_update(prop, NC_SCENE | NA_EDITED, "rna_Scene_view3d_update");
+	RNA_def_property_update(prop, NC_SCENE | NA_EDITED, "rna_Scene_camera_update");
 
 	prop = RNA_def_property(srna, "background_set", PROP_POINTER, PROP_NONE);
 	RNA_def_property_pointer_sdna(prop, NULL, "set");
@@ -6320,17 +6403,6 @@ void RNA_def_scene(BlenderRNA *brna)
 	RNA_def_property_flag(prop, PROP_EDITABLE);
 	RNA_def_property_ui_text(prop, "World", "World used for rendering the scene");
 	RNA_def_property_update(prop, NC_SCENE | ND_WORLD, "rna_Scene_world_update");
-
-	prop = RNA_def_property(srna, "cursor_location", PROP_FLOAT, PROP_XYZ_LENGTH);
-	RNA_def_property_float_sdna(prop, NULL, "cursor.location");
-	RNA_def_property_ui_text(prop, "Cursor Location", "3D cursor location");
-	RNA_def_property_ui_range(prop, -10000.0, 10000.0, 10, 4);
-	RNA_def_property_update(prop, NC_WINDOW, NULL);
-
-	prop = RNA_def_property(srna, "cursor_rotation", PROP_FLOAT, PROP_QUATERNION);
-	RNA_def_property_float_sdna(prop, NULL, "cursor.rotation");
-	RNA_def_property_ui_text(prop, "Cursor Rotation", "3D cursor rotation in quaternions (keep normalized)");
-	RNA_def_property_update(prop, NC_WINDOW, NULL);
 
 	prop = RNA_def_property(srna, "objects", PROP_COLLECTION, PROP_NONE);
 	RNA_def_property_struct_type(prop, "Object");
@@ -6587,6 +6659,14 @@ void RNA_def_scene(BlenderRNA *brna)
 	RNA_def_property_struct_type(prop, "TransformOrientationSlot");
 	RNA_def_property_ui_text(prop, "Transform Orientation Slots", "");
 
+
+	/* 3D View Cursor */
+	prop = RNA_def_property(srna, "cursor", PROP_POINTER, PROP_NONE);
+	RNA_def_property_flag(prop, PROP_NEVER_NULL);
+	RNA_def_property_pointer_sdna(prop, NULL, "cursor");
+	RNA_def_property_struct_type(prop, "View3DCursor");
+	RNA_def_property_ui_text(prop, "3D Cursor", "");
+
 	/* Audio Settings */
 	prop = RNA_def_property(srna, "use_audio", PROP_BOOLEAN, PROP_NONE);
 	RNA_def_property_boolean_funcs(prop, "rna_Scene_use_audio_get", "rna_Scene_use_audio_set");
@@ -6712,6 +6792,7 @@ void RNA_def_scene(BlenderRNA *brna)
 	rna_def_scene_image_format_data(brna);
 	rna_def_transform_orientation(brna);
 	rna_def_transform_orientation_slot(brna);
+	rna_def_view3d_cursor(brna);
 	rna_def_selected_uv_element(brna);
 	rna_def_display_safe_areas(brna);
 	rna_def_scene_display(brna);

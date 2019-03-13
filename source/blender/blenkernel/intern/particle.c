@@ -17,7 +17,8 @@
  * All rights reserved.
  */
 
-/** \file \ingroup bke
+/** \file
+ * \ingroup bke
  */
 
 
@@ -343,11 +344,11 @@ void psys_find_group_weights(ParticleSettings *part)
 	/* Find object pointers based on index. If the collection is linked from
 	 * another library linking may not have the object pointers available on
 	 * file load, so we have to retrieve them later. See T49273. */
-	const ListBase dup_group_objects = BKE_collection_object_cache_get(part->dup_group);
+	const ListBase instance_collection_objects = BKE_collection_object_cache_get(part->instance_collection);
 
-	for (ParticleDupliWeight *dw = part->dupliweights.first; dw; dw = dw->next) {
+	for (ParticleDupliWeight *dw = part->instance_weights.first; dw; dw = dw->next) {
 		if (dw->ob == NULL) {
-			Base *base = BLI_findlink(&dup_group_objects, dw->index);
+			Base *base = BLI_findlink(&instance_collection_objects, dw->index);
 			if (base != NULL) {
 				dw->ob = base->object;
 			}
@@ -359,8 +360,8 @@ void psys_check_group_weights(ParticleSettings *part)
 {
 	ParticleDupliWeight *dw, *tdw;
 
-	if (part->ren_as != PART_DRAW_GR || !part->dup_group) {
-		BLI_freelistN(&part->dupliweights);
+	if (part->ren_as != PART_DRAW_GR || !part->instance_collection) {
+		BLI_freelistN(&part->instance_weights);
 		return;
 	}
 
@@ -368,11 +369,11 @@ void psys_check_group_weights(ParticleSettings *part)
 	psys_find_group_weights(part);
 
 	/* Remove NULL objects, that were removed from the collection. */
-	dw = part->dupliweights.first;
+	dw = part->instance_weights.first;
 	while (dw) {
-		if (dw->ob == NULL || !BKE_collection_has_object_recursive(part->dup_group, dw->ob)) {
+		if (dw->ob == NULL || !BKE_collection_has_object_recursive(part->instance_collection, dw->ob)) {
 			tdw = dw->next;
-			BLI_freelinkN(&part->dupliweights, dw);
+			BLI_freelinkN(&part->instance_weights, dw);
 			dw = tdw;
 		}
 		else {
@@ -382,9 +383,9 @@ void psys_check_group_weights(ParticleSettings *part)
 
 	/* Add new objects in the collection. */
 	int index = 0;
-	FOREACH_COLLECTION_OBJECT_RECURSIVE_BEGIN(part->dup_group, object)
+	FOREACH_COLLECTION_OBJECT_RECURSIVE_BEGIN(part->instance_collection, object)
 	{
-		dw = part->dupliweights.first;
+		dw = part->instance_weights.first;
 		while (dw && dw->ob != object) {
 			dw = dw->next;
 		}
@@ -393,7 +394,7 @@ void psys_check_group_weights(ParticleSettings *part)
 			dw = MEM_callocN(sizeof(ParticleDupliWeight), "ParticleDupliWeight");
 			dw->ob = object;
 			dw->count = 1;
-			BLI_addtail(&part->dupliweights, dw);
+			BLI_addtail(&part->instance_weights, dw);
 		}
 
 		dw->index = index++;
@@ -402,7 +403,7 @@ void psys_check_group_weights(ParticleSettings *part)
 
 	/* Ensure there is an element marked as current. */
 	int current = 0;
-	for (dw = part->dupliweights.first; dw; dw = dw->next) {
+	for (dw = part->instance_weights.first; dw; dw = dw->next) {
 		if (dw->flag & PART_DUPLIW_CURRENT) {
 			current = 1;
 			break;
@@ -410,7 +411,7 @@ void psys_check_group_weights(ParticleSettings *part)
 	}
 
 	if (!current) {
-		dw = part->dupliweights.first;
+		dw = part->instance_weights.first;
 		if (dw)
 			dw->flag |= PART_DUPLIW_CURRENT;
 	}
@@ -452,7 +453,7 @@ void BKE_particlesettings_free(ParticleSettings *part)
 
 	MEM_SAFE_FREE(part->effector_weights);
 
-	BLI_freelistN(&part->dupliweights);
+	BLI_freelistN(&part->instance_weights);
 
 	boid_free_settings(part->boids);
 	fluid_free_settings(part->fluid);
@@ -1624,39 +1625,40 @@ static void psys_particle_on_shape(int UNUSED(distr), int UNUSED(index),
 /*			Particles on emitter				*/
 /************************************************/
 
-CustomDataMask psys_emitter_customdata_mask(ParticleSystem *psys)
+void psys_emitter_customdata_mask(ParticleSystem *psys, CustomData_MeshMasks *r_cddata_masks)
 {
-	CustomDataMask dataMask = 0;
 	MTex *mtex;
 	int i;
 
 	if (!psys->part)
-		return 0;
+		return;
 
 	for (i = 0; i < MAX_MTEX; i++) {
 		mtex = psys->part->mtex[i];
 		if (mtex && mtex->mapto && (mtex->texco & TEXCO_UV))
-			dataMask |= CD_MASK_MTFACE;
+			r_cddata_masks->fmask |= CD_MASK_MTFACE;
 	}
 
 	if (psys->part->tanfac != 0.0f)
-		dataMask |= CD_MASK_MTFACE;
+		r_cddata_masks->fmask |= CD_MASK_MTFACE;
 
 	/* ask for vertexgroups if we need them */
 	for (i = 0; i < PSYS_TOT_VG; i++) {
 		if (psys->vgroup[i]) {
-			dataMask |= CD_MASK_MDEFORMVERT;
+			r_cddata_masks->vmask |= CD_MASK_MDEFORMVERT;
 			break;
 		}
 	}
 
 	/* particles only need this if they are after a non deform modifier, and
 	 * the modifier stack will only create them in that case. */
-	dataMask |= CD_MASK_ORIGSPACE_MLOOP | CD_MASK_ORIGINDEX;
+	r_cddata_masks->lmask |= CD_MASK_ORIGSPACE_MLOOP;
+	/* XXX Check we do need all those? */
+	r_cddata_masks->vmask |= CD_MASK_ORIGINDEX;
+	r_cddata_masks->emask |= CD_MASK_ORIGINDEX;
+	r_cddata_masks->pmask |= CD_MASK_ORIGINDEX;
 
-	dataMask |= CD_MASK_ORCO;
-
-	return dataMask;
+	r_cddata_masks->vmask |= CD_MASK_ORCO;
 }
 
 void psys_particle_on_emitter(ParticleSystemModifierData *psmd, int from, int index, int index_dmcache,
@@ -3061,6 +3063,10 @@ ModifierData *object_add_particle_system(Main *bmain, Scene *scene, Object *ob, 
 	if (!ob || ob->type != OB_MESH)
 		return NULL;
 
+	if (name == NULL) {
+		name = DATA_("ParticleSettings");
+	}
+
 	psys = ob->particlesystem.first;
 	for (; psys; psys = psys->next)
 		psys->flag &= ~PSYS_CURRENT;
@@ -3068,20 +3074,12 @@ ModifierData *object_add_particle_system(Main *bmain, Scene *scene, Object *ob, 
 	psys = MEM_callocN(sizeof(ParticleSystem), "particle_system");
 	psys->pointcache = BKE_ptcache_add(&psys->ptcaches);
 	BLI_addtail(&ob->particlesystem, psys);
+	psys_unique_name(ob, psys, name);
 
-	psys->part = BKE_particlesettings_add(bmain, DATA_("ParticleSettings"));
-
-	if (BLI_listbase_count_at_most(&ob->particlesystem, 2) > 1)
-		BLI_snprintf(psys->name, sizeof(psys->name), DATA_("ParticleSystem %i"), BLI_listbase_count(&ob->particlesystem));
-	else
-		BLI_strncpy(psys->name, DATA_("ParticleSystem"), sizeof(psys->name));
+	psys->part = BKE_particlesettings_add(bmain, psys->name);
 
 	md = modifier_new(eModifierType_ParticleSystem);
-
-	if (name)
-		BLI_strncpy_utf8(md->name, name, sizeof(md->name));
-	else
-		BLI_snprintf(md->name, sizeof(md->name), DATA_("ParticleSystem %i"), BLI_listbase_count(&ob->particlesystem));
+	BLI_strncpy(md->name, psys->name, sizeof(md->name));
 	modifier_unique_name(&ob->modifiers, md);
 
 	psmd = (ParticleSystemModifierData *) md;
@@ -3296,8 +3294,8 @@ void BKE_particlesettings_twist_curve_init(ParticleSettings *part)
 void BKE_particlesettings_copy_data(
         Main *UNUSED(bmain), ParticleSettings *part_dst, const ParticleSettings *part_src, const int UNUSED(flag))
 {
-	part_dst->pd = MEM_dupallocN(part_src->pd);
-	part_dst->pd2 = MEM_dupallocN(part_src->pd2);
+	part_dst->pd = BKE_partdeflect_copy(part_src->pd);
+	part_dst->pd2 = BKE_partdeflect_copy(part_src->pd2);
 	part_dst->effector_weights = MEM_dupallocN(part_src->effector_weights);
 	part_dst->fluid = MEM_dupallocN(part_src->fluid);
 
@@ -3319,7 +3317,7 @@ void BKE_particlesettings_copy_data(
 		}
 	}
 
-	BLI_duplicatelist(&part_dst->dupliweights, &part_src->dupliweights);
+	BLI_duplicatelist(&part_dst->instance_weights, &part_src->instance_weights);
 }
 
 ParticleSettings *BKE_particlesettings_copy(Main *bmain, const ParticleSettings *part)

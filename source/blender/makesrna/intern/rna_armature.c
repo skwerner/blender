@@ -14,7 +14,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-/** \file \ingroup RNA
+/** \file
+ * \ingroup RNA
  */
 
 
@@ -140,7 +141,7 @@ static void rna_Armature_update_layers(Main *bmain, Scene *UNUSED(scene), Pointe
 
 	/* proxy lib exception, store it here so we can restore layers on file
 	 * load, since it would otherwise get lost due to being linked data */
-	for (ob = bmain->object.first; ob; ob = ob->id.next) {
+	for (ob = bmain->objects.first; ob; ob = ob->id.next) {
 		if (ob->data == arm && ob->pose)
 			ob->pose->proxy_layer = arm->layer;
 	}
@@ -425,7 +426,7 @@ static void rna_Bone_bbone_handle_update(Main *bmain, Scene *scene, PointerRNA *
 	Bone *bone = (Bone *)ptr->data;
 
 	/* Update all users of this armature after changing B-Bone handles. */
-	for (Object *obt = bmain->object.first; obt; obt = obt->id.next) {
+	for (Object *obt = bmain->objects.first; obt; obt = obt->id.next) {
 		if (obt->data == arm && obt->pose) {
 			bPoseChannel *pchan = BKE_pose_channel_find_name(obt->pose, bone->name);
 

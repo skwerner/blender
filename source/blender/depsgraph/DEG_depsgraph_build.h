@@ -17,7 +17,8 @@
  * All rights reserved.
  */
 
-/** \file \ingroup depsgraph
+/** \file
+ * \ingroup depsgraph
  *
  * Public API for Depsgraph
  */
@@ -34,6 +35,7 @@ struct Depsgraph;
 
 struct CacheFile;
 struct Collection;
+struct CustomData_MeshMasks;
 struct EffectorWeights;
 struct ID;
 struct Main;
@@ -142,16 +144,25 @@ void DEG_add_generic_id_relation(struct DepsNodeHandle *node_handle,
                                  struct ID *id,
                                  const char *description);
 
+/* Special function which is used from modifiers' updateDepsgraph() callback
+ * to indicate that the modifietr needs to know transformation of the object
+ * which that modifier belongs to.
+ * This function will take care of checking which operation is required to
+ * have transformation for the modifier, taking into account possible simulation
+ * solvers. */
+void DEG_add_modifier_to_transform_relation(
+        struct DepsNodeHandle *node_handle,
+        const char *description);
+
 /* Adds relations from the given component of a given object to the given node
- * handle AND the component to the point cache component of the node's ID.
- */
+ * handle AND the component to the point cache component of the node's ID. */
 void DEG_add_object_pointcache_relation(struct DepsNodeHandle *node_handle,
                                         struct Object *object,
                                         eDepsObjectComponentType component,
                                         const char *description);
 
 void DEG_add_special_eval_flag(struct DepsNodeHandle *handle, struct ID *id, uint32_t flag);
-void DEG_add_customdata_mask(struct DepsNodeHandle *handle, struct Object *object, uint64_t mask);
+void DEG_add_customdata_mask(struct DepsNodeHandle *handle, struct Object *object, const struct CustomData_MeshMasks *masks);
 
 struct ID *DEG_get_id_from_handle(struct DepsNodeHandle *node_handle);
 struct Depsgraph *DEG_get_graph_from_handle(struct DepsNodeHandle *node_handle);

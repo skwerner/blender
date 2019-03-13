@@ -14,7 +14,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-/** \file \ingroup pythonintern
+/** \file
+ * \ingroup pythonintern
  *
  * This file currently exposes callbacks for interface regions but may be
  * extended later.
@@ -46,9 +47,9 @@
 
 #include "../generic/python_utildefines.h"
 
-/* use this to stop other capsules from being mis-used */
-#define RNA_CAPSULE_ID "RNA_HANDLE"
-#define RNA_CAPSULE_ID_INVALID "RNA_HANDLE_REMOVED"
+/* Use this to stop other capsules from being mis-used. */
+static const char *rna_capsual_id = "RNA_HANDLE";
+static const char *rna_capsual_id_invalid = "RNA_HANDLE_REMOVED";
 
 static const EnumPropertyItem region_draw_mode_items[] = {
 	{REGION_DRAW_POST_PIXEL, "POST_PIXEL", 0, "Post Pixel", ""},
@@ -164,7 +165,7 @@ PyObject *pyrna_callback_add(BPy_StructRNA *self, PyObject *args)
 		return NULL;
 	}
 
-	return PyCapsule_New((void *)handle, RNA_CAPSULE_ID, NULL);
+	return PyCapsule_New((void *)handle, rna_capsual_id, NULL);
 }
 
 PyObject *pyrna_callback_remove(BPy_StructRNA *self, PyObject *args)
@@ -176,7 +177,7 @@ PyObject *pyrna_callback_remove(BPy_StructRNA *self, PyObject *args)
 	if (!PyArg_ParseTuple(args, "O!:callback_remove", &PyCapsule_Type, &py_handle))
 		return NULL;
 
-	handle = PyCapsule_GetPointer(py_handle, RNA_CAPSULE_ID);
+	handle = PyCapsule_GetPointer(py_handle, rna_capsual_id);
 
 	if (handle == NULL) {
 		PyErr_SetString(PyExc_ValueError, "callback_remove(handle): NULL handle given, invalid or already removed");
@@ -195,7 +196,7 @@ PyObject *pyrna_callback_remove(BPy_StructRNA *self, PyObject *args)
 	}
 
 	/* don't allow reuse */
-	PyCapsule_SetName(py_handle, RNA_CAPSULE_ID_INVALID);
+	PyCapsule_SetName(py_handle, rna_capsual_id_invalid);
 
 	Py_RETURN_NONE;
 }
@@ -205,9 +206,9 @@ PyObject *pyrna_callback_remove(BPy_StructRNA *self, PyObject *args)
 static eSpace_Type rna_Space_refine_reverse(StructRNA *srna)
 {
 	if (srna == &RNA_SpaceView3D)           return SPACE_VIEW3D;
-	if (srna == &RNA_SpaceGraphEditor)      return SPACE_IPO;
+	if (srna == &RNA_SpaceGraphEditor)      return SPACE_GRAPH;
 	if (srna == &RNA_SpaceOutliner)         return SPACE_OUTLINER;
-	if (srna == &RNA_SpaceProperties)       return SPACE_BUTS;
+	if (srna == &RNA_SpaceProperties)       return SPACE_PROPERTIES;
 	if (srna == &RNA_SpaceFileBrowser)      return SPACE_FILE;
 	if (srna == &RNA_SpaceImageEditor)      return SPACE_IMAGE;
 	if (srna == &RNA_SpaceInfo)             return SPACE_INFO;
@@ -342,7 +343,7 @@ PyObject *pyrna_callback_classmethod_add(PyObject *UNUSED(self), PyObject *args)
 		return NULL;
 	}
 
-	PyObject *ret = PyCapsule_New((void *)handle, RNA_CAPSULE_ID, NULL);
+	PyObject *ret = PyCapsule_New((void *)handle, rna_capsual_id, NULL);
 
 	/* Store 'args' in context as well as the handler custom-data,
 	 * because the handle may be freed by Blender (new file, new window... etc) */
@@ -370,7 +371,7 @@ PyObject *pyrna_callback_classmethod_remove(PyObject *UNUSED(self), PyObject *ar
 		return NULL;
 	}
 	py_handle = PyTuple_GET_ITEM(args, 1);
-	handle = PyCapsule_GetPointer(py_handle, RNA_CAPSULE_ID);
+	handle = PyCapsule_GetPointer(py_handle, rna_capsual_id);
 	if (handle == NULL) {
 		PyErr_SetString(PyExc_ValueError, "callback_remove(handler): NULL handler given, invalid or already removed");
 		return NULL;
@@ -437,7 +438,7 @@ PyObject *pyrna_callback_classmethod_remove(PyObject *UNUSED(self), PyObject *ar
 	/* don't allow reuse */
 	if (capsule_clear) {
 		Py_DECREF(handle_args);
-		PyCapsule_SetName(py_handle, RNA_CAPSULE_ID_INVALID);
+		PyCapsule_SetName(py_handle, rna_capsual_id_invalid);
 	}
 
 	Py_RETURN_NONE;

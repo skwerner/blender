@@ -17,7 +17,8 @@
  * All rights reserved.
  */
 
-/** \file \ingroup edinterface
+/** \file
+ * \ingroup edinterface
  *
  * Color Picker Region & Color Utils
  */
@@ -398,7 +399,7 @@ static void ui_block_colorpicker(
         uiBlock *block, uiBut *from_but, float rgba[4], bool show_picker)
 {
 	/* ePickerType */
-	static char colormode = 0;
+	static char colormode = 1;
 	uiBut *bt;
 	int width, butwidth;
 	static char hexcol[128];

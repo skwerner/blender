@@ -17,7 +17,8 @@
  * All rights reserved.
  */
 
-/** \file \ingroup gpu
+/** \file
+ * \ingroup gpu
  */
 
 #include "MEM_guardedalloc.h"
@@ -171,6 +172,17 @@ extern char datatoc_gpu_shader_gpencil_fill_vert_glsl[];
 extern char datatoc_gpu_shader_gpencil_fill_frag_glsl[];
 extern char datatoc_gpu_shader_cfg_world_clip_lib_glsl[];
 
+const struct GPUShaderConfigData GPU_shader_cfg_data[GPU_SHADER_CFG_LEN] = {
+	[GPU_SHADER_CFG_DEFAULT] = {
+		.lib = "",
+		.def = "",
+	},
+	[GPU_SHADER_CFG_CLIPPED] = {
+		.lib = datatoc_gpu_shader_cfg_world_clip_lib_glsl,
+		.def = "#define USE_WORLD_CLIP_PLANES\n",
+	},
+};
+
 /* cache of built-in shaders (each is created on first use) */
 static GPUShader *builtin_shaders[GPU_SHADER_CFG_LEN][GPU_SHADER_BUILTIN_LEN] = {NULL};
 
@@ -258,6 +270,14 @@ static void gpu_shader_standard_defines(char defines[MAX_DEFINE_LENGTH])
 		strcat(defines, "#define GPU_NVIDIA\n");
 	else if (GPU_type_matches(GPU_DEVICE_INTEL, GPU_OS_ANY, GPU_DRIVER_ANY))
 		strcat(defines, "#define GPU_INTEL\n");
+
+	/* some useful defines to detect OS type */
+	if (GPU_type_matches(GPU_DEVICE_ANY, GPU_OS_WIN, GPU_DRIVER_ANY))
+		strcat(defines, "#define OS_WIN\n");
+	else if (GPU_type_matches(GPU_DEVICE_ANY, GPU_OS_MAC, GPU_DRIVER_ANY))
+		strcat(defines, "#define OS_MAC\n");
+	else if (GPU_type_matches(GPU_DEVICE_ANY, GPU_OS_UNIX, GPU_DRIVER_ANY))
+		strcat(defines, "#define OS_UNIX\n");
 
 	return;
 }
@@ -1170,11 +1190,11 @@ static const GPUShaderStages builtin_shader_stages[GPU_SHADER_BUILTIN_LEN] = {
 };
 
 GPUShader *GPU_shader_get_builtin_shader_with_config(
-        eGPUBuiltinShader shader, eGPUShaderConfig shader_cfg)
+        eGPUBuiltinShader shader, eGPUShaderConfig sh_cfg)
 {
 	BLI_assert(shader < GPU_SHADER_BUILTIN_LEN);
-	BLI_assert(shader_cfg < GPU_SHADER_CFG_LEN);
-	GPUShader **sh_p = &builtin_shaders[shader_cfg][shader];
+	BLI_assert(sh_cfg < GPU_SHADER_CFG_LEN);
+	GPUShader **sh_p = &builtin_shaders[sh_cfg][shader];
 
 	if (*sh_p == NULL) {
 		GPUShaderStages stages_legacy = {NULL};
@@ -1199,10 +1219,10 @@ GPUShader *GPU_shader_get_builtin_shader_with_config(
 		}
 
 		/* common case */
-		if (shader_cfg == GPU_SHADER_CFG_DEFAULT) {
+		if (sh_cfg == GPU_SHADER_CFG_DEFAULT) {
 			*sh_p = GPU_shader_create(stages->vert, stages->frag, stages->geom, NULL, stages->defs, __func__);
 		}
-		else if (shader_cfg == GPU_SHADER_CFG_CLIPPED) {
+		else if (sh_cfg == GPU_SHADER_CFG_CLIPPED) {
 			/* Remove eventually, for now ensure support for each shader has been added. */
 			BLI_assert(ELEM(shader,
 			                GPU_SHADER_3D_UNIFORM_COLOR,
@@ -1220,7 +1240,9 @@ GPUShader *GPU_shader_get_builtin_shader_with_config(
 			                GPU_SHADER_DISTANCE_LINES,
 			                GPU_SHADER_INSTANCE_EDGES_VARIYING_COLOR,
 			                GPU_SHADER_3D_FLAT_SELECT_ID,
-			                GPU_SHADER_3D_UNIFORM_SELECT_ID));
+			                GPU_SHADER_3D_UNIFORM_SELECT_ID) ||
+			           ELEM(shader,
+			                GPU_SHADER_3D_FLAT_COLOR));
 			const char *world_clip_lib = datatoc_gpu_shader_cfg_world_clip_lib_glsl;
 			const char *world_clip_def = "#define USE_WORLD_CLIP_PLANES\n";
 			/* In rare cases geometry shaders calculate clipping themselves. */

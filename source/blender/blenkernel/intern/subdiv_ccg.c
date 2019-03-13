@@ -17,7 +17,8 @@
  * All rights reserved.
  */
 
-/** \file \ingroup bke
+/** \file
+ * \ingroup bke
  */
 
 #include "BKE_subdiv_ccg.h"
@@ -38,6 +39,19 @@
 #include "BKE_subdiv_eval.h"
 
 #include "opensubdiv_topology_refiner_capi.h"
+
+/* =============================================================================
+ * Various forward declarations.
+ */
+
+static void subdiv_ccg_average_all_boundaries_and_corners(
+        SubdivCCG *subdiv_ccg,
+        CCGKey *key);
+
+static void subdiv_ccg_average_inner_face_grids(
+        SubdivCCG *subdiv_ccg,
+        CCGKey *key,
+        SubdivCCGFace *face);
 
 /* =============================================================================
  * Generally useful internal helpers.
@@ -162,7 +176,8 @@ typedef struct CCGEvalGridsData {
 	SubdivCCG *subdiv_ccg;
 	Subdiv *subdiv;
 	int *face_ptex_offset;
-	SubdivCCGMask *mask_evaluator;
+	SubdivCCGMaskEvaluator *mask_evaluator;
+	SubdivCCGMaterialFlagsEvaluator *material_flags_evaluator;
 } CCGEvalGridsData;
 
 static void subdiv_ccg_eval_grid_element(
@@ -231,6 +246,10 @@ static void subdiv_ccg_eval_regular_grid(CCGEvalGridsData *data,
 		}
 		/* Assign grid's face. */
 		grid_faces[grid_index] = &faces[face_index];
+		/* Assign material flags. */
+		subdiv_ccg->grid_flag_mats[grid_index] =
+		        data->material_flags_evaluator->eval_material_flags(
+		                data->material_flags_evaluator, face_index);
 	}
 }
 
@@ -246,13 +265,13 @@ static void subdiv_ccg_eval_special_grid(CCGEvalGridsData *data,
 	const SubdivCCGFace *face = &faces[face_index];
 	for (int corner = 0; corner < face->num_grids; corner++) {
 		const int grid_index = face->start_grid_index + corner;
+		const int ptex_face_index =
+		        data->face_ptex_offset[face_index] + corner;
 		unsigned char *grid = (unsigned char *)subdiv_ccg->grids[grid_index];
 		for (int y = 0; y < grid_size; y++) {
 			const float u = 1.0f - ((float)y * grid_size_1_inv);
 			for (int x = 0; x < grid_size; x++) {
 				const float v = 1.0f - ((float)x * grid_size_1_inv);
-				const int ptex_face_index =
-				        data->face_ptex_offset[face_index] + corner;
 				const size_t grid_element_index = (size_t)y * grid_size + x;
 				const size_t grid_element_offset =
 				        grid_element_index * element_size;
@@ -264,6 +283,10 @@ static void subdiv_ccg_eval_special_grid(CCGEvalGridsData *data,
 		}
 		/* Assign grid's face. */
 		grid_faces[grid_index] = &faces[face_index];
+		/* Assign material flags. */
+		subdiv_ccg->grid_flag_mats[grid_index] =
+		        data->material_flags_evaluator->eval_material_flags(
+		                data->material_flags_evaluator, face_index);
 	}
 }
 
@@ -286,7 +309,8 @@ static void subdiv_ccg_eval_grids_task(
 static bool subdiv_ccg_evaluate_grids(
         SubdivCCG *subdiv_ccg,
         Subdiv *subdiv,
-        SubdivCCGMask *mask_evaluator)
+        SubdivCCGMaskEvaluator *mask_evaluator,
+        SubdivCCGMaterialFlagsEvaluator *material_flags_evaluator)
 {
 	OpenSubdiv_TopologyRefiner *topology_refiner = subdiv->topology_refiner;
 	const int num_faces = topology_refiner->getNumFaces(topology_refiner);
@@ -296,6 +320,7 @@ static bool subdiv_ccg_evaluate_grids(
 	data.subdiv = subdiv;
 	data.face_ptex_offset = BKE_subdiv_face_ptex_offset_get(subdiv);
 	data.mask_evaluator = mask_evaluator;
+	data.material_flags_evaluator = material_flags_evaluator;
 	/* Threaded grids evaluation. */
 	ParallelRangeSettings parallel_range_settings;
 	BLI_parallel_range_settings_defaults(&parallel_range_settings);
@@ -590,7 +615,8 @@ static void subdiv_ccg_init_faces_neighborhood(SubdivCCG *subdiv_ccg)
 SubdivCCG *BKE_subdiv_to_ccg(
         Subdiv *subdiv,
         const SubdivToCCGSettings *settings,
-        SubdivCCGMask *mask_evaluator)
+        SubdivCCGMaskEvaluator *mask_evaluator,
+        SubdivCCGMaterialFlagsEvaluator *material_flags_evaluator)
 {
 	BKE_subdiv_stats_begin(&subdiv->stats, SUBDIV_STATS_SUBDIV_TO_CCG);
 	SubdivCCG *subdiv_ccg = MEM_callocN(sizeof(SubdivCCG), "subdiv ccg");
@@ -601,7 +627,9 @@ SubdivCCG *BKE_subdiv_to_ccg(
 	subdiv_ccg_alloc_elements(subdiv_ccg, subdiv);
 	subdiv_ccg_init_faces(subdiv_ccg);
 	subdiv_ccg_init_faces_neighborhood(subdiv_ccg);
-	if (!subdiv_ccg_evaluate_grids(subdiv_ccg, subdiv, mask_evaluator)) {
+	if (!subdiv_ccg_evaluate_grids(
+	            subdiv_ccg, subdiv, mask_evaluator, material_flags_evaluator))
+	{
 		BKE_subdiv_ccg_destroy(subdiv_ccg);
 		BKE_subdiv_stats_end(&subdiv->stats, SUBDIV_STATS_SUBDIV_TO_CCG);
 		return NULL;
@@ -623,14 +651,21 @@ Mesh *BKE_subdiv_to_ccg_mesh(
 		}
 	}
 	BKE_subdiv_stats_end(&subdiv->stats, SUBDIV_STATS_SUBDIV_TO_CCG);
-	SubdivCCGMask mask_evaluator;
+	SubdivCCGMaskEvaluator mask_evaluator;
 	bool has_mask = BKE_subdiv_ccg_mask_init_from_paint(
-        &mask_evaluator, coarse_mesh);
+	        &mask_evaluator, coarse_mesh);
+	SubdivCCGMaterialFlagsEvaluator material_flags_evaluator;
+	BKE_subdiv_ccg_material_flags_init_from_mesh(
+	        &material_flags_evaluator, coarse_mesh);
 	SubdivCCG *subdiv_ccg = BKE_subdiv_to_ccg(
-	    subdiv, settings, has_mask ? &mask_evaluator : NULL);
+	        subdiv,
+	        settings,
+	        has_mask ? &mask_evaluator : NULL,
+	        &material_flags_evaluator);
 	if (has_mask) {
 		mask_evaluator.free(&mask_evaluator);
 	}
+	material_flags_evaluator.free(&material_flags_evaluator);
 	if (subdiv_ccg == NULL) {
 		return NULL;
 	}
@@ -722,12 +757,11 @@ typedef struct RecalcInnerNormalsTLSData {
  *
  * The result is stored in normals storage from TLS. */
 static void subdiv_ccg_recalc_inner_face_normals(
-        RecalcInnerNormalsData *data,
+        SubdivCCG *subdiv_ccg,
+        CCGKey *key,
         RecalcInnerNormalsTLSData *tls,
         const int grid_index)
 {
-	SubdivCCG *subdiv_ccg = data->subdiv_ccg;
-	CCGKey *key = data->key;
 	const int grid_size = subdiv_ccg->grid_size;
 	const int grid_size_1 = grid_size - 1;
 	CCGElem *grid = subdiv_ccg->grids[grid_index];
@@ -760,12 +794,11 @@ static void subdiv_ccg_recalc_inner_face_normals(
 
 /* Average normals at every grid element, using adjacent faces normals. */
 static void subdiv_ccg_average_inner_face_normals(
-        RecalcInnerNormalsData *data,
+        SubdivCCG *subdiv_ccg,
+        CCGKey *key,
         RecalcInnerNormalsTLSData *tls,
         const int grid_index)
 {
-	SubdivCCG *subdiv_ccg = data->subdiv_ccg;
-	CCGKey *key = data->key;
 	const int grid_size = subdiv_ccg->grid_size;
 	const int grid_size_1 = grid_size - 1;
 	CCGElem *grid = subdiv_ccg->grids[grid_index];
@@ -810,8 +843,10 @@ static void subdiv_ccg_recalc_inner_normal_task(
 {
 	RecalcInnerNormalsData *data = userdata_v;
 	RecalcInnerNormalsTLSData *tls = tls_v->userdata_chunk;
-	subdiv_ccg_recalc_inner_face_normals(data, tls, grid_index);
-	subdiv_ccg_average_inner_face_normals(data, tls, grid_index);
+	subdiv_ccg_recalc_inner_face_normals(
+	        data->subdiv_ccg, data->key, tls, grid_index);
+	subdiv_ccg_average_inner_face_normals(
+	        data->subdiv_ccg, data->key, tls, grid_index);
 }
 
 static void subdiv_ccg_recalc_inner_normal_finalize(
@@ -854,6 +889,88 @@ void BKE_subdiv_ccg_recalc_normals(SubdivCCG *subdiv_ccg)
 	BKE_subdiv_ccg_average_grids(subdiv_ccg);
 }
 
+typedef struct RecalcModifiedInnerNormalsData {
+	SubdivCCG *subdiv_ccg;
+	CCGKey *key;
+	SubdivCCGFace **effected_ccg_faces;
+} RecalcModifiedInnerNormalsData;
+
+static void subdiv_ccg_recalc_modified_inner_normal_task(
+        void *__restrict userdata_v,
+        const int face_index,
+        const ParallelRangeTLS *__restrict tls_v)
+{
+	RecalcModifiedInnerNormalsData *data = userdata_v;
+	SubdivCCG *subdiv_ccg = data->subdiv_ccg;
+	CCGKey *key = data->key;
+	RecalcInnerNormalsTLSData *tls = tls_v->userdata_chunk;
+	SubdivCCGFace **faces = data->effected_ccg_faces;
+	SubdivCCGFace *face = faces[face_index];
+	const int num_face_grids = face->num_grids;
+	for (int i = 0; i < num_face_grids; i++) {
+		const int grid_index = face->start_grid_index + i;
+		subdiv_ccg_recalc_inner_face_normals(
+		        data->subdiv_ccg, data->key, tls, grid_index);
+		subdiv_ccg_average_inner_face_normals(
+		        data->subdiv_ccg, data->key, tls, grid_index);
+	}
+	subdiv_ccg_average_inner_face_grids(subdiv_ccg, key, face);
+}
+
+static void subdiv_ccg_recalc_modified_inner_normal_finalize(
+        void *__restrict UNUSED(userdata),
+        void *__restrict tls_v)
+{
+	RecalcInnerNormalsTLSData *tls = tls_v;
+	MEM_SAFE_FREE(tls->face_normals);
+}
+
+static void subdiv_ccg_recalc_modified_inner_grid_normals(
+        SubdivCCG *subdiv_ccg,
+        struct CCGFace **effected_faces,
+        int num_effected_faces)
+{
+	CCGKey key;
+	BKE_subdiv_ccg_key_top_level(&key, subdiv_ccg);
+	RecalcModifiedInnerNormalsData data = {
+		.subdiv_ccg = subdiv_ccg,
+		.key = &key,
+		.effected_ccg_faces = (SubdivCCGFace **)effected_faces,
+	};
+	RecalcInnerNormalsTLSData tls_data = {NULL};
+	ParallelRangeSettings parallel_range_settings;
+	BLI_parallel_range_settings_defaults(&parallel_range_settings);
+	parallel_range_settings.userdata_chunk = &tls_data;
+	parallel_range_settings.userdata_chunk_size = sizeof(tls_data);
+	parallel_range_settings.func_finalize =
+	        subdiv_ccg_recalc_modified_inner_normal_finalize;
+	BLI_task_parallel_range(0, num_effected_faces,
+	                        &data,
+	                        subdiv_ccg_recalc_modified_inner_normal_task,
+	                        &parallel_range_settings);
+}
+
+void BKE_subdiv_ccg_update_normals(SubdivCCG *subdiv_ccg,
+                                   struct CCGFace **effected_faces,
+                                   int num_effected_faces)
+{
+	if (!subdiv_ccg->has_normal) {
+		/* Grids don't have normals, can do early output. */
+		return;
+	}
+	if (num_effected_faces == 0) {
+		/* No faces changed, so nothing to do here. */
+		return;
+	}
+	subdiv_ccg_recalc_modified_inner_grid_normals(
+	        subdiv_ccg, effected_faces, num_effected_faces);
+	/* TODO(sergey): Only average elements which are adjacent to modified
+	 * faces. */
+	CCGKey key;
+	BKE_subdiv_ccg_key_top_level(&key, subdiv_ccg);
+	subdiv_ccg_average_all_boundaries_and_corners(subdiv_ccg, &key);
+}
+
 /* =============================================================================
  * Boundary averaging/stitching.
  */
@@ -890,17 +1007,53 @@ static void average_grid_element(SubdivCCG *subdiv_ccg,
 	}
 }
 
-static void copy_grid_element(SubdivCCG *subdiv_ccg,
-                              CCGKey *key,
-                              CCGElem *destination,
-                              CCGElem *source)
+/* Accumulator to hold data during averaging. */
+typedef struct GridElementAccumulator {
+	float co[3];
+	float no[3];
+	float mask;
+} GridElementAccumulator;
+
+static void element_accumulator_init(GridElementAccumulator *accumulator)
 {
-	copy_v3_v3(CCG_elem_co(key, destination), CCG_elem_co(key, source));
+	zero_v3(accumulator->co);
+	zero_v3(accumulator->no);
+	accumulator->mask = 0.0f;
+}
+
+static void element_accumulator_add(GridElementAccumulator *accumulator,
+                                    const SubdivCCG *subdiv_ccg,
+                                    CCGKey *key,
+                                    /*const*/ CCGElem *grid_element)
+{
+	add_v3_v3(accumulator->co, CCG_elem_co(key, grid_element));
 	if (subdiv_ccg->has_normal) {
-		copy_v3_v3(CCG_elem_no(key, destination), CCG_elem_no(key, source));
+		add_v3_v3(accumulator->no, CCG_elem_no(key, grid_element));
 	}
 	if (subdiv_ccg->has_mask) {
-		*CCG_elem_mask(key, destination) = *CCG_elem_mask(key, source);
+		accumulator->mask += *CCG_elem_mask(key, grid_element);
+	}
+}
+
+static void element_accumulator_mul_fl(GridElementAccumulator *accumulator,
+                                       const float f)
+{
+	mul_v3_fl(accumulator->co, f);
+	mul_v3_fl(accumulator->no, f);
+	accumulator->mask *= f;
+}
+
+static void element_accumulator_copy(SubdivCCG *subdiv_ccg,
+                                     CCGKey *key,
+                                     CCGElem *destination,
+                                     const GridElementAccumulator *accumulator)
+{
+	copy_v3_v3(CCG_elem_co(key, destination), accumulator->co);
+	if (subdiv_ccg->has_normal) {
+		copy_v3_v3(CCG_elem_no(key, destination), accumulator->no);
+	}
+	if (subdiv_ccg->has_mask) {
+		*CCG_elem_mask(key, destination) = accumulator->mask;
 	}
 }
 
@@ -944,10 +1097,15 @@ typedef struct AverageGridsBoundariesData {
 	CCGKey *key;
 } AverageGridsBoundariesData;
 
+typedef struct AverageGridsBoundariesTLSData {
+	GridElementAccumulator *accumulators;
+} AverageGridsBoundariesTLSData;
+
 static void subdiv_ccg_average_grids_boundary(
         SubdivCCG *subdiv_ccg,
         CCGKey *key,
-        SubdivCCGAdjacentEdge *adjacent_edge)
+        SubdivCCGAdjacentEdge *adjacent_edge,
+        AverageGridsBoundariesTLSData *tls)
 {
 	const int num_adjacent_faces = adjacent_edge->num_adjacent_faces;
 	const int grid_size2 = subdiv_ccg->grid_size * 2;
@@ -955,39 +1113,35 @@ static void subdiv_ccg_average_grids_boundary(
 		/* Nothing to average with. */
 		return;
 	}
-	/* Incrementall average result to elements of a first adjacent face.
-	 *
-	 * Arguably, this is less precise than accumulating and then diving once,
-	 * but on another hand this is more stable when coordinates are big. */
-	for (int face_index = 1; face_index < num_adjacent_faces; face_index++) {
-		/* NOTE: We ignore very first and very last elements, they correspond
-		 * to corner vertices, and they can belong to multiple edges.
-		 * The fact, that they can belong to multiple edges means we can't
-		 * safely average them.
-		 * The fact, that they correspond to a corner elements, means they will
-		 * be handled at the upcoming pass over corner elements. */
+	if (tls->accumulators == NULL) {
+		tls->accumulators = MEM_calloc_arrayN(sizeof(GridElementAccumulator),
+		                                      grid_size2,
+		                                      "average accumulators");
+	}
+	else {
 		for (int i = 1; i < grid_size2 - 1; i++) {
-			CCGElem *grid_element_0 =
-			        adjacent_edge->boundary_elements[0][i];
-			CCGElem *grid_element_face_index =
-			        adjacent_edge->boundary_elements[face_index][i];
-			average_grid_element(subdiv_ccg,
-			                     key,
-			                     grid_element_0,
-			                     grid_element_face_index);
+			element_accumulator_init(&tls->accumulators[i]);
 		}
 	}
-	/* Copy averaged value to all the other faces. */
-	for (int face_index = 1; face_index < num_adjacent_faces; face_index++) {
-		for (int i = 1; i < grid_size2 -1; i++) {
-			CCGElem *grid_element_0 =
-			        adjacent_edge->boundary_elements[0][i];
-			CCGElem *grid_element_face_index =
+	for (int face_index = 0; face_index < num_adjacent_faces; face_index++) {
+		for (int i = 1; i < grid_size2 - 1; i++) {
+			CCGElem *grid_element =
 			        adjacent_edge->boundary_elements[face_index][i];
-			copy_grid_element(subdiv_ccg,
-			                  key,
-			                  grid_element_face_index,
-			                  grid_element_0);
+			element_accumulator_add(
+			        &tls->accumulators[i], subdiv_ccg, key, grid_element);
+		}
+	}
+	for (int i = 1; i < grid_size2 -1; i++) {
+		element_accumulator_mul_fl(
+		        &tls->accumulators[i], 1.0f / (float)num_adjacent_faces);
+	}
+	/* Copy averaged value to all the other faces. */
+	for (int face_index = 0; face_index < num_adjacent_faces; face_index++) {
+		for (int i = 1; i < grid_size2 - 1; i++) {
+			CCGElem *grid_element =
+			        adjacent_edge->boundary_elements[face_index][i];
+			element_accumulator_copy(
+			        subdiv_ccg, key, grid_element, &tls->accumulators[i]);
 		}
 	}
 }
@@ -995,14 +1149,23 @@ static void subdiv_ccg_average_grids_boundary(
 static void subdiv_ccg_average_grids_boundaries_task(
         void *__restrict userdata_v,
         const int adjacent_edge_index,
-        const ParallelRangeTLS *__restrict UNUSED(tls_v))
+        const ParallelRangeTLS *__restrict tls_v)
 {
 	AverageGridsBoundariesData *data = userdata_v;
+	AverageGridsBoundariesTLSData *tls = tls_v->userdata_chunk;
 	SubdivCCG *subdiv_ccg = data->subdiv_ccg;
 	CCGKey *key = data->key;
 	SubdivCCGAdjacentEdge *adjacent_edge =
 	        &subdiv_ccg->adjacent_edges[adjacent_edge_index];
-	subdiv_ccg_average_grids_boundary(subdiv_ccg, key, adjacent_edge);
+	subdiv_ccg_average_grids_boundary(subdiv_ccg, key, adjacent_edge, tls);
+}
+
+static void subdiv_ccg_average_grids_boundaries_finalize(
+        void *__restrict UNUSED(userdata),
+        void *__restrict tls_v)
+{
+	AverageGridsBoundariesTLSData *tls = tls_v;
+	MEM_SAFE_FREE(tls->accumulators);
 }
 
 typedef struct AverageGridsCornerData {
@@ -1020,28 +1183,17 @@ static void subdiv_ccg_average_grids_corners(
 		/* Nothing to average with. */
 		return;
 	}
-	/* Incrementall average result to elements of a first adjacent face.
-	 * See comment to the boundary averaging. */
-	for (int face_index = 1; face_index < num_adjacent_faces; face_index++) {
-		CCGElem *grid_element_0 =
-		        adjacent_vertex->corner_elements[0];
-		CCGElem *grid_element_face_index =
-		        adjacent_vertex->corner_elements[face_index];
-		average_grid_element(subdiv_ccg,
-		                     key,
-		                     grid_element_0,
-		                     grid_element_face_index);
+	GridElementAccumulator accumulator;
+	element_accumulator_init(&accumulator);
+	for (int face_index = 0; face_index < num_adjacent_faces; face_index++) {
+		CCGElem *grid_element = adjacent_vertex->corner_elements[face_index];
+		element_accumulator_add(&accumulator, subdiv_ccg, key, grid_element);
 	}
+	element_accumulator_mul_fl(&accumulator, 1.0f / (float)num_adjacent_faces);
 	/* Copy averaged value to all the other faces. */
-	for (int face_index = 1; face_index < num_adjacent_faces; face_index++) {
-		CCGElem *grid_element_0 =
-		        adjacent_vertex->corner_elements[0];
-		CCGElem *grid_element_face_index =
-		        adjacent_vertex->corner_elements[face_index];
-		copy_grid_element(subdiv_ccg,
-		                  key,
-		                  grid_element_face_index,
-		                  grid_element_0);
+	for (int face_index = 0; face_index < num_adjacent_faces; face_index++) {
+		CCGElem *grid_element = adjacent_vertex->corner_elements[face_index];
+		element_accumulator_copy(subdiv_ccg, key, grid_element, &accumulator);
 	}
 }
 
@@ -1058,22 +1210,33 @@ static void subdiv_ccg_average_grids_corners_task(
 	subdiv_ccg_average_grids_corners(subdiv_ccg, key, adjacent_vertex);
 }
 
-static void subdiv_ccg_average_all_boundaries_and_corners(
+static void subdiv_ccg_average_all_boundaries(
         SubdivCCG *subdiv_ccg,
         CCGKey *key)
 {
 	ParallelRangeSettings parallel_range_settings;
 	BLI_parallel_range_settings_defaults(&parallel_range_settings);
-	/* Average grids across coarse edges. */
 	AverageGridsBoundariesData boundaries_data = {
 	        .subdiv_ccg = subdiv_ccg,
 	        .key = key,
 	};
+	AverageGridsBoundariesTLSData tls_data = {NULL};
+	parallel_range_settings.userdata_chunk = &tls_data;
+	parallel_range_settings.userdata_chunk_size = sizeof(tls_data);
+	parallel_range_settings.func_finalize =
+	        subdiv_ccg_average_grids_boundaries_finalize;
 	BLI_task_parallel_range(0, subdiv_ccg->num_adjacent_edges,
 	                        &boundaries_data,
 	                        subdiv_ccg_average_grids_boundaries_task,
 	                        &parallel_range_settings);
-	/* Average grids at coarse vertices. */
+}
+
+static void subdiv_ccg_average_all_corners(
+        SubdivCCG *subdiv_ccg,
+        CCGKey *key)
+{
+	ParallelRangeSettings parallel_range_settings;
+	BLI_parallel_range_settings_defaults(&parallel_range_settings);
 	AverageGridsCornerData corner_data = {
 	        .subdiv_ccg = subdiv_ccg,
 	        .key = key,
@@ -1082,6 +1245,14 @@ static void subdiv_ccg_average_all_boundaries_and_corners(
 	                        &corner_data,
 	                        subdiv_ccg_average_grids_corners_task,
 	                        &parallel_range_settings);
+}
+
+static void subdiv_ccg_average_all_boundaries_and_corners(
+        SubdivCCG *subdiv_ccg,
+        CCGKey *key)
+{
+	subdiv_ccg_average_all_boundaries(subdiv_ccg, key);
+	subdiv_ccg_average_all_corners(subdiv_ccg, key);
 }
 
 void BKE_subdiv_ccg_average_grids(SubdivCCG *subdiv_ccg)

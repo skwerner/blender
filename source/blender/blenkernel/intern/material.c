@@ -17,7 +17,8 @@
  * All rights reserved.
  */
 
-/** \file \ingroup bke
+/** \file
+ * \ingroup bke
  */
 
 
@@ -111,6 +112,7 @@ void BKE_material_init_gpencil_settings(Material *ma)
 		MaterialGPencilStyle *gp_style = ma->gp_style;
 		/* set basic settings */
 		gp_style->stroke_rgba[3] = 1.0f;
+		gp_style->fill_rgba[3] = 1.0f;
 		gp_style->pattern_gridsize = 0.1f;
 		gp_style->gradient_radius = 0.5f;
 		ARRAY_SET_ITEMS(gp_style->mix_rgba, 1.0f, 1.0f, 1.0f, 0.2f);
@@ -120,13 +122,12 @@ void BKE_material_init_gpencil_settings(Material *ma)
 		gp_style->texture_pixsize = 100.0f;
 
 		gp_style->flag |= GP_STYLE_STROKE_SHOW;
-		gp_style->flag |= GP_STYLE_FILL_SHOW;
 	}
 }
 
 void BKE_material_init(Material *ma)
 {
-	BLI_assert(MEMCMP_STRUCT_OFS_IS_ZERO(ma, id));
+	BLI_assert(MEMCMP_STRUCT_AFTER_IS_ZERO(ma, id));
 
 	ma->r = ma->g = ma->b = 0.8;
 	ma->specr = ma->specg = ma->specb = 1.0;
@@ -135,7 +136,6 @@ void BKE_material_init(Material *ma)
 
 	ma->roughness = 0.25f;
 
-	ma->pr_lamp = 3;         /* two lamps, is bits */
 	ma->pr_type = MA_SPHERE;
 
 	ma->preview = NULL;
@@ -645,7 +645,7 @@ void test_all_objects_materials(Main *bmain, ID *id)
 	}
 
 	BKE_main_lock(bmain);
-	for (ob = bmain->object.first; ob; ob = ob->id.next) {
+	for (ob = bmain->objects.first; ob; ob = ob->id.next) {
 		if (ob->data == id) {
 			BKE_material_resize_object(bmain, ob, *totcol, false);
 		}
@@ -972,7 +972,7 @@ bool BKE_object_material_slot_remove(Main *bmain, Object *ob)
 
 	actcol = ob->actcol;
 
-	for (Object *obt = bmain->object.first; obt; obt = obt->id.next) {
+	for (Object *obt = bmain->objects.first; obt; obt = obt->id.next) {
 		if (obt->data == ob->data) {
 			/* Can happen when object material lists are used, see: T52953 */
 			if (actcol > obt->totcol) {
@@ -1038,7 +1038,7 @@ static int count_texture_nodes_recursive(bNodeTree *nodetree)
 		if (node->typeinfo->nclass == NODE_CLASS_TEXTURE && node->typeinfo->type == SH_NODE_TEX_IMAGE && node->id) {
 			tex_nodes++;
 		}
-		else if (node->type == NODE_GROUP) {
+		else if (node->type == NODE_GROUP && node->id) {
 			/* recurse into the node group and see if it contains any textures */
 			tex_nodes += count_texture_nodes_recursive((bNodeTree *)node->id);
 		}
@@ -1073,7 +1073,7 @@ static void fill_texpaint_slots_recursive(bNodeTree *nodetree, bNode *active_nod
 			}
 			(*index)++;
 		}
-		else if (node->type == NODE_GROUP) {
+		else if (node->type == NODE_GROUP && node->id) {
 			/* recurse into the node group and see if it contains any textures */
 			fill_texpaint_slots_recursive((bNodeTree *)node->id, active_node, ma, index);
 		}

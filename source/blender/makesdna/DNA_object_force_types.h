@@ -17,7 +17,8 @@
  * All rights reserved.
  */
 
-/** \file \ingroup DNA
+/** \file
+ * \ingroup DNA
  */
 
 #ifndef __DNA_OBJECT_FORCE_TYPES_H__
@@ -156,16 +157,18 @@ typedef struct PartDeflect {
 	/** Runtime only : end of the curve. */
 	float drawvec2[4];
 	/** Runtime only. */
-	float drawvec_falloff_min[3], pad1;
+	float drawvec_falloff_min[3];
+	char _pad1[4];
 	/** Runtime only. */
-	float drawvec_falloff_max[3], pad2;
+	float drawvec_falloff_max[3];
+	char _pad2[4];
 
 	/** Force source object. */
 	struct Object *f_source;
 
 	/** Friction of cloth collisions. */
 	float pdef_cfrict;
-	float pad;
+	char _pad[4];
 } PartDeflect;
 
 typedef struct EffectorWeights {
@@ -176,7 +179,7 @@ typedef struct EffectorWeights {
 	float weight[14];
 	float global_gravity;
 	short flag, rt[3];
-	int pad;
+	char _pad[4];
 } EffectorWeights;
 
 /* EffectorWeights->flag */
@@ -255,7 +258,7 @@ typedef struct PointCache {
 	int last_exact;
 	/** Used for editing cache - what is the last baked frame. */
 	int last_valid;
-	int pad;
+	char _pad[4];
 
 	/* for external cache files */
 	/** Number of cached points. */
@@ -269,11 +272,15 @@ typedef struct PointCache {
 	char info[64];
 	/** File path, 1024 = FILE_MAX. */
 	char path[1024];
+
 	/**
 	 * Array of length endframe-startframe+1 with flags to indicate cached frames.
 	 * Can be later used for other per frame flags too if needed.
 	 */
 	char *cached_frames;
+	int cached_frames_len;
+	char _pad1[4];
+
 	struct ListBase mem_cache;
 
 	struct PTCacheEdit *edit;
@@ -301,7 +308,7 @@ typedef struct SoftBody {
 	struct BodyPoint *bpoint;
 	/** Not saved in file. */
 	struct BodySpring *bspring;
-	char   pad;
+	char   _pad;
 	char   msg_lock;
 	short  msg_value;
 
@@ -388,7 +395,7 @@ typedef struct SoftBody {
 		plastic, springpreload
 		;
 
-	/** Scratch pad/cache on live time not saved in file. */
+	/** Scratchpad/cache on live time not saved in file. */
 	struct SBScratch *scratch;
 	float shearstiff;
 	float inpush;

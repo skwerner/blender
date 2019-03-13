@@ -14,7 +14,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-/** \file \ingroup RNA
+/** \file
+ * \ingroup RNA
  */
 
 #include <stdlib.h>
@@ -654,7 +655,7 @@ static void rna_Key_update_data(Main *bmain, Scene *UNUSED(scene), PointerRNA *p
 	Key *key = ptr->id.data;
 	Object *ob;
 
-	for (ob = bmain->object.first; ob; ob = ob->id.next) {
+	for (ob = bmain->objects.first; ob; ob = ob->id.next) {
 		if (BKE_key_from_object(ob) == key) {
 			DEG_id_tag_update(&ob->id, ID_RECALC_GEOMETRY);
 			WM_main_add_notifier(NC_OBJECT | ND_MODIFIER, ob);
@@ -893,8 +894,8 @@ static void rna_def_keyblock(BlenderRNA *brna)
 
 	prop = RNA_def_property(srna, "mute", PROP_BOOLEAN, PROP_NONE);
 	RNA_def_property_boolean_sdna(prop, NULL, "flag", KEYBLOCK_MUTE);
-	RNA_def_property_ui_text(prop, "Mute", "Mute this shape key");
-	RNA_def_property_ui_icon(prop, ICON_HIDE_OFF, -1);
+	RNA_def_property_ui_text(prop, "Mute", "Toggle this shape key");
+	RNA_def_property_ui_icon(prop, ICON_CHECKBOX_HLT, -1);
 	RNA_def_property_update(prop, 0, "rna_Key_update_data");
 
 	prop = RNA_def_property(srna, "slider_min", PROP_FLOAT, PROP_NONE);

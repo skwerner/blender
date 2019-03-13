@@ -14,7 +14,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-/** \file \ingroup collada
+/** \file
+ * \ingroup collada
  */
 
 #ifndef __COLLADA_UTILS_H__
@@ -38,7 +39,7 @@ extern "C" {
 #include "DNA_anim_types.h"
 #include "DNA_constraint_types.h"
 #include "DNA_mesh_types.h"
-#include "DNA_lamp_types.h"
+#include "DNA_light_types.h"
 #include "DNA_camera_types.h"
 
 #include "DNA_customdata_types.h"
@@ -89,13 +90,13 @@ inline bAction *bc_getSceneObjectAction(Object *ob)
 	return (ob->adt && ob->adt->action) ? ob->adt->action : NULL;
 }
 
-/* Returns Lamp Action or NULL */
-inline bAction *bc_getSceneLampAction(Object *ob)
+/* Returns Light Action or NULL */
+inline bAction *bc_getSceneLightAction(Object *ob)
 {
 	if (ob->type != OB_LAMP)
 		return NULL;
 
-	Lamp *lamp = (Lamp *)ob->data;
+	Light *lamp = (Light *)ob->data;
 	return (lamp->adt && lamp->adt->action) ? lamp->adt->action : NULL;
 }
 
@@ -309,8 +310,8 @@ void bc_add_default_shader(bContext *C, Material *ma);
 bNode *bc_get_master_shader(Material *ma);
 COLLADASW::ColorOrTexture bc_get_cot(float r, float g, float b, float a);
 COLLADASW::ColorOrTexture bc_get_base_color(bNode *shader);
+bool bc_get_reflectivity(bNode *shader, double &reflectivity);
+double bc_get_reflectivity(Material *ma);
 COLLADASW::ColorOrTexture bc_get_base_color(Material *ma);
-COLLADASW::ColorOrTexture bc_get_specular_color(bNode *shader);
-COLLADASW::ColorOrTexture bc_get_specular_color(Material *ma, bool use_fallback);
 
 #endif

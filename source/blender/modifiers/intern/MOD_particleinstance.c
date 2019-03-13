@@ -17,19 +17,21 @@
  * All rights reserved.
  */
 
-/** \file \ingroup modifiers
+/** \file
+ * \ingroup modifiers
  */
 
-#include "DNA_mesh_types.h"
-#include "DNA_meshdata_types.h"
-
 #include "MEM_guardedalloc.h"
+
+#include "BLI_utildefines.h"
 
 #include "BLI_math.h"
 #include "BLI_listbase.h"
 #include "BLI_rand.h"
 #include "BLI_string.h"
-#include "BLI_utildefines.h"
+
+#include "DNA_mesh_types.h"
+#include "DNA_meshdata_types.h"
 
 #include "BKE_effect.h"
 #include "BKE_lattice.h"
@@ -61,19 +63,15 @@ static void initData(ModifierData *md)
 	STRNCPY(pimd->value_layer_name, "");
 }
 
-static CustomDataMask requiredDataMask(Object *UNUSED(ob), ModifierData *md)
+static void requiredDataMask(Object *UNUSED(ob), ModifierData *md, CustomData_MeshMasks *r_cddata_masks)
 {
 	ParticleInstanceModifierData *pimd = (ParticleInstanceModifierData *)md;
-	CustomDataMask dataMask = 0;
 
 	if (pimd->index_layer_name[0] != '\0' ||
 	    pimd->value_layer_name[0] != '\0')
 	{
-		dataMask |= CD_MASK_MLOOPCOL;
+		r_cddata_masks->lmask |= CD_MASK_MLOOPCOL;
 	}
-
-	return dataMask;
-
 }
 
 static bool isDisabled(const struct Scene *scene, ModifierData *md, bool useRenderParams)

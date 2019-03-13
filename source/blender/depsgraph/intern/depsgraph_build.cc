@@ -17,7 +17,8 @@
  * All rights reserved.
  */
 
-/** \file \ingroup depsgraph
+/** \file
+ * \ingroup depsgraph
  *
  * Methods for constructing depsgraph.
  */
@@ -190,6 +191,16 @@ void DEG_add_generic_id_relation(struct DepsNodeHandle *node_handle,
 	                                                   description);
 }
 
+void DEG_add_modifier_to_transform_relation(
+        struct DepsNodeHandle *node_handle,
+        const char *description)
+{
+	DEG::DepsNodeHandle *deg_node_handle = get_node_handle(node_handle);
+	deg_node_handle->builder->add_modifier_to_transform_relation(
+	        deg_node_handle,
+	        description);
+}
+
 void DEG_add_special_eval_flag(struct DepsNodeHandle *node_handle,
                                ID *id,
                                uint32_t flag)
@@ -200,10 +211,12 @@ void DEG_add_special_eval_flag(struct DepsNodeHandle *node_handle,
 
 void DEG_add_customdata_mask(struct DepsNodeHandle *node_handle,
                              struct Object *object,
-                             uint64_t mask)
+                             const CustomData_MeshMasks *masks)
 {
 	DEG::DepsNodeHandle *deg_node_handle = get_node_handle(node_handle);
-	deg_node_handle->builder->add_customdata_mask(object, mask);
+	deg_node_handle->builder->add_customdata_mask(
+	            object,
+	            DEG::DEGCustomDataMeshMasks(masks));
 }
 
 struct ID *DEG_get_id_from_handle(struct DepsNodeHandle *node_handle)
@@ -231,7 +244,7 @@ void DEG_graph_build_from_view_layer(Depsgraph *graph,
                                       ViewLayer *view_layer)
 {
 	double start_time = 0.0;
-	if (G.debug & G_DEBUG_DEPSGRAPH_BUILD) {
+	if (G.debug & (G_DEBUG_DEPSGRAPH_BUILD | G_DEBUG_DEPSGRAPH_TIME)) {
 		start_time = PIL_check_seconds_timer();
 	}
 	DEG::Depsgraph *deg_graph = reinterpret_cast<DEG::Depsgraph *>(graph);
@@ -275,7 +288,7 @@ void DEG_graph_build_from_view_layer(Depsgraph *graph,
 	/* Relations are up to date. */
 	deg_graph->need_update = false;
 	/* Finish statistics. */
-	if (G.debug & G_DEBUG_DEPSGRAPH_BUILD) {
+	if (G.debug & (G_DEBUG_DEPSGRAPH_BUILD | G_DEBUG_DEPSGRAPH_TIME)) {
 		printf("Depsgraph built in %f seconds.\n",
 		       PIL_check_seconds_timer() - start_time);
 	}
@@ -317,7 +330,7 @@ void DEG_graph_relations_update(Depsgraph *graph,
 void DEG_relations_tag_update(Main *bmain)
 {
 	DEG_GLOBAL_DEBUG_PRINTF(TAG, "%s: Tagging relations for update.\n", __func__);
-	LISTBASE_FOREACH (Scene *, scene, &bmain->scene) {
+	LISTBASE_FOREACH (Scene *, scene, &bmain->scenes) {
 		LISTBASE_FOREACH (ViewLayer *, view_layer, &scene->view_layers) {
 			Depsgraph *depsgraph =
 			        (Depsgraph *)BKE_scene_get_depsgraph(scene,

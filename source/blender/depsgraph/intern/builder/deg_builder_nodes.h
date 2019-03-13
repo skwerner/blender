@@ -17,18 +17,19 @@
  * All rights reserved.
  */
 
-/** \file \ingroup depsgraph
+/** \file
+ * \ingroup depsgraph
  */
 
 #pragma once
 
+#include "intern/builder/deg_builder.h"
 #include "intern/builder/deg_builder_map.h"
 #include "intern/depsgraph_type.h"
-
-#include "DEG_depsgraph.h"
-
 #include "intern/node/deg_node_id.h"
 #include "intern/node/deg_node_operation.h"
+
+#include "DEG_depsgraph.h"
 
 struct Base;
 struct CacheFile;
@@ -39,8 +40,8 @@ struct GHash;
 struct ID;
 struct Image;
 struct Key;
-struct Lamp;
 struct LayerCollection;
+struct Light;
 struct LightProbe;
 struct ListBase;
 struct MTex;
@@ -67,13 +68,14 @@ struct PropertyRNA;
 namespace DEG {
 
 struct ComponentNode;
-struct Node;
 struct Depsgraph;
 struct IDNode;
+struct Node;
 struct OperationNode;
 struct TimeSourceNode;
 
-struct DepsgraphNodeBuilder {
+class DepsgraphNodeBuilder : public DepsgraphBuilder {
+public:
 	DepsgraphNodeBuilder(Main *bmain, Depsgraph *graph);
 	~DepsgraphNodeBuilder();
 
@@ -171,7 +173,7 @@ struct DepsgraphNodeBuilder {
 	void build_object_data_geometry(Object *object, bool is_object_visible);
 	void build_object_data_geometry_datablock(ID *obdata,
 	                                          bool is_object_visible);
-	void build_object_data_lamp(Object *object);
+	void build_object_data_light(Object *object);
 	void build_object_data_lightprobe(Object *object);
 	void build_object_data_speaker(Object *object);
 	void build_object_transform(Object *object);
@@ -186,10 +188,12 @@ struct DepsgraphNodeBuilder {
 	void build_particle_settings(ParticleSettings *part);
 	void build_animdata(ID *id);
 	void build_animdata_nlastrip_targets(ListBase *strips);
+	void build_animation_images(ID *id);
 	void build_action(bAction *action);
 	void build_driver(ID *id, FCurve *fcurve, int driver_index);
 	void build_driver_variables(ID *id, FCurve *fcurve);
 	void build_driver_id_property(ID *id, const char *rna_path);
+	void build_parameters(ID *id);
 	void build_ik_pose(Object *object,
 	                   bPoseChannel *pchan,
 	                   bConstraint *con);
@@ -201,7 +205,7 @@ struct DepsgraphNodeBuilder {
 	void build_armature(bArmature *armature);
 	void build_shapekeys(Key *key);
 	void build_camera(Camera *camera);
-	void build_lamp(Lamp *lamp);
+	void build_light(Light *lamp);
 	void build_nodetree(bNodeTree *ntree);
 	void build_material(Material *ma);
 	void build_texture(Tex *tex);
@@ -226,7 +230,7 @@ struct DepsgraphNodeBuilder {
 		/* Special evaluation flag mask from the previous depsgraph. */
 		uint32_t previous_eval_flags;
 		/* Mesh CustomData mask from the previous depsgraph. */
-		uint64_t previous_customdata_mask;
+		DEGCustomDataMeshMasks previous_customdata_masks;
 	};
 
 protected:
@@ -237,7 +241,7 @@ protected:
 		ID *id_orig;
 		NodeType component_type;
 		OperationCode opcode;
-		const char *name;
+		string name;
 		int name_tag;
 	};
 	vector<SavedEntryTag> saved_entry_tags_;
@@ -255,10 +259,6 @@ protected:
 	                            ID **idpoin,
 	                            bool is_reference,
 	                            void *user_data);
-
-	/* State which never changes, same for the whole builder time. */
-	Main *bmain_;
-	Depsgraph *graph_;
 
 	/* State which demotes currently built entities. */
 	Scene *scene_;

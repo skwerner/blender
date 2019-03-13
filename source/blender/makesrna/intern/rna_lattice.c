@@ -14,7 +14,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-/** \file \ingroup RNA
+/** \file
+ * \ingroup RNA
  */
 
 #include <stdlib.h>
@@ -129,7 +130,7 @@ static void rna_Lattice_update_size(Main *bmain, Scene *scene, PointerRNA *ptr)
 	neww = (lt->opntsw > 0) ? lt->opntsw : lt->pntsw;
 
 	/* BKE_lattice_resize needs an object, any object will have the same result */
-	for (ob = bmain->object.first; ob; ob = ob->id.next) {
+	for (ob = bmain->objects.first; ob; ob = ob->id.next) {
 		if (ob->data == lt) {
 			BKE_lattice_resize(lt, newu, newv, neww, ob);
 			if (lt->editlatt)

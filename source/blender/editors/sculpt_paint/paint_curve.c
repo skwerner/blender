@@ -14,7 +14,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-/** \file \ingroup edsculpt
+/** \file
+ * \ingroup edsculpt
  */
 
 #include <string.h>
@@ -164,6 +165,8 @@ static int paintcurve_new_exec(bContext *C, wmOperator *UNUSED(op))
 	if (p && p->brush) {
 		p->brush->paint_curve = BKE_paint_curve_add(bmain, "PaintCurve");
 	}
+
+	WM_event_add_notifier(C, NC_PAINTCURVE | NA_ADDED, NULL);
 
 	return OPERATOR_FINISHED;
 }

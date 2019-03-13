@@ -19,8 +19,9 @@
 #ifndef __BKE_BLENDER_H__
 #define __BKE_BLENDER_H__
 
-/** \file \ingroup bke
- *  \brief Blender util stuff
+/** \file
+ * \ingroup bke
+ * \brief Blender util stuff
  */
 
 #ifdef __cplusplus
@@ -46,10 +47,6 @@ void BKE_blender_userdef_app_template_data_set(struct UserDef *userdef);
 void BKE_blender_userdef_app_template_data_set_and_free(struct UserDef *userdef);
 
 void BKE_blender_userdef_data_free(struct UserDef *userdef, bool clear_fonts);
-
-/* set this callback when a UI is running */
-void BKE_blender_callback_test_break_set(void (*func)(void));
-int  BKE_blender_test_break(void);
 
 /* Blenders' own atexit (avoids leaking) */
 void BKE_blender_atexit_register(void (*func)(void *user_data), void *user_data);

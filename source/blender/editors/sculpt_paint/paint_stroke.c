@@ -17,7 +17,8 @@
  * All rights reserved.
  */
 
-/** \file \ingroup edsculpt
+/** \file
+ * \ingroup edsculpt
  */
 
 
@@ -1362,6 +1363,11 @@ void *paint_stroke_mode_data(struct PaintStroke *stroke)
 bool paint_stroke_flipped(struct PaintStroke *stroke)
 {
 	return stroke->pen_flip;
+}
+
+bool paint_stroke_inverted(struct PaintStroke *stroke)
+{
+	return stroke->stroke_mode == BRUSH_STROKE_INVERT;
 }
 
 float paint_stroke_distance_get(struct PaintStroke *stroke)

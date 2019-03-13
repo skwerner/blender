@@ -16,7 +16,8 @@
  * Copyright 2016, Blender Foundation.
  */
 
-/** \file \ingroup draw
+/** \file
+ * \ingroup draw
  */
 
 #include "draw_manager.h"
@@ -43,8 +44,6 @@ void DRW_select_load_id(uint id)
 #endif
 
 #define DEBUG_UBO_BINDING
-
-struct GPUUniformBuffer *view_ubo;
 
 /* -------------------------------------------------------------------- */
 /** \name Draw State (DRW_state)
@@ -98,15 +97,8 @@ void drw_state_set(DRWState state)
 
 	/* Raster Discard */
 	{
-		if (CHANGED_ANY(DRW_STATE_WRITE_DEPTH | DRW_STATE_WRITE_COLOR |
-		                DRW_STATE_WRITE_STENCIL |
-		                DRW_STATE_WRITE_STENCIL_SHADOW_PASS |
-		                DRW_STATE_WRITE_STENCIL_SHADOW_FAIL))
-		{
-			if ((state & (DRW_STATE_WRITE_DEPTH | DRW_STATE_WRITE_COLOR |
-			              DRW_STATE_WRITE_STENCIL | DRW_STATE_WRITE_STENCIL_SHADOW_PASS |
-			              DRW_STATE_WRITE_STENCIL_SHADOW_FAIL)) != 0)
-			{
+		if (CHANGED_ANY(DRW_STATE_RASTERIZER_ENABLED)) {
+			if ((state & DRW_STATE_RASTERIZER_ENABLED) != 0) {
 				glDisable(GL_RASTERIZER_DISCARD);
 			}
 			else {
@@ -1282,9 +1274,6 @@ static void draw_shgroup(DRWShadingGroup *shgroup, DRWState pass_state)
 	if (use_tfeedback) {
 		GPU_shader_transform_feedback_disable(shgroup->shader);
 	}
-
-	/* TODO: remove, (currently causes alpha issue with sculpt, need to investigate) */
-	DRW_state_reset();
 }
 
 static void drw_update_view(void)
@@ -1293,7 +1282,7 @@ static void drw_update_view(void)
 		DST.state_cache_id++;
 		DST.dirty_mat = false;
 
-		DRW_uniformbuffer_update(view_ubo, &DST.view_data);
+		DRW_uniformbuffer_update(G_draw.view_ubo, &DST.view_data);
 
 		/* Catch integer wrap around. */
 		if (UNLIKELY(DST.state_cache_id == 0)) {
@@ -1326,6 +1315,10 @@ static void drw_draw_pass_ex(DRWPass *pass, DRWShadingGroup *start_group, DRWSha
 
 	drw_update_view();
 
+	/* GPU_framebuffer_clear calls can change the state outside the DRW module.
+	 * Force reset the affected states to avoid problems later. */
+	drw_state_set(DST.state | DRW_STATE_WRITE_DEPTH | DRW_STATE_WRITE_COLOR);
+
 	drw_state_set(pass->state);
 
 	DRW_stats_query_start(pass->name);
@@ -1357,6 +1350,13 @@ static void drw_draw_pass_ex(DRWPass *pass, DRWShadingGroup *start_group, DRWSha
 	if (DST.shader) {
 		GPU_shader_unbind();
 		DST.shader = NULL;
+	}
+
+	/* HACK: Rasterized discard can affect clear commands which are not
+	 * part of a DRWPass (as of now). So disable rasterized discard here
+	 * if it has been enabled. */
+	if ((DST.state & DRW_STATE_RASTERIZER_ENABLED) == 0) {
+		drw_state_set((DST.state & ~DRW_STATE_RASTERIZER_ENABLED) | DRW_STATE_DEFAULT);
 	}
 
 	DRW_stats_query_end();

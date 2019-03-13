@@ -17,15 +17,16 @@
  * All rights reserved.
  */
 
-/** \file \ingroup modifiers
+/** \file
+ * \ingroup modifiers
  */
+
+#include "BLI_utildefines.h"
 
 #include "BLI_math.h"
 
 #include "DNA_mesh_types.h"
 #include "DNA_key_types.h"
-
-#include "BLI_utildefines.h"
 
 #include "BKE_key.h"
 #include "BKE_particle.h"

@@ -17,7 +17,8 @@
  * All rights reserved.
  */
 
-/** \file \ingroup DNA
+/** \file
+ * \ingroup DNA
  */
 
 #ifndef __DNA_BRUSH_TYPES_H__
@@ -43,7 +44,8 @@ typedef struct BrushClone {
 	/** Offset of clone image from canvas. */
 	float offset[2];
 	/** Transparency for drawing of clone image. */
-	float alpha, pad;
+	float alpha;
+	char _pad[4];
 } BrushClone;
 
 
@@ -70,8 +72,7 @@ typedef struct BrushGpencilSettings {
 	short draw_smoothlvl;
 	/** Number of times to subdivide new strokes. */
 	short draw_subdivide;
-	/** Internal grease pencil drawing flags. */
-	short flag;
+	short _pad;
 
 	/** Number of times to apply thickness smooth factor to new strokes. */
 	short thick_smoothlvl;
@@ -82,7 +83,7 @@ typedef struct BrushGpencilSettings {
 	float fill_threshold;
 	/** Number of pixel to consider the leak is too small (x 2). */
 	short fill_leak;
-	char pad_1[6];
+	char _pad1[6];
 
 	/** Number of simplify steps. */
 	int   fill_simplylvl;
@@ -105,7 +106,8 @@ typedef struct BrushGpencilSettings {
 	float era_strength_f;
 	/** Factor to apply to thickness for soft eraser. */
 	float era_thickness_f;
-	char pad_2[4];
+	/** Internal grease pencil drawing flags. */
+	int flag;
 
 	struct CurveMapping *curve_sensitivity;
 	struct CurveMapping *curve_strength;
@@ -146,6 +148,8 @@ typedef enum eGPDbrush_Flag {
 	GP_BRUSH_DISSABLE_LASSO = (1 << 14),
 	/* Do not erase strokes oLcluded */
 	GP_BRUSH_OCCLUDE_ERASER = (1 << 15),
+	/* Post process trim stroke */
+	GP_BRUSH_TRIM_STROKE = (1 << 16),
 } eGPDbrush_Flag;
 
 /* BrushGpencilSettings->gp_fill_draw_mode */
@@ -246,7 +250,7 @@ typedef struct Brush {
 	/** Source for fill tool color gradient application. */
 	char gradient_fill_mode;
 
-	char pad;
+	char _pad;
 	/** Projection shape (sphere, circle). */
 	char falloff_shape;
 	float falloff_angle;
@@ -318,7 +322,7 @@ typedef struct Palette {
 	ListBase colors;
 
 	int active_color;
-	int pad;
+	char _pad[4];
 } Palette;
 
 typedef struct PaintCurvePoint {
@@ -352,13 +356,13 @@ typedef enum eBrushGradientSourceFill {
 /* Brush.flag */
 typedef enum eBrushFlags {
 	BRUSH_AIRBRUSH = (1 << 0),
-	BRUSH_FLAG_DEPRECATED_1 = (1 << 1),
+	BRUSH_FLAG_DEPRECATED_1 = (1 << 1),  /* cleared */
 	BRUSH_ALPHA_PRESSURE = (1 << 2),
 	BRUSH_SIZE_PRESSURE = (1 << 3),
 	BRUSH_JITTER_PRESSURE = (1 << 4),
 	BRUSH_SPACING_PRESSURE = (1 << 5),
-	BRUSH_FLAG_DEPRECATED_2 = (1 << 6),
-	BRUSH_FLAG_DEPRECATED_3 = (1 << 7),
+	BRUSH_FLAG_DEPRECATED_6 = (1 << 6),  /* cleared */
+	BRUSH_FLAG_DEPRECATED_7 = (1 << 7),  /* cleared */
 	BRUSH_ANCHORED = (1 << 8),
 	BRUSH_DIR_IN = (1 << 9),
 	BRUSH_SPACE = (1 << 10),
@@ -368,7 +372,7 @@ typedef enum eBrushFlags {
 	BRUSH_LOCK_ALPHA = (1 << 14),
 	BRUSH_ORIGINAL_NORMAL = (1 << 15),
 	BRUSH_OFFSET_PRESSURE = (1 << 16),
-	BRUSH_FLAG_DEPRECATED_4 = (1 << 17),
+	BRUSH_FLAG_DEPRECATED_17 = (1 << 17),  /* cleared */
 	BRUSH_SPACE_ATTEN = (1 << 18),
 	BRUSH_ADAPTIVE_SPACE = (1 << 19),
 	BRUSH_LOCK_SIZE = (1 << 20),

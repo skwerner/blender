@@ -17,7 +17,8 @@
  * This is a new part of Blender
  */
 
-/** \file \ingroup edarmature
+/** \file
+ * \ingroup edarmature
  */
 
 #include <string.h>
@@ -159,7 +160,7 @@ static Object *get_poselib_object(bContext *C)
 
 	sa = CTX_wm_area(C);
 
-	if (sa && (sa->spacetype == SPACE_BUTS))
+	if (sa && (sa->spacetype == SPACE_PROPERTIES))
 		return ED_object_context(C);
 	else
 		return BKE_object_pose_armature_get(CTX_data_active_object(C));

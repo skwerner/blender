@@ -17,7 +17,8 @@
  * All rights reserved.
  */
 
-/** \file \ingroup edinterface
+/** \file
+ * \ingroup edinterface
  */
 
 #include <string.h>
@@ -68,31 +69,6 @@
 #include "ED_screen.h"
 #include "BKE_main.h"
 #include "BLI_ghash.h"
-
-/* Reset Default Theme ------------------------ */
-
-static int reset_default_theme_exec(bContext *C, wmOperator *UNUSED(op))
-{
-	ui_theme_init_default();
-	ui_style_init_default();
-	WM_event_add_notifier(C, NC_WINDOW, NULL);
-
-	return OPERATOR_FINISHED;
-}
-
-static void UI_OT_reset_default_theme(wmOperatorType *ot)
-{
-	/* identifiers */
-	ot->name = "Reset to Default Theme";
-	ot->idname = "UI_OT_reset_default_theme";
-	ot->description = "Reset to the default theme colors";
-
-	/* callbacks */
-	ot->exec = reset_default_theme_exec;
-
-	/* flags */
-	ot->flag = OPTYPE_REGISTER;
-}
 
 /* Copy Data Path Operator ------------------------ */
 
@@ -1157,7 +1133,7 @@ static int editsource_text_edit(
 	/* Developers may wish to copy-paste to an external editor. */
 	printf("%s:%d\n", filepath, line);
 
-	for (text = bmain->text.first; text; text = text->id.next) {
+	for (text = bmain->texts.first; text; text = text->id.next) {
 		if (text->name && BLI_path_cmp(text->name, filepath) == 0) {
 			break;
 		}
@@ -1602,7 +1578,6 @@ static void UI_OT_drop_color(wmOperatorType *ot)
 
 void ED_operatortypes_ui(void)
 {
-	WM_operatortype_append(UI_OT_reset_default_theme);
 	WM_operatortype_append(UI_OT_copy_data_path_button);
 	WM_operatortype_append(UI_OT_copy_python_command_button);
 	WM_operatortype_append(UI_OT_reset_default_button);

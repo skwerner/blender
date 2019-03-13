@@ -644,6 +644,7 @@ class CyclesRenderSettings(bpy.types.PropertyGroup):
         description="Scanline \"exposure\" time for the rolling shutter effect",
         default=0.1,
         min=0.0, max=1.0,
+        subtype='FACTOR',
     )
 
     texture_limit: EnumProperty(
@@ -721,11 +722,6 @@ class CyclesRenderSettings(bpy.types.PropertyGroup):
         update=_devices_update_callback
     )
 
-    debug_opencl_kernel_single_program: BoolProperty(
-        name="Single Program",
-        default=True,
-        update=_devices_update_callback,
-    )
     del _devices_update_callback
 
     debug_use_opencl_debug: BoolProperty(name="Debug OpenCL", default=False)
@@ -1343,6 +1339,7 @@ class CyclesRenderLayerSettings(bpy.types.PropertyGroup):
         description="Size of the image area that's used to denoise a pixel (higher values are smoother, but might lose detail and are slower)",
         min=1, max=25,
         default=8,
+        subtype="PIXEL",
     )
     denoising_relative_pca: BoolProperty(
         name="Relative filter",
@@ -1354,6 +1351,12 @@ class CyclesRenderLayerSettings(bpy.types.PropertyGroup):
         description="Store the denoising feature passes and the noisy image",
         default=False,
         update=update_render_passes,
+    )
+    denoising_neighbor_frames: IntProperty(
+        name="Neighbor Frames",
+        description="Number of neighboring frames to use for denoising animations (more frames produce smoother results at the cost of performance)",
+        min=0, max=7,
+        default=0,
     )
     use_pass_crypto_object: BoolProperty(
         name="Cryptomatte Object",

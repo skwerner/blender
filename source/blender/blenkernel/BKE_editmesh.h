@@ -17,7 +17,8 @@
 #ifndef __BKE_EDITMESH_H__
 #define __BKE_EDITMESH_H__
 
-/** \file \ingroup bke
+/** \file
+ * \ingroup bke
  *
  * The \link edmesh EDBM module\endlink is for editmode bmesh stuff.
  * In contrast, this module is for code shared with blenkernel that's
@@ -60,7 +61,7 @@ typedef struct BMEditMesh {
 	struct Mesh *mesh_eval_final, *mesh_eval_cage;
 
 	/*derivedmesh stuff*/
-	CustomDataMask lastDataMask;
+	CustomData_MeshMasks lastDataMask;
 	unsigned char (*derivedVertColor)[4];
 	int derivedVertColorLen;
 	unsigned char (*derivedFaceColor)[4];

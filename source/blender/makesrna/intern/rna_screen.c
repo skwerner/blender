@@ -14,7 +14,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-/** \file \ingroup RNA
+/** \file
+ * \ingroup RNA
  */
 
 
@@ -39,6 +40,7 @@ const EnumPropertyItem rna_enum_region_type_items[] = {
 	{RGN_TYPE_TOOLS, "TOOLS", 0, "Tools", ""},
 	{RGN_TYPE_TOOL_PROPS, "TOOL_PROPS", 0, "Tool Properties", ""},
 	{RGN_TYPE_PREVIEW, "PREVIEW", 0, "Preview", ""},
+	{RGN_TYPE_HUD, "HUD", 0, "Floating Region", ""},
 	{RGN_TYPE_NAV_BAR, "NAVIGATION_BAR", 0, "Navigation Bar", ""},
 	{RGN_TYPE_EXECUTE, "EXECUTE", 0, "Execute Buttons", ""},
 	{0, NULL, 0, NULL, NULL},
@@ -91,44 +93,6 @@ static int rna_region_alignment_get(PointerRNA *ptr)
 {
 	ARegion *region = ptr->data;
 	return (region->alignment & ~RGN_SPLIT_PREV);
-}
-
-static void rna_Screen_layout_name_get(PointerRNA *ptr, char *value)
-{
-	const bScreen *screen = ptr->data;
-	const WorkSpaceLayout *layout = BKE_workspace_layout_find_global(G_MAIN, screen, NULL);
-
-	if (layout) {
-		const char *name = BKE_workspace_layout_name_get(layout);
-		strcpy(value, name);
-	}
-	else {
-		value[0] = '\0';
-	}
-}
-
-static int rna_Screen_layout_name_length(PointerRNA *ptr)
-{
-	const bScreen *screen = ptr->data;
-	const WorkSpaceLayout *layout = BKE_workspace_layout_find_global(G_MAIN, screen, NULL);
-
-	if (layout) {
-		const char *name = BKE_workspace_layout_name_get(layout);
-		return strlen(name);
-	}
-
-	return 0;
-}
-
-static void rna_Screen_layout_name_set(PointerRNA *ptr, const char *value)
-{
-	bScreen *screen = ptr->data;
-	WorkSpace *workspace;
-	WorkSpaceLayout *layout = BKE_workspace_layout_find_global(G_MAIN, screen, &workspace);
-
-	if (layout) {
-		BKE_workspace_layout_name_set(workspace, layout, value);
-	}
 }
 
 static bool rna_Screen_fullscreen_get(PointerRNA *ptr)
@@ -254,6 +218,16 @@ static int rna_Area_ui_type_get(PointerRNA *ptr)
 {
 	int value = rna_Area_type_get(ptr) << 16;
 	ScrArea *sa = ptr->data;
+	/* sa->type can be NULL (when not yet initialized), try to do it now. */
+	/* Copied from `ED_area_initialize()`.*/
+	if (sa->type == NULL) {
+		sa->type = BKE_spacetype_from_id(sa->spacetype);
+		if (sa->type == NULL) {
+			sa->spacetype = SPACE_VIEW3D;
+			sa->type = BKE_spacetype_from_id(sa->spacetype);
+		}
+		BLI_assert(sa->type != NULL);
+	}
 	if (sa->type->space_subtype_item_extend != NULL) {
 		value |= sa->type->space_subtype_get(sa);
 	}
@@ -370,8 +344,8 @@ static void rna_def_area(BlenderRNA *brna)
 	RNA_def_property_update(prop, 0, "rna_Area_type_update");
 
 	prop = RNA_def_property(srna, "ui_type", PROP_ENUM, PROP_NONE);
-	RNA_def_property_enum_items(prop, DummyRNA_DEFAULT_items);  /* infact dummy */
-	RNA_def_property_enum_default(prop, 0);
+	RNA_def_property_enum_items(prop, DummyRNA_NULL_items);  /* infact dummy */
+	RNA_def_property_enum_default(prop, SPACE_VIEW3D << 16);
 	RNA_def_property_enum_funcs(prop, "rna_Area_ui_type_get", "rna_Area_ui_type_set", "rna_Area_ui_type_itemf");
 	RNA_def_property_ui_text(prop, "Editor Type", "Current editor type for this area");
 	RNA_def_property_flag(prop, PROP_CONTEXT_UPDATE);
@@ -517,12 +491,6 @@ static void rna_def_screen(BlenderRNA *brna)
 	RNA_def_struct_sdna(srna, "Screen"); /* it is actually bScreen but for 2.5 the dna is patched! */
 	RNA_def_struct_ui_text(srna, "Screen", "Screen data-block, defining the layout of areas in a window");
 	RNA_def_struct_ui_icon(srna, ICON_WORKSPACE);
-
-	prop = RNA_def_property(srna, "layout_name", PROP_STRING, PROP_NONE);
-	RNA_def_property_string_funcs(prop, "rna_Screen_layout_name_get", "rna_Screen_layout_name_length",
-	                              "rna_Screen_layout_name_set");
-	RNA_def_property_ui_text(prop, "Layout Name", "The name of the layout that refers to the screen");
-	RNA_def_struct_name_property(srna, prop);
 
 	/* collections */
 	prop = RNA_def_property(srna, "areas", PROP_COLLECTION, PROP_NONE);

@@ -17,7 +17,8 @@
  * All rights reserved.
  */
 
-/** \file \ingroup bke
+/** \file
+ * \ingroup bke
  */
 
 #include <stdio.h>
@@ -73,7 +74,7 @@ static const char *modifier_name[LS_MODIFIER_NUM] = {
 
 void BKE_linestyle_init(FreestyleLineStyle *linestyle)
 {
-	BLI_assert(MEMCMP_STRUCT_OFS_IS_ZERO(linestyle, id));
+	BLI_assert(MEMCMP_STRUCT_AFTER_IS_ZERO(linestyle, id));
 
 	linestyle->panel = LS_PANEL_STROKES;
 	linestyle->r = linestyle->g = linestyle->b = 0.0f;

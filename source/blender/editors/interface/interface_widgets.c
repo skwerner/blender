@@ -17,7 +17,8 @@
  * All rights reserved.
  */
 
-/** \file \ingroup edinterface
+/** \file
+ * \ingroup edinterface
  */
 
 #include <limits.h>
@@ -4497,7 +4498,7 @@ void ui_draw_popover_back(ARegion *ar, uiStyle *UNUSED(style), uiBlock *block, r
 	uiWidgetType *wt = widget_type(UI_WTYPE_MENU_BACK);
 
 	if (block) {
-		float mval_origin[2] = {block->mx, block->my};
+		float mval_origin[2] = {UNPACK2(block->bounds_offset)};
 		ui_window_to_block_fl(ar, block, &mval_origin[0], &mval_origin[1]);
 		ui_draw_popover_back_impl(wt->wcol_theme, rect, block->direction, U.widget_unit / block->aspect,  mval_origin);
 	}

@@ -17,7 +17,8 @@
  * All rights reserved.
  */
 
-/** \file \ingroup bke
+/** \file
+ * \ingroup bke
  */
 
 #include <ctype.h>
@@ -836,7 +837,7 @@ typedef struct ObjectBBoneDeform {
 
 static void allocate_bbone_cache(bPoseChannel *pchan, int segments)
 {
-	bPoseChannelRuntime *runtime = &pchan->runtime;
+	bPoseChannel_Runtime *runtime = &pchan->runtime;
 
 	if (runtime->bbone_segments != segments) {
 		if (runtime->bbone_segments != 0) {
@@ -844,17 +845,17 @@ static void allocate_bbone_cache(bPoseChannel *pchan, int segments)
 		}
 
 		runtime->bbone_segments = segments;
-		runtime->bbone_rest_mats = MEM_malloc_arrayN(sizeof(Mat4), (uint)segments, "bPoseChannelRuntime::bbone_rest_mats");
-		runtime->bbone_pose_mats = MEM_malloc_arrayN(sizeof(Mat4), (uint)segments, "bPoseChannelRuntime::bbone_pose_mats");
-		runtime->bbone_deform_mats = MEM_malloc_arrayN(sizeof(Mat4), 1 + (uint)segments, "bPoseChannelRuntime::bbone_deform_mats");
-		runtime->bbone_dual_quats = MEM_malloc_arrayN(sizeof(DualQuat), (uint)segments, "bPoseChannelRuntime::bbone_dual_quats");
+		runtime->bbone_rest_mats = MEM_malloc_arrayN(sizeof(Mat4), (uint)segments, "bPoseChannel_Runtime::bbone_rest_mats");
+		runtime->bbone_pose_mats = MEM_malloc_arrayN(sizeof(Mat4), (uint)segments, "bPoseChannel_Runtime::bbone_pose_mats");
+		runtime->bbone_deform_mats = MEM_malloc_arrayN(sizeof(Mat4), 1 + (uint)segments, "bPoseChannel_Runtime::bbone_deform_mats");
+		runtime->bbone_dual_quats = MEM_malloc_arrayN(sizeof(DualQuat), (uint)segments, "bPoseChannel_Runtime::bbone_dual_quats");
 	}
 }
 
 /** Compute and cache the B-Bone shape in the channel runtime struct. */
 void BKE_pchan_bbone_segments_cache_compute(bPoseChannel *pchan)
 {
-	bPoseChannelRuntime *runtime = &pchan->runtime;
+	bPoseChannel_Runtime *runtime = &pchan->runtime;
 	Bone *bone = pchan->bone;
 	int segments = bone->segments;
 
@@ -897,8 +898,8 @@ void BKE_pchan_bbone_segments_cache_compute(bPoseChannel *pchan)
 /** Copy cached B-Bone segments from one channel to another */
 void BKE_pchan_bbone_segments_cache_copy(bPoseChannel *pchan, bPoseChannel *pchan_from)
 {
-	bPoseChannelRuntime *runtime = &pchan->runtime;
-	bPoseChannelRuntime *runtime_from = &pchan_from->runtime;
+	bPoseChannel_Runtime *runtime = &pchan->runtime;
+	bPoseChannel_Runtime *runtime_from = &pchan_from->runtime;
 	int segments = runtime_from->bbone_segments;
 
 	if (segments <= 1) {
@@ -1069,7 +1070,7 @@ static void pchan_bone_deform(bPoseChannel *pchan, const bPoseChanDeform *pdef_i
 	copy_v3_v3(cop, co);
 
 	if (vec) {
-		if (pchan->bone->segments > 1)
+		if (pchan->bone->segments > 1 && pdef_info->b_bone_mats != NULL)
 			/* applies on cop and bbonemat */
 			b_bone_deform(pdef_info, pchan->bone, cop, NULL, (mat) ? bbonemat : NULL);
 		else
@@ -1083,7 +1084,7 @@ static void pchan_bone_deform(bPoseChannel *pchan, const bPoseChanDeform *pdef_i
 			pchan_deform_mat_add(pchan, weight, bbonemat, mat);
 	}
 	else {
-		if (pchan->bone->segments > 1) {
+		if (pchan->bone->segments > 1 && pdef_info->b_bone_mats != NULL) {
 			b_bone_deform(pdef_info, pchan->bone, cop, &bbonedq, NULL);
 			add_weighted_dq_dq(dq, &bbonedq, weight);
 		}
@@ -1109,11 +1110,17 @@ static void armature_bbone_defmats_cb(void *userdata, Link *iter, int index)
 		bPoseChanDeform *pdef_info = &data->pdef_info_array[index];
 		const bool use_quaternion = data->use_quaternion;
 
-		if (pchan->bone->segments > 1) {
-			BLI_assert(pchan->runtime.bbone_segments == pchan->bone->segments);
+		pdef_info->b_bone_mats = NULL;
+		pdef_info->b_bone_dual_quats = NULL;
 
-			pdef_info->b_bone_mats = pchan->runtime.bbone_deform_mats;
-			pdef_info->b_bone_dual_quats = pchan->runtime.bbone_dual_quats;
+		if (pchan->bone->segments > 1) {
+			if (pchan->runtime.bbone_segments == pchan->bone->segments) {
+				pdef_info->b_bone_mats = pchan->runtime.bbone_deform_mats;
+				pdef_info->b_bone_dual_quats = pchan->runtime.bbone_dual_quats;
+			}
+			else {
+				BLI_assert(!"invalid B-Bone shape data");
+			}
 		}
 
 		if (use_quaternion) {
@@ -2466,10 +2473,10 @@ static void boundbox_armature(Object *ob)
 	BoundBox *bb;
 	float min[3], max[3];
 
-	if (ob->bb == NULL) {
-		ob->bb = MEM_callocN(sizeof(BoundBox), "Armature boundbox");
+	if (ob->runtime.bb == NULL) {
+		ob->runtime.bb = MEM_callocN(sizeof(BoundBox), "Armature boundbox");
 	}
-	bb = ob->bb;
+	bb = ob->runtime.bb;
 
 	INIT_MINMAX(min, max);
 	if (!minmax_armature(ob, min, max)) {
@@ -2486,7 +2493,7 @@ BoundBox *BKE_armature_boundbox_get(Object *ob)
 {
 	boundbox_armature(ob);
 
-	return ob->bb;
+	return ob->runtime.bb;
 }
 
 bool BKE_pose_minmax(Object *ob, float r_min[3], float r_max[3], bool use_hidden, bool use_select)

@@ -20,7 +20,8 @@
 #ifndef __BKE_NODE_H__
 #define __BKE_NODE_H__
 
-/** \file \ingroup bke
+/** \file
+ * \ingroup bke
  */
 
 #include "BLI_compiler_compat.h"
@@ -29,7 +30,7 @@
 #include "DNA_listBase.h"
 
 /* for FOREACH_NODETREE_BEGIN */
-#include "DNA_lamp_types.h"
+#include "DNA_light_types.h"
 #include "DNA_material_types.h"
 #include "DNA_node_types.h"
 #include "DNA_scene_types.h"
@@ -450,7 +451,6 @@ void            nodeFreeNode(struct bNodeTree *ntree, struct bNode *node);
 void            nodeDeleteNode(struct Main *bmain, struct bNodeTree *ntree, struct bNode *node);
 
 struct bNode    *BKE_node_copy_ex(struct bNodeTree *ntree, struct bNode *node_src, const int flag);
-struct bNode	*nodeCopyNode(struct bNodeTree *ntree, struct bNode *node);
 
 struct bNodeLink *nodeAddLink(struct bNodeTree *ntree, struct bNode *fromnode, struct bNodeSocket *fromsock, struct bNode *tonode, struct bNodeSocket *tosock);
 void            nodeRemLink(struct bNodeTree *ntree, struct bNodeLink *link);
@@ -662,7 +662,7 @@ struct NodeTreeIterStore {
 	Scene *scene;
 	Material *mat;
 	Tex *tex;
-	Lamp *lamp;
+	Light *light;
 	World *world;
 	FreestyleLineStyle *linestyle;
 };
@@ -1065,5 +1065,8 @@ struct Depsgraph;
 void BKE_nodetree_shading_params_eval(struct Depsgraph *depsgraph,
                                       struct bNodeTree *ntree_dst,
                                       const struct bNodeTree *ntree_src);
+
+extern struct bNodeType NodeTypeUndefined;
+extern struct bNodeSocketType NodeSocketTypeUndefined;
 
 #endif  /* __BKE_NODE_H__ */

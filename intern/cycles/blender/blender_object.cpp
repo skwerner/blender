@@ -349,7 +349,7 @@ Object *BlenderSync::sync_object(BL::Depsgraph& b_depsgraph,
 	/* Visibility flags for both parent and child. */
 	PointerRNA cobject = RNA_pointer_get(&b_ob.ptr, "cycles");
 	bool use_holdout = get_boolean(cobject, "is_holdout") ||
-	                   b_parent.holdout_get(b_view_layer);
+	                   b_parent.holdout_get(PointerRNA_NULL, b_view_layer);
 	uint visibility = object_ray_visibility(b_ob) & PATH_RAY_ALL_VISIBILITY;
 
 	if(b_parent.ptr.data != b_ob.ptr.data) {
@@ -364,7 +364,7 @@ Object *BlenderSync::sync_object(BL::Depsgraph& b_depsgraph,
 #endif
 
 	/* Clear camera visibility for indirect only objects. */
-	bool use_indirect_only = b_parent.indirect_only_get(b_view_layer);
+	bool use_indirect_only = b_parent.indirect_only_get(PointerRNA_NULL, b_view_layer);
 	if(use_indirect_only) {
 		visibility &= ~PATH_RAY_CAMERA;
 	}
@@ -461,7 +461,7 @@ Object *BlenderSync::sync_object(BL::Depsgraph& b_depsgraph,
 
 			uint motion_steps;
 
-			if(scene->need_motion() == Scene::MOTION_BLUR) {
+			if(need_motion == Scene::MOTION_BLUR) {
 				motion_steps = object_motion_steps(b_parent, b_ob);
 				mesh->motion_steps = motion_steps;
 				if(motion_steps && object_use_deform_motion(b_parent, b_ob)) {

@@ -20,7 +20,8 @@
  * Copyright 2011-2012 AutoCRC
  */
 
-/** \file \ingroup bke
+/** \file
+ * \ingroup bke
  */
 
 
@@ -55,6 +56,7 @@
 #include "BLI_task.h"
 #include "BLI_threads.h"
 #include "BLI_linklist.h"
+#include "BLI_string_utils.h"
 
 #include "BKE_animsys.h"
 #include "BKE_boids.h"
@@ -183,6 +185,12 @@ void psys_reset(ParticleSystem *psys, int mode)
 	}
 
 	psys->tot_fluidsprings = psys->alloc_fluidsprings = 0;
+}
+
+void psys_unique_name(Object *object, ParticleSystem *psys, const char *defname)
+{
+	BLI_uniquename(&object->particlesystem, psys, defname, '.',
+	    offsetof(ParticleSystem, name), sizeof(psys->name));
 }
 
 static void realloc_particles(ParticleSimulationData *sim, int new_totpart)

@@ -17,7 +17,8 @@
  * All rights reserved.
  */
 
-/** \file \ingroup bke
+/** \file
+ * \ingroup bke
  */
 
 
@@ -514,11 +515,11 @@ static char *key_block_get_data(Key *key, KeyBlock *actkb, KeyBlock *kb, char **
 
 			me = (Mesh *)key->from;
 
-			if (me->edit_btmesh && me->edit_btmesh->bm->totvert == kb->totelem) {
+			if (me->edit_mesh && me->edit_mesh->bm->totvert == kb->totelem) {
 				a = 0;
-				co = MEM_mallocN(sizeof(float) * 3 * me->edit_btmesh->bm->totvert, "key_block_get_data");
+				co = MEM_mallocN(sizeof(float) * 3 * me->edit_mesh->bm->totvert, "key_block_get_data");
 
-				BM_ITER_MESH (eve, &iter, me->edit_btmesh->bm, BM_VERTS_OF_MESH) {
+				BM_ITER_MESH (eve, &iter, me->edit_mesh->bm, BM_VERTS_OF_MESH) {
 					copy_v3_v3(co[a], eve->co);
 					a++;
 				}
@@ -1052,8 +1053,8 @@ static float *get_weights_array(Object *ob, char *vgroup, WeightsArrayCache *cac
 		dvert = me->dvert;
 		totvert = me->totvert;
 
-		if (me->edit_btmesh && me->edit_btmesh->bm->totvert == totvert)
-			em = me->edit_btmesh;
+		if (me->edit_mesh && me->edit_mesh->bm->totvert == totvert)
+			em = me->edit_mesh;
 	}
 	else if (ob->type == OB_LATTICE) {
 		Lattice *lt = ob->data;
@@ -1414,7 +1415,7 @@ Key *BKE_key_from_id(ID *id)
 	return NULL;
 }
 
-Key **BKE_key_from_object_p(Object *ob)
+Key **BKE_key_from_object_p(const Object *ob)
 {
 	if (ob == NULL || ob->data == NULL)
 		return NULL;
@@ -1422,7 +1423,7 @@ Key **BKE_key_from_object_p(Object *ob)
 	return BKE_key_from_id_p(ob->data);
 }
 
-Key *BKE_key_from_object(Object *ob)
+Key *BKE_key_from_object(const Object *ob)
 {
 	Key **key_p;
 	key_p = BKE_key_from_object_p(ob);
@@ -1687,7 +1688,7 @@ void BKE_keyblock_update_from_curve(Curve *UNUSED(cu), KeyBlock *kb, ListBase *n
 				for (int i = 0; i < 3; i++) {
 					copy_v3_v3(&fp[i * 3], bezt->vec[i]);
 				}
-				fp[9] = bezt->alfa;
+				fp[9] = bezt->tilt;
 				fp[10] = bezt->radius;
 				fp += KEYELEM_FLOAT_LEN_BEZTRIPLE;
 			}
@@ -1695,7 +1696,7 @@ void BKE_keyblock_update_from_curve(Curve *UNUSED(cu), KeyBlock *kb, ListBase *n
 		else {
 			for (a = nu->pntsu * nu->pntsv, bp = nu->bp; a; a--, bp++) {
 				copy_v3_v3(fp, bp->vec);
-				fp[3] = bp->alfa;
+				fp[3] = bp->tilt;
 				fp[4] = bp->radius;
 				fp += KEYELEM_FLOAT_LEN_BPOINT;
 			}
@@ -1737,7 +1738,7 @@ void BKE_keyblock_convert_to_curve(KeyBlock *kb, Curve *UNUSED(cu), ListBase *nu
 				for (int i = 0; i < 3; i++) {
 					copy_v3_v3(bezt->vec[i], &fp[i * 3]);
 				}
-				bezt->alfa = fp[9];
+				bezt->tilt = fp[9];
 				bezt->radius = fp[10];
 				fp += KEYELEM_FLOAT_LEN_BEZTRIPLE;
 			}
@@ -1745,7 +1746,7 @@ void BKE_keyblock_convert_to_curve(KeyBlock *kb, Curve *UNUSED(cu), ListBase *nu
 		else {
 			for (a = nu->pntsu * nu->pntsv, bp = nu->bp; a && (tot -= KEYELEM_ELEM_LEN_BPOINT) >= 0; a--, bp++) {
 				copy_v3_v3(bp->vec, fp);
-				bp->alfa = fp[3];
+				bp->tilt = fp[3];
 				bp->radius = fp[4];
 				fp += KEYELEM_FLOAT_LEN_BPOINT;
 			}

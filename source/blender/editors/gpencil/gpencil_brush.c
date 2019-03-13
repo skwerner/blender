@@ -18,7 +18,8 @@
  * Brush based operators for editing Grease Pencil strokes
  */
 
-/** \file \ingroup edgpencil
+/** \file
+ * \ingroup edgpencil
  */
 
 
@@ -1244,9 +1245,8 @@ static bool gpsculpt_brush_init(bContext *C, wmOperator *op)
 	gso->is_multiframe = (bool)GPENCIL_MULTIEDIT_SESSIONS_ON(gso->gpd);
 	gso->use_multiframe_falloff = (ts->gp_sculpt.flag & GP_SCULPT_SETT_FLAG_FRAME_FALLOFF) != 0;
 
-	/* init multiedit falloff curve data before doing anything,
-	 * so we won't have to do it again later
-	 */
+	/* Init multi-edit falloff curve data before doing anything,
+	 * so we won't have to do it again later. */
 	if (gso->is_multiframe) {
 		curvemapping_initialize(ts->gp_sculpt.cur_falloff);
 	}

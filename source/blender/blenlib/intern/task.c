@@ -14,7 +14,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-/** \file \ingroup bli
+/** \file
+ * \ingroup bli
  *
  * A generic task system which can be used for any task based subsystem.
  */
@@ -727,7 +728,7 @@ TaskPool *BLI_task_pool_create_background(TaskScheduler *scheduler, void *userda
 
 /**
  * Similar to BLI_task_pool_create() but does not schedule any tasks for execution
- * for until BLI_task_pool_work_and_wait() is called. This helps reducing therading
+ * for until BLI_task_pool_work_and_wait() is called. This helps reducing threading
  * overhead when pushing huge amount of small initial tasks from the main thread.
  */
 TaskPool *BLI_task_pool_create_suspended(TaskScheduler *scheduler, void *userdata)

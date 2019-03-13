@@ -14,7 +14,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-/** \file \ingroup RNA
+/** \file
+ * \ingroup RNA
  */
 
 #include <stdlib.h>
@@ -407,7 +408,7 @@ static const EnumPropertyItem *rna_ColorManagedDisplaySettings_display_device_it
 	return items;
 }
 
-static void rna_ColorManagedDisplaySettings_display_device_update(Main *UNUSED(bmain), Scene *UNUSED(scene), PointerRNA *ptr)
+static void rna_ColorManagedDisplaySettings_display_device_update(Main *bmain, Scene *UNUSED(scene), PointerRNA *ptr)
 {
 	ID *id = ptr->id.data;
 
@@ -421,6 +422,11 @@ static void rna_ColorManagedDisplaySettings_display_device_update(Main *UNUSED(b
 
 		DEG_id_tag_update(id, 0);
 		WM_main_add_notifier(NC_SCENE | ND_SEQUENCER, NULL);
+
+		/* Color management can be baked into shaders, need to refresh. */
+		for (Material *ma = bmain->materials.first; ma; ma = ma->id.next) {
+			DEG_id_tag_update(&ma->id, ID_RECALC_COPY_ON_WRITE);
+		}
 	}
 }
 

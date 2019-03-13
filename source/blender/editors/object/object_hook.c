@@ -17,7 +17,8 @@
  * All rights reserved.
  */
 
-/** \file \ingroup edobj
+/** \file
+ * \ingroup edobj
  */
 
 
@@ -136,7 +137,7 @@ static bool return_editmesh_vgroup(Object *obedit, BMEditMesh *em, char *r_name,
 static void select_editbmesh_hook(Object *ob, HookModifierData *hmd)
 {
 	Mesh *me = ob->data;
-	BMEditMesh *em = me->edit_btmesh;
+	BMEditMesh *em = me->edit_mesh;
 	BMVert *eve;
 	BMIter iter;
 	int index = 0, nr = 0;
@@ -316,7 +317,7 @@ static bool object_hook_index_array(Main *bmain, Scene *scene, Object *obedit,
 
 			DEG_id_tag_update(obedit->data, 0);
 
-			em = me->edit_btmesh;
+			em = me->edit_mesh;
 
 			EDBM_mesh_normals_update(em);
 			BKE_editmesh_tessface_calc(em);
@@ -441,7 +442,7 @@ static bool hook_op_edit_poll(bContext *C)
 	return 0;
 }
 
-static Object *add_hook_object_new(Main *bmain, Scene *scene, ViewLayer *view_layer, Object *obedit)
+static Object *add_hook_object_new(Main *bmain, Scene *scene, ViewLayer *view_layer, View3D *v3d, Object *obedit)
 {
 	Base *basedit;
 	Object *ob;
@@ -451,6 +452,10 @@ static Object *add_hook_object_new(Main *bmain, Scene *scene, ViewLayer *view_la
 	basedit = BKE_view_layer_base_find(view_layer, obedit);
 	BLI_assert(view_layer->basact->object == ob);
 
+	if (v3d && v3d->localvd) {
+		view_layer->basact->local_view_bits |= v3d->local_view_uuid;
+	}
+
 	/* icky, BKE_object_add sets new base as active.
 	 * so set it back to the original edit object */
 	view_layer->basact = basedit;
@@ -458,7 +463,16 @@ static Object *add_hook_object_new(Main *bmain, Scene *scene, ViewLayer *view_la
 	return ob;
 }
 
-static int add_hook_object(const bContext *C, Main *bmain, Scene *scene, ViewLayer *view_layer, Object *obedit, Object *ob, int mode, ReportList *reports)
+static int add_hook_object(
+        const bContext *C,
+        Main *bmain,
+        Scene *scene,
+        ViewLayer *view_layer,
+        View3D *v3d,
+        Object *obedit,
+        Object *ob,
+        int mode,
+        ReportList *reports)
 {
 	ModifierData *md = NULL;
 	HookModifierData *hmd = NULL;
@@ -476,7 +490,7 @@ static int add_hook_object(const bContext *C, Main *bmain, Scene *scene, ViewLay
 
 	if (mode == OBJECT_ADDHOOK_NEWOB && !ob) {
 
-		ob = add_hook_object_new(bmain, scene, view_layer, obedit);
+		ob = add_hook_object_new(bmain, scene, view_layer, v3d, obedit);
 
 		/* transform cent to global coords for loc */
 		mul_v3_m4v3(ob->loc, obedit->obmat, cent);
@@ -575,7 +589,7 @@ static int object_add_hook_selob_exec(bContext *C, wmOperator *op)
 		return OPERATOR_CANCELLED;
 	}
 
-	if (add_hook_object(C, bmain, scene, view_layer, obedit, obsel, mode, op->reports)) {
+	if (add_hook_object(C, bmain, scene, view_layer, NULL, obedit, obsel, mode, op->reports)) {
 		WM_event_add_notifier(C, NC_OBJECT | ND_MODIFIER, obedit);
 		return OPERATOR_FINISHED;
 	}
@@ -607,9 +621,10 @@ static int object_add_hook_newob_exec(bContext *C, wmOperator *op)
 	Main *bmain = CTX_data_main(C);
 	Scene *scene = CTX_data_scene(C);
 	ViewLayer *view_layer = CTX_data_view_layer(C);
+	View3D *v3d = CTX_wm_view3d(C);
 	Object *obedit = CTX_data_edit_object(C);
 
-	if (add_hook_object(C, bmain, scene, view_layer, obedit, NULL, OBJECT_ADDHOOK_NEWOB, op->reports)) {
+	if (add_hook_object(C, bmain, scene, view_layer, v3d, obedit, NULL, OBJECT_ADDHOOK_NEWOB, op->reports)) {
 		DEG_id_tag_update(&scene->id, ID_RECALC_SELECT);
 		WM_event_add_notifier(C, NC_SCENE | ND_OB_SELECT, scene);
 		WM_event_add_notifier(C, NC_OBJECT | ND_MODIFIER, obedit);

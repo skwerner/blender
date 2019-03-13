@@ -18,7 +18,8 @@
  * All rights reserved.
  */
 
-/** \file \ingroup wm
+/** \file
+ * \ingroup wm
  *
  * Window management, wrap GHOST.
  */
@@ -95,23 +96,32 @@
 /* the global to talk to ghost */
 static GHOST_SystemHandle g_system = NULL;
 
-typedef enum WinOverrideFlag {
+typedef enum eWinOverrideFlag {
 	WIN_OVERRIDE_GEOM     = (1 << 0),
 	WIN_OVERRIDE_WINSTATE = (1 << 1),
-} WinOverrideFlag;
+} eWinOverrideFlag;
 
-/* set by commandline */
+#define GHOST_WINDOW_STATE_DEFAULT GHOST_kWindowStateMaximized
+
+/**
+ * Override defaults or startup file when #eWinOverrideFlag is set.
+ * These values are typically set by command line arguments.
+ */
 static struct WMInitStruct {
 	/* window geometry */
 	int size_x, size_y;
 	int start_x, start_y;
 
 	int windowstate;
-	WinOverrideFlag override_flag;
+	eWinOverrideFlag override_flag;
 
 	bool window_focus;
 	bool native_pixels;
-} wm_init_state = {0, 0, 0, 0, GHOST_kWindowStateNormal, 0, true, true};
+} wm_init_state = {
+	.windowstate = GHOST_WINDOW_STATE_DEFAULT,
+	.window_focus = true,
+	.native_pixels = true,
+};
 
 /* ******** win open & close ************ */
 
@@ -463,8 +473,13 @@ void wm_quit_with_optional_confirmation_prompt(bContext *C, wmWindow *win)
 	 * here (this function gets called outside of normal event handling loop). */
 	CTX_wm_window_set(C, win);
 
-	if ((U.uiflag & USER_QUIT_PROMPT) && !wm->file_saved && !G.background) {
-		wm_confirm_quit(C);
+	if (U.uiflag & USER_SAVE_PROMPT) {
+		if (!wm->file_saved && !G.background) {
+			wm_confirm_quit(C);
+		}
+		else {
+			wm_exit_schedule_delayed(C);
+		}
 	}
 	else {
 		wm_exit_schedule_delayed(C);
@@ -593,8 +608,12 @@ void WM_window_set_dpi(wmWindow *win)
 	U.pixelsize = pixelsize;
 	U.dpi = dpi / pixelsize;
 	U.virtual_pixel = (pixelsize == 1) ? VIRTUAL_PIXEL_NATIVE : VIRTUAL_PIXEL_DOUBLE;
-	U.widget_unit = (U.pixelsize * U.dpi * 20 + 36) / 72;
 	U.dpi_fac = ((U.pixelsize * (float)U.dpi) / 72.0f);
+
+	/* Set user preferences globals for drawing, and for forward compatibility. */
+	U.widget_unit = (U.pixelsize * U.dpi * 20 + 36) / 72;
+	/* If line thickness differs from scaling factor then adjustments need to be made */
+	U.widget_unit += 2 * ((int)U.pixelsize - (int)U.dpi_fac);
 
 	/* update font drawing */
 	BLF_default_dpi(U.pixelsize * U.dpi);
@@ -748,8 +767,13 @@ void wm_window_ghostwindows_ensure(wmWindowManager *wm)
 				win->sizex = wm_init_state.size_x;
 				win->sizey = wm_init_state.size_y;
 
-				win->windowstate = GHOST_kWindowStateNormal;
-				wm_init_state.override_flag &= ~WIN_OVERRIDE_GEOM;
+				if (wm_init_state.override_flag & WIN_OVERRIDE_GEOM) {
+					win->windowstate = GHOST_kWindowStateNormal;
+					wm_init_state.override_flag &= ~WIN_OVERRIDE_GEOM;
+				}
+				else {
+					win->windowstate = GHOST_WINDOW_STATE_DEFAULT;
+				}
 			}
 
 			if (wm_init_state.override_flag & WIN_OVERRIDE_WINSTATE) {
@@ -933,7 +957,7 @@ wmWindow *WM_window_open_temp(bContext *C, int x, int y, int sizex, int sizey, i
 		ED_area_newspace(C, sa, SPACE_IMAGE, false);
 	}
 	else if (type == WM_WINDOW_DRIVERS) {
-		ED_area_newspace(C, sa, SPACE_IPO, false);
+		ED_area_newspace(C, sa, SPACE_GRAPH, false);
 	}
 	else {
 		ED_area_newspace(C, sa, SPACE_USERPREF, false);
@@ -953,7 +977,7 @@ wmWindow *WM_window_open_temp(bContext *C, int x, int y, int sizex, int sizey, i
 		title = IFACE_("Blender Preferences");
 	else if (sa->spacetype == SPACE_FILE)
 		title = IFACE_("Blender File View");
-	else if (sa->spacetype == SPACE_IPO)
+	else if (sa->spacetype == SPACE_GRAPH)
 		title = IFACE_("Blender Drivers Editor");
 	else
 		title = "Blender";
@@ -1425,10 +1449,6 @@ static int ghost_event_proc(GHOST_EventHandle evt, GHOST_TUserDataPtr C_void_ptr
 						wm_event_do_handlers(C);
 						wm_event_do_notifiers(C);
 						wm_draw_update(C);
-
-						/* Warning! code above nulls 'C->wm.window', causing BGE to quit, see: T45699.
-						 * Further, its easier to match behavior across platforms, so restore the window. */
-						CTX_wm_window_set(C, win);
 #endif
 					}
 				}
@@ -1449,14 +1469,12 @@ static int ghost_event_proc(GHOST_EventHandle evt, GHOST_TUserDataPtr C_void_ptr
 			case GHOST_kEventOpenMainFile:
 			{
 				PointerRNA props_ptr;
-				wmWindow *oldWindow;
 				const char *path = GHOST_GetEventData(evt);
 
 				if (path) {
 					wmOperatorType *ot = WM_operatortype_find("WM_OT_open_mainfile", false);
 					/* operator needs a valid window in context, ensures
 					 * it is correctly set */
-					oldWindow = CTX_wm_window(C);
 					CTX_wm_window_set(C, win);
 
 					WM_operator_properties_create_ptr(&props_ptr, ot);
@@ -1464,7 +1482,7 @@ static int ghost_event_proc(GHOST_EventHandle evt, GHOST_TUserDataPtr C_void_ptr
 					WM_operator_name_call_ptr(C, ot, WM_OP_EXEC_DEFAULT, &props_ptr);
 					WM_operator_properties_free(&props_ptr);
 
-					CTX_wm_window_set(C, oldWindow);
+					CTX_wm_window_set(C, NULL);
 				}
 				break;
 			}
@@ -1533,10 +1551,9 @@ static int ghost_event_proc(GHOST_EventHandle evt, GHOST_TUserDataPtr C_void_ptr
 
 					// close all popups since they are positioned with the pixel
 					// size baked in and it's difficult to correct them
-					wmWindow *oldWindow = CTX_wm_window(C);
 					CTX_wm_window_set(C, win);
 					UI_popup_handlers_remove_all(C, &win->modalhandlers);
-					CTX_wm_window_set(C, oldWindow);
+					CTX_wm_window_set(C, NULL);
 
 					wm_window_make_drawable(wm, win);
 
@@ -1638,33 +1655,6 @@ void wm_window_process_events(const bContext *C)
 	/* no event, we sleep 5 milliseconds */
 	if (hasevent == 0)
 		PIL_sleep_ms(5);
-}
-
-void wm_window_process_events_nosleep(void)
-{
-	if (GHOST_ProcessEvents(g_system, 0))
-		GHOST_DispatchEvents(g_system);
-}
-
-/* exported as handle callback to bke blender.c */
-void wm_window_testbreak(void)
-{
-	static double ltime = 0;
-	double curtime = PIL_check_seconds_timer();
-
-	BLI_assert(BLI_thread_is_main());
-
-	/* only check for breaks every 50 milliseconds
-	 * if we get called more often.
-	 */
-	if ((curtime - ltime) > 0.05) {
-		int hasevent = GHOST_ProcessEvents(g_system, 0); /* 0 is no wait */
-
-		if (hasevent)
-			GHOST_DispatchEvents(g_system);
-
-		ltime = curtime;
-	}
 }
 
 /* **************** init ********************** */
@@ -1969,6 +1959,12 @@ void WM_init_state_fullscreen_set(void)
 void WM_init_state_normal_set(void)
 {
 	wm_init_state.windowstate = GHOST_kWindowStateNormal;
+	wm_init_state.override_flag |= WIN_OVERRIDE_WINSTATE;
+}
+
+void WM_init_state_maximized_set(void)
+{
+	wm_init_state.windowstate = GHOST_kWindowStateMaximized;
 	wm_init_state.override_flag |= WIN_OVERRIDE_WINSTATE;
 }
 

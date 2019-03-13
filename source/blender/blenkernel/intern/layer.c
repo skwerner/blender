@@ -14,7 +14,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-/** \file \ingroup bke
+/** \file
+ * \ingroup bke
  */
 
 #include <string.h>
@@ -53,6 +54,14 @@
 
 #include "MEM_guardedalloc.h"
 
+/* Set of flags which are dependent on a collection settings. */
+static const short g_base_collection_flags = (
+        BASE_VISIBLE |
+        BASE_SELECTABLE |
+        BASE_ENABLED_VIEWPORT |
+        BASE_ENABLED_RENDER |
+        BASE_HOLDOUT |
+        BASE_INDIRECT_ONLY);
 
 /* prototype */
 static void object_bases_iterator_next(BLI_Iterator *iter, const int flag);
@@ -699,53 +708,32 @@ static short layer_collection_sync(
 				BLI_addtail(new_object_bases, base);
 			}
 
-			int object_restrict = base->object->restrictflag;
-
-			if (((child_restrict & COLLECTION_RESTRICT_VIEW) == 0) &&
-			    ((object_restrict & OB_RESTRICT_VIEW) == 0))
-			{
-				base->flag |= BASE_ENABLED | BASE_ENABLED_VIEWPORT;
-
+			if ((child_restrict & COLLECTION_RESTRICT_VIEW) == 0) {
+				base->flag_from_collection |= BASE_ENABLED_VIEWPORT;
 				if ((child_layer_restrict & LAYER_COLLECTION_RESTRICT_VIEW) == 0) {
-					base->flag |= BASE_VISIBLE;
-
-					if (((child_restrict & COLLECTION_RESTRICT_SELECT) == 0) &&
-					    ((object_restrict & OB_RESTRICT_SELECT) == 0))
-					{
-						base->flag |= BASE_SELECTABLE;
+					base->flag_from_collection |= BASE_VISIBLE;
+					if (((child_restrict & COLLECTION_RESTRICT_SELECT) == 0)) {
+						base->flag_from_collection |= BASE_SELECTABLE;
 					}
 				}
 			}
 
-			if (((child_restrict & COLLECTION_RESTRICT_RENDER) == 0) &&
-			    ((object_restrict & OB_RESTRICT_RENDER) == 0))
-			{
-				base->flag |= BASE_ENABLED_RENDER;
-			}
-
-			/* Update runtime flags used for display and tools. */
-			if (base->flag & BASE_ENABLED) {
-				lc->runtime_flag |= LAYER_COLLECTION_HAS_ENABLED_OBJECTS;
-			}
-
-			if (base->flag & BASE_HIDDEN) {
-				base->flag &= ~BASE_VISIBLE;
-				view_layer->runtime_flag |= VIEW_LAYER_HAS_HIDE;
-				lc->runtime_flag |= LAYER_COLLECTION_HAS_HIDDEN_OBJECTS;
-			}
-			else if (base->flag & BASE_VISIBLE) {
-				lc->runtime_flag |= LAYER_COLLECTION_HAS_VISIBLE_OBJECTS;
+			if ((child_restrict & COLLECTION_RESTRICT_RENDER) == 0) {
+				base->flag_from_collection |= BASE_ENABLED_RENDER;
 			}
 
 			/* Holdout and indirect only */
 			if (lc->flag & LAYER_COLLECTION_HOLDOUT) {
-				base->flag |= BASE_HOLDOUT;
+				base->flag_from_collection |= BASE_HOLDOUT;
 			}
 			if (lc->flag & LAYER_COLLECTION_INDIRECT_ONLY) {
-				base->flag |= BASE_INDIRECT_ONLY;
+				base->flag_from_collection |= BASE_INDIRECT_ONLY;
 			}
 
 			lc->runtime_flag |= LAYER_COLLECTION_HAS_OBJECTS;
+
+			/* Make sure flags on base are usable right away. */
+			BKE_base_eval_flags(base);
 		}
 
 		runtime_flag |= lc->runtime_flag;
@@ -780,16 +768,9 @@ void BKE_layer_collection_sync(const Scene *scene, ViewLayer *view_layer)
 
 	/* Clear visible and selectable flags to be reset. */
 	for (Base *base = view_layer->object_bases.first; base; base = base->next) {
-		base->flag &= ~(BASE_VISIBLE |
-		                BASE_ENABLED |
-		                BASE_SELECTABLE |
-		                BASE_ENABLED_VIEWPORT |
-		                BASE_ENABLED_RENDER |
-		                BASE_HOLDOUT |
-		                BASE_INDIRECT_ONLY);
+		base->flag &= ~g_base_collection_flags;
+		base->flag_from_collection &= ~g_base_collection_flags;
 	}
-
-	view_layer->runtime_flag = 0;
 
 	/* Generate new layer connections and object bases when collections changed. */
 	CollectionChild child = {NULL, NULL, scene->master_collection};
@@ -841,7 +822,7 @@ void BKE_main_collection_sync(const Main *bmain)
 
 	/* TODO: optimize for file load so only linked collections get checked? */
 
-	for (const Scene *scene = bmain->scene.first; scene; scene = scene->id.next) {
+	for (const Scene *scene = bmain->scenes.first; scene; scene = scene->id.next) {
 		BKE_scene_collection_sync(scene);
 	}
 }
@@ -851,7 +832,7 @@ void BKE_main_collection_sync_remap(const Main *bmain)
 	/* On remapping of object or collection pointers free caches. */
 	/* TODO: try to make this faster */
 
-	for (const Scene *scene = bmain->scene.first; scene; scene = scene->id.next) {
+	for (const Scene *scene = bmain->scenes.first; scene; scene = scene->id.next) {
 		for (ViewLayer *view_layer = scene->view_layers.first; view_layer; view_layer = view_layer->next) {
 			MEM_SAFE_FREE(view_layer->object_bases_array);
 
@@ -862,7 +843,7 @@ void BKE_main_collection_sync_remap(const Main *bmain)
 		}
 	}
 
-	for (Collection *collection = bmain->collection.first; collection; collection = collection->id.next) {
+	for (Collection *collection = bmain->collections.first; collection; collection = collection->id.next) {
 		BKE_collection_object_cache_free(collection);
 		DEG_id_tag_update_ex((Main *)bmain, &collection->id, ID_RECALC_COPY_ON_WRITE);
 	}
@@ -991,20 +972,6 @@ static void layer_collection_flag_unset_recursive(LayerCollection *lc, const int
 }
 
 /**
- * Return true if something changed. */
-static bool layer_collection_collection_flag_unset_recursive(LayerCollection *lc, const int flag)
-{
-	bool changed = (lc->collection->flag & flag) != 0;
-
-	lc->collection->flag &= ~flag;
-	for (LayerCollection *lc_iter = lc->layer_collections.first; lc_iter; lc_iter = lc_iter->next) {
-		changed |= layer_collection_collection_flag_unset_recursive(lc_iter, flag);
-	}
-
-	return changed;
-}
-
-/**
  * Isolate the collection - hide all other collections but this one.
  * Make sure to show all the direct parents and all children of the layer collection as well.
  * When extending we simply show the collections and its direct family.
@@ -1019,9 +986,11 @@ bool BKE_layer_collection_isolate(Scene *scene, ViewLayer *view_layer, LayerColl
 	bool depsgraph_need_update = false;
 	LayerCollection *lc_master = view_layer->layer_collections.first;
 
-	if (lc->collection->flag & COLLECTION_RESTRICT_VIEW) {
-		lc->collection->flag &= ~COLLECTION_RESTRICT_VIEW;
-		depsgraph_need_update = true;
+	if (!ID_IS_LINKED(lc->collection)) {
+		if (lc->collection->flag & COLLECTION_RESTRICT_VIEW) {
+			lc->collection->flag &= ~COLLECTION_RESTRICT_VIEW;
+			depsgraph_need_update = true;
+		}
 	}
 
 	if (!extend) {
@@ -1041,9 +1010,11 @@ bool BKE_layer_collection_isolate(Scene *scene, ViewLayer *view_layer, LayerColl
 	}
 
 	while (lc_parent != lc) {
-		if (lc_parent->collection->flag & COLLECTION_RESTRICT_VIEW) {
-			lc_parent->collection->flag &= ~COLLECTION_RESTRICT_VIEW;
-			depsgraph_need_update = true;
+		if (!ID_IS_LINKED(lc_parent->collection)) {
+			if (lc_parent->collection->flag & COLLECTION_RESTRICT_VIEW) {
+				lc_parent->collection->flag &= ~COLLECTION_RESTRICT_VIEW;
+				depsgraph_need_update = true;
+			}
 		}
 
 		lc_parent->flag &= ~LAYER_COLLECTION_RESTRICT_VIEW;
@@ -1071,7 +1042,6 @@ static void layer_collection_bases_show_recursive(ViewLayer *view_layer, LayerCo
 	for (CollectionObject *cob = lc->collection->gobject.first; cob; cob = cob->next) {
 		Base *base = BKE_view_layer_base_find(view_layer, cob->ob);
 		base->flag &= ~BASE_HIDDEN;
-		base->object->restrictflag &= ~OB_RESTRICT_VIEW;
 	}
 	for (LayerCollection *lc_iter = lc->layer_collections.first; lc_iter; lc_iter = lc_iter->next) {
 		layer_collection_bases_show_recursive(view_layer, lc_iter);
@@ -1099,7 +1069,10 @@ bool BKE_layer_collection_set_visible(ViewLayer *view_layer, LayerCollection *lc
 {
 	bool depsgraph_changed = false;
 
-	if (visible && ((lc->collection->flag & COLLECTION_RESTRICT_VIEW) != 0)) {
+	if (visible &&
+	    (!ID_IS_LINKED(lc->collection)) &&
+	    ((lc->collection->flag & COLLECTION_RESTRICT_VIEW) != 0))
+	{
 		lc->collection->flag &= ~COLLECTION_RESTRICT_VIEW;
 		depsgraph_changed = true;
 	}
@@ -1469,18 +1442,46 @@ void BKE_view_layer_bases_in_mode_iterator_end(BLI_Iterator *UNUSED(iter))
 
 /* Evaluation  */
 
-void BKE_layer_eval_view_layer(
+/* Applies object's restrict flags on top of flags coming from the collection
+ * and stores those in base->flag. BASE_VISIBLE is based on viewport visibility. */
+void BKE_base_eval_flags(Base *base)
+{
+	/* Apply collection flags. */
+	base->flag &= ~g_base_collection_flags;
+	base->flag |= (base->flag_from_collection & g_base_collection_flags);
+
+	/* Apply object restrictions. */
+	const int object_restrict = base->object->restrictflag;
+	if (object_restrict & OB_RESTRICT_VIEW) {
+		base->flag &= ~BASE_ENABLED_VIEWPORT;
+	}
+	if (object_restrict & OB_RESTRICT_RENDER) {
+		base->flag &= ~BASE_ENABLED_RENDER;
+	}
+	if (object_restrict & OB_RESTRICT_SELECT) {
+		base->flag &= ~BASE_SELECTABLE;
+	}
+
+	/* Apply viewport visibility by default. The dependency graph for render
+	 * can change these again, but for tools we always want the viewport
+	 * visibility to be in sync regardless if depsgraph was evaluated. */
+	if (!(base->flag & BASE_ENABLED_VIEWPORT) || (base->flag & BASE_HIDDEN)) {
+		base->flag &= ~(BASE_VISIBLE | BASE_SELECTABLE);
+	}
+
+	/* Deselect unselectable objects. */
+	if (!(base->flag & BASE_SELECTABLE)) {
+		base->flag &= ~BASE_SELECTED;
+	}
+}
+
+static void layer_eval_view_layer(
         struct Depsgraph *depsgraph,
         struct Scene *UNUSED(scene),
         ViewLayer *view_layer)
 {
 	DEG_debug_print_eval(depsgraph, __func__, view_layer->name, view_layer);
 
-	/* Visibility based on depsgraph mode. */
-	const eEvaluationMode mode = DEG_get_mode(depsgraph);
-	const int base_enabled_flag = (mode == DAG_EVAL_VIEWPORT)
-	        ? BASE_ENABLED_VIEWPORT
-	        : BASE_ENABLED_RENDER;
 	/* Create array of bases, for fast index-based lookup. */
 	const int num_object_bases = BLI_listbase_count(&view_layer->object_bases);
 	MEM_SAFE_FREE(view_layer->object_bases_array);
@@ -1488,36 +1489,7 @@ void BKE_layer_eval_view_layer(
 	        num_object_bases, sizeof(Base *), "view_layer->object_bases_array");
 	int base_index = 0;
 	for (Base *base = view_layer->object_bases.first; base; base = base->next) {
-		/* Compute visibility for depsgraph evaluation mode. */
-		if (base->flag & base_enabled_flag) {
-			base->flag |= BASE_ENABLED;
-
-			/* When rendering, visibility is controlled by the enable/disable option. */
-			if (mode == DAG_EVAL_RENDER) {
-				base->flag |= BASE_VISIBLE;
-			}
-		}
-		else {
-			base->flag &= ~(BASE_ENABLED | BASE_VISIBLE | BASE_SELECTABLE);
-		}
-		/* If base is not selectabled, clear select. */
-		if ((base->flag & BASE_SELECTABLE) == 0) {
-			base->flag &= ~BASE_SELECTED;
-		}
 		view_layer->object_bases_array[base_index++] = base;
-	}
-	/* Flush back base flag to the original view layer for editing. */
-	if (view_layer == DEG_get_evaluated_view_layer(depsgraph)) {
-		ViewLayer *view_layer_orig = DEG_get_input_view_layer(depsgraph);
-		Base *base_orig = view_layer_orig->object_bases.first;
-		const Base *base_eval = view_layer->object_bases.first;
-		while (base_orig != NULL) {
-			if (base_orig->flag & base_enabled_flag) {
-				base_orig->flag = base_eval->flag;
-				base_eval = base_eval->next;
-			}
-			base_orig = base_orig->next;
-		}
 	}
 }
 
@@ -1529,5 +1501,5 @@ void BKE_layer_eval_view_layer_indexed(
 	BLI_assert(view_layer_index >= 0);
 	ViewLayer *view_layer = BLI_findlink(&scene->view_layers, view_layer_index);
 	BLI_assert(view_layer != NULL);
-	BKE_layer_eval_view_layer(depsgraph, scene, view_layer);
+	layer_eval_view_layer(depsgraph, scene, view_layer);
 }

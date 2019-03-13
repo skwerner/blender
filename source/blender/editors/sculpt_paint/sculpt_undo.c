@@ -18,7 +18,8 @@
  * Implements the Sculpt Mode tools
  */
 
-/** \file \ingroup edsculpt
+/** \file
+ * \ingroup edsculpt
  */
 
 #include <stddef.h>
@@ -48,6 +49,7 @@
 #include "BKE_key.h"
 #include "BKE_mesh.h"
 #include "BKE_mesh_runtime.h"
+#include "BKE_scene.h"
 #include "BKE_subsurf.h"
 #include "BKE_subdiv_ccg.h"
 #include "BKE_undo_system.h"
@@ -192,7 +194,7 @@ static bool sculpt_undo_restore_coords(bContext *C, SculptUndoNode *unode)
 
 			/* pbvh uses it's own mvert array, so coords should be */
 			/* propagated to pbvh here */
-			BKE_pbvh_apply_vertCos(ss->pbvh, vertCos, unode->totvert);
+			BKE_pbvh_apply_vertCos(ss->pbvh, vertCos, ss->kb->totelem);
 
 			MEM_freeN(vertCos);
 		}
@@ -843,13 +845,13 @@ static SculptUndoNode *sculpt_undo_bmesh_push(Object *ob,
 			 * dynamic-topology immediately does topological edits
 			 * (converting polys to triangles) that the BMLog can't
 			 * fully restore from */
-			CustomData_copy(&me->vdata, &unode->bm_enter_vdata, CD_MASK_MESH,
+			CustomData_copy(&me->vdata, &unode->bm_enter_vdata, CD_MASK_MESH.vmask,
 			                CD_DUPLICATE, me->totvert);
-			CustomData_copy(&me->edata, &unode->bm_enter_edata, CD_MASK_MESH,
+			CustomData_copy(&me->edata, &unode->bm_enter_edata, CD_MASK_MESH.emask,
 			                CD_DUPLICATE, me->totedge);
-			CustomData_copy(&me->ldata, &unode->bm_enter_ldata, CD_MASK_MESH,
+			CustomData_copy(&me->ldata, &unode->bm_enter_ldata, CD_MASK_MESH.lmask,
 			                CD_DUPLICATE, me->totloop);
-			CustomData_copy(&me->pdata, &unode->bm_enter_pdata, CD_MASK_MESH,
+			CustomData_copy(&me->pdata, &unode->bm_enter_pdata, CD_MASK_MESH.pmask,
 			                CD_DUPLICATE, me->totpoly);
 			unode->bm_enter_totvert = me->totvert;
 			unode->bm_enter_totedge = me->totedge;
@@ -1098,11 +1100,35 @@ static void sculpt_undosys_step_decode_redo(struct bContext *C, SculptUndoStep *
 	}
 }
 
-static void sculpt_undosys_step_decode(struct bContext *C, struct Main *UNUSED(bmain), UndoStep *us_p, int dir)
+static void sculpt_undosys_step_decode(struct bContext *C, struct Main *bmain, UndoStep *us_p, int dir)
 {
-	/* TODO(campbell): undo_system: use low-level API to set mode. */
-	ED_object_mode_set(C, OB_MODE_SCULPT);
-	BLI_assert(sculpt_undosys_poll(C));
+	/* Ensure sculpt mode. */
+	{
+		Scene *scene = CTX_data_scene(C);
+		ViewLayer *view_layer = CTX_data_view_layer(C);
+		/* Sculpt needs evaluated state. */
+		BKE_scene_view_layer_graph_evaluated_ensure(bmain, scene, view_layer);
+		Object *ob = OBACT(view_layer);
+		if (ob && (ob->type == OB_MESH)) {
+			Depsgraph *depsgraph = CTX_data_depsgraph(C);
+			if (ob->mode & OB_MODE_SCULPT) {
+				/* pass */
+			}
+			else {
+				ED_object_mode_generic_exit(bmain, depsgraph, scene, ob);
+				Mesh *me = ob->data;
+				/* Don't add sculpt topology undo steps when reading back undo state.
+				 * The undo steps must enter/exit for us. */
+				me->flag &= ~ME_SCULPT_DYNAMIC_TOPOLOGY;
+				ED_object_sculptmode_enter_ex(bmain, depsgraph, scene, ob, true, NULL);
+			}
+			BLI_assert(sculpt_undosys_poll(C));
+		}
+		else {
+			BLI_assert(0);
+			return;
+		}
+	}
 
 	SculptUndoStep *us = (SculptUndoStep *)us_p;
 	if (dir < 0) {

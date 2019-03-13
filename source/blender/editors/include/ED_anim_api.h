@@ -17,7 +17,8 @@
  * All rights reserved.
  */
 
-/** \file \ingroup editors
+/** \file
+ * \ingroup editors
  */
 
 #ifndef __ED_ANIM_API_H__
@@ -334,7 +335,7 @@ typedef enum eAnimFilter_Flags {
 /* 'Sub-object' channels (flags stored in Data block) */
 #define FILTER_SKE_OBJD(key)    (CHECK_TYPE_INLINE(key, Key *), ((key->flag & KEY_DS_EXPAND)))
 #define FILTER_MAT_OBJD(ma)     (CHECK_TYPE_INLINE(ma, Material *), ((ma->flag & MA_DS_EXPAND)))
-#define FILTER_LAM_OBJD(la)     (CHECK_TYPE_INLINE(la, Lamp *), ((la->flag & LA_DS_EXPAND)))
+#define FILTER_LAM_OBJD(la)     (CHECK_TYPE_INLINE(la, Light *), ((la->flag & LA_DS_EXPAND)))
 #define FILTER_CAM_OBJD(ca)     (CHECK_TYPE_INLINE(ca, Camera *), ((ca->flag & CAM_DS_EXPAND)))
 #define FILTER_CACHEFILE_OBJD(cf)     (CHECK_TYPE_INLINE(cf, CacheFile *), ((cf->flag & CACHEFILE_DS_EXPAND)))
 #define FILTER_CUR_OBJD(cu)     (CHECK_TYPE_INLINE(cu, Curve *), ((cu->flag & CU_DS_EXPAND)))
@@ -359,8 +360,8 @@ typedef enum eAnimFilter_Flags {
 /* Action Channel Group */
 #define EDITABLE_AGRP(agrp) ((agrp->flag & AGRP_PROTECTED) == 0)
 #define EXPANDED_AGRP(ac, agrp) \
-	( ((!(ac) || ((ac)->spacetype != SPACE_IPO)) && (agrp->flag & AGRP_EXPANDED)) || \
-	  (( (ac) && ((ac)->spacetype == SPACE_IPO)) && (agrp->flag & AGRP_EXPANDED_G)) )
+	( ((!(ac) || ((ac)->spacetype != SPACE_GRAPH)) && (agrp->flag & AGRP_EXPANDED)) || \
+	  (( (ac) && ((ac)->spacetype == SPACE_GRAPH)) && (agrp->flag & AGRP_EXPANDED_G)) )
 #define SEL_AGRP(agrp) ((agrp->flag & AGRP_SELECTED) || (agrp->flag & AGRP_ACTIVE))
 /* F-Curve Channels */
 #define EDITABLE_FCU(fcu) ((fcu->flag & FCURVE_PROTECTED) == 0)

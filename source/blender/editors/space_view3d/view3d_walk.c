@@ -14,7 +14,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-/** \file \ingroup spview3d
+/** \file
+ * \ingroup spview3d
  */
 
 /* defines VIEW3D_OT_navigate - walk modal operator */
@@ -948,7 +949,7 @@ static int walkApply(bContext *C, wmOperator *op, WalkInfo *walk)
 
 #ifdef NDOF_WALK_DEBUG
 	{
-		static unsigned int iteration = 1;
+		static uint iteration = 1;
 		printf("walk timer %d\n", iteration++);
 	}
 #endif

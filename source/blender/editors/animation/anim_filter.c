@@ -17,7 +17,8 @@
  * All rights reserved.
  */
 
-/** \file \ingroup edanimation
+/** \file
+ * \ingroup edanimation
  */
 
 
@@ -46,7 +47,7 @@
 #include "DNA_armature_types.h"
 #include "DNA_camera_types.h"
 #include "DNA_cachefile_types.h"
-#include "DNA_lamp_types.h"
+#include "DNA_light_types.h"
 #include "DNA_lattice_types.h"
 #include "DNA_linestyle_types.h"
 #include "DNA_key_types.h"
@@ -111,7 +112,7 @@ static void animedit_get_yscale_factor(bAnimContext *ac)
 	 * NOTE: This theme setting doesn't have an ID, as it cannot be accessed normally
 	 *       since it is a float, and the theme settings methods can only handle chars.
 	 */
-	ac->yscale_fac = btheme->tact.keyframe_scale_fac;
+	ac->yscale_fac = btheme->space_action.keyframe_scale_fac;
 
 	/* clamp to avoid problems with uninitialised values... */
 	if (ac->yscale_fac < 0.1f)
@@ -268,7 +269,7 @@ static bool actedit_get_context(bAnimContext *ac, SpaceAction *saction)
 /* ----------- Private Stuff - Graph Editor ------------- */
 
 /* Get data being edited in Graph Editor (depending on current 'mode') */
-static bool graphedit_get_context(bAnimContext *ac, SpaceIpo *sipo)
+static bool graphedit_get_context(bAnimContext *ac, SpaceGraph *sipo)
 {
 	/* init dopesheet data if non-existent (i.e. for old files) */
 	if (sipo->ads == NULL) {
@@ -357,9 +358,9 @@ bool ANIM_animdata_context_getdata(bAnimContext *ac)
 				ok = actedit_get_context(ac, saction);
 				break;
 			}
-			case SPACE_IPO:
+			case SPACE_GRAPH:
 			{
-				SpaceIpo *sipo = (SpaceIpo *)sl;
+				SpaceGraph *sipo = (SpaceGraph *)sl;
 				ok = graphedit_get_context(ac, sipo);
 				break;
 			}
@@ -671,7 +672,7 @@ static bAnimListElem *make_new_animlistelem(void *data, short datatype, ID *owne
 			}
 			case ANIMTYPE_DSLAM:
 			{
-				Lamp *la = (Lamp *)data;
+				Light *la = (Light *)data;
 				AnimData *adt = la->adt;
 
 				ale->flag = FILTER_LAM_OBJD(la);
@@ -1760,7 +1761,7 @@ static size_t animdata_filter_gpencil(bAnimContext *ac, ListBase *anim_data, voi
 
 		/* Grab all Grease Pencil datablocks directly from main,
 		 * but only those that seem to be useful somewhere */
-		for (gpd = ac->bmain->gpencil.first; gpd; gpd = gpd->id.next) {
+		for (gpd = ac->bmain->gpencils.first; gpd; gpd = gpd->id.next) {
 			/* only show if gpd is used by something... */
 			if (ID_REAL_USERS(gpd) < 1)
 				continue;
@@ -1883,7 +1884,7 @@ static size_t animdata_filter_mask(Main *bmain, ListBase *anim_data, void *UNUSE
 
 	/* for now, grab mask datablocks directly from main */
 	// XXX: this is not good...
-	for (mask = bmain->mask.first; mask; mask = mask->id.next) {
+	for (mask = bmain->masks.first; mask; mask = mask->id.next) {
 		ListBase tmp_data = {NULL, NULL};
 		size_t tmp_items = 0;
 
@@ -2081,7 +2082,7 @@ static size_t animdata_filter_ds_texture(bAnimContext *ac, ListBase *anim_data, 
 }
 
 /* NOTE: owner_id is the direct owner of the texture stack in question
- *       It used to be Material/Lamp/World before the Blender Internal removal for 2.8
+ *       It used to be Material/Light/World before the Blender Internal removal for 2.8
  */
 static size_t animdata_filter_ds_textures(bAnimContext *ac, ListBase *anim_data, bDopeSheet *ads, ID *owner_id, int filter_mode)
 {
@@ -2362,9 +2363,9 @@ static size_t animdata_filter_ds_obdata(bAnimContext *ac, ListBase *anim_data, b
 			expanded = FILTER_CAM_OBJD(ca);
 			break;
 		}
-		case OB_LAMP: /* ---------- Lamp ----------- */
+		case OB_LAMP: /* ---------- Light ----------- */
 		{
-			Lamp *la = (Lamp *)ob->data;
+			Light *la = (Light *)ob->data;
 
 			if (ads->filterflag & ADS_FILTER_NOLAM)
 				return 0;
@@ -2448,9 +2449,9 @@ static size_t animdata_filter_ds_obdata(bAnimContext *ac, ListBase *anim_data, b
 
 		/* sub-data filtering... */
 		switch (ob->type) {
-			case OB_LAMP:  /* lamp - textures + nodetree */
+			case OB_LAMP:  /* light - textures + nodetree */
 			{
-				Lamp *la = ob->data;
+				Light *la = ob->data;
 				bNodeTree *ntree = la->nodetree;
 
 				/* nodetree */
@@ -2840,7 +2841,7 @@ static size_t animdata_filter_dopesheet_movieclips(bAnimContext *ac, ListBase *a
 {
 	size_t items = 0;
 	MovieClip *clip;
-	for (clip = ac->bmain->movieclip.first; clip != NULL; clip = clip->id.next) {
+	for (clip = ac->bmain->movieclips.first; clip != NULL; clip = clip->id.next) {
 		/* only show if gpd is used by something... */
 		if (ID_REAL_USERS(clip) < 1) {
 			continue;

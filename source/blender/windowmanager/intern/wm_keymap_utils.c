@@ -14,7 +14,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-/** \file \ingroup wm
+/** \file
+ * \ingroup wm
  *
  * Utilities to help define keymaps.
  */
@@ -382,7 +383,7 @@ wmKeyMap *WM_keymap_guess_opname(const bContext *C, const char *opname)
 			case SPACE_VIEW3D:
 				km = WM_keymap_find_all(C, "3D View", sl->spacetype, 0);
 				break;
-			case SPACE_IPO:
+			case SPACE_GRAPH:
 				km = WM_keymap_find_all(C, "Graph Editor", sl->spacetype, 0);
 				break;
 			case SPACE_ACTION:

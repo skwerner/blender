@@ -17,7 +17,8 @@
  * All rights reserved.
  */
 
-/** \file \ingroup editors
+/** \file
+ * \ingroup editors
  */
 
 #ifndef __ED_MESH_H__
@@ -94,8 +95,8 @@ void EDBM_select_flush(struct BMEditMesh *em);
 
 bool EDBM_vert_color_check(struct BMEditMesh *em);
 
-void EDBM_mesh_hide(struct BMEditMesh *em, bool swap);
-void EDBM_mesh_reveal(struct BMEditMesh *em, bool select);
+bool EDBM_mesh_hide(struct BMEditMesh *em, bool swap);
+bool EDBM_mesh_reveal(struct BMEditMesh *em, bool select);
 
 void EDBM_update_generic(struct BMEditMesh *em, const bool do_tessface, const bool is_destructive);
 
@@ -315,14 +316,14 @@ void ED_mesh_calc_tessface(struct Mesh *mesh, bool free_mpoly);
 void ED_mesh_update(struct Mesh *mesh, struct bContext *C, bool calc_edges, bool calc_edges_loose, bool calc_tessface);
 
 void ED_mesh_uv_texture_ensure(struct Mesh *me, const char *name);
-int  ED_mesh_uv_texture_add(struct Mesh *me, const char *name, const bool active_set);
+int  ED_mesh_uv_texture_add(struct Mesh *me, const char *name, const bool active_set, const bool do_init);
 bool ED_mesh_uv_texture_remove_index(struct Mesh *me, const int n);
 bool ED_mesh_uv_texture_remove_active(struct Mesh *me);
 bool ED_mesh_uv_texture_remove_named(struct Mesh *me, const char *name);
 void ED_mesh_uv_loop_reset(struct bContext *C, struct Mesh *me);
 void ED_mesh_uv_loop_reset_ex(struct Mesh *me, const int layernum);
 bool ED_mesh_color_ensure(struct Mesh *me, const char *name);
-int  ED_mesh_color_add(struct Mesh *me, const char *name, const bool active_set);
+int  ED_mesh_color_add(struct Mesh *me, const char *name, const bool active_set, const bool do_init);
 bool ED_mesh_color_remove_index(struct Mesh *me, const int n);
 bool ED_mesh_color_remove_active(struct Mesh *me);
 bool ED_mesh_color_remove_named(struct Mesh *me, const char *name);

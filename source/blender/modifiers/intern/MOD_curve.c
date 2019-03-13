@@ -17,16 +17,17 @@
  * All rights reserved.
  */
 
-/** \file \ingroup modifiers
+/** \file
+ * \ingroup modifiers
  */
 
 #include <string.h>
 
+#include "BLI_utildefines.h"
+
 #include "DNA_mesh_types.h"
 #include "DNA_scene_types.h"
 #include "DNA_object_types.h"
-
-#include "BLI_utildefines.h"
 
 #include "BKE_editmesh.h"
 #include "BKE_lattice.h"
@@ -49,15 +50,14 @@ static void initData(ModifierData *md)
 	cmd->defaxis = MOD_CURVE_POSX;
 }
 
-static CustomDataMask requiredDataMask(Object *UNUSED(ob), ModifierData *md)
+static void  requiredDataMask(Object *UNUSED(ob), ModifierData *md, CustomData_MeshMasks *r_cddata_masks)
 {
 	CurveModifierData *cmd = (CurveModifierData *)md;
-	CustomDataMask dataMask = 0;
 
 	/* ask for vertexgroups if we need them */
-	if (cmd->name[0]) dataMask |= CD_MASK_MDEFORMVERT;
-
-	return dataMask;
+	if (cmd->name[0] != '\0') {
+		r_cddata_masks->vmask |= CD_MASK_MDEFORMVERT;
+	}
 }
 
 static bool isDisabled(const Scene *UNUSED(scene), ModifierData *md, bool UNUSED(userRenderParams))
@@ -91,7 +91,7 @@ static void updateDepsgraph(ModifierData *md, const ModifierUpdateDepsgraphConte
 		DEG_add_special_eval_flag(ctx->node, &cmd->object->id, DAG_EVAL_NEED_CURVE_PATH);
 	}
 
-	DEG_add_object_relation(ctx->node, ctx->object, DEG_OB_COMP_TRANSFORM, "Curve Modifier");
+	DEG_add_modifier_to_transform_relation(ctx->node, "Curve Modifier");
 }
 
 static void deformVerts(

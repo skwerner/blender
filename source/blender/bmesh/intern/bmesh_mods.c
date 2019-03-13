@@ -14,7 +14,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-/** \file \ingroup bmesh
+/** \file
+ * \ingroup bmesh
  *
  * This file contains functions for locally modifying
  * the topology of existing mesh data. (split, join, flip etc).
@@ -713,6 +714,17 @@ BMVert  *BM_edge_split_n(BMesh *bm, BMEdge *e, int numcuts, BMVert **r_varr)
 		}
 	}
 	return v_new;
+}
+
+/**
+ * Swap v1 & v2
+ *
+ * \note Typically we shouldn't care about this, however it's used when extruding wire edges.
+ */
+void BM_edge_verts_swap(BMEdge *e)
+{
+	SWAP(BMVert *, e->v1, e->v2);
+	SWAP(BMDiskLink, e->v1_disk_link, e->v2_disk_link);
 }
 
 #if 0

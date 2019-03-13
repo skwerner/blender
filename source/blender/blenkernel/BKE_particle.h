@@ -23,7 +23,8 @@
 #ifndef __BKE_PARTICLE_H__
 #define __BKE_PARTICLE_H__
 
-/** \file \ingroup bke
+/** \file
+ * \ingroup bke
  */
 
 #include "BLI_utildefines.h"
@@ -40,6 +41,7 @@ struct ParticleSystemModifierData;
 
 struct BVHTreeRay;
 struct BVHTreeRayHit;
+struct CustomData_MeshMasks;
 struct Depsgraph;
 struct Depsgraph;
 struct EdgeHash;
@@ -332,7 +334,7 @@ void psys_interpolate_mcol(const struct MCol *mcol, int quad, const float w[4], 
 
 void copy_particle_key(struct ParticleKey *to, struct ParticleKey *from, int time);
 
-CustomDataMask psys_emitter_customdata_mask(struct ParticleSystem *psys);
+void psys_emitter_customdata_mask(struct ParticleSystem *psys, struct CustomData_MeshMasks *r_cddata_masks);
 void psys_particle_on_emitter(struct ParticleSystemModifierData *psmd, int distr, int index, int index_dmcache,
                               float fuv[4], float foffset, float vec[3], float nor[3],
                               float utan[3], float vtan[3], float orco[3]);
@@ -351,6 +353,8 @@ void BKE_particlesettings_make_local(struct Main *bmain, struct ParticleSettings
 void psys_reset(struct ParticleSystem *psys, int mode);
 
 void psys_find_parents(struct ParticleSimulationData *sim, const bool use_render_params);
+
+void psys_unique_name(struct Object *object, struct ParticleSystem *psys, const char *defname);
 
 void psys_cache_paths(struct ParticleSimulationData *sim, float cfra, const bool use_render_params);
 void psys_cache_edit_paths(struct Depsgraph *depsgraph, struct Scene *scene, struct Object *ob, struct PTCacheEdit *edit, float cfra, const bool use_render_params);
@@ -484,5 +488,8 @@ enum {
 };
 void BKE_particle_batch_cache_dirty_tag(struct ParticleSystem *psys, int mode);
 void BKE_particle_batch_cache_free(struct ParticleSystem *psys);
+
+extern void (*BKE_particle_batch_cache_dirty_tag_cb)(struct ParticleSystem *psys, int mode);
+extern void (*BKE_particle_batch_cache_free_cb)(struct ParticleSystem *psys);
 
 #endif  /* __BKE_PARTICLE_H__ */

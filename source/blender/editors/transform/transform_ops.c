@@ -14,7 +14,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-/** \file \ingroup edtransform
+/** \file
+ * \ingroup edtransform
  */
 
 #include "MEM_guardedalloc.h"
@@ -160,11 +161,14 @@ const EnumPropertyItem rna_enum_transform_mode_types[] =
 static int select_orientation_exec(bContext *C, wmOperator *op)
 {
 	Scene *scene = CTX_data_scene(C);
+	View3D *v3d = CTX_wm_view3d(C);
+
 	int orientation = RNA_enum_get(op->ptr, "orientation");
 
 	BKE_scene_orientation_slot_set_index(&scene->orientation_slots[SCE_ORIENT_DEFAULT], orientation);
 
 	WM_event_add_notifier(C, NC_SCENE | ND_TOOLSETTINGS, NULL);
+	WM_event_add_notifier(C, NC_SPACE | ND_SPACE_VIEW3D, v3d);
 
 	struct wmMsgBus *mbus = CTX_wm_message_bus(C);
 	WM_msg_publish_rna_prop(mbus, &scene->id, scene, TransformOrientationSlot, type);
@@ -228,7 +232,7 @@ static bool delete_orientation_poll(bContext *C)
 	if (ED_operator_areaactive(C) == 0)
 		return 0;
 
-	return ((scene->orientation_slots[SCE_ORIENT_DEFAULT].type >= V3D_MANIP_CUSTOM) &&
+	return ((scene->orientation_slots[SCE_ORIENT_DEFAULT].type >= V3D_ORIENT_CUSTOM) &&
 	        (scene->orientation_slots[SCE_ORIENT_DEFAULT].index_custom != -1));
 }
 
@@ -514,8 +518,8 @@ static bool transform_poll_property(const bContext *UNUSED(C), wmOperator *op, c
 	/* Orientation/Constraints. */
 	{
 		/* Hide orientation axis if no constraints are set, since it wont be used. */
-		PropertyRNA *prop_con = RNA_struct_find_property(op->ptr, "constraint_axis");
-		if (prop_con && !RNA_property_is_set(op->ptr, prop_con)) {
+		PropertyRNA *prop_con = RNA_struct_find_property(op->ptr, "orient_type");
+		if (prop_con != NULL && (prop_con != prop)) {
 			if (STRPREFIX(prop_id, "constraint")) {
 				return false;
 			}
@@ -541,33 +545,41 @@ void Transform_Properties(struct wmOperatorType *ot, int flags)
 {
 	PropertyRNA *prop;
 
-	if (flags & P_AXIS) {
-		prop = RNA_def_property(ot->srna, "axis", PROP_FLOAT, PROP_DIRECTION);
-		RNA_def_property_array(prop, 3);
-		/* Make this not hidden when there's a nice axis selection widget */
-		RNA_def_property_flag(prop, PROP_HIDDEN);
-		RNA_def_property_ui_text(prop, "Axis", "The axis around which the transformation occurs");
+	if (flags & P_ORIENT_AXIS) {
+		prop = RNA_def_property(ot->srna, "orient_axis", PROP_ENUM, PROP_NONE);
+		RNA_def_property_ui_text(prop, "Axis", "");
+		RNA_def_property_enum_default(prop, 2);
+		RNA_def_property_enum_items(prop, rna_enum_axis_xyz_items);
+		RNA_def_property_flag(prop, PROP_SKIP_SAVE);
+	}
+	if (flags & P_ORIENT_AXIS_ORTHO) {
+		prop = RNA_def_property(ot->srna, "orient_axis_ortho", PROP_ENUM, PROP_NONE);
+		RNA_def_property_ui_text(prop, "Axis Ortho", "");
+		RNA_def_property_enum_default(prop, 1);
+		RNA_def_property_enum_items(prop, rna_enum_axis_xyz_items);
+		RNA_def_property_flag(prop, PROP_SKIP_SAVE);
 	}
 
-	if (flags & P_AXIS_ORTHO) {
-		prop = RNA_def_property(ot->srna, "axis_ortho", PROP_FLOAT, PROP_DIRECTION);
-		RNA_def_property_array(prop, 3);
-		/* Make this not hidden when there's a nice axis selection widget */
+	if (flags & P_ORIENT_MATRIX) {
+		prop = RNA_def_property(ot->srna, "orient_type", PROP_ENUM, PROP_NONE);
+		RNA_def_property_ui_text(prop, "Orientation", "Transformation orientation");
+		RNA_def_enum_funcs(prop, rna_TransformOrientation_itemf);
+
+		/* Set by 'orient_type' or gizmo which acts on non-standard orientation. */
+		prop = RNA_def_float_matrix(ot->srna, "orient_matrix", 3, 3, NULL, 0.0f, 0.0f, "Matrix", "", 0.0f, 0.0f);
+		RNA_def_property_flag(prop, PROP_HIDDEN | PROP_SKIP_SAVE);
+
+		/* Only use 'orient_matrix' when 'orient_matrix_type == orient_type',
+		 * this allows us to reuse the orientation set by a gizmo for eg, without disabling the ability
+		 * to switch over to other orientations. */
+		prop = RNA_def_property(ot->srna, "orient_matrix_type", PROP_ENUM, PROP_NONE);
+		RNA_def_property_ui_text(prop, "Matrix Orientation", "");
+		RNA_def_enum_funcs(prop, rna_TransformOrientation_itemf);
 		RNA_def_property_flag(prop, PROP_HIDDEN);
-		RNA_def_property_ui_text(prop, "Axis", "The orthogonal axis around which the transformation occurs");
 	}
 
 	if (flags & P_CONSTRAINT) {
 		RNA_def_boolean_vector(ot->srna, "constraint_axis", 3, NULL, "Constraint Axis", "");
-
-		/* Set by 'constraint_orientation' or gizmo which acts on non-standard orientation. */
-		prop = RNA_def_float_matrix(ot->srna, "constraint_matrix", 3, 3, NULL, 0.0f, 0.0f, "Matrix", "", 0.0f, 0.0f);
-		RNA_def_property_flag(prop, PROP_HIDDEN | PROP_SKIP_SAVE);
-
-		prop = RNA_def_property(ot->srna, "constraint_orientation", PROP_ENUM, PROP_NONE);
-		RNA_def_property_ui_text(prop, "Orientation", "Transformation orientation");
-		RNA_def_enum_funcs(prop, rna_TransformOrientation_itemf);
-
 	}
 
 	if (flags & P_MIRROR) {
@@ -668,7 +680,7 @@ static void TRANSFORM_OT_translate(struct wmOperatorType *ot)
 
 	Transform_Properties(
 	        ot,
-	        P_CONSTRAINT | P_PROPORTIONAL | P_MIRROR | P_ALIGN_SNAP | P_OPTIONS |
+	        P_ORIENT_MATRIX | P_CONSTRAINT | P_PROPORTIONAL | P_MIRROR | P_ALIGN_SNAP | P_OPTIONS |
 	        P_GPENCIL_EDIT | P_CURSOR_EDIT);
 }
 
@@ -693,7 +705,7 @@ static void TRANSFORM_OT_resize(struct wmOperatorType *ot)
 	WM_operatortype_props_advanced_begin(ot);
 
 	Transform_Properties(
-	        ot, P_CONSTRAINT | P_PROPORTIONAL | P_MIRROR | P_GEO_SNAP | P_OPTIONS | P_GPENCIL_EDIT | P_CENTER);
+	        ot, P_ORIENT_MATRIX | P_CONSTRAINT | P_PROPORTIONAL | P_MIRROR | P_GEO_SNAP | P_OPTIONS | P_GPENCIL_EDIT | P_CENTER);
 }
 
 static bool skin_resize_poll(bContext *C)
@@ -726,7 +738,8 @@ static void TRANSFORM_OT_skin_resize(struct wmOperatorType *ot)
 
 	WM_operatortype_props_advanced_begin(ot);
 
-	Transform_Properties(ot, P_CONSTRAINT | P_PROPORTIONAL | P_MIRROR | P_GEO_SNAP | P_OPTIONS | P_NO_TEXSPACE);
+	Transform_Properties(
+	        ot, P_ORIENT_MATRIX | P_CONSTRAINT  | P_PROPORTIONAL | P_MIRROR | P_GEO_SNAP | P_OPTIONS | P_NO_TEXSPACE);
 }
 
 static void TRANSFORM_OT_trackball(struct wmOperatorType *ot)
@@ -774,7 +787,7 @@ static void TRANSFORM_OT_rotate(struct wmOperatorType *ot)
 	WM_operatortype_props_advanced_begin(ot);
 
 	Transform_Properties(
-	        ot, P_AXIS | P_CONSTRAINT | P_PROPORTIONAL | P_MIRROR | P_GEO_SNAP | P_GPENCIL_EDIT | P_CENTER);
+	        ot, P_ORIENT_AXIS | P_ORIENT_MATRIX | P_CONSTRAINT | P_PROPORTIONAL | P_MIRROR | P_GEO_SNAP | P_GPENCIL_EDIT | P_CENTER);
 }
 
 static void TRANSFORM_OT_tilt(struct wmOperatorType *ot)
@@ -847,7 +860,9 @@ static void TRANSFORM_OT_shear(struct wmOperatorType *ot)
 
 	WM_operatortype_props_advanced_begin(ot);
 
-	Transform_Properties(ot, P_PROPORTIONAL | P_MIRROR | P_SNAP | P_GPENCIL_EDIT | P_AXIS | P_AXIS_ORTHO);
+	Transform_Properties(
+	        ot, P_ORIENT_AXIS | P_ORIENT_AXIS_ORTHO | P_ORIENT_MATRIX | P_PROPORTIONAL | P_MIRROR |
+	        P_SNAP | P_GPENCIL_EDIT);
 }
 
 static void TRANSFORM_OT_push_pull(struct wmOperatorType *ot)
@@ -889,7 +904,7 @@ static void TRANSFORM_OT_shrink_fatten(struct wmOperatorType *ot)
 	ot->poll   = ED_operator_editmesh;
 	ot->poll_property = transform_poll_property;
 
-	RNA_def_float(ot->srna, "value", 0, -FLT_MAX, FLT_MAX, "Offset", "", -FLT_MAX, FLT_MAX);
+	RNA_def_float_distance(ot->srna, "value", 0, -FLT_MAX, FLT_MAX, "Offset", "", -FLT_MAX, FLT_MAX);
 
 	RNA_def_boolean(ot->srna, "use_even_offset", false, "Offset Even", "Scale the offset to give more even thickness");
 
@@ -938,7 +953,7 @@ static void TRANSFORM_OT_mirror(struct wmOperatorType *ot)
 	ot->poll   = ED_operator_screenactive;
 	ot->poll_property = transform_poll_property;
 
-	Transform_Properties(ot, P_CONSTRAINT | P_PROPORTIONAL | P_GPENCIL_EDIT | P_CENTER);
+	Transform_Properties(ot, P_ORIENT_MATRIX | P_CONSTRAINT  | P_PROPORTIONAL | P_GPENCIL_EDIT | P_CENTER);
 }
 
 static void TRANSFORM_OT_edge_slide(struct wmOperatorType *ot)
@@ -1090,7 +1105,7 @@ static void TRANSFORM_OT_rotate_normal(struct wmOperatorType *ot)
 
 	RNA_def_float_rotation(ot->srna, "value", 0, NULL, -FLT_MAX, FLT_MAX, "Angle", "", -M_PI * 2, M_PI * 2);
 
-	Transform_Properties(ot, P_AXIS | P_CONSTRAINT | P_MIRROR);
+	Transform_Properties(ot, P_ORIENT_AXIS | P_ORIENT_MATRIX | P_CONSTRAINT | P_MIRROR);
 }
 
 
@@ -1120,7 +1135,8 @@ static void TRANSFORM_OT_transform(struct wmOperatorType *ot)
 	WM_operatortype_props_advanced_begin(ot);
 
 	Transform_Properties(
-	        ot, P_AXIS | P_CONSTRAINT | P_PROPORTIONAL | P_MIRROR | P_ALIGN_SNAP | P_GPENCIL_EDIT | P_CENTER);
+	        ot, P_ORIENT_AXIS | P_ORIENT_MATRIX | P_CONSTRAINT | P_PROPORTIONAL | P_MIRROR | P_ALIGN_SNAP |
+	        P_GPENCIL_EDIT | P_CENTER);
 }
 
 static int transform_from_gizmo_invoke(bContext *C, wmOperator *UNUSED(op), const wmEvent *UNUSED(event))

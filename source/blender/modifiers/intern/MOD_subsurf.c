@@ -17,17 +17,18 @@
  * All rights reserved.
  */
 
-/** \file \ingroup modifiers
+/** \file
+ * \ingroup modifiers
  */
 
 
 #include <stddef.h>
 
+#include "BLI_utildefines.h"
+
 #include "DNA_object_types.h"
 #include "DNA_scene_types.h"
 #include "DNA_mesh_types.h"
-
-#include "BLI_utildefines.h"
 
 #include "BKE_cdderivedmesh.h"
 #include "BKE_scene.h"
@@ -122,9 +123,7 @@ static Subdiv *subdiv_descriptor_ensure(SubsurfModifierData *smd,
 {
 	Subdiv *subdiv = BKE_subdiv_update_from_mesh(
 	        smd->subdiv, subdiv_settings, mesh);
-	if (false) {
-		smd->subdiv = subdiv;
-	}
+	smd->subdiv = subdiv;
 	return subdiv;
 }
 

@@ -14,7 +14,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-/** \file \ingroup blenloader
+/** \file
+ * \ingroup blenloader
  *
  * Version patch user preferences.
  */
@@ -54,9 +55,9 @@ static void do_versions_theme(UserDef *userdef, bTheme *btheme)
 	copy_v4_v4_char(btheme->member, U_theme_default.member);
 
 	if (!USER_VERSION_ATLEAST(280, 25)) {
-		copy_v4_v4_char(btheme->tact.anim_preview_range, btheme->tact.anim_active);
-		copy_v4_v4_char(btheme->tnla.anim_preview_range, btheme->tnla.anim_active);
-		copy_v4_v4_char(btheme->tipo.anim_preview_range, btheme->tact.anim_active);
+		copy_v4_v4_char(btheme->space_action.anim_preview_range, btheme->space_action.anim_active);
+		copy_v4_v4_char(btheme->space_nla.anim_preview_range, btheme->space_nla.anim_active);
+		copy_v4_v4_char(btheme->space_graph.anim_preview_range, btheme->space_action.anim_active);
 	}
 
 	if (!USER_VERSION_ATLEAST(280, 26)) {
@@ -68,26 +69,26 @@ static void do_versions_theme(UserDef *userdef, bTheme *btheme)
 	}
 
 	if (!USER_VERSION_ATLEAST(280, 27)) {
-		FROM_DEFAULT_V4_UCHAR(tact.shade2);
-		FROM_DEFAULT_V4_UCHAR(tact.hilite);
-		FROM_DEFAULT_V4_UCHAR(tact.group);
-		FROM_DEFAULT_V4_UCHAR(tact.group_active);
-		FROM_DEFAULT_V4_UCHAR(tact.strip_select);
-		FROM_DEFAULT_V4_UCHAR(tact.ds_channel);
-		FROM_DEFAULT_V4_UCHAR(tact.ds_subchannel);
-		FROM_DEFAULT_V4_UCHAR(tact.keytype_movehold);
-		FROM_DEFAULT_V4_UCHAR(tact.keytype_movehold_select);
+		FROM_DEFAULT_V4_UCHAR(space_action.shade2);
+		FROM_DEFAULT_V4_UCHAR(space_action.hilite);
+		FROM_DEFAULT_V4_UCHAR(space_action.group);
+		FROM_DEFAULT_V4_UCHAR(space_action.group_active);
+		FROM_DEFAULT_V4_UCHAR(space_action.strip_select);
+		FROM_DEFAULT_V4_UCHAR(space_action.ds_channel);
+		FROM_DEFAULT_V4_UCHAR(space_action.ds_subchannel);
+		FROM_DEFAULT_V4_UCHAR(space_action.keytype_movehold);
+		FROM_DEFAULT_V4_UCHAR(space_action.keytype_movehold_select);
 	}
 
 	if (!USER_VERSION_ATLEAST(280, 28)) {
-		FROM_DEFAULT_V4_UCHAR(tact.ds_ipoline);
+		FROM_DEFAULT_V4_UCHAR(space_action.ds_ipoline);
 	}
 
 	if (!USER_VERSION_ATLEAST(280, 29)) {
-		FROM_DEFAULT_V4_UCHAR(tbuts.navigation_bar);
+		FROM_DEFAULT_V4_UCHAR(space_properties.navigation_bar);
 	}
 	if (!USER_VERSION_ATLEAST(280, 31)) {
-		FROM_DEFAULT_V4_UCHAR(tclip.list_text);
+		FROM_DEFAULT_V4_UCHAR(space_clip.list_text);
 	}
 
 	if (!USER_VERSION_ATLEAST(280, 36)) {
@@ -96,17 +97,17 @@ static void do_versions_theme(UserDef *userdef, bTheme *btheme)
 	}
 
 	if (!USER_VERSION_ATLEAST(280, 39)) {
-		FROM_DEFAULT_V4_UCHAR(tclip.metadatabg);
-		FROM_DEFAULT_V4_UCHAR(tclip.metadatatext);
+		FROM_DEFAULT_V4_UCHAR(space_clip.metadatabg);
+		FROM_DEFAULT_V4_UCHAR(space_clip.metadatatext);
 	}
 
 	if (!USER_VERSION_ATLEAST(280, 40)) {
-		FROM_DEFAULT_V4_UCHAR(tuserpref.navigation_bar);
-		copy_v4_v4_char(btheme->tuserpref.execution_buts, btheme->tuserpref.navigation_bar);
+		FROM_DEFAULT_V4_UCHAR(space_preferences.navigation_bar);
+		copy_v4_v4_char(btheme->space_preferences.execution_buts, btheme->space_preferences.navigation_bar);
 	}
 
 	if (!USER_VERSION_ATLEAST(280, 41)) {
-		FROM_DEFAULT_V4_UCHAR(tv3d.back);
+		FROM_DEFAULT_V4_UCHAR(space_view3d.back);
 	}
 
 #undef FROM_DEFAULT_V4_UCHAR
@@ -314,8 +315,6 @@ void BLO_version_defaults_userpref_blend(Main *bmain, UserDef *userdef)
 		if (userdef->v2d_min_gridsize == 0) {
 			userdef->v2d_min_gridsize = 35;
 		}
-		if (userdef->dragthreshold == 0)
-			userdef->dragthreshold = 5;
 		if (userdef->widget_unit == 0)
 			userdef->widget_unit = 20;
 		if (userdef->anisotropic_filter <= 0)
@@ -468,6 +467,19 @@ void BLO_version_defaults_userpref_blend(Main *bmain, UserDef *userdef)
 		}
 	}
 
+	if (!USER_VERSION_ATLEAST(280, 44)) {
+		userdef->uiflag &= ~(
+		        USER_UIFLAG_DEPRECATED_0 | USER_UIFLAG_DEPRECATED_1);
+		userdef->uiflag2 &= ~(
+		        USER_UIFLAG2_DEPRECATED_0);
+		userdef->gp_settings &= ~(
+		        GP_PAINT_DEPRECATED_0);
+	}
+
+	if (!USER_VERSION_ATLEAST(280, 46)) {
+		userdef->uiflag2 |= USER_EDIT_MODE_SMOOTH_WIRE;
+	}
+
 	/**
 	 * Include next version bump.
 	 */
@@ -480,9 +492,6 @@ void BLO_version_defaults_userpref_blend(Main *bmain, UserDef *userdef)
 
 	if (userdef->image_draw_method == 0)
 		userdef->image_draw_method = IMAGE_DRAW_METHOD_2DTEXTURE;
-
-	// we default to the first audio device
-	userdef->audiodevice = 0;
 
 	for (bTheme *btheme = userdef->themes.first; btheme; btheme = btheme->next) {
 		do_versions_theme(userdef, btheme);

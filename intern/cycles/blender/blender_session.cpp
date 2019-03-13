@@ -475,7 +475,7 @@ void BlenderSession::render(BL::Depsgraph& b_depsgraph_)
 	buffer_params.denoising_clean_pass = (scene->film->denoising_flags & DENOISING_CLEAN_ALL_PASSES);
 	buffer_params.denoising_prefiltered_pass = write_denoising_passes;
 
-	buffer_params.per_pixel_samples = scene->integrator->adaptive_threshold > 0.0f;
+	buffer_params.per_pixel_samples = scene->integrator->sampling_pattern == SAMPLING_PATTERN_PMJ;
 
 	session->params.run_denoising = run_denoising;
 	session->params.full_denoising = full_denoising;

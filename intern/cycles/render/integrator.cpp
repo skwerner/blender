@@ -65,8 +65,8 @@ NODE_DEFINE(Integrator)
 	SOCKET_INT(volume_samples, "Volume Samples", 1);
 	SOCKET_INT(start_sample, "Start Sample", 0);
 
-	SOCKET_FLOAT(adaptive_threshold, "Adaptive Threshold", 0.1f);
-	SOCKET_INT(adaptive_min_samples, "Adaptive Min Samples", 16);
+	SOCKET_FLOAT(adaptive_threshold, "Adaptive Threshold", 0.0f);
+	SOCKET_INT(adaptive_min_samples, "Adaptive Min Samples", 0);
 
 	SOCKET_BOOLEAN(sample_all_lights_direct, "Sample All Lights Direct", true);
 	SOCKET_BOOLEAN(sample_all_lights_indirect, "Sample All Lights Indirect", true);
@@ -172,8 +172,18 @@ void Integrator::device_update(Device *device, DeviceScene *dscene, Scene *scene
 
 	kintegrator->sampling_pattern = sampling_pattern;
 	kintegrator->aa_samples = aa_samples;
-	kintegrator->adaptive_min_samples = max(8, adaptive_min_samples);
-	kintegrator->adaptive_threshold = adaptive_threshold;
+	if(aa_samples > 0 && adaptive_min_samples == 0) {
+		kintegrator->adaptive_min_samples = max(4, (int)sqrtf(aa_samples));
+	}
+	else {
+		kintegrator->adaptive_min_samples = max(4, adaptive_min_samples);
+	}
+	if(aa_samples > 0 && adaptive_threshold == 0.0f) {
+		kintegrator->adaptive_threshold = 1.0f / (float)aa_samples;
+	}
+	else {
+		kintegrator->adaptive_threshold = adaptive_threshold;
+	}
 
 	if(light_sampling_threshold > 0.0f) {
 		kintegrator->light_inv_rr_threshold = 1.0f / light_sampling_threshold;

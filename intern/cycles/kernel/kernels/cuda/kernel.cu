@@ -110,6 +110,27 @@ kernel_cuda_adaptive_filter_y(WorkTile *tile, int sample)
 
 extern "C" __global__ void
 CUDA_LAUNCH_BOUNDS(CUDA_THREADS_BLOCK_WIDTH, CUDA_KERNEL_MAX_REGISTERS)
+kernel_cuda_adaptive_scale_samples(WorkTile *tile, int sample, uint total_work_size)
+{
+	if (kernel_data.film.pass_sample_count) {
+		int work_index = ccl_global_id(0);
+		bool thread_is_active = work_index < total_work_size;
+		uint x, y;
+		KernelGlobals kg;
+		if(thread_is_active) {
+			uint unused_sample;
+			get_work_pixel(tile, work_index, &x, &y, &unused_sample);
+			int index = tile->offset + x + y * tile->stride;
+			ccl_global float *buffer = tile->buffer + index * kernel_data.film.pass_stride;
+			buffer[kernel_data.film.pass_sample_count] = -buffer[kernel_data.film.pass_sample_count];
+			float sample_multiplier = (float)sample / buffer[kernel_data.film.pass_sample_count];
+			kernel_adaptive_post_adjust(&kg, buffer, sample_multiplier);
+		}
+	}
+}
+
+extern "C" __global__ void
+CUDA_LAUNCH_BOUNDS(CUDA_THREADS_BLOCK_WIDTH, CUDA_KERNEL_MAX_REGISTERS)
 kernel_cuda_convert_to_byte(uchar4 *rgba, float *buffer, float sample_scale, int sx, int sy, int sw, int sh, int offset, int stride)
 {
 	int x = sx + blockDim.x*blockIdx.x + threadIdx.x;

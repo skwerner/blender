@@ -1686,12 +1686,14 @@ public:
 
 		cuda_assert(cuFuncSetCacheConfig(cuPathTrace, CU_FUNC_CACHE_PREFER_L1));
 		
-		CUfunction cuAdaptiveFilterX, cuAdaptiveFilterY;
+		CUfunction cuAdaptiveFilterX, cuAdaptiveFilterY, cuScaleSamples;
 		if (task.integrator_adaptive) {
 			cuda_assert(cuModuleGetFunction(&cuAdaptiveFilterX, cuModule, "kernel_cuda_adaptive_filter_x"));
 			cuda_assert(cuFuncSetCacheConfig(cuAdaptiveFilterX, CU_FUNC_CACHE_PREFER_L1));
 			cuda_assert(cuModuleGetFunction(&cuAdaptiveFilterY, cuModule, "kernel_cuda_adaptive_filter_y"));
 			cuda_assert(cuFuncSetCacheConfig(cuAdaptiveFilterY, CU_FUNC_CACHE_PREFER_L1));
+			cuda_assert(cuModuleGetFunction(&cuScaleSamples, cuModule, "kernel_cuda_adaptive_scale_samples"));
+			cuda_assert(cuFuncSetCacheConfig(cuScaleSamples, CU_FUNC_CACHE_PREFER_L1));
 		}
 
 		/* Allocate work tile. */
@@ -1777,6 +1779,19 @@ public:
 				if(task.need_finish_queue == false)
 					break;
 			}
+		}
+
+		if(task.integrator_adaptive) {
+			CUdeviceptr d_work_tiles = cuda_device_ptr(work_tiles.device_pointer);
+			uint total_work_size = wtile->h * wtile->w;
+			void* args[] = { &d_work_tiles, &rtile.sample, &total_work_size };
+			uint num_blocks = divide_up(total_work_size, num_threads_per_block);
+			cuda_assert(cuLaunchKernel(cuScaleSamples,
+				num_blocks, 1, 1,
+				num_threads_per_block, 1, 1,
+				0, 0, args, 0));
+			cuda_assert(cuCtxSynchronize());
+			task.update_progress(&rtile, rtile.w*rtile.h*wtile->num_samples);
 		}
 	}
 

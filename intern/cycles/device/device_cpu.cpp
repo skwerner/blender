@@ -865,6 +865,18 @@ public:
 				else {
 					path_trace(task, tile, kg);
 				}
+				if (task.integrator_adaptive && kernel_data.film.pass_sample_count) {
+					float *render_buffer = (float*)tile.buffer;
+					for (int y = tile.y; y < tile.y + tile.h; y++) {
+						for (int x = tile.x; x < tile.x + tile.w; x++) {
+							int index = tile.offset + x + y * tile.stride;
+							ccl_global float *buffer = render_buffer + index * kernel_data.film.pass_stride;
+							buffer[kernel_data.film.pass_sample_count] = -buffer[kernel_data.film.pass_sample_count];
+							float sample_multiplier = tile.sample / buffer[kernel_data.film.pass_sample_count];
+							kernel_adaptive_post_adjust(kg, buffer, sample_multiplier);
+						}
+					}
+				}
 			}
 			else if(tile.task == RenderTile::DENOISE) {
 				denoise(denoising, tile);

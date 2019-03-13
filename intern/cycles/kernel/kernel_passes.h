@@ -455,7 +455,7 @@ ccl_device_inline void kernel_write_result(KernelGlobals *kg,
 		}
 	}
 	if(kernel_data.film.pass_sample_count) {
-		kernel_write_pass_float(buffer + kernel_data.film.pass_sample_count, 1.0f);
+		kernel_write_pass_float(buffer + kernel_data.film.pass_sample_count, -1.0f);
 	}
 }
 

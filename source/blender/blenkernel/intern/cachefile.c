@@ -17,7 +17,8 @@
  * All rights reserved.
  */
 
-/** \file \ingroup bke
+/** \file
+ * \ingroup bke
  */
 
 #include "DNA_anim_types.h"
@@ -230,7 +231,7 @@ float BKE_cachefile_time_offset(CacheFile *cache_file, const float time, const f
 /* TODO(kevin): replace this with some depsgraph mechanism, or something similar. */
 void BKE_cachefile_clean(struct Main *bmain, CacheFile *cache_file)
 {
-	for (Object *ob = bmain->object.first; ob; ob = ob->id.next) {
+	for (Object *ob = bmain->objects.first; ob; ob = ob->id.next) {
 		ModifierData *md = modifiers_findByType(ob, eModifierType_MeshSequenceCache);
 
 		if (md) {

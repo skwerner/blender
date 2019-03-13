@@ -17,7 +17,8 @@
  * All rights reserved.
  */
 
-/** \file \ingroup depsgraph
+/** \file
+ * \ingroup depsgraph
  *
  * Methods for constructing depsgraph's nodes
  */
@@ -186,8 +187,8 @@ void DepsgraphNodeBuilder::build_rig(Object *object, bool is_object_visible)
 	 * - Acts to encapsulate the evaluation operations (base matrix + parenting,
 	 *   and constraint stack) so that they can be easily found.
 	 * - Everything else which depends on bone-results hook up to the component
-	 *   only so that we can redirect those to point at either the the post-IK/
-	 *   post-constraint/post-matrix steps, as needed. */
+	 *   only so that we can redirect those to point at either the
+	 *   post-IK/post-constraint/post-matrix steps, as needed. */
 	/* Pose eval context. */
 	op_node = add_operation_node(&object->id,
 	                             NodeType::EVAL_POSE,

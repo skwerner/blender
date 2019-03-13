@@ -14,18 +14,19 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-/** \file \ingroup modifiers
+/** \file
+ * \ingroup modifiers
  */
 
 #include <stddef.h>
+
+#include "BLI_utildefines.h"
 
 #include "DNA_dynamicpaint_types.h"
 #include "DNA_object_types.h"
 #include "DNA_object_force_types.h"
 #include "DNA_scene_types.h"
 #include "DNA_mesh_types.h"
-
-#include "BLI_utildefines.h"
 
 #include "BKE_dynamicpaint.h"
 #include "BKE_layer.h"
@@ -63,10 +64,9 @@ static void freeData(ModifierData *md)
 	dynamicPaint_Modifier_free(pmd);
 }
 
-static CustomDataMask requiredDataMask(Object *UNUSED(ob), ModifierData *md)
+static void requiredDataMask(Object *UNUSED(ob), ModifierData *md, CustomData_MeshMasks *r_cddata_masks)
 {
 	DynamicPaintModifierData *pmd = (DynamicPaintModifierData *)md;
-	CustomDataMask dataMask = 0;
 
 	if (pmd->canvas) {
 		DynamicPaintSurface *surface = pmd->canvas->surfaces.first;
@@ -75,21 +75,20 @@ static CustomDataMask requiredDataMask(Object *UNUSED(ob), ModifierData *md)
 			if (surface->format == MOD_DPAINT_SURFACE_F_IMAGESEQ ||
 			    surface->init_color_type == MOD_DPAINT_INITIAL_TEXTURE)
 			{
-				dataMask |= CD_MASK_MLOOPUV;
+				r_cddata_masks->lmask |= CD_MASK_MLOOPUV;
 			}
 			/* mcol */
 			if (surface->type == MOD_DPAINT_SURFACE_T_PAINT ||
 			    surface->init_color_type == MOD_DPAINT_INITIAL_VERTEXCOLOR)
 			{
-				dataMask |= CD_MASK_MLOOPCOL;
+				r_cddata_masks->lmask |= CD_MASK_MLOOPCOL;
 			}
 			/* CD_MDEFORMVERT */
 			if (surface->type == MOD_DPAINT_SURFACE_T_WEIGHT) {
-				dataMask |= CD_MASK_MDEFORMVERT;
+				r_cddata_masks->vmask |= CD_MASK_MDEFORMVERT;
 			}
 		}
 	}
-	return dataMask;
 }
 
 static Mesh *applyModifier(

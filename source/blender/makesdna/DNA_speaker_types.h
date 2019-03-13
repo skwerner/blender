@@ -14,7 +14,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-/** \file \ingroup DNA
+/** \file
+ * \ingroup DNA
  */
 
 #ifndef __DNA_SPEAKER_TYPES_H__
@@ -56,6 +57,6 @@ typedef struct Speaker {
 /* flag */
 #define SPK_DS_EXPAND   (1<<0)
 #define SPK_MUTED       (1<<1)
-#define SPK_RELATIVE    (1<<2)
+// #define SPK_RELATIVE    (1<<2)  /* UNUSED */
 
 #endif /* __DNA_SPEAKER_TYPES_H__ */

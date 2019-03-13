@@ -17,10 +17,15 @@
  * All rights reserved.
  */
 
-/** \file \ingroup modifiers
+/** \file
+ * \ingroup modifiers
  */
 
 #include <string.h>
+
+#include "BLI_utildefines.h"
+
+#include "BLI_listbase.h"
 
 #include "DNA_cloth_types.h"
 #include "DNA_key_types.h"
@@ -29,9 +34,6 @@
 #include "DNA_object_types.h"
 
 #include "MEM_guardedalloc.h"
-
-#include "BLI_listbase.h"
-#include "BLI_utildefines.h"
 
 #include "BKE_cloth.h"
 #include "BKE_effect.h"
@@ -122,21 +124,20 @@ static void updateDepsgraph(ModifierData *md, const ModifierUpdateDepsgraphConte
 		DEG_add_collision_relations(ctx->node, ctx->object, clmd->coll_parms->group, eModifierType_Collision, NULL, "Cloth Collision");
 		DEG_add_forcefield_relations(ctx->node, ctx->object, clmd->sim_parms->effector_weights, true, 0, "Cloth Field");
 	}
-	DEG_add_object_relation(ctx->node, ctx->object, DEG_OB_COMP_TRANSFORM, "Cloth Modifier");
+	DEG_add_modifier_to_transform_relation(ctx->node, "Cloth Modifier");
 }
 
-static CustomDataMask requiredDataMask(Object *UNUSED(ob), ModifierData *md)
+static void requiredDataMask(Object *UNUSED(ob), ModifierData *md, CustomData_MeshMasks *r_cddata_masks)
 {
-	CustomDataMask dataMask = 0;
 	ClothModifierData *clmd = (ClothModifierData *)md;
 
-	if (cloth_uses_vgroup(clmd))
-		dataMask |= CD_MASK_MDEFORMVERT;
+	if (cloth_uses_vgroup(clmd)) {
+		r_cddata_masks->vmask |= CD_MASK_MDEFORMVERT;
+	}
 
-	if (clmd->sim_parms->shapekey_rest != 0)
-		dataMask |= CD_MASK_CLOTH_ORCO;
-
-	return dataMask;
+	if (clmd->sim_parms->shapekey_rest != 0) {
+		r_cddata_masks->vmask |= CD_MASK_CLOTH_ORCO;
+	}
 }
 
 static void copyData(const ModifierData *md, ModifierData *target, const int flag)

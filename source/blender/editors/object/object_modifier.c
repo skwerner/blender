@@ -17,7 +17,8 @@
  * All rights reserved.
  */
 
-/** \file \ingroup edobj
+/** \file
+ * \ingroup edobj
  */
 
 
@@ -95,7 +96,7 @@ static void modifier_skin_customdata_delete(struct Object *ob);
 static void object_force_modifier_update_for_bind(Depsgraph *depsgraph, Scene *scene, Object *ob)
 {
 	if (ob->type == OB_MESH) {
-		Mesh *me_eval = mesh_create_eval_final_view(depsgraph, scene, ob, 0);
+		Mesh *me_eval = mesh_create_eval_final_view(depsgraph, scene, ob, &CD_MASK_BAREMESH);
 		BKE_id_free(NULL, me_eval);
 	}
 	else if (ob->type == OB_LATTICE) {
@@ -105,7 +106,7 @@ static void object_force_modifier_update_for_bind(Depsgraph *depsgraph, Scene *s
 		BKE_displist_make_mball(depsgraph, scene, ob);
 	}
 	else if (ELEM(ob->type, OB_CURVE, OB_SURF, OB_FONT)) {
-		BKE_displist_make_curveTypes(depsgraph, scene, ob, false, false);
+		BKE_displist_make_curveTypes(depsgraph, scene, ob, false, false, NULL);
 	}
 }
 
@@ -232,7 +233,7 @@ bool ED_object_iter_other(
 		Object *ob;
 		int totfound = include_orig ? 0 : 1;
 
-		for (ob = bmain->object.first; ob && totfound < users;
+		for (ob = bmain->objects.first; ob && totfound < users;
 		     ob = ob->id.next)
 		{
 			if (((ob != orig_ob) || include_orig) &&
@@ -260,8 +261,8 @@ static bool object_has_modifier_cb(Object *ob, void *data)
 }
 
 /* Use with ED_object_iter_other(). Sets the total number of levels
-* for any multires modifiers on the object to the int pointed to by
-* callback_data. */
+ * for any multires modifiers on the object to the int pointed to by
+ * callback_data. */
 bool ED_object_multires_update_totlevels_cb(Object *ob, void *totlevel_v)
 {
 	ModifierData *md;
@@ -636,7 +637,7 @@ static int modifier_apply_obdata(ReportList *reports, Depsgraph *depsgraph, Scen
 				return 0;
 			}
 
-			BKE_mesh_nomain_to_mesh(mesh_applied, me, ob, CD_MASK_MESH, true);
+			BKE_mesh_nomain_to_mesh(mesh_applied, me, ob, &CD_MASK_MESH, true);
 
 			if (md->type == eModifierType_Multires)
 				multires_customdata_delete(me);
@@ -1352,7 +1353,7 @@ static int multires_external_save_exec(bContext *C, wmOperator *op)
 		BLI_path_rel(path, BKE_main_blendfile_path(bmain));
 
 	CustomData_external_add(&me->ldata, &me->id, CD_MDISPS, me->totloop, path);
-	CustomData_external_write(&me->ldata, &me->id, CD_MASK_MESH, me->totloop, 0);
+	CustomData_external_write(&me->ldata, &me->id, CD_MASK_MESH.lmask, me->totloop, 0);
 
 	return OPERATOR_FINISHED;
 }
@@ -1485,7 +1486,7 @@ void OBJECT_OT_multires_base_apply(wmOperatorType *ot)
 static void modifier_skin_customdata_delete(Object *ob)
 {
 	Mesh *me = ob->data;
-	BMEditMesh *em = me->edit_btmesh;
+	BMEditMesh *em = me->edit_mesh;
 
 	if (em)
 		BM_data_layer_free(em->bm, &em->bm->vdata, CD_MVERT_SKIN);
@@ -1747,7 +1748,7 @@ static Object *modifier_skin_armature_create(Depsgraph *depsgraph, Main *bmain, 
 	Scene *scene_eval = DEG_get_evaluated_scene(depsgraph);
 	Object *ob_eval = DEG_get_evaluated_object(depsgraph, skin_ob);
 
-	me_eval_deform = mesh_get_eval_deform(depsgraph, scene_eval, ob_eval, CD_MASK_BAREMESH);
+	me_eval_deform = mesh_get_eval_deform(depsgraph, scene_eval, ob_eval, &CD_MASK_BAREMESH);
 	mvert = me_eval_deform->mvert;
 
 	/* add vertex weights to original mesh */

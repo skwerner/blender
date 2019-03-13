@@ -17,7 +17,8 @@
  * All rights reserved.
  */
 
-/** \file \ingroup editors
+/** \file
+ * \ingroup editors
  */
 
 #ifndef __ED_SCREEN_H__
@@ -40,6 +41,7 @@ struct Main;
 struct MenuType;
 struct PropertyRNA;
 struct Scene;
+struct SpaceLink;
 struct ViewLayer;
 struct WorkSpace;
 struct WorkSpaceInstanceHook;
@@ -194,6 +196,7 @@ void    ED_screens_navigation_bar_tools_menu_create(struct bContext *C, struct u
 bool    ED_screen_stereo3d_required(const struct bScreen *screen, const struct Scene *scene);
 Scene   *ED_screen_scene_find(const struct bScreen *screen, const struct wmWindowManager *wm);
 Scene   *ED_screen_scene_find_with_window(const struct bScreen *screen, const struct wmWindowManager *wm, struct wmWindow **r_window);
+ScrArea *ED_screen_area_find_with_spacedata(const bScreen *screen, const struct SpaceLink *sl, bool only_visible);
 struct wmWindow *ED_screen_window_find(const struct bScreen *screen, const struct wmWindowManager *wm);
 void    ED_screen_preview_render(const struct bScreen *screen, int size_x, int size_y, unsigned int *r_rect) ATTR_NONNULL();
 
@@ -355,12 +358,13 @@ void ED_area_type_hud_ensure(struct bContext *C, struct ScrArea *sa);
 enum {
 	ED_KEYMAP_UI        = (1 << 1),
 	ED_KEYMAP_GIZMO     = (1 << 2),
-	ED_KEYMAP_VIEW2D    = (1 << 3),
-	ED_KEYMAP_MARKERS   = (1 << 4),
-	ED_KEYMAP_ANIMATION = (1 << 5),
-	ED_KEYMAP_FRAMES    = (1 << 6),
-	ED_KEYMAP_HEADER    = (1 << 7),
-	ED_KEYMAP_GPENCIL   = (1 << 8),
+	ED_KEYMAP_TOOL      = (1 << 3),
+	ED_KEYMAP_VIEW2D    = (1 << 4),
+	ED_KEYMAP_MARKERS   = (1 << 5),
+	ED_KEYMAP_ANIMATION = (1 << 6),
+	ED_KEYMAP_FRAMES    = (1 << 7),
+	ED_KEYMAP_HEADER    = (1 << 8),
+	ED_KEYMAP_GPENCIL   = (1 << 9),
 };
 
 /* SCREEN_OT_space_context_cycle direction */

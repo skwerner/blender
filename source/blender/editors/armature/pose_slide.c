@@ -17,7 +17,8 @@
  * This is a new part of Blender
  */
 
-/** \file \ingroup edarmature
+/** \file
+ * \ingroup edarmature
  */
 
 #include "MEM_guardedalloc.h"
@@ -206,8 +207,7 @@ static int pose_slide_init(bContext *C, wmOperator *op, ePoseSlide_Modes mode)
 	pso->axislock = RNA_enum_get(op->ptr, "axis_lock");
 
 	/* for each Pose-Channel which gets affected, get the F-Curves for that channel
-	* and set the relevant transform flags...
-	*/
+	 * and set the relevant transform flags... */
 	poseAnim_mapping_get(C, &pso->pfLinks);
 
 	Object **objects = BKE_view_layer_array_from_objects_in_mode_unique_data(CTX_data_view_layer(C),

@@ -17,7 +17,8 @@
  * This is a new part of Blender
  */
 
-/** \file \ingroup edgpencil
+/** \file
+ * \ingroup edgpencil
  */
 
 #include <stdio.h>
@@ -315,14 +316,16 @@ static void gp_render_offscreen(tGPDfill *tgpf)
 	ImBuf *ibuf = IMB_allocImBuf(tgpf->sizex, tgpf->sizey, 32, flag);
 
 	rctf viewplane;
-	float clipsta, clipend;
+	float clip_start, clip_end;
 
-	is_ortho = ED_view3d_viewplane_get(tgpf->depsgraph, tgpf->v3d, tgpf->rv3d, tgpf->sizex, tgpf->sizey, &viewplane, &clipsta, &clipend, NULL);
+	is_ortho = ED_view3d_viewplane_get(
+	        tgpf->depsgraph, tgpf->v3d, tgpf->rv3d, tgpf->sizex, tgpf->sizey,
+	        &viewplane, &clip_start, &clip_end, NULL);
 	if (is_ortho) {
-		orthographic_m4(winmat, viewplane.xmin, viewplane.xmax, viewplane.ymin, viewplane.ymax, -clipend, clipend);
+		orthographic_m4(winmat, viewplane.xmin, viewplane.xmax, viewplane.ymin, viewplane.ymax, -clip_end, clip_end);
 	}
 	else {
-		perspective_m4(winmat, viewplane.xmin, viewplane.xmax, viewplane.ymin, viewplane.ymax, clipsta, clipend);
+		perspective_m4(winmat, viewplane.xmin, viewplane.xmax, viewplane.ymin, viewplane.ymax, clip_start, clip_end);
 	}
 
 	/* set temporary new size */
@@ -1121,9 +1124,9 @@ static void gpencil_fill_exit(bContext *C, wmOperator *op)
 
 		/* delete temp image */
 		if (tgpf->ima) {
-			for (Image *ima = bmain->image.first; ima; ima = ima->id.next) {
+			for (Image *ima = bmain->images.first; ima; ima = ima->id.next) {
 				if (ima == tgpf->ima) {
-					BLI_remlink(&bmain->image, ima);
+					BLI_remlink(&bmain->images, ima);
 					BKE_image_free(tgpf->ima);
 					MEM_SAFE_FREE(tgpf->ima);
 					break;

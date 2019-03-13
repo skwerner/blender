@@ -14,7 +14,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-/** \file \ingroup RNA
+/** \file
+ * \ingroup RNA
  */
 
 #include <float.h>
@@ -22,7 +23,7 @@
 #include <stdlib.h>
 
 #include "DNA_brush_types.h"
-#include "DNA_lamp_types.h"
+#include "DNA_light_types.h"
 #include "DNA_material_types.h"
 #include "DNA_object_types.h"
 #include "DNA_texture_types.h"

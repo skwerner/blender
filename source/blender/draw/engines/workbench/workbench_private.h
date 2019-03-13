@@ -16,7 +16,8 @@
  * Copyright 2016, Blender Foundation.
  */
 
-/** \file \ingroup draw_engine
+/** \file
+ * \ingroup draw_engine
  */
 
 #ifndef __WORKBENCH_PRIVATE_H__
@@ -251,6 +252,7 @@ typedef struct WORKBENCH_PrivateData {
 	bool dof_enabled;
 
 	/* Color Management */
+	bool use_color_management;
 	bool use_color_render_settings;
 } WORKBENCH_PrivateData; /* Transient data */
 

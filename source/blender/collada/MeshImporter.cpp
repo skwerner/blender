@@ -14,7 +14,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-/** \file \ingroup collada
+/** \file
+ * \ingroup collada
  */
 
 
@@ -555,7 +556,7 @@ void MeshImporter::mesh_add_edges(Mesh *mesh, int len)
 	totedge = mesh->totedge + len;
 
 	/* update customdata  */
-	CustomData_copy(&mesh->edata, &edata, CD_MASK_MESH, CD_DEFAULT, totedge);
+	CustomData_copy(&mesh->edata, &edata, CD_MASK_MESH.emask, CD_DEFAULT, totedge);
 	CustomData_copy_data(&mesh->edata, &edata, 0, 0, mesh->totedge);
 
 	if (!CustomData_has_layer(&edata, CD_MEDGE))

@@ -19,7 +19,8 @@
 
  */
 
-/** \file \ingroup edmeta
+/** \file
+ * \ingroup edmeta
  */
 
 #include <math.h>
@@ -711,7 +712,7 @@ bool ED_mball_select_pick(bContext *C, const int mval[2], bool extend, bool dese
 					}
 
 					const uint hit_object = hitresult & 0xFFFF;
-					if (vc.obedit->select_color != hit_object) {
+					if (vc.obedit->select_id != hit_object) {
 						continue;
 					}
 
@@ -740,8 +741,7 @@ bool ED_mball_select_pick(bContext *C, const int mval[2], bool extend, bool dese
 				metaelem_id += 0x10000;
 			}
 
-			/* When some metaelem was found, then it is necessary to select or
-			* deselect it. */
+			/* When some metaelem was found, then it is necessary to select or deselect it. */
 			if (ml_act) {
 				if (!extend && !deselect && !toggle) {
 					uint objects_len;

@@ -14,7 +14,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-/** \file \ingroup spview3d
+/** \file
+ * \ingroup spview3d
  */
 
 
@@ -60,7 +61,7 @@ struct CameraWidgetGroup {
 static bool WIDGETGROUP_camera_poll(const bContext *C, wmGizmoGroupType *UNUSED(gzgt))
 {
 	View3D *v3d = CTX_wm_view3d(C);
-	if ((v3d->flag2 & V3D_RENDER_OVERRIDE) ||
+	if ((v3d->flag2 & V3D_HIDE_OVERLAYS) ||
 	    (v3d->gizmo_flag & (V3D_GIZMO_HIDE | V3D_GIZMO_HIDE_CONTEXT)))
 	{
 		return false;
@@ -173,7 +174,7 @@ static void WIDGETGROUP_camera_refresh(const bContext *C, wmGizmoGroup *gzgroup)
 
 
 		/* account for lens shifting */
-		offset[0] = ((ob->size[0] > 0.0f) ? -2.0f : 2.0f) * ca->shiftx;
+		offset[0] = ((ob->scale[0] > 0.0f) ? -2.0f : 2.0f) * ca->shiftx;
 		offset[1] = 2.0f * ca->shifty;
 		offset[2] = 0.0f;
 
@@ -368,7 +369,7 @@ static bool WIDGETGROUP_camera_view_poll(const bContext *C, wmGizmoGroupType *UN
 	}
 
 	View3D *v3d = CTX_wm_view3d(C);
-	if ((v3d->flag2 & V3D_RENDER_OVERRIDE) ||
+	if ((v3d->flag2 & V3D_HIDE_OVERLAYS) ||
 	    (v3d->gizmo_flag & (V3D_GIZMO_HIDE | V3D_GIZMO_HIDE_CONTEXT)))
 	{
 		return false;

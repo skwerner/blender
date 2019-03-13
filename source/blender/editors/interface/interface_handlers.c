@@ -17,7 +17,8 @@
  * All rights reserved.
  */
 
-/** \file \ingroup edinterface
+/** \file
+ * \ingroup edinterface
  */
 
 #include <float.h>
@@ -1239,12 +1240,18 @@ static bool ui_drag_toggle_but_is_supported(const uiBut *but)
 
 /* Button pushed state to compare if other buttons match. Can be more
  * then just true or false for toggle buttons with more than 2 states. */
-static int ui_drag_toggle_but_pushed_state(uiBut *but)
+static int ui_drag_toggle_but_pushed_state(bContext *C, uiBut *but)
 {
-	if (but->icon) {
-		/* Assume icon identifies a unique state, for buttons that
-		 * work though functions callbacks. */
-		return but->icon + but->iconadd;
+	if (but->rnapoin.data == NULL && but->poin == NULL && but->icon) {
+		if (but->pushed_state_func) {
+			return but->pushed_state_func(C, but->pushed_state_arg);
+		}
+		else {
+			/* Assume icon identifies a unique state, for buttons that
+			* work though functions callbacks and don't have an boolean
+			* value that indicates the state. */
+			return but->icon + but->iconadd;
+		}
 	}
 	else if (ui_but_is_bool(but)) {
 		return ui_but_is_pushed(but);
@@ -1293,7 +1300,7 @@ static bool ui_drag_toggle_set_xy_xy(
 					/* execute the button */
 					if (ui_drag_toggle_but_is_supported(but)) {
 						/* is it pressed? */
-						int pushed_state_but = ui_drag_toggle_but_pushed_state(but);
+						int pushed_state_but = ui_drag_toggle_but_pushed_state(C, but);
 						if (pushed_state_but != pushed_state) {
 							UI_but_execute(C, but);
 							if (do_check) {
@@ -1734,8 +1741,13 @@ static bool ui_but_drag_init(
 	/* prevent other WM gestures to start while we try to drag */
 	WM_gestures_remove(C);
 
-	if (ABS(data->dragstartx - event->x) + ABS(data->dragstarty - event->y) > U.dragthreshold * U.dpi_fac) {
+	/* Clamp the maximum to half the UI unit size so a high user preference
+	 * doesn't require the user to drag more then half the default button height. */
+	const int drag_threshold = min_ii(
+	        U.tweak_threshold * U.dpi_fac,
+	        (int)((UI_UNIT_Y / 2) * ui_block_to_window_scale(data->region, but->block)));
 
+	if (ABS(data->dragstartx - event->x) + ABS(data->dragstarty - event->y) > drag_threshold) {
 		button_activate_state(C, but, BUTTON_STATE_EXIT);
 		data->cancel = true;
 #ifdef USE_DRAG_TOGGLE
@@ -1747,7 +1759,7 @@ static bool ui_but_drag_init(
 			 * typically 'button_activate_exit()' handles this */
 			ui_apply_but_autokey(C, but);
 
-			drag_info->pushed_state = ui_drag_toggle_but_pushed_state(but);
+			drag_info->pushed_state = ui_drag_toggle_but_pushed_state(C, but);
 			drag_info->but_cent_start[0] = BLI_rctf_cent_x(&but->rect);
 			drag_info->but_cent_start[1] = BLI_rctf_cent_y(&but->rect);
 			copy_v2_v2_int(drag_info->xy_init, &event->x);
@@ -3912,8 +3924,10 @@ static bool ui_but_is_mouse_over_icon_extra(const ARegion *region, uiBut *but, c
 
 static int ui_do_but_TAB(bContext *C, uiBlock *block, uiBut *but, uiHandleButtonData *data, const wmEvent *event)
 {
+	const bool is_property = (but->rnaprop != NULL);
+
 #ifdef USE_DRAG_TOGGLE
-	{
+	if (is_property) {
 		int retval;
 		if (ui_do_but_ANY_drag_toggle(C, but, data, event, &retval)) {
 			return retval;
@@ -3924,7 +3938,7 @@ static int ui_do_but_TAB(bContext *C, uiBlock *block, uiBut *but, uiHandleButton
 	if (data->state == BUTTON_STATE_HIGHLIGHT) {
 		const int rna_type = but->rnaprop ? RNA_property_type(but->rnaprop) : 0;
 
-		if (but->rnaprop &&
+		if (is_property &&
 		    ELEM(rna_type, PROP_POINTER, PROP_STRING) &&
 		    (but->custom_data != NULL) &&
 		    (event->type == LEFTMOUSE) &&
@@ -3933,9 +3947,12 @@ static int ui_do_but_TAB(bContext *C, uiBlock *block, uiBut *but, uiHandleButton
 			button_activate_state(C, but, BUTTON_STATE_TEXT_EDITING);
 			return WM_UI_HANDLER_BREAK;
 		}
-		else if (ELEM(event->type, LEFTMOUSE, PADENTER, RETKEY) && (event->val == KM_PRESS)) {
-			button_activate_state(C, but, BUTTON_STATE_EXIT);
-			return WM_UI_HANDLER_BREAK;
+		else if (ELEM(event->type, LEFTMOUSE, PADENTER, RETKEY)) {
+			int event_val = (is_property) ? KM_PRESS : KM_CLICK;
+			if (event->val == event_val) {
+				button_activate_state(C, but, BUTTON_STATE_EXIT);
+				return WM_UI_HANDLER_BREAK;
+			}
 		}
 	}
 	else if (data->state == BUTTON_STATE_TEXT_EDITING) {
@@ -8181,6 +8198,17 @@ static int ui_handle_button_event(bContext *C, const wmEvent *event, uiBut *but)
 				}
 				break;
 			}
+			case RIGHTMOUSE:
+			{
+				if (event->val == KM_PRESS) {
+					uiBut *bt = ui_but_find_mouse_over(ar, event);
+					if (bt && bt->active == data) {
+						button_activate_state(C, bt, BUTTON_STATE_HIGHLIGHT);
+					}
+				}
+				break;
+			}
+
 		}
 
 		ui_do_button(C, block, but, event);
@@ -8431,7 +8459,7 @@ static void ui_handle_button_return_submenu(bContext *C, const wmEvent *event, u
 /* ************************* menu handling *******************************/
 
 /**
- * Function used to prevent losing the open menu when using nested pulldowns,
+ * Function used to prevent losing the open menu when using nested pull-downs,
  * when moving mouse towards the pulldown menu over other buttons that could
  * steal the highlight from the current button, only checks:
  *
@@ -8827,7 +8855,29 @@ static int ui_handle_menu_event(
 
 			switch (event->type) {
 
-				/* closing sublevels of pulldowns */
+				/* Closing sub-levels of pull-downs.
+				 *
+				 * The actual event is handled by the button under the cursor.
+				 * This is done so we can right click on menu items even when they have sub-menus open. */
+				case RIGHTMOUSE:
+					if (inside == false) {
+						if (event->val == KM_PRESS && (block->flag & UI_BLOCK_LOOP)) {
+							if (block->saferct.first) {
+								/* Currently right clicking on a top level pull-down (typically in the header)
+								 * just closes the menu and doesn't support immediately handling the RMB event.
+								 *
+								 * To support we would need UI_RETURN_OUT_PARENT to be handled by
+								 * top-level buttons, not just menus. Note that this isn't very important
+								 * since it's easy to manually close these menus by clicking on them. */
+								menu->menuretval = (level > 0) ? UI_RETURN_OUT_PARENT : UI_RETURN_OUT;
+
+							}
+						}
+						retval = WM_UI_HANDLER_BREAK;
+					}
+					break;
+
+				/* Closing sub-levels of pull-downs. */
 				case LEFTARROWKEY:
 					if (event->val == KM_PRESS && (block->flag & UI_BLOCK_LOOP))
 						if (block->saferct.first)
@@ -8836,7 +8886,7 @@ static int ui_handle_menu_event(
 					retval = WM_UI_HANDLER_BREAK;
 					break;
 
-				/* opening sublevels of pulldowns */
+				/* Opening sub-levels of pull-downs. */
 				case RIGHTARROWKEY:
 					if (event->val == KM_PRESS && (block->flag & UI_BLOCK_LOOP)) {
 
@@ -9027,7 +9077,7 @@ static int ui_handle_menu_event(
 									ui_handle_button_activate(C, ar, but, BUTTON_ACTIVATE_APPLY);
 								}
 								else if (ELEM(but->type, UI_BTYPE_BLOCK, UI_BTYPE_PULLDOWN)) {
-									/* open submenus (like right arrow key) */
+									/* open sub-menus (like right arrow key) */
 									ui_handle_button_activate(C, ar, but, BUTTON_ACTIVATE_OPEN);
 								}
 								else if (but->type == UI_BTYPE_MENU) {
@@ -9051,13 +9101,16 @@ static int ui_handle_menu_event(
 
 		/* here we check return conditions for menus */
 		if (block->flag & UI_BLOCK_LOOP) {
-			/* if we click outside the block, verify if we clicked on the
+			/* If we click outside the block, verify if we clicked on the
 			 * button that opened us, otherwise we need to close,
 			 *
 			 * note that there is an exception for root level menus and
 			 * popups which you can click again to close.
+			 *
+			 * Events handled above may have already set the return value,
+			 * don't overwrite them, see: T61015.
 			 */
-			if (inside == 0) {
+			if ((inside == 0) && (menu->menuretval == 0)) {
 				uiSafetyRct *saferct = block->saferct.first;
 
 				if (ELEM(event->type, LEFTMOUSE, MIDDLEMOUSE, RIGHTMOUSE)) {
@@ -9093,12 +9146,12 @@ static int ui_handle_menu_event(
 			}
 #ifdef USE_KEYNAV_LIMIT
 			else if ((event->type == MOUSEMOVE) && ui_mouse_motion_keynav_test(&menu->keynav_state, event)) {
-				/* don't handle the mousemove if we're using key-navigation */
+				/* Don't handle the mouse-move if we're using key-navigation. */
 				retval = WM_UI_HANDLER_BREAK;
 			}
 #endif
 			else if (event->type == ESCKEY && event->val == KM_PRESS) {
-				/* esc cancels this and all preceding menus */
+				/* Escape cancels this and all preceding menus. */
 				menu->menuretval = UI_RETURN_CANCEL;
 			}
 			else if (ELEM(event->type, RETKEY, PADENTER) && event->val == KM_PRESS) {
@@ -9979,22 +10032,26 @@ void UI_popup_handlers_add(bContext *C, ListBase *handlers, uiPopupBlockHandle *
 
 void UI_popup_handlers_remove(ListBase *handlers, uiPopupBlockHandle *popup)
 {
-	wmEventHandler *handler;
+	LISTBASE_FOREACH (wmEventHandler *, handler_base, handlers) {
+		if (handler_base->type == WM_HANDLER_TYPE_UI) {
+			wmEventHandler_UI *handler = (wmEventHandler_UI *)handler_base;
 
-	for (handler = handlers->first; handler; handler = handler->next) {
-		if (handler->ui_handle == ui_popup_handler &&
-		    handler->ui_remove == ui_popup_handler_remove &&
-		    handler->ui_userdata == popup)
-		{
-			/* tag refresh parent popup */
-			if (handler->next &&
-			    handler->next->ui_handle == ui_popup_handler &&
-			    handler->next->ui_remove == ui_popup_handler_remove)
+			if (handler->handle_fn == ui_popup_handler &&
+			    handler->remove_fn == ui_popup_handler_remove &&
+			    handler->user_data == popup)
 			{
-				uiPopupBlockHandle *parent_popup = handler->next->ui_userdata;
-				ED_region_tag_refresh_ui(parent_popup->region);
+				/* tag refresh parent popup */
+				wmEventHandler_UI *handler_next = (wmEventHandler_UI *)handler->head.next;
+				if (handler_next &&
+				    handler_next->head.type == WM_HANDLER_TYPE_UI &&
+				    handler_next->handle_fn == ui_popup_handler &&
+				    handler_next->remove_fn == ui_popup_handler_remove)
+				{
+					uiPopupBlockHandle *parent_popup = handler_next->user_data;
+					ED_region_tag_refresh_ui(parent_popup->region);
+				}
+				break;
 			}
-			break;
 		}
 	}
 

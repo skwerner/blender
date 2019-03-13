@@ -17,7 +17,8 @@
  * This is a new part of Blender
  */
 
-/** \file \ingroup editors
+/** \file
+ * \ingroup editors
  */
 
 #ifndef __ED_GPENCIL_H__
@@ -264,5 +265,7 @@ int ED_gpencil_select_stroke_segment(
 	struct bGPDstroke *gps, struct bGPDspoint *pt,
 	bool select, bool insert, const float scale,
 	float r_hita[3], float r_hitb[3]);
+
+void ED_gpencil_select_toggle_all(struct bContext *C, int action);
 
 #endif /*  __ED_GPENCIL_H__ */

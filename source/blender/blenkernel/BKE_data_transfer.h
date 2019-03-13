@@ -17,7 +17,8 @@
  * All rights reserved.
  */
 
-/** \file \ingroup bke
+/** \file
+ * \ingroup bke
  */
 
 #ifndef __BKE_DATA_TRANSFER_H__
@@ -65,7 +66,7 @@ enum {
 };
 
 
-CustomDataMask BKE_object_data_transfer_dttypes_to_cdmask(const int dtdata_types);
+void BKE_object_data_transfer_dttypes_to_cdmask(const int dtdata_types, struct CustomData_MeshMasks *r_data_masks);
 bool BKE_object_data_transfer_get_dttypes_capacity(
         const int dtdata_types, bool *r_advanced_mixing, bool *r_threshold);
 int BKE_object_data_transfer_get_dttypes_item_types(const int dtdata_types);

@@ -14,7 +14,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-/** \file \ingroup RNA
+/** \file
+ * \ingroup RNA
  */
 
 
@@ -99,7 +100,7 @@ static const EnumPropertyItem modifier_gphook_falloff_items[] = {
 };
 
 static const EnumPropertyItem rna_enum_time_mode_items[] = {
-	{GP_TIME_MODE_NORMAL, "NORMAL", 0, "Normal", "Apply offset in normal animation direction"},
+	{GP_TIME_MODE_NORMAL, "NORMAL", 0, "Regular", "Apply offset in usual animation direction"},
 	{GP_TIME_MODE_REVERSE, "REVERSE", 0, "Reverse", "Apply offset in reverse animation direction"},
 	{GP_TIME_MODE_FIX, "FIX", 0, "Fixed Frame", "Keep frame and do not change with time"},
 	{0, NULL, 0, NULL, NULL},
@@ -1391,7 +1392,7 @@ static void rna_def_modifier_gpencilmirror(BlenderRNA *brna)
 	RNA_def_property_flag(prop, PROP_EDITABLE | PROP_ID_SELF_CHECK);
 	RNA_def_property_update(prop, 0, "rna_GpencilModifier_dependency_update");
 
-	prop = RNA_def_property(srna, "clip", PROP_BOOLEAN, PROP_NONE);
+	prop = RNA_def_property(srna, "use_clip", PROP_BOOLEAN, PROP_NONE);
 	RNA_def_property_boolean_sdna(prop, NULL, "flag", GP_MIRROR_CLIPPING);
 	RNA_def_property_ui_text(prop, "Clip", "Clip points");
 	RNA_def_property_update(prop, 0, "rna_GpencilModifier_update");
@@ -1498,7 +1499,7 @@ static void rna_def_modifier_gpencilhook(BlenderRNA *brna)
 
 	prop = RNA_def_property(srna, "falloff_curve", PROP_POINTER, PROP_NONE);
 	RNA_def_property_pointer_sdna(prop, NULL, "curfalloff");
-	RNA_def_property_ui_text(prop, "Falloff Curve", "Custom Lamp Falloff Curve");
+	RNA_def_property_ui_text(prop, "Falloff Curve", "Custom Light Falloff Curve");
 	RNA_def_property_update(prop, 0, "rna_GpencilModifier_update");
 
 	prop = RNA_def_property(srna, "center", PROP_FLOAT, PROP_NONE);

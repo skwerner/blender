@@ -17,11 +17,12 @@
  * All rights reserved.
  */
 
-/** \file \ingroup spnode
- *  \brief higher level node drawing for the node editor.
+/** \file
+ * \ingroup spnode
+ * \brief higher level node drawing for the node editor.
  */
 
-#include "DNA_lamp_types.h"
+#include "DNA_light_types.h"
 #include "DNA_node_types.h"
 #include "DNA_material_types.h"
 #include "DNA_screen_types.h"
@@ -101,7 +102,7 @@ static bNodeTree *node_tree_from_ID(ID *id)
 			case ID_MA:
 				return ((Material *)id)->nodetree;
 			case ID_LA:
-				return ((Lamp *)id)->nodetree;
+				return ((Light *)id)->nodetree;
 			case ID_WO:
 				return ((World *)id)->nodetree;
 			case ID_SCE:
@@ -892,11 +893,11 @@ static void node_draw_basis(const bContext *C, ARegion *ar, SpaceNode *snode, bN
 		/* header uses color from backdrop, but we make it opaque */
 		if (color_id == TH_NODE) {
 			UI_GetThemeColorShade3fv(color_id, -20, color);
-			color[3] = 1.0f;
 		}
 		else {
-			UI_GetThemeColor4fv(color_id, color);
+			UI_GetThemeColor3fv(color_id, color);
 		}
+		color[3] = 1.0f;
 	}
 
 	GPU_line_width(1.0f);
@@ -1307,7 +1308,7 @@ static void draw_group_overlay(const bContext *C, ARegion *ar)
 	/* shade node groups to separate them visually */
 	GPU_blend(true);
 
-	UI_GetThemeColorShadeAlpha4fv(TH_NODE_GROUP, 0, -70, color);
+	UI_GetThemeColorShadeAlpha4fv(TH_NODE_GROUP, 0, 0, color);
 	UI_draw_roundbox_corner_set(UI_CNR_NONE);
 	UI_draw_roundbox_4fv(true, rect.xmin, rect.ymin, rect.xmax, rect.ymax, 0, color);
 	GPU_blend(false);

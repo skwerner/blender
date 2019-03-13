@@ -17,7 +17,8 @@
  * All rights reserved.
  */
 
-/** \file \ingroup bke
+/** \file
+ * \ingroup bke
  */
 
 
@@ -794,7 +795,7 @@ void BKE_pose_channel_free_ex(bPoseChannel *pchan, bool do_id_user)
 /** Deallocates runtime cache of a pose channel's B-Bone shape. */
 void BKE_pose_channel_free_bbone_cache(bPoseChannel *pchan)
 {
-	bPoseChannelRuntime *runtime = &pchan->runtime;
+	bPoseChannel_Runtime *runtime = &pchan->runtime;
 
 	runtime->bbone_segments = 0;
 	MEM_SAFE_FREE(runtime->bbone_rest_mats);
@@ -1004,7 +1005,7 @@ void framechange_poses_clear_unkeyed(Main *bmain)
 
 	/* This needs to be done for each object that has a pose */
 	/* TODO: proxies may/may not be correctly handled here... (this needs checking) */
-	for (ob = bmain->object.first; ob; ob = ob->id.next) {
+	for (ob = bmain->objects.first; ob; ob = ob->id.next) {
 		/* we only need to do this on objects with a pose */
 		if ((pose = ob->pose)) {
 			for (pchan = pose->chanbase.first; pchan; pchan = pchan->next) {

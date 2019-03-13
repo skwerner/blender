@@ -17,7 +17,8 @@
  * All rights reserved.
  */
 
-/** \file \ingroup bke
+/** \file
+ * \ingroup bke
  */
 
 
@@ -1060,12 +1061,15 @@ static bool data_transfer_layersmapping_vgroups_multisrc_to_dst(
 			idx_src++;
 
 			if (idx_dst < idx_src) {
-				if (!use_create) {
-					return false;
+				if (use_create) {
+					/* Create as much vgroups as necessary! */
+					for (; idx_dst < idx_src; idx_dst++) {
+						BKE_object_defgroup_add(ob_dst);
+					}
 				}
-				/* Create as much vgroups as necessary! */
-				for (; idx_dst < idx_src; idx_dst++) {
-					BKE_object_defgroup_add(ob_dst);
+				else {
+					/* Otherwise, just try to map what we can with existing dst vgroups. */
+					idx_src = idx_dst;
 				}
 			}
 			else if (use_delete && idx_dst > idx_src) {
@@ -1115,14 +1119,14 @@ static bool data_transfer_layersmapping_vgroups_multisrc_to_dst(
 					}
 
 					if ((idx_dst = defgroup_name_index(ob_dst, dg_src->name)) == -1) {
-						if (!use_create) {
-							if (r_map) {
-								BLI_freelistN(r_map);
-							}
-							return false;
+						if (use_create) {
+							BKE_object_defgroup_add_name(ob_dst, dg_src->name);
+							idx_dst = ob_dst->actdef - 1;
 						}
-						BKE_object_defgroup_add_name(ob_dst, dg_src->name);
-						idx_dst = ob_dst->actdef - 1;
+						else {
+							/* If we are not allowed to create missing dst vgroups, just skip matching src one. */
+							continue;
+						}
 					}
 					if (r_map) {
 						/* At this stage, we **need** a valid CD_MDEFORMVERT layer on dest!
@@ -1184,8 +1188,8 @@ bool data_transfer_layersmapping_vgroups(
 			idx_src = fromlayers;
 			if (idx_src >= BLI_listbase_count(&ob_src->defbase)) {
 				/* This can happen when vgroups are removed from source object...
-				 * Remapping would be really tricky here, we'd need to go over all objects in Main everytime we delete
-				 * a vgroup... for now, simpler and safer to abort. */
+				 * Remapping would be really tricky here, we'd need to go over all objects in
+				 * Main every time we delete a vgroup... for now, simpler and safer to abort. */
 				return false;
 			}
 		}

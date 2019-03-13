@@ -17,7 +17,8 @@
  * All rights reserved.
  */
 
-/** \file \ingroup DNA
+/** \file
+ * \ingroup DNA
  */
 
 #ifndef __DNA_GPU_TYPES_H__
@@ -44,7 +45,7 @@ typedef struct GPUSSAOSettings {
 	float attenuation;
 	/** Ray samples, we use presets here for easy control instead of. */
 	int samples;
-	int pad;
+	char _pad[4];
 } GPUSSAOSettings;
 
 typedef struct GPUFXSettings {
@@ -52,7 +53,7 @@ typedef struct GPUFXSettings {
 	GPUSSAOSettings *ssao;
 	/** #eGPUFXFlags. */
 	char fx_flag;
-	char pad[7];
+	char _pad[7];
 } GPUFXSettings;
 
 /* shaderfx enables */

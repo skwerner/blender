@@ -17,7 +17,8 @@
  * All rights reserved.
  */
 
-/** \file \ingroup edphys
+/** \file
+ * \ingroup edphys
  */
 
 #include <stdlib.h>
@@ -424,6 +425,7 @@ typedef struct PEData {
 
 	int select_action;
 	int select_toggle_action;
+	bool is_changed;
 } PEData;
 
 static void PE_set_data(bContext *C, PEData *data)
@@ -1515,6 +1517,7 @@ static void select_key(PEData *data, int point_index, int key_index, bool UNUSED
 		key->flag &= ~PEK_SELECT;
 
 	point->flag |= PEP_EDIT_RECALC;
+	data->is_changed = true;
 }
 
 static void select_key_op(PEData *data, int point_index, int key_index, bool is_inside)
@@ -1997,27 +2000,38 @@ int PE_box_select(bContext *C, const rcti *rect, const int sel_op)
 
 /************************ circle select operator ************************/
 
-int PE_circle_select(bContext *C, int selecting, const int mval[2], float rad)
+bool PE_circle_select(bContext *C, const int sel_op, const int mval[2], float rad)
 {
+	BLI_assert(ELEM(sel_op, SEL_OP_SET, SEL_OP_ADD, SEL_OP_SUB));
 	Scene *scene = CTX_data_scene(C);
 	Object *ob = CTX_data_active_object(C);
 	PTCacheEdit *edit = PE_get_current(scene, ob);
 	PEData data;
 
-	if (!PE_start_edit(edit))
-		return OPERATOR_FINISHED;
+	if (!PE_start_edit(edit)) {
+		return false;
+	}
+
+	bool changed = false;
+	if (SEL_OP_USE_PRE_DESELECT(sel_op)) {
+		PE_deselect_all_visible(edit);
+		changed = true;
+	}
+	const bool select = (sel_op != SEL_OP_SUB);
 
 	PE_set_view3d_data(C, &data);
 	data.mval = mval;
 	data.rad = rad;
-	data.select = selecting;
+	data.select = select;
 
 	for_mouse_hit_keys(&data, select_key, 0);
+	changed |= data.is_changed;
 
-	PE_update_selection(data.depsgraph, scene, ob, 1);
-	WM_event_add_notifier(C, NC_OBJECT | ND_PARTICLE | NA_SELECTED, ob);
-
-	return OPERATOR_FINISHED;
+	if (changed) {
+		PE_update_selection(data.depsgraph, scene, ob, 1);
+		WM_event_add_notifier(C, NC_OBJECT | ND_PARTICLE | NA_SELECTED, ob);
+	}
+	return changed;
 }
 
 /************************ lasso select operator ************************/
@@ -2901,7 +2915,7 @@ static void brush_drawcursor(bContext *C, int x, int y, void *UNUSED(customdata)
 	ParticleEditSettings *pset = PE_settings(scene);
 	ParticleBrushData *brush;
 
-	if (pset->brushtype < 0) {
+	if (!WM_toolsystem_active_tool_is_brush(C)) {
 		return;
 	}
 
@@ -3579,9 +3593,9 @@ static int particle_intersect_mesh(Depsgraph *depsgraph, Scene *UNUSED(scene), O
 		Scene *scene_eval = DEG_get_evaluated_scene(depsgraph);
 		Object *ob_eval = DEG_get_evaluated_object(depsgraph, ob);
 
-		mesh = mesh_get_eval_final(depsgraph, scene_eval, ob_eval, CD_MASK_BAREMESH);
+		mesh = mesh_get_eval_final(depsgraph, scene_eval, ob_eval, &CD_MASK_BAREMESH);
 		if (mesh == NULL) {
-			mesh = mesh_get_eval_deform(depsgraph, scene_eval, ob_eval, CD_MASK_BAREMESH);
+			mesh = mesh_get_eval_deform(depsgraph, scene_eval, ob_eval, &CD_MASK_BAREMESH);
 		}
 
 		psys_enable_all(ob);
@@ -4064,14 +4078,14 @@ static int brush_edit_init(bContext *C, wmOperator *op)
 	Scene *scene = CTX_data_scene(C);
 	ViewLayer *view_layer = CTX_data_view_layer(C);
 	Object *ob = CTX_data_active_object(C);
-	ParticleEditSettings *pset = PE_settings(scene);
 	PTCacheEdit *edit = PE_get_current(scene, ob);
 	ARegion *ar = CTX_wm_region(C);
 	BrushEdit *bedit;
 	float min[3], max[3];
 
-	if (pset->brushtype < 0)
+	if (!WM_toolsystem_active_tool_is_brush(C)) {
 		return 0;
+	}
 
 	/* set the 'distance factor' for grabbing (used in comb etc) */
 	INIT_MINMAX(min, max);

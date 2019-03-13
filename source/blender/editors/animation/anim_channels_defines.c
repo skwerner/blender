@@ -17,7 +17,8 @@
  * All rights reserved.
  */
 
-/** \file \ingroup edanimation
+/** \file
+ * \ingroup edanimation
  */
 
 
@@ -41,7 +42,7 @@
 #include "DNA_scene_types.h"
 #include "DNA_space_types.h"
 #include "DNA_key_types.h"
-#include "DNA_lamp_types.h"
+#include "DNA_light_types.h"
 #include "DNA_lattice_types.h"
 #include "DNA_linestyle_types.h"
 #include "DNA_mesh_types.h"
@@ -166,9 +167,9 @@ static bool acf_show_channel_colors(bAnimContext *ac)
 
 				break;
 			}
-			case SPACE_IPO:
+			case SPACE_GRAPH:
 			{
-				SpaceIpo *sipo = (SpaceIpo *)ac->sl;
+				SpaceGraph *sipo = (SpaceGraph *)ac->sl;
 				showGroupColors = !(sipo->flag & SIPO_NODRAWGCOLORS);
 
 				break;
@@ -533,7 +534,7 @@ static bool acf_scene_setting_valid(bAnimContext *ac, bAnimListElem *UNUSED(ale)
 
 		/* visible only in Graph Editor */
 		case ACHANNEL_SETTING_VISIBLE:
-			return ((ac) && (ac->spacetype == SPACE_IPO));
+			return ((ac) && (ac->spacetype == SPACE_GRAPH));
 
 		/* only select and expand supported otherwise */
 		case ACHANNEL_SETTING_SELECT:
@@ -693,7 +694,7 @@ static bool acf_object_setting_valid(bAnimContext *ac, bAnimListElem *ale, eAnim
 
 		/* visible only in Graph Editor */
 		case ACHANNEL_SETTING_VISIBLE:
-			return ((ac) && (ac->spacetype == SPACE_IPO) && (ob->adt));
+			return ((ac) && (ac->spacetype == SPACE_GRAPH) && (ob->adt));
 
 		/* only select and expand supported otherwise */
 		case ACHANNEL_SETTING_SELECT:
@@ -701,7 +702,7 @@ static bool acf_object_setting_valid(bAnimContext *ac, bAnimListElem *ale, eAnim
 			return true;
 
 		case ACHANNEL_SETTING_ALWAYS_VISIBLE:
-			return ((ac) && (ac->spacetype == SPACE_IPO) && (ob->adt));
+			return ((ac) && (ac->spacetype == SPACE_GRAPH) && (ob->adt));
 
 		default:
 			return false;
@@ -861,10 +862,10 @@ static bool acf_group_setting_valid(bAnimContext *ac, bAnimListElem *UNUSED(ale)
 
 		/* conditionally supported */
 		case ACHANNEL_SETTING_VISIBLE: /* Only available in Graph Editor */
-			return (ac->spacetype == SPACE_IPO);
+			return (ac->spacetype == SPACE_GRAPH);
 
 		case ACHANNEL_SETTING_ALWAYS_VISIBLE:
-			return (ac->spacetype == SPACE_IPO);
+			return (ac->spacetype == SPACE_GRAPH);
 
 		default: /* always supported */
 			return true;
@@ -887,7 +888,7 @@ static int acf_group_setting_flag(bAnimContext *ac, eAnimChannel_Settings settin
 			 * allowing different collapsing of groups there, since sharing the flag
 			 * proved to be a hazard for workflows...
 			 */
-			return (ac->spacetype == SPACE_IPO) ?
+			return (ac->spacetype == SPACE_GRAPH) ?
 			       AGRP_EXPANDED_G :        /* Graph Editor case */
 			       AGRP_EXPANDED;           /* DopeSheet and elsewhere */
 		}
@@ -993,7 +994,7 @@ static bool acf_fcurve_setting_valid(bAnimContext *ac, bAnimListElem *ale, eAnim
 				return false;  // NOTE: in this special case, we need to draw ICON_ZOOMOUT
 
 		case ACHANNEL_SETTING_VISIBLE: /* Only available in Graph Editor */
-			return (ac->spacetype == SPACE_IPO);
+			return (ac->spacetype == SPACE_GRAPH);
 
 		case ACHANNEL_SETTING_ALWAYS_VISIBLE:
 			return false;
@@ -1482,7 +1483,7 @@ static int acf_dslight_setting_flag(bAnimContext *UNUSED(ac), eAnimChannel_Setti
 /* get pointer to the setting */
 static void *acf_dslight_setting_ptr(bAnimListElem *ale, eAnimChannel_Settings setting, short *type)
 {
-	Lamp *la = (Lamp *)ale->data;
+	Light *la = (Light *)ale->data;
 
 	/* clear extra return data first */
 	*type = 0;
@@ -1503,7 +1504,7 @@ static void *acf_dslight_setting_ptr(bAnimListElem *ale, eAnimChannel_Settings s
 	}
 }
 
-/* lamp expander type define */
+/* light expander type define */
 static bAnimChannelType ACF_DSLIGHT =
 {
 	"Light Expander",               /* type name */
@@ -2027,7 +2028,7 @@ static int acf_dspart_setting_flag(bAnimContext *UNUSED(ac), eAnimChannel_Settin
 
 	switch (setting) {
 		case ACHANNEL_SETTING_EXPAND: /* expanded */
-			return 0;
+			return PART_DS_EXPAND;
 
 		case ACHANNEL_SETTING_MUTE: /* mute (only in NLA) */
 			return ADT_NLA_EVAL_OFF;
@@ -2045,18 +2046,22 @@ static int acf_dspart_setting_flag(bAnimContext *UNUSED(ac), eAnimChannel_Settin
 }
 
 /* get pointer to the setting */
-static void *acf_dspart_setting_ptr(bAnimListElem *UNUSED(ale), eAnimChannel_Settings setting, short *type)
+static void *acf_dspart_setting_ptr(bAnimListElem *ale, eAnimChannel_Settings setting, short *type)
 {
+	ParticleSettings *part = (ParticleSettings *)ale->data;
+
 	/* clear extra return data first */
 	*type = 0;
 
 	switch (setting) {
 		case ACHANNEL_SETTING_EXPAND: /* expanded */
-			return NULL;
+			return GET_ACF_FLAG_PTR(part->flag, type);
 
 		case ACHANNEL_SETTING_SELECT: /* selected */
 		case ACHANNEL_SETTING_MUTE: /* muted (for NLA only) */
 		case ACHANNEL_SETTING_VISIBLE: /* visible (for Graph Editor only) */
+			if (part->adt)
+				return GET_ACF_FLAG_PTR(part->adt->flag, type);
 			return NULL;
 
 		default: /* unsupported */
@@ -3856,7 +3861,7 @@ void ANIM_channel_draw(bAnimContext *ac, bAnimListElem *ale, float yminc, float 
 	 * - in Grease Pencil mode, color swatches for layer color
 	 */
 	if (ac->sl) {
-		if ((ac->spacetype == SPACE_IPO) &&
+		if ((ac->spacetype == SPACE_GRAPH) &&
 		    (acf->has_setting(ac, ale, ACHANNEL_SETTING_VISIBLE) ||
 		     acf->has_setting(ac, ale, ACHANNEL_SETTING_ALWAYS_VISIBLE)))
 		{
@@ -3956,7 +3961,7 @@ void ANIM_channel_draw(bAnimContext *ac, bAnimListElem *ale, float yminc, float 
 		immUniformColor3fv(color);
 
 		/* check if we need to show the sliders */
-		if ((ac->sl) && ELEM(ac->spacetype, SPACE_ACTION, SPACE_IPO)) {
+		if ((ac->sl) && ELEM(ac->spacetype, SPACE_ACTION, SPACE_GRAPH)) {
 			switch (ac->spacetype) {
 				case SPACE_ACTION:
 				{
@@ -3964,9 +3969,9 @@ void ANIM_channel_draw(bAnimContext *ac, bAnimListElem *ale, float yminc, float 
 					draw_sliders = (saction->flag & SACTION_SLIDERS);
 					break;
 				}
-				case SPACE_IPO:
+				case SPACE_GRAPH:
 				{
-					SpaceIpo *sipo = (SpaceIpo *)ac->sl;
+					SpaceGraph *sipo = (SpaceGraph *)ac->sl;
 					draw_sliders = (sipo->flag & SIPO_SLIDERS);
 					break;
 				}
@@ -4466,7 +4471,7 @@ void ANIM_channel_draw_widgets(const bContext *C, bAnimContext *ac, bAnimListEle
 	 * - in Grease Pencil mode, color swatches for layer color
 	 */
 	if (ac->sl) {
-		if ((ac->spacetype == SPACE_IPO) &&
+		if ((ac->spacetype == SPACE_GRAPH) &&
 		    (acf->has_setting(ac, ale, ACHANNEL_SETTING_VISIBLE) ||
 		     acf->has_setting(ac, ale, ACHANNEL_SETTING_ALWAYS_VISIBLE)))
 		{
@@ -4563,7 +4568,7 @@ void ANIM_channel_draw_widgets(const bContext *C, bAnimContext *ac, bAnimListEle
 		short draw_sliders = 0;
 
 		/* check if we need to show the sliders */
-		if ((ac->sl) && ELEM(ac->spacetype, SPACE_ACTION, SPACE_IPO)) {
+		if ((ac->sl) && ELEM(ac->spacetype, SPACE_ACTION, SPACE_GRAPH)) {
 			switch (ac->spacetype) {
 				case SPACE_ACTION:
 				{
@@ -4571,9 +4576,9 @@ void ANIM_channel_draw_widgets(const bContext *C, bAnimContext *ac, bAnimListEle
 					draw_sliders = (saction->flag & SACTION_SLIDERS);
 					break;
 				}
-				case SPACE_IPO:
+				case SPACE_GRAPH:
 				{
-					SpaceIpo *sipo = (SpaceIpo *)ac->sl;
+					SpaceGraph *sipo = (SpaceGraph *)ac->sl;
 					draw_sliders = (sipo->flag & SIPO_SLIDERS);
 					break;
 				}

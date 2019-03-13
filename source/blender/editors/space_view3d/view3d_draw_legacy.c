@@ -17,7 +17,8 @@
  * All rights reserved.
  */
 
-/** \file \ingroup spview3d
+/** \file
+ * \ingroup spview3d
  */
 
 #include <string.h>
@@ -31,7 +32,7 @@
 #include "DNA_object_types.h"
 #include "DNA_mesh_types.h"
 #include "DNA_key_types.h"
-#include "DNA_lamp_types.h"
+#include "DNA_light_types.h"
 #include "DNA_scene_types.h"
 #include "DNA_world_types.h"
 #include "DNA_brush_types.h"
@@ -111,7 +112,7 @@ void ED_view3d_clipping_set(RegionView3D *rv3d)
 {
 #ifdef USE_CLIP_PLANES
 	double plane[4];
-	const unsigned int tot = (rv3d->viewlock & RV3D_BOXCLIP) ? 4 : 6;
+	const uint tot = (rv3d->viewlock & RV3D_BOXCLIP) ? 4 : 6;
 
 	for (unsigned a = 0; a < tot; a++) {
 		copy_v4db_v4fl(plane, rv3d->clip[a]);
@@ -307,7 +308,7 @@ int ED_view3d_backbuf_sample_size_clamp(ARegion *ar, const float dist)
 }
 
 /* samples a single pixel (copied from vpaint) */
-unsigned int ED_view3d_backbuf_sample(
+uint ED_view3d_backbuf_sample(
         ViewContext *vc, int x, int y)
 {
 	if (x >= vc->ar->winx || y >= vc->ar->winy) {
@@ -316,7 +317,7 @@ unsigned int ED_view3d_backbuf_sample(
 
 	ED_view3d_backbuf_validate(vc);
 
-	unsigned int col;
+	uint col;
 	view3d_opengl_read_pixels(vc->ar, x, y, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, &col);
 	glReadBuffer(GL_BACK);
 
@@ -385,9 +386,9 @@ ImBuf *ED_view3d_backbuf_read(
 }
 
 /* smart function to sample a rect spiralling outside, nice for backbuf selection */
-unsigned int ED_view3d_backbuf_sample_rect(
+uint ED_view3d_backbuf_sample_rect(
         ViewContext *vc, const int mval[2], int size,
-        unsigned int min, unsigned int max, float *r_dist)
+        uint min, uint max, float *r_dist)
 {
 	int dirvec[4][2];
 
@@ -479,8 +480,6 @@ static void view3d_draw_bgpic(Scene *scene, Depsgraph *depsgraph,
 	Camera *cam = v3d->camera->data;
 
 	for (CameraBGImage *bgpic = cam->bg_images.first; bgpic; bgpic = bgpic->next) {
-		bgpic->iuser.scene = scene;  /* Needed for render results. */
-
 		if ((bgpic->flag & CAM_BGIMG_FLAG_FOREGROUND) != fg_flag)
 			continue;
 
@@ -503,13 +502,16 @@ static void view3d_draw_bgpic(Scene *scene, Depsgraph *depsgraph,
 				ima = bgpic->ima;
 				if (ima == NULL)
 					continue;
-				BKE_image_user_frame_calc(&bgpic->iuser, (int)DEG_get_ctime(depsgraph));
-				if (ima->source == IMA_SRC_SEQUENCE && !(bgpic->iuser.flag & IMA_USER_FRAME_IN_RANGE)) {
+
+				ImageUser iuser = bgpic->iuser;
+				iuser.scene = scene;  /* Needed for render results. */
+				BKE_image_user_frame_calc(&iuser, (int)DEG_get_ctime(depsgraph));
+				if (ima->source == IMA_SRC_SEQUENCE && !(iuser.flag & IMA_USER_FRAME_IN_RANGE)) {
 					ibuf = NULL; /* frame is out of range, dont show */
 				}
 				else {
-					view3d_stereo_bgpic_setup(scene, v3d, ima, &bgpic->iuser);
-					ibuf = BKE_image_acquire_ibuf(ima, &bgpic->iuser, &lock);
+					view3d_stereo_bgpic_setup(scene, v3d, ima, &iuser);
+					ibuf = BKE_image_acquire_ibuf(ima, &iuser, &lock);
 					releaseibuf = ibuf;
 				}
 
@@ -732,7 +734,7 @@ void ED_view3d_draw_bgpic_test(
 	/* disabled - mango request, since footage /w only render is quite useful
 	 * and this option is easy to disable all background images at once */
 #if 0
-	if (v3d->flag2 & V3D_RENDER_OVERRIDE)
+	if (v3d->flag2 & V3D_HIDE_OVERLAYS)
 		return;
 #endif
 
@@ -877,40 +879,37 @@ void ED_view3d_draw_depth_gpencil(
 
 /* *********************** customdata **************** */
 
-CustomDataMask ED_view3d_datamask(const bContext *C, const Scene *UNUSED(scene), const View3D *v3d)
+void ED_view3d_datamask(
+        const bContext *C, const Scene *UNUSED(scene), const View3D *v3d, CustomData_MeshMasks *r_cddata_masks)
 {
-	CustomDataMask mask = 0;
 	const int drawtype = view3d_effective_drawtype(v3d);
 
 	if (ELEM(drawtype, OB_TEXTURE, OB_MATERIAL)) {
-		mask |= CD_MASK_MLOOPUV | CD_MASK_MLOOPCOL;
+		r_cddata_masks->lmask |= CD_MASK_MLOOPUV | CD_MASK_MLOOPCOL;
 
 		if (drawtype == OB_MATERIAL)
-			mask |= CD_MASK_ORCO;
+			r_cddata_masks->vmask |= CD_MASK_ORCO;
 	}
 
 	if ((CTX_data_mode_enum(C) == CTX_MODE_EDIT_MESH) &&
 	    (v3d->overlay.edit_flag & V3D_OVERLAY_EDIT_WEIGHT))
 	{
-		mask |= CD_MASK_MDEFORMVERT;
+		r_cddata_masks->vmask |= CD_MASK_MDEFORMVERT;
 	}
-
-	return mask;
 }
 
 /* goes over all modes and view3d settings */
-CustomDataMask ED_view3d_screen_datamask(const bContext *C, const Scene *scene, const bScreen *screen)
+void ED_view3d_screen_datamask(
+        const bContext *C, const Scene *scene, const bScreen *screen, CustomData_MeshMasks *r_cddata_masks)
 {
-	CustomDataMask mask = CD_MASK_BAREMESH;
+	CustomData_MeshMasks_update(r_cddata_masks, &CD_MASK_BAREMESH);
 
 	/* check if we need tfaces & mcols due to view mode */
 	for (const ScrArea *sa = screen->areabase.first; sa; sa = sa->next) {
 		if (sa->spacetype == SPACE_VIEW3D) {
-			mask |= ED_view3d_datamask(C, scene, sa->spacedata.first);
+			ED_view3d_datamask(C, scene, sa->spacedata.first, r_cddata_masks);
 		}
 	}
-
-	return mask;
 }
 
 /**

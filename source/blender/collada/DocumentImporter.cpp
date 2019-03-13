@@ -14,7 +14,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-/** \file \ingroup collada
+/** \file
+ * \ingroup collada
  */
 
 // TODO:
@@ -55,7 +56,7 @@ extern "C" {
 #include "BKE_global.h"
 #include "BKE_image.h"
 #include "BKE_layer.h"
-#include "BKE_lamp.h"
+#include "BKE_light.h"
 #include "BKE_library.h"
 #include "BKE_material.h"
 #include "BKE_scene.h"
@@ -63,7 +64,7 @@ extern "C" {
 #include "BLI_path_util.h"
 
 #include "DNA_camera_types.h"
-#include "DNA_lamp_types.h"
+#include "DNA_light_types.h"
 
 #include "RNA_access.h"
 
@@ -376,20 +377,20 @@ Object *DocumentImporter::create_camera_object(COLLADAFW::InstanceCamera *camera
 	return ob;
 }
 
-Object *DocumentImporter::create_lamp_object(COLLADAFW::InstanceLight *lamp, Scene *sce)
+Object *DocumentImporter::create_light_object(COLLADAFW::InstanceLight *lamp, Scene *sce)
 {
 	const COLLADAFW::UniqueId& lamp_uid = lamp->getInstanciatedObjectId();
-	if (uid_lamp_map.find(lamp_uid) == uid_lamp_map.end()) {
+	if (uid_light_map.find(lamp_uid) == uid_light_map.end()) {
 		fprintf(stderr, "Couldn't find light by UID.\n");
 		return NULL;
 	}
 
 	Main *bmain = CTX_data_main(mContext);
 	Object *ob = bc_add_object(bmain, sce, view_layer, OB_LAMP, NULL);
-	Lamp *la = uid_lamp_map[lamp_uid];
-	Lamp *old_lamp = (Lamp *)ob->data;
+	Light *la = uid_light_map[lamp_uid];
+	Light *old_light = (Light *)ob->data;
 	ob->data = la;
-	BKE_id_free_us(bmain, old_lamp);
+	BKE_id_free_us(bmain, old_light);
 	return ob;
 }
 
@@ -562,9 +563,9 @@ std::vector<Object *> *DocumentImporter::write_node(COLLADAFW::Node *node, COLLA
 			++camera_done;
 		}
 		while (lamp_done < lamp.getCount()) {
-			ob = create_lamp_object(lamp[lamp_done], sce);
+			ob = create_light_object(lamp[lamp_done], sce);
 			if (ob == NULL) {
-				report_unknown_reference(*node, "instance_lamp");
+				report_unknown_reference(*node, "instance_light");
 			}
 			else {
 				objects_done->push_back(ob);
@@ -836,10 +837,10 @@ bool DocumentImporter::writeCamera(const COLLADAFW::Camera *camera)
 	if (et && et->isProfile("blender")) {
 		et->setData("shiftx",&(cam->shiftx));
 		et->setData("shifty",&(cam->shifty));
-		et->setData("YF_dofdist",&(cam->YF_dofdist));
+		et->setData("dof_distance",&(cam->dof_distance));
 	}
-	cam->clipsta = camera->getNearClippingPlane().getValue();
-	cam->clipend = camera->getFarClippingPlane().getValue();
+	cam->clip_start = camera->getNearClippingPlane().getValue();
+	cam->clip_end = camera->getFarClippingPlane().getValue();
 
 	COLLADAFW::Camera::CameraType type = camera->getCameraType();
 	switch (type) {
@@ -982,7 +983,7 @@ bool DocumentImporter::writeLight(const COLLADAFW::Light *light)
 		return true;
 
 	Main *bmain = CTX_data_main(mContext);
-	Lamp *lamp = NULL;
+	Light *lamp = NULL;
 	std::string la_id, la_name;
 
 	ExtraTags *et = getExtraTags(light->getUniqueId());
@@ -994,8 +995,8 @@ bool DocumentImporter::writeLight(const COLLADAFW::Light *light)
 
 	la_id = light->getOriginalId();
 	la_name = light->getName();
-	if (la_name.size()) lamp = (Lamp *)BKE_lamp_add(bmain, (char *)la_name.c_str());
-	else lamp = (Lamp *)BKE_lamp_add(bmain, (char *)la_id.c_str());
+	if (la_name.size()) lamp = (Light *)BKE_light_add(bmain, (char *)la_name.c_str());
+	else lamp = (Light *)BKE_light_add(bmain, (char *)la_id.c_str());
 
 	if (!lamp) {
 		fprintf(stderr, "Cannot create light.\n");
@@ -1116,7 +1117,7 @@ bool DocumentImporter::writeLight(const COLLADAFW::Light *light)
 		}
 	}
 
-	this->uid_lamp_map[light->getUniqueId()] = lamp;
+	this->uid_light_map[light->getUniqueId()] = lamp;
 	this->FW_object_map[light->getUniqueId()] = light;
 	return true;
 }

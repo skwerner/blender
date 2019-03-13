@@ -20,7 +20,8 @@
 #ifndef __BKE_ANIMSYS_H__
 #define __BKE_ANIMSYS_H__
 
-/** \file \ingroup bke
+/** \file
+ * \ingroup bke
  */
 
 struct AnimData;
@@ -160,6 +161,9 @@ void BKE_animdata_main_cb(struct Main *bmain, ID_AnimData_Edit_Callback func, vo
 
 /* Loop over all datablocks applying callback to all its F-Curves */
 void BKE_fcurves_main_cb(struct Main *bmain, ID_FCurve_Edit_Callback func, void *user_data);
+
+/* Look over all f-curves of a given ID. */
+void BKE_fcurves_id_cb(struct ID *id, ID_FCurve_Edit_Callback func, void *user_data);
 
 /* ************************************* */
 // TODO: overrides, remapping, and path-finding api's

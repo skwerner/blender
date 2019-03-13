@@ -1,6 +1,4 @@
 /*
- * Copyright 2016, Blender Foundation.
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,9 +12,12 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
+ *
+ * Copyright 2016, Blender Foundation.
  */
 
-/** \file \ingroup draw_engine
+/** \file
+ * \ingroup draw_engine
  */
 
 #include "workbench_private.h"
@@ -256,8 +257,8 @@ void workbench_dof_engine_init(WORKBENCH_Data *vedata, Object *camera)
 		wpd->dof_distance = -focus_dist;
 		wpd->dof_invsensorsize = full_size[0] / sensor_scaled;
 
-		wpd->dof_near_far[0] = -cam->clipsta;
-		wpd->dof_near_far[1] = -cam->clipend;
+		wpd->dof_near_far[0] = -cam->clip_start;
+		wpd->dof_near_far[1] = -cam->clip_end;
 
 		float blades = cam->gpu_dof.num_blades;
 		float rotation = cam->gpu_dof.rotation;

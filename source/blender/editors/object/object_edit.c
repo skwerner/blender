@@ -17,7 +17,8 @@
  * All rights reserved.
  */
 
-/** \file \ingroup edobj
+/** \file
+ * \ingroup edobj
  */
 
 #include <stdlib.h>
@@ -200,21 +201,7 @@ static int object_hide_view_set_exec(bContext *C, wmOperator *op)
 	Scene *scene = CTX_data_scene(C);
 	ViewLayer *view_layer = CTX_data_view_layer(C);
 	const bool unselected = RNA_boolean_get(op->ptr, "unselected");
-
-	/* Do nothing if no objects was selected. */
-	bool have_selected = false;
-	for (Base *base = view_layer->object_bases.first; base; base = base->next) {
-		if (base->flag & BASE_VISIBLE) {
-			if (base->flag & BASE_SELECTED) {
-				have_selected = true;
-				break;
-			}
-		}
-	}
-
-	if (!have_selected) {
-		return OPERATOR_CANCELLED;
-	}
+	bool changed = false;
 
 	/* Hide selected or unselected objects. */
 	for (Base *base = view_layer->object_bases.first; base; base = base->next) {
@@ -226,14 +213,19 @@ static int object_hide_view_set_exec(bContext *C, wmOperator *op)
 			if (base->flag & BASE_SELECTED) {
 				ED_object_base_select(base, BA_DESELECT);
 				base->flag |= BASE_HIDDEN;
+				changed = true;
 			}
 		}
 		else {
 			if (!(base->flag & BASE_SELECTED)) {
 				ED_object_base_select(base, BA_DESELECT);
 				base->flag |= BASE_HIDDEN;
+				changed = true;
 			}
 		}
+	}
+	if (!changed) {
+		return OPERATOR_CANCELLED;
 	}
 
 	BKE_layer_collection_sync(scene, view_layer);
@@ -314,12 +306,6 @@ void ED_collection_hide_menu_draw(const bContext *C, uiLayout *layout)
 			continue;
 		}
 
-		if ((view_layer->runtime_flag & VIEW_LAYER_HAS_HIDE) &&
-		    !(lc->runtime_flag & LAYER_COLLECTION_HAS_VISIBLE_OBJECTS))
-		{
-			uiLayoutSetActive(row, false);
-		}
-
 		int icon = ICON_NONE;
 		if (BKE_layer_collection_has_selected_objects(view_layer, lc)) {
 			icon = ICON_LAYER_ACTIVE;
@@ -389,7 +375,7 @@ static bool mesh_needs_keyindex(Main *bmain, const Mesh *me)
 		return false;  /* will be added */
 	}
 
-	for (const Object *ob = bmain->object.first; ob; ob = ob->id.next) {
+	for (const Object *ob = bmain->objects.first; ob; ob = ob->id.next) {
 		if ((ob->parent) && (ob->parent->data == me) && ELEM(ob->partype, PARVERT1, PARVERT3)) {
 			return true;
 		}
@@ -416,11 +402,11 @@ static bool ED_object_editmode_load_ex(Main *bmain, Object *obedit, const bool f
 
 	if (obedit->type == OB_MESH) {
 		Mesh *me = obedit->data;
-		if (me->edit_btmesh == NULL) {
+		if (me->edit_mesh == NULL) {
 			return false;
 		}
 
-		if (me->edit_btmesh->bm->totvert > MESH_MAX_VERTS) {
+		if (me->edit_mesh->bm->totvert > MESH_MAX_VERTS) {
 			error("Too many vertices");
 			return false;
 		}
@@ -428,9 +414,9 @@ static bool ED_object_editmode_load_ex(Main *bmain, Object *obedit, const bool f
 		EDBM_mesh_load(bmain, obedit);
 
 		if (freedata) {
-			EDBM_mesh_free(me->edit_btmesh);
-			MEM_freeN(me->edit_btmesh);
-			me->edit_btmesh = NULL;
+			EDBM_mesh_free(me->edit_mesh);
+			MEM_freeN(me->edit_mesh);
+			me->edit_mesh = NULL;
 		}
 		/* will be recalculated as needed. */
 		{
@@ -749,6 +735,12 @@ static int posemode_exec(bContext *C, wmOperator *op)
 {
 	struct wmMsgBus *mbus = CTX_wm_message_bus(C);
 	Base *base = CTX_data_active_base(C);
+
+	/* If the base is NULL it means we have an active object, but the object itself is hidden. */
+	if (base == NULL) {
+		return OPERATOR_CANCELLED;
+	}
+
 	Object *obact = base->object;
 	const int mode_flag = OB_MODE_POSE;
 	bool is_mode_set = (obact->mode & mode_flag) != 0;

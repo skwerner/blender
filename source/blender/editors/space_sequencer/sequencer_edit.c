@@ -17,7 +17,8 @@
  * All rights reserved.
  */
 
-/** \file \ingroup spseq
+/** \file
+ * \ingroup spseq
  */
 
 
@@ -1816,7 +1817,7 @@ void SEQUENCER_OT_lock(struct wmOperatorType *ot)
 	/* identifiers */
 	ot->name = "Lock Strips";
 	ot->idname = "SEQUENCER_OT_lock";
-	ot->description = "Lock the active strip so that it can't be transformed";
+	ot->description = "Lock strips so they can't be transformed";
 
 	/* api callbacks */
 	ot->exec = sequencer_lock_exec;
@@ -1849,7 +1850,7 @@ void SEQUENCER_OT_unlock(struct wmOperatorType *ot)
 	/* identifiers */
 	ot->name = "Unlock Strips";
 	ot->idname = "SEQUENCER_OT_unlock";
-	ot->description = "Unlock the active strip so that it can't be transformed";
+	ot->description = "Unlock strips so they can be transformed";
 
 	/* api callbacks */
 	ot->exec = sequencer_unlock_exec;
@@ -3578,7 +3579,7 @@ void SEQUENCER_OT_enable_proxies(wmOperatorType *ot)
 	/* identifiers */
 	ot->name = "Set Selected Strip Proxies";
 	ot->idname = "SEQUENCER_OT_enable_proxies";
-	ot->description = "Enable selected proxies on all selected Movie strips";
+	ot->description = "Enable selected proxies on all selected Movie, Image and Meta strips";
 
 	/* api callbacks */
 	ot->invoke = sequencer_enable_proxies_invoke;

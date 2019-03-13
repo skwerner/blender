@@ -17,7 +17,8 @@
  * All rights reserved.
  */
 
-/** \file \ingroup editorui
+/** \file
+ * \ingroup editorui
  */
 
 #ifndef __UI_RESOURCES_H__
@@ -155,7 +156,7 @@ typedef enum ThemeColorID {
 	TH_KEYBORDER,
 	TH_KEYBORDER_SELECT,
 
-	TH_LAMP,
+	TH_LIGHT,
 	TH_SPEAKER,
 	TH_CAMERA,
 	TH_EMPTY,
@@ -345,6 +346,10 @@ void	UI_GetThemeColorBlendShade3ubv(int colorid1, int colorid2, float fac, int o
 
 // get four color values, scaled to 0.0-1.0 range
 void    UI_GetThemeColor4fv(int colorid, float col[4]);
+
+/* get four color values from specified space type, scaled to 0.0-1.0 range */
+void	UI_GetThemeColorType4fv(int colorid, int spacetype, float col[4]);
+
 // get four color values, range 0.0-1.0, complete with shading offset for the RGB components
 void    UI_GetThemeColorShade4fv(int colorid, int offset, float col[4]);
 void	UI_GetThemeColorShadeAlpha4fv(int colorid, int coloffset, int alphaoffset, float col[4]);

@@ -17,7 +17,8 @@
  * All rights reserved.
  */
 
-/** \file \ingroup spview3d
+/** \file
+ * \ingroup spview3d
  */
 
 #include "DNA_mesh_types.h"
@@ -156,7 +157,7 @@ static void circball_array_fill(float verts[CIRCLE_RESOL][3], const float cent[3
 	mul_v3_v3fl(vx, tmat[0], rad);
 	mul_v3_v3fl(vy, tmat[1], rad);
 
-	for (unsigned int a = 0; a < CIRCLE_RESOL; a++, viter += 3) {
+	for (uint a = 0; a < CIRCLE_RESOL; a++, viter += 3) {
 		viter[0] = cent[0] + sinval[a] * vx[0] + cosval[a] * vy[0];
 		viter[1] = cent[1] + sinval[a] * vx[1] + cosval[a] * vy[1];
 		viter[2] = cent[2] + sinval[a] * vx[2] + cosval[a] * vy[2];
@@ -177,7 +178,7 @@ void imm_drawcircball(const float cent[3], float rad, const float tmat[4][4], un
 }
 
 #ifdef VIEW3D_CAMERA_BORDER_HACK
-unsigned char view3d_camera_border_hack_col[3];
+uchar view3d_camera_border_hack_col[3];
 bool view3d_camera_border_hack_test = false;
 #endif
 
@@ -193,8 +194,8 @@ static void bbs_mesh_verts(GPUBatch *batch, int offset, const float world_clip_p
 {
 	GPU_point_size(UI_GetThemeValuef(TH_VERTEX_SIZE));
 
-	const eGPUShaderConfig shader_cfg = world_clip_planes ? GPU_SHADER_CFG_CLIPPED : GPU_SHADER_CFG_DEFAULT;
-	GPU_batch_program_set_builtin_with_config(batch, GPU_SHADER_3D_FLAT_SELECT_ID, shader_cfg);
+	const eGPUShaderConfig sh_cfg = world_clip_planes ? GPU_SHADER_CFG_CLIPPED : GPU_SHADER_CFG_DEFAULT;
+	GPU_batch_program_set_builtin_with_config(batch, GPU_SHADER_3D_FLAT_SELECT_ID, sh_cfg);
 	GPU_batch_uniform_1ui(batch, "offset", offset);
 	if (world_clip_planes != NULL) {
 		bbs_world_clip_planes_from_rv3d(batch, world_clip_planes);
@@ -207,8 +208,8 @@ static void bbs_mesh_wire(GPUBatch *batch, int offset, const float world_clip_pl
 	GPU_line_width(1.0f);
 	glProvokingVertex(GL_FIRST_VERTEX_CONVENTION);
 
-	const eGPUShaderConfig shader_cfg = world_clip_planes ? GPU_SHADER_CFG_CLIPPED : GPU_SHADER_CFG_DEFAULT;
-	GPU_batch_program_set_builtin_with_config(batch, GPU_SHADER_3D_FLAT_SELECT_ID, shader_cfg);
+	const eGPUShaderConfig sh_cfg = world_clip_planes ? GPU_SHADER_CFG_CLIPPED : GPU_SHADER_CFG_DEFAULT;
+	GPU_batch_program_set_builtin_with_config(batch, GPU_SHADER_3D_FLAT_SELECT_ID, sh_cfg);
 	GPU_batch_uniform_1ui(batch, "offset", offset);
 	if (world_clip_planes != NULL) {
 		bbs_world_clip_planes_from_rv3d(batch, world_clip_planes);
@@ -222,8 +223,8 @@ static void bbs_mesh_wire(GPUBatch *batch, int offset, const float world_clip_pl
 static void bbs_mesh_face(GPUBatch *batch, const bool use_select, const float world_clip_planes[6][4])
 {
 	if (use_select) {
-		const eGPUShaderConfig shader_cfg = world_clip_planes ? GPU_SHADER_CFG_CLIPPED : GPU_SHADER_CFG_DEFAULT;
-		GPU_batch_program_set_builtin_with_config(batch, GPU_SHADER_3D_FLAT_SELECT_ID, shader_cfg);
+		const eGPUShaderConfig sh_cfg = world_clip_planes ? GPU_SHADER_CFG_CLIPPED : GPU_SHADER_CFG_DEFAULT;
+		GPU_batch_program_set_builtin_with_config(batch, GPU_SHADER_3D_FLAT_SELECT_ID, sh_cfg);
 		GPU_batch_uniform_1ui(batch, "offset", 1);
 		if (world_clip_planes != NULL) {
 			bbs_world_clip_planes_from_rv3d(batch, world_clip_planes);
@@ -231,8 +232,8 @@ static void bbs_mesh_face(GPUBatch *batch, const bool use_select, const float wo
 		GPU_batch_draw(batch);
 	}
 	else {
-		const eGPUShaderConfig shader_cfg = world_clip_planes ? GPU_SHADER_CFG_CLIPPED : GPU_SHADER_CFG_DEFAULT;
-		GPU_batch_program_set_builtin_with_config(batch, GPU_SHADER_3D_UNIFORM_SELECT_ID, shader_cfg);
+		const eGPUShaderConfig sh_cfg = world_clip_planes ? GPU_SHADER_CFG_CLIPPED : GPU_SHADER_CFG_DEFAULT;
+		GPU_batch_program_set_builtin_with_config(batch, GPU_SHADER_3D_UNIFORM_SELECT_ID, sh_cfg);
 		GPU_batch_uniform_1ui(batch, "id", 0);
 		if (world_clip_planes != NULL) {
 			bbs_world_clip_planes_from_rv3d(batch, world_clip_planes);
@@ -243,8 +244,8 @@ static void bbs_mesh_face(GPUBatch *batch, const bool use_select, const float wo
 
 static void bbs_mesh_face_dot(GPUBatch *batch, const float world_clip_planes[6][4])
 {
-	const eGPUShaderConfig shader_cfg = world_clip_planes ? GPU_SHADER_CFG_CLIPPED : GPU_SHADER_CFG_DEFAULT;
-	GPU_batch_program_set_builtin_with_config(batch, GPU_SHADER_3D_FLAT_SELECT_ID, shader_cfg);
+	const eGPUShaderConfig sh_cfg = world_clip_planes ? GPU_SHADER_CFG_CLIPPED : GPU_SHADER_CFG_DEFAULT;
+	GPU_batch_program_set_builtin_with_config(batch, GPU_SHADER_3D_FLAT_SELECT_ID, sh_cfg);
 	GPU_batch_uniform_1ui(batch, "offset", 1);
 	if (world_clip_planes != NULL) {
 		bbs_world_clip_planes_from_rv3d(batch, world_clip_planes);
@@ -294,14 +295,15 @@ void draw_object_backbufsel(
 
 	const float (*world_clip_planes)[4] = NULL;
 	if (rv3d->rflag & RV3D_CLIPPING) {
-		world_clip_planes = rv3d->clip;
+		ED_view3d_clipping_local(rv3d, ob->obmat);
+		world_clip_planes = rv3d->clip_local;
 	}
 
 	switch (ob->type) {
 		case OB_MESH:
 			if (ob->mode & OB_MODE_EDIT) {
 				Mesh *me = ob->data;
-				BMEditMesh *em = me->edit_btmesh;
+				BMEditMesh *em = me->edit_mesh;
 				const bool draw_facedot = check_ob_drawface_dot(scene, v3d, ob->dt);
 				const bool use_faceselect = (select_mode & SCE_SELECT_FACE) != 0;
 

@@ -14,20 +14,22 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-/** \file \ingroup modifiers
+/** \file
+ * \ingroup modifiers
  */
 
 #include <stdio.h>
+
+#include "BLI_utildefines.h"
+
+#include "BLI_math.h"
+#include "BLI_path_util.h"
+#include "BLI_string.h"
 
 #include "DNA_scene_types.h"
 #include "DNA_object_types.h"
 #include "DNA_mesh_types.h"
 #include "DNA_meshdata_types.h"
-
-#include "BLI_utildefines.h"
-#include "BLI_string.h"
-#include "BLI_path_util.h"
-#include "BLI_math.h"
 
 #include "BKE_main.h"
 #include "BKE_mesh.h"

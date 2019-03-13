@@ -17,7 +17,8 @@
  * All rights reserved.
  */
 
-/** \file \ingroup DNA
+/** \file
+ * \ingroup DNA
  */
 
 #ifndef __DNA_SMOKE_TYPES_H__
@@ -41,7 +42,7 @@ enum {
 #define MOD_SMOKE_NOISEFFT (1<<1)
 #define MOD_SMOKE_NOISECURL (1<<2)
 /* viewsettings */
-#define MOD_SMOKE_VIEW_SHOWBIG (1<<0)
+#define MOD_SMOKE_VIEW_SHOW_HIGHRES (1<<0)
 
 /* slice method */
 enum {
@@ -216,7 +217,7 @@ typedef struct SmokeDomainSettings {
 	int openvdb_comp;
 	char cache_file_format;
 	char data_depth;
-	char pad[2];
+	char _pad[2];
 
 	/* Smoke uses only one cache from now on (index [0]),
 	 * but keeping the array for now for reading old files. */
@@ -254,7 +255,7 @@ typedef struct SmokeDomainSettings {
 	char interp_method;
 
 	float clipping;
-	float pad3;
+	char _pad3[4];
 } SmokeDomainSettings;
 
 
@@ -315,7 +316,7 @@ typedef struct SmokeFlowSettings {
 	/* texture control */
 	float texture_size;
 	float texture_offset;
-	int pad;
+	char _pad[4];
 	/** MAX_CUSTOMDATA_LAYER_NAME. */
 	char uvlayer_name[64];
 	short vgroup_density;
@@ -341,7 +342,7 @@ typedef struct SmokeCollSettings {
 	float *verts_old;
 	int numverts;
 	short type; // static = 0, rigid = 1, dynamic = 2
-	short pad;
+	char _pad[2];
 } SmokeCollSettings;
 
 #endif

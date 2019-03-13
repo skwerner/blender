@@ -17,7 +17,8 @@
  * All rights reserved.
  */
 
-/** \file \ingroup DNA
+/** \file
+ * \ingroup DNA
  *
  * Define actions data-block for the animation system.
  * A collection of animation curves and drivers to be assigned to data-blocks
@@ -85,7 +86,7 @@ typedef struct bMotionPath {
 	struct GPUVertBuf *points_vbo;
 	struct GPUBatch *batch_line;
 	struct GPUBatch *batch_points;
-	void *pad;
+	void *_pad;
 } bMotionPath;
 
 /* bMotionPath->flag */
@@ -119,7 +120,7 @@ typedef struct bAnimVizSettings {
 	short path_viewflag;
 	/** #eMotionPaths_BakeFlag. */
 	short path_bakeflag;
-	char pad[6];
+	char _pad[6];
 
 	/** Start and end frames of path-calculation range. */
 	int path_sf, path_ef;
@@ -182,9 +183,9 @@ typedef struct bPoseChannelDrawData {
 struct DualQuat;
 struct Mat4;
 
-typedef struct bPoseChannelRuntime {
+typedef struct bPoseChannel_Runtime {
 	int bbone_segments;
-	char pad[4];
+	char _pad[4];
 
 	/* Rest and posed matrices for segments. */
 	struct Mat4 *bbone_rest_mats;
@@ -193,7 +194,7 @@ typedef struct bPoseChannelRuntime {
 	/* Delta from rest to pose in matrix and DualQuat form. */
 	struct Mat4 *bbone_deform_mats;
 	struct DualQuat *bbone_dual_quats;
-} bPoseChannelRuntime;
+} bPoseChannel_Runtime;
 
 /* ************************************************ */
 /* Poses */
@@ -230,7 +231,7 @@ typedef struct bPoseChannel {
 	char selectflag;
 	char drawflag;
 	char bboneflag DNA_DEPRECATED;
-	char pad0[4];
+	char _pad0[4];
 
 	/** Set on read file or rebuild pose. */
 	struct Bone         *bone;
@@ -256,7 +257,7 @@ typedef struct bPoseChannel {
 	struct bPoseChannel *custom_tx;
 	float custom_scale;
 
-	char pad1[4];
+	char _pad1[4];
 
 	/** Transforms - written in by actions or transform. */
 	float loc[3];
@@ -274,9 +275,9 @@ typedef struct bPoseChannel {
 	float rotAxis[3], rotAngle;
 	/** #eRotationModes - rotation representation to use. */
 	short rotmode;
-	short pad;
+	char _pad[2];
 
-	/** Matrix result of l.oc/quat/size, and where we put deform in, see next line */
+	/** Matrix result of loc/quat/size, and where we put deform in, see next line */
 	float chan_mat[4][4];
 	/**
 	 * Constraints accumulate here. in the end, pose_mat = bone->arm_mat * chan_mat
@@ -330,8 +331,8 @@ typedef struct bPoseChannel {
 	/** Points to an original pose channel. */
 	struct bPoseChannel *orig_pchan;
 
-	/** Runtime data. */
-	struct bPoseChannelRuntime runtime;
+	/** Runtime data (keep last). */
+	struct bPoseChannel_Runtime runtime;
 } bPoseChannel;
 
 
@@ -459,10 +460,11 @@ typedef struct bPose {
 	 */
 	bPoseChannel **chan_array;
 
-	short flag, pad;
+	short flag;
+	char _pad[2];
 	/** Proxy layer: copy from armature, gets synced. */
 	unsigned int proxy_layer;
-	int pad1;
+	char _pad1[4];
 
 	/** Local action time of this pose. */
 	float ctime;
@@ -659,7 +661,7 @@ typedef struct bAction {
 	 * (if 0, will be set to whatever ID first evaluates it).
 	 */
 	int idroot;
-	int pad;
+	char _pad[4];
 } bAction;
 
 
@@ -850,6 +852,8 @@ typedef enum eSAction_Flag {
 	SACTION_SHOW_INTERPOLATION = (1 << 12),
 	/* show extremes */
 	SACTION_SHOW_EXTREMES = (1 << 13),
+	/* show vertical line markers */
+	SACTION_SHOW_MARKER_LINES = (1 << 14),
 } eSAction_Flag;
 
 

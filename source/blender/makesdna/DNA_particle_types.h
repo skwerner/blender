@@ -17,7 +17,8 @@
  * All rights reserved.
  */
 
-/** \file \ingroup DNA
+/** \file
+ * \ingroup DNA
  */
 
 #ifndef __DNA_PARTICLE_TYPES_H__
@@ -38,7 +39,7 @@ typedef struct HairKey {
 	float weight;
 	/** Saved particled edit mode flags. */
 	short editflag;
-	short pad;
+	char _pad[2];
 	float world_co[3];
 } HairKey;
 
@@ -140,7 +141,7 @@ typedef struct ParticleData {
 
 	/** Density of sph particle. */
 	float sphdensity;
-	int pad;
+	char _pad[4];
 
 	int hair_index;
 	short flag;
@@ -158,7 +159,7 @@ typedef struct SPHFluidSettings {
 	float buoyancy;
 	int flag, spring_frames;
 	short solver;
-	short pad[3];
+	char _pad[6];
 } SPHFluidSettings;
 
 /* fluid->flag */
@@ -190,7 +191,8 @@ typedef struct ParticleSettings {
 	short phystype, rotmode, avemode, reactevent;
 	int draw;
 	float draw_size;
-	short draw_as, pad1, childtype, pad2;
+	short draw_as, childtype;
+	char _pad2[4];
 	short ren_as, subframes, draw_col;
 	/* number of path segments, power of 2 except */
 	short draw_step, ren_step;
@@ -215,7 +217,8 @@ typedef struct ParticleSettings {
 	float timetweak, courant_target;
 	float jitfac, eff_hair, grid_rand, ps_offset[1];
 	int totpart, userjit, grid_res, effector_amount;
-	short time_flag, time_pad[3];
+	short time_flag;
+	char _pad0[6];
 
 	/* initial velocity factors */
 	float normfac, obfac, randfac, partfac, tanfac, tanphase, reactfac;
@@ -229,7 +232,7 @@ typedef struct ParticleSettings {
 	float randlength;
 	/* children */
 	int child_flag;
-	int pad3;
+	char _pad3[4];
 	int child_nbr, ren_child_nbr;
 	float parents, childsize, childrandsize;
 	float childrad, childflat;
@@ -238,7 +241,8 @@ typedef struct ParticleSettings {
 	/* kink */
 	float kink_amp, kink_freq, kink_shape, kink_flat;
 	float kink_amp_clump;
-	int kink_extra_steps, pad4;
+	int kink_extra_steps;
+	char _pad4[4];
 	float kink_axis_random, kink_amp_random;
 	/* rough */
 	float rough1, rough1_size;
@@ -267,10 +271,10 @@ typedef struct ParticleSettings {
 	/** MAX_MTEX. */
 	struct MTex *mtex[18];
 
-	struct Collection *dup_group;
-	struct ListBase dupliweights;
+	struct Collection *instance_collection;
+	struct ListBase instance_weights;
 	struct Collection *eff_group  DNA_DEPRECATED;		// deprecated
-	struct Object *dup_ob;
+	struct Object *instance_object;
 	struct Object *bb_ob;
 	/** Old animation system, deprecated for 2.5. */
 	struct Ipo *ipo  DNA_DEPRECATED;
@@ -279,20 +283,21 @@ typedef struct ParticleSettings {
 
 	/* modified dm support */
 	short use_modifier_stack;
-	short pad5;
+	char _pad5[2];
 
 	/* hair shape */
 	short shape_flag;
-	short pad6;
+	char _pad6[2];
 
-	float twist, pad8;
+	float twist;
+	char _pad8[4];
 
 	/* hair thickness shape */
 	float shape;
 	float rad_root, rad_tip, rad_scale;
 
 	struct CurveMapping *twistcurve;
-	void *pad7;
+	void *_pad7;
 } ParticleSettings;
 
 typedef struct ParticleSystem {
@@ -343,7 +348,7 @@ typedef struct ParticleSystem {
 	/** Particle system name, MAX_NAME. */
 	char name[64];
 
-	/** Used for duplicators. */
+	/** Used for instancing. */
 	float imat[4][4];
 	float cfra, tree_frame, bvhtree_frame;
 	int seed, child_seed;
@@ -353,9 +358,8 @@ typedef struct ParticleSystem {
 	 * TODO(sergey): Use part->id.recalc instead of this duplicated flag
 	 * somehow. */
 	int recalc;
-	int pad1;
 	short target_psys, totkeyed, bakespace;
-	short pad2;
+	char _pad1[6];
 
 	/** Billboard uv name, MAX_CUSTOMDATA_LAYER_NAME. */
 	char bb_uvname[3][64];
@@ -363,7 +367,7 @@ typedef struct ParticleSystem {
 	/* if you change these remember to update array lengths to PSYS_TOT_VG! */
 	/** Vertex groups, 0==disable, 1==starting index. */
 	short vgroup[13], vg_neg, rt3;
-	char pad[6];
+	char _pad[6];
 
 	/* point cache */
 	struct PointCache *pointcache;
@@ -409,7 +413,7 @@ typedef enum eParticleDrawFlag {
 	PART_ABS_PATH_TIME      = (1 << 5),
 	PART_DRAW_COUNT_GR      = (1 << 6),
 	PART_DRAW_BB_LOCK       = (1 << 7), /* used with billboards */
-	PART_DRAW_ROTATE_OB     = (1 << 7), /* used with dupliobjects/groups */
+	PART_DRAW_ROTATE_OB     = (1 << 7), /* used with instance object/collection */
 	PART_DRAW_PARENT        = (1 << 8),
 	PART_DRAW_NUM           = (1 << 9),
 	PART_DRAW_RAND_GR       = (1 << 10),
@@ -418,7 +422,7 @@ typedef enum eParticleDrawFlag {
 	PART_DRAW_MAT_COL       = (1 << 13), /* deprecated, but used in do_versions */
 	PART_DRAW_WHOLE_GR      = (1 << 14),
 	PART_DRAW_REN_STRAND    = (1 << 15),
-	PART_DRAW_NO_SCALE_OB   = (1 << 16), /* used with dupliobjects/groups */
+	PART_DRAW_NO_SCALE_OB   = (1 << 16), /* used with instance object/collection */
 	PART_DRAW_GUIDE_HAIRS   = (1 << 17),
 	PART_DRAW_HAIR_GRID     = (1 << 18),
 } eParticleDrawFlag;

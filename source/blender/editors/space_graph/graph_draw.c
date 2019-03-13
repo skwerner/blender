@@ -16,7 +16,8 @@
  * The Original Code is Copyright (C) Blender Foundation
  */
 
-/** \file \ingroup spgraph
+/** \file
+ * \ingroup spgraph
  */
 
 
@@ -304,7 +305,7 @@ static void draw_fcurve_vertices(ARegion *ar, FCurve *fcu, bool do_handles, bool
 
 /* Handles ---------------- */
 
-static bool draw_fcurve_handles_check(SpaceIpo *sipo, FCurve *fcu)
+static bool draw_fcurve_handles_check(SpaceGraph *sipo, FCurve *fcu)
 {
 	/* don't draw handle lines if handles are not to be shown */
 	if (
@@ -332,7 +333,7 @@ static bool draw_fcurve_handles_check(SpaceIpo *sipo, FCurve *fcu)
 
 /* draw lines for F-Curve handles only (this is only done in EditMode)
  * note: draw_fcurve_handles_check must be checked before running this. */
-static void draw_fcurve_handles(SpaceIpo *sipo, FCurve *fcu)
+static void draw_fcurve_handles(SpaceGraph *sipo, FCurve *fcu)
 {
 	int sel, b;
 
@@ -446,7 +447,7 @@ static void draw_fcurve_sample_control(float x, float y, float xscale, float ysc
 }
 
 /* helper func - draw keyframe vertices only for an F-Curve */
-static void draw_fcurve_samples(SpaceIpo *sipo, ARegion *ar, FCurve *fcu)
+static void draw_fcurve_samples(SpaceGraph *sipo, ARegion *ar, FCurve *fcu)
 {
 	FPoint *first, *last;
 	float hsize, xscale, yscale;
@@ -483,10 +484,9 @@ static void draw_fcurve_samples(SpaceIpo *sipo, ARegion *ar, FCurve *fcu)
 /* Curve ---------------- */
 
 /* helper func - just draw the F-Curve by sampling the visible region (for drawing curves with modifiers) */
-static void draw_fcurve_curve(bAnimContext *ac, ID *id, FCurve *fcu, View2D *v2d, View2DGrid *grid, unsigned int pos)
+static void draw_fcurve_curve(bAnimContext *ac, ID *id, FCurve *fcu_, View2D *v2d, View2DGrid *grid, unsigned int pos)
 {
-	SpaceIpo *sipo = (SpaceIpo *)ac->sl;
-	ChannelDriver *driver;
+	SpaceGraph *sipo = (SpaceGraph *)ac->sl;
 	float samplefreq;
 	float stime, etime;
 	float unitFac, offset;
@@ -501,12 +501,12 @@ static void draw_fcurve_curve(bAnimContext *ac, ID *id, FCurve *fcu, View2D *v2d
 		return;
 
 
-	/* disable any drivers temporarily */
-	driver = fcu->driver;
-	fcu->driver = NULL;
+	/* disable any drivers */
+	FCurve fcurve_for_draw = *fcu_;
+	fcurve_for_draw.driver = NULL;
 
 	/* compute unit correction factor */
-	unitFac = ANIM_unit_mapping_get_factor(ac->scene, id, fcu, mapping_flag, &offset);
+	unitFac = ANIM_unit_mapping_get_factor(ac->scene, id, &fcurve_for_draw, mapping_flag, &offset);
 
 	/* Note about sampling frequency:
 	 * Ideally, this is chosen such that we have 1-2 pixels = 1 segment
@@ -562,14 +562,11 @@ static void draw_fcurve_curve(bAnimContext *ac, ID *id, FCurve *fcu, View2D *v2d
 
 		for (i = 0; i <= n; i++) {
 			float ctime = stime + i * samplefreq;
-			immVertex2f(pos, ctime, (evaluate_fcurve(fcu, ctime) + offset) * unitFac);
+			immVertex2f(pos, ctime, (evaluate_fcurve(&fcurve_for_draw, ctime) + offset) * unitFac);
 		}
 
 		immEnd();
 	}
-
-	/* restore driver */
-	fcu->driver = driver;
 }
 
 /* helper func - draw a samples-based F-Curve */
@@ -965,7 +962,7 @@ static void graph_draw_driver_debug(bAnimContext *ac, ID *id, FCurve *fcu)
 /* Draw the 'ghost' F-Curves (i.e. snapshots of the curve)
  * NOTE: unit mapping has already been applied to the values, so do not try and apply again
  */
-void graph_draw_ghost_curves(bAnimContext *ac, SpaceIpo *sipo, ARegion *ar)
+void graph_draw_ghost_curves(bAnimContext *ac, SpaceGraph *sipo, ARegion *ar)
 {
 	FCurve *fcu;
 
@@ -1013,7 +1010,7 @@ void graph_draw_ghost_curves(bAnimContext *ac, SpaceIpo *sipo, ARegion *ar)
 /* This is called twice from space_graph.c -> graph_main_region_draw()
  * Unselected then selected F-Curves are drawn so that they do not occlude each other.
  */
-void graph_draw_curves(bAnimContext *ac, SpaceIpo *sipo, ARegion *ar, View2DGrid *grid, short sel)
+void graph_draw_curves(bAnimContext *ac, SpaceGraph *sipo, ARegion *ar, View2DGrid *grid, short sel)
 {
 	ListBase anim_data = {NULL, NULL};
 	bAnimListElem *ale;

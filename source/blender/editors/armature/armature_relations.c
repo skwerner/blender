@@ -18,7 +18,8 @@
  * Operators for relations between bones and for transferring bones between armature objects
  */
 
-/** \file \ingroup edarmature
+/** \file
+ * \ingroup edarmature
  */
 
 #include "MEM_guardedalloc.h"
@@ -204,7 +205,7 @@ static void joined_armature_fix_links(Main *bmain, Object *tarArm, Object *srcAr
 	bPoseChannel *pchant;
 
 	/* let's go through all objects in database */
-	for (ob = bmain->object.first; ob; ob = ob->id.next) {
+	for (ob = bmain->objects.first; ob; ob = ob->id.next) {
 		/* do some object-type specific things */
 		if (ob->type == OB_ARMATURE) {
 			pose = ob->pose;
@@ -416,7 +417,7 @@ static void separated_armature_fix_links(Main *bmain, Object *origArm, Object *n
 	npchans = &newArm->pose->chanbase;
 
 	/* let's go through all objects in database */
-	for (ob = bmain->object.first; ob; ob = ob->id.next) {
+	for (ob = bmain->objects.first; ob; ob = ob->id.next) {
 		/* do some object-type specific things */
 		if (ob->type == OB_ARMATURE) {
 			for (pchan = ob->pose->chanbase.first; pchan; pchan = pchan->next) {

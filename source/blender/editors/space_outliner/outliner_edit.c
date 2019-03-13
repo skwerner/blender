@@ -17,7 +17,8 @@
  * All rights reserved.
  */
 
-/** \file \ingroup spoutliner
+/** \file
+ * \ingroup spoutliner
  */
 
 #include <string.h>
@@ -32,6 +33,7 @@
 #include "DNA_material_types.h"
 
 #include "BLI_blenlib.h"
+#include "BLI_dynstr.h"
 #include "BLI_utildefines.h"
 #include "BLI_path_util.h"
 
@@ -91,7 +93,7 @@ static int outliner_highlight_update(bContext *C, wmOperator *UNUSED(op), const 
 	}
 
 	ARegion *ar = CTX_wm_region(C);
-	SpaceOops *soops = CTX_wm_space_outliner(C);
+	SpaceOutliner *soops = CTX_wm_space_outliner(C);
 	const float my = UI_view2d_region_to_view_y(&ar->v2d, event->mval[1]);
 
 	TreeElement *hovered_te = outliner_find_item_at_y(soops, &soops->tree, my);
@@ -125,7 +127,7 @@ void OUTLINER_OT_highlight_update(wmOperatorType *ot)
 
 /* Toggle Open/Closed ------------------------------------------- */
 
-static int do_outliner_item_openclose(bContext *C, SpaceOops *soops, TreeElement *te, const bool all, const float mval[2])
+static int do_outliner_item_openclose(bContext *C, SpaceOutliner *soops, TreeElement *te, const bool all, const float mval[2])
 {
 
 	if (mval[1] > te->ys && mval[1] < te->ys + UI_UNIT_Y) {
@@ -156,7 +158,7 @@ static int do_outliner_item_openclose(bContext *C, SpaceOops *soops, TreeElement
 static int outliner_item_openclose(bContext *C, wmOperator *op, const wmEvent *event)
 {
 	ARegion *ar = CTX_wm_region(C);
-	SpaceOops *soops = CTX_wm_space_outliner(C);
+	SpaceOutliner *soops = CTX_wm_space_outliner(C);
 	TreeElement *te;
 	float fmval[2];
 	const bool all = RNA_boolean_get(op->ptr, "all");
@@ -266,7 +268,7 @@ static void do_item_rename(ARegion *ar, TreeElement *te, TreeStoreElem *tselem,
 		}
 	}
 	else if (ID_IS_LINKED(tselem->id)) {
-		BKE_report(reports, RPT_WARNING, "Cannot edit external libdata");
+		BKE_report(reports, RPT_WARNING, "Cannot edit external library data");
 	}
 	else if (te->idcode == ID_LI && ((Library *)tselem->id)->parent) {
 		BKE_report(reports, RPT_WARNING, "Cannot edit the path of an indirectly linked library");
@@ -312,7 +314,7 @@ static int do_outliner_item_rename(ReportList *reports, ARegion *ar, TreeElement
 static int outliner_item_rename(bContext *C, wmOperator *op, const wmEvent *event)
 {
 	ARegion *ar = CTX_wm_region(C);
-	SpaceOops *soops = CTX_wm_space_outliner(C);
+	SpaceOutliner *soops = CTX_wm_space_outliner(C);
 	TreeElement *te;
 	float fmval[2];
 	bool changed = false;
@@ -409,7 +411,7 @@ static int outliner_id_delete_invoke_do(bContext *C, ReportList *reports, TreeEl
 static int outliner_id_delete_invoke(bContext *C, wmOperator *op, const wmEvent *event)
 {
 	ARegion *ar = CTX_wm_region(C);
-	SpaceOops *soops = CTX_wm_space_outliner(C);
+	SpaceOutliner *soops = CTX_wm_space_outliner(C);
 	TreeElement *te;
 	float fmval[2];
 
@@ -443,7 +445,7 @@ void OUTLINER_OT_id_delete(wmOperatorType *ot)
 static int outliner_id_remap_exec(bContext *C, wmOperator *op)
 {
 	Main *bmain = CTX_data_main(C);
-	SpaceOops *soops = CTX_wm_space_outliner(C);
+	SpaceOutliner *soops = CTX_wm_space_outliner(C);
 
 	const short id_type = (short)RNA_enum_get(op->ptr, "id_type");
 	ID *old_id = BLI_findlink(which_libbase(CTX_data_main(C), id_type), RNA_enum_get(op->ptr, "old_id"));
@@ -474,8 +476,8 @@ static int outliner_id_remap_exec(bContext *C, wmOperator *op)
 	/* recreate dependency graph to include new objects */
 	DEG_relations_tag_update(bmain);
 
-	/* free gpu materials, some materials depend on existing objects,
-	 * such as lamps so freeing correctly refreshes */
+	/* Free gpu materials, some materials depend on existing objects,
+	 * such as lights so freeing correctly refreshes. */
 	GPU_materials_free(bmain);
 
 	WM_event_add_notifier(C, NC_WINDOW, NULL);
@@ -509,7 +511,7 @@ static bool outliner_id_remap_find_tree_element(bContext *C, wmOperator *op, Lis
 
 static int outliner_id_remap_invoke(bContext *C, wmOperator *op, const wmEvent *event)
 {
-	SpaceOops *soops = CTX_wm_space_outliner(C);
+	SpaceOutliner *soops = CTX_wm_space_outliner(C);
 	ARegion *ar = CTX_wm_region(C);
 	float fmval[2];
 
@@ -664,7 +666,7 @@ static int outliner_lib_relocate_invoke_do(
 static int outliner_lib_relocate_invoke(bContext *C, wmOperator *op, const wmEvent *event)
 {
 	ARegion *ar = CTX_wm_region(C);
-	SpaceOops *soops = CTX_wm_space_outliner(C);
+	SpaceOutliner *soops = CTX_wm_space_outliner(C);
 	TreeElement *te;
 	float fmval[2];
 
@@ -709,7 +711,7 @@ void lib_relocate_cb(
 static int outliner_lib_reload_invoke(bContext *C, wmOperator *op, const wmEvent *event)
 {
 	ARegion *ar = CTX_wm_region(C);
-	SpaceOops *soops = CTX_wm_space_outliner(C);
+	SpaceOutliner *soops = CTX_wm_space_outliner(C);
 	TreeElement *te;
 	float fmval[2];
 
@@ -860,7 +862,7 @@ int common_restrict_check(bContext *C, Object *ob)
 
 static int outliner_toggle_expanded_exec(bContext *C, wmOperator *UNUSED(op))
 {
-	SpaceOops *soops = CTX_wm_space_outliner(C);
+	SpaceOutliner *soops = CTX_wm_space_outliner(C);
 	ARegion *ar = CTX_wm_region(C);
 
 	if (outliner_flag_is_any_test(&soops->tree, TSE_CLOSED, 1))
@@ -891,7 +893,7 @@ void OUTLINER_OT_expanded_toggle(wmOperatorType *ot)
 
 static int outliner_select_all_exec(bContext *C, wmOperator *op)
 {
-	SpaceOops *soops = CTX_wm_space_outliner(C);
+	SpaceOutliner *soops = CTX_wm_space_outliner(C);
 	ARegion *ar = CTX_wm_region(C);
 	Scene *scene = CTX_data_scene(C);
 	int action = RNA_enum_get(op->ptr, "action");
@@ -940,7 +942,7 @@ void OUTLINER_OT_select_all(wmOperatorType *ot)
 
 /* Show Active --------------------------------------------------- */
 
-static void outliner_set_coordinates_element_recursive(SpaceOops *soops, TreeElement *te, int startx, int *starty)
+static void outliner_set_coordinates_element_recursive(SpaceOutliner *soops, TreeElement *te, int startx, int *starty)
 {
 	TreeStoreElem *tselem = TREESTORE(te);
 
@@ -958,7 +960,7 @@ static void outliner_set_coordinates_element_recursive(SpaceOops *soops, TreeEle
 }
 
 /* to retrieve coordinates with redrawing the entire tree */
-void outliner_set_coordinates(ARegion *ar, SpaceOops *soops)
+void outliner_set_coordinates(ARegion *ar, SpaceOutliner *soops)
 {
 	TreeElement *te;
 	int starty = (int)(ar->v2d.tot.ymax) - UI_UNIT_Y;
@@ -986,7 +988,7 @@ static int outliner_open_back(TreeElement *te)
 
 static int outliner_show_active_exec(bContext *C, wmOperator *UNUSED(op))
 {
-	SpaceOops *so = CTX_wm_space_outliner(C);
+	SpaceOutliner *so = CTX_wm_space_outliner(C);
 	ViewLayer *view_layer = CTX_data_view_layer(C);
 	ARegion *ar = CTX_wm_region(C);
 	View2D *v2d = &ar->v2d;
@@ -1101,7 +1103,7 @@ void OUTLINER_OT_scroll_page(wmOperatorType *ot)
 #if 0
 
 /* find next element that has this name */
-static TreeElement *outliner_find_name(SpaceOops *soops, ListBase *lb, char *name, int flags,
+static TreeElement *outliner_find_name(SpaceOutliner *soops, ListBase *lb, char *name, int flags,
                                        TreeElement *prev, int *prevFound)
 {
 	TreeElement *te, *tes;
@@ -1130,7 +1132,7 @@ static TreeElement *outliner_find_name(SpaceOops *soops, ListBase *lb, char *nam
 	return NULL;
 }
 
-static void outliner_find_panel(Scene *UNUSED(scene), ARegion *ar, SpaceOops *soops, int again, int flags)
+static void outliner_find_panel(Scene *UNUSED(scene), ARegion *ar, SpaceOutliner *soops, int again, int flags)
 {
 	ReportList *reports = NULL; // CTX_wm_reports(C);
 	TreeElement *te = NULL;
@@ -1229,7 +1231,7 @@ static void outliner_openclose_level(ListBase *lb, int curlevel, int level, int 
 
 static int outliner_one_level_exec(bContext *C, wmOperator *op)
 {
-	SpaceOops *soops = CTX_wm_space_outliner(C);
+	SpaceOutliner *soops = CTX_wm_space_outliner(C);
 	ARegion *ar = CTX_wm_region(C);
 	const bool add = RNA_boolean_get(op->ptr, "open");
 	int level;
@@ -1285,7 +1287,7 @@ static int subtree_has_objects(ListBase *lb)
 }
 
 /* recursive helper function for Show Hierarchy operator */
-static void tree_element_show_hierarchy(Scene *scene, SpaceOops *soops, ListBase *lb)
+static void tree_element_show_hierarchy(Scene *scene, SpaceOutliner *soops, ListBase *lb)
 {
 	TreeElement *te;
 	TreeStoreElem *tselem;
@@ -1317,7 +1319,7 @@ static void tree_element_show_hierarchy(Scene *scene, SpaceOops *soops, ListBase
 /* show entire object level hierarchy */
 static int outliner_show_hierarchy_exec(bContext *C, wmOperator *UNUSED(op))
 {
-	SpaceOops *soops = CTX_wm_space_outliner(C);
+	SpaceOutliner *soops = CTX_wm_space_outliner(C);
 	ARegion *ar = CTX_wm_region(C);
 	Scene *scene = CTX_data_scene(C);
 
@@ -1352,7 +1354,7 @@ static bool ed_operator_outliner_datablocks_active(bContext *C)
 {
 	ScrArea *sa = CTX_wm_area(C);
 	if ((sa) && (sa->spacetype == SPACE_OUTLINER)) {
-		SpaceOops *so = CTX_wm_space_outliner(C);
+		SpaceOutliner *so = CTX_wm_space_outliner(C);
 		return (so->outlinevis == SO_DATA_API);
 	}
 	return 0;
@@ -1510,7 +1512,7 @@ enum {
 /* Utilities ---------------------------------- */
 
 /* Recursively iterate over tree, finding and working on selected items */
-static void do_outliner_drivers_editop(SpaceOops *soops, ListBase *tree, ReportList *reports, short mode)
+static void do_outliner_drivers_editop(SpaceOutliner *soops, ListBase *tree, ReportList *reports, short mode)
 {
 	TreeElement *te;
 	TreeStoreElem *tselem;
@@ -1588,7 +1590,7 @@ static void do_outliner_drivers_editop(SpaceOops *soops, ListBase *tree, ReportL
 
 static int outliner_drivers_addsel_exec(bContext *C, wmOperator *op)
 {
-	SpaceOops *soutliner = CTX_wm_space_outliner(C);
+	SpaceOutliner *soutliner = CTX_wm_space_outliner(C);
 
 	/* check for invalid states */
 	if (soutliner == NULL)
@@ -1623,7 +1625,7 @@ void OUTLINER_OT_drivers_add_selected(wmOperatorType *ot)
 
 static int outliner_drivers_deletesel_exec(bContext *C, wmOperator *op)
 {
-	SpaceOops *soutliner = CTX_wm_space_outliner(C);
+	SpaceOutliner *soutliner = CTX_wm_space_outliner(C);
 
 	/* check for invalid states */
 	if (soutliner == NULL)
@@ -1691,7 +1693,7 @@ static KeyingSet *verify_active_keyingset(Scene *scene, short add)
 }
 
 /* Recursively iterate over tree, finding and working on selected items */
-static void do_outliner_keyingset_editop(SpaceOops *soops, KeyingSet *ks, ListBase *tree, short mode)
+static void do_outliner_keyingset_editop(SpaceOutliner *soops, KeyingSet *ks, ListBase *tree, short mode)
 {
 	TreeElement *te;
 	TreeStoreElem *tselem;
@@ -1759,7 +1761,7 @@ static void do_outliner_keyingset_editop(SpaceOops *soops, KeyingSet *ks, ListBa
 
 static int outliner_keyingset_additems_exec(bContext *C, wmOperator *op)
 {
-	SpaceOops *soutliner = CTX_wm_space_outliner(C);
+	SpaceOutliner *soutliner = CTX_wm_space_outliner(C);
 	Scene *scene = CTX_data_scene(C);
 	KeyingSet *ks = verify_active_keyingset(scene, 1);
 
@@ -1800,7 +1802,7 @@ void OUTLINER_OT_keyingset_add_selected(wmOperatorType *ot)
 
 static int outliner_keyingset_removeitems_exec(bContext *C, wmOperator *UNUSED(op))
 {
-	SpaceOops *soutliner = CTX_wm_space_outliner(C);
+	SpaceOutliner *soutliner = CTX_wm_space_outliner(C);
 	Scene *scene = CTX_data_scene(C);
 	KeyingSet *ks = verify_active_keyingset(scene, 1);
 
@@ -1840,7 +1842,7 @@ static bool ed_operator_outliner_id_orphans_active(bContext *C)
 {
 	ScrArea *sa = CTX_wm_area(C);
 	if ((sa) && (sa->spacetype == SPACE_OUTLINER)) {
-		SpaceOops *so = CTX_wm_space_outliner(C);
+		SpaceOutliner *so = CTX_wm_space_outliner(C);
 		return (so->outlinevis == SO_ID_ORPHANS);
 	}
 	return 0;
@@ -1848,24 +1850,98 @@ static bool ed_operator_outliner_id_orphans_active(bContext *C)
 
 /* Purge Orphans Operator --------------------------------------- */
 
-static int outliner_orphans_purge_invoke(bContext *C, wmOperator *op, const wmEvent *UNUSED(evt))
+static void outliner_orphans_purge_tag(ID *id, int *num_tagged)
 {
-	/* present a prompt to informing users that this change is irreversible */
-	return WM_operator_confirm_message(C, op,
-	                                   "Purging unused data-blocks cannot be undone and saves to current .blend file. "
-	                                   "Click here to proceed...");
+	if (id->us == 0) {
+		id->tag |= LIB_TAG_DOIT;
+		num_tagged[INDEX_ID_NULL]++;
+		num_tagged[BKE_idcode_to_index(GS(id->name))]++;
+	}
+	else {
+		id->tag &= ~LIB_TAG_DOIT;
+	}
 }
 
-static int outliner_orphans_purge_exec(bContext *C, wmOperator *UNUSED(op))
+static int outliner_orphans_purge_invoke(bContext *C, wmOperator *op, const wmEvent *UNUSED(evt))
 {
-	/* Firstly, ensure that the file has been saved,
-	 * so that the latest changes since the last save
-	 * are retained...
-	 */
-	WM_operator_name_call(C, "WM_OT_save_mainfile", WM_OP_EXEC_DEFAULT, NULL);
+	Main *bmain = CTX_data_main(C);
+	int num_tagged[INDEX_ID_MAX] = {0};
 
-	/* Now, reload the file to get rid of the orphans... */
-	WM_operator_name_call(C, "WM_OT_revert_mainfile", WM_OP_EXEC_DEFAULT, NULL);
+	/* Tag all IDs having zero users. */
+	ID *id;
+	FOREACH_MAIN_ID_BEGIN(bmain, id)
+	{
+		outliner_orphans_purge_tag(id, num_tagged);
+	}
+	FOREACH_MAIN_ID_END;
+	RNA_int_set(op->ptr, "num_deleted", num_tagged[INDEX_ID_NULL]);
+
+	if (num_tagged[INDEX_ID_NULL] == 0) {
+		BKE_report(op->reports, RPT_INFO, "No orphanned data-blocks to purge");
+		return OPERATOR_CANCELLED;
+	}
+
+	DynStr *dyn_str = BLI_dynstr_new();
+	BLI_dynstr_append(dyn_str, "Purging unused data-blocks (");
+	bool is_first = true;
+	for (int i = 0; i < INDEX_ID_MAX - 2; i++) {
+		if (num_tagged[i] != 0) {
+			if (!is_first) {
+				BLI_dynstr_append(dyn_str, ", ");
+			}
+			else {
+				is_first = false;
+			}
+			BLI_dynstr_appendf(
+			            dyn_str, "%d %s",
+			            num_tagged[i], TIP_(BKE_idcode_to_name_plural(BKE_idcode_from_index(i))));
+		}
+	}
+	BLI_dynstr_append(dyn_str, TIP_("). Click here to proceed..."));
+
+	char *message = BLI_dynstr_get_cstring(dyn_str);
+	int ret = WM_operator_confirm_message(C, op, message);
+
+	MEM_freeN(message);
+	BLI_dynstr_free(dyn_str);
+	return ret;
+}
+
+static int outliner_orphans_purge_exec(bContext *C, wmOperator *op)
+{
+	Main *bmain = CTX_data_main(C);
+	SpaceOutliner *soops = CTX_wm_space_outliner(C);
+	int num_tagged[INDEX_ID_MAX] = {0};
+
+	if ((num_tagged[INDEX_ID_NULL] = RNA_int_get(op->ptr, "num_deleted")) == 0) {
+		/* Tag all IDs having zero users. */
+		ID *id;
+		FOREACH_MAIN_ID_BEGIN(bmain, id)
+		{
+			outliner_orphans_purge_tag(id, num_tagged);
+		}
+		FOREACH_MAIN_ID_END;
+
+		if (num_tagged[INDEX_ID_NULL] == 0) {
+			BKE_report(op->reports, RPT_INFO, "No orphanned data-blocks to purge");
+			return OPERATOR_CANCELLED;
+		}
+	}
+
+	BKE_id_multi_tagged_delete(bmain);
+
+	BKE_reportf(op->reports, RPT_INFO, "Deleted %d data-blocks", num_tagged[INDEX_ID_NULL]);
+
+	/* XXX: tree management normally happens from draw_outliner(), but when
+	 *      you're clicking to fast on Delete object from context menu in
+	 *      outliner several mouse events can be handled in one cycle without
+	 *      handling notifiers/redraw which leads to deleting the same object twice.
+	 *      cleanup tree here to prevent such cases. */
+	outliner_cleanup_tree(soops);
+
+	DEG_relations_tag_update(bmain);
+	WM_event_add_notifier(C, NC_ID | NA_EDITED, NULL);
+	WM_event_add_notifier(C, NC_SPACE | ND_SPACE_OUTLINER, NULL);
 	return OPERATOR_FINISHED;
 }
 
@@ -1874,8 +1950,7 @@ void OUTLINER_OT_orphans_purge(wmOperatorType *ot)
 	/* identifiers */
 	ot->idname = "OUTLINER_OT_orphans_purge";
 	ot->name = "Purge All";
-	ot->description = "Clear all orphaned data-blocks without any users from the file "
-	                  "(cannot be undone, saves to current .blend file)";
+	ot->description = "Clear all orphaned data-blocks without any users from the file";
 
 	/* callbacks */
 	ot->invoke = outliner_orphans_purge_invoke;
@@ -1884,4 +1959,8 @@ void OUTLINER_OT_orphans_purge(wmOperatorType *ot)
 
 	/* flags */
 	ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
+
+	/* properties */
+	PropertyRNA *prop = RNA_def_int(ot->srna, "num_deleted", 0, 0, INT_MAX, "", "", 0, INT_MAX);
+	RNA_def_property_flag(prop, PROP_SKIP_SAVE | PROP_HIDDEN);
 }

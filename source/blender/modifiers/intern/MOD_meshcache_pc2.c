@@ -14,15 +14,16 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-/** \file \ingroup modifiers
+/** \file
+ * \ingroup modifiers
  */
 
 #include <stdio.h>
 #include <string.h>
 #include <errno.h>
 
-#include "BLI_sys_types.h"
 #include "BLI_utildefines.h"
+
 #include "BLI_fileops.h"
 #ifdef __BIG_ENDIAN__
 #  include "BLI_endian_switch.h"
@@ -32,9 +33,9 @@
 #  include "BLI_winstuff.h"
 #endif
 
-#include "MOD_meshcache_util.h"  /* own include */
-
 #include "DNA_modifier_types.h"
+
+#include "MOD_meshcache_util.h"  /* own include */
 
 typedef struct PC2Head {
 	char    header[12];  /* 'POINTCACHE2\0' */

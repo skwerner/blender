@@ -17,7 +17,8 @@
  * All rights reserved.
  */
 
-/** \file \ingroup depsgraph
+/** \file
+ * \ingroup depsgraph
  *
  * Methods for constructing depsgraph
  */
@@ -129,7 +130,7 @@ void DepsgraphRelationBuilder::build_ik_pose(Object *object,
 			 * separately. */
 			ComponentKey target_key(&data->tar->id, NodeType::GEOMETRY);
 			add_relation(target_key, solver_key, con->name);
-			add_customdata_mask(data->tar, CD_MASK_MDEFORMVERT);
+			add_customdata_mask(data->tar, DEGCustomDataMeshMasks::MaskVert(CD_MASK_MDEFORMVERT));
 		}
 		else {
 			/* Standard Object Target. */
@@ -159,7 +160,7 @@ void DepsgraphRelationBuilder::build_ik_pose(Object *object,
 			 * separately. */
 			ComponentKey target_key(&data->poletar->id, NodeType::GEOMETRY);
 			add_relation(target_key, solver_key, con->name);
-			add_customdata_mask(data->poletar, CD_MASK_MDEFORMVERT);
+			add_customdata_mask(data->poletar, DEGCustomDataMeshMasks::MaskVert(CD_MASK_MDEFORMVERT));
 		}
 		else {
 			ComponentKey target_key(&data->poletar->id, NodeType::TRANSFORM);

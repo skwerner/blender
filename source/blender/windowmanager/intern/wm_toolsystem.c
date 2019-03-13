@@ -14,7 +14,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-/** \file \ingroup wm
+/** \file
+ * \ingroup wm
  *
  * Experimental tool-system>
  */
@@ -881,6 +882,7 @@ void WM_toolsystem_do_msg_notify_tag_refresh(
 		.mode = WM_toolsystem_mode_from_spacetype(view_layer, sa, sa->spacetype),
 	};
 	WM_toolsystem_refresh(C, workspace, &tkey);
+	WM_toolsystem_refresh_screen_area(workspace, view_layer, sa);
 }
 
 IDProperty *WM_toolsystem_ref_properties_ensure_idprops(bToolRef *tref)

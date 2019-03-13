@@ -14,7 +14,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-/** \file \ingroup bli
+/** \file
+ * \ingroup bli
  */
 
 #include "MEM_guardedalloc.h"
@@ -53,6 +54,9 @@ struct KDTree {
 
 #define KD_NODE_UNSET ((uint)-1)
 
+/** When set we know all values are unbalanced, otherwise clear them when re-balancing: see T62210. */
+#define KD_NODE_ROOT_IS_INIT ((uint)-2)
+
 /**
  * Creates or free a kdtree
  */
@@ -63,7 +67,7 @@ KDTree *BLI_kdtree_new(uint maxsize)
 	tree = MEM_mallocN(sizeof(KDTree), "KDTree");
 	tree->nodes = MEM_mallocN(sizeof(KDTreeNode) * maxsize, "KDTreeNode");
 	tree->totnode = 0;
-	tree->root = KD_NODE_UNSET;
+	tree->root = KD_NODE_ROOT_IS_INIT;
 
 #ifdef DEBUG
 	tree->is_balanced = false;
@@ -155,6 +159,13 @@ static uint kdtree_balance(KDTreeNode *nodes, uint totnode, uint axis, const uin
 
 void BLI_kdtree_balance(KDTree *tree)
 {
+	if (tree->root != KD_NODE_ROOT_IS_INIT) {
+		for (uint i = 0; i < tree->totnode; i++) {
+			tree->nodes[i].left = KD_NODE_UNSET;
+			tree->nodes[i].right = KD_NODE_UNSET;
+		}
+	}
+
 	tree->root = kdtree_balance(tree->nodes, tree->totnode, 0, 0);
 
 #ifdef DEBUG

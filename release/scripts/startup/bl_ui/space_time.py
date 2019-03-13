@@ -30,7 +30,6 @@ class TIME_HT_editor_buttons(Header):
     def draw(self, context):
         pass
 
-    @staticmethod
     def draw_header(context, layout):
         scene = context.scene
         tool_settings = context.tool_settings
@@ -117,7 +116,7 @@ class TIME_MT_marker(Menu):
     def draw(self, context):
         layout = self.layout
 
-        marker_menu_generic(layout)
+        marker_menu_generic(layout, context)
 
 
 class TIME_MT_view(Menu):
@@ -134,6 +133,7 @@ class TIME_MT_view(Menu):
 
         layout.separator()
 
+        layout.prop(st, "show_marker_lines")
         layout.prop(st, "show_frame_indicator")
         layout.prop(scene, "show_keys_from_selected_only")
 
@@ -174,8 +174,7 @@ class TIME_MT_cache(Menu):
         col.prop(st, "cache_rigidbody")
 
 
-def marker_menu_generic(layout):
-    from bpy import context
+def marker_menu_generic(layout, context):
 
     # layout.operator_context = 'EXEC_REGION_WIN'
 

@@ -17,7 +17,8 @@
  * All rights reserved.
  */
 
-/** \file \ingroup cmpnodes
+/** \file
+ * \ingroup cmpnodes
  */
 
 #include "node_composite_util.h"
@@ -205,7 +206,7 @@ void node_cmp_rlayers_register_pass(bNodeTree *ntree, bNode *node, Scene *scene,
 	}
 }
 
-static void cmp_node_rlayer_create_outputs_cb(RenderEngine *UNUSED(engine), Scene *scene, ViewLayer *view_layer,
+static void cmp_node_rlayer_create_outputs_cb(void *UNUSED(userdata), Scene *scene, ViewLayer *view_layer,
                                               const char *name, int UNUSED(channels), const char *UNUSED(chanid), int type)
 {
 	/* Register the pass in all scenes that have a render layer node for this layer.
@@ -215,7 +216,7 @@ static void cmp_node_rlayer_create_outputs_cb(RenderEngine *UNUSED(engine), Scen
 	 * unless we want to register that for every other temp Main we could generate??? */
 	ntreeCompositRegisterPass(scene->nodetree, scene, view_layer, name, type);
 
-	for (Scene *sce = G_MAIN->scene.first; sce; sce = sce->id.next) {
+	for (Scene *sce = G_MAIN->scenes.first; sce; sce = sce->id.next) {
 		if (sce->nodetree && sce != scene) {
 			ntreeCompositRegisterPass(sce->nodetree, scene, view_layer, name, type);
 		}
@@ -237,7 +238,7 @@ static void cmp_node_rlayer_create_outputs(bNodeTree *ntree, bNode *node, LinkNo
 				node->storage = data;
 
 				RenderEngine *engine = RE_engine_create(engine_type);
-				RE_engine_update_render_passes(engine, scene, view_layer, cmp_node_rlayer_create_outputs_cb);
+				RE_engine_update_render_passes(engine, scene, view_layer, cmp_node_rlayer_create_outputs_cb, NULL);
 				RE_engine_free(engine);
 
 				MEM_freeN(data);
@@ -408,7 +409,7 @@ static bool node_composit_poll_rlayers(bNodeType *UNUSED(ntype), bNodeTree *ntre
 		 * Render layers node can only be used in local scene->nodetree,
 		 * since it directly links to the scene.
 		 */
-		for (scene = G.main->scene.first; scene; scene = scene->id.next)
+		for (scene = G.main->scenes.first; scene; scene = scene->id.next)
 			if (scene->nodetree == ntree)
 				break;
 

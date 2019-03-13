@@ -14,7 +14,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-/** \file \ingroup RNA
+/** \file
+ * \ingroup RNA
  */
 
 #include <stdlib.h>
@@ -87,6 +88,8 @@ const EnumPropertyItem rna_enum_constraint_type_items[] = {
 	{0, "", 0, N_("Relationship"), ""},
 	{CONSTRAINT_TYPE_ACTION,     "ACTION", ICON_CONSTRAINT, "Action",
 	                             "Use transform property of target to look up pose for owner from an Action"},
+	{CONSTRAINT_TYPE_ARMATURE,   "ARMATURE", ICON_CONSTRAINT, "Armature",
+	                             "Apply weight-blended transformation from multiple bones like the Armature modifier"},
 	{CONSTRAINT_TYPE_CHILDOF,    "CHILD_OF", ICON_CONSTRAINT, "Child Of",
 	                             "Make target the 'detachable' parent of owner"},
 	{CONSTRAINT_TYPE_MINMAX,     "FLOOR", ICON_CONSTRAINT, "Floor",
@@ -101,8 +104,6 @@ const EnumPropertyItem rna_enum_constraint_type_items[] = {
 	                             "Custom constraint(s) written in Python (Not yet implemented)"}, */
 	{CONSTRAINT_TYPE_SHRINKWRAP, "SHRINKWRAP", ICON_CONSTRAINT, "Shrinkwrap",
 	                             "Restrict movements to surface of target mesh"},
-	{CONSTRAINT_TYPE_ARMATURE, "ARMATURE", ICON_CONSTRAINT, "Armature",
-	                           "Apply weight-blended transformation from multiple bones like the Armature modifier"},
 	{0, NULL, 0, NULL, NULL},
 };
 
@@ -715,7 +716,7 @@ static void rna_def_constrainttarget_bone(BlenderRNA *brna)
 	RNA_def_property_ui_text(prop, "Sub-Target", "Target armature bone");
 	RNA_def_property_update(prop, NC_OBJECT | ND_CONSTRAINT, "rna_ConstraintTarget_dependency_update");
 
-	prop = RNA_def_property(srna, "weight", PROP_FLOAT, PROP_NONE);
+	prop = RNA_def_property(srna, "weight", PROP_FLOAT, PROP_FACTOR);
 	RNA_def_property_float_sdna(prop, NULL, "weight");
 	RNA_def_property_range(prop, 0.0f, 1.0f);
 	RNA_def_property_ui_text(prop, "Blend Weight", "Blending weight of this bone");
@@ -2405,7 +2406,7 @@ static void rna_def_constraint_pivot(BlenderRNA *brna)
 	                         "Offset will be an absolute point in space instead of relative to the target");
 	RNA_def_property_update(prop, NC_OBJECT | ND_CONSTRAINT, "rna_Constraint_update");
 
-	prop = RNA_def_property(srna, "offset", PROP_FLOAT, PROP_XYZ);
+	prop = RNA_def_property(srna, "offset", PROP_FLOAT, PROP_TRANSLATION);
 	RNA_def_property_float_sdna(prop, NULL, "offset");
 	RNA_def_property_ui_text(prop, "Offset",
 	                         "Offset of pivot from target (when set), or from owner's location "

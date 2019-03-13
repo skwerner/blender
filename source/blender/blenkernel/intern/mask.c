@@ -17,7 +17,8 @@
  * All rights reserved.
  */
 
-/** \file \ingroup bke
+/** \file
+ * \ingroup bke
  */
 
 #include <stddef.h>
@@ -1422,7 +1423,7 @@ void BKE_mask_evaluate_all_masks(Main *bmain, float ctime, const bool do_newfram
 {
 	Mask *mask;
 
-	for (mask = bmain->mask.first; mask; mask = mask->id.next) {
+	for (mask = bmain->masks.first; mask; mask = mask->id.next) {
 		BKE_mask_evaluate(mask, ctime, do_newframe);
 	}
 }

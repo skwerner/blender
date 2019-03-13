@@ -14,7 +14,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-/** \file \ingroup spview3d
+/** \file
+ * \ingroup spview3d
  */
 
 
@@ -28,7 +29,7 @@
 #include "DEG_depsgraph.h"
 
 #include "DNA_object_types.h"
-#include "DNA_lamp_types.h"
+#include "DNA_light_types.h"
 
 #include "ED_screen.h"
 #include "ED_gizmo_library.h"
@@ -105,7 +106,7 @@ static bool WIDGETGROUP_empty_image_poll(const bContext *C, wmGizmoGroupType *UN
 	View3D *v3d = CTX_wm_view3d(C);
 	RegionView3D *rv3d = CTX_wm_region_view3d(C);
 
-	if ((v3d->flag2 & V3D_RENDER_OVERRIDE) ||
+	if ((v3d->flag2 & V3D_HIDE_OVERLAYS) ||
 	    (v3d->gizmo_flag & (V3D_GIZMO_HIDE | V3D_GIZMO_HIDE_CONTEXT)))
 	{
 		return false;
@@ -117,7 +118,7 @@ static bool WIDGETGROUP_empty_image_poll(const bContext *C, wmGizmoGroupType *UN
 		Object *ob = base->object;
 		if (ob->type == OB_EMPTY) {
 			if (ob->empty_drawtype == OB_EMPTY_IMAGE) {
-				return BKE_object_empty_image_is_visible_in_view3d(ob, rv3d);
+				return BKE_object_empty_image_frame_is_visible_in_view3d(ob, rv3d);
 			}
 		}
 	}

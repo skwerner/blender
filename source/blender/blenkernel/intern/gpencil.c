@@ -17,7 +17,8 @@
  * This is a new part of Blender
  */
 
-/** \file \ingroup bke
+/** \file
+ * \ingroup bke
  */
 
 
@@ -410,7 +411,6 @@ bGPdata *BKE_gpencil_data_addnew(Main *bmain, const char name[])
 	/* GP object specific settings */
 	ARRAY_SET_ITEMS(gpd->line_color, 0.6f, 0.6f, 0.6f, 0.5f);
 
-	gpd->xray_mode = GP_XRAY_3DSPACE;
 	gpd->pixfactor = GP_DEFAULT_PIX_FACTOR;
 
 	/* grid settings */
@@ -1111,11 +1111,11 @@ static void boundbox_gpencil(Object *ob)
 	bGPdata *gpd;
 	float min[3], max[3];
 
-	if (ob->bb == NULL) {
-		ob->bb = MEM_callocN(sizeof(BoundBox), "GPencil boundbox");
+	if (ob->runtime.bb == NULL) {
+		ob->runtime.bb = MEM_callocN(sizeof(BoundBox), "GPencil boundbox");
 	}
 
-	bb  = ob->bb;
+	bb  = ob->runtime.bb;
 	gpd = ob->data;
 
 	BKE_gpencil_data_minmax(NULL, gpd, min, max);
@@ -1127,21 +1127,17 @@ static void boundbox_gpencil(Object *ob)
 /* get bounding box */
 BoundBox *BKE_gpencil_boundbox_get(Object *ob)
 {
-	bGPdata *gpd;
-
 	if (ELEM(NULL, ob, ob->data))
 		return NULL;
 
-	gpd = ob->data;
-	if ((ob->bb) && ((ob->bb->flag & BOUNDBOX_DIRTY) == 0) &&
-	    ((gpd->flag & GP_DATA_CACHE_IS_DIRTY) == 0))
-	{
-		return ob->bb;
+	bGPdata *gpd = (bGPdata *)ob->data;
+	if ((ob->runtime.bb) && ((gpd->flag & GP_DATA_CACHE_IS_DIRTY) == 0)) {
+		return ob->runtime.bb;
 	}
 
 	boundbox_gpencil(ob);
 
-	return ob->bb;
+	return ob->runtime.bb;
 }
 
 /* ************************************************** */
@@ -1371,7 +1367,8 @@ bool BKE_gpencil_smooth_stroke_thickness(bGPDstroke *gps, int point_index, float
 }
 
 /**
-* Apply smooth for UV rotation to stroke point (use pressure) */
+ * Apply smooth for UV rotation to stroke point (use pressure).
+ */
 bool BKE_gpencil_smooth_stroke_uv(bGPDstroke *gps, int point_index, float influence)
 {
 	bGPDspoint *ptb = &gps->points[point_index];
@@ -1697,4 +1694,99 @@ void BKE_gpencil_stroke_2d_flat_ref(
 
 	/* Concave (-1), Convex (1), or Autodetect (0)? */
 	*r_direction = (int)locy[2];
+}
+
+/**
+ * Trim stroke to the first intersection or loop
+ * \param gps: Stroke data
+ */
+bool BKE_gpencil_trim_stroke(bGPDstroke *gps)
+{
+	if (gps->totpoints < 4) {
+		return false;
+	}
+	bool intersect = false;
+	int start, end;
+	float point[3];
+	/* loop segments from start until we have an intersection */
+	for (int i = 0; i < gps->totpoints - 2; i++) {
+		start = i;
+		bGPDspoint *a = &gps->points[start];
+		bGPDspoint *b = &gps->points[start + 1];
+		for (int j = start + 2; j < gps->totpoints - 1; j++) {
+			end = j + 1;
+			bGPDspoint *c = &gps->points[j];
+			bGPDspoint *d = &gps->points[end];
+			float pointb[3];
+			/* get intersection */
+			if (isect_line_line_v3(&a->x, &b->x, &c->x, &d->x, point, pointb)) {
+				if (len_v3(point) > 0.0f) {
+					float closest[3];
+					/* check intersection is on both lines */
+					float lambda = closest_to_line_v3(closest, point, &a->x, &b->x);
+					if ((lambda <= 0.0f) || (lambda >= 1.0f)) {
+						continue;
+					}
+					lambda = closest_to_line_v3(closest, point, &c->x, &d->x);
+					if ((lambda <= 0.0f) || (lambda >= 1.0f)) {
+						continue;
+					}
+					else {
+						intersect = true;
+						break;
+					}
+				}
+			}
+		}
+		if (intersect) {
+			break;
+		}
+	}
+
+	/* trim unwanted points */
+	if (intersect) {
+
+		/* save points */
+		bGPDspoint *old_points = MEM_dupallocN(gps->points);
+		MDeformVert *old_dvert = NULL;
+		MDeformVert *dvert_src = NULL;
+
+		if (gps->dvert != NULL) {
+			old_dvert = MEM_dupallocN(gps->dvert);
+		}
+
+		/* resize gps */
+		int newtot = end - start + 1;
+
+		gps->points = MEM_recallocN(gps->points, sizeof(*gps->points) * newtot);
+		if (gps->dvert != NULL) {
+			gps->dvert = MEM_recallocN(gps->dvert, sizeof(*gps->dvert) * newtot);
+		}
+
+		for (int i = 0; i < newtot; i++) {
+			int idx = start + i;
+			bGPDspoint *pt_src = &old_points[idx];
+			bGPDspoint *pt_new = &gps->points[i];
+			memcpy(pt_new, pt_src, sizeof(bGPDspoint));
+			if (gps->dvert != NULL) {
+				dvert_src = &old_dvert[idx];
+				MDeformVert *dvert = &gps->dvert[i];
+				memcpy(dvert, dvert_src, sizeof(MDeformVert));
+				if (dvert_src->dw) {
+					memcpy(dvert->dw, dvert_src->dw, sizeof(MDeformWeight));
+				}
+			}
+			if (idx == start || idx == end) {
+				copy_v3_v3(&pt_new->x, point);
+			}
+		}
+
+		gps->flag |= GP_STROKE_RECALC_GEOMETRY;
+		gps->tot_triangles = 0;
+		gps->totpoints = newtot;
+
+		MEM_SAFE_FREE(old_points);
+		MEM_SAFE_FREE(old_dvert);
+	}
+	return intersect;
 }

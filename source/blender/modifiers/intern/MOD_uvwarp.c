@@ -14,18 +14,20 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-/** \file \ingroup modifiers
+/** \file
+ * \ingroup modifiers
  */
 
 #include <string.h>
 
-#include "DNA_mesh_types.h"
-#include "DNA_meshdata_types.h"
-#include "DNA_object_types.h"
+#include "BLI_utildefines.h"
 
 #include "BLI_math.h"
 #include "BLI_task.h"
-#include "BLI_utildefines.h"
+
+#include "DNA_mesh_types.h"
+#include "DNA_meshdata_types.h"
+#include "DNA_object_types.h"
 
 #include "BKE_action.h"  /* BKE_pose_channel_find_name */
 #include "BKE_deform.h"
@@ -60,16 +62,14 @@ static void initData(ModifierData *md)
 	copy_v2_fl(umd->center, 0.5f);
 }
 
-static CustomDataMask requiredDataMask(Object *UNUSED(ob), ModifierData *md)
+static void requiredDataMask(Object *UNUSED(ob), ModifierData *md, CustomData_MeshMasks *r_cddata_masks)
 {
 	UVWarpModifierData *umd = (UVWarpModifierData *)md;
-	CustomDataMask dataMask = 0;
 
 	/* ask for vertexgroups if we need them */
-	if (umd->vgroup_name[0])
-		dataMask |= CD_MASK_MDEFORMVERT;
-
-	return dataMask;
+	if (umd->vgroup_name[0] != '\0') {
+		r_cddata_masks->vmask |= CD_MASK_MDEFORMVERT;
+	}
 }
 
 static void matrix_from_obj_pchan(float mat[4][4], Object *ob, const char *bonename)
@@ -241,7 +241,7 @@ static void updateDepsgraph(ModifierData *md, const ModifierUpdateDepsgraphConte
 	uv_warp_deps_object_bone_new(ctx->node, umd->object_src, umd->bone_src);
 	uv_warp_deps_object_bone_new(ctx->node, umd->object_dst, umd->bone_dst);
 
-	DEG_add_object_relation(ctx->node, ctx->object, DEG_OB_COMP_TRANSFORM, "UVWarp Modifier");
+	DEG_add_modifier_to_transform_relation(ctx->node, "UVWarp Modifier");
 }
 
 ModifierTypeInfo modifierType_UVWarp = {

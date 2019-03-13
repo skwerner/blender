@@ -14,7 +14,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-/** \file \ingroup spview3d
+/** \file
+ * \ingroup spview3d
  */
 
 /* defines VIEW3D_OT_fly modal operator */
@@ -707,7 +708,7 @@ static int flyApply(bContext *C, FlyInfo *fly)
 
 #ifdef NDOF_FLY_DEBUG
 	{
-		static unsigned int iteration = 1;
+		static uint iteration = 1;
 		printf("fly timer %d\n", iteration++);
 	}
 #endif

@@ -17,7 +17,8 @@
  * All rights reserved.
  */
 
-/** \file \ingroup blenloader
+/** \file
+ * \ingroup blenloader
  */
 
 
@@ -30,7 +31,7 @@
  *
  * start file:
  * <pre>
- *     BLENDER_V100    12 bytes  (versie 1.00)
+ *     BLENDER_V100    12 bytes  (version 1.00)
  *                     V = big endian, v = little endian
  *                     _ = 4 byte pointer, - = 8 byte pointer
  * </pre>
@@ -113,7 +114,7 @@
 #include "DNA_fileglobal_types.h"
 #include "DNA_key_types.h"
 #include "DNA_lattice_types.h"
-#include "DNA_lamp_types.h"
+#include "DNA_light_types.h"
 #include "DNA_layer_types.h"
 #include "DNA_linestyle_types.h"
 #include "DNA_meta_types.h"
@@ -215,6 +216,9 @@ struct WriteWrap {
 	bool   (*close)(WriteWrap *ww);
 	size_t (*write)(WriteWrap *ww, const char *data, size_t data_len);
 
+	/* Buffer output (we only want when output isn't already buffered). */
+	bool use_buf;
+
 	/* internal */
 	union {
 		int file_handle;
@@ -290,6 +294,7 @@ static void ww_handle_init(eWriteWrapType ww_type, WriteWrap *r_ww)
 			r_ww->open  = ww_open_zlib;
 			r_ww->close = ww_close_zlib;
 			r_ww->write = ww_write_zlib;
+			r_ww->use_buf = false;
 			break;
 		}
 		default:
@@ -297,6 +302,7 @@ static void ww_handle_init(eWriteWrapType ww_type, WriteWrap *r_ww)
 			r_ww->open  = ww_open_none;
 			r_ww->close = ww_close_none;
 			r_ww->write = ww_write_none;
+			r_ww->use_buf = true;
 			break;
 		}
 	}
@@ -350,7 +356,9 @@ static WriteData *writedata_new(WriteWrap *ww)
 
 	wd->ww = ww;
 
-	wd->buf = MEM_mallocN(MYWRITE_BUFFER_SIZE, "wd->buf");
+	if ((ww == NULL) || (ww->use_buf)) {
+		wd->buf = MEM_mallocN(MYWRITE_BUFFER_SIZE, "wd->buf");
+	}
 
 	return wd;
 }
@@ -378,7 +386,9 @@ static void writedata_do_write(WriteData *wd, const void *mem, int memlen)
 
 static void writedata_free(WriteData *wd)
 {
-	MEM_freeN(wd->buf);
+	if (wd->buf) {
+		MEM_freeN(wd->buf);
+	}
 	MEM_freeN(wd);
 }
 
@@ -420,33 +430,38 @@ static void mywrite(WriteData *wd, const void *adr, int len)
 	wd->write_len += len;
 #endif
 
-	/* if we have a single big chunk, write existing data in
-	 * buffer and write out big chunk in smaller pieces */
-	if (len > MYWRITE_MAX_CHUNK) {
-		if (wd->buf_used_len) {
+	if (wd->buf == NULL) {
+		writedata_do_write(wd, adr, len);
+	}
+	else {
+		/* if we have a single big chunk, write existing data in
+		 * buffer and write out big chunk in smaller pieces */
+		if (len > MYWRITE_MAX_CHUNK) {
+			if (wd->buf_used_len) {
+				writedata_do_write(wd, wd->buf, wd->buf_used_len);
+				wd->buf_used_len = 0;
+			}
+
+			do {
+				int writelen = MIN2(len, MYWRITE_MAX_CHUNK);
+				writedata_do_write(wd, adr, writelen);
+				adr = (const char *)adr + writelen;
+				len -= writelen;
+			} while (len > 0);
+
+			return;
+		}
+
+		/* if data would overflow buffer, write out the buffer */
+		if (len + wd->buf_used_len > MYWRITE_BUFFER_SIZE - 1) {
 			writedata_do_write(wd, wd->buf, wd->buf_used_len);
 			wd->buf_used_len = 0;
 		}
 
-		do {
-			int writelen = MIN2(len, MYWRITE_MAX_CHUNK);
-			writedata_do_write(wd, adr, writelen);
-			adr = (const char *)adr + writelen;
-			len -= writelen;
-		} while (len > 0);
-
-		return;
+		/* append data at end of buffer */
+		memcpy(&wd->buf[wd->buf_used_len], adr, len);
+		wd->buf_used_len += len;
 	}
-
-	/* if data would overflow buffer, write out the buffer */
-	if (len + wd->buf_used_len > MYWRITE_BUFFER_SIZE - 1) {
-		writedata_do_write(wd, wd->buf, wd->buf_used_len);
-		wd->buf_used_len = 0;
-	}
-
-	/* append data at end of buffer */
-	memcpy(&wd->buf[wd->buf_used_len], adr, len);
-	wd->buf_used_len += len;
 }
 
 /**
@@ -516,7 +531,7 @@ static void writestruct_at_address_nr(
 	bh.SDNAnr = struct_nr;
 	sp = wd->sdna->structs[bh.SDNAnr];
 
-	bh.len = nr * wd->sdna->typelens[sp[0]];
+	bh.len = nr * wd->sdna->types_size[sp[0]];
 
 	if (bh.len == 0) {
 		return;
@@ -1191,7 +1206,7 @@ static void write_renderinfo(WriteData *wd, Main *mainvar)
 	/* XXX in future, handle multiple windows with multiple screens? */
 	current_screen_compat(mainvar, false, &curscreen, &curscene, &view_layer);
 
-	for (sce = mainvar->scene.first; sce; sce = sce->id.next) {
+	for (sce = mainvar->scenes.first; sce; sce = sce->id.next) {
 		if (sce->id.lib == NULL && (sce == curscene || (sce->r.scemode & R_BG_RENDER))) {
 			data.sfra = sce->r.sfra;
 			data.efra = sce->r.efra;
@@ -1400,12 +1415,12 @@ static void write_particlesettings(WriteData *wd, ParticleSettings *part)
 			write_curvemapping(wd, part->twistcurve);
 		}
 
-		for (ParticleDupliWeight *dw = part->dupliweights.first; dw; dw = dw->next) {
+		for (ParticleDupliWeight *dw = part->instance_weights.first; dw; dw = dw->next) {
 			/* update indices, but only if dw->ob is set (can be NULL after loading e.g.) */
 			if (dw->ob != NULL) {
 				dw->index = 0;
-				if (part->dup_group) { /* can be NULL if lining fails or set to None */
-					FOREACH_COLLECTION_OBJECT_RECURSIVE_BEGIN(part->dup_group, object)
+				if (part->instance_collection) { /* can be NULL if lining fails or set to None */
+					FOREACH_COLLECTION_OBJECT_RECURSIVE_BEGIN(part->instance_collection, object)
 					{
 						if (object != dw->ob) {
 							dw->index++;
@@ -2086,14 +2101,15 @@ static void write_grid_paint_mask(WriteData *wd, int count, GridPaintMask *grid_
 }
 
 static void write_customdata(
-        WriteData *wd, ID *id, int count, CustomData *data, CustomDataLayer *layers,
+        WriteData *wd, ID *id,
+        int count, CustomData *data, CustomDataLayer *layers, CustomDataMask cddata_mask,
         int partial_type, int partial_count)
 {
 	int i;
 
 	/* write external customdata (not for undo) */
 	if (data->external && (wd->use_memfile == false)) {
-		CustomData_external_write(data, id, CD_MASK_MESH, count, 0);
+		CustomData_external_write(data, id, cddata_mask, count, 0);
 	}
 
 	writestruct_at_address(wd, DATA, CustomDataLayer, data->totlayer, data->layers, layers);
@@ -2194,12 +2210,12 @@ static void write_mesh(WriteData *wd, Mesh *mesh)
 			writedata(wd, DATA, sizeof(void *) * mesh->totcol, mesh->mat);
 			writedata(wd, DATA, sizeof(MSelect) * mesh->totselect, mesh->mselect);
 
-			write_customdata(wd, &mesh->id, mesh->totvert, &mesh->vdata, vlayers, -1, 0);
-			write_customdata(wd, &mesh->id, mesh->totedge, &mesh->edata, elayers, -1, 0);
+			write_customdata(wd, &mesh->id, mesh->totvert, &mesh->vdata, vlayers, CD_MASK_MESH.vmask, -1, 0);
+			write_customdata(wd, &mesh->id, mesh->totedge, &mesh->edata, elayers, CD_MASK_MESH.emask, -1, 0);
 			/* fdata is really a dummy - written so slots align */
-			write_customdata(wd, &mesh->id, mesh->totface, &mesh->fdata, flayers, -1, 0);
-			write_customdata(wd, &mesh->id, mesh->totloop, &mesh->ldata, llayers, -1, 0);
-			write_customdata(wd, &mesh->id, mesh->totpoly, &mesh->pdata, players, -1, 0);
+			write_customdata(wd, &mesh->id, mesh->totface, &mesh->fdata, flayers, CD_MASK_MESH.fmask, -1, 0);
+			write_customdata(wd, &mesh->id, mesh->totloop, &mesh->ldata, llayers, CD_MASK_MESH.lmask, -1, 0);
+			write_customdata(wd, &mesh->id, mesh->totpoly, &mesh->pdata, players, CD_MASK_MESH.pmask, -1, 0);
 
 			/* restore pointer */
 			mesh = old_mesh;
@@ -2353,11 +2369,11 @@ static void write_world(WriteData *wd, World *wrld)
 	}
 }
 
-static void write_lamp(WriteData *wd, Lamp *la)
+static void write_light(WriteData *wd, Light *la)
 {
 	if (la->id.us > 0 || wd->use_memfile) {
 		/* write LibData */
-		writestruct(wd, ID_LA, Lamp, 1, la);
+		writestruct(wd, ID_LA, Light, 1, la);
 		write_iddata(wd, &la->id);
 
 		if (la->adt) {
@@ -2368,7 +2384,7 @@ static void write_lamp(WriteData *wd, Lamp *la)
 			write_curvemapping(wd, la->curfalloff);
 		}
 
-		/* nodetree is integral part of lamps, no libdata */
+		/* Node-tree is integral part of lights, no libdata. */
 		if (la->nodetree) {
 			writestruct(wd, DATA, bNodeTree, 1, la->nodetree);
 			write_nodetree_nolib(wd, la->nodetree);
@@ -2780,12 +2796,12 @@ static void write_uilist(WriteData *wd, uiList *ui_list)
 	}
 }
 
-static void write_soops(WriteData *wd, SpaceOops *so)
+static void write_soops(WriteData *wd, SpaceOutliner *so)
 {
 	BLI_mempool *ts = so->treestore;
 
 	if (ts) {
-		SpaceOops so_flat = *so;
+		SpaceOutliner so_flat = *so;
 
 		int elems = BLI_mempool_len(ts);
 		/* linearize mempool to array */
@@ -2806,7 +2822,7 @@ static void write_soops(WriteData *wd, SpaceOops *so)
 			ts_flat.totelem = elems;
 			ts_flat.data = data_addr;
 
-			writestruct(wd, DATA, SpaceOops, 1, so);
+			writestruct(wd, DATA, SpaceOutliner, 1, so);
 
 			writestruct_at_address(wd, DATA, TreeStore, 1, ts, &ts_flat);
 			writestruct_at_address(wd, DATA, TreeStoreElem, elems, data_addr, data);
@@ -2815,11 +2831,11 @@ static void write_soops(WriteData *wd, SpaceOops *so)
 		}
 		else {
 			so_flat.treestore = NULL;
-			writestruct_at_address(wd, DATA, SpaceOops, 1, so, &so_flat);
+			writestruct_at_address(wd, DATA, SpaceOutliner, 1, so, &so_flat);
 		}
 	}
 	else {
-		writestruct(wd, DATA, SpaceOops, 1, so);
+		writestruct(wd, DATA, SpaceOutliner, 1, so);
 	}
 }
 
@@ -2870,14 +2886,14 @@ static void write_area_regions(WriteData *wd, ScrArea *area)
 				writestruct(wd, DATA, GPUDOFSettings, 1, v3d->fx_settings.dof);
 			}
 		}
-		else if (sl->spacetype == SPACE_IPO) {
-			SpaceIpo *sipo = (SpaceIpo *)sl;
+		else if (sl->spacetype == SPACE_GRAPH) {
+			SpaceGraph *sipo = (SpaceGraph *)sl;
 			ListBase tmpGhosts = sipo->runtime.ghost_curves;
 
 			/* temporarily disable ghost curves when saving */
 			BLI_listbase_clear(&sipo->runtime.ghost_curves);
 
-			writestruct(wd, DATA, SpaceIpo, 1, sl);
+			writestruct(wd, DATA, SpaceGraph, 1, sl);
 			if (sipo->ads) {
 				writestruct(wd, DATA, bDopeSheet, 1, sipo->ads);
 			}
@@ -2885,8 +2901,8 @@ static void write_area_regions(WriteData *wd, ScrArea *area)
 			/* reenable ghost curves */
 			sipo->runtime.ghost_curves = tmpGhosts;
 		}
-		else if (sl->spacetype == SPACE_BUTS) {
-			writestruct(wd, DATA, SpaceButs, 1, sl);
+		else if (sl->spacetype == SPACE_PROPERTIES) {
+			writestruct(wd, DATA, SpaceProperties, 1, sl);
 		}
 		else if (sl->spacetype == SPACE_FILE) {
 			SpaceFile *sfile = (SpaceFile *)sl;
@@ -2900,7 +2916,7 @@ static void write_area_regions(WriteData *wd, ScrArea *area)
 			writestruct(wd, DATA, SpaceSeq, 1, sl);
 		}
 		else if (sl->spacetype == SPACE_OUTLINER) {
-			SpaceOops *so = (SpaceOops *)sl;
+			SpaceOutliner *so = (SpaceOutliner *)sl;
 			write_soops(wd, so);
 		}
 		else if (sl->spacetype == SPACE_IMAGE) {
@@ -3737,6 +3753,7 @@ static void write_libraries(WriteData *wd, Main *main)
 				}
 			}
 
+			/* Write link placeholders for all direct linked IDs. */
 			while (a--) {
 				for (id = lbarray[a]->first; id; id = id->next) {
 					if (id->us > 0 && (id->tag & LIB_TAG_EXTERN)) {
@@ -3745,7 +3762,7 @@ static void write_libraries(WriteData *wd, Main *main)
 							       "but is flagged as directly linked", id->name, main->curlib->filepath);
 							BLI_assert(0);
 						}
-						writestruct(wd, ID_ID, ID, 1, id);
+						writestruct(wd, ID_LINK_PLACEHOLDER, ID, 1, id);
 					}
 				}
 			}
@@ -3768,10 +3785,10 @@ static void write_global(WriteData *wd, int fileflags, Main *mainvar)
 	char subvstr[8];
 
 	/* prevent mem checkers from complaining */
-	memset(fg.pad, 0, sizeof(fg.pad));
+	memset(fg._pad, 0, sizeof(fg._pad));
 	memset(fg.filename, 0, sizeof(fg.filename));
 	memset(fg.build_hash, 0, sizeof(fg.build_hash));
-	fg.pad1 = NULL;
+	fg._pad1 = NULL;
 
 	current_screen_compat(mainvar, is_undo, &screen, &scene, &view_layer);
 
@@ -3919,7 +3936,7 @@ static bool write_file_handle(
 						write_camera(wd, (Camera *)id);
 						break;
 					case ID_LA:
-						write_lamp(wd, (Lamp *)id);
+						write_light(wd, (Light *)id);
 						break;
 					case ID_LT:
 						write_lattice(wd, (Lattice *)id);
@@ -4031,7 +4048,7 @@ static bool write_file_handle(
 	 *
 	 * Note that we *borrow* the pointer to 'DNAstr',
 	 * so writing each time uses the same address and doesn't cause unnecessary undo overhead. */
-	writedata(wd, DNA1, wd->sdna->datalen, wd->sdna->data);
+	writedata(wd, DNA1, wd->sdna->data_len, wd->sdna->data);
 
 #ifdef USE_NODE_COMPAT_CUSTOMNODES
 	/* compatibility data not created on undo */

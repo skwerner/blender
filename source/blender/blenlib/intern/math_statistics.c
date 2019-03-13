@@ -17,7 +17,8 @@
  * All rights reserved.
  * */
 
-/** \file \ingroup bli
+/** \file
+ * \ingroup bli
  */
 
 #include "MEM_guardedalloc.h"
@@ -53,7 +54,7 @@ static void covariance_m_vn_ex_task_cb(
 
 	int k;
 
-	/* Covariance matrices are always symetrical, so we can compute only one half of it,
+	/* Covariance matrices are always symmetrical, so we can compute only one half of it,
 	 * and mirror it to the other half (at the end of the func).
 	 *
 	 * This allows using a flat loop of n*n with same results as imbricated one over half the matrix:

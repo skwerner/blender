@@ -17,7 +17,8 @@
  * All rights reserved.
  */
 
-/** \file \ingroup DNA
+/** \file
+ * \ingroup DNA
  */
 
 #ifndef __DNA_MESH_TYPES_H__
@@ -78,9 +79,9 @@ typedef struct Mesh_Runtime {
 	void *batch_cache;
 
 	struct SubdivCCG *subdiv_ccg;
-	void  *pad1;
+	void *_pad1;
 	int subdiv_ccg_tot_level;
-	int pad2;
+	char _pad2[4];
 
 	int64_t cd_dirty_vert;
 	int64_t cd_dirty_edge;
@@ -102,7 +103,7 @@ typedef struct Mesh_Runtime {
 	 * In the future we may leave the mesh-data empty
 	 * since its not needed if we can use edit-mesh data. */
 	char is_original;
-	char padding[6];
+	char _pad[6];
 } Mesh_Runtime;
 
 typedef struct Mesh {
@@ -148,7 +149,7 @@ typedef struct Mesh {
 
 	/* When the object is available, the preferred access method is: BKE_editmesh_from_object(ob) */
 	/** Not saved in file!. */
-	struct BMEditMesh *edit_btmesh;
+	struct BMEditMesh *edit_mesh;
 
 	struct CustomData vdata, edata, fdata;
 
@@ -177,7 +178,7 @@ typedef struct Mesh {
 	float smoothresh;
 
 	/* customdata flag, for bevel-weight and crease, which are now optional */
-	char cd_flag, pad;
+	char cd_flag, _pad;
 
 	char subdiv  DNA_DEPRECATED, subdivr  DNA_DEPRECATED;
 	/** Only kept for backwards compat, not used anymore. */

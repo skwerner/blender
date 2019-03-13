@@ -14,7 +14,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-/** \file \ingroup edinterface
+/** \file
+ * \ingroup edinterface
  *
  * Generic context popup menus.
  */
@@ -109,7 +110,7 @@ static uiBlock *menu_change_shortcut(bContext *C, ARegion *ar, void *arg)
 
 	uiItemR(layout, &ptr, "type", UI_ITEM_R_FULL_EVENT | UI_ITEM_R_IMMEDIATE, "", ICON_NONE);
 
-	UI_block_bounds_set_popup(block, 6, -50, 26);
+	UI_block_bounds_set_popup(block, 6, (const int[2]){-50, 26});
 
 	return block;
 }
@@ -158,7 +159,7 @@ static uiBlock *menu_add_shortcut(bContext *C, ARegion *ar, void *arg)
 
 	uiItemR(layout, &ptr, "type", UI_ITEM_R_FULL_EVENT | UI_ITEM_R_IMMEDIATE, "", ICON_NONE);
 
-	UI_block_bounds_set_popup(block, 6, -50, 26);
+	UI_block_bounds_set_popup(block, 6, (const int[2]){-50, 26});
 
 #ifdef USE_KEYMAP_ADD_HACK
 	g_kmi_id_hack = kmi_id;
@@ -710,7 +711,9 @@ bool ui_popup_context_menu_for_button(bContext *C, uiBut *but)
 				item_found = true;
 			}
 		}
-		MEM_freeN(um_array);
+		if (um_array) {
+			MEM_freeN(um_array);
+		}
 
 		if (!item_found) {
 			but2 = uiDefIconTextBut(

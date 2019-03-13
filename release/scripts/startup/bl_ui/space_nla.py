@@ -100,6 +100,7 @@ class NLA_MT_view(Menu):
 
         layout.prop(st, "show_strip_curves")
         layout.prop(st, "show_local_markers")
+        layout.prop(st, "show_marker_lines")
 
         layout.separator()
         layout.operator("anim.previewrange_set")
@@ -145,7 +146,7 @@ class NLA_MT_marker(Menu):
         layout = self.layout
 
         from .space_time import marker_menu_generic
-        marker_menu_generic(layout)
+        marker_menu_generic(layout, context)
 
 
 class NLA_MT_edit(Menu):

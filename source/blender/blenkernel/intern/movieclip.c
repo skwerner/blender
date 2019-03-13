@@ -17,7 +17,8 @@
  * All rights reserved.
  */
 
-/** \file \ingroup bke
+/** \file
+ * \ingroup bke
  */
 
 
@@ -764,7 +765,7 @@ MovieClip *BKE_movieclip_file_add_exists_ex(Main *bmain, const char *filepath, b
 	BLI_path_abs(str, BKE_main_blendfile_path(bmain));
 
 	/* first search an identical filepath */
-	for (clip = bmain->movieclip.first; clip; clip = clip->id.next) {
+	for (clip = bmain->movieclips.first; clip; clip = clip->id.next) {
 		BLI_strncpy(strtest, clip->name, sizeof(clip->name));
 		BLI_path_abs(strtest, ID_BLEND_PATH(bmain, &clip->id));
 
@@ -1018,10 +1019,7 @@ static ImBuf *movieclip_get_postprocessed_ibuf(MovieClip *clip,
 		               (user->render_size != MCLIP_PROXY_RENDER_SIZE_FULL);
 
 		if (clip->source == MCLIP_SRC_SEQUENCE || use_sequence) {
-			ibuf = movieclip_load_sequence_file(clip,
-			                                    user,
-			                                    framenr,
-			                                    flag);
+			ibuf = movieclip_load_sequence_file(clip, user, framenr, flag);
 		}
 		else {
 			ibuf = movieclip_load_movie_file(clip, user, framenr, flag);
@@ -1372,7 +1370,7 @@ void BKE_movieclip_reload(Main *bmain, MovieClip *clip)
 	 */
 	{
 		Scene *scene;
-		for (scene = bmain->scene.first; scene; scene = scene->id.next) {
+		for (scene = bmain->scenes.first; scene; scene = scene->id.next) {
 			if (scene->nodetree) {
 				nodeUpdateID(scene->nodetree, &clip->id);
 			}

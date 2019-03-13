@@ -14,7 +14,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-/** \file \ingroup bmesh
+/** \file
+ * \ingroup bmesh
  *
  * BMesh operator definitions.
  *
@@ -1390,6 +1391,7 @@ static BMOpDefine bmo_duplicate_def = {
 	/* destination bmesh, if NULL will use current on */
 	 {"dest", BMO_OP_SLOT_PTR, {(int)BMO_OP_SLOT_SUBTYPE_PTR_BMESH}},
 	 {"use_select_history", BMO_OP_SLOT_BOOL},
+	 {"use_edge_flip_from_face", BMO_OP_SLOT_BOOL},
 	 {{'\0'}},
 	},
 	/* slots_out */

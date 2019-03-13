@@ -17,7 +17,8 @@
  * All rights reserved.
  */
 
-/** \file \ingroup gpu
+/** \file
+ * \ingroup gpu
  *
  * Convert material node-trees to GLSL.
  */
@@ -888,7 +889,7 @@ static char *code_generate_vertex(ListBase *nodes, const char *vert_code, bool u
 					        input->attr_id, attr_prefix_get(input->attr_type), hash);
 					/* Auto attribute can be vertex color byte buffer.
 					 * We need to know and convert them to linear space in VS. */
-					if (!use_geom && input->attr_type == CD_AUTO_FROM_NAME) {
+					if (input->attr_type == CD_AUTO_FROM_NAME) {
 						BLI_dynstr_appendf(ds, "uniform bool ba%u;\n", hash);
 						BLI_dynstr_appendf(ds, "#define att%d_is_srgb ba%u\n", input->attr_id, hash);
 					}
@@ -901,9 +902,11 @@ static char *code_generate_vertex(ListBase *nodes, const char *vert_code, bool u
 	}
 
 	if (builtins & GPU_BARYCENTRIC_TEXCO) {
+		BLI_dynstr_append(ds, "#ifdef HAIR_SHADER\n");
 		BLI_dynstr_appendf(
 		        ds, "out vec2 barycentricTexCo%s;\n",
 		        use_geom ? "g" : "");
+		BLI_dynstr_append(ds, "#endif\n");
 	}
 
 	if (builtins & GPU_BARYCENTRIC_DIST) {
@@ -985,14 +988,9 @@ static char *code_generate_vertex(ListBase *nodes, const char *vert_code, bool u
 
 	BLI_dynstr_append(ds, "#else /* MESH_SHADER */\n");
 
-	if (builtins & GPU_BARYCENTRIC_TEXCO) {
-		BLI_dynstr_appendf(
-		        ds, "\tbarycentricTexCo%s.x = float((gl_VertexID %% 3) == 0);\n",
-		        use_geom ? "g" : "");
-		BLI_dynstr_appendf(
-		        ds, "\tbarycentricTexCo%s.y = float((gl_VertexID %% 3) == 1);\n",
-		        use_geom ? "g" : "");
-	}
+	/* GPU_BARYCENTRIC_TEXCO cannot be computed based on gl_VertexID
+	 * for MESH_SHADER because of indexed drawing. In this case a
+	 * geometry shader is needed. */
 
 	if (builtins & GPU_BARYCENTRIC_DIST) {
 		BLI_dynstr_appendf(ds, "\tbarycentricPosg = (ModelMatrix * vec4(position, 1.0)).xyz;\n");
@@ -1070,13 +1068,16 @@ static char *code_generate_vertex(ListBase *nodes, const char *vert_code, bool u
 	return code;
 }
 
-static char *code_generate_geometry(ListBase *nodes, const char *geom_code)
+static char *code_generate_geometry(ListBase *nodes, const char *geom_code, const char *defines)
 {
 	DynStr *ds = BLI_dynstr_new();
 	GPUNode *node;
 	GPUInput *input;
 	char *code;
 	int builtins = 0;
+
+	/* XXX we should not make specific eevee cases here. */
+	bool is_hair_shader = (strstr(defines, "HAIR_SHADER") != NULL);
 
 	/* Create prototype because attributes cannot be declared before layout. */
 	BLI_dynstr_appendf(ds, "void pass_attr(in int vert);\n");
@@ -1103,7 +1104,10 @@ static char *code_generate_geometry(ListBase *nodes, const char *geom_code)
 	}
 
 	if (builtins & GPU_BARYCENTRIC_TEXCO) {
+		BLI_dynstr_appendf(ds, "#ifdef HAIR_SHADER\n");
 		BLI_dynstr_appendf(ds, "in vec2 barycentricTexCog[];\n");
+		BLI_dynstr_appendf(ds, "#endif\n");
+
 		BLI_dynstr_appendf(ds, "out vec2 barycentricTexCo;\n");
 	}
 
@@ -1113,7 +1117,9 @@ static char *code_generate_geometry(ListBase *nodes, const char *geom_code)
 	}
 
 	if (geom_code == NULL) {
-		if ((builtins & GPU_BARYCENTRIC_DIST) == 0) {
+		/* Force geometry usage if GPU_BARYCENTRIC_DIST or GPU_BARYCENTRIC_TEXCO are used.
+		 * Note: GPU_BARYCENTRIC_TEXCO only requires it if the shader is not drawing hairs. */
+		if ((builtins & (GPU_BARYCENTRIC_DIST | GPU_BARYCENTRIC_TEXCO)) == 0 || is_hair_shader) {
 			/* Early out */
 			BLI_dynstr_free(ds);
 			return NULL;
@@ -1188,7 +1194,12 @@ static char *code_generate_geometry(ListBase *nodes, const char *geom_code)
 	}
 
 	if (builtins & GPU_BARYCENTRIC_TEXCO) {
+		BLI_dynstr_appendf(ds, "#ifdef HAIR_SHADER\n");
 		BLI_dynstr_appendf(ds, "\tbarycentricTexCo = barycentricTexCog[vert];\n");
+		BLI_dynstr_appendf(ds, "#else\n");
+		BLI_dynstr_appendf(ds, "\tbarycentricTexCo.x = float((vert %% 3) == 0);\n");
+		BLI_dynstr_appendf(ds, "\tbarycentricTexCo.y = float((vert %% 3) == 1);\n");
+		BLI_dynstr_appendf(ds, "#endif\n");
 	}
 
 	for (node = nodes->first; node; node = node->next) {
@@ -1243,8 +1254,6 @@ void GPU_nodes_extract_dynamic_inputs(GPUShader *shader, ListBase *inputs, ListB
 	if (!shader)
 		return;
 
-	GPU_shader_bind(shader);
-
 	for (node = nodes->first; node; node = node->next) {
 		int z = 0;
 		for (input = node->inputs.first; input; input = next, z++) {
@@ -1273,8 +1282,6 @@ void GPU_nodes_extract_dynamic_inputs(GPUShader *shader, ListBase *inputs, ListB
 			}
 		}
 	}
-
-	GPU_shader_unbind();
 }
 
 /* Node Link Functions */
@@ -1387,6 +1394,8 @@ static void gpu_node_input_link(GPUNode *node, GPUNodeLink *link, const eGPUType
 static const char *gpu_uniform_set_function_from_type(eNodeSocketDatatype type)
 {
 	switch (type) {
+		/* For now INT is supported as float. */
+		case SOCK_INT:
 		case SOCK_FLOAT:
 			return "set_value";
 		case SOCK_VECTOR:
@@ -1816,7 +1825,7 @@ GPUPass *GPU_generate_pass(
 	 * continue generating the shader strings. */
 	char *tmp = BLI_strdupcat(frag_lib, glsl_material_library);
 
-	geometrycode = code_generate_geometry(nodes, geom_code);
+	geometrycode = code_generate_geometry(nodes, geom_code, defines);
 	vertexcode = code_generate_vertex(nodes, vert_code, (geometrycode != NULL));
 	fragmentcode = BLI_strdupcat(tmp, fragmentgen);
 
@@ -1971,6 +1980,13 @@ void GPU_pass_compile(GPUPass *pass, const char *shname)
 			}
 			pass->shader = NULL;
 		}
+		else if (!BLI_thread_is_main()) {
+			/* For some Intel drivers, you must use the program at least once
+			 * in the rendering context that it is linked. */
+			glUseProgram(GPU_shader_get_program(pass->shader));
+			glUseProgram(0);
+		}
+
 		pass->compiled = true;
 	}
 }

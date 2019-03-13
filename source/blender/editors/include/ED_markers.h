@@ -17,7 +17,8 @@
  * All rights reserved.
  */
 
-/** \file \ingroup editors
+/** \file
+ * \ingroup editors
  */
 
 #ifndef __ED_MARKERS_H__
@@ -54,6 +55,8 @@ int ED_markers_find_nearest_marker_time(ListBase *markers, float x);
 void ED_markers_get_minmax(ListBase *markers, short sel, float *first, float *last);
 
 void ED_markers_make_cfra_list(ListBase *markers, ListBase *lb, short sel);
+
+void ED_markers_deselect_all(ListBase *markers, int action);
 
 struct TimeMarker *ED_markers_get_first_selected(ListBase *markers);
 

@@ -17,10 +17,13 @@
  * This is a new part of Blender
  */
 
-/** \file \ingroup modifiers
+/** \file
+ * \ingroup modifiers
  */
 
 #include <stdio.h>
+
+#include "BLI_utildefines.h"
 
 #include "DNA_meshdata_types.h"
 #include "DNA_object_types.h"

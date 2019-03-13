@@ -17,7 +17,8 @@
  * All rights reserved.
  */
 
-/** \file \ingroup spimage
+/** \file
+ * \ingroup spimage
  */
 
 #include "DNA_gpencil_types.h"
@@ -99,15 +100,19 @@ static void image_scopes_tag_refresh(ScrArea *sa)
 
 static void image_user_refresh_scene(const bContext *C, SpaceImage *sima)
 {
+	/* Update scene image user for acquiring render results. */
+	sima->iuser.scene = CTX_data_scene(C);
+
 	if (sima->image && sima->image->type == IMA_TYPE_R_RESULT) {
-		/* for render result, try to use the currently rendering scene */
+		/* While rendering, prefer scene that is being rendered. */
 		Scene *render_scene = ED_render_job_get_current_scene(C);
 		if (render_scene) {
 			sima->iuser.scene = render_scene;
-			return;
 		}
 	}
-	sima->iuser.scene = CTX_data_scene(C);
+
+	/* Auto switch image to show in UV editor when selection changes. */
+	ED_space_image_auto_set(C, sima);
 }
 
 /* ******************** manage regions ********************* */
@@ -334,7 +339,7 @@ static void image_refresh(const bContext *C, ScrArea *sa)
 
 	ima = ED_space_image(sima);
 
-	BKE_image_user_check_frame_calc(&sima->iuser, scene->r.cfra);
+	BKE_image_user_frame_calc(&sima->iuser, scene->r.cfra);
 
 	/* check if we have to set the image from the editmesh */
 	if (ima && (ima->source == IMA_SRC_VIEWER && sima->mode == SI_MODE_MASK)) {
@@ -1027,7 +1032,7 @@ void ED_spacetype_image(void)
 	/* regions: main window */
 	art = MEM_callocN(sizeof(ARegionType), "spacetype image region");
 	art->regionid = RGN_TYPE_WINDOW;
-	art->keymapflag = ED_KEYMAP_GIZMO | ED_KEYMAP_FRAMES | ED_KEYMAP_GPENCIL;
+	art->keymapflag = ED_KEYMAP_GIZMO | ED_KEYMAP_TOOL | ED_KEYMAP_FRAMES | ED_KEYMAP_GPENCIL;
 	art->init = image_main_region_init;
 	art->draw = image_main_region_draw;
 	art->listener = image_main_region_listener;

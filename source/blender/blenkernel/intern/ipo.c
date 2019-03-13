@@ -17,7 +17,8 @@
  * All rights reserved.
  */
 
-/** \file \ingroup bke
+/** \file
+ * \ingroup bke
  */
 
 
@@ -40,7 +41,7 @@
 #include "DNA_anim_types.h"
 #include "DNA_constraint_types.h"
 #include "DNA_camera_types.h"
-#include "DNA_lamp_types.h"
+#include "DNA_light_types.h"
 #include "DNA_ipo_types.h"
 #include "DNA_key_types.h"
 #include "DNA_material_types.h"
@@ -600,7 +601,7 @@ static const char *camera_adrcodes_to_paths(int adrcode, int *array_index)
 		case CAM_YF_APERT:
 			poin = &(ca->YF_aperture); break;
 		case CAM_YF_FDIST:
-			poin = &(ca->YF_dofdist); break;
+			poin = &(ca->dof_distance); break;
 #endif // XXX these are not defined in RNA
 
 		case CAM_SHIFT_X:
@@ -609,12 +610,12 @@ static const char *camera_adrcodes_to_paths(int adrcode, int *array_index)
 			return "shift_y";
 	}
 
-	/* unrecognised adrcode, or not-yet-handled ones! */
+	/* unrecognized adrcode, or not-yet-handled ones! */
 	return NULL;
 }
 
-/* Lamp Types */
-static const char *lamp_adrcodes_to_paths(int adrcode, int *array_index)
+/* Light Types */
+static const char *light_adrcodes_to_paths(int adrcode, int *array_index)
 {
 	/* set array index like this in-case nothing sets it correctly  */
 	*array_index = 0;
@@ -651,7 +652,7 @@ static const char *lamp_adrcodes_to_paths(int adrcode, int *array_index)
 			return mtex_adrcodes_to_paths(adrcode, array_index);
 	}
 
-	/* unrecognised adrcode, or not-yet-handled ones! */
+	/* unrecognized adrcode, or not-yet-handled ones! */
 	return NULL;
 }
 
@@ -676,7 +677,7 @@ static const char *sound_adrcodes_to_paths(int adrcode, int *array_index)
 			return "attenuation";
 	}
 
-	/* unrecognised adrcode, or not-yet-handled ones! */
+	/* unrecognized adrcode, or not-yet-handled ones! */
 	return NULL;
 }
 
@@ -841,8 +842,8 @@ static char *get_rna_access(ID *id, int blocktype, int adrcode, char actname[], 
 			propname = camera_adrcodes_to_paths(adrcode, &dummy_index);
 			break;
 
-		case ID_LA: /* lamp */
-			propname = lamp_adrcodes_to_paths(adrcode, &dummy_index);
+		case ID_LA: /* light */
+			propname = light_adrcodes_to_paths(adrcode, &dummy_index);
 			break;
 
 		case ID_SO: /* sound */
@@ -1696,7 +1697,7 @@ void do_versions_ipos_to_animato(Main *bmain)
 	/* ----------- Animation Attached to Data -------------- */
 
 	/* objects */
-	for (id = bmain->object.first; id; id = id->next) {
+	for (id = bmain->objects.first; id; id = id->next) {
 		Object *ob = (Object *)id;
 		bPoseChannel *pchan;
 		bConstraint *con;
@@ -1823,7 +1824,7 @@ void do_versions_ipos_to_animato(Main *bmain)
 	}
 
 	/* shapekeys */
-	for (id = bmain->key.first; id; id = id->next) {
+	for (id = bmain->shapekeys.first; id; id = id->next) {
 		Key *key = (Key *)id;
 
 		if (G.debug & G_DEBUG) printf("\tconverting key %s\n", id->name + 2);
@@ -1848,7 +1849,7 @@ void do_versions_ipos_to_animato(Main *bmain)
 	}
 
 	/* materials */
-	for (id = bmain->mat.first; id; id = id->next) {
+	for (id = bmain->materials.first; id; id = id->next) {
 		Material *ma = (Material *)id;
 
 		if (G.debug & G_DEBUG) printf("\tconverting material %s\n", id->name + 2);
@@ -1870,7 +1871,7 @@ void do_versions_ipos_to_animato(Main *bmain)
 	}
 
 	/* worlds */
-	for (id = bmain->world.first; id; id = id->next) {
+	for (id = bmain->worlds.first; id; id = id->next) {
 		World *wo = (World *)id;
 
 		if (G.debug & G_DEBUG) printf("\tconverting world %s\n", id->name + 2);
@@ -1892,7 +1893,7 @@ void do_versions_ipos_to_animato(Main *bmain)
 	}
 
 	/* sequence strips */
-	for (id = bmain->scene.first; id; id = id->next) {
+	for (id = bmain->scenes.first; id; id = id->next) {
 		Scene *scene = (Scene *)id;
 		Editing *ed = scene->ed;
 		if (ed && ed->seqbasep) {
@@ -1945,7 +1946,7 @@ void do_versions_ipos_to_animato(Main *bmain)
 
 
 	/* textures */
-	for (id = bmain->tex.first; id; id = id->next) {
+	for (id = bmain->textures.first; id; id = id->next) {
 		Tex *te = (Tex *)id;
 
 		if (G.debug & G_DEBUG) printf("\tconverting texture %s\n", id->name + 2);
@@ -1967,7 +1968,7 @@ void do_versions_ipos_to_animato(Main *bmain)
 	}
 
 	/* cameras */
-	for (id = bmain->camera.first; id; id = id->next) {
+	for (id = bmain->cameras.first; id; id = id->next) {
 		Camera *ca = (Camera *)id;
 
 		if (G.debug & G_DEBUG) printf("\tconverting camera %s\n", id->name + 2);
@@ -1988,9 +1989,9 @@ void do_versions_ipos_to_animato(Main *bmain)
 		}
 	}
 
-	/* lamps */
-	for (id = bmain->lamp.first; id; id = id->next) {
-		Lamp *la = (Lamp *)id;
+	/* lights */
+	for (id = bmain->lights.first; id; id = id->next) {
+		Light *la = (Light *)id;
 
 		if (G.debug & G_DEBUG) printf("\tconverting light %s\n", id->name + 2);
 
@@ -1999,7 +2000,7 @@ void do_versions_ipos_to_animato(Main *bmain)
 			/* Add AnimData block */
 			AnimData *adt = BKE_animdata_add_id(id);
 
-			/* Convert Lamp data... */
+			/* Convert Light data... */
 			ipo_to_animdata(bmain, id, la->ipo, NULL, NULL, NULL);
 
 			if (adt->action)
@@ -2011,7 +2012,7 @@ void do_versions_ipos_to_animato(Main *bmain)
 	}
 
 	/* curves */
-	for (id = bmain->curve.first; id; id = id->next) {
+	for (id = bmain->curves.first; id; id = id->next) {
 		Curve *cu = (Curve *)id;
 
 		if (G.debug & G_DEBUG) printf("\tconverting curve %s\n", id->name + 2);
@@ -2044,7 +2045,7 @@ void do_versions_ipos_to_animato(Main *bmain)
 	 */
 
 	/* actions */
-	for (id = bmain->action.first; id; id = id->next) {
+	for (id = bmain->actions.first; id; id = id->next) {
 		bAction *act = (bAction *)id;
 
 		if (G.debug & G_DEBUG) printf("\tconverting action %s\n", id->name + 2);

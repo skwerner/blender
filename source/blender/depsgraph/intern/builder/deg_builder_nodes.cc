@@ -17,7 +17,8 @@
  * All rights reserved.
  */
 
-/** \file \ingroup depsgraph
+/** \file
+ * \ingroup depsgraph
  *
  * Methods for constructing depsgraph's nodes
  */
@@ -45,7 +46,7 @@ extern "C" {
 #include "DNA_effect_types.h"
 #include "DNA_gpencil_types.h"
 #include "DNA_key_types.h"
-#include "DNA_lamp_types.h"
+#include "DNA_light_types.h"
 #include "DNA_material_types.h"
 #include "DNA_mask_types.h"
 #include "DNA_mesh_types.h"
@@ -72,6 +73,7 @@ extern "C" {
 #include "BKE_gpencil.h"
 #include "BKE_gpencil_modifier.h"
 #include "BKE_idcode.h"
+#include "BKE_image.h"
 #include "BKE_key.h"
 #include "BKE_lattice.h"
 #include "BKE_mask.h"
@@ -129,8 +131,7 @@ void free_copy_on_write_datablock(void *id_info_v)
 /* **** General purpose functions **** */
 
 DepsgraphNodeBuilder::DepsgraphNodeBuilder(Main *bmain, Depsgraph *graph)
-    : bmain_(bmain),
-      graph_(graph),
+    : DepsgraphBuilder(bmain, graph),
       scene_(NULL),
       view_layer_(NULL),
       view_layer_index_(-1),
@@ -153,14 +154,14 @@ IDNode *DepsgraphNodeBuilder::add_id_node(ID *id)
 	ID *id_cow = NULL;
 	IDComponentsMask previously_visible_components_mask = 0;
 	uint32_t previous_eval_flags = 0;
-	uint64_t previous_customdata_mask = 0;
+	DEGCustomDataMeshMasks previous_customdata_masks;
 	IDInfo *id_info = (IDInfo *)BLI_ghash_lookup(id_info_hash_, id);
 	if (id_info != NULL) {
 		id_cow = id_info->id_cow;
 		previously_visible_components_mask =
 		        id_info->previously_visible_components_mask;
 		previous_eval_flags = id_info->previous_eval_flags;
-		previous_customdata_mask = id_info->previous_customdata_mask;
+		previous_customdata_masks = id_info->previous_customdata_masks;
 		/* Tag ID info to not free the CoW ID pointer. */
 		id_info->id_cow = NULL;
 	}
@@ -168,7 +169,7 @@ IDNode *DepsgraphNodeBuilder::add_id_node(ID *id)
 	id_node->previously_visible_components_mask =
 	        previously_visible_components_mask;
 	id_node->previous_eval_flags = previous_eval_flags;
-	id_node->previous_customdata_mask = previous_customdata_mask;
+	id_node->previous_customdata_masks = previous_customdata_masks;
 	/* Currently all ID nodes are supposed to have copy-on-write logic.
 	 *
 	 * NOTE: Zero number of components indicates that ID node was just created. */
@@ -338,7 +339,7 @@ void DepsgraphNodeBuilder::begin_build()
 		id_info->previously_visible_components_mask =
 		        id_node->visible_components_mask;
 		id_info->previous_eval_flags = id_node->eval_flags;
-		id_info->previous_customdata_mask = id_node->customdata_mask;
+		id_info->previous_customdata_masks = id_node->customdata_masks;
 		BLI_ghash_insert(id_info_hash_, id_node->id_orig, id_info);
 		id_node->id_cow = NULL;
 	}
@@ -376,7 +377,8 @@ void DepsgraphNodeBuilder::end_build()
 		if (comp_node == NULL) {
 			continue;
 		}
-		OperationNode *op_node = comp_node->find_operation(entry_tag.opcode, entry_tag.name, entry_tag.name_tag);
+		OperationNode *op_node = comp_node->find_operation(
+		        entry_tag.opcode, entry_tag.name.c_str(), entry_tag.name_tag);
 		if (op_node == NULL) {
 			continue;
 		}
@@ -421,7 +423,7 @@ void DepsgraphNodeBuilder::build_id(ID *id)
 			build_shapekeys((Key *)id);
 			break;
 		case ID_LA:
-			build_lamp((Lamp *)id);
+			build_light((Light *)id);
 			break;
 		case ID_LP:
 			build_lightprobe((LightProbe *)id);
@@ -493,6 +495,12 @@ void DepsgraphNodeBuilder::build_collection(
 			/* Collection became visible, make sure nested collections and
 			 * objects are poked with the new visibility flag, since they
 			 * might become visible too. */
+		}
+		else if (from_layer_collection == NULL &&
+		         !id_node->is_collection_fully_expanded) {
+			/* Initially collection was built from layer now, and was requested
+			 * to not recurs into object. But nw it's asked to recurs into all
+			 * objects. */
 		}
 		else {
 			return;
@@ -599,14 +607,14 @@ void DepsgraphNodeBuilder::build_object(int base_index,
 	}
 	/* Object data. */
 	build_object_data(object, is_visible);
+	/* Paramaters, used by both drivers/animation and also to inform dependency
+	 * from object's data. */
+	build_parameters(&object->id);
 	/* Build animation data,
 	 *
 	 * Do it now because it's possible object data will affect
 	 * on object's level animation, for example in case of rebuilding
 	 * pose for proxy. */
-	OperationNode *op_node = add_operation_node(
-	        &object->id, NodeType::PARAMETERS, OperationCode::PARAMETERS_EVAL);
-	op_node->set_as_exit();
 	build_animdata(&object->id);
 	/* Particle systems. */
 	if (object->particlesystem.first != NULL) {
@@ -622,11 +630,11 @@ void DepsgraphNodeBuilder::build_object(int base_index,
 		        -1, object->proxy_group, DEG_ID_LINKED_INDIRECTLY, is_visible);
 	}
 	/* Object dupligroup. */
-	if (object->dup_group != NULL) {
+	if (object->instance_collection != NULL) {
 		const bool is_current_parent_collection_visible =
 		        is_parent_collection_visible_;
 		is_parent_collection_visible_ = is_visible;
-		build_collection(NULL, object->dup_group);
+		build_collection(NULL, object->instance_collection);
 		is_parent_collection_visible_ = is_current_parent_collection_visible;
 		add_operation_node(
 		        &object->id, NodeType::DUPLI, OperationCode::DUPLI);
@@ -655,7 +663,7 @@ void DepsgraphNodeBuilder::build_object_flags(
 	add_operation_node(&object->id,
 	                   NodeType::OBJECT_FROM_LAYER,
 	                   OperationCode::OBJECT_BASE_FLAGS,
-	                   function_bind(BKE_object_eval_flush_base_flags,
+	                   function_bind(BKE_object_eval_eval_base_flags,
 	                                 _1,
 	                                 scene_cow,
 	                                 view_layer_index_,
@@ -689,7 +697,7 @@ void DepsgraphNodeBuilder::build_object_data(
 			}
 			break;
 		case OB_LAMP:
-			build_object_data_lamp(object);
+			build_object_data_light(object);
 			break;
 		case OB_CAMERA:
 			build_object_data_camera(object);
@@ -717,10 +725,10 @@ void DepsgraphNodeBuilder::build_object_data_camera(Object *object)
 	build_camera(camera);
 }
 
-void DepsgraphNodeBuilder::build_object_data_lamp(Object *object)
+void DepsgraphNodeBuilder::build_object_data_light(Object *object)
 {
-	Lamp *lamp = (Lamp *)object->data;
-	build_lamp(lamp);
+	Light *lamp = (Light *)object->data;
+	build_light(lamp);
 }
 
 void DepsgraphNodeBuilder::build_object_data_lightprobe(Object *object)
@@ -823,11 +831,14 @@ void DepsgraphNodeBuilder::build_object_pointcache(Object *object)
 }
 
 /**
- * Build graph nodes for AnimData block
+ * Build graph nodes for AnimData block and any animated images used.
  * \param id: ID-Block which hosts the AnimData
  */
 void DepsgraphNodeBuilder::build_animdata(ID *id)
 {
+	/* Special handling for animated images/sequences. */
+	build_animation_images(id);
+	/* Regular animation. */
 	AnimData *adt = BKE_animdata_from_id(id);
 	if (adt == NULL) {
 		return;
@@ -835,40 +846,35 @@ void DepsgraphNodeBuilder::build_animdata(ID *id)
 	if (adt->action != NULL) {
 		build_action(adt->action);
 	}
-	/* animation */
-	if (adt->action || adt->nla_tracks.first || adt->drivers.first) {
-		(void) add_id_node(id);
-		ID *id_cow = get_cow_id(id);
-
-		// XXX: Hook up specific update callbacks for special properties which
-		// may need it...
-
-		/* actions and NLA - as a single unit for now, as it gets complicated to
-		 * schedule otherwise.  */
-		if ((adt->action) || (adt->nla_tracks.first)) {
-			/* create the node */
-			add_operation_node(id, NodeType::ANIMATION,
-			                   OperationCode::ANIMATION,
-			                   function_bind(BKE_animsys_eval_animdata,
-			                                 _1,
-			                                 id_cow),
-			                   id->name);
-			/* TODO: for each channel affected, we might also want to add some
-			 * support for running RNA update callbacks on them
-			 * (which will be needed for proper handling of drivers later) */
-		}
-
-		/* NLA strips contain actions */
-		LISTBASE_FOREACH (NlaTrack *, nlt, &adt->nla_tracks) {
-			build_animdata_nlastrip_targets(&nlt->strips);
-		}
-
-		/* drivers */
-		int driver_index = 0;
-		LISTBASE_FOREACH (FCurve *, fcu, &adt->drivers) {
-			/* create driver */
-			build_driver(id, fcu, driver_index++);
-		}
+	/* Make sure ID node exists. */
+	(void) add_id_node(id);
+	ID *id_cow = get_cow_id(id);
+	if (adt->action != NULL || !BLI_listbase_is_empty(&adt->nla_tracks)) {
+		OperationNode *operation_node;
+		/* Explicit entry operation. */
+		operation_node = add_operation_node(
+		        id, NodeType::ANIMATION, OperationCode::ANIMATION_ENTRY);
+		operation_node->set_as_entry();
+		/* All the evaluation nodes. */
+		add_operation_node(
+		        id,
+		        NodeType::ANIMATION,
+		        OperationCode::ANIMATION_EVAL,
+		        function_bind(BKE_animsys_eval_animdata, _1, id_cow));
+		/* Explicit exit operation. */
+		operation_node = add_operation_node(
+		        id, NodeType::ANIMATION, OperationCode::ANIMATION_EXIT);
+		operation_node->set_as_exit();
+	}
+	/* NLA strips contain actions. */
+	LISTBASE_FOREACH (NlaTrack *, nlt, &adt->nla_tracks) {
+		build_animdata_nlastrip_targets(&nlt->strips);
+	}
+	/* Drivers. */
+	int driver_index = 0;
+	LISTBASE_FOREACH (FCurve *, fcu, &adt->drivers) {
+		/* create driver */
+		build_driver(id, fcu, driver_index++);
 	}
 }
 
@@ -884,13 +890,27 @@ void DepsgraphNodeBuilder::build_animdata_nlastrip_targets(ListBase *strips)
 	}
 }
 
+/**
+ * Build graph nodes to update the current frame in image users.
+ */
+void DepsgraphNodeBuilder::build_animation_images(ID *id)
+{
+	if (BKE_image_user_id_has_animation(id)) {
+		ID *id_cow = get_cow_id(id);
+		add_operation_node(id,
+		                   NodeType::ANIMATION,
+		                   OperationCode::IMAGE_ANIMATION,
+		                   function_bind(BKE_image_user_id_eval_animation, _1, id_cow));
+	}
+}
+
 void DepsgraphNodeBuilder::build_action(bAction *action)
 {
 	if (built_map_.checkIsBuiltAndTag(action)) {
 		return;
 	}
 	add_operation_node(
-	        &action->id, NodeType::ANIMATION, OperationCode::ANIMATION);
+	        &action->id, NodeType::ANIMATION, OperationCode::ANIMATION_EVAL);
 }
 
 /**
@@ -968,6 +988,23 @@ void DepsgraphNodeBuilder::build_driver_id_property(ID *id,
 	                      prop_identifier);
 }
 
+void DepsgraphNodeBuilder::build_parameters(ID *id)
+{
+	(void) add_id_node(id);
+	OperationNode *op_node;
+	/* Explicit entry. */
+	op_node = add_operation_node(
+	        id, NodeType::PARAMETERS, OperationCode::PARAMETERS_ENTRY);
+	op_node->set_as_entry();
+	/* Generic evaluation node. */
+	add_operation_node(
+	        id, NodeType::PARAMETERS, OperationCode::PARAMETERS_EVAL);
+	/* Explicit exit operation. */
+	op_node = add_operation_node(
+	        id, NodeType::PARAMETERS, OperationCode::PARAMETERS_EXIT);
+	op_node->set_as_exit();
+}
+
 /* Recursively build graph for world */
 void DepsgraphNodeBuilder::build_world(World *world)
 {
@@ -1016,8 +1053,8 @@ void DepsgraphNodeBuilder::build_rigidbody(Scene *scene)
 
 	/* Init/rebuild operation. */
 	add_operation_node(&scene->id, NodeType::TRANSFORM,
-	                  OperationCode::RIGIDBODY_REBUILD,
-	                  function_bind(BKE_rigidbody_rebuild_sim, _1, scene_cow));
+	                   OperationCode::RIGIDBODY_REBUILD,
+	                   function_bind(BKE_rigidbody_rebuild_sim, _1, scene_cow));
 	/* Do-sim operation. */
 	OperationNode *sim_node = add_operation_node(
 	        &scene->id, NodeType::TRANSFORM,
@@ -1123,16 +1160,16 @@ void DepsgraphNodeBuilder::build_particle_systems(Object *object,
 		/* Visualization of particle system. */
 		switch (part->ren_as) {
 			case PART_DRAW_OB:
-				if (part->dup_ob != NULL) {
+				if (part->instance_object != NULL) {
 					build_object(-1,
-					             part->dup_ob,
+					             part->instance_object,
 					             DEG_ID_LINKED_INDIRECTLY,
 					             is_object_visible);
 				}
 				break;
 			case PART_DRAW_GR:
-				if (part->dup_group != NULL) {
-					build_collection(NULL, part->dup_group);
+				if (part->instance_collection != NULL) {
+					build_collection(NULL, part->instance_collection);
 				}
 				break;
 		}
@@ -1385,7 +1422,7 @@ void DepsgraphNodeBuilder::build_camera(Camera *camera)
 	op_node->set_as_exit();
 }
 
-void DepsgraphNodeBuilder::build_lamp(Lamp *lamp)
+void DepsgraphNodeBuilder::build_light(Light *lamp)
 {
 	if (built_map_.checkIsBuiltAndTag(lamp)) {
 		return;
@@ -1396,11 +1433,11 @@ void DepsgraphNodeBuilder::build_lamp(Lamp *lamp)
 	        &lamp->id, NodeType::PARAMETERS, OperationCode::PARAMETERS_EVAL);
 	/* NOTE: We mark this node as both entry and exit. This way we have a
 	 * node to link all dependencies for shading (which includes relation to the
-	 * lamp object, and incldues relation from node tree) without adding a
+	 * light object, and incldues relation from node tree) without adding a
 	 * dedicated component type. */
 	op_node->set_as_entry();
 	op_node->set_as_exit();
-	/* lamp's nodetree */
+	/* light's nodetree */
 	build_nodetree(lamp->nodetree);
 }
 
@@ -1415,6 +1452,11 @@ void DepsgraphNodeBuilder::build_nodetree(bNodeTree *ntree)
 	/* nodetree itself */
 	add_id_node(&ntree->id);
 	bNodeTree *ntree_cow = get_cow_datablock(ntree);
+	/* General parameters. */
+	OperationNode *op_node;
+	op_node = add_operation_node(
+	        &ntree->id, NodeType::PARAMETERS, OperationCode::PARAMETERS_EVAL);
+	op_node->set_as_exit();
 	/* Animation, */
 	build_animdata(&ntree->id);
 	/* Shading update. */

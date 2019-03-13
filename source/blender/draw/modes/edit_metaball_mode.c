@@ -16,7 +16,8 @@
  * Copyright 2016, Blender Foundation.
  */
 
-/** \file \ingroup draw
+/** \file
+ * \ingroup draw
  */
 
 #include "DRW_render.h"
@@ -31,7 +32,7 @@
 #include "GPU_shader.h"
 
 #include "draw_common.h"
-
+#include "draw_mode_engines.h"
 
 /* *********** LISTS *********** */
 /* All lists are per viewport specific datas.
@@ -93,8 +94,7 @@ typedef struct EDIT_METABALL_PrivateData {
 static void EDIT_METABALL_engine_init(void *UNUSED(vedata))
 {
 	const DRWContextState *draw_ctx = DRW_context_state_get();
-	const bool is_clip = (draw_ctx->rv3d->rflag & RV3D_CLIPPING) != 0;
-	if (is_clip) {
+	if (draw_ctx->sh_cfg == GPU_SHADER_CFG_CLIPPED) {
 		DRW_state_clip_planes_set_from_rv3d(draw_ctx->rv3d);
 	}
 }
@@ -121,7 +121,7 @@ static void EDIT_METABALL_cache_init(void *vedata)
 		psl->pass = DRW_pass_create("My Pass", state);
 
 		/* Create a shadingGroup using a function in draw_common.c or custom one */
-		stl->g_data->group = shgroup_instance_mball_handles(psl->pass, draw_ctx->shader_cfg);
+		stl->g_data->group = shgroup_instance_mball_handles(psl->pass, draw_ctx->sh_cfg);
 	}
 }
 
@@ -162,8 +162,8 @@ static void EDIT_METABALL_cache_populate(void *vedata, Object *ob)
 				copy_v3_v3(draw_scale_xform[2], scamat[2]);
 			}
 
-			int selection_id = ob->select_color;
-			for (MetaElem *ml = mb->editelems->first; ml != NULL; ml = ml->next, selection_id += 0x10000) {
+			int select_id = ob->select_id;
+			for (MetaElem *ml = mb->editelems->first; ml != NULL; ml = ml->next, select_id += 0x10000) {
 				float world_pos[3];
 				mul_v3_m4v3(world_pos, ob->obmat, &ml->x);
 				draw_scale_xform[0][3] = world_pos[0];
@@ -176,7 +176,7 @@ static void EDIT_METABALL_cache_populate(void *vedata, Object *ob)
 				else color = col_radius;
 
 				if (is_select) {
-					DRW_select_load_id(selection_id | MBALLSEL_RADIUS);
+					DRW_select_load_id(select_id | MBALLSEL_RADIUS);
 				}
 
 				DRW_shgroup_call_dynamic_add(group, draw_scale_xform, &ml->rad, color);
@@ -185,7 +185,7 @@ static void EDIT_METABALL_cache_populate(void *vedata, Object *ob)
 				else color = col_stiffness;
 
 				if (is_select) {
-					DRW_select_load_id(selection_id | MBALLSEL_STIFF);
+					DRW_select_load_id(select_id | MBALLSEL_STIFF);
 				}
 
 				DRW_shgroup_call_dynamic_add(group, draw_scale_xform, &draw_stiffness_radius, color);

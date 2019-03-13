@@ -14,7 +14,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-/** \file \ingroup edmesh
+/** \file
+ * \ingroup edmesh
  */
 
 #include "BLI_math.h"
@@ -242,7 +243,7 @@ static void gizmo_mesh_spin_init_draw_prepare(
 		Scene *scene = CTX_data_scene(C);
 		const TransformOrientationSlot *orient_slot = BKE_scene_orientation_slot_get(scene, SCE_GIZMO_SHOW_ROTATE);
 		switch (orient_slot->type) {
-			case V3D_MANIP_VIEW:
+			case V3D_ORIENT_VIEW:
 			{
 				if (!equals_m3m3(viewinv_m3, ggd->prev.viewinv_m3)) {
 					/* Take care calling refresh from draw_prepare,
@@ -437,18 +438,10 @@ static void gizmo_mesh_spin_init_message_subscribe(
 		.notify = WM_gizmo_do_msg_notify_tag_refresh,
 	};
 
-	PointerRNA scene_ptr;
-	RNA_id_pointer_create(&scene->id, &scene_ptr);
-
-	{
-		extern PropertyRNA rna_Scene_cursor_location;
-		const PropertyRNA *props[] = {
-			&rna_Scene_cursor_location,
-		};
-		for (int i = 0; i < ARRAY_SIZE(props); i++) {
-			WM_msg_subscribe_rna(mbus, &scene_ptr, props[i], &msg_sub_value_gz_tag_refresh, __func__);
-		}
-	}
+	PointerRNA cursor_ptr;
+	RNA_pointer_create(&scene->id, &RNA_View3DCursor, &scene->cursor, &cursor_ptr);
+	/* All cursor properties. */
+	WM_msg_subscribe_rna(mbus, &cursor_ptr, NULL, &msg_sub_value_gz_tag_refresh, __func__);
 
 	WM_msg_subscribe_rna_params(
 	        mbus,

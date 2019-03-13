@@ -14,7 +14,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-/** \file \ingroup bmesh
+/** \file
+ * \ingroup bmesh
  *
  * Core BMesh functions for adding, removing BMesh elements.
  */
@@ -31,6 +32,7 @@
 
 #include "DNA_meshdata_types.h"
 
+#include "BKE_customdata.h"
 #include "BKE_mesh.h"
 
 #include "bmesh.h"

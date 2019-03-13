@@ -17,7 +17,8 @@
  * All rights reserved.
  */
 
-/** \file \ingroup edtransform
+/** \file
+ * \ingroup edtransform
  */
 
 #include <stdlib.h>
@@ -167,7 +168,7 @@ static void viewAxisCorrectCenter(const TransInfo *t, float t_con_center[3])
 {
 	if (t->spacetype == SPACE_VIEW3D) {
 		// View3D *v3d = t->sa->spacedata.first;
-		const float min_dist = 1.0f;  /* v3d->near; */
+		const float min_dist = 1.0f;  /* v3d->clip_start; */
 		float dir[3];
 		float l;
 
@@ -658,7 +659,7 @@ void setUserConstraint(TransInfo *t, short orientation, int mode, const char fte
 	char text[256];
 
 	switch (orientation) {
-		case V3D_MANIP_GLOBAL:
+		case V3D_ORIENT_GLOBAL:
 		{
 			float mtx[3][3];
 			BLI_snprintf(text, sizeof(text), ftext, IFACE_("global"));
@@ -666,11 +667,11 @@ void setUserConstraint(TransInfo *t, short orientation, int mode, const char fte
 			setConstraint(t, mtx, mode, text);
 			break;
 		}
-		case V3D_MANIP_LOCAL:
+		case V3D_ORIENT_LOCAL:
 			BLI_snprintf(text, sizeof(text), ftext, IFACE_("local"));
 			setLocalConstraint(t, mode, text);
 			break;
-		case V3D_MANIP_NORMAL:
+		case V3D_ORIENT_NORMAL:
 			BLI_snprintf(text, sizeof(text), ftext, IFACE_("normal"));
 			if (checkUseAxisMatrix(t)) {
 				setAxisMatrixConstraint(t, mode, text);
@@ -679,23 +680,23 @@ void setUserConstraint(TransInfo *t, short orientation, int mode, const char fte
 				setConstraint(t, t->spacemtx, mode, text);
 			}
 			break;
-		case V3D_MANIP_VIEW:
+		case V3D_ORIENT_VIEW:
 			BLI_snprintf(text, sizeof(text), ftext, IFACE_("view"));
 			setConstraint(t, t->spacemtx, mode, text);
 			break;
-		case V3D_MANIP_CURSOR:
+		case V3D_ORIENT_CURSOR:
 			BLI_snprintf(text, sizeof(text), ftext, IFACE_("cursor"));
 			setConstraint(t, t->spacemtx, mode, text);
 			break;
-		case V3D_MANIP_GIMBAL:
+		case V3D_ORIENT_GIMBAL:
 			BLI_snprintf(text, sizeof(text), ftext, IFACE_("gimbal"));
 			setConstraint(t, t->spacemtx, mode, text);
 			break;
-		case V3D_MANIP_CUSTOM_MATRIX:
+		case V3D_ORIENT_CUSTOM_MATRIX:
 			BLI_snprintf(text, sizeof(text), ftext, IFACE_("custom matrix"));
 			setConstraint(t, t->spacemtx, mode, text);
 			break;
-		case V3D_MANIP_CUSTOM:
+		case V3D_ORIENT_CUSTOM:
 		{
 			char orientation_str[128];
 			BLI_snprintf(orientation_str, sizeof(orientation_str), "%s \"%s\"",
@@ -804,7 +805,7 @@ void drawPropCircle(const struct bContext *C, TransInfo *t)
 		else if (t->spacetype == SPACE_IMAGE) {
 			GPU_matrix_scale_2f(1.0f / t->aspect[0], 1.0f / t->aspect[1]);
 		}
-		else if (ELEM(t->spacetype, SPACE_IPO, SPACE_ACTION)) {
+		else if (ELEM(t->spacetype, SPACE_GRAPH, SPACE_ACTION)) {
 			/* only scale y */
 			rcti *mask = &t->ar->v2d.mask;
 			rctf *datamask = &t->ar->v2d.cur;
@@ -1091,26 +1092,35 @@ void setNearestAxis(TransInfo *t)
 
 /*-------------- HELPER FUNCTIONS ----------------*/
 
-char constraintModeToChar(TransInfo *t)
+int constraintModeToIndex(const TransInfo *t)
 {
 	if ((t->con.mode & CON_APPLY) == 0) {
-		return '\0';
+		return -1;
 	}
 	switch (t->con.mode & (CON_AXIS0 | CON_AXIS1 | CON_AXIS2)) {
 		case (CON_AXIS0):
 		case (CON_AXIS1 | CON_AXIS2):
-			return 'X';
+			return 0;
 		case (CON_AXIS1):
 		case (CON_AXIS0 | CON_AXIS2):
-			return 'Y';
+			return 1;
 		case (CON_AXIS2):
 		case (CON_AXIS0 | CON_AXIS1):
-			return 'Z';
+			return 2;
 		default:
-			return '\0';
+			return -1;
 	}
 }
 
+char constraintModeToChar(const TransInfo *t)
+{
+	int index = constraintModeToIndex(t);
+	if (index == -1) {
+		return '\0';
+	}
+	BLI_assert((uint)index < 3);
+	return 'X' + index;
+}
 
 bool isLockConstraint(TransInfo *t)
 {

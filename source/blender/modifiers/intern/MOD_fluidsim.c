@@ -17,16 +17,17 @@
  * All rights reserved.
  */
 
-/** \file \ingroup modifiers
+/** \file
+ * \ingroup modifiers
  */
 
+
+#include "BLI_utildefines.h"
 
 #include "DNA_mesh_types.h"
 #include "DNA_scene_types.h"
 #include "DNA_object_fluidsim_types.h"
 #include "DNA_object_types.h"
-
-#include "BLI_utildefines.h"
 
 #include "BKE_layer.h"
 #include "BKE_modifier.h"

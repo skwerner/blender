@@ -16,7 +16,8 @@
  * Copyright 2016, Blender Foundation.
  */
 
-/** \file \ingroup draw
+/** \file
+ * \ingroup draw
  */
 
 /* This is the Render Functions used by Realtime engines to draw with OpenGL */
@@ -37,7 +38,7 @@
 #include "BLT_translation.h"
 
 #include "DNA_object_types.h"
-#include "DNA_lamp_types.h"
+#include "DNA_light_types.h"
 #include "DNA_material_types.h"
 #include "DNA_scene_types.h"
 #include "DNA_world_types.h"
@@ -68,7 +69,7 @@ struct GPUMaterial;
 struct GPUShader;
 struct GPUTexture;
 struct GPUUniformBuffer;
-struct LampEngineData;
+struct LightEngineData;
 struct Object;
 struct ParticleSystem;
 struct RenderEngineType;
@@ -305,6 +306,8 @@ typedef enum {
 	DRW_STATE_STENCIL_NEQUAL         = (1 << 31),
 } DRWState;
 #define DRW_STATE_DEFAULT (DRW_STATE_WRITE_DEPTH | DRW_STATE_WRITE_COLOR | DRW_STATE_DEPTH_LESS_EQUAL)
+#define DRW_STATE_RASTERIZER_ENABLED (DRW_STATE_WRITE_DEPTH | DRW_STATE_WRITE_COLOR | DRW_STATE_WRITE_STENCIL | \
+                                      DRW_STATE_WRITE_STENCIL_SHADOW_PASS | DRW_STATE_WRITE_STENCIL_SHADOW_FAIL)
 
 typedef enum {
 	DRW_ATTR_INT,
@@ -377,6 +380,7 @@ void DRW_shgroup_call_instances_add(
 void DRW_shgroup_call_object_instances_add(
         DRWShadingGroup *shgroup, struct GPUBatch *geom, struct Object *ob, uint *count);
 void DRW_shgroup_call_sculpt_add(DRWShadingGroup *shgroup, struct Object *ob, float (*obmat)[4]);
+void DRW_shgroup_call_sculpt_wires_add(DRWShadingGroup *shgroup, struct Object *ob, float (*obmat)[4]);
 void DRW_shgroup_call_generate_add(
         DRWShadingGroup *shgroup, DRWCallGenerateFn *geometry_fn, void *user_data, float (*obmat)[4]);
 void DRW_shgroup_call_dynamic_add_array(DRWShadingGroup *shgroup, const void *attr[], uint attr_len);
@@ -578,7 +582,7 @@ typedef struct DRWContextState {
 
 	eObjectMode object_mode;
 
-	eGPUShaderConfig shader_cfg;
+	eGPUShaderConfig sh_cfg;
 
 	/** Last resort (some functions take this as an arg so we can't easily avoid).
 	 * May be NULL when used for selection or depth buffer. */

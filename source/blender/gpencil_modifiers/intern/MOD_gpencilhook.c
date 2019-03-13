@@ -17,10 +17,15 @@
  * This is a new part of Blender
  */
 
-/** \file \ingroup modifiers
+/** \file
+ * \ingroup modifiers
  */
 
 #include <stdio.h>
+
+#include "BLI_utildefines.h"
+
+#include "BLI_math.h"
 
 #include "DNA_meshdata_types.h"
 #include "DNA_scene_types.h"
@@ -28,9 +33,6 @@
 #include "DNA_gpencil_types.h"
 #include "DNA_gpencil_modifier_types.h"
 #include "DNA_modifier_types.h"
-#include "BLI_math.h"
-
-#include "BLI_utildefines.h"
 
 #include "BKE_action.h"
 #include "BKE_colortools.h"
@@ -327,7 +329,7 @@ GpencilModifierTypeInfo modifierType_Gpencil_Hook = {
 	/* structName */        "HookGpencilModifierData",
 	/* structSize */        sizeof(HookGpencilModifierData),
 	/* type */              eGpencilModifierTypeType_Gpencil,
-	/* flags */             0,
+	/* flags */             eGpencilModifierTypeFlag_SupportsEditmode,
 
 	/* copyData */          copyData,
 

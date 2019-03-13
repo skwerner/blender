@@ -17,7 +17,8 @@
  * All rights reserved.
  */
 
-/** \file \ingroup gpu
+/** \file
+ * \ingroup gpu
  *
  * Wrap OpenGL features such as textures, shaders and GLSL
  * with checks for drivers and GPU support.
@@ -208,6 +209,12 @@ bool GPU_depth_blitting_workaround(void)
 bool GPU_unused_fb_slot_workaround(void)
 {
 	return GG.unused_fb_slot_workaround;
+}
+
+bool GPU_crappy_amd_driver(void)
+{
+	/* Currently are the same drivers with the `unused_fb_slot` problem. */
+	return GPU_unused_fb_slot_workaround();
 }
 
 void gpu_extensions_init(void)

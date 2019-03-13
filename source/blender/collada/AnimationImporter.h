@@ -14,7 +14,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-/** \file \ingroup collada
+/** \file
+ * \ingroup collada
  */
 
 #ifndef __ANIMATIONIMPORTER_H__
@@ -39,7 +40,7 @@ extern "C" {
 #include "DNA_anim_types.h"
 #include "DNA_object_types.h"
 #include "DNA_scene_types.h"
-#include "DNA_lamp_types.h"
+#include "DNA_light_types.h"
 #include "DNA_camera_types.h"
 }
 

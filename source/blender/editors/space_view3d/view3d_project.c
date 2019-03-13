@@ -17,7 +17,8 @@
  * All rights reserved.
  */
 
-/** \file \ingroup spview3d
+/** \file
+ * \ingroup spview3d
  */
 
 #include "DNA_camera_types.h"
@@ -321,7 +322,7 @@ static void view3d_win_to_ray_segment(
 	ED_view3d_win_to_vector(ar, mval, r_ray_dir);
 
 	if ((rv3d->is_persp == false) && (rv3d->persp != RV3D_CAMOB)) {
-		end_offset = v3d->far / 2.0f;
+		end_offset = v3d->clip_end / 2.0f;
 		start_offset = -end_offset;
 	}
 	else {

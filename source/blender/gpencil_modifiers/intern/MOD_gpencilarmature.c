@@ -17,10 +17,15 @@
  * This is a new part of Blender
  */
 
-/** \file \ingroup modifiers
+/** \file
+ * \ingroup modifiers
  */
 
 #include <stdio.h>
+
+#include "BLI_utildefines.h"
+
+#include "BLI_math.h"
 
 #include "DNA_armature_types.h"
 #include "DNA_meshdata_types.h"
@@ -29,9 +34,6 @@
 #include "DNA_gpencil_types.h"
 #include "DNA_gpencil_modifier_types.h"
 #include "DNA_modifier_types.h"
-#include "BLI_math.h"
-
-#include "BLI_utildefines.h"
 
 #include "BKE_lattice.h"
 #include "BKE_gpencil.h"
@@ -176,7 +178,7 @@ GpencilModifierTypeInfo modifierType_Gpencil_Armature = {
 	/* structName */        "ArmatureGpencilModifierData",
 	/* structSize */        sizeof(ArmatureGpencilModifierData),
 	/* type */              eGpencilModifierTypeType_Gpencil,
-	/* flags */             0,
+	/* flags */             eGpencilModifierTypeFlag_SupportsEditmode,
 
 	/* copyData */          copyData,
 

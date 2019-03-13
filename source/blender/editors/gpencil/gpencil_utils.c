@@ -16,7 +16,8 @@
  * The Original Code is Copyright (C) 2014, Blender Foundation
  */
 
-/** \file \ingroup edgpencil
+/** \file
+ * \ingroup edgpencil
  */
 
 #include <stdio.h>
@@ -70,6 +71,7 @@
 #include "ED_view3d.h"
 #include "ED_object.h"
 #include "ED_screen.h"
+#include "ED_select_utils.h"
 
 #include "GPU_immediate.h"
 #include "GPU_immediate_util.h"
@@ -95,7 +97,7 @@ bGPdata **ED_gpencil_data_get_pointers_direct(ID *screen_id, ScrArea *sa, Scene 
 
 		switch (sa->spacetype) {
 			/* XXX: Should we reduce reliance on context.gpencil_data for these cases? */
-			case SPACE_BUTS: /* properties */
+			case SPACE_PROPERTIES: /* properties */
 			case SPACE_INFO: /* header info (needed after workspaces merge) */
 			{
 				if (ob && (ob->type == OB_GPENCIL)) {
@@ -460,7 +462,7 @@ bool ED_gpencil_stroke_can_use_direct(const ScrArea *sa, const bGPDstroke *gps)
 	/* filter stroke types by flags + spacetype */
 	if (gps->flag & GP_STROKE_3DSPACE) {
 		/* 3D strokes - only in 3D view */
-		return ((sa->spacetype == SPACE_VIEW3D) || (sa->spacetype == SPACE_BUTS));
+		return ((sa->spacetype == SPACE_VIEW3D) || (sa->spacetype == SPACE_PROPERTIES));
 	}
 	else if (gps->flag & GP_STROKE_2DIMAGE) {
 		/* Special "image" strokes - only in Image Editor */
@@ -720,8 +722,8 @@ void gp_point_to_xy_fl(
 
 
 /**
-* generic based on gp_point_to_xy_fl
-*/
+ * generic based on gp_point_to_xy_fl
+ */
 void gp_point_3d_to_xy(const GP_SpaceConversion *gsc, const short flag, const float pt[3], float xy[2])
 {
 	const ARegion *ar = gsc->ar;
@@ -1270,8 +1272,6 @@ Object *ED_gpencil_add_object(bContext *C, Scene *UNUSED(scene), const float loc
 
 	Object *ob = ED_object_add_type(C, OB_GPENCIL, NULL, loc, rot, false, local_view_bits);
 
-	/* define size */
-	BKE_object_obdata_size_init(ob, GP_OBGPENCIL_DEFAULT_SIZE);
 	/* create default brushes and colors */
 	ED_gpencil_add_defaults(C, ob);
 
@@ -1648,54 +1648,53 @@ static void gp_brush_cursor_draw(bContext *C, int x, int y, void *customdata)
 	/* for paint use paint brush size and color */
 	if (gpd->flag & GP_DATA_STROKE_PAINTMODE) {
 		brush = scene->toolsettings->gp_paint->paint.brush;
+		if ((brush == NULL) || (brush->gpencil_settings == NULL)) {
+			return;
+		}
+
 		/* while drawing hide */
 		if ((gpd->runtime.sbuffer_size > 0) &&
-		    (brush) && ((brush->gpencil_settings->flag & GP_BRUSH_STABILIZE_MOUSE) == 0) &&
+		    ((brush->gpencil_settings->flag & GP_BRUSH_STABILIZE_MOUSE) == 0) &&
 		    ((brush->gpencil_settings->flag & GP_BRUSH_STABILIZE_MOUSE_TEMP) == 0))
 		{
 			return;
 		}
 
-		if (brush) {
-			if ((brush->gpencil_settings->flag & GP_BRUSH_ENABLE_CURSOR) == 0) {
-				return;
-			}
+		if ((brush->gpencil_settings->flag & GP_BRUSH_ENABLE_CURSOR) == 0) {
+			return;
+		}
 
-			/* eraser has special shape and use a different shader program */
-			if (brush->gpencil_tool == GPAINT_TOOL_ERASE) {
-				ED_gpencil_brush_draw_eraser(brush, x, y);
-				return;
-			}
+		/* eraser has special shape and use a different shader program */
+		if (brush->gpencil_tool == GPAINT_TOOL_ERASE) {
+			ED_gpencil_brush_draw_eraser(brush, x, y);
+			return;
+		}
 
-			/* get current drawing color */
-			ma = BKE_gpencil_get_material_from_brush(brush);
-			if (ma == NULL) {
-				BKE_gpencil_material_ensure(bmain, ob);
-				/* assign the first material to the brush */
-				ma = give_current_material(ob, 1);
-				brush->gpencil_settings->material = ma;
-			}
-			gp_style = ma->gp_style;
+		/* get current drawing color */
+		ma = BKE_gpencil_get_material_from_brush(brush);
+		if (ma == NULL) {
+			BKE_gpencil_material_ensure(bmain, ob);
+			/* assign the first material to the brush */
+			ma = give_current_material(ob, 1);
+			brush->gpencil_settings->material = ma;
+		}
+		gp_style = ma->gp_style;
 
-			/* after some testing, display the size of the brush is not practical because
-			 * is too disruptive and the size of cursor does not change with zoom factor.
-			 * The decision was to use a fix size, instead of brush->thickness value.
-			 */
-			if ((gp_style) && (GPENCIL_PAINT_MODE(gpd)) &&
-			    ((brush->gpencil_settings->flag & GP_BRUSH_STABILIZE_MOUSE) == 0) &&
-			    ((brush->gpencil_settings->flag & GP_BRUSH_STABILIZE_MOUSE_TEMP) == 0) &&
-			    (brush->gpencil_tool == GPAINT_TOOL_DRAW))
-			{
-				radius = 2.0f;
-				copy_v3_v3(color, gp_style->stroke_rgba);
-			}
-			else {
-				radius = 5.0f;
-				copy_v3_v3(color, brush->add_col);
-			}
+		/* after some testing, display the size of the brush is not practical because
+		 * is too disruptive and the size of cursor does not change with zoom factor.
+		 * The decision was to use a fix size, instead of brush->thickness value.
+		 */
+		if ((gp_style) && (GPENCIL_PAINT_MODE(gpd)) &&
+		    ((brush->gpencil_settings->flag & GP_BRUSH_STABILIZE_MOUSE) == 0) &&
+		    ((brush->gpencil_settings->flag & GP_BRUSH_STABILIZE_MOUSE_TEMP) == 0) &&
+		    (brush->gpencil_tool == GPAINT_TOOL_DRAW))
+		{
+			radius = 2.0f;
+			copy_v3_v3(color, gp_style->stroke_rgba);
 		}
 		else {
-			return;
+			radius = 5.0f;
+			copy_v3_v3(color, brush->add_col);
 		}
 	}
 
@@ -1970,7 +1969,7 @@ void ED_gpencil_update_color_uv(Main *bmain, Material *mat)
 {
 	Material *gps_ma = NULL;
 	/* read all strokes  */
-	for (Object *ob = bmain->object.first; ob; ob = ob->id.next) {
+	for (Object *ob = bmain->objects.first; ob; ob = ob->id.next) {
 		if (ob->type == OB_GPENCIL) {
 			bGPdata *gpd = ob->data;
 			if (gpd == NULL) {
@@ -1995,6 +1994,7 @@ void ED_gpencil_update_color_uv(Main *bmain, Material *mat)
 					}
 				}
 			}
+			DEG_id_tag_update(&gpd->id, ID_RECALC_TRANSFORM | ID_RECALC_GEOMETRY);
 		}
 	}
 }
@@ -2351,5 +2351,93 @@ int ED_gpencil_select_stroke_segment(
 	}
 	else {
 		return 0;
+	}
+}
+
+void ED_gpencil_select_toggle_all(bContext *C, int action)
+{
+	/* for "toggle", test for existing selected strokes */
+	if (action == SEL_TOGGLE) {
+		action = SEL_SELECT;
+
+		CTX_DATA_BEGIN(C, bGPDstroke *, gps, editable_gpencil_strokes)
+		{
+			if (gps->flag & GP_STROKE_SELECT) {
+				action = SEL_DESELECT;
+				break; // XXX: this only gets out of the inner loop...
+			}
+		}
+		CTX_DATA_END;
+	}
+
+	/* if deselecting, we need to deselect strokes across all frames
+	 * - Currently, an exception is only given for deselection
+	 *   Selecting and toggling should only affect what's visible,
+	 *   while deselecting helps clean up unintended/forgotten
+	 *   stuff on other frames
+	 */
+	if (action == SEL_DESELECT) {
+		/* deselect strokes across editable layers
+		 * NOTE: we limit ourselves to editable layers, since once a layer is "locked/hidden
+		 *       nothing should be able to touch it
+		 */
+		CTX_DATA_BEGIN(C, bGPDlayer *, gpl, editable_gpencil_layers)
+		{
+			bGPDframe *gpf;
+
+			/* deselect all strokes on all frames */
+			for (gpf = gpl->frames.first; gpf; gpf = gpf->next) {
+				bGPDstroke *gps;
+
+				for (gps = gpf->strokes.first; gps; gps = gps->next) {
+					bGPDspoint *pt;
+					int i;
+
+					/* only edit strokes that are valid in this view... */
+					if (ED_gpencil_stroke_can_use(C, gps)) {
+						for (i = 0, pt = gps->points; i < gps->totpoints; i++, pt++) {
+							pt->flag &= ~GP_SPOINT_SELECT;
+						}
+
+						gps->flag &= ~GP_STROKE_SELECT;
+					}
+				}
+			}
+		}
+		CTX_DATA_END;
+	}
+	else {
+		/* select or deselect all strokes */
+		CTX_DATA_BEGIN(C, bGPDstroke *, gps, editable_gpencil_strokes)
+		{
+			bGPDspoint *pt;
+			int i;
+			bool selected = false;
+
+			/* Change selection status of all points, then make the stroke match */
+			for (i = 0, pt = gps->points; i < gps->totpoints; i++, pt++) {
+				switch (action) {
+					case SEL_SELECT:
+						pt->flag |= GP_SPOINT_SELECT;
+						break;
+					//case SEL_DESELECT:
+					//	pt->flag &= ~GP_SPOINT_SELECT;
+					//	break;
+					case SEL_INVERT:
+						pt->flag ^= GP_SPOINT_SELECT;
+						break;
+				}
+
+				if (pt->flag & GP_SPOINT_SELECT)
+					selected = true;
+			}
+
+			/* Change status of stroke */
+			if (selected)
+				gps->flag |= GP_STROKE_SELECT;
+			else
+				gps->flag &= ~GP_STROKE_SELECT;
+		}
+		CTX_DATA_END;
 	}
 }

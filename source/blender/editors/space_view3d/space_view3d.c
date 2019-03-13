@@ -17,7 +17,8 @@
  * All rights reserved.
  */
 
-/** \file \ingroup spview3d
+/** \file
+ * \ingroup spview3d
  */
 
 
@@ -338,8 +339,8 @@ static SpaceLink *view3d_new(const ScrArea *UNUSED(sa), const Scene *scene)
 	v3d->flag2 = V3D_SHOW_RECONSTRUCTION | V3D_SHOW_ANNOTATION;
 
 	v3d->lens = 50.0f;
-	v3d->near = 0.01f;
-	v3d->far = 1000.0f;
+	v3d->clip_start = 0.01f;
+	v3d->clip_end = 1000.0f;
 
 	v3d->overlay.gpencil_paper_opacity = 0.5f;
 	v3d->overlay.gpencil_grid_opacity = 0.9f;
@@ -685,9 +686,9 @@ static void view3d_widgets(void)
 	wmGizmoMapType *gzmap_type = WM_gizmomaptype_ensure(
 	        &(const struct wmGizmoMapType_Params){SPACE_VIEW3D, RGN_TYPE_WINDOW});
 
-	WM_gizmogrouptype_append_and_link(gzmap_type, VIEW3D_GGT_lamp_spot);
-	WM_gizmogrouptype_append_and_link(gzmap_type, VIEW3D_GGT_lamp_area);
-	WM_gizmogrouptype_append_and_link(gzmap_type, VIEW3D_GGT_lamp_target);
+	WM_gizmogrouptype_append_and_link(gzmap_type, VIEW3D_GGT_light_spot);
+	WM_gizmogrouptype_append_and_link(gzmap_type, VIEW3D_GGT_light_area);
+	WM_gizmogrouptype_append_and_link(gzmap_type, VIEW3D_GGT_light_target);
 	WM_gizmogrouptype_append_and_link(gzmap_type, VIEW3D_GGT_force_field);
 	WM_gizmogrouptype_append_and_link(gzmap_type, VIEW3D_GGT_camera);
 	WM_gizmogrouptype_append_and_link(gzmap_type, VIEW3D_GGT_camera_view);
@@ -1086,6 +1087,9 @@ static void view3d_main_region_message_subscribe(
 		WM_msg_subscribe_rna_anon_prop(
 		        mbus, Object, mode,
 		        &msg_sub_value_region_tag_refresh);
+		WM_msg_subscribe_rna_anon_prop(
+		        mbus, LayerObjects, active,
+		        &msg_sub_value_region_tag_refresh);
 	}
 }
 
@@ -1318,7 +1322,7 @@ static void space_view3d_listener(
 		case NC_SCENE:
 			switch (wmn->data) {
 				case ND_WORLD:
-					if (v3d->flag2 & V3D_RENDER_OVERRIDE)
+					if (v3d->flag2 & V3D_HIDE_OVERLAYS)
 						ED_area_tag_redraw_regiontype(sa, RGN_TYPE_WINDOW);
 					break;
 			}
@@ -1469,7 +1473,7 @@ void ED_spacetype_view3d(void)
 	/* regions: main window */
 	art = MEM_callocN(sizeof(ARegionType), "spacetype view3d main region");
 	art->regionid = RGN_TYPE_WINDOW;
-	art->keymapflag = ED_KEYMAP_GIZMO | ED_KEYMAP_GPENCIL;
+	art->keymapflag = ED_KEYMAP_GIZMO | ED_KEYMAP_TOOL | ED_KEYMAP_GPENCIL;
 	art->draw = view3d_main_region_draw;
 	art->init = view3d_main_region_init;
 	art->exit = view3d_main_region_exit;

@@ -14,7 +14,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-/** \file \ingroup edinterface
+/** \file
+ * \ingroup edinterface
  */
 
 
@@ -294,8 +295,8 @@ static bool id_search_add(
 		}
 
 		if (*str == '\0' || BLI_strcasestr(id->name + 2, str)) {
-			/* +1 is needed because BKE_id_ui_prefix uses 3 letter prefix
-			 * followed by ID_NAME-2 characters from id->name.
+			/* +1 is needed because BKE_id_ui_prefix used 3 letter prefix
+			 * followed by ID_NAME-2 characters from id->name
 			 */
 			char name_ui[MAX_ID_FULL_NAME];
 			BKE_id_full_name_ui_prefix_get(name_ui, id);
@@ -597,7 +598,7 @@ static uiBut *template_id_def_new_but(
 	        BLT_I18NCONTEXT_ID_TEXTURE,
 	        BLT_I18NCONTEXT_ID_IMAGE,
 	        BLT_I18NCONTEXT_ID_LATTICE,
-	        BLT_I18NCONTEXT_ID_LAMP,
+	        BLT_I18NCONTEXT_ID_LIGHT,
 	        BLT_I18NCONTEXT_ID_CAMERA,
 	        BLT_I18NCONTEXT_ID_WORLD,
 	        BLT_I18NCONTEXT_ID_SCREEN,
@@ -1322,7 +1323,7 @@ void uiTemplatePathBuilder(
 
 /************************ Modifier Template *************************/
 
-#define ERROR_LIBDATA_MESSAGE IFACE_("Can't edit external libdata")
+#define ERROR_LIBDATA_MESSAGE IFACE_("Can't edit external library data")
 
 static void modifiers_convertToReal(bContext *C, void *ob_v, void *md_v)
 {
@@ -2143,7 +2144,7 @@ uiLayout *uiTemplateConstraint(uiLayout *layout, PointerRNA *ptr)
 
 /************************* Preview Template ***************************/
 
-#include "DNA_lamp_types.h"
+#include "DNA_light_types.h"
 #include "DNA_material_types.h"
 #include "DNA_world_types.h"
 
@@ -2191,7 +2192,7 @@ void uiTemplatePreview(
 		else if (parent && (GS(parent->name) == ID_WO))
 			pr_texture = &((World *)parent)->pr_texture;
 		else if (parent && (GS(parent->name) == ID_LA))
-			pr_texture = &((Lamp *)parent)->pr_texture;
+			pr_texture = &((Light *)parent)->pr_texture;
 		else if (parent && (GS(parent->name) == ID_LS))
 			pr_texture = &((FreestyleLineStyle *)parent)->pr_texture;
 
@@ -2268,7 +2269,8 @@ void uiTemplatePreview(
 				          pr_texture, 10, TEX_PR_OTHER, 0, 0, "");
 			}
 			else if (GS(parent->name) == ID_LA) {
-				uiDefButS(block, UI_BTYPE_ROW, B_MATPRV, IFACE_("Light"),  0, 0, UI_UNIT_X * 10, UI_UNIT_Y,
+				uiDefButS(block, UI_BTYPE_ROW, B_MATPRV, CTX_IFACE_(BLT_I18NCONTEXT_ID_LIGHT, "Light"),
+				          0, 0, UI_UNIT_X * 10, UI_UNIT_Y,
 				          pr_texture, 10, TEX_PR_OTHER, 0, 0, "");
 			}
 			else if (GS(parent->name) == ID_WO) {
@@ -4612,7 +4614,7 @@ void uiTemplateRunningJobs(uiLayout *layout, bContext *C)
 	else {
 		Scene *scene;
 		/* another scene can be rendering too, for example via compositor */
-		for (scene = CTX_data_main(C)->scene.first; scene; scene = scene->id.next) {
+		for (scene = CTX_data_main(C)->scenes.first; scene; scene = scene->id.next) {
 			if (WM_jobs_test(wm, scene, WM_JOB_TYPE_RENDER)) {
 				handle_event = B_STOPRENDER;
 				icon = ICON_SCENE;
@@ -5048,7 +5050,7 @@ void uiTemplateCacheFile(uiLayout *layout, bContext *C, PointerRNA *ptr, const c
 		return;
 	}
 
-	SpaceButs *sbuts = CTX_wm_space_buts(C);
+	SpaceProperties *sbuts = CTX_wm_space_properties(C);
 
 	uiLayout *row = uiLayoutRow(layout, false);
 	uiBlock *block = uiLayoutGetBlock(row);

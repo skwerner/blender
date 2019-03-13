@@ -17,7 +17,8 @@
  * All rights reserved.
  */
 
-/** \file \ingroup DNA
+/** \file
+ * \ingroup DNA
  */
 
 #ifndef __DNA_VIEW3D_TYPES_H__
@@ -43,15 +44,6 @@ struct wmTimer;
 #include "DNA_object_types.h"
 #include "DNA_movieclip_types.h"
 #include "DNA_gpu_types.h"
-
-/* ******************************** */
-
-/* The near/far thing is a Win EXCEPTION, caused by indirect includes from <windows.h>.
- * Thus, leave near/far in the code, and undef for windows. */
-#ifdef _WIN32
-#  undef near
-#  undef far
-#endif
 
 typedef struct RegionView3D {
 
@@ -123,7 +115,7 @@ typedef struct RegionView3D {
 	char viewlock;
 	/** Options for quadview (store while out of quad view). */
 	char viewlock_quad;
-	char pad[3];
+	char _pad[3];
 	/** Normalized offset for locked view: (-1, -1) bottom left, (1, 1) upper right. */
 	float ofs_lock[2];
 
@@ -144,8 +136,13 @@ typedef struct RegionView3D {
 
 typedef struct View3DCursor {
 	float location[3];
-	float rotation[4];
-	char _pad[4];
+
+	float rotation_quaternion[4];
+	float rotation_euler[3];
+	float rotation_axis[3], rotation_angle;
+	short rotation_mode;
+
+	char _pad[6];
 } View3DCursor;
 
 /* 3D Viewport Shading settings */
@@ -162,7 +159,8 @@ typedef struct View3DShading {
 	char light;
 	char background_type;
 	char cavity_type;
-	char pad[7];
+	char wire_color_type;
+	char _pad[6];
 
 	/** FILE_MAXFILE. */
 	char studio_light[256];
@@ -213,7 +211,7 @@ typedef struct View3DOverlay {
 	float weight_paint_mode_opacity;
 
 	/* Armature edit/pose mode settings */
-	int arm_flag;
+	int _pad3;
 	float xray_alpha_bone;
 
 	/* Other settings */
@@ -243,12 +241,10 @@ typedef struct View3D {
 	float bundle_size;
 	/** Display style for bundle. */
 	char bundle_drawtype;
-	char pad[3];
+	char _pad3[2];
 
-	/** For active layer toggle. */
-	unsigned int lay_prev DNA_DEPRECATED;
-	/** Used while drawing. */
-	unsigned int lay_used DNA_DEPRECATED;
+	/** Multiview current eye - for internal use. */
+	char multiview_eye;
 
 	int object_type_exclude_viewport;
 	int object_type_exclude_select;
@@ -277,7 +273,7 @@ typedef struct View3D {
 	int flag2;
 
 	float lens, grid;
-	float near, far;
+	float clip_start, clip_end;
 	float ofs[3] DNA_DEPRECATED;
 
 	char _pad[4];
@@ -290,17 +286,8 @@ typedef struct View3D {
 	short gridsubdiv;
 	char gridflag;
 
-	/* transform gizmo info */
-	char _pad5[2], gizmo_flag;
-
-	short _pad2;
-
-	/* drawflags, denoting state */
-	char _pad3;
-	char transp, xray;
-
-	/** Multiview current eye - for internal use. */
-	char multiview_eye;
+	/** Transform gizmo info. */
+	char gizmo_flag;
 
 	/* actually only used to define the opacity of the grease pencil vertex in edit mode */
 	float vertex_opacity;
@@ -319,14 +306,14 @@ typedef struct View3D {
 	/* Stereoscopy settings */
 	short stereo3d_flag;
 	char stereo3d_camera;
-	char pad4;
+	char _pad4;
 	float stereo3d_convergence_factor;
 	float stereo3d_volume_alpha;
 	float stereo3d_convergence_alpha;
 
 	/* Display settings */
 	short drawtype DNA_DEPRECATED;
-	short pad5[3];
+	char _pad5[6];
 
 	View3DShading shading;
 	View3DOverlay overlay;
@@ -387,7 +374,7 @@ typedef struct View3D {
 	(((view) >= RV3D_VIEW_FRONT) && ((view) <= RV3D_VIEW_BOTTOM))
 
 /* View3d->flag2 (int) */
-#define V3D_RENDER_OVERRIDE     (1 << 2)
+#define V3D_HIDE_OVERLAYS       (1 << 2)
 #define V3D_FLAG2_DEPRECATED_3  (1 << 3)   /* cleared */
 #define V3D_SHOW_ANNOTATION     (1 << 4)
 #define V3D_LOCK_CAMERA         (1 << 5)
@@ -504,11 +491,6 @@ enum {
 	V3D_OVERLAY_EDIT_CU_NORMALS   = (1 << 21),
 };
 
-/* View3DOverlay->arm_flag */
-enum {
-	V3D_OVERLAY_ARM_TRANSP_BONES  = (1 << 0),
-};
-
 /* View3DOverlay->paint_flag */
 enum {
 	V3D_OVERLAY_PAINT_WIRE        = (1 << 0),
@@ -550,14 +532,17 @@ enum {
 #define V3D_SHOW_Z              (1 << 3)
 
 /** #TransformOrientationSlot.type */
-#define V3D_MANIP_GLOBAL		0
-#define V3D_MANIP_LOCAL			1
-#define V3D_MANIP_NORMAL		2
-#define V3D_MANIP_VIEW			3
-#define V3D_MANIP_GIMBAL		4
-#define V3D_MANIP_CURSOR		5
-#define V3D_MANIP_CUSTOM_MATRIX	(V3D_MANIP_CUSTOM - 1)  /* Runtime only, never saved to DNA. */
-#define V3D_MANIP_CUSTOM		1024
+enum {
+	V3D_ORIENT_GLOBAL        = 0,
+	V3D_ORIENT_LOCAL         = 1,
+	V3D_ORIENT_NORMAL        = 2,
+	V3D_ORIENT_VIEW          = 3,
+	V3D_ORIENT_GIMBAL        = 4,
+	V3D_ORIENT_CURSOR        = 5,
+	V3D_ORIENT_CUSTOM        = 1024,
+	/** Runtime only, never saved to DNA. */
+	V3D_ORIENT_CUSTOM_MATRIX =   (V3D_ORIENT_CUSTOM - 1),
+};
 
 /* View3d.mpr_flag (also) */
 enum {

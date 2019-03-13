@@ -17,7 +17,8 @@
  * All rights reserved.
  */
 
-/** \file \ingroup gpu
+/** \file
+ * \ingroup gpu
  *
  * Manages materials, lights and textures.
  */
@@ -58,7 +59,7 @@ typedef struct GPUColorBandBuilder {
 } GPUColorBandBuilder;
 
 struct GPUMaterial {
-	Scene *scene; /* DEPRECATED was only useful for lamps */
+	Scene *scene; /* DEPRECATED was only useful for lights. */
 	Material *ma;
 
 	eGPUMaterialStatus status;
@@ -753,10 +754,10 @@ void GPU_materials_free(Main *bmain)
 	World *wo;
 	extern Material defmaterial;
 
-	for (ma = bmain->mat.first; ma; ma = ma->id.next)
+	for (ma = bmain->materials.first; ma; ma = ma->id.next)
 		GPU_material_free(&ma->gpumaterial);
 
-	for (wo = bmain->world.first; wo; wo = wo->id.next)
+	for (wo = bmain->worlds.first; wo; wo = wo->id.next)
 		GPU_material_free(&wo->gpumaterial);
 
 	GPU_material_free(&defmaterial.gpumaterial);

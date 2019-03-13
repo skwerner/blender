@@ -17,7 +17,8 @@
  * All rights reserved.
  */
 
-/** \file \ingroup spview3d
+/** \file
+ * \ingroup spview3d
  */
 
 #include <math.h>
@@ -144,7 +145,7 @@ void ED_view3d_update_viewmat(
 		rv3d->viewcamtexcofac[2] = rv3d->viewcamtexcofac[3] = 0.0f;
 	}
 
-	/* calculate pixelsize factor once, is used for lamps and obcenters */
+	/* calculate pixelsize factor once, is used for lights and obcenters */
 	{
 		/* note:  '1.0f / len_v3(v1)'  replaced  'len_v3(rv3d->viewmat[0])'
 		 * because of float point precision problems at large values [#23908] */
@@ -312,8 +313,8 @@ static void view3d_camera_border(
 	/* get camera viewplane */
 	BKE_camera_params_init(&params);
 	/* fallback for non camera objects */
-	params.clipsta = v3d->near;
-	params.clipend = v3d->far;
+	params.clip_start = v3d->clip_start;
+	params.clip_end = v3d->clip_end;
 	BKE_camera_params_from_object(&params, camera_eval);
 	if (no_shift) {
 		params.shiftx = 0.0f;
@@ -508,7 +509,7 @@ static void drawviewborder(Scene *scene, Depsgraph *depsgraph, ARegion *ar, View
 	}
 
 	/* When overlays are disabled, only show camera outline & passepartout. */
-	if (v3d->flag2 & V3D_RENDER_OVERRIDE) {
+	if (v3d->flag2 & V3D_HIDE_OVERLAYS) {
 		return;
 	}
 
@@ -789,12 +790,11 @@ float ED_view3d_grid_view_scale(
 			/* Allow 3 more subdivisions (see OBJECT_engine_init). */
 			grid_scale /= powf(grid_subdiv, 3);
 
-			float grid_distance = rv3d->dist;
-			float lvl = (logf(grid_distance / grid_scale) / logf(grid_subdiv));
+			/* `3.0` was a value obtained by trial and error in order to get
+			 * a nice snap distance.*/
+			float grid_res = 3.0 * (rv3d->dist / v3d->lens);
+			float lvl = (logf(grid_res / grid_scale) / logf(grid_subdiv));
 
-			/* 1.3f is a visually chosen offset for the
-			 * subdivision to match the visible grid. */
-			lvl -= 1.3f;
 			CLAMP_MIN(lvl, 0.0f);
 
 			grid_scale *= pow(grid_subdiv, (int)lvl);
@@ -819,7 +819,7 @@ static void draw_view_axis(RegionView3D *rv3d, const rcti *rect)
 	const float starty = rect->ymax - (k + UI_UNIT_Y);
 
 	float axis_pos[3][2];
-	unsigned char axis_col[3][4];
+	uchar axis_col[3][4];
 
 	int axis_order[3] = {0, 1, 2};
 	axis_sort_v3(rv3d->viewinv[2], axis_order);
@@ -1273,7 +1273,7 @@ void view3d_draw_region_info(const bContext *C, ARegion *ar)
 	BLF_batch_draw_begin();
 
 	if ((U.uiflag & USER_SHOW_GIZMO_AXIS) ||
-	    (v3d->flag2 & V3D_RENDER_OVERRIDE) ||
+	    (v3d->flag2 & V3D_HIDE_OVERLAYS) ||
 	    /* No need to display gizmo and this info. */
 	    (v3d->gizmo_flag & (V3D_GIZMO_HIDE | V3D_GIZMO_HIDE_NAVIGATE)))
 	{
@@ -1286,7 +1286,7 @@ void view3d_draw_region_info(const bContext *C, ARegion *ar)
 	int xoffset = rect.xmin + U.widget_unit;
 	int yoffset = rect.ymax;
 
-	if ((v3d->flag2 & V3D_RENDER_OVERRIDE) == 0 &&
+	if ((v3d->flag2 & V3D_HIDE_OVERLAYS) == 0 &&
 	    (v3d->overlay.flag & V3D_OVERLAY_HIDE_TEXT) == 0)
 	{
 		if ((U.uiflag & USER_SHOW_FPS) && ED_screen_animation_no_scrub(wm)) {
@@ -1465,7 +1465,7 @@ ImBuf *ED_view3d_draw_offscreen_imbuf(
         Depsgraph *depsgraph, Scene *scene,
         int drawtype,
         View3D *v3d, ARegion *ar, int sizex, int sizey,
-        unsigned int flag, unsigned int draw_flags,
+        uint flag, uint draw_flags,
         int alpha_mode, int samples, const char *viewname,
         /* output vars */
         GPUOffScreen *ofs, char err_out[256])
@@ -1517,8 +1517,8 @@ ImBuf *ED_view3d_draw_offscreen_imbuf(
 
 		BKE_camera_params_init(&params);
 		/* fallback for non camera objects */
-		params.clipsta = v3d->near;
-		params.clipend = v3d->far;
+		params.clip_start = v3d->clip_start;
+		params.clip_end = v3d->clip_end;
 		BKE_camera_params_from_object(&params, camera_eval);
 		BKE_camera_multiview_params(&scene->r, &params, camera_eval, viewname);
 		BKE_camera_params_compute_viewplane(&params, sizex, sizey, scene->r.xasp, scene->r.yasp);
@@ -1531,14 +1531,14 @@ ImBuf *ED_view3d_draw_offscreen_imbuf(
 	}
 	else {
 		rctf viewplane;
-		float clipsta, clipend;
+		float clip_start, clipend;
 
-		is_ortho = ED_view3d_viewplane_get(depsgraph, v3d, rv3d, sizex, sizey, &viewplane, &clipsta, &clipend, NULL);
+		is_ortho = ED_view3d_viewplane_get(depsgraph, v3d, rv3d, sizex, sizey, &viewplane, &clip_start, &clipend, NULL);
 		if (is_ortho) {
 			orthographic_m4(winmat, viewplane.xmin, viewplane.xmax, viewplane.ymin, viewplane.ymax, -clipend, clipend);
 		}
 		else {
-			perspective_m4(winmat, viewplane.xmin, viewplane.xmax, viewplane.ymin, viewplane.ymax, clipsta, clipend);
+			perspective_m4(winmat, viewplane.xmin, viewplane.xmax, viewplane.ymin, viewplane.ymax, clip_start, clipend);
 		}
 	}
 
@@ -1591,7 +1591,7 @@ ImBuf *ED_view3d_draw_offscreen_imbuf(
 			        &fx_settings, ofs, viewport);
 			GPU_offscreen_read_pixels(ofs, GL_FLOAT, rect_temp);
 
-			unsigned int i = sizex * sizey * 4;
+			uint i = sizex * sizey * 4;
 			while (i--) {
 				accum_buffer[i] += rect_temp[i];
 			}
@@ -1609,16 +1609,16 @@ ImBuf *ED_view3d_draw_offscreen_imbuf(
 
 		if (ibuf->rect_float) {
 			float *rect_float = ibuf->rect_float;
-			unsigned int i = sizex * sizey * 4;
+			uint i = sizex * sizey * 4;
 			while (i--) {
 				rect_float[i] = accum_buffer[i] / samples;
 			}
 		}
 		else {
-			unsigned char *rect_ub = (unsigned char *)ibuf->rect;
-			unsigned int i = sizex * sizey * 4;
+			uchar *rect_ub = (uchar *)ibuf->rect;
+			uint i = sizex * sizey * 4;
 			while (i--) {
-				rect_ub[i] = (unsigned char)(255.0f * accum_buffer[i] / samples);
+				rect_ub[i] = (uchar)(255.0f * accum_buffer[i] / samples);
 			}
 		}
 
@@ -1656,7 +1656,7 @@ ImBuf *ED_view3d_draw_offscreen_imbuf_simple(
         Depsgraph *depsgraph, Scene *scene,
         int drawtype,
         Object *camera, int width, int height,
-        unsigned int flag, unsigned int draw_flags,
+        uint flag, uint draw_flags,
         int alpha_mode, int samples, const char *viewname,
         GPUOffScreen *ofs, char err_out[256])
 {
@@ -1671,7 +1671,7 @@ ImBuf *ED_view3d_draw_offscreen_imbuf_simple(
 
 	v3d.camera = camera;
 	v3d.shading.type = drawtype;
-	v3d.flag2 = V3D_RENDER_OVERRIDE;
+	v3d.flag2 = V3D_HIDE_OVERLAYS;
 
 	if (draw_flags & V3D_OFSDRAW_USE_GPENCIL) {
 		v3d.flag2 |= V3D_SHOW_ANNOTATION;
@@ -1705,8 +1705,8 @@ ImBuf *ED_view3d_draw_offscreen_imbuf_simple(
 		BKE_camera_params_compute_matrix(&params);
 
 		copy_m4_m4(rv3d.winmat, params.winmat);
-		v3d.near = params.clipsta;
-		v3d.far = params.clipend;
+		v3d.clip_start = params.clip_start;
+		v3d.clip_end = params.clip_end;
 		v3d.lens = params.lens;
 	}
 

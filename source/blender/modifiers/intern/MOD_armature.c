@@ -17,17 +17,18 @@
  * All rights reserved.
  */
 
-/** \file \ingroup modifiers
+/** \file
+ * \ingroup modifiers
  */
 
 
 #include <string.h>
 
+#include "BLI_utildefines.h"
+
 #include "DNA_armature_types.h"
 #include "DNA_object_types.h"
 #include "DNA_mesh_types.h"
-
-#include "BLI_utildefines.h"
 
 #include "BKE_editmesh.h"
 #include "BKE_lattice.h"
@@ -64,14 +65,10 @@ static void copyData(const ModifierData *md, ModifierData *target, const int fla
 	tamd->prevCos = NULL;
 }
 
-static CustomDataMask requiredDataMask(Object *UNUSED(ob), ModifierData *UNUSED(md))
+static void requiredDataMask(Object *UNUSED(ob), ModifierData *UNUSED(md), CustomData_MeshMasks *r_cddata_masks)
 {
-	CustomDataMask dataMask = 0;
-
 	/* ask for vertexgroups */
-	dataMask |= CD_MASK_MDEFORMVERT;
-
-	return dataMask;
+	r_cddata_masks->vmask |= CD_MASK_MDEFORMVERT;
 }
 
 static bool isDisabled(const struct Scene *UNUSED(scene), ModifierData *md, bool UNUSED(useRenderParams))
@@ -97,7 +94,7 @@ static void updateDepsgraph(ModifierData *md, const ModifierUpdateDepsgraphConte
 		DEG_add_object_relation(ctx->node, amd->object, DEG_OB_COMP_EVAL_POSE, "Armature Modifier");
 		DEG_add_object_relation(ctx->node, amd->object, DEG_OB_COMP_TRANSFORM, "Armature Modifier");
 	}
-	DEG_add_object_relation(ctx->node, ctx->object, DEG_OB_COMP_TRANSFORM, "Armature Modifier");
+	DEG_add_modifier_to_transform_relation(ctx->node, "Armature Modifier");
 }
 
 static void deformVerts(

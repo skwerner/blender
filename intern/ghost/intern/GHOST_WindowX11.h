@@ -17,7 +17,8 @@
  * All rights reserved.
  */
 
-/** \file \ingroup GHOST
+/** \file
+ * \ingroup GHOST
  * Declaration of GHOST_WindowX11 class.
  */
 
@@ -370,6 +371,5 @@ private:
 	void motifFullScreen(bool set);
 	bool motifIsFullScreen() const;
 };
-
 
 #endif // __GHOST_WINDOWX11_H__

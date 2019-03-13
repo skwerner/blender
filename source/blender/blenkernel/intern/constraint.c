@@ -17,7 +17,8 @@
  * All rights reserved.
  */
 
-/** \file \ingroup bke
+/** \file
+ * \ingroup bke
  */
 
 
@@ -464,7 +465,7 @@ static void contarget_get_mesh_mat(Object *ob, const char *substring, float mat[
 
 	/* derive the rotation from the average normal:
 	 * - code taken from transform_gizmo.c,
-	 *   calc_gizmo_stats, V3D_MANIP_NORMAL case
+	 *   calc_gizmo_stats, V3D_ORIENT_NORMAL case
 	 */
 	/*	we need the transpose of the inverse for a normal... */
 	copy_m3_m4(imat, ob->obmat);
@@ -1089,7 +1090,7 @@ static void trackto_evaluate(bConstraint *con, bConstraintOb *cob, ListBase *tar
 		float size[3], vec[3];
 		float totmat[3][3];
 
-		/* Get size property, since ob->size is only the object's own relative size, not its global one */
+		/* Get size property, since ob->scale is only the object's own relative size, not its global one */
 		mat4_to_size(size, cob->matrix);
 
 		/* Clear the object's rotation */

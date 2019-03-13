@@ -20,7 +20,8 @@
 #ifndef __DNA_FREESTYLE_TYPES_H__
 #define __DNA_FREESTYLE_TYPES_H__
 
-/** \file \ingroup DNA
+/** \file
+ * \ingroup DNA
  */
 
 #include "DNA_defs.h"
@@ -115,11 +116,11 @@ typedef struct FreestyleLineSet {
 	int selection;
 	/** Quantitative invisibility. */
 	short qi;
-	short pad1;
+	char _pad1[2];
 	int qi_start, qi_end;
 	/** Feature edge types. */
 	int edge_types, exclude_edge_types;
-	int pad2;
+	char _pad2[4];
 	/** Group of target objects. */
 	struct Collection *group;
 
@@ -131,7 +132,7 @@ typedef struct FreestyleModuleConfig {
 
 	struct Text *script;
 	short is_displayed;
-	short pad[3];
+	char _pad[6];
 } FreestyleModuleConfig;
 
 typedef struct FreestyleConfig {

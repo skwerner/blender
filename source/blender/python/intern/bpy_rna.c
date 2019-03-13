@@ -14,7 +14,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-/** \file \ingroup pythonintern
+/** \file
+ * \ingroup pythonintern
  *
  * This file is the main interface between python and blenders data api (RNA),
  * exposing RNA to python so blender data can be accessed in a python like way.
@@ -76,6 +77,8 @@
 #define USE_PEDANTIC_WRITE
 #define USE_MATHUTILS
 #define USE_STRING_COERCE
+
+BPy_StructRNA *bpy_context_module = NULL; /* for fast access */
 
 static PyObject *pyrna_struct_Subtype(PointerRNA *ptr);
 static PyObject *pyrna_prop_collection_values(BPy_PropertyRNA *self);
@@ -2340,7 +2343,7 @@ static int pyrna_prop_collection_subscript_str_lib_pair_ptr(
 		else if (PyUnicode_Check(keylib)) {
 			Main *bmain = self->ptr.data;
 			const char *keylib_str = _PyUnicode_AsString(keylib);
-			lib = BLI_findstring(&bmain->library, keylib_str, offsetof(Library, name));
+			lib = BLI_findstring(&bmain->libraries, keylib_str, offsetof(Library, name));
 			if (lib == NULL) {
 				if (err_not_found) {
 					PyErr_Format(PyExc_KeyError,

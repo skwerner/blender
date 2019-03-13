@@ -14,7 +14,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-/** \file \ingroup draw
+/** \file
+ * \ingroup draw
  */
 
 
@@ -52,6 +53,7 @@ static struct DRWShapeCache {
 	GPUBatch *drw_fullscreen_quad;
 	GPUBatch *drw_fullscreen_quad_texcoord;
 	GPUBatch *drw_quad;
+	GPUBatch *drw_quad_wires;
 	GPUBatch *drw_grid;
 	GPUBatch *drw_sphere;
 	GPUBatch *drw_screenspace_circle;
@@ -77,16 +79,16 @@ static struct DRWShapeCache {
 	GPUBatch *drw_field_vortex;
 	GPUBatch *drw_field_tube_limit;
 	GPUBatch *drw_field_cone_limit;
-	GPUBatch *drw_lamp;
-	GPUBatch *drw_lamp_shadows;
-	GPUBatch *drw_lamp_sunrays;
-	GPUBatch *drw_lamp_area_square;
-	GPUBatch *drw_lamp_area_disk;
-	GPUBatch *drw_lamp_hemi;
-	GPUBatch *drw_lamp_spot;
-	GPUBatch *drw_lamp_spot_volume;
-	GPUBatch *drw_lamp_spot_square;
-	GPUBatch *drw_lamp_spot_square_volume;
+	GPUBatch *drw_light;
+	GPUBatch *drw_light_shadows;
+	GPUBatch *drw_light_sunrays;
+	GPUBatch *drw_light_area_square;
+	GPUBatch *drw_light_area_disk;
+	GPUBatch *drw_light_hemi;
+	GPUBatch *drw_light_spot;
+	GPUBatch *drw_light_spot_volume;
+	GPUBatch *drw_light_spot_square;
+	GPUBatch *drw_light_spot_square_volume;
 	GPUBatch *drw_speaker;
 	GPUBatch *drw_lightprobe_cube;
 	GPUBatch *drw_lightprobe_planar;
@@ -321,6 +323,32 @@ GPUBatch *DRW_cache_quad_get(void)
 		SHC.drw_quad = GPU_batch_create_ex(GPU_PRIM_TRI_FAN, vbo, NULL, GPU_BATCH_OWNS_VBO);
 	}
 	return SHC.drw_quad;
+}
+
+/* Just a regular quad with 4 vertices - wires. */
+GPUBatch *DRW_cache_quad_wires_get(void)
+{
+	if (!SHC.drw_quad_wires) {
+		float pos[4][2] = {{-1.0f, -1.0f}, { 1.0f, -1.0f}, {1.0f,  1.0f}, {-1.0f,  1.0f}};
+
+		/* Position Only 2D format */
+		static GPUVertFormat format = { 0 };
+		static struct { uint pos; } attr_id;
+		if (format.attr_len == 0) {
+			attr_id.pos = GPU_vertformat_attr_add(&format, "pos", GPU_COMP_F32, 2, GPU_FETCH_FLOAT);
+		}
+
+		GPUVertBuf *vbo = GPU_vertbuf_create_with_format(&format);
+		GPU_vertbuf_data_alloc(vbo, 8);
+
+		for (int i = 0; i < 4; i++) {
+			GPU_vertbuf_attr_set(vbo, attr_id.pos, i * 2,     pos[i % 4]);
+			GPU_vertbuf_attr_set(vbo, attr_id.pos, i * 2 + 1, pos[(i + 1) % 4]);
+		}
+
+		SHC.drw_quad_wires = GPU_batch_create_ex(GPU_PRIM_LINES, vbo, NULL, GPU_BATCH_OWNS_VBO);
+	}
+	return SHC.drw_quad_wires;
 }
 
 /* Grid */
@@ -658,7 +686,7 @@ GPUBatch *DRW_cache_gpencil_axes_get(void)
 
 /* -------------------------------------------------------------------- */
 /** \name Common Object API
-* \{ */
+ * \{ */
 
 GPUBatch *DRW_cache_object_all_edges_get(Object *ob)
 {
@@ -1294,13 +1322,13 @@ GPUBatch *DRW_cache_field_cone_limit_get(void)
 /** \} */
 
 /* -------------------------------------------------------------------- */
-/** \name Lamps
+/** \name Lights
  * \{ */
 
-GPUBatch *DRW_cache_lamp_get(void)
+GPUBatch *DRW_cache_light_get(void)
 {
 #define NSEGMENTS 8
-	if (!SHC.drw_lamp) {
+	if (!SHC.drw_light) {
 		float v[2];
 
 		/* Position Only 3D format */
@@ -1323,16 +1351,16 @@ GPUBatch *DRW_cache_lamp_get(void)
 			GPU_vertbuf_attr_set(vbo, attr_id.pos, a + 1, v);
 		}
 
-		SHC.drw_lamp = GPU_batch_create_ex(GPU_PRIM_LINES, vbo, NULL, GPU_BATCH_OWNS_VBO);
+		SHC.drw_light = GPU_batch_create_ex(GPU_PRIM_LINES, vbo, NULL, GPU_BATCH_OWNS_VBO);
 	}
-	return SHC.drw_lamp;
+	return SHC.drw_light;
 #undef NSEGMENTS
 }
 
-GPUBatch *DRW_cache_lamp_shadows_get(void)
+GPUBatch *DRW_cache_light_shadows_get(void)
 {
 #define NSEGMENTS 10
-	if (!SHC.drw_lamp_shadows) {
+	if (!SHC.drw_light_shadows) {
 		float v[2];
 
 		/* Position Only 3D format */
@@ -1355,15 +1383,15 @@ GPUBatch *DRW_cache_lamp_shadows_get(void)
 			GPU_vertbuf_attr_set(vbo, attr_id.pos, a + 1, v);
 		}
 
-		SHC.drw_lamp_shadows = GPU_batch_create_ex(GPU_PRIM_LINES, vbo, NULL, GPU_BATCH_OWNS_VBO);
+		SHC.drw_light_shadows = GPU_batch_create_ex(GPU_PRIM_LINES, vbo, NULL, GPU_BATCH_OWNS_VBO);
 	}
-	return SHC.drw_lamp_shadows;
+	return SHC.drw_light_shadows;
 #undef NSEGMENTS
 }
 
-GPUBatch *DRW_cache_lamp_sunrays_get(void)
+GPUBatch *DRW_cache_light_sunrays_get(void)
 {
-	if (!SHC.drw_lamp_sunrays) {
+	if (!SHC.drw_light_sunrays) {
 		float v[2], v1[2], v2[2];
 
 		/* Position Only 2D format */
@@ -1391,14 +1419,14 @@ GPUBatch *DRW_cache_lamp_sunrays_get(void)
 			GPU_vertbuf_attr_set(vbo, attr_id.pos, a * 4 + 3, v2);
 		}
 
-		SHC.drw_lamp_sunrays = GPU_batch_create_ex(GPU_PRIM_LINES, vbo, NULL, GPU_BATCH_OWNS_VBO);
+		SHC.drw_light_sunrays = GPU_batch_create_ex(GPU_PRIM_LINES, vbo, NULL, GPU_BATCH_OWNS_VBO);
 	}
-	return SHC.drw_lamp_sunrays;
+	return SHC.drw_light_sunrays;
 }
 
-GPUBatch *DRW_cache_lamp_area_square_get(void)
+GPUBatch *DRW_cache_light_area_square_get(void)
 {
-	if (!SHC.drw_lamp_area_square) {
+	if (!SHC.drw_light_area_square) {
 		float v1[3] = {0.0f, 0.0f, 0.0f};
 
 		/* Position Only 3D format */
@@ -1425,15 +1453,15 @@ GPUBatch *DRW_cache_lamp_area_square_get(void)
 		v1[1] = 0.5f;
 		GPU_vertbuf_attr_set(vbo, attr_id.pos, 7, v1);
 
-		SHC.drw_lamp_area_square = GPU_batch_create_ex(GPU_PRIM_LINES, vbo, NULL, GPU_BATCH_OWNS_VBO);
+		SHC.drw_light_area_square = GPU_batch_create_ex(GPU_PRIM_LINES, vbo, NULL, GPU_BATCH_OWNS_VBO);
 	}
-	return SHC.drw_lamp_area_square;
+	return SHC.drw_light_area_square;
 }
 
-GPUBatch *DRW_cache_lamp_area_disk_get(void)
+GPUBatch *DRW_cache_light_area_disk_get(void)
 {
 #define NSEGMENTS 32
-	if (!SHC.drw_lamp_area_disk) {
+	if (!SHC.drw_light_area_disk) {
 		/* Position Only 3D format */
 		static GPUVertFormat format = { 0 };
 		static struct { uint pos; } attr_id;
@@ -1455,16 +1483,16 @@ GPUBatch *DRW_cache_lamp_area_disk_get(void)
 		copy_v3_fl3(v, 0.0f, 0.5f, 0.0f);
 		GPU_vertbuf_attr_set(vbo, attr_id.pos, (2 * NSEGMENTS) - 1, v);
 
-		SHC.drw_lamp_area_disk = GPU_batch_create_ex(GPU_PRIM_LINES, vbo, NULL, GPU_BATCH_OWNS_VBO);
+		SHC.drw_light_area_disk = GPU_batch_create_ex(GPU_PRIM_LINES, vbo, NULL, GPU_BATCH_OWNS_VBO);
 	}
-	return SHC.drw_lamp_area_disk;
+	return SHC.drw_light_area_disk;
 #undef NSEGMENTS
 }
 
-GPUBatch *DRW_cache_lamp_hemi_get(void)
+GPUBatch *DRW_cache_light_hemi_get(void)
 {
 #define CIRCLE_RESOL 32
-	if (!SHC.drw_lamp_hemi) {
+	if (!SHC.drw_light_hemi) {
 		float v[3];
 		int vidx = 0;
 
@@ -1518,17 +1546,17 @@ GPUBatch *DRW_cache_lamp_hemi_get(void)
 		}
 
 
-		SHC.drw_lamp_hemi = GPU_batch_create_ex(GPU_PRIM_LINES, vbo, NULL, GPU_BATCH_OWNS_VBO);
+		SHC.drw_light_hemi = GPU_batch_create_ex(GPU_PRIM_LINES, vbo, NULL, GPU_BATCH_OWNS_VBO);
 	}
-	return SHC.drw_lamp_hemi;
+	return SHC.drw_light_hemi;
 #undef CIRCLE_RESOL
 }
 
 
-GPUBatch *DRW_cache_lamp_spot_get(void)
+GPUBatch *DRW_cache_light_spot_get(void)
 {
 #define NSEGMENTS 32
-	if (!SHC.drw_lamp_spot) {
+	if (!SHC.drw_light_spot) {
 		/* a single ring of vertices */
 		float p[NSEGMENTS][2];
 		float n[NSEGMENTS][3];
@@ -1587,16 +1615,16 @@ GPUBatch *DRW_cache_lamp_spot_get(void)
 			GPU_vertbuf_attr_set(vbo, attr_id.n2, i * 4 + 3, neg[(i) % NSEGMENTS]);
 		}
 
-		SHC.drw_lamp_spot = GPU_batch_create_ex(GPU_PRIM_LINES, vbo, NULL, GPU_BATCH_OWNS_VBO);
+		SHC.drw_light_spot = GPU_batch_create_ex(GPU_PRIM_LINES, vbo, NULL, GPU_BATCH_OWNS_VBO);
 	}
-	return SHC.drw_lamp_spot;
+	return SHC.drw_light_spot;
 #undef NSEGMENTS
 }
 
-GPUBatch *DRW_cache_lamp_spot_volume_get(void)
+GPUBatch *DRW_cache_light_spot_volume_get(void)
 {
 #define NSEGMENTS 32
-	if (!SHC.drw_lamp_spot_volume) {
+	if (!SHC.drw_light_spot_volume) {
 		/* a single ring of vertices */
 		float p[NSEGMENTS][2];
 		for (int i = 0; i < NSEGMENTS; ++i) {
@@ -1632,15 +1660,15 @@ GPUBatch *DRW_cache_lamp_spot_volume_get(void)
 			GPU_vertbuf_attr_set(vbo, attr_id.pos, v_idx++, v);
 		}
 
-		SHC.drw_lamp_spot_volume = GPU_batch_create_ex(GPU_PRIM_TRIS, vbo, NULL, GPU_BATCH_OWNS_VBO);
+		SHC.drw_light_spot_volume = GPU_batch_create_ex(GPU_PRIM_TRIS, vbo, NULL, GPU_BATCH_OWNS_VBO);
 	}
-	return SHC.drw_lamp_spot_volume;
+	return SHC.drw_light_spot_volume;
 #undef NSEGMENTS
 }
 
-GPUBatch *DRW_cache_lamp_spot_square_get(void)
+GPUBatch *DRW_cache_light_spot_square_get(void)
 {
-	if (!SHC.drw_lamp_spot_square) {
+	if (!SHC.drw_light_spot_square) {
 		float p[5][3] = {
 			{ 0.0f,  0.0f,  0.0f},
 			{ 1.0f,  1.0f, -1.0f},
@@ -1669,14 +1697,14 @@ GPUBatch *DRW_cache_lamp_spot_square_get(void)
 			GPU_vertbuf_attr_set(vbo, attr_id.pos, v_idx++, p[((i + 1) % 4) + 1]);
 		}
 
-		SHC.drw_lamp_spot_square = GPU_batch_create_ex(GPU_PRIM_LINES, vbo, NULL, GPU_BATCH_OWNS_VBO);
+		SHC.drw_light_spot_square = GPU_batch_create_ex(GPU_PRIM_LINES, vbo, NULL, GPU_BATCH_OWNS_VBO);
 	}
-	return SHC.drw_lamp_spot_square;
+	return SHC.drw_light_spot_square;
 }
 
-GPUBatch *DRW_cache_lamp_spot_square_volume_get(void)
+GPUBatch *DRW_cache_light_spot_square_volume_get(void)
 {
-	if (!SHC.drw_lamp_spot_square_volume) {
+	if (!SHC.drw_light_spot_square_volume) {
 		float p[5][3] = {
 			{ 0.0f,  0.0f,  0.0f},
 			{ 1.0f,  1.0f, -1.0f},
@@ -1703,9 +1731,9 @@ GPUBatch *DRW_cache_lamp_spot_square_volume_get(void)
 			GPU_vertbuf_attr_set(vbo, attr_id.pos, v_idx++, p[(i % 4) + 1]);
 		}
 
-		SHC.drw_lamp_spot_square_volume = GPU_batch_create_ex(GPU_PRIM_TRIS, vbo, NULL, GPU_BATCH_OWNS_VBO);
+		SHC.drw_light_spot_square_volume = GPU_batch_create_ex(GPU_PRIM_TRIS, vbo, NULL, GPU_BATCH_OWNS_VBO);
 	}
-	return SHC.drw_lamp_spot_square_volume;
+	return SHC.drw_light_spot_square_volume;
 }
 
 /** \} */

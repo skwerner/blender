@@ -14,7 +14,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-/** \file \ingroup edmesh
+/** \file
+ * \ingroup edmesh
  */
 
 #include "MEM_guardedalloc.h"
@@ -508,7 +509,7 @@ static void *undomesh_from_editmesh(UndoMesh *um, BMEditMesh *em, Key *key)
 	        NULL, em->bm, &um->me, (&(struct BMeshToMeshParams){
 	            /* Undo code should not be manipulating 'G_MAIN->object' hooks/vertex-parent. */
 	            .calc_object_remap = false,
-	            .cd_mask_extra = CD_MASK_SHAPE_KEYINDEX,
+	            .cd_mask_extra = {.vmask = CD_MASK_SHAPE_KEYINDEX},
 	        }));
 
 	um->selectmode = em->selectmode;
@@ -661,7 +662,7 @@ static Object *editmesh_object_from_context(bContext *C)
 	Object *obedit = CTX_data_edit_object(C);
 	if (obedit && obedit->type == OB_MESH) {
 		Mesh *me = obedit->data;
-		if (me->edit_btmesh != NULL) {
+		if (me->edit_mesh != NULL) {
 			return obedit;
 		}
 	}
@@ -698,9 +699,11 @@ static bool mesh_undosys_step_encode(struct bContext *C, struct Main *UNUSED(bma
 {
 	MeshUndoStep *us = (MeshUndoStep *)us_p;
 
+	/* Important not to use the 3D view when getting objects because all objects
+	 * outside of this list will be moved out of edit-mode when reading back undo steps. */
 	ViewLayer *view_layer = CTX_data_view_layer(C);
 	uint objects_len = 0;
-	Object **objects = BKE_view_layer_array_from_objects_in_edit_mode_unique_data(view_layer, CTX_wm_view3d(C), &objects_len);
+	Object **objects = BKE_view_layer_array_from_objects_in_edit_mode_unique_data(view_layer, NULL, &objects_len);
 
 	us->elems = MEM_callocN(sizeof(*us->elems) * objects_len, __func__);
 	us->elems_len = objects_len;
@@ -711,23 +714,19 @@ static bool mesh_undosys_step_encode(struct bContext *C, struct Main *UNUSED(bma
 
 		elem->obedit_ref.ptr = ob;
 		Mesh *me = elem->obedit_ref.ptr->data;
-		undomesh_from_editmesh(&elem->data, me->edit_btmesh, me->key);
+		undomesh_from_editmesh(&elem->data, me->edit_mesh, me->key);
 		us->step.data_size += elem->data.undo_size;
 	}
 	MEM_freeN(objects);
 	return true;
 }
 
-static void mesh_undosys_step_decode(struct bContext *C, struct Main *bmain, UndoStep *us_p, int UNUSED(dir))
+static void mesh_undosys_step_decode(struct bContext *C, struct Main *UNUSED(bmain), UndoStep *us_p, int UNUSED(dir))
 {
 	MeshUndoStep *us = (MeshUndoStep *)us_p;
 
-	Scene *scene = CTX_data_scene(C);
-	for (uint i = 0; i < us->elems_len; i++) {
-		MeshUndoStep_Elem *elem = &us->elems[i];
-		Object *obedit = elem->obedit_ref.ptr;
-		ED_object_editmode_enter_ex(bmain, scene, obedit, EM_NO_CONTEXT);
-	}
+	/* Load all our objects  into edit-mode, clear everything else. */
+	ED_undo_object_editmode_restore_helper(C, &us->elems[0].obedit_ref.ptr, us->elems_len, sizeof(*us->elems));
 
 	BLI_assert(mesh_undosys_poll(C));
 
@@ -735,19 +734,22 @@ static void mesh_undosys_step_decode(struct bContext *C, struct Main *bmain, Und
 		MeshUndoStep_Elem *elem = &us->elems[i];
 		Object *obedit = elem->obedit_ref.ptr;
 		Mesh *me = obedit->data;
-		if (me->edit_btmesh == NULL) {
+		if (me->edit_mesh == NULL) {
 			/* Should never fail, may not crash but can give odd behavior. */
 			CLOG_ERROR(&LOG, "name='%s', failed to enter edit-mode for object '%s', undo state invalid",
 			           us_p->name, obedit->id.name);
 			continue;
 		}
-		BMEditMesh *em = me->edit_btmesh;
+		BMEditMesh *em = me->edit_mesh;
 		undomesh_to_editmesh(&elem->data, em, obedit->data);
 		DEG_id_tag_update(&obedit->id, ID_RECALC_GEOMETRY);
 	}
 
 	/* The first element is always active */
 	ED_undo_object_set_active_or_warn(CTX_data_view_layer(C), us->elems[0].obedit_ref.ptr, us_p->name, &LOG);
+
+	Scene *scene = CTX_data_scene(C);
+	scene->toolsettings->selectmode = us->elems[0].data.selectmode;
 
 	WM_event_add_notifier(C, NC_GEOM | ND_DATA, NULL);
 }

@@ -17,16 +17,18 @@
  * All rights reserved.
  */
 
-/** \file \ingroup modifiers
+/** \file
+ * \ingroup modifiers
  */
 
+
+#include "BLI_utildefines.h"
+
+#include "BLI_math.h"
 
 #include "DNA_mesh_types.h"
 #include "DNA_meshdata_types.h"
 #include "DNA_object_types.h"
-
-#include "BLI_math.h"
-#include "BLI_utildefines.h"
 
 #include "BKE_action.h"
 #include "BKE_editmesh.h"
@@ -65,16 +67,20 @@ static void copyData(const ModifierData *md, ModifierData *target, const int fla
 	thmd->indexar = MEM_dupallocN(hmd->indexar);
 }
 
-static CustomDataMask requiredDataMask(Object *UNUSED(ob), ModifierData *md)
+static void requiredDataMask(Object *UNUSED(ob), ModifierData *md, CustomData_MeshMasks *r_cddata_masks)
 {
 	HookModifierData *hmd = (HookModifierData *)md;
-	CustomDataMask dataMask = 0;
 
 	/* ask for vertexgroups if we need them */
-	if (hmd->name[0]) dataMask |= CD_MASK_MDEFORMVERT;
-	if (hmd->indexar) dataMask |= CD_MASK_ORIGINDEX;
-
-	return dataMask;
+	if (hmd->name[0] != '\0') {
+		r_cddata_masks->vmask |= CD_MASK_MDEFORMVERT;
+	}
+	if (hmd->indexar != NULL) {
+		/* TODO check which origindex are actually needed? */
+		r_cddata_masks->vmask |= CD_MASK_ORIGINDEX;
+		r_cddata_masks->emask |= CD_MASK_ORIGINDEX;
+		r_cddata_masks->pmask |= CD_MASK_ORIGINDEX;
+	}
 }
 
 static void freeData(ModifierData *md)
@@ -112,7 +118,7 @@ static void updateDepsgraph(ModifierData *md, const ModifierUpdateDepsgraphConte
 		DEG_add_object_relation(ctx->node, hmd->object, DEG_OB_COMP_TRANSFORM, "Hook Modifier");
 	}
 	/* We need own transformation as well. */
-	DEG_add_object_relation(ctx->node, ctx->object, DEG_OB_COMP_TRANSFORM, "Hook Modifier");
+	DEG_add_modifier_to_transform_relation(ctx->node, "Hook Modifier");
 }
 
 struct HookData_cb {

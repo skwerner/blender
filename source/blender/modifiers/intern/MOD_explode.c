@@ -17,20 +17,22 @@
  * All rights reserved.
  */
 
-/** \file \ingroup modifiers
+/** \file
+ * \ingroup modifiers
  */
 
+
+#include "BLI_utildefines.h"
+
+#include "BLI_edgehash.h"
+#include "BLI_kdtree.h"
+#include "BLI_math.h"
+#include "BLI_rand.h"
 
 #include "DNA_meshdata_types.h"
 #include "DNA_scene_types.h"
 #include "DNA_object_types.h"
 #include "DNA_mesh_types.h"
-
-#include "BLI_utildefines.h"
-#include "BLI_kdtree.h"
-#include "BLI_rand.h"
-#include "BLI_math.h"
-#include "BLI_edgehash.h"
 
 #include "BKE_deform.h"
 #include "BKE_lattice.h"
@@ -74,15 +76,13 @@ static bool dependsOnTime(ModifierData *UNUSED(md))
 {
 	return true;
 }
-static CustomDataMask requiredDataMask(Object *UNUSED(ob), ModifierData *md)
+static void requiredDataMask(Object *UNUSED(ob), ModifierData *md, CustomData_MeshMasks *r_cddata_masks)
 {
 	ExplodeModifierData *emd = (ExplodeModifierData *) md;
-	CustomDataMask dataMask = 0;
 
-	if (emd->vgroup)
-		dataMask |= CD_MASK_MDEFORMVERT;
-
-	return dataMask;
+	if (emd->vgroup) {
+		r_cddata_masks->vmask |= CD_MASK_MDEFORMVERT;
+	}
 }
 
 static void createFacepa(

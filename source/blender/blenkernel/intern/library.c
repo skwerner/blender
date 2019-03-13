@@ -17,7 +17,8 @@
  * All rights reserved.
  */
 
-/** \file \ingroup bke
+/** \file
+ * \ingroup bke
  *
  * Contains management of ID's and libraries
  * allocate and free of all library data
@@ -44,7 +45,7 @@
 #include "DNA_gpencil_types.h"
 #include "DNA_ipo_types.h"
 #include "DNA_key_types.h"
-#include "DNA_lamp_types.h"
+#include "DNA_light_types.h"
 #include "DNA_lattice_types.h"
 #include "DNA_linestyle_types.h"
 #include "DNA_material_types.h"
@@ -92,7 +93,7 @@
 #include "BKE_idprop.h"
 #include "BKE_image.h"
 #include "BKE_key.h"
-#include "BKE_lamp.h"
+#include "BKE_light.h"
 #include "BKE_lattice.h"
 #include "BKE_library.h"
 #include "BKE_library_query.h"
@@ -111,6 +112,7 @@
 #include "BKE_particle.h"
 #include "BKE_packedFile.h"
 #include "BKE_lightprobe.h"
+#include "BKE_rigidbody.h"
 #include "BKE_sound.h"
 #include "BKE_speaker.h"
 #include "BKE_scene.h"
@@ -407,7 +409,7 @@ bool id_make_local(Main *bmain, ID *id, const bool test, const bool lib_local)
 			if (!test) BKE_lattice_make_local(bmain, (Lattice *)id, lib_local);
 			return true;
 		case ID_LA:
-			if (!test) BKE_lamp_make_local(bmain, (Lamp *)id, lib_local);
+			if (!test) BKE_light_make_local(bmain, (Light *)id, lib_local);
 			return true;
 		case ID_CA:
 			if (!test) BKE_camera_make_local(bmain, (Camera *)id, lib_local);
@@ -511,35 +513,9 @@ static int id_copy_libmanagement_cb(void *user_data, ID *UNUSED(id_self), ID **i
 	return IDWALK_RET_NOP;
 }
 
-static void id_copy_clear_runtime_pointers(ID *id, int UNUSED(flag))
-{
-	if (id == NULL) {
-		return;
-	}
-	/* TODO(sergey): We might want to do a deep-copy of all the pointers inside.
-	 * This isn't currently needed, and is quite involved change (to cover all
-	 * things like batch cache and such). */
-	switch ((ID_Type)GS(id->name)) {
-		case ID_OB:
-		{
-			Object *object = (Object *)id;
-			BKE_object_runtime_reset_on_copy(object);
-			break;
-		}
-		case ID_ME:
-		{
-			Mesh *mesh = (Mesh *)id;
-			BKE_mesh_runtime_reset_on_copy(mesh);
-			break;
-		}
-		default:
-			break;
-	}
-}
-
 bool BKE_id_copy_is_allowed(const ID *id)
 {
-#define LIB_ID_TYPES_NOCOPY ID_LI, ID_SCR, ID_WM,  /* Not supported */ \
+#define LIB_ID_TYPES_NOCOPY ID_LI, ID_SCR, ID_WM, ID_WS,  /* Not supported */ \
                             ID_IP  /* Deprecated */
 
 	return !ELEM(GS(id->name), LIB_ID_TYPES_NOCOPY);
@@ -615,7 +591,7 @@ bool BKE_id_copy_ex(Main *bmain, const ID *id, ID **r_newid, const int flag)
 			BKE_lattice_copy_data(bmain, (Lattice *)*r_newid, (Lattice *)id, flag);
 			break;
 		case ID_LA:
-			BKE_lamp_copy_data(bmain, (Lamp *)*r_newid, (Lamp *)id, flag);
+			BKE_light_copy_data(bmain, (Light *)*r_newid, (Light *)id, flag);
 			break;
 		case ID_SPK:
 			BKE_speaker_copy_data(bmain, (Speaker *)*r_newid, (Speaker *)id, flag);
@@ -703,8 +679,6 @@ bool BKE_id_copy_ex(Main *bmain, const ID *id, ID **r_newid, const int flag)
 		(*r_newid)->lib = id->lib;
 	}
 
-	id_copy_clear_runtime_pointers(*r_newid, flag);
-
 	return true;
 }
 
@@ -718,7 +692,7 @@ bool BKE_id_copy(Main *bmain, const ID *id, ID **newid)
 }
 
 /** Does a mere memory swap over the whole IDs data (including type-specific memory).
- *  \note Most internal ID data itself is not swapped (only IDProperties are). */
+ * \note Most internal ID data itself is not swapped (only IDProperties are). */
 void BKE_id_swap(Main *bmain, ID *id_a, ID *id_b)
 {
 	BLI_assert(GS(id_a->name) == GS(id_b->name));
@@ -742,7 +716,7 @@ void BKE_id_swap(Main *bmain, ID *id_a, ID *id_b)
 		CASE_SWAP(ID_TE, Tex);
 		CASE_SWAP(ID_IM, Image);
 		CASE_SWAP(ID_LT, Lattice);
-		CASE_SWAP(ID_LA, Lamp);
+		CASE_SWAP(ID_LA, Light);
 		CASE_SWAP(ID_LP, LightProbe);
 		CASE_SWAP(ID_CA, Camera);
 		CASE_SWAP(ID_KE, Key);
@@ -796,9 +770,8 @@ bool id_single_user(bContext *C, ID *id, PointerRNA *ptr, PropertyRNA *prop)
 		/* if property isn't editable, we're going to have an extra block hanging around until we save */
 		if (RNA_property_editable(ptr, prop)) {
 			Main *bmain = CTX_data_main(C);
-			if (BKE_id_copy(bmain, id, &newid) && newid) {
-				/* copy animation actions too */
-				BKE_animdata_copy_id_action(bmain, id, false);
+			/* copy animation actions too */
+			if (BKE_id_copy_ex(bmain, id, &newid, LIB_ID_COPY_DEFAULT | LIB_ID_COPY_ACTIONS) && newid) {
 				/* us is 1 by convention with new IDs, but RNA_property_pointer_set
 				 * will also increment it, decrement it here. */
 				id_us_min(newid);
@@ -869,7 +842,7 @@ void BKE_libblock_management_main_add(Main *bmain, void *idv)
 	ListBase *lb = which_libbase(bmain, GS(id->name));
 	BKE_main_lock(bmain);
 	BLI_addtail(lb, id);
-	new_id(lb, id, NULL);
+	BKE_id_new_name_validate(lb, id, NULL);
 	/* alphabetic insertion: is in new_id */
 	id->tag &= ~(LIB_TAG_NO_MAIN | LIB_TAG_NO_USER_REFCOUNT);
 	bmain->is_memfile_undo_written = false;
@@ -1019,7 +992,7 @@ void BKE_main_id_repair_duplicate_names_listbase(ListBase *lb)
 	}
 	for (i = 0; i < lb_len; i++) {
 		if (!BLI_gset_add(gset, id_array[i]->name + 2)) {
-			new_id(lb, id_array[i], NULL);
+			BKE_id_new_name_validate(lb, id_array[i], NULL);
 		}
 	}
 	BLI_gset_free(gset, NULL);
@@ -1031,7 +1004,7 @@ void BKE_main_lib_objects_recalc_all(Main *bmain)
 	Object *ob;
 
 	/* flag for full recalc */
-	for (ob = bmain->object.first; ob; ob = ob->id.next) {
+	for (ob = bmain->objects.first; ob; ob = ob->id.next) {
 		if (ID_IS_LINKED(ob)) {
 			DEG_id_tag_update(&ob->id, ID_RECALC_TRANSFORM | ID_RECALC_GEOMETRY | ID_RECALC_ANIMATION);
 		}
@@ -1075,7 +1048,7 @@ size_t BKE_libblock_get_alloc_info(short type, const char **name)
 		CASE_RETURN(ID_TE,  Tex);
 		CASE_RETURN(ID_IM,  Image);
 		CASE_RETURN(ID_LT,  Lattice);
-		CASE_RETURN(ID_LA,  Lamp);
+		CASE_RETURN(ID_LA,  Light);
 		CASE_RETURN(ID_CA,  Camera);
 		CASE_RETURN(ID_IP,  Ipo);
 		CASE_RETURN(ID_KE,  Key);
@@ -1151,7 +1124,7 @@ void *BKE_libblock_alloc(Main *bmain, short type, const char *name, const int fl
 
 			BKE_main_lock(bmain);
 			BLI_addtail(lb, id);
-			new_id(lb, id, name);
+			BKE_id_new_name_validate(lb, id, name);
 			bmain->is_memfile_undo_written = false;
 			/* alphabetic insertion: is in new_id */
 			BKE_main_unlock(bmain);
@@ -1212,7 +1185,7 @@ void BKE_libblock_init_empty(ID *id)
 			BKE_lattice_init((Lattice *)id);
 			break;
 		case ID_LA:
-			BKE_lamp_init((Lamp *)id);
+			BKE_light_init((Light *)id);
 			break;
 		case ID_SPK:
 			BKE_speaker_init((Speaker *)id);
@@ -1334,7 +1307,7 @@ void BKE_libblock_copy_ex(Main *bmain, const ID *id, ID **r_newid, const int fla
 	/* Grrrrrrrrr... Not adding 'root' nodetrees to bmain.... grrrrrrrrrrrrrrrrrrrr! */
 	/* This is taken from original ntree copy code, might be weak actually? */
 	const bool use_nodetree_alloc_exception = ((GS(id->name) == ID_NT) && (bmain != NULL) &&
-	                                           (BLI_findindex(&bmain->nodetree, id) < 0));
+	                                           (BLI_findindex(&bmain->nodetrees, id) < 0));
 
 	BLI_assert((flag & LIB_ID_CREATE_NO_MAIN) != 0 || bmain != NULL);
 	BLI_assert((flag & LIB_ID_CREATE_NO_MAIN) != 0 || (flag & LIB_ID_CREATE_NO_ALLOCATE) == 0);
@@ -1597,14 +1570,14 @@ static bool check_for_dupid(ListBase *lb, ID *id, char *name)
 #undef MAX_IN_USE
 }
 
-/*
- * Only for local blocks: external en indirect blocks already have a
- * unique ID.
+/**
+ * Ensures given ID has a unique name in given listbase.
  *
- * return true: created a new name
+ * Only for local IDs (linked ones already have a unique ID in their library).
+ *
+ * \return true if a new name had to be created.
  */
-
-bool new_id(ListBase *lb, ID *id, const char *tname)
+bool BKE_id_new_name_validate(ListBase *lb, ID *id, const char *tname)
 {
 	bool result;
 	char name[MAX_ID_NAME - 2];
@@ -1621,8 +1594,8 @@ bool new_id(ListBase *lb, ID *id, const char *tname)
 	BLI_strncpy(name, tname, sizeof(name));
 
 	if (name[0] == '\0') {
-		/* disallow empty names */
-		BLI_strncpy(name, DATA_(ID_FALLBACK_NAME), sizeof(name));
+		/* Disallow empty names. */
+		BLI_strncpy(name, DATA_(BKE_idcode_to_name(GS(id->name))), sizeof(name));
 	}
 	else {
 		/* disallow non utf8 chars,
@@ -1663,7 +1636,7 @@ void id_clear_lib_data_ex(Main *bmain, ID *id, const bool id_in_mainlist)
 	id->lib = NULL;
 	id->tag &= ~(LIB_TAG_INDIRECT | LIB_TAG_EXTERN);
 	if (id_in_mainlist) {
-		if (new_id(which_libbase(bmain, GS(id->name)), id, NULL)) {
+		if (BKE_id_new_name_validate(which_libbase(bmain, GS(id->name)), id, NULL)) {
 			bmain->is_memfile_undo_written = false;
 		}
 	}
@@ -1687,19 +1660,14 @@ void id_clear_lib_data(Main *bmain, ID *id)
 /* next to indirect usage in read/writefile also in editobject.c scene.c */
 void BKE_main_id_clear_newpoins(Main *bmain)
 {
-	ListBase *lbarray[MAX_LIBARRAY];
 	ID *id;
-	int a;
 
-	a = set_listbasepointers(bmain, lbarray);
-	while (a--) {
-		id = lbarray[a]->first;
-		while (id) {
-			id->newid = NULL;
-			id->tag &= ~LIB_TAG_NEW;
-			id = id->next;
-		}
+	FOREACH_MAIN_ID_BEGIN(bmain, id)
+	{
+		id->newid = NULL;
+		id->tag &= ~LIB_TAG_NEW;
 	}
+	FOREACH_MAIN_ID_END;
 }
 
 
@@ -1979,7 +1947,7 @@ void BKE_library_make_local(
 			else {
 				/* we can switch the proxy'ing from the linked-in to the made-local proxy.
 				 * BKE_object_make_proxy() shouldn't be used here, as it allocates memory that
-				 * was already allocated by BKE_object_make_local_ex() (which called BKE_object_copy_ex). */
+				 * was already allocated by BKE_object_make_local_ex() (which called BKE_object_copy). */
 				ob_new->proxy = ob->proxy;
 				ob_new->proxy_group = ob->proxy_group;
 				ob_new->proxy_from = ob->proxy_from;
@@ -2000,9 +1968,20 @@ void BKE_library_make_local(
 	 * relationship), se we tag it to be fully recomputed, but this does not seems to be enough in some cases,
 	 * and evaluation code ends up trying to evaluate a not-yet-updated armature object's deformations.
 	 * Try "make all local" in 04_01_H.lighting.blend from Agent327 without this, e.g. */
-	for (Object *ob = bmain->object.first; ob; ob = ob->id.next) {
+	/* Also, use this object loop to we handle rigid body resetting. */
+	for (Object *ob = bmain->objects.first; ob; ob = ob->id.next) {
 		if (ob->data != NULL && ob->type == OB_ARMATURE && ob->pose != NULL && ob->pose->flag & POSE_RECALC) {
 			BKE_pose_rebuild(bmain, ob, ob->data, true);
+		}
+
+		/* If there was ever any rigidbody settings in the object, we reset it. */
+		if (ob->rigidbody_object) {
+			for (Scene *scene_iter = bmain->scenes.first; scene_iter; scene_iter = scene_iter->id.next) {
+				if (scene_iter->rigidbody_world) {
+					BKE_rigidbody_remove_object(bmain, scene_iter, ob);
+				}
+			}
+			BKE_rigidbody_free_object(ob, NULL);
 		}
 	}
 
@@ -2035,9 +2014,8 @@ void BLI_libblock_ensure_unique_name(Main *bmain, const char *name)
 	/* search for id */
 	idtest = BLI_findstring(lb, name + 2, offsetof(ID, name) + 2);
 	if (idtest != NULL) {
-		if (!new_id(lb, idtest, idtest->name + 2)) {
-			id_sort_by_name(lb, idtest);
-		}
+		/* BKE_id_new_name_validate also takes care of sorting. */
+		BKE_id_new_name_validate(lb, idtest, NULL);
 		bmain->is_memfile_undo_written = false;
 	}
 }
@@ -2048,7 +2026,7 @@ void BLI_libblock_ensure_unique_name(Main *bmain, const char *name)
 void BKE_libblock_rename(Main *bmain, ID *id, const char *name)
 {
 	ListBase *lb = which_libbase(bmain, GS(id->name));
-	if (new_id(lb, id, name)) {
+	if (BKE_id_new_name_validate(lb, id, name)) {
 		bmain->is_memfile_undo_written = false;
 	}
 }

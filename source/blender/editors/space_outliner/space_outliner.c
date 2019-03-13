@@ -17,7 +17,8 @@
  * All rights reserved.
  */
 
-/** \file \ingroup spoutliner
+/** \file
+ * \ingroup spoutliner
  */
 
 
@@ -170,7 +171,7 @@ static void outliner_main_region_listener(
 			ED_region_tag_redraw(ar);
 			break;
 		case NC_LAMP:
-			/* For updating lamp icons, when changing lamp type */
+			/* For updating light icons, when changing light type */
 			if (wmn->data == ND_LIGHTING_DRAW)
 				ED_region_tag_redraw(ar);
 			break;
@@ -223,6 +224,11 @@ static void outliner_main_region_listener(
 				ED_region_tag_redraw(ar);
 			}
 			break;
+		case NC_PAINTCURVE:
+			if (ELEM(wmn->action, NA_ADDED)) {
+				ED_region_tag_redraw(ar);
+			}
+			break;
 	}
 
 }
@@ -233,7 +239,7 @@ static void outliner_main_region_message_subscribe(
         struct bScreen *UNUSED(screen), struct ScrArea *sa, struct ARegion *ar,
         struct wmMsgBus *mbus)
 {
-	SpaceOops *soops = sa->spacedata.first;
+	SpaceOutliner *soops = sa->spacedata.first;
 	wmMsgSubscribeValue msg_sub_value_region_tag_redraw = {
 		.owner = ar,
 		.user_data = ar,
@@ -285,9 +291,9 @@ static void outliner_header_region_listener(
 static SpaceLink *outliner_new(const ScrArea *UNUSED(area), const Scene *UNUSED(scene))
 {
 	ARegion *ar;
-	SpaceOops *soutliner;
+	SpaceOutliner *soutliner;
 
-	soutliner = MEM_callocN(sizeof(SpaceOops), "initoutliner");
+	soutliner = MEM_callocN(sizeof(SpaceOutliner), "initoutliner");
 	soutliner->spacetype = SPACE_OUTLINER;
 	soutliner->filter_id_type = ID_GR;
 
@@ -310,7 +316,7 @@ static SpaceLink *outliner_new(const ScrArea *UNUSED(area), const Scene *UNUSED(
 /* not spacelink itself */
 static void outliner_free(SpaceLink *sl)
 {
-	SpaceOops *soutliner = (SpaceOops *)sl;
+	SpaceOutliner *soutliner = (SpaceOutliner *)sl;
 
 	outliner_free_tree(&soutliner->tree);
 	if (soutliner->treestore) {
@@ -329,8 +335,8 @@ static void outliner_init(wmWindowManager *UNUSED(wm), ScrArea *UNUSED(sa))
 
 static SpaceLink *outliner_duplicate(SpaceLink *sl)
 {
-	SpaceOops *soutliner = (SpaceOops *)sl;
-	SpaceOops *soutlinern = MEM_dupallocN(soutliner);
+	SpaceOutliner *soutliner = (SpaceOutliner *)sl;
+	SpaceOutliner *soutlinern = MEM_dupallocN(soutliner);
 
 	BLI_listbase_clear(&soutlinern->tree);
 	soutlinern->treestore = NULL;
@@ -341,7 +347,7 @@ static SpaceLink *outliner_duplicate(SpaceLink *sl)
 
 static void outliner_id_remap(ScrArea *UNUSED(sa), SpaceLink *slink, ID *old_id, ID *new_id)
 {
-	SpaceOops *so = (SpaceOops *)slink;
+	SpaceOutliner *so = (SpaceOutliner *)slink;
 
 	/* Some early out checks. */
 	if (!TREESTORE_ID_TYPE(old_id)) {

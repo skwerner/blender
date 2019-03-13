@@ -17,7 +17,8 @@
  * All rights reserved.
  */
 
-/** \file \ingroup bke
+/** \file
+ * \ingroup bke
  */
 
 
@@ -296,7 +297,7 @@ VFont *BKE_vfont_load_exists_ex(struct Main *bmain, const char *filepath, bool *
 	BLI_path_abs(str, BKE_main_blendfile_path(bmain));
 
 	/* first search an identical filepath */
-	for (vfont = bmain->vfont.first; vfont; vfont = vfont->id.next) {
+	for (vfont = bmain->fonts.first; vfont; vfont = vfont->id.next) {
 		BLI_strncpy(strtest, vfont->name, sizeof(vfont->name));
 		BLI_path_abs(strtest, ID_BLEND_PATH(bmain, &vfont->id));
 
@@ -341,7 +342,7 @@ VFont *BKE_vfont_builtin_get(void)
 {
 	VFont *vfont;
 
-	for (vfont = G_MAIN->vfont.first; vfont; vfont = vfont->id.next) {
+	for (vfont = G_MAIN->fonts.first; vfont; vfont = vfont->id.next) {
 		if (BKE_vfont_is_builtin(vfont)) {
 			return vfont;
 		}
@@ -1261,7 +1262,6 @@ makebreak:
 					sb = &selboxes[i - selstart];
 					sb->rot = -ct->rot;
 				}
-				
 			}
 		}
 	}

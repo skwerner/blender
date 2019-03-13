@@ -17,7 +17,8 @@
  * All rights reserved.
  */
 
-/** \file \ingroup depsgraph
+/** \file
+ * \ingroup depsgraph
  */
 
 #pragma once
@@ -32,9 +33,9 @@ struct Scene;
 
 namespace DEG {
 
-struct Relation;
 struct Depsgraph;
 struct OperationNode;
+struct Relation;
 
 /* Metatype of Nodes - The general "level" in the graph structure
  * the node serves. */
@@ -154,7 +155,7 @@ struct Node {
 	 * have relationships between these nodes. */
 	typedef vector<Relation *> Relations;
 
-	const char *name;     /* Identifier - mainly for debugging purposes. */
+	string name;     /* Identifier - mainly for debugging purposes. */
 	NodeType type;  /* Structural type of node. */
 	Relations inlinks;    /* Nodes which this one depends on. */
 	Relations outlinks;   /* Nodes which depend on this one. */

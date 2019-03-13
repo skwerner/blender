@@ -17,12 +17,14 @@
  * This is a new part of Blender
  */
 
-/** \file \ingroup modifiers
+/** \file
+ * \ingroup modifiers
  */
 
 #include <stdio.h>
 
 #include "BLI_utildefines.h"
+
 #include "BLI_math_vector.h"
 #include "BLI_rand.h"
 

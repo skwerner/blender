@@ -17,7 +17,8 @@
  * All rights reserved.
  */
 
-/** \file \ingroup depsgraph
+/** \file
+ * \ingroup depsgraph
  */
 
 #include "intern/node/deg_node_id.h"
@@ -108,8 +109,8 @@ void IDNode::init(const ID *id, const char *UNUSED(subdata))
 	id_orig = (ID *)id;
 	eval_flags = 0;
 	previous_eval_flags = 0;
-	customdata_mask = 0;
-	previous_customdata_mask = 0;
+	customdata_masks = DEGCustomDataMeshMasks();
+	previous_customdata_masks = DEGCustomDataMeshMasks();
 	linked_state = DEG_ID_LINKED_INDIRECTLY;
 	is_directly_visible = true;
 	is_collection_fully_expanded = false;
@@ -187,15 +188,13 @@ string IDNode::identifier() const
 	                                                        : "false") + ")";
 }
 
-ComponentNode *IDNode::find_component(NodeType type,
-                                              const char *name) const
+ComponentNode *IDNode::find_component(NodeType type, const char *name) const
 {
 	ComponentIDKey key(type, name);
 	return reinterpret_cast<ComponentNode *>(BLI_ghash_lookup(components, &key));
 }
 
-ComponentNode *IDNode::add_component(NodeType type,
-                                             const char *name)
+ComponentNode *IDNode::add_component(NodeType type, const char *name)
 {
 	ComponentNode *comp_node = find_component(type, name);
 	if (!comp_node) {

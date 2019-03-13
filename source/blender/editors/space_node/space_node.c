@@ -17,11 +17,12 @@
  * All rights reserved.
  */
 
-/** \file \ingroup spnode
+/** \file
+ * \ingroup spnode
  */
 
 #include "DNA_gpencil_types.h"
-#include "DNA_lamp_types.h"
+#include "DNA_light_types.h"
 #include "DNA_material_types.h"
 #include "DNA_node_types.h"
 #include "DNA_world_types.h"
@@ -530,7 +531,7 @@ static void node_area_refresh(const struct bContext *C, ScrArea *sa)
 					ED_preview_shader_job(C, sa, snode->id, NULL, NULL, 100, 100, PR_NODE_RENDER);
 			}
 			else if (GS(snode->id->name) == ID_LA) {
-				Lamp *la = (Lamp *)snode->id;
+				Light *la = (Light *)snode->id;
 				if (la->use_nodes)
 					ED_preview_shader_job(C, sa, snode->id, NULL, NULL, 100, 100, PR_NODE_RENDER);
 			}
@@ -974,7 +975,7 @@ void ED_spacetype_node(void)
 	art->regionid = RGN_TYPE_WINDOW;
 	art->init = node_main_region_init;
 	art->draw = node_main_region_draw;
-	art->keymapflag = ED_KEYMAP_UI | ED_KEYMAP_GIZMO | ED_KEYMAP_VIEW2D | ED_KEYMAP_FRAMES | ED_KEYMAP_GPENCIL;
+	art->keymapflag = ED_KEYMAP_UI | ED_KEYMAP_GIZMO | ED_KEYMAP_TOOL | ED_KEYMAP_VIEW2D | ED_KEYMAP_FRAMES | ED_KEYMAP_GPENCIL;
 	art->listener = node_region_listener;
 	art->cursor = node_cursor;
 	art->event_cursor = true;

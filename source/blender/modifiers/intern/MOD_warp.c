@@ -14,19 +14,21 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-/** \file \ingroup modifiers
+/** \file
+ * \ingroup modifiers
  */
 
 #include <string.h>
 
 #include "MEM_guardedalloc.h"
 
+#include "BLI_utildefines.h"
+
+#include "BLI_math.h"
+
 #include "DNA_mesh_types.h"
 #include "DNA_meshdata_types.h"
 #include "DNA_object_types.h"
-
-#include "BLI_math.h"
-#include "BLI_utildefines.h"
 
 #include "BKE_editmesh.h"
 #include "BKE_library.h"
@@ -67,19 +69,19 @@ static void copyData(const ModifierData *md, ModifierData *target, const int fla
 	twmd->curfalloff = curvemapping_copy(wmd->curfalloff);
 }
 
-static CustomDataMask requiredDataMask(Object *UNUSED(ob), ModifierData *md)
+static void requiredDataMask(Object *UNUSED(ob), ModifierData *md, CustomData_MeshMasks *r_cddata_masks)
 {
 	WarpModifierData *wmd = (WarpModifierData *)md;
-	CustomDataMask dataMask = 0;
 
 	/* ask for vertexgroups if we need them */
-	if (wmd->defgrp_name[0]) dataMask |= (CD_MASK_MDEFORMVERT);
-	dataMask |= (CD_MASK_MDEFORMVERT);
+	if (wmd->defgrp_name[0] != '\0') {
+		r_cddata_masks->vmask |= CD_MASK_MDEFORMVERT;
+	}
 
 	/* ask for UV coordinates if we need them */
-	if (wmd->texmapping == MOD_DISP_MAP_UV) dataMask |= (1 << CD_MTFACE);
-
-	return dataMask;
+	if (wmd->texmapping == MOD_DISP_MAP_UV) {
+		r_cddata_masks->fmask |= CD_MASK_MTFACE;
+	}
 }
 
 static bool dependsOnTime(ModifierData *md)
@@ -135,7 +137,7 @@ static void updateDepsgraph(ModifierData *md, const ModifierUpdateDepsgraphConte
 {
 	WarpModifierData *wmd = (WarpModifierData *) md;
 	if (wmd->object_from != NULL && wmd->object_to != NULL) {
-		DEG_add_object_relation(ctx->node, ctx->object, DEG_OB_COMP_TRANSFORM, "Warplace Modifier");
+		DEG_add_modifier_to_transform_relation(ctx->node, "Warplace Modifier");
 		DEG_add_object_relation(ctx->node, wmd->object_from, DEG_OB_COMP_TRANSFORM, "Warp Modifier from");
 		DEG_add_object_relation(ctx->node, wmd->object_to, DEG_OB_COMP_TRANSFORM, "Warp Modifier to");
 	}

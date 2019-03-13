@@ -20,8 +20,9 @@
 #ifndef __BKE_CAMERA_H__
 #define __BKE_CAMERA_H__
 
-/** \file \ingroup bke
- *  \brief Camera datablock and utility functions.
+/** \file
+ * \ingroup bke
+ * \brief Camera datablock and utility functions.
  */
 #ifdef __cplusplus
 extern "C" {
@@ -80,8 +81,8 @@ typedef struct CameraParams {
 	int sensor_fit;
 
 	/* clipping */
-	float clipsta;
-	float clipend;
+	float clip_start;
+	float clip_end;
 
 	/* computed viewplane */
 	float ycor;

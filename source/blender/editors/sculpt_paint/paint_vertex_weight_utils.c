@@ -14,7 +14,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-/** \file \ingroup edsculpt
+/** \file
+ * \ingroup edsculpt
  *
  * Intended for use by `paint_vertex.c` & `paint_vertex_weight_ops.c`.
  */
@@ -146,7 +147,7 @@ int ED_wpaint_mirror_vgroup_ensure(Object *ob, const int vgroup_active)
 		}
 
 		/* curdef should never be NULL unless this is
-		 * a  lamp and BKE_object_defgroup_add_name fails */
+		 * a  light and BKE_object_defgroup_add_name fails */
 		return mirrdef;
 	}
 

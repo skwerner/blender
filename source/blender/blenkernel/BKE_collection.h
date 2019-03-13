@@ -17,7 +17,8 @@
 #ifndef __BKE_COLLECTION_H__
 #define __BKE_COLLECTION_H__
 
-/** \file \ingroup bke
+/** \file
+ * \ingroup bke
  */
 
 #include "BLI_compiler_compat.h"
@@ -53,15 +54,19 @@ void               BKE_collection_free(struct Collection *collection);
 bool               BKE_collection_delete(struct Main *bmain, struct Collection *collection, bool hierarchy);
 
 struct Collection *BKE_collection_copy(struct Main *bmain, struct Collection *parent, struct Collection *collection);
-struct Collection *BKE_collection_copy_master(struct Main *bmain, struct Collection *collection, const int flag);
 void               BKE_collection_copy_data(struct Main *bmain, struct Collection *collection_dst, const struct Collection *collection_src, const int flag);
-void               BKE_collection_copy_full(struct Main *bmain, struct Collection *collection);
 void               BKE_collection_make_local(struct Main *bmain, struct Collection *collection, const bool lib_local);
+
+struct Collection *BKE_collection_duplicate(
+        struct Main *bmain, struct Collection *parent, struct Collection *collection,
+        const bool do_hierarchy, const bool do_objects, const bool do_obdata);
+struct Collection *BKE_collection_copy_master(struct Main *bmain, struct Collection *collection, const int flag);
 
 /* Master Collection for Scene */
 
 struct Collection *BKE_collection_master(const struct Scene *scene);
 struct Collection *BKE_collection_master_add(void);
+struct Scene *BKE_collection_master_scene_search(const struct Main *bmain, const struct Collection *master_collection);
 
 /* Collection Objects */
 

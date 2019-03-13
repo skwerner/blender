@@ -17,7 +17,8 @@
  * All rights reserved.
  */
 
-/** \file \ingroup edscr
+/** \file
+ * \ingroup edscr
  */
 
 #include <stdio.h>
@@ -75,7 +76,7 @@ const char *screen_context_dir[] = {
 	"active_bone", "active_pose_bone",
 	"active_base", "active_object", "object", "edit_object",
 	"sculpt_object", "vertex_paint_object", "weight_paint_object",
-	"image_paint_object", "particle_edit_object", "uv_sculpt_object",
+	"image_paint_object", "particle_edit_object", "uv_sculpt_object", "pose_object",
 	"sequences", "selected_sequences", "selected_editable_sequences", /* sequencer */
 	"gpencil_data", "gpencil_data_owner", /* grease pencil data */
 	"visible_gpencil_layers", "editable_gpencil_layers", "editable_gpencil_strokes",
@@ -476,6 +477,13 @@ int ed_screen_context(const bContext *C, const char *member, bContextDataResult 
 		}
 		return 1;
 	}
+	else if (CTX_data_equals(member, "pose_object")) {
+		Object *obpose = BKE_object_pose_armature_get(obact);
+		if (obpose) {
+			CTX_data_id_pointer_set(result, &obpose->id);
+		}
+		return 1;
+	}
 	else if (CTX_data_equals(member, "sequences")) {
 		Editing *ed = BKE_sequencer_editing_get(scene, false);
 		if (ed) {
@@ -664,12 +672,12 @@ int ed_screen_context(const bContext *C, const char *member, bContextDataResult 
 	else if (CTX_data_equals(member, "selected_editable_fcurves")) {
 		bAnimContext ac;
 
-		if (ANIM_animdata_get_context(C, &ac) && ELEM(ac.spacetype, SPACE_ACTION, SPACE_IPO)) {
+		if (ANIM_animdata_get_context(C, &ac) && ELEM(ac.spacetype, SPACE_ACTION, SPACE_GRAPH)) {
 			bAnimListElem *ale;
 			ListBase anim_data = {NULL, NULL};
 
 			int filter = (ANIMFILTER_DATA_VISIBLE | ANIMFILTER_FOREDIT | ANIMFILTER_NODUPLIS | ANIMFILTER_SEL) |
-			             (ac.spacetype == SPACE_IPO ? ANIMFILTER_CURVE_VISIBLE : ANIMFILTER_LIST_VISIBLE);
+			             (ac.spacetype == SPACE_GRAPH ? ANIMFILTER_CURVE_VISIBLE : ANIMFILTER_LIST_VISIBLE);
 
 			ANIM_animdata_filter(&ac, &anim_data, filter, ac.data, ac.datatype);
 

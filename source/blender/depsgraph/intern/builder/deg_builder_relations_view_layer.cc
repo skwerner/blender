@@ -17,7 +17,8 @@
  * All rights reserved.
  */
 
-/** \file \ingroup depsgraph
+/** \file
+ * \ingroup depsgraph
  *
  * Methods for constructing depsgraph
  */
@@ -82,11 +83,8 @@ void DepsgraphRelationBuilder::build_view_layer(Scene *scene, ViewLayer *view_la
 	/* NOTE: Nodes builder requires us to pass CoW base because it's being
 	 * passed to the evaluation functions. During relations builder we only
 	 * do NULL-pointer check of the base, so it's fine to pass original one. */
-	const int base_flag = (graph_->mode == DAG_EVAL_VIEWPORT) ?
-		BASE_ENABLED_VIEWPORT : BASE_ENABLED_RENDER;
 	LISTBASE_FOREACH (Base *, base, &view_layer->object_bases) {
-		const bool is_object_visible = (base->flag & base_flag);
-		if (is_object_visible) {
+		if (need_pull_base_into_graph(base)) {
 			build_object(base, base->object);
 		}
 	}
@@ -113,11 +111,11 @@ void DepsgraphRelationBuilder::build_view_layer(Scene *scene, ViewLayer *view_la
 		build_compositor(scene);
 	}
 	/* Masks. */
-	LISTBASE_FOREACH (Mask *, mask, &bmain_->mask) {
+	LISTBASE_FOREACH (Mask *, mask, &bmain_->masks) {
 		build_mask(mask);
 	}
 	/* Movie clips. */
-	LISTBASE_FOREACH (MovieClip *, clip, &bmain_->movieclip) {
+	LISTBASE_FOREACH (MovieClip *, clip, &bmain_->movieclips) {
 		build_movieclip(clip);
 	}
 	/* Material override. */

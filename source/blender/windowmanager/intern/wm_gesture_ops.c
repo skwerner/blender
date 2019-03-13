@@ -17,7 +17,8 @@
  * All rights reserved.
  */
 
-/** \file \ingroup wm
+/** \file
+ * \ingroup wm
  *
  * Default operator callbacks for use with gestures (border/circle/lasso/straightline).
  * Operators themselves are defined elsewhere.
@@ -250,6 +251,7 @@ int WM_gesture_box_modal(bContext *C, wmOperator *op, const wmEvent *event)
 	}
 #endif
 
+	gesture->is_active_prev = gesture->is_active;
 	return OPERATOR_RUNNING_MODAL;
 }
 
@@ -382,8 +384,8 @@ int WM_gesture_circle_modal(bContext *C, wmOperator *op, const wmEvent *event)
 				}
 				else {
 					/* apply first click */
-					gesture_circle_apply(C, op);
 					gesture->is_active = true;
+					gesture_circle_apply(C, op);
 					wm_gesture_tag_redraw(C);
 				}
 				break;
@@ -421,7 +423,7 @@ int WM_gesture_circle_modal(bContext *C, wmOperator *op, const wmEvent *event)
 	}
 #endif
 
-
+	gesture->is_active_prev = gesture->is_active;
 	return OPERATOR_RUNNING_MODAL;
 }
 
@@ -654,6 +656,8 @@ int WM_gesture_lasso_modal(bContext *C, wmOperator *op, const wmEvent *event)
 			gesture_modal_end(C, op);
 			return OPERATOR_CANCELLED;
 	}
+
+	gesture->is_active_prev = gesture->is_active;
 	return OPERATOR_RUNNING_MODAL;
 }
 
@@ -840,6 +844,7 @@ int WM_gesture_straightline_modal(bContext *C, wmOperator *op, const wmEvent *ev
 		}
 	}
 
+	gesture->is_active_prev = gesture->is_active;
 	return OPERATOR_RUNNING_MODAL;
 }
 

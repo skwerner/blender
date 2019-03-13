@@ -99,7 +99,15 @@ ccl_device void kernel_adaptive_post_adjust(KernelGlobals *kg, float *buffer, fl
 #endif  /* __DENOISING_FEATURES__ */
 
 	if(kernel_data.film.cryptomatte_passes) {
-		kernel_assert(0); // TODO: Cryptomatte
+		int num_slots = 0;
+		num_slots += (kernel_data.film.cryptomatte_passes & CRYPT_OBJECT) ? 1 : 0;
+		num_slots += (kernel_data.film.cryptomatte_passes & CRYPT_MATERIAL) ? 1 : 0;
+		num_slots += (kernel_data.film.cryptomatte_passes & CRYPT_ASSET) ? 1 : 0;
+		num_slots = num_slots * 2 * kernel_data.film.cryptomatte_depth;
+		ccl_global float2 *id_buffer = (ccl_global float2*)(buffer + kernel_data.film.pass_cryptomatte);
+		for(int slot = 0; slot < num_slots; slot++) {
+			id_buffer[slot].y *= sample_multiplier;
+		}
 	}
 }
 

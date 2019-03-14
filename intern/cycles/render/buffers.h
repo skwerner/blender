@@ -59,9 +59,6 @@ public:
 	 * need the original data. */
 	bool denoising_prefiltered_pass;
 
-	/* When using adaptive sampling, each pixel has its separate sample count. */
-	bool per_pixel_samples;
-
 	/* functions */
 	BufferParams();
 

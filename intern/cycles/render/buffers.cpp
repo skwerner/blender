@@ -44,8 +44,6 @@ BufferParams::BufferParams()
 	denoising_clean_pass = false;
 	denoising_prefiltered_pass = false;
 
-	per_pixel_samples = false;
-
 	Pass::add(PASS_COMBINED, passes);
 }
 
@@ -240,7 +238,7 @@ bool RenderBuffers::get_pass_rect(PassType type, float exposure, int sample, int
 	}
 
 	float *sample_count = NULL;
-	if(type == PassType::PASS_COMBINED && params.per_pixel_samples) {
+	if(type == PassType::PASS_COMBINED) {
 		int sample_offset = 0;
 		for(size_t j = 0; j < params.passes.size(); j++) {
 			Pass& pass = params.passes[j];

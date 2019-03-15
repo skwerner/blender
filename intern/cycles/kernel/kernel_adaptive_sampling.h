@@ -23,7 +23,7 @@ ccl_device void kernel_adaptive_post_adjust(KernelGlobals *kg, float *buffer, fl
 {
 	*(float4*)(buffer) *= sample_multiplier;
 #ifdef __PASSES__
-	if(!kernel_data.film.use_light_pass) {
+	if(kernel_data.film.use_light_pass) {
 		int light_flag = kernel_data.film.light_pass_flag;
 
 		if(light_flag & PASSMASK(DIFFUSE_INDIRECT))
@@ -67,6 +67,17 @@ ccl_device void kernel_adaptive_post_adjust(KernelGlobals *kg, float *buffer, fl
 			*(float4*)(buffer + kernel_data.film.pass_shadow) *= sample_multiplier;
 		if(light_flag & PASSMASK(MIST))
 			*(float*)(buffer + kernel_data.film.pass_mist) *= sample_multiplier;
+
+		if (light_flag & PASSMASK(NORMAL))
+			*(float3*)(buffer + kernel_data.film.pass_normal) *= sample_multiplier;
+
+		if (light_flag & PASSMASK(UV))
+			*(float3*)(buffer + kernel_data.film.pass_uv) *= sample_multiplier;
+
+		if (light_flag & PASSMASK(MOTION)) {
+			*(float4*)(buffer + kernel_data.film.pass_motion) *= sample_multiplier;
+			*(float*)(buffer + kernel_data.film.pass_motion_weight) *= sample_multiplier;
+		}
 	}
 #endif
 

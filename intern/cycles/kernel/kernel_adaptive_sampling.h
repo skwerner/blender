@@ -23,6 +23,25 @@ ccl_device void kernel_adaptive_post_adjust(KernelGlobals *kg, float *buffer, fl
 {
 	*(float4*)(buffer) *= sample_multiplier;
 #ifdef __PASSES__
+	int flag = kernel_data.film.pass_flag;
+
+	if(flag & PASSMASK(SHADOW))
+		*(float3*)(buffer + kernel_data.film.pass_shadow) *= sample_multiplier;
+
+	if(flag & PASSMASK(MIST))
+		*(float*)(buffer + kernel_data.film.pass_mist) *= sample_multiplier;
+
+	if(flag & PASSMASK(NORMAL))
+		*(float3*)(buffer + kernel_data.film.pass_normal) *= sample_multiplier;
+
+	if(flag & PASSMASK(UV))
+		*(float3*)(buffer + kernel_data.film.pass_uv) *= sample_multiplier;
+
+	if(flag & PASSMASK(MOTION)) {
+		*(float4*)(buffer + kernel_data.film.pass_motion) *= sample_multiplier;
+		*(float*)(buffer + kernel_data.film.pass_motion_weight) *= sample_multiplier;
+	}
+
 	if(kernel_data.film.use_light_pass) {
 		int light_flag = kernel_data.film.light_pass_flag;
 
@@ -62,22 +81,6 @@ ccl_device void kernel_adaptive_post_adjust(KernelGlobals *kg, float *buffer, fl
 			*(float3*)(buffer + kernel_data.film.pass_transmission_color) *= sample_multiplier;
 		if(light_flag & PASSMASK(SUBSURFACE_COLOR))
 			*(float3*)(buffer + kernel_data.film.pass_subsurface_color) *= sample_multiplier;
-
-		if(light_flag & PASSMASK(SHADOW))
-			*(float4*)(buffer + kernel_data.film.pass_shadow) *= sample_multiplier;
-		if(light_flag & PASSMASK(MIST))
-			*(float*)(buffer + kernel_data.film.pass_mist) *= sample_multiplier;
-
-		if (light_flag & PASSMASK(NORMAL))
-			*(float3*)(buffer + kernel_data.film.pass_normal) *= sample_multiplier;
-
-		if (light_flag & PASSMASK(UV))
-			*(float3*)(buffer + kernel_data.film.pass_uv) *= sample_multiplier;
-
-		if (light_flag & PASSMASK(MOTION)) {
-			*(float4*)(buffer + kernel_data.film.pass_motion) *= sample_multiplier;
-			*(float*)(buffer + kernel_data.film.pass_motion_weight) *= sample_multiplier;
-		}
 	}
 #endif
 

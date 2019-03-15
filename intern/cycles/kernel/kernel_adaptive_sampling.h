@@ -129,7 +129,7 @@ ccl_device void kernel_adaptive_post_adjust(KernelGlobals *kg, float *buffer, fl
  * When a pixel demands more adaptive samples, let its neighboring pixels draw more samples too. */
 
 ccl_device bool kernel_adaptive_filter_x(KernelGlobals *kg, ccl_global float* tile_buffer, int y,
-	int tile_x, int tile_y, int tile_w, int tile_h, int tile_offset, int tile_stride)
+	int tile_x,int tile_w, int tile_offset, int tile_stride)
 {
 	bool any = false;
 	bool prev = false;
@@ -158,7 +158,7 @@ ccl_device bool kernel_adaptive_filter_x(KernelGlobals *kg, ccl_global float* ti
 }
 
 ccl_device bool kernel_adaptive_filter_y(KernelGlobals *kg, ccl_global float* tile_buffer, int x,
-	int tile_x, int tile_y, int tile_w, int tile_h, int tile_offset, int tile_stride)
+	int tile_y, int tile_h, int tile_offset, int tile_stride)
 {
 	bool prev = false;
 	bool any = false;

@@ -787,10 +787,10 @@ public:
 			if(kernel_data.film.pass_adaptive_min_max && (sample & 0x3) == 3 && sample > kernel_data.integrator.adaptive_min_samples) {
 				bool any = false;
 				for(int y = tile.y; y < tile.y + tile.h; ++y) {
-					any |= kernel_adaptive_filter_x(kg, render_buffer, y, tile.x, tile.y, tile.w, tile.h, tile.offset, tile.stride);
+					any |= kernel_adaptive_filter_x(kg, render_buffer, y, tile.x,  tile.w, tile.offset, tile.stride);
 				}
 				for(int x = tile.x; x < tile.x + tile.w; ++x) {
-					any |= kernel_adaptive_filter_y(kg, render_buffer, x, tile.x, tile.y, tile.w, tile.h, tile.offset, tile.stride);
+					any |= kernel_adaptive_filter_y(kg, render_buffer, x,tile.y, tile.h, tile.offset, tile.stride);
 				}
 				if(!any) {
 					tile.sample = end_sample;

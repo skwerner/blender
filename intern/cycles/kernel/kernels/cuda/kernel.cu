@@ -90,7 +90,7 @@ kernel_cuda_adaptive_filter_x(WorkTile *tile, int sample)
 	if (kernel_data.film.pass_adaptive_min_max && (sample & 0x3) == 3 && sample > kernel_data.integrator.adaptive_min_samples) {
 		if (ccl_global_id(0) < tile->h) {
 			int y = tile->y + ccl_global_id(0);
-			kernel_adaptive_filter_x(&kg, tile->buffer, y, tile->x, tile->y, tile->w, tile->h, tile->offset, tile->stride);
+			kernel_adaptive_filter_x(&kg, tile->buffer, y, tile->x, tile->w, tile->offset, tile->stride);
 		}
 	}
 }
@@ -103,7 +103,7 @@ kernel_cuda_adaptive_filter_y(WorkTile *tile, int sample)
 	if (kernel_data.film.pass_adaptive_min_max && (sample & 0x3) == 3 && sample > kernel_data.integrator.adaptive_min_samples) {
 		if(ccl_global_id(0) < tile->w) {
 			int x = tile->x + ccl_global_id(0);
-			kernel_adaptive_filter_y(&kg, tile->buffer, x, tile->x, tile->y, tile->w, tile->h, tile->offset, tile->stride);
+			kernel_adaptive_filter_y(&kg, tile->buffer, x, tile->y, tile->h, tile->offset, tile->stride);
 		}
 	}
 }

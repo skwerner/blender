@@ -382,7 +382,11 @@ class CYCLES_RENDER_PT_volumes(CyclesButtonsPanel, Panel):
         cscene = scene.cycles
 
         col = layout.column()
-        col.prop(cscene, "volume_step_size", text="Step Size")
+        col.prop(cscene, "volume_integrator")
+        if cscene.volume_integrator == 'VOLUME_RAY_MARCH':
+            col.prop(cscene, "volume_step_size", text="Step Size")
+        else:
+            col.prop(cscene, "volume_max_density", text="Max Density")
         col.prop(cscene, "volume_max_steps", text="Max Steps")
 
 

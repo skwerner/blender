@@ -46,6 +46,8 @@ NODE_DEFINE(Integrator)
   SOCKET_INT(volume_max_steps, "Volume Max Steps", 1024);
   SOCKET_FLOAT(volume_step_size, "Volume Step Size", 0.1f);
 
+  SOCKET_FLOAT(volume_max_density, "Volume Max Density", 1.0f);
+
   SOCKET_BOOLEAN(caustics_reflective, "Reflective Caustics", true);
   SOCKET_BOOLEAN(caustics_refractive, "Refractive Caustics", true);
   SOCKET_FLOAT(filter_glossy, "Filter Glossy", 0.0f);
@@ -77,6 +79,11 @@ NODE_DEFINE(Integrator)
   sampling_pattern_enum.insert("sobol", SAMPLING_PATTERN_SOBOL);
   sampling_pattern_enum.insert("cmj", SAMPLING_PATTERN_CMJ);
   SOCKET_ENUM(sampling_pattern, "Sampling Pattern", sampling_pattern_enum, SAMPLING_PATTERN_SOBOL);
+
+  static NodeEnum volume_enum;
+  method_enum.insert("ray marching", VOLUME_INTEGRATOR_RAY_MARCH);
+  method_enum.insert("unbiased tracking", VOLUME_INTEGRATOR_UNBIASED);
+  SOCKET_ENUM(method, "Volume Integrator", method_enum, VOLUME_INTEGRATOR_RAY_MARCH);
 
   return type;
 }
@@ -132,6 +139,8 @@ void Integrator::device_update(Device *device, DeviceScene *dscene, Scene *scene
 
   kintegrator->volume_max_steps = volume_max_steps;
   kintegrator->volume_step_size = volume_step_size;
+  kintegrator->volume_max_density = volume_max_density;
+  kintegrator->volume_integrator = volume_integrator;
 
   kintegrator->caustics_reflective = caustics_reflective;
   kintegrator->caustics_refractive = caustics_refractive;

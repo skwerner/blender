@@ -254,6 +254,48 @@ ccl_device void kernel_volume_shadow_heterogeneous(KernelGlobals *kg,
   *throughput = tp;
 }
 
+/* Residual ratio tracking to estimate volume transmission.
+ See Novak et al, 2014, "Residual Ratio Tracking for Estimating Attenuation in Participating Media."
+ sigma_c should be the lower bound of the volume density,
+ sigma_r should be the difference between lower and upper bound of volume density.
+ When sigma_c == 0, it is the same as ratio tracking. */
+ccl_device void kernel_volume_transmission_residual_ratio(KernelGlobals *kg,
+                                                          ccl_addr_space PathState *state,
+                                                          Ray *ray,
+                                                          ShaderData *sd,
+                                                          float3 *throughput,
+                                                          float sigma_r,
+                                                          float sigma_c = 0.0f)
+{
+  float t = 0.0f;
+  float T_c = expf(-sigma_c * ray->t);
+  float3 T_r = make_float3(1.0f, 1.0f, 1.0f);
+  uint lcg_state = lcg_state_init_addrspace(state, 0xabcdabcd);
+  /* Sometimes, excessive values for ray.t come in when a volume exit intersection is missed.
+   Allow for a max number of steps to prevent this from stepping towards infinite lights.
+   The original algorithm would be while(true) instead of a for loop.
+   */
+  for (int i = 0; i < kernel_data.integrator.volume_max_steps; ++i) {
+    float s = lcg_step_float_addrspace(&lcg_state);
+    t = t - (logf(1.f - s) / sigma_r);
+    if (t >= ray->t) {
+      break;
+    }
+    float3 new_P = ray->P + ray->D * t;
+    float3 sigma_t;
+    volume_shader_extinction_sample(kg, sd, state, new_P, &sigma_t);
+    T_r = T_r * (make_float3(1.0f, 1.0f, 1.0f) -
+                 (sigma_t - make_float3(sigma_c, sigma_c, sigma_c)) / sigma_r);
+  }
+
+  T_r *= T_c;
+
+  throughput->x = saturate(T_r.x);
+  throughput->y = saturate(T_r.y);
+  throughput->z = saturate(T_r.z);
+  return;
+}
+
 /* get the volume attenuation over line segment defined by ray, with the
  * assumption that there are no surfaces blocking light between the endpoints */
 ccl_device_noinline void kernel_volume_shadow(KernelGlobals *kg,
@@ -264,8 +306,15 @@ ccl_device_noinline void kernel_volume_shadow(KernelGlobals *kg,
 {
   shader_setup_from_volume(kg, shadow_sd, ray);
 
-  if (volume_stack_is_heterogeneous(kg, state->volume_stack))
-    kernel_volume_shadow_heterogeneous(kg, state, ray, shadow_sd, throughput);
+  if (volume_stack_is_heterogeneous(kg, state->volume_stack)) {
+    if (kernel_data.integrator.volume_integrator == VOLUME_INTEGRATOR_RAY_MARCH) {
+      kernel_volume_shadow_heterogeneous(kg, state, ray, shadow_sd, throughput);
+    }
+    else {
+      kernel_volume_transmission_residual_ratio(
+          kg, state, ray, shadow_sd, throughput, kernel_data.integrator.volume_max_density);
+    }
+  }
   else
     kernel_volume_shadow_homogeneous(kg, state, ray, shadow_sd, throughput);
 }
@@ -667,6 +716,81 @@ kernel_volume_integrate_heterogeneous_distance(KernelGlobals *kg,
   return VOLUME_PATH_ATTENUATED;
 }
 
+/* The particle tracing algorithm from section 4.1 in
+ "Unbiased Light Transport Estimators for Inhomogeneous Participating Media"
+ Szirmay-Kalos et al, 2017 */
+ccl_device VolumeIntegrateResult
+kernel_volume_integrate_heterogeneous_tracking(KernelGlobals *kg,
+                                               ccl_addr_space PathState *state,
+                                               Ray *ray,
+                                               ShaderData *sd,
+                                               PathRadiance *L,
+                                               ccl_addr_space float3 *throughput)
+{
+  uint lcg_state = lcg_state_init_addrspace(state, 0x0f0f0f0f);
+  float3 tp = *throughput;
+  float t = 0.0f;
+  float sigma_samp = kernel_data.integrator.volume_max_density;
+  float rphase = path_state_rng_1D(kg, state, PRNG_PHASE_CHANNEL);
+  do {
+    float s = lcg_step_float_addrspace(&lcg_state);
+    float dt = -(logf(1.f - s) / sigma_samp);
+    t = t + dt;
+    if (t > ray->t) {
+      break;
+    }
+    float3 new_P = ray->P + ray->D * t;
+    VolumeShaderCoefficients coeff;
+    volume_shader_sample(kg, sd, state, new_P, &coeff);
+    int closure_flag = sd->flag;
+    float3 albedo = safe_divide_color(coeff.sigma_s, coeff.sigma_t);
+    int channel = (int)(rphase * 3.0f); /* TODO: better choice of channel */
+    float a = kernel_volume_channel_get(albedo, channel);
+    float r = kernel_volume_channel_get(coeff.sigma_t, channel) / sigma_samp;
+    float qscat = a * r;
+    float qtran = fabsf(1.0f - r);
+    float qsum = qscat + qtran;
+    if (r < 1.0f || qsum > 1.0f) {
+      qscat = qscat / qsum;
+      qtran = qtran / qsum;
+    }
+    float xi = lcg_step_float_addrspace(&lcg_state);
+    if (xi < qscat) {
+      tp = tp * r * a / qscat;
+
+      if (L && (closure_flag & SD_EMISSION)) {
+        float3 emission = coeff.emission * dt;
+        path_radiance_accum_emission(L, state, tp, emission);
+      }
+
+      /* adjust throughput and move to new location */
+      sd->P = ray->P + t * ray->D;
+      throughput->x = saturate(tp.x);
+      throughput->y = saturate(tp.y);
+      throughput->z = saturate(tp.z);
+      return VOLUME_PATH_SCATTERED;
+    }
+    else if (xi < qscat + qtran) {
+      /* transmission */
+      tp = (1.0f - r) * tp / qtran;
+
+      if (L && (closure_flag & SD_EMISSION)) {
+        float3 emission = coeff.emission * dt;
+        path_radiance_accum_emission(L, state, tp, emission);
+      }
+    }
+    else {
+      /* absorption */
+      tp = make_float3(0.0f, 0.0f, 0.0f);
+    }
+  } while (fabsf(min3(tp)) > 0.0f && t < ray->t);
+
+  throughput->x = saturate(tp.x);
+  throughput->y = saturate(tp.y);
+  throughput->z = saturate(tp.z);
+  return VOLUME_PATH_ATTENUATED;
+}
+
 /* get the volume attenuation and emission over line segment defined by
  * ray, with the assumption that there are no surfaces blocking light
  * between the endpoints. distance sampling is used to decide if we will
@@ -683,7 +807,12 @@ kernel_volume_integrate(KernelGlobals *kg,
   shader_setup_from_volume(kg, sd, ray);
 
   if (heterogeneous)
-    return kernel_volume_integrate_heterogeneous_distance(kg, state, ray, sd, L, throughput);
+    if (kernel_data.integrator.volume_integrator == VOLUME_INTEGRATOR_UNBIASED) {
+      return kernel_volume_integrate_heterogeneous_tracking(kg, state, ray, sd, L, throughput);
+    }
+    else {
+      return kernel_volume_integrate_heterogeneous_distance(kg, state, ray, sd, L, throughput);
+    }
   else
     return kernel_volume_integrate_homogeneous(kg, state, ray, sd, L, throughput, true);
 }
@@ -1117,6 +1246,9 @@ ccl_device bool kernel_volume_use_decoupled(KernelGlobals *kg,
    * which also means equiangular and multiple importance sampling is not
    * support for that case */
   if (!kernel_data.integrator.volume_decoupled)
+    return false;
+
+  if (kernel_data.integrator.volume_integrator == VOLUME_INTEGRATOR_UNBIASED)
     return false;
 
 #  ifdef __KERNEL_GPU__

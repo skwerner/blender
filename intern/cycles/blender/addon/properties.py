@@ -68,6 +68,11 @@ enum_filter_types = (
     ('BLACKMAN_HARRIS', "Blackman-Harris", "Blackman-Harris filter"),
 )
 
+enum_volume_integrators = (
+    ('VOLUME_RAY_MARCH', "Ray March", "Ray Marching"),
+    ('VOLUME_TRACKING', "Tracking", "Tracking"),
+)
+
 enum_aperture_types = (
     ('RADIUS', "Radius", "Directly change the size of the aperture"),
     ('FSTOP', "F-stop", "Change the size of the aperture by f-stop"),
@@ -370,6 +375,20 @@ class CyclesRenderSettings(bpy.types.PropertyGroup):
         "to avoid extremely long render times with big objects or small step sizes",
         default=1024,
         min=2, max=65536
+    )
+
+    volume_max_density: FloatProperty(
+        name="Max Density",
+        description="Maximum volume density",
+        default=1.0,
+        min=0.0000001, max=100000.0, soft_min=0.01, soft_max=10.0, precision=4
+    )
+
+    volume_integrator: EnumProperty(
+        name="Volume Integrator",
+        description="Method for Volume rendering",
+        items=enum_volume_integrators,
+        default='VOLUME_RAY_MARCH',
     )
 
     dicing_rate: FloatProperty(

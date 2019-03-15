@@ -265,6 +265,13 @@ enum SamplingPattern {
   SAMPLING_NUM_PATTERNS,
 };
 
+enum VolumeIntegrator {
+  VOLUME_INTEGRATOR_RAY_MARCH = 0,
+  VOLUME_INTEGRATOR_UNBIASED = 1,
+
+  NUM_VOLUME_INTEGRATORS,
+};
+
 /* these flags values correspond to raytypes in osl.cpp, so keep them in sync! */
 
 enum PathRayFlag {
@@ -1315,13 +1322,15 @@ typedef struct KernelIntegrator {
   int use_volumes;
   int volume_max_steps;
   float volume_step_size;
+  float volume_max_density;
+  int volume_integrator;
   int volume_samples;
 
   int start_sample;
 
   int max_closures;
 
-  int pad1, pad2, pad3;
+  int pad;
 } KernelIntegrator;
 static_assert_align(KernelIntegrator, 16);
 

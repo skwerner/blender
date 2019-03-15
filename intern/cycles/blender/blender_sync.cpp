@@ -242,6 +242,10 @@ void BlenderSync::sync_integrator()
 
   integrator->volume_max_steps = get_int(cscene, "volume_max_steps");
   integrator->volume_step_size = get_float(cscene, "volume_step_size");
+  integrator->volume_max_density = get_float(cscene, "volume_max_density");
+
+  integrator->volume_integrator = (VolumeIntegrator)get_enum(
+      cscene, "volume_integrator", NUM_VOLUME_INTEGRATORS, VOLUME_INTEGRATOR_RAY_MARCH);
 
   integrator->caustics_reflective = get_boolean(cscene, "caustics_reflective");
   integrator->caustics_refractive = get_boolean(cscene, "caustics_refractive");

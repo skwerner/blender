@@ -318,4 +318,21 @@ ccl_device float lcg_step_float_addrspace(ccl_addr_space uint *rng)
 	return (float)*rng * (1.0f/(float)0xFFFFFFFF);
 }
 
+ccl_device_inline bool sample_is_even(int pattern, int sample)
+{
+	if(pattern == SAMPLING_PATTERN_PMJ) {
+		/* See Section 10.2.1, "Progressive Multi-Jittered Sample Sequences", Christensen et al.
+		 * We can use this to get divide sample sequence into two classes for easier variance estimation.
+		 * There must be a more elegant way of writing this? */
+		return (bool)(sample & 2) ^ (bool)(sample & 8) ^ (bool)(sample & 0x20) ^ (bool)(sample & 0x20) ^ (bool)(sample & 0x80)
+			  ^ (bool)(sample & 0x200) ^ (bool)(sample & 0x800) ^ (bool)(sample & 0x2000) ^ (bool)(sample & 0x8000)
+			  ^ (bool)(sample & 0x20000) ^ (bool)(sample & 0x80000) ^ (bool)(sample & 0x200000) ^ (bool)(sample & 0x800000)
+			  ^ (bool)(sample & 0x2000000) ^ (bool)(sample & 0x8000000) ^ (bool)(sample & 0x20000000) ^ (bool)(sample & 0x80000000);
+	}
+	else {
+		/* TODO: Are there reliable ways of dividing CMJ and Sobol into two classes? */
+		return sample & 0x1;
+	}
+}
+
 CCL_NAMESPACE_END

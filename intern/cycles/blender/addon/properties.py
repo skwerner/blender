@@ -311,6 +311,12 @@ class CyclesRenderSettings(bpy.types.PropertyGroup):
         default=0,
     )
 
+    use_adaptive_sampling: BoolProperty(
+        name="Use adaptive sampling",
+        description="Automatically determine the number of samples per pixel based on a variance estimation",
+        default=False,
+    )
+
     caustics_reflective: BoolProperty(
         name="Reflective Caustics",
         description="Use reflective caustics, resulting in a brighter image (more noise but added realism)",

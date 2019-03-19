@@ -233,6 +233,9 @@ class CYCLES_RENDER_PT_sampling_advanced(CyclesButtonsPanel, Panel):
         layout.prop(cscene, "sampling_pattern", text="Pattern")
         col = layout.column(align=True)
         col.active = cscene.sampling_pattern == 'PROGRESSIVE_MUTI_JITTER'
+        col.prop(cscene, "use_adaptive_sampling", text="Adaptive Sampling")
+        col = layout.column(align=True)
+        col.active = cscene.use_adaptive_sampling
         col.prop(cscene, "adaptive_min_samples", text="Adaptive Min Samples")
         col.prop(cscene, "adaptive_threshold", text="Adaptive Threshold")
 

@@ -87,8 +87,8 @@ CUDA_LAUNCH_BOUNDS(CUDA_THREADS_BLOCK_WIDTH, CUDA_KERNEL_MAX_REGISTERS)
 kernel_cuda_adaptive_filter_x(WorkTile *tile, int sample)
 {
 	KernelGlobals kg;
-	if (kernel_data.film.pass_adaptive_min_max && (sample & 0x3) == 3 && sample > kernel_data.integrator.adaptive_min_samples) {
-		if (ccl_global_id(0) < tile->h) {
+	if(kernel_data.film.pass_adaptive_aux_buffer && (sample & 0x3) == 3 && sample > kernel_data.integrator.adaptive_min_samples) {
+		if(ccl_global_id(0) < tile->h) {
 			int y = tile->y + ccl_global_id(0);
 			kernel_adaptive_filter_x(&kg, tile->buffer, y, tile->x, tile->w, tile->offset, tile->stride);
 		}
@@ -100,7 +100,7 @@ CUDA_LAUNCH_BOUNDS(CUDA_THREADS_BLOCK_WIDTH, CUDA_KERNEL_MAX_REGISTERS)
 kernel_cuda_adaptive_filter_y(WorkTile *tile, int sample)
 {
 	KernelGlobals kg;
-	if (kernel_data.film.pass_adaptive_min_max && (sample & 0x3) == 3 && sample > kernel_data.integrator.adaptive_min_samples) {
+	if(kernel_data.film.pass_adaptive_aux_buffer && (sample & 0x3) == 3 && sample > kernel_data.integrator.adaptive_min_samples) {
 		if(ccl_global_id(0) < tile->w) {
 			int x = tile->x + ccl_global_id(0);
 			kernel_adaptive_filter_y(&kg, tile->buffer, x, tile->y, tile->h, tile->offset, tile->stride);
@@ -112,7 +112,7 @@ extern "C" __global__ void
 CUDA_LAUNCH_BOUNDS(CUDA_THREADS_BLOCK_WIDTH, CUDA_KERNEL_MAX_REGISTERS)
 kernel_cuda_adaptive_scale_samples(WorkTile *tile, int sample, uint total_work_size)
 {
-	if (kernel_data.film.pass_sample_count) {
+	if(kernel_data.film.pass_adaptive_aux_buffer) {
 		int work_index = ccl_global_id(0);
 		bool thread_is_active = work_index < total_work_size;
 		uint x, y;

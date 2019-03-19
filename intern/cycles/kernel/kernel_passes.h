@@ -435,19 +435,19 @@ ccl_device_inline void kernel_write_result(KernelGlobals *kg,
 	/* Adaptive Sampling. Fill the additional buffer with the odd samples and calculate our stopping criteria.
 	   This is the heuristic from "A hierarchical automatic stopping condition for Monte Carlo global illumination"
 	   except that here it is applied per pixel and not in hierarchical tiles. */
-	if(kernel_data.film.pass_adaptive_min_max && kernel_data.integrator.adaptive_threshold > 0.0f) {
+	if(kernel_data.film.pass_adaptive_aux_buffer && kernel_data.integrator.adaptive_threshold > 0.0f) {
 		if(sample_is_even(kernel_data.integrator.sampling_pattern, sample)) {
-			kernel_write_pass_float4(buffer + kernel_data.film.pass_adaptive_min_max,
+			kernel_write_pass_float4(buffer + kernel_data.film.pass_adaptive_aux_buffer,
 				make_float4(L_sum.x * 2.0f, L_sum.y* 2.0f, L_sum.z * 2.0f, 0.0f));
 		}
 		if(sample > kernel_data.integrator.adaptive_min_samples && (sample & 0x3) == 3) {
 			/* TODO Stefan: Is this better in linear, sRGB or something else? */
 			float4 I = *((ccl_global float4*)buffer);
-			float4 A = *(ccl_global float4*)(buffer + kernel_data.film.pass_adaptive_min_max);
+			float4 A = *(ccl_global float4*)(buffer + kernel_data.film.pass_adaptive_aux_buffer);
 			/* The per pixel error as seen in section 2.1 of the aforementioned paper. */
 			float error = (fabsf(I.x - A.x) + fabsf(I.y - A.y) + fabsf(I.z - A.z)) / sqrtf(I.x + I.y + I.z);
 			if(error < kernel_data.integrator.adaptive_threshold * (float)sample) {
-				kernel_write_pass_float4(buffer + kernel_data.film.pass_adaptive_min_max, make_float4(0.0f, 0.0f, 0.0f, 1.0f));
+				kernel_write_pass_float4(buffer + kernel_data.film.pass_adaptive_aux_buffer, make_float4(0.0f, 0.0f, 0.0f, 1.0f));
 			}
 		}
 	}

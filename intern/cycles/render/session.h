@@ -55,6 +55,7 @@ public:
 	int start_resolution;
 	int pixel_size;
 	int threads;
+	bool adaptive_sampling;
 
 	bool use_profiling;
 
@@ -89,6 +90,7 @@ public:
 		start_resolution = INT_MAX;
 		pixel_size = 1;
 		threads = 0;
+		adaptive_sampling = false;
 
 		use_profiling = false;
 
@@ -118,6 +120,7 @@ public:
 		&& start_resolution == params.start_resolution
 		&& pixel_size == params.pixel_size
 		&& threads == params.threads
+		&& adaptive_sampling == params.adaptive_sampling
 		&& use_profiling == params.use_profiling
 		&& display_buffer_linear == params.display_buffer_linear
 		&& cancel_timeout == params.cancel_timeout

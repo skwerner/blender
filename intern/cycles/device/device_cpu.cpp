@@ -784,7 +784,7 @@ public:
 
 			task.update_progress(&tile, tile.w*tile.h);
 
-			if(kernel_data.film.pass_adaptive_min_max && (sample & 0x3) == 3 && sample > kernel_data.integrator.adaptive_min_samples) {
+			if(kernel_data.film.pass_adaptive_aux_buffer && (sample & 0x3) == 3 && sample > kernel_data.integrator.adaptive_min_samples) {
 				bool any = false;
 				for(int y = tile.y; y < tile.y + tile.h; ++y) {
 					any |= kernel_adaptive_filter_x(kg, render_buffer, y, tile.x,  tile.w, tile.offset, tile.stride);
@@ -865,7 +865,7 @@ public:
 				else {
 					path_trace(task, tile, kg);
 				}
-				if (task.integrator_adaptive && kernel_data.film.pass_sample_count) {
+				if (task.integrator_adaptive && kernel_data.film.pass_adaptive_aux_buffer) {
 					float *render_buffer = (float*)tile.buffer;
 					for (int y = tile.y; y < tile.y + tile.h; y++) {
 						for (int x = tile.x; x < tile.x + tile.w; x++) {

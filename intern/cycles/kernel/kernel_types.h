@@ -365,7 +365,7 @@ typedef enum PassType {
 #endif
 	PASS_RENDER_TIME,
 	PASS_CRYPTOMATTE,
-	PASS_ADAPTIVE_MIN_MAX,
+	PASS_ADAPTIVE_AUX_BUFFER,
 	PASS_SAMPLE_COUNT,
 	PASS_CATEGORY_MAIN_END = 31,
 
@@ -1241,7 +1241,7 @@ typedef struct KernelFilm {
 	int cryptomatte_depth;
 	int pass_cryptomatte;
 
-	int pass_adaptive_min_max;
+	int pass_adaptive_aux_buffer;
 	int pass_sample_count;
 
 	int pass_mist;

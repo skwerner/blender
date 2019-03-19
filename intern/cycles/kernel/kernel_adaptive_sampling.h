@@ -141,15 +141,15 @@ ccl_device bool kernel_adaptive_filter_x(KernelGlobals *kg, ccl_global float* ti
 	bool prev = false;
 	for (int x = tile_x; x < tile_x + tile_w; ++x) {
 		int index = tile_offset + x + y * tile_stride;
-		ccl_global float *buffer = (ccl_global float*)tile_buffer + index * kernel_data.film.pass_stride;
-		ccl_global float4 *minmax = (ccl_global float4*)(buffer + kernel_data.film.pass_adaptive_min_max);
+		ccl_global float *buffer = tile_buffer + index * kernel_data.film.pass_stride;
+		ccl_global float4 *minmax = (ccl_global float4*)(buffer + kernel_data.film.pass_adaptive_aux_buffer);
 		if (minmax->w == 0.0f) {
 			prev = true;
 			any = true;
 			if (x > tile_x) {
 				index = index - 1;
-				buffer = (ccl_global float*)tile_buffer + index * kernel_data.film.pass_stride;
-				minmax = (ccl_global float4*)(buffer + kernel_data.film.pass_adaptive_min_max);
+				buffer = tile_buffer + index * kernel_data.film.pass_stride;
+				minmax = (ccl_global float4*)(buffer + kernel_data.film.pass_adaptive_aux_buffer);
 				minmax->w = 0.0f;
 			}
 		}
@@ -170,14 +170,14 @@ ccl_device bool kernel_adaptive_filter_y(KernelGlobals *kg, ccl_global float* ti
 	bool any = false;
 	for (int y = tile_y; y < tile_y + tile_h; ++y) {
 		int index = tile_offset + x + y * tile_stride;
-		ccl_global float *buffer = (ccl_global float*)tile_buffer + index * kernel_data.film.pass_stride;
-		ccl_global float4 *minmax = (ccl_global float4*)(buffer + kernel_data.film.pass_adaptive_min_max);
+		ccl_global float *buffer = tile_buffer + index * kernel_data.film.pass_stride;
+		ccl_global float4 *minmax = (ccl_global float4*)(buffer + kernel_data.film.pass_adaptive_aux_buffer);
 		if (minmax->w == 0.0f) {
 			prev = true;
 			if (y > tile_y) {
 				index = index - tile_stride;
-				buffer = (ccl_global float*)tile_buffer + index * kernel_data.film.pass_stride;
-				minmax = (ccl_global float4*)(buffer + kernel_data.film.pass_adaptive_min_max);
+				buffer = tile_buffer + index * kernel_data.film.pass_stride;
+				minmax = (ccl_global float4*)(buffer + kernel_data.film.pass_adaptive_aux_buffer);
 				minmax->w = 0.0f;
 			}
 		}

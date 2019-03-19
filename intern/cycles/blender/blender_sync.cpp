@@ -481,7 +481,7 @@ PassType BlenderSync::get_pass_type(BL::RenderPass& b_pass)
 	MAP_PASS("Debug Ray Bounces", PASS_RAY_BOUNCES);
 #endif
 	MAP_PASS("Debug Render Time", PASS_RENDER_TIME);
-	MAP_PASS("AdaptiveMinMax", PASS_ADAPTIVE_MIN_MAX);
+	MAP_PASS("AdaptiveAuxBuffer", PASS_ADAPTIVE_AUX_BUFFER);
 	MAP_PASS("Debug Sample Count", PASS_SAMPLE_COUNT);
 	if(string_startswith(name, cryptomatte_prefix)) {
 		return PASS_CRYPTOMATTE;
@@ -633,9 +633,11 @@ vector<Pass> BlenderSync::sync_render_passes(BL::RenderLayer& b_rlay,
 		scene->film->cryptomatte_passes = (CryptomatteType)(scene->film->cryptomatte_passes | CRYPT_ACCURATE);
 	}
 
-	if(1 || get_boolean(crp, "pass_adaptive_min_max")) {
-		b_engine.add_pass("AdaptiveMinMax", 4, "RGBA", b_view_layer.name().c_str());
-		Pass::add(PASS_ADAPTIVE_MIN_MAX, passes);
+	if(1 /* session_params.adaptive_sampling */) {
+		Pass::add(PASS_ADAPTIVE_AUX_BUFFER, passes);
+		if(!get_boolean(crp, "pass_debug_sample_count")) {
+			Pass::add(PASS_SAMPLE_COUNT, passes);
+		}
 	}
 
 	return passes;
@@ -870,6 +872,8 @@ SessionParams BlenderSync::get_session_params(BL::RenderEngine& b_engine,
 
 	params.use_profiling = params.device.has_profiling && !b_engine.is_preview() &&
 	                       background && BlenderSession::print_render_stats;
+
+	params.adaptive_sampling = RNA_boolean_get(&cscene, "use_adaptive_sampling");
 
 	return params;
 }

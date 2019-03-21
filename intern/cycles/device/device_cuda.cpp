@@ -1686,14 +1686,17 @@ public:
 
 		cuda_assert(cuFuncSetCacheConfig(cuPathTrace, CU_FUNC_CACHE_PREFER_L1));
 		
-		CUfunction cuAdaptiveFilterX, cuAdaptiveFilterY, cuScaleSamples;
+		/* Kernels for adaptive sampling. */
+		CUfunction cuAdaptiveStopping, cuAdaptiveFilterX, cuAdaptiveFilterY, cuAdaptiveScaleSamples;
 		if (task.integrator_adaptive) {
+			cuda_assert(cuModuleGetFunction(&cuAdaptiveStopping, cuModule, "kernel_cuda_adaptive_stopping"));
+			cuda_assert(cuFuncSetCacheConfig(cuAdaptiveStopping, CU_FUNC_CACHE_PREFER_L1));
 			cuda_assert(cuModuleGetFunction(&cuAdaptiveFilterX, cuModule, "kernel_cuda_adaptive_filter_x"));
 			cuda_assert(cuFuncSetCacheConfig(cuAdaptiveFilterX, CU_FUNC_CACHE_PREFER_L1));
 			cuda_assert(cuModuleGetFunction(&cuAdaptiveFilterY, cuModule, "kernel_cuda_adaptive_filter_y"));
 			cuda_assert(cuFuncSetCacheConfig(cuAdaptiveFilterY, CU_FUNC_CACHE_PREFER_L1));
-			cuda_assert(cuModuleGetFunction(&cuScaleSamples, cuModule, "kernel_cuda_adaptive_scale_samples"));
-			cuda_assert(cuFuncSetCacheConfig(cuScaleSamples, CU_FUNC_CACHE_PREFER_L1));
+			cuda_assert(cuModuleGetFunction(&cuAdaptiveScaleSamples, cuModule, "kernel_cuda_adaptive_scale_samples"));
+			cuda_assert(cuFuncSetCacheConfig(cuAdaptiveScaleSamples, CU_FUNC_CACHE_PREFER_L1));
 		}
 
 		/* Allocate work tile. */
@@ -1720,7 +1723,7 @@ public:
 		uint step_samples = divide_up(min_blocks * num_threads_per_block, wtile->w * wtile->h);
 
 		if(task.integrator_adaptive) {
-			/* Force to either 1, 2 or multiple of 4 samples so that we can run the adaptive sampler properly. */
+			/* Force to either 1, 2 or multiple of 4 samples per kernel invocation. */
 			if(step_samples == 3) {
 				step_samples = 2;
 			}
@@ -1752,9 +1755,19 @@ public:
 			                           num_threads_per_block, 1, 1,
 			                           0, 0, args, 0));
 
-			if(task.integrator_adaptive) {
-				uint filter_sample = sample + step_samples - 1;
-				void* args2[] = { &d_work_tiles, &filter_sample };
+			uint filter_sample = sample + step_samples - 1;
+			/* Run the adaptive sampling kernels when we're at a multiple of 4 samples. 
+			 * These are a series of tiny kernels because there is no grid synchronisation
+			 * from within a kernel, so multiple kernel launches it is. */
+			if(task.integrator_adaptive && (filter_sample & 0x3) == 3) {
+				uint total_work_size = wtile->h * wtile->w;
+				void* args2[] = { &d_work_tiles, &filter_sample, &total_work_size };
+				total_work_size = wtile->h * wtile->w;
+				num_blocks = divide_up(total_work_size, num_threads_per_block);
+				cuda_assert(cuLaunchKernel(cuAdaptiveStopping,
+					num_blocks, 1, 1,
+					num_threads_per_block, 1, 1,
+					0, 0, args2, 0));
 				total_work_size = wtile->h;
 				num_blocks = divide_up(total_work_size, num_threads_per_block);
 				cuda_assert(cuLaunchKernel(cuAdaptiveFilterX,
@@ -1786,7 +1799,7 @@ public:
 			uint total_work_size = wtile->h * wtile->w;
 			void* args[] = { &d_work_tiles, &rtile.sample, &total_work_size };
 			uint num_blocks = divide_up(total_work_size, num_threads_per_block);
-			cuda_assert(cuLaunchKernel(cuScaleSamples,
+			cuda_assert(cuLaunchKernel(cuAdaptiveScaleSamples,
 				num_blocks, 1, 1,
 				num_threads_per_block, 1, 1,
 				0, 0, args, 0));

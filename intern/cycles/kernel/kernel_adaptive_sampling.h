@@ -19,7 +19,26 @@
 
 CCL_NAMESPACE_BEGIN
 
-ccl_device void kernel_adaptive_post_adjust(KernelGlobals *kg, float *buffer, float sample_multiplier)
+/* Determines whether to continue sampling a given pixel or if it has sufficiently converged. */
+
+ccl_device void kernel_adaptive_stopping(KernelGlobals *kg, ccl_global float *buffer, int sample)
+{
+	/* TODO Stefan: Is this better in linear, sRGB or something else? */
+	float4 I = *((ccl_global float4*)buffer);
+	float4 A = *(ccl_global float4*)(buffer + kernel_data.film.pass_adaptive_aux_buffer);
+	/* The per pixel error as seen in section 2.1 of
+	 * "A hierarchical automatic stopping condition for Monte Carlo global illumination"
+	 * A small epsilon is added to the divisor to prevent division by zero. */
+	float error = (fabsf(I.x - A.x) + fabsf(I.y - A.y) + fabsf(I.z - A.z)) / (sample * 0.0001f + sqrtf(I.x + I.y + I.z));
+	if (error < kernel_data.integrator.adaptive_threshold * (float)sample) {
+		ccl_global float *buf = buffer + kernel_data.film.pass_adaptive_aux_buffer + 3;
+		*buf += 1.0f;
+	}
+}
+
+/* Adjust the values of an adaptively sampled pixel. */
+
+ccl_device void kernel_adaptive_post_adjust(KernelGlobals *kg, ccl_global float *buffer, float sample_multiplier)
 {
 	*(float4*)(buffer) *= sample_multiplier;
 #ifdef __PASSES__
@@ -135,18 +154,18 @@ ccl_device void kernel_adaptive_post_adjust(KernelGlobals *kg, float *buffer, fl
  * When a pixel demands more adaptive samples, let its neighboring pixels draw more samples too. */
 
 ccl_device bool kernel_adaptive_filter_x(KernelGlobals *kg, ccl_global float* tile_buffer, int y,
-	int tile_x,int tile_w, int tile_offset, int tile_stride)
+                                         int tile_x,int tile_w, int tile_offset, int tile_stride)
 {
 	bool any = false;
 	bool prev = false;
-	for (int x = tile_x; x < tile_x + tile_w; ++x) {
+	for(int x = tile_x; x < tile_x + tile_w; ++x) {
 		int index = tile_offset + x + y * tile_stride;
 		ccl_global float *buffer = tile_buffer + index * kernel_data.film.pass_stride;
 		ccl_global float4 *minmax = (ccl_global float4*)(buffer + kernel_data.film.pass_adaptive_aux_buffer);
-		if (minmax->w == 0.0f) {
+		if(minmax->w == 0.0f) {
 			prev = true;
 			any = true;
-			if (x > tile_x) {
+			if(x > tile_x) {
 				index = index - 1;
 				buffer = tile_buffer + index * kernel_data.film.pass_stride;
 				minmax = (ccl_global float4*)(buffer + kernel_data.film.pass_adaptive_aux_buffer);
@@ -154,7 +173,7 @@ ccl_device bool kernel_adaptive_filter_x(KernelGlobals *kg, ccl_global float* ti
 			}
 		}
 		else {
-			if (prev) {
+			if(prev) {
 				minmax->w = 0.0f;
 			}
 			prev = false;
@@ -164,17 +183,17 @@ ccl_device bool kernel_adaptive_filter_x(KernelGlobals *kg, ccl_global float* ti
 }
 
 ccl_device bool kernel_adaptive_filter_y(KernelGlobals *kg, ccl_global float* tile_buffer, int x,
-	int tile_y, int tile_h, int tile_offset, int tile_stride)
+                                         int tile_y, int tile_h, int tile_offset, int tile_stride)
 {
 	bool prev = false;
 	bool any = false;
-	for (int y = tile_y; y < tile_y + tile_h; ++y) {
+	for(int y = tile_y; y < tile_y + tile_h; ++y) {
 		int index = tile_offset + x + y * tile_stride;
 		ccl_global float *buffer = tile_buffer + index * kernel_data.film.pass_stride;
 		ccl_global float4 *minmax = (ccl_global float4*)(buffer + kernel_data.film.pass_adaptive_aux_buffer);
 		if (minmax->w == 0.0f) {
 			prev = true;
-			if (y > tile_y) {
+			if(y > tile_y) {
 				index = index - tile_stride;
 				buffer = tile_buffer + index * kernel_data.film.pass_stride;
 				minmax = (ccl_global float4*)(buffer + kernel_data.film.pass_adaptive_aux_buffer);
@@ -182,7 +201,7 @@ ccl_device bool kernel_adaptive_filter_y(KernelGlobals *kg, ccl_global float* ti
 			}
 		}
 		else {
-			if (prev) {
+			if(prev) {
 				minmax->w = 0.0f;
 			}
 			prev = false;

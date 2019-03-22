@@ -40,66 +40,66 @@ ccl_device void kernel_adaptive_stopping(KernelGlobals *kg, ccl_global float *bu
 
 ccl_device void kernel_adaptive_post_adjust(KernelGlobals *kg, ccl_global float *buffer, float sample_multiplier)
 {
-	*(float4*)(buffer) *= sample_multiplier;
+	*(ccl_global float4*)(buffer) *= sample_multiplier;
 #ifdef __PASSES__
 	int flag = kernel_data.film.pass_flag;
 
 	if(flag & PASSMASK(SHADOW))
-		*(float3*)(buffer + kernel_data.film.pass_shadow) *= sample_multiplier;
+		*(ccl_global float3*)(buffer + kernel_data.film.pass_shadow) *= sample_multiplier;
 
 	if(flag & PASSMASK(MIST))
-		*(float*)(buffer + kernel_data.film.pass_mist) *= sample_multiplier;
+		*(ccl_global float*)(buffer + kernel_data.film.pass_mist) *= sample_multiplier;
 
 	if(flag & PASSMASK(NORMAL))
-		*(float3*)(buffer + kernel_data.film.pass_normal) *= sample_multiplier;
+		*(ccl_global float3*)(buffer + kernel_data.film.pass_normal) *= sample_multiplier;
 
 	if(flag & PASSMASK(UV))
-		*(float3*)(buffer + kernel_data.film.pass_uv) *= sample_multiplier;
+		*(ccl_global float3*)(buffer + kernel_data.film.pass_uv) *= sample_multiplier;
 
 	if(flag & PASSMASK(MOTION)) {
-		*(float4*)(buffer + kernel_data.film.pass_motion) *= sample_multiplier;
-		*(float*)(buffer + kernel_data.film.pass_motion_weight) *= sample_multiplier;
+		*(ccl_global float4*)(buffer + kernel_data.film.pass_motion) *= sample_multiplier;
+		*(ccl_global float*)(buffer + kernel_data.film.pass_motion_weight) *= sample_multiplier;
 	}
 
 	if(kernel_data.film.use_light_pass) {
 		int light_flag = kernel_data.film.light_pass_flag;
 
 		if(light_flag & PASSMASK(DIFFUSE_INDIRECT))
-			*(float3*)(buffer + kernel_data.film.pass_diffuse_indirect) *= sample_multiplier;
+			*(ccl_global float3*)(buffer + kernel_data.film.pass_diffuse_indirect) *= sample_multiplier;
 		if(light_flag & PASSMASK(GLOSSY_INDIRECT))
-			*(float3*)(buffer + kernel_data.film.pass_glossy_indirect) *= sample_multiplier;
+			*(ccl_global float3*)(buffer + kernel_data.film.pass_glossy_indirect) *= sample_multiplier;
 		if(light_flag & PASSMASK(TRANSMISSION_INDIRECT))
-			*(float3*)(buffer + kernel_data.film.pass_transmission_indirect) *= sample_multiplier;
+			*(ccl_global float3*)(buffer + kernel_data.film.pass_transmission_indirect) *= sample_multiplier;
 		if(light_flag & PASSMASK(SUBSURFACE_INDIRECT))
-			*(float3*)(buffer + kernel_data.film.pass_subsurface_indirect) *= sample_multiplier;
+			*(ccl_global float3*)(buffer + kernel_data.film.pass_subsurface_indirect) *= sample_multiplier;
 		if(light_flag & PASSMASK(VOLUME_INDIRECT))
-			*(float3*)(buffer + kernel_data.film.pass_volume_indirect) *= sample_multiplier;
+			*(ccl_global float3*)(buffer + kernel_data.film.pass_volume_indirect) *= sample_multiplier;
 		if(light_flag & PASSMASK(DIFFUSE_DIRECT))
-			*(float3*)(buffer + kernel_data.film.pass_diffuse_direct) *= sample_multiplier;
+			*(ccl_global float3*)(buffer + kernel_data.film.pass_diffuse_direct) *= sample_multiplier;
 		if(light_flag & PASSMASK(GLOSSY_DIRECT))
-			*(float3*)(buffer + kernel_data.film.pass_glossy_direct) *= sample_multiplier;
+			*(ccl_global float3*)(buffer + kernel_data.film.pass_glossy_direct) *= sample_multiplier;
 		if(light_flag & PASSMASK(TRANSMISSION_DIRECT))
-			*(float3*)(buffer + kernel_data.film.pass_transmission_direct) *= sample_multiplier;
+			*(ccl_global float3*)(buffer + kernel_data.film.pass_transmission_direct) *= sample_multiplier;
 		if(light_flag & PASSMASK(SUBSURFACE_DIRECT))
-			*(float3*)(buffer + kernel_data.film.pass_subsurface_direct) *= sample_multiplier;
+			*(ccl_global float3*)(buffer + kernel_data.film.pass_subsurface_direct) *= sample_multiplier;
 		if(light_flag & PASSMASK(VOLUME_DIRECT))
-			*(float3*)(buffer + kernel_data.film.pass_volume_direct) *= sample_multiplier;
+			*(ccl_global float3*)(buffer + kernel_data.film.pass_volume_direct) *= sample_multiplier;
 
 		if(light_flag & PASSMASK(EMISSION))
-			*(float3*)(buffer + kernel_data.film.pass_emission) *= sample_multiplier;
+			*(ccl_global float3*)(buffer + kernel_data.film.pass_emission) *= sample_multiplier;
 		if(light_flag & PASSMASK(BACKGROUND))
-			*(float3*)(buffer + kernel_data.film.pass_background) *= sample_multiplier;
+			*(ccl_global float3*)(buffer + kernel_data.film.pass_background) *= sample_multiplier;
 		if(light_flag & PASSMASK(AO))
-			*(float3*)(buffer + kernel_data.film.pass_ao) *= sample_multiplier;
+			*(ccl_global float3*)(buffer + kernel_data.film.pass_ao) *= sample_multiplier;
 
 		if(light_flag & PASSMASK(DIFFUSE_COLOR))
-			*(float3*)(buffer + kernel_data.film.pass_diffuse_color) *= sample_multiplier;
+			*(ccl_global float3*)(buffer + kernel_data.film.pass_diffuse_color) *= sample_multiplier;
 		if(light_flag & PASSMASK(GLOSSY_COLOR))
-			*(float3*)(buffer + kernel_data.film.pass_glossy_color) *= sample_multiplier;
+			*(ccl_global float3*)(buffer + kernel_data.film.pass_glossy_color) *= sample_multiplier;
 		if(light_flag & PASSMASK(TRANSMISSION_COLOR))
-			*(float3*)(buffer + kernel_data.film.pass_transmission_color) *= sample_multiplier;
+			*(ccl_global float3*)(buffer + kernel_data.film.pass_transmission_color) *= sample_multiplier;
 		if(light_flag & PASSMASK(SUBSURFACE_COLOR))
-			*(float3*)(buffer + kernel_data.film.pass_subsurface_color) *= sample_multiplier;
+			*(ccl_global float3*)(buffer + kernel_data.film.pass_subsurface_color) *= sample_multiplier;
 	}
 #endif
 

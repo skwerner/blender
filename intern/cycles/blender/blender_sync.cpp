@@ -516,7 +516,8 @@ int BlenderSync::get_denoising_pass(BL::RenderPass& b_pass)
 }
 
 vector<Pass> BlenderSync::sync_render_passes(BL::RenderLayer& b_rlay,
-                                             BL::ViewLayer& b_view_layer)
+                                             BL::ViewLayer& b_view_layer,
+	                                         bool adaptive_sampling)
 {
 	vector<Pass> passes;
 	Pass::add(PASS_COMBINED, passes);
@@ -633,7 +634,7 @@ vector<Pass> BlenderSync::sync_render_passes(BL::RenderLayer& b_rlay,
 		scene->film->cryptomatte_passes = (CryptomatteType)(scene->film->cryptomatte_passes | CRYPT_ACCURATE);
 	}
 
-	if(1 /* session_params.adaptive_sampling */) {
+	if(adaptive_sampling) {
 		Pass::add(PASS_ADAPTIVE_AUX_BUFFER, passes);
 		if(!get_boolean(crp, "pass_debug_sample_count")) {
 			Pass::add(PASS_SAMPLE_COUNT, passes);

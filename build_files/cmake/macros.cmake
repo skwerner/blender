@@ -427,7 +427,7 @@ function(setup_liblinks
 		target_link_libraries(${target} ${OPENIMAGEIO_LIBRARIES})
 	endif()
 	if(WITH_OPENIMAGEDENOISE)
-		target_link_libraries(${target} ${OPENIMAGEDENOISE_LIBRARIES})
+		target_link_libraries(${target} ${OPENIMAGEDENOISE_LIBRARIES} ${TBB_LIBRARIES})
 	endif()
 	if(WITH_OPENCOLORIO)
 		target_link_libraries(${target} ${OPENCOLORIO_LIBRARIES})

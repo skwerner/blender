@@ -384,6 +384,7 @@ endif()
 
 if(WITH_OPENIMAGEDENOISE)
 	find_package(OpenImageDenoise REQUIRED)
+	find_package(TBB REQUIRED)
 endif()
 
 # CMake FindOpenMP doesn't know about AppleClang before 3.12, so provide custom flags.

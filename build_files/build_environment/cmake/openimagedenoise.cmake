@@ -22,6 +22,7 @@ set(OIDN_EXTRA_ARGS
 	-DWITH_TEST=OFF
 	-DTBB_ROOT=${LIBDIR}/tbb
 	-DTBB_STATIC_LIB=ON
+	-DOIDN_STATIC_LIB=ON
 )
 
 ExternalProject_Add(external_openimagedenoise

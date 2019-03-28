@@ -34,8 +34,10 @@
 
 #ifdef WITH_EMBREE
 
-#include <pmmintrin.h>
 #include <xmmintrin.h>
+#ifdef __SSE3__
+#  include <pmmintrin.h>
+#endif
 #include <embree3/rtcore_geometry.h>
 
 #include "bvh/bvh_embree.h"

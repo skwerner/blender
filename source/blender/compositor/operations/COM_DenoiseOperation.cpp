@@ -21,6 +21,7 @@
 
 #include "COM_DenoiseOperation.h"
 #include "BLI_math.h"
+#define OIDN_STATIC_LIB 1
 #include <OpenImageDenoise/oidn.hpp>
 #include <iostream>
 

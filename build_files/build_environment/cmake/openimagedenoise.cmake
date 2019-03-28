@@ -34,3 +34,8 @@ ExternalProject_Add(external_openimagedenoise
 	PATCH_COMMAND ${PATCH_CMD} --verbose -p 1 -N -d ${BUILD_DIR}/openimagedenoise/src/external_openimagedenoise < ${PATCH_DIR}/openimagedenoise.diff
 	INSTALL_DIR ${LIBDIR}/openimagedenoise
 )
+
+add_dependencies(
+	external_openimagedenoise
+	external_tbb
+)

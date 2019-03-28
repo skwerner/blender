@@ -1520,6 +1520,19 @@ void PointDensityTextureNode::attributes(Shader *shader,
 	ShaderNode::attributes(shader, attributes);
 }
 
+void PointDensityTextureNode::add_image()
+{
+	if(slot == -1) {
+		ImageMetaData metadata;
+		slot = image_manager->add_image(filename.string(), builtin_data,
+		                                false, 0,
+		                                interpolation,
+		                                EXTENSION_CLIP,
+		                                true,
+		                                metadata);
+	}
+}
+
 void PointDensityTextureNode::compile(SVMCompiler& compiler)
 {
 	ShaderInput *vector_in = input("Vector");
@@ -1532,15 +1545,7 @@ void PointDensityTextureNode::compile(SVMCompiler& compiler)
 	image_manager = compiler.image_manager;
 
 	if(use_density || use_color) {
-		if(slot == -1) {
-			ImageMetaData metadata;
-			slot = image_manager->add_image(filename.string(), builtin_data,
-			                                false, 0,
-			                                interpolation,
-			                                EXTENSION_CLIP,
-			                                true,
-			                                metadata);
-		}
+		add_image();
 
 		if(slot != -1) {
 			compiler.stack_assign(vector_in);
@@ -1583,15 +1588,7 @@ void PointDensityTextureNode::compile(OSLCompiler& compiler)
 	image_manager = compiler.image_manager;
 
 	if(use_density || use_color) {
-		if(slot == -1) {
-			ImageMetaData metadata;
-			slot = image_manager->add_image(filename.string(), builtin_data,
-			                                false, 0,
-			                                interpolation,
-			                                EXTENSION_CLIP,
-			                                true,
-			                                metadata);
-		}
+		add_image();
 
 		if(slot != -1) {
 			compiler.parameter("filename", string_printf("@i%d", slot).c_str());
@@ -3384,6 +3381,20 @@ void GeometryNode::compile(OSLCompiler& compiler)
 	compiler.add(this, "node_geometry");
 }
 
+int GeometryNode::get_group()
+{
+	ShaderOutput *out;
+	int result = ShaderNode::get_group();
+
+	/* Backfacing uses NODE_LIGHT_PATH */
+	out = output("Backfacing");
+	if (!out->links.empty()) {
+		result = max(result, NODE_GROUP_LEVEL_1);
+	}
+
+	return result;
+}
+
 /* TextureCoordinate */
 
 NODE_DEFINE(TextureCoordinateNode)
@@ -3533,7 +3544,7 @@ void TextureCoordinateNode::compile(OSLCompiler& compiler)
 	if(compiler.output_type() == SHADER_TYPE_VOLUME)
 		compiler.parameter("is_volume", true);
 	compiler.parameter(this, "use_transform");
-	Transform ob_itfm = transform_transposed_inverse(ob_tfm);
+	Transform ob_itfm = transform_inverse(ob_tfm);
 	compiler.parameter("object_itfm", ob_itfm);
 
 	compiler.parameter(this, "from_dupli");

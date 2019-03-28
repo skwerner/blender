@@ -195,13 +195,13 @@ class CyclesRenderSettings(bpy.types.PropertyGroup):
         cls.samples = IntProperty(
             name="Samples",
             description="Number of samples to render for each pixel",
-            min=1, max=2147483647,
+            min=1, max=(1 << 24),
             default=128,
         )
         cls.preview_samples = IntProperty(
             name="Preview Samples",
             description="Number of samples to render in the viewport, unlimited if 0",
-            min=0, max=2147483647,
+            min=0, max=(1 << 24),
             default=32,
         )
         cls.preview_pause = BoolProperty(
@@ -731,12 +731,6 @@ class CyclesRenderSettings(bpy.types.PropertyGroup):
                 ('ACCELERATOR', "Accelerator", ""),
             ),
             update=devices_update_callback
-        )
-
-        cls.debug_opencl_kernel_single_program = BoolProperty(
-            name="Single Program",
-            default=True,
-            update=devices_update_callback,
         )
 
         cls.debug_use_opencl_debug = BoolProperty(name="Debug OpenCL", default=False)
@@ -1353,6 +1347,12 @@ class CyclesRenderLayerSettings(bpy.types.PropertyGroup):
             default=False,
             update=update_render_passes,
         )
+        denoising_neighbor_frames: IntProperty(
+            name="Neighbor Frames",
+            description="Number of neighboring frames to use for denoising animations (more frames produce smoother results at the cost of performance)",
+            min=0, max=7,
+            default=0,
+        )
         cls.use_pass_crypto_object = BoolProperty(
                 name="Cryptomatte Object",
                 description="Render cryptomatte object pass, for isolating objects in compositing",
@@ -1484,10 +1484,11 @@ class CyclesPreferences(bpy.types.AddonPreferences):
                 # Update name in case it changed
                 entry.name = device[0]
 
-    def get_devices(self):
+    # Gets all devices types by default.
+    def get_devices(self, compute_device_type=''):
         import _cycles
         # Layout of the device tuples: (Name, Type, Persistent ID)
-        device_list = _cycles.available_devices(self.compute_device_type)
+        device_list = _cycles.available_devices(compute_device_type)
         # Make sure device entries are up to date and not referenced before
         # we know we don't add new devices. This way we guarantee to not
         # hold pointers to a resized array.
@@ -1544,7 +1545,7 @@ class CyclesPreferences(bpy.types.AddonPreferences):
         row = layout.row()
         row.prop(self, "compute_device_type", expand=True)
 
-        cuda_devices, opencl_devices = self.get_devices()
+        cuda_devices, opencl_devices = self.get_devices(self.compute_device_type)
         row = layout.row()
         if self.compute_device_type == 'CUDA':
             self._draw_devices(row, 'CUDA', cuda_devices)

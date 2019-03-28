@@ -56,7 +56,7 @@ ccl_device_noinline void shader_setup_from_ray(KernelGlobals *kg,
 	PROFILING_INIT(kg, PROFILING_SHADER_SETUP);
 
 #ifdef __INSTANCING__
-	sd->object = (isect->object == PRIM_NONE)? kernel_tex_fetch(__prim_object, isect->prim): isect->object;
+	sd->object = (isect->object == OBJECT_NONE)? kernel_tex_fetch(__prim_object, isect->prim): isect->object;
 #endif
 	sd->lamp = LAMP_NONE;
 
@@ -299,6 +299,10 @@ ccl_device_inline void shader_setup_from_sample(KernelGlobals *kg,
 		sd->ob_tfm  = lamp_fetch_transform(kg, lamp, false);
 		sd->ob_itfm = lamp_fetch_transform(kg, lamp, true);
 		sd->lamp = lamp;
+#else
+	}
+	else if(lamp != LAMP_NONE) {
+		sd->lamp = lamp;
 #endif
 	}
 
@@ -407,7 +411,7 @@ ccl_device_inline void shader_setup_from_background(KernelGlobals *kg, ShaderDat
 	sd->ray_length = 0.0f;
 
 #ifdef __INSTANCING__
-	sd->object = PRIM_NONE;
+	sd->object = OBJECT_NONE;
 #endif
 	sd->lamp = LAMP_NONE;
 	sd->prim = PRIM_NONE;
@@ -453,7 +457,7 @@ ccl_device_inline void shader_setup_from_volume(KernelGlobals *kg, ShaderData *s
 	sd->ray_length = 0.0f; /* todo: can we set this to some useful value? */
 
 #  ifdef __INSTANCING__
-	sd->object = PRIM_NONE; /* todo: fill this for texture coordinates */
+	sd->object = OBJECT_NONE; /* todo: fill this for texture coordinates */
 #  endif
 	sd->lamp = LAMP_NONE;
 	sd->prim = PRIM_NONE;
@@ -980,9 +984,40 @@ ccl_device float3 shader_bssrdf_sum(ShaderData *sd, float3 *N_, float *texture_b
 }
 #endif  /* __SUBSURFACE__ */
 
+/* Constant emission optimization */
+
+ccl_device bool shader_constant_emission_eval(KernelGlobals *kg, int shader, float3 *eval)
+{
+	int shader_index = shader & SHADER_MASK;
+	int shader_flag = kernel_tex_fetch(__shaders, shader_index).flags;
+
+	if (shader_flag & SD_HAS_CONSTANT_EMISSION) {
+		*eval = make_float3(
+			kernel_tex_fetch(__shaders, shader_index).constant_emission[0],
+			kernel_tex_fetch(__shaders, shader_index).constant_emission[1],
+			kernel_tex_fetch(__shaders, shader_index).constant_emission[2]);
+
+		return true;
+	}
+
+	return false;
+}
+
+/* Background */
+
+ccl_device float3 shader_background_eval(ShaderData *sd)
+{
+	if(sd->flag & SD_EMISSION) {
+		return sd->closure_emission_background;
+	}
+	else {
+		return make_float3(0.0f, 0.0f, 0.0f);
+	}
+}
+
 /* Emission */
 
-ccl_device float3 shader_emissive_eval(KernelGlobals *kg, ShaderData *sd)
+ccl_device float3 shader_emissive_eval(ShaderData *sd)
 {
 	if(sd->flag & SD_EMISSION) {
 		return emissive_simple_eval(sd->Ng, sd->I) * sd->closure_emission_background;
@@ -1030,20 +1065,32 @@ ccl_device void shader_eval_surface(KernelGlobals *kg, ShaderData *sd,
 	sd->num_closure_left = max_closures;
 
 #ifdef __OSL__
-	if(kg->osl)
-		OSLShader::eval_surface(kg, sd, state, path_flag);
+	if(kg->osl) {
+		if (sd->object == OBJECT_NONE) {
+			OSLShader::eval_background(kg, sd, state, path_flag);
+		}
+		else {
+			OSLShader::eval_surface(kg, sd, state, path_flag);
+		}
+	}
 	else
 #endif
 	{
 #ifdef __SVM__
 		svm_eval_nodes(kg, sd, state, SHADER_TYPE_SURFACE, path_flag);
 #else
-		DiffuseBsdf *bsdf = (DiffuseBsdf*)bsdf_alloc(sd,
-		                                             sizeof(DiffuseBsdf),
-		                                             make_float3(0.8f, 0.8f, 0.8f));
-		if(bsdf != NULL) {
-			bsdf->N = sd->N;
-			sd->flag |= bsdf_diffuse_setup(bsdf);
+		if(sd->object == OBJECT_NONE) {
+			sd->closure_emission_background = make_float3(0.8f, 0.8f, 0.8f);
+			sd->flag |= SD_EMISSION;
+		}
+		else {
+			DiffuseBsdf *bsdf = (DiffuseBsdf*)bsdf_alloc(sd,
+			                                             sizeof(DiffuseBsdf),
+			                                             make_float3(0.8f, 0.8f, 0.8f));
+			if(bsdf != NULL) {
+				bsdf->N = sd->N;
+				sd->flag |= bsdf_diffuse_setup(bsdf);
+			}
 		}
 #endif
 	}
@@ -1051,36 +1098,6 @@ ccl_device void shader_eval_surface(KernelGlobals *kg, ShaderData *sd,
 	if(sd->flag & SD_BSDF_NEEDS_LCG) {
 		sd->lcg_state = lcg_state_init_addrspace(state, 0xb4bc3953);
 	}
-}
-
-/* Background Evaluation */
-
-ccl_device float3 shader_eval_background(KernelGlobals *kg, ShaderData *sd,
-	ccl_addr_space PathState *state, int path_flag)
-{
-	sd->num_closure = 0;
-	sd->num_closure_left = 0;
-
-#ifdef __SVM__
-#  ifdef __OSL__
-	if(kg->osl) {
-		OSLShader::eval_background(kg, sd, state, path_flag);
-	}
-	else
-#  endif  /* __OSL__ */
-	{
-		svm_eval_nodes(kg, sd, state, SHADER_TYPE_SURFACE, path_flag);
-	}
-
-	if(sd->flag & SD_EMISSION) {
-		return sd->closure_emission_background;
-	}
-	else {
-		return make_float3(0.0f, 0.0f, 0.0f);
-	}
-#else  /* __SVM__ */
-	return make_float3(0.8f, 0.8f, 0.8f);
-#endif  /* __SVM__ */
 }
 
 /* Volume */

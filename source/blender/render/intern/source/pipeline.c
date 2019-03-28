@@ -1890,6 +1890,7 @@ static void render_result_uncrop(Render *re)
 			render_result_disprect_to_full_resolution(re);
 
 			rres = render_result_new(re, &re->disprect, 0, RR_USE_MEM, RR_ALL_LAYERS, RR_ALL_VIEWS);
+			rres->stamp_data = BKE_stamp_data_copy(re->result->stamp_data);
 
 			render_result_clone_passes(re, rres, NULL);
 
@@ -3414,6 +3415,8 @@ bool RE_WriteRenderViewsImage(ReportList *reports, RenderResult *rr, Scene *scen
 
 					ImBuf *ibuf = render_result_rect_to_ibuf(rr, rd, view_id);
 					ibuf->planes = 24;
+					IMB_colormanagement_imbuf_for_write(ibuf, true, false, &scene->view_settings,
+					                                    &scene->display_settings, &imf);
 
 					ok = render_imbuf_write_stamp_test(reports, scene, rr, ibuf, name, &imf, stamp);
 

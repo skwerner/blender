@@ -287,8 +287,10 @@ BVHEmbree::BVHEmbree(const BVHParams& params_, const vector<Object*>& objects_)
   use_curves(params_.curve_flags & CURVE_KN_INTERPOLATE),
   use_ribbons(params.curve_flags & CURVE_KN_RIBBONS), dynamic_scene(true)
 {
+#ifdef __SSE3__
 	_MM_SET_FLUSH_ZERO_MODE(_MM_FLUSH_ZERO_ON);
 	_MM_SET_DENORMALS_ZERO_MODE(_MM_DENORMALS_ZERO_ON);
+#endif
 	thread_scoped_lock lock(rtc_shared_mutex);
 	if(rtc_shared_users == 0) {
 		rtc_shared_device = rtcNewDevice("verbose=0");

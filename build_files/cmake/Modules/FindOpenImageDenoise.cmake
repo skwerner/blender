@@ -65,6 +65,15 @@ FOREACH(COMPONENT ${_openimagedenoise_FIND_COMPONENTS})
   LIST(APPEND _openimagedenoise_LIBRARIES "${OPENIMAGEDENOISE_${UPPERCOMPONENT}_LIBRARY}")
 ENDFOREACH()
 
+FIND_LIBRARY(OPENIMAGEDENOISE_LIBRARY
+  NAMES
+    OpenImageDenoise
+  HINTS
+    ${_openimagedenoise_SEARCH_DIRS}
+  PATH_SUFFIXES
+    lib64 lib
+  )
+
 # handle the QUIETLY and REQUIRED arguments and set OPENIMAGEDENOISE_FOUND to TRUE if
 # all listed variables are TRUE
 INCLUDE(FindPackageHandleStandardArgs)

@@ -364,7 +364,7 @@ if(WITH_CYCLES_EMBREE)
 endif()
 
 if(WITH_OPENIMAGEDENOISE)
-	find_package(OpenImageDenoise REQUIRED)
+	find_package_wrapper(OpenImageDenoise REQUIRED)
 endif()
 
 if(WITH_LLVM)

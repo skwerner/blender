@@ -66,14 +66,20 @@ ccl_device_inline void get_work_pixel(ccl_global const WorkTile *tile,
                                       ccl_private uint *y,
                                       ccl_private uint *sample)
 {
+	uint sample_offset, pixel_offset;
 #ifdef __KERNEL_CUDA__
-	/* Keeping threads for the same pixel together improves performance on CUDA. */
-	uint sample_offset = global_work_index % tile->num_samples;
-	uint pixel_offset = global_work_index / tile->num_samples;
-#else /* __KERNEL_CUDA__ */
-	uint tile_pixels = tile->w * tile->h;
-	uint sample_offset = global_work_index / tile_pixels;
-	uint pixel_offset = global_work_index - sample_offset * tile_pixels;
+	if (kernel_data.integrator.scrambling_distance > 0.9f) {
+		/* Keeping threads for the same pixel together improves performance on CUDA. */
+		sample_offset = global_work_index % tile->num_samples;
+		pixel_offset = global_work_index / tile->num_samples;
+	}
+	else {
+#endif /* __KERNEL_CUDA__ */
+		uint tile_pixels = tile->w * tile->h;
+		sample_offset = global_work_index / tile_pixels;
+		pixel_offset = global_work_index - sample_offset * tile_pixels;
+#ifdef __KERNEL_CUDA__
+	}
 #endif /* __KERNEL_CUDA__ */
 	uint y_offset = pixel_offset / tile->w;
 	uint x_offset = pixel_offset - y_offset * tile->w;

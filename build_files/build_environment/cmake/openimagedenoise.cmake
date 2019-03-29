@@ -39,3 +39,23 @@ add_dependencies(
 	external_openimagedenoise
 	external_tbb
 )
+
+if(WIN32)
+	if(BUILD_MODE STREQUAL Release)
+		ExternalProject_Add_Step(external_openimagedenoise after_install
+			COMMAND ${CMAKE_COMMAND} -E copy_directory ${LIBDIR}/openimagedenoise/include ${HARVEST_TARGET}/openimagedenoise/include
+			COMMAND ${CMAKE_COMMAND} -E copy ${LIBDIR}/openimagedenoise/lib/openimagedenoise.lib ${HARVEST_TARGET}/openimagedenoise/lib/openimagedenoise.lib
+			COMMAND ${CMAKE_COMMAND} -E copy ${LIBDIR}/openimagedenoise/lib/common.lib ${HARVEST_TARGET}/openimagedenoise/lib/common.lib
+			COMMAND ${CMAKE_COMMAND} -E copy ${LIBDIR}/openimagedenoise/lib/mkldnn.lib ${HARVEST_TARGET}/openimagedenoise/lib/mkldnn.lib
+			DEPENDEES install
+		)
+	endif()
+	if(BUILD_MODE STREQUAL Debug)
+		ExternalProject_Add_Step(external_openimagedenoise after_install
+			COMMAND ${CMAKE_COMMAND} -E copy ${LIBDIR}/openimagedenoise/lib/openimagedenoise.lib ${HARVEST_TARGET}/openimagedenoise/lib/openimagedenoise_d.lib
+			COMMAND ${CMAKE_COMMAND} -E copy ${LIBDIR}/openimagedenoise/lib/common.lib ${HARVEST_TARGET}/openimagedenoise/lib/common_d.lib
+			COMMAND ${CMAKE_COMMAND} -E copy ${LIBDIR}/openimagedenoise/lib/mkldnn.lib ${HARVEST_TARGET}/openimagedenoise/lib/mkldnn_d.lib
+			DEPENDEES install
+		)
+	endif()
+endif()

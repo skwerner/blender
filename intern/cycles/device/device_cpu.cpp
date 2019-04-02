@@ -784,7 +784,7 @@ public:
 
 			task.update_progress(&tile, tile.w*tile.h);
 
-			if(kernel_data.film.pass_adaptive_aux_buffer && (sample & 0x3) == 3 && sample > kernel_data.integrator.adaptive_min_samples) {
+			if(kernel_data.film.pass_adaptive_aux_buffer && (sample & 0x3) == 3 && sample >= kernel_data.integrator.adaptive_min_samples - 1) {
 				bool any = false;
 				for(int y = tile.y; y < tile.y + tile.h; ++y) {
 					any |= kernel_adaptive_filter_x(kg, render_buffer, y, tile.x,  tile.w, tile.offset, tile.stride);
@@ -867,13 +867,20 @@ public:
 				}
 				if (task.integrator_adaptive && kernel_data.film.pass_adaptive_aux_buffer) {
 					float *render_buffer = (float*)tile.buffer;
-					for (int y = tile.y; y < tile.y + tile.h; y++) {
-						for (int x = tile.x; x < tile.x + tile.w; x++) {
+					for(int y = tile.y; y < tile.y + tile.h; y++) {
+						for(int x = tile.x; x < tile.x + tile.w; x++) {
 							int index = tile.offset + x + y * tile.stride;
 							ccl_global float *buffer = render_buffer + index * kernel_data.film.pass_stride;
-							buffer[kernel_data.film.pass_sample_count] = -buffer[kernel_data.film.pass_sample_count];
-							float sample_multiplier = tile.sample / buffer[kernel_data.film.pass_sample_count];
-							kernel_adaptive_post_adjust(kg, buffer, sample_multiplier);
+							if(buffer[kernel_data.film.pass_sample_count] < 0.0f) {
+								buffer[kernel_data.film.pass_sample_count] = -buffer[kernel_data.film.pass_sample_count];
+								float sample_multiplier = tile.sample / max((float)tile.start_sample + 1.0f, buffer[kernel_data.film.pass_sample_count]);
+								if(sample_multiplier != 1.0f) {
+									kernel_adaptive_post_adjust(kg, buffer, sample_multiplier);
+								}
+							}
+							else {
+								kernel_adaptive_post_adjust(kg, buffer, tile.sample / (tile.sample - 1.0f));
+							}
 						}
 					}
 				}

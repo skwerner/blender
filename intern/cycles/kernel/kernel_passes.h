@@ -441,7 +441,7 @@ ccl_device_inline void kernel_write_result(KernelGlobals *kg,
 				make_float4(L_sum.x * 2.0f, L_sum.y* 2.0f, L_sum.z * 2.0f, 0.0f));
 		}
 #ifdef __KERNEL_CPU__
-		if(sample > kernel_data.integrator.adaptive_min_samples && (sample & 0x3) == 3) {
+		if(sample >= kernel_data.integrator.adaptive_min_samples - 1 && (sample & 0x3) == 3) {
 			kernel_adaptive_stopping(kg, buffer, sample);
 		}
 #endif
@@ -451,6 +451,14 @@ ccl_device_inline void kernel_write_result(KernelGlobals *kg,
 	 * Once the tile has finished rendering, the sign gets flipped and all the pixel values
 	 * are scaled as if they were taken at a uniform sample count. */
 	if(kernel_data.film.pass_sample_count) {
+		/* Make sure it's a negative number. In progressive refine mode, this bit gets flipped between passes. */
+#ifdef __ATOMIC_PASS_WRITE__
+		atomic_fetch_and_or_uint32((uint*)(buffer + kernel_data.film.pass_sample_count), 0x80000000);
+#else
+		if(buffer[kernel_data.film.pass_sample_count] > 0) {
+			buffer[kernel_data.film.pass_sample_count] *= -1.0f;
+		}
+#endif
 		kernel_write_pass_float(buffer + kernel_data.film.pass_sample_count, -1.0f);
 	}
 }

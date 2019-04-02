@@ -1755,14 +1755,13 @@ public:
 			                           num_threads_per_block, 1, 1,
 			                           0, 0, args, 0));
 
-			uint filter_sample = sample + step_samples - 1;
+			uint filter_sample = sample + wtile->num_samples - 1;
 			/* Run the adaptive sampling kernels when we're at a multiple of 4 samples. 
 			 * These are a series of tiny kernels because there is no grid synchronisation
 			 * from within a kernel, so multiple kernel launches it is. */
 			if(task.integrator_adaptive && (filter_sample & 0x3) == 3) {
-				uint total_work_size = wtile->h * wtile->w;
-				void* args2[] = { &d_work_tiles, &filter_sample, &total_work_size };
 				total_work_size = wtile->h * wtile->w;
+				void* args2[] = { &d_work_tiles, &filter_sample, &total_work_size };
 				num_blocks = divide_up(total_work_size, num_threads_per_block);
 				cuda_assert(cuLaunchKernel(cuAdaptiveStopping,
 					num_blocks, 1, 1,
@@ -1797,7 +1796,7 @@ public:
 		if(task.integrator_adaptive) {
 			CUdeviceptr d_work_tiles = cuda_device_ptr(work_tiles.device_pointer);
 			uint total_work_size = wtile->h * wtile->w;
-			void* args[] = { &d_work_tiles, &rtile.sample, &total_work_size };
+			void* args[] = { &d_work_tiles, &rtile.start_sample, &rtile.sample, &total_work_size };
 			uint num_blocks = divide_up(total_work_size, num_threads_per_block);
 			cuda_assert(cuLaunchKernel(cuAdaptiveScaleSamples,
 				num_blocks, 1, 1,

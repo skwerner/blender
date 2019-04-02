@@ -31,8 +31,8 @@ ccl_device void kernel_adaptive_stopping(KernelGlobals *kg, ccl_global float *bu
 	 * A small epsilon is added to the divisor to prevent division by zero. */
 	float error = (fabsf(I.x - A.x) + fabsf(I.y - A.y) + fabsf(I.z - A.z)) / (sample * 0.0001f + sqrtf(I.x + I.y + I.z));
 	if (error < kernel_data.integrator.adaptive_threshold * (float)sample) {
-		ccl_global float *buf = buffer + kernel_data.film.pass_adaptive_aux_buffer + 3;
-		*buf += 1.0f;
+		/* Set the fourth component to non-zero value to indicate that this pixel has converged. */
+		buffer[kernel_data.film.pass_adaptive_aux_buffer + 3] += 1.0f;
 	}
 }
 

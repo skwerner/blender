@@ -94,7 +94,7 @@ kernel_cuda_adaptive_stopping(WorkTile *tile, int sample, uint total_work_size)
 		uint y = tile->y + work_index / tile->w;
 		int index = tile->offset + x + y * tile->stride;
 		ccl_global float *buffer = tile->buffer + index * kernel_data.film.pass_stride;
-		kernel_adaptive_stopping(&kg, buffer, sample);
+		kernel_do_adaptive_stopping(&kg, buffer, sample);
 	}
 }
 
@@ -106,7 +106,7 @@ kernel_cuda_adaptive_filter_x(WorkTile *tile, int sample, uint)
 	if(kernel_data.film.pass_adaptive_aux_buffer && sample > kernel_data.integrator.adaptive_min_samples) {
 		if(ccl_global_id(0) < tile->h) {
 			int y = tile->y + ccl_global_id(0);
-			kernel_adaptive_filter_x(&kg, tile->buffer, y, tile->x, tile->w, tile->offset, tile->stride);
+			kernel_do_adaptive_filter_x(&kg, y, tile);
 		}
 	}
 }
@@ -119,7 +119,7 @@ kernel_cuda_adaptive_filter_y(WorkTile *tile, int sample, uint)
 	if(kernel_data.film.pass_adaptive_aux_buffer && sample >= kernel_data.integrator.adaptive_min_samples - 1) {
 		if(ccl_global_id(0) < tile->w) {
 			int x = tile->x + ccl_global_id(0);
-			kernel_adaptive_filter_y(&kg, tile->buffer, x, tile->y, tile->h, tile->offset, tile->stride);
+			kernel_do_adaptive_filter_y(&kg, x, tile);
 		}
 	}
 }

@@ -566,11 +566,6 @@ typedef ccl_addr_space struct PathRadiance {
 	float denoising_depth;
 #endif  /* __DENOISING_FEATURES__ */
 
-#ifdef __ADAPTIVE_SAMPLING__
-	float3 max_value;
-	float3 min_value;
-#endif /* __ADAPTIVE_SAMPLING__ */
-
 #ifdef __KERNEL_DEBUG__
 	DebugData debug_data;
 #endif  /* __KERNEL_DEBUG__ */
@@ -1662,7 +1657,7 @@ typedef struct WorkTile {
 	uint start_sample;
 	uint num_samples;
 
-	uint offset;
+	int offset;
 	uint stride;
 
 	ccl_global float *buffer;

@@ -309,6 +309,10 @@ set(SRC_UTIL_HEADERS
 )
 
 set(SRC_SPLIT_HEADERS
+	split/kernel_adaptive_adjust_samples.h
+	split/kernel_adaptive_filter_x.h
+	split/kernel_adaptive_filter_y.h
+	split/kernel_adaptive_stopping.h
 	split/kernel_branched.h
 	split/kernel_buffer_update.h
 	split/kernel_data_init.h
@@ -453,7 +457,7 @@ if(WITH_CYCLES_CUDA_BINARIES)
 			CYCLES_CUDA_KERNEL_ADD(${arch} ${prev_arch} filter "" "${cuda_filter_sources}" FALSE)
 			CYCLES_CUDA_KERNEL_ADD(${arch} ${prev_arch} kernel "" "${cuda_sources}" FALSE)
 
-			if(WITH_CYCLES_CUDA_SPLIT_KERNEL_BINARIES)
+			if(1)
 				# Compile split kernel
 				CYCLES_CUDA_KERNEL_ADD(${arch} ${prev_arch} kernel_split "-D __SPLIT__" "${cuda_sources}" FALSE)
 			endif()

@@ -442,7 +442,7 @@ ccl_device_inline void kernel_write_result(KernelGlobals *kg,
 		}
 #ifdef __KERNEL_CPU__
 		if(sample >= kernel_data.integrator.adaptive_min_samples - 1 && (sample & 0x3) == 3) {
-			kernel_adaptive_stopping(kg, buffer, sample);
+			kernel_do_adaptive_stopping(kg, buffer, sample);
 		}
 #endif
 	}

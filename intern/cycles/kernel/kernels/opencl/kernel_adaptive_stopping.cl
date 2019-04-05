@@ -14,15 +14,10 @@
  * limitations under the License.
  */
 
-CCL_NAMESPACE_BEGIN
+#include "kernel/kernel_compat_opencl.h"
+#include "kernel/split/kernel_split_common.h"
+#include "kernel/split/kernel_adaptive_stopping.h"
 
-ccl_device void kernel_adaptive_filter_y(KernelGlobals *kg)
-{
-	int pixel_index = ccl_global_id(1) * ccl_global_size(0) + ccl_global_id(0);
-	if(pixel_index < kernel_split_params.tile.w &&
-		kernel_split_params.tile.start_sample + kernel_split_params.tile.num_samples >= kernel_data.integrator.adaptive_min_samples) {
-		int x = kernel_split_params.tile.x + pixel_index;
-		kernel_do_adaptive_filter_y(kg, x, &kernel_split_params.tile);
-	}
-}
-CCL_NAMESPACE_END
+#define KERNEL_NAME adaptive_stopping
+#include "kernel/kernels/opencl/kernel_split_function.h"
+#undef KERNEL_NAME

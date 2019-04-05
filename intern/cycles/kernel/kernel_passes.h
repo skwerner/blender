@@ -453,7 +453,7 @@ ccl_device_inline void kernel_write_result(KernelGlobals *kg,
 	if(kernel_data.film.pass_sample_count) {
 		/* Make sure it's a negative number. In progressive refine mode, this bit gets flipped between passes. */
 #ifdef __ATOMIC_PASS_WRITE__
-		atomic_fetch_and_or_uint32((uint*)(buffer + kernel_data.film.pass_sample_count), 0x80000000);
+		atomic_fetch_and_or_uint32((ccl_global uint*)(buffer + kernel_data.film.pass_sample_count), 0x80000000);
 #else
 		if(buffer[kernel_data.film.pass_sample_count] > 0) {
 			buffer[kernel_data.film.pass_sample_count] *= -1.0f;

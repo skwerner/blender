@@ -216,11 +216,9 @@ bool DeviceSplitKernel::path_trace(DeviceTask *task,
 
 		RenderTile subtile = tile;
 		subtile.start_sample = tile.sample;
-		subtile.num_samples = min(samples_per_second, tile.start_sample + tile.num_samples - tile.sample);
 
 		if(task->integrator_adaptive) {
 			int step_samples = subtile.start_sample % 4;
-			step_samples += subtile.num_samples;
 			/* Round so that we end up on multiples of four for adaptive sampling. */
 			if (step_samples == 3) {
 				step_samples = 2;
@@ -228,8 +226,10 @@ bool DeviceSplitKernel::path_trace(DeviceTask *task,
 			else if(step_samples > 4) {
 				step_samples &= 0xfffffffc;
 			}
-			subtile.num_samples = max(1, step_samples - (subtile.start_sample % 4));
+			samples_per_second = max(1, step_samples - (subtile.start_sample % 4));
 		}
+
+		subtile.num_samples = min(samples_per_second, tile.start_sample + tile.num_samples - tile.sample);
 
 		if(device->have_error()) {
 			return false;

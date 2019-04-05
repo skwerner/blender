@@ -36,6 +36,10 @@ set(SRC_CUDA_KERNELS
 )
 
 set(SRC_OPENCL_KERNELS
+	kernels/opencl/kernel_adaptive_stopping.cl
+	kernels/opencl/kernel_adaptive_filter_x.cl
+	kernels/opencl/kernel_adaptive_filter_y.cl
+	kernels/opencl/kernel_adaptive_adjust_samples.cl
 	kernels/opencl/kernel_bake.cl
 	kernels/opencl/kernel_base.cl
 	kernels/opencl/kernel_displace.cl

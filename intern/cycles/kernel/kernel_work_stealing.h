@@ -23,13 +23,37 @@ CCL_NAMESPACE_BEGIN
  * Utility functions for work stealing
  */
 
+ /* Map global work index to tile, pixel X/Y and sample. */
+	ccl_device_inline void get_work_pixel(ccl_global const WorkTile *tile,
+		uint global_work_index,
+		ccl_private uint *x,
+		ccl_private uint *y,
+		ccl_private uint *sample)
+{
+#ifdef __KERNEL_CUDA__
+	/* Keeping threads for the same pixel together improves performance on CUDA. */
+	uint sample_offset = global_work_index % tile->num_samples;
+	uint pixel_offset = global_work_index / tile->num_samples;
+#else /* __KERNEL_CUDA__ */
+	uint tile_pixels = tile->w * tile->h;
+	uint sample_offset = global_work_index / tile_pixels;
+	uint pixel_offset = global_work_index - sample_offset * tile_pixels;
+#endif /* __KERNEL_CUDA__ */
+	uint y_offset = pixel_offset / tile->w;
+	uint x_offset = pixel_offset - y_offset * tile->w;
+
+	*x = tile->x + x_offset;
+	*y = tile->y + y_offset;
+	*sample = tile->start_sample + sample_offset;
+}
+
 #ifdef __KERNEL_OPENCL__
 #  pragma OPENCL EXTENSION cl_khr_global_int32_base_atomics : enable
 #endif
 
 #ifdef __SPLIT_KERNEL__
 /* Returns true if there is work */
-ccl_device bool get_next_work(KernelGlobals *kg,
+ccl_device bool get_next_work_item(KernelGlobals *kg,
                               ccl_global uint *work_pools,
                               uint total_work_size,
                               uint ray_index,
@@ -57,31 +81,36 @@ ccl_device bool get_next_work(KernelGlobals *kg,
 	/* Test if all work for this pool is done. */
 	return (*global_work_index < total_work_size);
 }
-#endif
 
-/* Map global work index to tile, pixel X/Y and sample. */
-ccl_device_inline void get_work_pixel(ccl_global const WorkTile *tile,
-                                      uint global_work_index,
-                                      ccl_private uint *x,
-                                      ccl_private uint *y,
-                                      ccl_private uint *sample)
+ccl_device bool get_next_work(KernelGlobals *kg,
+                              ccl_global uint *work_pools,
+                              uint total_work_size,
+                              uint ray_index,
+                              ccl_private uint *global_work_index)
 {
-#ifdef __KERNEL_CUDA__
-	/* Keeping threads for the same pixel together improves performance on CUDA. */
-	uint sample_offset = global_work_index % tile->num_samples;
-	uint pixel_offset = global_work_index / tile->num_samples;
-#else /* __KERNEL_CUDA__ */
-	uint tile_pixels = tile->w * tile->h;
-	uint sample_offset = global_work_index / tile_pixels;
-	uint pixel_offset = global_work_index - sample_offset * tile_pixels;
-#endif /* __KERNEL_CUDA__ */
-	uint y_offset = pixel_offset / tile->w;
-	uint x_offset = pixel_offset - y_offset * tile->w;
-
-	*x = tile->x + x_offset;
-	*y = tile->y + y_offset;
-	*sample = tile->start_sample + sample_offset;
+	bool got_work = false;
+	if(kernel_data.film.pass_adaptive_aux_buffer) {
+		do {
+			got_work = get_next_work_item(kg, work_pools, total_work_size, ray_index, global_work_index);
+			if(got_work) {
+				ccl_global WorkTile *tile = &kernel_split_params.tile;
+				uint x, y, sample;
+				get_work_pixel(tile, *global_work_index, &x, &y, &sample);
+				uint buffer_offset = (tile->offset + x + y * tile->stride) * kernel_data.film.pass_stride;
+				ccl_global float *buffer = kernel_split_params.tile.buffer + buffer_offset;
+				ccl_global float4 *minmax = (ccl_global float4*)(buffer + kernel_data.film.pass_adaptive_aux_buffer);
+				if (minmax->w == 0.0f) {
+					break;
+				}
+			}
+		} while(got_work);
+	}
+	else {
+		got_work = get_next_work_item(kg, work_pools, total_work_size, ray_index, global_work_index);
+	}
+	return got_work;
 }
+#endif
 
 CCL_NAMESPACE_END
 

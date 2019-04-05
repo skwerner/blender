@@ -24,7 +24,7 @@ ccl_device void kernel_adaptive_adjust_samples(KernelGlobals *kg)
 		int y = kernel_split_params.tile.y + pixel_index / kernel_split_params.tile.w;
 		int buffer_offset = (kernel_split_params.tile.offset + x + y * kernel_split_params.tile.stride) * kernel_data.film.pass_stride;
 		ccl_global float *buffer = kernel_split_params.tile.buffer + buffer_offset;
-		int sample = kernel_split_params.tile.start_sample + kernel_split_params.tile.num_samples - 1;
+		int sample = kernel_split_params.tile.start_sample + kernel_split_params.tile.num_samples;
 		if(buffer[kernel_data.film.pass_sample_count] < 0.0f) {
 			buffer[kernel_data.film.pass_sample_count] = -buffer[kernel_data.film.pass_sample_count];
 			float sample_multiplier = sample / max((float)kernel_split_params.tile.start_sample + 1.0f, buffer[kernel_data.film.pass_sample_count]);
@@ -36,6 +36,7 @@ ccl_device void kernel_adaptive_adjust_samples(KernelGlobals *kg)
 			kernel_adaptive_post_adjust(kg, buffer, sample / (sample - 1.0f));
 		}
 	}
+
 }
 
 CCL_NAMESPACE_END

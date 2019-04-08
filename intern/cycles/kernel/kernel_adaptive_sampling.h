@@ -41,6 +41,11 @@ ccl_device void kernel_do_adaptive_stopping(KernelGlobals *kg, ccl_global float 
 ccl_device void kernel_adaptive_post_adjust(KernelGlobals *kg, ccl_global float *buffer, float sample_multiplier)
 {
 	*(ccl_global float4*)(buffer) *= sample_multiplier;
+
+	/* Scale the aux pass too, this is necessary for progressive rendering to work properly. */
+	kernel_assert(kernel_data.film.pass_adaptive_aux_buffer);
+	*(ccl_global float4*)(buffer + kernel_data.film.pass_adaptive_aux_buffer) *= sample_multiplier;
+
 #ifdef __PASSES__
 	int flag = kernel_data.film.pass_flag;
 

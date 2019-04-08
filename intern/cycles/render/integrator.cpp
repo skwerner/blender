@@ -225,10 +225,12 @@ void Integrator::device_update(Device *device, DeviceScene *dscene, Scene *scene
 		constexpr int sequence_size = 64 * 64;
 		constexpr int num_sequences = 48;
 		float2 *directions = (float2*)dscene->sample_pattern_lut.alloc(sequence_size * num_sequences * 2);
+		TaskPool pool;
 		for(int j = 0; j < num_sequences; ++j) {
 			float2 *sequence = directions + j * sequence_size;
-			progressive_multi_jitter_02_generate_2D(sequence, sequence_size, j);
+			pool.push(function_bind(&progressive_multi_jitter_02_generate_2D, sequence, sequence_size, j));
 		}
+		pool.wait_work();
 		dscene->sample_pattern_lut.copy_to_device();
 	}
 

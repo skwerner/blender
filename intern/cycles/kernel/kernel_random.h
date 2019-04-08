@@ -44,7 +44,7 @@ ccl_device uint sobol_dimension(KernelGlobals *kg, int index, int dimension)
 	uint i = index + SOBOL_SKIP;
 	for(uint j = 0; i; i >>= 1, j++) {
 		if(i & 1) {
-			result ^= kernel_tex_fetch(__sobol_directions, 32*dimension + j);
+			result ^= kernel_tex_fetch(__sample_pattern_lut, 32*dimension + j);
 		}
 	}
 	return result;
@@ -71,7 +71,7 @@ ccl_device_forceinline float path_rng_1D(KernelGlobals *kg,
 		}
 		uint tmp_rng = cmj_hash_simple(dimension, rng_hash);
 		int index = ((dimension % NUM_PJ_PATTERNS) * NUM_PJ_SAMPLES + sample) * 2;
-		return __uint_as_float(kernel_tex_fetch(__sobol_directions, index) ^ (tmp_rng & 0x007fffff)) - 1.0f;
+		return __uint_as_float(kernel_tex_fetch(__sample_pattern_lut, index) ^ (tmp_rng & 0x007fffff)) - 1.0f;
 	}
 #ifdef __CMJ__
 #  ifdef __SOBOL__
@@ -121,9 +121,9 @@ ccl_device_forceinline void path_rng_2D(KernelGlobals *kg,
 		}
 		uint tmp_rng = cmj_hash_simple(dimension, rng_hash);
 		int index = ((dimension % NUM_PJ_PATTERNS) * NUM_PJ_SAMPLES + sample) * 2;
-		*fx = __uint_as_float(kernel_tex_fetch(__sobol_directions, index) ^ (tmp_rng & 0x007fffff)) - 1.0f;
+		*fx = __uint_as_float(kernel_tex_fetch(__sample_pattern_lut, index) ^ (tmp_rng & 0x007fffff)) - 1.0f;
 		tmp_rng = cmj_hash_simple(dimension+ 1, rng_hash);
-		*fy = __uint_as_float(kernel_tex_fetch(__sobol_directions, index + 1) ^ (tmp_rng & 0x007fffff)) - 1.0f;
+		*fy = __uint_as_float(kernel_tex_fetch(__sample_pattern_lut, index + 1) ^ (tmp_rng & 0x007fffff)) - 1.0f;
 		return;
 	}
 #ifdef __CMJ__

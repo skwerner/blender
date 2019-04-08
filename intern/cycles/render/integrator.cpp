@@ -215,21 +215,21 @@ void Integrator::device_update(Device *device, DeviceScene *dscene, Scene *scene
 	dimensions = min(dimensions, SOBOL_MAX_DIMENSIONS);
 
 	if(sampling_pattern == SAMPLING_PATTERN_SOBOL) {
-		uint *directions = dscene->sobol_directions.alloc(SOBOL_BITS*dimensions);
+		uint *directions = dscene->sample_pattern_lut.alloc(SOBOL_BITS*dimensions);
 
 		sobol_generate_direction_vectors((uint(*)[SOBOL_BITS])directions, dimensions);
 
-		dscene->sobol_directions.copy_to_device();
+		dscene->sample_pattern_lut.copy_to_device();
 	}
 	else {
 		constexpr int sequence_size = 64 * 64;
 		constexpr int num_sequences = 48;
-		float2 *directions = (float2*)dscene->sobol_directions.alloc(sequence_size * num_sequences * 2);
+		float2 *directions = (float2*)dscene->sample_pattern_lut.alloc(sequence_size * num_sequences * 2);
 		for(int j = 0; j < num_sequences; ++j) {
 			float2 *sequence = directions + j * sequence_size;
 			progressive_multi_jitter_02_generate_2D(sequence, sequence_size, j);
 		}
-		dscene->sobol_directions.copy_to_device();
+		dscene->sample_pattern_lut.copy_to_device();
 	}
 
 	/* Clamping. */
@@ -245,7 +245,7 @@ void Integrator::device_update(Device *device, DeviceScene *dscene, Scene *scene
 
 void Integrator::device_free(Device *, DeviceScene *dscene)
 {
-	dscene->sobol_directions.free();
+	dscene->sample_pattern_lut.free();
 }
 
 bool Integrator::modified(const Integrator& integrator)

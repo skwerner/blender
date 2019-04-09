@@ -14,6 +14,15 @@
  * limitations under the License.
  */
 
+ /* This file is based on "Progressive Multi-Jittered Sample Sequences"
+  * by Per Christensen, Andrew Kensler and Charlie Kilpatrick.
+  * http://graphics.pixar.com/library/ProgressiveMultiJitteredSampling/paper.pdf
+  *
+  * Performance can be improved in the future by implementing the new
+  * algorithm from Matt Pharr in  http://jcgt.org/published/0008/01/04/
+  * "Efficient Generation of Points that Satisfy Two-Dimensional Elementary Intervals"
+  */
+
 #include "render/jitter.h"
 
 #include <math.h>
@@ -41,61 +50,6 @@ static float cmj_randfloat(uint i, uint p)
 {
 	return cmj_hash(i, p) * (1.0f / 4294967808.0f);
 }
-
-class PJ_Generator
-{
-public:
-	static void generate_2d(float2 points[], int size, int rng_seed_in)
-	{
-		PJ_Generator g(rng_seed_in);
-		points[0].x = g.rnd();
-		points[0].y = g.rnd();
-		int N = 1;
-		while(N < size) {
-			g.extend_sequence(points, N);
-			N = 4 * N;
-		}
-	}
-protected:
-	PJ_Generator(int rnd_seed_in) : rnd_index(2), rnd_seed(rnd_seed_in) {}
-	
-	float rnd() { return cmj_randfloat(++rnd_index, rnd_seed); }
-	
-	float2 generate_sample_point(float i, float j, float xhalf, float yhalf, float n)
-	{
-		float2 pt;
-		pt.x = (i + 0.5f * (xhalf + rnd())) / n;
-		pt.y = (j + 0.5f * (yhalf + rnd())) / n;
-		return pt;
-	}
-
-	void extend_sequence(float2 points[], int N)
-	{
-		int n = (int)sqrtf(N);
-		for(int s = 0; s < N; ++s) {
-			float2 oldpt = points[s];
-			float i = floorf(n * oldpt.x);
-			float j = floorf(n * oldpt.y);
-			float xhalf = floorf(2.0f * (n * oldpt.x - i));
-			float yhalf = floorf(2.0f * (n * oldpt.y - j));
-			xhalf = 1.0f - xhalf;
-			yhalf = 1.0f - yhalf;
-			points[N + s] = generate_sample_point(i, j, xhalf, yhalf, n);
-			if(rnd() > 0.5f) {
-				xhalf = 1.0f - xhalf;
-			}
-			else {
-				yhalf = 1.0f - yhalf;
-			}
-			points[2 * N + s] = generate_sample_point(i, j, xhalf, yhalf, n);
-			xhalf = 1.0f - xhalf;
-			yhalf = 1.0f - yhalf;
-			points[3 * N + s] = generate_sample_point(i, j, xhalf, yhalf, n);
-		}
-	}
-
-	int rnd_index, rnd_seed;
-};
 
 class PMJ_Generator
 {
@@ -248,7 +202,9 @@ protected:
 		do {
 			int xstratum = (int)(xdivs * pt.x);
 			int ystratum = (int)(ydivs * pt.y);
-			occupiedStrata[shape][ystratum * xdivs + xstratum] = true;
+			size_t index = ystratum * xdivs + xstratum;
+			assert(index < NN);
+			occupiedStrata[shape][index] = true;
 			shape = shape + 1;
 			xdivs = xdivs / 2;
 			ydivs = ydivs * 2;
@@ -263,7 +219,9 @@ protected:
 		do {
 			int xstratum = (int)(xdivs * pt.x);
 			int ystratum = (int)(ydivs * pt.y);
-			if(occupiedStrata[shape][ystratum * xdivs + xstratum]) {
+			size_t index = ystratum * xdivs + xstratum;
+			assert(index < NN);
+			if(occupiedStrata[shape][index]) {
 				return true;
 			}
 			shape = shape + 1;
@@ -288,22 +246,25 @@ static void shuffle(float2 points[], int size, int rng_seed)
 	if(rng_seed == 0) {
 		return;
 	}
+
+	constexpr int odd[8] = { 0, 1, 4, 5, 10, 11, 14, 15 };
+	constexpr int even[8] = { 2, 3, 6, 7, 8, 9, 12, 13 };
+
 	int rng_index = 0;
 	for(int yy = 0; yy < size / 16; ++yy) {
-		for(int xx = 0; xx < 16; ++xx) {
-			int other = (int)(cmj_randfloat(++rng_index, rng_seed) * (16.0f - xx) + xx);
-			float2 tmp = points[xx + yy * 16];
-			tmp = points[other + yy * 16];
-			points[other + yy * 16] = points[xx + yy * 16];
-			points[xx + yy * 16] = tmp;
+		for(int xx = 0; xx < 8; ++xx) {
+			int other = (int)(cmj_randfloat(++rng_index, rng_seed) * (8.0f - xx) + xx);
+			float2 tmp = points[odd[other] + yy * 16];
+			points[odd[other] + yy * 16] = points[odd[xx] + yy * 16];
+			points[odd[xx] + yy * 16] = tmp;
+		}
+		for(int xx = 0; xx < 8; ++xx) {
+			int other = (int)(cmj_randfloat(++rng_index, rng_seed) * (8.0f - xx) + xx);
+			float2 tmp = points[even[other] + yy * 16];
+			points[even[other] + yy * 16] = points[even[xx] + yy * 16];
+			points[even[xx] + yy * 16] = tmp;
 		}
 	}
-}
-
-void progressive_jitter_generate_2D(float2 points[], int size, int rng_seed)
-{
-	PJ_Generator::generate_2d(points, size, rng_seed);
-	shuffle(points, size, rng_seed);
 }
 
 void progressive_multi_jitter_generate_2D(float2 points[], int size, int rng_seed)

@@ -165,20 +165,20 @@ ccl_device bool kernel_do_adaptive_filter_x(KernelGlobals *kg, int y, ccl_global
 	for(int x = tile->x; x < tile->x + tile->w; ++x) {
 		int index = tile->offset + x + y * tile->stride;
 		ccl_global float *buffer = tile->buffer + index * kernel_data.film.pass_stride;
-		ccl_global float4 *minmax = (ccl_global float4*)(buffer + kernel_data.film.pass_adaptive_aux_buffer);
-		if(minmax->w == 0.0f) {
+		ccl_global float4 *aux = (ccl_global float4*)(buffer + kernel_data.film.pass_adaptive_aux_buffer);
+		if(aux->w == 0.0f) {
 			any = true;
 			if(x > tile->x && !prev) {
 				index = index - 1;
 				buffer = tile->buffer + index * kernel_data.film.pass_stride;
-				minmax = (ccl_global float4*)(buffer + kernel_data.film.pass_adaptive_aux_buffer);
-				minmax->w = 0.0f;
+				aux = (ccl_global float4*)(buffer + kernel_data.film.pass_adaptive_aux_buffer);
+				aux->w = 0.0f;
 			}
 			prev = true;
 		}
 		else {
 			if(prev) {
-				minmax->w = 0.0f;
+				aux->w = 0.0f;
 			}
 			prev = false;
 		}
@@ -193,20 +193,20 @@ ccl_device bool kernel_do_adaptive_filter_y(KernelGlobals *kg, int x, ccl_global
 	for(int y = tile->y; y < tile->y + tile->h; ++y) {
 		int index = tile->offset + x + y * tile->stride;
 		ccl_global float *buffer = tile->buffer + index * kernel_data.film.pass_stride;
-		ccl_global float4 *minmax = (ccl_global float4*)(buffer + kernel_data.film.pass_adaptive_aux_buffer);
-		if (minmax->w == 0.0f) {
+		ccl_global float4 *aux = (ccl_global float4*)(buffer + kernel_data.film.pass_adaptive_aux_buffer);
+		if(aux->w == 0.0f) {
 			any = true;
 			if(y > tile->y && !prev) {
 				index = index - tile->stride;
 				buffer = tile->buffer + index * kernel_data.film.pass_stride;
-				minmax = (ccl_global float4*)(buffer + kernel_data.film.pass_adaptive_aux_buffer);
-				minmax->w = 0.0f;
+				aux = (ccl_global float4*)(buffer + kernel_data.film.pass_adaptive_aux_buffer);
+				aux->w = 0.0f;
 			}
 			prev = true;
 		}
 		else {
 			if(prev) {
-				minmax->w = 0.0f;
+				aux->w = 0.0f;
 			}
 			prev = false;
 		}

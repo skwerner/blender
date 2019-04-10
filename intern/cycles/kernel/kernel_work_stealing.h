@@ -98,8 +98,8 @@ ccl_device bool get_next_work(KernelGlobals *kg,
 				get_work_pixel(tile, *global_work_index, &x, &y, &sample);
 				uint buffer_offset = (tile->offset + x + y * tile->stride) * kernel_data.film.pass_stride;
 				ccl_global float *buffer = kernel_split_params.tile.buffer + buffer_offset;
-				ccl_global float4 *minmax = (ccl_global float4*)(buffer + kernel_data.film.pass_adaptive_aux_buffer);
-				if (minmax->w == 0.0f) {
+				ccl_global float4 *aux = (ccl_global float4*)(buffer + kernel_data.film.pass_adaptive_aux_buffer);
+				if(aux->w == 0.0f) {
 					break;
 				}
 			}

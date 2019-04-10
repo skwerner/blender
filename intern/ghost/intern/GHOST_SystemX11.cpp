@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,19 +15,12 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
  * Part of this code has been taken from Qt, under LGPL license
  * Copyright (C) 2009 Nokia Corporation and/or its subsidiary(-ies).
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file ghost/intern/GHOST_SystemX11.cpp
- *  \ingroup GHOST
+/** \file
+ * \ingroup GHOST
  */
 
 #include <X11/Xatom.h>
@@ -1119,7 +1110,7 @@ GHOST_SystemX11::processEvent(XEvent *xe)
 				}
 				else if (status == XLookupKeySym) {
 					/* this key doesn't have a text representation, it is a command
-					 * key of some sort */;
+					 * key of some sort */
 				}
 				else {
 					printf("Bad keycode lookup. Keysym 0x%x Status: %s\n",

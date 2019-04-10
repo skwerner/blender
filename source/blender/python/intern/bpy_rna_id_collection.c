@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,14 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * Contributor(s): Bastien Montagne
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/python/intern/bpy_rna_id_collection.c
- *  \ingroup pythonintern
+/** \file
+ * \ingroup pythonintern
  *
  * This file adds some helpers related to ID/Main handling, that cannot fit well in RNA itself.
  */
@@ -43,6 +37,9 @@
 /* Those folowing are only to support hack of not listing some internal 'backward' pointers in generated user_map... */
 #include "DNA_object_types.h"
 #include "DNA_key_types.h"
+
+#include "WM_api.h"
+#include "WM_types.h"
 
 #include "bpy_capi_utils.h"
 #include "bpy_rna_id_collection.h"
@@ -162,6 +159,8 @@ static PyObject *bpy_user_map(PyObject *UNUSED(self), PyObject *args, PyObject *
 #else
 	Main *bmain = G_MAIN;  /* XXX Ugly, but should work! */
 #endif
+	ListBase *lb;
+	ID *id;
 
 	PyObject *subset = NULL;
 
@@ -171,6 +170,8 @@ static PyObject *bpy_user_map(PyObject *UNUSED(self), PyObject *args, PyObject *
 	BLI_bitmap *val_types_bitmap = NULL;
 
 	PyObject *ret = NULL;
+
+	IDUserMapData data_cb = {NULL};
 
 	static const char *_keywords[] = {"subset", "key_types", "value_types", NULL};
 	static _PyArg_Parser _parser = {"|O$O!O!:user_map", _keywords, 0};
@@ -199,8 +200,6 @@ static PyObject *bpy_user_map(PyObject *UNUSED(self), PyObject *args, PyObject *
 		}
 	}
 
-	IDUserMapData data_cb = {NULL};
-
 	if (subset) {
 		PyObject *subset_fast = PySequence_Fast(subset, "user_map");
 		if (subset_fast == NULL) {
@@ -225,18 +224,17 @@ static PyObject *bpy_user_map(PyObject *UNUSED(self), PyObject *args, PyObject *
 
 	data_cb.types_bitmap = key_types_bitmap;
 
-	ListBase *lb_array[MAX_LIBARRAY];
-	int lb_index;
-	lb_index = set_listbasepointers(bmain, lb_array);
-
-	while (lb_index--) {
-		if (val_types_bitmap && lb_array[lb_index]->first) {
-			if (!id_check_type(lb_array[lb_index]->first, val_types_bitmap)) {
-				continue;
+	FOREACH_MAIN_LISTBASE_BEGIN(bmain, lb)
+	{
+		FOREACH_MAIN_LISTBASE_ID_BEGIN(lb, id)
+		{
+			/* We cannot skip here in case we have some filter on key types... */
+			if (key_types_bitmap == NULL && val_types_bitmap != NULL) {
+				if (!id_check_type(id, val_types_bitmap)) {
+					break;
+				}
 			}
-		}
 
-		for (ID *id = lb_array[lb_index]->first; id; id = id->next) {
 			/* One-time init, ID is just used as placeholder here, we abuse this in iterator callback
 			 * to avoid having to rebuild a complete bpyrna object each time for the key searching
 			 * (where only ID pointer value is used). */
@@ -244,7 +242,12 @@ static PyObject *bpy_user_map(PyObject *UNUSED(self), PyObject *args, PyObject *
 				data_cb.py_id_key_lookup_only = pyrna_id_CreatePyObject(id);
 			}
 
-			if (!data_cb.is_subset) {
+			if (!data_cb.is_subset &&
+			    /* We do not want to pre-add keys of flitered out types. */
+			    (key_types_bitmap == NULL || id_check_type(id, key_types_bitmap)) &&
+			    /* We do not want to pre-add keys when we have filter on value types, but not on key types. */
+			    (val_types_bitmap == NULL || key_types_bitmap != NULL))
+			{
 				PyObject *key = data_cb.py_id_key_lookup_only;
 				PyObject *set;
 
@@ -261,6 +264,10 @@ static PyObject *bpy_user_map(PyObject *UNUSED(self), PyObject *args, PyObject *
 				}
 			}
 
+			if (val_types_bitmap != NULL && !id_check_type(id, val_types_bitmap)) {
+				continue;
+			}
+
 			data_cb.id_curr = id;
 			BKE_library_foreach_ID_link(NULL, id, foreach_libblock_id_user_map_callback, &data_cb, IDWALK_CB_NOP);
 
@@ -269,25 +276,26 @@ static PyObject *bpy_user_map(PyObject *UNUSED(self), PyObject *args, PyObject *
 				data_cb.py_id_curr = NULL;
 			}
 		}
+		FOREACH_MAIN_LISTBASE_ID_END;
 	}
+	FOREACH_MAIN_LISTBASE_ID_END;
 
 	ret = data_cb.user_map;
 
-
 error:
+	if (data_cb.py_id_key_lookup_only != NULL) {
+		Py_XDECREF(data_cb.py_id_key_lookup_only);
+	}
 
-	Py_XDECREF(data_cb.py_id_key_lookup_only);
-
-	if (key_types_bitmap) {
+	if (key_types_bitmap != NULL) {
 		MEM_freeN(key_types_bitmap);
 	}
 
-	if (val_types_bitmap) {
+	if (val_types_bitmap != NULL) {
 		MEM_freeN(val_types_bitmap);
 	}
 
 	return ret;
-
 }
 
 PyDoc_STRVAR(bpy_batch_remove_doc,
@@ -351,6 +359,8 @@ static PyObject *bpy_batch_remove(PyObject *UNUSED(self), PyObject *args, PyObje
 		Py_DECREF(ids_fast);
 
 		BKE_id_multi_tagged_delete(bmain);
+		/* Force full redraw, mandatory to avoid crashes when running this from UI... */
+		WM_main_add_notifier(NC_WINDOW, NULL);
 	}
 	else {
 		goto error;

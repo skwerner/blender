@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,14 +15,10 @@
  *
  * The Original Code is Copyright (C) 2018 Blender Foundation.
  * All rights reserved.
- *
- * Contributor(s): Sergey Sharybin.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/blenkernel/intern/multires_reshape.c
- *  \ingroup bke
+/** \file
+ * \ingroup bke
  */
 
 #include "MEM_guardedalloc.h"
@@ -89,6 +83,9 @@ static void multires_reshape_allocate_displacement_grid(
 	const int grid_area = grid_size * grid_size;
 	float (*disps)[3] = MEM_calloc_arrayN(
 	        grid_area, 3 * sizeof(float), "multires disps");
+	if (displacement_grid->disps != NULL) {
+		MEM_freeN(displacement_grid->disps);
+	}
 	displacement_grid->disps = disps;
 	displacement_grid->totdisp = grid_area;
 	displacement_grid->level = level;
@@ -97,7 +94,7 @@ static void multires_reshape_allocate_displacement_grid(
 static void multires_reshape_ensure_displacement_grid(
         MDisps *displacement_grid, const int level)
 {
-	if (displacement_grid->disps != NULL) {
+	if (displacement_grid->disps != NULL && displacement_grid->level == level) {
 		return;
 	}
 	multires_reshape_allocate_displacement_grid(
@@ -864,7 +861,7 @@ static Subdiv *multires_create_subdiv_for_reshape(
 	Scene *scene_eval = DEG_get_evaluated_scene(depsgraph);
 	Object *object_eval = DEG_get_evaluated_object(depsgraph, object);
 	Mesh *deformed_mesh = mesh_get_eval_deform(
-	        depsgraph, scene_eval, object_eval, CD_MASK_BAREMESH);
+	        depsgraph, scene_eval, object_eval, &CD_MASK_BAREMESH);
 	SubdivSettings subdiv_settings;
 	BKE_multires_subdiv_settings_init(&subdiv_settings, mmd);
 	Subdiv *subdiv = BKE_subdiv_new_from_mesh(&subdiv_settings, deformed_mesh);
@@ -968,7 +965,7 @@ bool multiresModifier_reshapeFromObject(
 	Scene *scene_eval = DEG_get_evaluated_scene(depsgraph);
 	Object *src_eval = DEG_get_evaluated_object(depsgraph, src);
 	Mesh *src_mesh_eval = mesh_get_eval_final(
-	        depsgraph, scene_eval, src_eval, CD_MASK_BAREMESH);
+	        depsgraph, scene_eval, src_eval, &CD_MASK_BAREMESH);
 	int num_deformed_verts;
 	float (*deformed_verts)[3] = BKE_mesh_vertexCos_get(
 	        src_mesh_eval, &num_deformed_verts);

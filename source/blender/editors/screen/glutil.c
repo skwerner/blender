@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,14 +15,10 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * Contributor(s): Blender Foundation
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/screen/glutil.c
- *  \ingroup edscr
+/** \file
+ * \ingroup edscr
  */
 
 
@@ -36,13 +30,11 @@
 #include "DNA_userdef_types.h"
 #include "DNA_vec_types.h"
 
-#include "BLI_rect.h"
 #include "BLI_utildefines.h"
 #include "BLI_math.h"
 
 #include "BKE_context.h"
 
-#include "BIF_gl.h"
 #include "BIF_glutil.h"
 
 #include "IMB_colormanagement.h"
@@ -55,21 +47,6 @@
 #include "UI_interface.h"
 
 /* ******************************************** */
-
-void setlinestyle(int nr)
-{
-	if (nr == 0) {
-		GPU_line_stipple(false);
-	}
-	else {
-
-		GPU_line_stipple(true);
-		if (U.pixelsize > 1.0f)
-			glLineStipple(nr, 0xCCCC);
-		else
-			glLineStipple(nr, 0xAAAA);
-	}
-}
 
 /* Invert line handling */
 
@@ -309,6 +286,13 @@ void immDrawPixelsTexScaled_clipping(IMMDrawPixelsTexState *state,
 			immAttr2f(texco, (float)(0 + offset_left) / tex_w, (float)(subpart_h - offset_top) / tex_h);
 			immVertex2f(pos, rast_x + (float)offset_left * xzoom, rast_y + (float)(subpart_h - offset_top) * yzoom * scaleY);
 			immEnd();
+
+			/* NOTE: Weirdly enough this is only required on macOS. Without this there is some sort of
+			 * bleeding of data is happening from tiles which are drawn later on.
+			 * This doesn't seem to be too slow, but still would be nice to have fast and nice solution. */
+#ifdef __APPLE__
+			GPU_flush();
+#endif
 		}
 	}
 
@@ -349,6 +333,34 @@ void immDrawPixelsTex_clipping(IMMDrawPixelsTexState *state,
 
 /* *************** glPolygonOffset hack ************* */
 
+float bglPolygonOffsetCalc(const float winmat[16], float viewdist, float dist)
+{
+	if (winmat[15] > 0.5f) {
+#if 1
+		return 0.00001f * dist * viewdist;  // ortho tweaking
+#else
+		static float depth_fac = 0.0f;
+		if (depth_fac == 0.0f) {
+			int depthbits;
+			glGetIntegerv(GL_DEPTH_BITS, &depthbits);
+			depth_fac = 1.0f / (float)((1 << depthbits) - 1);
+		}
+		offs = (-1.0 / winmat[10]) * dist * depth_fac;
+
+		UNUSED_VARS(viewdist);
+#endif
+	}
+	else {
+		/* This adjustment effectively results in reducing the Z value by 0.25%.
+		 *
+		 * winmat[14] actually evaluates to `-2 * far * near / (far - near)`,
+		 * is very close to -0.2 with default clip range, and is used as the coefficient multiplied by `w / z`,
+		 * thus controlling the z dependent part of the depth value.
+		 */
+		return winmat[14] * -0.0025f * dist;
+	}
+}
+
 /**
  * \note \a viewdist is only for ortho at the moment.
  */
@@ -357,8 +369,6 @@ void bglPolygonOffset(float viewdist, float dist)
 	static float winmat[16], offset = 0.0f;
 
 	if (dist != 0.0f) {
-		float offs;
-
 		// glEnable(GL_POLYGON_OFFSET_FILL);
 		// glPolygonOffset(-1.0, -1.0);
 
@@ -367,30 +377,7 @@ void bglPolygonOffset(float viewdist, float dist)
 
 		/* dist is from camera to center point */
 
-		if (winmat[15] > 0.5f) {
-#if 1
-			offs = 0.00001f * dist * viewdist;  // ortho tweaking
-#else
-			static float depth_fac = 0.0f;
-			if (depth_fac == 0.0f) {
-				int depthbits;
-				glGetIntegerv(GL_DEPTH_BITS, &depthbits);
-				depth_fac = 1.0f / (float)((1 << depthbits) - 1);
-			}
-			offs = (-1.0 / winmat[10]) * dist * depth_fac;
-
-			UNUSED_VARS(viewdist);
-#endif
-		}
-		else {
-			/* This adjustment effectively results in reducing the Z value by 0.25%.
-			 *
-			 * winmat[14] actually evaluates to `-2 * far * near / (far - near)`,
-			 * is very close to -0.2 with default clip range, and is used as the coefficient multiplied by `w / z`,
-			 * thus controlling the z dependent part of the depth value.
-			 */
-			offs = winmat[14] * -0.0025f * dist;
-		}
+		float offs = bglPolygonOffsetCalc(winmat, viewdist, dist);
 
 		winmat[14] -= offs;
 		offset += offs;

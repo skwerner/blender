@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,12 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/makesrna/intern/rna_workspace_api.c
- *  \ingroup RNA
+/** \file
+ * \ingroup RNA
  */
 
 
@@ -45,7 +41,7 @@
 
 #include "ED_screen.h"
 
-static void rna_WorkspaceTool_setup(
+static void rna_WorkSpaceTool_setup(
         ID *id,
         bToolRef *tref,
         bContext *C,
@@ -70,7 +66,7 @@ static void rna_WorkspaceTool_setup(
 	WM_toolsystem_ref_set_from_runtime(C, (WorkSpace *)id, tref, &tref_rt, name);
 }
 
-static void rna_WorkspaceTool_refresh_from_context(
+static void rna_WorkSpaceTool_refresh_from_context(
         ID *id,
         bToolRef *tref,
         Main *bmain)
@@ -78,7 +74,7 @@ static void rna_WorkspaceTool_refresh_from_context(
 	WM_toolsystem_ref_sync_from_context(bmain, (WorkSpace *)id, tref);
 }
 
-static PointerRNA rna_WorkspaceTool_operator_properties(
+static PointerRNA rna_WorkSpaceTool_operator_properties(
         bToolRef *tref,
         ReportList *reports,
         const char *idname)
@@ -96,7 +92,7 @@ static PointerRNA rna_WorkspaceTool_operator_properties(
 	return PointerRNA_NULL;
 }
 
-static PointerRNA rna_WorkspaceTool_gizmo_group_properties(
+static PointerRNA rna_WorkSpaceTool_gizmo_group_properties(
         bToolRef *tref,
         ReportList *reports,
         const char *idname)
@@ -133,11 +129,11 @@ void RNA_api_workspace_tool(StructRNA *srna)
 	PropertyRNA *parm;
 	FunctionRNA *func;
 
-	func = RNA_def_function(srna, "setup", "rna_WorkspaceTool_setup");
+	func = RNA_def_function(srna, "setup", "rna_WorkSpaceTool_setup");
 	RNA_def_function_flag(func, FUNC_USE_SELF_ID | FUNC_USE_CONTEXT);
 	RNA_def_function_ui_description(func, "Set the tool settings");
 
-	parm = RNA_def_string(func, "name", NULL, KMAP_MAX_NAME, "Name", "");
+	parm = RNA_def_string(func, "idname", NULL, MAX_NAME, "Identifier", "");
 	RNA_def_parameter_flags(parm, 0, PARM_REQUIRED);
 
 	/* 'bToolRef_Runtime' */
@@ -150,7 +146,7 @@ void RNA_api_workspace_tool(StructRNA *srna)
 	RNA_def_int(func, "index", 0, INT_MIN, INT_MAX, "Index", "", INT_MIN, INT_MAX);
 
 	/* Access tool operator options (optionally create). */
-	func = RNA_def_function(srna, "operator_properties", "rna_WorkspaceTool_operator_properties");
+	func = RNA_def_function(srna, "operator_properties", "rna_WorkSpaceTool_operator_properties");
 	RNA_def_function_flag(func, FUNC_USE_REPORTS);
 	parm = RNA_def_string(func, "operator", NULL, 0, "", "");
 	RNA_def_parameter_flags(parm, 0, PARM_REQUIRED);
@@ -160,7 +156,7 @@ void RNA_api_workspace_tool(StructRNA *srna)
 	RNA_def_function_return(func, parm);
 
 	/* Access gizmo-group options (optionally create). */
-	func = RNA_def_function(srna, "gizmo_group_properties", "rna_WorkspaceTool_gizmo_group_properties");
+	func = RNA_def_function(srna, "gizmo_group_properties", "rna_WorkSpaceTool_gizmo_group_properties");
 	RNA_def_function_flag(func, FUNC_USE_REPORTS);
 	parm = RNA_def_string(func, "group", NULL, 0, "", "");
 	RNA_def_parameter_flags(parm, 0, PARM_REQUIRED);
@@ -169,7 +165,7 @@ void RNA_api_workspace_tool(StructRNA *srna)
 	RNA_def_parameter_flags(parm, PROP_NEVER_NULL, PARM_RNAPTR);
 	RNA_def_function_return(func, parm);
 
-	func = RNA_def_function(srna, "refresh_from_context", "rna_WorkspaceTool_refresh_from_context");
+	func = RNA_def_function(srna, "refresh_from_context", "rna_WorkSpaceTool_refresh_from_context");
 	RNA_def_function_flag(func, FUNC_USE_SELF_ID | FUNC_USE_MAIN);
 }
 

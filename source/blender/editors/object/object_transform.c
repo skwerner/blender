@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,14 +15,10 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * Contributor(s): Blender Foundation, 2002-2008 full recode
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/object/object_transform.c
- *  \ingroup edobj
+/** \file
+ * \ingroup edobj
  */
 
 
@@ -35,7 +29,7 @@
 #include "DNA_armature_types.h"
 #include "DNA_mesh_types.h"
 #include "DNA_meta_types.h"
-#include "DNA_lamp_types.h"
+#include "DNA_light_types.h"
 #include "DNA_object_types.h"
 #include "DNA_scene_types.h"
 #include "DNA_gpencil_types.h"
@@ -228,15 +222,15 @@ static void object_clear_scale(Object *ob, const bool clear_delta)
 {
 	/* clear scale factors which are not locked */
 	if ((ob->protectflag & OB_LOCK_SCALEX) == 0) {
-		ob->size[0] = 1.0f;
+		ob->scale[0] = 1.0f;
 		if (clear_delta) ob->dscale[0] = 1.0f;
 	}
 	if ((ob->protectflag & OB_LOCK_SCALEY) == 0) {
-		ob->size[1] = 1.0f;
+		ob->scale[1] = 1.0f;
 		if (clear_delta) ob->dscale[1] = 1.0f;
 	}
 	if ((ob->protectflag & OB_LOCK_SCALEZ) == 0) {
-		ob->size[2] = 1.0f;
+		ob->scale[2] = 1.0f;
 		if (clear_delta) ob->dscale[2] = 1.0f;
 	}
 }
@@ -414,7 +408,7 @@ static void ignore_parent_tx(const bContext *C, Main *bmain, Scene *scene, Objec
 	Depsgraph *depsgraph = CTX_data_depsgraph(C);
 
 	/* a change was made, adjust the children to compensate */
-	for (ob_child = bmain->object.first; ob_child; ob_child = ob_child->id.next) {
+	for (ob_child = bmain->objects.first; ob_child; ob_child = ob_child->id.next) {
 		if (ob_child->parent == ob) {
 			BKE_object_apply_mat4(ob_child, ob_child->obmat, true, false);
 			BKE_object_workob_calc_parent(depsgraph, scene, ob_child, &workob);
@@ -516,7 +510,7 @@ static int apply_objects_internal(
 		}
 
 		if (ob->type == OB_LAMP) {
-			Lamp *la = ob->data;
+			Light *la = ob->data;
 			if (la->type == LA_AREA) {
 				if (apply_rot || apply_loc) {
 					BKE_reportf(reports, RPT_ERROR,
@@ -636,7 +630,7 @@ static int apply_objects_internal(
 				continue;
 
 			if (apply_scale)
-				BKE_tracking_reconstruction_scale(&clip->tracking, ob->size);
+				BKE_tracking_reconstruction_scale(&clip->tracking, ob->scale);
 		}
 		else if (ob->type == OB_EMPTY) {
 			/* It's possible for empties too, even though they don't
@@ -655,12 +649,12 @@ static int apply_objects_internal(
 			    (apply_rot == false) &&
 			    (apply_scale == true))
 			{
-				float max_scale = max_fff(fabsf(ob->size[0]), fabsf(ob->size[1]), fabsf(ob->size[2]));
+				float max_scale = max_fff(fabsf(ob->scale[0]), fabsf(ob->scale[1]), fabsf(ob->scale[2]));
 				ob->empty_drawsize *= max_scale;
 			}
 		}
 		else if (ob->type == OB_LAMP) {
-			Lamp *la = ob->data;
+			Light *la = ob->data;
 			if (la->type != LA_AREA) {
 				continue;
 			}
@@ -686,7 +680,7 @@ static int apply_objects_internal(
 		if (apply_loc)
 			zero_v3(ob->loc);
 		if (apply_scale)
-			ob->size[0] = ob->size[1] = ob->size[2] = 1.0f;
+			ob->scale[0] = ob->scale[1] = ob->scale[2] = 1.0f;
 		if (apply_rot) {
 			zero_v3(ob->rot);
 			unit_qt(ob->quat);
@@ -786,9 +780,9 @@ void OBJECT_OT_transform_apply(wmOperatorType *ot)
 	/* flags */
 	ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
 
-	RNA_def_boolean(ot->srna, "location", 0, "Location", "");
-	RNA_def_boolean(ot->srna, "rotation", 0, "Rotation", "");
-	RNA_def_boolean(ot->srna, "scale", 0, "Scale", "");
+	RNA_def_boolean(ot->srna, "location", true, "Location", "");
+	RNA_def_boolean(ot->srna, "rotation", true, "Rotation", "");
+	RNA_def_boolean(ot->srna, "scale", true, "Scale", "");
 	RNA_def_boolean(ot->srna, "properties", true, "Apply Properties",
 	                "Modify properties such as curve vertex radius, font size and bone envelope");
 }
@@ -849,7 +843,7 @@ static int object_origin_set_exec(bContext *C, wmOperator *op)
 	if (obedit) {
 		if (obedit->type == OB_MESH) {
 			Mesh *me = obedit->data;
-			BMEditMesh *em = me->edit_btmesh;
+			BMEditMesh *em = me->edit_mesh;
 			BMVert *eve;
 			BMIter iter;
 
@@ -907,11 +901,11 @@ static int object_origin_set_exec(bContext *C, wmOperator *op)
 		BLI_listbase_rotate_first(&ctx_data_list, (LinkData *)ctx_ob_act);
 	}
 
-	for (tob = bmain->object.first; tob; tob = tob->id.next) {
+	for (tob = bmain->objects.first; tob; tob = tob->id.next) {
 		if (tob->data)
 			((ID *)tob->data)->tag &= ~LIB_TAG_DOIT;
-		if (tob->dup_group)
-			((ID *)tob->dup_group)->tag &= ~LIB_TAG_DOIT;
+		if (tob->instance_collection)
+			((ID *)tob->instance_collection)->tag &= ~LIB_TAG_DOIT;
 	}
 
 	for (ctx_ob = ctx_data_list.first;
@@ -932,8 +926,8 @@ static int object_origin_set_exec(bContext *C, wmOperator *op)
 
 			if (ob->data == NULL) {
 				/* special support for dupligroups */
-				if ((ob->transflag & OB_DUPLICOLLECTION) && ob->dup_group && (ob->dup_group->id.tag & LIB_TAG_DOIT) == 0) {
-					if (ID_IS_LINKED(ob->dup_group)) {
+				if ((ob->transflag & OB_DUPLICOLLECTION) && ob->instance_collection && (ob->instance_collection->id.tag & LIB_TAG_DOIT) == 0) {
+					if (ID_IS_LINKED(ob->instance_collection)) {
 						tot_lib_error++;
 					}
 					else {
@@ -950,10 +944,10 @@ static int object_origin_set_exec(bContext *C, wmOperator *op)
 							mul_m4_v3(ob->imat, cent);
 						}
 
-						add_v3_v3(ob->dup_group->dupli_ofs, cent);
+						add_v3_v3(ob->instance_collection->instance_offset, cent);
 
 						tot_change++;
-						ob->dup_group->id.tag |= LIB_TAG_DOIT;
+						ob->instance_collection->id.tag |= LIB_TAG_DOIT;
 						do_inverse_offset = true;
 					}
 				}
@@ -1018,7 +1012,7 @@ static int object_origin_set_exec(bContext *C, wmOperator *op)
 
 				Curve *cu = ob->data;
 
-				if (ob->bb == NULL && (centermode != ORIGIN_TO_CURSOR)) {
+				if (ob->runtime.bb == NULL && (centermode != ORIGIN_TO_CURSOR)) {
 					/* do nothing*/
 				}
 				else {
@@ -1027,8 +1021,8 @@ static int object_origin_set_exec(bContext *C, wmOperator *op)
 					}
 					else {
 						/* extra 0.5 is the height o above line */
-						cent[0] = 0.5f * (ob->bb->vec[4][0] + ob->bb->vec[0][0]);
-						cent[1] = 0.5f * (ob->bb->vec[0][1] + ob->bb->vec[2][1]);
+						cent[0] = 0.5f * (ob->runtime.bb->vec[4][0] + ob->runtime.bb->vec[0][0]);
+						cent[1] = 0.5f * (ob->runtime.bb->vec[0][1] + ob->runtime.bb->vec[2][1]);
 					}
 
 					cent[2] = 0.0f;
@@ -1134,7 +1128,7 @@ static int object_origin_set_exec(bContext *C, wmOperator *op)
 						float inverse_diff_mat[4][4];
 
 						/* recalculate all strokes
-						 * (all layers are considered without evaluating lock attributtes) */
+						 * (all layers are considered without evaluating lock attributes) */
 						for (bGPDlayer *gpl = gpd->layers.first; gpl; gpl = gpl->next) {
 							/* calculate difference matrix */
 							ED_gpencil_parent_location(depsgraph, obact, gpd, gpl, diff_mat);
@@ -1204,7 +1198,7 @@ static int object_origin_set_exec(bContext *C, wmOperator *op)
 
 					if ((ob_other->flag & OB_DONE) == 0 &&
 					    ((ob->data && (ob->data == ob_other->data)) ||
-					     (ob->dup_group == ob_other->dup_group &&
+					     (ob->instance_collection == ob_other->instance_collection &&
 					      (ob->transflag | ob_other->transflag) & OB_DUPLICOLLECTION)))
 					{
 						ob_other->flag |= OB_DONE;
@@ -1227,7 +1221,7 @@ static int object_origin_set_exec(bContext *C, wmOperator *op)
 	}
 	BLI_freelistN(&ctx_data_list);
 
-	for (tob = bmain->object.first; tob; tob = tob->id.next) {
+	for (tob = bmain->objects.first; tob; tob = tob->id.next) {
 		if (tob->data && (((ID *)tob->data)->tag & LIB_TAG_DOIT)) {
 			BKE_object_batch_cache_dirty_tag(tob);
 			DEG_id_tag_update(&tob->id, ID_RECALC_TRANSFORM | ID_RECALC_GEOMETRY);
@@ -1263,13 +1257,13 @@ void OBJECT_OT_origin_set(wmOperatorType *ot)
 		 "Calculate the center of mass from the surface area"},
 		{ORIGIN_TO_CENTER_OF_MASS_VOLUME, "ORIGIN_CENTER_OF_VOLUME", 0, "Origin to Center of Mass (Volume)",
 		 "Calculate the center of mass from the volume (must be manifold geometry with consistent normals)"},
-		{0, NULL, 0, NULL, NULL}
+		{0, NULL, 0, NULL, NULL},
 	};
 
 	static const EnumPropertyItem prop_set_bounds_types[] = {
 		{V3D_AROUND_CENTER_MEDIAN, "MEDIAN", 0, "Median Center", ""},
 		{V3D_AROUND_CENTER_BOUNDS, "BOUNDS", 0, "Bounds Center", ""},
-		{0, NULL, 0, NULL, NULL}
+		{0, NULL, 0, NULL, NULL},
 	};
 
 	/* identifiers */
@@ -1291,17 +1285,16 @@ void OBJECT_OT_origin_set(wmOperatorType *ot)
 }
 
 /* -------------------------------------------------------------------- */
-
 /** \name Transform Axis Target
  *
- * Note this is an experemental operator to point lamps/cameras at objects.
+ * Note this is an experemental operator to point lights/cameras at objects.
  * We may re-work how this behaves based on user feedback.
  * - campbell.
  * \{ */
 
 /* When using multiple objects, apply their relative rotational offset to the active object. */
 #define USE_RELATIVE_ROTATION
-/* Disable overlays, ignoring user setting (lamp wire gets in the way). */
+/* Disable overlays, ignoring user setting (light wire gets in the way). */
 #define USE_RENDER_OVERRIDE
 /* Calculate a depth if the cursor isn't already over a depth (not essential but feels buggy without). */
 #define USE_FAKE_DEPTH_INIT
@@ -1368,12 +1361,12 @@ static void object_transform_axis_target_calc_depth_init(struct XFormAxisData *x
 static bool object_is_target_compat(const Object *ob)
 {
 	if (ob->type == OB_LAMP) {
-		const Lamp *la = ob->data;
+		const Light *la = ob->data;
 		if (ELEM(la->type, LA_SUN, LA_SPOT, LA_AREA)) {
 			return true;
 		}
 	}
-	/* We might want to enable this later, for now just lamps */
+	/* We might want to enable this later, for now just lights. */
 #if 0
 	else if (ob->type == OB_CAMERA) {
 		return true;
@@ -1409,10 +1402,10 @@ static void object_apply_rotation(Object *ob, const float rmat[3][3])
 	float rmat4[4][4];
 	copy_m4_m3(rmat4, rmat);
 
-	copy_v3_v3(size, ob->size);
+	copy_v3_v3(size, ob->scale);
 	copy_v3_v3(loc, ob->loc);
 	BKE_object_apply_mat4(ob, rmat4, true, true);
-	copy_v3_v3(ob->size, size);
+	copy_v3_v3(ob->scale, size);
 	copy_v3_v3(ob->loc, loc);
 }
 /* We may want to extract this to: BKE_object_apply_location */
@@ -1475,7 +1468,7 @@ static int object_transform_axis_target_invoke(bContext *C, wmOperator *op, cons
 
 #ifdef USE_RENDER_OVERRIDE
 	int flag2_prev = vc.v3d->flag2;
-	vc.v3d->flag2 |= V3D_RENDER_OVERRIDE;
+	vc.v3d->flag2 |= V3D_HIDE_OVERLAYS;
 #endif
 
 	ED_view3d_autodist_init(vc.depsgraph, vc.ar, vc.v3d, 0);

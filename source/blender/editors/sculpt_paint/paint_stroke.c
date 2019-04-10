@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,17 +15,10 @@
  *
  * The Original Code is Copyright (C) 2009 by Nicholas Bishop
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): Jason Wilkins, Tom Musgrove.
- *
- * ***** END GPL LICENSE BLOCK *****
- *
  */
 
-/** \file blender/editors/sculpt_paint/paint_stroke.c
- *  \ingroup edsculpt
+/** \file
+ * \ingroup edsculpt
  */
 
 
@@ -58,8 +49,6 @@
 #include "WM_api.h"
 #include "WM_types.h"
 
-#include "BIF_gl.h"
-#include "BIF_glutil.h"
 
 #include "GPU_immediate.h"
 #include "GPU_state.h"
@@ -819,9 +808,9 @@ static void stroke_done(struct bContext *C, struct wmOperator *op)
 
 	if (stroke->timer) {
 		WM_event_remove_timer(
-			CTX_wm_manager(C),
-			CTX_wm_window(C),
-			stroke->timer);
+		        CTX_wm_manager(C),
+		        CTX_wm_window(C),
+		        stroke->timer);
 	}
 
 	if (stroke->rng) {
@@ -1374,6 +1363,11 @@ void *paint_stroke_mode_data(struct PaintStroke *stroke)
 bool paint_stroke_flipped(struct PaintStroke *stroke)
 {
 	return stroke->pen_flip;
+}
+
+bool paint_stroke_inverted(struct PaintStroke *stroke)
+{
+	return stroke->stroke_mode == BRUSH_STROKE_INVERT;
 }
 
 float paint_stroke_distance_get(struct PaintStroke *stroke)

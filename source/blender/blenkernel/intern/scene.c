@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,10 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/blenkernel/intern/scene.c
- *  \ingroup bke
+/** \file
+ * \ingroup bke
  */
 
 
@@ -73,7 +65,6 @@
 #include "BKE_editmesh.h"
 #include "BKE_fcurve.h"
 #include "BKE_freestyle.h"
-#include "BKE_global.h"
 #include "BKE_gpencil.h"
 #include "BKE_icons.h"
 #include "BKE_idprop.h"
@@ -236,7 +227,7 @@ void BKE_toolsettings_free(ToolSettings *toolsettings)
 
 /**
  * Only copy internal data of Scene ID from source to already allocated/initialized destination.
- * You probably nerver want to use that directly, use id_copy or BKE_id_copy_ex for typical needs.
+ * You probably never want to use that directly, use BKE_id_copy or BKE_id_copy_ex for typical needs.
  *
  * WARNING! This function will not handle ID user count!
  *
@@ -273,7 +264,7 @@ void BKE_scene_copy_data(Main *bmain, Scene *sce_dst, const Scene *sce_src, cons
 	if (sce_src->nodetree) {
 		/* Note: nodetree is *not* in bmain, however this specific case is handled at lower level
 		 *       (see BKE_libblock_copy_ex()). */
-		BKE_id_copy_ex(bmain, (ID *)sce_src->nodetree, (ID **)&sce_dst->nodetree, flag, false);
+		BKE_id_copy_ex(bmain, (ID *)sce_src->nodetree, (ID **)&sce_dst->nodetree, flag);
 		BKE_libblock_relink_ex(bmain, sce_dst->nodetree, (void *)(&sce_src->id), &sce_dst->id, false);
 	}
 
@@ -327,6 +318,7 @@ void BKE_scene_copy_data(Main *bmain, Scene *sce_dst, const Scene *sce_src, cons
 	}
 
 	sce_dst->eevee.light_cache = NULL;
+	sce_dst->eevee.light_cache_info[0] = '\0';
 	/* TODO Copy the cache. */
 }
 
@@ -348,6 +340,9 @@ Scene *BKE_scene_copy(Main *bmain, Scene *sce, int type)
 		sce_copy->unit = sce->unit;
 		sce_copy->physics_settings = sce->physics_settings;
 		sce_copy->audio = sce->audio;
+		sce_copy->eevee = sce->eevee;
+		sce_copy->eevee.light_cache = NULL;
+		sce_copy->eevee.light_cache_info[0] = '\0';
 
 		if (sce->id.properties)
 			sce_copy->id.properties = IDP_CopyProperty(sce->id.properties);
@@ -396,7 +391,7 @@ Scene *BKE_scene_copy(Main *bmain, Scene *sce, int type)
 		return sce_copy;
 	}
 	else {
-		BKE_id_copy_ex(bmain, (ID *)sce, (ID **)&sce_copy, LIB_ID_COPY_ACTIONS, false);
+		BKE_id_copy_ex(bmain, (ID *)sce, (ID **)&sce_copy, LIB_ID_COPY_ACTIONS);
 		id_us_min(&sce_copy->id);
 		id_us_ensure_real(&sce_copy->id);
 
@@ -408,8 +403,11 @@ Scene *BKE_scene_copy(Main *bmain, Scene *sce, int type)
 				for (FreestyleLineSet *lineset = view_layer_dst->freestyle_config.linesets.first; lineset; lineset = lineset->next) {
 					if (lineset->linestyle) {
 						id_us_min(&lineset->linestyle->id);
-						/* XXX Not copying anim/actions here? */
-						BKE_id_copy_ex(bmain, (ID *)lineset->linestyle, (ID **)&lineset->linestyle, 0, false);
+						BKE_id_copy_ex(
+						            bmain,
+						            (ID *)lineset->linestyle,
+						            (ID **)&lineset->linestyle,
+						            LIB_ID_COPY_ACTIONS);
 					}
 				}
 			}
@@ -417,17 +415,13 @@ Scene *BKE_scene_copy(Main *bmain, Scene *sce, int type)
 			/* Full copy of world (included animations) */
 			if (sce_copy->world) {
 				id_us_min(&sce_copy->world->id);
-				BKE_id_copy_ex(bmain, (ID *)sce_copy->world, (ID **)&sce_copy->world, LIB_ID_COPY_ACTIONS, false);
+				BKE_id_copy_ex(bmain, (ID *)sce_copy->world, (ID **)&sce_copy->world, LIB_ID_COPY_ACTIONS);
 			}
 
-			/* Collections */
-			BKE_collection_copy_full(bmain, sce_copy->master_collection);
-
 			/* Full copy of GreasePencil. */
-			/* XXX Not copying anim/actions here? */
 			if (sce_copy->gpd) {
 				id_us_min(&sce_copy->gpd->id);
-				BKE_id_copy_ex(bmain, (ID *)sce_copy->gpd, (ID **)&sce_copy->gpd, 0, false);
+				BKE_id_copy_ex(bmain, (ID *)sce_copy->gpd, (ID **)&sce_copy->gpd, LIB_ID_COPY_ACTIONS);
 			}
 		}
 		else {
@@ -437,14 +431,8 @@ Scene *BKE_scene_copy(Main *bmain, Scene *sce, int type)
 			BKE_sequencer_editing_free(sce_copy, true);
 		}
 
-		/* NOTE: part of SCE_COPY_LINK_DATA and SCE_COPY_FULL operations
+		/* NOTE: part of SCE_COPY_FULL operations
 		 * are done outside of blenkernel with ED_object_single_users! */
-
-		/*  camera */
-		/* XXX This is most certainly useless? Object have not yet been duplicated... */
-		if (ELEM(type, SCE_COPY_LINK_DATA, SCE_COPY_FULL)) {
-			ID_NEW_REMAP(sce_copy->camera);
-		}
 
 		return sce_copy;
 	}
@@ -552,9 +540,12 @@ void BKE_scene_init(Scene *sce)
 	SceneRenderView *srv;
 	CurveMapping *mblur_shutter_curve;
 
-	BLI_assert(MEMCMP_STRUCT_OFS_IS_ZERO(sce, id));
+	BLI_assert(MEMCMP_STRUCT_AFTER_IS_ZERO(sce, id));
 
-	unit_qt(sce->cursor.rotation);
+
+	sce->cursor.rotation_mode = ROT_MODE_XYZ;
+	sce->cursor.rotation_quaternion[0] = 1.0f;
+	sce->cursor.rotation_axis[1] = 1.0f;
 
 	sce->r.mode = R_OSA;
 	sce->r.cfra = 1;
@@ -733,7 +724,7 @@ void BKE_scene_init(Scene *sce)
 	pset->emitterdist = 0.25f;
 	pset->totrekey = 5;
 	pset->totaddkey = 5;
-	pset->brushtype = PE_BRUSH_NONE;
+	pset->brushtype = PE_BRUSH_COMB;
 	pset->draw_step = 2;
 	pset->fade_frames = 2;
 	pset->selectmode = SCE_SELECT_PATH;
@@ -782,9 +773,22 @@ void BKE_scene_init(Scene *sce)
 
 	BKE_color_managed_display_settings_init(&sce->display_settings);
 	BKE_color_managed_view_settings_init_render(&sce->view_settings,
-	                                            &sce->display_settings);
+	                                            &sce->display_settings,
+	                                            "Filmic");
 	BLI_strncpy(sce->sequencer_colorspace_settings.name, colorspace_name,
 	            sizeof(sce->sequencer_colorspace_settings.name));
+
+	/* Those next two sets (render and baking settings) are not currently in use,
+	 * but are exposed to RNA API and hence must have valid data. */
+	BKE_color_managed_display_settings_init(&sce->r.im_format.display_settings);
+	BKE_color_managed_view_settings_init_render(&sce->r.im_format.view_settings,
+	                                            &sce->r.im_format.display_settings,
+	                                            "Filmic");
+
+	BKE_color_managed_display_settings_init(&sce->r.bake.im_format.display_settings);
+	BKE_color_managed_view_settings_init_render(&sce->r.bake.im_format.view_settings,
+	                                            &sce->r.bake.im_format.display_settings,
+	                                            "Filmic");
 
 	/* Safe Areas */
 	copy_v2_fl2(sce->safe_areas.title, 10.0f / 100.0f, 5.0f / 100.0f);
@@ -1004,7 +1008,7 @@ void BKE_scene_set_background(Main *bmain, Scene *scene)
 	BKE_scene_validate_setscene(bmain, scene);
 
 	/* deselect objects (for dataselect) */
-	for (ob = bmain->object.first; ob; ob = ob->id.next)
+	for (ob = bmain->objects.first; ob; ob = ob->id.next)
 		ob->flag &= ~SELECT;
 
 	/* copy layers and flags from bases to objects */
@@ -1103,10 +1107,10 @@ int BKE_scene_base_iter_next(Depsgraph *depsgraph, SceneBaseIter *iter,
 			else {
 				if (iter->phase != F_DUPLI) {
 					if (depsgraph && (*base)->object->transflag & OB_DUPLI) {
-						/* collections cannot be duplicated for mballs yet,
+						/* collections cannot be duplicated for metaballs yet,
 						 * this enters eternal loop because of
 						 * makeDispListMBall getting called inside of collection_duplilist */
-						if ((*base)->object->dup_group == NULL) {
+						if ((*base)->object->instance_collection == NULL) {
 							iter->duplilist = object_duplilist(depsgraph, (*scene), (*base)->object);
 
 							iter->dupob = iter->duplilist->first;
@@ -1161,7 +1165,7 @@ int BKE_scene_base_iter_next(Depsgraph *depsgraph, SceneBaseIter *iter,
 
 Scene *BKE_scene_find_from_collection(const Main *bmain, const Collection *collection)
 {
-	for (Scene *scene = bmain->scene.first; scene; scene = scene->id.next) {
+	for (Scene *scene = bmain->scenes.first; scene; scene = scene->id.next) {
 		for (ViewLayer *layer = scene->view_layers.first; layer; layer = layer->next) {
 			if (BKE_view_layer_has_collection(layer, collection)) {
 				return scene;
@@ -1297,7 +1301,7 @@ bool BKE_scene_validate_setscene(Main *bmain, Scene *sce)
 	int a, totscene;
 
 	if (sce->set == NULL) return true;
-	totscene = BLI_listbase_count(&bmain->scene);
+	totscene = BLI_listbase_count(&bmain->scenes);
 
 	for (a = 0, sce_iter = sce; sce_iter->set; sce_iter = sce_iter->set, a++) {
 		/* more iterations than scenes means we have a cycle */
@@ -1366,19 +1370,19 @@ TransformOrientationSlot *BKE_scene_orientation_slot_get(Scene *scene, int flag)
 /**
  * Activate a transform orientation in a 3D view based on an enum value.
  *
- * \param orientation: If this is #V3D_MANIP_CUSTOM or greater, the custom transform orientation
- * with index \a orientation - #V3D_MANIP_CUSTOM gets activated.
+ * \param orientation: If this is #V3D_ORIENT_CUSTOM or greater, the custom transform orientation
+ * with index \a orientation - #V3D_ORIENT_CUSTOM gets activated.
  */
 void BKE_scene_orientation_slot_set_index(TransformOrientationSlot *orient_slot, int orientation)
 {
-	const bool is_custom = orientation >= V3D_MANIP_CUSTOM;
-	orient_slot->type = is_custom ? V3D_MANIP_CUSTOM : orientation;
-	orient_slot->index_custom = is_custom ? (orientation - V3D_MANIP_CUSTOM) : -1;
+	const bool is_custom = orientation >= V3D_ORIENT_CUSTOM;
+	orient_slot->type = is_custom ? V3D_ORIENT_CUSTOM : orientation;
+	orient_slot->index_custom = is_custom ? (orientation - V3D_ORIENT_CUSTOM) : -1;
 }
 
 int BKE_scene_orientation_slot_get_index(const TransformOrientationSlot *orient_slot)
 {
-	return (orient_slot->type == V3D_MANIP_CUSTOM) ? (orient_slot->type + orient_slot->index_custom) : orient_slot->type;
+	return (orient_slot->type == V3D_ORIENT_CUSTOM) ? (orient_slot->type + orient_slot->index_custom) : orient_slot->type;
 }
 
 /** \} */
@@ -1399,11 +1403,11 @@ int BKE_scene_orientation_slot_get_index(const TransformOrientationSlot *orient_
 static void scene_armature_depsgraph_workaround(Main *bmain, Depsgraph *depsgraph)
 {
 	Object *ob;
-	if (BLI_listbase_is_empty(&bmain->armature) || !DEG_id_type_updated(depsgraph, ID_OB)) {
+	if (BLI_listbase_is_empty(&bmain->armatures) || !DEG_id_type_updated(depsgraph, ID_OB)) {
 		return;
 	}
-	for (ob = bmain->object.first; ob; ob = ob->id.next) {
-		if (ob->type == OB_ARMATURE && ob->adt && ob->adt->recalc & ADT_RECALC_ANIM) {
+	for (ob = bmain->objects.first; ob; ob = ob->id.next) {
+		if (ob->type == OB_ARMATURE && ob->adt) {
 			if (ob->pose == NULL || (ob->pose->flag & POSE_RECALC)) {
 				BKE_pose_rebuild(bmain, ob, ob->data, true);
 			}
@@ -1460,7 +1464,7 @@ static void prepare_mesh_for_viewport_render(
 		     (mesh->id.recalc & ID_RECALC_ALL)))
 		{
 			if (check_rendered_viewport_visible(bmain)) {
-				BMesh *bm = mesh->edit_btmesh->bm;
+				BMesh *bm = mesh->edit_mesh->bm;
 				BM_mesh_bm_to_me(
 				        bmain, bm, mesh,
 				        (&(struct BMeshToMeshParams){
@@ -1530,7 +1534,7 @@ void BKE_scene_graph_update_for_newframe(Depsgraph *depsgraph,
 	/* Update animated image textures for particles, modifiers, gpu, etc,
 	 * call this at the start so modifiers with textures don't lag 1 frame.
 	 */
-	BKE_image_update_frame(bmain, scene->r.cfra);
+	BKE_image_editors_update_frame(bmain, scene->r.cfra);
 	BKE_sound_set_cfra(scene->r.cfra);
 	DEG_graph_relations_update(depsgraph, bmain, scene, view_layer);
 	/* Update animated cache files for modifiers.
@@ -1633,11 +1637,11 @@ int get_render_child_particle_number(const RenderData *r, int num, bool for_rend
 }
 
 /**
-  * Helper function for the SETLOOPER and SETLOOPER_VIEW_LAYER macros
-  *
-  * It iterates over the bases of the active layer and then the bases
-  * of the active layer of the background (set) scenes recursively.
-  */
+ * Helper function for the SETLOOPER and SETLOOPER_VIEW_LAYER macros
+ *
+ * It iterates over the bases of the active layer and then the bases
+ * of the active layer of the background (set) scenes recursively.
+ */
 Base *_setlooper_base_step(Scene **sce_iter, ViewLayer *view_layer, Base *base)
 {
 	if (base && base->next) {
@@ -1725,9 +1729,8 @@ void BKE_scene_object_base_flag_sync_from_object(Base *base)
 	Object *ob = base->object;
 	base->flag = ob->flag;
 
-	if ((ob->flag & SELECT) != 0) {
+	if ((ob->flag & SELECT) != 0 && (base->flag & BASE_SELECTABLE) != 0) {
 		base->flag |= BASE_SELECTED;
-		BLI_assert((base->flag & BASE_SELECTABLE) != 0);
 	}
 	else {
 		base->flag &= ~BASE_SELECTED;
@@ -1808,6 +1811,7 @@ double BKE_scene_unit_scale(const UnitSettings *unit, const int unit_type, doubl
 		case B_UNIT_LENGTH:
 			return value * (double)unit->scale_length;
 		case B_UNIT_AREA:
+		case B_UNIT_POWER:
 			return value * pow(unit->scale_length, 2);
 		case B_UNIT_VOLUME:
 			return value * pow(unit->scale_length, 3);
@@ -2223,7 +2227,7 @@ void BKE_scene_transform_orientation_remove(
 		TransformOrientationSlot *orient_slot = &scene->orientation_slots[i];
 		if (orient_slot->index_custom == orientation_index) {
 			/* could also use orientation_index-- */
-			orient_slot->type = V3D_MANIP_GLOBAL;
+			orient_slot->type = V3D_ORIENT_GLOBAL;
 			orient_slot->index_custom = -1;
 		}
 	}
@@ -2245,5 +2249,99 @@ int BKE_scene_transform_orientation_get_index(
 {
 	return BLI_findindex(&scene->transform_spaces, orientation);
 }
+
+/** \} */
+
+
+/* -------------------------------------------------------------------- */
+/** \name Scene Cursor Rotation
+ *
+ * Matches #BKE_object_rot_to_mat3 and #BKE_object_mat3_to_rot.
+ * \{ */
+
+void BKE_scene_cursor_rot_to_mat3(const View3DCursor *cursor, float mat[3][3])
+{
+	if (cursor->rotation_mode > 0) {
+		eulO_to_mat3(mat, cursor->rotation_euler, cursor->rotation_mode);
+	}
+	else if (cursor->rotation_mode == ROT_MODE_AXISANGLE) {
+		axis_angle_to_mat3(mat, cursor->rotation_axis, cursor->rotation_angle);
+	}
+	else {
+		float tquat[4];
+		normalize_qt_qt(tquat, cursor->rotation_quaternion);
+		quat_to_mat3(mat, tquat);
+	}
+}
+
+void BKE_scene_cursor_rot_to_quat(const View3DCursor *cursor, float quat[4])
+{
+	if (cursor->rotation_mode > 0) {
+		eulO_to_quat(quat, cursor->rotation_euler, cursor->rotation_mode);
+	}
+	else if (cursor->rotation_mode == ROT_MODE_AXISANGLE) {
+		axis_angle_to_quat(quat, cursor->rotation_axis, cursor->rotation_angle);
+	}
+	else {
+		normalize_qt_qt(quat, cursor->rotation_quaternion);
+	}
+}
+
+void BKE_scene_cursor_mat3_to_rot(View3DCursor *cursor, const float mat[3][3], bool use_compat)
+{
+	BLI_ASSERT_UNIT_M3(mat);
+
+	switch (cursor->rotation_mode) {
+		case ROT_MODE_QUAT:
+		{
+			mat3_normalized_to_quat(cursor->rotation_quaternion, mat);
+			break;
+		}
+		case ROT_MODE_AXISANGLE:
+		{
+			mat3_to_axis_angle(cursor->rotation_axis, &cursor->rotation_angle, mat);
+			break;
+		}
+		default:
+		{
+			if (use_compat) {
+				mat3_to_compatible_eulO(cursor->rotation_euler, cursor->rotation_euler, cursor->rotation_mode, mat);
+			}
+			else {
+				mat3_to_eulO(cursor->rotation_euler, cursor->rotation_mode, mat);
+			}
+			break;
+		}
+	}
+}
+
+void BKE_scene_cursor_quat_to_rot(View3DCursor *cursor, const float quat[4], bool use_compat)
+{
+	BLI_ASSERT_UNIT_QUAT(quat);
+
+	switch (cursor->rotation_mode) {
+		case ROT_MODE_QUAT:
+		{
+			copy_qt_qt(cursor->rotation_quaternion, quat);
+			break;
+		}
+		case ROT_MODE_AXISANGLE:
+		{
+			quat_to_axis_angle(cursor->rotation_axis, &cursor->rotation_angle, quat);
+			break;
+		}
+		default:
+		{
+			if (use_compat) {
+				quat_to_compatible_eulO(cursor->rotation_euler, cursor->rotation_euler, cursor->rotation_mode, quat);
+			}
+			else {
+				quat_to_eulO(cursor->rotation_euler, cursor->rotation_mode, quat);
+			}
+			break;
+		}
+	}
+}
+
 
 /** \} */

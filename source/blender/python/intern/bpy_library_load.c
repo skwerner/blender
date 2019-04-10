@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,12 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/python/intern/bpy_library_load.c
- *  \ingroup pythonintern
+/** \file
+ * \ingroup pythonintern
  *
  * This file exposed blend file library appending/linking to python, typically
  * this would be done via RNA api but in this case a hand written python api
@@ -480,8 +476,9 @@ int BPY_library_load_module(PyObject *mod_par)
 	/* some compilers don't like accessing this directly, delay assignment */
 	bpy_lib_Type.tp_getattro = PyObject_GenericGetAttr;
 
-	if (PyType_Ready(&bpy_lib_Type) < 0)
+	if (PyType_Ready(&bpy_lib_Type) < 0) {
 		return -1;
+	}
 
 	return 0;
 }

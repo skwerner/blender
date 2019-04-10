@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,14 +15,10 @@
  *
  * The Original Code is Copyright (C) 2008, Blender Foundation
  * This is a new part of Blender
- *
- * Contributor(s): Joshua Leung, Antonio Vazquez
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/gpencil/annotate_draw.c
- *  \ingroup edgpencil
+/** \file
+ * \ingroup edgpencil
  */
 
 
@@ -41,7 +35,6 @@
 
 #include "BLI_math.h"
 #include "BLI_utildefines.h"
-#include "BLI_polyfill_2d.h"
 
 #include "BLF_api.h"
 #include "BLT_translation.h"
@@ -724,8 +717,8 @@ static void gp_draw_strokes_edit(
 /* ----- General Drawing ------ */
 /* draw onion-skinning for a layer */
 static void gp_draw_onionskins(
-	bGPdata *gpd, bGPDlayer *gpl, bGPDframe *gpf, int offsx, int offsy, int winx, int winy,
-	int UNUSED(cfra), int dflag)
+        bGPdata *gpd, bGPDlayer *gpl, bGPDframe *gpf, int offsx, int offsy, int winx, int winy,
+        int UNUSED(cfra), int dflag)
 {
 	const float alpha = 1.0f;
 	float color[4];
@@ -745,8 +738,8 @@ static void gp_draw_onionskins(
 				fac = 1.0f - ((float)(gpf->framenum - gf->framenum) / (float)(gpl->gstep + 1));
 				color[3] = alpha * fac * 0.66f;
 				gp_draw_strokes(
-					gpd, gpl, gf, offsx, offsy, winx, winy, dflag,
-					gpl->thickness, color);
+				        gpd, gpl, gf, offsx, offsy, winx, winy, dflag,
+				        gpl->thickness, color);
 			}
 			else
 				break;
@@ -757,8 +750,8 @@ static void gp_draw_onionskins(
 		if (gpf->prev) {
 			color[3] = (alpha / 7);
 			gp_draw_strokes(
-				gpd, gpl, gpf->prev, offsx, offsy, winx, winy, dflag,
-				gpl->thickness, color);
+			        gpd, gpl, gpf->prev, offsx, offsy, winx, winy, dflag,
+			        gpl->thickness, color);
 		}
 	}
 	else {
@@ -781,8 +774,8 @@ static void gp_draw_onionskins(
 				fac = 1.0f - ((float)(gf->framenum - gpf->framenum) / (float)(gpl->gstep_next + 1));
 				color[3] = alpha * fac * 0.66f;
 				gp_draw_strokes(
-					gpd, gpl, gf, offsx, offsy, winx, winy, dflag,
-					gpl->thickness, color);
+				        gpd, gpl, gf, offsx, offsy, winx, winy, dflag,
+				        gpl->thickness, color);
 			}
 			else
 				break;
@@ -793,8 +786,8 @@ static void gp_draw_onionskins(
 		if (gpf->next) {
 			color[3] = (alpha / 4);
 			gp_draw_strokes(
-				gpd, gpl, gpf->next, offsx, offsy, winx, winy, dflag,
-				gpl->thickness, color);
+			        gpd, gpl, gpf->next, offsx, offsy, winx, winy, dflag,
+			        gpl->thickness, color);
 		}
 	}
 	else {
@@ -855,7 +848,7 @@ static void gp_draw_data_layers(
 		 *    (NOTE: doing it this way means that the toggling editmode shows visible change immediately)
 		 */
 		/* XXX: perhaps we don't want to show these when users are drawing... */
-		if ((G.f & G_RENDER_OGL) == 0 &&
+		if ((G.f & G_FLAG_RENDER_VIEWPORT) == 0 &&
 		    (gpl->flag & GP_LAYER_LOCKED) == 0 &&
 		    (gpd->flag & GP_DATA_STROKE_EDITMODE))
 		{
@@ -888,7 +881,7 @@ static void gp_draw_status_text(const bGPdata *gpd, ARegion *ar)
 	rcti rect;
 
 	/* Cannot draw any status text when drawing OpenGL Renders */
-	if (G.f & G_RENDER_OGL)
+	if (G.f & G_FLAG_RENDER_VIEWPORT)
 		return;
 
 	/* Get bounds of region - Necessary to avoid problems with region overlap */
@@ -988,7 +981,7 @@ static void gp_draw_data_all(
  * ............................ */
 
 /* draw grease-pencil sketches to specified 2d-view that uses ibuf corrections */
-void ED_gpencil_draw_2dimage(const bContext *C)
+void ED_annotation_draw_2dimage(const bContext *C)
 {
 	wmWindowManager *wm = CTX_wm_manager(C);
 	ScrArea *sa = CTX_wm_area(C);
@@ -1043,9 +1036,8 @@ void ED_gpencil_draw_2dimage(const bContext *C)
 	}
 
 	if (ED_screen_animation_playing(wm)) {
-		/* don't show onionskins during animation playback/scrub (i.e. it obscures the poses)
-		 * OpenGL Renders (i.e. final output), or depth buffer (i.e. not real strokes)
-		 */
+		/* Don't show onion-skins during animation playback/scrub (i.e. it obscures the poses)
+		 * OpenGL Renders (i.e. final output), or depth buffer (i.e. not real strokes). */
 		dflag |= GP_DRAWDATA_NO_ONIONS;
 	}
 
@@ -1056,7 +1048,7 @@ void ED_gpencil_draw_2dimage(const bContext *C)
 /* draw grease-pencil sketches to specified 2d-view assuming that matrices are already set correctly
  * Note: this gets called twice - first time with onlyv2d=true to draw 'canvas' strokes,
  * second time with onlyv2d=false for screen-aligned strokes */
-void ED_gpencil_draw_view2d(const bContext *C, bool onlyv2d)
+void ED_annotation_draw_view2d(const bContext *C, bool onlyv2d)
 {
 	wmWindowManager *wm = CTX_wm_manager(C);
 	ScrArea *sa = CTX_wm_area(C);
@@ -1090,7 +1082,7 @@ void ED_gpencil_draw_view2d(const bContext *C, bool onlyv2d)
 /* draw annotations sketches to specified 3d-view assuming that matrices are already set correctly
  * Note: this gets called twice - first time with only3d=true to draw 3d-strokes,
  * second time with only3d=false for screen-aligned strokes */
-void ED_gpencil_draw_view3d_annotations(
+void ED_annotation_draw_view3d(
         Scene *scene, struct Depsgraph *depsgraph,
         View3D *v3d, ARegion *ar,
         bool only3d)
@@ -1106,7 +1098,7 @@ void ED_gpencil_draw_view3d_annotations(
 
 	/* when rendering to the offscreen buffer we don't want to
 	 * deal with the camera border, otherwise map the coords to the camera border. */
-	if ((rv3d->persp == RV3D_CAMOB) && !(G.f & G_RENDER_OGL)) {
+	if ((rv3d->persp == RV3D_CAMOB) && !(G.f & G_FLAG_RENDER_VIEWPORT)) {
 		rctf rectf;
 		ED_view3d_calc_camera_border(scene, depsgraph, ar, v3d, rv3d, &rectf, true); /* no shift */
 
@@ -1131,13 +1123,22 @@ void ED_gpencil_draw_view3d_annotations(
 		dflag |= (GP_DRAWDATA_ONLY3D | GP_DRAWDATA_NOSTATUS);
 	}
 
-	if (v3d->flag2 & V3D_RENDER_OVERRIDE) {
+	if (v3d->flag2 & V3D_HIDE_OVERLAYS) {
 		/* don't draw status text when "only render" flag is set */
 		dflag |= GP_DRAWDATA_NOSTATUS;
 	}
 
 	/* draw it! */
 	gp_draw_data_all(scene, gpd, offsx, offsy, winx, winy, CFRA, dflag, v3d->spacetype);
+}
+
+void ED_annotation_draw_ex(
+	Scene *scene, bGPdata *gpd,
+	int winx, int winy, const int cfra, const char spacetype)
+{
+	int dflag = GP_DRAWDATA_NOSTATUS | GP_DRAWDATA_ONLYV2D;
+
+	gp_draw_data_all(scene, gpd, 0, 0, winx, winy, cfra, dflag, spacetype);
 }
 
 /* ************************************************** */

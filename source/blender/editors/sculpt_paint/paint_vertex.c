@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,10 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/sculpt_paint/paint_vertex.c
- *  \ingroup edsculpt
+/** \file
+ * \ingroup edsculpt
  *
  * Used for vertex color & weight paint and mode switching.
  *
@@ -183,7 +175,7 @@ static MDeformVert *defweight_prev_init(MDeformVert *dvert_prev, MDeformVert *dv
 }
 
 /* check if we can do partial updates and have them draw realtime
- * (without rebuilding the 'derivedFinal') */
+ * (without evaluating modifiers) */
 static bool vertex_paint_use_fast_update_check(Object *ob)
 {
 	Mesh *me_eval = ob->runtime.mesh_eval;
@@ -898,7 +890,7 @@ static void do_weight_paint_vertex_multi(
 		}
 
 		oldw = BKE_defvert_multipaint_collective_weight(
-			dv_prev, wpi->defbase_tot, wpi->defbase_sel, wpi->defbase_tot_sel, wpi->do_auto_normalize);
+		        dv_prev, wpi->defbase_tot, wpi->defbase_sel, wpi->defbase_tot_sel, wpi->do_auto_normalize);
 	}
 	else {
 		oldw = curw;
@@ -1691,7 +1683,7 @@ static void do_wpaint_brush_blur_task_cb_ex(
 	{
 		/* Test to see if the vertex coordinates are within the spherical brush region. */
 		if (sculpt_brush_test_sq_fn(&test, vd.co)) {
-			/* For grid based pbvh, take the vert whose loop coopresponds to the current grid.
+			/* For grid based pbvh, take the vert whose loop corresponds to the current grid.
 			 * Otherwise, take the current vert. */
 			const int v_index = has_grids ? data->me->mloop[vd.grid_indices[vd.g]].v : vd.vert_indices[vd.i];
 			const float grid_alpha = has_grids ? 1.0f / vd.gridsize : 1.0f;
@@ -1788,7 +1780,7 @@ static void do_wpaint_brush_smear_task_cb_ex(
 		{
 			/* Test to see if the vertex coordinates are within the spherical brush region. */
 			if (sculpt_brush_test_sq_fn(&test, vd.co)) {
-				/* For grid based pbvh, take the vert whose loop cooresponds to the current grid.
+				/* For grid based pbvh, take the vert whose loop corresponds to the current grid.
 				 * Otherwise, take the current vert. */
 				const int v_index = has_grids ? data->me->mloop[vd.grid_indices[vd.g]].v : vd.vert_indices[vd.i];
 				const float grid_alpha = has_grids ? 1.0f / vd.gridsize : 1.0f;
@@ -1895,7 +1887,7 @@ static void do_wpaint_brush_draw_task_cb_ex(
 		/* Test to see if the vertex coordinates are within the spherical brush region. */
 		if (sculpt_brush_test_sq_fn(&test, vd.co)) {
 			/* Note: grids are 1:1 with corners (aka loops).
-			 * For multires, take the vert whose loop cooresponds to the current grid.
+			 * For multires, take the vert whose loop corresponds to the current grid.
 			 * Otherwise, take the current vert. */
 			const int v_index = has_grids ? data->me->mloop[vd.grid_indices[vd.g]].v : vd.vert_indices[vd.i];
 			const float grid_alpha = has_grids ? 1.0f / vd.gridsize : 1.0f;
@@ -2683,7 +2675,7 @@ static void do_vpaint_brush_draw_task_cb_ex(
 		/* Test to see if the vertex coordinates are within the spherical brush region. */
 		if (sculpt_brush_test_sq_fn(&test, vd.co)) {
 			/* Note: Grids are 1:1 with corners (aka loops).
-			 * For grid based pbvh, take the vert whose loop cooresponds to the current grid.
+			 * For grid based pbvh, take the vert whose loop corresponds to the current grid.
 			 * Otherwise, take the current vert. */
 			const int v_index = has_grids ? data->me->mloop[vd.grid_indices[vd.g]].v : vd.vert_indices[vd.i];
 			const float grid_alpha = has_grids ? 1.0f / vd.gridsize : 1.0f;
@@ -2777,7 +2769,7 @@ static void do_vpaint_brush_blur_task_cb_ex(
 	{
 		/* Test to see if the vertex coordinates are within the spherical brush region. */
 		if (sculpt_brush_test_sq_fn(&test, vd.co)) {
-			/* For grid based pbvh, take the vert whose loop cooresponds to the current grid.
+			/* For grid based pbvh, take the vert whose loop corresponds to the current grid.
 			 * Otherwise, take the current vert. */
 			const int v_index = has_grids ? data->me->mloop[vd.grid_indices[vd.g]].v : vd.vert_indices[vd.i];
 			const float grid_alpha = has_grids ? 1.0f / vd.gridsize : 1.0f;
@@ -2896,7 +2888,7 @@ static void do_vpaint_brush_smear_task_cb_ex(
 		{
 			/* Test to see if the vertex coordinates are within the spherical brush region. */
 			if (sculpt_brush_test_sq_fn(&test, vd.co)) {
-				/* For grid based pbvh, take the vert whose loop cooresponds to the current grid.
+				/* For grid based pbvh, take the vert whose loop corresponds to the current grid.
 				 * Otherwise, take the current vert. */
 				const int v_index = has_grids ? data->me->mloop[vd.grid_indices[vd.g]].v : vd.vert_indices[vd.i];
 				const float grid_alpha = has_grids ? 1.0f / vd.gridsize : 1.0f;

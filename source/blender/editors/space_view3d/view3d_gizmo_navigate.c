@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,15 +12,12 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/space_view3d/view3d_gizmo_navigate.c
- *  \ingroup spview3d
+/** \file
+ * \ingroup spview3d
  */
 
-#include "BLI_blenlib.h"
 #include "BLI_math.h"
 #include "BLI_utildefines.h"
 
@@ -126,7 +121,7 @@ static bool WIDGETGROUP_navigate_poll(const bContext *C, wmGizmoGroupType *UNUSE
 {
 	View3D *v3d = CTX_wm_view3d(C);
 	if (((U.uiflag & USER_SHOW_GIZMO_AXIS) == 0) ||
-	    (v3d->flag2 & V3D_RENDER_OVERRIDE) ||
+	    (v3d->flag2 & V3D_HIDE_OVERLAYS) ||
 	    (v3d->gizmo_flag & (V3D_GIZMO_HIDE | V3D_GIZMO_HIDE_NAVIGATE)))
 	{
 		return false;
@@ -153,15 +148,28 @@ static void WIDGETGROUP_navigate_setup(const bContext *UNUSED(C), wmGizmoGroup *
 
 		if (i == GZ_INDEX_ROTATE) {
 			gz->color[3] = 0.0f;
-			gz->color_hi[3] = 0.1f;
+			copy_v3_fl(gz->color_hi, 0.5f);
+			gz->color_hi[3] = 0.5f;
 		}
 		else {
-			UI_GetThemeColorShade3fv(TH_HEADER, -40, gz->color);
-			UI_GetThemeColorShade3fv(TH_HEADER, 160, gz->color_hi);
-			gz->color[3] = 0.4f;
-			gz->color_hi[3] = 0.2f;
+			uchar icon_color[3];
+			UI_GetThemeColor3ubv(TH_TEXT, icon_color);
+			int color_tint, color_tint_hi;
+			if (icon_color[0] > 128) {
+				color_tint = -40;
+				color_tint_hi = 60;
+				gz->color[3] = 0.5f;
+				gz->color_hi[3] = 0.5f;
+			}
+			else {
+				color_tint = 60;
+				color_tint_hi = 60;
+				gz->color[3] = 0.5f;
+				gz->color_hi[3] = 0.75f;
+			}
+			UI_GetThemeColorShade3fv(TH_HEADER, color_tint, gz->color);
+			UI_GetThemeColorShade3fv(TH_HEADER, color_tint_hi, gz->color_hi);
 		}
-
 
 		/* may be overwritten later */
 		gz->scale_basis = (GIZMO_SIZE * GIZMO_MINI_FAC) / 2;

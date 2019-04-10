@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,33 +15,25 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
 #ifndef __BKE_LATTICE_H__
 #define __BKE_LATTICE_H__
 
-/** \file BKE_lattice.h
- *  \ingroup bke
- *  \author Ton Roosendaal
- *  \since June 2001
+/** \file
+ * \ingroup bke
  */
 
 #include "BLI_compiler_attrs.h"
 
+struct BPoint;
+struct Depsgraph;
 struct Lattice;
+struct MDeformVert;
 struct Main;
 struct Mesh;
 struct Object;
 struct Scene;
-struct BPoint;
-struct MDeformVert;
-struct Depsgraph;
 struct bGPDstroke;
 
 void BKE_lattice_resize(struct Lattice *lt, int u, int v, int w, struct Object *ltOb);
@@ -118,5 +108,8 @@ enum {
 };
 void BKE_lattice_batch_cache_dirty_tag(struct Lattice *lt, int mode);
 void BKE_lattice_batch_cache_free(struct Lattice *lt);
+
+extern void (*BKE_lattice_batch_cache_dirty_tag_cb)(struct Lattice *lt, int mode);
+extern void (*BKE_lattice_batch_cache_free_cb)(struct Lattice *lt);
 
 #endif  /* __BKE_LATTICE_H__ */

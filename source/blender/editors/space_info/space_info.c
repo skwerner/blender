@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,15 +15,10 @@
  *
  * The Original Code is Copyright (C) 2008 Blender Foundation.
  * All rights reserved.
- *
- *
- * Contributor(s): Blender Foundation
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/space_info/space_info.c
- *  \ingroup spinfo
+/** \file
+ * \ingroup spinfo
  */
 
 
@@ -40,13 +33,10 @@
 #include "BLT_translation.h"
 
 #include "BKE_context.h"
-#include "BKE_global.h"
 #include "BKE_screen.h"
 
 #include "ED_space_api.h"
 #include "ED_screen.h"
-
-#include "BIF_gl.h"
 
 #include "WM_api.h"
 #include "WM_types.h"
@@ -161,8 +151,9 @@ static void info_main_region_draw(const bContext *C, ARegion *ar)
 	GPU_clear(GPU_COLOR_BIT);
 
 	/* quick way to avoid drawing if not bug enough */
-	if (ar->winy < 16)
+	if (ar->winy < 16) {
 		return;
+	}
 
 	info_textview_update_rect(C, ar);
 
@@ -197,7 +188,7 @@ static void info_operatortypes(void)
 
 	/* info_report.c */
 	WM_operatortype_append(INFO_OT_select_pick);
-	WM_operatortype_append(INFO_OT_select_all_toggle);
+	WM_operatortype_append(INFO_OT_select_all);
 	WM_operatortype_append(INFO_OT_select_box);
 
 	WM_operatortype_append(INFO_OT_report_replay);
@@ -251,20 +242,24 @@ static void info_header_listener(
 			}
 			break;
 		case NC_WM:
-			if (wmn->data == ND_JOB)
+			if (wmn->data == ND_JOB) {
 				ED_region_tag_redraw(ar);
+			}
 			break;
 		case NC_SCENE:
-			if (wmn->data == ND_RENDER_RESULT)
+			if (wmn->data == ND_RENDER_RESULT) {
 				ED_region_tag_redraw(ar);
+			}
 			break;
 		case NC_SPACE:
-			if (wmn->data == ND_SPACE_INFO)
+			if (wmn->data == ND_SPACE_INFO) {
 				ED_region_tag_redraw(ar);
+			}
 			break;
 		case NC_ID:
-			if (wmn->action == NA_RENAME)
+			if (wmn->action == NA_RENAME) {
 				ED_region_tag_redraw(ar);
+			}
 			break;
 	}
 

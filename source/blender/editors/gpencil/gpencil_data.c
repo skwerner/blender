@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -15,18 +13,13 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
- * The Original Code is Copyright (C) 2008, Blender Foundation, Joshua Leung
+ * The Original Code is Copyright (C) 2008, Blender Foundation
  * This is a new part of Blender
- *
- * Contributor(s): Joshua Leung, Antonio Vazquez
- *
- * ***** END GPL LICENSE BLOCK *****
- *
  * Operators for dealing with GP datablocks and layers
  */
 
-/** \file blender/editors/gpencil/gpencil_data.c
- *  \ingroup edgpencil
+/** \file
+ * \ingroup edgpencil
  */
 
 
@@ -62,7 +55,6 @@
 #include "BKE_context.h"
 #include "BKE_deform.h"
 #include "BKE_fcurve.h"
-#include "BKE_global.h"
 #include "BKE_gpencil.h"
 #include "BKE_gpencil_modifier.h"
 #include "BKE_library.h"
@@ -73,7 +65,6 @@
 #include "BKE_paint.h"
 #include "BKE_report.h"
 #include "BKE_scene.h"
-#include "BKE_screen.h"
 
 #include "UI_interface.h"
 #include "UI_resources.h"
@@ -98,6 +89,18 @@
 /* Datablock Operators */
 
 /* ******************* Add New Data ************************ */
+static bool gp_data_add_poll(bContext *C)
+{
+	Object *obact = CTX_data_active_object(C);
+	if (obact && obact->type == OB_GPENCIL) {
+		if (obact->mode != OB_MODE_OBJECT) {
+			return false;
+		}
+	}
+
+	/* the base line we have is that we have somewhere to add Grease Pencil data */
+	return ED_gpencil_data_get_pointers(C, NULL) != NULL;
+}
 
 /* add new datablock - wrapper around API */
 static int gp_data_add_exec(bContext *C, wmOperator *op)
@@ -162,7 +165,7 @@ void GPENCIL_OT_data_add(wmOperatorType *ot)
 
 	/* callbacks */
 	ot->exec = gp_data_add_exec;
-	ot->poll = gp_add_poll;
+	ot->poll = gp_data_add_poll;
 }
 
 /* ******************* Unlink Data ************************ */
@@ -172,6 +175,13 @@ static bool gp_data_unlink_poll(bContext *C)
 {
 	bGPdata **gpd_ptr = ED_gpencil_data_get_pointers(C, NULL);
 
+	/* only unlink annotation datablocks */
+	if ((gpd_ptr != NULL) && (*gpd_ptr != NULL)) {
+		bGPdata *gpd = (*gpd_ptr);
+		if ((gpd->flag & GP_DATA_ANNOTATIONS) == 0) {
+			return false;
+		}
+	}
 	/* if we have access to some active data, make sure there's a datablock before enabling this */
 	return (gpd_ptr && *gpd_ptr);
 }
@@ -203,9 +213,9 @@ static int gp_data_unlink_exec(bContext *C, wmOperator *op)
 void GPENCIL_OT_data_unlink(wmOperatorType *ot)
 {
 	/* identifiers */
-	ot->name = "Grease Pencil Unlink";
+	ot->name = "Annotation Unlink";
 	ot->idname = "GPENCIL_OT_data_unlink";
-	ot->description = "Unlink active Grease Pencil data-block";
+	ot->description = "Unlink active Annotation data-block";
 	ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
 
 	/* callbacks */
@@ -363,7 +373,7 @@ void GPENCIL_OT_layer_move(wmOperatorType *ot)
 	static const EnumPropertyItem slot_move[] = {
 		{GP_LAYER_MOVE_UP, "UP", 0, "Up", ""},
 		{GP_LAYER_MOVE_DOWN, "DOWN", 0, "Down", ""},
-		{0, NULL, 0, NULL, NULL}
+		{0, NULL, 0, NULL, NULL},
 	};
 
 	/* identifiers */
@@ -511,15 +521,10 @@ static int gp_layer_duplicate_object_exec(bContext *C, wmOperator *op)
 			 * otherwise add the slot with the material
 			 */
 			Material *ma_src = give_current_material(ob_src, gps_src->mat_nr + 1);
-			int idx = BKE_gpencil_get_material_index(ob_dst, ma_src);
-			if (idx == 0) {
-				BKE_object_material_slot_add(bmain, ob_dst);
-				assign_material(bmain, ob_dst, ma_src, ob_dst->totcol, BKE_MAT_ASSIGN_USERPREF);
-				idx = ob_dst->totcol;
-			}
+			int idx = BKE_gpencil_object_material_ensure(bmain, ob_dst, ma_src);
 
 			/* reasign the stroke material to the right slot in destination object */
-			gps_dst->mat_nr = idx - 1;
+			gps_dst->mat_nr = idx;
 
 			/* add new stroke to frame */
 			BLI_addtail(&gpf_dst->strokes, gps_dst);
@@ -539,7 +544,7 @@ void GPENCIL_OT_layer_duplicate_object(wmOperatorType *ot)
 	static const EnumPropertyItem copy_mode[] = {
 		{GP_LAYER_COPY_OBJECT_ALL_FRAME, "ALL", 0, "All Frames", ""},
 		{GP_LAYER_COPY_OBJECT_ACT_FRAME, "ACTIVE", 0, "Active Frame", ""},
-		{0, NULL, 0, NULL, NULL}
+		{0, NULL, 0, NULL, NULL},
 	};
 
 	/* identifiers */
@@ -602,7 +607,7 @@ void GPENCIL_OT_frame_duplicate(wmOperatorType *ot)
 	static const EnumPropertyItem duplicate_mode[] = {
 		{GP_FRAME_DUP_ACTIVE, "ACTIVE", 0, "Active", "Duplicate frame in active layer only"},
 		{GP_FRAME_DUP_ALL, "ALL", 0, "All", "Duplicate active frames in all layers"},
-		{0, NULL, 0, NULL, NULL}
+		{0, NULL, 0, NULL, NULL},
 	};
 
 	/* identifiers */
@@ -689,7 +694,7 @@ void GPENCIL_OT_frame_clean_fill(wmOperatorType *ot)
 	static const EnumPropertyItem duplicate_mode[] = {
 		{GP_FRAME_CLEAN_FILL_ACTIVE, "ACTIVE", 0, "Active Frame Only", "Clean active frame only"},
 		{GP_FRAME_CLEAN_FILL_ALL, "ALL", 0, "All Frames", "Clean all frames in all layers"},
-		{0, NULL, 0, NULL, NULL}
+		{0, NULL, 0, NULL, NULL},
 	};
 
 	/* identifiers */
@@ -1374,7 +1379,7 @@ static int gp_stroke_change_color_exec(bContext *C, wmOperator *op)
 		}
 	}
 	/* try to find slot */
-	int idx = BKE_gpencil_get_material_index(ob, ma) - 1;
+	int idx = BKE_gpencil_object_material_get_index(ob, ma);
 	if (idx < 0) {
 		return OPERATOR_CANCELLED;
 	}
@@ -2049,10 +2054,7 @@ int ED_gpencil_join_objects_exec(bContext *C, wmOperator *op)
 
 				for (short i = 0; i < *totcol; i++) {
 					Material *tmp_ma = give_current_material(ob_src, i + 1);
-					if (BKE_gpencil_get_material_index(ob_dst, tmp_ma) == 0) {
-						BKE_object_material_slot_add(bmain, ob_dst);
-						assign_material(bmain, ob_dst, tmp_ma, ob_dst->totcol, BKE_MAT_ASSIGN_USERPREF);
-					}
+					BKE_gpencil_object_material_ensure(bmain, ob_dst, tmp_ma);
 				}
 
 				/* duplicate bGPDlayers  */
@@ -2082,24 +2084,12 @@ int ED_gpencil_join_objects_exec(bContext *C, wmOperator *op)
 					invert_m4_m4(inverse_diff_mat, diff_mat);
 
 					Material *ma_src = NULL;
-					int idx;
 					for (bGPDframe *gpf = gpl_new->frames.first; gpf; gpf = gpf->next) {
 						for (bGPDstroke *gps = gpf->strokes.first; gps; gps = gps->next) {
 
 							/* reasign material. Look old material and try to find in dst */
 							ma_src = give_current_material(ob_src, gps->mat_nr + 1);
-							if (ma_src != NULL) {
-								idx = BKE_gpencil_get_material_index(ob_dst, ma_src);
-								if (idx > 0) {
-									gps->mat_nr = idx - 1;
-								}
-								else {
-									gps->mat_nr = 0;
-								}
-							}
-							else {
-								gps->mat_nr = 0;
-							}
+							gps->mat_nr = BKE_gpencil_object_material_ensure(bmain, ob_dst, ma_src);
 
 							bGPDspoint *pt;
 							int i;

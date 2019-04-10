@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,15 +15,10 @@
  *
  * The Original Code is Copyright (C) 2004-2008 Blender Foundation.
  * All rights reserved.
- *
- *
- * Contributor(s): Blender Foundation
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/space_view3d/view3d_header.c
- *  \ingroup spview3d
+/** \file
+ * \ingroup spview3d
  */
 
 #include <string.h>
@@ -42,8 +35,6 @@
 #include "BLT_translation.h"
 
 #include "BKE_context.h"
-#include "BKE_main.h"
-#include "BKE_screen.h"
 #include "BKE_editmesh.h"
 
 #include "DEG_depsgraph.h"
@@ -77,9 +68,18 @@ static void do_view3d_header_buttons(bContext *C, void *arg, int event);
 static int toggle_matcap_flip(bContext *C, wmOperator *UNUSED(op))
 {
 	View3D *v3d = CTX_wm_view3d(C);
-	v3d->shading.flag ^= V3D_SHADING_MATCAP_FLIP_X;
-	ED_view3d_shade_update(CTX_data_main(C), v3d, CTX_wm_area(C));
-	WM_event_add_notifier(C, NC_SPACE | ND_SPACE_VIEW3D, v3d);
+
+	if (v3d) {
+		v3d->shading.flag ^= V3D_SHADING_MATCAP_FLIP_X;
+		ED_view3d_shade_update(CTX_data_main(C), v3d, CTX_wm_area(C));
+		WM_event_add_notifier(C, NC_SPACE | ND_SPACE_VIEW3D, v3d);
+	}
+	else {
+		Scene *scene = CTX_data_scene(C);
+		scene->display.shading.flag ^= V3D_SHADING_MATCAP_FLIP_X;
+		WM_event_add_notifier(C, NC_SCENE | NA_EDITED, v3d);
+	}
+
 	return OPERATOR_FINISHED;
 }
 
@@ -92,11 +92,13 @@ void VIEW3D_OT_toggle_matcap_flip(wmOperatorType *ot)
 
 	/* api callbacks */
 	ot->exec = toggle_matcap_flip;
-	ot->poll = ED_operator_view3d_active;
 }
 
 /** \} */
 
+/* -------------------------------------------------------------------- */
+/** \name UI Templates
+ * \{ */
 
 static void do_view3d_header_buttons(bContext *C, void *UNUSED(arg), int event)
 {
@@ -143,10 +145,10 @@ void uiTemplateEditModeSelection(uiLayout *layout, struct bContext *C)
 		                 0, 0, UI_UNIT_X, UI_UNIT_Y, &em->selectmode, 1.0, 0.0, 0, 0,
 		                 TIP_("Vertex select - Shift-Click for multiple modes, Ctrl-Click contracts selection"));
 		uiDefIconButBitS(block, UI_BTYPE_TOGGLE, SCE_SELECT_EDGE, B_SEL_EDGE, ICON_EDGESEL,
-		                 0, 0, ceilf(UI_UNIT_X - UI_DPI_FAC), UI_UNIT_Y, &em->selectmode, 1.0, 0.0, 0, 0,
+		                 0, 0, ceilf(UI_UNIT_X - U.pixelsize), UI_UNIT_Y, &em->selectmode, 1.0, 0.0, 0, 0,
 		                 TIP_("Edge select - Shift-Click for multiple modes, Ctrl-Click expands/contracts selection"));
 		uiDefIconButBitS(block, UI_BTYPE_TOGGLE, SCE_SELECT_FACE, B_SEL_FACE, ICON_FACESEL,
-		                 0, 0, ceilf(UI_UNIT_X - UI_DPI_FAC), UI_UNIT_Y, &em->selectmode, 1.0, 0.0, 0, 0,
+		                 0, 0, ceilf(UI_UNIT_X - U.pixelsize), UI_UNIT_Y, &em->selectmode, 1.0, 0.0, 0, 0,
 		                 TIP_("Face select - Shift-Click for multiple modes, Ctrl-Click expands selection"));
 	}
 }
@@ -175,7 +177,6 @@ static void uiTemplatePaintModeSelection(uiLayout *layout, struct bContext *C)
 
 void uiTemplateHeader3D_mode(uiLayout *layout, struct bContext *C)
 {
-	/* Extracted from: uiTemplateHeader3D */
 	ViewLayer *view_layer = CTX_data_view_layer(C);
 	Object *ob = OBACT(view_layer);
 	Object *obedit = CTX_data_edit_object(C);
@@ -192,67 +193,4 @@ void uiTemplateHeader3D_mode(uiLayout *layout, struct bContext *C)
 	}
 }
 
-void uiTemplateHeader3D(uiLayout *layout, struct bContext *C)
-{
-	bScreen *screen = CTX_wm_screen(C);
-	ScrArea *sa = CTX_wm_area(C);
-	View3D *v3d = sa->spacedata.first;
-	Scene *scene = CTX_data_scene(C);
-	ViewLayer *view_layer = CTX_data_view_layer(C);
-	ToolSettings *ts = CTX_data_tool_settings(C);
-	PointerRNA v3dptr, toolsptr, sceneptr;
-	Object *ob = OBACT(view_layer);
-	Object *obedit = CTX_data_edit_object(C);
-	bGPdata *gpd = CTX_data_gpencil_data(C);
-	uiBlock *block;
-	bool is_paint = (
-	        ob && !(gpd && (gpd->flag & GP_DATA_STROKE_EDITMODE)) &&
-	        ELEM(ob->mode,
-	             OB_MODE_SCULPT, OB_MODE_VERTEX_PAINT, OB_MODE_WEIGHT_PAINT, OB_MODE_TEXTURE_PAINT));
-
-	RNA_pointer_create(&screen->id, &RNA_SpaceView3D, v3d, &v3dptr);
-	RNA_pointer_create(&scene->id, &RNA_ToolSettings, ts, &toolsptr);
-	RNA_pointer_create(&scene->id, &RNA_Scene, scene, &sceneptr);
-
-	block = uiLayoutGetBlock(layout);
-	UI_block_func_handle_set(block, do_view3d_header_buttons, NULL);
-
-	/* other buttons: */
-	UI_block_emboss_set(block, UI_EMBOSS);
-
-	/* moved to topbar */
-#if 0
-	uiLayout *row = uiLayoutRow(layout, true);
-	uiItemR(row, &v3dptr, "pivot_point", UI_ITEM_R_ICON_ONLY, "", ICON_NONE);
-	if (!ob || ELEM(ob->mode, OB_MODE_OBJECT, OB_MODE_POSE, OB_MODE_WEIGHT_PAINT)) {
-		uiItemR(row, &v3dptr, "use_pivot_point_align", UI_ITEM_R_ICON_ONLY, "", ICON_NONE);
-	}
-#endif
-
-	if (obedit == NULL && is_paint) {
-		/* Currently Python calls this directly. */
-#if 0
-		uiTemplatePaintModeSelection(layout, C);
-#endif
-
-	}
-	else {
-		/* Moved to popover and topbar. */
-#if 0
-		/* Transform widget / gizmos */
-		row = uiLayoutRow(layout, true);
-		uiItemR(row, &v3dptr, "show_gizmo", UI_ITEM_R_ICON_ONLY, "", ICON_NONE);
-		uiItemR(row, &sceneptr, "transform_orientation", 0, "", ICON_NONE);
-#endif
-	}
-
-	if (obedit == NULL && v3d->localvd == NULL) {
-		/* Scene lock */
-		uiItemR(layout, &v3dptr, "lock_camera_and_layers", UI_ITEM_R_ICON_ONLY, "", ICON_NONE);
-	}
-
-	/* Currently Python calls this directly. */
-#if 0
-	uiTemplateEditModeSelection(layout, C);
-#endif
-}
+/** \} */

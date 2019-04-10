@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,12 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/blenlib/intern/polyfill_2d.c
- *  \ingroup bli
+/** \file
+ * \ingroup bli
  *
  * An ear clipping algorithm to triangulate single boundary polygons.
  *
@@ -89,8 +85,6 @@ typedef signed char eSign;
  *
  * This is a single purpose KDTree based on BLI_kdtree with some modifications
  * to better suit polyfill2d.
- *
- *
  * - #KDTreeNode2D is kept small (only 16 bytes),
  *   by not storing coords in the nodes and using index values rather then pointers
  *   to reference neg/pos values.
@@ -183,12 +177,15 @@ static void       pf_ear_tip_cut(PolyFill *pf, PolyIndex *pi_ear_tip);
 
 BLI_INLINE eSign signum_enum(float a)
 {
-	if (UNLIKELY(a == 0.0f))
+	if (UNLIKELY(a == 0.0f)) {
 		return  0;
-	else if (a > 0.0f)
+	}
+	else if (a > 0.0f) {
 		return  1;
-	else
+	}
+	else {
 		return -1;
+	}
 }
 
 /**
@@ -279,8 +276,8 @@ static uint kdtree2d_balance_recursive(
 		j = pos;
 
 		while (1) {
-			while (coords[nodes[++i].index][axis] < co) ;
-			while (coords[nodes[--j].index][axis] > co && j > neg) ;
+			while (coords[nodes[++i].index][axis] < co) { /* pass */ }
+			while (coords[nodes[--j].index][axis] > co && j > neg) { /* pass */ }
 
 			if (i >= j) {
 				break;

@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,10 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): 2007, Joshua Leung, major recode
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/blenkernel/intern/constraint.c
- *  \ingroup bke
+/** \file
+ * \ingroup bke
  */
 
 
@@ -87,6 +79,8 @@
 #include "DEG_depsgraph.h"
 #include "DEG_depsgraph_query.h"
 
+#include "CLG_log.h"
+
 #ifdef WITH_PYTHON
 #  include "BPY_extern.h"
 #endif
@@ -100,6 +94,8 @@
 
 /* Constraint Target Macros */
 #define VALID_CONS_TARGET(ct) ((ct) && (ct->tar))
+
+static CLG_LogRef LOG = {"bke.constraint"};
 
 /* ************************ Constraints - General Utilities *************************** */
 /* These functions here don't act on any specific constraints, and are therefore should/will
@@ -469,7 +465,7 @@ static void contarget_get_mesh_mat(Object *ob, const char *substring, float mat[
 
 	/* derive the rotation from the average normal:
 	 * - code taken from transform_gizmo.c,
-	 *   calc_gizmo_stats, V3D_MANIP_NORMAL case
+	 *   calc_gizmo_stats, V3D_ORIENT_NORMAL case
 	 */
 	/*	we need the transpose of the inverse for a normal... */
 	copy_m3_m4(imat, ob->obmat);
@@ -1094,7 +1090,7 @@ static void trackto_evaluate(bConstraint *con, bConstraintOb *cob, ListBase *tar
 		float size[3], vec[3];
 		float totmat[3][3];
 
-		/* Get size property, since ob->size is only the object's own relative size, not its global one */
+		/* Get size property, since ob->scale is only the object's own relative size, not its global one */
 		mat4_to_size(size, cob->matrix);
 
 		/* Clear the object's rotation */
@@ -2059,7 +2055,7 @@ static void pycon_get_tarmat(struct Depsgraph *UNUSED(depsgraph),
 
 		/* only execute target calculation if allowed */
 #ifdef WITH_PYTHON
-		if (G.f & G_SCRIPT_AUTOEXEC)
+		if (G.f & G_FLAG_SCRIPT_AUTOEXEC)
 			BPY_pyconstraint_target(data, ct);
 #endif
 	}
@@ -2076,7 +2072,7 @@ static void pycon_evaluate(bConstraint *con, bConstraintOb *cob, ListBase *targe
 	bPythonConstraint *data = con->data;
 
 	/* only evaluate in python if we're allowed to do so */
-	if ((G.f & G_SCRIPT_AUTOEXEC) == 0) return;
+	if ((G.f & G_FLAG_SCRIPT_AUTOEXEC) == 0) return;
 
 	/* Now, run the actual 'constraint' function, which should only access the matrices */
 	BPY_pyconstraint_exec(data, cob, targets);
@@ -4576,10 +4572,12 @@ static void transformcache_evaluate(bConstraint *con, bConstraintOb *cob, ListBa
 	const float frame = DEG_get_ctime(cob->depsgraph);
 	const float time = BKE_cachefile_time_offset(cache_file, frame, FPS);
 
-	BKE_cachefile_ensure_handle(G.main, cache_file);
+	/* Must always load ABC handle on original. */
+	CacheFile *cache_file_orig = (CacheFile *)DEG_get_original_id(&cache_file->id);
+	BKE_cachefile_ensure_handle(G.main, cache_file_orig);
 
 	if (!data->reader) {
-		data->reader = CacheReader_open_alembic_object(cache_file->handle,
+		data->reader = CacheReader_open_alembic_object(cache_file_orig->handle,
 		                                               data->reader,
 		                                               cob->ob,
 		                                               data->object_path);
@@ -4706,7 +4704,7 @@ const bConstraintTypeInfo *BKE_constraint_typeinfo_from_type(int type)
 		return constraintsTypeInfo[type];
 	}
 	else {
-		printf("No valid constraint type-info data available. Type = %i\n", type);
+		CLOG_WARN(&LOG, "No valid constraint type-info data available. Type = %i", type);
 	}
 
 	return NULL;

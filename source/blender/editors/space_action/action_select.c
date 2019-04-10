@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -16,14 +14,10 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
  * The Original Code is Copyright (C) 2008 Blender Foundation
- *
- * Contributor(s): Joshua Leung
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/space_action/action_select.c
- *  \ingroup spaction
+/** \file
+ * \ingroup spaction
  */
 
 
@@ -312,11 +306,15 @@ static void box_select_action(bAnimContext *ac, const rcti rect, short mode, sho
 					break;
 				}
 				case ANIMTYPE_MASKLAYER:
+				{
 					ED_masklayer_frames_select_box(ale->data, rectf.xmin, rectf.xmax, selectmode);
 					break;
+				}
 				default:
+				{
 					ANIM_animchannel_keyframes_loop(&ked, ac->ads, ale, ok_cb, select_cb, NULL);
 					break;
+				}
 			}
 		}
 
@@ -335,28 +333,21 @@ static int actkeys_box_select_exec(bContext *C, wmOperator *op)
 {
 	bAnimContext ac;
 	rcti rect;
-	short mode = 0, selectmode = 0;
-	const bool select = !RNA_boolean_get(op->ptr, "deselect");
-	const bool extend = RNA_boolean_get(op->ptr, "extend");
+	short mode = 0;
 
 	/* get editor data */
-	if (ANIM_animdata_get_context(C, &ac) == 0)
+	if (ANIM_animdata_get_context(C, &ac) == 0) {
 		return OPERATOR_CANCELLED;
+	}
 
-	/* clear all selection if not extending selection */
-	if (!extend) {
+	const eSelectOp sel_op = RNA_enum_get(op->ptr, "mode");
+	const int selectmode = (sel_op != SEL_OP_SUB) ? SELECT_ADD : SELECT_SUBTRACT;
+	if (SEL_OP_USE_PRE_DESELECT(sel_op)) {
 		deselect_action_keys(&ac, 1, SELECT_SUBTRACT);
 	}
 
 	/* get settings from operator */
 	WM_operator_properties_border_to_rcti(op, &rect);
-
-	if (select) {
-		selectmode = SELECT_ADD;
-	}
-	else {
-		selectmode = SELECT_SUBTRACT;
-	}
 
 	/* selection 'mode' depends on whether box_select region only matters on one axis */
 	if (RNA_boolean_get(op->ptr, "axis_range")) {
@@ -401,9 +392,11 @@ void ACTION_OT_select_box(wmOperatorType *ot)
 	ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
 
 	/* rna */
-	WM_operator_properties_gesture_box_select(ot);
-
 	ot->prop = RNA_def_boolean(ot->srna, "axis_range", 0, "Axis Range", "");
+
+	/* properties */
+	WM_operator_properties_gesture_box(ot);
+	WM_operator_properties_select_operation_simple(ot);
 }
 
 /* ******************** Region Select Operators ***************************** */
@@ -549,9 +542,6 @@ static int actkeys_lassoselect_exec(bContext *C, wmOperator *op)
 	rcti rect;
 	rctf rect_fl;
 
-	short selectmode;
-	bool extend;
-
 	/* get editor data */
 	if (ANIM_animdata_get_context(C, &ac) == 0)
 		return OPERATOR_CANCELLED;
@@ -561,15 +551,11 @@ static int actkeys_lassoselect_exec(bContext *C, wmOperator *op)
 	if (data_lasso.mcords == NULL)
 		return OPERATOR_CANCELLED;
 
-	/* clear all selection if not extending selection */
-	extend = RNA_boolean_get(op->ptr, "extend");
-	if (!extend)
+	const eSelectOp sel_op = RNA_enum_get(op->ptr, "mode");
+	const int selectmode = (sel_op != SEL_OP_SUB) ? SELECT_ADD : SELECT_SUBTRACT;
+	if (SEL_OP_USE_PRE_DESELECT(sel_op)) {
 		deselect_action_keys(&ac, 1, SELECT_SUBTRACT);
-
-	if (!RNA_boolean_get(op->ptr, "deselect"))
-		selectmode = SELECT_ADD;
-	else
-		selectmode = SELECT_SUBTRACT;
+	}
 
 	/* get settings from operator */
 	BLI_lasso_boundbox(&rect, data_lasso.mcords, data_lasso.mcords_tot);
@@ -604,7 +590,8 @@ void ACTION_OT_select_lasso(wmOperatorType *ot)
 	ot->flag = OPTYPE_UNDO;
 
 	/* properties */
-	WM_operator_properties_gesture_lasso_select(ot);
+	WM_operator_properties_gesture_lasso(ot);
+	WM_operator_properties_select_operation_simple(ot);
 }
 
 /* ------------------- */
@@ -612,8 +599,6 @@ void ACTION_OT_select_lasso(wmOperatorType *ot)
 static int action_circle_select_exec(bContext *C, wmOperator *op)
 {
 	bAnimContext ac;
-	const bool select = !RNA_boolean_get(op->ptr, "deselect");
-	const short selectmode = select ? SELECT_ADD : SELECT_SUBTRACT;
 
 	KeyframeEdit_CircleData data = {0};
 	rctf rect_fl;
@@ -625,6 +610,13 @@ static int action_circle_select_exec(bContext *C, wmOperator *op)
 	/* get editor data */
 	if (ANIM_animdata_get_context(C, &ac) == 0)
 		return OPERATOR_CANCELLED;
+
+	const eSelectOp sel_op = ED_select_op_modal(
+	        RNA_enum_get(op->ptr, "mode"), WM_gesture_is_modal_first(op->customdata));
+	const short selectmode = (sel_op != SEL_OP_SUB) ? SELECT_ADD : SELECT_SUBTRACT;
+	if (SEL_OP_USE_PRE_DESELECT(sel_op)) {
+		deselect_action_keys(&ac, 0, SELECT_SUBTRACT);
+	}
 
 	data.mval[0] = x;
 	data.mval[1] = y;
@@ -661,7 +653,8 @@ void ACTION_OT_select_circle(wmOperatorType *ot)
 	ot->flag = OPTYPE_UNDO;
 
 	/* properties */
-	WM_operator_properties_gesture_circle_select(ot);
+	WM_operator_properties_gesture_circle(ot);
+	WM_operator_properties_select_operation_simple(ot);
 }
 
 /* ******************** Column Select Operator **************************** */
@@ -678,7 +671,7 @@ static const EnumPropertyItem prop_column_select_types[] = {
 	{ACTKEYS_COLUMNSEL_CFRA, "CFRA", 0, "On Current Frame", ""},
 	{ACTKEYS_COLUMNSEL_MARKERS_COLUMN, "MARKERS_COLUMN", 0, "On Selected Markers", ""},
 	{ACTKEYS_COLUMNSEL_MARKERS_BETWEEN, "MARKERS_BETWEEN", 0, "Between Min/Max Selected Markers", ""},
-	{0, NULL, 0, NULL, NULL}
+	{0, NULL, 0, NULL, NULL},
 };
 
 /* ------------------- */
@@ -1051,7 +1044,7 @@ static const EnumPropertyItem prop_actkeys_leftright_select_types[] = {
 	{ACTKEYS_LRSEL_TEST, "CHECK", 0, "Check if Select Left or Right", ""},
 	{ACTKEYS_LRSEL_LEFT, "LEFT", 0, "Before current frame", ""},
 	{ACTKEYS_LRSEL_RIGHT, "RIGHT", 0, "After current frame", ""},
-	{0, NULL, 0, NULL, NULL}
+	{0, NULL, 0, NULL, NULL},
 };
 
 /* --------------------------------- */

@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,14 +15,10 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * Contributor(s): Blender Foundation, 2002-2009
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/uvedit/uvedit_draw.c
- *  \ingroup eduv
+/** \file
+ * \ingroup eduv
  */
 
 
@@ -47,8 +41,6 @@
 
 #include "BLI_math.h"
 #include "BLI_utildefines.h"
-#include "BLI_buffer.h"
-#include "BLI_bitmap.h"
 
 #include "BKE_deform.h"
 #include "BKE_editmesh.h"
@@ -56,8 +48,6 @@
 #include "BKE_layer.h"
 
 #include "BKE_scene.h"
-
-#include "BIF_glutil.h"
 
 #include "DEG_depsgraph.h"
 #include "DEG_depsgraph_query.h"
@@ -279,7 +269,7 @@ static void draw_uvs(SpaceImage *sima, Scene *scene, Object *obedit, Depsgraph *
 	if (sima->flag & SI_DRAWSHADOW) {
 		bool is_cage_like_final_meshes = false;
 		Mesh *me = (Mesh *)eval_ob->data;
-		BMEditMesh *embm = me->edit_btmesh;
+		BMEditMesh *embm = me->edit_mesh;
 		is_cage_like_final_meshes = embm &&
 		                            embm->mesh_eval_final &&
 		                            embm->mesh_eval_final->runtime.is_original;

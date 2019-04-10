@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,17 +15,11 @@
  *
  * The Original Code is Copyright (C) Blender Foundation, 2002-2009
  * All rights reserved.
- *
- * Contributor(s): Antony Riakiotakis
- *
- * ***** END GPL LICENSE BLOCK *****
- *
  * UV Sculpt tools
- *
  */
 
-/** \file blender/editors/sculpt_paint/sculpt_uv.c
- *  \ingroup edsculpt
+/** \file
+ * \ingroup edsculpt
  */
 
 
@@ -910,10 +902,10 @@ static int uv_sculpt_stroke_modal(bContext *C, wmOperator *op, const wmEvent *ev
 void SCULPT_OT_uv_sculpt_stroke(wmOperatorType *ot)
 {
 	static const EnumPropertyItem stroke_mode_items[] = {
-		{BRUSH_STROKE_NORMAL, "NORMAL", 0, "Normal", "Apply brush normally"},
+		{BRUSH_STROKE_NORMAL, "NORMAL", 0, "Regular", "Apply brush normally"},
 		{BRUSH_STROKE_INVERT, "INVERT", 0, "Invert", "Invert action of brush for duration of stroke"},
 		{BRUSH_STROKE_SMOOTH, "RELAX", 0, "Relax", "Switch brush to relax mode for duration of stroke"},
-		{0}
+		{0},
 	};
 
 	/* identifiers */

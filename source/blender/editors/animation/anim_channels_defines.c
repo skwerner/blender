@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,14 +15,10 @@
  *
  * The Original Code is Copyright (C) 2009 Blender Foundation, Joshua Leung
  * All rights reserved.
- *
- * Contributor(s): Joshua Leung
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/animation/anim_channels_defines.c
- *  \ingroup edanimation
+/** \file
+ * \ingroup edanimation
  */
 
 
@@ -48,7 +42,7 @@
 #include "DNA_scene_types.h"
 #include "DNA_space_types.h"
 #include "DNA_key_types.h"
-#include "DNA_lamp_types.h"
+#include "DNA_light_types.h"
 #include "DNA_lattice_types.h"
 #include "DNA_linestyle_types.h"
 #include "DNA_mesh_types.h"
@@ -81,8 +75,6 @@
 
 #include "ED_anim_api.h"
 #include "ED_keyframing.h"
-
-#include "BIF_gl.h"
 
 #include "WM_api.h"
 #include "WM_types.h"
@@ -175,9 +167,9 @@ static bool acf_show_channel_colors(bAnimContext *ac)
 
 				break;
 			}
-			case SPACE_IPO:
+			case SPACE_GRAPH:
 			{
-				SpaceIpo *sipo = (SpaceIpo *)ac->sl;
+				SpaceGraph *sipo = (SpaceGraph *)ac->sl;
 				showGroupColors = !(sipo->flag & SIPO_NODRAWGCOLORS);
 
 				break;
@@ -223,6 +215,23 @@ static void acf_generic_channel_color(bAnimContext *ac, bAnimListElem *ale, floa
 	}
 	else {
 		// FIXME: what happens when the indention is 1 greater than what it should be (due to grouping)?
+		int colOfs = 10 - 10 * indent;
+		UI_GetThemeColorShade3fv(TH_SHADE2, colOfs, r_color);
+	}
+}
+
+/* get backdrop color for grease pencil channels */
+static void acf_gpencil_channel_color(bAnimContext *ac, bAnimListElem *ale, float r_color[3])
+{
+	const bAnimChannelType *acf = ANIM_channel_get_typeinfo(ale);
+	short indent = (acf->get_indent_level) ? acf->get_indent_level(ac, ale) : 0;
+	bool showGroupColors = acf_show_channel_colors(ac);
+	
+	if ((showGroupColors) && (ale->type == ANIMTYPE_GPLAYER)) {
+		bGPDlayer *gpl = (bGPDlayer *)ale->data;
+		copy_v3_v3(r_color, gpl->color);
+	}
+	else {
 		int colOfs = 10 - 10 * indent;
 		UI_GetThemeColorShade3fv(TH_SHADE2, colOfs, r_color);
 	}
@@ -542,7 +551,7 @@ static bool acf_scene_setting_valid(bAnimContext *ac, bAnimListElem *UNUSED(ale)
 
 		/* visible only in Graph Editor */
 		case ACHANNEL_SETTING_VISIBLE:
-			return ((ac) && (ac->spacetype == SPACE_IPO));
+			return ((ac) && (ac->spacetype == SPACE_GRAPH));
 
 		/* only select and expand supported otherwise */
 		case ACHANNEL_SETTING_SELECT:
@@ -702,7 +711,7 @@ static bool acf_object_setting_valid(bAnimContext *ac, bAnimListElem *ale, eAnim
 
 		/* visible only in Graph Editor */
 		case ACHANNEL_SETTING_VISIBLE:
-			return ((ac) && (ac->spacetype == SPACE_IPO) && (ob->adt));
+			return ((ac) && (ac->spacetype == SPACE_GRAPH) && (ob->adt));
 
 		/* only select and expand supported otherwise */
 		case ACHANNEL_SETTING_SELECT:
@@ -710,7 +719,7 @@ static bool acf_object_setting_valid(bAnimContext *ac, bAnimListElem *ale, eAnim
 			return true;
 
 		case ACHANNEL_SETTING_ALWAYS_VISIBLE:
-			return ((ac) && (ac->spacetype == SPACE_IPO) && (ob->adt));
+			return ((ac) && (ac->spacetype == SPACE_GRAPH) && (ob->adt));
 
 		default:
 			return false;
@@ -725,7 +734,7 @@ static int acf_object_setting_flag(bAnimContext *UNUSED(ac), eAnimChannel_Settin
 
 	switch (setting) {
 		case ACHANNEL_SETTING_SELECT: /* selected */
-			return SELECT;
+			return BASE_SELECTED;
 
 		case ACHANNEL_SETTING_EXPAND: /* expanded */
 			*neg = 1;
@@ -757,7 +766,7 @@ static void *acf_object_setting_ptr(bAnimListElem *ale, eAnimChannel_Settings se
 
 	switch (setting) {
 		case ACHANNEL_SETTING_SELECT: /* selected */
-			return GET_ACF_FLAG_PTR(ob->flag, type);
+			return GET_ACF_FLAG_PTR(base->flag, type);
 
 		case ACHANNEL_SETTING_EXPAND: /* expanded */
 			return GET_ACF_FLAG_PTR(ob->nlaflag, type); // xxx
@@ -870,10 +879,10 @@ static bool acf_group_setting_valid(bAnimContext *ac, bAnimListElem *UNUSED(ale)
 
 		/* conditionally supported */
 		case ACHANNEL_SETTING_VISIBLE: /* Only available in Graph Editor */
-			return (ac->spacetype == SPACE_IPO);
+			return (ac->spacetype == SPACE_GRAPH);
 
 		case ACHANNEL_SETTING_ALWAYS_VISIBLE:
-			return (ac->spacetype == SPACE_IPO);
+			return (ac->spacetype == SPACE_GRAPH);
 
 		default: /* always supported */
 			return true;
@@ -896,7 +905,7 @@ static int acf_group_setting_flag(bAnimContext *ac, eAnimChannel_Settings settin
 			 * allowing different collapsing of groups there, since sharing the flag
 			 * proved to be a hazard for workflows...
 			 */
-			return (ac->spacetype == SPACE_IPO) ?
+			return (ac->spacetype == SPACE_GRAPH) ?
 			       AGRP_EXPANDED_G :        /* Graph Editor case */
 			       AGRP_EXPANDED;           /* DopeSheet and elsewhere */
 		}
@@ -1002,7 +1011,7 @@ static bool acf_fcurve_setting_valid(bAnimContext *ac, bAnimListElem *ale, eAnim
 				return false;  // NOTE: in this special case, we need to draw ICON_ZOOMOUT
 
 		case ACHANNEL_SETTING_VISIBLE: /* Only available in Graph Editor */
-			return (ac->spacetype == SPACE_IPO);
+			return (ac->spacetype == SPACE_GRAPH);
 
 		case ACHANNEL_SETTING_ALWAYS_VISIBLE:
 			return false;
@@ -1491,7 +1500,7 @@ static int acf_dslight_setting_flag(bAnimContext *UNUSED(ac), eAnimChannel_Setti
 /* get pointer to the setting */
 static void *acf_dslight_setting_ptr(bAnimListElem *ale, eAnimChannel_Settings setting, short *type)
 {
-	Lamp *la = (Lamp *)ale->data;
+	Light *la = (Light *)ale->data;
 
 	/* clear extra return data first */
 	*type = 0;
@@ -1512,7 +1521,7 @@ static void *acf_dslight_setting_ptr(bAnimListElem *ale, eAnimChannel_Settings s
 	}
 }
 
-/* lamp expander type define */
+/* light expander type define */
 static bAnimChannelType ACF_DSLIGHT =
 {
 	"Light Expander",               /* type name */
@@ -2036,7 +2045,7 @@ static int acf_dspart_setting_flag(bAnimContext *UNUSED(ac), eAnimChannel_Settin
 
 	switch (setting) {
 		case ACHANNEL_SETTING_EXPAND: /* expanded */
-			return 0;
+			return PART_DS_EXPAND;
 
 		case ACHANNEL_SETTING_MUTE: /* mute (only in NLA) */
 			return ADT_NLA_EVAL_OFF;
@@ -2054,18 +2063,22 @@ static int acf_dspart_setting_flag(bAnimContext *UNUSED(ac), eAnimChannel_Settin
 }
 
 /* get pointer to the setting */
-static void *acf_dspart_setting_ptr(bAnimListElem *UNUSED(ale), eAnimChannel_Settings setting, short *type)
+static void *acf_dspart_setting_ptr(bAnimListElem *ale, eAnimChannel_Settings setting, short *type)
 {
+	ParticleSettings *part = (ParticleSettings *)ale->data;
+
 	/* clear extra return data first */
 	*type = 0;
 
 	switch (setting) {
 		case ACHANNEL_SETTING_EXPAND: /* expanded */
-			return NULL;
+			return GET_ACF_FLAG_PTR(part->flag, type);
 
 		case ACHANNEL_SETTING_SELECT: /* selected */
 		case ACHANNEL_SETTING_MUTE: /* muted (for NLA only) */
 		case ACHANNEL_SETTING_VISIBLE: /* visible (for Graph Editor only) */
+			if (part->adt)
+				return GET_ACF_FLAG_PTR(part->adt->flag, type);
 			return NULL;
 
 		default: /* unsupported */
@@ -3062,7 +3075,7 @@ static bAnimChannelType ACF_GPL =
 	"GPencil Layer",                /* type name */
 	ACHANNEL_ROLE_CHANNEL,          /* role */
 
-	acf_generic_channel_color,      /* backdrop color */
+	acf_gpencil_channel_color,      /* backdrop color */
 	acf_generic_channel_backdrop,   /* backdrop */
 	acf_generic_indention_flexible, /* indent level */
 	acf_generic_group_offset,       /* offset */
@@ -3865,7 +3878,7 @@ void ANIM_channel_draw(bAnimContext *ac, bAnimListElem *ale, float yminc, float 
 	 * - in Grease Pencil mode, color swatches for layer color
 	 */
 	if (ac->sl) {
-		if ((ac->spacetype == SPACE_IPO) &&
+		if ((ac->spacetype == SPACE_GRAPH) &&
 		    (acf->has_setting(ac, ale, ACHANNEL_SETTING_VISIBLE) ||
 		     acf->has_setting(ac, ale, ACHANNEL_SETTING_ALWAYS_VISIBLE)))
 		{
@@ -3965,7 +3978,7 @@ void ANIM_channel_draw(bAnimContext *ac, bAnimListElem *ale, float yminc, float 
 		immUniformColor3fv(color);
 
 		/* check if we need to show the sliders */
-		if ((ac->sl) && ELEM(ac->spacetype, SPACE_ACTION, SPACE_IPO)) {
+		if ((ac->sl) && ELEM(ac->spacetype, SPACE_ACTION, SPACE_GRAPH)) {
 			switch (ac->spacetype) {
 				case SPACE_ACTION:
 				{
@@ -3973,9 +3986,9 @@ void ANIM_channel_draw(bAnimContext *ac, bAnimListElem *ale, float yminc, float 
 					draw_sliders = (saction->flag & SACTION_SLIDERS);
 					break;
 				}
-				case SPACE_IPO:
+				case SPACE_GRAPH:
 				{
-					SpaceIpo *sipo = (SpaceIpo *)ac->sl;
+					SpaceGraph *sipo = (SpaceGraph *)ac->sl;
 					draw_sliders = (sipo->flag & SIPO_SLIDERS);
 					break;
 				}
@@ -4063,13 +4076,13 @@ static void achannel_setting_flush_widget_cb(bContext *C, void *ale_npoin, void 
 		WM_event_add_notifier(C, NC_GPENCIL | ND_DATA, NULL);
 	}
 
-	/* tag copy-on-write flushing (so that the settings will have an effect) */
+	/* Tag for full animation update, so that the settings will have an effect. */
 	if (ale_setting->id) {
-		DEG_id_tag_update(ale_setting->id, ID_RECALC_ANIMATION | ID_RECALC_COPY_ON_WRITE);
+		DEG_id_tag_update(ale_setting->id, ID_RECALC_ANIMATION);
 	}
 	if (ale_setting->adt && ale_setting->adt->action) {
-		/* action is it's own datablock, so has to be tagged specifically... */
-		DEG_id_tag_update(&ale_setting->adt->action->id, ID_RECALC_COPY_ON_WRITE);
+		/* Action is it's own datablock, so has to be tagged specifically. */
+		DEG_id_tag_update(&ale_setting->adt->action->id, ID_RECALC_ANIMATION);
 	}
 
 	/* verify animation context */
@@ -4113,7 +4126,7 @@ static void achannel_nlatrack_solo_widget_cb(bContext *C, void *ale_poin, void *
 	BKE_nlatrack_solo_toggle(adt, nlt);
 
 	/* send notifiers */
-	DEG_id_tag_update(ale->id, ID_RECALC_ANIMATION | ID_RECALC_COPY_ON_WRITE);
+	DEG_id_tag_update(ale->id, ID_RECALC_ANIMATION);
 	WM_event_add_notifier(C, NC_ANIMATION | ND_NLA | NA_EDITED, NULL);
 }
 
@@ -4156,8 +4169,13 @@ static void achannel_setting_slider_cb(bContext *C, void *id_poin, void *fcu_poi
 		/* insert a keyframe for this F-Curve */
 		done = insert_keyframe_direct(depsgraph, reports, ptr, prop, fcu, cfra, ts->keyframe_type, nla_context, flag);
 
-		if (done)
+		if (done) {
+			if (adt->action != NULL) {
+				DEG_id_tag_update(&adt->action->id, ID_RECALC_ANIMATION_NO_FLUSH);
+			}
+			DEG_id_tag_update(id, ID_RECALC_ANIMATION_NO_FLUSH);
 			WM_event_add_notifier(C, NC_ANIMATION | ND_ANIMCHAN | NA_EDITED, NULL);
+		}
 	}
 
 	BKE_animsys_free_nla_keyframing_context_cache(&nla_cache);
@@ -4422,15 +4440,27 @@ static void draw_setting_widget(bAnimContext *ac, bAnimListElem *ale, const bAni
 			}
 		}
 	}
+
+	if ((ale->fcurve_owner_id != NULL && ID_IS_LINKED(ale->fcurve_owner_id)) ||
+	    (ale->id != NULL && ID_IS_LINKED(ale->id)))
+	{
+		UI_but_flag_enable(but, UI_BUT_DISABLED);
+	}
 }
 
 /* Draw UI widgets the given channel */
-void ANIM_channel_draw_widgets(const bContext *C, bAnimContext *ac, bAnimListElem *ale, uiBlock *block, float yminc, float ymaxc, size_t channel_index)
+void ANIM_channel_draw_widgets(
+        const bContext *C,
+        bAnimContext *ac,
+        bAnimListElem *ale,
+        uiBlock *block,
+        rctf *rect,
+        size_t channel_index)
 {
 	const bAnimChannelType *acf = ANIM_channel_get_typeinfo(ale);
 	View2D *v2d = &ac->ar->v2d;
-	float y, ymid /*, ytext*/;
-	short offset;
+	float ymid;
+	const short channel_height = round_fl_to_int(BLI_rctf_size_y(rect));
 	const bool is_being_renamed = achannel_is_being_renamed(ac, acf, channel_index);
 
 	/* sanity checks - don't draw anything */
@@ -4438,15 +4468,13 @@ void ANIM_channel_draw_widgets(const bContext *C, bAnimContext *ac, bAnimListEle
 		return;
 
 	/* get initial offset */
-	if (acf->get_offset)
-		offset = acf->get_offset(ac, ale);
-	else
-		offset = 0;
+	short offset = rect->xmin;
+	if (acf->get_offset) {
+		offset += acf->get_offset(ac, ale);
+	}
 
-	/* calculate appropriate y-coordinates for icon buttons
-	 */
-	y = (ymaxc - yminc) / 2 + yminc;
-	ymid = y - 0.5f * ICON_WIDTH;
+	/* calculate appropriate y-coordinates for icon buttons */
+	ymid = BLI_rctf_cent_y(rect) - 0.5f * ICON_WIDTH;
 
 	/* no button backdrop behind icons */
 	UI_block_emboss_set(block, UI_EMBOSS_NONE);
@@ -4469,7 +4497,7 @@ void ANIM_channel_draw_widgets(const bContext *C, bAnimContext *ac, bAnimListEle
 	 * - in Grease Pencil mode, color swatches for layer color
 	 */
 	if (ac->sl) {
-		if ((ac->spacetype == SPACE_IPO) &&
+		if ((ac->spacetype == SPACE_GRAPH) &&
 		    (acf->has_setting(ac, ale, ACHANNEL_SETTING_VISIBLE) ||
 		     acf->has_setting(ac, ale, ACHANNEL_SETTING_ALWAYS_VISIBLE)))
 		{
@@ -4528,13 +4556,12 @@ void ANIM_channel_draw_widgets(const bContext *C, bAnimContext *ac, bAnimListEle
 		 */
 		if (acf->name_prop(ale, &ptr, &prop)) {
 			const short margin_x = 3 * round_fl_to_int(UI_DPI_FAC);
-			const short channel_height = round_fl_to_int(ymaxc - yminc);
 			const short width = ac->ar->winx - offset - (margin_x * 2);
 			uiBut *but;
 
 			UI_block_emboss_set(block, UI_EMBOSS);
 
-			but = uiDefButR(block, UI_BTYPE_TEXT, 1, "", offset + margin_x, yminc,
+			but = uiDefButR(block, UI_BTYPE_TEXT, 1, "", offset + margin_x, rect->ymin,
 			                MAX2(width, RENAME_TEXT_MIN_WIDTH), channel_height,
 			                &ptr, RNA_property_identifier(prop), -1, 0, 0, -1, -1, NULL);
 
@@ -4559,14 +4586,14 @@ void ANIM_channel_draw_widgets(const bContext *C, bAnimContext *ac, bAnimListEle
 
 	/* step 5) draw mute+protection toggles + (sliders) ....................... */
 	/* reset offset - now goes from RHS of panel */
-	offset = 0;
+	offset = (int)rect->xmax;
 
 	// TODO: when drawing sliders, make those draw instead of these toggles if not enough space
 	if (v2d && !is_being_renamed) {
 		short draw_sliders = 0;
 
 		/* check if we need to show the sliders */
-		if ((ac->sl) && ELEM(ac->spacetype, SPACE_ACTION, SPACE_IPO)) {
+		if ((ac->sl) && ELEM(ac->spacetype, SPACE_ACTION, SPACE_GRAPH)) {
 			switch (ac->spacetype) {
 				case SPACE_ACTION:
 				{
@@ -4574,9 +4601,9 @@ void ANIM_channel_draw_widgets(const bContext *C, bAnimContext *ac, bAnimListEle
 					draw_sliders = (saction->flag & SACTION_SLIDERS);
 					break;
 				}
-				case SPACE_IPO:
+				case SPACE_GRAPH:
 				{
-					SpaceIpo *sipo = (SpaceIpo *)ac->sl;
+					SpaceGraph *sipo = (SpaceGraph *)ac->sl;
 					draw_sliders = (sipo->flag & SIPO_SLIDERS);
 					break;
 				}
@@ -4587,33 +4614,33 @@ void ANIM_channel_draw_widgets(const bContext *C, bAnimContext *ac, bAnimListEle
 		if (!(draw_sliders) || (BLI_rcti_size_x(&v2d->mask) > ACHANNEL_BUTTON_WIDTH / 2) ) {
 			/* protect... */
 			if (acf->has_setting(ac, ale, ACHANNEL_SETTING_PROTECT)) {
-				offset += ICON_WIDTH;
-				draw_setting_widget(ac, ale, acf, block, (int)v2d->cur.xmax - offset, ymid, ACHANNEL_SETTING_PROTECT);
+				offset -= ICON_WIDTH;
+				draw_setting_widget(ac, ale, acf, block, offset, ymid, ACHANNEL_SETTING_PROTECT);
 			}
 			/* mute... */
 			if (acf->has_setting(ac, ale, ACHANNEL_SETTING_MUTE)) {
-				offset += ICON_WIDTH;
-				draw_setting_widget(ac, ale, acf, block, (int)v2d->cur.xmax - offset, ymid, ACHANNEL_SETTING_MUTE);
+				offset -= ICON_WIDTH;
+				draw_setting_widget(ac, ale, acf, block, offset, ymid, ACHANNEL_SETTING_MUTE);
 			}
 			if (ale->type == ANIMTYPE_GPLAYER) {
 				/* Not technically "mute" (in terms of anim channels, but this sets layer visibility instead) */
-				offset += ICON_WIDTH;
-				draw_setting_widget(ac, ale, acf, block, (int)v2d->cur.xmax - offset, ymid, ACHANNEL_SETTING_VISIBLE);
+				offset -= ICON_WIDTH;
+				draw_setting_widget(ac, ale, acf, block, offset, ymid, ACHANNEL_SETTING_VISIBLE);
 			}
 
 			/* modifiers disable */
 			if (acf->has_setting(ac, ale, ACHANNEL_SETTING_MOD_OFF)) {
 				/* hack: extra spacing, to avoid touching the mute toggle */
-				offset += ICON_WIDTH * 1.2f;
-				draw_setting_widget(ac, ale, acf, block, (int)v2d->cur.xmax - offset, ymid, ACHANNEL_SETTING_MOD_OFF);
+				offset -= ICON_WIDTH * 1.2f;
+				draw_setting_widget(ac, ale, acf, block, offset, ymid, ACHANNEL_SETTING_MOD_OFF);
 			}
 
 			/* ----------- */
 
 			/* pinned... */
 			if (acf->has_setting(ac, ale, ACHANNEL_SETTING_PINNED)) {
-				offset += ICON_WIDTH;
-				draw_setting_widget(ac, ale, acf, block, (int)v2d->cur.xmax - offset, ymid, ACHANNEL_SETTING_PINNED);
+				offset -= ICON_WIDTH;
+				draw_setting_widget(ac, ale, acf, block, offset, ymid, ACHANNEL_SETTING_PINNED);
 			}
 
 			/* NLA Action "pushdown" */
@@ -4623,9 +4650,9 @@ void ANIM_channel_draw_widgets(const bContext *C, bAnimContext *ac, bAnimListEle
 
 				UI_block_emboss_set(block, UI_EMBOSS);
 
-				offset += UI_UNIT_X;
+				offset -= UI_UNIT_X;
 				but = uiDefIconButO(block, UI_BTYPE_BUT, "NLA_OT_action_pushdown", WM_OP_INVOKE_DEFAULT, ICON_NLA_PUSHDOWN,
-				                   (int)v2d->cur.xmax - offset, ymid, UI_UNIT_X, UI_UNIT_X, NULL);
+				                   offset, ymid, UI_UNIT_X, UI_UNIT_X, NULL);
 
 				opptr_b = UI_but_operator_ptr_get(but);
 				RNA_int_set(opptr_b, "channel_index", channel_index);
@@ -4645,7 +4672,7 @@ void ANIM_channel_draw_widgets(const bContext *C, bAnimContext *ac, bAnimListEle
 		if ((draw_sliders) && ELEM(ale->type, ANIMTYPE_FCURVE, ANIMTYPE_NLACURVE, ANIMTYPE_SHAPEKEY)) {
 			/* adjust offset */
 			// TODO: make slider width dynamic, so that they can be easier to use when the view is wide enough
-			offset += SLIDER_WIDTH;
+			offset -= SLIDER_WIDTH;
 
 			/* need backdrop behind sliders... */
 			UI_block_emboss_set(block, UI_EMBOSS);
@@ -4666,7 +4693,7 @@ void ANIM_channel_draw_widgets(const bContext *C, bAnimContext *ac, bAnimListEle
 						uiBut *but;
 
 						/* create the slider button, and assign relevant callback to ensure keyframes are inserted... */
-						but = uiDefAutoButR(block, &ptr, prop, fcu->array_index, "", ICON_NONE, (int)v2d->cur.xmax - offset, ymid, SLIDER_WIDTH, (int)ymaxc - yminc);
+						but = uiDefAutoButR(block, &ptr, prop, fcu->array_index, "", ICON_NONE, offset, ymid, SLIDER_WIDTH, channel_height);
 						UI_but_func_set(but, achannel_setting_slider_nla_curve_cb, ale->id, ale->data);
 					}
 				}
@@ -4703,7 +4730,7 @@ void ANIM_channel_draw_widgets(const bContext *C, bAnimContext *ac, bAnimListEle
 						uiBut *but;
 
 						/* create the slider button, and assign relevant callback to ensure keyframes are inserted... */
-						but = uiDefAutoButR(block, &ptr, prop, array_index, "", ICON_NONE, (int)v2d->cur.xmax - offset, ymid, SLIDER_WIDTH, (int)ymaxc - yminc);
+						but = uiDefAutoButR(block, &ptr, prop, array_index, "", ICON_NONE, offset, ymid, SLIDER_WIDTH, channel_height);
 
 						/* assign keyframing function according to slider type */
 						if (ale->type == ANIMTYPE_SHAPEKEY)

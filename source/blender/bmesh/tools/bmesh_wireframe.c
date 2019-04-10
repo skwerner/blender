@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,14 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * Contributor(s): Campbell Barton
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/bmesh/tools/bmesh_wireframe.c
- *  \ingroup bmesh
+/** \file
+ * \ingroup bmesh
  *
  * Creates a solid wireframe from connected faces.
  */
@@ -443,7 +437,9 @@ void BM_mesh_wireframe(
 			BMVert *v_pos2 = verts_pos[i_2];
 
 			f_new = BM_face_create_quad_tri(bm, v_l1, v_l2, v_neg2, v_neg1, f_src, BM_CREATE_NOP);
-			if (mat_offset) f_new->mat_nr = CLAMPIS(f_new->mat_nr + mat_offset, 0, mat_max);
+			if (mat_offset) {
+				f_new->mat_nr = CLAMPIS(f_new->mat_nr + mat_offset, 0, mat_max);
+			}
 			BM_elem_flag_enable(f_new, BM_ELEM_TAG);
 			l_new = BM_FACE_FIRST_LOOP(f_new);
 
@@ -454,7 +450,9 @@ void BM_mesh_wireframe(
 
 			f_new = BM_face_create_quad_tri(bm, v_l2, v_l1, v_pos1, v_pos2, f_src, BM_CREATE_NOP);
 
-			if (mat_offset) f_new->mat_nr = CLAMPIS(f_new->mat_nr + mat_offset, 0, mat_max);
+			if (mat_offset) {
+				f_new->mat_nr = CLAMPIS(f_new->mat_nr + mat_offset, 0, mat_max);
+			}
 			BM_elem_flag_enable(f_new, BM_ELEM_TAG);
 			l_new = BM_FACE_FIRST_LOOP(f_new);
 
@@ -471,7 +469,9 @@ void BM_mesh_wireframe(
 					BMVert *v_b2 = verts_boundary[i_2];
 
 					f_new = BM_face_create_quad_tri(bm, v_b2, v_b1, v_neg1, v_neg2, f_src, BM_CREATE_NOP);
-					if (mat_offset) f_new->mat_nr = CLAMPIS(f_new->mat_nr + mat_offset, 0, mat_max);
+					if (mat_offset) {
+						f_new->mat_nr = CLAMPIS(f_new->mat_nr + mat_offset, 0, mat_max);
+					}
 					BM_elem_flag_enable(f_new, BM_ELEM_TAG);
 					l_new = BM_FACE_FIRST_LOOP(f_new);
 
@@ -481,7 +481,9 @@ void BM_mesh_wireframe(
 					BM_elem_attrs_copy(bm, bm, l,      l_new->next->next);
 
 					f_new = BM_face_create_quad_tri(bm, v_b1, v_b2, v_pos2, v_pos1, f_src, BM_CREATE_NOP);
-					if (mat_offset) f_new->mat_nr = CLAMPIS(f_new->mat_nr + mat_offset, 0, mat_max);
+					if (mat_offset) {
+						f_new->mat_nr = CLAMPIS(f_new->mat_nr + mat_offset, 0, mat_max);
+					}
 					BM_elem_flag_enable(f_new, BM_ELEM_TAG);
 					l_new = BM_FACE_FIRST_LOOP(f_new);
 

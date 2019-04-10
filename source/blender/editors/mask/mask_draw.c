@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,17 +15,10 @@
  *
  * The Original Code is Copyright (C) 2012 Blender Foundation.
  * All rights reserved.
- *
- *
- * Contributor(s): Blender Foundation,
- *                 Campbell Barton,
- *                 Sergey Sharybin
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/mask/mask_draw.c
- *  \ingroup edmask
+/** \file
+ * \ingroup edmask
  */
 
 #include "MEM_guardedalloc.h"
@@ -35,7 +26,6 @@
 #include "BLI_utildefines.h"
 #include "BLI_math.h"
 #include "BLI_rect.h"
-#include "BLI_task.h"
 #include "BLI_listbase.h"
 
 #include "BKE_context.h"
@@ -246,10 +236,10 @@ static void draw_spline_points(const bContext *C, MaskLayer *masklay, MaskSpline
 				if (point == masklay->act_point)
 					immUniformColor3f(1.0f, 1.0f, 1.0f);
 				else
-					immUniformThemeColor(TH_HANDLE_VERTEX_SELECT);
+					immUniformThemeColorShadeAlpha(TH_HANDLE_VERTEX_SELECT, 0, 255);
 			}
 			else {
-				immUniformThemeColor(TH_HANDLE_VERTEX);
+				immUniformThemeColorShadeAlpha(TH_HANDLE_VERTEX, 0, 255);
 			}
 
 			immBegin(GPU_PRIM_POINTS, 1);
@@ -316,10 +306,10 @@ static void draw_spline_points(const bContext *C, MaskLayer *masklay, MaskSpline
 			if (point == masklay->act_point)
 				immUniformColor3f(1.0f, 1.0f, 1.0f);
 			else
-				immUniformThemeColor(TH_HANDLE_VERTEX_SELECT);
+				immUniformThemeColorShadeAlpha(TH_HANDLE_VERTEX_SELECT, 0, 255);
 		}
 		else
-			immUniformThemeColor(TH_HANDLE_VERTEX);
+			immUniformThemeColorShadeAlpha(TH_HANDLE_VERTEX, 0, 255);
 
 		immBegin(GPU_PRIM_POINTS, 1);
 		immVertex2fv(pos, vert);

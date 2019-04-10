@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,14 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * Contributor(s): Lukas Toenne, Campbell Barton
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/python/mathutils/mathutils_bvhtree.c
- *  \ingroup mathutils
+/** \file
+ * \ingroup mathutils
  *
  * This file defines the 'mathutils.bvhtree' module, a general purpose module to access
  * blenders bvhtree for mesh surface nearest-element search and ray casting.
@@ -69,7 +63,6 @@
 
 
 /* -------------------------------------------------------------------- */
-
 /** \name Docstring (snippets)
  * \{ */
 
@@ -119,7 +112,6 @@ typedef struct {
 
 
 /* -------------------------------------------------------------------- */
-
 /** \name Utility helper functions
  * \{ */
 
@@ -152,7 +144,6 @@ static PyObject *bvhtree_CreatePyObject(
 
 
 /* -------------------------------------------------------------------- */
-
 /** \name BVHTreeRayHit to Python utilities
  * \{ */
 
@@ -209,7 +200,6 @@ static PyObject *py_bvhtree_raycast_to_py_and_check(const BVHTreeRayHit *hit)
 
 
 /* -------------------------------------------------------------------- */
-
 /** \name BVHTreeNearest to Python utilities
  * \{ */
 
@@ -281,7 +271,6 @@ static void py_bvhtree__tp_dealloc(PyBVHTree *self)
 
 
 /* -------------------------------------------------------------------- */
-
 /** \name Methods
  * \{ */
 
@@ -661,7 +650,6 @@ static PyObject *py_bvhtree_overlap(PyBVHTree *self, PyBVHTree *other)
 
 
 /* -------------------------------------------------------------------- */
-
 /** \name Class Methods
  * \{ */
 
@@ -936,10 +924,12 @@ static PyObject *C_BVHTree_FromPolygons(PyObject *UNUSED(cls), PyObject *args, P
 		        orig_index, orig_normal);
 	}
 	else {
-		if (coords)
+		if (coords) {
 			MEM_freeN(coords);
-		if (tris)
+		}
+		if (tris) {
 			MEM_freeN(tris);
+		}
 
 		return NULL;
 	}
@@ -1057,7 +1047,7 @@ static Mesh *bvh_get_mesh(
 {
 	Object *ob_eval = DEG_get_evaluated_object(depsgraph, ob);
 	/* we only need minimum mesh data for topology and vertex locations */
-	CustomDataMask mask = CD_MASK_BAREMESH;
+	CustomData_MeshMasks data_masks = CD_MASK_BAREMESH;
 	const bool use_render = DEG_get_mode(depsgraph) == DAG_EVAL_RENDER;
 	*r_free_mesh = false;
 
@@ -1071,15 +1061,15 @@ static Mesh *bvh_get_mesh(
 			}
 			else {
 				*r_free_mesh = true;
-				return mesh_create_eval_final_render(depsgraph, scene, ob, mask);
+				return mesh_create_eval_final_render(depsgraph, scene, ob, &data_masks);
 			}
 		}
 		else if (ob_eval != NULL) {
 			if (use_cage) {
-				return mesh_get_eval_deform(depsgraph, scene, ob_eval, mask);  /* ob->derivedDeform */
+				return mesh_get_eval_deform(depsgraph, scene, ob_eval, &data_masks);
 			}
 			else {
-				return mesh_get_eval_final(depsgraph, scene, ob_eval, mask);  /* ob->derivedFinal */
+				return mesh_get_eval_final(depsgraph, scene, ob_eval, &data_masks);
 			}
 		}
 		else {
@@ -1098,7 +1088,7 @@ static Mesh *bvh_get_mesh(
 			}
 			else {
 				*r_free_mesh = true;
-				return mesh_create_eval_no_deform_render(depsgraph, scene, ob, NULL, mask);
+				return mesh_create_eval_no_deform_render(depsgraph, scene, ob, &data_masks);
 			}
 		}
 		else {
@@ -1109,7 +1099,7 @@ static Mesh *bvh_get_mesh(
 			}
 			else {
 				*r_free_mesh = true;
-				return mesh_create_eval_no_deform(depsgraph, scene, ob, NULL, mask);
+				return mesh_create_eval_no_deform(depsgraph, scene, ob, &data_masks);
 			}
 		}
 	}
@@ -1240,7 +1230,6 @@ static PyObject *C_BVHTree_FromObject(PyObject *UNUSED(cls), PyObject *args, PyO
 
 
 /* -------------------------------------------------------------------- */
-
 /** \name Module & Type definition
  * \{ */
 
@@ -1256,7 +1245,7 @@ static PyMethodDef py_bvhtree_methods[] = {
 	{"FromBMesh", (PyCFunction) C_BVHTree_FromBMesh, METH_VARARGS | METH_KEYWORDS | METH_CLASS, C_BVHTree_FromBMesh_doc},
 	{"FromObject", (PyCFunction) C_BVHTree_FromObject, METH_VARARGS | METH_KEYWORDS | METH_CLASS, C_BVHTree_FromObject_doc},
 #endif
-	{NULL, NULL, 0, NULL}
+	{NULL, NULL, 0, NULL},
 };
 
 PyTypeObject PyBVHTree_Type = {

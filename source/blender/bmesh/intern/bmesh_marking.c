@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,14 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * Contributor(s): Joseph Eagar, Geoffrey Bantle, Campbell Barton
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/bmesh/intern/bmesh_marking.c
- *  \ingroup bmesh
+/** \file
+ * \ingroup bmesh
  *
  * Selection routines for bmesh structures.
  * This is actually all old code ripped from
@@ -66,7 +60,9 @@ static void recount_totsels(BMesh *bm)
 		int count = 0;
 
 		BM_ITER_MESH (ele, &iter, bm, iter_types[i]) {
-			if (BM_elem_flag_test(ele, BM_ELEM_SELECT)) count += 1;
+			if (BM_elem_flag_test(ele, BM_ELEM_SELECT)) {
+				count += 1;
+			}
 		}
 		*tots[i] = count;
 	}
@@ -673,20 +669,32 @@ static int bm_mesh_flag_count(
 
 	if (htype & BM_VERT) {
 		BM_ITER_MESH (ele, &iter, bm, BM_VERTS_OF_MESH) {
-			if (respecthide && BM_elem_flag_test(ele, BM_ELEM_HIDDEN)) continue;
-			if (BM_elem_flag_test_bool(ele, hflag) == test_for_enabled) tot++;
+			if (respecthide && BM_elem_flag_test(ele, BM_ELEM_HIDDEN)) {
+				continue;
+			}
+			if (BM_elem_flag_test_bool(ele, hflag) == test_for_enabled) {
+				tot++;
+			}
 		}
 	}
 	if (htype & BM_EDGE) {
 		BM_ITER_MESH (ele, &iter, bm, BM_EDGES_OF_MESH) {
-			if (respecthide && BM_elem_flag_test(ele, BM_ELEM_HIDDEN)) continue;
-			if (BM_elem_flag_test_bool(ele, hflag) == test_for_enabled) tot++;
+			if (respecthide && BM_elem_flag_test(ele, BM_ELEM_HIDDEN)) {
+				continue;
+			}
+			if (BM_elem_flag_test_bool(ele, hflag) == test_for_enabled) {
+				tot++;
+			}
 		}
 	}
 	if (htype & BM_FACE) {
 		BM_ITER_MESH (ele, &iter, bm, BM_FACES_OF_MESH) {
-			if (respecthide && BM_elem_flag_test(ele, BM_ELEM_HIDDEN)) continue;
-			if (BM_elem_flag_test_bool(ele, hflag) == test_for_enabled) tot++;
+			if (respecthide && BM_elem_flag_test(ele, BM_ELEM_HIDDEN)) {
+				continue;
+			}
+			if (BM_elem_flag_test_bool(ele, hflag) == test_for_enabled) {
+				tot++;
+			}
 		}
 	}
 
@@ -882,9 +890,9 @@ void BM_editselection_plane(BMEditSelection *ese, float r_plane[3])
 			 * we cant make a crossvec from a vec thats the same as the vec
 			 * unlikely but possible, so make sure if the normal is (0, 0, 1)
 			 * that vec isn't the same or in the same direction even. */
-			if      (eve->no[0] < 0.5f) vec[0] = 1.0f;
-			else if (eve->no[1] < 0.5f) vec[1] = 1.0f;
-			else                        vec[2] = 1.0f;
+			if      (eve->no[0] < 0.5f) { vec[0] = 1.0f; }
+			else if (eve->no[1] < 0.5f) { vec[1] = 1.0f; }
+			else                        { vec[2] = 1.0f; }
 			cross_v3_v3v3(r_plane, eve->no, vec);
 		}
 		normalize_v3(r_plane);
@@ -1377,15 +1385,21 @@ void _bm_elem_hide_set(BMesh *bm, BMHeader *head, const bool hide)
 	 * hiding an element */
 	switch (head->htype) {
 		case BM_VERT:
-			if (hide) BM_vert_select_set(bm, (BMVert *)head, false);
+			if (hide) {
+				BM_vert_select_set(bm, (BMVert *)head, false);
+			}
 			BM_vert_hide_set((BMVert *)head, hide);
 			break;
 		case BM_EDGE:
-			if (hide) BM_edge_select_set(bm, (BMEdge *)head, false);
+			if (hide) {
+				BM_edge_select_set(bm, (BMEdge *)head, false);
+			}
 			BM_edge_hide_set((BMEdge *)head, hide);
 			break;
 		case BM_FACE:
-			if (hide) BM_face_select_set(bm, (BMFace *)head, false);
+			if (hide) {
+				BM_face_select_set(bm, (BMFace *)head, false);
+			}
 			BM_face_hide_set((BMFace *)head, hide);
 			break;
 		default:

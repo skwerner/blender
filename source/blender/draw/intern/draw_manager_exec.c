@@ -1,6 +1,4 @@
 /*
- * Copyright 2016, Blender Foundation.
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -15,47 +13,39 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
- * Contributor(s): Blender Institute
- *
+ * Copyright 2016, Blender Foundation.
  */
 
-/** \file blender/draw/intern/draw_manager_exec.c
- *  \ingroup draw
+/** \file
+ * \ingroup draw
  */
 
 #include "draw_manager.h"
 
+#include "BLI_math_bits.h"
 #include "BLI_mempool.h"
 
-#include "BIF_glutil.h"
-
 #include "BKE_global.h"
-#include "BKE_object.h"
 
 #include "GPU_draw.h"
 #include "GPU_extensions.h"
 #include "intern/gpu_shader_private.h"
 
 #ifdef USE_GPU_SELECT
-#  include "ED_view3d.h"
-#  include "ED_armature.h"
 #  include "GPU_select.h"
 #endif
 
 #ifdef USE_GPU_SELECT
 void DRW_select_load_id(uint id)
 {
-	BLI_assert(G.f & G_PICKSEL);
+	BLI_assert(G.f & G_FLAG_PICKSEL);
 	DST.select_id = id;
 }
 #endif
 
 #define DEBUG_UBO_BINDING
 
-struct GPUUniformBuffer *view_ubo;
-
 /* -------------------------------------------------------------------- */
-
 /** \name Draw State (DRW_state)
  * \{ */
 
@@ -107,15 +97,8 @@ void drw_state_set(DRWState state)
 
 	/* Raster Discard */
 	{
-		if (CHANGED_ANY(DRW_STATE_WRITE_DEPTH | DRW_STATE_WRITE_COLOR |
-		                DRW_STATE_WRITE_STENCIL |
-		                DRW_STATE_WRITE_STENCIL_SHADOW_PASS |
-		                DRW_STATE_WRITE_STENCIL_SHADOW_FAIL))
-		{
-			if ((state & (DRW_STATE_WRITE_DEPTH | DRW_STATE_WRITE_COLOR |
-			              DRW_STATE_WRITE_STENCIL | DRW_STATE_WRITE_STENCIL_SHADOW_PASS |
-			              DRW_STATE_WRITE_STENCIL_SHADOW_FAIL)) != 0)
-			{
+		if (CHANGED_ANY(DRW_STATE_RASTERIZER_ENABLED)) {
+			if ((state & DRW_STATE_RASTERIZER_ENABLED) != 0) {
 				glDisable(GL_RASTERIZER_DISCARD);
 			}
 			else {
@@ -191,15 +174,23 @@ void drw_state_set(DRWState state)
 
 	/* Wire Width */
 	{
-		if (CHANGED_ANY(DRW_STATE_WIRE | DRW_STATE_WIRE_SMOOTH)) {
-			if ((state & DRW_STATE_WIRE_SMOOTH) != 0) {
+		int test;
+		if (CHANGED_ANY_STORE_VAR(
+		        DRW_STATE_WIRE | DRW_STATE_WIRE_WIDE | DRW_STATE_WIRE_SMOOTH,
+		        test))
+		{
+			if (test & DRW_STATE_WIRE_WIDE) {
+				GPU_line_width(3.0f);
+			}
+			else if (test & DRW_STATE_WIRE_SMOOTH) {
 				GPU_line_width(2.0f);
 				GPU_line_smooth(true);
 			}
-			else if ((state & DRW_STATE_WIRE) != 0) {
+			else if (test & DRW_STATE_WIRE) {
 				GPU_line_width(1.0f);
 			}
 			else {
+				GPU_line_width(1.0f);
 				GPU_line_smooth(false);
 			}
 		}
@@ -435,7 +426,7 @@ void DRW_state_invert_facing(void)
  * This only works if DRWPasses have been tagged with DRW_STATE_CLIP_PLANES,
  * and if the shaders have support for it (see usage of gl_ClipDistance).
  * Be sure to call DRW_state_clip_planes_reset() after you finish drawing.
- **/
+ */
 void DRW_state_clip_planes_len_set(uint plane_len)
 {
 	BLI_assert(plane_len <= MAX_CLIP_PLANES);
@@ -447,10 +438,22 @@ void DRW_state_clip_planes_reset(void)
 	DST.clip_planes_len = 0;
 }
 
+void DRW_state_clip_planes_set_from_rv3d(RegionView3D *rv3d)
+{
+	int max_len = 6;
+	int real_len = (rv3d->viewlock & RV3D_BOXCLIP) ? 4 : max_len;
+	while (real_len < max_len) {
+		/* Fill in dummy values that wont change results (6 is hard coded in shaders). */
+		copy_v4_v4(rv3d->clip[real_len], rv3d->clip[3]);
+		real_len++;
+	}
+
+	DRW_state_clip_planes_len_set(max_len);
+}
+
 /** \} */
 
 /* -------------------------------------------------------------------- */
-
 /** \name Clipping (DRW_clipping)
  * \{ */
 
@@ -461,24 +464,17 @@ void DRW_state_clip_planes_reset(void)
  */
 static void draw_frustum_boundbox_calc(const float(*projmat)[4], BoundBox *r_bbox)
 {
-	float near, far, left, right, bottom, top;
+	float left, right, bottom, top, near, far;
 	bool is_persp = projmat[3][3] == 0.0f;
 
+	projmat_dimensions(
+	        projmat, &left, &right, &bottom, &top, &near, &far);
+
 	if (is_persp) {
-		near   = projmat[3][2] / (projmat[2][2] - 1.0f);
-		far    = projmat[3][2] / (projmat[2][2] + 1.0f);
-		left   = near * (projmat[2][0] - 1.0f) / projmat[0][0];
-		right  = near * (projmat[2][0] + 1.0f) / projmat[0][0];
-		bottom = near * (projmat[2][1] - 1.0f) / projmat[1][1];
-		top    = near * (projmat[2][1] + 1.0f) / projmat[1][1];
-	}
-	else {
-		near   = ( projmat[3][2] + 1.0f) / projmat[2][2];
-		far    = ( projmat[3][2] - 1.0f) / projmat[2][2];
-		left   = (-projmat[3][0] - 1.0f) / projmat[0][0];
-		right  = (-projmat[3][0] + 1.0f) / projmat[0][0];
-		bottom = (-projmat[3][1] - 1.0f) / projmat[1][1];
-		top    = (-projmat[3][1] + 1.0f) / projmat[1][1];
+		left   *= near;
+		right  *= near;
+		bottom *= near;
+		top    *= near;
 	}
 
 	r_bbox->vec[0][2] = r_bbox->vec[3][2] = r_bbox->vec[7][2] = r_bbox->vec[4][2] = -near;
@@ -491,8 +487,8 @@ static void draw_frustum_boundbox_calc(const float(*projmat)[4], BoundBox *r_bbo
 	if (is_persp) {
 		float sca_far = far / near;
 		left   *= sca_far;
-		bottom *= sca_far;
 		right  *= sca_far;
+		bottom *= sca_far;
 		top    *= sca_far;
 	}
 
@@ -505,8 +501,9 @@ static void draw_frustum_boundbox_calc(const float(*projmat)[4], BoundBox *r_bbo
 
 static void draw_clipping_setup_from_view(void)
 {
-	if (DST.clipping.updated)
+	if (DST.clipping.updated) {
 		return;
+	}
 
 	float (*viewinv)[4] = DST.view_data.matstate.mat[DRW_MAT_VIEWINV];
 	float (*projmat)[4] = DST.view_data.matstate.mat[DRW_MAT_WIN];
@@ -542,7 +539,7 @@ static void draw_clipping_setup_from_view(void)
 			default: q = 4; r = 7; s = 6; break; /* +X */
 		}
 		if (DST.frontface == GL_CW) {
-			SWAP(int, q, r);
+			SWAP(int, q, s);
 		}
 
 		normal_quad_v3(DST.clipping.frustum_planes[p], bbox.vec[p], bbox.vec[q], bbox.vec[r], bbox.vec[s]);
@@ -668,14 +665,16 @@ bool DRW_culling_sphere_test(BoundSphere *bsphere)
 	draw_clipping_setup_from_view();
 
 	/* Bypass test if radius is negative. */
-	if (bsphere->radius < 0.0f)
+	if (bsphere->radius < 0.0f) {
 		return true;
+	}
 
 	/* Do a rough test first: Sphere VS Sphere intersect. */
 	BoundSphere *frustum_bsphere = &DST.clipping.frustum_bsphere;
 	float center_dist = len_squared_v3v3(bsphere->center, frustum_bsphere->center);
-	if (center_dist > SQUARE(bsphere->radius + frustum_bsphere->radius))
+	if (center_dist > SQUARE(bsphere->radius + frustum_bsphere->radius)) {
 		return false;
+	}
 
 	/* Test against the 6 frustum planes. */
 	for (int p = 0; p < 6; p++) {
@@ -746,7 +745,6 @@ void DRW_culling_frustum_planes_get(float planes[6][4])
 /** \} */
 
 /* -------------------------------------------------------------------- */
-
 /** \name Draw (DRW_draw)
  * \{ */
 
@@ -794,18 +792,20 @@ static void draw_matrices_model_prepare(DRWCallState *st)
 	if (st->matflag & DRW_CALL_MODELVIEWPROJECTION) {
 		mul_m4_m4m4(st->modelviewprojection, DST.view_data.matstate.mat[DRW_MAT_PERS], st->model);
 	}
-	if (st->matflag & (DRW_CALL_NORMALVIEW | DRW_CALL_EYEVEC)) {
+	if (st->matflag & (DRW_CALL_NORMALVIEW | DRW_CALL_NORMALVIEWINVERSE | DRW_CALL_EYEVEC)) {
 		copy_m3_m4(st->normalview, st->modelview);
 		invert_m3(st->normalview);
 		transpose_m3(st->normalview);
 	}
+	if (st->matflag & (DRW_CALL_NORMALVIEWINVERSE | DRW_CALL_EYEVEC)) {
+		invert_m3_m3(st->normalviewinverse, st->normalview);
+	}
+	/* TODO remove eye vec (unused) */
 	if (st->matflag & DRW_CALL_EYEVEC) {
 		/* Used by orthographic wires */
-		float tmp[3][3];
 		copy_v3_fl3(st->eyevec, 0.0f, 0.0f, 1.0f);
-		invert_m3_m3(tmp, st->normalview);
 		/* set eye vector, transformed to object coords */
-		mul_m3_v3(tmp, st->eyevec);
+		mul_m3_v3(st->normalviewinverse, st->eyevec);
 	}
 	/* Non view dependent */
 	if (st->matflag & DRW_CALL_MODELINVERSE) {
@@ -825,10 +825,11 @@ static void draw_geometry_prepare(DRWShadingGroup *shgroup, DRWCall *call)
 	/* step 1 : bind object dependent matrices */
 	if (call != NULL) {
 		DRWCallState *state = call->state;
-		float objectinfo[3];
+		float objectinfo[4];
 		objectinfo[0] = state->objectinfo[0];
 		objectinfo[1] = call->single.ma_index; /* WATCH this is only valid for single drawcalls. */
 		objectinfo[2] = state->objectinfo[1];
+		objectinfo[3] = (state->flag & DRW_CALL_NEGSCALE) ? -1.0f : 1.0f;
 
 		GPU_shader_uniform_vector(shgroup->shader, shgroup->model, 16, 1, (float *)state->model);
 		GPU_shader_uniform_vector(shgroup->shader, shgroup->modelinverse, 16, 1, (float *)state->modelinverse);
@@ -836,8 +837,9 @@ static void draw_geometry_prepare(DRWShadingGroup *shgroup, DRWCall *call)
 		GPU_shader_uniform_vector(shgroup->shader, shgroup->modelviewinverse, 16, 1, (float *)state->modelviewinverse);
 		GPU_shader_uniform_vector(shgroup->shader, shgroup->modelviewprojection, 16, 1, (float *)state->modelviewprojection);
 		GPU_shader_uniform_vector(shgroup->shader, shgroup->normalview, 9, 1, (float *)state->normalview);
+		GPU_shader_uniform_vector(shgroup->shader, shgroup->normalviewinverse, 9, 1, (float *)state->normalviewinverse);
 		GPU_shader_uniform_vector(shgroup->shader, shgroup->normalworld, 9, 1, (float *)state->normalworld);
-		GPU_shader_uniform_vector(shgroup->shader, shgroup->objectinfo, 3, 1, (float *)objectinfo);
+		GPU_shader_uniform_vector(shgroup->shader, shgroup->objectinfo, 4, 1, (float *)objectinfo);
 		GPU_shader_uniform_vector(shgroup->shader, shgroup->orcotexfac, 3, 2, (float *)state->orcotexfac);
 		GPU_shader_uniform_vector(shgroup->shader, shgroup->eye, 3, 1, (float *)state->eyevec);
 	}
@@ -851,7 +853,7 @@ static void draw_geometry_prepare(DRWShadingGroup *shgroup, DRWCall *call)
 		GPU_shader_uniform_vector(shgroup->shader, shgroup->modelview, 16, 1, (float *)DST.view_data.matstate.mat[DRW_MAT_VIEW]);
 		GPU_shader_uniform_vector(shgroup->shader, shgroup->modelviewinverse, 16, 1, (float *)DST.view_data.matstate.mat[DRW_MAT_VIEWINV]);
 		GPU_shader_uniform_vector(shgroup->shader, shgroup->modelviewprojection, 16, 1, (float *)DST.view_data.matstate.mat[DRW_MAT_PERS]);
-		GPU_shader_uniform_vector(shgroup->shader, shgroup->objectinfo, 3, 1, (float *)unitmat);
+		GPU_shader_uniform_vector(shgroup->shader, shgroup->objectinfo, 4, 1, (float *)unitmat);
 		GPU_shader_uniform_vector(shgroup->shader, shgroup->orcotexfac, 3, 2, (float *)shgroup->instance_orcofac);
 	}
 }
@@ -890,55 +892,97 @@ enum {
 	BIND_PERSIST = 2,      /* Release slot only after the next shader change. */
 };
 
+static void set_bound_flags(uint64_t *slots, uint64_t *persist_slots, int slot_idx, char bind_type)
+{
+	uint64_t slot = 1lu << slot_idx;
+	*slots |= slot;
+	if (bind_type == BIND_PERSIST) {
+		*persist_slots |= slot;
+	}
+}
+
+static int get_empty_slot_index(uint64_t slots)
+{
+	uint64_t empty_slots = ~slots;
+	/* Find first empty slot using bitscan. */
+	if (empty_slots != 0) {
+		if ((empty_slots & 0xFFFFFFFFlu) != 0) {
+			return (int)bitscan_forward_uint(empty_slots);
+		}
+		else {
+			return (int)bitscan_forward_uint(empty_slots >> 32) + 32;
+		}
+	}
+	else {
+		/* Greater than GPU_max_textures() */
+		return 99999;
+	}
+}
+
 static void bind_texture(GPUTexture *tex, char bind_type)
 {
-	int index;
-	char *slot_flags = DST.RST.bound_tex_slots;
-	int bind_num = GPU_texture_bound_number(tex);
-	if (bind_num == -1) {
-		for (int i = 0; i < GPU_max_textures(); ++i) {
-			index = DST.RST.bind_tex_inc = (DST.RST.bind_tex_inc + 1) % GPU_max_textures();
-			if (slot_flags[index] == BIND_NONE) {
-				if (DST.RST.bound_texs[index] != NULL) {
-					GPU_texture_unbind(DST.RST.bound_texs[index]);
-				}
-				GPU_texture_bind(tex, index);
-				DST.RST.bound_texs[index] = tex;
-				slot_flags[index] = bind_type;
-				// printf("Binds Texture %d %p\n", DST.RST.bind_tex_inc, tex);
-				return;
+	int idx = GPU_texture_bound_number(tex);
+	if (idx == -1) {
+		/* Texture isn't bound yet. Find an empty slot and bind it. */
+		idx = get_empty_slot_index(DST.RST.bound_tex_slots);
+
+		if (idx < GPU_max_textures()) {
+			GPUTexture **gpu_tex_slot = &DST.RST.bound_texs[idx];
+			/* Unbind any previous texture. */
+			if (*gpu_tex_slot != NULL) {
+				GPU_texture_unbind(*gpu_tex_slot);
 			}
+			GPU_texture_bind(tex, idx);
+			*gpu_tex_slot = tex;
 		}
-		printf("Not enough texture slots! Reduce number of textures used by your shader.\n");
+		else {
+			printf("Not enough texture slots! Reduce number of textures used by your shader.\n");
+			return;
+		}
 	}
-	slot_flags[bind_num] = bind_type;
+	else {
+		/* This texture slot was released but the tex
+		 * is still bound. Just flag the slot again. */
+		BLI_assert(DST.RST.bound_texs[idx] == tex);
+	}
+	set_bound_flags(&DST.RST.bound_tex_slots,
+	                &DST.RST.bound_tex_slots_persist,
+	                idx, bind_type);
 }
 
 static void bind_ubo(GPUUniformBuffer *ubo, char bind_type)
 {
-	int index;
-	char *slot_flags = DST.RST.bound_ubo_slots;
-	int bind_num = GPU_uniformbuffer_bindpoint(ubo);
-	if (bind_num == -1) {
-		for (int i = 0; i < GPU_max_ubo_binds(); ++i) {
-			index = DST.RST.bind_ubo_inc = (DST.RST.bind_ubo_inc + 1) % GPU_max_ubo_binds();
-			if (slot_flags[index] == BIND_NONE) {
-				if (DST.RST.bound_ubos[index] != NULL) {
-					GPU_uniformbuffer_unbind(DST.RST.bound_ubos[index]);
-				}
-				GPU_uniformbuffer_bind(ubo, index);
-				DST.RST.bound_ubos[index] = ubo;
-				slot_flags[index] = bind_type;
-				return;
+	int idx = GPU_uniformbuffer_bindpoint(ubo);
+	if (idx == -1) {
+		/* UBO isn't bound yet. Find an empty slot and bind it. */
+		idx = get_empty_slot_index(DST.RST.bound_ubo_slots);
+
+		if (idx < GPU_max_ubo_binds()) {
+			GPUUniformBuffer **gpu_ubo_slot = &DST.RST.bound_ubos[idx];
+			/* Unbind any previous UBO. */
+			if (*gpu_ubo_slot != NULL) {
+				GPU_uniformbuffer_unbind(*gpu_ubo_slot);
 			}
+			GPU_uniformbuffer_bind(ubo, idx);
+			*gpu_ubo_slot = ubo;
 		}
-		/* printf so user can report bad behavior */
-		printf("Not enough ubo slots! This should not happen!\n");
-		/* This is not depending on user input.
-		 * It is our responsibility to make sure there is enough slots. */
-		BLI_assert(0);
+		else {
+			/* printf so user can report bad behavior */
+			printf("Not enough ubo slots! This should not happen!\n");
+			/* This is not depending on user input.
+			 * It is our responsibility to make sure there is enough slots. */
+			BLI_assert(0);
+			return;
+		}
 	}
-	slot_flags[bind_num] = bind_type;
+	else {
+		/* This UBO slot was released but the UBO is
+		 * still bound here. Just flag the slot again. */
+		BLI_assert(DST.RST.bound_ubos[idx] == ubo);
+	}
+	set_bound_flags(&DST.RST.bound_ubo_slots,
+	                &DST.RST.bound_ubo_slots_persist,
+	                idx, bind_type);
 }
 
 #ifndef NDEBUG
@@ -992,35 +1036,23 @@ static bool ubo_bindings_validate(DRWShadingGroup *shgroup)
 static void release_texture_slots(bool with_persist)
 {
 	if (with_persist) {
-		memset(DST.RST.bound_tex_slots, 0x0, sizeof(*DST.RST.bound_tex_slots) * GPU_max_textures());
+		DST.RST.bound_tex_slots = 0;
+		DST.RST.bound_tex_slots_persist = 0;
 	}
 	else {
-		for (int i = 0; i < GPU_max_textures(); ++i) {
-			if (DST.RST.bound_tex_slots[i] != BIND_PERSIST)
-				DST.RST.bound_tex_slots[i] = BIND_NONE;
-		}
+		DST.RST.bound_tex_slots &= DST.RST.bound_tex_slots_persist;
 	}
-
-	/* Reset so that slots are consistently assigned for different shader
-	 * draw calls, to avoid shader specialization/patching by the driver. */
-	DST.RST.bind_tex_inc = 0;
 }
 
 static void release_ubo_slots(bool with_persist)
 {
 	if (with_persist) {
-		memset(DST.RST.bound_ubo_slots, 0x0, sizeof(*DST.RST.bound_ubo_slots) * GPU_max_ubo_binds());
+		DST.RST.bound_ubo_slots = 0;
+		DST.RST.bound_ubo_slots_persist = 0;
 	}
 	else {
-		for (int i = 0; i < GPU_max_ubo_binds(); ++i) {
-			if (DST.RST.bound_ubo_slots[i] != BIND_PERSIST)
-				DST.RST.bound_ubo_slots[i] = BIND_NONE;
-		}
+		DST.RST.bound_ubo_slots &= DST.RST.bound_ubo_slots_persist;
 	}
-
-	/* Reset so that slots are consistently assigned for different shader
-	 * draw calls, to avoid shader specialization/patching by the driver. */
-	DST.RST.bind_ubo_inc = 0;
 }
 
 static void draw_shgroup(DRWShadingGroup *shgroup, DRWState pass_state)
@@ -1035,7 +1067,9 @@ static void draw_shgroup(DRWShadingGroup *shgroup, DRWState pass_state)
 	bool use_tfeedback = false;
 
 	if (shader_changed) {
-		if (DST.shader) GPU_shader_unbind();
+		if (DST.shader) {
+			GPU_shader_unbind();
+		}
 		GPU_shader_bind(shgroup->shader);
 		DST.shader = shgroup->shader;
 	}
@@ -1123,12 +1157,12 @@ static void draw_shgroup(DRWShadingGroup *shgroup, DRWState pass_state)
 
 #ifdef USE_GPU_SELECT
 #  define GPU_SELECT_LOAD_IF_PICKSEL(_select_id) \
-	if (G.f & G_PICKSEL) { \
+	if (G.f & G_FLAG_PICKSEL) { \
 		GPU_select_load_id(_select_id); \
 	} ((void)0)
 
 #  define GPU_SELECT_LOAD_IF_PICKSEL_CALL(_call) \
-	if ((G.f & G_PICKSEL) && (_call)) { \
+	if ((G.f & G_FLAG_PICKSEL) && (_call)) { \
 		GPU_select_load_id((_call)->select_id); \
 	} ((void)0)
 
@@ -1136,7 +1170,7 @@ static void draw_shgroup(DRWShadingGroup *shgroup, DRWState pass_state)
 	_start = 0;                                                      \
 	_count = _shgroup->instance_count;                     \
 	int *select_id = NULL;                                           \
-	if (G.f & G_PICKSEL) {                                           \
+	if (G.f & G_FLAG_PICKSEL) {                                           \
 		if (_shgroup->override_selectid == -1) {                        \
 			/* Hack : get vbo data without actually drawing. */     \
 			GPUVertBufRaw raw;                   \
@@ -1267,9 +1301,6 @@ static void draw_shgroup(DRWShadingGroup *shgroup, DRWState pass_state)
 	if (use_tfeedback) {
 		GPU_shader_transform_feedback_disable(shgroup->shader);
 	}
-
-	/* TODO: remove, (currently causes alpha issue with sculpt, need to investigate) */
-	DRW_state_reset();
 }
 
 static void drw_update_view(void)
@@ -1278,7 +1309,7 @@ static void drw_update_view(void)
 		DST.state_cache_id++;
 		DST.dirty_mat = false;
 
-		DRW_uniformbuffer_update(view_ubo, &DST.view_data);
+		DRW_uniformbuffer_update(G_draw.view_ubo, &DST.view_data);
 
 		/* Catch integer wrap around. */
 		if (UNLIKELY(DST.state_cache_id == 0)) {
@@ -1301,14 +1332,19 @@ static void drw_update_view(void)
 
 static void drw_draw_pass_ex(DRWPass *pass, DRWShadingGroup *start_group, DRWShadingGroup *end_group)
 {
-	if (start_group == NULL)
+	if (start_group == NULL) {
 		return;
+	}
 
 	DST.shader = NULL;
 
 	BLI_assert(DST.buffer_finish_called && "DRW_render_instance_buffer_finish had not been called before drawing");
 
 	drw_update_view();
+
+	/* GPU_framebuffer_clear calls can change the state outside the DRW module.
+	 * Force reset the affected states to avoid problems later. */
+	drw_state_set(DST.state | DRW_STATE_WRITE_DEPTH | DRW_STATE_WRITE_COLOR);
 
 	drw_state_set(pass->state);
 
@@ -1323,7 +1359,7 @@ static void drw_draw_pass_ex(DRWPass *pass, DRWShadingGroup *start_group, DRWSha
 	}
 
 	/* Clear Bound textures */
-	for (int i = 0; i < GPU_max_textures(); i++) {
+	for (int i = 0; i < DST_MAX_SLOTS; i++) {
 		if (DST.RST.bound_texs[i] != NULL) {
 			GPU_texture_unbind(DST.RST.bound_texs[i]);
 			DST.RST.bound_texs[i] = NULL;
@@ -1331,7 +1367,7 @@ static void drw_draw_pass_ex(DRWPass *pass, DRWShadingGroup *start_group, DRWSha
 	}
 
 	/* Clear Bound Ubos */
-	for (int i = 0; i < GPU_max_ubo_binds(); i++) {
+	for (int i = 0; i < DST_MAX_SLOTS; i++) {
 		if (DST.RST.bound_ubos[i] != NULL) {
 			GPU_uniformbuffer_unbind(DST.RST.bound_ubos[i]);
 			DST.RST.bound_ubos[i] = NULL;
@@ -1341,6 +1377,13 @@ static void drw_draw_pass_ex(DRWPass *pass, DRWShadingGroup *start_group, DRWSha
 	if (DST.shader) {
 		GPU_shader_unbind();
 		DST.shader = NULL;
+	}
+
+	/* HACK: Rasterized discard can affect clear commands which are not
+	 * part of a DRWPass (as of now). So disable rasterized discard here
+	 * if it has been enabled. */
+	if ((DST.state & DRW_STATE_RASTERIZER_ENABLED) == 0) {
+		drw_state_set((DST.state & ~DRW_STATE_RASTERIZER_ENABLED) | DRW_STATE_DEFAULT);
 	}
 
 	DRW_stats_query_end();

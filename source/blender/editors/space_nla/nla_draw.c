@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,15 +15,10 @@
  *
  * The Original Code is Copyright (C) 2009 Blender Foundation, Joshua Leung
  * All rights reserved.
- *
- *
- * Contributor(s): Joshua Leung (major recode)
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/space_nla/nla_draw.c
- *  \ingroup spnla
+/** \file
+ * \ingroup spnla
  */
 
 
@@ -53,7 +46,6 @@
 #include "ED_anim_api.h"
 #include "ED_keyframes_draw.h"
 
-#include "BIF_glutil.h"
 
 #include "GPU_immediate.h"
 #include "GPU_immediate_util.h"
@@ -851,7 +843,9 @@ void draw_nla_channel_list(const bContext *C, bAnimContext *ac, ARegion *ar)
 			    IN_RANGE(ymaxc, v2d->cur.ymin, v2d->cur.ymax) )
 			{
 				/* draw all channels using standard channel-drawing API */
-				ANIM_channel_draw_widgets(C, ac, ale, block, yminc, ymaxc, channel_index);
+				rctf channel_rect;
+				BLI_rctf_init(&channel_rect, 0, v2d->cur.xmax, yminc, ymaxc);
+				ANIM_channel_draw_widgets(C, ac, ale, block, &channel_rect, channel_index);
 			}
 
 			/* adjust y-position for next one */

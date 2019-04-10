@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,18 +15,10 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file ghost/intern/GHOST_System.cpp
- *  \ingroup GHOST
- *  \author	Maarten Gribnau
- *  \date	May 7, 2001
+/** \file
+ * \ingroup GHOST
  */
 
 #include "GHOST_System.h"
@@ -221,12 +211,10 @@ bool GHOST_System::getFullScreen(void)
 void GHOST_System::dispatchEvents()
 {
 #ifdef WITH_INPUT_NDOF
-  #ifndef WIN32
 	// NDOF Motion event is sent only once per dispatch, so do it now:
 	if (m_ndofManager) {
 		m_ndofManager->sendMotionEvent();
 	}
-  #endif
 #endif
 
 	if (m_eventManager) {
@@ -303,9 +291,9 @@ void GHOST_System::setTabletAPI(GHOST_TTabletAPI api)
 	m_tabletAPI = api;
 }
 
-bool GHOST_System::useTabletAPI(GHOST_TTabletAPI api) const
+GHOST_TTabletAPI GHOST_System::getTabletAPI(void)
 {
-	return (m_tabletAPI == GHOST_kTabletAutomatic || m_tabletAPI == api);
+	return m_tabletAPI;
 }
 
 #ifdef WITH_INPUT_NDOF

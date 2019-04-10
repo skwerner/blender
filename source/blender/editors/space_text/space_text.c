@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,15 +15,10 @@
  *
  * The Original Code is Copyright (C) 2008 Blender Foundation.
  * All rights reserved.
- *
- *
- * Contributor(s): Blender Foundation
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/space_text/space_text.c
- *  \ingroup sptext
+/** \file
+ * \ingroup sptext
  */
 
 
@@ -45,7 +38,6 @@
 #include "ED_space_api.h"
 #include "ED_screen.h"
 
-#include "BIF_gl.h"
 
 #include "WM_api.h"
 #include "WM_types.h"
@@ -81,6 +73,12 @@ static SpaceLink *text_new(const ScrArea *UNUSED(area), const Scene *UNUSED(scen
 	BLI_addtail(&stext->regionbase, ar);
 	ar->regiontype = RGN_TYPE_HEADER;
 	ar->alignment = (U.uiflag & USER_HEADER_BOTTOM) ? RGN_ALIGN_BOTTOM : RGN_ALIGN_TOP;
+
+	/* footer */
+	ar = MEM_callocN(sizeof(ARegion), "footer for text");
+	BLI_addtail(&stext->regionbase, ar);
+	ar->regiontype = RGN_TYPE_FOOTER;
+	ar->alignment = (U.uiflag & USER_HEADER_BOTTOM) ? RGN_ALIGN_TOP : RGN_ALIGN_BOTTOM;
 
 	/* properties region */
 	ar = MEM_callocN(sizeof(ARegion), "properties region for text");
@@ -477,7 +475,15 @@ void ED_spacetype_text(void)
 
 	art->init = text_header_region_init;
 	art->draw = text_header_region_draw;
+	BLI_addhead(&st->regiontypes, art);
 
+	/* regions: footer */
+	art = MEM_callocN(sizeof(ARegionType), "spacetype text region");
+	art->regionid = RGN_TYPE_FOOTER;
+	art->prefsizey = HEADERY;
+	art->keymapflag = ED_KEYMAP_UI | ED_KEYMAP_VIEW2D | ED_KEYMAP_FOOTER;
+	art->init = text_header_region_init;
+	art->draw = text_header_region_draw;
 	BLI_addhead(&st->regiontypes, art);
 
 	BKE_spacetype_register(st);

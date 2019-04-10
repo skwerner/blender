@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,10 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/blenlib/intern/BLI_ghash.c
- *  \ingroup bli
+/** \file
+ * \ingroup bli
  *
  * A general (pointer -> pointer) chaining hash table
  * for 'Abstract Data Types' (known as an ADT Hash Table).
@@ -62,12 +54,14 @@
  *
  * \note Also used by: `BLI_edgehash` & `BLI_smallhash`.
  */
-const uint hashsizes[] = {
+extern const uint BLI_ghash_hash_sizes[];  /* Quiet warning, this is only used by smallhash.c */
+const uint BLI_ghash_hash_sizes[] = {
 	5, 11, 17, 37, 67, 131, 257, 521, 1031, 2053, 4099, 8209,
 	16411, 32771, 65537, 131101, 262147, 524309, 1048583, 2097169,
 	4194319, 8388617, 16777259, 33554467, 67108879, 134217757,
-	268435459
+	268435459,
 };
+#define hashsizes BLI_ghash_hash_sizes
 
 #ifdef GHASH_USE_MODULO_BUCKETS
 #  define GHASH_MAX_SIZE 27
@@ -247,7 +241,9 @@ static void ghash_buckets_resize(GHash *gh, const uint nbuckets)
 				const unsigned bucket_index = ghash_bucket_index(gh, i);
 				BLI_assert(!buckets_old[i] || (bucket_index == ghash_bucket_index(gh, ghash_entryhash(gh, buckets_old[i]))));
 				Entry *e;
-				for (e = buckets_old[i]; e && e->next; e = e->next);
+				for (e = buckets_old[i]; e && e->next; e = e->next) {
+					/* pass */
+				}
 				if (e) {
 					e->next = buckets_new[bucket_index];
 					buckets_new[bucket_index] = buckets_old[i];
@@ -989,8 +985,9 @@ void BLI_ghash_clear_ex(
         GHash *gh, GHashKeyFreeFP keyfreefp, GHashValFreeFP valfreefp,
         const uint nentries_reserve)
 {
-	if (keyfreefp || valfreefp)
+	if (keyfreefp || valfreefp) {
 		ghash_free_cb(gh, keyfreefp, valfreefp);
+	}
 
 	ghash_buckets_reset(gh, nentries_reserve);
 	BLI_mempool_clear_ex(gh->entrypool, nentries_reserve ? (int)nentries_reserve : -1);
@@ -1014,8 +1011,9 @@ void BLI_ghash_clear(GHash *gh, GHashKeyFreeFP keyfreefp, GHashValFreeFP valfree
 void BLI_ghash_free(GHash *gh, GHashKeyFreeFP keyfreefp, GHashValFreeFP valfreefp)
 {
 	BLI_assert((int)gh->nentries == BLI_mempool_len(gh->entrypool));
-	if (keyfreefp || valfreefp)
+	if (keyfreefp || valfreefp) {
 		ghash_free_cb(gh, keyfreefp, valfreefp);
+	}
 
 	MEM_freeN(gh->buckets);
 	BLI_mempool_destroy(gh->entrypool);
@@ -1075,8 +1073,9 @@ void BLI_ghashIterator_init(GHashIterator *ghi, GHash *gh)
 	if (gh->nentries) {
 		do {
 			ghi->curBucket++;
-			if (UNLIKELY(ghi->curBucket == ghi->gh->nbuckets))
+			if (UNLIKELY(ghi->curBucket == ghi->gh->nbuckets)) {
 				break;
+			}
 			ghi->curEntry = ghi->gh->buckets[ghi->curBucket];
 		} while (!ghi->curEntry);
 	}
@@ -1093,8 +1092,9 @@ void BLI_ghashIterator_step(GHashIterator *ghi)
 		ghi->curEntry = ghi->curEntry->next;
 		while (!ghi->curEntry) {
 			ghi->curBucket++;
-			if (ghi->curBucket == ghi->gh->nbuckets)
+			if (ghi->curBucket == ghi->gh->nbuckets) {
 				break;
+			}
 			ghi->curEntry = ghi->gh->buckets[ghi->curBucket];
 		}
 	}

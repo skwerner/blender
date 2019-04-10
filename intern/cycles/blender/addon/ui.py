@@ -18,16 +18,12 @@
 
 import bpy
 from bpy_extras.node_utils import find_node_input
-from bl_operators.presets import PresetMenu
-import _cycles
+from bl_ui.utils import PresetPanel
 
-from bpy.types import (
-    Panel,
-    Operator,
-)
+from bpy.types import Panel
 
 
-class CYCLES_PT_sampling_presets(PresetMenu):
+class CYCLES_PT_sampling_presets(PresetPanel, Panel):
     bl_label = "Sampling Presets"
     preset_subdir = "cycles/sampling"
     preset_operator = "script.execute_preset"
@@ -35,7 +31,7 @@ class CYCLES_PT_sampling_presets(PresetMenu):
     COMPAT_ENGINES = {'CYCLES'}
 
 
-class CYCLES_PT_integrator_presets(PresetMenu):
+class CYCLES_PT_integrator_presets(PresetPanel, Panel):
     bl_label = "Integrator Presets"
     preset_subdir = "cycles/integrator"
     preset_operator = "script.execute_preset"
@@ -54,14 +50,18 @@ class CyclesButtonsPanel:
         return context.engine in cls.COMPAT_ENGINES
 
 
-class CyclesNodeButtonsPanel:
-    bl_space_type = "NODE_EDITOR"
-    bl_region_type = "UI"
-    COMPAT_ENGINES = {'CYCLES'}
+# Adapt properties editor panel to display in node editor. We have to
+# copy the class rather than inherit due to the way bpy registration works.
+def node_panel(cls):
+    node_cls = type('NODE_' + cls.__name__, cls.__bases__, dict(cls.__dict__))
 
-    @classmethod
-    def poll(cls, context):
-        return context.engine in cls.COMPAT_ENGINES
+    node_cls.bl_space_type = 'NODE_EDITOR'
+    node_cls.bl_region_type = 'UI'
+    node_cls.bl_category = "Node"
+    if hasattr(node_cls, 'bl_parent_id'):
+        node_cls.bl_parent_id = 'NODE_' + node_cls.bl_parent_id
+
+    return node_cls
 
 
 def get_device_type(context):
@@ -313,7 +313,7 @@ class CYCLES_RENDER_PT_subdivision(CyclesButtonsPanel, Panel):
 
     @classmethod
     def poll(self, context):
-        return context.scene.cycles.feature_set == 'EXPERIMENTAL'
+        return (context.scene.render.engine == 'CYCLES') and (context.scene.cycles.feature_set == 'EXPERIMENTAL')
 
     def draw(self, context):
         layout = self.layout
@@ -636,6 +636,8 @@ class CYCLES_RENDER_PT_performance_acceleration_structure(CyclesButtonsPanel, Pa
     bl_parent_id = "CYCLES_RENDER_PT_performance"
 
     def draw(self, context):
+        import _cycles
+
         layout = self.layout
         layout.use_property_split = True
         layout.use_property_decorate = False
@@ -1117,7 +1119,7 @@ class CYCLES_PT_context_material(CyclesButtonsPanel, Panel):
             col.operator("object.material_slot_add", icon='ADD', text="")
             col.operator("object.material_slot_remove", icon='REMOVE', text="")
 
-            col.menu("MATERIAL_MT_specials", icon='DOWNARROW_HLT', text="")
+            col.menu("MATERIAL_MT_context_menu", icon='DOWNARROW_HLT', text="")
 
             if is_sortable:
                 col.separator()
@@ -1277,27 +1279,6 @@ class CYCLES_OBJECT_PT_cycles_settings_performance(CyclesButtonsPanel, Panel):
         col.prop(cob, "use_distance_cull")
 
 
-class CYCLES_OT_use_shading_nodes(Operator):
-    """Enable nodes on a material, world or light"""
-    bl_idname = "cycles.use_shading_nodes"
-    bl_label = "Use Nodes"
-
-    @classmethod
-    def poll(cls, context):
-        return (getattr(context, "material", False) or getattr(context, "world", False) or
-                getattr(context, "light", False))
-
-    def execute(self, context):
-        if context.material:
-            context.material.use_nodes = True
-        elif context.world:
-            context.world.use_nodes = True
-        elif context.light:
-            context.light.use_nodes = True
-
-        return {'FINISHED'}
-
-
 def panel_node_draw(layout, id_data, output_type, input_name):
     if not id_data.use_nodes:
         layout.operator("cycles.use_shading_nodes", icon='NODETREE')
@@ -1351,12 +1332,15 @@ class CYCLES_LIGHT_PT_light(CyclesButtonsPanel, Panel):
 
         light = context.light
         clamp = light.cycles
-        # cscene = context.scene.cycles
 
-        layout.prop(light, "type", expand=True)
-
-        layout.use_property_split = True
         layout.use_property_decorate = False
+
+        if self.bl_space_type == 'PROPERTIES':
+            layout.row().prop(light, "type", expand=True)
+            layout.use_property_split = True
+        else:
+            layout.use_property_split = True
+            layout.row().prop(light, "type")
 
         col = layout.column()
 
@@ -1636,7 +1620,8 @@ class CYCLES_MATERIAL_PT_preview(CyclesButtonsPanel, Panel):
 
     @classmethod
     def poll(cls, context):
-        return context.material and CyclesButtonsPanel.poll(context)
+        mat = context.material
+        return mat and (not mat.grease_pencil) and CyclesButtonsPanel.poll(context)
 
     def draw(self, context):
         self.layout.template_preview(context.material)
@@ -1648,7 +1633,8 @@ class CYCLES_MATERIAL_PT_surface(CyclesButtonsPanel, Panel):
 
     @classmethod
     def poll(cls, context):
-        return context.material and CyclesButtonsPanel.poll(context)
+        mat = context.material
+        return mat and (not mat.grease_pencil) and CyclesButtonsPanel.poll(context)
 
     def draw(self, context):
         layout = self.layout
@@ -1666,7 +1652,7 @@ class CYCLES_MATERIAL_PT_volume(CyclesButtonsPanel, Panel):
     @classmethod
     def poll(cls, context):
         mat = context.material
-        return mat and mat.node_tree and CyclesButtonsPanel.poll(context)
+        return mat and (not mat.grease_pencil) and mat.node_tree and CyclesButtonsPanel.poll(context)
 
     def draw(self, context):
         layout = self.layout
@@ -1684,7 +1670,7 @@ class CYCLES_MATERIAL_PT_displacement(CyclesButtonsPanel, Panel):
     @classmethod
     def poll(cls, context):
         mat = context.material
-        return mat and mat.node_tree and CyclesButtonsPanel.poll(context)
+        return mat and (not mat.grease_pencil) and mat.node_tree and CyclesButtonsPanel.poll(context)
 
     def draw(self, context):
         layout = self.layout
@@ -1700,7 +1686,8 @@ class CYCLES_MATERIAL_PT_settings(CyclesButtonsPanel, Panel):
 
     @classmethod
     def poll(cls, context):
-        return context.material and CyclesButtonsPanel.poll(context)
+        mat = context.material
+        return mat and (not mat.grease_pencil) and CyclesButtonsPanel.poll(context)
 
     @staticmethod
     def draw_shared(self, mat):
@@ -1776,76 +1763,140 @@ class CYCLES_RENDER_PT_bake(CyclesButtonsPanel, Panel):
         cbk = scene.render.bake
         rd = scene.render
 
-        col = layout.column()
-        col.prop(rd, "use_bake_multires")
         if rd.use_bake_multires:
-            col.prop(rd, "bake_type")
+            layout.operator("object.bake_image", icon='RENDER_STILL')
+            layout.prop(rd, "use_bake_multires")
+            layout.prop(rd, "bake_type")
 
-            col = layout.column()
-            col.prop(rd, "bake_margin")
-            col.prop(rd, "use_bake_clear")
+        else:
+            layout.operator("object.bake", icon='RENDER_STILL').type = cscene.bake_type
+            layout.prop(rd, "use_bake_multires")
+            layout.prop(cscene, "bake_type")
+
+
+class CYCLES_RENDER_PT_bake_influence(CyclesButtonsPanel, Panel):
+    bl_label = "Influence"
+    bl_context = "render"
+    bl_parent_id = "CYCLES_RENDER_PT_bake"
+    COMPAT_ENGINES = {'CYCLES'}
+    @classmethod
+    def poll(cls, context):
+        scene = context.scene
+        cscene = scene.cycles
+        rd = scene.render
+        if rd.use_bake_multires == False and cscene.bake_type in {
+                'NORMAL', 'COMBINED', 'DIFFUSE', 'GLOSSY', 'TRANSMISSION', 'SUBSURFACE'}:
+            return True
+
+    def draw(self, context):
+        layout = self.layout
+        layout.use_property_split = True
+        layout.use_property_decorate = False  # No animation.
+
+        scene = context.scene
+        cscene = scene.cycles
+        cbk = scene.render.bake
+        rd = scene.render
+
+        col = layout.column()
+
+        if cscene.bake_type == 'NORMAL':
+            col.prop(cbk, "normal_space", text="Space")
+
+            sub = col.column(align=True)
+            sub.prop(cbk, "normal_r", text="Swizzle R")
+            sub.prop(cbk, "normal_g", text="G")
+            sub.prop(cbk, "normal_b", text="B")
+
+        elif cscene.bake_type == 'COMBINED':
+            row = col.row(align=True)
+            row.use_property_split = False
+            row.prop(cbk, "use_pass_direct", toggle=True)
+            row.prop(cbk, "use_pass_indirect", toggle=True)
+
+            flow = col.grid_flow(row_major=False, columns=0, even_columns=False, even_rows=False, align=True)
+
+            flow.active = cbk.use_pass_direct or cbk.use_pass_indirect
+            flow.prop(cbk, "use_pass_diffuse")
+            flow.prop(cbk, "use_pass_glossy")
+            flow.prop(cbk, "use_pass_transmission")
+            flow.prop(cbk, "use_pass_subsurface")
+            flow.prop(cbk, "use_pass_ambient_occlusion")
+            flow.prop(cbk, "use_pass_emit")
+
+        elif cscene.bake_type in {'DIFFUSE', 'GLOSSY', 'TRANSMISSION', 'SUBSURFACE'}:
+            row = col.row(align=True)
+            row.use_property_split = False
+            row.prop(cbk, "use_pass_direct", toggle=True)
+            row.prop(cbk, "use_pass_indirect", toggle=True)
+            row.prop(cbk, "use_pass_color", toggle=True)
+
+
+class CYCLES_RENDER_PT_bake_selected_to_active(CyclesButtonsPanel, Panel):
+    bl_label = "Selected to Active"
+    bl_context = "render"
+    bl_parent_id = "CYCLES_RENDER_PT_bake"
+    bl_options = {'DEFAULT_CLOSED'}
+    COMPAT_ENGINES = {'CYCLES'}
+
+    @classmethod
+    def poll(cls, context):
+        scene = context.scene
+        rd = scene.render
+        return rd.use_bake_multires == False
+
+    def draw_header(self, context):
+        scene = context.scene
+        cbk = scene.render.bake
+        self.layout.prop(cbk, "use_selected_to_active", text="")
+
+    def draw(self, context):
+        layout = self.layout
+        layout.use_property_split = True
+        layout.use_property_decorate = False  # No animation.
+
+        scene = context.scene
+        cscene = scene.cycles
+        cbk = scene.render.bake
+        rd = scene.render
+
+        layout.active = cbk.use_selected_to_active
+        col = layout.column()
+
+        col.prop(cbk, "use_cage", text="Cage")
+        if cbk.use_cage:
+            col.prop(cbk, "cage_extrusion", text="Extrusion")
+            col.prop(cbk, "cage_object", text="Cage Object")
+        else:
+            col.prop(cbk, "cage_extrusion", text="Ray Distance")
+
+
+class CYCLES_RENDER_PT_bake_output(CyclesButtonsPanel, Panel):
+    bl_label = "Output"
+    bl_context = "render"
+    bl_parent_id = "CYCLES_RENDER_PT_bake"
+    COMPAT_ENGINES = {'CYCLES'}
+
+    def draw(self, context):
+        layout = self.layout
+        layout.use_property_split = True
+        layout.use_property_decorate = False  # No animation.
+
+        scene = context.scene
+        cscene = scene.cycles
+        cbk = scene.render.bake
+        rd = scene.render
+
+        if rd.use_bake_multires:
+            layout.prop(rd, "bake_margin")
+            layout.prop(rd, "use_bake_clear", text="Clear Image")
 
             if rd.bake_type == 'DISPLACEMENT':
                 col.prop(rd, "use_bake_lores_mesh")
-
-            col.operator("object.bake_image", icon='RENDER_STILL')
-
         else:
-            col.prop(cscene, "bake_type")
 
-            col = layout.column()
-
-            if cscene.bake_type == 'NORMAL':
-                col.prop(cbk, "normal_space", text="Space")
-
-                sub = col.column(align=True)
-                sub.prop(cbk, "normal_r", text="Swizzle R")
-                sub.prop(cbk, "normal_g", text="G")
-                sub.prop(cbk, "normal_b", text="B")
-
-            elif cscene.bake_type == 'COMBINED':
-                row = col.row(align=True)
-                row.use_property_split = False
-                row.prop(cbk, "use_pass_direct", toggle=True)
-                row.prop(cbk, "use_pass_indirect", toggle=True)
-
-                col = col.column()
-                col.active = cbk.use_pass_direct or cbk.use_pass_indirect
-                col.prop(cbk, "use_pass_diffuse")
-                col.prop(cbk, "use_pass_glossy")
-                col.prop(cbk, "use_pass_transmission")
-                col.prop(cbk, "use_pass_subsurface")
-                col.prop(cbk, "use_pass_ambient_occlusion")
-                col.prop(cbk, "use_pass_emit")
-
-            elif cscene.bake_type in {'DIFFUSE', 'GLOSSY', 'TRANSMISSION', 'SUBSURFACE'}:
-                row = col.row(align=True)
-                row.use_property_split = False
-                row.prop(cbk, "use_pass_direct", toggle=True)
-                row.prop(cbk, "use_pass_indirect", toggle=True)
-                row.prop(cbk, "use_pass_color", toggle=True)
-
-            layout.separator()
-
-            col = layout.column()
-            col.prop(cbk, "margin")
-            col.prop(cbk, "use_clear", text="Clear Image")
-
-            col.separator()
-
-            col.prop(cbk, "use_selected_to_active")
-            sub = col.column()
-            sub.active = cbk.use_selected_to_active
-            sub.prop(cbk, "use_cage", text="Cage")
-            if cbk.use_cage:
-                sub.prop(cbk, "cage_extrusion", text="Extrusion")
-                sub.prop(cbk, "cage_object", text="Cage Object")
-            else:
-                sub.prop(cbk, "cage_extrusion", text="Ray Distance")
-
-            layout.separator()
-
-            layout.operator("object.bake", icon='RENDER_STILL').type = cscene.bake_type
+            layout.prop(cbk, "margin")
+            layout.prop(cbk, "use_clear", text="Clear Image")
 
 
 class CYCLES_RENDER_PT_debug(CyclesButtonsPanel, Panel):
@@ -1886,10 +1937,8 @@ class CYCLES_RENDER_PT_debug(CyclesButtonsPanel, Panel):
         col.separator()
 
         col = layout.column()
-        col.label(text="OpenCL Flags:")
-        col.prop(cscene, "debug_opencl_kernel_type", text="Kernel")
+        col.label(text='OpenCL Flags:')
         col.prop(cscene, "debug_opencl_device_type", text="Device")
-        col.prop(cscene, "debug_opencl_kernel_single_program", text="Single Program")
         col.prop(cscene, "debug_use_opencl_debug", text="Debug")
         col.prop(cscene, "debug_opencl_mem_limit")
 
@@ -1935,7 +1984,7 @@ class CYCLES_RENDER_PT_simplify_viewport(CyclesButtonsPanel, Panel):
         col.prop(rd, "simplify_child_particles", text="Child Particles")
         col.prop(cscene, "texture_limit", text="Texture Limit")
         col.prop(cscene, "ao_bounces", text="AO Bounces")
-
+        col.prop(rd, "use_simplify_smoke_highres")
 
 class CYCLES_RENDER_PT_simplify_render(CyclesButtonsPanel, Panel):
     bl_label = "Render"
@@ -1993,43 +2042,6 @@ class CYCLES_RENDER_PT_simplify_culling(CyclesButtonsPanel, Panel):
         sub.prop(cscene, "distance_cull_margin", text="Distance")
 
 
-class CYCLES_NODE_PT_settings(CyclesNodeButtonsPanel, Panel):
-    bl_label = "Settings"
-    bl_category = "Node"
-    bl_options = {'DEFAULT_CLOSED'}
-
-    @classmethod
-    def poll(cls, context):
-        snode = context.space_data
-        return CyclesNodeButtonsPanel.poll(context) and \
-               snode.tree_type == 'ShaderNodeTree' and snode.id and \
-               snode.id.bl_rna.identifier == 'Material'
-
-    def draw(self, context):
-        material = context.space_data.id
-        CYCLES_MATERIAL_PT_settings.draw_shared(self, material)
-
-
-class CYCLES_NODE_PT_settings_surface(CyclesNodeButtonsPanel, Panel):
-    bl_label = "Surface"
-    bl_category = "Node"
-    bl_parent_id = "CYCLES_NODE_PT_settings"
-
-    def draw(self, context):
-        material = context.space_data.id
-        CYCLES_MATERIAL_PT_settings_surface.draw_shared(self, material)
-
-
-class CYCLES_NODE_PT_settings_volume(CyclesNodeButtonsPanel, Panel):
-    bl_label = "Volume"
-    bl_category = "Node"
-    bl_parent_id = "CYCLES_NODE_PT_settings"
-
-    def draw(self, context):
-        material = context.space_data.id
-        CYCLES_MATERIAL_PT_settings_volume.draw_shared(self, context, material)
-
-
 def draw_device(self, context):
     scene = context.scene
     layout = self.layout
@@ -2076,6 +2088,8 @@ def get_panels():
         'DATA_PT_spot',
         'MATERIAL_PT_context_material',
         'MATERIAL_PT_preview',
+        'NODE_DATA_PT_light',
+        'NODE_DATA_PT_spot',
         'VIEWLAYER_PT_filter',
         'VIEWLAYER_PT_layer_passes',
         'RENDER_PT_post_processing',
@@ -2136,7 +2150,6 @@ classes = (
     CYCLES_OBJECT_PT_cycles_settings,
     CYCLES_OBJECT_PT_cycles_settings_ray_visibility,
     CYCLES_OBJECT_PT_cycles_settings_performance,
-    CYCLES_OT_use_shading_nodes,
     CYCLES_LIGHT_PT_preview,
     CYCLES_LIGHT_PT_light,
     CYCLES_LIGHT_PT_nodes,
@@ -2158,10 +2171,19 @@ classes = (
     CYCLES_MATERIAL_PT_settings_surface,
     CYCLES_MATERIAL_PT_settings_volume,
     CYCLES_RENDER_PT_bake,
+    CYCLES_RENDER_PT_bake_influence,
+    CYCLES_RENDER_PT_bake_selected_to_active,
+    CYCLES_RENDER_PT_bake_output,
     CYCLES_RENDER_PT_debug,
-    CYCLES_NODE_PT_settings,
-    CYCLES_NODE_PT_settings_surface,
-    CYCLES_NODE_PT_settings_volume,
+    node_panel(CYCLES_MATERIAL_PT_settings),
+    node_panel(CYCLES_MATERIAL_PT_settings_surface),
+    node_panel(CYCLES_MATERIAL_PT_settings_volume),
+    node_panel(CYCLES_WORLD_PT_ray_visibility),
+    node_panel(CYCLES_WORLD_PT_settings),
+    node_panel(CYCLES_WORLD_PT_settings_surface),
+    node_panel(CYCLES_WORLD_PT_settings_volume),
+    node_panel(CYCLES_LIGHT_PT_light),
+    node_panel(CYCLES_LIGHT_PT_spot),
 )
 
 

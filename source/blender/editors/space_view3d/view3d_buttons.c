@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,15 +15,10 @@
  *
  * The Original Code is Copyright (C) 2009 Blender Foundation.
  * All rights reserved.
- *
- *
- * Contributor(s): Blender Foundation
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/space_view3d/view3d_buttons.c
- *  \ingroup spview3d
+/** \file
+ * \ingroup spview3d
  */
 
 
@@ -131,10 +124,12 @@ typedef struct {
  */
 static float compute_scale_factor(const float ve_median, const float median)
 {
-	if (ve_median <= 0.0f)
+	if (ve_median <= 0.0f) {
 		return 0.0f;
-	else if (ve_median >= 1.0f)
+	}
+	else if (ve_median >= 1.0f) {
 		return 1.0f;
+	}
 	else {
 		/* Scale value to target median. */
 		float median_new = ve_median;
@@ -224,7 +219,7 @@ static void v3d_editvertex_buts(uiLayout *layout, View3D *v3d, Object *ob, float
 	if (ob->type == OB_MESH) {
 		TransformMedian_Mesh *median = &median_basis.mesh;
 		Mesh *me = ob->data;
-		BMEditMesh *em = me->edit_btmesh;
+		BMEditMesh *em = me->edit_mesh;
 		BMesh *bm = em->bm;
 		BMVert *eve;
 		BMEdge *eed;
@@ -300,7 +295,7 @@ static void v3d_editvertex_buts(uiLayout *layout, View3D *v3d, Object *ob, float
 						tot++;
 						median->weight += bezt->weight;
 						median->radius += bezt->radius;
-						median->tilt += bezt->alfa;
+						median->tilt += bezt->tilt;
 						if (!totcurvedata) { /* I.e. first time... */
 							selp = bezt;
 							seltype = &RNA_BezierSplinePoint;
@@ -331,7 +326,7 @@ static void v3d_editvertex_buts(uiLayout *layout, View3D *v3d, Object *ob, float
 						tot++;
 						median->weight += bp->weight;
 						median->radius += bp->radius;
-						median->tilt += bp->alfa;
+						median->tilt += bp->tilt;
 						if (!totcurvedata) { /* I.e. first time... */
 							selp = bp;
 							seltype = &RNA_SplinePoint;
@@ -344,8 +339,9 @@ static void v3d_editvertex_buts(uiLayout *layout, View3D *v3d, Object *ob, float
 			nu = nu->next;
 		}
 
-		if (totcurvedata == 1)
+		if (totcurvedata == 1) {
 			RNA_pointer_create(&cu->id, seltype, selp, &data_ptr);
+		}
 	}
 	else if (ob->type == OB_LATTICE) {
 		Lattice *lt = ob->data;
@@ -371,8 +367,9 @@ static void v3d_editvertex_buts(uiLayout *layout, View3D *v3d, Object *ob, float
 			bp++;
 		}
 
-		if (totlattdata == 1)
+		if (totlattdata == 1) {
 			RNA_pointer_create(&lt->id, seltype, selp, &data_ptr);
+		}
 	}
 
 	if (tot == 0) {
@@ -382,8 +379,9 @@ static void v3d_editvertex_buts(uiLayout *layout, View3D *v3d, Object *ob, float
 
 	/* Location, X/Y/Z */
 	mul_v3_fl(median_basis.generic.location, 1.0f / (float)tot);
-	if (v3d->flag & V3D_GLOBAL_STATS)
+	if (v3d->flag & V3D_GLOBAL_STATS) {
 		mul_m4_v3(ob->obmat, median_basis.generic.location);
+	}
 
 	if (has_meshdata) {
 		TransformMedian_Mesh *median = &median_basis.mesh;
@@ -426,13 +424,18 @@ static void v3d_editvertex_buts(uiLayout *layout, View3D *v3d, Object *ob, float
 
 		UI_block_align_begin(block);
 		if (tot == 1) {
-			if (totcurvedata) /* Curve */
+			if (totcurvedata) {
+				/* Curve */
 				c = IFACE_("Control Point:");
-			else /* Mesh or lattice */
+			}
+			else {
+				/* Mesh or lattice */
 				c = IFACE_("Vertex:");
+			}
 		}
-		else
+		else {
 			c = IFACE_("Median:");
+		}
 		uiDefBut(block, UI_BTYPE_LABEL, 0, c, 0, yi -= buth, butw, buth, NULL, 0, 0, 0, 0, "");
 
 		UI_block_align_begin(block);
@@ -565,7 +568,7 @@ static void v3d_editvertex_buts(uiLayout *layout, View3D *v3d, Object *ob, float
 		{
 			const TransformMedian_Mesh *median = &median_basis.mesh, *ve_median = &ve_median_basis.mesh;
 			Mesh *me = ob->data;
-			BMEditMesh *em = me->edit_btmesh;
+			BMEditMesh *em = me->edit_mesh;
 			BMesh *bm = em->bm;
 			BMIter iter;
 			BMVert *eve;
@@ -705,7 +708,7 @@ static void v3d_editvertex_buts(uiLayout *layout, View3D *v3d, Object *ob, float
 								apply_raw_diff(&bezt->radius, tot, ve_median->radius, median->radius);
 							}
 							if (median->tilt) {
-								apply_raw_diff(&bezt->alfa, tot, ve_median->tilt, median->tilt);
+								apply_raw_diff(&bezt->tilt, tot, ve_median->tilt, median->tilt);
 							}
 						}
 						else if (apply_vcos) {
@@ -735,7 +738,7 @@ static void v3d_editvertex_buts(uiLayout *layout, View3D *v3d, Object *ob, float
 								apply_raw_diff(&bp->radius, tot, ve_median->radius, median->radius);
 							}
 							if (median->tilt) {
-								apply_raw_diff(&bp->alfa, tot, ve_median->tilt, median->tilt);
+								apply_raw_diff(&bp->tilt, tot, ve_median->tilt, median->tilt);
 							}
 						}
 					}
@@ -875,7 +878,7 @@ static void view3d_panel_vgroup(const bContext *C, Panel *pa)
 		uiLayout *row;
 		uiBut *but;
 		bDeformGroup *dg;
-		unsigned int i;
+		uint i;
 		int subset_count, vgroup_tot;
 		const bool *vgroup_validmap;
 		eVGroupSelect subset_type = ts->vgroupsubset;
@@ -1000,10 +1003,12 @@ static void v3d_transform_butsR(uiLayout *layout, PointerRNA *ptr)
 			colsub = uiLayoutColumn(split, true);
 			uiLayoutSetEmboss(colsub, UI_EMBOSS_NONE);
 			uiItemR(colsub, ptr, "lock_rotations_4d", UI_ITEM_R_TOGGLE, IFACE_("4L"), ICON_NONE);
-			if (RNA_boolean_get(ptr, "lock_rotations_4d"))
+			if (RNA_boolean_get(ptr, "lock_rotations_4d")) {
 				uiItemR(colsub, ptr, "lock_rotation_w", UI_ITEM_R_TOGGLE + UI_ITEM_R_ICON_ONLY, "", ICON_DECORATE_UNLOCKED);
-			else
+			}
+			else {
 				uiItemL(colsub, "", ICON_NONE);
+			}
 			uiItemR(colsub, ptr, "lock_rotation", UI_ITEM_R_TOGGLE | UI_ITEM_R_ICON_ONLY, "", ICON_DECORATE_UNLOCKED);
 			break;
 		case ROT_MODE_AXISANGLE: /* axis angle */
@@ -1012,10 +1017,12 @@ static void v3d_transform_butsR(uiLayout *layout, PointerRNA *ptr)
 			colsub = uiLayoutColumn(split, true);
 			uiLayoutSetEmboss(colsub, UI_EMBOSS_NONE);
 			uiItemR(colsub, ptr, "lock_rotations_4d", UI_ITEM_R_TOGGLE, IFACE_("4L"), ICON_NONE);
-			if (RNA_boolean_get(ptr, "lock_rotations_4d"))
+			if (RNA_boolean_get(ptr, "lock_rotations_4d")) {
 				uiItemR(colsub, ptr, "lock_rotation_w", UI_ITEM_R_TOGGLE | UI_ITEM_R_ICON_ONLY, "", ICON_DECORATE_UNLOCKED);
-			else
+			}
+			else {
 				uiItemL(colsub, "", ICON_NONE);
+			}
 			uiItemR(colsub, ptr, "lock_rotation", UI_ITEM_R_TOGGLE | UI_ITEM_R_ICON_ONLY, "", ICON_DECORATE_UNLOCKED);
 			break;
 		default: /* euler rotations */
@@ -1100,8 +1107,9 @@ static void v3d_editmetaball_buts(uiLayout *layout, Object *ob)
 	MetaBall *mball = ob->data;
 	uiLayout *col;
 
-	if (!mball || !(mball->lastelem))
+	if (!mball || !(mball->lastelem)) {
 		return;
+	}
 
 	RNA_pointer_create(&mball->id, &RNA_MetaBall, mball, &mbptr);
 
@@ -1264,8 +1272,9 @@ static int view3d_properties_toggle_exec(bContext *C, wmOperator *UNUSED(op))
 	ScrArea *sa = CTX_wm_area(C);
 	ARegion *ar = view3d_has_buttons_region(sa);
 
-	if (ar)
+	if (ar) {
 		ED_region_toggle_hidden(C, ar);
+	}
 
 	return OPERATOR_FINISHED;
 }

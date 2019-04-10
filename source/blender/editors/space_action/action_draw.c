@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,10 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): Joshua Leung
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/space_action/action_draw.c
- *  \ingroup spaction
+/** \file
+ * \ingroup spaction
  */
 
 
@@ -38,12 +30,14 @@
 #include <float.h>
 
 #include "BLI_blenlib.h"
+#include "BLI_math.h"
 #include "BLI_utildefines.h"
 
 /* Types --------------------------------------------------------------- */
 
 #include "DNA_anim_types.h"
 #include "DNA_cachefile_types.h"
+#include "DNA_gpencil_types.h"
 #include "DNA_object_types.h"
 #include "DNA_screen_types.h"
 #include "DNA_scene_types.h"
@@ -55,7 +49,6 @@
 
 /* Everything from source (BIF, BDR, BSE) ------------------------------ */
 
-#include "BIF_gl.h"
 
 #include "GPU_immediate.h"
 #include "GPU_matrix.h"
@@ -137,7 +130,9 @@ void draw_channel_names(bContext *C, bAnimContext *ac, ARegion *ar)
 			    IN_RANGE(ymaxc, v2d->cur.ymin, v2d->cur.ymax) )
 			{
 				/* draw all channels using standard channel-drawing API */
-				ANIM_channel_draw_widgets(C, ac, ale, block, yminc, ymaxc, channel_index);
+				rctf channel_rect;
+				BLI_rctf_init(&channel_rect, 0, v2d->cur.xmax, yminc, ymaxc);
+				ANIM_channel_draw_widgets(C, ac, ale, block, &channel_rect, channel_index);
 			}
 
 			/* adjust y-position for next one */
@@ -296,8 +291,19 @@ void draw_channel_strips(bAnimContext *ac, SpaceAction *saction, ARegion *ar)
 						immRectf(pos, act_start,  (float)y - ACHANNEL_HEIGHT_HALF(ac),  act_end,  (float)y + ACHANNEL_HEIGHT_HALF(ac));
 				}
 				else if (ac->datatype == ANIMCONT_GPENCIL) {
+					unsigned char *color;
+					if ((show_group_colors) && (ale->type == ANIMTYPE_GPLAYER)) {
+						bGPDlayer *gpl = (bGPDlayer *)ale->data;
+						unsigned char gpl_col[4];
+						rgb_float_to_uchar(gpl_col, gpl->color);
+						gpl_col[3] = col1[3];
+
+						color = sel ? col1 : gpl_col;
+					}
+					else {
+						color = sel ? col1 : col2;
+					}
 					/* frames less than one get less saturated background */
-					unsigned char *color = sel ? col1 : col2;
 					immUniformColor4ubv(color);
 					immRectf(pos, 0.0f, (float)y - ACHANNEL_HEIGHT_HALF(ac), v2d->cur.xmin, (float)y + ACHANNEL_HEIGHT_HALF(ac));
 

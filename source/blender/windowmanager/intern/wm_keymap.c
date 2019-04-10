@@ -1,7 +1,4 @@
 /*
- *
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -18,15 +15,10 @@
  *
  * The Original Code is Copyright (C) 2007 Blender Foundation.
  * All rights reserved.
- *
- *
- * Contributor(s): Blender Foundation
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/windowmanager/intern/wm_keymap.c
- *  \ingroup wm
+/** \file
+ * \ingroup wm
  *
  * Configurable key-maps - add/remove/find/compare/patch...
  */
@@ -1234,20 +1226,21 @@ static wmKeyMapItem *wm_keymap_item_find_handlers(
         wmKeyMap **r_keymap)
 {
 	wmWindowManager *wm = CTX_wm_manager(C);
-	wmEventHandler *handler;
-	wmKeyMap *keymap;
 
 	/* find keymap item in handlers */
-	for (handler = handlers->first; handler; handler = handler->next) {
-		keymap = WM_keymap_active(wm, handler->keymap);
-		if (keymap && WM_keymap_poll((bContext *)C, keymap)) {
-			wmKeyMapItem *kmi = wm_keymap_item_find_in_keymap(
-			        keymap, opname, properties, is_strict, params);
-			if (kmi != NULL) {
-				if (r_keymap) {
-					*r_keymap = keymap;
+	LISTBASE_FOREACH (wmEventHandler *, handler_base, handlers) {
+		if (handler_base->type == WM_HANDLER_TYPE_KEYMAP) {
+			wmEventHandler_Keymap *handler = (wmEventHandler_Keymap *)handler_base;
+			wmKeyMap *keymap = WM_event_get_keymap_from_handler(wm, handler);
+			if (keymap && WM_keymap_poll((bContext *)C, keymap)) {
+				wmKeyMapItem *kmi = wm_keymap_item_find_in_keymap(
+				        keymap, opname, properties, is_strict, params);
+				if (kmi != NULL) {
+					if (r_keymap) {
+						*r_keymap = keymap;
+					}
+					return kmi;
 				}
-				return kmi;
 			}
 		}
 	}
@@ -1593,7 +1586,8 @@ void WM_keyconfig_update(wmWindowManager *wm)
 		    &wm->userconf->keymaps,
 		    &wm->defaultconf->keymaps,
 		    &wm->addonconf->keymaps,
-		    NULL};
+		    NULL,
+		};
 
 		int i;
 

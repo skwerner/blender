@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,15 +15,10 @@
  *
  * The Original Code is Copyright (C) 2009 Blender Foundation.
  * All rights reserved.
- *
- *
- * Contributor(s): Blender Foundation
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/windowmanager/intern/wm_jobs.c
- *  \ingroup wm
+/** \file
+ * \ingroup wm
  *
  * Threaded job manager (high level job access).
  */
@@ -73,7 +66,6 @@
  *
  * When job is done:
  * - it puts timer to sleep (or removes?)
- *
  */
 
 struct wmJob {
@@ -232,6 +224,38 @@ float WM_jobs_progress(wmWindowManager *wm, void *owner)
 		return wm_job->progress;
 
 	return 0.0;
+}
+
+static void wm_jobs_update_progress_bars(wmWindowManager *wm)
+{
+	float total_progress = 0.f;
+	float jobs_progress = 0;
+
+	for (wmJob *wm_job = wm->jobs.first; wm_job; wm_job = wm_job->next) {
+		if (wm_job->threads.first && !wm_job->ready) {
+			if (wm_job->flag & WM_JOB_PROGRESS) {
+				/* accumulate global progress for running jobs */
+				jobs_progress++;
+				total_progress += wm_job->progress;
+			}
+		}
+	}
+
+	/* if there are running jobs, set the global progress indicator */
+	if (jobs_progress > 0) {
+		wmWindow *win;
+		float progress = total_progress / (float)jobs_progress;
+
+		for (win = wm->windows.first; win; win = win->next)
+			WM_progress_set(win, progress);
+	}
+	else {
+		wmWindow *win;
+
+		for (win = wm->windows.first; win; win = win->next)
+			WM_progress_clear(win);
+	}
+
 }
 
 /* time that job started */
@@ -446,6 +470,8 @@ static void wm_job_free(wmWindowManager *wm, wmJob *wm_job)
 /* stop job, end thread, free data completely */
 static void wm_jobs_kill_job(wmWindowManager *wm, wmJob *wm_job)
 {
+	bool update_progress = (wm_job->flag & WM_JOB_PROGRESS) != 0;
+
 	if (wm_job->running) {
 		/* signal job to end */
 		wm_job->stop = true;
@@ -467,6 +493,11 @@ static void wm_jobs_kill_job(wmWindowManager *wm, wmJob *wm_job)
 
 	/* remove wm_job */
 	wm_job_free(wm, wm_job);
+
+	/* Update progress bars in windows. */
+	if (update_progress) {
+		wm_jobs_update_progress_bars(wm);
+	}
 }
 
 /* wait until every job ended */
@@ -556,8 +587,6 @@ void wm_jobs_timer_ended(wmWindowManager *wm, wmTimer *wt)
 void wm_jobs_timer(const bContext *C, wmWindowManager *wm, wmTimer *wt)
 {
 	wmJob *wm_job, *wm_jobnext;
-	float total_progress = 0.f;
-	float jobs_progress = 0;
 
 	for (wm_job = wm->jobs.first; wm_job; wm_job = wm_jobnext) {
 		wm_jobnext = wm_job->next;
@@ -623,41 +652,15 @@ void wm_jobs_timer(const bContext *C, wmWindowManager *wm, wmTimer *wt)
 						wm_job_free(wm, wm_job);
 					}
 				}
-				else if (wm_job->flag & WM_JOB_PROGRESS) {
-					/* accumulate global progress for running jobs */
-					jobs_progress++;
-					total_progress += wm_job->progress;
-				}
 			}
 			else if (wm_job->suspended) {
 				WM_jobs_start(wm, wm_job);
 			}
 		}
-		else if (wm_job->threads.first && !wm_job->ready) {
-			if (wm_job->flag & WM_JOB_PROGRESS) {
-				/* accumulate global progress for running jobs */
-				jobs_progress++;
-				total_progress += wm_job->progress;
-			}
-		}
 	}
 
-
-	/* if there are running jobs, set the global progress indicator */
-	if (jobs_progress > 0) {
-		wmWindow *win;
-		float progress = total_progress / (float)jobs_progress;
-
-		for (win = wm->windows.first; win; win = win->next)
-			WM_progress_set(win, progress);
-	}
-	else {
-		wmWindow *win;
-
-		for (win = wm->windows.first; win; win = win->next)
-			WM_progress_clear(win);
-	}
-
+	/* Update progress bars in windows. */
+	wm_jobs_update_progress_bars(wm);
 }
 
 bool WM_jobs_has_running(wmWindowManager *wm)

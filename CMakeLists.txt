@@ -16,11 +16,6 @@
 #
 # The Original Code is Copyright (C) 2006, Blender Foundation
 # All rights reserved.
-#
-# The Original Code is: all of this file.
-#
-# Contributor(s): Jacques Beaurain.
-#
 # ***** END GPL LICENSE BLOCK *****
 
 #-----------------------------------------------------------------------------
@@ -763,8 +758,8 @@ if(WITH_PYTHON)
 	# Do this before main 'platform_*' checks,
 	# because UNIX will search for the old Python paths which may not exist.
 	# giving errors about missing paths before this case is met.
-	if(DEFINED PYTHON_VERSION AND "${PYTHON_VERSION}" VERSION_LESS "3.6")
-		message(FATAL_ERROR "At least Python 3.6 is required to build")
+	if(DEFINED PYTHON_VERSION AND "${PYTHON_VERSION}" VERSION_LESS "3.7")
+		message(FATAL_ERROR "At least Python 3.7 is required to build")
 	endif()
 
 	if(NOT EXISTS "${CMAKE_SOURCE_DIR}/release/scripts/addons/modules")
@@ -1122,7 +1117,10 @@ endif()
 #-----------------------------------------------------------------------------
 # Configure OpenMP.
 if(WITH_OPENMP)
-	find_package(OpenMP)
+	if(NOT OPENMP_CUSTOM)
+		find_package(OpenMP)
+	endif()
+
 	if(OPENMP_FOUND)
 		if(NOT WITH_OPENMP_STATIC)
 			set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${OpenMP_C_FLAGS}")
@@ -1448,6 +1446,7 @@ elseif(CMAKE_C_COMPILER_ID MATCHES "MSVC")
 		# warning level:
 		"/W3"
 		"/w34062"  # switch statement contains 'default' but no 'case' labels
+		"/w34115"  # 'type' : named type definition in parentheses
 		"/w34189"  # local variable is initialized but not referenced
 		# disable:
 		"/wd4018"  # signed/unsigned mismatch

@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,17 +15,11 @@
  *
  * The Original Code is Copyright (C) 2013 Blender Foundation
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): Joshua Leung, Sergej Reich
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file DNA_rigidbody_types.h
- *  \ingroup DNA
- *  \brief Types and defines for representing Rigid Body entities
+/** \file
+ * \ingroup DNA
+ * \brief Types and defines for representing Rigid Body entities
  */
 
 #ifndef __DNA_RIGIDBODY_TYPES_H__
@@ -70,7 +62,7 @@ typedef struct RigidBodyWorld {
 	/** Group containing objects to use for Rigid Body Constraint.s*/
 	struct Collection *constraints;
 
-	int pad;
+	char _pad[4];
 	/** Last frame world was evaluated for (internal). */
 	float ltime;
 
@@ -140,7 +132,7 @@ typedef struct RigidBodyOb {
 	int col_groups;
 	/** (eRigidBody_MeshSource) mesh source for mesh based collision shapes. */
 	short mesh_source;
-	short pad;
+	char _pad[2];
 
 	/* Physics Parameters */
 	/** How much object 'weighs' (i.e. absolute 'amount of stuff' it holds). */
@@ -168,7 +160,7 @@ typedef struct RigidBodyOb {
 	float orn[4];
 	/** Rigid body position. */
 	float pos[3];
-	float pad1;
+	char _pad1[4];
 
 	/** This pointer is shared between all evaluated copies. */
 	struct RigidBodyOb_Shared *shared;
@@ -205,23 +197,23 @@ typedef enum eRigidBodyOb_Flag {
 
 /* RigidBody Collision Shape */
 typedef enum eRigidBody_Shape {
-		/* simple box (i.e. bounding box) */
+	/** Simple box (i.e. bounding box). */
 	RB_SHAPE_BOX = 0,
-		/* sphere */
+	/** Sphere. */
 	RB_SHAPE_SPHERE,
-		/* rounded "pill" shape (i.e. calcium tablets) */
+	/** Rounded "pill" shape (i.e. calcium tablets). */
 	RB_SHAPE_CAPSULE,
-		/* cylinder (i.e. pringles can) */
+	/** Cylinder (i.e. pringles can). */
 	RB_SHAPE_CYLINDER,
-		/* cone (i.e. party hat) */
+	/** Cone (i.e. party hat). */
 	RB_SHAPE_CONE,
 
-		/* convex hull (minimal shrinkwrap encompassing all verts) */
+	/** Convex hull (minimal shrinkwrap encompassing all verts). */
 	RB_SHAPE_CONVEXH,
-		/* triangulated mesh */
+	/** Triangulated mesh. */
 	RB_SHAPE_TRIMESH,
 
-		/* concave mesh approximated using primitives */
+	/* concave mesh approximated using primitives */
 	//RB_SHAPE_COMPOUND,
 } eRigidBody_Shape;
 
@@ -260,7 +252,7 @@ typedef struct RigidBodyCon {
 	float breaking_threshold;
 	/** Spring implementation to use. */
 	char spring_type;
-	char pad[3];
+	char _pad[3];
 
 	/* limits */
 	/* translation limits */

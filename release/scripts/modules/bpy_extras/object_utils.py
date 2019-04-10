@@ -33,7 +33,6 @@ import bpy
 
 from bpy.props import (
     BoolProperty,
-    BoolVectorProperty,
     FloatVectorProperty,
 )
 
@@ -61,7 +60,7 @@ def add_object_align_init(context, operator):
     if operator and properties.is_property_set("location"):
         location = Matrix.Translation(Vector(properties.location))
     else:
-        location = Matrix.Translation(context.scene.cursor_location)
+        location = Matrix.Translation(context.scene.cursor.location)
 
         if operator:
             properties.location = location.to_translation()
@@ -132,6 +131,11 @@ def object_data_add(context, obdata, operator=None, name=None):
     scene_collection.objects.link(obj_new)
     obj_new.select_set(True)
     obj_new.matrix_world = add_object_align_init(context, operator)
+
+    space_data = context.space_data
+    if space_data.type == 'VIEW_3D':
+        if space_data.local_view:
+            obj_new.local_view_set(space_data, True)
 
     if obj_act and obj_act.mode == 'EDIT' and obj_act.type == obj_new.type:
         bpy.ops.mesh.select_all(action='DESELECT')

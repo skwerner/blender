@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,14 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * Contributor(s): Campbell Barton
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/python/intern/bpy_rna_anim.c
- *  \ingroup pythonintern
+/** \file
+ * \ingroup pythonintern
  *
  * This file defines the animation related methods used in bpy_rna.c
  */
@@ -345,8 +339,9 @@ PyObject *pyrna_struct_keyframe_insert(BPy_StructRNA *self, PyObject *args, PyOb
 		}
 		MEM_freeN((void *)path_full);
 
-		if (BPy_reports_to_error(&reports, PyExc_RuntimeError, true) == -1)
+		if (BPy_reports_to_error(&reports, PyExc_RuntimeError, true) == -1) {
 			return NULL;
+		}
 
 		return PyBool_FromLong(result);
 	}
@@ -362,8 +357,9 @@ PyObject *pyrna_struct_keyframe_insert(BPy_StructRNA *self, PyObject *args, PyOb
 		result = insert_keyframe(G_MAIN, depsgraph, &reports, id, NULL, group_name, path_full, index, cfra, keytype, NULL, options);
 		MEM_freeN((void *)path_full);
 
-		if (BPy_reports_to_error(&reports, PyExc_RuntimeError, true) == -1)
+		if (BPy_reports_to_error(&reports, PyExc_RuntimeError, true) == -1) {
 			return NULL;
+		}
 
 		return PyBool_FromLong(result);
 	}
@@ -458,8 +454,9 @@ PyObject *pyrna_struct_keyframe_delete(BPy_StructRNA *self, PyObject *args, PyOb
 		}
 		MEM_freeN((void *)path_full);
 
-		if (BPy_reports_to_error(&reports, PyExc_RuntimeError, true) == -1)
+		if (BPy_reports_to_error(&reports, PyExc_RuntimeError, true) == -1) {
 			return NULL;
+		}
 
 		return PyBool_FromLong(result);
 	}
@@ -472,8 +469,9 @@ PyObject *pyrna_struct_keyframe_delete(BPy_StructRNA *self, PyObject *args, PyOb
 		result = delete_keyframe(G.main, &reports, (ID *)self->ptr.id.data, NULL, group_name, path_full, index, cfra, 0);
 		MEM_freeN((void *)path_full);
 
-		if (BPy_reports_to_error(&reports, PyExc_RuntimeError, true) == -1)
+		if (BPy_reports_to_error(&reports, PyExc_RuntimeError, true) == -1) {
 			return NULL;
+		}
 
 		return PyBool_FromLong(result);
 	}
@@ -499,8 +497,9 @@ PyObject *pyrna_struct_driver_add(BPy_StructRNA *self, PyObject *args)
 
 	PYRNA_STRUCT_CHECK_OBJ(self);
 
-	if (!PyArg_ParseTuple(args, "s|i:driver_add", &path, &index))
+	if (!PyArg_ParseTuple(args, "s|i:driver_add", &path, &index)) {
 		return NULL;
+	}
 
 	if (pyrna_struct_anim_args_parse(
 	            &self->ptr, "bpy_struct.driver_add():", path,
@@ -518,8 +517,9 @@ PyObject *pyrna_struct_driver_add(BPy_StructRNA *self, PyObject *args)
 		result = ANIM_add_driver(&reports, (ID *)self->ptr.id.data, path_full, index,
 		                         CREATEDRIVER_WITH_FMODIFIER, DRIVER_TYPE_PYTHON);
 
-		if (BPy_reports_to_error(&reports, PyExc_RuntimeError, true) == -1)
+		if (BPy_reports_to_error(&reports, PyExc_RuntimeError, true) == -1) {
 			return NULL;
+		}
 
 		if (result) {
 			ID *id = self->ptr.id.data;
@@ -598,8 +598,9 @@ PyObject *pyrna_struct_driver_remove(BPy_StructRNA *self, PyObject *args)
 			MEM_freeN((void *)path_full);
 		}
 
-		if (BPy_reports_to_error(&reports, PyExc_RuntimeError, true) == -1)
+		if (BPy_reports_to_error(&reports, PyExc_RuntimeError, true) == -1) {
 			return NULL;
+		}
 
 		WM_event_add_notifier(BPy_GetContext(), NC_ANIMATION | ND_FCURVES_ORDER, NULL);
 

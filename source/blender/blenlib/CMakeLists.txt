@@ -16,11 +16,6 @@
 #
 # The Original Code is Copyright (C) 2006, Blender Foundation
 # All rights reserved.
-#
-# The Original Code is: all of this file.
-#
-# Contributor(s): Jacques Beaurain.
-#
 # ***** END GPL LICENSE BLOCK *****
 
 set(INC
@@ -50,7 +45,6 @@ set(SRC
 	intern/BLI_heap.c
 	intern/BLI_heap_simple.c
 	intern/BLI_kdopbvh.c
-	intern/BLI_kdtree.c
 	intern/BLI_linklist.c
 	intern/BLI_linklist_lockfree.c
 	intern/BLI_memarena.c
@@ -81,8 +75,11 @@ set(SRC
 	intern/hash_mm2a.c
 	intern/hash_mm3.c
 	intern/jitter_2d.c
+	intern/kdtree_1d.c
+	intern/kdtree_2d.c
+	intern/kdtree_3d.c
+	intern/kdtree_4d.c
 	intern/lasso_2d.c
-	intern/list_sort_impl.h
 	intern/listbase.c
 	intern/math_base.c
 	intern/math_base_inline.c
@@ -129,6 +126,10 @@ set(SRC
 	intern/winstuff.c
 	intern/winstuff_dir.c
 
+	# Header as source (included in C files above).
+	intern/kdtree_impl.h
+	intern/list_sort_impl.h
+
 	BLI_alloca.h
 	BLI_args.h
 	BLI_array.h
@@ -172,6 +173,7 @@ set(SRC
 	BLI_jitter_2d.h
 	BLI_kdopbvh.h
 	BLI_kdtree.h
+	BLI_kdtree_impl.h
 	BLI_lasso_2d.h
 	BLI_link_utils.h
 	BLI_linklist.h

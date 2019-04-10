@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,15 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software  Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * Contributor(s): Miika Hämäläinen
- *
- * ***** END GPL LICENSE BLOCK *****
- *
  */
 
-/** \file DNA_dynamicpaint_types.h
- *  \ingroup DNA
+/** \file
+ * \ingroup DNA
  */
 
 #ifndef __DNA_DYNAMICPAINT_TYPES_H__
@@ -98,6 +91,14 @@ enum {
 	MOD_DPAINT_INITIAL_VERTEXCOLOR = 3,
 };
 
+/* Is stored in ModifierData.runtime. */
+#
+#
+typedef struct DynamicPaintRuntime {
+	struct Mesh *canvas_mesh;
+	struct Mesh *brush_mesh;
+} DynamicPaintRuntime;
+
 typedef struct DynamicPaintSurface {
 
 	struct DynamicPaintSurface *next, *prev;
@@ -121,11 +122,13 @@ typedef struct DynamicPaintSurface {
 	short effect_ui;
 	/** Surface output id to preview. */
 	short preview_id;
-	short init_color_type, pad_s;
+	short init_color_type;
+	char _pad0[2];
 	int flags, effect;
 
 	int image_resolution, substeps;
-	int start_frame, end_frame, pad;
+	int start_frame, end_frame;
+	char _pad[4];
 
 	/* initial color */
 	float init_color[4];
@@ -145,7 +148,7 @@ typedef struct DynamicPaintSurface {
 
 	/* wave settings */
 	float wave_damping, wave_speed, wave_timescale, wave_spring, wave_smoothness;
-	int pad2;
+	char _pad2[4];
 
 	/** MAX_CUSTOMDATA_LAYER_NAME. */
 	char uvlayer_name[64];
@@ -174,11 +177,10 @@ enum {
 typedef struct DynamicPaintCanvasSettings {
 	/** For fast RNA access. */
 	struct DynamicPaintModifierData *pmd;
-	struct Mesh *mesh;
 
 	struct ListBase surfaces;
 	short active_sur, flags;
-	int pad;
+	char _pad[4];
 
 	/** Bake error description. */
 	char error[64];
@@ -253,7 +255,6 @@ enum {
 typedef struct DynamicPaintBrushSettings {
 	/** For fast RNA access. */
 	struct DynamicPaintModifierData *pmd;
-	struct Mesh *mesh;
 	struct ParticleSystem *psys;
 
 	int flags;
@@ -274,7 +275,7 @@ typedef struct DynamicPaintBrushSettings {
 	short proximity_falloff;
 	short wave_type;
 	short ray_dir;
-	short pad;
+	char _pad[2];
 
 	float wave_factor, wave_clamp;
 	float max_velocity, smudge_strength;

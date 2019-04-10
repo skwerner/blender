@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,17 +12,13 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * Contributor(s): Blender Foundation (2008).
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
 #ifndef __RNA_ACCESS_H__
 #define __RNA_ACCESS_H__
 
-/** \file RNA_access.h
- *  \ingroup RNA
+/** \file
+ * \ingroup RNA
  */
 
 #include <stdarg.h>
@@ -37,7 +31,6 @@
 extern "C" {
 #endif
 
-struct bContext;
 struct ID;
 struct IDOverrideStatic;
 struct IDOverrideStaticProperty;
@@ -46,6 +39,7 @@ struct ListBase;
 struct Main;
 struct ReportList;
 struct Scene;
+struct bContext;
 
 /* Types */
 extern BlenderRNA BLENDER_RNA;
@@ -67,7 +61,6 @@ extern StructRNA RNA_AndController;
 extern StructRNA RNA_AnimData;
 extern StructRNA RNA_AnimViz;
 extern StructRNA RNA_AnimVizMotionPaths;
-extern StructRNA RNA_AnimVizOnionSkinning;
 extern StructRNA RNA_AnyType;
 extern StructRNA RNA_Area;
 extern StructRNA RNA_AreaLight;
@@ -327,6 +320,7 @@ extern StructRNA RNA_LatticeGpencilModifier;
 extern StructRNA RNA_LatticeModifier;
 extern StructRNA RNA_LatticePoint;
 extern StructRNA RNA_LayerCollection;
+extern StructRNA RNA_LayerObjects;
 extern StructRNA RNA_Library;
 extern StructRNA RNA_Light;
 extern StructRNA RNA_LightProbe;
@@ -726,6 +720,7 @@ extern StructRNA RNA_VertexPaint;
 extern StructRNA RNA_VertexWeightEditModifier;
 extern StructRNA RNA_VertexWeightMixModifier;
 extern StructRNA RNA_VertexWeightProximityModifier;
+extern StructRNA RNA_View3DCursor;
 extern StructRNA RNA_View3DOverlay;
 extern StructRNA RNA_View3DShading;
 extern StructRNA RNA_ViewLayer;
@@ -1162,7 +1157,7 @@ void RNA_collection_clear(PointerRNA *ptr, const char *name);
 #define RNA_PROP_END                                                          \
 		}                                                                     \
 		RNA_property_collection_end(&rna_macro_iter);                         \
-	}
+	} ((void)0)
 
 #define RNA_STRUCT_BEGIN(sptr, prop)                                          \
 	{                                                                         \
@@ -1179,7 +1174,7 @@ void RNA_collection_clear(PointerRNA *ptr, const char *name);
 #define RNA_STRUCT_END                                                        \
 		}                                                                     \
 		RNA_property_collection_end(&rna_macro_iter);                         \
-	}
+	} ((void)0)
 
 /* check if the idproperty exists, for operators */
 bool RNA_property_is_set_ex(PointerRNA *ptr, PropertyRNA *prop, bool use_ghost);

@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,14 +15,10 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * Contributor(s): Blender Foundation 2007
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/windowmanager/intern/wm_files.c
- *  \ingroup wm
+/** \file
+ * \ingroup wm
  *
  * User level access for blend file read/write, file-history and userprefs (including relevant operators).
  */
@@ -360,8 +354,8 @@ static void wm_init_userdef(Main *bmain, const bool read_userdef_from_memory)
 
 	/* set the python auto-execute setting from user prefs */
 	/* enabled by default, unless explicitly enabled in the command line which overrides */
-	if ((G.f & G_SCRIPT_OVERRIDE_PREF) == 0) {
-		SET_FLAG_FROM_TEST(G.f, (U.flag & USER_SCRIPT_AUTOEXEC_DISABLE) == 0, G_SCRIPT_AUTOEXEC);
+	if ((G.f & G_FLAG_SCRIPT_OVERRIDE_PREF) == 0) {
+		SET_FLAG_FROM_TEST(G.f, (U.flag & USER_SCRIPT_AUTOEXEC_DISABLE) == 0, G_FLAG_SCRIPT_AUTOEXEC);
 	}
 
 	/* avoid re-saving for every small change to our prefs, allow overrides */
@@ -435,15 +429,15 @@ static int wm_read_exotic(const char *name)
 
 void WM_file_autoexec_init(const char *filepath)
 {
-	if (G.f & G_SCRIPT_OVERRIDE_PREF) {
+	if (G.f & G_FLAG_SCRIPT_OVERRIDE_PREF) {
 		return;
 	}
 
-	if (G.f & G_SCRIPT_AUTOEXEC) {
+	if (G.f & G_FLAG_SCRIPT_AUTOEXEC) {
 		char path[FILE_MAX];
 		BLI_split_dir_part(filepath, path, sizeof(path));
 		if (BKE_autoexec_match(path)) {
-			G.f &= ~G_SCRIPT_AUTOEXEC;
+			G.f &= ~G_FLAG_SCRIPT_AUTOEXEC;
 		}
 	}
 }
@@ -453,7 +447,7 @@ void wm_file_read_report(bContext *C, Main *bmain)
 	ReportList *reports = NULL;
 	Scene *sce;
 
-	for (sce = bmain->scene.first; sce; sce = sce->id.next) {
+	for (sce = bmain->scenes.first; sce; sce = sce->id.next) {
 		if (sce->r.engine[0] &&
 		    BLI_findstring(&R_engines, sce->r.engine, offsetof(RenderEngineType, idname)) == NULL)
 		{
@@ -491,12 +485,6 @@ static void wm_file_read_post(
 
 	CTX_wm_window_set(C, wm->windows.first);
 
-	Main *bmain = CTX_data_main(C);
-	DEG_on_visible_update(bmain, true);
-	wm_event_do_depsgraph(C);
-
-	ED_editors_init(C);
-
 #ifdef WITH_PYTHON
 	if (is_startup_file) {
 		/* possible python hasn't been initialized */
@@ -529,11 +517,19 @@ static void wm_file_read_post(
 	WM_operatortype_last_properties_clear_all();
 
 	/* important to do before NULL'ing the context */
+	Main *bmain = CTX_data_main(C);
 	BLI_callback_exec(bmain, NULL, BLI_CB_EVT_VERSION_UPDATE);
 	BLI_callback_exec(bmain, NULL, BLI_CB_EVT_LOAD_POST);
 	if (is_factory_startup) {
 		BLI_callback_exec(bmain, NULL, BLI_CB_EVT_LOAD_FACTORY_STARTUP_POST);
 	}
+
+	/* After load post, so for example the driver namespace can be filled
+	 * before evaluating the depsgraph. */
+	DEG_on_visible_update(bmain, true);
+	wm_event_do_depsgraph(C);
+
+	ED_editors_init(C);
 
 #if 1
 	WM_event_add_notifier(C, NC_WM | ND_FILEREAD, NULL);
@@ -592,7 +588,7 @@ bool WM_file_read(bContext *C, const char *filepath, ReportList *reports)
 
 	/* we didn't succeed, now try to read Blender file */
 	if (retval == BKE_READ_EXOTIC_OK_BLEND) {
-		int G_f = G.f;
+		const int G_f_orig = G.f;
 		ListBase wmbase;
 
 		/* put aside screens to match with persistent windows later */
@@ -620,9 +616,10 @@ bool WM_file_read(bContext *C, const char *filepath, ReportList *reports)
 
 		/* this flag is initialized by the operator but overwritten on read.
 		 * need to re-enable it here else drivers + registered scripts wont work. */
-		if (G.f != G_f) {
-			const int flags_keep = (G_SCRIPT_AUTOEXEC | G_SCRIPT_OVERRIDE_PREF);
-			G.f = (G.f & ~flags_keep) | (G_f & flags_keep);
+		if (G.f != G_f_orig) {
+			const int flags_keep = G_FLAG_ALL_RUNTIME;
+			G.f &= G_FLAG_ALL_READFILE;
+			G.f = (G.f & ~flags_keep) | (G_f_orig & flags_keep);
 		}
 
 		/* match the read WM with current WM */
@@ -777,8 +774,8 @@ void wm_homefile_read(
 	/* options exclude eachother */
 	BLI_assert((use_factory_settings && filepath_startup_override) == 0);
 
-	if ((G.f & G_SCRIPT_OVERRIDE_PREF) == 0) {
-		SET_FLAG_FROM_TEST(G.f, (U.flag & USER_SCRIPT_AUTOEXEC_DISABLE) == 0, G_SCRIPT_AUTOEXEC);
+	if ((G.f & G_FLAG_SCRIPT_OVERRIDE_PREF) == 0) {
+		SET_FLAG_FROM_TEST(G.f, (U.flag & USER_SCRIPT_AUTOEXEC_DISABLE) == 0, G_FLAG_SCRIPT_AUTOEXEC);
 	}
 
 	BLI_callback_exec(CTX_data_main(C), NULL, BLI_CB_EVT_LOAD_PRE);
@@ -1269,7 +1266,7 @@ static bool wm_file_write(bContext *C, const char *filepath, int fileflags, Repo
 	 * its handy for scripts to save to a predefined name without blender editing it */
 
 	/* send the OnSave event */
-	for (li = bmain->library.first; li; li = li->id.next) {
+	for (li = bmain->libraries.first; li; li = li->id.next) {
 		if (BLI_path_cmp(li->filepath, filepath) == 0) {
 			BKE_reportf(reports, RPT_ERROR, "Cannot overwrite used library '%.240s'", filepath);
 			return ok;
@@ -1289,7 +1286,7 @@ static bool wm_file_write(bContext *C, const char *filepath, int fileflags, Repo
 
 	/* operator now handles overwrite checks */
 
-	if (G.fileflags & G_AUTOPACK) {
+	if (G.fileflags & G_FILE_AUTOPACK) {
 		packAll(bmain, reports, false);
 	}
 
@@ -1363,10 +1360,10 @@ void wm_autosave_location(char *filepath)
 	if (G_MAIN && G.relbase_valid) {
 		const char *basename = BLI_path_basename(BKE_main_blendfile_path_from_global());
 		int len = strlen(basename) - 6;
-		BLI_snprintf(path, sizeof(path), "%.*s.blend", len, basename);
+		BLI_snprintf(path, sizeof(path), "%.*s (autosave).blend", len, basename);
 	}
 	else {
-		BLI_snprintf(path, sizeof(path), "%d.blend", pid);
+		BLI_snprintf(path, sizeof(path), "%d (autosave).blend", pid);
 	}
 
 #ifdef WIN32
@@ -1398,21 +1395,22 @@ void WM_autosave_init(wmWindowManager *wm)
 
 void wm_autosave_timer(const bContext *C, wmWindowManager *wm, wmTimer *UNUSED(wt))
 {
-	wmWindow *win;
-	wmEventHandler *handler;
 	char filepath[FILE_MAX];
 
 	WM_event_remove_timer(wm, NULL, wm->autosavetimer);
 
 	/* if a modal operator is running, don't autosave, but try again in 10 seconds */
-	for (win = wm->windows.first; win; win = win->next) {
-		for (handler = win->modalhandlers.first; handler; handler = handler->next) {
-			if (handler->op) {
-				wm->autosavetimer = WM_event_add_timer(wm, NULL, TIMERAUTOSAVE, 10.0);
-				if (G.debug) {
-					printf("Skipping auto-save, modal operator running, retrying in ten seconds...\n");
+	for (wmWindow *win = wm->windows.first; win; win = win->next) {
+		LISTBASE_FOREACH (wmEventHandler *, handler_base, &win->modalhandlers) {
+			if (handler_base->type == WM_HANDLER_TYPE_OP) {
+				wmEventHandler_Op *handler = (wmEventHandler_Op *)handler_base;
+				if (handler->op) {
+					wm->autosavetimer = WM_event_add_timer(wm, NULL, TIMERAUTOSAVE, 10.0);
+					if (G.debug) {
+						printf("Skipping auto-save, modal operator running, retrying in ten seconds...\n");
+					}
+					return;
 				}
-				return;
 			}
 		}
 	}
@@ -1496,12 +1494,12 @@ void wm_open_init_use_scripts(wmOperator *op, bool use_prefs)
 {
 	PropertyRNA *prop = RNA_struct_find_property(op->ptr, "use_scripts");
 	if (!RNA_property_is_set(op->ptr, prop)) {
-		/* use G_SCRIPT_AUTOEXEC rather than the userpref because this means if
+		/* use G_FLAG_SCRIPT_AUTOEXEC rather than the userpref because this means if
 		 * the flag has been disabled from the command line, then opening
 		 * from the menu wont enable this setting. */
 		bool value = use_prefs ?
 		             ((U.flag & USER_SCRIPT_AUTOEXEC_DISABLE) == 0) :
-		             ((G.f & G_SCRIPT_AUTOEXEC) != 0);
+		             ((G.f & G_FLAG_SCRIPT_AUTOEXEC) != 0);
 
 		RNA_property_boolean_set(op->ptr, prop, value);
 	}
@@ -1921,11 +1919,11 @@ static int wm_open_mainfile_exec(bContext *C, wmOperator *op)
 		G.fileflags |= G_FILE_NO_UI;
 
 	if (RNA_boolean_get(op->ptr, "use_scripts"))
-		G.f |= G_SCRIPT_AUTOEXEC;
+		G.f |= G_FLAG_SCRIPT_AUTOEXEC;
 	else
-		G.f &= ~G_SCRIPT_AUTOEXEC;
+		G.f &= ~G_FLAG_SCRIPT_AUTOEXEC;
 
-	success = wm_file_read_opwrap(C, filepath, op->reports, !(G.f & G_SCRIPT_AUTOEXEC));
+	success = wm_file_read_opwrap(C, filepath, op->reports, !(G.f & G_FLAG_SCRIPT_AUTOEXEC));
 
 	/* for file open also popup for warnings, not only errors */
 	BKE_report_print_level_set(op->reports, RPT_WARNING);
@@ -2024,12 +2022,12 @@ static int wm_revert_mainfile_exec(bContext *C, wmOperator *op)
 	wm_open_init_use_scripts(op, false);
 
 	if (RNA_boolean_get(op->ptr, "use_scripts"))
-		G.f |= G_SCRIPT_AUTOEXEC;
+		G.f |= G_FLAG_SCRIPT_AUTOEXEC;
 	else
-		G.f &= ~G_SCRIPT_AUTOEXEC;
+		G.f &= ~G_FLAG_SCRIPT_AUTOEXEC;
 
 	BLI_strncpy(filepath, BKE_main_blendfile_path(bmain), sizeof(filepath));
-	success = wm_file_read_opwrap(C, filepath, op->reports, !(G.f & G_SCRIPT_AUTOEXEC));
+	success = wm_file_read_opwrap(C, filepath, op->reports, !(G.f & G_FLAG_SCRIPT_AUTOEXEC));
 
 	if (success) {
 		return OPERATOR_FINISHED;
@@ -2301,7 +2299,7 @@ void WM_OT_save_as_mainfile(wmOperatorType *ot)
 	        WM_FILESEL_FILEPATH, FILE_DEFAULTDISPLAY, FILE_SORT_ALPHA);
 	RNA_def_boolean(ot->srna, "compress", false, "Compress", "Write compressed .blend file");
 	RNA_def_boolean(ot->srna, "relative_remap", true, "Remap Relative",
-	                "Remap relative paths when saving in a different directory");
+	                "Make paths relative when saving to a different directory");
 	prop = RNA_def_boolean(ot->srna, "copy", false, "Save Copy",
 	                "Save a copy of the actual working state but does not make saved file active");
 	RNA_def_property_flag(prop, PROP_SKIP_SAVE);
@@ -2331,14 +2329,9 @@ static int wm_save_mainfile_invoke(bContext *C, wmOperator *op, const wmEvent *U
 		char path[FILE_MAX];
 
 		RNA_string_get(op->ptr, "filepath", path);
-		if (RNA_boolean_get(op->ptr, "check_existing") && BLI_exists(path)) {
-			ret = WM_operator_confirm_message_ex(C, op, IFACE_("Save Over?"), ICON_QUESTION, path);
-		}
-		else {
-			ret = wm_save_as_mainfile_exec(C, op);
-			/* Without this there is no feedback the file was saved. */
-			BKE_reportf(op->reports, RPT_INFO, "Saved \"%s\"", BLI_path_basename(path));
-		}
+		ret = wm_save_as_mainfile_exec(C, op);
+		/* Without this there is no feedback the file was saved. */
+		BKE_reportf(op->reports, RPT_INFO, "Saved \"%s\"", BLI_path_basename(path));
 	}
 	else {
 		WM_event_add_fileselect(C, op);
@@ -2365,7 +2358,7 @@ void WM_OT_save_mainfile(wmOperatorType *ot)
 	        WM_FILESEL_FILEPATH, FILE_DEFAULTDISPLAY, FILE_SORT_ALPHA);
 	RNA_def_boolean(ot->srna, "compress", false, "Compress", "Write compressed .blend file");
 	RNA_def_boolean(ot->srna, "relative_remap", false, "Remap Relative",
-	                "Remap relative paths when saving in a different directory");
+	                "Make paths relative when saving to a different directory");
 
 	prop = RNA_def_boolean(ot->srna, "exit", false, "Exit", "Exit Blender after saving");
 	RNA_def_property_flag(prop, PROP_HIDDEN | PROP_SKIP_SAVE);
@@ -2467,16 +2460,16 @@ static uiBlock *block_create_autorun_warning(struct bContext *C, struct ARegion 
 void wm_test_autorun_warning(bContext *C)
 {
 	/* Test if any auto-execution of scripts failed. */
-	if ((G.f & G_SCRIPT_AUTOEXEC_FAIL) == 0) {
+	if ((G.f & G_FLAG_SCRIPT_AUTOEXEC_FAIL) == 0) {
 		return;
 	}
 
 	/* Only show the warning once. */
-	if (G.f & G_SCRIPT_AUTOEXEC_FAIL_QUIET) {
+	if (G.f & G_FLAG_SCRIPT_AUTOEXEC_FAIL_QUIET) {
 		return;
 	}
 
-	G.f |= G_SCRIPT_AUTOEXEC_FAIL_QUIET;
+	G.f |= G_FLAG_SCRIPT_AUTOEXEC_FAIL_QUIET;
 
 	wmWindowManager *wm = CTX_wm_manager(C);
 	wmWindow *win = (wm->winactive) ? wm->winactive : wm->windows.first;

@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,21 +15,17 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file DNA_genfile.h
- *  \ingroup DNA
- *  \brief blenloader genfile private function prototypes
+/** \file
+ * \ingroup DNA
+ * \brief blenloader genfile private function prototypes
  */
 
 #ifndef __DNA_GENFILE_H__
 #define __DNA_GENFILE_H__
+
+#include "intern/dna_utils.h"
 
 struct SDNA;
 
@@ -84,7 +78,7 @@ enum eSDNA_StructCompare {
 };
 
 struct SDNA *DNA_sdna_from_data(
-        const void *data, const int datalen,
+        const void *data, const int data_len,
         bool do_endian_swap, bool data_alloc,
         const char **r_error_message);
 void DNA_sdna_free(struct SDNA *sdna);
@@ -103,7 +97,6 @@ void *DNA_struct_reconstruct(
         const struct SDNA *newsdna, const struct SDNA *oldsdna,
         const char *compflags, int oldSDNAnr, int blocks, const void *data);
 
-int DNA_elem_array_size(const char *str);
 int DNA_elem_offset(struct SDNA *sdna, const char *stype, const char *vartype, const char *name);
 
 bool DNA_struct_find(const struct SDNA *sdna, const char *stype);
@@ -111,5 +104,12 @@ bool DNA_struct_elem_find(const struct SDNA *sdna, const char *stype, const char
 
 
 int DNA_elem_type_size(const eSDNA_Type elem_nr);
+
+bool DNA_sdna_patch_struct(
+        struct SDNA *sdna, const char *struct_name_old, const char *struct_name_new);
+bool DNA_sdna_patch_struct_member(
+        struct SDNA *sdna, const char *struct_name, const char *elem_old, const char *elem_new);
+
+void DNA_sdna_alias_data_ensure(struct SDNA *sdna);
 
 #endif /* __DNA_GENFILE_H__ */

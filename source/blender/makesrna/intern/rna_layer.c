@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,22 +12,16 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * Contributor(s): Blender Foundation.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/makesrna/intern/rna_layer.c
- *  \ingroup RNA
+/** \file
+ * \ingroup RNA
  */
 
 #include "DNA_scene_types.h"
 #include "DNA_layer_types.h"
 #include "DNA_view3d_types.h"
 
-#include "BLI_math.h"
-#include "BLI_string_utils.h"
 
 #include "BLT_translation.h"
 
@@ -204,7 +196,7 @@ int rna_LayerCollection_name_length(PointerRNA *ptr)
 	return strlen(id->name + 2);
 }
 
-static void rna_LayerCollection_use_update(Main *bmain, Scene *UNUSED(scene), PointerRNA *ptr)
+static void rna_LayerCollection_exclude_update(Main *bmain, Scene *UNUSED(scene), PointerRNA *ptr)
 {
 	Scene *scene = (Scene *)ptr->id.data;
 	LayerCollection *lc = (LayerCollection *)ptr->data;
@@ -217,29 +209,22 @@ static void rna_LayerCollection_use_update(Main *bmain, Scene *UNUSED(scene), Po
 	WM_main_add_notifier(NC_SCENE | ND_LAYER_CONTENT, NULL);
 }
 
+static void rna_LayerCollection_update(Main *UNUSED(bmain), Scene *UNUSED(scene), PointerRNA *ptr)
+{
+	Scene *scene = (Scene *)ptr->id.data;
+	LayerCollection *lc = (LayerCollection *)ptr->data;
+	ViewLayer *view_layer = BKE_view_layer_find_from_collection(scene, lc);
+
+	BKE_layer_collection_sync(scene, view_layer);
+
+	DEG_id_tag_update(&scene->id, ID_RECALC_BASE_FLAGS);
+
+	WM_main_add_notifier(NC_SCENE | ND_LAYER_CONTENT, NULL);
+}
+
 static bool rna_LayerCollection_has_objects(LayerCollection *lc)
 {
 	return (lc->runtime_flag & LAYER_COLLECTION_HAS_OBJECTS) != 0;
-}
-
-static bool rna_LayerCollection_has_visible_objects(LayerCollection *lc, ViewLayer *view_layer)
-{
-	if ((view_layer->runtime_flag & VIEW_LAYER_HAS_HIDE) &&
-	    !(lc->runtime_flag & LAYER_COLLECTION_HAS_VISIBLE_OBJECTS))
-	{
-		return false;
-	}
-	return true;
-}
-
-static bool rna_LayerCollection_has_hidden_objects(LayerCollection *lc, ViewLayer *view_layer)
-{
-	if ((view_layer->runtime_flag & VIEW_LAYER_HAS_HIDE) &&
-	    (lc->runtime_flag & LAYER_COLLECTION_HAS_HIDDEN_OBJECTS))
-	{
-		return true;
-	}
-	return false;
 }
 
 static bool rna_LayerCollection_has_selected_objects(LayerCollection *lc, ViewLayer *view_layer)
@@ -281,13 +266,13 @@ static void rna_def_layer_collection(BlenderRNA *brna)
 	RNA_def_property_boolean_sdna(prop, NULL, "flag", LAYER_COLLECTION_EXCLUDE);
 	RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
 	RNA_def_property_ui_text(prop, "Exclude", "Exclude collection from view layer");
-	RNA_def_property_update(prop, NC_SCENE | ND_LAYER, "rna_LayerCollection_use_update");
+	RNA_def_property_update(prop, NC_SCENE | ND_LAYER, "rna_LayerCollection_exclude_update");
 
 	prop = RNA_def_property(srna, "holdout", PROP_BOOLEAN, PROP_NONE);
 	RNA_def_property_boolean_sdna(prop, NULL, "flag", LAYER_COLLECTION_HOLDOUT);
 	RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
 	RNA_def_property_ui_text(prop, "Holdout", "Mask out objects in collection from view layer");
-	RNA_def_property_update(prop, NC_SCENE | ND_LAYER, "rna_LayerCollection_use_update");
+	RNA_def_property_update(prop, NC_SCENE | ND_LAYER, "rna_LayerCollection_update");
 
 	prop = RNA_def_property(srna, "indirect_only", PROP_BOOLEAN, PROP_NONE);
 	RNA_def_property_boolean_sdna(prop, NULL, "flag", LAYER_COLLECTION_INDIRECT_ONLY);
@@ -295,22 +280,24 @@ static void rna_def_layer_collection(BlenderRNA *brna)
 	RNA_def_property_ui_text(prop, "Indirect Only",
 	                         "Objects in collection only contribute indirectly (through shadows and reflections) "
 	                         "in the view layer");
-	RNA_def_property_update(prop, NC_SCENE | ND_LAYER, "rna_LayerCollection_use_update");
+	RNA_def_property_update(prop, NC_SCENE | ND_LAYER, "rna_LayerCollection_update");
+
+	prop = RNA_def_property(srna, "hide_viewport", PROP_BOOLEAN, PROP_NONE);
+	RNA_def_property_boolean_sdna(prop, NULL, "flag", LAYER_COLLECTION_RESTRICT_VIEW);
+	RNA_def_property_override_flag(prop, PROPOVERRIDE_OVERRIDABLE_STATIC);
+	RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
+	RNA_def_property_ui_icon(prop, ICON_HIDE_OFF, -1);
+	RNA_def_property_ui_text(prop, "Disable Viewport", "Disable collection in viewport for this view layer");
+	RNA_def_property_update(prop, NC_SCENE | ND_LAYER_CONTENT, "rna_LayerCollection_update");
+
+	prop = RNA_def_property(srna, "is_visible", PROP_BOOLEAN, PROP_NONE);
+	RNA_def_property_boolean_sdna(prop, NULL, "runtime_flag", LAYER_COLLECTION_VISIBLE);
+	RNA_def_property_clear_flag(prop, PROP_EDITABLE);
+	RNA_def_property_ui_text(prop, "Visible",
+	                         "Whether this collection is visible, take into account the collection parent");
 
 	func = RNA_def_function(srna, "has_objects", "rna_LayerCollection_has_objects");
 	RNA_def_function_ui_description(func, "");
-	RNA_def_function_return(func, RNA_def_boolean(func, "result", 0, "", ""));
-
-	func = RNA_def_function(srna, "has_visible_objects", "rna_LayerCollection_has_visible_objects");
-	RNA_def_function_ui_description(func, "");
-	prop = RNA_def_pointer(func, "view_layer", "ViewLayer", "", "ViewLayer the layer collection belongs to");
-	RNA_def_parameter_flags(prop, 0, PARM_REQUIRED);
-	RNA_def_function_return(func, RNA_def_boolean(func, "result", 0, "", ""));
-
-	func = RNA_def_function(srna, "has_hidden_objects", "rna_LayerCollection_has_hidden_objects");
-	RNA_def_function_ui_description(func, "");
-	prop = RNA_def_pointer(func, "view_layer", "ViewLayer", "", "ViewLayer the layer collection belongs to");
-	RNA_def_parameter_flags(prop, 0, PARM_REQUIRED);
 	RNA_def_function_return(func, RNA_def_boolean(func, "result", 0, "", ""));
 
 	func = RNA_def_function(srna, "has_selected_objects", "rna_LayerCollection_has_selected_objects");

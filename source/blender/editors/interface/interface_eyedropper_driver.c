@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,14 +15,10 @@
  *
  * The Original Code is Copyright (C) 2009 Blender Foundation.
  * All rights reserved.
- *
- * Contributor(s): Blender Foundation, Joshua Leung
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/interface/interface_eyedropper_driver.c
- *  \ingroup edinterface
+/** \file
+ * \ingroup edinterface
  *
  * Eyedropper (Animation Driver Targets).
  *
@@ -38,7 +32,6 @@
 #include "DNA_screen_types.h"
 #include "DNA_object_types.h"
 
-#include "BLI_math_vector.h"
 
 #include "BKE_context.h"
 #include "BKE_animsys.h"
@@ -141,10 +134,12 @@ static void driverdropper_sample(bContext *C, wmOperator *op, const wmEvent *eve
 		}
 
 		/* cleanup */
-		if (target_path)
+		if (target_path) {
 			MEM_freeN(target_path);
-		if (dst_path)
+		}
+		if (dst_path) {
 			MEM_freeN(dst_path);
+		}
 	}
 }
 
@@ -214,8 +209,12 @@ static int driverdropper_exec(bContext *C, wmOperator *op)
 
 static bool driverdropper_poll(bContext *C)
 {
-	if (!CTX_wm_window(C)) return 0;
-	else return 1;
+	if (!CTX_wm_window(C)) {
+		return 0;
+	}
+	else {
+		return 1;
+	}
 }
 
 void UI_OT_eyedropper_driver(wmOperatorType *ot)

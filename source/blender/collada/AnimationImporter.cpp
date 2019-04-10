@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,14 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * Contributor(s): Chingiz Dyussenov, Arystanbek Dyussenov, Nathan Letwory, Sukhitha Jayathilake.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/collada/AnimationImporter.cpp
- *  \ingroup collada
+/** \file
+ * \ingroup collada
  */
 
 #include <stddef.h>
@@ -1000,7 +994,7 @@ void AnimationImporter::translate_Animations(COLLADAFW::Node *node,
 	}
 
 	if ((animType->light) != 0) {
-		Lamp *lamp  = (Lamp *) ob->data;
+		Light *lamp  = (Light *) ob->data;
 		if (!lamp->adt || !lamp->adt->action)
 			act = verify_adt_action(bmain, (ID *)&lamp->id, 1);
 		else
@@ -1944,7 +1938,7 @@ Object *AnimationImporter::get_joint_object(COLLADAFW::Node *root, COLLADAFW::No
 
 		job->lay = BKE_scene_base_find(scene, job)->lay = 2;
 
-		mul_v3_fl(job->size, 0.5f);
+		mul_v3_fl(job->scale, 0.5f);
 		DEG_id_tag_update(&job->id, ID_RECALC_TRANSFORM);
 
 		verify_adt_action((ID *)&job->id, 1);
@@ -1961,7 +1955,7 @@ Object *AnimationImporter::get_joint_object(COLLADAFW::Node *root, COLLADAFW::No
 			mul_m4_m4m4(mat, ipar, temp);
 		}
 
-		bc_decompose(mat, job->loc, NULL, job->quat, job->size);
+		bc_decompose(mat, job->loc, NULL, job->quat, job->scale);
 
 		if (par_job) {
 			job->parent = par_job;

@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,10 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): Joshua Leung
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file DNA_view2d_types.h
- *  \ingroup DNA
+/** \file
+ * \ingroup DNA
  */
 
 #ifndef __DNA_VIEW2D_TYPES_H__
@@ -86,7 +78,7 @@ typedef struct View2D {
 	/* Usually set externally (as in, not in view2d files). */
 	/** Alpha of vertical and horizontal scrollbars (range is [0, 255]). */
 	char alpha_vert, alpha_hor;
-	short pad[3];
+	char _pad[6];
 
 	/* animated smooth view */
 	struct SmoothView2DStore *sms;

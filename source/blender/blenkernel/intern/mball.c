@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,11 +15,6 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * Contributor(s): Jiri Hnidek <jiri.hnidek@vslib.cz>.
- *
- * ***** END GPL LICENSE BLOCK *****
- *
  * MetaBalls are created from a single Object (with a name without number in it),
  * here the DispList and BoundBox also is located.
  * All objects with the same name (but with a number in it) are added to this.
@@ -29,8 +22,8 @@
  * texture coordinates are patched within the displist
  */
 
-/** \file blender/blenkernel/intern/mball.c
- *  \ingroup bke
+/** \file
+ * \ingroup bke
  */
 
 #include <stdio.h>
@@ -52,19 +45,18 @@
 #include "BLI_string_utils.h"
 #include "BLI_utildefines.h"
 
-#include "BKE_global.h"
 #include "BKE_main.h"
 
 #include "BKE_animsys.h"
 #include "BKE_curve.h"
 #include "BKE_scene.h"
 #include "BKE_library.h"
-#include "BKE_library_query.h"
-#include "BKE_library_remap.h"
 #include "BKE_displist.h"
 #include "BKE_mball.h"
 #include "BKE_object.h"
 #include "BKE_material.h"
+
+#include "DEG_depsgraph.h"
 
 /* Functions */
 
@@ -83,7 +75,7 @@ void BKE_mball_free(MetaBall *mb)
 
 void BKE_mball_init(MetaBall *mb)
 {
-	BLI_assert(MEMCMP_STRUCT_OFS_IS_ZERO(mb, id));
+	BLI_assert(MEMCMP_STRUCT_AFTER_IS_ZERO(mb, id));
 
 	mb->size[0] = mb->size[1] = mb->size[2] = 1.0;
 	mb->texflag = MB_AUTOSPACE;
@@ -106,7 +98,7 @@ MetaBall *BKE_mball_add(Main *bmain, const char *name)
 
 /**
  * Only copy internal data of MetaBall ID from source to already allocated/initialized destination.
- * You probably nerver want to use that directly, use id_copy or BKE_id_copy_ex for typical needs.
+ * You probably never want to use that directly, use BKE_id_copy or BKE_id_copy_ex for typical needs.
  *
  * WARNING! This function will not handle ID user count!
  *
@@ -126,7 +118,7 @@ void BKE_mball_copy_data(Main *UNUSED(bmain), MetaBall *mb_dst, const MetaBall *
 MetaBall *BKE_mball_copy(Main *bmain, const MetaBall *mb)
 {
 	MetaBall *mb_copy;
-	BKE_id_copy_ex(bmain, &mb->id, (ID **)&mb_copy, 0, false);
+	BKE_id_copy(bmain, &mb->id, (ID **)&mb_copy);
 	return mb_copy;
 }
 
@@ -197,8 +189,10 @@ void BKE_mball_texspace_calc(Object *ob)
 	int tot;
 	bool do_it = false;
 
-	if (ob->bb == NULL) ob->bb = MEM_callocN(sizeof(BoundBox), "mb boundbox");
-	bb = ob->bb;
+	if (ob->runtime.bb == NULL) {
+		ob->runtime.bb = MEM_callocN(sizeof(BoundBox), "mb boundbox");
+	}
+	bb = ob->runtime.bb;
 
 	/* Weird one, this. */
 /*      INIT_MINMAX(min, max); */
@@ -233,8 +227,8 @@ BoundBox *BKE_mball_boundbox_get(Object *ob)
 {
 	BLI_assert(ob->type == OB_MBALL);
 
-	if (ob->bb != NULL && (ob->bb->flag & BOUNDBOX_DIRTY) == 0) {
-		return ob->bb;
+	if (ob->runtime.bb != NULL && (ob->runtime.bb->flag & BOUNDBOX_DIRTY) == 0) {
+		return ob->runtime.bb;
 	}
 
 	/* This should always only be called with evaluated objects, but currently RNA is a problem here... */
@@ -242,7 +236,7 @@ BoundBox *BKE_mball_boundbox_get(Object *ob)
 		BKE_mball_texspace_calc(ob);
 	}
 
-	return ob->bb;
+	return ob->runtime.bb;
 }
 
 float *BKE_mball_make_orco(Object *ob, ListBase *dispbase)
@@ -254,7 +248,7 @@ float *BKE_mball_make_orco(Object *ob, ListBase *dispbase)
 	int a;
 
 	/* restore size and loc */
-	bb = ob->bb;
+	bb = ob->runtime.bb;
 	loc[0] = (bb->vec[0][0] + bb->vec[4][0]) / 2.0f;
 	size[0] = bb->vec[4][0] - loc[0];
 	loc[1] = (bb->vec[0][1] + bb->vec[2][1]) / 2.0f;
@@ -337,10 +331,10 @@ bool BKE_mball_is_any_selected(const MetaBall *mb)
 }
 
 
-bool BKE_mball_is_any_selected_multi(Object **objects, int objects_len)
+bool BKE_mball_is_any_selected_multi(Base **bases, int bases_len)
 {
-	for (uint ob_index = 0; ob_index < objects_len; ob_index++) {
-		Object *obedit = objects[ob_index];
+	for (uint base_index = 0; base_index < bases_len; base_index++) {
+		Object *obedit = bases[base_index]->object;
 		MetaBall *mb = (MetaBall *)obedit->data;
 		if (BKE_mball_is_any_selected(mb)) {
 			return true;
@@ -396,6 +390,7 @@ void BKE_mball_properties_copy(Scene *scene, Object *active_object)
 					mb->rendersize = active_mball->rendersize;
 					mb->thresh = active_mball->thresh;
 					mb->flag = active_mball->flag;
+					DEG_id_tag_update(&mb->id, 0);
 				}
 			}
 		}
@@ -564,64 +559,83 @@ int BKE_mball_select_count(const MetaBall *mb)
 	return sel;
 }
 
-int BKE_mball_select_count_multi(Object **objects, int objects_len)
+int BKE_mball_select_count_multi(Base **bases, int bases_len)
 {
 	int sel = 0;
-	for (uint ob_index = 0; ob_index < objects_len; ob_index++) {
-		const Object *obedit = objects[ob_index];
+	for (uint ob_index = 0; ob_index < bases_len; ob_index++) {
+		const Object *obedit = bases[ob_index]->object;
 		const MetaBall *mb = (MetaBall *)obedit->data;
 		sel += BKE_mball_select_count(mb);
 	}
 	return sel;
 }
 
-void BKE_mball_select_all(MetaBall *mb)
+bool BKE_mball_select_all(MetaBall *mb)
 {
+	bool changed = false;
 	for (MetaElem *ml = mb->editelems->first; ml; ml = ml->next) {
-		ml->flag |= SELECT;
+		if ((ml->flag & SELECT) == 0) {
+			ml->flag |= SELECT;
+			changed = true;
+		}
 	}
+	return changed;
 }
 
-void BKE_mball_select_all_multi(Object **objects, int objects_len)
+bool BKE_mball_select_all_multi_ex(Base **bases, int bases_len)
 {
-	for (uint ob_index = 0; ob_index < objects_len; ob_index++) {
-		Object *obedit = objects[ob_index];
+	bool changed_multi = false;
+	for (uint ob_index = 0; ob_index < bases_len; ob_index++) {
+		Object *obedit = bases[ob_index]->object;
 		MetaBall *mb = obedit->data;
-		BKE_mball_select_all(mb);
+		changed_multi |= BKE_mball_select_all(mb);
 	}
+	return changed_multi;
 }
 
-void BKE_mball_deselect_all(MetaBall *mb)
+bool BKE_mball_deselect_all(MetaBall *mb)
 {
+	bool changed = false;
 	for (MetaElem *ml = mb->editelems->first; ml; ml = ml->next) {
-		ml->flag &= ~SELECT;
+		if ((ml->flag & SELECT) != 0) {
+			ml->flag &= ~SELECT;
+			changed = true;
+		}
 	}
+	return changed;
 }
 
-void BKE_mball_deselect_all_multi(Object **objects, int objects_len)
+bool BKE_mball_deselect_all_multi_ex(Base **bases, int bases_len)
 {
-	for (uint ob_index = 0; ob_index < objects_len; ob_index++) {
-		Object *obedit = objects[ob_index];
+	bool changed_multi = false;
+	for (uint ob_index = 0; ob_index < bases_len; ob_index++) {
+		Object *obedit = bases[ob_index]->object;
 		MetaBall *mb = obedit->data;
-
-		BKE_mball_deselect_all(mb);
+		changed_multi |= BKE_mball_deselect_all(mb);
+		DEG_id_tag_update(&mb->id, ID_RECALC_SELECT);
 	}
+	return changed_multi;
 }
 
-void BKE_mball_select_swap(MetaBall *mb)
+bool BKE_mball_select_swap(MetaBall *mb)
 {
+	bool changed = false;
 	for (MetaElem *ml = mb->editelems->first; ml; ml = ml->next) {
 		ml->flag ^= SELECT;
+		changed = true;
 	}
+	return changed;
 }
 
-void BKE_mball_select_swap_multi(Object **objects, int objects_len)
+bool BKE_mball_select_swap_multi_ex(Base **bases, int bases_len)
 {
-	for (uint ob_index = 0; ob_index < objects_len; ob_index++) {
-		Object *obedit = objects[ob_index];
+	bool changed_multi = false;
+	for (uint ob_index = 0; ob_index < bases_len; ob_index++) {
+		Object *obedit = bases[ob_index]->object;
 		MetaBall *mb = (MetaBall *)obedit->data;
-		BKE_mball_select_swap(mb);
+		changed_multi |= BKE_mball_select_swap(mb);
 	}
+	return changed_multi;
 }
 
 /* **** Depsgraph evaluation **** */

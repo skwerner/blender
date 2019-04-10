@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,11 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * Contributor(s): Blender Foundation, 2002-2009 full recode.
- *
- * ***** END GPL LICENSE BLOCK *****
- *
  * Operators for relations between bones and for transferring bones between armature objects
  */
 
-/** \file blender/editors/armature/armature_relations.c
- *  \ingroup edarmature
+/** \file
+ * \ingroup edarmature
  */
 
 #include "MEM_guardedalloc.h"
@@ -48,7 +41,6 @@
 #include "BKE_constraint.h"
 #include "BKE_context.h"
 #include "BKE_fcurve.h"
-#include "BKE_global.h"
 #include "BKE_layer.h"
 #include "BKE_main.h"
 #include "BKE_report.h"
@@ -213,7 +205,7 @@ static void joined_armature_fix_links(Main *bmain, Object *tarArm, Object *srcAr
 	bPoseChannel *pchant;
 
 	/* let's go through all objects in database */
-	for (ob = bmain->object.first; ob; ob = ob->id.next) {
+	for (ob = bmain->objects.first; ob; ob = ob->id.next) {
 		/* do some object-type specific things */
 		if (ob->type == OB_ARMATURE) {
 			pose = ob->pose;
@@ -425,7 +417,7 @@ static void separated_armature_fix_links(Main *bmain, Object *origArm, Object *n
 	npchans = &newArm->pose->chanbase;
 
 	/* let's go through all objects in database */
-	for (ob = bmain->object.first; ob; ob = ob->id.next) {
+	for (ob = bmain->objects.first; ob; ob = ob->id.next) {
 		/* do some object-type specific things */
 		if (ob->type == OB_ARMATURE) {
 			for (pchan = ob->pose->chanbase.first; pchan; pchan = pchan->next) {
@@ -755,7 +747,7 @@ static void bone_connect_to_new_parent(ListBase *edbo, EditBone *selbone, EditBo
 static const EnumPropertyItem prop_editarm_make_parent_types[] = {
 	{ARM_PAR_CONNECT, "CONNECTED", 0, "Connected", ""},
 	{ARM_PAR_OFFSET, "OFFSET", 0, "Keep Offset", ""},
-	{0, NULL, 0, NULL, NULL}
+	{0, NULL, 0, NULL, NULL},
 };
 
 static int armature_parent_set_exec(bContext *C, wmOperator *op)
@@ -876,7 +868,7 @@ void ARMATURE_OT_parent_set(wmOperatorType *ot)
 static const EnumPropertyItem prop_editarm_clear_parent_types[] = {
 	{1, "CLEAR", 0, "Clear Parent", ""},
 	{2, "DISCONNECT", 0, "Disconnect Bone", ""},
-	{0, NULL, 0, NULL, NULL}
+	{0, NULL, 0, NULL, NULL},
 };
 
 static void editbone_clear_parent(EditBone *ebone, int mode)

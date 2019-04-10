@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,10 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/sculpt_paint/paint_image_2d.c
- *  \ingroup bke
+/** \file
+ * \ingroup bke
  */
 //#include <math.h>
 #include <string.h>
@@ -1423,7 +1415,7 @@ static void paint_2d_fill_add_pixel_byte(
 		rgba_uchar_to_float(color_f, color_b);
 		straight_to_premul_v4(color_f);
 
-		if (compare_len_squared_v4v4(color_f, color, threshold_sq)) {
+		if (len_squared_v4v4(color_f, color) <= threshold_sq) {
 			BLI_stack_push(stack, &coordinate);
 		}
 		BLI_BITMAP_SET(touched, coordinate, true);
@@ -1442,7 +1434,7 @@ static void paint_2d_fill_add_pixel_float(
 	coordinate = ((size_t)y_px) * ibuf->x + x_px;
 
 	if (!BLI_BITMAP_TEST(touched, coordinate)) {
-		if (compare_len_squared_v4v4(ibuf->rect_float + 4 * coordinate, color, threshold_sq)) {
+		if (len_squared_v4v4(ibuf->rect_float + 4 * coordinate, color) <= threshold_sq) {
 			BLI_stack_push(stack, &coordinate);
 		}
 		BLI_BITMAP_SET(touched, coordinate, true);

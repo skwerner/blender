@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,10 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/space_text/text_ops.c
- *  \ingroup sptext
+/** \file
+ * \ingroup sptext
  */
 
 
@@ -44,7 +36,6 @@
 #include "PIL_time.h"
 
 #include "BKE_context.h"
-#include "BKE_global.h"
 #include "BKE_library.h"
 #include "BKE_main.h"
 #include "BKE_report.h"
@@ -93,7 +84,7 @@ static bool text_edit_poll(bContext *C)
 		return 0;
 
 	if (ID_IS_LINKED(text)) {
-		// BKE_report(op->reports, RPT_ERROR, "Cannot edit external libdata");
+		// BKE_report(op->reports, RPT_ERROR, "Cannot edit external library data");
 		return 0;
 	}
 
@@ -109,7 +100,7 @@ bool text_space_edit_poll(bContext *C)
 		return 0;
 
 	if (ID_IS_LINKED(text)) {
-		// BKE_report(op->reports, RPT_ERROR, "Cannot edit external libdata");
+		// BKE_report(op->reports, RPT_ERROR, "Cannot edit external library data");
 		return 0;
 	}
 
@@ -129,7 +120,7 @@ static bool text_region_edit_poll(bContext *C)
 		return 0;
 
 	if (ID_IS_LINKED(text)) {
-		// BKE_report(op->reports, RPT_ERROR, "Cannot edit external libdata");
+		// BKE_report(op->reports, RPT_ERROR, "Cannot edit external library data");
 		return 0;
 	}
 
@@ -195,7 +186,7 @@ static int text_new_exec(bContext *C, wmOperator *UNUSED(op))
 void TEXT_OT_new(wmOperatorType *ot)
 {
 	/* identifiers */
-	ot->name = "Create Text Block";
+	ot->name = "New Text";
 	ot->idname = "TEXT_OT_new";
 	ot->description = "Create a new text data-block";
 
@@ -289,7 +280,7 @@ static int text_open_invoke(bContext *C, wmOperator *op, const wmEvent *UNUSED(e
 void TEXT_OT_open(wmOperatorType *ot)
 {
 	/* identifiers */
-	ot->name = "Open Text Block";
+	ot->name = "Open Text";
 	ot->idname = "TEXT_OT_open";
 	ot->description = "Open a new text data-block";
 
@@ -623,7 +614,7 @@ static int text_run_script(bContext *C, ReportList *reports)
 			}
 		}
 
-		BKE_report(reports, RPT_ERROR, "Python script fail, look in the console for now...");
+		BKE_report(reports, RPT_ERROR, "Python script failed, check the message in the system console");
 
 		return OPERATOR_FINISHED;
 	}
@@ -674,7 +665,7 @@ static int text_refresh_pyconstraints_exec(bContext *UNUSED(C), wmOperator *UNUS
 	short update;
 
 	/* check all pyconstraints */
-	for (ob = CTX_data_main(C)->object.first; ob; ob = ob->id.next) {
+	for (ob = CTX_data_main(C)->objects.first; ob; ob = ob->id.next) {
 		update = 0;
 		if (ob->type == OB_ARMATURE && ob->pose) {
 			bPoseChannel *pchan;
@@ -1092,7 +1083,8 @@ enum { TO_SPACES, TO_TABS };
 static const EnumPropertyItem whitespace_type_items[] = {
 	{TO_SPACES, "SPACES", 0, "To Spaces", NULL},
 	{TO_TABS, "TABS", 0, "To Tabs", NULL},
-	{0, NULL, 0, NULL, NULL}};
+	{0, NULL, 0, NULL, NULL},
+};
 
 static int text_convert_whitespace_exec(bContext *C, wmOperator *op)
 {
@@ -1332,7 +1324,7 @@ void TEXT_OT_move_lines(wmOperatorType *ot)
 	static const EnumPropertyItem direction_items[] = {
 		{TXT_MOVE_LINE_UP, "UP", 0, "Up", ""},
 		{TXT_MOVE_LINE_DOWN, "DOWN", 0, "Down", ""},
-		{0, NULL, 0, NULL, NULL}
+		{0, NULL, 0, NULL, NULL},
 	};
 
 	/* identifiers */
@@ -1366,7 +1358,8 @@ static const EnumPropertyItem move_type_items[] = {
 	{NEXT_LINE, "NEXT_LINE", 0, "Next Line", ""},
 	{PREV_PAGE, "PREVIOUS_PAGE", 0, "Previous Page", ""},
 	{NEXT_PAGE, "NEXT_PAGE", 0, "Next Page", ""},
-	{0, NULL, 0, NULL, NULL}};
+	{0, NULL, 0, NULL, NULL},
+};
 
 /* get cursor position in line by relative wrapped line and column positions */
 static int text_get_cursor_rel(SpaceText *st, ARegion *ar, TextLine *linein, int rell, int relc)
@@ -1980,7 +1973,8 @@ static const EnumPropertyItem delete_type_items[] = {
 	{DEL_PREV_CHAR, "PREVIOUS_CHARACTER", 0, "Previous Character", ""},
 	{DEL_NEXT_WORD, "NEXT_WORD", 0, "Next Word", ""},
 	{DEL_PREV_WORD, "PREVIOUS_WORD", 0, "Previous Word", ""},
-	{0, NULL, 0, NULL, NULL}};
+	{0, NULL, 0, NULL, NULL},
+};
 
 static int text_delete_exec(bContext *C, wmOperator *op)
 {
@@ -2130,7 +2124,7 @@ static void txt_screen_skip(SpaceText *st, ARegion *ar, int lines)
 enum {
 	SCROLLHANDLE_BAR,
 	SCROLLHANDLE_MIN_OUTSIDE,
-	SCROLLHANDLE_MAX_OUTSIDE
+	SCROLLHANDLE_MAX_OUTSIDE,
 };
 
 typedef struct TextScroll {
@@ -3047,7 +3041,7 @@ static int text_find_and_replace(bContext *C, wmOperator *op, short mode)
 		if (text->id.next)
 			text = st->text = text->id.next;
 		else
-			text = st->text = bmain->text.first;
+			text = st->text = bmain->texts.first;
 		txt_move_toline(text, 0, 0);
 		text_update_cursor_moved(C);
 		WM_event_add_notifier(C, NC_TEXT | ND_CURSOR, text);
@@ -3166,7 +3160,7 @@ static const EnumPropertyItem resolution_items[] = {
 	{RESOLVE_RELOAD, "RELOAD", 0, "Reload", ""},
 	{RESOLVE_SAVE, "SAVE", 0, "Save", ""},
 	{RESOLVE_MAKE_INTERNAL, "MAKE_INTERNAL", 0, "Make Internal", ""},
-	{0, NULL, 0, NULL, NULL}
+	{0, NULL, 0, NULL, NULL},
 };
 
 static int text_resolve_conflict_exec(bContext *C, wmOperator *op)

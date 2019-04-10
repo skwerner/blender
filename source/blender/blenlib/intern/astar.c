@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,17 +15,11 @@
  *
  * The Original Code is Copyright (C) 2014 Blender Foundation.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): Bastien Montagne
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/blenlib/intern/astar.c
- *  \ingroup bli
- *  \brief An implementation of the A* (AStar) algorithm to solve shortest path problem.
+/** \file
+ * \ingroup bli
+ * \brief An implementation of the A* (AStar) algorithm to solve shortest path problem.
  *
  * This library implements the simple A* (AStar) algorithm, an optimized version of
  * classical dijkstra shortest path solver. The difference is that each future possible
@@ -51,7 +43,6 @@
 #include "BLI_sys_types.h"
 #include "BLI_compiler_attrs.h"
 
-#include "BLI_alloca.h"
 #include "BLI_heap_simple.h"
 #include "BLI_listbase.h"
 #include "BLI_math.h"

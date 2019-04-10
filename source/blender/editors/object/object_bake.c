@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,17 +15,10 @@
  *
  * The Original Code is Copyright (C) 2004 by Blender Foundation
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): Morten Mikkelsen,
- *                 Sergey Sharybin
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/object/object_bake.c
- *  \ingroup edobj
+/** \file
+ * \ingroup edobj
  */
 
 #include <string.h>
@@ -43,15 +34,12 @@
 #include "DNA_meshdata_types.h"
 
 #include "BLI_blenlib.h"
-#include "BLI_threads.h"
 #include "BLI_utildefines.h"
 
 #include "BKE_blender.h"
-#include "BKE_screen.h"
 #include "BKE_context.h"
 #include "BKE_global.h"
 #include "BKE_image.h"
-#include "BKE_main.h"
 #include "BKE_material.h"
 #include "BKE_multires.h"
 #include "BKE_report.h"
@@ -238,7 +226,7 @@ static DerivedMesh *multiresbake_create_loresdm(Scene *scene, Object *ob, int *l
 	MultiresModifierData tmp_mmd = *mmd;
 	DerivedMesh *cddm = CDDM_from_mesh(me);
 
-	DM_set_only_copy(cddm, CD_MASK_BAREMESH);
+	DM_set_only_copy(cddm, &CD_MASK_BAREMESH);
 
 	if (mmd->lvl == 0) {
 		dm = CDDM_copy(cddm);
@@ -264,13 +252,13 @@ static DerivedMesh *multiresbake_create_hiresdm(Scene *scene, Object *ob, int *l
 	DerivedMesh *cddm = CDDM_from_mesh(me);
 	DerivedMesh *dm;
 
-	DM_set_only_copy(cddm, CD_MASK_BAREMESH);
+	DM_set_only_copy(cddm, &CD_MASK_BAREMESH);
 
 	/* TODO: DM_set_only_copy wouldn't set mask for loop and poly data,
 	 *       but we really need BAREMESH only to save lots of memory
 	 */
-	CustomData_set_only_copy(&cddm->loopData, CD_MASK_BAREMESH);
-	CustomData_set_only_copy(&cddm->polyData, CD_MASK_BAREMESH);
+	CustomData_set_only_copy(&cddm->loopData, CD_MASK_BAREMESH.lmask);
+	CustomData_set_only_copy(&cddm->polyData, CD_MASK_BAREMESH.pmask);
 
 	*lvl = mmd->totlvl;
 	*simple = mmd->simple != 0;

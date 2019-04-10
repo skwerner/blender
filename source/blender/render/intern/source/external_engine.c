@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,10 @@
  *
  * The Original Code is Copyright (C) 2006 Blender Foundation.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/render/intern/source/external_engine.c
- *  \ingroup render
+/** \file
+ * \ingroup render
  */
 
 #include <stddef.h>
@@ -281,7 +273,7 @@ void RE_engine_end_result(RenderEngine *engine, RenderResult *result, bool cance
 		RenderPart *pa = get_part_from_result(re, result);
 
 		if (pa) {
-			pa->status = (!cancel && merge_results)? PART_STATUS_MERGED: PART_STATUS_RENDERED;
+			pa->status = (!cancel && merge_results) ? PART_STATUS_MERGED : PART_STATUS_RENDERED;
 		}
 		else if (re->result->do_exr_tile) {
 			/* if written result does not match any tile and we are using save
@@ -440,7 +432,7 @@ bool RE_engine_get_spherical_stereo(RenderEngine *engine, Object *camera)
 	return BKE_camera_multiview_spherical_stereo(re ? &re->r : NULL, camera) ? 1 : 0;
 }
 
-rcti* RE_engine_get_current_tiles(Render *re, int *r_total_tiles, bool *r_needs_free)
+rcti *RE_engine_get_current_tiles(Render *re, int *r_total_tiles, bool *r_needs_free)
 {
 	static rcti tiles_static[BLENDER_MAX_THREADS];
 	const int allocation_step = BLENDER_MAX_THREADS;
@@ -513,7 +505,7 @@ static void engine_depsgraph_free(RenderEngine *engine)
 
 void RE_engine_frame_set(RenderEngine *engine, int frame, float subframe)
 {
-	if(!engine->depsgraph) {
+	if (!engine->depsgraph) {
 		return;
 	}
 
@@ -770,10 +762,7 @@ int RE_engine_render(Render *re, int do_all)
 	BLI_rw_mutex_lock(&re->partsmutex, THREAD_LOCK_WRITE);
 
 	if (re->result->do_exr_tile) {
-		BLI_rw_mutex_lock(&re->resultmutex, THREAD_LOCK_WRITE);
-		render_result_save_empty_result_tiles(re);
 		render_result_exr_file_end(re, engine);
-		BLI_rw_mutex_unlock(&re->resultmutex);
 	}
 
 	/* re->engine becomes zero if user changed active render engine during render */
@@ -803,7 +792,7 @@ int RE_engine_render(Render *re, int do_all)
 }
 
 void RE_engine_update_render_passes(struct RenderEngine *engine, struct Scene *scene, struct ViewLayer *view_layer,
-                                    update_render_passes_cb_t callback)
+                                    update_render_passes_cb_t callback, void *callback_data)
 {
 	if (!(scene && view_layer && engine && callback && engine->type->update_render_passes)) {
 		return;
@@ -812,7 +801,10 @@ void RE_engine_update_render_passes(struct RenderEngine *engine, struct Scene *s
 	BLI_mutex_lock(&engine->update_render_passes_mutex);
 
 	engine->update_render_passes_cb = callback;
+	engine->update_render_passes_data = callback_data;
 	engine->type->update_render_passes(engine, scene, view_layer);
+	engine->update_render_passes_cb = NULL;
+	engine->update_render_passes_data = NULL;
 
 	BLI_mutex_unlock(&engine->update_render_passes_mutex);
 }
@@ -824,7 +816,7 @@ void RE_engine_register_pass(struct RenderEngine *engine, struct Scene *scene, s
 		return;
 	}
 
-	engine->update_render_passes_cb(engine, scene, view_layer, name, channels, chanid, type);
+	engine->update_render_passes_cb(engine->update_render_passes_data, scene, view_layer, name, channels, chanid, type);
 }
 
 void RE_engine_free_blender_memory(RenderEngine *engine)

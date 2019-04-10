@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,14 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * Contributor(s): Joseph Eagar, Geoffrey Bantle, Campbell Barton
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/bmesh/intern/bmesh_iterators.c
- *  \ingroup bmesh
+/** \file
+ * \ingroup bmesh
  *
  * Functions to abstract looping over bmesh data structures.
  *
@@ -519,7 +513,6 @@ void  *bmiter__face_of_vert_step(struct BMIter__face_of_vert *iter)
 
 /*
  * LOOP OF VERT CALLBACKS
- *
  */
 
 void  bmiter__loop_of_vert_begin(struct BMIter__loop_of_vert *iter)
@@ -591,8 +584,9 @@ void  bmiter__loop_of_loop_begin(struct BMIter__loop_of_loop *iter)
 	iter->l_first = iter->ldata;
 	iter->l_next = iter->l_first->radial_next;
 
-	if (iter->l_next == iter->l_first)
+	if (iter->l_next == iter->l_first) {
 		iter->l_next = NULL;
+	}
 }
 
 void  *bmiter__loop_of_loop_step(struct BMIter__loop_of_loop *iter)

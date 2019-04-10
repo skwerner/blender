@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,12 +15,10 @@
  *
  * The Original Code is Copyright (C) 2013 by Campbell Barton.
  * All rights reserved.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/bmesh/intern/bmesh_edgeloop.c
- *  \ingroup bmesh
+/** \file
+ * \ingroup bmesh
  *
  * Generic utility functions for getting edge loops from a mesh.
  */
@@ -475,8 +471,9 @@ void BM_mesh_edgeloops_calc_order(BMesh *UNUSED(bm), ListBase *eloops, const boo
 		const float *no = ((BMEdgeLoopStore *)eloops_ordered.last)->no;
 		float len_best_sq = FLT_MAX;
 
-		if (use_normals)
+		if (use_normals) {
 			BLI_ASSERT_UNIT_V3(no);
+		}
 
 		for (el_store = eloops->first; el_store; el_store = el_store->next) {
 			float len_sq;
@@ -623,8 +620,9 @@ void BM_edgeloop_calc_center(BMesh *UNUSED(bm), BMEdgeLoopStore *el_store)
 		v_next = NODE_AS_CO(node_next);
 	} while (1);
 
-	if (totw != 0.0f)
+	if (totw != 0.0f) {
 		mul_v3_fl(el_store->co, 1.0f / (float) totw);
+	}
 
 }
 

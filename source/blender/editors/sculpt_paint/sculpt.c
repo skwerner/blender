@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,19 +15,11 @@
  *
  * The Original Code is Copyright (C) 2006 by Nicholas Bishop
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): Jason Wilkins, Tom Musgrove.
- *
- * ***** END GPL LICENSE BLOCK *****
- *
  * Implements the Sculpt Mode tools
- *
  */
 
-/** \file blender/editors/sculpt_paint/sculpt.c
- *  \ingroup edsculpt
+/** \file
+ * \ingroup edsculpt
  */
 
 
@@ -56,7 +46,6 @@
 #include "BKE_ccg.h"
 #include "BKE_colortools.h"
 #include "BKE_context.h"
-#include "BKE_global.h"
 #include "BKE_image.h"
 #include "BKE_key.h"
 #include "BKE_library.h"
@@ -68,7 +57,9 @@
 #include "BKE_node.h"
 #include "BKE_object.h"
 #include "BKE_paint.h"
+#include "BKE_particle.h"
 #include "BKE_pbvh.h"
+#include "BKE_pointcache.h"
 #include "BKE_report.h"
 #include "BKE_screen.h"
 #include "BKE_subsurf.h"
@@ -142,13 +133,22 @@ static bool sculpt_tool_is_proxy_used(const char sculpt_tool)
 	            SCULPT_TOOL_LAYER);
 }
 
+static bool sculpt_brush_use_topology_rake(
+        const SculptSession *ss, const Brush *brush)
+{
+	return SCULPT_TOOL_HAS_TOPOLOGY_RAKE(brush->sculpt_tool) &&
+	       (brush->topology_rake_factor > 0.0f) &&
+	       (ss->bm != NULL);
+}
+
 /**
  * Test whether the #StrokeCache.sculpt_normal needs update in #do_brush_action
  */
-static int sculpt_brush_needs_normal(const Brush *brush, float normal_weight)
+static int sculpt_brush_needs_normal(
+        const SculptSession *ss, const Brush *brush)
 {
 	return ((SCULPT_TOOL_HAS_NORMAL_WEIGHT(brush->sculpt_tool) &&
-	         (normal_weight > 0.0f)) ||
+	         (ss->cache->normal_weight > 0.0f)) ||
 
 	        ELEM(brush->sculpt_tool,
 	             SCULPT_TOOL_BLOB,
@@ -159,7 +159,8 @@ static int sculpt_brush_needs_normal(const Brush *brush, float normal_weight)
 	             SCULPT_TOOL_ROTATE,
 	             SCULPT_TOOL_THUMB) ||
 
-	        (brush->mtex.brush_map_mode == MTEX_MAP_MODE_AREA));
+	        (brush->mtex.brush_map_mode == MTEX_MAP_MODE_AREA)) ||
+	        sculpt_brush_use_topology_rake(ss, brush);
 }
 /** \} */
 
@@ -722,7 +723,6 @@ static bool sculpt_brush_test_cyl(SculptBrushTest *test, float co[3], float loca
 #endif
 
 /* ===== Sculpting =====
- *
  */
 static void flip_v3(float v[3], const char symm)
 {
@@ -1598,6 +1598,94 @@ static void bmesh_neighbor_average(float avg[3], BMVert *v)
 	copy_v3_v3(avg, v->co);
 }
 
+/* For bmesh: average only the four most aligned (parallel and perpendicular) edges
+ * relative to a direction. Naturally converges to a quad-like tessellation. */
+static void bmesh_four_neighbor_average(float avg[3], float direction[3], BMVert *v)
+{
+	/* Logic for 3 or more is identical. */
+	const int vfcount = BM_vert_face_count_at_most(v, 3);
+
+	/* Don't modify corner vertices. */
+	if (vfcount < 2) {
+		copy_v3_v3(avg, v->co);
+		return;
+	}
+
+	/* Project the direction to the vertex normal and create an additional
+	 * parallel vector. */
+	float dir_a[3], dir_b[3];
+	cross_v3_v3v3(dir_a, direction, v->no);
+	cross_v3_v3v3(dir_b, dir_a, v->no);
+
+	/* The four vectors which will be used for smoothing.
+	 * Occasionally less than 4 verts match the requirements in that case
+	 * use 'v' as fallback. */
+	BMVert *pos_a = v;
+	BMVert *neg_a = v;
+	BMVert *pos_b = v;
+	BMVert *neg_b = v;
+
+	float pos_score_a = 0.0f;
+	float neg_score_a = 0.0f;
+	float pos_score_b = 0.0f;
+	float neg_score_b = 0.0f;
+
+	BMIter liter;
+	BMLoop *l;
+
+	BM_ITER_ELEM(l, &liter, v, BM_LOOPS_OF_VERT) {
+		BMVert *adj_v[2] = { l->prev->v, l->next->v };
+
+		for (int i = 0; i < ARRAY_SIZE(adj_v); i++) {
+			BMVert *v_other = adj_v[i];
+
+			if (vfcount != 2 || BM_vert_face_count_at_most(v_other, 2) <= 2) {
+				float vec[3];
+				sub_v3_v3v3(vec, v_other->co, v->co);
+				normalize_v3(vec);
+
+				/* The score is a measure of how orthogonal the edge is. */
+				float score = dot_v3v3(vec, dir_a);
+
+				if (score >= pos_score_a) {
+					pos_a = v_other;
+					pos_score_a = score;
+				}
+				else if (score < neg_score_a) {
+					neg_a = v_other;
+					neg_score_a = score;
+				}
+				/* The same scoring but for the perpendicular direction. */
+				score = dot_v3v3(vec, dir_b);
+
+				if (score >= pos_score_b) {
+					pos_b = v_other;
+					pos_score_b = score;
+				}
+				else if (score < neg_score_b) {
+					neg_b = v_other;
+					neg_score_b = score;
+				}
+			}
+		}
+	}
+
+	/* Average everything together. */
+	zero_v3(avg);
+	add_v3_v3(avg, pos_a->co);
+	add_v3_v3(avg, neg_a->co);
+	add_v3_v3(avg, pos_b->co);
+	add_v3_v3(avg, neg_b->co);
+	mul_v3_fl(avg, 0.25f);
+
+	/* Preserve volume. */
+	float vec[3];
+	sub_v3_v3(avg, v->co);
+	mul_v3_v3fl(vec, v->no, dot_v3v3(avg, v->no));
+	sub_v3_v3(avg, vec);
+	add_v3_v3(avg, v->co);
+}
+
 /* Same logic as neighbor_average_mask(), but for bmesh rather than mesh */
 static float bmesh_neighbor_average_mask(BMVert *v, const int cd_vert_mask_offset)
 {
@@ -1644,7 +1732,7 @@ typedef struct {
 	const float *ray_start, *ray_normal;
 	bool hit;
 	float depth;
-	float detail;
+	float edge_length;
 } SculptDetailRaycastData;
 
 typedef struct {
@@ -1748,6 +1836,62 @@ static void do_smooth_brush_bmesh_task_cb_ex(
 
 				sculpt_clip(sd, ss, vd.co, val);
 			}
+
+			if (vd.mvert)
+				vd.mvert->flag |= ME_VERT_PBVH_UPDATE;
+		}
+	}
+	BKE_pbvh_vertex_iter_end;
+}
+
+static void do_topology_rake_bmesh_task_cb_ex(
+        void *__restrict userdata,
+        const int n,
+        const ParallelRangeTLS *__restrict tls)
+{
+	SculptThreadedTaskData *data = userdata;
+	SculptSession *ss = data->ob->sculpt;
+	Sculpt *sd = data->sd;
+	const Brush *brush = data->brush;
+
+	float direction[3];
+	copy_v3_v3(direction, ss->cache->grab_delta_symmetry);
+
+	float tmp[3];
+	mul_v3_v3fl(
+	        tmp, ss->cache->sculpt_normal_symm,
+	        dot_v3v3(ss->cache->sculpt_normal_symm, direction));
+	sub_v3_v3(direction, tmp);
+
+	/* Cancel if there's no grab data. */
+	if (is_zero_v3(direction)) {
+		return;
+	}
+
+	float bstrength = data->strength;
+	CLAMP(bstrength, 0.0f, 1.0f);
+
+	SculptBrushTest test;
+	SculptBrushTestFn sculpt_brush_test_sq_fn =
+		sculpt_brush_test_init_with_falloff_shape(ss, &test, data->brush->falloff_shape);
+
+	PBVHVertexIter vd;
+	BKE_pbvh_vertex_iter_begin(ss->pbvh, data->nodes[n], vd, PBVH_ITER_UNIQUE)
+	{
+		if (sculpt_brush_test_sq_fn(&test, vd.co)) {
+			const float fade = bstrength * tex_strength(
+			        ss, brush, vd.co, sqrtf(test.dist),
+			        vd.no, vd.fno, *vd.mask, tls->thread_id) * ss->cache->pressure;
+
+			float avg[3], val[3];
+
+			bmesh_four_neighbor_average(avg, direction, vd.bm_vert);
+
+			sub_v3_v3v3(val, avg, vd.co);
+
+			madd_v3_v3v3fl(val, vd.co, val, fade);
+
+			sculpt_clip(sd, ss, vd.co, val);
 
 			if (vd.mvert)
 				vd.mvert->flag |= ME_VERT_PBVH_UPDATE;
@@ -1979,6 +2123,37 @@ static void smooth(
 
 		if (ss->multires)
 			multires_stitch_grids(ob);
+	}
+}
+
+static void bmesh_topology_rake(
+	Sculpt *sd, Object *ob, PBVHNode **nodes, const int totnode, float bstrength)
+{
+	Brush *brush = BKE_paint_brush(&sd->paint);
+	CLAMP(bstrength, 0.0f, 1.0f);
+
+	/* Interactions increase both strength and quality. */
+	const int iterations = 3;
+
+	int iteration;
+	const int count = iterations * bstrength + 1;
+	const float factor = iterations * bstrength / count;
+
+	for (iteration = 0; iteration <= count; ++iteration) {
+
+		SculptThreadedTaskData data = {
+			.sd = sd, .ob = ob, .brush = brush, .nodes = nodes,
+			.strength = factor,
+		};
+		ParallelRangeSettings settings;
+		BLI_parallel_range_settings_defaults(&settings);
+		settings.use_threading = ((sd->flags & SCULPT_USE_OPENMP) && totnode > SCULPT_THREADED_LIMIT);
+
+		BLI_task_parallel_range(
+		        0, totnode,
+		        &data,
+		        do_topology_rake_bmesh_task_cb_ex,
+		        &settings);
 	}
 }
 
@@ -3607,7 +3782,7 @@ static void do_brush_action(Sculpt *sd, Object *ob, Brush *brush, UnifiedPaintSe
 		            do_brush_action_task_cb,
 		            &settings);
 
-		if (sculpt_brush_needs_normal(brush, ss->cache->normal_weight))
+		if (sculpt_brush_needs_normal(ss, brush))
 			update_sculpt_normal(sd, ob, nodes, totnode);
 
 		if (brush->mtex.brush_map_mode == MTEX_MAP_MODE_AREA)
@@ -3680,6 +3855,10 @@ static void do_brush_action(Sculpt *sd, Object *ob, Brush *brush, UnifiedPaintSe
 			else {
 				smooth(sd, ob, nodes, totnode, brush->autosmooth_factor, false);
 			}
+		}
+
+		if (sculpt_brush_use_topology_rake(ss, brush)) {
+			bmesh_topology_rake(sd, ob, nodes, totnode, brush->topology_rake_factor);
 		}
 
 		if (ss->cache->supports_gravity)
@@ -3916,7 +4095,7 @@ void sculpt_cache_calc_brushdata_symm(
 	/* XXX This reduces the length of the grab delta if it approaches the line of symmetry
 	 * XXX However, a different approach appears to be needed */
 #if 0
-	if (sd->paint.symmetry_flags & SCULPT_SYMMETRY_FEATHER) {
+	if (sd->paint.symmetry_flags & PAINT_SYMMETRY_FEATHER) {
 		float frac = 1.0f / max_overlap_count(sd);
 		float reduce = (feather - frac) / (1 - frac);
 
@@ -4233,12 +4412,12 @@ static void sculpt_update_cache_invariants(
 	else {
 		max_scale = 0.0f;
 		for (i = 0; i < 3; i ++) {
-			max_scale = max_ff(max_scale, fabsf(ob->size[i]));
+			max_scale = max_ff(max_scale, fabsf(ob->scale[i]));
 		}
 	}
-	cache->scale[0] = max_scale / ob->size[0];
-	cache->scale[1] = max_scale / ob->size[1];
-	cache->scale[2] = max_scale / ob->size[2];
+	cache->scale[0] = max_scale / ob->scale[0];
+	cache->scale[1] = max_scale / ob->scale[1];
+	cache->scale[2] = max_scale / ob->scale[2];
 
 	cache->plane_trim_squared = brush->plane_trim * brush->plane_trim;
 
@@ -4387,14 +4566,15 @@ static void sculpt_update_brush_delta(UnifiedPaintSettings *ups, Object *ob, Bru
 	StrokeCache *cache = ss->cache;
 	const float mouse[2] = {
 		cache->mouse[0],
-		cache->mouse[1]
+		cache->mouse[1],
 	};
 	int tool = brush->sculpt_tool;
 
 	if (ELEM(tool,
 	         SCULPT_TOOL_GRAB, SCULPT_TOOL_NUDGE,
 	         SCULPT_TOOL_CLAY_STRIPS, SCULPT_TOOL_SNAKE_HOOK,
-	         SCULPT_TOOL_THUMB))
+	         SCULPT_TOOL_THUMB) ||
+	    sculpt_brush_use_topology_rake(ss, brush))
 	{
 		float grab_location[3], imat[4][4], delta[3], loc[3];
 
@@ -4434,6 +4614,11 @@ static void sculpt_update_brush_delta(UnifiedPaintSettings *ups, Object *ob, Bru
 					invert_m4_m4(imat, ob->obmat);
 					mul_mat3_m4_v3(imat, cache->grab_delta);
 					break;
+				default:
+					/* Use for 'Brush.topology_rake_factor'. */
+					sub_v3_v3v3(cache->grab_delta, grab_location, cache->old_grab_location);
+					break;
+
 			}
 		}
 		else {
@@ -4684,7 +4869,7 @@ static void sculpt_raycast_detail_cb(PBVHNode *node, void *data_v, float *tmin)
 	if (BKE_pbvh_node_get_tmin(node) < *tmin) {
 		SculptDetailRaycastData *srd = data_v;
 		if (BKE_pbvh_bmesh_node_raycast_detail(node, srd->ray_start, srd->ray_normal,
-		                                       &srd->depth, &srd->detail))
+		                                       &srd->depth, &srd->edge_length))
 		{
 			srd->hit = 1;
 			*tmin = srd->depth;
@@ -4861,31 +5046,53 @@ static void sculpt_restore_mesh(Sculpt *sd, Object *ob)
 /* Copy the PBVH bounding box into the object's bounding box */
 void sculpt_update_object_bounding_box(Object *ob)
 {
-	if (ob->bb) {
+	if (ob->runtime.bb) {
 		float bb_min[3], bb_max[3];
 
 		BKE_pbvh_bounding_box(ob->sculpt->pbvh, bb_min, bb_max);
-		BKE_boundbox_init_from_minmax(ob->bb, bb_min, bb_max);
+		BKE_boundbox_init_from_minmax(ob->runtime.bb, bb_min, bb_max);
 	}
 }
 
 static void sculpt_flush_update(bContext *C)
 {
+	Depsgraph *depsgraph = CTX_data_depsgraph(C);
 	Object *ob = CTX_data_active_object(C);
+	Object *ob_eval = DEG_get_evaluated_object(depsgraph, ob);
 	SculptSession *ss = ob->sculpt;
 	ARegion *ar = CTX_wm_region(C);
+	bScreen *screen = CTX_wm_screen(C);
 	MultiresModifierData *mmd = ss->multires;
 
 	if (mmd != NULL) {
 		/* NOTE: SubdivCCG is living in the evaluated object. */
-		Depsgraph *depsgraph = CTX_data_depsgraph(C);
-		Object *ob_eval = DEG_get_evaluated_object(depsgraph, ob);
 		multires_mark_as_modified(ob_eval, MULTIRES_COORDS_MODIFIED);
 	}
 
 	DEG_id_tag_update(&ob->id, ID_RECALC_SHADING);
 
-	if (ss->kb || ss->modifiers_active) {
+	bool use_shaded_mode = false;
+	if (mmd || (BKE_pbvh_type(ss->pbvh) == PBVH_BMESH)) {
+		/* Multres or dyntopo are drawn directly by EEVEE,
+		 * no need for hacks in this case. */
+	}
+	else {
+		/* We search if an area of the current window is in lookdev/rendered
+		 * display mode. In this case, for changes to show up, we need to
+		 * tag for ID_RECALC_GEOMETRY. */
+		for (ScrArea *sa = screen->areabase.first; sa; sa = sa->next) {
+			for (SpaceLink *sl = sa->spacedata.first; sl; sl = sl->next) {
+				if (sl->spacetype == SPACE_VIEW3D) {
+					View3D *v3d = (View3D *)sl;
+					if (v3d->shading.type > OB_SOLID) {
+						use_shaded_mode = true;
+					}
+				}
+			}
+		}
+	}
+
+	if (ss->kb || ss->modifiers_active || use_shaded_mode) {
 		DEG_id_tag_update(&ob->id, ID_RECALC_GEOMETRY);
 		ED_region_tag_redraw(ar);
 	}
@@ -4916,9 +5123,6 @@ static void sculpt_flush_update(bContext *C)
 			ED_region_tag_redraw_partial(ar, &r);
 		}
 	}
-
-	/* 2.8x - avoid full mesh update! */
-	BKE_mesh_batch_cache_dirty_tag(ob->data, BKE_MESH_BATCH_DIRTY_SCULPT_COORDS);
 }
 
 /* Returns whether the mouse/stylus is over the mesh (1)
@@ -4972,7 +5176,8 @@ static void sculpt_stroke_update_step(bContext *C, struct PaintStroke *UNUSED(st
 	sculpt_restore_mesh(sd, ob);
 
 	if (sd->flags & (SCULPT_DYNTOPO_DETAIL_CONSTANT | SCULPT_DYNTOPO_DETAIL_MANUAL)) {
-		BKE_pbvh_bmesh_detail_size_set(ss->pbvh, 1.0f / sd->constant_detail);
+		float object_space_constant_detail = 1.0f / (sd->constant_detail * mat4_to_scale(ob->obmat));
+		BKE_pbvh_bmesh_detail_size_set(ss->pbvh, object_space_constant_detail);
 	}
 	else if (sd->flags & SCULPT_DYNTOPO_DETAIL_BRUSH) {
 		BKE_pbvh_bmesh_detail_size_set(ss->pbvh, ss->cache->radius * sd->detail_percent / 100.0f);
@@ -5218,7 +5423,7 @@ static void SCULPT_OT_set_persistent_base(wmOperatorType *ot)
 static void sculpt_dynamic_topology_triangulate(BMesh *bm)
 {
 	if (bm->totloop != bm->totface * 3) {
-		BM_mesh_triangulate(bm, MOD_TRIANGULATE_QUAD_BEAUTY, MOD_TRIANGULATE_NGON_EARCLIP, false, NULL, NULL, NULL);
+		BM_mesh_triangulate(bm, MOD_TRIANGULATE_QUAD_BEAUTY, MOD_TRIANGULATE_NGON_EARCLIP, 4, false, NULL, NULL, NULL);
 	}
 }
 
@@ -5346,13 +5551,13 @@ void sculpt_dynamic_topology_disable_ex(
 		me->totpoly = unode->bm_enter_totpoly;
 		me->totedge = unode->bm_enter_totedge;
 		me->totface = 0;
-		CustomData_copy(&unode->bm_enter_vdata, &me->vdata, CD_MASK_MESH,
+		CustomData_copy(&unode->bm_enter_vdata, &me->vdata, CD_MASK_MESH.vmask,
 		                CD_DUPLICATE, unode->bm_enter_totvert);
-		CustomData_copy(&unode->bm_enter_edata, &me->edata, CD_MASK_MESH,
+		CustomData_copy(&unode->bm_enter_edata, &me->edata, CD_MASK_MESH.emask,
 		                CD_DUPLICATE, unode->bm_enter_totedge);
-		CustomData_copy(&unode->bm_enter_ldata, &me->ldata, CD_MASK_MESH,
+		CustomData_copy(&unode->bm_enter_ldata, &me->ldata, CD_MASK_MESH.lmask,
 		                CD_DUPLICATE, unode->bm_enter_totloop);
-		CustomData_copy(&unode->bm_enter_pdata, &me->pdata, CD_MASK_MESH,
+		CustomData_copy(&unode->bm_enter_pdata, &me->pdata, CD_MASK_MESH.pmask,
 		                CD_DUPLICATE, unode->bm_enter_totpoly);
 
 		BKE_mesh_update_customdata_pointers(me, false);
@@ -5373,6 +5578,9 @@ void sculpt_dynamic_topology_disable_ex(
 		BM_log_free(ss->bm_log);
 		ss->bm_log = NULL;
 	}
+
+	BKE_particlesystem_reset_all(ob);
+	BKE_ptcache_object_reset(scene, ob, PTCACHE_RESET_OUTDATED);
 
 	/* Refresh */
 	sculpt_update_after_dynamic_topology_toggle(depsgraph, scene, ob);
@@ -5657,7 +5865,7 @@ static int ed_object_sculptmode_flush_recalc_flag(Scene *scene, Object *ob, Mult
 
 void ED_object_sculptmode_enter_ex(
         Main *bmain, Depsgraph *depsgraph,
-        Scene *scene, Object *ob,
+        Scene *scene, Object *ob, const bool force_dyntopo,
         ReportList *reports)
 {
 	const int mode_flag = OB_MODE_SCULPT;
@@ -5692,7 +5900,7 @@ void ED_object_sculptmode_enter_ex(
 		BKE_sculpt_mask_layers_ensure(ob, mmd);
 	}
 
-	if (!(fabsf(ob->size[0] - ob->size[1]) < 1e-4f && fabsf(ob->size[1] - ob->size[2]) < 1e-4f)) {
+	if (!(fabsf(ob->scale[0] - ob->scale[1]) < 1e-4f && fabsf(ob->scale[1] - ob->scale[2]) < 1e-4f)) {
 		BKE_report(reports, RPT_WARNING,
 		           "Object has non-uniform scale, sculpting may be unpredictable");
 	}
@@ -5738,7 +5946,7 @@ void ED_object_sculptmode_enter_ex(
 			}
 		}
 
-		if (message_unsupported == NULL) {
+		if ((message_unsupported == NULL) || force_dyntopo) {
 			/* Needed because we may be entering this mode before the undo system loads. */
 			wmWindowManager *wm = bmain->wm.first;
 			bool has_undo = wm->undo_stack != NULL;
@@ -5771,7 +5979,7 @@ void ED_object_sculptmode_enter(struct bContext *C, ReportList *reports)
 	ViewLayer *view_layer = CTX_data_view_layer(C);
 	Object *ob = OBACT(view_layer);
 	Depsgraph *depsgraph = CTX_data_depsgraph(C);
-	ED_object_sculptmode_enter_ex(bmain, depsgraph, scene, ob, reports);
+	ED_object_sculptmode_enter_ex(bmain, depsgraph, scene, ob, false, reports);
 }
 
 void ED_object_sculptmode_exit_ex(
@@ -5853,7 +6061,7 @@ static int sculpt_mode_toggle_exec(bContext *C, wmOperator *op)
 		ED_object_sculptmode_exit_ex(depsgraph, scene, ob);
 	}
 	else {
-		ED_object_sculptmode_enter_ex(bmain, depsgraph, scene, ob, op->reports);
+		ED_object_sculptmode_enter_ex(bmain, depsgraph, scene, ob, false, op->reports);
 		BKE_paint_toolslots_brush_validate(bmain, &ts->sculpt->paint);
 	}
 
@@ -5915,7 +6123,8 @@ static int sculpt_detail_flood_fill_exec(bContext *C, wmOperator *UNUSED(op))
 	size = max_fff(dim[0], dim[1], dim[2]);
 
 	/* update topology size */
-	BKE_pbvh_bmesh_detail_size_set(ss->pbvh, 1.0f / sd->constant_detail);
+	float object_space_constant_detail = 1.0f / (sd->constant_detail * mat4_to_scale(ob->obmat));
+	BKE_pbvh_bmesh_detail_size_set(ss->pbvh, object_space_constant_detail);
 
 	sculpt_undo_push_begin("Dynamic topology flood fill");
 	sculpt_undo_push_node(ob, NULL, SCULPT_UNDO_COORDS);
@@ -5988,14 +6197,14 @@ static void sample_detail(bContext *C, int mx, int my)
 	srd.ray_start = ray_start;
 	srd.ray_normal = ray_normal;
 	srd.depth = depth;
-	srd.detail = sd->constant_detail;
+	srd.edge_length = 0.0f;
 
 	BKE_pbvh_raycast(ob->sculpt->pbvh, sculpt_raycast_detail_cb, &srd,
 	                 ray_start, ray_normal, false);
 
-	if (srd.hit) {
-		/* convert edge length to detail resolution */
-		sd->constant_detail = 1.0f / srd.detail;
+	if (srd.hit && srd.edge_length > 0.0f) {
+		/* Convert edge length to world space detail resolution. */
+		sd->constant_detail = 1 / (srd.edge_length * mat4_to_scale(ob->obmat));
 	}
 
 	/* Restore context. */

@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,10 @@
  *
  * The Original Code is Copyright (C) 2005 Blender Foundation.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): Bob Holcomb, Xavier Thomas
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file DNA_node_types.h
- *  \ingroup DNA
+/** \file
+ * \ingroup DNA
  */
 
 #ifndef __DNA_NODE_TYPES_H__
@@ -38,17 +30,17 @@
 #include "DNA_texture_types.h"
 #include "DNA_scene_types.h"
 
-struct ID;
-struct ListBase;
-struct bNodeLink;
-struct bNodeType;
-struct bNodeTreeExec;
-struct bNodePreview;
-struct bNodeInstanceHash;
 struct AnimData;
-struct bGPdata;
-struct uiBlock;
+struct ID;
 struct Image;
+struct ListBase;
+struct bGPdata;
+struct bNodeInstanceHash;
+struct bNodeLink;
+struct bNodePreview;
+struct bNodeTreeExec;
+struct bNodeType;
+struct uiBlock;
 
 /* In writefile.c: write deprecated DNA data,
  * to ensure forward compatibility in 2.6x versions.
@@ -74,7 +66,7 @@ typedef struct bNodeStack {
 	short is_copy;
 	/** Data is used by external nodes (no freeing). */
 	short external;
-	short pad[2];
+	char _pad[4];
 } bNodeStack;
 
 /* ns->datatype, shadetree only */
@@ -127,7 +119,8 @@ typedef struct bNodeSocket {
 	short stack_index;
 	/* XXX deprecated, kept for forward compatibility */
 	short stack_type  DNA_DEPRECATED;
-	char draw_shape, pad[3];
+	char draw_shape;
+	char _pad[3];
 
 	/** Cached data from execution. */
 	void *cache;
@@ -214,7 +207,8 @@ typedef struct bNode {
 	/** MAX_NAME. */
 	char name[64];
 	int flag;
-	short type, pad;
+	short type;
+	char _pad[2];
 	/** Both for dependency and sorting. */
 	short done, level;
 	/** Lasty: check preview render status, menunr: browse ID blocks. */
@@ -281,7 +275,8 @@ typedef struct bNode {
 	/** Reserved size of the preview rect. */
 	short preview_xsize, preview_ysize;
 	/** Used at runtime when going through the tree. Initialize before use. */
-	short tmp_flag, pad2;
+	short tmp_flag;
+	char _pad2[2];
 	/** Runtime during drawing. */
 	struct uiBlock *block;
 
@@ -312,31 +307,31 @@ typedef struct bNode {
 #define NODE_MUTED			512
 // #define NODE_CUSTOM_NAME	1024	/* deprecated! */
 	/* group node types: use const outputs by default */
-#define NODE_CONST_OUTPUT	(1<<11)
+#define NODE_CONST_OUTPUT	(1 << 11)
 	/* node is always behind others */
-#define NODE_BACKGROUND		(1<<12)
+#define NODE_BACKGROUND		(1 << 12)
 	/* automatic flag for nodes included in transforms */
-#define NODE_TRANSFORM		(1<<13)
+#define NODE_TRANSFORM		(1 << 13)
 	/* node is active texture */
 
 	/* note: take care with this flag since its possible it gets
 	 * `stuck` inside/outside the active group - which makes buttons
 	 * window texture not update, we try to avoid it by clearing the
 	 * flag when toggling group editing - Campbell */
-#define NODE_ACTIVE_TEXTURE	(1<<14)
+#define NODE_ACTIVE_TEXTURE	(1 << 14)
 	/* use a custom color for the node */
-#define NODE_CUSTOM_COLOR	(1<<15)
+#define NODE_CUSTOM_COLOR	(1 << 15)
 	/* Node has been initialized
 	 * This flag indicates the node->typeinfo->init function has been called.
 	 * In case of undefined type at creation time this can be delayed until
 	 * until the node type is registered.
 	 */
-#define NODE_INIT			(1<<16)
+#define NODE_INIT			(1 << 16)
 
 	/* do recalc of output, used to skip recalculation of unwanted
 	 * composite out nodes when editing tree
 	 */
-#define NODE_DO_OUTPUT_RECALC	(1<<17)
+#define NODE_DO_OUTPUT_RECALC	(1 << 17)
 
 /* node->update */
 /* XXX NODE_UPDATE is a generic update flag. More fine-grained updates
@@ -357,22 +352,24 @@ typedef struct bNodeInstanceKey {
  * WARNING: pointers are cast to this struct internally,
  * it must be first member in hash entry structs!
  */
+#
+#
 typedef struct bNodeInstanceHashEntry {
 	bNodeInstanceKey key;
 
 	/* tags for cleaning the cache */
 	short tag;
-	short pad;
 } bNodeInstanceHashEntry;
 
 
+#
+#
 typedef struct bNodePreview {
 	/** Must be first. */
 	bNodeInstanceHashEntry hash_entry;
 
 	unsigned char *rect;
 	short xsize, ysize;
-	int pad;
 } bNodePreview;
 
 
@@ -383,7 +380,7 @@ typedef struct bNodeLink {
 	bNodeSocket *fromsock, *tosock;
 
 	int flag;
-	int pad;
+	char _pad[4];
 } bNodeLink;
 
 /* link->flag */
@@ -441,7 +438,7 @@ typedef struct bNodeTree {
 	short is_updating;
 	/** Generic temporary flag for recursion check (DFS/BFS). */
 	short done;
-	int pad2;
+	char _pad2[4];
 
 	/** Specific node type this tree is used for. */
 	int nodetype DNA_DEPRECATED;
@@ -469,7 +466,7 @@ typedef struct bNodeTree {
 	 * in case multiple different editors are used and make context ambiguous.
 	 */
 	bNodeInstanceKey active_viewer_key;
-	int pad;
+	char _pad[4];
 
 	/* execution data */
 	/* XXX It would be preferable to completely move this data out of the underlying node tree,
@@ -555,7 +552,7 @@ typedef struct bNodeSocketValueFloat {
 
 typedef struct bNodeSocketValueBoolean {
 	char value;
-	char pad[3];
+	char _pad[3];
 } bNodeSocketValueBoolean;
 
 typedef struct bNodeSocketValueVector {
@@ -571,7 +568,7 @@ typedef struct bNodeSocketValueRGBA {
 
 typedef struct bNodeSocketValueString {
 	int subtype;
-	int pad;
+	char _pad[4];
 	/** 1024 = FILEMAX. */
 	char value[1024];
 } bNodeSocketValueString;
@@ -629,7 +626,7 @@ typedef struct NodeImageAnim {
 	int nr       DNA_DEPRECATED;
 	char cyclic  DNA_DEPRECATED;
 	char movie   DNA_DEPRECATED;
-	short pad;
+	char _pad[2];
 } NodeImageAnim;
 
 typedef struct ColorCorrectionData {
@@ -638,7 +635,7 @@ typedef struct ColorCorrectionData {
 	float gamma;
 	float gain;
 	float lift;
-	int pad;
+	char _pad[4];
 } ColorCorrectionData;
 
 typedef struct NodeColorCorrection {
@@ -664,7 +661,7 @@ typedef struct NodeBoxMask {
 	float rotation;
 	float height;
 	float width;
-	int pad;
+	char _pad[4];
 } NodeBoxMask;
 
 typedef struct NodeEllipseMask {
@@ -673,7 +670,7 @@ typedef struct NodeEllipseMask {
 	float rotation;
 	float height;
 	float width;
-	int pad;
+	char _pad[4];
 } NodeEllipseMask;
 
 /* layer info for image node outputs */
@@ -699,12 +696,13 @@ typedef struct NodeBlurData {
 typedef struct NodeDBlurData {
 	float center_x, center_y, distance, angle, spin, zoom;
 	short iter;
-	char wrap, pad;
+	char wrap, _pad;
 } NodeDBlurData;
 
 typedef struct NodeBilateralBlurData {
 	float sigma_color, sigma_space;
-	short iter, pad;
+	short iter;
+	char _pad[2];
 } NodeBilateralBlurData;
 
 /* NOTE: Only for do-version code. */
@@ -728,14 +726,14 @@ typedef struct NodeImageMultiFile {
 	int sfra DNA_DEPRECATED, efra DNA_DEPRECATED;
 	/** Selected input in details view list. */
 	int active_input;
-	int pad;
+	char _pad[4];
 } NodeImageMultiFile;
 typedef struct NodeImageMultiFileSocket {
 	/* single layer file output */
 	short use_render_format  DNA_DEPRECATED;
 	/** Use overall node image format. */
 	short use_node_format;
-	int pad1;
+	char _pad1[4];
 	/** 1024 = FILE_MAX. */
 	char path[1024];
 	ImageFormatData format;
@@ -743,7 +741,7 @@ typedef struct NodeImageMultiFileSocket {
 	/* multilayer output */
 	/** EXR_TOT_MAXNAME-2 ('.' and channel char are appended). */
 	char layer[30];
-	char pad2[2];
+	char _pad2[2];
 } NodeImageMultiFileSocket;
 
 typedef struct NodeChroma {
@@ -768,10 +766,11 @@ typedef struct NodeVertexCol {
 
 /* qdn: Defocus blur node */
 typedef struct NodeDefocus {
-	char bktype, pad_c1, preview, gamco;
+	char bktype, _pad0, preview, gamco;
 	short samples, no_zbuf;
 	float fstop, maxblur, bthresh, scale;
-	float rotation, pad_f1;
+	float rotation;
+	char _pad1[4];
 } NodeDefocus;
 
 typedef struct NodeScriptDict {
@@ -786,9 +785,10 @@ typedef struct NodeGlare {
 	char quality, type, iter;
 	/* XXX angle is only kept for backward/forward compatibility,
 	 * was used for two different things, see T50736. */
-	char angle DNA_DEPRECATED, pad_c1, size, star_45, streaks;
+	char angle DNA_DEPRECATED, _pad0, size, star_45, streaks;
 	float colmod, mix, threshold, fade;
-	float angle_ofs, pad_f1;
+	float angle_ofs;
+	char _pad1[4];
 } NodeGlare;
 
 /* qdn: tonemap node */
@@ -800,7 +800,8 @@ typedef struct NodeTonemap {
 
 /* qdn: lens distortion node */
 typedef struct NodeLensDist {
-	short jit, proj, fit, pad;
+	short jit, proj, fit;
+	char _pad[2];
 } NodeLensDist;
 
 typedef struct NodeColorBalance {
@@ -825,7 +826,7 @@ typedef struct NodeColorspill {
 
 typedef struct NodeDilateErode {
 	char falloff;
-	char pad[7];
+	char _pad[7];
 } NodeDilateErode;
 
 typedef struct NodeMask {
@@ -853,7 +854,7 @@ typedef struct NodeTexImage {
 	float projection_blend;
 	int interpolation;
 	int extension;
-	int pad;
+	char _pad[4];
 } NodeTexImage;
 
 typedef struct NodeTexChecker {
@@ -872,13 +873,13 @@ typedef struct NodeTexEnvironment {
 	int color_space;
 	int projection;
 	int interpolation;
-	int pad;
+	char _pad[4];
 } NodeTexEnvironment;
 
 typedef struct NodeTexGradient {
 	NodeTexBase base;
 	int gradient_type;
-	int pad;
+	char _pad[4];
 } NodeTexGradient;
 
 typedef struct NodeTexNoise {
@@ -890,13 +891,13 @@ typedef struct NodeTexVoronoi {
 	int coloring;
 	int distance;
 	int feature;
-	int pad;
+	char _pad[4];
 } NodeTexVoronoi;
 
 typedef struct NodeTexMusgrave {
 	NodeTexBase base;
 	int musgrave_type;
-	int pad;
+	char _pad[4];
 } NodeTexMusgrave;
 
 typedef struct NodeTexWave {
@@ -908,7 +909,7 @@ typedef struct NodeTexWave {
 typedef struct NodeTexMagic {
 	NodeTexBase base;
 	int depth;
-	int pad;
+	char _pad[4];
 } NodeTexMagic;
 
 typedef struct NodeShaderAttribute {
@@ -918,12 +919,13 @@ typedef struct NodeShaderAttribute {
 typedef struct NodeShaderVectTransform {
 	int type;
 	int convert_from, convert_to;
-	int pad;
+	char _pad[4];
 } NodeShaderVectTransform;
 
 typedef struct NodeShaderTexPointDensity {
 	NodeTexBase base;
-	short point_source, pad;
+	short point_source;
+	char _pad[2];
 	int particle_system;
 	float radius;
 	int resolution;
@@ -936,7 +938,7 @@ typedef struct NodeShaderTexPointDensity {
 	/* Used at runtime only by sampling RNA API. */
 	PointDensity pd;
 	int cached_resolution;
-	int pad2;
+	char _pad2[4];
 } NodeShaderTexPointDensity;
 
 /* TEX_output */
@@ -969,7 +971,7 @@ typedef struct NodeTrackPosData {
 typedef struct NodeTranslateData {
 	char wrap_axis;
 	char relative;
-	char pad[6];
+	char _pad[6];
 } NodeTranslateData;
 
 typedef struct NodePlaneTrackDeformData {
@@ -977,7 +979,7 @@ typedef struct NodePlaneTrackDeformData {
 	char plane_track_name[64];
 	char flag;
 	char motion_blur_samples;
-	char pad[2];
+	char _pad[2];
 	float motion_blur_shutter;
 } NodePlaneTrackDeformData;
 
@@ -1025,7 +1027,7 @@ typedef struct NodeCryptomatte {
 	float remove[3];
 	char *matte_id;
 	int num_inputs;
-	int pad;
+	char _pad[4];
 } NodeCryptomatte;
 
 /* script node mode */

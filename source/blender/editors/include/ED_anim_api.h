@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,41 +15,36 @@
  *
  * The Original Code is Copyright (C) 2008 Blender Foundation.
  * All rights reserved.
- *
- *
- * Contributor(s): Joshua Leung
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file ED_anim_api.h
- *  \ingroup editors
+/** \file
+ * \ingroup editors
  */
 
 #ifndef __ED_ANIM_API_H__
 #define __ED_ANIM_API_H__
 
+struct AnimData;
 struct ID;
 struct ListBase;
-struct AnimData;
 
-struct bContext;
+struct ARegion;
 struct Main;
-struct wmKeyConfig;
 struct ReportList;
 struct ScrArea;
 struct SpaceLink;
-struct ARegion;
 struct View2D;
+struct bContext;
+struct wmKeyConfig;
 
-struct Scene;
 struct Object;
+struct Scene;
 
 struct bDopeSheet;
 
-struct bAction;
 struct FCurve;
 struct FModifier;
+struct bAction;
 
 struct uiBlock;
 struct uiLayout;
@@ -178,7 +171,7 @@ typedef struct bAnimListElem {
 	 * action's ID. But if this is a f-curve which is a driver, then the owner
 	 * is set to, for example, object.
 	 *
-	 * Note, that this is different from id above. The if above will be set to
+	 * Note, that this is different from id above. The id above will be set to
 	 * an object if the f-curve is coming from action associated with that
 	 * object. */
 	struct ID *fcurve_owner_id;
@@ -342,7 +335,7 @@ typedef enum eAnimFilter_Flags {
 /* 'Sub-object' channels (flags stored in Data block) */
 #define FILTER_SKE_OBJD(key)    (CHECK_TYPE_INLINE(key, Key *), ((key->flag & KEY_DS_EXPAND)))
 #define FILTER_MAT_OBJD(ma)     (CHECK_TYPE_INLINE(ma, Material *), ((ma->flag & MA_DS_EXPAND)))
-#define FILTER_LAM_OBJD(la)     (CHECK_TYPE_INLINE(la, Lamp *), ((la->flag & LA_DS_EXPAND)))
+#define FILTER_LAM_OBJD(la)     (CHECK_TYPE_INLINE(la, Light *), ((la->flag & LA_DS_EXPAND)))
 #define FILTER_CAM_OBJD(ca)     (CHECK_TYPE_INLINE(ca, Camera *), ((ca->flag & CAM_DS_EXPAND)))
 #define FILTER_CACHEFILE_OBJD(cf)     (CHECK_TYPE_INLINE(cf, CacheFile *), ((cf->flag & CACHEFILE_DS_EXPAND)))
 #define FILTER_CUR_OBJD(cu)     (CHECK_TYPE_INLINE(cu, Curve *), ((cu->flag & CU_DS_EXPAND)))
@@ -367,8 +360,8 @@ typedef enum eAnimFilter_Flags {
 /* Action Channel Group */
 #define EDITABLE_AGRP(agrp) ((agrp->flag & AGRP_PROTECTED) == 0)
 #define EXPANDED_AGRP(ac, agrp) \
-	( ((!(ac) || ((ac)->spacetype != SPACE_IPO)) && (agrp->flag & AGRP_EXPANDED)) || \
-	  (( (ac) && ((ac)->spacetype == SPACE_IPO)) && (agrp->flag & AGRP_EXPANDED_G)) )
+	( ((!(ac) || ((ac)->spacetype != SPACE_GRAPH)) && (agrp->flag & AGRP_EXPANDED)) || \
+	  (( (ac) && ((ac)->spacetype == SPACE_GRAPH)) && (agrp->flag & AGRP_EXPANDED_G)) )
 #define SEL_AGRP(agrp) ((agrp->flag & AGRP_SELECTED) || (agrp->flag & AGRP_ACTIVE))
 /* F-Curve Channels */
 #define EDITABLE_FCU(fcu) ((fcu->flag & FCURVE_PROTECTED) == 0)
@@ -555,7 +548,13 @@ void ANIM_channel_debug_print_info(bAnimListElem *ale, short indent_level);
 /* Draw the given channel */
 void ANIM_channel_draw(bAnimContext *ac, bAnimListElem *ale, float yminc, float ymaxc, size_t channel_index);
 /* Draw the widgets for the given channel */
-void ANIM_channel_draw_widgets(const struct bContext *C, bAnimContext *ac, bAnimListElem *ale, struct uiBlock *block, float yminc, float ymaxc, size_t channel_index);
+void ANIM_channel_draw_widgets(
+    const struct bContext *C,
+    bAnimContext *ac,
+    bAnimListElem *ale,
+    struct uiBlock *block,
+    rctf *rect,
+    size_t channel_index);
 
 
 /* ------------------------ Editing API -------------------------- */
@@ -736,7 +735,7 @@ float ANIM_unit_mapping_get_factor(struct Scene *scene, struct ID *id, struct FC
 		if      (smode == ACHANNEL_SETFLAG_INVERT)  (channel)->flag ^=  (sflag); \
 		else if (smode == ACHANNEL_SETFLAG_ADD)     (channel)->flag |=  (sflag); \
 		else                                        (channel)->flag &= ~(sflag); \
-	}
+	} ((void)0)
 
 /* set/clear/toggle macro, where the flag is negative
  * - channel - channel with a 'flag' member that we're setting
@@ -748,7 +747,7 @@ float ANIM_unit_mapping_get_factor(struct Scene *scene, struct ID *id, struct FC
 		if      (smode == ACHANNEL_SETFLAG_INVERT)  (channel)->flag ^=  (sflag); \
 		else if (smode == ACHANNEL_SETFLAG_ADD)     (channel)->flag &= ~(sflag); \
 		else                                        (channel)->flag |=  (sflag); \
-	}
+	} ((void)0)
 
 
 /* --------- anim_deps.c, animation updates -------- */

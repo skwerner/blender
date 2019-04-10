@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,10 @@
  *
  * The Original Code is Copyright (C) 2004 by Blender Foundation
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s):
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/object/object_bake_api.c
- *  \ingroup edobj
+/** \file
+ * \ingroup edobj
  */
 
 
@@ -41,9 +33,7 @@
 #include "RNA_enum_types.h"
 
 #include "BLI_listbase.h"
-#include "BLI_string.h"
 #include "BLI_fileops.h"
-#include "BLI_math_geom.h"
 #include "BLI_path_util.h"
 
 #include "BKE_context.h"
@@ -202,7 +192,7 @@ static bool write_internal_bake_pixels(
 		RE_bake_mask_fill(pixel_array, num_pixels, mask_buffer);
 	}
 
-	is_float = (ibuf->flags & IB_rectfloat);
+	is_float = (ibuf->rect_float != NULL);
 
 	/* colormanagement conversions */
 	if (!is_noncolor) {
@@ -557,7 +547,7 @@ static bool bake_objects_check(Main *bmain, ViewLayer *view_layer, Object *ob, L
 static void bake_images_clear(Main *bmain, const bool is_tangent)
 {
 	Image *image;
-	for (image = bmain->image.first; image; image = image->id.next) {
+	for (image = bmain->images.first; image; image = image->id.next) {
 		if ((image->id.tag & LIB_TAG_DOIT) != 0) {
 			RE_bake_ibuf_clear(image, is_tangent);
 		}
@@ -774,7 +764,7 @@ static int bake(
 		}
 
 		if (is_cage && custom_cage[0] != '\0') {
-			ob_cage = BLI_findstring(&bmain->object, custom_cage, offsetof(ID, name) + 2);
+			ob_cage = BLI_findstring(&bmain->objects, custom_cage, offsetof(ID, name) + 2);
 
 			if (ob_cage == NULL || ob_cage->type != OB_MESH) {
 				BKE_report(reports, RPT_ERROR, "No valid cage object");

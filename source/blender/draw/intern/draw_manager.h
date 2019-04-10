@@ -1,6 +1,4 @@
 /*
- * Copyright 2016, Blender Foundation.
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -15,12 +13,11 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
- * Contributor(s): Blender Institute
- *
+ * Copyright 2016, Blender Foundation.
  */
 
-/** \file draw_manager.h
- *  \ingroup draw
+/** \file
+ * \ingroup draw
  */
 
 /* Private functions / structs of the draw manager */
@@ -86,7 +83,7 @@
  * Data structure containing all drawcalls organized by passes and materials.
  * DRWPass > DRWShadingGroup > DRWCall > DRWCallState
  *                           > DRWUniform
- **/
+ */
 
 /* Used by DRWCallState.flag */
 enum {
@@ -102,10 +99,11 @@ enum {
 	DRW_CALL_MODELVIEWINVERSE       = (1 << 2),
 	DRW_CALL_MODELVIEWPROJECTION    = (1 << 3),
 	DRW_CALL_NORMALVIEW             = (1 << 4),
-	DRW_CALL_NORMALWORLD            = (1 << 5),
-	DRW_CALL_ORCOTEXFAC             = (1 << 6),
-	DRW_CALL_EYEVEC                 = (1 << 7),
-	DRW_CALL_OBJECTINFO             = (1 << 8),
+	DRW_CALL_NORMALVIEWINVERSE      = (1 << 5),
+	DRW_CALL_NORMALWORLD            = (1 << 6),
+	DRW_CALL_ORCOTEXFAC             = (1 << 7),
+	DRW_CALL_EYEVEC                 = (1 << 8),
+	DRW_CALL_OBJECTINFO             = (1 << 9),
 };
 
 typedef struct DRWCallState {
@@ -125,6 +123,7 @@ typedef struct DRWCallState {
 	float modelviewinverse[4][4];
 	float modelviewprojection[4][4];
 	float normalview[3][3];
+	float normalviewinverse[3][3];
 	float normalworld[3][3]; /* Not view dependent */
 	float orcotexfac[2][3]; /* Not view dependent */
 	float objectinfo[2];
@@ -132,11 +131,16 @@ typedef struct DRWCallState {
 } DRWCallState;
 
 typedef enum {
-	DRW_CALL_SINGLE,                 /* A single batch */
-	DRW_CALL_RANGE,                  /* Like single but only draw a range of vertices/indices. */
-	DRW_CALL_INSTANCES,              /* Draw instances without any instancing attribs. */
-	DRW_CALL_GENERATE,               /* Uses a callback to draw with any number of batches. */
-	DRW_CALL_PROCEDURAL,             /* Generate a drawcall without any GPUBatch. */
+	/** A single batch. */
+	DRW_CALL_SINGLE,
+	/** Like single but only draw a range of vertices/indices. */
+	DRW_CALL_RANGE,
+	/** Draw instances without any instancing attributes. */
+	DRW_CALL_INSTANCES,
+	/** Uses a callback to draw with any number of batches. */
+	DRW_CALL_GENERATE,
+	/** Generate a drawcall without any #GPUBatch. */
+	DRW_CALL_PROCEDURAL,
 } DRWCallType;
 
 typedef struct DRWCall {
@@ -256,6 +260,7 @@ struct DRWShadingGroup {
 	int modelviewinverse;
 	int modelviewprojection;
 	int normalview;
+	int normalviewinverse;
 	int normalworld;
 	int orcotexfac;
 	int eye;
@@ -265,7 +270,7 @@ struct DRWShadingGroup {
 
 	DRWPass *pass_parent; /* backlink to pass we're in */
 #ifndef NDEBUG
-	char attribs_count;
+	char attrs_count;
 #endif
 #ifdef USE_GPU_SELECT
 	GPUVertBuf *inst_selectid;
@@ -308,6 +313,7 @@ typedef struct DRWDebugSphere {
 
 /* ------------- DRAW MANAGER ------------ */
 
+#define DST_MAX_SLOTS 64 /* Cannot be changed without modifying RST.bound_tex_slots */
 #define MAX_CLIP_PLANES 6 /* GL_MAX_CLIP_PLANES is at least 6 */
 #define STENCIL_UNDEFINED 256
 typedef struct DRWManager {
@@ -389,12 +395,16 @@ typedef struct DRWManager {
 
 	/** GPU Resource State: Memory storage between drawing. */
 	struct {
-		GPUTexture **bound_texs;
-		char *bound_tex_slots;
-		int bind_tex_inc;
-		GPUUniformBuffer **bound_ubos;
-		char *bound_ubo_slots;
-		int bind_ubo_inc;
+		/* High end GPUs supports up to 32 binds per shader stage.
+		 * We only use textures during the vertex and fragment stage,
+		 * so 2 * 32 slots is a nice limit. */
+		GPUTexture *bound_texs[DST_MAX_SLOTS];
+		uint64_t bound_tex_slots;
+		uint64_t bound_tex_slots_persist;
+
+		GPUUniformBuffer *bound_ubos[DST_MAX_SLOTS];
+		uint64_t bound_ubo_slots;
+		uint64_t bound_ubo_slots_persist;
 	} RST;
 
 	struct {
@@ -424,5 +434,7 @@ void drw_debug_draw(void);
 void drw_debug_init(void);
 
 void drw_batch_cache_generate_requested(struct Object *ob);
+
+extern struct GPUVertFormat *g_pos_format;
 
 #endif /* __DRAW_MANAGER_H__ */

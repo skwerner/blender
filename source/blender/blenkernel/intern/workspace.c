@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,32 +12,24 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/blenkernel/intern/workspace.c
- *  \ingroup bke
+/** \file
+ * \ingroup bke
  */
-
-/* allow accessing private members of DNA_workspace_types.h */
-#define DNA_PRIVATE_WORKSPACE_ALLOW
 
 #include <stdlib.h>
 #include <string.h>
 
 #include "BLI_utildefines.h"
 #include "BLI_string.h"
-#include "BLI_string_utf8.h"
 #include "BLI_string_utils.h"
 #include "BLI_listbase.h"
 
-#include "BKE_global.h"
 #include "BKE_idprop.h"
 #include "BKE_library.h"
 #include "BKE_main.h"
 #include "BKE_scene.h"
-#include "BKE_screen.h"
 #include "BKE_object.h"
 #include "BKE_workspace.h"
 
@@ -338,7 +328,7 @@ WorkSpaceLayout *BKE_workspace_layout_iter_circular(
 				return iter_layout;
 			}
 		}
-		LISTBASE_CIRCULAR_FORWARD_END(&workspace->layouts, iter_layout, start)
+		LISTBASE_CIRCULAR_FORWARD_END(&workspace->layouts, iter_layout, start);
 	}
 
 	return NULL;

@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,29 +15,22 @@
  *
  * The Original Code is Copyright (C) 2005 by the Blender Foundation.
  * All rights reserved.
- *
- * Contributor(s): Daniel Dunbar
- *                 Ton Roosendaal,
- *                 Ben Batt,
- *                 Brecht Van Lommel,
- *                 Campbell Barton
- *
- * ***** END GPL LICENSE BLOCK *****
- *
  */
 
-/** \file blender/modifiers/intern/MOD_subsurf.c
- *  \ingroup modifiers
+/** \file
+ * \ingroup modifiers
  */
 
 
 #include <stddef.h>
 
+#include "MEM_guardedalloc.h"
+
+#include "BLI_utildefines.h"
+
 #include "DNA_object_types.h"
 #include "DNA_scene_types.h"
 #include "DNA_mesh_types.h"
-
-#include "BLI_utildefines.h"
 
 #include "BKE_cdderivedmesh.h"
 #include "BKE_scene.h"
@@ -55,6 +46,11 @@
 
 #include "intern/CCGSubSurf.h"
 
+typedef struct SubsurfRuntimeData {
+	/* Cached subdivision surface descriptor, with topology and settings. */
+	struct Subdiv *subdiv;
+} SubsurfRuntimeData;
+
 static void initData(ModifierData *md)
 {
 	SubsurfModifierData *smd = (SubsurfModifierData *) md;
@@ -63,6 +59,7 @@ static void initData(ModifierData *md)
 	smd->renderLevels = 2;
 	smd->uv_smooth = SUBSURF_UV_SMOOTH_PRESERVE_CORNERS;
 	smd->quality = 3;
+	smd->flags |= eSubsurfModifierFlag_UseCrease;
 }
 
 static void copyData(const ModifierData *md, ModifierData *target, const int flag)
@@ -77,6 +74,18 @@ static void copyData(const ModifierData *md, ModifierData *target, const int fla
 	tsmd->emCache = tsmd->mCache = NULL;
 }
 
+static void freeRuntimeData(void *runtime_data_v)
+{
+	if (runtime_data_v == NULL) {
+		return;
+	}
+	SubsurfRuntimeData *runtime_data = (SubsurfRuntimeData *)runtime_data_v;
+	if (runtime_data->subdiv != NULL) {
+		BKE_subdiv_free(runtime_data->subdiv);
+	}
+	MEM_freeN(runtime_data);
+}
+
 static void freeData(ModifierData *md)
 {
 	SubsurfModifierData *smd = (SubsurfModifierData *) md;
@@ -89,9 +98,7 @@ static void freeData(ModifierData *md)
 		ccgSubSurf_free(smd->emCache);
 		smd->emCache = NULL;
 	}
-	if (smd->subdiv != NULL) {
-		BKE_subdiv_free(smd->subdiv);
-	}
+	freeRuntimeData(smd->modifier.runtime);
 }
 
 static bool isDisabled(const Scene *scene, ModifierData *md, bool useRenderParams)
@@ -120,6 +127,7 @@ static void subdiv_settings_init(SubdivSettings *settings,
 	settings->is_simple = (smd->subdivType == SUBSURF_TYPE_SIMPLE);
 	settings->is_adaptive = true;
 	settings->level = settings->is_simple ? 1 : smd->quality;
+	settings->use_creases = (smd->flags & eSubsurfModifierFlag_UseCrease);
 	settings->vtx_boundary_interpolation = SUBDIV_VTX_BOUNDARY_EDGE_ONLY;
 	settings->fvar_linear_interpolation =
 	        BKE_subdiv_fvar_interpolation_from_uv_smooth(smd->uv_smooth);
@@ -131,11 +139,11 @@ static Subdiv *subdiv_descriptor_ensure(SubsurfModifierData *smd,
                                         const SubdivSettings *subdiv_settings,
                                         const Mesh *mesh)
 {
+	SubsurfRuntimeData *runtime_data =
+	        (SubsurfRuntimeData *)smd->modifier.runtime;
 	Subdiv *subdiv = BKE_subdiv_update_from_mesh(
-	        smd->subdiv, subdiv_settings, mesh);
-	if (false) {
-		smd->subdiv = subdiv;
-	}
+	        runtime_data->subdiv, subdiv_settings, mesh);
+	runtime_data->subdiv = subdiv;
 	return subdiv;
 }
 
@@ -193,6 +201,17 @@ static Mesh *subdiv_as_ccg(SubsurfModifierData *smd,
 	return result;
 }
 
+static SubsurfRuntimeData *subsurf_ensure_runtime(SubsurfModifierData *smd)
+{
+	SubsurfRuntimeData *runtime_data =
+	        (SubsurfRuntimeData *)smd->modifier.runtime;
+	if (runtime_data == NULL) {
+		runtime_data = MEM_callocN(sizeof(*runtime_data), "subsurf runtime");
+		smd->modifier.runtime = runtime_data;
+	}
+	return runtime_data;
+}
+
 /* Modifier itself. */
 
 static Mesh *applyModifier(ModifierData *md,
@@ -206,6 +225,8 @@ static Mesh *applyModifier(ModifierData *md,
 	if (subdiv_settings.level == 0) {
 		return result;
 	}
+	BKE_subdiv_settings_validate_for_mesh(&subdiv_settings, mesh);
+	SubsurfRuntimeData *runtime_data = subsurf_ensure_runtime(smd);
 	Subdiv *subdiv = subdiv_descriptor_ensure(smd, &subdiv_settings, mesh);
 	if (subdiv == NULL) {
 		/* Happens on bad topology, but also on empty input mesh. */
@@ -220,7 +241,7 @@ static Mesh *applyModifier(ModifierData *md,
 		result = subdiv_as_ccg(smd, ctx, mesh, subdiv);
 	}
 	// BKE_subdiv_stats_print(&subdiv->stats);
-	if (subdiv != smd->subdiv) {
+	if (subdiv != runtime_data->subdiv) {
 		BKE_subdiv_free(subdiv);
 	}
 	return result;
@@ -239,12 +260,6 @@ ModifierTypeInfo modifierType_Subsurf = {
 
 	/* copyData */          copyData,
 
-	/* deformVerts_DM */    NULL,
-	/* deformMatrices_DM */ NULL,
-	/* deformVertsEM_DM */  NULL,
-	/* deformMatricesEM_DM*/NULL,
-	/* applyModifier_DM */  NULL,
-
 	/* deformVerts */       NULL,
 	/* deformMatrices */    NULL,
 	/* deformVertsEM */     NULL,
@@ -261,4 +276,5 @@ ModifierTypeInfo modifierType_Subsurf = {
 	/* foreachObjectLink */ NULL,
 	/* foreachIDLink */     NULL,
 	/* foreachTexLink */    NULL,
+	/* freeRuntimeData */   freeRuntimeData,
 };

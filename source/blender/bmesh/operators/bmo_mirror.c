@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,14 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * Contributor(s): Joseph Eagar.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/bmesh/operators/bmo_mirror.c
- *  \ingroup bmesh
+/** \file
+ * \ingroup bmesh
  *
  * Basic mirror, optionally with UVs's.
  */
@@ -99,10 +93,12 @@ void bmo_mirror_exec(BMesh *bm, BMOperator *op)
 			BM_ITER_ELEM (l, &liter, f, BM_LOOPS_OF_FACE) {
 				for (i = 0; i < totlayer; i++) {
 					luv = CustomData_bmesh_get_n(&bm->ldata, l->head.data, CD_MLOOPUV, i);
-					if (mirror_u)
+					if (mirror_u) {
 						luv->uv[0] = 1.0f - luv->uv[0];
-					if (mirror_v)
+					}
+					if (mirror_v) {
 						luv->uv[1] = 1.0f - luv->uv[1];
+					}
 				}
 			}
 		}
@@ -115,6 +111,7 @@ void bmo_mirror_exec(BMesh *bm, BMOperator *op)
 
 	BMO_slot_buffer_from_enabled_flag(bm, op, op->slots_out, "geom.out", BM_ALL_NOLOOP, ELE_NEW);
 
-	if (vmap)
+	if (vmap) {
 		MEM_freeN(vmap);
+	}
 }

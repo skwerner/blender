@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,10 @@
  *
  * The Original Code is Copyright (C) 2009 by Janne Karhu.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file DNA_boid_types.h
- *  \ingroup DNA
+/** \file
+ * \ingroup DNA
  */
 
 #ifndef __DNA_BOID_TYPES_H__
@@ -194,7 +186,7 @@ typedef struct BoidState {
 //typedef struct BoidSimulationData {
 //	ListBase signal_defines;/* list of defined signals */
 //	ListBase signals[20];	/* gathers signals from all channels */
-//	struct KDTree *signaltrees[20];
+//	struct KDTree_3d *signaltrees[20];
 //	char channel_names[20][32];
 //	int last_signal_id;		/* used for incrementing signal ids */
 //	int flag;				/* switches for drawing stuff */

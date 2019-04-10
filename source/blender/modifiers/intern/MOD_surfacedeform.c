@@ -1,12 +1,33 @@
+/*
+ * This program is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU General Public License
+ * as published by the Free Software Foundation; either version 2
+ * of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software  Foundation,
+ * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
+ *
+ * Copyright 2017, Blender Foundation.
+ */
+
+/** \file
+ * \ingroup modifiers
+ */
+
+#include "BLI_math.h"
+#include "BLI_math_geom.h"
+#include "BLI_task.h"
+
 #include "DNA_mesh_types.h"
 #include "DNA_meshdata_types.h"
 #include "DNA_object_types.h"
 #include "DNA_scene_types.h"
-
-#include "BLI_alloca.h"
-#include "BLI_math.h"
-#include "BLI_math_geom.h"
-#include "BLI_task.h"
 
 #include "BKE_bvhutils.h"
 #include "BKE_mesh_runtime.h"
@@ -1107,36 +1128,24 @@ static void surfacedeformModifier_do(
         float (*vertexCos)[3], unsigned int numverts, Object *ob)
 {
 	SurfaceDeformModifierData *smd = (SurfaceDeformModifierData *)md;
-	bool free_target;
 	Mesh *target;
 	unsigned int tnumverts, tnumpoly;
 
 	/* Exit function if bind flag is not set (free bind data if any). */
 	if (!(smd->flags & MOD_SDEF_BIND)) {
-		/* Note: with new CoW system, we expect unbinding to be done by a special call from main thread,
-		 * outside of depsgraph evaluation (see object_force_modifier_update_for_bind() in object_modifier.c). */
 		if (smd->verts != NULL) {
-			if (ob != DEG_get_original_object(ob)) {
-				BLI_assert(!"Trying to unbind inside of depsgraph evaluation");
-				modifier_setError(md, "Trying to unbind inside of depsgraph evaluation");
+			if (!DEG_is_active(ctx->depsgraph)) {
+				modifier_setError(md, "Attempt to bind from inactive dependency graph");
+				return;
 			}
-			else {
-				freeData(md);
-			}
+			ModifierData *md_orig = modifier_get_original(md);
+			freeData(md_orig);
 		}
 		return;
 	}
 
-	Object *ob_target = DEG_get_evaluated_object(ctx->depsgraph, smd->target);
-	target = BKE_modifier_get_evaluated_mesh_from_evaluated_object(ob_target, &free_target);
-#if 0  /* Should not be needed anymore since we always get that mesh from eval object ? */
-	if (target == NULL && smd->verts == NULL && ob == DEG_get_original_object(ob)) {
-		/* Special case, binding happens outside of depsgraph evaluation, so we can build our own
-		 * target mesh if needed. */
-		target = mesh_create_eval_final_view(ctx->depsgraph, DEG_get_input_scene(ctx->depsgraph), smd->target, 0);
-		free_target = target != NULL;
-	}
-#endif
+	Object *ob_target = smd->target;
+	target = BKE_modifier_get_evaluated_mesh_from_evaluated_object(ob_target, false);
 	if (!target) {
 		modifier_setError(md, "No valid target mesh");
 		return;
@@ -1146,34 +1155,33 @@ static void surfacedeformModifier_do(
 	tnumpoly = target->totpoly;
 
 	/* If not bound, execute bind. */
-	/* Note: with new CoW system, we expect binding to be done by a special call from main thread,
-	 * outside of depsgraph evaluation (see object_force_modifier_update_for_bind() in object_modifier.c). */
 	if (smd->verts == NULL) {
-		if (ob != DEG_get_original_object(ob)) {
-			BLI_assert(!"Trying to bind inside of depsgraph evaluation");
-			modifier_setError(md, "Trying to bind inside of depsgraph evaluation");
-			goto finally;
+		if (!DEG_is_active(ctx->depsgraph)) {
+			modifier_setError(md, "Attempt to unbind from inactive dependency graph");
+			return;
 		}
+
+		SurfaceDeformModifierData *smd_orig = (SurfaceDeformModifierData *)modifier_get_original(md);
 		float tmp_mat[4][4];
 
 		invert_m4_m4(tmp_mat, ob->obmat);
-		mul_m4_m4m4(smd->mat, tmp_mat, ob_target->obmat);
+		mul_m4_m4m4(smd_orig->mat, tmp_mat, ob_target->obmat);
 
-		if (!surfacedeformBind(smd, vertexCos, numverts, tnumpoly, tnumverts, target)) {
+		if (!surfacedeformBind(smd_orig, vertexCos, numverts, tnumpoly, tnumverts, target)) {
 			smd->flags &= ~MOD_SDEF_BIND;
 		}
 		/* Early abort, this is binding 'call', no need to perform whole evaluation. */
-		goto finally;
+		return;
 	}
 
 	/* Poly count checks */
 	if (smd->numverts != numverts) {
 		modifier_setError(md, "Verts changed from %u to %u", smd->numverts, numverts);
-		goto finally;
+		return;
 	}
 	else if (smd->numpoly != tnumpoly) {
 		modifier_setError(md, "Target polygons changed from %u to %u", smd->numpoly, tnumpoly);
-		goto finally;
+		return;
 	}
 
 	/* Actual vertex location update starts here */
@@ -1199,11 +1207,6 @@ static void surfacedeformModifier_do(
 		                        &settings);
 
 		MEM_freeN(data.targetCos);
-	}
-
-finally:
-	if (target != NULL && free_target) {
-		BKE_id_free(NULL, target);
 	}
 }
 
@@ -1241,12 +1244,6 @@ ModifierTypeInfo modifierType_SurfaceDeform = {
 
 	/* copyData */          copyData,
 
-	/* deformVerts_DM */    NULL,
-	/* deformMatrices_DM */ NULL,
-	/* deformVertsEM_DM */  NULL,
-	/* deformMatricesEM_DM*/NULL,
-	/* applyModifier_DM */  NULL,
-
 	/* deformVerts */       deformVerts,
 	/* deformMatrices */    NULL,
 	/* deformVertsEM */     deformVertsEM,
@@ -1263,4 +1260,5 @@ ModifierTypeInfo modifierType_SurfaceDeform = {
 	/* foreachObjectLink */ foreachObjectLink,
 	/* foreachIDLink */     NULL,
 	/* foreachTexLink */    NULL,
+	/* freeRuntimeData */   NULL,
 };

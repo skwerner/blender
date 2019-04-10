@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,35 +15,28 @@
  *
  * The Original Code is Copyright (C) 2005 by the Blender Foundation.
  * All rights reserved.
- *
- * Contributor(s): Daniel Dunbar
- *                 Ton Roosendaal,
- *                 Ben Batt,
- *                 Brecht Van Lommel,
- *                 Campbell Barton
- *
- * ***** END GPL LICENSE BLOCK *****
- *
  */
 
-/** \file blender/modifiers/intern/MOD_multires.c
- *  \ingroup modifiers
+/** \file
+ * \ingroup modifiers
  */
 
 
 #include <stddef.h>
 
+#include "MEM_guardedalloc.h"
+
+#include "BLI_utildefines.h"
+
 #include "DNA_mesh_types.h"
 #include "DNA_object_types.h"
 #include "DNA_scene_types.h"
 
-#include "BLI_utildefines.h"
-
 #include "BKE_cdderivedmesh.h"
-#include "BKE_global.h"
 #include "BKE_mesh.h"
 #include "BKE_multires.h"
 #include "BKE_modifier.h"
+#include "BKE_paint.h"
 #include "BKE_subdiv.h"
 #include "BKE_subdiv_ccg.h"
 #include "BKE_subdiv_mesh.h"
@@ -54,6 +45,11 @@
 #include "DEG_depsgraph_query.h"
 
 #include "MOD_modifiertypes.h"
+
+typedef struct MultiresRuntimeData {
+	/* Cached subdivision surface descriptor, with topology and settings. */
+	struct Subdiv *subdiv;
+} MultiresRuntimeData;
 
 static void initData(ModifierData *md)
 {
@@ -65,14 +61,41 @@ static void initData(ModifierData *md)
 	mmd->totlvl = 0;
 	mmd->uv_smooth = SUBSURF_UV_SMOOTH_PRESERVE_CORNERS;
 	mmd->quality = 3;
+	mmd->flags |= eMultiresModifierFlag_UseCrease;
+}
+
+static void copyData(const ModifierData *md_src, ModifierData *md_dst, const int flag)
+{
+	modifier_copyData_generic(md_src, md_dst, flag);
+}
+
+static void freeRuntimeData(void *runtime_data_v)
+{
+	if (runtime_data_v == NULL) {
+		return;
+	}
+	MultiresRuntimeData *runtime_data = (MultiresRuntimeData *)runtime_data_v;
+	if (runtime_data->subdiv != NULL) {
+		BKE_subdiv_free(runtime_data->subdiv);
+	}
+	MEM_freeN(runtime_data);
 }
 
 static void freeData(ModifierData *md)
 {
 	MultiresModifierData *mmd = (MultiresModifierData *) md;
-	if (mmd->subdiv != NULL) {
-		BKE_subdiv_free(mmd->subdiv);
+	freeRuntimeData(mmd->modifier.runtime);
+}
+
+static MultiresRuntimeData *multires_ensure_runtime(MultiresModifierData *mmd)
+{
+	MultiresRuntimeData *runtime_data =
+	        (MultiresRuntimeData *)mmd->modifier.runtime;
+	if (runtime_data == NULL) {
+		runtime_data = MEM_callocN(sizeof(*runtime_data), "subsurf runtime");
+		mmd->modifier.runtime = runtime_data;
 	}
+	return runtime_data;
 }
 
 /* Main goal of this function is to give usable subdivision surface descriptor
@@ -81,11 +104,11 @@ static Subdiv *subdiv_descriptor_ensure(MultiresModifierData *mmd,
                                         const SubdivSettings *subdiv_settings,
                                         const Mesh *mesh)
 {
+	MultiresRuntimeData *runtime_data =
+	        (MultiresRuntimeData *)mmd->modifier.runtime;
 	Subdiv *subdiv = BKE_subdiv_update_from_mesh(
-	        mmd->subdiv, subdiv_settings, mesh);
-	if (false) {
-		mmd->subdiv = subdiv;
-	}
+	        runtime_data->subdiv, subdiv_settings, mesh);
+	runtime_data->subdiv = subdiv;
 	return subdiv;
 }
 
@@ -103,7 +126,7 @@ static Mesh *multires_as_mesh(MultiresModifierData *mmd,
 	Object *object = ctx->object;
 	SubdivToMeshSettings mesh_settings;
 	BKE_multires_subdiv_mesh_settings_init(
-        &mesh_settings, scene, object, mmd, use_render_params, ignore_simplify);
+	        &mesh_settings, scene, object, mmd, use_render_params, ignore_simplify);
 	if (mesh_settings.resolution < 3) {
 		return result;
 	}
@@ -159,6 +182,8 @@ static Mesh *applyModifier(ModifierData *md,
 	if (subdiv_settings.level == 0) {
 		return result;
 	}
+	BKE_subdiv_settings_validate_for_mesh(&subdiv_settings, mesh);
+	MultiresRuntimeData *runtime_data = multires_ensure_runtime(mmd);
 	Subdiv *subdiv = subdiv_descriptor_ensure(mmd, &subdiv_settings, mesh);
 	if (subdiv == NULL) {
 		/* Happens on bad topology, ut also on empty input mesh. */
@@ -172,12 +197,24 @@ static Mesh *applyModifier(ModifierData *md,
 		/* NOTE: CCG takes ownership over Subdiv. */
 		result = multires_as_ccg(mmd, ctx, mesh, subdiv);
 		result->runtime.subdiv_ccg_tot_level = mmd->totlvl;
+		/* TODO(sergey): Usually it is sculpt stroke's update variants which
+		 * takes care of this, but is possible that we need this before the
+		 * stroke: i.e. when exiting blender right after stroke is done.
+		 * Annoying and not so much black-boxed as far as sculpting goes, and
+		 * surely there is a better way of solving this. */
+		if (ctx->object->sculpt != NULL) {
+			ctx->object->sculpt->subdiv_ccg = result->runtime.subdiv_ccg;
+		}
+		/* NOTE: CCG becomes an owner of Subdiv descriptor, so can not share
+		 * this pointer. Not sure if it's needed, but might have a second look
+		 * on the ownership model here. */
+		runtime_data->subdiv = NULL;
 		// BKE_subdiv_stats_print(&subdiv->stats);
 	}
 	else {
 		result = multires_as_mesh(mmd, ctx, mesh, subdiv);
 		// BKE_subdiv_stats_print(&subdiv->stats);
-		if (subdiv != mmd->subdiv) {
+		if (subdiv != runtime_data->subdiv) {
 			BKE_subdiv_free(subdiv);
 		}
 	}
@@ -193,13 +230,7 @@ ModifierTypeInfo modifierType_Multires = {
 	                        eModifierTypeFlag_SupportsMapping |
 	                        eModifierTypeFlag_RequiresOriginalData,
 
-	/* copyData */          modifier_copyData_generic,
-
-	/* deformVerts_DM */    NULL,
-	/* deformMatrices_DM */ NULL,
-	/* deformVertsEM_DM */  NULL,
-	/* deformMatricesEM_DM*/NULL,
-	/* applyModifier_DM */  NULL,
+	/* copyData */          copyData,
 
 	/* deformVerts */       NULL,
 	/* deformMatrices */    NULL,
@@ -217,4 +248,5 @@ ModifierTypeInfo modifierType_Multires = {
 	/* foreachObjectLink */ NULL,
 	/* foreachIDLink */     NULL,
 	/* foreachTexLink */    NULL,
+	/* freeRuntimeData */   freeRuntimeData,
 };

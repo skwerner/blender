@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -18,15 +16,12 @@
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
  *
- * Contributor(s):
  * - Blender Foundation, 2003-2009
  * - Peter Schlaile <peter [at] schlaile [dot] de> 2005/2006
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/blenkernel/intern/seqeffects.c
- *  \ingroup bke
+/** \file
+ * \ingroup bke
  */
 
 
@@ -106,7 +101,7 @@ enum {
 	GlowR = 0,
 	GlowG = 1,
 	GlowB = 2,
-	GlowA = 3
+	GlowA = 3,
 };
 
 static ImBuf *prepare_effect_imbufs(const SeqRenderData *context, ImBuf *ibuf1, ImBuf *ibuf2, ImBuf *ibuf3)
@@ -1323,11 +1318,11 @@ BLI_INLINE void apply_blend_function_byte(
 	rt = out;
 	while (y--) {
 		for (x = xo; x > 0; x--) {
-			achannel = rt2[3];
-			rt2[3] = (unsigned int) achannel * facf0;
+			achannel = rt1[3];
+			rt1[3] = (unsigned int) achannel * facf0;
 			blend_function(rt, rt1, rt2);
-			rt2[3] = achannel;
-			rt[3] = rt2[3];
+			rt1[3] = achannel;
+			rt[3] = rt1[3];
 			rt1 += 4;
 			rt2 += 4;
 			rt += 4;
@@ -1337,11 +1332,11 @@ BLI_INLINE void apply_blend_function_byte(
 		}
 		y--;
 		for (x = xo; x > 0; x--) {
-			achannel = rt2[3];
-			rt2[3] = (unsigned int) achannel * facf1;
+			achannel = rt1[3];
+			rt1[3] = (unsigned int) achannel * facf1;
 			blend_function(rt, rt1, rt2);
-			rt2[3] = achannel;
-			rt[3] = rt2[3];
+			rt1[3] = achannel;
+			rt[3] = rt1[3];
 			rt1 += 4;
 			rt2 += 4;
 			rt += 4;
@@ -1362,11 +1357,11 @@ BLI_INLINE void apply_blend_function_float(
 	rt = out;
 	while (y--) {
 		for (x = xo; x > 0; x--) {
-			achannel = rt2[3];
-			rt2[3] = achannel * facf0;
+			achannel = rt1[3];
+			rt1[3] = achannel * facf0;
 			blend_function(rt, rt1, rt2);
-			rt2[3] = achannel;
-			rt[3] = rt2[3];
+			rt1[3] = achannel;
+			rt[3] = rt1[3];
 			rt1 += 4;
 			rt2 += 4;
 			rt += 4;
@@ -1376,11 +1371,11 @@ BLI_INLINE void apply_blend_function_float(
 		}
 		y--;
 		for (x = xo; x > 0; x--) {
-			achannel = rt2[3];
-			rt2[3] = achannel * facf1;
+			achannel = rt1[3];
+			rt1[3] = achannel * facf1;
 			blend_function(rt, rt1, rt2);
-			rt2[3] = achannel;
-			rt[3] = rt2[3];
+			rt1[3] = achannel;
+			rt[3] = rt1[3];
 			rt1 += 4;
 			rt2 += 4;
 			rt += 4;

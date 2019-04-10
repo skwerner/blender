@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,11 @@
  *
  * The Original Code is Copyright (C) 2017, Blender Foundation
  * This is a new part of Blender
- *
- * Contributor(s): Antonio Vazquez
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
- /** \file blender/blenkernel/intern/gpencil_modifier.c
-  *  \ingroup bke
-  */
-
+/** \file
+ * \ingroup bke
+ */
 
 #include <stdio.h>
 
@@ -45,7 +38,6 @@
 #include "DNA_gpencil_types.h"
 #include "DNA_gpencil_modifier_types.h"
 
-#include "BKE_global.h"
 #include "BKE_library.h"
 #include "BKE_library_query.h"
 #include "BKE_gpencil.h"
@@ -427,15 +419,18 @@ void BKE_gpencil_stroke_modifiers(Depsgraph *depsgraph, Object *ob, bGPDlayer *g
 		if (GPENCIL_MODIFIER_ACTIVE(md, is_render)) {
 			const GpencilModifierTypeInfo *mti = BKE_gpencil_modifierType_getInfo(md->type);
 
-			if (GPENCIL_MODIFIER_EDIT(md, is_edit)) {
+			if ((GPENCIL_MODIFIER_EDIT(md, is_edit)) && (!is_render)) {
 				continue;
 			}
 
 			if (mti && mti->deformStroke) {
 				mti->deformStroke(md, depsgraph, ob, gpl, gps);
-
+				/* subdivide allways requires update */
+				if (md->type == eGpencilModifierType_Subdiv) {
+					gps->flag |= GP_STROKE_RECALC_GEOMETRY;
+				}
 				/* some modifiers could require a recalc of fill triangulation data */
-				if (gpd->flag & GP_DATA_STROKE_FORCE_RECALC) {
+				else if (gpd->flag & GP_DATA_STROKE_FORCE_RECALC) {
 					if (ELEM(md->type,
 					         eGpencilModifierType_Armature,
 					         eGpencilModifierType_Hook,
@@ -462,7 +457,7 @@ void BKE_gpencil_geometry_modifiers(Depsgraph *depsgraph, Object *ob, bGPDlayer 
 		if (GPENCIL_MODIFIER_ACTIVE(md, is_render)) {
 			const GpencilModifierTypeInfo *mti = BKE_gpencil_modifierType_getInfo(md->type);
 
-			if (GPENCIL_MODIFIER_EDIT(md, is_edit)) {
+			if ((GPENCIL_MODIFIER_EDIT(md, is_edit)) && (!is_render)) {
 				continue;
 			}
 
@@ -486,7 +481,7 @@ int BKE_gpencil_time_modifier(Depsgraph *depsgraph, Scene *scene, Object *ob,
 		if (GPENCIL_MODIFIER_ACTIVE(md, is_render)) {
 			const GpencilModifierTypeInfo *mti = BKE_gpencil_modifierType_getInfo(md->type);
 
-			if (GPENCIL_MODIFIER_EDIT(md, is_edit)) {
+			if ((GPENCIL_MODIFIER_EDIT(md, is_edit)) && (!is_render)) {
 				continue;
 			}
 
@@ -520,10 +515,10 @@ void BKE_gpencil_eval_geometry(Depsgraph *depsgraph,
 	 * This would be better than inventing our own logic for this stuff...
 	 */
 
-	 /* TODO: Move the following code to "BKE_gpencil_eval_done()" (marked as an exit node)
-	  * later when there's more happening here. For now, let's just keep this in here to avoid
-	  * needing to have one more node slowing down evaluation...
-	  */
+	/* TODO: Move the following code to "BKE_gpencil_eval_done()" (marked as an exit node)
+	 * later when there's more happening here. For now, let's just keep this in here to avoid
+	 * needing to have one more node slowing down evaluation...
+	 */
 	if (DEG_is_active(depsgraph)) {
 		bGPdata *gpd_orig = (bGPdata *)DEG_get_original_id(&gpd->id);
 

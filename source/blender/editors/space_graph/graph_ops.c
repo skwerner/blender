@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,15 +15,10 @@
  *
  * The Original Code is Copyright (C) 2008 Blender Foundation.
  * All rights reserved.
- *
- *
- * Contributor(s): Blender Foundation
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/space_graph/graph_ops.c
- *  \ingroup spgraph
+/** \file
+ * \ingroup spgraph
  */
 
 
@@ -83,7 +76,7 @@ static void graphview_cursor_apply(bContext *C, wmOperator *op)
 {
 	Main *bmain = CTX_data_main(C);
 	Scene *scene = CTX_data_scene(C);
-	SpaceIpo *sipo = CTX_wm_space_graph(C);
+	SpaceGraph *sipo = CTX_wm_space_graph(C);
 	/* this isn't technically "frame", but it'll do... */
 	float frame = RNA_float_get(op->ptr, "frame");
 
@@ -496,7 +489,7 @@ void ED_operatormacros_graph(void)
 void graphedit_keymap(wmKeyConfig *keyconf)
 {
 	/* keymap for all regions */
-	WM_keymap_ensure(keyconf, "Graph Editor Generic", SPACE_IPO, 0);
+	WM_keymap_ensure(keyconf, "Graph Editor Generic", SPACE_GRAPH, 0);
 
 	/* channels */
 	/* Channels are not directly handled by the Graph Editor module, but are inherited from the Animation module.
@@ -505,5 +498,5 @@ void graphedit_keymap(wmKeyConfig *keyconf)
 	 */
 
 	/* keyframes */
-	WM_keymap_ensure(keyconf, "Graph Editor", SPACE_IPO, 0);
+	WM_keymap_ensure(keyconf, "Graph Editor", SPACE_GRAPH, 0);
 }

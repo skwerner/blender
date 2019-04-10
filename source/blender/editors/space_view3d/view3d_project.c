@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,15 +15,10 @@
  *
  * The Original Code is Copyright (C) 2008 Blender Foundation.
  * All rights reserved.
- *
- *
- * Contributor(s): Blender Foundation
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/space_view3d/view3d_project.c
- *  \ingroup spview3d
+/** \file
+ * \ingroup spview3d
  */
 
 #include "DNA_camera_types.h"
@@ -322,14 +315,18 @@ static void view3d_win_to_ray_segment(
 	RegionView3D *rv3d = ar->regiondata;
 	float _ray_co[3], _ray_dir[3], start_offset, end_offset;
 
-	if (!r_ray_co) r_ray_co = _ray_co;
-	if (!r_ray_dir) r_ray_dir = _ray_dir;
+	if (!r_ray_co) {
+		r_ray_co = _ray_co;
+	}
+	if (!r_ray_dir) {
+		r_ray_dir = _ray_dir;
+	}
 
 	ED_view3d_win_to_origin(ar, mval, r_ray_co);
 	ED_view3d_win_to_vector(ar, mval, r_ray_dir);
 
 	if ((rv3d->is_persp == false) && (rv3d->persp != RV3D_CAMOB)) {
-		end_offset = v3d->far / 2.0f;
+		end_offset = v3d->clip_end / 2.0f;
 		start_offset = -end_offset;
 	}
 	else {

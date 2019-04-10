@@ -18,8 +18,7 @@
 # ##### END GPL LICENSE BLOCK #####
 
 # <pep8 compliant>
-import bpy
-from bpy.types import Menu, Panel, UIList
+from bpy.types import Panel
 from .space_view3d import (
     VIEW3D_PT_shading_lighting,
     VIEW3D_PT_shading_color,
@@ -117,7 +116,7 @@ class RENDER_PT_color_management_curves(RenderButtonsPanel, Panel):
 
         layout.enabled = view.use_curve_mapping
 
-        layout.template_curve_mapping(view, "curve_mapping", levels=True)
+        layout.template_curve_mapping(view, "curve_mapping", type='COLOR', levels=True)
 
 
 class RENDER_PT_eevee_ambient_occlusion(RenderButtonsPanel, Panel):
@@ -411,8 +410,8 @@ class RENDER_PT_eevee_sampling(RenderButtonsPanel, Panel):
         props = scene.eevee
 
         col = layout.column()
-        col.prop(props, "taa_samples")
-        col.prop(props, "taa_render_samples")
+        col.prop(props, "taa_render_samples", text="Render")
+        col.prop(props, "taa_samples", text="Viewport")
         col.prop(props, "use_taa_reprojection")
 
 
@@ -436,7 +435,7 @@ class RENDER_PT_eevee_indirect_lighting(RenderButtonsPanel, Panel):
         col = layout.column()
         col.operator("scene.light_cache_bake", text="Bake Indirect Lighting", icon='RENDER_STILL')
         col.operator("scene.light_cache_bake", text="Bake Cubemap Only", icon='LIGHTPROBE_CUBEMAP').subset = 'CUBEMAPS'
-        col.operator("scene.light_cache_free", text="Free Lighting Cache")
+        col.operator("scene.light_cache_free", text="Delete Lighting Cache")
 
         cache_info = scene.eevee.gi_cache_info
         if cache_info:
@@ -492,18 +491,34 @@ class RENDER_PT_eevee_film(RenderButtonsPanel, Panel):
         layout.use_property_split = True
 
         scene = context.scene
-        props = scene.eevee
         rd = scene.render
-
-        split = layout.split()
-        split.prop(props, "use_overscan")
-        row = split.row()
-        row.active = props.use_overscan
-        row.prop(props, "overscan_size", text="")
 
         col = layout.column()
         col.prop(rd, "filter_size")
         col.prop(rd, "alpha_mode", text="Alpha")
+
+
+class RENDER_PT_eevee_film_overscan(RenderButtonsPanel, Panel):
+    bl_label = "Overscan"
+    bl_parent_id = "RENDER_PT_eevee_film"
+    bl_options = {'DEFAULT_CLOSED'}
+    COMPAT_ENGINES = {'BLENDER_EEVEE'}
+
+    def draw_header(self, context):
+
+        scene = context.scene
+        props = scene.eevee
+
+        self.layout.prop(props, "use_overscan", text="")
+
+    def draw(self, context):
+        layout = self.layout
+        layout.use_property_split = True
+        scene = context.scene
+        props = scene.eevee
+
+        layout.active = props.use_overscan
+        layout.prop(props, "overscan_size", text="Size")
 
 
 class RENDER_PT_eevee_hair(RenderButtonsPanel, Panel):
@@ -614,6 +629,9 @@ class RENDER_PT_simplify_viewport(RenderButtonsPanel, Panel):
         col = flow.column()
         col.prop(rd, "simplify_child_particles", text="Max Child Particles")
 
+        col = flow.column()
+        col.prop(rd, "use_simplify_smoke_highres", text="High-resolution Smoke")
+
 
 class RENDER_PT_simplify_render(RenderButtonsPanel, Panel):
     bl_label = "Render"
@@ -685,6 +703,7 @@ classes = (
     RENDER_PT_eevee_indirect_lighting,
     RENDER_PT_eevee_indirect_lighting_display,
     RENDER_PT_eevee_film,
+    RENDER_PT_eevee_film_overscan,
     RENDER_PT_opengl_lighting,
     RENDER_PT_opengl_color,
     RENDER_PT_opengl_options,

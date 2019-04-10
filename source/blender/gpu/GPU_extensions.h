@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,10 @@
  *
  * The Original Code is Copyright (C) 2005 Blender Foundation.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): Brecht Van Lommel.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file GPU_extensions.h
- *  \ingroup gpu
+/** \file
+ * \ingroup gpu
  */
 
 #ifndef __GPU_EXTENSIONS_H__
@@ -50,11 +42,11 @@ int GPU_max_cube_map_size(void);
 int GPU_max_ubo_binds(void);
 int GPU_max_ubo_size(void);
 float GPU_max_line_width(void);
-int GPU_color_depth(void);
 void GPU_get_dfdy_factors(float fac[2]);
 bool GPU_mip_render_workaround(void);
 bool GPU_depth_blitting_workaround(void);
 bool GPU_unused_fb_slot_workaround(void);
+bool GPU_crappy_amd_driver(void);
 
 bool GPU_mem_stats_supported(void);
 void GPU_mem_stats_get(int *totalmem, int *freemem);
@@ -63,7 +55,7 @@ void GPU_code_generate_glsl_lib(void);
 
 /* GPU Types */
 
-typedef enum GPUDeviceType {
+typedef enum eGPUDeviceType {
 	GPU_DEVICE_NVIDIA =     (1 << 0),
 	GPU_DEVICE_ATI =        (1 << 1),
 	GPU_DEVICE_INTEL =      (1 << 2),
@@ -71,23 +63,23 @@ typedef enum GPUDeviceType {
 	GPU_DEVICE_SOFTWARE =   (1 << 4),
 	GPU_DEVICE_UNKNOWN =    (1 << 5),
 	GPU_DEVICE_ANY =        (0xff),
-} GPUDeviceType;
+} eGPUDeviceType;
 
-typedef enum GPUOSType {
+typedef enum eGPUOSType {
 	GPU_OS_WIN =            (1 << 8),
 	GPU_OS_MAC =            (1 << 9),
 	GPU_OS_UNIX =           (1 << 10),
 	GPU_OS_ANY =            (0xff00),
-} GPUOSType;
+} eGPUOSType;
 
-typedef enum GPUDriverType {
+typedef enum eGPUDriverType {
 	GPU_DRIVER_OFFICIAL =   (1 << 16),
 	GPU_DRIVER_OPENSOURCE = (1 << 17),
 	GPU_DRIVER_SOFTWARE =   (1 << 18),
 	GPU_DRIVER_ANY =        (0xff0000),
-} GPUDriverType;
+} eGPUDriverType;
 
-bool GPU_type_matches(GPUDeviceType device, GPUOSType os, GPUDriverType driver);
+bool GPU_type_matches(eGPUDeviceType device, eGPUOSType os, eGPUDriverType driver);
 
 #ifdef __cplusplus
 }

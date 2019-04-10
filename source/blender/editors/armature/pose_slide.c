@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,14 +15,10 @@
  *
  * The Original Code is Copyright (C) 2009, Blender Foundation, Joshua Leung
  * This is a new part of Blender
- *
- * Contributor(s): Joshua Leung
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/armature/pose_slide.c
- *  \ingroup edarmature
+/** \file
+ * \ingroup edarmature
  */
 
 #include "MEM_guardedalloc.h"
@@ -165,7 +159,7 @@ static const EnumPropertyItem prop_channels_types[] = {
 	{PS_TFM_SIZE, "SIZE", 0, "Scale", "Scale only"},
 	{PS_TFM_BBONE_SHAPE, "BBONE", 0, "Bendy Bone", "Bendy Bone shape properties"},
 	{PS_TFM_PROPS, "CUSTOM", 0, "Custom Properties", "Custom properties"},
-	{0, NULL, 0, NULL, NULL}
+	{0, NULL, 0, NULL, NULL},
 };
 
 /* Axis Locks */
@@ -182,7 +176,7 @@ static const EnumPropertyItem prop_axis_lock_types[] = {
 	{PS_LOCK_Y, "Y", 0, "Y", "Only Y-axis transforms are affected"},
 	{PS_LOCK_Z, "Z", 0, "Z", "Only Z-axis transforms are affected"},
 	/* TODO: Combinations? */
-	{0, NULL, 0, NULL, NULL}
+	{0, NULL, 0, NULL, NULL},
 };
 
 /* ------------------------------------ */
@@ -213,8 +207,7 @@ static int pose_slide_init(bContext *C, wmOperator *op, ePoseSlide_Modes mode)
 	pso->axislock = RNA_enum_get(op->ptr, "axis_lock");
 
 	/* for each Pose-Channel which gets affected, get the F-Curves for that channel
-	* and set the relevant transform flags...
-	*/
+	 * and set the relevant transform flags... */
 	poseAnim_mapping_get(C, &pso->pfLinks);
 
 	Object **objects = BKE_view_layer_array_from_objects_in_mode_unique_data(CTX_data_view_layer(C),
@@ -300,8 +293,10 @@ static void pose_slide_refresh(bContext *C, tPoseSlideOp *pso)
 	}
 }
 
-/** Although this lookup is not ideal, we won't be dealing with a lot of objects at a given time.
-  * But if it comes to that we can instead store prev/next frme in the tPChanFCurveLink. */
+/**
+ * Although this lookup is not ideal, we won't be dealing with a lot of objects at a given time.
+ * But if it comes to that we can instead store prev/next frame in the #tPChanFCurveLink.
+ */
 static bool pose_frame_range_from_object_get(tPoseSlideOp *pso, Object *ob, float *prevFrameF, float *nextFrameF)
 {
 	for (uint ob_index = 0; ob_index < pso->objects_len; ob_index++) {
@@ -563,54 +558,67 @@ static void pose_slide_apply_quat(tPoseSlideOp *pso, tPChanFCurveLink *pfl)
 
 	/* only if all channels exist, proceed */
 	if (fcu_w && fcu_x && fcu_y && fcu_z) {
-		float quat_prev[4], quat_next[4];
+		float quat_prev[4], quat_prev_orig[4];
+		float quat_next[4], quat_next_orig[4];
+		float quat_curr[4], quat_curr_orig[4];
+		float quat_final[4];
+
+		copy_qt_qt(quat_curr_orig, pchan->quat);
 
 		/* get 2 quats */
-		quat_prev[0] = evaluate_fcurve(fcu_w, prevFrameF);
-		quat_prev[1] = evaluate_fcurve(fcu_x, prevFrameF);
-		quat_prev[2] = evaluate_fcurve(fcu_y, prevFrameF);
-		quat_prev[3] = evaluate_fcurve(fcu_z, prevFrameF);
+		quat_prev_orig[0] = evaluate_fcurve(fcu_w, prevFrameF);
+		quat_prev_orig[1] = evaluate_fcurve(fcu_x, prevFrameF);
+		quat_prev_orig[2] = evaluate_fcurve(fcu_y, prevFrameF);
+		quat_prev_orig[3] = evaluate_fcurve(fcu_z, prevFrameF);
 
-		quat_next[0] = evaluate_fcurve(fcu_w, nextFrameF);
-		quat_next[1] = evaluate_fcurve(fcu_x, nextFrameF);
-		quat_next[2] = evaluate_fcurve(fcu_y, nextFrameF);
-		quat_next[3] = evaluate_fcurve(fcu_z, nextFrameF);
+		quat_next_orig[0] = evaluate_fcurve(fcu_w, nextFrameF);
+		quat_next_orig[1] = evaluate_fcurve(fcu_x, nextFrameF);
+		quat_next_orig[2] = evaluate_fcurve(fcu_y, nextFrameF);
+		quat_next_orig[3] = evaluate_fcurve(fcu_z, nextFrameF);
+
+		normalize_qt_qt(quat_prev, quat_prev_orig);
+		normalize_qt_qt(quat_next, quat_next_orig);
+		normalize_qt_qt(quat_curr, quat_curr_orig);
 
 		/* perform blending */
 		if (pso->mode == POSESLIDE_BREAKDOWN) {
 			/* just perform the interpol between quat_prev and quat_next using pso->percentage as a guide */
-			interp_qt_qtqt(pchan->quat, quat_prev, quat_next, pso->percentage);
+			interp_qt_qtqt(quat_final, quat_prev, quat_next, pso->percentage);
 		}
 		else if (pso->mode == POSESLIDE_PUSH) {
-			float quat_diff[4], quat_orig[4];
+			float quat_diff[4];
 
 			/* calculate the delta transform from the previous to the current */
 			/* TODO: investigate ways to favour one transform more? */
-			sub_qt_qtqt(quat_diff, pchan->quat, quat_prev);
-
-			/* make a copy of the original rotation */
-			copy_qt_qt(quat_orig, pchan->quat);
+			sub_qt_qtqt(quat_diff, quat_curr, quat_prev);
 
 			/* increase the original by the delta transform, by an amount determined by percentage */
-			add_qt_qtqt(pchan->quat, quat_orig, quat_diff, pso->percentage);
+			add_qt_qtqt(quat_final, quat_curr, quat_diff, pso->percentage);
+
+			normalize_qt(quat_final);
 		}
 		else {
-			float quat_interp[4], quat_orig[4];
+			BLI_assert(pso->mode == POSESLIDE_RELAX);
+			float quat_interp[4], quat_final_prev[4];
 			/* TODO: maybe a sensitivity ctrl on top of this is needed */
 			int iters = (int)ceil(10.0f * pso->percentage);
+
+			copy_qt_qt(quat_final, quat_curr);
 
 			/* perform this blending several times until a satisfactory result is reached */
 			while (iters-- > 0) {
 				/* calculate the interpolation between the endpoints */
 				interp_qt_qtqt(quat_interp, quat_prev, quat_next, (cframe - pso->prevFrame) / (pso->nextFrame - pso->prevFrame));
 
-				/* make a copy of the original rotation */
-				copy_qt_qt(quat_orig, pchan->quat);
+				normalize_qt_qt(quat_final_prev, quat_final);
 
 				/* tricky interpolations - blending between original and new */
-				interp_qt_qtqt(pchan->quat, quat_orig, quat_interp, 1.0f / 6.0f);
+				interp_qt_qtqt(quat_final, quat_final_prev, quat_interp, 1.0f / 6.0f);
 			}
 		}
+
+		/* Apply final to the pose bone, keeping compatible for similar keyframe positions. */
+		quat_to_compatible_quat(pchan->quat, quat_final, quat_curr_orig);
 	}
 
 	/* free the path now */
@@ -696,7 +704,7 @@ static void pose_slide_apply(bContext *C, tPoseSlideOp *pso)
 	pose_slide_refresh(C, pso);
 }
 
-/* perform autokeyframing after changes were made + confirmed */
+/* perform auto-key-framing after changes were made + confirmed */
 static void pose_slide_autoKeyframe(bContext *C, tPoseSlideOp *pso)
 {
 	/* wrapper around the generic call */
@@ -1652,20 +1660,21 @@ void POSE_OT_propagate(wmOperatorType *ot)
 {
 	static const EnumPropertyItem terminate_items[] = {
 		{POSE_PROPAGATE_SMART_HOLDS, "WHILE_HELD", 0, "While Held",
-	     "Propagate pose to all keyframes after current frame that don't change (Default behavior)"},
+		 "Propagate pose to all keyframes after current frame that don't change (Default behavior)"},
 		{POSE_PROPAGATE_NEXT_KEY, "NEXT_KEY", 0, "To Next Keyframe",
-	     "Propagate pose to first keyframe following the current frame only"},
+		 "Propagate pose to first keyframe following the current frame only"},
 		{POSE_PROPAGATE_LAST_KEY, "LAST_KEY", 0, "To Last Keyframe",
-	     "Propagate pose to the last keyframe only (i.e. making action cyclic)"},
+		 "Propagate pose to the last keyframe only (i.e. making action cyclic)"},
 		{POSE_PROPAGATE_BEFORE_FRAME, "BEFORE_FRAME", 0, "Before Frame",
-	     "Propagate pose to all keyframes between current frame and 'Frame' property"},
+		 "Propagate pose to all keyframes between current frame and 'Frame' property"},
 		{POSE_PROPAGATE_BEFORE_END, "BEFORE_END", 0, "Before Last Keyframe",
-	     "Propagate pose to all keyframes from current frame until no more are found"},
+		 "Propagate pose to all keyframes from current frame until no more are found"},
 		{POSE_PROPAGATE_SELECTED_KEYS, "SELECTED_KEYS", 0, "On Selected Keyframes",
-	     "Propagate pose to all selected keyframes"},
+		 "Propagate pose to all selected keyframes"},
 		{POSE_PROPAGATE_SELECTED_MARKERS, "SELECTED_MARKERS", 0, "On Selected Markers",
-	     "Propagate pose to all keyframes occurring on frames with Scene Markers after the current frame"},
-		{0, NULL, 0, NULL, NULL}};
+		 "Propagate pose to all keyframes occurring on frames with Scene Markers after the current frame"},
+		{0, NULL, 0, NULL, NULL},
+	};
 
 	/* identifiers */
 	ot->name = "Propagate Pose";

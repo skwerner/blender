@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,12 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/python/generic/py_capi_utils.c
- *  \ingroup pygen
+/** \file
+ * \ingroup pygen
  *
  * Extend upon CPython's API, filling in some gaps, these functions use PyC_
  * prefix to distinguish them apart from CPython.
@@ -323,8 +319,12 @@ void PyC_FileAndNum(const char **filename, int *lineno)
 {
 	PyFrameObject *frame;
 
-	if (filename) *filename = NULL;
-	if (lineno)   *lineno = -1;
+	if (filename) {
+		*filename = NULL;
+	}
+	if (lineno) {
+		*lineno = -1;
+	}
 
 	if (!(frame = PyThreadState_GET()->frame)) {
 		return;
@@ -388,10 +388,13 @@ PyObject *PyC_Object_GetAttrStringArgs(PyObject *o, Py_ssize_t n, ...)
 		attr = va_arg(vargs, char *);
 		item = PyObject_GetAttrString(item, attr);
 
-		if (item)
+		if (item) {
 			Py_DECREF(item);
-		else /* python will set the error value here */
+		}
+		else {
+			/* python will set the error value here */
 			break;
+		}
 
 	}
 	va_end(vargs);
@@ -531,8 +534,9 @@ PyObject *PyC_ExceptionBuffer(void)
 
 	PyObject *error_type, *error_value, *error_traceback;
 
-	if (!PyErr_Occurred())
+	if (!PyErr_Occurred()) {
 		return NULL;
+	}
 
 	PyErr_Fetch(&error_type, &error_value, &error_traceback);
 
@@ -597,8 +601,9 @@ PyObject *PyC_ExceptionBuffer_Simple(void)
 
 	PyObject *error_type, *error_value, *error_traceback;
 
-	if (!PyErr_Occurred())
+	if (!PyErr_Occurred()) {
 		return NULL;
+	}
 
 	PyErr_Fetch(&error_type, &error_value, &error_traceback);
 
@@ -779,9 +784,10 @@ void PyC_SetHomePath(const char *py_path_bundle)
 #ifdef __APPLE__
 	/* OSX allow file/directory names to contain : character (represented as / in the Finder)
 	 * but current Python lib (release 3.1.1) doesn't handle these correctly */
-	if (strchr(py_path_bundle, ':'))
+	if (strchr(py_path_bundle, ':')) {
 		printf("Warning : Blender application is located in a path containing : or / chars\
 		       \nThis may make python import function fail\n");
+	}
 #endif
 
 
@@ -1248,7 +1254,6 @@ bool PyC_RunString_AsString(const char *imports[], const char *expr, const char 
 #endif  /* #ifndef MATH_STANDALONE */
 
 /* -------------------------------------------------------------------- */
-
 /** \name Int Conversion
  *
  * \note Python doesn't provide overflow checks for specific bit-widths.
@@ -1340,7 +1345,6 @@ uint32_t PyC_Long_AsU32(PyObject *value)
  */
 
 /* -------------------------------------------------------------------- */
-
 /** \name Py_buffer Utils
  *
  * \{ */

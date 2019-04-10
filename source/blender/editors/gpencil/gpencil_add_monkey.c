@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,17 +15,12 @@
  *
  * The Original Code is Copyright (C) 2017 Blender Foundation
  * This is a new part of Blender
- *
- * Contributor(s): Antonio Vazquez, Matias Mendiola
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/gpencil/gpencil_add_monkey.c
- *  \ingroup edgpencil
+/** \file
+ * \ingroup edgpencil
  */
 
-#include "BLI_blenlib.h"
 #include "BLI_math.h"
 #include "BLI_utildefines.h"
 
@@ -38,6 +31,7 @@
 #include "BKE_brush.h"
 #include "BKE_context.h"
 #include "BKE_gpencil.h"
+#include "BKE_library.h"
 #include "BKE_main.h"
 #include "BKE_material.h"
 
@@ -66,10 +60,10 @@ static int gpencil_monkey_color(
 		}
 	}
 
+	int idx;
+
 	/* create a new one */
-	BKE_object_material_slot_add(bmain, ob);
-	ma = BKE_material_add_gpencil(bmain, pct->name);
-	assign_material(bmain, ob, ma, ob->totcol, BKE_MAT_ASSIGN_USERPREF);
+	ma = BKE_gpencil_object_material_new(bmain, ob, pct->name, &idx);
 
 	copy_v4_v4(ma->gp_style->stroke_rgba, pct->line);
 	copy_v4_v4(ma->gp_style->fill_rgba, pct->fill);
@@ -81,8 +75,11 @@ static int gpencil_monkey_color(
 	if (!fill) {
 		ma->gp_style->flag &= ~GP_STYLE_FILL_SHOW;
 	}
+	else {
+		ma->gp_style->flag |= GP_STYLE_FILL_SHOW;
+	}
 
-	return BKE_gpencil_get_material_index(ob, ma) - 1;
+	return idx;
 }
 
 /* ***************************************************************** */
@@ -1400,31 +1397,31 @@ static const ColorTemplate gp_monkey_pct_black = {
 static const ColorTemplate gp_monkey_pct_skin = {
 	"Skin",
 	{0.733f, 0.569f, 0.361f, 1.0f},
-	{0.745f, 0.502f, 0.278f, 1.0f}
+	{0.745f, 0.502f, 0.278f, 1.0f},
 };
 
 static const ColorTemplate gp_monkey_pct_skin_light = {
 	"Skin_Light",
 	{0.914f, 0.827f, 0.635f, 1.0f},
-	{0.913f, 0.828f, 0.637f, 0.0f}
+	{0.913f, 0.828f, 0.637f, 0.0f},
 };
 
 static const ColorTemplate gp_monkey_pct_skin_shadow = {
 	"Skin_Shadow",
 	{0.322f, 0.29f, 0.224f, 0.5f},
-	{0.32f, 0.29f, 0.223f, 0.3f}
+	{0.32f, 0.29f, 0.223f, 0.3f},
 };
 
 static const ColorTemplate gp_monkey_pct_eyes = {
 	"Eyes",
 	{0.553f, 0.39f, 0.266f, 0.0f},
-	{0.847f, 0.723f, 0.599f, 1.0f}
+	{0.847f, 0.723f, 0.599f, 1.0f},
 };
 
 static const ColorTemplate gp_monkey_pct_pupils = {
 	"Pupils",
 	{0.0f, 0.0f, 0.0f, 0.0f},
-	{0.0f, 0.0f, 0.0f, 1.0f}
+	{0.0f, 0.0f, 0.0f, 1.0f},
 };
 
 /* ***************************************************************** */
@@ -1449,10 +1446,6 @@ void ED_gpencil_create_monkey(bContext *C, Object *ob, float mat[4][4])
 
 	/* set first color as active */
 	ob->actcol = color_Black + 1;
-	Material *ma = give_current_material(ob, ob->actcol);
-	if (ma != NULL) {
-		BKE_brush_update_material(bmain, ma, NULL);
-	}
 
 	/* layers */
 	/* NOTE: For now, we just add new layers, to make it easier to separate out old/new instances */

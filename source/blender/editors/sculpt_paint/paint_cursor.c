@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,15 +15,10 @@
  *
  * The Original Code is Copyright (C) 2009 by Nicholas Bishop
  * All rights reserved.
- *
- * Contributor(s): Jason Wilkins, Tom Musgrove.
- *
- * ***** END GPL LICENSE BLOCK *****
- *
  */
 
-/** \file blender/editors/sculpt_paint/paint_cursor.c
- *  \ingroup edsculpt
+/** \file
+ * \ingroup edsculpt
  */
 
 #include "MEM_guardedalloc.h"
@@ -803,11 +796,11 @@ static void paint_draw_alpha_overlay(
         UnifiedPaintSettings *ups, Brush *brush,
         ViewContext *vc, int x, int y, float zoom, ePaintMode mode)
 {
-	/* color means that primary brush texture is colured and
-	 * secondary is used for alpha/mask control */
+	/* Color means that primary brush texture is colored and
+	 * secondary is used for alpha/mask control. */
 	bool col = ELEM(mode, PAINT_MODE_TEXTURE_3D, PAINT_MODE_TEXTURE_2D, PAINT_MODE_VERTEX) ? true : false;
 	eOverlayControlFlags flags = BKE_paint_get_overlay_flags();
-	gpuPushAttrib(GPU_DEPTH_BUFFER_BIT | GPU_BLEND_BIT);
+	gpuPushAttr(GPU_DEPTH_BUFFER_BIT | GPU_BLEND_BIT);
 
 	/* Translate to region. */
 	GPU_matrix_push();
@@ -832,7 +825,7 @@ static void paint_draw_alpha_overlay(
 	}
 
 	GPU_matrix_pop();
-	gpuPopAttrib();
+	gpuPopAttr();
 }
 
 

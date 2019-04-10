@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,10 @@
  *
  * The Original Code is Copyright (C) 2009 Blender Foundation, Joshua Leung
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): Joshua Leung (full recode)
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/animation/keyframing.c
- *  \ingroup edanimation
+/** \file
+ * \ingroup edanimation
  */
 
 
@@ -87,6 +79,8 @@
 #include "RNA_enum_types.h"
 
 #include "anim_intern.h"
+
+static KeyingSet *keyingset_get_from_op_with_error(wmOperator *op, PropertyRNA *prop, Scene *scene);
 
 /* ************************************************** */
 /* Keyframing Setting Wrangling */
@@ -165,7 +159,7 @@ bAction *verify_adt_action(Main *bmain, ID *id, short add)
 		DEG_relations_tag_update(bmain);
 	}
 
-	DEG_id_tag_update(&adt->action->id, ID_RECALC_COPY_ON_WRITE);
+	DEG_id_tag_update(&adt->action->id, ID_RECALC_ANIMATION_NO_FLUSH);
 
 	/* return the action */
 	return adt->action;
@@ -1325,10 +1319,10 @@ short insert_keyframe(
 
 	if (ret) {
 		if (act != NULL) {
-			DEG_id_tag_update(&act->id, ID_RECALC_COPY_ON_WRITE);
+			DEG_id_tag_update(&act->id, ID_RECALC_ANIMATION_NO_FLUSH);
 		}
 		if (adt != NULL && adt->action != NULL && adt->action != act) {
-			DEG_id_tag_update(&adt->action->id, ID_RECALC_COPY_ON_WRITE);
+			DEG_id_tag_update(&adt->action->id, ID_RECALC_ANIMATION_NO_FLUSH);
 		}
 	}
 
@@ -1371,6 +1365,20 @@ static bool delete_keyframe_fcurve(AnimData *adt, FCurve *fcu, float cfra)
 		return true;
 	}
 	return false;
+}
+
+static void deg_tag_after_keyframe_delete(Main *bmain, ID *id, AnimData *adt)
+{
+	if (adt->action == NULL) {
+		/* In the case last f-curve wes removed need to inform dependency graph
+		 * about relations update, since it needs to get rid of animation operation
+		 * for this datablock. */
+		DEG_id_tag_update_ex(bmain, id, ID_RECALC_ANIMATION_NO_FLUSH);
+		DEG_relations_tag_update(bmain);
+	}
+	else {
+		DEG_id_tag_update_ex(bmain, &adt->action->id, ID_RECALC_ANIMATION_NO_FLUSH);
+	}
 }
 
 short delete_keyframe(Main *bmain, ReportList *reports, ID *id, bAction *act,
@@ -1449,12 +1457,8 @@ short delete_keyframe(Main *bmain, ReportList *reports, ID *id, bAction *act,
 		ret += delete_keyframe_fcurve(adt, fcu, cfra);
 
 	}
-	/* In the case last f-curve wes removed need to inform dependency graph
-	 * about relations update, since it needs to get rid of animation operation
-	 * for this datablock. */
-	if (ret && adt->action == NULL) {
-		DEG_id_tag_update_ex(bmain, id, ID_RECALC_COPY_ON_WRITE);
-		DEG_relations_tag_update(bmain);
+	if (ret) {
+		deg_tag_after_keyframe_delete(bmain, id, adt);
 	}
 	/* return success/failure */
 	return ret;
@@ -1545,12 +1549,8 @@ static short clear_keyframe(Main *bmain, ReportList *reports, ID *id, bAction *a
 		/* return success */
 		ret++;
 	}
-	/* In the case last f-curve wes removed need to inform dependency graph
-	 * about relations update, since it needs to get rid of animation operation
-	 * for this datablock. */
-	if (ret && adt->action == NULL) {
-		DEG_id_tag_update_ex(bmain, id, ID_RECALC_COPY_ON_WRITE);
-		DEG_relations_tag_update(bmain);
+	if (ret) {
+		deg_tag_after_keyframe_delete(bmain, id, adt);
 	}
 	/* return success/failure */
 	return ret;
@@ -1589,26 +1589,12 @@ static int insert_key_exec(bContext *C, wmOperator *op)
 	Scene *scene = CTX_data_scene(C);
 	Object *obedit = CTX_data_edit_object(C);
 	bool ob_edit_mode = false;
-	KeyingSet *ks = NULL;
-	int type = RNA_enum_get(op->ptr, "type");
+
 	float cfra = (float)CFRA; // XXX for now, don't bother about all the yucky offset crap
 	short success;
 
-	/* type is the Keying Set the user specified to use when calling the operator:
-	 * - type == 0: use scene's active Keying Set
-	 * - type > 0: use a user-defined Keying Set from the active scene
-	 * - type < 0: use a builtin Keying Set
-	 */
-	if (type == 0)
-		type = scene->active_keyingset;
-	if (type > 0)
-		ks = BLI_findlink(&scene->keyingsets, type - 1);
-	else
-		ks = BLI_findlink(&builtin_keyingsets, -type - 1);
-
-	/* report failures */
+	KeyingSet *ks = keyingset_get_from_op_with_error(op, op->type->prop, scene);
 	if (ks == NULL) {
-		BKE_report(op->reports, RPT_ERROR, "No active keying set");
 		return OPERATOR_CANCELLED;
 	}
 
@@ -1668,6 +1654,36 @@ void ANIM_OT_keyframe_insert(wmOperatorType *ot)
 	/* keyingset to use (dynamic enum) */
 	prop = RNA_def_enum(ot->srna, "type", DummyRNA_DEFAULT_items, 0, "Keying Set", "The Keying Set to use");
 	RNA_def_enum_funcs(prop, ANIM_keying_sets_enum_itemf);
+	RNA_def_property_flag(prop, PROP_HIDDEN);
+	ot->prop = prop;
+
+	/* confirm whether a keyframe was added by showing a popup
+	 * - by default, this is enabled, since this operator is assumed to be called independently
+	 */
+	prop = RNA_def_boolean(ot->srna, "confirm_success", 1, "Confirm Successful Insert",
+	                       "Show a popup when the keyframes get successfully added");
+	RNA_def_property_flag(prop, PROP_HIDDEN);
+}
+
+/* Clone of 'ANIM_OT_keyframe_insert' which uses a name for the keying set instead of an enum. */
+void ANIM_OT_keyframe_insert_by_name(wmOperatorType *ot)
+{
+	PropertyRNA *prop;
+
+	/* identifiers */
+	ot->name = "Insert Keyframe (by name)";
+	ot->idname = "ANIM_OT_keyframe_insert_by_name";
+	ot->description = "Alternate access to 'Insert Keyframe' for keymaps to use";
+
+	/* callbacks */
+	ot->exec = insert_key_exec;
+	ot->poll = modify_key_op_poll;
+
+	/* flags */
+	ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
+
+	/* keyingset to use (idname) */
+	prop = RNA_def_string_file_path(ot->srna, "type", "Type", MAX_ID_NAME - 2, "", "");
 	RNA_def_property_flag(prop, PROP_HIDDEN);
 	ot->prop = prop;
 
@@ -1754,22 +1770,36 @@ void ANIM_OT_keyframe_insert_menu(wmOperatorType *ot)
 static int delete_key_exec(bContext *C, wmOperator *op)
 {
 	Scene *scene = CTX_data_scene(C);
-	KeyingSet *ks = NULL;
-	int type = RNA_enum_get(op->ptr, "type");
 	float cfra = (float)CFRA; // XXX for now, don't bother about all the yucky offset crap
 	short success;
 
-	/* type is the Keying Set the user specified to use when calling the operator:
-	 * - type == 0: use scene's active Keying Set
-	 * - type > 0: use a user-defined Keying Set from the active scene
-	 * - type < 0: use a builtin Keying Set
-	 */
-	if (type == 0)
-		type = scene->active_keyingset;
-	if (type > 0)
-		ks = BLI_findlink(&scene->keyingsets, type - 1);
-	else
-		ks = BLI_findlink(&builtin_keyingsets, -type - 1);
+	KeyingSet *ks = keyingset_get_from_op_with_error(op, op->type->prop, scene);
+	if (ks == NULL) {
+		return OPERATOR_CANCELLED;
+	}
+
+	const int prop_type = RNA_property_type(op->type->prop);
+	if (prop_type == PROP_ENUM) {
+		int type = RNA_property_enum_get(op->ptr, op->type->prop);
+		ks = ANIM_keyingset_get_from_enum_type(scene, type);
+		if (ks == NULL) {
+			BKE_report(op->reports, RPT_ERROR, "No active keying set");
+			return OPERATOR_CANCELLED;
+		}
+	}
+	else if (prop_type == PROP_STRING) {
+		char type_id[MAX_ID_NAME - 2];
+		RNA_property_string_get(op->ptr, op->type->prop, type_id);
+		ks = ANIM_keyingset_get_from_idname(scene, type_id);
+
+		if (ks == NULL) {
+			BKE_reportf(op->reports, RPT_ERROR, "No active keying set '%s' not found", type_id);
+			return OPERATOR_CANCELLED;
+		}
+	}
+	else {
+		BLI_assert(0);
+	}
 
 	/* report failure */
 	if (ks == NULL) {
@@ -1820,6 +1850,34 @@ void ANIM_OT_keyframe_delete(wmOperatorType *ot)
 	/* keyingset to use (dynamic enum) */
 	prop = RNA_def_enum(ot->srna, "type", DummyRNA_DEFAULT_items, 0, "Keying Set", "The Keying Set to use");
 	RNA_def_enum_funcs(prop, ANIM_keying_sets_enum_itemf);
+	RNA_def_property_flag(prop, PROP_HIDDEN);
+	ot->prop = prop;
+
+	/* confirm whether a keyframe was added by showing a popup
+	 * - by default, this is enabled, since this operator is assumed to be called independently
+	 */
+	RNA_def_boolean(ot->srna, "confirm_success", 1, "Confirm Successful Delete",
+	                "Show a popup when the keyframes get successfully removed");
+}
+
+void ANIM_OT_keyframe_delete_by_name(wmOperatorType *ot)
+{
+	PropertyRNA *prop;
+
+	/* identifiers */
+	ot->name = "Delete Keying-Set Keyframe (by name)";
+	ot->idname = "ANIM_OT_keyframe_delete_by_name";
+	ot->description = "Alternate access to 'Delete Keyframe' for keymaps to use";
+
+	/* callbacks */
+	ot->exec = delete_key_exec;
+	ot->poll = modify_key_op_poll;
+
+	/* flags */
+	ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
+
+	/* keyingset to use (idname) */
+	prop = RNA_def_string_file_path(ot->srna, "type", "Type", MAX_ID_NAME - 2, "", "");
 	RNA_def_property_flag(prop, PROP_HIDDEN);
 	ot->prop = prop;
 
@@ -1977,6 +2035,7 @@ static int delete_key_v3d_exec(bContext *C, wmOperator *op)
 				 */
 				success += delete_keyframe_fcurve(adt, fcu, cfra_unmap);
 			}
+			DEG_id_tag_update(&ob->adt->action->id, ID_RECALC_ANIMATION_NO_FLUSH);
 		}
 
 		/* report success (or failure) */
@@ -2127,6 +2186,13 @@ static int insert_key_button_exec(bContext *C, wmOperator *op)
 	}
 
 	if (success) {
+		ID *id = ptr.id.data;
+		AnimData *adt = BKE_animdata_from_id(id);
+		if (adt->action != NULL) {
+			DEG_id_tag_update(&adt->action->id, ID_RECALC_ANIMATION_NO_FLUSH);
+		}
+		DEG_id_tag_update(id, ID_RECALC_ANIMATION_NO_FLUSH);
+
 		/* send updates */
 		UI_context_update_anim_flag(C);
 
@@ -2591,3 +2657,36 @@ bool ED_autokeyframe_pchan(bContext *C, Scene *scene, Object *ob, bPoseChannel *
 		return false;
 	}
 }
+
+/* -------------------------------------------------------------------- */
+/** \name Internal Utilities
+ * \{ */
+
+/** Use for insert/delete key-frame. */
+static KeyingSet *keyingset_get_from_op_with_error(wmOperator *op, PropertyRNA *prop, Scene *scene)
+{
+	KeyingSet *ks = NULL;
+	const int prop_type = RNA_property_type(prop);
+	if (prop_type == PROP_ENUM) {
+		int type = RNA_property_enum_get(op->ptr, prop);
+		ks = ANIM_keyingset_get_from_enum_type(scene, type);
+		if (ks == NULL) {
+			BKE_report(op->reports, RPT_ERROR, "No active keying set");
+		}
+	}
+	else if (prop_type == PROP_STRING) {
+		char type_id[MAX_ID_NAME - 2];
+		RNA_property_string_get(op->ptr, prop, type_id);
+		ks = ANIM_keyingset_get_from_idname(scene, type_id);
+
+		if (ks == NULL) {
+			BKE_reportf(op->reports, RPT_ERROR, "Keying set '%s' not found", type_id);
+		}
+	}
+	else {
+		BLI_assert(0);
+	}
+	return ks;
+}
+
+/** \} */

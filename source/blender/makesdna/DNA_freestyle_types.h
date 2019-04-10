@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,19 +15,13 @@
  *
  * The Original Code is Copyright (C) 2010 Blender Foundation.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
 #ifndef __DNA_FREESTYLE_TYPES_H__
 #define __DNA_FREESTYLE_TYPES_H__
 
-/** \file DNA_freestyle_types.h
- *  \ingroup DNA
+/** \file
+ * \ingroup DNA
  */
 
 #include "DNA_defs.h"
@@ -39,8 +31,8 @@
 extern "C" {
 #endif
 
-struct FreestyleLineStyle;
 struct Collection;
+struct FreestyleLineStyle;
 struct Text;
 
 /* FreestyleConfig::flags */
@@ -124,11 +116,11 @@ typedef struct FreestyleLineSet {
 	int selection;
 	/** Quantitative invisibility. */
 	short qi;
-	short pad1;
+	char _pad1[2];
 	int qi_start, qi_end;
 	/** Feature edge types. */
 	int edge_types, exclude_edge_types;
-	int pad2;
+	char _pad2[4];
 	/** Group of target objects. */
 	struct Collection *group;
 
@@ -140,7 +132,7 @@ typedef struct FreestyleModuleConfig {
 
 	struct Text *script;
 	short is_displayed;
-	short pad[3];
+	char _pad[6];
 } FreestyleModuleConfig;
 
 typedef struct FreestyleConfig {

@@ -36,9 +36,12 @@ set(SRC_CUDA_KERNELS
 )
 
 set(SRC_OPENCL_KERNELS
-	kernels/opencl/kernel.cl
+	kernels/opencl/kernel_bake.cl
+	kernels/opencl/kernel_base.cl
+	kernels/opencl/kernel_displace.cl
+	kernels/opencl/kernel_background.cl
 	kernels/opencl/kernel_state_buffer_size.cl
-	kernels/opencl/kernel_split.cl
+	kernels/opencl/kernel_split_bundle.cl
 	kernels/opencl/kernel_data_init.cl
 	kernels/opencl/kernel_path_init.cl
 	kernels/opencl/kernel_queue_enqueue.cl
@@ -343,11 +346,11 @@ if(WITH_CYCLES_CUDA_BINARIES)
 	set(CUDA_VERSION "${CUDA_VERSION_MAJOR}${CUDA_VERSION_MINOR}")
 
 	# warn for other versions
-	if(CUDA_VERSION MATCHES "90" OR CUDA_VERSION MATCHES "91" OR CUDA_VERSION MATCHES "100")
+	if(CUDA_VERSION MATCHES "101")
 	else()
 		message(WARNING
 			"CUDA version ${CUDA_VERSION_MAJOR}.${CUDA_VERSION_MINOR} detected, "
-			"build may succeed but only CUDA 9.0, 9.1 and 10.0 are officially supported")
+			"build may succeed but only CUDA 10.1 is officially supported")
 	endif()
 
 	# build for each arch
@@ -397,29 +400,17 @@ if(WITH_CYCLES_CUDA_BINARIES)
 			set(cuda_flags ${cuda_flags} -D __KERNEL_DEBUG__)
 		endif()
 
-		# Workaround to build only sm_7x kernels with CUDA 10, until
-		# older kernels work well with this version.
-		if(DEFINED CUDA10_NVCC_EXECUTABLE  AND (${arch} MATCHES "sm_7."))
-			set(with_cubin_compiler OFF)
-			set(cuda_nvcc_executable "${CUDA10_NVCC_EXECUTABLE}")
-			set(cuda_toolkit_root_dir "${CUDA10_TOOLKIT_ROOT_DIR}")
-		else()
-			set(with_cubin_compiler ${WITH_CYCLES_CUBIN_COMPILER})
-			set(cuda_nvcc_executable "${CUDA_NVCC_EXECUTABLE}")
-			set(cuda_toolkit_root_dir "${CUDA_TOOLKIT_ROOT_DIR}")
-		endif()
-
-		if(with_cubin_compiler)
+		if(WITH_CYCLES_CUBIN_COMPILER)
 			string(SUBSTRING ${arch} 3 -1 CUDA_ARCH)
 
 			# Needed to find libnvrtc-builtins.so. Can't do it from inside
 			# cycles_cubin_cc since the env variable is read before main()
 			if(APPLE)
 				set(CUBIN_CC_ENV ${CMAKE_COMMAND}
-					-E env DYLD_LIBRARY_PATH="${cuda_toolkit_root_dir}/lib")
+					-E env DYLD_LIBRARY_PATH="${CUDA_TOOLKIT_ROOT_DIR}/lib")
 			elseif(UNIX)
 				set(CUBIN_CC_ENV ${CMAKE_COMMAND}
-					-E env LD_LIBRARY_PATH="${cuda_toolkit_root_dir}/lib64")
+					-E env LD_LIBRARY_PATH="${CUDA_TOOLKIT_ROOT_DIR}/lib64")
 			endif()
 
 			add_custom_command(
@@ -430,12 +421,12 @@ if(WITH_CYCLES_CUDA_BINARIES)
 						-i ${CMAKE_CURRENT_SOURCE_DIR}${cuda_kernel_src}
 						${cuda_flags}
 						-v
-						-cuda-toolkit-dir "${cuda_toolkit_root_dir}"
+						-cuda-toolkit-dir "${CUDA_TOOLKIT_ROOT_DIR}"
 				DEPENDS ${kernel_sources} cycles_cubin_cc)
 		else()
 			add_custom_command(
 				OUTPUT ${cuda_cubin}
-				COMMAND ${cuda_nvcc_executable}
+				COMMAND ${CUDA_NVCC_EXECUTABLE}
 						-arch=${arch}
 						${CUDA_NVCC_FLAGS}
 						--cubin
@@ -454,7 +445,7 @@ if(WITH_CYCLES_CUDA_BINARIES)
 	foreach(arch ${CYCLES_CUDA_BINARIES_ARCH})
 		if(${arch} MATCHES "sm_2.")
 			message(STATUS "CUDA binaries for ${arch} are no longer supported, skipped.")
-		elseif(${arch} MATCHES "sm_7." AND (${CUDA_VERSION} LESS 100) AND (NOT DEFINED CUDA10_NVCC_EXECUTABLE))
+		elseif(${arch} MATCHES "sm_7." AND ${CUDA_VERSION} LESS 100)
 			message(STATUS "CUDA binaries for ${arch} require CUDA 10.0+, skipped.")
 		else()
 			# Compile regular kernel

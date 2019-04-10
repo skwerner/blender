@@ -16,9 +16,6 @@
 #
 # The Original Code is Copyright (C) 2016, Blender Foundation
 # All rights reserved.
-#
-# Contributor(s): Sergey Sharybin.
-#
 # ***** END GPL LICENSE BLOCK *****
 
 # Libraries configuration for any *nix system including Linux and Unix.
@@ -40,6 +37,10 @@ if(EXISTS ${LIBDIR})
 	set(CMAKE_PREFIX_PATH ${LIBDIR}/zlib ${LIB_SUBDIRS})
 	set(WITH_STATIC_LIBS ON)
 	set(WITH_OPENMP_STATIC ON)
+endif()
+
+if(WITH_STATIC_LIBS)
+	set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -static-libstdc++")
 endif()
 
 # Wrapper to prefer static libraries

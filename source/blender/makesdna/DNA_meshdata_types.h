@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,10 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file DNA_meshdata_types.h
- *  \ingroup DNA
+/** \file
+ * \ingroup DNA
  */
 
 #ifndef __DNA_MESHDATA_TYPES_H__
@@ -83,7 +75,7 @@ typedef struct MPoly {
 	/** Keep signed since we need to subtract when getting the previous loop. */
 	int totloop;
 	short mat_nr;
-	char flag, pad;
+	char flag, _pad;
 } MPoly;
 
 /* the e here is because we want to move away from relying on edge hashes.*/
@@ -192,7 +184,7 @@ typedef struct MVertTri {
 } MVertTri;
 
 //typedef struct MTexPoly {
-//	void *pad;
+//	void *_pad;
 //} MTexPoly;
 
 typedef struct MLoopUV {
@@ -285,7 +277,7 @@ typedef struct MDisps {
 	unsigned int *hidden;
 } MDisps;
 
-/** Multires structs kept for compatibility with old files **/
+/** Multires structs kept for compatibility with old files. */
 typedef struct MultiresCol {
 	float a, r, g, b;
 } MultiresCol;
@@ -298,7 +290,7 @@ typedef struct MultiresColFace {
 typedef struct MultiresFace {
 	unsigned int v[4];
 	unsigned int mid;
-	char flag, mat_nr, pad[2];
+	char flag, mat_nr, _pad[2];
 } MultiresFace;
 
 typedef struct MultiresEdge {
@@ -313,7 +305,8 @@ typedef struct MultiresLevel {
 	MultiresColFace *colfaces;
 	MultiresEdge *edges;
 
-	unsigned int totvert, totface, totedge, pad;
+	unsigned int totvert, totface, totedge;
+	char _pad[4];
 
 	/* Kept for compatibility with even older files */
 	MVert *verts;
@@ -333,7 +326,7 @@ typedef struct Multires {
 	char *edge_creases;
 } Multires;
 
-/** End Multires **/
+/* End Multires */
 
 typedef struct MRecast {
 	int i;
@@ -346,7 +339,7 @@ typedef struct GridPaintMask {
 	/* The maximum multires level associated with this grid */
 	unsigned int level;
 
-	int pad;
+	char _pad[4];
 } GridPaintMask;
 
 typedef enum eMVertSkinFlag {
@@ -372,7 +365,7 @@ typedef struct MVertSkin {
 
 typedef struct FreestyleEdge {
 	char flag;
-	char pad[3];
+	char _pad[3];
 } FreestyleEdge;
 
 /* FreestyleEdge->flag */
@@ -382,7 +375,7 @@ enum {
 
 typedef struct FreestyleFace {
 	char flag;
-	char pad[3];
+	char _pad[3];
 } FreestyleFace;
 
 /* FreestyleFace->flag */

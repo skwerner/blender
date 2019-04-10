@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,41 +12,18 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file DNA_workspace_types.h
- *  \ingroup DNA
+/** \file
+ * \ingroup DNA
  *
- * Use API in BKE_workspace.h!
- * Struct members marked with DNA_PRIVATE_WORKSPACE will throw a
- * warning saying it's deprecated when used outside of workspace.c.
+ * Use API in BKE_workspace.h to edit these.
  */
 
 #ifndef __DNA_WORKSPACE_TYPES_H__
 #define __DNA_WORKSPACE_TYPES_H__
 
 #include "DNA_scene_types.h"
-
-/* Same logic as DNA_DEPRECATED_ALLOW, but throws 'deprecated'
- * warnings if DNA_PRIVATE_WORKSPACE_ALLOW is not defined */
-#ifdef DNA_PRIVATE_WORKSPACE_ALLOW
-   /* allow use of private items */
-#  define DNA_PRIVATE_WORKSPACE
-#else
-#  ifndef DNA_PRIVATE_WORKSPACE
-#    define DNA_PRIVATE_WORKSPACE DNA_PRIVATE_ATTR
-#  endif
-#endif
-
-#ifdef DNA_PRIVATE_READ_WRITE_ALLOW
-#  define DNA_PRIVATE_WORKSPACE_READ_WRITE
-#else
-#  ifndef DNA_PRIVATE_WORKSPACE_READ_WRITE
-#    define DNA_PRIVATE_WORKSPACE_READ_WRITE DNA_PRIVATE_WORKSPACE
-#  endif
-#endif
 
 /* Currently testing, allow to disable. */
 #define USE_WORKSPACE_TOOL
@@ -115,29 +90,29 @@ typedef struct WorkSpaceLayout {
 	/* The name of this layout, we override the RNA name of the screen with this
 	 * (but not ID name itself) */
 	/** MAX_NAME. */
-	char name[64] DNA_PRIVATE_WORKSPACE;
+	char name[64];
 } WorkSpaceLayout;
 
 /** Optional tags, which features to use, aligned with #bAddon names by convention. */
 typedef struct wmOwnerID {
 	struct wmOwnerID *next, *prev;
 	/** MAX_NAME. */
-	char name[64] DNA_PRIVATE_WORKSPACE;
+	char name[64];
 } wmOwnerID;
 
 typedef struct WorkSpace {
 	ID id;
 
 	/** WorkSpaceLayout. */
-	ListBase layouts DNA_PRIVATE_WORKSPACE;
+	ListBase layouts;
 	/* Store for each hook (so for each window) which layout has
 	 * been activated the last time this workspace was visible. */
 	/** WorkSpaceDataRelation. */
-	ListBase hook_layout_relations DNA_PRIVATE_WORKSPACE_READ_WRITE;
+	ListBase hook_layout_relations;
 
 	/* Feature tagging (use for addons) */
 	/** #wmOwnerID. */
-	ListBase owner_ids DNA_PRIVATE_WORKSPACE_READ_WRITE;
+	ListBase owner_ids;
 
 	/* should be: '#ifdef USE_WORKSPACE_TOOL'. */
 
@@ -146,7 +121,7 @@ typedef struct WorkSpace {
 
 	/**
 	 * BAD DESIGN WARNING:
-	 * This is a workaround for the topbar not knowing which tools spac */
+	 * This is a workaround for the topbar not knowing which tools spec. */
 	char tools_space_type;
 	/** Type is different for each space-type. */
 	char tools_mode;
@@ -155,7 +130,7 @@ typedef struct WorkSpace {
 	int object_mode;
 
 	/** Enum eWorkSpaceFlags. */
-	int flags DNA_PRIVATE_WORKSPACE;
+	int flags;
 
 	/* Number for workspace tab reordering in the UI. */
 	int order;
@@ -163,9 +138,6 @@ typedef struct WorkSpace {
 	/* Info text from modal operators (runtime). */
 	char *status_text;
 } WorkSpace;
-
-/* internal struct, but exported for read/write */
-#if defined(DNA_PRIVATE_READ_WRITE_ALLOW) || defined(DNA_PRIVATE_WORKSPACE_ALLOW)
 
 /**
  * Generic (and simple/primitive) struct for storing a history of assignments/relations
@@ -200,15 +172,13 @@ typedef struct WorkSpaceDataRelation {
 	void *value;
 } WorkSpaceDataRelation;
 
-#endif /* DNA_PRIVATE_WORKSPACE_READ_WRITE */
-
 /**
  * Little wrapper to store data that is going to be per window, but coming from the workspace.
  * It allows us to keep workspace and window data completely separate.
  */
 typedef struct WorkSpaceInstanceHook {
-	WorkSpace *active DNA_PRIVATE_WORKSPACE;
-	struct WorkSpaceLayout *act_layout DNA_PRIVATE_WORKSPACE;
+	WorkSpace *active;
+	struct WorkSpaceLayout *act_layout;
 
 	/* Needed because we can't change workspaces/layouts in running handler loop,
 	 * it would break context. */

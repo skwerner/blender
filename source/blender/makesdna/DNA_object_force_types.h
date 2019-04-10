@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,10 @@
  *
  * The Original Code is Copyright (C) 2004-2005 by Blender Foundation
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file DNA_object_force_types.h
- *  \ingroup DNA
+/** \file
+ * \ingroup DNA
  */
 
 #ifndef __DNA_OBJECT_FORCE_TYPES_H__
@@ -165,16 +157,18 @@ typedef struct PartDeflect {
 	/** Runtime only : end of the curve. */
 	float drawvec2[4];
 	/** Runtime only. */
-	float drawvec_falloff_min[3], pad1;
+	float drawvec_falloff_min[3];
+	char _pad1[4];
 	/** Runtime only. */
-	float drawvec_falloff_max[3], pad2;
+	float drawvec_falloff_max[3];
+	char _pad2[4];
 
 	/** Force source object. */
 	struct Object *f_source;
 
 	/** Friction of cloth collisions. */
 	float pdef_cfrict;
-	float pad;
+	char _pad[4];
 } PartDeflect;
 
 typedef struct EffectorWeights {
@@ -185,14 +179,14 @@ typedef struct EffectorWeights {
 	float weight[14];
 	float global_gravity;
 	short flag, rt[3];
-	int pad;
+	char _pad[4];
 } EffectorWeights;
 
 /* EffectorWeights->flag */
 #define EFF_WEIGHT_DO_HAIR		1
 
 /* Point cache file data types:
- * - used as (1<<flag) so poke jahka if you reach the limit of 15
+ * - used as (1 << flag) so poke jahka if you reach the limit of 15
  * - to add new data types update:
  *   - BKE_ptcache_data_size()
  *   - ptcache_file_init_pointers()
@@ -264,7 +258,7 @@ typedef struct PointCache {
 	int last_exact;
 	/** Used for editing cache - what is the last baked frame. */
 	int last_valid;
-	int pad;
+	char _pad[4];
 
 	/* for external cache files */
 	/** Number of cached points. */
@@ -278,11 +272,15 @@ typedef struct PointCache {
 	char info[64];
 	/** File path, 1024 = FILE_MAX. */
 	char path[1024];
+
 	/**
-	 * Array of length endframe-startframe+1 with flags to indicate cached frames.
+	 * Array of length `endframe - startframe + 1` with flags to indicate cached frames.
 	 * Can be later used for other per frame flags too if needed.
 	 */
 	char *cached_frames;
+	int cached_frames_len;
+	char _pad1[4];
+
 	struct ListBase mem_cache;
 
 	struct PTCacheEdit *edit;
@@ -310,7 +308,7 @@ typedef struct SoftBody {
 	struct BodyPoint *bpoint;
 	/** Not saved in file. */
 	struct BodySpring *bspring;
-	char   pad;
+	char   _pad;
 	char   msg_lock;
 	short  msg_value;
 
@@ -384,20 +382,20 @@ typedef struct SoftBody {
 	/* self collision*/
 	/** Fixed collision ball size if > 0. */
 	float colball;
-	/** Cooling down collision response . */
+	/** Cooling down collision response. */
 	float balldamp;
-	/** Pressure the ball is loaded with . */
+	/** Pressure the ball is loaded with. */
 	float ballstiff;
 	short sbc_mode;
-	short aeroedge,
-		minloops,
-		maxloops,
-		choke,
-		solver_ID,
-		plastic, springpreload
-		;
+	short aeroedge;
+	short minloops;
+	short maxloops;
+	short choke;
+	short solver_ID;
+	short plastic;
+	short springpreload;
 
-	/** Scratch pad/cache on live time not saved in file. */
+	/** Scratchpad/cache on live time not saved in file. */
 	struct SBScratch *scratch;
 	float shearstiff;
 	float inpush;
@@ -452,7 +450,7 @@ typedef struct SoftBody {
 /** used for (simple) force */
 #define PFIELD_GRAVITATION      (1 << 18)
 /** Enable cloth collision side detection based on normal. */
-#define PFIELD_CLOTH_USE_CULLING (1<< 19)
+#define PFIELD_CLOTH_USE_CULLING (1 << 19)
 /** Replace collision direction with collider normal. */
 #define PFIELD_CLOTH_USE_NORMAL (1 << 20)
 

@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,10 @@
  *
  * The Original Code is Copyright (C) 2006 by NaN Holding BV.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): Daniel (Genscher)
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file DNA_cloth_types.h
- *  \ingroup DNA
+/** \file
+ * \ingroup DNA
  */
 
 #ifndef __DNA_CLOTH_TYPES_H__
@@ -113,7 +105,7 @@ typedef struct ClothSimSettings {
 	float	bending_damping;
 	/** Size of voxel grid cells for continuum dynamics. */
 	float	voxel_cell_size;
-	int		pad;
+	char _pad[4];
 
 	/** Number of time steps per frame. */
 	int 	stepsPerFrame;
@@ -139,7 +131,7 @@ typedef struct ClothSimSettings {
 	short	presets;
 	short 	reset;
 
-	char pad0[4];
+	char _pad0[4];
 	struct EffectorWeights *effector_weights;
 
 	short	bending_model;
@@ -179,12 +171,12 @@ typedef struct ClothCollSettings {
 	short	self_loop_count DNA_DEPRECATED;
 	/** How many iterations for the collision loop. */
 	short	loop_count;
-	int pad;
+	char _pad[4];
 	/** Only use colliders from this group of objects. */
 	struct Collection *group;
 	/** Vgroup to paint which vertices are used for self collisions. */
 	short	vgroup_selfcol;
-	short pad2[3];
+	char _pad2[6];
 	/** Impulse clamp for object collisions. */
 	float	clamp;
 	/** Impulse clamp for self collisions. */

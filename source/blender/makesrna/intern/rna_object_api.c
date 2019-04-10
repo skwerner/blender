@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,15 +15,10 @@
  *
  * The Original Code is Copyright (C) 2009 Blender Foundation.
  * All rights reserved.
- *
- *
- * Contributor(s): Blender Foundation
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/makesrna/intern/rna_object_api.c
- *  \ingroup RNA
+/** \file
+ * \ingroup RNA
  */
 
 
@@ -59,7 +52,7 @@ static const EnumPropertyItem space_items[] = {
 	                            "The local space of a bone's parent bone"},
 	{CONSTRAINT_SPACE_LOCAL,    "LOCAL", 0, "Local Space",
 	                            "The local space of an object/bone"},
-	{0, NULL, 0, NULL, NULL}
+	{0, NULL, 0, NULL, NULL},
 };
 
 #ifdef RNA_RUNTIME
@@ -81,6 +74,7 @@ static const EnumPropertyItem space_items[] = {
 #include "BKE_report.h"
 
 #include "ED_object.h"
+#include "ED_screen.h"
 
 #include "DNA_curve_types.h"
 #include "DNA_mesh_types.h"
@@ -118,9 +112,11 @@ static void rna_Object_select_set(
 	WM_main_add_notifier(NC_SCENE | ND_OB_SELECT, scene);
 }
 
-static bool rna_Object_select_get(Object *ob, bContext *C, ReportList *reports)
+static bool rna_Object_select_get(Object *ob, bContext *C, ReportList *reports, ViewLayer *view_layer)
 {
-	ViewLayer *view_layer = CTX_data_view_layer(C);
+	if (view_layer == NULL) {
+		view_layer = CTX_data_view_layer(C);
+	}
 	Base *base = BKE_view_layer_base_find(view_layer, ob);
 
 	if (!base) {
@@ -131,10 +127,56 @@ static bool rna_Object_select_get(Object *ob, bContext *C, ReportList *reports)
 	return ((base->flag & BASE_SELECTED) != 0);
 }
 
-static bool rna_Object_visible_get(Object *ob, bContext *C, ReportList *reports)
+static void rna_Object_hide_set(
+        Object *ob, bContext *C, ReportList *reports,
+        bool hide, ViewLayer *view_layer)
 {
-	ViewLayer *view_layer = CTX_data_view_layer(C);
-	View3D *v3d = CTX_wm_view3d(C);
+	if (view_layer == NULL) {
+		view_layer = CTX_data_view_layer(C);
+	}
+	Base *base = BKE_view_layer_base_find(view_layer, ob);
+
+	if (!base) {
+		BKE_reportf(reports, RPT_ERROR, "Object '%s' not in View Layer '%s'!", ob->id.name + 2, view_layer->name);
+		return;
+	}
+
+	if (hide) {
+		base->flag |= BASE_HIDDEN;
+	}
+	else {
+		base->flag &= ~BASE_HIDDEN;
+	}
+
+	Scene *scene = CTX_data_scene(C);
+	BKE_layer_collection_sync(scene, view_layer);
+	DEG_id_tag_update(&scene->id, ID_RECALC_BASE_FLAGS);
+	WM_event_add_notifier(C, NC_SCENE | ND_OB_SELECT, scene);
+}
+
+static bool rna_Object_hide_get(Object *ob, bContext *C, ReportList *reports, ViewLayer *view_layer)
+{
+	if (view_layer == NULL) {
+		view_layer = CTX_data_view_layer(C);
+	}
+	Base *base = BKE_view_layer_base_find(view_layer, ob);
+
+	if (!base) {
+		BKE_reportf(reports, RPT_ERROR, "Object '%s' not in View Layer '%s'!", ob->id.name + 2, view_layer->name);
+		return false;
+	}
+
+	return ((base->flag & BASE_HIDDEN) != 0);
+}
+
+static bool rna_Object_visible_get(Object *ob, bContext *C, ReportList *reports, ViewLayer *view_layer, View3D *v3d)
+{
+	if (view_layer == NULL) {
+		view_layer = CTX_data_view_layer(C);
+	}
+	if (v3d == NULL) {
+		v3d = CTX_wm_view3d(C);
+	}
 	Base *base = BKE_view_layer_base_find(view_layer, ob);
 
 	if (!base) {
@@ -145,8 +187,11 @@ static bool rna_Object_visible_get(Object *ob, bContext *C, ReportList *reports)
 	return BASE_VISIBLE(v3d, base);
 }
 
-static bool rna_Object_holdout_get(Object *ob, ReportList *reports, ViewLayer *view_layer)
+static bool rna_Object_holdout_get(Object *ob, bContext *C, ReportList *reports, ViewLayer *view_layer)
 {
+	if (view_layer == NULL) {
+		view_layer = CTX_data_view_layer(C);
+	}
 	Base *base = BKE_view_layer_base_find(view_layer, ob);
 
 	if (!base) {
@@ -157,8 +202,11 @@ static bool rna_Object_holdout_get(Object *ob, ReportList *reports, ViewLayer *v
 	return ((base->flag & BASE_HOLDOUT) != 0);
 }
 
-static bool rna_Object_indirect_only_get(Object *ob, ReportList *reports, ViewLayer *view_layer)
+static bool rna_Object_indirect_only_get(Object *ob, bContext *C, ReportList *reports, ViewLayer *view_layer)
 {
+	if (view_layer == NULL) {
+		view_layer = CTX_data_view_layer(C);
+	}
 	Base *base = BKE_view_layer_base_find(view_layer, ob);
 
 	if (!base) {
@@ -167,6 +215,61 @@ static bool rna_Object_indirect_only_get(Object *ob, ReportList *reports, ViewLa
 	}
 
 	return ((base->flag & BASE_INDIRECT_ONLY) != 0);
+}
+
+static Base *rna_Object_local_view_property_helper(bScreen *sc, View3D *v3d, Object *ob, ReportList *reports, Scene **r_scene)
+{
+	if (v3d->localvd == NULL) {
+		BKE_report(reports, RPT_ERROR, "Viewport not in local view");
+		return NULL;
+	}
+
+	wmWindow *win = ED_screen_window_find(sc, G_MAIN->wm.first);
+	ViewLayer *view_layer = WM_window_get_active_view_layer(win);
+	Base *base = BKE_view_layer_base_find(view_layer, ob);
+	if (base == NULL) {
+		BKE_reportf(reports,
+		            RPT_WARNING,
+		            "Object %s not in view layer %s",
+		            ob->id.name + 2,
+		            view_layer->name);
+
+	}
+	if (r_scene) {
+		*r_scene = win->scene;
+	}
+	return base;
+}
+
+static bool rna_Object_local_view_get(Object *ob, ReportList *reports, PointerRNA *v3d_ptr)
+{
+	bScreen *sc = v3d_ptr->id.data;
+	View3D *v3d = v3d_ptr->data;
+	Base *base = rna_Object_local_view_property_helper(sc, v3d, ob, reports, NULL);
+	if (base == NULL) {
+		return false; /* Error reported. */
+	}
+	return (base->local_view_bits & v3d->local_view_uuid) != 0;
+}
+
+static void rna_Object_local_view_set(Object *ob, ReportList *reports, PointerRNA *v3d_ptr, bool state)
+{
+	bScreen *sc = v3d_ptr->id.data;
+	View3D *v3d = v3d_ptr->data;
+	Scene *scene;
+	Base *base = rna_Object_local_view_property_helper(sc, v3d, ob, reports, &scene);
+	if (base == NULL) {
+		return; /* Error reported. */
+	}
+	const short local_view_bits_prev = base->local_view_bits;
+	SET_FLAG_FROM_TEST(base->local_view_bits, state, v3d->local_view_uuid);
+	if (local_view_bits_prev != base->local_view_bits) {
+		DEG_id_tag_update(&scene->id, ID_RECALC_BASE_FLAGS);
+		ScrArea *sa = ED_screen_area_find_with_spacedata(sc, (SpaceLink *)v3d, true);
+		if (sa) {
+			ED_area_tag_redraw(sa);
+		}
+	}
 }
 
 /* Convert a given matrix from a space to another (using the object and/or a bone as reference). */
@@ -256,12 +359,12 @@ static void rna_Object_shape_key_remove(
 	Key *key = BKE_key_from_object(ob);
 
 	if ((key == NULL) || BLI_findindex(&key->block, kb) == -1) {
-		BKE_reportf(reports, RPT_ERROR, "ShapeKey not found");
+		BKE_report(reports, RPT_ERROR, "ShapeKey not found");
 		return;
 	}
 
 	if (!BKE_object_shapekey_remove(bmain, ob, kb)) {
-		BKE_reportf(reports, RPT_ERROR, "Could not remove ShapeKey");
+		BKE_report(reports, RPT_ERROR, "Could not remove ShapeKey");
 		return;
 	}
 
@@ -501,7 +604,7 @@ void RNA_api_object(StructRNA *srna)
 	static const EnumPropertyItem mesh_type_items[] = {
 		{eModifierMode_Realtime, "PREVIEW", 0, "Preview", "Apply modifier preview settings"},
 		{eModifierMode_Render, "RENDER", 0, "Render", "Apply modifier render settings"},
-		{0, NULL, 0, NULL, NULL}
+		{0, NULL, 0, NULL, NULL},
 	};
 
 #ifndef NDEBUG
@@ -509,45 +612,77 @@ void RNA_api_object(StructRNA *srna)
 		{0, "SOURCE", 0, "Source", "Source mesh"},
 		{1, "DEFORM", 0, "Deform", "Objects deform mesh"},
 		{2, "FINAL", 0, "Final", "Objects final mesh"},
-		{0, NULL, 0, NULL, NULL}
+		{0, NULL, 0, NULL, NULL},
 	};
 #endif
 
 	/* Special wrapper to access the base selection value */
-	func = RNA_def_function(srna, "select_set", "rna_Object_select_set");
-	RNA_def_function_ui_description(func, "Select the object (for the active view layer)");
-	RNA_def_function_flag(func, FUNC_USE_CONTEXT | FUNC_USE_REPORTS);
-	parm = RNA_def_boolean(func, "state", 0, "", "Selection state to define");
-	RNA_def_parameter_flags(parm, 0, PARM_REQUIRED);
-	parm = RNA_def_pointer(func, "view_layer", "ViewLayer", "", "Operate on this view layer instead of the context");
-
 	func = RNA_def_function(srna, "select_get", "rna_Object_select_get");
-	RNA_def_function_ui_description(func, "Get the object selection for the active view layer");
+	RNA_def_function_ui_description(func, "Test if the object is selected. The selection state is per view layer");
 	RNA_def_function_flag(func, FUNC_USE_CONTEXT | FUNC_USE_REPORTS);
+	parm = RNA_def_pointer(func, "view_layer", "ViewLayer", "", "Use this instead of the active view layer");
 	parm = RNA_def_boolean(func, "result", 0, "", "Object selected");
 	RNA_def_function_return(func, parm);
 
-	func = RNA_def_function(srna, "visible_get", "rna_Object_visible_get");
-	RNA_def_function_ui_description(func, "Get the object visibility for the active view layer and viewport");
+	func = RNA_def_function(srna, "select_set", "rna_Object_select_set");
+	RNA_def_function_ui_description(func, "Select or deselect the object. The selection state is per view layer");
 	RNA_def_function_flag(func, FUNC_USE_CONTEXT | FUNC_USE_REPORTS);
+	parm = RNA_def_boolean(func, "state", 0, "", "Selection state to define");
+	RNA_def_parameter_flags(parm, 0, PARM_REQUIRED);
+	parm = RNA_def_pointer(func, "view_layer", "ViewLayer", "", "Use this instead of the active view layer");
+
+	func = RNA_def_function(srna, "hide_get", "rna_Object_hide_get");
+	RNA_def_function_ui_description(func, "Test if the object is hidden for viewport editing. This hiding state is per view layer");
+	RNA_def_function_flag(func, FUNC_USE_CONTEXT | FUNC_USE_REPORTS);
+	parm = RNA_def_pointer(func, "view_layer", "ViewLayer", "", "Use this instead of the active view layer");
+	parm = RNA_def_boolean(func, "result", 0, "", "Object hideed");
+	RNA_def_function_return(func, parm);
+
+	func = RNA_def_function(srna, "hide_set", "rna_Object_hide_set");
+	RNA_def_function_ui_description(func, "Hide the object for viewport editing. This hiding state is per view layer");
+	RNA_def_function_flag(func, FUNC_USE_CONTEXT | FUNC_USE_REPORTS);
+	parm = RNA_def_boolean(func, "state", 0, "", "Hide state to define");
+	RNA_def_parameter_flags(parm, 0, PARM_REQUIRED);
+	parm = RNA_def_pointer(func, "view_layer", "ViewLayer", "", "Use this instead of the active view layer");
+
+	func = RNA_def_function(srna, "visible_get", "rna_Object_visible_get");
+	RNA_def_function_ui_description(func, "Test if the object is visible in the 3D viewport, taking into account all visibility settings");
+	RNA_def_function_flag(func, FUNC_USE_CONTEXT | FUNC_USE_REPORTS);
+	parm = RNA_def_pointer(func, "view_layer", "ViewLayer", "", "Use this instead of the active view layer");
+	parm = RNA_def_pointer(func, "viewport", "SpaceView3D", "", "Use this instead of the active 3D viewport");
 	parm = RNA_def_boolean(func, "result", 0, "", "Object visible");
 	RNA_def_function_return(func, parm);
 
 	func = RNA_def_function(srna, "holdout_get", "rna_Object_holdout_get");
 	RNA_def_function_ui_description(func, "Test if object is masked in the view layer");
-	RNA_def_function_flag(func, FUNC_USE_REPORTS);
-	parm = RNA_def_pointer(func, "view_layer", "ViewLayer", "", "View layer to check against");
-	RNA_def_parameter_flags(parm, 0, PARM_REQUIRED);
+	RNA_def_function_flag(func, FUNC_USE_CONTEXT | FUNC_USE_REPORTS);
+	parm = RNA_def_pointer(func, "view_layer", "ViewLayer", "", "Use this instead of the active view layer");
 	parm = RNA_def_boolean(func, "result", 0, "", "Object holdout");
 	RNA_def_function_return(func, parm);
 
 	func = RNA_def_function(srna, "indirect_only_get", "rna_Object_indirect_only_get");
 	RNA_def_function_ui_description(func, "Test if object is set to contribute only indirectly (through shadows and reflections) in the view layer");
-	RNA_def_function_flag(func, FUNC_USE_REPORTS);
-	parm = RNA_def_pointer(func, "view_layer", "ViewLayer", "", "View layer to check against");
-	RNA_def_parameter_flags(parm, 0, PARM_REQUIRED);
+	RNA_def_function_flag(func, FUNC_USE_CONTEXT | FUNC_USE_REPORTS);
+	parm = RNA_def_pointer(func, "view_layer", "ViewLayer", "", "Use this instead of the active view layer");
 	parm = RNA_def_boolean(func, "result", 0, "", "Object indirect only");
 	RNA_def_function_return(func, parm);
+
+	/* Local View */
+	func = RNA_def_function(srna, "local_view_get", "rna_Object_local_view_get");
+	RNA_def_function_ui_description(func, "Get the local view state for this object");
+	RNA_def_function_flag(func, FUNC_USE_REPORTS);
+	parm = RNA_def_pointer(func, "viewport", "SpaceView3D", "", "Viewport in local view");
+	RNA_def_parameter_flags(parm, 0, PARM_RNAPTR | PARM_REQUIRED);
+	parm = RNA_def_boolean(func, "result", 0, "", "Object local view state");
+	RNA_def_function_return(func, parm);
+
+	func = RNA_def_function(srna, "local_view_set", "rna_Object_local_view_set");
+	RNA_def_function_ui_description(func, "Set the local view state for this object");
+	RNA_def_function_flag(func, FUNC_USE_REPORTS);
+	parm = RNA_def_pointer(func, "viewport", "SpaceView3D", "", "Viewport in local view");
+	RNA_def_parameter_flags(parm, 0, PARM_RNAPTR | PARM_REQUIRED);
+	parm = RNA_def_boolean(func, "state", 0, "", "Local view state to define");
+	RNA_def_parameter_flags(parm, 0, PARM_REQUIRED);
 
 	/* Matrix space conversion */
 	func = RNA_def_function(srna, "convert_space", "rna_Object_mat_convert_space");

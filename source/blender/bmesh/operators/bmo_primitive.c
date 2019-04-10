@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,14 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * Contributor(s): Joseph Eagar.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/bmesh/operators/bmo_primitive.c
- *  \ingroup bmesh
+/** \file
+ * \ingroup bmesh
  *
  * Primitive shapes.
  */
@@ -52,7 +46,7 @@ static const float icovert[12][3] = {
 	{-144.72f, 105.144f, 89.443f},
 	{55.277f, 170.128f, 89.443f},
 	{178.885f, 0.0f, 89.443f},
-	{0.0f, 0.0f, 200.0f}
+	{0.0f, 0.0f, 200.0f},
 };
 
 static const short icoface[20][3] = {
@@ -75,7 +69,7 @@ static const short icoface[20][3] = {
 	{7, 6, 11},
 	{8, 7, 11},
 	{9, 8, 11},
-	{10, 9, 11}
+	{10, 9, 11},
 };
 
 static const float icouvs[60][2] =
@@ -99,7 +93,7 @@ static const float icouvs[60][2] =
 	{1.000000f, 0.314921f}, {0.818181f, 0.314921f}, {0.909090f, 0.472382f},
 	{0.272727f, 0.314921f}, {0.090909f, 0.314921f}, {0.181818f, 0.472382f},
 	{0.454545f, 0.314921f}, {0.272727f, 0.314921f}, {0.363636f, 0.472382f},
-	{0.636363f, 0.314921f}, {0.454545f, 0.314921f}, {0.545454f, 0.472382f}
+	{0.636363f, 0.314921f}, {0.454545f, 0.314921f}, {0.545454f, 0.472382f},
 };
 
 
@@ -846,8 +840,9 @@ void BM_mesh_calc_uvs_grid(
 	BLI_assert(cd_loop_uv_offset != -1);
 
 	BM_ITER_MESH (f, &iter, bm, BM_FACES_OF_MESH) {
-		if (!BMO_face_flag_test(bm, f, oflag))
+		if (!BMO_face_flag_test(bm, f, oflag)) {
 			continue;
+		}
 
 		BM_ITER_ELEM_INDEX (l, &liter, f, BM_LOOPS_OF_FACE, loop_index) {
 			MLoopUV *luv = BM_ELEM_CD_GET_VOID_P(l, cd_loop_uv_offset);
@@ -944,8 +939,9 @@ void bmo_create_uvsphere_exec(BMesh *bm, BMOperator *op)
 		prevop = bmop;
 	}
 
-	if (a)
+	if (a) {
 		BMO_op_finish(bm, &bmop);
+	}
 
 	{
 		float len, len2, vec2[3];
@@ -1172,8 +1168,9 @@ void BM_mesh_calc_uvs_sphere(
 	BLI_assert(cd_loop_uv_offset != -1); /* caller is responsible for giving us UVs */
 
 	BM_ITER_MESH (f, &iter, bm, BM_FACES_OF_MESH) {
-		if (!BMO_face_flag_test(bm, f, oflag))
+		if (!BMO_face_flag_test(bm, f, oflag)) {
 			continue;
+		}
 
 		bm_mesh_calc_uvs_sphere_face(f, cd_loop_uv_offset);
 	}
@@ -1184,8 +1181,9 @@ void BM_mesh_calc_uvs_sphere(
 	float minx = 1.0f;
 
 	BM_ITER_MESH (f, &iter, bm, BM_FACES_OF_MESH) {
-		if (!BMO_face_flag_test(bm, f, oflag))
+		if (!BMO_face_flag_test(bm, f, oflag)) {
 			continue;
+		}
 		BM_ITER_ELEM_INDEX (l, &iter2, f, BM_LOOPS_OF_FACE, loop_index) {
 			MLoopUV *luv = BM_ELEM_CD_GET_VOID_P(l, cd_loop_uv_offset);
 			if (luv->uv[0] < minx) {
@@ -1195,8 +1193,9 @@ void BM_mesh_calc_uvs_sphere(
 	}
 
 	BM_ITER_MESH (f, &iter, bm, BM_FACES_OF_MESH) {
-		if (!BMO_face_flag_test(bm, f, oflag))
+		if (!BMO_face_flag_test(bm, f, oflag)) {
 			continue;
+		}
 		BM_ITER_ELEM_INDEX (l, &iter2, f, BM_LOOPS_OF_FACE, loop_index) {
 			MLoopUV *luv = BM_ELEM_CD_GET_VOID_P(l, cd_loop_uv_offset);
 			luv->uv[0] -= minx;
@@ -1297,8 +1296,9 @@ void bmo_create_circle_exec(BMesh *bm, BMOperator *op)
 	float vec[3], mat[4][4], phi, phid;
 	int a;
 
-	if (!segs)
+	if (!segs) {
 		return;
+	}
 
 	BMO_slot_mat4_get(op->slots_in, "matrix", mat);
 
@@ -1323,8 +1323,9 @@ void bmo_create_circle_exec(BMesh *bm, BMOperator *op)
 
 		BMO_vert_flag_enable(bm, v1, VERT_MARK);
 
-		if (lastv1)
+		if (lastv1) {
 			BM_edge_create(bm, v1, lastv1, NULL, BM_CREATE_NOP);
+		}
 
 		if (a && cap_ends) {
 			BMFace *f;
@@ -1333,14 +1334,16 @@ void bmo_create_circle_exec(BMesh *bm, BMOperator *op)
 			BMO_face_flag_enable(bm, f, FACE_NEW);
 		}
 
-		if (!firstv1)
+		if (!firstv1) {
 			firstv1 = v1;
+		}
 
 		lastv1 = v1;
 	}
 
-	if (!a)
+	if (!a) {
 		return;
+	}
 
 	BM_edge_create(bm, firstv1, lastv1, NULL, 0);
 
@@ -1388,8 +1391,9 @@ void BM_mesh_calc_uvs_circle(
 	invert_m4_m4(inv_mat, mat);
 
 	BM_ITER_MESH (f, &fiter, bm, BM_FACES_OF_MESH) {
-		if (!BMO_face_flag_test(bm, f, oflag))
+		if (!BMO_face_flag_test(bm, f, oflag)) {
 			continue;
+		}
 
 		BM_ITER_ELEM (l, &liter, f, BM_LOOPS_OF_FACE) {
 			MLoopUV *luv = BM_ELEM_CD_GET_VOID_P(l, cd_loop_uv_offset);
@@ -1422,8 +1426,9 @@ void bmo_create_cone_exec(BMesh *bm, BMOperator *op)
 	const bool calc_uvs = (cd_loop_uv_offset != -1) && BMO_slot_bool_get(op->slots_in, "calc_uvs");
 	int a;
 
-	if (!segs)
+	if (!segs) {
 		return;
+	}
 
 	BMO_slot_mat4_get(op->slots_in, "matrix", mat);
 
@@ -1493,8 +1498,9 @@ void bmo_create_cone_exec(BMesh *bm, BMOperator *op)
 		lastv2 = v2;
 	}
 
-	if (!a)
+	if (!a) {
 		return;
+	}
 
 	if (cap_ends) {
 		f = BM_face_create_quad_tri(bm, cent1, v1, firstv1, NULL, NULL, BM_CREATE_NOP);
@@ -1580,8 +1586,9 @@ void BM_mesh_calc_uvs_cone(
 	y = 1.0f - uv_height;
 
 	BM_ITER_MESH (f, &fiter, bm, BM_FACES_OF_MESH) {
-		if (!BMO_face_flag_test(bm, f, oflag))
+		if (!BMO_face_flag_test(bm, f, oflag)) {
 			continue;
+		}
 
 		if (f->len == 4 && radius_top && radius_bottom) {
 			/* side face - so unwrap it in a rectangle */
@@ -1653,7 +1660,9 @@ void bmo_create_cube_exec(BMesh *bm, BMOperator *op)
 
 	BMO_slot_mat4_get(op->slots_in, "matrix", mat);
 
-	if (!off) off = 0.5f;
+	if (!off) {
+		off = 0.5f;
+	}
 	int i = 0;
 
 	for (int x = -1; x < 2; x += 2) {

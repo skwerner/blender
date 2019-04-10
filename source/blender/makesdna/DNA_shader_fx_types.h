@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,12 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file DNA_shader_fx_types.h
- *  \ingroup DNA
+/** \file
+ * \ingroup DNA
  */
 
 #ifndef __DNA_SHADER_FX_TYPES_H__
@@ -67,7 +63,7 @@ typedef struct ShaderFxData {
 	int type, mode;
 	int stackindex;
 	short flag;
-	short pad;
+	char _pad[2];
 	/** MAX_NAME. */
 	char name[64];
 
@@ -76,6 +72,8 @@ typedef struct ShaderFxData {
 
 /* Runtime temp data */
 typedef struct ShaderFxData_Runtime {
+	float loc[3];
+	char _pad[4];
 	struct DRWShadingGroup *fx_sh;
 	struct DRWShadingGroup *fx_sh_b;
 	struct DRWShadingGroup *fx_sh_c;
@@ -92,7 +90,7 @@ typedef struct BlurShaderFxData {
 	float coc;
 	/** Not visible in rna. */
 	int blur[2];
-	char pad[4];
+	char _pad[4];
 
 	ShaderFxData_Runtime runtime;
 } BlurShaderFxData;
@@ -109,7 +107,7 @@ typedef struct ColorizeShaderFxData {
 	float factor;
 	/** Flags. */
 	int flag;
-	char pad[4];
+	char _pad[4];
 
 	ShaderFxData_Runtime runtime;
 } ColorizeShaderFxData;
@@ -117,7 +115,7 @@ typedef struct ColorizeShaderFxData {
 typedef enum ColorizeShaderFxModes {
 	eShaderFxColorizeMode_GrayScale = 0,
 	eShaderFxColorizeMode_Sepia = 1,
-	eShaderFxColorizeMode_BiTone = 2,
+	eShaderFxColorizeMode_Duotone = 2,
 	eShaderFxColorizeMode_Custom = 3,
 	eShaderFxColorizeMode_Transparent = 4,
 } ColorizeShaderFxModes;
@@ -167,7 +165,7 @@ typedef struct LightShaderFxData {
 	float ambient;
 	/** Internal, not visible in rna. */
 	float loc[4];
-	char pad[4];
+	char _pad[4];
 	ShaderFxData_Runtime runtime;
 } LightShaderFxData;
 
@@ -195,7 +193,7 @@ typedef struct RimShaderFxData {
 	int   mode;
 	int   blur[2];
 	int   samples;
-	char pad[4];
+	char _pad[4];
 	ShaderFxData_Runtime runtime;
 } RimShaderFxData;
 
@@ -223,7 +221,7 @@ typedef struct ShadowShaderFxData {
 	float rotation;
 	int   blur[2];
 	int   samples;
-	char pad[4];
+	char _pad[4];
 	ShaderFxData_Runtime runtime;
 } ShadowShaderFxData;
 
@@ -256,7 +254,7 @@ typedef struct WaveShaderFxData {
 	int orientation;
 	/** Flags. */
 	int flag;
-	char pad[4];
+	char _pad[4];
 	ShaderFxData_Runtime runtime;
 } WaveShaderFxData;
 #endif  /* __DNA_SHADER_FX_TYPES_H__ */

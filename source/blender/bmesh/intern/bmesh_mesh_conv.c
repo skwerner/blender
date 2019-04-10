@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,14 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * Contributor(s): Geoffrey Bantle.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/bmesh/intern/bmesh_mesh_conv.c
- *  \ingroup bmesh
+/** \file
+ * \ingroup bmesh
  *
  * BM mesh conversion functions.
  *
@@ -35,23 +29,17 @@
  *
  * There are comments in code but this should help explain the general
  * intention as to how this works converting from/to bmesh.
- *
- *
  * \subsection user_pov User Perspective
  *
  * - Editmode operations when a shape key-block is active edits only that key-block.
  * - The first Basis key-block always matches the Mesh verts.
  * - Changing vertex locations of _any_ Basis will apply offsets to those shape keys using this as their Basis.
- *
- *
  * \subsection enter_editmode Entering EditMode - #BM_mesh_bm_from_me
  *
  * - the active key-block is used for BMesh vertex locations on entering edit-mode.
  * So obviously the meshes vertex locations remain unchanged and the shape key its self is not being edited directly.
  * Simply the #BMVert.co is a initialized from active shape key (when its set).
  * - all key-blocks are added as CustomData layers (read code for details).
- *
- *
  * \subsection exit_editmode Exiting EditMode - #BM_mesh_bm_to_me
  *
  * This is where the most confusing code is! Won't attempt to document the details here, for that read the code.
@@ -72,7 +60,6 @@
  * are copied back into the mesh.
  *
  * This has the effect from the users POV of leaving the mesh un-touched, and only editing the active shape key-block.
- *
  */
 
 #include "DNA_mesh_types.h"
@@ -92,7 +79,6 @@
 #include "BKE_customdata.h"
 #include "BKE_multires.h"
 
-#include "BKE_global.h" /* ugh - for looping over all objects */
 #include "BKE_main.h"
 #include "BKE_key.h"
 
@@ -209,15 +195,15 @@ void BM_mesh_bm_from_me(
 	BMFace *f, **ftable = NULL;
 	float (*keyco)[3] = NULL;
 	int totloops, i;
-	const int64_t mask = CD_MASK_BMESH | params->cd_mask_extra;
-	const int64_t mask_loop_only = mask & ~CD_MASK_ORIGINDEX;
+	CustomData_MeshMasks mask = CD_MASK_BMESH;
+	CustomData_MeshMasks_update(&mask, &params->cd_mask_extra);
 
 	if (!me || !me->totvert) {
 		if (me && is_new) { /*no verts? still copy customdata layout*/
-			CustomData_copy(&me->vdata, &bm->vdata, mask, CD_ASSIGN, 0);
-			CustomData_copy(&me->edata, &bm->edata, mask, CD_ASSIGN, 0);
-			CustomData_copy(&me->ldata, &bm->ldata, mask_loop_only, CD_ASSIGN, 0);
-			CustomData_copy(&me->pdata, &bm->pdata, mask, CD_ASSIGN, 0);
+			CustomData_copy(&me->vdata, &bm->vdata, mask.vmask, CD_ASSIGN, 0);
+			CustomData_copy(&me->edata, &bm->edata, mask.emask, CD_ASSIGN, 0);
+			CustomData_copy(&me->ldata, &bm->ldata, mask.lmask, CD_ASSIGN, 0);
+			CustomData_copy(&me->pdata, &bm->pdata, mask.pmask, CD_ASSIGN, 0);
 
 			CustomData_bmesh_init_pool(&bm->vdata, me->totvert, BM_VERT);
 			CustomData_bmesh_init_pool(&bm->edata, me->totedge, BM_EDGE);
@@ -228,10 +214,16 @@ void BM_mesh_bm_from_me(
 	}
 
 	if (is_new) {
-		CustomData_copy(&me->vdata, &bm->vdata, mask, CD_CALLOC, 0);
-		CustomData_copy(&me->edata, &bm->edata, mask, CD_CALLOC, 0);
-		CustomData_copy(&me->ldata, &bm->ldata, mask_loop_only, CD_CALLOC, 0);
-		CustomData_copy(&me->pdata, &bm->pdata, mask, CD_CALLOC, 0);
+		CustomData_copy(&me->vdata, &bm->vdata, mask.vmask, CD_CALLOC, 0);
+		CustomData_copy(&me->edata, &bm->edata, mask.emask, CD_CALLOC, 0);
+		CustomData_copy(&me->ldata, &bm->ldata, mask.lmask, CD_CALLOC, 0);
+		CustomData_copy(&me->pdata, &bm->pdata, mask.pmask, CD_CALLOC, 0);
+	}
+	else {
+		CustomData_bmesh_merge(&me->vdata, &bm->vdata, mask.vmask, CD_CALLOC, bm, BM_VERT);
+		CustomData_bmesh_merge(&me->edata, &bm->edata, mask.emask, CD_CALLOC, bm, BM_EDGE);
+		CustomData_bmesh_merge(&me->ldata, &bm->ldata, mask.lmask, CD_CALLOC, bm, BM_LOOP);
+		CustomData_bmesh_merge(&me->pdata, &bm->pdata, mask.pmask, CD_CALLOC, bm, BM_FACE);
 	}
 
 	/* -------------------------------------------------------------------- */
@@ -326,10 +318,14 @@ void BM_mesh_bm_from_me(
 		/* Copy Custom Data */
 		CustomData_to_bmesh_block(&me->vdata, &bm->vdata, i, &v->head.data, true);
 
-		if (cd_vert_bweight_offset != -1) BM_ELEM_CD_SET_FLOAT(v, cd_vert_bweight_offset, (float)mvert->bweight / 255.0f);
+		if (cd_vert_bweight_offset != -1) {
+			BM_ELEM_CD_SET_FLOAT(v, cd_vert_bweight_offset, (float)mvert->bweight / 255.0f);
+		}
 
 		/* set shape key original index */
-		if (cd_shape_keyindex_offset != -1) BM_ELEM_CD_SET_INT(v, cd_shape_keyindex_offset, i);
+		if (cd_shape_keyindex_offset != -1) {
+			BM_ELEM_CD_SET_INT(v, cd_shape_keyindex_offset, i);
+		}
 
 		/* set shapekey data */
 		if (tot_shape_keys) {
@@ -361,8 +357,12 @@ void BM_mesh_bm_from_me(
 		/* Copy Custom Data */
 		CustomData_to_bmesh_block(&me->edata, &bm->edata, i, &e->head.data, true);
 
-		if (cd_edge_bweight_offset != -1) BM_ELEM_CD_SET_FLOAT(e, cd_edge_bweight_offset, (float)medge->bweight / 255.0f);
-		if (cd_edge_crease_offset  != -1) BM_ELEM_CD_SET_FLOAT(e, cd_edge_crease_offset,  (float)medge->crease  / 255.0f);
+		if (cd_edge_bweight_offset != -1) {
+			BM_ELEM_CD_SET_FLOAT(e, cd_edge_bweight_offset, (float)medge->bweight / 255.0f);
+		}
+		if (cd_edge_crease_offset  != -1) {
+			BM_ELEM_CD_SET_FLOAT(e, cd_edge_crease_offset,  (float)medge->crease  / 255.0f);
+		}
 
 	}
 	if (is_new) {
@@ -405,7 +405,9 @@ void BM_mesh_bm_from_me(
 		}
 
 		f->mat_nr = mp->mat_nr;
-		if (i == me->act_face) bm->act_face = f;
+		if (i == me->act_face) {
+			bm->act_face = f;
+		}
 
 		int j = mp->loopstart;
 		l_iter = l_first = BM_FACE_FIRST_LOOP(f);
@@ -575,20 +577,36 @@ void BM_mesh_bm_to_me(
 	ototvert = me->totvert;
 
 	/* new vertex block */
-	if (bm->totvert == 0) mvert = NULL;
-	else mvert = MEM_callocN(bm->totvert * sizeof(MVert), "loadeditbMesh vert");
+	if (bm->totvert == 0) {
+		mvert = NULL;
+	}
+	else {
+		mvert = MEM_callocN(bm->totvert * sizeof(MVert), "loadeditbMesh vert");
+	}
 
 	/* new edge block */
-	if (bm->totedge == 0) medge = NULL;
-	else medge = MEM_callocN(bm->totedge * sizeof(MEdge), "loadeditbMesh edge");
+	if (bm->totedge == 0) {
+		medge = NULL;
+	}
+	else {
+		medge = MEM_callocN(bm->totedge * sizeof(MEdge), "loadeditbMesh edge");
+	}
 
 	/* new ngon face block */
-	if (bm->totface == 0) mpoly = NULL;
-	else mpoly = MEM_callocN(bm->totface * sizeof(MPoly), "loadeditbMesh poly");
+	if (bm->totface == 0) {
+		mpoly = NULL;
+	}
+	else {
+		mpoly = MEM_callocN(bm->totface * sizeof(MPoly), "loadeditbMesh poly");
+	}
 
 	/* new loop block */
-	if (bm->totloop == 0) mloop = NULL;
-	else mloop = MEM_callocN(bm->totloop * sizeof(MLoop), "loadeditbMesh loop");
+	if (bm->totloop == 0) {
+		mloop = NULL;
+	}
+	else {
+		mloop = MEM_callocN(bm->totloop * sizeof(MLoop), "loadeditbMesh loop");
+	}
 
 	/* lets save the old verts just in case we are actually working on
 	 * a key ... we now do processing of the keys at the end */
@@ -618,11 +636,12 @@ void BM_mesh_bm_to_me(
 	me->act_face = -1;
 
 	{
-		const CustomDataMask mask = CD_MASK_MESH | params->cd_mask_extra;
-		CustomData_copy(&bm->vdata, &me->vdata, mask, CD_CALLOC, me->totvert);
-		CustomData_copy(&bm->edata, &me->edata, mask, CD_CALLOC, me->totedge);
-		CustomData_copy(&bm->ldata, &me->ldata, mask, CD_CALLOC, me->totloop);
-		CustomData_copy(&bm->pdata, &me->pdata, mask, CD_CALLOC, me->totpoly);
+		CustomData_MeshMasks mask = CD_MASK_MESH;
+		CustomData_MeshMasks_update(&mask, &params->cd_mask_extra);
+		CustomData_copy(&bm->vdata, &me->vdata, mask.vmask, CD_CALLOC, me->totvert);
+		CustomData_copy(&bm->edata, &me->edata, mask.emask, CD_CALLOC, me->totedge);
+		CustomData_copy(&bm->ldata, &me->ldata, mask.lmask, CD_CALLOC, me->totloop);
+		CustomData_copy(&bm->pdata, &me->pdata, mask.pmask, CD_CALLOC, me->totpoly);
 	}
 
 	CustomData_add_layer(&me->vdata, CD_MVERT, CD_ASSIGN, mvert, me->totvert);
@@ -647,7 +666,9 @@ void BM_mesh_bm_to_me(
 		/* copy over customdat */
 		CustomData_from_bmesh_block(&bm->vdata, &me->vdata, v->head.data, i);
 
-		if (cd_vert_bweight_offset != -1) mvert->bweight = BM_ELEM_CD_GET_FLOAT_AS_UCHAR(v, cd_vert_bweight_offset);
+		if (cd_vert_bweight_offset != -1) {
+			mvert->bweight = BM_ELEM_CD_GET_FLOAT_AS_UCHAR(v, cd_vert_bweight_offset);
+		}
 
 		i++;
 		mvert++;
@@ -671,8 +692,12 @@ void BM_mesh_bm_to_me(
 
 		bmesh_quick_edgedraw_flag(med, e);
 
-		if (cd_edge_crease_offset  != -1) med->crease  = BM_ELEM_CD_GET_FLOAT_AS_UCHAR(e, cd_edge_crease_offset);
-		if (cd_edge_bweight_offset != -1) med->bweight = BM_ELEM_CD_GET_FLOAT_AS_UCHAR(e, cd_edge_bweight_offset);
+		if (cd_edge_crease_offset  != -1) {
+			med->crease  = BM_ELEM_CD_GET_FLOAT_AS_UCHAR(e, cd_edge_crease_offset);
+		}
+		if (cd_edge_bweight_offset != -1) {
+			med->bweight = BM_ELEM_CD_GET_FLOAT_AS_UCHAR(e, cd_edge_bweight_offset);
+		}
 
 		i++;
 		med++;
@@ -704,7 +729,9 @@ void BM_mesh_bm_to_me(
 			BM_CHECK_ELEMENT(l_iter->v);
 		} while ((l_iter = l_iter->next) != l_first);
 
-		if (f == bm->act_face) me->act_face = i;
+		if (f == bm->act_face) {
+			me->act_face = i;
+		}
 
 		/* copy over customdata */
 		CustomData_from_bmesh_block(&bm->pdata, &me->pdata, f->head.data, i);
@@ -721,7 +748,7 @@ void BM_mesh_bm_to_me(
 		ModifierData *md;
 		BMVert **vertMap = NULL;
 
-		for (ob = bmain->object.first; ob; ob = ob->id.next) {
+		for (ob = bmain->objects.first; ob; ob = ob->id.next) {
 			if ((ob->parent) && (ob->parent->data == me) && ELEM(ob->partype, PARVERT1, PARVERT3)) {
 
 				if (vertMap == NULL) {
@@ -730,15 +757,21 @@ void BM_mesh_bm_to_me(
 
 				if (ob->par1 < ototvert) {
 					eve = vertMap[ob->par1];
-					if (eve) ob->par1 = BM_elem_index_get(eve);
+					if (eve) {
+						ob->par1 = BM_elem_index_get(eve);
+					}
 				}
 				if (ob->par2 < ototvert) {
 					eve = vertMap[ob->par2];
-					if (eve) ob->par2 = BM_elem_index_get(eve);
+					if (eve) {
+						ob->par2 = BM_elem_index_get(eve);
+					}
 				}
 				if (ob->par3 < ototvert) {
 					eve = vertMap[ob->par3];
-					if (eve) ob->par3 = BM_elem_index_get(eve);
+					if (eve) {
+						ob->par3 = BM_elem_index_get(eve);
+					}
 				}
 
 			}
@@ -770,7 +803,9 @@ void BM_mesh_bm_to_me(
 			}
 		}
 
-		if (vertMap) MEM_freeN(vertMap);
+		if (vertMap) {
+			MEM_freeN(vertMap);
+		}
 	}
 
 	BKE_mesh_update_customdata_pointers(me, false);
@@ -816,12 +851,14 @@ void BM_mesh_bm_to_me(
 		 * necessary */
 		j = 0;
 		for (i = 0; i < bm->vdata.totlayer; i++) {
-			if (bm->vdata.layers[i].type != CD_SHAPEKEY)
+			if (bm->vdata.layers[i].type != CD_SHAPEKEY) {
 				continue;
+			}
 
 			for (currkey = me->key->block.first; currkey; currkey = currkey->next) {
-				if (currkey->uid == bm->vdata.layers[i].uid)
+				if (currkey->uid == bm->vdata.layers[i].uid) {
 					break;
+				}
 			}
 
 			if (!currkey) {
@@ -937,10 +974,14 @@ void BM_mesh_bm_to_me(
 			currkey->data = newkey;
 		}
 
-		if (ofs) MEM_freeN(ofs);
+		if (ofs) {
+			MEM_freeN(ofs);
+		}
 	}
 
-	if (oldverts) MEM_freeN(oldverts);
+	if (oldverts) {
+		MEM_freeN(oldverts);
+	}
 
 	/* topology could be changed, ensure mdisps are ok */
 	multires_topology_changed(me);
@@ -964,11 +1005,11 @@ void BM_mesh_bm_to_me(
  *
  * \note Was `cddm_from_bmesh_ex` in 2.7x, removed `MFace` support.
  */
-void BM_mesh_bm_to_me_for_eval(BMesh *bm, Mesh *me, const int64_t cd_mask_extra)
+void BM_mesh_bm_to_me_for_eval(BMesh *bm, Mesh *me, const CustomData_MeshMasks *cd_mask_extra)
 {
 	/* must be an empty mesh. */
 	BLI_assert(me->totvert == 0);
-	BLI_assert((cd_mask_extra & CD_MASK_SHAPEKEY) == 0);
+	BLI_assert(cd_mask_extra == NULL || (cd_mask_extra->vmask & CD_MASK_SHAPEKEY) == 0);
 
 	me->totvert = bm->totvert;
 	me->totedge = bm->totedge;
@@ -987,11 +1028,15 @@ void BM_mesh_bm_to_me_for_eval(BMesh *bm, Mesh *me, const int64_t cd_mask_extra)
 
 	/* don't process shapekeys, we only feed them through the modifier stack as needed,
 	 * e.g. for applying modifiers or the like*/
-	const CustomDataMask mask = (CD_MASK_DERIVEDMESH | cd_mask_extra) & ~CD_MASK_SHAPEKEY;
-	CustomData_merge(&bm->vdata, &me->vdata, mask, CD_CALLOC, me->totvert);
-	CustomData_merge(&bm->edata, &me->edata, mask, CD_CALLOC, me->totedge);
-	CustomData_merge(&bm->ldata, &me->ldata, mask, CD_CALLOC, me->totloop);
-	CustomData_merge(&bm->pdata, &me->pdata, mask, CD_CALLOC, me->totpoly);
+	CustomData_MeshMasks mask = CD_MASK_DERIVEDMESH;
+	if (cd_mask_extra != NULL) {
+		CustomData_MeshMasks_update(&mask, cd_mask_extra);
+	}
+	mask.vmask &= ~CD_MASK_SHAPEKEY;
+	CustomData_merge(&bm->vdata, &me->vdata, mask.vmask, CD_CALLOC, me->totvert);
+	CustomData_merge(&bm->edata, &me->edata, mask.emask, CD_CALLOC, me->totedge);
+	CustomData_merge(&bm->ldata, &me->ldata, mask.lmask, CD_CALLOC, me->totloop);
+	CustomData_merge(&bm->pdata, &me->pdata, mask.pmask, CD_CALLOC, me->totpoly);
 
 	BKE_mesh_update_customdata_pointers(me, false);
 
@@ -1028,9 +1073,13 @@ void BM_mesh_bm_to_me_for_eval(BMesh *bm, Mesh *me, const int64_t cd_mask_extra)
 
 		mv->flag = BM_vert_flag_to_mflag(eve);
 
-		if (cd_vert_bweight_offset != -1) mv->bweight = BM_ELEM_CD_GET_FLOAT_AS_UCHAR(eve, cd_vert_bweight_offset);
+		if (cd_vert_bweight_offset != -1) {
+			mv->bweight = BM_ELEM_CD_GET_FLOAT_AS_UCHAR(eve, cd_vert_bweight_offset);
+		}
 
-		if (add_orig) *index++ = i;
+		if (add_orig) {
+			*index++ = i;
+		}
 
 		CustomData_from_bmesh_block(&bm->vdata, &me->vdata, eve->head.data, i);
 	}
@@ -1055,11 +1104,17 @@ void BM_mesh_bm_to_me_for_eval(BMesh *bm, Mesh *me, const int64_t cd_mask_extra)
 			}
 		}
 
-		if (cd_edge_crease_offset  != -1) med->crease  = BM_ELEM_CD_GET_FLOAT_AS_UCHAR(eed, cd_edge_crease_offset);
-		if (cd_edge_bweight_offset != -1) med->bweight = BM_ELEM_CD_GET_FLOAT_AS_UCHAR(eed, cd_edge_bweight_offset);
+		if (cd_edge_crease_offset  != -1) {
+			med->crease  = BM_ELEM_CD_GET_FLOAT_AS_UCHAR(eed, cd_edge_crease_offset);
+		}
+		if (cd_edge_bweight_offset != -1) {
+			med->bweight = BM_ELEM_CD_GET_FLOAT_AS_UCHAR(eed, cd_edge_bweight_offset);
+		}
 
 		CustomData_from_bmesh_block(&bm->edata, &me->edata, eed->head.data, i);
-		if (add_orig) *index++ = i;
+		if (add_orig) {
+			*index++ = i;
+		}
 	}
 	bm->elem_index_dirty &= ~BM_EDGE;
 
@@ -1091,7 +1146,9 @@ void BM_mesh_bm_to_me_for_eval(BMesh *bm, Mesh *me, const int64_t cd_mask_extra)
 
 		CustomData_from_bmesh_block(&bm->pdata, &me->pdata, efa->head.data, i);
 
-		if (add_orig) *index++ = i;
+		if (add_orig) {
+			*index++ = i;
+		}
 	}
 	bm->elem_index_dirty &= ~(BM_FACE | BM_LOOP);
 

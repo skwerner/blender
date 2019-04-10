@@ -57,6 +57,29 @@ class TEXT_HT_header(Header):
             is_osl = text.name.endswith((".osl", ".osl"))
 
             row = layout.row()
+            if is_osl:
+                row = layout.row()
+                row.operator("node.shader_script_update")
+            else:
+                row = layout.row()
+                row.active = text.name.endswith(".py")
+                row.prop(text, "use_module")
+
+                row = layout.row()
+                row.operator("text.run_script")
+
+
+class TEXT_HT_footer(Header):
+    bl_space_type = 'TEXT_EDITOR'
+    bl_region_type = 'FOOTER'
+
+    def draw(self, context):
+        layout = self.layout
+
+        st = context.space_data
+        text = st.text
+        if text:
+            row = layout.row()
             if text.filepath:
                 if text.is_dirty:
                     row.label(
@@ -74,16 +97,6 @@ class TEXT_HT_header(Header):
                     if text.library
                     else "Text: Internal"
                 )
-            if is_osl:
-                row = layout.row()
-                row.operator("node.shader_script_update")
-            else:
-                row = layout.row()
-                row.active = text.name.endswith(".py")
-                row.prop(text, "use_module")
-
-                row = layout.row()
-                row.operator("text.run_script")
 
 
 class TEXT_MT_editor_menus(Menu):
@@ -200,20 +213,21 @@ class TEXT_MT_text(Menu):
         st = context.space_data
         text = st.text
 
-        layout.operator("text.new")
-        layout.operator("text.open")
+        layout.operator("text.new", text="New")
+        layout.operator("text.open", text="Open...", icon='FILE_FOLDER')
 
         if text:
+            layout.separator()
             layout.operator("text.reload")
 
-            layout.column()
-            layout.operator("text.save")
-            layout.operator("text.save_as")
+            layout.separator()
+            layout.operator("text.save", icon='FILE_TICK')
+            layout.operator("text.save_as", text="Save As...")
 
             if text.filepath:
                 layout.operator("text.make_internal")
 
-            layout.column()
+            layout.separator()
             layout.operator("text.run_script")
 
 
@@ -352,6 +366,7 @@ class TEXT_MT_toolbox(Menu):
 
 classes = (
     TEXT_HT_header,
+    TEXT_HT_footer,
     TEXT_MT_edit,
     TEXT_MT_editor_menus,
     TEXT_PT_properties,

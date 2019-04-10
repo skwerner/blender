@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -18,15 +16,11 @@
  * All rights reserved.
  *
  * The Original Code is: some of this file.
- *
- * Contributor(s): Jens Ole Wund (bjornmose), Campbell Barton (ideasman42)
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/sculpt_paint/paint_image.c
- *  \ingroup edsculpt
- *  \brief Functions to paint images in 2D and 3D.
+/** \file
+ * \ingroup edsculpt
+ * \brief Functions to paint images in 2D and 3D.
  */
 
 #include <float.h>
@@ -84,15 +78,14 @@
 #include "GPU_immediate.h"
 #include "GPU_state.h"
 
-#include "BIF_gl.h"
 
 #include "IMB_colormanagement.h"
 
 #include "paint_intern.h"
 
-/* this is a static resource for non-globality,
- * Maybe it should be exposed as part of the
- * paint operation, but for now just give a public interface */
+/* This is a static resource for non-global access.
+ * Maybe it should be exposed as part of the paint operation, but for now just give a public interface.
+ */
 static ImagePaintPartialRedraw imapaintpartial = {0, 0, 0, 0, 0};
 
 ImagePaintPartialRedraw *get_imapaintpartial(void)
@@ -496,7 +489,7 @@ static PaintOperation *texture_paint_init(bContext *C, wmOperator *op, const flo
 	}
 
 	settings->imapaint.flag |= IMAGEPAINT_DRAWING;
-	ED_image_undo_push_begin(op->type->name);
+	ED_image_undo_push_begin(op->type->name, PAINT_MODE_TEXTURE_2D);
 
 	return pop;
 }
@@ -592,8 +585,12 @@ static void paint_stroke_done(const bContext *C, struct PaintStroke *stroke)
 		else {
 			if (pop->mode == PAINT_MODE_2D) {
 				float color[3];
-
-				srgb_to_linearrgb_v3_v3(color, BKE_brush_color_get(scene, brush));
+				if (paint_stroke_inverted(stroke)) {
+					srgb_to_linearrgb_v3_v3(color, BKE_brush_secondary_color_get(scene, brush));
+				}
+				else {
+					srgb_to_linearrgb_v3_v3(color, BKE_brush_color_get(scene, brush));
+				}
 				paint_2d_bucket_fill(C, color, brush, pop->prevmouse, pop->custom_paint);
 			}
 			else {
@@ -1119,7 +1116,7 @@ static int texture_paint_toggle_exec(bContext *C, wmOperator *op)
 		}
 
 		if (ima) {
-			for (sc = bmain->screen.first; sc; sc = sc->id.next) {
+			for (sc = bmain->screens.first; sc; sc = sc->id.next) {
 				ScrArea *sa;
 				for (sa = sc->areabase.first; sa; sa = sa->next) {
 					SpaceLink *sl;
@@ -1129,7 +1126,7 @@ static int texture_paint_toggle_exec(bContext *C, wmOperator *op)
 
 							if (!sima->pin) {
 								Object *obedit = CTX_data_edit_object(C);
-								ED_space_image_set(bmain, sima, scene, obedit, ima);
+								ED_space_image_set(bmain, sima, obedit, ima, true);
 							}
 						}
 					}
@@ -1203,7 +1200,7 @@ static bool brush_colors_flip_poll(bContext *C)
 {
 	if (image_paint_poll(C)) {
 		Brush *br = image_paint_brush(C);
-		if (br->imagepaint_tool == PAINT_TOOL_DRAW)
+		if (ELEM(br->imagepaint_tool, PAINT_TOOL_DRAW, PAINT_TOOL_FILL))
 			return true;
 	}
 	else {
@@ -1241,7 +1238,7 @@ void ED_imapaint_bucket_fill(struct bContext *C, float color[3], wmOperator *op)
 
 	BKE_undosys_step_push_init_with_type(wm->undo_stack, C, op->type->name, BKE_UNDOSYS_TYPE_IMAGE);
 
-	ED_image_undo_push_begin(op->type->name);
+	ED_image_undo_push_begin(op->type->name, PAINT_MODE_TEXTURE_2D);
 
 	paint_2d_bucket_fill(C, color, NULL, NULL, NULL);
 

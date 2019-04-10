@@ -128,7 +128,7 @@ extern "C" __global__ void
 CUDA_LAUNCH_BOUNDS(CUDA_THREADS_BLOCK_WIDTH, CUDA_KERNEL_MAX_REGISTERS)
 kernel_cuda_adaptive_scale_samples(WorkTile *tile, int start_sample, int sample, uint total_work_size)
 {
-	if(kernel_data.film.pass_adaptive_aux_buffer && sample >= kernel_data.integrator.adaptive_min_samples - 1) {
+	if(kernel_data.film.pass_adaptive_aux_buffer) {
 		int work_index = ccl_global_id(0);
 		bool thread_is_active = work_index < total_work_size;
 		KernelGlobals kg;

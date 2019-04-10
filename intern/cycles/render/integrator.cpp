@@ -25,6 +25,7 @@
 #include "render/sobol.h"
 
 #include "util/util_foreach.h"
+#include "util/util_logging.h"
 #include "util/util_hash.h"
 
 CCL_NAMESPACE_BEGIN
@@ -174,12 +175,14 @@ void Integrator::device_update(Device *device, DeviceScene *dscene, Scene *scene
 	kintegrator->aa_samples = aa_samples;
 	if(aa_samples > 0 && adaptive_min_samples == 0) {
 		kintegrator->adaptive_min_samples = max(4, (int)sqrtf(aa_samples));
+		VLOG(1) << "Cycles adaptive sampling: automatic min samples = " << kintegrator->adaptive_min_samples;
 	}
 	else {
 		kintegrator->adaptive_min_samples = max(4, adaptive_min_samples);
 	}
 	if(aa_samples > 0 && adaptive_threshold == 0.0f) {
-		kintegrator->adaptive_threshold = 1.0f / (float)aa_samples;
+		kintegrator->adaptive_threshold = max(0.002f, 1.0f / (float)aa_samples);
+		VLOG(1) << "Cycles adaptive sampling: automatic threshold = " << kintegrator->adaptive_threshold;
 	}
 	else {
 		kintegrator->adaptive_threshold = adaptive_threshold;

@@ -22,8 +22,10 @@
 #include "DRW_engine.h"
 #include "DRW_render.h"
 
+#include "BKE_gpencil.h"
 #include "BKE_library.h"
 #include "BKE_object.h"
+#include "BKE_paint.h"
 #include "BKE_shader_fx.h"
 
 #include "DNA_gpencil_types.h"
@@ -302,7 +304,9 @@ void GPENCIL_cache_init(void *vedata)
 	GPENCIL_StorageList *stl = ((GPENCIL_Data *)vedata)->stl;
 	const DRWContextState *draw_ctx = DRW_context_state_get();
 	Scene *scene = draw_ctx->scene;
+	ToolSettings *ts = scene->toolsettings;
 	View3D *v3d = draw_ctx->v3d;
+	Brush *brush = BKE_paint_brush(&ts->gp_paint->paint);
 
 	/* Special handling for when active object is GP object (e.g. for draw mode) */
 	Object *obact = draw_ctx->obact;
@@ -311,7 +315,15 @@ void GPENCIL_cache_init(void *vedata)
 
 	if (obact && (obact->type == OB_GPENCIL) && (obact->data)) {
 		obact_gpd = (bGPdata *)obact->data;
-		gp_style = BKE_material_gpencil_settings_get(obact, obact->actcol);
+		/* use the brush material */
+		Material *ma = BKE_gpencil_object_material_get_from_brush(obact, brush);
+		if (ma != NULL) {
+			gp_style = ma->gp_style;
+		}
+		/* this is not common, but avoid any special situations when brush could be without material */
+		if (gp_style == NULL) {
+			gp_style = BKE_material_gpencil_settings_get(obact, obact->actcol);
+		}
 	}
 
 	if (!stl->g_data) {
@@ -393,7 +405,7 @@ void GPENCIL_cache_init(void *vedata)
 
 		/* xray mode */
 		if (v3d) {
-			stl->storage->is_xray = (v3d->shading.flag & V3D_XRAY_FLAG(v3d)) ? 1 : 0;
+			stl->storage->is_xray = XRAY_ACTIVE(v3d);
 		}
 		else {
 			stl->storage->is_xray = 0;
@@ -550,7 +562,7 @@ static void gpencil_add_draw_data(void *vedata, Object *ob)
 
 	if (!cache_ob->is_dup_ob) {
 		/* fill shading groups */
-		if (!is_multiedit) {
+		if ((!is_multiedit) || (stl->storage->is_render)) {
 			DRW_gpencil_populate_datablock(&e_data, vedata, ob, cache_ob);
 		}
 		else {
@@ -617,9 +629,20 @@ void GPENCIL_cache_populate(void *vedata, Object *ob)
 		}
 
 		/* draw current painting strokes
-		 * (only if region is equal to originated paint region) */
+		 * (only if region is equal to originated paint region)
+		 *
+		 * Need to use original data because to use the copy of data, the paint
+		 * operator must update depsgraph and this makes that first events of the
+		 * mouse are missed if the datablock is very big due the time required to
+		 * copy the datablock. The search of the original data is faster than a
+		 * full datablock copy.
+		 * Using the original data doesn't require a copy and the feel when drawing
+		 * is far better.
+		 */
+
+		bGPdata *gpd_orig = (bGPdata *)DEG_get_original_id(&gpd->id);
 		if ((draw_ctx->obact == ob) &&
-		    ((gpd->runtime.ar == NULL) || (gpd->runtime.ar == draw_ctx->ar)))
+		    ((gpd_orig->runtime.ar == NULL) || (gpd_orig->runtime.ar == draw_ctx->ar)))
 		{
 			DRW_gpencil_populate_buffer_strokes(&e_data, vedata, ts, ob);
 		}

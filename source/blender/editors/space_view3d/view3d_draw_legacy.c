@@ -81,6 +81,7 @@
 #include "ED_space_api.h"
 #include "ED_screen_types.h"
 #include "ED_transform.h"
+#include "ED_view3d.h"
 
 #include "UI_interface.h"
 #include "UI_interface_icons.h"
@@ -174,12 +175,12 @@ static void validate_object_select_id(
 		/* do nothing */
 	}
 	else if ((obact_eval && (obact_eval->mode & OB_MODE_PARTICLE_EDIT)) &&
-	         V3D_IS_ZBUF(v3d))
+	         !XRAY_ENABLED(v3d))
 	{
 		/* do nothing */
 	}
 	else if ((obedit && (obedit->mode & OB_MODE_EDIT)) &&
-	         V3D_IS_ZBUF(v3d))
+	         !XRAY_FLAG_ENABLED(v3d))
 	{
 		/* do nothing */
 	}
@@ -303,7 +304,7 @@ uint *ED_view3d_select_id_read_rect(ViewContext *vc, const rcti *clip, uint *r_b
 	uint width = BLI_rcti_size_x(clip);
 	uint height = BLI_rcti_size_y(clip);
 	uint buf_len = width * height;
-	uint *buf = MEM_callocN(buf_len * sizeof(*buf), __func__);
+	uint *buf = MEM_mallocN(buf_len * sizeof(*buf), __func__);
 
 	DRW_framebuffer_select_id_read(clip, buf);
 
@@ -654,7 +655,7 @@ static void view3d_draw_bgpic(Scene *scene, Depsgraph *depsgraph,
 			float zoomx = (x2 - x1) / ibuf->x;
 			float zoomy = (y2 - y1) / ibuf->y;
 
-			/* for some reason; zoomlevels down refuses to use GL_ALPHA_SCALE */
+			/* For some reason; zoom-levels down refuses to use GL_ALPHA_SCALE. */
 			if (zoomx < 1.0f || zoomy < 1.0f) {
 				float tzoom = min_ff(zoomx, zoomy);
 				int mip = 0;

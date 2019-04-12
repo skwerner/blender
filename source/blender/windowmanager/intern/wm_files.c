@@ -405,7 +405,11 @@ static int wm_read_exotic(const char *name)
 				retval = BKE_READ_EXOTIC_OK_BLEND;
 			}
 			else {
-#if 0           /* historic stuff - no longer used */
+				/* We may want to support loading other file formats
+				 * from their header bytes or file extension.
+				 * This used to be supported in the code below and may be added
+				 * back at some point. */
+#if 0
 				WM_cursor_wait(true);
 
 				if (is_foo_format(name)) {
@@ -1360,10 +1364,10 @@ void wm_autosave_location(char *filepath)
 	if (G_MAIN && G.relbase_valid) {
 		const char *basename = BLI_path_basename(BKE_main_blendfile_path_from_global());
 		int len = strlen(basename) - 6;
-		BLI_snprintf(path, sizeof(path), "%.*s.blend", len, basename);
+		BLI_snprintf(path, sizeof(path), "%.*s (autosave).blend", len, basename);
 	}
 	else {
-		BLI_snprintf(path, sizeof(path), "%d.blend", pid);
+		BLI_snprintf(path, sizeof(path), "%d (autosave).blend", pid);
 	}
 
 #ifdef WIN32

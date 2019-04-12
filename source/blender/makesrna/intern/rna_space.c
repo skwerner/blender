@@ -663,8 +663,9 @@ static void rna_3DViewShading_type_update(Main *bmain, Scene *scene, PointerRNA 
 
 	View3DShading *shading = ptr->data;
 	if (shading->type == OB_MATERIAL ||
-	    (shading->type == OB_RENDER && (strcmp(scene->r.engine, RE_engine_id_BLENDER_EEVEE) == 0 ||
-	                                    strcmp(scene->r.engine, RE_engine_id_CYCLES)))) {
+	    (shading->type == OB_RENDER &&
+	     STR_ELEM(scene->r.engine, RE_engine_id_BLENDER_EEVEE, RE_engine_id_CYCLES)))
+	{
 		/* When switching from workbench to render or material mode the geometry of any
 		 * active sculpt session needs to be recalculated. */
 		for (Object *ob = bmain->objects.first; ob ; ob = ob->id.next) {
@@ -1330,16 +1331,24 @@ static const EnumPropertyItem *rna_SpaceProperties_context_itemf(
 		RNA_enum_items_add_value(&item, &totitem, buttons_context_items, BCONTEXT_OBJECT);
 	}
 
-	if (sbuts->pathflag & (1 << BCONTEXT_CONSTRAINT)) {
-		RNA_enum_items_add_value(&item, &totitem, buttons_context_items, BCONTEXT_CONSTRAINT);
-	}
-
 	if (sbuts->pathflag & (1 << BCONTEXT_MODIFIER)) {
 		RNA_enum_items_add_value(&item, &totitem, buttons_context_items, BCONTEXT_MODIFIER);
 	}
 
 	if (sbuts->pathflag & (1 << BCONTEXT_SHADERFX)) {
 		RNA_enum_items_add_value(&item, &totitem, buttons_context_items, BCONTEXT_SHADERFX);
+	}
+
+	if (sbuts->pathflag & (1 << BCONTEXT_PARTICLE)) {
+		RNA_enum_items_add_value(&item, &totitem, buttons_context_items, BCONTEXT_PARTICLE);
+	}
+
+	if (sbuts->pathflag & (1 << BCONTEXT_PHYSICS)) {
+		RNA_enum_items_add_value(&item, &totitem, buttons_context_items, BCONTEXT_PHYSICS);
+	}
+
+	if (sbuts->pathflag & (1 << BCONTEXT_CONSTRAINT)) {
+		RNA_enum_items_add_value(&item, &totitem, buttons_context_items, BCONTEXT_CONSTRAINT);
 	}
 
 	if (sbuts->pathflag & (1 << BCONTEXT_DATA)) {
@@ -1359,16 +1368,12 @@ static const EnumPropertyItem *rna_SpaceProperties_context_itemf(
 		RNA_enum_items_add_value(&item, &totitem, buttons_context_items, BCONTEXT_MATERIAL);
 	}
 
+		if (totitem) {
+		RNA_enum_item_add_separator(&item, &totitem);
+	}
+
 	if (sbuts->pathflag & (1 << BCONTEXT_TEXTURE)) {
 		RNA_enum_items_add_value(&item, &totitem, buttons_context_items, BCONTEXT_TEXTURE);
-	}
-
-	if (sbuts->pathflag & (1 << BCONTEXT_PARTICLE)) {
-		RNA_enum_items_add_value(&item, &totitem, buttons_context_items, BCONTEXT_PARTICLE);
-	}
-
-	if (sbuts->pathflag & (1 << BCONTEXT_PHYSICS)) {
-		RNA_enum_items_add_value(&item, &totitem, buttons_context_items, BCONTEXT_PHYSICS);
 	}
 
 	RNA_enum_item_end(&item, &totitem);

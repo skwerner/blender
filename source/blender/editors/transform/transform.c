@@ -2035,7 +2035,7 @@ static void drawTransformPixel(const struct bContext *C, ARegion *ar, void *arg)
 		ViewLayer *view_layer = t->view_layer;
 		Object *ob = OBACT(view_layer);
 
-		/* draw autokeyframing hint in the corner
+		/* draw auto-key-framing hint in the corner
 		 * - only draw if enabled (advanced users may be distracted/annoyed),
 		 *   for objects that will be autokeyframed (no point otherwise),
 		 *   AND only for the active region (as showing all is too overwhelming)
@@ -7094,7 +7094,7 @@ static bool createEdgeSlideVerts_double_side(TransInfo *t, TransDataContainer *t
 	if (t->spacetype == SPACE_VIEW3D) {
 		v3d = t->sa ? t->sa->spacedata.first : NULL;
 		rv3d = t->ar ? t->ar->regiondata : NULL;
-		use_occlude_geometry = (v3d && TRANS_DATA_CONTAINER_FIRST_OK(t)->obedit->dt > OB_WIRE && v3d->shading.type > OB_WIRE);
+		use_occlude_geometry = (v3d && TRANS_DATA_CONTAINER_FIRST_OK(t)->obedit->dt > OB_WIRE && !XRAY_ENABLED(v3d));
 	}
 
 	calcEdgeSlide_mval_range(t, tc, sld, sv_table, loop_nr, mval, use_occlude_geometry, true);
@@ -7289,7 +7289,7 @@ static bool createEdgeSlideVerts_single_side(TransInfo *t, TransDataContainer *t
 	if (t->spacetype == SPACE_VIEW3D) {
 		v3d = t->sa ? t->sa->spacedata.first : NULL;
 		rv3d = t->ar ? t->ar->regiondata : NULL;
-		use_occlude_geometry = (v3d && TRANS_DATA_CONTAINER_FIRST_OK(t)->obedit->dt > OB_WIRE && v3d->shading.type > OB_WIRE);
+		use_occlude_geometry = (v3d && TRANS_DATA_CONTAINER_FIRST_OK(t)->obedit->dt > OB_WIRE && !XRAY_ENABLED(v3d));
 	}
 
 	calcEdgeSlide_mval_range(t, tc, sld, sv_table, loop_nr, mval, use_occlude_geometry, false);

@@ -1349,7 +1349,7 @@ static void gpu_node_input_link(GPUNode *node, GPUNodeLink *link, const eGPUType
 		name = outnode->name;
 		input = outnode->inputs.first;
 
-		if ((STREQ(name, "set_value") || STREQ(name, "set_rgb") || STREQ(name, "set_rgba")) &&
+		if ((STR_ELEM(name, "set_value", "set_rgb", "set_rgba")) &&
 		    (input->type == type))
 		{
 			input = MEM_dupallocN(outnode->inputs.first);
@@ -1963,7 +1963,7 @@ static bool gpu_pass_shader_validate(GPUPass *pass)
 
 	/* Validate against opengl limit. */
 	if ((frag_samplers_len > GPU_max_textures_frag()) ||
-	    (frag_samplers_len > GPU_max_textures_vert()))
+	    (vert_samplers_len > GPU_max_textures_vert()))
 	{
 		return false;
 	}

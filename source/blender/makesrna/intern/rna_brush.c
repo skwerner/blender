@@ -80,7 +80,7 @@ const EnumPropertyItem rna_enum_brush_sculpt_tool_items[] = {
 	{SCULPT_TOOL_ROTATE, "ROTATE", ICON_BRUSH_ROTATE, "Rotate", ""},
 	{0, "", 0, NULL, NULL},
 	{SCULPT_TOOL_MASK, "MASK", ICON_BRUSH_MASK, "Mask", ""},
-	{SCULPT_TOOL_SIMPLIFY, "SIMPLIFY", ICON_BRUSH_SUBTRACT /* icon TODO */, "Simplify", ""},
+	{SCULPT_TOOL_SIMPLIFY, "SIMPLIFY", ICON_BRUSH_DATA /* icon TODO */, "Simplify", ""},
 	{0, NULL, 0, NULL, NULL},
 };
 
@@ -713,10 +713,10 @@ static void rna_BrushGpencilSettings_use_material_pin_update(bContext *C, Pointe
 
 	if (brush->gpencil_settings->flag & GP_BRUSH_MATERIAL_PINNED) {
 		Material *material = give_current_material(ob, ob->actcol);
-		BKE_gpencil_brush_set_material(brush, material);
+		BKE_gpencil_brush_material_set(brush, material);
 	}
 	else {
-		BKE_gpencil_brush_set_material(brush, NULL);
+		BKE_gpencil_brush_material_set(brush, NULL);
 	}
 
 	/* number of material users changed */

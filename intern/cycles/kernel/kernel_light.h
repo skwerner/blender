@@ -147,11 +147,11 @@ ccl_device_inline float uniform_cone_pdf(float cos_theta_max) {
 	return cos_theta_max < 1.0f ? 1.0f / (2.0f * M_PI_F * (1.0f - cos_theta_max)) : 0.0f;
 }
 
-ccl_device float sphere_light_pdf(float3 P, float3 lightP, const LightSample *ls, float radius)
+ccl_device float sphere_light_pdf(float3 P, float3 lightP, LightSample* const ls, float radius)
 {
-	float3 wc = lightP - P;
-	float dist_squared = len_squared(wc);
-	float sin_theta_max2 = radius * radius / dist_squared;
+	const float3 wc = lightP - P;
+	const float dist_squared = len_squared(wc);
+	const float sin_theta_max2 = radius * radius / dist_squared;
 
 	/* No light if we're inside of or directly on the sphere. */
 	if(sin_theta_max2 >= 1.0f) {
@@ -159,21 +159,17 @@ ccl_device float sphere_light_pdf(float3 P, float3 lightP, const LightSample *ls
 	}
 
 	/* Use solid angle sampling. */
-	float cos_theta_max = safe_sqrtf(max(0.0f, 1.0f - sin_theta_max2));
-	float pdf = uniform_cone_pdf(cos_theta_max);
-	if(isfinite_safe(pdf)) {
-		return pdf;
-	}
-	else {
-		return 0.0f;
-	}
+	const float cos_theta_max = safe_sqrtf(max(0.0f, 1.0f - sin_theta_max2));
+	const float pdf = uniform_cone_pdf(cos_theta_max);
+	kernel_assert(isfinite_safe(pdf));
+	return pdf;
 }
 
 ccl_device void sphere_light_sample(float3 P, LightSample *ls, float radius, float randu, float randv)
 {
 	float3 wc = ls->P - P;
-	float dist_squared = len_squared(wc);
-	float sin_theta_max2 = radius * radius / dist_squared;
+	const float dist_squared = len_squared(wc);
+	const float sin_theta_max2 = radius * radius / dist_squared;
 
 	/* No light if we're inside of or directly on the sphere. */
 	if(sin_theta_max2 >= 1.0f) {
@@ -190,18 +186,18 @@ ccl_device void sphere_light_sample(float3 P, LightSample *ls, float radius, flo
 	/* Sample sphere uniformly inside subtended cone. */
 
 	/* Compute theta and phi values for sample in cone. */
-	float cos_theta_max = safe_sqrtf(max(0.0f, 1.0f - sin_theta_max2));
-	float cos_theta = (1.0f - randu) + randu * cos_theta_max;
-	float sin_theta = safe_sqrtf(max(0.0f, 1.0f - cos_theta * cos_theta));
-	float phi = randv * 2.0f * M_PI_F;
+	const float cos_theta_max = safe_sqrtf(max(0.0f, 1.0f - sin_theta_max2));
+	const float cos_theta = (1.0f - randu) + randu * cos_theta_max;
+	const float sin_theta = safe_sqrtf(max(0.0f, 1.0f - cos_theta * cos_theta));
+	const float phi = randv * 2.0f * M_PI_F;
 
 	/* Compute angle alpha from center of sphere to sampled point on surface. */
-	float ds = dc * cos_theta - safe_sqrtf(max(0.0f, radius * radius - dc * dc * sin_theta * sin_theta));
-	float cos_alpha = (dc * dc + radius * radius - ds * ds) / (2.0f * dc * radius);
-	float sin_alpha = safe_sqrtf(max(0.0f, 1.0f - cos_alpha * cos_alpha));
+	const float ds = dc * cos_theta - safe_sqrtf(max(0.0f, radius * radius - dc * dc * sin_theta * sin_theta));
+	const float cos_alpha = (dc * dc + radius * radius - ds * ds) / (2.0f * dc * radius);
+	const float sin_alpha = safe_sqrtf(max(0.0f, 1.0f - cos_alpha * cos_alpha));
 
 	/* Compute surface normal and sampled point on sphere. */
-	float3 n_world = sin_alpha * cosf(phi) * (-wcX) + sin_alpha * sinf(phi) * (-wcY) + cos_alpha * (-wc);
+	const float3 n_world = sin_alpha * cosf(phi) * (-wcX) + sin_alpha * sinf(phi) * (-wcY) + cos_alpha * (-wc);
 
 	ls->P = ls->P + radius * n_world;
 	ls->D = normalize_len(ls->P - P, &ls->t);

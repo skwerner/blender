@@ -133,28 +133,21 @@ ccl_device float3 disk_light_sample(float3 v, float randu, float randv)
 	return ellipse_sample(ru, rv, randu, randv);
 }
 
-static float sphere_sampling_threshold = 0.0001f;
-
 ccl_device float3 distant_light_sample(float3 D, float radius, float randu, float randv)
 {
 	return normalize(D + disk_light_sample(D, randu, randv)*radius);
 }
 
-ccl_device float lamp_light_pdf(const float3 Ng, const float3 I, float t)
-{
-	float cos_pi = dot(Ng, I);
-
-	if(cos_pi <= 0.0f)
-		return 0.0f;
-
-	return t*t/cos_pi;
-}
+/* Sampling of a sphere light's solid angle.
+ * Based on/copied from Pharr, Jakob, Humphreys,
+ * "Physically Based Rendering", 3rd edition, page 840ff
+ */
 
 ccl_device_inline float uniform_cone_pdf(float cos_theta_max) {
 	return cos_theta_max < 1.0f ? 1.0f / (2.0f * M_PI_F * (1.0f - cos_theta_max)) : 0.0f;
 }
 
-ccl_device float sphere_light_pdf(float3 P, float3 lightP, const LightSample *ls, float radius, float invarea)
+ccl_device float sphere_light_pdf(float3 P, float3 lightP, const LightSample *ls, float radius)
 {
 	float3 wc = lightP - P;
 	float dist_squared = len_squared(wc);
@@ -163,11 +156,6 @@ ccl_device float sphere_light_pdf(float3 P, float3 lightP, const LightSample *ls
 	/* No light if we're inside of or directly on the sphere. */
 	if(sin_theta_max2 >= 1.0f) {
 		return 0.0f;
-	}
-
-	/* Sample as disk if the radius is tiny compared to the distance. */
-	if(sin_theta_max2 < sphere_sampling_threshold) {
-		return invarea * lamp_light_pdf(ls->Ng, -ls->D, ls->t);
 	}
 
 	/* Use solid angle sampling. */
@@ -181,7 +169,7 @@ ccl_device float sphere_light_pdf(float3 P, float3 lightP, const LightSample *ls
 	}
 }
 
-ccl_device void sphere_light_sample(float3 P, LightSample *ls, float radius, float randu, float randv, float invarea)
+ccl_device void sphere_light_sample(float3 P, LightSample *ls, float radius, float randu, float randv)
 {
 	float3 wc = ls->P - P;
 	float dist_squared = len_squared(wc);
@@ -190,13 +178,6 @@ ccl_device void sphere_light_sample(float3 P, LightSample *ls, float radius, flo
 	/* No light if we're inside of or directly on the sphere. */
 	if(sin_theta_max2 >= 1.0f) {
 		ls->pdf = 0.0f;
-		return;
-	}
-
-	/* Sample as disk if the radius is tiny compared to the distance. */
-	if(sin_theta_max2 < sphere_sampling_threshold) {
-		ls->P += disk_light_sample(-wc / sqrtf(dist_squared), randu, randv)*radius;
-		ls->pdf = invarea;
 		return;
 	}
 	
@@ -223,6 +204,7 @@ ccl_device void sphere_light_sample(float3 P, LightSample *ls, float radius, flo
 	float3 n_world = sin_alpha * cosf(phi) * (-wcX) + sin_alpha * sinf(phi) * (-wcY) + cos_alpha * (-wc);
 
 	ls->P = ls->P + radius * n_world;
+	ls->D = normalize_len(ls->P - P, &ls->t);
 
 	/* Uniform cone PDF. */
 	ls->pdf = uniform_cone_pdf(cos_theta_max);
@@ -246,6 +228,16 @@ ccl_device float spot_light_attenuation(float3 dir, float spot_angle, float spot
 	}
 
 	return attenuation;
+}
+
+ccl_device float lamp_light_pdf(KernelGlobals *kg, const float3 Ng, const float3 I, float t)
+{
+	float cos_pi = dot(Ng, I);
+
+	if(cos_pi <= 0.0f)
+		return 0.0f;
+
+	return t*t/cos_pi;
 }
 
 /* Background Light */
@@ -429,7 +421,7 @@ ccl_device_inline float background_portal_pdf(KernelGlobals *kg,
 		if(is_round) {
 			float t;
 			float3 D = normalize_len(lightpos - P, &t);
-			portal_pdf += fabsf(klight->area.invarea) * lamp_light_pdf(dir, -D, t);
+			portal_pdf += fabsf(klight->area.invarea) * lamp_light_pdf(kg, dir, -D, t);
 		}
 		else {
 			portal_pdf += rect_light_sample(P, &lightpos, axisu, axisv, 0.0f, 0.0f, false);
@@ -490,7 +482,7 @@ ccl_device float3 background_portal_sample(KernelGlobals *kg,
 				lightpos += ellipse_sample(axisu*0.5f, axisv*0.5f, randu, randv);
 				float t;
 				D = normalize_len(lightpos - P, &t);
-				*pdf = fabsf(klight->area.invarea) * lamp_light_pdf(dir, -D, t);
+				*pdf = fabsf(klight->area.invarea) * lamp_light_pdf(kg, dir, -D, t);
 			}
 			else {
 				*pdf = rect_light_sample(P, &lightpos,
@@ -654,15 +646,17 @@ ccl_device_inline bool lamp_light_sample(KernelGlobals *kg,
 		ls->P = make_float3(klight->co[0], klight->co[1], klight->co[2]);
 
 		if(type == LIGHT_POINT || type == LIGHT_SPOT) {
-			float3 light_P = ls->P;
 			float radius = klight->spot.radius;
 			float invarea = klight->spot.invarea;
 			if(radius > 0.0f) {
-				/* sphere light */
-				sphere_light_sample(P, ls, radius, randu, randv, invarea);
+				/* Fills ls.D, ls.P, ls.Ng, ls.t and ls.pdf */
+				sphere_light_sample(P, ls, radius, randu, randv);
 			}
-			ls->D = normalize_len(ls->P - P, &ls->t);
-			ls->Ng = -ls->D;
+			else {
+				ls->D = normalize_len(ls->P - P, &ls->t);
+				ls->Ng = -ls->D;
+				ls->pdf = invarea * lamp_light_pdf(kg, ls->Ng, -ls->D, ls->t);
+			}
 			ls->eval_fac = (0.25f*M_1_PI_F)*invarea;
 
 			if(type == LIGHT_SPOT) {
@@ -681,8 +675,6 @@ ccl_device_inline bool lamp_light_sample(KernelGlobals *kg,
 			float2 uv = map_to_sphere(ls->Ng);
 			ls->u = uv.x;
 			ls->v = uv.y;
-
-			ls->pdf = sphere_light_pdf(P, light_P, ls, radius, invarea);
 		}
 		else {
 			/* area light */
@@ -726,7 +718,7 @@ ccl_device_inline bool lamp_light_sample(KernelGlobals *kg,
 
 			ls->eval_fac = 0.25f*invarea;
 			if(is_round) {
-				ls->pdf *= lamp_light_pdf(D, -ls->D, ls->t);
+				ls->pdf *= lamp_light_pdf(kg, D, -ls->D, ls->t);
 			}
 		}
 	}
@@ -802,26 +794,10 @@ ccl_device bool lamp_light_eval(KernelGlobals *kg, int lamp, float3 P, float3 D,
 		if(radius == 0.0f)
 			return false;
 
-		float3 wc = ls->P - P;
-		float dist_squared = len_squared(wc);
-		float sin_theta_max2 = radius * radius / dist_squared;
-		if(sin_theta_max2 < sphere_sampling_threshold) {
-			if(!ray_aligned_disk_intersect(P, D, t,
-										   lightP, radius, &ls->P, &ls->t)) {
-				return false;
-			}
-			else {
-				ls->Ng = -D;
-			}
-			}
-			else {
-			if(!ray_sphere_intersect(P, D, t, lightP, radius, &ls->P, &ls->t)) {
-				return false;
-			}
-			else {
-				ls->Ng = (ls->t < radius ? -1.0f : 1.0f) * normalize(ls->P - lightP);
-			}
+		if(!ray_sphere_intersect(P, D, t, lightP, radius, &ls->P, &ls->t)) {
+			return false;
 		}
+		ls->Ng = normalize(ls->P - lightP);
 		ls->D = D;
 
 		float invarea = klight->spot.invarea;
@@ -845,8 +821,7 @@ ccl_device bool lamp_light_eval(KernelGlobals *kg, int lamp, float3 P, float3 D,
 		ls->v = uv.y;
 
 		/* compute pdf */
-		if(ls->t != FLT_MAX)
-			ls->pdf = sphere_light_pdf(P, lightP, ls, radius, invarea);
+		ls->pdf = sphere_light_pdf(P, lightP, ls, radius);
 	}
 	else if(type == LIGHT_AREA) {
 		/* area light */
@@ -883,7 +858,7 @@ ccl_device bool lamp_light_eval(KernelGlobals *kg, int lamp, float3 P, float3 D,
 		ls->D = D;
 		ls->Ng = Ng;
 		if(is_round) {
-			ls->pdf = invarea * lamp_light_pdf(Ng, -D, ls->t);
+			ls->pdf = invarea * lamp_light_pdf(kg, Ng, -D, ls->t);
 		}
 		else {
 			ls->pdf = rect_light_sample(P, &light_P, axisu, axisv, 0, 0, false);

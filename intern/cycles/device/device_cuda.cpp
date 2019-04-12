@@ -1685,7 +1685,7 @@ public:
 		}
 
 		cuda_assert(cuFuncSetCacheConfig(cuPathTrace, CU_FUNC_CACHE_PREFER_L1));
-		
+
 		/* Kernels for adaptive sampling. */
 		CUfunction cuAdaptiveStopping, cuAdaptiveFilterX, cuAdaptiveFilterY, cuAdaptiveScaleSamples;
 		if (task.integrator_adaptive) {
@@ -1756,7 +1756,7 @@ public:
 			                           0, 0, args, 0));
 
 			uint filter_sample = sample + wtile->num_samples - 1;
-			/* Run the adaptive sampling kernels when we're at a multiple of 4 samples. 
+			/* Run the adaptive sampling kernels when we're at a multiple of 4 samples.
 			 * These are a series of tiny kernels because there is no grid synchronisation
 			 * from within a kernel, so multiple kernel launches it is. */
 			if(task.integrator_adaptive && (filter_sample & 0x3) == 3) {

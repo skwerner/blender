@@ -363,15 +363,15 @@ bool DeviceSplitKernel::path_trace(DeviceTask *task,
 		subtile.start_sample = tile.start_sample;
 		subtile.num_samples = tile.sample - tile.start_sample;
 		enqueue_split_kernel_data_init(KernelDimensions(global_size, local_size),
-			subtile,
-			num_global_elements,
-			kgbuffer,
-			kernel_data,
-			split_data,
-			ray_state,
-			queue_index,
-			use_queues_flag,
-			work_pool_wgs);
+		                                                subtile,
+		                                                num_global_elements,
+		                                                kgbuffer,
+		                                                kernel_data,
+		                                                split_data,
+		                                                ray_state,
+		                                                queue_index,
+		                                                use_queues_flag,
+		                                                work_pool_wgs);
 		size_t buffer_size[2];
 		buffer_size[0] = round_up(tile.w, local_size[0]);
 		buffer_size[1] = round_up(tile.h, local_size[1]);

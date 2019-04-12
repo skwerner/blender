@@ -602,7 +602,7 @@ ccl_device void kernel_branched_path_trace(KernelGlobals *kg,
 	int pass_stride = kernel_data.film.pass_stride;
 
 	buffer += index*pass_stride;
-	
+
 	if(kernel_data.film.pass_adaptive_aux_buffer) {
 		ccl_global float4 *aux = (ccl_global float4*)(buffer + kernel_data.film.pass_adaptive_aux_buffer);
 		if(aux->w > 0.0f) {

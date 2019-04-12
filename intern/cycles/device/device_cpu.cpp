@@ -797,7 +797,7 @@ public:
 				wtile.offset = tile.offset;
 				wtile.stride = tile.stride;
 				wtile.buffer = (float*)tile.buffer;
-				
+
 				bool any = false;
 				for(int y = tile.y; y < tile.y + tile.h; ++y) {
 					any |= kernel_do_adaptive_filter_x(kg, y, &wtile);

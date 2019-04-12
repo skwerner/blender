@@ -461,7 +461,7 @@ if(WITH_CYCLES_CUDA_BINARIES)
 			CYCLES_CUDA_KERNEL_ADD(${arch} ${prev_arch} filter "" "${cuda_filter_sources}" FALSE)
 			CYCLES_CUDA_KERNEL_ADD(${arch} ${prev_arch} kernel "" "${cuda_sources}" FALSE)
 
-			if(1)
+			if(WITH_CYCLES_CUDA_SPLIT_KERNEL_BINARIES)
 				# Compile split kernel
 				CYCLES_CUDA_KERNEL_ADD(${arch} ${prev_arch} kernel_split "-D __SPLIT__" "${cuda_sources}" FALSE)
 			endif()

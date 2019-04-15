@@ -179,6 +179,8 @@ class CYCLES_RENDER_PT_sampling(CyclesButtonsPanel, Panel):
             col.prop(cscene, "aa_samples", text="Render")
             col.prop(cscene, "preview_aa_samples", text="Viewport")
 
+        col.prop(cscene, "use_adaptive_sampling", text="Adaptive Sampling")
+
 
 class CYCLES_RENDER_PT_sampling_sub_samples(CyclesButtonsPanel, Panel):
     bl_label = "Sub Samples"
@@ -230,10 +232,9 @@ class CYCLES_RENDER_PT_sampling_advanced(CyclesButtonsPanel, Panel):
         row.prop(cscene, "seed")
         row.prop(cscene, "use_animated_seed", text="", icon='TIME')
 
-        layout.prop(cscene, "sampling_pattern", text="Pattern")
         col = layout.column(align=True)
-        col.active = cscene.sampling_pattern == 'PROGRESSIVE_MUTI_JITTER'
-        col.prop(cscene, "use_adaptive_sampling", text="Adaptive Sampling")
+        col.active = not(cscene.use_adaptive_sampling)
+        col.prop(cscene, "sampling_pattern", text="Pattern")
         col = layout.column(align=True)
         col.active = cscene.use_adaptive_sampling
         col.prop(cscene, "adaptive_min_samples", text="Adaptive Min Samples")

@@ -181,7 +181,7 @@ void Integrator::device_update(Device *device, DeviceScene *dscene, Scene *scene
 		kintegrator->adaptive_min_samples = max(4, adaptive_min_samples);
 	}
 	if(aa_samples > 0 && adaptive_threshold == 0.0f) {
-		kintegrator->adaptive_threshold = max(0.002f, 1.0f / (float)aa_samples);
+		kintegrator->adaptive_threshold = max(0.001f, 1.0f / (float)aa_samples);
 		VLOG(1) << "Cycles adaptive sampling: automatic threshold = " << kintegrator->adaptive_threshold;
 	}
 	else {

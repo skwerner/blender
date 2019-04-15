@@ -291,7 +291,8 @@ void BlenderSync::sync_integrator()
 	integrator->sample_all_lights_indirect = get_boolean(cscene, "sample_all_lights_indirect");
 	integrator->light_sampling_threshold = get_float(cscene, "light_sampling_threshold");
 
-	if(integrator->sampling_pattern == SAMPLING_PATTERN_PMJ) {
+	if(RNA_boolean_get(&cscene, "use_adaptive_sampling")) {
+		integrator->sampling_pattern = SAMPLING_PATTERN_PMJ;
 		integrator->adaptive_min_samples = get_int(cscene, "adaptive_min_samples");
 		integrator->adaptive_threshold = get_float(cscene, "adaptive_threshold");
 	}

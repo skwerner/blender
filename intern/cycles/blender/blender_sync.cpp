@@ -272,6 +272,10 @@ void BlenderSync::sync_integrator()
 			integrator->sampling_pattern = SAMPLING_PATTERN_CMJ;
 			integrator->use_dithered_sampling = false;
 			break;
+		case 3: /* Progressive Multi-Jittered */
+			integrator->sampling_pattern = SAMPLING_PATTERN_PMJ;
+			integrator->use_dithered_sampling = false;
+			break;
 		case 0: /* Sobol */
 		default:
 			integrator->sampling_pattern = SAMPLING_PATTERN_SOBOL;
@@ -301,6 +305,16 @@ void BlenderSync::sync_integrator()
 	integrator->sample_all_lights_indirect = get_boolean(cscene, "sample_all_lights_indirect");
 	integrator->light_sampling_threshold = get_float(cscene, "light_sampling_threshold");
 
+	if(RNA_boolean_get(&cscene, "use_adaptive_sampling")) {
+		integrator->sampling_pattern = SAMPLING_PATTERN_PMJ;
+		integrator->adaptive_min_samples = get_int(cscene, "adaptive_min_samples");
+		integrator->adaptive_threshold = get_float(cscene, "adaptive_threshold");
+	}
+	else {
+		integrator->adaptive_min_samples = INT_MAX;
+		integrator->adaptive_threshold = 0.0f;
+	}
+
 	int diffuse_samples = get_int(cscene, "diffuse_samples");
 	int glossy_samples = get_int(cscene, "glossy_samples");
 	int transmission_samples = get_int(cscene, "transmission_samples");
@@ -317,6 +331,7 @@ void BlenderSync::sync_integrator()
 		integrator->mesh_light_samples = mesh_light_samples * mesh_light_samples;
 		integrator->subsurface_samples = subsurface_samples * subsurface_samples;
 		integrator->volume_samples = volume_samples * volume_samples;
+		integrator->adaptive_min_samples = min(integrator->adaptive_min_samples * integrator->adaptive_min_samples, INT_MAX);
 	}
 	else {
 		integrator->diffuse_samples = diffuse_samples;
@@ -533,6 +548,8 @@ PassType BlenderSync::get_pass_type(BL::RenderPass& b_pass)
 	MAP_PASS("Debug Ray Bounces", PASS_RAY_BOUNCES);
 #endif
 	MAP_PASS("Debug Render Time", PASS_RENDER_TIME);
+	MAP_PASS("AdaptiveAuxBuffer", PASS_ADAPTIVE_AUX_BUFFER);
+	MAP_PASS("Debug Sample Count", PASS_SAMPLE_COUNT);
 	if(string_startswith(name, cryptomatte_prefix)) {
 		return PASS_CRYPTOMATTE;
 	}
@@ -566,7 +583,8 @@ int BlenderSync::get_denoising_pass(BL::RenderPass& b_pass)
 }
 
 vector<Pass> BlenderSync::sync_render_passes(BL::RenderLayer& b_rlay,
-                                             BL::SceneRenderLayer& b_srlay)
+                                             BL::SceneRenderLayer& b_srlay,
+                                             bool adaptive_sampling)
 {
 	vector<Pass> passes;
 	Pass::add(PASS_COMBINED, passes);
@@ -677,6 +695,14 @@ vector<Pass> BlenderSync::sync_render_passes(BL::RenderLayer& b_rlay,
 	}
 	if(get_boolean(crp, "pass_crypto_accurate") && scene->film->cryptomatte_passes != CRYPT_NONE) {
 		scene->film->cryptomatte_passes = (CryptomatteType)(scene->film->cryptomatte_passes | CRYPT_ACCURATE);
+	}
+
+	if(adaptive_sampling) {
+		Pass::add(PASS_ADAPTIVE_AUX_BUFFER, passes);
+		if(get_boolean(crp, "pass_debug_sample_count")) {
+			b_engine.add_pass("Debug Sample Count", 1, "X", b_srlay.name().c_str());
+		}
+		Pass::add(PASS_SAMPLE_COUNT, passes);
 	}
 
 	return passes;
@@ -896,6 +922,8 @@ SessionParams BlenderSync::get_session_params(BL::RenderEngine& b_engine,
 
 	params.use_profiling = params.device.has_profiling && !b_engine.is_preview() &&
 	                       background && BlenderSession::print_render_stats;
+
+	params.adaptive_sampling = RNA_boolean_get(&cscene, "use_adaptive_sampling");
 
 	return params;
 }

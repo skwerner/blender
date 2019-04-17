@@ -119,7 +119,7 @@ public:
 	device_vector<float> lookup_table;
 
 	/* integrator */
-	device_vector<uint> sobol_directions;
+	device_vector<uint> sample_pattern_lut;
 	device_vector<float2> sobol_dither;
 
 	/* ies lights */

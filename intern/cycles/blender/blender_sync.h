@@ -67,7 +67,8 @@ public:
 	               const char *layer = 0);
 	void sync_render_layers(BL::SpaceView3D& b_v3d, const char *layer);
 	vector<Pass> sync_render_passes(BL::RenderLayer& b_rlay,
-	                                BL::SceneRenderLayer& b_srlay);
+	                                BL::SceneRenderLayer& b_srlay,
+	                                bool adaptive_sampling);
 	void sync_integrator();
 	void sync_camera(BL::RenderSettings& b_render,
 	                 BL::Object& b_override,

@@ -18,12 +18,14 @@
 #include "render/background.h"
 #include "render/integrator.h"
 #include "render/film.h"
+#include "render/jitter.h"
 #include "render/light.h"
 #include "render/scene.h"
 #include "render/shader.h"
 #include "render/sobol.h"
 
 #include "util/util_foreach.h"
+#include "util/util_logging.h"
 #include "util/util_hash.h"
 
 CCL_NAMESPACE_BEGIN
@@ -64,6 +66,9 @@ NODE_DEFINE(Integrator)
 	SOCKET_INT(volume_samples, "Volume Samples", 1);
 	SOCKET_INT(start_sample, "Start Sample", 0);
 
+	SOCKET_FLOAT(adaptive_threshold, "Adaptive Threshold", 0.0f);
+	SOCKET_INT(adaptive_min_samples, "Adaptive Min Samples", 0);
+
 	SOCKET_BOOLEAN(sample_all_lights_direct, "Sample All Lights Direct", true);
 	SOCKET_BOOLEAN(sample_all_lights_indirect, "Sample All Lights Indirect", true);
 	SOCKET_FLOAT(light_sampling_threshold, "Light Sampling Threshold", 0.05f);
@@ -76,6 +81,7 @@ NODE_DEFINE(Integrator)
 	static NodeEnum sampling_pattern_enum;
 	sampling_pattern_enum.insert("sobol", SAMPLING_PATTERN_SOBOL);
 	sampling_pattern_enum.insert("cmj", SAMPLING_PATTERN_CMJ);
+	sampling_pattern_enum.insert("pmj", SAMPLING_PATTERN_PMJ);
 	SOCKET_ENUM(sampling_pattern, "Sampling Pattern", sampling_pattern_enum, SAMPLING_PATTERN_SOBOL);
 	SOCKET_BOOLEAN(use_dithered_sampling, "Use Dithered Sampling", false);
 	SOCKET_FLOAT(scrambling_distance, "Scrambling Distance", 1.0f);
@@ -171,6 +177,21 @@ void Integrator::device_update(Device *device, DeviceScene *dscene, Scene *scene
 	kintegrator->scrambling_distance = scrambling_distance;
 	kintegrator->aa_samples = aa_samples;
 
+	if(aa_samples > 0 && adaptive_min_samples == 0) {
+		kintegrator->adaptive_min_samples = max(4, (int)sqrtf(aa_samples));
+		VLOG(1) << "Cycles adaptive sampling: automatic min samples = " << kintegrator->adaptive_min_samples;
+	}
+	else {
+		kintegrator->adaptive_min_samples = max(4, adaptive_min_samples);
+	}
+	if(aa_samples > 0 && adaptive_threshold == 0.0f) {
+		kintegrator->adaptive_threshold = max(0.001f, 1.0f / (float)aa_samples);
+		VLOG(1) << "Cycles adaptive sampling: automatic threshold = " << kintegrator->adaptive_threshold;
+	}
+	else {
+		kintegrator->adaptive_threshold = adaptive_threshold;
+	}
+
 	if(light_sampling_threshold > 0.0f) {
 		kintegrator->light_inv_rr_threshold = 1.0f / light_sampling_threshold;
 	}
@@ -200,11 +221,25 @@ void Integrator::device_update(Device *device, DeviceScene *dscene, Scene *scene
 	int dimensions = PRNG_BASE_NUM + max_samples*PRNG_BOUNCE_NUM;
 	dimensions = min(dimensions, SOBOL_MAX_DIMENSIONS);
 
-	uint *directions = dscene->sobol_directions.alloc(SOBOL_BITS*dimensions);
+	if (sampling_pattern == SAMPLING_PATTERN_SOBOL) {
+		uint * directions = dscene->sample_pattern_lut.alloc(SOBOL_BITS*dimensions);
 
-	sobol_generate_direction_vectors((uint(*)[SOBOL_BITS])directions, dimensions);
+		sobol_generate_direction_vectors((uint(*)[SOBOL_BITS])directions, dimensions);
 
-	dscene->sobol_directions.copy_to_device();
+		dscene->sample_pattern_lut.copy_to_device();
+	}
+	else {
+		constexpr int sequence_size = 64 * 64;
+		constexpr int num_sequences = 48;
+		float2 * directions = (float2*)dscene->sample_pattern_lut.alloc(sequence_size * num_sequences * 2);
+		TaskPool pool;
+		for (int j = 0; j < num_sequences; ++j) {
+			float2 * sequence = directions + j * sequence_size;
+			pool.push(function_bind(&progressive_multi_jitter_02_generate_2D, sequence, sequence_size, j));
+		}
+		pool.wait_work();
+		dscene->sample_pattern_lut.copy_to_device();
+	}
 
 	/* Sobol dithering table */
 	if(use_dithered_sampling) {
@@ -231,7 +266,7 @@ void Integrator::device_update(Device *device, DeviceScene *dscene, Scene *scene
 
 void Integrator::device_free(Device *, DeviceScene *dscene)
 {
-	dscene->sobol_directions.free();
+	dscene->sample_pattern_lut.free();
 	dscene->sobol_dither.free();
 }
 

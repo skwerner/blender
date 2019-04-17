@@ -55,7 +55,7 @@ ccl_device uint sobol_dimension(KernelGlobals *kg, int index, int dimension)
 	uint i = index + SOBOL_SKIP;
 	for(uint j = 0; i; i >>= 1, j++) {
 		if(i & 1) {
-			result ^= kernel_tex_fetch(__sobol_directions, 32*dimension + j);
+			result ^= kernel_tex_fetch(__sample_pattern_lut, 32*dimension + j);
 		}
 	}
 	return result;
@@ -63,6 +63,8 @@ ccl_device uint sobol_dimension(KernelGlobals *kg, int index, int dimension)
 
 #endif  /* __SOBOL__ */
 
+#define NUM_PJ_SAMPLES 64*64
+#define NUM_PJ_PATTERNS 48
 
 ccl_device_forceinline float path_rng_1D(KernelGlobals *kg,
                                          uint rng_hash,
@@ -72,7 +74,16 @@ ccl_device_forceinline float path_rng_1D(KernelGlobals *kg,
 #ifdef __DEBUG_CORRELATION__
 	return (float)drand48();
 #endif
-
+	if(kernel_data.integrator.sampling_pattern == SAMPLING_PATTERN_PMJ) {
+		/* Fallback to random */
+		if(sample > NUM_PJ_SAMPLES) {
+			int p = rng_hash + dimension;
+			return cmj_randfloat(sample, p);
+		}
+		uint tmp_rng = cmj_hash_simple(dimension, rng_hash);
+		int index = ((dimension % NUM_PJ_PATTERNS) * NUM_PJ_SAMPLES + sample) * 2;
+		return __uint_as_float(kernel_tex_fetch(__sample_pattern_lut, index) ^ (tmp_rng & 0x007fffff)) - 1.0f;
+	}
 #ifdef __CMJ__
 #  ifdef __SOBOL__
 	if(kernel_data.integrator.sampling_pattern == SAMPLING_PATTERN_CMJ)
@@ -125,7 +136,19 @@ ccl_device_forceinline void path_rng_2D(KernelGlobals *kg,
 	*fy = (float)drand48();
 	return;
 #endif
-
+	if(kernel_data.integrator.sampling_pattern == SAMPLING_PATTERN_PMJ) {
+		if(sample > NUM_PJ_SAMPLES) {
+			int p = rng_hash + dimension;
+			*fx = cmj_randfloat(sample, p);
+			*fy = cmj_randfloat(sample, p + 1);
+		}
+		uint tmp_rng = cmj_hash_simple(dimension, rng_hash);
+		int index = ((dimension % NUM_PJ_PATTERNS) * NUM_PJ_SAMPLES + sample) * 2;
+		*fx = __uint_as_float(kernel_tex_fetch(__sample_pattern_lut, index) ^ (tmp_rng & 0x007fffff)) - 1.0f;
+		tmp_rng = cmj_hash_simple(dimension+ 1, rng_hash);
+		*fy = __uint_as_float(kernel_tex_fetch(__sample_pattern_lut, index + 1) ^ (tmp_rng & 0x007fffff)) - 1.0f;
+		return;
+	}
 #ifdef __CMJ__
 #  ifdef __SOBOL__
 	if(kernel_data.integrator.sampling_pattern == SAMPLING_PATTERN_CMJ)
@@ -327,6 +350,23 @@ ccl_device_inline uint path_rng_hash(uint rng_hash, int i)
 {
 	/* Fall back to the regular scrambling after hashing. */
 	return cmj_hash(rng_hash, i) & (~DITHER_MASK);
+}
+
+ccl_device_inline bool sample_is_even(int pattern, int sample)
+{
+	if (pattern == SAMPLING_PATTERN_PMJ) {
+	        /* See Section 10.2.1, "Progressive Multi-Jittered Sample Sequences", Christensen et al.
+	         * We can use this to get divide sample sequence into two classes for easier variance estimation.
+	         * There must be a more elegant way of writing this? */
+	return (bool)(sample & 2) ^ (bool)(sample & 8) ^ (bool)(sample & 0x20) ^ (bool)(sample & 0x80)
+	       ^ (bool)(sample & 0x200) ^ (bool)(sample & 0x800) ^ (bool)(sample & 0x2000) ^ (bool)(sample & 0x8000)
+	       ^ (bool)(sample & 0x20000) ^ (bool)(sample & 0x80000) ^ (bool)(sample & 0x200000) ^ (bool)(sample & 0x800000)
+	       ^ (bool)(sample & 0x2000000) ^ (bool)(sample & 0x8000000) ^ (bool)(sample & 0x20000000) ^ (bool)(sample & 0x80000000);
+	}
+	else {
+	        /* TODO: Are there reliable ways of dividing CMJ and Sobol into two classes? */
+		return sample & 0x1;
+	}
 }
 
 CCL_NAMESPACE_END

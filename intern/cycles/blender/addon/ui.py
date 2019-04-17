@@ -204,9 +204,19 @@ class CYCLES_RENDER_PT_sampling(CyclesButtonsPanel, Panel):
             col.prop(cscene, "sample_all_lights_direct")
             col.prop(cscene, "sample_all_lights_indirect")
 
-        layout.row().prop(cscene, "sampling_pattern", text="Pattern")
-        if cscene.sampling_pattern != "CORRELATED_MUTI_JITTER":
+        sub.prop(cscene, "use_adaptive_sampling", text="Adaptive Sampling")
+
+        row = layout.row()
+        row.active = not(cscene.use_adaptive_sampling)
+        row.prop(cscene, "sampling_pattern", text="Pattern")
+        row = layout.row(align=True)
+        if cscene.sampling_pattern != "CORRELATED_MUTI_JITTER" and cscene.sampling_pattern != "PROGRESSIVE_MULTI_JITTER" and not(cscene.use_adaptive_sampling):
             layout.row().prop(cscene, "scrambling_distance", text="Scrambling Distance")
+        row = layout.row(align=True)
+        row.active = cscene.use_adaptive_sampling
+        row.prop(cscene, "adaptive_min_samples", text="Adaptive Min Samples")
+        row.prop(cscene, "adaptive_threshold", text="Adaptive Threshold")
+
 
         for rl in scene.render.layers:
             if rl.samples > 0:
@@ -560,6 +570,7 @@ class CYCLES_RENDER_PT_layer_passes(CyclesButtonsPanel, Panel):
 
         col = layout.column()
         col.prop(crl, "pass_debug_render_time")
+        col.prop(crl, "pass_debug_sample_count")
         if _cycles.with_cycles_debug:
             col.prop(crl, "pass_debug_bvh_traversed_nodes")
             col.prop(crl, "pass_debug_bvh_traversed_instances")

@@ -324,7 +324,7 @@ ccl_device_inline bool sample_is_even(int pattern, int sample)
 		/* See Section 10.2.1, "Progressive Multi-Jittered Sample Sequences", Christensen et al.
 		 * We can use this to get divide sample sequence into two classes for easier variance estimation.
 		 * There must be a more elegant way of writing this? */
-		return (bool)(sample & 2) ^ (bool)(sample & 8) ^ (bool)(sample & 0x20) ^ (bool)(sample & 0x20) ^ (bool)(sample & 0x80)
+		return (bool)(sample & 2) ^ (bool)(sample & 8) ^ (bool)(sample & 0x20) ^ (bool)(sample & 0x80)
 			  ^ (bool)(sample & 0x200) ^ (bool)(sample & 0x800) ^ (bool)(sample & 0x2000) ^ (bool)(sample & 0x8000)
 			  ^ (bool)(sample & 0x20000) ^ (bool)(sample & 0x80000) ^ (bool)(sample & 0x200000) ^ (bool)(sample & 0x800000)
 			  ^ (bool)(sample & 0x2000000) ^ (bool)(sample & 0x8000000) ^ (bool)(sample & 0x20000000) ^ (bool)(sample & 0x80000000);

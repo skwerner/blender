@@ -3660,8 +3660,10 @@ static int region_quadview_exec(bContext *C, wmOperator *op)
                                 RV3D_ORTHO);
       /* forcing camera is distracting */
 #if 0
-      if (v3d->camera) region_quadview_init_rv3d(sa, (ar = ar->next), 0, RV3D_VIEW_CAMERA, RV3D_CAMOB);
-      else             region_quadview_init_rv3d(sa, (ar = ar->next), 0, RV3D_VIEW_USER,   RV3D_PERSP);
+      if (v3d->camera)
+        region_quadview_init_rv3d(sa, (ar = ar->next), 0, RV3D_VIEW_CAMERA, RV3D_CAMOB);
+      else
+        region_quadview_init_rv3d(sa, (ar = ar->next), 0, RV3D_VIEW_USER, RV3D_PERSP);
 #else
       (void)v3d;
 #endif
@@ -4783,7 +4785,7 @@ static void region_blend_end(bContext *C, ARegion *ar, const bool is_running)
   ar->regiontimer = NULL;
 }
 /* assumes that *ar itself is not a splitted version from previous region */
-void region_blend_start(bContext *C, ScrArea *sa, ARegion *ar)
+void ED_region_visibility_change_update_animated(bContext *C, ScrArea *sa, ARegion *ar)
 {
   wmWindowManager *wm = CTX_wm_manager(C);
   wmWindow *win = CTX_wm_window(C);

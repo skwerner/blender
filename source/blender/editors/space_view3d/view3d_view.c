@@ -739,9 +739,16 @@ void view3d_winmatrix_set(Depsgraph *depsgraph, ARegion *ar, const View3D *v3d, 
   rv3d->is_persp = !is_ortho;
 
 #if 0
-  printf("%s: %d %d %f %f %f %f %f %f\n", __func__, winx, winy,
-         viewplane.xmin, viewplane.ymin, viewplane.xmax, viewplane.ymax,
-         clipsta, clipend);
+  printf("%s: %d %d %f %f %f %f %f %f\n",
+         __func__,
+         winx,
+         winy,
+         viewplane.xmin,
+         viewplane.ymin,
+         viewplane.xmax,
+         viewplane.ymax,
+         clipsta,
+         clipend);
 #endif
 
   if (rect) { /* picking */
@@ -1223,7 +1230,7 @@ static bool view3d_localview_init(const Depsgraph *depsgraph,
 
   if (local_view_bit == 0) {
     /* TODO(dfelinto): We can kick one of the other 3D views out of local view
-       specially if it is not being used.  */
+     * specially if it is not being used.  */
     BKE_report(reports, RPT_ERROR, "No more than 16 local views");
     ok = false;
   }

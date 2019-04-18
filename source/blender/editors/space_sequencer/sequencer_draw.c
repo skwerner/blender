@@ -1186,7 +1186,7 @@ static void sequencer_draw_borders(const SpaceSeq *sseq, const View2D *v2d, cons
 void sequencer_draw_maskedit(const bContext *C, Scene *scene, ARegion *ar, SpaceSeq *sseq)
 {
   /* NOTE: sequencer mask editing isnt finished, the draw code is working but editing not,
-  * for now just disable drawing since the strip frame will likely be offset */
+   * for now just disable drawing since the strip frame will likely be offset */
 
   // if (sc->mode == SC_MODE_MASKEDIT)
   if (0 && sseq->mainb == SEQ_DRAW_IMG_IMBUF) {
@@ -1201,13 +1201,19 @@ void sequencer_draw_maskedit(const bContext *C, Scene *scene, ARegion *ar, Space
       width = (scene->r.size * scene->r.xsch) / 100;
       height = (scene->r.size * scene->r.ysch) / 100;
 
-      ED_mask_draw_region(
-              mask, ar,
-              0, 0, 0,  /* TODO */
-              width, height,
-              aspx, aspy,
-              false, true,
-              NULL, C);
+      ED_mask_draw_region(mask,
+                          ar,
+                          0,
+                          0,
+                          0, /* TODO */
+                          width,
+                          height,
+                          aspx,
+                          aspy,
+                          false,
+                          true,
+                          NULL,
+                          C);
     }
   }
 }
@@ -1623,9 +1629,7 @@ void drawprefetchseqspace(Scene *scene, ARegion *UNUSED(ar), SpaceSeq *sseq)
   recty = (render_size * scene->r.ysch) / 100;
 
   if (sseq->mainb != SEQ_DRAW_SEQUENCE) {
-    give_ibuf_prefetch_request(
-        rectx, recty, (scene->r.cfra), sseq->chanshown,
-        proxy_size);
+    give_ibuf_prefetch_request(rectx, recty, (scene->r.cfra), sseq->chanshown, proxy_size);
   }
 }
 #endif

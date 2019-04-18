@@ -405,7 +405,9 @@ static bool acf_generic_idfill_name_prop(bAnimListElem *ale, PointerRNA *ptr, Pr
 
 #if 0
 /* channel type has no settings */
-static bool acf_generic_none_setting_valid(bAnimContext *ac, bAnimListElem *ale, eAnimChannel_Settings setting)
+static bool acf_generic_none_setting_valid(bAnimContext *ac,
+                                           bAnimListElem *ale,
+                                           eAnimChannel_Settings setting)
 {
   return false;
 }
@@ -3665,7 +3667,7 @@ static bAnimChannelType ACF_NLAACTION = {
     ACHANNEL_ROLE_CHANNEL, /* role */
 
     acf_nlaaction_color,            /* backdrop color (NOTE: the backdrop handles this too,
-                                   * since it needs special hacks) */
+                                     * since it needs special hacks). */
     acf_nlaaction_backdrop,         /* backdrop */
     acf_generic_indention_flexible, /* indent level */
     acf_generic_group_offset,
@@ -4628,12 +4630,14 @@ static void draw_setting_widget(bAnimContext *ac,
           UI_but_func_set(but, achannel_setting_widget_cb, NULL, NULL);
           break;
       }
-    }
-  }
 
-  if ((ale->fcurve_owner_id != NULL && ID_IS_LINKED(ale->fcurve_owner_id)) ||
-      (ale->id != NULL && ID_IS_LINKED(ale->id))) {
-    UI_but_flag_enable(but, UI_BUT_DISABLED);
+      if ((ale->fcurve_owner_id != NULL && ID_IS_LINKED(ale->fcurve_owner_id)) ||
+          (ale->id != NULL && ID_IS_LINKED(ale->id))) {
+        if (setting != ACHANNEL_SETTING_EXPAND) {
+          UI_but_flag_enable(but, UI_BUT_DISABLED);
+        }
+      }
+    }
   }
 }
 
@@ -4715,15 +4719,43 @@ void ANIM_channel_draw_widgets(const bContext *C,
       RNA_pointer_create(ale->id, &RNA_GPencilLayer, ale->data, &ptr);
 
       UI_block_align_begin(block);
-      UI_block_emboss_set(block, RNA_boolean_get(&ptr, "is_stroke_visible") ? UI_EMBOSS : UI_EMBOSS_NONE);
-      uiDefButR(block, UI_BTYPE_COLOR, 1, "", offset, yminc, w, ICON_WIDTH,
-                &ptr, "color", -1,
-                0, 0, 0, 0, gpl->info);
+      UI_block_emboss_set(block,
+                          RNA_boolean_get(&ptr, "is_stroke_visible") ? UI_EMBOSS : UI_EMBOSS_NONE);
+      uiDefButR(block,
+                UI_BTYPE_COLOR,
+                1,
+                "",
+                offset,
+                yminc,
+                w,
+                ICON_WIDTH,
+                &ptr,
+                "color",
+                -1,
+                0,
+                0,
+                0,
+                0,
+                gpl->info);
 
-      UI_block_emboss_set(block, RNA_boolean_get(&ptr, "is_fill_visible") ? UI_EMBOSS : UI_EMBOSS_NONE);
-      uiDefButR(block, UI_BTYPE_COLOR, 1, "", offset + w, yminc, w, ICON_WIDTH,
-                &ptr, "fill_color", -1,
-                0, 0, 0, 0, gpl->info);
+      UI_block_emboss_set(block,
+                          RNA_boolean_get(&ptr, "is_fill_visible") ? UI_EMBOSS : UI_EMBOSS_NONE);
+      uiDefButR(block,
+                UI_BTYPE_COLOR,
+                1,
+                "",
+                offset + w,
+                yminc,
+                w,
+                ICON_WIDTH,
+                &ptr,
+                "fill_color",
+                -1,
+                0,
+                0,
+                0,
+                0,
+                gpl->info);
       UI_block_emboss_set(block, UI_EMBOSS_NONE);
       UI_block_align_end(block);
 

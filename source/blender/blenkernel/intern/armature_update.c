@@ -806,6 +806,7 @@ static void pose_eval_cleanup_common(Object *object)
   bPose *pose = object->pose;
   BLI_assert(pose != NULL);
   BLI_assert(pose->chan_array != NULL || BLI_listbase_is_empty(&pose->chanbase));
+  UNUSED_VARS_NDEBUG(pose);
 }
 
 void BKE_pose_eval_done(struct Depsgraph *depsgraph, Object *object)
@@ -869,8 +870,7 @@ void BKE_pose_eval_proxy_copy_bone(struct Depsgraph *depsgraph, Object *object, 
    * around for the time while proxies are evaluating.
    */
 #if 0
-  bPoseChannel *pchan_from = pose_pchan_get_indexed(
-          object->proxy_from, pchan_index);
+  bPoseChannel *pchan_from = pose_pchan_get_indexed(object->proxy_from, pchan_index);
 #else
   bPoseChannel *pchan_from = BKE_pose_channel_find_name(object->proxy_from->pose, pchan->name);
 #endif

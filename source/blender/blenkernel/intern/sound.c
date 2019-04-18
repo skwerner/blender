@@ -391,8 +391,7 @@ void BKE_sound_load(struct Main *bmain, bSound *sound)
 
 /* XXX unused currently */
 #  if 0
-    switch (sound->type)
-    {
+    switch (sound->type) {
       case SOUND_TYPE_FILE:
 #  endif
     {

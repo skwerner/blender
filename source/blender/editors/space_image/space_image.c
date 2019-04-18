@@ -291,9 +291,6 @@ static void image_operatortypes(void)
   WM_operatortype_append(IMAGE_OT_sample_line);
   WM_operatortype_append(IMAGE_OT_curves_point_set);
 
-  WM_operatortype_append(IMAGE_OT_properties);
-  WM_operatortype_append(IMAGE_OT_toolshelf);
-
   WM_operatortype_append(IMAGE_OT_change_frame);
 
   WM_operatortype_append(IMAGE_OT_read_viewlayers);
@@ -745,7 +742,8 @@ static void image_main_region_draw(const bContext *C, ARegion *ar)
 
   /* scrollers? */
 #if 0
-  scrollers = UI_view2d_scrollers_calc(C, v2d, V2D_UNIT_VALUES, V2D_GRID_CLAMP, V2D_ARG_DUMMY, V2D_ARG_DUMMY);
+  scrollers = UI_view2d_scrollers_calc(
+      C, v2d, V2D_UNIT_VALUES, V2D_GRID_CLAMP, V2D_ARG_DUMMY, V2D_ARG_DUMMY);
   UI_view2d_scrollers_draw(C, v2d, scrollers);
   UI_view2d_scrollers_free(scrollers);
 #endif

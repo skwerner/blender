@@ -26,4 +26,4 @@ void progressive_multi_jitter_02_generate_2D(float2 points[], int size, int rng_
 
 CCL_NAMESPACE_END
 
-#endif  /* __JITTER_H__ */
+#endif /* __JITTER_H__ */

@@ -316,7 +316,6 @@ static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, Mes
         cross_v3_v3v3(c1, cross2, axis_vec);
         cross_v3_v3v3(c2, axis_vec, c1);
 
-
         angle = angle_v3v3(cross1, c2);
 
         cross_v3_v3v3(axis_tmp, cross1, c2);
@@ -324,7 +323,6 @@ static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, Mes
 
         if (len_v3v3(axis_tmp, axis_vec) > 1.0f)
           angle = -angle;
-
       }
     }
 #endif
@@ -719,26 +717,34 @@ static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, Mes
                       /*printf("\t\t\tFlipping 0\n");*/
                       SWAP(unsigned int, lt_iter.e->v1, lt_iter.e->v2);
                     }
-                    /* else {
-                        printf("\t\t\tFlipping Not 0\n");
-                       }*/
+#if 0
+                    else {
+                      printf("\t\t\tFlipping Not 0\n");
+                    }
+#endif
                   }
                   else if (lt_iter.v == lt_iter.e->v2) {
                     if (ed_loop_flip == 1) {
                       /*printf("\t\t\tFlipping 1\n");*/
                       SWAP(unsigned int, lt_iter.e->v1, lt_iter.e->v2);
                     }
-                    /* else {
-                        printf("\t\t\tFlipping Not 1\n");
-                       }*/
+#if 0
+                    else {
+                      printf("\t\t\tFlipping Not 1\n");
+                    }
+#endif
                   }
-                  /* else {
-                      printf("\t\tIncorrect edge topology");
-                     }*/
+#if 0
+                  else {
+                    printf("\t\tIncorrect edge topology");
+                  }
+#endif
                 }
-                /* else {
-                    printf("\t\tNo Edge at this point\n");
-                   }*/
+#if 0
+                else {
+                  printf("\t\tNo Edge at this point\n");
+                }
+#endif
                 screwvert_iter_step(&lt_iter);
               }
             }
@@ -1081,7 +1087,6 @@ static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, Mes
       ii = findEd(medge_new, maxEdges, ml_new[3].v, ml_new[0].v);
       printf("%d %d\n", ii, ml_new[3].e);
       ml_new[3].e = ii;
-
     }
   }
 #endif

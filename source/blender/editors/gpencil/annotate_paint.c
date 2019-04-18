@@ -1514,7 +1514,7 @@ static void gpencil_draw_eraser(bContext *UNUSED(C), int x, int y, void *p_ptr)
         y,
         p->radius,
         /* XXX Dashed shader gives bad results with sets of small segments currently,
-             *     temp hack around the issue. :( */
+         *     temp hack around the issue. :( */
         max_ii(8, p->radius / 2)); /* was fixed 40 */
 
     immUnbindProgram();
@@ -2429,7 +2429,9 @@ static int gpencil_draw_modal(bContext *C, wmOperator *op, const wmEvent *event)
       /* event doesn't need to be handled */
 #if 0
       printf("unhandled event -> %d (mmb? = %d | mmv? = %d)\n",
-             event->type, event->type == MIDDLEMOUSE, event->type==MOUSEMOVE);
+             event->type,
+             event->type == MIDDLEMOUSE,
+             event->type == MOUSEMOVE);
 #endif
       break;
   }

@@ -511,6 +511,7 @@ static void OBJECT_engine_init(void *vedata)
     const bool show_axis_y = (v3d->gridflag & V3D_SHOW_Y) != 0;
     const bool show_axis_z = (v3d->gridflag & V3D_SHOW_Z) != 0;
     const bool show_floor = (v3d->gridflag & V3D_SHOW_FLOOR) != 0;
+    const bool show_ortho_grid = (v3d->gridflag & V3D_SHOW_ORTHO_GRID) != 0;
     e_data.draw_grid = show_axis_x || show_axis_y || show_axis_z || show_floor;
 
     DRW_viewport_matrix_get(winmat, DRW_MAT_WIN);
@@ -559,15 +560,15 @@ static void OBJECT_engine_init(void *vedata)
       grid_res = viewdist / grid_scale;
 
       if (ELEM(rv3d->view, RV3D_VIEW_RIGHT, RV3D_VIEW_LEFT)) {
-        e_data.draw_grid = true;
+        e_data.draw_grid = show_ortho_grid;
         e_data.grid_flag = PLANE_YZ | SHOW_AXIS_Y | SHOW_AXIS_Z | SHOW_GRID | GRID_BACK;
       }
       else if (ELEM(rv3d->view, RV3D_VIEW_TOP, RV3D_VIEW_BOTTOM)) {
-        e_data.draw_grid = true;
+        e_data.draw_grid = show_ortho_grid;
         e_data.grid_flag = PLANE_XY | SHOW_AXIS_X | SHOW_AXIS_Y | SHOW_GRID | GRID_BACK;
       }
       else if (ELEM(rv3d->view, RV3D_VIEW_FRONT, RV3D_VIEW_BACK)) {
-        e_data.draw_grid = true;
+        e_data.draw_grid = show_ortho_grid;
         e_data.grid_flag = PLANE_XZ | SHOW_AXIS_X | SHOW_AXIS_Z | SHOW_GRID | GRID_BACK;
       }
       else { /* RV3D_VIEW_USER */
@@ -3115,11 +3116,10 @@ static void OBJECT_cache_populate(void *vedata, Object *ob)
                             ((DRW_object_is_renderable(ob) && (ob->dt > OB_WIRE)) ||
                              (ob->dt == OB_WIRE)));
   const bool show_relations = ((draw_ctx->v3d->flag & V3D_HIDE_HELPLINES) == 0);
-  const bool hide_object_extra = ((v3d->overlay.flag & V3D_OVERLAY_HIDE_OBJECT_XTRAS) != 0 &&
-                                  /* Show if this is the camera we're looking through
-           * since it's useful for moving the camera. */
-                                  (((rv3d->persp == RV3D_CAMOB) &&
-                                    ((ID *)v3d->camera == ob->id.orig_id)) == 0));
+  const bool hide_object_extra =
+      ((v3d->overlay.flag & V3D_OVERLAY_HIDE_OBJECT_XTRAS) != 0 &&
+       /* Show if this is the camera we're looking through since it's useful for selecting. */
+       (((rv3d->persp == RV3D_CAMOB) && ((ID *)v3d->camera == ob->id.orig_id)) == 0));
 
   if (do_outlines) {
     if (!BKE_object_is_in_editmode(ob) &&

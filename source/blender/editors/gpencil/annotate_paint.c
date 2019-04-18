@@ -93,7 +93,7 @@ typedef enum eGP_StrokeAdd_Result {
 	GP_STROKEADD_INVALID    = -2,       /* error occurred - insufficient info to do so */
 	GP_STROKEADD_OVERFLOW   = -1,       /* error occurred - cannot fit any more points */
 	GP_STROKEADD_NORMAL,                /* point was successfully added */
-	GP_STROKEADD_FULL                   /* cannot add any more points to buffer */
+	GP_STROKEADD_FULL,                   /* cannot add any more points to buffer */
 } eGP_StrokeAdd_Result;
 
 /* Runtime flags */
@@ -681,6 +681,9 @@ static void gp_stroke_newfrombuffer(tGPsdata *p)
 	/* copy appropriate settings for stroke */
 	gps->totpoints = totelem;
 	gps->thickness = gpl->thickness;
+	gps->gradient_f = 1.0f;
+	gps->gradient_s[0] = 1.0f;
+	gps->gradient_s[1] = 1.0f;
 	gps->flag = gpd->runtime.sbuffer_sflag;
 	gps->inittime = p->inittime;
 

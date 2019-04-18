@@ -440,7 +440,7 @@ void OBJECT_OT_proxy_make(wmOperatorType *ot)
 typedef enum eObClearParentTypes {
 	CLEAR_PARENT_ALL = 0,
 	CLEAR_PARENT_KEEP_TRANSFORM,
-	CLEAR_PARENT_INVERSE
+	CLEAR_PARENT_INVERSE,
 } eObClearParentTypes;
 
 EnumPropertyItem prop_clear_parent_types[] = {
@@ -947,6 +947,8 @@ static int parent_set_invoke(bContext *C, wmOperator *UNUSED(op), const wmEvent 
 	RNA_enum_set(&opptr, "type", PAR_OBJECT);
 	RNA_boolean_set(&opptr, "keep_transform", true);
 #endif
+
+	uiItemO(layout, IFACE_("Object (Without Inverse)"), ICON_NONE, "OBJECT_OT_parent_no_inverse_set");
 
 	struct {
 		bool mesh, gpencil;

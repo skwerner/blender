@@ -1830,12 +1830,6 @@ void blo_do_versions_280(FileData *fd, Library *UNUSED(lib), Main *bmain)
 			}
 		}
 
-		for (Scene *scene = bmain->scenes.first; scene; scene = scene->id.next) {
-			if (scene->toolsettings->gizmo_flag == 0) {
-				scene->toolsettings->gizmo_flag = SCE_GIZMO_SHOW_TRANSLATE | SCE_GIZMO_SHOW_ROTATE | SCE_GIZMO_SHOW_SCALE;
-			}
-		}
-
 		if (!DNA_struct_elem_find(fd->filesdna, "RigidBodyWorld", "RigidBodyWorld_Shared", "*shared")) {
 			for (Scene *scene = bmain->scenes.first; scene; scene = scene->id.next) {
 				RigidBodyWorld *rbw = scene->rigidbody_world;
@@ -3086,7 +3080,83 @@ void blo_do_versions_280(FileData *fd, Library *UNUSED(lib), Main *bmain)
 		}
 	}
 
+	if (!MAIN_VERSION_ATLEAST(bmain, 280, 56)) {
+		for (bScreen *screen = bmain->screens.first; screen; screen = screen->id.next) {
+			for (ScrArea *area = screen->areabase.first; area; area = area->next) {
+				for (SpaceLink *sl = area->spacedata.first; sl; sl = sl->next) {
+					if (sl->spacetype == SPACE_VIEW3D) {
+						View3D *v3d = (View3D *)sl;
+						v3d->gizmo_show_armature = V3D_GIZMO_SHOW_ARMATURE_BBONE | V3D_GIZMO_SHOW_ARMATURE_ROLL;
+						v3d->gizmo_show_empty = V3D_GIZMO_SHOW_EMPTY_IMAGE | V3D_GIZMO_SHOW_EMPTY_FORCE_FIELD;
+						v3d->gizmo_show_light = V3D_GIZMO_SHOW_LIGHT_SIZE | V3D_GIZMO_SHOW_LIGHT_LOOK_AT;
+						v3d->gizmo_show_camera = V3D_GIZMO_SHOW_CAMERA_LENS | V3D_GIZMO_SHOW_CAMERA_DOF_DIST;
+					}
+				}
+			}
+		}
+	}
+
+	if (!MAIN_VERSION_ATLEAST(bmain, 280, 57)) {
+		/* Enable Show Interpolation in dopesheet by default. */
+		for (bScreen *screen = bmain->screens.first; screen; screen = screen->id.next) {
+			for (ScrArea *sa = screen->areabase.first; sa; sa = sa->next) {
+				for (SpaceLink *sl = sa->spacedata.first; sl; sl = sl->next) {
+					if (sl->spacetype == SPACE_ACTION) {
+						SpaceAction *saction = (SpaceAction *)sl;
+						if ((saction->flag & SACTION_SHOW_EXTREMES) == 0) {
+							saction->flag |= SACTION_SHOW_INTERPOLATION;
+						}
+					}
+				}
+			}
+		}
+
+		/* init grease pencil brush gradients */
+		if (!DNA_struct_elem_find(fd->filesdna, "BrushGpencilSettings", "float", "gradient_f")) {
+			for (Brush *brush = bmain->brushes.first; brush; brush = brush->id.next) {
+				if (brush->gpencil_settings != NULL) {
+					BrushGpencilSettings *gp = brush->gpencil_settings;
+					gp->gradient_f = 1.0f;
+					gp->gradient_s[0] = 1.0f;
+					gp->gradient_s[1] = 1.0f;
+				}
+			}
+		}
+
+		/* init grease pencil stroke gradients */
+		if (!DNA_struct_elem_find(fd->filesdna, "bGPDstroke", "float", "gradient_f")) {
+			for (bGPdata *gpd = bmain->gpencils.first; gpd; gpd = gpd->id.next) {
+				for (bGPDlayer *gpl = gpd->layers.first; gpl; gpl = gpl->next) {
+					for (bGPDframe *gpf = gpl->frames.first; gpf; gpf = gpf->next) {
+						for (bGPDstroke *gps = gpf->strokes.first; gps; gps = gps->next) {
+							gps->gradient_f = 1.0f;
+							gps->gradient_s[0] = 1.0f;
+							gps->gradient_s[1] = 1.0f;
+						}
+					}
+				}
+			}
+		}
+	}
+
 	{
+		if (!DNA_struct_elem_find(fd->filesdna, "bSplineIKConstraint", "short", "yScaleMode")) {
+			for (Object *ob = bmain->objects.first; ob; ob = ob->id.next) {
+				if (ob->pose) {
+					for (bPoseChannel *pchan = ob->pose->chanbase.first; pchan; pchan = pchan->next) {
+						for (bConstraint *con = pchan->constraints.first; con; con = con->next) {
+							if (con->type == CONSTRAINT_TYPE_SPLINEIK) {
+								bSplineIKConstraint *data = (bSplineIKConstraint *)con->data;
+								if ((data->flag & CONSTRAINT_SPLINEIK_SCALE_LIMITED) == 0) {
+									data->yScaleMode = CONSTRAINT_SPLINEIK_YS_FIT_CURVE;
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+
 		/* Versioning code until next subversion bump goes here. */
 	}
 }

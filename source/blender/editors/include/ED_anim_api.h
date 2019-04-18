@@ -240,7 +240,7 @@ typedef enum eAnim_ChannelType {
 	ANIMTYPE_PALETTE,
 
 	/* always as last item, the total number of channel types... */
-	ANIMTYPE_NUM_TYPES
+	ANIMTYPE_NUM_TYPES,
 } eAnim_ChannelType;
 
 /* types of keyframe data in bAnimListElem */
@@ -255,7 +255,7 @@ typedef enum eAnim_KeyType {
 	ALE_SCE,            /* Scene summary */
 	ALE_OB,             /* Object summary */
 	ALE_ACT,            /* Action summary */
-	ALE_GROUP           /* Action Group summary */
+	ALE_GROUP,           /* Action Group summary */
 } eAnim_KeyType;
 
 /* Flags for specifying the types of updates (i.e. recalculation/refreshing) that
@@ -791,5 +791,14 @@ void ED_animedit_unlink_action(struct bContext *C, struct ID *id,
 void ED_drivers_editor_init(struct bContext *C, struct ScrArea *sa);
 
 /* ************************************************ */
+
+void animviz_calc_motionpaths(struct Depsgraph *depsgraph,
+                              struct Main *bmain,
+                              struct Scene *scene,
+                              ListBase *targets,
+                              bool restore,
+                              bool current_frame_only);
+
+void animviz_get_object_motionpaths(struct Object *ob, ListBase *targets);
 
 #endif /* __ED_ANIM_API_H__ */

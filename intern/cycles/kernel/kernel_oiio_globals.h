@@ -23,21 +23,19 @@
 
 CCL_NAMESPACE_BEGIN
 
-struct OIIOTexture
-{
-	OIIO::TextureSystem::TextureHandle* handle;
-	OIIO::TextureOpt::InterpMode interpolation;
-	OIIO::TextureOpt::Wrap extension;
-	bool is_linear;
+struct OIIOTexture {
+  OIIO::TextureSystem::TextureHandle *handle;
+  OIIO::TextureOpt::InterpMode interpolation;
+  OIIO::TextureOpt::Wrap extension;
+  bool is_linear;
 };
 
-struct OIIOGlobals
-{
-	OIIO::TextureSystem *tex_sys;
-	thread_mutex tex_paths_mutex;
-	vector<OIIOTexture> textures;
-	float diffuse_blur;
-	float glossy_blur;
+struct OIIOGlobals {
+  OIIO::TextureSystem *tex_sys;
+  thread_mutex tex_paths_mutex;
+  vector<OIIOTexture> textures;
+  float diffuse_blur;
+  float glossy_blur;
 };
 
 CCL_NAMESPACE_END

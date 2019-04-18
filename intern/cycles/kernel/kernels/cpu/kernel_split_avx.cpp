@@ -34,7 +34,7 @@
 #    define __KERNEL_SSE41__
 #    define __KERNEL_AVX__
 #  endif
-#endif  /* WITH_CYCLES_OPTIMIZED_KERNEL_AVX */
+#endif /* WITH_CYCLES_OPTIMIZED_KERNEL_AVX */
 
 #define OIIO_NO_AVX 1
 

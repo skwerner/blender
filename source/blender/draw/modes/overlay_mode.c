@@ -34,6 +34,8 @@
 #include "GPU_shader.h"
 #include "DRW_render.h"
 
+#include "ED_view3d.h"
+
 #include "draw_mode_engines.h"
 
 #ifdef __APPLE__
@@ -82,7 +84,7 @@ typedef struct OVERLAY_Shaders {
 /* *********** STATIC *********** */
 static struct {
 	OVERLAY_Shaders sh_data[GPU_SHADER_CFG_LEN];
-} e_data = {NULL};
+} e_data = {{{NULL}}};
 
 /* Shaders */
 extern char datatoc_overlay_face_orientation_frag_glsl[];
@@ -177,7 +179,6 @@ static void overlay_cache_init(void *vedata)
 
 	if (v3d->shading.type == OB_WIRE) {
 		g_data->overlay.flag |= V3D_OVERLAY_WIREFRAMES;
-		g_data->show_overlays = true;
 
 		if (ELEM(v3d->shading.wire_color_type,
 		         V3D_SHADING_OBJECT_COLOR,
@@ -328,8 +329,7 @@ static void overlay_cache_populate(void *vedata, Object *ob)
 	const DRWContextState *draw_ctx = DRW_context_state_get();
 	View3D *v3d = draw_ctx->v3d;
 
-	if ((!pd->show_overlays) ||
-	    (ob->dt < OB_WIRE) ||
+	if ((ob->dt < OB_WIRE) ||
 	    (!DRW_object_is_renderable(ob) && (ob->dt != OB_WIRE)))
 	{
 		return;
@@ -359,14 +359,14 @@ static void overlay_cache_populate(void *vedata, Object *ob)
 		}
 
 		/* Don't do that in edit Mesh mode, unless there is a modifier preview. */
-		if ((((ob != draw_ctx->object_edit) && !is_edit_mode) || has_edit_mesh_cage) ||
+		if ((!pd->show_overlays) || (((ob != draw_ctx->object_edit) && !is_edit_mode) || has_edit_mesh_cage) ||
 		    ob->type != OB_MESH)
 		{
 			const bool is_active = (ob == draw_ctx->obact);
 			const bool is_sculpt_mode = is_active && (draw_ctx->object_mode & OB_MODE_SCULPT) != 0;
 			const bool all_wires = (ob->dtx & OB_DRAW_ALL_EDGES);
 			const bool is_wire = (ob->dt < OB_SOLID);
-			const bool use_coloring = (!is_edit_mode && !is_sculpt_mode && !has_edit_mesh_cage);
+			const bool use_coloring = (pd->show_overlays && !is_edit_mode && !is_sculpt_mode && !has_edit_mesh_cage);
 			const int stencil_mask = (ob->dtx & OB_DRAWXRAY) ? 0x00 : 0xFF;
 			float *rim_col, *wire_col;
 			DRWShadingGroup *shgrp = NULL;
@@ -423,7 +423,7 @@ static void overlay_cache_finish(void *vedata)
 	View3D *v3d = ctx->v3d;
 
 	/* only in solid mode */
-	if (v3d->shading.type == OB_SOLID && (v3d->shading.flag & XRAY_FLAG(v3d)) == 0) {
+	if (v3d->shading.type == OB_SOLID && !XRAY_FLAG_ENABLED(v3d)) {
 		if (stl->g_data->ghost_stencil_test) {
 			DRW_pass_state_add(psl->face_wireframe_pass, DRW_STATE_STENCIL_EQUAL);
 		}

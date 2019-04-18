@@ -340,8 +340,7 @@ typedef struct PreviewImage {
  *
  * The tags represent types! This is a dirty way of enabling RTTI. The
  * sig_byte end endian defines aren't really used much.
- *
- **/
+ */
 
 #ifdef __BIG_ENDIAN__
    /* big endian */
@@ -527,7 +526,8 @@ enum {
 
 /* Tag given ID for an update in all the dependency graphs. */
 typedef enum IDRecalcFlag {
-	/* Individual update tags, this is what ID gets tagged for update with. */
+	/***************************************************************************
+	 * Individual update tags, this is what ID gets tagged for update with. */
 
 	/* ** Object transformation changed. ** */
 	ID_RECALC_TRANSFORM   = (1 << 0),
@@ -585,7 +585,16 @@ typedef enum IDRecalcFlag {
 	 */
 	ID_RECALC_COPY_ON_WRITE = (1 << 13),
 
-	/* Aggregate flags, use only for checks on runtime.
+	/***************************************************************************
+	 * Pseudonyms, to have more semantic meaning in the actual code without
+	 * using too much low-level and implementation specific tags. */
+
+	/* Update animation datablock itself, without doing full re-evaluation of
+	 * all dependent objects. */
+	ID_RECALC_ANIMATION_NO_FLUSH = ID_RECALC_COPY_ON_WRITE,
+
+	/***************************************************************************
+	 * Aggregate flags, use only for checks on runtime.
 	 * Do NOT use those for tagging. */
 
 	/* Identifies that SOMETHING has been changed in this ID. */

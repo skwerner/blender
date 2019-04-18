@@ -207,7 +207,7 @@ static int gpu_group_execute(GPUMaterial *mat, bNode *node, bNodeExecData *execd
 		return 0;
 
 	group_gpu_copy_inputs(node, in, exec->stack);
-	ntreeExecGPUNodes(exec, mat, 0);
+	ntreeExecGPUNodes(exec, mat, NULL);
 	group_gpu_move_outputs(node, out, exec->stack);
 
 	return 1;
@@ -238,4 +238,21 @@ void register_node_type_sh_group(void)
 	node_type_gpu(&ntype, gpu_group_execute);
 
 	nodeRegisterType(&ntype);
+}
+
+void register_node_type_sh_custom_group(bNodeType *ntype)
+{
+	/* These methods can be overriden but need a default implementation otherwise. */
+	if (ntype->poll == NULL) {
+		ntype->poll = sh_node_poll_default;
+	}
+	if (ntype->insert_link == NULL) {
+		ntype->insert_link = node_insert_link_default;
+	}
+	if (ntype->update_internal_links == NULL) {
+		ntype->update_internal_links = node_update_internal_links_default;
+	}
+
+	node_type_exec(ntype, group_initexec, group_freeexec, group_execute);
+	node_type_gpu(ntype, gpu_group_execute);
 }

@@ -125,7 +125,7 @@ static void fcurves_to_pchan_links_get(ListBase *pfLinks, Object *ob, bAction *a
 
 /**
  *  Returns a valid pose armature for this object, else returns NULL.
- **/
+ */
 Object *poseAnim_object_get(Object *ob_)
 {
 	Object *ob = BKE_object_pose_armature_get(ob_);
@@ -277,7 +277,7 @@ void poseAnim_mapping_reset(ListBase *pfLinks)
 	}
 }
 
-/* perform autokeyframing after changes were made + confirmed */
+/* perform auto-key-framing after changes were made + confirmed */
 void poseAnim_mapping_autoKeyframe(bContext *C, Scene *scene, ListBase *pfLinks, float cframe)
 {
 	ViewLayer *view_layer = CTX_data_view_layer(C);
@@ -303,7 +303,7 @@ void poseAnim_mapping_autoKeyframe(bContext *C, Scene *scene, ListBase *pfLinks,
 		return;
 	}
 
-	/* insert keyframes as necessary if autokeyframing */
+	/* Insert keyframes as necessary if auto-key-framing. */
 	KeyingSet *ks = ANIM_get_keyingset_for_autokeying(scene, ANIM_KS_WHOLE_CHARACTER_ID);
 	ListBase dsources = {NULL, NULL};
 	tPChanFCurveLink *pfl;

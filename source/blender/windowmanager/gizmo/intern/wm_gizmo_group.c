@@ -61,7 +61,6 @@
 /* Allow gizmo part's to be single click only,
  * dragging falls back to activating their 'drag_part' action. */
 #define USE_DRAG_DETECT
-#define DRAG_THRESHOLD (U.tweak_threshold * U.dpi_fac)
 
 /* -------------------------------------------------------------------- */
 /** \name wmGizmoGroup
@@ -146,18 +145,18 @@ int WM_gizmo_cmp_temp_fl(const void *gz_a_ptr, const void *gz_b_ptr)
 {
 	const wmGizmo *gz_a = gz_a_ptr;
 	const wmGizmo *gz_b = gz_b_ptr;
-	if      (gz_a->temp.f < gz_b->temp.f) return -1;
-	else if (gz_a->temp.f > gz_b->temp.f) return  1;
-	else                                  return  0;
+	if      (gz_a->temp.f < gz_b->temp.f) { return -1; }
+	else if (gz_a->temp.f > gz_b->temp.f) { return  1; }
+	else                                  { return  0; }
 }
 
 int WM_gizmo_cmp_temp_fl_reverse(const void *gz_a_ptr, const void *gz_b_ptr)
 {
 	const wmGizmo *gz_a = gz_a_ptr;
 	const wmGizmo *gz_b = gz_b_ptr;
-	if      (gz_a->temp.f < gz_b->temp.f) return  1;
-	else if (gz_a->temp.f > gz_b->temp.f) return -1;
-	else                                  return  0;
+	if      (gz_a->temp.f < gz_b->temp.f) { return  1; }
+	else if (gz_a->temp.f > gz_b->temp.f) { return -1; }
+	else                                  { return  0; }
 }
 
 wmGizmo *wm_gizmogroup_find_intersected_gizmo(
@@ -440,7 +439,7 @@ static int gizmo_tweak_modal(bContext *C, wmOperator *op, const wmEvent *event)
 	wmGizmoMap *gzmap = mtweak->gzmap;
 	if (mtweak->drag_state == DRAG_DETECT) {
 		if (ELEM(event->type, MOUSEMOVE, INBETWEEN_MOUSEMOVE)) {
-			if (len_manhattan_v2v2_int(&event->x, gzmap->gzmap_context.event_xy) >= DRAG_THRESHOLD) {
+			if (len_manhattan_v2v2_int(&event->x, gzmap->gzmap_context.event_xy) >= WM_EVENT_CURSOR_CLICK_DRAG_THRESHOLD) {
 				mtweak->drag_state = DRAG_IDLE;
 				gz->highlight_part = gz->drag_part;
 			}
@@ -637,8 +636,9 @@ static wmKeyMap *gizmogroup_tweak_modal_keymap(wmKeyConfig *keyconf, const char 
 	keymap = WM_modalkeymap_get(keyconf, name);
 
 	/* this function is called for each spacetype, only needs to add map once */
-	if (keymap && keymap->modal_items)
+	if (keymap && keymap->modal_items) {
 		return NULL;
+	}
 
 	keymap = WM_modalkeymap_add(keyconf, name, modal_items);
 

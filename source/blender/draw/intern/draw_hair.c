@@ -212,6 +212,7 @@ static DRWShadingGroup *drw_shgroup_create_hair_procedural_ex(
 
 		DRW_shgroup_uniform_texture(tf_shgrp, "hairPointBuffer", hair_cache->point_tex);
 		DRW_shgroup_uniform_texture(tf_shgrp, "hairStrandBuffer", hair_cache->strand_tex);
+		DRW_shgroup_uniform_texture(tf_shgrp, "hairStrandSegBuffer", hair_cache->strand_seg_tex);
 		DRW_shgroup_uniform_int(tf_shgrp, "hairStrandsRes", &hair_cache->final[subdiv].strands_res, 1);
 		DRW_shgroup_call_procedural_points_add(tf_shgrp, final_points_len, NULL);
 	}
@@ -246,7 +247,7 @@ void DRW_hair_update(void)
 	 * readback the result to system memory and reupload as VBO data.
 	 * It is really not ideal performance wise, but it is the simplest
 	 * and the most local workaround that still uses the power of the GPU.
-	 **/
+	 */
 
 	if (g_tf_calls == NULL) {
 		return;
@@ -263,7 +264,7 @@ void DRW_hair_update(void)
 	 * Do chunks of maximum 2048 * 2048 hair points. */
 	int width = 2048;
 	int height = min_ii(width, 1 + max_size / width);
-	GPUTexture *tex = DRW_texture_pool_query_2D(width, height, GPU_RGBA32F, (void *)DRW_hair_update);
+	GPUTexture *tex = DRW_texture_pool_query_2d(width, height, GPU_RGBA32F, (void *)DRW_hair_update);
 	g_tf_target_height = height;
 	g_tf_target_width = width;
 

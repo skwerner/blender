@@ -429,6 +429,28 @@ void GPU_create_gl_tex(
 {
 	ImBuf *ibuf = NULL;
 
+	if (textarget == GL_TEXTURE_2D &&
+	    is_over_resolution_limit(textarget, rectw, recth))
+	{
+		int tpx = rectw;
+		int tpy = recth;
+		rectw = smaller_power_of_2_limit(rectw);
+		recth = smaller_power_of_2_limit(recth);
+
+		if (use_high_bit_depth) {
+			ibuf = IMB_allocFromBuffer(NULL, frect, tpx, tpy);
+			IMB_scaleImBuf(ibuf, rectw, recth);
+
+			frect = ibuf->rect_float;
+		}
+		else {
+			ibuf = IMB_allocFromBuffer(rect, NULL, tpx, tpy);
+			IMB_scaleImBuf(ibuf, rectw, recth);
+
+			rect = ibuf->rect;
+		}
+	}
+
 	/* create image */
 	glGenTextures(1, (GLuint *)bind);
 	glBindTexture(textarget, *bind);
@@ -855,7 +877,7 @@ static GPUTexture *create_transfer_function(int type, const ColorBand *coba)
 			break;
 	}
 
-	GPUTexture *tex = GPU_texture_create_1D(TFUNC_WIDTH, GPU_RGBA8, data, NULL);
+	GPUTexture *tex = GPU_texture_create_1d(TFUNC_WIDTH, GPU_RGBA8, data, NULL);
 
 	MEM_freeN(data);
 
@@ -1067,9 +1089,9 @@ void GPU_create_smoke_velocity(SmokeModifierData *smd)
 		}
 
 		if (!sds->tex_velocity_x) {
-			sds->tex_velocity_x = GPU_texture_create_3D(sds->res[0], sds->res[1], sds->res[2], GPU_R16F, vel_x, NULL);
-			sds->tex_velocity_y = GPU_texture_create_3D(sds->res[0], sds->res[1], sds->res[2], GPU_R16F, vel_y, NULL);
-			sds->tex_velocity_z = GPU_texture_create_3D(sds->res[0], sds->res[1], sds->res[2], GPU_R16F, vel_z, NULL);
+			sds->tex_velocity_x = GPU_texture_create_3d(sds->res[0], sds->res[1], sds->res[2], GPU_R16F, vel_x, NULL);
+			sds->tex_velocity_y = GPU_texture_create_3d(sds->res[0], sds->res[1], sds->res[2], GPU_R16F, vel_y, NULL);
+			sds->tex_velocity_z = GPU_texture_create_3d(sds->res[0], sds->res[1], sds->res[2], GPU_R16F, vel_z, NULL);
 		}
 	}
 #else // WITH_SMOKE
@@ -1275,148 +1297,6 @@ void GPU_disable_program_point_size(void)
 /** \name Framebuffer color depth, for selection codes
  * \{ */
 
-#ifdef __APPLE__
-
-/* apple seems to round colors to below and up on some configs */
-
-static uint index_to_framebuffer(int index)
-{
-	uint i = index;
-
-	switch (GPU_color_depth()) {
-		case 12:
-			i = ((i & 0xF00) << 12) + ((i & 0xF0) << 8) + ((i & 0xF) << 4);
-			/* sometimes dithering subtracts! */
-			i |= 0x070707;
-			break;
-		case 15:
-		case 16:
-			i = ((i & 0x7C00) << 9) + ((i & 0x3E0) << 6) + ((i & 0x1F) << 3);
-			i |= 0x030303;
-			break;
-		case 24:
-			break;
-		default: /* 18 bits... */
-			i = ((i & 0x3F000) << 6) + ((i & 0xFC0) << 4) + ((i & 0x3F) << 2);
-			i |= 0x010101;
-			break;
-	}
-
-	return i;
-}
-
-#else
-
-/* this is the old method as being in use for ages.... seems to work? colors are rounded to lower values */
-
-static uint index_to_framebuffer(int index)
-{
-	uint i = index;
-
-	switch (GPU_color_depth()) {
-		case 8:
-			i = ((i & 48) << 18) + ((i & 12) << 12) + ((i & 3) << 6);
-			i |= 0x3F3F3F;
-			break;
-		case 12:
-			i = ((i & 0xF00) << 12) + ((i & 0xF0) << 8) + ((i & 0xF) << 4);
-			/* sometimes dithering subtracts! */
-			i |= 0x0F0F0F;
-			break;
-		case 15:
-		case 16:
-			i = ((i & 0x7C00) << 9) + ((i & 0x3E0) << 6) + ((i & 0x1F) << 3);
-			i |= 0x070707;
-			break;
-		case 24:
-			break;
-		default:    /* 18 bits... */
-			i = ((i & 0x3F000) << 6) + ((i & 0xFC0) << 4) + ((i & 0x3F) << 2);
-			i |= 0x030303;
-			break;
-	}
-
-	return i;
-}
-
-#endif
-
-
-void GPU_select_index_set(int index)
-{
-	const int col = index_to_framebuffer(index);
-	glColor3ub(( (col)        & 0xFF),
-	           (((col) >>  8) & 0xFF),
-	           (((col) >> 16) & 0xFF));
-}
-
-void GPU_select_index_get(int index, int *r_col)
-{
-	const int col = index_to_framebuffer(index);
-	char *c_col = (char *)r_col;
-	c_col[0] = (col & 0xFF); /* red */
-	c_col[1] = ((col >>  8) & 0xFF); /* green */
-	c_col[2] = ((col >> 16) & 0xFF); /* blue */
-	c_col[3] = 0xFF; /* alpha */
-}
-
-
-#define INDEX_FROM_BUF_8(col)     ((((col) & 0xC00000) >> 18) + (((col) & 0xC000) >> 12) + (((col) & 0xC0) >> 6))
-#define INDEX_FROM_BUF_12(col)    ((((col) & 0xF00000) >> 12) + (((col) & 0xF000) >> 8)  + (((col) & 0xF0) >> 4))
-#define INDEX_FROM_BUF_15_16(col) ((((col) & 0xF80000) >> 9)  + (((col) & 0xF800) >> 6)  + (((col) & 0xF8) >> 3))
-#define INDEX_FROM_BUF_18(col)    ((((col) & 0xFC0000) >> 6)  + (((col) & 0xFC00) >> 4)  + (((col) & 0xFC) >> 2))
-#define INDEX_FROM_BUF_24(col)      ((col) & 0xFFFFFF)
-
-int GPU_select_to_index(uint col)
-{
-	if (col == 0) {
-		return 0;
-	}
-
-	switch (GPU_color_depth()) {
-		case  8: return INDEX_FROM_BUF_8(col);
-		case 12: return INDEX_FROM_BUF_12(col);
-		case 15:
-		case 16: return INDEX_FROM_BUF_15_16(col);
-		case 24: return INDEX_FROM_BUF_24(col);
-		default: return INDEX_FROM_BUF_18(col);
-	}
-}
-
-void GPU_select_to_index_array(uint *col, const uint size)
-{
-#define INDEX_BUF_ARRAY(INDEX_FROM_BUF_BITS) \
-	for (i = size; i--; col++) { \
-		if ((c = *col)) { \
-			*col = INDEX_FROM_BUF_BITS(c); \
-		} \
-	} ((void)0)
-
-	if (size > 0) {
-		uint i, c;
-
-		switch (GPU_color_depth()) {
-			case  8:
-				INDEX_BUF_ARRAY(INDEX_FROM_BUF_8);
-				break;
-			case 12:
-				INDEX_BUF_ARRAY(INDEX_FROM_BUF_12);
-				break;
-			case 15:
-			case 16:
-				INDEX_BUF_ARRAY(INDEX_FROM_BUF_15_16);
-				break;
-			case 24:
-				INDEX_BUF_ARRAY(INDEX_FROM_BUF_24);
-				break;
-			default:
-				INDEX_BUF_ARRAY(INDEX_FROM_BUF_18);
-				break;
-		}
-	}
-
-#undef INDEX_BUF_ARRAY
-}
 
 #define STATE_STACK_DEPTH 16
 

@@ -290,7 +290,7 @@ static void displaceModifier_do(
 	mvert = mesh->mvert;
 	MOD_get_vgroup(ob, mesh, dmd->defgrp_name, &dvert, &defgrp_index);
 
-	Tex *tex_target = (Tex *)DEG_get_evaluated_id(ctx->depsgraph, &dmd->texture->id);
+	Tex *tex_target = dmd->texture;
 	if (tex_target != NULL) {
 		tex_co = MEM_calloc_arrayN((size_t)numVerts, sizeof(*tex_co),
 		                     "displaceModifier_do tex_co");
@@ -406,12 +406,6 @@ ModifierTypeInfo modifierType_Displace = {
 
 	/* copyData */          modifier_copyData_generic,
 
-	/* deformVerts_DM */    NULL,
-	/* deformMatrices_DM */ NULL,
-	/* deformVertsEM_DM */  NULL,
-	/* deformMatricesEM_DM*/NULL,
-	/* applyModifier_DM */  NULL,
-
 	/* deformVerts */       deformVerts,
 	/* deformMatrices */    NULL,
 	/* deformVertsEM */     deformVertsEM,
@@ -428,4 +422,5 @@ ModifierTypeInfo modifierType_Displace = {
 	/* foreachObjectLink */ foreachObjectLink,
 	/* foreachIDLink */     foreachIDLink,
 	/* foreachTexLink */    foreachTexLink,
+	/* freeRuntimeData */   NULL,
 };

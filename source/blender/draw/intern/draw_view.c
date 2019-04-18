@@ -215,8 +215,8 @@ void DRW_draw_cursor(void)
 
 			/* Draw nice Anti Aliased cursor. */
 			GPU_line_width(1.0f);
-			glEnable(GL_BLEND);
-			glEnable(GL_LINE_SMOOTH);
+			GPU_blend(true);
+			GPU_line_smooth(true);
 
 			float eps = 1e-5f;
 			rv3d->viewquat[0] = -rv3d->viewquat[0];
@@ -247,7 +247,7 @@ void DRW_draw_cursor(void)
 #define CURSOR_EDGE(axis_vec, axis, sign) { \
 					CURSOR_VERT(axis_vec, axis, sign 1.0f); \
 					CURSOR_VERT(axis_vec, axis, sign 0.25f); \
-				}
+				} ((void)0)
 
 				for (int axis = 0; axis < 3; axis++) {
 					float axis_vec[3] = {0};
@@ -277,8 +277,8 @@ void DRW_draw_cursor(void)
 
 			GPU_batch_draw(cursor_batch);
 
-			glDisable(GL_BLEND);
-			glDisable(GL_LINE_SMOOTH);
+			GPU_blend(false);
+			GPU_line_smooth(false);
 			GPU_matrix_pop();
 			GPU_matrix_projection_set(original_proj);
 		}

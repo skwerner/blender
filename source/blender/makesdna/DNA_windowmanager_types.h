@@ -182,14 +182,14 @@ typedef struct wmWindowManager {
 
 /* wmWindowManager.initialized */
 enum {
-	WM_WINDOW_IS_INITIALIZED = (1<<0),
-	WM_KEYCONFIG_IS_INITIALIZED = (1<<1),
+	WM_WINDOW_IS_INITIALIZED = (1 << 0),
+	WM_KEYCONFIG_IS_INITIALIZED = (1 << 1),
 };
 
 #define WM_KEYCONFIG_STR_DEFAULT "blender"
 
 /* IME is win32 only! */
-#ifndef WIN32
+#if !defined(WIN32) && !defined(DNA_DEPRECATED)
 #  ifdef __GNUC__
 #    define ime_data ime_data __attribute__ ((deprecated))
 #  endif

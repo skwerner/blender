@@ -114,7 +114,7 @@ typedef struct bConstraintTarget {
 /* bConstraintTarget -> flag */
 typedef enum eConstraintTargetFlag {
 	/** temporary target-struct that needs to be freed after use */
-	CONSTRAINT_TAR_TEMP = (1<<0),
+	CONSTRAINT_TAR_TEMP = (1 << 0),
 } eConstraintTargetFlag;
 
 /* bConstraintTarget/bConstraintOb -> type */
@@ -231,6 +231,9 @@ typedef struct bSplineIKConstraint {
 	short flag;
 	/** Method used for determining the x & z scaling of the bones. */
 	short xzScaleMode;
+	/** Method used for determining the y scaling of the bones. */
+	short yScaleMode;
+	short _pad[3];
 
 		/* volume preservation settings */
 	float		bulge;
@@ -662,30 +665,30 @@ typedef enum eBConstraint_Types {
 	CONSTRAINT_TYPE_ARMATURE = 30,
 
 	/* NOTE: no constraints are allowed to be added after this */
-	NUM_CONSTRAINT_TYPES
+	NUM_CONSTRAINT_TYPES,
 } eBConstraint_Types;
 
 /* bConstraint->flag */
-/* flags 0x2 (1<<1) and 0x8 (1<<3) were used in past */
-/* flag 0x20 (1<<5) was used to indicate that a constraint was evaluated
+/* flags 0x2 (1 << 1) and 0x8 (1 << 3) were used in past */
+/* flag 0x20 (1 << 5) was used to indicate that a constraint was evaluated
  *                  using a 'local' hack for posebones only. */
 typedef enum eBConstraint_Flags {
 	/* expand for UI */
-	CONSTRAINT_EXPAND =		(1<<0),
+	CONSTRAINT_EXPAND =		(1 << 0),
 	/* pre-check for illegal object name or bone name */
-	CONSTRAINT_DISABLE = 	(1<<2),
+	CONSTRAINT_DISABLE = 	(1 << 2),
 	/* to indicate which Ipo should be shown, maybe for 3d access later too */
-	CONSTRAINT_ACTIVE = 	(1<<4),
+	CONSTRAINT_ACTIVE = 	(1 << 4),
 	/* to indicate that the owner's space should only be changed into ownspace, but not out of it */
-	CONSTRAINT_SPACEONCE = 	(1<<6),
+	CONSTRAINT_SPACEONCE = 	(1 << 6),
 	/* influence ipo is on constraint itself, not in action channel */
-	CONSTRAINT_OWN_IPO	= (1<<7),
+	CONSTRAINT_OWN_IPO	= (1 << 7),
 	/* indicates that constraint was added locally (i.e.  didn't come from the proxy-lib) */
-	CONSTRAINT_PROXY_LOCAL = (1<<8),
+	CONSTRAINT_PROXY_LOCAL = (1 << 8),
 	/* indicates that constraint is temporarily disabled (only used in GE) */
-	CONSTRAINT_OFF = (1<<9),
+	CONSTRAINT_OFF = (1 << 9),
 	/* use bbone curve shape when calculating headtail values (also used by dependency graph!) */
-	CONSTRAINT_BBONE_SHAPE = (1<<10),
+	CONSTRAINT_BBONE_SHAPE = (1 << 10),
 	/* That constraint has been inserted in local override (i.e. it can be fully edited!). */
 	CONSTRAINT_STATICOVERRIDE_LOCAL = (1 << 11),
 	/* use full transformation (not just segment locations) - only set at runtime  */
@@ -694,60 +697,59 @@ typedef enum eBConstraint_Flags {
 
 /* bConstraint->ownspace/tarspace */
 typedef enum eBConstraint_SpaceTypes {
-		/* default for all - worldspace */
+	/** Default for all - worldspace. */
 	CONSTRAINT_SPACE_WORLD = 0,
-		/* for objects (relative to parent/without parent influence),
-		 * for bones (along normals of bone, without parent/restpositions)
-		 */
+	/** For objects (relative to parent/without parent influence),
+	 * for bones (along normals of bone, without parent/restpositions). */
 	CONSTRAINT_SPACE_LOCAL = 1,
-		/* for posechannels - pose space  */
+	/** For posechannels - pose space. */
 	CONSTRAINT_SPACE_POSE = 2,
-		 /* for posechannels - local with parent  */
+	/** For posechannels - local with parent. */
 	CONSTRAINT_SPACE_PARLOCAL = 3,
-		/* for files from between 2.43-2.46 (should have been parlocal) */
-	CONSTRAINT_SPACE_INVALID = 4 /* do not exchange for anything! */
+	/** For files from between 2.43-2.46 (should have been parlocal). */
+	CONSTRAINT_SPACE_INVALID = 4, /* do not exchange for anything! */
 } eBConstraint_SpaceTypes;
 
 /* bConstraintChannel.flag */
 // XXX deprecated... old AnimSys
 typedef enum eConstraintChannel_Flags {
-	CONSTRAINT_CHANNEL_SELECT =		(1<<0),
-	CONSTRAINT_CHANNEL_PROTECTED =	(1<<1),
+	CONSTRAINT_CHANNEL_SELECT =		(1 << 0),
+	CONSTRAINT_CHANNEL_PROTECTED =	(1 << 1),
 } eConstraintChannel_Flags;
 
 /* -------------------------------------- */
 
 /* bRotateLikeConstraint.flag */
 typedef enum eCopyRotation_Flags {
-	ROTLIKE_X			= (1<<0),
-	ROTLIKE_Y			= (1<<1),
-	ROTLIKE_Z			= (1<<2),
-	ROTLIKE_X_INVERT	= (1<<4),
-	ROTLIKE_Y_INVERT	= (1<<5),
-	ROTLIKE_Z_INVERT 	= (1<<6),
-	ROTLIKE_OFFSET		= (1<<7),
+	ROTLIKE_X			= (1 << 0),
+	ROTLIKE_Y			= (1 << 1),
+	ROTLIKE_Z			= (1 << 2),
+	ROTLIKE_X_INVERT	= (1 << 4),
+	ROTLIKE_Y_INVERT	= (1 << 5),
+	ROTLIKE_Z_INVERT 	= (1 << 6),
+	ROTLIKE_OFFSET		= (1 << 7),
 } eCopyRotation_Flags;
 
 /* bLocateLikeConstraint.flag */
 typedef enum eCopyLocation_Flags {
-	LOCLIKE_X			= (1<<0),
-	LOCLIKE_Y			= (1<<1),
-	LOCLIKE_Z			= (1<<2),
-		/* LOCLIKE_TIP is a deprecated option... use headtail=1.0f instead */
-	LOCLIKE_TIP			= (1<<3),
-	LOCLIKE_X_INVERT	= (1<<4),
-	LOCLIKE_Y_INVERT	= (1<<5),
-	LOCLIKE_Z_INVERT	= (1<<6),
-	LOCLIKE_OFFSET		= (1<<7),
+	LOCLIKE_X			= (1 << 0),
+	LOCLIKE_Y			= (1 << 1),
+	LOCLIKE_Z			= (1 << 2),
+	/** LOCLIKE_TIP is a deprecated option... use headtail=1.0f instead */
+	LOCLIKE_TIP			= (1 << 3),
+	LOCLIKE_X_INVERT	= (1 << 4),
+	LOCLIKE_Y_INVERT	= (1 << 5),
+	LOCLIKE_Z_INVERT	= (1 << 6),
+	LOCLIKE_OFFSET		= (1 << 7),
 } eCopyLocation_Flags;
 
 /* bSizeLikeConstraint.flag */
 typedef enum eCopyScale_Flags {
-	SIZELIKE_X		= (1<<0),
-	SIZELIKE_Y		= (1<<1),
-	SIZELIKE_Z		= (1<<2),
-	SIZELIKE_OFFSET = (1<<3),
-	SIZELIKE_MULTIPLY = (1<<4),
+	SIZELIKE_X		= (1 << 0),
+	SIZELIKE_Y		= (1 << 1),
+	SIZELIKE_Z		= (1 << 2),
+	SIZELIKE_OFFSET = (1 << 3),
+	SIZELIKE_MULTIPLY = (1 << 4),
 } eCopyScale_Flags;
 
 /* bTransformConstraint.to/from */
@@ -791,7 +793,7 @@ typedef enum eTrackToAxis_Modes {
 	TRACK_Z		= 2,
 	TRACK_nX	= 3,
 	TRACK_nY	= 4,
-	TRACK_nZ	= 5
+	TRACK_nZ	= 5,
 } eTrackToAxis_Modes;
 
 /* Shrinkwrap flags */
@@ -813,14 +815,14 @@ typedef enum eShrinkwrap_Flags {
 
 /* FollowPath flags */
 typedef enum eFollowPath_Flags {
-	FOLLOWPATH_FOLLOW	= (1<<0),
-	FOLLOWPATH_STATIC	= (1<<1),
-	FOLLOWPATH_RADIUS	= (1<<2),
+	FOLLOWPATH_FOLLOW	= (1 << 0),
+	FOLLOWPATH_STATIC	= (1 << 1),
+	FOLLOWPATH_RADIUS	= (1 << 2),
 } eFollowPath_Flags;
 
 /* bTrackToConstraint->flags */
 typedef enum eTrackTo_Flags {
-	TARGET_Z_UP 	= (1<<0),
+	TARGET_Z_UP 	= (1 << 0),
 } eTrackTo_Flags;
 
 /* Stretch To Constraint -> volmode */
@@ -848,30 +850,30 @@ typedef enum eClampTo_Modes {
 
 /* ClampTo Constraint ->flag2 */
 typedef enum eClampTo_Flags {
-	CLAMPTO_CYCLIC	= (1<<0),
+	CLAMPTO_CYCLIC	= (1 << 0),
 } eClampTo_Flags;
 
 /* bKinematicConstraint->flag */
 typedef enum eKinematic_Flags {
-	CONSTRAINT_IK_TIP			= (1<<0),
-	CONSTRAINT_IK_ROT			= (1<<1),
+	CONSTRAINT_IK_TIP			= (1 << 0),
+	CONSTRAINT_IK_ROT			= (1 << 1),
 	/* targetless */
-	CONSTRAINT_IK_AUTO			= (1<<2),
+	CONSTRAINT_IK_AUTO			= (1 << 2),
 	/* autoik */
-	CONSTRAINT_IK_TEMP			= (1<<3),
-	CONSTRAINT_IK_STRETCH		= (1<<4),
-	CONSTRAINT_IK_POS			= (1<<5),
-	CONSTRAINT_IK_SETANGLE		= (1<<6),
-	CONSTRAINT_IK_GETANGLE		= (1<<7),
+	CONSTRAINT_IK_TEMP			= (1 << 3),
+	CONSTRAINT_IK_STRETCH		= (1 << 4),
+	CONSTRAINT_IK_POS			= (1 << 5),
+	CONSTRAINT_IK_SETANGLE		= (1 << 6),
+	CONSTRAINT_IK_GETANGLE		= (1 << 7),
 	/* limit axis */
-	CONSTRAINT_IK_NO_POS_X		= (1<<8),
-	CONSTRAINT_IK_NO_POS_Y		= (1<<9),
-	CONSTRAINT_IK_NO_POS_Z		= (1<<10),
-	CONSTRAINT_IK_NO_ROT_X		= (1<<11),
-	CONSTRAINT_IK_NO_ROT_Y		= (1<<12),
-	CONSTRAINT_IK_NO_ROT_Z		= (1<<13),
+	CONSTRAINT_IK_NO_POS_X		= (1 << 8),
+	CONSTRAINT_IK_NO_POS_Y		= (1 << 9),
+	CONSTRAINT_IK_NO_POS_Z		= (1 << 10),
+	CONSTRAINT_IK_NO_ROT_X		= (1 << 11),
+	CONSTRAINT_IK_NO_ROT_Y		= (1 << 12),
+	CONSTRAINT_IK_NO_ROT_Z		= (1 << 13),
 	/* axis relative to target */
-	CONSTRAINT_IK_TARGETAXIS	= (1<<14),
+	CONSTRAINT_IK_TARGETAXIS	= (1 << 14),
 } eKinematic_Flags;
 
 /* bSplineIKConstraint->flag */
@@ -880,8 +882,10 @@ typedef enum eSplineIK_Flags {
 	CONSTRAINT_SPLINEIK_BOUND			= (1 << 0),
 	/* root of chain is not influenced by the constraint */
 	CONSTRAINT_SPLINEIK_NO_ROOT			= (1 << 1),
+#ifdef DNA_DEPRECATED
 	/* bones in the chain should not scale to fit the curve */
 	CONSTRAINT_SPLINEIK_SCALE_LIMITED	= (1 << 2),
+#endif
 	/* evenly distribute the bones along the path regardless of length */
 	CONSTRAINT_SPLINEIK_EVENSPLITS		= (1 << 3),
 	/* don't adjust the x and z scaling of the bones by the curve radius */
@@ -904,55 +908,65 @@ typedef enum eSplineIK_XZScaleModes {
 	CONSTRAINT_SPLINEIK_XZS_VOLUMETRIC		= 3,
 } eSplineIK_XZScaleModes;
 
+/* bSplineIKConstraint->yScaleMode */
+typedef enum eSplineIK_YScaleModes {
+	/* no y scaling */
+	CONSTRAINT_SPLINEIK_YS_NONE        = 0,
+	/* bones in the chain should be scaled to fit the length of the curve */
+	CONSTRAINT_SPLINEIK_YS_FIT_CURVE   = 1,
+	/* bones in the chain should take their y scales from the original scaling */
+	CONSTRAINT_SPLINEIK_YS_ORIGINAL    = 2,
+} eSplineIK_YScaleModes;
+
 /* bArmatureConstraint -> flag */
 typedef enum eArmature_Flags {
 	/** use dual quaternion blending */
-	CONSTRAINT_ARMATURE_QUATERNION      = (1<<0),
+	CONSTRAINT_ARMATURE_QUATERNION      = (1 << 0),
 	/** use envelopes */
-	CONSTRAINT_ARMATURE_ENVELOPE        = (1<<1),
+	CONSTRAINT_ARMATURE_ENVELOPE        = (1 << 1),
 	/** use current bone location */
-	CONSTRAINT_ARMATURE_CUR_LOCATION    = (1<<2),
+	CONSTRAINT_ARMATURE_CUR_LOCATION    = (1 << 2),
 } eArmature_Flags;
 
 /* MinMax (floor) flags */
 typedef enum eFloor_Flags {
-	MINMAX_STICKY	= (1<<0),
-	MINMAX_STUCK	= (1<<1),
-	MINMAX_USEROT	= (1<<2),
+	MINMAX_STICKY	= (1 << 0),
+	MINMAX_STUCK	= (1 << 1),
+	MINMAX_USEROT	= (1 << 2),
 } eFloor_Flags;
 
 /* transform limiting constraints -> flag2 */
 typedef enum eTransformLimits_Flags2 {
 	/* not used anymore - for older Limit Location constraints only */
-	LIMIT_NOPARENT 	= (1<<0),
+	LIMIT_NOPARENT 	= (1 << 0),
 	/* for all Limit constraints - allow to be used during transform? */
-	LIMIT_TRANSFORM = (1<<1),
+	LIMIT_TRANSFORM = (1 << 1),
 } eTransformLimits_Flags2;
 
 /* transform limiting constraints -> flag (own flags)  */
 typedef enum eTransformLimits_Flags {
-	LIMIT_XMIN = (1<<0),
-	LIMIT_XMAX = (1<<1),
-	LIMIT_YMIN = (1<<2),
-	LIMIT_YMAX = (1<<3),
-	LIMIT_ZMIN = (1<<4),
-	LIMIT_ZMAX = (1<<5),
+	LIMIT_XMIN = (1 << 0),
+	LIMIT_XMAX = (1 << 1),
+	LIMIT_YMIN = (1 << 2),
+	LIMIT_YMAX = (1 << 3),
+	LIMIT_ZMIN = (1 << 4),
+	LIMIT_ZMAX = (1 << 5),
 } eTransformLimits_Flags;
 
 /* limit rotation constraint -> flag (own flags) */
 typedef enum eRotLimit_Flags {
-	LIMIT_XROT = (1<<0),
-	LIMIT_YROT = (1<<1),
-	LIMIT_ZROT = (1<<2),
+	LIMIT_XROT = (1 << 0),
+	LIMIT_YROT = (1 << 1),
+	LIMIT_ZROT = (1 << 2),
 } eRotLimit_Flags;
 
 /* distance limit constraint */
 	/* bDistLimitConstraint->flag */
 typedef enum eDistLimit_Flag {
 	/* "soft" cushion effect when reaching the limit sphere */ // NOT IMPLEMENTED!
-	LIMITDIST_USESOFT	= (1<<0),
+	LIMITDIST_USESOFT	= (1 << 0),
 	/* as for all Limit constraints - allow to be used during transform? */
-	LIMITDIST_TRANSFORM = (1<<1),
+	LIMITDIST_TRANSFORM = (1 << 1),
 } eDistLimit_Flag;
 
 	/* bDistLimitConstraint->mode */
@@ -964,21 +978,21 @@ typedef enum eDistLimit_Modes {
 
 /* python constraint -> flag */
 typedef enum ePyConstraint_Flags {
-	PYCON_USETARGETS	= (1<<0),
-	PYCON_SCRIPTERROR	= (1<<1),
+	PYCON_USETARGETS	= (1 << 0),
+	PYCON_SCRIPTERROR	= (1 << 1),
 } ePyConstraint_Flags;
 
 /* ChildOf Constraint -> flag */
 typedef enum eChildOf_Flags {
-	CHILDOF_LOCX 	= (1<<0),
-	CHILDOF_LOCY	= (1<<1),
-	CHILDOF_LOCZ	= (1<<2),
-	CHILDOF_ROTX	= (1<<3),
-	CHILDOF_ROTY	= (1<<4),
-	CHILDOF_ROTZ	= (1<<5),
-	CHILDOF_SIZEX	= (1<<6),
-	CHILDOF_SIZEY	= (1<<7),
-	CHILDOF_SIZEZ	= (1<<8),
+	CHILDOF_LOCX 	= (1 << 0),
+	CHILDOF_LOCY	= (1 << 1),
+	CHILDOF_LOCZ	= (1 << 2),
+	CHILDOF_ROTX	= (1 << 3),
+	CHILDOF_ROTY	= (1 << 4),
+	CHILDOF_ROTZ	= (1 << 5),
+	CHILDOF_SIZEX	= (1 << 6),
+	CHILDOF_SIZEY	= (1 << 7),
+	CHILDOF_SIZEZ	= (1 << 8),
 	CHILDOF_ALL		= 511,
 } eChildOf_Flags;
 
@@ -1006,15 +1020,15 @@ typedef enum ePivotConstraint_Axis {
 	/* settings for Pivot Constraint in general */
 typedef enum ePivotConstraint_Flag {
 	/* offset is to be interpreted as being a fixed-point in space */
-	PIVOTCON_FLAG_OFFSET_ABS	= (1<<0),
+	PIVOTCON_FLAG_OFFSET_ABS	= (1 << 0),
 	/* rotation-based activation uses negative rotation to drive result */
-	PIVOTCON_FLAG_ROTACT_NEG	= (1<<1),
+	PIVOTCON_FLAG_ROTACT_NEG	= (1 << 1),
 } ePivotConstraint_Flag;
 
 typedef enum eFollowTrack_Flags {
-	FOLLOWTRACK_ACTIVECLIP	= (1<<0),
-	FOLLOWTRACK_USE_3D_POSITION	= (1<<1),
-	FOLLOWTRACK_USE_UNDISTORTION	= (1<<2),
+	FOLLOWTRACK_ACTIVECLIP	= (1 << 0),
+	FOLLOWTRACK_USE_3D_POSITION	= (1 << 1),
+	FOLLOWTRACK_USE_UNDISTORTION	= (1 << 2),
 } eFollowTrack_Flags;
 
 typedef enum eFollowTrack_FrameMethod {
@@ -1025,12 +1039,12 @@ typedef enum eFollowTrack_FrameMethod {
 
 /* CameraSolver Constraint -> flag */
 typedef enum eCameraSolver_Flags {
-	CAMERASOLVER_ACTIVECLIP	= (1<<0),
+	CAMERASOLVER_ACTIVECLIP	= (1 << 0),
 } eCameraSolver_Flags;
 
 /* ObjectSolver Constraint -> flag */
 typedef enum eObjectSolver_Flags {
-	OBJECTSOLVER_ACTIVECLIP	= (1<<0),
+	OBJECTSOLVER_ACTIVECLIP	= (1 << 0),
 } eObjectSolver_Flags;
 
 /* ObjectSolver Constraint -> flag */

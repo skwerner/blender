@@ -66,7 +66,7 @@ typedef struct BASIC_Shaders {
 
 static struct {
 	BASIC_Shaders sh_data[GPU_SHADER_CFG_LEN];
-} e_data = {NULL}; /* Engine data */
+} e_data = {{{NULL}}}; /* Engine data */
 
 typedef struct BASIC_PrivateData {
 	DRWShadingGroup *depth_shgrp;
@@ -83,7 +83,7 @@ static void basic_engine_init(void *UNUSED(vedata))
 
 	/* Depth prepass */
 	if (!sh_data->depth) {
-		sh_data->depth = DRW_shader_create_3D_depth_only(draw_ctx->sh_cfg);
+		sh_data->depth = DRW_shader_create_3d_depth_only(draw_ctx->sh_cfg);
 	}
 }
 
@@ -139,9 +139,6 @@ static void basic_cache_populate(void *vedata, Object *ob)
 		     psys != NULL;
 		     psys = psys->next)
 		{
-			if (!psys_check_enabled(ob, psys, false)) {
-				continue;
-			}
 			if (!DRW_object_is_visible_psys_in_active_context(ob, psys)) {
 				continue;
 			}

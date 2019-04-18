@@ -151,9 +151,12 @@ static int vertex_parent_set_exec(bContext *C, wmOperator *op)
 		EDBM_mesh_normals_update(em);
 		BKE_editmesh_tessface_calc(em);
 
-		/* derivedMesh might be needed for solving parenting,
-		 * so re-create it here */
-		makeDerivedMesh(depsgraph, scene, obedit, em, &CD_MASK_BAREMESH_ORIGINDEX, false);
+		/* Make sure the evaluated mesh is updated.
+		 *
+		 * Most reliable way is to update the tagged objects, which will ensure
+		 * proper copy-on-write update, but also will make sure all dependent
+		 * objects are also up to date. */
+		BKE_scene_graph_update_tagged(depsgraph, bmain);
 
 		BM_ITER_MESH (eve, &iter, em->bm, BM_VERTS_OF_MESH) {
 			if (BM_elem_flag_test(eve, BM_ELEM_SELECT)) {
@@ -437,7 +440,7 @@ void OBJECT_OT_proxy_make(wmOperatorType *ot)
 typedef enum eObClearParentTypes {
 	CLEAR_PARENT_ALL = 0,
 	CLEAR_PARENT_KEEP_TRANSFORM,
-	CLEAR_PARENT_INVERSE
+	CLEAR_PARENT_INVERSE,
 } eObClearParentTypes;
 
 EnumPropertyItem prop_clear_parent_types[] = {
@@ -628,14 +631,16 @@ bool ED_object_parent_set(ReportList *reports, const bContext *C, Scene *scene, 
 			return 0;
 		else {
 			Curve *cu = par->data;
-
+			Curve *cu_eval = parent_eval->data;
 			if ((cu->flag & CU_PATH) == 0) {
 				cu->flag |= CU_PATH | CU_FOLLOW;
+				cu_eval->flag |= CU_PATH | CU_FOLLOW;
 				/* force creation of path data */
 				BKE_displist_make_curveTypes(depsgraph, scene, par, false, false, NULL);
 			}
 			else {
 				cu->flag |= CU_FOLLOW;
+				cu_eval->flag |= CU_FOLLOW;
 			}
 
 			/* if follow, add F-Curve for ctime (i.e. "eval_time") so that path-follow works */
@@ -835,14 +840,14 @@ bool ED_object_parent_set(ReportList *reports, const bContext *C, Scene *scene, 
 
 
 
-static void parent_set_vert_find(KDTree *tree, Object *child, int vert_par[3], bool is_tri)
+static void parent_set_vert_find(KDTree_3d *tree, Object *child, int vert_par[3], bool is_tri)
 {
 	const float *co_find = child->obmat[3];
 	if (is_tri) {
-		KDTreeNearest nearest[3];
+		KDTreeNearest_3d nearest[3];
 		int tot;
 
-		tot = BLI_kdtree_find_nearest_n(tree, co_find, nearest, 3);
+		tot = BLI_kdtree_3d_find_nearest_n(tree, co_find, nearest, 3);
 		BLI_assert(tot == 3);
 		UNUSED_VARS(tot);
 
@@ -853,7 +858,7 @@ static void parent_set_vert_find(KDTree *tree, Object *child, int vert_par[3], b
 		BLI_assert(min_iii(UNPACK3(vert_par)) >= 0);
 	}
 	else {
-		vert_par[0] = BLI_kdtree_find_nearest(tree, co_find, NULL);
+		vert_par[0] = BLI_kdtree_3d_find_nearest(tree, co_find, NULL);
 		BLI_assert(vert_par[0] >= 0);
 		vert_par[1] = 0;
 		vert_par[2] = 0;
@@ -874,7 +879,7 @@ static int parent_set_exec(bContext *C, wmOperator *op)
 	const bool is_vert_par = ELEM(partype, PAR_VERTEX, PAR_VERTEX_TRI);
 	const bool is_tri = partype == PAR_VERTEX_TRI;
 	int tree_tot;
-	struct KDTree *tree = NULL;
+	struct KDTree_3d *tree = NULL;
 	int vert_par[3] = {0, 0, 0};
 	const int *vert_par_p = is_vert_par ? vert_par : NULL;
 
@@ -906,7 +911,7 @@ static int parent_set_exec(bContext *C, wmOperator *op)
 	}
 
 	if (is_vert_par) {
-		BLI_kdtree_free(tree);
+		BLI_kdtree_3d_free(tree);
 	}
 
 	if (!ok)
@@ -942,6 +947,8 @@ static int parent_set_invoke(bContext *C, wmOperator *UNUSED(op), const wmEvent 
 	RNA_enum_set(&opptr, "type", PAR_OBJECT);
 	RNA_boolean_set(&opptr, "keep_transform", true);
 #endif
+
+	uiItemO(layout, IFACE_("Object (Without Inverse)"), ICON_NONE, "OBJECT_OT_parent_no_inverse_set");
 
 	struct {
 		bool mesh, gpencil;
@@ -1356,9 +1363,13 @@ static bool allow_make_links_data(const int type, Object *ob_src, Object *ob_dst
 				return true;
 			}
 			break;
+		case MAKE_LINKS_DUPLICOLLECTION:
+			if (ob_dst->type == OB_EMPTY) {
+				return true;
+			}
+			break;
 		case MAKE_LINKS_ANIMDATA:
 		case MAKE_LINKS_GROUP:
-		case MAKE_LINKS_DUPLICOLLECTION:
 			return true;
 		case MAKE_LINKS_MODIFIERS:
 			if (!ELEM(OB_EMPTY, ob_src->type, ob_dst->type)) {
@@ -1392,7 +1403,7 @@ static int make_links_data_exec(bContext *C, wmOperator *op)
 
 	/* avoid searching all collections in source object each time */
 	if (type == MAKE_LINKS_GROUP) {
-		ob_collections = BKE_object_groups(bmain, ob_src);
+		ob_collections = BKE_object_groups(bmain, scene, ob_src);
 	}
 
 	CTX_DATA_BEGIN (C, Base *, base_dst, selected_editable_bases)
@@ -1441,7 +1452,7 @@ static int make_links_data_exec(bContext *C, wmOperator *op)
 						LinkNode *collection_node;
 
 						/* first clear collections */
-						BKE_object_groups_clear(bmain, ob_dst);
+						BKE_object_groups_clear(bmain, scene, ob_dst);
 
 						/* now add in the collections from the link nodes */
 						for (collection_node = ob_collections; collection_node; collection_node = collection_node->next) {
@@ -1593,7 +1604,7 @@ static void libblock_relink_collection(Collection *collection)
 	}
 }
 
-static void single_object_users_collection(
+static Collection *single_object_users_collection(
         Main *bmain, Scene *scene, Collection *collection,
         const int flag, const bool copy_collections, const bool is_master_collection)
 {
@@ -1614,9 +1625,26 @@ static void single_object_users_collection(
 		}
 	}
 
-	for (CollectionChild *child = collection->children.first; child; child = child->next) {
-		single_object_users_collection(bmain, scene, child->collection, flag, copy_collections, false);
+	/* Since master collection has already be duplicated as part of scene copy, we do not duplictae it here.
+	 * However, this means its children need to be re-added manually here, otherwise their parent lists are empty
+	 * (which will lead to crashes, see T63101). */
+	CollectionChild *child_next, *child = collection->children.first;
+	CollectionChild *orig_child_last = collection->children.last;
+	for (; child != NULL; child = child_next) {
+		child_next = child->next;
+		Collection *collection_child_new = single_object_users_collection(
+		                                       bmain, scene, child->collection, flag, copy_collections, false);
+		if (is_master_collection && copy_collections && child->collection != collection_child_new) {
+			BKE_collection_child_add(bmain, collection, collection_child_new);
+			BLI_remlink(&collection->children, child);
+			MEM_freeN(child);
+			if (child == orig_child_last) {
+				break;
+			}
+		}
 	}
+
+	return collection;
 }
 
 /* Warning, sets ID->newid pointers of objects and collections, but does not clear them. */
@@ -1665,9 +1693,12 @@ static void single_object_users(Main *bmain, Scene *scene, View3D *v3d, const in
 
 	/* active camera */
 	ID_NEW_REMAP(scene->camera);
-	if (v3d) ID_NEW_REMAP(v3d->camera);
+	if (v3d) {
+		ID_NEW_REMAP(v3d->camera);
+	}
 
-	BKE_scene_collection_sync(scene);
+	/* Making single user may affect other scenes if they share with current one some collections in their ViewLayer. */
+	BKE_main_collection_sync(bmain);
 }
 
 /* not an especially efficient function, only added so the single user

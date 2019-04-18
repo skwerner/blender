@@ -315,8 +315,12 @@ static void view3d_win_to_ray_segment(
 	RegionView3D *rv3d = ar->regiondata;
 	float _ray_co[3], _ray_dir[3], start_offset, end_offset;
 
-	if (!r_ray_co) r_ray_co = _ray_co;
-	if (!r_ray_dir) r_ray_dir = _ray_dir;
+	if (!r_ray_co) {
+		r_ray_co = _ray_co;
+	}
+	if (!r_ray_dir) {
+		r_ray_dir = _ray_dir;
+	}
 
 	ED_view3d_win_to_origin(ar, mval, r_ray_co);
 	ED_view3d_win_to_vector(ar, mval, r_ray_dir);
@@ -578,7 +582,7 @@ bool ED_view3d_win_to_3d_on_plane_int(
 
 /**
  * Calculate a 3d difference vector from 2d window offset.
- * note that ED_view3d_calc_zfac() must be called first to determine
+ * note that #ED_view3d_calc_zfac() must be called first to determine
  * the depth used to calculate the delta.
  * \param ar: The region (used for the window width and height).
  * \param mval: The area relative 2d difference (such as event->mval[0] - other_x).

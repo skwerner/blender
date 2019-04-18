@@ -61,6 +61,7 @@
 #include "BKE_idprop.h"
 #include "BKE_image.h"
 #include "BKE_icons.h"
+#include "BKE_library.h"
 #include "BKE_light.h"
 #include "BKE_layer.h"
 #include "BKE_main.h"
@@ -188,7 +189,7 @@ typedef struct IconPreview {
 
 /* *************************** Preview for buttons *********************** */
 
-static Main *G_pr_main_cycles = NULL;
+static Main *G_pr_main = NULL;
 static Main *G_pr_main_grease_pencil = NULL;
 
 #ifndef WITH_HEADLESS
@@ -217,17 +218,11 @@ void ED_preview_ensure_dbase(void)
 	static bool base_initialized = false;
 	BLI_assert(BLI_thread_is_main());
 	if (!base_initialized) {
-		G_pr_main_cycles = load_main_from_memory(datatoc_preview_cycles_blend, datatoc_preview_cycles_blend_size);
+		G_pr_main = load_main_from_memory(datatoc_preview_blend, datatoc_preview_blend_size);
 		G_pr_main_grease_pencil = load_main_from_memory(datatoc_preview_grease_pencil_blend, datatoc_preview_grease_pencil_blend_size);
 		base_initialized = true;
 	}
 #endif
-}
-
-static bool check_engine_supports_textures(Scene *scene)
-{
-	RenderEngineType *type = RE_engines_find(scene->r.engine);
-	return (type->flag & RE_USE_TEXTURE_PREVIEW) != 0;
 }
 
 static bool check_engine_supports_preview(Scene *scene)
@@ -238,8 +233,8 @@ static bool check_engine_supports_preview(Scene *scene)
 
 void ED_preview_free_dbase(void)
 {
-	if (G_pr_main_cycles)
-		BKE_main_free(G_pr_main_cycles);
+	if (G_pr_main)
+		BKE_main_free(G_pr_main);
 
 	if (G_pr_main_grease_pencil)
 		BKE_main_free(G_pr_main_grease_pencil);
@@ -261,14 +256,16 @@ static const char *preview_collection_name(const char pr_type)
 			return "Sphere";
 		case MA_CUBE:
 			return "Cube";
-		case MA_MONKEY:
-			return "Monkey";
+		case MA_SHADERBALL:
+			return "Shader Ball";
+		case MA_CLOTH:
+			return "Cloth";
+		case MA_FLUID:
+			return "Fluid";
 		case MA_SPHERE_A:
-			return "World Sphere";
-		case MA_TEXTURE:
-			return "Texture";
+			return "World Shader Ball";
 		case MA_LAMP:
-			return "Light";
+			return "Lamp";
 		case MA_SKY:
 			return "Sky";
 		case MA_HAIR:
@@ -281,8 +278,9 @@ static const char *preview_collection_name(const char pr_type)
 	}
 }
 
-static void set_preview_collection(Scene *scene, ViewLayer *view_layer, char pr_type)
+static void set_preview_visibility(Scene *scene, ViewLayer *view_layer, char pr_type, int pr_method)
 {
+	/* Set appropriate layer as visibile. */
 	LayerCollection *lc = view_layer->layer_collections.first;
 	const char *collection_name = preview_collection_name(pr_type);
 
@@ -292,6 +290,18 @@ static void set_preview_collection(Scene *scene, ViewLayer *view_layer, char pr_
 		}
 		else {
 			lc->collection->flag |= COLLECTION_RESTRICT_RENDER;
+		}
+	}
+
+	/* Hide floor for icon renders. */
+	for (Base *base = view_layer->object_bases.first; base; base = base->next) {
+		if (STREQ(base->object->id.name + 2, "Floor")) {
+			if (pr_method == PR_ICON_RENDER) {
+				base->object->restrictflag |= OB_RESTRICT_RENDER;
+			}
+			else {
+				base->object->restrictflag &= ~OB_RESTRICT_RENDER;
+			}
 		}
 	}
 
@@ -388,11 +398,8 @@ static Scene *preview_prepare_scene(Main *bmain, Scene *scene, ID *id, int id_ty
 
 		sce->r.cfra = scene->r.cfra;
 
-		if (id_type == ID_TE && !check_engine_supports_textures(scene)) {
-			/* Force blender internal for texture icons and nodes render,
-			 * seems commonly used render engines does not support
-			 * such kind of rendering.
-			 */
+		if (id_type == ID_TE) {
+			/* Texture is not actually rendered with engine, just set dummy value. */
 			BLI_strncpy(sce->r.engine, RE_engine_id_BLENDER_EEVEE, sizeof(sce->r.engine));
 		}
 		else {
@@ -409,8 +416,8 @@ static Scene *preview_prepare_scene(Main *bmain, Scene *scene, ID *id, int id_ty
 				sp->id_copy = NULL;
 				BLI_addtail(&pr_main->materials, mat);
 
-				/* use current scene world to light sphere */
-				if (mat->pr_type == MA_SPHERE_A && sp->pr_method == PR_BUTS_RENDER) {
+				/* Use current scene world for lighting. */
+				if (mat->pr_flag == MA_PREVIEW_WORLD && sp->pr_method == PR_BUTS_RENDER) {
 					/* Use current scene world to light sphere. */
 					sce->world = preview_get_localized_world(sp, scene->world);
 				}
@@ -418,17 +425,14 @@ static Scene *preview_prepare_scene(Main *bmain, Scene *scene, ID *id, int id_ty
 					/* Use a default world color. Using the current
 					 * scene world can be slow if it has big textures. */
 					sce->world->use_nodes = false;
-					sce->world->horr = 0.5f;
-					sce->world->horg = 0.5f;
-					sce->world->horb = 0.5f;
+					sce->world->horr = 0.05f;
+					sce->world->horg = 0.05f;
+					sce->world->horb = 0.05f;
 				}
 
-				if (sp->pr_method == PR_ICON_RENDER) {
-					set_preview_collection(sce, view_layer, MA_SPHERE_A);
-				}
-				else {
-					set_preview_collection(sce, view_layer, mat->pr_type);
+				set_preview_visibility(sce, view_layer, mat->pr_type, sp->pr_method);
 
+				if (sp->pr_method != PR_ICON_RENDER) {
 					if (mat->nodetree && sp->pr_method == PR_NODE_RENDER) {
 						/* two previews, they get copied by wmJob */
 						BKE_node_preview_init_tree(mat->nodetree, sp->sizex, sp->sizey, true);
@@ -469,7 +473,6 @@ static Scene *preview_prepare_scene(Main *bmain, Scene *scene, ID *id, int id_ty
 				sp->id_copy = NULL;
 				BLI_addtail(&pr_main->textures, tex);
 			}
-			set_preview_collection(sce, view_layer, MA_TEXTURE);
 
 			if (tex && tex->nodetree && sp->pr_method == PR_NODE_RENDER) {
 				/* two previews, they get copied by wmJob */
@@ -489,7 +492,7 @@ static Scene *preview_prepare_scene(Main *bmain, Scene *scene, ID *id, int id_ty
 				BLI_addtail(&pr_main->lights, la);
 			}
 
-			set_preview_collection(sce, view_layer, MA_LAMP);
+			set_preview_visibility(sce, view_layer, MA_LAMP, sp->pr_method);
 
 			if (sce->world) {
 				/* Only use lighting from the light. */
@@ -523,7 +526,7 @@ static Scene *preview_prepare_scene(Main *bmain, Scene *scene, ID *id, int id_ty
 				BLI_addtail(&pr_main->worlds, wrld);
 			}
 
-			set_preview_collection(sce, view_layer, MA_SKY);
+			set_preview_visibility(sce, view_layer, MA_SKY, sp->pr_method);
 			sce->world = wrld;
 
 			if (wrld && wrld->nodetree && sp->pr_method == PR_NODE_RENDER) {
@@ -923,7 +926,7 @@ static void shader_preview_free(void *customdata)
 		/* get rid of copied ID */
 		properties = IDP_GetProperties(sp->id_copy, false);
 		if (properties) {
-			IDP_FreeProperty(properties);
+			IDP_FreeProperty_ex(properties, false);
 			MEM_freeN(properties);
 		}
 		switch (GS(sp->id_copy->name)) {
@@ -1177,7 +1180,7 @@ static void icon_preview_startjob_all_sizes(void *customdata, short *stop, short
 			}
 
 			if ((ma == NULL) || (ma->gp_style == NULL)) {
-				sp->pr_main = G_pr_main_cycles;
+				sp->pr_main = G_pr_main;
 			}
 			else {
 				sp->pr_main = G_pr_main_grease_pencil;
@@ -1358,7 +1361,7 @@ void ED_preview_shader_job(const bContext *C, void *owner, ID *id, ID *parent, M
 	}
 
 	if ((ma == NULL) || (ma->gp_style == NULL)) {
-		sp->pr_main = G_pr_main_cycles;
+		sp->pr_main = G_pr_main;
 	}
 	else {
 		sp->pr_main = G_pr_main_grease_pencil;

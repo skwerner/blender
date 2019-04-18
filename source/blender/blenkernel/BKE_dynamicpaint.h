@@ -24,6 +24,7 @@
 struct Depsgraph;
 struct DynamicPaintCanvasSettings;
 struct DynamicPaintModifierData;
+struct DynamicPaintRuntime;
 struct Main;
 struct Scene;
 struct ViewLayer;
@@ -63,6 +64,7 @@ struct Mesh *dynamicPaint_Modifier_do(
         struct DynamicPaintModifierData *pmd, struct Depsgraph *depsgraph, struct Scene *scene,
         struct Object *ob, struct Mesh *me);
 void dynamicPaint_Modifier_free(struct DynamicPaintModifierData *pmd);
+void dynamicPaint_Modifier_free_runtime(struct DynamicPaintRuntime *runtime);
 void dynamicPaint_Modifier_copy(const struct DynamicPaintModifierData *pmd,
                                 struct DynamicPaintModifierData *tsmd,
                                 int flag);

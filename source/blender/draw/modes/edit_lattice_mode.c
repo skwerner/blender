@@ -99,7 +99,7 @@ static struct {
 
 	EDIT_LATTICE_Shaders sh_data[GPU_SHADER_CFG_LEN];
 
-} e_data = {NULL}; /* Engine data */
+} e_data = {{{NULL}}}; /* Engine data */
 
 typedef struct EDIT_LATTICE_PrivateData {
 	/* This keeps the references of the shading groups for
@@ -262,7 +262,7 @@ static void EDIT_LATTICE_draw_scene(void *vedata)
 	DRW_draw_pass(psl->wire_pass);
 	DRW_draw_pass(psl->vert_pass);
 
-	MULTISAMPLE_SYNC_DISABLE(dfbl, dtxl)
+	MULTISAMPLE_SYNC_DISABLE(dfbl, dtxl);
 
 	/* If you changed framebuffer, double check you rebind
 	 * the default one with its textures attached before finishing */

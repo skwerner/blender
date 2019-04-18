@@ -172,7 +172,8 @@ void DepsgraphRelationBuilder::build_ik_pose(Object *object,
 	        BUILD,
 	        "\nStarting IK Build: pchan = %s, target = (%s, %s), "
 	        "segcount = %d\n",
-	        pchan->name, data->tar->id.name, data->subtarget, data->rootbone);
+	        pchan->name, data->tar ? data->tar->id.name : "NULL",
+	        data->subtarget, data->rootbone);
 	bPoseChannel *parchan = pchan;
 	/* Exclude tip from chain if needed. */
 	if (!(data->flag & CONSTRAINT_IK_TIP)) {
@@ -260,14 +261,11 @@ void DepsgraphRelationBuilder::build_splineik_pose(Object *object,
 	             RELATION_FLAG_GODMODE);
 	/* Attach path dependency to solver. */
 	if (data->tar != NULL) {
-		/* TODO(sergey): For until we'll store partial matricies in the
-		 * depsgraph, we create dependency between target object and pose eval
-		 * component. See IK pose for a bit more information. */
-		/* TODO: the bigggest point here is that we need the curve PATH and not
-		 * just the general geometry. */
-		ComponentKey target_key(&data->tar->id, NodeType::GEOMETRY);
-		ComponentKey pose_key(&object->id, NodeType::EVAL_POSE);
-		add_relation(target_key, pose_key, "Curve.Path -> Spline IK");
+		ComponentKey target_geometry_key(&data->tar->id, NodeType::GEOMETRY);
+		add_relation(target_geometry_key, solver_key, "Curve.Path -> Spline IK");
+		ComponentKey target_transform_key(&data->tar->id, NodeType::TRANSFORM);
+		add_relation(target_transform_key, solver_key, "Curve.Transform -> Spline IK");
+		add_special_eval_flag(&data->tar->id, DAG_EVAL_NEED_CURVE_PATH);
 	}
 	pchan->flag |= POSE_DONE;
 	OperationKey final_transforms_key(
@@ -275,41 +273,27 @@ void DepsgraphRelationBuilder::build_splineik_pose(Object *object,
 	add_relation(solver_key, final_transforms_key, "Spline IK Result");
 	root_map->add_bone(pchan->name, rootchan->name);
 	/* Walk to the chain's root/ */
-	int segcount = 0;
+	int segcount = 1;
 	for (bPoseChannel *parchan = pchan->parent;
-	     parchan != NULL;
-	     parchan = parchan->parent)
+	     parchan != NULL && segcount < data->chainlen;
+	     parchan = parchan->parent, segcount++)
 	{
 		/* Make Spline IK solver dependent on this bone's result, since it can
 		 * only run after the standard results of the bone are know. Validate
 		 * links step on the bone will ensure that users of this bone only grab
 		 * the result with IK solver results. */
-		if (parchan != pchan) {
-			OperationKey parent_key(&object->id,
-			                        NodeType::BONE,
-			                        parchan->name,
-			                        OperationCode::BONE_READY);
-			add_relation(parent_key, solver_key, "Spline IK Solver Update");
-			OperationKey bone_done_key(&object->id,
-			                           NodeType::BONE,
-			                           parchan->name,
-			                           OperationCode::BONE_DONE);
-			add_relation(solver_key, bone_done_key, "IK Chain Result");
-		}
+		OperationKey parent_key(&object->id,
+								NodeType::BONE,
+								parchan->name,
+								OperationCode::BONE_READY);
+		add_relation(parent_key, solver_key, "Spline IK Solver Update");
+		OperationKey bone_done_key(&object->id,
+								   NodeType::BONE,
+								   parchan->name,
+								   OperationCode::BONE_DONE);
+		add_relation(solver_key, bone_done_key, "Spline IK Solver Result");
 		parchan->flag |= POSE_DONE;
-		OperationKey final_transforms_key(&object->id,
-		                                  NodeType::BONE,
-		                                  parchan->name,
-		                                  OperationCode::BONE_DONE);
-		add_relation(
-		        solver_key, final_transforms_key, "Spline IK Solver Result");
 		root_map->add_bone(parchan->name, rootchan->name);
-		/* TODO(sergey): This is an arbitrary value, which was just following
-		 * old code convention. */
-		segcount++;
-		if ((segcount == data->chainlen) || (segcount > 255)) {
-			break;
-		}
 	}
 	OperationKey pose_done_key(
 	        &object->id, NodeType::EVAL_POSE, OperationCode::POSE_DONE);
@@ -343,6 +327,8 @@ void DepsgraphRelationBuilder::build_rig(Object *object)
 	                          NodeType::PARAMETERS,
 	                          OperationCode::ARMATURE_EVAL);
 	add_relation(armature_key, pose_init_key, "Data dependency");
+	/* Run cleanup even when there are no bones. */
+	add_relation(pose_init_key, pose_cleanup_key, "Init -> Cleanup");
 	/* IK Solvers.
 	 *
 	 * - These require separate processing steps are pose-level to be executed
@@ -456,7 +442,8 @@ void DepsgraphRelationBuilder::build_rig(Object *object)
 			                             NodeType::BONE,
 			                             pchan->name,
 			                             OperationCode::BONE_CONSTRAINTS);
-			add_relation(bone_pose_key, constraints_key, "Constraints Stack");
+			add_relation(bone_pose_key, constraints_key, "Pose -> Constraints Stack");
+			add_relation(bone_local_key, constraints_key, "Local -> Constraints Stack");
 			/* Constraints -> ready/ */
 			/* TODO(sergey): When constraint stack is exploded, this step should
 			 * occur before the first IK solver.  */
@@ -518,9 +505,15 @@ void DepsgraphRelationBuilder::build_rig(Object *object)
 			add_relation(bone_done_key,
 			             pose_done_key,
 			             "PoseEval Result-Bone Link");
+
+			/* Bones must be traversed before cleanup. */
 			add_relation(bone_done_key,
 			             pose_cleanup_key,
-			             "Cleanup dependency");
+			             "Done -> Cleanup");
+
+			add_relation(bone_ready_key,
+			             pose_cleanup_key,
+			             "Ready -> Cleanup");
 		}
 		/* Custom shape. */
 		if (pchan->custom != NULL) {
@@ -583,6 +576,18 @@ void DepsgraphRelationBuilder::build_proxy_rig(Object *object)
 			add_relation(from_bone_done_key,
 			             bone_done_key,
 			             "Bone Done -> Bone Done");
+		}
+
+		/* Parent relation: even though the proxy bone itself doesn't need
+		 * the parent bone, some users expect the parent to be ready if the
+		 * bone itself is (e.g. for computing the local space matrix).
+		 */
+		if (pchan->parent != NULL) {
+			OperationKey parent_key(&object->id,
+			                        NodeType::BONE,
+			                        pchan->parent->name,
+			                        OperationCode::BONE_DONE);
+			add_relation(parent_key, bone_done_key, "Parent Bone -> Child Bone");
 		}
 
 		if (pchan->prop != NULL) {

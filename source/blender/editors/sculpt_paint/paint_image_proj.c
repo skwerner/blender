@@ -158,6 +158,8 @@ BLI_INLINE unsigned char f_to_char(const float val)
 #define PROJ_FACE_SEAM_INIT1 (1 << 9)
 #define PROJ_FACE_SEAM_INIT2 (1 << 10)
 
+#define PROJ_FACE_DEGENERATE (1 << 12)
+
 /* face winding */
 #define PROJ_FACE_WINDING_INIT 1
 #define PROJ_FACE_WINDING_CW 2
@@ -922,8 +924,8 @@ static bool project_bucket_point_occluded(
 	return false;
 }
 
-/* basic line intersection, could move to math_geom.c, 2 points with a horiz line
- * 1 for an intersection, 2 if the first point is aligned, 3 if the second point is aligned */
+/* Basic line intersection, could move to math_geom.c, 2 points with a horizontal line
+ * 1 for an intersection, 2 if the first point is aligned, 3 if the second point is aligned. */
 #define ISECT_TRUE 1
 #define ISECT_TRUE_P1 2
 #define ISECT_TRUE_P2 3
@@ -1324,7 +1326,7 @@ static void uv_image_outset(
 			len_fact = UNLIKELY(len_fact < FLT_EPSILON) ? FLT_MAX : (1.0f / len_fact);
 
 			/* Clamp the length factor, see: T62236. */
-			len_fact = MIN2(len_fact, 5.0f);
+			len_fact = MIN2(len_fact, 10.0f);
 
 			mul_v2_fl(no, ps->seam_bleed_px * len_fact);
 
@@ -1745,7 +1747,7 @@ static float project_paint_uvpixel_mask(
 		} /* otherwise no mask normal is needed, were within the limit */
 	}
 
-	/* This only works when the opacity dosnt change while painting, stylus pressure messes with this
+	/* This only works when the opacity doesn't change while painting, stylus pressure messes with this
 	 * so don't use it. */
 	// if (ps->is_airbrush == 0) mask *= BKE_brush_alpha_get(ps->brush);
 
@@ -2441,8 +2443,8 @@ static void project_bucket_clip_face(
 		*tot = 3;
 		return;
 	}
-	/* handle pathological case here,
-	 * no need for further intersections below since tringle area is almost zero */
+	/* Handle pathological case here,
+	 * no need for further intersections below since triangle area is almost zero. */
 	if (collinear) {
 		int flag;
 
@@ -2984,7 +2986,7 @@ static void project_paint_face_init(
 
 
 #ifndef PROJ_DEBUG_NOSEAMBLEED
-	if (ps->seam_bleed_px > 0.0f) {
+	if (ps->seam_bleed_px > 0.0f && !(ps->faceSeamFlags[tri_index] & PROJ_FACE_DEGENERATE)) {
 		int face_seam_flag;
 
 		if (threaded) {
@@ -3759,11 +3761,23 @@ static void project_paint_bleed_add_face_user(
 	/* add face user if we have bleed enabled, set the UV seam flags later */
 	/* annoying but we need to add all faces even ones we never use elsewhere */
 	if (ps->seam_bleed_px > 0.0f) {
-		const int lt_vtri[3] = { PS_LOOPTRI_AS_VERT_INDEX_3(ps, lt) };
-		void *tri_index_p = POINTER_FROM_INT(tri_index);
-		BLI_linklist_prepend_arena(&ps->vertFaces[lt_vtri[0]], tri_index_p, arena);
-		BLI_linklist_prepend_arena(&ps->vertFaces[lt_vtri[1]], tri_index_p, arena);
-		BLI_linklist_prepend_arena(&ps->vertFaces[lt_vtri[2]], tri_index_p, arena);
+		const float *lt_tri_uv[3] = { PS_LOOPTRI_AS_UV_3(ps->poly_to_loop_uv, lt) };
+
+		/* Check for degenerate triangles. Degenerate faces cause trouble with bleed computations.
+		 * Ideally this would be checked later, not to add to the cost of computing non-degenerate
+		 * triangles, but that would allow other triangles to still find adjacent seams on degenerate
+		 * triangles, potentially causing incorrect results. */
+		if (area_tri_v2(UNPACK3(lt_tri_uv)) > FLT_EPSILON) {
+			const int lt_vtri[3] = { PS_LOOPTRI_AS_VERT_INDEX_3(ps, lt) };
+			void *tri_index_p = POINTER_FROM_INT(tri_index);
+
+			BLI_linklist_prepend_arena(&ps->vertFaces[lt_vtri[0]], tri_index_p, arena);
+			BLI_linklist_prepend_arena(&ps->vertFaces[lt_vtri[1]], tri_index_p, arena);
+			BLI_linklist_prepend_arena(&ps->vertFaces[lt_vtri[2]], tri_index_p, arena);
+		}
+		else {
+			ps->faceSeamFlags[tri_index] |= PROJ_FACE_DEGENERATE;
+		}
 	}
 }
 #endif
@@ -4061,10 +4075,7 @@ static void project_paint_prepare_all_faces(
 
 	for (tri_index = 0, lt = ps->mlooptri_eval; tri_index < ps->totlooptri_eval; tri_index++, lt++) {
 		bool is_face_sel;
-
-#ifndef PROJ_DEBUG_NOSEAMBLEED
-		project_paint_bleed_add_face_user(ps, arena, lt, tri_index);
-#endif
+		bool skip_tri = false;
 
 		is_face_sel = project_paint_check_face_sel(ps, face_lookup, lt);
 
@@ -4084,14 +4095,15 @@ static void project_paint_prepare_all_faces(
 
 				/* don't allow using the same inage for painting and stencilling */
 				if (slot->ima == ps->stencil_ima) {
-					/* While this shouldn't be used, face-winding reads all polys.
+					/* Delay continuing the loop until after loop_uvs and bleed faces are initialized.
+					 * While this shouldn't be used, face-winding reads all polys.
 					 * It's less trouble to set all faces to valid UV's,
 					 * avoiding NULL checks all over. */
-					ps->poly_to_loop_uv[lt->poly] = mloopuv_base;
-					continue;
+					skip_tri = true;
 				}
-
-				tpage = slot->ima;
+				else {
+					tpage = slot->ima;
+				}
 			}
 		}
 		else {
@@ -4100,7 +4112,11 @@ static void project_paint_prepare_all_faces(
 
 		ps->poly_to_loop_uv[lt->poly] = mloopuv_base;
 
-		if (project_paint_clone_face_skip(ps, layer_clone, slot, tri_index)) {
+#ifndef PROJ_DEBUG_NOSEAMBLEED
+		project_paint_bleed_add_face_user(ps, arena, lt, tri_index);
+#endif
+
+		if (skip_tri || project_paint_clone_face_skip(ps, layer_clone, slot, tri_index)) {
 			continue;
 		}
 

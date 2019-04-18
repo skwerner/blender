@@ -77,11 +77,13 @@
 #include "BKE_softbody.h"
 #include "BKE_editmesh.h"
 #include "BKE_report.h"
+#include "BKE_scene.h"
 #include "BKE_workspace.h"
 
 #include "DEG_depsgraph.h"
 #include "DEG_depsgraph_build.h"
 
+#include "ED_anim_api.h"
 #include "ED_armature.h"
 #include "ED_curve.h"
 #include "ED_mesh.h"
@@ -162,7 +164,10 @@ static int object_hide_view_clear_exec(bContext *C, wmOperator *op)
 			changed = true;
 
 			if (select) {
-				ED_object_base_select(base, BA_SELECT);
+				/* We cannot call `ED_object_base_select` because
+				 * base is not selectable while it is hidden. */
+				base->flag |= BASE_SELECTED;
+				BKE_scene_object_base_flag_sync_from_base(base);
 			}
 		}
 	}
@@ -1707,6 +1712,7 @@ void OBJECT_OT_move_to_collection(wmOperatorType *ot)
 	prop = RNA_def_string(ot->srna, "new_collection_name", NULL, MAX_NAME, "Name",
 	                      "Name of the newly added collection");
 	RNA_def_property_flag(prop, PROP_SKIP_SAVE);
+	ot->prop = prop;
 }
 
 void OBJECT_OT_link_to_collection(wmOperatorType *ot)

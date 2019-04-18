@@ -20,7 +20,6 @@
 import bpy
 from bpy.types import Menu, Panel, UIList
 from rna_prop_ui import PropertyPanel
-from bpy.app.translations import pgettext_iface as iface_
 from bpy_extras.node_utils import find_node_input
 
 
@@ -207,19 +206,18 @@ class EEVEE_MATERIAL_PT_settings(MaterialButtonsPanel, Panel):
     bl_context = "material"
     COMPAT_ENGINES = {'BLENDER_EEVEE'}
 
-    @staticmethod
-    def draw_shared(self, mat):
+    def draw(self, context):
         layout = self.layout
         layout.use_property_split = True
 
+        mat = context.material
+
         layout.prop(mat, "blend_method")
+        layout.prop(mat, "shadow_method")
 
-        if mat.blend_method != 'OPAQUE':
-            layout.prop(mat, "transparent_shadow_method")
-
-            row = layout.row()
-            row.active = ((mat.blend_method == 'CLIP') or (mat.transparent_shadow_method == 'CLIP'))
-            row.prop(mat, "alpha_threshold")
+        row = layout.row()
+        row.active = ((mat.blend_method == 'CLIP') or (mat.shadow_method == 'CLIP'))
+        row.prop(mat, "alpha_threshold")
 
         if mat.blend_method not in {'OPAQUE', 'CLIP', 'HASHED'}:
             layout.prop(mat, "show_transparent_back")
@@ -228,9 +226,6 @@ class EEVEE_MATERIAL_PT_settings(MaterialButtonsPanel, Panel):
         layout.prop(mat, "refraction_depth")
         layout.prop(mat, "use_sss_translucency")
         layout.prop(mat, "pass_index")
-
-    def draw(self, context):
-        self.draw_shared(self, context.material)
 
 
 class MATERIAL_PT_viewport(MaterialButtonsPanel, Panel):
@@ -243,18 +238,16 @@ class MATERIAL_PT_viewport(MaterialButtonsPanel, Panel):
         mat = context.material
         return mat and not mat.grease_pencil
 
-    @staticmethod
-    def draw_shared(self, mat):
+    def draw(self, context):
         layout = self.layout
         layout.use_property_split = True
+
+        mat = context.material
 
         col = layout.column()
         col.prop(mat, "diffuse_color", text="Color")
         col.prop(mat, "metallic")
         col.prop(mat, "roughness")
-
-    def draw(self, context):
-        self.draw_shared(self, context.material)
 
 
 classes = (

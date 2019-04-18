@@ -2021,7 +2021,7 @@ static int edbm_hide_exec(bContext *C, wmOperator *op)
 void MESH_OT_hide(wmOperatorType *ot)
 {
 	/* identifiers */
-	ot->name = "Hide Selection";
+	ot->name = "Hide Selected";
 	ot->idname = "MESH_OT_hide";
 	ot->description = "Hide (un)selected vertices, edges or faces";
 
@@ -4943,7 +4943,7 @@ static int edbm_decimate_exec(bContext *C, wmOperator *op)
 		}
 		else {
 			/**
-			 * Calculate a new ratio based on faces that could be remoevd during decimation.
+			 * Calculate a new ratio based on faces that could be removed during decimation.
 			 * needed so 0..1 has a meaningful range when operating on the selection.
 			 *
 			 * This doesn't have to be totally accurate,
@@ -7540,7 +7540,7 @@ static void edbm_point_normals_ui(bContext *C, wmOperator *op)
 	RNA_pointer_create(&wm->id, op->type->srna, op->properties, &ptr);
 
 	/* Main auto-draw call */
-	uiDefAutoButsRNA(layout, &ptr, point_normals_draw_check_prop, NULL, '\0', false);
+	uiDefAutoButsRNA(layout, &ptr, point_normals_draw_check_prop, NULL, NULL, '\0', false);
 }
 
 void MESH_OT_point_normals(struct wmOperatorType *ot)
@@ -7935,7 +7935,7 @@ static void edbm_average_normals_ui(bContext *C, wmOperator *op)
 	RNA_pointer_create(&wm->id, op->type->srna, op->properties, &ptr);
 
 	/* Main auto-draw call */
-	uiDefAutoButsRNA(layout, &ptr, average_normals_draw_check_prop, NULL, '\0', false);
+	uiDefAutoButsRNA(layout, &ptr, average_normals_draw_check_prop, NULL, NULL, '\0', false);
 }
 
 void MESH_OT_average_normals(struct wmOperatorType *ot)
@@ -8000,15 +8000,9 @@ static int edbm_normals_tools_exec(bContext *C, wmOperator *op)
 	switch (mode) {
 		case EDBM_CLNOR_TOOLS_COPY:
 			if (bm->totfacesel != 1 && lnors_ed_arr->totloop != 1 && bm->totvertsel != 1) {
-				BKE_report(op->reports, RPT_ERROR, "Can only copy custom normal, vertex normal or face normal");
+				BKE_report(op->reports, RPT_ERROR, "Can only copy one custom normal, vertex normal or face normal");
 				BM_loop_normal_editdata_array_free(lnors_ed_arr);
 				return OPERATOR_CANCELLED;
-			}
-			bool join = true;
-			for (int i = 0; i < lnors_ed_arr->totloop; i++, lnor_ed++) {
-				if (!compare_v3v3(lnors_ed_arr->lnor_editdata->nloc, lnor_ed->nloc, 1e-4f)) {
-					join = false;
-				}
 			}
 			if (lnors_ed_arr->totloop == 1) {
 				copy_v3_v3(scene->toolsettings->normal_vector, lnors_ed_arr->lnor_editdata->nloc);
@@ -8022,8 +8016,18 @@ static int edbm_normals_tools_exec(bContext *C, wmOperator *op)
 					}
 				}
 			}
-			else if (join) {
-				copy_v3_v3(scene->toolsettings->normal_vector, lnors_ed_arr->lnor_editdata->nloc);
+			else {
+				/* 'Vertex' normal, i.e. common set of loop normals on the same vertex,
+				 * only if they are all the same. */
+				bool are_same_lnors = true;
+				for (int i = 0; i < lnors_ed_arr->totloop; i++, lnor_ed++) {
+					if (!compare_v3v3(lnors_ed_arr->lnor_editdata->nloc, lnor_ed->nloc, 1e-4f)) {
+						are_same_lnors = false;
+					}
+				}
+				if (are_same_lnors) {
+					copy_v3_v3(scene->toolsettings->normal_vector, lnors_ed_arr->lnor_editdata->nloc);
+				}
 			}
 			break;
 
@@ -8123,7 +8127,7 @@ static void edbm_normals_tools_ui(bContext *C, wmOperator *op)
 	RNA_pointer_create(&wm->id, op->type->srna, op->properties, &ptr);
 
 	/* Main auto-draw call */
-	uiDefAutoButsRNA(layout, &ptr, normals_tools_draw_check_prop, NULL, '\0', false);
+	uiDefAutoButsRNA(layout, &ptr, normals_tools_draw_check_prop, NULL, NULL, '\0', false);
 }
 
 void MESH_OT_normals_tools(struct wmOperatorType *ot)
@@ -8197,7 +8201,7 @@ static int edbm_set_normals_from_faces_exec(bContext *C, wmOperator *op)
 						if (!is_zero_v3(vnors[v_index])) {
 							short *clnors = BM_ELEM_CD_GET_VOID_P(l, cd_clnors_offset);
 							BKE_lnor_space_custom_normal_to_data(
-								bm->lnor_spacearr->lspacearr[l_index], vnors[v_index], clnors);
+							        bm->lnor_spacearr->lspacearr[l_index], vnors[v_index], clnors);
 
 							if (bm->lnor_spacearr->lspacearr[l_index]->flags & MLNOR_SPACE_IS_SINGLE) {
 								BLI_BITMAP_ENABLE(loop_set, l_index);

@@ -84,6 +84,9 @@ void main(void)
 	if (sp2.x < -area.x || sp2.x > area.x) return;
 	if (sp2.y < -area.y || sp2.y > area.y) return;
 
+	/* culling behind camera */
+	if (P1.w < 0 || P2.w < 0) return;
+
 	/* determine the direction of each of the 3 segments (previous, current, next) */
 	vec2 v0 = normalize(sp1 - sp0);
 	vec2 v1 = normalize(sp2 - sp1);
@@ -182,24 +185,37 @@ void main(void)
 		EmitVertex();
 	}
 
+	float y_a = 0.0;
+	float y_b = 1.0;
+
+	/* invert uv (vertical) */
+	if (finaluvdata[2].x > 1.0) {
+		if ((finaluvdata[1].y != 0.0) && (finaluvdata[2].y != 0.0)) {
+			float d = ceil(finaluvdata[2].x) - 1.0;
+			if (floor(d / 2.0) == (d / 2.0)) {
+				y_a = 1.0;
+				y_b = 0.0;
+			}
+		}
+	}
 	/* generate the triangle strip */
 	uvfac = vec2(0.0, 0.0);
-	mTexCoord = (color_type == GPENCIL_COLOR_SOLID) ? vec2(0, 0) : vec2(finaluvdata[1].x, 0);
+	mTexCoord = (color_type == GPENCIL_COLOR_SOLID) ? vec2(0, 0) : vec2(finaluvdata[1].x, y_a);
 	mColor = finalColor[1];
 	gl_Position = vec4((sp1 + length_a * miter_a) / Viewport, getZdepth(P1), 1.0);
 	EmitVertex();
 
-	mTexCoord = (color_type == GPENCIL_COLOR_SOLID) ? vec2(0, 1) : vec2(finaluvdata[1].x, 1);
+	mTexCoord = (color_type == GPENCIL_COLOR_SOLID) ? vec2(0, 1) : vec2(finaluvdata[1].x, y_b);
 	mColor = finalColor[1];
 	gl_Position = vec4((sp1 - length_a * miter_a) / Viewport, getZdepth(P1), 1.0);
 	EmitVertex();
 
-	mTexCoord = (color_type == GPENCIL_COLOR_SOLID) ? vec2(1, 0) : vec2(finaluvdata[2].x, 0);
+	mTexCoord = (color_type == GPENCIL_COLOR_SOLID) ? vec2(1, 0) : vec2(finaluvdata[2].x, y_a);
 	mColor = finalColor[2];
 	gl_Position = vec4((sp2 + length_b * miter_b) / Viewport, getZdepth(P2), 1.0);
 	EmitVertex();
 
-	mTexCoord = (color_type == GPENCIL_COLOR_SOLID) ? vec2(1, 1) : vec2(finaluvdata[2].x, 1);
+	mTexCoord = (color_type == GPENCIL_COLOR_SOLID) ? vec2(1, 1) : vec2(finaluvdata[2].x, y_b);
 	mColor = finalColor[2];
 	gl_Position = vec4((sp2 - length_b * miter_b) / Viewport, getZdepth(P2), 1.0);
 	EmitVertex();

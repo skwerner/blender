@@ -56,8 +56,6 @@
 
 #include "RE_render_ext.h"
 
-#include "NOD_composite.h"
-
 #include "DEG_depsgraph.h"
 #include "DEG_depsgraph_query.h"
 
@@ -192,6 +190,8 @@ static const EnumPropertyItem prop_shader_output_target_items[] = {
 
 #include "NOD_common.h"
 #include "NOD_socket.h"
+#include "NOD_shader.h"
+#include "NOD_composite.h"
 
 #include "RE_engine.h"
 #include "RE_pipeline.h"
@@ -448,6 +448,13 @@ static const EnumPropertyItem *rna_node_static_type_itemf(bContext *UNUSED(C), P
 	tmp.identifier = "CUSTOM";
 	tmp.name = "Custom";
 	tmp.description = "Custom Node";
+	tmp.icon = ICON_NONE;
+	RNA_enum_item_add(&item, &totitem, &tmp);
+
+	tmp.value = NODE_CUSTOM_GROUP;
+	tmp.identifier = "CUSTOM GROUP";
+	tmp.name = "CustomGroup";
+	tmp.description = "Custom Group Node";
 	tmp.icon = ICON_NONE;
 	RNA_enum_item_add(&item, &totitem, &tmp);
 
@@ -741,8 +748,8 @@ static void rna_NodeTree_node_remove(bNodeTree *ntree, Main *bmain, ReportList *
 		return;
 	}
 
-	id_us_min(node->id);
-	nodeDeleteNode(bmain, ntree, node);
+	nodeRemoveNode(bmain, ntree, node, true);
+
 	RNA_POINTER_INVALIDATE(node_ptr);
 
 	ntreeUpdateTree(bmain, ntree); /* update group node socket links */
@@ -759,10 +766,7 @@ static void rna_NodeTree_node_clear(bNodeTree *ntree, Main *bmain, ReportList *r
 	while (node) {
 		bNode *next_node = node->next;
 
-		if (node->id)
-			id_us_min(node->id);
-
-		nodeDeleteNode(bmain, ntree, node);
+		nodeRemoveNode(bmain, ntree, node, true);
 
 		node = next_node;
 	}
@@ -1615,6 +1619,11 @@ static void rna_Node_name_set(PointerRNA *ptr, const char *value)
 
 static bNodeSocket *rna_Node_inputs_new(ID *id, bNode *node, Main *bmain, ReportList *reports, const char *type, const char *name, const char *identifier)
 {
+	/* Adding an input to a group node is not working, simpler to add it to its underlying nodetree. */
+	if (ELEM(node->type, NODE_GROUP, NODE_CUSTOM_GROUP) && node->id != NULL) {
+		return rna_NodeTree_inputs_new((bNodeTree *)node->id, bmain, reports, type, name);
+	}
+
 	bNodeTree *ntree = (bNodeTree *)id;
 	bNodeSocket *sock;
 
@@ -1633,6 +1642,11 @@ static bNodeSocket *rna_Node_inputs_new(ID *id, bNode *node, Main *bmain, Report
 
 static bNodeSocket *rna_Node_outputs_new(ID *id, bNode *node, Main *bmain, ReportList *reports, const char *type, const char *name, const char *identifier)
 {
+	/* Adding an output to a group node is not working, simpler to add it to its underlying nodetree. */
+	if (ELEM(node->type, NODE_GROUP, NODE_CUSTOM_GROUP) && node->id != NULL) {
+		return rna_NodeTree_outputs_new((bNodeTree *)node->id, bmain, reports, type, name);
+	}
+
 	bNodeTree *ntree = (bNodeTree *)id;
 	bNodeSocket *sock;
 
@@ -2462,6 +2476,50 @@ static StructRNA *rna_NodeCustomGroup_register(
 
 	return nt->ext.srna;
 }
+
+static StructRNA *rna_ShaderNodeCustomGroup_register(
+        Main *bmain, ReportList *reports,
+        void *data, const char *identifier,
+        StructValidateFunc validate, StructCallbackFunc call, StructFreeFunc free)
+{
+	bNodeType * nt = rna_Node_register_base(bmain, reports, &RNA_ShaderNodeCustomGroup, data, identifier, validate, call, free);
+
+	if (!nt)
+		return NULL;
+
+	nt->verifyfunc = node_group_verify;
+	nt->type = NODE_CUSTOM_GROUP;
+
+	register_node_type_sh_custom_group(nt);
+
+	nodeRegisterType(nt);
+
+	WM_main_add_notifier(NC_NODE | NA_EDITED, NULL);
+
+	return nt->ext.srna;
+}
+
+static StructRNA *rna_CompositorNodeCustomGroup_register(
+        Main *bmain, ReportList *reports,
+        void *data, const char *identifier,
+        StructValidateFunc validate, StructCallbackFunc call, StructFreeFunc free)
+{
+	bNodeType *nt = rna_Node_register_base(bmain, reports, &RNA_CompositorNodeCustomGroup, data, identifier, validate, call, free);
+	if (!nt)
+		return NULL;
+
+	nt->verifyfunc = node_group_verify;
+	nt->type = NODE_CUSTOM_GROUP;
+
+	register_node_type_cmp_custom_group(nt);
+
+	nodeRegisterType(nt);
+
+	WM_main_add_notifier(NC_NODE | NA_EDITED, NULL);
+
+	return nt->ext.srna;
+}
+
 
 static void rna_CompositorNode_tag_need_exec(bNode *node)
 {
@@ -3413,15 +3471,17 @@ static void def_group(StructRNA *srna)
 	RNA_def_property_ui_text(prop, "Interface", "Interface socket data");
 }
 
-static void def_custom_group(BlenderRNA *brna)
+static void def_custom_group(
+        BlenderRNA *brna, const char *struct_name, const char *base_name,
+        const char *ui_name, const char *ui_desc, const char *reg_func)
 {
 	StructRNA *srna;
 
-	srna = RNA_def_struct(brna, "NodeCustomGroup", "Node");
-	RNA_def_struct_ui_text(srna, "Custom Group", "Base node type for custom registered node group types");
+	srna = RNA_def_struct(brna, struct_name, base_name);
+	RNA_def_struct_ui_text(srna, ui_name, ui_desc);
 	RNA_def_struct_sdna(srna, "bNode");
 
-	RNA_def_struct_register_funcs(srna, "rna_NodeCustomGroup_register", "rna_Node_unregister", NULL);
+	RNA_def_struct_register_funcs(srna, reg_func, "rna_Node_unregister", NULL);
 
 	def_group(srna);
 }
@@ -4145,19 +4205,19 @@ static void def_sh_tex_pointdensity(StructRNA *srna)
 
 	static const EnumPropertyItem particle_color_source_items[] = {
 		{SHD_POINTDENSITY_COLOR_PARTAGE, "PARTICLE_AGE", 0, "Particle Age",
-		                                 "Lifetime mapped as 0.0 - 1.0 intensity"},
+		 "Lifetime mapped as 0.0 - 1.0 intensity"},
 		{SHD_POINTDENSITY_COLOR_PARTSPEED, "PARTICLE_SPEED", 0, "Particle Speed",
-		                                   "Particle speed (absolute magnitude of velocity) mapped as 0.0-1.0 intensity"},
+		 "Particle speed (absolute magnitude of velocity) mapped as 0.0-1.0 intensity"},
 		{SHD_POINTDENSITY_COLOR_PARTVEL, "PARTICLE_VELOCITY", 0, "Particle Velocity",
-		                                 "XYZ velocity mapped to RGB colors"},
+		 "XYZ velocity mapped to RGB colors"},
 		{0, NULL, 0, NULL, NULL},
 	};
 
 	static const EnumPropertyItem vertex_color_source_items[] = {
-	    {SHD_POINTDENSITY_COLOR_VERTCOL, "VERTEX_COLOR", 0, "Vertex Color", "Vertex color layer"},
-	    {SHD_POINTDENSITY_COLOR_VERTWEIGHT, "VERTEX_WEIGHT", 0, "Vertex Weight", "Vertex group weight"},
-	    {SHD_POINTDENSITY_COLOR_VERTNOR, "VERTEX_NORMAL", 0, "Vertex Normal",
-	                                     "XYZ normal vector mapped to RGB colors"},
+		{SHD_POINTDENSITY_COLOR_VERTCOL, "VERTEX_COLOR", 0, "Vertex Color", "Vertex color layer"},
+		{SHD_POINTDENSITY_COLOR_VERTWEIGHT, "VERTEX_WEIGHT", 0, "Vertex Weight", "Vertex group weight"},
+		{SHD_POINTDENSITY_COLOR_VERTNOR, "VERTEX_NORMAL", 0, "Vertex Normal",
+		 "XYZ normal vector mapped to RGB colors"},
 		{0, NULL, 0, NULL, NULL},
 	};
 
@@ -7142,6 +7202,7 @@ static void rna_def_node_socket(BlenderRNA *brna)
 	RNA_def_property_ui_text(prop, "Linked", "True if the socket is connected");
 
 	prop = RNA_def_property(srna, "show_expanded", PROP_BOOLEAN, PROP_NONE);
+	RNA_def_property_flag(prop, PROP_NO_DEG_UPDATE);
 	RNA_def_property_boolean_negative_sdna(prop, NULL, "flag", SOCK_COLLAPSED);
 	RNA_def_property_ui_text(prop, "Expanded", "Socket links are expanded in the user interface");
 	RNA_def_property_update(prop, NC_NODE | NA_EDITED, NULL);
@@ -8619,7 +8680,9 @@ void RNA_def_nodetree(BlenderRNA *brna)
 	define_specific_node(brna, "ShaderNodeGroup", "ShaderNode", "Group", "", def_group);
 	define_specific_node(brna, "CompositorNodeGroup", "CompositorNode", "Group", "", def_group);
 	define_specific_node(brna, "TextureNodeGroup", "TextureNode", "Group", "", def_group);
-	def_custom_group(brna);
+	def_custom_group(brna, "ShaderNodeCustomGroup", "ShaderNode", "Shader Custom Group", "Custom Shader Group Node for Python nodes", "rna_ShaderNodeCustomGroup_register");
+	def_custom_group(brna, "CompositorNodeCustomGroup", "CompositorNode", "Compositor Custom Group", "Custom Compositor Group Node for Python nodes", "rna_CompositorNodeCustomGroup_register");
+	def_custom_group(brna, "NodeCustomGroup", "Node", "Custom Group", "Base node type for custom registered node group types", "rna_NodeCustomGroup_register");
 
 	/* special socket types */
 	rna_def_cmp_output_file_slot_file(brna);

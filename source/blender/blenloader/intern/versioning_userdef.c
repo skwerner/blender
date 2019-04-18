@@ -52,7 +52,7 @@ static void do_versions_theme(UserDef *userdef, bTheme *btheme)
 	}
 
 #define FROM_DEFAULT_V4_UCHAR(member) \
-	copy_v4_v4_char(btheme->member, U_theme_default.member);
+	copy_v4_v4_char(btheme->member, U_theme_default.member)
 
 	if (!USER_VERSION_ATLEAST(280, 25)) {
 		copy_v4_v4_char(btheme->space_action.anim_preview_range, btheme->space_action.anim_active);
@@ -108,6 +108,10 @@ static void do_versions_theme(UserDef *userdef, bTheme *btheme)
 
 	if (!USER_VERSION_ATLEAST(280, 41)) {
 		FROM_DEFAULT_V4_UCHAR(space_view3d.back);
+	}
+
+	if (!USER_VERSION_ATLEAST(280, 52)) {
+		FROM_DEFAULT_V4_UCHAR(space_info.info_info);
 	}
 
 #undef FROM_DEFAULT_V4_UCHAR
@@ -356,14 +360,14 @@ void BLO_version_defaults_userpref_blend(Main *bmain, UserDef *userdef)
 	if (!USER_VERSION_ATLEAST(278, 6)) {
 		/* Clear preference flags for re-use. */
 		userdef->flag &= ~(
-		    USER_FLAG_NUMINPUT_ADVANCED | USER_FLAG_DEPRECATED_2 | USER_FLAG_DEPRECATED_3 |
-		    USER_FLAG_DEPRECATED_6 | USER_FLAG_DEPRECATED_7 |
-		    USER_FLAG_DEPRECATED_9 | USER_DEVELOPER_UI);
+		    USER_FLAG_NUMINPUT_ADVANCED | USER_FLAG_UNUSED_2 | USER_FLAG_UNUSED_3 |
+		    USER_FLAG_UNUSED_6 | USER_FLAG_UNUSED_7 |
+		    USER_FLAG_UNUSED_9 | USER_DEVELOPER_UI);
 		userdef->uiflag &= ~(
 		    USER_HEADER_BOTTOM);
 		userdef->transopts &= ~(
-		    USER_TR_DEPRECATED_2 | USER_TR_DEPRECATED_3 | USER_TR_DEPRECATED_4 |
-		    USER_TR_DEPRECATED_6 | USER_TR_DEPRECATED_7);
+		    USER_TR_UNUSED_2 | USER_TR_UNUSED_3 | USER_TR_UNUSED_4 |
+		    USER_TR_UNUSED_6 | USER_TR_UNUSED_7);
 
 		userdef->uiflag |= USER_LOCK_CURSOR_ADJUST;
 	}
@@ -448,15 +452,15 @@ void BLO_version_defaults_userpref_blend(Main *bmain, UserDef *userdef)
 		userdef->light_param[3].flag = 1;
 		userdef->light_param[3].smooth = 0.7;
 
-		copy_v4_fl4(userdef->light_ambient, 0.025000, 0.025000, 0.025000, 1.000000);
+		copy_v3_fl3(userdef->light_ambient, 0.025000, 0.025000, 0.025000);
 
 		userdef->flag &= ~(
-		        USER_FLAG_DEPRECATED_4);
+		        USER_FLAG_UNUSED_4);
 
 		userdef->uiflag &= ~(
 		        USER_HEADER_FROM_PREF |
-		        USER_UIFLAG_DEPRECATED_12 |
-		        USER_UIFLAG_DEPRECATED_22);
+		        USER_UIFLAG_UNUSED_12 |
+		        USER_UIFLAG_UNUSED_22);
 	}
 
 	if (!USER_VERSION_ATLEAST(280, 41)) {
@@ -469,15 +473,20 @@ void BLO_version_defaults_userpref_blend(Main *bmain, UserDef *userdef)
 
 	if (!USER_VERSION_ATLEAST(280, 44)) {
 		userdef->uiflag &= ~(
-		        USER_UIFLAG_DEPRECATED_0 | USER_UIFLAG_DEPRECATED_1);
+		        USER_UIFLAG_UNUSED_0 | USER_UIFLAG_UNUSED_1);
 		userdef->uiflag2 &= ~(
-		        USER_UIFLAG2_DEPRECATED_0);
+		        USER_UIFLAG2_UNUSED_0);
 		userdef->gp_settings &= ~(
-		        GP_PAINT_DEPRECATED_0);
+		        GP_PAINT_UNUSED_0);
 	}
 
-	if (!USER_VERSION_ATLEAST(280, 46)) {
-		userdef->uiflag2 |= USER_EDIT_MODE_SMOOTH_WIRE;
+	if (!USER_VERSION_ATLEAST(280, 50)) {
+		/* 3ds is no longer enabled by default and not ported yet. */
+		BKE_addon_remove_safe(&userdef->addons, "io_scene_3ds");
+	}
+
+	if (!USER_VERSION_ATLEAST(280, 51)) {
+		userdef->move_threshold = 2;
 	}
 
 	/**

@@ -362,18 +362,18 @@ static bool cast_ray_highpoly(
 
 		/* transfer position differentials */
 		float tmp[3];
-		mul_v3_v3fl(tmp, dir_high, 1.0f/dot_v3v3(dir_high, triangle_high->normal));
+		mul_v3_v3fl(tmp, dir_high, 1.0f / dot_v3v3(dir_high, triangle_high->normal));
 		madd_v3_v3fl(dxco, tmp, -dot_v3v3(dxco, triangle_high->normal));
 		madd_v3_v3fl(dyco, tmp, -dot_v3v3(dyco, triangle_high->normal));
 
 		/* compute barycentric differentials from position differentials */
 		barycentric_differentials_from_position(
-			hits[hit_mesh].co, triangle_high->mverts[0]->co,
-			triangle_high->mverts[1]->co, triangle_high->mverts[2]->co,
-			dxco, dyco, triangle_high->normal, true,
-			&pixel_high->uv[0], &pixel_high->uv[1],
-			&pixel_high->du_dx, &pixel_high->dv_dx,
-			&pixel_high->du_dy, &pixel_high->dv_dy);
+		        hits[hit_mesh].co, triangle_high->mverts[0]->co,
+		        triangle_high->mverts[1]->co, triangle_high->mverts[2]->co,
+		        dxco, dyco, triangle_high->normal, true,
+		        &pixel_high->uv[0], &pixel_high->uv[1],
+		        &pixel_high->du_dx, &pixel_high->dv_dx,
+		        &pixel_high->du_dy, &pixel_high->dv_dy);
 
 		/* verify we have valid uvs */
 		BLI_assert(pixel_high->uv[0] >= -1e-3f &&
@@ -421,10 +421,10 @@ static TriTessFace *mesh_calc_tri_tessface(
 	}
 
 	BKE_mesh_recalc_looptri(
-	            me->mloop, me->mpoly,
-	            me->mvert,
-	            me->totloop, me->totpoly,
-	            looptri);
+	        me->mloop, me->mpoly,
+	        me->mvert,
+	        me->totloop, me->totpoly,
+	        looptri);
 
 	const float *precomputed_normals = CustomData_get_layer(&me->pdata, CD_NORMAL);
 	const bool calculate_normal = precomputed_normals ? false : true;

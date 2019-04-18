@@ -206,8 +206,8 @@ typedef struct ParticleSettings {
 	short kink, kink_axis;
 
 	/* billboards */
-	short bb_align, bb_uv_split, bb_anim, bb_split_offset;
-	float bb_tilt, bb_rand_tilt, bb_offset[2], bb_size[2], bb_vel_head, bb_vel_tail;
+	short bb_align, bb_uv_split, bb_anim, bb_split_offset DNA_DEPRECATED;
+	float bb_tilt, bb_rand_tilt, bb_offset[2], bb_size[2], bb_vel_head, bb_vel_tail DNA_DEPRECATED;
 
 	/* draw color */
 	float color_vec_max;
@@ -362,7 +362,7 @@ typedef struct ParticleSystem {
 	char _pad1[6];
 
 	/** Billboard uv name, MAX_CUSTOMDATA_LAYER_NAME. */
-	char bb_uvname[3][64];
+	char bb_uvname[3][64] DNA_DEPRECATED;
 
 	/* if you change these remember to update array lengths to PSYS_TOT_VG! */
 	/** Vertex groups, 0==disable, 1==starting index. */
@@ -379,7 +379,7 @@ typedef struct ParticleSystem {
 	int tot_fluidsprings, alloc_fluidsprings;
 
 	/** Used for interactions with self and other systems. */
-	struct KDTree *tree;
+	struct KDTree_3d *tree;
 	/** Used for interactions with self and other systems. */
 	struct BVHTree *bvhtree;
 
@@ -407,12 +407,13 @@ typedef enum eParticleDrawFlag {
 	PART_DRAW_GLOBAL_OB	    = (1 << 1),
 	PART_DRAW_SIZE          = (1 << 2),
 #ifdef DNA_DEPRECATED
-	PART_DRAW_EMITTER       = (1 << 3),  /* render emitter also */ /* DEPRECATED */
+	/** Render emitter as well. */
+	PART_DRAW_EMITTER       = (1 << 3), /* DEPRECATED */
 #endif
 	PART_DRAW_HEALTH        = (1 << 4),
 	PART_ABS_PATH_TIME      = (1 << 5),
 	PART_DRAW_COUNT_GR      = (1 << 6),
-	PART_DRAW_BB_LOCK       = (1 << 7), /* used with billboards */
+	PART_DRAW_BB_LOCK       = (1 << 7), /* used with billboards */ /* DEPRECATED */
 	PART_DRAW_ROTATE_OB     = (1 << 7), /* used with instance object/collection */
 	PART_DRAW_PARENT        = (1 << 8),
 	PART_DRAW_NUM           = (1 << 9),
@@ -452,32 +453,32 @@ typedef enum eParticleDrawFlag {
 #define PART_EDISTR			256	/* particle/face from face areas */
 
 #define PART_ROTATIONS		512	/* calculate particle rotations (and store them in pointcache) */
-#define PART_DIE_ON_COL		(1<<12)
-#define PART_SIZE_DEFL		(1<<13) /* swept sphere deflections */
-#define PART_ROT_DYN		(1<<14)	/* dynamic rotation */
-#define PART_SIZEMASS		(1<<16)
+#define PART_DIE_ON_COL		(1 << 12)
+#define PART_SIZE_DEFL		(1 << 13) /* swept sphere deflections */
+#define PART_ROT_DYN		(1 << 14)	/* dynamic rotation */
+#define PART_SIZEMASS		(1 << 16)
 
-#define PART_HIDE_ADVANCED_HAIR	(1<<15)
+#define PART_HIDE_ADVANCED_HAIR	(1 << 15)
 
-//#define PART_ABS_TIME		(1<<17)
-//#define PART_GLOB_TIME		(1<<18)
+//#define PART_ABS_TIME		(1 << 17)
+//#define PART_GLOB_TIME		(1 << 18)
 
-#define PART_BOIDS_2D		(1<<19)
+#define PART_BOIDS_2D		(1 << 19)
 
-//#define PART_BRANCHING		(1<<20)
-//#define PART_ANIM_BRANCHING	(1<<21)
+//#define PART_BRANCHING		(1 << 20)
+//#define PART_ANIM_BRANCHING	(1 << 21)
 
 #define PART_HAIR_BSPLINE	1024
 
-#define PART_GRID_HEXAGONAL	(1<<24)
-#define PART_GRID_INVERT	(1<<26)
+#define PART_GRID_HEXAGONAL	(1 << 24)
+#define PART_GRID_INVERT	(1 << 26)
 
-#define PART_CHILD_EFFECT		(1<<27)
-#define PART_CHILD_LONG_HAIR	(1<<28)
-/* #define PART_CHILD_RENDER		(1<<29) */ /*UNUSED*/
-#define PART_CHILD_GUIDE		(1<<30)
+#define PART_CHILD_EFFECT		(1 << 27)
+#define PART_CHILD_LONG_HAIR	(1 << 28)
+/* #define PART_CHILD_RENDER		(1 << 29) */ /*UNUSED*/
+#define PART_CHILD_GUIDE		(1 << 30)
 
-#define PART_SELF_EFFECT	(1<<22)
+#define PART_SELF_EFFECT	(1 << 22)
 
 /* part->from */
 #define PART_FROM_VERT		0
@@ -510,15 +511,15 @@ typedef enum eParticleKink {
 
 /* part->child_flag */
 typedef enum eParticleChildFlag {
-	PART_CHILD_USE_CLUMP_NOISE  = (1<<0),
-	PART_CHILD_USE_CLUMP_CURVE  = (1<<1),
-	PART_CHILD_USE_ROUGH_CURVE  = (1<<2),
-	PART_CHILD_USE_TWIST_CURVE  = (1<<3),
+	PART_CHILD_USE_CLUMP_NOISE  = (1 << 0),
+	PART_CHILD_USE_CLUMP_CURVE  = (1 << 1),
+	PART_CHILD_USE_ROUGH_CURVE  = (1 << 2),
+	PART_CHILD_USE_TWIST_CURVE  = (1 << 3),
 } eParticleChildFlag;
 
 /* part->shape_flag */
 typedef enum eParticleShapeFlag {
-	PART_SHAPE_CLOSE_TIP     = (1<<0),
+	PART_SHAPE_CLOSE_TIP     = (1 << 0),
 } eParticleShapeFlag;
 
 /* part->draw_col */
@@ -529,24 +530,6 @@ typedef enum eParticleShapeFlag {
 
 /* part->time_flag */
 #define PART_TIME_AUTOSF	1 /* Automatic subframes */
-
-/* part->bb_align */
-#define PART_BB_X		0
-#define PART_BB_Y		1
-#define PART_BB_Z		2
-#define PART_BB_VIEW	3
-#define PART_BB_VEL		4
-
-/* part->bb_anim */
-#define PART_BB_ANIM_NONE	0
-#define PART_BB_ANIM_AGE	1
-#define PART_BB_ANIM_ANGLE	2
-#define PART_BB_ANIM_FRAME	3
-
-/* part->bb_split_offset */
-#define PART_BB_OFF_NONE	0
-#define PART_BB_OFF_LINEAR	1
-#define PART_BB_OFF_RANDOM	2
 
 /* part->draw_as */
 /* part->ren_as*/
@@ -560,7 +543,7 @@ typedef enum eParticleShapeFlag {
 #define PART_DRAW_PATH		6
 #define PART_DRAW_OB		7
 #define PART_DRAW_GR		8
-#define PART_DRAW_BB		9
+#define PART_DRAW_BB		9 /* deprecated */
 #define PART_DRAW_REND		10
 
 /* part->integrator */
@@ -661,25 +644,25 @@ typedef enum eParticleShapeFlag {
 /* mapto */
 typedef enum eParticleTextureInfluence {
 	/* init */
-	PAMAP_TIME		= (1<<0),	/* emission time */
-	PAMAP_LIFE		= (1<<1),	/* life time */
-	PAMAP_DENS		= (1<<2),	/* density */
-	PAMAP_SIZE		= (1<<3),	/* physical size */
+	PAMAP_TIME		= (1 << 0),	/* emission time */
+	PAMAP_LIFE		= (1 << 1),	/* life time */
+	PAMAP_DENS		= (1 << 2),	/* density */
+	PAMAP_SIZE		= (1 << 3),	/* physical size */
 	PAMAP_INIT		= (PAMAP_TIME | PAMAP_LIFE | PAMAP_DENS | PAMAP_SIZE),
 	/* reset */
-	PAMAP_IVEL		= (1<<5),	/* initial velocity */
+	PAMAP_IVEL		= (1 << 5),	/* initial velocity */
 	/* physics */
-	PAMAP_FIELD		= (1<<6),	/* force fields */
-	PAMAP_GRAVITY	= (1<<10),
-	PAMAP_DAMP		= (1<<11),
+	PAMAP_FIELD		= (1 << 6),	/* force fields */
+	PAMAP_GRAVITY	= (1 << 10),
+	PAMAP_DAMP		= (1 << 11),
 	PAMAP_PHYSICS	= (PAMAP_FIELD | PAMAP_GRAVITY | PAMAP_DAMP),
 	/* children */
-	PAMAP_CLUMP		= (1<<7),
-	PAMAP_KINK_FREQ	= (1<<8),
-	PAMAP_KINK_AMP	= (1<<12),
-	PAMAP_ROUGH		= (1<<9),
-	PAMAP_LENGTH	= (1<<4),
-	PAMAP_TWIST	= (1<<13),
+	PAMAP_CLUMP		= (1 << 7),
+	PAMAP_KINK_FREQ	= (1 << 8),
+	PAMAP_KINK_AMP	= (1 << 12),
+	PAMAP_ROUGH		= (1 << 9),
+	PAMAP_LENGTH	= (1 << 4),
+	PAMAP_TWIST	= (1 << 13),
 	PAMAP_CHILD		= (PAMAP_CLUMP | PAMAP_KINK_FREQ | PAMAP_KINK_AMP | PAMAP_ROUGH | PAMAP_LENGTH | PAMAP_TWIST),
 } eParticleTextureInfluence;
 

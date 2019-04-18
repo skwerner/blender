@@ -58,7 +58,6 @@ struct bNodeTree;
 #define RE_USE_SHADING_NODES	16
 #define RE_USE_EXCLUDE_LAYERS	32
 #define RE_USE_SAVE_BUFFERS		64
-#define RE_USE_TEXTURE_PREVIEW		128
 #define RE_USE_SHADING_NODES_CUSTOM 	256
 #define RE_USE_SPHERICAL_STEREO 512
 
@@ -183,7 +182,7 @@ bool RE_engine_is_opengl(RenderEngineType *render_type);
 
 RenderEngineType *RE_engines_find(const char *idname);
 
-rcti* RE_engine_get_current_tiles(struct Render *re, int *r_total_tiles, bool *r_needs_free);
+rcti *RE_engine_get_current_tiles(struct Render *re, int *r_total_tiles, bool *r_needs_free);
 struct RenderData *RE_engine_get_render_data(struct Render *re);
 void RE_bake_engine_set_engine_parameters(
         struct Render *re, struct Main *bmain, struct Scene *scene);

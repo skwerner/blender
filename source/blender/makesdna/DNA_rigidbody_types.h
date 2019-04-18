@@ -172,7 +172,7 @@ typedef enum eRigidBodyOb_Type {
 	/* active geometry participant in simulation. is directly controlled by sim */
 	RBO_TYPE_ACTIVE	= 0,
 	/* passive geometry participant in simulation. is directly controlled by animsys */
-	RBO_TYPE_PASSIVE
+	RBO_TYPE_PASSIVE,
 } eRigidBodyOb_Type;
 
 /* Flags for RigidBodyOb */
@@ -197,23 +197,23 @@ typedef enum eRigidBodyOb_Flag {
 
 /* RigidBody Collision Shape */
 typedef enum eRigidBody_Shape {
-		/* simple box (i.e. bounding box) */
+	/** Simple box (i.e. bounding box). */
 	RB_SHAPE_BOX = 0,
-		/* sphere */
+	/** Sphere. */
 	RB_SHAPE_SPHERE,
-		/* rounded "pill" shape (i.e. calcium tablets) */
+	/** Rounded "pill" shape (i.e. calcium tablets). */
 	RB_SHAPE_CAPSULE,
-		/* cylinder (i.e. pringles can) */
+	/** Cylinder (i.e. pringles can). */
 	RB_SHAPE_CYLINDER,
-		/* cone (i.e. party hat) */
+	/** Cone (i.e. party hat). */
 	RB_SHAPE_CONE,
 
-		/* convex hull (minimal shrinkwrap encompassing all verts) */
+	/** Convex hull (minimal shrinkwrap encompassing all verts). */
 	RB_SHAPE_CONVEXH,
-		/* triangulated mesh */
+	/** Triangulated mesh. */
 	RB_SHAPE_TRIMESH,
 
-		/* concave mesh approximated using primitives */
+	/* concave mesh approximated using primitives */
 	//RB_SHAPE_COMPOUND,
 } eRigidBody_Shape;
 
@@ -223,7 +223,7 @@ typedef enum eRigidBody_MeshSource {
 	/* only deformations */
 	RBO_MESH_DEFORM,
 	/* final derived mesh */
-	RBO_MESH_FINAL
+	RBO_MESH_FINAL,
 } eRigidBody_MeshSource;
 
 /* ******************************** */

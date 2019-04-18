@@ -52,6 +52,7 @@ struct EffectorWeights;
 struct FCurve;
 struct GHash;
 struct ID;
+struct Image;
 struct Key;
 struct LayerCollection;
 struct Light;
@@ -198,6 +199,12 @@ public:
 	                                   const char *description,
 	                                   int flags = 0);
 
+	template <typename KeyTo>
+	Relation *add_depends_on_transform_relation(ID *id,
+	                                            const KeyTo& key_to,
+	                                            const char *description,
+	                                            int flags = 0);
+
 	/* Adds relation from proper transformation opertation to the modifier.
 	 * Takes care of checking for possible physics solvers modifying position
 	 * of this object. */
@@ -272,6 +279,7 @@ public:
 	void build_nodetree(bNodeTree *ntree);
 	void build_material(Material *ma);
 	void build_texture(Tex *tex);
+	void build_image(Image *image);
 	void build_compositor(Scene *scene);
 	void build_gpencil(bGPdata *gpd);
 	void build_cachefile(CacheFile *cache_file);

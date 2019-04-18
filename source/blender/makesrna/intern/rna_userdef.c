@@ -3775,6 +3775,17 @@ static void rna_def_userdef_view(BlenderRNA *brna)
 	                         "Show the frames per second screen refresh rate, while animation is played back");
 	RNA_def_property_update(prop, 0, "rna_userdef_update");
 
+	static const EnumPropertyItem factor_display_items[] = {
+		{USER_FACTOR_AS_FACTOR, "FACTOR", 0, "Factor", "Display factors as values between 0 and 1"},
+		{USER_FACTOR_AS_PERCENTAGE, "PERCENTAGE", 0, "Percentage", "Display factors as percentages"},
+		{0, NULL, 0, NULL, NULL},
+	};
+
+	prop = RNA_def_property(srna, "factor_display_type", PROP_ENUM, PROP_NONE);
+	RNA_def_property_enum_items(prop, factor_display_items);
+	RNA_def_property_ui_text(prop, "Factor Display Type", "How factor values are displayed");
+	RNA_def_property_update(prop, 0, "rna_userdef_update");
+
 	/* Weight Paint */
 
 	prop = RNA_def_property(srna, "use_weight_color_range", PROP_BOOLEAN, PROP_NONE);
@@ -4045,7 +4056,7 @@ static void rna_def_userdef_edit(BlenderRNA *brna)
 	};
 
 	static const EnumPropertyItem material_link_items[] = {
-		{0, "OBDATA", 0, "ObData", "Toggle whether the material is linked to object data or the object block"},
+		{0, "OBDATA", 0, "Object Data", "Toggle whether the material is linked to object data or the object block"},
 		{USER_MAT_ON_OB, "OBJECT", 0, "Object",
 		                 "Toggle whether the material is linked to object data or the object block"},
 		{0, NULL, 0, NULL, NULL},
@@ -4417,7 +4428,7 @@ static void rna_def_userdef_system(BlenderRNA *brna)
 	RNA_def_property_update(prop, 0, "rna_userdef_dpi_update");
 
 	prop = RNA_def_property(srna, "use_edit_mode_smooth_wire", PROP_BOOLEAN, PROP_NONE);
-	RNA_def_property_boolean_sdna(prop, NULL, "uiflag2", USER_EDIT_MODE_SMOOTH_WIRE);
+	RNA_def_property_boolean_negative_sdna(prop, NULL, "gpu_flag", USER_GPU_FLAG_NO_EDIT_MODE_SMOOTH_WIRE);
 	RNA_def_property_ui_text(prop, "Edit-Mode Smooth Wires",
 	                         "Enable Edit-Mode edge smoothing, reducing aliasing, requires restart");
 	RNA_def_property_update(prop, 0, "rna_userdef_dpi_update");
@@ -4505,8 +4516,11 @@ static void rna_def_userdef_system(BlenderRNA *brna)
 	/* Select */
 
 	prop = RNA_def_property(srna, "use_select_pick_depth", PROP_BOOLEAN, PROP_NONE);
-	RNA_def_property_boolean_sdna(prop, NULL, "gpu_select_pick_deph", 1);
-	RNA_def_property_ui_text(prop, "OpenGL Depth Picking", "Use the depth buffer for picking 3D View selection");
+	RNA_def_property_boolean_negative_sdna(prop, NULL, "gpu_flag", USER_GPU_FLAG_NO_DEPT_PICK);
+	RNA_def_property_ui_text(
+	        prop, "OpenGL Depth Picking",
+	        "Use the depth buffer for picking 3D View selection "
+	        "(without this the front most object may not be selected first)");
 
 	/* Audio */
 
@@ -4698,6 +4712,13 @@ static void rna_def_userdef_input(BlenderRNA *brna)
 	RNA_def_property_ui_text(prop, "Drag Threshold",
 	                         "Number of pixels you have to drag before a tweak/drag event is triggered "
 	                         "(otherwise click events are detected)");
+
+	prop = RNA_def_property(srna, "move_threshold", PROP_INT, PROP_PIXEL);
+	RNA_def_property_range(prop, 0, 255);
+	RNA_def_property_ui_range(prop, 0, 10, 1, -1);
+	RNA_def_property_ui_text(prop, "Motion Threshold",
+	                         "Number of pixels you have to before the cursor is considered to have moved "
+	                         "(used for cycling selected items on successive clicks)");
 
 	/* tablet pressure curve */
 	prop = RNA_def_property(srna, "pressure_threshold_max", PROP_FLOAT, PROP_FACTOR);

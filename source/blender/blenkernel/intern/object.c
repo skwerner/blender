@@ -1427,6 +1427,14 @@ Object *BKE_object_copy(Main *bmain, const Object *ob)
 	return ob_copy;
 }
 
+/** Perform deep-copy of object and its 'children' data-blocks (obdata, materials, actions, etc.).
+ *
+ * \param dupflag Controls which sub-data are also duplicated (see #eDupli_ID_Flags in DNA_userdef_types.h).
+ *
+ * \note This function does not do any remapping to new IDs, caller must do it (\a #BKE_libblock_relink_to_newid()).
+ * \note Caller MUST free \a newid pointers itself (#BKE_main_id_clear_newpoins()) and call updates of DEG too
+ *       (#DAG_relations_tag_update()).
+ */
 Object *BKE_object_duplicate(Main *bmain, const Object *ob, const int dupflag)
 {
 	Material ***matarar;
@@ -1547,17 +1555,19 @@ Object *BKE_object_duplicate(Main *bmain, const Object *ob, const int dupflag)
 			}
 			break;
 		case OB_ARMATURE:
-			DEG_id_tag_update(&obn->id, ID_RECALC_GEOMETRY);
-			if (obn->pose)
-				BKE_pose_tag_recalc(bmain, obn->pose);
-			if (dupflag & USER_DUP_ARM) {
-				ID_NEW_REMAP_US2(obn->data)
-				else {
-					obn->data = ID_NEW_SET(obn->data, BKE_armature_copy(bmain, obn->data));
-					BKE_pose_rebuild(bmain, obn, obn->data, true);
-					didit = 1;
+			if (dupflag != 0) {
+				DEG_id_tag_update(&obn->id, ID_RECALC_GEOMETRY);
+				if (obn->pose)
+					BKE_pose_tag_recalc(bmain, obn->pose);
+				if (dupflag & USER_DUP_ARM) {
+					ID_NEW_REMAP_US2(obn->data)
+					else {
+						obn->data = ID_NEW_SET(obn->data, BKE_armature_copy(bmain, obn->data));
+						BKE_pose_rebuild(bmain, obn, obn->data, true);
+						didit = 1;
+					}
+					id_us_min(id);
 				}
-				id_us_min(id);
 			}
 			break;
 		case OB_LATTICE:
@@ -1648,15 +1658,9 @@ Object *BKE_object_duplicate(Main *bmain, const Object *ob, const int dupflag)
 #undef ID_NEW_REMAP_US
 #undef ID_NEW_REMAP_US2
 
-	BKE_libblock_relink_to_newid(&obn->id);
-
-	/* DAG_relations_tag_update(bmain); */ /* caller must do */
-
 	if (ob->data != NULL) {
 		DEG_id_tag_update_ex(bmain, (ID *)obn->data, ID_RECALC_EDITORS);
 	}
-
-	/* BKE_main_id_clear_newpoins(bmain); */ /* Called must do. */
 
 	return obn;
 }
@@ -2762,6 +2766,20 @@ void BKE_object_minmax(Object *ob, float min_r[3], float max_r[3], const bool us
 			changed = true;
 			break;
 		}
+		case OB_MESH:
+		{
+			bb = *BKE_mesh_boundbox_get(ob);
+			BKE_boundbox_minmax(&bb, ob->obmat, min_r, max_r);
+			changed = true;
+			break;
+		}
+		case OB_GPENCIL:
+		{
+			bb = *BKE_gpencil_boundbox_get(ob);
+			BKE_boundbox_minmax(&bb, ob->obmat, min_r, max_r);
+			changed = true;
+			break;
+		}
 		case OB_LATTICE:
 		{
 			Lattice *lt = ob->data;
@@ -2782,17 +2800,6 @@ void BKE_object_minmax(Object *ob, float min_r[3], float max_r[3], const bool us
 		case OB_ARMATURE:
 		{
 			changed = BKE_pose_minmax(ob, min_r, max_r, use_hidden, false);
-			break;
-		}
-		case OB_MESH:
-		{
-			Mesh *me = BKE_mesh_from_object(ob);
-
-			if (me) {
-				bb = *BKE_mesh_boundbox_get(ob);
-				BKE_boundbox_minmax(&bb, ob->obmat, min_r, max_r);
-				changed = true;
-			}
 			break;
 		}
 		case OB_MBALL:
@@ -3140,10 +3147,12 @@ void BKE_object_handle_update_ex(Depsgraph *depsgraph,
 	object_handle_update_proxy(depsgraph, scene, ob, do_proxy_update);
 }
 
-/* WARNING: "scene" here may not be the scene object actually resides in.
+/**
+ * \warning "scene" here may not be the scene object actually resides in.
  * When dealing with background-sets, "scene" is actually the active scene.
  * e.g. "scene" <-- set 1 <-- set 2 ("ob" lives here) <-- set 3 <-- ... <-- set n
- * rigid bodies depend on their world so use BKE_object_handle_update_ex() to also pass along the current rigid body world
+ * rigid bodies depend on their world so use #BKE_object_handle_update_ex()
+ * to also pass along the current rigid body world.
  */
 void BKE_object_handle_update(Depsgraph *depsgraph, Scene *scene, Object *ob)
 {
@@ -3944,28 +3953,28 @@ LinkNode *BKE_object_relational_superset(struct ViewLayer *view_layer, eObjectSe
 /**
  * return all groups this object is apart of, caller must free.
  */
-struct LinkNode *BKE_object_groups(Main *bmain, Object *ob)
+struct LinkNode *BKE_object_groups(Main *bmain, Scene *scene, Object *ob)
 {
 	LinkNode *collection_linknode = NULL;
 	Collection *collection = NULL;
-	while ((collection = BKE_collection_object_find(bmain, collection, ob))) {
+	while ((collection = BKE_collection_object_find(bmain, scene, collection, ob))) {
 		BLI_linklist_prepend(&collection_linknode, collection);
 	}
 
 	return collection_linknode;
 }
 
-void BKE_object_groups_clear(Main *bmain, Object *ob)
+void BKE_object_groups_clear(Main *bmain, Scene *scene, Object *ob)
 {
 	Collection *collection = NULL;
-	while ((collection = BKE_collection_object_find(bmain, collection, ob))) {
+	while ((collection = BKE_collection_object_find(bmain, scene, collection, ob))) {
 		BKE_collection_object_remove(bmain, collection, ob, false);
 		DEG_id_tag_update(&collection->id, ID_RECALC_COPY_ON_WRITE);
 	}
 }
 
 /**
- * Return a KDTree from the deformed object (in worldspace)
+ * Return a KDTree_3d from the deformed object (in worldspace)
  *
  * \note Only mesh objects currently support deforming, others are TODO.
  *
@@ -3973,9 +3982,9 @@ void BKE_object_groups_clear(Main *bmain, Object *ob)
  * \param r_tot:
  * \return The kdtree or NULL if it can't be created.
  */
-KDTree *BKE_object_as_kdtree(Object *ob, int *r_tot)
+KDTree_3d *BKE_object_as_kdtree(Object *ob, int *r_tot)
 {
-	KDTree *tree = NULL;
+	KDTree_3d *tree = NULL;
 	unsigned int tot = 0;
 
 	switch (ob->type) {
@@ -3993,14 +4002,14 @@ KDTree *BKE_object_as_kdtree(Object *ob, int *r_tot)
 
 				/* tree over-allocs in case where some verts have ORIGINDEX_NONE */
 				tot = 0;
-				tree = BLI_kdtree_new(totvert);
+				tree = BLI_kdtree_3d_new(totvert);
 
 				/* we don't how how many verts from the DM we can use */
 				for (i = 0; i < totvert; i++) {
 					if (index[i] != ORIGINDEX_NONE) {
 						float co[3];
 						mul_v3_m4v3(co, ob->obmat, mvert[i].co);
-						BLI_kdtree_insert(tree, index[i], co);
+						BLI_kdtree_3d_insert(tree, index[i], co);
 						tot++;
 					}
 				}
@@ -4009,16 +4018,16 @@ KDTree *BKE_object_as_kdtree(Object *ob, int *r_tot)
 				MVert *mvert = me->mvert;
 
 				tot = me->totvert;
-				tree = BLI_kdtree_new(tot);
+				tree = BLI_kdtree_3d_new(tot);
 
 				for (i = 0; i < tot; i++) {
 					float co[3];
 					mul_v3_m4v3(co, ob->obmat, mvert[i].co);
-					BLI_kdtree_insert(tree, i, co);
+					BLI_kdtree_3d_insert(tree, i, co);
 				}
 			}
 
-			BLI_kdtree_balance(tree);
+			BLI_kdtree_3d_balance(tree);
 			break;
 		}
 		case OB_CURVE:
@@ -4031,7 +4040,7 @@ KDTree *BKE_object_as_kdtree(Object *ob, int *r_tot)
 			Nurb *nu;
 
 			tot = BKE_nurbList_verts_count_without_handles(&cu->nurb);
-			tree = BLI_kdtree_new(tot);
+			tree = BLI_kdtree_3d_new(tot);
 			i = 0;
 
 			nu = cu->nurb.first;
@@ -4044,7 +4053,7 @@ KDTree *BKE_object_as_kdtree(Object *ob, int *r_tot)
 					while (a--) {
 						float co[3];
 						mul_v3_m4v3(co, ob->obmat, bezt->vec[1]);
-						BLI_kdtree_insert(tree, i++, co);
+						BLI_kdtree_3d_insert(tree, i++, co);
 						bezt++;
 					}
 				}
@@ -4056,14 +4065,14 @@ KDTree *BKE_object_as_kdtree(Object *ob, int *r_tot)
 					while (a--) {
 						float co[3];
 						mul_v3_m4v3(co, ob->obmat, bp->vec);
-						BLI_kdtree_insert(tree, i++, co);
+						BLI_kdtree_3d_insert(tree, i++, co);
 						bp++;
 					}
 				}
 				nu = nu->next;
 			}
 
-			BLI_kdtree_balance(tree);
+			BLI_kdtree_3d_balance(tree);
 			break;
 		}
 		case OB_LATTICE:
@@ -4074,16 +4083,16 @@ KDTree *BKE_object_as_kdtree(Object *ob, int *r_tot)
 			unsigned int i;
 
 			tot = lt->pntsu * lt->pntsv * lt->pntsw;
-			tree = BLI_kdtree_new(tot);
+			tree = BLI_kdtree_3d_new(tot);
 			i = 0;
 
 			for (bp = lt->def; i < tot; bp++) {
 				float co[3];
 				mul_v3_m4v3(co, ob->obmat, bp->vec);
-				BLI_kdtree_insert(tree, i++, co);
+				BLI_kdtree_3d_insert(tree, i++, co);
 			}
 
-			BLI_kdtree_balance(tree);
+			BLI_kdtree_3d_balance(tree);
 			break;
 		}
 	}

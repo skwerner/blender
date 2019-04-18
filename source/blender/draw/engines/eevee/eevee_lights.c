@@ -222,8 +222,12 @@ static GPUShader *eevee_lights_get_store_sh(int shadow_method, bool high_blur, b
 
 		ds_frag = BLI_dynstr_new();
 		BLI_dynstr_append(ds_frag, (shadow_method == SHADOW_VSM) ? "#define VSM\n" : "#define ESM\n");
-		if (high_blur) BLI_dynstr_append(ds_frag, "#define HIGH_BLUR\n");
-		if (cascade)   BLI_dynstr_append(ds_frag, "#define CSM\n");
+		if (high_blur) {
+			BLI_dynstr_append(ds_frag, "#define HIGH_BLUR\n");
+		}
+		if (cascade) {
+			BLI_dynstr_append(ds_frag, "#define CSM\n");
+		}
 		char *define_str = BLI_dynstr_get_cstring(ds_frag);
 		BLI_dynstr_free(ds_frag);
 
@@ -336,13 +340,18 @@ void EEVEE_lights_cache_add(EEVEE_ViewLayerData *sldata, Object *ob)
 
 	const DRWContextState *draw_ctx = DRW_context_state_get();
 	const float threshold = draw_ctx->scene->eevee.light_threshold;
-
 	/* Step 1 find all lights in the scene and setup them */
 	if (linfo->num_light >= MAX_LIGHT) {
 		printf("Too many lights in the scene !!!\n");
 	}
 	else {
 		Light *la = (Light *)ob->data;
+
+		/* Early out if light has no power. */
+		if (la->energy == 0.0f || is_zero_v3(&la->r)) {
+			return;
+		}
+
 		EEVEE_Light *evli = linfo->light_data + linfo->num_light;
 		eevee_light_setup(ob, evli);
 
@@ -439,7 +448,9 @@ void EEVEE_lights_cache_shcaster_material_add(
 	/* TODO / PERF : reuse the same shading group for objects with the same material */
 	DRWShadingGroup *grp = DRW_shgroup_material_create(gpumat, psl->shadow_pass);
 
-	if (grp == NULL) return;
+	if (grp == NULL) {
+		return;
+	}
 
 	/* Grrr needed for correctness but not 99% of the time not needed.
 	 * TODO detect when needed? */
@@ -555,7 +566,7 @@ void EEVEE_lights_cache_finish(EEVEE_ViewLayerData *sldata, EEVEE_Data *vedata)
 		        linfo->shadow_cube_size, shadow_pool_format, DRW_TEX_FILTER, NULL);
 	}
 	if (!sldata->shadow_cube_pool) {
-		sldata->shadow_cube_pool = DRW_texture_create_2D_array(
+		sldata->shadow_cube_pool = DRW_texture_create_2d_array(
 		        linfo->shadow_cube_store_size, linfo->shadow_cube_store_size, max_ii(1, linfo->num_cube_layer),
 		        shadow_pool_format, DRW_TEX_FILTER, NULL);
 	}
@@ -569,13 +580,13 @@ void EEVEE_lights_cache_finish(EEVEE_ViewLayerData *sldata, EEVEE_Data *vedata)
 
 	/* CSM */
 	if (!sldata->shadow_cascade_target) {
-		sldata->shadow_cascade_target = DRW_texture_create_2D_array(
+		sldata->shadow_cascade_target = DRW_texture_create_2d_array(
 		        linfo->shadow_cascade_size, linfo->shadow_cascade_size, MAX_CASCADE_NUM, GPU_DEPTH_COMPONENT24, 0, NULL);
-		sldata->shadow_cascade_blur = DRW_texture_create_2D_array(
+		sldata->shadow_cascade_blur = DRW_texture_create_2d_array(
 		        linfo->shadow_cascade_size, linfo->shadow_cascade_size, MAX_CASCADE_NUM, shadow_pool_format, DRW_TEX_FILTER, NULL);
 	}
 	if (!sldata->shadow_cascade_pool) {
-		sldata->shadow_cascade_pool = DRW_texture_create_2D_array(
+		sldata->shadow_cascade_pool = DRW_texture_create_2d_array(
 		        linfo->shadow_cascade_size, linfo->shadow_cascade_size, max_ii(1, linfo->num_cascade_layer),
 		        shadow_pool_format, DRW_TEX_FILTER, NULL);
 	}
@@ -693,6 +704,14 @@ static void eevee_light_setup(Object *ob, EEVEE_Light *evli)
 	copy_v3_v3(evli->upvec, mat[1]);
 	normalize_v3(evli->upvec);
 
+	/* Make sure we have a consistent Right Hand coord frame.
+	 * (in case of negatively scaled Z axis) */
+	float cross[3];
+	cross_v3_v3v3(cross, evli->rightvec, evli->forwardvec);
+	if (dot_v3v3(cross, evli->upvec) < 0.0) {
+		negate_v3(evli->upvec);
+	}
+
 	light_shape_parameters_set(evli, la, scale);
 
 	/* Light Type */
@@ -713,14 +732,14 @@ static void eevee_light_setup(Object *ob, EEVEE_Light *evli)
  * Point are distributed in a way that when they are orthogonaly
  * projected into any plane, the resulting distribution is (close to)
  * a uniform disc distribution.
- **/
+ */
 static void sample_ball(int sample_ofs, float radius, float rsample[3])
 {
 	double ht_point[3];
 	double ht_offset[3] = {0.0, 0.0, 0.0};
 	uint ht_primes[3] = {2, 3, 7};
 
-	BLI_halton_3D(ht_primes, ht_offset, sample_ofs, ht_point);
+	BLI_halton_3d(ht_primes, ht_offset, sample_ofs, ht_point);
 
 	float omega = ht_point[1] * 2.0f * M_PI;
 
@@ -743,7 +762,7 @@ static void sample_rectangle(
 	double ht_offset[2] = {0.0, 0.0};
 	uint ht_primes[2] = {2, 3};
 
-	BLI_halton_2D(ht_primes, ht_offset, sample_ofs, ht_point);
+	BLI_halton_2d(ht_primes, ht_offset, sample_ofs, ht_point);
 
 	/* Change ditribution center to be 0,0 */
 	ht_point[0] = (ht_point[0] > 0.5f) ? ht_point[0] - 1.0f : ht_point[0];
@@ -762,7 +781,7 @@ static void sample_ellipse(
 	double ht_offset[2] = {0.0, 0.0};
 	uint ht_primes[2] = {2, 3};
 
-	BLI_halton_2D(ht_primes, ht_offset, sample_ofs, ht_point);
+	BLI_halton_2d(ht_primes, ht_offset, sample_ofs, ht_point);
 
 	/* Uniform disc sampling. */
 	float omega = ht_point[1] * 2.0f * M_PI;

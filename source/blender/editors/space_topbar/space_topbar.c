@@ -72,15 +72,11 @@ static SpaceLink *topbar_new(const ScrArea *UNUSED(area), const Scene *UNUSED(sc
 	ar->alignment = RGN_ALIGN_RIGHT | RGN_SPLIT_PREV;
 
 	/* main regions */
-	ar = MEM_callocN(sizeof(ARegion), "left aligned main region for topbar");
-	BLI_addtail(&stopbar->regionbase, ar);
-	ar->regiontype = RGN_TYPE_WINDOW;
-	ar->alignment = RGN_ALIGN_LEFT;
 	ar = MEM_callocN(sizeof(ARegion), "right aligned main region for topbar");
 	BLI_addtail(&stopbar->regionbase, ar);
 	ar->regiontype = RGN_TYPE_WINDOW;
 	ar->alignment = RGN_ALIGN_RIGHT;
-	ar = MEM_callocN(sizeof(ARegion), "center main region for topbar");
+	ar = MEM_callocN(sizeof(ARegion), "main region of topbar");
 	BLI_addtail(&stopbar->regionbase, ar);
 	ar->regiontype = RGN_TYPE_WINDOW;
 
@@ -117,7 +113,7 @@ static void topbar_main_region_init(wmWindowManager *wm, ARegion *region)
 	wmKeyMap *keymap;
 
 	/* force delayed UI_view2d_region_reinit call */
-	if (ELEM(region->alignment, RGN_ALIGN_LEFT, RGN_ALIGN_RIGHT)) {
+	if (ELEM(region->alignment, RGN_ALIGN_RIGHT)) {
 		region->flag |= RGN_FLAG_DYNAMIC_SIZE;
 	}
 	UI_view2d_region_reinit(&region->v2d, V2D_COMMONVIEW_HEADER, region->winx, region->winy);
@@ -151,20 +147,24 @@ static void topbar_main_region_listener(wmWindow *UNUSED(win), ScrArea *UNUSED(s
 	/* context changes */
 	switch (wmn->category) {
 		case NC_WM:
-			if (wmn->data == ND_HISTORY)
+			if (wmn->data == ND_HISTORY) {
 				ED_region_tag_redraw(ar);
+			}
 			break;
 		case NC_SCENE:
-			if (wmn->data == ND_MODE)
+			if (wmn->data == ND_MODE) {
 				ED_region_tag_redraw(ar);
+			}
 			break;
 		case NC_SPACE:
-			if (wmn->data == ND_SPACE_VIEW3D)
+			if (wmn->data == ND_SPACE_VIEW3D) {
 				ED_region_tag_redraw(ar);
+			}
 			break;
 		case NC_GPENCIL:
-			if (wmn->data == ND_DATA)
+			if (wmn->data == ND_DATA) {
 				ED_region_tag_redraw(ar);
+			}
 			break;
 	}
 }
@@ -175,20 +175,24 @@ static void topbar_header_listener(wmWindow *UNUSED(win), ScrArea *UNUSED(sa), A
 	/* context changes */
 	switch (wmn->category) {
 		case NC_WM:
-			if (wmn->data == ND_JOB)
+			if (wmn->data == ND_JOB) {
 				ED_region_tag_redraw(ar);
+			}
 			break;
 		case NC_SPACE:
-			if (wmn->data == ND_SPACE_INFO)
+			if (wmn->data == ND_SPACE_INFO) {
 				ED_region_tag_redraw(ar);
+			}
 			break;
 		case NC_SCREEN:
-			if (wmn->data == ND_LAYER)
+			if (wmn->data == ND_LAYER) {
 				ED_region_tag_redraw(ar);
+			}
 			break;
 		case NC_SCENE:
-			if (wmn->data == ND_SCENEBROWSE)
+			if (wmn->data == ND_SCENEBROWSE) {
 				ED_region_tag_redraw(ar);
+			}
 			break;
 	}
 }

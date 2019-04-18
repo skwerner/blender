@@ -121,12 +121,6 @@ ModifierTypeInfo modifierType_ShapeKey = {
 
 	/* copyData */          NULL,
 
-	/* deformVerts_DM */    NULL,
-	/* deformMatrices_DM */ NULL,
-	/* deformVertsEM_DM */  NULL,
-	/* deformMatricesEM_DM*/NULL,
-	/* applyModifier_DM */  NULL,
-
 	/* deformVerts */       deformVerts,
 	/* deformMatrices */    deformMatrices,
 	/* deformVertsEM */     deformVertsEM,
@@ -143,4 +137,5 @@ ModifierTypeInfo modifierType_ShapeKey = {
 	/* foreachObjectLink */ NULL,
 	/* foreachIDLink */     NULL,
 	/* foreachTexLink */    NULL,
+	/* freeRuntimeData */   NULL,
 };

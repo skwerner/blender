@@ -93,10 +93,6 @@
 
 /* allow writefile to use deprecated functionality (for forward compatibility code) */
 #define DNA_DEPRECATED_ALLOW
-/* Allow using DNA struct members that are marked as private for read/write.
- * Note: Each header that uses this needs to define its own way of handling
- * it. There's no generic implementation, direct use does nothing. */
-#define DNA_PRIVATE_READ_WRITE_ALLOW
 
 #include "DNA_anim_types.h"
 #include "DNA_armature_types.h"
@@ -1422,9 +1418,10 @@ static void write_particlesettings(WriteData *wd, ParticleSettings *part)
 				if (part->instance_collection) { /* can be NULL if lining fails or set to None */
 					FOREACH_COLLECTION_OBJECT_RECURSIVE_BEGIN(part->instance_collection, object)
 					{
-						if (object != dw->ob) {
-							dw->index++;
+						if (object == dw->ob) {
+							break;
 						}
+						dw->index++;
 					}
 					FOREACH_COLLECTION_OBJECT_RECURSIVE_END;
 				}

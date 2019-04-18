@@ -537,7 +537,6 @@ static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, Mes
 	const bool has_clnors = clnors != NULL;
 	if (!clnors) {
 		clnors = CustomData_add_layer(ldata, CD_CUSTOMLOOPNORMAL, CD_CALLOC, NULL, numLoops);
-		clnors = CustomData_get_layer(ldata, CD_CUSTOMLOOPNORMAL);
 	}
 
 	MDeformVert *dvert;
@@ -634,12 +633,6 @@ ModifierTypeInfo modifierType_WeightedNormal = {
 
 	/* copyData */          modifier_copyData_generic,
 
-	/* deformVerts_DM */    NULL,
-	/* deformMatrices_DM */ NULL,
-	/* deformVertsEM_DM */  NULL,
-	/* deformMatricesEM_DM*/NULL,
-	/* applyModifier_DM */  NULL,
-
 	/* deformVerts */       NULL,
 	/* deformMatrices */    NULL,
 	/* deformVertsEM */     NULL,
@@ -656,4 +649,5 @@ ModifierTypeInfo modifierType_WeightedNormal = {
 	/* foreachObjectLink */ NULL,
 	/* foreachIDLink */     NULL,
 	/* foreachTexLink */    NULL,
+	/* freeRuntimeData */   NULL,
 };

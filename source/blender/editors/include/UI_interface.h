@@ -86,6 +86,14 @@ typedef struct uiPopupBlockHandle uiPopupBlockHandle;
 #define UI_MAX_NAME_STR 128
 #define UI_MAX_SHORTCUT_STR 64
 
+/**
+ * For #ARegion.overlap regions, pass events though if they don't overlap
+ * the regions contents (the usable part of the #View2D and buttons).
+ *
+ * The margin is needed so it's not possible to accidentally click inbetween buttons.
+ */
+#define UI_REGION_OVERLAP_MARGIN (U.widget_unit / 3)
+
 /* use for clamping popups within the screen */
 #define UI_SCREEN_MARGIN 10
 
@@ -416,8 +424,16 @@ void UI_draw_roundbox_shade_x(bool filled,
                               const float col[4]);
 
 #if 0 /* unused */
-int  UI_draw_roundbox_corner_get(void);
-void UI_draw_roundbox_shade_y(bool filled, float minx, float miny, float maxx, float maxy, float rad, float shadeleft, float shaderight, const float col[4]);
+int UI_draw_roundbox_corner_get(void);
+void UI_draw_roundbox_shade_y(bool filled,
+                              float minx,
+                              float miny,
+                              float maxx,
+                              float maxy,
+                              float rad,
+                              float shadeleft,
+                              float shaderight,
+                              const float col[4]);
 #endif
 
 void UI_draw_box_shadow(unsigned char alpha, float minx, float miny, float maxx, float maxy);
@@ -587,7 +603,10 @@ void UI_popup_block_ex(struct bContext *C,
                        void *arg,
                        struct wmOperator *op);
 #if 0 /* UNUSED */
-void uiPupBlockOperator(struct bContext *C, uiBlockCreateFunc func, struct wmOperator *op, int opcontext);
+void uiPupBlockOperator(struct bContext *C,
+                        uiBlockCreateFunc func,
+                        struct wmOperator *op,
+                        int opcontext);
 #endif
 
 void UI_popup_block_close(struct bContext *C, struct wmWindow *win, uiBlock *block);
@@ -2291,6 +2310,7 @@ void UI_context_active_but_prop_get_templateID(struct bContext *C,
 struct ID *UI_context_active_but_get_tab_ID(struct bContext *C);
 
 uiBut *UI_region_active_but_get(struct ARegion *ar);
+uiBut *UI_region_but_find_rect_over(const struct ARegion *ar, const struct rcti *isect);
 
 /* uiFontStyle.align */
 typedef enum eFontStyle_Align {

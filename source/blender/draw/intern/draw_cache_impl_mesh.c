@@ -364,6 +364,11 @@ BLI_INLINE bool mesh_cd_layers_type_overlap(DRW_MeshCDMask a, DRW_MeshCDMask b)
   return (*((uint32_t *)&a) & *((uint32_t *)&b)) == *((uint32_t *)&b);
 }
 
+BLI_INLINE bool mesh_cd_layers_type_equal(DRW_MeshCDMask a, DRW_MeshCDMask b)
+{
+  return *((uint32_t *)&a) == *((uint32_t *)&b);
+}
+
 BLI_INLINE void mesh_cd_layers_type_merge(DRW_MeshCDMask *a, DRW_MeshCDMask b)
 {
   atomic_fetch_and_or_uint32((uint32_t *)a, *(uint32_t *)&b);
@@ -1645,7 +1650,7 @@ static void mesh_render_data_edge_flag(const MeshRenderData *rdata,
    * specular highlights make it hard to see T55456#510873.
    *
    * This isn't ideal since it can't be used when mixing edge/face modes
-     * but it's still better then not being able to see the active face. */
+   * but it's still better then not being able to see the active face. */
   if (is_face_only_select_mode) {
     if (rdata->efa_act != NULL) {
       if (BM_edge_in_face(eed, rdata->efa_act)) {
@@ -1997,7 +2002,9 @@ typedef struct MeshBatchCache {
 
   struct DRW_MeshWeightState weight_state;
 
-  DRW_MeshCDMask cd_used, cd_needed;
+  DRW_MeshCDMask cd_used, cd_needed, cd_used_over_time;
+
+  int lastmatch;
 
   /* XXX, only keep for as long as sculpt mode uses shaded drawing. */
   bool is_sculpt_points_tag;
@@ -2120,6 +2127,8 @@ static void mesh_batch_cache_discard_shaded_tri(MeshBatchCache *cache)
 
   MEM_SAFE_FREE(cache->auto_layer_names);
   MEM_SAFE_FREE(cache->auto_layer_is_srgb);
+
+  mesh_cd_layers_type_clear(&cache->cd_used);
 
   cache->mat_len = 0;
 }
@@ -3128,7 +3137,8 @@ static void mesh_create_loop_uv_and_tan(MeshRenderData *rdata, GPUVertBuf *vbo)
   for (uint i = 0; i < uv_len; i++) {
     const char *attr_name = mesh_render_data_uv_layer_uuid_get(rdata, i);
 #if 0 /* these are clamped. Maybe use them as an option in the future */
-    uv_id[i] = GPU_vertformat_attr_add(&format, attr_name, GPU_COMP_I16, 2, GPU_FETCH_INT_TO_FLOAT_UNIT);
+    uv_id[i] = GPU_vertformat_attr_add(
+        &format, attr_name, GPU_COMP_I16, 2, GPU_FETCH_INT_TO_FLOAT_UNIT);
 #else
     uv_id[i] = GPU_vertformat_attr_add(&format, attr_name, GPU_COMP_F32, 2, GPU_FETCH_FLOAT);
 #endif
@@ -4197,16 +4207,16 @@ GPUBatch **DRW_mesh_batch_cache_get_surface_shaded(Mesh *me,
 
   BLI_assert(gpumat_array_len == cache->mat_len);
 
-  bool cd_overlap = mesh_cd_layers_type_overlap(cache->cd_used, cd_needed);
-  if (!cd_overlap) {
-    mesh_cd_layers_type_merge(&cache->cd_needed, cd_needed);
+  mesh_cd_layers_type_merge(&cache->cd_needed, cd_needed);
 
+  if (!mesh_cd_layers_type_overlap(cache->cd_used, cd_needed)) {
     mesh_cd_extract_auto_layers_names_and_srgb(me,
                                                cache->cd_needed,
                                                &cache->auto_layer_names,
                                                &cache->auto_layer_is_srgb,
                                                &cache->auto_layer_len);
   }
+
   if (auto_layer_names) {
     *auto_layer_names = cache->auto_layer_names;
     *auto_layer_is_srgb = cache->auto_layer_is_srgb;
@@ -4419,8 +4429,7 @@ BLI_INLINE void edit_uv_preprocess_stretch_angle(float (*auv)[2],
   BMLoop *l;
   BMIter liter;
   int i;
-  BM_ITER_ELEM_INDEX(l, &liter, efa, BM_LOOPS_OF_FACE, i)
-  {
+  BM_ITER_ELEM_INDEX (l, &liter, efa, BM_LOOPS_OF_FACE, i) {
     MLoopUV *luv = BM_ELEM_CD_GET_VOID_P(l, cd_loop_uv_offset);
     MLoopUV *luv_prev = BM_ELEM_CD_GET_VOID_P(l->prev, cd_loop_uv_offset);
 
@@ -4433,8 +4442,10 @@ BLI_INLINE void edit_uv_preprocess_stretch_angle(float (*auv)[2],
 }
 
 #if 0 /* here for reference, this is done in shader now. */
-BLI_INLINE float edit_uv_get_loop_stretch_angle(
-        const float auv0[2], const float auv1[2], const float av0[3], const float av1[3])
+BLI_INLINE float edit_uv_get_loop_stretch_angle(const float auv0[2],
+                                                const float auv1[2],
+                                                const float av0[3],
+                                                const float av1[3])
 {
   float uvang = angle_normalized_v2v2(auv0, auv1);
   float ang = angle_normalized_v3v3(av0, av1);
@@ -4517,8 +4528,7 @@ static void uvedit_fill_buffer_data(MeshRenderData *rdata,
         }
       }
 
-      BM_ITER_ELEM_INDEX(l, &liter, efa, BM_LOOPS_OF_FACE, i)
-      {
+      BM_ITER_ELEM_INDEX (l, &liter, efa, BM_LOOPS_OF_FACE, i) {
         MLoopUV *luv = BM_ELEM_CD_GET_VOID_P(l, cd_loop_uv_offset);
         if (vbo_area) {
           GPU_vertbuf_attr_set(vbo_area, uv_attr_id.area, vidx, &area_stretch);
@@ -4714,6 +4724,28 @@ static void mesh_create_uvedit_buffers(MeshRenderData *rdata,
 /** \name Grouped batch generation
  * \{ */
 
+/* Thread safety need to be assured by caller. Don't call this during drawing.
+ * Note: For now this only free the shading batches / vbo if any cd layers is
+ * not needed anymore. */
+void DRW_mesh_batch_cache_free_old(Mesh *me, int ctime)
+{
+  MeshBatchCache *cache = me->runtime.batch_cache;
+
+  if (cache == NULL) {
+    return;
+  }
+
+  if (mesh_cd_layers_type_equal(cache->cd_used_over_time, cache->cd_used)) {
+    cache->lastmatch = ctime;
+  }
+
+  if (ctime - cache->lastmatch > U.vbotimeout) {
+    mesh_batch_cache_discard_shaded_tri(cache);
+  }
+
+  mesh_cd_layers_type_clear(&cache->cd_used_over_time);
+}
+
 /* Can be called for any surface type. Mesh *me is the final mesh. */
 void DRW_mesh_batch_cache_create_requested(
     Object *ob, Mesh *me, const ToolSettings *ts, const bool is_paint_mode, const bool use_hide)
@@ -4728,6 +4760,18 @@ void DRW_mesh_batch_cache_create_requested(
     mesh_batch_cache_check_vertex_group(cache, &wstate);
     drw_mesh_weight_state_copy(&cache->weight_state, &wstate);
     drw_mesh_weight_state_clear(&wstate);
+  }
+
+  /* Optimization : Only create orco layer if mesh is deformed. */
+  if (cache->cd_needed.orco != 0) {
+    CustomData *cd_vdata = (me->edit_mesh) ? &me->edit_mesh->bm->vdata : &me->vdata;
+    if (CustomData_get_layer(cd_vdata, CD_ORCO) != NULL && ob->modifiers.first != NULL) {
+      /* Orco layer is needed. */
+    }
+    else if (cache->cd_needed.tan_orco == 0) {
+      /* Skip orco calculation if not needed by tangent generation. */
+      cache->cd_needed.orco = 0;
+    }
   }
 
   /* Verify that all surface batches have needed attribute layers. */
@@ -4754,6 +4798,7 @@ void DRW_mesh_batch_cache_create_requested(
 
     mesh_cd_layers_type_merge(&cache->cd_used, cache->cd_needed);
   }
+  mesh_cd_layers_type_merge(&cache->cd_used_over_time, cache->cd_needed);
   mesh_cd_layers_type_clear(&cache->cd_needed);
 
   /* Discard UV batches if sync_selection changes */
@@ -4926,15 +4971,7 @@ void DRW_mesh_batch_cache_create_requested(
         DRW_vbo_request(cache->surf_per_mat[i], &cache->ordered.loop_vcol);
       }
       if (cache->cd_used.orco != 0) {
-        /* OPTI : Only do that if there is modifiers that modify orcos. */
-        CustomData *cd_vdata = (me->edit_mesh) ? &me->edit_mesh->bm->vdata : &me->vdata;
-        if (CustomData_get_layer(cd_vdata, CD_ORCO) != NULL && ob->modifiers.first != NULL) {
-          DRW_vbo_request(cache->surf_per_mat[i], &cache->ordered.loop_orco);
-        }
-        else if (cache->cd_used.tan_orco == 0) {
-          /* Skip orco calculation if not needed by tangent generation. */
-          cache->cd_used.orco = 0;
-        }
+        DRW_vbo_request(cache->surf_per_mat[i], &cache->ordered.loop_orco);
       }
     }
   }

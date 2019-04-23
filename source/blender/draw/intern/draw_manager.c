@@ -35,6 +35,7 @@
 #include "BKE_global.h"
 #include "BKE_gpencil.h"
 #include "BKE_lattice.h"
+#include "BKE_main.h"
 #include "BKE_mball.h"
 #include "BKE_mesh.h"
 #include "BKE_object.h"
@@ -404,7 +405,7 @@ void DRW_multisamples_resolve(GPUTexture *src_depth, GPUTexture *src_color, bool
         builtin = GPU_SHADER_2D_IMAGE_MULTISAMPLE_16_DEPTH_TEST;
         break;
       default:
-        BLI_assert("Mulisample count unsupported by blit shader.");
+        BLI_assert(!"Mulisample count unsupported by blit shader.");
         builtin = GPU_SHADER_2D_IMAGE_MULTISAMPLE_2_DEPTH_TEST;
         break;
     }
@@ -424,7 +425,7 @@ void DRW_multisamples_resolve(GPUTexture *src_depth, GPUTexture *src_color, bool
         builtin = GPU_SHADER_2D_IMAGE_MULTISAMPLE_16;
         break;
       default:
-        BLI_assert("Mulisample count unsupported by blit shader.");
+        BLI_assert(!"Mulisample count unsupported by blit shader.");
         builtin = GPU_SHADER_2D_IMAGE_MULTISAMPLE_2;
         break;
     }
@@ -960,6 +961,42 @@ static void drw_drawdata_unlink_dupli(ID *id)
     }
 
     BLI_listbase_clear((ListBase *)drawdata);
+  }
+}
+
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Garbage Collection
+ * \{ */
+
+void DRW_cache_free_old_batches(Main *bmain)
+{
+  Scene *scene;
+  ViewLayer *view_layer;
+  static int lasttime = 0;
+  int ctime = (int)PIL_check_seconds_timer();
+
+  if (U.vbotimeout == 0 || (ctime - lasttime) < U.vbocollectrate || ctime == lasttime) {
+    return;
+  }
+
+  lasttime = ctime;
+
+  for (scene = bmain->scenes.first; scene; scene = scene->id.next) {
+    for (view_layer = scene->view_layers.first; view_layer; view_layer = view_layer->next) {
+      Depsgraph *depsgraph = BKE_scene_get_depsgraph(scene, view_layer, false);
+
+      /* TODO(fclem): This is not optimal since it iter over all dupli instances.
+       * In this case only the source object should be tagged. */
+      int iter_flags = DEG_ITER_OBJECT_FLAG_LINKED_DIRECTLY | DEG_ITER_OBJECT_FLAG_LINKED_VIA_SET |
+                       DEG_ITER_OBJECT_FLAG_VISIBLE | DEG_ITER_OBJECT_FLAG_DUPLI;
+
+      DEG_OBJECT_ITER_BEGIN (depsgraph, ob, iter_flags) {
+        DRW_batch_cache_free_old(ob, ctime);
+      }
+      DEG_OBJECT_ITER_END;
+    }
   }
 }
 
@@ -2294,42 +2331,6 @@ void DRW_draw_select_loop(struct Depsgraph *depsgraph,
 #endif /* USE_GPU_SELECT */
 }
 
-static void draw_depth_texture_to_screen(GPUTexture *texture)
-{
-  const float w = (float)GPU_texture_width(texture);
-  const float h = (float)GPU_texture_height(texture);
-
-  GPUVertFormat *format = immVertexFormat();
-  uint texcoord = GPU_vertformat_attr_add(format, "texCoord", GPU_COMP_F32, 2, GPU_FETCH_FLOAT);
-  uint pos = GPU_vertformat_attr_add(format, "pos", GPU_COMP_F32, 2, GPU_FETCH_FLOAT);
-
-  immBindBuiltinProgram(GPU_SHADER_3D_IMAGE_DEPTH_COPY);
-
-  GPU_texture_bind(texture, 0);
-
-  immUniform1i("image", 0); /* default GL_TEXTURE0 unit */
-
-  immBegin(GPU_PRIM_TRI_STRIP, 4);
-
-  immAttr2f(texcoord, 0.0f, 0.0f);
-  immVertex2f(pos, 0.0f, 0.0f);
-
-  immAttr2f(texcoord, 1.0f, 0.0f);
-  immVertex2f(pos, w, 0.0f);
-
-  immAttr2f(texcoord, 0.0f, 1.0f);
-  immVertex2f(pos, 0.0f, h);
-
-  immAttr2f(texcoord, 1.0f, 1.0f);
-  immVertex2f(pos, w, h);
-
-  immEnd();
-
-  GPU_texture_unbind(texture);
-
-  immUnbindProgram();
-}
-
 /**
  * object mode select-loop, see: ED_view3d_draw_depth_loop (legacy drawing).
  */
@@ -2446,21 +2447,6 @@ void DRW_draw_depth_loop(struct Depsgraph *depsgraph,
 
   drw_engines_disable();
 
-  /* XXX Drawing the resulting buffer to the BACK_BUFFER */
-  GPU_matrix_push();
-  GPU_matrix_push_projection();
-  wmOrtho2_region_pixelspace(DST.draw_ctx.ar);
-  GPU_matrix_identity_set();
-
-  glEnable(GL_DEPTH_TEST); /* Cannot write to depth buffer without testing */
-  glDepthFunc(GL_ALWAYS);
-  DefaultTextureList *dtxl = (DefaultTextureList *)GPU_viewport_texture_list_get(DST.viewport);
-  draw_depth_texture_to_screen(dtxl->depth);
-  glDepthFunc(GL_LEQUAL);
-
-  GPU_matrix_pop();
-  GPU_matrix_pop_projection();
-
 #ifdef DEBUG
   /* Avoid accidental reuse. */
   drw_state_ensure_not_reused(&DST);
@@ -2504,6 +2490,69 @@ void DRW_draw_depth_loop_gpencil(struct Depsgraph *depsgraph,
   /* Avoid accidental reuse. */
   drw_state_ensure_not_reused(&DST);
 #endif
+}
+
+/**
+ * Clears the Depth Buffer and draws only the specified object.
+ */
+void DRW_draw_depth_object(ARegion *ar, GPUViewport *viewport, Object *object)
+{
+  RegionView3D *rv3d = ar->regiondata;
+
+  DRW_opengl_context_enable();
+
+  /* Setup framebuffer */
+  DefaultFramebufferList *fbl = GPU_viewport_framebuffer_list_get(viewport);
+
+  GPU_framebuffer_bind(fbl->depth_only_fb);
+  GPU_framebuffer_clear_depth(fbl->depth_only_fb, 1.0f);
+  GPU_depth_test(true);
+  GPU_matrix_mul(object->obmat);
+
+  const float(*world_clip_planes)[4] = NULL;
+  if (rv3d->rflag & RV3D_CLIPPING) {
+    ED_view3d_clipping_set(rv3d);
+    ED_view3d_clipping_local(rv3d, object->obmat);
+    world_clip_planes = rv3d->clip_local;
+  }
+
+  switch (object->type) {
+    case OB_MESH: {
+      GPUBatch *batch;
+
+      Mesh *me = object->data;
+
+      if (object->mode & OB_MODE_EDIT) {
+        batch = DRW_mesh_batch_cache_get_edit_triangles(me);
+      }
+      else {
+        batch = DRW_mesh_batch_cache_get_surface(me);
+      }
+
+      DRW_mesh_batch_cache_create_requested(object, me, NULL, false, true);
+
+      const eGPUShaderConfig sh_cfg = world_clip_planes ? GPU_SHADER_CFG_CLIPPED :
+                                                          GPU_SHADER_CFG_DEFAULT;
+      GPU_batch_program_set_builtin_with_config(batch, GPU_SHADER_3D_DEPTH_ONLY, sh_cfg);
+      if (world_clip_planes != NULL) {
+        GPU_batch_uniform_4fv_array(batch, "WorldClipPlanes", 6, world_clip_planes[0]);
+      }
+
+      GPU_batch_draw(batch);
+    } break;
+    case OB_CURVE:
+    case OB_SURF:
+      break;
+  }
+
+  if (rv3d->rflag & RV3D_CLIPPING) {
+    ED_view3d_clipping_disable();
+  }
+
+  GPU_matrix_set(rv3d->viewmat);
+  GPU_depth_test(false);
+  GPU_framebuffer_restore();
+  DRW_opengl_context_disable();
 }
 
 /* Set an opengl context to be used with shaders that draw on U32 colors. */

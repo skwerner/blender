@@ -267,7 +267,8 @@ static void ui_panel_copy_offset(Panel *pa, Panel *papar)
 }
 
 /**
- * XXX Disabled paneltab handling for now. Old 2.4x feature, *DO NOT* confuse it with new tool tabs in 2.70. ;)
+ * XXX Disabled paneltab handling for now. Old 2.4x feature,
+ * *DO NOT* confuse it with new tool tabs in 2.70. ;)
  * See also T41704.
  */
 /* #define UI_USE_PANELTAB */
@@ -703,7 +704,7 @@ void ui_draw_aligned_panel(uiStyle *style,
   const bool show_drag =
       (!is_subpanel &&
        /* FIXME(campbell): currently no background means floating panel which can't be dragged.
-           * This may be changed in future. */
+        * This may be changed in future. */
        show_background);
 
   if (panel->paneltab) {

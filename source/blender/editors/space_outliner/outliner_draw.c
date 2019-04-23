@@ -100,7 +100,7 @@ static void outliner_width(SpaceOutliner *soops, ListBase *lb, int *w)
 {
   TreeElement *te = lb->first;
   while (te) {
-//      TreeStoreElem *tselem = TREESTORE(te);
+    //      TreeStoreElem *tselem = TREESTORE(te);
 
     // XXX fixme... te->xend is not set yet
     if (!TSELEM_OPEN(tselem, soops)) {
@@ -1561,7 +1561,8 @@ TreeElementIcon tree_element_get_icon(TreeStoreElem *tselem, TreeElement *te)
         data.icon = ICON_GROUP;
         break;
       }
-      /* Removed the icons from outliner. Need a better structure with Layers, Palettes and Colors */
+      /* Removed the icons from outliner.
+       * Need a better structure with Layers, Palettes and Colors. */
       case TSE_GP_LAYER: {
         /* indicate whether layer is active */
         bGPDlayer *gpl = te->directdata;

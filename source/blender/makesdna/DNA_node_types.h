@@ -264,13 +264,14 @@ typedef struct bNode {
   rctf butr;
   /** Optional preview area. */
   rctf prvr;
-  /* XXX TODO
+  /**
+   * XXX TODO
    * Node totr size depends on the prvr size, which in turn is determined from preview size.
    * In earlier versions bNodePreview was stored directly in nodes, but since now there can be
-   * multiple instances using different preview images it is possible that required node size varies between instances.
-   * preview_xsize, preview_ysize defines a common reserved size for preview rect for now,
-   * could be replaced by more accurate node instance drawing, but that requires removing totr from DNA
-   * and replacing all uses with per-instance data.
+   * multiple instances using different preview images it is possible that required node size
+   * varies between instances. preview_xsize, preview_ysize defines a common reserved size for
+   * preview rect for now, could be replaced by more accurate node instance drawing,
+   * but that requires removing totr from DNA and replacing all uses with per-instance data.
    */
   /** Reserved size of the preview rect. */
   short preview_xsize, preview_ysize;
@@ -315,22 +316,22 @@ typedef struct bNode {
 /* node is active texture */
 
 /* note: take care with this flag since its possible it gets
-   * `stuck` inside/outside the active group - which makes buttons
-   * window texture not update, we try to avoid it by clearing the
-   * flag when toggling group editing - Campbell */
+ * `stuck` inside/outside the active group - which makes buttons
+ * window texture not update, we try to avoid it by clearing the
+ * flag when toggling group editing - Campbell */
 #define NODE_ACTIVE_TEXTURE (1 << 14)
 /* use a custom color for the node */
 #define NODE_CUSTOM_COLOR (1 << 15)
 /* Node has been initialized
-   * This flag indicates the node->typeinfo->init function has been called.
-   * In case of undefined type at creation time this can be delayed until
-   * until the node type is registered.
-   */
+ * This flag indicates the node->typeinfo->init function has been called.
+ * In case of undefined type at creation time this can be delayed until
+ * until the node type is registered.
+ */
 #define NODE_INIT (1 << 16)
 
 /* do recalc of output, used to skip recalculation of unwanted
-   * composite out nodes when editing tree
-   */
+ * composite out nodes when editing tree
+ */
 #define NODE_DO_OUTPUT_RECALC (1 << 17)
 
 /* node->update */
@@ -466,10 +467,12 @@ typedef struct bNodeTree {
   bNodeInstanceKey active_viewer_key;
   char _pad[4];
 
-  /* execution data */
-  /* XXX It would be preferable to completely move this data out of the underlying node tree,
-   * so node tree execution could finally run independent of the tree itself. This would allow node trees
-   * to be merely linked by other data (materials, textures, etc.), as ID data is supposed to.
+  /** Execution data.
+   *
+   * XXX It would be preferable to completely move this data out of the underlying node tree,
+   * so node tree execution could finally run independent of the tree itself.
+   * This would allow node trees to be merely linked by other data (materials, textures, etc.),
+   * as ID data is supposed to.
    * Execution data is generated from the tree once at execution start and can then be used
    * as long as necessary, even while the tree is being modified.
    */

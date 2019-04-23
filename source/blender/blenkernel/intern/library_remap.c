@@ -145,14 +145,18 @@ typedef struct IDRemap {
   Main *bmain; /* Only used to trigger depsgraph updates in the right bmain. */
   ID *old_id;
   ID *new_id;
-  ID *id; /* The ID in which we are replacing old_id by new_id usages. */
+  /** The ID in which we are replacing old_id by new_id usages. */
+  ID *id;
   short flag;
 
   /* 'Output' data. */
   short status;
-  int skipped_direct; /* Number of direct usecases that could not be remapped (e.g.: obdata when in edit mode). */
-  int skipped_indirect;   /* Number of indirect usecases that could not be remapped. */
-  int skipped_refcounted; /* Number of skipped usecases that refcount the datablock. */
+  /** Number of direct usecases that could not be remapped (e.g.: obdata when in edit mode). */
+  int skipped_direct;
+  /** Number of indirect usecases that could not be remapped. */
+  int skipped_indirect;
+  /** Number of skipped usecases that refcount the datablock. */
+  int skipped_refcounted;
 } IDRemap;
 
 /* IDRemap->flag enums defined in BKE_library.h */
@@ -448,8 +452,7 @@ static void libblock_remap_data(
      * objects actually using given old_id... sounds rather unlikely currently, though, so this will do for now. */
     ID *id_curr;
 
-    FOREACH_MAIN_ID_BEGIN(bmain, id_curr)
-    {
+    FOREACH_MAIN_ID_BEGIN (bmain, id_curr) {
       if (BKE_library_id_can_use_idtype(id_curr, GS(old_id->name))) {
         /* Note that we cannot skip indirect usages of old_id here (if requested), we still need to check it for
          * the user count handling...
@@ -717,8 +720,9 @@ static int id_relink_to_newid_looper(void *UNUSED(user_data),
  */
 void BKE_libblock_relink_to_newid(ID *id)
 {
-  if (ID_IS_LINKED(id))
+  if (ID_IS_LINKED(id)) {
     return;
+  }
 
   BKE_library_foreach_ID_link(NULL, id, id_relink_to_newid_looper, NULL, 0);
 }
@@ -823,8 +827,9 @@ void BKE_libblock_free_datablock(ID *id, const int UNUSED(flag))
       BKE_particlesettings_free((ParticleSettings *)id);
       break;
     case ID_WM:
-      if (free_windowmanager_cb)
+      if (free_windowmanager_cb) {
         free_windowmanager_cb(NULL, (wmWindowManager *)id);
+      }
       break;
     case ID_GD:
       BKE_gpencil_free((bGPdata *)id, true);

@@ -318,7 +318,8 @@ void gpu_select_pick_begin(uint (*buffer)[4], uint bufsize, const rcti *input, c
     if (mode == GPU_SELECT_PICK_ALL) {
       /* Note that other depth settings (such as #GL_LEQUAL) work too,
        * since the depth is always cleared.
-       * Noting this for cases when depth picking is used where drawing calls change depth settings. */
+       * Noting this for cases when depth picking is used where
+       * drawing calls change depth settings. */
       glDepthFunc(GL_ALWAYS);
     }
     else {
@@ -348,7 +349,10 @@ void gpu_select_pick_begin(uint (*buffer)[4], uint bufsize, const rcti *input, c
 
     /* set initial 'far' value */
 #if 0
-    glReadPixels(UNPACK4(ps->gl.clip_readpixels), GL_DEPTH_COMPONENT, GL_UNSIGNED_INT, ps->gl.rect_depth->buf);
+    glReadPixels(UNPACK4(ps->gl.clip_readpixels),
+                 GL_DEPTH_COMPONENT,
+                 GL_UNSIGNED_INT,
+                 ps->gl.rect_depth->buf);
 #else
     for (uint i = 0; i < rect_len; i++) {
       ps->gl.rect_depth->buf[i] = DEPTH_MAX;

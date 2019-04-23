@@ -372,9 +372,12 @@ static void outliner_add_object_contents(SpaceOutliner *soops,
                 soops, &tenla1->subtree, ob, tenla1, TSE_CONSTRAINT, const_index);
 #if 0 /* disabled as it needs to be reworked for recoded constraints system */
             target = get_constraint_target(con, &str);
-            if (str && str[0]) ten1->name = str;
-            else if (target) ten1->name = target->id.name + 2;
-            else ten1->name = con->name;
+            if (str && str[0])
+              ten1->name = str;
+            else if (target)
+              ten1->name = target->id.name + 2;
+            else
+              ten1->name = con->name;
 #endif
             ten1->name = con->name;
             ten1->directdata = con;
@@ -434,9 +437,12 @@ static void outliner_add_object_contents(SpaceOutliner *soops,
       ten = outliner_add_element(soops, &tenla->subtree, ob, tenla, TSE_CONSTRAINT, a);
 #if 0 /* disabled due to constraints system targets recode... code here needs review */
       target = get_constraint_target(con, &str);
-      if (str && str[0]) ten->name = str;
-      else if (target) ten->name = target->id.name + 2;
-      else ten->name = con->name;
+      if (str && str[0])
+        ten->name = str;
+      else if (target)
+        ten->name = target->id.name + 2;
+      else
+        ten->name = con->name;
 #endif
       ten->name = con->name;
       ten->directdata = con;
@@ -952,7 +958,7 @@ static TreeElement *outliner_add_element(
 
     /* Don't display arrays larger, weak but index is stored as a short,
      * also the outliner isn't intended for editing such large data-sets. */
-    BLI_STATIC_ASSERT(sizeof(te->index) == 2, "Index is no longer short!");
+    BLI_STATIC_ASSERT(sizeof(te->index) == 2, "Index is no longer short!")
     const int tot_limit = SHRT_MAX;
 
     int a, tot;
@@ -1464,10 +1470,7 @@ static void outliner_make_object_parent_hierarchy(ListBase *lb)
         BLI_remlink(lb, te);
         tep = (TreeElement *)ob->parent->id.newid;
         BLI_addtail(&tep->subtree, te);
-        // set correct parent pointers
-        for (te = tep->subtree.first; te; te = te->next) {
-          te->parent = tep;
-        }
+        te->parent = tep;
       }
     }
     te = ten;
@@ -1548,15 +1551,20 @@ static int treesort_obtype_alpha(const void *v1, const void *v2)
   else {
     /* 2nd we check ob type */
     if (x1->idcode == ID_OB && x2->idcode == ID_OB) {
-      if      (((Object *)x1->id)->type > ((Object *)x2->id)->type) return  1;
-      else if (((Object *)x1->id)->type > ((Object *)x2->id)->type) return -1;
-      else return 0;
+      if (((Object *)x1->id)->type > ((Object *)x2->id)->type)
+        return 1;
+      else if (((Object *)x1->id)->type > ((Object *)x2->id)->type)
+        return -1;
+      else
+        return 0;
     }
     else {
       int comp = strcmp(x1->name, x2->name);
 
-      if      (comp > 0) return  1;
-      else if (comp < 0) return -1;
+      if (comp > 0)
+        return 1;
+      else if (comp < 0)
+        return -1;
       return 0;
     }
   }
@@ -1774,10 +1782,11 @@ static TreeElement *outliner_find_first_desired_element_at_y(const SpaceOutliner
 }
 
 /**
- * Store information of current outliner scrolling status to be restored later
+ * Store information of current outliner scrolling status to be restored later.
  *
- * Finds the top-most collection visible in the outliner and populates the OutlinerTreeElementFocus
- * struct to retrieve this element later to make sure it is in the same original position as before filtering
+ * Finds the top-most collection visible in the outliner and populates the
+ * #OutlinerTreeElementFocus struct to retrieve this element later to make sure it is in the same
+ * original position as before filtering.
  */
 static void outliner_store_scrolling_position(SpaceOutliner *soops,
                                               ARegion *ar,

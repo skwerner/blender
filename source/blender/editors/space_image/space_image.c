@@ -115,66 +115,6 @@ static void image_user_refresh_scene(const bContext *C, SpaceImage *sima)
   ED_space_image_auto_set(C, sima);
 }
 
-/* ******************** manage regions ********************* */
-
-ARegion *image_has_buttons_region(ScrArea *sa)
-{
-  ARegion *ar, *arnew;
-
-  ar = BKE_area_find_region_type(sa, RGN_TYPE_UI);
-  if (ar) {
-    return ar;
-  }
-
-  /* add subdiv level; after header */
-  ar = BKE_area_find_region_type(sa, RGN_TYPE_HEADER);
-
-  /* is error! */
-  if (ar == NULL) {
-    return NULL;
-  }
-
-  arnew = MEM_callocN(sizeof(ARegion), "buttons for image");
-
-  BLI_insertlinkafter(&sa->regionbase, ar, arnew);
-  arnew->regiontype = RGN_TYPE_UI;
-  arnew->alignment = RGN_ALIGN_RIGHT;
-
-  arnew->flag = RGN_FLAG_HIDDEN;
-
-  return arnew;
-}
-
-ARegion *image_has_tools_region(ScrArea *sa)
-{
-  ARegion *ar, *arnew;
-
-  ar = BKE_area_find_region_type(sa, RGN_TYPE_TOOLS);
-  if (ar) {
-    return ar;
-  }
-
-  /* add subdiv level; after buttons */
-  ar = BKE_area_find_region_type(sa, RGN_TYPE_UI);
-
-  /* is error! */
-  if (ar == NULL) {
-    return NULL;
-  }
-
-  arnew = MEM_callocN(sizeof(ARegion), "scopes for image");
-
-  BLI_insertlinkafter(&sa->regionbase, ar, arnew);
-  arnew->regiontype = RGN_TYPE_TOOLS;
-  arnew->alignment = RGN_ALIGN_LEFT;
-
-  arnew->flag = RGN_FLAG_HIDDEN;
-
-  image_scopes_tag_refresh(sa);
-
-  return arnew;
-}
-
 /* ******************** default callbacks for image space ***************** */
 
 static SpaceLink *image_new(const ScrArea *UNUSED(area), const Scene *UNUSED(scene))
@@ -188,12 +128,18 @@ static SpaceLink *image_new(const ScrArea *UNUSED(area), const Scene *UNUSED(sce
   simage->lock = true;
   simage->flag = SI_SHOW_GPENCIL | SI_USE_ALPHA | SI_COORDFLOATS;
 
-  simage->iuser.ok = true;
-  simage->iuser.frames = 100;
+  BKE_imageuser_default(&simage->iuser);
   simage->iuser.flag = IMA_SHOW_STEREO | IMA_ANIM_ALWAYS;
 
   scopes_new(&simage->scopes);
   simage->sample_line_hist.height = 100;
+
+  /* tool header */
+  ar = MEM_callocN(sizeof(ARegion), "tool header for image");
+
+  BLI_addtail(&simage->regionbase, ar);
+  ar->regiontype = RGN_TYPE_TOOL_HEADER;
+  ar->alignment = (U.uiflag & USER_HEADER_BOTTOM) ? RGN_ALIGN_BOTTOM : RGN_ALIGN_TOP;
 
   /* header */
   ar = MEM_callocN(sizeof(ARegion), "header for image");
@@ -290,9 +236,6 @@ static void image_operatortypes(void)
   WM_operatortype_append(IMAGE_OT_sample);
   WM_operatortype_append(IMAGE_OT_sample_line);
   WM_operatortype_append(IMAGE_OT_curves_point_set);
-
-  WM_operatortype_append(IMAGE_OT_properties);
-  WM_operatortype_append(IMAGE_OT_toolshelf);
 
   WM_operatortype_append(IMAGE_OT_change_frame);
 
@@ -745,7 +688,8 @@ static void image_main_region_draw(const bContext *C, ARegion *ar)
 
   /* scrollers? */
 #if 0
-  scrollers = UI_view2d_scrollers_calc(C, v2d, V2D_UNIT_VALUES, V2D_GRID_CLAMP, V2D_ARG_DUMMY, V2D_ARG_DUMMY);
+  scrollers = UI_view2d_scrollers_calc(
+      C, v2d, V2D_UNIT_VALUES, V2D_GRID_CLAMP, V2D_ARG_DUMMY, V2D_ARG_DUMMY);
   UI_view2d_scrollers_draw(C, v2d, scrollers);
   UI_view2d_scrollers_free(scrollers);
 #endif
@@ -1094,6 +1038,17 @@ void ED_spacetype_image(void)
   art->snap_size = ED_region_generic_tools_region_snap_size;
   art->init = image_tools_region_init;
   art->draw = image_tools_region_draw;
+  BLI_addhead(&st->regiontypes, art);
+
+  /* regions: tool header */
+  art = MEM_callocN(sizeof(ARegionType), "spacetype image tool header region");
+  art->regionid = RGN_TYPE_TOOL_HEADER;
+  art->prefsizey = HEADERY;
+  art->keymapflag = ED_KEYMAP_UI | ED_KEYMAP_VIEW2D | ED_KEYMAP_FRAMES | ED_KEYMAP_HEADER;
+  art->listener = image_header_region_listener;
+  art->init = image_header_region_init;
+  art->draw = image_header_region_draw;
+  art->message_subscribe = ED_area_do_mgs_subscribe_for_tool_header;
   BLI_addhead(&st->regiontypes, art);
 
   /* regions: header */

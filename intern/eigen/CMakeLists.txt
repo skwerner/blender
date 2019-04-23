@@ -16,11 +16,6 @@
 #
 # The Original Code is Copyright (C) 2015, Blender Foundation
 # All rights reserved.
-#
-# The Original Code is: all of this file.
-#
-# Contributor(s): Bastien Montagne.
-#
 # ***** END GPL LICENSE BLOCK *****
 
 set(INC
@@ -45,4 +40,7 @@ set(SRC
 	intern/svd.h
 )
 
-blender_add_lib(bf_intern_eigen "${SRC}" "${INC}" "${INC_SYS}")
+set(LIB
+)
+
+blender_add_lib(bf_intern_eigen "${SRC}" "${INC}" "${INC_SYS}" "${LIB}")

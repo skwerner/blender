@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,12 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file DNA_gpencil_modifier_types.h
- *  \ingroup DNA
+/** \file
+ * \ingroup DNA
  */
 
 #ifndef __DNA_GPENCIL_MODIFIER_TYPES_H__
@@ -52,7 +48,7 @@ typedef enum GpencilModifierType {
 	eGpencilModifierType_Mirror    = 14,
 	eGpencilModifierType_Armature  = 15,
 	eGpencilModifierType_Time      = 16,
-	NUM_GREASEPENCIL_MODIFIER_TYPES
+	NUM_GREASEPENCIL_MODIFIER_TYPES,
 } GpencilModifierType;
 
 typedef enum GpencilModifierMode {
@@ -194,14 +190,14 @@ typedef enum eTimeGpencil_Flag {
 typedef enum eTimeGpencil_Mode {
 	GP_TIME_MODE_NORMAL  = 0,
 	GP_TIME_MODE_REVERSE = 1,
-	GP_TIME_MODE_FIX     = 2
+	GP_TIME_MODE_FIX     = 2,
 } eTimeGpencil_Mode;
 
 
 typedef enum eModifyColorGpencil_Flag {
 	GP_MODIFY_COLOR_BOTH = 0,
 	GP_MODIFY_COLOR_STROKE = 1,
-	GP_MODIFY_COLOR_FILL = 2
+	GP_MODIFY_COLOR_FILL = 2,
 } eModifyColorGpencil_Flag;
 
 typedef struct TintGpencilModifierData {

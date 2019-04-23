@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,15 +15,10 @@
  *
  * The Original Code is Copyright (C) 2007 Blender Foundation.
  * All rights reserved.
- *
- *
- * Contributor(s): Blender Foundation
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/windowmanager/intern/wm.c
- *  \ingroup wm
+/** \file
+ * \ingroup wm
  *
  * Internal functions for managing UI registrable types (operator, UI and menu types)
  *
@@ -43,7 +36,6 @@
 
 #include "BLI_utildefines.h"
 #include "BLI_blenlib.h"
-#include "BLI_ghash.h"
 
 #include "BKE_context.h"
 #include "BKE_global.h"
@@ -51,7 +43,6 @@
 #include "BKE_library.h"
 #include "BKE_main.h"
 #include "BKE_report.h"
-#include "BKE_screen.h"
 #include "BKE_workspace.h"
 
 #include "WM_api.h"
@@ -206,17 +197,17 @@ void WM_operator_handlers_clear(wmWindowManager *wm, wmOperatorType *ot)
 	wmWindow *win;
 	for (win = wm->windows.first; win; win = win->next) {
 		ListBase *lb[2] = {&win->handlers, &win->modalhandlers};
-		wmEventHandler *handler;
-		int i;
-
-		for (i = 0; i < 2; i++) {
-			for (handler = lb[i]->first; handler; handler = handler->next) {
-				if (handler->op && handler->op->type == ot) {
-					/* don't run op->cancel because it needs the context,
-					 * assume whoever unregisters the operator will cleanup */
-					handler->flag |= WM_HANDLER_DO_FREE;
-					WM_operator_free(handler->op);
-					handler->op = NULL;
+		for (int i = 0; i < ARRAY_SIZE(lb); i++) {
+			LISTBASE_FOREACH (wmEventHandler *, handler_base, lb[i]) {
+				if (handler_base->type == WM_HANDLER_TYPE_OP) {
+					wmEventHandler_Op *handler = (wmEventHandler_Op *)handler_base;
+					if (handler->op && handler->op->type == ot) {
+						/* don't run op->cancel because it needs the context,
+						 * assume whoever unregisters the operator will cleanup */
+						handler->head.flag |= WM_HANDLER_DO_FREE;
+						WM_operator_free(handler->op);
+						handler->op = NULL;
+					}
 				}
 			}
 		}
@@ -228,9 +219,11 @@ void WM_operator_handlers_clear(wmWindowManager *wm, wmOperatorType *ot)
 void WM_keyconfig_reload(bContext *C)
 {
 	if (CTX_py_init_get(C) && !G.background) {
+#ifdef WITH_PYTHON
 		BPY_execute_string(
 		        C, (const char *[]){"bpy", NULL},
 		        "bpy.utils.keyconfig_init()");
+#endif
 	}
 }
 
@@ -363,8 +356,9 @@ void wm_close_and_free(bContext *C, wmWindowManager *wm)
 	wmOperator *op;
 	wmKeyConfig *keyconf;
 
-	if (wm->autosavetimer)
+	if (wm->autosavetimer) {
 		wm_autosave_timer_ended(wm);
+	}
 
 	while ((win = BLI_pophead(&wm->windows))) {
 		/* prevent draw clear to use screen */
@@ -397,7 +391,9 @@ void wm_close_and_free(bContext *C, wmWindowManager *wm)
 		wm->undo_stack = NULL;
 	}
 
-	if (C && CTX_wm_manager(C) == wm) CTX_wm_manager_set(C, NULL);
+	if (C && CTX_wm_manager(C) == wm) {
+		CTX_wm_manager_set(C, NULL);
+	}
 }
 
 void wm_close_and_free_all(bContext *C, ListBase *wmlist)

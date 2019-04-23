@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,34 +15,26 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 #ifndef __BKE_ARMATURE_H__
 #define __BKE_ARMATURE_H__
 
-/** \file BKE_armature.h
- *  \ingroup bke
- *  \since March 2001
- *  \author nzc
+/** \file
+ * \ingroup bke
  */
 
-struct bPose;
 struct Bone;
 struct Depsgraph;
 struct GHash;
+struct ListBase;
 struct Main;
-struct bArmature;
-struct bPoseChannel;
-struct bConstraint;
-struct Scene;
 struct Object;
 struct PoseTree;
-struct ListBase;
+struct Scene;
+struct bArmature;
+struct bConstraint;
+struct bPose;
+struct bPoseChannel;
 
 typedef struct PoseTarget {
 	struct PoseTarget *next, *prev;
@@ -194,7 +184,7 @@ void BKE_pchan_bbone_spline_params_get(
         struct bPoseChannel *pchan, const bool rest, struct BBoneSplineParameters *r_param);
 
 void BKE_pchan_bbone_spline_setup(
-        struct bPoseChannel *pchan, const bool rest, Mat4 result_array[MAX_BBONE_SUBDIV]);
+        struct bPoseChannel *pchan, const bool rest, const bool for_deform, Mat4 *result_array);
 
 void BKE_pchan_bbone_handles_compute(
         const BBoneSplineParameters *param,
@@ -202,12 +192,14 @@ void BKE_pchan_bbone_handles_compute(
         float h2[3], float *r_roll2,
         bool ease, bool offsets);
 int  BKE_pchan_bbone_spline_compute(
-        struct BBoneSplineParameters *param, Mat4 result_array[MAX_BBONE_SUBDIV]);
+        struct BBoneSplineParameters *param, const bool for_deform, Mat4 *result_array);
 
 void BKE_pchan_bbone_segments_cache_compute(
         struct bPoseChannel *pchan);
 void BKE_pchan_bbone_segments_cache_copy(
         struct bPoseChannel *pchan, struct bPoseChannel *pchan_from);
+
+void BKE_pchan_bbone_deform_segment_index(const struct bPoseChannel *pchan, float pos, int *r_index, float *r_blend_next);
 
 /* like EBONE_VISIBLE */
 #define PBONE_VISIBLE(arm, bone) ( \
@@ -252,6 +244,8 @@ void BKE_pose_splineik_init_tree(struct Scene *scene, struct Object *ob, float c
 void BKE_splineik_execute_tree(
         struct Depsgraph *depsgraph, struct Scene *scene,
         struct Object *ob, struct bPoseChannel *pchan_root, float ctime);
+
+void BKE_pose_pchan_index_rebuild(struct bPose *pose);
 
 void BKE_pose_eval_init(
         struct Depsgraph *depsgraph,

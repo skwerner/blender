@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,10 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * Contributor(s): Esteban Tovagliari, Cedric Paille, Kevin Dietrich
- *
- * ***** END GPL LICENSE BLOCK *****
+ */
+
+/** \file
+ * \ingroup balembic
  */
 
 #include "abc_util.h"
@@ -86,11 +84,6 @@ std::string get_object_dag_path_name(const Object * const ob, Object *dupli_pare
 	}
 
 	return name;
-}
-
-bool object_selected(const Base * const ob_base)
-{
-	return ob_base->flag & SELECT;
 }
 
 Imath::M44d convert_matrix(float mat[4][4])

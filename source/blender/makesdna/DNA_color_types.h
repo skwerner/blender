@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,10 @@
  *
  * The Original Code is Copyright (C) 2006 Blender Foundation.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL/BL DUAL LICENSE BLOCK *****
  */
 
-/** \file DNA_color_types.h
- *  \ingroup DNA
+/** \file
+ * \ingroup DNA
  */
 
 #ifndef __DNA_COLOR_TYPES_H__
@@ -98,7 +90,7 @@ typedef struct CurveMapping {
 	float sample[3];
 
 	short tone;
-	short pad[3];
+	char _pad[6];
 } CurveMapping;
 
 /* cumapping->flag */
@@ -133,12 +125,12 @@ enum {
 	HISTO_MODE_R      = 2,
 	HISTO_MODE_G      = 3,
 	HISTO_MODE_B      = 4,
-	HISTO_MODE_ALPHA  = 5
+	HISTO_MODE_ALPHA  = 5,
 };
 
 enum {
 	HISTO_FLAG_LINE        = (1 << 0),
-	HISTO_FLAG_SAMPLELINE  = (1 << 1)
+	HISTO_FLAG_SAMPLELINE  = (1 << 1),
 };
 
 typedef struct Histogram {
@@ -178,7 +170,7 @@ typedef struct Scopes {
 	float *waveform_3;
 	float *vecscope;
 	int waveform_tot;
-	int pad;
+	char _pad[4];
 } Scopes;
 
 /* scopes->wavefrm_mode */
@@ -190,8 +182,10 @@ typedef struct Scopes {
 #define SCOPES_WAVEFRM_RGB		5
 
 typedef struct ColorManagedViewSettings {
-	int flag, pad;
-	/** Look which is being applied when displaying buffer on the screen (prior to view transform). */
+	int flag;
+	char _pad[4];
+	/** Look which is being applied when displaying buffer on the screen
+	 * (prior to view transform). */
 	char look[64];
 	/** View transform which is being applied when displaying buffer on the screen. */
 	char view_transform[64];
@@ -201,7 +195,7 @@ typedef struct ColorManagedViewSettings {
 	float gamma;
 	/** Pre-display RGB curves transform. */
 	struct CurveMapping *curve_mapping;
-	void *pad2;
+	void *_pad2;
 } ColorManagedViewSettings;
 
 typedef struct ColorManagedDisplaySettings {
@@ -215,7 +209,7 @@ typedef struct ColorManagedColorspaceSettings {
 
 /* ColorManagedViewSettings->flag */
 enum {
-	COLORMANAGE_VIEW_USE_CURVES = (1 << 0)
+	COLORMANAGE_VIEW_USE_CURVES = (1 << 0),
 };
 
 #endif

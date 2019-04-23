@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,10 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file DNA_material_types.h
- *  \ingroup DNA
+/** \file
+ * \ingroup DNA
  */
 
 #ifndef __DNA_MATERIAL_TYPES_H__
@@ -40,10 +32,10 @@
 #define MAX_MTEX	18
 #endif
 
-struct Image;
-struct bNodeTree;
 struct AnimData;
+struct Image;
 struct Ipo;
+struct bNodeTree;
 
 /* WATCH IT: change type? also make changes in ipo.h  */
 
@@ -55,7 +47,7 @@ typedef struct TexPaintSlot {
 	/** Do we have a valid image and UV map. */
 	int valid;
 	/** Copy of node inteporlation setting. */
-	int interp;        
+	int interp;
 } TexPaintSlot;
 
 typedef struct MaterialGPencilStyle {
@@ -104,7 +96,7 @@ typedef struct MaterialGPencilStyle {
 
 	/** Type of gradient. */
 	int gradient_type;
-	char pad[4];
+	char _pad[4];
 } MaterialGPencilStyle;
 
 /* MaterialGPencilStyle->flag */
@@ -128,7 +120,9 @@ typedef enum eMaterialGPencilStyle_Flag {
 	/* Stroke show main switch */
 	GP_STYLE_STROKE_SHOW = (1 << 8),
 	/* Fill  show main switch */
-	GP_STYLE_FILL_SHOW = (1 << 9)
+	GP_STYLE_FILL_SHOW = (1 << 9),
+	/* Don't rotate dots/boxes */
+	GP_STYLE_COLOR_LOCK_DOTS = (1 << 10),
 } eMaterialGPencilStyle_Flag;
 
 typedef enum eMaterialGPencilStyle_Mode {
@@ -142,10 +136,11 @@ typedef struct Material {
 	/** Animation data (must be immediately after id for utilities to use it). */
 	struct AnimData *adt;
 
-	short flag, pad1[7];
+	short flag;
+	char _pad1[2];
 
 	/* Colors from Blender Internal that we are still using. */
-	float r, g, b;
+	float r, g, b, a;
 	float specr, specg, specb;
 	float alpha DNA_DEPRECATED;
 	float ray_mirror  DNA_DEPRECATED;
@@ -154,13 +149,16 @@ typedef struct Material {
 	float gloss_mir  DNA_DEPRECATED;
 	float roughness;
 	float metallic;
-	float pad4[2];
 
-	/* Ror buttons and render. */
-	char pr_type, use_nodes;
-	short pr_lamp, pr_texture;
+	/** Nodes */
+	char use_nodes;
 
-	/* Index for render passes. */
+	/** Preview render. */
+	char pr_type;
+	short pr_texture;
+	short pr_flag;
+
+	/** Index for render passes. */
 	short index;
 
 	struct bNodeTree *nodetree;
@@ -177,7 +175,7 @@ typedef struct Material {
 	short paint_active_slot;
 	short paint_clone_slot;
 	short tot_slots;
-	short pad2[3];
+	char _pad2[2];
 
 	/* Transparency. */
 	float alpha_threshold;
@@ -185,7 +183,7 @@ typedef struct Material {
 	char blend_method;
 	char blend_shadow;
 	char blend_flag;
-	char pad3[5];
+	char _pad3[1];
 
 	/**
 	 * Cached slots for texture painting, must be refreshed in
@@ -203,14 +201,14 @@ typedef struct Material {
 /* **************** MATERIAL ********************* */
 
 /* maximum number of materials per material array.
- * (on object, mesh, lamp, etc.). limited by
+ * (on object, mesh, light, etc.). limited by
  * short mat_nr in verts, faces.
  * -1 because for active material we store the index + 1 */
 #define MAXMAT			(32767-1)
 
 /* flag */
 		/* for render */
-#define MA_IS_USED      (1 << 0)
+/* #define MA_IS_USED      (1 << 0) */ /* UNUSED */
 		/* for dopesheet */
 #define MA_DS_EXPAND    (1 << 1)
 		/* for dopesheet (texture stack expander)
@@ -241,23 +239,24 @@ typedef struct Material {
 
 /* texco */
 #define TEXCO_ORCO      (1 << 0)
-#define TEXCO_REFL      (1 << 1)
-#define TEXCO_NORM      (1 << 2)
+/* #define TEXCO_REFL      (1 << 1) */ /* deprecated */
+/* #define TEXCO_NORM      (1 << 2) */ /* deprecated */
 #define TEXCO_GLOB      (1 << 3)
 #define TEXCO_UV        (1 << 4)
 #define TEXCO_OBJECT    (1 << 5)
-#define TEXCO_LAVECTOR  (1 << 6)
-#define TEXCO_VIEW      (1 << 7)
-#define TEXCO_STICKY_   (1 << 8)  // DEPRECATED
-#define TEXCO_OSA       (1 << 9)
+/* #define TEXCO_LAVECTOR  (1 << 6) */ /* deprecated */
+/* #define TEXCO_VIEW      (1 << 7) */ /* deprecated */
+/* #define TEXCO_STICKY   (1 << 8) */ /* deprecated */
+/* #define TEXCO_OSA       (1 << 9) */ /* deprecated */
 #define TEXCO_WINDOW    (1 << 10)
-#define NEED_UV         (1 << 11)
-#define TEXCO_TANGENT   (1 << 12)
+/* #define NEED_UV         (1 << 11) */ /* deprecated */
+/* #define TEXCO_TANGENT   (1 << 12) */ /* deprecated */
 	/* still stored in vertex->accum, 1 D */
 #define TEXCO_STRAND    (1 << 13)
-#define TEXCO_PARTICLE  (1 << 13) /* strand is used for normal materials, particle for halo materials */
-#define TEXCO_STRESS    (1 << 14)
-#define TEXCO_SPEED     (1 << 15)
+/** strand is used for normal materials, particle for halo materials */
+#define TEXCO_PARTICLE  (1 << 13)
+/* #define TEXCO_STRESS    (1 << 14) */ /* deprecated */
+/* #define TEXCO_SPEED     (1 << 15) */ /* deprecated */
 
 /* mapto */
 #define MAP_COL			(1 << 0)
@@ -285,13 +284,18 @@ typedef struct Material {
 #define MA_FLAT			0
 #define MA_SPHERE		1
 #define MA_CUBE			2
-#define MA_MONKEY		3
-#define MA_SPHERE_A		4
+#define MA_SHADERBALL   3
+#define MA_SPHERE_A		4  /* Used for icon renders only. */
 #define MA_TEXTURE		5
 #define MA_LAMP			6
 #define MA_SKY			7
 #define MA_HAIR			10
 #define MA_ATMOS		11
+#define MA_CLOTH		12
+#define MA_FLUID		13
+
+/* pr_flag */
+#define MA_PREVIEW_WORLD (1 << 0)
 
 /* blend_method */
 enum {
@@ -307,7 +311,7 @@ enum {
 enum {
 	MA_BL_HIDE_BACKFACE =        (1 << 0),
 	MA_BL_SS_REFRACTION =        (1 << 1),
-	MA_BL_FLAG_DEPRECATED_2 =    (1 << 2), /* cleared */
+	MA_BL_FLAG_UNUSED_2 =        (1 << 2), /* cleared */
 	MA_BL_TRANSLUCENCY =         (1 << 3),
 };
 
@@ -322,7 +326,7 @@ enum {
 /* Grease Pencil Stroke styles */
 enum {
 	GP_STYLE_STROKE_STYLE_SOLID = 0,
-	GP_STYLE_STROKE_STYLE_TEXTURE
+	GP_STYLE_STROKE_STYLE_TEXTURE,
 };
 
 /* Grease Pencil Fill styles */
@@ -330,13 +334,13 @@ enum {
 	GP_STYLE_FILL_STYLE_SOLID = 0,
 	GP_STYLE_FILL_STYLE_GRADIENT,
 	GP_STYLE_FILL_STYLE_CHESSBOARD,
-	GP_STYLE_FILL_STYLE_TEXTURE
+	GP_STYLE_FILL_STYLE_TEXTURE,
 };
 
 /* Grease Pencil Gradient Types */
 enum {
 	GP_STYLE_GRADIENT_LINEAR = 0,
-	GP_STYLE_GRADIENT_RADIAL
+	GP_STYLE_GRADIENT_RADIAL,
 };
 
 #endif

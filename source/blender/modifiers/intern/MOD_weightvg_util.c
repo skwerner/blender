@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,21 +15,17 @@
  *
  * The Original Code is Copyright (C) 2011 by Bastien Montagne.
  * All rights reserved.
- *
- * Contributor(s): None yet.
- *
- * ***** END GPL LICENSE BLOCK *****
- *
  */
 
-/** \file blender/modifiers/intern/MOD_weightvg_util.c
- *  \ingroup modifiers
+/** \file
+ * \ingroup modifiers
  */
+
+#include "BLI_utildefines.h"
 
 #include "BLI_math.h"
 #include "BLI_rand.h"
 #include "BLI_string.h"
-#include "BLI_utildefines.h"
 
 #include "DNA_color_types.h"      /* CurveMapping. */
 #include "DNA_mesh_types.h"
@@ -133,7 +127,6 @@ void weightvg_do_mask(
 
 	/* If we want to mask vgroup weights from a texture. */
 	if (texture != NULL) {
-		texture = (Tex *)DEG_get_evaluated_id(ctx->depsgraph, &texture->id);
 		/* The texture coordinates. */
 		float (*tex_co)[3];
 		/* See mapping note below... */

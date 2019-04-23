@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,10 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file DNA_customdata_types.h
- *  \ingroup DNA
+/** \file
+ * \ingroup DNA
  *
  * Used for custom mesh data types (stored per vert/edge/loop/face)
  */
@@ -81,7 +73,7 @@ typedef struct CustomData {
 	 * Correct size is ensured in CustomData_update_typemap assert().
 	 */
 	int typemap[42];
-	int pad_i1;
+	char _pad0[4];
 	/** Number of layers, size of layers array. */
 	int totlayer, maxlayer;
 	/** In editmode, total size of all data layers. */
@@ -116,7 +108,7 @@ typedef enum CustomDataType {
 	CD_PROP_INT         = 11,
 	CD_PROP_STR         = 12,
 	CD_ORIGSPACE        = 13,  /* for modifier stack face location mapping */
-	CD_ORCO             = 14,
+	CD_ORCO             = 14,  /* undeformed vertex coordinates, normalized to 0..1 range */
 /*	CD_MTEXPOLY         = 15, */  /* deprecated */
 	CD_MLOOPUV          = 16,
 	CD_MLOOPCOL         = 17,
@@ -149,7 +141,7 @@ typedef enum CustomDataType {
 	CD_TESSLOOPNORMAL   = 40,
 	CD_CUSTOMLOOPNORMAL = 41,
 
-	CD_NUMTYPES         = 42
+	CD_NUMTYPES         = 42,
 } CustomDataType;
 
 /* Bits for CustomDataMask */
@@ -197,6 +189,19 @@ typedef enum CustomDataType {
 #define CD_MASK_MLOOPTANGENT    (1LL << CD_MLOOPTANGENT)
 #define CD_MASK_TESSLOOPNORMAL  (1LL << CD_TESSLOOPNORMAL)
 #define CD_MASK_CUSTOMLOOPNORMAL (1LL << CD_CUSTOMLOOPNORMAL)
+
+/** Data types that may be defined for all mesh elements types. */
+#define CD_MASK_GENERIC_DATA (CD_MASK_PROP_FLT | CD_MASK_PROP_INT | CD_MASK_PROP_STR)
+
+
+typedef struct CustomData_MeshMasks {
+	uint64_t vmask;
+	uint64_t emask;
+	uint64_t fmask;
+	uint64_t pmask;
+	uint64_t lmask;
+} CustomData_MeshMasks;
+
 
 /* CustomData.flag */
 enum {

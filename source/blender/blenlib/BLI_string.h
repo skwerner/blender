@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,19 +15,13 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
 #ifndef __BLI_STRING_H__
 #define __BLI_STRING_H__
 
-/** \file BLI_string.h
- *  \ingroup bli
+/** \file
+ * \ingroup bli
  */
 
 #include <stdarg.h>
@@ -40,6 +32,7 @@ extern "C" {
 #endif
 
 #include "BLI_compiler_attrs.h"
+#include "BLI_utildefines_variadic.h"
 
 char *BLI_strdupn(const char *str, const size_t len) ATTR_MALLOC ATTR_WARN_UNUSED_RESULT ATTR_NONNULL();
 
@@ -119,7 +112,58 @@ int BLI_string_find_split_words(
     BLI_snprintf(dst, ARRAY_SIZE(dst), format, __VA_ARGS__)
 #define SNPRINTF_RLEN(dst, format, ...) \
     BLI_snprintf_rlen(dst, ARRAY_SIZE(dst), format, __VA_ARGS__)
+#define STR_CONCAT(dst, len, suffix) \
+    len += BLI_strncpy_rlen(dst + len, suffix, ARRAY_SIZE(dst) - len)
+#define STR_CONCATF(dst, len, format, ...) \
+    len += BLI_snprintf_rlen(dst + len, ARRAY_SIZE(dst) - len, format, __VA_ARGS__)
 /** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Equal to Any Element (STR_ELEM) Macro
+ *
+ * Follows #ELEM macro convention.
+ * \{ */
+
+/* STR_ELEM#(v, ...): is the first arg equal any others? */
+/* Internal helpers. */
+#define _VA_STR_ELEM2(v, a) \
+       (strcmp(v, a) == 0)
+#define _VA_STR_ELEM3(v, a, b) \
+       (_VA_STR_ELEM2(v, a) || ((v) == (b)))
+#define _VA_STR_ELEM4(v, a, b, c) \
+       (_VA_STR_ELEM3(v, a, b) || ((v) == (c)))
+#define _VA_STR_ELEM5(v, a, b, c, d) \
+       (_VA_STR_ELEM4(v, a, b, c) || ((v) == (d)))
+#define _VA_STR_ELEM6(v, a, b, c, d, e) \
+       (_VA_STR_ELEM5(v, a, b, c, d) || ((v) == (e)))
+#define _VA_STR_ELEM7(v, a, b, c, d, e, f) \
+       (_VA_STR_ELEM6(v, a, b, c, d, e) || ((v) == (f)))
+#define _VA_STR_ELEM8(v, a, b, c, d, e, f, g) \
+       (_VA_STR_ELEM7(v, a, b, c, d, e, f) || ((v) == (g)))
+#define _VA_STR_ELEM9(v, a, b, c, d, e, f, g, h) \
+       (_VA_STR_ELEM8(v, a, b, c, d, e, f, g) || ((v) == (h)))
+#define _VA_STR_ELEM10(v, a, b, c, d, e, f, g, h, i) \
+       (_VA_STR_ELEM9(v, a, b, c, d, e, f, g, h) || ((v) == (i)))
+#define _VA_STR_ELEM11(v, a, b, c, d, e, f, g, h, i, j) \
+       (_VA_STR_ELEM10(v, a, b, c, d, e, f, g, h, i) || ((v) == (j)))
+#define _VA_STR_ELEM12(v, a, b, c, d, e, f, g, h, i, j, k) \
+       (_VA_STR_ELEM11(v, a, b, c, d, e, f, g, h, i, j) || ((v) == (k)))
+#define _VA_STR_ELEM13(v, a, b, c, d, e, f, g, h, i, j, k, l) \
+       (_VA_STR_ELEM12(v, a, b, c, d, e, f, g, h, i, j, k) || ((v) == (l)))
+#define _VA_STR_ELEM14(v, a, b, c, d, e, f, g, h, i, j, k, l, m) \
+       (_VA_STR_ELEM13(v, a, b, c, d, e, f, g, h, i, j, k, l) || ((v) == (m)))
+#define _VA_STR_ELEM15(v, a, b, c, d, e, f, g, h, i, j, k, l, m, n) \
+       (_VA_STR_ELEM14(v, a, b, c, d, e, f, g, h, i, j, k, l, m) || ((v) == (n)))
+#define _VA_STR_ELEM16(v, a, b, c, d, e, f, g, h, i, j, k, l, m, n, o) \
+       (_VA_STR_ELEM15(v, a, b, c, d, e, f, g, h, i, j, k, l, m, n) || ((v) == (o)))
+#define _VA_STR_ELEM17(v, a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p) \
+       (_VA_STR_ELEM16(v, a, b, c, d, e, f, g, h, i, j, k, l, m, n, o) || ((v) == (p)))
+
+/* reusable STR_ELEM macro */
+#define STR_ELEM(...) VA_NARGS_CALL_OVERLOAD(_VA_STR_ELEM, __VA_ARGS__)
+
+/** \} */
+
 
 #ifdef __cplusplus
 }

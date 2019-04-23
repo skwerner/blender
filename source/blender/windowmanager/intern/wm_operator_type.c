@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,12 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/windowmanager/intern/wm_operator_type.c
- *  \ingroup wm
+/** \file
+ * \ingroup wm
  *
  * Operator Registry.
  */
@@ -162,8 +158,9 @@ void WM_operatortype_remove_ptr(wmOperatorType *ot)
 		MEM_freeN(ot->last_properties);
 	}
 
-	if (ot->macro.first)
+	if (ot->macro.first) {
 		wm_operatortype_free_macro(ot);
+	}
 
 	BLI_ghash_remove(global_ops_hash, ot->idname, NULL, NULL);
 
@@ -176,8 +173,9 @@ bool WM_operatortype_remove(const char *idname)
 {
 	wmOperatorType *ot = WM_operatortype_find(idname, 0);
 
-	if (ot == NULL)
+	if (ot == NULL) {
 		return false;
+	}
 
 	WM_operatortype_remove_ptr(ot);
 
@@ -198,11 +196,14 @@ static void operatortype_ghash_free_cb(wmOperatorType *ot)
 		MEM_freeN(ot->last_properties);
 	}
 
-	if (ot->macro.first)
+	if (ot->macro.first) {
 		wm_operatortype_free_macro(ot);
+	}
 
-	if (ot->ext.srna) /* python operator, allocs own string */
+	if (ot->ext.srna) {
+		/* python operator, allocs own string */
 		MEM_freeN((void *)ot->idname);
+	}
 
 	MEM_freeN(ot);
 }
@@ -358,10 +359,12 @@ static int wm_macro_invoke_internal(bContext *C, wmOperator *op, const wmEvent *
 
 	/* start from operator received as argument */
 	for (; opm; opm = opm->next) {
-		if (opm->type->invoke)
+		if (opm->type->invoke) {
 			retval = opm->type->invoke(C, opm, event);
-		else if (opm->type->exec)
+		}
+		else if (opm->type->exec) {
 			retval = opm->type->exec(C, opm);
+		}
 
 		OPERATOR_RETVAL_CHECK(retval);
 
@@ -413,12 +416,12 @@ static int wm_macro_modal(bContext *C, wmOperator *op, const wmEvent *event)
 			/* if new operator is modal and also added its own handler */
 			if (retval & OPERATOR_RUNNING_MODAL && op->opm != opm) {
 				wmWindow *win = CTX_wm_window(C);
-				wmEventHandler *handler;
+				wmEventHandler_Op *handler;
 
-				handler = BLI_findptr(&win->modalhandlers, op, offsetof(wmEventHandler, op));
+				handler = BLI_findptr(&win->modalhandlers, op, offsetof(wmEventHandler_Op, op));
 				if (handler) {
 					BLI_remlink(&win->modalhandlers, handler);
-					wm_event_free_handler(handler);
+					wm_event_free_handler(&handler->head);
 				}
 
 				/* if operator is blocking, grab cursor
@@ -484,8 +487,10 @@ wmOperatorType *WM_operatortype_append_macro(const char *idname, const char *nam
 	ot->cancel = wm_macro_cancel;
 	ot->poll = NULL;
 
-	if (!ot->description) /* XXX All ops should have a description but for now allow them not to. */
+	if (!ot->description) {
+		/* XXX All ops should have a description but for now allow them not to. */
 		ot->description = UNDOCUMENTED_OPERATOR_TIP;
+	}
 
 	RNA_def_struct_ui_text(ot->srna, ot->name, ot->description);
 	RNA_def_struct_identifier(&BLENDER_RNA, ot->srna, ot->idname);
@@ -513,8 +518,9 @@ void WM_operatortype_append_macro_ptr(void (*opfunc)(wmOperatorType *, void *), 
 	ot->cancel = wm_macro_cancel;
 	ot->poll = NULL;
 
-	if (!ot->description)
+	if (!ot->description) {
 		ot->description = UNDOCUMENTED_OPERATOR_TIP;
+	}
 
 	/* Set the default i18n context now, so that opfunc can redefine it if needed! */
 	RNA_def_struct_translation_context(ot->srna, BLT_I18NCONTEXT_OPERATOR_DEFAULT);

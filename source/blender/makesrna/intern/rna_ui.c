@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,14 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * Contributor(s): Blender Foundation (2009)
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/makesrna/intern/rna_ui.c
- *  \ingroup RNA
+/** \file
+ * \ingroup RNA
  */
 
 
@@ -58,14 +52,14 @@ const EnumPropertyItem rna_enum_operator_context_items[] = {
 	{WM_OP_EXEC_REGION_PREVIEW, "EXEC_REGION_PREVIEW", 0, "Exec Region Preview", ""},
 	{WM_OP_EXEC_AREA, "EXEC_AREA", 0, "Exec Area", ""},
 	{WM_OP_EXEC_SCREEN, "EXEC_SCREEN", 0, "Exec Screen", ""},
-	{0, NULL, 0, NULL, NULL}
+	{0, NULL, 0, NULL, NULL},
 };
 
 const EnumPropertyItem rna_enum_uilist_layout_type_items[] = {
 	{UILST_LAYOUT_DEFAULT, "DEFAULT", 0, "Default Layout", "Use the default, multi-rows layout"},
 	{UILST_LAYOUT_COMPACT, "COMPACT", 0, "Compact Layout", "Use the compact, single-row layout"},
 	{UILST_LAYOUT_GRID, "GRID", 0, "Grid Layout", "Use the grid-based layout"},
-	{0, NULL, 0, NULL, NULL}
+	{0, NULL, 0, NULL, NULL},
 };
 
 #ifdef RNA_RUNTIME
@@ -887,6 +881,26 @@ static void rna_UILayout_active_set(PointerRNA *ptr, bool value)
 	uiLayoutSetActive(ptr->data, value);
 }
 
+static bool rna_UILayout_active_default_get(PointerRNA *ptr)
+{
+	return uiLayoutGetActiveDefault(ptr->data);
+}
+
+static void rna_UILayout_active_default_set(PointerRNA *ptr, bool value)
+{
+	uiLayoutSetActiveDefault(ptr->data, value);
+}
+
+static bool rna_UILayout_activate_init_get(PointerRNA *ptr)
+{
+	return uiLayoutGetActivateInit(ptr->data);
+}
+
+static void rna_UILayout_activate_init_set(PointerRNA *ptr, bool value)
+{
+	uiLayoutSetActivateInit(ptr->data, value);
+}
+
 static bool rna_UILayout_alert_get(PointerRNA *ptr)
 {
 	return uiLayoutGetRedAlert(ptr->data);
@@ -1036,21 +1050,21 @@ static void rna_def_ui_layout(BlenderRNA *brna)
 		{UI_LAYOUT_ALIGN_LEFT, "LEFT", 0, "Left", ""},
 		{UI_LAYOUT_ALIGN_CENTER, "CENTER", 0, "Center", ""},
 		{UI_LAYOUT_ALIGN_RIGHT, "RIGHT", 0, "Right", ""},
-		{0, NULL, 0, NULL, NULL}
+		{0, NULL, 0, NULL, NULL},
 	};
 
 	static const EnumPropertyItem direction_items[] = {
 		{UI_LAYOUT_HORIZONTAL, "HORIZONTAL", 0, "Horizontal", ""},
 		{UI_LAYOUT_VERTICAL, "VERTICAL", 0, "Vertical", ""},
-		{0, NULL, 0, NULL, NULL}
+		{0, NULL, 0, NULL, NULL},
 	};
 
 	static const EnumPropertyItem emboss_items[] = {
-		{UI_EMBOSS, "NORMAL", 0, "Normal", "Draw standard button emboss style"},
+		{UI_EMBOSS, "NORMAL", 0, "Regular", "Draw standard button emboss style"},
 		{UI_EMBOSS_NONE, "NONE", 0, "None", "Draw only text and icons"},
 		{UI_EMBOSS_PULLDOWN, "PULLDOWN_MENU", 0, "Pulldown Menu", "Draw pulldown menu style"},
 		{UI_EMBOSS_RADIAL, "RADIAL_MENU", 0, "Radial Menu", "Draw radial menu style"},
-		{0, NULL, 0, NULL, NULL}
+		{0, NULL, 0, NULL, NULL},
 	};
 
 	/* layout */
@@ -1061,6 +1075,20 @@ static void rna_def_ui_layout(BlenderRNA *brna)
 
 	prop = RNA_def_property(srna, "active", PROP_BOOLEAN, PROP_NONE);
 	RNA_def_property_boolean_funcs(prop, "rna_UILayout_active_get", "rna_UILayout_active_set");
+
+	prop = RNA_def_property(srna, "active_default", PROP_BOOLEAN, PROP_NONE);
+	RNA_def_property_boolean_funcs(prop, "rna_UILayout_active_default_get", "rna_UILayout_active_default_set");
+	RNA_def_property_ui_text(
+	        prop, "Active Default",
+	        "When true, an operator button defined after this will be activated when pressing return"
+	        "(use with popup dialogs)");
+
+	prop = RNA_def_property(srna, "activate_init", PROP_BOOLEAN, PROP_NONE);
+	RNA_def_property_boolean_funcs(prop, "rna_UILayout_activate_init_get", "rna_UILayout_activate_init_set");
+	RNA_def_property_ui_text(
+	        prop, "Activate on Init",
+	        "When true, buttons defined in popups will be activated on first display "
+	        "(use so you can type into a field without having to click on it first)");
 
 	prop = RNA_def_property(srna, "operator_context", PROP_ENUM, PROP_NONE);
 	RNA_def_property_enum_items(prop, rna_enum_operator_context_items);
@@ -1128,7 +1156,7 @@ static void rna_def_panel(BlenderRNA *brna)
 		{PNL_NO_HEADER, "HIDE_HEADER", 0, "Hide Header",
 		                "If set to False, the panel shows a header, which contains a clickable "
 		                "arrow to collapse the panel and the label (see bl_label)"},
-		{0, NULL, 0, NULL, NULL}
+		{0, NULL, 0, NULL, NULL},
 	};
 
 	srna = RNA_def_struct(brna, "Panel", NULL);

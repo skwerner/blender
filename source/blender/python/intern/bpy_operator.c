@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,14 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * Contributor(s): Campbell Barton
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/python/intern/bpy_operator.c
- *  \ingroup pythonintern
+/** \file
+ * \ingroup pythonintern
  *
  * This file defines '_bpy.ops', an internal python module which gives python
  * the ability to inspect and call both C and Python defined operators.
@@ -37,7 +31,6 @@
 
 #include "BLI_utildefines.h"
 #include "BLI_listbase.h"
-#include "BLI_string.h"
 
 #include "BPY_extern.h"
 #include "bpy_operator.h"
@@ -100,8 +93,9 @@ static PyObject *pyop_poll(PyObject *UNUSED(self), PyObject *args)
 		return NULL;
 	}
 
-	if (!PyArg_ParseTuple(args, "s|Os:_bpy.ops.poll", &opname, &context_dict, &context_str))
+	if (!PyArg_ParseTuple(args, "s|Os:_bpy.ops.poll", &opname, &context_dict, &context_str)) {
 		return NULL;
+	}
 
 	ot = WM_operatortype_find(opname, true);
 
@@ -269,10 +263,7 @@ static PyObject *pyop_call(PyObject *UNUSED(self), PyObject *args)
 
 			/* operator output is nice to have in the terminal/console too */
 			if (!BLI_listbase_is_empty(&reports->list)) {
-				Report *report;
-				for (report = reports->list.first; report; report = report->next) {
-					PySys_WriteStdout("%s: %s\n", report->typestr, report->message);
-				}
+				BPy_reports_write_stdout(reports, NULL);
 			}
 
 			BKE_reports_clear(reports);
@@ -372,8 +363,9 @@ static PyObject *pyop_as_string(PyObject *UNUSED(self), PyObject *args)
 		error_val = pyrna_pydict_to_props(&ptr, kw, false, "Converting py args to operator properties: ");
 	}
 
-	if (error_val == 0)
+	if (error_val == 0) {
 		buf = WM_operator_pystring_ex(C, NULL, all_args, macro_args, ot, &ptr);
+	}
 
 	WM_operator_properties_free(&ptr);
 
@@ -429,7 +421,7 @@ static struct PyMethodDef bpy_ops_methods[] = {
 	{"dir", (PyCFunction) pyop_dir, METH_NOARGS, NULL},
 	{"get_rna_type", (PyCFunction) pyop_getrna_type, METH_O, NULL},
 	{"macro_define", (PyCFunction) PYOP_wrap_macro_define, METH_VARARGS, NULL},
-	{NULL, NULL, 0, NULL}
+	{NULL, NULL, 0, NULL},
 };
 
 static struct PyModuleDef bpy_ops_module = {
@@ -438,7 +430,7 @@ static struct PyModuleDef bpy_ops_module = {
 	NULL,
 	-1, /* multiple "initialization" just copies the module dict. */
 	bpy_ops_methods,
-	NULL, NULL, NULL, NULL
+	NULL, NULL, NULL, NULL,
 };
 
 PyObject *BPY_operator_module(void)

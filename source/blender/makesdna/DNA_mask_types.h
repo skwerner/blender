@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,19 +15,10 @@
  *
  * The Original Code is Copyright (C) 2012 Blender Foundation.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): Blender Foundation,
- *                 Sergey Sharybin
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file DNA_mask_types.h
- *  \ingroup DNA
- *  \since march-2012
- *  \author Sergey Sharybin
+/** \file
+ * \ingroup DNA
  *
  * Mask data-blocks are collections of 2D curves to be used
  * for image masking in the compositor and sequencer.
@@ -58,7 +47,7 @@ typedef struct Mask {
 
 	/** For anim info. */
 	int flag;
-	int pad;
+	char _pad[4];
 } Mask;
 
 typedef struct MaskParent {
@@ -103,7 +92,7 @@ typedef struct MaskSplinePointUW {
 typedef struct MaskSplinePoint {
 	/** Actual point coordinates and it's handles . */
 	BezTriple bezt;
-	int pad;
+	char _pad[4];
 	/** Number of uv feather values. */
 	int tot_uw;
 	/** Feather UV values. */
@@ -145,7 +134,7 @@ typedef struct MaskLayerShape {
 	int    frame;
 	/** Animation flag. */
 	char   flag;
-	char   pad[7];
+	char _pad[7];
 } MaskLayerShape;
 
 /* cast to this for convenience, not saved */
@@ -177,7 +166,7 @@ typedef struct MaskLayer {
 	char   blend;
 	char   blend_flag;
 	char   falloff;
-	char   pad[7];
+	char _pad[7];
 
 	/** For animation. */
 	char   flag;
@@ -199,19 +188,19 @@ enum {
 enum {
 	MASK_SPLINE_CYCLIC  = (1 << 1),
 	MASK_SPLINE_NOFILL  = (1 << 2),
-	MASK_SPLINE_NOINTERSECT = (1 << 3)
+	MASK_SPLINE_NOINTERSECT = (1 << 3),
 };
 
 /* MaskSpline->weight_interp */
 enum {
 	MASK_SPLINE_INTERP_LINEAR  = 1,
-	MASK_SPLINE_INTERP_EASE    = 2
+	MASK_SPLINE_INTERP_EASE    = 2,
 };
 
 /* MaskSpline->offset_mode */
 enum {
 	MASK_SPLINE_OFFSET_EVEN   = 0,
-	MASK_SPLINE_OFFSET_SMOOTH = 1
+	MASK_SPLINE_OFFSET_SMOOTH = 1,
 };
 
 
@@ -230,13 +219,13 @@ enum {
 	MASK_DT_OUTLINE = 0,
 	MASK_DT_DASH    = 1,
 	MASK_DT_BLACK   = 2,
-	MASK_DT_WHITE   = 3
+	MASK_DT_WHITE   = 3,
 };
 
 /* MaskSpaceInfo->overlay_mode */
 enum {
 	MASK_OVERLAY_ALPHACHANNEL = 0,
-	MASK_OVERLAY_COMBINED     = 1
+	MASK_OVERLAY_COMBINED     = 1,
 };
 
 /* masklay->blend */
@@ -249,12 +238,12 @@ enum {
 	MASK_BLEND_REPLACE         = 5,
 	MASK_BLEND_DIFFERENCE      = 6,
 	MASK_BLEND_MERGE_ADD       = 7,
-	MASK_BLEND_MERGE_SUBTRACT  = 8
+	MASK_BLEND_MERGE_SUBTRACT  = 8,
 };
 
 /* masklay->blend_flag */
 enum {
-	MASK_BLENDFLAG_INVERT = (1 << 0)
+	MASK_BLENDFLAG_INVERT = (1 << 0),
 };
 
 /* masklay->flag */
@@ -269,13 +258,13 @@ enum {
 
 /* masklay_shape->flag */
 enum {
-	MASK_SHAPE_SELECT = (1 << 0)
+	MASK_SHAPE_SELECT = (1 << 0),
 };
 
 
 /* mask->flag */
 enum {
-	MASK_ANIMF_EXPAND = (1 << 4)
+	MASK_ANIMF_EXPAND = (1 << 4),
 };
 
 #endif  /* __DNA_MASK_TYPES_H__ */

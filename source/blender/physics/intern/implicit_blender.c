@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,10 @@
  *
  * The Original Code is Copyright (C) Blender Foundation
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/physics/intern/implicit_blender.c
- *  \ingroup bph
+/** \file
+ * \ingroup bph
  */
 
 #include "implicit.h"
@@ -42,7 +34,6 @@
 #include "DNA_texture_types.h"
 
 #include "BLI_math.h"
-#include "BLI_linklist.h"
 #include "BLI_utildefines.h"
 
 #include "BKE_cloth.h"
@@ -216,7 +207,7 @@ DO_INLINE void add_lfvector_lfvector(float(*to)[3], float(*fLongVectorA)[3], flo
 	unsigned int i = 0;
 
 	for (i = 0; i < verts; i++) {
-		VECADD(to[i], fLongVectorA[i], fLongVectorB[i]);
+		add_v3_v3v3(to[i], fLongVectorA[i], fLongVectorB[i]);
 	}
 
 }
@@ -431,9 +422,9 @@ DO_INLINE void mul_fmatrix_fvector(float *to, float matrix[3][3], float from[3])
 /* 3x3 matrix addition with 3x3 matrix */
 DO_INLINE void add_fmatrix_fmatrix(float to[3][3], float matrixA[3][3], float matrixB[3][3])
 {
-	VECADD(to[0], matrixA[0], matrixB[0]);
-	VECADD(to[1], matrixA[1], matrixB[1]);
-	VECADD(to[2], matrixA[2], matrixB[2]);
+	add_v3_v3v3(to[0], matrixA[0], matrixB[0]);
+	add_v3_v3v3(to[1], matrixA[1], matrixB[1]);
+	add_v3_v3v3(to[2], matrixA[2], matrixB[2]);
 }
 /* A -= B*x + C*y (3x3 matrix sub-addition with 3x3 matrix) */
 DO_INLINE void subadd_fmatrixS_fmatrixS(float to[3][3], float matrixA[3][3], float aS, float matrixB[3][3], float bS)
@@ -502,18 +493,6 @@ BLI_INLINE void madd_m3_m3fl(float r[3][3], float m[3][3], float f)
 	r[2][2] += m[2][2] * f;
 }
 
-BLI_INLINE void madd_m3_m3m3fl(float r[3][3], float a[3][3], float b[3][3], float f)
-{
-	r[0][0] = a[0][0] + b[0][0] * f;
-	r[0][1] = a[0][1] + b[0][1] * f;
-	r[0][2] = a[0][2] + b[0][2] * f;
-	r[1][0] = a[1][0] + b[1][0] * f;
-	r[1][1] = a[1][1] + b[1][1] * f;
-	r[1][2] = a[1][2] + b[1][2] * f;
-	r[2][0] = a[2][0] + b[2][0] * f;
-	r[2][1] = a[2][1] + b[2][1] * f;
-	r[2][2] = a[2][2] + b[2][2] * f;
-}
 /////////////////////////////////////////////////////////////////
 
 ///////////////////////////

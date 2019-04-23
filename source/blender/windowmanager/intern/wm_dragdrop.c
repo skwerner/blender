@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,15 +15,10 @@
  *
  * The Original Code is Copyright (C) 2010 Blender Foundation.
  * All rights reserved.
- *
- *
- * Contributor(s): Blender Foundation
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/windowmanager/intern/wm_dragdrop.c
- *  \ingroup wm
+/** \file
+ * \ingroup wm
  *
  * Our own drag-and-drop, drag state and drop boxes.
  */
@@ -48,6 +41,7 @@
 #include "BKE_idcode.h"
 
 #include "GPU_shader.h"
+#include "GPU_state.h"
 
 #include "IMB_imbuf_types.h"
 
@@ -82,10 +76,13 @@ ListBase *WM_dropboxmap_find(const char *idname, int spaceid, int regionid)
 {
 	wmDropBoxMap *dm;
 
-	for (dm = dropboxes.first; dm; dm = dm->next)
-		if (dm->spaceid == spaceid && dm->regionid == regionid)
-			if (STREQLEN(idname, dm->idname, KMAP_MAX_NAME))
+	for (dm = dropboxes.first; dm; dm = dm->next) {
+		if (dm->spaceid == spaceid && dm->regionid == regionid) {
+			if (STREQLEN(idname, dm->idname, KMAP_MAX_NAME)) {
 				return &dm->dropboxes;
+			}
+		}
+	}
 
 	dm = MEM_callocN(sizeof(struct wmDropBoxMap), "dropmap list");
 	BLI_strncpy(dm->idname, idname, KMAP_MAX_NAME);
@@ -201,16 +198,17 @@ void WM_drag_free_list(struct ListBase *lb)
 
 static const char *dropbox_active(bContext *C, ListBase *handlers, wmDrag *drag, const wmEvent *event)
 {
-	wmEventHandler *handler = handlers->first;
-	for (; handler; handler = handler->next) {
-		if (handler->dropboxes) {
-			wmDropBox *drop = handler->dropboxes->first;
-			for (; drop; drop = drop->next) {
-				const char *tooltip = NULL;
-				if (drop->poll(C, drag, event, &tooltip)) {
-					/* XXX Doing translation here might not be ideal, but later we have no more
-					 *     access to ot (and hence op context)... */
-					return (tooltip) ? tooltip : RNA_struct_ui_name(drop->ot->srna);
+	LISTBASE_FOREACH (wmEventHandler *, handler_base, handlers) {
+		if (handler_base->type == WM_HANDLER_TYPE_DROPBOX) {
+			wmEventHandler_Dropbox *handler = (wmEventHandler_Dropbox *)handler_base;
+			if (handler->dropboxes) {
+				for (wmDropBox *drop = handler->dropboxes->first; drop; drop = drop->next) {
+					const char *tooltip = NULL;
+					if (drop->poll(C, drag, event, &tooltip)) {
+						/* XXX Doing translation here might not be ideal, but later we have no more
+						 *     access to ot (and hence op context)... */
+						return (tooltip) ? tooltip : RNA_struct_ui_name(drop->ot->srna);
+					}
 				}
 			}
 		}
@@ -227,13 +225,19 @@ static const char *wm_dropbox_active(bContext *C, wmDrag *drag, const wmEvent *e
 	const char *name;
 
 	name = dropbox_active(C, &win->handlers, drag, event);
-	if (name) return name;
+	if (name) {
+		return name;
+	}
 
 	name = dropbox_active(C, &sa->handlers, drag, event);
-	if (name) return name;
+	if (name) {
+		return name;
+	}
 
 	name = dropbox_active(C, &ar->handlers, drag, event);
-	if (name) return name;
+	if (name) {
+		return name;
+	}
 
 	return NULL;
 }
@@ -246,8 +250,9 @@ static void wm_drop_operator_options(bContext *C, wmDrag *drag, const wmEvent *e
 	const int winsize_y = WM_window_pixels_y(win);
 
 	/* for multiwin drags, we only do this if mouse inside */
-	if (event->x < 0 || event->y < 0 || event->x > winsize_x || event->y > winsize_y)
+	if (event->x < 0 || event->y < 0 || event->x > winsize_x || event->y > winsize_y) {
 		return;
+	}
 
 	drag->opname[0] = 0;
 
@@ -366,14 +371,18 @@ static const char *wm_drag_name(wmDrag *drag)
 
 static void drag_rect_minmax(rcti *rect, int x1, int y1, int x2, int y2)
 {
-	if (rect->xmin > x1)
+	if (rect->xmin > x1) {
 		rect->xmin = x1;
-	if (rect->xmax < x2)
+	}
+	if (rect->xmax < x2) {
 		rect->xmax = x2;
-	if (rect->ymin > y1)
+	}
+	if (rect->ymin > y1) {
 		rect->ymin = y1;
-	if (rect->ymax < y2)
+	}
+	if (rect->ymax < y2) {
 		rect->ymax = y2;
+	}
 }
 
 /* called in wm_draw.c */
@@ -394,7 +403,7 @@ void wm_drags_draw(bContext *C, wmWindow *win, rcti *rect)
 	}
 
 	/* XXX todo, multiline drag draws... but maybe not, more types mixed wont work well */
-	glEnable(GL_BLEND);
+	GPU_blend(true);
 	for (drag = wm->drags.first; drag; drag = drag->next) {
 		const char text_col[] = {255, 255, 255, 255};
 		int iconsize = UI_DPI_ICON_SIZE;
@@ -405,8 +414,9 @@ void wm_drags_draw(bContext *C, wmWindow *win, rcti *rect)
 			x = cursorx - drag->sx / 2;
 			y = cursory - drag->sy / 2;
 
-			if (rect)
+			if (rect) {
 				drag_rect_minmax(rect, x, y, x + drag->sx, y + drag->sy);
+			}
 			else {
 				float col[4] = {1.0f, 1.0f, 1.0f, 0.65f}; /* this blends texture */
 				IMMDrawPixelsTexState state = immDrawPixelsTexSetup(GPU_SHADER_2D_IMAGE_COLOR);
@@ -418,10 +428,12 @@ void wm_drags_draw(bContext *C, wmWindow *win, rcti *rect)
 			x = cursorx - 2 * padding;
 			y = cursory - 2 * UI_DPI_FAC;
 
-			if (rect)
+			if (rect) {
 				drag_rect_minmax(rect, x, y, x + iconsize, y + iconsize);
-			else
+			}
+			else {
 				UI_icon_draw_aspect(x, y, drag->icon, 1.0f / UI_DPI_FAC, 0.8, text_col);
+			}
 		}
 
 		/* item name */
@@ -447,10 +459,12 @@ void wm_drags_draw(bContext *C, wmWindow *win, rcti *rect)
 			if (drag->imb) {
 				x = cursorx - drag->sx / 2;
 
-				if (cursory + drag->sy / 2 + padding + iconsize < winsize_y)
+				if (cursory + drag->sy / 2 + padding + iconsize < winsize_y) {
 					y = cursory + drag->sy / 2 + padding;
-				else
+				}
+				else {
 					y = cursory - drag->sy / 2 - padding - iconsize - padding - iconsize;
+				}
 			}
 			else {
 				x = cursorx - 2 * padding;
@@ -467,10 +481,11 @@ void wm_drags_draw(bContext *C, wmWindow *win, rcti *rect)
 				int w =  UI_fontstyle_string_width(fstyle, wm_drag_name(drag));
 				drag_rect_minmax(rect, x, y, x + w, y + iconsize);
 			}
-			else
+			else {
 				wm_drop_operator_draw(drag->opname, x, y);
+			}
 
 		}
 	}
-	glDisable(GL_BLEND);
+	GPU_blend(false);
 }

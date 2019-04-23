@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,15 +15,10 @@
  *
  * The Original Code is Copyright (C) 2009 Blender Foundation.
  * All rights reserved.
- *
- *
- * Contributor(s): Blender Foundation
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/blenfont/intern/blf_glyph.c
- *  \ingroup blf
+/** \file
+ * \ingroup blf
  *
  * Glyph rendering, texturing and caching. Wraps Freetype and OpenGL functions.
  */
@@ -52,7 +45,6 @@
 #include "BLI_rect.h"
 #include "BLI_threads.h"
 
-#include "BIF_gl.h"
 #include "BLF_api.h"
 
 #ifndef BLF_STANDALONE
@@ -97,11 +89,11 @@ KerningCacheBLF *blf_kerning_cache_new(FontBLF *font)
 				FT_UInt glyph_index = FT_Get_Char_Index(font->face, i);
 				g = blf_glyph_add(font, glyph_index, i);
 			}
-			/* Cannot fail since it has been added just before. */
+			/* Can fail on certain fonts */
 			GlyphBLF *g_prev = blf_glyph_search(font->glyph_cache, j);
 
 			FT_Vector delta = { .x = 0, .y = 0, };
-			if (FT_Get_Kerning(font->face, g_prev->idx, g->idx, kc->mode, &delta) == 0) {
+			if (g_prev && FT_Get_Kerning(font->face, g_prev->idx, g->idx, kc->mode, &delta) == 0) {
 				kc->table[i][j] = (int)delta.x >> 6;
 			}
 			else {
@@ -445,10 +437,26 @@ static void blf_glyph_calc_rect(rctf *rect, GlyphBLF *g, float x, float y)
 	rect->ymax = rect->ymin - (float)g->height;
 }
 
+static void blf_glyph_calc_rect_test(rctf *rect, GlyphBLF *g, float x, float y)
+{
+	/* Intentionally check with g->advance, because this is the
+	 * width used by BLF_width. This allows that the text slightly
+	 * overlaps the clipping border to achieve better alignment. */
+	rect->xmin = floorf(x);
+	rect->xmax = rect->xmin + MIN2(g->advance, (float)g->width);
+	rect->ymin = floorf(y);
+	rect->ymax = rect->ymin - (float)g->height;
+}
+
+static void blf_glyph_calc_rect_shadow(rctf *rect, GlyphBLF *g, float x, float y, FontBLF *font)
+{
+	blf_glyph_calc_rect(rect, g,
+	        x + (float)font->shadow_x,
+	        y + (float)font->shadow_y);
+}
+
 void blf_glyph_render(FontBLF *font, GlyphBLF *g, float x, float y)
 {
-	rctf rect;
-
 	if ((!g->width) || (!g->height))
 		return;
 
@@ -504,11 +512,9 @@ void blf_glyph_render(FontBLF *font, GlyphBLF *g, float x, float y)
 		g->build_tex = 1;
 	}
 
-	blf_glyph_calc_rect(&rect, g, x, y);
-
 	if (font->flags & BLF_CLIPPING) {
-		/* intentionally check clipping without shadow offset */
-		rctf rect_test = rect;
+		rctf rect_test;
+		blf_glyph_calc_rect_test(&rect_test, g, x, y);
 		BLI_rctf_translate(&rect_test, font->pos[0], font->pos[1]);
 
 		if (!BLI_rctf_inside_rctf(&font->clip_rec, &rect_test)) {
@@ -526,9 +532,7 @@ void blf_glyph_render(FontBLF *font, GlyphBLF *g, float x, float y)
 
 	if (font->flags & BLF_SHADOW) {
 		rctf rect_ofs;
-		blf_glyph_calc_rect(&rect_ofs, g,
-		                    x + (float)font->shadow_x,
-		                    y + (float)font->shadow_y);
+		blf_glyph_calc_rect_shadow(&rect_ofs, g, x, y, font);
 
 		if (font->shadow == 0) {
 			blf_texture_draw(font->shadow_color, g->uv, rect_ofs.xmin, rect_ofs.ymin, rect_ofs.xmax, rect_ofs.ymax);
@@ -542,6 +546,9 @@ void blf_glyph_render(FontBLF *font, GlyphBLF *g, float x, float y)
 			                  rect_ofs.xmin, rect_ofs.ymin, rect_ofs.xmax, rect_ofs.ymax);
 		}
 	}
+
+	rctf rect;
+	blf_glyph_calc_rect(&rect, g, x, y);
 
 #if BLF_BLUR_ENABLE
 	switch (font->blur) {

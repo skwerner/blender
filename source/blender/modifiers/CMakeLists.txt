@@ -16,12 +16,6 @@
 #
 # The Original Code is Copyright (C) 2006, Blender Foundation
 # All rights reserved.
-#
-# The Original Code is: all of this file.
-#
-# Contributor(s): Jacques Beaurain
-#                 Ben Batt
-#
 # ***** END GPL LICENSE BLOCK *****
 
 set(INC
@@ -96,8 +90,8 @@ set(SRC
 	intern/MOD_surfacedeform.c
 	intern/MOD_triangulate.c
 	intern/MOD_util.c
-	intern/MOD_uvwarp.c
 	intern/MOD_uvproject.c
+	intern/MOD_uvwarp.c
 	intern/MOD_warp.c
 	intern/MOD_wave.c
 	intern/MOD_weighted_normal.c
@@ -114,18 +108,29 @@ set(SRC
 	intern/MOD_weightvg_util.h
 )
 
+set(LIB
+	bf_blenkernel
+	bf_blenlib
+)
+
 if(WITH_ALEMBIC)
 	add_definitions(-DWITH_ALEMBIC)
 	list(APPEND INC
 		../alembic
 	)
+	list(APPEND LIB
+		bf_alembic
+	)
 endif()
 
 if(WITH_MOD_REMESH)
-	add_definitions(-DWITH_MOD_REMESH)
 	list(APPEND INC
 		../../../intern/dualcon
 	)
+	list(APPEND LIB
+		bf_intern_dualcon
+	)
+	add_definitions(-DWITH_MOD_REMESH)
 endif()
 
 if(WITH_MOD_FLUID)
@@ -137,6 +142,9 @@ if(WITH_MOD_OCEANSIM)
 endif()
 
 if(WITH_BULLET)
+	list(APPEND LIB
+		extern_bullet
+	)
 	add_definitions(-DWITH_BULLET)
 endif()
 
@@ -147,4 +155,4 @@ endif()
 # So we can have special tricks in modifier system.
 add_definitions(${GL_DEFINITIONS})
 
-blender_add_lib(bf_modifiers "${SRC}" "${INC}" "${INC_SYS}")
+blender_add_lib(bf_modifiers "${SRC}" "${INC}" "${INC_SYS}" "${LIB}")

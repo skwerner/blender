@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,14 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * Contributor(s): Joseph Eagar, Geoffrey Bantle, Campbell Barton
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/bmesh/intern/bmesh_opdefines.c
- *  \ingroup bmesh
+/** \file
+ * \ingroup bmesh
  *
  * BMesh operator definitions.
  *
@@ -51,7 +45,6 @@
  * (e.g. vertfaces.out), for three-type slots, use geom.  note that you can also
  * use more esoteric names (e.g. geom_skirt.out) so long as the comment next to the
  * slot definition tells you what types of elements are in it.
- *
  */
 
 #include "BLI_utildefines.h"
@@ -96,6 +89,9 @@
  * Both are acceptable.
  * note that '//' comments are ignored.
  */
+
+/* Keep struct definition from wrapping. */
+/* clang-format off */
 
 /* enums shared between multiple operators */
 
@@ -1141,7 +1137,7 @@ static BMO_FlagSet bmo_enum_dissolve_limit_flags[] = {
 	{BMO_DELIM_SEAM, "SEAM"},
 	{BMO_DELIM_SHARP, "SHARP"},
 	{BMO_DELIM_UV, "UV"},
-	{0, NULL}
+	{0, NULL},
 };
 
 /*
@@ -1398,6 +1394,7 @@ static BMOpDefine bmo_duplicate_def = {
 	/* destination bmesh, if NULL will use current on */
 	 {"dest", BMO_OP_SLOT_PTR, {(int)BMO_OP_SLOT_SUBTYPE_PTR_BMESH}},
 	 {"use_select_history", BMO_OP_SLOT_BOOL},
+	 {"use_edge_flip_from_face", BMO_OP_SLOT_BOOL},
 	 {{'\0'}},
 	},
 	/* slots_out */
@@ -1743,6 +1740,13 @@ static BMO_FlagSet bmo_enum_bevel_face_strength_type[] = {
 	{0, NULL},
 };
 
+static BMO_FlagSet bmo_enum_bevel_miter_type[] = {
+	{BEVEL_MITER_SHARP, "SHARP"},
+	{BEVEL_MITER_PATCH, "PATCH"},
+	{BEVEL_MITER_ARC, "ARC"},
+	{0, NULL},
+};
+
 /*
  * Bevel.
  *
@@ -1764,7 +1768,12 @@ static BMOpDefine bmo_bevel_def = {
 	 {"mark_sharp", BMO_OP_SLOT_BOOL},		/* extend edge data to allow sharp edges to run across bevels */
 	 {"harden_normals", BMO_OP_SLOT_BOOL},  /* harden normals */
 	 {"face_strength_mode", BMO_OP_SLOT_INT, {(int)BMO_OP_SLOT_SUBTYPE_INT_ENUM},
-	 	bmo_enum_bevel_face_strength_type}, /* whether to set face strength, and which faces to set if so */
+	  bmo_enum_bevel_face_strength_type}, /* whether to set face strength, and which faces to set if so */
+	 {"miter_outer", BMO_OP_SLOT_INT, {(int)BMO_OP_SLOT_SUBTYPE_INT_ENUM},
+	  bmo_enum_bevel_miter_type},         /* outer miter kind */
+	 {"miter_inner", BMO_OP_SLOT_INT, {(int)BMO_OP_SLOT_SUBTYPE_INT_ENUM},
+	  bmo_enum_bevel_miter_type},         /* outer miter kind */
+	 {"spread", BMO_OP_SLOT_FLT},           /* amount to offset beveled edge */
 	 {"smoothresh", BMO_OP_SLOT_FLT},       /* for passing mesh's smoothresh, used in hardening */
 	 {{'\0'}},
 	},
@@ -2060,6 +2069,8 @@ static BMOpDefine bmo_symmetrize_def = {
 	 BMO_OPTYPE_FLAG_SELECT_FLUSH |
 	 BMO_OPTYPE_FLAG_SELECT_VALIDATE),
 };
+
+/* clang-format on */
 
 const BMOpDefine *bmo_opdefines[] = {
 	&bmo_automerge_def,

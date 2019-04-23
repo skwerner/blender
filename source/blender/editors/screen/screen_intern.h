@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,27 +15,23 @@
  *
  * The Original Code is Copyright (C) 2008 Blender Foundation.
  * All rights reserved.
- *
- *
- * Contributor(s): Blender Foundation
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/screen/screen_intern.h
- *  \ingroup edscr
+/** \file
+ * \ingroup edscr
  */
 
 #ifndef __SCREEN_INTERN_H__
 #define __SCREEN_INTERN_H__
 
+struct Main;
 struct bContext;
 struct bContextDataResult;
-struct Main;
 
 /* internal exports only */
 
-#define AZONESPOT       (0.4f * U.widget_unit)
+#define AZONESPOTW      UI_HEADER_OFFSET       /* width of corner azone - max */
+#define AZONESPOTH      (0.6f * U.widget_unit) /* height of corner azone */
 #define AZONEFADEIN     (5.0f * U.widget_unit) /* when azone is totally visible */
 #define AZONEFADEOUT    (6.5f * U.widget_unit) /* when we start seeing the azone */
 

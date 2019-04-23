@@ -42,6 +42,7 @@
 #include "fx/Limiter.h"
 #include "fx/Loop.h"
 #include "fx/Lowpass.h"
+#include "fx/Modulator.h"
 #include "fx/MutableSound.h"
 #include "fx/Pitch.h"
 #include "fx/Reverse.h"
@@ -139,8 +140,6 @@ Sound_data(Sound* self)
 	sample_t* data = reinterpret_cast<sample_t*>(PyArray_DATA(array));
 
 	std::memcpy(data, buffer->getBuffer(), buffer->getSize());
-
-	Py_INCREF(array);
 
 	return reinterpret_cast<PyObject*>(array);
 }
@@ -1131,6 +1130,47 @@ Sound_lowpass(Sound* self, PyObject* args)
 	return (PyObject *)parent;
 }
 
+PyDoc_STRVAR(M_aud_Sound_modulate_doc,
+			 "modulate(sound)\n\n"
+			 "Modulates two factories.\n\n"
+			 ":arg sound: The sound to modulate over the other.\n"
+			 ":type sound: :class:`Sound`\n"
+			 ":return: The created :class:`Sound` object.\n"
+			 ":rtype: :class:`Sound`\n\n"
+			 ".. note:: The two factories have to have the same specifications "
+			 "(channels and samplerate).");
+
+static PyObject *
+Sound_modulate(Sound* self, PyObject* object)
+{
+	PyTypeObject* type = Py_TYPE(self);
+
+	if(!PyObject_TypeCheck(object, type))
+	{
+		PyErr_SetString(PyExc_TypeError, "Object is not of type Sound!");
+		return nullptr;
+	}
+
+	Sound* parent = (Sound*)type->tp_alloc(type, 0);
+	Sound* child = (Sound*)object;
+
+	if(parent != nullptr)
+	{
+		try
+		{
+			parent->sound = new std::shared_ptr<ISound>(new Modulator(*reinterpret_cast<std::shared_ptr<ISound>*>(self->sound), *reinterpret_cast<std::shared_ptr<ISound>*>(child->sound)));
+		}
+		catch(Exception& e)
+		{
+			Py_DECREF(parent);
+			PyErr_SetString(AUDError, e.what());
+			return nullptr;
+		}
+	}
+
+	return (PyObject *)parent;
+}
+
 PyDoc_STRVAR(M_aud_Sound_pitch_doc,
 			 "pitch(factor)\n\n"
 			 "Changes the pitch of a sound with a specific factor.\n\n"
@@ -1792,6 +1832,9 @@ static PyMethodDef Sound_methods[] = {
 	},
 	{"lowpass", (PyCFunction)Sound_lowpass, METH_VARARGS,
 	 M_aud_Sound_lowpass_doc
+	},
+	{"modulate", (PyCFunction)Sound_modulate, METH_O,
+	 M_aud_Sound_modulate_doc
 	},
 	{"pitch", (PyCFunction)Sound_pitch, METH_VARARGS,
 	 M_aud_Sound_pitch_doc

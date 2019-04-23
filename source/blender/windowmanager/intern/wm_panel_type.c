@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,12 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/windowmanager/intern/wm_panel_type.c
- *  \ingroup wm
+/** \file
+ * \ingroup wm
  *
  * Panel Registry.
  *
@@ -49,12 +45,14 @@ PanelType *WM_paneltype_find(const char *idname, bool quiet)
 
 	if (idname[0]) {
 		pt = BLI_ghash_lookup(g_paneltypes_hash, idname);
-		if (pt)
+		if (pt) {
 			return pt;
+		}
 	}
 
-	if (!quiet)
+	if (!quiet) {
 		printf("search for unknown paneltype %s\n", idname);
+	}
 
 	return NULL;
 }

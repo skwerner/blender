@@ -19,9 +19,6 @@
 # <pep8 compliant>
 import bpy
 from bpy.types import Header, Menu, Panel
-from .properties_grease_pencil_common import (
-    GPENCIL_UL_layer,
-)
 
 
 class TOPBAR_HT_upper_bar(Header):
@@ -90,12 +87,10 @@ class TOPBAR_HT_lower_bar(Header):
     def draw(self, context):
         region = context.region
 
-        if region.alignment == 'LEFT':
-            self.draw_left(context)
-        elif region.alignment == 'RIGHT':
+        if region.alignment == 'RIGHT':
             self.draw_right(context)
         else:
-            self.draw_center(context)
+            self.draw_left(context)
 
     def draw_left(self, context):
         layout = self.layout
@@ -158,9 +153,6 @@ class TOPBAR_HT_lower_bar(Header):
                     layout.popover_group(space_type='PROPERTIES', region_type='WINDOW', context=".paint_common_2d", category="")
             elif context.uv_sculpt_object is not None:
                 layout.popover_group(space_type='PROPERTIES', region_type='WINDOW', context=".uv_sculpt", category="")
-
-    def draw_center(self, context):
-        pass
 
     def draw_right(self, context):
         layout = self.layout
@@ -302,10 +294,12 @@ class _draw_left_context_mode:
             if tool is None:
                 return
 
-            is_paint = True
-            if tool.name in {"Line", "Box", "Circle", "Arc", "Curve"}:
-                is_paint = False
-            elif tool.name == "Cutter":
+            # is_paint = True
+            # FIXME: tools must use their own UI drawing!
+            if tool.idname in {"builtin.line", "builtin.box", "builtin.circle", "builtin.arc", "builtin.curve"}:
+                # is_paint = False
+                pass
+            elif tool.idname == "Cutter":
                 row = layout.row(align=True)
                 row.prop(context.tool_settings.gpencil_sculpt, "intersection_threshold")
                 return
@@ -322,7 +316,8 @@ class _draw_left_context_mode:
             def draw_color_selector():
                 ma = gp_settings.material
                 row = layout.row(align=True)
-
+                if not gp_settings.use_material_pin:
+                    ma = context.object.active_material
                 icon_id = 0
                 if ma:
                     icon_id = ma.id_data.preview.icon_id
@@ -349,7 +344,7 @@ class _draw_left_context_mode:
             settings = tool_settings.gpencil_paint
             row.template_ID_preview(settings, "brush", rows=3, cols=8, hide_buttons=True)
 
-            if brush.gpencil_tool in {'FILL', 'DRAW'}:
+            if context.object and brush.gpencil_tool in {'FILL', 'DRAW'}:
                 draw_color_selector()
 
             from .properties_paint_common import (
@@ -357,7 +352,8 @@ class _draw_left_context_mode:
             )
             brush_basic_gpencil_paint_settings(layout, context, brush, compact=True)
 
-            if tool.name in {"Arc", "Curve", "Line", "Box", "Circle"}:
+            # FIXME: tools must use their own UI drawing!
+            if tool.idname in {"builtin.arc", "builtin.curve", "builtin.line", "builtin.box", "builtin.circle"}:
                 settings = context.tool_settings.gpencil_sculpt
                 row = layout.row(align=True)
                 row.prop(settings, "use_thickness_curve", text="", icon='CURVE_DATA')
@@ -365,7 +361,16 @@ class _draw_left_context_mode:
                 sub.active = settings.use_thickness_curve
                 sub.popover(
                     panel="TOPBAR_PT_gpencil_primitive",
-                    text="Thickness Profile"
+                    text="Thickness Profile",
+                )
+
+            if brush.gpencil_tool == 'FILL':
+                settings = context.tool_settings.gpencil_sculpt
+                row = layout.row(align=True)
+                sub = row.row(align=True)
+                sub.popover(
+                    panel="TOPBAR_PT_gpencil_fill",
+                    text="Fill Options",
                 )
 
         @staticmethod
@@ -396,6 +401,9 @@ class _draw_left_context_mode:
 
         @staticmethod
         def PARTICLE(context, layout, tool):
+            if (tool is None) or (not tool.has_datablock):
+                return
+
             # See: 'VIEW3D_PT_tools_brush', basically a duplicate
             settings = context.tool_settings.particle_edit
             brush = settings.brush
@@ -417,8 +425,6 @@ class _draw_left_context_mode:
                         layout.row().prop(brush, "puff_mode", expand=True)
                         layout.prop(brush, "use_puff_volume")
                     elif tool == 'COMB':
-                        # Note: actually in 'Options' panel,
-                        # disabled when used in popover.
                         row = layout.row()
                         row.active = settings.is_editable
                         row.prop(settings, "use_emitter_deflect", text="Deflect Emitter")
@@ -438,12 +444,12 @@ class _draw_left_context_mode:
                         from .properties_paint_common import UnifiedPaintPanel
 
                         row = layout.row(align=True)
-                        UnifiedPaintPanel.prop_unified_size(row, context, brush, "size", slider=True, text="Radius")
-                        UnifiedPaintPanel.prop_unified_size(row, context, brush, "use_pressure_size")
+                        UnifiedPaintPanel.prop_unified_size(row, context, brush, "size", slider=True)
+                        UnifiedPaintPanel.prop_unified_size(row, context, brush, "use_pressure_size", text="")
 
                         row = layout.row(align=True)
-                        UnifiedPaintPanel.prop_unified_strength(row, context, brush, "strength", slider=True, text="Strength")
-                        UnifiedPaintPanel.prop_unified_strength(row, context, brush, "use_pressure_strength")
+                        UnifiedPaintPanel.prop_unified_strength(row, context, brush, "strength", slider=True)
+                        UnifiedPaintPanel.prop_unified_strength(row, context, brush, "use_pressure_strength", text="")
 
         @staticmethod
         def PAINT(context, layout, tool):
@@ -484,7 +490,6 @@ class TOPBAR_PT_gpencil_layers(Panel):
 
         return False
 
-    @staticmethod
     def draw(self, context):
         layout = self.layout
         gpd = context.gpencil_data
@@ -524,7 +529,7 @@ class TOPBAR_PT_gpencil_layers(Panel):
 
         gpl = context.active_gpencil_layer
         if gpl:
-            sub.menu("GPENCIL_MT_layer_specials", icon='DOWNARROW_HLT', text="")
+            sub.menu("GPENCIL_MT_layer_context_menu", icon='DOWNARROW_HLT', text="")
 
             if len(gpd.layers) > 1:
                 col.separator()
@@ -588,7 +593,7 @@ class TOPBAR_MT_file(Menu):
             app_template = None
 
         if app_template:
-            layout.label(text=bpy.path.display_name(app_template))
+            layout.label(text=bpy.path.display_name(app_template, has_ext=False))
             layout.operator("wm.save_homefile")
             layout.operator(
                 "wm.read_factory_settings",
@@ -600,7 +605,7 @@ class TOPBAR_MT_file(Menu):
 
         layout.separator()
 
-        layout.operator("wm.app_template_install", text="Install Application Template...")
+        layout.operator("preferences.app_template_install", text="Install Application Template...")
 
         layout.separator()
 
@@ -621,7 +626,7 @@ class TOPBAR_MT_file(Menu):
         layout.separator()
 
         layout.operator_context = 'EXEC_AREA'
-        if bpy.data.is_dirty and context.preferences.view.use_quit_dialog:
+        if bpy.data.is_dirty:
             layout.operator_context = 'INVOKE_SCREEN'  # quit dialog
         layout.operator("wm.quit_blender", text="Quit", icon='QUIT')
 
@@ -815,6 +820,13 @@ class TOPBAR_MT_edit(Menu):
 
         layout.separator()
 
+        # Mainly to expose shortcut since this depends on the context.
+        props = layout.operator("wm.call_panel", text="Rename Active Item...", icon='OUTLINER_DATA_FONT')
+        props.name = "TOPBAR_PT_name"
+        props.keep_open = False
+
+        layout.separator()
+
         # Should move elsewhere (impacts outliner & 3D view).
         tool_settings = context.tool_settings
         layout.prop(tool_settings, "lock_object_mode")
@@ -866,6 +878,10 @@ class TOPBAR_MT_help(Menu):
     bl_label = "Help"
 
     def draw(self, context):
+        # If 'url_prefill_from_blender' becomes slow it could be made into a separate operator
+        # to avoid constructing the bug report just to show this menu.
+        from bl_ui_utils.bug_report_url import url_prefill_from_blender
+
         layout = self.layout
 
         show_developer = context.preferences.view.show_developer_ui
@@ -876,7 +892,7 @@ class TOPBAR_MT_help(Menu):
 
         layout.operator(
             "wm.url_open", text="Report a Bug", icon='URL',
-        ).url = "https://developer.blender.org/maniphest/task/edit/form/1"
+        ).url = url_prefill_from_blender()
 
         layout.separator()
 
@@ -905,7 +921,7 @@ class TOPBAR_MT_help(Menu):
             "wm.url_open", text="Blender Store", icon='URL',
         ).url = "https://store.blender.org"
         layout.operator(
-            "wm.url_open", text="Development Fund", icon='URL'
+            "wm.url_open", text="Development Fund", icon='URL',
         ).url = "https://fund.blender.org"
         layout.operator(
             "wm.url_open", text="Donate", icon='URL',
@@ -927,7 +943,7 @@ class TOPBAR_MT_help(Menu):
         layout.operator("wm.splash", icon='BLENDER')
 
 
-class TOPBAR_MT_file_specials(Menu):
+class TOPBAR_MT_file_context_menu(Menu):
     bl_label = "File Context Menu"
 
     def draw(self, context):
@@ -946,31 +962,6 @@ class TOPBAR_MT_file_specials(Menu):
 
         layout.menu("TOPBAR_MT_file_import", icon='IMPORT')
         layout.menu("TOPBAR_MT_file_export", icon='EXPORT')
-
-
-class TOPBAR_MT_window_specials(Menu):
-    bl_label = "Window Context Menu"
-
-    def draw(self, context):
-        layout = self.layout
-
-        layout.operator_context = 'EXEC_AREA'
-
-        layout.operator("wm.window_new")
-        layout.operator("wm.window_new_main")
-
-        layout.operator_context = 'INVOKE_AREA'
-
-        layout.operator("screen.area_dupli", icon='DUPLICATE')
-
-        layout.separator()
-
-        layout.operator("screen.area_split", text="Horizontal Split").direction = 'HORIZONTAL'
-        layout.operator("screen.area_split", text="Vertical Split").direction = 'VERTICAL'
-
-        layout.separator()
-
-        layout.operator("wm.window_fullscreen_toggle", icon='FULLSCREEN_ENTER')
 
         layout.separator()
 
@@ -1028,7 +1019,6 @@ class TOPBAR_PT_gpencil_primitive(Panel):
     bl_region_type = 'HEADER'
     bl_label = "Primitives"
 
-    @staticmethod
     def draw(self, context):
         settings = context.tool_settings.gpencil_sculpt
 
@@ -1037,11 +1027,101 @@ class TOPBAR_PT_gpencil_primitive(Panel):
         layout.template_curve_mapping(settings, "thickness_primitive_curve", brush=True)
 
 
+# Grease Pencil Fill
+class TOPBAR_PT_gpencil_fill(Panel):
+    bl_space_type = 'VIEW_3D'
+    bl_region_type = 'HEADER'
+    bl_label = "Advanced"
+
+    @staticmethod
+    def draw(self, context):
+        paint = context.tool_settings.gpencil_paint
+        brush = paint.brush
+        gp_settings = brush.gpencil_settings
+
+        layout = self.layout
+        # Fill
+        row = layout.row(align=True)
+        row.prop(gp_settings, "fill_factor", text="Resolution")
+        if gp_settings.fill_draw_mode != 'STROKE':
+            row = layout.row(align=True)
+            row.prop(gp_settings, "show_fill", text="Ignore Transparent Strokes")
+            row = layout.row(align=True)
+            row.prop(gp_settings, "fill_threshold", text="Threshold")
+
+
+# Only a popover
+class TOPBAR_PT_name(Panel):
+    bl_space_type = 'TOPBAR'  # dummy
+    bl_region_type = 'WINDOW'
+    bl_label = "Rename Active Item"
+    bl_ui_units_x = 14
+
+    @classmethod
+    def poll(cls, context):
+        return True
+
+    def draw(self, context):
+        layout = self.layout
+
+        # Edit first editable button in popup
+        def row_with_icon(layout, icon):
+            row = layout.row()
+            row.activate_init = True
+            row.label(icon=icon)
+            return row
+
+        mode = context.mode
+        scene = context.scene
+        space = context.space_data
+        space_type = None if (space is None) else space.type
+        found = False
+        if space_type == 'SEQUENCE_EDITOR':
+            layout.label(text="Sequence Strip Name")
+            item = getattr(scene.sequence_editor, "active_strip")
+            if item:
+                row = row_with_icon(layout, 'SEQUENCE')
+                row.prop(item, "name", text="")
+                found = True
+        elif space_type == 'NODE_EDITOR':
+            layout.label(text="Node Label")
+            item = context.active_node
+            if item:
+                row = row_with_icon(layout, 'NODE')
+                row.prop(item, "label", text="")
+                found = True
+        else:
+            if mode == 'POSE' or (mode == 'WEIGHT_PAINT' and context.pose_object):
+                layout.label(text="Bone Name")
+                item = context.active_pose_bone
+                if item:
+                    row = row_with_icon(layout, 'BONE_DATA')
+                    row.prop(item, "name", text="")
+                    found = True
+            elif mode == 'EDIT_ARMATURE':
+                layout.label(text="Bone Name")
+                item = context.active_bone
+                if item:
+                    row = row_with_icon(layout, 'BONE_DATA')
+                    row.prop(item, "name", text="")
+                    found = True
+            else:
+                layout.label(text="Object Name")
+                item = context.object
+                if item:
+                    row = row_with_icon(layout, 'OBJECT_DATA')
+                    row.prop(item, "name", text="")
+                    found = True
+
+        if not found:
+            row = row_with_icon(layout, 'ERROR')
+            row.label(text="No active item")
+
+
 classes = (
     TOPBAR_HT_upper_bar,
     TOPBAR_HT_lower_bar,
-    TOPBAR_MT_file_specials,
-    TOPBAR_MT_window_specials,
+    TOPBAR_MT_file_context_menu,
     TOPBAR_MT_workspace_menu,
     TOPBAR_MT_editor_menus,
     TOPBAR_MT_file,
@@ -1058,6 +1138,8 @@ classes = (
     TOPBAR_PT_active_tool,
     TOPBAR_PT_gpencil_layers,
     TOPBAR_PT_gpencil_primitive,
+    TOPBAR_PT_gpencil_fill,
+    TOPBAR_PT_name,
 )
 
 if __name__ == "__main__":  # only for live edit.

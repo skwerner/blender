@@ -1,6 +1,4 @@
 /*
- * Copyright 2016, Blender Foundation.
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,13 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * Contributor(s): Blender Institute
- *
  */
 
-/** \file draw_cache.c
- *  \ingroup draw
+/** \file
+ * \ingroup draw
  */
 
 
@@ -37,13 +32,11 @@
 
 #include "BLI_utildefines.h"
 #include "BLI_math.h"
-#include "BLI_listbase.h"
 
 #include "BKE_object.h"
-#include "BKE_object_deform.h"
+#include "BKE_paint.h"
 
 #include "GPU_batch.h"
-#include "GPU_batch_presets.h"
 #include "GPU_batch_utils.h"
 
 #include "MEM_guardedalloc.h"
@@ -60,6 +53,7 @@ static struct DRWShapeCache {
 	GPUBatch *drw_fullscreen_quad;
 	GPUBatch *drw_fullscreen_quad_texcoord;
 	GPUBatch *drw_quad;
+	GPUBatch *drw_quad_wires;
 	GPUBatch *drw_grid;
 	GPUBatch *drw_sphere;
 	GPUBatch *drw_screenspace_circle;
@@ -85,16 +79,16 @@ static struct DRWShapeCache {
 	GPUBatch *drw_field_vortex;
 	GPUBatch *drw_field_tube_limit;
 	GPUBatch *drw_field_cone_limit;
-	GPUBatch *drw_lamp;
-	GPUBatch *drw_lamp_shadows;
-	GPUBatch *drw_lamp_sunrays;
-	GPUBatch *drw_lamp_area_square;
-	GPUBatch *drw_lamp_area_disk;
-	GPUBatch *drw_lamp_hemi;
-	GPUBatch *drw_lamp_spot;
-	GPUBatch *drw_lamp_spot_volume;
-	GPUBatch *drw_lamp_spot_square;
-	GPUBatch *drw_lamp_spot_square_volume;
+	GPUBatch *drw_light;
+	GPUBatch *drw_light_shadows;
+	GPUBatch *drw_light_sunrays;
+	GPUBatch *drw_light_area_square;
+	GPUBatch *drw_light_area_disk;
+	GPUBatch *drw_light_hemi;
+	GPUBatch *drw_light_spot;
+	GPUBatch *drw_light_spot_volume;
+	GPUBatch *drw_light_spot_square;
+	GPUBatch *drw_light_spot_square_volume;
 	GPUBatch *drw_speaker;
 	GPUBatch *drw_lightprobe_cube;
 	GPUBatch *drw_lightprobe_planar;
@@ -145,7 +139,6 @@ void DRW_shape_cache_reset(void)
 }
 
 /* -------------------------------------------------------------------- */
-
 /** \name Helper functions
  * \{ */
 
@@ -332,6 +325,32 @@ GPUBatch *DRW_cache_quad_get(void)
 	return SHC.drw_quad;
 }
 
+/* Just a regular quad with 4 vertices - wires. */
+GPUBatch *DRW_cache_quad_wires_get(void)
+{
+	if (!SHC.drw_quad_wires) {
+		float pos[4][2] = {{-1.0f, -1.0f}, { 1.0f, -1.0f}, {1.0f,  1.0f}, {-1.0f,  1.0f}};
+
+		/* Position Only 2D format */
+		static GPUVertFormat format = { 0 };
+		static struct { uint pos; } attr_id;
+		if (format.attr_len == 0) {
+			attr_id.pos = GPU_vertformat_attr_add(&format, "pos", GPU_COMP_F32, 2, GPU_FETCH_FLOAT);
+		}
+
+		GPUVertBuf *vbo = GPU_vertbuf_create_with_format(&format);
+		GPU_vertbuf_data_alloc(vbo, 8);
+
+		for (int i = 0; i < 4; i++) {
+			GPU_vertbuf_attr_set(vbo, attr_id.pos, i * 2,     pos[i % 4]);
+			GPU_vertbuf_attr_set(vbo, attr_id.pos, i * 2 + 1, pos[(i + 1) % 4]);
+		}
+
+		SHC.drw_quad_wires = GPU_batch_create_ex(GPU_PRIM_LINES, vbo, NULL, GPU_BATCH_OWNS_VBO);
+	}
+	return SHC.drw_quad_wires;
+}
+
 /* Grid */
 GPUBatch *DRW_cache_grid_get(void)
 {
@@ -386,7 +405,6 @@ GPUBatch *DRW_cache_sphere_get(void)
 /** \} */
 
 /* -------------------------------------------------------------------- */
-
 /** \name Common
  * \{ */
 
@@ -401,7 +419,7 @@ GPUBatch *DRW_cache_cube_get(void)
 			{ 1.0f, -1.0f, -1.0f},
 			{ 1.0f, -1.0f,  1.0f},
 			{ 1.0f,  1.0f, -1.0f},
-			{ 1.0f,  1.0f,  1.0f}
+			{ 1.0f,  1.0f,  1.0f},
 		};
 
 		const uint indices[36] = {
@@ -449,7 +467,7 @@ GPUBatch *DRW_cache_empty_cube_get(void)
 			{ 1.0f, -1.0f, -1.0f},
 			{ 1.0f, -1.0f,  1.0f},
 			{ 1.0f,  1.0f, -1.0f},
-			{ 1.0f,  1.0f,  1.0f}
+			{ 1.0f,  1.0f,  1.0f},
 		};
 
 		const GLubyte indices[24] = {0, 1, 1, 3, 3, 2, 2, 0, 0, 4, 4, 5, 5, 7, 7, 6, 6, 4, 1, 5, 3, 7, 2, 6};
@@ -667,9 +685,8 @@ GPUBatch *DRW_cache_gpencil_axes_get(void)
 
 
 /* -------------------------------------------------------------------- */
-
 /** \name Common Object API
-* \{ */
+ * \{ */
 
 GPUBatch *DRW_cache_object_all_edges_get(Object *ob)
 {
@@ -688,8 +705,14 @@ GPUBatch *DRW_cache_object_edge_detection_get(Object *ob, bool *r_is_manifold)
 	switch (ob->type) {
 		case OB_MESH:
 			return DRW_cache_mesh_edge_detection_get(ob, r_is_manifold);
-
-		/* TODO, should match 'DRW_cache_object_surface_get' */
+		case OB_CURVE:
+			return DRW_cache_curve_edge_detection_get(ob, r_is_manifold);
+		case OB_SURF:
+			return DRW_cache_surf_edge_detection_get(ob, r_is_manifold);
+		case OB_FONT:
+			return DRW_cache_text_edge_detection_get(ob, r_is_manifold);
+		case OB_MBALL:
+			return DRW_cache_mball_edge_detection_get(ob, r_is_manifold);
 		default:
 			return NULL;
 	}
@@ -781,7 +804,6 @@ GPUBatch **DRW_cache_object_surface_material_get(
 
 
 /* -------------------------------------------------------------------- */
-
 /** \name Empties
  * \{ */
 
@@ -980,7 +1002,7 @@ GPUBatch *DRW_cache_empty_capsule_body_get(void)
 			{-1.0f,  0.0f, 1.0f},
 			{-1.0f,  0.0f, 0.0f},
 			{ 0.0f, -1.0f, 1.0f},
-			{ 0.0f, -1.0f, 0.0f}
+			{ 0.0f, -1.0f, 0.0f},
 		};
 
 		/* Position Only 3D format */
@@ -1306,14 +1328,13 @@ GPUBatch *DRW_cache_field_cone_limit_get(void)
 /** \} */
 
 /* -------------------------------------------------------------------- */
-
-/** \name Lamps
+/** \name Lights
  * \{ */
 
-GPUBatch *DRW_cache_lamp_get(void)
+GPUBatch *DRW_cache_light_get(void)
 {
 #define NSEGMENTS 8
-	if (!SHC.drw_lamp) {
+	if (!SHC.drw_light) {
 		float v[2];
 
 		/* Position Only 3D format */
@@ -1336,16 +1357,16 @@ GPUBatch *DRW_cache_lamp_get(void)
 			GPU_vertbuf_attr_set(vbo, attr_id.pos, a + 1, v);
 		}
 
-		SHC.drw_lamp = GPU_batch_create_ex(GPU_PRIM_LINES, vbo, NULL, GPU_BATCH_OWNS_VBO);
+		SHC.drw_light = GPU_batch_create_ex(GPU_PRIM_LINES, vbo, NULL, GPU_BATCH_OWNS_VBO);
 	}
-	return SHC.drw_lamp;
+	return SHC.drw_light;
 #undef NSEGMENTS
 }
 
-GPUBatch *DRW_cache_lamp_shadows_get(void)
+GPUBatch *DRW_cache_light_shadows_get(void)
 {
 #define NSEGMENTS 10
-	if (!SHC.drw_lamp_shadows) {
+	if (!SHC.drw_light_shadows) {
 		float v[2];
 
 		/* Position Only 3D format */
@@ -1368,15 +1389,15 @@ GPUBatch *DRW_cache_lamp_shadows_get(void)
 			GPU_vertbuf_attr_set(vbo, attr_id.pos, a + 1, v);
 		}
 
-		SHC.drw_lamp_shadows = GPU_batch_create_ex(GPU_PRIM_LINES, vbo, NULL, GPU_BATCH_OWNS_VBO);
+		SHC.drw_light_shadows = GPU_batch_create_ex(GPU_PRIM_LINES, vbo, NULL, GPU_BATCH_OWNS_VBO);
 	}
-	return SHC.drw_lamp_shadows;
+	return SHC.drw_light_shadows;
 #undef NSEGMENTS
 }
 
-GPUBatch *DRW_cache_lamp_sunrays_get(void)
+GPUBatch *DRW_cache_light_sunrays_get(void)
 {
-	if (!SHC.drw_lamp_sunrays) {
+	if (!SHC.drw_light_sunrays) {
 		float v[2], v1[2], v2[2];
 
 		/* Position Only 2D format */
@@ -1404,14 +1425,14 @@ GPUBatch *DRW_cache_lamp_sunrays_get(void)
 			GPU_vertbuf_attr_set(vbo, attr_id.pos, a * 4 + 3, v2);
 		}
 
-		SHC.drw_lamp_sunrays = GPU_batch_create_ex(GPU_PRIM_LINES, vbo, NULL, GPU_BATCH_OWNS_VBO);
+		SHC.drw_light_sunrays = GPU_batch_create_ex(GPU_PRIM_LINES, vbo, NULL, GPU_BATCH_OWNS_VBO);
 	}
-	return SHC.drw_lamp_sunrays;
+	return SHC.drw_light_sunrays;
 }
 
-GPUBatch *DRW_cache_lamp_area_square_get(void)
+GPUBatch *DRW_cache_light_area_square_get(void)
 {
-	if (!SHC.drw_lamp_area_square) {
+	if (!SHC.drw_light_area_square) {
 		float v1[3] = {0.0f, 0.0f, 0.0f};
 
 		/* Position Only 3D format */
@@ -1438,15 +1459,15 @@ GPUBatch *DRW_cache_lamp_area_square_get(void)
 		v1[1] = 0.5f;
 		GPU_vertbuf_attr_set(vbo, attr_id.pos, 7, v1);
 
-		SHC.drw_lamp_area_square = GPU_batch_create_ex(GPU_PRIM_LINES, vbo, NULL, GPU_BATCH_OWNS_VBO);
+		SHC.drw_light_area_square = GPU_batch_create_ex(GPU_PRIM_LINES, vbo, NULL, GPU_BATCH_OWNS_VBO);
 	}
-	return SHC.drw_lamp_area_square;
+	return SHC.drw_light_area_square;
 }
 
-GPUBatch *DRW_cache_lamp_area_disk_get(void)
+GPUBatch *DRW_cache_light_area_disk_get(void)
 {
 #define NSEGMENTS 32
-	if (!SHC.drw_lamp_area_disk) {
+	if (!SHC.drw_light_area_disk) {
 		/* Position Only 3D format */
 		static GPUVertFormat format = { 0 };
 		static struct { uint pos; } attr_id;
@@ -1468,16 +1489,16 @@ GPUBatch *DRW_cache_lamp_area_disk_get(void)
 		copy_v3_fl3(v, 0.0f, 0.5f, 0.0f);
 		GPU_vertbuf_attr_set(vbo, attr_id.pos, (2 * NSEGMENTS) - 1, v);
 
-		SHC.drw_lamp_area_disk = GPU_batch_create_ex(GPU_PRIM_LINES, vbo, NULL, GPU_BATCH_OWNS_VBO);
+		SHC.drw_light_area_disk = GPU_batch_create_ex(GPU_PRIM_LINES, vbo, NULL, GPU_BATCH_OWNS_VBO);
 	}
-	return SHC.drw_lamp_area_disk;
+	return SHC.drw_light_area_disk;
 #undef NSEGMENTS
 }
 
-GPUBatch *DRW_cache_lamp_hemi_get(void)
+GPUBatch *DRW_cache_light_hemi_get(void)
 {
 #define CIRCLE_RESOL 32
-	if (!SHC.drw_lamp_hemi) {
+	if (!SHC.drw_light_hemi) {
 		float v[3];
 		int vidx = 0;
 
@@ -1531,17 +1552,17 @@ GPUBatch *DRW_cache_lamp_hemi_get(void)
 		}
 
 
-		SHC.drw_lamp_hemi = GPU_batch_create_ex(GPU_PRIM_LINES, vbo, NULL, GPU_BATCH_OWNS_VBO);
+		SHC.drw_light_hemi = GPU_batch_create_ex(GPU_PRIM_LINES, vbo, NULL, GPU_BATCH_OWNS_VBO);
 	}
-	return SHC.drw_lamp_hemi;
+	return SHC.drw_light_hemi;
 #undef CIRCLE_RESOL
 }
 
 
-GPUBatch *DRW_cache_lamp_spot_get(void)
+GPUBatch *DRW_cache_light_spot_get(void)
 {
 #define NSEGMENTS 32
-	if (!SHC.drw_lamp_spot) {
+	if (!SHC.drw_light_spot) {
 		/* a single ring of vertices */
 		float p[NSEGMENTS][2];
 		float n[NSEGMENTS][3];
@@ -1600,16 +1621,16 @@ GPUBatch *DRW_cache_lamp_spot_get(void)
 			GPU_vertbuf_attr_set(vbo, attr_id.n2, i * 4 + 3, neg[(i) % NSEGMENTS]);
 		}
 
-		SHC.drw_lamp_spot = GPU_batch_create_ex(GPU_PRIM_LINES, vbo, NULL, GPU_BATCH_OWNS_VBO);
+		SHC.drw_light_spot = GPU_batch_create_ex(GPU_PRIM_LINES, vbo, NULL, GPU_BATCH_OWNS_VBO);
 	}
-	return SHC.drw_lamp_spot;
+	return SHC.drw_light_spot;
 #undef NSEGMENTS
 }
 
-GPUBatch *DRW_cache_lamp_spot_volume_get(void)
+GPUBatch *DRW_cache_light_spot_volume_get(void)
 {
 #define NSEGMENTS 32
-	if (!SHC.drw_lamp_spot_volume) {
+	if (!SHC.drw_light_spot_volume) {
 		/* a single ring of vertices */
 		float p[NSEGMENTS][2];
 		for (int i = 0; i < NSEGMENTS; ++i) {
@@ -1645,15 +1666,15 @@ GPUBatch *DRW_cache_lamp_spot_volume_get(void)
 			GPU_vertbuf_attr_set(vbo, attr_id.pos, v_idx++, v);
 		}
 
-		SHC.drw_lamp_spot_volume = GPU_batch_create_ex(GPU_PRIM_TRIS, vbo, NULL, GPU_BATCH_OWNS_VBO);
+		SHC.drw_light_spot_volume = GPU_batch_create_ex(GPU_PRIM_TRIS, vbo, NULL, GPU_BATCH_OWNS_VBO);
 	}
-	return SHC.drw_lamp_spot_volume;
+	return SHC.drw_light_spot_volume;
 #undef NSEGMENTS
 }
 
-GPUBatch *DRW_cache_lamp_spot_square_get(void)
+GPUBatch *DRW_cache_light_spot_square_get(void)
 {
-	if (!SHC.drw_lamp_spot_square) {
+	if (!SHC.drw_light_spot_square) {
 		float p[5][3] = {
 			{ 0.0f,  0.0f,  0.0f},
 			{ 1.0f,  1.0f, -1.0f},
@@ -1682,14 +1703,14 @@ GPUBatch *DRW_cache_lamp_spot_square_get(void)
 			GPU_vertbuf_attr_set(vbo, attr_id.pos, v_idx++, p[((i + 1) % 4) + 1]);
 		}
 
-		SHC.drw_lamp_spot_square = GPU_batch_create_ex(GPU_PRIM_LINES, vbo, NULL, GPU_BATCH_OWNS_VBO);
+		SHC.drw_light_spot_square = GPU_batch_create_ex(GPU_PRIM_LINES, vbo, NULL, GPU_BATCH_OWNS_VBO);
 	}
-	return SHC.drw_lamp_spot_square;
+	return SHC.drw_light_spot_square;
 }
 
-GPUBatch *DRW_cache_lamp_spot_square_volume_get(void)
+GPUBatch *DRW_cache_light_spot_square_volume_get(void)
 {
-	if (!SHC.drw_lamp_spot_square_volume) {
+	if (!SHC.drw_light_spot_square_volume) {
 		float p[5][3] = {
 			{ 0.0f,  0.0f,  0.0f},
 			{ 1.0f,  1.0f, -1.0f},
@@ -1716,15 +1737,14 @@ GPUBatch *DRW_cache_lamp_spot_square_volume_get(void)
 			GPU_vertbuf_attr_set(vbo, attr_id.pos, v_idx++, p[(i % 4) + 1]);
 		}
 
-		SHC.drw_lamp_spot_square_volume = GPU_batch_create_ex(GPU_PRIM_TRIS, vbo, NULL, GPU_BATCH_OWNS_VBO);
+		SHC.drw_light_spot_square_volume = GPU_batch_create_ex(GPU_PRIM_TRIS, vbo, NULL, GPU_BATCH_OWNS_VBO);
 	}
-	return SHC.drw_lamp_spot_square_volume;
+	return SHC.drw_light_spot_square_volume;
 }
 
 /** \} */
 
 /* -------------------------------------------------------------------- */
-
 /** \name Speaker
  * \{ */
 
@@ -1788,7 +1808,6 @@ GPUBatch *DRW_cache_speaker_get(void)
 /** \} */
 
 /* -------------------------------------------------------------------- */
-
 /** \name Probe
  * \{ */
 
@@ -1929,7 +1948,6 @@ GPUBatch *DRW_cache_lightprobe_planar_get(void)
 /** \} */
 
 /* -------------------------------------------------------------------- */
-
 /** \name Armature Bones
  * \{ */
 
@@ -1939,7 +1957,7 @@ static const float bone_octahedral_verts[6][3] = {
 	{ 0.1f, 0.1f, -0.1f},
 	{-0.1f, 0.1f, -0.1f},
 	{-0.1f, 0.1f,  0.1f},
-	{ 0.0f, 1.0f,  0.0f}
+	{ 0.0f, 1.0f,  0.0f},
 };
 
 static const float bone_octahedral_smooth_normals[6][3] = {
@@ -1955,7 +1973,7 @@ static const float bone_octahedral_smooth_normals[6][3] = {
 	{-M_SQRT1_2, 0.0f, -M_SQRT1_2},
 	{-M_SQRT1_2, 0.0f,  M_SQRT1_2},
 #endif
-	{ 0.0f,  1.0f,  0.0f}
+	{ 0.0f,  1.0f,  0.0f},
 };
 
 #if 0  /* UNUSED */
@@ -1984,7 +2002,7 @@ static const uint bone_octahedral_solid_tris[8][3] = {
 	{5, 1, 2}, /* top */
 	{5, 2, 3},
 	{5, 3, 4},
-	{5, 4, 1}
+	{5, 4, 1},
 };
 
 /**
@@ -1997,7 +2015,7 @@ static const uint bone_octahedral_solid_tris[8][3] = {
  * According to opengl specification it becomes (starting from
  * the first vertex of the first face aka. vertex 2):
  * {0, 12, 1, 10, 2, 3}
- **/
+ */
 static const uint bone_octahedral_wire_lines_adjacency[12][4] = {
 	{ 0, 1, 2,  6}, { 0, 12, 1,  6}, { 0, 3, 12,  6}, { 0, 2, 3,  6},
 	{ 1, 6, 2,  3}, { 1, 12, 6,  3}, { 1, 0, 12,  3}, { 1, 2, 0,  3},
@@ -2027,7 +2045,7 @@ static const float bone_octahedral_solid_normals[8][3] = {
 	{ 0.99388373f,  0.11043154f, -0.00000000f},
 	{ 0.00000000f,  0.11043154f, -0.99388373f},
 	{-0.99388373f,  0.11043154f,  0.00000000f},
-	{ 0.00000000f,  0.11043154f,  0.99388373f}
+	{ 0.00000000f,  0.11043154f,  0.99388373f},
 };
 
 GPUBatch *DRW_cache_bone_octahedral_get(void)
@@ -2096,7 +2114,7 @@ static const float bone_box_verts[8][3] = {
 	{ 1.0f, 1.0f,  1.0f},
 	{ 1.0f, 1.0f, -1.0f},
 	{-1.0f, 1.0f, -1.0f},
-	{-1.0f, 1.0f,  1.0f}
+	{-1.0f, 1.0f,  1.0f},
 };
 
 static const float bone_box_smooth_normals[8][3] = {
@@ -2149,7 +2167,7 @@ static const uint bone_box_solid_tris[12][3] = {
 /**
  * Store indices of generated verts from bone_box_solid_tris to define adjacency infos.
  * See bone_octahedral_solid_tris for more infos.
- **/
+ */
 static const uint bone_box_wire_lines_adjacency[12][4] = {
 	{ 4,  2,  0, 11}, { 0,  1, 2,  8}, { 2, 4,  1,  14}, {  1,  0,  4, 20}, /* bottom */
 	{ 0,  8, 11, 14}, { 2, 14, 8, 20}, { 1, 20, 14, 11}, {  4, 11, 20,  8}, /* top */
@@ -2576,7 +2594,7 @@ static void set_bone_axis_vert(
 #define S_Y 0.025f
 static float x_axis_name[4][2] = {
 	{ 0.9f * S_X,  1.0f * S_Y}, {-1.0f * S_X, -1.0f * S_Y},
-	{-0.9f * S_X,  1.0f * S_Y}, { 1.0f * S_X, -1.0f * S_Y}
+	{-0.9f * S_X,  1.0f * S_Y}, { 1.0f * S_X, -1.0f * S_Y},
 };
 #define X_LEN (sizeof(x_axis_name) / (sizeof(float) * 2))
 #undef S_X
@@ -2587,7 +2605,7 @@ static float x_axis_name[4][2] = {
 static float y_axis_name[6][2] = {
 	{-1.0f * S_X,  1.0f * S_Y}, { 0.0f * S_X, -0.1f * S_Y},
 	{ 1.0f * S_X,  1.0f * S_Y}, { 0.0f * S_X, -0.1f * S_Y},
-	{ 0.0f * S_X, -0.1f * S_Y}, { 0.0f * S_X, -1.0f * S_Y}
+	{ 0.0f * S_X, -0.1f * S_Y}, { 0.0f * S_X, -1.0f * S_Y},
 };
 #define Y_LEN (sizeof(y_axis_name) / (sizeof(float) * 2))
 #undef S_X
@@ -2600,7 +2618,7 @@ static float z_axis_name[10][2] = {
 	{ 0.95f * S_X,  1.00f * S_Y}, { 0.95f * S_X,  0.90f * S_Y},
 	{ 0.95f * S_X,  0.90f * S_Y}, {-1.00f * S_X, -0.90f * S_Y},
 	{-1.00f * S_X, -0.90f * S_Y}, {-1.00f * S_X, -1.00f * S_Y},
-	{-1.00f * S_X, -1.00f * S_Y}, { 1.00f * S_X, -1.00f * S_Y}
+	{-1.00f * S_X, -1.00f * S_Y}, { 1.00f * S_X, -1.00f * S_Y},
 };
 #define Z_LEN (sizeof(z_axis_name) / (sizeof(float) * 2))
 #undef S_X
@@ -2634,7 +2652,7 @@ static float axis_name_shadow[8][2] = {
 	{-S_X + O_X,  S_Y + O_Y}, { S_X + O_X,  S_Y + O_Y},
 	{ S_X + O_X,  S_Y + O_Y}, { S_X + O_X, -S_Y + O_Y},
 	{ S_X + O_X, -S_Y + O_Y}, {-S_X + O_X, -S_Y + O_Y},
-	{-S_X + O_X, -S_Y + O_Y}, {-S_X + O_X,  S_Y + O_Y}
+	{-S_X + O_X, -S_Y + O_Y}, {-S_X + O_X,  S_Y + O_Y},
 };
 // #define SHADOW_RES (sizeof(axis_name_shadow) / (sizeof(float) * 2))
 #define SHADOW_RES 0
@@ -2730,12 +2748,13 @@ static const float staticSine[16] = {
 	0.406736643076f, 0.5f, 0.587785252292f, 0.669130606359f,
 	0.743144825477f, 0.809016994375f, 0.866025403784f,
 	0.913545457643f, 0.951056516295f, 0.978147600734f,
-	0.994521895368f, 1.0f
+	0.994521895368f, 1.0f,
 };
 
-#define set_vert(a, b, quarter) \
-        copy_v2_fl2(pos, (quarter % 2 == 0) ? -(a) : (a), (quarter < 2) ? -(b) : (b)); \
-        GPU_vertbuf_attr_set(vbo, attr_id.pos, v++, pos);
+#define set_vert(a, b, quarter) { \
+		copy_v2_fl2(pos, (quarter % 2 == 0) ? -(a) : (a), (quarter < 2) ? -(b) : (b)); \
+		GPU_vertbuf_attr_set(vbo, attr_id.pos, v++, pos); \
+	} ((void)0)
 
 GPUBatch *DRW_cache_bone_dof_sphere_get(void)
 {
@@ -2822,7 +2841,6 @@ GPUBatch *DRW_cache_bone_dof_lines_get(void)
 /** \} */
 
 /* -------------------------------------------------------------------- */
-
 /** \name Camera
  * \{ */
 
@@ -2968,7 +2986,6 @@ GPUBatch *DRW_cache_camera_tria_get(void)
 /** \} */
 
 /* -------------------------------------------------------------------- */
-
 /** \name Object Mode Helpers
  * \{ */
 
@@ -2998,7 +3015,6 @@ GPUBatch *DRW_cache_single_vert_get(void)
 /** \} */
 
 /* -------------------------------------------------------------------- */
-
 /** \name Meshes
  * \{ */
 
@@ -3091,7 +3107,6 @@ void DRW_cache_mesh_sculpt_coords_ensure(Object *ob)
 /** \} */
 
 /* -------------------------------------------------------------------- */
-
 /** \name Curve
  * \{ */
 
@@ -3171,6 +3186,19 @@ GPUBatch *DRW_cache_curve_face_wireframe_get(Object *ob)
 	}
 }
 
+GPUBatch *DRW_cache_curve_edge_detection_get(Object *ob, bool *r_is_manifold)
+{
+	BLI_assert(ob->type == OB_CURVE);
+	struct Curve *cu = ob->data;
+	struct Mesh *mesh_eval = ob->runtime.mesh_eval;
+	if (mesh_eval != NULL) {
+		return DRW_mesh_batch_cache_get_edge_detection(mesh_eval, r_is_manifold);
+	}
+	else {
+		return DRW_curve_batch_cache_get_edge_detection(cu, r_is_manifold);
+	}
+}
+
 /* Return list of batches */
 GPUBatch **DRW_cache_curve_surface_shaded_get(
         Object *ob, struct GPUMaterial **gpumat_array, uint gpumat_array_len)
@@ -3190,7 +3218,6 @@ GPUBatch **DRW_cache_curve_surface_shaded_get(
 /** \} */
 
 /* -------------------------------------------------------------------- */
-
 /** \name MetaBall
  * \{ */
 
@@ -3198,6 +3225,12 @@ GPUBatch *DRW_cache_mball_surface_get(Object *ob)
 {
 	BLI_assert(ob->type == OB_MBALL);
 	return DRW_metaball_batch_cache_get_triangles_with_normals(ob);
+}
+
+GPUBatch *DRW_cache_mball_edge_detection_get(Object *ob, bool *r_is_manifold)
+{
+	BLI_assert(ob->type == OB_MBALL);
+	return DRW_metaball_batch_cache_get_edge_detection(ob, r_is_manifold);
 }
 
 GPUBatch *DRW_cache_mball_face_wireframe_get(Object *ob)
@@ -3217,7 +3250,6 @@ GPUBatch **DRW_cache_mball_surface_shaded_get(
 /** \} */
 
 /* -------------------------------------------------------------------- */
-
 /** \name Font
  * \{ */
 
@@ -3242,6 +3274,22 @@ GPUBatch *DRW_cache_text_surface_get(Object *ob)
 	}
 	else {
 		return DRW_curve_batch_cache_get_triangles_with_normals(cu);
+	}
+}
+
+GPUBatch *DRW_cache_text_edge_detection_get(Object *ob, bool *r_is_manifold)
+{
+	BLI_assert(ob->type == OB_FONT);
+	struct Curve *cu = ob->data;
+	struct Mesh *mesh_eval = ob->runtime.mesh_eval;
+	if (cu->editfont && (cu->flag & CU_FAST)) {
+		return NULL;
+	}
+	if (mesh_eval != NULL) {
+		return DRW_mesh_batch_cache_get_edge_detection(mesh_eval, r_is_manifold);
+	}
+	else {
+		return DRW_curve_batch_cache_get_edge_detection(cu, r_is_manifold);
 	}
 }
 
@@ -3298,7 +3346,6 @@ GPUBatch **DRW_cache_text_surface_shaded_get(
 /** \} */
 
 /* -------------------------------------------------------------------- */
-
 /** \name Surface
  * \{ */
 
@@ -3338,6 +3385,19 @@ GPUBatch *DRW_cache_surf_face_wireframe_get(Object *ob)
 	}
 }
 
+GPUBatch *DRW_cache_surf_edge_detection_get(Object *ob, bool *r_is_manifold)
+{
+	BLI_assert(ob->type == OB_SURF);
+	struct Curve *cu = ob->data;
+	struct Mesh *mesh_eval = ob->runtime.mesh_eval;
+	if (mesh_eval != NULL) {
+		return DRW_mesh_batch_cache_get_edge_detection(mesh_eval, r_is_manifold);
+	}
+	else {
+		return DRW_curve_batch_cache_get_edge_detection(cu, r_is_manifold);
+	}
+}
+
 GPUBatch *DRW_cache_surf_loose_edges_get(Object *ob)
 {
 	BLI_assert(ob->type == OB_SURF);
@@ -3373,7 +3433,6 @@ GPUBatch **DRW_cache_surf_surface_shaded_get(
 /** \} */
 
 /* -------------------------------------------------------------------- */
-
 /** \name Lattice
  * \{ */
 
@@ -3410,7 +3469,6 @@ GPUBatch *DRW_cache_lattice_vert_overlay_get(Object *ob)
 /** \} */
 
 /* -------------------------------------------------------------------- */
-
 /** \name Particles
  * \{ */
 
@@ -3620,10 +3678,7 @@ GPUBatch *DRW_cache_cursor_get(bool crosshair_lines)
 			float x = f10 * cosf(angle);
 			float y = f10 * sinf(angle);
 
-			if (i % 2 == 0)
-				GPU_vertbuf_attr_set(vbo, attr_id.color, v, red);
-			else
-				GPU_vertbuf_attr_set(vbo, attr_id.color, v, white);
+			GPU_vertbuf_attr_set(vbo, attr_id.color, v, (i % 2 == 0) ? red : white);
 
 			GPU_vertbuf_attr_set(vbo, attr_id.pos, v, (const float[2]){x, y});
 			GPU_indexbuf_add_generic_vert(&elb, v++);
@@ -3681,7 +3736,6 @@ GPUBatch *DRW_cache_cursor_get(bool crosshair_lines)
 /** \} */
 
 /* -------------------------------------------------------------------- */
-
 /** \name Batch Cache Impl. common
  * \{ */
 
@@ -3751,10 +3805,15 @@ void drw_batch_cache_generate_requested(Object *ob)
 {
 	const DRWContextState *draw_ctx = DRW_context_state_get();
 	const ToolSettings *ts = draw_ctx->scene->toolsettings;
-	const int mode = CTX_data_mode_enum_ex(draw_ctx->object_edit, draw_ctx->obact, draw_ctx->object_mode);
+	const enum eContextObjectMode mode = CTX_data_mode_enum_ex(
+	        draw_ctx->object_edit, draw_ctx->obact, draw_ctx->object_mode);
 	const bool is_paint_mode = ELEM(mode, CTX_MODE_PAINT_TEXTURE, CTX_MODE_PAINT_VERTEX, CTX_MODE_PAINT_WEIGHT);
-	const bool use_hide = (ob->type == OB_MESH) && ((is_paint_mode && (ob == draw_ctx->obact)) ||
-	                                               ((mode == CTX_MODE_EDIT_MESH) && BKE_object_is_in_editmode(ob)));
+
+	const bool use_hide = (
+	        (ob->type == OB_MESH) &&
+	        ((is_paint_mode && (ob == draw_ctx->obact) &&
+	          DRW_object_use_hide_faces(ob)) ||
+	         ((mode == CTX_MODE_EDIT_MESH) && BKE_object_is_in_editmode(ob))));
 
 	struct Mesh *mesh_eval = ob->runtime.mesh_eval;
 	switch (ob->type) {

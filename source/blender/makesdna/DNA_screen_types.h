@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,14 +15,10 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * Contributor(s): Blender Foundation
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file DNA_screen_types.h
- *  \ingroup DNA
+/** \file
+ * \ingroup DNA
  */
 
 #ifndef __DNA_SCREEN_TYPES_H__
@@ -37,12 +31,12 @@
 
 #include "DNA_ID.h"
 
-struct SpaceType;
-struct SpaceLink;
 struct ARegion;
 struct ARegionType;
 struct PanelType;
 struct Scene;
+struct SpaceLink;
+struct SpaceType;
 struct uiLayout;
 struct wmDrawBuffer;
 struct wmTimer;
@@ -72,10 +66,7 @@ typedef struct bScreen {
 	short flag;
 	/** Winid from WM, starts with 1. */
 	short winid;
-	/**
-	 * User-setting for which editors get redrawn during anim playback
-	 * (used to be time->redraws).
-	 */
+	/** User-setting for which editors get redrawn during anim playback. */
 	short redraws_flag;
 
 	/** Temp screen in a temp window, don't save (like user prefs). */
@@ -96,7 +87,7 @@ typedef struct bScreen {
 	char skip_handling;
 	/** Set when scrubbing to avoid some costly updates. */
 	char scrubbing;
-	char pad[1];
+	char _pad[1];
 
 	/** Active region that has mouse focus. */
 	struct ARegion *active_region;
@@ -125,7 +116,7 @@ typedef struct ScrEdge {
 	/** 1 when at edge of screen. */
 	short border;
 	short flag;
-	int pad;
+	char _pad[4];
 } ScrEdge;
 
 typedef struct ScrAreaMap {
@@ -150,7 +141,7 @@ typedef struct Panel {
 
 	/** Defined as UI_MAX_NAME_STR. */
 	char panelname[64], tabname[64];
-	/** Panelname is identifier for restoring location. */
+	/** Panel name is identifier for restoring location. */
 	char drawname[64];
 	/** Offset within the region. */
 	int ofsx, ofsy;
@@ -158,11 +149,12 @@ typedef struct Panel {
 	int sizex, sizey;
 	/** Panel size excluding children. */
 	int blocksizex, blocksizey;
-	short labelofs, pad;
+	short labelofs;
+	char _pad[2];
 	short flag, runtime_flag;
 	short control;
 	short snap;
-	/** Panels are aligned according to increasing sortorder. */
+	/** Panels are aligned according to increasing sort-order. */
 	int sortorder;
 	/** This panel is tabbed in *paneltab. */
 	struct Panel *paneltab;
@@ -173,15 +165,16 @@ typedef struct Panel {
 } Panel;
 
 
-/* Notes on Panel Catogories:
+/**
+ * Notes on Panel Categories:
  *
- * ar->panels_category (PanelCategoryDyn) is a runtime only list of categories collected during draw.
+ * - #ARegion.panels_category (#PanelCategoryDyn) is a runtime only list of categories collected during draw.
  *
- * ar->panels_category_active (PanelCategoryStack) is basically a list of strings (category id's).
+ * - #ARegion.panels_category_active (#PanelCategoryStack) is basically a list of strings (category id's).
  *
  * Clicking on a tab moves it to the front of ar->panels_category_active,
  * If the context changes so this tab is no longer displayed,
- * then the first-most tab in ar->panels_category_active is used.
+ * then the first-most tab in #ARegion.panels_category_active is used.
  *
  * This way you can change modes and always have the tab you last clicked on.
  */
@@ -269,16 +262,17 @@ typedef struct TransformOrientation {
 	/** MAX_NAME. */
 	char name[64];
 	float mat[3][3];
-	int pad;
+	char _pad[4];
 } TransformOrientation;
 
-typedef struct uiPreview {           /* some preview UI data need to be saved in file */
+/** Some preview UI data need to be saved in file. */
+typedef struct uiPreview {
 	struct uiPreview *next, *prev;
 
 	/** Defined as UI_MAX_NAME_STR. */
 	char preview_id[64];
 	short height;
-	short pad1[3];
+	char _pad1[6];
 } uiPreview;
 
 /* These two lines with # tell makesdna this struct can be excluded.
@@ -292,15 +286,14 @@ typedef struct ScrGlobalAreaData {
 	 * and winx/winy don't) */
 	short cur_fixed_height;
 	/* For global areas, this is the min and max size they can use depending on
-	 * if they are 'collapsed' or not. Value is set on area creation and not
-	 * touched afterwards. */
+	 * if they are 'collapsed' or not. */
 	short size_min, size_max;
 	/** GlobalAreaAlign. */
 	short align;
 
 	/** GlobalAreaFlag. */
 	short flag;
-	short pad;
+	char _pad[2];
 } ScrGlobalAreaData;
 
 enum GlobalAreaFlag {
@@ -354,7 +347,7 @@ typedef struct ScrArea {
 	 * runtime variable, updated by executing operators.
 	 */
 	short region_active_win;
-	char temp, pad;
+	char temp, _pad;
 
 	/** Callbacks for this space type. */
 	struct SpaceType *type;
@@ -409,9 +402,8 @@ typedef struct ARegion {
 	/** Hide, .... */
 	short flag;
 
-	/** Current split size in float (unused). */
-	float fsize;
-	/** Current split size in pixels (if zero it uses regiontype). */
+	/** Current split size in unscaled pixels (if zero it uses regiontype).
+	 * To convert to pixels use: `UI_DPI_FAC * ar->sizex + 0.5f`. */
 	short sizex, sizey;
 
 	/** Private, cached notifier events. */
@@ -422,7 +414,6 @@ typedef struct ARegion {
 	short overlap;
 	/** Temporary copy of flag settings for clean fullscreen. */
 	short flagfullscreen;
-	short pad1, pad2;
 
 	/** Callbacks for this region type. */
 	struct ARegionType *type;
@@ -456,45 +447,62 @@ typedef struct ARegion {
 	ARegion_Runtime runtime;
 } ARegion;
 
-/* area->flag */
+/** #ScrArea.flag */
 enum {
 	HEADER_NO_PULLDOWN           = (1 << 0),
-//	AREA_FLAG_DEPRECATED_1       = (1 << 1),
-//	AREA_FLAG_DEPRECATED_2       = (1 << 2),
+//	AREA_FLAG_UNUSED_1           = (1 << 1),
+//	AREA_FLAG_UNUSED_2           = (1 << 2),
 #ifdef DNA_DEPRECATED_ALLOW
 	AREA_TEMP_INFO               = (1 << 3), /* versioned to make slot reusable */
 #endif
 	/* update size of regions within the area */
 	AREA_FLAG_REGION_SIZE_UPDATE = (1 << 3),
 	AREA_FLAG_ACTIVE_TOOL_UPDATE = (1 << 4),
-//	AREA_FLAG_DEPRECATED_5       = (1 << 5),
+//	AREA_FLAG_UNUSED_5           = (1 << 5),
 	/* used to check if we should switch back to prevspace (of a different type) */
 	AREA_FLAG_TEMP_TYPE          = (1 << 6),
-	/* for temporary fullscreens (file browser, image editor render) that are opened above user set fullscreens */
+	/* for temporary fullscreens (file browser, image editor render)
+	 * that are opened above user set fullscreens */
 	AREA_FLAG_STACKED_FULLSCREEN = (1 << 7),
 	/* update action zones (even if the mouse is not intersecting them) */
 	AREA_FLAG_ACTIONZONES_UPDATE = (1 << 8),
 };
 
-#define EDGEWIDTH	1
-#define AREAGRID	4
-#define AREAMINX	32
-#define HEADERY		26
+#define AREAGRID          4
+#define AREAMINX          32
+#define HEADER_PADDING_Y  6
+#define HEADERY           (20 + HEADER_PADDING_Y)
 
-/* screen->flag */
+/** #bScreen.flag */
 enum {
 	SCREEN_COLLAPSE_TOPBAR    = 1,
 	SCREEN_COLLAPSE_STATUSBAR = 2,
 };
 
-/* screen->state */
+/** #bScreen.state */
 enum {
 	SCREENNORMAL     = 0,
 	SCREENMAXIMIZED  = 1, /* one editor taking over the screen */
 	SCREENFULL       = 2, /* one editor taking over the screen with no bare-minimum UI elements */
 };
 
-/* Panel->flag */
+/** #bScreen.redraws_flag */
+typedef enum eScreen_Redraws_Flag {
+	TIME_REGION            = (1 << 0),
+	TIME_ALL_3D_WIN        = (1 << 1),
+	TIME_ALL_ANIM_WIN      = (1 << 2),
+	TIME_ALL_BUTS_WIN      = (1 << 3),
+	// TIME_WITH_SEQ_AUDIO    = (1 << 4), /* DEPRECATED */
+	TIME_SEQ               = (1 << 5),
+	TIME_ALL_IMAGE_WIN     = (1 << 6),
+	// TIME_CONTINUE_PHYSICS  = (1 << 7), /* UNUSED */
+	TIME_NODES             = (1 << 8),
+	TIME_CLIPS             = (1 << 9),
+
+	TIME_FOLLOW            = (1 << 15),
+} eScreen_Redraws_Flag;
+
+/** #Panel.flag */
 enum {
 	PNL_SELECT      = (1 << 0),
 	PNL_CLOSEDX     = (1 << 1),
@@ -506,7 +514,7 @@ enum {
 	PNL_POPOVER     = (1 << 6),
 };
 
-/* Panel->snap - for snapping to screen edges */
+/** #Panel.snap - for snapping to screen edges */
 #define PNL_SNAP_NONE		0
 /* #define PNL_SNAP_TOP		1 */
 /* #define PNL_SNAP_RIGHT		2 */
@@ -523,16 +531,17 @@ enum {
 /* Fallback panel category (only for old scripts which need updating) */
 #define PNL_CATEGORY_FALLBACK "Misc"
 
-/* uiList layout_type */
+/** #uiList.layout_type */
 enum {
 	UILST_LAYOUT_DEFAULT          = 0,
 	UILST_LAYOUT_COMPACT          = 1,
 	UILST_LAYOUT_GRID             = 2,
 };
 
-/* uiList flag */
+/** #uiList.flag */
 enum {
-	UILST_SCROLL_TO_ACTIVE_ITEM   = 1 << 0,          /* Scroll list to make active item visible. */
+	/* Scroll list to make active item visible. */
+	UILST_SCROLL_TO_ACTIVE_ITEM   = 1 << 0,
 };
 
 /* Value (in number of items) we have to go below minimum shown items to enable auto size. */
@@ -545,21 +554,24 @@ enum {
 	UILST_FLT_ITEM      = 1 << 30,  /* This item has passed the filter process successfully. */
 };
 
-/* uiList filter options */
+/** #uiList.filter_flag */
 enum {
 	UILST_FLT_SHOW      = 1 << 0,          /* Show filtering UI. */
 	UILST_FLT_EXCLUDE   = UILST_FLT_ITEM,  /* Exclude filtered items, *must* use this same value. */
 };
 
-/* uiList filter sort type */
+/** #uiList.filter_sort_flag */
 enum {
 	/* Plain values (only one is valid at a time, once masked with UILST_FLT_SORT_MASK. */
-	UILST_FLT_SORT_INDEX        = 0,  /* Just for sake of consistency. */
+	/** Just for sake of consistency. */
+	UILST_FLT_SORT_INDEX        = 0,
 	UILST_FLT_SORT_ALPHA        = 1,
 
 	/* Bitflags affecting behavior of any kind of sorting. */
-	UILST_FLT_SORT_LOCK       = 1u << 30,   /* Special flag to indicate that order is locked (not user-changeable). */
-	UILST_FLT_SORT_REVERSE      = 1u << 31  /* Special value, bitflag used to reverse order! */
+	/** Special flag to indicate that order is locked (not user-changeable). */
+	UILST_FLT_SORT_LOCK       = 1u << 30,
+	/** Special value, bitflag used to reverse order! */
+	UILST_FLT_SORT_REVERSE      = 1u << 31,
 };
 
 #define UILST_FLT_SORT_MASK (((unsigned int)(UILST_FLT_SORT_REVERSE | UILST_FLT_SORT_LOCK)) - 1)
@@ -578,8 +590,9 @@ enum {
 	RGN_TYPE_HUD = 8,
 	/* Region to navigate the main region from (RGN_TYPE_WINDOW). */
 	RGN_TYPE_NAV_BAR = 9,
-	/* A place for buttons to trigger execution of somthing that was set up in other regions. */
+	/* A place for buttons to trigger execution of something that was set up in other regions. */
 	RGN_TYPE_EXECUTE = 10,
+	RGN_TYPE_FOOTER = 11,
 };
 /* use for function args */
 #define RGN_TYPE_ANY -1
@@ -597,10 +610,11 @@ enum {
 #define RGN_ALIGN_VSPLIT	6
 #define RGN_ALIGN_FLOAT		7
 #define RGN_ALIGN_QSPLIT	8
+#define RGN_ALIGN_ENUM_MASK 0x0F
 
 #define RGN_SPLIT_PREV		32
 
-/* region flag */
+/** #ARegion.flag */
 enum {
 	RGN_FLAG_HIDDEN             = (1 << 0),
 	RGN_FLAG_TOO_SMALL          = (1 << 1),
@@ -612,12 +626,16 @@ enum {
 	RGN_FLAG_TEMP_REGIONDATA    = (1 << 3),
 	/* The region must either use its prefsizex/y or be hidden. */
 	RGN_FLAG_PREFSIZE_OR_HIDDEN = (1 << 4),
+	/** Size has been clamped (floating regions only). */
+	RGN_FLAG_SIZE_CLAMP_X      = (1 << 5),
+	RGN_FLAG_SIZE_CLAMP_Y      = (1 << 6),
 };
 
-/* region do_draw */
+/** #ARegion.do_draw */
 #define RGN_DRAW			1
 #define RGN_DRAW_PARTIAL	2
 #define RGN_DRAWING			4
 #define RGN_DRAW_REFRESH_UI	8  /* re-create uiBlock's where possible */
 #define RGN_DRAW_NO_REBUILD	16
-#endif
+
+#endif  /* __DNA_SCREEN_TYPES_H__ */

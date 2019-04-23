@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,12 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/sculpt_paint/paint_vertex_weight_utils.c
- *  \ingroup edsculpt
+/** \file
+ * \ingroup edsculpt
  *
  * Intended for use by `paint_vertex.c` & `paint_vertex_weight_ops.c`.
  */
@@ -151,7 +147,7 @@ int ED_wpaint_mirror_vgroup_ensure(Object *ob, const int vgroup_active)
 		}
 
 		/* curdef should never be NULL unless this is
-		 * a  lamp and BKE_object_defgroup_add_name fails */
+		 * a  light and BKE_object_defgroup_add_name fails */
 		return mirrdef;
 	}
 

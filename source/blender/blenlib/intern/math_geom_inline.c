@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -20,11 +18,10 @@
  *
  * The Original Code is: some of this file.
  *
- * ***** END GPL LICENSE BLOCK *****
  * */
 
-/** \file blender/blenlib/intern/math_geom_inline.c
- *  \ingroup bli
+/** \file
+ * \ingroup bli
  */
 
 #ifndef __MATH_GEOM_INLINE_C__
@@ -76,16 +73,18 @@ MINLINE void mul_sh_fl(float r[9], const float f)
 {
 	int i;
 
-	for (i = 0; i < 9; i++)
+	for (i = 0; i < 9; i++) {
 		r[i] *= f;
+	}
 }
 
 MINLINE void add_sh_shsh(float r[9], const float a[9], const float b[9])
 {
 	int i;
 
-	for (i = 0; i < 9; i++)
+	for (i = 0; i < 9; i++) {
 		r[i] = a[i] + b[i];
+	}
 }
 
 MINLINE float dot_shsh(const float a[9], const float b[9])
@@ -93,8 +92,9 @@ MINLINE float dot_shsh(const float a[9], const float b[9])
 	float r = 0.0f;
 	int i;
 
-	for (i = 0; i < 9; i++)
+	for (i = 0; i < 9; i++) {
 		r += a[i] * b[i];
+	}
 
 	return r;
 }

@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,14 +15,10 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * Contributor(s): Blender Foundation, 2002-2008 full recode
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/object/object_edit.c
- *  \ingroup edobj
+/** \file
+ * \ingroup edobj
  */
 
 #include <stdlib.h>
@@ -38,10 +32,8 @@
 #include "MEM_guardedalloc.h"
 
 #include "BLI_blenlib.h"
-#include "BLI_math.h"
 #include "BLI_utildefines.h"
 #include "BLI_ghash.h"
-#include "BLI_string_utils.h"
 
 #include "BLT_translation.h"
 
@@ -73,7 +65,6 @@
 #include "BKE_image.h"
 #include "BKE_lattice.h"
 #include "BKE_layer.h"
-#include "BKE_library.h"
 #include "BKE_main.h"
 #include "BKE_material.h"
 #include "BKE_mball.h"
@@ -81,15 +72,18 @@
 #include "BKE_modifier.h"
 #include "BKE_object.h"
 #include "BKE_paint.h"
+#include "BKE_particle.h"
 #include "BKE_pointcache.h"
 #include "BKE_softbody.h"
 #include "BKE_editmesh.h"
 #include "BKE_report.h"
+#include "BKE_scene.h"
 #include "BKE_workspace.h"
 
 #include "DEG_depsgraph.h"
 #include "DEG_depsgraph_build.h"
 
+#include "ED_anim_api.h"
 #include "ED_armature.h"
 #include "ED_curve.h"
 #include "ED_mesh.h"
@@ -170,7 +164,10 @@ static int object_hide_view_clear_exec(bContext *C, wmOperator *op)
 			changed = true;
 
 			if (select) {
-				ED_object_base_select(base, BA_SELECT);
+				/* We cannot call `ED_object_base_select` because
+				 * base is not selectable while it is hidden. */
+				base->flag |= BASE_SELECTED;
+				BKE_scene_object_base_flag_sync_from_base(base);
 			}
 		}
 	}
@@ -209,21 +206,7 @@ static int object_hide_view_set_exec(bContext *C, wmOperator *op)
 	Scene *scene = CTX_data_scene(C);
 	ViewLayer *view_layer = CTX_data_view_layer(C);
 	const bool unselected = RNA_boolean_get(op->ptr, "unselected");
-
-	/* Do nothing if no objects was selected. */
-	bool have_selected = false;
-	for (Base *base = view_layer->object_bases.first; base; base = base->next) {
-		if (base->flag & BASE_VISIBLE) {
-			if (base->flag & BASE_SELECTED) {
-				have_selected = true;
-				break;
-			}
-		}
-	}
-
-	if (!have_selected) {
-		return OPERATOR_CANCELLED;
-	}
+	bool changed = false;
 
 	/* Hide selected or unselected objects. */
 	for (Base *base = view_layer->object_bases.first; base; base = base->next) {
@@ -235,14 +218,19 @@ static int object_hide_view_set_exec(bContext *C, wmOperator *op)
 			if (base->flag & BASE_SELECTED) {
 				ED_object_base_select(base, BA_DESELECT);
 				base->flag |= BASE_HIDDEN;
+				changed = true;
 			}
 		}
 		else {
 			if (!(base->flag & BASE_SELECTED)) {
 				ED_object_base_select(base, BA_DESELECT);
 				base->flag |= BASE_HIDDEN;
+				changed = true;
 			}
 		}
+	}
+	if (!changed) {
+		return OPERATOR_CANCELLED;
 	}
 
 	BKE_layer_collection_sync(scene, view_layer);
@@ -291,9 +279,12 @@ static int object_hide_collection_exec(bContext *C, wmOperator *op)
 		return OPERATOR_CANCELLED;
 	}
 
-	BKE_layer_collection_set_visible(scene, view_layer, lc, extend);
-
 	DEG_id_tag_update(&scene->id, ID_RECALC_BASE_FLAGS);
+
+	if (BKE_layer_collection_isolate(scene, view_layer, lc, extend)) {
+		DEG_relations_tag_update(CTX_data_main(C));
+	}
+
 	WM_event_add_notifier(C, NC_SCENE | ND_OB_SELECT, scene);
 
 	return OPERATOR_FINISHED;
@@ -318,12 +309,6 @@ void ED_collection_hide_menu_draw(const bContext *C, uiLayout *layout)
 
 		if (lc->collection->flag & COLLECTION_RESTRICT_VIEW) {
 			continue;
-		}
-
-		if ((view_layer->runtime_flag & VIEW_LAYER_HAS_HIDE) &&
-		    !(lc->runtime_flag & LAYER_COLLECTION_HAS_VISIBLE_OBJECTS))
-		{
-			uiLayoutSetActive(row, false);
 		}
 
 		int icon = ICON_NONE;
@@ -366,7 +351,7 @@ static int object_hide_collection_invoke(bContext *C, wmOperator *op, const wmEv
 void OBJECT_OT_hide_collection(wmOperatorType *ot)
 {
 	/* identifiers */
-	ot->name = "Hide Objects By Collection";
+	ot->name = "Hide Collection";
 	ot->description = "Show only objects in collection (Shift to extend)";
 	ot->idname = "OBJECT_OT_hide_collection";
 
@@ -395,7 +380,7 @@ static bool mesh_needs_keyindex(Main *bmain, const Mesh *me)
 		return false;  /* will be added */
 	}
 
-	for (const Object *ob = bmain->object.first; ob; ob = ob->id.next) {
+	for (const Object *ob = bmain->objects.first; ob; ob = ob->id.next) {
 		if ((ob->parent) && (ob->parent->data == me) && ELEM(ob->partype, PARVERT1, PARVERT3)) {
 			return true;
 		}
@@ -422,11 +407,11 @@ static bool ED_object_editmode_load_ex(Main *bmain, Object *obedit, const bool f
 
 	if (obedit->type == OB_MESH) {
 		Mesh *me = obedit->data;
-		if (me->edit_btmesh == NULL) {
+		if (me->edit_mesh == NULL) {
 			return false;
 		}
 
-		if (me->edit_btmesh->bm->totvert > MESH_MAX_VERTS) {
+		if (me->edit_mesh->bm->totvert > MESH_MAX_VERTS) {
 			error("Too many vertices");
 			return false;
 		}
@@ -434,9 +419,9 @@ static bool ED_object_editmode_load_ex(Main *bmain, Object *obedit, const bool f
 		EDBM_mesh_load(bmain, obedit);
 
 		if (freedata) {
-			EDBM_mesh_free(me->edit_btmesh);
-			MEM_freeN(me->edit_btmesh);
-			me->edit_btmesh = NULL;
+			EDBM_mesh_free(me->edit_mesh);
+			MEM_freeN(me->edit_mesh);
+			me->edit_mesh = NULL;
 		}
 		/* will be recalculated as needed. */
 		{
@@ -533,11 +518,14 @@ bool ED_object_editmode_exit_ex(Main *bmain, Scene *scene, Object *obedit, int f
 		/* flag object caches as outdated */
 		BKE_ptcache_ids_from_object(&pidlist, obedit, scene, 0);
 		for (pid = pidlist.first; pid; pid = pid->next) {
-			if (pid->type != PTCACHE_TYPE_PARTICLES) /* particles don't need reset on geometry change */
+			/* particles don't need reset on geometry change */
+			if (pid->type != PTCACHE_TYPE_PARTICLES) {
 				pid->cache->flag |= PTCACHE_OUTDATED;
+			}
 		}
 		BLI_freelistN(&pidlist);
 
+		BKE_particlesystem_reset_all(obedit);
 		BKE_ptcache_object_reset(scene, obedit, PTCACHE_RESET_OUTDATED);
 
 		/* also flush ob recalc, doesn't take much overhead, but used for particles */
@@ -602,7 +590,9 @@ bool ED_object_editmode_enter_ex(Main *bmain, Scene *scene, Object *ob, int flag
 		ok = 1;
 		ED_armature_to_edit(ob->data);
 		/* to ensure all goes in restposition and without striding */
-		DEG_id_tag_update(&ob->id, ID_RECALC_TRANSFORM | ID_RECALC_GEOMETRY | ID_RECALC_ANIMATION); /* XXX: should this be ID_RECALC_GEOMETRY? */
+
+		/* XXX: should this be ID_RECALC_GEOMETRY? */
+		DEG_id_tag_update(&ob->id, ID_RECALC_TRANSFORM | ID_RECALC_GEOMETRY | ID_RECALC_ANIMATION);
 
 		WM_main_add_notifier(NC_SCENE | ND_MODE | NS_EDITMODE_ARMATURE, scene);
 	}
@@ -648,15 +638,11 @@ bool ED_object_editmode_enter(bContext *C, int flag)
 {
 	Main *bmain = CTX_data_main(C);
 	Scene *scene = CTX_data_scene(C);
-	ViewLayer *view_layer = CTX_data_view_layer(C);
 	Object *ob;
 
-	if ((flag & EM_IGNORE_LAYER) == 0) {
-		ob = CTX_data_active_object(C); /* active layer checked here for view3d */
-	}
-	else {
-		ob = view_layer->basact->object;
-	}
+	/* Active layer checked here for view3d,
+	 * callers that don't want view context can call the extended version. */
+	ob = CTX_data_active_object(C);
 	if ((ob == NULL) || ID_IS_LINKED(ob)) {
 		return false;
 	}
@@ -754,6 +740,12 @@ static int posemode_exec(bContext *C, wmOperator *op)
 {
 	struct wmMsgBus *mbus = CTX_wm_message_bus(C);
 	Base *base = CTX_data_active_base(C);
+
+	/* If the base is NULL it means we have an active object, but the object itself is hidden. */
+	if (base == NULL) {
+		return OPERATOR_CANCELLED;
+	}
+
 	Object *obact = base->object;
 	const int mode_flag = OB_MODE_POSE;
 	bool is_mode_set = (obact->mode & mode_flag) != 0;
@@ -1720,6 +1712,7 @@ void OBJECT_OT_move_to_collection(wmOperatorType *ot)
 	prop = RNA_def_string(ot->srna, "new_collection_name", NULL, MAX_NAME, "Name",
 	                      "Name of the newly added collection");
 	RNA_def_property_flag(prop, PROP_SKIP_SAVE);
+	ot->prop = prop;
 }
 
 void OBJECT_OT_link_to_collection(wmOperatorType *ot)

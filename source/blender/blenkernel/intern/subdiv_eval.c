@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,14 +15,10 @@
  *
  * The Original Code is Copyright (C) 2018 by Blender Foundation.
  * All rights reserved.
- *
- * Contributor(s): Sergey Sharybin.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/blenkernel/intern/subdiv_eval.c
- *  \ingroup bke
+/** \file
+ * \ingroup bke
  */
 
 #include "BKE_subdiv_eval.h"
@@ -46,10 +40,10 @@
 
 bool BKE_subdiv_eval_begin(Subdiv *subdiv)
 {
+	BKE_subdiv_stats_reset(&subdiv->stats, SUBDIV_STATS_EVALUATOR_CREATE);
 	if (subdiv->topology_refiner == NULL) {
 		/* Happens on input mesh with just loose geometry,
-		 * or when OpenSubdiv is disabled
-		 */
+		 * or when OpenSubdiv is disabled */
 		return false;
 	}
 	else if (subdiv->evaluator == NULL) {
@@ -76,8 +70,7 @@ static void set_coarse_positions(Subdiv *subdiv, const Mesh *mesh)
 	/* Mark vertices which needs new coordinates. */
 	/* TODO(sergey): This is annoying to calculate this on every update,
 	 * maybe it's better to cache this mapping. Or make it possible to have
-	 * OpenSubdiv's vertices match mesh ones?
-	 */
+	 * OpenSubdiv's vertices match mesh ones? */
 	BLI_bitmap *vertex_used_map =
 	        BLI_BITMAP_NEW(mesh->totvert, "vert used map");
 	for (int poly_index = 0; poly_index < mesh->totpoly; poly_index++) {

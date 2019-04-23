@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,17 +15,11 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file DNA_ID.h
- *  \ingroup DNA
- *  \brief ID and Library types, which are fundamental for sdna.
+/** \file
+ * \ingroup DNA
+ * \brief ID and Library types, which are fundamental for sdna.
  */
 
 #ifndef __DNA_ID_H__
@@ -39,11 +31,11 @@
 extern "C" {
 #endif
 
-struct Library;
 struct FileData;
-struct ID;
-struct PackedFile;
 struct GPUTexture;
+struct ID;
+struct Library;
+struct PackedFile;
 
 /* Runtime display data */
 struct DrawData;
@@ -81,7 +73,7 @@ typedef struct IDProperty {
 	char name[64];
 
 	/* saved is used to indicate if this struct has been saved yet.
-	 * seemed like a good idea as a pad var was needed anyway :) */
+	 * seemed like a good idea as a '_pad' var was needed anyway :) */
 	int saved;
 	/** Note, alignment for 64 bits. */
 	IDPropertyData data;
@@ -133,11 +125,13 @@ enum {
 
 /*->flag*/
 enum {
-	/* This IDProp may be statically overridden. Should only be used/be relevant for custom properties. */
+	/** This IDProp may be statically overridden.
+	 * Should only be used/be relevant for custom properties. */
 	IDP_FLAG_OVERRIDABLE_STATIC = 1 << 0,
 
-	IDP_FLAG_GHOST       = 1 << 7,  /* this means the property is set but RNA will return false when checking
-	                                 * 'RNA_property_is_set', currently this is a runtime flag */
+	/** This means the property is set but RNA will return false when checking
+	 * 'RNA_property_is_set', currently this is a runtime flag */
+	IDP_FLAG_GHOST       = 1 << 7,
 };
 
 /* add any future new id property types here.*/
@@ -151,7 +145,7 @@ typedef struct IDOverrideStaticPropertyOperation {
 	/* Type of override. */
 	short operation;
 	short flag;
-	short pad_s1[2];
+	char _pad0[4];
 
 	/* Sub-item references, if needed (for arrays or collections only).
 	 * We need both reference and local values to allow e.g. insertion into collections (constraints, modifiers...).
@@ -186,8 +180,10 @@ enum {
 
 /* IDOverridePropertyOperation->flag. */
 enum {
-	IDOVERRIDESTATIC_FLAG_MANDATORY     =   1 << 0,  /* User cannot remove that override operation. */
-	IDOVERRIDESTATIC_FLAG_LOCKED        =   1 << 1,  /* User cannot change that override operation. */
+	/** User cannot remove that override operation. */
+	IDOVERRIDESTATIC_FLAG_MANDATORY     =   1 << 0,
+	/** User cannot change that override operation. */
+	IDOVERRIDESTATIC_FLAG_LOCKED        =   1 << 1,
 };
 
 /** A single overridden property, contain all operations on this one. */
@@ -212,7 +208,7 @@ typedef struct IDOverrideStatic {
 	ListBase properties;
 
 	short flag;
-	short pad[3];
+	char _pad[6];
 
 	/* Read/write data. */
 	/* Temp ID storing extra override data (used for differential operations only currently).
@@ -253,7 +249,7 @@ typedef struct ID {
 	int us;
 	int icon_id;
 	int recalc;
-	int pad;
+	char _pad[4];
 	IDProperty *properties;
 
 	/** Reference linked ID which this one overrides. */
@@ -302,7 +298,7 @@ enum eIconSizes {
 	ICON_SIZE_ICON = 0,
 	ICON_SIZE_PREVIEW = 1,
 
-	NUM_ICON_SIZES
+	NUM_ICON_SIZES,
 };
 
 /* for PreviewImage->flag */
@@ -333,7 +329,7 @@ typedef struct PreviewImage {
 
 	/** Runtime data. */
 	short tag;
-	char pad[2];
+	char _pad[2];
 } PreviewImage;
 
 #define PRV_DEFERRED_DATA(prv) \
@@ -344,8 +340,7 @@ typedef struct PreviewImage {
  *
  * The tags represent types! This is a dirty way of enabling RTTI. The
  * sig_byte end endian defines aren't really used much.
- *
- **/
+ */
 
 #ifdef __BIG_ENDIAN__
    /* big endian */
@@ -372,7 +367,7 @@ typedef enum ID_Type {
 	ID_TE   = MAKE_ID2('T', 'E'), /* Tex (Texture) */
 	ID_IM   = MAKE_ID2('I', 'M'), /* Image */
 	ID_LT   = MAKE_ID2('L', 'T'), /* Lattice */
-	ID_LA   = MAKE_ID2('L', 'A'), /* Lamp */
+	ID_LA   = MAKE_ID2('L', 'A'), /* Light */
 	ID_CA   = MAKE_ID2('C', 'A'), /* Camera */
 	ID_IP   = MAKE_ID2('I', 'P'), /* Ipo (depreciated, replaced by FCurves) */
 	ID_KE   = MAKE_ID2('K', 'E'), /* Key (shape key) */
@@ -401,20 +396,20 @@ typedef enum ID_Type {
 } ID_Type;
 
 /* Only used as 'placeholder' in .blend files for directly linked datablocks. */
-#define ID_ID       MAKE_ID2('I', 'D') /* (internal use only) */
+#define ID_LINK_PLACEHOLDER  MAKE_ID2('I', 'D') /* (internal use only) */
 
 /* Deprecated. */
 #define ID_SCRN	    MAKE_ID2('S', 'N')
 
 /* NOTE! Fake IDs, needed for g.sipo->blocktype or outliner */
 #define ID_SEQ		MAKE_ID2('S', 'Q')
-			/* constraint */
+/* constraint */
 #define ID_CO		MAKE_ID2('C', 'O')
-			/* pose (action channel, used to be ID_AC in code, so we keep code for backwards compat) */
+/* pose (action channel, used to be ID_AC in code, so we keep code for backwards compat) */
 #define ID_PO		MAKE_ID2('A', 'C')
-			/* used in outliner... */
+/* used in outliner... */
 #define ID_NLA		MAKE_ID2('N', 'L')
-			/* fluidsim Ipo */
+/* fluidsim Ipo */
 #define ID_FLUIDSIM	MAKE_ID2('F', 'S')
 
 #define ID_FAKE_USERS(id) ((((ID *)id)->flag & LIB_FAKEUSER) ? 1 : 0)
@@ -464,31 +459,36 @@ enum {
  *
  * Those flags belong to three different categories, which have different expected handling in code:
  *
- *   - RESET_BEFORE_USE: piece of code that wants to use such flag has to ensure they are properly 'reset' first.
- *   - RESET_AFTER_USE: piece of code that wants to use such flag has to ensure they are properly 'reset' after usage
- *                      (though 'lifetime' of those flags is a bit fuzzy, e.g. _RECALC ones are reset on depsgraph
- *                       evaluation...).
- *   - RESET_NEVER: those flags are 'status' one, and never actually need any reset (except on initialization
- *                  during .blend file reading).
+ * - RESET_BEFORE_USE: piece of code that wants to use such flag
+ *   has to ensure they are properly 'reset' first.
+ * - RESET_AFTER_USE: piece of code that wants to use such flag has to ensure they are properly
+ *   'reset' after usage
+ *   (though 'lifetime' of those flags is a bit fuzzy, e.g. _RECALC ones are reset on depsgraph
+ *   evaluation...).
+ * - RESET_NEVER: those flags are 'status' one, and never actually need any reset
+ *   (except on initialization during .blend file reading).
  */
 enum {
 	/* RESET_NEVER Datablock is from current .blend file. */
 	LIB_TAG_LOCAL           = 0,
-	/* RESET_NEVER Datablock is from a library, but is used (linked) directly by current .blend file. */
+	/* RESET_NEVER Datablock is from a library,
+	 * but is used (linked) directly by current .blend file. */
 	LIB_TAG_EXTERN          = 1 << 0,
-	/* RESET_NEVER Datablock is from a library, and is only used (linked) inderectly through other libraries. */
+	/* RESET_NEVER Datablock is from a library,
+	 * and is only used (linked) inderectly through other libraries. */
 	LIB_TAG_INDIRECT        = 1 << 1,
 
-	/* RESET_AFTER_USE Three flags used internally in readfile.c, to mark IDs needing to be read (only done once). */
+	/* RESET_AFTER_USE Flag used internally in readfile.c,
+	 * to mark IDs needing to be expanded (only done once). */
 	LIB_TAG_NEED_EXPAND     = 1 << 3,
-	LIB_TAG_TESTEXT         = (LIB_TAG_NEED_EXPAND | LIB_TAG_EXTERN),
-	LIB_TAG_TESTIND         = (LIB_TAG_NEED_EXPAND | LIB_TAG_INDIRECT),
-	/* RESET_AFTER_USE Flag used internally in readfile.c, to mark IDs needing to be linked from a library. */
-	LIB_TAG_READ            = 1 << 4,
+	/* RESET_AFTER_USE Flag used internally in readfile.c to mark ID
+	 * placeholders for linked datablocks needing to be read. */
+	LIB_TAG_ID_LINK_PLACEHOLDER = 1 << 4,
 	/* RESET_AFTER_USE */
 	LIB_TAG_NEED_LINK       = 1 << 5,
 
-	/* RESET_NEVER tag datablock as a place-holder (because the real one could not be linked from its library e.g.). */
+	/* RESET_NEVER tag datablock as a place-holder
+	 * (because the real one could not be linked from its library e.g.). */
 	LIB_TAG_MISSING         = 1 << 6,
 
 	/* RESET_NEVER tag datablock as being up-to-date regarding its reference. */
@@ -515,21 +515,24 @@ enum {
 	LIB_TAG_COPIED_ON_WRITE_EVAL_RESULT   = 1 << 13,
 	LIB_TAG_LOCALIZED = 1 << 14,
 
-	/* RESET_NEVER tag datablock for freeing etc. behavior (usually set when copying real one into temp/runtime one). */
+	/* RESET_NEVER tag datablock for freeing etc. behavior
+	 * (usually set when copying real one into temp/runtime one). */
 	LIB_TAG_NO_MAIN          = 1 << 15,  /* Datablock is not listed in Main database. */
 	LIB_TAG_NO_USER_REFCOUNT = 1 << 16,  /* Datablock does not refcount usages of other IDs. */
 	/* Datablock was not allocated by standard system (BKE_libblock_alloc), do not free its memory
 	 * (usual type-specific freeing is called though). */
-	LIB_TAG_NOT_ALLOCATED     = 1 << 17,
+	LIB_TAG_NOT_ALLOCATED     = 1 << 18,
 };
 
 /* Tag given ID for an update in all the dependency graphs. */
 typedef enum IDRecalcFlag {
-	/* Individual update tags, this is what ID gets tagged for update with. */
+	/***************************************************************************
+	 * Individual update tags, this is what ID gets tagged for update with. */
 
-	/* Object transformation changed. */
+	/* ** Object transformation changed. ** */
 	ID_RECALC_TRANSFORM   = (1 << 0),
-	/* Object geometry changed.
+
+	/* ** Object geometry changed. **
 	 *
 	 * When object of armature type gets tagged with this flag, it's pose is
 	 * re-evaluated.
@@ -538,18 +541,30 @@ typedef enum IDRecalcFlag {
 	 * When object data type (mesh, curve, ...) gets tagged with this flag it
 	 * makes all objects which shares this datablock to be updated. */
 	ID_RECALC_GEOMETRY    = (1 << 1),
-	/* Animation or time changed and animation is to be re-evaluated. */
+
+	/* ** Animation or time changed and animation is to be re-evaluated. ** */
 	ID_RECALC_ANIMATION   = (1 << 2),
-	/* Particle system changed; values are aligned with ID_RECALC_PSYS_xxx. */
-	ID_RECALC_PSYS_REDO   = (1 << 3),  /* Only do pathcache etc */
-	ID_RECALC_PSYS_RESET  = (1 << 4),  /* Reset everything including pointcache. */
-	ID_RECALC_PSYS_CHILD  = (1 << 5),  /* Only child settings changed. */
-	ID_RECALC_PSYS_PHYS   = (1 << 6),  /* Physics type changed. */
-	/* Update copy on write component without flushing down the road. */
-	ID_RECALC_COPY_ON_WRITE = (1 << 7),
-	/* Tag shading components for update. Only parameters of material changed).
-	 */
-	ID_RECALC_SHADING       = (1 << 8),
+
+	/* ** Particle system changed. ** */
+	/* Only do pathcache etc. */
+	ID_RECALC_PSYS_REDO   = (1 << 3),
+	/* Reset everything including pointcache. */
+	ID_RECALC_PSYS_RESET  = (1 << 4),
+	/* Only child settings changed. */
+	ID_RECALC_PSYS_CHILD  = (1 << 5),
+	/* Physics type changed. */
+	ID_RECALC_PSYS_PHYS   = (1 << 6),
+
+	/* ** Material and shading ** */
+
+	/* For materials and node trees this means that topology of the shader tree
+	 * changed, and the shader is to be recompiled.
+	 * For objects it means that the draw batch cache is to be redone. */
+	ID_RECALC_SHADING             = (1 << 7),
+	/* TODO(sergey): Consider adding an explicit ID_RECALC_SHADING_PARAMATERS
+	 * which can be used for cases when only socket value changed, to speed up
+	 * redraw update in that case. */
+
 	/* Selection of the ID itself or its components (for example, vertices) did
 	 * change, and all the drawing data is to eb updated. */
 	ID_RECALC_SELECT        = (1 << 9),
@@ -564,7 +579,22 @@ typedef enum IDRecalcFlag {
 	 * re-rendered. */
 	ID_RECALC_EDITORS       = (1 << 12),
 
-	/* Aggregate flags, use only for checks on runtime.
+	/* ** Update copy on write component. **
+	 * This is most generic tag which should only be used when nothing else
+	 * matches.
+	 */
+	ID_RECALC_COPY_ON_WRITE = (1 << 13),
+
+	/***************************************************************************
+	 * Pseudonyms, to have more semantic meaning in the actual code without
+	 * using too much low-level and implementation specific tags. */
+
+	/* Update animation datablock itself, without doing full re-evaluation of
+	 * all dependent objects. */
+	ID_RECALC_ANIMATION_NO_FLUSH = ID_RECALC_COPY_ON_WRITE,
+
+	/***************************************************************************
+	 * Aggregate flags, use only for checks on runtime.
 	 * Do NOT use those for tagging. */
 
 	/* Identifies that SOMETHING has been changed in this ID. */

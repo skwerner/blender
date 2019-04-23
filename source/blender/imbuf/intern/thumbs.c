@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,10 @@
  *
  * The Original Code is Copyright (C) 2007 Blender Foundation
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): Andrea Weikert.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/imbuf/intern/thumbs.c
- *  \ingroup imbuf
+/** \file
+ * \ingroup imbuf
  */
 
 #include <stdio.h>
@@ -149,7 +141,7 @@ typedef enum {
 	UNSAFE_ALLOW_PLUS = 0x2, /* Allows '+'  */
 	UNSAFE_PATH       = 0x8, /* Allows '/', '&', '=', ':', '@', '+', '$' and ',' */
 	UNSAFE_HOST       = 0x10, /* Allows '/' and ':' and '@' */
-	UNSAFE_SLASHES    = 0x20 /* Allows all characters except for '/' and '%' */
+	UNSAFE_SLASHES    = 0x20, /* Allows all characters except for '/' and '%' */
 } UnsafeCharacterSet;
 
 static const unsigned char acceptable[96] = {
@@ -165,7 +157,7 @@ static const unsigned char acceptable[96] = {
 	/* `    a    b    c    d    e    f    g    h    i    j    k    l    m    n    o */
 	0x20,0x3F,0x3F,0x3F,0x3F,0x3F,0x3F,0x3F,0x3F,0x3F,0x3F,0x3F,0x3F,0x3F,0x3F,0x3F,
 	/* p    q    r    s    t    u    v    w    x    y    z    {    |    }    ~  DEL */
-	0x3F,0x3F,0x3F,0x3F,0x3F,0x3F,0x3F,0x3F,0x3F,0x3F,0x3F,0x20,0x20,0x20,0x3F,0x20
+	0x3F,0x3F,0x3F,0x3F,0x3F,0x3F,0x3F,0x3F,0x3F,0x3F,0x3F,0x20,0x20,0x20,0x3F,0x20,
 };
 
 static const char hex[17] = "0123456789abcdef";

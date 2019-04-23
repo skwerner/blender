@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,13 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * ***** END GPL LICENSE BLOCK *****
- *
  */
 
-/** \file blender/blenloader/intern/versioning_userdef.c
- *  \ingroup blenloader
+/** \file
+ * \ingroup blenloader
  *
  * Version patch user preferences.
  */
@@ -57,12 +52,12 @@ static void do_versions_theme(UserDef *userdef, bTheme *btheme)
 	}
 
 #define FROM_DEFAULT_V4_UCHAR(member) \
-	copy_v4_v4_char(btheme->member, U_theme_default.member);
+	copy_v4_v4_char(btheme->member, U_theme_default.member)
 
 	if (!USER_VERSION_ATLEAST(280, 25)) {
-		copy_v4_v4_char(btheme->tact.anim_preview_range, btheme->tact.anim_active);
-		copy_v4_v4_char(btheme->tnla.anim_preview_range, btheme->tnla.anim_active);
-		copy_v4_v4_char(btheme->tipo.anim_preview_range, btheme->tact.anim_active);
+		copy_v4_v4_char(btheme->space_action.anim_preview_range, btheme->space_action.anim_active);
+		copy_v4_v4_char(btheme->space_nla.anim_preview_range, btheme->space_nla.anim_active);
+		copy_v4_v4_char(btheme->space_graph.anim_preview_range, btheme->space_action.anim_active);
 	}
 
 	if (!USER_VERSION_ATLEAST(280, 26)) {
@@ -74,26 +69,26 @@ static void do_versions_theme(UserDef *userdef, bTheme *btheme)
 	}
 
 	if (!USER_VERSION_ATLEAST(280, 27)) {
-		FROM_DEFAULT_V4_UCHAR(tact.shade2);
-		FROM_DEFAULT_V4_UCHAR(tact.hilite);
-		FROM_DEFAULT_V4_UCHAR(tact.group);
-		FROM_DEFAULT_V4_UCHAR(tact.group_active);
-		FROM_DEFAULT_V4_UCHAR(tact.strip_select);
-		FROM_DEFAULT_V4_UCHAR(tact.ds_channel);
-		FROM_DEFAULT_V4_UCHAR(tact.ds_subchannel);
-		FROM_DEFAULT_V4_UCHAR(tact.keytype_movehold);
-		FROM_DEFAULT_V4_UCHAR(tact.keytype_movehold_select);
+		FROM_DEFAULT_V4_UCHAR(space_action.shade2);
+		FROM_DEFAULT_V4_UCHAR(space_action.hilite);
+		FROM_DEFAULT_V4_UCHAR(space_action.group);
+		FROM_DEFAULT_V4_UCHAR(space_action.group_active);
+		FROM_DEFAULT_V4_UCHAR(space_action.strip_select);
+		FROM_DEFAULT_V4_UCHAR(space_action.ds_channel);
+		FROM_DEFAULT_V4_UCHAR(space_action.ds_subchannel);
+		FROM_DEFAULT_V4_UCHAR(space_action.keytype_movehold);
+		FROM_DEFAULT_V4_UCHAR(space_action.keytype_movehold_select);
 	}
 
 	if (!USER_VERSION_ATLEAST(280, 28)) {
-		FROM_DEFAULT_V4_UCHAR(tact.ds_ipoline);
+		FROM_DEFAULT_V4_UCHAR(space_action.ds_ipoline);
 	}
 
 	if (!USER_VERSION_ATLEAST(280, 29)) {
-		FROM_DEFAULT_V4_UCHAR(tbuts.navigation_bar);
+		FROM_DEFAULT_V4_UCHAR(space_properties.navigation_bar);
 	}
 	if (!USER_VERSION_ATLEAST(280, 31)) {
-		FROM_DEFAULT_V4_UCHAR(tclip.list_text);
+		FROM_DEFAULT_V4_UCHAR(space_clip.list_text);
 	}
 
 	if (!USER_VERSION_ATLEAST(280, 36)) {
@@ -102,17 +97,21 @@ static void do_versions_theme(UserDef *userdef, bTheme *btheme)
 	}
 
 	if (!USER_VERSION_ATLEAST(280, 39)) {
-		FROM_DEFAULT_V4_UCHAR(tclip.metadatabg);
-		FROM_DEFAULT_V4_UCHAR(tclip.metadatatext);
+		FROM_DEFAULT_V4_UCHAR(space_clip.metadatabg);
+		FROM_DEFAULT_V4_UCHAR(space_clip.metadatatext);
 	}
 
 	if (!USER_VERSION_ATLEAST(280, 40)) {
-		FROM_DEFAULT_V4_UCHAR(tuserpref.navigation_bar);
-		copy_v4_v4_char(btheme->tuserpref.execution_buts, btheme->tuserpref.navigation_bar);
+		FROM_DEFAULT_V4_UCHAR(space_preferences.navigation_bar);
+		copy_v4_v4_char(btheme->space_preferences.execution_buts, btheme->space_preferences.navigation_bar);
 	}
 
 	if (!USER_VERSION_ATLEAST(280, 41)) {
-		FROM_DEFAULT_V4_UCHAR(tv3d.back);
+		FROM_DEFAULT_V4_UCHAR(space_view3d.back);
+	}
+
+	if (!USER_VERSION_ATLEAST(280, 52)) {
+		FROM_DEFAULT_V4_UCHAR(space_info.info_info);
 	}
 
 #undef FROM_DEFAULT_V4_UCHAR
@@ -154,10 +153,6 @@ void BLO_version_defaults_userpref_blend(Main *bmain, UserDef *userdef)
 	if (userdef->menuthreshold1 == 0) {
 		userdef->menuthreshold1 = 5;
 		userdef->menuthreshold2 = 2;
-	}
-	if (userdef->tb_leftmouse == 0) {
-		userdef->tb_leftmouse = 5;
-		userdef->tb_rightmouse = 5;
 	}
 	if (userdef->mixbufsize == 0) userdef->mixbufsize = 2048;
 	if (userdef->autokey_mode == 0) {
@@ -308,10 +303,6 @@ void BLO_version_defaults_userpref_blend(Main *bmain, UserDef *userdef)
 		BKE_addon_ensure(&userdef->addons, "cycles");
 	}
 
-	if (!USER_VERSION_ATLEAST(261, 4)) {
-		userdef->use_16bit_textures = true;
-	}
-
 	if (!USER_VERSION_ATLEAST(267, 0)) {
 
 		/* GL Texture Garbage Collection */
@@ -328,8 +319,6 @@ void BLO_version_defaults_userpref_blend(Main *bmain, UserDef *userdef)
 		if (userdef->v2d_min_gridsize == 0) {
 			userdef->v2d_min_gridsize = 35;
 		}
-		if (userdef->dragthreshold == 0)
-			userdef->dragthreshold = 5;
 		if (userdef->widget_unit == 0)
 			userdef->widget_unit = 20;
 		if (userdef->anisotropic_filter <= 0)
@@ -371,14 +360,14 @@ void BLO_version_defaults_userpref_blend(Main *bmain, UserDef *userdef)
 	if (!USER_VERSION_ATLEAST(278, 6)) {
 		/* Clear preference flags for re-use. */
 		userdef->flag &= ~(
-		    USER_FLAG_NUMINPUT_ADVANCED | USER_FLAG_DEPRECATED_2 | USER_FLAG_DEPRECATED_3 |
-		    USER_FLAG_DEPRECATED_6 | USER_FLAG_DEPRECATED_7 |
-		    USER_FLAG_DEPRECATED_9 | USER_DEVELOPER_UI);
+		    USER_FLAG_NUMINPUT_ADVANCED | USER_FLAG_UNUSED_2 | USER_FLAG_UNUSED_3 |
+		    USER_FLAG_UNUSED_6 | USER_FLAG_UNUSED_7 |
+		    USER_FLAG_UNUSED_9 | USER_DEVELOPER_UI);
 		userdef->uiflag &= ~(
 		    USER_HEADER_BOTTOM);
 		userdef->transopts &= ~(
-		    USER_TR_DEPRECATED_2 | USER_TR_DEPRECATED_3 | USER_TR_DEPRECATED_4 |
-		    USER_TR_DEPRECATED_6 | USER_TR_DEPRECATED_7);
+		    USER_TR_UNUSED_2 | USER_TR_UNUSED_3 | USER_TR_UNUSED_4 |
+		    USER_TR_UNUSED_6 | USER_TR_UNUSED_7);
 
 		userdef->uiflag |= USER_LOCK_CURSOR_ADJUST;
 	}
@@ -463,15 +452,15 @@ void BLO_version_defaults_userpref_blend(Main *bmain, UserDef *userdef)
 		userdef->light_param[3].flag = 1;
 		userdef->light_param[3].smooth = 0.7;
 
-		copy_v4_fl4(userdef->light_ambient, 0.025000, 0.025000, 0.025000, 1.000000);
+		copy_v3_fl3(userdef->light_ambient, 0.025000, 0.025000, 0.025000);
 
 		userdef->flag &= ~(
-		        USER_FLAG_DEPRECATED_4);
+		        USER_FLAG_UNUSED_4);
 
 		userdef->uiflag &= ~(
-		        USER_UIFLAG_DEPRECATED_8 |
-		        USER_UIFLAG_DEPRECATED_12 |
-		        USER_UIFLAG_DEPRECATED_22);
+		        USER_HEADER_FROM_PREF |
+		        USER_UIFLAG_UNUSED_12 |
+		        USER_UIFLAG_UNUSED_22);
 	}
 
 	if (!USER_VERSION_ATLEAST(280, 41)) {
@@ -480,6 +469,24 @@ void BLO_version_defaults_userpref_blend(Main *bmain, UserDef *userdef)
 		if (userdef->pie_tap_timeout == 0) {
 			userdef->pie_tap_timeout = 20;
 		}
+	}
+
+	if (!USER_VERSION_ATLEAST(280, 44)) {
+		userdef->uiflag &= ~(
+		        USER_UIFLAG_UNUSED_0 | USER_UIFLAG_UNUSED_1);
+		userdef->uiflag2 &= ~(
+		        USER_UIFLAG2_UNUSED_0);
+		userdef->gp_settings &= ~(
+		        GP_PAINT_UNUSED_0);
+	}
+
+	if (!USER_VERSION_ATLEAST(280, 50)) {
+		/* 3ds is no longer enabled by default and not ported yet. */
+		BKE_addon_remove_safe(&userdef->addons, "io_scene_3ds");
+	}
+
+	if (!USER_VERSION_ATLEAST(280, 51)) {
+		userdef->move_threshold = 2;
 	}
 
 	/**
@@ -494,9 +501,6 @@ void BLO_version_defaults_userpref_blend(Main *bmain, UserDef *userdef)
 
 	if (userdef->image_draw_method == 0)
 		userdef->image_draw_method = IMAGE_DRAW_METHOD_2DTEXTURE;
-
-	// we default to the first audio device
-	userdef->audiodevice = 0;
 
 	for (bTheme *btheme = userdef->themes.first; btheme; btheme = btheme->next) {
 		do_versions_theme(userdef, btheme);

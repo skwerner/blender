@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,22 +15,14 @@
  *
  * The Original Code is Copyright (C) 2006 by NaN Holding BV.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): Daniel Genrich, Andre Pinto
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
 
 #ifndef __BLI_KDOPBVH_H__
 #define __BLI_KDOPBVH_H__
 
-/** \file BLI_kdopbvh.h
- *  \ingroup bli
- *  \author Daniel Genrich
- *  \author Andre Pinto
+/** \file
+ * \ingroup bli
  */
 
 #ifdef __cplusplus
@@ -151,7 +141,8 @@ void BLI_bvhtree_update_tree(BVHTree *tree);
 
 int BLI_bvhtree_overlap_thread_num(const BVHTree *tree);
 
-/* collision/overlap: check two trees if they overlap, alloc's *overlap with length of the int return value */
+/* collision/overlap: check two trees if they overlap,
+ * alloc's *overlap with length of the int return value */
 BVHTreeOverlap *BLI_bvhtree_overlap(
         const BVHTree *tree1, const BVHTree *tree2, unsigned int *r_overlap_tot,
         BVHTree_OverlapCallback callback, void *userdata);
@@ -161,7 +152,8 @@ int   BLI_bvhtree_get_tree_type(const BVHTree *tree);
 float BLI_bvhtree_get_epsilon(const BVHTree *tree);
 
 /* find nearest node to the given coordinates
- * (if nearest is given it will only search nodes where square distance is smaller than nearest->dist) */
+ * (if nearest is given it will only search nodes where
+ * square distance is smaller than nearest->dist) */
 int BLI_bvhtree_find_nearest_ex(
         BVHTree *tree, const float co[3], BVHTreeNearest *nearest,
         BVHTree_NearestPointCallback callback, void *userdata,

@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,21 +12,15 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * Contributor(s): Campbell Barton
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/space_view3d/view3d_camera_control.c
- *  \ingroup spview3d
+/** \file
+ * \ingroup spview3d
  *
  * The purpose of View3DCameraControl is to allow editing \a rv3d manipulation
  * (mainly \a ofs and \a viewquat) for the purpose of view navigation
  * without having to worry about positioning the camera, its parent...
  * or other details.
- *
- *
  * Typical view-control usage:
  *
  * - acquire a view-control (#ED_view3d_cameracontrol_acquire).
@@ -54,7 +46,6 @@
 #include "BLI_utildefines.h"
 
 #include "BKE_object.h"
-#include "BKE_context.h"
 
 #include "DEG_depsgraph.h"
 
@@ -171,8 +162,9 @@ struct View3DCameraControl *ED_view3d_cameracontrol_acquire(
 	if (rv3d->persp == RV3D_CAMOB) {
 		Object *ob_back;
 		if (use_parent_root && (vctrl->root_parent = v3d->camera->parent)) {
-			while (vctrl->root_parent->parent)
+			while (vctrl->root_parent->parent) {
 				vctrl->root_parent = vctrl->root_parent->parent;
+			}
 			ob_back = vctrl->root_parent;
 		}
 		else {
@@ -223,7 +215,8 @@ void ED_view3d_cameracontrol_update(
         const bool use_autokey,
         struct bContext *C, const bool do_rotate, const bool do_translate)
 {
-	/* we are in camera view so apply the view ofs and quat to the view matrix and set the camera to the view */
+	/* we are in camera view so apply the view ofs and quat to the view matrix and set the camera
+	 * to the view */
 
 	Scene *scene       = vctrl->ctx_scene;
 	View3D *v3d        = vctrl->ctx_v3d;
@@ -259,21 +252,21 @@ void ED_view3d_cameracontrol_update(
 	}
 	else {
 		float view_mat[4][4];
-		float size_mat[4][4];
-		float size_back[3];
+		float scale_mat[4][4];
+		float scale_back[3];
 
-		/* even though we handle the size matrix, this still changes over time */
-		copy_v3_v3(size_back, v3d->camera->size);
+		/* even though we handle the scale matrix, this still changes over time */
+		copy_v3_v3(scale_back, v3d->camera->scale);
 
 		ED_view3d_to_m4(view_mat, rv3d->ofs, rv3d->viewquat, rv3d->dist);
-		size_to_mat4(size_mat, v3d->camera->size);
-		mul_m4_m4m4(view_mat, view_mat, size_mat);
+		size_to_mat4(scale_mat, v3d->camera->scale);
+		mul_m4_m4m4(view_mat, view_mat, scale_mat);
 
 		BKE_object_apply_mat4(v3d->camera, view_mat, true, true);
 
 		DEG_id_tag_update(&v3d->camera->id, ID_RECALC_TRANSFORM);
 
-		copy_v3_v3(v3d->camera->size, size_back);
+		copy_v3_v3(v3d->camera->scale, scale_back);
 
 		id_key = &v3d->camera->id;
 	}
@@ -309,7 +302,8 @@ void ED_view3d_cameracontrol_release(
 			DEG_id_tag_update(&ob_back->id, ID_RECALC_TRANSFORM);
 		}
 		else {
-			/* Non Camera we need to reset the view back to the original location because the user canceled*/
+			/* Non Camera we need to reset the view back
+			 * to the original location because the user canceled. */
 			copy_qt_qt(rv3d->viewquat, vctrl->rot_backup);
 			rv3d->persp = vctrl->persp_backup;
 		}

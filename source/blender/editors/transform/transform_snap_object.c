@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,12 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/transform/transform_snap_object.c
- *  \ingroup edtransform
+/** \file
+ * \ingroup edtransform
  */
 
 #include <stdlib.h>
@@ -33,7 +29,6 @@
 #include "BLI_kdopbvh.h"
 #include "BLI_memarena.h"
 #include "BLI_ghash.h"
-#include "BLI_linklist.h"
 #include "BLI_listbase.h"
 #include "BLI_utildefines.h"
 
@@ -210,7 +205,7 @@ typedef void(*IterSnapObjsCallback)(SnapObjectContext *sctx, bool is_obedit, Obj
  * Walks through all objects in the scene to create the list of objects to snap.
  *
  * \param sctx: Snap context to store data.
- * \param snap_select : from enum eSnapSelect.
+ * \param snap_select: from enum #eSnapSelect.
  */
 static void iter_snap_objects(
         SnapObjectContext *sctx,
@@ -567,7 +562,7 @@ static bool raycastEditMesh(
 		BMEditMesh *em_orig;
 		int looptri_num_active = -1;
 
-		/* Get original version of the edit_btmesh. */
+		/* Get original version of the edit_mesh. */
 		em_orig = BKE_editmesh_from_object(DEG_get_original_object(ob));
 
 		if (sctx->callbacks.edit_mesh.test_face_fn) {
@@ -646,7 +641,7 @@ static bool raycastEditMesh(
 				retval = true;
 
 				if (r_index) {
-					/* Get original version of the edit_btmesh. */
+					/* Get original version of the edit_mesh. */
 					BMEditMesh *em_orig = BKE_editmesh_from_object(DEG_get_original_object(ob));
 
 					*r_index = BM_elem_index_get(em_orig->looptris[hit.index][0]->f);
@@ -678,18 +673,24 @@ static bool raycastObj(
 {
 	bool retval = false;
 
-	if (use_occlusion_test) {
-		if (use_obedit && sctx->use_v3d &&
-		    !V3D_IS_ZBUF(sctx->v3d_data.v3d))
-		{
-			/* Use of occlude geometry in editing mode disabled. */
-			return false;
-		}
-	}
-
 	switch (ob->type) {
 		case OB_MESH:
 		{
+			if (use_occlusion_test) {
+				if (use_obedit && sctx->use_v3d &&
+				    XRAY_ENABLED(sctx->v3d_data.v3d))
+				{
+					/* Use of occlude geometry in editing mode disabled. */
+					return false;
+				}
+
+				if (ELEM(ob->dt, OB_BOUNDBOX, OB_WIRE)) {
+					/* Do not hit objects that are in wire or bounding box
+					 * display mode. */
+					return false;
+				}
+			}
+
 			Mesh *me = ob->data;
 			if (BKE_object_is_in_editmode(ob)) {
 				BMEditMesh *em = BKE_editmesh_from_object(ob);
@@ -767,8 +768,8 @@ static void raycast_obj_cb(SnapObjectContext *sctx, bool use_obedit, Object *ob,
  * Walks through all objects in the scene to find the `hit` on object surface.
  *
  * \param sctx: Snap context to store data.
- * \param snap_select : from enum eSnapSelect.
- * \param use_object_edit_cage : Uses the coordinates of BMesh(if any) to do the snapping.
+ * \param snap_select: from enum eSnapSelect.
+ * \param use_object_edit_cage: Uses the coordinates of BMesh(if any) to do the snapping.
  * \param obj_list: List with objects to snap (created in `create_object_list`).
  *
  * Read/Write Args
@@ -786,7 +787,6 @@ static void raycast_obj_cb(SnapObjectContext *sctx, bool use_obedit, Object *ob,
  * \param r_ob: Hit object.
  * \param r_obmat: Object matrix (may not be #Object.obmat with dupli-instances).
  * \param r_hit_list: List of #SnapObjectHitDepth (caller must free).
- *
  */
 static bool raycastObjects(
         SnapObjectContext *sctx,
@@ -995,7 +995,8 @@ static bool test_projected_edge_dist(
 typedef void (*Nearest2DGetVertCoCallback)(const int index, const float **co, void *data);
 typedef void (*Nearest2DGetEdgeVertsCallback)(const int index, int v_index[2], void *data);
 typedef void (*Nearest2DGetTriVertsCallback)(const int index, int v_index[3], void *data);
-typedef void (*Nearest2DGetTriEdgesCallback)(const int index, int e_index[3], void *data); /* Equal the previous one */
+/* Equal the previous one */
+typedef void (*Nearest2DGetTriEdgesCallback)(const int index, int e_index[3], void *data);
 typedef void (*Nearest2DCopyVertNoCallback)(const int index, float r_no[3], void *data);
 
 typedef struct Nearest2dUserData {
@@ -1220,6 +1221,7 @@ static short snap_mesh_polygon(
 		l_iter = l_first = BM_FACE_FIRST_LOOP(f);
 		if (snapdata->snap_to_flag & SCE_SNAP_MODE_EDGE) {
 			elem = SCE_SNAP_MODE_EDGE;
+			BM_mesh_elem_index_ensure(em->bm, BM_EDGE);
 			BM_mesh_elem_table_ensure(em->bm, BM_VERT | BM_EDGE);
 			do {
 				cb_snap_edge(
@@ -1231,6 +1233,7 @@ static short snap_mesh_polygon(
 		}
 		else {
 			elem = SCE_SNAP_MODE_VERTEX;
+			BM_mesh_elem_index_ensure(em->bm, BM_VERT);
 			BM_mesh_elem_table_ensure(em->bm, BM_VERT);
 			do {
 				cb_snap_vert(
@@ -1325,7 +1328,7 @@ static short snap_mesh_edge_verts_mixed(
 	        neasrest_precalc.ray_direction,
 	        v_pair[0], v_pair[1], &lambda))
 	{
-		/* do nothing */;
+		/* do nothing */
 	}
 	else if (lambda < 0.25f || 0.75f < lambda) {
 		int v_id = lambda < 0.5f ? 0 : 1;
@@ -1543,7 +1546,7 @@ static short snapCurve(
 					if (nu->bezt) {
 						/* don't snap to selected (moving) or hidden */
 						if (nu->bezt[u].f2 & SELECT || nu->bezt[u].hide != 0) {
-							break;
+							continue;
 						}
 						has_snap |= test_projected_vert_dist(
 						        &neasrest_precalc,
@@ -1573,7 +1576,7 @@ static short snapCurve(
 					else {
 						/* don't snap to selected (moving) or hidden */
 						if (nu->bp[u].f1 & SELECT || nu->bp[u].hide != 0) {
-							break;
+							continue;
 						}
 						has_snap |= test_projected_vert_dist(
 						        &neasrest_precalc,
@@ -2188,6 +2191,11 @@ static short snapObject(
 					me = em->mesh_eval_final;
 				}
 			}
+			else if (ob->dt == OB_BOUNDBOX) {
+				/* Do not snap to objects that are in bounding box display mode */
+				return 0;
+			}
+
 			retval = snapMesh(
 			        sctx, snapdata, ob, me, obmat,
 			        dist_px,
@@ -2300,7 +2308,6 @@ static void sanp_obj_cb(SnapObjectContext *sctx, bool is_obedit, Object *ob, flo
  * (currently only set to the polygon index when when using ``snap_to == SCE_SNAP_MODE_FACE``).
  * \param r_ob: Hit object.
  * \param r_obmat: Object matrix (may not be #Object.obmat with dupli-instances).
- *
  */
 static short snapObjectsRay(
         SnapObjectContext *sctx, SnapData *snapdata,
@@ -2534,8 +2541,7 @@ static short transform_snap_context_project_view3d_mixed_impl(
 	const RegionView3D *rv3d = ar->regiondata;
 
 	bool use_occlusion_test =
-	        params->use_occlusion_test &&
-	        !(sctx->v3d_data.v3d->shading.flag & V3D_XRAY_FLAG(sctx->v3d_data.v3d));
+	        params->use_occlusion_test && !XRAY_ENABLED(sctx->v3d_data.v3d);
 
 	if (snap_to_flag & SCE_SNAP_MODE_FACE || use_occlusion_test) {
 		float ray_start[3], ray_normal[3];

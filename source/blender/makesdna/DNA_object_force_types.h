@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,10 @@
  *
  * The Original Code is Copyright (C) 2004-2005 by Blender Foundation
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file DNA_object_force_types.h
- *  \ingroup DNA
+/** \file
+ * \ingroup DNA
  */
 
 #ifndef __DNA_OBJECT_FORCE_TYPES_H__
@@ -41,22 +33,36 @@ extern "C" {
 
 /* pd->forcefield:  Effector Fields types */
 typedef enum ePFieldType {
-	PFIELD_NULL   = 0,	/* (this is used for general effector weight)							*/
-	PFIELD_FORCE  = 1,	/* Force away/towards a point depending on force strength				*/
-	PFIELD_VORTEX = 2,	/* Force around the effector normal										*/
-	PFIELD_MAGNET = 3,	/* Force from the cross product of effector normal and point velocity	*/
-	PFIELD_WIND   = 4,	/* Force away and towards a point depending which side of the effector 	*/
-				/*	 normal the point is												*/
-	PFIELD_GUIDE      = 5,	/* Force along curve for dynamics, a shaping curve for hair paths		*/
-	PFIELD_TEXTURE    = 6,	/* Force based on texture values calculated at point coordinates		*/
-	PFIELD_HARMONIC   = 7,	/* Force of a harmonic (damped) oscillator								*/
-	PFIELD_CHARGE     = 8,	/* Force away/towards a point depending on point charge					*/
-	PFIELD_LENNARDJ   = 9,	/* Force due to a Lennard-Jones potential								*/
-	PFIELD_BOID       = 10,	/* Defines predator / goal for boids									*/
-	PFIELD_TURBULENCE = 11,	/* Force defined by BLI_gTurbulence										*/
-	PFIELD_DRAG       = 12,	/* Linear & quadratic drag												*/
-	PFIELD_SMOKEFLOW  = 13,	/* Force based on smoke simulation air flow								*/
-	NUM_PFIELD_TYPES
+	/** (this is used for general effector weight). */
+	PFIELD_NULL   = 0,
+	/** Force away/towards a point depending on force strength. */
+	PFIELD_FORCE  = 1,
+	/** Force around the effector normal. */
+	PFIELD_VORTEX = 2,
+	/** Force from the cross product of effector normal and point velocity. */
+	PFIELD_MAGNET = 3,
+	/** Force away and towards a point depending which side of the effector normal the point is. */
+	PFIELD_WIND   = 4,
+	/** Force along curve for dynamics, a shaping curve for hair paths. */
+	PFIELD_GUIDE      = 5,
+	/** Force based on texture values calculated at point coordinates. */
+	PFIELD_TEXTURE    = 6,
+	/** Force of a harmonic (damped) oscillator. */
+	PFIELD_HARMONIC   = 7,
+	/** Force away/towards a point depending on point charge. */
+	PFIELD_CHARGE     = 8,
+	/** Force due to a Lennard-Jones potential. */
+	PFIELD_LENNARDJ   = 9,
+	/** Defines predator / goal for boids. */
+	PFIELD_BOID       = 10,
+	/** Force defined by BLI_gTurbulence. */
+	PFIELD_TURBULENCE = 11,
+	/** Linear & quadratic drag. */
+	PFIELD_DRAG       = 12,
+	/** Force based on smoke simulation air flow. */
+	PFIELD_SMOKEFLOW  = 13,
+
+	NUM_PFIELD_TYPES,
 } ePFieldType;
 
 typedef struct PartDeflect {
@@ -151,16 +157,18 @@ typedef struct PartDeflect {
 	/** Runtime only : end of the curve. */
 	float drawvec2[4];
 	/** Runtime only. */
-	float drawvec_falloff_min[3], pad1;
+	float drawvec_falloff_min[3];
+	char _pad1[4];
 	/** Runtime only. */
-	float drawvec_falloff_max[3], pad2;
+	float drawvec_falloff_max[3];
+	char _pad2[4];
 
 	/** Force source object. */
 	struct Object *f_source;
 
 	/** Friction of cloth collisions. */
 	float pdef_cfrict;
-	float pad;
+	char _pad[4];
 } PartDeflect;
 
 typedef struct EffectorWeights {
@@ -171,17 +179,18 @@ typedef struct EffectorWeights {
 	float weight[14];
 	float global_gravity;
 	short flag, rt[3];
-	int pad;
+	char _pad[4];
 } EffectorWeights;
 
 /* EffectorWeights->flag */
 #define EFF_WEIGHT_DO_HAIR		1
 
-/* Point cache file data types:
- * - used as (1<<flag) so poke jahka if you reach the limit of 15
- * - to add new data types update:
- *   - BKE_ptcache_data_size()
- *   - ptcache_file_init_pointers()
+/**
+ * Point cache file data types:
+ * - Used as `(1 << flag)` so poke jahka if you reach the limit of 15.
+ * - To add new data types update:
+ *   - #BKE_ptcache_data_size()
+ *   - #ptcache_file_pointers_init()
  */
 #define BPHYS_DATA_INDEX		0
 #define BPHYS_DATA_LOCATION		1
@@ -250,7 +259,7 @@ typedef struct PointCache {
 	int last_exact;
 	/** Used for editing cache - what is the last baked frame. */
 	int last_valid;
-	int pad;
+	char _pad[4];
 
 	/* for external cache files */
 	/** Number of cached points. */
@@ -264,11 +273,15 @@ typedef struct PointCache {
 	char info[64];
 	/** File path, 1024 = FILE_MAX. */
 	char path[1024];
+
 	/**
-	 * Array of length endframe-startframe+1 with flags to indicate cached frames.
+	 * Array of length `endframe - startframe + 1` with flags to indicate cached frames.
 	 * Can be later used for other per frame flags too if needed.
 	 */
 	char *cached_frames;
+	int cached_frames_len;
+	char _pad1[4];
+
 	struct ListBase mem_cache;
 
 	struct PTCacheEdit *edit;
@@ -296,7 +309,7 @@ typedef struct SoftBody {
 	struct BodyPoint *bpoint;
 	/** Not saved in file. */
 	struct BodySpring *bspring;
-	char   pad;
+	char   _pad;
 	char   msg_lock;
 	short  msg_value;
 
@@ -370,20 +383,20 @@ typedef struct SoftBody {
 	/* self collision*/
 	/** Fixed collision ball size if > 0. */
 	float colball;
-	/** Cooling down collision response . */
+	/** Cooling down collision response. */
 	float balldamp;
-	/** Pressure the ball is loaded with . */
+	/** Pressure the ball is loaded with. */
 	float ballstiff;
 	short sbc_mode;
-	short aeroedge,
-		minloops,
-		maxloops,
-		choke,
-		solver_ID,
-		plastic, springpreload
-		;
+	short aeroedge;
+	short minloops;
+	short maxloops;
+	short choke;
+	short solver_ID;
+	short plastic;
+	short springpreload;
 
-	/** Scratch pad/cache on live time not saved in file. */
+	/** Scratchpad/cache on live time not saved in file. */
 	struct SBScratch *scratch;
 	float shearstiff;
 	float inpush;
@@ -409,27 +422,38 @@ typedef struct SoftBody {
 /* pd->flag: various settings */
 #define PFIELD_USEMAX           (1 << 0)
 /*#define PDEFLE_DEFORM         (1 << 1)*/      /*UNUSED*/
-#define PFIELD_GUIDE_PATH_ADD   (1 << 2)        /* TODO: do_versions for below */
-#define PFIELD_PLANAR           (1 << 3)        /* used for do_versions */
+/** TODO: do_versions for below */
+#define PFIELD_GUIDE_PATH_ADD   (1 << 2)
+/** used for do_versions */
+#define PFIELD_PLANAR           (1 << 3)
 #define PDEFLE_KILL_PART        (1 << 4)
-#define PFIELD_POSZ             (1 << 5)        /* used for do_versions */
+/** used for do_versions */
+#define PFIELD_POSZ             (1 << 5)
 #define PFIELD_TEX_OBJECT       (1 << 6)
-#define PFIELD_GLOBAL_CO        (1 << 6)        /* used for turbulence */
+/** used for turbulence */
+#define PFIELD_GLOBAL_CO        (1 << 6)
 #define PFIELD_TEX_2D           (1 << 7)
-#define PFIELD_MULTIPLE_SPRINGS (1 << 7)        /* used for harmonic force */
+/** used for harmonic force */
+#define PFIELD_MULTIPLE_SPRINGS (1 << 7)
 #define PFIELD_USEMIN           (1 << 8)
 #define PFIELD_USEMAXR          (1 << 9)
 #define PFIELD_USEMINR          (1 << 10)
 #define PFIELD_TEX_ROOTCO       (1 << 11)
-#define PFIELD_SURFACE          (1 << 12)       /* used for do_versions */
+/** used for do_versions */
+#define PFIELD_SURFACE          (1 << 12)
 #define PFIELD_VISIBILITY       (1 << 13)
 #define PFIELD_DO_LOCATION      (1 << 14)
 #define PFIELD_DO_ROTATION      (1 << 15)
-#define PFIELD_GUIDE_PATH_WEIGHT (1 << 16)      /* apply curve weights */
-#define PFIELD_SMOKE_DENSITY    (1 << 17)       /* multiply smoke force by density */
-#define PFIELD_GRAVITATION      (1 << 18)             /* used for (simple) force */
-#define PFIELD_CLOTH_USE_CULLING (1<< 19)       /* Enable cloth collision side detection based on normal. */
-#define PFIELD_CLOTH_USE_NORMAL (1 << 20)       /* Replace collision direction with collider normal. */
+/** apply curve weights */
+#define PFIELD_GUIDE_PATH_WEIGHT (1 << 16)
+/** multiply smoke force by density */
+#define PFIELD_SMOKE_DENSITY    (1 << 17)
+/** used for (simple) force */
+#define PFIELD_GRAVITATION      (1 << 18)
+/** Enable cloth collision side detection based on normal. */
+#define PFIELD_CLOTH_USE_CULLING (1 << 19)
+/** Replace collision direction with collider normal. */
+#define PFIELD_CLOTH_USE_NORMAL (1 << 20)
 
 /* pd->falloff */
 #define PFIELD_FALL_SPHERE		0
@@ -461,13 +485,15 @@ typedef struct SoftBody {
 //#define PTCACHE_BAKE_EDIT         (1 << 4)
 //#define PTCACHE_BAKE_EDIT_ACTIVE  (1 << 5)
 #define PTCACHE_DISK_CACHE          (1 << 6)
-//#define PTCACHE_QUICK_CACHE       (1 << 7)  /* removed since 2.64 - [#30974], could be added back in a more useful way */
+///* removed since 2.64 - [#30974], could be added back in a more useful way */
+//#define PTCACHE_QUICK_CACHE       (1 << 7)
 #define PTCACHE_FRAMES_SKIPPED      (1 << 8)
 #define PTCACHE_EXTERNAL            (1 << 9)
 #define PTCACHE_READ_INFO           (1 << 10)
-/* don't use the filename of the blendfile the data is linked from (write a local cache) */
+/** don't use the filename of the blendfile the data is linked from (write a local cache) */
 #define PTCACHE_IGNORE_LIBPATH      (1 << 11)
-/* high resolution cache is saved for smoke for backwards compatibility, so set this flag to know it's a "fake" cache */
+/** high resolution cache is saved for smoke for backwards compatibility,
+ * so set this flag to know it's a "fake" cache */
 #define PTCACHE_FAKE_SMOKE          (1 << 12)
 #define PTCACHE_IGNORE_CLEAR        (1 << 13)
 

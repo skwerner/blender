@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,17 +15,11 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file DNA_object_types.h
- *  \ingroup DNA
- *  \brief Object is a sort of wrapper for general info.
+/** \file
+ * \ingroup DNA
+ * \brief Object is a sort of wrapper for general info.
  */
 
 #ifndef __DNA_OBJECT_TYPES_H__
@@ -36,6 +28,7 @@
 #include "DNA_object_enums.h"
 
 #include "DNA_defs.h"
+#include "DNA_customdata_types.h"
 #include "DNA_listBase.h"
 #include "DNA_ID.h"
 #include "DNA_action_types.h" /* bAnimVizSettings */
@@ -44,21 +37,21 @@
 extern "C" {
 #endif
 
-struct Object;
 struct AnimData;
-struct Ipo;
 struct BoundBox;
-struct Path;
-struct Material;
-struct PartDeflect;
-struct SoftBody;
-struct FluidsimSettings;
-struct ParticleSystem;
 struct DerivedMesh;
-struct SculptSession;
-struct bGPdata;
-struct RigidBodyOb;
+struct FluidsimSettings;
 struct GpencilBatchCache;
+struct Ipo;
+struct Material;
+struct Object;
+struct PartDeflect;
+struct ParticleSystem;
+struct Path;
+struct RigidBodyOb;
+struct SculptSession;
+struct SoftBody;
+struct bGPdata;
 
 /* Vertex Groups - Name Info */
 typedef struct bDeformGroup {
@@ -66,7 +59,7 @@ typedef struct bDeformGroup {
 	/** MAX_VGROUP_NAME. */
 	char name[64];
 	/* need this flag for locking weights */
-	char flag, pad[7];
+	char flag, _pad0[7];
 } bDeformGroup;
 
 /* Face Maps*/
@@ -75,7 +68,7 @@ typedef struct bFaceMap {
 	/** MAX_VGROUP_NAME. */
 	char name[64];
 	char flag;
-	char pad[7];
+	char _pad0[7];
 } bFaceMap;
 
 #define MAX_VGROUP_NAME 64
@@ -93,8 +86,6 @@ typedef struct bFaceMap {
  * | /
  * |/
  * .-----X
- *
- *
  *     2----------6
  *    /|         /|
  *   / |        / |
@@ -108,7 +99,8 @@ typedef struct bFaceMap {
  */
 typedef struct BoundBox {
 	float vec[8][3];
-	int flag, pad;
+	int flag;
+	char _pad0[4];
 } BoundBox;
 
 /* boundbox flag */
@@ -121,21 +113,38 @@ typedef struct LodLevel {
 	struct LodLevel *next, *prev;
 	struct Object *source;
 	int flags;
-	float distance, pad;
+	float distance;
+	char _pad0[4];
 	int obhysteresis;
 } LodLevel;
-
-typedef struct ObjectDisplay {
-	int flag;
-} ObjectDisplay;
 
 /* Forward declaration for cache bbone deformation information.
  *
  * TODO(sergey): Consider moving it to more appropriate place. */
 struct ObjectBBoneDeform;
 
+struct CustomData_MeshMasks;
+
 /* Not saved in file! */
 typedef struct Object_Runtime {
+	/**
+	 * The custom data layer mask that was last used
+	 * to calculate mesh_eval and mesh_deform_eval.
+	 */
+	CustomData_MeshMasks last_data_mask;
+
+	/** Did last modifier stack generation need mapping support? */
+	char last_need_mapping;
+
+	char _pad0[3];
+
+	/** Only used for drawing the parent/child help-line. */
+	float parent_display_origin[3];
+
+
+	/** Axis aligned boundbox (in localspace). */
+	struct BoundBox *bb;
+
 	/**
 	 * Original mesh pointer, before object->data was changed to point
 	 * to mesh_eval.
@@ -153,7 +162,6 @@ typedef struct Object_Runtime {
 	 */
 	struct Mesh *mesh_deform_eval;
 
-
 	/** Runtime evaluated curve-specific data, not stored in the file. */
 	struct CurveCache *curve_cache;
 
@@ -162,15 +170,7 @@ typedef struct Object_Runtime {
 
 	struct ObjectBBoneDeform *cached_bbone_deformation;
 
-	/**
-	 * The custom data layer mask that was last used
-	 * to calculate mesh_eval and mesh_deform_eval.
-	 */
-	uint64_t last_data_mask;
-
-	/** Did last modifier stack generation need mapping support? */
-	char last_need_mapping;
-	char pad[7];
+	void *_pad1;
 } Object_Runtime;
 
 typedef struct Object {
@@ -194,8 +194,6 @@ typedef struct Object {
 	/** Old animation system, deprecated for 2.5. */
 	struct Ipo *ipo  DNA_DEPRECATED;
 	/* struct Path *path; */
-	/** Axis aligned boundbox (in localspace). */
-	struct BoundBox *bb;
 	struct bAction *action  DNA_DEPRECATED;	 // XXX deprecated... old animation system
 	struct bAction *poselib;
 	/** Pose data, armature objects only. */
@@ -204,13 +202,13 @@ typedef struct Object {
 	void *data;
 
 	/** Grease Pencil data. */
-	struct bGPdata *gpd;
+	struct bGPdata *gpd  DNA_DEPRECATED; // XXX deprecated... replaced by gpencil object, keep for readfile
 
 	/** Settings for visualization of object-transform animation. */
 	bAnimVizSettings avs;
 	/** Motion path cache for this object. */
 	bMotionPath *mpath;
-	void *pad1;
+	void *_pad0;
 
 	ListBase constraintChannels  DNA_DEPRECATED; // XXX deprecated... old animation system
 	ListBase effect  DNA_DEPRECATED;             // XXX deprecated... keep for readfile
@@ -240,9 +238,9 @@ typedef struct Object {
 	int actcol;
 
 	/* rot en drot have to be together! (transform('r' en 's')) */
-	float loc[3], dloc[3], orig[3];
-	/** Scale in fact. */
-	float size[3];
+	float loc[3], dloc[3];
+	/** Scale (can be negative). */
+	float scale[3];
 	/** DEPRECATED, 2.60 and older only. */
 	float dsize[3] DNA_DEPRECATED ;
 	/** Ack!, changing. */
@@ -259,7 +257,8 @@ typedef struct Object {
 	float obmat[4][4];
 	/** Inverse result of parent, so that object doesn't 'stick' to parent. */
 	float parentinv[4][4];
-	/** Inverse result of constraints. doesn't include effect of parent or object local transform. */
+	/** Inverse result of constraints.
+	 * doesn't include effect of parent or object local transform. */
 	float constinv[4][4];
 	/**
 	 * Inverse matrix of 'obmat' for any other use than rendering!
@@ -289,13 +288,9 @@ typedef struct Object {
 	short trackflag, upflag;
 	/** Used for DopeSheet filtering settings (expanded/collapsed). */
 	short nlaflag;
-	short pad[2];
 
-	char pad12;
+	char _pad1;
 	char duplicator_visibility_flag;
-
-	/* dupli-frame settings */
-	int dupon, dupoff, dupsta, dupend;
 
 	/* Depsgraph */
 	/** Used by depsgraph, flushed from base. */
@@ -321,10 +316,7 @@ typedef struct Object {
 	char empty_drawtype;
 	float empty_drawsize;
 	/** Dupliface scale. */
-	float dupfacesca;
-
-	/** Sf is time-offset. */
-	float sf;
+	float instance_faces_scale;
 
 	/** Custom index, for renderpasses. */
 	short index;
@@ -332,16 +324,22 @@ typedef struct Object {
 	unsigned short actdef;
 	/** Current face map, note: index starts at 1. */
 	unsigned short actfmap;
-	unsigned char pad5[6];
-	/** Object color. */
-	float col[4];
+	char _pad2[2];
+	/** Object color (in most cases the material color is used for drawing). */
+	float color[4];
+
+	/** Softbody settings. */
+	short softflag;
 
 	/** For restricting view, select, render etc. accessible in outliner. */
 	char restrictflag;
-	char pad3;
-	/** Softbody settings. */
-	short softflag;
-	int pad2;
+
+	/** Flag for pinning. */
+	char  shapeflag;
+	/** Current shape key for menu or pinned. */
+	short shapenr;
+
+	char _pad3[2];
 
 	/** Object constraints. */
 	ListBase constraints;
@@ -355,22 +353,12 @@ typedef struct Object {
 	/** If exists, saved in file. */
 	struct SoftBody *soft;
 	/** Object duplicator for group. */
-	struct Collection *dup_group;
-	void *pad10;
-
-	char  pad4;
-	/** Flag for pinning. */
-	char  shapeflag;
-	/** Current shape key for menu or pinned. */
-	short shapenr;
-	/** Smoothresh is phong interpolation ray_shadow correction in render. */
-	float smoothresh;
+	struct Collection *instance_collection;
 
 	/** If fluidsim enabled, store additional settings. */
 	struct FluidsimSettings *fluidsimSettings;
 
 	struct DerivedMesh *derivedDeform, *derivedFinal;
-	void *pad7;
 
 	ListBase pc_ids;
 
@@ -385,7 +373,10 @@ typedef struct Object {
 	ImageUser *iuser;
 	char empty_image_visibility_flag;
 	char empty_image_depth;
-	char pad11[6];
+	char empty_image_flag;
+	char _pad8[1];
+
+	int select_id;
 
 	/** Contains data for levels of detail. */
 	ListBase lodlevels;
@@ -393,15 +384,8 @@ typedef struct Object {
 
 	struct PreviewImage *preview;
 
-	int pad6;
-	int select_color;
-
-	/* Runtime evaluation data. */
+	/** Runtime evaluation data (keep last). */
 	Object_Runtime runtime;
-
-	/* Object Display */
-	struct ObjectDisplay display;
-	int pad9;
 } Object;
 
 /* Warning, this is not used anymore because hooks are now modifiers */
@@ -449,20 +433,14 @@ enum {
 	OB_SPEAKER    = 12,
 	OB_LIGHTPROBE = 13,
 
-/*	OB_WAVE       = 21, */
 	OB_LATTICE    = 22,
 
-/* 23 and 24 are for life and sector (old file compat.) */
 	OB_ARMATURE   = 25,
-/* Grease Pencil object used in 3D view but not used for annotation in 2D */
+
+	/** Grease Pencil object used in 3D view but not used for annotation in 2D. */
 	OB_GPENCIL  = 26,
 
 	OB_TYPE_MAX,
-};
-
-/* ObjectDisplay.flag */
-enum {
-	OB_SHOW_SHADOW = (1 << 0),
 };
 
 /* check if the object type supports materials */
@@ -490,42 +468,35 @@ enum {
 enum {
 	PARTYPE       = (1 << 4) - 1,
 	PAROBJECT     = 0,
-#ifdef DNA_DEPRECATED
-	PARCURVE      = 1,  /* Deprecated. */
-#endif
-	PARKEY        = 2,  /* XXX Unused, deprecated? */
-
 	PARSKEL       = 4,
 	PARVERT1      = 5,
 	PARVERT3      = 6,
 	PARBONE       = 7,
 
-	/** Slow parenting - is not threadsafe and/or may give errors after jumping. */
-	PARSLOW       = 16,
 };
 
 /* (short) transflag */
 enum {
-	OB_TRANSFLAG_DEPRECATED_0 = 1 << 0,
-	OB_TRANSFLAG_DEPRECATED_1 = 1 << 1,
+	OB_TRANSFLAG_UNUSED_0 = 1 << 0,  /* cleared */
+	OB_TRANSFLAG_UNUSED_1 = 1 << 1,  /* cleared */
 	OB_NEG_SCALE        = 1 << 2,
-	OB_DUPLIFRAMES      = 1 << 3,
+	OB_TRANSFLAG_UNUSED_3 = 1 << 3,  /* cleared */
 	OB_DUPLIVERTS       = 1 << 4,
 	OB_DUPLIROT         = 1 << 5,
-	OB_DUPLINOSPEED     = 1 << 6,
+	OB_TRANSFLAG_UNUSED_6 = 1 << 6,  /* cleared */
 	/* runtime, calculate derivedmesh for dupli before it's used */
 	OB_DUPLICALCDERIVED = 1 << 7,
 	OB_DUPLICOLLECTION  = 1 << 8,
 	OB_DUPLIFACES       = 1 << 9,
 	OB_DUPLIFACES_SCALE = 1 << 10,
 	OB_DUPLIPARTS       = 1 << 11,
-	OB_TRANSLFAG_DEPRECATED_2 = 1 << 12,
+	OB_TRANSFLAG_UNUSED_12 = 1 << 12,  /* cleared */
 	/* runtime constraints disable */
 	OB_NO_CONSTRAINTS   = 1 << 13,
 	/* hack to work around particle issue */
 	OB_NO_PSYS_UPDATE   = 1 << 14,
 
-	OB_DUPLI = OB_DUPLIFRAMES | OB_DUPLIVERTS | OB_DUPLICOLLECTION | OB_DUPLIFACES | OB_DUPLIPARTS,
+	OB_DUPLI = OB_DUPLIVERTS | OB_DUPLICOLLECTION | OB_DUPLIFACES | OB_DUPLIPARTS,
 };
 
 /* (short) trackflag / upflag */
@@ -562,6 +533,7 @@ enum {
 	/* enable transparent draw */
 	OB_DRAWTRANSP     = 1 << 7,
 	OB_DRAW_ALL_EDGES = 1 << 8,  /* only for meshes currently */
+	OB_DRAW_NO_SHADOW_CAST = 1 << 9,
 };
 
 /* empty_drawtype: no flags */
@@ -580,7 +552,7 @@ enum {
 enum {
 	GP_EMPTY = 0,
 	GP_STROKE = 1,
-	GP_MONKEY = 2
+	GP_MONKEY = 2,
 };
 
 /* boundtype */
@@ -612,7 +584,8 @@ enum {
 	/* NOTE: BA_HAS_RECALC_DATA can be re-used later if freed in readfile.c. */
 	// BA_HAS_RECALC_OB = (1 << 2),  /* DEPRECATED */
 	// BA_HAS_RECALC_DATA =  (1 << 3),  /* DEPRECATED */
-	BA_SNAP_FIX_DEPS_FIASCO = (1 << 2),  /* DEPRECATED, was runtime only, but was reusing an older flag. */
+	/** DEPRECATED, was runtime only, but was reusing an older flag. */
+	BA_SNAP_FIX_DEPS_FIASCO = (1 << 2),
 };
 
 	/* NOTE: this was used as a proper setting in past, so nullify before using */
@@ -626,15 +599,9 @@ enum {
 #define OB_FROMDUPLI        (1 << 9)
 #define OB_DONE             (1 << 10)  /* unknown state, clear before use */
 #ifdef DNA_DEPRECATED_ALLOW
-#  define OB_FLAG_DEPRECATED_11        (1 << 11)  /* cleared */
-#  define OB_FLAG_DEPRECATED_12        (1 << 12)  /* cleared */
+#  define OB_FLAG_UNUSED_11        (1 << 11)  /* cleared */
+#  define OB_FLAG_UNUSED_12        (1 << 12)  /* cleared */
 #endif
-
-/* controller state */
-#define OB_MAX_STATES       30
-
-/* collision masks */
-#define OB_MAX_COL_MASKS    16
 
 /* ob->restrictflag */
 enum {
@@ -647,14 +614,15 @@ enum {
 enum {
 	OB_SHAPE_LOCK       = 1 << 0,
 #ifdef DNA_DEPRECATED_ALLOW
-	OB_SHAPE_FLAG_DEPRECATED_1   = 1 << 1,  /* cleared */
+	OB_SHAPE_FLAG_UNUSED_1   = 1 << 1,  /* cleared */
 #endif
 	OB_SHAPE_EDIT_MODE  = 1 << 2,
 };
 
 /* ob->nlaflag */
 enum {
-	/* WARNING: flags (1 << 0) and (1 << 1) were from old animsys */
+	OB_ADS_UNUSED_1    = 1 << 0,  /* cleared */
+	OB_ADS_UNUSED_2    = 1 << 1,  /* cleared */
 	/* object-channel expanded status */
 	OB_ADS_COLLAPSED    = 1 << 10,
 	/* object's ipo-block */
@@ -702,6 +670,11 @@ enum {
 	OB_EMPTY_IMAGE_HIDE_ORTHOGRAPHIC = 1 << 1,
 	OB_EMPTY_IMAGE_HIDE_BACK         = 1 << 2,
 	OB_EMPTY_IMAGE_HIDE_FRONT        = 1 << 3,
+};
+
+/** #Object.empty_image_flag */
+enum {
+	OB_EMPTY_IMAGE_USE_ALPHA_BLEND   = 1 << 0,
 };
 
 #define MAX_DUPLI_RECUR 8

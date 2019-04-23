@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,15 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * Contributor(s): Blender Foundation
- *
- * ***** END GPL LICENSE BLOCK *****
- *
  */
 
-/** \file blender/blenloader/intern/versioning_defaults.c
- *  \ingroup blenloader
+/** \file
+ * \ingroup blenloader
  */
 
 #include "MEM_guardedalloc.h"
@@ -44,6 +37,7 @@
 
 #include "BKE_appdir.h"
 #include "BKE_brush.h"
+#include "BKE_colorband.h"
 #include "BKE_colortools.h"
 #include "BKE_idprop.h"
 #include "BKE_keyconfig.h"
@@ -75,7 +69,12 @@ void BLO_update_defaults_userpref_blend(void)
 #endif
 
 	/* Clear addon preferences. */
-	for (bAddon *addon = U.addons.first; addon; addon = addon->next) {
+	for (bAddon *addon = U.addons.first, *addon_next;
+	     addon != NULL;
+	     addon = addon_next)
+	{
+		addon_next = addon->next;
+
 		if (addon->prop) {
 			IDP_FreeProperty(addon->prop);
 			MEM_freeN(addon->prop);
@@ -103,8 +102,41 @@ void BLO_update_defaults_userpref_blend(void)
 	/* Auto perspective. */
 	U.uiflag |= USER_AUTOPERSP;
 
+	/* Init weight paint range. */
+	BKE_colorband_init(&U.coba_weight, true);
+
+	/* Default visible section. */
+	U.userpref = USER_SECTION_INTERFACE;
+
 	/* Default to left click select. */
 	BKE_keyconfig_pref_set_select_mouse(&U, 0, true);
+}
+
+
+/**
+ * Rename if the ID doesn't exist.
+ */
+static ID *rename_id_for_versioning(Main *bmain, const short id_type, const char *name_src, const char *name_dst)
+{
+	/* We can ignore libraries */
+	ListBase *lb = which_libbase(bmain, id_type);
+	ID *id = NULL;
+	for (ID *idtest = lb->first; idtest; idtest = idtest->next) {
+		if (idtest->lib == NULL) {
+			if (STREQ(idtest->name + 2, name_src)) {
+				id = idtest;
+			}
+			if (STREQ(idtest->name + 2, name_dst)) {
+				return NULL;
+			}
+		}
+	}
+	if (id != NULL) {
+		BLI_strncpy(id->name + 2, name_dst, sizeof(id->name) - 2);
+		/* We know it's unique, this just sorts. */
+		BLI_libblock_ensure_unique_name(bmain, id->name);
+	}
+	return id;
 }
 
 /**
@@ -113,7 +145,7 @@ void BLO_update_defaults_userpref_blend(void)
 void BLO_update_defaults_startup_blend(Main *bmain, const char *app_template)
 {
 	/* For all startup.blend files. */
-	for (bScreen *screen = bmain->screen.first; screen; screen = screen->id.next) {
+	for (bScreen *screen = bmain->screens.first; screen; screen = screen->id.next) {
 		for (ScrArea *sa = screen->areabase.first; sa; sa = sa->next) {
 			for (ARegion *ar = sa->regionbase.first; ar; ar = ar->next) {
 				/* Remove all stored panels, we want to use defaults (order, open/closed) as defined by UI code here! */
@@ -169,12 +201,13 @@ void BLO_update_defaults_startup_blend(Main *bmain, const char *app_template)
 				WorkSpaceLayout *layout = BKE_workspace_hook_layout_for_workspace_get(win->workspace_hook, workspace);
 				bScreen *screen = layout->screen;
 				BLI_strncpy(screen->id.name + 2, workspace->id.name + 2, sizeof(screen->id.name) - 2);
+				BLI_libblock_ensure_unique_name(bmain, screen->id.name);
 			}
 		}
 
 		{
 			/* 'UV Editing' should use UV mode. */
-			bScreen *screen = BLI_findstring(&bmain->screen, "UV Editing", offsetof(ID, name) + 2);
+			bScreen *screen = BLI_findstring(&bmain->screens, "UV Editing", offsetof(ID, name) + 2);
 			for (ScrArea *sa = screen->areabase.first; sa; sa = sa->next) {
 				for (SpaceLink *sl = sa->spacedata.first; sl; sl = sl->next) {
 					if (sl->spacetype == SPACE_IMAGE) {
@@ -198,7 +231,7 @@ void BLO_update_defaults_startup_blend(Main *bmain, const char *app_template)
 			}
 		}
 		/* set object in drawing mode */
-		for (Object *object = bmain->object.first; object; object = object->id.next) {
+		for (Object *object = bmain->objects.first; object; object = object->id.next) {
 			if (object->type == OB_GPENCIL) {
 				bGPdata *gpd = (bGPdata *)object->data;
 				object->mode = OB_MODE_PAINT_GPENCIL;
@@ -208,7 +241,7 @@ void BLO_update_defaults_startup_blend(Main *bmain, const char *app_template)
 		}
 
 		/* Be sure curfalloff and primitive are initializated */
-		for (Scene *scene = bmain->scene.first; scene; scene = scene->id.next) {
+		for (Scene *scene = bmain->scenes.first; scene; scene = scene->id.next) {
 			ToolSettings *ts = scene->toolsettings;
 			if (ts->gp_sculpt.cur_falloff == NULL) {
 				ts->gp_sculpt.cur_falloff = curvemapping_add(1, 0.0f, 0.0f, 1.0f, 1.0f);
@@ -249,7 +282,7 @@ void BLO_update_defaults_startup_blend(Main *bmain, const char *app_template)
 			}
 		}
 
-		for (bScreen *screen = bmain->screen.first; screen; screen = screen->id.next) {
+		for (bScreen *screen = bmain->screens.first; screen; screen = screen->id.next) {
 			/* Hide channels in timelines. */
 			for (ScrArea *sa = screen->areabase.first; sa; sa = sa->next) {
 				SpaceAction *saction = (sa->spacetype == SPACE_ACTION) ? sa->spacedata.first : NULL;
@@ -264,14 +297,19 @@ void BLO_update_defaults_startup_blend(Main *bmain, const char *app_template)
 			}
 		}
 
-		for (Scene *scene = bmain->scene.first; scene; scene = scene->id.next) {
+		for (Scene *scene = bmain->scenes.first; scene; scene = scene->id.next) {
 			BLI_strncpy(scene->r.engine, RE_engine_id_BLENDER_EEVEE, sizeof(scene->r.engine));
 
 			scene->r.cfra = 1.0f;
 			scene->r.displaymode = R_OUTPUT_WINDOW;
 
-			/* AV Sync break physics sim caching, disable until that is fixed. */
-			if (!(app_template && STREQ(app_template, "Video_Editing"))) {
+			if (app_template && STREQ(app_template, "Video_Editing")) {
+				/* Filmic is too slow, use default until it is optimized. */
+				STRNCPY(scene->view_settings.view_transform, "Default");
+				STRNCPY(scene->view_settings.look, "None");
+			}
+			else {
+				/* AV Sync break physics sim caching, disable until that is fixed. */
 				scene->audio.flag &= ~AUDIO_SYNC;
 				scene->flag &= ~SCE_FRAME_DROP;
 			}
@@ -286,57 +324,24 @@ void BLO_update_defaults_startup_blend(Main *bmain, const char *app_template)
 
 			/* Rename render layers. */
 			BKE_view_layer_rename(bmain, scene, scene->view_layers.first, "View Layer");
+
+			/* New EEVEE defaults. */
+			scene->eevee.bloom_intensity = 0.05f;
+			scene->eevee.bloom_clamp = 0.0f;
+			scene->eevee.motion_blur_shutter = 0.5f;
 		}
 
-		/* Rename lamp objects. */
-		for (Object *ob = bmain->object.first; ob; ob = ob->id.next) {
-			if (STREQ(ob->id.name, "OBLamp")) {
-				STRNCPY(ob->id.name, "OBLight");
-			}
-		}
-		for (Lamp *lamp = bmain->lamp.first; lamp; lamp = lamp->id.next) {
-			if (STREQ(lamp->id.name, "LALamp")) {
-				STRNCPY(lamp->id.name, "LALight");
-			}
-		}
+		/* Rename light objects. */
+		rename_id_for_versioning(bmain, ID_OB, "Light", "Light");
+		rename_id_for_versioning(bmain, ID_LA, "Light", "Light");
 
-		for (Mesh *mesh = bmain->mesh.first; mesh; mesh = mesh->id.next) {
+		for (Mesh *mesh = bmain->meshes.first; mesh; mesh = mesh->id.next) {
 			/* Match default for new meshes. */
 			mesh->smoothresh = DEG2RADF(30);
 		}
-
-		/* Grease Pencil New Eraser Brush */
-		Brush *br;
-		/* Rename old Hard Eraser */
-		br = (Brush *)BKE_libblock_find_name(bmain, ID_BR, "Eraser Hard");
-		if (br) {
-			strcpy(br->id.name, "BREraser Point");
-		}
-		for (Scene *scene = bmain->scene.first; scene; scene = scene->id.next) {
-			ToolSettings *ts = scene->toolsettings;
-			/* create new hard brush (only create one, but need ToolSettings) */
-			br = (Brush *)BKE_libblock_find_name(bmain, ID_BR, "Eraser Hard");
-			if (!br) {
-				Paint *paint = &ts->gp_paint->paint;
-				Brush *old_brush = paint->brush;
-
-				br = BKE_brush_add_gpencil(bmain, ts, "Eraser Hard");
-				br->size = 30.0f;
-				br->gpencil_settings->draw_strength = 1.0f;
-				br->gpencil_settings->flag = (GP_BRUSH_ENABLE_CURSOR | GP_BRUSH_DEFAULT_ERASER);
-				br->gpencil_settings->icon_id = GP_BRUSH_ICON_ERASE_HARD;
-				br->gpencil_tool = GPAINT_TOOL_ERASE;
-				br->gpencil_settings->eraser_mode = GP_BRUSH_ERASER_SOFT;
-				br->gpencil_settings->era_strength_f = 100.0f;
-				br->gpencil_settings->era_thickness_f = 50.0f;
-
-				/* back to default brush */
-				BKE_paint_brush_set(paint, old_brush);
-			}
-		}
 	}
 
-	for (bScreen *sc = bmain->screen.first; sc; sc = sc->id.next) {
+	for (bScreen *sc = bmain->screens.first; sc; sc = sc->id.next) {
 		for (ScrArea *sa = sc->areabase.first; sa; sa = sa->next) {
 			for (SpaceLink *sl = sa->spacedata.first; sl; sl = sl->next) {
 				if (sl->spacetype == SPACE_VIEW3D) {
@@ -347,7 +352,7 @@ void BLO_update_defaults_startup_blend(Main *bmain, const char *app_template)
 		}
 	}
 
-	for (Scene *scene = bmain->scene.first; scene; scene = scene->id.next) {
+	for (Scene *scene = bmain->scenes.first; scene; scene = scene->id.next) {
 		copy_v3_v3(scene->display.light_direction, (float[3]){M_SQRT1_3, M_SQRT1_3, M_SQRT1_3});
 		copy_v2_fl2(scene->safe_areas.title, 0.1f, 0.05f);
 		copy_v2_fl2(scene->safe_areas.action, 0.035f, 0.035f);

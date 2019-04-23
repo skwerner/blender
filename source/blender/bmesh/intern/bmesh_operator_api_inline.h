@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,14 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * Contributor(s): Joseph Eagar, Geoffrey Bantle, Campbell Barton
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/bmesh/intern/bmesh_operator_api_inline.h
- *  \ingroup bmesh
+/** \file
+ * \ingroup bmesh
  *
  * BMesh inline operator functions.
  */
@@ -70,8 +64,8 @@ ATTR_NONNULL(1, 2)
 BLI_INLINE void _bmo_elem_flag_set(BMesh *bm, BMFlagLayer *oflags, const short oflag, int val)
 {
 	BLI_assert(bm->use_toolflags);
-	if (val) oflags[bm->toolflag_index].f |= oflag;
-	else     oflags[bm->toolflag_index].f &= (short)~oflag;
+	if (val) { oflags[bm->toolflag_index].f |= oflag; }
+	else     { oflags[bm->toolflag_index].f &= (short)~oflag; }
 }
 
 ATTR_NONNULL(1, 2)
@@ -210,7 +204,9 @@ BLI_INLINE void *BMO_slot_map_ptr_get(BMOpSlot *slot, const void *element)
 {
 	void **val = BMO_slot_map_data_get(slot, element);
 	BLI_assert(slot->slot_subtype.map == BMO_OP_SLOT_SUBTYPE_MAP_INTERNAL);
-	if (val) return *val;
+	if (val) {
+		return *val;
+	}
 
 	return NULL;
 }
@@ -220,7 +216,9 @@ BLI_INLINE void *BMO_slot_map_elem_get(BMOpSlot *slot, const void *element)
 {
 	void **val = (void **) BMO_slot_map_data_get(slot, element);
 	BLI_assert(slot->slot_subtype.map == BMO_OP_SLOT_SUBTYPE_MAP_ELEM);
-	if (val) return *val;
+	if (val) {
+		return *val;
+	}
 
 	return NULL;
 }

@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,10 @@
  *
  * The Original Code is Copyright (C) 2005 Blender Foundation.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): Robin Allen
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/nodes/texture/nodes/node_texture_viewer.c
- *  \ingroup texnodes
+/** \file
+ * \ingroup texnodes
  */
 
 
@@ -36,10 +28,10 @@
 
 static bNodeSocketTemplate inputs[] = {
 	{ SOCK_RGBA, 1, N_("Color"), 1.0f, 0.0f, 0.0f, 1.0f },
-	{ -1, 0, "" }
+	{ -1, 0, "" },
 };
 static bNodeSocketTemplate outputs[] = {
-	{ -1, 0, "" }
+	{ -1, 0, "" },
 };
 
 static void exec(void *data, int UNUSED(thread), bNode *UNUSED(node), bNodeExecData *execdata, bNodeStack **in, bNodeStack **UNUSED(out))

@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,14 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * Contributors: Amorilia (amorilia@users.sourceforge.net)
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/imbuf/intern/dds/Stream.cpp
- *  \ingroup imbdds
+/** \file
+ * \ingroup imbdds
  */
 
 
@@ -36,7 +30,7 @@ static const char *msg_error_read = "DDS: trying to read beyond end of stream (c
 unsigned int Stream::seek(unsigned int p)
 {
 	if (p > size) {
-		puts(msg_error_seek);
+		set_failed(msg_error_seek);
 	}
 	else {
 		pos = p;
@@ -48,7 +42,7 @@ unsigned int Stream::seek(unsigned int p)
 unsigned int mem_read(Stream & mem, unsigned long long & i)
 {
 	if (mem.pos + 8 > mem.size) {
-		puts(msg_error_seek);
+		mem.set_failed(msg_error_seek);
 		return(0);
 	}
 	memcpy(&i, mem.mem + mem.pos, 8); // @@ todo: make sure little endian
@@ -59,7 +53,7 @@ unsigned int mem_read(Stream & mem, unsigned long long & i)
 unsigned int mem_read(Stream & mem, unsigned int & i)
 {
 	if (mem.pos + 4 > mem.size) {
-		puts(msg_error_read);
+		mem.set_failed(msg_error_read);
 		return(0);
 	}
 	memcpy(&i, mem.mem + mem.pos, 4); // @@ todo: make sure little endian
@@ -70,7 +64,7 @@ unsigned int mem_read(Stream & mem, unsigned int & i)
 unsigned int mem_read(Stream & mem, unsigned short & i)
 {
 	if (mem.pos + 2 > mem.size) {
-		puts(msg_error_read);
+		mem.set_failed(msg_error_read);
 		return(0);
 	}
 	memcpy(&i, mem.mem + mem.pos, 2); // @@ todo: make sure little endian
@@ -81,7 +75,7 @@ unsigned int mem_read(Stream & mem, unsigned short & i)
 unsigned int mem_read(Stream & mem, unsigned char & i)
 {
 	if (mem.pos + 1 > mem.size) {
-		puts(msg_error_read);
+		mem.set_failed(msg_error_read);
 		return(0);
 	}
 	i = (mem.mem + mem.pos)[0];
@@ -92,10 +86,18 @@ unsigned int mem_read(Stream & mem, unsigned char & i)
 unsigned int mem_read(Stream & mem, unsigned char *i, unsigned int cnt)
 {
 	if (mem.pos + cnt > mem.size) {
-		puts(msg_error_read);
+		mem.set_failed(msg_error_read);
 		return(0);
 	}
 	memcpy(i, mem.mem + mem.pos, cnt);
 	mem.pos += cnt;
 	return(cnt);
+}
+
+void Stream::set_failed(const char *msg)
+{
+	if (!failed) {
+		puts(msg);
+		failed = true;
+	}
 }

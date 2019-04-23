@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,17 +15,9 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
-/** \file DNA_sequence_types.h
- *  \ingroup DNA
- *  \since mar-2001
- *  \author nzc
+/** \file
+ * \ingroup DNA
  *
  * Structs for use by the 'Sequencer' (Video Editor)
  *
@@ -48,9 +38,9 @@
 #include "DNA_vfont_types.h"
 
 struct Ipo;
+struct MovieClip;
 struct Scene;
 struct bSound;
-struct MovieClip;
 
 /* strlens; 256= FILE_MAXFILE, 768= FILE_MAXDIR */
 
@@ -81,7 +71,7 @@ typedef struct StripColorBalance {
 	float gamma[3];
 	float gain[3];
 	int flag;
-	int pad;
+	char _pad[4];
 	// float exposure;
 	// float saturation;
 } StripColorBalance;
@@ -102,7 +92,7 @@ typedef struct StripProxy {
 	                       // to build
 	short build_flags;
 	char storage;
-	char pad[5];
+	char _pad[5];
 } StripProxy;
 
 typedef struct Strip {
@@ -183,7 +173,8 @@ typedef struct Sequence {
 	/** Old animation system, deprecated for 2.5. */
 	struct Ipo *ipo DNA_DEPRECATED;
 
-	/* these ID vars should never be NULL but can be when linked libs fail to load, so check on access */
+	/** these ID vars should never be NULL but can be when linked libs fail to load,
+	 * so check on access */
 	struct Scene     *scene;
 	/** Override scene camera. */
 	struct Object    *scene_camera;
@@ -229,7 +220,7 @@ typedef struct Sequence {
 	int sfra;
 
 	char alpha_mode;
-	char pad[2];
+	char _pad[2];
 
 	/* Multiview */
 	char views_format;
@@ -303,7 +294,7 @@ typedef struct TransformVars {
 
 typedef struct SolidColorVars {
 	float col[3];
-	float pad;
+	char _pad[4];
 } SolidColorVars;
 
 typedef struct SpeedControlVars {
@@ -329,7 +320,7 @@ typedef struct TextVars {
 	float wrap_width;
 	char flag;
 	char align, align_y;
-	char pad[1];
+	char _pad[1];
 } TextVars;
 
 /* TextVars.flag */
@@ -410,7 +401,7 @@ typedef struct WhiteBalanceModifierData {
 	SequenceModifierData modifier;
 
 	float white_value[3];
-	float pad;
+	char _pad[4];
 } WhiteBalanceModifierData;
 
 typedef struct SequencerTonemapModifierData {
@@ -455,7 +446,7 @@ typedef struct SequencerScopes {
 
 /* SpeedControlVars->flags */
 #define SEQ_SPEED_INTEGRATE      (1 << 0)
-#define SEQ_SPEED_DEPRECATED_1   (1 << 1)  /* cleared */
+#define SEQ_SPEED_UNUSED_1       (1 << 1)  /* cleared */
 #define SEQ_SPEED_COMPRESS_IPO_Y (1 << 2)
 
 /* ***************** SEQUENCE ****************** */
@@ -469,7 +460,7 @@ enum {
 	SEQ_OVERLAP                 = (1 << 3),
 	SEQ_FILTERY                 = (1 << 4),
 	SEQ_MUTE                    = (1 << 5),
-	SEQ_FLAG_DEPRECATED_6       = (1 << 6),  /* cleared */
+	SEQ_FLAG_UNUSED_6           = (1 << 6),  /* cleared */
 	SEQ_REVERSE_FRAMES          = (1 << 7),
 	SEQ_IPO_FRAME_LOCKED        = (1 << 8),
 	SEQ_EFFECT_NOT_LOADED       = (1 << 9),
@@ -481,9 +472,9 @@ enum {
 	SEQ_USE_PROXY               = (1 << 15),
 	SEQ_USE_TRANSFORM           = (1 << 16),
 	SEQ_USE_CROP                = (1 << 17),
-	SEQ_FLAG_DEPRECATED_18      = (1 << 18),  /* cleared */
-	SEQ_FLAG_DEPRECATED_19      = (1 << 19),  /* cleared */
-	SEQ_FLAG_DEPRECATED_21      = (1 << 21),  /* cleared */
+	SEQ_FLAG_UNUSED_18          = (1 << 18),  /* cleared */
+	SEQ_FLAG_UNUSED_19          = (1 << 19),  /* cleared */
+	SEQ_FLAG_UNUSED_21          = (1 << 21),  /* cleared */
 
 	SEQ_USE_EFFECT_DEFAULT_FADE = (1 << 22),
 	SEQ_USE_LINEAR_MODIFIERS    = (1 << 23),
@@ -542,7 +533,7 @@ enum {
 /* seq->alpha_mode */
 enum {
 	SEQ_ALPHA_STRAIGHT = 0,
-	SEQ_ALPHA_PREMUL   = 1
+	SEQ_ALPHA_PREMUL   = 1,
 };
 
 /* seq->type WATCH IT: SEQ_TYPE_EFFECT BIT is used to determine if this is an effect strip!!! */
@@ -597,7 +588,7 @@ enum {
 	SEQ_TYPE_DIFFERENCE  = 59,
 	SEQ_TYPE_EXCLUSION   = 60,
 
-	SEQ_TYPE_MAX         = 60
+	SEQ_TYPE_MAX         = 60,
 };
 
 #define SEQ_MOVIECLIP_RENDER_UNDISTORTED (1 << 0)
@@ -624,7 +615,7 @@ enum {
 	seqModifierType_WhiteBalance   = 6,
 	seqModifierType_Tonemap        = 7,
 
-	NUM_SEQUENCE_MODIFIER_TYPES
+	NUM_SEQUENCE_MODIFIER_TYPES,
 };
 
 /* SequenceModifierData->flag */
@@ -635,7 +626,7 @@ enum {
 
 enum {
 	SEQUENCE_MASK_INPUT_STRIP   = 0,
-	SEQUENCE_MASK_INPUT_ID      = 1
+	SEQUENCE_MASK_INPUT_ID      = 1,
 };
 
 enum {

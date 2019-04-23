@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,11 @@
  *
  * The Original Code is Copyright (C) 2008 Blender Foundation
  * All rights reserved.
- *
- * Contributor(s): Joshua Leung
- *
- * ***** END GPL LICENSE BLOCK *****
- *
  * Implementation of Bone Groups operators and editing API's
  */
 
-/** \file blender/editors/armature/pose_group.c
- *  \ingroup edarmature
+/** \file
+ * \ingroup edarmature
  */
 
 #include <string.h>
@@ -337,7 +330,7 @@ void POSE_OT_group_move(wmOperatorType *ot)
 	static const EnumPropertyItem group_slot_move[] = {
 		{-1, "UP", 0, "Up", ""},
 		{1, "DOWN", 0, "Down", ""},
-		{0, NULL, 0, NULL, NULL}
+		{0, NULL, 0, NULL, NULL},
 	};
 
 	/* identifiers */
@@ -470,6 +463,8 @@ static int pose_group_select_exec(bContext *C, wmOperator *UNUSED(op))
 	pose_group_select(ob, 1);
 
 	/* notifiers for updates */
+	bArmature *arm = ob->data;
+	DEG_id_tag_update(&arm->id, ID_RECALC_SELECT);
 	WM_event_add_notifier(C, NC_OBJECT | ND_POSE, ob);
 
 	return OPERATOR_FINISHED;
@@ -501,6 +496,8 @@ static int pose_group_deselect_exec(bContext *C, wmOperator *UNUSED(op))
 	pose_group_select(ob, 0);
 
 	/* notifiers for updates */
+	bArmature *arm = ob->data;
+	DEG_id_tag_update(&arm->id, ID_RECALC_SELECT);
 	WM_event_add_notifier(C, NC_OBJECT | ND_POSE, ob);
 
 	return OPERATOR_FINISHED;

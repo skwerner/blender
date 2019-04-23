@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,17 +15,11 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  * (uit traces) maart 95
  */
 
-/** \file blender/blenlib/intern/scanfill.c
- *  \ingroup bli
+/** \file
+ * \ingroup bli
  *
  * Triangulate multiple 2D/3D polygon with support for holes,
  * use for tessellating curves, fonts and geometry.
@@ -101,10 +93,10 @@ static int vergscdata(const void *a1, const void *a2)
 {
 	const ScanFillVertLink *x1 = a1, *x2 = a2;
 
-	if      (x1->vert->xy[1] < x2->vert->xy[1]) return  1;
-	else if (x1->vert->xy[1] > x2->vert->xy[1]) return -1;
-	else if (x1->vert->xy[0] > x2->vert->xy[0]) return  1;
-	else if (x1->vert->xy[0] < x2->vert->xy[0]) return -1;
+	if      (x1->vert->xy[1] < x2->vert->xy[1]) { return  1; }
+	else if (x1->vert->xy[1] > x2->vert->xy[1]) { return -1; }
+	else if (x1->vert->xy[0] > x2->vert->xy[0]) { return  1; }
+	else if (x1->vert->xy[0] < x2->vert->xy[0]) { return -1; }
 
 	return 0;
 }
@@ -113,10 +105,10 @@ static int vergpoly(const void *a1, const void *a2)
 {
 	const PolyFill *x1 = a1, *x2 = a2;
 
-	if      (x1->min_xy[0] > x2->min_xy[0]) return  1;
-	else if (x1->min_xy[0] < x2->min_xy[0]) return -1;
-	else if (x1->min_xy[1] > x2->min_xy[1]) return  1;
-	else if (x1->min_xy[1] < x2->min_xy[1]) return -1;
+	if      (x1->min_xy[0] > x2->min_xy[0]) { return  1; }
+	else if (x1->min_xy[0] < x2->min_xy[0]) { return -1; }
+	else if (x1->min_xy[1] > x2->min_xy[1]) { return  1; }
+	else if (x1->min_xy[1] < x2->min_xy[1]) { return -1; }
 
 	return 0;
 }
@@ -182,26 +174,27 @@ static bool boundisect(PolyFill *pf2, PolyFill *pf1)
 	/* has pf2 been touched (intersected) by pf1 ? with bounding box */
 	/* test first if polys exist */
 
-	if (pf1->edges == 0 || pf2->edges == 0) return false;
+	if (pf1->edges == 0 || pf2->edges == 0) { return false; }
 
-	if (pf2->max_xy[0] < pf1->min_xy[0]) return false;
-	if (pf2->max_xy[1] < pf1->min_xy[1]) return false;
+	if (pf2->max_xy[0] < pf1->min_xy[0]) { return false; }
+	if (pf2->max_xy[1] < pf1->min_xy[1]) { return false; }
 
-	if (pf2->min_xy[0] > pf1->max_xy[0]) return false;
-	if (pf2->min_xy[1] > pf1->max_xy[1]) return false;
+	if (pf2->min_xy[0] > pf1->max_xy[0]) { return false; }
+	if (pf2->min_xy[1] > pf1->max_xy[1]) { return false; }
 
 	/* join */
-	if (pf2->max_xy[0] < pf1->max_xy[0]) pf2->max_xy[0] = pf1->max_xy[0];
-	if (pf2->max_xy[1] < pf1->max_xy[1]) pf2->max_xy[1] = pf1->max_xy[1];
+	if (pf2->max_xy[0] < pf1->max_xy[0]) { pf2->max_xy[0] = pf1->max_xy[0]; }
+	if (pf2->max_xy[1] < pf1->max_xy[1]) { pf2->max_xy[1] = pf1->max_xy[1]; }
 
-	if (pf2->min_xy[0] > pf1->min_xy[0]) pf2->min_xy[0] = pf1->min_xy[0];
-	if (pf2->min_xy[1] > pf1->min_xy[1]) pf2->min_xy[1] = pf1->min_xy[1];
+	if (pf2->min_xy[0] > pf1->min_xy[0]) { pf2->min_xy[0] = pf1->min_xy[0]; }
+	if (pf2->min_xy[1] > pf1->min_xy[1]) { pf2->min_xy[1] = pf1->min_xy[1]; }
 
 	return true;
 }
 
 
-static void mergepolysSimp(ScanFillContext *sf_ctx, PolyFill *pf1, PolyFill *pf2)    /* add pf2 to pf1 */
+/* add pf2 to pf1 */
+static void mergepolysSimp(ScanFillContext *sf_ctx, PolyFill *pf1, PolyFill *pf2)
 {
 	ScanFillVert *eve;
 	ScanFillEdge *eed;
@@ -237,8 +230,12 @@ static bool testedgeside(const float v1[2], const float v2[2], const float v3[2]
 		return false;
 	}
 	else if (inp == 0.0f) {
-		if (v1[0] == v3[0] && v1[1] == v3[1]) return false;
-		if (v2[0] == v3[0] && v2[1] == v3[1]) return false;
+		if (v1[0] == v3[0] && v1[1] == v3[1]) {
+			return false;
+		}
+		if (v2[0] == v3[0] && v2[1] == v3[1]) {
+			return false;
+		}
 	}
 	return true;
 }
@@ -285,8 +282,12 @@ static bool addedgetoscanvert(ScanFillVertLink *sc, ScanFillEdge *eed)
 			break;
 		}
 	}
-	if (ed) BLI_insertlinkbefore((ListBase *)&(sc->edge_first), ed, eed);
-	else BLI_addtail((ListBase *)&(sc->edge_first), eed);
+	if (ed) {
+		BLI_insertlinkbefore((ListBase *)&(sc->edge_first), ed, eed);
+	}
+	else {
+		BLI_addtail((ListBase *)&(sc->edge_first), eed);
+	}
 
 	return true;
 }
@@ -502,7 +503,8 @@ static unsigned int scanfill(ScanFillContext *sf_ctx, PolyFill *pf, const int fl
 				eve->f = SF_VERT_NEW;  /* flag for connectedges later on */
 				sc->vert = eve;
 				sc->edge_first = sc->edge_last = NULL;
-				/* if (even->tmp.v == NULL) eve->tmp.u = verts; */ /* Note, debug print only will work for curve polyfill, union is in use for mesh */
+				/* Note, debug print only will work for curve polyfill, union is in use for mesh */
+				/* if (even->tmp.v == NULL) eve->tmp.u = verts; */
 				sc++;
 			}
 		}
@@ -525,13 +527,15 @@ static unsigned int scanfill(ScanFillContext *sf_ctx, PolyFill *pf, const int fl
 			 */
 			if (eed->v1->f == SF_VERT_ZERO_LEN) {
 				v1 = eed->v1;
-				while ((eed->v1->f == SF_VERT_ZERO_LEN) && (eed->v1->tmp.v != v1) && (eed->v1 != eed->v1->tmp.v))
+				while ((eed->v1->f == SF_VERT_ZERO_LEN) && (eed->v1->tmp.v != v1) && (eed->v1 != eed->v1->tmp.v)) {
 					eed->v1 = eed->v1->tmp.v;
+				}
 			}
 			if (eed->v2->f == SF_VERT_ZERO_LEN) {
 				v2 = eed->v2;
-				while ((eed->v2->f == SF_VERT_ZERO_LEN) && (eed->v2->tmp.v != v2) && (eed->v2 != eed->v2->tmp.v))
+				while ((eed->v2->f == SF_VERT_ZERO_LEN) && (eed->v2->tmp.v != v2) && (eed->v2 != eed->v2->tmp.v)) {
 					eed->v2 = eed->v2->tmp.v;
+				}
 			}
 			if (eed->v1 != eed->v2) {
 				addedgetoscanlist(scdata, eed, verts);
@@ -561,8 +565,9 @@ static unsigned int scanfill(ScanFillContext *sf_ctx, PolyFill *pf, const int fl
 
 	/* STEP 2: FILL LOOP */
 
-	if (pf->f == SF_POLY_NEW)
+	if (pf->f == SF_POLY_NEW) {
 		twoconnected = true;
+	}
 
 	/* (temporal) security: never much more faces than vertices */
 	totface = 0;
@@ -570,7 +575,8 @@ static unsigned int scanfill(ScanFillContext *sf_ctx, PolyFill *pf, const int fl
 		maxface = 2 * verts;       /* 2*verts: based at a filled circle within a triangle */
 	}
 	else {
-		maxface = verts - 2;       /* when we don't calc any holes, we assume face is a non overlapping loop */
+		/* when we don't calc any holes, we assume face is a non overlapping loop */
+		maxface = verts - 2;
 	}
 
 	sc = scdata;
@@ -582,8 +588,12 @@ static unsigned int scanfill(ScanFillContext *sf_ctx, PolyFill *pf, const int fl
 			if (ed1->v1->edge_tot == 1 || ed1->v2->edge_tot == 1) {
 				BLI_remlink((ListBase *)&(sc->edge_first), ed1);
 				BLI_addtail(&sf_ctx->filledgebase, ed1);
-				if (ed1->v1->edge_tot > 1) ed1->v1->edge_tot--;
-				if (ed1->v2->edge_tot > 1) ed1->v2->edge_tot--;
+				if (ed1->v1->edge_tot > 1) {
+					ed1->v1->edge_tot--;
+				}
+				if (ed1->v2->edge_tot > 1) {
+					ed1->v2->edge_tot--;
+				}
 			}
 			else {
 				ed1->v2->f = SF_VERT_AVAILABLE;
@@ -593,7 +603,8 @@ static unsigned int scanfill(ScanFillContext *sf_ctx, PolyFill *pf, const int fl
 			ed1 = sc->edge_first;
 			ed2 = ed1->next;
 
-			/* commented out... the ESC here delivers corrupted memory (and doesnt work during grab) */
+			/* commented out... the ESC here delivers corrupted memory
+			 * (and doesnt work during grab) */
 			/* if (callLocalInterruptCallBack()) break; */
 			if (totface >= maxface) {
 				/* printf("Fill error: endless loop. Escaped at vert %d,  tot: %d.\n", a, verts); */
@@ -620,7 +631,9 @@ static unsigned int scanfill(ScanFillContext *sf_ctx, PolyFill *pf, const int fl
 				v3 = ed2->v2;
 
 				/* this happens with a serial of overlapping edges */
-				if (v1 == v2 || v2 == v3) break;
+				if (v1 == v2 || v2 == v3) {
+					break;
+				}
 
 				/* printf("test verts %d %d %d\n", v1->tmp.u, v2->tmp.u, v3->tmp.u); */
 				miny = min_ff(v1->xy[1], v3->xy[1]);
@@ -628,21 +641,24 @@ static unsigned int scanfill(ScanFillContext *sf_ctx, PolyFill *pf, const int fl
 
 				for (b = a + 1; b < verts; b++, sc1++) {
 					if (sc1->vert->f == SF_VERT_NEW) {
-						if (sc1->vert->xy[1] <= miny) break;
+						if (sc1->vert->xy[1] <= miny) {
+							break;
+						}
 						if (testedgeside(v1->xy, v2->xy, sc1->vert->xy)) {
 							if (testedgeside(v2->xy, v3->xy, sc1->vert->xy)) {
 								if (testedgeside(v3->xy, v1->xy, sc1->vert->xy)) {
 									/* point is in triangle */
 
-									/* because multiple points can be inside triangle (concave holes) */
-									/* we continue searching and pick the one with sharpest corner */
-
+									/* Because multiple points can be inside triangle
+									 * (concave holes) we continue searching and pick the
+									 * one with sharpest corner. */
 									if (best_sc == NULL) {
 										/* even without holes we need to keep checking [#35861] */
 										best_sc = sc1;
 									}
 									else {
-										/* prevent angle calc for the simple cases only 1 vertex is found */
+										/* Prevent angle calc for the simple cases
+										 * only 1 vertex is found. */
 										if (firsttime == false) {
 											angle_best_cos = cos_v2v2v2(v2->xy, v1->xy, best_sc->vert->xy);
 											firsttime = true;
@@ -727,8 +743,12 @@ static unsigned int scanfill(ScanFillContext *sf_ctx, PolyFill *pf, const int fl
 				if (ed1->v1->edge_tot < 2 || ed1->v2->edge_tot < 2) {
 					BLI_remlink((ListBase *)&(sc->edge_first), ed1);
 					BLI_addtail(&sf_ctx->filledgebase, ed1);
-					if (ed1->v1->edge_tot > 1) ed1->v1->edge_tot--;
-					if (ed1->v2->edge_tot > 1) ed1->v2->edge_tot--;
+					if (ed1->v1->edge_tot > 1) {
+						ed1->v1->edge_tot--;
+					}
+					if (ed1->v2->edge_tot > 1) {
+						ed1->v2->edge_tot--;
+					}
 				}
 			}
 			/* done with loose edges */
@@ -937,8 +957,12 @@ unsigned int BLI_scanfill_calc_ex(ScanFillContext *sf_ctx, const int flag, const
 	if (flag & BLI_SCANFILL_CALC_LOOSE) {
 		unsigned int toggle = 0;
 		for (eed = sf_ctx->filledgebase.first; eed; eed = eed->next) {
-			if (eed->v1->edge_tot++ > 250) break;
-			if (eed->v2->edge_tot++ > 250) break;
+			if (eed->v1->edge_tot++ > 250) {
+				break;
+			}
+			if (eed->v2->edge_tot++ > 250) {
+				break;
+			}
 		}
 		if (eed) {
 			/* otherwise it's impossible to be sure you can clear vertices */

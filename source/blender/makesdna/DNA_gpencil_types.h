@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,14 +15,10 @@
  *
  * The Original Code is Copyright (C) 2008, Blender Foundation.
  * This is a new part of Blender
- *
- * Contributor(s): Joshua Leung, Antonio Vazquez
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file DNA_gpencil_types.h
- *  \ingroup DNA
+/** \file
+ * \ingroup DNA
  */
 
 #ifndef __DNA_GPENCIL_TYPES_H__
@@ -40,7 +34,6 @@ struct CurveMapping;
 struct GHash;
 struct MDeformVert;
 
-#define GP_OBGPENCIL_DEFAULT_SIZE  0.2f
 #define GP_DEFAULT_PIX_FACTOR 1.0f
 #define GP_DEFAULT_GRID_LINES 4
 #define GP_MAX_INPUT_SAMPLES 10
@@ -136,7 +129,7 @@ typedef enum eGPDpalettecolor_Flag {
 	/* do onion skinning */
 	PC_COLOR_ONIONSKIN = (1 << 3),
 	/* "volumetric" strokes */
-	PC_COLOR_VOLUMETRIC = (1 << 4)
+	PC_COLOR_VOLUMETRIC = (1 << 4),
 } eGPDpalettecolor_Flag;
 
 /* palette of colors */
@@ -155,7 +148,7 @@ typedef struct bGPDpalette {
 /* bGPDpalette->flag */
 typedef enum eGPDpalette_Flag {
 	/* palette is active */
-	PL_PALETTE_ACTIVE = (1 << 0)
+A,	PL_PALETTE_ACTIVE = (1 << 0)
 } eGPDpalette_Flag;
 
 /* ***************************************** */
@@ -206,8 +199,15 @@ typedef struct bGPDstroke {
 	/** Caps mode for each stroke extreme */
 	short caps[2];
 
+	/** gradient control along y for color */
+	float gradient_f;
+	/** factor xy of shape for dots gradients */
+	float gradient_s[2];
+	char _pad_3[4];
+
 	/** Vertex weight data. */
 	struct MDeformVert *dvert;
+	void *_pad3;
 
 	bGPDstroke_Runtime runtime;
 	char _pad2[4];
@@ -223,14 +223,16 @@ typedef enum eGPDstroke_Flag {
 	GP_STROKE_2DIMAGE		= (1 << 2),
 	/* stroke is selected */
 	GP_STROKE_SELECT		= (1 << 3),
-	/* Recalculate geometry data (triangulation, UVs, Bound Box,... (when true, force a new recalc) */
+	/* Recalculate geometry data (triangulation, UVs, Bound Box,...
+	 * (when true, force a new recalc) */
 	GP_STROKE_RECALC_GEOMETRY = (1 << 4),
 	/* Flag used to indicate that stroke is closed and draw edge between last and first point */
 	GP_STROKE_CYCLIC = (1 << 7),
-	/* Flag used to indicate that stroke is used for fill close and must use fill color for stroke and no fill area */
+	/* Flag used to indicate that stroke is used for fill close and must use
+	 * fill color for stroke and no fill area */
 	GP_STROKE_NOFILL = (1 << 8),
 	/* only for use with stroke-buffer (while drawing eraser) */
-	GP_STROKE_ERASER		= (1 << 15)
+	GP_STROKE_ERASER		= (1 << 15),
 } eGPDstroke_Flag;
 
 /* bGPDstroke->caps */
@@ -239,7 +241,7 @@ typedef enum eGPDstroke_Caps {
 	GP_STROKE_CAP_ROUND = 0,
 	GP_STROKE_CAP_FLAT  = 1,
 
-	GP_STROKE_CAP_MAX
+	GP_STROKE_CAP_MAX,
 } GPDstroke_Caps;
 
 /* ***************************************** */
@@ -276,7 +278,7 @@ typedef enum eGPDframe_Flag {
 	/* frame is being painted on */
 	GP_FRAME_PAINT		= (1 << 0),
 	/* for editing in Action Editor */
-	GP_FRAME_SELECT		= (1 << 1)
+	GP_FRAME_SELECT		= (1 << 1),
 } eGPDframe_Flag;
 
 /* ***************************************** */
@@ -303,7 +305,8 @@ typedef struct bGPDlayer {
 	/** Per-layer onion-skinning flags (eGPDlayer_OnionFlag). */
 	short onion_flag;
 
-	/** Color for strokes in layers. Used for annotations, and for ruler (which uses GPencil internally). */
+	/** Color for strokes in layers. Used for annotations, and for ruler
+	 * (which uses GPencil internally). */
 	float color[4];
 	/** Fill color for strokes in layers. Not used anymore (was only for). */
 	float fill[4];
@@ -464,9 +467,7 @@ typedef struct bGPdata {
 	/** Settings for this datablock. */
 	int flag;
 
-	/** Xray mode for strokes (eGP_DepthOrdering). */
-	short xray_mode;
-	char _pad1[2];
+	char _pad1[4];
 
 	/* Palettes */
 	/** List of bGPDpalette's   - Deprecated (2.78 - 2.79 only). */
@@ -513,7 +514,11 @@ typedef struct bGPdata {
 	char _pad2[6];
 	int   totstroke;
 	int   totpoint;
-	char _pad3[4];
+
+	/** Draw mode for strokes (eGP_DrawMode). */
+	short draw_mode;
+	char _pad3[2];
+
 	bGPgrid grid;
 
 	bGPdata_Runtime runtime;
@@ -551,7 +556,8 @@ typedef enum eGPdata_Flag {
 	GP_DATA_DEPTH_STROKE_ENDPOINTS = (1 << 7),
 /* ------------------------------------------------ DEPRECATED */
 
-	/* Stroke Editing Mode - Toggle to enable alternative keymap for easier editing of stroke points */
+	/* Stroke Editing Mode - Toggle to enable alternative keymap
+	 * for easier editing of stroke points */
 	GP_DATA_STROKE_EDITMODE	= (1 << 8),
 
 	/* Main flag to switch onion skinning on/off */
@@ -615,8 +621,13 @@ typedef enum eGP_OnionModes {
 typedef enum eGP_DepthOrdering {
 	GP_XRAY_FRONT = 0,
 	GP_XRAY_3DSPACE = 1,
-	GP_XRAY_BACK  = 2
 } eGP_DepthOrdering;
+
+/* draw modes (Use 2D or 3D position) */
+typedef enum eGP_DrawMode {
+	GP_DRAWMODE_2D = 0,
+	GP_DRAWMODE_3D = 1,
+} eGP_DrawMode;
 
 /* ***************************************** */
 /* Mode Checking Macros */

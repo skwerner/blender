@@ -16,11 +16,6 @@
 #
 # The Original Code is Copyright (C) 2006, Blender Foundation
 # All rights reserved.
-#
-# The Original Code is: all of this file.
-#
-# Contributor(s): Jacques Beaurain.
-#
 # ***** END GPL LICENSE BLOCK *****
 
 set(INC
@@ -59,15 +54,22 @@ set(SRC
 	intern/versioning_270.c
 	intern/versioning_280.c
 	intern/versioning_defaults.c
+	intern/versioning_dna.c
 	intern/versioning_legacy.c
 	intern/versioning_userdef.c
 	intern/writefile.c
 
 	BLO_blend_defs.h
+	BLO_blend_validate.h
 	BLO_readfile.h
 	BLO_undofile.h
 	BLO_writefile.h
 	intern/readfile.h
+)
+
+set(LIB
+	bf_blenkernel
+	bf_blenlib
 )
 
 if(WITH_BUILDINFO)
@@ -95,7 +97,7 @@ if(WITH_ALEMBIC)
 	add_definitions(-DWITH_ALEMBIC)
 endif()
 
-blender_add_lib(bf_blenloader "${SRC}" "${INC}" "${INC_SYS}")
+blender_add_lib(bf_blenloader "${SRC}" "${INC}" "${INC_SYS}" "${LIB}")
 
 # needed so writefile.c can use dna_type_offsets.h
 add_dependencies(bf_blenloader bf_dna)

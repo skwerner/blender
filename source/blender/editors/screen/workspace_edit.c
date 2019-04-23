@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,12 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/screen/workspace_edit.c
- *  \ingroup edscr
+/** \file
+ * \ingroup edscr
  */
 
 #include <stdlib.h>
@@ -29,7 +25,6 @@
 #include "BLI_fileops.h"
 #include "BLI_listbase.h"
 #include "BLI_path_util.h"
-#include "BLI_string.h"
 
 #include "BKE_appdir.h"
 #include "BKE_blendfile.h"
@@ -208,6 +203,9 @@ WorkSpace *ED_workspace_duplicate(
 	ListBase *layouts_old = BKE_workspace_layouts_get(workspace_old);
 	WorkSpace *workspace_new = ED_workspace_add(bmain, workspace_old->id.name + 2);
 
+	workspace_new->flags = workspace_old->flags;
+	BLI_duplicatelist(&workspace_new->owner_ids, &workspace_old->owner_ids);
+
 	/* TODO(campbell): tools */
 
 	for (WorkSpaceLayout *layout_old = layouts_old->first; layout_old; layout_old = layout_old->next) {
@@ -226,20 +224,31 @@ WorkSpace *ED_workspace_duplicate(
 bool ED_workspace_delete(
         WorkSpace *workspace, Main *bmain, bContext *C, wmWindowManager *wm)
 {
-	ID *workspace_id = (ID *)workspace;
-
 	if (BLI_listbase_is_single(&bmain->workspaces)) {
 		return false;
 	}
 
-	for (wmWindow *win = wm->windows.first; win; win = win->next) {
-		WorkSpace *prev = workspace_id->prev;
-		WorkSpace *next = workspace_id->next;
-
-		ED_workspace_change((prev != NULL) ? prev : next, C, wm, win);
+	ListBase ordered;
+	BKE_id_ordered_list(&ordered, &bmain->workspaces);
+	WorkSpace *prev = NULL, *next = NULL;
+	for (LinkData *link = ordered.first; link; link = link->next) {
+		if (link->data == workspace) {
+			prev = link->prev ? link->prev->data : NULL;
+			next = link->next ? link->next->data : NULL;
+			break;
+		}
 	}
-	BKE_libblock_free(bmain, workspace_id);
+	BLI_freelistN(&ordered);
+	BLI_assert((prev != NULL) || (next != NULL));
 
+	for (wmWindow *win = wm->windows.first; win; win = win->next) {
+		WorkSpace *workspace_active = WM_window_get_active_workspace(win);
+		if (workspace_active == workspace) {
+			ED_workspace_change((prev != NULL) ? prev : next, C, wm, win);
+		}
+	}
+
+	BKE_id_free(bmain, &workspace->id);
 	return true;
 }
 
@@ -306,6 +315,7 @@ static int workspace_delete_exec(bContext *C, wmOperator *UNUSED(op))
 {
 	WorkSpace *workspace = workspace_context_get(C);
 	WM_event_add_notifier(C, NC_SCREEN | ND_WORKSPACE_DELETE, workspace);
+	WM_event_add_notifier(C, NC_WINDOW, NULL);
 
 	return OPERATOR_FINISHED;
 }
@@ -523,7 +533,8 @@ static int workspace_add_invoke(bContext *C, wmOperator *op, const wmEvent *UNUS
 	BLI_freelistN(&templates);
 
 	uiItemS(layout);
-	uiItemO(layout, "Duplicate Current", ICON_DUPLICATE, "WORKSPACE_OT_duplicate");
+	uiItemO(layout, CTX_IFACE_(BLT_I18NCONTEXT_OPERATOR_DEFAULT, "Duplicate Current"), ICON_DUPLICATE,
+	        "WORKSPACE_OT_duplicate");
 
 	UI_popup_menu_end(C, pup);
 

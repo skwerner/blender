@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,15 +15,10 @@
  *
  * The Original Code is Copyright (C) 2008 Blender Foundation.
  * All rights reserved.
- *
- *
- * Contributor(s): Blender Foundation
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/space_view3d/view3d_draw.c
- *  \ingroup spview3d
+/** \file
+ * \ingroup spview3d
  */
 
 #include <math.h>
@@ -37,8 +30,6 @@
 #include "BLI_threads.h"
 #include "BLI_jitter_2d.h"
 
-#include "BIF_gl.h"
-#include "BIF_glutil.h"
 
 #include "BKE_camera.h"
 #include "BKE_collection.h"
@@ -102,7 +93,9 @@
 
 #include "view3d_intern.h"  /* own include */
 
-/* ******************** general functions ***************** */
+/* -------------------------------------------------------------------- */
+/** \name General Functions
+ * \{ */
 
 /**
  * \note keep this synced with #ED_view3d_mats_rv3d_backup/#ED_view3d_mats_rv3d_restore
@@ -114,10 +107,12 @@ void ED_view3d_update_viewmat(
 	RegionView3D *rv3d = ar->regiondata;
 
 	/* setup window matrices */
-	if (winmat)
+	if (winmat) {
 		copy_m4_m4(rv3d->winmat, winmat);
-	else
+	}
+	else {
 		view3d_winmatrix_set(depsgraph, ar, v3d, rect);
+	}
 
 	/* setup view matrix */
 	if (viewmat) {
@@ -154,7 +149,7 @@ void ED_view3d_update_viewmat(
 		rv3d->viewcamtexcofac[2] = rv3d->viewcamtexcofac[3] = 0.0f;
 	}
 
-	/* calculate pixelsize factor once, is used for lamps and obcenters */
+	/* calculate pixelsize factor once, is used for lights and obcenters */
 	{
 		/* note:  '1.0f / len_v3(v1)'  replaced  'len_v3(rv3d->viewmat[0])'
 		 * because of float point precision problems at large values [#23908] */
@@ -240,8 +235,9 @@ static void view3d_stereo3d_setup(
 	const char *viewname;
 
 	/* show only left or right camera */
-	if (v3d->stereo3d_camera != STEREO_3D_ID)
+	if (v3d->stereo3d_camera != STEREO_3D_ID) {
 		v3d->multiview_eye = v3d->stereo3d_camera;
+	}
 
 	is_left = v3d->multiview_eye == STEREO_LEFT_ID;
 	viewname = names[is_left ? STEREO_LEFT_ID : STEREO_RIGHT_ID];
@@ -300,7 +296,11 @@ void ED_view3d_draw_setup_view(
 	}
 }
 
-/* ******************** view border ***************** */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Draw View Border
+ * \{ */
 
 static void view3d_camera_border(
         const Scene *scene, struct Depsgraph *depsgraph,
@@ -314,16 +314,17 @@ static void view3d_camera_border(
 	/* get viewport viewplane */
 	BKE_camera_params_init(&params);
 	BKE_camera_params_from_view3d(&params, depsgraph, v3d, rv3d);
-	if (no_zoom)
+	if (no_zoom) {
 		params.zoom = 1.0f;
+	}
 	BKE_camera_params_compute_viewplane(&params, ar->winx, ar->winy, 1.0f, 1.0f);
 	rect_view = params.viewplane;
 
 	/* get camera viewplane */
 	BKE_camera_params_init(&params);
 	/* fallback for non camera objects */
-	params.clipsta = v3d->near;
-	params.clipend = v3d->far;
+	params.clip_start = v3d->clip_start;
+	params.clip_end = v3d->clip_end;
 	BKE_camera_params_from_object(&params, camera_eval);
 	if (no_shift) {
 		params.shiftx = 0.0f;
@@ -402,7 +403,9 @@ static void drawviewborder_triangle(
 		else {
 			ofs = h * (h / w);
 		}
-		if (dir == 'B') SWAP(float, y1, y2);
+		if (dir == 'B') {
+			SWAP(float, y1, y2);
+		}
 
 		immVertex2f(shdr_pos, x1, y1);
 		immVertex2f(shdr_pos, x2, y2);
@@ -420,7 +423,9 @@ static void drawviewborder_triangle(
 		else {
 			ofs = w * (w / h);
 		}
-		if (dir == 'B') SWAP(float, x1, x2);
+		if (dir == 'B') {
+			SWAP(float, x1, x2);
+		}
 
 		immVertex2f(shdr_pos, x1, y1);
 		immVertex2f(shdr_pos, x2, y2);
@@ -444,10 +449,12 @@ static void drawviewborder(Scene *scene, Depsgraph *depsgraph, ARegion *ar, View
 	Camera *ca = NULL;
 	RegionView3D *rv3d = ar->regiondata;
 
-	if (v3d->camera == NULL)
+	if (v3d->camera == NULL) {
 		return;
-	if (v3d->camera->type == OB_CAMERA)
+	}
+	if (v3d->camera->type == OB_CAMERA) {
 		ca = v3d->camera->data;
+	}
 
 	ED_view3d_calc_camera_border(scene, depsgraph, ar, v3d, rv3d, &viewborder, false);
 	/* the offsets */
@@ -491,14 +498,18 @@ static void drawviewborder(Scene *scene, Depsgraph *depsgraph, ARegion *ar, View
 
 			immUniformColor4f(0.0f, 0.0f, 0.0f, alpha);
 
-			if (x1i > 0.0f)
+			if (x1i > 0.0f) {
 				immRectf(shdr_pos, 0.0f, winy, x1i, 0.0f);
-			if (x2i < winx)
+			}
+			if (x2i < winx) {
 				immRectf(shdr_pos, x2i, winy, winx, 0.0f);
-			if (y2i < winy)
+			}
+			if (y2i < winy) {
 				immRectf(shdr_pos, x1i, winy, x2i, y2i);
-			if (y2i > 0.0f)
+			}
+			if (y2i > 0.0f) {
 				immRectf(shdr_pos, x1i, y1i, x2i, 0.0f);
+			}
 
 			GPU_blend(false);
 		}
@@ -518,7 +529,7 @@ static void drawviewborder(Scene *scene, Depsgraph *depsgraph, ARegion *ar, View
 	}
 
 	/* When overlays are disabled, only show camera outline & passepartout. */
-	if (v3d->flag2 & V3D_RENDER_OVERRIDE) {
+	if (v3d->flag2 & V3D_HIDE_OVERLAYS) {
 		return;
 	}
 
@@ -718,7 +729,10 @@ void ED_view3d_draw_depth(
 	/* temp set drawtype to solid */
 	/* Setting these temporarily is not nice */
 	v3d->flag &= ~V3D_SELECT_OUTLINE;
-	U.glalphaclip = alphaoverride ? 0.5f : glalphaclip; /* not that nice but means we wont zoom into billboards */
+
+	/* not that nice but means we wont zoom into billboards */
+	U.glalphaclip = alphaoverride ? 0.5f : glalphaclip;
+
 	U.obcenter_dia = 0;
 
 	/* Tools may request depth outside of regular drawing code. */
@@ -737,7 +751,8 @@ void ED_view3d_draw_depth(
 
 	GPU_depth_test(true);
 
-	DRW_draw_depth_loop(depsgraph, ar, v3d);
+	GPUViewport *viewport = WM_draw_region_get_viewport(ar, 0);
+	DRW_draw_depth_loop(depsgraph, ar, v3d, viewport);
 
 	if (rv3d->rflag & RV3D_CLIPPING) {
 		ED_view3d_clipping_disable();
@@ -768,8 +783,9 @@ float ED_scene_grid_scale(Scene *scene, const char **grid_unit)
 
 		if (usys) {
 			int i = bUnit_GetBaseUnit(usys);
-			if (grid_unit)
+			if (grid_unit) {
 				*grid_unit = bUnit_GetNameDisplay(usys, i);
+			}
 			return (float)bUnit_GetScaler(usys, i) / scene->unit.scale_length;
 		}
 	}
@@ -796,12 +812,11 @@ float ED_view3d_grid_view_scale(
 			/* Allow 3 more subdivisions (see OBJECT_engine_init). */
 			grid_scale /= powf(grid_subdiv, 3);
 
-			float grid_distance = rv3d->dist;
-			float lvl = (logf(grid_distance / grid_scale) / logf(grid_subdiv));
+			/* `3.0` was a value obtained by trial and error in order to get
+			 * a nice snap distance.*/
+			float grid_res = 3.0 * (rv3d->dist / v3d->lens);
+			float lvl = (logf(grid_res / grid_scale) / logf(grid_subdiv));
 
-			/* 1.3f is a visually chosen offset for the
-			 * subdivision to match the visible grid. */
-			lvl -= 1.3f;
 			CLAMP_MIN(lvl, 0.0f);
 
 			grid_scale *= pow(grid_subdiv, (int)lvl);
@@ -814,7 +829,8 @@ float ED_view3d_grid_view_scale(
 static void draw_view_axis(RegionView3D *rv3d, const rcti *rect)
 {
 	const float k = U.rvisize * U.pixelsize;  /* axis size */
-	const int bright = - 20 * (10 - U.rvibright);  /* axis alpha offset (rvibright has range 0-10) */
+	/* axis alpha offset (rvibright has range 0-10) */
+	const int bright = - 20 * (10 - U.rvibright);
 
 	/* Axis center in screen coordinates.
 	 *
@@ -825,7 +841,7 @@ static void draw_view_axis(RegionView3D *rv3d, const rcti *rect)
 	const float starty = rect->ymax - (k + UI_UNIT_Y);
 
 	float axis_pos[3][2];
-	unsigned char axis_col[3][4];
+	uchar axis_col[3][4];
 
 	int axis_order[3] = {0, 1, 2};
 	axis_sort_v3(rv3d->viewinv[2], axis_order);
@@ -969,8 +985,9 @@ static void draw_rotation_guide(const RegionView3D *rv3d)
 
 		color[3] = 255;  /* solid dot */
 	}
-	else
+	else {
 		color[3] = 127;  /* see-through dot */
+	}
 
 	immUnbindProgram();
 
@@ -995,8 +1012,6 @@ static void draw_rotation_guide(const RegionView3D *rv3d)
 }
 #endif /* WITH_INPUT_NDOF */
 
-/* ******************** info ***************** */
-
 /**
  * Render and camera border
  */
@@ -1015,8 +1030,14 @@ static void view3d_draw_border(const bContext *C, ARegion *ar)
 	}
 }
 
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Draw Text & Info
+ * \{ */
+
 /**
- * Grease Pencil
+ * Draw Info
  */
 static void view3d_draw_grease_pencil(const bContext *UNUSED(C))
 {
@@ -1032,28 +1053,52 @@ static const char *view3d_get_name(View3D *v3d, RegionView3D *rv3d)
 
 	switch (rv3d->view) {
 		case RV3D_VIEW_FRONT:
-			if (rv3d->persp == RV3D_ORTHO) name = IFACE_("Front Orthographic");
-			else name = IFACE_("Front Perspective");
+			if (rv3d->persp == RV3D_ORTHO) {
+				name = IFACE_("Front Orthographic");
+			}
+			else {
+				name = IFACE_("Front Perspective");
+			}
 			break;
 		case RV3D_VIEW_BACK:
-			if (rv3d->persp == RV3D_ORTHO) name = IFACE_("Back Orthographic");
-			else name = IFACE_("Back Perspective");
+			if (rv3d->persp == RV3D_ORTHO) {
+				name = IFACE_("Back Orthographic");
+			}
+			else {
+				name = IFACE_("Back Perspective");
+			}
 			break;
 		case RV3D_VIEW_TOP:
-			if (rv3d->persp == RV3D_ORTHO) name = IFACE_("Top Orthographic");
-			else name = IFACE_("Top Perspective");
+			if (rv3d->persp == RV3D_ORTHO) {
+				name = IFACE_("Top Orthographic");
+			}
+			else {
+				name = IFACE_("Top Perspective");
+			}
 			break;
 		case RV3D_VIEW_BOTTOM:
-			if (rv3d->persp == RV3D_ORTHO) name = IFACE_("Bottom Orthographic");
-			else name = IFACE_("Bottom Perspective");
+			if (rv3d->persp == RV3D_ORTHO) {
+				name = IFACE_("Bottom Orthographic");
+			}
+			else {
+				name = IFACE_("Bottom Perspective");
+			}
 			break;
 		case RV3D_VIEW_RIGHT:
-			if (rv3d->persp == RV3D_ORTHO) name = IFACE_("Right Orthographic");
-			else name = IFACE_("Right Perspective");
+			if (rv3d->persp == RV3D_ORTHO) {
+				name = IFACE_("Right Orthographic");
+			}
+			else {
+				name = IFACE_("Right Perspective");
+			}
 			break;
 		case RV3D_VIEW_LEFT:
-			if (rv3d->persp == RV3D_ORTHO) name = IFACE_("Left Orthographic");
-			else name = IFACE_("Left Perspective");
+			if (rv3d->persp == RV3D_ORTHO) {
+				name = IFACE_("Left Orthographic");
+			}
+			else {
+				name = IFACE_("Left Perspective");
+			}
 			break;
 
 		default:
@@ -1211,19 +1256,24 @@ static void draw_selected_name(Scene *scene, ViewLayer *view_layer, Object *ob, 
 		}
 
 		/* color depends on whether there is a keyframe */
-		if (id_frame_has_keyframe((ID *)ob, /* BKE_scene_frame_get(scene) */ (float)cfra, ANIMFILTER_KEYS_LOCAL))
+		if (id_frame_has_keyframe((ID *)ob, /* BKE_scene_frame_get(scene) */ (float)cfra, ANIMFILTER_KEYS_LOCAL)) {
 			UI_FontThemeColor(font_id, TH_TIME_KEYFRAME);
-		else if (ED_gpencil_has_keyframe_v3d(scene, ob, cfra))
+		}
+		else if (ED_gpencil_has_keyframe_v3d(scene, ob, cfra)) {
 			UI_FontThemeColor(font_id, TH_TIME_GP_KEYFRAME);
-		else
+		}
+		else {
 			UI_FontThemeColor(font_id, TH_TEXT_HI);
+		}
 	}
 	else {
 		/* no object */
-		if (ED_gpencil_has_keyframe_v3d(scene, NULL, cfra))
+		if (ED_gpencil_has_keyframe_v3d(scene, NULL, cfra)) {
 			UI_FontThemeColor(font_id, TH_TIME_GP_KEYFRAME);
-		else
+		}
+		else {
 			UI_FontThemeColor(font_id, TH_TEXT_HI);
+		}
 	}
 
 	if (markern) {
@@ -1239,8 +1289,6 @@ static void draw_selected_name(Scene *scene, ViewLayer *view_layer, Object *ob, 
 
 	BLF_disable(font_id, BLF_SHADOW);
 }
-
-/* ******************** view loop ***************** */
 
 /**
  * Information drawn on top of the solid plates and composed data
@@ -1276,7 +1324,6 @@ void view3d_draw_region_info(const bContext *C, ARegion *ar)
 	BLF_batch_draw_begin();
 
 	if ((U.uiflag & USER_SHOW_GIZMO_AXIS) ||
-	    (v3d->flag2 & V3D_RENDER_OVERRIDE) ||
 	    /* No need to display gizmo and this info. */
 	    (v3d->gizmo_flag & (V3D_GIZMO_HIDE | V3D_GIZMO_HIDE_NAVIGATE)))
 	{
@@ -1289,7 +1336,7 @@ void view3d_draw_region_info(const bContext *C, ARegion *ar)
 	int xoffset = rect.xmin + U.widget_unit;
 	int yoffset = rect.ymax;
 
-	if ((v3d->flag2 & V3D_RENDER_OVERRIDE) == 0 &&
+	if ((v3d->flag2 & V3D_HIDE_OVERLAYS) == 0 &&
 	    (v3d->overlay.flag & V3D_OVERLAY_HIDE_TEXT) == 0)
 	{
 		if ((U.uiflag & USER_SHOW_FPS) && ED_screen_animation_no_scrub(wm)) {
@@ -1326,6 +1373,12 @@ void view3d_draw_region_info(const bContext *C, ARegion *ar)
 
 	BLF_batch_draw_end();
 }
+
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Draw Viewport Contents
+ * \{ */
 
 static void view3d_draw_view(const bContext *C, ARegion *ar)
 {
@@ -1368,8 +1421,9 @@ void view3d_main_region_draw(const bContext *C, ARegion *ar)
 	v3d->flag |= V3D_INVALID_BACKBUF;
 }
 
-/* -------------------------------------------------------------------- */
+/** \} */
 
+/* -------------------------------------------------------------------- */
 /** \name Offscreen Drawing
  * \{ */
 
@@ -1400,7 +1454,7 @@ void ED_view3d_draw_offscreen(
         View3D *v3d, ARegion *ar, int winx, int winy,
         float viewmat[4][4], float winmat[4][4],
         bool do_sky, bool UNUSED(is_persp), const char *viewname,
-        GPUFXSettings *UNUSED(fx_settings),
+        GPUFXSettings *UNUSED(fx_settings), const bool do_color_management,
         GPUOffScreen *ofs, GPUViewport *viewport)
 {
 	RegionView3D *rv3d = ar->regiondata;
@@ -1423,7 +1477,7 @@ void ED_view3d_draw_offscreen(
 	UI_SetTheme(SPACE_VIEW3D, RGN_TYPE_WINDOW);
 
 	/* set flags */
-	G.f |= G_RENDER_OGL;
+	G.f |= G_FLAG_RENDER_VIEWPORT;
 
 	{
 		/* free images which can have changed on frame-change
@@ -1436,15 +1490,17 @@ void ED_view3d_draw_offscreen(
 	GPU_matrix_push();
 	GPU_matrix_identity_set();
 
-	if ((viewname != NULL && viewname[0] != '\0') && (viewmat == NULL) && rv3d->persp == RV3D_CAMOB && v3d->camera)
+	if ((viewname != NULL && viewname[0] != '\0') && (viewmat == NULL) && rv3d->persp == RV3D_CAMOB && v3d->camera) {
 		view3d_stereo3d_setup_offscreen(depsgraph, scene, v3d, ar, winmat, viewname);
-	else
+	}
+	else {
 		view3d_main_region_setup_view(depsgraph, scene, v3d, ar, viewmat, winmat, NULL);
+	}
 
 	/* main drawing call */
 	DRW_draw_render_loop_offscreen(
 	        depsgraph, engine_type, ar, v3d,
-	        do_sky, ofs, viewport);
+	        do_sky, do_color_management, ofs, viewport);
 
 	/* restore size */
 	ar->winx = bwinx;
@@ -1456,7 +1512,7 @@ void ED_view3d_draw_offscreen(
 
 	UI_Theme_Restore(&theme_state);
 
-	G.f &= ~G_RENDER_OGL;
+	G.f &= ~G_FLAG_RENDER_VIEWPORT;
 }
 
 /**
@@ -1469,7 +1525,7 @@ ImBuf *ED_view3d_draw_offscreen_imbuf(
         Depsgraph *depsgraph, Scene *scene,
         int drawtype,
         View3D *v3d, ARegion *ar, int sizex, int sizey,
-        unsigned int flag, unsigned int draw_flags,
+        uint flag, uint draw_flags,
         int alpha_mode, int samples, const char *viewname,
         /* output vars */
         GPUOffScreen *ofs, char err_out[256])
@@ -1521,8 +1577,8 @@ ImBuf *ED_view3d_draw_offscreen_imbuf(
 
 		BKE_camera_params_init(&params);
 		/* fallback for non camera objects */
-		params.clipsta = v3d->near;
-		params.clipend = v3d->far;
+		params.clip_start = v3d->clip_start;
+		params.clip_end = v3d->clip_end;
 		BKE_camera_params_from_object(&params, camera_eval);
 		BKE_camera_multiview_params(&scene->r, &params, camera_eval, viewname);
 		BKE_camera_params_compute_viewplane(&params, sizex, sizey, scene->r.xasp, scene->r.yasp);
@@ -1535,24 +1591,25 @@ ImBuf *ED_view3d_draw_offscreen_imbuf(
 	}
 	else {
 		rctf viewplane;
-		float clipsta, clipend;
+		float clip_start, clipend;
 
-		is_ortho = ED_view3d_viewplane_get(depsgraph, v3d, rv3d, sizex, sizey, &viewplane, &clipsta, &clipend, NULL);
+		is_ortho = ED_view3d_viewplane_get(depsgraph, v3d, rv3d, sizex, sizey, &viewplane, &clip_start, &clipend, NULL);
 		if (is_ortho) {
 			orthographic_m4(winmat, viewplane.xmin, viewplane.xmax, viewplane.ymin, viewplane.ymax, -clipend, clipend);
 		}
 		else {
-			perspective_m4(winmat, viewplane.xmin, viewplane.xmax, viewplane.ymin, viewplane.ymax, clipsta, clipend);
+			perspective_m4(winmat, viewplane.xmin, viewplane.xmax, viewplane.ymin, viewplane.ymax, clip_start, clipend);
 		}
 	}
 
 	if ((samples && use_full_sample) == 0) {
+		const bool do_color_management = (ibuf->rect_float == NULL);
 		/* Single-pass render, common case */
 		ED_view3d_draw_offscreen(
 		        depsgraph, scene, drawtype,
 		        v3d, ar, sizex, sizey, NULL, winmat,
 		        draw_sky, !is_ortho, viewname,
-		        &fx_settings, ofs, NULL);
+		        &fx_settings, do_color_management, ofs, NULL);
 
 		if (ibuf->rect_float) {
 			GPU_offscreen_read_pixels(ofs, GL_FLOAT, ibuf->rect_float);
@@ -1577,7 +1634,7 @@ ImBuf *ED_view3d_draw_offscreen_imbuf(
 		        depsgraph, scene, drawtype,
 		        v3d, ar, sizex, sizey, NULL, winmat,
 		        draw_sky, !is_ortho, viewname,
-		        &fx_settings, ofs, viewport);
+		        &fx_settings, false, ofs, viewport);
 		GPU_offscreen_read_pixels(ofs, GL_FLOAT, accum_buffer);
 
 		/* skip the first sample */
@@ -1592,10 +1649,10 @@ ImBuf *ED_view3d_draw_offscreen_imbuf(
 			        depsgraph, scene, drawtype,
 			        v3d, ar, sizex, sizey, NULL, winmat_jitter,
 			        draw_sky, !is_ortho, viewname,
-			        &fx_settings, ofs, viewport);
+			        &fx_settings, false, ofs, viewport);
 			GPU_offscreen_read_pixels(ofs, GL_FLOAT, rect_temp);
 
-			unsigned int i = sizex * sizey * 4;
+			uint i = sizex * sizey * 4;
 			while (i--) {
 				accum_buffer[i] += rect_temp[i];
 			}
@@ -1613,16 +1670,16 @@ ImBuf *ED_view3d_draw_offscreen_imbuf(
 
 		if (ibuf->rect_float) {
 			float *rect_float = ibuf->rect_float;
-			unsigned int i = sizex * sizey * 4;
+			uint i = sizex * sizey * 4;
 			while (i--) {
 				rect_float[i] = accum_buffer[i] / samples;
 			}
 		}
 		else {
-			unsigned char *rect_ub = (unsigned char *)ibuf->rect;
-			unsigned int i = sizex * sizey * 4;
+			uchar *rect_ub = (uchar *)ibuf->rect;
+			uint i = sizex * sizey * 4;
 			while (i--) {
-				rect_ub[i] = (unsigned char)(255.0f * accum_buffer[i] / samples);
+				rect_ub[i] = (uchar)(255.0f * accum_buffer[i] / samples);
 			}
 		}
 
@@ -1642,8 +1699,9 @@ ImBuf *ED_view3d_draw_offscreen_imbuf(
 		GPU_framebuffer_bind(old_fb);
 	}
 
-	if (ibuf->rect_float && ibuf->rect)
+	if (ibuf->rect_float && ibuf->rect) {
 		IMB_rect_from_float(ibuf);
+	}
 
 	return ibuf;
 }
@@ -1660,7 +1718,7 @@ ImBuf *ED_view3d_draw_offscreen_imbuf_simple(
         Depsgraph *depsgraph, Scene *scene,
         int drawtype,
         Object *camera, int width, int height,
-        unsigned int flag, unsigned int draw_flags,
+        uint flag, uint draw_flags,
         int alpha_mode, int samples, const char *viewname,
         GPUOffScreen *ofs, char err_out[256])
 {
@@ -1675,7 +1733,7 @@ ImBuf *ED_view3d_draw_offscreen_imbuf_simple(
 
 	v3d.camera = camera;
 	v3d.shading.type = drawtype;
-	v3d.flag2 = V3D_RENDER_OVERRIDE;
+	v3d.flag2 = V3D_HIDE_OVERLAYS;
 
 	if (draw_flags & V3D_OFSDRAW_USE_GPENCIL) {
 		v3d.flag2 |= V3D_SHOW_ANNOTATION;
@@ -1709,8 +1767,8 @@ ImBuf *ED_view3d_draw_offscreen_imbuf_simple(
 		BKE_camera_params_compute_matrix(&params);
 
 		copy_m4_m4(rv3d.winmat, params.winmat);
-		v3d.near = params.clipsta;
-		v3d.far = params.clipend;
+		v3d.clip_start = params.clip_start;
+		v3d.clip_end = params.clip_end;
 		v3d.lens = params.lens;
 	}
 
@@ -1721,6 +1779,34 @@ ImBuf *ED_view3d_draw_offscreen_imbuf_simple(
 	        depsgraph, scene, drawtype,
 	        &v3d, &ar, width, height, flag,
 	        draw_flags, alpha_mode, samples, viewname, ofs, err_out);
+}
+
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Viewport Clipping
+ * \{ */
+
+static bool view3d_clipping_test(const float co[3], const float clip[6][4])
+{
+	if (plane_point_side_v3(clip[0], co) > 0.0f) {
+		if (plane_point_side_v3(clip[1], co) > 0.0f) {
+			if (plane_point_side_v3(clip[2], co) > 0.0f) {
+				if (plane_point_side_v3(clip[3], co) > 0.0f) {
+					return false;
+				}
+			}
+		}
+	}
+
+	return true;
+}
+
+/* for 'local' ED_view3d_clipping_local must run first
+ * then all comparisons can be done in localspace */
+bool ED_view3d_clipping_test(const RegionView3D *rv3d, const float co[3], const bool is_local)
+{
+	return view3d_clipping_test(co, is_local ? rv3d->clip_local : rv3d->clip);
 }
 
 /** \} */

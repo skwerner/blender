@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,14 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * Contributor(s): Blender Foundation (2009)
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/makesrna/intern/rna_render.c
- *  \ingroup RNA
+/** \file
+ * \ingroup RNA
  */
 
 #include <stdlib.h>
@@ -77,7 +71,7 @@ const EnumPropertyItem rna_enum_render_pass_type_items[] = {
 #ifdef WITH_CYCLES_DEBUG
 	{SCE_PASS_DEBUG, "DEBUG", 0, "Pass used for render engine debugging", ""},
 #endif
-	{0, NULL, 0, NULL, NULL}
+	{0, NULL, 0, NULL, NULL},
 };
 
 const EnumPropertyItem rna_enum_bake_pass_type_items[] = {
@@ -93,7 +87,7 @@ const EnumPropertyItem rna_enum_bake_pass_type_items[] = {
 	{SCE_PASS_GLOSSY_COLOR, "GLOSSY", 0, "Glossy", ""},
 	{SCE_PASS_TRANSM_COLOR, "TRANSMISSION", 0, "Transmission", ""},
 	{SCE_PASS_SUBSURFACE_COLOR, "SUBSURFACE", 0, "Subsurface", ""},
-	{0, NULL, 0, NULL, NULL}
+	{0, NULL, 0, NULL, NULL},
 };
 
 #ifdef RNA_RUNTIME
@@ -467,7 +461,7 @@ static void rna_def_render_engine(BlenderRNA *brna)
 	        {SOCK_FLOAT,   "VALUE",     0,    "Value",     ""},
 	        {SOCK_VECTOR,  "VECTOR",    0,    "Vector",    ""},
 	        {SOCK_RGBA,    "COLOR",     0,    "Color",     ""},
-	        {0, NULL, 0, NULL, NULL}
+	        {0, NULL, 0, NULL, NULL},
 	};
 
 	srna = RNA_def_struct(brna, "RenderEngine", NULL);
@@ -748,10 +742,6 @@ static void rna_def_render_engine(BlenderRNA *brna)
 
 	prop = RNA_def_property(srna, "bl_use_preview", PROP_BOOLEAN, PROP_NONE);
 	RNA_def_property_boolean_sdna(prop, NULL, "type->flag", RE_USE_PREVIEW);
-	RNA_def_property_flag(prop, PROP_REGISTER_OPTIONAL);
-
-	prop = RNA_def_property(srna, "bl_use_texture_preview", PROP_BOOLEAN, PROP_NONE);
-	RNA_def_property_boolean_sdna(prop, NULL, "type->flag", RE_USE_TEXTURE_PREVIEW);
 	RNA_def_property_flag(prop, PROP_REGISTER_OPTIONAL);
 
 	prop = RNA_def_property(srna, "bl_use_postprocess", PROP_BOOLEAN, PROP_NONE);

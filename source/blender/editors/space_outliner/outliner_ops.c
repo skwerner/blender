@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,28 +15,19 @@
  *
  * The Original Code is Copyright (C) 2008 Blender Foundation.
  * All rights reserved.
- *
- *
- * Contributor(s): Blender Foundation
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/space_outliner/outliner_ops.c
- *  \ingroup spoutliner
+/** \file
+ * \ingroup spoutliner
  */
 
 #include "MEM_guardedalloc.h"
 
-#include "BLI_listbase.h"
-#include "BLI_math.h"
 
 #include "DNA_collection_types.h"
 
 #include "BLT_translation.h"
 
-#include "BKE_context.h"
-#include "BKE_main.h"
 
 #include "GPU_immediate.h"
 #include "GPU_state.h"
@@ -74,6 +63,8 @@ void outliner_operatortypes(void)
 	WM_operatortype_append(OUTLINER_OT_id_operation);
 	WM_operatortype_append(OUTLINER_OT_id_delete);
 	WM_operatortype_append(OUTLINER_OT_id_remap);
+	WM_operatortype_append(OUTLINER_OT_id_copy);
+	WM_operatortype_append(OUTLINER_OT_id_paste);
 	WM_operatortype_append(OUTLINER_OT_data_operation);
 	WM_operatortype_append(OUTLINER_OT_animdata_operation);
 	WM_operatortype_append(OUTLINER_OT_action_set);
@@ -104,6 +95,7 @@ void outliner_operatortypes(void)
 
 	/* collections */
 	WM_operatortype_append(OUTLINER_OT_collection_new);
+	WM_operatortype_append(OUTLINER_OT_collection_duplicate_linked);
 	WM_operatortype_append(OUTLINER_OT_collection_duplicate);
 	WM_operatortype_append(OUTLINER_OT_collection_delete);
 	WM_operatortype_append(OUTLINER_OT_collection_objects_select);
@@ -116,6 +108,18 @@ void outliner_operatortypes(void)
 	WM_operatortype_append(OUTLINER_OT_collection_holdout_clear);
 	WM_operatortype_append(OUTLINER_OT_collection_indirect_only_set);
 	WM_operatortype_append(OUTLINER_OT_collection_indirect_only_clear);
+
+	WM_operatortype_append(OUTLINER_OT_collection_isolate);
+	WM_operatortype_append(OUTLINER_OT_collection_disable);
+	WM_operatortype_append(OUTLINER_OT_collection_enable);
+	WM_operatortype_append(OUTLINER_OT_collection_hide);
+	WM_operatortype_append(OUTLINER_OT_collection_show);
+	WM_operatortype_append(OUTLINER_OT_collection_disable_render);
+	WM_operatortype_append(OUTLINER_OT_collection_enable_render);
+	WM_operatortype_append(OUTLINER_OT_collection_hide_inside);
+	WM_operatortype_append(OUTLINER_OT_collection_show_inside);
+	WM_operatortype_append(OUTLINER_OT_hide);
+	WM_operatortype_append(OUTLINER_OT_unhide_all);
 }
 
 void outliner_keymap(wmKeyConfig *keyconf)

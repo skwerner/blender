@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,10 @@
  *
  * The Original Code is Copyright (C) 2005 Blender Foundation.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): Brecht Van Lommel.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/gpu/intern/gpu_extensions.c
- *  \ingroup gpu
+/** \file
+ * \ingroup gpu
  *
  * Wrap OpenGL features such as textures, shaders and GLSL
  * with checks for drivers and GPU support.
@@ -75,11 +67,10 @@ static struct GPUGlobal {
 	GLint maxtexturesvert;
 	GLint maxubosize;
 	GLint maxubobinds;
-	int colordepth;
 	int samples_color_texture_max;
-	GPUDeviceType device;
-	GPUOSType os;
-	GPUDriverType driver;
+	eGPUDeviceType device;
+	eGPUOSType os;
+	eGPUDriverType driver;
 	float line_width_range[2];
 	/* workaround for different calculation of dfdy factors on GPUs. Some GPUs/drivers
 	 * calculate dfdy in shader differently when drawing to an offscreen buffer. First
@@ -132,7 +123,7 @@ static void gpu_detect_mip_render_workaround(void)
 
 /* GPU Types */
 
-bool GPU_type_matches(GPUDeviceType device, GPUOSType os, GPUDriverType driver)
+bool GPU_type_matches(eGPUDeviceType device, eGPUOSType os, eGPUDriverType driver)
 {
 	return (GG.device & device) && (GG.os & os) && (GG.driver & driver);
 }
@@ -219,6 +210,12 @@ bool GPU_unused_fb_slot_workaround(void)
 	return GG.unused_fb_slot_workaround;
 }
 
+bool GPU_crappy_amd_driver(void)
+{
+	/* Currently are the same drivers with the `unused_fb_slot` problem. */
+	return GPU_unused_fb_slot_workaround();
+}
+
 void gpu_extensions_init(void)
 {
 	/* during 2.8 development each platform has its own OpenGL minimum requirements
@@ -253,12 +250,6 @@ void gpu_extensions_init(void)
 	/* We expect FRONT_LEFT to be the default buffer. */
 	BLI_assert(ret == GL_FRAMEBUFFER_DEFAULT);
 #endif
-
-	GLint r, g, b;
-	glGetFramebufferAttachmentParameteriv(GL_FRAMEBUFFER, GL_FRONT_LEFT, GL_FRAMEBUFFER_ATTACHMENT_RED_SIZE, &r);
-	glGetFramebufferAttachmentParameteriv(GL_FRAMEBUFFER, GL_FRONT_LEFT, GL_FRAMEBUFFER_ATTACHMENT_GREEN_SIZE, &g);
-	glGetFramebufferAttachmentParameteriv(GL_FRAMEBUFFER, GL_FRONT_LEFT, GL_FRAMEBUFFER_ATTACHMENT_BLUE_SIZE, &b);
-	GG.colordepth = r + g + b; /* Assumes same depth for RGB. */
 
 	glGetIntegerv(GL_MAX_COLOR_TEXTURE_SAMPLES, &GG.samples_color_texture_max);
 
@@ -402,11 +393,6 @@ void gpu_extensions_init(void)
 void gpu_extensions_exit(void)
 {
 	GPU_invalid_tex_free();
-}
-
-int GPU_color_depth(void)
-{
-	return GG.colordepth;
 }
 
 bool GPU_mem_stats_supported(void)

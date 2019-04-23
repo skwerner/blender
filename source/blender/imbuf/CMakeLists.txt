@@ -16,11 +16,6 @@
 #
 # The Original Code is Copyright (C) 2006, Blender Foundation
 # All rights reserved.
-#
-# The Original Code is: all of this file.
-#
-# Contributor(s): Jacques Beaurain.
-#
 # ***** END GPL LICENSE BLOCK *****
 
 set(INC
@@ -88,7 +83,19 @@ set(SRC
 	../../../intern/ffmpeg/ffmpeg_compat.h
 )
 
+set(LIB
+	bf_blenkernel
+	bf_blenlib
+	bf_blenloader
+	bf_intern_guardedalloc
+	bf_intern_memutil
+	bf_intern_opencolorio
+)
+
 if(WITH_IMAGE_OPENEXR)
+	list(APPEND LIB
+		bf_imbuf_openexr
+	)
 	add_definitions(-DWITH_OPENEXR)
 else()
 	list(APPEND SRC
@@ -103,12 +110,14 @@ if(WITH_IMAGE_TIFF)
 	list(APPEND SRC
 		intern/tiff.c
 	)
-
 	add_definitions(-DWITH_TIFF)
 endif()
 
 
 if(WITH_OPENIMAGEIO)
+	list(APPEND LIB
+		bf_imbuf_openimageio
+	)
 	add_definitions(-DWITH_OPENIMAGEIO)
 endif()
 
@@ -127,6 +136,9 @@ if(WITH_CODEC_AVI)
 	list(APPEND INC
 		../avi
 	)
+	list(APPEND LIB
+		bf_avi
+	)
 	add_definitions(-DWITH_AVI)
 endif()
 
@@ -140,17 +152,23 @@ if(WITH_CODEC_FFMPEG)
 	add_definitions(-DWITH_FFMPEG)
 
 	remove_strict_c_flags_file(
+		intern/anim_movie.c
 		intern/indexer.c
 		intern/util.c
-		intern/anim_movie.c
 	)
 endif()
 
 if(WITH_IMAGE_DDS)
+	list(APPEND LIB
+		bf_imbuf_dds
+	)
 	add_definitions(-DWITH_DDS)
 endif()
 
 if(WITH_IMAGE_CINEON)
+	list(APPEND LIB
+		bf_imbuf_cineon
+	)
 	add_definitions(-DWITH_CINEON)
 endif()
 
@@ -177,4 +195,4 @@ set_source_files_properties(
 	PROPERTIES HEADER_FILE_ONLY TRUE
 )
 
-blender_add_lib(bf_imbuf "${SRC}" "${INC}" "${INC_SYS}")
+blender_add_lib(bf_imbuf "${SRC}" "${INC}" "${INC_SYS}" "${LIB}")

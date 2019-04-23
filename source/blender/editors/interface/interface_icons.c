@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,14 +15,10 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * Contributors: Blender Foundation, full recode
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/interface/interface_icons.c
- *  \ingroup edinterface
+/** \file
+ * \ingroup edinterface
  */
 
 #include <math.h>
@@ -98,7 +92,7 @@ typedef struct IconImage {
 	int w;
 	int h;
 	uint *rect;
-	uchar *datatoc_rect;
+	const uchar *datatoc_rect;
 	int datatoc_size;
 } IconImage;
 
@@ -212,8 +206,9 @@ static DrawInfo *def_internal_icon(ImBuf *bbuf, int icon_id, int xofs, int yofs,
 			iimg->rect = MEM_mallocN(size * size * sizeof(uint), "icon_rect");
 
 			/* Here we store the rect in the icon - same as before */
-			if (size == bbuf->x && size == bbuf->y && xofs == 0 && yofs == 0)
+			if (size == bbuf->x && size == bbuf->y && xofs == 0 && yofs == 0) {
 				memcpy(iimg->rect, bbuf->rect, size * size * sizeof(int));
+			}
 			else {
 				/* this code assumes square images */
 				imgsize = bbuf->x;
@@ -481,7 +476,7 @@ static void init_brush_icons(void)
 		di = def_internal_icon(NULL, icon_id, 0, 0, w, ICON_TYPE_BUFFER, 0);    \
 		di->data.buffer.image->datatoc_rect = rect;                             \
 		di->data.buffer.image->datatoc_size = size;                             \
-	}
+	} ((void)0)
 	/* end INIT_BRUSH_ICON */
 
 	const int w = 96; /* warning, brush size hardcoded in C, but it gets scaled */
@@ -619,7 +614,7 @@ static void init_event_icons(void)
 		di->data.input.icon = icon_id; \
 		di->data.input.next = di_next; \
 		di_next = di; \
-	}
+	} ((void)0)
 	/* end INIT_EVENT_ICON */
 
 	const int w = 16; /* DUMMY */
@@ -680,15 +675,17 @@ static void init_event_icons(void)
 static void icon_verify_datatoc(IconImage *iimg)
 {
 	/* if it has own rect, things are all OK */
-	if (iimg->rect)
+	if (iimg->rect) {
 		return;
+	}
 
 	if (iimg->datatoc_rect) {
 		ImBuf *bbuf = IMB_ibImageFromMemory(iimg->datatoc_rect,
 		                                    iimg->datatoc_size, IB_rect, NULL, "<matcap icon>");
 		/* w and h were set on initialize */
-		if (bbuf->x != iimg->h && bbuf->y != iimg->w)
+		if (bbuf->x != iimg->h && bbuf->y != iimg->w) {
 			IMB_scaleImBuf(bbuf, iimg->w, iimg->h);
+		}
 
 		iimg->rect = bbuf->rect;
 		bbuf->rect = NULL;
@@ -709,7 +706,10 @@ static void init_internal_icons(void)
 
 		if (icondir) {
 			BLI_join_dirfile(iconfilestr, sizeof(iconfilestr), icondir, btheme->tui.iconfile);
-			bbuf = IMB_loadiffname(iconfilestr, IB_rect, NULL); /* if the image is missing bbuf will just be NULL */
+
+			/* if the image is missing bbuf will just be NULL */
+			bbuf = IMB_loadiffname(iconfilestr, IB_rect, NULL);
+
 			if (bbuf && (bbuf->x < ICON_IMAGE_W || bbuf->y < ICON_IMAGE_H)) {
 				printf("\n***WARNING***\nIcons file %s too small.\nUsing built-in Icons instead\n", iconfilestr);
 				IMB_freeImBuf(bbuf);
@@ -721,17 +721,21 @@ static void init_internal_icons(void)
 		}
 	}
 #endif
-	if (b16buf == NULL)
-		b16buf = IMB_ibImageFromMemory((uchar *)datatoc_blender_icons16_png,
+	if (b16buf == NULL) {
+		b16buf = IMB_ibImageFromMemory((const uchar *)datatoc_blender_icons16_png,
 		                               datatoc_blender_icons16_png_size, IB_rect, NULL, "<blender icons>");
-	if (b16buf)
+	}
+	if (b16buf) {
 		IMB_premultiply_alpha(b16buf);
+	}
 
-	if (b32buf == NULL)
-		b32buf = IMB_ibImageFromMemory((uchar *)datatoc_blender_icons32_png,
+	if (b32buf == NULL) {
+		b32buf = IMB_ibImageFromMemory((const uchar *)datatoc_blender_icons32_png,
 		                               datatoc_blender_icons32_png_size, IB_rect, NULL, "<blender icons>");
-	if (b32buf)
+	}
+	if (b32buf) {
 		IMB_premultiply_alpha(b32buf);
+	}
 
 	if (b16buf && b32buf) {
 		/* Free existing texture if any. */
@@ -838,8 +842,9 @@ static void init_iconfile_list(struct ListBase *list)
 	BLI_listbase_clear(list);
 	icondir = BKE_appdir_folder_id(BLENDER_DATAFILES, "icons");
 
-	if (icondir == NULL)
+	if (icondir == NULL) {
 		return;
+	}
 
 	totfile = BLI_filelist_dir_contents(icondir, &dir);
 
@@ -947,8 +952,9 @@ void UI_icons_free_drawinfo(void *drawinfo)
 	if (di) {
 		if (di->type == ICON_TYPE_BUFFER) {
 			if (di->data.buffer.image) {
-				if (di->data.buffer.image->rect)
+				if (di->data.buffer.image->rect) {
 					MEM_freeN(di->data.buffer.image->rect);
+				}
 				MEM_freeN(di->data.buffer.image);
 			}
 		}
@@ -1011,8 +1017,9 @@ int UI_icon_get_width(int icon_id)
 	icon = BKE_icon_get(icon_id);
 
 	if (icon == NULL) {
-		if (G.debug & G_DEBUG)
+		if (G.debug & G_DEBUG) {
 			printf("%s: Internal error, no icon for icon ID: %d\n", __func__, icon_id);
+		}
 		return 0;
 	}
 
@@ -1028,8 +1035,9 @@ int UI_icon_get_height(int icon_id)
 {
 	Icon *icon = BKE_icon_get(icon_id);
 	if (icon == NULL) {
-		if (G.debug & G_DEBUG)
+		if (G.debug & G_DEBUG) {
 			printf("%s: Internal error, no icon for icon ID: %d\n", __func__, icon_id);
+		}
 		return 0;
 	}
 
@@ -1072,8 +1080,9 @@ static void icon_create_rect(struct PreviewImage *prv_img, enum eIconSizes size)
 	uint render_size = UI_preview_render_size(size);
 
 	if (!prv_img) {
-		if (G.debug & G_DEBUG)
+		if (G.debug & G_DEBUG) {
 			printf("%s, error: requested preview image does not exist", __func__);
+		}
 	}
 	else if (!prv_img->rect[size]) {
 		prv_img->w[size] = render_size;
@@ -1108,8 +1117,9 @@ static void ui_studiolight_free_function(StudioLight *sl, void *data)
 	wmWindowManager *wm = data;
 
 	/* Happens if job was canceled or already finished. */
-	if (wm == NULL)
+	if (wm == NULL) {
 		return;
+	}
 
 	// get icons_id, get icons and kill wm jobs
 	if (sl->icon_id_radiance) {
@@ -1198,8 +1208,9 @@ static void icon_set_image(
         const bContext *C, Scene *scene, ID *id, PreviewImage *prv_img, enum eIconSizes size, const bool use_job)
 {
 	if (!prv_img) {
-		if (G.debug & G_DEBUG)
+		if (G.debug & G_DEBUG) {
 			printf("%s: no preview image for this ID: %s\n", __func__, id->name);
+		}
 		return;
 	}
 
@@ -1308,7 +1319,7 @@ static void icon_draw_rect(float x, float y, int w, int h, float UNUSED(aspect),
 	}
 
 	/* draw */
-	GPUBuiltinShader shader;
+	eGPUBuiltinShader shader;
 	if (desaturate != 0.0f) {
 		shader = GPU_SHADER_2D_IMAGE_DESATURATE_COLOR;
 	}
@@ -1324,8 +1335,9 @@ static void icon_draw_rect(float x, float y, int w, int h, float UNUSED(aspect),
 	immDrawPixelsTex(&state, draw_x, draw_y, draw_w, draw_h, GL_RGBA, GL_UNSIGNED_BYTE, GL_NEAREST, rect,
 	                 1.0f, 1.0f, col);
 
-	if (ima)
+	if (ima) {
 		IMB_freeImBuf(ima);
+	}
 }
 
 /* High enough to make a difference, low enough so that
@@ -1356,8 +1368,9 @@ void UI_icon_draw_cache_begin(void)
 
 static void icon_draw_cache_flush_ex(void)
 {
-	if (g_icon_draw_cache.calls == 0)
+	if (g_icon_draw_cache.calls == 0) {
 		return;
+	}
 
 	/* We need to flush widget base first to ensure correct ordering. */
 	UI_widgetbase_draw_cache_flush();
@@ -1370,8 +1383,8 @@ static void icon_draw_cache_flush_ex(void)
 	GPUShader *shader = GPU_shader_get_builtin_shader(GPU_SHADER_2D_IMAGE_MULTI_RECT_COLOR);
 	GPU_shader_bind(shader);
 
-	int img_loc = GPU_shader_get_uniform(shader, "image");
-	int data_loc = GPU_shader_get_uniform(shader, "calls_data[0]");
+	int img_loc = GPU_shader_get_uniform_ensure(shader, "image");
+	int data_loc = GPU_shader_get_uniform_ensure(shader, "calls_data[0]");
 
 	glUniform1i(img_loc, 0);
 	glUniform4fv(data_loc, ICON_DRAW_CACHE_SIZE * 3, (float *)g_icon_draw_cache.drawcall_cache);
@@ -1391,8 +1404,9 @@ void UI_icon_draw_cache_end(void)
 	g_icon_draw_cache.enabled = false;
 
 	/* Don't change blend state if it's not needed. */
-	if (g_icon_draw_cache.calls == 0)
+	if (g_icon_draw_cache.calls == 0) {
 		return;
+	}
 
 	GPU_blend(true);
 	icon_draw_cache_flush_ex();
@@ -1421,8 +1435,12 @@ static void icon_draw_texture_cached(
 	call->tex.ymin = iy * icongltex.invh;
 	call->tex.ymax = (iy + ih) * icongltex.invh;
 
-	if (rgb) copy_v4_fl4(call->color, rgb[0], rgb[1], rgb[2], alpha);
-	else     copy_v4_fl(call->color, alpha);
+	if (rgb) {
+		copy_v4_fl4(call->color, rgb[0], rgb[1], rgb[2], alpha);
+	}
+	else {
+		copy_v4_fl(call->color, alpha);
+	}
 
 	if (g_icon_draw_cache.calls == ICON_DRAW_CACHE_SIZE) {
 		icon_draw_cache_flush_ex();
@@ -1456,12 +1474,16 @@ static void icon_draw_texture(
 	GPUShader *shader = GPU_shader_get_builtin_shader(GPU_SHADER_2D_IMAGE_RECT_COLOR);
 	GPU_shader_bind(shader);
 
-	if (rgb) glUniform4f(GPU_shader_get_builtin_uniform(shader, GPU_UNIFORM_COLOR), rgb[0], rgb[1], rgb[2], alpha);
-	else     glUniform4f(GPU_shader_get_builtin_uniform(shader, GPU_UNIFORM_COLOR), alpha, alpha, alpha, alpha);
+	if (rgb) {
+		glUniform4f(GPU_shader_get_builtin_uniform(shader, GPU_UNIFORM_COLOR), rgb[0], rgb[1], rgb[2], alpha);
+	}
+	else {
+		glUniform4f(GPU_shader_get_builtin_uniform(shader, GPU_UNIFORM_COLOR), alpha, alpha, alpha, alpha);
+	}
 
-	glUniform1i(GPU_shader_get_uniform(shader, "image"), 0);
-	glUniform4f(GPU_shader_get_uniform(shader, "rect_icon"), x1, y1, x2, y2);
-	glUniform4f(GPU_shader_get_uniform(shader, "rect_geom"), x, y, x + w, y + h);
+	glUniform1i(GPU_shader_get_uniform_ensure(shader, "image"), 0);
+	glUniform4f(GPU_shader_get_uniform_ensure(shader, "rect_icon"), x1, y1, x2, y2);
+	glUniform4f(GPU_shader_get_uniform_ensure(shader, "rect_geom"), x, y, x + w, y + h);
 
 	GPU_draw_primitive(GPU_PRIM_TRI_STRIP, 4);
 
@@ -1499,8 +1521,9 @@ static void icon_draw_size(
 	alpha *= btheme->tui.icon_alpha;
 
 	if (icon == NULL) {
-		if (G.debug & G_DEBUG)
+		if (G.debug & G_DEBUG) {
 			printf("%s: Internal error, no icon for icon ID: %d\n", __func__, icon_id);
+		}
 		return;
 	}
 
@@ -1520,7 +1543,8 @@ static void icon_draw_size(
 	}
 	else if (di->type == ICON_TYPE_GEOM) {
 #ifdef USE_UI_TOOLBAR_HACK
-		/* TODO(campbell): scale icons up for toolbar, we need a way to detect larger buttons and do this automatic. */
+		/* TODO(campbell): scale icons up for toolbar,
+		 * we need a way to detect larger buttons and do this automatic. */
 		{
 			float scale = (float)ICON_DEFAULT_HEIGHT_TOOLBAR / (float)ICON_DEFAULT_HEIGHT;
 			y = (y + (h / 2)) - ((h * scale) / 2);
@@ -1585,7 +1609,10 @@ static void icon_draw_size(
 #ifndef WITH_HEADLESS
 		icon_verify_datatoc(iimg);
 #endif
-		if (!iimg->rect) return;  /* something has gone wrong! */
+		if (!iimg->rect) {
+			/* something has gone wrong! */
+			return;
+		}
 
 		icon_draw_rect(x, y, w, h, aspect, iimg->w, iimg->h, iimg->rect, alpha, rgb, desaturate);
 	}
@@ -1594,7 +1621,10 @@ static void icon_draw_size(
 
 		if (pi) {
 			/* no create icon on this level in code */
-			if (!pi->rect[size]) return;  /* something has gone wrong! */
+			if (!pi->rect[size]) {
+				/* Something has gone wrong! */
+				return;
+			}
 
 			/* Preview images use premultiplied alpha. */
 			GPU_blend_set_func_separate(GPU_ONE, GPU_ONE_MINUS_SRC_ALPHA, GPU_ONE, GPU_ONE_MINUS_SRC_ALPHA);
@@ -1615,7 +1645,8 @@ static void icon_draw_size(
 static void ui_id_preview_image_render_size(
         const bContext *C, Scene *scene, ID *id, PreviewImage *pi, int size, const bool use_job)
 {
-	if (((pi->flag[size] & PRV_CHANGED) || !pi->rect[size])) { /* changed only ever set by dynamic icons */
+	/* changed only ever set by dynamic icons */
+	if (((pi->flag[size] & PRV_CHANGED) || !pi->rect[size])) {
 		/* create the rect if necessary */
 		icon_set_image(C, scene, id, pi, size, use_job);
 
@@ -1628,10 +1659,14 @@ void UI_id_icon_render(const bContext *C, Scene *scene, ID *id, const bool big, 
 	PreviewImage *pi = BKE_previewimg_id_ensure(id);
 
 	if (pi) {
-		if (big)
-			ui_id_preview_image_render_size(C, scene, id, pi, ICON_SIZE_PREVIEW, use_job);  /* bigger preview size */
-		else
-			ui_id_preview_image_render_size(C, scene, id, pi, ICON_SIZE_ICON, use_job);     /* icon size */
+		if (big) {
+			/* bigger preview size */
+			ui_id_preview_image_render_size(C, scene, id, pi, ICON_SIZE_PREVIEW, use_job);
+		}
+		else {
+			/* icon size */
+			ui_id_preview_image_render_size(C, scene, id, pi, ICON_SIZE_ICON, use_job);
+		}
 	}
 }
 
@@ -1640,8 +1675,9 @@ static void ui_id_icon_render(const bContext *C, ID *id, bool use_jobs)
 	PreviewImage *pi = BKE_previewimg_id_ensure(id);
 	enum eIconSizes i;
 
-	if (!pi)
+	if (!pi) {
 		return;
+	}
 
 	for (i = 0; i < NUM_ICON_SIZES; i++) {
 		/* check if rect needs to be created; changed
@@ -1806,8 +1842,9 @@ int UI_rnaptr_icon_get(bContext *C, PointerRNA *ptr, int rnaicon, const bool big
 {
 	ID *id = NULL;
 
-	if (!ptr->data)
+	if (!ptr->data) {
 		return rnaicon;
+	}
 
 	/* try ID, material, texture or dynapaint slot */
 	if (RNA_struct_is_ID(ptr->type)) {
@@ -1822,12 +1859,15 @@ int UI_rnaptr_icon_get(bContext *C, PointerRNA *ptr, int rnaicon, const bool big
 	else if (RNA_struct_is_a(ptr->type, &RNA_DynamicPaintSurface)) {
 		DynamicPaintSurface *surface = ptr->data;
 
-		if (surface->format == MOD_DPAINT_SURFACE_F_PTEX)
+		if (surface->format == MOD_DPAINT_SURFACE_F_PTEX) {
 			return ICON_SHADING_TEXTURE;
-		else if (surface->format == MOD_DPAINT_SURFACE_F_VERTEX)
+		}
+		else if (surface->format == MOD_DPAINT_SURFACE_F_VERTEX) {
 			return ICON_OUTLINER_DATA_MESH;
-		else if (surface->format == MOD_DPAINT_SURFACE_F_IMAGESEQ)
+		}
+		else if (surface->format == MOD_DPAINT_SURFACE_F_IMAGESEQ) {
 			return ICON_FILE_IMAGE;
+		}
 	}
 	else if (RNA_struct_is_a(ptr->type, &RNA_StudioLight)) {
 		StudioLight *sl = ptr->data;

@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,14 +15,10 @@
  *
  * The Original Code is Copyright (C) 2009 Blender Foundation.
  * All rights reserved.
- *
- * Contributor(s): Blender Foundation, Joshua Leung
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/interface/interface_ops.c
- *  \ingroup edinterface
+/** \file
+ * \ingroup edinterface
  */
 
 #include <string.h>
@@ -76,32 +70,9 @@
 #include "BKE_main.h"
 #include "BLI_ghash.h"
 
-/* Reset Default Theme ------------------------ */
-
-static int reset_default_theme_exec(bContext *C, wmOperator *UNUSED(op))
-{
-	ui_theme_init_default();
-	ui_style_init_default();
-	WM_event_add_notifier(C, NC_WINDOW, NULL);
-
-	return OPERATOR_FINISHED;
-}
-
-static void UI_OT_reset_default_theme(wmOperatorType *ot)
-{
-	/* identifiers */
-	ot->name = "Reset to Default Theme";
-	ot->idname = "UI_OT_reset_default_theme";
-	ot->description = "Reset to the default theme colors";
-
-	/* callbacks */
-	ot->exec = reset_default_theme_exec;
-
-	/* flags */
-	ot->flag = OPTYPE_REGISTER;
-}
-
-/* Copy Data Path Operator ------------------------ */
+/* -------------------------------------------------------------------- */
+/** \name Copy Data Path Operator
+ * \{ */
 
 static bool copy_data_path_button_poll(bContext *C)
 {
@@ -193,6 +164,12 @@ static bool copy_python_command_button_poll(bContext *C)
 	return 0;
 }
 
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Copy Python Command Operator
+ * \{ */
+
 static int copy_python_command_button_exec(bContext *C, wmOperator *UNUSED(op))
 {
 	uiBut *but = UI_context_active_but_get(C);
@@ -229,7 +206,11 @@ static void UI_OT_copy_python_command_button(wmOperatorType *ot)
 	ot->flag = OPTYPE_REGISTER;
 }
 
-/* Reset to Default Values Button Operator ------------------------ */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Reset to Default Values Button Operator
+ * \{ */
 
 static int operator_button_property_finish(bContext *C, PointerRNA *ptr, PropertyRNA *prop)
 {
@@ -276,8 +257,9 @@ static int reset_default_button_exec(bContext *C, wmOperator *op)
 
 	/* if there is a valid property that is editable... */
 	if (ptr.data && prop && RNA_property_editable(&ptr, prop)) {
-		if (RNA_property_reset(&ptr, prop, (all) ? -1 : index))
+		if (RNA_property_reset(&ptr, prop, (all) ? -1 : index)) {
 			return operator_button_property_finish(C, &ptr, prop);
+		}
 	}
 
 	return OPERATOR_CANCELLED;
@@ -301,7 +283,11 @@ static void UI_OT_reset_default_button(wmOperatorType *ot)
 	RNA_def_boolean(ot->srna, "all", 1, "All", "Reset to default values all elements of the array");
 }
 
-/* Assign Value as Default Button Operator ------------------------ */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Assign Value as Default Button Operator
+ * \{ */
 
 static bool assign_default_button_poll(bContext *C)
 {
@@ -331,8 +317,9 @@ static int assign_default_button_exec(bContext *C, wmOperator *UNUSED(op))
 
 	/* if there is a valid property that is editable... */
 	if (ptr.data && prop && RNA_property_editable(&ptr, prop)) {
-		if (RNA_property_assign_default(&ptr, prop))
+		if (RNA_property_assign_default(&ptr, prop)) {
 			return operator_button_property_finish(C, &ptr, prop);
+		}
 	}
 
 	return OPERATOR_CANCELLED;
@@ -353,7 +340,11 @@ static void UI_OT_assign_default_button(wmOperatorType *ot)
 	ot->flag = OPTYPE_UNDO;
 }
 
-/* Unset Property Button Operator ------------------------ */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Unset Property Button Operator
+ * \{ */
 
 static int unset_property_button_exec(bContext *C, wmOperator *UNUSED(op))
 {
@@ -391,6 +382,11 @@ static void UI_OT_unset_property_button(wmOperatorType *ot)
 	ot->flag = OPTYPE_UNDO;
 }
 
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Define Override Type Operator
+ * \{ */
 
 /* Note that we use different values for UI/UX than 'real' override operations, user does not care
  * whether it's added or removed for the differential operation e.g. */
@@ -408,7 +404,7 @@ static EnumPropertyItem override_type_items[] = {
 	{UIOverride_Type_Replace, "REPLACE", 0, "Replace", "Completely replace value from linked data by local one"},
 	{UIOverride_Type_Difference, "DIFFERENCE", 0, "Difference", "Store difference to linked data value"},
 	{UIOverride_Type_Factor, "FACTOR", 0, "Factor", "Store factor to linked data value (useful e.g. for scale)"},
-	{0, NULL, 0, NULL, NULL}
+	{0, NULL, 0, NULL, NULL},
 };
 
 
@@ -444,7 +440,8 @@ static int override_type_set_button_exec(bContext *C, wmOperator *op)
 			operation = IDOVERRIDESTATIC_OP_REPLACE;
 			break;
 		case UIOverride_Type_Difference:
-			operation = IDOVERRIDESTATIC_OP_ADD;  /* override code will automatically switch to subtract if needed. */
+			/* override code will automatically switch to subtract if needed. */
+			operation = IDOVERRIDESTATIC_OP_ADD;
 			break;
 		case UIOverride_Type_Factor:
 			operation = IDOVERRIDESTATIC_OP_MULTIPLY;
@@ -549,13 +546,15 @@ static int override_remove_button_exec(bContext *C, wmOperator *op)
 
 	if (!all && index != -1) {
 		bool is_strict_find;
-		/* Remove override operation for given item, add singular operations for the other items as needed. */
+		/* Remove override operation for given item,
+		 * add singular operations for the other items as needed. */
 		IDOverrideStaticPropertyOperation *opop = BKE_override_static_property_operation_find(
 		        oprop, NULL, NULL, index, index, false, &is_strict_find);
 		BLI_assert(opop != NULL);
 		if (!is_strict_find) {
 			/* No specific override operation, we have to get generic one,
-			 * and create item-specific override operations for all but given index, before removing generic one. */
+			 * and create item-specific override operations for all but given index,
+			 * before removing generic one. */
 			for (int idx = RNA_property_array_length(&ptr, prop); idx--; ) {
 				if (idx != index) {
 					BKE_override_static_property_operation_get(oprop, opop->operation, NULL, NULL, idx, idx, true, NULL, NULL);
@@ -599,10 +598,11 @@ static void UI_OT_override_remove_button(wmOperatorType *ot)
 	RNA_def_boolean(ot->srna, "all", 1, "All", "Reset to default values all elements of the array");
 }
 
+/** \} */
 
-
-
-/* Copy To Selected Operator ------------------------ */
+/* -------------------------------------------------------------------- */
+/** \name Copy To Selected Operator
+ * \{ */
 
 bool UI_context_copy_to_selected_list(
         bContext *C, PointerRNA *ptr, PropertyRNA *prop,
@@ -735,7 +735,8 @@ bool UI_context_copy_to_selected_list(
 		}
 		else if (GS(id->name) == ID_SCE) {
 			/* Sequencer's ID is scene :/ */
-			/* Try to recursively find an RNA_Sequence ancestor, to handle situations like T41062... */
+			/* Try to recursively find an RNA_Sequence ancestor,
+			 * to handle situations like T41062... */
 			if ((*r_path = RNA_path_resolve_from_type_to_property(ptr, prop, &RNA_Sequence)) != NULL) {
 				*r_lb = CTX_data_collection_get(C, "selected_editable_sequences");
 			}
@@ -858,6 +859,7 @@ static void UI_OT_copy_to_selected_button(wmOperatorType *ot)
 	RNA_def_boolean(ot->srna, "all", true, "All", "Copy to selected all elements of the array");
 }
 
+/** \} */
 
 /* -------------------------------------------------------------------- */
 /** \name Jump to Target Operator
@@ -976,7 +978,7 @@ static bool jump_to_target_button(bContext *C, bool poll)
 	return false;
 }
 
-static bool jump_to_target_button_poll(bContext *C)
+bool ui_jump_to_target_button_poll(bContext *C)
 {
 	return jump_to_target_button(C, true);
 }
@@ -996,7 +998,7 @@ static void UI_OT_jump_to_target_button(wmOperatorType *ot)
 	ot->description = "Switch to the target object or bone";
 
 	/* callbacks */
-	ot->poll = jump_to_target_button_poll;
+	ot->poll = ui_jump_to_target_button_poll;
 	ot->exec = jump_to_target_button_exec;
 
 	/* flags */
@@ -1005,7 +1007,9 @@ static void UI_OT_jump_to_target_button(wmOperatorType *ot)
 
 /** \} */
 
-/* Reports to Textblock Operator ------------------------ */
+/* -------------------------------------------------------------------- */
+/** \name Reports to Textblock Operator
+ * \{ */
 
 /* FIXME: this is just a temporary operator so that we can see all the reports somewhere
  * when there are too many to display...
@@ -1055,6 +1059,12 @@ static void UI_OT_reports_to_textblock(wmOperatorType *ot)
 	ot->poll = reports_to_text_poll;
 	ot->exec = reports_to_text_exec;
 }
+
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Edit Python Source Operator
+ * \{ */
 
 #ifdef WITH_PYTHON
 
@@ -1160,7 +1170,7 @@ static int editsource_text_edit(
 	/* Developers may wish to copy-paste to an external editor. */
 	printf("%s:%d\n", filepath, line);
 
-	for (text = bmain->text.first; text; text = text->id.next) {
+	for (text = bmain->texts.first; text; text = text->id.next) {
 		if (text->name && BLI_path_cmp(text->name, filepath) == 0) {
 			break;
 		}
@@ -1271,7 +1281,11 @@ static void UI_OT_editsource(wmOperatorType *ot)
 	ot->exec = editsource_exec;
 }
 
-/* ------------------------------------------------------------------------- */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Edit Translation Operator
+ * \{ */
 
 /**
  * EditTranslation utility funcs and operator,
@@ -1286,8 +1300,9 @@ static void edittranslation_find_po_file(const char *root, const char *uilng, ch
 	BLI_snprintf(tstr, sizeof(tstr), "%s.po", uilng);
 	BLI_join_dirfile(path, maxlen, root, uilng);
 	BLI_path_append(path, maxlen, tstr);
-	if (BLI_is_file(path))
+	if (BLI_is_file(path)) {
 		return;
+	}
 
 	/* Now try without the second iso code part (_ES in es_ES). */
 	{
@@ -1298,20 +1313,23 @@ static void edittranslation_find_po_file(const char *root, const char *uilng, ch
 		tc = strchr(uilng, '_');
 		if (tc) {
 			szt = tc - uilng;
-			if (szt < sizeof(tstr)) /* Paranoid, should always be true! */
+			if (szt < sizeof(tstr)) { /* Paranoid, should always be true! */
 				BLI_strncpy(tstr, uilng, szt + 1); /* +1 for '\0' char! */
+			}
 		}
 		if (tstr[0]) {
 			/* Because of some codes like sr_SR@latin... */
 			tc = strchr(uilng, '@');
-			if (tc)
+			if (tc) {
 				BLI_strncpy(tstr + szt, tc, sizeof(tstr) - szt);
+			}
 
 			BLI_join_dirfile(path, maxlen, root, tstr);
 			strcat(tstr, ".po");
 			BLI_path_append(path, maxlen, tstr);
-			if (BLI_is_file(path))
+			if (BLI_is_file(path)) {
 				return;
+			}
 		}
 	}
 
@@ -1385,26 +1403,36 @@ static int edittranslation_exec(bContext *C, wmOperator *op)
 		ret = WM_operator_name_call_ptr(C, ot, WM_OP_INVOKE_DEFAULT, &ptr);
 
 		/* Clean up */
-		if (but_label.strinfo)
+		if (but_label.strinfo) {
 			MEM_freeN(but_label.strinfo);
-		if (rna_label.strinfo)
+		}
+		if (rna_label.strinfo) {
 			MEM_freeN(rna_label.strinfo);
-		if (enum_label.strinfo)
+		}
+		if (enum_label.strinfo) {
 			MEM_freeN(enum_label.strinfo);
-		if (but_tip.strinfo)
+		}
+		if (but_tip.strinfo) {
 			MEM_freeN(but_tip.strinfo);
-		if (rna_tip.strinfo)
+		}
+		if (rna_tip.strinfo) {
 			MEM_freeN(rna_tip.strinfo);
-		if (enum_tip.strinfo)
+		}
+		if (enum_tip.strinfo) {
 			MEM_freeN(enum_tip.strinfo);
-		if (rna_struct.strinfo)
+		}
+		if (rna_struct.strinfo) {
 			MEM_freeN(rna_struct.strinfo);
-		if (rna_prop.strinfo)
+		}
+		if (rna_prop.strinfo) {
 			MEM_freeN(rna_prop.strinfo);
-		if (rna_enum.strinfo)
+		}
+		if (rna_enum.strinfo) {
 			MEM_freeN(rna_enum.strinfo);
-		if (rna_ctxt.strinfo)
+		}
+		if (rna_ctxt.strinfo) {
 			MEM_freeN(rna_ctxt.strinfo);
+		}
 
 		return ret;
 	}
@@ -1427,6 +1455,12 @@ static void UI_OT_edittranslation_init(wmOperatorType *ot)
 
 #endif /* WITH_PYTHON */
 
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Reload Translation Operator
+ * \{ */
+
 static int reloadtranslation_exec(bContext *UNUSED(C), wmOperator *UNUSED(op))
 {
 	BLT_lang_init();
@@ -1447,6 +1481,11 @@ static void UI_OT_reloadtranslation(wmOperatorType *ot)
 	ot->exec = reloadtranslation_exec;
 }
 
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Prese Button Operator
+ * \{ */
 
 static ARegion *region_event_inside_for_screen(bContext *C, const int xy[2])
 {
@@ -1507,6 +1546,12 @@ static void UI_OT_button_execute(wmOperatorType *ot)
 	RNA_def_boolean(ot->srna, "skip_depressed", 0, "Skip Depressed", "");
 }
 
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Drop Color Operator
+ * \{ */
+
 bool UI_drop_color_poll(struct bContext *C, wmDrag *drag, const wmEvent *UNUSED(event), const char **UNUSED(tooltip))
 {
 	/* should only return true for regions that include buttons, for now
@@ -1515,8 +1560,9 @@ bool UI_drop_color_poll(struct bContext *C, wmDrag *drag, const wmEvent *UNUSED(
 		SpaceImage *sima = CTX_wm_space_image(C);
 		ARegion *ar = CTX_wm_region(C);
 
-		if (UI_but_active_drop_color(C))
+		if (UI_but_active_drop_color(C)) {
 			return 1;
+		}
 
 		if (sima && (sima->mode == SI_MODE_PAINT) &&
 		    sima->image && (ar && ar->regiontype == RGN_TYPE_WINDOW))
@@ -1548,7 +1594,7 @@ static int drop_color_invoke(bContext *C, wmOperator *op, const wmEvent *UNUSED(
 
 	/* find button under mouse, check if it has RNA color property and
 	 * if it does copy the data */
-	but = ui_but_find_active_in_region(ar);
+	but = ui_region_find_active_but(ar);
 
 	if (but && but->type == UI_BTYPE_COLOR && but->rnaprop) {
 		const int color_len = RNA_property_array_length(&but->rnapoin, but->rnaprop);
@@ -1560,14 +1606,16 @@ static int drop_color_invoke(bContext *C, wmOperator *op, const wmEvent *UNUSED(
 		}
 
 		if (RNA_property_subtype(but->rnaprop) == PROP_COLOR_GAMMA) {
-			if (!gamma)
+			if (!gamma) {
 				IMB_colormanagement_scene_linear_to_srgb_v3(color);
+			}
 			RNA_property_float_set_array(&but->rnapoin, but->rnaprop, color);
 			RNA_property_update(C, &but->rnapoin, but->rnaprop);
 		}
 		else if (RNA_property_subtype(but->rnaprop) == PROP_COLOR) {
-			if (gamma)
+			if (gamma) {
 				IMB_colormanagement_srgb_to_scene_linear_v3(color);
+			}
 			RNA_property_float_set_array(&but->rnapoin, but->rnaprop, color);
 			RNA_property_update(C, &but->rnapoin, but->rnaprop);
 		}
@@ -1599,13 +1647,14 @@ static void UI_OT_drop_color(wmOperatorType *ot)
 	RNA_def_boolean(ot->srna, "gamma", 0, "Gamma Corrected", "The source color is gamma corrected ");
 }
 
+/** \} */
 
-/* ********************************************************* */
-/* Registration */
+/* -------------------------------------------------------------------- */
+/** \name Operator & Keymap Registration
+ * \{ */
 
 void ED_operatortypes_ui(void)
 {
-	WM_operatortype_append(UI_OT_reset_default_theme);
 	WM_operatortype_append(UI_OT_copy_data_path_button);
 	WM_operatortype_append(UI_OT_copy_python_command_button);
 	WM_operatortype_append(UI_OT_reset_default_button);
@@ -1626,9 +1675,8 @@ void ED_operatortypes_ui(void)
 
 	/* external */
 	WM_operatortype_append(UI_OT_eyedropper_color);
-	WM_operatortype_append(UI_OT_eyedropper_color_crypto);
-	WM_operatortype_append(UI_OT_eyedropper_colorband);
-	WM_operatortype_append(UI_OT_eyedropper_colorband_point);
+	WM_operatortype_append(UI_OT_eyedropper_colorramp);
+	WM_operatortype_append(UI_OT_eyedropper_colorramp_point);
 	WM_operatortype_append(UI_OT_eyedropper_id);
 	WM_operatortype_append(UI_OT_eyedropper_depth);
 	WM_operatortype_append(UI_OT_eyedropper_driver);
@@ -1644,3 +1692,5 @@ void ED_keymap_ui(wmKeyConfig *keyconf)
 	eyedropper_modal_keymap(keyconf);
 	eyedropper_colorband_modal_keymap(keyconf);
 }
+
+/** \} */

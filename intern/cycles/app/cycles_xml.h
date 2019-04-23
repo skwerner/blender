@@ -31,4 +31,4 @@ void xml_write_file(const Scene *scene, const SessionParams *params, const char 
 
 CCL_NAMESPACE_END
 
-#endif  /* __CYCLES_XML_H__ */
+#endif /* __CYCLES_XML_H__ */

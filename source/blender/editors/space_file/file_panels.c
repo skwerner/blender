@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,15 +15,10 @@
  *
  * The Original Code is Copyright (C) 2009 Blender Foundation.
  * All rights reserved.
- *
- *
- * Contributor(s): Blender Foundation, Andrea Weikert
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/space_file/file_panels.c
- *  \ingroup spfile
+/** \file
+ * \ingroup spfile
  */
 
 #include "BLI_blenlib.h"
@@ -80,7 +73,7 @@ static void file_panel_operator(const bContext *C, Panel *pa)
 	UI_block_func_set(uiLayoutGetBlock(pa->layout), file_draw_check_cb, NULL, NULL);
 
 	/* Hack: temporary hide.*/
-	const char *hide[] = {"filepath", "directory", "filename", "files"};
+	const char *hide[] = {"filepath", "files", "directory", "filename"};
 	for (int i = 0; i < ARRAY_SIZE(hide); i++) {
 		PropertyRNA *prop = RNA_struct_find_property(op->ptr, hide[i]);
 		if (prop) {
@@ -88,8 +81,11 @@ static void file_panel_operator(const bContext *C, Panel *pa)
 		}
 	}
 
-	uiTemplateOperatorPropertyButs(C, pa->layout, op, '\0', UI_TEMPLATE_OP_PROPS_SHOW_EMPTY);
+	uiTemplateOperatorPropertyButs(
+	        C, pa->layout, op, UI_BUT_LABEL_ALIGN_NONE,
+	        UI_TEMPLATE_OP_PROPS_SHOW_EMPTY);
 
+	/* Hack: temporary hide.*/
 	for (int i = 0; i < ARRAY_SIZE(hide); i++) {
 		PropertyRNA *prop = RNA_struct_find_property(op->ptr, hide[i]);
 		if (prop) {

@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,10 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): Joshua Leung
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/space_graph/graph_edit.c
- *  \ingroup spgraph
+/** \file
+ * \ingroup spgraph
  */
 
 
@@ -36,7 +28,7 @@
 #include <float.h>
 
 #ifdef WITH_AUDASPACE
-#  include AUD_SPECIAL_H
+#  include <AUD_Special.h>
 #endif
 
 #include "MEM_guardedalloc.h"
@@ -54,13 +46,14 @@
 
 #include "BLT_translation.h"
 
+#include "BKE_animsys.h"
 #include "BKE_context.h"
-#include "BKE_depsgraph.h"
 #include "BKE_fcurve.h"
 #include "BKE_global.h"
-#include "BKE_main.h"
 #include "BKE_nla.h"
 #include "BKE_report.h"
+
+#include "DEG_depsgraph_build.h"
 
 #include "UI_view2d.h"
 
@@ -277,7 +270,8 @@ void GRAPH_OT_view_all(wmOperatorType *ot)
 
 	/* api callbacks */
 	ot->exec = graphkeys_viewall_exec;
-	ot->poll = ED_operator_graphedit_active; /* XXX: unchecked poll to get fsamples working too, but makes modifier damage trickier... */
+	/* XXX: unchecked poll to get fsamples working too, but makes modifier damage trickier... */
+	ot->poll = ED_operator_graphedit_active;
 
 	/* flags */
 	ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
@@ -296,7 +290,8 @@ void GRAPH_OT_view_selected(wmOperatorType *ot)
 
 	/* api callbacks */
 	ot->exec = graphkeys_view_selected_exec;
-	ot->poll = ED_operator_graphedit_active; /* XXX: unchecked poll to get fsamples working too, but makes modifier damage trickier... */
+	/* XXX: unchecked poll to get fsamples working too, but makes modifier damage trickier... */
+	ot->poll = ED_operator_graphedit_active;
 
 	/* flags */
 	ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
@@ -338,13 +333,13 @@ void GRAPH_OT_view_frame(wmOperatorType *ot)
 /* Bake each F-Curve into a set of samples, and store as a ghost curve */
 static void create_ghost_curves(bAnimContext *ac, int start, int end)
 {
-	SpaceIpo *sipo = (SpaceIpo *)ac->sl;
+	SpaceGraph *sipo = (SpaceGraph *)ac->sl;
 	ListBase anim_data = {NULL, NULL};
 	bAnimListElem *ale;
 	int filter;
 
 	/* free existing ghost curves */
-	free_fcurves(&sipo->ghostCurves);
+	free_fcurves(&sipo->runtime.ghost_curves);
 
 	/* sanity check */
 	if (start >= end) {
@@ -395,7 +390,7 @@ static void create_ghost_curves(bAnimContext *ac, int start, int end)
 		gcu->color[2] = fcu->color[2] - 0.07f;
 
 		/* store new ghost curve */
-		BLI_addtail(&sipo->ghostCurves, gcu);
+		BLI_addtail(&sipo->runtime.ghost_curves, gcu);
 
 		/* restore driver */
 		fcu->driver = driver;
@@ -454,19 +449,19 @@ void GRAPH_OT_ghost_curves_create(wmOperatorType *ot)
 static int graphkeys_clear_ghostcurves_exec(bContext *C, wmOperator *UNUSED(op))
 {
 	bAnimContext ac;
-	SpaceIpo *sipo;
+	SpaceGraph *sipo;
 
 	/* get editor data */
 	if (ANIM_animdata_get_context(C, &ac) == 0)
 		return OPERATOR_CANCELLED;
-	sipo = (SpaceIpo *)ac.sl;
+	sipo = (SpaceGraph *)ac.sl;
 
 	/* if no ghost curves, don't do anything */
-	if (BLI_listbase_is_empty(&sipo->ghostCurves))
+	if (BLI_listbase_is_empty(&sipo->runtime.ghost_curves)) {
 		return OPERATOR_CANCELLED;
-
+	}
 	/* free ghost curves */
-	free_fcurves(&sipo->ghostCurves);
+	free_fcurves(&sipo->runtime.ghost_curves);
 
 	/* update this editor only */
 	ED_area_tag_redraw(CTX_wm_area(C));
@@ -513,19 +508,21 @@ static const EnumPropertyItem prop_graphkeys_insertkey_types[] = {
 	 "Active Channels At Cursor", "Insert a keyframe for the active F-Curve at the cursor point"},
 	{GRAPHKEYS_INSERTKEY_SEL | GRAPHKEYS_INSERTKEY_CURSOR, "CURSOR_SEL", 0,
 	 "Selected Channels At Cursor", "Insert a keyframe for selected F-Curves at the cursor point"},
-	{0, NULL, 0, NULL, NULL}
+	{0, NULL, 0, NULL, NULL},
 };
 
 /* this function is responsible for snapping keyframes to frame-times */
 static void insert_graph_keys(bAnimContext *ac, eGraphKeys_InsertKey_Types mode)
 {
 	ListBase anim_data = {NULL, NULL};
+	ListBase nla_cache = {NULL, NULL};
 	bAnimListElem *ale;
 	int filter;
 	size_t num_items;
 
 	ReportList *reports = ac->reports;
-	SpaceIpo *sipo = (SpaceIpo *)ac->sl;
+	SpaceGraph *sipo = (SpaceGraph *)ac->sl;
+	struct Depsgraph *depsgraph = ac->depsgraph;
 	Scene *scene = ac->scene;
 	ToolSettings *ts = scene->toolsettings;
 	short flag = 0;
@@ -587,17 +584,8 @@ static void insert_graph_keys(bAnimContext *ac, eGraphKeys_InsertKey_Types mode)
 	}
 	else {
 		for (ale = anim_data.first; ale; ale = ale->next) {
-			AnimData *adt = ANIM_nla_mapping_get(ac, ale);
 			FCurve *fcu = (FCurve *)ale->key_data;
-			float cfra;
-
-			/* adjust current frame for NLA-mapping */
-			if ((sipo) && (sipo->mode == SIPO_MODE_DRIVERS))
-				cfra = sipo->cursorTime;
-			else if (adt)
-				cfra = BKE_nla_tweakedit_remap(adt, (float)CFRA, NLATIME_CONVERT_UNMAP);
-			else
-				cfra = (float)CFRA;
+			float cfra = (float)CFRA;
 
 			/* read value from property the F-Curve represents, or from the curve only?
 			 * - ale->id != NULL:    Typically, this means that we have enough info to try resolving the path
@@ -608,17 +596,27 @@ static void insert_graph_keys(bAnimContext *ac, eGraphKeys_InsertKey_Types mode)
 			 *                        up adding the keyframes on a new F-Curve in the action data instead.
 			 */
 			if (ale->id && !ale->owner && !fcu->driver) {
-				insert_keyframe(ac->bmain, reports, ale->id, NULL, ((fcu->grp) ? (fcu->grp->name) : (NULL)),
-				                fcu->rna_path, fcu->array_index, cfra, ts->keyframe_type, flag);
+				insert_keyframe(ac->bmain, depsgraph, reports, ale->id, NULL, ((fcu->grp) ? (fcu->grp->name) : (NULL)),
+				                fcu->rna_path, fcu->array_index, cfra, ts->keyframe_type, &nla_cache, flag);
 			}
 			else {
-				const float curval = evaluate_fcurve(fcu, cfra);
+				AnimData *adt = ANIM_nla_mapping_get(ac, ale);
+
+				/* adjust current frame for NLA-mapping */
+				if ((sipo) && (sipo->mode == SIPO_MODE_DRIVERS))
+					cfra = sipo->cursorTime;
+				else if (adt)
+					cfra = BKE_nla_tweakedit_remap(adt, (float)CFRA, NLATIME_CONVERT_UNMAP);
+
+				const float curval = evaluate_fcurve_only_curve(fcu, cfra);
 				insert_vert_fcurve(fcu, cfra, curval, ts->keyframe_type, 0);
 			}
 
 			ale->update |= ANIM_UPDATE_DEFAULT;
 		}
 	}
+
+	BKE_animsys_free_nla_keyframing_context_cache(&nla_cache);
 
 	ANIM_animdata_update(ac, &anim_data);
 	ANIM_animdata_freelist(&anim_data);
@@ -1474,7 +1472,7 @@ static const EnumPropertyItem prop_graphkeys_expo_types[] = {
 
 	{MAKE_CYCLIC_EXPO, "MAKE_CYCLIC", 0, "Make Cyclic (F-Modifier)", "Add Cycles F-Modifier if one doesn't exist already"},
 	{CLEAR_CYCLIC_EXPO, "CLEAR_CYCLIC", 0, "Clear Cyclic (F-Modifier)", "Remove Cycles F-Modifier if not needed anymore"},
-	{0, NULL, 0, NULL, NULL}
+	{0, NULL, 0, NULL, NULL},
 };
 
 /* this function is responsible for setting extrapolation mode for keyframes */
@@ -1796,9 +1794,12 @@ void GRAPH_OT_handle_type(wmOperatorType *ot)
 typedef struct tEulerFilter {
 	struct tEulerFilter *next, *prev;
 
-	ID *id;                         /* ID-block which owns the channels */
-	FCurve *(fcurves[3]);           /* 3 Pointers to F-Curves */
-	const char *rna_path;           /* Pointer to one of the RNA Path's used by one of the F-Curves */
+	/** ID-block which owns the channels */
+	ID *id;
+	/** 3 Pointers to F-Curves */
+	FCurve *(fcurves[3]);
+	/** Pointer to one of the RNA Path's used by one of the F-Curves */
+	const char *rna_path;
 } tEulerFilter;
 
 static int graphkeys_euler_filter_exec(bContext *C, wmOperator *op)
@@ -1859,7 +1860,8 @@ static int graphkeys_euler_filter_exec(bContext *C, wmOperator *op)
 			groups++;
 
 			euf->id = ale->id;
-			euf->rna_path = fcu->rna_path; /* this should be safe, since we're only using it for a short time */
+			/* this should be safe, since we're only using it for a short time */
+			euf->rna_path = fcu->rna_path;
 			euf->fcurves[fcu->array_index] = fcu;
 		}
 
@@ -1879,7 +1881,8 @@ static int graphkeys_euler_filter_exec(bContext *C, wmOperator *op)
 		int f;
 
 		/* sanity check: ensure that there are enough F-Curves to work on in this group */
-		/* TODO: also enforce assumption that there be a full set of keyframes at each position by ensuring that totvert counts are same? */
+		/* TODO: also enforce assumption that there be a full set of keyframes
+		 * at each position by ensuring that totvert counts are same? */
 		if (ELEM(NULL, euf->fcurves[0], euf->fcurves[1], euf->fcurves[2])) {
 			/* report which components are missing */
 			BKE_reportf(op->reports, RPT_WARNING,
@@ -1912,7 +1915,8 @@ static int graphkeys_euler_filter_exec(bContext *C, wmOperator *op)
 
 				/* > 180 degree flip? */
 				if ((sign * (prev->vec[1][1] - bezt->vec[1][1])) >= (float)M_PI) {
-					/* 360 degrees to add/subtract frame value until difference is acceptably small that there's no more flip */
+					/* 360 degrees to add/subtract frame value until difference
+					 * is acceptably small that there's no more flip */
 					const float fac = sign * 2.0f * (float)M_PI;
 
 					while ((sign * (prev->vec[1][1] - bezt->vec[1][1])) >= (float)M_PI) {
@@ -2027,7 +2031,7 @@ static int graphkeys_framejump_exec(bContext *C, wmOperator *UNUSED(op))
 
 	/* set the new current frame and cursor values, based on the average time and value */
 	if (ked.i1) {
-		SpaceIpo *sipo = (SpaceIpo *)ac.sl;
+		SpaceGraph *sipo = (SpaceGraph *)ac.sl;
 		Scene *scene = ac.scene;
 
 		/* take the average values, rounding to the nearest int as necessary for int results */
@@ -2081,7 +2085,7 @@ static const EnumPropertyItem prop_graphkeys_snap_types[] = {
 	 "Snap selected keyframes to the nearest marker"},
 	{GRAPHKEYS_SNAP_HORIZONTAL, "HORIZONTAL", 0, "Flatten Handles",
 	 "Flatten handles for a smoother transition"},
-	{0, NULL, 0, NULL, NULL}
+	{0, NULL, 0, NULL, NULL},
 };
 
 /* this function is responsible for snapping keyframes to frame-times */
@@ -2091,7 +2095,7 @@ static void snap_graph_keys(bAnimContext *ac, short mode)
 	bAnimListElem *ale;
 	int filter;
 
-	SpaceIpo *sipo = (SpaceIpo *)ac->sl;
+	SpaceGraph *sipo = (SpaceGraph *)ac->sl;
 	KeyframeEditData ked;
 	KeyframeEditFunc edit_cb;
 	float cursor_value = 0.0f;
@@ -2208,7 +2212,7 @@ static const EnumPropertyItem prop_graphkeys_mirror_types[] = {
 	 "Flip values of selected keyframes (i.e. negative values become positive, and vice versa)"},
 	{GRAPHKEYS_MIRROR_MARKER, "MARKER", 0, "By Times over First Selected Marker",
 	 "Flip times of selected keyframes using the first selected marker as the reference point"},
-	{0, NULL, 0, NULL, NULL}
+	{0, NULL, 0, NULL, NULL},
 };
 
 /* this function is responsible for mirroring keyframes */
@@ -2218,7 +2222,7 @@ static void mirror_graph_keys(bAnimContext *ac, short mode)
 	bAnimListElem *ale;
 	int filter;
 
-	SpaceIpo *sipo = (SpaceIpo *)ac->sl;
+	SpaceGraph *sipo = (SpaceGraph *)ac->sl;
 	KeyframeEditData ked;
 	KeyframeEditFunc edit_cb;
 	float cursor_value = 0.0f;
@@ -2716,7 +2720,7 @@ static int graph_driver_vars_paste_exec(bContext *C, wmOperator *op)
 	/* successful or not? */
 	if (ok) {
 		/* rebuild depsgraph, now that there are extra deps here */
-		DAG_relations_tag_update(CTX_data_main(C));
+		DEG_relations_tag_update(CTX_data_main(C));
 
 		/* set notifier that keyframes have changed */
 		WM_event_add_notifier(C, NC_SCENE | ND_FRAME, CTX_data_scene(C));
@@ -2790,7 +2794,7 @@ static int graph_driver_delete_invalid_exec(bContext *C, wmOperator *op)
 
 	if (deleted > 0) {
 		/* notify the world of any changes */
-		DAG_relations_tag_update(CTX_data_main(C));
+		DEG_relations_tag_update(CTX_data_main(C));
 		WM_event_add_notifier(C, NC_ANIMATION | ND_KEYFRAME | NA_REMOVED, NULL);
 		WM_reportf(RPT_INFO, "Deleted %u drivers", deleted);
 	}
@@ -2812,7 +2816,7 @@ static bool graph_driver_delete_invalid_poll(bContext *C)
 	ScrArea *sa = CTX_wm_area(C);
 
 	/* firstly, check if in Graph Editor */
-	if ((sa == NULL) || (sa->spacetype != SPACE_IPO))
+	if ((sa == NULL) || (sa->spacetype != SPACE_GRAPH))
 		return 0;
 
 	/* try to init Anim-Context stuff ourselves and check */

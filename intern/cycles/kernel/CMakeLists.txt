@@ -36,9 +36,12 @@ set(SRC_CUDA_KERNELS
 )
 
 set(SRC_OPENCL_KERNELS
-	kernels/opencl/kernel.cl
+	kernels/opencl/kernel_bake.cl
+	kernels/opencl/kernel_base.cl
+	kernels/opencl/kernel_displace.cl
+	kernels/opencl/kernel_background.cl
 	kernels/opencl/kernel_state_buffer_size.cl
-	kernels/opencl/kernel_split.cl
+	kernels/opencl/kernel_split_bundle.cl
 	kernels/opencl/kernel_data_init.cl
 	kernels/opencl/kernel_path_init.cl
 	kernels/opencl/kernel_queue_enqueue.cl
@@ -330,6 +333,10 @@ set(SRC_SPLIT_HEADERS
 	split/kernel_subsurface_scatter.h
 )
 
+set(LIB
+
+)
+
 # CUDA module
 
 if(WITH_CYCLES_CUDA_BINARIES)
@@ -343,11 +350,11 @@ if(WITH_CYCLES_CUDA_BINARIES)
 	set(CUDA_VERSION "${CUDA_VERSION_MAJOR}${CUDA_VERSION_MINOR}")
 
 	# warn for other versions
-	if(CUDA_VERSION MATCHES "90" OR CUDA_VERSION MATCHES "91")
+	if(CUDA_VERSION MATCHES "101")
 	else()
 		message(WARNING
 			"CUDA version ${CUDA_VERSION_MAJOR}.${CUDA_VERSION_MINOR} detected, "
-			"build may succeed but only CUDA 9.0 and 9.1 are officially supported")
+			"build may succeed but only CUDA 10.1 is officially supported")
 	endif()
 
 	# build for each arch
@@ -442,6 +449,8 @@ if(WITH_CYCLES_CUDA_BINARIES)
 	foreach(arch ${CYCLES_CUDA_BINARIES_ARCH})
 		if(${arch} MATCHES "sm_2.")
 			message(STATUS "CUDA binaries for ${arch} are no longer supported, skipped.")
+		elseif(${arch} MATCHES "sm_7." AND ${CUDA_VERSION} LESS 100)
+			message(STATUS "CUDA binaries for ${arch} require CUDA 10.0+, skipped.")
 		else()
 			# Compile regular kernel
 			CYCLES_CUDA_KERNEL_ADD(${arch} ${prev_arch} filter "" "${cuda_filter_sources}" FALSE)
@@ -465,6 +474,9 @@ endif()
 # OSL module
 
 if(WITH_CYCLES_OSL)
+	list(APPEND LIB
+		cycles_kernel_osl
+	)
 	add_subdirectory(osl)
 	add_subdirectory(shaders)
 endif()
@@ -502,7 +514,7 @@ if(CXX_HAS_AVX2)
 	set_source_files_properties(kernels/cpu/filter_avx2.cpp PROPERTIES COMPILE_FLAGS "${CYCLES_AVX2_KERNEL_FLAGS}")
 endif()
 
-cycles_add_library(cycles_kernel
+cycles_add_library(cycles_kernel "${LIB}"
 	${SRC_CPU_KERNELS}
 	${SRC_CUDA_KERNELS}
 	${SRC_OPENCL_KERNELS}

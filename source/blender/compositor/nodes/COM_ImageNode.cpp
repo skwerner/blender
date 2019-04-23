@@ -1,6 +1,4 @@
 /*
- * Copyright 2011, Blender Foundation.
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -15,10 +13,7 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
- * Contributor:
- *      Jeroen Bakker
- *      Monique Dewanchand
- *      Lukas Tönne
+ * Copyright 2011, Blender Foundation.
  */
 
 #include "COM_ImageNode.h"
@@ -78,7 +73,7 @@ void ImageNode::convertToOperations(NodeConverter &converter, const CompositorCo
 	int framenumber = context.getFramenumber();
 	int numberOfOutputs = this->getNumberOfOutputSockets();
 	bool outputStraightAlpha = (editorNode->custom1 & CMP_NODE_IMAGE_USE_STRAIGHT_OUTPUT) != 0;
-	BKE_image_user_frame_calc(imageuser, context.getFramenumber(), 0);
+	BKE_image_user_frame_calc(imageuser, context.getFramenumber());
 	/* force a load, we assume iuser index will be set OK anyway */
 	if (image && image->type == IMA_TYPE_MULTILAYER) {
 		bool is_multilayer_ok = false;

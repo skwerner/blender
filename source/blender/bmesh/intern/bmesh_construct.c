@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,10 @@
  *
  * The Original Code is Copyright (C) 2007 Blender Foundation.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): Geoffrey Bantle.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/bmesh/intern/bmesh_construct.c
- *  \ingroup bmesh
+/** \file
+ * \ingroup bmesh
  *
  * BM construction functions.
  */
@@ -127,7 +119,7 @@ BMFace *BM_face_create_quad_tri(
 /**
  * \brief copies face loop data from shared adjacent faces.
  *
- * \param filter_fn  A function that filters the source loops before copying (don't always want to copy all)
+ * \param filter_fn: A function that filters the source loops before copying (don't always want to copy all)
  *
  * \note when a matching edge is found, both loops of that edge are copied
  * this is done since the face may not be completely surrounded by faces,
@@ -273,7 +265,7 @@ error:
  * Makes an ngon from an unordered list of edges.
  * Verts \a v1 and \a v2 define the winding of the new face.
  *
- * \a edges are not required to be ordered, simply to to form
+ * \a edges are not required to be ordered, simply to form
  * a single closed loop as a whole.
  *
  * \note While this function will work fine when the edges
@@ -670,10 +662,10 @@ void BM_mesh_copy_init_customdata(BMesh *bm_dst, BMesh *bm_src, const BMAllocTem
 		allocsize = &bm_mesh_allocsize_default;
 	}
 
-	CustomData_copy(&bm_src->vdata, &bm_dst->vdata, CD_MASK_BMESH, CD_CALLOC, 0);
-	CustomData_copy(&bm_src->edata, &bm_dst->edata, CD_MASK_BMESH, CD_CALLOC, 0);
-	CustomData_copy(&bm_src->ldata, &bm_dst->ldata, CD_MASK_BMESH, CD_CALLOC, 0);
-	CustomData_copy(&bm_src->pdata, &bm_dst->pdata, CD_MASK_BMESH, CD_CALLOC, 0);
+	CustomData_copy(&bm_src->vdata, &bm_dst->vdata, CD_MASK_BMESH.vmask, CD_CALLOC, 0);
+	CustomData_copy(&bm_src->edata, &bm_dst->edata, CD_MASK_BMESH.emask, CD_CALLOC, 0);
+	CustomData_copy(&bm_src->ldata, &bm_dst->ldata, CD_MASK_BMESH.lmask, CD_CALLOC, 0);
+	CustomData_copy(&bm_src->pdata, &bm_dst->pdata, CD_MASK_BMESH.pmask, CD_CALLOC, 0);
 
 	CustomData_bmesh_init_pool(&bm_dst->vdata, allocsize->totvert, BM_VERT);
 	CustomData_bmesh_init_pool(&bm_dst->edata, allocsize->totedge, BM_EDGE);
@@ -745,7 +737,9 @@ BMesh *BM_mesh_copy(BMesh *bm_old)
 
 		ftable[i] = f_new;
 
-		if (f == bm_old->act_face) bm_new->act_face = f_new;
+		if (f == bm_old->act_face) {
+			bm_new->act_face = f_new;
+		}
 	}
 	bm_old->elem_index_dirty &= ~BM_FACE;
 	bm_new->elem_index_dirty &= ~BM_FACE;

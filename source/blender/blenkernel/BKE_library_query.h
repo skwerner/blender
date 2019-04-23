@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,18 +15,12 @@
  *
  * The Original Code is Copyright (C) 2014 by Blender Foundation.
  * All rights reserved.
- *
- * Contributor(s): Sergey SHarybin.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 #ifndef __BKE_LIBRARY_QUERY_H__
 #define __BKE_LIBRARY_QUERY_H__
 
-/** \file BKE_library_query.h
- *  \ingroup bke
- *  \since March 2014
- *  \author sergey
+/** \file
+ * \ingroup bke
  */
 
 struct ID;
@@ -55,6 +47,9 @@ enum {
 	 * This addresses Their Highest Ugliness the 'from' pointers: Object->from_proxy and Key->from.
 	 * How to handle that kind of cases totally depends on what caller code is doing... */
 	IDWALK_CB_LOOPBACK = (1 << 4),
+
+	/** That ID is used as static override's reference by its owner. */
+	IDWALK_CB_STATIC_OVERRIDE_REFERENCE = (1 << 5),
 
 	/**
 	 * Adjusts #ID.us reference-count.

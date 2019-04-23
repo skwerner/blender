@@ -15,16 +15,13 @@
 # Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
 #
 # The Original Code is Copyright (C) 2012 Blender Foundation.
-#
-# Contributor(s): Blender Foundation,
-#                 Sergey Sharybin
-#
 # ***** END GPL LICENSE BLOCK *****
 
 set(INC
 	../include
 	../../blenkernel
 	../../blenlib
+	../../depsgraph
 	../../gpu
 	../../makesdna
 	../../makesrna
@@ -50,6 +47,9 @@ set(SRC
 	mask_intern.h
 )
 
+set(LIB
+)
+
 add_definitions(${GL_DEFINITIONS})
 
-blender_add_lib(bf_editor_mask "${SRC}" "${INC}" "${INC_SYS}")
+blender_add_lib(bf_editor_mask "${SRC}" "${INC}" "${INC_SYS}" "${LIB}")

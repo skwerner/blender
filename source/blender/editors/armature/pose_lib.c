@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,14 +15,10 @@
  *
  * The Original Code is Copyright (C) 2007, Blender Foundation
  * This is a new part of Blender
- *
- * Contributor(s): Joshua Leung
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/armature/pose_lib.c
- *  \ingroup edarmature
+/** \file
+ * \ingroup edarmature
  */
 
 #include <string.h>
@@ -43,18 +37,18 @@
 #include "DNA_object_types.h"
 #include "DNA_scene_types.h"
 
-#include "BKE_animsys.h"
 #include "BKE_action.h"
+#include "BKE_animsys.h"
 #include "BKE_armature.h"
-#include "BKE_depsgraph.h"
-#include "BKE_global.h"
 #include "BKE_idprop.h"
-#include "BKE_main.h"
 #include "BKE_library.h"
+#include "BKE_main.h"
 #include "BKE_object.h"
 
 #include "BKE_context.h"
 #include "BKE_report.h"
+
+#include "DEG_depsgraph.h"
 
 #include "RNA_access.h"
 #include "RNA_define.h"
@@ -166,7 +160,7 @@ static Object *get_poselib_object(bContext *C)
 
 	sa = CTX_wm_area(C);
 
-	if (sa && (sa->spacetype == SPACE_BUTS))
+	if (sa && (sa->spacetype == SPACE_PROPERTIES))
 		return ED_object_context(C);
 	else
 		return BKE_object_pose_armature_get(CTX_data_active_object(C));
@@ -311,8 +305,7 @@ static int poselib_sanitize_exec(bContext *C, wmOperator *op)
 
 	/* determine which frames have keys */
 	BLI_dlrbTree_init(&keys);
-	action_to_keylist(NULL, act, &keys, NULL);
-	BLI_dlrbTree_linkedlist_sync(&keys);
+	action_to_keylist(NULL, act, &keys, 0);
 
 	/* for each key, make sure there is a corresponding pose */
 	for (ak = keys.first; ak; ak = ak->next) {
@@ -498,11 +491,15 @@ static int poselib_add_exec(bContext *C, wmOperator *op)
 	BLI_uniquename(&act->markers, marker, DATA_("Pose"), '.', offsetof(TimeMarker, name), sizeof(marker->name));
 
 	/* use Keying Set to determine what to store for the pose */
-	ks = ANIM_builtin_keyingset_get_named(NULL, ANIM_KS_WHOLE_CHARACTER_SELECTED_ID); /* this includes custom props :)*/
+
+	/* this includes custom props :)*/
+	ks = ANIM_builtin_keyingset_get_named(NULL, ANIM_KS_WHOLE_CHARACTER_SELECTED_ID);
+
 	ANIM_apply_keyingset(C, NULL, act, ks, MODIFYKEY_MODE_INSERT, (float)frame);
 
 	/* store new 'active' pose number */
 	act->active_marker = BLI_listbase_count(&act->markers);
+	DEG_id_tag_update(&act->id, ID_RECALC_COPY_ON_WRITE);
 
 	/* done */
 	return OPERATOR_FINISHED;
@@ -617,6 +614,7 @@ static int poselib_remove_exec(bContext *C, wmOperator *op)
 	 * may be being shown in anim editors as active action
 	 */
 	WM_event_add_notifier(C, NC_ANIMATION | ND_KEYFRAME | NA_EDITED, NULL);
+	DEG_id_tag_update(&act->id, ID_RECALC_COPY_ON_WRITE);
 
 	/* done */
 	return OPERATOR_FINISHED;
@@ -728,7 +726,8 @@ void POSELIB_OT_pose_rename(wmOperatorType *ot)
 	ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
 
 	/* properties */
-	/* NOTE: name not pose is the operator's "main" property, so that it will get activated in the popup for easy renaming */
+	/* NOTE: name not pose is the operator's "main" property,
+	 * so that it will get activated in the popup for easy renaming */
 	ot->prop = RNA_def_string(ot->srna, "name", "RenamedPose", 64, "New Pose Name", "New name for pose");
 	prop = RNA_def_enum(ot->srna, "pose", DummyRNA_NULL_items, 0, "Pose", "The pose to rename");
 	RNA_def_enum_funcs(prop, poselib_stored_pose_itemf);
@@ -790,7 +789,7 @@ void POSELIB_OT_pose_move(wmOperatorType *ot)
 	static const EnumPropertyItem pose_lib_pose_move[] = {
 		{-1, "UP", 0, "Up", ""},
 		{1, "DOWN", 0, "Down", ""},
-		{0, NULL, 0, NULL, NULL}
+		{0, NULL, 0, NULL, NULL},
 	};
 
 	/* identifiers */
@@ -823,30 +822,49 @@ void POSELIB_OT_pose_move(wmOperatorType *ot)
 
 /* Simple struct for storing settings/data for use during PoseLib preview */
 typedef struct tPoseLib_PreviewData {
-	ListBase backups;       /* tPoseLib_Backup structs for restoring poses */
-	ListBase searchp;       /* LinkData structs storing list of poses which match the current search-string */
+	/** tPoseLib_Backup structs for restoring poses. */
+	ListBase backups;
+	/** LinkData structs storing list of poses which match the current search-string. */
+	ListBase searchp;
 
-	Scene *scene;           /* active scene */
-	ScrArea *sa;            /* active area */
+	/** active scene. */
+	Scene *scene;
+	/** active area. */
+	ScrArea *sa;
 
-	PointerRNA rna_ptr;     /* RNA-Pointer to Object 'ob' */
-	Object *ob;             /* object to work on */
-	bArmature *arm;         /* object's armature data */
-	bPose *pose;            /* object's pose */
-	bAction *act;           /* poselib to use */
-	TimeMarker *marker;     /* 'active' pose */
+	/** RNA-Pointer to Object 'ob' .*/
+	PointerRNA rna_ptr;
+	/** object to work on. */
+	Object *ob;
+	/** object's armature data. */
+	bArmature *arm;
+	/** object's pose. */
+	bPose *pose;
+	/** poselib to use. */
+	bAction *act;
+	/** 'active' pose. */
+	TimeMarker *marker;
 
-	int totcount;           /* total number of elements to work on */
+	/** total number of elements to work on. */
+	int totcount;
 
-	short state;            /* state of main loop */
-	short redraw;           /* redraw/update settings during main loop */
-	short flag;             /* flags for various settings */
+	/** state of main loop. */
+	short state;
+	/** redraw/update settings during main loop. */
+	short redraw;
+	/** flags for various settings. */
+	short flag;
 
-	short search_cursor;    /* position of cursor in searchstr (cursor occurs before the item at the nominated index) */
-	char searchstr[64];     /* (Part of) Name to search for to filter poses that get shown */
-	char searchold[64];     /* Previously set searchstr (from last loop run), so that we can detected when to rebuild searchp */
+	/** position of cursor in searchstr (cursor occurs before the item at the nominated index) */
+	short search_cursor;
+	/** (Part of) Name to search for to filter poses that get shown. */
+	char searchstr[64];
+	/** Previously set searchstr (from last loop run),
+	 * so that we can detected when to rebuild searchp. */
+	char searchold[64];
 
-	char headerstr[UI_MAX_DRAW_STR];    /* Info-text to print in header */
+	/** Info-text to print in header. */
+	char headerstr[UI_MAX_DRAW_STR];
 } tPoseLib_PreviewData;
 
 /* defines for tPoseLib_PreviewData->state values */
@@ -855,7 +873,7 @@ enum {
 	PL_PREVIEW_RUNNING,
 	PL_PREVIEW_CONFIRM,
 	PL_PREVIEW_CANCEL,
-	PL_PREVIEW_RUNONCE
+	PL_PREVIEW_RUNONCE,
 };
 
 /* defines for tPoseLib_PreviewData->redraw values */
@@ -942,7 +960,8 @@ static void poselib_backup_restore(tPoseLib_PreviewData *pld)
 		if (plb->oldprops)
 			IDP_SyncGroupValues(plb->pchan->prop, plb->oldprops);
 
-		/* TODO: constraints settings aren't restored yet, even though these could change (though not that likely) */
+		/* TODO: constraints settings aren't restored yet,
+		 * even though these could change (though not that likely) */
 	}
 }
 
@@ -1024,7 +1043,7 @@ static void poselib_apply_pose(tPoseLib_PreviewData *pld)
 				}
 
 				if (ok)
-					animsys_evaluate_action_group(ptr, act, agrp, NULL, (float)frame);
+					animsys_evaluate_action_group(ptr, act, agrp, (float)frame);
 			}
 		}
 	}
@@ -1099,23 +1118,21 @@ static void poselib_preview_apply(bContext *C, wmOperator *op)
 		else
 			RNA_int_set(op->ptr, "pose_index", -2);  /* -2 means don't apply any pose */
 
-		/* old optimize trick... this enforces to bypass the depgraph
+		/* old optimize trick... this enforces to bypass the depsgraph
 		 * - note: code copied from transform_generics.c -> recalcData()
 		 */
 		// FIXME: shouldn't this use the builtin stuff?
 		if ((pld->arm->flag & ARM_DELAYDEFORM) == 0)
-			DAG_id_tag_update(&pld->ob->id, OB_RECALC_DATA);  /* sets recalc flags */
+			DEG_id_tag_update(&pld->ob->id, ID_RECALC_GEOMETRY);  /* sets recalc flags */
 		else
-			BKE_pose_where_is(pld->scene, pld->ob);
+			BKE_pose_where_is(CTX_data_depsgraph(C), pld->scene, pld->ob);
 	}
 
 	/* do header print - if interactively previewing */
 	if (pld->state == PL_PREVIEW_RUNNING) {
 		if (pld->flag & PL_PREVIEW_SHOWORIGINAL) {
-			BLI_strncpy(pld->headerstr,
-			            IFACE_("PoseLib Previewing Pose: [Showing Original Pose] | Use Tab to start previewing poses again"),
-			            sizeof(pld->headerstr));
-			ED_area_headerprint(pld->sa, pld->headerstr);
+			ED_area_status_text(pld->sa, IFACE_("PoseLib Previewing Pose: [Showing Original Pose]"));
+			ED_workspace_status_text(C, IFACE_("Use Tab to start previewing poses again"));
 		}
 		else if (pld->searchstr[0]) {
 			char tempstr[65];
@@ -1139,17 +1156,17 @@ static void poselib_preview_apply(bContext *C, wmOperator *op)
 
 			BLI_snprintf(pld->headerstr, sizeof(pld->headerstr),
 			             IFACE_("PoseLib Previewing Pose: Filter - [%s] | "
-			                    "Current Pose - \"%s\"  | "
-			                    "Use ScrollWheel or PageUp/Down to change"),
+			                    "Current Pose - \"%s\""),
 			             tempstr, markern);
-			ED_area_headerprint(pld->sa, pld->headerstr);
+			ED_area_status_text(pld->sa, pld->headerstr);
+			ED_workspace_status_text(C, IFACE_("Use ScrollWheel or PageUp/Down to change pose"));
 		}
 		else {
 			BLI_snprintf(pld->headerstr, sizeof(pld->headerstr),
-			             IFACE_("PoseLib Previewing Pose: \"%s\"  | "
-			                    "Use ScrollWheel or PageUp/Down to change"),
+			             IFACE_("PoseLib Previewing Pose: \"%s\""),
 			             pld->marker->name);
-			ED_area_headerprint(pld->sa, pld->headerstr);
+			ED_area_status_text(pld->sa, pld->headerstr);
+			ED_workspace_status_text(C, NULL);
 		}
 	}
 
@@ -1599,7 +1616,8 @@ static void poselib_preview_cleanup(bContext *C, wmOperator *op)
 	TimeMarker *marker = pld->marker;
 
 	/* redraw the header so that it doesn't show any of our stuff anymore */
-	ED_area_headerprint(pld->sa, NULL);
+	ED_area_status_text(pld->sa, NULL);
+	ED_workspace_status_text(C, NULL);
 
 	/* this signal does one recalc on pose, then unlocks, so ESC or edit will work */
 	pose->flag |= POSE_DO_UNLOCK;
@@ -1612,9 +1630,9 @@ static void poselib_preview_cleanup(bContext *C, wmOperator *op)
 		 * - note: code copied from transform_generics.c -> recalcData()
 		 */
 		if ((arm->flag & ARM_DELAYDEFORM) == 0)
-			DAG_id_tag_update(&ob->id, OB_RECALC_DATA);  /* sets recalc flags */
+			DEG_id_tag_update(&ob->id, ID_RECALC_GEOMETRY);  /* sets recalc flags */
 		else
-			BKE_pose_where_is(scene, ob);
+			BKE_pose_where_is(CTX_data_depsgraph(C), scene, ob);
 	}
 	else if (pld->state == PL_PREVIEW_CONFIRM) {
 		/* tag poses as appropriate */
@@ -1625,14 +1643,14 @@ static void poselib_preview_cleanup(bContext *C, wmOperator *op)
 		action_set_activemarker(act, marker, NULL);
 
 		/* Update event for pose and deformation children */
-		DAG_id_tag_update(&ob->id, OB_RECALC_DATA);
+		DEG_id_tag_update(&ob->id, ID_RECALC_GEOMETRY);
 
 		/* updates */
 		if (IS_AUTOKEY_MODE(scene, NORMAL)) {
 			//remake_action_ipos(ob->action);
 		}
 		else
-			BKE_pose_where_is(scene, ob);
+			BKE_pose_where_is(CTX_data_depsgraph(C), scene, ob);
 	}
 
 	/* Request final redraw of the view. */
@@ -1765,7 +1783,11 @@ void POSELIB_OT_browse_interactive(wmOperatorType *ot)
 
 	// XXX: percentage vs factor?
 	/* not used yet */
-	/* RNA_def_float_factor(ot->srna, "blend_factor", 1.0f, 0.0f, 1.0f, "Blend Factor", "Amount that the pose is applied on top of the existing poses", 0.0f, 1.0f); */
+#if 0
+	RNA_def_float_factor(
+	        ot->srna, "blend_factor", 1.0f, 0.0f, 1.0f, "Blend Factor",
+	        "Amount that the pose is applied on top of the existing poses", 0.0f, 1.0f);
+#endif
 }
 
 void POSELIB_OT_apply_pose(wmOperatorType *ot)

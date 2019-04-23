@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,14 +15,10 @@
  *
  * The Original Code is Copyright (C) 2008, Blender Foundation
  * This is a new part of Blender
- *
- * Contributor(s): Joshua Leung
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/gpencil/editaction_gpencil.c
- *  \ingroup edgpencil
+/** \file
+ * \ingroup edgpencil
  */
 
 
@@ -191,7 +185,7 @@ void ED_gpencil_select_frame(bGPDlayer *gpl, int selx, short select_mode)
 }
 
 /* select the frames in this layer that occur within the bounds specified */
-void ED_gplayer_frames_select_border(bGPDlayer *gpl, float min, float max, short select_mode)
+void ED_gplayer_frames_select_box(bGPDlayer *gpl, float min, float max, short select_mode)
 {
 	bGPDframe *gpf;
 
@@ -288,7 +282,7 @@ void ED_gplayer_frames_duplicate(bGPDlayer *gpl)
 }
 
 /* Set keyframe type for selected frames from given gp-layer
- * \param type The type of keyframe (eBezTriple_KeyframeType) to set selected frames to
+ * \param type: The type of keyframe (eBezTriple_KeyframeType) to set selected frames to
  */
 void ED_gplayer_frames_keytype_set(bGPDlayer *gpl, short type)
 {
@@ -477,7 +471,7 @@ bool ED_gpencil_anim_copybuf_paste(bAnimContext *ac, const short offset_mode)
 			gpfs->framenum += offset;
 
 			/* get frame to copy data into (if no frame returned, then just ignore) */
-			gpf = BKE_gpencil_layer_getframe(gpld, gpfs->framenum, 1);
+			gpf = BKE_gpencil_layer_getframe(gpld, gpfs->framenum, GP_GETFRAME_ADD_NEW);
 			if (gpf) {
 				bGPDstroke *gps, *gpsn;
 
@@ -492,6 +486,10 @@ bool ED_gpencil_anim_copybuf_paste(bAnimContext *ac, const short offset_mode)
 					/* make a copy of stroke, then of its points array */
 					gpsn = MEM_dupallocN(gps);
 					gpsn->points = MEM_dupallocN(gps->points);
+					if (gps->dvert != NULL) {
+						gpsn->dvert = MEM_dupallocN(gps->dvert);
+						BKE_gpencil_stroke_weights_duplicate(gps, gpsn);
+					}
 					/* duplicate triangle information */
 					gpsn->triangles = MEM_dupallocN(gps->triangles);
 					/* append stroke to frame */

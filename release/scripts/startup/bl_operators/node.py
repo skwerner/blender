@@ -34,7 +34,7 @@ from bpy.props import (
 
 
 class NodeSetting(PropertyGroup):
-    value = StringProperty(
+    value: StringProperty(
         name="Value",
         description="Python expression to be evaluated "
         "as the initial node setting",
@@ -45,16 +45,16 @@ class NodeSetting(PropertyGroup):
 # Base class for node 'Add' operators
 class NodeAddOperator:
 
-    type = StringProperty(
+    type: StringProperty(
         name="Node Type",
         description="Node type",
     )
-    use_transform = BoolProperty(
+    use_transform: BoolProperty(
         name="Use Transform",
         description="Start transform operator after inserting the node",
         default=False,
     )
-    settings = CollectionProperty(
+    settings: CollectionProperty(
         name="Settings",
         description="Settings to be applied on the newly created node",
         type=NodeSetting,
@@ -152,7 +152,7 @@ class NODE_OT_add_and_link_node(NodeAddOperator, Operator):
     bl_label = "Add and Link Node"
     bl_options = {'REGISTER', 'UNDO'}
 
-    link_socket_index = IntProperty(
+    link_socket_index: IntProperty(
         name="Link Socket Index",
         description="Index of the socket to link",
     )
@@ -192,14 +192,12 @@ class NODE_OT_add_search(NodeAddOperator, Operator):
 
         for index, item in enumerate(nodeitems_utils.node_items_iter(context)):
             if isinstance(item, nodeitems_utils.NodeItem):
-                nodetype = getattr(bpy.types, item.nodetype, None)
-                if nodetype:
-                    enum_items.append(
-                        (str(index),
-                         item.label,
-                         nodetype.bl_rna.description,
-                         index,
-                         ))
+                enum_items.append(
+                    (str(index),
+                     item.label,
+                     "",
+                     index,
+                     ))
         return enum_items
 
     # Look up the item based on index
@@ -210,7 +208,7 @@ class NODE_OT_add_search(NodeAddOperator, Operator):
                 return item
         return None
 
-    node_item = EnumProperty(
+    node_item: EnumProperty(
         name="Node Type",
         description="Node type",
         items=node_enum_items,

@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,17 +15,13 @@
  *
  * The Original Code is Copyright (C) 2016 Blender Foundation.
  * All rights reserved.
- *
- * Contributor(s): Kevin Dietrich.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
 #ifndef __BKE_CACHEFILE_H__
 #define __BKE_CACHEFILE_H__
 
-/** \file BKE_cachefile.h
- *  \ingroup bke
+/** \file
+ * \ingroup bke
  */
 
 #ifdef __cplusplus
@@ -35,6 +29,7 @@ extern "C" {
 #endif
 
 struct CacheFile;
+struct Depsgraph;
 struct Main;
 struct Scene;
 
@@ -57,7 +52,7 @@ void BKE_cachefile_reload(const struct Main *bmain, struct CacheFile *cache_file
 
 void BKE_cachefile_ensure_handle(const struct Main *bmain, struct CacheFile *cache_file);
 
-void BKE_cachefile_update_frame(struct Main *bmain, struct Scene *scene, const float ctime, const float fps);
+void BKE_cachefile_update_frame(struct Main *bmain, struct Depsgraph *depsgraph, struct Scene *scene, const float ctime, const float fps);
 
 bool BKE_cachefile_filepath_get(
         const struct Main *bmain, const struct CacheFile *cache_file, float frame,
@@ -65,7 +60,7 @@ bool BKE_cachefile_filepath_get(
 
 float BKE_cachefile_time_offset(struct CacheFile *cache_file, const float time, const float fps);
 
-void BKE_cachefile_clean(struct Scene *scene, struct CacheFile *cache_file);
+void BKE_cachefile_clean(struct Main *bmain, struct CacheFile *cache_file);
 
 #ifdef __cplusplus
 }

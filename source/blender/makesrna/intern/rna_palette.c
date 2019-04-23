@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,12 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/makesrna/intern/rna_palette.c
- *  \ingroup RNA
+/** \file
+ * \ingroup RNA
  */
 
 #include <stdlib.h>
@@ -39,7 +35,6 @@
 
 #include "BKE_paint.h"
 #include "BKE_report.h"
-
 static PaletteColor *rna_Palette_color_new(Palette *palette)
 {
 	PaletteColor *color = BKE_palette_color_add(palette);
@@ -139,6 +134,7 @@ static void rna_def_palettecolor(BlenderRNA *brna)
 	prop = RNA_def_property(srna, "color", PROP_FLOAT, PROP_COLOR_GAMMA);
 	RNA_def_property_range(prop, 0.0, 1.0);
 	RNA_def_property_float_sdna(prop, NULL, "rgb");
+	RNA_def_property_array(prop, 3);
 	RNA_def_property_ui_text(prop, "Color", "");
 	RNA_def_property_update(prop, NC_SCENE | ND_TOOLSETTINGS, NULL);
 
@@ -153,6 +149,7 @@ static void rna_def_palettecolor(BlenderRNA *brna)
 	RNA_def_property_float_sdna(prop, NULL, "value");
 	RNA_def_property_ui_text(prop, "Weight", "");
 	RNA_def_property_update(prop, NC_SCENE | ND_TOOLSETTINGS, NULL);
+
 }
 
 static void rna_def_palette(BlenderRNA *brna)
@@ -167,6 +164,7 @@ static void rna_def_palette(BlenderRNA *brna)
 	prop = RNA_def_property(srna, "colors", PROP_COLLECTION, PROP_NONE);
 	RNA_def_property_struct_type(prop, "PaletteColor");
 	rna_def_palettecolors(brna, prop);
+
 }
 
 void RNA_def_palette(BlenderRNA *brna)

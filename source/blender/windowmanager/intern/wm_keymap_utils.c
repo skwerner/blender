@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,12 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/windowmanager/intern/wm_keymap_utils.c
- *  \ingroup wm
+/** \file
+ * \ingroup wm
  *
  * Utilities to help define keymaps.
  */
@@ -46,6 +42,7 @@
 /** \name Wrappers for #WM_keymap_add_item
  * \{ */
 
+/* menu wrapper for WM_keymap_add_item */
 wmKeyMapItem *WM_keymap_add_menu(wmKeyMap *keymap, const char *idname, int type, int val, int modifier, int keymodifier)
 {
 	wmKeyMapItem *kmi = WM_keymap_add_item(keymap, "WM_OT_call_menu", type, val, modifier, keymodifier);
@@ -60,11 +57,92 @@ wmKeyMapItem *WM_keymap_add_menu_pie(wmKeyMap *keymap, const char *idname, int t
 	return kmi;
 }
 
+wmKeyMapItem *WM_keymap_add_panel(wmKeyMap *keymap, const char *idname, int type, int val, int modifier, int keymodifier)
+{
+	wmKeyMapItem *kmi = WM_keymap_add_item(keymap, "WM_OT_call_panel", type, val, modifier, keymodifier);
+	RNA_string_set(kmi->ptr, "name", idname);
+	/* TODO: we might want to disable this. */
+	RNA_boolean_set(kmi->ptr, "keep_open", false);
+	return kmi;
+}
+
+/* tool wrapper for WM_keymap_add_item */
+wmKeyMapItem *WM_keymap_add_tool(wmKeyMap *keymap, const char *idname, int type, int val, int modifier, int keymodifier)
+{
+	wmKeyMapItem *kmi = WM_keymap_add_item(keymap, "WM_OT_tool_set_by_id", type, val, modifier, keymodifier);
+	RNA_string_set(kmi->ptr, "name", idname);
+	return kmi;
+}
+
+/** Useful for mapping numbers to an enum. */
+void WM_keymap_add_context_enum_set_items(
+        wmKeyMap *keymap, const EnumPropertyItem *items, const char *data_path,
+        int type_start, int val, int modifier, int keymodifier)
+{
+	for (int i = 0, type_offset = 0; items[i].identifier; i++) {
+		if (items[i].identifier[0] == '\0') {
+			continue;
+		}
+		wmKeyMapItem *kmi = WM_keymap_add_item(
+		        keymap, "WM_OT_context_set_enum",
+		        type_start + type_offset, val, modifier, keymodifier);
+		RNA_string_set(kmi->ptr, "data_path", data_path);
+		RNA_string_set(kmi->ptr, "value", items[i].identifier);
+		type_offset += 1;
+	}
+}
+
 /** \} */
 
 /* -------------------------------------------------------------------- */
 /** \name Introspection
  * \{ */
+
+wmKeyMap *WM_keymap_guess_from_context(const bContext *C)
+{
+	SpaceLink *sl = CTX_wm_space_data(C);
+	const char *km_id = NULL;
+	if (sl->spacetype == SPACE_VIEW3D) {
+		const enum eContextObjectMode mode = CTX_data_mode_enum(C);
+		switch (mode) {
+			case CTX_MODE_EDIT_MESH:            km_id = "Mesh"; break;
+			case CTX_MODE_EDIT_CURVE:           km_id = "Curve"; break;
+			case CTX_MODE_EDIT_SURFACE:         km_id = "Curve"; break;
+			case CTX_MODE_EDIT_TEXT:            km_id = "Font"; break;
+			case CTX_MODE_EDIT_ARMATURE:        km_id = "Armature"; break;
+			case CTX_MODE_EDIT_METABALL:        km_id = "Metaball"; break;
+			case CTX_MODE_EDIT_LATTICE:         km_id = "Lattice"; break;
+			case CTX_MODE_POSE:                 km_id = "Pose"; break;
+			case CTX_MODE_SCULPT:               km_id = "Sculpt"; break;
+			case CTX_MODE_PAINT_WEIGHT:         km_id = "Weight Paint"; break;
+			case CTX_MODE_PAINT_VERTEX:         km_id = "Vertex Paint"; break;
+			case CTX_MODE_PAINT_TEXTURE:        km_id = "Image Paint"; break;
+			case CTX_MODE_PARTICLE:             km_id = "Particle"; break;
+			case CTX_MODE_OBJECT:               km_id = "Object Mode"; break;
+			case CTX_MODE_PAINT_GPENCIL:        km_id = "Grease Pencil Stroke Paint Mode"; break;
+			case CTX_MODE_EDIT_GPENCIL:         km_id = "Grease Pencil Stroke Edit Mode"; break;
+			case CTX_MODE_SCULPT_GPENCIL:		km_id = "Grease Pencil Stroke Sculpt Mode"; break;
+			case CTX_MODE_WEIGHT_GPENCIL:       km_id = "Grease Pencil Stroke Weight Mode"; break;
+		}
+	}
+	else if (sl->spacetype == SPACE_IMAGE) {
+		const SpaceImage *sima = (SpaceImage *)sl;
+		const eSpaceImage_Mode mode = sima->mode;
+		switch (mode) {
+			case SI_MODE_VIEW:      km_id = "Image"; break;
+			case SI_MODE_PAINT:     km_id = "Image Paint"; break;
+			case SI_MODE_MASK:      km_id = "Mask Editing"; break;
+			case SI_MODE_UV:        km_id = "UV Editor"; break;
+		}
+	}
+	else {
+		return NULL;
+	}
+
+	wmKeyMap *km = WM_keymap_find_all(C, km_id, 0, 0);
+	BLI_assert(km);
+	return km;
+}
 
 /* Guess an appropriate keymap from the operator name */
 /* Needs to be kept up to date with Keymap and Operator naming */
@@ -88,8 +166,16 @@ wmKeyMap *WM_keymap_guess_opname(const bContext *C, const char *opname)
 	SpaceLink *sl = CTX_wm_space_data(C);
 
 	/* Window */
-	if (STRPREFIX(opname, "WM_OT")) {
-		km = WM_keymap_find_all(C, "Window", 0, 0);
+	if (STRPREFIX(opname, "WM_OT") ||
+	    STRPREFIX(opname, "ED_OT_undo"))
+	{
+		if (STREQ(opname, "WM_OT_tool_set_by_id")) {
+			km = WM_keymap_guess_from_context(C);
+		}
+
+		if (km == NULL) {
+			km = WM_keymap_find_all(C, "Window", 0, 0);
+		}
 	}
 	/* Screen & Render */
 	else if (STRPREFIX(opname, "SCREEN_OT") ||
@@ -121,10 +207,12 @@ wmKeyMap *WM_keymap_guess_opname(const bContext *C, const char *opname)
 	}
 	else if (STRPREFIX(opname, "OBJECT_OT")) {
 		/* exception, this needs to work outside object mode too */
-		if (STRPREFIX(opname, "OBJECT_OT_mode_set"))
+		if (STRPREFIX(opname, "OBJECT_OT_mode_set")) {
 			km = WM_keymap_find_all(C, "Object Non-modal", 0, 0);
-		else
+		}
+		else {
 			km = WM_keymap_find_all(C, "Object Mode", 0, 0);
+		}
 	}
 	/* Object mode related */
 	else if (STRPREFIX(opname, "GROUP_OT") ||
@@ -166,11 +254,13 @@ wmKeyMap *WM_keymap_guess_opname(const bContext *C, const char *opname)
 	}
 	else if (STRPREFIX(opname, "SCULPT_OT")) {
 		switch (CTX_data_mode_enum(C)) {
-			case OB_MODE_SCULPT:
+			case CTX_MODE_SCULPT:
 				km = WM_keymap_find_all(C, "Sculpt", 0, 0);
 				break;
-			case OB_MODE_EDIT:
+			case CTX_MODE_EDIT_MESH:
 				km = WM_keymap_find_all(C, "UV Sculpt", 0, 0);
+				break;
+			default:
 				break;
 		}
 	}
@@ -198,20 +288,21 @@ wmKeyMap *WM_keymap_guess_opname(const bContext *C, const char *opname)
 	else if (STRPREFIX(opname, "PAINT_OT")) {
 		/* check for relevant mode */
 		switch (CTX_data_mode_enum(C)) {
-			case OB_MODE_WEIGHT_PAINT:
+			case CTX_MODE_PAINT_WEIGHT:
 				km = WM_keymap_find_all(C, "Weight Paint", 0, 0);
 				break;
-			case OB_MODE_VERTEX_PAINT:
+			case CTX_MODE_PAINT_VERTEX:
 				km = WM_keymap_find_all(C, "Vertex Paint", 0, 0);
 				break;
-			case OB_MODE_TEXTURE_PAINT:
+			case CTX_MODE_PAINT_TEXTURE:
 				km = WM_keymap_find_all(C, "Image Paint", 0, 0);
 				break;
+			case CTX_MODE_SCULPT:
+				km = WM_keymap_find_all(C, "Sculpt", 0, 0);
+				break;
+			default:
+				break;
 		}
-	}
-	/* Timeline */
-	else if (STRPREFIX(opname, "TIME_OT")) {
-		km = WM_keymap_find_all(C, "Timeline", sl->spacetype, 0);
 	}
 	/* Image Editor */
 	else if (STRPREFIX(opname, "IMAGE_OT")) {
@@ -301,7 +392,7 @@ wmKeyMap *WM_keymap_guess_opname(const bContext *C, const char *opname)
 			case SPACE_VIEW3D:
 				km = WM_keymap_find_all(C, "3D View", sl->spacetype, 0);
 				break;
-			case SPACE_IPO:
+			case SPACE_GRAPH:
 				km = WM_keymap_find_all(C, "Graph Editor", sl->spacetype, 0);
 				break;
 			case SPACE_ACTION:
@@ -323,6 +414,10 @@ wmKeyMap *WM_keymap_guess_opname(const bContext *C, const char *opname)
 	}
 
 	return km;
+}
+
+void WM_keymap_fix_linking(void)
+{
 }
 
 /** \} */

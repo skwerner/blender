@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -18,15 +16,11 @@
  * All rights reserved.
  *
  * The Original Code is: some of this file.
- *
- * Contributor(s): Jens Ole Wund (bjornmose), Campbell Barton (ideasman42)
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/sculpt_paint/paint_image.c
- *  \ingroup edsculpt
- *  \brief Functions to paint images in 2D and 3D.
+/** \file
+ * \ingroup edsculpt
+ * \brief Functions to paint images in 2D and 3D.
  */
 
 #include <float.h>
@@ -46,20 +40,22 @@
 #include "IMB_imbuf_types.h"
 
 #include "DNA_brush_types.h"
+#include "DNA_mesh_types.h"
 #include "DNA_node_types.h"
 #include "DNA_object_types.h"
 
 #include "BKE_colorband.h"
 #include "BKE_context.h"
-#include "BKE_depsgraph.h"
-#include "BKE_DerivedMesh.h"
 #include "BKE_brush.h"
 #include "BKE_main.h"
 #include "BKE_material.h"
+#include "BKE_mesh.h"
 #include "BKE_node.h"
 #include "BKE_paint.h"
 #include "BKE_undo_system.h"
 
+
+#include "DEG_depsgraph.h"
 
 #include "UI_interface.h"
 #include "UI_view2d.h"
@@ -72,23 +68,24 @@
 
 #include "WM_api.h"
 #include "WM_types.h"
+#include "WM_message.h"
+#include "WM_toolsystem.h"
 
 #include "RNA_access.h"
 #include "RNA_define.h"
 
 #include "GPU_draw.h"
-#include "GPU_buffers.h"
+#include "GPU_immediate.h"
+#include "GPU_state.h"
 
-#include "BIF_gl.h"
-#include "BIF_glutil.h"
 
 #include "IMB_colormanagement.h"
 
 #include "paint_intern.h"
 
-/* this is a static resource for non-globality,
- * Maybe it should be exposed as part of the
- * paint operation, but for now just give a public interface */
+/* This is a static resource for non-global access.
+ * Maybe it should be exposed as part of the paint operation, but for now just give a public interface.
+ */
 static ImagePaintPartialRedraw imapaintpartial = {0, 0, 0, 0, 0};
 
 ImagePaintPartialRedraw *get_imapaintpartial(void)
@@ -265,7 +262,7 @@ static Brush *image_paint_brush(bContext *C)
 	return BKE_paint_brush(&settings->imapaint.paint);
 }
 
-static bool image_paint_poll(bContext *C)
+static bool image_paint_poll_ex(bContext *C, bool check_tool)
 {
 	Object *obact;
 
@@ -274,7 +271,9 @@ static bool image_paint_poll(bContext *C)
 
 	obact = CTX_data_active_object(C);
 	if ((obact && obact->mode & OB_MODE_TEXTURE_PAINT) && CTX_wm_region_view3d(C)) {
-		return 1;
+		if (!check_tool || WM_toolsystem_active_tool_is_brush(C)) {
+			return 1;
+		}
 	}
 	else {
 		SpaceImage *sima = CTX_wm_space_image(C);
@@ -289,6 +288,16 @@ static bool image_paint_poll(bContext *C)
 	}
 
 	return 0;
+}
+
+static bool image_paint_poll(bContext *C)
+{
+	return image_paint_poll_ex(C, true);
+}
+
+static bool image_paint_poll_ignore_tool(bContext *C)
+{
+	return image_paint_poll_ex(C, false);
 }
 
 static bool image_paint_2d_clone_poll(bContext *C)
@@ -306,7 +315,7 @@ static bool image_paint_2d_clone_poll(bContext *C)
 /************************ paint operator ************************/
 typedef enum eTexPaintMode {
 	PAINT_MODE_2D,
-	PAINT_MODE_3D_PROJECT
+	PAINT_MODE_3D_PROJECT,
 } eTexPaintMode;
 
 typedef struct PaintOperation {
@@ -375,11 +384,14 @@ void paint_brush_init_tex(Brush *brush)
 	/* init mtex nodes */
 	if (brush) {
 		MTex *mtex = &brush->mtex;
-		if (mtex->tex && mtex->tex->nodetree)
-			ntreeTexBeginExecTree(mtex->tex->nodetree);  /* has internal flag to detect it only does it once */
-		mtex = &brush->mask_mtex;
-		if (mtex->tex && mtex->tex->nodetree)
+		if (mtex->tex && mtex->tex->nodetree) {
+			/* has internal flag to detect it only does it once */
 			ntreeTexBeginExecTree(mtex->tex->nodetree);
+		}
+		mtex = &brush->mask_mtex;
+		if (mtex->tex && mtex->tex->nodetree) {
+			ntreeTexBeginExecTree(mtex->tex->nodetree);
+		}
 	}
 }
 
@@ -400,18 +412,36 @@ static void gradient_draw_line(bContext *UNUSED(C), int x, int y, void *customda
 	PaintOperation *pop = (PaintOperation *)customdata;
 
 	if (pop) {
-		glEnable(GL_LINE_SMOOTH);
-		glEnable(GL_BLEND);
+		GPU_line_smooth(true);
+		GPU_blend(true);
 
-		glLineWidth(4.0);
-		glColor4ub(0, 0, 0, 255);
-		sdrawline(x, y, pop->startmouse[0], pop->startmouse[1]);
-		glLineWidth(2.0);
-		glColor4ub(255, 255, 255, 255);
-		sdrawline(x, y, pop->startmouse[0], pop->startmouse[1]);
+		GPUVertFormat *format = immVertexFormat();
+		uint pos = GPU_vertformat_attr_add(format, "pos", GPU_COMP_I32, 2, GPU_FETCH_INT_TO_FLOAT);
 
-		glDisable(GL_BLEND);
-		glDisable(GL_LINE_SMOOTH);
+		ARegion *ar = pop->vc.ar;
+
+		immBindBuiltinProgram(GPU_SHADER_2D_UNIFORM_COLOR);
+
+		GPU_line_width(4.0);
+		immUniformColor4ub(0, 0, 0, 255);
+
+		immBegin(GPU_PRIM_LINES, 2);
+		immVertex2i(pos, x, y);
+		immVertex2i(pos, pop->startmouse[0] + ar->winrct.xmin, pop->startmouse[1] + ar->winrct.ymin);
+		immEnd();
+
+		GPU_line_width(2.0);
+		immUniformColor4ub(255, 255, 255, 255);
+
+		immBegin(GPU_PRIM_LINES, 2);
+		immVertex2i(pos, x, y);
+		immVertex2i(pos, pop->startmouse[0] + ar->winrct.xmin, pop->startmouse[1] + ar->winrct.ymin);
+		immEnd();
+
+		immUnbindProgram();
+
+		GPU_blend(false);
+		GPU_line_smooth(false);
 	}
 }
 
@@ -430,7 +460,8 @@ static PaintOperation *texture_paint_init(bContext *C, wmOperator *op, const flo
 
 	/* initialize from context */
 	if (CTX_wm_region_view3d(C)) {
-		Object *ob = OBACT;
+		ViewLayer *view_layer = CTX_data_view_layer(C);
+		Object *ob = OBACT(view_layer);
 		bool uvs, mat, tex, stencil;
 		if (!BKE_paint_proj_mesh_data_check(scene, ob, &uvs, &mat, &tex, &stencil)) {
 			BKE_paint_data_warning(op->reports, uvs, mat, tex, stencil);
@@ -452,11 +483,15 @@ static PaintOperation *texture_paint_init(bContext *C, wmOperator *op, const flo
 	}
 
 	if ((brush->imagepaint_tool == PAINT_TOOL_FILL) && (brush->flag & BRUSH_USE_GRADIENT)) {
-		pop->cursor = WM_paint_cursor_activate(CTX_wm_manager(C), image_paint_poll, gradient_draw_line, pop);
+		pop->cursor = WM_paint_cursor_activate(
+		        CTX_wm_manager(C),
+		        SPACE_TYPE_ANY, RGN_TYPE_ANY,
+		        image_paint_poll, gradient_draw_line,
+		        pop);
 	}
 
 	settings->imapaint.flag |= IMAGEPAINT_DRAWING;
-	ED_image_undo_push_begin(op->type->name);
+	ED_image_undo_push_begin(op->type->name, PAINT_MODE_TEXTURE_2D);
 
 	return pop;
 }
@@ -552,8 +587,12 @@ static void paint_stroke_done(const bContext *C, struct PaintStroke *stroke)
 		else {
 			if (pop->mode == PAINT_MODE_2D) {
 				float color[3];
-
-				srgb_to_linearrgb_v3_v3(color, BKE_brush_color_get(scene, brush));
+				if (paint_stroke_inverted(stroke)) {
+					srgb_to_linearrgb_v3_v3(color, BKE_brush_secondary_color_get(scene, brush));
+				}
+				else {
+					srgb_to_linearrgb_v3_v3(color, BKE_brush_color_get(scene, brush));
+				}
 				paint_2d_bucket_fill(C, color, brush, pop->prevmouse, pop->custom_paint);
 			}
 			else {
@@ -717,16 +756,20 @@ static void toggle_paint_cursor(bContext *C, int enable)
 void ED_space_image_paint_update(Main *bmain, wmWindowManager *wm, Scene *scene)
 {
 	ToolSettings *settings = scene->toolsettings;
-	wmWindow *win;
-	ScrArea *sa;
 	ImagePaintSettings *imapaint = &settings->imapaint;
 	bool enabled = false;
 
-	for (win = wm->windows.first; win; win = win->next)
-		for (sa = win->screen->areabase.first; sa; sa = sa->next)
-			if (sa->spacetype == SPACE_IMAGE)
-				if (((SpaceImage *)sa->spacedata.first)->mode == SI_MODE_PAINT)
+	for (wmWindow *win = wm->windows.first; win; win = win->next) {
+		bScreen *screen = WM_window_get_active_screen(win);
+
+		for (ScrArea *sa = screen->areabase.first; sa; sa = sa->next) {
+			if (sa->spacetype == SPACE_IMAGE) {
+				if (((SpaceImage *)sa->spacedata.first)->mode == SI_MODE_PAINT) {
 					enabled = true;
+				}
+			}
+		}
+	}
 
 	if (enabled) {
 		BKE_paint_init(bmain, scene, PAINT_MODE_TEXTURE_2D, PAINT_CURSOR_TEXTURE_PAINT);
@@ -857,7 +900,7 @@ static void sample_color_update_header(SampleColorData *data, bContext *C)
 		        !data->sample_palette ?
 		        IFACE_("Brush. Use Left Click to sample for palette instead") :
 		        IFACE_("Palette. Use Left Click to sample more colors"));
-		ED_area_headerprint(sa, msg);
+		ED_workspace_status_text(C, msg);
 	}
 }
 
@@ -936,8 +979,6 @@ static int sample_color_modal(bContext *C, wmOperator *op, const wmEvent *event)
 	Brush *brush = BKE_paint_brush(paint);
 
 	if ((event->type == data->event_type) && (event->val == KM_RELEASE)) {
-		ScrArea *sa = CTX_wm_area(C);
-
 		if (data->show_cursor) {
 			paint->flags |= PAINT_SHOW_BRUSH;
 		}
@@ -948,7 +989,7 @@ static int sample_color_modal(bContext *C, wmOperator *op, const wmEvent *event)
 		}
 		WM_cursor_modal_restore(CTX_wm_window(C));
 		MEM_freeN(data);
-		ED_area_headerprint(sa, NULL);
+		ED_workspace_status_text(C, NULL);
 
 		return OPERATOR_FINISHED;
 	}
@@ -985,7 +1026,7 @@ static int sample_color_modal(bContext *C, wmOperator *op, const wmEvent *event)
 
 static bool sample_color_poll(bContext *C)
 {
-	return (image_paint_poll(C) || vertex_paint_poll(C));
+	return (image_paint_poll_ignore_tool(C) || vertex_paint_poll_ignore_tool(C));
 }
 
 void PAINT_OT_sample_color(wmOperatorType *ot)
@@ -1031,6 +1072,7 @@ static bool texture_paint_toggle_poll(bContext *C)
 
 static int texture_paint_toggle_exec(bContext *C, wmOperator *op)
 {
+	struct wmMsgBus *mbus = CTX_wm_message_bus(C);
 	Main *bmain = CTX_data_main(C);
 	Scene *scene = CTX_data_scene(C);
 	Object *ob = CTX_data_active_object(C);
@@ -1065,7 +1107,8 @@ static int texture_paint_toggle_exec(bContext *C, wmOperator *op)
 
 		/* entering paint mode also sets image to editors */
 		if (imapaint->mode == IMAGEPAINT_MODE_MATERIAL) {
-			Material *ma = give_current_material(ob, ob->actcol); /* set the current material active paint slot on image editor */
+			/* set the current material active paint slot on image editor */
+			Material *ma = give_current_material(ob, ob->actcol);
 
 			if (ma && ma->texpaintslot)
 				ima = ma->texpaintslot[ma->paint_active_slot].ima;
@@ -1075,7 +1118,7 @@ static int texture_paint_toggle_exec(bContext *C, wmOperator *op)
 		}
 
 		if (ima) {
-			for (sc = bmain->screen.first; sc; sc = sc->id.next) {
+			for (sc = bmain->screens.first; sc; sc = sc->id.next) {
 				ScrArea *sa;
 				for (sa = sc->areabase.first; sa; sa = sa->next) {
 					SpaceLink *sl;
@@ -1083,8 +1126,10 @@ static int texture_paint_toggle_exec(bContext *C, wmOperator *op)
 						if (sl->spacetype == SPACE_IMAGE) {
 							SpaceImage *sima = (SpaceImage *)sl;
 
-							if (!sima->pin)
-								ED_space_image_set(bmain, sima, scene, scene->obedit, ima);
+							if (!sima->pin) {
+								Object *obedit = CTX_data_edit_object(C);
+								ED_space_image_set(bmain, sima, obedit, ima, true);
+							}
 						}
 					}
 				}
@@ -1095,6 +1140,8 @@ static int texture_paint_toggle_exec(bContext *C, wmOperator *op)
 
 		BKE_paint_init(bmain, scene, PAINT_MODE_TEXTURE_3D, PAINT_CURSOR_TEXTURE_PAINT);
 
+		BKE_paint_toolslots_brush_validate(bmain, &imapaint->paint);
+
 		if (U.glreslimit != 0)
 			GPU_free_images(bmain);
 		GPU_paint_set_mipmap(bmain, 0);
@@ -1102,8 +1149,15 @@ static int texture_paint_toggle_exec(bContext *C, wmOperator *op)
 		toggle_paint_cursor(C, 1);
 	}
 
-	GPU_drawobject_free(ob->derivedFinal);
+	Mesh *me = BKE_mesh_from_object(ob);
+	BLI_assert(me != NULL);
+	DEG_id_tag_update(&me->id, ID_RECALC_COPY_ON_WRITE);
+
 	WM_event_add_notifier(C, NC_SCENE | ND_MODE, scene);
+
+	WM_msg_publish_rna_prop(mbus, &ob->id, ob, Object, mode);
+
+	WM_toolsystem_update_from_context_view3d(C);
 
 	return OPERATOR_FINISHED;
 }
@@ -1120,26 +1174,18 @@ void PAINT_OT_texture_paint_toggle(wmOperatorType *ot)
 	ot->poll = texture_paint_toggle_poll;
 
 	/* flags */
-	ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
+	ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO | OPTYPE_USE_EVAL_DATA;
 }
 
 
 static int brush_colors_flip_exec(bContext *C, wmOperator *UNUSED(op))
 {
-	UnifiedPaintSettings *ups = &CTX_data_tool_settings(C)->unified_paint_settings;
+	Scene *scene = CTX_data_scene(C);
+	UnifiedPaintSettings *ups = &scene->toolsettings->unified_paint_settings;
 
-	Brush *br;
-	Object *ob = CTX_data_active_object(C);
-	if (!(ob && (ob->mode & OB_MODE_VERTEX_PAINT))) {
-		br = image_paint_brush(C);
-	}
-	else {
-		/* At the moment, wpaint does not support the color flipper.
-		 * So for now we're only handling vpaint */
-		ToolSettings *ts = CTX_data_tool_settings(C);
-		VPaint *vp = ts->vpaint;
-		br = BKE_paint_brush(&vp->paint);
-	}
+	ViewLayer *view_layer = CTX_data_view_layer(C);
+	Paint *paint = BKE_paint_get_active(scene, view_layer);
+	Brush *br = BKE_paint_brush(paint);
 
 	if (ups->flag & UNIFIED_PAINT_COLOR) {
 		swap_v3_v3(ups->rgb, ups->secondary_rgb);
@@ -1156,16 +1202,18 @@ static bool brush_colors_flip_poll(bContext *C)
 {
 	if (image_paint_poll(C)) {
 		Brush *br = image_paint_brush(C);
-		if (br->imagepaint_tool == PAINT_TOOL_DRAW)
-			return 1;
+		if (ELEM(br->imagepaint_tool, PAINT_TOOL_DRAW, PAINT_TOOL_FILL))
+			return true;
 	}
 	else {
 		Object *ob = CTX_data_active_object(C);
-		if (ob && (ob->mode & OB_MODE_VERTEX_PAINT)) {
-			return 1;
+		if (ob != NULL) {
+			if (ob->mode & (OB_MODE_VERTEX_PAINT | OB_MODE_TEXTURE_PAINT)) {
+				return true;
+			}
 		}
 	}
-	return 0;
+	return false;
 }
 
 void PAINT_OT_brush_colors_flip(wmOperatorType *ot)
@@ -1192,13 +1240,13 @@ void ED_imapaint_bucket_fill(struct bContext *C, float color[3], wmOperator *op)
 
 	BKE_undosys_step_push_init_with_type(wm->undo_stack, C, op->type->name, BKE_UNDOSYS_TYPE_IMAGE);
 
-	ED_image_undo_push_begin(op->type->name);
+	ED_image_undo_push_begin(op->type->name, PAINT_MODE_TEXTURE_2D);
 
 	paint_2d_bucket_fill(C, color, NULL, NULL, NULL);
 
 	BKE_undosys_step_push(wm->undo_stack, C, op->type->name);
 
-	DAG_id_tag_update(&ima->id, 0);
+	DEG_id_tag_update(&ima->id, 0);
 }
 
 

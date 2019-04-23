@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,30 +15,24 @@
  *
  * The Original Code is Copyright (C) 2012 Blender Foundation.
  * All rights reserved.
- *
- * Contributor(s): Blender Foundation,
- *                 Sergey Sharybin,
- *                 Campbell Barton
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
 #ifndef __BKE_MASK_H__
 #define __BKE_MASK_H__
 
-/** \file BKE_mask.h
- *  \ingroup bke
+/** \file
+ * \ingroup bke
  */
 
-struct EvaluationContext;
-struct ImageUser;
+struct Depsgraph;
 struct Image;
+struct ImageUser;
 struct ListBase;
 struct Main;
 struct Mask;
-struct MaskParent;
 struct MaskLayer;
 struct MaskLayerShape;
+struct MaskParent;
 struct MaskSpline;
 struct MaskSplinePoint;
 struct MaskSplinePointUW;
@@ -99,7 +91,7 @@ struct BezTriple *BKE_mask_spline_point_next_bezt(struct MaskSpline *spline, str
 typedef enum {
 	MASK_PROJ_NEG = -1,
 	MASK_PROJ_ANY = 0,
-	MASK_PROJ_POS = 1
+	MASK_PROJ_POS = 1,
 } eMaskSign;
 float BKE_mask_spline_project_co(struct MaskSpline *spline, struct MaskSplinePoint *point,
                                  float start_u, const float co[2], const eMaskSign sign);
@@ -145,7 +137,6 @@ void BKE_mask_update_display(struct Mask *mask, float ctime);
 void BKE_mask_evaluate_all_masks(struct Main *bmain, float ctime, const bool do_newframe);
 void BKE_mask_evaluate(struct Mask *mask, const float ctime, const bool do_newframe);
 void BKE_mask_layer_evaluate(struct MaskLayer *masklay, const float ctime, const bool do_newframe);
-void BKE_mask_update_scene(struct Main *bmain, struct Scene *scene);
 void BKE_mask_parent_init(struct MaskParent *parent);
 void BKE_mask_calc_handle_adjacent_interp(struct MaskSpline *spline, struct MaskSplinePoint *point, const float u);
 void BKE_mask_calc_tangent_polyline(struct MaskSpline *spline, struct MaskSplinePoint *point, float t[2]);
@@ -237,8 +228,8 @@ float *BKE_mask_point_segment_feather_diff(struct MaskSpline *spline, struct Mas
 void BKE_mask_layer_evaluate_animation(struct MaskLayer *masklay, const float ctime);
 void BKE_mask_layer_evaluate_deform(struct MaskLayer *masklay, const float ctime);
 
-void BKE_mask_eval_animation(struct EvaluationContext *eval_ctx, struct Mask *mask);
-void BKE_mask_eval_update(struct EvaluationContext *eval_ctx, struct Mask *mask);
+void BKE_mask_eval_animation(struct Depsgraph *depsgraph, struct Mask *mask);
+void BKE_mask_eval_update(struct Depsgraph *depsgraph, struct Mask *mask);
 
 /* mask_rasterize.c */
 struct MaskRasterHandle;

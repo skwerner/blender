@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,10 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file ghost/GHOST_ISystem.h
- *  \ingroup GHOST
+/** \file
+ * \ingroup GHOST
  * %Main interface file for C++ Api with declaration of GHOST_ISystem interface
  * class.
  * Contains the doxygen documentation main page.
@@ -36,6 +28,7 @@
 #define __GHOST_ISYSTEM_H__
 
 #include "GHOST_Types.h"
+#include "GHOST_IContext.h"
 #include "GHOST_ITimerTask.h"
 #include "GHOST_IWindow.h"
 
@@ -134,8 +127,6 @@ class GHOST_IEventConsumer;
  *  -# Access to the state of the mouse buttons and the keyboard.
  *  -# Menus for windows with events generated when they are accessed (this is
  *     work in progress).
- * \author  Maarten Gribnau
- * \date    May 30, 2001
  */
 class GHOST_ISystem
 {
@@ -262,6 +253,20 @@ public:
 	virtual GHOST_TSuccess disposeWindow(GHOST_IWindow *window) = 0;
 
 	/**
+	 * Create a new offscreen context.
+	 * Never explicitly delete the context, use disposeContext() instead.
+	 * \return  The new context (or 0 if creation failed).
+	 */
+	virtual GHOST_IContext *createOffscreenContext() = 0;
+
+	/**
+	 * Dispose of a context.
+	 * \param   context Pointer to the context to be disposed.
+	 * \return  Indication of success.
+	 */
+	virtual GHOST_TSuccess disposeContext(GHOST_IContext *context) = 0;
+
+	/**
 	 * Returns whether a window is valid.
 	 * \param   window Pointer to the window to be checked.
 	 * \return  Indication of validity.
@@ -381,6 +386,12 @@ public:
 	 * \return          Indication of success.
 	 */
 	virtual GHOST_TSuccess getButtonState(GHOST_TButtonMask mask, bool& isDown) const = 0;
+
+	/**
+	 * Set which tablet API to use. Only affects Windows, other platforms have a single API.
+	 * \param api Enum indicating which API to use.
+	 */
+	virtual void setTabletAPI(GHOST_TTabletAPI api) = 0;
 
 #ifdef WITH_INPUT_NDOF
 	/**

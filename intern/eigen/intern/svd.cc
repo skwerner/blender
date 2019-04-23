@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,11 +15,6 @@
  *
  * The Original Code is Copyright (C) 2015 Blender Foundation.
  * All rights reserved.
- *
- * Contributor(s): Blender Foundation,
- *                 Bastien Montagne
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
 #ifndef __EIGEN3_SVD_C_API_CC__
@@ -37,6 +30,7 @@
 
 #include <Eigen/Core>
 #include <Eigen/SVD>
+#include <Eigen/Dense>
 
 #include "svd.h"
 
@@ -50,6 +44,8 @@ using Eigen::ComputeThinV;
 using Eigen::MatrixXf;
 using Eigen::VectorXf;
 using Eigen::Map;
+
+using Eigen::Matrix4f;
 
 void EIG_svd_square_matrix(const int size, const float *matrix, float *r_U, float *r_S, float *r_V)
 {

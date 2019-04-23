@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,15 +12,13 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
 #ifndef __BKE_BRUSH_H__
 #define __BKE_BRUSH_H__
 
-/** \file BKE_brush.h
- *  \ingroup bke
+/** \file
+ * \ingroup bke
  *
  * General operations for brushes.
  */
@@ -32,8 +28,13 @@ struct Brush;
 struct ImBuf;
 struct ImagePool;
 struct Main;
+struct Material;
+struct Paint;
 struct Scene;
+struct ToolSettings;
 struct UnifiedPaintSettings;
+struct bContext;
+
 // enum eCurveMappingPreset;
 
 #include "DNA_object_enums.h"
@@ -45,14 +46,16 @@ void BKE_brush_system_exit(void);
 /* datablock functions */
 void BKE_brush_init(struct Brush *brush);
 struct Brush *BKE_brush_add(struct Main *bmain, const char *name, const eObjectMode ob_mode);
+struct Brush *BKE_brush_add_gpencil(struct Main *bmain, struct ToolSettings *ts, const char *name);
+void BKE_brush_init_gpencil_settings(struct Brush *brush);
 struct Brush *BKE_brush_first_search(struct Main *bmain, const eObjectMode ob_mode);
 void BKE_brush_copy_data(struct Main *bmain, struct Brush *brush_dst, const struct Brush *brush_src, const int flag);
 struct Brush *BKE_brush_copy(struct Main *bmain, const struct Brush *brush);
 void BKE_brush_make_local(struct Main *bmain, struct Brush *brush, const bool lib_local);
-void BKE_brush_unlink(struct Main *bmain, struct Brush *brush);
 void BKE_brush_free(struct Brush *brush);
 
 void BKE_brush_sculpt_reset(struct Brush *brush);
+void BKE_brush_gpencil_presets(struct bContext *C);
 
 /* image icon function */
 struct ImBuf *get_brush_icon(struct Brush *brush);
@@ -116,6 +119,14 @@ void BKE_brush_scale_size(
         int *r_brush_size,
         float new_unprojected_radius,
         float old_unprojected_radius);
+
+/* Accessors */
+#define BKE_brush_tool_get(brush, p) \
+	(CHECK_TYPE_ANY(brush, struct Brush *, const struct Brush *), \
+	 *(const char *)POINTER_OFFSET(brush, (p)->runtime.tool_offset))
+#define BKE_brush_tool_set(brush, p, tool) { \
+	CHECK_TYPE_ANY(brush, struct Brush *); \
+	*(char *)POINTER_OFFSET(brush, (p)->runtime.tool_offset) = tool; } ((void)0)
 
 /* debugging only */
 void BKE_brush_debug_print_state(struct Brush *br);

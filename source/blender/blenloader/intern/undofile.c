@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,17 +15,11 @@
  *
  * The Original Code is Copyright (C) 2004 Blender Foundation
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  * .blend file reading entry point
  */
 
-/** \file blender/blenloader/intern/undofile.c
- *  \ingroup blenloader
+/** \file
+ * \ingroup blenloader
  */
 
 #include <stdlib.h>
@@ -97,7 +89,7 @@ void BLO_memfile_merge(MemFile *first, MemFile *second)
 }
 
 void memfile_chunk_add(
-        MemFile *memfile, const char *buf, unsigned int size,
+        MemFile *memfile, const char *buf, uint size,
         MemFileChunk **compchunk_step)
 {
 	MemFileChunk *curchunk = MEM_mallocN(sizeof(MemFileChunk), "MemFileChunk");

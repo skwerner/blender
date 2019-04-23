@@ -16,11 +16,6 @@
 #
 # The Original Code is Copyright (C) 2006, Blender Foundation
 # All rights reserved.
-#
-# The Original Code is: all of this file.
-#
-# Contributor(s): Jacques Beaurain.
-#
 # ***** END GPL LICENSE BLOCK *****
 
 setup_libdirs()
@@ -42,6 +37,25 @@ blender_include_dirs(
 	../blender/windowmanager
 )
 
+set(LIB
+	bf_blenfont
+	bf_blenkernel
+	bf_blenlib
+	bf_blenloader
+	bf_depsgraph
+	bf_dna
+	bf_editor_datafiles
+	bf_imbuf
+	bf_intern_clog
+	bf_intern_guardedalloc
+	bf_intern_memutil
+	bf_intern_opencolorio
+	bf_python
+	bf_render
+	bf_rna
+	bf_windowmanager
+)
+
 add_definitions(${GL_DEFINITIONS})
 blender_include_dirs("${GLEW_INCLUDE_PATH}")
 
@@ -54,9 +68,14 @@ if(WITH_LIBMV)
 	add_definitions(-DWITH_LIBMV)
 endif()
 
-if(WITH_CYCLES AND WITH_CYCLES_LOGGING)
-	blender_include_dirs(../../intern/cycles/blender)
-	add_definitions(-DWITH_CYCLES_LOGGING)
+if(WITH_CYCLES)
+	if(WITH_CYCLES_LOGGING)
+		blender_include_dirs(../../intern/cycles/blender)
+		add_definitions(-DWITH_CYCLES_LOGGING)
+	endif()
+	list(APPEND LIB
+		bf_intern_cycles
+	)
 endif()
 
 if(WITH_CODEC_FFMPEG)
@@ -76,28 +95,28 @@ if(WITH_HEADLESS)
 	add_definitions(-DWITH_HEADLESS)
 endif()
 
-if(WITH_GAMEENGINE)
-	blender_include_dirs(../gameengine/BlenderRoutines)
-
-	add_definitions(-DWITH_GAMEENGINE)
-endif()
-
 if(WITH_SDL)
 	if(WITH_SDL_DYNLOAD)
-		add_definitions(-DWITH_SDL_DYNLOAD)
 		blender_include_dirs(../../extern/sdlew/include)
+		add_definitions(-DWITH_SDL_DYNLOAD)
 	endif()
 	add_definitions(-DWITH_SDL)
 endif()
 
 if(WITH_BINRELOC)
-	add_definitions(-DWITH_BINRELOC)
 	blender_include_dirs(${BINRELOC_INCLUDE_DIRS})
+	list(APPEND LIB
+		extern_binreloc
+	)
+	add_definitions(-DWITH_BINRELOC)
 endif()
 
 if(WITH_FREESTYLE)
-	add_definitions(-DWITH_FREESTYLE)
 	blender_include_dirs(../blender/freestyle)
+	list(APPEND LIB
+		bf_freestyle
+	)
+	add_definitions(-DWITH_FREESTYLE)
 endif()
 
 # Setup the exe sources and buildinfo
@@ -485,6 +504,7 @@ if(UNIX AND NOT APPLE)
 			FILES
 				${CMAKE_SOURCE_DIR}/release/freedesktop/blender.desktop
 				${CMAKE_SOURCE_DIR}/release/freedesktop/icons/scalable/apps/blender.svg
+				${CMAKE_SOURCE_DIR}/release/freedesktop/icons/symbolic/apps/blender-symbolic.svg
 			DESTINATION "."
 		)
 
@@ -515,19 +535,12 @@ if(UNIX AND NOT APPLE)
 			DESTINATION share/applications
 		)
 		install(
-			DIRECTORY
-				${CMAKE_SOURCE_DIR}/release/freedesktop/icons/16x16
-				${CMAKE_SOURCE_DIR}/release/freedesktop/icons/22x22
-				${CMAKE_SOURCE_DIR}/release/freedesktop/icons/24x24
-				${CMAKE_SOURCE_DIR}/release/freedesktop/icons/32x32
-				${CMAKE_SOURCE_DIR}/release/freedesktop/icons/48x48
-				${CMAKE_SOURCE_DIR}/release/freedesktop/icons/256x256
-			DESTINATION share/icons/hicolor
-			PATTERN "*.svg" EXCLUDE
-		)
-		install(
 			FILES ${CMAKE_SOURCE_DIR}/release/freedesktop/icons/scalable/apps/blender.svg
 			DESTINATION share/icons/hicolor/scalable/apps
+		)
+		install(
+			FILES ${CMAKE_SOURCE_DIR}/release/freedesktop/icons/symbolic/apps/blender-symbolic.svg
+			DESTINATION share/icons/hicolor/symbolic/apps
 		)
 		install(
 			PROGRAMS ${CMAKE_SOURCE_DIR}/release/bin/blender-thumbnailer.py
@@ -649,6 +662,13 @@ if(UNIX AND NOT APPLE)
 			unset(_target_LIB)
 
 		endif()
+	endif()
+
+	if(WITH_DRACO)
+		install(
+			PROGRAMS $<TARGET_FILE:extern_draco>
+			DESTINATION ${TARGETDIR_VER}/python/lib/python${PYTHON_VERSION}/site-packages
+		)
 	endif()
 elseif(WIN32)
 
@@ -783,13 +803,6 @@ elseif(WIN32)
 		endif()
 	endif()
 
-	if(MSVC)
-		install(
-			FILES ${LIBDIR}/pthreads/lib/pthreadVC2.dll
-			DESTINATION "."
-		)
-	endif()
-
 	if(WITH_CODEC_FFMPEG)
 		install(
 			FILES
@@ -847,6 +860,21 @@ elseif(WIN32)
 		DESTINATION "."
 	)
 
+	install(
+		FILES
+			${CMAKE_SOURCE_DIR}/release/windows/batch/blender_debug_gpu.cmd
+			${CMAKE_SOURCE_DIR}/release/windows/batch/blender_debug_gpu_glitchworkaround.cmd
+			${CMAKE_SOURCE_DIR}/release/windows/batch/blender_debug_log.cmd
+			${CMAKE_SOURCE_DIR}/release/windows/batch/blender_factory_startup.cmd
+		DESTINATION "."
+	)
+
+	if(WITH_DRACO)
+		install(
+			PROGRAMS $<TARGET_FILE:extern_draco>
+			DESTINATION ${TARGETDIR_VER}/python/lib/site-packages
+		)
+	endif()
 elseif(APPLE)
 
 	# handy install macro to exclude files, we use \$ escape for the "to"
@@ -914,6 +942,13 @@ elseif(APPLE)
 		blender.app/Contents/
 	)
 
+	if(WITH_OPENMP AND OPENMP_CUSTOM)
+		install(
+			FILES ${LIBDIR}/openmp/lib/libomp.dylib
+			DESTINATION blender.app/Contents/Resources/lib
+		)
+	endif()
+
 	if(WITH_LLVM AND NOT LLVM_STATIC)
 		install(
 			FILES ${LIBDIR}/llvm/lib/libLLVM-3.4.dylib
@@ -944,53 +979,12 @@ elseif(APPLE)
 		unset(_py_inc_suffix)
 	endif()
 
-	# install blenderplayer bundle - copy of blender.app above. re-using macros et al
-	# note we are using OSX Bundle as base and copying Blender dummy bundle on top of it
-	if(WITH_GAMEENGINE AND WITH_PLAYER)
-		set(OSX_APP_PLAYER_SOURCEDIR ${CMAKE_SOURCE_DIR}/release/darwin/blenderplayer.app)
-		set(PLAYER_SOURCEINFO ${OSX_APP_PLAYER_SOURCEDIR}/Contents/Info.plist)
-		set(PLAYER_TARGETDIR_VER blenderplayer.app/Contents/Resources/${BLENDER_VERSION})
-
-
-		# important to make a clean  install each time else old scripts get loaded.
+	if(WITH_DRACO)
 		install(
-			CODE
-			"file(REMOVE_RECURSE ${PLAYER_TARGETDIR_VER})"
+			PROGRAMS $<TARGET_FILE:extern_draco>
+			DESTINATION ${TARGETDIR_VER}/python/lib/python${PYTHON_VERSION}/site-packages
 		)
-
-		# Give the bundle actual creation/modification date
-		execute_process(COMMAND SetFile -d ${SETFILE_DATE} -m ${SETFILE_DATE}
-		                ${EXECUTABLE_OUTPUT_PATH}/blenderplayer.app)
-
-		install(
-			FILES ${OSX_APP_PLAYER_SOURCEDIR}/Contents/PkgInfo
-			DESTINATION blenderplayer.app/Contents
-		)
-
-		install_dir(
-			${OSX_APP_PLAYER_SOURCEDIR}/Contents/Resources
-			blenderplayer.app/Contents/
-		)
-
-		if(WITH_OPENMP AND CMAKE_C_COMPILER_ID MATCHES "Clang" AND NOT ${CMAKE_C_COMPILER_VERSION} VERSION_LESS '3.4')
-			install(
-				FILES ${LIBDIR}/openmp/lib/libiomp5.dylib
-				DESTINATION blenderplayer.app/Contents/Resources/lib/
-			)
-		endif()
-
-
-		# python
-		if(WITH_PYTHON AND NOT WITH_PYTHON_FRAMEWORK)
-			# Copy the python libs into the install directory
-			install_dir(
-				${PYTHON_LIBPATH}
-				${PLAYER_TARGETDIR_VER}/python/lib
-			)
-		endif()
-
 	endif()
-
 endif()
 
 # -----------------------------------------------------------------------------
@@ -1026,14 +1020,42 @@ unset(BLENDER_TEXT_FILES_DESTINATION)
 
 
 # -----------------------------------------------------------------------------
+# Geometry Icons
+
+# Geometry icons.
+get_property(_icon_names GLOBAL PROPERTY ICON_GEOM_NAMES)
+set(_icon_files)
+foreach(_f ${_icon_names})
+	list(APPEND _icon_files
+		"${CMAKE_SOURCE_DIR}/release/datafiles/icons/${_f}.dat"
+	)
+endforeach()
+install(
+	FILES ${_icon_files}
+	DESTINATION ${TARGETDIR_VER}/datafiles/icons
+)
+
+unset(_icon_names)
+unset(_icon_files)
+unset(_f)
+
+# -----------------------------------------------------------------------------
+# Studio Lights
+install(
+	DIRECTORY
+		${CMAKE_SOURCE_DIR}/release/datafiles/studiolights
+	DESTINATION ${TARGETDIR_VER}/datafiles
+)
+
+# -----------------------------------------------------------------------------
 # Setup link libs
 
 add_dependencies(blender makesdna)
-
-setup_blender_sorted_libs()
-target_link_libraries(blender ${BLENDER_SORTED_LIBS})
+target_link_libraries(blender ${LIB})
+unset(LIB)
 
 setup_liblinks(blender)
+
 
 # -----------------------------------------------------------------------------
 # Setup launcher

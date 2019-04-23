@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,16 +12,14 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
 #ifndef __BLI_LINK_UTILS_H__
 #define __BLI_LINK_UTILS_H__
 
-/** \file BLI_link_utils.h
- *  \ingroup bli
- *  \brief Single link-list utility macros. (header only api).
+/** \file
+ * \ingroup bli
+ * \brief Single link-list utility macros. (header only api).
  *
  * Use this api when the structure defines its own ``next`` pointer
  * and a double linked list such as #ListBase isnt needed.
@@ -33,6 +29,27 @@
 	CHECK_TYPE_PAIR(list, link); \
 	(link)->next = list; \
 	list = link; \
+} (void)0
+
+/* Use for append (single linked list, storing the last element). */
+#define BLI_LINKS_APPEND(list, link)  { \
+	(link)->next = NULL; \
+	if ((list)->first) { \
+		(list)->last->next = link; \
+	} \
+	else { \
+		(list)->first = link; \
+	} \
+	(list)->last = link; \
+} (void)0
+
+/* Use for inserting after a certain element. */
+#define BLI_LINKS_INSERT_AFTER(list, node, link)  { \
+	if ((node)->next == NULL) { \
+		(list)->last = link; \
+	} \
+	(link)->next = (node)->next; \
+	(node)->next = link; \
 } (void)0
 
 #define BLI_LINKS_FREE(list)  { \

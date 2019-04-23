@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,10 @@
  *
  * The Original Code is Copyright (C) 2011 Blender Foundation.
  * All rights reserved.
- *
- *
- * Contributor(s): Blender Foundation,
- *                 Sergey Sharybin
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/gpencil/gpencil_undo.c
- *  \ingroup edgpencil
+/** \file
+ * \ingroup edgpencil
  */
 
 
@@ -36,6 +28,7 @@
 #include "MEM_guardedalloc.h"
 
 #include "DNA_gpencil_types.h"
+#include "DNA_object_types.h"
 #include "DNA_listBase.h"
 #include "DNA_windowmanager_types.h"
 
@@ -43,13 +36,14 @@
 
 #include "BKE_blender_undo.h"
 #include "BKE_context.h"
-#include "BKE_global.h"
 #include "BKE_gpencil.h"
 
 #include "ED_gpencil.h"
 
 #include "WM_api.h"
 #include "WM_types.h"
+
+#include "DEG_depsgraph.h"
 
 #include "gpencil_intern.h"
 
@@ -111,6 +105,9 @@ int ED_undo_gpencil_step(bContext *C, int step, const char *name)
 				}
 			}
 		}
+		/* drawing batch cache is dirty now */
+		DEG_id_tag_update(&new_gpd->id, ID_RECALC_TRANSFORM | ID_RECALC_GEOMETRY);
+		new_gpd->flag |= GP_DATA_CACHE_IS_DIRTY;
 	}
 
 	WM_event_add_notifier(C, NC_GPENCIL | NA_EDITED, NULL);

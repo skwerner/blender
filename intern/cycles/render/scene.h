@@ -98,6 +98,7 @@ public:
 	/* attributes */
 	device_vector<uint4> attributes_map;
 	device_vector<float> attributes_float;
+	device_vector<float2> attributes_float2;
 	device_vector<float4> attributes_float3;
 	device_vector<uchar4> attributes_uchar4;
 
@@ -196,6 +197,9 @@ public:
 
 class Scene {
 public:
+	/* Optional name. Is used for logging and reporting. */
+	string name;
+
 	/* data */
 	Camera *camera;
 	Camera *dicing_camera;

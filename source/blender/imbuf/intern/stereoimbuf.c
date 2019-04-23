@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,10 @@
  *
  * The Original Code is Copyright (C) 2015 by Blender Foundation
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): Dalai Felinto
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/imbuf/intern/stereoimbuf.c
- *  \ingroup imbuf
+/** \file
+ * \ingroup imbuf
  */
 
 #include <stddef.h>
@@ -43,7 +35,6 @@
 
 #include "MEM_guardedalloc.h"
 
-#include "BLI_threads.h"
 #include "BLI_utildefines.h"
 
 #include "BLI_math.h"
@@ -722,7 +713,6 @@ ImBuf *IMB_stereo3d_ImBuf(ImageFormatData *im_format, ImBuf *ibuf_left, ImBuf *i
 	ibuf_stereo->rect_colorspace = ibuf_left->rect_colorspace;
 	ibuf_stereo->float_colorspace = ibuf_left->float_colorspace;
 
-	/* copy flags for IB_fields and other settings */
 	ibuf_stereo->flags = ibuf_left->flags;
 
 	imb_stereo3d_data_initialize(
@@ -1233,7 +1223,6 @@ void IMB_ImBufFromStereo3d(
 	ibuf_left = IMB_allocImBuf(width, height, ibuf_stereo3d->planes, (is_float ? IB_rectfloat : IB_rect));
 	ibuf_right = IMB_allocImBuf(width, height, ibuf_stereo3d->planes, (is_float ? IB_rectfloat : IB_rect));
 
-	/* copy flags for IB_fields and other settings */
 	ibuf_left->flags = ibuf_stereo3d->flags;
 	ibuf_right->flags = ibuf_stereo3d->flags;
 

@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,15 +15,10 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * Contributor(s): Full recode, Ton Roosendaal, Crete 2005
- *                 Full recode, Joshua Leung, 2009
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/blenkernel/intern/action.c
- *  \ingroup bke
+/** \file
+ * \ingroup bke
  */
 
 
@@ -55,19 +48,21 @@
 #include "BKE_animsys.h"
 #include "BKE_constraint.h"
 #include "BKE_deform.h"
-#include "BKE_depsgraph.h"
 #include "BKE_fcurve.h"
-#include "BKE_global.h"
 #include "BKE_idprop.h"
 #include "BKE_library.h"
-#include "BKE_library_query.h"
-#include "BKE_library_remap.h"
 #include "BKE_main.h"
 #include "BKE_object.h"
+
+#include "DEG_depsgraph_build.h"
 
 #include "BIK_api.h"
 
 #include "RNA_access.h"
+
+#include "CLG_log.h"
+
+static CLG_LogRef LOG = {"bke.action"};
 
 /* *********************** NOTE ON POSE AND ACTION **********************
  *
@@ -122,11 +117,11 @@ void BKE_action_free(bAction *act)
 
 /**
  * Only copy internal data of Action ID from source to already allocated/initialized destination.
- * You probably nerver want to use that directly, use id_copy or BKE_id_copy_ex for typical needs.
+ * You probably never want to use that directly, use BKE_id_copy or BKE_id_copy_ex for typical needs.
  *
  * WARNING! This function will not handle ID user count!
  *
- * \param flag  Copying options (see BKE_library.h's LIB_ID_COPY_... flags for more).
+ * \param flag: Copying options (see BKE_library.h's LIB_ID_COPY_... flags for more).
  */
 void BKE_action_copy_data(Main *UNUSED(bmain), bAction *act_dst, const bAction *act_src, const int UNUSED(flag))
 {
@@ -168,7 +163,7 @@ void BKE_action_copy_data(Main *UNUSED(bmain), bAction *act_dst, const bAction *
 bAction *BKE_action_copy(Main *bmain, const bAction *act_src)
 {
 	bAction *act_copy;
-	BKE_id_copy_ex(bmain, &act_src->id, (ID **)&act_copy, 0, false);
+	BKE_id_copy(bmain, &act_src->id, (ID **)&act_copy);
 	return act_copy;
 }
 
@@ -425,7 +420,7 @@ bPoseChannel *BKE_pose_channel_verify(bPose *pose, const char *name)
 		return NULL;
 
 	/* See if this channel exists */
-	chan = BLI_findstring(&pose->chanbase, name, offsetof(bPoseChannel, name));
+	chan = BKE_pose_channel_find_name(pose, name);
 	if (chan) {
 		return chan;
 	}
@@ -453,7 +448,9 @@ bPoseChannel *BKE_pose_channel_verify(bPose *pose, const char *name)
 	chan->protectflag = OB_LOCK_ROT4D;  /* lock by components by default */
 
 	BLI_addtail(&pose->chanbase, chan);
-	BKE_pose_channels_hash_free(pose);
+	if (pose->chanhash) {
+		BLI_ghash_insert(pose->chanhash, chan->name, chan);
+	}
 
 	return chan;
 }
@@ -531,7 +528,7 @@ const char *BKE_pose_ikparam_get_name(bPose *pose)
  * Allocate a new pose on the heap, and copy the src pose and it's channels
  * into the new pose. *dst is set to the newly allocated structure, and assumed to be NULL.
  *
- * \param dst  Should be freed already, makes entire duplicate.
+ * \param dst: Should be freed already, makes entire duplicate.
  */
 void BKE_pose_copy_data_ex(bPose **dst, const bPose *src, const int flag, const bool copy_constraints)
 {
@@ -581,12 +578,19 @@ void BKE_pose_copy_data_ex(bPose **dst, const bPose *src, const int flag, const 
 		if (copy_constraints) {
 			BKE_constraints_copy_ex(&listb, &pchan->constraints, flag, true);  // BKE_constraints_copy NULLs listb
 			pchan->constraints = listb;
-			pchan->mpath = NULL; /* motion paths should not get copied yet... */
+
+			/* XXX: This is needed for motionpath drawing to work. Dunno why it was setting to null before... */
+			pchan->mpath = animviz_copy_motionpath(pchan->mpath);
 		}
 
 		if (pchan->prop) {
 			pchan->prop = IDP_CopyProperty_ex(pchan->prop, flag);
 		}
+
+		pchan->draw_data = NULL;  /* Drawing cache, no need to copy. */
+
+		/* Runtime data, no need to copy. */
+		memset(&pchan->runtime, 0, sizeof(pchan->runtime));
 	}
 
 	/* for now, duplicate Bone Groups too when doing this */
@@ -780,6 +784,24 @@ void BKE_pose_channel_free_ex(bPoseChannel *pchan, bool do_id_user)
 		IDP_FreeProperty(pchan->prop);
 		MEM_freeN(pchan->prop);
 	}
+
+	/* Cached data, for new draw manager rendering code. */
+	MEM_SAFE_FREE(pchan->draw_data);
+
+	/* Cached B-Bone shape data. */
+	BKE_pose_channel_free_bbone_cache(pchan);
+}
+
+/** Deallocates runtime cache of a pose channel's B-Bone shape. */
+void BKE_pose_channel_free_bbone_cache(bPoseChannel *pchan)
+{
+	bPoseChannel_Runtime *runtime = &pchan->runtime;
+
+	runtime->bbone_segments = 0;
+	MEM_SAFE_FREE(runtime->bbone_rest_mats);
+	MEM_SAFE_FREE(runtime->bbone_pose_mats);
+	MEM_SAFE_FREE(runtime->bbone_deform_mats);
+	MEM_SAFE_FREE(runtime->bbone_dual_quats);
 }
 
 void BKE_pose_channel_free(bPoseChannel *pchan)
@@ -803,6 +825,8 @@ void BKE_pose_channels_free_ex(bPose *pose, bool do_id_user)
 	}
 
 	BKE_pose_channels_hash_free(pose);
+
+	MEM_SAFE_FREE(pose->chan_array);
 }
 
 void BKE_pose_channels_free(bPose *pose)
@@ -849,39 +873,6 @@ void BKE_pose_free(bPose *pose)
 	BKE_pose_free_ex(pose, true);
 }
 
-static void copy_pose_channel_data(bPoseChannel *pchan, const bPoseChannel *chan)
-{
-	bConstraint *pcon, *con;
-
-	copy_v3_v3(pchan->loc, chan->loc);
-	copy_v3_v3(pchan->size, chan->size);
-	copy_v3_v3(pchan->eul, chan->eul);
-	copy_v3_v3(pchan->rotAxis, chan->rotAxis);
-	pchan->rotAngle = chan->rotAngle;
-	copy_qt_qt(pchan->quat, chan->quat);
-	pchan->rotmode = chan->rotmode;
-	copy_m4_m4(pchan->chan_mat, (float(*)[4])chan->chan_mat);
-	copy_m4_m4(pchan->pose_mat, (float(*)[4])chan->pose_mat);
-	pchan->flag = chan->flag;
-
-	pchan->roll1 = chan->roll1;
-	pchan->roll2 = chan->roll2;
-	pchan->curveInX = chan->curveInX;
-	pchan->curveInY = chan->curveInY;
-	pchan->curveOutX = chan->curveOutX;
-	pchan->curveOutY = chan->curveOutY;
-	pchan->ease1 = chan->ease1;
-	pchan->ease2 = chan->ease2;
-	pchan->scaleIn = chan->scaleIn;
-	pchan->scaleOut = chan->scaleOut;
-
-	con = chan->constraints.first;
-	for (pcon = pchan->constraints.first; pcon && con; pcon = pcon->next, con = con->next) {
-		pcon->enforce = con->enforce;
-		pcon->headtail = con->headtail;
-	}
-}
-
 /**
  * Copy the internal members of each pose channel including constraints
  * and ID-Props, used when duplicating bones in editmode.
@@ -910,7 +901,6 @@ void BKE_pose_channel_copy_data(bPoseChannel *pchan, const bPoseChannel *pchan_f
 	pchan->iklinweight = pchan_from->iklinweight;
 
 	/* bbone settings (typically not animated) */
-	pchan->bboneflag = pchan_from->bboneflag;
 	pchan->bbone_next = pchan_from->bbone_next;
 	pchan->bbone_prev = pchan_from->bbone_prev;
 
@@ -1017,7 +1007,7 @@ void framechange_poses_clear_unkeyed(Main *bmain)
 
 	/* This needs to be done for each object that has a pose */
 	/* TODO: proxies may/may not be correctly handled here... (this needs checking) */
-	for (ob = bmain->object.first; ob; ob = ob->id.next) {
+	for (ob = bmain->objects.first; ob; ob = ob->id.next) {
 		/* we only need to do this on objects with a pose */
 		if ((pose = ob->pose)) {
 			for (pchan = pose->chanbase.first; pchan; pchan = pchan->next) {
@@ -1323,25 +1313,6 @@ short action_get_item_transforms(bAction *act, Object *ob, bPoseChannel *pchan, 
 
 /* ************** Pose Management Tools ****************** */
 
-/* Copy the data from the action-pose (src) into the pose */
-/* both args are assumed to be valid */
-/* exported to game engine */
-/* Note! this assumes both poses are aligned, this isn't always true when dealing with user poses */
-void extract_pose_from_pose(bPose *pose, const bPose *src)
-{
-	const bPoseChannel *schan;
-	bPoseChannel *pchan = pose->chanbase.first;
-
-	if (pose == src) {
-		printf("extract_pose_from_pose source and target are the same\n");
-		return;
-	}
-
-	for (schan = src->chanbase.first; (schan && pchan); schan = schan->next, pchan = pchan->next) {
-		copy_pose_channel_data(pchan, schan);
-	}
-}
-
 /* for do_all_pose_actions, clears the pose. Now also exported for proxy and tools */
 void BKE_pose_rest(bPose *pose)
 {
@@ -1370,52 +1341,55 @@ void BKE_pose_rest(bPose *pose)
 	}
 }
 
+void BKE_pose_copyesult_pchan_result(bPoseChannel *pchanto, const bPoseChannel *pchanfrom)
+{
+	copy_m4_m4(pchanto->pose_mat, pchanfrom->pose_mat);
+	copy_m4_m4(pchanto->chan_mat, pchanfrom->chan_mat);
+
+	/* used for local constraints */
+	copy_v3_v3(pchanto->loc, pchanfrom->loc);
+	copy_qt_qt(pchanto->quat, pchanfrom->quat);
+	copy_v3_v3(pchanto->eul, pchanfrom->eul);
+	copy_v3_v3(pchanto->size, pchanfrom->size);
+
+	copy_v3_v3(pchanto->pose_head, pchanfrom->pose_head);
+	copy_v3_v3(pchanto->pose_tail, pchanfrom->pose_tail);
+
+	pchanto->roll1 = pchanfrom->roll1;
+	pchanto->roll2 = pchanfrom->roll2;
+	pchanto->curveInX = pchanfrom->curveInX;
+	pchanto->curveInY = pchanfrom->curveInY;
+	pchanto->curveOutX = pchanfrom->curveOutX;
+	pchanto->curveOutY = pchanfrom->curveOutY;
+	pchanto->ease1 = pchanfrom->ease1;
+	pchanto->ease2 = pchanfrom->ease2;
+	pchanto->scaleIn = pchanfrom->scaleIn;
+	pchanto->scaleOut = pchanfrom->scaleOut;
+
+	pchanto->rotmode = pchanfrom->rotmode;
+	pchanto->flag = pchanfrom->flag;
+	pchanto->protectflag = pchanfrom->protectflag;
+}
+
 /* both poses should be in sync */
 bool BKE_pose_copy_result(bPose *to, bPose *from)
 {
 	bPoseChannel *pchanto, *pchanfrom;
 
 	if (to == NULL || from == NULL) {
-		printf("Pose copy error, pose to:%p from:%p\n", (void *)to, (void *)from); /* debug temp */
+		CLOG_ERROR(&LOG, "Pose copy error, pose to:%p from:%p", (void *)to, (void *)from); /* debug temp */
 		return false;
 	}
 
 	if (to == from) {
-		printf("BKE_pose_copy_result source and target are the same\n");
+		CLOG_ERROR(&LOG, "source and target are the same");
 		return false;
 	}
 
-
 	for (pchanfrom = from->chanbase.first; pchanfrom; pchanfrom = pchanfrom->next) {
 		pchanto = BKE_pose_channel_find_name(to, pchanfrom->name);
-		if (pchanto) {
-			copy_m4_m4(pchanto->pose_mat, pchanfrom->pose_mat);
-			copy_m4_m4(pchanto->chan_mat, pchanfrom->chan_mat);
-
-			/* used for local constraints */
-			copy_v3_v3(pchanto->loc, pchanfrom->loc);
-			copy_qt_qt(pchanto->quat, pchanfrom->quat);
-			copy_v3_v3(pchanto->eul, pchanfrom->eul);
-			copy_v3_v3(pchanto->size, pchanfrom->size);
-
-			copy_v3_v3(pchanto->pose_head, pchanfrom->pose_head);
-			copy_v3_v3(pchanto->pose_tail, pchanfrom->pose_tail);
-
-			pchanto->roll1 = pchanfrom->roll1;
-			pchanto->roll2 = pchanfrom->roll2;
-			pchanto->curveInX = pchanfrom->curveInX;
-			pchanto->curveInY = pchanfrom->curveInY;
-			pchanto->curveOutX = pchanfrom->curveOutX;
-			pchanto->curveOutY = pchanfrom->curveOutY;
-			pchanto->ease1 = pchanfrom->ease1;
-			pchanto->ease2 = pchanfrom->ease2;
-			pchanto->scaleIn = pchanfrom->scaleIn;
-			pchanto->scaleOut = pchanfrom->scaleOut;
-
-			pchanto->rotmode = pchanfrom->rotmode;
-			pchanto->flag = pchanfrom->flag;
-			pchanto->protectflag = pchanfrom->protectflag;
-			pchanto->bboneflag = pchanfrom->bboneflag;
+		if (pchanto != NULL) {
+			BKE_pose_copyesult_pchan_result(pchanto, pchanfrom);
 		}
 	}
 	return true;
@@ -1428,7 +1402,7 @@ void BKE_pose_tag_recalc(Main *bmain, bPose *pose)
 	/* Depsgraph components depends on actual pose state,
 	 * if pose was changed depsgraph is to be updated as well.
 	 */
-	DAG_relations_tag_update(bmain);
+	DEG_relations_tag_update(bmain);
 }
 
 /* For the calculation of the effects of an Action at the given frame on an object
@@ -1486,7 +1460,7 @@ void what_does_obaction(Object *ob, Object *workob, bPose *pose, bAction *act, c
 		RNA_id_pointer_create(&workob->id, &id_ptr);
 
 		/* execute action for this group only */
-		animsys_evaluate_action_group(&id_ptr, act, agrp, NULL, cframe);
+		animsys_evaluate_action_group(&id_ptr, act, agrp, cframe);
 	}
 	else {
 		AnimData adt = {NULL};
@@ -1494,10 +1468,9 @@ void what_does_obaction(Object *ob, Object *workob, bPose *pose, bAction *act, c
 		/* init animdata, and attach to workob */
 		workob->adt = &adt;
 
-		adt.recalc = ADT_RECALC_ANIM;
 		adt.action = act;
 
 		/* execute effects of Action on to workob (or it's PoseChannels) */
-		BKE_animsys_evaluate_animdata(NULL, &workob->id, &adt, cframe, ADT_RECALC_ANIM);
+		BKE_animsys_evaluate_animdata(NULL, NULL, &workob->id, &adt, cframe, ADT_RECALC_ANIM);
 	}
 }

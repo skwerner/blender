@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,14 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * Contributor(s): Chingiz Dyussenov, Arystanbek Dyussenov, Nathan Letwory.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/collada/MeshImporter.cpp
- *  \ingroup collada
+/** \file
+ * \ingroup collada
  */
 
 
@@ -43,7 +37,6 @@ extern "C" {
 	#include "BKE_displist.h"
 	#include "BKE_global.h"
 	#include "BKE_library.h"
-	#include "BKE_main.h"
 	#include "BKE_material.h"
 	#include "BKE_mesh.h"
 	#include "BKE_object.h"
@@ -207,11 +200,14 @@ void VCOLDataWrapper::get_vcol(int v_index, MLoopCol *mloopcol)
 
 }
 
-MeshImporter::MeshImporter(UnitConverter *unitconv, ArmatureImporter *arm, Main *bmain, Scene *sce) :
-    unitconverter(unitconv),
-    m_bmain(bmain),
-    scene(sce),
-    armature_importer(arm) {
+MeshImporter::MeshImporter(UnitConverter *unitconv, ArmatureImporter *arm, Main *bmain, Scene *sce, ViewLayer *view_layer):
+	unitconverter(unitconv),
+	m_bmain(bmain),
+	scene(sce),
+	view_layer(view_layer),
+	armature_importer(arm)
+{
+	/* pass */
 }
 
 bool MeshImporter::set_poly_indices(MPoly *mpoly, MLoop *mloop, int loop_index, unsigned int *indices, int loop_count)
@@ -476,11 +472,9 @@ void MeshImporter::allocate_poly_data(COLLADAFW::Mesh *collada_mesh, Mesh *me)
 				COLLADAFW::MeshVertexData::InputInfos *info = collada_mesh->getUVCoords().getInputInfosArray()[i];
 				COLLADAFW::String &uvname = info->mName;
 				// Allocate space for UV_data
-				CustomData_add_layer_named(&me->pdata, CD_MTEXPOLY, CD_DEFAULT, NULL, me->totpoly, uvname.c_str());
 				CustomData_add_layer_named(&me->ldata, CD_MLOOPUV, CD_DEFAULT, NULL, me->totloop, uvname.c_str());
 			}
 			// activate the first uv map
-			me->mtpoly  = (MTexPoly *)CustomData_get_layer_n(&me->pdata, CD_MTEXPOLY, 0);
 			me->mloopuv = (MLoopUV *) CustomData_get_layer_n(&me->ldata, CD_MLOOPUV, 0);
 		}
 
@@ -564,7 +558,7 @@ void MeshImporter::mesh_add_edges(Mesh *mesh, int len)
 	totedge = mesh->totedge + len;
 
 	/* update customdata  */
-	CustomData_copy(&mesh->edata, &edata, CD_MASK_MESH, CD_DEFAULT, totedge);
+	CustomData_copy(&mesh->edata, &edata, CD_MASK_MESH.emask, CD_DEFAULT, totedge);
 	CustomData_copy_data(&mesh->edata, &edata, 0, 0, mesh->totedge);
 
 	if (!CustomData_has_layer(&edata, CD_MEDGE))
@@ -601,9 +595,8 @@ void MeshImporter::read_lines(COLLADAFW::Mesh *mesh, Mesh *me)
 
 		COLLADAFW::MeshPrimitiveArray& prim_arr = mesh->getMeshPrimitives();
 
-		for (int i = 0; i < prim_arr.getCount(); i++) {
-
-			COLLADAFW::MeshPrimitive *mp = prim_arr[i];
+		for (int index = 0; index < prim_arr.getCount(); index++) {
+			COLLADAFW::MeshPrimitive *mp = prim_arr[index];
 
 			int type = mp->getPrimitiveType();
 			if (type == COLLADAFW::MeshPrimitive::LINES) {
@@ -881,53 +874,11 @@ std::string *MeshImporter::get_geometry_name(const std::string &mesh_name)
 	return NULL;
 }
 
-MTex *MeshImporter::assign_textures_to_uvlayer(COLLADAFW::TextureCoordinateBinding &ctexture,
-                                               Mesh *me, TexIndexTextureArrayMap& texindex_texarray_map,
-                                               MTex *color_texture)
-{
-	const COLLADAFW::TextureMapId texture_index = ctexture.getTextureMapId();
-	size_t setindex = ctexture.getSetIndex();
-	std::string uvname = ctexture.getSemantic();
-
-	if (setindex == -1) return NULL;
-
-	const CustomData *data = &me->fdata;
-	int layer_index = CustomData_get_layer_index(data, CD_MTFACE);
-
-	if (layer_index == -1) return NULL;
-
-	CustomDataLayer *cdl = &data->layers[layer_index + setindex];
-
-	/* set uvname to bind_vertex_input semantic */
-	BLI_strncpy(cdl->name, uvname.c_str(), sizeof(cdl->name));
-
-	if (texindex_texarray_map.find(texture_index) == texindex_texarray_map.end()) {
-
-		fprintf(stderr, "Cannot find texture array by texture index.\n");
-		return color_texture;
-	}
-
-	std::vector<MTex *> textures = texindex_texarray_map[texture_index];
-
-	std::vector<MTex *>::iterator it;
-
-	for (it = textures.begin(); it != textures.end(); it++) {
-
-		MTex *texture = *it;
-
-		if (texture) {
-			BLI_strncpy(texture->uvname, uvname.c_str(), sizeof(texture->uvname));
-			if (texture->mapto == MAP_COL) color_texture = texture;
-		}
-	}
-	return color_texture;
-}
-
 /**
  * this function checks if both objects have the same
  * materials assigned to Object (in the same order)
  * returns true if condition matches, otherwise false;
- **/
+ */
 static bool bc_has_same_material_configuration(Object *ob1, Object *ob2)
 {
 	if (ob1->totcol != ob2->totcol) return false; // not same number of materials
@@ -948,7 +899,7 @@ static bool bc_has_same_material_configuration(Object *ob1, Object *ob2)
  * and no material is assigned to Data.
  * That is true right after the objects have been imported.
  *
- **/
+ */
 static void bc_copy_materials_to_data(Object *ob, Mesh *me)
 {
 	for (int index = 0; index < ob->totcol; index++) {
@@ -961,7 +912,7 @@ static void bc_copy_materials_to_data(Object *ob, Mesh *me)
  *
  * Remove all references to materials from the object
  *
- **/
+ */
 static void bc_remove_materials_from_object(Object *ob, Mesh *me)
 {
 	for (int index = 0; index < ob->totcol; index++) {
@@ -974,7 +925,7 @@ static void bc_remove_materials_from_object(Object *ob, Mesh *me)
  * Returns the list of Users of the given Mesh object.
  * Note: This function uses the object user flag to control
  * which objects have already been processed.
- **/
+ */
 std::vector<Object *> MeshImporter::get_all_users_of(Mesh *reference_mesh)
 {
 	std::vector<Object *> mesh_users;
@@ -1009,7 +960,7 @@ std::vector<Object *> MeshImporter::get_all_users_of(Mesh *reference_mesh)
  *             Add the materials of the first user to the geometry
  *             adjust all other users accordingly.
  *
- **/
+ */
 void MeshImporter::optimize_material_assignements()
 {
 	for (std::vector<Object *>::iterator it = imported_objects.begin();
@@ -1056,21 +1007,19 @@ void MeshImporter::optimize_material_assignements()
  * which materials shall be moved to the created geometries. Also see
  * optimize_material_assignements() above.
  */
-MTFace *MeshImporter::assign_material_to_geom(COLLADAFW::MaterialBinding cmaterial,
-                                              std::map<COLLADAFW::UniqueId, Material *>& uid_material_map,
-                                              Object *ob, const COLLADAFW::UniqueId *geom_uid,
-                                              char *layername, MTFace *texture_face,
-                                              std::map<Material *, TexIndexTextureArrayMap>& material_texture_mapping_map, short mat_index)
+void MeshImporter::assign_material_to_geom(
+        COLLADAFW::MaterialBinding cmaterial,
+        std::map<COLLADAFW::UniqueId, Material *>& uid_material_map,
+        Object *ob, const COLLADAFW::UniqueId *geom_uid,
+        short mat_index)
 {
-	MTex *color_texture = NULL;
-	Mesh *me = (Mesh *)ob->data;
 	const COLLADAFW::UniqueId& ma_uid = cmaterial.getReferencedMaterial();
 
 	// do we know this material?
 	if (uid_material_map.find(ma_uid) == uid_material_map.end()) {
 
 		fprintf(stderr, "Cannot find material by UID.\n");
-		return NULL;
+		return;
 	}
 
 	// first time we get geom_uid, ma_uid pair. Save for later check.
@@ -1082,27 +1031,6 @@ MTFace *MeshImporter::assign_material_to_geom(COLLADAFW::MaterialBinding cmateri
 	// See note above.
 	ob->actcol=0;
 	assign_material(m_bmain, ob, ma, mat_index + 1, BKE_MAT_ASSIGN_OBJECT);
-
-	COLLADAFW::TextureCoordinateBindingArray& tex_array =
-	    cmaterial.getTextureCoordinateBindingArray();
-	TexIndexTextureArrayMap texindex_texarray_map = material_texture_mapping_map[ma];
-	unsigned int i;
-	// loop through <bind_vertex_inputs>
-	for (i = 0; i < tex_array.getCount(); i++) {
-
-		color_texture = assign_textures_to_uvlayer(tex_array[i], me, texindex_texarray_map,
-		                                            color_texture);
-	}
-
-	// set texture face
-	if (color_texture &&
-	    strlen((color_texture)->uvname) &&
-	    !STREQ(layername, color_texture->uvname))
-	{
-		texture_face = (MTFace *)CustomData_get_layer_named(&me->fdata, CD_MTFACE,
-		                                                    color_texture->uvname);
-		strcpy(layername, color_texture->uvname);
-	}
 
 	MaterialIdPrimitiveArrayMap& mat_prim_map = geom_uid_mat_mapping_map[*geom_uid];
 	COLLADAFW::MaterialId mat_id = cmaterial.getMaterialId();
@@ -1118,23 +1046,16 @@ MTFace *MeshImporter::assign_material_to_geom(COLLADAFW::MaterialBinding cmateri
 			Primitive& prim = *it;
 			MPoly *mpoly = prim.mpoly;
 
-			for (i = 0; i < prim.totpoly; i++, mpoly++) {
+			for (int i = 0; i < prim.totpoly; i++, mpoly++) {
 				mpoly->mat_nr = mat_index;
-				// bind texture images to faces
-				if (texture_face && color_texture) {
-					texture_face->tpage = (Image *)color_texture->tex->ima;
-					texture_face++;
-				}
 			}
 		}
 	}
-	return texture_face;
 }
 
 Object *MeshImporter::create_mesh_object(COLLADAFW::Node *node, COLLADAFW::InstanceGeometry *geom,
                                          bool isController,
-                                         std::map<COLLADAFW::UniqueId, Material *>& uid_material_map,
-                                         std::map<Material *, TexIndexTextureArrayMap>& material_texture_mapping_map)
+                                         std::map<COLLADAFW::UniqueId, Material *>& uid_material_map)
 {
 	const COLLADAFW::UniqueId *geom_uid = &geom->getInstanciatedObjectId();
 
@@ -1164,8 +1085,8 @@ Object *MeshImporter::create_mesh_object(COLLADAFW::Node *node, COLLADAFW::Insta
 	const char *name = (id.length()) ? id.c_str() : NULL;
 
 	// add object
-	Object *ob = bc_add_object(m_bmain, scene, OB_MESH, name);
-	bc_set_mark(ob); // used later for material assignement optimization
+	Object *ob = bc_add_object(m_bmain, scene, view_layer, OB_MESH, name);
+	bc_set_mark(ob); // used later for material assignment optimization
 
 
 	// store object pointer for ArmatureImporter
@@ -1180,11 +1101,7 @@ Object *MeshImporter::create_mesh_object(COLLADAFW::Node *node, COLLADAFW::Insta
 	BKE_mesh_calc_normals(new_mesh);
 
 	id_us_plus(&old_mesh->id);  /* Because BKE_mesh_assign_object would have already decreased it... */
-	BKE_libblock_free_us(m_bmain, old_mesh);
-
-	char layername[100];
-	layername[0] = '\0';
-	MTFace *texture_face = NULL;
+	BKE_id_free_us(m_bmain, old_mesh);
 
 	COLLADAFW::MaterialBindingArray& mat_array =
 	    geom->getMaterialBindings();
@@ -1193,14 +1110,17 @@ Object *MeshImporter::create_mesh_object(COLLADAFW::Node *node, COLLADAFW::Insta
 	for (unsigned int i = 0; i < mat_array.getCount(); i++) {
 
 		if (mat_array[i].getReferencedMaterial().isValid()) {
-			texture_face = assign_material_to_geom(mat_array[i], uid_material_map, ob, geom_uid,
-			                                       layername, texture_face,
-			                                       material_texture_mapping_map, i);
+			assign_material_to_geom(
+			        mat_array[i], uid_material_map, ob, geom_uid,
+			        i);
 		}
 		else {
 			fprintf(stderr, "invalid referenced material for %s\n", mat_array[i].getName().c_str());
 		}
 	}
+
+	// clean up the mesh
+	BKE_mesh_validate((Mesh *)ob->data, false, false);
 
 	return ob;
 }
@@ -1233,13 +1153,7 @@ bool MeshImporter::write_geometry(const COLLADAFW::Geometry *geom)
 
 	read_vertices(mesh, me);
 	read_polys(mesh, me);
-
-	// must validate before calculating edges
-	BKE_mesh_calc_normals(me);
-	BKE_mesh_validate(me, false, false);
-	// validation does this
-	// BKE_mesh_calc_edges(me, false, false);
-
+	BKE_mesh_calc_edges(me, false, false);
 	// read_lines() must be called after the face edges have been generated.
 	// Otherwise the loose edges will be silently deleted again.
 	read_lines(mesh, me);

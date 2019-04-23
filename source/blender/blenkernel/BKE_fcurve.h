@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,40 +15,34 @@
  *
  * The Original Code is Copyright (C) 2009 Blender Foundation, Joshua Leung
  * All rights reserved.
- *
- * Contributor(s): Joshua Leung (full recode)
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
 #ifndef __BKE_FCURVE_H__
 #define __BKE_FCURVE_H__
 
-/** \file BKE_fcurve.h
- *  \ingroup bke
- *  \author Joshua Leung
- *  \since 2009
+/** \file
+ * \ingroup bke
  */
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
+struct ChannelDriver;
+struct DriverTarget;
+struct DriverVar;
+struct FCM_EnvelopeData;
 struct FCurve;
 struct FModifier;
-struct ChannelDriver;
-struct DriverVar;
-struct DriverTarget;
-struct FCM_EnvelopeData;
 
-struct bContext;
 struct AnimData;
-struct bAction;
 struct BezTriple;
-struct StructRNA;
 struct PathResolvedRNA;
 struct PointerRNA;
 struct PropertyRNA;
+struct StructRNA;
+struct bAction;
+struct bContext;
 
 #include "DNA_curve_types.h"
 
@@ -72,14 +64,14 @@ void bezt_add_to_cfra_elem(ListBase *lb, struct BezTriple *bezt);
  */
 
 /* convenience looper over ALL driver targets for a given variable (even the unused ones) */
-#define DRIVER_TARGETS_LOOPER(dvar) \
+#define DRIVER_TARGETS_LOOPER_BEGIN(dvar) \
 	{ \
 		DriverTarget *dtar = &dvar->targets[0]; \
 		int tarIndex = 0; \
 		for (; tarIndex < MAX_DRIVER_TARGETS; tarIndex++, dtar++)
 
 /* convenience looper over USED driver targets only */
-#define DRIVER_TARGETS_USED_LOOPER(dvar) \
+#define DRIVER_TARGETS_USED_LOOPER_BEGIN(dvar) \
 	{ \
 		DriverTarget *dtar = &dvar->targets[0]; \
 		int tarIndex = 0; \
@@ -87,7 +79,7 @@ void bezt_add_to_cfra_elem(ListBase *lb, struct BezTriple *bezt);
 
 /* tidy up for driver targets loopers */
 #define DRIVER_TARGETS_LOOPER_END \
-}
+} ((void)0)
 
 /* ---------------------- */
 
@@ -108,7 +100,11 @@ bool  driver_get_variable_property(
         struct ChannelDriver *driver, struct DriverTarget *dtar,
         struct PointerRNA *r_ptr, struct PropertyRNA **r_prop, int *r_index);
 
-float evaluate_driver(struct PathResolvedRNA *anim_rna, struct ChannelDriver *driver, const float evaltime);
+bool BKE_driver_has_simple_expression(struct ChannelDriver *driver);
+void BKE_driver_invalidate_expression(struct ChannelDriver *driver, bool expr_changed, bool varname_changed);
+
+float evaluate_driver(struct PathResolvedRNA *anim_rna, struct ChannelDriver *driver,
+                      struct ChannelDriver *driver_orig, const float evaltime);
 
 /* ************** F-Curve Modifiers *************** */
 
@@ -164,7 +160,7 @@ typedef enum eFMI_Action_Types {
 	/* modifier only modifies the values of points (but times stay the same) */
 	FMI_TYPE_REPLACE_VALUES,
 	/* modifier generates a curve regardless of what came before */
-	FMI_TYPE_GENERATE_CURVE
+	FMI_TYPE_GENERATE_CURVE,
 } eFMI_Action_Types;
 
 /* Flags for the requirements of a FModifier Type */
@@ -179,7 +175,7 @@ typedef enum eFMI_Requirement_Flags {
 	FMI_REQUIRES_RUNTIME_CHECK      = (1 << 2),
 
 	/* Requires to store data shared between time and valua evaluation */
-	FMI_REQUIRES_STORAGE            = (1 << 3)
+	FMI_REQUIRES_STORAGE            = (1 << 3),
 } eFMI_Requirement_Flags;
 
 /* Function Prototypes for FModifierTypeInfo's */
@@ -269,6 +265,17 @@ bool BKE_fcurve_is_protected(struct FCurve *fcu);
 /* The curve is an infinite cycle via Cycles modifier */
 bool BKE_fcurve_is_cyclic(struct FCurve *fcu);
 
+/* Type of infinite cycle for a curve. */
+typedef enum eFCU_Cycle_Type {
+	FCU_CYCLE_NONE = 0,
+	/* The cycle repeats identically to the base range. */
+	FCU_CYCLE_PERFECT,
+	/* The cycle accumulates the change between start and end keys. */
+	FCU_CYCLE_OFFSET,
+} eFCU_Cycle_Type;
+
+eFCU_Cycle_Type BKE_fcurve_get_cycle_type(struct FCurve *fcu);
+
 /* -------- Curve Sanity --------  */
 
 void calchandles_fcurve(struct FCurve *fcu);
@@ -282,7 +289,9 @@ void correct_bezpart(float v1[2], float v2[2], float v3[2], float v4[2]);
 
 /* evaluate fcurve */
 float evaluate_fcurve(struct FCurve *fcu, float evaltime);
-float evaluate_fcurve_driver(struct PathResolvedRNA *anim_rna, struct FCurve *fcu, float evaltime);
+float evaluate_fcurve_only_curve(struct FCurve *fcu, float evaltime);
+float evaluate_fcurve_driver(struct PathResolvedRNA *anim_rna, struct FCurve *fcu,
+                             struct ChannelDriver *driver_orig, float evaltime);
 /* evaluate fcurve and store value */
 float calculate_fcurve(struct PathResolvedRNA *anim_rna, struct FCurve *fcu, float evaltime);
 

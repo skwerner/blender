@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,10 @@
  *
  * The Original Code is Copyright (C) 2006 Blender Foundation.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/render/intern/source/render_result.c
- *  \ingroup render
+/** \file
+ * \ingroup render
  */
 
 #include <stdio.h>
@@ -45,11 +37,10 @@
 #include "BLI_threads.h"
 
 #include "BKE_appdir.h"
-#include "BKE_image.h"
-#include "BKE_global.h"
-#include "BKE_main.h"
-#include "BKE_report.h"
 #include "BKE_camera.h"
+#include "BKE_global.h"
+#include "BKE_image.h"
+#include "BKE_report.h"
 #include "BKE_scene.h"
 
 #include "IMB_imbuf.h"
@@ -57,6 +48,8 @@
 #include "IMB_colormanagement.h"
 
 #include "intern/openexr/openexr_multi.h"
+
+#include "RE_engine.h"
 
 #include "render_result.h"
 #include "render_types.h"
@@ -176,7 +169,7 @@ void render_result_views_shallowdelete(RenderResult *rr)
 }
 
 
-static char* set_pass_name(char *outname, const char *name, int channel, const char *chan_id)
+static char *set_pass_name(char *outname, const char *name, int channel, const char *chan_id)
 {
 	BLI_strncpy(outname, name, EXR_PASS_MAXNAME);
 	if (channel >= 0) {
@@ -266,9 +259,7 @@ RenderResult *render_result_new(Render *re, rcti *partrct, int crop, int savebuf
 	RenderResult *rr;
 	RenderLayer *rl;
 	RenderView *rv;
-	SceneRenderLayer *srl;
 	int rectx, recty;
-	int nr;
 
 	rectx = BLI_rcti_size_x(partrct);
 	recty = BLI_rcti_size_y(partrct);
@@ -296,33 +287,20 @@ RenderResult *render_result_new(Render *re, rcti *partrct, int crop, int savebuf
 	render_result_views_new(rr, &re->r);
 
 	/* check renderdata for amount of layers */
-	for (nr = 0, srl = re->r.layers.first; srl; srl = srl->next, nr++) {
-
-		if (layername && layername[0])
-			if (!STREQ(srl->name, layername))
+	FOREACH_VIEW_LAYER_TO_RENDER_BEGIN(re, view_layer)
+	{
+		if (layername && layername[0]) {
+			if (!STREQ(view_layer->name, layername)) {
 				continue;
-
-		if (re->r.scemode & R_SINGLE_LAYER) {
-			if (nr != re->r.actlay)
-				continue;
-		}
-		else {
-			if (srl->layflag & SCE_LAY_DISABLE)
-				continue;
+			}
 		}
 
 		rl = MEM_callocN(sizeof(RenderLayer), "new render layer");
 		BLI_addtail(&rr->layers, rl);
 
-		BLI_strncpy(rl->name, srl->name, sizeof(rl->name));
-		rl->lay = srl->lay;
-		rl->lay_zmask = srl->lay_zmask;
-		rl->lay_exclude = srl->lay_exclude;
-		rl->layflag = srl->layflag;
-		rl->passflag = srl->passflag; /* for debugging: srl->passflag | SCE_PASS_RAYHITS; */
-		rl->pass_xor = srl->pass_xor;
-		rl->light_override = srl->light_override;
-		rl->mat_override = srl->mat_override;
+		BLI_strncpy(rl->name, view_layer->name, sizeof(rl->name));
+		rl->layflag = view_layer->layflag;
+		rl->passflag = view_layer->passflag; /* for debugging: view_layer->passflag | SCE_PASS_RAYHITS; */
 		rl->rectx = rectx;
 		rl->recty = recty;
 
@@ -347,80 +325,70 @@ RenderResult *render_result_new(Render *re, rcti *partrct, int crop, int savebuf
 				IMB_exr_add_view(rl->exrhandle, view);
 
 #define RENDER_LAYER_ADD_PASS_SAFE(rr, rl, channels, name, viewname, chan_id) \
-			do { \
-				if (render_layer_add_pass(rr, rl, channels, name, viewname, chan_id) == NULL) { \
-					render_result_free(rr); \
-					return NULL; \
-				} \
-			} while (false)
+	do { \
+		if (render_layer_add_pass(rr, rl, channels, name, viewname, chan_id) == NULL) { \
+			render_result_free(rr); \
+			return NULL; \
+		} \
+	} while (false)
 
 			/* a renderlayer should always have a Combined pass*/
 			render_layer_add_pass(rr, rl, 4, "Combined", view, "RGBA");
 
-			if (srl->passflag  & SCE_PASS_Z)
+			if (view_layer->passflag  & SCE_PASS_Z)
 				RENDER_LAYER_ADD_PASS_SAFE(rr, rl, 1, RE_PASSNAME_Z, view, "Z");
-			if (srl->passflag  & SCE_PASS_VECTOR)
+			if (view_layer->passflag  & SCE_PASS_VECTOR)
 				RENDER_LAYER_ADD_PASS_SAFE(rr, rl, 4, RE_PASSNAME_VECTOR, view, "XYZW");
-			if (srl->passflag  & SCE_PASS_NORMAL)
+			if (view_layer->passflag  & SCE_PASS_NORMAL)
 				RENDER_LAYER_ADD_PASS_SAFE(rr, rl, 3, RE_PASSNAME_NORMAL, view, "XYZ");
-			if (srl->passflag  & SCE_PASS_UV)
+			if (view_layer->passflag  & SCE_PASS_UV)
 				RENDER_LAYER_ADD_PASS_SAFE(rr, rl, 3, RE_PASSNAME_UV, view, "UVA");
-			if (srl->passflag  & SCE_PASS_RGBA)
-				RENDER_LAYER_ADD_PASS_SAFE(rr, rl, 4, RE_PASSNAME_RGBA, view, "RGBA");
-			if (srl->passflag  & SCE_PASS_EMIT)
+			if (view_layer->passflag  & SCE_PASS_EMIT)
 				RENDER_LAYER_ADD_PASS_SAFE(rr, rl, 3, RE_PASSNAME_EMIT, view, "RGB");
-			if (srl->passflag  & SCE_PASS_DIFFUSE)
-				RENDER_LAYER_ADD_PASS_SAFE(rr, rl, 3, RE_PASSNAME_DIFFUSE, view, "RGB");
-			if (srl->passflag  & SCE_PASS_SPEC)
-				RENDER_LAYER_ADD_PASS_SAFE(rr, rl, 3, RE_PASSNAME_SPEC, view, "RGB");
-			if (srl->passflag  & SCE_PASS_AO)
+			if (view_layer->passflag  & SCE_PASS_AO)
 				RENDER_LAYER_ADD_PASS_SAFE(rr, rl, 3, RE_PASSNAME_AO, view, "RGB");
-			if (srl->passflag  & SCE_PASS_ENVIRONMENT)
+			if (view_layer->passflag  & SCE_PASS_ENVIRONMENT)
 				RENDER_LAYER_ADD_PASS_SAFE(rr, rl, 3, RE_PASSNAME_ENVIRONMENT, view, "RGB");
-			if (srl->passflag  & SCE_PASS_INDIRECT)
-				RENDER_LAYER_ADD_PASS_SAFE(rr, rl, 3, RE_PASSNAME_INDIRECT, view, "RGB");
-			if (srl->passflag  & SCE_PASS_SHADOW)
+			if (view_layer->passflag  & SCE_PASS_SHADOW)
 				RENDER_LAYER_ADD_PASS_SAFE(rr, rl, 3, RE_PASSNAME_SHADOW, view, "RGB");
-			if (srl->passflag  & SCE_PASS_REFLECT)
-				RENDER_LAYER_ADD_PASS_SAFE(rr, rl, 3, RE_PASSNAME_REFLECT, view, "RGB");
-			if (srl->passflag  & SCE_PASS_REFRACT)
-				RENDER_LAYER_ADD_PASS_SAFE(rr, rl, 3, RE_PASSNAME_REFRACT, view, "RGB");
-			if (srl->passflag  & SCE_PASS_INDEXOB)
+			if (view_layer->passflag  & SCE_PASS_INDEXOB)
 				RENDER_LAYER_ADD_PASS_SAFE(rr, rl, 1, RE_PASSNAME_INDEXOB, view, "X");
-			if (srl->passflag  & SCE_PASS_INDEXMA)
+			if (view_layer->passflag  & SCE_PASS_INDEXMA)
 				RENDER_LAYER_ADD_PASS_SAFE(rr, rl, 1, RE_PASSNAME_INDEXMA, view, "X");
-			if (srl->passflag  & SCE_PASS_MIST)
+			if (view_layer->passflag  & SCE_PASS_MIST)
 				RENDER_LAYER_ADD_PASS_SAFE(rr, rl, 1, RE_PASSNAME_MIST, view, "Z");
 			if (rl->passflag & SCE_PASS_RAYHITS)
 				RENDER_LAYER_ADD_PASS_SAFE(rr, rl, 4, RE_PASSNAME_RAYHITS, view, "RGB");
-			if (srl->passflag  & SCE_PASS_DIFFUSE_DIRECT)
+			if (view_layer->passflag  & SCE_PASS_DIFFUSE_DIRECT)
 				RENDER_LAYER_ADD_PASS_SAFE(rr, rl, 3, RE_PASSNAME_DIFFUSE_DIRECT, view, "RGB");
-			if (srl->passflag  & SCE_PASS_DIFFUSE_INDIRECT)
+			if (view_layer->passflag  & SCE_PASS_DIFFUSE_INDIRECT)
 				RENDER_LAYER_ADD_PASS_SAFE(rr, rl, 3, RE_PASSNAME_DIFFUSE_INDIRECT, view, "RGB");
-			if (srl->passflag  & SCE_PASS_DIFFUSE_COLOR)
+			if (view_layer->passflag  & SCE_PASS_DIFFUSE_COLOR)
 				RENDER_LAYER_ADD_PASS_SAFE(rr, rl, 3, RE_PASSNAME_DIFFUSE_COLOR, view, "RGB");
-			if (srl->passflag  & SCE_PASS_GLOSSY_DIRECT)
+			if (view_layer->passflag  & SCE_PASS_GLOSSY_DIRECT)
 				RENDER_LAYER_ADD_PASS_SAFE(rr, rl, 3, RE_PASSNAME_GLOSSY_DIRECT, view, "RGB");
-			if (srl->passflag  & SCE_PASS_GLOSSY_INDIRECT)
+			if (view_layer->passflag  & SCE_PASS_GLOSSY_INDIRECT)
 				RENDER_LAYER_ADD_PASS_SAFE(rr, rl, 3, RE_PASSNAME_GLOSSY_INDIRECT, view, "RGB");
-			if (srl->passflag  & SCE_PASS_GLOSSY_COLOR)
+			if (view_layer->passflag  & SCE_PASS_GLOSSY_COLOR)
 				RENDER_LAYER_ADD_PASS_SAFE(rr, rl, 3, RE_PASSNAME_GLOSSY_COLOR, view, "RGB");
-			if (srl->passflag  & SCE_PASS_TRANSM_DIRECT)
+			if (view_layer->passflag  & SCE_PASS_TRANSM_DIRECT)
 				RENDER_LAYER_ADD_PASS_SAFE(rr, rl, 3, RE_PASSNAME_TRANSM_DIRECT, view, "RGB");
-			if (srl->passflag  & SCE_PASS_TRANSM_INDIRECT)
+			if (view_layer->passflag  & SCE_PASS_TRANSM_INDIRECT)
 				RENDER_LAYER_ADD_PASS_SAFE(rr, rl, 3, RE_PASSNAME_TRANSM_INDIRECT, view, "RGB");
-			if (srl->passflag  & SCE_PASS_TRANSM_COLOR)
+			if (view_layer->passflag  & SCE_PASS_TRANSM_COLOR)
 				RENDER_LAYER_ADD_PASS_SAFE(rr, rl, 3, RE_PASSNAME_TRANSM_COLOR, view, "RGB");
-			if (srl->passflag  & SCE_PASS_SUBSURFACE_DIRECT)
+			if (view_layer->passflag  & SCE_PASS_SUBSURFACE_DIRECT)
 				RENDER_LAYER_ADD_PASS_SAFE(rr, rl, 3, RE_PASSNAME_SUBSURFACE_DIRECT, view, "RGB");
-			if (srl->passflag  & SCE_PASS_SUBSURFACE_INDIRECT)
+			if (view_layer->passflag  & SCE_PASS_SUBSURFACE_INDIRECT)
 				RENDER_LAYER_ADD_PASS_SAFE(rr, rl, 3, RE_PASSNAME_SUBSURFACE_INDIRECT, view, "RGB");
-			if (srl->passflag  & SCE_PASS_SUBSURFACE_COLOR)
+			if (view_layer->passflag  & SCE_PASS_SUBSURFACE_COLOR)
 				RENDER_LAYER_ADD_PASS_SAFE(rr, rl, 3, RE_PASSNAME_SUBSURFACE_COLOR, view, "RGB");
 #undef RENDER_LAYER_ADD_PASS_SAFE
 		}
 	}
-	/* sss, previewrender and envmap don't do layers, so we make a default one */
+	FOREACH_VIEW_LAYER_TO_RENDER_END;
+
+	/* previewrender doesn't do layers, so we make a default one */
 	if (BLI_listbase_is_empty(&rr->layers) && !(layername && layername[0])) {
 		rl = MEM_callocN(sizeof(RenderLayer), "new render layer");
 		BLI_addtail(&rr->layers, rl);
@@ -449,11 +417,10 @@ RenderResult *render_result_new(Render *re, rcti *partrct, int crop, int savebuf
 		}
 
 		/* note, this has to be in sync with scene.c */
-		rl->lay = (1 << 20) - 1;
 		rl->layflag = 0x7FFF;    /* solid ztra halo strand */
 		rl->passflag = SCE_PASS_COMBINED;
 
-		re->r.actlay = 0;
+		re->active_view_layer = 0;
 	}
 
 	/* border render; calculate offset for use in compositor. compo is centralized coords */
@@ -509,6 +476,7 @@ void render_result_add_pass(RenderResult *rr, const char *name, int channels, co
 			for (rp = rl->passes.first; rp; rp = rp->next) {
 				if (!STREQ(rp->name, name)) continue;
 				if (!STREQ(rp->view, view)) continue;
+				break;
 			}
 
 			if (!rp) {
@@ -516,23 +484,6 @@ void render_result_add_pass(RenderResult *rr, const char *name, int channels, co
 			}
 		}
 	}
-}
-
-/* allocate osa new results for samples */
-RenderResult *render_result_new_full_sample(Render *re, ListBase *lb, rcti *partrct, int crop, int savebuffers, const char *viewname)
-{
-	int a;
-
-	if (re->osa == 0)
-		return render_result_new(re, partrct, crop, savebuffers, RR_ALL_LAYERS, viewname);
-
-	for (a = 0; a < re->osa; a++) {
-		RenderResult *rr = render_result_new(re, partrct, crop, savebuffers, RR_ALL_LAYERS, viewname);
-		BLI_addtail(lb, rr);
-		rr->sample_nr = a;
-	}
-
-	return lb->first;
 }
 
 static int passtype_from_name(const char *name)
@@ -548,16 +499,10 @@ static int passtype_from_name(const char *name)
 	CHECK_PASS(VECTOR);
 	CHECK_PASS(NORMAL);
 	CHECK_PASS(UV);
-	CHECK_PASS(RGBA);
 	CHECK_PASS(EMIT);
-	CHECK_PASS(DIFFUSE);
-	CHECK_PASS(SPEC);
 	CHECK_PASS(SHADOW);
 	CHECK_PASS(AO);
 	CHECK_PASS(ENVIRONMENT);
-	CHECK_PASS(INDIRECT);
-	CHECK_PASS(REFLECT);
-	CHECK_PASS(REFRACT);
 	CHECK_PASS(INDEXOB);
 	CHECK_PASS(INDEXMA);
 	CHECK_PASS(MIST);
@@ -653,8 +598,8 @@ static void *ml_addview_cb(void *base, const char *str)
 static int order_render_passes(const void *a, const void *b)
 {
 	// 1 if a is after b
-	RenderPass *rpa = (RenderPass *) a;
-	RenderPass *rpb = (RenderPass *) b;
+	RenderPass *rpa = (RenderPass *)a;
+	RenderPass *rpb = (RenderPass *)b;
 	unsigned int passtype_a = passtype_from_name(rpa->name);
 	unsigned int passtype_b = passtype_from_name(rpb->name);
 
@@ -893,7 +838,7 @@ bool RE_WriteRenderResult(ReportList *reports, RenderResult *rr, const char *fil
 			}
 
 			if (write_z && rview->rectz) {
-				const char *layname = (multi_layer)? "Composite": "";
+				const char *layname = (multi_layer) ? "Composite" : "";
 				IMB_exr_add_channel(exrhandle, layname, "Z", viewname,
 				                    1, rr->rectx, rview->rectz, false);
 			}
@@ -901,7 +846,7 @@ bool RE_WriteRenderResult(ReportList *reports, RenderResult *rr, const char *fil
 	}
 
 	/* Other render layers. */
-	int nr = (rr->have_combined)? 1: 0;
+	int nr = (rr->have_combined) ? 1 : 0;
 	for (RenderLayer *rl = rr->layers.first; rl; rl = rl->next, nr++) {
 		/* Skip other render layers if requested. */
 		if (!multi_layer && nr != layer) {
@@ -995,7 +940,7 @@ void render_result_single_layer_begin(Render *re)
 /* if scemode is R_SINGLE_LAYER, at end of rendering, merge the both render results */
 void render_result_single_layer_end(Render *re)
 {
-	SceneRenderLayer *srl;
+	ViewLayer *view_layer;
 	RenderLayer *rlpush;
 	RenderLayer *rl;
 	int nr;
@@ -1016,12 +961,12 @@ void render_result_single_layer_end(Render *re)
 		BLI_remlink(&re->result->layers, rl);
 
 		/* reconstruct render result layers */
-		for (nr = 0, srl = re->r.layers.first; srl; srl = srl->next, nr++) {
-			if (nr == re->r.actlay) {
+		for (nr = 0, view_layer = re->view_layers.first; view_layer; view_layer = view_layer->next, nr++) {
+			if (nr == re->active_view_layer) {
 				BLI_addtail(&re->result->layers, rl);
 			}
 			else {
-				rlpush = RE_GetRenderLayer(re->pushedresult, srl->name);
+				rlpush = RE_GetRenderLayer(re->pushedresult, view_layer->name);
 				if (rlpush) {
 					BLI_remlink(&re->pushedresult->layers, rlpush);
 					BLI_addtail(&re->result->layers, rlpush);
@@ -1104,8 +1049,8 @@ void render_result_save_empty_result_tiles(Render *re)
 		for (rl = rr->layers.first; rl; rl = rl->next) {
 			for (pa = re->parts.first; pa; pa = pa->next) {
 				if (pa->status != PART_STATUS_MERGED) {
-					int party = pa->disprect.ymin - re->disprect.ymin + pa->crop;
-					int partx = pa->disprect.xmin - re->disprect.xmin + pa->crop;
+					int party = pa->disprect.ymin - re->disprect.ymin;
+					int partx = pa->disprect.xmin - re->disprect.xmin;
 					IMB_exrtile_write_channels(rl->exrhandle, partx, party, 0, re->viewname, true);
 				}
 			}
@@ -1113,15 +1058,56 @@ void render_result_save_empty_result_tiles(Render *re)
 	}
 }
 
-/* begin write of exr tile file */
-void render_result_exr_file_begin(Render *re)
+/* Compute list of passes needed by render engine. */
+static void templates_register_pass_cb(void *userdata, Scene *UNUSED(scene), ViewLayer *UNUSED(view_layer),
+                                       const char *name, int channels, const char *chan_id, int UNUSED(type))
 {
-	RenderResult *rr;
-	RenderLayer *rl;
+	ListBase *templates = userdata;
+	RenderPass *pass = MEM_callocN(sizeof(RenderPass), "RenderPassTemplate");
+
+	pass->channels = channels;
+	BLI_strncpy(pass->name, name, sizeof(pass->name));
+	BLI_strncpy(pass->chan_id, chan_id, sizeof(pass->chan_id));
+
+	BLI_addtail(templates, pass);
+}
+
+static void render_result_get_pass_templates(RenderEngine *engine, Render *re, RenderLayer *rl, ListBase *templates)
+{
+	BLI_listbase_clear(templates);
+
+	if (engine && engine->type->update_render_passes) {
+		ViewLayer *view_layer = BLI_findstring(&re->view_layers, rl->name, offsetof(ViewLayer, name));
+		if (view_layer) {
+			RE_engine_update_render_passes(engine, re->scene, view_layer, templates_register_pass_cb, templates);
+		}
+	}
+}
+
+/* begin write of exr tile file */
+void render_result_exr_file_begin(Render *re, RenderEngine *engine)
+{
 	char str[FILE_MAX];
 
-	for (rr = re->result; rr; rr = rr->next) {
-		for (rl = rr->layers.first; rl; rl = rl->next) {
+	for (RenderResult *rr = re->result; rr; rr = rr->next) {
+		for (RenderLayer *rl = rr->layers.first; rl; rl = rl->next) {
+			/* Get passes needed by engine. Normally we would wait for the
+			 * engine to create them, but for EXR file we need to know in
+			 * advance. */
+			ListBase templates;
+			render_result_get_pass_templates(engine, re, rl, &templates);
+
+			/* Create render passes requested by engine. Only this part is
+			 * mutex locked to avoid deadlock with Python GIL. */
+			BLI_rw_mutex_lock(&re->resultmutex, THREAD_LOCK_WRITE);
+			for (RenderPass *pass = templates.first; pass; pass = pass->next) {
+				render_result_add_pass(re->result, pass->name, pass->channels, pass->chan_id, rl->name, NULL);
+			}
+			BLI_rw_mutex_unlock(&re->resultmutex);
+
+			BLI_freelistN(&templates);
+
+			/* Open EXR file for writing. */
 			render_result_exr_file_path(re->scene, rl->name, rr->sample_nr, str);
 			printf("write exr tmp file, %dx%d, %s\n", rr->rectx, rr->recty, str);
 			IMB_exrtile_begin_write(rl->exrhandle, str, 0, rr->rectx, rr->recty, re->partx, re->party);
@@ -1130,13 +1116,11 @@ void render_result_exr_file_begin(Render *re)
 }
 
 /* end write of exr tile file, read back first sample */
-void render_result_exr_file_end(Render *re)
+void render_result_exr_file_end(Render *re, RenderEngine *engine)
 {
-	RenderResult *rr;
-	RenderLayer *rl;
-
-	for (rr = re->result; rr; rr = rr->next) {
-		for (rl = rr->layers.first; rl; rl = rl->next) {
+	/* Close EXR files. */
+	for (RenderResult *rr = re->result; rr; rr = rr->next) {
+		for (RenderLayer *rl = rr->layers.first; rl; rl = rl->next) {
 			IMB_exr_close(rl->exrhandle);
 			rl->exrhandle = NULL;
 		}
@@ -1144,10 +1128,36 @@ void render_result_exr_file_end(Render *re)
 		rr->do_exr_tile = false;
 	}
 
+	/* Create new render result in memory instead of on disk. */
+	BLI_rw_mutex_lock(&re->resultmutex, THREAD_LOCK_WRITE);
 	render_result_free_list(&re->fullresult, re->result);
-	re->result = NULL;
+	re->result = render_result_new(re, &re->disprect, 0, RR_USE_MEM, RR_ALL_LAYERS, RR_ALL_VIEWS);
+	BLI_rw_mutex_unlock(&re->resultmutex);
 
-	render_result_exr_file_read_sample(re, 0);
+	for (RenderLayer *rl = re->result->layers.first; rl; rl = rl->next) {
+		/* Get passes needed by engine. */
+		ListBase templates;
+		render_result_get_pass_templates(engine, re, rl, &templates);
+
+		/* Create render passes requested by engine. Only this part is
+		 * mutex locked to avoid deadlock with Python GIL. */
+		BLI_rw_mutex_lock(&re->resultmutex, THREAD_LOCK_WRITE);
+		for (RenderPass *pass = templates.first; pass; pass = pass->next) {
+			render_result_add_pass(re->result, pass->name, pass->channels, pass->chan_id, rl->name, NULL);
+		}
+
+		BLI_freelistN(&templates);
+
+		/* Render passes contents from file. */
+		char str[FILE_MAXFILE + MAX_ID_NAME + MAX_ID_NAME + 100] = "";
+		render_result_exr_file_path(re->scene, rl->name, 0, str);
+		printf("read exr tmp file: %s\n", str);
+
+		if (!render_result_exr_file_read_path(re->result, rl, str)) {
+			printf("cannot read: %s\n", str);
+		}
+		BLI_rw_mutex_unlock(&re->resultmutex);
+	}
 }
 
 /* save part into exr file */
@@ -1174,29 +1184,6 @@ void render_result_exr_file_path(Scene *scene, const char *layname, int sample, 
 	BLI_filename_make_safe(name);
 
 	BLI_make_file_string("/", filepath, BKE_tempdir_session(), name);
-}
-
-/* only for temp buffer, makes exact copy of render result */
-int render_result_exr_file_read_sample(Render *re, int sample)
-{
-	RenderLayer *rl;
-	char str[FILE_MAXFILE + MAX_ID_NAME + MAX_ID_NAME + 100] = "";
-	bool success = true;
-
-	RE_FreeRenderResult(re->result);
-	re->result = render_result_new(re, &re->disprect, 0, RR_USE_MEM, RR_ALL_LAYERS, RR_ALL_VIEWS);
-
-	for (rl = re->result->layers.first; rl; rl = rl->next) {
-		render_result_exr_file_path(re->scene, rl->name, sample, str);
-		printf("read exr tmp file: %s\n", str);
-
-		if (!render_result_exr_file_read_path(re->result, rl, str)) {
-			printf("cannot read: %s\n", str);
-			success = false;
-		}
-	}
-
-	return success;
 }
 
 /* called for reading temp files, and for external engines */
@@ -1317,7 +1304,7 @@ ImBuf *render_result_rect_to_ibuf(RenderResult *rr, RenderData *rd, const int vi
 	RenderView *rv = RE_RenderViewGetById(rr, view_id);
 
 	/* if not exists, BKE_imbuf_write makes one */
-	ibuf->rect = (unsigned int *) rv->rect32;
+	ibuf->rect = (unsigned int *)rv->rect32;
 	ibuf->rect_float = rv->rectf;
 	ibuf->zbuf_float = rv->rectz;
 
@@ -1405,7 +1392,7 @@ void render_result_rect_get_pixels(RenderResult *rr, unsigned int *rect, int rec
 	if (rv->rect32)
 		memcpy(rect, rv->rect32, sizeof(int) * rr->rectx * rr->recty);
 	else if (rv->rectf)
-		IMB_display_buffer_transform_apply((unsigned char *) rect, rv->rectf, rr->rectx, rr->recty, 4,
+		IMB_display_buffer_transform_apply((unsigned char *)rect, rv->rectf, rr->rectx, rr->recty, 4,
 		                                   view_settings, display_settings, true);
 	else
 		/* else fill with black */
@@ -1444,11 +1431,13 @@ bool RE_HasFloatPixels(RenderResult *res)
 
 bool RE_RenderResult_is_stereo(RenderResult *res)
 {
-	if (! BLI_findstring(&res->views, STEREO_LEFT_NAME, offsetof(RenderView, name)))
+	if (!BLI_findstring(&res->views, STEREO_LEFT_NAME, offsetof(RenderView, name))) {
 		return false;
+	}
 
-	if (! BLI_findstring(&res->views, STEREO_RIGHT_NAME, offsetof(RenderView, name)))
+	if (!BLI_findstring(&res->views, STEREO_RIGHT_NAME, offsetof(RenderView, name))) {
 		return false;
+	}
 
 	return true;
 }
@@ -1541,6 +1530,6 @@ RenderResult *RE_DuplicateRenderResult(RenderResult *rr)
 	if (new_rr->rectz != NULL) {
 		new_rr->rectz = MEM_dupallocN(new_rr->rectz);
 	}
-	new_rr->stamp_data = MEM_dupallocN(new_rr->stamp_data);
+	new_rr->stamp_data = BKE_stamp_data_copy(new_rr->stamp_data);
 	return new_rr;
 }

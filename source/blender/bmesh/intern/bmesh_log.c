@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,12 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/bmesh/intern/bmesh_log.c
- *  \ingroup bmesh
+/** \file
+ * \ingroup bmesh
  *
  * The BMLog is an interface for storing undo/redo steps as a BMesh is
  * modified. It only stores changes to the BMesh, not full copies.
@@ -527,10 +523,12 @@ BMLog *BM_log_from_existing_entries_create(BMesh *bm, BMLogEntry *entry)
 {
 	BMLog *log = BM_log_create(bm);
 
-	if (entry->prev)
+	if (entry->prev) {
 		log->current_entry = entry;
-	else
+	}
+	else {
 		log->current_entry = NULL;
+	}
 
 	/* Let BMLog manage the entry list again */
 	log->entries.first = log->entries.last = entry;
@@ -567,19 +565,23 @@ void BM_log_free(BMLog *log)
 {
 	BMLogEntry *entry;
 
-	if (log->unused_ids)
+	if (log->unused_ids) {
 		range_tree_uint_free(log->unused_ids);
+	}
 
-	if (log->id_to_elem)
+	if (log->id_to_elem) {
 		BLI_ghash_free(log->id_to_elem, NULL, NULL);
+	}
 
-	if (log->elem_to_id)
+	if (log->elem_to_id) {
 		BLI_ghash_free(log->elem_to_id, NULL, NULL);
+	}
 
 	/* Clear the BMLog references within each entry, but do not free
 	 * the entries themselves */
-	for (entry = log->entries.first; entry; entry = entry->next)
+	for (entry = log->entries.first; entry; entry = entry->next) {
 		entry->log = NULL;
+	}
 
 	MEM_freeN(log);
 }
@@ -655,7 +657,7 @@ void BM_log_mesh_elems_reorder(BMesh *bm, BMLog *log)
 BMLogEntry *BM_log_entry_add(BMLog *log)
 {
 	/* WARNING: this is now handled by the UndoSystem: BKE_UNDOSYS_TYPE_SCULPT
-	 * freeing here causes unnecesssary complications. */
+	 * freeing here causes unnecessary complications. */
 	BMLogEntry *entry;
 #if 0
 	/* Delete any entries after the current one */
@@ -695,10 +697,12 @@ void BM_log_entry_drop(BMLogEntry *entry)
 	if (!log) {
 		/* Unlink */
 		BLI_assert(!(entry->prev && entry->next));
-		if (entry->prev)
+		if (entry->prev) {
 			entry->prev->next = NULL;
-		else if (entry->next)
+		}
+		else if (entry->next) {
 			entry->next->prev = NULL;
+		}
 
 		bm_log_entry_free(entry);
 		MEM_freeN(entry);
@@ -744,8 +748,9 @@ void BM_log_entry_drop(BMLogEntry *entry)
 		BLI_assert(!"Cannot drop BMLogEntry from middle");
 	}
 
-	if (log->current_entry == entry)
+	if (log->current_entry == entry) {
 		log->current_entry = entry->prev;
+	}
 
 	bm_log_entry_free(entry);
 	BLI_freelinkN(&log->entries, entry);
@@ -1130,10 +1135,10 @@ void bm_log_print(const BMLog *log, const char *description)
 
 	printf("%s:\n", description);
 	printf("    % 2d: [ initial ]%s\n", 0,
-		   (!log->current_entry) ? current : "");
+	       (!log->current_entry) ? current : "");
 	for (entry = log->entries.first, i = 1; entry; entry = entry->next, i++) {
 		printf("    % 2d: [%p]%s\n", i, entry,
-			   (entry == log->current_entry) ? current : "");
+		       (entry == log->current_entry) ? current : "");
 	}
 }
 #endif

@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,15 +15,10 @@
  *
  * The Original Code is Copyright (C) 2009 Blender Foundation, Joshua Leung
  * All rights reserved.
- *
- *
- * Contributor(s): Joshua Leung (major recode)
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/space_nla/nla_select.c
- *  \ingroup spnla
+/** \file
+ * \ingroup spnla
  */
 
 
@@ -46,6 +39,7 @@
 #include "ED_anim_api.h"
 #include "ED_keyframes_edit.h"
 #include "ED_screen.h"
+#include "ED_select_utils.h"
 
 #include "RNA_access.h"
 #include "RNA_define.h"
@@ -167,10 +161,24 @@ static int nlaedit_deselectall_exec(bContext *C, wmOperator *op)
 		return OPERATOR_CANCELLED;
 
 	/* 'standard' behavior - check if selected, then apply relevant selection */
-	if (RNA_boolean_get(op->ptr, "invert"))
-		deselect_nla_strips(&ac, DESELECT_STRIPS_NOTEST, SELECT_INVERT);
-	else
-		deselect_nla_strips(&ac, DESELECT_STRIPS_TEST, SELECT_ADD);
+	const int action = RNA_enum_get(op->ptr, "action");
+	switch (action) {
+		case SEL_TOGGLE:
+			deselect_nla_strips(&ac, DESELECT_STRIPS_TEST, SELECT_ADD);
+			break;
+		case SEL_SELECT:
+			deselect_nla_strips(&ac, DESELECT_STRIPS_NOTEST, SELECT_ADD);
+			break;
+		case SEL_DESELECT:
+			deselect_nla_strips(&ac, DESELECT_STRIPS_NOTEST, SELECT_SUBTRACT);
+			break;
+		case SEL_INVERT:
+			deselect_nla_strips(&ac, DESELECT_STRIPS_NOTEST, SELECT_INVERT);
+			break;
+		default:
+			BLI_assert(0);
+			break;
+	}
 
 	/* set notifier that things have changed */
 	WM_event_add_notifier(C, NC_ANIMATION | ND_NLA | NA_SELECTED, NULL);
@@ -178,11 +186,11 @@ static int nlaedit_deselectall_exec(bContext *C, wmOperator *op)
 	return OPERATOR_FINISHED;
 }
 
-void NLA_OT_select_all_toggle(wmOperatorType *ot)
+void NLA_OT_select_all(wmOperatorType *ot)
 {
 	/* identifiers */
 	ot->name = "(De)select All";
-	ot->idname = "NLA_OT_select_all_toggle";
+	ot->idname = "NLA_OT_select_all";
 	ot->description = "Select or deselect all NLA-Strips";
 
 	/* api callbacks */
@@ -192,12 +200,11 @@ void NLA_OT_select_all_toggle(wmOperatorType *ot)
 	/* flags */
 	ot->flag = OPTYPE_REGISTER /*|OPTYPE_UNDO*/;
 
-	/* props */
-	ot->prop = RNA_def_boolean(ot->srna, "invert", 0, "Invert", "");
-	RNA_def_property_flag(ot->prop, PROP_SKIP_SAVE);
+	/* properties */
+	WM_operator_properties_select_all(ot);
 }
 
-/* ******************** Border Select Operator **************************** */
+/* ******************** Box Select Operator **************************** */
 /* This operator currently works in one of three ways:
  *  -> BKEY     - 1) all strips within region are selected (NLAEDIT_BORDERSEL_ALLSTRIPS)
  *  -> ALT-BKEY - depending on which axis of the region was larger...
@@ -205,15 +212,15 @@ void NLA_OT_select_all_toggle(wmOperatorType *ot)
  *      -> 3) y-axis, so select all frames within channels that region included (NLAEDIT_BORDERSEL_CHANNELS)
  */
 
-/* defines for borderselect mode */
+/* defines for box_select mode */
 enum {
-	NLA_BORDERSEL_ALLSTRIPS = 0,
-	NLA_BORDERSEL_FRAMERANGE,
-	NLA_BORDERSEL_CHANNELS,
-} /* eNLAEDIT_BorderSelect_Mode */;
+	NLA_BOXSEL_ALLSTRIPS = 0,
+	NLA_BOXSEL_FRAMERANGE,
+	NLA_BOXSEL_CHANNELS,
+} /* eNLAEDIT_BoxSelect_Mode */;
 
 
-static void borderselect_nla_strips(bAnimContext *ac, rcti rect, short mode, short selectmode)
+static void box_select_nla_strips(bAnimContext *ac, rcti rect, short mode, short selectmode)
 {
 	ListBase anim_data = {NULL, NULL};
 	bAnimListElem *ale;
@@ -235,12 +242,12 @@ static void borderselect_nla_strips(bAnimContext *ac, rcti rect, short mode, sho
 	/* convert selection modes to selection modes */
 	selectmode = selmodes_to_flagmodes(selectmode);
 
-	/* loop over data, doing border select */
+	/* loop over data, doing box select */
 	for (ale = anim_data.first; ale; ale = ale->next) {
 		ymin = ymax - NLACHANNEL_STEP(snla);
 
 		/* perform vertical suitability check (if applicable) */
-		if ((mode == NLA_BORDERSEL_FRAMERANGE) ||
+		if ((mode == NLA_BOXSEL_FRAMERANGE) ||
 		    !((ymax < rectf.ymin) || (ymin > rectf.ymax)))
 		{
 			/* loop over data selecting (only if NLA-Track) */
@@ -250,7 +257,7 @@ static void borderselect_nla_strips(bAnimContext *ac, rcti rect, short mode, sho
 
 				/* only select strips if they fall within the required ranges (if applicable) */
 				for (strip = nlt->strips.first; strip; strip = strip->next) {
-					if ((mode == NLA_BORDERSEL_CHANNELS) ||
+					if ((mode == NLA_BOXSEL_CHANNELS) ||
 					    BKE_nlastrip_within_bounds(strip, rectf.xmin, rectf.xmax))
 					{
 						/* set selection */
@@ -273,34 +280,26 @@ static void borderselect_nla_strips(bAnimContext *ac, rcti rect, short mode, sho
 
 /* ------------------- */
 
-static int nlaedit_borderselect_exec(bContext *C, wmOperator *op)
+static int nlaedit_box_select_exec(bContext *C, wmOperator *op)
 {
 	bAnimContext ac;
 	rcti rect;
-	short mode = 0, selectmode = 0;
-	const bool select = !RNA_boolean_get(op->ptr, "deselect");
-	const bool extend = RNA_boolean_get(op->ptr, "extend");
+	short mode = 0;
 
 	/* get editor data */
 	if (ANIM_animdata_get_context(C, &ac) == 0)
 		return OPERATOR_CANCELLED;
 
-	/* clear all selection if not extending selection */
-	if (!extend) {
+	const eSelectOp sel_op = RNA_enum_get(op->ptr, "mode");
+	const int selectmode = (sel_op != SEL_OP_SUB) ? SELECT_ADD : SELECT_SUBTRACT;
+	if (SEL_OP_USE_PRE_DESELECT(sel_op)) {
 		deselect_nla_strips(&ac, DESELECT_STRIPS_TEST, SELECT_SUBTRACT);
 	}
 
 	/* get settings from operator */
 	WM_operator_properties_border_to_rcti(op, &rect);
 
-	if (select) {
-		selectmode = SELECT_ADD;
-	}
-	else {
-		selectmode = SELECT_SUBTRACT;
-	}
-
-	/* selection 'mode' depends on whether borderselect region only matters on one axis */
+	/* selection 'mode' depends on whether box_select region only matters on one axis */
 	if (RNA_boolean_get(op->ptr, "axis_range")) {
 		/* mode depends on which axis of the range is larger to determine which axis to use
 		 * - checking this in region-space is fine, as it's fundamentally still going to be a different rect size
@@ -308,15 +307,15 @@ static int nlaedit_borderselect_exec(bContext *C, wmOperator *op)
 		 *   used for tweaking timing when "blocking", while channels is not that useful...
 		 */
 		if (BLI_rcti_size_x(&rect) >= BLI_rcti_size_y(&rect))
-			mode = NLA_BORDERSEL_FRAMERANGE;
+			mode = NLA_BOXSEL_FRAMERANGE;
 		else
-			mode = NLA_BORDERSEL_CHANNELS;
+			mode = NLA_BOXSEL_CHANNELS;
 	}
 	else
-		mode = NLA_BORDERSEL_ALLSTRIPS;
+		mode = NLA_BOXSEL_ALLSTRIPS;
 
-	/* apply borderselect action */
-	borderselect_nla_strips(&ac, rect, mode, selectmode);
+	/* apply box_select action */
+	box_select_nla_strips(&ac, rect, mode, selectmode);
 
 	/* set notifier that things have changed */
 	WM_event_add_notifier(C, NC_ANIMATION | ND_NLA | NA_SELECTED, NULL);
@@ -324,28 +323,29 @@ static int nlaedit_borderselect_exec(bContext *C, wmOperator *op)
 	return OPERATOR_FINISHED;
 }
 
-void NLA_OT_select_border(wmOperatorType *ot)
+void NLA_OT_select_box(wmOperatorType *ot)
 {
 	/* identifiers */
-	ot->name = "Border Select";
-	ot->idname = "NLA_OT_select_border";
+	ot->name = "Box Select";
+	ot->idname = "NLA_OT_select_box";
 	ot->description = "Use box selection to grab NLA-Strips";
 
 	/* api callbacks */
-	ot->invoke = WM_gesture_border_invoke;
-	ot->exec = nlaedit_borderselect_exec;
-	ot->modal = WM_gesture_border_modal;
-	ot->cancel = WM_gesture_border_cancel;
+	ot->invoke = WM_gesture_box_invoke;
+	ot->exec = nlaedit_box_select_exec;
+	ot->modal = WM_gesture_box_modal;
+	ot->cancel = WM_gesture_box_cancel;
 
 	ot->poll = nlaop_poll_tweakmode_off;
 
 	/* flags */
 	ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
 
-	/* rna */
-	WM_operator_properties_gesture_border_select(ot);
-
+	/* properties */
 	RNA_def_boolean(ot->srna, "axis_range", 0, "Axis Range", "");
+
+	WM_operator_properties_gesture_box(ot);
+	WM_operator_properties_select_operation_simple(ot);
 }
 
 /* ******************** Select Left/Right Operator ************************* */
@@ -356,7 +356,7 @@ static const EnumPropertyItem prop_nlaedit_leftright_select_types[] = {
 	{NLAEDIT_LRSEL_TEST, "CHECK", 0, "Check if Select Left or Right", ""},
 	{NLAEDIT_LRSEL_LEFT, "LEFT", 0, "Before current frame", ""},
 	{NLAEDIT_LRSEL_RIGHT, "RIGHT", 0, "After current frame", ""},
-	{0, NULL, 0, NULL, NULL}
+	{0, NULL, 0, NULL, NULL},
 };
 
 /* ------------------- */
@@ -522,7 +522,8 @@ static void mouse_nla_strips(bContext *C, bAnimContext *ac, const int mval[2], s
 	float x, y;
 
 
-	/* use View2D to determine the index of the channel (i.e a row in the list) where keyframe was */
+	/* use View2D to determine the index of the channel
+	 * (i.e a row in the list) where keyframe was */
 	UI_view2d_region_to_view(v2d, mval[0], mval[1], &x, &y);
 	UI_view2d_listview_view_to_cell(v2d, 0, NLACHANNEL_STEP(snla), 0, (float)NLACHANNEL_HEIGHT_HALF(snla), x, y, NULL, &channel_index);
 
@@ -549,14 +550,16 @@ static void mouse_nla_strips(bContext *C, bAnimContext *ac, const int mval[2], s
 		if (ale->type == ANIMTYPE_NLATRACK) {
 			NlaTrack *nlt = (NlaTrack *)ale->data;
 
-			/* loop over NLA-strips in this track, trying to find one which occurs in the necessary bounds */
+			/* loop over NLA-strips in this track,
+			 * trying to find one which occurs in the necessary bounds */
 			for (strip = nlt->strips.first; strip; strip = strip->next) {
 				if (BKE_nlastrip_within_bounds(strip, xmin, xmax))
 					break;
 			}
 		}
 
-		/* remove active channel from list of channels for separate treatment (since it's needed later on) */
+		/* remove active channel from list of channels for separate treatment
+		 * (since it's needed later on) */
 		BLI_remlink(&anim_data, ale);
 
 		/* free list of channels, since it's not used anymore */
@@ -653,7 +656,7 @@ void NLA_OT_click_select(wmOperatorType *ot)
 	PropertyRNA *prop;
 
 	/* identifiers */
-	ot->name = "Mouse Select";
+	ot->name = "Select";
 	ot->idname = "NLA_OT_click_select";
 	ot->description = "Handle clicks to select NLA Strips";
 

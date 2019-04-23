@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,27 +12,25 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 #ifndef __BKE_BLENDFILE_H__
 #define __BKE_BLENDFILE_H__
 
-/** \file BKE_blendfile.h
- *  \ingroup bke
+/** \file
+ * \ingroup bke
  */
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-struct bContext;
+struct BlendFileReadParams;
 struct ID;
 struct Main;
 struct MemFile;
 struct ReportList;
 struct UserDef;
-struct BlendFileReadParams;
+struct bContext;
 
 enum {
 	BKE_BLENDFILE_READ_FAIL             = 0, /* no load */
@@ -64,6 +60,13 @@ struct UserDef *BKE_blendfile_userdef_read_from_memory(
 
 bool BKE_blendfile_userdef_write(const char *filepath, struct ReportList *reports);
 bool BKE_blendfile_userdef_write_app_template(const char *filepath, struct ReportList *reports);
+
+struct WorkspaceConfigFileData *BKE_blendfile_workspace_config_read(
+        const char *filepath,
+        const void *filebuf, int filelength,
+        struct ReportList *reports);
+bool BKE_blendfile_workspace_config_write(struct Main *bmain, const char *filepath, struct ReportList *reports);
+void BKE_blendfile_workspace_config_data_free(struct WorkspaceConfigFileData *workspace_config);
 
 /* partial blend file writing */
 void BKE_blendfile_write_partial_tag_ID(struct ID *id, bool set);

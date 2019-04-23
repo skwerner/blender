@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,9 +15,10 @@
  *
  * The Original Code is Copyright (C) 2016 Kévin Dietrich.
  * All rights reserved.
- *
- * ***** END GPL LICENSE BLOCK *****
- *
+ */
+
+/** \file
+ * \ingroup balembic
  */
 
 #ifndef __ABC_POINTS_H__
@@ -38,8 +37,7 @@ class AbcPointsWriter : public AbcObjectWriter {
 	ParticleSystem *m_psys;
 
 public:
-	AbcPointsWriter(Scene *scene,
-	                Object *ob,
+	AbcPointsWriter(Object *ob,
 	                AbcTransformWriter *parent,
 	                uint32_t time_sampling,
 	                ExportSettings &settings,
@@ -64,10 +62,10 @@ public:
 
 	void readObjectData(Main *bmain, const Alembic::Abc::ISampleSelector &sample_sel);
 
-	DerivedMesh *read_derivedmesh(DerivedMesh *dm,
-	                              const Alembic::Abc::ISampleSelector &sample_sel,
-	                              int read_flag,
-	                              const char **err_str);
+	struct Mesh *read_mesh(struct Mesh *existing_mesh,
+	                       const Alembic::Abc::ISampleSelector &sample_sel,
+	                       int read_flag,
+	                       const char **err_str);
 };
 
 void read_points_sample(const Alembic::AbcGeom::IPointsSchema &schema,

@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,12 +15,6 @@
  *
  * The Original Code is Copyright (C) 2005 Blender Foundation.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
 #include "../node_shader_util.h"
@@ -40,19 +32,16 @@ static bNodeSocketTemplate outputs[] = {
 	{ SOCK_FLOAT,  0, "Size" },
 	{ SOCK_VECTOR,  0, "Velocity" },
 	{ SOCK_VECTOR,  0, "Angular Velocity" },
-	{ -1, 0, "" }
+	{ -1, 0, "" },
 };
-static void node_shader_exec_particle_info(void *data, int UNUSED(thread), bNode *UNUSED(node), bNodeExecData *UNUSED(execdata), bNodeStack **UNUSED(in), bNodeStack **out)
+static void node_shader_exec_particle_info(void *UNUSED(data), int UNUSED(thread), bNode *UNUSED(node), bNodeExecData *UNUSED(execdata), bNodeStack **UNUSED(in), bNodeStack **UNUSED(out))
 {
-	ShadeInput *shi = ((ShaderCallData *)data)->shi;
-
-	RE_instance_get_particle_info(shi->obi, out[0]->vec, out[1]->vec, out[2]->vec, out[3]->vec, out[4]->vec, out[5]->vec, out[6]->vec, out[7]->vec);
 }
 
-static int gpu_shader_particle_info(GPUMaterial *mat, bNode *UNUSED(node), bNodeExecData *UNUSED(execdata), GPUNodeStack *in, GPUNodeStack *out)
+static int gpu_shader_particle_info(GPUMaterial *mat, bNode *node, bNodeExecData *UNUSED(execdata), GPUNodeStack *in, GPUNodeStack *out)
 {
 
-	return GPU_stack_link(mat, "particle_info", in, out,
+	return GPU_stack_link(mat, node, "particle_info", in, out,
 	                      GPU_builtin(GPU_PARTICLE_SCALAR_PROPS),
 	                      GPU_builtin(GPU_PARTICLE_LOCATION),
 	                      GPU_builtin(GPU_PARTICLE_VELOCITY),
@@ -65,7 +54,6 @@ void register_node_type_sh_particle_info(void)
 	static bNodeType ntype;
 
 	sh_node_type_base(&ntype, SH_NODE_PARTICLE_INFO, "Particle Info", NODE_CLASS_INPUT, 0);
-	node_type_compatibility(&ntype, NODE_NEW_SHADING | NODE_OLD_SHADING);
 	node_type_socket_templates(&ntype, NULL, outputs);
 	node_type_exec(&ntype, NULL, NULL, node_shader_exec_particle_info);
 	node_type_gpu(&ntype, gpu_shader_particle_info);

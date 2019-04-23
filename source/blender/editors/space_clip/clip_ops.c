@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,10 @@
  *
  * The Original Code is Copyright (C) 2011 Blender Foundation.
  * All rights reserved.
- *
- *
- * Contributor(s): Blender Foundation,
- *                 Sergey Sharybin
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/space_clip/clip_ops.c
- *  \ingroup spclip
+/** \file
+ * \ingroup spclip
  */
 
 #include <errno.h>
@@ -56,11 +48,10 @@
 
 #include "BKE_context.h"
 #include "BKE_global.h"
-#include "BKE_depsgraph.h"
-#include "BKE_report.h"
 #include "BKE_library.h"
 #include "BKE_main.h"
 #include "BKE_movieclip.h"
+#include "BKE_report.h"
 #include "BKE_sound.h"
 #include "BKE_tracking.h"
 
@@ -82,6 +73,8 @@
 #include "UI_view2d.h"
 
 #include "PIL_time.h"
+
+#include "DEG_depsgraph_build.h"
 
 #include "clip_intern.h"	// own include
 
@@ -253,7 +246,7 @@ static int open_exec(bContext *C, wmOperator *op)
 
 	WM_event_add_notifier(C, NC_MOVIECLIP | NA_ADDED, clip);
 
-	DAG_relations_tag_update(bmain);
+	DEG_relations_tag_update(bmain);
 	MEM_freeN(op->customdata);
 
 	return OPERATOR_FINISHED;
@@ -321,6 +314,7 @@ static int reload_exec(bContext *C, wmOperator *UNUSED(op))
 	if (!clip)
 		return OPERATOR_CANCELLED;
 
+	WM_jobs_kill_type(CTX_wm_manager(C), NULL, WM_JOB_TYPE_CLIP_PREFETCH);
 	BKE_movieclip_reload(CTX_data_main(C), clip);
 
 	WM_event_add_notifier(C, NC_MOVIECLIP | NA_EDITED, clip);
@@ -471,7 +465,7 @@ static void view_pan_cancel(bContext *C, wmOperator *op)
 void CLIP_OT_view_pan(wmOperatorType *ot)
 {
 	/* identifiers */
-	ot->name = "View Pan";
+	ot->name = "Pan View";
 	ot->idname = "CLIP_OT_view_pan";
 	ot->description = "Pan the view";
 

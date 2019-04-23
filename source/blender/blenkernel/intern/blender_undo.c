@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,12 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/blenkernel/intern/blender_undo.c
- *  \ingroup bke
+/** \file
+ * \ingroup bke
  *
  * Blend file undo (known as 'Global Undo').
  * DNA level diffing for undo.
@@ -46,11 +42,10 @@
 #include "BLI_string.h"
 #include "BLI_utildefines.h"
 
+#include "BKE_appdir.h"
 #include "BKE_blender_undo.h"  /* own include */
 #include "BKE_blendfile.h"
-#include "BKE_appdir.h"
 #include "BKE_context.h"
-#include "BKE_depsgraph.h"
 #include "BKE_global.h"
 #include "BKE_main.h"
 
@@ -58,8 +53,9 @@
 #include "BLO_readfile.h"
 #include "BLO_writefile.h"
 
-/* -------------------------------------------------------------------- */
+#include "DEG_depsgraph.h"
 
+/* -------------------------------------------------------------------- */
 /** \name Global Undo
  * \{ */
 
@@ -92,8 +88,8 @@ bool BKE_memfile_undo_decode(MemFileUndoData *mfu, bContext *C)
 	G.fileflags = fileflags;
 
 	if (success) {
-		/* important not to update time here, else non keyed tranforms are lost */
-		DAG_on_visible_update(bmain, false);
+		/* important not to update time here, else non keyed transforms are lost */
+		DEG_on_visible_update(bmain, false);
 	}
 
 	return success;

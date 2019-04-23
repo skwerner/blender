@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,14 +15,10 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * Contributor(s): Blender Foundation
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/lattice/editlattice_select.c
- *  \ingroup edlattice
+/** \file
+ * \ingroup edlattice
  */
 
 #include <stdlib.h>
@@ -50,13 +44,18 @@
 #include "BKE_context.h"
 #include "BKE_lattice.h"
 #include "BKE_report.h"
+#include "BKE_layer.h"
 
+#include "ED_object.h"
 #include "ED_screen.h"
+#include "ED_select_utils.h"
 #include "ED_lattice.h"
 #include "ED_view3d.h"
 
 #include "WM_api.h"
 #include "WM_types.h"
+
+#include "DEG_depsgraph.h"
 
 #include "lattice_intern.h"
 
@@ -76,6 +75,29 @@ static void bpoint_select_set(BPoint *bp, bool select)
 	}
 }
 
+bool ED_lattice_deselect_all_multi_ex(struct Base **bases, const uint bases_len)
+{
+	bool changed_multi = false;
+	for (uint base_index = 0; base_index < bases_len; base_index++) {
+		Base *base_iter = bases[base_index];
+		Object *ob_iter = base_iter->object;
+		changed_multi |= ED_lattice_flags_set(ob_iter, 0);
+		DEG_id_tag_update(ob_iter->data, ID_RECALC_SELECT);
+	}
+	return changed_multi;
+}
+
+bool ED_lattice_deselect_all_multi(struct bContext *C)
+{
+	ViewContext vc;
+	ED_view3d_viewcontext_init(C, &vc);
+	uint bases_len = 0;
+	Base **bases = BKE_view_layer_array_from_bases_in_edit_mode_unique_data(vc.view_layer, vc.v3d, &bases_len);
+	bool changed_multi = ED_lattice_deselect_all_multi_ex(bases, bases_len);
+	MEM_freeN(bases);
+	return changed_multi;
+}
+
 /** \} */
 
 /* -------------------------------------------------------------------- */
@@ -84,36 +106,44 @@ static void bpoint_select_set(BPoint *bp, bool select)
 
 static int lattice_select_random_exec(bContext *C, wmOperator *op)
 {
-	Object *obedit = CTX_data_edit_object(C);
-	Lattice *lt = ((Lattice *)obedit->data)->editlatt->latt;
-
 	const float randfac = RNA_float_get(op->ptr, "percent") / 100.0f;
 	const int seed = WM_operator_properties_select_random_seed_increment_get(op);
 	const bool select = (RNA_enum_get(op->ptr, "action") == SEL_SELECT);
 
-	RNG *rng = BLI_rng_new_srandom(seed);
+	ViewLayer *view_layer = CTX_data_view_layer(C);
+	uint objects_len = 0;
+	Object **objects = BKE_view_layer_array_from_objects_in_edit_mode_unique_data(view_layer, CTX_wm_view3d(C), &objects_len);
+	for (uint ob_index = 0; ob_index < objects_len; ob_index++) {
+		Object *obedit = objects[ob_index];
+		Lattice *lt = ((Lattice *)obedit->data)->editlatt->latt;
 
-	int tot;
-	BPoint *bp;
+		RNG *rng = BLI_rng_new_srandom(seed);
 
-	tot = lt->pntsu * lt->pntsv * lt->pntsw;
-	bp = lt->def;
-	while (tot--) {
-		if (!bp->hide) {
-			if (BLI_rng_get_float(rng) < randfac) {
-				bpoint_select_set(bp, select);
+		int tot;
+		BPoint *bp;
+
+		tot = lt->pntsu * lt->pntsv * lt->pntsw;
+		bp = lt->def;
+		while (tot--) {
+			if (!bp->hide) {
+				if (BLI_rng_get_float(rng) < randfac) {
+					bpoint_select_set(bp, select);
+				}
 			}
+			bp++;
 		}
-		bp++;
+
+		if (select == false) {
+			lt->actbp = LT_ACTBP_NONE;
+		}
+
+		BLI_rng_free(rng);
+
+		DEG_id_tag_update(obedit->data, ID_RECALC_SELECT);
+		WM_event_add_notifier(C, NC_GEOM | ND_SELECT, obedit->data);
+
 	}
-
-	if (select == false) {
-		lt->actbp = LT_ACTBP_NONE;
-	}
-
-	BLI_rng_free(rng);
-
-	WM_event_add_notifier(C, NC_GEOM | ND_SELECT, obedit->data);
+	MEM_freeN(objects);
 
 	return OPERATOR_FINISHED;
 }
@@ -183,18 +213,28 @@ static void ed_lattice_select_mirrored(Lattice *lt, const int axis, const bool e
 
 static int lattice_select_mirror_exec(bContext *C, wmOperator *op)
 {
-	Object *obedit = CTX_data_edit_object(C);
-	Lattice *lt = ((Lattice *)obedit->data)->editlatt->latt;
 	const int axis_flag = RNA_enum_get(op->ptr, "axis");
 	const bool extend = RNA_boolean_get(op->ptr, "extend");
 
-	for (int axis = 0; axis < 3; axis++) {
-		if ((1 << axis) & axis_flag) {
-			ed_lattice_select_mirrored(lt, axis, extend);
-		}
-	}
+	ViewLayer *view_layer = CTX_data_view_layer(C);
+	uint objects_len = 0;
+	Object **objects = BKE_view_layer_array_from_objects_in_edit_mode_unique_data(view_layer, CTX_wm_view3d(C), &objects_len);
 
-	WM_event_add_notifier(C, NC_GEOM | ND_SELECT, obedit->data);
+	for (uint ob_index = 0; ob_index < objects_len; ob_index++) {
+		Object *obedit = objects[ob_index];
+		Lattice *lt = ((Lattice *)obedit->data)->editlatt->latt;
+
+		for (int axis = 0; axis < 3; axis++) {
+			if ((1 << axis) & axis_flag) {
+				ed_lattice_select_mirrored(lt, axis, extend);
+			}
+		}
+
+		/* TODO, only notify changes */
+		DEG_id_tag_update(obedit->data, ID_RECALC_SELECT);
+		WM_event_add_notifier(C, NC_GEOM | ND_SELECT, obedit->data);
+	}
+	MEM_freeN(objects);
 
 	return OPERATOR_FINISHED;
 }
@@ -244,42 +284,53 @@ static bool lattice_test_bitmap_uvw(Lattice *lt, BLI_bitmap *selpoints, int u, i
 
 static int lattice_select_more_less(bContext *C, const bool select)
 {
-	Object *obedit = CTX_data_edit_object(C);
-	Lattice *lt = ((Lattice *)obedit->data)->editlatt->latt;
-	BPoint *bp;
-	const int tot = lt->pntsu * lt->pntsv * lt->pntsw;
-	int u, v, w;
-	BLI_bitmap *selpoints;
+	ViewLayer *view_layer = CTX_data_view_layer(C);
+	uint objects_len;
+	bool changed = false;
 
-	lt->actbp = LT_ACTBP_NONE;
+	Object **objects = BKE_view_layer_array_from_objects_in_edit_mode_unique_data(view_layer, CTX_wm_view3d(C), &objects_len);
+	for (uint ob_index = 0; ob_index < objects_len; ob_index++) {
+		Object *obedit = objects[ob_index];
+		Lattice *lt = ((Lattice *)obedit->data)->editlatt->latt;
+		BPoint *bp;
+		const int tot = lt->pntsu * lt->pntsv * lt->pntsw;
+		int u, v, w;
+		BLI_bitmap *selpoints;
 
-	selpoints = BLI_BITMAP_NEW(tot, __func__);
-	BKE_lattice_bitmap_from_flag(lt, selpoints, SELECT, false, false);
+		lt->actbp = LT_ACTBP_NONE;
 
-	bp = lt->def;
-	for (w = 0; w < lt->pntsw; w++) {
-		for (v = 0; v < lt->pntsv; v++) {
-			for (u = 0; u < lt->pntsu; u++) {
-				if ((bp->hide == 0) && (((bp->f1 & SELECT) == 0) == select)) {
-					if (lattice_test_bitmap_uvw(lt, selpoints, u + 1, v, w, select) ||
-					    lattice_test_bitmap_uvw(lt, selpoints, u - 1, v, w, select) ||
-					    lattice_test_bitmap_uvw(lt, selpoints, u, v + 1, w, select) ||
-					    lattice_test_bitmap_uvw(lt, selpoints, u, v - 1, w, select) ||
-					    lattice_test_bitmap_uvw(lt, selpoints, u, v, w + 1, select) ||
-					    lattice_test_bitmap_uvw(lt, selpoints, u, v, w - 1, select))
-					{
-						SET_FLAG_FROM_TEST(bp->f1, select, SELECT);
+		selpoints = BLI_BITMAP_NEW(tot, __func__);
+		BKE_lattice_bitmap_from_flag(lt, selpoints, SELECT, false, false);
+
+		bp = lt->def;
+		for (w = 0; w < lt->pntsw; w++) {
+			for (v = 0; v < lt->pntsv; v++) {
+				for (u = 0; u < lt->pntsu; u++) {
+					if ((bp->hide == 0) && (((bp->f1 & SELECT) == 0) == select)) {
+						if (lattice_test_bitmap_uvw(lt, selpoints, u + 1, v, w, select) ||
+						    lattice_test_bitmap_uvw(lt, selpoints, u - 1, v, w, select) ||
+						    lattice_test_bitmap_uvw(lt, selpoints, u, v + 1, w, select) ||
+						    lattice_test_bitmap_uvw(lt, selpoints, u, v - 1, w, select) ||
+						    lattice_test_bitmap_uvw(lt, selpoints, u, v, w + 1, select) ||
+						    lattice_test_bitmap_uvw(lt, selpoints, u, v, w - 1, select))
+						{
+							SET_FLAG_FROM_TEST(bp->f1, select, SELECT);
+						}
 					}
+					bp++;
 				}
-				bp++;
 			}
 		}
+
+		MEM_freeN(selpoints);
+
+		changed = true;
+		DEG_id_tag_update(obedit->data, ID_RECALC_SELECT);
+		WM_event_add_notifier(C, NC_GEOM | ND_SELECT, obedit->data);
 	}
+	MEM_freeN(objects);
 
-	MEM_freeN(selpoints);
-
-	WM_event_add_notifier(C, NC_GEOM | ND_SELECT, obedit->data);
-	return OPERATOR_FINISHED;
+	return changed ? OPERATOR_FINISHED : OPERATOR_CANCELLED;
 }
 
 static int lattice_select_more_exec(bContext *C, wmOperator *UNUSED(op))
@@ -328,74 +379,96 @@ void LATTICE_OT_select_less(wmOperatorType *ot)
 /** \name Select All Operator
  * \{ */
 
-void ED_lattice_flags_set(Object *obedit, int flag)
+bool ED_lattice_flags_set(Object *obedit, int flag)
 {
 	Lattice *lt = obedit->data;
 	BPoint *bp;
 	int a;
+	bool changed = false;
 
 	bp = lt->editlatt->latt->def;
 
 	a = lt->editlatt->latt->pntsu * lt->editlatt->latt->pntsv * lt->editlatt->latt->pntsw;
-	lt->editlatt->latt->actbp = LT_ACTBP_NONE;
+
+	if (lt->editlatt->latt->actbp != LT_ACTBP_NONE) {
+		lt->editlatt->latt->actbp = LT_ACTBP_NONE;
+		changed = true;
+	}
 
 	while (a--) {
 		if (bp->hide == 0) {
-			bp->f1 = flag;
+			if (bp->f1 != flag) {
+				bp->f1 = flag;
+				changed = true;
+			}
 		}
 		bp++;
 	}
+	return changed;
 }
 
 static int lattice_select_all_exec(bContext *C, wmOperator *op)
 {
-	Object *obedit = CTX_data_edit_object(C);
-	Lattice *lt = obedit->data;
-	BPoint *bp;
-	int a;
+	ViewLayer *view_layer = CTX_data_view_layer(C);
 	int action = RNA_enum_get(op->ptr, "action");
+
+	uint objects_len = 0;
+	Object **objects = BKE_view_layer_array_from_objects_in_edit_mode_unique_data(view_layer, CTX_wm_view3d(C), &objects_len);
 
 	if (action == SEL_TOGGLE) {
 		action = SEL_SELECT;
-
-		bp = lt->editlatt->latt->def;
-		a = lt->editlatt->latt->pntsu * lt->editlatt->latt->pntsv * lt->editlatt->latt->pntsw;
-
-		while (a--) {
-			if (bp->hide == 0) {
-				if (bp->f1 & SELECT) {
-					action = SEL_DESELECT;
-					break;
-				}
+		for (uint ob_index = 0; ob_index < objects_len; ob_index++) {
+			Object *obedit = objects[ob_index];
+			Lattice *lt = obedit->data;
+			if (BKE_lattice_is_any_selected(lt->editlatt->latt)) {
+				action = SEL_DESELECT;
+				break;
 			}
-			bp++;
 		}
 	}
 
-	switch (action) {
-		case SEL_SELECT:
-			ED_lattice_flags_set(obedit, 1);
-			break;
-		case SEL_DESELECT:
-			ED_lattice_flags_set(obedit, 0);
-			break;
-		case SEL_INVERT:
-			bp = lt->editlatt->latt->def;
-			a = lt->editlatt->latt->pntsu * lt->editlatt->latt->pntsv * lt->editlatt->latt->pntsw;
-			lt->editlatt->latt->actbp = LT_ACTBP_NONE;
+	bool changed_multi = false;
+	for (uint ob_index = 0; ob_index < objects_len; ob_index++) {
+		Object *obedit = objects[ob_index];
+		Lattice *lt;
+		BPoint *bp;
+		int a;
+		bool changed = false;
 
-			while (a--) {
-				if (bp->hide == 0) {
-					bp->f1 ^= SELECT;
+		switch (action) {
+			case SEL_SELECT:
+				changed = ED_lattice_flags_set(obedit, 1);
+				break;
+			case SEL_DESELECT:
+				changed = ED_lattice_flags_set(obedit, 0);
+				break;
+			case SEL_INVERT:
+				lt = obedit->data;
+				bp = lt->editlatt->latt->def;
+				a = lt->editlatt->latt->pntsu * lt->editlatt->latt->pntsv * lt->editlatt->latt->pntsw;
+				lt->editlatt->latt->actbp = LT_ACTBP_NONE;
+
+				while (a--) {
+					if (bp->hide == 0) {
+						bp->f1 ^= SELECT;
+						changed = true;
+					}
+					bp++;
 				}
-				bp++;
-			}
-			break;
+				break;
+		}
+		if (changed) {
+			changed_multi = true;
+			DEG_id_tag_update(obedit->data, ID_RECALC_SELECT);
+			WM_event_add_notifier(C, NC_GEOM | ND_SELECT, obedit->data);
+		}
 	}
+	MEM_freeN(objects);
 
-	WM_event_add_notifier(C, NC_GEOM | ND_SELECT, obedit->data);
-
-	return OPERATOR_FINISHED;
+	if (changed_multi) {
+		return OPERATOR_FINISHED;
+	}
+	return OPERATOR_CANCELLED;
 }
 
 void LATTICE_OT_select_all(wmOperatorType *ot)
@@ -423,34 +496,51 @@ void LATTICE_OT_select_all(wmOperatorType *ot)
 
 static int lattice_select_ungrouped_exec(bContext *C, wmOperator *op)
 {
-	Object *obedit = CTX_data_edit_object(C);
-	Lattice *lt = ((Lattice *)obedit->data)->editlatt->latt;
-	MDeformVert *dv;
-	BPoint *bp;
-	int a, tot;
+	ViewLayer *view_layer = CTX_data_view_layer(C);
+	uint objects_len;
+	const bool is_extend = RNA_boolean_get(op->ptr, "extend");
+	bool changed = false;
 
-	if (BLI_listbase_is_empty(&obedit->defbase) || lt->dvert == NULL) {
-		BKE_report(op->reports, RPT_ERROR, "No weights/vertex groups on object");
-		return OPERATOR_CANCELLED;
-	}
+	Object **objects = BKE_view_layer_array_from_objects_in_edit_mode_unique_data(view_layer, CTX_wm_view3d(C), &objects_len);
+	for (uint ob_index = 0; ob_index < objects_len; ob_index++) {
+		Object *obedit = objects[ob_index];
+		Lattice *lt = ((Lattice *)obedit->data)->editlatt->latt;
+		MDeformVert *dv;
+		BPoint *bp;
+		int a, tot;
 
-	if (!RNA_boolean_get(op->ptr, "extend")) {
-		ED_lattice_flags_set(obedit, 0);
-	}
+		if (BLI_listbase_is_empty(&obedit->defbase) || lt->dvert == NULL) {
+			continue;
+		}
 
-	dv = lt->dvert;
-	tot = lt->pntsu * lt->pntsv * lt->pntsw;
+		if (!is_extend) {
+			ED_lattice_flags_set(obedit, 0);
+		}
 
-	for (a = 0, bp = lt->def; a < tot; a++, bp++, dv++) {
-		if (bp->hide == 0) {
-			if (dv->dw == NULL) {
-				bp->f1 |= SELECT;
+		dv = lt->dvert;
+		tot = lt->pntsu * lt->pntsv * lt->pntsw;
+
+		for (a = 0, bp = lt->def; a < tot; a++, bp++, dv++) {
+			if (bp->hide == 0) {
+				if (dv->dw == NULL) {
+					bp->f1 |= SELECT;
+				}
 			}
 		}
+
+		changed = true;
+		DEG_id_tag_update(obedit->data, ID_RECALC_SELECT);
+		WM_event_add_notifier(C, NC_GEOM | ND_SELECT, obedit->data);
 	}
+	MEM_freeN(objects);
 
-	WM_event_add_notifier(C, NC_GEOM | ND_SELECT, obedit->data);
-
+	if (!changed) {
+		BKE_report(op->reports,
+		           RPT_ERROR,
+		           objects_len > 1 ? "No weights/vertex groups on objects" :
+		                             "No weights/vertex groups on object");
+		return OPERATOR_CANCELLED;
+	}
 	return OPERATOR_FINISHED;
 }
 
@@ -484,7 +574,7 @@ void LATTICE_OT_select_ungrouped(wmOperatorType *ot)
 
 static void findnearestLattvert__doClosest(void *userData, BPoint *bp, const float screen_co[2])
 {
-	struct { BPoint *bp; float dist; int select; float mval_fl[2]; } *data = userData;
+	struct { BPoint *bp; float dist; int select; float mval_fl[2]; bool is_changed; } *data = userData;
 	float dist_test = len_manhattan_v2v2(data->mval_fl, screen_co);
 
 	if ((bp->f1 & SELECT) && data->select)
@@ -492,26 +582,38 @@ static void findnearestLattvert__doClosest(void *userData, BPoint *bp, const flo
 
 	if (dist_test < data->dist) {
 		data->dist = dist_test;
-
 		data->bp = bp;
+		data->is_changed = true;
 	}
 }
 
-static BPoint *findnearestLattvert(ViewContext *vc, const int mval[2], int sel)
+static BPoint *findnearestLattvert(ViewContext *vc, int sel, Base **r_base)
 {
 	/* (sel == 1): selected gets a disadvantage */
 	/* in nurb and bezt or bp the nearest is written */
 	/* return 0 1 2: handlepunt */
-	struct { BPoint *bp; float dist; int select; float mval_fl[2]; } data = {NULL};
+	struct { BPoint *bp; float dist; int select; float mval_fl[2]; bool is_changed; } data = {NULL};
 
 	data.dist = ED_view3d_select_dist_px();
 	data.select = sel;
-	data.mval_fl[0] = mval[0];
-	data.mval_fl[1] = mval[1];
+	data.mval_fl[0] = vc->mval[0];
+	data.mval_fl[1] = vc->mval[1];
 
-	ED_view3d_init_mats_rv3d(vc->obedit, vc->rv3d);
-	lattice_foreachScreenVert(vc, findnearestLattvert__doClosest, &data, V3D_PROJ_TEST_CLIP_DEFAULT);
+	uint bases_len;
+	Base **bases = BKE_view_layer_array_from_bases_in_edit_mode_unique_data(vc->view_layer, vc->v3d, &bases_len);
+	for (uint base_index = 0; base_index < bases_len; base_index++) {
+		Base *base = bases[base_index];
+		data.is_changed = false;
 
+		ED_view3d_viewcontext_init_object(vc, base->object);
+		ED_view3d_init_mats_rv3d(base->object, vc->rv3d);
+		lattice_foreachScreenVert(vc, findnearestLattvert__doClosest, &data, V3D_PROJ_TEST_CLIP_DEFAULT);
+
+		if (data.is_changed) {
+			*r_base = base;
+		}
+	}
+	MEM_freeN(bases);
 	return data.bp;
 }
 
@@ -519,13 +621,30 @@ bool ED_lattice_select_pick(bContext *C, const int mval[2], bool extend, bool de
 {
 	ViewContext vc;
 	BPoint *bp = NULL;
-	Lattice *lt;
+	Base *basact = NULL;
 
 	ED_view3d_viewcontext_init(C, &vc);
-	lt = ((Lattice *)vc.obedit->data)->editlatt->latt;
-	bp = findnearestLattvert(&vc, mval, true);
+	vc.mval[0] = mval[0];
+	vc.mval[1] = mval[1];
 
+	bp = findnearestLattvert(&vc, true, &basact);
 	if (bp) {
+		ED_view3d_viewcontext_init_object(&vc, basact->object);
+		Lattice *lt = ((Lattice *)vc.obedit->data)->editlatt->latt;
+
+		if (!extend && !deselect && !toggle) {
+			uint objects_len = 0;
+			Object **objects = BKE_view_layer_array_from_objects_in_edit_mode_unique_data(vc.view_layer, vc.v3d, &objects_len);
+			for (uint ob_index = 0; ob_index < objects_len; ob_index++) {
+				Object *ob = objects[ob_index];
+				if (ED_lattice_flags_set(ob, 0)) {
+					DEG_id_tag_update(ob->data, ID_RECALC_SELECT);
+					WM_event_add_notifier(C, NC_GEOM | ND_SELECT, ob->data);
+				}
+			}
+			MEM_freeN(objects);
+		}
+
 		if (extend) {
 			bp->f1 |= SELECT;
 		}
@@ -547,6 +666,11 @@ bool ED_lattice_select_pick(bContext *C, const int mval[2], bool extend, bool de
 			lt->actbp = LT_ACTBP_NONE;
 		}
 
+		if (vc.view_layer->basact != basact) {
+			ED_object_base_activate(C, basact);
+		}
+
+		DEG_id_tag_update(vc.obedit->data, ID_RECALC_SELECT);
 		WM_event_add_notifier(C, NC_GEOM | ND_SELECT, vc.obedit->data);
 
 		return true;

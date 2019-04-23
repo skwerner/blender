@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,10 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): 2008,2009 Joshua Leung (IPO System cleanup, Animation System Recode)
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/blenkernel/intern/ipo.c
- *  \ingroup bke
+/** \file
+ * \ingroup bke
  */
 
 
@@ -46,11 +38,10 @@
 /* since we have versioning code here */
 #define DNA_DEPRECATED_ALLOW
 
-#include "DNA_actuator_types.h"
 #include "DNA_anim_types.h"
 #include "DNA_constraint_types.h"
 #include "DNA_camera_types.h"
-#include "DNA_lamp_types.h"
+#include "DNA_light_types.h"
 #include "DNA_ipo_types.h"
 #include "DNA_key_types.h"
 #include "DNA_material_types.h"
@@ -78,11 +69,15 @@
 #include "BKE_nla.h"
 #include "BKE_sequencer.h"
 
+#include "CLG_log.h"
+
 #include "MEM_guardedalloc.h"
 
 #ifdef WIN32
 #  include "BLI_math_base.h"  /* M_PI */
 #endif
+
+static CLG_LogRef LOG = {"bke.ipo"};
 
 /* *************************************************** */
 /* Old-Data Freeing Tools */
@@ -143,18 +138,7 @@ static AdrBit2Path ob_layer_bits[] = {
 	{(1 << 16), "layers", 16},
 	{(1 << 17), "layers", 17},
 	{(1 << 18), "layers", 18},
-	{(1 << 19), "layers", 19}
-};
-
-/* Material mode */
-static AdrBit2Path ma_mode_bits[] = {
-//	{MA_TRACEBLE, "traceable", 0},
-//  {MA_SHADOW, "shadow", 0},
-//	{MA_SHLESS, "shadeless", 0},
-//  ...
-	{MA_RAYTRANSP, "transparency", 0},
-	{MA_RAYMIRROR, "raytrace_mirror.enabled", 0},
-//	{MA_HALO, "type", MA_TYPE_HALO}
+	{(1 << 19), "layers", 19},
 };
 
 /* ----------------- */
@@ -172,9 +156,6 @@ static AdrBit2Path *adrcode_bitmaps_to_paths(int blocktype, int adrcode, int *to
 	/* Object layers */
 	if ((blocktype == ID_OB) && (adrcode == OB_LAY)) {
 		RET_ABP(ob_layer_bits);
-	}
-	else if ((blocktype == ID_MA) && (adrcode == MA_MODE)) {
-		RET_ABP(ma_mode_bits);
 	}
 	// XXX TODO: add other types...
 
@@ -307,7 +288,7 @@ static const char *pchan_adrcodes_to_paths(int adrcode, int *array_index)
 	}
 
 	/* for debugging only */
-	printf("ERROR: unmatched PoseChannel setting (code %d)\n", adrcode);
+	CLOG_ERROR(&LOG, "unmatched PoseChannel setting (code %d)", adrcode);
 	return NULL;
 }
 
@@ -620,7 +601,7 @@ static const char *camera_adrcodes_to_paths(int adrcode, int *array_index)
 		case CAM_YF_APERT:
 			poin = &(ca->YF_aperture); break;
 		case CAM_YF_FDIST:
-			poin = &(ca->YF_dofdist); break;
+			poin = &(ca->dof_distance); break;
 #endif // XXX these are not defined in RNA
 
 		case CAM_SHIFT_X:
@@ -629,12 +610,12 @@ static const char *camera_adrcodes_to_paths(int adrcode, int *array_index)
 			return "shift_y";
 	}
 
-	/* unrecognised adrcode, or not-yet-handled ones! */
+	/* unrecognized adrcode, or not-yet-handled ones! */
 	return NULL;
 }
 
-/* Lamp Types */
-static const char *lamp_adrcodes_to_paths(int adrcode, int *array_index)
+/* Light Types */
+static const char *light_adrcodes_to_paths(int adrcode, int *array_index)
 {
 	/* set array index like this in-case nothing sets it correctly  */
 	*array_index = 0;
@@ -671,7 +652,7 @@ static const char *lamp_adrcodes_to_paths(int adrcode, int *array_index)
 			return mtex_adrcodes_to_paths(adrcode, array_index);
 	}
 
-	/* unrecognised adrcode, or not-yet-handled ones! */
+	/* unrecognized adrcode, or not-yet-handled ones! */
 	return NULL;
 }
 
@@ -696,7 +677,7 @@ static const char *sound_adrcodes_to_paths(int adrcode, int *array_index)
 			return "attenuation";
 	}
 
-	/* unrecognised adrcode, or not-yet-handled ones! */
+	/* unrecognized adrcode, or not-yet-handled ones! */
 	return NULL;
 }
 
@@ -861,8 +842,8 @@ static char *get_rna_access(ID *id, int blocktype, int adrcode, char actname[], 
 			propname = camera_adrcodes_to_paths(adrcode, &dummy_index);
 			break;
 
-		case ID_LA: /* lamp */
-			propname = lamp_adrcodes_to_paths(adrcode, &dummy_index);
+		case ID_LA: /* light */
+			propname = light_adrcodes_to_paths(adrcode, &dummy_index);
 			break;
 
 		case ID_SO: /* sound */
@@ -908,7 +889,7 @@ static char *get_rna_access(ID *id, int blocktype, int adrcode, char actname[], 
 
 		/* TODO... add other blocktypes... */
 		default:
-			printf("IPO2ANIMATO WARNING: No path for blocktype %d, adrcode %d yet\n", blocktype, adrcode);
+			CLOG_WARN(&LOG, "No path for blocktype %d, adrcode %d yet", blocktype, adrcode);
 			break;
 	}
 
@@ -1534,7 +1515,7 @@ static void ipo_to_animdata(Main *bmain, ID *id, Ipo *ipo, char actname[], char 
 	if (ELEM(NULL, id, ipo))
 		return;
 	if (adt == NULL) {
-		printf("ERROR ipo_to_animdata(): adt invalid\n");
+		CLOG_ERROR(&LOG, "adt invalid");
 		return;
 	}
 
@@ -1701,13 +1682,13 @@ void do_versions_ipos_to_animato(Main *bmain)
 	ID *id;
 
 	if (bmain == NULL) {
-		printf("Argh! Main is NULL in do_versions_ipos_to_animato()\n");
+		CLOG_ERROR(&LOG, "Argh! Main is NULL");
 		return;
 	}
 
 	/* only convert if version is right */
 	if (bmain->versionfile >= 250) {
-		printf("WARNING: Animation data too new to convert (Version %d)\n", bmain->versionfile);
+		CLOG_WARN(&LOG, "Animation data too new to convert (Version %d)", bmain->versionfile);
 		return;
 	}
 	else if (G.debug & G_DEBUG)
@@ -1716,7 +1697,7 @@ void do_versions_ipos_to_animato(Main *bmain)
 	/* ----------- Animation Attached to Data -------------- */
 
 	/* objects */
-	for (id = bmain->object.first; id; id = id->next) {
+	for (id = bmain->objects.first; id; id = id->next) {
 		Object *ob = (Object *)id;
 		bPoseChannel *pchan;
 		bConstraint *con;
@@ -1767,23 +1748,6 @@ void do_versions_ipos_to_animato(Main *bmain)
 				ipo_to_animdata(bmain, id, ob->ipo, NULL, NULL, NULL);
 				/* No need to id_us_min ipo ID here, ipo_to_animdata already does it. */
 				ob->ipo = NULL;
-
-				{
-					/* If we have any empty action actuators, assume they were
-					 * converted IPO Actuators using the object IPO */
-					bActuator *act;
-					bActionActuator *aa;
-
-					for (act = ob->actuators.first; act; act = act->next) {
-						/* Any actuators set to ACT_IPO at this point are actually Action Actuators that
-						 * need this converted IPO to finish converting the actuator. */
-						if (act->type == ACT_IPO) {
-							aa = (bActionActuator *)act->data;
-							aa->act = ob->adt->action;
-							act->type = ACT_ACTION;
-						}
-					}
-				}
 			}
 		}
 
@@ -1860,7 +1824,7 @@ void do_versions_ipos_to_animato(Main *bmain)
 	}
 
 	/* shapekeys */
-	for (id = bmain->key.first; id; id = id->next) {
+	for (id = bmain->shapekeys.first; id; id = id->next) {
 		Key *key = (Key *)id;
 
 		if (G.debug & G_DEBUG) printf("\tconverting key %s\n", id->name + 2);
@@ -1885,7 +1849,7 @@ void do_versions_ipos_to_animato(Main *bmain)
 	}
 
 	/* materials */
-	for (id = bmain->mat.first; id; id = id->next) {
+	for (id = bmain->materials.first; id; id = id->next) {
 		Material *ma = (Material *)id;
 
 		if (G.debug & G_DEBUG) printf("\tconverting material %s\n", id->name + 2);
@@ -1907,7 +1871,7 @@ void do_versions_ipos_to_animato(Main *bmain)
 	}
 
 	/* worlds */
-	for (id = bmain->world.first; id; id = id->next) {
+	for (id = bmain->worlds.first; id; id = id->next) {
 		World *wo = (World *)id;
 
 		if (G.debug & G_DEBUG) printf("\tconverting world %s\n", id->name + 2);
@@ -1929,7 +1893,7 @@ void do_versions_ipos_to_animato(Main *bmain)
 	}
 
 	/* sequence strips */
-	for (id = bmain->scene.first; id; id = id->next) {
+	for (id = bmain->scenes.first; id; id = id->next) {
 		Scene *scene = (Scene *)id;
 		Editing *ed = scene->ed;
 		if (ed && ed->seqbasep) {
@@ -1976,14 +1940,13 @@ void do_versions_ipos_to_animato(Main *bmain)
 
 				id_us_min(&seq->ipo->id);
 				seq->ipo = NULL;
-			}
-			SEQ_END
+			} SEQ_END;
 		}
 	}
 
 
 	/* textures */
-	for (id = bmain->tex.first; id; id = id->next) {
+	for (id = bmain->textures.first; id; id = id->next) {
 		Tex *te = (Tex *)id;
 
 		if (G.debug & G_DEBUG) printf("\tconverting texture %s\n", id->name + 2);
@@ -2005,7 +1968,7 @@ void do_versions_ipos_to_animato(Main *bmain)
 	}
 
 	/* cameras */
-	for (id = bmain->camera.first; id; id = id->next) {
+	for (id = bmain->cameras.first; id; id = id->next) {
 		Camera *ca = (Camera *)id;
 
 		if (G.debug & G_DEBUG) printf("\tconverting camera %s\n", id->name + 2);
@@ -2026,18 +1989,18 @@ void do_versions_ipos_to_animato(Main *bmain)
 		}
 	}
 
-	/* lamps */
-	for (id = bmain->lamp.first; id; id = id->next) {
-		Lamp *la = (Lamp *)id;
+	/* lights */
+	for (id = bmain->lights.first; id; id = id->next) {
+		Light *la = (Light *)id;
 
-		if (G.debug & G_DEBUG) printf("\tconverting lamp %s\n", id->name + 2);
+		if (G.debug & G_DEBUG) printf("\tconverting light %s\n", id->name + 2);
 
 		/* we're only interested in the IPO */
 		if (la->ipo) {
 			/* Add AnimData block */
 			AnimData *adt = BKE_animdata_add_id(id);
 
-			/* Convert Lamp data... */
+			/* Convert Light data... */
 			ipo_to_animdata(bmain, id, la->ipo, NULL, NULL, NULL);
 
 			if (adt->action)
@@ -2049,7 +2012,7 @@ void do_versions_ipos_to_animato(Main *bmain)
 	}
 
 	/* curves */
-	for (id = bmain->curve.first; id; id = id->next) {
+	for (id = bmain->curves.first; id; id = id->next) {
 		Curve *cu = (Curve *)id;
 
 		if (G.debug & G_DEBUG) printf("\tconverting curve %s\n", id->name + 2);
@@ -2082,7 +2045,7 @@ void do_versions_ipos_to_animato(Main *bmain)
 	 */
 
 	/* actions */
-	for (id = bmain->action.first; id; id = id->next) {
+	for (id = bmain->actions.first; id; id = id->next) {
 		bAction *act = (bAction *)id;
 
 		if (G.debug & G_DEBUG) printf("\tconverting action %s\n", id->name + 2);

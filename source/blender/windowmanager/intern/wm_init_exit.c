@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,15 +15,10 @@
  *
  * The Original Code is Copyright (C) 2007 Blender Foundation.
  * All rights reserved.
- *
- *
- * Contributor(s): Blender Foundation
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/windowmanager/intern/wm_init_exit.c
- *  \ingroup wm
+/** \file
+ * \ingroup wm
  *
  * Manage initializing resources and correctly shutting down.
  */
@@ -35,6 +28,7 @@
 #include <string.h>
 
 #ifdef _WIN32
+#  define WIN32_LEAN_AND_MEAN
 #  include <windows.h>
 #endif
 
@@ -53,6 +47,7 @@
 #include "BLI_string.h"
 #include "BLI_threads.h"
 #include "BLI_utildefines.h"
+#include "BLI_timer.h"
 
 #include "BLO_writefile.h"
 #include "BLO_undofile.h"
@@ -60,21 +55,21 @@
 #include "BKE_blender.h"
 #include "BKE_blender_undo.h"
 #include "BKE_context.h"
-#include "BKE_screen.h"
-#include "BKE_DerivedMesh.h"
+#include "BKE_font.h"
 #include "BKE_global.h"
 #include "BKE_icons.h"
-#include "BKE_library.h"
 #include "BKE_library_remap.h"
 #include "BKE_main.h"
 #include "BKE_mball_tessellate.h"
 #include "BKE_node.h"
 #include "BKE_report.h"
-#include "BKE_font.h"
+#include "BKE_screen.h"
+#include "BKE_keyconfig.h"
 
 #include "BKE_addon.h"
 #include "BKE_appdir.h"
 #include "BKE_sequencer.h" /* free seq clipboard */
+#include "BKE_studiolight.h"
 #include "BKE_material.h" /* clear_matcopybuf */
 #include "BKE_tracking.h" /* free tracking clipboard */
 #include "BKE_mask.h" /* free mask clipboard */
@@ -86,9 +81,6 @@
 #include "BPY_extern.h"
 #endif
 
-#ifdef WITH_GAMEENGINE
-#  include "BL_System.h"
-#endif
 #include "GHOST_Path-api.h"
 #include "GHOST_C-api.h"
 
@@ -96,6 +88,7 @@
 
 #include "WM_api.h"
 #include "WM_types.h"
+#include "WM_message.h"
 
 #include "wm_cursors.h"
 #include "wm_event_system.h"
@@ -116,16 +109,21 @@
 #include "ED_undo.h"
 
 #include "UI_interface.h"
+#include "UI_resources.h"
 #include "BLF_api.h"
 #include "BLT_lang.h"
 
-#include "GPU_buffers.h"
+#include "GPU_material.h"
 #include "GPU_draw.h"
+#include "GPU_immediate.h"
 #include "GPU_init_exit.h"
 
-#include "BKE_depsgraph.h"
 #include "BKE_sound.h"
 #include "COM_compositor.h"
+
+#include "DEG_depsgraph.h"
+
+#include "DRW_engine.h"
 
 #ifdef WITH_OPENSUBDIV
 #  include "BKE_subsurf.h"
@@ -135,6 +133,9 @@ CLG_LOGREF_DECLARE_GLOBAL(WM_LOG_OPERATORS, "wm.operator");
 CLG_LOGREF_DECLARE_GLOBAL(WM_LOG_HANDLERS, "wm.handler");
 CLG_LOGREF_DECLARE_GLOBAL(WM_LOG_EVENTS, "wm.event");
 CLG_LOGREF_DECLARE_GLOBAL(WM_LOG_KEYMAPS, "wm.keymap");
+CLG_LOGREF_DECLARE_GLOBAL(WM_LOG_TOOLS, "wm.tool");
+CLG_LOGREF_DECLARE_GLOBAL(WM_LOG_MSGBUS_PUB, "wm.msgbus.pub");
+CLG_LOGREF_DECLARE_GLOBAL(WM_LOG_MSGBUS_SUB, "wm.msgbus.sub");
 
 static void wm_init_reports(bContext *C)
 {
@@ -151,7 +152,47 @@ static void wm_free_reports(bContext *C)
 	BKE_reports_clear(reports);
 }
 
-bool wm_start_with_console = false; /* used in creator.c */
+static bool wm_start_with_console = false;
+
+void WM_init_state_start_with_console_set(bool value)
+{
+	wm_start_with_console = value;
+}
+
+/**
+ * Since we cannot know in advance if we will require the draw manager
+ * context when starting blender in background mode (specially true with
+ * scripts) we deferre the ghost initialization the most as possible
+ * so that it does not break anything that can run in headless mode (as in
+ * without display server attached).
+ */
+static bool opengl_is_init = false;
+
+void WM_init_opengl(Main *bmain)
+{
+	/* must be called only once */
+	BLI_assert(opengl_is_init == false);
+
+	if (G.background) {
+		/* Ghost is still not init elsewhere in background mode. */
+		wm_ghost_init(NULL);
+	}
+
+	/* Needs to be first to have an ogl context bound. */
+	DRW_opengl_context_create();
+
+	GPU_init();
+	GPU_set_mipmap(bmain, true);
+	GPU_set_linear_mipmap(true);
+	GPU_set_anisotropic(bmain, U.anisotropic_filter);
+
+	GPU_pass_cache_init();
+
+#ifdef WITH_OPENSUBDIV
+	BKE_subsurf_osd_init();
+#endif
+	opengl_is_init = true;
+}
 
 /* only called once, for startup */
 void WM_init(bContext *C, int argc, const char **argv)
@@ -161,44 +202,59 @@ void WM_init(bContext *C, int argc, const char **argv)
 		wm_ghost_init(C);   /* note: it assigns C to ghost! */
 		wm_init_cursor_data();
 	}
+
 	GHOST_CreateSystemPaths();
 
 	BKE_addon_pref_type_init();
+	BKE_keyconfig_pref_type_init();
 
 	wm_operatortype_init();
 	wm_operatortypes_register();
 
+	WM_paneltype_init();  /* Lookup table only. */
 	WM_menutype_init();
 	WM_uilisttype_init();
+	wm_gizmotype_init();
+	wm_gizmogrouptype_init();
 
 	ED_undosys_type_init();
 
 	BKE_library_callback_free_window_manager_set(wm_close_and_free);   /* library.c */
 	BKE_library_callback_free_notifier_reference_set(WM_main_remove_notifier_reference);   /* library.c */
+	BKE_region_callback_free_gizmomap_set(wm_gizmomap_remove); /* screen.c */
+	BKE_region_callback_refresh_tag_gizmomap_set(WM_gizmomap_tag_refresh);
 	BKE_library_callback_remap_editor_id_reference_set(WM_main_remap_editor_id_reference);   /* library.c */
-	BKE_blender_callback_test_break_set(wm_window_testbreak); /* blender.c */
 	BKE_spacedata_callback_id_remap_set(ED_spacedata_id_remap); /* screen.c */
-	DAG_editors_update_cb(ED_render_id_flush_update,
-	                      ED_render_scene_update,
-	                      ED_render_scene_update_pre); /* depsgraph.c */
+	DEG_editors_set_update_cb(ED_render_id_flush_update,
+	                          ED_render_scene_update);
 
 	ED_spacetypes_init();   /* editors/space_api/spacetype.c */
 
 	ED_file_init();         /* for fsmenu */
 	ED_node_init_butfuncs();
 
-	BLF_init(); /* Please update source/gamengine/GamePlayer/GPG_ghost.cpp if you change this */
+	BLF_init();
 
 	BLT_lang_init();
 	/* Must call first before doing any .blend file reading, since versionning code may create new IDs... See T57066. */
 	BLT_lang_set(NULL);
 
+	/* Init icons before reading .blend files for preview icons, which can
+	 * get triggered by the depsgraph. This is also done in background mode
+	 * for scripts that do background processing with preview icons. */
+	BKE_icons_init(BIFICONID_LAST);
+
 	/* reports cant be initialized before the wm,
 	 * but keep before file reading, since that may report errors */
 	wm_init_reports(C);
 
+	WM_msgbus_types_init();
+
 	/* get the default database, plus a wm */
-	wm_homefile_read(C, NULL, G.factory_startup, false, true, NULL, WM_init_state_app_template_get());
+	bool is_factory_startup = true;
+	wm_homefile_read(
+	        C, NULL, G.factory_startup, false, true, NULL, WM_init_state_app_template_get(),
+	        &is_factory_startup);
 
 	/* Call again to set from userpreferences... */
 	BLT_lang_set(NULL);
@@ -209,28 +265,12 @@ void WM_init(bContext *C, int argc, const char **argv)
 		/* sets 3D mouse deadzone */
 		WM_ndof_deadzone_set(U.ndof_deadzone);
 #endif
-
-		GPU_init();
-
-		GPU_set_mipmap(G_MAIN, !(U.gameflags & USER_DISABLE_MIPMAP));
-		GPU_set_linear_mipmap(true);
-		GPU_set_anisotropic(G_MAIN, U.anisotropic_filter);
-		GPU_set_gpu_mipmapping(G_MAIN, U.use_gpu_mipmap);
-
-#ifdef WITH_OPENSUBDIV
-		BKE_subsurf_osd_init();
-#endif
+		WM_init_opengl(G_MAIN);
 
 		UI_init();
 	}
-	else {
-		/* Note: Currently only inits icons, which we now want in background mode too
-		 * (scripts could use those in background processing...).
-		 * In case we do more later, we may need to pass a 'background' flag.
-		 * Called from 'UI_init' above */
-		BKE_icons_init(1);
-	}
 
+	BKE_studiolight_init();
 
 	ED_spacemacros_init();
 
@@ -252,13 +292,14 @@ void WM_init(bContext *C, int argc, const char **argv)
 	(void)argv; /* unused */
 #endif
 
-	if (!G.background && !wm_start_with_console)
+	if (!G.background && !wm_start_with_console) {
 		GHOST_toggleConsole(3);
+	}
 
 	clear_matcopybuf();
 	ED_render_clear_mtex_copybuf();
 
-	// glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+	// glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
 
 	wm_history_file_read();
 
@@ -277,12 +318,7 @@ void WM_init(bContext *C, int argc, const char **argv)
 	}
 #endif
 
-	/* load last session, uses regular file reading so it has to be in end (after init py etc) */
-	if (U.uiflag2 & USER_KEEP_SESSION) {
-		/* calling WM_recover_last_session(C, NULL) has been moved to creator.c */
-		/* that prevents loading both the kept session, and the file on the command line */
-	}
-	else {
+	{
 		Main *bmain = CTX_data_main(C);
 		/* note, logic here is from wm_file_read_post,
 		 * call functions that depend on Python being initialized. */
@@ -296,6 +332,9 @@ void WM_init(bContext *C, int argc, const char **argv)
 
 		BLI_callback_exec(bmain, NULL, BLI_CB_EVT_VERSION_UPDATE);
 		BLI_callback_exec(bmain, NULL, BLI_CB_EVT_LOAD_POST);
+		if (is_factory_startup) {
+			BLI_callback_exec(bmain, NULL, BLI_CB_EVT_LOAD_FACTORY_STARTUP_POST);
+		}
 
 		wm_file_read_report(C, bmain);
 
@@ -319,103 +358,14 @@ void WM_init_splash(bContext *C)
 	}
 }
 
-bool WM_init_game(bContext *C)
-{
-	wmWindowManager *wm = CTX_wm_manager(C);
-	wmWindow *win;
-
-	ScrArea *sa;
-	ARegion *ar = NULL;
-
-	Scene *scene = CTX_data_scene(C);
-
-	if (!scene) {
-		/* XXX, this should not be needed. */
-		Main *bmain = CTX_data_main(C);
-		scene = bmain->scene.first;
-	}
-
-	win = wm->windows.first;
-
-	/* first to get a valid window */
-	if (win)
-		CTX_wm_window_set(C, win);
-
-	sa = BKE_screen_find_big_area(CTX_wm_screen(C), SPACE_VIEW3D, 0);
-	ar = BKE_area_find_region_type(sa, RGN_TYPE_WINDOW);
-
-	/* if we have a valid 3D view */
-	if (sa && ar) {
-		ARegion *arhide;
-
-		CTX_wm_area_set(C, sa);
-		CTX_wm_region_set(C, ar);
-
-		/* disable quad view */
-		if (ar->alignment == RGN_ALIGN_QSPLIT)
-			WM_operator_name_call(C, "SCREEN_OT_region_quadview", WM_OP_EXEC_DEFAULT, NULL);
-
-		/* toolbox, properties panel and header are hidden */
-		for (arhide = sa->regionbase.first; arhide; arhide = arhide->next) {
-			if (arhide->regiontype != RGN_TYPE_WINDOW) {
-				if (!(arhide->flag & RGN_FLAG_HIDDEN)) {
-					ED_region_toggle_hidden(C, arhide);
-				}
-			}
-		}
-
-		/* full screen the area */
-		if (!sa->full) {
-			ED_screen_state_toggle(C, win, sa, SCREENMAXIMIZED);
-		}
-
-		/* Fullscreen */
-		if ((scene->gm.playerflag & GAME_PLAYER_FULLSCREEN)) {
-			WM_operator_name_call(C, "WM_OT_window_fullscreen_toggle", WM_OP_EXEC_DEFAULT, NULL);
-			wm_get_screensize(&ar->winrct.xmax, &ar->winrct.ymax);
-			ar->winx = ar->winrct.xmax + 1;
-			ar->winy = ar->winrct.ymax + 1;
-		}
-		else {
-			GHOST_RectangleHandle rect = GHOST_GetClientBounds(win->ghostwin);
-			ar->winrct.ymax = GHOST_GetHeightRectangle(rect);
-			ar->winrct.xmax = GHOST_GetWidthRectangle(rect);
-			ar->winx = ar->winrct.xmax + 1;
-			ar->winy = ar->winrct.ymax + 1;
-			GHOST_DisposeRectangle(rect);
-		}
-
-		WM_operator_name_call(C, "VIEW3D_OT_game_start", WM_OP_EXEC_DEFAULT, NULL);
-
-		BKE_sound_exit();
-
-		return true;
-	}
-	else {
-		ReportTimerInfo *rti;
-
-		BKE_report(&wm->reports, RPT_ERROR, "No valid 3D View found, game auto start is not possible");
-
-		/* After adding the report to the global list, reset the report timer. */
-		WM_event_remove_timer(wm, NULL, wm->reports.reporttimer);
-
-		/* Records time since last report was added */
-		wm->reports.reporttimer = WM_event_add_timer(wm, CTX_wm_window(C), TIMER, 0.02);
-
-		rti = MEM_callocN(sizeof(ReportTimerInfo), "ReportTimerInfo");
-		wm->reports.reporttimer->customdata = rti;
-
-		return false;
-	}
-}
-
 /* free strings of open recent files */
 static void free_openrecent(void)
 {
 	struct RecentFile *recent;
 
-	for (recent = G.recent_files.first; recent; recent = recent->next)
+	for (recent = G.recent_files.first; recent; recent = recent->next) {
 		MEM_freeN(recent->filepath);
+	}
 
 	BLI_freelistN(&(G.recent_files));
 }
@@ -453,7 +403,7 @@ static int wm_exit_handler(bContext *C, const wmEvent *event, void *userdata)
 }
 
 /**
- * Cause a delayed WM_exit() call to avoid leaking memory when trying to exit from within operators.
+ * Cause a delayed #WM_exit() call to avoid leaking memory when trying to exit from within operators.
  */
 void wm_exit_schedule_delayed(const bContext *C)
 {
@@ -482,17 +432,18 @@ void WM_exit_ext(bContext *C, const bool do_python)
 
 		if (!G.background) {
 			struct MemFile *undo_memfile = wm->undo_stack ? ED_undosys_stack_memfile_get_active(wm->undo_stack) : NULL;
-			if ((U.uiflag2 & USER_KEEP_SESSION) || (undo_memfile != NULL)) {
+			if (undo_memfile != NULL) {
 				/* save the undo state as quit.blend */
+				Main *bmain = CTX_data_main(C);
 				char filename[FILE_MAX];
 				bool has_edited;
-				int fileflags = G.fileflags & ~(G_FILE_COMPRESS | G_FILE_AUTOPLAY | G_FILE_HISTORY);
+				int fileflags = G.fileflags & ~(G_FILE_COMPRESS | G_FILE_HISTORY);
 
 				BLI_make_file_string("/", filename, BKE_tempdir_base(), BLENDER_QUIT_FILE);
 
-				has_edited = ED_editors_flush_edits(C, false);
+				has_edited = ED_editors_flush_edits(bmain, false);
 
-				if ((has_edited && BLO_write_file(CTX_data_main(C), filename, fileflags, NULL, NULL)) ||
+				if ((has_edited && BLO_write_file(bmain, filename, fileflags, NULL, NULL)) ||
 				    (undo_memfile && BLO_memfile_write_file(undo_memfile, filename)))
 				{
 					printf("Saved session recovery to '%s'\n", filename);
@@ -507,26 +458,29 @@ void WM_exit_ext(bContext *C, const bool do_python)
 			CTX_wm_window_set(C, win);  /* needed by operator close callbacks */
 			WM_event_remove_handlers(C, &win->handlers);
 			WM_event_remove_handlers(C, &win->modalhandlers);
-			ED_screen_exit(C, win, win->screen);
+			ED_screen_exit(C, win, WM_window_get_active_screen(win));
 		}
 	}
 
+	BLI_timer_free();
+
+	WM_paneltype_clear();
+
 	BKE_addon_pref_type_free();
+	BKE_keyconfig_pref_type_free();
+
 	wm_operatortype_free();
 	wm_dropbox_free();
 	WM_menutype_free();
 	WM_uilisttype_free();
 
 	/* all non-screen and non-space stuff editors did, like editmode */
-	if (C)
-		ED_editors_exit(C);
+	if (C) {
+		Main *bmain = CTX_data_main(C);
+		ED_editors_exit(bmain, true);
+	}
 
 	ED_undosys_type_free();
-
-//	XXX
-//	BIF_GlobalReebFree();
-//	BIF_freeRetarget();
-	BIF_freeTemplates(C);
 
 	free_openrecent();
 
@@ -538,17 +492,28 @@ void WM_exit_ext(bContext *C, const bool do_python)
 
 	ED_preview_free_dbase();  /* frees a Main dbase, before BKE_blender_free! */
 
-	if (C && wm)
-		wm_free_reports(C);  /* before BKE_blender_free! - since the ListBases get freed there */
+	if (C && wm) {
+		/* Before BKE_blender_free! - since the ListBases get freed there. */
+		wm_free_reports(C);
+	}
 
 	BKE_sequencer_free_clipboard(); /* sequencer.c */
 	BKE_tracking_clipboard_free();
 	BKE_mask_clipboard_free();
 	BKE_vfont_clipboard_free();
+	BKE_node_clipboard_free();
 
 #ifdef WITH_COMPOSITOR
 	COM_deinitialize();
 #endif
+
+	if (opengl_is_init) {
+#ifdef WITH_OPENSUBDIV
+		BKE_subsurf_osd_cleanup();
+#endif
+
+		GPU_free_unused_buffers(G_MAIN);
+	}
 
 	BKE_blender_free();  /* blender.c, does entire library and spacetypes */
 //	free_matcopybuf();
@@ -558,9 +523,21 @@ void WM_exit_ext(bContext *C, const bool do_python)
 	ANIM_fmodifiers_copybuf_free();
 	ED_gpencil_anim_copybuf_free();
 	ED_gpencil_strokes_copybuf_free();
-	BKE_node_clipboard_clear();
+
+	/* free gizmo-maps after freeing blender, so no deleted data get accessed during cleaning up of areas */
+	wm_gizmomaptypes_free();
+	wm_gizmogrouptype_free();
+	wm_gizmotype_free();
 
 	BLF_exit();
+
+	if (opengl_is_init) {
+		DRW_opengl_context_enable_ex(false);
+		GPU_pass_cache_free();
+		GPU_exit();
+		DRW_opengl_context_disable_ex(false);
+		DRW_opengl_context_destroy();
+	}
 
 #ifdef WITH_INTERNATIONAL
 	BLF_free_unifont();
@@ -589,17 +566,6 @@ void WM_exit_ext(bContext *C, const bool do_python)
 	(void)do_python;
 #endif
 
-	if (!G.background) {
-#ifdef WITH_OPENSUBDIV
-		BKE_subsurf_osd_cleanup();
-#endif
-
-		GPU_global_buffer_pool_free();
-		GPU_free_unused_buffers(G_MAIN);
-
-		GPU_exit();
-	}
-
 	ED_file_exit(); /* for fsmenu */
 
 	UI_exit();
@@ -610,9 +576,6 @@ void WM_exit_ext(bContext *C, const bool do_python)
 	wm_ghost_exit();
 
 	CTX_free(C);
-#ifdef WITH_GAMEENGINE
-	SYS_DeleteSystem(SYS_GetSystem());
-#endif
 
 	GHOST_DisposeSystemPaths();
 

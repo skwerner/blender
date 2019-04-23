@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,10 @@
  *
  * The Original Code is Copyright (C) 2014 Blender Foundation.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): Jason Wilkins
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file ghost/intern/GHOST_ContextSDL.cpp
- *  \ingroup GHOST
+/** \file
+ * \ingroup GHOST
  *
  * Definition of GHOST_ContextSDL class.
  */
@@ -55,6 +47,7 @@ GHOST_ContextSDL::GHOST_ContextSDL(
         int contextResetNotificationStrategy)
     : GHOST_Context(stereoVisual, numOfAASamples),
       m_window(window),
+      m_hidden_window(NULL),
       m_contextProfileMask(contextProfileMask),
       m_contextMajorVersion(contextMajorVersion),
       m_contextMinorVersion(contextMinorVersion),
@@ -62,7 +55,7 @@ GHOST_ContextSDL::GHOST_ContextSDL(
       m_contextResetNotificationStrategy(contextResetNotificationStrategy),
       m_context(NULL)
 {
-	assert(m_window  != NULL);
+	// assert(m_window  != NULL);
 }
 
 
@@ -70,7 +63,7 @@ GHOST_ContextSDL::~GHOST_ContextSDL()
 {
 	if (m_context != NULL) {
 		if (m_window != NULL && m_context == SDL_GL_GetCurrentContext())
-			SDL_GL_MakeCurrent(m_window, m_context);
+			SDL_GL_MakeCurrent(m_window, NULL);
 
 		if (m_context != s_sharedContext || s_sharedCount == 1) {
 			assert(s_sharedCount > 0);
@@ -82,6 +75,9 @@ GHOST_ContextSDL::~GHOST_ContextSDL()
 
 			SDL_GL_DeleteContext(m_context);
 		}
+
+		if (m_hidden_window != NULL)
+			SDL_DestroyWindow(m_hidden_window);
 	}
 }
 
@@ -97,9 +93,19 @@ GHOST_TSuccess GHOST_ContextSDL::swapBuffers()
 GHOST_TSuccess GHOST_ContextSDL::activateDrawingContext()
 {
 	if (m_context) {
-		activateGLEW();
-
 		return SDL_GL_MakeCurrent(m_window, m_context) ? GHOST_kSuccess : GHOST_kFailure;
+	}
+	else {
+		return GHOST_kFailure;
+	}
+}
+
+
+GHOST_TSuccess GHOST_ContextSDL::releaseDrawingContext()
+{
+	if (m_context) {
+		/* Untested, may not work */
+		return SDL_GL_MakeCurrent(NULL, NULL) ? GHOST_kSuccess : GHOST_kFailure;
 	}
 	else {
 		return GHOST_kFailure;
@@ -148,6 +154,18 @@ GHOST_TSuccess GHOST_ContextSDL::initializeDrawingContext()
 	if (m_numOfAASamples) {
 		SDL_GL_SetAttribute(SDL_GL_MULTISAMPLEBUFFERS, 1);
 		SDL_GL_SetAttribute(SDL_GL_MULTISAMPLESAMPLES, m_numOfAASamples);
+	}
+
+	if (m_window == NULL) {
+		m_hidden_window = SDL_CreateWindow(
+		    "Offscreen Context Windows",
+		    SDL_WINDOWPOS_UNDEFINED,
+		    SDL_WINDOWPOS_UNDEFINED,
+		    1, 1,
+		    SDL_WINDOW_OPENGL | SDL_WINDOW_BORDERLESS | SDL_WINDOW_HIDDEN
+		);
+
+		m_window = m_hidden_window;
 	}
 
 	m_context = SDL_GL_CreateContext(m_window);

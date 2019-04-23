@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,21 +12,18 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  * meshlaplacian.c: Algorithms using the mesh laplacian.
  */
 
-/** \file blender/editors/armature/meshlaplacian.c
- *  \ingroup edarmature
+/** \file
+ * \ingroup edarmature
  */
 
 #include "MEM_guardedalloc.h"
 
 #include "DNA_object_types.h"
 #include "DNA_mesh_types.h"
+#include "DNA_meshdata_types.h"
 #include "DNA_scene_types.h"
 
 #include "BLI_math.h"
@@ -39,12 +34,15 @@
 
 #include "BLT_translation.h"
 
-#include "BKE_DerivedMesh.h"
-#include "BKE_modifier.h"
+#include "BKE_bvhutils.h"
 #include "BKE_mesh.h"
+#include "BKE_mesh_runtime.h"
+#include "BKE_modifier.h"
 
 #include "ED_mesh.h"
 #include "ED_armature.h"
+
+#include "DEG_depsgraph.h"
 
 #include "eigen_capi.h"
 
@@ -600,9 +598,10 @@ static float heat_limit_weight(float weight)
 		return weight;
 }
 
-void heat_bone_weighting(Object *ob, Mesh *me, float (*verts)[3], int numsource,
-                         bDeformGroup **dgrouplist, bDeformGroup **dgroupflip,
-                         float (*root)[3], float (*tip)[3], int *selected, const char **err_str)
+void heat_bone_weighting(
+        Object *ob, Mesh *me, float (*verts)[3], int numsource,
+        bDeformGroup **dgrouplist, bDeformGroup **dgroupflip,
+        float (*root)[3], float (*tip)[3], int *selected, const char **err_str)
 {
 	LaplacianSystem *sys;
 	MLoopTri *mlooptri;
@@ -801,7 +800,7 @@ void heat_bone_weighting(Object *ob, Mesh *me, float (*verts)[3], int numsource,
 #define MESHDEFORM_MIN_INFLUENCE 0.0005f
 
 static const int MESHDEFORM_OFFSET[7][3] = {
-	{0, 0, 0}, {1, 0, 0}, {-1, 0, 0}, {0, 1, 0}, {0, -1, 0}, {0, 0, 1}, {0, 0, -1}
+	{0, 0, 0}, {1, 0, 0}, {-1, 0, 0}, {0, 1, 0}, {0, -1, 0}, {0, 0, 1}, {0, 0, -1},
 };
 
 typedef struct MDefBoundIsect {
@@ -830,7 +829,7 @@ typedef struct MeshDeformBind {
 	int size, size3;
 
 	/* meshes */
-	DerivedMesh *cagedm;
+	Mesh *cagemesh;
 	float (*cagecos)[3];
 	float (*vertexcos)[3];
 	int totvert, totcagevert;
@@ -860,7 +859,7 @@ typedef struct MeshDeformBind {
 		const MLoop *mloop;
 		const MLoopTri *looptri;
 		const float (*poly_nors)[3];
-	} cagedm_cache;
+	} cagemesh_cache;
 } MeshDeformBind;
 
 typedef struct MeshDeformIsect {
@@ -885,9 +884,9 @@ static void harmonic_ray_callback(void *userdata, int index, const BVHTreeRay *r
 {
 	struct MeshRayCallbackData *data = userdata;
 	MeshDeformBind *mdb = data->mdb;
-	const MLoop *mloop = mdb->cagedm_cache.mloop;
-	const MLoopTri *looptri = mdb->cagedm_cache.looptri, *lt;
-	const float (*poly_nors)[3] = mdb->cagedm_cache.poly_nors;
+	const MLoop *mloop = mdb->cagemesh_cache.mloop;
+	const MLoopTri *looptri = mdb->cagemesh_cache.looptri, *lt;
+	const float (*poly_nors)[3] = mdb->cagemesh_cache.poly_nors;
 	MeshDeformIsect *isec = data->isec;
 	float no[3], co[3], dist;
 	float *face[3];
@@ -898,9 +897,10 @@ static void harmonic_ray_callback(void *userdata, int index, const BVHTreeRay *r
 	face[1] = mdb->cagecos[mloop[lt->tri[1]].v];
 	face[2] = mdb->cagecos[mloop[lt->tri[2]].v];
 
-	if (!isect_ray_tri_watertight_v3(
-	        ray->origin, ray->isect_precalc, UNPACK3(face), &dist, NULL))
-	{
+	bool isect_ray_tri = isect_ray_tri_watertight_v3(
+	        ray->origin, ray->isect_precalc, UNPACK3(face), &dist, NULL);
+
+	if (!isect_ray_tri || dist > isec->vec_length) {
 		return;
 	}
 
@@ -951,9 +951,9 @@ static MDefBoundIsect *meshdeform_ray_tree_intersect(MeshDeformBind *mdb, const 
 	if (BLI_bvhtree_ray_cast_ex(mdb->bvhtree, isect_mdef.start, vec_normal,
 	                            0.0, &hit, harmonic_ray_callback, &data, BVH_RAYCAST_WATERTIGHT) != -1)
 	{
-		const MLoop *mloop = mdb->cagedm_cache.mloop;
-		const MLoopTri *lt = &mdb->cagedm_cache.looptri[hit.index];
-		const MPoly *mp = &mdb->cagedm_cache.mpoly[lt->poly];
+		const MLoop *mloop = mdb->cagemesh_cache.mloop;
+		const MLoopTri *lt = &mdb->cagemesh_cache.looptri[hit.index];
+		const MPoly *mp = &mdb->cagemesh_cache.mpoly[lt->poly];
 		const float (*cagecos)[3] = mdb->cagecos;
 		const float len = isect_mdef.lambda;
 		MDefBoundIsect *isect;
@@ -1128,8 +1128,8 @@ static void meshdeform_bind_floodfill(MeshDeformBind *mdb)
 
 static float meshdeform_boundary_phi(const MeshDeformBind *mdb, const MDefBoundIsect *isect, int cagevert)
 {
-	const MLoop *mloop = mdb->cagedm_cache.mloop;
-	const MPoly *mp = &mdb->cagedm_cache.mpoly[isect->poly_index];
+	const MLoop *mloop = mdb->cagemesh_cache.mloop;
+	const MPoly *mp = &mdb->cagemesh_cache.mpoly[isect->poly_index];
 	int i;
 
 	for (i = 0; i < mp->totloop; i++) {
@@ -1422,7 +1422,7 @@ static void meshdeform_matrix_solve(MeshDeformModifierData *mmd, MeshDeformBind 
 	EIG_linear_solver_delete(context);
 }
 
-static void harmonic_coordinates_bind(Scene *UNUSED(scene), MeshDeformModifierData *mmd, MeshDeformBind *mdb)
+static void harmonic_coordinates_bind(MeshDeformModifierData *mmd, MeshDeformBind *mdb)
 {
 	MDefBindInfluence *inf;
 	MDefInfluence *mdinf;
@@ -1444,7 +1444,7 @@ static void harmonic_coordinates_bind(Scene *UNUSED(scene), MeshDeformModifierDa
 	mdb->totalphi = MEM_callocN(sizeof(float) * mdb->size3, "MeshDeformBindTotalPhi");
 	mdb->boundisect = MEM_callocN(sizeof(*mdb->boundisect) * mdb->size3, "MDefBoundIsect");
 	mdb->semibound = MEM_callocN(sizeof(int) * mdb->size3, "MDefSemiBound");
-	mdb->bvhtree = bvhtree_from_mesh_get(&mdb->bvhdata, mdb->cagedm, BVHTREE_FROM_LOOPTRI, 4);
+	mdb->bvhtree = BKE_bvhtree_from_mesh_get(&mdb->bvhdata, mdb->cagemesh, BVHTREE_FROM_LOOPTRI, 4);
 	mdb->inside = MEM_callocN(sizeof(int) * mdb->totvert, "MDefInside");
 
 	if (mmd->flag & MOD_MDEF_DYNAMIC_BIND)
@@ -1457,11 +1457,12 @@ static void harmonic_coordinates_bind(Scene *UNUSED(scene), MeshDeformModifierDa
 
 	/* initialize data from 'cagedm' for reuse */
 	{
-		DerivedMesh *dm = mdb->cagedm;
-		mdb->cagedm_cache.mpoly = dm->getPolyArray(dm);
-		mdb->cagedm_cache.mloop = dm->getLoopArray(dm);
-		mdb->cagedm_cache.looptri = dm->getLoopTriArray(dm);
-		mdb->cagedm_cache.poly_nors = dm->getPolyDataArray(dm, CD_NORMAL);  /* can be NULL */
+		Mesh *me = mdb->cagemesh;
+		mdb->cagemesh_cache.mpoly = me->mpoly;
+		mdb->cagemesh_cache.mloop = me->mloop;
+		mdb->cagemesh_cache.looptri = BKE_mesh_runtime_looptri_ensure(me);
+		/* can be NULL */
+		mdb->cagemesh_cache.poly_nors = CustomData_get_layer(&me->pdata, CD_NORMAL);
 	}
 
 	/* make bounding box equal size in all directions, add padding, and compute
@@ -1573,9 +1574,11 @@ static void harmonic_coordinates_bind(Scene *UNUSED(scene), MeshDeformModifierDa
 }
 
 void ED_mesh_deform_bind_callback(
-        Scene *scene, MeshDeformModifierData *mmd, DerivedMesh *cagedm,
+        MeshDeformModifierData *mmd, Mesh *cagemesh,
         float *vertexcos, int totvert, float cagemat[4][4])
 {
+	MeshDeformModifierData *mmd_orig =
+	        (MeshDeformModifierData *)modifier_get_original(&mmd->modifier);
 	MeshDeformBind mdb;
 	MVert *mvert;
 	int a;
@@ -1589,35 +1592,35 @@ void ED_mesh_deform_bind_callback(
 	mdb.vertexcos = MEM_callocN(sizeof(float) * 3 * totvert, "MeshDeformCos");
 	mdb.totvert = totvert;
 
-	mdb.cagedm = cagedm;
-	mdb.totcagevert = mdb.cagedm->getNumVerts(mdb.cagedm);
+	mdb.cagemesh = cagemesh;
+	mdb.totcagevert = mdb.cagemesh->totvert;
 	mdb.cagecos = MEM_callocN(sizeof(*mdb.cagecos) * mdb.totcagevert, "MeshDeformBindCos");
 	copy_m4_m4(mdb.cagemat, cagemat);
 
-	mvert = mdb.cagedm->getVertArray(mdb.cagedm);
+	mvert = mdb.cagemesh->mvert;
 	for (a = 0; a < mdb.totcagevert; a++)
 		copy_v3_v3(mdb.cagecos[a], mvert[a].co);
 	for (a = 0; a < mdb.totvert; a++)
 		mul_v3_m4v3(mdb.vertexcos[a], mdb.cagemat, vertexcos + a * 3);
 
 	/* solve */
-	harmonic_coordinates_bind(scene, mmd, &mdb);
+	harmonic_coordinates_bind(mmd_orig, &mdb);
 
 	/* assign bind variables */
-	mmd->bindcagecos = (float *)mdb.cagecos;
-	mmd->totvert = mdb.totvert;
-	mmd->totcagevert = mdb.totcagevert;
-	copy_m4_m4(mmd->bindmat, mmd->object->obmat);
+	mmd_orig->bindcagecos = (float *)mdb.cagecos;
+	mmd_orig->totvert = mdb.totvert;
+	mmd_orig->totcagevert = mdb.totcagevert;
+	copy_m4_m4(mmd_orig->bindmat, mmd_orig->object->obmat);
 
 	/* transform bindcagecos to world space */
 	for (a = 0; a < mdb.totcagevert; a++)
-		mul_m4_v3(mmd->object->obmat, mmd->bindcagecos + a * 3);
+		mul_m4_v3(mmd_orig->object->obmat, mmd_orig->bindcagecos + a * 3);
 
 	/* free */
 	MEM_freeN(mdb.vertexcos);
 
 	/* compact weights */
-	modifier_mdef_compact_influences((ModifierData *)mmd);
+	modifier_mdef_compact_influences((ModifierData *)mmd_orig);
 
 	end_progress_bar();
 	waitcursor(0);

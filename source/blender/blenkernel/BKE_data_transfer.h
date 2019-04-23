@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,10 @@
  *
  * The Original Code is Copyright (C) 2014 Blender Foundation.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): Bastien Montagne
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/blenkernel/BKE_data_transfer.h
- *  \ingroup bke
+/** \file
+ * \ingroup bke
  */
 
 #ifndef __BKE_DATA_TRANSFER_H__
@@ -38,10 +30,11 @@ extern "C" {
 
 #include "BKE_customdata.h"
 
+struct Depsgraph;
 struct Object;
+struct ReportList;
 struct Scene;
 struct SpaceTransform;
-struct ReportList;
 
 /* Warning, those def are stored in files (TransferData modifier), *DO NOT* modify those values. */
 enum {
@@ -73,7 +66,7 @@ enum {
 };
 
 
-CustomDataMask BKE_object_data_transfer_dttypes_to_cdmask(const int dtdata_types);
+void BKE_object_data_transfer_dttypes_to_cdmask(const int dtdata_types, struct CustomData_MeshMasks *r_data_masks);
 bool BKE_object_data_transfer_get_dttypes_capacity(
         const int dtdata_types, bool *r_advanced_mixing, bool *r_threshold);
 int BKE_object_data_transfer_get_dttypes_item_types(const int dtdata_types);
@@ -129,11 +122,12 @@ enum {
 };
 
 void BKE_object_data_transfer_layout(
-        struct Scene *scene, struct Object *ob_src, struct Object *ob_dst, const int data_types, const bool use_delete,
+        struct Depsgraph *depsgraph, struct Scene *scene, struct Object *ob_src,
+        struct Object *ob_dst, const int data_types, const bool use_delete,
         const int fromlayers_select[DT_MULTILAYER_INDEX_MAX], const int tolayers_select[DT_MULTILAYER_INDEX_MAX]);
 
 bool BKE_object_data_transfer_mesh(
-        struct Scene *scene,
+        struct Depsgraph *depsgraph, struct Scene *scene,
         struct Object *ob_src, struct Object *ob_dst, const int data_types, const bool use_create,
         const int map_vert_mode, const int map_edge_mode, const int map_loop_mode, const int map_poly_mode,
         struct SpaceTransform *space_transform, const bool auto_transform,
@@ -141,9 +135,9 @@ bool BKE_object_data_transfer_mesh(
         const int fromlayers_select[DT_MULTILAYER_INDEX_MAX], const int tolayers_select[DT_MULTILAYER_INDEX_MAX],
         const int mix_mode, const float mix_factor, const char *vgroup_name, const bool invert_vgroup,
         struct ReportList *reports);
-bool BKE_object_data_transfer_dm(
-        struct Scene *scene,
-        struct Object *ob_src, struct Object *ob_dst, struct DerivedMesh *dm_dst,
+bool BKE_object_data_transfer_ex(
+        struct Depsgraph *depsgraph, struct Scene *scene,
+        struct Object *ob_src, struct Object *ob_dst, struct Mesh *me_dst,
         const int data_types, bool use_create,
         const int map_vert_mode, const int map_edge_mode, const int map_loop_mode, const int map_poly_mode,
         struct SpaceTransform *space_transform, const bool auto_transform,

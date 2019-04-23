@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,10 @@
  *
  * The Original Code is Copyright (C) 2014 Blender Foundation.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): Jason Wilkins
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file glew-mx.c
- *  \ingroup glew-mx
+/** \file
+ * \ingroup glew-mx
  */
 
 #include "glew-mx.h"
@@ -83,62 +75,4 @@ GLenum glew_chk(GLenum error, const char *file, int line, const char *text)
 	}
 
 	return error;
-}
-
-
-#ifdef WITH_GLEW_MX
-MXContext *_mx_context = NULL;
-#endif
-
-
-MXContext *mxCreateContext(void)
-{
-#ifdef WITH_GLEW_MX
-	MXContext* new_ctx = calloc(1, sizeof(MXContext));
-
-	if (new_ctx != NULL) {
-		MXContext* cur_ctx = _mx_context;
-		_mx_context = new_ctx;
-		GLEW_CHK(glewInit());
-		_mx_context = cur_ctx;
-	}
-
-	return new_ctx;
-#else
-	GLEW_CHK(glewInit());
-	return NULL;
-#endif
-}
-
-
-MXContext *mxGetCurrentContext(void)
-{
-#ifdef WITH_GLEW_MX
-	return _mx_context;
-#else
-	return NULL;
-#endif
-}
-
-
-void mxMakeCurrentContext(MXContext *ctx)
-{
-#ifdef WITH_GLEW_MX
-	_mx_context = ctx;
-#else
-	(void)ctx;
-#endif
-}
-
-
-void mxDestroyContext(MXContext *ctx)
-{
-#ifdef WITH_GLEW_MX
-	if (_mx_context == ctx)
-		_mx_context = NULL;
-
-	free(ctx);
-#else
-	(void)ctx;
-#endif
 }

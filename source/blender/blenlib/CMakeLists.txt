@@ -16,11 +16,6 @@
 #
 # The Original Code is Copyright (C) 2006, Blender Foundation
 # All rights reserved.
-#
-# The Original Code is: all of this file.
-#
-# Contributor(s): Jacques Beaurain.
-#
 # ***** END GPL LICENSE BLOCK *****
 
 set(INC
@@ -48,17 +43,20 @@ set(SRC
 	intern/BLI_ghash.c
 	intern/BLI_ghash_utils.c
 	intern/BLI_heap.c
+	intern/BLI_heap_simple.c
 	intern/BLI_kdopbvh.c
-	intern/BLI_kdtree.c
 	intern/BLI_linklist.c
 	intern/BLI_linklist_lockfree.c
 	intern/BLI_memarena.c
+	intern/BLI_memiter.c
 	intern/BLI_mempool.c
+	intern/BLI_timer.c
 	intern/DLRB_tree.c
 	intern/array_store.c
 	intern/array_store_utils.c
 	intern/array_utils.c
 	intern/astar.c
+	intern/bitmap.c
 	intern/bitmap_draw_2d.c
 	intern/boxpack_2d.c
 	intern/buffer.c
@@ -68,17 +66,20 @@ set(SRC
 	intern/easing.c
 	intern/edgehash.c
 	intern/endian_switch.c
+	intern/expr_pylike_eval.c
 	intern/fileops.c
 	intern/fnmatch.c
 	intern/freetypefont.c
-	intern/graph.c
 	intern/gsqueue.c
 	intern/hash_md5.c
 	intern/hash_mm2a.c
 	intern/hash_mm3.c
 	intern/jitter_2d.c
+	intern/kdtree_1d.c
+	intern/kdtree_2d.c
+	intern/kdtree_3d.c
+	intern/kdtree_4d.c
 	intern/lasso_2d.c
-	intern/list_sort_impl.h
 	intern/listbase.c
 	intern/math_base.c
 	intern/math_base_inline.c
@@ -125,6 +126,10 @@ set(SRC
 	intern/winstuff.c
 	intern/winstuff_dir.c
 
+	# Header as source (included in C files above).
+	intern/kdtree_impl.h
+	intern/list_sort_impl.h
+
 	BLI_alloca.h
 	BLI_args.h
 	BLI_array.h
@@ -152,20 +157,23 @@ set(SRC
 	BLI_edgehash.h
 	BLI_endian_switch.h
 	BLI_endian_switch_inline.h
+	BLI_expr_pylike_eval.h
 	BLI_fileops.h
 	BLI_fileops_types.h
 	BLI_fnmatch.h
 	BLI_ghash.h
-	BLI_graph.h
 	BLI_gsqueue.h
 	BLI_hash.h
 	BLI_hash_md5.h
 	BLI_hash_mm2a.h
 	BLI_hash_mm3.h
 	BLI_heap.h
+	BLI_heap_simple.h
+	BLI_iterator.h
 	BLI_jitter_2d.h
 	BLI_kdopbvh.h
 	BLI_kdtree.h
+	BLI_kdtree_impl.h
 	BLI_lasso_2d.h
 	BLI_link_utils.h
 	BLI_linklist.h
@@ -186,6 +194,7 @@ set(SRC
 	BLI_math_statistics.h
 	BLI_math_vector.h
 	BLI_memarena.h
+	BLI_memiter.h
 	BLI_memory_utils.h
 	BLI_mempool.h
 	BLI_noise.h
@@ -210,6 +219,7 @@ set(SRC
 	BLI_task.h
 	BLI_threads.h
 	BLI_timecode.h
+	BLI_timer.h
 	BLI_utildefines.h
 	BLI_utildefines_iter.h
 	BLI_utildefines_stack.h
@@ -223,6 +233,13 @@ set(SRC
 	PIL_time_utildefines.h
 )
 
+set(LIB
+	bf_intern_eigen
+	bf_intern_guardedalloc
+	bf_intern_numaapi
+	extern_wcwidth
+)
+
 if(WITH_MEM_VALGRIND)
 	add_definitions(-DWITH_MEM_VALGRIND)
 endif()
@@ -230,6 +247,9 @@ endif()
 if(WIN32)
 	list(APPEND INC
 		../../../intern/utfconv
+	)
+	list(APPEND LIB
+		bf_intern_utfconv
 	)
 endif()
 
@@ -244,4 +264,4 @@ set_source_files_properties(
 	PROPERTIES HEADER_FILE_ONLY TRUE
 )
 
-blender_add_lib(bf_blenlib "${SRC}" "${INC}" "${INC_SYS}")
+blender_add_lib(bf_blenlib "${SRC}" "${INC}" "${INC_SYS}" "${LIB}")

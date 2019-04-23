@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,15 +15,10 @@
  *
  * The Original Code is Copyright (C) 2008 Blender Foundation.
  * All rights reserved.
- *
- *
- * Contributor(s): Blender Foundation, Joshua Leung
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/animation/anim_deps.c
- *  \ingroup edanimation
+/** \file
+ * \ingroup edanimation
  */
 
 
@@ -47,12 +40,13 @@
 #include "BKE_animsys.h"
 #include "BKE_action.h"
 #include "BKE_context.h"
-#include "BKE_depsgraph.h"
 #include "BKE_fcurve.h"
 #include "BKE_gpencil.h"
 #include "BKE_main.h"
 #include "BKE_node.h"
 #include "BKE_sequencer.h"
+
+#include "DEG_depsgraph.h"
 
 #include "RNA_access.h"
 
@@ -76,8 +70,16 @@ void ANIM_list_elem_update(Main *bmain, Scene *scene, bAnimListElem *ale)
 	/* tag AnimData for refresh so that other views will update in realtime with these changes */
 	adt = BKE_animdata_from_id(id);
 	if (adt) {
-		adt->recalc |= ADT_RECALC_ANIM;
-		DAG_id_tag_update(id, OB_RECALC_TIME);
+		DEG_id_tag_update(id, ID_RECALC_ANIMATION);
+		if (adt->action != NULL) {
+			DEG_id_tag_update(&adt->action->id, ID_RECALC_ANIMATION);
+		}
+	}
+
+	/* Tag copy on the main object if updating anything directly inside AnimData */
+	if (ELEM(ale->type, ANIMTYPE_ANIMDATA, ANIMTYPE_NLAACTION, ANIMTYPE_NLATRACK, ANIMTYPE_NLACURVE)) {
+		DEG_id_tag_update(id, ID_RECALC_ANIMATION);
+		return;
 	}
 
 	/* update data */
@@ -98,23 +100,16 @@ void ANIM_list_elem_update(Main *bmain, Scene *scene, bAnimListElem *ale)
 	else {
 		/* in other case we do standard depsgraph update, ideally
 		 * we'd be calling property update functions here too ... */
-		DAG_id_tag_update(id, OB_RECALC_OB | OB_RECALC_DATA | OB_RECALC_TIME); // XXX or do we want something more restrictive?
+		DEG_id_tag_update(id, ID_RECALC_TRANSFORM | ID_RECALC_GEOMETRY | ID_RECALC_ANIMATION); // XXX or do we want something more restrictive?
 	}
 }
 
 /* tags the given ID block for refreshes (if applicable) due to
  * Animation Editor editing */
-void ANIM_id_update(Scene *UNUSED(scene), ID *id)
+void ANIM_id_update(Main *bmain, ID *id)
 {
 	if (id) {
-		AnimData *adt = BKE_animdata_from_id(id);
-
-		/* tag AnimData for refresh so that other views will update in realtime with these changes */
-		if (adt)
-			adt->recalc |= ADT_RECALC_ANIM;
-
-		/* set recalc flags */
-		DAG_id_tag_update(id, OB_RECALC_OB | OB_RECALC_DATA | OB_RECALC_TIME); // XXX or do we want something more restrictive?
+		DEG_id_tag_update_ex(bmain, id, ID_RECALC_TRANSFORM | ID_RECALC_GEOMETRY | ID_RECALC_ANIMATION); // XXX or do we want something more restrictive?
 	}
 }
 
@@ -189,7 +184,7 @@ static void animchan_sync_group(bAnimContext *ac, bAnimListElem *ale, bActionGro
 }
 
 /* perform syncing updates for F-Curves */
-static void animchan_sync_fcurve(bAnimContext *ac, bAnimListElem *ale, FCurve **active_fcurve)
+static void animchan_sync_fcurve(bAnimContext *UNUSED(ac), bAnimListElem *ale, FCurve **active_fcurve)
 {
 	FCurve *fcu = (FCurve *)ale->data;
 	ID *owner_id = ale->id;
@@ -200,50 +195,7 @@ static void animchan_sync_fcurve(bAnimContext *ac, bAnimListElem *ale, FCurve **
 	if (ELEM(NULL, fcu, fcu->rna_path, owner_id))
 		return;
 
-	if (GS(owner_id->name) == ID_OB) {
-		Object *ob = (Object *)owner_id;
-
-		/* only affect if F-Curve involves pose.bones */
-		if ((fcu->rna_path) && strstr(fcu->rna_path, "pose.bones")) {
-			bArmature *arm = (bArmature *)ob->data;
-			bPoseChannel *pchan;
-			char *bone_name;
-
-			/* get bone-name, and check if this bone is selected */
-			bone_name = BLI_str_quoted_substrN(fcu->rna_path, "pose.bones[");
-			pchan = BKE_pose_channel_find_name(ob->pose, bone_name);
-			if (bone_name) MEM_freeN(bone_name);
-
-			/* F-Curve selection depends on whether the bone is selected */
-			if ((pchan) && (pchan->bone)) {
-				/* F-Curve selection */
-				if (pchan->bone->flag & BONE_SELECTED)
-					fcu->flag |= FCURVE_SELECTED;
-				else
-					fcu->flag &= ~FCURVE_SELECTED;
-
-				/* Active F-Curve - it should be the first one for this bone on the
-				 * active object to be considered as active
-				 */
-				if ((ob == ac->obact) && (pchan->bone == arm->act_bone)) {
-					/* if no previous F-Curve has active flag, then we're the first and only one to get it */
-					if (*active_fcurve == NULL) {
-						fcu->flag |= FCURVE_ACTIVE;
-						*active_fcurve = fcu;
-					}
-					else {
-						/* someone else has already taken it - set as not active */
-						fcu->flag &= ~FCURVE_ACTIVE;
-					}
-				}
-				else {
-					/* this can't possibly be active now */
-					fcu->flag &= ~FCURVE_ACTIVE;
-				}
-			}
-		}
-	}
-	else if (GS(owner_id->name) == ID_SCE) {
+	if (GS(owner_id->name) == ID_SCE) {
 		Scene *scene = (Scene *)owner_id;
 
 		/* only affect if F-Curve involves sequence_editor.sequences */
@@ -404,6 +356,10 @@ void ANIM_animdata_update(bAnimContext *ac, ListBase *anim_data)
 				ale->update &= ~ANIM_UPDATE_DEPS;
 				ANIM_list_elem_update(ac->bmain, ac->scene, ale);
 			}
+			/* disable handles to avoid crash */
+			if (ale->update & ANIM_UPDATE_HANDLES) {
+				ale->update &= ~ANIM_UPDATE_HANDLES;
+			}
 		}
 		else if (ale->datatype == ALE_FCURVE) {
 			FCurve *fcu = ale->key_data;
@@ -425,11 +381,21 @@ void ANIM_animdata_update(bAnimContext *ac, ListBase *anim_data)
 				ANIM_list_elem_update(ac->bmain, ac->scene, ale);
 			}
 		}
-		else if (ale->datatype == ALE_NLASTRIP) {
+		else if (ELEM(ale->type, ANIMTYPE_ANIMDATA, ANIMTYPE_NLAACTION, ANIMTYPE_NLATRACK, ANIMTYPE_NLACURVE)) {
 			if (ale->update & ANIM_UPDATE_DEPS) {
 				ale->update &= ~ANIM_UPDATE_DEPS;
 				ANIM_list_elem_update(ac->bmain, ac->scene, ale);
 			}
+		}
+		else if (ale->update) {
+#if 0
+			if (G.debug & G_DEBUG) {
+				printf("%s: Unhandled animchannel updates (%d) for type=%d (%p)\n",
+				       __func__, ale->update, ale->type, ale->data);
+			}
+#endif
+			/* Prevent crashes in cases where it can't be handled */
+			ale->update = 0;
 		}
 
 		BLI_assert(ale->update == 0);

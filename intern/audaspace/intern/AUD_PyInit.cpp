@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * Copyright 2009-2011 Jörg Hermann Müller
  *
  * This file is part of AudaSpace.
@@ -18,12 +16,10 @@
  * You should have received a copy of the GNU General Public License
  * along with Audaspace; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file audaspace/intern/AUD_PyInit.cpp
- *  \ingroup audaspaceintern
+/** \file
+ * \ingroup audaspaceintern
  */
 
 #include "AUD_PyInit.h"
@@ -70,6 +66,11 @@ static PyMethodDef meth_sound_from_pointer[] = {
 PyObject *AUD_initPython(void)
 {
 	PyObject *module = PyInit_aud();
+	if (module == NULL) {
+		printf("Unable to initialise audio\n");
+		return NULL;
+	}
+
 	PyModule_AddObject(module, "_sound_from_pointer", (PyObject *)PyCFunction_New(meth_sound_from_pointer, NULL));
 	PyDict_SetItemString(PyImport_GetModuleDict(), "aud", module);
 

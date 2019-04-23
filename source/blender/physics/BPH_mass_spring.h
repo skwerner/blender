@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,10 @@
  *
  * The Original Code is Copyright (C) Blender Foundation
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): Lukas Toenne
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/physics/BPH_mass_spring.h
- *  \ingroup bph
+/** \file
+ * \ingroup bph
  */
 
 #ifndef __BPH_MASS_SPRING_H__
@@ -36,10 +28,11 @@
 extern "C" {
 #endif
 
-struct Implicit_Data;
-struct Object;
 struct ClothModifierData;
+struct Depsgraph;
+struct Implicit_Data;
 struct ListBase;
+struct Object;
 struct VoxelData;
 
 typedef enum eMassSpringSolverStatus {
@@ -55,10 +48,8 @@ int BPH_mass_spring_solver_numvert(struct Implicit_Data *id);
 
 int BPH_cloth_solver_init(struct Object *ob, struct ClothModifierData *clmd);
 void BPH_cloth_solver_free(struct ClothModifierData *clmd);
-int BPH_cloth_solve(struct Object *ob, float frame, struct ClothModifierData *clmd, struct ListBase *effectors);
+int BPH_cloth_solve(struct Depsgraph *depsgraph, struct Object *ob, float frame, struct ClothModifierData *clmd, struct ListBase *effectors);
 void BKE_cloth_solver_set_positions(struct ClothModifierData *clmd);
-
-bool BPH_cloth_solver_get_texture_data(struct Object *ob, struct ClothModifierData *clmd, struct VoxelData *vd);
 
 #ifdef __cplusplus
 }

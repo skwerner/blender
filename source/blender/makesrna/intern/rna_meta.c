@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,14 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * Contributor(s): Blender Foundation (2008), Juho Vepsalainen, Jiri Hnidek
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/makesrna/intern/rna_meta.c
- *  \ingroup RNA
+/** \file
+ * \ingroup RNA
  */
 
 #include <stdlib.h>
@@ -47,8 +41,10 @@
 #include "DNA_object_types.h"
 
 #include "BKE_mball.h"
-#include "BKE_depsgraph.h"
 #include "BKE_main.h"
+#include "BKE_scene.h"
+
+#include "DEG_depsgraph.h"
 
 #include "WM_types.h"
 #include "WM_api.h"
@@ -99,11 +95,11 @@ static void rna_MetaBall_update_data(Main *bmain, Scene *scene, PointerRNA *ptr)
 
 	/* cheating way for importers to avoid slow updates */
 	if (mb->id.us > 0) {
-		for (ob = bmain->object.first; ob; ob = ob->id.next)
+		for (ob = bmain->objects.first; ob; ob = ob->id.next)
 			if (ob->data == mb)
-				BKE_mball_properties_copy(bmain, bmain->eval_ctx, scene, ob);
+				BKE_mball_properties_copy(scene, ob);
 
-		DAG_id_tag_update(&mb->id, 0);
+		DEG_id_tag_update(&mb->id, 0);
 		WM_main_add_notifier(NC_GEOM | ND_DATA, mb);
 	}
 }
@@ -121,7 +117,7 @@ static MetaElem *rna_MetaBall_elements_new(MetaBall *mb, int type)
 
 	/* cheating way for importers to avoid slow updates */
 	if (mb->id.us > 0) {
-		DAG_id_tag_update(&mb->id, 0);
+		DEG_id_tag_update(&mb->id, 0);
 		WM_main_add_notifier(NC_GEOM | ND_DATA, &mb->id);
 	}
 
@@ -142,7 +138,7 @@ static void rna_MetaBall_elements_remove(MetaBall *mb, ReportList *reports, Poin
 
 	/* cheating way for importers to avoid slow updates */
 	if (mb->id.us > 0) {
-		DAG_id_tag_update(&mb->id, 0);
+		DEG_id_tag_update(&mb->id, 0);
 		WM_main_add_notifier(NC_GEOM | ND_DATA, &mb->id);
 	}
 }
@@ -153,7 +149,7 @@ static void rna_MetaBall_elements_clear(MetaBall *mb)
 
 	/* cheating way for importers to avoid slow updates */
 	if (mb->id.us > 0) {
-		DAG_id_tag_update(&mb->id, 0);
+		DEG_id_tag_update(&mb->id, 0);
 		WM_main_add_notifier(NC_GEOM | ND_DATA, &mb->id);
 	}
 }
@@ -300,7 +296,7 @@ static void rna_def_metaball(BlenderRNA *brna)
 		{MB_UPDATE_HALFRES, "HALFRES", 0, "Half", "While editing, update metaball in half resolution"},
 		{MB_UPDATE_FAST, "FAST", 0, "Fast", "While editing, update metaball without polygonization"},
 		{MB_UPDATE_NEVER, "NEVER", 0, "Never", "While editing, don't update metaball at all"},
-		{0, NULL, 0, NULL, NULL}
+		{0, NULL, 0, NULL, NULL},
 	};
 
 	srna = RNA_def_struct(brna, "MetaBall", "ID");

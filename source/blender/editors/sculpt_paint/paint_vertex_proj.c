@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,18 +15,13 @@
  *
  * The Original Code is Copyright (C) 2013 Blender Foundation.
  * All rights reserved.
- *
- *
- * Contributor(s): Blender Foundation
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/sculpt_paint/paint_vertex_proj.c
- *  \ingroup edsculpt
+/** \file
+ * \ingroup edsculpt
  *
  * Utility functions for getting vertex locations while painting
- * (since they may be instanced multiple times in a DerivedMesh)
+ * (since they may be instanced multiple times in an evaluated mesh)
  */
 
 #include "MEM_guardedalloc.h"
@@ -39,8 +32,13 @@
 #include "DNA_mesh_types.h"
 #include "DNA_object_types.h"
 
-#include "BKE_DerivedMesh.h"
 #include "BKE_context.h"
+#include "BKE_customdata.h"
+#include "BKE_mesh_iterators.h"
+#include "BKE_mesh_runtime.h"
+
+#include "DEG_depsgraph.h"
+#include "DEG_depsgraph_query.h"
 
 #include "ED_screen.h"
 #include "ED_view3d.h"
@@ -52,7 +50,7 @@
 
 /* stored while painting */
 struct VertProjHandle {
-	DMCoNo *vcosnos;
+	CoNo *vcosnos;
 
 	bool use_update;
 
@@ -81,7 +79,7 @@ static void vpaint_proj_dm_map_cosnos_init__map_cb(
         const float no_f[3], const short no_s[3])
 {
 	struct VertProjHandle *vp_handle = userData;
-	DMCoNo *co_no = &vp_handle->vcosnos[index];
+	CoNo *co_no = &vp_handle->vcosnos[index];
 
 	/* check if we've been here before (normal should not be 0) */
 	if (!is_zero_v3(co_no->no)) {
@@ -100,28 +98,18 @@ static void vpaint_proj_dm_map_cosnos_init__map_cb(
 }
 
 static void vpaint_proj_dm_map_cosnos_init(
-        Scene *scene, Object *ob,
+        struct Depsgraph *depsgraph, Scene *UNUSED(scene), Object *ob,
         struct VertProjHandle *vp_handle)
 {
+	Scene *scene_eval = DEG_get_evaluated_scene(depsgraph);
+	Object *ob_eval = DEG_get_evaluated_object(depsgraph, ob);
 	Mesh *me = ob->data;
-	DerivedMesh *dm;
 
-	dm = mesh_get_derived_final(scene, ob, CD_MASK_BAREMESH | CD_MASK_ORIGINDEX);
+	CustomData_MeshMasks cddata_masks = CD_MASK_BAREMESH_ORIGINDEX;
+	Mesh *me_eval = mesh_get_eval_final(depsgraph, scene_eval, ob_eval, &cddata_masks);
 
-	if (dm->foreachMappedVert) {
-		memset(vp_handle->vcosnos, 0, sizeof(DMCoNo) * me->totvert);
-		dm->foreachMappedVert(dm, vpaint_proj_dm_map_cosnos_init__map_cb, vp_handle, DM_FOREACH_USE_NORMAL);
-	}
-	else {
-		DMCoNo *v_co_no = vp_handle->vcosnos;
-		int a;
-		for (a = 0; a < me->totvert; a++, v_co_no++) {
-			dm->getVertCo(dm, a, v_co_no->co);
-			dm->getVertNo(dm, a, v_co_no->no);
-		}
-	}
-
-	dm->release(dm);
+	memset(vp_handle->vcosnos, 0, sizeof(*vp_handle->vcosnos) * me->totvert);
+	BKE_mesh_foreach_mapped_vert(me_eval, vpaint_proj_dm_map_cosnos_init__map_cb, vp_handle, MESH_FOREACH_USE_NORMAL);
 }
 
 
@@ -137,7 +125,7 @@ static void vpaint_proj_dm_map_cosnos_update__map_cb(
 	struct VertProjUpdate *vp_update = userData;
 	struct VertProjHandle *vp_handle = vp_update->vp_handle;
 
-	DMCoNo *co_no = &vp_handle->vcosnos[index];
+	CoNo *co_no = &vp_handle->vcosnos[index];
 
 	/* find closest vertex */
 	{
@@ -174,29 +162,24 @@ static void vpaint_proj_dm_map_cosnos_update__map_cb(
 }
 
 static void vpaint_proj_dm_map_cosnos_update(
-        struct VertProjHandle *vp_handle,
+        struct Depsgraph *depsgraph, struct VertProjHandle *vp_handle,
         ARegion *ar, const float mval_fl[2])
 {
 	struct VertProjUpdate vp_update = {vp_handle, ar, mval_fl};
 
-	Scene *scene = vp_handle->scene;
 	Object *ob = vp_handle->ob;
+	Scene *scene_eval = DEG_get_evaluated_scene(depsgraph);
+	Object *ob_eval = DEG_get_evaluated_object(depsgraph, ob);
 	Mesh *me = ob->data;
-	DerivedMesh *dm;
+
+	CustomData_MeshMasks cddata_masks = CD_MASK_BAREMESH_ORIGINDEX;
+	Mesh *me_eval = mesh_get_eval_final(depsgraph, scene_eval, ob_eval, &cddata_masks);
 
 	/* quick sanity check - we shouldn't have to run this if there are no modifiers */
 	BLI_assert(BLI_listbase_is_empty(&ob->modifiers) == false);
 
-	dm = mesh_get_derived_final(scene, ob, CD_MASK_BAREMESH | CD_MASK_ORIGINDEX);
-
-	/* highly unlikely this will become unavailable once painting starts (perhaps with animated modifiers) */
-	if (LIKELY(dm->foreachMappedVert)) {
-		copy_vn_fl(vp_handle->dists_sq, me->totvert, FLT_MAX);
-
-		dm->foreachMappedVert(dm, vpaint_proj_dm_map_cosnos_update__map_cb, &vp_update, DM_FOREACH_USE_NORMAL);
-	}
-
-	dm->release(dm);
+	copy_vn_fl(vp_handle->dists_sq, me->totvert, FLT_MAX);
+	BKE_mesh_foreach_mapped_vert(me_eval, vpaint_proj_dm_map_cosnos_update__map_cb, &vp_update, MESH_FOREACH_USE_NORMAL);
 }
 
 
@@ -204,18 +187,18 @@ static void vpaint_proj_dm_map_cosnos_update(
 /* Public Functions */
 
 struct VertProjHandle *ED_vpaint_proj_handle_create(
-        Scene *scene, Object *ob,
-        DMCoNo **r_vcosnos)
+        struct Depsgraph *depsgraph, Scene *scene, Object *ob,
+        CoNo **r_vcosnos)
 {
 	struct VertProjHandle *vp_handle = MEM_mallocN(sizeof(struct VertProjHandle), __func__);
 	Mesh *me = ob->data;
 
 	/* setup the handle */
-	vp_handle->vcosnos = MEM_mallocN(sizeof(DMCoNo) * me->totvert, "vertexcosnos map");
+	vp_handle->vcosnos = MEM_mallocN(sizeof(CoNo) * me->totvert, "vertexcosnos map");
 	vp_handle->use_update = false;
 
 	/* sets 'use_update' if needed */
-	vpaint_proj_dm_map_cosnos_init(scene, ob, vp_handle);
+	vpaint_proj_dm_map_cosnos_init(depsgraph, scene, ob, vp_handle);
 
 	if (vp_handle->use_update) {
 		vp_handle->dists_sq = MEM_mallocN(sizeof(float) * me->totvert, __func__);
@@ -235,11 +218,11 @@ struct VertProjHandle *ED_vpaint_proj_handle_create(
 }
 
 void  ED_vpaint_proj_handle_update(
-        struct VertProjHandle *vp_handle,
+        struct Depsgraph *depsgraph, struct VertProjHandle *vp_handle,
         ARegion *ar, const float mval_fl[2])
 {
 	if (vp_handle->use_update) {
-		vpaint_proj_dm_map_cosnos_update(vp_handle, ar, mval_fl);
+		vpaint_proj_dm_map_cosnos_update(depsgraph, vp_handle, ar, mval_fl);
 	}
 }
 

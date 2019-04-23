@@ -1,6 +1,4 @@
 /*
- * Copyright 2011, Blender Foundation.
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -15,9 +13,7 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
- * Contributor:
- *      Jeroen Bakker
- *      Monique Dewanchand
+ * Copyright 2011, Blender Foundation.
  */
 
 #include "COM_RenderLayersProg.h"
@@ -55,10 +51,10 @@ void RenderLayersProg::initExecution()
 		rr = RE_AcquireResultRead(re);
 
 	if (rr) {
-		SceneRenderLayer *srl = (SceneRenderLayer *)BLI_findlink(&scene->r.layers, getLayerId());
-		if (srl) {
+		ViewLayer *view_layer = (ViewLayer *)BLI_findlink(&scene->view_layers, getLayerId());
+		if (view_layer) {
 
-			RenderLayer *rl = RE_GetRenderLayer(rr, srl->name);
+			RenderLayer *rl = RE_GetRenderLayer(rr, view_layer->name);
 			if (rl) {
 				this->m_inputBuffer = RE_RenderLayerGetPass(rl, this->m_passName.c_str(), this->m_viewName);
 			}
@@ -189,9 +185,9 @@ void RenderLayersProg::determineResolution(unsigned int resolution[2], unsigned 
 		rr = RE_AcquireResultRead(re);
 
 	if (rr) {
-		SceneRenderLayer *srl   = (SceneRenderLayer *)BLI_findlink(&sce->r.layers, getLayerId());
-		if (srl) {
-			RenderLayer *rl = RE_GetRenderLayer(rr, srl->name);
+		ViewLayer *view_layer   = (ViewLayer *)BLI_findlink(&sce->view_layers, getLayerId());
+		if (view_layer) {
+			RenderLayer *rl = RE_GetRenderLayer(rr, view_layer->name);
 			if (rl) {
 				resolution[0] = rl->rectx;
 				resolution[1] = rl->recty;

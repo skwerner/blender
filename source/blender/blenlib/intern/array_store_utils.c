@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,13 +12,11 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/blenlib/intern/array_store_utils.c
- *  \ingroup bli
- *  \brief Helper functions for BLI_array_store API.
+/** \file
+ * \ingroup bli
+ * \brief Helper functions for BLI_array_store API.
  */
 
 #include "MEM_guardedalloc.h"
@@ -43,9 +39,6 @@ BArrayStore *BLI_array_store_at_size_ensure(
 	BArrayStore **bs_p = &bs_stride->stride_table[stride - 1];
 
 	if ((*bs_p) == NULL) {
-#if 0
-		unsigned int chunk_count = chunk_size;
-#else
 		/* calculate best chunk-count to fit a power of two */
 		unsigned int chunk_count = chunk_size;
 		{
@@ -54,7 +47,6 @@ BArrayStore *BLI_array_store_at_size_ensure(
 			size = MEM_SIZE_OPTIMAL(size);
 			chunk_count = size / stride;
 		}
-#endif
 
 		(*bs_p) = BLI_array_store_create(stride, chunk_count);
 	}

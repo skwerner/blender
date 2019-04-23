@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,22 +15,14 @@
  *
  * The Original Code is Copyright (C) 2006 by NaN Holding BV.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): Daniel Genrich, Andre Pinto
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
 
 #ifndef __BLI_KDOPBVH_H__
 #define __BLI_KDOPBVH_H__
 
-/** \file BLI_kdopbvh.h
- *  \ingroup bli
- *  \author Daniel Genrich
- *  \author Andre Pinto
+/** \file
+ * \ingroup bli
  */
 
 #ifdef __cplusplus
@@ -40,6 +30,8 @@ extern "C" {
 #endif
 
 struct BVHTree;
+struct DistProjectedAABBPrecalc;
+
 typedef struct BVHTree BVHTree;
 #define USE_KDOPBVH_WATERTIGHT
 
@@ -59,29 +51,47 @@ typedef struct BVHTreeOverlap {
 } BVHTreeOverlap;
 
 typedef struct BVHTreeNearest {
-	int index;          /* the index of the nearest found (untouched if none is found within a dist radius from the given coordinates) */
-	float co[3];        /* nearest coordinates (untouched it none is found within a dist radius from the given coordinates) */
-	float no[3];        /* normal at nearest coordinates (untouched it none is found within a dist radius from the given coordinates) */
-	float dist_sq;      /* squared distance to search around */
+	/** The index of the nearest found
+	 * (untouched if none is found within a dist radius from the given coordinates) */
+	int index;
+	/** Nearest coordinates
+	 * (untouched it none is found within a dist radius from the given coordinates). */
+	float co[3];
+	/** Normal at nearest coordinates
+	 * (untouched it none is found within a dist radius from the given coordinates). */
+	float no[3];
+	/** squared distance to search around */
+	float dist_sq;
 	int flags;
 } BVHTreeNearest;
 
 typedef struct BVHTreeRay {
-	float origin[3];    /* ray origin */
-	float direction[3]; /* ray direction */
-	float radius;       /* radius around ray */
+	/** ray origin */
+	float origin[3];
+	/** ray direction */
+	float direction[3];
+	/** radius around ray */
+	float radius;
 #ifdef USE_KDOPBVH_WATERTIGHT
 	struct IsectRayPrecalc *isect_precalc;
 #endif
 } BVHTreeRay;
 
 typedef struct BVHTreeRayHit {
-	int index;          /* index of the tree node (untouched if no hit is found) */
-	float co[3];        /* coordinates of the hit point */
-	float no[3];        /* normal on hit point */
-	float dist;         /* distance to the hit point */
+	/** Index of the tree node (untouched if no hit is found). */
+	int index;
+	/** Coordinates of the hit point. */
+	float co[3];
+	/** Normal on hit point. */
+	float no[3];
+	/** Distance to the hit point. */
+	float dist;
 } BVHTreeRayHit;
 
+enum {
+	/* Use a priority queue to process nodes in the optimal order (for slow callbacks) */
+	BVH_NEAREST_OPTIMAL_ORDER   = (1 << 0),
+};
 enum {
 	/* calculate IsectRayPrecalc data */
 	BVH_RAYCAST_WATERTIGHT		= (1 << 0),
@@ -100,6 +110,13 @@ typedef bool (*BVHTree_OverlapCallback)(void *userdata, int index_a, int index_b
 
 /* callback to range search query */
 typedef void (*BVHTree_RangeQuery)(void *userdata, int index, const float co[3], float dist_sq);
+
+/* callback to find nearest projected */
+typedef void (*BVHTree_NearestProjectedCallback)(
+        void *userdata, int index,
+        const struct DistProjectedAABBPrecalc *precalc,
+        const float (*clip_plane)[4], const int clip_plane_len,
+        BVHTreeNearest *nearest);
 
 
 /* callbacks to BLI_bvhtree_walk_dfs */
@@ -124,7 +141,8 @@ void BLI_bvhtree_update_tree(BVHTree *tree);
 
 int BLI_bvhtree_overlap_thread_num(const BVHTree *tree);
 
-/* collision/overlap: check two trees if they overlap, alloc's *overlap with length of the int return value */
+/* collision/overlap: check two trees if they overlap,
+ * alloc's *overlap with length of the int return value */
 BVHTreeOverlap *BLI_bvhtree_overlap(
         const BVHTree *tree1, const BVHTree *tree2, unsigned int *r_overlap_tot,
         BVHTree_OverlapCallback callback, void *userdata);
@@ -134,7 +152,12 @@ int   BLI_bvhtree_get_tree_type(const BVHTree *tree);
 float BLI_bvhtree_get_epsilon(const BVHTree *tree);
 
 /* find nearest node to the given coordinates
- * (if nearest is given it will only search nodes where square distance is smaller than nearest->dist) */
+ * (if nearest is given it will only search nodes where
+ * square distance is smaller than nearest->dist) */
+int BLI_bvhtree_find_nearest_ex(
+        BVHTree *tree, const float co[3], BVHTreeNearest *nearest,
+        BVHTree_NearestPointCallback callback, void *userdata,
+        int flag);
 int BLI_bvhtree_find_nearest(
         BVHTree *tree, const float co[3], BVHTreeNearest *nearest,
         BVHTree_NearestPointCallback callback, void *userdata);
@@ -161,6 +184,12 @@ float BLI_bvhtree_bb_raycast(const float bv[6], const float light_start[3], cons
 int BLI_bvhtree_range_query(
         BVHTree *tree, const float co[3], float radius,
         BVHTree_RangeQuery callback, void *userdata);
+
+int BLI_bvhtree_find_nearest_projected(
+        BVHTree *tree, float projmat[4][4], float winsize[2], float mval[2],
+        float clip_planes[6][4], int clip_num,
+        BVHTreeNearest *nearest,
+        BVHTree_NearestProjectedCallback callback, void *userdata);
 
 void BLI_bvhtree_walk_dfs(
         BVHTree *tree,

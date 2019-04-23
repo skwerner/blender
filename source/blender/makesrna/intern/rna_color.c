@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,14 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * Contributor(s): Blender Foundation (2008).
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/makesrna/intern/rna_color.c
- *  \ingroup RNA
+/** \file
+ * \ingroup RNA
  */
 
 #include <stdlib.h>
@@ -54,12 +48,13 @@
 
 #include "BKE_colorband.h"
 #include "BKE_colortools.h"
-#include "BKE_depsgraph.h"
 #include "BKE_image.h"
 #include "BKE_movieclip.h"
 #include "BKE_node.h"
 #include "BKE_sequencer.h"
 #include "BKE_linestyle.h"
+
+#include "DEG_depsgraph.h"
 
 #include "ED_node.h"
 
@@ -113,6 +108,12 @@ static void rna_CurveMapping_white_level_set(PointerRNA *ptr, const float *value
 	curvemapping_set_black_white(cumap, NULL, NULL);
 }
 
+static void rna_CurveMapping_tone_update(Main *UNUSED(bmain), Scene *UNUSED(scene), PointerRNA *UNUSED(ptr))
+{
+	WM_main_add_notifier(NC_NODE | NA_EDITED, NULL);
+	WM_main_add_notifier(NC_SCENE | ND_SEQUENCER, NULL);
+}
+
 static void rna_CurveMapping_clipminx_range(PointerRNA *ptr, float *min, float *max,
                                             float *UNUSED(softmin), float *UNUSED(softmax))
 {
@@ -159,17 +160,6 @@ static char *rna_ColorRamp_path(PointerRNA *ptr)
 		ID *id = ptr->id.data;
 
 		switch (GS(id->name)) {
-			case ID_MA: /* material has 2 cases - diffuse and specular */
-			{
-				Material *ma = (Material *)id;
-
-				if (ptr->data == ma->ramp_col)
-					path = BLI_strdup("diffuse_ramp");
-				else if (ptr->data == ma->ramp_spec)
-					path = BLI_strdup("specular_ramp");
-				break;
-			}
-
 			case ID_NT:
 			{
 				bNodeTree *ntree = (bNodeTree *)id;
@@ -244,22 +234,6 @@ static char *rna_ColorRampElement_path(PointerRNA *ptr)
 		ID *id = ptr->id.data;
 
 		switch (GS(id->name)) {
-			case ID_MA: /* 2 cases for material - diffuse and spec */
-			{
-				Material *ma = (Material *)id;
-
-				/* try diffuse first */
-				if (ma->ramp_col) {
-					RNA_pointer_create(id, &RNA_ColorRamp, ma->ramp_col, &ramp_ptr);
-					COLRAMP_GETPATH;
-				}
-				/* try specular if not diffuse */
-				if (!path && ma->ramp_spec) {
-					RNA_pointer_create(id, &RNA_ColorRamp, ma->ramp_spec, &ramp_ptr);
-					COLRAMP_GETPATH;
-				}
-				break;
-			}
 			case ID_NT:
 			{
 				bNodeTree *ntree = (bNodeTree *)id;
@@ -315,7 +289,7 @@ static void rna_ColorRamp_update(Main *bmain, Scene *UNUSED(scene), PointerRNA *
 			{
 				Material *ma = ptr->id.data;
 
-				DAG_id_tag_update(&ma->id, 0);
+				DEG_id_tag_update(&ma->id, 0);
 				WM_main_add_notifier(NC_MATERIAL | ND_SHADING_DRAW, ma);
 				break;
 			}
@@ -335,7 +309,7 @@ static void rna_ColorRamp_update(Main *bmain, Scene *UNUSED(scene), PointerRNA *
 			{
 				Tex *tex = ptr->id.data;
 
-				DAG_id_tag_update(&tex->id, 0);
+				DEG_id_tag_update(&tex->id, 0);
 				WM_main_add_notifier(NC_TEXTURE, tex);
 				break;
 			}
@@ -350,7 +324,7 @@ static void rna_ColorRamp_update(Main *bmain, Scene *UNUSED(scene), PointerRNA *
 			{
 				ParticleSettings *part = ptr->id.data;
 
-				DAG_id_tag_update(&part->id, OB_RECALC_DATA | PSYS_RECALC_REDO);
+				DEG_id_tag_update(&part->id, ID_RECALC_GEOMETRY | ID_RECALC_PSYS_REDO);
 				WM_main_add_notifier(NC_OBJECT | ND_PARTICLE | NA_EDITED, part);
 			}
 			default:
@@ -434,7 +408,7 @@ static const EnumPropertyItem *rna_ColorManagedDisplaySettings_display_device_it
 	return items;
 }
 
-static void rna_ColorManagedDisplaySettings_display_device_update(Main *UNUSED(bmain), Scene *UNUSED(scene), PointerRNA *ptr)
+static void rna_ColorManagedDisplaySettings_display_device_update(Main *bmain, Scene *UNUSED(scene), PointerRNA *ptr)
 {
 	ID *id = ptr->id.data;
 
@@ -446,14 +420,19 @@ static void rna_ColorManagedDisplaySettings_display_device_update(Main *UNUSED(b
 
 		IMB_colormanagement_validate_settings(&scene->display_settings, &scene->view_settings);
 
-		DAG_id_tag_update(id, 0);
+		DEG_id_tag_update(id, 0);
 		WM_main_add_notifier(NC_SCENE | ND_SEQUENCER, NULL);
+
+		/* Color management can be baked into shaders, need to refresh. */
+		for (Material *ma = bmain->materials.first; ma; ma = ma->id.next) {
+			DEG_id_tag_update(&ma->id, ID_RECALC_COPY_ON_WRITE);
+		}
 	}
 }
 
 static char *rna_ColorManagedDisplaySettings_path(PointerRNA *UNUSED(ptr))
 {
-	return BLI_sprintfN("display_settings");
+	return BLI_strdup("display_settings");
 }
 
 static int rna_ColorManagedViewSettings_view_transform_get(PointerRNA *ptr)
@@ -539,7 +518,7 @@ static void rna_ColorManagedViewSettings_use_curves_set(PointerRNA *ptr, bool va
 
 static char *rna_ColorManagedViewSettings_path(PointerRNA *UNUSED(ptr))
 {
-	return BLI_sprintfN("view_settings");
+	return BLI_strdup("view_settings");
 }
 
 
@@ -581,7 +560,7 @@ static void rna_ColorManagedColorspaceSettings_reload_update(Main *bmain, Scene 
 	if (GS(id->name) == ID_IM) {
 		Image *ima = (Image *) id;
 
-		DAG_id_tag_update(&ima->id, 0);
+		DEG_id_tag_update(&ima->id, 0);
 
 		BKE_image_signal(bmain, ima, NULL, IMA_SIGNAL_COLORMANAGE);
 
@@ -648,12 +627,12 @@ static void rna_ColorManagedColorspaceSettings_reload_update(Main *bmain, Scene 
 
 static char *rna_ColorManagedSequencerColorspaceSettings_path(PointerRNA *UNUSED(ptr))
 {
-	return BLI_sprintfN("sequencer_colorspace_settings");
+	return BLI_strdup("sequencer_colorspace_settings");
 }
 
 static char *rna_ColorManagedInputColorspaceSettings_path(PointerRNA *UNUSED(ptr))
 {
-	return BLI_sprintfN("colorspace_settings");
+	return BLI_strdup("colorspace_settings");
 }
 
 static void rna_ColorManagement_update(Main *UNUSED(bmain), Scene *UNUSED(scene), PointerRNA *ptr)
@@ -664,7 +643,7 @@ static void rna_ColorManagement_update(Main *UNUSED(bmain), Scene *UNUSED(scene)
 		return;
 
 	if (GS(id->name) == ID_SCE) {
-		DAG_id_tag_update(id, 0);
+		DEG_id_tag_update(id, 0);
 		WM_main_add_notifier(NC_SCENE | ND_SEQUENCER, NULL);
 	}
 }
@@ -693,7 +672,7 @@ static void rna_def_curvemappoint(BlenderRNA *brna)
 		{0, "AUTO", 0, "Auto Handle", ""},
 		{CUMA_HANDLE_AUTO_ANIM, "AUTO_CLAMPED", 0, "Auto Clamped Handle", ""},
 		{CUMA_HANDLE_VECTOR, "VECTOR", 0, "Vector Handle", ""},
-		{0, NULL, 0, NULL, NULL}
+		{0, NULL, 0, NULL, NULL},
 	};
 
 	srna = RNA_def_struct(brna, "CurveMapPoint", NULL);
@@ -751,7 +730,7 @@ static void rna_def_curvemap(BlenderRNA *brna)
 	static const EnumPropertyItem prop_extend_items[] = {
 		{0, "HORIZONTAL", 0, "Horizontal", ""},
 		{CUMA_EXTEND_EXTRAPOLATE, "EXTRAPOLATED", 0, "Extrapolated", ""},
-		{0, NULL, 0, NULL, NULL}
+		{0, NULL, 0, NULL, NULL},
 	};
 
 	srna = RNA_def_struct(brna, "CurveMap", NULL);
@@ -783,10 +762,23 @@ static void rna_def_curvemapping(BlenderRNA *brna)
 	PropertyRNA *prop;
 	FunctionRNA *func;
 
+	static const EnumPropertyItem tone_items[] = {
+		{CURVE_TONE_STANDARD, "STANDARD", 0, "Standard",  ""},
+		{CURVE_TONE_FILMLIKE, "FILMLIKE", 0, "Film like", ""},
+		{0, NULL, 0, NULL, NULL},
+	};
+
 	srna = RNA_def_struct(brna, "CurveMapping", NULL);
 	RNA_def_struct_ui_text(srna, "CurveMapping",
 	                       "Curve mapping to map color, vector and scalar values to other values using "
 	                       "a user defined curve");
+
+	prop = RNA_def_property(srna, "tone", PROP_ENUM, PROP_NONE);
+	RNA_def_property_enum_sdna(prop, NULL, "tone");
+	RNA_def_property_enum_items(prop, tone_items);
+	RNA_def_property_ui_text(prop, "Tone", "Tone of the curve");
+	RNA_def_property_update(prop, 0, "rna_CurveMapping_tone_update");
+
 
 	prop = RNA_def_property(srna, "use_clip", PROP_BOOLEAN, PROP_NONE);
 	RNA_def_property_boolean_sdna(prop, NULL, "flag", CUMA_DO_CLIP);
@@ -917,14 +909,14 @@ static void rna_def_color_ramp(BlenderRNA *brna)
 		{COLBAND_INTERP_LINEAR, "LINEAR", 0, "Linear", ""},
 		{COLBAND_INTERP_B_SPLINE, "B_SPLINE", 0, "B-Spline", ""},
 		{COLBAND_INTERP_CONSTANT, "CONSTANT", 0, "Constant", ""},
-		{0, NULL, 0, NULL, NULL}
+		{0, NULL, 0, NULL, NULL},
 	};
 
 	static const EnumPropertyItem prop_mode_items[] = {
 		{COLBAND_BLEND_RGB, "RGB", 0, "RGB", ""},
 		{COLBAND_BLEND_HSV, "HSV", 0, "HSV", ""},
 		{COLBAND_BLEND_HSL, "HSL", 0, "HSL", ""},
-		{0, NULL, 0, NULL, NULL}
+		{0, NULL, 0, NULL, NULL},
 	};
 
 	static const EnumPropertyItem prop_hsv_items[] = {
@@ -932,7 +924,7 @@ static void rna_def_color_ramp(BlenderRNA *brna)
 		{COLBAND_HUE_FAR, "FAR", 0, "Far", ""},
 		{COLBAND_HUE_CW, "CW", 0, "Clockwise", ""},
 		{COLBAND_HUE_CCW, "CCW", 0, "Counter-Clockwise", ""},
-		{0, NULL, 0, NULL, NULL}
+		{0, NULL, 0, NULL, NULL},
 	};
 
 	srna = RNA_def_struct(brna, "ColorRamp", NULL);
@@ -998,7 +990,7 @@ static void rna_def_histogram(BlenderRNA *brna)
 		{HISTO_MODE_G, "G", 0, "G", "Green"},
 		{HISTO_MODE_B, "B", 0, "B", "Blue"},
 		{HISTO_MODE_ALPHA, "A", 0, "A", "Alpha"},
-		{0, NULL, 0, NULL, NULL}
+		{0, NULL, 0, NULL, NULL},
 	};
 
 	srna = RNA_def_struct(brna, "Histogram", NULL);
@@ -1012,7 +1004,7 @@ static void rna_def_histogram(BlenderRNA *brna)
 	prop = RNA_def_property(srna, "show_line", PROP_BOOLEAN, PROP_NONE);
 	RNA_def_property_boolean_sdna(prop, NULL, "flag", HISTO_FLAG_LINE);
 	RNA_def_property_ui_text(prop, "Show Line", "Display lines rather than filled shapes");
-	RNA_def_property_ui_icon(prop, ICON_IPO, 0);
+	RNA_def_property_ui_icon(prop, ICON_GRAPH, 0);
 }
 
 static void rna_def_scopes(BlenderRNA *brna)
@@ -1027,7 +1019,7 @@ static void rna_def_scopes(BlenderRNA *brna)
 		{SCOPES_WAVEFRM_YCC_709, "YCBCR709", ICON_COLOR, "YCbCr (ITU 709)", ""},
 		{SCOPES_WAVEFRM_YCC_JPEG, "YCBCRJPG", ICON_COLOR, "YCbCr (Jpeg)", ""},
 		{SCOPES_WAVEFRM_RGB, "RGB", ICON_COLOR, "Red Green Blue", ""},
-		{0, NULL, 0, NULL, NULL}
+		{0, NULL, 0, NULL, NULL},
 	};
 
 	srna = RNA_def_struct(brna, "Scopes", NULL);
@@ -1074,22 +1066,22 @@ static void rna_def_colormanage(BlenderRNA *brna)
 
 	static const EnumPropertyItem display_device_items[] = {
 		{0, "DEFAULT", 0, "Default", ""},
-		{0, NULL, 0, NULL, NULL}
+		{0, NULL, 0, NULL, NULL},
 	};
 
 	static const EnumPropertyItem look_items[] = {
 		{0, "NONE", 0, "None", "Do not modify image in an artistic manner"},
-		{0, NULL, 0, NULL, NULL}
+		{0, NULL, 0, NULL, NULL},
 	};
 
 	static const EnumPropertyItem view_transform_items[] = {
 		{0, "NONE", 0, "None", "Do not perform any color transform on display, use old non-color managed technique for display"},
-		{0, NULL, 0, NULL, NULL}
+		{0, NULL, 0, NULL, NULL},
 	};
 
 	static const EnumPropertyItem color_space_items[] = {
 		{0, "NONE", 0, "None", "Do not perform any color transform on load, treat colors as in scene linear space already"},
-		{0, NULL, 0, NULL, NULL}
+		{0, NULL, 0, NULL, NULL},
 	};
 
 	/* ** Display Settings  **  */

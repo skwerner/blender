@@ -16,11 +16,6 @@
 #
 # The Original Code is Copyright (C) 2006, Blender Foundation
 # All rights reserved.
-#
-# The Original Code is: all of this file.
-#
-# Contributor(s): Jacques Beaurain.
-#
 # ***** END GPL LICENSE BLOCK *****
 
 set(INC
@@ -29,11 +24,14 @@ set(INC
 	../blenkernel
 	../blenlib
 	../blentranslation
+	../depsgraph
+	../draw
 	../imbuf
 	../makesdna
 	../makesrna
 	../nodes
 	../render/extern/include
+	../windowmanager
 	../../../intern/guardedalloc
 
 	# for writefile.c: dna_type_offsets.h
@@ -46,24 +44,32 @@ set(INC_SYS
 )
 
 set(SRC
+	${CMAKE_SOURCE_DIR}/release/datafiles/userdef/userdef_default_theme.c
 	intern/blend_validate.c
 	intern/readblenentry.c
 	intern/readfile.c
-	intern/runtime.c
 	intern/undofile.c
 	intern/versioning_250.c
 	intern/versioning_260.c
 	intern/versioning_270.c
+	intern/versioning_280.c
 	intern/versioning_defaults.c
+	intern/versioning_dna.c
 	intern/versioning_legacy.c
+	intern/versioning_userdef.c
 	intern/writefile.c
 
 	BLO_blend_defs.h
+	BLO_blend_validate.h
 	BLO_readfile.h
-	BLO_runtime.h
 	BLO_undofile.h
 	BLO_writefile.h
 	intern/readfile.h
+)
+
+set(LIB
+	bf_blenkernel
+	bf_blenlib
 )
 
 if(WITH_BUILDINFO)
@@ -91,7 +97,7 @@ if(WITH_ALEMBIC)
 	add_definitions(-DWITH_ALEMBIC)
 endif()
 
-blender_add_lib(bf_blenloader "${SRC}" "${INC}" "${INC_SYS}")
+blender_add_lib(bf_blenloader "${SRC}" "${INC}" "${INC_SYS}" "${LIB}")
 
 # needed so writefile.c can use dna_type_offsets.h
 add_dependencies(bf_blenloader bf_dna)

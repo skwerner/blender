@@ -64,12 +64,10 @@ public:
 
 	bool display_buffer_linear;
 
-	bool use_denoising;
-	bool denoising_passes;
-	int denoising_radius;
-	float denoising_strength;
-	float denoising_feature_strength;
-	bool denoising_relative_pca;
+	bool run_denoising;
+	bool write_denoising_passes;
+	bool full_denoising;
+	DenoiseParams denoising;
 
 	double cancel_timeout;
 	double reset_timeout;
@@ -90,7 +88,7 @@ public:
 
 		progressive = false;
 		experimental = false;
-		samples = INT_MAX;
+		samples = 1024;
 		tile_size = make_int2(64, 64);
 		start_resolution = INT_MAX;
 		pixel_size = 1;
@@ -98,12 +96,9 @@ public:
 
 		use_profiling = false;
 
-		use_denoising = false;
-		denoising_passes = false;
-		denoising_radius = 8;
-		denoising_strength = 0.0f;
-		denoising_feature_strength = 0.0f;
-		denoising_relative_pca = false;
+		run_denoising = false;
+		write_denoising_passes = false;
+		full_denoising = false;
 
 		display_buffer_linear = false;
 
@@ -153,6 +148,7 @@ public:
 	SessionParams params;
 	TileManager tile_manager;
 	Stats stats;
+	Profiler profiler;
 
 	function<void(RenderTile&)> write_render_tile_cb;
 	function<void(RenderTile&, bool)> update_render_tile_cb;
@@ -170,7 +166,7 @@ public:
 	void set_pause(bool pause);
 
 	bool update_scene();
-	void load_kernels(bool lock_scene=true);
+	bool load_kernels(bool lock_scene=true);
 
 	void device_free();
 

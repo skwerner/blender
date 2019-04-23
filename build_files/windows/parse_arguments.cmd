@@ -12,9 +12,6 @@ if NOT "%1" == "" (
 	if "%1" == "debug" (
 		set BUILD_TYPE=Debug
 	REM Build Configurations
-	) else if "%1" == "noge" (
-		set BUILD_CMAKE_ARGS=%BUILD_CMAKE_ARGS% -DWITH_GAMEENGINE=OFF -DWITH_PLAYER=OFF
-		set BUILD_NGE=_noge
 	) else if "%1" == "builddir" (
 		set BUILD_DIR_OVERRRIDE="%BLENDER_DIR%..\%2"
 		shift /1
@@ -53,9 +50,16 @@ if NOT "%1" == "" (
 	) else if "%1" == "2017pre" (
 		set BUILD_VS_YEAR=2017
 		set VSWHERE_ARGS=-prerelease
-		set BUILD_VS_YEAR=2017
 	) else if "%1" == "2017b" (
 		set BUILD_VS_YEAR=2017
+		set VSWHERE_ARGS=-products Microsoft.VisualStudio.Product.BuildTools
+	) else if "%1" == "2019" (
+		set BUILD_VS_YEAR=2019
+	) else if "%1" == "2019pre" (
+		set BUILD_VS_YEAR=2019
+		set VSWHERE_ARGS=-prerelease
+	) else if "%1" == "2019b" (
+		set BUILD_VS_YEAR=2019
 		set VSWHERE_ARGS=-products Microsoft.VisualStudio.Product.BuildTools
 	) else if "%1" == "2015" (
 		set BUILD_VS_YEAR=2015
@@ -77,6 +81,8 @@ if NOT "%1" == "" (
 		set MUST_CLEAN=1
 	) else if "%1" == "verbose" (
 		set VERBOSE=1
+	) else if "%1" == "format" (
+		set FORMAT=1
 	) else (
 		echo Command "%1" unknown, aborting!
 		exit /b 1

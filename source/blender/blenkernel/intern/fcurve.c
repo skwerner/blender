@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,19 +15,11 @@
  *
  * The Original Code is Copyright (C) 2009 Blender Foundation, Joshua Leung
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): Joshua Leung (full recode)
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/blenkernel/intern/fcurve.c
- *  \ingroup bke
+/** \file
+ * \ingroup bke
  */
-
-
 
 #include <math.h>
 #include <stdio.h>
@@ -49,6 +39,8 @@
 #include "BLI_threads.h"
 #include "BLI_string_utils.h"
 #include "BLI_utildefines.h"
+#include "BLI_expr_pylike_eval.h"
+#include "BLI_alloca.h"
 
 #include "BLT_translation.h"
 
@@ -65,6 +57,10 @@
 
 #include "RNA_access.h"
 
+#include "atomic_ops.h"
+
+#include "CLG_log.h"
+
 #ifdef WITH_PYTHON
 #include "BPY_extern.h"
 #endif
@@ -75,6 +71,8 @@
 #ifdef WITH_PYTHON
 static ThreadMutex python_driver_lock = BLI_MUTEX_INITIALIZER;
 #endif
+
+static CLG_LogRef LOG = {"bke.fcurve"};
 
 /* ************************** Data-Level Functions ************************* */
 
@@ -432,7 +430,7 @@ static int binarysearch_bezt_index_ex(BezTriple array[], float frame, int arrayl
 	 * - keyframe to be added would replace one of the existing ones on bounds
 	 */
 	if ((arraylen <= 0) || (array == NULL)) {
-		printf("Warning: binarysearch_bezt_index() encountered invalid array\n");
+		CLOG_WARN(&LOG, "encountered invalid array");
 		return 0;
 	}
 	else {
@@ -482,10 +480,10 @@ static int binarysearch_bezt_index_ex(BezTriple array[], float frame, int arrayl
 
 	/* print error if loop-limit exceeded */
 	if (loopbreaker == (maxloop - 1)) {
-		printf("Error: binarysearch_bezt_index() was taking too long\n");
+		CLOG_ERROR(&LOG, "search taking too long");
 
 		/* include debug info */
-		printf("\tround = %d: start = %d, end = %d, arraylen = %d\n", loopbreaker, start, end, arraylen);
+		CLOG_ERROR(&LOG, "\tround = %d: start = %d, end = %d, arraylen = %d", loopbreaker, start, end, arraylen);
 	}
 
 	/* not found, so return where to place it */
@@ -847,13 +845,13 @@ void fcurve_store_samples(FCurve *fcu, void *data, int start, int end, FcuSample
 	int cfra;
 
 	/* sanity checks */
-	/* TODO: make these tests report errors using reports not printf's */
+	/* TODO: make these tests report errors using reports not CLOG's */
 	if (ELEM(NULL, fcu, sample_cb)) {
-		printf("Error: No F-Curve with F-Curve Modifiers to Bake\n");
+		CLOG_ERROR(&LOG, "No F-Curve with F-Curve Modifiers to Bake");
 		return;
 	}
 	if (start > end) {
-		printf("Error: Frame range for Sampled F-Curve creation is inappropriate\n");
+		CLOG_ERROR(&LOG, "Error: Frame range for Sampled F-Curve creation is inappropriate");
 		return;
 	}
 
@@ -882,25 +880,44 @@ void fcurve_store_samples(FCurve *fcu, void *data, int start, int end, FcuSample
  * that the handles are correctly
  */
 
-/* Checks if the F-Curve has a Cycles modifier with simple settings that warrant transition smoothing */
-bool BKE_fcurve_is_cyclic(FCurve *fcu)
+/* Checks if the F-Curve has a Cycles modifier, and returns the type of the cycle behavior. */
+eFCU_Cycle_Type BKE_fcurve_get_cycle_type(FCurve *fcu)
 {
 	FModifier *fcm = fcu->modifiers.first;
 
-	if (!fcm || fcm->type != FMODIFIER_TYPE_CYCLES)
-		return false;
+	if (!fcm || fcm->type != FMODIFIER_TYPE_CYCLES) {
+		return FCU_CYCLE_NONE;
+	}
 
-	if (fcm->flag & (FMODIFIER_FLAG_DISABLED | FMODIFIER_FLAG_MUTED))
-		return false;
+	if (fcm->flag & (FMODIFIER_FLAG_DISABLED | FMODIFIER_FLAG_MUTED)) {
+		return FCU_CYCLE_NONE;
+	}
 
-	if (fcm->flag & (FMODIFIER_FLAG_RANGERESTRICT | FMODIFIER_FLAG_USEINFLUENCE))
-		return false;
+	if (fcm->flag & (FMODIFIER_FLAG_RANGERESTRICT | FMODIFIER_FLAG_USEINFLUENCE)) {
+		return FCU_CYCLE_NONE;
+	}
 
 	FMod_Cycles *data = (FMod_Cycles *)fcm->data;
 
-	return data && data->after_cycles == 0 && data->before_cycles == 0 &&
-	    ELEM(data->before_mode, FCM_EXTRAPOLATE_CYCLIC, FCM_EXTRAPOLATE_CYCLIC_OFFSET) &&
-	    ELEM(data->after_mode, FCM_EXTRAPOLATE_CYCLIC, FCM_EXTRAPOLATE_CYCLIC_OFFSET);
+	if (data && data->after_cycles == 0 && data->before_cycles == 0) {
+		if (data->before_mode == FCM_EXTRAPOLATE_CYCLIC && data->after_mode == FCM_EXTRAPOLATE_CYCLIC) {
+			return FCU_CYCLE_PERFECT;
+		}
+
+		if (ELEM(data->before_mode, FCM_EXTRAPOLATE_CYCLIC, FCM_EXTRAPOLATE_CYCLIC_OFFSET) &&
+		    ELEM(data->after_mode, FCM_EXTRAPOLATE_CYCLIC, FCM_EXTRAPOLATE_CYCLIC_OFFSET))
+		{
+			return FCU_CYCLE_OFFSET;
+		}
+	}
+
+	return FCU_CYCLE_NONE;
+}
+
+/* Checks if the F-Curve has a Cycles modifier with simple settings that warrant transition smoothing */
+bool BKE_fcurve_is_cyclic(FCurve *fcu)
+{
+	return BKE_fcurve_get_cycle_type(fcu) != FCU_CYCLE_NONE;
 }
 
 /* Shifts 'in' by the difference in coordinates between 'to' and 'from', using 'out' as the output buffer.
@@ -1145,7 +1162,7 @@ static float dtar_get_prop_val(ChannelDriver *driver, DriverTarget *dtar)
 	/* error check for missing pointer... */
 	if (id == NULL) {
 		if (G.debug & G_DEBUG) {
-			printf("Error: driver has an invalid target to use (path = %s)\n", dtar->rna_path);
+			CLOG_ERROR(&LOG, "driver has an invalid target to use (path = %s)", dtar->rna_path);
 		}
 
 		driver->flag |= DRIVER_FLAG_INVALID;
@@ -1178,8 +1195,8 @@ static float dtar_get_prop_val(ChannelDriver *driver, DriverTarget *dtar)
 			else {
 				/* out of bounds */
 				if (G.debug & G_DEBUG) {
-					printf("Driver Evaluation Error: array index is out of bounds for %s -> %s (%d)",
-					       id->name, dtar->rna_path, index);
+					CLOG_ERROR(&LOG, "Driver Evaluation Error: array index is out of bounds for %s -> %s (%d)",
+					           id->name, dtar->rna_path, index);
 				}
 
 				driver->flag |= DRIVER_FLAG_INVALID;
@@ -1210,7 +1227,7 @@ static float dtar_get_prop_val(ChannelDriver *driver, DriverTarget *dtar)
 	else {
 		/* path couldn't be resolved */
 		if (G.debug & G_DEBUG) {
-			printf("Driver Evaluation Error: cannot resolve target for %s -> %s\n", id->name, dtar->rna_path);
+			CLOG_ERROR(&LOG, "Driver Evaluation Error: cannot resolve target for %s -> %s", id->name, dtar->rna_path);
 		}
 
 		driver->flag |= DRIVER_FLAG_INVALID;
@@ -1245,7 +1262,7 @@ bool driver_get_variable_property(
 	/* error check for missing pointer... */
 	if (id == NULL) {
 		if (G.debug & G_DEBUG) {
-			printf("Error: driver has an invalid target to use (path = %s)\n", dtar->rna_path);
+			CLOG_ERROR(&LOG, "driver has an invalid target to use (path = %s)", dtar->rna_path);
 		}
 
 		driver->flag |= DRIVER_FLAG_INVALID;
@@ -1267,7 +1284,7 @@ bool driver_get_variable_property(
 	else {
 		/* path couldn't be resolved */
 		if (G.debug & G_DEBUG) {
-			printf("Driver Evaluation Error: cannot resolve target for %s -> %s\n", id->name, dtar->rna_path);
+			CLOG_ERROR(&LOG, "Driver Evaluation Error: cannot resolve target for %s -> %s", id->name, dtar->rna_path);
 		}
 
 		ptr = PointerRNA_NULL;
@@ -1288,36 +1305,11 @@ bool driver_get_variable_property(
 	return true;
 }
 
-#if 0
-/* Helper function to obtain a pointer to a Pose Channel (for evaluating drivers) */
-static bPoseChannel *dtar_get_pchan_ptr(ChannelDriver *driver, DriverTarget *dtar)
-{
-	ID *id;
-	/* sanity check */
-	if (ELEM(NULL, driver, dtar))
-		return NULL;
-
-	id = dtar_id_ensure_proxy_from(dtar->id);
-
-	/* check if the ID here is a valid object */
-	if (id && GS(id->name)) {
-		Object *ob = (Object *)id;
-
-		/* get pose, and subsequently, posechannel */
-		return BKE_pose_channel_find_name(ob->pose, dtar->pchan_name);
-	}
-	else {
-		/* cannot find a posechannel this way */
-		return NULL;
-	}
-}
-#endif
-
 static short driver_check_valid_targets(ChannelDriver *driver, DriverVar *dvar)
 {
 	short valid_targets = 0;
 
-	DRIVER_TARGETS_USED_LOOPER(dvar)
+	DRIVER_TARGETS_USED_LOOPER_BEGIN(dvar)
 	{
 		Object *ob = (Object *)dtar_id_ensure_proxy_from(dtar->id);
 
@@ -1333,7 +1325,7 @@ static short driver_check_valid_targets(ChannelDriver *driver, DriverVar *dvar)
 			valid_targets++;
 		}
 	}
-	DRIVER_TARGETS_LOOPER_END
+	DRIVER_TARGETS_LOOPER_END;
 
 	return valid_targets;
 }
@@ -1355,8 +1347,8 @@ static float dvar_eval_rotDiff(ChannelDriver *driver, DriverVar *dvar)
 	/* make sure we have enough valid targets to use - all or nothing for now... */
 	if (driver_check_valid_targets(driver, dvar) != 2) {
 		if (G.debug & G_DEBUG) {
-			printf("RotDiff DVar: not enough valid targets (n = %d) (a = %p, b = %p)\n",
-			        valid_targets, dvar->targets[0].id, dvar->targets[1].id);
+			CLOG_WARN(&LOG, "RotDiff DVar: not enough valid targets (n = %d) (a = %p, b = %p)",
+			          valid_targets, dvar->targets[0].id, dvar->targets[1].id);
 		}
 		return 0.0f;
 	}
@@ -1412,15 +1404,15 @@ static float dvar_eval_locDiff(ChannelDriver *driver, DriverVar *dvar)
 	/* make sure we have enough valid targets to use - all or nothing for now... */
 	if (valid_targets < dvar->num_targets) {
 		if (G.debug & G_DEBUG) {
-			printf("LocDiff DVar: not enough valid targets (n = %d) (a = %p, b = %p)\n",
-			        valid_targets, dvar->targets[0].id, dvar->targets[1].id);
+			CLOG_WARN(&LOG, "LocDiff DVar: not enough valid targets (n = %d) (a = %p, b = %p)",
+			          valid_targets, dvar->targets[0].id, dvar->targets[1].id);
 		}
 		return 0.0f;
 	}
 
 	/* SECOND PASS: get two location values */
 	/* NOTE: for now, these are all just worldspace */
-	DRIVER_TARGETS_USED_LOOPER(dvar)
+	DRIVER_TARGETS_USED_LOOPER_BEGIN(dvar)
 	{
 		/* get pointer to loc values to store in */
 		Object *ob = (Object *)dtar_id_ensure_proxy_from(dtar->id);
@@ -1491,7 +1483,7 @@ static float dvar_eval_locDiff(ChannelDriver *driver, DriverVar *dvar)
 			copy_v3_v3(loc1, tmp_loc);
 		}
 	}
-	DRIVER_TARGETS_LOOPER_END
+	DRIVER_TARGETS_LOOPER_END;
 
 
 	/* if we're still here, there should now be two targets to use,
@@ -1676,13 +1668,13 @@ void driver_free_variable(ListBase *variables, DriverVar *dvar)
 	 *   currently, since there may be some lingering RNA paths from
 	 *   previous users needing freeing
 	 */
-	DRIVER_TARGETS_LOOPER(dvar)
+	DRIVER_TARGETS_LOOPER_BEGIN(dvar)
 	{
 		/* free RNA path if applicable */
 		if (dtar->rna_path)
 			MEM_freeN(dtar->rna_path);
 	}
-	DRIVER_TARGETS_LOOPER_END
+	DRIVER_TARGETS_LOOPER_END;
 
 	/* remove the variable from the driver */
 	BLI_freelinkN(variables, dvar);
@@ -1694,11 +1686,8 @@ void driver_free_variable_ex(ChannelDriver *driver, DriverVar *dvar)
 	/* remove and free the driver variable */
 	driver_free_variable(&driver->variables, dvar);
 
-#ifdef WITH_PYTHON
 	/* since driver variables are cached, the expression needs re-compiling too */
-	if (driver->type == DRIVER_TYPE_PYTHON)
-		driver->flag |= DRIVER_FLAG_RENAMEVAR;
-#endif
+	BKE_driver_invalidate_expression(driver, false, true);
 }
 
 /* Copy driver variables from src_vars list to dst_vars list */
@@ -1709,13 +1698,13 @@ void driver_variables_copy(ListBase *dst_vars, const ListBase *src_vars)
 
 	for (DriverVar *dvar = dst_vars->first; dvar; dvar = dvar->next) {
 		/* need to go over all targets so that we don't leave any dangling paths */
-		DRIVER_TARGETS_LOOPER(dvar)
+		DRIVER_TARGETS_LOOPER_BEGIN(dvar)
 		{
 			/* make a copy of target's rna path if available */
 			if (dtar->rna_path)
 				dtar->rna_path = MEM_dupallocN(dtar->rna_path);
 		}
-		DRIVER_TARGETS_LOOPER_END
+		DRIVER_TARGETS_LOOPER_END;
 	}
 }
 
@@ -1735,7 +1724,7 @@ void driver_change_variable_type(DriverVar *dvar, int type)
 	/* make changes to the targets based on the defines for these types
 	 * NOTE: only need to make sure the ones we're using here are valid...
 	 */
-	DRIVER_TARGETS_USED_LOOPER(dvar)
+	DRIVER_TARGETS_USED_LOOPER_BEGIN(dvar)
 	{
 		short flags = dvti->target_flags[tarIndex];
 
@@ -1746,7 +1735,7 @@ void driver_change_variable_type(DriverVar *dvar, int type)
 		if ((flags & DTAR_FLAG_ID_OB_ONLY) || (dtar->idtype == 0))
 			dtar->idtype = ID_OB;
 	}
-	DRIVER_TARGETS_LOOPER_END
+	DRIVER_TARGETS_LOOPER_END;
 }
 
 /* Validate driver name (after being renamed) */
@@ -1756,7 +1745,7 @@ void driver_variable_name_validate(DriverVar *dvar)
 	const char special_char_blacklist[] = {
 	    '~', '`', '!', '@', '#', '$', '%', '^', '&', '*', '+', '=', '-',
 	    '/', '\\', '?', ':', ';',  '<', '>', '{', '}', '[', ']', '|',
-	    ' ', '.', '\t', '\n', '\r'
+	    ' ', '.', '\t', '\n', '\r',
 	};
 
 	/* sanity checks */
@@ -1835,11 +1824,8 @@ DriverVar *driver_add_new_variable(ChannelDriver *driver)
 	/* set the default type to 'single prop' */
 	driver_change_variable_type(dvar, DVAR_TYPE_SINGLE_PROP);
 
-#ifdef WITH_PYTHON
 	/* since driver variables are cached, the expression needs re-compiling too */
-	if (driver->type == DRIVER_TYPE_PYTHON)
-		driver->flag |= DRIVER_FLAG_RENAMEVAR;
-#endif
+	BKE_driver_invalidate_expression(driver, false, true);
 
 	/* return the target */
 	return dvar;
@@ -1868,6 +1854,8 @@ void fcurve_free_driver(FCurve *fcu)
 		BPY_DECREF(driver->expr_comp);
 #endif
 
+	BLI_expr_pylike_free(driver->expr_simple);
+
 	/* free driver itself, then set F-Curve's point to this to NULL (as the curve may still be used) */
 	MEM_freeN(driver);
 	fcu->driver = NULL;
@@ -1885,6 +1873,7 @@ ChannelDriver *fcurve_copy_driver(const ChannelDriver *driver)
 	/* copy all data */
 	ndriver = MEM_dupallocN(driver);
 	ndriver->expr_comp = NULL;
+	ndriver->expr_simple = NULL;
 
 	/* copy variables */
 	BLI_listbase_clear(&ndriver->variables); /* to get rid of refs to non-copied data (that's still used on original) */
@@ -1892,6 +1881,124 @@ ChannelDriver *fcurve_copy_driver(const ChannelDriver *driver)
 
 	/* return the new driver */
 	return ndriver;
+}
+
+/* Driver Expression Evaluation --------------- */
+
+static ExprPyLike_Parsed *driver_compile_simple_expr_impl(ChannelDriver *driver)
+{
+	/* Prepare parameter names. */
+	int names_len = BLI_listbase_count(&driver->variables);
+	const char **names = BLI_array_alloca(names, names_len + 1);
+	int i = 0;
+
+	names[i++] = "frame";
+
+	for (DriverVar *dvar = driver->variables.first; dvar; dvar = dvar->next) {
+		names[i++] = dvar->name;
+	}
+
+	return BLI_expr_pylike_parse(driver->expression, names, names_len + 1);
+}
+
+static bool driver_evaluate_simple_expr(ChannelDriver *driver, ExprPyLike_Parsed *expr, float *result, float time)
+{
+	/* Prepare parameter values. */
+	int vars_len = BLI_listbase_count(&driver->variables);
+	double *vars = BLI_array_alloca(vars, vars_len + 1);
+	int i = 0;
+
+	vars[i++] = time;
+
+	for (DriverVar *dvar = driver->variables.first; dvar; dvar = dvar->next) {
+		vars[i++] = driver_get_variable_value(driver, dvar);
+	}
+
+	/* Evaluate expression. */
+	double result_val;
+	eExprPyLike_EvalStatus status = BLI_expr_pylike_eval(expr, vars, vars_len + 1, &result_val);
+	const char *message;
+
+	switch (status) {
+		case EXPR_PYLIKE_SUCCESS:
+			if (isfinite(result_val)) {
+				*result = (float)result_val;
+			}
+			return true;
+
+		case EXPR_PYLIKE_DIV_BY_ZERO:
+		case EXPR_PYLIKE_MATH_ERROR:
+			message = (status == EXPR_PYLIKE_DIV_BY_ZERO) ? "Division by Zero" : "Math Domain Error";
+			CLOG_ERROR(&LOG, "%s in Driver: '%s'", message, driver->expression);
+
+			driver->flag |= DRIVER_FLAG_INVALID;
+			return true;
+
+		default:
+			/* arriving here means a bug, not user error */
+			CLOG_ERROR(&LOG, "simple driver expression evaluation failed: '%s'", driver->expression);
+			return false;
+	}
+}
+
+/* Compile and cache the driver expression if necessary, with thread safety. */
+static bool driver_compile_simple_expr(ChannelDriver *driver)
+{
+	if (driver->expr_simple != NULL) {
+		return true;
+	}
+
+	if (driver->type != DRIVER_TYPE_PYTHON) {
+		return false;
+	}
+
+	/* It's safe to parse in multiple threads; at worst it'll
+	 * waste some effort, but in return avoids mutex contention. */
+	ExprPyLike_Parsed *expr = driver_compile_simple_expr_impl(driver);
+
+	/* Store the result if the field is still NULL, or discard
+	 * it if another thread got here first. */
+	if (atomic_cas_ptr((void **)&driver->expr_simple, NULL, expr) != NULL) {
+		BLI_expr_pylike_free(expr);
+	}
+
+	return true;
+}
+
+/* Try using the simple expression evaluator to compute the result of the driver.
+ * On success, stores the result and returns true; on failure result is set to 0. */
+static bool driver_try_evaluate_simple_expr(ChannelDriver *driver, ChannelDriver *driver_orig, float *result, float time)
+{
+	*result = 0.0f;
+
+	return driver_compile_simple_expr(driver_orig) &&
+	       BLI_expr_pylike_is_valid(driver_orig->expr_simple) &&
+	       driver_evaluate_simple_expr(driver, driver_orig->expr_simple, result, time);
+}
+
+/* Check if the expression in the driver conforms to the simple subset. */
+bool BKE_driver_has_simple_expression(ChannelDriver *driver)
+{
+	return driver_compile_simple_expr(driver) && BLI_expr_pylike_is_valid(driver->expr_simple);
+}
+
+/* Reset cached compiled expression data */
+void BKE_driver_invalidate_expression(ChannelDriver *driver, bool expr_changed, bool varname_changed)
+{
+	if (expr_changed || varname_changed) {
+		BLI_expr_pylike_free(driver->expr_simple);
+		driver->expr_simple = NULL;
+	}
+
+#ifdef WITH_PYTHON
+	if (expr_changed) {
+		driver->flag |= DRIVER_FLAG_RECOMPILE;
+	}
+
+	if (varname_changed) {
+		driver->flag |= DRIVER_FLAG_RENAMEVAR;
+	}
+#endif
 }
 
 /* Driver Evaluation -------------------------- */
@@ -1922,13 +2029,14 @@ float driver_get_variable_value(ChannelDriver *driver, DriverVar *dvar)
 /* Evaluate an Channel-Driver to get a 'time' value to use instead of "evaltime"
  * - "evaltime" is the frame at which F-Curve is being evaluated
  * - has to return a float value
+ * - driver_orig is where we cache Python expressions, in case of COW
  */
-float evaluate_driver(PathResolvedRNA *anim_rna, ChannelDriver *driver, const float evaltime)
+float evaluate_driver(PathResolvedRNA *anim_rna, ChannelDriver *driver, ChannelDriver *driver_orig, const float evaltime)
 {
 	DriverVar *dvar;
 
 	/* check if driver can be evaluated */
-	if (driver->flag & DRIVER_FLAG_INVALID)
+	if (driver_orig->flag & DRIVER_FLAG_INVALID)
 		return 0.0f;
 
 	switch (driver->type) {
@@ -1996,26 +2104,26 @@ float evaluate_driver(PathResolvedRNA *anim_rna, ChannelDriver *driver, const fl
 		}
 		case DRIVER_TYPE_PYTHON: /* expression */
 		{
-#ifdef WITH_PYTHON
 			/* check for empty or invalid expression */
-			if ( (driver->expression[0] == '\0') ||
-			     (driver->flag & DRIVER_FLAG_INVALID) )
+			if ( (driver_orig->expression[0] == '\0') ||
+			     (driver_orig->flag & DRIVER_FLAG_INVALID) )
 			{
 				driver->curval = 0.0f;
 			}
-			else {
+			else if (!driver_try_evaluate_simple_expr(driver, driver_orig, &driver->curval, evaltime)) {
+#ifdef WITH_PYTHON
 				/* this evaluates the expression using Python, and returns its result:
 				 * - on errors it reports, then returns 0.0f
 				 */
 				BLI_mutex_lock(&python_driver_lock);
 
-				driver->curval = BPY_driver_exec(anim_rna, driver, evaltime);
+				driver->curval = BPY_driver_exec(anim_rna, driver, driver_orig, evaltime);
 
 				BLI_mutex_unlock(&python_driver_lock);
-			}
 #else /* WITH_PYTHON*/
-			UNUSED_VARS(anim_rna, evaltime);
+				UNUSED_VARS(anim_rna, evaltime);
 #endif /* WITH_PYTHON*/
+			}
 			break;
 		}
 		default:
@@ -2186,24 +2294,6 @@ static void berekeny(float f1, float f2, float f3, float f4, float *o, int b)
 		o[a] = c0 + t * c1 + t * t * c2 + t * t * t * c3;
 	}
 }
-
-#if 0
-static void berekenx(float *f, float *o, int b)
-{
-	float t, c0, c1, c2, c3;
-	int a;
-
-	c0 = f[0];
-	c1 = 3.0f * (f[3] - f[0]);
-	c2 = 3.0f * (f[0] - 2.0f * f[3] + f[6]);
-	c3 = f[9] - f[0] + 3.0f * (f[3] - f[6]);
-
-	for (a = 0; a < b; a++) {
-		t = o[a];
-		o[a] = c0 + t * c1 + t * t * c2 + t * t * t * c3;
-	}
-}
-#endif
 
 
 /* -------------------------- */
@@ -2705,7 +2795,15 @@ float evaluate_fcurve(FCurve *fcu, float evaltime)
 	return evaluate_fcurve_ex(fcu, evaltime, 0.0);
 }
 
-float evaluate_fcurve_driver(PathResolvedRNA *anim_rna, FCurve *fcu, float evaltime)
+float evaluate_fcurve_only_curve(FCurve *fcu, float evaltime)
+{
+	/* Can be used to evaluate the (keyframed) fcurve only.
+	 * Also works for driver-fcurves when the driver itself is not relevant.
+	 * E.g. when inserting a keyframe in a driver fcurve. */
+	return evaluate_fcurve_ex(fcu, evaltime, 0.0);
+}
+
+float evaluate_fcurve_driver(PathResolvedRNA *anim_rna, FCurve *fcu, ChannelDriver *driver_orig, float evaltime)
 {
 	BLI_assert(fcu->driver != NULL);
 	float cvalue = 0.0f;
@@ -2715,7 +2813,7 @@ float evaluate_fcurve_driver(PathResolvedRNA *anim_rna, FCurve *fcu, float evalt
 	 */
 	if (fcu->driver) {
 		/* evaltime now serves as input for the curve */
-		evaltime = evaluate_driver(anim_rna, fcu->driver, evaltime);
+		evaltime = evaluate_driver(anim_rna, fcu->driver, driver_orig, evaltime);
 
 		/* only do a default 1-1 mapping if it's unlikely that anything else will set a value... */
 		if (fcu->totvert == 0) {
@@ -2762,7 +2860,7 @@ float calculate_fcurve(PathResolvedRNA *anim_rna, FCurve *fcu, float evaltime)
 		/* calculate and set curval (evaluates driver too if necessary) */
 		float curval;
 		if (fcu->driver) {
-			curval = evaluate_fcurve_driver(anim_rna, fcu, evaltime);
+			curval = evaluate_fcurve_driver(anim_rna, fcu, fcu->driver, evaltime);
 		}
 		else {
 			curval = evaluate_fcurve(fcu, evaltime);

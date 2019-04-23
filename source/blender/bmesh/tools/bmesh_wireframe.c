@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,14 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * Contributor(s): Campbell Barton
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/bmesh/tools/bmesh_wireframe.c
- *  \ingroup bmesh
+/** \file
+ * \ingroup bmesh
  *
  * Creates a solid wireframe from connected faces.
  */
@@ -269,7 +263,7 @@ void BM_mesh_wireframe(
 
 			if (verts_relfac) {
 				if (use_relative_offset) {
-					verts_relfac[i] = BM_vert_calc_mean_tagged_edge_length(v_src);
+					verts_relfac[i] = BM_vert_calc_median_tagged_edge_length(v_src);
 				}
 				else {
 					verts_relfac[i] = 1.0f;
@@ -315,7 +309,7 @@ void BM_mesh_wireframe(
 			verts_pos[i] = NULL;
 		}
 
-		/* conflicts with BM_vert_calc_mean_tagged_edge_length */
+		/* conflicts with BM_vert_calc_median_tagged_edge_length */
 		if (use_relative_offset == false) {
 			BM_elem_flag_disable(v_src, BM_ELEM_TAG);
 		}
@@ -335,7 +329,8 @@ void BM_mesh_wireframe(
 		}
 
 		BM_ITER_ELEM (l, &itersub, f_src, BM_LOOPS_OF_FACE) {
-			BM_elem_index_set(l, verts_loop_tot); /* set_dirty */  /* Because some faces might be skipped! */
+			/* Because some faces might be skipped! */
+			BM_elem_index_set(l, verts_loop_tot); /* set_dirty */
 
 			BM_loop_calc_face_tangent(l, tvec);
 
@@ -443,7 +438,9 @@ void BM_mesh_wireframe(
 			BMVert *v_pos2 = verts_pos[i_2];
 
 			f_new = BM_face_create_quad_tri(bm, v_l1, v_l2, v_neg2, v_neg1, f_src, BM_CREATE_NOP);
-			if (mat_offset) f_new->mat_nr = CLAMPIS(f_new->mat_nr + mat_offset, 0, mat_max);
+			if (mat_offset) {
+				f_new->mat_nr = CLAMPIS(f_new->mat_nr + mat_offset, 0, mat_max);
+			}
 			BM_elem_flag_enable(f_new, BM_ELEM_TAG);
 			l_new = BM_FACE_FIRST_LOOP(f_new);
 
@@ -454,7 +451,9 @@ void BM_mesh_wireframe(
 
 			f_new = BM_face_create_quad_tri(bm, v_l2, v_l1, v_pos1, v_pos2, f_src, BM_CREATE_NOP);
 
-			if (mat_offset) f_new->mat_nr = CLAMPIS(f_new->mat_nr + mat_offset, 0, mat_max);
+			if (mat_offset) {
+				f_new->mat_nr = CLAMPIS(f_new->mat_nr + mat_offset, 0, mat_max);
+			}
 			BM_elem_flag_enable(f_new, BM_ELEM_TAG);
 			l_new = BM_FACE_FIRST_LOOP(f_new);
 
@@ -471,7 +470,9 @@ void BM_mesh_wireframe(
 					BMVert *v_b2 = verts_boundary[i_2];
 
 					f_new = BM_face_create_quad_tri(bm, v_b2, v_b1, v_neg1, v_neg2, f_src, BM_CREATE_NOP);
-					if (mat_offset) f_new->mat_nr = CLAMPIS(f_new->mat_nr + mat_offset, 0, mat_max);
+					if (mat_offset) {
+						f_new->mat_nr = CLAMPIS(f_new->mat_nr + mat_offset, 0, mat_max);
+					}
 					BM_elem_flag_enable(f_new, BM_ELEM_TAG);
 					l_new = BM_FACE_FIRST_LOOP(f_new);
 
@@ -481,7 +482,9 @@ void BM_mesh_wireframe(
 					BM_elem_attrs_copy(bm, bm, l,      l_new->next->next);
 
 					f_new = BM_face_create_quad_tri(bm, v_b1, v_b2, v_pos2, v_pos1, f_src, BM_CREATE_NOP);
-					if (mat_offset) f_new->mat_nr = CLAMPIS(f_new->mat_nr + mat_offset, 0, mat_max);
+					if (mat_offset) {
+						f_new->mat_nr = CLAMPIS(f_new->mat_nr + mat_offset, 0, mat_max);
+					}
 					BM_elem_flag_enable(f_new, BM_ELEM_TAG);
 					l_new = BM_FACE_FIRST_LOOP(f_new);
 

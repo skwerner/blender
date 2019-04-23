@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,10 @@
  *
  * The Original Code is Copyright (C) 2013 Blender Foundation.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): Jason Wilkins
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file ghost/intern/GHOST_ContextEGL.h
- *  \ingroup GHOST
+/** \file
+ * \ingroup GHOST
  */
 
 #ifndef __GHOST_CONTEXTEGL_H__
@@ -34,16 +26,7 @@
 
 #include "GHOST_Context.h"
 
-#ifdef WITH_GLEW_MX
-#  define eglewGetContext() eglewContext
-#endif
-
 #include <GL/eglew.h>
-
-#ifdef WITH_GLEW_MX
-extern "C" EGLEWContext *eglewContext;
-#endif
-
 
 #ifndef GHOST_OPENGL_EGL_CONTEXT_FLAGS
 #define GHOST_OPENGL_EGL_CONTEXT_FLAGS 0
@@ -90,6 +73,12 @@ public:
 	GHOST_TSuccess activateDrawingContext();
 
 	/**
+	 * Release the drawing context of the calling thread.
+	 * \return  A boolean success indicator.
+	 */
+	GHOST_TSuccess releaseDrawingContext();
+
+	/**
 	 * Call immediately after new to initialize.  If this fails then immediately delete the object.
 	 * \return Indication as to whether initialization has succeeded.
 	 */
@@ -116,13 +105,6 @@ public:
 	 */
 	GHOST_TSuccess getSwapInterval(int &intervalOut);
 
-protected:
-	inline void activateEGLEW() const {
-#ifdef WITH_GLEW_MX
-		eglewContext = m_eglewContext;
-#endif
-	}
-
 private:
 	void initContextEGLEW();
 
@@ -142,10 +124,6 @@ private:
 	EGLDisplay m_display;
 
 	EGLint m_swap_interval;
-
-#ifdef WITH_GLEW_MX
-	EGLEWContext *m_eglewContext;
-#endif
 
 	EGLContext &m_sharedContext;
 	EGLint     &m_sharedCount;

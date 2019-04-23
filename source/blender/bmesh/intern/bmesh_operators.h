@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,17 +12,13 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * Contributor(s): Joseph Eagar.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
 #ifndef __BMESH_OPERATORS_H__
 #define __BMESH_OPERATORS_H__
 
-/** \file blender/bmesh/intern/bmesh_operators.h
- *  \ingroup bmesh
+/** \file
+ * \ingroup bmesh
  */
 
 /*see comments in intern/bmesh_opdefines.c for documentation of specific operators*/
@@ -36,7 +30,7 @@ enum {
 	SUBD_CORNER_INNERVERT,
 	SUBD_CORNER_PATH,
 	SUBD_CORNER_FAN,
-	SUBD_CORNER_STRAIGHT_CUT
+	SUBD_CORNER_STRAIGHT_CUT,
 };
 
 /* aligned with PROP_SMOOTH and friends */
@@ -53,13 +47,7 @@ enum {
 	SUBDIV_SELECT_NONE,
 	SUBDIV_SELECT_ORIG,
 	SUBDIV_SELECT_INNER,
-	SUBDIV_SELECT_LOOPCUT
-};
-
-enum {
-	SIM_CMP_EQ = 0,
-	SIM_CMP_GT,
-	SIM_CMP_LT
+	SUBDIV_SELECT_LOOPCUT,
 };
 
 /* subdivide_edgering */
@@ -77,16 +65,14 @@ enum {
 /* similar face selection slot values */
 enum {
 	SIMFACE_MATERIAL = 201,
-	SIMFACE_IMAGE,
 	SIMFACE_AREA,
 	SIMFACE_SIDES,
 	SIMFACE_PERIMETER,
 	SIMFACE_NORMAL,
 	SIMFACE_COPLANAR,
 	SIMFACE_SMOOTH,
-#ifdef WITH_FREESTYLE
-	SIMFACE_FREESTYLE
-#endif
+	SIMFACE_FACEMAP,
+	SIMFACE_FREESTYLE,
 };
 
 /* similar edge selection slot values */
@@ -99,9 +85,7 @@ enum {
 	SIMEDGE_BEVEL,
 	SIMEDGE_SEAM,
 	SIMEDGE_SHARP,
-#ifdef WITH_FREESTYLE
-	SIMEDGE_FREESTYLE
-#endif
+	SIMEDGE_FREESTYLE,
 };
 
 /* similar vertex selection slot values */
@@ -109,14 +93,14 @@ enum {
 	SIMVERT_NORMAL = 0,
 	SIMVERT_FACE,
 	SIMVERT_VGROUP,
-	SIMVERT_EDGE
+	SIMVERT_EDGE,
 };
 
 /* Poke face center calculation */
 enum {
-	BMOP_POKE_MEAN_WEIGHTED = 0,
-	BMOP_POKE_MEAN,
-	BMOP_POKE_BOUNDS
+	BMOP_POKE_MEDIAN_WEIGHTED = 0,
+	BMOP_POKE_MEDIAN,
+	BMOP_POKE_BOUNDS,
 };
 
 /* Bevel offset_type slot values */
@@ -124,7 +108,22 @@ enum {
 	BEVEL_AMT_OFFSET,
 	BEVEL_AMT_WIDTH,
 	BEVEL_AMT_DEPTH,
-	BEVEL_AMT_PERCENT
+	BEVEL_AMT_PERCENT,
+};
+
+/* Bevel face_strength_mode values: should match face_str mode enum in DNA_modifer_types.h */
+enum {
+	BEVEL_FACE_STRENGTH_NONE,
+	BEVEL_FACE_STRENGTH_NEW,
+	BEVEL_FACE_STRENGTH_AFFECTED,
+	BEVEL_FACE_STRENGTH_ALL,
+};
+
+/* Bevel miter slot values */
+enum {
+	BEVEL_MITER_SHARP,
+	BEVEL_MITER_PATCH,
+	BEVEL_MITER_ARC,
 };
 
 extern const BMOpDefine *bmo_opdefines[];

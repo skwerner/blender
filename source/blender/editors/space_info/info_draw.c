@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,14 +15,10 @@
  *
  * The Original Code is Copyright (C) 2010 Blender Foundation.
  * All rights reserved.
- *
- * Contributor(s): Blender Foundation
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/space_info/info_draw.c
- *  \ingroup spinfo
+/** \file
+ * \ingroup spinfo
  */
 
 #include <math.h>
@@ -32,7 +26,6 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <limits.h>
-
 
 #include "BLI_utildefines.h"
 
@@ -42,15 +35,13 @@
 // #include "BKE_suggestions.h"
 #include "BKE_report.h"
 
-#include "BIF_gl.h"
-
-
 #include "UI_resources.h"
 #include "UI_interface.h"
 #include "UI_view2d.h"
 
 #include "info_intern.h"
 #include "textview.h"
+#include "GPU_framebuffer.h"
 
 /* complicates things a bit, so leaving in old simple code */
 #define USE_INFO_NEWLINE
@@ -130,7 +121,7 @@ static int report_textview_begin(TextViewContext *tvc)
 	tvc->iter = reports->list.last;
 
 	UI_ThemeClearColor(TH_BACK);
-	glClear(GL_COLOR_BUFFER_BIT);
+	GPU_clear(GPU_COLOR_BIT);
 
 #ifdef USE_INFO_NEWLINE
 	tvc->iter_tmp = 0;

@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,12 +15,6 @@
  *
  * The Original Code is Copyright (C) 2018 Blender Foundation.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): Lukas Stockner, L. E. Segovia
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
 #include "../node_shader_util.h"
@@ -49,7 +41,7 @@ static bNodeSocketTemplate sh_node_bsdf_hair_principled_in[] = {
 
 static bNodeSocketTemplate sh_node_bsdf_hair_principled_out[] = {
 	{	SOCK_SHADER, 0, N_("BSDF")},
-	{	-1, 0, ""	}
+	{	-1, 0, ""	},
 };
 
 /* Initialize the custom Parametrization property to Color. */
@@ -122,7 +114,6 @@ void register_node_type_sh_bsdf_hair_principled(void)
 	static bNodeType ntype;
 
 	sh_node_type_base(&ntype, SH_NODE_BSDF_HAIR_PRINCIPLED, "Principled Hair BSDF", NODE_CLASS_SHADER, 0);
-	node_type_compatibility(&ntype, NODE_NEW_SHADING);
 	node_type_socket_templates(&ntype, sh_node_bsdf_hair_principled_in, sh_node_bsdf_hair_principled_out);
 	node_type_size_preset(&ntype, NODE_SIZE_LARGE);
 	node_type_init(&ntype, node_shader_init_hair_principled);

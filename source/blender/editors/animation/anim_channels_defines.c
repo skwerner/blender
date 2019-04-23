@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,14 +15,10 @@
  *
  * The Original Code is Copyright (C) 2009 Blender Foundation, Joshua Leung
  * All rights reserved.
- *
- * Contributor(s): Joshua Leung
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/animation/anim_channels_defines.c
- *  \ingroup edanimation
+/** \file
+ * \ingroup edanimation
  */
 
 
@@ -48,7 +42,7 @@
 #include "DNA_scene_types.h"
 #include "DNA_space_types.h"
 #include "DNA_key_types.h"
-#include "DNA_lamp_types.h"
+#include "DNA_light_types.h"
 #include "DNA_lattice_types.h"
 #include "DNA_linestyle_types.h"
 #include "DNA_mesh_types.h"
@@ -64,10 +58,16 @@
 
 #include "BKE_animsys.h"
 #include "BKE_curve.h"
+#include "BKE_gpencil.h"
 #include "BKE_key.h"
 #include "BKE_main.h"
 #include "BKE_nla.h"
 #include "BKE_context.h"
+
+#include "GPU_immediate.h"
+#include "GPU_state.h"
+
+#include "DEG_depsgraph.h"
 
 #include "UI_interface.h"
 #include "UI_interface_icons.h"
@@ -75,9 +75,6 @@
 
 #include "ED_anim_api.h"
 #include "ED_keyframing.h"
-
-#include "BIF_gl.h"
-#include "BIF_glutil.h"
 
 #include "WM_api.h"
 #include "WM_types.h"
@@ -120,11 +117,10 @@ static void acf_generic_root_backdrop(bAnimContext *ac, bAnimListElem *ale, floa
 
 	/* set backdrop drawing color */
 	acf->get_backdrop_color(ac, ale, color);
-	glColor3fv(color);
 
 	/* rounded corners on LHS only - top only when expanded, but bottom too when collapsed */
 	UI_draw_roundbox_corner_set((expanded) ? UI_CNR_TOP_LEFT : (UI_CNR_TOP_LEFT | UI_CNR_BOTTOM_LEFT));
-	UI_draw_roundbox_gl_mode(GL_POLYGON, offset,  yminc, v2d->cur.xmax + EXTRA_SCROLL_PAD, ymaxc, 8);
+	UI_draw_roundbox_3fvAlpha(true, offset,  yminc, v2d->cur.xmax + EXTRA_SCROLL_PAD, ymaxc, 8, color, 1.0f);
 }
 
 
@@ -143,12 +139,18 @@ static void acf_generic_dataexpand_backdrop(bAnimContext *ac, bAnimListElem *ale
 	short offset = (acf->get_offset) ? acf->get_offset(ac, ale) : 0;
 	float color[3];
 
+	uint pos = GPU_vertformat_attr_add(immVertexFormat(), "pos", GPU_COMP_F32, 2, GPU_FETCH_FLOAT);
+
 	/* set backdrop drawing color */
 	acf->get_backdrop_color(ac, ale, color);
-	glColor3fv(color);
+
+	immBindBuiltinProgram(GPU_SHADER_2D_UNIFORM_COLOR);
+	immUniformColor3fv(color);
 
 	/* no rounded corner - just rectangular box */
-	glRectf(offset, yminc,  v2d->cur.xmax + EXTRA_SCROLL_PAD, ymaxc);
+	immRectf(pos, offset, yminc,  v2d->cur.xmax + EXTRA_SCROLL_PAD, ymaxc);
+
+	immUnbindProgram();
 }
 
 /* helper method to test if group colors should be drawn */
@@ -165,9 +167,9 @@ static bool acf_show_channel_colors(bAnimContext *ac)
 
 				break;
 			}
-			case SPACE_IPO:
+			case SPACE_GRAPH:
 			{
-				SpaceIpo *sipo = (SpaceIpo *)ac->sl;
+				SpaceGraph *sipo = (SpaceGraph *)ac->sl;
 				showGroupColors = !(sipo->flag & SIPO_NODRAWGCOLORS);
 
 				break;
@@ -213,8 +215,25 @@ static void acf_generic_channel_color(bAnimContext *ac, bAnimListElem *ale, floa
 	}
 	else {
 		// FIXME: what happens when the indention is 1 greater than what it should be (due to grouping)?
-		int colOfs = 20 - 20 * indent;
-		UI_GetThemeColorShade3fv(TH_HEADER, colOfs, r_color);
+		int colOfs = 10 - 10 * indent;
+		UI_GetThemeColorShade3fv(TH_SHADE2, colOfs, r_color);
+	}
+}
+
+/* get backdrop color for grease pencil channels */
+static void acf_gpencil_channel_color(bAnimContext *ac, bAnimListElem *ale, float r_color[3])
+{
+	const bAnimChannelType *acf = ANIM_channel_get_typeinfo(ale);
+	short indent = (acf->get_indent_level) ? acf->get_indent_level(ac, ale) : 0;
+	bool showGroupColors = acf_show_channel_colors(ac);
+
+	if ((showGroupColors) && (ale->type == ANIMTYPE_GPLAYER)) {
+		bGPDlayer *gpl = (bGPDlayer *)ale->data;
+		copy_v3_v3(r_color, gpl->color);
+	}
+	else {
+		int colOfs = 10 - 10 * indent;
+		UI_GetThemeColorShade3fv(TH_SHADE2, colOfs, r_color);
 	}
 }
 
@@ -226,12 +245,18 @@ static void acf_generic_channel_backdrop(bAnimContext *ac, bAnimListElem *ale, f
 	short offset = (acf->get_offset) ? acf->get_offset(ac, ale) : 0;
 	float color[3];
 
+	uint pos = GPU_vertformat_attr_add(immVertexFormat(), "pos", GPU_COMP_F32, 2, GPU_FETCH_FLOAT);
+
 	/* set backdrop drawing color */
 	acf->get_backdrop_color(ac, ale, color);
-	glColor3fv(color);
+
+	immBindBuiltinProgram(GPU_SHADER_2D_UNIFORM_COLOR);
+	immUniformColor3fv(color);
 
 	/* no rounded corners - just rectangular box */
-	glRectf(offset, yminc,  v2d->cur.xmax + EXTRA_SCROLL_PAD, ymaxc);
+	immRectf(pos, offset, yminc,  v2d->cur.xmax + EXTRA_SCROLL_PAD, ymaxc);
+
+	immUnbindProgram();
 }
 
 /* Indention + Offset ------------------------------------------- */
@@ -422,14 +447,13 @@ static void acf_summary_backdrop(bAnimContext *ac, bAnimListElem *ale, float ymi
 
 	/* set backdrop drawing color */
 	acf->get_backdrop_color(ac, ale, color);
-	glColor3fv(color);
 
 	/* rounded corners on LHS only
 	 * - top and bottom
 	 * - special hack: make the top a bit higher, since we are first...
 	 */
 	UI_draw_roundbox_corner_set(UI_CNR_TOP_LEFT | UI_CNR_BOTTOM_LEFT);
-	UI_draw_roundbox_gl_mode(GL_POLYGON, 0,  yminc - 2, v2d->cur.xmax + EXTRA_SCROLL_PAD, ymaxc, 8);
+	UI_draw_roundbox_3fvAlpha(true, 0,  yminc - 2, v2d->cur.xmax + EXTRA_SCROLL_PAD, ymaxc, 8, color, 1.0f);
 }
 
 /* name for summary entries */
@@ -506,7 +530,7 @@ static bAnimChannelType ACF_SUMMARY =
 
 	acf_summary_setting_valid,          /* has setting */
 	acf_summary_setting_flag,           /* flag for setting */
-	acf_summary_setting_ptr             /* pointer for setting */
+	acf_summary_setting_ptr,             /* pointer for setting */
 };
 
 /* Scene ------------------------------------------- */
@@ -527,7 +551,7 @@ static bool acf_scene_setting_valid(bAnimContext *ac, bAnimListElem *UNUSED(ale)
 
 		/* visible only in Graph Editor */
 		case ACHANNEL_SETTING_VISIBLE:
-			return ((ac) && (ac->spacetype == SPACE_IPO));
+			return ((ac) && (ac->spacetype == SPACE_GRAPH));
 
 		/* only select and expand supported otherwise */
 		case ACHANNEL_SETTING_SELECT:
@@ -611,7 +635,7 @@ static bAnimChannelType ACF_SCENE =
 
 	acf_scene_setting_valid,        /* has setting */
 	acf_scene_setting_flag,         /* flag for setting */
-	acf_scene_setting_ptr           /* pointer for setting */
+	acf_scene_setting_ptr,           /* pointer for setting */
 };
 
 /* Object ------------------------------------------- */
@@ -624,7 +648,7 @@ static int acf_object_icon(bAnimListElem *ale)
 	/* icon depends on object-type */
 	switch (ob->type) {
 		case OB_LAMP:
-			return ICON_OUTLINER_OB_LAMP;
+			return ICON_OUTLINER_OB_LIGHT;
 		case OB_MESH:
 			return ICON_OUTLINER_OB_MESH;
 		case OB_CAMERA:
@@ -637,6 +661,8 @@ static int acf_object_icon(bAnimListElem *ale)
 			return ICON_OUTLINER_OB_LATTICE;
 		case OB_SPEAKER:
 			return ICON_OUTLINER_OB_SPEAKER;
+		case OB_LIGHTPROBE:
+			return ICON_OUTLINER_OB_LIGHTPROBE;
 		case OB_ARMATURE:
 			return ICON_OUTLINER_OB_ARMATURE;
 		case OB_FONT:
@@ -645,6 +671,8 @@ static int acf_object_icon(bAnimListElem *ale)
 			return ICON_OUTLINER_OB_SURFACE;
 		case OB_EMPTY:
 			return ICON_OUTLINER_OB_EMPTY;
+		case OB_GPENCIL:
+			return ICON_OUTLINER_OB_GREASEPENCIL;
 		default:
 			return ICON_OBJECT_DATA;
 	}
@@ -683,7 +711,7 @@ static bool acf_object_setting_valid(bAnimContext *ac, bAnimListElem *ale, eAnim
 
 		/* visible only in Graph Editor */
 		case ACHANNEL_SETTING_VISIBLE:
-			return ((ac) && (ac->spacetype == SPACE_IPO) && (ob->adt));
+			return ((ac) && (ac->spacetype == SPACE_GRAPH) && (ob->adt));
 
 		/* only select and expand supported otherwise */
 		case ACHANNEL_SETTING_SELECT:
@@ -691,7 +719,7 @@ static bool acf_object_setting_valid(bAnimContext *ac, bAnimListElem *ale, eAnim
 			return true;
 
 		case ACHANNEL_SETTING_ALWAYS_VISIBLE:
-			return ((ac) && (ac->spacetype == SPACE_IPO) && (ob->adt));
+			return ((ac) && (ac->spacetype == SPACE_GRAPH) && (ob->adt));
 
 		default:
 			return false;
@@ -706,7 +734,7 @@ static int acf_object_setting_flag(bAnimContext *UNUSED(ac), eAnimChannel_Settin
 
 	switch (setting) {
 		case ACHANNEL_SETTING_SELECT: /* selected */
-			return SELECT;
+			return BASE_SELECTED;
 
 		case ACHANNEL_SETTING_EXPAND: /* expanded */
 			*neg = 1;
@@ -738,7 +766,7 @@ static void *acf_object_setting_ptr(bAnimListElem *ale, eAnimChannel_Settings se
 
 	switch (setting) {
 		case ACHANNEL_SETTING_SELECT: /* selected */
-			return GET_ACF_FLAG_PTR(ob->flag, type);
+			return GET_ACF_FLAG_PTR(base->flag, type);
 
 		case ACHANNEL_SETTING_EXPAND: /* expanded */
 			return GET_ACF_FLAG_PTR(ob->nlaflag, type); // xxx
@@ -772,7 +800,7 @@ static bAnimChannelType ACF_OBJECT =
 
 	acf_object_setting_valid,       /* has setting */
 	acf_object_setting_flag,        /* flag for setting */
-	acf_object_setting_ptr          /* pointer for setting */
+	acf_object_setting_ptr,          /* pointer for setting */
 };
 
 /* Group ------------------------------------------- */
@@ -798,9 +826,9 @@ static void acf_group_color(bAnimContext *ac, bAnimListElem *ale, float r_color[
 	else {
 		/* highlight only for active */
 		if (ale->flag & AGRP_ACTIVE)
-			UI_GetThemeColorShade3fv(TH_GROUP_ACTIVE, 10, r_color);
+			UI_GetThemeColor3fv(TH_GROUP_ACTIVE, r_color);
 		else
-			UI_GetThemeColorShade3fv(TH_GROUP, 20, r_color);
+			UI_GetThemeColor3fv(TH_GROUP, r_color);
 	}
 }
 
@@ -815,11 +843,10 @@ static void acf_group_backdrop(bAnimContext *ac, bAnimListElem *ale, float yminc
 
 	/* set backdrop drawing color */
 	acf->get_backdrop_color(ac, ale, color);
-	glColor3fv(color);
 
 	/* rounded corners on LHS only - top only when expanded, but bottom too when collapsed */
 	UI_draw_roundbox_corner_set(expanded ? UI_CNR_TOP_LEFT : (UI_CNR_TOP_LEFT | UI_CNR_BOTTOM_LEFT));
-	UI_draw_roundbox_gl_mode(GL_POLYGON, offset,  yminc, v2d->cur.xmax + EXTRA_SCROLL_PAD, ymaxc, 8);
+	UI_draw_roundbox_3fvAlpha(true, offset,  yminc, v2d->cur.xmax + EXTRA_SCROLL_PAD, ymaxc, 8, color, 1.0f);
 }
 
 /* name for group entries */
@@ -852,10 +879,10 @@ static bool acf_group_setting_valid(bAnimContext *ac, bAnimListElem *UNUSED(ale)
 
 		/* conditionally supported */
 		case ACHANNEL_SETTING_VISIBLE: /* Only available in Graph Editor */
-			return (ac->spacetype == SPACE_IPO);
+			return (ac->spacetype == SPACE_GRAPH);
 
 		case ACHANNEL_SETTING_ALWAYS_VISIBLE:
-			return (ac->spacetype == SPACE_IPO);
+			return (ac->spacetype == SPACE_GRAPH);
 
 		default: /* always supported */
 			return true;
@@ -878,7 +905,7 @@ static int acf_group_setting_flag(bAnimContext *ac, eAnimChannel_Settings settin
 			 * allowing different collapsing of groups there, since sharing the flag
 			 * proved to be a hazard for workflows...
 			 */
-			return (ac->spacetype == SPACE_IPO) ?
+			return (ac->spacetype == SPACE_GRAPH) ?
 			       AGRP_EXPANDED_G :        /* Graph Editor case */
 			       AGRP_EXPANDED;           /* DopeSheet and elsewhere */
 		}
@@ -932,7 +959,7 @@ static bAnimChannelType ACF_GROUP =
 
 	acf_group_setting_valid,        /* has setting */
 	acf_group_setting_flag,         /* flag for setting */
-	acf_group_setting_ptr           /* pointer for setting */
+	acf_group_setting_ptr,           /* pointer for setting */
 };
 
 /* F-Curve ------------------------------------------- */
@@ -984,7 +1011,7 @@ static bool acf_fcurve_setting_valid(bAnimContext *ac, bAnimListElem *ale, eAnim
 				return false;  // NOTE: in this special case, we need to draw ICON_ZOOMOUT
 
 		case ACHANNEL_SETTING_VISIBLE: /* Only available in Graph Editor */
-			return (ac->spacetype == SPACE_IPO);
+			return (ac->spacetype == SPACE_GRAPH);
 
 		case ACHANNEL_SETTING_ALWAYS_VISIBLE:
 			return false;
@@ -1049,7 +1076,7 @@ static bAnimChannelType ACF_FCURVE =
 
 	acf_fcurve_setting_valid,       /* has setting */
 	acf_fcurve_setting_flag,        /* flag for setting */
-	acf_fcurve_setting_ptr          /* pointer for setting */
+	acf_fcurve_setting_ptr,          /* pointer for setting */
 };
 
 /* NLA Control FCurves Expander ----------------------- */
@@ -1072,11 +1099,10 @@ static void acf_nla_controls_backdrop(bAnimContext *ac, bAnimListElem *ale, floa
 
 	/* set backdrop drawing color */
 	acf->get_backdrop_color(ac, ale, color);
-	glColor3fv(color);
 
 	/* rounded corners on LHS only - top only when expanded, but bottom too when collapsed */
 	UI_draw_roundbox_corner_set(expanded ? UI_CNR_TOP_LEFT : (UI_CNR_TOP_LEFT | UI_CNR_BOTTOM_LEFT));
-	UI_draw_roundbox_gl_mode(GL_POLYGON, offset,  yminc, v2d->cur.xmax + EXTRA_SCROLL_PAD, ymaxc, 5);
+	UI_draw_roundbox_3fvAlpha(true, offset,  yminc, v2d->cur.xmax + EXTRA_SCROLL_PAD, ymaxc, 5, color, 1.0f);
 }
 
 /* name for nla controls expander entries */
@@ -1149,7 +1175,7 @@ static bAnimChannelType ACF_NLACONTROLS =
 
 	acf_nla_controls_setting_valid, /* has setting */
 	acf_nla_controls_setting_flag,  /* flag for setting */
-	acf_nla_controls_setting_ptr    /* pointer for setting */
+	acf_nla_controls_setting_ptr,    /* pointer for setting */
 };
 
 
@@ -1192,7 +1218,7 @@ static bAnimChannelType ACF_NLACURVE =
 
 	acf_fcurve_setting_valid,       /* has setting */
 	acf_fcurve_setting_flag,        /* flag for setting */
-	acf_fcurve_setting_ptr          /* pointer for setting */
+	acf_fcurve_setting_ptr,          /* pointer for setting */
 };
 
 /* Object Action Expander  ------------------------------------------- */
@@ -1277,7 +1303,7 @@ static bAnimChannelType ACF_FILLACTD =
 
 	acf_fillactd_setting_valid,     /* has setting */
 	acf_fillactd_setting_flag,      /* flag for setting */
-	acf_fillactd_setting_ptr        /* pointer for setting */
+	acf_fillactd_setting_ptr,        /* pointer for setting */
 };
 
 /* Drivers Expander  ------------------------------------------- */
@@ -1357,7 +1383,7 @@ static bAnimChannelType ACF_FILLDRIVERS =
 
 	acf_filldrivers_setting_valid,  /* has setting */
 	acf_filldrivers_setting_flag,   /* flag for setting */
-	acf_filldrivers_setting_ptr     /* pointer for setting */
+	acf_filldrivers_setting_ptr,     /* pointer for setting */
 };
 
 
@@ -1435,19 +1461,19 @@ static bAnimChannelType ACF_DSMAT =
 
 	acf_generic_dataexpand_setting_valid,   /* has setting */
 	acf_dsmat_setting_flag,                 /* flag for setting */
-	acf_dsmat_setting_ptr                   /* pointer for setting */
+	acf_dsmat_setting_ptr,                   /* pointer for setting */
 };
 
-/* Lamp Expander  ------------------------------------------- */
+/* Light Expander  ------------------------------------------- */
 
 // TODO: just get this from RNA?
-static int acf_dslam_icon(bAnimListElem *UNUSED(ale))
+static int acf_dslight_icon(bAnimListElem *UNUSED(ale))
 {
-	return ICON_LAMP_DATA;
+	return ICON_LIGHT_DATA;
 }
 
 /* get the appropriate flag(s) for the setting when it is valid  */
-static int acf_dslam_setting_flag(bAnimContext *UNUSED(ac), eAnimChannel_Settings setting, bool *neg)
+static int acf_dslight_setting_flag(bAnimContext *UNUSED(ac), eAnimChannel_Settings setting, bool *neg)
 {
 	/* clear extra return data first */
 	*neg = false;
@@ -1472,9 +1498,9 @@ static int acf_dslam_setting_flag(bAnimContext *UNUSED(ac), eAnimChannel_Setting
 }
 
 /* get pointer to the setting */
-static void *acf_dslam_setting_ptr(bAnimListElem *ale, eAnimChannel_Settings setting, short *type)
+static void *acf_dslight_setting_ptr(bAnimListElem *ale, eAnimChannel_Settings setting, short *type)
 {
-	Lamp *la = (Lamp *)ale->data;
+	Light *la = (Light *)ale->data;
 
 	/* clear extra return data first */
 	*type = 0;
@@ -1495,10 +1521,10 @@ static void *acf_dslam_setting_ptr(bAnimListElem *ale, eAnimChannel_Settings set
 	}
 }
 
-/* lamp expander type define */
-static bAnimChannelType ACF_DSLAM =
+/* light expander type define */
+static bAnimChannelType ACF_DSLIGHT =
 {
-	"Lamp Expander",                /* type name */
+	"Light Expander",               /* type name */
 	ACHANNEL_ROLE_EXPANDER,         /* role */
 
 	acf_generic_dataexpand_color,   /* backdrop color */
@@ -1507,12 +1533,12 @@ static bAnimChannelType ACF_DSLAM =
 	acf_generic_basic_offset,       /* offset */
 
 	acf_generic_idblock_name,       /* name */
-	acf_generic_idblock_name_prop,   /* name prop */
-	acf_dslam_icon,                 /* icon */
+	acf_generic_idblock_name_prop,  /* name prop */
+	acf_dslight_icon,               /* icon */
 
 	acf_generic_dataexpand_setting_valid,   /* has setting */
-	acf_dslam_setting_flag,                 /* flag for setting */
-	acf_dslam_setting_ptr                   /* pointer for setting */
+	acf_dslight_setting_flag,               /* flag for setting */
+	acf_dslight_setting_ptr,                 /* pointer for setting */
 };
 
 /* Texture Expander  ------------------------------------------- */
@@ -1596,7 +1622,7 @@ static bAnimChannelType ACF_DSTEX =
 
 	acf_generic_dataexpand_setting_valid,   /* has setting */
 	acf_dstex_setting_flag,                 /* flag for setting */
-	acf_dstex_setting_ptr                   /* pointer for setting */
+	acf_dstex_setting_ptr,                   /* pointer for setting */
 };
 
 /* Camera Expander  ------------------------------------------- */
@@ -1678,7 +1704,7 @@ static bAnimChannelType ACF_DSCACHEFILE =
 
 	acf_generic_dataexpand_setting_valid,   /* has setting */
 	acf_dscachefile_setting_flag,           /* flag for setting */
-	acf_dscachefile_setting_ptr             /* pointer for setting */
+	acf_dscachefile_setting_ptr,             /* pointer for setting */
 };
 
 /* Camera Expander  ------------------------------------------- */
@@ -1759,7 +1785,7 @@ static bAnimChannelType ACF_DSCAM =
 
 	acf_generic_dataexpand_setting_valid,   /* has setting */
 	acf_dscam_setting_flag,                 /* flag for setting */
-	acf_dscam_setting_ptr                   /* pointer for setting */
+	acf_dscam_setting_ptr,                   /* pointer for setting */
 };
 
 /* Curve Expander  ------------------------------------------- */
@@ -1846,7 +1872,7 @@ static bAnimChannelType ACF_DSCUR =
 
 	acf_generic_dataexpand_setting_valid,   /* has setting */
 	acf_dscur_setting_flag,                 /* flag for setting */
-	acf_dscur_setting_ptr                   /* pointer for setting */
+	acf_dscur_setting_ptr,                   /* pointer for setting */
 };
 
 /* Shape Key Expander  ------------------------------------------- */
@@ -1923,7 +1949,7 @@ static bAnimChannelType ACF_DSSKEY =
 
 	acf_generic_dataexpand_setting_valid,   /* has setting */
 	acf_dsskey_setting_flag,                /* flag for setting */
-	acf_dsskey_setting_ptr                  /* pointer for setting */
+	acf_dsskey_setting_ptr,                  /* pointer for setting */
 };
 
 /* World Expander  ------------------------------------------- */
@@ -2000,7 +2026,7 @@ static bAnimChannelType ACF_DSWOR =
 
 	acf_generic_dataexpand_setting_valid,   /* has setting */
 	acf_dswor_setting_flag,                 /* flag for setting */
-	acf_dswor_setting_ptr                   /* pointer for setting */
+	acf_dswor_setting_ptr,                   /* pointer for setting */
 };
 
 /* Particle Expander  ------------------------------------------- */
@@ -2077,7 +2103,7 @@ static bAnimChannelType ACF_DSPART =
 
 	acf_generic_dataexpand_setting_valid,   /* has setting */
 	acf_dspart_setting_flag,                /* flag for setting */
-	acf_dspart_setting_ptr                  /* pointer for setting */
+	acf_dspart_setting_ptr,                  /* pointer for setting */
 };
 
 /* MetaBall Expander  ------------------------------------------- */
@@ -2154,7 +2180,7 @@ static bAnimChannelType ACF_DSMBALL =
 
 	acf_generic_dataexpand_setting_valid,   /* has setting */
 	acf_dsmball_setting_flag,               /* flag for setting */
-	acf_dsmball_setting_ptr                 /* pointer for setting */
+	acf_dsmball_setting_ptr,                 /* pointer for setting */
 };
 
 /* Armature Expander  ------------------------------------------- */
@@ -2231,7 +2257,7 @@ static bAnimChannelType ACF_DSARM =
 
 	acf_generic_dataexpand_setting_valid,   /* has setting */
 	acf_dsarm_setting_flag,                 /* flag for setting */
-	acf_dsarm_setting_ptr                   /* pointer for setting */
+	acf_dsarm_setting_ptr,                   /* pointer for setting */
 };
 
 /* NodeTree Expander  ------------------------------------------- */
@@ -2319,7 +2345,7 @@ static bAnimChannelType ACF_DSNTREE =
 
 	acf_generic_dataexpand_setting_valid,   /* has setting */
 	acf_dsntree_setting_flag,               /* flag for setting */
-	acf_dsntree_setting_ptr                 /* pointer for setting */
+	acf_dsntree_setting_ptr,                 /* pointer for setting */
 };
 
 /* LineStyle Expander  ------------------------------------------- */
@@ -2396,7 +2422,7 @@ static bAnimChannelType ACF_DSLINESTYLE =
 
 	acf_generic_dataexpand_setting_valid,	/* has setting */
 	acf_dslinestyle_setting_flag,			/* flag for setting */
-	acf_dslinestyle_setting_ptr				/* pointer for setting */
+	acf_dslinestyle_setting_ptr,				/* pointer for setting */
 };
 
 /* Mesh Expander  ------------------------------------------- */
@@ -2473,7 +2499,7 @@ static bAnimChannelType ACF_DSMESH =
 
 	acf_generic_dataexpand_setting_valid,   /* has setting */
 	acf_dsmesh_setting_flag,                /* flag for setting */
-	acf_dsmesh_setting_ptr                  /* pointer for setting */
+	acf_dsmesh_setting_ptr,                  /* pointer for setting */
 };
 
 /* Lattice Expander  ------------------------------------------- */
@@ -2550,7 +2576,7 @@ static bAnimChannelType ACF_DSLAT =
 
 	acf_generic_dataexpand_setting_valid,   /* has setting */
 	acf_dslat_setting_flag,                 /* flag for setting */
-	acf_dslat_setting_ptr                   /* pointer for setting */
+	acf_dslat_setting_ptr,                   /* pointer for setting */
 };
 
 /* Speaker Expander  ------------------------------------------- */
@@ -2627,7 +2653,7 @@ static bAnimChannelType ACF_DSSPK =
 
 	acf_generic_dataexpand_setting_valid,   /* has setting */
 	acf_dsspk_setting_flag,                 /* flag for setting */
-	acf_dsspk_setting_ptr                   /* pointer for setting */
+	acf_dsspk_setting_ptr,                   /* pointer for setting */
 };
 
 /* GPencil Expander  ------------------------------------------- */
@@ -2704,7 +2730,7 @@ static bAnimChannelType ACF_DSGPENCIL =
 
 	acf_generic_dataexpand_setting_valid,   /* has setting */
 	acf_dsgpencil_setting_flag,             /* flag for setting */
-	acf_dsgpencil_setting_ptr               /* pointer for setting */
+	acf_dsgpencil_setting_ptr,               /* pointer for setting */
 };
 
 /* World Expander  ------------------------------------------- */
@@ -2782,7 +2808,7 @@ static bAnimChannelType ACF_DSMCLIP =
 
 	acf_generic_dataexpand_setting_valid,   /* has setting */
 	acf_dsmclip_setting_flag,               /* flag for setting */
-	acf_dsmclip_setting_ptr                 /* pointer for setting */
+	acf_dsmclip_setting_ptr,                 /* pointer for setting */
 };
 
 /* ShapeKey Entry  ------------------------------------------- */
@@ -2890,7 +2916,7 @@ static bAnimChannelType ACF_SHAPEKEY =
 
 	acf_shapekey_setting_valid,     /* has setting */
 	acf_shapekey_setting_flag,      /* flag for setting */
-	acf_shapekey_setting_ptr        /* pointer for setting */
+	acf_shapekey_setting_ptr,        /* pointer for setting */
 };
 
 /* GPencil Datablock ------------------------------------------- */
@@ -2967,7 +2993,7 @@ static bAnimChannelType ACF_GPD =
 
 	acf_gpd_setting_valid,          /* has setting */
 	acf_gpd_setting_flag,           /* flag for setting */
-	acf_gpd_setting_ptr             /* pointer for setting */
+	acf_gpd_setting_ptr,             /* pointer for setting */
 };
 
 /* GPencil Layer ------------------------------------------- */
@@ -3049,7 +3075,7 @@ static bAnimChannelType ACF_GPL =
 	"GPencil Layer",                /* type name */
 	ACHANNEL_ROLE_CHANNEL,          /* role */
 
-	acf_generic_channel_color,      /* backdrop color */
+	acf_gpencil_channel_color,      /* backdrop color */
 	acf_generic_channel_backdrop,   /* backdrop */
 	acf_generic_indention_flexible, /* indent level */
 	acf_generic_group_offset,       /* offset */
@@ -3060,7 +3086,7 @@ static bAnimChannelType ACF_GPL =
 
 	acf_gpl_setting_valid,          /* has setting */
 	acf_gpl_setting_flag,           /* flag for setting */
-	acf_gpl_setting_ptr             /* pointer for setting */
+	acf_gpl_setting_ptr,             /* pointer for setting */
 };
 
 
@@ -3138,7 +3164,7 @@ static bAnimChannelType ACF_MASKDATA =
 
 	acf_mask_setting_valid,          /* has setting */
 	acf_mask_setting_flag,           /* flag for setting */
-	acf_mask_setting_ptr             /* pointer for setting */
+	acf_mask_setting_ptr,             /* pointer for setting */
 };
 
 /* Mask Layer ------------------------------------------- */
@@ -3225,7 +3251,7 @@ static bAnimChannelType ACF_MASKLAYER =
 
 	acf_masklay_setting_valid,      /* has setting */
 	acf_masklay_setting_flag,       /* flag for setting */
-	acf_masklay_setting_ptr         /* pointer for setting */
+	acf_masklay_setting_ptr,         /* pointer for setting */
 };
 
 /* NLA Track ----------------------------------------------- */
@@ -3364,7 +3390,7 @@ static bAnimChannelType ACF_NLATRACK =
 
 	acf_nlatrack_setting_valid,     /* has setting */
 	acf_nlatrack_setting_flag,      /* flag for setting */
-	acf_nlatrack_setting_ptr        /* pointer for setting */
+	acf_nlatrack_setting_ptr,        /* pointer for setting */
 };
 
 /* NLA Action ----------------------------------------------- */
@@ -3421,14 +3447,10 @@ static void acf_nlaaction_backdrop(bAnimContext *ac, bAnimListElem *ale, float y
 	 */
 	nla_action_get_color(adt, (bAction *)ale->data, color);
 
-	if (adt && (adt->flag & ADT_NLA_EDIT_ON)) {
-		/* Yes, the color vector has 4 components, BUT we only want to be using 3 of them! */
-		glColor3fv(color);
-	}
-	else {
-		float alpha = (adt && (adt->flag & ADT_NLA_SOLO_TRACK)) ? 0.3f : 1.0f;
-		glColor4f(color[0], color[1], color[2], alpha);
-	}
+	if (adt && (adt->flag & ADT_NLA_EDIT_ON))
+		color[3] = 1.0f;
+	else
+		color[3] = (adt && (adt->flag & ADT_NLA_SOLO_TRACK)) ? 0.3f : 1.0f;
 
 	/* only on top left corner, to show that this channel sits on top of the preceding ones
 	 * while still linking into the action line strip to the right
@@ -3438,7 +3460,7 @@ static void acf_nlaaction_backdrop(bAnimContext *ac, bAnimListElem *ale, float y
 	/* draw slightly shifted up vertically to look like it has more separation from other channels,
 	 * but we then need to slightly shorten it so that it doesn't look like it overlaps
 	 */
-	UI_draw_roundbox_gl_mode(GL_POLYGON, offset,  yminc + NLACHANNEL_SKIP, (float)v2d->cur.xmax, ymaxc + NLACHANNEL_SKIP - 1, 8);
+	UI_draw_roundbox_4fv(true, offset,  yminc + NLACHANNEL_SKIP, (float)v2d->cur.xmax, ymaxc + NLACHANNEL_SKIP - 1, 8, color);
 }
 
 /* name for nla action entries */
@@ -3522,7 +3544,8 @@ static bAnimChannelType ACF_NLAACTION =
 	"NLA Active Action",            /* type name */
 	ACHANNEL_ROLE_CHANNEL,          /* role */
 
-	acf_nlaaction_color,            /* backdrop color (NOTE: the backdrop handles this too, since it needs special hacks) */
+	acf_nlaaction_color,            /* backdrop color (NOTE: the backdrop handles this too,
+	                                 * since it needs special hacks) */
 	acf_nlaaction_backdrop,         /* backdrop */
 	acf_generic_indention_flexible, /* indent level */
 	acf_generic_group_offset,       /* offset */           // XXX?
@@ -3533,7 +3556,7 @@ static bAnimChannelType ACF_NLAACTION =
 
 	acf_nlaaction_setting_valid,     /* has setting */
 	acf_nlaaction_setting_flag,      /* flag for setting */
-	acf_nlaaction_setting_ptr        /* pointer for setting */
+	acf_nlaaction_setting_ptr,        /* pointer for setting */
 };
 
 
@@ -3574,7 +3597,7 @@ static void ANIM_init_channel_typeinfo_data(void)
 		animchannelTypeInfo[type++] = &ACF_FILLDRIVERS;  /* Drivers Expander */
 
 		animchannelTypeInfo[type++] = &ACF_DSMAT;        /* Material Channel */
-		animchannelTypeInfo[type++] = &ACF_DSLAM;        /* Lamp Channel */
+		animchannelTypeInfo[type++] = &ACF_DSLIGHT;      /* Light Channel */
 		animchannelTypeInfo[type++] = &ACF_DSCAM;        /* Camera Channel */
 		animchannelTypeInfo[type++] = &ACF_DSCACHEFILE;  /* CacheFile Channel */
 		animchannelTypeInfo[type++] = &ACF_DSCUR;        /* Curve Channel */
@@ -3827,8 +3850,8 @@ void ANIM_channel_draw(bAnimContext *ac, bAnimListElem *ale, float yminc, float 
 		selected = 0;
 
 	/* set blending again, as may not be set in previous step */
-	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-	glEnable(GL_BLEND);
+	GPU_blend_set_func_separate(GPU_SRC_ALPHA, GPU_ONE_MINUS_SRC_ALPHA, GPU_ONE, GPU_ONE_MINUS_SRC_ALPHA);
+	GPU_blend(true);
 
 	/* step 1) draw backdrop ...........................................  */
 	if (acf->draw_backdrop)
@@ -3847,7 +3870,7 @@ void ANIM_channel_draw(bAnimContext *ac, bAnimListElem *ale, float yminc, float 
 	}
 
 	/* turn off blending, since not needed anymore... */
-	glDisable(GL_BLEND);
+	GPU_blend(false);
 
 	/* step 4) draw special toggles  .................................
 	 * - in Graph Editor, checkboxes for visibility in curves area
@@ -3855,22 +3878,27 @@ void ANIM_channel_draw(bAnimContext *ac, bAnimListElem *ale, float yminc, float 
 	 * - in Grease Pencil mode, color swatches for layer color
 	 */
 	if (ac->sl) {
-		if ((ac->spacetype == SPACE_IPO) &&
+		if ((ac->spacetype == SPACE_GRAPH) &&
 		    (acf->has_setting(ac, ale, ACHANNEL_SETTING_VISIBLE) ||
 		     acf->has_setting(ac, ale, ACHANNEL_SETTING_ALWAYS_VISIBLE)))
 		{
 			/* for F-Curves, draw color-preview of curve behind checkbox */
 			if (ELEM(ale->type, ANIMTYPE_FCURVE, ANIMTYPE_NLACURVE)) {
 				FCurve *fcu = (FCurve *)ale->data;
+				uint pos = GPU_vertformat_attr_add(immVertexFormat(), "pos", GPU_COMP_F32, 2, GPU_FETCH_FLOAT);
+
+				immBindBuiltinProgram(GPU_SHADER_2D_UNIFORM_COLOR);
 
 				/* F-Curve channels need to have a special 'color code' box drawn, which is colored with whatever
 				 * color the curve has stored
 				 */
-				glColor3fv(fcu->color);
+				immUniformColor3fv(fcu->color);
 
 				/* just a solid color rect
 				 */
-				glRectf(offset, yminc, offset + ICON_WIDTH, ymaxc);
+				immRectf(pos, offset, yminc, offset + ICON_WIDTH, ymaxc);
+
+				immUnbindProgram();
 			}
 			/* icon is drawn as widget now... */
 			if (acf->has_setting(ac, ale, ACHANNEL_SETTING_VISIBLE)) {
@@ -3895,27 +3923,39 @@ void ANIM_channel_draw(bAnimContext *ac, bAnimListElem *ale, float yminc, float 
 	if (acf->name && !achannel_is_being_renamed(ac, acf, channel_index)) {
 		const uiFontStyle *fstyle = UI_FSTYLE_WIDGET;
 		char name[ANIM_CHAN_NAME_SIZE]; /* hopefully this will be enough! */
+		unsigned char col[4];
 
 		/* set text color */
 		/* XXX: if active, highlight differently? */
+
 		if (selected)
-			UI_ThemeColor(TH_TEXT_HI);
+			UI_GetThemeColor4ubv(TH_TEXT_HI, col);
 		else
-			UI_ThemeColor(TH_TEXT);
+			UI_GetThemeColor4ubv(TH_TEXT, col);
 
 		/* get name */
 		acf->name(ale, name);
 
 		offset += 3;
-		UI_fontstyle_draw_simple(fstyle, offset, ytext, name);
+		UI_fontstyle_draw_simple(fstyle, offset, ytext, name, col);
 
 		/* draw red underline if channel is disabled */
 		if (ELEM(ale->type, ANIMTYPE_FCURVE, ANIMTYPE_NLACURVE) && (ale->flag & FCURVE_DISABLED)) {
+			uint pos = GPU_vertformat_attr_add(immVertexFormat(), "pos", GPU_COMP_F32, 2, GPU_FETCH_FLOAT);
+
+			immBindBuiltinProgram(GPU_SHADER_2D_UNIFORM_COLOR);
+
 			/* FIXME: replace hardcoded color here, and check on extents! */
-			glColor3f(1.0f, 0.0f, 0.0f);
-			glLineWidth(2.0);
-			fdrawline((float)(offset), yminc,
-			          (float)(v2d->cur.xmax), yminc);
+			immUniformColor3f(1.0f, 0.0f, 0.0f);
+
+			GPU_line_width(2.0f);
+
+			immBegin(GPU_PRIM_LINES, 2);
+			immVertex2f(pos, (float)offset, yminc);
+			immVertex2f(pos, (float)v2d->cur.xmax, yminc);
+			immEnd();
+
+			immUnbindProgram();
 		}
 	}
 
@@ -3929,13 +3969,16 @@ void ANIM_channel_draw(bAnimContext *ac, bAnimListElem *ale, float yminc, float 
 		short draw_sliders = 0;
 		float ymin_ofs = 0.0f;
 		float color[3];
+		uint pos = GPU_vertformat_attr_add(immVertexFormat(), "pos", GPU_COMP_F32, 2, GPU_FETCH_FLOAT);
+
+		immBindBuiltinProgram(GPU_SHADER_2D_UNIFORM_COLOR);
 
 		/* get and set backdrop color */
 		acf->get_backdrop_color(ac, ale, color);
-		glColor3fv(color);
+		immUniformColor3fv(color);
 
 		/* check if we need to show the sliders */
-		if ((ac->sl) && ELEM(ac->spacetype, SPACE_ACTION, SPACE_IPO)) {
+		if ((ac->sl) && ELEM(ac->spacetype, SPACE_ACTION, SPACE_GRAPH)) {
 			switch (ac->spacetype) {
 				case SPACE_ACTION:
 				{
@@ -3943,9 +3986,9 @@ void ANIM_channel_draw(bAnimContext *ac, bAnimListElem *ale, float yminc, float 
 					draw_sliders = (saction->flag & SACTION_SLIDERS);
 					break;
 				}
-				case SPACE_IPO:
+				case SPACE_GRAPH:
 				{
-					SpaceIpo *sipo = (SpaceIpo *)ac->sl;
+					SpaceGraph *sipo = (SpaceGraph *)ac->sl;
 					draw_sliders = (sipo->flag & SIPO_SLIDERS);
 					break;
 				}
@@ -3990,7 +4033,9 @@ void ANIM_channel_draw(bAnimContext *ac, bAnimListElem *ale, float yminc, float 
 		 * - starts from the point where the first toggle/slider starts,
 		 * - ends past the space that might be reserved for a scroller
 		 */
-		glRectf(v2d->cur.xmax - (float)offset, yminc + ymin_ofs, v2d->cur.xmax + EXTRA_SCROLL_PAD, ymaxc);
+		immRectf(pos, v2d->cur.xmax - (float)offset, yminc + ymin_ofs, v2d->cur.xmax + EXTRA_SCROLL_PAD, ymaxc);
+
+		immUnbindProgram();
 	}
 }
 
@@ -4020,8 +4065,25 @@ static void achannel_setting_flush_widget_cb(bContext *C, void *ale_npoin, void 
 		return;
 	}
 
-	if (ale_setting->type == ANIMTYPE_GPLAYER)
+	if (ale_setting->type == ANIMTYPE_GPLAYER) {
+		/* draw cache updates for settings that affect the visible strokes */
+		if (setting == ACHANNEL_SETTING_VISIBLE) {
+			bGPdata *gpd = (bGPdata *)ale_setting->id;
+			DEG_id_tag_update(&gpd->id, ID_RECALC_TRANSFORM | ID_RECALC_GEOMETRY);
+		}
+
+		/* UI updates */
 		WM_event_add_notifier(C, NC_GPENCIL | ND_DATA, NULL);
+	}
+
+	/* Tag for full animation update, so that the settings will have an effect. */
+	if (ale_setting->id) {
+		DEG_id_tag_update(ale_setting->id, ID_RECALC_ANIMATION);
+	}
+	if (ale_setting->adt && ale_setting->adt->action) {
+		/* Action is it's own datablock, so has to be tagged specifically. */
+		DEG_id_tag_update(&ale_setting->adt->action->id, ID_RECALC_ANIMATION);
+	}
 
 	/* verify animation context */
 	if (ANIM_animdata_get_context(C, &ac) == 0)
@@ -4047,10 +4109,11 @@ static void achannel_setting_flush_widget_cb(bContext *C, void *ale_npoin, void 
 }
 
 /* callback for wrapping NLA Track "solo" toggle logic */
-static void achannel_nlatrack_solo_widget_cb(bContext *C, void *adt_poin, void *nlt_poin)
+static void achannel_nlatrack_solo_widget_cb(bContext *C, void *ale_poin, void *UNUSED(arg2))
 {
-	AnimData *adt = adt_poin;
-	NlaTrack *nlt = nlt_poin;
+	bAnimListElem *ale = ale_poin;
+	AnimData *adt = ale->adt;
+	NlaTrack *nlt = ale->data;
 
 	/* Toggle 'solo' mode. There are several complications here which need explaining:
 	 * - The method call is needed to perform a few additional validation operations
@@ -4063,7 +4126,8 @@ static void achannel_nlatrack_solo_widget_cb(bContext *C, void *adt_poin, void *
 	BKE_nlatrack_solo_toggle(adt, nlt);
 
 	/* send notifiers */
-	WM_event_add_notifier(C, NC_ANIMATION | ND_ANIMCHAN | NA_RENAME, NULL);
+	DEG_id_tag_update(ale->id, ID_RECALC_ANIMATION);
+	WM_event_add_notifier(C, NC_ANIMATION | ND_NLA | NA_EDITED, NULL);
 }
 
 /* callback for widget sliders - insert keyframes */
@@ -4073,23 +4137,28 @@ static void achannel_setting_slider_cb(bContext *C, void *id_poin, void *fcu_poi
 	AnimData *adt = BKE_animdata_from_id(id);
 	FCurve *fcu = (FCurve *)fcu_poin;
 
+	Depsgraph *depsgraph = CTX_data_depsgraph(C);
 	ReportList *reports = CTX_wm_reports(C);
 	Scene *scene = CTX_data_scene(C);
 	ToolSettings *ts = scene->toolsettings;
+	ListBase nla_cache = {NULL, NULL};
 	PointerRNA id_ptr, ptr;
 	PropertyRNA *prop;
 	short flag = 0;
 	bool done = false;
 	float cfra;
 
+	/* Get RNA pointer */
+	RNA_id_pointer_create(id, &id_ptr);
+
+	/* Get NLA context for value remapping */
+	NlaKeyframingContext *nla_context = BKE_animsys_get_nla_keyframing_context(&nla_cache, depsgraph, &id_ptr, adt, (float)CFRA);
+
 	/* get current frame and apply NLA-mapping to it (if applicable) */
 	cfra = BKE_nla_tweakedit_remap(adt, (float)CFRA, NLATIME_CONVERT_UNMAP);
 
 	/* get flags for keyframing */
 	flag = ANIM_get_keyframing_flags(scene, 1);
-
-	/* get RNA pointer, and resolve the path */
-	RNA_id_pointer_create(id, &id_ptr);
 
 	/* try to resolve the path stored in the F-Curve */
 	if (RNA_path_resolve_property(&id_ptr, fcu->rna_path, &ptr, &prop)) {
@@ -4098,11 +4167,18 @@ static void achannel_setting_slider_cb(bContext *C, void *id_poin, void *fcu_poi
 			flag |= INSERTKEY_REPLACE;
 
 		/* insert a keyframe for this F-Curve */
-		done = insert_keyframe_direct(reports, ptr, prop, fcu, cfra, ts->keyframe_type, flag);
+		done = insert_keyframe_direct(depsgraph, reports, ptr, prop, fcu, cfra, ts->keyframe_type, nla_context, flag);
 
-		if (done)
+		if (done) {
+			if (adt->action != NULL) {
+				DEG_id_tag_update(&adt->action->id, ID_RECALC_ANIMATION_NO_FLUSH);
+			}
+			DEG_id_tag_update(id, ID_RECALC_ANIMATION_NO_FLUSH);
 			WM_event_add_notifier(C, NC_ANIMATION | ND_ANIMCHAN | NA_EDITED, NULL);
+		}
 	}
+
+	BKE_animsys_free_nla_keyframing_context_cache(&nla_cache);
 }
 
 /* callback for shapekey widget sliders - insert keyframes */
@@ -4113,14 +4189,22 @@ static void achannel_setting_slider_shapekey_cb(bContext *C, void *key_poin, voi
 	KeyBlock *kb = (KeyBlock *)kb_poin;
 	char *rna_path = BKE_keyblock_curval_rnapath_get(key, kb);
 
+	Depsgraph *depsgraph = CTX_data_depsgraph(C);
 	ReportList *reports = CTX_wm_reports(C);
 	Scene *scene = CTX_data_scene(C);
 	ToolSettings *ts = scene->toolsettings;
+	ListBase nla_cache = {NULL, NULL};
 	PointerRNA id_ptr, ptr;
 	PropertyRNA *prop;
 	short flag = 0;
 	bool done = false;
 	float cfra;
+
+	/* Get RNA pointer */
+	RNA_id_pointer_create((ID *)key, &id_ptr);
+
+	/* Get NLA context for value remapping */
+	NlaKeyframingContext *nla_context = BKE_animsys_get_nla_keyframing_context(&nla_cache, depsgraph, &id_ptr, key->adt, (float)CFRA);
 
 	/* get current frame and apply NLA-mapping to it (if applicable) */
 	cfra = BKE_nla_tweakedit_remap(key->adt, (float)CFRA, NLATIME_CONVERT_UNMAP);
@@ -4128,22 +4212,19 @@ static void achannel_setting_slider_shapekey_cb(bContext *C, void *key_poin, voi
 	/* get flags for keyframing */
 	flag = ANIM_get_keyframing_flags(scene, 1);
 
-	/* get RNA pointer, and resolve the path */
-	RNA_id_pointer_create((ID *)key, &id_ptr);
-
 	/* try to resolve the path stored in the F-Curve */
 	if (RNA_path_resolve_property(&id_ptr, rna_path, &ptr, &prop)) {
 		/* find or create new F-Curve */
 		// XXX is the group name for this ok?
 		bAction *act = verify_adt_action(bmain, (ID *)key, 1);
-		FCurve *fcu = verify_fcurve(act, NULL, &ptr, rna_path, 0, 1);
+		FCurve *fcu = verify_fcurve(bmain, act, NULL, &ptr, rna_path, 0, 1);
 
 		/* set the special 'replace' flag if on a keyframe */
 		if (fcurve_frame_has_keyframe(fcu, cfra, 0))
 			flag |= INSERTKEY_REPLACE;
 
 		/* insert a keyframe for this F-Curve */
-		done = insert_keyframe_direct(reports, ptr, prop, fcu, cfra, ts->keyframe_type, flag);
+		done = insert_keyframe_direct(depsgraph, reports, ptr, prop, fcu, cfra, ts->keyframe_type, nla_context, flag);
 
 		if (done)
 			WM_event_add_notifier(C, NC_ANIMATION | ND_ANIMCHAN | NA_EDITED, NULL);
@@ -4152,6 +4233,8 @@ static void achannel_setting_slider_shapekey_cb(bContext *C, void *key_poin, voi
 	/* free the path */
 	if (rna_path)
 		MEM_freeN(rna_path);
+
+	BKE_animsys_free_nla_keyframing_context_cache(&nla_cache);
 }
 
 /* callback for NLA Control Curve widget sliders - insert keyframes */
@@ -4164,6 +4247,7 @@ static void achannel_setting_slider_nla_curve_cb(bContext *C, void *UNUSED(id_po
 	PropertyRNA *prop;
 	int index;
 
+	Depsgraph *depsgraph = CTX_data_depsgraph(C);
 	ReportList *reports = CTX_wm_reports(C);
 	Scene *scene = CTX_data_scene(C);
 	ToolSettings *ts = scene->toolsettings;
@@ -4186,7 +4270,7 @@ static void achannel_setting_slider_nla_curve_cb(bContext *C, void *UNUSED(id_po
 			flag |= INSERTKEY_REPLACE;
 
 		/* insert a keyframe for this F-Curve */
-		done = insert_keyframe_direct(reports, ptr, prop, fcu, cfra, ts->keyframe_type, flag);
+		done = insert_keyframe_direct(depsgraph, reports, ptr, prop, fcu, cfra, ts->keyframe_type, NULL, flag);
 
 		if (done)
 			WM_event_add_notifier(C, NC_ANIMATION | ND_ANIMCHAN | NA_EDITED, NULL);
@@ -4204,11 +4288,12 @@ static void draw_setting_widget(bAnimContext *ac, bAnimListElem *ale, const bAni
 	void *ptr;
 	const char *tooltip;
 	uiBut *but = NULL;
+	bool enabled;
 
 	/* get the flag and the pointer to that flag */
 	flag = acf->setting_flag(ac, setting, &negflag);
 	ptr = acf->setting_ptr(ale, setting, &ptrsize);
-	/* enabled = ANIM_channel_setting_get(ac, ale, setting); */ /* UNUSED */
+	enabled = ANIM_channel_setting_get(ac, ale, setting);
 
 	/* get the base icon for the setting */
 	switch (setting) {
@@ -4230,8 +4315,7 @@ static void draw_setting_widget(bAnimContext *ac, bAnimListElem *ale, const bAni
 			break;
 
 		case ACHANNEL_SETTING_MOD_OFF:  /* modifiers disabled */
-			icon = ICON_MODIFIER;
-			usetoggle = false;
+			icon = ICON_MODIFIER_OFF;
 			tooltip = TIP_("F-Curve modifiers are disabled");
 			break;
 
@@ -4261,8 +4345,8 @@ static void draw_setting_widget(bAnimContext *ac, bAnimListElem *ale, const bAni
 			break;
 
 		case ACHANNEL_SETTING_MUTE: /* muted speaker */
-			//icon = ((enabled) ? ICON_MUTE_IPO_ON : ICON_MUTE_IPO_OFF);
-			icon = ICON_MUTE_IPO_OFF;
+			icon = ((enabled) ? ICON_CHECKBOX_DEHLT : ICON_CHECKBOX_HLT);
+			usetoggle = false;
 
 			if (ELEM(ale->type, ANIMTYPE_FCURVE, ANIMTYPE_NLACURVE)) {
 				tooltip = TIP_("Does F-Curve contribute to result");
@@ -4344,26 +4428,39 @@ static void draw_setting_widget(bAnimContext *ac, bAnimListElem *ale, const bAni
 
 				/* settings needing special attention */
 				case ACHANNEL_SETTING_SOLO: /* NLA Tracks - Solo toggle */
-					UI_but_func_set(but, achannel_nlatrack_solo_widget_cb, ale->adt, ale->data);
+					UI_but_funcN_set(but, achannel_nlatrack_solo_widget_cb, MEM_dupallocN(ale), NULL);
 					break;
 
 				/* no flushing */
-				case ACHANNEL_SETTING_EXPAND: /* expanding - cannot flush, otherwise all would open/close at once */
+				case ACHANNEL_SETTING_EXPAND: /* expanding - cannot flush,
+				                               * otherwise all would open/close at once */
 				default:
 					UI_but_func_set(but, achannel_setting_widget_cb, NULL, NULL);
 					break;
 			}
 		}
 	}
+
+	if ((ale->fcurve_owner_id != NULL && ID_IS_LINKED(ale->fcurve_owner_id)) ||
+	    (ale->id != NULL && ID_IS_LINKED(ale->id)))
+	{
+		UI_but_flag_enable(but, UI_BUT_DISABLED);
+	}
 }
 
 /* Draw UI widgets the given channel */
-void ANIM_channel_draw_widgets(const bContext *C, bAnimContext *ac, bAnimListElem *ale, uiBlock *block, float yminc, float ymaxc, size_t channel_index)
+void ANIM_channel_draw_widgets(
+        const bContext *C,
+        bAnimContext *ac,
+        bAnimListElem *ale,
+        uiBlock *block,
+        rctf *rect,
+        size_t channel_index)
 {
 	const bAnimChannelType *acf = ANIM_channel_get_typeinfo(ale);
 	View2D *v2d = &ac->ar->v2d;
-	float y, ymid /*, ytext*/;
-	short offset;
+	float ymid;
+	const short channel_height = round_fl_to_int(BLI_rctf_size_y(rect));
 	const bool is_being_renamed = achannel_is_being_renamed(ac, acf, channel_index);
 
 	/* sanity checks - don't draw anything */
@@ -4371,15 +4468,13 @@ void ANIM_channel_draw_widgets(const bContext *C, bAnimContext *ac, bAnimListEle
 		return;
 
 	/* get initial offset */
-	if (acf->get_offset)
-		offset = acf->get_offset(ac, ale);
-	else
-		offset = 0;
+	short offset = rect->xmin;
+	if (acf->get_offset) {
+		offset += acf->get_offset(ac, ale);
+	}
 
-	/* calculate appropriate y-coordinates for icon buttons
-	 */
-	y = (ymaxc - yminc) / 2 + yminc;
-	ymid = y - 0.5f * ICON_WIDTH;
+	/* calculate appropriate y-coordinates for icon buttons */
+	ymid = BLI_rctf_cent_y(rect) - 0.5f * ICON_WIDTH;
 
 	/* no button backdrop behind icons */
 	UI_block_emboss_set(block, UI_EMBOSS_NONE);
@@ -4402,7 +4497,7 @@ void ANIM_channel_draw_widgets(const bContext *C, bAnimContext *ac, bAnimListEle
 	 * - in Grease Pencil mode, color swatches for layer color
 	 */
 	if (ac->sl) {
-		if ((ac->spacetype == SPACE_IPO) &&
+		if ((ac->spacetype == SPACE_GRAPH) &&
 		    (acf->has_setting(ac, ale, ACHANNEL_SETTING_VISIBLE) ||
 		     acf->has_setting(ac, ale, ACHANNEL_SETTING_ALWAYS_VISIBLE)))
 		{
@@ -4461,13 +4556,12 @@ void ANIM_channel_draw_widgets(const bContext *C, bAnimContext *ac, bAnimListEle
 		 */
 		if (acf->name_prop(ale, &ptr, &prop)) {
 			const short margin_x = 3 * round_fl_to_int(UI_DPI_FAC);
-			const short channel_height = round_fl_to_int(ymaxc - yminc);
 			const short width = ac->ar->winx - offset - (margin_x * 2);
 			uiBut *but;
 
 			UI_block_emboss_set(block, UI_EMBOSS);
 
-			but = uiDefButR(block, UI_BTYPE_TEXT, 1, "", offset + margin_x, yminc,
+			but = uiDefButR(block, UI_BTYPE_TEXT, 1, "", offset + margin_x, rect->ymin,
 			                MAX2(width, RENAME_TEXT_MIN_WIDTH), channel_height,
 			                &ptr, RNA_property_identifier(prop), -1, 0, 0, -1, -1, NULL);
 
@@ -4492,14 +4586,14 @@ void ANIM_channel_draw_widgets(const bContext *C, bAnimContext *ac, bAnimListEle
 
 	/* step 5) draw mute+protection toggles + (sliders) ....................... */
 	/* reset offset - now goes from RHS of panel */
-	offset = 0;
+	offset = (int)rect->xmax;
 
 	// TODO: when drawing sliders, make those draw instead of these toggles if not enough space
 	if (v2d && !is_being_renamed) {
 		short draw_sliders = 0;
 
 		/* check if we need to show the sliders */
-		if ((ac->sl) && ELEM(ac->spacetype, SPACE_ACTION, SPACE_IPO)) {
+		if ((ac->sl) && ELEM(ac->spacetype, SPACE_ACTION, SPACE_GRAPH)) {
 			switch (ac->spacetype) {
 				case SPACE_ACTION:
 				{
@@ -4507,9 +4601,9 @@ void ANIM_channel_draw_widgets(const bContext *C, bAnimContext *ac, bAnimListEle
 					draw_sliders = (saction->flag & SACTION_SLIDERS);
 					break;
 				}
-				case SPACE_IPO:
+				case SPACE_GRAPH:
 				{
-					SpaceIpo *sipo = (SpaceIpo *)ac->sl;
+					SpaceGraph *sipo = (SpaceGraph *)ac->sl;
 					draw_sliders = (sipo->flag & SIPO_SLIDERS);
 					break;
 				}
@@ -4520,32 +4614,33 @@ void ANIM_channel_draw_widgets(const bContext *C, bAnimContext *ac, bAnimListEle
 		if (!(draw_sliders) || (BLI_rcti_size_x(&v2d->mask) > ACHANNEL_BUTTON_WIDTH / 2) ) {
 			/* protect... */
 			if (acf->has_setting(ac, ale, ACHANNEL_SETTING_PROTECT)) {
-				offset += ICON_WIDTH;
-				draw_setting_widget(ac, ale, acf, block, (int)v2d->cur.xmax - offset, ymid, ACHANNEL_SETTING_PROTECT);
+				offset -= ICON_WIDTH;
+				draw_setting_widget(ac, ale, acf, block, offset, ymid, ACHANNEL_SETTING_PROTECT);
 			}
 			/* mute... */
 			if (acf->has_setting(ac, ale, ACHANNEL_SETTING_MUTE)) {
-				offset += ICON_WIDTH;
-				draw_setting_widget(ac, ale, acf, block, (int)v2d->cur.xmax - offset, ymid, ACHANNEL_SETTING_MUTE);
+				offset -= ICON_WIDTH;
+				draw_setting_widget(ac, ale, acf, block, offset, ymid, ACHANNEL_SETTING_MUTE);
 			}
 			if (ale->type == ANIMTYPE_GPLAYER) {
 				/* Not technically "mute" (in terms of anim channels, but this sets layer visibility instead) */
-				offset += ICON_WIDTH;
-				draw_setting_widget(ac, ale, acf, block, (int)v2d->cur.xmax - offset, ymid, ACHANNEL_SETTING_VISIBLE);
+				offset -= ICON_WIDTH;
+				draw_setting_widget(ac, ale, acf, block, offset, ymid, ACHANNEL_SETTING_VISIBLE);
 			}
 
 			/* modifiers disable */
 			if (acf->has_setting(ac, ale, ACHANNEL_SETTING_MOD_OFF)) {
-				offset += ICON_WIDTH * 1.2f; /* hack: extra spacing, to avoid touching the mute toggle */
-				draw_setting_widget(ac, ale, acf, block, (int)v2d->cur.xmax - offset, ymid, ACHANNEL_SETTING_MOD_OFF);
+				/* hack: extra spacing, to avoid touching the mute toggle */
+				offset -= ICON_WIDTH * 1.2f;
+				draw_setting_widget(ac, ale, acf, block, offset, ymid, ACHANNEL_SETTING_MOD_OFF);
 			}
 
 			/* ----------- */
 
 			/* pinned... */
 			if (acf->has_setting(ac, ale, ACHANNEL_SETTING_PINNED)) {
-				offset += ICON_WIDTH;
-				draw_setting_widget(ac, ale, acf, block, (int)v2d->cur.xmax - offset, ymid, ACHANNEL_SETTING_PINNED);
+				offset -= ICON_WIDTH;
+				draw_setting_widget(ac, ale, acf, block, offset, ymid, ACHANNEL_SETTING_PINNED);
 			}
 
 			/* NLA Action "pushdown" */
@@ -4555,9 +4650,9 @@ void ANIM_channel_draw_widgets(const bContext *C, bAnimContext *ac, bAnimListEle
 
 				UI_block_emboss_set(block, UI_EMBOSS);
 
-				offset += UI_UNIT_X;
+				offset -= UI_UNIT_X;
 				but = uiDefIconButO(block, UI_BTYPE_BUT, "NLA_OT_action_pushdown", WM_OP_INVOKE_DEFAULT, ICON_NLA_PUSHDOWN,
-				                   (int)v2d->cur.xmax - offset, ymid, UI_UNIT_X, UI_UNIT_X, NULL);
+				                   offset, ymid, UI_UNIT_X, UI_UNIT_X, NULL);
 
 				opptr_b = UI_but_operator_ptr_get(but);
 				RNA_int_set(opptr_b, "channel_index", channel_index);
@@ -4577,7 +4672,7 @@ void ANIM_channel_draw_widgets(const bContext *C, bAnimContext *ac, bAnimListEle
 		if ((draw_sliders) && ELEM(ale->type, ANIMTYPE_FCURVE, ANIMTYPE_NLACURVE, ANIMTYPE_SHAPEKEY)) {
 			/* adjust offset */
 			// TODO: make slider width dynamic, so that they can be easier to use when the view is wide enough
-			offset += SLIDER_WIDTH;
+			offset -= SLIDER_WIDTH;
 
 			/* need backdrop behind sliders... */
 			UI_block_emboss_set(block, UI_EMBOSS);
@@ -4598,7 +4693,7 @@ void ANIM_channel_draw_widgets(const bContext *C, bAnimContext *ac, bAnimListEle
 						uiBut *but;
 
 						/* create the slider button, and assign relevant callback to ensure keyframes are inserted... */
-						but = uiDefAutoButR(block, &ptr, prop, fcu->array_index, "", ICON_NONE, (int)v2d->cur.xmax - offset, ymid, SLIDER_WIDTH, (int)ymaxc - yminc);
+						but = uiDefAutoButR(block, &ptr, prop, fcu->array_index, "", ICON_NONE, offset, ymid, SLIDER_WIDTH, channel_height);
 						UI_but_func_set(but, achannel_setting_slider_nla_curve_cb, ale->id, ale->data);
 					}
 				}
@@ -4635,7 +4730,7 @@ void ANIM_channel_draw_widgets(const bContext *C, bAnimContext *ac, bAnimListEle
 						uiBut *but;
 
 						/* create the slider button, and assign relevant callback to ensure keyframes are inserted... */
-						but = uiDefAutoButR(block, &ptr, prop, array_index, "", ICON_NONE, (int)v2d->cur.xmax - offset, ymid, SLIDER_WIDTH, (int)ymaxc - yminc);
+						but = uiDefAutoButR(block, &ptr, prop, array_index, "", ICON_NONE, offset, ymid, SLIDER_WIDTH, channel_height);
 
 						/* assign keyframing function according to slider type */
 						if (ale->type == ANIMTYPE_SHAPEKEY)

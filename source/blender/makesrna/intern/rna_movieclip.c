@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,15 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * Contributor(s): Blender Foundation,
- *                 Sergey Sharybin
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/makesrna/intern/rna_movieclip.c
- *  \ingroup RNA
+/** \file
+ * \ingroup RNA
  */
 
 #include <stdlib.h>
@@ -49,7 +42,7 @@
 
 #ifdef RNA_RUNTIME
 
-#include "BKE_depsgraph.h"
+#include "DEG_depsgraph.h"
 
 #include "ED_clip.h"
 
@@ -61,7 +54,7 @@ static void rna_MovieClip_reload_update(Main *bmain, Scene *UNUSED(scene), Point
 	MovieClip *clip = (MovieClip *)ptr->id.data;
 
 	BKE_movieclip_reload(bmain, clip);
-	DAG_id_tag_update(&clip->id, 0);
+	DEG_id_tag_update(&clip->id, 0);
 }
 
 static void rna_MovieClip_size_get(PointerRNA *ptr, int *values)
@@ -143,7 +136,7 @@ static void rna_def_movieclip_proxy(BlenderRNA *brna)
 		                                        "written by recording device"},
 		{IMB_TC_RECORD_RUN_NO_GAPS, "FREE_RUN_NO_GAPS", 0, "Free Run No Gaps",
 		                            "Record run, but ignore timecode, changes in framerate or dropouts"},
-		{0, NULL, 0, NULL, NULL}
+		{0, NULL, 0, NULL, NULL},
 	};
 
 	srna = RNA_def_struct(brna, "MovieClipProxy", NULL);
@@ -236,12 +229,12 @@ static void rna_def_moviecliUser(BlenderRNA *brna)
 	PropertyRNA *prop;
 
 	static const EnumPropertyItem clip_render_size_items[] = {
-		{MCLIP_PROXY_RENDER_SIZE_25, "PROXY_25", 0, "Proxy size 25%", ""},
-		{MCLIP_PROXY_RENDER_SIZE_50, "PROXY_50", 0, "Proxy size 50%", ""},
-		{MCLIP_PROXY_RENDER_SIZE_75, "PROXY_75", 0, "Proxy size 75%", ""},
-		{MCLIP_PROXY_RENDER_SIZE_100, "PROXY_100", 0, "Proxy size 100%", ""},
-		{MCLIP_PROXY_RENDER_SIZE_FULL, "FULL", 0, "No proxy, full render", ""},
-		{0, NULL, 0, NULL, NULL}
+		{MCLIP_PROXY_RENDER_SIZE_25, "PROXY_25", 0, "25%", ""},
+		{MCLIP_PROXY_RENDER_SIZE_50, "PROXY_50", 0, "50%", ""},
+		{MCLIP_PROXY_RENDER_SIZE_75, "PROXY_75", 0, "75%", ""},
+		{MCLIP_PROXY_RENDER_SIZE_100, "PROXY_100", 0, "100%", ""},
+		{MCLIP_PROXY_RENDER_SIZE_FULL, "FULL", 0, "None, full render", ""},
+		{0, NULL, 0, NULL, NULL},
 	};
 
 	srna = RNA_def_struct(brna, "MovieClipUser", NULL);
@@ -257,7 +250,7 @@ static void rna_def_moviecliUser(BlenderRNA *brna)
 	prop = RNA_def_property(srna, "proxy_render_size", PROP_ENUM, PROP_NONE);
 	RNA_def_property_enum_sdna(prop, NULL, "render_size");
 	RNA_def_property_enum_items(prop, clip_render_size_items);
-	RNA_def_property_ui_text(prop, "Proxy render size",
+	RNA_def_property_ui_text(prop, "Proxy Render Size",
 	                         "Draw preview using full resolution or different proxy resolutions");
 	RNA_def_property_update(prop, NC_MOVIECLIP | ND_DISPLAY, "rna_MovieClipUser_proxy_render_settings_update");
 
@@ -287,7 +280,7 @@ static void rna_def_movieclip(BlenderRNA *brna)
 	static const EnumPropertyItem clip_source_items[] = {
 		{MCLIP_SRC_SEQUENCE, "SEQUENCE", 0, "Image Sequence", "Multiple image files, as a sequence"},
 		{MCLIP_SRC_MOVIE, "MOVIE", 0, "Movie File", "Movie file"},
-		{0, NULL, 0, NULL, NULL}
+		{0, NULL, 0, NULL, NULL},
 	};
 
 	srna = RNA_def_struct(brna, "MovieClip", "ID");
@@ -344,6 +337,7 @@ static void rna_def_movieclip(BlenderRNA *brna)
 	prop = RNA_def_property(srna, "grease_pencil", PROP_POINTER, PROP_NONE);
 	RNA_def_property_pointer_sdna(prop, NULL, "gpd");
 	RNA_def_property_struct_type(prop, "GreasePencil");
+	RNA_def_property_pointer_funcs(prop, NULL, NULL, NULL, "rna_GPencil_datablocks_annotations_poll");
 	RNA_def_property_flag(prop, PROP_EDITABLE | PROP_ID_REFCOUNT);
 	RNA_def_property_ui_text(prop, "Grease Pencil", "Grease pencil data for this movie clip");
 	RNA_def_property_update(prop, NC_MOVIECLIP | ND_DISPLAY, NULL);

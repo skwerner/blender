@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,10 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/blenkernel/intern/blender.c
- *  \ingroup bke
+/** \file
+ * \ingroup bke
  *
  * Application level startup/shutdown functionality.
  */
@@ -48,20 +40,23 @@
 #include "BKE_addon.h"
 #include "BKE_blender.h"  /* own include */
 #include "BKE_blender_version.h"  /* own include */
+#include "BKE_blender_user_menu.h"
 #include "BKE_blendfile.h"
 #include "BKE_brush.h"
 #include "BKE_cachefile.h"
-#include "BKE_context.h"
-#include "BKE_depsgraph.h"
 #include "BKE_global.h"
 #include "BKE_idprop.h"
 #include "BKE_image.h"
-#include "BKE_library.h"
+#include "BKE_layer.h"
+#include "BKE_main.h"
 #include "BKE_node.h"
 #include "BKE_report.h"
 #include "BKE_scene.h"
 #include "BKE_screen.h"
 #include "BKE_sequencer.h"
+#include "BKE_studiolight.h"
+
+#include "DEG_depsgraph.h"
 
 #include "RE_pipeline.h"
 #include "RE_render_ext.h"
@@ -80,6 +75,8 @@ char versionstr[48] = "";
 void BKE_blender_free(void)
 {
 	/* samples are in a global list..., also sets G_MAIN->sound->sample NULL */
+
+	BKE_studiolight_free(); /* needs to run before main free as wm is still referenced for icons preview jobs */
 	BKE_main_free(G_MAIN);
 	G_MAIN = NULL;
 
@@ -92,7 +89,7 @@ void BKE_blender_free(void)
 	IMB_exit();
 	BKE_cachefiles_exit();
 	BKE_images_exit();
-	DAG_exit();
+	DEG_free_node_types();
 
 	BKE_brush_system_exit();
 	RE_texture_rng_exit();
@@ -130,9 +127,9 @@ void BKE_blender_globals_init(void)
 	BKE_blender_version_string(versionstr, sizeof(versionstr), BLENDER_VERSION, BLENDER_SUBVERSION, true, true);
 
 #ifndef WITH_PYTHON_SECURITY /* default */
-	G.f |= G_SCRIPT_AUTOEXEC;
+	G.f |= G_FLAG_SCRIPT_AUTOEXEC;
 #else
-	G.f &= ~G_SCRIPT_AUTOEXEC;
+	G.f &= ~G_FLAG_SCRIPT_AUTOEXEC;
 #endif
 
 	G.log.level = 1;
@@ -201,6 +198,26 @@ static void userdef_free_keymaps(UserDef *userdef)
 	BLI_listbase_clear(&userdef->user_keymaps);
 }
 
+static void userdef_free_keyconfig_prefs(UserDef *userdef)
+{
+	for (wmKeyConfigPref *kpt = userdef->user_keyconfig_prefs.first, *kpt_next; kpt; kpt = kpt_next) {
+		kpt_next = kpt->next;
+		IDP_FreeProperty(kpt->prop);
+		MEM_freeN(kpt->prop);
+		MEM_freeN(kpt);
+	}
+	BLI_listbase_clear(&userdef->user_keyconfig_prefs);
+}
+
+static void userdef_free_user_menus(UserDef *userdef)
+{
+	for (bUserMenu *um = userdef->user_menus.first, *um_next; um; um = um_next) {
+		um_next = um->next;
+		BKE_blender_user_menu_item_free_list(&um->items);
+		MEM_freeN(um);
+	}
+}
+
 static void userdef_free_addons(UserDef *userdef)
 {
 	for (bAddon *addon = userdef->addons.first, *addon_next; addon; addon = addon_next) {
@@ -221,6 +238,8 @@ void BKE_blender_userdef_data_free(UserDef *userdef, bool clear_fonts)
 #endif
 
 	userdef_free_keymaps(userdef);
+	userdef_free_keyconfig_prefs(userdef);
+	userdef_free_user_menus(userdef);
 	userdef_free_addons(userdef);
 
 	if (clear_fonts) {
@@ -235,6 +254,7 @@ void BKE_blender_userdef_data_free(UserDef *userdef, bool clear_fonts)
 	BLI_freelistN(&userdef->uistyles);
 	BLI_freelistN(&userdef->uifonts);
 	BLI_freelistN(&userdef->themes);
+
 
 #undef U
 }
@@ -255,7 +275,7 @@ void BKE_blender_userdef_app_template_data_swap(UserDef *userdef_a, UserDef *use
 		memcpy(&(userdef_tmp.id), &(userdef_a->id), sizeof(userdef_tmp.id)); \
 		memcpy(&(userdef_a->id), &(userdef_b->id), sizeof(userdef_tmp.id)); \
 		memcpy(&(userdef_b->id), &(userdef_tmp.id), sizeof(userdef_tmp.id)); \
-	}
+	} ((void)0)
 
 #define LIST_SWAP(id) { \
 	SWAP(ListBase, userdef_a->id, userdef_b->id); \
@@ -277,17 +297,17 @@ void BKE_blender_userdef_app_template_data_swap(UserDef *userdef_a, UserDef *use
 	LIST_SWAP(addons);
 	LIST_SWAP(user_keymaps);
 
-	DATA_SWAP(light);
-
 	DATA_SWAP(font_path_ui);
 	DATA_SWAP(font_path_ui_mono);
 	DATA_SWAP(keyconfigstr);
 
+	DATA_SWAP(gizmo_flag);
 	DATA_SWAP(app_flag);
 
 	/* We could add others. */
-	FLAG_SWAP(uiflag, int, USER_QUIT_PROMPT);
+	FLAG_SWAP(uiflag, int, USER_SAVE_PROMPT);
 
+#undef SWAP_TYPELESS
 #undef DATA_SWAP
 #undef LIST_SWAP
 #undef FLAG_SWAP
@@ -304,27 +324,6 @@ void BKE_blender_userdef_app_template_data_set_and_free(UserDef *userdef)
 	BKE_blender_userdef_app_template_data_set(userdef);
 	MEM_freeN(userdef);
 }
-
-/* *****************  testing for break ************* */
-
-static void (*blender_test_break_cb)(void) = NULL;
-
-void BKE_blender_callback_test_break_set(void (*func)(void))
-{
-	blender_test_break_cb = func;
-}
-
-
-int BKE_blender_test_break(void)
-{
-	if (!G.background) {
-		if (blender_test_break_cb)
-			blender_test_break_cb();
-	}
-
-	return (G.is_break == true);
-}
-
 
 /** \name Blender's AtExit
  *

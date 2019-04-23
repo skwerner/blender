@@ -25,7 +25,7 @@
 ARGS=$( \
 getopt \
 -o s:i:t:h \
---long source:,install:,tmp:,info:,threads:,help,show-deps,no-sudo,no-build,no-confirm,use-cxx11,\
+--long source:,install:,tmp:,info:,threads:,help,show-deps,no-sudo,no-build,no-confirm,\
 with-all,with-opencollada,with-jack,with-embree,\
 ver-ocio:,ver-oiio:,ver-llvm:,ver-osl:,ver-osd:,ver-openvdb:,\
 force-all,force-python,force-numpy,force-boost,\
@@ -105,11 +105,6 @@ ARGUMENTS_INFO="\"COMMAND LINE ARGUMENTS:
 
     --no-confirm
         Disable any interaction with user (suitable for automated run).
-
-    --use-cxx11
-        Build all libraries in cpp11 'mode' (will be mandatory soon in blender2.8 branch).
-        NOTE: If your compiler is gcc-6.0 or above, you probably *want* to enable this option (since it's default
-              standard starting from this version).
 
     --with-all
         By default, a number of optional and not-so-often needed libraries are not installed.
@@ -306,6 +301,8 @@ NO_BUILD=false
 NO_CONFIRM=false
 USE_CXX11=true
 
+CLANG_FORMAT_VERSION_MIN="6.0"
+
 PYTHON_VERSION="3.7.0"
 PYTHON_VERSION_MIN="3.7"
 PYTHON_FORCE_BUILD=false
@@ -383,11 +380,10 @@ ALEMBIC_FORCE_BUILD=false
 ALEMBIC_FORCE_REBUILD=false
 ALEMBIC_SKIP=false
 
-OPENCOLLADA_VERSION="1.6.63"
+OPENCOLLADA_VERSION="1.6.68"
 OPENCOLLADA_FORCE_BUILD=false
 OPENCOLLADA_FORCE_REBUILD=false
 OPENCOLLADA_SKIP=false
-
 
 EMBREE_VERSION="3.2.4"
 EMBREE_FORCE_BUILD=false
@@ -2633,7 +2629,7 @@ compile_FFmpeg() {
     ./configure --cc="gcc -Wl,--as-needed" \
         --extra-ldflags="-pthread -static-libgcc" \
         --prefix=$_inst --enable-static \
-        --disable-ffplay --disable-ffserver --disable-doc \
+        --disable-ffplay --disable-doc \
         --enable-gray \
         --enable-avfilter --disable-vdpau \
         --disable-bzlib --disable-libgsm --disable-libspeex \
@@ -2793,6 +2789,17 @@ install_DEB() {
     PRINT ""
   fi
 
+  PRINT ""
+  CLANG_FORMAT="clang-format"
+  check_package_version_ge_DEB $CLANG_FORMAT $CLANG_FORMAT_VERSION_MIN
+  if [ $? -eq 0 ]; then
+    _packages="$_packages $CLANG_FORMAT"
+  else
+    PRINT ""
+    WARNING "clang-format $CLANG_FORMAT_VERSION_MIN or higher not found, this is NOT needed to get Blender compiling..."
+    PRINT ""
+  fi
+
   if [ "$WITH_JACK" = true ]; then
     _packages="$_packages libspnav-dev"
     # Only install jack if jack2 is not already installed!
@@ -2810,10 +2817,10 @@ install_DEB() {
   install_packages_DEB $_packages
 
   PRINT""
-  SNDFILE_DEV="libsndfile1-dev"
-  check_package_DEB $SNDFILE_DEV
+  LIBSNDFILE_DEV="libsndfile1-dev"
+  check_package_DEB $LIBSNDFILE_DEV
   if [ $? -eq 0 ]; then
-    install_packages_DEB $SNDFILE_DEV
+    install_packages_DEB $LIBSNDFILE_DEV
   fi
 
   PRINT ""
@@ -3426,10 +3433,10 @@ install_RPM() {
   fi
 
   PRINT""
-  SNDFILE_DEV="libsndfile-devel"
-  check_package_RPM $SNDFILE_DEV
+  LIBSNDFILE_DEV="libsndfile-devel"
+  check_package_RPM $LIBSNDFILE_DEV
   if [ $? -eq 0 ]; then
-    install_packages_RPM $SNDFILE_DEV
+    install_packages_RPM $LIBSNDFILE_DEV
   fi
 
   if [ "$WITH_ALL" = true ]; then
@@ -3444,6 +3451,16 @@ install_RPM() {
     install_packages_RPM libspnav-devel
   fi
 
+  PRINT ""
+  CLANG_FORMAT="clang"  # Yeah, on fedora/suse clang-format is part of main clang package...
+  check_package_version_ge_RPM $CLANG_FORMAT $CLANG_FORMAT_VERSION_MIN
+  if [ $? -eq 0 ]; then
+    install_packages_RPM $CLANG_FORMAT
+  else
+    PRINT ""
+    WARNING "clang-format $CLANG_FORMAT_VERSION_MIN or higher not found, this is NOT needed to get Blender compiling..."
+    PRINT ""
+  fi
 
   PRINT ""
   _do_compile_python=false
@@ -3850,10 +3867,10 @@ install_ARCH() {
   install_packages_ARCH $_packages
 
   PRINT""
-  SNDFILE_DEV="libsndfile"
-  check_package_ARCH $SNDFILE_DEV
+  LIBSNDFILE_DEV="libsndfile"
+  check_package_ARCH $LIBSNDFILE_DEV
   if [ $? -eq 0 ]; then
-    install_packages_ARCH $SNDFILE_DEV
+    install_packages_ARCH $LIBSNDFILE_DEV
   fi
 
   PRINT ""
@@ -3888,6 +3905,18 @@ install_ARCH() {
       install_packages_ARCH $VPX_DEV
       VPX_USE=true
     fi
+  fi
+
+
+  PRINT ""
+  CLANG_FORMAT="clang"  # Yeah, on arch clang-format is part of main clang package...
+  check_package_version_ge_ARCH $CLANG_FORMAT $CLANG_FORMAT_VERSION_MIN
+  if [ $? -eq 0 ]; then
+    install_packages_ARCH $CLANG_FORMAT
+  else
+    PRINT ""
+    WARNING "clang-format $CLANG_FORMAT_VERSION_MIN or higher not found, this is NOT needed to get Blender compiling..."
+    PRINT ""
   fi
 
 
@@ -4529,18 +4558,33 @@ print_info() {
       PRINT "  $_1"
       _buildargs="$_buildargs $_1"
     fi
+    if [ -d $INST/blosc ]; then
+      _1="-D BLOSC_ROOT_DIR=$INST/blosc"
+      PRINT "  $_1"
+      _buildargs="$_buildargs $_1"
+    fi
   fi
 
   if [ "$WITH_OPENCOLLADA" = true ]; then
     _1="-D WITH_OPENCOLLADA=ON"
     PRINT "  $_1"
     _buildargs="$_buildargs $_1"
+    if [ -d $INST/opencollada ]; then
+      _1="-D OPENCOLLADA_ROOT_DIR=$INST/opencollada"
+      PRINT "  $_1"
+      _buildargs="$_buildargs $_1"
+    fi
   fi
 
   if [ "$WITH_EMBREE" = true ]; then
     _1="-D WITH_CYCLES_EMBREE=ON"
     PRINT "  $_1"
     _buildargs="$_buildargs $_1"
+    if [ -d $INST/embree ]; then
+      _1="-D EMBREE_ROOT_DIR=$INST/embree"
+      PRINT "  $_1"
+      _buildargs="$_buildargs $_1"
+    fi
   fi
 
   if [ "$WITH_JACK" = true ]; then

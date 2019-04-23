@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,21 +12,20 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
 #ifndef __BKE_MESH_REMAP_H__
 #define __BKE_MESH_REMAP_H__
 
-/** \file BKE_mesh_remap.h
- *  \ingroup bke
+/** \file
+ * \ingroup bke
  */
 
 struct CustomData;
-struct DerivedMesh;
+struct CustomData_MeshMasks;
 struct MVert;
 struct MemArena;
+struct Mesh;
 
 /* Generic ways to map some geometry elements from a source mesh to a dest one. */
 
@@ -140,39 +137,41 @@ enum {
 	MREMAP_MODE_TOPOLOGY                 = MREMAP_MODE_VERT | MREMAP_MODE_EDGE | MREMAP_MODE_LOOP | MREMAP_MODE_POLY,
 };
 
-float BKE_mesh_remap_calc_difference_from_dm(
-        const struct SpaceTransform *space_transform,
-        const struct MVert *verts_dst, const int numverts_dst, struct DerivedMesh *dm_src);
+void BKE_mesh_remap_calc_source_cddata_masks_from_map_modes(
+        const int vert_mode, const int edge_mode, const int loop_mode, const int poly_mode,
+        struct CustomData_MeshMasks *cddata_mask);
 
-void BKE_mesh_remap_find_best_match_from_dm(
-        const struct MVert *verts_dst, const int numverts_dst, struct DerivedMesh *dm_src,
+float BKE_mesh_remap_calc_difference_from_mesh(
+        const struct SpaceTransform *space_transform,
+        const struct MVert *verts_dst, const int numverts_dst, struct Mesh *me_src);
+
+void BKE_mesh_remap_find_best_match_from_mesh(
+        const struct MVert *verts_dst, const int numverts_dst, struct Mesh *me_src,
         struct SpaceTransform *r_space_transform);
 
-/* TODO add mesh2mesh versions (we'll need mesh versions of bvhtree funcs too, though!). */
-
-void BKE_mesh_remap_calc_verts_from_dm(
+void BKE_mesh_remap_calc_verts_from_mesh(
         const int mode, const struct SpaceTransform *space_transform, const float max_dist, const float ray_radius,
         const struct MVert *verts_dst, const int numverts_dst, const bool dirty_nors_dst,
-        struct DerivedMesh *dm_src, MeshPairRemap *r_map);
+        struct Mesh *me_src, MeshPairRemap *r_map);
 
-void BKE_mesh_remap_calc_edges_from_dm(
+void BKE_mesh_remap_calc_edges_from_mesh(
         const int mode, const struct SpaceTransform *space_transform, const float max_dist, const float ray_radius,
         const struct MVert *verts_dst, const int numverts_dst, const struct MEdge *edges_dst, const int numedges_dst,
-        const bool dirty_nors_dst, struct DerivedMesh *dm_src, MeshPairRemap *r_map);
+        const bool dirty_nors_dst, struct Mesh *me_src, MeshPairRemap *r_map);
 
-void BKE_mesh_remap_calc_loops_from_dm(
+void BKE_mesh_remap_calc_loops_from_mesh(
         const int mode, const struct SpaceTransform *space_transform, const float max_dist, const float ray_radius,
         struct MVert *verts_dst, const int numverts_dst, struct MEdge *edges_dst, const int numedges_dst,
         struct MLoop *loops_dst, const int numloops_dst, struct MPoly *polys_dst, const int numpolys_dst,
         struct CustomData *ldata_dst, struct CustomData *pdata_dst,
         const bool use_split_nors_dst, const float split_angle_dst, const bool dirty_nors_dst,
-        struct DerivedMesh *dm_src, const bool use_split_nors_src, const float split_angle_src,
+        struct Mesh *me_src,
         MeshRemapIslandsCalc gen_islands_src, const float islands_precision_src, struct MeshPairRemap *r_map);
 
-void BKE_mesh_remap_calc_polys_from_dm(
+void BKE_mesh_remap_calc_polys_from_mesh(
         const int mode, const struct SpaceTransform *space_transform, const float max_dist, const float ray_radius,
         struct MVert *verts_dst, const int numverts_dst, struct MLoop *loops_dst, const int numloops_dst,
         struct MPoly *polys_dst, const int numpolys_dst, struct CustomData *pdata_dst, const bool dirty_nors_dst,
-        struct DerivedMesh *dm_src, struct MeshPairRemap *r_map);
+        struct Mesh *me_src, struct MeshPairRemap *r_map);
 
 #endif  /* __BKE_MESH_REMAP_H__ */

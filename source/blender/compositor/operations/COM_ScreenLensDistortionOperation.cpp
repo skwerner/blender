@@ -1,6 +1,4 @@
 /*
- * Copyright 2011, Blender Foundation.
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -15,9 +13,7 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
- * Contributor:
- *      Jeroen Bakker
- *      Monique Dewanchand
+ * Copyright 2011, Blender Foundation.
  */
 
 #include "COM_ScreenLensDistortionOperation.h"
@@ -26,6 +22,7 @@ extern "C" {
 #  include "BLI_math.h"
 #  include "BLI_utildefines.h"
 #  include "BLI_rand.h"
+#  include "PIL_time.h"
 }
 
 ScreenLensDistortionOperation::ScreenLensDistortionOperation() : NodeOperation()
@@ -59,6 +56,10 @@ void ScreenLensDistortionOperation::initExecution()
 {
 	this->m_inputProgram = this->getInputSocketReader(0);
 	this->initMutex();
+
+	uint rng_seed = (uint)(PIL_check_seconds_timer_i() & UINT_MAX);
+	rng_seed ^= (uint)POINTER_AS_INT(m_inputProgram);
+	this->m_rng = BLI_rng_new(rng_seed);
 
 	this->m_cx = 0.5f * (float)getWidth();
 	this->m_cy = 0.5f * (float)getHeight();
@@ -142,7 +143,7 @@ void ScreenLensDistortionOperation::accumulate(MemoryBuffer *buffer,
 	float dk4 = m_dk4[a];
 
 	for (float z = 0; z < ds; ++z) {
-		float tz = (z + (m_jitter ? BLI_frand() : 0.5f)) * sd;
+		float tz = (z + (m_jitter ? BLI_rng_get_float(m_rng) : 0.5f)) * sd;
 		float t = 1.0f - (k4 + tz * dk4) * r_sq;
 
 		float xy[2];
@@ -192,6 +193,7 @@ void ScreenLensDistortionOperation::deinitExecution()
 {
 	this->deinitMutex();
 	this->m_inputProgram = NULL;
+	BLI_rng_free(this->m_rng);
 }
 
 void ScreenLensDistortionOperation::determineUV(float result[6], float x, float y) const

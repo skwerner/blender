@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,12 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/freestyle/intern/blender_interface/FRS_freestyle.cpp
- *  \ingroup freestyle
+/** \file
+ * \ingroup freestyle
  */
 
 #include <iostream>
@@ -41,29 +37,31 @@ extern "C" {
 #include "MEM_guardedalloc.h"
 
 #include "DNA_camera_types.h"
+#include "DNA_collection_types.h"
 #include "DNA_freestyle_types.h"
-#include "DNA_group_types.h"
 #include "DNA_material_types.h"
 #include "DNA_text_types.h"
 
+#include "BKE_context.h"
 #include "BKE_freestyle.h"
 #include "BKE_global.h"
 #include "BKE_library.h"
 #include "BKE_linestyle.h"
-#include "BKE_main.h"
+#include "BKE_scene.h"
 #include "BKE_text.h"
-#include "BKE_context.h"
 
 #include "BLT_translation.h"
 
 #include "BLI_blenlib.h"
 #include "BLI_math.h"
+#include "BLI_math_color_blend.h"
 #include "BLI_callbacks.h"
 
 #include "BPY_extern.h"
 
+#include "DEG_depsgraph_query.h"
+
 #include "renderpipeline.h"
-#include "pixelblending.h"
 
 #include "FRS_freestyle.h"
 
@@ -283,19 +281,19 @@ static bool test_edge_type_conditions(struct edge_type_condition *conditions,
 	return true;
 }
 
-static void prepare(Render *re, SceneRenderLayer *srl)
+static void prepare(Render *re, ViewLayer *view_layer, Depsgraph *depsgraph)
 {
 	// load mesh
 	re->i.infostr = IFACE_("Freestyle: Mesh loading");
 	re->stats_draw(re->sdh, &re->i);
 	re->i.infostr = NULL;
-	if (controller->LoadMesh(re, srl)) // returns if scene cannot be loaded or if empty
+	if (controller->LoadMesh(re, view_layer, depsgraph)) // returns if scene cannot be loaded or if empty
 		return;
 	if (re->test_break(re->tbh))
 		return;
 
 	// add style modules
-	FreestyleConfig *config = &srl->freestyleConfig;
+	FreestyleConfig *config = &view_layer->freestyle_config;
 
 	if (G.debug & G_DEBUG_FREESTYLE) {
 		cout << "\n===  Rendering options  ===" << endl;
@@ -344,7 +342,7 @@ static void prepare(Render *re, SceneRenderLayer *srl)
 				{FREESTYLE_FE_MATERIAL_BOUNDARY, 0},
 				{FREESTYLE_FE_CONTOUR, 0},
 				{FREESTYLE_FE_EXTERNAL_CONTOUR, 0},
-				{FREESTYLE_FE_EDGE_MARK, 0}
+				{FREESTYLE_FE_EDGE_MARK, 0},
 			};
 			int num_edge_types = sizeof(conditions) / sizeof(struct edge_type_condition);
 			if (G.debug & G_DEBUG_FREESTYLE) {
@@ -357,9 +355,9 @@ static void prepare(Render *re, SceneRenderLayer *srl)
 				if (lineset->flags & FREESTYLE_LINESET_ENABLED) {
 					if (G.debug & G_DEBUG_FREESTYLE) {
 						cout << "  " << layer_count+1 << ": " << lineset->name << " - " <<
-							(lineset->linestyle ? (lineset->linestyle->id.name + 2) : "<NULL>") << endl;
+						        (lineset->linestyle ? (lineset->linestyle->id.name + 2) : "<NULL>") << endl;
 					}
-					char *buffer = create_lineset_handler(srl->name, lineset->name);
+					char *buffer = create_lineset_handler(view_layer->name, lineset->name);
 					controller->InsertStyleModule(layer_count, lineset->name, buffer);
 					controller->toggleLayer(layer_count, true);
 					MEM_freeN(buffer);
@@ -445,10 +443,10 @@ static void prepare(Render *re, SceneRenderLayer *srl)
 	}
 
 	// set diffuse and z depth passes
-	RenderLayer *rl = RE_GetRenderLayer(re->result, srl->name);
+	RenderLayer *rl = RE_GetRenderLayer(re->result, view_layer->name);
 	bool diffuse = false, z = false;
 	for (RenderPass *rpass = (RenderPass *)rl->passes.first; rpass; rpass = rpass->next) {
-		if (STREQ(rpass->name, RE_PASSNAME_DIFFUSE)) {
+		if (STREQ(rpass->name, RE_PASSNAME_DIFFUSE_COLOR)) {
 			controller->setPassDiffuse(rpass->rect, rpass->rectx, rpass->recty);
 			diffuse = true;
 		}
@@ -473,7 +471,7 @@ static void prepare(Render *re, SceneRenderLayer *srl)
 	controller->ComputeViewMap();
 }
 
-void FRS_composite_result(Render *re, SceneRenderLayer *srl, Render *freestyle_render)
+void FRS_composite_result(Render *re, ViewLayer *view_layer, Render *freestyle_render)
 {
 	RenderLayer *rl;
 	float *src, *dest, *pixSrc, *pixDest;
@@ -503,7 +501,7 @@ void FRS_composite_result(Render *re, SceneRenderLayer *srl, Render *freestyle_r
 	}
 #endif
 
-	rl = RE_GetRenderLayer(re->result, srl->name);
+	rl = RE_GetRenderLayer(re->result, view_layer->name);
 	if (!rl) {
 		if (G.debug & G_DEBUG_FREESTYLE) {
 			cout << "No destination render layer to composite to" << endl;
@@ -530,19 +528,19 @@ void FRS_composite_result(Render *re, SceneRenderLayer *srl, Render *freestyle_r
 			pixSrc = src + 4 * (rectx * y + x);
 			if (pixSrc[3] > 0.0) {
 				pixDest = dest + 4 * (rectx * y + x);
-				addAlphaOverFloat(pixDest, pixSrc);
+				blend_color_mix_float(pixDest, pixDest, pixSrc);
 			}
 		}
 	}
 }
 
-static int displayed_layer_count(SceneRenderLayer *srl)
+static int displayed_layer_count(ViewLayer *view_layer)
 {
 	int count = 0;
 
-	switch (srl->freestyleConfig.mode) {
+	switch (view_layer->freestyle_config.mode) {
 		case FREESTYLE_CONTROL_SCRIPT_MODE:
-			for (FreestyleModuleConfig *module = (FreestyleModuleConfig *)srl->freestyleConfig.modules.first;
+			for (FreestyleModuleConfig *module = (FreestyleModuleConfig *)view_layer->freestyle_config.modules.first;
 			     module;
 			     module = module->next)
 			{
@@ -551,7 +549,7 @@ static int displayed_layer_count(SceneRenderLayer *srl)
 			}
 			break;
 		case FREESTYLE_CONTROL_EDITOR_MODE:
-			for (FreestyleLineSet *lineset = (FreestyleLineSet *)srl->freestyleConfig.linesets.first;
+			for (FreestyleLineSet *lineset = (FreestyleLineSet *)view_layer->freestyle_config.linesets.first;
 			     lineset;
 			     lineset = lineset->next)
 			{
@@ -563,9 +561,11 @@ static int displayed_layer_count(SceneRenderLayer *srl)
 	return count;
 }
 
-int FRS_is_freestyle_enabled(SceneRenderLayer *srl)
+int FRS_is_freestyle_enabled(ViewLayer *view_layer)
 {
-	return (!(srl->layflag & SCE_LAY_DISABLE) && srl->layflag & SCE_LAY_FRS && displayed_layer_count(srl) > 0);
+	return ((view_layer->flag & VIEW_LAYER_RENDER) &&
+	        (view_layer->flag & VIEW_LAYER_FREESTYLE) &&
+	        displayed_layer_count(view_layer) > 0);
 }
 
 void FRS_init_stroke_renderer(Render *re)
@@ -587,7 +587,7 @@ void FRS_begin_stroke_rendering(Render *re)
 	init_camera(re);
 }
 
-Render *FRS_do_stroke_rendering(Render *re, SceneRenderLayer *srl, int render)
+Render *FRS_do_stroke_rendering(Render *re, ViewLayer *view_layer, int render)
 {
 	Render *freestyle_render = NULL;
 
@@ -596,21 +596,26 @@ Render *FRS_do_stroke_rendering(Render *re, SceneRenderLayer *srl, int render)
 
 	RenderMonitor monitor(re);
 	controller->setRenderMonitor(&monitor);
-	controller->setViewMapCache((srl->freestyleConfig.flags & FREESTYLE_VIEW_MAP_CACHE) ? true : false);
+	controller->setViewMapCache((view_layer->freestyle_config.flags & FREESTYLE_VIEW_MAP_CACHE) ? true : false);
 
 	if (G.debug & G_DEBUG_FREESTYLE) {
 		cout << endl;
 		cout << "----------------------------------------------------------" << endl;
-		cout << "|  " << (re->scene->id.name + 2) << "|" << srl->name << endl;
+		cout << "|  " << (re->scene->id.name + 2) << "|" << view_layer->name << endl;
 		cout << "----------------------------------------------------------" << endl;
 	}
+
+	/* Create depsgraph and evaluate scene. */
+	ViewLayer *scene_view_layer = (ViewLayer*)BLI_findstring(&re->scene->view_layers, view_layer->name, offsetof(ViewLayer, name));
+	Depsgraph *depsgraph = DEG_graph_new(re->scene, scene_view_layer, DAG_EVAL_RENDER);
+	BKE_scene_graph_update_for_newframe(depsgraph, re->main);
 
 	// prepare Freestyle:
 	//   - load mesh
 	//   - add style modules
 	//   - set parameters
 	//   - compute view map
-	prepare(re, srl);
+	prepare(re, view_layer, depsgraph);
 
 	if (re->test_break(re->tbh)) {
 		controller->CloseFile();
@@ -625,7 +630,7 @@ Render *FRS_do_stroke_rendering(Render *re, SceneRenderLayer *srl, int render)
 			re->i.infostr = IFACE_("Freestyle: Stroke rendering");
 			re->stats_draw(re->sdh, &re->i);
 			re->i.infostr = NULL;
-			g_freestyle.scene = re->scene;
+			g_freestyle.scene = DEG_get_evaluated_scene(depsgraph);
 			int strokeCount = controller->DrawStrokes();
 			if (strokeCount > 0) {
 				freestyle_render = controller->RenderStrokes(re, true);
@@ -635,12 +640,14 @@ Render *FRS_do_stroke_rendering(Render *re, SceneRenderLayer *srl, int render)
 
 			// composite result
 			if (freestyle_render) {
-				FRS_composite_result(re, srl, freestyle_render);
+				FRS_composite_result(re, view_layer, freestyle_render);
 				RE_FreeRenderResult(freestyle_render->result);
 				freestyle_render->result = NULL;
 			}
 		}
 	}
+
+	DEG_graph_free(depsgraph);
 
 	return freestyle_render;
 }

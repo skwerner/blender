@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,14 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * Contributor(s): Blender Foundation (2008)
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/makesrna/intern/rna_space_api.c
- *  \ingroup RNA
+/** \file
+ * \ingroup RNA
  */
 
 #include "RNA_access.h"
@@ -31,9 +25,12 @@
 
 #ifdef RNA_RUNTIME
 
+#include "BKE_global.h"
+
+#include "ED_screen.h"
 #include "ED_text.h"
 
-static void rna_RegionView3D_update(ID *id, RegionView3D *rv3d)
+static void rna_RegionView3D_update(ID *id, RegionView3D *rv3d, bContext *C)
 {
 	bScreen *sc = (bScreen *)id;
 
@@ -43,11 +40,20 @@ static void rna_RegionView3D_update(ID *id, RegionView3D *rv3d)
 	area_region_from_regiondata(sc, rv3d, &sa, &ar);
 
 	if (sa && ar && sa->spacetype == SPACE_VIEW3D) {
-		View3D *v3d;
+		View3D *v3d = sa->spacedata.first;
+		wmWindowManager *wm = CTX_wm_manager(C);
+		wmWindow *win;
 
-		v3d = (View3D *)sa->spacedata.first;
+		for (win = wm->windows.first; win; win = win->next) {
+			if (WM_window_get_active_screen(win) == sc) {
+				Scene *scene = WM_window_get_active_scene(win);
+				ViewLayer *view_layer = WM_window_get_active_view_layer(win);
+				Depsgraph *depsgraph = BKE_scene_get_depsgraph(scene, view_layer, true);
 
-		ED_view3d_update_viewmat(sc->scene, v3d, ar, NULL, NULL, NULL);
+				ED_view3d_update_viewmat(depsgraph, scene, v3d, ar, NULL, NULL, NULL);
+				break;
+			}
+		}
 	}
 }
 
@@ -71,7 +77,7 @@ void RNA_api_region_view3d(StructRNA *srna)
 	FunctionRNA *func;
 
 	func = RNA_def_function(srna, "update", "rna_RegionView3D_update");
-	RNA_def_function_flag(func, FUNC_USE_SELF_ID);
+	RNA_def_function_flag(func, FUNC_USE_SELF_ID | FUNC_USE_CONTEXT);
 	RNA_def_function_ui_description(func, "Recalculate the view matrices");
 }
 

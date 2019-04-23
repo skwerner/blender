@@ -13,9 +13,6 @@
 # You should have received a copy of the GNU General Public License
 # along with this program; if not, write to the Free Software Foundation,
 # Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
-#
-# Contributor(s): Jacques Beaurain.
-#
 # ***** END GPL LICENSE BLOCK *****
 
 # --env-system-scripts allows to run without the install target.
@@ -189,7 +186,7 @@ add_test(
 	--run={'FINISHED'}&bpy.ops.export_scene.obj\(filepath='${TEST_OUT_DIR}/export_obj_cube.obj',use_selection=False\)
 	--md5_source=${TEST_OUT_DIR}/export_obj_cube.obj
 	--md5_source=${TEST_OUT_DIR}/export_obj_cube.mtl
-	--md5=e80660437ad9bfe082849641c361a233 --md5_method=FILE
+	--md5=95832f81160f07101dc566cb286a9f76 --md5_method=FILE
 )
 
 add_test(
@@ -531,57 +528,68 @@ function(add_python_test testname testscript)
 	endif()
 endfunction()
 
-if(WITH_CYCLES)
-	if(OPENIMAGEIO_IDIFF AND EXISTS "${TEST_SRC_DIR}/render/ctests/shader")
-		macro(add_cycles_render_test subject)
+if(OPENIMAGEIO_IDIFF AND EXISTS "${TEST_SRC_DIR}/render/ctests/shader")
+	macro(add_cycles_render_test subject)
+		if(WITH_CYCLES)
 			add_python_test(
-				cycles_${subject}_test
+				cycles_${subject}
 				${CMAKE_CURRENT_LIST_DIR}/cycles_render_tests.py
 				-blender "$<TARGET_FILE:blender>"
 				-testdir "${TEST_SRC_DIR}/render/ctests/${subject}"
 				-idiff "${OPENIMAGEIO_IDIFF}"
 				-outdir "${TEST_OUT_DIR}/cycles"
 			)
-		endmacro()
-		if(WITH_OPENGL_RENDER_TESTS)
-			add_cycles_render_test(opengl)
 		endif()
-		add_cycles_render_test(bake)
-		add_cycles_render_test(bsdf)
-		add_cycles_render_test(denoise)
-		add_cycles_render_test(displacement)
-		add_cycles_render_test(hair)
-		add_cycles_render_test(image_data_types)
-		add_cycles_render_test(image_mapping)
-		add_cycles_render_test(image_texture_limit)
-		add_cycles_render_test(integrator)
-		add_cycles_render_test(light)
-		add_cycles_render_test(mesh)
-		add_cycles_render_test(motion_blur)
-		add_cycles_render_test(render_layer)
-		add_cycles_render_test(reports)
-		add_cycles_render_test(shader)
-		add_cycles_render_test(shadow_catcher)
-		add_cycles_render_test(sss)
-		add_cycles_render_test(volume)
-	else()
-		MESSAGE(STATUS "Disabling Cycles tests because tests folder does not exist")
-	endif()
+
+		if(WITH_OPENGL_RENDER_TESTS AND (NOT ${subject} MATCHES "bake"))
+			add_python_test(
+				eevee_${subject}_test
+				${CMAKE_CURRENT_LIST_DIR}/eevee_render_tests.py
+				-blender "$<TARGET_FILE:blender>"
+				-testdir "${TEST_SRC_DIR}/render/ctests/${subject}"
+				-idiff "${OPENIMAGEIO_IDIFF}"
+				-outdir "${TEST_OUT_DIR}/eevee"
+			)
+		endif()
+	endmacro()
+	add_cycles_render_test(bake)
+	add_cycles_render_test(bsdf)
+	add_cycles_render_test(denoise)
+	add_cycles_render_test(denoise_animation)
+	add_cycles_render_test(displacement)
+	add_cycles_render_test(hair)
+	add_cycles_render_test(image_data_types)
+	add_cycles_render_test(image_mapping)
+	add_cycles_render_test(image_texture_limit)
+	add_cycles_render_test(integrator)
+	add_cycles_render_test(light)
+	add_cycles_render_test(mesh)
+	add_cycles_render_test(motion_blur)
+	add_cycles_render_test(render_layer)
+	add_cycles_render_test(reports)
+	add_cycles_render_test(shader)
+	add_cycles_render_test(shadow_catcher)
+	add_cycles_render_test(sss)
+	add_cycles_render_test(volume)
+elseif(WITH_CYCLES)
+	MESSAGE(STATUS "Disabling Cycles tests because tests folder does not exist")
 endif()
 
 if(WITH_OPENGL_DRAW_TESTS)
 	if(OPENIMAGEIO_IDIFF AND EXISTS "${TEST_SRC_DIR}/opengl")
-		# Use all test folders
-		file(GLOB children RELATIVE ${TEST_SRC_DIR} ${TEST_SRC_DIR}/*)
+		# Use all subdirectories of opengl folder.
+		file(GLOB children RELATIVE ${TEST_SRC_DIR}/opengl ${TEST_SRC_DIR}/opengl/*)
 		foreach(child ${children})
-			if(IS_DIRECTORY ${TEST_SRC_DIR}/${child})
-				file(GLOB_RECURSE blends "${TEST_SRC_DIR}/${child}/*.blend")
+			# Resolve symlinks, useful to test production files with linked libraries.
+			get_filename_component(child_path ${TEST_SRC_DIR}/opengl/${child} REALPATH)
+			if(IS_DIRECTORY ${child_path})
+				file(GLOB_RECURSE blends "${child_path}/*.blend")
 				if(blends)
 					add_python_test(
-						opengl_draw_${child}_test
+						opengl_draw_${child}
 						${CMAKE_CURRENT_LIST_DIR}/opengl_draw_tests.py
 						-blender "$<TARGET_FILE:blender>"
-						-testdir "${TEST_SRC_DIR}/${child}"
+						-testdir "${child_path}"
 						-idiff "${OPENIMAGEIO_IDIFF}"
 						-outdir "${TEST_OUT_DIR}/opengl_draw"
 					)
@@ -622,7 +630,7 @@ endif()
 
 if(WITH_CODEC_FFMPEG)
 	add_python_test(
-		ffmpeg_tests
+		ffmpeg
 		${CMAKE_CURRENT_LIST_DIR}/ffmpeg_tests.py
 		--blender "$<TARGET_FILE:blender>"
 		--testdir "${TEST_DATA_SRC_DIR}/ffmpeg"
@@ -630,3 +638,6 @@ if(WITH_CODEC_FFMPEG)
 endif()
 
 add_subdirectory(collada)
+
+# TODO: disabled for now after collection unification
+# add_subdirectory(view_layer)

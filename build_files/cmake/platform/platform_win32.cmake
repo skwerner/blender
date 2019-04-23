@@ -16,9 +16,6 @@
 #
 # The Original Code is Copyright (C) 2016, Blender Foundation
 # All rights reserved.
-#
-# Contributor(s): Sergey Sharybin.
-#
 # ***** END GPL LICENSE BLOCK *****
 
 # Libraries configuration for Windows.
@@ -173,7 +170,10 @@ if(NOT DEFINED LIBDIR)
 		set(LIBDIR_BASE "windows")
 	endif()
 	# Can be 1910..1912
-	if(MSVC_VERSION GREATER 1909)
+	if(MSVC_VERSION GREATER 1919)
+		message(STATUS "Visual Studio 2019 detected.")
+		set(LIBDIR ${CMAKE_SOURCE_DIR}/../lib/${LIBDIR_BASE}_vc14)
+	elseif(MSVC_VERSION GREATER 1909)
 		message(STATUS "Visual Studio 2017 detected.")
 		set(LIBDIR ${CMAKE_SOURCE_DIR}/../lib/${LIBDIR_BASE}_vc14)
 	elseif(MSVC_VERSION EQUAL 1900)
@@ -225,7 +225,7 @@ if(NOT JPEG_FOUND)
 endif()
 
 set(PTHREADS_INCLUDE_DIRS ${LIBDIR}/pthreads/include)
-set(PTHREADS_LIBRARIES ${LIBDIR}/pthreads/lib/pthreadVC2.lib)
+set(PTHREADS_LIBRARIES ${LIBDIR}/pthreads/lib/pthreadVC3.lib)
 
 set(FREETYPE ${LIBDIR}/freetype)
 set(FREETYPE_INCLUDE_DIRS
@@ -427,6 +427,7 @@ endif()
 
 if(WITH_LLVM)
 	set(LLVM_ROOT_DIR ${LIBDIR}/llvm CACHE PATH	"Path to the LLVM installation")
+	set(LLVM_INCLUDE_DIRS ${LLVM_ROOT_DIR}/$<$<CONFIG:Debug>:Debug>/include CACHE PATH	"Path to the LLVM include directory")
 	file(GLOB LLVM_LIBRARY_OPTIMIZED ${LLVM_ROOT_DIR}/lib/*.lib)
 
 	if(EXISTS ${LLVM_ROOT_DIR}/debug/lib)
@@ -567,11 +568,10 @@ if(WITH_OPENAL)
 endif()
 
 if(WITH_CODEC_SNDFILE)
-	set(SNDFILE ${LIBDIR}/sndfile)
-	set(SNDFILE_INCLUDE_DIRS ${SNDFILE}/include)
-	set(SNDFILE_LIBPATH ${SNDFILE}/lib) # TODO, deprecate
-	set(SNDFILE_LIBRARIES ${SNDFILE_LIBPATH}/libsndfile-1.lib)
-
+	set(LIBSNDFILE ${LIBDIR}/sndfile)
+	set(LIBSNDFILE_INCLUDE_DIRS ${LIBSNDFILE}/include)
+	set(LIBSNDFILE_LIBPATH ${LIBSNDFILE}/lib) # TODO, deprecate
+	set(LIBSNDFILE_LIBRARIES ${LIBSNDFILE_LIBPATH}/libsndfile-1.lib)
 endif()
 
 if(WITH_RAYOPTIMIZATION AND SUPPORT_SSE_BUILD)

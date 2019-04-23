@@ -16,11 +16,6 @@
 #
 # The Original Code is Copyright (C) 2006, Blender Foundation
 # All rights reserved.
-#
-# The Original Code is: all of this file.
-#
-# Contributor(s): Jacques Beaurain.
-#
 # ***** END GPL LICENSE BLOCK *****
 
 # Libs that adhere to strict flags
@@ -46,6 +41,10 @@ if(WITH_BULLET)
 	endif()
 endif()
 
+if(WITH_DRACO)
+	add_subdirectory(draco)
+endif()
+
 # now only available in a branch
 #if(WITH_MOD_CLOTH_ELTOPO)
 #	add_subdirectory(eltopo)
@@ -61,10 +60,6 @@ if(NOT WITH_SYSTEM_GLEW)
 	else()
 		add_subdirectory(glew)
 	endif()
-endif()
-
-if(WITH_GAMEENGINE)
-	add_subdirectory(recastnavigation)
 endif()
 
 if(WITH_LZO AND NOT WITH_SYSTEM_LZO)
@@ -104,4 +99,9 @@ endif()
 
 if(WITH_SDL AND WITH_SDL_DYNLOAD)
 	add_subdirectory(sdlew)
+endif()
+
+if(WITH_AUDASPACE AND NOT WITH_SYSTEM_AUDASPACE)
+	set(AUDASPACE_CMAKE_CFG ${CMAKE_CURRENT_SOURCE_DIR}/audaspace/blender_config.cmake)
+	add_subdirectory(audaspace)
 endif()

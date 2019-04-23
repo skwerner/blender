@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,12 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/blenkernel/intern/blendfile.c
- *  \ingroup bke
+/** \file
+ * \ingroup bke
  *
  * High level `.blend` file read/write,
  * and functions for writing *partial* files (only selected data-blocks).
@@ -32,6 +28,7 @@
 
 #include "DNA_scene_types.h"
 #include "DNA_screen_types.h"
+#include "DNA_workspace_types.h"
 
 #include "BLI_listbase.h"
 #include "BLI_string.h"
@@ -48,11 +45,13 @@
 #include "BKE_context.h"
 #include "BKE_global.h"
 #include "BKE_ipo.h"
+#include "BKE_layer.h"
 #include "BKE_library.h"
 #include "BKE_main.h"
 #include "BKE_report.h"
 #include "BKE_scene.h"
 #include "BKE_screen.h"
+#include "BKE_workspace.h"
 
 #include "BLO_readfile.h"
 #include "BLO_writefile.h"
@@ -66,7 +65,6 @@
 #endif
 
 /* -------------------------------------------------------------------- */
-
 /** \name High Level `.blend` file read/write.
  * \{ */
 
@@ -84,7 +82,7 @@ static void clean_paths(Main *main)
 
 	BKE_bpath_traverse_main(main, clean_paths_visit_cb, BKE_BPATH_TRAVERSE_SKIP_MULTIFILE, NULL);
 
-	for (scene = main->scene.first; scene; scene = scene->id.next) {
+	for (scene = main->scenes.first; scene; scene = scene->id.next) {
 		BLI_path_native_slash(scene->r.pic);
 	}
 }
@@ -93,7 +91,7 @@ static bool wm_scene_is_visible(wmWindowManager *wm, Scene *scene)
 {
 	wmWindow *win;
 	for (win = wm->windows.first; win; win = win->next) {
-		if (win->screen->scene == scene) {
+		if (win->scene == scene) {
 			return true;
 		}
 	}
@@ -129,7 +127,7 @@ static void setup_app_data(
 		BKE_report(reports, RPT_WARNING, "Library file, loading empty scene");
 		mode = LOAD_UI_OFF;
 	}
-	else if (BLI_listbase_is_empty(&bfd->main->screen)) {
+	else if (BLI_listbase_is_empty(&bfd->main->screens)) {
 		mode = LOAD_UNDO;
 	}
 	else if ((G.fileflags & G_FILE_NO_UI) && (is_startup == false)) {
@@ -165,54 +163,66 @@ static void setup_app_data(
 		 * (otherwise we'd be undoing on an off-screen scene which isn't acceptable).
 		 * see: T43424
 		 */
+		wmWindow *win;
 		bScreen *curscreen = NULL;
+		ViewLayer *cur_view_layer;
 		bool track_undo_scene;
 
 		/* comes from readfile.c */
 		SWAP(ListBase, bmain->wm, bfd->main->wm);
-		SWAP(ListBase, bmain->screen, bfd->main->screen);
+		SWAP(ListBase, bmain->workspaces, bfd->main->workspaces);
+		SWAP(ListBase, bmain->screens, bfd->main->screens);
 
-		/* we re-use current screen */
+		/* we re-use current window and screen */
+		win = CTX_wm_window(C);
 		curscreen = CTX_wm_screen(C);
-		/* but use new Scene pointer */
+		/* but use Scene pointer from new file */
 		curscene = bfd->curscene;
+		cur_view_layer = bfd->cur_view_layer;
 
 		track_undo_scene = (mode == LOAD_UNDO && curscreen && curscene && bfd->main->wm.first);
 
 		if (curscene == NULL) {
-			curscene = bfd->main->scene.first;
+			curscene = bfd->main->scenes.first;
 		}
 		/* empty file, we add a scene to make Blender work */
 		if (curscene == NULL) {
 			curscene = BKE_scene_add(bfd->main, "Empty");
+		}
+		if (cur_view_layer == NULL) {
+			/* fallback to scene layer */
+			cur_view_layer = BKE_view_layer_default_view(curscene);
 		}
 
 		if (track_undo_scene) {
 			/* keep the old (free'd) scene, let 'blo_lib_link_screen_restore'
 			 * replace it with 'curscene' if its needed */
 		}
-		else {
-			/* and we enforce curscene to be in current screen */
-			if (curscreen) {
-				/* can run in bgmode */
-				curscreen->scene = curscene;
-			}
+		/* and we enforce curscene to be in current screen */
+		else if (win) { /* can run in bgmode */
+			win->scene = curscene;
 		}
 
 		/* BKE_blender_globals_clear will free G_MAIN, here we can still restore pointers */
-		blo_lib_link_screen_restore(bfd->main, curscreen, curscene);
-		/* curscreen might not be set when loading without ui (see T44217) so only re-assign if available */
-		if (curscreen) {
-			curscene = curscreen->scene;
+		blo_lib_link_restore(bmain, bfd->main, CTX_wm_manager(C), curscene, cur_view_layer);
+		if (win) {
+			curscene = win->scene;
 		}
 
 		if (track_undo_scene) {
 			wmWindowManager *wm = bfd->main->wm.first;
 			if (wm_scene_is_visible(wm, bfd->curscene) == false) {
 				curscene = bfd->curscene;
-				curscreen->scene = curscene;
-				BKE_screen_view3d_scene_sync(curscreen);
+				win->scene = curscene;
+				BKE_screen_view3d_scene_sync(curscreen, curscene);
 			}
+		}
+
+		/* We need to tag this here because events may be handled immediately after.
+		 * only the current screen is important because we wont have to handle
+		 * events from multiple screens at once.*/
+		if (curscreen) {
+			BKE_screen_gizmo_tag_refresh(curscreen);
 		}
 	}
 
@@ -228,6 +238,7 @@ static void setup_app_data(
 	CTX_data_main_set(C, bmain);
 
 	if (bfd->user) {
+
 		/* only here free userdef themes... */
 		BKE_blender_userdef_data_set_and_free(bfd->user);
 		bfd->user = NULL;
@@ -249,9 +260,6 @@ static void setup_app_data(
 		CTX_data_scene_set(C, curscene);
 	}
 	else {
-		/* Keep state from preferences. */
-		const int fileflags_skip = G_FILE_FLAGS_RUNTIME;
-		G.fileflags = (G.fileflags & fileflags_skip) | (bfd->fileflags & ~fileflags_skip);
 		CTX_wm_manager_set(C, bmain->wm.first);
 		CTX_wm_screen_set(C, bfd->curscreen);
 		CTX_data_scene_set(C, bfd->curscene);
@@ -261,14 +269,20 @@ static void setup_app_data(
 		curscene = bfd->curscene;
 	}
 
+	/* Keep state from preferences. */
+	const int fileflags_keep = G_FILE_FLAG_ALL_RUNTIME;
+	G.fileflags = (G.fileflags & fileflags_keep) | (bfd->fileflags & ~fileflags_keep);
+
 	/* this can happen when active scene was lib-linked, and doesn't exist anymore */
 	if (CTX_data_scene(C) == NULL) {
+		wmWindow *win = CTX_wm_window(C);
+
 		/* in case we don't even have a local scene, add one */
-		if (!bmain->scene.first)
+		if (!bmain->scenes.first)
 			BKE_scene_add(bmain, "Empty");
 
-		CTX_data_scene_set(C, bmain->scene.first);
-		CTX_wm_screen(C)->scene = CTX_data_scene(C);
+		CTX_data_scene_set(C, bmain->scenes.first);
+		win->scene = CTX_data_scene(C);
 		curscene = CTX_data_scene(C);
 	}
 
@@ -277,7 +291,8 @@ static void setup_app_data(
 
 	/* special cases, override loaded flags: */
 	if (G.f != bfd->globalf) {
-		const int flags_keep = (G_SWAP_EXCHANGE | G_SCRIPT_AUTOEXEC | G_SCRIPT_OVERRIDE_PREF);
+		const int flags_keep = G_FLAG_ALL_RUNTIME;
+		bfd->globalf &= G_FLAG_ALL_READFILE;
 		bfd->globalf = (bfd->globalf & ~flags_keep) | (G.f & flags_keep);
 	}
 
@@ -317,20 +332,27 @@ static void setup_app_data(
 		wmWindowManager *wm = bmain->wm.first;
 
 		if (wm) {
-			wmWindow *win;
-
-			for (win = wm->windows.first; win; win = win->next) {
-				if (win->screen && win->screen->scene) /* zealous check... */
-					if (win->screen->scene != curscene)
-						BKE_scene_set_background(bmain, win->screen->scene);
+			for (wmWindow *win = wm->windows.first; win; win = win->next) {
+				if (win->scene && win->scene != curscene) {
+					BKE_scene_set_background(bmain, win->scene);
+				}
 			}
 		}
 	}
+
+	/* Setting scene might require having a dependency graph, with copy on write
+	 * we need to make sure we ensure scene has correct color management before
+	 * constructing dependency graph.
+	 */
+	if (mode != LOAD_UNDO) {
+		IMB_colormanagement_check_file_config(bmain);
+	}
+
 	BKE_scene_set_background(bmain, curscene);
 
 	if (mode != LOAD_UNDO) {
+		/* TODO(sergey): Can this be also move above? */
 		RE_FreeAllPersistentData();
-		IMB_colormanagement_check_file_config(bmain);
 	}
 
 	MEM_freeN(bfd);
@@ -395,7 +417,7 @@ bool BKE_blendfile_read_from_memory(
 	bfd = BLO_read_from_memory(filebuf, filelength, params->skip_flags, reports);
 	if (bfd) {
 		if (update_defaults)
-			BLO_update_defaults_startup_blend(bfd->main);
+			BLO_update_defaults_startup_blend(bfd->main, NULL);
 		setup_app_data(C, bfd, "<memory2>", params->is_startup, reports);
 	}
 	else {
@@ -418,9 +440,9 @@ bool BKE_blendfile_read_from_memfile(
 	if (bfd) {
 		/* remove the unused screens and wm */
 		while (bfd->main->wm.first)
-			BKE_libblock_free(bfd->main, bfd->main->wm.first);
-		while (bfd->main->screen.first)
-			BKE_libblock_free(bfd->main, bfd->main->screen.first);
+			BKE_id_free(bfd->main, bfd->main->wm.first);
+		while (bfd->main->screens.first)
+			BKE_id_free(bfd->main, bfd->main->screens.first);
 
 		setup_app_data(C, bfd, "<memory1>", params->is_startup, reports);
 	}
@@ -438,23 +460,21 @@ bool BKE_blendfile_read_from_memfile(
 void BKE_blendfile_read_make_empty(bContext *C)
 {
 	Main *bmain = CTX_data_main(C);
-
-	ListBase *lbarray[MAX_LIBARRAY];
+	ListBase *lb;
 	ID *id;
-	int a;
 
-	a = set_listbasepointers(bmain, lbarray);
-	while (a--) {
-		id = lbarray[a]->first;
-		if (id != NULL) {
-			if (ELEM(GS(id->name), ID_SCE, ID_SCR, ID_WM)) {
-				continue;
+	FOREACH_MAIN_LISTBASE_BEGIN(bmain, lb)
+	{
+		FOREACH_MAIN_LISTBASE_ID_BEGIN(lb, id)
+		{
+			if (ELEM(GS(id->name), ID_SCE, ID_SCR, ID_WM, ID_WS)) {
+				break;
 			}
-			while ((id = lbarray[a]->first)) {
-				BKE_libblock_delete(bmain, id);
-			}
+			BKE_id_delete(bmain, id);
 		}
+		FOREACH_MAIN_LISTBASE_ID_END;
 	}
+	FOREACH_MAIN_LISTBASE_END;
 }
 
 /* only read the userdef from a .blend */
@@ -543,12 +563,59 @@ bool BKE_blendfile_userdef_write_app_template(const char *filepath, ReportList *
 	return ok;
 }
 
+WorkspaceConfigFileData *BKE_blendfile_workspace_config_read(const char *filepath, const void *filebuf, int filelength, ReportList *reports)
+{
+	BlendFileData *bfd;
+	WorkspaceConfigFileData *workspace_config = NULL;
+
+	if (filepath) {
+		bfd = BLO_read_from_file(filepath, BLO_READ_SKIP_USERDEF, reports);
+	}
+	else {
+		bfd = BLO_read_from_memory(filebuf, filelength, BLO_READ_SKIP_USERDEF, reports);
+	}
+
+	if (bfd) {
+		workspace_config = MEM_mallocN(sizeof(*workspace_config), __func__);
+		workspace_config->main = bfd->main;
+		workspace_config->workspaces = bfd->main->workspaces;
+
+		MEM_freeN(bfd);
+	}
+
+	return workspace_config;
+}
+
+bool BKE_blendfile_workspace_config_write(Main *bmain, const char *filepath, ReportList *reports)
+{
+	int fileflags = G.fileflags & ~(G_FILE_NO_UI | G_FILE_HISTORY);
+	bool retval = false;
+
+	BKE_blendfile_write_partial_begin(bmain);
+
+	for (WorkSpace *workspace = bmain->workspaces.first; workspace; workspace = workspace->id.next) {
+		BKE_blendfile_write_partial_tag_ID(&workspace->id, true);
+	}
+
+	if (BKE_blendfile_write_partial(bmain, filepath, fileflags, reports)) {
+		retval = true;
+	}
+
+	BKE_blendfile_write_partial_end(bmain);
+
+	return retval;
+}
+
+void BKE_blendfile_workspace_config_data_free(WorkspaceConfigFileData *workspace_config)
+{
+	BKE_main_free(workspace_config->main);
+	MEM_freeN(workspace_config);
+}
 
 /** \} */
 
 
 /* -------------------------------------------------------------------- */
-
 /** \name Partial `.blend` file save.
  * \{ */
 

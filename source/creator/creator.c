@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,10 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file creator/creator.c
- *  \ingroup creator
+/** \file
+ * \ingroup creator
  */
 
 #include <stdlib.h>
@@ -52,7 +44,6 @@
 #include "BLI_callbacks.h"
 #include "BLI_string.h"
 #include "BLI_system.h"
-#include "BLI_threads.h"
 
 /* mostly init functions */
 #include "BKE_appdir.h"
@@ -60,16 +51,18 @@
 #include "BKE_brush.h"
 #include "BKE_cachefile.h"
 #include "BKE_context.h"
-#include "BKE_depsgraph.h" /* for DAG_init */
 #include "BKE_font.h"
 #include "BKE_global.h"
 #include "BKE_material.h"
 #include "BKE_modifier.h"
+#include "BKE_gpencil_modifier.h"
 #include "BKE_node.h"
+#include "BKE_shader_fx.h"
 #include "BKE_sound.h"
 #include "BKE_image.h"
 #include "BKE_particle.h"
 
+#include "DEG_depsgraph.h"
 
 #include "IMB_imbuf.h"  /* for IMB_init */
 
@@ -79,18 +72,12 @@
 #include "ED_datafiles.h"
 
 #include "WM_api.h"
+#include "WM_toolsystem.h"
 
 #include "RNA_define.h"
 
 #ifdef WITH_FREESTYLE
 #  include "FRS_freestyle.h"
-#endif
-
-/* for passing information between creator and gameengine */
-#ifdef WITH_GAMEENGINE
-#  include "BL_System.h"
-#else /* dummy */
-#  define SYS_SystemHandle int
 #endif
 
 #include <signal.h>
@@ -132,11 +119,10 @@ struct ApplicationState app_state = {
 	},
 	.exit_code_on_error = {
 		.python = 0,
-	}
+	},
 };
 
 /* -------------------------------------------------------------------- */
-
 /** \name Application Level Callbacks
  *
  * Initialize callbacks for the modules that need them.
@@ -192,9 +178,7 @@ static void callback_clg_fatal(void *fp)
 /** \} */
 
 
-
 /* -------------------------------------------------------------------- */
-
 /** \name Main Function
  * \{ */
 
@@ -227,7 +211,6 @@ int main(
         )
 {
 	bContext *C;
-	SYS_SystemHandle syshandle;
 
 #ifndef WITH_PYTHON_MODULE
 	bArgs *ba;
@@ -244,13 +227,19 @@ int main(
 	struct CreatorAtExitData app_init_data = {NULL};
 	BKE_blender_atexit_register(callback_main_atexit, &app_init_data);
 
+	/* Unbuffered stdout makes stdout and stderr better synchronized, and helps
+	 * when stepping through code in a debugger (prints are immediately
+	 * visible). */
+	setvbuf(stdout, NULL, _IONBF, 0);
+
 #ifdef WIN32
 	/* We delay loading of openmp so we can set the policy here. */
 # if defined(_MSC_VER)
 	_putenv_s("OMP_WAIT_POLICY", "PASSIVE");
 # endif
 
-	/* FMA3 support in the 2013 CRT is broken on Vista and Windows 7 RTM (fixed in SP1). Just disable it. */
+	/* FMA3 support in the 2013 CRT is broken on Vista and Windows 7 RTM
+	 * (fixed in SP1). Just disable it. */
 #  if defined(_MSC_VER) && defined(_M_X64)
 	_set_FMA3_enable(0);
 #  endif
@@ -280,9 +269,7 @@ int main(
 	{
 		int i;
 		for (i = 0; i < argc; i++) {
-			if (STREQ(argv[i], "--debug") || STREQ(argv[i], "-d") ||
-			    STREQ(argv[i], "--debug-memory") || STREQ(argv[i], "--debug-all"))
-			{
+			if (STR_ELEM(argv[i], "-d", "--debug", "--debug-memory", "--debug-all")) {
 				printf("Switching to fully guarded memory allocator.\n");
 				MEM_use_guarded_allocator();
 				break;
@@ -375,19 +362,15 @@ int main(
 	BKE_cachefiles_init();
 	BKE_images_init();
 	BKE_modifier_init();
-	DAG_init();
+	BKE_gpencil_modifier_init();
+	BKE_shaderfx_init();
+	DEG_register_node_types();
 
 	BKE_brush_system_init();
 	RE_texture_rng_init();
 
 
 	BLI_callback_global_init();
-
-#ifdef WITH_GAMEENGINE
-	syshandle = SYS_GetSystem();
-#else
-	syshandle = 0;
-#endif
 
 	/* first test for background */
 #ifndef WITH_PYTHON_MODULE
@@ -396,15 +379,15 @@ int main(
 	/* ensure we free on early exit */
 	app_init_data.ba = ba;
 
-	main_args_setup(C, ba, &syshandle);
+	main_args_setup(C, ba);
 
 	BLI_argsParse(ba, 1, NULL, NULL);
 
 	main_signal_setup();
 
 #else
-	G.factory_startup = true;  /* using preferences or user startup makes no sense for py-as-module */
-	(void)syshandle;
+	/* using preferences or user startup makes no sense for py-as-module */
+	G.factory_startup = true;
 #endif
 
 #ifdef WITH_FFMPEG
@@ -472,7 +455,7 @@ int main(
 #endif
 
 	CTX_py_init_set(C, 1);
-	WM_keymap_init(C);
+	WM_keyconfig_init(C);
 
 #ifdef WITH_FREESTYLE
 	/* initialize Freestyle */
@@ -483,13 +466,6 @@ int main(
 	/* OK we are ready for it */
 #ifndef WITH_PYTHON_MODULE
 	main_args_setup_post(C, ba);
-
-	if (G.background == 0) {
-		if (!G.file_loaded)
-			if (U.uiflag2 & USER_KEEP_SESSION)
-				WM_recover_last_session(C, NULL);
-	}
-
 #endif
 
 	/* Explicitly free data allocated for argument parsing:
@@ -519,20 +495,6 @@ int main(
 		WM_exit(C);
 	}
 	else {
-		if (G.fileflags & G_FILE_AUTOPLAY) {
-			if (G.f & G_SCRIPT_AUTOEXEC) {
-				if (WM_init_game(C)) {
-					return 0;
-				}
-			}
-			else {
-				if (!(G.f & G_SCRIPT_AUTOEXEC_FAIL_QUIET)) {
-					G.f |= G_SCRIPT_AUTOEXEC_FAIL;
-					BLI_snprintf(G.autoexec_fail, sizeof(G.autoexec_fail), "Game AutoStart");
-				}
-			}
-		}
-
 		if (!G.file_loaded) {
 			WM_init_splash(C);
 		}

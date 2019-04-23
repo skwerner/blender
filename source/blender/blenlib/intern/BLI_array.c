@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,18 +15,11 @@
  *
  * The Original Code is Copyright (C) 2008 Blender Foundation.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): Joseph Eagar,
- *                 Campbell Barton
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/blenlib/intern/BLI_array.c
- *  \ingroup bli
- *  \brief A (mainly) macro array library.
+/** \file
+ * \ingroup bli
+ * \brief A (mainly) macro array library.
  *
  * This is an array library, used to manage array (re)allocation.
  *
@@ -90,9 +81,4 @@ void _bli_array_grow_func(
 	}
 
 	*arr_p = arr_tmp;
-
-	/* caller must do */
-#if 0
-	arr_len += num;
-#endif
 }

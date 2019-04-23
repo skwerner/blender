@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,10 @@
  *
  * The Original Code is Copyright (C) 2004 Blender Foundation
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/undo/ed_undo.c
- *  \ingroup edundo
+/** \file
+ * \ingroup edundo
  */
 
 #include <string.h>
@@ -36,6 +28,7 @@
 #include "CLG_log.h"
 
 #include "DNA_scene_types.h"
+#include "DNA_object_types.h"
 
 #include "BLI_utildefines.h"
 #include "BLI_callbacks.h"
@@ -48,18 +41,24 @@
 #include "BKE_global.h"
 #include "BKE_main.h"
 #include "BKE_report.h"
+#include "BKE_scene.h"
 #include "BKE_screen.h"
+#include "BKE_layer.h"
 #include "BKE_undo_system.h"
+#include "BKE_workspace.h"
+#include "BKE_paint.h"
 
-#include "BLO_runtime.h"
+#include "BLO_blend_validate.h"
 
 #include "ED_gpencil.h"
 #include "ED_render.h"
+#include "ED_object.h"
 #include "ED_screen.h"
 #include "ED_undo.h"
 
 #include "WM_api.h"
 #include "WM_types.h"
+#include "WM_toolsystem.h"
 
 #include "RNA_access.h"
 #include "RNA_define.h"
@@ -103,12 +102,17 @@ void ED_undo_push(bContext *C, const char *str)
 	WM_file_tag_modified();
 }
 
-/* note: also check undo_history_exec() in bottom if you change notifiers */
+/**
+ * \note Also check #undo_history_exec in bottom if you change notifiers.
+ */
 static int ed_undo_step(bContext *C, int step, const char *undoname, ReportList *reports)
 {
+	/* Mutually exclusives, ensure correct input. */
+	BLI_assert((undoname && !step) || (!undoname && step));
 	CLOG_INFO(&LOG, 1, "name='%s', step=%d", undoname, step);
 	wmWindowManager *wm = CTX_wm_manager(C);
 	Scene *scene = CTX_data_scene(C);
+	ScrArea *sa = CTX_wm_area(C);
 
 	/* undo during jobs are running can easily lead to freeing data using by jobs,
 	 * or they can just lead to freezing job in some other cases */
@@ -117,7 +121,7 @@ static int ed_undo_step(bContext *C, int step, const char *undoname, ReportList 
 	if (G.debug & G_DEBUG_IO) {
 		Main *bmain = CTX_data_main(C);
 		if (bmain->lock != NULL) {
-			BKE_report(reports, RPT_INFO, "Checking sanity of current .blend file *BEFORE* undo step.");
+			BKE_report(reports, RPT_INFO, "Checking sanity of current .blend file *BEFORE* undo step");
 			BLO_main_validate_libraries(bmain, reports);
 		}
 	}
@@ -126,6 +130,12 @@ static int ed_undo_step(bContext *C, int step, const char *undoname, ReportList 
 	/* grease pencil can be can be used in plenty of spaces, so check it first */
 	if (ED_gpencil_session_active()) {
 		return ED_undo_gpencil_step(C, step, undoname);
+	}
+	if (sa && (sa->spacetype == SPACE_VIEW3D)) {
+		Object *obact = CTX_data_active_object(C);
+		if (obact && (obact->type == OB_GPENCIL)) {
+			ED_gpencil_toggle_brush_cursor(C, false, NULL);
+		}
 	}
 
 	UndoStep *step_data_from_name = NULL;
@@ -159,7 +169,29 @@ static int ed_undo_step(bContext *C, int step, const char *undoname, ReportList 
 			BKE_undosys_step_undo_with_data(wm->undo_stack, C, step_data_from_name);
 		}
 		else {
-			BKE_undosys_step_undo_compat_only(wm->undo_stack, C, step);
+			if (step == 1) {
+				BKE_undosys_step_undo(wm->undo_stack, C);
+			}
+			else {
+				BKE_undosys_step_redo(wm->undo_stack, C);
+			}
+		}
+
+		/* Set special modes for grease pencil */
+		if (sa && (sa->spacetype == SPACE_VIEW3D)) {
+			Object *obact = CTX_data_active_object(C);
+			if (obact && (obact->type == OB_GPENCIL)) {
+				/* set cursor */
+				if (ELEM(obact->mode, OB_MODE_PAINT_GPENCIL, OB_MODE_SCULPT_GPENCIL, OB_MODE_WEIGHT_GPENCIL)) {
+					ED_gpencil_toggle_brush_cursor(C, true, NULL);
+				}
+				else {
+					ED_gpencil_toggle_brush_cursor(C, false, NULL);
+				}
+				/* set workspace mode */
+				Base *basact = CTX_data_active_base(C);
+				ED_object_base_activate(C, basact);
+			}
 		}
 	}
 
@@ -168,20 +200,25 @@ static int ed_undo_step(bContext *C, int step, const char *undoname, ReportList 
 		Main *bmain = CTX_data_main(C);
 		scene = CTX_data_scene(C);
 		wm->op_undo_depth++;
-		BLI_callback_exec(bmain, &scene->id, step_for_callback > 0 ? BLI_CB_EVT_UNDO_PRE : BLI_CB_EVT_REDO_PRE);
+		BLI_callback_exec(bmain, &scene->id, step_for_callback > 0 ? BLI_CB_EVT_UNDO_POST : BLI_CB_EVT_REDO_POST);
 		wm->op_undo_depth--;
 	}
 
 	if (G.debug & G_DEBUG_IO) {
 		Main *bmain = CTX_data_main(C);
 		if (bmain->lock != NULL) {
-			BKE_report(reports, RPT_INFO, "Checking sanity of current .blend file *AFTER* undo step.");
+			BKE_report(reports, RPT_INFO, "Checking sanity of current .blend file *AFTER* undo step");
 			BLO_main_validate_libraries(bmain, reports);
 		}
 	}
 
 	WM_event_add_notifier(C, NC_WINDOW, NULL);
 	WM_event_add_notifier(C, NC_WM | ND_UNDO, NULL);
+
+	WM_toolsystem_refresh_active(C);
+
+	Main *bmain = CTX_data_main(C);
+	WM_toolsystem_refresh_screen_all(bmain);
 
 	return OPERATOR_FINISHED;
 }
@@ -237,6 +274,23 @@ bool ED_undo_is_valid(const bContext *C, const char *undoname)
 	return BKE_undosys_stack_has_undo(wm->undo_stack, undoname);
 }
 
+bool ED_undo_is_memfile_compatible(const bContext *C)
+{
+	/* Some modes don't co-exist with memfile undo, disable their use: T60593
+	 * (this matches 2.7x behavior). */
+	ViewLayer *view_layer = CTX_data_view_layer(C);
+	if (view_layer != NULL) {
+		Object *obact = OBACT(view_layer);
+		if (obact != NULL) {
+			if (obact->mode & (OB_MODE_SCULPT | OB_MODE_EDIT)) {
+				return false;
+			}
+		}
+	}
+	return true;
+}
+
+
 /**
  * Ideally we wont access the stack directly,
  * this is needed for modes which handle undo themselves (bypassing #ED_undo_push).
@@ -270,6 +324,15 @@ static int ed_undo_exec(bContext *C, wmOperator *op)
 
 static int ed_undo_push_exec(bContext *C, wmOperator *op)
 {
+	if (G.background) {
+		/* Exception for background mode, see: T60934.
+		 * Note: since the undo stack isn't initialized on startup, background mode behavior
+		 * won't match regular usage, this is just for scripts to do explicit undo pushes. */
+		wmWindowManager *wm = CTX_wm_manager(C);
+		if (wm->undo_stack == NULL) {
+			wm->undo_stack = BKE_undosys_stack_create();
+		}
+	}
 	char str[BKE_UNDO_STR_MAX];
 	RNA_string_get(op->ptr, "message", str);
 	ED_undo_push(C, str);
@@ -298,11 +361,31 @@ static int ed_undo_redo_exec(bContext *C, wmOperator *UNUSED(op))
 	return ret;
 }
 
+/* Disable in background mode, we could support if it's useful, T60934. */
+
+static bool ed_undo_is_init_poll(bContext *C)
+{
+	wmWindowManager *wm = CTX_wm_manager(C);
+	if (wm->undo_stack == NULL) {
+		CTX_wm_operator_poll_msg_set(C, "Undo disabled at startup");
+		return false;
+	}
+	return true;
+}
+
+static bool ed_undo_is_init_and_screenactive_poll(bContext *C)
+{
+	if (ed_undo_is_init_poll(C) == false) {
+		return false;
+	}
+	return ED_operator_screenactive(C);
+}
+
 static bool ed_undo_redo_poll(bContext *C)
 {
 	wmOperator *last_op = WM_operator_last_redo(C);
-	return last_op && ED_operator_screenactive(C) &&
-		WM_operator_check_ui_enabled(C, last_op->type->name);
+	return (last_op && ed_undo_is_init_and_screenactive_poll(C) &&
+	        WM_operator_check_ui_enabled(C, last_op->type->name));
 }
 
 void ED_OT_undo(wmOperatorType *ot)
@@ -314,7 +397,7 @@ void ED_OT_undo(wmOperatorType *ot)
 
 	/* api callbacks */
 	ot->exec = ed_undo_exec;
-	ot->poll = ED_operator_screenactive;
+	ot->poll = ed_undo_is_init_and_screenactive_poll;
 }
 
 void ED_OT_undo_push(wmOperatorType *ot)
@@ -326,6 +409,8 @@ void ED_OT_undo_push(wmOperatorType *ot)
 
 	/* api callbacks */
 	ot->exec = ed_undo_push_exec;
+	/* Unlike others undo operators this initializes undo stack. */
+	ot->poll = ED_operator_screenactive;
 
 	ot->flag = OPTYPE_INTERNAL;
 
@@ -341,7 +426,7 @@ void ED_OT_redo(wmOperatorType *ot)
 
 	/* api callbacks */
 	ot->exec = ed_redo_exec;
-	ot->poll = ED_operator_screenactive;
+	ot->poll = ed_undo_is_init_and_screenactive_poll;
 }
 
 void ED_OT_undo_redo(wmOperatorType *ot)
@@ -363,7 +448,7 @@ void ED_OT_undo_redo(wmOperatorType *ot)
  * \{ */
 
 /* ui callbacks should call this rather than calling WM_operator_repeat() themselves */
-int ED_undo_operator_repeat(bContext *C, struct wmOperator *op)
+int ED_undo_operator_repeat(bContext *C, wmOperator *op)
 {
 	int ret = 0;
 
@@ -373,11 +458,12 @@ int ED_undo_operator_repeat(bContext *C, struct wmOperator *op)
 		struct Scene *scene = CTX_data_scene(C);
 
 		/* keep in sync with logic in view3d_panel_operator_redo() */
-		ARegion *ar = CTX_wm_region(C);
-		ARegion *ar1 = BKE_area_find_region_active_win(CTX_wm_area(C));
+		ARegion *ar_orig = CTX_wm_region(C);
+		ARegion *ar_win = BKE_area_find_region_active_win(CTX_wm_area(C));
 
-		if (ar1)
-			CTX_wm_region_set(C, ar1);
+		if (ar_win) {
+			CTX_wm_region_set(C, ar_win);
+		}
 
 		if ((WM_operator_repeat_check(C, op)) &&
 		    (WM_operator_poll(C, op->type)) &&
@@ -389,8 +475,6 @@ int ED_undo_operator_repeat(bContext *C, struct wmOperator *op)
 		    (WM_jobs_test(wm, scene, WM_JOB_TYPE_ANY) == 0))
 		{
 			int retval;
-
-			ED_viewport_render_kill_jobs(wm, CTX_data_main(C), true);
 
 			if (G.debug & G_DEBUG)
 				printf("redo_cb: operator redo %s\n", op->type->name);
@@ -407,6 +491,15 @@ int ED_undo_operator_repeat(bContext *C, struct wmOperator *op)
 						ED_region_tag_refresh_ui(ar_menu);
 					}
 				}
+			}
+
+			if (op->type->flag & OPTYPE_USE_EVAL_DATA) {
+				/* We need to force refresh of depsgraph after undo step,
+				 * redoing the operator *may* rely on some valid evaluated data. */
+				Main *bmain = CTX_data_main(C);
+				scene = CTX_data_scene(C);
+				ViewLayer *view_layer = CTX_data_view_layer(C);
+				BKE_scene_view_layer_graph_evaluated_ensure(bmain, scene, view_layer);
 			}
 
 			retval = WM_operator_repeat(C, op);
@@ -426,7 +519,7 @@ int ED_undo_operator_repeat(bContext *C, struct wmOperator *op)
 		}
 
 		/* set region back */
-		CTX_wm_region_set(C, ar);
+		CTX_wm_region_set(C, ar_orig);
 	}
 	else {
 		CLOG_WARN(&LOG, "called with NULL 'op'");
@@ -468,7 +561,7 @@ static const EnumPropertyItem *rna_undo_itemf(bContext *C, int *totitem)
 			item_tmp.identifier = us->name;
 			item_tmp.name = IFACE_(us->name);
 			if (us == wm->undo_stack->step_active) {
-				item_tmp.icon = ICON_RESTRICT_VIEW_OFF;
+				item_tmp.icon = ICON_HIDE_OFF;
 			}
 			else {
 				item_tmp.icon = ICON_NONE;
@@ -544,10 +637,64 @@ void ED_OT_undo_history(wmOperatorType *ot)
 	/* api callbacks */
 	ot->invoke = undo_history_invoke;
 	ot->exec = undo_history_exec;
-	ot->poll = ED_operator_screenactive;
+	ot->poll = ed_undo_is_init_and_screenactive_poll;
 
 	RNA_def_int(ot->srna, "item", 0, 0, INT_MAX, "Item", "", 0, INT_MAX);
 
+}
+
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Undo Helper Functions
+ * \{ */
+
+void ED_undo_object_set_active_or_warn(ViewLayer *view_layer, Object *ob, const char *info, CLG_LogRef *log)
+{
+	Object *ob_prev = OBACT(view_layer);
+	if (ob_prev != ob) {
+		Base *base = BKE_view_layer_base_find(view_layer, ob);
+		if (base != NULL) {
+			view_layer->basact = base;
+		}
+		else {
+			/* Should never fail, may not crash but can give odd behavior. */
+			CLOG_WARN(log, "'%s' failed to restore active object: '%s'", info, ob->id.name + 2);
+		}
+	}
+}
+
+void ED_undo_object_editmode_restore_helper(
+        struct bContext *C, Object **object_array, uint object_array_len, uint object_array_stride)
+{
+	Main *bmain = CTX_data_main(C);
+	ViewLayer *view_layer = CTX_data_view_layer(C);
+	uint bases_len = 0;
+	/* Don't request unique data because we wan't to de-select objects when exiting edit-mode
+	 * for that to be done on all objects we can't skip ones that share data. */
+	Base **bases = BKE_view_layer_array_from_bases_in_edit_mode(
+	        view_layer, NULL, &bases_len);
+	for (uint i = 0; i < bases_len; i++) {
+		((ID *)bases[i]->object->data)->tag |= LIB_TAG_DOIT;
+	}
+	Scene *scene = CTX_data_scene(C);
+	Object **ob_p = object_array;
+	for (uint i = 0; i < object_array_len; i++, ob_p = POINTER_OFFSET(ob_p, object_array_stride)) {
+		Object *obedit = *ob_p;
+		ED_object_editmode_enter_ex(bmain, scene, obedit, EM_NO_CONTEXT);
+		((ID *)obedit->data)->tag &= ~LIB_TAG_DOIT;
+	}
+	for (uint i = 0; i < bases_len; i++) {
+		ID *id = bases[i]->object->data;
+		if (id->tag & LIB_TAG_DOIT) {
+			ED_object_editmode_exit_ex(bmain, scene, bases[i]->object, EM_FREEDATA);
+			/* Ideally we would know the selection state it was before entering edit-mode,
+			 * for now follow the convention of having them unselected when exiting the mode. */
+			ED_object_base_select(bases[i], BA_DESELECT);
+
+		}
+	}
+	MEM_freeN(bases);
 }
 
 /** \} */

@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,10 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file ghost/intern/GHOST_C-api.cpp
- *  \ingroup GHOST
+/** \file
+ * \ingroup GHOST
  *
  * C Api for GHOST
  */
@@ -130,6 +122,22 @@ void GHOST_GetAllDisplayDimensions(GHOST_SystemHandle systemhandle,
 	GHOST_ISystem *system = (GHOST_ISystem *) systemhandle;
 
 	system->getAllDisplayDimensions(*width, *height);
+}
+
+GHOST_ContextHandle GHOST_CreateOpenGLContext(GHOST_SystemHandle systemhandle)
+{
+	GHOST_ISystem *system = (GHOST_ISystem *) systemhandle;
+
+	return (GHOST_ContextHandle) system->createOffscreenContext();
+}
+
+GHOST_TSuccess GHOST_DisposeOpenGLContext(GHOST_SystemHandle systemhandle,
+                                             GHOST_ContextHandle contexthandle)
+{
+	GHOST_ISystem *system = (GHOST_ISystem *) systemhandle;
+	GHOST_IContext *context = (GHOST_IContext *) contexthandle;
+
+	return system->disposeContext(context);
 }
 
 GHOST_WindowHandle GHOST_CreateWindow(GHOST_SystemHandle systemhandle,
@@ -713,7 +721,19 @@ GHOST_TSuccess GHOST_ActivateWindowDrawingContext(GHOST_WindowHandle windowhandl
 	return window->activateDrawingContext();
 }
 
+GHOST_TSuccess GHOST_ActivateOpenGLContext(GHOST_ContextHandle contexthandle)
+{
+	GHOST_IContext *context = (GHOST_IContext *) contexthandle;
 
+	return context->activateDrawingContext();
+}
+
+GHOST_TSuccess GHOST_ReleaseOpenGLContext(GHOST_ContextHandle contexthandle)
+{
+	GHOST_IContext *context = (GHOST_IContext *) contexthandle;
+
+	return context->releaseDrawingContext();
+}
 
 GHOST_TSuccess GHOST_InvalidateWindow(GHOST_WindowHandle windowhandle)
 {
@@ -722,8 +742,13 @@ GHOST_TSuccess GHOST_InvalidateWindow(GHOST_WindowHandle windowhandle)
 	return window->invalidate();
 }
 
+void GHOST_SetTabletAPI(GHOST_SystemHandle systemhandle, GHOST_TTabletAPI api)
+{
+	GHOST_ISystem *system = (GHOST_ISystem *) systemhandle;
+	system->setTabletAPI(api);
+}
 
-extern const GHOST_TabletData *GHOST_GetTabletData(GHOST_WindowHandle windowhandle)
+const GHOST_TabletData *GHOST_GetTabletData(GHOST_WindowHandle windowhandle)
 {
 	return ((GHOST_IWindow *)windowhandle)->GetTabletData();
 }

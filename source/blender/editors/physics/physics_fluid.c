@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,10 @@
  *
  * The Original Code is Copyright (C) Blender Foundation
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/physics/physics_fluid.c
- *  \ingroup edphys
+/** \file
+ * \ingroup edphys
  */
 
 #include <math.h>
@@ -41,21 +33,17 @@
 #include "DNA_object_types.h"
 #include "DNA_object_fluidsim_types.h"
 
-#include "BLI_blenlib.h"
-#include "BLI_path_util.h"
-#include "BLI_math.h"
 #include "BLI_utildefines.h"
 
 #include "BKE_context.h"
 #include "BKE_customdata.h"
 #include "BKE_fluidsim.h"
-#include "BKE_main.h"
 #include "BKE_modifier.h"
 #include "BKE_object.h"
 #include "BKE_report.h"
 #include "BKE_scene.h"
 
-#include "LBM_fluidsim.h"
+#include "DEG_depsgraph.h"
 
 #include "ED_screen.h"
 
@@ -67,7 +55,14 @@
 /* enable/disable overall compilation */
 #ifdef WITH_MOD_FLUID
 
+#include "LBM_fluidsim.h"
+
+#include "BLI_blenlib.h"
+#include "BLI_path_util.h"
+#include "BLI_math.h"
+
 #include "BKE_global.h"
+#include "BKE_main.h"
 
 #include "WM_api.h"
 
@@ -215,7 +210,6 @@ static void fluidsimPrintChannel(FILE *file, float *channel, int paramsize, char
  * CHANNEL_VEC:
  * frame 1                   |frame 2
  * [dataX][dataY][dataZ][time][dataX][dataY][dataZ][time]
- *
  */
 
 static void init_time(FluidsimSettings *domainSettings, FluidAnimChannels *channels)
@@ -246,7 +240,7 @@ static void set_channel(float *channel, float time, float *value, int i, int siz
 	}
 }
 
-static void set_vertex_channel(float *channel, float time, struct Scene *scene, struct FluidObject *fobj, int i)
+static void set_vertex_channel(Depsgraph *depsgraph, float *channel, float time, struct Scene *scene, struct FluidObject *fobj, int i)
 {
 	Object *ob = fobj->object;
 	FluidsimModifierData *fluidmd = (FluidsimModifierData *)modifiers_findByType(ob, eModifierType_Fluidsim);
@@ -259,7 +253,7 @@ static void set_vertex_channel(float *channel, float time, struct Scene *scene, 
 	if (channel == NULL)
 		return;
 
-	initElbeemMesh(scene, ob, &numVerts, &verts, &numTris, &tris, 1, modifierIndex);
+	initElbeemMesh(depsgraph, scene, ob, &numVerts, &verts, &numTris, &tris, 1, modifierIndex);
 
 	/* don't allow mesh to change number of verts in anim sequence */
 	if (numVerts != fobj->numVerts) {
@@ -331,6 +325,8 @@ static void free_all_fluidobject_channels(ListBase *fobjects)
 static void fluid_init_all_channels(bContext *C, Object *UNUSED(fsDomain), FluidsimSettings *domainSettings, FluidAnimChannels *channels, ListBase *fobjects)
 {
 	Scene *scene = CTX_data_scene(C);
+	ViewLayer *view_layer = CTX_data_view_layer(C);
+	Depsgraph *depsgraph = CTX_data_depsgraph(C);
 	Base *base;
 	int i;
 	int length = channels->length;
@@ -345,7 +341,7 @@ static void fluid_init_all_channels(bContext *C, Object *UNUSED(fsDomain), Fluid
 	channels->DomainTime = MEM_callocN(length * (CHANNEL_FLOAT+1) * sizeof(float), "channel DomainTime");
 
 	/* allocate fluid objects */
-	for (base=scene->base.first; base; base= base->next) {
+	for (base = FIRSTBASE(view_layer); base; base = base->next) {
 		Object *ob = base->object;
 		FluidsimModifierData *fluidmd = (FluidsimModifierData *)modifiers_findByType(ob, eModifierType_Fluidsim);
 
@@ -375,7 +371,7 @@ static void fluid_init_all_channels(bContext *C, Object *UNUSED(fsDomain), Fluid
 				float *verts=NULL;
 				int *tris=NULL, modifierIndex = BLI_findindex(&ob->modifiers, (ModifierData *)fluidmd);
 
-				initElbeemMesh(scene, ob, &fobj->numVerts, &verts, &fobj->numTris, &tris, 0, modifierIndex);
+				initElbeemMesh(depsgraph, scene, ob, &fobj->numVerts, &verts, &fobj->numTris, &tris, 0, modifierIndex);
 				fobj->VertexCache = MEM_callocN(length *((fobj->numVerts*CHANNEL_VEC)+1) * sizeof(float), "fluidobject VertexCache");
 
 				MEM_freeN(verts);
@@ -394,17 +390,10 @@ static void fluid_init_all_channels(bContext *C, Object *UNUSED(fsDomain), Fluid
 
 		eval_time = domainSettings->bakeStart + i;
 
-		/* XXX: This can't be used due to an anim sys optimization that ignores recalc object animation,
-		 * leaving it for the depgraph (this ignores object animation such as modifier properties though... :/ )
-		 * --> BKE_animsys_evaluate_all_animation(CTX_data_main(C), eval_time);
-		 * This doesn't work with drivers:
-		 * --> BKE_animsys_evaluate_animdata(&fsDomain->id, fsDomain->adt, eval_time, ADT_RECALC_ALL);
-		 */
-
 		/* Modifying the global scene isn't nice, but we can do it in
 		 * this part of the process before a threaded job is created */
 		scene->r.cfra = (int)eval_time;
-		ED_update_for_newframe(CTX_data_main(C), scene, 1);
+		ED_update_for_newframe(CTX_data_main(C), depsgraph);
 
 		/* now scene data should be current according to animation system, so we fill the channels */
 
@@ -449,7 +438,7 @@ static void fluid_init_all_channels(bContext *C, Object *UNUSED(fsDomain), Fluid
 
 			set_channel(fobj->Translation, timeAtFrame, ob->loc, i, CHANNEL_VEC);
 			set_channel(fobj->Rotation, timeAtFrame, rot_d, i, CHANNEL_VEC);
-			set_channel(fobj->Scale, timeAtFrame, ob->size, i, CHANNEL_VEC);
+			set_channel(fobj->Scale, timeAtFrame, ob->scale, i, CHANNEL_VEC);
 			set_channel(fobj->Active, timeAtFrame, &active, i, CHANNEL_FLOAT);
 			set_channel(fobj->InitialVelocity, timeAtFrame, &fluidmd->fss->iniVelx, i, CHANNEL_VEC);
 
@@ -463,14 +452,15 @@ static void fluid_init_all_channels(bContext *C, Object *UNUSED(fsDomain), Fluid
 			}
 
 			if (fluid_is_animated_mesh(fluidmd->fss)) {
-				set_vertex_channel(fobj->VertexCache, timeAtFrame, scene, fobj, i);
+				set_vertex_channel(depsgraph, fobj->VertexCache, timeAtFrame, scene, fobj, i);
 			}
 		}
 	}
 }
 
-static void export_fluid_objects(ListBase *fobjects, Scene *scene, int length)
+static void export_fluid_objects(const bContext *C, ListBase *fobjects, Scene *scene, int length)
 {
+	Depsgraph *depsgraph = CTX_data_depsgraph(C);
 	FluidObject *fobj;
 
 	for (fobj=fobjects->first; fobj; fobj=fobj->next) {
@@ -493,7 +483,7 @@ static void export_fluid_objects(ListBase *fobjects, Scene *scene, int length)
 		fsmesh.type = fluidmd->fss->type;
 		fsmesh.name = ob->id.name;
 
-		initElbeemMesh(scene, ob, &numVerts, &verts, &numTris, &tris, 0, modifierIndex);
+		initElbeemMesh(depsgraph, scene, ob, &numVerts, &verts, &numTris, &tris, 0, modifierIndex);
 
 		fsmesh.numVertices   = numVerts;
 		fsmesh.numTriangles  = numTris;
@@ -572,14 +562,14 @@ static void export_fluid_objects(ListBase *fobjects, Scene *scene, int length)
 	}
 }
 
-static int fluid_validate_scene(ReportList *reports, Scene *scene, Object *fsDomain)
+static int fluid_validate_scene(ReportList *reports, ViewLayer *view_layer, Object *fsDomain)
 {
 	Base *base;
 	Object *newdomain = NULL;
 	int channelObjCount = 0;
 	int fluidInputCount = 0;
 
-	for (base=scene->base.first; base; base= base->next) {
+	for (base = FIRSTBASE(view_layer); base; base = base->next) {
 		Object *ob = base->object;
 		FluidsimModifierData *fluidmdtmp = (FluidsimModifierData *)modifiers_findByType(ob, eModifierType_Fluidsim);
 
@@ -838,7 +828,9 @@ static void fluidsim_delete_until_lastframe(FluidsimSettings *fss, const char *r
 static int fluidsimBake(bContext *C, ReportList *reports, Object *fsDomain, short do_job)
 {
 	Main *bmain = CTX_data_main(C);
-	Scene *scene= CTX_data_scene(C);
+	Scene *scene = CTX_data_scene(C);
+	ViewLayer *view_layer = CTX_data_view_layer(C);
+	Depsgraph *depsgraph = CTX_data_depsgraph(C);
 	int i;
 	FluidsimSettings *domainSettings;
 
@@ -885,7 +877,7 @@ static int fluidsimBake(bContext *C, ReportList *reports, Object *fsDomain, shor
 	}
 
 	/* check scene for sane object/modifier settings */
-	if (!fluid_validate_scene(reports, scene, fsDomain)) {
+	if (!fluid_validate_scene(reports, view_layer, fsDomain)) {
 		fluidbake_free_data(channels, fobjects, fsset, fb);
 		return 0;
 	}
@@ -950,7 +942,7 @@ static int fluidsimBake(bContext *C, ReportList *reports, Object *fsDomain, shor
 
 	/* reset to original current frame */
 	scene->r.cfra = origFrame;
-	ED_update_for_newframe(CTX_data_main(C), scene, 1);
+	ED_update_for_newframe(CTX_data_main(C), depsgraph);
 
 	/* ******** init domain object's matrix ******** */
 	copy_m4_m4(domainMat, fsDomain->obmat);
@@ -1037,7 +1029,7 @@ static int fluidsimBake(bContext *C, ReportList *reports, Object *fsDomain, shor
 	elbeemAddDomain(fsset);
 
 	/* ******** export all fluid objects to elbeem ******** */
-	export_fluid_objects(fobjects, scene, channels->length);
+	export_fluid_objects(C, fobjects, scene, channels->length);
 
 	/* custom data for fluid bake job */
 	fb->settings = fsset;

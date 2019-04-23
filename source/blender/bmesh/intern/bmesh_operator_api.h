@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,17 +12,13 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * Contributor(s): Joseph Eagar.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
 #ifndef __BMESH_OPERATOR_API_H__
 #define __BMESH_OPERATOR_API_H__
 
-/** \file blender/bmesh/intern/bmesh_operator_api.h
- *  \ingroup bmesh
+/** \file
+ * \ingroup bmesh
  */
 
 #ifdef __cplusplus
@@ -193,12 +187,22 @@ typedef enum eBMOpSlotSubType_Ptr {
 	BMO_OP_SLOT_SUBTYPE_PTR_OBJECT = 102,
 	BMO_OP_SLOT_SUBTYPE_PTR_MESH   = 103,
 } eBMOpSlotSubType_Ptr;
+typedef enum eBMOpSlotSubType_Int {
+	BMO_OP_SLOT_SUBTYPE_INT_ENUM = 200,
+	BMO_OP_SLOT_SUBTYPE_INT_FLAG = 201,
+} eBMOpSlotSubType_Int;
 
 typedef union eBMOpSlotSubType_Union {
 	eBMOpSlotSubType_Elem elem;
 	eBMOpSlotSubType_Ptr ptr;
 	eBMOpSlotSubType_Map map;
+	eBMOpSlotSubType_Int intg;
 } eBMOpSlotSubType_Union;
+
+typedef struct BMO_FlagSet {
+	int value;
+	const char *identifier;
+} BMO_FlagSet;
 
 /* please ignore all these structures, don't touch them in tool code, except
  * for when your defining an operator with BMOpDefine.*/
@@ -218,6 +222,11 @@ typedef struct BMOpSlot {
 		float vec[3];
 		void **buf;
 		GHash *ghash;
+		struct {
+			/** Don't clobber (i) when assigning flags, see #eBMOpSlotSubType_Int. */
+			int _i;
+			BMO_FlagSet *flags;
+		} enum_data;
 	} data;
 } BMOpSlot;
 
@@ -235,7 +244,7 @@ typedef struct BMOpSlot {
 	           ((slot >= (op)->slots_out) && (slot < &(op)->slots_out[BMO_OP_MAX_SLOTS])))
 
 /* way more than probably needed, compiler complains if limit hit */
-#define BMO_OP_MAX_SLOTS 16
+#define BMO_OP_MAX_SLOTS 20
 
 /* BMOpDefine->type_flag */
 typedef enum {
@@ -244,6 +253,7 @@ typedef enum {
 	BMO_OPTYPE_FLAG_NORMALS_CALC        = (1 << 1),
 	BMO_OPTYPE_FLAG_SELECT_FLUSH        = (1 << 2),
 	BMO_OPTYPE_FLAG_SELECT_VALIDATE     = (1 << 3),
+	BMO_OPTYPE_FLAG_INVALIDATE_CLNOR_ALL = (1 << 4),
 } BMOpTypeFlag;
 
 typedef struct BMOperator {
@@ -268,6 +278,7 @@ typedef struct BMOSlotType {
 	char name[MAX_SLOTNAME];
 	eBMOpSlotType          type;
 	eBMOpSlotSubType_Union subtype;
+	BMO_FlagSet            *enum_flags;
 } BMOSlotType;
 
 typedef struct BMOpDefine {
@@ -347,7 +358,7 @@ enum {
 	/* A version of 'DEL_FACES' that keeps edges on face boundaries,
 	 * allowing the surrounding edge-loop to be kept from removed face regions. */
 	DEL_FACES_KEEP_BOUNDARY,
-	DEL_ONLYTAGGED
+	DEL_ONLYTAGGED,
 };
 
 typedef enum {
@@ -511,7 +522,7 @@ void BMO_slot_buffer_from_all(
  *
  *    f = BMO_iter_new(&oiter, some_operator, "slot_name", BM_FACE);
  *    for (; f; f = BMO_iter_step(&oiter)) {
- *        /do something with the face
+ *        // do something with the face
  *    }
  *
  * another example, iterating over a mapping:

@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,14 +15,10 @@
  *
  * The Original Code is Copyright (C) 2008 Blender Foundation
  * All rights reserved.
- *
- * Contributor(s): Joshua Leung
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/animation/keyframes_general.c
- *  \ingroup edanimation
+/** \file
+ * \ingroup edanimation
  */
 
 
@@ -47,9 +41,7 @@
 #include "BKE_action.h"
 #include "BKE_fcurve.h"
 #include "BKE_report.h"
-#include "BKE_library.h"
 #include "BKE_main.h"
-#include "BKE_global.h"
 #include "BKE_deform.h"
 
 #include "RNA_access.h"
@@ -72,9 +64,10 @@
 
 /* **************************************************** */
 
-/* Only delete the nominated keyframe from provided F-Curve.
+/**
+ * Only delete the nominated keyframe from provided F-Curve.
  * Not recommended to be used many times successively. For that
- * there is delete_fcurve_keys().
+ * there is #delete_fcurve_keys().
  */
 void delete_fcurve_key(FCurve *fcu, int index, bool do_recalc)
 {
@@ -183,7 +176,8 @@ void duplicate_fcurve_keys(FCurve *fcu)
 /* Various Tools */
 
 /* Basic F-Curve 'cleanup' function that removes 'double points' and unnecessary keyframes on linear-segments only
- * optionally clears up curve if one keyframe with default value remains */
+ * optionally clears up curve if one keyframe with default value remains
+ */
 void clean_fcurve(struct bAnimContext *ac, bAnimListElem *ale, float thresh, bool cleardefault)
 {
 	FCurve *fcu = (FCurve *)ale->key_data;
@@ -206,7 +200,7 @@ void clean_fcurve(struct bAnimContext *ac, bAnimListElem *ale, float thresh, boo
 
 	/* now insert first keyframe, as it should be ok */
 	bezt = old_bezts;
-	insert_vert_fcurve(fcu, bezt->vec[1][0], bezt->vec[1][1], BEZKEYTYPE(bezt), 0);
+	insert_bezt_fcurve(fcu, bezt, 0);
 	if (!(bezt->f2 & SELECT)) {
 		lastb = fcu->bezt;
 		lastb->f1 = lastb->f2 = lastb->f3 = 0;
@@ -235,7 +229,7 @@ void clean_fcurve(struct bAnimContext *ac, bAnimListElem *ale, float thresh, boo
 		cur[0] = bezt->vec[1][0]; cur[1] = bezt->vec[1][1];
 
 		if (!(bezt->f2 & SELECT)) {
-			insert_vert_fcurve(fcu, cur[0], cur[1], BEZKEYTYPE(bezt), 0);
+			insert_bezt_fcurve(fcu, bezt, 0);
 			lastb = (fcu->bezt + (fcu->totvert - 1));
 			lastb->f1 = lastb->f2 = lastb->f3 = 0;
 			continue;
@@ -254,7 +248,7 @@ void clean_fcurve(struct bAnimContext *ac, bAnimListElem *ale, float thresh, boo
 				if (cur[1] > next[1]) {
 					if (IS_EQT(cur[1], prev[1], thresh) == 0) {
 						/* add new keyframe */
-						insert_vert_fcurve(fcu, cur[0], cur[1], BEZKEYTYPE(bezt), 0);
+						insert_bezt_fcurve(fcu, bezt, 0);
 					}
 				}
 			}
@@ -262,7 +256,7 @@ void clean_fcurve(struct bAnimContext *ac, bAnimListElem *ale, float thresh, boo
 				/* only add if values are a considerable distance apart */
 				if (IS_EQT(cur[1], prev[1], thresh) == 0) {
 					/* add new keyframe */
-					insert_vert_fcurve(fcu, cur[0], cur[1], BEZKEYTYPE(bezt), 0);
+					insert_bezt_fcurve(fcu, bezt, 0);
 				}
 			}
 		}
@@ -271,19 +265,19 @@ void clean_fcurve(struct bAnimContext *ac, bAnimListElem *ale, float thresh, boo
 			if (beztn) {
 				/* does current have same value as previous and next? */
 				if (IS_EQT(cur[1], prev[1], thresh) == 0) {
-					/* add new keyframe*/
-					insert_vert_fcurve(fcu, cur[0], cur[1], BEZKEYTYPE(bezt), 0);
+					/* add new keyframe */
+					insert_bezt_fcurve(fcu, bezt, 0);
 				}
 				else if (IS_EQT(cur[1], next[1], thresh) == 0) {
 					/* add new keyframe */
-					insert_vert_fcurve(fcu, cur[0], cur[1], BEZKEYTYPE(bezt), 0);
+					insert_bezt_fcurve(fcu, bezt, 0);
 				}
 			}
 			else {
 				/* add if value doesn't equal that of previous */
 				if (IS_EQT(cur[1], prev[1], thresh) == 0) {
 					/* add new keyframe */
-					insert_vert_fcurve(fcu, cur[0], cur[1], BEZKEYTYPE(bezt), 0);
+					insert_bezt_fcurve(fcu, bezt, 0);
 				}
 			}
 		}
@@ -739,7 +733,7 @@ static tAnimCopybufItem *pastebuf_match_path_property(
 		/* check that paths exist */
 		if (aci->rna_path && fcu->rna_path) {
 			/* find the property of the fcurve and compare against the end of the tAnimCopybufItem
-			 * more involved since it needs to to path lookups.
+			 * more involved since it needs to do path lookups.
 			 * This is not 100% reliable since the user could be editing the curves on a path that wont
 			 * resolve, or a bone could be renamed after copying for eg. but in normal copy & paste
 			 * this should work out ok.
@@ -904,14 +898,16 @@ const EnumPropertyItem rna_enum_keyframe_paste_offset_items[] = {
 	{KEYFRAME_PASTE_OFFSET_CFRA_END, "END", 0, "Frame End", "Paste keys ending at current frame"},
 	{KEYFRAME_PASTE_OFFSET_CFRA_RELATIVE, "RELATIVE", 0, "Frame Relative", "Paste keys relative to the current frame when copying"},
 	{KEYFRAME_PASTE_OFFSET_NONE, "NONE", 0, "No Offset", "Paste keys from original time"},
-	{0, NULL, 0, NULL, NULL}};
+	{0, NULL, 0, NULL, NULL},
+};
 
 const EnumPropertyItem rna_enum_keyframe_paste_merge_items[] = {
 	{KEYFRAME_PASTE_MERGE_MIX, "MIX", 0, "Mix", "Overlay existing with new keys"},
 	{KEYFRAME_PASTE_MERGE_OVER, "OVER_ALL", 0, "Overwrite All", "Replace all keys"},
 	{KEYFRAME_PASTE_MERGE_OVER_RANGE, "OVER_RANGE", 0, "Overwrite Range", "Overwrite keys in pasted range"},
 	{KEYFRAME_PASTE_MERGE_OVER_RANGE_ALL, "OVER_RANGE_ALL", 0, "Overwrite Entire Range", "Overwrite keys in pasted range, using the range of all copied keys"},
-	{0, NULL, 0, NULL, NULL}};
+	{0, NULL, 0, NULL, NULL},
+};
 
 
 /**

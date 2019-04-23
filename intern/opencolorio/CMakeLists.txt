@@ -16,11 +16,6 @@
 #
 # The Original Code is Copyright (C) 2012, Blender Foundation
 # All rights reserved.
-#
-# The Original Code is: all of this file.
-#
-# Contributor(s): Sergey Sharybin.
-#
 # ***** END GPL LICENSE BLOCK *****
 
 set(INC
@@ -28,6 +23,7 @@ set(INC
 	../glew-mx
 	../guardedalloc
 	../../source/blender/blenlib
+	../../source/blender/gpu
 )
 
 set(INC_SYS
@@ -40,6 +36,9 @@ set(SRC
 
 	ocio_capi.h
 	ocio_impl.h
+)
+
+set(LIB
 )
 
 if(WITH_OPENCOLORIO)
@@ -69,7 +68,8 @@ if(WITH_OPENCOLORIO)
 	endif()
 
 	data_to_c_simple(gpu_shader_display_transform.glsl SRC)
+	data_to_c_simple(gpu_shader_display_transform_vertex.glsl SRC)
 endif()
 
 
-blender_add_lib(bf_intern_opencolorio "${SRC}" "${INC}" "${INC_SYS}")
+blender_add_lib(bf_intern_opencolorio "${SRC}" "${INC}" "${INC_SYS}" "${LIB}")

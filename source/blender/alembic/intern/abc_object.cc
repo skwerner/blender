@@ -1,6 +1,4 @@
 ﻿/*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,10 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * Contributor(s): Esteban Tovagliari, Cedric Paille, Kevin Dietrich
- *
- * ***** END GPL LICENSE BLOCK *****
+ */
+
+/** \file
+ * \ingroup balembic
  */
 
 #include "abc_object.h"
@@ -32,7 +30,6 @@ extern "C" {
 #include "DNA_space_types.h"  /* for FILE_MAX */
 
 #include "BKE_constraint.h"
-#include "BKE_depsgraph.h"
 #include "BKE_idprop.h"
 #include "BKE_library.h"
 #include "BKE_modifier.h"
@@ -59,14 +56,12 @@ using Alembic::AbcGeom::OStringProperty;
 
 /* ************************************************************************** */
 
-AbcObjectWriter::AbcObjectWriter(Scene *scene,
-                                 Object *ob,
+AbcObjectWriter::AbcObjectWriter(Object *ob,
                                  uint32_t time_sampling,
                                  ExportSettings &settings,
                                  AbcObjectWriter *parent)
     : m_object(ob)
     , m_settings(settings)
-    , m_scene(scene)
     , m_time_sampling(time_sampling)
     , m_first_frame(true)
 {
@@ -247,12 +242,12 @@ Imath::M44d get_matrix(const IXformSchema &schema, const float time)
 	return s0.getMatrix();
 }
 
-DerivedMesh *AbcObjectReader::read_derivedmesh(DerivedMesh *dm,
-                                               const Alembic::Abc::ISampleSelector &UNUSED(sample_sel),
-                                               int UNUSED(read_flag),
-                                               const char **UNUSED(err_str))
+struct Mesh *AbcObjectReader::read_mesh(struct Mesh *existing_mesh,
+                                        const Alembic::Abc::ISampleSelector &UNUSED(sample_sel),
+                                        int UNUSED(read_flag),
+                                        const char **UNUSED(err_str))
 {
-	return dm;
+	return existing_mesh;
 }
 
 void AbcObjectReader::setupObjectTransform(const float time)
@@ -295,12 +290,8 @@ Alembic::AbcGeom::IXform AbcObjectReader::xform()
 		return IXform(abc_parent, Alembic::AbcGeom::kWrapExisting);
 	}
 
-	/* Should not happen. */
-	std::cerr << "AbcObjectReader::xform(): "
-	          << "unable to find IXform for Alembic object '"
-	          << m_iobject.getFullName() << "'\n";
-	BLI_assert(false);
-
+	/* This can happen in certain cases. For example, MeshLab exports
+	 * point clouds without parent XForm. */
 	return IXform();
 }
 
@@ -309,6 +300,8 @@ void AbcObjectReader::read_matrix(float r_mat[4][4], const float time,
 {
 	IXform ixform = xform();
 	if (!ixform) {
+		unit_m4(r_mat);
+		is_constant = true;
 		return;
 	}
 
@@ -328,8 +321,13 @@ void AbcObjectReader::read_matrix(float r_mat[4][4], const float time,
 		 * all parent matrices in the Alembic file, we assume that the Blender
 		 * parent object is already updated for the current timekey, and use its
 		 * world matrix. */
-		BLI_assert(m_object->parent);
-		mul_m4_m4m4(r_mat, m_object->parent->obmat, r_mat);
+		if (m_object->parent) {
+			mul_m4_m4m4(r_mat, m_object->parent->obmat, r_mat);
+		}
+		else {
+			/* This can happen if the user deleted the parent object. */
+			unit_m4(r_mat);
+		}
 	}
 	else {
 		/* Only apply scaling to root objects, parenting will propagate it. */

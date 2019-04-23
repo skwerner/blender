@@ -351,6 +351,35 @@ def dump_rna_messages(msgs, reports, settings, verbose=False):
                         process_msg(msgs, default_context, item.description, msgsrc, reports, check_ctxt_rna_tip,
                                     settings)
 
+    def walk_tools_definitions(cls):
+        from bl_ui.space_toolsystem_common import ToolDef
+
+        bl_rna = cls.bl_rna
+        op_default_context = bpy.app.translations.contexts.operator_default
+
+        def process_tooldef(tool_context, tool):
+            if not isinstance(tool, ToolDef):
+                if callable(tool):
+                    for t in tool(None):
+                        process_tooldef(tool_context, t)
+                return
+            msgsrc = "bpy.types.{} Tools: '{}', '{}'".format(bl_rna.identifier, tool_context, tool.idname)
+            if tool.label:
+                process_msg(msgs, op_default_context, tool.label, msgsrc, reports, check_ctxt_rna, settings)
+            # Callable (function) descriptions must handle their translations themselves.
+            if tool.description and not callable(tool.description):
+                process_msg(msgs, default_context, tool.description, msgsrc, reports, check_ctxt_rna_tip, settings)
+
+        for tool_context, tools_defs in cls.tools_all():
+            for tools_group in tools_defs:
+                if tools_group is None:
+                    continue
+                elif isinstance(tools_group, tuple) and not isinstance(tools_group, ToolDef):
+                    for tool in tools_group:
+                        process_tooldef(tool_context, tool)
+                else:
+                    process_tooldef(tool_context, tools_group)
+
     blacklist_rna_class = class_blacklist()
 
     def walk_class(cls):
@@ -373,13 +402,18 @@ def dump_rna_messages(msgs, reports, settings, verbose=False):
         if hasattr(bl_rna, 'bl_label') and bl_rna.bl_label:
             process_msg(msgs, msgctxt, bl_rna.bl_label, msgsrc, reports, check_ctxt_rna, settings)
 
+        # Tools Panels definitions.
+        if hasattr(bl_rna, 'tools_all') and bl_rna.tools_all:
+            walk_tools_definitions(cls)
+
         walk_properties(cls)
 
     def walk_keymap_hierarchy(hier, msgsrc_prev):
         km_i18n_context = bpy.app.translations.contexts.id_windowmanager
         for lvl in hier:
             msgsrc = msgsrc_prev + "." + lvl[1]
-            process_msg(msgs, km_i18n_context, lvl[0], msgsrc, reports, None, settings)
+            if isinstance(lvl[0], str):  # Can be a function too, now, with tool system...
+                process_msg(msgs, km_i18n_context, lvl[0], msgsrc, reports, None, settings)
             if lvl[3]:
                 walk_keymap_hierarchy(lvl[3], msgsrc)
 
@@ -391,7 +425,7 @@ def dump_rna_messages(msgs, reports, settings, verbose=False):
             return
 
         def full_class_id(cls):
-            """Gives us 'ID.Lamp.AreaLamp' which is best for sorting."""
+            """Gives us 'ID.Light.AreaLight' which is best for sorting."""
             # Always the same issue, some classes listed in blacklist should actually no more exist (they have been
             # unregistered), but are still listed by __subclasses__() calls... :/
             if cls in blacklist_rna_class:
@@ -437,8 +471,8 @@ def dump_rna_messages(msgs, reports, settings, verbose=False):
                     reports, check_ctxt_rna, settings)
 
     # And parse keymaps!
-    from bpy_extras.keyconfig_utils import KM_HIERARCHY
-    walk_keymap_hierarchy(KM_HIERARCHY, "KM_HIERARCHY")
+    from bl_keymap_utils import keymap_hierarchy
+    walk_keymap_hierarchy(keymap_hierarchy.generate(), "KM_HIERARCHY")
 
 
 ##### Python source code #####
@@ -535,7 +569,7 @@ def dump_py_messages_from_files(msgs, reports, files, settings):
 
     def _op_to_ctxt(node):
         # Some smart coders like things like:
-        #    >>> row.operator("wm.addon_disable" if is_enabled else "wm.addon_enable", ...)
+        #    >>> row.operator("preferences.addon_disable" if is_enabled else "preferences.addon_enable", ...)
         # We only take first arg into account here!
         bag = extract_strings_split(node)
         opname, _ = bag[0]
@@ -987,7 +1021,7 @@ def main():
     args = parser.parse_args(argv)
 
     settings = settings_i18n.I18nSettings()
-    settings.from_json(args.settings)
+    settings.load(args.settings)
 
     if args.output:
         settings.FILE_NAME_POT = args.output

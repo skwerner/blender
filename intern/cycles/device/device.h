@@ -40,13 +40,31 @@ class RenderTile;
 /* Device Types */
 
 enum DeviceType {
-	DEVICE_NONE,
+	DEVICE_NONE = 0,
 	DEVICE_CPU,
 	DEVICE_OPENCL,
 	DEVICE_CUDA,
 	DEVICE_NETWORK,
 	DEVICE_MULTI
 };
+
+enum DeviceTypeMask {
+	DEVICE_MASK_CPU = (1 << DEVICE_CPU),
+	DEVICE_MASK_OPENCL = (1 << DEVICE_OPENCL),
+	DEVICE_MASK_CUDA = (1 << DEVICE_CUDA),
+	DEVICE_MASK_NETWORK = (1 << DEVICE_NETWORK),
+	DEVICE_MASK_ALL = ~0
+};
+
+enum DeviceKernelStatus {
+	DEVICE_KERNEL_WAITING_FOR_FEATURE_KERNEL = 0,
+	DEVICE_KERNEL_FEATURE_KERNEL_AVAILABLE,
+	DEVICE_KERNEL_USING_FEATURE_KERNEL,
+	DEVICE_KERNEL_FEATURE_KERNEL_INVALID,
+	DEVICE_KERNEL_UNKNOWN,
+};
+
+#define DEVICE_MASK(type) (DeviceTypeMask)(1 << type)
 
 class DeviceInfo {
 public:
@@ -55,7 +73,6 @@ public:
 	string id; /* used for user preferences, should stay fixed with changing hardware config */
 	int num;
 	bool display_device;            /* GPU is used as a display device. */
-	bool advanced_shading;          /* Supports full shading system. */
 	bool has_half_images;           /* Support half-float textures. */
 	bool has_volume_decoupled;      /* Decoupled volume shading. */
 	bool has_osl;                   /* Support Open Shading Language. */
@@ -71,7 +88,6 @@ public:
 		num = 0;
 		cpu_threads = 0;
 		display_device = false;
-		advanced_shading = true;
 		has_half_images = false;
 		has_volume_decoupled = false;
 		has_osl = false;
@@ -139,6 +155,12 @@ public:
 	/* Use raytracing in shaders. */
 	bool use_shader_raytrace;
 
+	/* Use true displacement */
+	bool use_true_displacement;
+
+	/* Use background lights */
+	bool use_background_light;
+
 	DeviceRequestedFeatures()
 	{
 		/* TODO(sergey): Find more meaningful defaults. */
@@ -158,6 +180,8 @@ public:
 		use_principled = false;
 		use_denoising = false;
 		use_shader_raytrace = false;
+		use_true_displacement = false;
+		use_background_light = false;
 	}
 
 	bool modified(const DeviceRequestedFeatures& requested_features)
@@ -177,7 +201,9 @@ public:
 		         use_shadow_tricks == requested_features.use_shadow_tricks &&
 		         use_principled == requested_features.use_principled &&
 		         use_denoising == requested_features.use_denoising &&
-		         use_shader_raytrace == requested_features.use_shader_raytrace);
+		         use_shader_raytrace == requested_features.use_shader_raytrace &&
+		         use_true_displacement == requested_features.use_true_displacement &&
+		         use_background_light == requested_features.use_background_light);
 	}
 
 	/* Convert the requested features structure to a build options,
@@ -249,13 +275,26 @@ struct DeviceDrawParams {
 class Device {
 	friend class device_sub_ptr;
 protected:
-	Device(DeviceInfo& info_, Stats &stats_, bool background) : background(background), vertex_buffer(0), info(info_), stats(stats_) {}
+	enum {
+		FALLBACK_SHADER_STATUS_NONE = 0,
+		FALLBACK_SHADER_STATUS_ERROR,
+		FALLBACK_SHADER_STATUS_SUCCESS,
+	};
+
+	Device(DeviceInfo& info_, Stats &stats_, Profiler &profiler_, bool background) : background(background),
+	    vertex_buffer(0),
+	    fallback_status(FALLBACK_SHADER_STATUS_NONE), fallback_shader_program(0),
+	    info(info_), stats(stats_), profiler(profiler_) {}
 
 	bool background;
 	string error_msg;
 
 	/* used for real time display */
 	unsigned int vertex_buffer;
+	int fallback_status, fallback_shader_program;
+	int image_texture_location, fullscreen_location;
+
+	bool bind_fallback_display_space_shader(const float width, const float height);
 
 	virtual device_ptr mem_alloc_sub_ptr(device_memory& /*mem*/, int /*offset*/, int /*size*/)
 	{
@@ -285,6 +324,7 @@ public:
 
 	/* statistics */
 	Stats &stats;
+	Profiler &profiler;
 
 	/* memory alignment */
 	virtual int mem_sub_ptr_alignment() { return MIN_ALIGNMENT_CPU_DATA_TYPES; }
@@ -300,6 +340,20 @@ public:
 	        const DeviceRequestedFeatures& /*requested_features*/)
 	{ return true; }
 
+	/* Wait for device to become available to upload data and receive tasks
+	 * This method is used by the OpenCL device to load the
+	 * optimized kernels or when not (yet) available load the
+	 * generic kernels (only during foreground rendering) */
+	virtual bool wait_for_availability(
+	        const DeviceRequestedFeatures& /*requested_features*/)
+	{ return true; }
+	/* Check if there are 'better' kernels available to be used
+	 * We can switch over to these kernels
+	 * This method is used to determine if we can switch the preview kernels
+	 * to regular kernels */
+	virtual DeviceKernelStatus get_active_kernel_switch_state()
+	{ return DEVICE_KERNEL_USING_FEATURE_KERNEL; }
+
 	/* tasks */
 	virtual int get_split_task_count(DeviceTask& task) = 0;
 	virtual void task_add(DeviceTask& task) = 0;
@@ -307,9 +361,10 @@ public:
 	virtual void task_cancel() = 0;
 
 	/* opengl drawing */
-	virtual void draw_pixels(device_memory& mem, int y, int w, int h,
-		int dx, int dy, int width, int height, bool transparent,
-		const DeviceDrawParams &draw_params);
+	virtual void draw_pixels(device_memory& mem, int y,
+	    int w, int h, int width, int height,
+	    int dx, int dy, int dw, int dh,
+	    bool transparent, const DeviceDrawParams &draw_params);
 
 #ifdef WITH_NETWORK
 	/* networking */
@@ -323,13 +378,13 @@ public:
 	virtual void unmap_neighbor_tiles(Device * /*sub_device*/, RenderTile * /*tiles*/) {}
 
 	/* static */
-	static Device *create(DeviceInfo& info, Stats &stats, bool background = true);
+	static Device *create(DeviceInfo& info, Stats &stats, Profiler& profiler, bool background = true);
 
 	static DeviceType type_from_string(const char *name);
 	static string string_from_type(DeviceType type);
-	static vector<DeviceType>& available_types();
-	static vector<DeviceInfo>& available_devices();
-	static string device_capabilities();
+	static vector<DeviceType> available_types();
+	static vector<DeviceInfo> available_devices(uint device_type_mask = DEVICE_MASK_ALL);
+	static string device_capabilities(uint device_type_mask = DEVICE_MASK_ALL);
 	static DeviceInfo get_multi_device(const vector<DeviceInfo>& subdevices,
 	                                   int threads,
 	                                   bool background);
@@ -356,8 +411,11 @@ private:
 	/* Indicted whether device types and devices lists were initialized. */
 	static bool need_types_update, need_devices_update;
 	static thread_mutex device_mutex;
-	static vector<DeviceType> types;
-	static vector<DeviceInfo> devices;
+	static vector<DeviceInfo> cuda_devices;
+	static vector<DeviceInfo> opencl_devices;
+	static vector<DeviceInfo> cpu_devices;
+	static vector<DeviceInfo> network_devices;
+	static uint devices_initialized_mask;
 };
 
 CCL_NAMESPACE_END

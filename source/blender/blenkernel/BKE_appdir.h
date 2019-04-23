@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,15 +12,14 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 #ifndef __BKE_APPDIR_H__
 #define __BKE_APPDIR_H__
 
-/** \file BKE_appdir.h
- *  \ingroup bli
+/** \file
+ * \ingroup bli
  */
+struct ListBase;
 
 /* note on naming: typical _get() suffix is omitted here,
  * since its the main purpose of the API. */
@@ -33,8 +30,10 @@ const char *BKE_appdir_folder_id_create(const int folder_id, const char *subfold
 const char *BKE_appdir_folder_id_user_notest(const int folder_id, const char *subfolder);
 const char *BKE_appdir_folder_id_version(const int folder_id, const int ver, const bool do_check);
 
+bool BKE_appdir_app_is_portable_install(void);
 bool BKE_appdir_app_template_any(void);
 bool BKE_appdir_app_template_id_search(const char *app_template, char *path, size_t path_len);
+void BKE_appdir_app_templates(struct ListBase *templates);
 
 /* Initialize path to program executable */
 void        BKE_appdir_program_path_init(const char *argv0);

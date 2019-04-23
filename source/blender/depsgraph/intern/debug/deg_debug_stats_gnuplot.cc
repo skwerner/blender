@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,15 +15,10 @@
  *
  * The Original Code is Copyright (C) 2017 Blender Foundation.
  * All rights reserved.
- *
- * Original Author: Sergey Sharybin
- * Contributor(s): None Yet
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/depsgraph/intern/debug/deg_debug_stats_gnuplot.cc
- *  \ingroup depsgraph
+/** \file
+ * \ingroup depsgraph
  */
 
 #include "DEG_depsgraph_debug.h"
@@ -37,9 +30,7 @@
 #include "BLI_math_base.h"
 
 #include "intern/depsgraph.h"
-#include "intern/nodes/deg_node_id.h"
-
-#include "util/deg_util_foreach.h"
+#include "intern/node/deg_node_id.h"
 
 extern "C" {
 #include "DNA_ID.h"
@@ -58,7 +49,7 @@ struct DebugContext {
 };
 
 struct StatsEntry {
-	const IDDepsNode *id_node;
+	const IDNode *id_node;
 	double time;
 };
 
@@ -75,7 +66,7 @@ static void deg_debug_fprintf(const DebugContext &ctx, const char *fmt, ...)
 }
 
 BLI_INLINE double get_node_time(const DebugContext& /*ctx*/,
-                                const DepsNode *node)
+                                const Node *node)
 {
 	// TODO(sergey): Figure out a nice way to define which exact time
 	// we want to show.
@@ -84,7 +75,26 @@ BLI_INLINE double get_node_time(const DebugContext& /*ctx*/,
 
 bool stat_entry_comparator(const StatsEntry& a, const StatsEntry& b)
 {
-	return a.time < b.time;
+	return a.time > b.time;
+}
+
+string gnuplotify_id_code(const string& name)
+{
+	return string("") + name[0] + name[1];
+}
+
+string gnuplotify_name(const string& name)
+{
+	string result = "";
+	const int length = name.length();
+	for (int i = 0; i < length; ++i) {
+		const char ch = name[i];
+		if (ch == '_') {
+			result += "\\\\\\";
+		}
+		result += ch;
+	}
+	return result;
 }
 
 void write_stats_data(const DebugContext& ctx)
@@ -92,7 +102,7 @@ void write_stats_data(const DebugContext& ctx)
 	// Fill in array of all stats which are to be displayed.
 	vector<StatsEntry> stats;
 	stats.reserve(ctx.graph->id_nodes.size());
-	foreach (const IDDepsNode *id_node, ctx.graph->id_nodes) {
+	for (const IDNode *id_node : ctx.graph->id_nodes) {
 		const double time = get_node_time(ctx, id_node);
 		if (time == 0.0) {
 			continue;
@@ -106,12 +116,15 @@ void write_stats_data(const DebugContext& ctx)
 	std::sort(stats.begin(), stats.end(), stat_entry_comparator);
 	// We limit number of entries, otherwise things become unreadable.
 	stats.resize(min_ii(stats.size(), 32));
+	std::reverse(stats.begin(), stats.end());
 	// Print data to the file stream.
 	deg_debug_fprintf(ctx, "$data << EOD" NL);
-	foreach (const StatsEntry& entry, stats) {
-		deg_debug_fprintf(ctx, "\"%s\",%f" NL,
-		                  entry.id_node->id->name + 2,
-		                  entry.time);
+	for (const StatsEntry& entry : stats) {
+		deg_debug_fprintf(
+		        ctx, "\"[%s] %s\",%f" NL,
+		        gnuplotify_id_code(entry.id_node->id_orig->name).c_str(),
+		        gnuplotify_name(entry.id_node->id_orig->name + 2).c_str(),
+		        entry.time);
 	}
 	deg_debug_fprintf(ctx, "EOD" NL);
 }

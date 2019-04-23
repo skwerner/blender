@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,10 @@
  *
  * The Original Code is Copyright (C) 2006 Blender Foundation.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): Robin Allen
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/nodes/texture/nodes/node_texture_image.c
- *  \ingroup texnodes
+/** \file
+ * \ingroup texnodes
  */
 
 
@@ -35,7 +27,7 @@
 
 static bNodeSocketTemplate outputs[] = {
 	{ SOCK_RGBA, 0, N_("Image")},
-	{ -1, 0, "" }
+	{ -1, 0, "" },
 };
 
 static void colorfn(float *out, TexParams *p, bNode *node, bNodeStack **UNUSED(in), short UNUSED(thread))
@@ -93,8 +85,8 @@ static void init(bNodeTree *UNUSED(ntree), bNode *node)
 	ImageUser *iuser = MEM_callocN(sizeof(ImageUser), "node image user");
 	node->storage = iuser;
 	iuser->sfra = 1;
-	iuser->fie_ima = 2;
 	iuser->ok = 1;
+	iuser->flag |= IMA_ANIM_ALWAYS;
 }
 
 void register_node_type_tex_image(void)

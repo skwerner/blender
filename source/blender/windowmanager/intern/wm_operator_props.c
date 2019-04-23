@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,12 +15,10 @@
  *
  * The Original Code is Copyright (C) 2007 Blender Foundation.
  * All rights reserved.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/windowmanager/intern/wm_operator_props.c
- *  \ingroup wm
+/** \file
+ * \ingroup wm
  *
  * Generic re-usable property definitions and accessors for operators to share.
  * (`WM_operator_properties_*` functions).
@@ -39,8 +35,19 @@
 #include "RNA_define.h"
 #include "RNA_enum_types.h"
 
+#include "ED_select_utils.h"
+
 #include "WM_api.h"
 #include "WM_types.h"
+
+
+void WM_operator_properties_confirm_or_exec(wmOperatorType *ot)
+{
+	PropertyRNA *prop;
+
+	prop = RNA_def_boolean(ot->srna, "confirm", true, "Confirm", "Prompt for confirmation");
+	RNA_def_property_flag(prop, PROP_HIDDEN | PROP_SKIP_SAVE);
+}
 
 /* default properties for fileselect */
 void WM_operator_properties_filesel(
@@ -54,20 +61,24 @@ void WM_operator_properties_filesel(
 		{FILE_SHORTDISPLAY, "LIST_SHORT", ICON_SHORTDISPLAY, "Short List", "Display files as short list"},
 		{FILE_LONGDISPLAY, "LIST_LONG", ICON_LONGDISPLAY, "Long List", "Display files as a detailed list"},
 		{FILE_IMGDISPLAY, "THUMBNAIL", ICON_IMGDISPLAY, "Thumbnails", "Display files as thumbnails"},
-		{0, NULL, 0, NULL, NULL}
+		{0, NULL, 0, NULL, NULL},
 	};
 
-	if (flag & WM_FILESEL_FILEPATH)
+	if (flag & WM_FILESEL_FILEPATH) {
 		RNA_def_string_file_path(ot->srna, "filepath", NULL, FILE_MAX, "File Path", "Path to file");
+	}
 
-	if (flag & WM_FILESEL_DIRECTORY)
+	if (flag & WM_FILESEL_DIRECTORY) {
 		RNA_def_string_dir_path(ot->srna, "directory", NULL, FILE_MAX, "Directory", "Directory of the file");
+	}
 
-	if (flag & WM_FILESEL_FILENAME)
+	if (flag & WM_FILESEL_FILENAME) {
 		RNA_def_string_file_name(ot->srna, "filename", NULL, FILE_MAX, "File Name", "Name of the file");
+	}
 
-	if (flag & WM_FILESEL_FILES)
+	if (flag & WM_FILESEL_FILES) {
 		RNA_def_collection_runtime(ot->srna, "files", &RNA_OperatorFileListElement, "Files", "");
+	}
 
 	if (action == FILE_SAVE) {
 		/* note, this is only used to check if we should highlight the filename area red when the
@@ -109,8 +120,9 @@ void WM_operator_properties_filesel(
 	                   FILE_LOADLIB, FILE_SPECIAL);
 	RNA_def_property_flag(prop, PROP_HIDDEN | PROP_SKIP_SAVE);
 
-	if (flag & WM_FILESEL_RELPATH)
+	if (flag & WM_FILESEL_RELPATH) {
 		RNA_def_boolean(ot->srna, "relative_path", true, "Relative Path", "Select the file relative to the blend file");
+	}
 
 	if ((filter & FILE_TYPE_IMAGE) || (filter & FILE_TYPE_MOVIE)) {
 		prop = RNA_def_boolean(ot->srna, "show_multiview", 0, "Enable Multi-View", "");
@@ -128,36 +140,42 @@ void WM_operator_properties_filesel(
 }
 
 static void wm_operator_properties_select_action_ex(wmOperatorType *ot, int default_action,
-                                                    const EnumPropertyItem *select_actions)
+                                                    const EnumPropertyItem *select_actions,
+													bool hide_gui)
 {
-	RNA_def_enum(ot->srna, "action", select_actions, default_action, "Action", "Selection action to execute");
+	PropertyRNA *prop;
+	prop = RNA_def_enum(ot->srna, "action", select_actions, default_action, "Action", "Selection action to execute");
+
+	if (hide_gui) {
+		RNA_def_property_flag(prop, PROP_HIDDEN | PROP_SKIP_SAVE);
+	}
 }
 
-void WM_operator_properties_select_action(wmOperatorType *ot, int default_action)
+void WM_operator_properties_select_action(wmOperatorType *ot, int default_action, bool hide_gui)
 {
 	static const EnumPropertyItem select_actions[] = {
 		{SEL_TOGGLE, "TOGGLE", 0, "Toggle", "Toggle selection for all elements"},
 		{SEL_SELECT, "SELECT", 0, "Select", "Select all elements"},
 		{SEL_DESELECT, "DESELECT", 0, "Deselect", "Deselect all elements"},
 		{SEL_INVERT, "INVERT", 0, "Invert", "Invert selection of all elements"},
-		{0, NULL, 0, NULL, NULL}
+		{0, NULL, 0, NULL, NULL},
 	};
 
-	wm_operator_properties_select_action_ex(ot, default_action, select_actions);
+	wm_operator_properties_select_action_ex(ot, default_action, select_actions, hide_gui);
 }
 
 /**
  * only SELECT/DESELECT
  */
-void WM_operator_properties_select_action_simple(wmOperatorType *ot, int default_action)
+void WM_operator_properties_select_action_simple(wmOperatorType *ot, int default_action, bool hide_gui)
 {
 	static const EnumPropertyItem select_actions[] = {
 		{SEL_SELECT, "SELECT", 0, "Select", "Select all elements"},
 		{SEL_DESELECT, "DESELECT", 0, "Deselect", "Deselect all elements"},
-		{0, NULL, 0, NULL, NULL}
+		{0, NULL, 0, NULL, NULL},
 	};
 
-	wm_operator_properties_select_action_ex(ot, default_action, select_actions);
+	wm_operator_properties_select_action_ex(ot, default_action, select_actions, hide_gui);
 }
 
 /**
@@ -173,7 +191,7 @@ void WM_operator_properties_select_random(wmOperatorType *ot)
 	        ot->srna, "seed", 0, 0, INT_MAX,
 	        "Random Seed", "Seed for the random number generator", 0, 255);
 
-	WM_operator_properties_select_action_simple(ot, SEL_SELECT);
+	WM_operator_properties_select_action_simple(ot, SEL_SELECT, false);
 }
 
 int WM_operator_properties_select_random_seed_increment_get(wmOperator *op)
@@ -192,7 +210,7 @@ int WM_operator_properties_select_random_seed_increment_get(wmOperator *op)
 
 void WM_operator_properties_select_all(wmOperatorType *ot)
 {
-	WM_operator_properties_select_action(ot, SEL_TOGGLE);
+	WM_operator_properties_select_action(ot, SEL_TOGGLE, true);
 }
 
 void WM_operator_properties_border(wmOperatorType *ot)
@@ -206,6 +224,9 @@ void WM_operator_properties_border(wmOperatorType *ot)
 	prop = RNA_def_int(ot->srna, "ymin", 0, INT_MIN, INT_MAX, "Y Min", "", INT_MIN, INT_MAX);
 	RNA_def_property_flag(prop, PROP_HIDDEN | PROP_SKIP_SAVE);
 	prop = RNA_def_int(ot->srna, "ymax", 0, INT_MIN, INT_MAX, "Y Max", "", INT_MIN, INT_MAX);
+	RNA_def_property_flag(prop, PROP_HIDDEN | PROP_SKIP_SAVE);
+
+	prop = RNA_def_boolean(ot->srna, "wait_for_input", true, "Wait for Input", "");
 	RNA_def_property_flag(prop, PROP_HIDDEN | PROP_SKIP_SAVE);
 }
 
@@ -225,30 +246,61 @@ void WM_operator_properties_border_to_rctf(struct wmOperator *op, rctf *rect)
 }
 
 /**
- * Use with #WM_gesture_border_invoke
+ * Use with #WM_gesture_box_invoke
  */
-void WM_operator_properties_gesture_border_ex(wmOperatorType *ot, bool deselect, bool extend)
+void WM_operator_properties_gesture_box_ex(wmOperatorType *ot, bool deselect, bool extend)
 {
+	PropertyRNA *prop;
+
 	WM_operator_properties_border(ot);
 
 	if (deselect) {
-		RNA_def_boolean(ot->srna, "deselect", false, "Deselect", "Deselect rather than select items");
+		prop = RNA_def_boolean(ot->srna, "deselect", false, "Deselect", "Deselect rather than select items");
+		RNA_def_property_flag(prop, PROP_SKIP_SAVE);
 	}
 	if (extend) {
-		RNA_def_boolean(ot->srna, "extend", true, "Extend", "Extend selection instead of deselecting everything first");
+		prop = RNA_def_boolean(ot->srna, "extend", true, "Extend", "Extend selection instead of deselecting everything first");
+		RNA_def_property_flag(prop, PROP_SKIP_SAVE);
 	}
 }
 
-void WM_operator_properties_gesture_border_select(wmOperatorType *ot)
+void WM_operator_properties_gesture_box_select(wmOperatorType *ot)
 {
-	WM_operator_properties_gesture_border_ex(ot, true, true);
+	WM_operator_properties_gesture_box_ex(ot, true, true);
 }
-void WM_operator_properties_gesture_border(wmOperatorType *ot)
+void WM_operator_properties_gesture_box(wmOperatorType *ot)
 {
-	WM_operator_properties_gesture_border_ex(ot, false, false);
+	WM_operator_properties_gesture_box_ex(ot, false, false);
 }
 
-void WM_operator_properties_gesture_border_zoom(wmOperatorType *ot)
+void WM_operator_properties_select_operation(wmOperatorType *ot)
+{
+	static const EnumPropertyItem select_mode_items[] = {
+		{SEL_OP_SET, "SET", 0, "New", ""},
+		{SEL_OP_ADD, "ADD", 0, "Add", ""},
+		{SEL_OP_SUB, "SUB", 0, "Subtract", ""},
+		{SEL_OP_XOR, "XOR", 0, "Difference", ""},
+		{SEL_OP_AND, "AND", 0, "Intersect", ""},
+		{0, NULL, 0, NULL, NULL},
+	};
+	PropertyRNA *prop = RNA_def_enum(ot->srna, "mode", select_mode_items, SEL_OP_SET, "Mode", "");
+	RNA_def_property_flag(prop, PROP_SKIP_SAVE);
+}
+
+/* Some tools don't support XOR/AND. */
+void WM_operator_properties_select_operation_simple(wmOperatorType *ot)
+{
+	static const EnumPropertyItem select_mode_items[] = {
+		{SEL_OP_SET, "SET", 0, "New", ""},
+		{SEL_OP_ADD, "ADD", 0, "Add", ""},
+		{SEL_OP_SUB, "SUB", 0, "Subtract", ""},
+		{0, NULL, 0, NULL, NULL},
+	};
+	PropertyRNA *prop = RNA_def_enum(ot->srna, "mode", select_mode_items, SEL_OP_SET, "Mode", "");
+	RNA_def_property_flag(prop, PROP_SKIP_SAVE);
+}
+
+void WM_operator_properties_gesture_box_zoom(wmOperatorType *ot)
 {
 	WM_operator_properties_border(ot);
 
@@ -260,28 +312,11 @@ void WM_operator_properties_gesture_border_zoom(wmOperatorType *ot)
 /**
  * Use with #WM_gesture_lasso_invoke
  */
-void WM_operator_properties_gesture_lasso_ex(wmOperatorType *ot, bool deselect, bool extend)
+void WM_operator_properties_gesture_lasso(wmOperatorType *ot)
 {
 	PropertyRNA *prop;
 	prop = RNA_def_collection_runtime(ot->srna, "path", &RNA_OperatorMousePath, "Path", "");
 	RNA_def_property_flag(prop, PROP_HIDDEN | PROP_SKIP_SAVE);
-
-	if (deselect) {
-		RNA_def_boolean(ot->srna, "deselect", false, "Deselect", "Deselect rather than select items");
-	}
-	if (extend) {
-		RNA_def_boolean(ot->srna, "extend", true, "Extend", "Extend selection instead of deselecting everything first");
-	}
-}
-
-void WM_operator_properties_gesture_lasso(wmOperatorType *ot)
-{
-	WM_operator_properties_gesture_lasso_ex(ot, false, false);
-}
-
-void WM_operator_properties_gesture_lasso_select(wmOperatorType *ot)
-{
-	WM_operator_properties_gesture_lasso_ex(ot, true, true);
 }
 
 /**
@@ -310,7 +345,7 @@ void WM_operator_properties_gesture_straightline(wmOperatorType *ot, int cursor)
 /**
  * Use with #WM_gesture_circle_invoke
  */
-void WM_operator_properties_gesture_circle_ex(wmOperatorType *ot, bool deselect)
+void WM_operator_properties_gesture_circle(wmOperatorType *ot)
 {
 	PropertyRNA *prop;
 	const int radius_default = 25;
@@ -321,19 +356,8 @@ void WM_operator_properties_gesture_circle_ex(wmOperatorType *ot, bool deselect)
 	RNA_def_property_flag(prop, PROP_HIDDEN | PROP_SKIP_SAVE);
 	RNA_def_int(ot->srna, "radius", radius_default, 1, INT_MAX, "Radius", "", 1, INT_MAX);
 
-	if (deselect) {
-		RNA_def_boolean(ot->srna, "deselect", false, "Deselect", "Deselect rather than select items");
-	}
-}
-
-void WM_operator_properties_gesture_circle(wmOperatorType *ot)
-{
-	WM_operator_properties_gesture_circle_ex(ot, false);
-}
-
-void WM_operator_properties_gesture_circle_select(wmOperatorType *ot)
-{
-	WM_operator_properties_gesture_circle_ex(ot, true);
+	prop = RNA_def_boolean(ot->srna, "wait_for_input", true, "Wait for Input", "");
+	RNA_def_property_flag(prop, PROP_HIDDEN | PROP_SKIP_SAVE);
 }
 
 void WM_operator_properties_mouse_select(wmOperatorType *ot)

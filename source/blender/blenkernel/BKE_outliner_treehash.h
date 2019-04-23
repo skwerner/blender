@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,20 +12,16 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * Contributor(s): Blender Foundation 2013
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 #ifndef __BKE_OUTLINER_TREEHASH_H__
 #define __BKE_OUTLINER_TREEHASH_H__
 
-/** \file BKE_outliner_treehash.h
- *  \ingroup bke
+/** \file
+ * \ingroup bke
  */
 
-struct ID;
 struct BLI_mempool;
+struct ID;
 struct TreeStoreElem;
 
 /* create and fill hashtable with treestore elements */
@@ -36,8 +30,12 @@ void *BKE_outliner_treehash_create_from_treestore(struct BLI_mempool *treestore)
 /* full rebuild for already allocated hashtable */
 void *BKE_outliner_treehash_rebuild_from_treestore(void *treehash, struct BLI_mempool *treestore);
 
-/* full rebuild for already allocated hashtable */
+/* clear element usage flags */
+void BKE_outliner_treehash_clear_used(void *treehash);
+
+/* Add/remove hashtable elements */
 void BKE_outliner_treehash_add_element(void *treehash, struct TreeStoreElem *elem);
+void BKE_outliner_treehash_remove_element(void *treehash, struct TreeStoreElem *elem);
 
 /* find first unused element with specific type, nr and id */
 struct TreeStoreElem *BKE_outliner_treehash_lookup_unused(void *treehash, short type, short nr, struct ID *id);

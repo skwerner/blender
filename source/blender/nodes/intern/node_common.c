@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,10 @@
  *
  * The Original Code is Copyright (C) 2007 Blender Foundation.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): Lukas Toenne.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/nodes/intern/node_common.c
- *  \ingroup nodes
+/** \file
+ * \ingroup nodes
  */
 
 #include <string.h>
@@ -210,7 +202,6 @@ void register_node_type_frame(void)
 	node_type_init(ntype, node_frame_init);
 	node_type_storage(ntype, "NodeFrame", node_free_standard_storage, node_copy_standard_storage);
 	node_type_size(ntype, 150, 100, 0);
-	node_type_compatibility(ntype, NODE_OLD_SHADING | NODE_NEW_SHADING);
 
 	ntype->needs_free = 1;
 	nodeRegisterType(ntype);
@@ -484,7 +475,6 @@ void register_node_type_group_input(void)
 	node_type_size(ntype, 140, 80, 400);
 	node_type_init(ntype, node_group_input_init);
 	node_type_update(ntype, node_group_input_update, node_group_input_verify);
-	node_type_compatibility(ntype, NODE_OLD_SHADING | NODE_NEW_SHADING);
 
 	ntype->needs_free = 1;
 	nodeRegisterType(ntype);
@@ -583,7 +573,6 @@ void register_node_type_group_output(void)
 	node_type_size(ntype, 140, 80, 400);
 	node_type_init(ntype, node_group_output_init);
 	node_type_update(ntype, node_group_output_update, node_group_output_verify);
-	node_type_compatibility(ntype, NODE_OLD_SHADING | NODE_NEW_SHADING);
 
 	ntype->needs_free = 1;
 	nodeRegisterType(ntype);

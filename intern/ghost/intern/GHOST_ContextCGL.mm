@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,12 +15,6 @@
  *
  * The Original Code is Copyright (C) 2013 Blender Foundation.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): Jason Wilkins
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
 /** \file ghost/intern/GHOST_ContextCGL.mm
@@ -34,6 +26,8 @@
 #include "GHOST_ContextCGL.h"
 
 #include <Cocoa/Cocoa.h>
+
+//#define GHOST_MULTITHREADED_OPENGL
 
 #ifdef GHOST_MULTITHREADED_OPENGL
 #include <OpenGL/OpenGL.h>
@@ -62,7 +56,22 @@ GHOST_ContextCGL::GHOST_ContextCGL(
       m_openGLContext(nil),
       m_debug(contextFlags)
 {
-	assert(openGLView != nil);
+	// for now be very strict about OpenGL version requested
+	switch (contextMajorVersion) {
+		case 2:
+			assert(contextMinorVersion == 1);
+			assert(contextProfileMask == 0);
+			m_coreProfile = false;
+			break;
+		case 3:
+			// Apple didn't implement 3.0 or 3.1
+			assert(contextMinorVersion == 3);
+			assert(contextProfileMask == GL_CONTEXT_CORE_PROFILE_BIT);
+			m_coreProfile = true;
+			break;
+		default:
+			assert(false);
+	}
 }
 
 
@@ -71,7 +80,10 @@ GHOST_ContextCGL::~GHOST_ContextCGL()
 	if (m_openGLContext != nil) {
 		if (m_openGLContext == [NSOpenGLContext currentContext]) {
 			[NSOpenGLContext clearCurrentContext];
-			[m_openGLView clearGLContext];
+
+			if(m_openGLView) {
+				[m_openGLView clearGLContext];
+			}
 		}
 
 		if (m_openGLContext != s_sharedOpenGLContext || s_sharedCount == 1) {
@@ -123,7 +135,7 @@ GHOST_TSuccess GHOST_ContextCGL::getSwapInterval(int &intervalOut)
 
 		NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
 
-		[m_openGLContext setValues:&interval forParameter:NSOpenGLCPSwapInterval];
+		[m_openGLContext getValues:&interval forParameter:NSOpenGLCPSwapInterval];
 
 		[pool drain];
 
@@ -142,9 +154,6 @@ GHOST_TSuccess GHOST_ContextCGL::activateDrawingContext()
 	if (m_openGLContext != nil) {
 		NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
 		[m_openGLContext makeCurrentContext];
-
-		activateGLEW();
-
 		[pool drain];
 		return GHOST_kSuccess;
 	}
@@ -153,6 +162,18 @@ GHOST_TSuccess GHOST_ContextCGL::activateDrawingContext()
 	}
 }
 
+GHOST_TSuccess GHOST_ContextCGL::releaseDrawingContext()
+{
+	if (m_openGLContext != nil) {
+		NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
+		[NSOpenGLContext clearCurrentContext];
+		[pool drain];
+		return GHOST_kSuccess;
+	}
+	else {
+		return GHOST_kFailure;
+	}
+}
 
 GHOST_TSuccess GHOST_ContextCGL::updateDrawingContext()
 {
@@ -170,6 +191,7 @@ GHOST_TSuccess GHOST_ContextCGL::updateDrawingContext()
 
 static void makeAttribList(
         std::vector<NSOpenGLPixelFormatAttribute>& attribs,
+        bool coreProfile,
         bool stereoVisual,
         int numOfAASamples,
         bool needAlpha,
@@ -177,6 +199,9 @@ static void makeAttribList(
         bool softwareGL)
 {
 	attribs.clear();
+
+	attribs.push_back(NSOpenGLPFAOpenGLProfile);
+	attribs.push_back(coreProfile ? NSOpenGLProfileVersion3_2Core : NSOpenGLProfileVersionLegacy);
 
 	// Pixel Format Attributes for the windowed NSOpenGLContext
 	attribs.push_back(NSOpenGLPFADoubleBuffer);
@@ -190,13 +215,9 @@ static void makeAttribList(
 		attribs.push_back(NSOpenGLPFANoRecovery);
 	}
 
-	/* Removed to allow 10.4 builds, and 2 GPUs rendering is not used anyway */
-	//attribs.push_back(NSOpenGLPFAAllowOfflineRenderers);
+	attribs.push_back(NSOpenGLPFAAllowOfflineRenderers); // for automatic GPU switching
 
 	attribs.push_back(NSOpenGLPFADepthSize);
-	attribs.push_back((NSOpenGLPixelFormatAttribute) 32);
-
-	attribs.push_back(NSOpenGLPFAAccumSize);
 	attribs.push_back((NSOpenGLPixelFormatAttribute) 32);
 
 	if (stereoVisual)
@@ -244,7 +265,7 @@ GHOST_TSuccess GHOST_ContextCGL::initializeDrawingContext()
 	std::vector<NSOpenGLPixelFormatAttribute> attribs;
 	attribs.reserve(40);
 
-	NSOpenGLContext *prev_openGLContext = [m_openGLView openGLContext];
+	NSOpenGLContext *prev_openGLContext = (m_openGLView) ? [m_openGLView openGLContext] : NULL;
 
 #ifdef GHOST_OPENGL_ALPHA
 	static const bool needAlpha   = true;
@@ -263,7 +284,7 @@ GHOST_TSuccess GHOST_ContextCGL::initializeDrawingContext()
 	NSOpenGLPixelFormat *pixelFormat;
 	// TODO: keep pixel format for subsequent windows/contexts instead of recreating each time
 
-	makeAttribList(attribs, m_stereoVisual, m_numOfAASamples, needAlpha, needStencil, softwareGL);
+	makeAttribList(attribs, m_coreProfile, m_stereoVisual, m_numOfAASamples, needAlpha, needStencil, softwareGL);
 
 	pixelFormat = [[NSOpenGLPixelFormat alloc] initWithAttributes:&attribs[0]];
 
@@ -274,7 +295,7 @@ GHOST_TSuccess GHOST_ContextCGL::initializeDrawingContext()
 		// (Now that I think about it, does WGL really require the code that it has for finding a lesser match?)
 
 		attribs.clear();
-		makeAttribList(attribs, m_stereoVisual, 0, needAlpha, needStencil, softwareGL);
+		makeAttribList(attribs, m_coreProfile, m_stereoVisual, 0, needAlpha, needStencil, softwareGL);
 		pixelFormat = [[NSOpenGLPixelFormat alloc] initWithAttributes:&attribs[0]];
 	}
 
@@ -316,7 +337,7 @@ GHOST_TSuccess GHOST_ContextCGL::initializeDrawingContext()
 		[m_openGLContext release];
 
 		// create software GL context
-		makeAttribList(attribs, m_stereoVisual, m_numOfAASamples, needAlpha, needStencil, softwareGL);
+		makeAttribList(attribs, m_coreProfile, m_stereoVisual, m_numOfAASamples, needAlpha, needStencil, softwareGL);
 		pixelFormat = [[NSOpenGLPixelFormat alloc] initWithAttributes:&attribs[0]];
 		m_openGLContext = [[NSOpenGLContext alloc] initWithFormat:pixelFormat shareContext:s_sharedOpenGLContext];
 		[pixelFormat release];
@@ -332,8 +353,7 @@ GHOST_TSuccess GHOST_ContextCGL::initializeDrawingContext()
 
 #ifdef GHOST_MULTITHREADED_OPENGL
 	//Switch openGL to multhreaded mode
-	CGLContextObj cglCtx = (CGLContextObj)[tmpOpenGLContext CGLContextObj];
-	if (CGLEnable(cglCtx, kCGLCEMPEngine) == kCGLNoError)
+	if (CGLEnable(CGLGetCurrentContext(), kCGLCEMPEngine) == kCGLNoError)
 		if (m_debug)
 			fprintf(stderr, "\nSwitched OpenGL to multithreaded mode\n");
 #endif
@@ -348,12 +368,14 @@ GHOST_TSuccess GHOST_ContextCGL::initializeDrawingContext()
 
 	initContextGLEW();
 
-	[m_openGLView setOpenGLContext:m_openGLContext];
-	[m_openGLContext setView:m_openGLView];
+	if (m_openGLView) {
+		[m_openGLView setOpenGLContext:m_openGLContext];
+		[m_openGLContext setView:m_openGLView];
+	}
 
 	if (s_sharedCount == 0)
 		s_sharedOpenGLContext = m_openGLContext;
-	
+
 	s_sharedCount++;
 
 
@@ -366,7 +388,10 @@ GHOST_TSuccess GHOST_ContextCGL::initializeDrawingContext()
 
 error:
 
-	[m_openGLView setOpenGLContext:prev_openGLContext];
+	if (m_openGLView) {
+		[m_openGLView setOpenGLContext:prev_openGLContext];
+	}
+
 	[pixelFormat release];
 
 	[pool drain];

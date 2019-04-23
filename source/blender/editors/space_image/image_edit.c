@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,15 +15,10 @@
  *
  * The Original Code is Copyright (C) 2008 Blender Foundation.
  * All rights reserved.
- *
- *
- * Contributor(s): Blender Foundation
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/space_image/image_edit.c
- *  \ingroup spimage
+/** \file
+ * \ingroup spimage
  */
 
 #include "DNA_brush_types.h"
@@ -34,16 +27,19 @@
 #include "DNA_scene_types.h"
 
 #include "BLI_rect.h"
+#include "BLI_listbase.h"
 
 #include "BKE_colortools.h"
 #include "BKE_context.h"
+#include "BKE_editmesh.h"
 #include "BKE_global.h"
 #include "BKE_image.h"
-#include "BKE_editmesh.h"
 #include "BKE_library.h"
 #include "BKE_main.h"
 
 #include "IMB_imbuf_types.h"
+
+#include "DEG_depsgraph.h"
 
 #include "ED_image.h"  /* own include */
 #include "ED_mesh.h"
@@ -61,11 +57,12 @@ Image *ED_space_image(SpaceImage *sima)
 	return sima->image;
 }
 
-/* called to assign images to UV faces */
-void ED_space_image_set(Main *bmain, SpaceImage *sima, Scene *scene, Object *obedit, Image *ima)
+void ED_space_image_set(Main *bmain, SpaceImage *sima, Object *obedit, Image *ima, bool automatic)
 {
-	/* context may be NULL, so use global */
-	ED_uvedit_assign_image(bmain, scene, obedit, ima, sima->image);
+	/* Automatically pin image when manually assigned, otherwise it follows object. */
+	if (!automatic && sima->image != ima && sima->mode == SI_MODE_UV) {
+		sima->pin = true;
+	}
 
 	/* change the space ima after because uvedit_face_visible_test uses the space ima
 	 * to check if the face is displayed in UV-localview */
@@ -77,15 +74,49 @@ void ED_space_image_set(Main *bmain, SpaceImage *sima, Scene *scene, Object *obe
 		}
 	}
 
-	if (sima->image)
+	if (sima->image) {
 		BKE_image_signal(bmain, sima->image, &sima->iuser, IMA_SIGNAL_USER_NEW_IMAGE);
+	}
 
 	id_us_ensure_real((ID *)sima->image);
 
-	if (obedit)
+	if (obedit) {
 		WM_main_add_notifier(NC_GEOM | ND_DATA, obedit->data);
+	}
 
 	WM_main_add_notifier(NC_SPACE | ND_SPACE_IMAGE, NULL);
+}
+
+void ED_space_image_auto_set(const bContext *C, SpaceImage *sima)
+{
+	if (sima->mode != SI_MODE_UV || sima->pin) {
+		return;
+	}
+
+	/* Track image assigned to active face in edit mode. */
+	Object *ob = CTX_data_active_object(C);
+	if (!(ob && (ob->mode & OB_MODE_EDIT) && ED_space_image_show_uvedit(sima, ob))) {
+		return;
+	}
+
+	BMEditMesh *em = BKE_editmesh_from_object(ob);
+	BMesh *bm = em->bm;
+	BMFace *efa = BM_mesh_active_face_get(bm, true, false);
+	if (efa == NULL) {
+		return;
+	}
+
+	Image *ima = NULL;
+	ED_object_get_active_image(ob, efa->mat_nr + 1, &ima, NULL, NULL, NULL);
+
+	if (ima != sima->image) {
+		sima->image = ima;
+
+		if (sima->image) {
+			Main *bmain = CTX_data_main(C);
+			BKE_image_signal(bmain, sima->image, &sima->iuser, IMA_SIGNAL_USER_NEW_IMAGE);
+		}
+	}
 }
 
 Mask *ED_space_image_get_mask(SpaceImage *sima)
@@ -118,22 +149,25 @@ ImBuf *ED_space_image_acquire_buffer(SpaceImage *sima, void **r_lock)
 		ibuf = BKE_image_acquire_ibuf(sima->image, &sima->iuser, r_lock);
 
 		if (ibuf) {
-			if (ibuf->rect || ibuf->rect_float)
+			if (ibuf->rect || ibuf->rect_float) {
 				return ibuf;
+			}
 			BKE_image_release_ibuf(sima->image, ibuf, *r_lock);
 			*r_lock = NULL;
 		}
 	}
-	else
+	else {
 		*r_lock = NULL;
+	}
 
 	return NULL;
 }
 
 void ED_space_image_release_buffer(SpaceImage *sima, ImBuf *ibuf, void *lock)
 {
-	if (sima && sima->image)
+	if (sima && sima->image) {
 		BKE_image_release_ibuf(sima->image, ibuf, lock);
+	}
 }
 
 bool ED_space_image_has_buffer(SpaceImage *sima)
@@ -303,17 +337,21 @@ bool ED_image_slot_cycle(struct Image *image, int direction)
 
 	BLI_assert(ELEM(direction, -1, 1));
 
-	for (i = 1; i < IMA_MAX_RENDER_SLOT; i++) {
-		slot = (cur + ((direction == -1) ? -i : i)) % IMA_MAX_RENDER_SLOT;
-		if (slot < 0) slot += IMA_MAX_RENDER_SLOT;
+	int num_slots = BLI_listbase_count(&image->renderslots);
+	for (i = 1; i < num_slots; i++) {
+		slot = (cur + ((direction == -1) ? -i : i)) % num_slots;
+		if (slot < 0) {
+			slot += num_slots;
+		}
 
-		if (image->renders[slot] || slot == image->last_render_slot) {
+		RenderSlot *render_slot = BKE_image_get_renderslot(image, slot);
+		if ((render_slot && render_slot->render) || slot == image->last_render_slot) {
 			image->render_slot = slot;
 			break;
 		}
 	}
 
-	if (i == IMA_MAX_RENDER_SLOT) {
+	if (i == num_slots) {
 		image->render_slot = ((cur == 1) ? 0 : 1);
 	}
 
@@ -326,10 +364,12 @@ void ED_space_image_scopes_update(const struct bContext *C, struct SpaceImage *s
 	Object *ob = CTX_data_active_object(C);
 
 	/* scope update can be expensive, don't update during paint modes */
-	if (sima->mode == SI_MODE_PAINT)
+	if (sima->mode == SI_MODE_PAINT) {
 		return;
-	if (ob && ((ob->mode & (OB_MODE_TEXTURE_PAINT | OB_MODE_EDIT)) != 0))
+	}
+	if (ob && ((ob->mode & (OB_MODE_TEXTURE_PAINT | OB_MODE_EDIT)) != 0)) {
 		return;
+	}
 
 	/* We also don't update scopes of render result during render. */
 	if (G.is_rendering) {
@@ -351,16 +391,23 @@ bool ED_space_image_show_render(SpaceImage *sima)
 
 bool ED_space_image_show_paint(SpaceImage *sima)
 {
-	if (ED_space_image_show_render(sima))
+	if (ED_space_image_show_render(sima)) {
 		return false;
+	}
 
 	return (sima->mode == SI_MODE_PAINT);
 }
 
 bool ED_space_image_show_uvedit(SpaceImage *sima, Object *obedit)
 {
-	if (sima && (ED_space_image_show_render(sima) || ED_space_image_show_paint(sima)))
-		return false;
+	if (sima) {
+		if (ED_space_image_show_render(sima)) {
+			return false;
+		}
+		if (sima->mode != SI_MODE_UV) {
+			return false;
+		}
+	}
 
 	if (obedit && obedit->type == OB_MESH) {
 		struct BMEditMesh *em = BKE_editmesh_from_object(obedit);
@@ -375,10 +422,10 @@ bool ED_space_image_show_uvedit(SpaceImage *sima, Object *obedit)
 }
 
 /* matches clip function */
-bool ED_space_image_check_show_maskedit(Scene *scene, SpaceImage *sima)
+bool ED_space_image_check_show_maskedit(SpaceImage *sima, ViewLayer *view_layer)
 {
 	/* check editmode - this is reserved for UV editing */
-	Object *ob = OBACT;
+	Object *ob = OBACT(view_layer);
 	if (ob && ob->mode & OB_MODE_EDIT && ED_space_image_show_uvedit(sima, ob)) {
 		return false;
 	}
@@ -391,8 +438,8 @@ bool ED_space_image_maskedit_poll(bContext *C)
 	SpaceImage *sima = CTX_wm_space_image(C);
 
 	if (sima) {
-		Scene *scene = CTX_data_scene(C);
-		return ED_space_image_check_show_maskedit(scene, sima);
+		ViewLayer *view_layer = CTX_data_view_layer(C);
+		return ED_space_image_check_show_maskedit(sima, view_layer);
 	}
 
 	return false;
@@ -405,8 +452,9 @@ bool ED_space_image_paint_curve(const bContext *C)
 	if (sima && sima->mode == SI_MODE_PAINT) {
 		Brush *br = CTX_data_tool_settings(C)->imapaint.paint.brush;
 
-		if (br && (br->flag & BRUSH_CURVE))
+		if (br && (br->flag & BRUSH_CURVE)) {
 			return true;
+		}
 	}
 
 	return false;

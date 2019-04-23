@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,10 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/blenkernel/intern/anim.c
- *  \ingroup bke
+/** \file
+ * \ingroup bke
  */
 
 #include "MEM_guardedalloc.h"
@@ -35,6 +27,7 @@
 
 #include "BLI_listbase.h"
 #include "BLI_math.h"
+#include "BLI_dlrbTree.h"
 
 #include "BLT_translation.h"
 
@@ -43,18 +36,26 @@
 #include "DNA_key_types.h"
 #include "DNA_scene_types.h"
 
+#include "BKE_anim.h"
+#include "BKE_animsys.h"
+#include "BKE_action.h"
 #include "BKE_curve.h"
-#include "BKE_depsgraph.h"
-#include "BKE_global.h"
 #include "BKE_key.h"
 #include "BKE_main.h"
 #include "BKE_object.h"
 #include "BKE_particle.h"
 #include "BKE_scene.h"
-#include "BKE_anim.h"
 #include "BKE_report.h"
 
-// XXX bad level call...
+#include "DEG_depsgraph.h"
+#include "DEG_depsgraph_query.h"
+#include "DEG_depsgraph_build.h"
+
+#include "GPU_batch.h"
+
+#include "CLG_log.h"
+
+static CLG_LogRef LOG = {"bke.anim"};
 
 /* --------------------- */
 /* forward declarations */
@@ -69,15 +70,6 @@ void animviz_settings_init(bAnimVizSettings *avs)
 	if (avs == NULL)
 		return;
 
-	/* ghosting settings */
-	avs->ghost_bc = avs->ghost_ac = 10;
-
-	avs->ghost_sf = 1; /* xxx - take from scene instead? */
-	avs->ghost_ef = 250; /* xxx - take from scene instead? */
-
-	avs->ghost_step = 1;
-
-
 	/* path settings */
 	avs->path_bc = avs->path_ac = 10;
 
@@ -87,6 +79,8 @@ void animviz_settings_init(bAnimVizSettings *avs)
 	avs->path_viewflag = (MOTIONPATH_VIEW_KFRAS | MOTIONPATH_VIEW_KFNOS);
 
 	avs->path_step = 1;
+
+	avs->path_bakeflag |= MOTIONPATH_BAKE_HEADS;
 }
 
 /* ------------------- */
@@ -101,6 +95,10 @@ void animviz_free_motionpath_cache(bMotionPath *mpath)
 	/* free the path if necessary */
 	if (mpath->points)
 		MEM_freeN(mpath->points);
+
+	GPU_VERTBUF_DISCARD_SAFE(mpath->points_vbo);
+	GPU_BATCH_DISCARD_SAFE(mpath->batch_line);
+	GPU_BATCH_DISCARD_SAFE(mpath->batch_points);
 
 	/* reset the relevant parameters */
 	mpath->points = NULL;
@@ -125,13 +123,34 @@ void animviz_free_motionpath(bMotionPath *mpath)
 
 /* ------------------- */
 
+/* Make a copy of motionpath data, so that viewing with copy on write works */
+bMotionPath *animviz_copy_motionpath(const bMotionPath *mpath_src)
+{
+	bMotionPath *mpath_dst;
+
+	if (mpath_src == NULL)
+		return NULL;
+
+	mpath_dst = MEM_dupallocN(mpath_src);
+	mpath_dst->points = MEM_dupallocN(mpath_src->points);
+
+	/* should get recreated on draw... */
+	mpath_dst->points_vbo = NULL;
+	mpath_dst->batch_line = NULL;
+	mpath_dst->batch_points = NULL;
+
+	return mpath_dst;
+}
+
+/* ------------------- */
+
 /**
  * Setup motion paths for the given data.
  * \note Only used when explicitly calculating paths on bones which may/may not be consider already
  *
- * \param scene Current scene (for frame ranges, etc.)
- * \param ob Object to add paths for (must be provided)
- * \param pchan Posechannel to add paths for (optional; if not provided, object-paths are assumed)
+ * \param scene: Current scene (for frame ranges, etc.)
+ * \param ob: Object to add paths for (must be provided)
+ * \param pchan: Posechannel to add paths for (optional; if not provided, object-paths are assumed)
  */
 bMotionPath *animviz_verify_motionpaths(ReportList *reports, Scene *scene, Object *ob, bPoseChannel *pchan)
 {
@@ -207,7 +226,7 @@ bMotionPath *animviz_verify_motionpaths(ReportList *reports, Scene *scene, Objec
 	mpath->color[1] = 0.0;
 	mpath->color[2] = 0.0;
 
-	mpath->line_thickness = 1;
+	mpath->line_thickness = 2;
 	mpath->flag |= MOTIONPATH_FLAG_LINES;  /* draw lines by default */
 
 	/* allocate a cache */
@@ -218,246 +237,6 @@ bMotionPath *animviz_verify_motionpaths(ReportList *reports, Scene *scene, Objec
 
 	/* return it */
 	return mpath;
-}
-
-/* ------------------- */
-
-/* Motion path needing to be baked (mpt) */
-typedef struct MPathTarget {
-	struct MPathTarget *next, *prev;
-
-	bMotionPath *mpath;         /* motion path in question */
-
-	Object *ob;                 /* source object */
-	bPoseChannel *pchan;        /* source posechannel (if applicable) */
-} MPathTarget;
-
-/* ........ */
-
-/* get list of motion paths to be baked for the given object
- * - assumes the given list is ready to be used
- */
-/* TODO: it would be nice in future to be able to update objects dependent on these bones too? */
-void animviz_get_object_motionpaths(Object *ob, ListBase *targets)
-{
-	MPathTarget *mpt;
-
-	/* object itself first */
-	if ((ob->avs.recalc & ANIMVIZ_RECALC_PATHS) && (ob->mpath)) {
-		/* new target for object */
-		mpt = MEM_callocN(sizeof(MPathTarget), "MPathTarget Ob");
-		BLI_addtail(targets, mpt);
-
-		mpt->mpath = ob->mpath;
-		mpt->ob = ob;
-	}
-
-	/* bones */
-	if ((ob->pose) && (ob->pose->avs.recalc & ANIMVIZ_RECALC_PATHS)) {
-		bArmature *arm = ob->data;
-		bPoseChannel *pchan;
-
-		for (pchan = ob->pose->chanbase.first; pchan; pchan = pchan->next) {
-			if ((pchan->bone) && (arm->layer & pchan->bone->layer) && (pchan->mpath)) {
-				/* new target for bone */
-				mpt = MEM_callocN(sizeof(MPathTarget), "MPathTarget PoseBone");
-				BLI_addtail(targets, mpt);
-
-				mpt->mpath = pchan->mpath;
-				mpt->ob = ob;
-				mpt->pchan = pchan;
-			}
-		}
-	}
-}
-
-/* ........ */
-
-/* Note on evaluation optimizations:
- * Optimization's currently used here play tricks with the depsgraph in order to try and
- * evaluate as few objects as strictly necessary to get nicer performance under standard
- * production conditions. For those people who really need the accurate version,
- * disable the ifdef (i.e. 1 -> 0) and comment out the call to motionpaths_calc_optimise_depsgraph()
- */
-
-/* tweak the object ordering to trick depsgraph into making MotionPath calculations run faster */
-static void motionpaths_calc_optimise_depsgraph(Main *bmain, Scene *scene, ListBase *targets)
-{
-	Base *base, *baseNext;
-	MPathTarget *mpt;
-
-	/* make sure our temp-tag isn't already in use */
-	for (base = scene->base.first; base; base = base->next)
-		base->object->flag &= ~BA_TEMP_TAG;
-
-	/* for each target, dump its object to the start of the list if it wasn't moved already */
-	for (mpt = targets->first; mpt; mpt = mpt->next) {
-		for (base = scene->base.first; base; base = baseNext) {
-			baseNext = base->next;
-
-			if ((base->object == mpt->ob) && !(mpt->ob->flag & BA_TEMP_TAG)) {
-				BLI_remlink(&scene->base, base);
-				BLI_addhead(&scene->base, base);
-
-				mpt->ob->flag |= BA_TEMP_TAG;
-
-				/* we really don't need to continue anymore once this happens, but this line might really 'break' */
-				break;
-			}
-		}
-	}
-
-	/* "brew me a list that's sorted a bit faster now depsy" */
-	DAG_scene_relations_rebuild(bmain, scene);
-}
-
-/* update scene for current frame */
-static void motionpaths_calc_update_scene(Main *bmain, Scene *scene)
-{
-#if 1 // 'production' optimizations always on
-	/* rigid body simulation needs complete update to work correctly for now */
-	/* RB_TODO investigate if we could avoid updating everything */
-	if (BKE_scene_check_rigidbody_active(scene)) {
-		BKE_scene_update_for_newframe(bmain->eval_ctx, bmain, scene, scene->lay);
-	}
-	else { /* otherwise we can optimize by restricting updates */
-		Base *base, *last = NULL;
-
-		/* only stuff that moves or needs display still */
-		DAG_scene_update_flags(bmain, scene, scene->lay, true, false);
-
-		/* find the last object with the tag
-		 * - all those afterwards are assumed to not be relevant for our calculations
-		 */
-		/* optimize further by moving out... */
-		for (base = scene->base.first; base; base = base->next) {
-			if (base->object->flag & BA_TEMP_TAG)
-				last = base;
-		}
-
-		/* perform updates for tagged objects */
-		/* XXX: this will break if rigs depend on scene or other data that
-		 * is animated but not attached to/updatable from objects */
-		for (base = scene->base.first; base; base = base->next) {
-			/* update this object */
-			BKE_object_handle_update(bmain, bmain->eval_ctx, scene, base->object);
-
-			/* if this is the last one we need to update, let's stop to save some time */
-			if (base == last)
-				break;
-		}
-	}
-#else // original, 'always correct' version
-	/* do all updates
-	 * - if this is too slow, resort to using a more efficient way
-	 *   that doesn't force complete update, but for now, this is the
-	 *   most accurate way!
-	 */
-	BKE_scene_update_for_newframe(bmain->eval_ctx, bmain, scene, scene->lay); /* XXX this is the best way we can get anything moving */
-#endif
-}
-
-/* ........ */
-
-/* perform baking for the targets on the current frame */
-static void motionpaths_calc_bake_targets(Scene *scene, ListBase *targets)
-{
-	MPathTarget *mpt;
-
-	/* for each target, check if it can be baked on the current frame */
-	for (mpt = targets->first; mpt; mpt = mpt->next) {
-		bMotionPath *mpath = mpt->mpath;
-		bMotionPathVert *mpv;
-
-		/* current frame must be within the range the cache works for
-		 * - is inclusive of the first frame, but not the last otherwise we get buffer overruns
-		 */
-		if ((CFRA < mpath->start_frame) || (CFRA >= mpath->end_frame))
-			continue;
-
-		/* get the relevant cache vert to write to */
-		mpv = mpath->points + (CFRA - mpath->start_frame);
-
-		/* pose-channel or object path baking? */
-		if (mpt->pchan) {
-			/* heads or tails */
-			if (mpath->flag & MOTIONPATH_FLAG_BHEAD) {
-				copy_v3_v3(mpv->co, mpt->pchan->pose_head);
-			}
-			else {
-				copy_v3_v3(mpv->co, mpt->pchan->pose_tail);
-			}
-
-			/* result must be in worldspace */
-			mul_m4_v3(mpt->ob->obmat, mpv->co);
-		}
-		else {
-			/* worldspace object location */
-			copy_v3_v3(mpv->co, mpt->ob->obmat[3]);
-		}
-	}
-}
-
-/* Perform baking of the given object's and/or its bones' transforms to motion paths
- * - scene: current scene
- * - ob: object whose flagged motionpaths should get calculated
- * - recalc: whether we need to
- */
-/* TODO: include reports pointer? */
-void animviz_calc_motionpaths(Main *bmain, Scene *scene, ListBase *targets)
-{
-	MPathTarget *mpt;
-	int sfra, efra;
-	int cfra;
-
-	/* sanity check */
-	if (ELEM(NULL, targets, targets->first))
-		return;
-
-	/* set frame values */
-	cfra = CFRA;
-	sfra = efra = cfra;
-
-	/* TODO: this method could be improved...
-	 * 1) max range for standard baking
-	 * 2) minimum range for recalc baking (i.e. between keyframes, but how?) */
-	for (mpt = targets->first; mpt; mpt = mpt->next) {
-		/* try to increase area to do (only as much as needed) */
-		sfra = MIN2(sfra, mpt->mpath->start_frame);
-		efra = MAX2(efra, mpt->mpath->end_frame);
-	}
-	if (efra <= sfra) return;
-
-	/* optimize the depsgraph for faster updates */
-	/* TODO: whether this is used should depend on some setting for the level of optimizations used */
-	motionpaths_calc_optimise_depsgraph(bmain, scene, targets);
-
-	/* calculate path over requested range */
-	for (CFRA = sfra; CFRA <= efra; CFRA++) {
-		/* update relevant data for new frame */
-		motionpaths_calc_update_scene(bmain, scene);
-
-		/* perform baking for targets */
-		motionpaths_calc_bake_targets(scene, targets);
-	}
-
-	/* reset original environment */
-	CFRA = cfra;
-	motionpaths_calc_update_scene(bmain, scene);
-
-	/* clear recalc flags from targets */
-	for (mpt = targets->first; mpt; mpt = mpt->next) {
-		bAnimVizSettings *avs;
-
-		/* get pointer to animviz settings for each target */
-		if (mpt->pchan)
-			avs = &mpt->ob->pose->avs;
-		else
-			avs = &mpt->ob->avs;
-
-		/* clear the flag requesting recalculation of targets */
-		avs->recalc &= ~ANIMVIZ_RECALC_PATHS;
-	}
 }
 
 /* ******************************************************************** */
@@ -494,18 +273,18 @@ void calc_curvepath(Object *ob, ListBase *nurbs)
 		return;
 	}
 
-	if (ob->curve_cache->path) free_path(ob->curve_cache->path);
-	ob->curve_cache->path = NULL;
+	if (ob->runtime.curve_cache->path) free_path(ob->runtime.curve_cache->path);
+	ob->runtime.curve_cache->path = NULL;
 
 	/* weak! can only use first curve */
-	bl = ob->curve_cache->bev.first;
+	bl = ob->runtime.curve_cache->bev.first;
 	if (bl == NULL || !bl->nr) {
 		return;
 	}
 
 	nu = nurbs->first;
 
-	ob->curve_cache->path = path = MEM_callocN(sizeof(Path), "calc_curvepath");
+	ob->runtime.curve_cache->path = path = MEM_callocN(sizeof(Path), "calc_curvepath");
 
 	/* if POLY: last vertice != first vertice */
 	cycl = (bl->poly != -1);
@@ -576,7 +355,7 @@ void calc_curvepath(Object *ob, ListBase *nurbs)
 		}
 
 		interp_v3_v3v3(pp->vec, bevp->vec, bevpn->vec, fac2);
-		pp->vec[3] = fac1 * bevp->alfa   + fac2 * bevpn->alfa;
+		pp->vec[3] = fac1 * bevp->tilt   + fac2 * bevpn->tilt;
 		pp->radius = fac1 * bevp->radius + fac2 * bevpn->radius;
 		pp->weight = fac1 * bevp->weight + fac2 * bevpn->weight;
 		interp_qt_qtqt(pp->quat, bevp->quat, bevpn->quat, fac2);
@@ -622,15 +401,15 @@ int where_on_path(Object *ob, float ctime, float vec[4], float dir[3], float qua
 
 	if (ob == NULL || ob->type != OB_CURVE) return 0;
 	cu = ob->data;
-	if (ob->curve_cache == NULL || ob->curve_cache->path == NULL || ob->curve_cache->path->data == NULL) {
-		printf("no path!\n");
+	if (ob->runtime.curve_cache == NULL || ob->runtime.curve_cache->path == NULL || ob->runtime.curve_cache->path->data == NULL) {
+		CLOG_WARN(&LOG, "no path!");
 		return 0;
 	}
-	path = ob->curve_cache->path;
+	path = ob->runtime.curve_cache->path;
 	pp = path->data;
 
 	/* test for cyclic */
-	bl = ob->curve_cache->bev.first;
+	bl = ob->runtime.curve_cache->bev.first;
 	if (!bl) return 0;
 	if (!bl->nr) return 0;
 	if (bl->poly > -1) cycl = 1;

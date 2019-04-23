@@ -591,30 +591,6 @@ void Mesh::clear(bool preserve_voxel_data)
 	patch_table = NULL;
 }
 
-int Mesh::split_vertex(int vertex)
-{
-	/* copy vertex location and vertex attributes */
-	add_vertex_slow(verts[vertex]);
-
-	foreach(Attribute& attr, attributes.attributes) {
-		if(attr.element == ATTR_ELEMENT_VERTEX) {
-			array<char> tmp(attr.data_sizeof());
-			memcpy(tmp.data(), attr.data() + tmp.size()*vertex, tmp.size());
-			attr.add(tmp.data());
-		}
-	}
-
-	foreach(Attribute& attr, subd_attributes.attributes) {
-		if(attr.element == ATTR_ELEMENT_VERTEX) {
-			array<char> tmp(attr.data_sizeof());
-			memcpy(tmp.data(), attr.data() + tmp.size()*vertex, tmp.size());
-			attr.add(tmp.data());
-		}
-	}
-
-	return verts.size() - 1;
-}
-
 void Mesh::add_vertex(float3 P)
 {
 	verts.push_back_reserved(P);
@@ -1244,6 +1220,8 @@ void MeshManager::update_osl_attributes(Device *device, Scene *scene, vector<Att
 					osl_attr.type = TypeDesc::TypeFloat;
 				else if(req.triangle_type == TypeDesc::TypeMatrix)
 					osl_attr.type = TypeDesc::TypeMatrix;
+				else if(req.triangle_type == TypeFloat2)
+					osl_attr.type = TypeFloat2;
 				else
 					osl_attr.type = TypeDesc::TypeColor;
 
@@ -1353,6 +1331,8 @@ void MeshManager::update_svm_attributes(Device *, DeviceScene *dscene, Scene *sc
 					attr_map[index].w = NODE_ATTR_FLOAT;
 				else if(req.triangle_type == TypeDesc::TypeMatrix)
 					attr_map[index].w = NODE_ATTR_MATRIX;
+				else if(req.triangle_type == TypeFloat2)
+					attr_map[index].w = NODE_ATTR_FLOAT2;
 				else
 					attr_map[index].w = NODE_ATTR_FLOAT3;
 
@@ -1370,6 +1350,8 @@ void MeshManager::update_svm_attributes(Device *, DeviceScene *dscene, Scene *sc
 					attr_map[index].w = NODE_ATTR_FLOAT;
 				else if(req.curve_type == TypeDesc::TypeMatrix)
 					attr_map[index].w = NODE_ATTR_MATRIX;
+				else if(req.curve_type == TypeFloat2)
+					attr_map[index].w = NODE_ATTR_FLOAT2;
 				else
 					attr_map[index].w = NODE_ATTR_FLOAT3;
 
@@ -1387,6 +1369,8 @@ void MeshManager::update_svm_attributes(Device *, DeviceScene *dscene, Scene *sc
 					attr_map[index].w = NODE_ATTR_FLOAT;
 				else if(req.subd_type == TypeDesc::TypeMatrix)
 					attr_map[index].w = NODE_ATTR_MATRIX;
+				else if(req.subd_type == TypeFloat2)
+					attr_map[index].w = NODE_ATTR_FLOAT2;
 				else
 					attr_map[index].w = NODE_ATTR_FLOAT3;
 
@@ -1415,6 +1399,7 @@ static void update_attribute_element_size(Mesh *mesh,
                                           Attribute *mattr,
                                           AttributePrimitive prim,
                                           size_t *attr_float_size,
+										  size_t *attr_float2_size,
                                           size_t *attr_float3_size,
                                           size_t *attr_uchar4_size)
 {
@@ -1430,6 +1415,9 @@ static void update_attribute_element_size(Mesh *mesh,
 		else if(mattr->type == TypeDesc::TypeFloat) {
 			*attr_float_size += size;
 		}
+		else if(mattr->type == TypeFloat2) {
+			*attr_float2_size += size;
+		}
 		else if(mattr->type == TypeDesc::TypeMatrix) {
 			*attr_float3_size += size * 4;
 		}
@@ -1442,6 +1430,8 @@ static void update_attribute_element_size(Mesh *mesh,
 static void update_attribute_element_offset(Mesh *mesh,
                                             device_vector<float>& attr_float,
                                             size_t& attr_float_offset,
+											device_vector<float2>& attr_float2,
+											size_t& attr_float2_offset,
                                             device_vector<float4>& attr_float3,
                                             size_t& attr_float3_offset,
                                             device_vector<uchar4>& attr_uchar4,
@@ -1487,6 +1477,16 @@ static void update_attribute_element_offset(Mesh *mesh,
 				attr_float[offset+k] = data[k];
 			}
 			attr_float_offset += size;
+		}
+		else if(mattr->type == TypeFloat2) {
+			float2 *data = mattr->data_float2();
+			offset = attr_float2_offset;
+
+			assert(attr_float2.size() >= offset + size);
+			for(size_t k = 0; k < size; k++) {
+				attr_float2[offset+k] = data[k];
+			}
+			attr_float2_offset += size;
 		}
 		else if(mattr->type == TypeDesc::TypeMatrix) {
 			Transform *tfm = mattr->data_transform();
@@ -1572,6 +1572,7 @@ void MeshManager::device_update_attributes(Device *device, DeviceScene *dscene, 
 	 * take 2x of overall attribute memory usage.
 	 */
 	size_t attr_float_size = 0;
+	size_t attr_float2_size = 0;
 	size_t attr_float3_size = 0;
 	size_t attr_uchar4_size = 0;
 	for(size_t i = 0; i < scene->meshes.size(); i++) {
@@ -1586,28 +1587,33 @@ void MeshManager::device_update_attributes(Device *device, DeviceScene *dscene, 
 			                              triangle_mattr,
 			                              ATTR_PRIM_TRIANGLE,
 			                              &attr_float_size,
+										  &attr_float2_size,
 			                              &attr_float3_size,
 			                              &attr_uchar4_size);
 			update_attribute_element_size(mesh,
 			                              curve_mattr,
 			                              ATTR_PRIM_CURVE,
 			                              &attr_float_size,
+										  &attr_float2_size,
 			                              &attr_float3_size,
 			                              &attr_uchar4_size);
 			update_attribute_element_size(mesh,
 			                              subd_mattr,
 			                              ATTR_PRIM_SUBD,
 			                              &attr_float_size,
+										  &attr_float2_size,
 			                              &attr_float3_size,
 			                              &attr_uchar4_size);
 		}
 	}
 
 	dscene->attributes_float.alloc(attr_float_size);
+	dscene->attributes_float2.alloc(attr_float2_size);
 	dscene->attributes_float3.alloc(attr_float3_size);
 	dscene->attributes_uchar4.alloc(attr_uchar4_size);
 
 	size_t attr_float_offset = 0;
+	size_t attr_float2_offset = 0;
 	size_t attr_float3_offset = 0;
 	size_t attr_uchar4_offset = 0;
 
@@ -1625,6 +1631,7 @@ void MeshManager::device_update_attributes(Device *device, DeviceScene *dscene, 
 
 			update_attribute_element_offset(mesh,
 			                                dscene->attributes_float, attr_float_offset,
+											dscene->attributes_float2, attr_float2_offset,
 			                                dscene->attributes_float3, attr_float3_offset,
 			                                dscene->attributes_uchar4, attr_uchar4_offset,
 			                                triangle_mattr,
@@ -1634,6 +1641,7 @@ void MeshManager::device_update_attributes(Device *device, DeviceScene *dscene, 
 
 			update_attribute_element_offset(mesh,
 			                                dscene->attributes_float, attr_float_offset,
+											dscene->attributes_float2, attr_float2_offset,
 			                                dscene->attributes_float3, attr_float3_offset,
 			                                dscene->attributes_uchar4, attr_uchar4_offset,
 			                                curve_mattr,
@@ -1643,6 +1651,7 @@ void MeshManager::device_update_attributes(Device *device, DeviceScene *dscene, 
 
 			update_attribute_element_offset(mesh,
 			                                dscene->attributes_float, attr_float_offset,
+											dscene->attributes_float2, attr_float2_offset,
 			                                dscene->attributes_float3, attr_float3_offset,
 			                                dscene->attributes_uchar4, attr_uchar4_offset,
 			                                subd_mattr,
@@ -1667,6 +1676,9 @@ void MeshManager::device_update_attributes(Device *device, DeviceScene *dscene, 
 
 	if(dscene->attributes_float.size()) {
 		dscene->attributes_float.copy_to_device();
+	}
+	if(dscene->attributes_float2.size()) {
+		dscene->attributes_float2.copy_to_device();
 	}
 	if(dscene->attributes_float3.size()) {
 		dscene->attributes_float3.copy_to_device();
@@ -2124,7 +2136,7 @@ void MeshManager::device_update(Device *device, DeviceScene *dscene, Scene *scen
 				mesh->add_undisplaced();
 			}
 
-			/* Test if we need tesselation. */
+			/* Test if we need tessellation. */
 			if(mesh->subdivision_type != Mesh::SUBDIVISION_NONE &&
 			   mesh->num_subd_verts == 0 &&
 			   mesh->subd_params)
@@ -2143,6 +2155,9 @@ void MeshManager::device_update(Device *device, DeviceScene *dscene, Scene *scen
 
 	/* Tessellate meshes that are using subdivision */
 	if(total_tess_needed) {
+		Camera *dicing_camera = scene->dicing_camera;
+		dicing_camera->update(scene);
+
 		size_t i = 0;
 		foreach(Mesh *mesh, scene->meshes) {
 			if(mesh->need_update &&
@@ -2158,6 +2173,7 @@ void MeshManager::device_update(Device *device, DeviceScene *dscene, Scene *scen
 
 				progress.set_status("Updating Mesh", msg);
 
+				mesh->subd_params->camera = dicing_camera;
 				DiagSplit dsplit(*mesh->subd_params);
 				mesh->tessellate(&dsplit);
 
@@ -2300,6 +2316,7 @@ void MeshManager::device_free(Device *device, DeviceScene *dscene)
 	dscene->patches.free();
 	dscene->attributes_map.free();
 	dscene->attributes_float.free();
+	dscene->attributes_float2.free();
 	dscene->attributes_float3.free();
 	dscene->attributes_uchar4.free();
 

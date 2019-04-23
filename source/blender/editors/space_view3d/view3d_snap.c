@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,10 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/space_view3d/view3d_snap.c
- *  \ingroup spview3d
+/** \file
+ * \ingroup spview3d
  */
 
 
@@ -48,6 +40,7 @@
 #include "BKE_mball.h"
 #include "BKE_object.h"
 #include "BKE_report.h"
+#include "BKE_scene.h"
 #include "BKE_tracking.h"
 
 #include "DEG_depsgraph.h"
@@ -72,7 +65,7 @@ static bool snap_calc_active_center(bContext *C, const bool select_only, float r
 
 /* *********************** operators ******************** */
 
-/** Snaps every individual object center to its nearest point on the grid. **/
+/** Snaps every individual object center to its nearest point on the grid. */
 static int snap_sel_to_grid_exec(bContext *C, wmOperator *UNUSED(op))
 {
 	Depsgraph *depsgraph = CTX_data_depsgraph(C);
@@ -163,12 +156,15 @@ static int snap_sel_to_grid_exec(bContext *C, wmOperator *UNUSED(op))
 
 								/* adjust location on the original pchan*/
 								bPoseChannel *pchan = BKE_pose_channel_find_name(ob->pose, pchan_eval->name);
-								if ((pchan->protectflag & OB_LOCK_LOCX) == 0)
+								if ((pchan->protectflag & OB_LOCK_LOCX) == 0) {
 									pchan->loc[0] = vec[0];
-								if ((pchan->protectflag & OB_LOCK_LOCY) == 0)
+								}
+								if ((pchan->protectflag & OB_LOCK_LOCY) == 0) {
 									pchan->loc[1] = vec[1];
-								if ((pchan->protectflag & OB_LOCK_LOCZ) == 0)
+								}
+								if ((pchan->protectflag & OB_LOCK_LOCZ) == 0) {
 									pchan->loc[2] = vec[2];
+								}
 
 								/* auto-keyframing */
 								ED_autokeyframe_pchan(C, scene, ob, pchan, ks);
@@ -195,12 +191,15 @@ static int snap_sel_to_grid_exec(bContext *C, wmOperator *UNUSED(op))
 					invert_m3_m3(imat, originmat);
 					mul_m3_v3(imat, vec);
 				}
-				if ((ob->protectflag & OB_LOCK_LOCX) == 0)
+				if ((ob->protectflag & OB_LOCK_LOCX) == 0) {
 					ob->loc[0] = ob_eval->loc[0] + vec[0];
-				if ((ob->protectflag & OB_LOCK_LOCY) == 0)
+				}
+				if ((ob->protectflag & OB_LOCK_LOCY) == 0) {
 					ob->loc[1] = ob_eval->loc[1] + vec[1];
-				if ((ob->protectflag & OB_LOCK_LOCZ) == 0)
+				}
+				if ((ob->protectflag & OB_LOCK_LOCZ) == 0) {
 					ob->loc[2] = ob_eval->loc[2] + vec[2];
+				}
 
 				/* auto-keyframing */
 				ED_autokeyframe_object(C, scene, ob, ks);
@@ -238,7 +237,7 @@ void VIEW3D_OT_snap_selected_to_grid(wmOperatorType *ot)
  * \param snap_target_global: a location in global space to snap to (eg. 3D cursor or active object).
  * \param use_offset: if the selected objects should maintain their relative offsets and be snapped by the selection
  *                    pivot point (median, active), or if every object origin should be snapped to the given location.
-**/
+ */
 static int snap_selected_to_location(bContext *C, const float snap_target_global[3], const bool use_offset)
 {
 	Depsgraph *depsgraph = CTX_data_depsgraph(C);
@@ -317,8 +316,12 @@ static int snap_selected_to_location(bContext *C, const float snap_target_global
 	}
 	else if (obact && (obact->mode & OB_MODE_POSE)) {
 		struct KeyingSet *ks = ANIM_get_keyingset_for_autokeying(scene, ANIM_KS_LOCATION_ID);
-		CTX_DATA_BEGIN (C, Object *, ob, selected_editable_objects)
-		{
+		ViewLayer *view_layer = CTX_data_view_layer(C);
+		uint objects_len = 0;
+		Object **objects = BKE_view_layer_array_from_objects_in_mode_unique_data(view_layer, CTX_wm_view3d(C),
+		                                                                         &objects_len, OB_MODE_POSE);
+		for (uint ob_index = 0; ob_index < objects_len; ob_index++) {
+			Object *ob = objects[ob_index];
 			bPoseChannel *pchan;
 			bArmature *arm = ob->data;
 			float snap_target_local[3];
@@ -362,12 +365,15 @@ static int snap_selected_to_location(bContext *C, const float snap_target_global
 					}
 
 					/* copy new position */
-					if ((pchan->protectflag & OB_LOCK_LOCX) == 0)
+					if ((pchan->protectflag & OB_LOCK_LOCX) == 0) {
 						pchan->loc[0] = cursor_pose[0];
-					if ((pchan->protectflag & OB_LOCK_LOCY) == 0)
+					}
+					if ((pchan->protectflag & OB_LOCK_LOCY) == 0) {
 						pchan->loc[1] = cursor_pose[1];
-					if ((pchan->protectflag & OB_LOCK_LOCZ) == 0)
+					}
+					if ((pchan->protectflag & OB_LOCK_LOCZ) == 0) {
 						pchan->loc[2] = cursor_pose[2];
+					}
 
 					/* auto-keyframing */
 					ED_autokeyframe_pchan(C, scene, ob, pchan, ks);
@@ -382,7 +388,7 @@ static int snap_selected_to_location(bContext *C, const float snap_target_global
 
 			DEG_id_tag_update(&ob->id, ID_RECALC_GEOMETRY);
 		}
-		CTX_DATA_END;
+		MEM_freeN(objects);
 	}
 	else {
 		struct KeyingSet *ks = ANIM_get_keyingset_for_autokeying(scene, ANIM_KS_LOCATION_ID);
@@ -395,7 +401,7 @@ static int snap_selected_to_location(bContext *C, const float snap_target_global
 		CTX_data_selected_editable_objects(C, &ctx_data_list);
 
 		/* reset flags */
-		for (ob = bmain->object.first; ob; ob = ob->id.next) {
+		for (ob = bmain->objects.first; ob; ob = ob->id.next) {
 			ob->flag &= ~OB_DONE;
 		}
 
@@ -428,12 +434,15 @@ static int snap_selected_to_location(bContext *C, const float snap_target_global
 					invert_m3_m3(imat, originmat);
 					mul_m3_v3(imat, cursor_parent);
 				}
-				if ((ob->protectflag & OB_LOCK_LOCX) == 0)
+				if ((ob->protectflag & OB_LOCK_LOCX) == 0) {
 					ob->loc[0] += cursor_parent[0];
-				if ((ob->protectflag & OB_LOCK_LOCY) == 0)
+				}
+				if ((ob->protectflag & OB_LOCK_LOCY) == 0) {
 					ob->loc[1] += cursor_parent[1];
-				if ((ob->protectflag & OB_LOCK_LOCZ) == 0)
+				}
+				if ((ob->protectflag & OB_LOCK_LOCZ) == 0) {
 					ob->loc[2] += cursor_parent[2];
+				}
 
 				/* auto-keyframing */
 				ED_autokeyframe_object(C, scene, ob, ks);
@@ -476,13 +485,14 @@ void VIEW3D_OT_snap_selected_to_cursor(wmOperatorType *ot)
 	ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO | OPTYPE_USE_EVAL_DATA;
 
 	/* rna */
-	RNA_def_boolean(ot->srna, "use_offset", 1, "Offset",
-		"If the selection should be snapped as a whole or by each object center");
+	RNA_def_boolean(
+	        ot->srna, "use_offset", 1, "Offset",
+	        "If the selection should be snapped as a whole or by each object center");
 }
 
 /* *************************************************** */
 
-/** Snaps each selected object to the location of the active selected object. **/
+/** Snaps each selected object to the location of the active selected object. */
 static int snap_selected_to_active_exec(bContext *C, wmOperator *op)
 {
 	float snap_target_global[3];
@@ -513,7 +523,7 @@ void VIEW3D_OT_snap_selected_to_active(wmOperatorType *ot)
 
 /* *************************************************** */
 
-/** Snaps the 3D cursor location to its nearest point on the grid. **/
+/** Snaps the 3D cursor location to its nearest point on the grid. */
 static int snap_curs_to_grid_exec(bContext *C, wmOperator *UNUSED(op))
 {
 	Scene *scene = CTX_data_scene(C);
@@ -551,7 +561,10 @@ void VIEW3D_OT_snap_cursor_to_grid(wmOperatorType *ot)
 
 /* **************************************************** */
 
-/** Returns the center position of a tracking marker visible on the viewport (useful to snap to). **/
+/**
+ * Returns the center position of a tracking marker visible on the viewport
+ * (useful to snap to).
+ */
 static void bundle_midpoint(Scene *scene, Object *ob, float r_vec[3])
 {
 	MovieClip *clip = BKE_object_movieclip_get(scene, ob, false);
@@ -560,8 +573,9 @@ static void bundle_midpoint(Scene *scene, Object *ob, float r_vec[3])
 	bool ok = false;
 	float min[3], max[3], mat[4][4], pos[3], cammat[4][4];
 
-	if (!clip)
+	if (!clip) {
 		return;
+	}
 
 	tracking = &clip->tracking;
 
@@ -604,7 +618,7 @@ static void bundle_midpoint(Scene *scene, Object *ob, float r_vec[3])
 	}
 }
 
-/** Snaps the 3D cursor location to the median point of the selection. **/
+/** Snaps the 3D cursor location to the median point of the selection. */
 static bool snap_curs_to_sel_ex(bContext *C, float cursor[3])
 {
 	Depsgraph *depsgraph = CTX_data_depsgraph(C);
@@ -800,12 +814,15 @@ void VIEW3D_OT_snap_cursor_to_active(wmOperatorType *ot)
 
 /* **************************************************** */
 
-/** Snaps the 3D cursor location to the origin. **/
+/** Snaps the 3D cursor location to the origin and clears cursor rotation. */
 static int snap_curs_to_center_exec(bContext *C, wmOperator *UNUSED(op))
 {
 	Scene *scene = CTX_data_scene(C);
+	float mat3[3][3];
+	unit_m3(mat3);
 
 	zero_v3(scene->cursor.location);
+	BKE_scene_cursor_mat3_to_rot(&scene->cursor, mat3, false);
 
 	DEG_id_tag_update(&scene->id, ID_RECALC_COPY_ON_WRITE);
 
@@ -830,7 +847,10 @@ void VIEW3D_OT_snap_cursor_to_center(wmOperatorType *ot)
 
 /* **************************************************** */
 
-/** Calculates the bounding box corners (min and max) for \a obedit. The returned values are in global space. **/
+/**
+ * Calculates the bounding box corners (min and max) for \a obedit.
+ * The returned values are in global space.
+ */
 bool ED_view3d_minmax_verts(Object *obedit, float r_min[3], float r_max[3])
 {
 	TransVertStore tvs = {NULL};
@@ -850,11 +870,13 @@ bool ED_view3d_minmax_verts(Object *obedit, float r_min[3], float r_max[3])
 		return changed;
 	}
 
-	if (ED_transverts_check_obedit(obedit))
+	if (ED_transverts_check_obedit(obedit)) {
 		ED_transverts_create_from_obedit(&tvs, obedit, TM_ALL_JOINTS);
+	}
 
-	if (tvs.transverts_tot == 0)
+	if (tvs.transverts_tot == 0) {
 		return false;
+	}
 
 	copy_m3_m4(bmat, obedit->obmat);
 

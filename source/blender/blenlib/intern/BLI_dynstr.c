@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,17 +15,11 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  * Dynamically sized string ADT
  */
 
-/** \file blender/blenlib/intern/BLI_dynstr.c
- *  \ingroup bli
+/** \file
+ * \ingroup bli
  */
 
 #include <stdlib.h>  /* malloc */
@@ -120,10 +112,12 @@ void BLI_dynstr_append(DynStr *__restrict ds, const char *cstr)
 	memcpy(dse->str, cstr, cstrlen + 1);
 	dse->next = NULL;
 
-	if (!ds->last)
+	if (!ds->last) {
 		ds->last = ds->elems = dse;
-	else
+	}
+	else {
 		ds->last = ds->last->next = dse;
+	}
 
 	ds->curlen += cstrlen;
 }
@@ -145,10 +139,12 @@ void BLI_dynstr_nappend(DynStr *__restrict ds, const char *cstr, int len)
 	dse->str[cstrlen] = '\0';
 	dse->next = NULL;
 
-	if (!ds->last)
+	if (!ds->last) {
 		ds->last = ds->elems = dse;
-	else
+	}
+	else {
 		ds->last = ds->last->next = dse;
+	}
 
 	ds->curlen += cstrlen;
 }
@@ -162,10 +158,12 @@ void BLI_dynstr_vappendf(DynStr *__restrict ds, const char *__restrict format, v
 
 	while (1) {
 		va_list args_cpy;
-		if (len == sizeof(fixedmessage))
+		if (len == sizeof(fixedmessage)) {
 			message = fixedmessage;
-		else
+		}
+		else {
 			message = MEM_callocN(sizeof(char) * len, "BLI_dynstr_appendf");
+		}
 
 		/* cant reuse the same args, so work on a copy */
 		va_copy(args_cpy, args);
@@ -175,8 +173,9 @@ void BLI_dynstr_vappendf(DynStr *__restrict ds, const char *__restrict format, v
 		if (retval == -1) {
 			/* -1 means not enough space, but on windows it may also mean
 			 * there is a formatting error, so we impose a maximum length */
-			if (message != fixedmessage)
+			if (message != fixedmessage) {
 				MEM_freeN(message);
+			}
 			message = NULL;
 
 			len *= 2;
@@ -187,22 +186,25 @@ void BLI_dynstr_vappendf(DynStr *__restrict ds, const char *__restrict format, v
 		}
 		else if (retval >= len) {
 			/* in C99 the actual length required is returned */
-			if (message != fixedmessage)
+			if (message != fixedmessage) {
 				MEM_freeN(message);
+			}
 			message = NULL;
 
 			/* retval doesn't include \0 terminator */
 			len = retval + 1;
 		}
-		else
+		else {
 			break;
+		}
 	}
 
 	if (message) {
 		BLI_dynstr_append(ds, message);
 
-		if (message != fixedmessage)
+		if (message != fixedmessage) {
 			MEM_freeN(message);
+		}
 	}
 }
 
@@ -225,10 +227,12 @@ void BLI_dynstr_appendf(DynStr *__restrict ds, const char *__restrict format, ..
 	 * va_start/va_end have to be called for each vsnprintf call */
 
 	while (1) {
-		if (len == sizeof(fixedmessage))
+		if (len == sizeof(fixedmessage)) {
 			message = fixedmessage;
-		else
+		}
+		else {
 			message = MEM_callocN(sizeof(char) * (len), "BLI_dynstr_appendf");
+		}
 
 		va_start(args, format);
 		retval = vsnprintf(message, len, format, args);
@@ -237,8 +241,9 @@ void BLI_dynstr_appendf(DynStr *__restrict ds, const char *__restrict format, ..
 		if (retval == -1) {
 			/* -1 means not enough space, but on windows it may also mean
 			 * there is a formatting error, so we impose a maximum length */
-			if (message != fixedmessage)
+			if (message != fixedmessage) {
 				MEM_freeN(message);
+			}
 			message = NULL;
 
 			len *= 2;
@@ -249,22 +254,25 @@ void BLI_dynstr_appendf(DynStr *__restrict ds, const char *__restrict format, ..
 		}
 		else if (retval >= len) {
 			/* in C99 the actual length required is returned */
-			if (message != fixedmessage)
+			if (message != fixedmessage) {
 				MEM_freeN(message);
+			}
 			message = NULL;
 
 			/* retval doesn't include \0 terminator */
 			len = retval + 1;
 		}
-		else
+		else {
 			break;
+		}
 	}
 
 	if (message) {
 		BLI_dynstr_append(ds, message);
 
-		if (message != fixedmessage)
+		if (message != fixedmessage) {
 			MEM_freeN(message);
+		}
 	}
 }
 

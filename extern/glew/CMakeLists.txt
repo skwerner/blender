@@ -16,11 +16,6 @@
 #
 # The Original Code is Copyright (C) 2006, Blender Foundation
 # All rights reserved.
-#
-# The Original Code is: all of this file.
-#
-# Contributor(s): Jacques Beaurain.
-#
 # ***** END GPL LICENSE BLOCK *****
 
 set(INC
@@ -46,6 +41,9 @@ set(SRC
 	include/GL/wglew.h
 )
 
+set(LIB
+)
+
 add_definitions(${GL_DEFINITIONS})
 
-blender_add_lib(extern_glew "${SRC}" "${INC}" "${INC_SYS}")
+blender_add_lib(extern_glew "${SRC}" "${INC}" "${INC_SYS}" "${LIB}")

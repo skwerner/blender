@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,14 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * Contributor(s): Willian P. Germano, Campbell Barton
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/python/generic/bgl.c
- *  \ingroup pygen
+/** \file
+ * \ingroup pygen
  *
  * This file is the 'bgl' module which wraps OpenGL functions and constants,
  * allowing script writers to make OpenGL calls in their Python scripts.
@@ -43,7 +37,6 @@
 
 
 /* -------------------------------------------------------------------- */
-
 /** \name Local utility defines for wrapping OpenGL
  * \{ */
 
@@ -139,9 +132,9 @@
 #define GLclampfP_def(number) Buffer *bgl_buffer##number
 #endif
 
-#define GLvoidP_str     "O!"
-#define GLvoidP_var(number) (bgl_buffer##number)->buf.asvoid
-#define GLvoidP_ref(number) &BGL_bufferType, &bgl_buffer##number
+#define GLvoidP_str     "O&"
+#define GLvoidP_var(number) ((bgl_buffer##number) ? (bgl_buffer##number)->buf.asvoid : NULL)
+#define GLvoidP_ref(number) BGL_BufferOrNoneConverter, &bgl_buffer##number
 #define GLvoidP_def(number) Buffer *bgl_buffer##number
 
 #define GLsizeiP_str     "O!"
@@ -456,7 +449,6 @@ static int Buffer_ass_subscript(Buffer *self, PyObject *item, PyObject *value);
 
 
 /* -------------------------------------------------------------------- */
-
 /** \name Utility Functions
  * \{ */
 
@@ -484,15 +476,25 @@ static int gl_buffer_type_from_py_buffer(Py_buffer *pybuffer)
 	Py_ssize_t itemsize = pybuffer->itemsize;
 
 	if (PyC_StructFmt_type_is_float_any(format)) {
-		if (itemsize == 4) return GL_FLOAT;
-		if (itemsize == 8) return GL_DOUBLE;
+		if (itemsize == 4) {
+			return GL_FLOAT;
+		}
+		if (itemsize == 8) {
+			return GL_DOUBLE;
+		}
 	}
 	if (PyC_StructFmt_type_is_byte(format) ||
 	    PyC_StructFmt_type_is_int_any(format))
 	{
-		if (itemsize == 1) return GL_BYTE;
-		if (itemsize == 2) return GL_SHORT;
-		if (itemsize == 4) return GL_INT;
+		if (itemsize == 1) {
+			return GL_BYTE;
+		}
+		if (itemsize == 2) {
+			return GL_SHORT;
+		}
+		if (itemsize == 4) {
+			return GL_INT;
+		}
 	}
 
 	return -1; /* UNKNOWN */
@@ -512,7 +514,6 @@ static bool compare_dimensions(int ndim, int *dim1, Py_ssize_t *dim2)
 
 
 /* -------------------------------------------------------------------- */
-
 /** \name Buffer API
  * \{ */
 
@@ -533,7 +534,7 @@ static PySequenceMethods Buffer_SeqMethods = {
 static PyMappingMethods Buffer_AsMapping = {
 	(lenfunc)Buffer_len,
 	(binaryfunc)Buffer_subscript,
-	(objobjargproc)Buffer_ass_subscript
+	(objobjargproc)Buffer_ass_subscript,
 };
 
 static void Buffer_dealloc(Buffer *self);
@@ -587,12 +588,12 @@ static PyObject *Buffer_dimensions(Buffer *self, void *UNUSED(arg))
 static PyMethodDef Buffer_methods[] = {
 	{"to_list", (PyCFunction)Buffer_to_list_recursive, METH_NOARGS,
 	 "return the buffer as a list"},
-	{NULL, NULL, 0, NULL}
+	{NULL, NULL, 0, NULL},
 };
 
 static PyGetSetDef Buffer_getseters[] = {
 	{(char *)"dimensions", (getter)Buffer_dimensions, NULL, NULL, NULL},
-	{NULL, NULL, NULL, NULL, NULL}
+	{NULL, NULL, NULL, NULL, NULL},
 };
 
 
@@ -663,7 +664,7 @@ PyTypeObject BGL_bufferType = {
 	NULL,                       /*tp_cache*/
 	NULL,                       /*tp_subclasses*/
 	NULL,                       /*tp_weaklist*/
-	NULL                        /*tp_del*/
+	NULL,                       /*tp_del*/
 };
 
 
@@ -712,6 +713,22 @@ Buffer *BGL_MakeBuffer(int type, int ndimensions, int *dimensions, void *initbuf
 	return buffer;
 }
 
+/* Custom converter function so we can support a buffer or NULL. */
+static int BGL_BufferOrNoneConverter(PyObject *object, Buffer **buffer)
+{
+	if (object == Py_None) {
+		*buffer = NULL;
+		return 1;
+	}
+	else if (PyObject_TypeCheck(object, &BGL_bufferType)) {
+		*buffer = (Buffer *)object;
+		return 1;
+	}
+	else {
+		PyErr_SetString(PyExc_TypeError, "expected a bgl.Buffer or None");
+		return 0;
+	}
+}
 
 #define MAX_DIMENSIONS  256
 static PyObject *Buffer_new(PyTypeObject *UNUSED(type), PyObject *args, PyObject *kwds)
@@ -762,10 +779,12 @@ static PyObject *Buffer_new(PyTypeObject *UNUSED(type), PyObject *args, PyObject
 		for (i = 0; i < ndimensions; i++) {
 			PyObject *ob = PySequence_GetItem(length_ob, i);
 
-			if (!PyLong_Check(ob))
+			if (!PyLong_Check(ob)) {
 				dimensions[i] = 1;
-			else
+			}
+			else {
 				dimensions[i] = PyLong_AsLong(ob);
+			}
 			Py_DECREF(ob);
 
 			if (dimensions[i] < 1) {
@@ -861,9 +880,15 @@ static PyObject *Buffer_slice(Buffer *self, int begin, int end)
 	PyObject *list;
 	int count;
 
-	if (begin < 0) begin = 0;
-	if (end > self->dimensions[0]) end = self->dimensions[0];
-	if (begin > end) begin = end;
+	if (begin < 0) {
+		begin = 0;
+	}
+	if (end > self->dimensions[0]) {
+		end = self->dimensions[0];
+	}
+	if (begin > end) {
+		begin = end;
+	}
 
 	list = PyList_New(end - begin);
 
@@ -909,9 +934,15 @@ static int Buffer_ass_slice(Buffer *self, int begin, int end, PyObject *seq)
 	PyObject *item;
 	int count, err = 0;
 
-	if (begin < 0) begin = 0;
-	if (end > self->dimensions[0]) end = self->dimensions[0];
-	if (begin > end) begin = end;
+	if (begin < 0) {
+		begin = 0;
+	}
+	if (end > self->dimensions[0]) {
+		end = self->dimensions[0];
+	}
+	if (begin > end) {
+		begin = end;
+	}
 
 	if (!PySequence_Check(seq)) {
 		PyErr_Format(PyExc_TypeError,
@@ -950,17 +981,20 @@ static PyObject *Buffer_subscript(Buffer *self, PyObject *item)
 	if (PyIndex_Check(item)) {
 		Py_ssize_t i;
 		i = PyNumber_AsSsize_t(item, PyExc_IndexError);
-		if (i == -1 && PyErr_Occurred())
+		if (i == -1 && PyErr_Occurred()) {
 			return NULL;
-		if (i < 0)
+		}
+		if (i < 0) {
 			i += self->dimensions[0];
+		}
 		return Buffer_item(self, i);
 	}
 	else if (PySlice_Check(item)) {
 		Py_ssize_t start, stop, step, slicelength;
 
-		if (PySlice_GetIndicesEx(item, self->dimensions[0], &start, &stop, &step, &slicelength) < 0)
+		if (PySlice_GetIndicesEx(item, self->dimensions[0], &start, &stop, &step, &slicelength) < 0) {
 			return NULL;
+		}
 
 		if (slicelength <= 0) {
 			return PyTuple_New(0);
@@ -986,20 +1020,24 @@ static int Buffer_ass_subscript(Buffer *self, PyObject *item, PyObject *value)
 {
 	if (PyIndex_Check(item)) {
 		Py_ssize_t i = PyNumber_AsSsize_t(item, PyExc_IndexError);
-		if (i == -1 && PyErr_Occurred())
+		if (i == -1 && PyErr_Occurred()) {
 			return -1;
-		if (i < 0)
+		}
+		if (i < 0) {
 			i += self->dimensions[0];
+		}
 		return Buffer_ass_item(self, i, value);
 	}
 	else if (PySlice_Check(item)) {
 		Py_ssize_t start, stop, step, slicelength;
 
-		if (PySlice_GetIndicesEx(item, self->dimensions[0], &start, &stop, &step, &slicelength) < 0)
+		if (PySlice_GetIndicesEx(item, self->dimensions[0], &start, &stop, &step, &slicelength) < 0) {
 			return -1;
+		}
 
-		if (step == 1)
+		if (step == 1) {
 			return Buffer_ass_slice(self, start, stop, value);
+		}
 		else {
 			PyErr_SetString(PyExc_IndexError,
 			                "slice steps not supported with vectors");
@@ -1055,7 +1093,6 @@ static PyObject *Buffer_repr(Buffer *self)
 
 
 /* -------------------------------------------------------------------- */
-
 /** \name OpenGL API Wrapping
  * \{ */
 
@@ -1072,261 +1109,261 @@ static PyObject *Method_##funcname (PyObject *UNUSED(self), PyObject *args)   \
 }
 
 /* GL_VERSION_1_0 */
-BGL_Wrap(BlendFunc,                 void,      (GLenum, GLenum))
-BGL_Wrap(Clear,                     void,      (GLbitfield))
-BGL_Wrap(ClearColor,                void,      (GLfloat, GLfloat, GLfloat, GLfloat))
-BGL_Wrap(ClearDepth,                void,      (GLdouble))
-BGL_Wrap(ClearStencil,              void,      (GLint))
-BGL_Wrap(ColorMask,                 void,      (GLboolean, GLboolean, GLboolean, GLboolean))
-BGL_Wrap(CullFace,                  void,      (GLenum))
-BGL_Wrap(DepthFunc,                 void,      (GLenum))
-BGL_Wrap(DepthMask,                 void,      (GLboolean))
-BGL_Wrap(DepthRange,                void,      (GLdouble, GLdouble))
-BGL_Wrap(Disable,                   void,      (GLenum))
-BGL_Wrap(DrawBuffer,                void,      (GLenum))
-BGL_Wrap(Enable,                    void,      (GLenum))
-BGL_Wrap(Finish,                    void,      (void))
-BGL_Wrap(Flush,                     void,      (void))
-BGL_Wrap(FrontFace,                 void,      (GLenum))
-BGL_Wrap(GetBooleanv,               void,      (GLenum, GLbooleanP))
-BGL_Wrap(GetDoublev,                void,      (GLenum, GLdoubleP))
-BGL_Wrap(GetError,                  GLenum,    (void))
-BGL_Wrap(GetFloatv,                 void,      (GLenum, GLfloatP))
-BGL_Wrap(GetIntegerv,               void,      (GLenum, GLintP))
-BGL_Wrap(GetString,                 GLstring,  (GLenum))
-BGL_Wrap(GetTexImage,               void,      (GLenum, GLint, GLenum, GLenum, GLvoidP))
-BGL_Wrap(GetTexLevelParameterfv,    void,      (GLenum, GLint, GLenum, GLfloatP))
-BGL_Wrap(GetTexLevelParameteriv,    void,      (GLenum, GLint, GLenum, GLintP))
-BGL_Wrap(GetTexParameterfv,         void,      (GLenum, GLenum, GLfloatP))
-BGL_Wrap(GetTexParameteriv,         void,      (GLenum, GLenum, GLintP))
-BGL_Wrap(Hint,                      void,      (GLenum, GLenum))
-BGL_Wrap(IsEnabled,                 GLboolean, (GLenum))
-BGL_Wrap(LineWidth,                 void,      (GLfloat))
-BGL_Wrap(LogicOp,                   void,      (GLenum))
-BGL_Wrap(PixelStoref,               void,      (GLenum, GLfloat))
-BGL_Wrap(PixelStorei,               void,      (GLenum, GLint))
-BGL_Wrap(PointSize,                 void,      (GLfloat))
-BGL_Wrap(PolygonMode,               void,      (GLenum, GLenum))
-BGL_Wrap(ReadBuffer,                void,      (GLenum))
-BGL_Wrap(ReadPixels,                void,      (GLint, GLint, GLsizei, GLsizei, GLenum, GLenum, GLvoidP))
-BGL_Wrap(Scissor,                   void,      (GLint, GLint, GLsizei, GLsizei))
-BGL_Wrap(StencilFunc,               void,      (GLenum, GLint, GLuint))
-BGL_Wrap(StencilMask,               void,      (GLuint))
-BGL_Wrap(StencilOp,                 void,      (GLenum, GLenum, GLenum))
-BGL_Wrap(TexImage1D,                void,      (GLenum, GLint, GLint, GLsizei, GLint, GLenum, GLenum, GLvoidP))
-BGL_Wrap(TexImage2D,                void,      (GLenum, GLint, GLint, GLsizei, GLsizei, GLint, GLenum, GLenum, GLvoidP))
-BGL_Wrap(TexParameterf,             void,      (GLenum, GLenum, GLfloat))
-BGL_Wrap(TexParameterfv,            void,      (GLenum, GLenum, GLfloatP))
-BGL_Wrap(TexParameteri,             void,      (GLenum, GLenum, GLint))
-BGL_Wrap(TexParameteriv,            void,      (GLenum, GLenum, GLintP))
-BGL_Wrap(Viewport,                  void,      (GLint, GLint, GLsizei, GLsizei))
+BGL_Wrap(BlendFunc,                 void,      (GLenum, GLenum));
+BGL_Wrap(Clear,                     void,      (GLbitfield));
+BGL_Wrap(ClearColor,                void,      (GLfloat, GLfloat, GLfloat, GLfloat));
+BGL_Wrap(ClearDepth,                void,      (GLdouble));
+BGL_Wrap(ClearStencil,              void,      (GLint));
+BGL_Wrap(ColorMask,                 void,      (GLboolean, GLboolean, GLboolean, GLboolean));
+BGL_Wrap(CullFace,                  void,      (GLenum));
+BGL_Wrap(DepthFunc,                 void,      (GLenum));
+BGL_Wrap(DepthMask,                 void,      (GLboolean));
+BGL_Wrap(DepthRange,                void,      (GLdouble, GLdouble));
+BGL_Wrap(Disable,                   void,      (GLenum));
+BGL_Wrap(DrawBuffer,                void,      (GLenum));
+BGL_Wrap(Enable,                    void,      (GLenum));
+BGL_Wrap(Finish,                    void,      (void));
+BGL_Wrap(Flush,                     void,      (void));
+BGL_Wrap(FrontFace,                 void,      (GLenum));
+BGL_Wrap(GetBooleanv,               void,      (GLenum, GLbooleanP));
+BGL_Wrap(GetDoublev,                void,      (GLenum, GLdoubleP));
+BGL_Wrap(GetError,                  GLenum,    (void));
+BGL_Wrap(GetFloatv,                 void,      (GLenum, GLfloatP));
+BGL_Wrap(GetIntegerv,               void,      (GLenum, GLintP));
+BGL_Wrap(GetString,                 GLstring,  (GLenum));
+BGL_Wrap(GetTexImage,               void,      (GLenum, GLint, GLenum, GLenum, GLvoidP));
+BGL_Wrap(GetTexLevelParameterfv,    void,      (GLenum, GLint, GLenum, GLfloatP));
+BGL_Wrap(GetTexLevelParameteriv,    void,      (GLenum, GLint, GLenum, GLintP));
+BGL_Wrap(GetTexParameterfv,         void,      (GLenum, GLenum, GLfloatP));
+BGL_Wrap(GetTexParameteriv,         void,      (GLenum, GLenum, GLintP));
+BGL_Wrap(Hint,                      void,      (GLenum, GLenum));
+BGL_Wrap(IsEnabled,                 GLboolean, (GLenum));
+BGL_Wrap(LineWidth,                 void,      (GLfloat));
+BGL_Wrap(LogicOp,                   void,      (GLenum));
+BGL_Wrap(PixelStoref,               void,      (GLenum, GLfloat));
+BGL_Wrap(PixelStorei,               void,      (GLenum, GLint));
+BGL_Wrap(PointSize,                 void,      (GLfloat));
+BGL_Wrap(PolygonMode,               void,      (GLenum, GLenum));
+BGL_Wrap(ReadBuffer,                void,      (GLenum));
+BGL_Wrap(ReadPixels,                void,      (GLint, GLint, GLsizei, GLsizei, GLenum, GLenum, GLvoidP));
+BGL_Wrap(Scissor,                   void,      (GLint, GLint, GLsizei, GLsizei));
+BGL_Wrap(StencilFunc,               void,      (GLenum, GLint, GLuint));
+BGL_Wrap(StencilMask,               void,      (GLuint));
+BGL_Wrap(StencilOp,                 void,      (GLenum, GLenum, GLenum));
+BGL_Wrap(TexImage1D,                void,      (GLenum, GLint, GLint, GLsizei, GLint, GLenum, GLenum, GLvoidP));
+BGL_Wrap(TexImage2D,                void,      (GLenum, GLint, GLint, GLsizei, GLsizei, GLint, GLenum, GLenum, GLvoidP));
+BGL_Wrap(TexParameterf,             void,      (GLenum, GLenum, GLfloat));
+BGL_Wrap(TexParameterfv,            void,      (GLenum, GLenum, GLfloatP));
+BGL_Wrap(TexParameteri,             void,      (GLenum, GLenum, GLint));
+BGL_Wrap(TexParameteriv,            void,      (GLenum, GLenum, GLintP));
+BGL_Wrap(Viewport,                  void,      (GLint, GLint, GLsizei, GLsizei));
 
 
 /* GL_VERSION_1_1 */
-BGL_Wrap(BindTexture,               void,      (GLenum, GLuint))
-BGL_Wrap(CopyTexImage1D,            void,      (GLenum, GLint, GLenum, GLint, GLint, GLsizei, GLint))
-BGL_Wrap(CopyTexImage2D,            void,      (GLenum, GLint, GLenum, GLint, GLint, GLsizei, GLsizei, GLint))
-BGL_Wrap(CopyTexSubImage1D,         void,      (GLenum, GLint, GLint, GLint, GLint, GLsizei))
-BGL_Wrap(CopyTexSubImage2D,         void,      (GLenum, GLint, GLint, GLint, GLint, GLint, GLsizei, GLsizei))
-BGL_Wrap(DeleteTextures,            void,      (GLsizei, GLuintP))
-BGL_Wrap(DrawArrays,                void,      (GLenum, GLint, GLsizei))
-BGL_Wrap(DrawElements,              void,      (GLenum, GLsizei, GLenum, GLvoidP))
-BGL_Wrap(GenTextures,               void,      (GLsizei, GLuintP))
-BGL_Wrap(IsTexture,                 GLboolean, (GLuint))
-BGL_Wrap(PolygonOffset,             void,      (GLfloat, GLfloat))
-BGL_Wrap(TexSubImage1D,             void,      (GLenum, GLint, GLint, GLsizei, GLenum, GLenum, GLvoidP))
-BGL_Wrap(TexSubImage2D,             void,      (GLenum, GLint, GLint, GLint, GLsizei, GLsizei, GLenum, GLenum, GLvoidP))
+BGL_Wrap(BindTexture,               void,      (GLenum, GLuint));
+BGL_Wrap(CopyTexImage1D,            void,      (GLenum, GLint, GLenum, GLint, GLint, GLsizei, GLint));
+BGL_Wrap(CopyTexImage2D,            void,      (GLenum, GLint, GLenum, GLint, GLint, GLsizei, GLsizei, GLint));
+BGL_Wrap(CopyTexSubImage1D,         void,      (GLenum, GLint, GLint, GLint, GLint, GLsizei));
+BGL_Wrap(CopyTexSubImage2D,         void,      (GLenum, GLint, GLint, GLint, GLint, GLint, GLsizei, GLsizei));
+BGL_Wrap(DeleteTextures,            void,      (GLsizei, GLuintP));
+BGL_Wrap(DrawArrays,                void,      (GLenum, GLint, GLsizei));
+BGL_Wrap(DrawElements,              void,      (GLenum, GLsizei, GLenum, GLvoidP));
+BGL_Wrap(GenTextures,               void,      (GLsizei, GLuintP));
+BGL_Wrap(IsTexture,                 GLboolean, (GLuint));
+BGL_Wrap(PolygonOffset,             void,      (GLfloat, GLfloat));
+BGL_Wrap(TexSubImage1D,             void,      (GLenum, GLint, GLint, GLsizei, GLenum, GLenum, GLvoidP));
+BGL_Wrap(TexSubImage2D,             void,      (GLenum, GLint, GLint, GLint, GLsizei, GLsizei, GLenum, GLenum, GLvoidP));
 
 
 /* GL_VERSION_1_2 */
-BGL_Wrap(CopyTexSubImage3D,         void,      (GLenum, GLint, GLint, GLint, GLint, GLint, GLint, GLsizei, GLsizei))
-BGL_Wrap(DrawRangeElements,         void,      (GLenum, GLuint, GLuint, GLsizei, GLenum, GLvoidP))
-BGL_Wrap(TexImage3D,                void,      (GLenum, GLint, GLint, GLsizei, GLsizei, GLsizei, GLint, GLenum, GLenum, GLvoidP))
-BGL_Wrap(TexSubImage3D,             void,      (GLenum, GLint, GLint, GLint, GLint, GLsizei, GLsizei, GLsizei, GLenum, GLenum, GLvoidP))
+BGL_Wrap(CopyTexSubImage3D,         void,      (GLenum, GLint, GLint, GLint, GLint, GLint, GLint, GLsizei, GLsizei));
+BGL_Wrap(DrawRangeElements,         void,      (GLenum, GLuint, GLuint, GLsizei, GLenum, GLvoidP));
+BGL_Wrap(TexImage3D,                void,      (GLenum, GLint, GLint, GLsizei, GLsizei, GLsizei, GLint, GLenum, GLenum, GLvoidP));
+BGL_Wrap(TexSubImage3D,             void,      (GLenum, GLint, GLint, GLint, GLint, GLsizei, GLsizei, GLsizei, GLenum, GLenum, GLvoidP));
 
 
 /* GL_VERSION_1_3 */
-BGL_Wrap(ActiveTexture,             void,      (GLenum))
-BGL_Wrap(CompressedTexImage1D,      void,      (GLenum, GLint, GLenum, GLsizei, GLint, GLsizei, GLvoidP))
-BGL_Wrap(CompressedTexImage2D,      void,      (GLenum, GLint, GLenum, GLsizei, GLsizei, GLint, GLsizei, GLvoidP))
-BGL_Wrap(CompressedTexImage3D,      void,      (GLenum, GLint, GLenum, GLsizei, GLsizei, GLsizei, GLint, GLsizei, GLvoidP))
-BGL_Wrap(CompressedTexSubImage1D,   void,      (GLenum, GLint, GLint, GLsizei, GLenum, GLsizei, GLvoidP))
-BGL_Wrap(CompressedTexSubImage2D,   void,      (GLenum, GLint, GLint, GLint, GLsizei, GLsizei, GLenum, GLsizei, GLvoidP))
-BGL_Wrap(CompressedTexSubImage3D,   void,      (GLenum, GLint, GLint, GLint, GLint, GLsizei, GLsizei, GLsizei, GLenum, GLsizei, GLvoidP))
-BGL_Wrap(GetCompressedTexImage,     void,      (GLenum, GLint, GLvoidP))
-BGL_Wrap(SampleCoverage,            void,      (GLfloat, GLboolean))
+BGL_Wrap(ActiveTexture,             void,      (GLenum));
+BGL_Wrap(CompressedTexImage1D,      void,      (GLenum, GLint, GLenum, GLsizei, GLint, GLsizei, GLvoidP));
+BGL_Wrap(CompressedTexImage2D,      void,      (GLenum, GLint, GLenum, GLsizei, GLsizei, GLint, GLsizei, GLvoidP));
+BGL_Wrap(CompressedTexImage3D,      void,      (GLenum, GLint, GLenum, GLsizei, GLsizei, GLsizei, GLint, GLsizei, GLvoidP));
+BGL_Wrap(CompressedTexSubImage1D,   void,      (GLenum, GLint, GLint, GLsizei, GLenum, GLsizei, GLvoidP));
+BGL_Wrap(CompressedTexSubImage2D,   void,      (GLenum, GLint, GLint, GLint, GLsizei, GLsizei, GLenum, GLsizei, GLvoidP));
+BGL_Wrap(CompressedTexSubImage3D,   void,      (GLenum, GLint, GLint, GLint, GLint, GLsizei, GLsizei, GLsizei, GLenum, GLsizei, GLvoidP));
+BGL_Wrap(GetCompressedTexImage,     void,      (GLenum, GLint, GLvoidP));
+BGL_Wrap(SampleCoverage,            void,      (GLfloat, GLboolean));
 
 
 /* GL_VERSION_1_4 */
-BGL_Wrap(BlendColor,                void,      (GLfloat, GLfloat, GLfloat, GLfloat))
-BGL_Wrap(BlendEquation,             void,      (GLenum))
+BGL_Wrap(BlendColor,                void,      (GLfloat, GLfloat, GLfloat, GLfloat));
+BGL_Wrap(BlendEquation,             void,      (GLenum));
 
 
 /* GL_VERSION_1_5 */
-BGL_Wrap(BeginQuery,                void,      (GLenum, GLuint))
-BGL_Wrap(BindBuffer,                void,      (GLenum, GLuint))
-BGL_Wrap(BufferData,                void,      (GLenum, GLsizeiptr, GLvoidP, GLenum))
-BGL_Wrap(BufferSubData,             void,      (GLenum, GLintptr, GLsizeiptr, GLvoidP))
-BGL_Wrap(DeleteBuffers,             void,      (GLsizei, GLuintP))
-BGL_Wrap(DeleteQueries,             void,      (GLsizei, GLuintP))
-BGL_Wrap(EndQuery,                  void,      (GLenum))
-BGL_Wrap(GenBuffers,                void,      (GLsizei, GLuintP))
-BGL_Wrap(GenQueries,                void,      (GLsizei, GLuintP))
-BGL_Wrap(GetBufferParameteriv,      void,      (GLenum, GLenum, GLintP))
-BGL_Wrap(GetBufferPointerv,         void,      (GLenum, GLenum, GLvoidP))
-BGL_Wrap(GetBufferSubData,          void,      (GLenum, GLintptr, GLsizeiptr, GLvoidP))
-BGL_Wrap(GetQueryObjectiv,          void,      (GLuint, GLenum, GLintP))
-BGL_Wrap(GetQueryObjectuiv,         void,      (GLuint, GLenum, GLuintP))
-BGL_Wrap(GetQueryiv,                void,      (GLenum, GLenum, GLintP))
-BGL_Wrap(IsBuffer,                  GLboolean, (GLuint))
-BGL_Wrap(IsQuery,                   GLboolean, (GLuint))
-BGL_Wrap(MapBuffer,                 void,      (GLenum, GLenum))
-BGL_Wrap(UnmapBuffer,               GLboolean, (GLenum))
+BGL_Wrap(BeginQuery,                void,      (GLenum, GLuint));
+BGL_Wrap(BindBuffer,                void,      (GLenum, GLuint));
+BGL_Wrap(BufferData,                void,      (GLenum, GLsizeiptr, GLvoidP, GLenum));
+BGL_Wrap(BufferSubData,             void,      (GLenum, GLintptr, GLsizeiptr, GLvoidP));
+BGL_Wrap(DeleteBuffers,             void,      (GLsizei, GLuintP));
+BGL_Wrap(DeleteQueries,             void,      (GLsizei, GLuintP));
+BGL_Wrap(EndQuery,                  void,      (GLenum));
+BGL_Wrap(GenBuffers,                void,      (GLsizei, GLuintP));
+BGL_Wrap(GenQueries,                void,      (GLsizei, GLuintP));
+BGL_Wrap(GetBufferParameteriv,      void,      (GLenum, GLenum, GLintP));
+BGL_Wrap(GetBufferPointerv,         void,      (GLenum, GLenum, GLvoidP));
+BGL_Wrap(GetBufferSubData,          void,      (GLenum, GLintptr, GLsizeiptr, GLvoidP));
+BGL_Wrap(GetQueryObjectiv,          void,      (GLuint, GLenum, GLintP));
+BGL_Wrap(GetQueryObjectuiv,         void,      (GLuint, GLenum, GLuintP));
+BGL_Wrap(GetQueryiv,                void,      (GLenum, GLenum, GLintP));
+BGL_Wrap(IsBuffer,                  GLboolean, (GLuint));
+BGL_Wrap(IsQuery,                   GLboolean, (GLuint));
+BGL_Wrap(MapBuffer,                 void,      (GLenum, GLenum));
+BGL_Wrap(UnmapBuffer,               GLboolean, (GLenum));
 
 
 /* GL_VERSION_2_0 */
-BGL_Wrap(AttachShader,              void,      (GLuint, GLuint))
-BGL_Wrap(BindAttribLocation,        void,      (GLuint, GLuint, GLstring))
-BGL_Wrap(BlendEquationSeparate,     void,      (GLenum, GLenum))
-BGL_Wrap(CompileShader,             void,      (GLuint))
-BGL_Wrap(CreateProgram,             GLuint,    (void))
-BGL_Wrap(CreateShader,              GLuint,    (GLenum))
-BGL_Wrap(DeleteProgram,             void,      (GLuint))
-BGL_Wrap(DeleteShader,              void,      (GLuint))
-BGL_Wrap(DetachShader,              void,      (GLuint, GLuint))
-BGL_Wrap(DisableVertexAttribArray,  void,      (GLuint))
-BGL_Wrap(DrawBuffers,               void,      (GLsizei, GLenumP))
-BGL_Wrap(EnableVertexAttribArray,   void,      (GLuint))
-BGL_Wrap(GetActiveAttrib,           void,      (GLuint, GLuint, GLsizei, GLsizeiP, GLintP, GLenumP, GLcharP))
-BGL_Wrap(GetActiveUniform,          void,      (GLuint, GLuint, GLsizei, GLsizeiP, GLintP, GLenumP, GLcharP))
-BGL_Wrap(GetAttachedShaders,        void,      (GLuint, GLsizei, GLsizeiP, GLuintP))
-BGL_Wrap(GetAttribLocation,         GLint,     (GLuint, GLstring))
-BGL_Wrap(GetProgramInfoLog,         void,      (GLuint, GLsizei, GLsizeiP, GLcharP))
-BGL_Wrap(GetProgramiv,              void,      (GLuint, GLenum, GLintP))
-BGL_Wrap(GetShaderInfoLog,          void,      (GLuint, GLsizei, GLsizeiP, GLcharP))
-BGL_Wrap(GetShaderSource,           void,      (GLuint, GLsizei, GLsizeiP, GLcharP))
-BGL_Wrap(GetShaderiv,               void,      (GLuint, GLenum, GLintP))
-BGL_Wrap(GetUniformLocation,        GLint,     (GLuint, GLstring))
-BGL_Wrap(GetUniformfv,              void,      (GLuint, GLint, GLfloatP))
-BGL_Wrap(GetUniformiv,              void,      (GLuint, GLint, GLintP))
-BGL_Wrap(GetVertexAttribPointerv,   void,      (GLuint, GLenum, GLvoidP))
-BGL_Wrap(GetVertexAttribdv,         void,      (GLuint, GLenum, GLdoubleP))
-BGL_Wrap(GetVertexAttribfv,         void,      (GLuint, GLenum, GLfloatP))
-BGL_Wrap(GetVertexAttribiv,         void,      (GLuint, GLenum, GLintP))
-BGL_Wrap(IsProgram,                 GLboolean, (GLuint))
-BGL_Wrap(IsShader,                  GLboolean, (GLuint))
-BGL_Wrap(LinkProgram,               void,      (GLuint))
-BGL_Wrap(StencilFuncSeparate,       void,      (GLenum, GLenum, GLint, GLuint))
-BGL_Wrap(StencilMaskSeparate,       void,      (GLenum, GLuint))
-BGL_Wrap(StencilOpSeparate,         void,      (GLenum, GLenum, GLenum, GLenum))
-BGL_Wrap(Uniform1f,                 void,      (GLint, GLfloat))
-BGL_Wrap(Uniform1fv,                void,      (GLint, GLsizei, GLfloatP))
-BGL_Wrap(Uniform1i,                 void,      (GLint, GLint))
-BGL_Wrap(Uniform1iv,                void,      (GLint, GLsizei, GLintP))
-BGL_Wrap(Uniform2f,                 void,      (GLint, GLfloat, GLfloat))
-BGL_Wrap(Uniform2fv,                void,      (GLint, GLsizei, GLfloatP))
-BGL_Wrap(Uniform2i,                 void,      (GLint, GLint, GLint))
-BGL_Wrap(Uniform2iv,                void,      (GLint, GLsizei, GLintP))
-BGL_Wrap(Uniform3f,                 void,      (GLint, GLfloat, GLfloat, GLfloat))
-BGL_Wrap(Uniform3fv,                void,      (GLint, GLsizei, GLfloatP))
-BGL_Wrap(Uniform3i,                 void,      (GLint, GLint, GLint, GLint))
-BGL_Wrap(Uniform3iv,                void,      (GLint, GLsizei, GLintP))
-BGL_Wrap(Uniform4f,                 void,      (GLint, GLfloat, GLfloat, GLfloat, GLfloat))
-BGL_Wrap(Uniform4fv,                void,      (GLint, GLsizei, GLfloatP))
-BGL_Wrap(Uniform4i,                 void,      (GLint, GLint, GLint, GLint, GLint))
-BGL_Wrap(Uniform4iv,                void,      (GLint, GLsizei, GLintP))
-BGL_Wrap(UniformMatrix2fv,          void,      (GLint, GLsizei, GLboolean, GLfloatP))
-BGL_Wrap(UniformMatrix3fv,          void,      (GLint, GLsizei, GLboolean, GLfloatP))
-BGL_Wrap(UniformMatrix4fv,          void,      (GLint, GLsizei, GLboolean, GLfloatP))
-BGL_Wrap(UseProgram,                void,      (GLuint))
-BGL_Wrap(ValidateProgram,           void,      (GLuint))
-BGL_Wrap(VertexAttrib1d,            void,      (GLuint, GLdouble))
-BGL_Wrap(VertexAttrib1dv,           void,      (GLuint, GLdoubleP))
-BGL_Wrap(VertexAttrib1f,            void,      (GLuint, GLfloat))
-BGL_Wrap(VertexAttrib1fv,           void,      (GLuint, GLfloatP))
-BGL_Wrap(VertexAttrib1s,            void,      (GLuint, GLshort))
-BGL_Wrap(VertexAttrib1sv,           void,      (GLuint, GLshortP))
-BGL_Wrap(VertexAttrib2d,            void,      (GLuint, GLdouble, GLdouble))
-BGL_Wrap(VertexAttrib2dv,           void,      (GLuint, GLdoubleP))
-BGL_Wrap(VertexAttrib2f,            void,      (GLuint, GLfloat, GLfloat))
-BGL_Wrap(VertexAttrib2fv,           void,      (GLuint, GLfloatP))
-BGL_Wrap(VertexAttrib2s,            void,      (GLuint, GLshort, GLshort))
-BGL_Wrap(VertexAttrib2sv,           void,      (GLuint, GLshortP))
-BGL_Wrap(VertexAttrib3d,            void,      (GLuint, GLdouble, GLdouble, GLdouble))
-BGL_Wrap(VertexAttrib3dv,           void,      (GLuint, GLdoubleP))
-BGL_Wrap(VertexAttrib3f,            void,      (GLuint, GLfloat, GLfloat, GLfloat))
-BGL_Wrap(VertexAttrib3fv,           void,      (GLuint, GLfloatP))
-BGL_Wrap(VertexAttrib3s,            void,      (GLuint, GLshort, GLshort, GLshort))
-BGL_Wrap(VertexAttrib3sv,           void,      (GLuint, GLshortP))
-BGL_Wrap(VertexAttrib4Nbv,          void,      (GLuint, GLbyteP))
-BGL_Wrap(VertexAttrib4Niv,          void,      (GLuint, GLintP))
-BGL_Wrap(VertexAttrib4Nsv,          void,      (GLuint, GLshortP))
-BGL_Wrap(VertexAttrib4Nub,          void,      (GLuint, GLubyte, GLubyte, GLubyte, GLubyte))
-BGL_Wrap(VertexAttrib4Nubv,         void,      (GLuint, GLubyteP))
-BGL_Wrap(VertexAttrib4Nuiv,         void,      (GLuint, GLuintP))
-BGL_Wrap(VertexAttrib4Nusv,         void,      (GLuint, GLushortP))
-BGL_Wrap(VertexAttrib4bv,           void,      (GLuint, GLbyteP))
-BGL_Wrap(VertexAttrib4d,            void,      (GLuint, GLdouble, GLdouble, GLdouble, GLdouble))
-BGL_Wrap(VertexAttrib4dv,           void,      (GLuint, GLdoubleP))
-BGL_Wrap(VertexAttrib4f,            void,      (GLuint, GLfloat, GLfloat, GLfloat, GLfloat))
-BGL_Wrap(VertexAttrib4fv,           void,      (GLuint, GLfloatP))
-BGL_Wrap(VertexAttrib4iv,           void,      (GLuint, GLintP))
-BGL_Wrap(VertexAttrib4s,            void,      (GLuint, GLshort, GLshort, GLshort, GLshort))
-BGL_Wrap(VertexAttrib4sv,           void,      (GLuint, GLshortP))
-BGL_Wrap(VertexAttrib4ubv,          void,      (GLuint, GLubyteP))
-BGL_Wrap(VertexAttrib4uiv,          void,      (GLuint, GLuintP))
-BGL_Wrap(VertexAttrib4usv,          void,      (GLuint, GLushortP))
-BGL_Wrap(VertexAttribPointer,       void,      (GLuint, GLint, GLenum, GLboolean, GLsizei, GLvoidP))
+BGL_Wrap(AttachShader,              void,      (GLuint, GLuint));
+BGL_Wrap(BindAttribLocation,        void,      (GLuint, GLuint, GLstring));
+BGL_Wrap(BlendEquationSeparate,     void,      (GLenum, GLenum));
+BGL_Wrap(CompileShader,             void,      (GLuint));
+BGL_Wrap(CreateProgram,             GLuint,    (void));
+BGL_Wrap(CreateShader,              GLuint,    (GLenum));
+BGL_Wrap(DeleteProgram,             void,      (GLuint));
+BGL_Wrap(DeleteShader,              void,      (GLuint));
+BGL_Wrap(DetachShader,              void,      (GLuint, GLuint));
+BGL_Wrap(DisableVertexAttribArray,  void,      (GLuint));
+BGL_Wrap(DrawBuffers,               void,      (GLsizei, GLenumP));
+BGL_Wrap(EnableVertexAttribArray,   void,      (GLuint));
+BGL_Wrap(GetActiveAttrib,           void,      (GLuint, GLuint, GLsizei, GLsizeiP, GLintP, GLenumP, GLcharP));
+BGL_Wrap(GetActiveUniform,          void,      (GLuint, GLuint, GLsizei, GLsizeiP, GLintP, GLenumP, GLcharP));
+BGL_Wrap(GetAttachedShaders,        void,      (GLuint, GLsizei, GLsizeiP, GLuintP));
+BGL_Wrap(GetAttribLocation,         GLint,     (GLuint, GLstring));
+BGL_Wrap(GetProgramInfoLog,         void,      (GLuint, GLsizei, GLsizeiP, GLcharP));
+BGL_Wrap(GetProgramiv,              void,      (GLuint, GLenum, GLintP));
+BGL_Wrap(GetShaderInfoLog,          void,      (GLuint, GLsizei, GLsizeiP, GLcharP));
+BGL_Wrap(GetShaderSource,           void,      (GLuint, GLsizei, GLsizeiP, GLcharP));
+BGL_Wrap(GetShaderiv,               void,      (GLuint, GLenum, GLintP));
+BGL_Wrap(GetUniformLocation,        GLint,     (GLuint, GLstring));
+BGL_Wrap(GetUniformfv,              void,      (GLuint, GLint, GLfloatP));
+BGL_Wrap(GetUniformiv,              void,      (GLuint, GLint, GLintP));
+BGL_Wrap(GetVertexAttribPointerv,   void,      (GLuint, GLenum, GLvoidP));
+BGL_Wrap(GetVertexAttribdv,         void,      (GLuint, GLenum, GLdoubleP));
+BGL_Wrap(GetVertexAttribfv,         void,      (GLuint, GLenum, GLfloatP));
+BGL_Wrap(GetVertexAttribiv,         void,      (GLuint, GLenum, GLintP));
+BGL_Wrap(IsProgram,                 GLboolean, (GLuint));
+BGL_Wrap(IsShader,                  GLboolean, (GLuint));
+BGL_Wrap(LinkProgram,               void,      (GLuint));
+BGL_Wrap(StencilFuncSeparate,       void,      (GLenum, GLenum, GLint, GLuint));
+BGL_Wrap(StencilMaskSeparate,       void,      (GLenum, GLuint));
+BGL_Wrap(StencilOpSeparate,         void,      (GLenum, GLenum, GLenum, GLenum));
+BGL_Wrap(Uniform1f,                 void,      (GLint, GLfloat));
+BGL_Wrap(Uniform1fv,                void,      (GLint, GLsizei, GLfloatP));
+BGL_Wrap(Uniform1i,                 void,      (GLint, GLint));
+BGL_Wrap(Uniform1iv,                void,      (GLint, GLsizei, GLintP));
+BGL_Wrap(Uniform2f,                 void,      (GLint, GLfloat, GLfloat));
+BGL_Wrap(Uniform2fv,                void,      (GLint, GLsizei, GLfloatP));
+BGL_Wrap(Uniform2i,                 void,      (GLint, GLint, GLint));
+BGL_Wrap(Uniform2iv,                void,      (GLint, GLsizei, GLintP));
+BGL_Wrap(Uniform3f,                 void,      (GLint, GLfloat, GLfloat, GLfloat));
+BGL_Wrap(Uniform3fv,                void,      (GLint, GLsizei, GLfloatP));
+BGL_Wrap(Uniform3i,                 void,      (GLint, GLint, GLint, GLint));
+BGL_Wrap(Uniform3iv,                void,      (GLint, GLsizei, GLintP));
+BGL_Wrap(Uniform4f,                 void,      (GLint, GLfloat, GLfloat, GLfloat, GLfloat));
+BGL_Wrap(Uniform4fv,                void,      (GLint, GLsizei, GLfloatP));
+BGL_Wrap(Uniform4i,                 void,      (GLint, GLint, GLint, GLint, GLint));
+BGL_Wrap(Uniform4iv,                void,      (GLint, GLsizei, GLintP));
+BGL_Wrap(UniformMatrix2fv,          void,      (GLint, GLsizei, GLboolean, GLfloatP));
+BGL_Wrap(UniformMatrix3fv,          void,      (GLint, GLsizei, GLboolean, GLfloatP));
+BGL_Wrap(UniformMatrix4fv,          void,      (GLint, GLsizei, GLboolean, GLfloatP));
+BGL_Wrap(UseProgram,                void,      (GLuint));
+BGL_Wrap(ValidateProgram,           void,      (GLuint));
+BGL_Wrap(VertexAttrib1d,            void,      (GLuint, GLdouble));
+BGL_Wrap(VertexAttrib1dv,           void,      (GLuint, GLdoubleP));
+BGL_Wrap(VertexAttrib1f,            void,      (GLuint, GLfloat));
+BGL_Wrap(VertexAttrib1fv,           void,      (GLuint, GLfloatP));
+BGL_Wrap(VertexAttrib1s,            void,      (GLuint, GLshort));
+BGL_Wrap(VertexAttrib1sv,           void,      (GLuint, GLshortP));
+BGL_Wrap(VertexAttrib2d,            void,      (GLuint, GLdouble, GLdouble));
+BGL_Wrap(VertexAttrib2dv,           void,      (GLuint, GLdoubleP));
+BGL_Wrap(VertexAttrib2f,            void,      (GLuint, GLfloat, GLfloat));
+BGL_Wrap(VertexAttrib2fv,           void,      (GLuint, GLfloatP));
+BGL_Wrap(VertexAttrib2s,            void,      (GLuint, GLshort, GLshort));
+BGL_Wrap(VertexAttrib2sv,           void,      (GLuint, GLshortP));
+BGL_Wrap(VertexAttrib3d,            void,      (GLuint, GLdouble, GLdouble, GLdouble));
+BGL_Wrap(VertexAttrib3dv,           void,      (GLuint, GLdoubleP));
+BGL_Wrap(VertexAttrib3f,            void,      (GLuint, GLfloat, GLfloat, GLfloat));
+BGL_Wrap(VertexAttrib3fv,           void,      (GLuint, GLfloatP));
+BGL_Wrap(VertexAttrib3s,            void,      (GLuint, GLshort, GLshort, GLshort));
+BGL_Wrap(VertexAttrib3sv,           void,      (GLuint, GLshortP));
+BGL_Wrap(VertexAttrib4Nbv,          void,      (GLuint, GLbyteP));
+BGL_Wrap(VertexAttrib4Niv,          void,      (GLuint, GLintP));
+BGL_Wrap(VertexAttrib4Nsv,          void,      (GLuint, GLshortP));
+BGL_Wrap(VertexAttrib4Nub,          void,      (GLuint, GLubyte, GLubyte, GLubyte, GLubyte));
+BGL_Wrap(VertexAttrib4Nubv,         void,      (GLuint, GLubyteP));
+BGL_Wrap(VertexAttrib4Nuiv,         void,      (GLuint, GLuintP));
+BGL_Wrap(VertexAttrib4Nusv,         void,      (GLuint, GLushortP));
+BGL_Wrap(VertexAttrib4bv,           void,      (GLuint, GLbyteP));
+BGL_Wrap(VertexAttrib4d,            void,      (GLuint, GLdouble, GLdouble, GLdouble, GLdouble));
+BGL_Wrap(VertexAttrib4dv,           void,      (GLuint, GLdoubleP));
+BGL_Wrap(VertexAttrib4f,            void,      (GLuint, GLfloat, GLfloat, GLfloat, GLfloat));
+BGL_Wrap(VertexAttrib4fv,           void,      (GLuint, GLfloatP));
+BGL_Wrap(VertexAttrib4iv,           void,      (GLuint, GLintP));
+BGL_Wrap(VertexAttrib4s,            void,      (GLuint, GLshort, GLshort, GLshort, GLshort));
+BGL_Wrap(VertexAttrib4sv,           void,      (GLuint, GLshortP));
+BGL_Wrap(VertexAttrib4ubv,          void,      (GLuint, GLubyteP));
+BGL_Wrap(VertexAttrib4uiv,          void,      (GLuint, GLuintP));
+BGL_Wrap(VertexAttrib4usv,          void,      (GLuint, GLushortP));
+BGL_Wrap(VertexAttribPointer,       void,      (GLuint, GLint, GLenum, GLboolean, GLsizei, GLvoidP));
 
 
 /* GL_VERSION_2_1 */
-BGL_Wrap(UniformMatrix2x3fv,        void,      (GLint, GLsizei, GLboolean, GLfloatP))
-BGL_Wrap(UniformMatrix2x4fv,        void,      (GLint, GLsizei, GLboolean, GLfloatP))
-BGL_Wrap(UniformMatrix3x2fv,        void,      (GLint, GLsizei, GLboolean, GLfloatP))
-BGL_Wrap(UniformMatrix3x4fv,        void,      (GLint, GLsizei, GLboolean, GLfloatP))
-BGL_Wrap(UniformMatrix4x2fv,        void,      (GLint, GLsizei, GLboolean, GLfloatP))
-BGL_Wrap(UniformMatrix4x3fv,        void,      (GLint, GLsizei, GLboolean, GLfloatP))
+BGL_Wrap(UniformMatrix2x3fv,        void,      (GLint, GLsizei, GLboolean, GLfloatP));
+BGL_Wrap(UniformMatrix2x4fv,        void,      (GLint, GLsizei, GLboolean, GLfloatP));
+BGL_Wrap(UniformMatrix3x2fv,        void,      (GLint, GLsizei, GLboolean, GLfloatP));
+BGL_Wrap(UniformMatrix3x4fv,        void,      (GLint, GLsizei, GLboolean, GLfloatP));
+BGL_Wrap(UniformMatrix4x2fv,        void,      (GLint, GLsizei, GLboolean, GLfloatP));
+BGL_Wrap(UniformMatrix4x3fv,        void,      (GLint, GLsizei, GLboolean, GLfloatP));
 
 
 /* GL_VERSION_3_0 */
-BGL_Wrap(BindFramebuffer,           void,      (GLenum, GLuint))
-BGL_Wrap(BindRenderbuffer,          void,      (GLenum, GLuint))
-BGL_Wrap(BindVertexArray,           void,      (GLuint))
-BGL_Wrap(BlitFramebuffer,           void,      (GLint, GLint, GLint, GLint, GLint, GLint, GLint, GLint, GLbitfield, GLenum))
-BGL_Wrap(CheckFramebufferStatus,    GLenum,    (GLenum))
-BGL_Wrap(DeleteFramebuffers,        void,      (GLsizei, GLuintP))
-BGL_Wrap(DeleteRenderbuffers,       void,      (GLsizei, GLuintP))
-BGL_Wrap(DeleteVertexArrays,        void,      (GLsizei, GLuintP))
-BGL_Wrap(FramebufferRenderbuffer,   void,      (GLenum, GLenum, GLenum, GLuint))
-BGL_Wrap(GenFramebuffers,           void,      (GLsizei, GLuintP))
-BGL_Wrap(GenRenderbuffers,          void,      (GLsizei, GLuintP))
-BGL_Wrap(GenVertexArrays,           void,      (GLsizei, GLuintP))
-BGL_Wrap(GetStringi,                GLstring,  (GLenum, GLuint))
-BGL_Wrap(IsVertexArray,             GLboolean, (GLuint))
-BGL_Wrap(RenderbufferStorage,       void,      (GLenum, GLenum, GLsizei, GLsizei))
+BGL_Wrap(BindFramebuffer,           void,      (GLenum, GLuint));
+BGL_Wrap(BindRenderbuffer,          void,      (GLenum, GLuint));
+BGL_Wrap(BindVertexArray,           void,      (GLuint));
+BGL_Wrap(BlitFramebuffer,           void,      (GLint, GLint, GLint, GLint, GLint, GLint, GLint, GLint, GLbitfield, GLenum));
+BGL_Wrap(CheckFramebufferStatus,    GLenum,    (GLenum));
+BGL_Wrap(DeleteFramebuffers,        void,      (GLsizei, GLuintP));
+BGL_Wrap(DeleteRenderbuffers,       void,      (GLsizei, GLuintP));
+BGL_Wrap(DeleteVertexArrays,        void,      (GLsizei, GLuintP));
+BGL_Wrap(FramebufferRenderbuffer,   void,      (GLenum, GLenum, GLenum, GLuint));
+BGL_Wrap(GenFramebuffers,           void,      (GLsizei, GLuintP));
+BGL_Wrap(GenRenderbuffers,          void,      (GLsizei, GLuintP));
+BGL_Wrap(GenVertexArrays,           void,      (GLsizei, GLuintP));
+BGL_Wrap(GetStringi,                GLstring,  (GLenum, GLuint));
+BGL_Wrap(IsVertexArray,             GLboolean, (GLuint));
+BGL_Wrap(RenderbufferStorage,       void,      (GLenum, GLenum, GLsizei, GLsizei));
 
 
 /* GL_VERSION_3_1 */
-BGL_Wrap(BindBufferBase,            void,      (GLenum, GLuint, GLuint))
-BGL_Wrap(BindBufferRange,           void,      (GLenum, GLuint, GLuint, GLintptr, GLsizeiptr))
-BGL_Wrap(GetActiveUniformBlockName, void,      (GLuint, GLuint, GLsizei, GLsizeiP, GLcharP))
-BGL_Wrap(GetActiveUniformBlockiv,   void,      (GLuint, GLuint, GLenum, GLintP))
-BGL_Wrap(GetActiveUniformName,      void,      (GLuint, GLuint, GLsizei, GLsizeiP, GLcharP))
-BGL_Wrap(GetActiveUniformsiv,       void,      (GLuint, GLsizei, GLuintP, GLenum, GLintP))
-BGL_Wrap(GetIntegeri_v,             void,      (GLenum, GLuint, GLintP))
-BGL_Wrap(GetUniformBlockIndex,      GLuint,    (GLuint, GLstring))
-BGL_Wrap(GetUniformIndices,         void,      (GLuint, GLsizei, GLcharP, GLuintP))
-BGL_Wrap(UniformBlockBinding,       void,      (GLuint, GLuint, GLuint))
+BGL_Wrap(BindBufferBase,            void,      (GLenum, GLuint, GLuint));
+BGL_Wrap(BindBufferRange,           void,      (GLenum, GLuint, GLuint, GLintptr, GLsizeiptr));
+BGL_Wrap(GetActiveUniformBlockName, void,      (GLuint, GLuint, GLsizei, GLsizeiP, GLcharP));
+BGL_Wrap(GetActiveUniformBlockiv,   void,      (GLuint, GLuint, GLenum, GLintP));
+BGL_Wrap(GetActiveUniformName,      void,      (GLuint, GLuint, GLsizei, GLsizeiP, GLcharP));
+BGL_Wrap(GetActiveUniformsiv,       void,      (GLuint, GLsizei, GLuintP, GLenum, GLintP));
+BGL_Wrap(GetIntegeri_v,             void,      (GLenum, GLuint, GLintP));
+BGL_Wrap(GetUniformBlockIndex,      GLuint,    (GLuint, GLstring));
+BGL_Wrap(GetUniformIndices,         void,      (GLuint, GLsizei, GLcharP, GLuintP));
+BGL_Wrap(UniformBlockBinding,       void,      (GLuint, GLuint, GLuint));
 
 
 /* GL_VERSION_3_2 */
-BGL_Wrap(FramebufferTexture,        void,      (GLenum, GLenum, GLuint, GLint))
-BGL_Wrap(GetBufferParameteri64v,    void,      (GLenum, GLenum, GLint64P))
-BGL_Wrap(GetInteger64i_v,           void,      (GLenum, GLuint, GLint64P))
-BGL_Wrap(GetMultisamplefv,          void,      (GLenum, GLuint, GLfloatP))
-BGL_Wrap(SampleMaski,               void,      (GLuint, GLbitfield))
-BGL_Wrap(TexImage2DMultisample,     void,      (GLenum, GLsizei, GLenum, GLsizei, GLsizei, GLboolean))
-BGL_Wrap(TexImage3DMultisample,     void,      (GLenum, GLsizei, GLenum, GLsizei, GLsizei, GLsizei, GLboolean))
+BGL_Wrap(FramebufferTexture,        void,      (GLenum, GLenum, GLuint, GLint));
+BGL_Wrap(GetBufferParameteri64v,    void,      (GLenum, GLenum, GLint64P));
+BGL_Wrap(GetInteger64i_v,           void,      (GLenum, GLuint, GLint64P));
+BGL_Wrap(GetMultisamplefv,          void,      (GLenum, GLuint, GLfloatP));
+BGL_Wrap(SampleMaski,               void,      (GLuint, GLbitfield));
+BGL_Wrap(TexImage2DMultisample,     void,      (GLenum, GLsizei, GLenum, GLsizei, GLsizei, GLboolean));
+BGL_Wrap(TexImage3DMultisample,     void,      (GLenum, GLsizei, GLenum, GLsizei, GLsizei, GLsizei, GLboolean));
 
 
 /* GL_VERSION_3_3 */
@@ -1336,7 +1373,6 @@ BGL_Wrap(TexImage3DMultisample,     void,      (GLenum, GLsizei, GLenum, GLsizei
 
 
 /* -------------------------------------------------------------------- */
-
 /** \name Module Definition
  * \{ */
 
@@ -1385,8 +1421,9 @@ PyObject *BPyInit_bgl(void)
 	submodule = PyModule_Create(&BGL_module_def);
 	dict = PyModule_GetDict(submodule);
 
-	if (PyType_Ready(&BGL_bufferType) < 0)
+	if (PyType_Ready(&BGL_bufferType) < 0) {
 		return NULL;  /* should never happen */
+	}
 
 	PyModule_AddObject(submodule, "Buffer", (PyObject *)&BGL_bufferType);
 	Py_INCREF((PyObject *)&BGL_bufferType);
@@ -2549,8 +2586,9 @@ static PyObject *Method_ShaderSource(PyObject *UNUSED(self), PyObject *args)
 	unsigned int shader;
 	const char *source;
 
-	if (!PyArg_ParseTuple(args, "Is", &shader, &source))
+	if (!PyArg_ParseTuple(args, "Is", &shader, &source)) {
 		return NULL;
+	}
 
 	glShaderSource(shader, 1, (const char **)&source, NULL);
 

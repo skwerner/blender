@@ -2,8 +2,9 @@
 uniform mat4 ModelViewMatrix;
 uniform mat4 ModelViewMatrixInverse;
 uniform mat3 NormalMatrix;
+uniform mat3 NormalMatrixInverse;
 
-#ifndef ATTRIB
+#ifndef USE_ATTR
 uniform mat4 ModelMatrix;
 uniform mat4 ModelMatrixInverse;
 #endif
@@ -185,6 +186,11 @@ void vect_normalize(vec3 vin, out vec3 vout)
 void direction_transform_m4v3(vec3 vin, mat4 mat, out vec3 vout)
 {
 	vout = (mat * vec4(vin, 0.0)).xyz;
+}
+
+void mat3_mul(vec3 vin, mat3 mat, out vec3 vout)
+{
+	vout = mat * vin;
 }
 
 void point_transform_m4v3(vec3 vin, mat4 mat, out vec3 vout)
@@ -479,16 +485,68 @@ void curves_vec(float fac, vec3 vec, sampler1DArray curvemap, float layer, out v
 	outvec = mix(vec, outvec, fac);
 }
 
-void curves_rgb(float fac, vec4 col, sampler1DArray curvemap, float layer, out vec4 outcol)
+/* ext is vec4(in_x, in_dy, out_x, out_dy). */
+float curve_extrapolate(float x, float y, vec4 ext)
 {
-	vec4 co = vec4(col.rgb, layer);
-	co.x = texture(curvemap, co.xw).a;
-	co.y = texture(curvemap, co.yw).a;
-	co.z = texture(curvemap, co.zw).a;
-	outcol.r = texture(curvemap, co.xw).r;
-	outcol.g = texture(curvemap, co.yw).g;
-	outcol.b = texture(curvemap, co.zw).b;
+	if (x < 0.0) {
+		return y + x * ext.y;
+	}
+	else if (x > 1.0) {
+		return y + (x - 1.0) * ext.w;
+	}
+	else {
+		return y;
+	}
+}
+
+#define RANGE_RESCALE(x, min, range) ((x - min) * range)
+
+void curves_rgb(
+        float fac, vec4 col, sampler1DArray curvemap, float layer,
+        vec4 range, vec4 ext_r, vec4 ext_g, vec4 ext_b, vec4 ext_a,
+        out vec4 outcol)
+{
+	vec4 co = vec4(RANGE_RESCALE(col.rgb, ext_a.x, range.a), layer);
+	vec3 samp;
+	samp.r = texture(curvemap, co.xw).a;
+	samp.g = texture(curvemap, co.yw).a;
+	samp.b = texture(curvemap, co.zw).a;
+
+	samp.r = curve_extrapolate(co.x, samp.r, ext_a);
+	samp.g = curve_extrapolate(co.y, samp.g, ext_a);
+	samp.b = curve_extrapolate(co.z, samp.b, ext_a);
+
+	vec3 rgb_min = vec3(ext_r.x, ext_g.x, ext_b.x);
+	co.xyz = RANGE_RESCALE(samp.rgb, rgb_min, range.rgb);
+
+	samp.r = texture(curvemap, co.xw).r;
+	samp.g = texture(curvemap, co.yw).g;
+	samp.b = texture(curvemap, co.zw).b;
+
+	outcol.r = curve_extrapolate(co.x, samp.r, ext_r);
+	outcol.g = curve_extrapolate(co.y, samp.g, ext_g);
+	outcol.b = curve_extrapolate(co.z, samp.b, ext_b);
 	outcol.a = col.a;
+
+	outcol = mix(col, outcol, fac);
+}
+
+void curves_rgb_opti(
+        float fac, vec4 col, sampler1DArray curvemap, float layer,
+        vec4 range, vec4 ext_a,
+        out vec4 outcol)
+{
+	vec4 co = vec4(RANGE_RESCALE(col.rgb, ext_a.x, range.a), layer);
+	vec3 samp;
+	samp.r = texture(curvemap, co.xw).a;
+	samp.g = texture(curvemap, co.yw).a;
+	samp.b = texture(curvemap, co.zw).a;
+
+	outcol.r = curve_extrapolate(co.x, samp.r, ext_a);
+	outcol.g = curve_extrapolate(co.y, samp.g, ext_a);
+	outcol.b = curve_extrapolate(co.z, samp.b, ext_a);
+	outcol.a = col.a;
+
 	outcol = mix(col, outcol, fac);
 }
 
@@ -856,12 +914,9 @@ void hue_sat(float hue, float sat, float value, float fac, vec4 col, out vec4 ou
 
 	rgb_to_hsv(col, hsv);
 
-	hsv[0] += (hue - 0.5);
-	if (hsv[0] > 1.0) hsv[0] -= 1.0; else if (hsv[0] < 0.0) hsv[0] += 1.0;
-	hsv[1] *= sat;
-	if (hsv[1] > 1.0) hsv[1] = 1.0; else if (hsv[1] < 0.0) hsv[1] = 0.0;
-	hsv[2] *= value;
-	if (hsv[2] > 1.0) hsv[2] = 1.0; else if (hsv[2] < 0.0) hsv[2] = 0.0;
+	hsv[0] = fract(hsv[0] + hue + 0.5);
+	hsv[1] = clamp(hsv[1] * sat, 0.0, 1.0);
+	hsv[2] = hsv[2] * value;
 
 	hsv_to_rgb(hsv, outcol);
 
@@ -1059,9 +1114,9 @@ float cellnoise(vec3 p)
 
 vec3 cellnoise_color(vec3 p)
 {
-	float r = cellnoise(p);
-	float g = cellnoise(vec3(p.y, p.x, p.z));
-	float b = cellnoise(vec3(p.y, p.z, p.x));
+	float r = cellnoise(p.xyz);
+	float g = cellnoise(p.yxz);
+	float b = cellnoise(p.yzx);
 
 	return vec3(r, g, b);
 }
@@ -1092,6 +1147,8 @@ void convert_metallic_to_specular_tinted(
 vec3 principled_sheen(float NV, vec3 basecol_tint, float sheen_tint)
 {
 	float f = 1.0 - NV;
+	/* Temporary fix for T59784. Normal map seems to contain NaNs for tangent space normal maps, therefore we need to clamp value. */
+	f = clamp(f, 0.0, 1.0);
 	/* Empirical approximation (manual curve fitting). Can be refined. */
 	float sheen = f*f*f*0.077 + f*0.01 + 0.00026;
 	return sheen * mix(vec3(1.0), basecol_tint, sheen_tint);
@@ -1553,11 +1610,11 @@ void node_volume_principled(
 	/* Compute density. */
 	density = max(density, 0.0);
 
-	if(density > 1e-5) {
+	if (density > 1e-5) {
 		density = max(density * density_attribute, 0.0);
 	}
 
-	if(density > 1e-5) {
+	if (density > 1e-5) {
 		/* Compute scattering and absorption coefficients. */
 		vec3 scatter_color = color.rgb * color_attribute.rgb;
 
@@ -1569,20 +1626,21 @@ void node_volume_principled(
 	/* Compute emission. */
 	emission_strength = max(emission_strength, 0.0);
 
-	if(emission_strength > 1e-5) {
+	if (emission_strength > 1e-5) {
 		emission_coeff += emission_strength * emission_color.rgb;
 	}
 
-	if(blackbody_intensity > 1e-3) {
+	if (blackbody_intensity > 1e-3) {
 		/* Add temperature from attribute. */
 		float T = max(temperature * max(temperature_attribute, 0.0), 0.0);
 
 		/* Stefan-Boltzman law. */
-		float T4 = (T * T) * (T * T);
+		float T2 = T * T;
+		float T4 = T2 * T2;
 		float sigma = 5.670373e-8 * 1e-6 / M_PI;
 		float intensity = sigma * mix(1.0, T4, blackbody_intensity);
 
-		if(intensity > 1e-5) {
+		if (intensity > 1e-5) {
 			vec4 bb;
 			node_blackbody(T, spectrummap, layer, bb);
 			emission_coeff += bb.rgb * blackbody_tint.rgb * intensity;
@@ -1669,6 +1727,8 @@ void node_attribute_volume_density(sampler3D tex, out vec4 outcol, out vec3 outv
 	outf = dot(vec3(1.0 / 3.0), outvec);
 }
 
+uniform vec3 volumeColor = vec3(1.0);
+
 void node_attribute_volume_color(sampler3D tex, out vec4 outcol, out vec3 outvec, out float outf)
 {
 #if defined(MESH_SHADER) && defined(VOLUMETRICS)
@@ -1682,7 +1742,7 @@ void node_attribute_volume_color(sampler3D tex, out vec4 outcol, out vec3 outvec
 	if (value.a > 1e-8)
 		value.rgb /= value.a;
 
-	outvec = value.rgb;
+	outvec = value.rgb * volumeColor;
 	outcol = vec4(outvec, 1.0);
 	outf = dot(vec3(1.0 / 3.0), outvec);
 }
@@ -1742,13 +1802,13 @@ void tangent_orco_z(vec3 orco_in, out vec3 orco_out)
 
 void node_tangentmap(vec4 attr_tangent, mat4 toworld, out vec3 tangent)
 {
-	tangent = (toworld * vec4(attr_tangent.xyz, 0.0)).xyz;
+	tangent = normalize((toworld * vec4(attr_tangent.xyz, 0.0)).xyz);
 }
 
 void node_tangent(vec3 N, vec3 orco, mat4 objmat, mat4 toworld, out vec3 T)
 {
 #ifndef VOLUMETRICS
-	N = normalize(worldNormal);
+	N = normalize(gl_FrontFacing ? worldNormal : -worldNormal);
 #else
 	N = (toworld * vec4(N, 0.0)).xyz;
 #endif
@@ -1777,8 +1837,7 @@ void node_geometry(
 
 	position = worldPosition;
 #  ifndef VOLUMETRICS
-	normal = normalize(worldNormal);
-
+	normal = normalize(gl_FrontFacing ? worldNormal : -worldNormal);
 	vec3 B = dFdx(worldPosition);
 	vec3 T = dFdy(worldPosition);
 	true_normal = normalize(cross(B, T));
@@ -1815,7 +1874,7 @@ void node_tex_coord(
         out vec3 camera, out vec3 window, out vec3 reflection)
 {
 	generated = attr_orco;
-	normal = normalize((obinvmat * (viewinvmat * vec4(N, 0.0))).xyz);
+	normal = normalize(NormalMatrixInverse * N);
 	uv = attr_uv;
 	object = (obinvmat * (viewinvmat * vec4(I, 1.0))).xyz;
 	camera = vec3(I.xy, -I.z);
@@ -1852,9 +1911,7 @@ void node_tex_coord_background(
 	object = coords;
 
 	camera = vec3(co.xy, -co.z);
-	window = (ProjectionMatrix[3][3] == 0.0) ?
-	         vec3(mtex_2d_mapping(I).xy * camerafac.xy + camerafac.zw, 0.0) :
-	         vec3(vec2(0.5) * camerafac.xy + camerafac.zw, 0.0);
+	window = vec3(mtex_2d_mapping(I).xy * camerafac.xy + camerafac.zw, 0.0);
 
 	reflection = -coords;
 }
@@ -2024,22 +2081,25 @@ void node_tex_environment_empty(vec3 co, out vec4 color)
 	color = vec4(1.0, 0.0, 1.0, 1.0);
 }
 
+/* 16bits floats limits. Higher/Lower values produce +/-inf. */
+#define safe_color(a) (clamp(a, -65520.0, 65520.0))
+
 void node_tex_image_linear(vec3 co, sampler2D ima, out vec4 color, out float alpha)
 {
-	color = texture(ima, co.xy);
+	color = safe_color(texture(ima, co.xy));
 	alpha = color.a;
 }
 
 void node_tex_image_linear_no_mip(vec3 co, sampler2D ima, out vec4 color, out float alpha)
 {
-	color = textureLod(ima, co.xy, 0.0);
+	color = safe_color(textureLod(ima, co.xy, 0.0));
 	alpha = color.a;
 }
 
 void node_tex_image_nearest(vec3 co, sampler2D ima, out vec4 color, out float alpha)
 {
 	ivec2 pix = ivec2(fract(co.xy) * textureSize(ima, 0).xy);
-	color = texelFetch(ima, pix, 0);
+	color = safe_color(texelFetch(ima, pix, 0));
 	alpha = color.a;
 }
 
@@ -2081,10 +2141,10 @@ void node_tex_image_cubic_ex(vec3 co, sampler2D ima, float do_extend, out vec4 c
 	}
 	final_co /= tex_size.xyxy;
 
-	color  = textureLod(ima, final_co.xy, 0.0) * s0.x * s0.y;
-	color += textureLod(ima, final_co.zy, 0.0) * s1.x * s0.y;
-	color += textureLod(ima, final_co.xw, 0.0) * s0.x * s1.y;
-	color += textureLod(ima, final_co.zw, 0.0) * s1.x * s1.y;
+	color  = safe_color(textureLod(ima, final_co.xy, 0.0)) * s0.x * s0.y;
+	color += safe_color(textureLod(ima, final_co.zy, 0.0)) * s1.x * s0.y;
+	color += safe_color(textureLod(ima, final_co.xw, 0.0)) * s0.x * s1.y;
+	color += safe_color(textureLod(ima, final_co.zw, 0.0)) * s1.x * s1.y;
 
 #else /* Reference bruteforce 16 tap. */
 	color  = texelFetch(ima, ivec2(tc + vec2(-1.0, -1.0)), 0) * w0.x * w0.y;
@@ -2268,7 +2328,7 @@ void node_tex_image_box(vec3 texco,
 	}
 	else {
 		/* last case, we have a mix between three */
-		weight = ((2.0 - limit) * N + (limit - 1.0)) / max(1e-8, 2.0 * limit - 1.0);
+		weight = ((2.0 - limit) * N + (limit - 1.0)) / max(1e-8, blend);
 	}
 
 	color = weight.x * color1 + weight.y * color2 + weight.z * color3;
@@ -2738,17 +2798,12 @@ void node_tex_voronoi(vec3 co, float scale, float exponent, float coloring, floa
 {
 	vec3 p = co * scale;
 	int xx, yy, zz, xi, yi, zi;
-	float da[4];
-	vec3 pa[4];
+	vec4 da = vec4(1e10);
+	vec3 pa[4] = vec3[4](vec3(0.0), vec3(0.0), vec3(0.0), vec3(0.0));
 
 	xi = floor_to_int(p[0]);
 	yi = floor_to_int(p[1]);
 	zi = floor_to_int(p[2]);
-
-	da[0] = 1e+10;
-	da[1] = 1e+10;
-	da[2] = 1e+10;
-	da[3] = 1e+10;
 
 	for (xx = xi - 1; xx <= xi + 1; xx++) {
 		for (yy = yi - 1; yy <= yi + 1; yy++) {
@@ -2758,33 +2813,31 @@ void node_tex_voronoi(vec3 co, float scale, float exponent, float coloring, floa
 				vec3 pd = p - (vp + ip);
 
 				float d = 0.0;
-				if (metric == 0) { /* SHD_VORONOI_DISTANCE 0 */
+				if (metric == 0.0) { /* SHD_VORONOI_DISTANCE 0 */
 					d = dot(pd, pd);
 				}
-				else if (metric == 1) { /* SHD_VORONOI_MANHATTAN 1 */
+				else if (metric == 1.0) { /* SHD_VORONOI_MANHATTAN 1 */
 					d = abs(pd[0]) + abs(pd[1]) + abs(pd[2]);
 				}
-				else if (metric == 2) { /* SHD_VORONOI_CHEBYCHEV 2 */
+				else if (metric == 2.0) { /* SHD_VORONOI_CHEBYCHEV 2 */
 					d = max(abs(pd[0]), max(abs(pd[1]), abs(pd[2])));
 				}
-				else if (metric == 3) { /* SHD_VORONOI_MINKOWSKI 3 */
+				else if (metric == 3.0) { /* SHD_VORONOI_MINKOWSKI 3 */
 					d = pow(pow(abs(pd[0]), exponent) + pow(abs(pd[1]), exponent) + pow(abs(pd[2]), exponent), 1.0/exponent);
 				}
 
 				vp += vec3(xx, yy, zz);
 				if (d < da[0]) {
-					da[3] = da[2];
-					da[2] = da[1];
-					da[1] = da[0];
+					da.yzw = da.xyz;
 					da[0] = d;
+
 					pa[3] = pa[2];
 					pa[2] = pa[1];
 					pa[1] = pa[0];
 					pa[0] = vp;
 				}
 				else if (d < da[1]) {
-					da[3] = da[2];
-					da[2] = da[1];
+					da.zw = da.yz;
 					da[1] = d;
 
 					pa[3] = pa[2];
@@ -2808,43 +2861,43 @@ void node_tex_voronoi(vec3 co, float scale, float exponent, float coloring, floa
 
 	if (coloring == 0.0) {
 		/* Intensity output */
-		if (feature == 0) { /* F1 */
+		if (feature == 0.0) { /* F1 */
 			fac = abs(da[0]);
 		}
-		else if (feature == 1) { /* F2 */
+		else if (feature == 1.0) { /* F2 */
 			fac = abs(da[1]);
 		}
-		else if (feature == 2) { /* F3 */
+		else if (feature == 2.0) { /* F3 */
 			fac = abs(da[2]);
 		}
-		else if (feature == 3) { /* F4 */
+		else if (feature == 3.0) { /* F4 */
 			fac = abs(da[3]);
 		}
-		else if (feature == 4) { /* F2F1 */
+		else if (feature == 4.0) { /* F2F1 */
 			fac = abs(da[1] - da[0]);
 		}
-		color = vec4(fac, fac, fac, 1);
+		color = vec4(fac, fac, fac, 1.0);
 	}
 	else {
 		/* Color output */
 		vec3 col = vec3(fac, fac, fac);
-		if (feature == 0) { /* F1 */
+		if (feature == 0.0) { /* F1 */
 			col = pa[0];
 		}
-		else if (feature == 1) { /* F2 */
+		else if (feature == 1.0) { /* F2 */
 			col = pa[1];
 		}
-		else if (feature == 2) { /* F3 */
+		else if (feature == 2.0) { /* F3 */
 			col = pa[2];
 		}
-		else if (feature == 3) { /* F4 */
+		else if (feature == 3.0) { /* F4 */
 			col = pa[3];
 		}
-		else if (feature == 4) { /* F2F1 */
+		else if (feature == 4.0) { /* F2F1 */
 			col = abs(pa[1] - pa[0]);
 		}
 
-		color = vec4(cellnoise_color(col), 1);
+		color = vec4(cellnoise_color(col), 1.0);
 		fac = (color.x + color.y + color.z) * (1.0 / 3.0);
 	}
 }
@@ -2924,7 +2977,7 @@ void node_light_falloff(float strength, float tsmooth, out float quadratic, out 
 	constant = strength;
 }
 
-void node_object_info(mat4 obmat, vec3 info, out vec3 location, out float object_index, out float material_index, out float random)
+void node_object_info(mat4 obmat, vec4 info, out vec3 location, out float object_index, out float material_index, out float random)
 {
 	location = obmat[3].xyz;
 	object_index = info.x;
@@ -2932,9 +2985,14 @@ void node_object_info(mat4 obmat, vec3 info, out vec3 location, out float object
 	random = info.z;
 }
 
-void node_normal_map(vec4 tangent, vec3 normal, vec3 texnormal, out vec3 outnormal)
+void node_normal_map(vec4 info, vec4 tangent, vec3 normal, vec3 texnormal, out vec3 outnormal)
 {
-	vec3 B = tangent.w * cross(normal, tangent.xyz);
+	if (all(equal(tangent, vec4(0.0, 0.0, 0.0, 1.0)))) {
+		outnormal = normal;
+		return;
+	}
+	tangent *= (gl_FrontFacing ? 1.0 : -1.0);
+	vec3 B = tangent.w * cross(normal, tangent.xyz) * info.w;
 
 	outnormal = texnormal.x * tangent.xyz + texnormal.y * B + texnormal.z * normal;
 	outnormal = normalize(outnormal);
@@ -3039,7 +3097,7 @@ uniform float backgroundAlpha;
 void node_output_world(Closure surface, Closure volume, out Closure result)
 {
 #ifndef VOLUMETRICS
-	result.radiance = surface.radiance;
+	result.radiance = surface.radiance * backgroundAlpha;
 	result.opacity = backgroundAlpha;
 #else
 	result = volume;

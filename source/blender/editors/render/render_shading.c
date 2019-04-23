@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -16,14 +14,10 @@
  *
  * The Original Code is Copyright (C) 2009 Blender Foundation.
  * All rights reserved.
- *
- * Contributor(s): Blender Foundation
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/render/render_shading.c
- *  \ingroup edrend
+/** \file
+ * \ingroup edrend
  */
 
 #include <stdlib.h>
@@ -32,7 +26,7 @@
 #include "MEM_guardedalloc.h"
 
 #include "DNA_curve_types.h"
-#include "DNA_lamp_types.h"
+#include "DNA_light_types.h"
 #include "DNA_lightprobe_types.h"
 #include "DNA_material_types.h"
 #include "DNA_node_types.h"
@@ -49,6 +43,7 @@
 #include "BLT_translation.h"
 
 #include "BKE_animsys.h"
+#include "BKE_brush.h"
 #include "BKE_context.h"
 #include "BKE_curve.h"
 #include "BKE_editmesh.h"
@@ -106,9 +101,9 @@
 static Object **object_array_for_shading(bContext *C, uint *r_objects_len)
 {
 	ScrArea *sa = CTX_wm_area(C);
-	SpaceButs *sbuts = NULL;
+	SpaceProperties *sbuts = NULL;
 	View3D *v3d = NULL;
-	if (sa->spacetype == SPACE_BUTS) {
+	if (sa->spacetype == SPACE_PROPERTIES) {
 		sbuts = sa->spacedata.first;
 	}
 	else if (sa->spacetype == SPACE_VIEW3D) {
@@ -293,18 +288,46 @@ void OBJECT_OT_material_slot_assign(wmOperatorType *ot)
 static int material_slot_de_select(bContext *C, bool select)
 {
 	bool changed_multi = false;
+	Object *obact = CTX_data_active_object(C);
+	const Material *mat_active = obact ? give_current_material(obact, obact->actcol) : NULL;
 
 	uint objects_len = 0;
 	Object **objects = object_array_for_shading(C, &objects_len);
 	for (uint ob_index = 0; ob_index < objects_len; ob_index++) {
 		Object *ob = objects[ob_index];
+		short mat_nr_active = -1;
+
+		if (ob->totcol == 0) {
+			continue;
+		}
+		if (obact && (mat_active == give_current_material(ob, obact->actcol))) {
+			/* Avoid searching since there may be multiple slots with the same material.
+			 * For the active object or duplicates: match the material slot index first. */
+			mat_nr_active = obact->actcol - 1;
+		}
+		else {
+			/* Find the first matching material.
+			 * Note: there may be multiple but thats not a common use case. */
+			for (short i = 0; i < ob->totcol; i++) {
+				const Material *mat = give_current_material(ob, i + 1);
+				if (mat_active == mat) {
+					mat_nr_active = i;
+					break;
+				}
+			}
+			if (mat_nr_active == -1) {
+				continue;
+			}
+		}
+
+
 		bool changed = false;
 
 		if (ob->type == OB_MESH) {
 			BMEditMesh *em = BKE_editmesh_from_object(ob);
 
 			if (em) {
-				changed = EDBM_deselect_by_material(em, ob->actcol - 1, select);
+				changed = EDBM_deselect_by_material(em, mat_nr_active, select);
 			}
 		}
 		else if (ELEM(ob->type, OB_CURVE, OB_SURF)) {
@@ -316,7 +339,7 @@ static int material_slot_de_select(bContext *C, bool select)
 
 			if (nurbs) {
 				for (nu = nurbs->first; nu; nu = nu->next) {
-					if (nu->mat_nr == ob->actcol - 1) {
+					if (nu->mat_nr == mat_nr_active) {
 						if (nu->bezt) {
 							a = nu->pntsu;
 							bezt = nu->bezt;
@@ -499,7 +522,7 @@ void OBJECT_OT_material_slot_move(wmOperatorType *ot)
 	static const EnumPropertyItem material_slot_move[] = {
 		{1, "UP", 0, "Up", ""},
 		{-1, "DOWN", 0, "Down", ""},
-		{0, NULL, 0, NULL, NULL}
+		{0, NULL, 0, NULL, NULL},
 	};
 
 	/* identifiers */
@@ -533,7 +556,9 @@ static int new_material_exec(bContext *C, wmOperator *UNUSED(op))
 
 	/* add or copy material */
 	if (ma) {
-		ma = BKE_material_copy(bmain, ma);
+		Material *new_ma = NULL;
+		BKE_id_copy_ex(bmain, &ma->id, (ID **)&new_ma, LIB_ID_COPY_DEFAULT | LIB_ID_COPY_ACTIONS);
+		ma = new_ma;
 	}
 	else {
 		const char *name = DATA_("Material");
@@ -718,6 +743,12 @@ void SCENE_OT_view_layer_add(wmOperatorType *ot)
 	ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO | OPTYPE_INTERNAL;
 }
 
+static bool view_layer_remove_poll(bContext *C)
+{
+	Scene *scene = CTX_data_scene(C);
+	return (scene->view_layers.first != scene->view_layers.last);
+}
+
 static int view_layer_remove_exec(bContext *C, wmOperator *UNUSED(op))
 {
 	Main *bmain = CTX_data_main(C);
@@ -742,6 +773,7 @@ void SCENE_OT_view_layer_remove(wmOperatorType *ot)
 
 	/* api callbacks */
 	ot->exec = view_layer_remove_exec;
+	ot->poll = view_layer_remove_poll;
 
 	/* flags */
 	ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO | OPTYPE_INTERNAL;
@@ -809,7 +841,7 @@ static int light_cache_bake_exec(bContext *C, wmOperator *op)
 	G.is_break = false;
 
 	/* TODO abort if selected engine is not eevee. */
-	void *rj = EEVEE_lightbake_job_data_alloc(bmain, view_layer, scene, false);
+	void *rj = EEVEE_lightbake_job_data_alloc(bmain, view_layer, scene, false, scene->r.cfra);
 
 	light_cache_bake_tag_cache(scene, op);
 
@@ -834,7 +866,7 @@ static int light_cache_bake_invoke(bContext *C, wmOperator *op, const wmEvent *U
 	Scene *scene = CTX_data_scene(C);
 	int delay = RNA_int_get(op->ptr, "delay");
 
-	wmJob *wm_job = EEVEE_lightbake_job_create(wm, win, bmain, view_layer, scene, delay);
+	wmJob *wm_job = EEVEE_lightbake_job_create(wm, win, bmain, view_layer, scene, delay, scene->r.cfra);
 
 	if (!wm_job) {
 		return OPERATOR_CANCELLED;
@@ -861,11 +893,13 @@ static int light_cache_bake_invoke(bContext *C, wmOperator *op, const wmEvent *U
 void SCENE_OT_light_cache_bake(wmOperatorType *ot)
 {
 	static const EnumPropertyItem light_cache_subset_items[] = {
-		{LIGHTCACHE_SUBSET_ALL, "ALL", 0, "All LightProbes", "Bake both irradiance grids and reflection cubemaps"},
-		{LIGHTCACHE_SUBSET_DIRTY, "DIRTY", 0, "Dirty Only", "Only bake lightprobes that are marked as dirty"},
-		{LIGHTCACHE_SUBSET_CUBE, "CUBEMAPS", 0, "Cubemaps Only", "Try to only bake reflection cubemaps if irradiance "
-	                                                             "grids are up to date"},
-		{0, NULL, 0, NULL, NULL}
+		{LIGHTCACHE_SUBSET_ALL, "ALL", 0, "All LightProbes",
+		 "Bake both irradiance grids and reflection cubemaps"},
+		{LIGHTCACHE_SUBSET_DIRTY, "DIRTY", 0, "Dirty Only",
+		 "Only bake lightprobes that are marked as dirty"},
+		{LIGHTCACHE_SUBSET_CUBE, "CUBEMAPS", 0, "Cubemaps Only",
+		 "Try to only bake reflection cubemaps if irradiance grids are up to date"},
+		{0, NULL, 0, NULL, NULL},
 	};
 
 	/* identifiers */
@@ -920,9 +954,9 @@ static int light_cache_free_exec(bContext *C, wmOperator *UNUSED(op))
 void SCENE_OT_light_cache_free(wmOperatorType *ot)
 {
 	/* identifiers */
-	ot->name = "Free Light Cache";
+	ot->name = "Delete Light Cache";
 	ot->idname = "SCENE_OT_light_cache_free";
-	ot->description = "Free cached indirect lighting";
+	ot->description = "Delete cached indirect lighting";
 
 	/* api callbacks */
 	ot->exec = light_cache_free_exec;
@@ -1094,7 +1128,7 @@ void SCENE_OT_freestyle_module_move(wmOperatorType *ot)
 	static const EnumPropertyItem direction_items[] = {
 		{-1, "UP", 0, "Up", ""},
 		{1, "DOWN", 0, "Down", ""},
-		{0, NULL, 0, NULL, NULL}
+		{0, NULL, 0, NULL, NULL},
 	};
 
 	/* identifiers */
@@ -1252,7 +1286,7 @@ void SCENE_OT_freestyle_lineset_move(wmOperatorType *ot)
 	static const EnumPropertyItem direction_items[] = {
 		{-1, "UP", 0, "Up", ""},
 		{1, "DOWN", 0, "Down", ""},
-		{0, NULL, 0, NULL, NULL}
+		{0, NULL, 0, NULL, NULL},
 	};
 
 	/* identifiers */
@@ -1621,7 +1655,7 @@ void SCENE_OT_freestyle_modifier_move(wmOperatorType *ot)
 	static const EnumPropertyItem direction_items[] = {
 		{-1, "UP", 0, "Up", ""},
 		{1, "DOWN", 0, "Down", ""},
-		{0, NULL, 0, NULL, NULL}
+		{0, NULL, 0, NULL, NULL},
 	};
 
 	/* identifiers */
@@ -1724,7 +1758,7 @@ void TEXTURE_OT_slot_move(wmOperatorType *ot)
 	static const EnumPropertyItem slot_move[] = {
 		{-1, "UP", 0, "Up", ""},
 		{1, "DOWN", 0, "Down", ""},
-		{0, NULL, 0, NULL, NULL}
+		{0, NULL, 0, NULL, NULL},
 	};
 
 	/* identifiers */
@@ -1769,7 +1803,8 @@ void MATERIAL_OT_copy(wmOperatorType *ot)
 	ot->exec = copy_material_exec;
 
 	/* flags */
-	ot->flag = OPTYPE_REGISTER | OPTYPE_INTERNAL; /* no undo needed since no changes are made to the material */
+	/* no undo needed since no changes are made to the material */
+	ot->flag = OPTYPE_REGISTER | OPTYPE_INTERNAL;
 }
 
 static int paste_material_exec(bContext *C, wmOperator *UNUSED(op))
@@ -1781,6 +1816,7 @@ static int paste_material_exec(bContext *C, wmOperator *UNUSED(op))
 
 	paste_matcopybuf(CTX_data_main(C), ma);
 
+	DEG_id_tag_update(&ma->id, ID_RECALC_COPY_ON_WRITE);
 	WM_event_add_notifier(C, NC_MATERIAL | ND_SHADING_LINKS, ma);
 
 	return OPERATOR_FINISHED;
@@ -1901,7 +1937,8 @@ void TEXTURE_OT_slot_copy(wmOperatorType *ot)
 	ot->poll = copy_mtex_poll;
 
 	/* flags */
-	ot->flag = OPTYPE_REGISTER | OPTYPE_INTERNAL; /* no undo needed since no changes are made to the mtex */
+	/* no undo needed since no changes are made to the mtex */
+	ot->flag = OPTYPE_REGISTER | OPTYPE_INTERNAL;
 }
 
 static int paste_mtex_exec(bContext *C, wmOperator *UNUSED(op))
@@ -1910,7 +1947,7 @@ static int paste_mtex_exec(bContext *C, wmOperator *UNUSED(op))
 
 	if (id == NULL) {
 		Material *ma = CTX_data_pointer_get_type(C, "material", &RNA_Material).data;
-		Lamp *la = CTX_data_pointer_get_type(C, "light", &RNA_Light).data;
+		Light *la = CTX_data_pointer_get_type(C, "light", &RNA_Light).data;
 		World *wo = CTX_data_pointer_get_type(C, "world", &RNA_World).data;
 		ParticleSystem *psys = CTX_data_pointer_get_type(C, "particle_system", &RNA_ParticleSystem).data;
 		FreestyleLineStyle *linestyle = CTX_data_pointer_get_type(C, "line_style", &RNA_FreestyleLineStyle).data;

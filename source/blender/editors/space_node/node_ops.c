@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,15 +15,10 @@
  *
  * The Original Code is Copyright (C) 2008 Blender Foundation.
  * All rights reserved.
- *
- *
- * Contributor(s): Blender Foundation, Nathan Letwory
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/space_node/node_ops.c
- *  \ingroup spnode
+/** \file
+ * \ingroup spnode
  */
 
 
@@ -143,7 +136,9 @@ void ED_operatormacros_node(void)
 	ot = WM_operatortype_append_macro("NODE_OT_select_link_viewer", "Link Viewer",
 	                                  "Select node and link it to a viewer node",
 	                                  OPTYPE_UNDO);
-	WM_operatortype_macro_define(ot, "NODE_OT_select");
+	mot = WM_operatortype_macro_define(ot, "NODE_OT_select");
+	RNA_boolean_set(mot->ptr, "extend", false);
+	RNA_boolean_set(mot->ptr, "socket_select", true);
 	WM_operatortype_macro_define(ot, "NODE_OT_link_viewer");
 
 	ot = WM_operatortype_append_macro("NODE_OT_translate_attach", "Move and Attach",

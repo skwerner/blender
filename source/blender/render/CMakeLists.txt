@@ -16,11 +16,6 @@
 #
 # The Original Code is Copyright (C) 2006, Blender Foundation
 # All rights reserved.
-#
-# The Original Code is: all of this file.
-#
-# Contributor(s): Jacques Beaurain.
-#
 # ***** END GPL LICENSE BLOCK *****
 
 
@@ -60,18 +55,21 @@ set(SRC
 	intern/source/render_texture.c
 	intern/source/zbuf.c
 
-	extern/include/RE_engine.h
 	extern/include/RE_bake.h
+	extern/include/RE_engine.h
 	extern/include/RE_multires_bake.h
 	extern/include/RE_pipeline.h
 	extern/include/RE_render_ext.h
 	extern/include/RE_shader_ext.h
 	intern/include/initrender.h
-	intern/include/render_types.h
 	intern/include/render_result.h
+	intern/include/render_types.h
 	intern/include/renderpipeline.h
 	intern/include/texture.h
 	intern/include/zbuf.h
+)
+
+set(LIB
 )
 
 if(WITH_PYTHON)
@@ -82,6 +80,9 @@ if(WITH_PYTHON)
 endif()
 
 if(WITH_IMAGE_OPENEXR)
+	list(APPEND LIB
+		bf_imbuf_openexr
+	)
 	add_definitions(-DWITH_OPENEXR)
 endif()
 
@@ -92,6 +93,9 @@ endif()
 if(WITH_FREESTYLE)
 	list(APPEND INC
 		../freestyle
+	)
+	list(APPEND LIB
+		bf_freestyle
 	)
 	add_definitions(-DWITH_FREESTYLE)
 endif()
@@ -108,4 +112,4 @@ if(APPLE)
 	endif()
 endif()
 
-blender_add_lib_nolist(bf_render "${SRC}" "${INC}" "${INC_SYS}")
+blender_add_lib_nolist(bf_render "${SRC}" "${INC}" "${INC_SYS}" "${LIB}")

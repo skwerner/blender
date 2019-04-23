@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,14 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * Contributor(s): Bastien Montagne
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/python/intern/bpy_app_translations.c
- *  \ingroup pythonintern
+/** \file
+ * \ingroup pythonintern
  *
  * This file defines a singleton py object accessed via 'bpy.app.translations',
  * which exposes various data and functions useful in i18n work.
@@ -33,8 +27,6 @@
 #include <structmember.h>
 
 #include "BLI_utildefines.h"
-#include "BLI_string.h"
-#include "BLI_ghash.h"
 
 #include "BPY_extern.h"
 #include "bpy_app_translations.h"
@@ -47,6 +39,11 @@
 #include "RNA_types.h"
 
 #include "../generic/python_utildefines.h"
+
+#ifdef WITH_INTERNATIONAL
+#  include "BLI_string.h"
+#  include "BLI_ghash.h"
+#endif
 
 typedef struct {
 	PyObject_HEAD
@@ -92,8 +89,9 @@ static bool _ghashutil_keycmp(const void *a, const void *b)
 	const GHashKey *B = b;
 
 	/* Note: comparing msgid first, most of the time it will be enough! */
-	if (BLI_ghashutil_strcmp(A->msgid, B->msgid) == false)
+	if (BLI_ghashutil_strcmp(A->msgid, B->msgid) == false) {
 		return BLI_ghashutil_strcmp(A->msgctxt, B->msgctxt);
+	}
 	return true;  /* true means they are not equal! */
 }
 
@@ -252,8 +250,9 @@ const char *BPY_app_translations_py_pgettext(const char *msgctxt, const char *ms
 	const char *tmp;
 
 	/* Just in case, should never happen! */
-	if (!_translations)
+	if (!_translations) {
 		return msgid;
+	}
 
 	tmp = BLT_lang_get();
 	if (!STREQ(tmp, locale) || !_translations_cache) {
@@ -387,7 +386,7 @@ static PyStructSequence_Desc app_translations_contexts_desc = {
 	(char *)"bpy.app.translations.contexts",     /* name */
 	(char *)"This named tuple contains all pre-defined translation contexts",    /* doc */
 	app_translations_contexts_fields,    /* fields */
-	ARRAY_SIZE(app_translations_contexts_fields) - 1
+	ARRAY_SIZE(app_translations_contexts_fields) - 1,
 };
 
 static PyObject *app_translations_contexts_make(void)
@@ -438,7 +437,7 @@ static PyMemberDef app_translations_members[] = {
 	                     app_translations_contexts_doc},
 	{(char *)"contexts_C_to_py", T_OBJECT_EX, offsetof(BlenderAppTranslations, contexts_C_to_py), READONLY,
 	                             app_translations_contexts_C_to_py_doc},
-	{NULL}
+	{NULL},
 };
 
 PyDoc_STRVAR(app_translations_locale_doc,
@@ -461,8 +460,9 @@ static PyObject *app_translations_locales_get(PyObject *UNUSED(self), void *UNUS
 	if (items) {
 		/* This is not elegant, but simple! */
 		for (it = items; it->identifier; it++) {
-			if (it->value)
+			if (it->value) {
 				num_locales++;
+			}
 		}
 	}
 
@@ -470,8 +470,9 @@ static PyObject *app_translations_locales_get(PyObject *UNUSED(self), void *UNUS
 
 	if (items) {
 		for (it = items; it->identifier; it++) {
-			if (it->value)
+			if (it->value) {
 				PyTuple_SET_ITEM(ret, pos++, PyUnicode_FromString(it->description));
+			}
 		}
 	}
 
@@ -482,7 +483,7 @@ static PyGetSetDef app_translations_getseters[] = {
 	/* {name, getter, setter, doc, userdata} */
 	{(char *)"locale", (getter)app_translations_locale_get, NULL, app_translations_locale_doc, NULL},
 	{(char *)"locales", (getter)app_translations_locales_get, NULL, app_translations_locales_doc, NULL},
-	{NULL}
+	{NULL},
 };
 
 /* pgettext helper. */
@@ -660,7 +661,7 @@ static PyMethodDef app_translations_methods[] = {
 	                   app_translations_pgettext_data_doc},
 	{"locale_explode", (PyCFunction)app_translations_locale_explode, METH_VARARGS | METH_KEYWORDS | METH_STATIC,
 	                    app_translations_locale_explode_doc},
-	{NULL}
+	{NULL},
 };
 
 static PyObject *app_translations_new(PyTypeObject *type, PyObject *UNUSED(args), PyObject *UNUSED(kw))
@@ -782,7 +783,7 @@ static PyTypeObject BlenderAppTranslationsType = {
 	NULL,                       /* PyObject *tp_cache; */
 	NULL,                       /* PyObject *tp_subclasses; */
 	NULL,                       /* PyObject *tp_weaklist; */
-	NULL
+	NULL,
 };
 
 PyObject *BPY_app_translations_struct(void)
@@ -804,8 +805,9 @@ PyObject *BPY_app_translations_struct(void)
 		PyStructSequence_InitType(&BlenderAppTranslationsContextsType, &app_translations_contexts_desc);
 	}
 
-	if (PyType_Ready(&BlenderAppTranslationsType) < 0)
+	if (PyType_Ready(&BlenderAppTranslationsType) < 0) {
 		return NULL;
+	}
 
 	ret = PyObject_CallObject((PyObject *)&BlenderAppTranslationsType, NULL);
 

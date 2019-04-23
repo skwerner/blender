@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -15,16 +13,12 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
- * The Original Code is Copyright (C) 2009, Blender Foundation, Joshua Leung
+ * The Original Code is Copyright (C) 2009, Blender Foundation
  * This is a new part of Blender
- *
- * Contributor(s): Joshua Leung, Antonio Vazquez
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/gpencil/gpencil_ops.c
- *  \ingroup edgpencil
+/** \file
+ * \ingroup edgpencil
  */
 
 
@@ -228,6 +222,10 @@ void ED_operatortypes_gpencil(void)
 	WM_operatortype_append(GPENCIL_OT_draw);
 	WM_operatortype_append(GPENCIL_OT_fill);
 
+	/* Guides ----------------------- */
+
+	WM_operatortype_append(GPENCIL_OT_guide_rotate);
+
 	/* Editing (Strokes) ------------ */
 
 	WM_operatortype_append(GPENCIL_OT_editmode_toggle);
@@ -256,6 +254,7 @@ void ED_operatortypes_gpencil(void)
 	WM_operatortype_append(GPENCIL_OT_dissolve);
 	WM_operatortype_append(GPENCIL_OT_copy);
 	WM_operatortype_append(GPENCIL_OT_paste);
+	WM_operatortype_append(GPENCIL_OT_extrude);
 
 	WM_operatortype_append(GPENCIL_OT_move_to_layer);
 	WM_operatortype_append(GPENCIL_OT_layer_change);
@@ -301,6 +300,7 @@ void ED_operatortypes_gpencil(void)
 	WM_operatortype_append(GPENCIL_OT_stroke_lock_color);
 	WM_operatortype_append(GPENCIL_OT_stroke_apply_thickness);
 	WM_operatortype_append(GPENCIL_OT_stroke_cyclical_set);
+	WM_operatortype_append(GPENCIL_OT_stroke_caps_set);
 	WM_operatortype_append(GPENCIL_OT_stroke_join);
 	WM_operatortype_append(GPENCIL_OT_stroke_flip);
 	WM_operatortype_append(GPENCIL_OT_stroke_subdivide);
@@ -310,6 +310,8 @@ void ED_operatortypes_gpencil(void)
 	WM_operatortype_append(GPENCIL_OT_stroke_split);
 	WM_operatortype_append(GPENCIL_OT_stroke_smooth);
 	WM_operatortype_append(GPENCIL_OT_stroke_merge);
+	WM_operatortype_append(GPENCIL_OT_stroke_cutter);
+	WM_operatortype_append(GPENCIL_OT_stroke_trim);
 
 	WM_operatortype_append(GPENCIL_OT_brush_presets_create);
 
@@ -320,6 +322,8 @@ void ED_operatortypes_gpencil(void)
 	WM_operatortype_append(GPENCIL_OT_vertex_group_deselect);
 	WM_operatortype_append(GPENCIL_OT_vertex_group_invert);
 	WM_operatortype_append(GPENCIL_OT_vertex_group_smooth);
+	WM_operatortype_append(GPENCIL_OT_vertex_group_normalize);
+	WM_operatortype_append(GPENCIL_OT_vertex_group_normalize_all);
 
 	/* color handle */
 	WM_operatortype_append(GPENCIL_OT_lock_layer);
@@ -353,13 +357,26 @@ void ED_operatormacros_gpencil(void)
 	wmOperatorTypeMacro *otmacro;
 
 	/* Duplicate + Move = Interactively place newly duplicated strokes */
-	ot = WM_operatortype_append_macro("GPENCIL_OT_duplicate_move", "Duplicate Strokes",
-	                                  "Make copies of the selected Grease Pencil strokes and move them",
-	                                  OPTYPE_UNDO | OPTYPE_REGISTER);
+	ot = WM_operatortype_append_macro(
+	        "GPENCIL_OT_duplicate_move", "Duplicate Strokes",
+	        "Make copies of the selected Grease Pencil strokes and move them",
+	        OPTYPE_UNDO | OPTYPE_REGISTER);
 	WM_operatortype_macro_define(ot, "GPENCIL_OT_duplicate");
 	otmacro = WM_operatortype_macro_define(ot, "TRANSFORM_OT_translate");
 	RNA_boolean_set(otmacro->ptr, "gpencil_strokes", true);
+	RNA_enum_set(otmacro->ptr, "proportional", 0);
+	RNA_boolean_set(otmacro->ptr, "mirror", false);
 
+	/* Extrude + Move = Interactively add new points */
+	ot = WM_operatortype_append_macro(
+	        "GPENCIL_OT_extrude_move", "Extrude Stroke Points",
+	        "Extrude selected points and move them",
+	        OPTYPE_UNDO | OPTYPE_REGISTER);
+	WM_operatortype_macro_define(ot, "GPENCIL_OT_extrude");
+	otmacro = WM_operatortype_macro_define(ot, "TRANSFORM_OT_translate");
+	RNA_boolean_set(otmacro->ptr, "gpencil_strokes", true);
+	RNA_enum_set(otmacro->ptr, "proportional", 0);
+	RNA_boolean_set(otmacro->ptr, "mirror", false);
 }
 
 /* ****************************************** */

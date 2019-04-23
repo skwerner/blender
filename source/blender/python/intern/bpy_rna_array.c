@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,14 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * Contributor(s): Arystanbek Dyussenov, Campbell Barton
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/python/intern/bpy_rna_array.c
- *  \ingroup pythonintern
+/** \file
+ * \ingroup pythonintern
  *
  * This file deals with array access for 'BPy_PropertyArrayRNA' from bpy_rna.c
  */
@@ -35,7 +29,6 @@
 #include "RNA_types.h"
 
 #include "bpy_rna.h"
-#include "BKE_global.h"
 
 #include "MEM_guardedalloc.h"
 
@@ -283,8 +276,9 @@ static int validate_array_length(PyObject *rvalue, PointerRNA *ptr, PropertyRNA 
 			 *
 			 *    arr[2][3][4] = x
 			 *    lvalue_dim = 2 */
-			for (i = lvalue_dim; i < totdim; i++)
+			for (i = lvalue_dim; i < totdim; i++) {
 				len *= dimsize[i];
+			}
 		}
 
 		if (tot != len) {
@@ -315,8 +309,9 @@ static int validate_array(PyObject *rvalue, PointerRNA *ptr, PropertyRNA *prop,
 		if (MatrixObject_Check(rvalue)) {
 			MatrixObject *pymat = (MatrixObject *)rvalue;
 
-			if (BaseMath_ReadCallback(pymat) == -1)
+			if (BaseMath_ReadCallback(pymat) == -1) {
 				return -1;
+			}
 
 			if (RNA_property_type(prop) != PROP_FLOAT) {
 				PyErr_Format(PyExc_ValueError, "%s %.200s.%.200s, matrix assign to non float array",
@@ -519,8 +514,9 @@ static int py_to_array_index(
 
 	lvalue_dim++;
 
-	for (i = lvalue_dim; i < totdim; i++)
+	for (i = lvalue_dim; i < totdim; i++) {
 		index *= dimsize[i];
+	}
 
 	index += arrayoffset;
 
@@ -758,8 +754,9 @@ static PyObject *pyrna_py_from_array_internal(PointerRNA *ptr, PropertyRNA *prop
 	for (i = 0; i < len; i++) {
 		PyObject *item;
 
-		if (dim + 1 < totdim)
+		if (dim + 1 < totdim) {
 			item = pyrna_py_from_array_internal(ptr, prop, dim + 1, index);
+		}
 		else {
 			item = pyrna_array_index(ptr, prop, *index);
 			*index = *index + 1;
@@ -809,8 +806,9 @@ PyObject *pyrna_py_from_array_index(BPy_PropertyArrayRNA *self, PointerRNA *ptr,
 		 *    x = arr[2][3]
 		 *    index = offset + 3 * 5 */
 
-		for (i = arraydim + 1; i < totdim; i++)
+		for (i = arraydim + 1; i < totdim; i++) {
 			index *= dimsize[i];
+		}
 
 		ret->arrayoffset = arrayoffset + index;
 	}
@@ -829,7 +827,9 @@ PyObject *pyrna_py_from_array(PointerRNA *ptr, PropertyRNA *prop)
 	ret = pyrna_math_object_from_array(ptr, prop);
 
 	/* is this a maths object? */
-	if (ret) return ret;
+	if (ret) {
+		return ret;
+	}
 
 	return pyrna_prop_CreatePyObject(ptr, prop);
 }
@@ -841,8 +841,10 @@ int pyrna_array_contains_py(PointerRNA *ptr, PropertyRNA *prop, PyObject *value)
 	int type;
 	int i;
 
-	if (len == 0) /* possible with dynamic arrays */
+	if (len == 0) {
+		/* possible with dynamic arrays */
 		return 0;
+	}
 
 	if (RNA_property_array_dimension(ptr, prop, NULL) > 1) {
 		PyErr_SetString(PyExc_TypeError, "PropertyRNA - multi dimensional arrays not supported yet");
@@ -878,8 +880,9 @@ int pyrna_array_contains_py(PointerRNA *ptr, PropertyRNA *prop, PyObject *value)
 					}
 				}
 
-				if (tmp_arr != tmp)
+				if (tmp_arr != tmp) {
 					PyMem_FREE(tmp_arr);
+				}
 
 				return i < len ? 1 : 0;
 			}
@@ -911,8 +914,9 @@ int pyrna_array_contains_py(PointerRNA *ptr, PropertyRNA *prop, PyObject *value)
 					}
 				}
 
-				if (tmp_arr != tmp)
+				if (tmp_arr != tmp) {
 					PyMem_FREE(tmp_arr);
+				}
 
 				return i < len ? 1 : 0;
 			}
@@ -944,8 +948,9 @@ int pyrna_array_contains_py(PointerRNA *ptr, PropertyRNA *prop, PyObject *value)
 					}
 				}
 
-				if (tmp_arr != tmp)
+				if (tmp_arr != tmp) {
 					PyMem_FREE(tmp_arr);
+				}
 
 				return i < len ? 1 : 0;
 			}

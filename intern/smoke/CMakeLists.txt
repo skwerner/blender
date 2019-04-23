@@ -16,11 +16,6 @@
 #
 # The Original Code is Copyright (C) 2006, Blender Foundation
 # All rights reserved.
-#
-# The Original Code is: all of this file.
-#
-# Contributor(s): Daniel Genrich
-#
 # ***** END GPL LICENSE BLOCK *****
 
 set(INC
@@ -82,6 +77,9 @@ set(SRC
 	intern/tnt/tnt_version.h
 )
 
+set(LIB
+)
+
 # quiet -Wundef
 add_definitions(-DDDF_DEBUG=0)
 
@@ -98,4 +96,4 @@ if(WITH_FFTW3)
 	)
 endif()
 
-blender_add_lib(bf_intern_smoke "${SRC}" "${INC}" "${INC_SYS}")
+blender_add_lib(bf_intern_smoke "${SRC}" "${INC}" "${INC_SYS}" "${LIB}")

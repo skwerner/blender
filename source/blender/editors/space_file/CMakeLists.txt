@@ -13,9 +13,6 @@
 # You should have received a copy of the GNU General Public License
 # along with this program; if not, write to the Free Software Foundation,
 # Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
-#
-# Contributor(s): Jacques Beaurain.
-#
 # ***** END GPL LICENSE BLOCK *****
 
 set(INC
@@ -53,6 +50,9 @@ set(SRC
 	file_intern.h
 	filelist.h
 	fsmenu.h
+)
+
+set(LIB
 )
 
 if(WITH_HEADLESS)
@@ -97,4 +97,4 @@ if(WITH_FREESTYLE)
 	add_definitions(-DWITH_FREESTYLE)
 endif()
 
-blender_add_lib(bf_editor_space_file "${SRC}" "${INC}" "${INC_SYS}")
+blender_add_lib(bf_editor_space_file "${SRC}" "${INC}" "${INC_SYS}" "${LIB}")

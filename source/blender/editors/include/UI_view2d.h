@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,18 +15,12 @@
  *
  * The Original Code is Copyright (C) 2008 Blender Foundation.
  * All rights reserved.
- *
- *
- * Contributor(s): Blender Foundation, Joshua Leung
- *
- *
  * Generic 2d view with should allow drawing grids,
  * panning, zooming, scrolling, ..
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file UI_view2d.h
- *  \ingroup editorui
+/** \file
+ * \ingroup editorui
  */
 
 #ifndef __UI_VIEW2D_H__
@@ -61,7 +53,7 @@ enum eView2D_CommonViewTypes {
 	/* headers (this is basically the same as listview, but no y-panning) */
 	V2D_COMMONVIEW_HEADER,
 	/* ui region containing panels */
-	V2D_COMMONVIEW_PANELS_UI
+	V2D_COMMONVIEW_PANELS_UI,
 };
 
 /* ---- Defines for Scroller/Grid Arguments ----- */
@@ -78,14 +70,12 @@ enum eView2D_Units {
 
 	/* for drawing values */
 	V2D_UNIT_VALUES,
-	V2D_UNIT_DEGREES,
-	V2D_UNIT_TIME,
 };
 
 /* clamping of grid values to whole numbers */
 enum eView2D_Clamp {
 	V2D_GRID_NOCLAMP = 0,
-	V2D_GRID_CLAMP
+	V2D_GRID_CLAMP,
 };
 
 /* flags for grid-lines to draw */
@@ -134,13 +124,13 @@ struct View2D;
 struct View2DGrid;
 struct View2DScrollers;
 
-struct wmKeyConfig;
-struct bScreen;
+struct ARegion;
 struct Scene;
 struct ScrArea;
-struct ARegion;
 struct bContext;
+struct bScreen;
 struct rctf;
+struct wmKeyConfig;
 
 typedef struct View2DGrid View2DGrid;
 typedef struct View2DScrollers View2DScrollers;
@@ -177,6 +167,12 @@ void UI_view2d_grid_draw(struct View2D *v2d, View2DGrid *grid, int flag);
 void UI_view2d_constant_grid_draw(struct View2D *v2d, float step);
 void UI_view2d_multi_grid_draw(struct View2D *v2d, int colorid, float step, int level_size, int totlevels);
 void UI_view2d_grid_size(View2DGrid *grid, float *r_dx, float *r_dy);
+void UI_view2d_grid_draw_numbers_horizontal(const struct Scene *scene, const struct View2D *v2d,
+                                            const View2DGrid *grid, const struct rcti *rect,
+                                            int unit, bool whole_numbers_only);
+void UI_view2d_grid_draw_numbers_vertical(const struct Scene *scene, const struct View2D *v2d,
+                                          const View2DGrid *grid, const struct rcti *rect,
+                                          int unit, float text_offset);
 void UI_view2d_grid_free(View2DGrid *grid);
 
 /* scrollbar drawing */
@@ -217,19 +213,21 @@ bool  UI_view2d_view_to_region_rcti_clip(struct View2D *v2d, const struct rctf *
 struct View2D *UI_view2d_fromcontext(const struct bContext *C);
 struct View2D *UI_view2d_fromcontext_rwin(const struct bContext *C);
 
-void UI_view2d_scale_get(struct View2D *v2d, float *x, float *y);
-void UI_view2d_scale_get_inverse(struct View2D *v2d, float *x, float *y);
+void UI_view2d_scale_get(struct View2D *v2d, float *r_x, float *r_y);
+float UI_view2d_scale_get_x(const struct View2D *v2d);
+float UI_view2d_scale_get_y(const struct View2D *v2d);
+void UI_view2d_scale_get_inverse(struct View2D *v2d, float *r_x, float *r_y);
 
-void UI_view2d_center_get(struct View2D *v2d, float *x, float *y);
+void UI_view2d_center_get(struct View2D *v2d, float *r_x, float *r_y);
 void UI_view2d_center_set(struct View2D *v2d, float x, float y);
 
 void UI_view2d_offset(struct View2D *v2d, float xfac, float yfac);
 
 char UI_view2d_mouse_in_scrollers_ex(
-        const struct ARegion *ar, struct View2D *v2d, int x, int y,
+        const struct ARegion *ar, const struct View2D *v2d, int x, int y,
         int *r_scroll);
 char UI_view2d_mouse_in_scrollers(
-        const struct ARegion *ar, struct View2D *v2d, int x, int y);
+        const struct ARegion *ar, const struct View2D *v2d, int x, int y);
 
 /* cached text drawing in v2d, to allow pixel-aligned draw as post process */
 void UI_view2d_text_cache_add(struct View2D *v2d, float x, float y,

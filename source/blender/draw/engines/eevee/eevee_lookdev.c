@@ -1,6 +1,4 @@
 /*
- * Copyright 2016, Blender Foundation.
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -15,12 +13,11 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
- * Contributor(s): Blender Institute
- *
+ * Copyright 2016, Blender Foundation.
  */
 
-/** \file eevee_lookdev.c
- *  \ingroup draw_engine
+/** \file
+ * \ingroup draw_engine
  */
 #include "DRW_render.h"
 
@@ -44,6 +41,7 @@
 static void eevee_lookdev_lightcache_delete(EEVEE_Data *vedata)
 {
 	EEVEE_StorageList *stl = vedata->stl;
+	EEVEE_PrivateData *g_data = stl->g_data;
 	EEVEE_TextureList *txl = vedata->txl;
 
 	MEM_SAFE_FREE(stl->lookdev_lightcache);
@@ -51,16 +49,22 @@ static void eevee_lookdev_lightcache_delete(EEVEE_Data *vedata)
 	MEM_SAFE_FREE(stl->lookdev_cube_data);
 	DRW_TEXTURE_FREE_SAFE(txl->lookdev_grid_tx);
 	DRW_TEXTURE_FREE_SAFE(txl->lookdev_cube_tx);
+	g_data->studiolight_index = -1;
+	g_data->studiolight_rot_z = 0.0f;
 }
 
 void EEVEE_lookdev_cache_init(
         EEVEE_Data *vedata, DRWShadingGroup **grp, DRWPass *pass,
+        float background_alpha,
         World *UNUSED(world), EEVEE_LightProbesInfo *pinfo)
 {
 	EEVEE_StorageList *stl = vedata->stl;
 	EEVEE_TextureList *txl = vedata->txl;
+	EEVEE_PrivateData *g_data = stl->g_data;
 	const DRWContextState *draw_ctx = DRW_context_state_get();
 	View3D *v3d = draw_ctx->v3d;
+	Scene *scene = draw_ctx->scene;
+
 	if (LOOK_DEV_STUDIO_LIGHT_ENABLED(v3d)) {
 		StudioLight *sl = BKE_studiolight_find(v3d->shading.lookdev_light, STUDIOLIGHT_ORIENTATIONS_MATERIAL_MODE);
 		if (sl && (sl->flag & STUDIOLIGHT_TYPE_WORLD)) {
@@ -109,7 +113,7 @@ void EEVEE_lookdev_cache_init(
 			stl->g_data->light_cache = stl->lookdev_lightcache;
 
 			static float background_color[4];
-			UI_GetThemeColor4fv(TH_HIGH_GRAD, background_color);
+			UI_GetThemeColor4fv(TH_BACK, background_color);
 			/* XXX: Really quick conversion to avoid washed out background.
 			 * Needs to be addressed properly (color managed using ocio). */
 			srgb_to_linearrgb_v4(background_color, background_color);
@@ -117,7 +121,7 @@ void EEVEE_lookdev_cache_init(
 			*grp = DRW_shgroup_create(shader, pass);
 			axis_angle_to_mat3_single(stl->g_data->studiolight_matrix, 'Z', v3d->shading.studiolight_rot_z);
 			DRW_shgroup_uniform_mat3(*grp, "StudioLightMatrix", stl->g_data->studiolight_matrix);
-			DRW_shgroup_uniform_float(*grp, "backgroundAlpha", &stl->g_data->background_alpha, 1);
+			DRW_shgroup_uniform_float_copy(*grp, "backgroundAlpha", background_alpha);
 			DRW_shgroup_uniform_vec3(*grp, "color", background_color, 1);
 			DRW_shgroup_call_add(*grp, geom, NULL);
 			if (!pinfo) {
@@ -134,13 +138,18 @@ void EEVEE_lookdev_cache_init(
 			DRW_shgroup_uniform_texture(*grp, "image", tex);
 
 			/* Do we need to recalc the lightprobes? */
-			if (pinfo &&
-			    ((pinfo->studiolight_index != sl->index) ||
-			     (pinfo->studiolight_rot_z != v3d->shading.studiolight_rot_z)))
+			if (g_data->studiolight_index != sl->index ||
+			    g_data->studiolight_rot_z != v3d->shading.studiolight_rot_z ||
+			    g_data->studiolight_cubemap_res != scene->eevee.gi_cubemap_resolution ||
+			    g_data->studiolight_glossy_clamp != scene->eevee.gi_glossy_clamp ||
+			    g_data->studiolight_filter_quality != scene->eevee.gi_filter_quality)
 			{
 				stl->lookdev_lightcache->flag |= LIGHTCACHE_UPDATE_WORLD;
-				pinfo->studiolight_index = sl->index;
-				pinfo->studiolight_rot_z = v3d->shading.studiolight_rot_z;
+				g_data->studiolight_index = sl->index;
+				g_data->studiolight_rot_z = v3d->shading.studiolight_rot_z;
+				g_data->studiolight_cubemap_res = scene->eevee.gi_cubemap_resolution;
+				g_data->studiolight_glossy_clamp = scene->eevee.gi_glossy_clamp;
+				g_data->studiolight_filter_quality = scene->eevee.gi_filter_quality;
 			}
 		}
 	}
@@ -191,8 +200,8 @@ void EEVEE_lookdev_draw_background(EEVEE_Data *vedata)
 		params.offsety = 0.0f;
 		params.shiftx = 0.0f;
 		params.shifty = 0.0f;
-		params.clipsta = 0.001f;
-		params.clipend = 20.0f;
+		params.clip_start = 0.001f;
+		params.clip_end = 20.0f;
 		BKE_camera_params_compute_viewplane(&params, ar->winx, ar->winy, aspect[0], aspect[1]);
 		BKE_camera_params_compute_matrix(&params);
 

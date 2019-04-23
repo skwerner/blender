@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,21 +15,16 @@
  *
  * The Original Code is Copyright (C) 2007 by Janne Karhu.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
  * Adaptive time step
  * Classical SPH
  * Copyright 2011-2012 AutoCRC
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
 #ifndef __BKE_PARTICLE_H__
 #define __BKE_PARTICLE_H__
 
-/** \file BKE_particle.h
- *  \ingroup bke
+/** \file
+ * \ingroup bke
  */
 
 #include "BLI_utildefines.h"
@@ -41,28 +34,29 @@
 
 #include "BKE_customdata.h"
 
-struct ParticleSystemModifierData;
-struct ParticleSystem;
 struct ParticleKey;
 struct ParticleSettings;
+struct ParticleSystem;
+struct ParticleSystemModifierData;
 
-struct Main;
-struct Object;
-struct Scene;
-struct Depsgraph;
-struct ModifierData;
-struct MTFace;
-struct MCol;
-struct MFace;
-struct MVert;
-struct LatticeDeformData;
-struct LinkNode;
-struct KDTree;
-struct RNG;
 struct BVHTreeRay;
 struct BVHTreeRayHit;
-struct EdgeHash;
+struct CustomData_MeshMasks;
 struct Depsgraph;
+struct Depsgraph;
+struct EdgeHash;
+struct KDTree_3d;
+struct LatticeDeformData;
+struct LinkNode;
+struct MCol;
+struct MFace;
+struct MTFace;
+struct MVert;
+struct Main;
+struct ModifierData;
+struct Object;
+struct RNG;
+struct Scene;
 struct ViewLayer;
 
 #define PARTICLE_COLLISION_MAX_COLLISIONS 10
@@ -142,7 +136,7 @@ typedef struct ParticleThreadContext {
 	struct Material *ma;
 
 	/* distribution */
-	struct KDTree *tree;
+	struct KDTree_3d *tree;
 
 	struct ParticleSeam *seams;
 	int totseam;
@@ -177,19 +171,6 @@ typedef struct ParticleTask {
 	struct RNG *rng, *rng_path;
 	int begin, end;
 } ParticleTask;
-
-typedef struct ParticleBillboardData {
-	struct Object *ob;
-	float vec[3], vel[3];
-	float offset[2];
-	float size[2];
-	float tilt, random, time;
-	int uv[3];
-	int lock, num;
-	int totnum;
-	int lifetime;
-	short align, uv_split, anim, split_offset;
-} ParticleBillboardData;
 
 typedef struct ParticleCollisionElement {
 	/* pointers to original data */
@@ -340,7 +321,7 @@ void psys_interpolate_mcol(const struct MCol *mcol, int quad, const float w[4], 
 
 void copy_particle_key(struct ParticleKey *to, struct ParticleKey *from, int time);
 
-CustomDataMask psys_emitter_customdata_mask(struct ParticleSystem *psys);
+void psys_emitter_customdata_mask(struct ParticleSystem *psys, struct CustomData_MeshMasks *r_cddata_masks);
 void psys_particle_on_emitter(struct ParticleSystemModifierData *psmd, int distr, int index, int index_dmcache,
                               float fuv[4], float foffset, float vec[3], float nor[3],
                               float utan[3], float vtan[3], float orco[3]);
@@ -359,6 +340,8 @@ void BKE_particlesettings_make_local(struct Main *bmain, struct ParticleSettings
 void psys_reset(struct ParticleSystem *psys, int mode);
 
 void psys_find_parents(struct ParticleSimulationData *sim, const bool use_render_params);
+
+void psys_unique_name(struct Object *object, struct ParticleSystem *psys, const char *defname);
 
 void psys_cache_paths(struct ParticleSimulationData *sim, float cfra, const bool use_render_params);
 void psys_cache_edit_paths(struct Depsgraph *depsgraph, struct Scene *scene, struct Object *ob, struct PTCacheEdit *edit, float cfra, const bool use_render_params);
@@ -395,7 +378,6 @@ void psys_thread_context_free(struct ParticleThreadContext *ctx);
 void psys_tasks_create(struct ParticleThreadContext *ctx, int startpart, int endpart, struct ParticleTask **r_tasks, int *r_numtasks);
 void psys_tasks_free(struct ParticleTask *tasks, int numtasks);
 
-void psys_make_billboard(ParticleBillboardData *bb, float xvec[3], float yvec[3], float zvec[3], float center[3]);
 void psys_apply_hair_lattice(struct Depsgraph *depsgraph, struct Scene *scene, struct Object *ob, struct ParticleSystem *psys);
 
 /* particle_system.c */
@@ -417,6 +399,9 @@ void particle_system_update(struct Depsgraph *depsgraph, struct Scene *scene, st
 typedef void (*ParticleSystemIDFunc)(struct ParticleSystem *psys, struct ID **idpoin, void *userdata, int cb_flag);
 
 void BKE_particlesystem_id_loop(struct ParticleSystem *psys, ParticleSystemIDFunc func, void *userdata);
+
+/* Reset all particle systems in the given object. */
+void BKE_particlesystem_reset_all(struct Object *object);
 
 /* ----------- functions needed only inside particlesystem ------------ */
 /* particle.c */
@@ -483,11 +468,14 @@ void BKE_particle_settings_eval_reset(
 void BKE_particle_system_eval_init(struct Depsgraph *depsgraph,
                                    struct Object *object);
 
-#endif
-
 /* Draw Cache */
 enum {
 	BKE_PARTICLE_BATCH_DIRTY_ALL = 0,
 };
 void BKE_particle_batch_cache_dirty_tag(struct ParticleSystem *psys, int mode);
 void BKE_particle_batch_cache_free(struct ParticleSystem *psys);
+
+extern void (*BKE_particle_batch_cache_dirty_tag_cb)(struct ParticleSystem *psys, int mode);
+extern void (*BKE_particle_batch_cache_free_cb)(struct ParticleSystem *psys);
+
+#endif  /* __BKE_PARTICLE_H__ */

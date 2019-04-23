@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,12 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/makesrna/intern/rna_shader_fx.c
- *  \ingroup RNA
+/** \file
+ * \ingroup RNA
  */
 
 
@@ -59,11 +55,11 @@ const EnumPropertyItem rna_enum_object_shaderfx_type_items[] = {
 	{eShaderFxType_Shadow, "FX_SHADOW", ICON_SHADERFX, "Shadow", "Create a shadow effect"},
 	{eShaderFxType_Swirl, "FX_SWIRL", ICON_SHADERFX, "Swirl", "Create a rotation distortion"},
 	{eShaderFxType_Wave, "FX_WAVE", ICON_SHADERFX, "Wave Distortion", "Apply sinusoidal deformation"},
-	{0, NULL, 0, NULL, NULL}
+	{0, NULL, 0, NULL, NULL},
 };
 
 static const EnumPropertyItem rna_enum_shaderfx_rim_modes_items[] = {
-	{eShaderFxRimMode_Normal, "NORMAL", 0, "Normal", "" },
+	{eShaderFxRimMode_Normal, "NORMAL", 0, "Regular", "" },
 	{eShaderFxRimMode_Overlay, "OVERLAY", 0, "Overlay", "" },
 	{eShaderFxRimMode_Add, "ADD", 0, "Add", "" },
 	{eShaderFxRimMode_Subtract, "SUBTRACT", 0, "Subtract", "" },
@@ -81,7 +77,7 @@ static const EnumPropertyItem rna_enum_shaderfx_glow_modes_items[] = {
 static const EnumPropertyItem rna_enum_shaderfx_colorize_modes_items[] = {
 	{eShaderFxColorizeMode_GrayScale, "GRAYSCALE", 0, "Gray Scale", "" },
 	{eShaderFxColorizeMode_Sepia, "SEPIA", 0, "Sepia", "" },
-	{eShaderFxColorizeMode_BiTone, "BITONE", 0, "Bi-Tone", "" },
+	{eShaderFxColorizeMode_Duotone, "DUOTONE", 0, "Duotone", "" },
 	{eShaderFxColorizeMode_Transparent, "TRANSPARENT", 0, "Transparent", "" },
 	{eShaderFxColorizeMode_Custom, "CUSTOM", 0, "Custom", "" },
 	{0, NULL, 0, NULL, NULL }
@@ -522,7 +518,7 @@ static void rna_def_shader_fx_glow(BlenderRNA *brna)
 	RNA_def_property_ui_text(prop, "Mode", "Glow mode");
 	RNA_def_property_update(prop, NC_OBJECT | ND_MODIFIER, "rna_ShaderFx_update");
 
-	prop = RNA_def_property(srna, "threshold", PROP_FLOAT, PROP_NONE);
+	prop = RNA_def_property(srna, "threshold", PROP_FLOAT, PROP_FACTOR);
 	RNA_def_property_float_sdna(prop, NULL, "threshold");
 	RNA_def_property_range(prop, 0.0f, 1.0f);
 	RNA_def_property_ui_range(prop, 0.0f, 1.0f, 0.1f, 3);
@@ -573,7 +569,7 @@ static void rna_def_shader_fx_swirl(BlenderRNA *brna)
 	RNA_def_property_ui_text(prop, "Angle", "Angle of rotation");
 	RNA_def_property_update(prop, NC_OBJECT | ND_MODIFIER, "rna_ShaderFx_update");
 
-	prop = RNA_def_property(srna, "transparent", PROP_BOOLEAN, PROP_NONE);
+	prop = RNA_def_property(srna, "use_transparent", PROP_BOOLEAN, PROP_NONE);
 	RNA_def_property_boolean_sdna(prop, NULL, "flag", FX_SWIRL_MAKE_TRANSPARENT);
 	RNA_def_property_ui_text(prop, "Transparent", "Make image transparent outside of radius");
 	RNA_def_property_update(prop, NC_OBJECT | ND_MODIFIER, "rna_ShaderFx_update");
@@ -662,6 +658,7 @@ void RNA_def_shader_fx(BlenderRNA *brna)
 	RNA_def_property_enum_sdna(prop, NULL, "type");
 	RNA_def_property_enum_items(prop, rna_enum_object_shaderfx_type_items);
 	RNA_def_property_ui_text(prop, "Type", "");
+	RNA_def_property_translation_context(prop, BLT_I18NCONTEXT_ID_ID);  /* Abused, for "Light"... */
 
 	/* flags */
 	prop = RNA_def_property(srna, "show_viewport", PROP_BOOLEAN, PROP_NONE);
@@ -686,6 +683,7 @@ void RNA_def_shader_fx(BlenderRNA *brna)
 	RNA_def_property_ui_icon(prop, ICON_EDITMODE_HLT, 0);
 
 	prop = RNA_def_property(srna, "show_expanded", PROP_BOOLEAN, PROP_NONE);
+	RNA_def_property_flag(prop, PROP_NO_DEG_UPDATE);
 	RNA_def_property_boolean_sdna(prop, NULL, "mode", eShaderFxMode_Expanded);
 	RNA_def_property_override_flag(prop, PROPOVERRIDE_OVERRIDABLE_STATIC);
 	RNA_def_property_ui_text(prop, "Expanded", "Set effect expanded in the user interface");

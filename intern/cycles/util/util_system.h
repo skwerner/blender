@@ -18,6 +18,7 @@
 #define __UTIL_SYSTEM_H__
 
 #include "util/util_string.h"
+#include "util/util_vector.h"
 
 CCL_NAMESPACE_BEGIN
 
@@ -26,6 +27,9 @@ bool system_cpu_ensure_initialized();
 
 /* Get total number of threads in all NUMA nodes / CPU groups. */
 int system_cpu_thread_count();
+
+/* Get width in characters of the current console output. */
+int system_console_width();
 
 /* Get number of available nodes.
  *
@@ -44,6 +48,10 @@ int system_cpu_num_numa_node_processors(int node);
  * Returns truth if affinity has successfully changed. */
 bool system_cpu_run_thread_on_node(int node);
 
+/* Number of processors within the current CPU group (or within active thread
+ * thread affinity). */
+int system_cpu_num_active_group_processors();
+
 string system_cpu_brand_string();
 int system_cpu_bits();
 bool system_cpu_support_sse2();
@@ -53,6 +61,9 @@ bool system_cpu_support_avx();
 bool system_cpu_support_avx2();
 
 size_t system_physical_ram();
+
+/* Start a new process of the current application with the given arguments. */
+bool system_call_self(const vector<string>& args);
 
 CCL_NAMESPACE_END
 

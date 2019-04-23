@@ -1,5 +1,5 @@
-/** \file blender/blenlib/intern/fnmatch.c
- *  \ingroup bli
+/** \file
+ * \ingroup bli
  */
 /* Copyright (C) 1991, 1992, 1993, 1996, 1997 Free Software Foundation, Inc.
 
@@ -18,6 +18,10 @@
   Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.  */
 
 #ifdef WIN32
+
+
+/* Maintained by GLIBC. */
+/* clang-format off */
 
 /* Enable GNU extensions in fnmatch.h.  */
 #ifndef _GNU_SOURCE
@@ -236,6 +240,8 @@ fnmatch (const char *pattern, const char *string, int flags)
 }
 
 #endif /* _LIBC or not __GNU_LIBRARY__.  */
+
+/* clang-format on */
 
 #else
 

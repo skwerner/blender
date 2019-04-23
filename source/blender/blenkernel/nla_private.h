@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,10 @@
  *
  * The Original Code is Copyright (C) 2009 Blender Foundation, Joshua Leung
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): Joshua Leung (full recode)
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/blenkernel/nla_private.h
- *  \ingroup bke
+/** \file
+ * \ingroup bke
  */
 
 
@@ -92,6 +84,14 @@ typedef struct NlaEvalChannelSnapshot {
 	/* Memory over-allocated to provide space for values. */
 } NlaEvalChannelSnapshot;
 
+/* NlaEvalChannel->mix_mode */
+enum eNlaEvalChannel_MixMode {
+	NEC_MIX_ADD,
+	NEC_MIX_MULTIPLY,
+	NEC_MIX_QUATERNION,
+	NEC_MIX_AXIS_ANGLE,
+};
+
 /* Temp channel for accumulating data from NLA for a single property.
  * Handles array properties as a unit to allow intelligent blending. */
 typedef struct NlaEvalChannel {
@@ -104,6 +104,11 @@ typedef struct NlaEvalChannel {
 
 	int index;
 	bool is_array;
+	bool in_blend;
+	char mix_mode;
+
+	struct NlaEvalChannel *next_blend;
+	NlaEvalChannelSnapshot *blend_snapshot;
 
 	/* Mask of array items controlled by NLA. */
 	NlaValidMask valid;

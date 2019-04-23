@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,10 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/blenkernel/intern/lattice.c
- *  \ingroup bke
+/** \file
+ * \ingroup bke
  */
 
 #include <stdio.h>
@@ -57,8 +49,6 @@
 #include "BKE_key.h"
 #include "BKE_lattice.h"
 #include "BKE_library.h"
-#include "BKE_library_query.h"
-#include "BKE_library_remap.h"
 #include "BKE_main.h"
 #include "BKE_modifier.h"
 #include "BKE_object.h"
@@ -252,7 +242,7 @@ void BKE_lattice_resize(Lattice *lt, int uNew, int vNew, int wNew, Object *ltOb)
 
 void BKE_lattice_init(Lattice *lt)
 {
-	BLI_assert(MEMCMP_STRUCT_OFS_IS_ZERO(lt, id));
+	BLI_assert(MEMCMP_STRUCT_AFTER_IS_ZERO(lt, id));
 
 	lt->flag = LT_GRID;
 
@@ -276,7 +266,7 @@ Lattice *BKE_lattice_add(Main *bmain, const char *name)
 
 /**
  * Only copy internal data of Lattice ID from source to already allocated/initialized destination.
- * You probably nerver want to use that directly, use id_copy or BKE_id_copy_ex for typical needs.
+ * You probably never want to use that directly, use BKE_id_copy or BKE_id_copy_ex for typical needs.
  *
  * WARNING! This function will not handle ID user count!
  *
@@ -287,7 +277,7 @@ void BKE_lattice_copy_data(Main *bmain, Lattice *lt_dst, const Lattice *lt_src, 
 	lt_dst->def = MEM_dupallocN(lt_src->def);
 
 	if (lt_src->key && (flag & LIB_ID_COPY_SHAPEKEY)) {
-		BKE_id_copy_ex(bmain, &lt_src->key->id, (ID **)&lt_dst->key, flag, false);
+		BKE_id_copy_ex(bmain, &lt_src->key->id, (ID **)&lt_dst->key, flag);
 	}
 
 	if (lt_src->dvert) {
@@ -302,7 +292,7 @@ void BKE_lattice_copy_data(Main *bmain, Lattice *lt_dst, const Lattice *lt_src, 
 Lattice *BKE_lattice_copy(Main *bmain, const Lattice *lt)
 {
 	Lattice *lt_copy;
-	BKE_id_copy_ex(bmain, &lt->id, (ID **)&lt_copy, LIB_ID_COPY_SHAPEKEY, false);
+	BKE_id_copy(bmain, &lt->id, (ID **)&lt_copy);
 	return lt_copy;
 }
 
@@ -1100,11 +1090,11 @@ static void boundbox_lattice(Object *ob)
 	Lattice *lt;
 	float min[3], max[3];
 
-	if (ob->bb == NULL) {
-		ob->bb = MEM_callocN(sizeof(BoundBox), "Lattice boundbox");
+	if (ob->runtime.bb == NULL) {
+		ob->runtime.bb = MEM_callocN(sizeof(BoundBox), "Lattice boundbox");
 	}
 
-	bb = ob->bb;
+	bb = ob->runtime.bb;
 	lt = ob->data;
 
 	INIT_MINMAX(min, max);
@@ -1118,7 +1108,7 @@ BoundBox *BKE_lattice_boundbox_get(Object *ob)
 {
 	boundbox_lattice(ob);
 
-	return ob->bb;
+	return ob->runtime.bb;
 }
 
 void BKE_lattice_minmax_dl(Object *ob, Lattice *lt, float min[3], float max[3])

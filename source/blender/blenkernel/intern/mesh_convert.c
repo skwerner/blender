@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,14 +12,13 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/blenkernel/intern/mesh_convert.c
- *  \ingroup bke
+/** \file
+ * \ingroup bke
  */
 
+#include "CLG_log.h"
 
 #include "MEM_guardedalloc.h"
 
@@ -40,7 +37,6 @@
 
 #include "BKE_main.h"
 #include "BKE_DerivedMesh.h"
-#include "BKE_global.h"
 #include "BKE_key.h"
 #include "BKE_mesh.h"
 #include "BKE_mesh_runtime.h"
@@ -67,6 +63,8 @@
 #else
 #  define ASSERT_IS_VALID_MESH(mesh)
 #endif
+
+static CLG_LogRef LOG = {"bke.mesh_convert"};
 
 void BKE_mesh_from_metaball(ListBase *lb, Mesh *me)
 {
@@ -594,7 +592,7 @@ void BKE_mesh_from_nurbs_displist(
 	else {
 		me = BKE_mesh_add(bmain, obdata_name);
 		ob->runtime.mesh_eval = NULL;
-		BKE_mesh_nomain_to_mesh(me_eval, me, ob, CD_MASK_MESH, false);
+		BKE_mesh_nomain_to_mesh(me_eval, me, ob, &CD_MASK_MESH, true);
 	}
 
 	me->totcol = cu->totcol;
@@ -616,12 +614,12 @@ void BKE_mesh_from_nurbs_displist(
 	cu->mat = NULL;
 	cu->totcol = 0;
 
-	/* Do not decrement ob->data usercount here, it's done at end of func with BKE_libblock_free_us() call. */
+	/* Do not decrement ob->data usercount here, it's done at end of func with BKE_id_free_us() call. */
 	ob->data = me;
 	ob->type = OB_MESH;
 
 	/* other users */
-	ob1 = bmain->object.first;
+	ob1 = bmain->objects.first;
 	while (ob1) {
 		if (ob1->data == cu) {
 			ob1->type = OB_MESH;
@@ -637,11 +635,10 @@ void BKE_mesh_from_nurbs_displist(
 		/* For temporary objects in BKE_mesh_new_from_object don't remap
 		 * the entire scene with associated depsgraph updates, which are
 		 * problematic for renderers exporting data. */
-		id_us_min(&cu->id);
-		BKE_libblock_free(bmain, cu);
+		BKE_id_free(NULL, cu);
 	}
 	else {
-		BKE_libblock_free_us(bmain, cu);
+		BKE_id_free_us(bmain, cu);
 	}
 }
 
@@ -820,7 +817,7 @@ void BKE_mesh_to_curve(Main *bmain, Depsgraph *depsgraph, Scene *UNUSED(scene), 
 	/* make new mesh data from the original copy */
 	Scene *scene_eval = DEG_get_evaluated_scene(depsgraph);
 	Object *ob_eval = DEG_get_evaluated_object(depsgraph, ob);
-	Mesh *me_eval = mesh_get_eval_final(depsgraph, scene_eval, ob_eval, CD_MASK_MESH);
+	Mesh *me_eval = mesh_get_eval_final(depsgraph, scene_eval, ob_eval, &CD_MASK_MESH);
 	ListBase nurblist = {NULL, NULL};
 
 	BKE_mesh_to_curve_nurblist(me_eval, &nurblist, 0);
@@ -840,7 +837,25 @@ void BKE_mesh_to_curve(Main *bmain, Depsgraph *depsgraph, Scene *UNUSED(scene), 
 	}
 }
 
-/* settings: 1 - preview, 2 - render */
+/* settings: 1 - preview, 2 - render
+ *
+ * The convention goes as following:
+ *
+ * - Passing original object with apply_modifiers=false will give a
+ *   non-modified non-deformed mesh.
+ *   The result mesh will point to datablocks from the original "domain". For
+ *   example, materials will be original.
+ *
+ * - Passing original object with apply_modifiers=true will give a mesh which
+ *   has all modifiers applied.
+ *   The result mesh will point to datablocks from the original "domain". For
+ *   example, materials will be original.
+ *
+ * - Passing evaluated object will ignore apply_modifiers argument, and the
+ *   result always contains all modifiers applied.
+ *   The result mesh will point to an evaluated datablocks. For example,
+ *   materials will be an evaluated IDs from the dependency graph.
+ */
 Mesh *BKE_mesh_new_from_object(
         Depsgraph *depsgraph, Main *bmain, Scene *sce, Object *ob,
         const bool apply_modifiers, const bool calc_undeformed)
@@ -849,11 +864,42 @@ Mesh *BKE_mesh_new_from_object(
 	Curve *tmpcu = NULL, *copycu;
 	int i;
 	const bool render = (DEG_get_mode(depsgraph) == DAG_EVAL_RENDER);
-	const bool cage = !apply_modifiers;
+	bool effective_apply_modifiers = apply_modifiers;
 	bool do_mat_id_data_us = true;
 
+	Object *object_input = ob;
+	Object *object_eval = DEG_get_evaluated_object(depsgraph, object_input);
+	Object object_for_eval;
+
+	if (object_eval == object_input) {
+		/* Evaluated mesh contains all modifiers applied already.
+		 * The other types of object has them applied, but are stored in other
+		 * data structures than a mesh. So need to apply modifiers again on a
+		 * temporary copy before converting result to mesh. */
+		if (object_input->type == OB_MESH) {
+			effective_apply_modifiers = false;
+		}
+		else {
+			effective_apply_modifiers = true;
+		}
+		object_for_eval = *object_eval;
+	}
+	else {
+		if (apply_modifiers) {
+			object_for_eval = *object_eval;
+			if (object_for_eval.runtime.mesh_orig != NULL) {
+				object_for_eval.data = object_for_eval.runtime.mesh_orig;
+			}
+		}
+		else {
+			object_for_eval = *object_input;
+		}
+	}
+
+	const bool cage = !effective_apply_modifiers;
+
 	/* perform the mesh extraction based on type */
-	switch (ob->type) {
+	switch (object_for_eval.type) {
 		case OB_FONT:
 		case OB_CURVE:
 		case OB_SURF:
@@ -864,8 +910,7 @@ Mesh *BKE_mesh_new_from_object(
 
 			/* copies object and modifiers (but not the data) */
 			Object *tmpobj;
-			/* TODO: make it temp copy outside bmain! */
-			BKE_id_copy_ex(bmain, &ob->id, (ID **)&tmpobj, LIB_ID_COPY_CACHES | LIB_ID_CREATE_NO_DEG_TAG, false);
+			BKE_id_copy_ex(NULL, &object_for_eval.id, (ID **)&tmpobj, LIB_ID_COPY_LOCALIZE);
 			tmpcu = (Curve *)tmpobj->data;
 
 			/* Copy cached display list, it might be needed by the stack evaluation.
@@ -874,19 +919,19 @@ Mesh *BKE_mesh_new_from_object(
 			 *
 			 * TODO(sergey): Look into more proper solution.
 			 */
-			if (ob->runtime.curve_cache != NULL) {
+			if (object_for_eval.runtime.curve_cache != NULL) {
 				if (tmpobj->runtime.curve_cache == NULL) {
 					tmpobj->runtime.curve_cache = MEM_callocN(sizeof(CurveCache), "CurveCache for curve types");
 				}
-				BKE_displist_copy(&tmpobj->runtime.curve_cache->disp, &ob->runtime.curve_cache->disp);
+				BKE_displist_copy(&tmpobj->runtime.curve_cache->disp, &object_for_eval.runtime.curve_cache->disp);
 			}
 
 			/* if getting the original caged mesh, delete object modifiers */
 			if (cage)
-				BKE_object_free_modifiers(tmpobj, 0);
+				BKE_object_free_modifiers(tmpobj, LIB_ID_CREATE_NO_USER_REFCOUNT);
 
-			/* copies the data */
-			BKE_id_copy_ex(bmain, ob->data, (ID **)&copycu, LIB_ID_CREATE_NO_DEG_TAG, false);
+			/* copies the data, but *not* the shapekeys. */
+			BKE_id_copy_ex(NULL, object_for_eval.data, (ID **)&copycu, LIB_ID_COPY_LOCALIZE);
 			tmpobj->data = copycu;
 
 			/* make sure texture space is calculated for a copy of curve,
@@ -901,7 +946,9 @@ Mesh *BKE_mesh_new_from_object(
 			copycu->editnurb = tmpcu->editnurb;
 
 			/* get updated display list, and convert to a mesh */
-			BKE_displist_make_curveTypes_forRender(depsgraph, sce, tmpobj, &dispbase, &me_eval_final, false, render);
+			BKE_displist_make_curveTypes_forRender(
+			        depsgraph, sce, tmpobj, &dispbase, &me_eval_final, false, render,
+			        NULL);
 
 			copycu->editfont = NULL;
 			copycu->editnurb = NULL;
@@ -911,8 +958,11 @@ Mesh *BKE_mesh_new_from_object(
 			/* convert object type to mesh */
 			uv_from_orco = (tmpcu->flag & CU_UV_ORCO) != 0;
 			BKE_mesh_from_nurbs_displist(bmain, tmpobj, &dispbase, uv_from_orco, tmpcu->id.name + 2, true);
+			/* Function above also frees copycu (aka tmpobj->data), make this obvious here. */
+			copycu = NULL;
 
 			tmpmesh = tmpobj->data;
+			id_us_min(&tmpmesh->id);  /* Gets one user from its creation in BKE_mesh_from_nurbs_displist(). */
 
 			BKE_displist_free(&dispbase);
 
@@ -920,11 +970,11 @@ Mesh *BKE_mesh_new_from_object(
 			 * if it didn't the curve did not have any segments or otherwise
 			 * would have generated an empty mesh */
 			if (tmpobj->type != OB_MESH) {
-				BKE_libblock_free(bmain, tmpobj);
+				BKE_id_free(NULL, tmpobj);
 				return NULL;
 			}
 
-			BKE_libblock_free(bmain, tmpobj);
+			BKE_id_free(NULL, tmpobj);
 
 			/* XXX The curve to mesh conversion is convoluted... But essentially, BKE_mesh_from_nurbs_displist()
 			 *     already transfers the ownership of materials from the temp copy of the Curve ID to the new
@@ -937,32 +987,34 @@ Mesh *BKE_mesh_new_from_object(
 		case OB_MBALL:
 		{
 			/* metaballs don't have modifiers, so just convert to mesh */
-			Object *basis_ob = BKE_mball_basis_find(sce, ob);
+			Object *basis_ob = BKE_mball_basis_find(sce, object_input);
 			/* todo, re-generatre for render-res */
 			/* metaball_polygonize(scene, ob) */
 
-			if (ob != basis_ob)
-				return NULL;  /* only do basis metaball */
+			if (basis_ob != object_input) {
+				/* Only do basis metaball. */
+				return NULL;
+			}
 
-			tmpmesh = BKE_mesh_add(bmain, ((ID *)ob->data)->name + 2);
+			tmpmesh = BKE_mesh_add(bmain, ((ID *)object_for_eval.data)->name + 2);
 			/* BKE_mesh_add gives us a user count we don't need */
 			id_us_min(&tmpmesh->id);
 
 			if (render) {
 				ListBase disp = {NULL, NULL};
-				BKE_displist_make_mball_forRender(depsgraph, sce, ob, &disp);
+				BKE_displist_make_mball_forRender(depsgraph, sce, &object_for_eval, &disp);
 				BKE_mesh_from_metaball(&disp, tmpmesh);
 				BKE_displist_free(&disp);
 			}
 			else {
 				ListBase disp = {NULL, NULL};
-				if (ob->runtime.curve_cache) {
-					disp = ob->runtime.curve_cache->disp;
+				if (object_for_eval.runtime.curve_cache) {
+					disp = object_for_eval.runtime.curve_cache->disp;
 				}
 				BKE_mesh_from_metaball(&disp, tmpmesh);
 			}
 
-			BKE_mesh_texspace_copy_from_object(tmpmesh, ob);
+			BKE_mesh_texspace_copy_from_object(tmpmesh, &object_for_eval);
 
 			break;
 
@@ -970,9 +1022,9 @@ Mesh *BKE_mesh_new_from_object(
 		case OB_MESH:
 			/* copies object and modifiers (but not the data) */
 			if (cage) {
-				/* copies the data */
-				Mesh *mesh = ob->data;
-				BKE_id_copy_ex(bmain, &mesh->id, (ID **)&tmpmesh, 0, false);
+				/* copies the data (but *not* the shapekeys). */
+				Mesh *mesh = object_for_eval.data;
+				BKE_id_copy_ex(bmain, &mesh->id, (ID **)&tmpmesh, 0);
 				/* XXX BKE_mesh_copy() already handles materials usercount. */
 				do_mat_id_data_us = false;
 			}
@@ -980,25 +1032,25 @@ Mesh *BKE_mesh_new_from_object(
 			else {
 				/* Make a dummy mesh, saves copying */
 				Mesh *me_eval;
-				/* CustomDataMask mask = CD_MASK_BAREMESH|CD_MASK_MTFACE|CD_MASK_MCOL; */
-				CustomDataMask mask = CD_MASK_MESH; /* this seems more suitable, exporter,
-				                                     * for example, needs CD_MASK_MDEFORMVERT */
+				CustomData_MeshMasks mask = CD_MASK_MESH; /* this seems more suitable, exporter,
+				                                           * for example, needs CD_MASK_MDEFORMVERT */
 
-				if (calc_undeformed)
-					mask |= CD_MASK_ORCO;
+				if (calc_undeformed) {
+					mask.vmask |= CD_MASK_ORCO;
+				}
 
 				if (render) {
-					me_eval = mesh_create_eval_final_render(depsgraph, sce, ob, mask);
+					me_eval = mesh_create_eval_final_render(depsgraph, sce, &object_for_eval, &mask);
 				}
 				else {
-					me_eval = mesh_create_eval_final_view(depsgraph, sce, ob, mask);
+					me_eval = mesh_create_eval_final_view(depsgraph, sce, &object_for_eval, &mask);
 				}
 
-				tmpmesh = BKE_mesh_add(bmain, ((ID *)ob->data)->name + 2);
-				BKE_mesh_nomain_to_mesh(me_eval, tmpmesh, ob, mask, true);
+				tmpmesh = BKE_mesh_add(bmain, ((ID *)object_for_eval.data)->name + 2);
+				BKE_mesh_nomain_to_mesh(me_eval, tmpmesh, &object_for_eval, &mask, true);
 
 				/* Copy autosmooth settings from original mesh. */
-				Mesh *me = (Mesh *)ob->data;
+				Mesh *me = (Mesh *)object_for_eval.data;
 				tmpmesh->flag |= (me->flag & ME_AUTOSMOOTH);
 				tmpmesh->smoothresh = me->smoothresh;
 			}
@@ -1013,7 +1065,7 @@ Mesh *BKE_mesh_new_from_object(
 	}
 
 	/* Copy materials to new mesh */
-	switch (ob->type) {
+	switch (object_for_eval.type) {
 		case OB_SURF:
 		case OB_FONT:
 		case OB_CURVE:
@@ -1023,9 +1075,9 @@ Mesh *BKE_mesh_new_from_object(
 			if (tmpcu->mat) {
 				for (i = tmpcu->totcol; i-- > 0; ) {
 					/* are we an object material or data based? */
-					tmpmesh->mat[i] = give_current_material(ob, i + 1);
+					tmpmesh->mat[i] = give_current_material(object_input, i + 1);
 
-					if (((ob->matbits && ob->matbits[i]) || do_mat_id_data_us)  && tmpmesh->mat[i]) {
+					if (((object_for_eval.matbits && object_for_eval.matbits[i]) || do_mat_id_data_us)  && tmpmesh->mat[i]) {
 						id_us_plus(&tmpmesh->mat[i]->id);
 					}
 				}
@@ -1034,7 +1086,7 @@ Mesh *BKE_mesh_new_from_object(
 
 		case OB_MBALL:
 		{
-			MetaBall *tmpmb = (MetaBall *)ob->data;
+			MetaBall *tmpmb = (MetaBall *)object_for_eval.data;
 			tmpmesh->mat = MEM_dupallocN(tmpmb->mat);
 			tmpmesh->totcol = tmpmb->totcol;
 
@@ -1042,9 +1094,9 @@ Mesh *BKE_mesh_new_from_object(
 			if (tmpmb->mat) {
 				for (i = tmpmb->totcol; i-- > 0; ) {
 					/* are we an object material or data based? */
-					tmpmesh->mat[i] = give_current_material(ob, i + 1);
+					tmpmesh->mat[i] = give_current_material(object_input, i + 1);
 
-					if (((ob->matbits && ob->matbits[i]) || do_mat_id_data_us) && tmpmesh->mat[i]) {
+					if (((object_for_eval.matbits && object_for_eval.matbits[i]) || do_mat_id_data_us) && tmpmesh->mat[i]) {
 						id_us_plus(&tmpmesh->mat[i]->id);
 					}
 				}
@@ -1054,7 +1106,7 @@ Mesh *BKE_mesh_new_from_object(
 
 		case OB_MESH:
 			if (!cage) {
-				Mesh *origmesh = ob->data;
+				Mesh *origmesh = object_for_eval.data;
 				tmpmesh->flag = origmesh->flag;
 				tmpmesh->mat = MEM_dupallocN(origmesh->mat);
 				tmpmesh->totcol = origmesh->totcol;
@@ -1062,9 +1114,9 @@ Mesh *BKE_mesh_new_from_object(
 				if (origmesh->mat) {
 					for (i = origmesh->totcol; i-- > 0; ) {
 						/* are we an object material or data based? */
-						tmpmesh->mat[i] = give_current_material(ob, i + 1);
+						tmpmesh->mat[i] = give_current_material(object_input, i + 1);
 
-						if (((ob->matbits && ob->matbits[i]) || do_mat_id_data_us)  && tmpmesh->mat[i]) {
+						if (((object_for_eval.matbits && object_for_eval.matbits[i]) || do_mat_id_data_us) && tmpmesh->mat[i]) {
 							id_us_plus(&tmpmesh->mat[i]->id);
 						}
 					}
@@ -1088,9 +1140,8 @@ static void add_shapekey_layers(Mesh *mesh_dest, Mesh *mesh_src)
 
 	/* ensure we can use mesh vertex count for derived mesh custom data */
 	if (mesh_src->totvert != mesh_dest->totvert) {
-		fprintf(stderr,
-		        "%s: vertex size mismatch (mesh/dm) '%s' (%d != %d)\n",
-		        __func__, mesh_src->id.name + 2, mesh_src->totvert, mesh_dest->totvert);
+		CLOG_ERROR(&LOG, "vertex size mismatch (mesh/dm) '%s' (%d != %d)",
+		           mesh_src->id.name + 2, mesh_src->totvert, mesh_dest->totvert);
 		return;
 	}
 
@@ -1099,9 +1150,8 @@ static void add_shapekey_layers(Mesh *mesh_dest, Mesh *mesh_src)
 		float *array;
 
 		if (mesh_src->totvert != kb->totelem) {
-			fprintf(stderr,
-			        "%s: vertex size mismatch (Mesh '%s':%d != KeyBlock '%s':%d)\n",
-			        __func__, mesh_src->id.name + 2, mesh_src->totvert, kb->name, kb->totelem);
+			CLOG_ERROR(&LOG, "vertex size mismatch (Mesh '%s':%d != KeyBlock '%s':%d)",
+			        mesh_src->id.name + 2, mesh_src->totvert, kb->name, kb->totelem);
 			array = MEM_calloc_arrayN((size_t)mesh_src->totvert, 3 * sizeof(float), __func__);
 		}
 		else {
@@ -1121,7 +1171,7 @@ Mesh *BKE_mesh_create_derived_for_modifier(
         struct Depsgraph *depsgraph, Scene *scene, Object *ob,
         ModifierData *md, int build_shapekey_layers)
 {
-	Mesh *me = ob->data;
+	Mesh *me = ob->runtime.mesh_orig ? ob->runtime.mesh_orig : ob->data;
 	const ModifierTypeInfo *mti = modifierType_getInfo(md->type);
 	Mesh *result;
 	KeyBlock *kb;
@@ -1144,13 +1194,7 @@ Mesh *BKE_mesh_create_derived_for_modifier(
 		float (*deformedVerts)[3] = BKE_mesh_vertexCos_get(me, &numVerts);
 
 		mti->deformVerts(md, &mectx, NULL, deformedVerts, numVerts);
-		BKE_id_copy_ex(
-		        NULL, &me->id, (ID **)&result,
-		        LIB_ID_CREATE_NO_MAIN |
-		        LIB_ID_CREATE_NO_USER_REFCOUNT |
-		        LIB_ID_CREATE_NO_DEG_TAG |
-		        LIB_ID_COPY_NO_PREVIEW,
-		        false);
+		BKE_id_copy_ex(NULL, &me->id, (ID **)&result, LIB_ID_COPY_LOCALIZE);
 		BKE_mesh_apply_vert_coords(result, deformedVerts);
 
 		if (build_shapekey_layers)
@@ -1160,13 +1204,7 @@ Mesh *BKE_mesh_create_derived_for_modifier(
 	}
 	else {
 		Mesh *mesh_temp;
-		BKE_id_copy_ex(
-		        NULL, &me->id, (ID **)&mesh_temp,
-		        LIB_ID_CREATE_NO_MAIN |
-		        LIB_ID_CREATE_NO_USER_REFCOUNT |
-		        LIB_ID_CREATE_NO_DEG_TAG |
-		        LIB_ID_COPY_NO_PREVIEW,
-		        false);
+		BKE_id_copy_ex(NULL, &me->id, (ID **)&mesh_temp, LIB_ID_COPY_LOCALIZE);
 
 		if (build_shapekey_layers)
 			add_shapekey_layers(mesh_temp, me);
@@ -1234,14 +1272,15 @@ static void shapekey_layers_to_keyblocks(Mesh *mesh_src, Mesh *mesh_dst, int act
 
 			kb->totelem = mesh_src->totvert;
 			kb->data = MEM_calloc_arrayN(kb->totelem, 3 * sizeof(float), __func__);
-			fprintf(stderr, "%s: lost a shapekey layer: '%s'! (bmesh internal error)\n", __func__, kb->name);
+			CLOG_ERROR(&LOG, "lost a shapekey layer: '%s'! (bmesh internal error)", kb->name);
 		}
 	}
 }
 
 
 /* This is a Mesh-based copy of DM_to_mesh() */
-void BKE_mesh_nomain_to_mesh(Mesh *mesh_src, Mesh *mesh_dst, Object *ob, CustomDataMask mask, bool take_ownership)
+void BKE_mesh_nomain_to_mesh(
+        Mesh *mesh_src, Mesh *mesh_dst, Object *ob, const CustomData_MeshMasks *mask, bool take_ownership)
 {
 	/* mesh_src might depend on mesh_dst, so we need to do everything with a local copy */
 	/* TODO(Sybren): the above claim came from DM_to_mesh(); check whether it is still true with Mesh */
@@ -1275,10 +1314,10 @@ void BKE_mesh_nomain_to_mesh(Mesh *mesh_src, Mesh *mesh_dst, Object *ob, CustomD
 	totpoly = tmp.totpoly = mesh_src->totpoly;
 	tmp.totface = 0;
 
-	CustomData_copy(&mesh_src->vdata, &tmp.vdata, mask, alloctype, totvert);
-	CustomData_copy(&mesh_src->edata, &tmp.edata, mask, alloctype, totedge);
-	CustomData_copy(&mesh_src->ldata, &tmp.ldata, mask, alloctype, totloop);
-	CustomData_copy(&mesh_src->pdata, &tmp.pdata, mask, alloctype, totpoly);
+	CustomData_copy(&mesh_src->vdata, &tmp.vdata, mask->vmask, alloctype, totvert);
+	CustomData_copy(&mesh_src->edata, &tmp.edata, mask->emask, alloctype, totedge);
+	CustomData_copy(&mesh_src->ldata, &tmp.ldata, mask->lmask, alloctype, totloop);
+	CustomData_copy(&mesh_src->pdata, &tmp.pdata, mask->pmask, alloctype, totpoly);
 	tmp.cd_flag = mesh_src->cd_flag;
 	tmp.runtime.deformed_only = mesh_src->runtime.deformed_only;
 
@@ -1292,8 +1331,7 @@ void BKE_mesh_nomain_to_mesh(Mesh *mesh_src, Mesh *mesh_dst, Object *ob, CustomD
 				uid = kb->uid;
 			}
 			else {
-				printf("%s: error - could not find active shapekey %d!\n",
-				       __func__, ob->shapenr - 1);
+				CLOG_ERROR(&LOG, "could not find active shapekey %d!", ob->shapenr - 1);
 
 				uid = INT_MAX;
 			}
@@ -1363,7 +1401,7 @@ void BKE_mesh_nomain_to_mesh(Mesh *mesh_src, Mesh *mesh_dst, Object *ob, CustomD
 	 * which should be fed through the modifier
 	 * stack */
 	if (tmp.totvert != mesh_dst->totvert && !did_shapekeys && mesh_dst->key) {
-		printf("%s: YEEK! this should be recoded! Shape key loss!: ID '%s'\n", __func__, tmp.id.name);
+		CLOG_ERROR(&LOG, "YEEK! this should be recoded! Shape key loss!: ID '%s'", tmp.id.name);
 		if (tmp.key && !(tmp.id.tag & LIB_TAG_NO_MAIN)) {
 			id_us_min(&tmp.key->id);
 		}
@@ -1380,14 +1418,14 @@ void BKE_mesh_nomain_to_mesh(Mesh *mesh_src, Mesh *mesh_dst, Object *ob, CustomD
 	}
 
 	/* skip the listbase */
-	MEMCPY_STRUCT_OFS(mesh_dst, &tmp, id.prev);
+	MEMCPY_STRUCT_AFTER(mesh_dst, &tmp, id.prev);
 
 	if (take_ownership) {
 		if (alloctype == CD_ASSIGN) {
-			CustomData_free_typemask(&mesh_src->vdata, mesh_src->totvert, ~mask);
-			CustomData_free_typemask(&mesh_src->edata, mesh_src->totedge, ~mask);
-			CustomData_free_typemask(&mesh_src->ldata, mesh_src->totloop, ~mask);
-			CustomData_free_typemask(&mesh_src->pdata, mesh_src->totpoly, ~mask);
+			CustomData_free_typemask(&mesh_src->vdata, mesh_src->totvert, ~mask->vmask);
+			CustomData_free_typemask(&mesh_src->edata, mesh_src->totedge, ~mask->emask);
+			CustomData_free_typemask(&mesh_src->ldata, mesh_src->totloop, ~mask->lmask);
+			CustomData_free_typemask(&mesh_src->pdata, mesh_src->totpoly, ~mask->pmask);
 		}
 		BKE_id_free(NULL, mesh_src);
 	}

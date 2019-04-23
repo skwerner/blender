@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,20 +12,14 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
 #ifndef __BKE_OBJECT_H__
 #define __BKE_OBJECT_H__
 
-/** \file BKE_object.h
- *  \ingroup bke
- *  \brief General operations, lookup, etc. for blender objects.
+/** \file
+ * \ingroup bke
+ * \brief General operations, lookup, etc. for blender objects.
  */
 #ifdef __cplusplus
 extern "C" {
@@ -36,24 +28,24 @@ extern "C" {
 #include "BLI_compiler_attrs.h"
 
 struct Base;
+struct BoundBox;
 struct Depsgraph;
 struct GpencilModifierData;
-struct Scene;
-struct ShaderFxData;
-struct ViewLayer;
+struct HookGpencilModifierData;
+struct HookModifierData;
 struct ID;
-struct Object;
-struct BoundBox;
-struct View3D;
-struct SoftBody;
-struct MovieClip;
 struct Main;
 struct Mesh;
-struct RigidBodyWorld;
-struct HookModifierData;
 struct ModifierData;
-struct HookGpencilModifierData;
+struct MovieClip;
+struct Object;
 struct RegionView3D;
+struct RigidBodyWorld;
+struct Scene;
+struct ShaderFxData;
+struct SoftBody;
+struct View3D;
+struct ViewLayer;
 
 #include "DNA_object_enums.h"
 
@@ -134,6 +126,8 @@ void BKE_object_make_local_ex(struct Main *bmain, struct Object *ob, const bool 
 bool BKE_object_is_libdata(const struct Object *ob);
 bool BKE_object_obdata_is_libdata(const struct Object *ob);
 
+struct Object *BKE_object_duplicate(struct Main *bmain, const struct Object *ob, const int dupflag);
+
 void BKE_object_obdata_size_init(struct Object *ob, const float scale);
 
 void BKE_object_scale_to_mat3(struct Object *ob, float mat[3][3]);
@@ -159,8 +153,6 @@ struct Base **BKE_object_pose_base_array_get(struct ViewLayer *view_layer, struc
 
 void BKE_object_get_parent_matrix(
         struct Object *ob, struct Object *par, float parentmat[4][4]);
-void BKE_object_get_parent_matrix_for_dupli(
-        struct Object *ob, struct Object *par, float dupli_ctime, int dupli_transflag, float parentmat[4][4]);
 void BKE_object_where_is_calc(
         struct Depsgraph *depsgraph, struct Scene *scene, struct Object *ob);
 void BKE_object_where_is_calc_ex(
@@ -168,11 +160,6 @@ void BKE_object_where_is_calc_ex(
         struct Object *ob, float r_originmat[3][3]);
 void BKE_object_where_is_calc_time(
         struct Depsgraph *depsgraph, struct Scene *scene, struct Object *ob, float ctime);
-void BKE_object_where_is_calc_time_for_dupli(
-        struct Depsgraph *depsgraph, struct Scene *scene, struct Object *ob, float ctime, int dupli_transflag);
-void BKE_object_where_is_calc_time_ex(
-        struct Depsgraph *depsgraph, struct Scene *scene, struct Object *ob, float ctime, int dupli_transflag,
-        struct RigidBodyWorld *rbw, float r_originmat[3][3]);
 void BKE_object_where_is_calc_mat4(struct Object *ob, float obmat[4][4]);
 
 /* possibly belong in own moduke? */
@@ -208,7 +195,7 @@ void  BKE_object_tfm_restore(struct Object *ob, void *obtfm_pt);
 
 typedef struct ObjectTfmProtectedChannels {
 	float loc[3],     dloc[3];
-	float size[3],    dscale[3];
+	float scale[3],   dscale[3];
 	float rot[3],     drot[3];
 	float quat[4],    dquat[4];
 	float rotAxis[3], drotAxis[3];
@@ -224,6 +211,9 @@ void BKE_object_tfm_protected_restore(
         const ObjectTfmProtectedChannels *obtfm,
         const short protectflag);
 
+void BKE_object_tfm_copy(
+        struct Object *object_dst,
+        const struct Object *object_src);
 
 void BKE_object_eval_reset(
         struct Object *ob_eval);
@@ -275,7 +265,7 @@ void BKE_object_data_select_update(
         struct Depsgraph *depsgraph,
         struct ID *object_data);
 
-void BKE_object_eval_flush_base_flags(
+void BKE_object_eval_eval_base_flags(
         struct Depsgraph *depsgraph,
         struct Scene *scene, const int view_layer_index,
         struct Object *object, int base_index,
@@ -292,6 +282,8 @@ void BKE_object_handle_update_ex(
         struct RigidBodyWorld *rbw,
         const bool do_proxy_update);
 void BKE_object_sculpt_modifiers_changed(struct Object *ob);
+
+void BKE_object_sculpt_data_create(struct Object *ob);
 
 int BKE_object_obdata_texspace_get(struct Object *ob, short **r_texflag, float **r_loc, float **r_size, float **r_rot);
 
@@ -315,10 +307,12 @@ bool BKE_object_is_animated(struct Scene *scene, struct Object *ob);
 int BKE_object_is_modified(struct Scene *scene, struct Object *ob);
 int BKE_object_is_deform_modified(struct Scene *scene, struct Object *ob);
 
+int BKE_object_scenes_users_get(struct Main *bmain, struct Object *ob);
+
 struct MovieClip *BKE_object_movieclip_get(struct Scene *scene, struct Object *ob, bool use_default);
 
 void BKE_object_runtime_reset(struct Object *object);
-void BKE_object_runtime_reset_on_copy(struct Object *object);
+void BKE_object_runtime_reset_on_copy(struct Object *object, const int flag);
 
 void BKE_object_batch_cache_dirty_tag(struct Object *ob);
 
@@ -337,15 +331,15 @@ typedef enum eObRelationTypes {
 typedef enum eObjectSet {
 	OB_SET_SELECTED, /* Selected Objects */
 	OB_SET_VISIBLE,  /* Visible Objects  */
-	OB_SET_ALL       /* All Objects      */
+	OB_SET_ALL,      /* All Objects      */
 } eObjectSet;
 
 struct LinkNode *BKE_object_relational_superset(
         struct ViewLayer *view_layer, eObjectSet objectSet, eObRelationTypes includeFilter);
-struct LinkNode *BKE_object_groups(struct Main *bmain, struct Object *ob);
-void             BKE_object_groups_clear(struct Main *bmain, struct Object *object);
+struct LinkNode *BKE_object_groups(struct Main *bmain, struct Scene *scene, struct Object *ob);
+void             BKE_object_groups_clear(struct Main *bmain, struct Scene *scene, struct Object *object);
 
-struct KDTree *BKE_object_as_kdtree(struct Object *ob, int *r_tot);
+struct KDTree_3d *BKE_object_as_kdtree(struct Object *ob, int *r_tot);
 
 bool BKE_object_modifier_use_time(struct Object *ob, struct ModifierData *md);
 
@@ -355,7 +349,8 @@ bool BKE_object_modifier_update_subframe(
 
 void BKE_object_type_set_empty_for_versioning(struct Object *ob);
 
-bool BKE_object_empty_image_is_visible_in_view3d(const struct Object *ob, const struct RegionView3D *rv3d);
+bool BKE_object_empty_image_frame_is_visible_in_view3d(const struct Object *ob, const struct RegionView3D *rv3d);
+bool BKE_object_empty_image_data_is_visible_in_view3d(const struct Object *ob, const struct RegionView3D *rv3d);
 
 #ifdef __cplusplus
 }

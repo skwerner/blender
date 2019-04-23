@@ -16,11 +16,6 @@
 #
 # The Original Code is Copyright (C) 2012, Blender Foundation
 # All rights reserved.
-#
-# The Original Code is: all of this file.
-#
-# Contributor(s): Sergey Sharybin.
-#
 # ***** END GPL LICENSE BLOCK *****
 
 set(INC
@@ -36,8 +31,11 @@ set(SRC
 	xdnd.h
 )
 
+set(LIB
+)
+
 add_definitions(
 	-DHAVE_SYS_TIME_H
 )
 
-blender_add_lib(extern_xdnd "${SRC}" "${INC}" "${INC_SYS}")
+blender_add_lib(extern_xdnd "${SRC}" "${INC}" "${INC_SYS}" "${LIB}")

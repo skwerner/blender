@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,10 @@
  *
  * The Original Code is Copyright (C) 2007 Blender Foundation.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): Geoffrey Bantle.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/bmesh/intern/bmesh_structure.c
- *  \ingroup bmesh
+/** \file
+ * \ingroup bmesh
  *
  * Low level routines for manipulating the BM structure.
  */
@@ -108,8 +100,6 @@ void bmesh_disk_vert_replace(BMEdge *e, BMVert *v_dst, BMVert *v_src)
  * modification of specific cycle types.
  *
  * The three cycles explicitly stored in the BM data structure are as follows:
- *
- *
  * 1: The Disk Cycle - A circle of edges around a vertex
  * Base: vertex->edge pointer.
  *
@@ -133,8 +123,6 @@ void bmesh_disk_vert_replace(BMEdge *e, BMVert *v_dst, BMVert *v_src)
  * - #bmesh_disk_facevert_count
  * - #bmesh_disk_faceedge_find_first
  * - #bmesh_disk_faceedge_find_next
- *
- *
  * 2: The Radial Cycle - A circle of face edges (bmesh_Loop) around an edge
  * Base: edge->l->radial structure.
  *
@@ -150,8 +138,6 @@ void bmesh_disk_vert_replace(BMEdge *e, BMVert *v_dst, BMVert *v_src)
  * - #bmesh_radial_faceloop_find_first
  * - #bmesh_radial_faceloop_find_next
  * - #bmesh_radial_validate
- *
- *
  * 3: The Loop Cycle - A circle of face edges around a polygon.
  * Base: polygon->lbase.
  *
@@ -161,8 +147,6 @@ void bmesh_disk_vert_replace(BMEdge *e, BMVert *v_dst, BMVert *v_src)
  *
  * Functions relating to this cycle:
  * - bmesh_cycle_XXX family of functions.
- *
- *
  * \note the order of elements in all cycles except the loop cycle is undefined. This
  * leads to slightly increased seek time for deriving some adjacency relations, however the
  * advantage is that no intrinsic properties of the data structures are dependent upon the
@@ -188,8 +172,9 @@ void bmesh_disk_edge_append(BMEdge *e, BMVert *v)
 		dl1->prev = dl2->prev;
 
 		dl2->prev = e;
-		if (dl3)
+		if (dl3) {
 			dl3->next = e;
+		}
 	}
 }
 
@@ -208,8 +193,9 @@ void bmesh_disk_edge_remove(BMEdge *e, BMVert *v)
 		dl2->prev = dl1->prev;
 	}
 
-	if (v->e == e)
+	if (v->e == e) {
 		v->e = (e != dl1->next) ? dl1->next : NULL;
+	}
 
 	dl1->next = dl1->prev = NULL;
 }
@@ -363,6 +349,28 @@ BMLoop *bmesh_disk_faceloop_find_first(const BMEdge *e, const BMVert *v)
 	return NULL;
 }
 
+/**
+ * A version of #bmesh_disk_faceloop_find_first that ignores hidden faces.
+ */
+BMLoop *bmesh_disk_faceloop_find_first_visible(const BMEdge *e, const BMVert *v)
+{
+	const BMEdge *e_iter = e;
+	do {
+		if (!BM_elem_flag_test(e_iter, BM_ELEM_HIDDEN)) {
+			if (e_iter->l != NULL) {
+				BMLoop *l_iter, *l_first;
+				l_iter = l_first = e_iter->l;
+				do {
+					if (!BM_elem_flag_test(l_iter->f, BM_ELEM_HIDDEN)) {
+						return (l_iter->v == v) ? l_iter : l_iter->next;
+					}
+				} while ((l_iter = l_iter->radial_next) != l_first);
+			}
+		}
+	} while ((e_iter = bmesh_disk_edge_next(e_iter, v)) != e);
+	return NULL;
+}
+
 BMEdge *bmesh_disk_faceedge_find_next(const BMEdge *e, const BMVert *v)
 {
 	BMEdge *e_find;
@@ -381,8 +389,9 @@ bool bmesh_radial_validate(int radlen, BMLoop *l)
 	BMLoop *l_iter = l;
 	int i = 0;
 
-	if (bmesh_radial_length(l) != radlen)
+	if (bmesh_radial_length(l) != radlen) {
 		return false;
+	}
 
 	do {
 		if (UNLIKELY(!l_iter)) {
@@ -390,10 +399,12 @@ bool bmesh_radial_validate(int radlen, BMLoop *l)
 			return false;
 		}
 
-		if (l_iter->e != l->e)
+		if (l_iter->e != l->e) {
 			return false;
-		if (l_iter->v != l->e->v1 && l_iter->v != l->e->v2)
+		}
+		if (l_iter->v != l->e->v1 && l_iter->v != l->e->v2) {
 			return false;
+		}
 
 		if (UNLIKELY(i > BM_LOOP_RADIAL_MAX)) {
 			BMESH_ASSERT(0);
@@ -520,8 +531,9 @@ int bmesh_radial_length(const BMLoop *l)
 	const BMLoop *l_iter = l;
 	int i = 0;
 
-	if (!l)
+	if (!l) {
 		return 0;
+	}
 
 	do {
 		if (UNLIKELY(!l_iter)) {

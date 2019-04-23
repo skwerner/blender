@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,12 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/blenkernel/intern/CCGSubSurf_intern.h
- *  \ingroup bke
+/** \file
+ * \ingroup bke
  */
 
 #ifndef __CCGSUBSURF_INTERN_H__
@@ -103,15 +99,15 @@ struct DerivedMesh;
 enum {
 	Vert_eEffected =    (1 << 0),
 	Vert_eChanged =     (1 << 1),
-	Vert_eSeam =        (1 << 2)
+	Vert_eSeam =        (1 << 2),
 } /*VertFlags*/;
 
 enum {
-	Edge_eEffected =    (1 << 0)
+	Edge_eEffected =    (1 << 0),
 } /*CCGEdgeFlags*/;
 
 enum {
-	Face_eEffected =    (1 << 0)
+	Face_eEffected =    (1 << 0),
 } /*FaceFlags*/;
 
 struct CCGVert {

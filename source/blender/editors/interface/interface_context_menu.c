@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,12 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/interface/interface_context_menu.c
- *  \ingroup edinterface
+/** \file
+ * \ingroup edinterface
  *
  * Generic context popup menus.
  */
@@ -54,7 +50,8 @@
 #include "WM_api.h"
 #include "WM_types.h"
 
-/* This hack is needed because we don't have a good way to re-reference keymap items once added: T42944 */
+/* This hack is needed because we don't have a good way to
+ * re-reference keymap items once added: T42944 */
 #define USE_KEYMAP_ADD_HACK
 
 /* -------------------------------------------------------------------- */
@@ -113,7 +110,7 @@ static uiBlock *menu_change_shortcut(bContext *C, ARegion *ar, void *arg)
 
 	uiItemR(layout, &ptr, "type", UI_ITEM_R_FULL_EVENT | UI_ITEM_R_IMMEDIATE, "", ICON_NONE);
 
-	UI_block_bounds_set_popup(block, 6, -50, 26);
+	UI_block_bounds_set_popup(block, 6, (const int[2]){-50, 26});
 
 	return block;
 }
@@ -135,14 +132,16 @@ static uiBlock *menu_add_shortcut(bContext *C, ARegion *ar, void *arg)
 	IDProperty *prop = (but->opptr) ? but->opptr->data : NULL;
 	int kmi_id;
 
-	/* XXX this guess_opname can potentially return a different keymap than being found on adding later... */
+	/* XXX this guess_opname can potentially return a different keymap
+	 * than being found on adding later... */
 	km = WM_keymap_guess_opname(C, but->optype->idname);
 	kmi = WM_keymap_add_item(km, but->optype->idname, AKEY, KM_PRESS, 0, 0);
 	kmi_id = kmi->id;
 
 	/* copy properties, prop can be NULL for reset */
-	if (prop)
+	if (prop) {
 		prop = IDP_CopyProperty(prop);
+	}
 	WM_keymap_properties_reset(kmi, prop);
 
 	/* update and get pointers again */
@@ -161,7 +160,7 @@ static uiBlock *menu_add_shortcut(bContext *C, ARegion *ar, void *arg)
 
 	uiItemR(layout, &ptr, "type", UI_ITEM_R_FULL_EVENT | UI_ITEM_R_IMMEDIATE, "", ICON_NONE);
 
-	UI_block_bounds_set_popup(block, 6, -50, 26);
+	UI_block_bounds_set_popup(block, 6, (const int[2]){-50, 26});
 
 #ifdef USE_KEYMAP_ADD_HACK
 	g_kmi_id_hack = kmi_id;
@@ -407,9 +406,11 @@ bool ui_popup_context_menu_for_button(bContext *C, uiBut *but)
 		bool is_idprop = RNA_property_is_idprop(prop);
 		bool is_set = RNA_property_is_set(ptr, prop);
 
-		/* second slower test, saved people finding keyframe items in menus when its not possible */
-		if (is_anim)
+		/* second slower test,
+		 * saved people finding keyframe items in menus when its not possible */
+		if (is_anim) {
 			is_anim = RNA_property_path_from_ID_check(&but->rnapoin, but->rnaprop);
+		}
 
 		/* determine if we can key a single component of an array */
 		const bool is_array = RNA_property_array_length(&but->rnapoin, but->rnaprop) != 0;
@@ -418,7 +419,8 @@ bool ui_popup_context_menu_for_button(bContext *C, uiBut *but)
 		const int override_status = RNA_property_static_override_status(ptr, prop, -1);
 		const bool is_overridable = (override_status & RNA_OVERRIDE_STATUS_OVERRIDABLE) != 0;
 
-		/* Set the (button_pointer, button_prop) and pointer data for Python access to the hovered ui element. */
+		/* Set the (button_pointer, button_prop)
+		 * and pointer data for Python access to the hovered ui element. */
 		uiLayoutSetContextFromBut(layout, but);
 
 		/* Keyframes */
@@ -675,11 +677,16 @@ bool ui_popup_context_menu_for_button(bContext *C, uiBut *but)
 		}
 	}
 
-	/* Pointer properties and string properties with prop_search support jumping to target object/bone. */
+	/* Pointer properties and string properties with
+	 * prop_search support jumping to target object/bone. */
 	if (but->rnapoin.data && but->rnaprop) {
-		const PropertyType type = RNA_property_type(but->rnaprop);
-
-		if ((type == PROP_POINTER) || (type == PROP_STRING && but->type == UI_BTYPE_SEARCH_MENU && but->search_func == ui_rna_collection_search_cb)) {
+		const PropertyType prop_type = RNA_property_type(but->rnaprop);
+		if (((prop_type == PROP_POINTER) ||
+		     (prop_type == PROP_STRING &&
+		      but->type == UI_BTYPE_SEARCH_MENU &&
+		      but->search_func == ui_rna_collection_search_cb)) &&
+		      ui_jump_to_target_button_poll(C))
+		{
 			uiItemO(layout, CTX_IFACE_(BLT_I18NCONTEXT_OPERATOR_DEFAULT, "Jump To Target"),
 			        ICON_NONE, "UI_OT_jump_to_target_button");
 			uiItemS(layout);
@@ -691,13 +698,7 @@ bool ui_popup_context_menu_for_button(bContext *C, uiBut *but)
 		uiBlock *block = uiLayoutGetBlock(layout);
 		const int w = uiLayoutGetWidth(layout);
 		uiBut *but2;
-
-		but2 = uiDefIconTextBut(
-		        block, UI_BTYPE_BUT, 0, ICON_MENU_PANEL,
-		        CTX_IFACE_(BLT_I18NCONTEXT_OPERATOR_DEFAULT, "Add to Quick Favorites"),
-		        0, 0, w, UI_UNIT_Y, NULL, 0, 0, 0, 0,
-		        "Add to a user defined context menu (stored in the user preferences)");
-		UI_but_func_set(but2, popup_user_menu_add_or_replace_func, but, NULL);
+		bool item_found = false;
 
 		uint um_array_len;
 		bUserMenu **um_array = ED_screen_user_menus_find(C, &um_array_len);
@@ -709,13 +710,25 @@ bool ui_popup_context_menu_for_button(bContext *C, uiBut *but)
 			bUserMenuItem *umi = ui_but_user_menu_find(C, but, um);
 			if (umi != NULL) {
 				but2 = uiDefIconTextBut(
-				        block, UI_BTYPE_BUT, 0, ICON_BLANK1,
+				        block, UI_BTYPE_BUT, 0, ICON_MENU_PANEL,
 				        CTX_IFACE_(BLT_I18NCONTEXT_OPERATOR_DEFAULT, "Remove from Quick Favorites"),
 				        0, 0, w, UI_UNIT_Y, NULL, 0, 0, 0, 0, "");
 				UI_but_func_set(but2, popup_user_menu_remove_func, um, umi);
+				item_found = true;
 			}
 		}
-		MEM_freeN(um_array);
+		if (um_array) {
+			MEM_freeN(um_array);
+		}
+
+		if (!item_found) {
+			but2 = uiDefIconTextBut(
+			        block, UI_BTYPE_BUT, 0, ICON_MENU_PANEL,
+			        CTX_IFACE_(BLT_I18NCONTEXT_OPERATOR_DEFAULT, "Add to Quick Favorites"),
+			        0, 0, w, UI_UNIT_Y, NULL, 0, 0, 0, 0,
+			        "Add to a user defined context menu (stored in the user preferences)");
+			UI_but_func_set(but2, popup_user_menu_add_or_replace_func, but, NULL);
+		}
 
 		uiItemS(layout);
 	}
@@ -833,6 +846,9 @@ bool ui_popup_context_menu_for_button(bContext *C, uiBut *but)
 		}
 		else if (ar->regiontype == RGN_TYPE_NAV_BAR) {
 			uiItemMenuF(layout, IFACE_("Navigation Bar"), ICON_NONE, ED_screens_navigation_bar_tools_menu_create, NULL);
+		}
+		else if (ar->regiontype == RGN_TYPE_FOOTER) {
+			uiItemMenuF(layout, IFACE_("Footer"), ICON_NONE, ED_screens_footer_tools_menu_create, NULL);
 		}
 	}
 

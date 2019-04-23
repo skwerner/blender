@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,30 +12,28 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
 #ifndef __BKE_BRUSH_H__
 #define __BKE_BRUSH_H__
 
-/** \file BKE_brush.h
- *  \ingroup bke
+/** \file
+ * \ingroup bke
  *
  * General operations for brushes.
  */
 
 enum eCurveMappingPreset;
-struct bContext;
 struct Brush;
-struct Paint;
 struct ImBuf;
 struct ImagePool;
 struct Main;
+struct Material;
+struct Paint;
 struct Scene;
 struct ToolSettings;
 struct UnifiedPaintSettings;
-struct Material;
+struct bContext;
 
 // enum eCurveMappingPreset;
 
@@ -60,7 +56,6 @@ void BKE_brush_free(struct Brush *brush);
 
 void BKE_brush_sculpt_reset(struct Brush *brush);
 void BKE_brush_gpencil_presets(struct bContext *C);
-void BKE_brush_update_material(struct Main *bmain, struct Material *ma, struct Brush *exclude_brush);
 
 /* image icon function */
 struct ImBuf *get_brush_icon(struct Brush *brush);

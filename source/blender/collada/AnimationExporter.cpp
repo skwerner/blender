@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,14 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * Contributor(s): Chingiz Dyussenov, Arystanbek Dyussenov, Jan Diederich, Tod Liverseed.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file AnimationExporter.cpp
- *  \ingroup collada
+/** \file
+ * \ingroup collada
  */
 
 #include "GeometryExporter.h"
@@ -98,11 +92,11 @@ bool AnimationExporter::exportAnimations()
 
 		try {
 			animation_sampler.sample_scene(
-				export_settings->sampling_rate,
-				/*keyframe_at_end = */ true,
-				export_settings->open_sim,
-				export_settings->keep_keyframes,
-				export_settings->export_animation_type
+			        export_settings->sampling_rate,
+			        /*keyframe_at_end = */ true,
+			        export_settings->open_sim,
+			        export_settings->keep_keyframes,
+			        export_settings->export_animation_type
 			);
 
 			openLibrary();
@@ -180,7 +174,6 @@ void AnimationExporter::exportAnimation(Object *ob, BCAnimationSampler &sampler)
  * especially when negative scales are involved in the animation.
  * And when parent inverse matrices are involved (when exporting
  * object hierarchies)
- *
  */
 void AnimationExporter::export_curve_animation_set(Object *ob, BCAnimationSampler &sampler, bool export_as_matrix)
 {
@@ -266,14 +259,14 @@ void AnimationExporter::export_bone_animations_recursive(Object *ob, Bone *bone,
 		export_bone_animations_recursive(ob, child, sampler);
 }
 
-/*
-* In some special cases the exported Curve needs to be replaced
-* by a modified curve (for collada purposes)
-* This method checks if a conversion is necessary and if applicable
-* returns a pointer to the modified BCAnimationCurve.
-* IMPORTANT: the modified curve must be deleted by the caller when no longer needed
-* if no conversion is needed this method returns a NULL;
-*/
+/**
+ * In some special cases the exported Curve needs to be replaced
+ * by a modified curve (for collada purposes)
+ * This method checks if a conversion is necessary and if applicable
+ * returns a pointer to the modified BCAnimationCurve.
+ * IMPORTANT: the modified curve must be deleted by the caller when no longer needed
+ * if no conversion is needed this method returns a NULL;
+ */
 BCAnimationCurve *AnimationExporter::get_modified_export_curve(Object *ob, BCAnimationCurve &curve, BCAnimationCurveMap &curves)
 {
 	std::string channel_target = curve.get_channel_target();
@@ -728,7 +721,7 @@ const std::string AnimationExporter::get_collada_name(std::string channel_target
 		{ "specular_hardness", "specular_hardness" },
 		{ "alpha", "alpha" },
 
-		/* Lamps */
+		/* Lights */
 		{ "color", "color" },
 		{ "fall_off_angle", "falloff_angle" },
 		{ "spot_size", "falloff_angle" },

@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,17 +12,13 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * Contributor(s): Blender Foundation, Dalai Felinto
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
 #ifndef __BKE_LAYER_H__
 #define __BKE_LAYER_H__
 
-/** \file blender/blenkernel/BKE_layer.h
- *  \ingroup bke
+/** \file
+ * \ingroup bke
  */
 
 #include "BKE_collection.h"
@@ -39,8 +33,6 @@ extern "C" {
 #define TODO_LAYER_OVERRIDE /* CollectionOverride */
 #define TODO_LAYER_OPERATORS /* collection mamanger and property panel operators */
 #define TODO_LAYER /* generic todo */
-
-#define ROOT_PROP "root"
 
 struct Base;
 struct Collection;
@@ -113,16 +105,16 @@ bool BKE_layer_collection_objects_select(
         struct ViewLayer *view_layer, struct LayerCollection *lc, bool deselect);
 bool BKE_layer_collection_has_selected_objects(
         struct ViewLayer *view_layer, struct LayerCollection *lc);
+bool BKE_layer_collection_has_layer_collection(
+        struct LayerCollection *lc_parent, struct LayerCollection *lc_child);
 
 void BKE_base_set_visible(struct Scene *scene, struct ViewLayer *view_layer, struct Base *base, bool extend);
-void BKE_layer_collection_set_visible(struct Scene *scene, struct ViewLayer *view_layer, struct LayerCollection *lc, bool extend);
+bool BKE_layer_collection_isolate(struct Scene *scene, struct ViewLayer *view_layer, struct LayerCollection *lc, bool extend);
+bool BKE_layer_collection_set_visible(struct ViewLayer *view_layer, struct LayerCollection *lc, const bool visible, const bool hierarchy);
 
 /* evaluation */
 
-void BKE_layer_eval_view_layer(
-        struct Depsgraph *depsgraph,
-        struct Scene *scene,
-        struct ViewLayer *view_layer);
+void BKE_base_eval_flags(struct Base *base);
 
 void BKE_layer_eval_view_layer_indexed(
         struct Depsgraph *depsgraph,
@@ -155,10 +147,6 @@ struct ObjectsInModeIteratorData {
 	struct View3D *v3d;
 	struct Base *base_active;
 };
-
-void BKE_view_layer_renderable_objects_iterator_begin(BLI_Iterator *iter, void *data_in);
-void BKE_view_layer_renderable_objects_iterator_next(BLI_Iterator *iter);
-void BKE_view_layer_renderable_objects_iterator_end(BLI_Iterator *iter);
 
 void BKE_view_layer_bases_in_mode_iterator_begin(BLI_Iterator *iter, void *data_in);
 void BKE_view_layer_bases_in_mode_iterator_next(BLI_Iterator *iter);
@@ -320,34 +308,6 @@ void BKE_view_layer_visible_bases_iterator_end(BLI_Iterator *iter);
 	ITER_END;                                                                 \
 } ((void)0)
 
-struct ObjectsRenderableIteratorData {
-	struct Scene *scene;
-	struct Base base_temp;
-	struct Scene scene_temp;
-
-	struct {
-		struct ViewLayer *view_layer;
-		struct Base *base;
-		struct Scene *set;
-	} iter;
-};
-
-#define FOREACH_OBJECT_RENDERABLE_BEGIN(scene_, _instance)                    \
-{                                                                             \
-	struct ObjectsRenderableIteratorData data_ = {                            \
-	    .scene = (scene_),                                                    \
-	};                                                                        \
-	ITER_BEGIN(BKE_view_layer_renderable_objects_iterator_begin,              \
-	           BKE_view_layer_renderable_objects_iterator_next,               \
-	           BKE_view_layer_renderable_objects_iterator_end,                \
-	           &data_, Object *, _instance)
-
-
-#define FOREACH_OBJECT_RENDERABLE_END                                         \
-	ITER_END;                                                                 \
-} ((void)0)
-
-
 /* layer_utils.c */
 
 struct ObjectsInModeParams {
@@ -384,37 +344,37 @@ bool BKE_view_layer_filter_edit_mesh_has_edges(struct Object *ob, void *user_dat
 #define BKE_view_layer_array_from_objects_in_edit_mode(view_layer, v3d, r_len) \
 	BKE_view_layer_array_from_objects_in_mode( \
 	view_layer, v3d, r_len, { \
-		.object_mode = OB_MODE_EDIT});
+		.object_mode = OB_MODE_EDIT})
 
 #define BKE_view_layer_array_from_bases_in_edit_mode(view_layer, v3d, r_len) \
 	BKE_view_layer_array_from_bases_in_mode( \
 	view_layer, v3d, r_len, { \
-		.object_mode = OB_MODE_EDIT});
+		.object_mode = OB_MODE_EDIT})
 
 #define BKE_view_layer_array_from_objects_in_edit_mode_unique_data(view_layer, v3d, r_len) \
 	BKE_view_layer_array_from_objects_in_mode( \
 	view_layer, v3d, r_len, { \
 		.object_mode = OB_MODE_EDIT, \
-		.no_dup_data = true});
+		.no_dup_data = true})
 
 #define BKE_view_layer_array_from_bases_in_edit_mode_unique_data(view_layer, v3d, r_len) \
 	BKE_view_layer_array_from_bases_in_mode( \
 	view_layer, v3d, r_len, { \
 		.object_mode = OB_MODE_EDIT, \
-		.no_dup_data = true});
+		.no_dup_data = true})
 
 #define BKE_view_layer_array_from_objects_in_edit_mode_unique_data_with_uvs(view_layer, v3d, r_len) \
 	BKE_view_layer_array_from_objects_in_mode( \
 	view_layer, v3d, r_len, { \
 		.object_mode = OB_MODE_EDIT, \
 		.no_dup_data = true, \
-		.filter_fn = BKE_view_layer_filter_edit_mesh_has_uvs});
+		.filter_fn = BKE_view_layer_filter_edit_mesh_has_uvs})
 
 #define BKE_view_layer_array_from_objects_in_mode_unique_data(view_layer, v3d, r_len, mode) \
 	BKE_view_layer_array_from_objects_in_mode( \
 	view_layer, v3d, r_len, { \
 		.object_mode = mode, \
-		.no_dup_data = true});
+		.no_dup_data = true})
 
 #ifdef __cplusplus
 }

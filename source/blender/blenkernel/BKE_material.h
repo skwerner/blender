@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,28 +15,22 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
 #ifndef __BKE_MATERIAL_H__
 #define __BKE_MATERIAL_H__
 
-/** \file BKE_material.h
- *  \ingroup bke
- *  \brief General operations, lookup, etc. for materials.
+/** \file
+ * \ingroup bke
+ * \brief General operations, lookup, etc. for materials.
  */
 #ifdef __cplusplus
 extern "C" {
 #endif
 
+struct ID;
 struct Main;
 struct Material;
-struct ID;
 struct Object;
 struct Scene;
 
@@ -76,7 +68,7 @@ enum {
 	BKE_MAT_ASSIGN_EXISTING,
 	BKE_MAT_ASSIGN_USERPREF,
 	BKE_MAT_ASSIGN_OBDATA,
-	BKE_MAT_ASSIGN_OBJECT
+	BKE_MAT_ASSIGN_OBJECT,
 };
 
 struct Material **give_current_material_p(struct Object *ob, short act);
@@ -114,6 +106,8 @@ void paste_matcopybuf(struct Main *bmain, struct Material *ma);
 struct Depsgraph;
 
 void BKE_material_eval(struct Depsgraph *depsgraph, struct Material *material);
+
+extern struct Material defmaterial;
 
 #ifdef __cplusplus
 }

@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,24 +15,13 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 #ifndef __BKE_ANIM_H__
 #define __BKE_ANIM_H__
 
-/** \file BKE_anim.h
- *  \ingroup bke
- *  \author nzc
- *  \since March 2001
+/** \file
+ * \ingroup bke
  */
-struct bAnimVizSettings;
-struct bMotionPath;
-struct bPoseChannel;
 struct Depsgraph;
 struct ListBase;
 struct Main;
@@ -43,6 +30,9 @@ struct ParticleSystem;
 struct Path;
 struct ReportList;
 struct Scene;
+struct bAnimVizSettings;
+struct bMotionPath;
+struct bPoseChannel;
 
 /* ---------------------------------------------------- */
 /* Animation Visualization */
@@ -56,14 +46,6 @@ void animviz_free_motionpath(struct bMotionPath *mpath);
 
 struct bMotionPath *animviz_verify_motionpaths(struct ReportList *reports, struct Scene *scene, struct Object *ob, struct bPoseChannel *pchan);
 
-void animviz_get_object_motionpaths(struct Object *ob, ListBase *targets);
-void animviz_calc_motionpaths(struct Depsgraph *depsgraph,
-                              struct Main *bmain,
-                              struct Scene *scene,
-                              ListBase *targets,
-                              bool restore,
-                              bool current_frame_only);
-
 /* ---------------------------------------------------- */
 /* Curve Paths */
 
@@ -76,7 +58,6 @@ int where_on_path(struct Object *ob, float ctime, float vec[4], float dir[3], fl
 
 struct ListBase *object_duplilist(struct Depsgraph *depsgraph, struct Scene *sce, struct Object *ob);
 void free_object_duplilist(struct ListBase *lb);
-int count_duplilist(struct Object *ob);
 
 typedef struct DupliObject {
 	struct DupliObject *next, *prev;

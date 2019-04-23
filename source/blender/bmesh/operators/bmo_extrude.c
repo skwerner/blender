@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,14 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * Contributor(s): Joseph Eagar.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/bmesh/operators/bmo_extrude.c
- *  \ingroup bmesh
+/** \file
+ * \ingroup bmesh
  *
  * Extrude faces and solidify.
  */
@@ -44,7 +38,7 @@
 enum {
 	EXT_INPUT   = 1,
 	EXT_KEEP    = 2,
-	EXT_DEL     = 4
+	EXT_DEL     = 4,
 };
 
 #define VERT_MARK 1
@@ -264,8 +258,9 @@ void bmo_extrude_vert_indiv_exec(BMesh *bm, BMOperator *op)
 		dupev = BM_vert_create(bm, v->co, v, BM_CREATE_NOP);
 		BMO_vert_flag_enable(bm, dupev, EXT_KEEP);
 
-		if (has_vskin)
+		if (has_vskin) {
 			bm_extrude_disable_skin_root(bm, v);
+		}
 
 		if (select_history_map) {
 			BMEditSelection *ese;
@@ -470,10 +465,12 @@ void bmo_extrude_face_region_exec(BMesh *bm, BMOperator *op)
 			BM_edge_kill(bm, e);
 
 			/* kill standalone vertices from this edge - see [#32341] */
-			if (!v1->e)
+			if (!v1->e) {
 				BM_vert_kill(bm, v1);
-			if (!v2->e)
+			}
+			if (!v2->e) {
 				BM_vert_kill(bm, v2);
+			}
 
 			continue;
 		}
@@ -569,7 +566,9 @@ void bmo_extrude_face_region_exec(BMesh *bm, BMOperator *op)
 	}
 
 	/* cleanup */
-	if (delorig) BMO_op_finish(bm, &delop);
+	if (delorig) {
+		BMO_op_finish(bm, &delop);
+	}
 	BMO_op_finish(bm, &dupeop);
 }
 

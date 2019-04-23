@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,12 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/blenlib/intern/edgehash.c
- *  \ingroup bli
+/** \file
+ * \ingroup bli
  *
  * An (edge -> pointer) hash table.
  * Using unordered int-pairs as keys.
@@ -117,7 +113,9 @@ BLI_INLINE bool edges_equal(Edge e1, Edge e2)
 static uint calc_capacity_exp_for_reserve(uint reserve)
 {
 	uint result = 1;
-	while (reserve >>= 1) result++;
+	while (reserve >>= 1) {
+		result++;
+	}
 	return result;
 }
 
@@ -259,7 +257,9 @@ void BLI_edgehash_print(EdgeHash *eh)
 	}
 	printf("  Entries:\n");
 	for (uint i = 0; i < ENTRIES_CAPACITY(eh); i++) {
-		if (i == eh->length) printf("    **** below is rest capacity ****\n");
+		if (i == eh->length) {
+			printf("    **** below is rest capacity ****\n");
+		}
 		EdgeHashEntry entry = eh->entries[i];
 		printf("    %u: (%u, %u) -> %p\n", i, entry.edge.v_low, entry.edge.v_high, entry.value);
 
@@ -314,7 +314,7 @@ void *BLI_edgehash_lookup_default(EdgeHash *eh, uint v0, uint v1, void *default_
  * Return value for given edge (\a v0, \a v1), or NULL if
  * if key does not exist in hash. (If need exists
  * to differentiate between key-value being NULL and
- * lack of key then see BLI_edgehash_lookup_p().
+ * lack of key then see #BLI_edgehash_lookup_p().
  */
 void *BLI_edgehash_lookup(EdgeHash *eh, uint v0, uint v1)
 {
@@ -378,7 +378,9 @@ bool BLI_edgehash_remove(EdgeHash *eh, uint v0, uint v1, EdgeHashFreeFP free_val
 {
 	uint old_length = eh->length;
 	void *value = BLI_edgehash_popkey(eh, v0, v1);
-	if (free_value && value) free_value(value);
+	if (free_value && value) {
+		free_value(value);
+	}
 	return old_length > eh->length;
 }
 

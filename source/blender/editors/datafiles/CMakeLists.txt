@@ -13,9 +13,6 @@
 # You should have received a copy of the GNU General Public License
 # along with this program; if not, write to the Free Software Foundation,
 # Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
-#
-# Contributor(s): Jacques Beaurain.
-#
 # ***** END GPL LICENSE BLOCK *****
 
 set(INC
@@ -29,6 +26,9 @@ set(INC_SYS
 # blender and player
 set(SRC
 
+)
+
+set(LIB
 )
 
 # Order matches "UI_icons.h", final name will be formatted: "icons{size}_{name}.dat"
@@ -671,6 +671,8 @@ set_property(GLOBAL PROPERTY ICON_GEOM_NAMES
 	ops.curve.draw
 	ops.curve.extrude_cursor
 	ops.curve.extrude_move
+	ops.curve.radius
+	ops.curve.vertex_random
 	ops.generic.cursor
 	ops.generic.select
 	ops.generic.select_box
@@ -684,11 +686,13 @@ set_property(GLOBAL PROPERTY ICON_GEOM_NAMES
 	ops.gpencil.edit_mirror
 	ops.gpencil.edit_shear
 	ops.gpencil.edit_to_sphere
+	ops.gpencil.extrude_move
 	ops.gpencil.primitive_arc
 	ops.gpencil.primitive_box
 	ops.gpencil.primitive_circle
 	ops.gpencil.primitive_curve
 	ops.gpencil.primitive_line
+	ops.gpencil.radius
 	ops.gpencil.sculpt_clone
 	ops.gpencil.sculpt_grab
 	ops.gpencil.sculpt_pinch
@@ -699,6 +703,7 @@ set_property(GLOBAL PROPERTY ICON_GEOM_NAMES
 	ops.gpencil.sculpt_thickness
 	ops.gpencil.sculpt_twist
 	ops.gpencil.sculpt_weight
+	ops.gpencil.stroke_cutter
 	ops.mesh.bevel
 	ops.mesh.bisect
 	ops.mesh.dupli_extrude_cursor
@@ -721,6 +726,7 @@ set_property(GLOBAL PROPERTY ICON_GEOM_NAMES
 	ops.mesh.spin
 	ops.mesh.spin.duplicate
 	ops.mesh.vertices_smooth
+	ops.node.links_cut
 	ops.paint.vertex_color_fill
 	ops.paint.weight_fill
 	ops.paint.weight_gradient
@@ -761,7 +767,7 @@ if(WITH_BLENDER)
 		# blender UI only
 
 		# blends
-		data_to_c_simple(../../../../release/datafiles/preview_cycles.blend SRC)
+		data_to_c_simple(../../../../release/datafiles/preview.blend SRC)
 		data_to_c_simple(../../../../release/datafiles/preview_grease_pencil.blend SRC)
 
 		# images
@@ -842,4 +848,4 @@ endif()
 
 unset(ICON_NAMES)
 
-blender_add_lib(bf_editor_datafiles "${SRC}" "${INC}" "${INC_SYS}")
+blender_add_lib(bf_editor_datafiles "${SRC}" "${INC}" "${INC_SYS}" "${LIB}")

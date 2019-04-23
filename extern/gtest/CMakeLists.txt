@@ -16,9 +16,6 @@
 #
 # The Original Code is Copyright (C) 2014, Blender Foundation
 # All rights reserved.
-#
-# Contributor(s): Sergey Sharybin
-#
 # ***** END GPL LICENSE BLOCK *****
 
 # avoid noisy warnings
@@ -69,4 +66,7 @@ set(SRC
 	include/gtest/internal/gtest-type-util.h
 )
 
-blender_add_lib(extern_gtest "${SRC}" "${INC}" "${INC_SYS}")
+set(LIB
+)
+
+blender_add_lib(extern_gtest "${SRC}" "${INC}" "${INC_SYS}" "${LIB}")

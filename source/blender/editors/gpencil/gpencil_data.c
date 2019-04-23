@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -15,18 +13,13 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
- * The Original Code is Copyright (C) 2008, Blender Foundation, Joshua Leung
+ * The Original Code is Copyright (C) 2008, Blender Foundation
  * This is a new part of Blender
- *
- * Contributor(s): Joshua Leung, Antonio Vazquez
- *
- * ***** END GPL LICENSE BLOCK *****
- *
  * Operators for dealing with GP datablocks and layers
  */
 
-/** \file blender/editors/gpencil/gpencil_data.c
- *  \ingroup edgpencil
+/** \file
+ * \ingroup edgpencil
  */
 
 
@@ -62,7 +55,6 @@
 #include "BKE_context.h"
 #include "BKE_deform.h"
 #include "BKE_fcurve.h"
-#include "BKE_global.h"
 #include "BKE_gpencil.h"
 #include "BKE_gpencil_modifier.h"
 #include "BKE_library.h"
@@ -73,7 +65,6 @@
 #include "BKE_paint.h"
 #include "BKE_report.h"
 #include "BKE_scene.h"
-#include "BKE_screen.h"
 
 #include "UI_interface.h"
 #include "UI_resources.h"
@@ -98,6 +89,18 @@
 /* Datablock Operators */
 
 /* ******************* Add New Data ************************ */
+static bool gp_data_add_poll(bContext *C)
+{
+	Object *obact = CTX_data_active_object(C);
+	if (obact && obact->type == OB_GPENCIL) {
+		if (obact->mode != OB_MODE_OBJECT) {
+			return false;
+		}
+	}
+
+	/* the base line we have is that we have somewhere to add Grease Pencil data */
+	return ED_gpencil_data_get_pointers(C, NULL) != NULL;
+}
 
 /* add new datablock - wrapper around API */
 static int gp_data_add_exec(bContext *C, wmOperator *op)
@@ -112,7 +115,8 @@ static int gp_data_add_exec(bContext *C, wmOperator *op)
 	}
 	else {
 		/* decrement user count and add new datablock */
-		/* TODO: if a datablock exists, we should make a copy of it instead of starting fresh (as in other areas) */
+		/* TODO: if a datablock exists,
+		 * we should make a copy of it instead of starting fresh (as in other areas) */
 		Main *bmain = CTX_data_main(C);
 
 		/* decrement user count of old GP datablock */
@@ -161,7 +165,7 @@ void GPENCIL_OT_data_add(wmOperatorType *ot)
 
 	/* callbacks */
 	ot->exec = gp_data_add_exec;
-	ot->poll = gp_add_poll;
+	ot->poll = gp_data_add_poll;
 }
 
 /* ******************* Unlink Data ************************ */
@@ -171,6 +175,13 @@ static bool gp_data_unlink_poll(bContext *C)
 {
 	bGPdata **gpd_ptr = ED_gpencil_data_get_pointers(C, NULL);
 
+	/* only unlink annotation datablocks */
+	if ((gpd_ptr != NULL) && (*gpd_ptr != NULL)) {
+		bGPdata *gpd = (*gpd_ptr);
+		if ((gpd->flag & GP_DATA_ANNOTATIONS) == 0) {
+			return false;
+		}
+	}
 	/* if we have access to some active data, make sure there's a datablock before enabling this */
 	return (gpd_ptr && *gpd_ptr);
 }
@@ -202,9 +213,9 @@ static int gp_data_unlink_exec(bContext *C, wmOperator *op)
 void GPENCIL_OT_data_unlink(wmOperatorType *ot)
 {
 	/* identifiers */
-	ot->name = "Grease Pencil Unlink";
+	ot->name = "Annotation Unlink";
 	ot->idname = "GPENCIL_OT_data_unlink";
-	ot->description = "Unlink active Grease Pencil data-block";
+	ot->description = "Unlink active Annotation data-block";
 	ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
 
 	/* callbacks */
@@ -334,7 +345,7 @@ void GPENCIL_OT_layer_remove(wmOperatorType *ot)
 
 enum {
 	GP_LAYER_MOVE_UP   = -1,
-	GP_LAYER_MOVE_DOWN = 1
+	GP_LAYER_MOVE_DOWN = 1,
 };
 
 static int gp_layer_move_exec(bContext *C, wmOperator *op)
@@ -362,7 +373,7 @@ void GPENCIL_OT_layer_move(wmOperatorType *ot)
 	static const EnumPropertyItem slot_move[] = {
 		{GP_LAYER_MOVE_UP, "UP", 0, "Up", ""},
 		{GP_LAYER_MOVE_DOWN, "DOWN", 0, "Down", ""},
-		{0, NULL, 0, NULL, NULL}
+		{0, NULL, 0, NULL, NULL},
 	};
 
 	/* identifiers */
@@ -425,7 +436,7 @@ void GPENCIL_OT_layer_duplicate(wmOperatorType *ot)
 /* ********************* Duplicate Layer in a new object ************************** */
 enum {
 	GP_LAYER_COPY_OBJECT_ALL_FRAME = 0,
-	GP_LAYER_COPY_OBJECT_ACT_FRAME = 1
+	GP_LAYER_COPY_OBJECT_ACT_FRAME = 1,
 };
 
 static bool gp_layer_duplicate_object_poll(bContext *C)
@@ -510,15 +521,10 @@ static int gp_layer_duplicate_object_exec(bContext *C, wmOperator *op)
 			 * otherwise add the slot with the material
 			 */
 			Material *ma_src = give_current_material(ob_src, gps_src->mat_nr + 1);
-			int idx = BKE_gpencil_get_material_index(ob_dst, ma_src);
-			if (idx == 0) {
-				BKE_object_material_slot_add(bmain, ob_dst);
-				assign_material(bmain, ob_dst, ma_src, ob_dst->totcol, BKE_MAT_ASSIGN_USERPREF);
-				idx = ob_dst->totcol;
-			}
+			int idx = BKE_gpencil_object_material_ensure(bmain, ob_dst, ma_src);
 
 			/* reasign the stroke material to the right slot in destination object */
-			gps_dst->mat_nr = idx - 1;
+			gps_dst->mat_nr = idx;
 
 			/* add new stroke to frame */
 			BLI_addtail(&gpf_dst->strokes, gps_dst);
@@ -538,7 +544,7 @@ void GPENCIL_OT_layer_duplicate_object(wmOperatorType *ot)
 	static const EnumPropertyItem copy_mode[] = {
 		{GP_LAYER_COPY_OBJECT_ALL_FRAME, "ALL", 0, "All Frames", ""},
 		{GP_LAYER_COPY_OBJECT_ACT_FRAME, "ACTIVE", 0, "Active Frame", ""},
-		{0, NULL, 0, NULL, NULL}
+		{0, NULL, 0, NULL, NULL},
 	};
 
 	/* identifiers */
@@ -562,7 +568,7 @@ void GPENCIL_OT_layer_duplicate_object(wmOperatorType *ot)
 /* ********************* Duplicate Frame ************************** */
 enum {
 	GP_FRAME_DUP_ACTIVE = 0,
-	GP_FRAME_DUP_ALL = 1
+	GP_FRAME_DUP_ALL = 1,
 };
 
 static int gp_frame_duplicate_exec(bContext *C, wmOperator *op)
@@ -601,7 +607,7 @@ void GPENCIL_OT_frame_duplicate(wmOperatorType *ot)
 	static const EnumPropertyItem duplicate_mode[] = {
 		{GP_FRAME_DUP_ACTIVE, "ACTIVE", 0, "Active", "Duplicate frame in active layer only"},
 		{GP_FRAME_DUP_ALL, "ALL", 0, "All", "Duplicate active frames in all layers"},
-		{0, NULL, 0, NULL, NULL}
+		{0, NULL, 0, NULL, NULL},
 	};
 
 	/* identifiers */
@@ -622,7 +628,7 @@ void GPENCIL_OT_frame_duplicate(wmOperatorType *ot)
 /* ********************* Clean Fill Boundaries on Frame ************************** */
 enum {
 	GP_FRAME_CLEAN_FILL_ACTIVE = 0,
-	GP_FRAME_CLEAN_FILL_ALL = 1
+	GP_FRAME_CLEAN_FILL_ALL = 1,
 };
 
 static int gp_frame_clean_fill_exec(bContext *C, wmOperator *op)
@@ -688,7 +694,7 @@ void GPENCIL_OT_frame_clean_fill(wmOperatorType *ot)
 	static const EnumPropertyItem duplicate_mode[] = {
 		{GP_FRAME_CLEAN_FILL_ACTIVE, "ACTIVE", 0, "Active Frame Only", "Clean active frame only"},
 		{GP_FRAME_CLEAN_FILL_ALL, "ALL", 0, "All Frames", "Clean all frames in all layers"},
-		{0, NULL, 0, NULL, NULL}
+		{0, NULL, 0, NULL, NULL},
 	};
 
 	/* identifiers */
@@ -1217,7 +1223,7 @@ enum {
 	GP_STROKE_MOVE_UP = -1,
 	GP_STROKE_MOVE_DOWN = 1,
 	GP_STROKE_MOVE_TOP = 2,
-	GP_STROKE_MOVE_BOTTOM = 3
+	GP_STROKE_MOVE_BOTTOM = 3,
 };
 
 static int gp_stroke_arrange_exec(bContext *C, wmOperator *op)
@@ -1373,7 +1379,7 @@ static int gp_stroke_change_color_exec(bContext *C, wmOperator *op)
 		}
 	}
 	/* try to find slot */
-	int idx = BKE_gpencil_get_material_index(ob, ma) - 1;
+	int idx = BKE_gpencil_object_material_get_index(ob, ma);
 	if (idx < 0) {
 		return OPERATOR_CANCELLED;
 	}
@@ -1719,19 +1725,26 @@ void GPENCIL_OT_vertex_group_deselect(wmOperatorType *ot)
 }
 
 /* invert */
-static int gpencil_vertex_group_invert_exec(bContext *C, wmOperator *UNUSED(op))
+static int gpencil_vertex_group_invert_exec(bContext *C, wmOperator *op)
 {
 	ToolSettings *ts = CTX_data_tool_settings(C);
 	Object *ob = CTX_data_active_object(C);
 
 	/* sanity checks */
-	if (ELEM(NULL, ts, ob, ob->data))
+	if (ELEM(NULL, ts, ob, ob->data)) {
 		return OPERATOR_CANCELLED;
+	}
 
 	MDeformVert *dvert;
 	const int def_nr = ob->actdef - 1;
-	if (!BLI_findlink(&ob->defbase, def_nr))
+	bDeformGroup *defgroup = BLI_findlink(&ob->defbase, def_nr);
+	if (defgroup == NULL) {
 		return OPERATOR_CANCELLED;
+	}
+	if (defgroup->flag & DG_LOCK_WEIGHT) {
+		BKE_report(op->reports, RPT_ERROR, "Current Vertex Group is locked");
+		return OPERATOR_CANCELLED;
+	}
 
 	CTX_DATA_BEGIN(C, bGPDstroke *, gps, editable_gpencil_strokes)
 	{
@@ -1784,18 +1797,29 @@ static int gpencil_vertex_group_smooth_exec(bContext *C, wmOperator *op)
 	Object *ob = CTX_data_active_object(C);
 
 	/* sanity checks */
-	if (ELEM(NULL, ts, ob, ob->data))
+	if (ELEM(NULL, ts, ob, ob->data)) {
 		return OPERATOR_CANCELLED;
+	}
+
+	const int def_nr = ob->actdef - 1;
+	bDeformGroup *defgroup = BLI_findlink(&ob->defbase, def_nr);
+	if (defgroup == NULL) {
+		return OPERATOR_CANCELLED;
+	}
+	if (defgroup->flag & DG_LOCK_WEIGHT) {
+		BKE_report(op->reports, RPT_ERROR, "Current Vertex Group is locked");
+		return OPERATOR_CANCELLED;
+	}
 
 	bGPDspoint *pta, *ptb, *ptc;
 	MDeformVert *dverta, *dvertb;
 
-	const int def_nr = ob->actdef - 1;
-	if (!BLI_findlink(&ob->defbase, def_nr))
-		return OPERATOR_CANCELLED;
-
 	CTX_DATA_BEGIN(C, bGPDstroke *, gps, editable_gpencil_strokes)
 	{
+		if (gps->dvert == NULL) {
+			continue;
+		}
+
 		for (int s = 0; s < repeat; s++) {
 			for (int i = 0; i < gps->totpoints; i++) {
 				/* previous point */
@@ -1830,6 +1854,7 @@ static int gpencil_vertex_group_smooth_exec(bContext *C, wmOperator *op)
 				MDeformWeight *dw = defvert_verify_index(dvertb, def_nr);
 				if (dw) {
 					dw->weight = interpf(wb, optimal, fac);
+					CLAMP(dw->weight, 0.0, 1.0f);
 				}
 			}
 		}
@@ -1862,6 +1887,187 @@ void GPENCIL_OT_vertex_group_smooth(wmOperatorType *ot)
 	RNA_def_int(ot->srna, "repeat", 1, 1, 10000, "Iterations", "", 1, 200);
 }
 
+/* normalize */
+static int gpencil_vertex_group_normalize_exec(bContext *C, wmOperator *op)
+{
+	ToolSettings *ts = CTX_data_tool_settings(C);
+	Object *ob = CTX_data_active_object(C);
+
+	/* sanity checks */
+	if (ELEM(NULL, ts, ob, ob->data)) {
+		return OPERATOR_CANCELLED;
+	}
+
+	MDeformVert *dvert = NULL;
+	MDeformWeight *dw = NULL;
+	const int def_nr = ob->actdef - 1;
+	bDeformGroup *defgroup = BLI_findlink(&ob->defbase, def_nr);
+	if (defgroup == NULL) {
+		return OPERATOR_CANCELLED;
+	}
+	if (defgroup->flag & DG_LOCK_WEIGHT) {
+		BKE_report(op->reports, RPT_ERROR, "Current Vertex Group is locked");
+		return OPERATOR_CANCELLED;
+	}
+
+	CTX_DATA_BEGIN(C, bGPDstroke *, gps, editable_gpencil_strokes)
+	{
+		/* look for max value */
+		float maxvalue = 0.0f;
+		for (int i = 0; i < gps->totpoints; i++) {
+			dvert = &gps->dvert[i];
+			dw = defvert_find_index(dvert, def_nr);
+			if ((dw != NULL) &&	(dw->weight > maxvalue)) {
+				maxvalue = dw->weight;
+			}
+		}
+
+		/* normalize weights */
+		if (maxvalue > 0.0f) {
+			for (int i = 0; i < gps->totpoints; i++) {
+				dvert = &gps->dvert[i];
+				dw = defvert_find_index(dvert, def_nr);
+				if (dw != NULL) {
+					dw->weight = dw->weight / maxvalue;
+				}
+			}
+		}
+	}
+	CTX_DATA_END;
+
+	/* notifiers */
+	bGPdata *gpd = ob->data;
+	DEG_id_tag_update(&gpd->id, ID_RECALC_TRANSFORM | ID_RECALC_GEOMETRY);
+	WM_event_add_notifier(C, NC_GPENCIL | ND_DATA | NA_EDITED | ND_SPACE_PROPERTIES, NULL);
+
+	return OPERATOR_FINISHED;
+}
+
+void GPENCIL_OT_vertex_group_normalize(wmOperatorType *ot)
+{
+	/* identifiers */
+	ot->name = "Normalize Vertex Group";
+	ot->idname = "GPENCIL_OT_vertex_group_normalize";
+	ot->description = "Normalize weights to the active vertex group";
+
+	/* api callbacks */
+	ot->poll = gpencil_vertex_group_weight_poll;
+	ot->exec = gpencil_vertex_group_normalize_exec;
+
+	/* flags */
+	ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
+}
+
+/* normalize all */
+static int gpencil_vertex_group_normalize_all_exec(bContext *C, wmOperator *op)
+{
+	ToolSettings *ts = CTX_data_tool_settings(C);
+	Object *ob = CTX_data_active_object(C);
+	bool lock_active = RNA_boolean_get(op->ptr, "lock_active");
+
+	/* sanity checks */
+	if (ELEM(NULL, ts, ob, ob->data)) {
+		return OPERATOR_CANCELLED;
+	}
+
+	bDeformGroup *defgroup = NULL;
+	MDeformVert *dvert = NULL;
+	MDeformWeight *dw = NULL;
+	const int def_nr = ob->actdef - 1;
+	const int defbase_tot = BLI_listbase_count(&ob->defbase);
+	if (defbase_tot == 0) {
+		return OPERATOR_CANCELLED;
+	}
+
+	CTX_DATA_BEGIN(C, bGPDstroke *, gps, editable_gpencil_strokes)
+	{
+		/* verify the strokes has something to change */
+		if (gps->totpoints == 0) {
+			continue;
+		}
+		/* look for tot value */
+		float *tot_values = MEM_callocN(gps->totpoints * sizeof(float), __func__);
+
+		for (int i = 0; i < gps->totpoints; i++) {
+			dvert = &gps->dvert[i];
+			for (int v = 0; v < defbase_tot; v++) {
+				defgroup = BLI_findlink(&ob->defbase, v);
+				/* skip NULL or locked groups */
+				if ((defgroup == NULL) || (defgroup->flag & DG_LOCK_WEIGHT)) {
+					continue;
+				}
+
+				/* skip current */
+				if ((lock_active) && (v == def_nr)) {
+					continue;
+				}
+
+				dw = defvert_find_index(dvert, v);
+				if (dw != NULL) {
+					tot_values[i] += dw->weight;
+				}
+			}
+		}
+
+		/* normalize weights */
+		for (int i = 0; i < gps->totpoints; i++) {
+			if (tot_values[i] == 0.0f) {
+				continue;
+			}
+
+			dvert = &gps->dvert[i];
+			for (int v = 0; v < defbase_tot; v++) {
+				defgroup = BLI_findlink(&ob->defbase, v);
+				/* skip NULL or locked groups */
+				if ((defgroup == NULL) || (defgroup->flag & DG_LOCK_WEIGHT)) {
+					continue;
+				}
+
+				/* skip current */
+				if ((lock_active) && (v == def_nr)) {
+					continue;
+				}
+
+				dw = defvert_find_index(dvert, v);
+				if (dw != NULL) {
+					dw->weight = dw->weight / tot_values[i];
+				}
+			}
+		}
+
+		/* free temp array */
+		MEM_SAFE_FREE(tot_values);
+	}
+	CTX_DATA_END;
+
+	/* notifiers */
+	bGPdata *gpd = ob->data;
+	DEG_id_tag_update(&gpd->id, ID_RECALC_TRANSFORM | ID_RECALC_GEOMETRY);
+	WM_event_add_notifier(C, NC_GPENCIL | ND_DATA | NA_EDITED | ND_SPACE_PROPERTIES, NULL);
+
+	return OPERATOR_FINISHED;
+}
+
+void GPENCIL_OT_vertex_group_normalize_all(wmOperatorType *ot)
+{
+	/* identifiers */
+	ot->name = "Normalize All Vertex Group";
+	ot->idname = "GPENCIL_OT_vertex_group_normalize_all";
+	ot->description = "Normalize all weights of all vertex groups, "
+		"so that for each vertex, the sum of all weights is 1.0";
+
+	/* api callbacks */
+	ot->poll = gpencil_vertex_group_weight_poll;
+	ot->exec = gpencil_vertex_group_normalize_all_exec;
+
+	/* flags */
+	ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
+
+	/* props */
+	RNA_def_boolean(ot->srna, "lock_active", true, "Lock Active",
+		"Keep the values of the active group while normalizing others");
+}
+
 /****************************** Join ***********************************/
 
 /* userdata for joined_gpencil_fix_animdata_cb() */
@@ -1887,7 +2093,8 @@ static void joined_gpencil_fix_animdata_cb(ID *id, FCurve *fcu, void *user_data)
 			const char *old_name = BLI_ghashIterator_getKey(&gh_iter);
 			const char *new_name = BLI_ghashIterator_getValue(&gh_iter);
 
-			/* only remap if changed; this still means there will be some waste if there aren't many drivers/keys */
+			/* only remap if changed;
+			 * this still means there will be some waste if there aren't many drivers/keys */
 			if (!STREQ(old_name, new_name) && strstr(fcu->rna_path, old_name)) {
 				fcu->rna_path = BKE_animsys_fix_rna_path_rename(
 				        id, fcu->rna_path, "layers",
@@ -2042,10 +2249,7 @@ int ED_gpencil_join_objects_exec(bContext *C, wmOperator *op)
 
 				for (short i = 0; i < *totcol; i++) {
 					Material *tmp_ma = give_current_material(ob_src, i + 1);
-					if (BKE_gpencil_get_material_index(ob_dst, tmp_ma) == 0) {
-						BKE_object_material_slot_add(bmain, ob_dst);
-						assign_material(bmain, ob_dst, tmp_ma, ob_dst->totcol, BKE_MAT_ASSIGN_USERPREF);
-					}
+					BKE_gpencil_object_material_ensure(bmain, ob_dst, tmp_ma);
 				}
 
 				/* duplicate bGPDlayers  */
@@ -2075,24 +2279,12 @@ int ED_gpencil_join_objects_exec(bContext *C, wmOperator *op)
 					invert_m4_m4(inverse_diff_mat, diff_mat);
 
 					Material *ma_src = NULL;
-					int idx;
 					for (bGPDframe *gpf = gpl_new->frames.first; gpf; gpf = gpf->next) {
 						for (bGPDstroke *gps = gpf->strokes.first; gps; gps = gps->next) {
 
 							/* reasign material. Look old material and try to find in dst */
 							ma_src = give_current_material(ob_src, gps->mat_nr + 1);
-							if (ma_src != NULL) {
-								idx = BKE_gpencil_get_material_index(ob_dst, ma_src);
-								if (idx > 0) {
-									gps->mat_nr = idx - 1;
-								}
-								else {
-									gps->mat_nr = 0;
-								}
-							}
-							else {
-								gps->mat_nr = 0;
-							}
+							gps->mat_nr = BKE_gpencil_object_material_ensure(bmain, ob_dst, ma_src);
 
 							bGPDspoint *pt;
 							int i;

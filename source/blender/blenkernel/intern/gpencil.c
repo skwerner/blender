@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,14 +15,10 @@
  *
  * The Original Code is Copyright (C) 2008, Blender Foundation
  * This is a new part of Blender
- *
- * Contributor(s): Joshua Leung, Antonio Vazquez
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/blenkernel/intern/gpencil.c
- *  \ingroup bke
+/** \file
+ * \ingroup bke
  */
 
 
@@ -34,15 +28,14 @@
 #include <stddef.h>
 #include <math.h>
 
+#include "CLG_log.h"
+
 #include "MEM_guardedalloc.h"
 
 #include "BLI_blenlib.h"
 #include "BLI_utildefines.h"
 #include "BLI_math_vector.h"
-#include "BLI_math_color.h"
 #include "BLI_string_utils.h"
-#include "BLI_rand.h"
-#include "BLI_ghash.h"
 
 #include "BLT_translation.h"
 
@@ -54,11 +47,9 @@
 #include "DNA_scene_types.h"
 #include "DNA_object_types.h"
 
-#include "BKE_context.h"
 #include "BKE_action.h"
 #include "BKE_animsys.h"
 #include "BKE_deform.h"
-#include "BKE_global.h"
 #include "BKE_gpencil.h"
 #include "BKE_colortools.h"
 #include "BKE_icons.h"
@@ -68,6 +59,8 @@
 #include "BKE_material.h"
 
 #include "DEG_depsgraph.h"
+
+static CLG_LogRef LOG = {"bke.gpencil"};
 
 /* ************************************************** */
 /* Draw Engine */
@@ -267,7 +260,7 @@ bGPDframe *BKE_gpencil_frame_addnew(bGPDlayer *gpl, int cframe)
 
 	/* check whether frame was added successfully */
 	if (state == -1) {
-		printf("Error: Frame (%d) existed already for this layer. Using existing frame\n", cframe);
+		CLOG_ERROR(&LOG, "Frame (%d) existed already for this layer. Using existing frame", cframe);
 
 		/* free the newly created one, and use the old one instead */
 		MEM_freeN(gpf);
@@ -381,6 +374,8 @@ bGPDlayer *BKE_gpencil_layer_addnew(bGPdata *gpd, const char *name, bool setacti
 		/* thickness parameter represents "thickness change", not absolute thickness */
 		gpl->thickness = 0;
 		gpl->opacity = 1.0f;
+		/* default channel color */
+		ARRAY_SET_ITEMS(gpl->color, 0.2f, 0.2f, 0.2f);
 	}
 
 	/* auto-name */
@@ -418,7 +413,6 @@ bGPdata *BKE_gpencil_data_addnew(Main *bmain, const char name[])
 	/* GP object specific settings */
 	ARRAY_SET_ITEMS(gpd->line_color, 0.6f, 0.6f, 0.6f, 0.5f);
 
-	gpd->xray_mode = GP_XRAY_3DSPACE;
 	gpd->pixfactor = GP_DEFAULT_PIX_FACTOR;
 
 	/* grid settings */
@@ -473,6 +467,10 @@ bGPDstroke *BKE_gpencil_add_stroke(bGPDframe *gpf, int mat_idx, int totpoints, s
 	bGPDstroke *gps = MEM_callocN(sizeof(bGPDstroke), "gp_stroke");
 
 	gps->thickness = thickness;
+	gps->gradient_f = 1.0f;
+	gps->gradient_s[0] = 1.0f;
+	gps->gradient_s[1] = 1.0f;
+
 	gps->inittime = 0;
 
 	/* enable recalculation flag by default */
@@ -617,7 +615,7 @@ bGPDlayer *BKE_gpencil_layer_duplicate(const bGPDlayer *gpl_src)
 
 /**
  * Only copy internal data of GreasePencil ID from source to already allocated/initialized destination.
- * You probably never want to use that directly, use id_copy or BKE_id_copy_ex for typical needs.
+ * You probably never want to use that directly, use BKE_id_copy or BKE_id_copy_ex for typical needs.
  *
  * WARNING! This function will not handle ID user count!
  *
@@ -644,7 +642,7 @@ void BKE_gpencil_copy_data(bGPdata *gpd_dst, const bGPdata *gpd_src, const int U
 bGPdata *BKE_gpencil_copy(Main *bmain, const bGPdata *gpd)
 {
 	bGPdata *gpd_copy;
-	BKE_id_copy_ex(bmain, &gpd->id, (ID **)&gpd_copy, 0, false);
+	BKE_id_copy(bmain, &gpd->id, (ID **)&gpd_copy);
 	return gpd_copy;
 }
 
@@ -669,7 +667,7 @@ bGPdata *BKE_gpencil_data_duplicate(Main *bmain, const bGPdata *gpd_src, bool in
 	}
 	else {
 		BLI_assert(bmain != NULL);
-		BKE_id_copy_ex(bmain, &gpd_src->id, (ID **)&gpd_dst, 0, false);
+		BKE_id_copy(bmain, &gpd_src->id, (ID **)&gpd_dst);
 	}
 
 	/* Copy internal data (layers, etc.) */
@@ -892,7 +890,7 @@ bGPDframe *BKE_gpencil_layer_getframe(bGPDlayer *gpl, int cframe, eGP_GetFrame_M
 			gpl->actframe = gpf;
 		else {
 			/* unresolved errogenous situation! */
-			printf("Error: cannot find appropriate gp-frame\n");
+			CLOG_STR_ERROR(&LOG, "cannot find appropriate gp-frame");
 			/* gpl->actframe should still be NULL */
 		}
 	}
@@ -991,7 +989,7 @@ void BKE_gpencil_layer_delete(bGPdata *gpd, bGPDlayer *gpl)
 	BLI_freelinkN(&gpd->layers, gpl);
 }
 
-Material *BKE_gpencil_get_material_from_brush(Brush *brush)
+Material *BKE_gpencil_brush_material_get(Brush *brush)
 {
 	Material *ma = NULL;
 
@@ -1004,8 +1002,136 @@ Material *BKE_gpencil_get_material_from_brush(Brush *brush)
 	return ma;
 }
 
+void BKE_gpencil_brush_material_set(Brush *brush, Material *ma)
+{
+	BLI_assert(brush);
+	BLI_assert(brush->gpencil_settings);
+	if (brush->gpencil_settings->material != ma) {
+		if (brush->gpencil_settings->material) {
+			id_us_min(&brush->gpencil_settings->material->id);
+		}
+		if (ma) {
+			id_us_plus(&ma->id);
+		}
+		brush->gpencil_settings->material = ma;
+	}
+}
+
+/* Adds the pinned material to the object if necessary. */
+Material *BKE_gpencil_object_material_ensure_from_brush(Main *bmain, Object *ob, Brush *brush)
+{
+	if (brush->gpencil_settings->flag & GP_BRUSH_MATERIAL_PINNED) {
+		Material *ma = BKE_gpencil_brush_material_get(brush);
+
+		/* check if the material is already on object material slots and add it if missing */
+		if (ma && BKE_gpencil_object_material_get_index(ob, ma) < 0) {
+			BKE_object_material_slot_add(bmain, ob);
+			assign_material(bmain, ob, ma, ob->totcol, BKE_MAT_ASSIGN_USERPREF);
+		}
+
+		return ma;
+	}
+	else {
+		/* using active material instead */
+		return give_current_material(ob, ob->actcol);
+	}
+}
+
+/* Assigns the material to object (if not already present) and returns its index (mat_nr). */
+int BKE_gpencil_object_material_ensure(Main *bmain, Object *ob, Material *material)
+{
+	if (!material) {
+		return -1;
+	}
+	int index = BKE_gpencil_object_material_get_index(ob, material);
+	if (index < 0) {
+		BKE_object_material_slot_add(bmain, ob);
+		assign_material(bmain, ob, material, ob->totcol, BKE_MAT_ASSIGN_USERPREF);
+		return ob->totcol - 1;
+	}
+	return index;
+}
+
+/** Creates a new gpencil material and assigns it to object.
+ *
+ * \param *r_index: value is set to zero based index of the new material if r_index is not NULL
+ */
+Material *BKE_gpencil_object_material_new(Main *bmain, Object *ob, const char *name, int *r_index)
+{
+	Material *ma = BKE_material_add_gpencil(bmain, name);
+	id_us_min(&ma->id); /* no users yet */
+
+	BKE_object_material_slot_add(bmain, ob);
+	assign_material(bmain, ob, ma, ob->totcol, BKE_MAT_ASSIGN_USERPREF);
+
+	if (r_index) {
+		*r_index = ob->actcol - 1;
+	}
+	return ma;
+}
+
+/* Returns the material for a brush with respect to its pinned state. */
+Material *BKE_gpencil_object_material_get_from_brush(Object *ob, Brush *brush)
+{
+	if ((brush) && (brush->gpencil_settings->flag & GP_BRUSH_MATERIAL_PINNED)) {
+		Material *ma = BKE_gpencil_brush_material_get(brush);
+		return ma;
+	}
+	else {
+		return give_current_material(ob, ob->actcol);
+	}
+}
+
+/* Returns the material index for a brush with respect to its pinned state. */
+int BKE_gpencil_object_material_get_index_from_brush(Object *ob, Brush *brush)
+{
+	if ((brush) && (brush->gpencil_settings->flag & GP_BRUSH_MATERIAL_PINNED)) {
+		return BKE_gpencil_object_material_get_index(ob, brush->gpencil_settings->material);
+	}
+	else {
+		return ob->actcol - 1;
+	}
+}
+
+/* Guaranteed to return a material assigned to object. Returns never NULL. */
+Material *BKE_gpencil_object_material_ensure_from_active_input_toolsettings(Main *bmain, Object *ob, ToolSettings *ts)
+{
+	if (ts && ts->gp_paint && ts->gp_paint->paint.brush) {
+		return BKE_gpencil_object_material_ensure_from_active_input_brush(bmain, ob, ts->gp_paint->paint.brush);
+	}
+	else {
+		return BKE_gpencil_object_material_ensure_from_active_input_brush(bmain, ob, NULL);
+	}
+}
+
+/* Guaranteed to return a material assigned to object. Returns never NULL. */
+Material *BKE_gpencil_object_material_ensure_from_active_input_brush(Main *bmain, Object *ob, Brush *brush)
+{
+	if (brush) {
+		Material *ma = BKE_gpencil_object_material_ensure_from_brush(bmain, ob, brush);
+		if (ma) {
+			return ma;
+		}
+		else if (brush->gpencil_settings->flag & GP_BRUSH_MATERIAL_PINNED) {
+			/* it is easier to just unpin a NULL material, instead of setting a new one */
+			brush->gpencil_settings->flag &= ~GP_BRUSH_MATERIAL_PINNED;
+		}
+	}
+	return BKE_gpencil_object_material_ensure_from_active_input_material(bmain, ob);
+}
+
+/* Guaranteed to return a material assigned to object. Returns never NULL. Only use this for materials unrelated to user input */
+Material *BKE_gpencil_object_material_ensure_from_active_input_material(Main *bmain, Object *ob)
+{
+	Material *ma = give_current_material(ob, ob->actcol);
+	if (ma) {
+		return ma;
+	}
+	return BKE_gpencil_object_material_new(bmain, ob, "Material", NULL);
+}
+
 /* Get active color, and add all default settings if we don't find anything */
-Material *BKE_gpencil_material_ensure(Main *bmain, Object *ob)
+Material *BKE_gpencil_object_material_ensure_active(Main *bmain, Object *ob)
 {
 	Material *ma = NULL;
 
@@ -1013,15 +1139,8 @@ Material *BKE_gpencil_material_ensure(Main *bmain, Object *ob)
 	if (ELEM(NULL, bmain, ob))
 		return NULL;
 
-	ma = give_current_material(ob, ob->actcol);
-	if (ma == NULL) {
-		if (ob->totcol == 0) {
-			BKE_object_material_slot_add(bmain, ob);
-		}
-		ma = BKE_material_add_gpencil(bmain, DATA_("Material"));
-		assign_material(bmain, ob, ma, ob->totcol, BKE_MAT_ASSIGN_USERPREF);
-	}
-	else if (ma->gp_style == NULL) {
+	ma = BKE_gpencil_object_material_ensure_from_active_input_material(bmain, ob);
+	if (ma->gp_style == NULL) {
 		BKE_material_init_gpencil_settings(ma);
 	}
 
@@ -1056,9 +1175,8 @@ bool BKE_gpencil_stroke_minmax(
 }
 
 /* get min/max bounds of all strokes in GP datablock */
-bool BKE_gpencil_data_minmax(Object *ob, const bGPdata *gpd, float r_min[3], float r_max[3])
+bool BKE_gpencil_data_minmax(const bGPdata *gpd, float r_min[3], float r_max[3])
 {
-	float bmat[3][3];
 	bool changed = false;
 
 	INIT_MINMAX(r_min, r_max);
@@ -1074,14 +1192,6 @@ bool BKE_gpencil_data_minmax(Object *ob, const bGPdata *gpd, float r_min[3], flo
 				changed = BKE_gpencil_stroke_minmax(gps, false, r_min, r_max);
 			}
 		}
-	}
-
-	if ((changed) && (ob)) {
-		copy_m3_m4(bmat, ob->obmat);
-		mul_m3_v3(bmat, r_min);
-		add_v3_v3(r_min, ob->obmat[3]);
-		mul_m3_v3(bmat, r_max);
-		add_v3_v3(r_max, ob->obmat[3]);
 	}
 
 	return changed;
@@ -1105,7 +1215,7 @@ void BKE_gpencil_centroid_3d(bGPdata *gpd, float r_centroid[3])
 {
 	float min[3], max[3], tot[3];
 
-	BKE_gpencil_data_minmax(NULL, gpd, min, max);
+	BKE_gpencil_data_minmax(gpd, min, max);
 
 	add_v3_v3v3(tot, min, max);
 	mul_v3_v3fl(r_centroid, tot, 0.5f);
@@ -1119,14 +1229,18 @@ static void boundbox_gpencil(Object *ob)
 	bGPdata *gpd;
 	float min[3], max[3];
 
-	if (ob->bb == NULL) {
-		ob->bb = MEM_callocN(sizeof(BoundBox), "GPencil boundbox");
+	if (ob->runtime.bb == NULL) {
+		ob->runtime.bb = MEM_callocN(sizeof(BoundBox), "GPencil boundbox");
 	}
 
-	bb  = ob->bb;
+	bb  = ob->runtime.bb;
 	gpd = ob->data;
 
-	BKE_gpencil_data_minmax(NULL, gpd, min, max);
+	if (!BKE_gpencil_data_minmax(gpd, min, max)) {
+		min[0] = min[1] = min[2] = -1.0f;
+		max[0] = max[1] = max[2] = 1.0f;
+	}
+
 	BKE_boundbox_init_from_minmax(bb, min, max);
 
 	bb->flag &= ~BOUNDBOX_DIRTY;
@@ -1135,21 +1249,17 @@ static void boundbox_gpencil(Object *ob)
 /* get bounding box */
 BoundBox *BKE_gpencil_boundbox_get(Object *ob)
 {
-	bGPdata *gpd;
-
 	if (ELEM(NULL, ob, ob->data))
 		return NULL;
 
-	gpd = ob->data;
-	if ((ob->bb) && ((ob->bb->flag & BOUNDBOX_DIRTY) == 0) &&
-	    ((gpd->flag & GP_DATA_CACHE_IS_DIRTY) == 0))
-	{
-		return ob->bb;
+	bGPdata *gpd = (bGPdata *)ob->data;
+	if ((ob->runtime.bb) && ((gpd->flag & GP_DATA_CACHE_IS_DIRTY) == 0)) {
+		return ob->runtime.bb;
 	}
 
 	boundbox_gpencil(ob);
 
-	return ob->bb;
+	return ob->runtime.bb;
 }
 
 /* ************************************************** */
@@ -1208,6 +1318,15 @@ void BKE_gpencil_vgroup_remove(Object *ob, bDeformGroup *defgroup)
 							MDeformWeight *dw = defvert_find_index(dvert, def_nr);
 							if (dw != NULL) {
 								defvert_remove_group(dvert, dw);
+							}
+							else {
+								/* reorganize weights in other strokes */
+								for (int g = 0; g < gps->dvert->totweight; g++) {
+									dw = &dvert->dw[g];
+									if ((dw != NULL) && (dw->def_nr > def_nr)) {
+										dw->def_nr--;
+									}
+								}
 							}
 						}
 					}
@@ -1370,7 +1489,8 @@ bool BKE_gpencil_smooth_stroke_thickness(bGPDstroke *gps, int point_index, float
 }
 
 /**
-* Apply smooth for UV rotation to stroke point (use pressure) */
+ * Apply smooth for UV rotation to stroke point (use pressure).
+ */
 bool BKE_gpencil_smooth_stroke_uv(bGPDstroke *gps, int point_index, float influence)
 {
 	bGPDspoint *ptb = &gps->points[point_index];
@@ -1545,24 +1665,26 @@ void BKE_gpencil_stats_update(bGPdata *gpd)
 
 }
 
-/* get material index */
-int BKE_gpencil_get_material_index(Object *ob, Material *ma)
+/* get material index (0-based like mat_nr not actcol) */
+int BKE_gpencil_object_material_get_index(Object *ob, Material *ma)
 {
 	short *totcol = give_totcolp(ob);
 	Material *read_ma = NULL;
 	for (short i = 0; i < *totcol; i++) {
 		read_ma = give_current_material(ob, i + 1);
 		if (ma == read_ma) {
-			return i + 1;
+			return i;
 		}
 	}
 
-	return 0;
+	return -1;
 }
 
 /* Get points of stroke always flat to view not affected by camera view or view position */
 void BKE_gpencil_stroke_2d_flat(const bGPDspoint *points, int totpoints, float(*points2d)[2], int *r_direction)
 {
+	BLI_assert(totpoints >= 2);
+
 	const bGPDspoint *pt0 = &points[0];
 	const bGPDspoint *pt1 = &points[1];
 	const bGPDspoint *pt3 = &points[(int)(totpoints * 0.75)];
@@ -1576,7 +1698,15 @@ void BKE_gpencil_stroke_2d_flat(const bGPDspoint *points, int totpoints, float(*
 	sub_v3_v3v3(locx, &pt1->x, &pt0->x);
 
 	/* point vector at 3/4 */
-	sub_v3_v3v3(loc3, &pt3->x, &pt0->x);
+	float v3[3];
+	if (totpoints == 2) {
+		mul_v3_v3fl(v3, &pt3->x, 0.001f);
+	}
+	else {
+		copy_v3_v3(v3, &pt3->x);
+	}
+
+	sub_v3_v3v3(loc3, v3, &pt0->x);
 
 	/* vector orthogonal to polygon plane */
 	cross_v3_v3v3(normal, locx, loc3);
@@ -1604,3 +1734,181 @@ void BKE_gpencil_stroke_2d_flat(const bGPDspoint *points, int totpoints, float(*
 	*r_direction = (int)locy[2];
 }
 
+/* Get points of stroke always flat to view not affected by camera view or view position
+ * using another stroke as reference
+ */
+void BKE_gpencil_stroke_2d_flat_ref(
+	const bGPDspoint *ref_points, int ref_totpoints,
+	const bGPDspoint *points, int totpoints,
+	float(*points2d)[2], const float scale, int *r_direction)
+{
+	BLI_assert(totpoints >= 2);
+
+	const bGPDspoint *pt0 = &ref_points[0];
+	const bGPDspoint *pt1 = &ref_points[1];
+	const bGPDspoint *pt3 = &ref_points[(int)(ref_totpoints * 0.75)];
+
+	float locx[3];
+	float locy[3];
+	float loc3[3];
+	float normal[3];
+
+	/* local X axis (p0 -> p1) */
+	sub_v3_v3v3(locx, &pt1->x, &pt0->x);
+
+	/* point vector at 3/4 */
+	float v3[3];
+	if (totpoints == 2) {
+		mul_v3_v3fl(v3, &pt3->x, 0.001f);
+	}
+	else {
+		copy_v3_v3(v3, &pt3->x);
+	}
+
+	sub_v3_v3v3(loc3, v3, &pt0->x);
+
+	/* vector orthogonal to polygon plane */
+	cross_v3_v3v3(normal, locx, loc3);
+
+	/* local Y axis (cross to normal/x axis) */
+	cross_v3_v3v3(locy, normal, locx);
+
+	/* Normalize vectors */
+	normalize_v3(locx);
+	normalize_v3(locy);
+
+	/* Get all points in local space */
+	for (int i = 0; i < totpoints; i++) {
+		const bGPDspoint *pt = &points[i];
+		float loc[3];
+		float v1[3];
+		float vn[3] = { 0.0f, 0.0f, 0.0f };
+
+		/* apply scale to extremes of the stroke to get better collision detection
+		 * the scale is divided to get more control in the UI parameter
+		 */
+		/* first point */
+		if (i == 0) {
+			const bGPDspoint *pt_next = &points[i + 1];
+			sub_v3_v3v3(vn, &pt->x, &pt_next->x);
+			normalize_v3(vn);
+			mul_v3_fl(vn, scale / 10.0f);
+			add_v3_v3v3(v1, &pt->x, vn);
+		}
+		/* last point */
+		else if (i == totpoints - 1) {
+			const bGPDspoint *pt_prev = &points[i - 1];
+			sub_v3_v3v3(vn, &pt->x, &pt_prev->x);
+			normalize_v3(vn);
+			mul_v3_fl(vn, scale / 10.0f);
+			add_v3_v3v3(v1, &pt->x, vn);
+		}
+		else {
+			copy_v3_v3(v1, &pt->x);
+		}
+
+		/* Get local space using first point as origin (ref stroke) */
+		sub_v3_v3v3(loc, v1, &pt0->x);
+
+		points2d[i][0] = dot_v3v3(loc, locx);
+		points2d[i][1] = dot_v3v3(loc, locy);
+	}
+
+	/* Concave (-1), Convex (1), or Autodetect (0)? */
+	*r_direction = (int)locy[2];
+}
+
+/**
+ * Trim stroke to the first intersection or loop
+ * \param gps: Stroke data
+ */
+bool BKE_gpencil_trim_stroke(bGPDstroke *gps)
+{
+	if (gps->totpoints < 4) {
+		return false;
+	}
+	bool intersect = false;
+	int start, end;
+	float point[3];
+	/* loop segments from start until we have an intersection */
+	for (int i = 0; i < gps->totpoints - 2; i++) {
+		start = i;
+		bGPDspoint *a = &gps->points[start];
+		bGPDspoint *b = &gps->points[start + 1];
+		for (int j = start + 2; j < gps->totpoints - 1; j++) {
+			end = j + 1;
+			bGPDspoint *c = &gps->points[j];
+			bGPDspoint *d = &gps->points[end];
+			float pointb[3];
+			/* get intersection */
+			if (isect_line_line_v3(&a->x, &b->x, &c->x, &d->x, point, pointb)) {
+				if (len_v3(point) > 0.0f) {
+					float closest[3];
+					/* check intersection is on both lines */
+					float lambda = closest_to_line_v3(closest, point, &a->x, &b->x);
+					if ((lambda <= 0.0f) || (lambda >= 1.0f)) {
+						continue;
+					}
+					lambda = closest_to_line_v3(closest, point, &c->x, &d->x);
+					if ((lambda <= 0.0f) || (lambda >= 1.0f)) {
+						continue;
+					}
+					else {
+						intersect = true;
+						break;
+					}
+				}
+			}
+		}
+		if (intersect) {
+			break;
+		}
+	}
+
+	/* trim unwanted points */
+	if (intersect) {
+
+		/* save points */
+		bGPDspoint *old_points = MEM_dupallocN(gps->points);
+		MDeformVert *old_dvert = NULL;
+		MDeformVert *dvert_src = NULL;
+
+		if (gps->dvert != NULL) {
+			old_dvert = MEM_dupallocN(gps->dvert);
+		}
+
+		/* resize gps */
+		int newtot = end - start + 1;
+
+		gps->points = MEM_recallocN(gps->points, sizeof(*gps->points) * newtot);
+		if (gps->dvert != NULL) {
+			gps->dvert = MEM_recallocN(gps->dvert, sizeof(*gps->dvert) * newtot);
+		}
+
+		for (int i = 0; i < newtot; i++) {
+			int idx = start + i;
+			bGPDspoint *pt_src = &old_points[idx];
+			bGPDspoint *pt_new = &gps->points[i];
+			memcpy(pt_new, pt_src, sizeof(bGPDspoint));
+			if (gps->dvert != NULL) {
+				dvert_src = &old_dvert[idx];
+				MDeformVert *dvert = &gps->dvert[i];
+				memcpy(dvert, dvert_src, sizeof(MDeformVert));
+				if (dvert_src->dw) {
+					memcpy(dvert->dw, dvert_src->dw, sizeof(MDeformWeight));
+				}
+			}
+			if (idx == start || idx == end) {
+				copy_v3_v3(&pt_new->x, point);
+			}
+		}
+
+		gps->flag |= GP_STROKE_RECALC_GEOMETRY;
+		gps->tot_triangles = 0;
+		gps->totpoints = newtot;
+
+		MEM_SAFE_FREE(old_points);
+		MEM_SAFE_FREE(old_dvert);
+	}
+	return intersect;
+}

@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,12 +15,6 @@
  *
  * The Original Code is Copyright (C) 2005 Blender Foundation.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
 #include "../node_shader_util.h"
@@ -40,7 +32,7 @@ static bNodeSocketTemplate outputs[] = {
 	{ SOCK_FLOAT,  0, "Size" },
 	{ SOCK_VECTOR,  0, "Velocity" },
 	{ SOCK_VECTOR,  0, "Angular Velocity" },
-	{ -1, 0, "" }
+	{ -1, 0, "" },
 };
 static void node_shader_exec_particle_info(void *UNUSED(data), int UNUSED(thread), bNode *UNUSED(node), bNodeExecData *UNUSED(execdata), bNodeStack **UNUSED(in), bNodeStack **UNUSED(out))
 {

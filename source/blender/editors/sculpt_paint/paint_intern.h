@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,15 +15,10 @@
  *
  * The Original Code is Copyright (C) 2008 Blender Foundation.
  * All rights reserved.
- *
- *
- * Contributor(s): Blender Foundation
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/sculpt_paint/paint_intern.h
- *  \ingroup edsculpt
+/** \file
+ * \ingroup edsculpt
  */
 
 
@@ -33,28 +26,28 @@
 #define __PAINT_INTERN_H__
 
 struct ARegion;
-struct bContext;
 struct Brush;
-struct ImagePool;
-struct ColorSpace;
 struct ColorManagedDisplay;
+struct ColorSpace;
+struct ImagePool;
 struct ListBase;
 struct MTex;
 struct Object;
-struct PaintStroke;
 struct Paint;
 struct PaintCurve;
+struct PaintStroke;
 struct PointerRNA;
-struct rcti;
-struct Scene;
 struct RegionView3D;
+struct Scene;
+struct UndoStep;
 struct VPaint;
 struct ViewContext;
+struct bContext;
+struct rcti;
 struct wmEvent;
 struct wmOperator;
 struct wmOperatorType;
 struct wmWindowManager;
-struct UndoStep;
 enum ePaintMode;
 
 typedef struct CoNo {
@@ -88,6 +81,7 @@ int paint_stroke_modal(struct bContext *C, struct wmOperator *op, const struct w
 int paint_stroke_exec(struct bContext *C, struct wmOperator *op);
 void paint_stroke_cancel(struct bContext *C, struct wmOperator *op);
 bool paint_stroke_flipped(struct PaintStroke *stroke);
+bool paint_stroke_inverted(struct PaintStroke *stroke);
 struct ViewContext *paint_stroke_view_context(struct PaintStroke *stroke);
 void *paint_stroke_mode_data(struct PaintStroke *stroke);
 float paint_stroke_distance_get(struct PaintStroke *stroke);
@@ -113,7 +107,7 @@ void PAINT_OT_weight_set(struct wmOperatorType *ot);
 
 enum {
 	WPAINT_GRADIENT_TYPE_LINEAR,
-	WPAINT_GRADIENT_TYPE_RADIAL
+	WPAINT_GRADIENT_TYPE_RADIAL,
 };
 void PAINT_OT_weight_gradient(struct wmOperatorType *ot);
 
@@ -303,21 +297,21 @@ void flip_qt_qt(float out[3], const float in[3], const char symm);
 typedef enum BrushStrokeMode {
 	BRUSH_STROKE_NORMAL,
 	BRUSH_STROKE_INVERT,
-	BRUSH_STROKE_SMOOTH
+	BRUSH_STROKE_SMOOTH,
 } BrushStrokeMode;
 
 /* paint_hide.c */
 
 typedef enum {
 	PARTIALVIS_HIDE,
-	PARTIALVIS_SHOW
+	PARTIALVIS_SHOW,
 } PartialVisAction;
 
 typedef enum {
 	PARTIALVIS_INSIDE,
 	PARTIALVIS_OUTSIDE,
 	PARTIALVIS_ALL,
-	PARTIALVIS_MASKED
+	PARTIALVIS_MASKED,
 } PartialVisArea;
 
 void PAINT_OT_hide_show(struct wmOperatorType *ot);
@@ -327,7 +321,7 @@ void PAINT_OT_hide_show(struct wmOperatorType *ot);
 typedef enum {
 	PAINT_MASK_FLOOD_VALUE,
 	PAINT_MASK_FLOOD_VALUE_INVERSE,
-	PAINT_MASK_INVERT
+	PAINT_MASK_INVERT,
 } PaintMaskFloodMode;
 
 void PAINT_OT_mask_flood_fill(struct wmOperatorType *ot);

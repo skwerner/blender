@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,17 +15,10 @@
  *
  * The Original Code is Copyright (C) 2006-2007 Blender Foundation.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
- *
  */
 
-/** \file blender/blenkernel/intern/studiolight.c
- *  \ingroup bke
+/** \file
+ * \ingroup bke
  */
 
 #include "BKE_studiolight.h"
@@ -43,7 +34,6 @@
 #include "BLI_math.h"
 #include "BLI_math_color.h"
 #include "BLI_path_util.h"
-#include "BLI_rand.h"
 #include "BLI_string.h"
 #include "BLI_string_utils.h"
 
@@ -332,7 +322,7 @@ static void cube_face_uv_to_direction(float r_dir[3], float x, float y, int face
 		{{ 1.0f, 0.0f,  0.0f}, {0.0f,  0.0f, -1.0f}, { 0.0f,  1.0f,  0.0f}},
 		{{ 1.0f, 0.0f,  0.0f}, {0.0f,  0.0f,  1.0f}, { 0.0f, -1.0f,  0.0f}},
 		{{ 1.0f, 0.0f,  0.0f}, {0.0f, -1.0f,  0.0f}, { 0.0f,  0.0f, -1.0f}},
-		{{-1.0f, 0.0f,  0.0f}, {0.0f, -1.0f,  0.0f}, { 0.0f,  0.0f,  1.0f}}
+		{{-1.0f, 0.0f,  0.0f}, {0.0f, -1.0f,  0.0f}, { 0.0f,  0.0f,  1.0f}},
 	};
 
 	copy_v3_fl3(r_dir, x * 2.0f - 1.0f, y * 2.0f - 1.0f, 1.0f);
@@ -378,7 +368,7 @@ static void studiolight_create_equirect_radiance_gputexture(StudioLight *sl)
 			MEM_SAFE_FREE(gpu_matcap_3components);
 		}
 		else {
-			sl->equirect_radiance_gputexture = GPU_texture_create_2D(
+			sl->equirect_radiance_gputexture = GPU_texture_create_2d(
 			        ibuf->x, ibuf->y, GPU_RGBA16F, ibuf->rect_float, error);
 			GPUTexture *tex = sl->equirect_radiance_gputexture;
 			GPU_texture_bind(tex, 0);
@@ -396,7 +386,7 @@ static void studiolight_create_equirect_irradiance_gputexture(StudioLight *sl)
 		char error[256];
 		BKE_studiolight_ensure_flag(sl, STUDIOLIGHT_EQUIRECT_IRRADIANCE_IMAGE_CALCULATED);
 		ImBuf *ibuf = sl->equirect_irradiance_buffer;
-		sl->equirect_irradiance_gputexture = GPU_texture_create_2D(
+		sl->equirect_irradiance_gputexture = GPU_texture_create_2d(
 		        ibuf->x, ibuf->y, GPU_RGBA16F, ibuf->rect_float, error);
 		GPUTexture *tex = sl->equirect_irradiance_gputexture;
 		GPU_texture_bind(tex, 0);
@@ -732,7 +722,7 @@ static void studiolight_spherical_harmonics_apply_band_factors(StudioLight *sl, 
 		2.0f / 3.0f,
 		1.0f / 4.0f,
 		0.0f,
-		-1.0f / 24.0f
+		-1.0f / 24.0f,
 	};
 
 	int index = 0, dst_idx = 0;
@@ -861,7 +851,7 @@ static float blinn_specular(
 	gloss *= 1.0f - wrap;
 	float shininess = exp2(10.0f * gloss + 1.0f);
 
-	/* Pi is already divided in the lamp power.
+	/* Pi is already divided in the light power.
 	 * normalization_factor = (shininess + 8.0) / (8.0 * M_PI) */
 	float normalization_factor = shininess * 0.125f + 1.0f;
 	float spec_light = powf(spec_angle, shininess) * max_ff(NL, 0.0f) * normalization_factor;
@@ -1194,7 +1184,7 @@ void BKE_studiolight_init(void)
 	        STUDIOLIGHT_INTERNAL | STUDIOLIGHT_SPHERICAL_HARMONICS_COEFFICIENTS_CALCULATED | STUDIOLIGHT_TYPE_STUDIO);
 	BLI_strncpy(sl->name, "Default", FILE_MAXFILE);
 
-	copy_v4_fl4(sl->light_ambient, 0.025000, 0.025000, 0.025000, 1.000000);
+	copy_v3_fl3(sl->light_ambient, 0.025000, 0.025000, 0.025000);
 
 	copy_v4_fl4(sl->light[0].vec, -0.580952, 0.228571, 0.781185, 0.0);
 	copy_v4_fl4(sl->light[0].col, 0.900000, 0.900000, 0.900000, 1.000000);

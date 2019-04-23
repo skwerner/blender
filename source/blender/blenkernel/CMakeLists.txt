@@ -16,11 +16,6 @@
 #
 # The Original Code is Copyright (C) 2006, Blender Foundation
 # All rights reserved.
-#
-# The Original Code is: all of this file.
-#
-# Contributor(s): Jacques Beaurain.
-#
 # ***** END GPL LICENSE BLOCK *****
 
 set(INC
@@ -49,7 +44,6 @@ set(INC
 	../../../intern/iksolver/extern
 	../../../intern/memutil
 	../../../intern/mikktspace
-	../../../intern/smoke/extern
 	../../../intern/atomic
 	../../../intern/clog
 	../../../intern/libmv
@@ -129,13 +123,16 @@ set(SRC
 	intern/ipo.c
 	intern/key.c
 	intern/keyconfig.c
-	intern/lamp.c
 	intern/lattice.c
+	intern/layer.c
+	intern/layer_utils.c
 	intern/library.c
 	intern/library_idmap.c
 	intern/library_override.c
 	intern/library_query.c
 	intern/library_remap.c
+	intern/light.c
+	intern/lightprobe.c
 	intern/linestyle.c
 	intern/main.c
 	intern/mask.c
@@ -162,9 +159,9 @@ set(SRC
 	intern/nla.c
 	intern/node.c
 	intern/object.c
-	intern/object_facemap.c
 	intern/object_deform.c
 	intern/object_dupli.c
+	intern/object_facemap.c
 	intern/object_update.c
 	intern/ocean.c
 	intern/outliner_treehash.c
@@ -178,9 +175,6 @@ set(SRC
 	intern/pbvh.c
 	intern/pbvh_bmesh.c
 	intern/pointcache.c
-	intern/layer.c
-	intern/layer_utils.c
-	intern/lightprobe.c
 	intern/report.c
 	intern/rigidbody.c
 	intern/scene.c
@@ -199,6 +193,7 @@ set(SRC
 	intern/subdiv.c
 	intern/subdiv_ccg.c
 	intern/subdiv_ccg_mask.c
+	intern/subdiv_ccg_material.c
 	intern/subdiv_converter.c
 	intern/subdiv_converter_mesh.c
 	intern/subdiv_displacement.c
@@ -282,13 +277,15 @@ set(SRC
 	BKE_ipo.h
 	BKE_key.h
 	BKE_keyconfig.h
-	BKE_lamp.h
 	BKE_lattice.h
+	BKE_layer.h
 	BKE_library.h
 	BKE_library_idmap.h
 	BKE_library_override.h
 	BKE_library_query.h
 	BKE_library_remap.h
+	BKE_light.h
+	BKE_lightprobe.h
 	BKE_linestyle.h
 	BKE_main.h
 	BKE_mask.h
@@ -307,8 +304,8 @@ set(SRC
 	BKE_nla.h
 	BKE_node.h
 	BKE_object.h
-	BKE_object_facemap.h
 	BKE_object_deform.h
+	BKE_object_facemap.h
 	BKE_ocean.h
 	BKE_outliner_treehash.h
 	BKE_packedFile.h
@@ -316,8 +313,6 @@ set(SRC
 	BKE_particle.h
 	BKE_pbvh.h
 	BKE_pointcache.h
-	BKE_layer.h
-	BKE_lightprobe.h
 	BKE_report.h
 	BKE_rigidbody.h
 	BKE_scene.h
@@ -359,9 +354,39 @@ set(SRC
 	intern/subdiv_inline.h
 )
 
+set(LIB
+	bf_blenfont
+	bf_blenlib
+	bf_blenloader
+	bf_blentranslation
+	bf_bmesh
+	bf_depsgraph
+	bf_draw
+	bf_gpencil_modifiers
+	bf_gpu
+	bf_ikplugin
+	bf_imbuf
+	bf_intern_clog
+	bf_intern_ghost
+	bf_intern_guardedalloc
+	bf_intern_libmv  # Uses stub when disabled.
+	bf_intern_mikktspace
+	bf_intern_opensubdiv  # Uses stub when disabled.
+	bf_modifiers
+	bf_nodes
+	bf_physics
+	bf_python
+	bf_python_bmesh
+	bf_rna
+	bf_shader_fx
+)
+
 if(WITH_BINRELOC)
 	list(APPEND INC_SYS
 		${BINRELOC_INCLUDE_DIRS}
+	)
+	list(APPEND LIB
+		extern_binreloc
 	)
 	add_definitions(-DWITH_BINRELOC)
 endif()
@@ -388,6 +413,10 @@ if(WITH_BULLET)
 	)
 	list(APPEND INC
 		../../../intern/rigidbody
+	)
+	list(APPEND LIB
+		bf_intern_rigidbody
+		extern_bullet
 	)
 	add_definitions(-DWITH_BULLET)
 endif()
@@ -483,10 +512,19 @@ if(WITH_MOD_FLUID)
 	list(APPEND INC
 		../../../intern/elbeem/extern
 	)
+	list(APPEND LIB
+		bf_intern_elbeem
+	)
 	add_definitions(-DWITH_MOD_FLUID)
 endif()
 
 if(WITH_MOD_SMOKE)
+	list(APPEND INC
+		../../../intern/smoke/extern
+	)
+	list(APPEND LIB
+		bf_intern_smoke
+	)
 	add_definitions(-DWITH_SMOKE)
 endif()
 
@@ -508,6 +546,9 @@ if(WITH_LZO)
 		list(APPEND INC_SYS
 			../../../extern/lzo/minilzo
 		)
+		list(APPEND LIB
+			extern_minilzo
+		)
 	endif()
 	add_definitions(-DWITH_LZO)
 endif()
@@ -515,6 +556,9 @@ endif()
 if(WITH_LZMA)
 	list(APPEND INC_SYS
 		../../../extern/lzma
+	)
+	list(APPEND LIB
+		extern_lzma
 	)
 	add_definitions(-DWITH_LZMA)
 endif()
@@ -546,17 +590,20 @@ if(WITH_ALEMBIC)
 endif()
 
 if(WITH_OPENSUBDIV)
-	add_definitions(-DWITH_OPENSUBDIV)
 	list(APPEND INC_SYS
 		${OPENSUBDIV_INCLUDE_DIRS}
 	)
+	add_definitions(-DWITH_OPENSUBDIV)
 endif()
 
 if(WITH_OPENVDB)
-	add_definitions(-DWITH_OPENVDB)
 	list(APPEND INC
 		 ../../../intern/openvdb
 	)
+	list(APPEND LIB
+		 bf_intern_openvdb
+	)
+	add_definitions(-DWITH_OPENVDB)
 
 	if(WITH_OPENVDB_BLOSC)
 		add_definitions(
@@ -570,4 +617,4 @@ endif()
 #	set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} /WX")
 #endif()
 
-blender_add_lib(bf_blenkernel "${SRC}" "${INC}" "${INC_SYS}")
+blender_add_lib(bf_blenkernel "${SRC}" "${INC}" "${INC_SYS}" "${LIB}")

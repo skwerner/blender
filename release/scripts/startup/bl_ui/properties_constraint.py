@@ -17,7 +17,6 @@
 # ##### END GPL LICENSE BLOCK #####
 
 # <pep8 compliant>
-import bpy
 from bpy.types import Panel
 
 
@@ -68,7 +67,8 @@ class ConstraintButtonsPanel:
                     row = layout.row(align=True)
                     row.label(text="Head/Tail:")
                     row.prop(con, "head_tail", text="")
-                    row.prop(con, "use_bbone_shape", text="", icon='IPO_BEZIER')  # XXX icon, and only when bone has segments?
+                    # XXX icon, and only when bone has segments?
+                    row.prop(con, "use_bbone_shape", text="", icon='IPO_BEZIER')
             elif con.target.type in {'MESH', 'LATTICE'}:
                 layout.prop_search(con, "subtarget", con.target, "vertex_groups", text="Vertex Group")
 
@@ -794,9 +794,9 @@ class ConstraintButtonsPanel:
 
         col = layout.column()
         col.label(text="Chain Scaling:")
-        col.prop(con, "use_y_stretch")
         col.prop(con, "use_curve_radius")
 
+        layout.prop(con, "y_scale_mode")
         layout.prop(con, "xz_scale_mode")
 
         if con.xz_scale_mode == 'VOLUME_PRESERVE':
@@ -974,14 +974,7 @@ class OBJECT_PT_constraints(ConstraintButtonsPanel, Panel):
 
         obj = context.object
 
-        if obj.type == 'ARMATURE' and obj.mode == 'POSE':
-            box = layout.box()
-            box.alert = True  # XXX: this should apply to the box background
-            box.label(icon='INFO', text="Constraints for active bone do not live here")
-            box.operator("wm.properties_context_change", icon='CONSTRAINT_BONE',
-                         text="Go to Bone Constraints tab...").context = 'BONE_CONSTRAINT'
-        else:
-            layout.operator_menu_enum("object.constraint_add", "type", text="Add Object Constraint")
+        layout.operator_menu_enum("object.constraint_add", "type", text="Add Object Constraint")
 
         for con in obj.constraints:
             self.draw_constraint(context, con)

@@ -16,9 +16,6 @@
 #
 # The Original Code is Copyright (C) 2006, Blender Foundation
 # All rights reserved.
-#
-# The Original Code is: all of this file.
-#
 # ***** END GPL LICENSE BLOCK *****
 
 set(INC
@@ -35,4 +32,7 @@ set(SRC
 	RBI_api.h
 )
 
-blender_add_lib(bf_intern_rigidbody "${SRC}" "${INC}" "${INC_SYS}")
+set(LIB
+)
+
+blender_add_lib(bf_intern_rigidbody "${SRC}" "${INC}" "${INC_SYS}" "${LIB}")

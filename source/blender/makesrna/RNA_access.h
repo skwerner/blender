@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,17 +12,13 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * Contributor(s): Blender Foundation (2008).
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
 #ifndef __RNA_ACCESS_H__
 #define __RNA_ACCESS_H__
 
-/** \file RNA_access.h
- *  \ingroup RNA
+/** \file
+ * \ingroup RNA
  */
 
 #include <stdarg.h>
@@ -37,7 +31,6 @@
 extern "C" {
 #endif
 
-struct bContext;
 struct ID;
 struct IDOverrideStatic;
 struct IDOverrideStaticProperty;
@@ -46,6 +39,7 @@ struct ListBase;
 struct Main;
 struct ReportList;
 struct Scene;
+struct bContext;
 
 /* Types */
 extern BlenderRNA BLENDER_RNA;
@@ -67,7 +61,6 @@ extern StructRNA RNA_AndController;
 extern StructRNA RNA_AnimData;
 extern StructRNA RNA_AnimViz;
 extern StructRNA RNA_AnimVizMotionPaths;
-extern StructRNA RNA_AnimVizOnionSkinning;
 extern StructRNA RNA_AnyType;
 extern StructRNA RNA_Area;
 extern StructRNA RNA_AreaLight;
@@ -97,6 +90,8 @@ extern StructRNA RNA_BoneGroup;
 extern StructRNA RNA_BoolProperty;
 extern StructRNA RNA_BooleanModifier;
 extern StructRNA RNA_Brush;
+extern StructRNA RNA_BrushCapabilitiesImagePaint;
+extern StructRNA RNA_BrushCapabilitiesVertexPaint;
 extern StructRNA RNA_BrushTextureSlot;
 extern StructRNA RNA_BuildGpencilModifier;
 extern StructRNA RNA_BuildModifier;
@@ -274,6 +269,7 @@ extern StructRNA RNA_GPencilFrame;
 extern StructRNA RNA_GPencilInterpolateSettings;
 extern StructRNA RNA_GPencilLayer;
 extern StructRNA RNA_GPencilSculptBrush;
+extern StructRNA RNA_GPencilSculptGuide;
 extern StructRNA RNA_GPencilSculptSettings;
 extern StructRNA RNA_GPencilStroke;
 extern StructRNA RNA_GPencilStrokePoint;
@@ -300,7 +296,6 @@ extern StructRNA RNA_ImagePreview;
 extern StructRNA RNA_ImageSequence;
 extern StructRNA RNA_ImageTexture;
 extern StructRNA RNA_ImageUser;
-extern StructRNA RNA_ImapaintToolCapabilities;
 extern StructRNA RNA_InflowFluidSettings;
 extern StructRNA RNA_IntProperty;
 extern StructRNA RNA_Itasc;
@@ -325,6 +320,7 @@ extern StructRNA RNA_LatticeGpencilModifier;
 extern StructRNA RNA_LatticeModifier;
 extern StructRNA RNA_LatticePoint;
 extern StructRNA RNA_LayerCollection;
+extern StructRNA RNA_LayerObjects;
 extern StructRNA RNA_Library;
 extern StructRNA RNA_Light;
 extern StructRNA RNA_LightProbe;
@@ -494,6 +490,14 @@ extern StructRNA RNA_PointLight;
 extern StructRNA RNA_PointerProperty;
 extern StructRNA RNA_Pose;
 extern StructRNA RNA_PoseBone;
+extern StructRNA RNA_Preferences;
+extern StructRNA RNA_PreferencesEdit;
+extern StructRNA RNA_PreferencesFilePaths;
+extern StructRNA RNA_PreferencesInput;
+extern StructRNA RNA_PreferencesKeymap;
+extern StructRNA RNA_PreferencesSystem;
+extern StructRNA RNA_PreferencesView;
+extern StructRNA RNA_PreferencesWalkNavigation;
 extern StructRNA RNA_Property;
 extern StructRNA RNA_PropertyGroup;
 extern StructRNA RNA_PropertyGroupItem;
@@ -606,11 +610,11 @@ extern StructRNA RNA_SpaceInfo;
 extern StructRNA RNA_SpaceNLA;
 extern StructRNA RNA_SpaceNodeEditor;
 extern StructRNA RNA_SpaceOutliner;
+extern StructRNA RNA_SpacePreferences;
 extern StructRNA RNA_SpaceProperties;
 extern StructRNA RNA_SpaceSequenceEditor;
 extern StructRNA RNA_SpaceTextEditor;
 extern StructRNA RNA_SpaceUVEditor;
-extern StructRNA RNA_SpacePreferences;
 extern StructRNA RNA_SpaceView3D;
 extern StructRNA RNA_Speaker;
 extern StructRNA RNA_SpeedControlSequence;
@@ -677,6 +681,7 @@ extern StructRNA RNA_ThemeLogicEditor;
 extern StructRNA RNA_ThemeNLAEditor;
 extern StructRNA RNA_ThemeNodeEditor;
 extern StructRNA RNA_ThemeOutliner;
+extern StructRNA RNA_ThemePreferences;
 extern StructRNA RNA_ThemeProperties;
 extern StructRNA RNA_ThemeSequenceEditor;
 extern StructRNA RNA_ThemeSpaceGeneric;
@@ -685,7 +690,6 @@ extern StructRNA RNA_ThemeSpaceListGeneric;
 extern StructRNA RNA_ThemeStyle;
 extern StructRNA RNA_ThemeTextEditor;
 extern StructRNA RNA_ThemeUserInterface;
-extern StructRNA RNA_ThemePreferences;
 extern StructRNA RNA_ThemeView3D;
 extern StructRNA RNA_ThemeWidgetColors;
 extern StructRNA RNA_ThemeWidgetStateColors;
@@ -708,14 +712,6 @@ extern StructRNA RNA_UVProjector;
 extern StructRNA RNA_UVWarpModifier;
 extern StructRNA RNA_UnitSettings;
 extern StructRNA RNA_UnknownType;
-extern StructRNA RNA_Preferences;
-extern StructRNA RNA_PreferencesEdit;
-extern StructRNA RNA_PreferencesFilePaths;
-extern StructRNA RNA_PreferencesInput;
-extern StructRNA RNA_PreferencesKeymap;
-extern StructRNA RNA_PreferencesSystem;
-extern StructRNA RNA_PreferencesView;
-extern StructRNA RNA_PreferencesWalkNavigation;
 extern StructRNA RNA_UserSolidLight;
 extern StructRNA RNA_VectorFont;
 extern StructRNA RNA_VertexGroup;
@@ -724,6 +720,7 @@ extern StructRNA RNA_VertexPaint;
 extern StructRNA RNA_VertexWeightEditModifier;
 extern StructRNA RNA_VertexWeightMixModifier;
 extern StructRNA RNA_VertexWeightProximityModifier;
+extern StructRNA RNA_View3DCursor;
 extern StructRNA RNA_View3DOverlay;
 extern StructRNA RNA_View3DShading;
 extern StructRNA RNA_ViewLayer;
@@ -1160,7 +1157,7 @@ void RNA_collection_clear(PointerRNA *ptr, const char *name);
 #define RNA_PROP_END                                                          \
 		}                                                                     \
 		RNA_property_collection_end(&rna_macro_iter);                         \
-	}
+	} ((void)0)
 
 #define RNA_STRUCT_BEGIN(sptr, prop)                                          \
 	{                                                                         \
@@ -1177,7 +1174,7 @@ void RNA_collection_clear(PointerRNA *ptr, const char *name);
 #define RNA_STRUCT_END                                                        \
 		}                                                                     \
 		RNA_property_collection_end(&rna_macro_iter);                         \
-	}
+	} ((void)0)
 
 /* check if the idproperty exists, for operators */
 bool RNA_property_is_set_ex(PointerRNA *ptr, PropertyRNA *prop, bool use_ghost);

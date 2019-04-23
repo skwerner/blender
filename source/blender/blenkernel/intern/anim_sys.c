@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,10 @@
  *
  * The Original Code is Copyright (C) 2009 Blender Foundation, Joshua Leung
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): Joshua Leung (full recode)
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/blenkernel/intern/anim_sys.c
- *  \ingroup bke
+/** \file
+ * \ingroup bke
  */
 
 
@@ -44,11 +36,13 @@
 #include "BLI_dynstr.h"
 #include "BLI_listbase.h"
 #include "BLI_string_utils.h"
+#include "BLI_math_rotation.h"
+#include "BLI_math_vector.h"
 
 #include "BLT_translation.h"
 
 #include "DNA_anim_types.h"
-#include "DNA_lamp_types.h"
+#include "DNA_light_types.h"
 #include "DNA_material_types.h"
 #include "DNA_object_types.h"
 #include "DNA_scene_types.h"
@@ -77,6 +71,10 @@
 #include "nla_private.h"
 
 #include "atomic_ops.h"
+
+#include "CLG_log.h"
+
+static CLG_LogRef LOG = {"bke.anim_sys"};
 
 /* ***************************************** */
 /* AnimData API */
@@ -286,8 +284,8 @@ AnimData *BKE_animdata_copy(Main *bmain, AnimData *adt, const int flag)
 	/* make a copy of action - at worst, user has to delete copies... */
 	if (do_action) {
 		BLI_assert(bmain != NULL);
-		BKE_id_copy_ex(bmain, (ID *)dadt->action, (ID **)&dadt->action, 0, false);
-		BKE_id_copy_ex(bmain, (ID *)dadt->tmpact, (ID **)&dadt->tmpact, 0, false);
+		BKE_id_copy(bmain, (ID *)dadt->action, (ID **)&dadt->action);
+		BKE_id_copy(bmain, (ID *)dadt->tmpact, (ID **)&dadt->tmpact);
 	}
 	else if (do_id_user) {
 		id_us_plus((ID *)dadt->action);
@@ -361,7 +359,7 @@ void BKE_animdata_merge_copy(
 
 	// TODO: we must unset all "tweakmode" flags
 	if ((src->flag & ADT_NLA_EDIT_ON) || (dst->flag & ADT_NLA_EDIT_ON)) {
-		printf("ERROR: Merging AnimData blocks while editing NLA is dangerous as it may cause data corruption\n");
+		CLOG_ERROR(&LOG, "Merging AnimData blocks while editing NLA is dangerous as it may cause data corruption");
 		return;
 	}
 
@@ -448,8 +446,8 @@ void action_move_fcurves_by_basepath(bAction *srcAct, bAction *dstAct, const cha
 	/* sanity checks */
 	if (ELEM(NULL, srcAct, dstAct, basepath)) {
 		if (G.debug & G_DEBUG) {
-			printf("ERROR: action_partition_fcurves_by_basepath(%p, %p, %p) has insufficient info to work with\n",
-			       (void *)srcAct, (void *)dstAct, (void *)basepath);
+			CLOG_ERROR(&LOG, "srcAct: %p, dstAct: %p, basepath: %p has insufficient info to work with",
+			           (void *)srcAct, (void *)dstAct, (void *)basepath);
 		}
 		return;
 	}
@@ -530,7 +528,7 @@ void BKE_animdata_separate_by_basepath(
 	/* sanity checks */
 	if (ELEM(NULL, srcID, dstID)) {
 		if (G.debug & G_DEBUG)
-			printf("ERROR: no source or destination ID to separate AnimData with\n");
+			CLOG_ERROR(&LOG, "no source or destination ID to separate AnimData with");
 		return;
 	}
 
@@ -540,7 +538,7 @@ void BKE_animdata_separate_by_basepath(
 
 	if (ELEM(NULL, srcAdt, dstAdt)) {
 		if (G.debug & G_DEBUG)
-			printf("ERROR: no AnimData for this pair of ID's\n");
+			CLOG_ERROR(&LOG, "no AnimData for this pair of ID's");
 		return;
 	}
 
@@ -551,8 +549,9 @@ void BKE_animdata_separate_by_basepath(
 			dstAdt->action = BKE_action_add(bmain, srcAdt->action->id.name + 2);
 		}
 		else if (dstAdt->action == srcAdt->action) {
-			printf("Argh! Source and Destination share animation! ('%s' and '%s' both use '%s') Making new empty action\n",
-			       srcID->name, dstID->name, srcAdt->action->id.name);
+			CLOG_WARN(&LOG, "Argh! Source and Destination share animation! "
+			          "('%s' and '%s' both use '%s') Making new empty action",
+			          srcID->name, dstID->name, srcAdt->action->id.name);
 
 			/* TODO: review this... */
 			id_us_min(&dstAdt->action->id);
@@ -616,7 +615,7 @@ char *BKE_animdata_driver_path_hack(bContext *C, PointerRNA *ptr, PropertyRNA *p
 	 * restricts the subspace of options to the 'active' data (a manageable state)
 	 */
 	/* TODO: watch out for pinned context? */
-	if ((sa) && (sa->spacetype == SPACE_BUTS)) {
+	if ((sa) && (sa->spacetype == SPACE_PROPERTIES)) {
 		Object *ob = CTX_data_active_object(C);
 
 		if (ob && id) {
@@ -707,90 +706,97 @@ static char *rna_path_rename_fix(ID *owner_id, const char *prefix, const char *o
 }
 
 /* Check RNA-Paths for a list of F-Curves */
-static void fcurves_path_rename_fix(ID *owner_id, const char *prefix, const char *oldName, const char *newName,
+static bool fcurves_path_rename_fix(ID *owner_id, const char *prefix, const char *oldName, const char *newName,
                                     const char *oldKey, const char *newKey, ListBase *curves, bool verify_paths)
 {
 	FCurve *fcu;
-
-	/* we need to check every curve... */
+	bool is_changed = false;
+	/* We need to check every curve. */
 	for (fcu = curves->first; fcu; fcu = fcu->next) {
-		if (fcu->rna_path) {
-			const char *old_path = fcu->rna_path;
-
-			/* firstly, handle the F-Curve's own path */
-			fcu->rna_path = rna_path_rename_fix(owner_id, prefix, oldKey, newKey, fcu->rna_path, verify_paths);
-
-			/* if path changed and the F-Curve is grouped, check if its group also needs renaming
-			 * (i.e. F-Curve is first of a bone's F-Curves; hence renaming this should also trigger rename)
-			 */
-			if (fcu->rna_path != old_path) {
-				bActionGroup *agrp = fcu->grp;
-
-				if ((agrp) && STREQ(oldName, agrp->name)) {
-					BLI_strncpy(agrp->name, newName, sizeof(agrp->name));
-				}
+		if (fcu->rna_path == NULL) {
+			continue;
+		}
+		const char *old_path = fcu->rna_path;
+		/* Firstly, handle the F-Curve's own path. */
+		fcu->rna_path = rna_path_rename_fix(owner_id, prefix, oldKey, newKey, fcu->rna_path, verify_paths);
+		/* if path changed and the F-Curve is grouped, check if its group also needs renaming
+		 * (i.e. F-Curve is first of a bone's F-Curves; hence renaming this should also trigger rename) */
+		if (fcu->rna_path != old_path) {
+			bActionGroup *agrp = fcu->grp;
+			is_changed = true;
+			if ((agrp != NULL) && STREQ(oldName, agrp->name)) {
+				BLI_strncpy(agrp->name, newName, sizeof(agrp->name));
 			}
 		}
 	}
+	return is_changed;
 }
 
 /* Check RNA-Paths for a list of Drivers */
-static void drivers_path_rename_fix(ID *owner_id, ID *ref_id, const char *prefix, const char *oldName, const char *newName,
+static bool drivers_path_rename_fix(ID *owner_id, ID *ref_id, const char *prefix, const char *oldName, const char *newName,
                                     const char *oldKey, const char *newKey, ListBase *curves, bool verify_paths)
 {
+	bool is_changed = false;
 	FCurve *fcu;
-
-	/* we need to check every curve - drivers are F-Curves too! */
+	/* We need to check every curve - drivers are F-Curves too. */
 	for (fcu = curves->first; fcu; fcu = fcu->next) {
 		/* firstly, handle the F-Curve's own path */
-		if (fcu->rna_path)
+		if (fcu->rna_path != NULL) {
+			const char *old_rna_path = fcu->rna_path;
 			fcu->rna_path = rna_path_rename_fix(owner_id, prefix, oldKey, newKey, fcu->rna_path, verify_paths);
-
-		/* driver? */
-		if (fcu->driver) {
-			ChannelDriver *driver = fcu->driver;
-			DriverVar *dvar;
-
-			/* driver variables */
-			for (dvar = driver->variables.first; dvar; dvar = dvar->next) {
-				/* only change the used targets, since the others will need fixing manually anyway */
-				DRIVER_TARGETS_USED_LOOPER_BEGIN(dvar)
-				{
-					/* rename RNA path */
-					if (dtar->rna_path && dtar->id)
-						dtar->rna_path = rna_path_rename_fix(dtar->id, prefix, oldKey, newKey, dtar->rna_path, verify_paths);
-
-					/* also fix the bone-name (if applicable) */
-					if (strstr(prefix, "bones")) {
-						if ( ((dtar->id) && (GS(dtar->id->name) == ID_OB) && (!ref_id || ((Object *)(dtar->id))->data == ref_id)) &&
-						     (dtar->pchan_name[0]) && STREQ(oldName, dtar->pchan_name) )
-						{
-							BLI_strncpy(dtar->pchan_name, newName, sizeof(dtar->pchan_name));
-						}
+			is_changed |= (fcu->rna_path != old_rna_path);
+		}
+		if (fcu->driver == NULL) {
+			continue;
+		}
+		ChannelDriver *driver = fcu->driver;
+		DriverVar *dvar;
+		/* driver variables */
+		for (dvar = driver->variables.first; dvar; dvar = dvar->next) {
+			/* only change the used targets, since the others will need fixing manually anyway */
+			DRIVER_TARGETS_USED_LOOPER_BEGIN(dvar)
+			{
+				/* rename RNA path */
+				if (dtar->rna_path && dtar->id) {
+					const char *old_rna_path = dtar->rna_path;
+					dtar->rna_path = rna_path_rename_fix(dtar->id, prefix, oldKey, newKey, dtar->rna_path, verify_paths);
+					is_changed |= (dtar->rna_path != old_rna_path);
+				}
+				/* also fix the bone-name (if applicable) */
+				if (strstr(prefix, "bones")) {
+					if ( ((dtar->id) && (GS(dtar->id->name) == ID_OB) && (!ref_id || ((Object *)(dtar->id))->data == ref_id)) &&
+					     (dtar->pchan_name[0]) && STREQ(oldName, dtar->pchan_name) )
+					{
+						is_changed = true;
+						BLI_strncpy(dtar->pchan_name, newName, sizeof(dtar->pchan_name));
 					}
 				}
-				DRIVER_TARGETS_LOOPER_END;
 			}
+			DRIVER_TARGETS_LOOPER_END;
 		}
 	}
+	return is_changed;
 }
 
 /* Fix all RNA-Paths for Actions linked to NLA Strips */
-static void nlastrips_path_rename_fix(ID *owner_id, const char *prefix, const char *oldName, const char *newName,
+static bool nlastrips_path_rename_fix(ID *owner_id, const char *prefix, const char *oldName, const char *newName,
                                       const char *oldKey, const char *newKey, ListBase *strips, bool verify_paths)
 {
 	NlaStrip *strip;
-
-	/* recursively check strips, fixing only actions... */
+	bool is_changed = false;
+	/* Recursively check strips, fixing only actions. */
 	for (strip = strips->first; strip; strip = strip->next) {
 		/* fix strip's action */
-		if (strip->act)
-			fcurves_path_rename_fix(owner_id, prefix, oldName, newName, oldKey, newKey, &strip->act->curves, verify_paths);
-		/* ignore own F-Curves, since those are local...  */
-
-		/* check sub-strips (if metas) */
-		nlastrips_path_rename_fix(owner_id, prefix, oldName, newName, oldKey, newKey, &strip->strips, verify_paths);
+		if (strip->act != NULL) {
+			is_changed |= fcurves_path_rename_fix(
+			        owner_id, prefix, oldName, newName, oldKey, newKey, &strip->act->curves, verify_paths);
+		}
+		/* Ignore own F-Curves, since those are local.  */
+		/* Check sub-strips (if metas) */
+		is_changed |= nlastrips_path_rename_fix(
+		        owner_id, prefix, oldName, newName, oldKey, newKey, &strip->strips, verify_paths);
 	}
+	return is_changed;
 }
 
 /* Rename Sub-ID Entities in RNA Paths ----------------------- */
@@ -811,7 +817,7 @@ char *BKE_animsys_fix_rna_path_rename(ID *owner_id, char *old_path, const char *
 
 	/* if no action, no need to proceed */
 	if (ELEM(NULL, owner_id, old_path)) {
-		if (G.debug & G_DEBUG) printf("%s: early abort\n", __func__);
+		if (G.debug & G_DEBUG) CLOG_WARN(&LOG, "early abort");
 		return old_path;
 	}
 
@@ -898,14 +904,14 @@ void BKE_animdata_fix_paths_rename(ID *owner_id, AnimData *adt, ID *ref_id, cons
 {
 	NlaTrack *nlt;
 	char *oldN, *newN;
-
-	/* if no AnimData, no need to proceed */
-	if (ELEM(NULL, owner_id, adt))
+	/* If no AnimData, no need to proceed. */
+	if (ELEM(NULL, owner_id, adt)) {
 		return;
-
-	/* Name sanitation logic - shared with BKE_action_fix_paths_rename() */
+	}
+	bool is_self_changed = false;
+	/* Name sanitation logic - shared with BKE_action_fix_paths_rename(). */
 	if ((oldName != NULL) && (newName != NULL)) {
-		/* pad the names with [" "] so that only exact matches are made */
+		/* Pad the names with [" "] so that only exact matches are made. */
 		const size_t name_old_len = strlen(oldName);
 		const size_t name_new_len = strlen(newName);
 		char *name_old_esc = BLI_array_alloca(name_old_esc, (name_old_len * 2) + 1);
@@ -920,20 +926,33 @@ void BKE_animdata_fix_paths_rename(ID *owner_id, AnimData *adt, ID *ref_id, cons
 		oldN = BLI_sprintfN("[%d]", oldSubscript);
 		newN = BLI_sprintfN("[%d]", newSubscript);
 	}
-
-	/* Active action and temp action */
-	if (adt->action)
-		fcurves_path_rename_fix(owner_id, prefix, oldName, newName, oldN, newN, &adt->action->curves, verify_paths);
-	if (adt->tmpact)
-		fcurves_path_rename_fix(owner_id, prefix, oldName, newName, oldN, newN, &adt->tmpact->curves, verify_paths);
-
+	/* Active action and temp action. */
+	if (adt->action != NULL) {
+		if (fcurves_path_rename_fix(owner_id, prefix, oldName, newName,
+		                            oldN, newN, &adt->action->curves, verify_paths))
+		{
+			DEG_id_tag_update(&adt->action->id, ID_RECALC_COPY_ON_WRITE);
+		}
+	}
+	if (adt->tmpact) {
+		if (fcurves_path_rename_fix(owner_id, prefix, oldName, newName,
+		                            oldN, newN, &adt->tmpact->curves, verify_paths))
+		{
+			DEG_id_tag_update(&adt->tmpact->id, ID_RECALC_COPY_ON_WRITE);
+		}
+	}
 	/* Drivers - Drivers are really F-Curves */
-	drivers_path_rename_fix(owner_id, ref_id, prefix, oldName, newName, oldN, newN, &adt->drivers, verify_paths);
-
+	is_self_changed |= drivers_path_rename_fix(
+	         owner_id, ref_id, prefix, oldName, newName, oldN, newN, &adt->drivers, verify_paths);
 	/* NLA Data - Animation Data for Strips */
-	for (nlt = adt->nla_tracks.first; nlt; nlt = nlt->next)
-		nlastrips_path_rename_fix(owner_id, prefix, oldName, newName, oldN, newN, &nlt->strips, verify_paths);
-
+	for (nlt = adt->nla_tracks.first; nlt; nlt = nlt->next) {
+		is_self_changed |= nlastrips_path_rename_fix(
+		        owner_id, prefix, oldName, newName, oldN, newN, &nlt->strips, verify_paths);
+	}
+	/* Tag owner ID if it */
+	if (is_self_changed) {
+		DEG_id_tag_update(owner_id, ID_RECALC_COPY_ON_WRITE);
+	}
 	/* free the temp names */
 	MEM_freeN(oldN);
 	MEM_freeN(newN);
@@ -1069,6 +1088,15 @@ static void adt_apply_all_fcurves_cb(ID *id, AnimData *adt, void *wrapper_data)
 	}
 }
 
+void BKE_fcurves_id_cb(ID *id, ID_FCurve_Edit_Callback func, void *user_data)
+{
+	AnimData *adt = BKE_animdata_from_id(id);
+	if (adt != NULL) {
+		AllFCurvesCbWrapper wrapper = {func, user_data};
+		adt_apply_all_fcurves_cb(id, adt, &wrapper);
+	}
+}
+
 /* apply the given callback function on all F-Curves attached to data in main database */
 void BKE_fcurves_main_cb(Main *bmain, ID_FCurve_Edit_Callback func, void *user_data)
 {
@@ -1107,64 +1135,64 @@ void BKE_animdata_main_cb(Main *bmain, ID_AnimData_Edit_Callback func, void *use
 	} (void)0
 
 	/* nodes */
-	ANIMDATA_IDS_CB(bmain->nodetree.first);
+	ANIMDATA_IDS_CB(bmain->nodetrees.first);
 
 	/* textures */
-	ANIMDATA_NODETREE_IDS_CB(bmain->tex.first, Tex);
+	ANIMDATA_NODETREE_IDS_CB(bmain->textures.first, Tex);
 
-	/* lamps */
-	ANIMDATA_NODETREE_IDS_CB(bmain->lamp.first, Lamp);
+	/* lights */
+	ANIMDATA_NODETREE_IDS_CB(bmain->lights.first, Light);
 
 	/* materials */
-	ANIMDATA_NODETREE_IDS_CB(bmain->mat.first, Material);
+	ANIMDATA_NODETREE_IDS_CB(bmain->materials.first, Material);
 
 	/* cameras */
-	ANIMDATA_IDS_CB(bmain->camera.first);
+	ANIMDATA_IDS_CB(bmain->cameras.first);
 
 	/* shapekeys */
-	ANIMDATA_IDS_CB(bmain->key.first);
+	ANIMDATA_IDS_CB(bmain->shapekeys.first);
 
 	/* metaballs */
-	ANIMDATA_IDS_CB(bmain->mball.first);
+	ANIMDATA_IDS_CB(bmain->metaballs.first);
 
 	/* curves */
-	ANIMDATA_IDS_CB(bmain->curve.first);
+	ANIMDATA_IDS_CB(bmain->curves.first);
 
 	/* armatures */
-	ANIMDATA_IDS_CB(bmain->armature.first);
+	ANIMDATA_IDS_CB(bmain->armatures.first);
 
 	/* lattices */
-	ANIMDATA_IDS_CB(bmain->latt.first);
+	ANIMDATA_IDS_CB(bmain->lattices.first);
 
 	/* meshes */
-	ANIMDATA_IDS_CB(bmain->mesh.first);
+	ANIMDATA_IDS_CB(bmain->meshes.first);
 
 	/* particles */
-	ANIMDATA_IDS_CB(bmain->particle.first);
+	ANIMDATA_IDS_CB(bmain->particles.first);
 
 	/* speakers */
-	ANIMDATA_IDS_CB(bmain->speaker.first);
+	ANIMDATA_IDS_CB(bmain->speakers.first);
 
 	/* movie clips */
-	ANIMDATA_IDS_CB(bmain->movieclip.first);
+	ANIMDATA_IDS_CB(bmain->movieclips.first);
 
 	/* objects */
-	ANIMDATA_IDS_CB(bmain->object.first);
+	ANIMDATA_IDS_CB(bmain->objects.first);
 
 	/* masks */
-	ANIMDATA_IDS_CB(bmain->mask.first);
+	ANIMDATA_IDS_CB(bmain->masks.first);
 
 	/* worlds */
-	ANIMDATA_NODETREE_IDS_CB(bmain->world.first, World);
+	ANIMDATA_NODETREE_IDS_CB(bmain->worlds.first, World);
 
 	/* scenes */
-	ANIMDATA_NODETREE_IDS_CB(bmain->scene.first, Scene);
+	ANIMDATA_NODETREE_IDS_CB(bmain->scenes.first, Scene);
 
 	/* line styles */
-	ANIMDATA_IDS_CB(bmain->linestyle.first);
+	ANIMDATA_IDS_CB(bmain->linestyles.first);
 
 	/* grease pencil */
-	ANIMDATA_IDS_CB(bmain->gpencil.first);
+	ANIMDATA_IDS_CB(bmain->gpencils.first);
 
 	/* palettes */
 	ANIMDATA_IDS_CB(bmain->palettes.first);
@@ -1206,67 +1234,67 @@ void BKE_animdata_fix_paths_rename_all(ID *ref_id, const char *prefix, const cha
 	} (void)0
 
 	/* nodes */
-	RENAMEFIX_ANIM_IDS(bmain->nodetree.first);
+	RENAMEFIX_ANIM_IDS(bmain->nodetrees.first);
 
 	/* textures */
-	RENAMEFIX_ANIM_NODETREE_IDS(bmain->tex.first, Tex);
+	RENAMEFIX_ANIM_NODETREE_IDS(bmain->textures.first, Tex);
 
-	/* lamps */
-	RENAMEFIX_ANIM_NODETREE_IDS(bmain->lamp.first, Lamp);
+	/* lights */
+	RENAMEFIX_ANIM_NODETREE_IDS(bmain->lights.first, Light);
 
 	/* materials */
-	RENAMEFIX_ANIM_NODETREE_IDS(bmain->mat.first, Material);
+	RENAMEFIX_ANIM_NODETREE_IDS(bmain->materials.first, Material);
 
 	/* cameras */
-	RENAMEFIX_ANIM_IDS(bmain->camera.first);
+	RENAMEFIX_ANIM_IDS(bmain->cameras.first);
 
 	/* shapekeys */
-	RENAMEFIX_ANIM_IDS(bmain->key.first);
+	RENAMEFIX_ANIM_IDS(bmain->shapekeys.first);
 
 	/* metaballs */
-	RENAMEFIX_ANIM_IDS(bmain->mball.first);
+	RENAMEFIX_ANIM_IDS(bmain->metaballs.first);
 
 	/* curves */
-	RENAMEFIX_ANIM_IDS(bmain->curve.first);
+	RENAMEFIX_ANIM_IDS(bmain->curves.first);
 
 	/* armatures */
-	RENAMEFIX_ANIM_IDS(bmain->armature.first);
+	RENAMEFIX_ANIM_IDS(bmain->armatures.first);
 
 	/* lattices */
-	RENAMEFIX_ANIM_IDS(bmain->latt.first);
+	RENAMEFIX_ANIM_IDS(bmain->lattices.first);
 
 	/* meshes */
-	RENAMEFIX_ANIM_IDS(bmain->mesh.first);
+	RENAMEFIX_ANIM_IDS(bmain->meshes.first);
 
 	/* particles */
-	RENAMEFIX_ANIM_IDS(bmain->particle.first);
+	RENAMEFIX_ANIM_IDS(bmain->particles.first);
 
 	/* speakers */
-	RENAMEFIX_ANIM_IDS(bmain->speaker.first);
+	RENAMEFIX_ANIM_IDS(bmain->speakers.first);
 
 	/* movie clips */
-	RENAMEFIX_ANIM_IDS(bmain->movieclip.first);
+	RENAMEFIX_ANIM_IDS(bmain->movieclips.first);
 
 	/* objects */
-	RENAMEFIX_ANIM_IDS(bmain->object.first);
+	RENAMEFIX_ANIM_IDS(bmain->objects.first);
 
 	/* masks */
-	RENAMEFIX_ANIM_IDS(bmain->mask.first);
+	RENAMEFIX_ANIM_IDS(bmain->masks.first);
 
 	/* worlds */
-	RENAMEFIX_ANIM_NODETREE_IDS(bmain->world.first, World);
+	RENAMEFIX_ANIM_NODETREE_IDS(bmain->worlds.first, World);
 
 	/* linestyles */
-	RENAMEFIX_ANIM_IDS(bmain->linestyle.first);
+	RENAMEFIX_ANIM_IDS(bmain->linestyles.first);
 
 	/* grease pencil */
-	RENAMEFIX_ANIM_IDS(bmain->gpencil.first);
+	RENAMEFIX_ANIM_IDS(bmain->gpencils.first);
 
 	/* cache files */
 	RENAMEFIX_ANIM_IDS(bmain->cachefiles.first);
 
 	/* scenes */
-	RENAMEFIX_ANIM_NODETREE_IDS(bmain->scene.first, Scene);
+	RENAMEFIX_ANIM_NODETREE_IDS(bmain->scenes.first, Scene);
 }
 
 /* *********************************** */
@@ -1355,20 +1383,20 @@ KS_Path *BKE_keyingset_add_path(KeyingSet *ks, ID *id, const char group_name[], 
 
 	/* sanity checks */
 	if (ELEM(NULL, ks, rna_path)) {
-		printf("ERROR: no Keying Set and/or RNA Path to add path with\n");
+		CLOG_ERROR(&LOG, "no Keying Set and/or RNA Path to add path with");
 		return NULL;
 	}
 
 	/* ID is required for all types of KeyingSets */
 	if (id == NULL) {
-		printf("ERROR: No ID provided for Keying Set Path\n");
+		CLOG_ERROR(&LOG, "No ID provided for Keying Set Path");
 		return NULL;
 	}
 
 	/* don't add if there is already a matching KS_Path in the KeyingSet */
 	if (BKE_keyingset_find_path(ks, id, group_name, rna_path, array_index, groupmode)) {
 		if (G.debug & G_DEBUG)
-			printf("ERROR: destination already exists in Keying Set\n");
+			CLOG_ERROR(&LOG, "destination already exists in Keying Set");
 		return NULL;
 	}
 
@@ -1491,9 +1519,9 @@ static bool animsys_store_rna_setting(
 
 				if (array_len && array_index >= array_len) {
 					if (G.debug & G_DEBUG) {
-						printf("Animato: Invalid array index. ID = '%s',  '%s[%d]', array length is %d\n",
-						       (ptr->id.data) ? (((ID *)ptr->id.data)->name + 2) : "<No ID>",
-						       path, array_index, array_len - 1);
+						CLOG_WARN(&LOG, "Animato: Invalid array index. ID = '%s',  '%s[%d]', array length is %d",
+						          (ptr->id.data) ? (((ID *)ptr->id.data)->name + 2) : "<No ID>",
+						          path, array_index, array_len - 1);
 					}
 				}
 				else {
@@ -1507,9 +1535,9 @@ static bool animsys_store_rna_setting(
 			/* XXX don't tag as failed yet though, as there are some legit situations (Action Constraint)
 			 * where some channels will not exist, but shouldn't lock up Action */
 			if (G.debug & G_DEBUG) {
-				printf("Animato: Invalid path. ID = '%s',  '%s[%d]'\n",
-				       (ptr->id.data) ? (((ID *)ptr->id.data)->name + 2) : "<No ID>",
-				       path, array_index);
+				CLOG_WARN(&LOG, "Animato: Invalid path. ID = '%s',  '%s[%d]'",
+				          (ptr->id.data) ? (((ID *)ptr->id.data)->name + 2) : "<No ID>",
+				          path, array_index);
 			}
 		}
 	}
@@ -1742,7 +1770,7 @@ static void animsys_evaluate_drivers(PointerRNA *ptr, AnimData *adt, float ctime
 		if ((fcu->flag & (FCURVE_MUTED | FCURVE_DISABLED)) == 0) {
 			/* check if driver itself is tagged for recalculation */
 			/* XXX driver recalc flag is not set yet by depsgraph! */
-			if ((driver) && !(driver->flag & DRIVER_FLAG_INVALID) /*&& (driver->flag & DRIVER_FLAG_RECALC)*/) {
+			if ((driver) && !(driver->flag & DRIVER_FLAG_INVALID)) {
 				/* evaluate this using values set already in other places
 				 * NOTE: for 'layering' option later on, we should check if we should remove old value before adding
 				 *       new to only be done when drivers only changed */
@@ -1752,9 +1780,6 @@ static void animsys_evaluate_drivers(PointerRNA *ptr, AnimData *adt, float ctime
 					const float curval = calculate_fcurve(&anim_rna, fcu, ctime);
 					ok = animsys_write_rna_setting(&anim_rna, curval);
 				}
-
-				/* clear recalc flag */
-				driver->flag &= ~DRIVER_FLAG_RECALC;
 
 				/* set error-flag if evaluation failed */
 				if (ok == 0)
@@ -1888,10 +1913,17 @@ static void nlastrip_evaluate_controls(Depsgraph *depsgraph, NlaStrip *strip, fl
 	 * - we do this after the F-Curves have been evaluated to override the effects of those
 	 *   in case the override has been turned off.
 	 */
-	if ((strip->flag & NLASTRIP_FLAG_USR_TIME) == 0)
-		strip->strip_time = nlastrip_get_frame(strip, ctime, NLATIME_CONVERT_EVAL);
 	if ((strip->flag & NLASTRIP_FLAG_USR_INFLUENCE) == 0)
 		strip->influence = nlastrip_get_influence(strip, ctime);
+
+	/* Bypass evaluation time computation if time mapping is disabled. */
+	if ((strip->flag & NLASTRIP_FLAG_NO_TIME_MAP) != 0) {
+		strip->strip_time = ctime;
+		return;
+	}
+
+	if ((strip->flag & NLASTRIP_FLAG_USR_TIME) == 0)
+		strip->strip_time = nlastrip_get_frame(strip, ctime, NLATIME_CONVERT_EVAL);
 
 	/* if user can control the evaluation time (using F-Curves), consider the option which allows this time to be clamped
 	 * to lie within extents of the action-clip, so that a steady changing rate of progress through several cycles of the clip
@@ -1912,7 +1944,7 @@ NlaEvalStrip *nlastrips_ctime_get_strip(Depsgraph *depsgraph, ListBase *list, Li
 	/* loop over strips, checking if they fall within the range */
 	for (strip = strips->first; strip; strip = strip->next) {
 		/* check if current time occurs within this strip  */
-		if (IN_RANGE_INCL(ctime, strip->start, strip->end)) {
+		if (IN_RANGE_INCL(ctime, strip->start, strip->end) || (strip->flag & NLASTRIP_FLAG_NO_TIME_MAP)) {
 			/* this strip is active, so try to use it */
 			estrip = strip;
 			side = NES_TIME_WITHIN;
@@ -2184,6 +2216,10 @@ static void nlaeval_snapshot_free_data(NlaEvalSnapshot *snapshot)
 static void nlaevalchan_free_data(NlaEvalChannel *nec)
 {
 	nlavalidmask_free(&nec->valid);
+
+	if (nec->blend_snapshot != NULL) {
+		nlaevalchan_snapshot_free(nec->blend_snapshot);
+	}
 }
 
 /* Initialize a full NLA evaluation state structure. */
@@ -2235,6 +2271,17 @@ static void nlaevalchan_get_default_values(NlaEvalChannel *nec, float *r_values)
 	PointerRNA *ptr = &nec->key.ptr;
 	PropertyRNA *prop = nec->key.prop;
 	int length = nec->base_snapshot.length;
+
+	/* Use unit quaternion for quaternion properties. */
+	if (nec->mix_mode == NEC_MIX_QUATERNION) {
+		unit_qt(r_values);
+		return;
+	}
+	/* Use all zero for Axis-Angle properties. */
+	if (nec->mix_mode == NEC_MIX_AXIS_ANGLE) {
+		zero_v4(r_values);
+		return;
+	}
 
 	/* NOTE: while this doesn't work for all RNA properties as default values aren't in fact
 	 * set properly for most of them, at least the common ones (which also happen to get used
@@ -2289,6 +2336,33 @@ static void nlaevalchan_get_default_values(NlaEvalChannel *nec, float *r_values)
 				*r_values = 0.0f;
 		}
 	}
+
+	/* Ensure multiplicative properties aren't reset to 0. */
+	if (nec->mix_mode == NEC_MIX_MULTIPLY) {
+		for (int i = 0; i < length; i++) {
+			if (r_values[i] == 0.0f) {
+				r_values[i] = 1.0f;
+			}
+		}
+	}
+}
+
+static char nlaevalchan_detect_mix_mode(NlaEvalChannelKey *key, int length)
+{
+	PropertySubType subtype = RNA_property_subtype(key->prop);
+
+	if (subtype == PROP_QUATERNION && length == 4) {
+		return NEC_MIX_QUATERNION;
+	}
+	else if (subtype == PROP_AXISANGLE && length == 4) {
+		return NEC_MIX_AXIS_ANGLE;
+	}
+	else if (RNA_property_flag(key->prop) & PROP_PROPORTIONAL) {
+		return NEC_MIX_MULTIPLY;
+	}
+	else {
+		return NEC_MIX_ADD;
+	}
 }
 
 /* Verify that an appropriate NlaEvalChannel for this property exists. */
@@ -2316,6 +2390,8 @@ static NlaEvalChannel *nlaevalchan_verify_key(NlaEvalData *nlaeval, const char *
 	nec->owner = nlaeval;
 	nec->index = nlaeval->num_channels++;
 	nec->is_array = is_array;
+
+	nec->mix_mode = nlaevalchan_detect_mix_mode(key, length);
 
 	nlavalidmask_init(&nec->valid, length);
 
@@ -2357,8 +2433,8 @@ static NlaEvalChannel *nlaevalchan_verify(PointerRNA *ptr, NlaEvalData *nlaeval,
 	if (!RNA_path_resolve_property(ptr, path, &key.ptr, &key.prop)) {
 		/* Report failure to resolve the path. */
 		if (G.debug & G_DEBUG) {
-			printf("Animato: Invalid path. ID = '%s',  '%s'\n",
-			       (ptr->id.data) ? (((ID *)ptr->id.data)->name + 2) : "<No ID>", path);
+			CLOG_WARN(&LOG, "Animato: Invalid path. ID = '%s',  '%s'",
+			          (ptr->id.data) ? (((ID *)ptr->id.data)->name + 2) : "<No ID>", path);
 		}
 
 		/* Cache NULL result. */
@@ -2402,6 +2478,10 @@ static float nla_blend_value(int blendmode, float old_value, float value, float 
 			 */
 			return inf * (old_value * value)  +   (1 - inf) * old_value;
 
+		case NLASTRIP_MODE_COMBINE:
+			BLI_assert(!"combine mode");
+			ATTR_FALLTHROUGH;
+
 		case NLASTRIP_MODE_REPLACE:
 		default: /* TODO: do we really want to blend by default? it seems more uses might prefer add... */
 			/* do linear interpolation
@@ -2409,6 +2489,33 @@ static float nla_blend_value(int blendmode, float old_value, float value, float 
 			 *   is 1 - influence, since the strip's influence is srcweight
 			 */
 			return old_value * (1.0f - inf)   +   (value * inf);
+	}
+}
+
+/* accumulate the old and new values of a channel according to mode and influence */
+static float nla_combine_value(int mix_mode, float base_value, float old_value, float value, float inf)
+{
+	/* optimisation: no need to try applying if there is no influence */
+	if (IS_EQF(inf, 0.0f)) {
+		return old_value;
+	}
+
+	/* perform blending */
+	switch (mix_mode) {
+		case NEC_MIX_ADD:
+		case NEC_MIX_AXIS_ANGLE:
+			return old_value + (value - base_value) * inf;
+
+		case NEC_MIX_MULTIPLY:
+			if (base_value == 0.0f) {
+				base_value = 1.0f;
+			}
+			return old_value * powf(value / base_value, inf);
+
+		case NEC_MIX_QUATERNION:
+		default:
+			BLI_assert(!"invalid mix mode");
+			return old_value;
 	}
 }
 
@@ -2439,6 +2546,10 @@ static bool nla_invert_blend_value(int blend_mode, float old_value, float target
 				return true;
 			}
 
+		case NLASTRIP_MODE_COMBINE:
+			BLI_assert(!"combine mode");
+			ATTR_FALLTHROUGH;
+
 		case NLASTRIP_MODE_REPLACE:
 		default:
 			*r_value = (target_value - old_value) / influence + old_value;
@@ -2446,12 +2557,91 @@ static bool nla_invert_blend_value(int blend_mode, float old_value, float target
 	}
 }
 
+/* compute the value that would blend to the desired target value using nla_combine_value */
+static bool nla_invert_combine_value(int mix_mode, float base_value, float old_value, float target_value, float influence, float *r_value)
+{
+	switch (mix_mode) {
+		case NEC_MIX_ADD:
+		case NEC_MIX_AXIS_ANGLE:
+			*r_value = base_value + (target_value - old_value) / influence;
+			return true;
+
+		case NEC_MIX_MULTIPLY:
+			if (base_value == 0.0f) {
+				base_value = 1.0f;
+			}
+			if (old_value == 0.0f) {
+				/* Resolve 0/0 to 1. */
+				if (target_value == 0.0f) {
+					*r_value = base_value;
+					return true;
+				}
+				/* Division by zero. */
+				return false;
+			}
+			else {
+				*r_value = base_value * powf(target_value / old_value, 1.0f / influence);
+				return true;
+			}
+
+		case NEC_MIX_QUATERNION:
+		default:
+			BLI_assert(!"invalid mix mode");
+			return false;
+	}
+}
+
+/* accumulate quaternion channels for Combine mode according to influence */
+static void nla_combine_quaternion(const float old_values[4], const float values[4], float influence, float result[4])
+{
+	float tmp_old[4], tmp_new[4];
+
+	normalize_qt_qt(tmp_old, old_values);
+	normalize_qt_qt(tmp_new, values);
+
+	pow_qt_fl_normalized(tmp_new, influence);
+	mul_qt_qtqt(result, tmp_old, tmp_new);
+}
+
+/* invert accumulation of quaternion channels for Combine mode according to influence */
+static void nla_invert_combine_quaternion(const float old_values[4], const float values[4], float influence, float result[4])
+{
+	float tmp_old[4], tmp_new[4];
+
+	normalize_qt_qt(tmp_old, old_values);
+	normalize_qt_qt(tmp_new, values);
+	invert_qt_normalized(tmp_old);
+
+	mul_qt_qtqt(result, tmp_old, tmp_new);
+	pow_qt_fl_normalized(result, 1.0f / influence);
+}
+
 /* Data about the current blend mode. */
 typedef struct NlaBlendData {
 	NlaEvalSnapshot *snapshot;
 	int mode;
 	float influence;
+
+	NlaEvalChannel *blend_queue;
 } NlaBlendData;
+
+/* Queue the channel for deferred blending. */
+static NlaEvalChannelSnapshot *nlaevalchan_queue_blend(NlaBlendData *blend, NlaEvalChannel *nec)
+{
+	if (!nec->in_blend) {
+		if (nec->blend_snapshot == NULL) {
+			nec->blend_snapshot = nlaevalchan_snapshot_new(nec);
+		}
+
+		nec->in_blend = true;
+		nlaevalchan_snapshot_copy(nec->blend_snapshot, &nec->base_snapshot);
+
+		nec->next_blend = blend->blend_queue;
+		blend->blend_queue = nec;
+	}
+
+	return nec->blend_snapshot;
+}
 
 /* Accumulate (i.e. blend) the given value on to the channel it affects. */
 static bool nlaeval_blend_value(NlaBlendData *blend, NlaEvalChannel *nec, int array_index, float value)
@@ -2465,20 +2655,63 @@ static bool nlaeval_blend_value(NlaBlendData *blend, NlaEvalChannel *nec, int ar
 	if (index < 0) {
 		if (G.debug & G_DEBUG) {
 			ID *id = nec->key.ptr.id.data;
-			printf("Animato: Invalid array index. ID = '%s',  '%s[%d]', array length is %d\n",
-			       id ? (id->name + 2) : "<No ID>", nec->rna_path, array_index, nec->base_snapshot.length);
+			CLOG_WARN(&LOG, "Animato: Invalid array index. ID = '%s',  '%s[%d]', array length is %d",
+    		          id ? (id->name + 2) : "<No ID>", nec->rna_path, array_index, nec->base_snapshot.length);
 		}
 
 		return false;
 	}
 
-	BLI_BITMAP_ENABLE(nec->valid.ptr, index);
+	if (nec->mix_mode == NEC_MIX_QUATERNION) {
+		/* For quaternion properties, always output all sub-channels. */
+		BLI_bitmap_set_all(nec->valid.ptr, true, 4);
+	}
+	else {
+		BLI_BITMAP_ENABLE(nec->valid.ptr, index);
+	}
 
 	NlaEvalChannelSnapshot *nec_snapshot = nlaeval_snapshot_ensure_channel(blend->snapshot, nec);
+	float *p_value = &nec_snapshot->values[index];
 
-	nec_snapshot->values[index] = nla_blend_value(blend->mode, nec_snapshot->values[index], value, blend->influence);
+	if (blend->mode == NLASTRIP_MODE_COMBINE) {
+		/* Quaternion blending is deferred until all sub-channel values are known. */
+		if (nec->mix_mode == NEC_MIX_QUATERNION) {
+			NlaEvalChannelSnapshot *blend_snapshot = nlaevalchan_queue_blend(blend, nec);
+
+			blend_snapshot->values[index] = value;
+		}
+		else {
+			float base_value = nec->base_snapshot.values[index];
+
+			*p_value = nla_combine_value(nec->mix_mode, base_value, *p_value, value, blend->influence);
+		}
+	}
+	else {
+		*p_value = nla_blend_value(blend->mode, *p_value, value, blend->influence);
+	}
 
 	return true;
+}
+
+/* Finish deferred quaternion blending. */
+static void nlaeval_blend_flush(NlaBlendData *blend)
+{
+	NlaEvalChannel *nec;
+
+	while ((nec = blend->blend_queue)) {
+		blend->blend_queue = nec->next_blend;
+		nec->in_blend = false;
+
+		NlaEvalChannelSnapshot *nec_snapshot = nlaeval_snapshot_ensure_channel(blend->snapshot, nec);
+		NlaEvalChannelSnapshot *blend_snapshot = nec->blend_snapshot;
+
+		if (nec->mix_mode == NEC_MIX_QUATERNION) {
+			nla_combine_quaternion(nec_snapshot->values, blend_snapshot->values, blend->influence, nec_snapshot->values);
+		}
+		else {
+			BLI_assert(!"mix quaternion");
+		}
+	}
 }
 
 /* Blend the specified snapshots into the target, and free the input snapshots. */
@@ -2597,7 +2830,7 @@ static void nlastrip_evaluate_actionclip(PointerRNA *ptr, NlaEvalData *channels,
 		return;
 
 	if (strip->act == NULL) {
-		printf("NLA-Strip Eval Error: Strip '%s' has no Action\n", strip->name);
+		CLOG_ERROR(&LOG, "NLA-Strip Eval Error: Strip '%s' has no Action", strip->name);
 		return;
 	}
 
@@ -2643,6 +2876,8 @@ static void nlastrip_evaluate_actionclip(PointerRNA *ptr, NlaEvalData *channels,
 
 		nlaeval_blend_value(&blend, nec, fcu->array_index, value);
 	}
+
+	nlaeval_blend_flush(&blend);
 
 	/* free temporary storage */
 	evaluate_fmodifiers_storage_free(storage);
@@ -2828,6 +3063,12 @@ static void nla_eval_domain_action(PointerRNA *ptr, NlaEvalData *channels, bActi
 		NlaEvalChannel *nec = nlaevalchan_verify(ptr, channels, fcu->rna_path);
 
 		if (nec != NULL) {
+			/* For quaternion properties, enable all sub-channels. */
+			if (nec->mix_mode == NEC_MIX_QUATERNION) {
+				BLI_bitmap_set_all(nec->valid.ptr, true, 4);
+				continue;
+			}
+
 			int idx = nlaevalchan_validate_index(nec, fcu->array_index);
 
 			if (idx >= 0) {
@@ -2971,11 +3212,16 @@ static bool animsys_evaluate_nla(Depsgraph *depsgraph, NlaEvalData *echannels, P
 				/* Always use the blend mode of the strip in tweak mode, even if not in-place. */
 				if (nlt && adt->actstrip) {
 					dummy_strip->blendmode = adt->actstrip->blendmode;
-					dummy_strip->extendmode = adt->actstrip->extendmode;
+					dummy_strip->extendmode = NLASTRIP_EXTEND_HOLD;
 				}
 				else {
 					dummy_strip->blendmode = adt->act_blendmode;
 					dummy_strip->extendmode = adt->act_extendmode;
+				}
+
+				/* Unless extendmode is Nothing (might be useful for flattening NLA evaluation), disable range. */
+				if (dummy_strip->extendmode != NLASTRIP_EXTEND_NOTHING) {
+					dummy_strip->flag |= NLASTRIP_FLAG_NO_TIME_MAP;
 				}
 
 				dummy_strip->influence = adt->act_influence;
@@ -3043,7 +3289,7 @@ static void animsys_calculate_nla(Depsgraph *depsgraph, PointerRNA *ptr, AnimDat
 	else {
 		/* special case - evaluate as if there isn't any NLA data */
 		/* TODO: this is really just a stop-gap measure... */
-		if (G.debug & G_DEBUG) printf("NLA Eval: Stopgap for active action on NLA Stack - no strips case\n");
+		if (G.debug & G_DEBUG) CLOG_WARN(&LOG, "NLA Eval: Stopgap for active action on NLA Stack - no strips case");
 
 		animsys_evaluate_action(depsgraph, ptr, adt->action, ctime);
 	}
@@ -3094,16 +3340,22 @@ NlaKeyframingContext *BKE_animsys_get_nla_keyframing_context(
 }
 
 /**
- * Apply correction from the NLA context to the value about to be keyframed.
+ * Apply correction from the NLA context to the values about to be keyframed.
  *
  * @param context Context to use (may be NULL).
  * @param prop_ptr Property about to be keyframed.
- * @param index Array index within the property.
- * @param[in,out] r_value Value to correct.
- * @return False if correction fails due to a division by zero.
+ * @param[in,out] values Array of property values to adjust.
+ * @param count Number of values in the array.
+ * @param index Index of the element about to be updated, or -1.
+ * @param[out] r_force_all Set to true if all channels must be inserted. May be NULL.
+ * @return False if correction fails due to a division by zero, or null r_force_all when all channels are required.
  */
-bool BKE_animsys_nla_remap_keyframe_value(struct NlaKeyframingContext *context, struct PointerRNA *prop_ptr, struct PropertyRNA *prop, int index, float *r_value)
+bool BKE_animsys_nla_remap_keyframe_values(struct NlaKeyframingContext *context, struct PointerRNA *prop_ptr, struct PropertyRNA *prop, float *values, int count, int index, bool *r_force_all)
 {
+	if (r_force_all != NULL) {
+		*r_force_all = false;
+	}
+
 	/* No context means no correction. */
 	if (context == NULL || context->strip.act == NULL) {
 		return true;
@@ -3131,18 +3383,51 @@ bool BKE_animsys_nla_remap_keyframe_value(struct NlaKeyframingContext *context, 
 	NlaEvalChannelKey key = { .ptr = *prop_ptr, .prop = prop, };
 	NlaEvalData *nlaeval = &context->nla_channels;
 	NlaEvalChannel *nec = nlaevalchan_verify_key(nlaeval, NULL, &key);
-	int real_index = nlaevalchan_validate_index(nec, index);
 
-	if (real_index < 0) {
-		return true;
+	if (nec->base_snapshot.length != count) {
+		BLI_assert(!"invalid value count");
+		return false;
 	}
 
-	/* Invert the blending operation to compute the desired key value. */
+	/* Invert the blending operation to compute the desired key values. */
 	NlaEvalChannelSnapshot *nec_snapshot = nlaeval_snapshot_find_channel(&nlaeval->eval_snapshot, nec);
 
-	float old_value = nec_snapshot->values[real_index];
+	float *old_values = nec_snapshot->values;
 
-	return nla_invert_blend_value(blend_mode, old_value, *r_value, influence, r_value);
+	if (blend_mode == NLASTRIP_MODE_COMBINE) {
+		/* Quaternion combine handles all sub-channels as a unit. */
+		if (nec->mix_mode == NEC_MIX_QUATERNION) {
+			if (r_force_all == NULL) {
+				return false;
+			}
+
+			*r_force_all = true;
+
+			nla_invert_combine_quaternion(old_values, values, influence, values);
+		}
+		else {
+			float *base_values = nec->base_snapshot.values;
+
+			for (int i = 0; i < count; i++) {
+				if (ELEM(index, i, -1)) {
+					if (!nla_invert_combine_value(nec->mix_mode, base_values[i], old_values[i], values[i], influence, &values[i])) {
+						return false;
+					}
+				}
+			}
+		}
+	}
+	else {
+		for (int i = 0; i < count; i++) {
+			if (ELEM(index, i, -1)) {
+				if (!nla_invert_blend_value(blend_mode, old_values[i], values[i], influence, &values[i])) {
+					return false;
+				}
+			}
+		}
+	}
+
+	return true;
 }
 
 /**
@@ -3231,7 +3516,7 @@ void BKE_animsys_evaluate_animdata(Depsgraph *depsgraph, Scene *scene, ID *id, A
 	 *   that overrides 'rough' work in NLA
 	 */
 	/* TODO: need to double check that this all works correctly */
-	if ((recalc & ADT_RECALC_ANIM) || (adt->recalc & ADT_RECALC_ANIM)) {
+	if (recalc & ADT_RECALC_ANIM) {
 		/* evaluate NLA data */
 		if ((adt->nla_tracks.first) && !(adt->flag & ADT_NLA_EVAL_OFF)) {
 			/* evaluate NLA-stack
@@ -3242,9 +3527,6 @@ void BKE_animsys_evaluate_animdata(Depsgraph *depsgraph, Scene *scene, ID *id, A
 		/* evaluate Active Action only */
 		else if (adt->action)
 			animsys_evaluate_action_ex(depsgraph, &id_ptr, adt->action, ctime);
-
-		/* reset tag */
-		adt->recalc &= ~ADT_RECALC_ANIM;
 	}
 
 	/* recalculate drivers
@@ -3252,10 +3534,7 @@ void BKE_animsys_evaluate_animdata(Depsgraph *depsgraph, Scene *scene, ID *id, A
 	 *   or be layered on top of existing animation data.
 	 * - Drivers should be in the appropriate order to be evaluated without problems...
 	 */
-	if ((recalc & ADT_RECALC_DRIVERS)
-	    /* XXX for now, don't check yet, as depsgraph hasn't been updated */
-	    /* && (adt->recalc & ADT_RECALC_DRIVERS)*/)
-	{
+	if (recalc & ADT_RECALC_DRIVERS) {
 		animsys_evaluate_drivers(&id_ptr, adt, ctime);
 	}
 
@@ -3273,9 +3552,6 @@ void BKE_animsys_evaluate_animdata(Depsgraph *depsgraph, Scene *scene, ID *id, A
 		RNA_property_update_cache_flush(bmain, scene);
 		RNA_property_update_cache_free();
 	}
-
-	/* clear recalc flag now */
-	adt->recalc = 0;
 }
 
 /* Evaluation of all ID-blocks with Animation Data blocks - Animation Data Only
@@ -3332,7 +3608,7 @@ void BKE_animsys_evaluate_all_animation(Main *main, Depsgraph *depsgraph, Scene 
 	 * however, if there are some curves, we will need to make sure that their 'ctime' property gets
 	 * set correctly, so this optimization must be skipped in that case...
 	 */
-	if (BLI_listbase_is_empty(&main->action) && BLI_listbase_is_empty(&main->curve)) {
+	if (BLI_listbase_is_empty(&main->actions) && BLI_listbase_is_empty(&main->curves)) {
 		if (G.debug & G_DEBUG)
 			printf("\tNo Actions, so no animation needs to be evaluated...\n");
 
@@ -3340,52 +3616,52 @@ void BKE_animsys_evaluate_all_animation(Main *main, Depsgraph *depsgraph, Scene 
 	}
 
 	/* nodes */
-	EVAL_ANIM_IDS(main->nodetree.first, ADT_RECALC_ANIM);
+	EVAL_ANIM_IDS(main->nodetrees.first, ADT_RECALC_ANIM);
 
 	/* textures */
-	EVAL_ANIM_NODETREE_IDS(main->tex.first, Tex, ADT_RECALC_ANIM);
+	EVAL_ANIM_NODETREE_IDS(main->textures.first, Tex, ADT_RECALC_ANIM);
 
-	/* lamps */
-	EVAL_ANIM_NODETREE_IDS(main->lamp.first, Lamp, ADT_RECALC_ANIM);
+	/* lights */
+	EVAL_ANIM_NODETREE_IDS(main->lights.first, Light, ADT_RECALC_ANIM);
 
 	/* materials */
-	EVAL_ANIM_NODETREE_IDS(main->mat.first, Material, ADT_RECALC_ANIM);
+	EVAL_ANIM_NODETREE_IDS(main->materials.first, Material, ADT_RECALC_ANIM);
 
 	/* cameras */
-	EVAL_ANIM_IDS(main->camera.first, ADT_RECALC_ANIM);
+	EVAL_ANIM_IDS(main->cameras.first, ADT_RECALC_ANIM);
 
 	/* shapekeys */
-	EVAL_ANIM_IDS(main->key.first, ADT_RECALC_ANIM);
+	EVAL_ANIM_IDS(main->shapekeys.first, ADT_RECALC_ANIM);
 
 	/* metaballs */
-	EVAL_ANIM_IDS(main->mball.first, ADT_RECALC_ANIM);
+	EVAL_ANIM_IDS(main->metaballs.first, ADT_RECALC_ANIM);
 
 	/* curves */
-	EVAL_ANIM_IDS(main->curve.first, ADT_RECALC_ANIM);
+	EVAL_ANIM_IDS(main->curves.first, ADT_RECALC_ANIM);
 
 	/* armatures */
-	EVAL_ANIM_IDS(main->armature.first, ADT_RECALC_ANIM);
+	EVAL_ANIM_IDS(main->armatures.first, ADT_RECALC_ANIM);
 
 	/* lattices */
-	EVAL_ANIM_IDS(main->latt.first, ADT_RECALC_ANIM);
+	EVAL_ANIM_IDS(main->lattices.first, ADT_RECALC_ANIM);
 
 	/* meshes */
-	EVAL_ANIM_IDS(main->mesh.first, ADT_RECALC_ANIM);
+	EVAL_ANIM_IDS(main->meshes.first, ADT_RECALC_ANIM);
 
 	/* particles */
-	EVAL_ANIM_IDS(main->particle.first, ADT_RECALC_ANIM);
+	EVAL_ANIM_IDS(main->particles.first, ADT_RECALC_ANIM);
 
 	/* speakers */
-	EVAL_ANIM_IDS(main->speaker.first, ADT_RECALC_ANIM);
+	EVAL_ANIM_IDS(main->speakers.first, ADT_RECALC_ANIM);
 
 	/* movie clips */
-	EVAL_ANIM_IDS(main->movieclip.first, ADT_RECALC_ANIM);
+	EVAL_ANIM_IDS(main->movieclips.first, ADT_RECALC_ANIM);
 
 	/* linestyles */
-	EVAL_ANIM_IDS(main->linestyle.first, ADT_RECALC_ANIM);
+	EVAL_ANIM_IDS(main->linestyles.first, ADT_RECALC_ANIM);
 
 	/* grease pencil */
-	EVAL_ANIM_IDS(main->gpencil.first, ADT_RECALC_ANIM);
+	EVAL_ANIM_IDS(main->gpencils.first, ADT_RECALC_ANIM);
 
 	/* palettes */
 	EVAL_ANIM_IDS(main->palettes.first, ADT_RECALC_ANIM);
@@ -3398,16 +3674,16 @@ void BKE_animsys_evaluate_all_animation(Main *main, Depsgraph *depsgraph, Scene 
 	 * this tagged by Depsgraph on framechange. This optimization means that objects
 	 * linked from other (not-visible) scenes will not need their data calculated.
 	 */
-	EVAL_ANIM_IDS(main->object.first, 0);
+	EVAL_ANIM_IDS(main->objects.first, 0);
 
 	/* masks */
-	EVAL_ANIM_IDS(main->mask.first, ADT_RECALC_ANIM);
+	EVAL_ANIM_IDS(main->masks.first, ADT_RECALC_ANIM);
 
 	/* worlds */
-	EVAL_ANIM_NODETREE_IDS(main->world.first, World, ADT_RECALC_ANIM);
+	EVAL_ANIM_NODETREE_IDS(main->worlds.first, World, ADT_RECALC_ANIM);
 
 	/* scenes */
-	EVAL_ANIM_NODETREE_IDS(main->scene.first, Scene, ADT_RECALC_ANIM);
+	EVAL_ANIM_NODETREE_IDS(main->scenes.first, Scene, ADT_RECALC_ANIM);
 }
 
 /* ***************************************** */
@@ -3423,8 +3699,7 @@ void BKE_animsys_eval_animdata(Depsgraph *depsgraph, ID *id)
 	                      * which should get handled as part of the dependency graph instead...
 	                      */
 	DEG_debug_print_eval_time(depsgraph, __func__, id->name, id, ctime);
-	short recalc = ADT_RECALC_ANIM;
-	BKE_animsys_evaluate_animdata(depsgraph, scene, id, adt, ctime, recalc);
+	BKE_animsys_evaluate_animdata(depsgraph, scene, id, adt, ctime, ADT_RECALC_ANIM);
 }
 
 void BKE_animsys_update_driver_array(ID *id)
@@ -3476,7 +3751,7 @@ void BKE_animsys_eval_driver(Depsgraph *depsgraph,
 	if ((fcu->flag & (FCURVE_MUTED | FCURVE_DISABLED)) == 0) {
 		/* check if driver itself is tagged for recalculation */
 		/* XXX driver recalc flag is not set yet by depsgraph! */
-		if ((driver_orig) && !(driver_orig->flag & DRIVER_FLAG_INVALID) /*&& (driver_orig->flag & DRIVER_FLAG_RECALC)*/) {
+		if ((driver_orig) && !(driver_orig->flag & DRIVER_FLAG_INVALID)) {
 			/* evaluate this using values set already in other places
 			 * NOTE: for 'layering' option later on, we should check if we should remove old value before adding
 			 *       new to only be done when drivers only changed */
@@ -3484,22 +3759,40 @@ void BKE_animsys_eval_driver(Depsgraph *depsgraph,
 
 			PathResolvedRNA anim_rna;
 			if (animsys_store_rna_setting(&id_ptr, fcu->rna_path, fcu->array_index, &anim_rna)) {
+				/* Evaluate driver, and write results to COW-domain destination */
 				const float ctime = DEG_get_ctime(depsgraph);
 				const float curval = evaluate_fcurve_driver(&anim_rna, fcu, driver_orig, ctime);
 				ok = animsys_write_rna_setting(&anim_rna, curval);
+
+				/* Flush results & status codes to original data for UI (T59984) */
 				if (ok && DEG_is_active(depsgraph)) {
 					animsys_write_orig_anim_rna(&id_ptr, fcu->rna_path, fcu->array_index, curval);
+
+					/* curval is displayed in the UI, and flag contains error-status codes */
+					driver_orig->curval = fcu->driver->curval;
+					driver_orig->flag = fcu->driver->flag;
+
+					DriverVar *dvar_orig = driver_orig->variables.first;
+					DriverVar *dvar = fcu->driver->variables.first;
+					for (;
+					     dvar_orig && dvar;
+					     dvar_orig = dvar_orig->next, dvar = dvar->next)
+					{
+						DriverTarget *dtar_orig = &dvar_orig->targets[0];
+						DriverTarget *dtar = &dvar->targets[0];
+						for (int i = 0; i < MAX_DRIVER_TARGETS; i++, dtar_orig++, dtar++) {
+							dtar_orig->flag = dtar->flag;
+						}
+
+						dvar_orig->curval = dvar->curval;
+						dvar_orig->flag = dvar->flag;
+					}
 				}
 			}
 
-			//printf("\tnew val = %f\n", fcu->curval);
-
-			/* clear recalc flag */
-			driver_orig->flag &= ~DRIVER_FLAG_RECALC;
-
 			/* set error-flag if evaluation failed */
 			if (ok == 0) {
-				printf("invalid driver - %s[%d]\n", fcu->rna_path, fcu->array_index);
+				CLOG_ERROR(&LOG, "invalid driver - %s[%d]", fcu->rna_path, fcu->array_index);
 				driver_orig->flag |= DRIVER_FLAG_INVALID;
 			}
 		}

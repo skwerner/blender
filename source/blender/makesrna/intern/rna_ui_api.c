@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,15 +15,10 @@
  *
  * The Original Code is Copyright (C) 2009 Blender Foundation.
  * All rights reserved.
- *
- *
- * Contributor(s): Blender Foundation
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/makesrna/intern/rna_ui_api.c
- *  \ingroup RNA
+/** \file
+ * \ingroup RNA
  */
 
 
@@ -53,7 +46,7 @@
 #define DEF_ICON_BLANK(name)
 const EnumPropertyItem rna_enum_icon_items[] = {
 #include "UI_icons.h"
-	{0, NULL, 0, NULL, NULL}
+	{0, NULL, 0, NULL, NULL},
 };
 
 #ifdef RNA_RUNTIME
@@ -123,6 +116,57 @@ static void rna_uiItemR(
 
 	uiItemFullR(layout, ptr, prop, index, 0, flag, name, icon);
 }
+
+static void rna_uiItemR_with_popover(
+        uiLayout *layout, struct PointerRNA *ptr, const char *propname, const char *name,
+        const char *text_ctxt, bool translate, int icon,
+        bool icon_only,
+        const char *panel_type)
+{
+	PropertyRNA *prop = RNA_struct_find_property(ptr, propname);
+
+	if (!prop) {
+		RNA_warning("property not found: %s.%s", RNA_struct_identifier(ptr->type), propname);
+		return;
+	}
+	if (RNA_property_type(prop) != PROP_ENUM) {
+		RNA_warning("property is not an enum: %s.%s", RNA_struct_identifier(ptr->type), propname);
+		return;
+	}
+	int flag = 0;
+
+	flag |= (icon_only) ? UI_ITEM_R_ICON_ONLY : 0;
+
+	/* Get translated name (label). */
+	name = rna_translate_ui_text(name, text_ctxt, NULL, prop, translate);
+	uiItemFullR_with_popover(layout, ptr, prop, -1, 0, flag, name, icon, panel_type);
+}
+
+static void rna_uiItemR_with_menu(
+        uiLayout *layout, struct PointerRNA *ptr, const char *propname, const char *name,
+        const char *text_ctxt, bool translate, int icon,
+        bool icon_only,
+        const char *menu_type)
+{
+	PropertyRNA *prop = RNA_struct_find_property(ptr, propname);
+
+	if (!prop) {
+		RNA_warning("property not found: %s.%s", RNA_struct_identifier(ptr->type), propname);
+		return;
+	}
+	if (RNA_property_type(prop) != PROP_ENUM) {
+		RNA_warning("property is not an enum: %s.%s", RNA_struct_identifier(ptr->type), propname);
+		return;
+	}
+	int flag = 0;
+
+	flag |= (icon_only) ? UI_ITEM_R_ICON_ONLY : 0;
+
+	/* Get translated name (label). */
+	name = rna_translate_ui_text(name, text_ctxt, NULL, prop, translate);
+	uiItemFullR_with_menu(layout, ptr, prop, -1, 0, flag, name, icon, menu_type);
+}
+
 
 static void rna_uiItemMenuEnumR(
         uiLayout *layout, struct PointerRNA *ptr, const char *propname, const char *name,
@@ -459,8 +503,12 @@ static int rna_ui_get_enum_icon(bContext *C, PointerRNA *ptr, const char *propna
 
 static void api_ui_item_common_text(FunctionRNA *func)
 {
-	RNA_def_string(func, "text", NULL, 0, "", "Override automatic text of the item");
-	RNA_def_string(func, "text_ctxt", NULL, 0, "", "Override automatic translation context of the given text");
+	PropertyRNA *prop;
+
+	prop = RNA_def_string(func, "text", NULL, 0, "", "Override automatic text of the item");
+	RNA_def_property_clear_flag(prop, PROP_NEVER_NULL);
+	prop = RNA_def_string(func, "text_ctxt", NULL, 0, "", "Override automatic translation context of the given text");
+	RNA_def_property_clear_flag(prop, PROP_NEVER_NULL);
 	RNA_def_boolean(func, "translate", true, "", "Translate the given text, when UI translation is enabled");
 }
 
@@ -508,13 +556,13 @@ void RNA_api_ui_layout(StructRNA *srna)
 		{'v', "VECTOR", 0, "Vector", ""},
 		{'c', "COLOR", 0, "Color", ""},
 		{'h', "HUE", 0, "Hue", ""},
-		{0, NULL, 0, NULL, NULL}
+		{0, NULL, 0, NULL, NULL},
 	};
 
 	static const EnumPropertyItem id_template_filter_items[] = {
 		{UI_TEMPLATE_ID_FILTER_ALL, "ALL", 0, "All", ""},
 		{UI_TEMPLATE_ID_FILTER_AVAILABLE, "AVAILABLE", 0, "Available", ""},
-		{0, NULL, 0, NULL, NULL}
+		{0, NULL, 0, NULL, NULL},
 	};
 
 	static float node_socket_color_default[] = { 0.0f, 0.0f, 0.0f, 1.0f };
@@ -641,6 +689,20 @@ void RNA_api_ui_layout(StructRNA *srna)
 	func = RNA_def_function(srna, "prop_menu_enum", "rna_uiItemMenuEnumR");
 	api_ui_item_rna_common(func);
 	api_ui_item_common(func);
+
+	func = RNA_def_function(srna, "prop_with_popover", "rna_uiItemR_with_popover");
+	api_ui_item_rna_common(func);
+	api_ui_item_common(func);
+	RNA_def_boolean(func, "icon_only", false, "", "Draw only icons in tabs, no text");
+	parm = RNA_def_string(func, "panel", NULL, 0, "", "Identifier of the panel");
+	RNA_def_parameter_flags(parm, 0, PARM_REQUIRED);
+
+	func = RNA_def_function(srna, "prop_with_menu", "rna_uiItemR_with_menu");
+	api_ui_item_rna_common(func);
+	api_ui_item_common(func);
+	RNA_def_boolean(func, "icon_only", false, "", "Draw only icons in tabs, no text");
+	parm = RNA_def_string(func, "menu", NULL, 0, "", "Identifier of the menu");
+	RNA_def_parameter_flags(parm, 0, PARM_REQUIRED);
 
 	func = RNA_def_function(srna, "prop_tabs_enum", "rna_uiItemTabsEnumR");
 	RNA_def_function_flag(func, FUNC_USE_CONTEXT);
@@ -773,9 +835,9 @@ void RNA_api_ui_layout(StructRNA *srna)
 	func = RNA_def_function(srna, "separator", "uiItemS_ex");
 	RNA_def_function_ui_description(func, "Item. Inserts empty space into the layout between items");
 	RNA_def_float(
-		func, "factor", 1.0f, 0.0f, FLT_MAX, "Percentage",
-		"Percentage of width to space (leave unset for default space)",
-		0.0f, FLT_MAX);
+	        func, "factor", 1.0f, 0.0f, FLT_MAX, "Percentage",
+	        "Percentage of width to space (leave unset for default space)",
+	        0.0f, FLT_MAX);
 
 	func = RNA_def_function(srna, "separator_spacer", "uiItemSpacer");
 	RNA_def_function_ui_description(func, "Item. Inserts horizontal spacing empty space into the layout between items");
@@ -895,8 +957,9 @@ void RNA_api_ui_layout(StructRNA *srna)
 	RNA_def_int(func, "rows", 0, 0, INT_MAX, "Number of thumbnail preview rows to display", "", 0, INT_MAX);
 	RNA_def_int(func, "cols", 0, 0, INT_MAX, "Number of thumbnail preview columns to display", "", 0, INT_MAX);
 	RNA_def_float(func, "scale", 1.0f, 0.1f, 1.5f, "Scale of the image thumbnails", "", 0.5f, 1.0f);
-	RNA_def_enum(func, "filter", id_template_filter_items, UI_TEMPLATE_ID_FILTER_ALL,
-		"", "Optionally limit the items which can be selected");
+	RNA_def_enum(
+	        func, "filter", id_template_filter_items, UI_TEMPLATE_ID_FILTER_ALL,
+	        "", "Optionally limit the items which can be selected");
 
 	func = RNA_def_function(srna, "template_constraint", "uiTemplateConstraint");
 	RNA_def_function_ui_description(func, "Generates the UI layout for constraints");
@@ -1064,16 +1127,13 @@ void RNA_api_ui_layout(StructRNA *srna)
 	RNA_def_int(func, "maxrows", 5, 0, INT_MAX, "", "Default maximum number of rows to display", 0, INT_MAX);
 	RNA_def_enum(func, "type", rna_enum_uilist_layout_type_items, UILST_LAYOUT_DEFAULT, "Type", "Type of layout to use");
 	RNA_def_int(func, "columns", 9, 0, INT_MAX, "", "Number of items to display per row, for GRID layout", 0, INT_MAX);
-	RNA_def_boolean(func, "reverse", false, "", "Display items in reverse order");
+	RNA_def_boolean(func, "sort_reverse", false, "", "Display items in reverse order by default");
+	RNA_def_boolean(func, "sort_lock", false, "", "Lock display order to default value");
 
 	func = RNA_def_function(srna, "template_running_jobs", "uiTemplateRunningJobs");
 	RNA_def_function_flag(func, FUNC_USE_CONTEXT);
 
 	RNA_def_function(srna, "template_operator_search", "uiTemplateOperatorSearch");
-
-	func = RNA_def_function(srna, "template_header_3D", "uiTemplateHeader3D");
-	RNA_def_function_flag(func, FUNC_USE_CONTEXT);
-	RNA_def_function_ui_description(func, "Inserts common 3DView header UI (selectors for context mode, shading, etc.)");
 
 	func = RNA_def_function(srna, "template_header_3D_mode", "uiTemplateHeader3D_mode");
 	RNA_def_function_flag(func, FUNC_USE_CONTEXT);

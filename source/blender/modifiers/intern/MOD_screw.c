@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,34 +15,25 @@
  *
  * The Original Code is Copyright (C) 2005 by the Blender Foundation.
  * All rights reserved.
- *
- * Contributor(s): Daniel Dunbar
- *                 Ton Roosendaal,
- *                 Ben Batt,
- *                 Brecht Van Lommel,
- *                 Campbell Barton
- *
- * ***** END GPL LICENSE BLOCK *****
- *
  */
 
-/** \file blender/modifiers/intern/MOD_screw.c
- *  \ingroup modifiers
+/** \file
+ * \ingroup modifiers
  */
 
 
 /* Screw modifier: revolves the edges about an axis */
 #include <limits.h>
 
+#include "BLI_utildefines.h"
+
+#include "BLI_math.h"
+#include "BLI_alloca.h"
+
 #include "DNA_mesh_types.h"
 #include "DNA_meshdata_types.h"
 #include "DNA_object_types.h"
 
-#include "BLI_math.h"
-#include "BLI_alloca.h"
-#include "BLI_utildefines.h"
-
-#include "BKE_library.h"
 #include "BKE_library_query.h"
 #include "BKE_mesh.h"
 
@@ -231,7 +220,8 @@ static Mesh *applyModifier(
 	float axis_vec[3] = {0.0f, 0.0f, 0.0f};
 	float tmp_vec1[3], tmp_vec2[3];
 	float mat3[3][3];
-	float mtx_tx[4][4]; /* transform the coords by an object relative to this objects transformation */
+	/* transform the coords by an object relative to this objects transformation */
+	float mtx_tx[4][4];
 	float mtx_tx_inv[4][4]; /* inverted */
 	float mtx_tmp_a[4][4];
 
@@ -246,7 +236,7 @@ static Mesh *applyModifier(
 	MEdge *medge_orig, *med_orig, *med_new, *med_new_firstloop, *medge_new;
 	MVert *mvert_new, *mvert_orig, *mv_orig, *mv_new, *mv_new_base;
 
-	Object *ob_axis = DEG_get_evaluated_object(ctx->depsgraph, ltmd->ob_axis);
+	Object *ob_axis = ltmd->ob_axis;
 
 	ScrewVertConnect *vc, *vc_tmp, *vert_connect = NULL;
 
@@ -1119,7 +1109,7 @@ static void updateDepsgraph(ModifierData *md, const ModifierUpdateDepsgraphConte
 	ScrewModifierData *ltmd = (ScrewModifierData *)md;
 	if (ltmd->ob_axis != NULL) {
 		DEG_add_object_relation(ctx->node, ltmd->ob_axis, DEG_OB_COMP_TRANSFORM, "Screw Modifier");
-		DEG_add_object_relation(ctx->node, ctx->object, DEG_OB_COMP_TRANSFORM, "Screw Modifier");
+		DEG_add_modifier_to_transform_relation(ctx->node, "Screw Modifier");
 	}
 }
 
@@ -1145,12 +1135,6 @@ ModifierTypeInfo modifierType_Screw = {
 
 	/* copyData */          modifier_copyData_generic,
 
-	/* deformVerts_DM */    NULL,
-	/* deformMatrices_DM */ NULL,
-	/* deformVertsEM_DM */  NULL,
-	/* deformMatricesEM_DM*/NULL,
-	/* applyModifier_DM */  NULL,
-
 	/* deformVerts */       NULL,
 	/* deformMatrices */    NULL,
 	/* deformVertsEM */     NULL,
@@ -1167,4 +1151,5 @@ ModifierTypeInfo modifierType_Screw = {
 	/* foreachObjectLink */ foreachObjectLink,
 	/* foreachIDLink */     NULL,
 	/* foreachTexLink */    NULL,
+	/* freeRuntimeData */   NULL,
 };

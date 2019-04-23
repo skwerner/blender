@@ -16,11 +16,6 @@
 #
 # The Original Code is Copyright (C) 2006, Blender Foundation
 # All rights reserved.
-#
-# The Original Code is: all of this file.
-#
-# Contributor(s): Jacques Beaurain.
-#
 # ***** END GPL LICENSE BLOCK *****
 remove_strict_flags()
 set(INC
@@ -358,6 +353,9 @@ set(SRC
 	${EIGEN3_HEADERS}
 )
 
+set(LIB
+)
+
 unset(EIGEN3_HEADERS)
 
-blender_add_lib(bf_intern_itasc "${SRC}" "${INC}" "${INC_SYS}")
+blender_add_lib(bf_intern_itasc "${SRC}" "${INC}" "${INC_SYS}" "${LIB}")

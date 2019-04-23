@@ -16,9 +16,6 @@
 #
 # The Original Code is Copyright (C) 2008, Blender Foundation
 # All rights reserved.
-#
-# The Original Code is: all of this file.
-#
 # ***** END GPL LICENSE BLOCK *****
 
 set(INC
@@ -54,6 +51,11 @@ set(SRC
 	intern/blf_internal_types.h
 )
 
+set(LIB
+	bf_gpu
+	bf_intern_guardedalloc
+)
+
 if(WIN32)
 	list(APPEND SRC
 		intern/blf_font_win32_compat.c
@@ -73,4 +75,4 @@ endif()
 
 add_definitions(${GL_DEFINITIONS})
 
-blender_add_lib(bf_blenfont "${SRC}" "${INC}" "${INC_SYS}")
+blender_add_lib(bf_blenfont "${SRC}" "${INC}" "${INC_SYS}" "${LIB}")

@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,15 +15,10 @@
  *
  * The Original Code is Copyright (C) 2008 Blender Foundation.
  * All rights reserved.
- *
- *
- * Contributor(s): Blender Foundation
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/space_image/space_image.c
- *  \ingroup spimage
+/** \file
+ * \ingroup spimage
  */
 
 #include "DNA_gpencil_types.h"
@@ -71,7 +64,6 @@
 #include "ED_uvedit.h"
 #include "ED_transform.h"
 
-#include "BIF_gl.h"
 
 #include "WM_api.h"
 #include "WM_types.h"
@@ -83,6 +75,12 @@
 
 #include "image_intern.h"
 #include "GPU_framebuffer.h"
+#include "GPU_batch_presets.h"
+#include "GPU_viewport.h"
+
+/* TODO(fclem) remove bad level calls */
+#include "../draw/DRW_engine.h"
+#include "wm_draw.h"
 
 /**************************** common state *****************************/
 
@@ -93,8 +91,9 @@ static void image_scopes_tag_refresh(ScrArea *sa)
 
 	/* only while histogram is visible */
 	for (ar = sa->regionbase.first; ar; ar = ar->next) {
-		if (ar->regiontype == RGN_TYPE_TOOLS && ar->flag & RGN_FLAG_HIDDEN)
+		if (ar->regiontype == RGN_TYPE_TOOL_PROPS && ar->flag & RGN_FLAG_HIDDEN) {
 			return;
+		}
 	}
 
 	sima->scopes.ok = 0;
@@ -102,15 +101,19 @@ static void image_scopes_tag_refresh(ScrArea *sa)
 
 static void image_user_refresh_scene(const bContext *C, SpaceImage *sima)
 {
+	/* Update scene image user for acquiring render results. */
+	sima->iuser.scene = CTX_data_scene(C);
+
 	if (sima->image && sima->image->type == IMA_TYPE_R_RESULT) {
-		/* for render result, try to use the currently rendering scene */
+		/* While rendering, prefer scene that is being rendered. */
 		Scene *render_scene = ED_render_job_get_current_scene(C);
 		if (render_scene) {
 			sima->iuser.scene = render_scene;
-			return;
 		}
 	}
-	sima->iuser.scene = CTX_data_scene(C);
+
+	/* Auto switch image to show in UV editor when selection changes. */
+	ED_space_image_auto_set(C, sima);
 }
 
 /* ******************** manage regions ********************* */
@@ -120,13 +123,17 @@ ARegion *image_has_buttons_region(ScrArea *sa)
 	ARegion *ar, *arnew;
 
 	ar = BKE_area_find_region_type(sa, RGN_TYPE_UI);
-	if (ar) return ar;
+	if (ar) {
+		return ar;
+	}
 
 	/* add subdiv level; after header */
 	ar = BKE_area_find_region_type(sa, RGN_TYPE_HEADER);
 
 	/* is error! */
-	if (ar == NULL) return NULL;
+	if (ar == NULL) {
+		return NULL;
+	}
 
 	arnew = MEM_callocN(sizeof(ARegion), "buttons for image");
 
@@ -144,13 +151,17 @@ ARegion *image_has_tools_region(ScrArea *sa)
 	ARegion *ar, *arnew;
 
 	ar = BKE_area_find_region_type(sa, RGN_TYPE_TOOLS);
-	if (ar) return ar;
+	if (ar) {
+		return ar;
+	}
 
 	/* add subdiv level; after buttons */
 	ar = BKE_area_find_region_type(sa, RGN_TYPE_UI);
 
 	/* is error! */
-	if (ar == NULL) return NULL;
+	if (ar == NULL) {
+		return NULL;
+	}
 
 	arnew = MEM_callocN(sizeof(ARegion), "scopes for image");
 
@@ -302,9 +313,12 @@ static void image_keymap(struct wmKeyConfig *keyconf)
 /* dropboxes */
 static bool image_drop_poll(bContext *UNUSED(C), wmDrag *drag, const wmEvent *UNUSED(event), const char **UNUSED(tooltip))
 {
-	if (drag->type == WM_DRAG_PATH)
-		if (ELEM(drag->icon, 0, ICON_FILE_IMAGE, ICON_FILE_MOVIE, ICON_FILE_BLANK)) /* rule might not work? */
+	if (drag->type == WM_DRAG_PATH) {
+		/* rule might not work? */
+		if (ELEM(drag->icon, 0, ICON_FILE_IMAGE, ICON_FILE_MOVIE, ICON_FILE_BLANK)) {
 			return 1;
+		}
+	}
 	return 0;
 }
 
@@ -334,7 +348,7 @@ static void image_refresh(const bContext *C, ScrArea *sa)
 
 	ima = ED_space_image(sima);
 
-	BKE_image_user_check_frame_calc(&sima->iuser, scene->r.cfra);
+	BKE_image_user_frame_calc(&sima->iuser, scene->r.cfra);
 
 	/* check if we have to set the image from the editmesh */
 	if (ima && (ima->source == IMA_SRC_VIEWER && sima->mode == SI_MODE_MASK)) {
@@ -366,15 +380,17 @@ static void image_listener(wmWindow *win, ScrArea *sa, wmNotifier *wmn, Scene *U
 					ED_area_tag_redraw(sa);
 					break;
 				case ND_MODE:
-					if (wmn->subtype == NS_EDITMODE_MESH)
+					if (wmn->subtype == NS_EDITMODE_MESH) {
 						ED_area_tag_refresh(sa);
+					}
 					ED_area_tag_redraw(sa);
 					break;
 				case ND_RENDER_RESULT:
 				case ND_RENDER_OPTIONS:
 				case ND_COMPO_RESULT:
-					if (ED_space_image_show_render(sima))
+					if (ED_space_image_show_render(sima)) {
 						image_scopes_tag_refresh(sa);
+					}
 					ED_area_tag_redraw(sa);
 					break;
 			}
@@ -397,7 +413,8 @@ static void image_listener(wmWindow *win, ScrArea *sa, wmNotifier *wmn, Scene *U
 		case NC_MASK:
 		{
 			// Scene *scene = wmn->window->screen->scene;
-			/* ideally would check for: ED_space_image_check_show_maskedit(scene, sima) but we cant get the scene */
+			/* ideally would check for: ED_space_image_check_show_maskedit(scene, sima)
+			 * but we cant get the scene */
 			if (sima->mode == SI_MODE_MASK) {
 				switch (wmn->data) {
 					case ND_SELECT:
@@ -526,8 +543,9 @@ static void image_main_region_set_view2d(SpaceImage *sima, ARegion *ar)
 	float w = width;
 	float h = height;
 
-	if (ima)
+	if (ima) {
 		h *= ima->aspy / ima->aspx;
+	}
 
 	int winx = BLI_rcti_size_x(&ar->winrct) + 1;
 	int winy = BLI_rcti_size_y(&ar->winrct) + 1;
@@ -620,6 +638,15 @@ static void image_main_region_draw(const bContext *C, ARegion *ar)
 	//View2DScrollers *scrollers;
 	float col[3];
 
+	/* XXX This is in order to draw UI batches with the DRW
+	 * olg context since we now use it for drawing the entire area */
+	gpu_batch_presets_reset();
+
+	/* TODO(fclem) port to draw manager and remove the depth buffer allocation. */
+	GPUViewport *viewport = ar->draw_buffer->viewport[ar->draw_buffer->stereo ? sima->iuser.multiview_eye : 0];
+	DefaultFramebufferList *fbl = GPU_viewport_framebuffer_list_get(viewport);
+	GPU_framebuffer_bind(fbl->color_only_fb);
+
 	/* XXX not supported yet, disabling for now */
 	scene->r.scemode &= ~R_COMP_CROP;
 
@@ -688,8 +715,9 @@ static void image_main_region_draw(const bContext *C, ARegion *ar)
 		ED_space_image_get_size(sima, &width, &height);
 		ED_space_image_get_aspect(sima, &aspx, &aspy);
 
-		if (show_viewer)
+		if (show_viewer) {
 			BLI_thread_unlock(LOCK_DRAW_IMAGE);
+		}
 
 		ED_mask_draw_region(mask, ar,
 		                    sima->mask_info.draw_flag,
@@ -729,26 +757,31 @@ static void image_main_region_listener(
 	/* context changes */
 	switch (wmn->category) {
 		case NC_GEOM:
-			if (ELEM(wmn->data, ND_DATA, ND_SELECT))
+			if (ELEM(wmn->data, ND_DATA, ND_SELECT)) {
 				WM_gizmomap_tag_refresh(ar->gizmo_map);
+			}
 			break;
 		case NC_GPENCIL:
-			if (ELEM(wmn->action, NA_EDITED, NA_SELECTED))
+			if (ELEM(wmn->action, NA_EDITED, NA_SELECTED)) {
 				ED_region_tag_redraw(ar);
-			else if (wmn->data & ND_GPENCIL_EDITMODE)
+			}
+			else if (wmn->data & ND_GPENCIL_EDITMODE) {
 				ED_region_tag_redraw(ar);
+			}
 			break;
 		case NC_IMAGE:
-			if (wmn->action == NA_PAINTING)
+			if (wmn->action == NA_PAINTING) {
 				ED_region_tag_redraw(ar);
+			}
 			WM_gizmomap_tag_refresh(ar->gizmo_map);
 			break;
 		case NC_MATERIAL:
 			if (wmn->data == ND_SHADING_LINKS) {
 				SpaceImage *sima = sa->spacedata.first;
 
-				if (sima->iuser.scene && (sima->iuser.scene->toolsettings->uv_flag & UV_SHOW_SAME_IMAGE))
+				if (sima->iuser.scene && (sima->iuser.scene->toolsettings->uv_flag & UV_SHOW_SAME_IMAGE)) {
 					ED_region_tag_redraw(ar);
+				}
 			}
 			break;
 		case NC_SCREEN:
@@ -775,6 +808,29 @@ static void image_buttons_region_init(wmWindowManager *wm, ARegion *ar)
 
 static void image_buttons_region_draw(const bContext *C, ARegion *ar)
 {
+	SpaceImage *sima = CTX_wm_space_image(C);
+	Scene *scene = CTX_data_scene(C);
+	void *lock;
+	ImBuf *ibuf = ED_space_image_acquire_buffer(sima, &lock);
+	/* XXX performance regression if name of scopes category changes! */
+	PanelCategoryStack *category = UI_panel_category_active_find(ar, "Scopes");
+
+	/* only update scopes if scope category is active */
+	if (category) {
+		if (ibuf) {
+			if (!sima->scopes.ok) {
+				BKE_histogram_update_sample_line(&sima->sample_line_hist, ibuf, &scene->view_settings, &scene->display_settings);
+			}
+			if (sima->image->flag & IMA_VIEW_AS_RENDER) {
+				ED_space_image_scopes_update(C, sima, ibuf, true);
+			}
+			else {
+				ED_space_image_scopes_update(C, sima, ibuf, false);
+			}
+		}
+	}
+	ED_space_image_release_buffer(sima, ibuf, lock);
+
 	ED_region_panels(C, ar);
 }
 
@@ -800,15 +856,17 @@ static void image_buttons_region_listener(
 			}
 			break;
 		case NC_IMAGE:
-			if (wmn->action != NA_PAINTING)
+			if (wmn->action != NA_PAINTING) {
 				ED_region_tag_redraw(ar);
+			}
 			break;
 		case NC_NODE:
 			ED_region_tag_redraw(ar);
 			break;
 		case NC_GPENCIL:
-			if (ELEM(wmn->action, NA_EDITED, NA_SELECTED))
+			if (ELEM(wmn->action, NA_EDITED, NA_SELECTED)) {
 				ED_region_tag_redraw(ar);
+			}
 			break;
 	}
 }
@@ -829,27 +887,6 @@ static void image_tools_region_init(wmWindowManager *wm, ARegion *ar)
 
 static void image_tools_region_draw(const bContext *C, ARegion *ar)
 {
-	SpaceImage *sima = CTX_wm_space_image(C);
-	Scene *scene = CTX_data_scene(C);
-	void *lock;
-	ImBuf *ibuf = ED_space_image_acquire_buffer(sima, &lock);
-	/* XXX performance regression if name of scopes category changes! */
-	PanelCategoryStack *category = UI_panel_category_active_find(ar, "Scopes");
-
-	/* only update scopes if scope category is active */
-	if (category) {
-		if (ibuf) {
-			if (!sima->scopes.ok) {
-				BKE_histogram_update_sample_line(&sima->sample_line_hist, ibuf, &scene->view_settings, &scene->display_settings);
-			}
-			if (sima->image->flag & IMA_VIEW_AS_RENDER)
-				ED_space_image_scopes_update(C, sima, ibuf, true);
-			else
-				ED_space_image_scopes_update(C, sima, ibuf, false);
-		}
-	}
-	ED_space_image_release_buffer(sima, ibuf, lock);
-
 	ED_region_panels(C, ar);
 }
 
@@ -860,13 +897,15 @@ static void image_tools_region_listener(
 	/* context changes */
 	switch (wmn->category) {
 		case NC_GPENCIL:
-			if (wmn->data == ND_DATA || ELEM(wmn->action, NA_EDITED, NA_SELECTED))
+			if (wmn->data == ND_DATA || ELEM(wmn->action, NA_EDITED, NA_SELECTED)) {
 				ED_region_tag_redraw(ar);
+			}
 			break;
 		case NC_BRUSH:
 			/* NA_SELECTED is used on brush changes */
-			if (ELEM(wmn->action, NA_EDITED, NA_SELECTED))
+			if (ELEM(wmn->action, NA_EDITED, NA_SELECTED)) {
 				ED_region_tag_redraw(ar);
+			}
 			break;
 		case NC_SCENE:
 			switch (wmn->data) {
@@ -878,8 +917,9 @@ static void image_tools_region_listener(
 			}
 			break;
 		case NC_IMAGE:
-			if (wmn->action != NA_PAINTING)
+			if (wmn->action != NA_PAINTING) {
 				ED_region_tag_redraw(ar);
+			}
 			break;
 		case NC_NODE:
 			ED_region_tag_redraw(ar);
@@ -1017,13 +1057,13 @@ void ED_spacetype_image(void)
 	/* regions: main window */
 	art = MEM_callocN(sizeof(ARegionType), "spacetype image region");
 	art->regionid = RGN_TYPE_WINDOW;
-	art->keymapflag = ED_KEYMAP_GIZMO | ED_KEYMAP_FRAMES | ED_KEYMAP_GPENCIL;
+	art->keymapflag = ED_KEYMAP_GIZMO | ED_KEYMAP_TOOL | ED_KEYMAP_FRAMES | ED_KEYMAP_GPENCIL;
 	art->init = image_main_region_init;
 	art->draw = image_main_region_draw;
 	art->listener = image_main_region_listener;
 	BLI_addhead(&st->regiontypes, art);
 
-	/* regions: listview/buttons */
+	/* regions: listview/buttons/scopes */
 	art = MEM_callocN(sizeof(ARegionType), "spacetype image region");
 	art->regionid = RGN_TYPE_UI;
 	art->prefsizex = 220; // XXX
@@ -1036,7 +1076,7 @@ void ED_spacetype_image(void)
 	ED_uvedit_buttons_register(art);
 	image_buttons_register(art);
 
-	/* regions: statistics/scope buttons */
+	/* regions: tool(bar) */
 	art = MEM_callocN(sizeof(ARegionType), "spacetype image region");
 	art->regionid = RGN_TYPE_TOOLS;
 	art->prefsizex = 58; /* XXX */

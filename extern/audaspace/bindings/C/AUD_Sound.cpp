@@ -32,6 +32,7 @@
 #include "fx/Limiter.h"
 #include "fx/Loop.h"
 #include "fx/Lowpass.h"
+#include "fx/Modulator.h"
 #include "fx/Pitch.h"
 #include "fx/Reverse.h"
 #include "fx/Sum.h"
@@ -212,7 +213,7 @@ AUD_API const char* AUD_Sound_write(AUD_Sound* sound, const char* filename, AUD_
 		std::shared_ptr<IWriter> writer = FileWriter::createWriter(filename, specs, static_cast<Container>(container), static_cast<Codec>(codec), bitrate);
 		FileWriter::writeReader(reader, writer, 0, buffersize);
 	}
-	catch(Exception& e)
+	catch(Exception&)
 	{
 		return "An exception occured while writing.";
 	}
@@ -458,6 +459,21 @@ AUD_API AUD_Sound* AUD_Sound_lowpass(AUD_Sound* sound, float frequency, float Q)
 	try
 	{
 		return new AUD_Sound(new Lowpass(*sound, frequency, Q));
+	}
+	catch(Exception&)
+	{
+		return nullptr;
+	}
+}
+
+AUD_API AUD_Sound* AUD_Sound_modulate(AUD_Sound* first, AUD_Sound* second)
+{
+	assert(first);
+	assert(second);
+
+	try
+	{
+		return new AUD_Sound(new Modulator(*first, *second));
 	}
 	catch(Exception&)
 	{

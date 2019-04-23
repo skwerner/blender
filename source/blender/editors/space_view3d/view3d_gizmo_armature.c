@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,12 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/space_view3d/view3d_gizmo_armature.c
- *  \ingroup spview3d
+/** \file
+ * \ingroup spview3d
  */
 
 #include "BLI_blenlib.h"
@@ -51,7 +47,6 @@
 
 
 /* -------------------------------------------------------------------- */
-
 /** \name Armature Spline Gizmo
  *
  * \{ */
@@ -130,9 +125,7 @@ static void gizmo_bbone_offset_set(
 static bool WIDGETGROUP_armature_spline_poll(const bContext *C, wmGizmoGroupType *UNUSED(gzgt))
 {
 	View3D *v3d = CTX_wm_view3d(C);
-	if ((v3d->flag2 & V3D_RENDER_OVERRIDE) ||
-	    (v3d->gizmo_flag & (V3D_GIZMO_HIDE | V3D_GIZMO_HIDE_CONTEXT)))
-	{
+	if (v3d->gizmo_flag & (V3D_GIZMO_HIDE | V3D_GIZMO_HIDE_CONTEXT)) {
 		return false;
 	}
 
@@ -190,8 +183,9 @@ static void WIDGETGROUP_armature_spline_refresh(const bContext *C, wmGizmoGroup 
 	ViewLayer *view_layer = CTX_data_view_layer(C);
 	Object *ob = BKE_object_pose_armature_get(OBACT(view_layer));
 
-	if (!gzgroup->customdata)
+	if (!gzgroup->customdata) {
 		return;
+	}
 
 	struct BoneSplineWidgetGroup *bspline_group = gzgroup->customdata;
 	bPoseChannel *pchan = BKE_pose_channel_active(ob);

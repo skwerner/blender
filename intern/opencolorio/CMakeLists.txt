@@ -16,11 +16,6 @@
 #
 # The Original Code is Copyright (C) 2012, Blender Foundation
 # All rights reserved.
-#
-# The Original Code is: all of this file.
-#
-# Contributor(s): Sergey Sharybin.
-#
 # ***** END GPL LICENSE BLOCK *****
 
 set(INC
@@ -41,6 +36,9 @@ set(SRC
 
 	ocio_capi.h
 	ocio_impl.h
+)
+
+set(LIB
 )
 
 if(WITH_OPENCOLORIO)
@@ -74,4 +72,4 @@ if(WITH_OPENCOLORIO)
 endif()
 
 
-blender_add_lib(bf_intern_opencolorio "${SRC}" "${INC}" "${INC_SYS}")
+blender_add_lib(bf_intern_opencolorio "${SRC}" "${INC}" "${INC_SYS}" "${LIB}")

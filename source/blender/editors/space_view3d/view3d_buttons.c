@@ -147,9 +147,11 @@ static float compute_scale_factor(const float ve_median, const float median)
   }
 }
 
-/* Apply helpers.
- * Note: In case we only have one element, copy directly the value instead of applying the diff or scale factor.
- *       Avoids some glitches when going e.g. from 3 to 0.0001 (see T37327).
+/**
+ * Apply helpers.
+ * \note In case we only have one element,
+ * copy directly the value instead of applying the diff or scale factor.
+ * Avoids some glitches when going e.g. from 3 to 0.0001 (see T37327).
  */
 static void apply_raw_diff(float *val, const int tot, const float ve_median, const float median)
 {
@@ -1626,31 +1628,6 @@ void view3d_buttons_register(ARegionType *art)
   strcpy(mt->translation_context, BLT_I18NCONTEXT_DEFAULT_BPYRNA);
   mt->draw = hide_collections_menu_draw;
   WM_menutype_add(mt);
-}
-
-static int view3d_properties_toggle_exec(bContext *C, wmOperator *UNUSED(op))
-{
-  ScrArea *sa = CTX_wm_area(C);
-  ARegion *ar = view3d_has_buttons_region(sa);
-
-  if (ar) {
-    ED_region_toggle_hidden(C, ar);
-  }
-
-  return OPERATOR_FINISHED;
-}
-
-void VIEW3D_OT_properties(wmOperatorType *ot)
-{
-  ot->name = "Toggle Sidebar";
-  ot->description = "Toggle the properties region visibility";
-  ot->idname = "VIEW3D_OT_properties";
-
-  ot->exec = view3d_properties_toggle_exec;
-  ot->poll = ED_operator_view3d_active;
-
-  /* flags */
-  ot->flag = 0;
 }
 
 static int view3d_object_mode_menu(bContext *C, wmOperator *op)

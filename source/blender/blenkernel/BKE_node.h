@@ -491,7 +491,8 @@ const char *nodeStaticSocketInterfaceType(int type, int subtype);
 #define NODE_SOCKET_TYPES_END \
   } \
   BLI_ghashIterator_free(__node_socket_type_iter__); \
-  }
+  } \
+  ((void)0)
 
 struct bNodeSocket *nodeFindSocket(struct bNode *node, int in_out, const char *identifier);
 struct bNodeSocket *nodeAddSocket(struct bNodeTree *ntree,
@@ -1144,8 +1145,6 @@ void ntreeCompositExecTree(struct Scene *scene,
                            const struct ColorManagedDisplaySettings *display_settings,
                            const char *view_name);
 void ntreeCompositTagRender(struct Scene *sce);
-int ntreeCompositTagAnimated(struct bNodeTree *ntree);
-void ntreeCompositTagGenerators(struct bNodeTree *ntree);
 void ntreeCompositUpdateRLayers(struct bNodeTree *ntree);
 void ntreeCompositRegisterPass(struct bNodeTree *ntree,
                                struct Scene *scene,
@@ -1220,7 +1219,6 @@ struct TexResult;
 #define TEX_NODE_PROC_MAX 600
 
 /* API */
-int ntreeTexTagAnimated(struct bNodeTree *ntree);
 void ntreeTexCheckCyclics(struct bNodeTree *ntree);
 
 struct bNodeTreeExec *ntreeTexBeginExecTree(struct bNodeTree *ntree);

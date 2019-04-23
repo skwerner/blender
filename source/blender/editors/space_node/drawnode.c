@@ -204,7 +204,8 @@ static void node_browse_tex_cb(bContext *C, void *ntree_v, void *node_v)
   bNode *node = node_v;
   Tex *tex;
 
-  if (node->menunr < 1) return;
+  if (node->menunr < 1)
+    return;
 
   if (node->id) {
     id_us_min(node->id);
@@ -3480,12 +3481,12 @@ void draw_nodespace_back_pix(const bContext *C,
         GPU_blend_set_func_separate(
             GPU_SRC_ALPHA, GPU_ONE_MINUS_SRC_ALPHA, GPU_ONE, GPU_ONE_MINUS_SRC_ALPHA);
 
-        glaDrawImBuf_glsl_ctx(C, ibuf, x, y, GL_NEAREST, snode->zoom, snode->zoom);
+        ED_draw_imbuf_ctx(C, ibuf, x, y, GL_NEAREST, snode->zoom, snode->zoom);
 
         GPU_blend(false);
       }
       else {
-        glaDrawImBuf_glsl_ctx(C, ibuf, x, y, GL_NEAREST, snode->zoom, snode->zoom);
+        ED_draw_imbuf_ctx(C, ibuf, x, y, GL_NEAREST, snode->zoom, snode->zoom);
       }
 
       if (cache_handle) {

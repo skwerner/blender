@@ -190,14 +190,18 @@ bool BKE_mesh_runtime_clear_edit_data(Mesh *mesh)
     return false;
   }
 
-  if (mesh->runtime.edit_data->polyCos != NULL)
+  if (mesh->runtime.edit_data->polyCos != NULL) {
     MEM_freeN((void *)mesh->runtime.edit_data->polyCos);
-  if (mesh->runtime.edit_data->polyNos != NULL)
+  }
+  if (mesh->runtime.edit_data->polyNos != NULL) {
     MEM_freeN((void *)mesh->runtime.edit_data->polyNos);
-  if (mesh->runtime.edit_data->vertexCos != NULL)
+  }
+  if (mesh->runtime.edit_data->vertexCos != NULL) {
     MEM_freeN((void *)mesh->runtime.edit_data->vertexCos);
-  if (mesh->runtime.edit_data->vertexNos != NULL)
+  }
+  if (mesh->runtime.edit_data->vertexNos != NULL) {
     MEM_freeN((void *)mesh->runtime.edit_data->vertexNos);
+  }
 
   MEM_SAFE_FREE(mesh->runtime.edit_data);
   return true;
@@ -285,9 +289,15 @@ char *BKE_mesh_runtime_debug_info(Mesh *me_eval)
 #  if 0
   const char *tstr;
   switch (me_eval->type) {
-    case DM_TYPE_CDDM:     tstr = "DM_TYPE_CDDM";     break;
-    case DM_TYPE_CCGDM:    tstr = "DM_TYPE_CCGDM";     break;
-    default:               tstr = "UNKNOWN";           break;
+    case DM_TYPE_CDDM:
+      tstr = "DM_TYPE_CDDM";
+      break;
+    case DM_TYPE_CCGDM:
+      tstr = "DM_TYPE_CCGDM";
+      break;
+    default:
+      tstr = "UNKNOWN";
+      break;
   }
   BLI_dynstr_appendf(dynstr, "    'type': '%s',\n", tstr);
 #  endif

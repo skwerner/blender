@@ -1432,7 +1432,7 @@ void BM_mesh_calc_tessellation(BMesh *bm, BMLoop *(*looptris)[3], int *r_looptri
     else if (efa->len == 3) {
 #  if 0
       int j;
-      BM_ITER_ELEM_INDEX (l, &liter, efa, BM_LOOPS_OF_FACE, j) {
+      BM_ITER_ELEM_INDEX(l, &liter, efa, BM_LOOPS_OF_FACE, j) {
         looptris[i][j] = l;
       }
       i += 1;
@@ -1450,7 +1450,7 @@ void BM_mesh_calc_tessellation(BMesh *bm, BMLoop *(*looptris)[3], int *r_looptri
       BMLoop *ltmp[4];
       int j;
       BLI_array_grow_items(looptris, 2);
-      BM_ITER_ELEM_INDEX (l, &liter, efa, BM_LOOPS_OF_FACE, j) {
+      BM_ITER_ELEM_INDEX(l, &liter, efa, BM_LOOPS_OF_FACE, j) {
         ltmp[j] = l;
       }
 
@@ -1587,7 +1587,7 @@ void BM_mesh_calc_tessellation_beauty(BMesh *bm, BMLoop *(*looptris)[3], int *r_
        */
 #if 0
       const bool split_13 = (BM_verts_calc_rotate_beauty(
-              l_v1->v, l_v2->v, l_v3->v, l_v4->v, 0, 0) < 0.0f);
+                                 l_v1->v, l_v2->v, l_v3->v, l_v4->v, 0, 0) < 0.0f);
 #else
       float axis_mat[3][3], v_quad[4][2];
       axis_dominant_v3_to_m3(axis_mat, efa->no);

@@ -132,16 +132,18 @@ static void text_listener(wmWindow *UNUSED(win),
       /* check if active text was changed, no need to redraw if text isn't active
        * (reference == NULL) means text was unlinked, should update anyway for this
        * case -- no way to know was text active before unlinking or not */
-      if (wmn->reference && wmn->reference != st->text)
+      if (wmn->reference && wmn->reference != st->text) {
         break;
+      }
 
       switch (wmn->data) {
         case ND_DISPLAY:
           ED_area_tag_redraw(sa);
           break;
         case ND_CURSOR:
-          if (st->text && st->text == wmn->reference)
+          if (st->text && st->text == wmn->reference) {
             text_scroll_to_cursor__area(st, sa, true);
+          }
 
           ED_area_tag_redraw(sa);
           break;
@@ -161,16 +163,18 @@ static void text_listener(wmWindow *UNUSED(win),
           ED_area_tag_redraw(sa);
           break;
         case NA_SELECTED:
-          if (st->text && st->text == wmn->reference)
+          if (st->text && st->text == wmn->reference) {
             text_scroll_to_cursor__area(st, sa, true);
+          }
 
           break;
       }
 
       break;
     case NC_SPACE:
-      if (wmn->data == ND_SPACE_TEXT)
+      if (wmn->data == ND_SPACE_TEXT) {
         ED_area_tag_redraw(sa);
+      }
       break;
   }
 }
@@ -218,8 +222,6 @@ static void text_operatortypes(void)
 
   WM_operatortype_append(TEXT_OT_line_break);
   WM_operatortype_append(TEXT_OT_insert);
-
-  WM_operatortype_append(TEXT_OT_properties);
 
   WM_operatortype_append(TEXT_OT_find);
   WM_operatortype_append(TEXT_OT_find_set_selected);

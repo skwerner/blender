@@ -53,34 +53,6 @@
 #include "nla_intern.h" /* own include */
 #include "GPU_framebuffer.h"
 
-/* ******************** manage regions ********************* */
-
-ARegion *nla_has_buttons_region(ScrArea *sa)
-{
-  ARegion *ar, *arnew;
-
-  ar = BKE_area_find_region_type(sa, RGN_TYPE_UI);
-  if (ar)
-    return ar;
-
-  /* add subdiv level; after main */
-  ar = BKE_area_find_region_type(sa, RGN_TYPE_WINDOW);
-
-  /* is error! */
-  if (ar == NULL)
-    return NULL;
-
-  arnew = MEM_callocN(sizeof(ARegion), "buttons for nla");
-
-  BLI_insertlinkafter(&sa->regionbase, ar, arnew);
-  arnew->regiontype = RGN_TYPE_UI;
-  arnew->alignment = RGN_ALIGN_RIGHT;
-
-  arnew->flag = RGN_FLAG_HIDDEN;
-
-  return arnew;
-}
-
 /* ******************** default callbacks for nla space ***************** */
 
 static SpaceLink *nla_new(const ScrArea *sa, const Scene *scene)
@@ -300,15 +272,17 @@ static void nla_main_region_draw(const bContext *C, ARegion *ar)
   UI_view2d_view_ortho(v2d);
 
   /* current frame */
-  if (snla->flag & SNLA_DRAWTIME)
+  if (snla->flag & SNLA_DRAWTIME) {
     cfra_flag |= DRAWCFRA_UNIT_SECONDS;
+  }
   ANIM_draw_cfra(C, v2d, cfra_flag);
 
   /* markers */
   UI_view2d_view_orthoSpecial(ar, v2d, 1);
   int marker_draw_flag = DRAW_MARKERS_MARGIN;
-  if (snla->flag & SNLA_SHOW_MARKER_LINES)
+  if (snla->flag & SNLA_SHOW_MARKER_LINES) {
     marker_draw_flag |= DRAW_MARKERS_LINES;
+  }
   ED_markers_draw(C, marker_draw_flag);
 
   /* preview range */
@@ -392,8 +366,9 @@ static void nla_region_listener(wmWindow *UNUSED(win),
       }
       break;
     default:
-      if (wmn->data == ND_KEYS)
+      if (wmn->data == ND_KEYS) {
         ED_region_tag_redraw(ar);
+      }
       break;
   }
 }
@@ -438,8 +413,9 @@ static void nla_main_region_listener(wmWindow *UNUSED(win),
       }
       break;
     case NC_ID:
-      if (wmn->action == NA_RENAME)
+      if (wmn->action == NA_RENAME) {
         ED_region_tag_redraw(ar);
+      }
       break;
     case NC_SCREEN:
       if (ELEM(wmn->data, ND_LAYER)) {
@@ -447,8 +423,9 @@ static void nla_main_region_listener(wmWindow *UNUSED(win),
       }
       break;
     default:
-      if (wmn->data == ND_KEYS)
+      if (wmn->data == ND_KEYS) {
         ED_region_tag_redraw(ar);
+      }
       break;
   }
 }
@@ -523,12 +500,14 @@ static void nla_channel_region_listener(wmWindow *UNUSED(win),
       }
       break;
     case NC_ID:
-      if (wmn->action == NA_RENAME)
+      if (wmn->action == NA_RENAME) {
         ED_region_tag_redraw(ar);
+      }
       break;
     default:
-      if (wmn->data == ND_KEYS)
+      if (wmn->data == ND_KEYS) {
         ED_region_tag_redraw(ar);
+      }
       break;
   }
 }
@@ -598,8 +577,9 @@ static void nla_listener(wmWindow *UNUSED(win), ScrArea *sa, wmNotifier *wmn, Sc
       }
       break;
     case NC_SPACE:
-      if (wmn->data == ND_SPACE_NLA)
+      if (wmn->data == ND_SPACE_NLA) {
         ED_area_tag_redraw(sa);
+      }
       break;
   }
 }

@@ -132,7 +132,7 @@ static void copyData(const ModifierData *md, ModifierData *target, const int fla
 {
 #ifdef WITH_OCEANSIM
 #  if 0
-  const OceanModifierData *omd = (const OceanModifierData *) md;
+  const OceanModifierData *omd = (const OceanModifierData *)md;
 #  endif
   OceanModifierData *tomd = (OceanModifierData *)target;
 
@@ -481,8 +481,9 @@ static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, Mes
 
   result = doOcean(md, ctx, mesh);
 
-  if (result != mesh)
+  if (result != mesh) {
     result->runtime.cd_dirty_vert |= CD_MASK_NORMAL;
+  }
 
   return result;
 }

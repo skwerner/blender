@@ -69,6 +69,7 @@
 #include "RNA_access.h"
 
 #include "UI_interface.h"
+#include "UI_view2d.h"
 
 #include "PIL_time.h"
 
@@ -123,7 +124,8 @@ wmEvent *wm_event_add_ex(wmWindow *win,
     BLI_addtail(&win->queue, event);
   }
   else {
-    /* note, strictly speaking this breaks const-correctness, however we're only changing 'next' member */
+    /* Note: strictly speaking this breaks const-correctness,
+     * however we're only changing 'next' member. */
     BLI_insertlinkafter(&win->queue, (void *)event_to_add_after, event);
   }
   return event;
@@ -354,7 +356,8 @@ void wm_event_do_depsgraph(bContext *C)
 }
 
 /**
- * Was part of #wm_event_do_notifiers, split out so it can be called once before entering the #WM_main loop.
+ * Was part of #wm_event_do_notifiers,
+ * split out so it can be called once before entering the #WM_main loop.
  * This ensures operators don't run before the UI and depsgraph are initialized.
  */
 void wm_event_do_refresh_wm_and_depsgraph(bContext *C)
@@ -504,7 +507,12 @@ void wm_event_do_notifiers(bContext *C)
         /* XXX context in notifiers? */
         CTX_wm_window_set(C, win);
 
-        /* printf("notifier win %d screen %s cat %x\n", win->winid, win->screen->id.name + 2, note->category); */
+#  if 0
+        printf("notifier win %d screen %s cat %x\n",
+               win->winid,
+               win->screen->id.name + 2,
+               note->category);
+#  endif
         ED_screen_do_listen(C, note);
 
         for (ar = screen->regionbase.first; ar; ar = ar->next) {
@@ -633,8 +641,7 @@ static void wm_handler_ui_cancel(bContext *C)
     return;
   }
 
-  LISTBASE_FOREACH_MUTABLE(wmEventHandler *, handler_base, &ar->handlers)
-  {
+  LISTBASE_FOREACH_MUTABLE (wmEventHandler *, handler_base, &ar->handlers) {
     if (handler_base->type == WM_HANDLER_TYPE_UI) {
       wmEventHandler_UI *handler = (wmEventHandler_UI *)handler_base;
       BLI_assert(handler->handle_fn != NULL);
@@ -1031,9 +1038,9 @@ static int wm_operator_exec(bContext *C,
     }
   }
 
-  /* XXX Disabled the repeat check to address part 2 of #31840.
-   *     Carefully checked all calls to wm_operator_exec and WM_operator_repeat, don't see any reason
-   *     why this was needed, but worth to note it in case something turns bad. (mont29) */
+  /* XXX(mont29) Disabled the repeat check to address part 2 of T31840.
+   * Carefully checked all calls to wm_operator_exec and WM_operator_repeat, don't see any reason
+   * why this was needed, but worth to note it in case something turns bad. */
   if (retval & (OPERATOR_FINISHED | OPERATOR_CANCELLED) /* && repeat == 0 */) {
     wm_operator_reports(C, op, retval, false);
   }
@@ -1362,7 +1369,8 @@ static int wm_operator_invoke(bContext *C,
 {
   int retval = OPERATOR_PASS_THROUGH;
 
-  /* this is done because complicated setup is done to call this function that is better not duplicated */
+  /* This is done because complicated setup is done to call this function
+   * that is better not duplicated. */
   if (poll_only) {
     return WM_operator_poll(C, ot);
   }
@@ -1422,8 +1430,8 @@ static int wm_operator_invoke(bContext *C,
       CLOG_ERROR(WM_LOG_OPERATORS, "invalid operator call '%s'", op->idname);
     }
 
-    /* Note, if the report is given as an argument then assume the caller will deal with displaying them
-     * currently python only uses this */
+    /* Note, if the report is given as an argument then assume the caller will deal with displaying
+     * them currently Python only uses this. */
     if (!(retval & OPERATOR_HANDLED) && (retval & (OPERATOR_FINISHED | OPERATOR_CANCELLED))) {
       /* only show the report if the report list was not given in the function */
       wm_operator_reports(C, op, retval, (reports != NULL));
@@ -1463,7 +1471,7 @@ static int wm_operator_invoke(bContext *C,
         /* exception, cont. grab in header is annoying */
         if (wrap) {
           ARegion *ar = CTX_wm_region(C);
-          if (ar && ELEM(ar->regiontype, RGN_TYPE_HEADER, RGN_TYPE_FOOTER)) {
+          if (ar && ELEM(ar->regiontype, RGN_TYPE_HEADER, RGN_TYPE_TOOL_HEADER, RGN_TYPE_FOOTER)) {
             wrap = false;
           }
         }
@@ -1716,7 +1724,9 @@ int WM_operator_call_py(bContext *C,
       wm->op_undo_depth--;
   }
   else {
-    CLOG_WARN(WM_LOG_OPERATORS, "\"%s\" operator has no exec function, Python cannot call it", op->type->name);
+    CLOG_WARN(WM_LOG_OPERATORS,
+              "\"%s\" operator has no exec function, Python cannot call it",
+              op->type->name);
   }
 
 #endif
@@ -1990,8 +2000,9 @@ static bool wm_eventmatch(const wmEvent *winevent, const wmKeyMapItem *kmi)
     }
   }
 
-  /* only keymap entry with keymodifier is checked, means all keys without modifier get handled too. */
-  /* that is currently needed to make overlapping events work (when you press A - G fast or so). */
+  /* Only keymap entry with keymodifier is checked,
+   * means all keys without modifier get handled too. */
+  /* That is currently needed to make overlapping events work (when you press A - G fast or so). */
   if (kmi->keymodifier) {
     if (winevent->keymodifier != kmi->keymodifier) {
       return false;
@@ -2272,7 +2283,8 @@ static int wm_handler_operator_call(bContext *C,
   return WM_HANDLER_BREAK;
 }
 
-/* fileselect handlers are only in the window queue, so it's safe to switch screens or area types */
+/* Fileselect handlers are only in the window queue,
+ * so it's safe to switch screens or area types. */
 static int wm_handler_fileselect_do(bContext *C,
                                     ListBase *handlers,
                                     wmEventHandler_Op *handler,
@@ -2940,15 +2952,23 @@ static int wm_handlers_do(bContext *C, wmEvent *event, ListBase *handlers)
   return action;
 }
 
-static int wm_event_inside_i(wmEvent *event, rcti *rect)
+static bool wm_event_inside_rect(const wmEvent *event, const rcti *rect)
 {
   if (wm_event_always_pass(event)) {
-    return 1;
+    return true;
   }
   if (BLI_rcti_isect_pt_v(rect, &event->x)) {
-    return 1;
+    return true;
   }
-  return 0;
+  return false;
+}
+
+static bool wm_event_inside_region(const wmEvent *event, const ARegion *ar)
+{
+  if (wm_event_always_pass(event)) {
+    return true;
+  }
+  return ED_region_contains_xy(ar, &event->x);
 }
 
 static ScrArea *area_event_inside(bContext *C, const int xy[2])
@@ -3174,7 +3194,8 @@ void wm_event_do_handlers(bContext *C)
       CTX_wm_area_set(C, area_event_inside(C, &event->x));
       CTX_wm_region_set(C, region_event_inside(C, &event->x));
 
-      /* MVC demands to not draw in event handlers... but we need to leave it for ogl selecting etc */
+      /* MVC demands to not draw in event handlers...
+       * but we need to leave it for ogl selecting etc. */
       wm_window_make_drawable(wm, win);
 
       wm_region_mouse_co(C, event);
@@ -3207,7 +3228,8 @@ void wm_event_do_handlers(bContext *C)
 
         /* Note: setting subwin active should be done here, after modal handlers have been done */
         if (event->type == MOUSEMOVE) {
-          /* state variables in screen, cursors. Also used in wm_draw.c, fails for modal handlers though */
+          /* State variables in screen, cursors.
+           * Also used in wm_draw.c, fails for modal handlers though. */
           ED_screen_set_active_region(C, win, &event->x);
           /* for regions having custom cursors */
           wm_paintcursor_test(C, event);
@@ -3233,12 +3255,13 @@ void wm_event_do_handlers(bContext *C)
             ED_area_azones_update(sa, &event->x);
           }
 
-          if (wm_event_inside_i(event, &sa->totrct)) {
+          if (wm_event_inside_rect(event, &sa->totrct)) {
             CTX_wm_area_set(C, sa);
 
             if ((action & WM_HANDLER_BREAK) == 0) {
               for (ar = sa->regionbase.first; ar; ar = ar->next) {
-                if (wm_event_inside_i(event, &ar->winrct)) {
+                if (wm_event_inside_region(event, ar)) {
+
                   CTX_wm_region_set(C, ar);
 
                   /* call even on non mouse events, since the */
@@ -3274,7 +3297,8 @@ void wm_event_do_handlers(bContext *C)
             }
             CTX_wm_area_set(C, NULL);
 
-            /* NOTE: do not escape on WM_HANDLER_BREAK, mousemove needs handled for previous area */
+            /* NOTE: do not escape on WM_HANDLER_BREAK,
+             * mousemove needs handled for previous area. */
           }
         }
 
@@ -3365,8 +3389,7 @@ void WM_event_add_fileselect(bContext *C, wmOperator *op)
   UI_popup_handlers_remove_all(C, &win->modalhandlers);
 
   /* only allow 1 file selector open per window */
-  LISTBASE_FOREACH_MUTABLE(wmEventHandler *, handler_base, &win->modalhandlers)
-  {
+  LISTBASE_FOREACH_MUTABLE (wmEventHandler *, handler_base, &win->modalhandlers) {
     if (handler_base->type == WM_HANDLER_TYPE_OP) {
       wmEventHandler_Op *handler = (wmEventHandler_Op *)handler_base;
       if (handler->is_fileselect == false) {
@@ -3464,7 +3487,8 @@ void WM_event_modal_handler_area_replace(wmWindow *win, const ScrArea *old_area,
   LISTBASE_FOREACH (wmEventHandler *, handler_base, &win->modalhandlers) {
     if (handler_base->type == WM_HANDLER_TYPE_OP) {
       wmEventHandler_Op *handler = (wmEventHandler_Op *)handler_base;
-      /* fileselect handler is quite special... it needs to keep old area stored in handler, so don't change it */
+      /* Fileselect handler is quite special...
+       * it needs to keep old area stored in handler, so don't change it. */
       if ((handler->context.area == old_area) && (handler->is_fileselect == false)) {
         handler->context.area = new_area;
       }
@@ -3483,7 +3507,8 @@ void WM_event_modal_handler_region_replace(wmWindow *win,
   LISTBASE_FOREACH (wmEventHandler *, handler_base, &win->modalhandlers) {
     if (handler_base->type == WM_HANDLER_TYPE_OP) {
       wmEventHandler_Op *handler = (wmEventHandler_Op *)handler_base;
-      /* fileselect handler is quite special... it needs to keep old region stored in handler, so don't change it */
+      /* Fileselect handler is quite special...
+       * it needs to keep old region stored in handler, so don't change it. */
       if ((handler->context.region == old_region) && (handler->is_fileselect == false)) {
         handler->context.region = new_region;
         handler->context.region_type = new_region ? new_region->regiontype : RGN_TYPE_WINDOW;
@@ -3683,8 +3708,7 @@ void WM_event_free_ui_handler_all(bContext *C,
                                   wmUIHandlerFunc handle_fn,
                                   wmUIHandlerRemoveFunc remove_fn)
 {
-  LISTBASE_FOREACH_MUTABLE(wmEventHandler *, handler_base, handlers)
-  {
+  LISTBASE_FOREACH_MUTABLE (wmEventHandler *, handler_base, handlers) {
     if (handler_base->type == WM_HANDLER_TYPE_UI) {
       wmEventHandler_UI *handler = (wmEventHandler_UI *)handler_base;
       if ((handler->handle_fn == handle_fn) && (handler->remove_fn == remove_fn)) {
@@ -3721,8 +3745,7 @@ wmEventHandler_Dropbox *WM_event_add_dropbox_handler(ListBase *handlers, ListBas
 /* XXX solution works, still better check the real cause (ton) */
 void WM_event_remove_area_handler(ListBase *handlers, void *area)
 {
-  LISTBASE_FOREACH_MUTABLE(wmEventHandler *, handler_base, handlers)
-  {
+  LISTBASE_FOREACH_MUTABLE (wmEventHandler *, handler_base, handlers) {
     if (handler_base->type == WM_HANDLER_TYPE_UI) {
       wmEventHandler_UI *handler = (wmEventHandler_UI *)handler_base;
       if (handler->context.area == area) {
@@ -4149,8 +4172,9 @@ static wmWindow *wm_event_cursor_other_windows(wmWindowManager *wm, wmWindow *wi
     wmWindow *owin;
     wmEventHandler *handler;
 
-    /* let's skip windows having modal handlers now */
-    /* potential XXX ugly... I wouldn't have added a modalhandlers list (introduced in rev 23331, ton) */
+    /* Let's skip windows having modal handlers now */
+    /* potential XXX ugly... I wouldn't have added a modalhandlers list
+     * (introduced in rev 23331, ton). */
     for (handler = win->modalhandlers.first; handler; handler = handler->next) {
       if (ELEM(handler->type, WM_HANDLER_TYPE_UI, WM_HANDLER_TYPE_OP)) {
         return NULL;
@@ -4228,11 +4252,15 @@ void wm_event_add_ghostevent(
     return;
   }
 
-  /* Having both, event and evt, can be highly confusing to work with, but is necessary for
-   * our current event system, so let's clear things up a bit:
-   * - data added to event only will be handled immediately, but will not be copied to the next event
-   * - data added to evt only stays, but is handled with the next event -> execution delay
-   * - data added to event and evt stays and is handled immediately
+  /**
+   * Having both, \a event and \a evt, can be highly confusing to work with,
+   * but is necessary for our current event system, so let's clear things up a bit:
+   *
+   * - Data added to event only will be handled immediately,
+   *   but will not be copied to the next event.
+   * - Data added to \a evt only stays,
+   *   but is handled with the next event -> execution delay.
+   * - Data added to event and \a evt stays and is handled immediately.
    */
   wmEvent event, *evt = win->eventstate;
 
@@ -4344,7 +4372,8 @@ void wm_event_add_ghostevent(
       if (win->active == 0) {
         int cx, cy;
 
-        /* entering window, update mouse pos. (ghost sends win-activate *after* the mouseclick in window!) */
+        /* Entering window, update mouse pos.
+         * (ghost sends win-activate *after* the mouseclick in window!) */
         wm_get_cursor_position(win, &cx, &cy);
 
         event.x = evt->x = cx;
@@ -4503,14 +4532,16 @@ void wm_event_add_ghostevent(
         event.keymodifier = 0;
       }
 
-      /* this case happens with an external numpad, and also when using 'dead keys' (to compose complex latin
-       * characters e.g.), it's not really clear why.
-       * Since it's impossible to map a key modifier to an unknown key, it shouldn't harm to clear it. */
+      /* this case happens with an external numpad, and also when using 'dead keys'
+       * (to compose complex latin characters e.g.), it's not really clear why.
+       * Since it's impossible to map a key modifier to an unknown key,
+       * it shouldn't harm to clear it. */
       if (event.keymodifier == UNKNOWNKEY) {
         evt->keymodifier = event.keymodifier = 0;
       }
 
-      /* if test_break set, it catches this. Do not set with modifier presses. XXX Keep global for now? */
+      /* if test_break set, it catches this. Do not set with modifier presses.
+       * XXX Keep global for now? */
       if ((event.type == ESCKEY && event.val == KM_PRESS) &&
           /* check other modifiers because ms-windows uses these to bring up the task manager */
           (event.shift == 0 && event.ctrl == 0 && event.alt == 0)) {
@@ -4924,7 +4955,12 @@ void WM_window_cursor_keymap_status_refresh(bContext *C, wmWindow *win)
   if (ELEM(sa->spacetype, SPACE_STATUSBAR, SPACE_TOPBAR)) {
     return;
   }
-  if (ELEM(ar->regiontype, RGN_TYPE_HEADER, RGN_TYPE_FOOTER, RGN_TYPE_TEMPORARY, RGN_TYPE_HUD)) {
+  if (ELEM(ar->regiontype,
+           RGN_TYPE_HEADER,
+           RGN_TYPE_TOOL_HEADER,
+           RGN_TYPE_FOOTER,
+           RGN_TYPE_TEMPORARY,
+           RGN_TYPE_HUD)) {
     return;
   }
   /* Fallback to window. */

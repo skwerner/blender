@@ -129,12 +129,13 @@ static const char *STUDIOLIGHT_MATCAP_DEFAULT = "basic_1.exr";
 static void studiolight_free(struct StudioLight *sl)
 {
 #define STUDIOLIGHT_DELETE_ICON(s) \
-  { \
+  do { \
     if (s != 0) { \
       BKE_icon_delete(s); \
       s = 0; \
     } \
-  }
+  } while (0)
+
   if (sl->free_function) {
     sl->free_function(sl, sl->free_function_data);
   }
@@ -432,9 +433,8 @@ static void studiolight_calculate_radiance_buffer(ImBuf *ibuf,
                                                   const float ysign,
                                                   const float zsign)
 {
-  ITER_PIXELS(
-      float, colbuf, 4, STUDIOLIGHT_RADIANCE_CUBEMAP_SIZE, STUDIOLIGHT_RADIANCE_CUBEMAP_SIZE)
-  {
+  ITER_PIXELS (
+      float, colbuf, 4, STUDIOLIGHT_RADIANCE_CUBEMAP_SIZE, STUDIOLIGHT_RADIANCE_CUBEMAP_SIZE) {
     float direction[3];
     direction[index_x] = xsign * (x - 0.5f);
     direction[index_y] = ysign * (y - 0.5f);
@@ -485,12 +485,24 @@ static void studiolight_calculate_radiance_cubemap_buffers(StudioLight *sl)
           NULL, colbuf, STUDIOLIGHT_RADIANCE_CUBEMAP_SIZE, STUDIOLIGHT_RADIANCE_CUBEMAP_SIZE);
 
 #if 0
-      IMB_saveiff(sl->radiance_cubemap_buffers[STUDIOLIGHT_X_POS], "/tmp/studiolight_radiance_left.png", IB_rectfloat);
-      IMB_saveiff(sl->radiance_cubemap_buffers[STUDIOLIGHT_X_NEG], "/tmp/studiolight_radiance_right.png", IB_rectfloat);
-      IMB_saveiff(sl->radiance_cubemap_buffers[STUDIOLIGHT_Y_POS], "/tmp/studiolight_radiance_front.png", IB_rectfloat);
-      IMB_saveiff(sl->radiance_cubemap_buffers[STUDIOLIGHT_Y_NEG], "/tmp/studiolight_radiance_back.png", IB_rectfloat);
-      IMB_saveiff(sl->radiance_cubemap_buffers[STUDIOLIGHT_Z_POS], "/tmp/studiolight_radiance_bottom.png", IB_rectfloat);
-      IMB_saveiff(sl->radiance_cubemap_buffers[STUDIOLIGHT_Z_NEG], "/tmp/studiolight_radiance_top.png", IB_rectfloat);
+      IMB_saveiff(sl->radiance_cubemap_buffers[STUDIOLIGHT_X_POS],
+                  "/tmp/studiolight_radiance_left.png",
+                  IB_rectfloat);
+      IMB_saveiff(sl->radiance_cubemap_buffers[STUDIOLIGHT_X_NEG],
+                  "/tmp/studiolight_radiance_right.png",
+                  IB_rectfloat);
+      IMB_saveiff(sl->radiance_cubemap_buffers[STUDIOLIGHT_Y_POS],
+                  "/tmp/studiolight_radiance_front.png",
+                  IB_rectfloat);
+      IMB_saveiff(sl->radiance_cubemap_buffers[STUDIOLIGHT_Y_NEG],
+                  "/tmp/studiolight_radiance_back.png",
+                  IB_rectfloat);
+      IMB_saveiff(sl->radiance_cubemap_buffers[STUDIOLIGHT_Z_POS],
+                  "/tmp/studiolight_radiance_bottom.png",
+                  IB_rectfloat);
+      IMB_saveiff(sl->radiance_cubemap_buffers[STUDIOLIGHT_Z_NEG],
+                  "/tmp/studiolight_radiance_top.png",
+                  IB_rectfloat);
 #endif
       MEM_freeN(colbuf);
     }
@@ -531,12 +543,11 @@ static void studiolight_spherical_harmonics_calculate_coefficients(StudioLight *
   memset(sh, 0, sizeof(float) * 3 * STUDIOLIGHT_SH_COEFS_LEN);
 
   for (int face = 0; face < 6; face++) {
-    ITER_PIXELS(float,
-                sl->radiance_cubemap_buffers[face]->rect_float,
-                4,
-                STUDIOLIGHT_RADIANCE_CUBEMAP_SIZE,
-                STUDIOLIGHT_RADIANCE_CUBEMAP_SIZE)
-    {
+    ITER_PIXELS (float,
+                 sl->radiance_cubemap_buffers[face]->rect_float,
+                 4,
+                 STUDIOLIGHT_RADIANCE_CUBEMAP_SIZE,
+                 STUDIOLIGHT_RADIANCE_CUBEMAP_SIZE) {
       float color[3], cubevec[3], weight;
       studiolight_calculate_cubemap_vector_weight(cubevec, &weight, face, x, y);
       mul_v3_v3fl(color, pixel, weight);
@@ -647,8 +658,9 @@ static float studiolight_spherical_harmonics_lambda_get(float *sh, float max_lap
 
 static void studiolight_spherical_harmonics_apply_windowing(float (*sh)[3], float max_laplacian)
 {
-  if (max_laplacian <= 0.0f)
+  if (max_laplacian <= 0.0f) {
     return;
+  }
 
   float sh_r[STUDIOLIGHT_SH_COEFS_LEN];
   float sh_g[STUDIOLIGHT_SH_COEFS_LEN];
@@ -822,12 +834,11 @@ BLI_INLINE void studiolight_evaluate_specular_radiance_buffer(ImBuf *radiance_bu
 
   float accum[3] = {0.0f, 0.0f, 0.0f};
   float accum_weight = 0.00001f;
-  ITER_PIXELS(float,
-              radiance_buffer->rect_float,
-              4,
-              STUDIOLIGHT_RADIANCE_CUBEMAP_SIZE,
-              STUDIOLIGHT_RADIANCE_CUBEMAP_SIZE)
-  {
+  ITER_PIXELS (float,
+               radiance_buffer->rect_float,
+               4,
+               STUDIOLIGHT_RADIANCE_CUBEMAP_SIZE,
+               STUDIOLIGHT_RADIANCE_CUBEMAP_SIZE) {
     float direction[3];
     direction[zoffset] = zsign * 0.5f;
     direction[xoffset] = x - 0.5f;
@@ -1014,12 +1025,11 @@ static void studiolight_calculate_irradiance_equirect_image(StudioLight *sl)
                                     STUDIOLIGHT_IRRADIANCE_EQUIRECT_HEIGHT * sizeof(float[4]),
                                 __func__);
 
-    ITER_PIXELS(float,
-                colbuf,
-                4,
-                STUDIOLIGHT_IRRADIANCE_EQUIRECT_WIDTH,
-                STUDIOLIGHT_IRRADIANCE_EQUIRECT_HEIGHT)
-    {
+    ITER_PIXELS (float,
+                 colbuf,
+                 4,
+                 STUDIOLIGHT_IRRADIANCE_EQUIRECT_WIDTH,
+                 STUDIOLIGHT_IRRADIANCE_EQUIRECT_HEIGHT) {
       float dir[3];
       equirect_to_direction(dir, x, y);
 #ifdef STUDIOLIGHT_IRRADIANCE_METHOD_RADIANCE
@@ -1153,8 +1163,7 @@ static void studiolight_radiance_preview(uint *icon_buffer, StudioLight *sl)
 {
   BKE_studiolight_ensure_flag(sl, STUDIOLIGHT_EXTERNAL_IMAGE_LOADED);
 
-  ITER_PIXELS(uint, icon_buffer, 1, STUDIOLIGHT_ICON_SIZE, STUDIOLIGHT_ICON_SIZE)
-  {
+  ITER_PIXELS (uint, icon_buffer, 1, STUDIOLIGHT_ICON_SIZE, STUDIOLIGHT_ICON_SIZE) {
     float dy = RESCALE_COORD(y);
     float dx = RESCALE_COORD(x);
 
@@ -1188,8 +1197,7 @@ static void studiolight_matcap_preview(uint *icon_buffer, StudioLight *sl, bool 
 
   ImBuf *ibuf = sl->equirect_radiance_buffer;
 
-  ITER_PIXELS(uint, icon_buffer, 1, STUDIOLIGHT_ICON_SIZE, STUDIOLIGHT_ICON_SIZE)
-  {
+  ITER_PIXELS (uint, icon_buffer, 1, STUDIOLIGHT_ICON_SIZE, STUDIOLIGHT_ICON_SIZE) {
     float dy = RESCALE_COORD(y);
     float dx = RESCALE_COORD(x);
     if (flipped) {
@@ -1211,8 +1219,7 @@ static void studiolight_matcap_preview(uint *icon_buffer, StudioLight *sl, bool 
 
 static void studiolight_irradiance_preview(uint *icon_buffer, StudioLight *sl)
 {
-  ITER_PIXELS(uint, icon_buffer, 1, STUDIOLIGHT_ICON_SIZE, STUDIOLIGHT_ICON_SIZE)
-  {
+  ITER_PIXELS (uint, icon_buffer, 1, STUDIOLIGHT_ICON_SIZE, STUDIOLIGHT_ICON_SIZE) {
     float dy = RESCALE_COORD(y);
     float dx = RESCALE_COORD(x);
 

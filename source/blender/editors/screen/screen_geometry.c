@@ -84,7 +84,8 @@ bool screen_geom_edge_is_horizontal(ScrEdge *se)
 }
 
 /**
- * \param bounds_rect: Either window or screen bounds. Used to exclude edges along window/screen edges.
+ * \param bounds_rect: Either window or screen bounds.
+ * Used to exclude edges along window/screen edges.
  */
 ScrEdge *screen_geom_area_map_find_active_scredge(const ScrAreaMap *area_map,
                                                   const rcti *bounds_rect,
@@ -102,8 +103,9 @@ ScrEdge *screen_geom_area_map_find_active_scredge(const ScrAreaMap *area_map,
         min = MIN2(se->v1->vec.x, se->v2->vec.x);
         max = MAX2(se->v1->vec.x, se->v2->vec.x);
 
-        if (abs(my - se->v1->vec.y) <= safety && mx >= min && mx <= max)
+        if (abs(my - se->v1->vec.y) <= safety && mx >= min && mx <= max) {
           return se;
+        }
       }
     }
     else {
@@ -112,8 +114,9 @@ ScrEdge *screen_geom_area_map_find_active_scredge(const ScrAreaMap *area_map,
         min = MIN2(se->v1->vec.y, se->v2->vec.y);
         max = MAX2(se->v1->vec.y, se->v2->vec.y);
 
-        if (abs(mx - se->v1->vec.x) <= safety && my >= min && my <= max)
+        if (abs(mx - se->v1->vec.x) <= safety && my >= min && my <= max) {
           return se;
+        }
       }
     }
   }
@@ -152,10 +155,6 @@ ScrEdge *screen_geom_find_active_scredge(const wmWindow *win,
  */
 void screen_geom_vertices_scale(const wmWindow *win, bScreen *sc)
 {
-  /* clamp Y size of header sized areas when expanding windows
-   * avoids annoying empty space around file menu */
-#define USE_HEADER_SIZE_CLAMP
-
   rcti window_rect, screen_rect;
 
   WM_window_rect_calc(win, &window_rect);
@@ -181,33 +180,6 @@ void screen_geom_vertices_scale(const wmWindow *win, bScreen *sc)
   screen_size_x_prev = (max[0] - min[0]) + 1;
   screen_size_y_prev = (max[1] - min[1]) + 1;
 
-#ifdef USE_HEADER_SIZE_CLAMP
-#  define TEMP_BOTTOM 1
-#  define TEMP_TOP 2
-
-  /* if the window's Y axis grows, clamp header sized areas */
-  if (screen_size_y_prev < screen_size_y) { /* growing? */
-    const int headery_margin_max = headery_init + 5;
-    for (sa = sc->areabase.first; sa; sa = sa->next) {
-      ARegion *ar = BKE_area_find_region_type(sa, RGN_TYPE_HEADER);
-      sa->temp = 0;
-
-      if (ar && !(ar->flag & RGN_FLAG_HIDDEN)) {
-        if (sa->v2->vec.y == max[1]) {
-          if (screen_geom_area_height(sa) < headery_margin_max) {
-            sa->temp = TEMP_TOP;
-          }
-        }
-        else if (sa->v1->vec.y == min[1]) {
-          if (screen_geom_area_height(sa) < headery_margin_max) {
-            sa->temp = TEMP_BOTTOM;
-          }
-        }
-      }
-    }
-  }
-#endif
-
   if (screen_size_x_prev != screen_size_x || screen_size_y_prev != screen_size_y) {
     const float facx = ((float)screen_size_x - 1) / ((float)screen_size_x_prev - 1);
     const float facy = ((float)screen_size_y - 1) / ((float)screen_size_y_prev - 1);
@@ -222,56 +194,6 @@ void screen_geom_vertices_scale(const wmWindow *win, bScreen *sc)
     }
   }
 
-#ifdef USE_HEADER_SIZE_CLAMP
-  if (screen_size_y_prev < screen_size_y) { /* growing? */
-    for (sa = sc->areabase.first; sa; sa = sa->next) {
-      ScrEdge *se = NULL;
-
-      if (sa->temp == 0)
-        continue;
-
-      if (sa->v1 == sa->v2)
-        continue;
-
-      /* adjust headery if verts are along the edge of window */
-      if (sa->temp == TEMP_TOP) {
-        /* lower edge */
-        const int yval = sa->v2->vec.y - headery_init;
-        se = BKE_screen_find_edge(sc, sa->v4, sa->v1);
-        if (se != NULL) {
-          screen_geom_select_connected_edge(win, se);
-        }
-        for (sv = sc->vertbase.first; sv; sv = sv->next) {
-          if (sv != sa->v2 && sv != sa->v3) {
-            if (sv->flag) {
-              sv->vec.y = yval;
-            }
-          }
-        }
-      }
-      else {
-        /* upper edge */
-        const int yval = sa->v1->vec.y + headery_init;
-        se = BKE_screen_find_edge(sc, sa->v2, sa->v3);
-        if (se != NULL) {
-          screen_geom_select_connected_edge(win, se);
-        }
-        for (sv = sc->vertbase.first; sv; sv = sv->next) {
-          if (sv != sa->v1 && sv != sa->v4) {
-            if (sv->flag) {
-              sv->vec.y = yval;
-            }
-          }
-        }
-      }
-    }
-  }
-
-#  undef USE_HEADER_SIZE_CLAMP
-#  undef TEMP_BOTTOM
-#  undef TEMP_TOP
-#endif
-
   /* test for collapsed areas. This could happen in some blender version... */
   /* ton: removed option now, it needs Context... */
 
@@ -280,10 +202,12 @@ void screen_geom_vertices_scale(const wmWindow *win, bScreen *sc)
     int headery = headery_init;
 
     /* adjust headery if verts are along the edge of window */
-    if (sa->v1->vec.y > window_rect.ymin)
+    if (sa->v1->vec.y > window_rect.ymin) {
       headery += U.pixelsize;
-    if (sa->v2->vec.y < (window_rect.ymax - 1))
+    }
+    if (sa->v2->vec.y < (window_rect.ymax - 1)) {
       headery += U.pixelsize;
+    }
 
     if (screen_geom_area_height(sa) < headery) {
       /* lower edge */
@@ -306,7 +230,8 @@ void screen_geom_vertices_scale(const wmWindow *win, bScreen *sc)
     }
   }
 
-  /* Global areas have a fixed size that only changes with the DPI. Here we ensure that exactly this size is set. */
+  /* Global areas have a fixed size that only changes with the DPI.
+   * Here we ensure that exactly this size is set. */
   for (ScrArea *area = win->global_areas.areabase.first; area; area = area->next) {
     if (area->global->flag & GLOBAL_AREA_IS_HIDDEN) {
       continue;

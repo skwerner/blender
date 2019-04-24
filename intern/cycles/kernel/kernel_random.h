@@ -75,14 +75,35 @@ ccl_device_forceinline float path_rng_1D(KernelGlobals *kg,
 	return (float)drand48();
 #endif
 	if(kernel_data.integrator.sampling_pattern == SAMPLING_PATTERN_PMJ) {
-		/* Fallback to random */
-		if(sample > NUM_PJ_SAMPLES) {
-			int p = rng_hash + dimension;
-			return cmj_randfloat(sample, p);
-		}
-		uint tmp_rng = cmj_hash_simple(dimension, rng_hash);
-		int index = ((dimension % NUM_PJ_PATTERNS) * NUM_PJ_SAMPLES + sample) * 2;
-		return __uint_as_float(kernel_tex_fetch(__sample_pattern_lut, index) ^ (tmp_rng & 0x007fffff)) - 1.0f;
+      float r;
+      /* Fallback to random */
+      if(sample > NUM_PJ_SAMPLES) {
+        r = cmj_randfloat(sample, dimension);
+      }
+      int index = ((dimension % NUM_PJ_PATTERNS) * NUM_PJ_SAMPLES + sample) * 2 + (dimension & 1);
+      r = __uint_as_float(kernel_tex_fetch(__sample_pattern_lut, index)) - 1.0f;
+      /* Cranly-Patterson rotation using rng seed */
+      float shift;
+
+      if(kernel_data.integrator.dither_size > 0) {
+        int size = kernel_data.integrator.dither_size;
+        /* Extract the pixel coordinates from rng and wrap them into the dither matrix. */
+        int x = (rng_hash & DITHER_COORD_MASK) % size;
+        int y = ((rng_hash >> DITHER_Y_SHIFT) & DITHER_COORD_MASK) % size;
+        float2 shifts = kernel_tex_fetch(__sobol_dither, y*size + x);
+        shift = (dimension & 1)? shifts.y: shifts.x;
+      }
+      else {
+        /* Hash rng with dimension to solve correlation issues.
+         * See T38710, T50116.
+         */
+        uint tmp_rng = cmj_hash_simple(dimension, rng_hash);
+        shift = tmp_rng * (1.0f/(float)0xFFFFFFFF);
+      }
+
+      shift *= kernel_data.integrator.scrambling_distance;
+
+      return r + shift - floorf(r + shift);
 	}
 #ifdef __CMJ__
 #  ifdef __SOBOL__
@@ -137,17 +158,9 @@ ccl_device_forceinline void path_rng_2D(KernelGlobals *kg,
 	return;
 #endif
 	if(kernel_data.integrator.sampling_pattern == SAMPLING_PATTERN_PMJ) {
-		if(sample > NUM_PJ_SAMPLES) {
-			int p = rng_hash + dimension;
-			*fx = cmj_randfloat(sample, p);
-			*fy = cmj_randfloat(sample, p + 1);
-		}
-		uint tmp_rng = cmj_hash_simple(dimension, rng_hash);
-		int index = ((dimension % NUM_PJ_PATTERNS) * NUM_PJ_SAMPLES + sample) * 2;
-		*fx = __uint_as_float(kernel_tex_fetch(__sample_pattern_lut, index) ^ (tmp_rng & 0x007fffff)) - 1.0f;
-		tmp_rng = cmj_hash_simple(dimension+ 1, rng_hash);
-		*fy = __uint_as_float(kernel_tex_fetch(__sample_pattern_lut, index + 1) ^ (tmp_rng & 0x007fffff)) - 1.0f;
-		return;
+      *fx = path_rng_1D(kg, rng_hash, sample, num_samples, dimension);
+      *fy = path_rng_1D(kg, rng_hash, sample, num_samples, dimension + 1);
+      return;
 	}
 #ifdef __CMJ__
 #  ifdef __SOBOL__

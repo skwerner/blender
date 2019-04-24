@@ -210,7 +210,7 @@ class CYCLES_RENDER_PT_sampling(CyclesButtonsPanel, Panel):
         row.active = not(cscene.use_adaptive_sampling)
         row.prop(cscene, "sampling_pattern", text="Pattern")
         row = layout.row(align=True)
-        if cscene.sampling_pattern != "CORRELATED_MUTI_JITTER" and cscene.sampling_pattern != "PROGRESSIVE_MULTI_JITTER" and not(cscene.use_adaptive_sampling):
+        if cscene.sampling_pattern != "PROGRESSIVE_MULTI_JITTER" or cscene.use_adaptive_sampling:
             layout.row().prop(cscene, "scrambling_distance", text="Scrambling Distance")
         row = layout.row(align=True)
         row.active = cscene.use_adaptive_sampling

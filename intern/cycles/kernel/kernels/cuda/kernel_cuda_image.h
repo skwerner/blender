@@ -189,7 +189,7 @@ ccl_device float4 kernel_tex_image_interp_3d(
 
   if (info.sparse_info.offsets) {
     if (!sparse_coordinates(&info.sparse_info, x, y, z)) {
-      return make_float4(0.0f);
+      return make_float4(0.0f, 0.0f, 0.0f, 0.0f);
     }
   }
 

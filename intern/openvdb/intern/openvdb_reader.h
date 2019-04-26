@@ -23,32 +23,32 @@
 #include <openvdb/openvdb.h>
 
 struct OpenVDBReader {
-private:
-	openvdb::MetaMap::Ptr m_meta_map;
-	openvdb::io::File *m_file;
+ private:
+  openvdb::MetaMap::Ptr m_meta_map;
+  openvdb::io::File *m_file;
 
-	void cleanupFile();
+  void cleanupFile();
 
-public:
-	OpenVDBReader();
-	~OpenVDBReader();
+ public:
+  OpenVDBReader();
+  ~OpenVDBReader();
 
-	void open(const openvdb::Name &filename);
+  void open(const openvdb::Name &filename);
 
-	void floatMeta(const openvdb::Name &name, float &value) const;
-	void intMeta(const openvdb::Name &name, int &value) const;
-	void vec3sMeta(const openvdb::Name &name, float value[3]) const;
-	void vec3IMeta(const openvdb::Name &name, int value[3]) const;
-	void mat4sMeta(const openvdb::Name &name, float value[4][4]) const;
+  void floatMeta(const openvdb::Name &name, float &value) const;
+  void intMeta(const openvdb::Name &name, int &value) const;
+  void vec3sMeta(const openvdb::Name &name, float value[3]) const;
+  void vec3IMeta(const openvdb::Name &name, int value[3]) const;
+  void mat4sMeta(const openvdb::Name &name, float value[4][4]) const;
 
-	bool hasGrid(const openvdb::Name &name) const;
+  bool hasGrid(const openvdb::Name &name) const;
 
-	/* Don't run these functions without checking if grid exists first! */
-	openvdb::GridBase::Ptr getGrid(const openvdb::Name &name) const;
-	openvdb::math::CoordBBox getGridBounds(const openvdb::Name &name) const;
-	openvdb::math::Transform::Ptr getGridTranform(const openvdb::Name &name) const;
+  /* Don't run these functions without checking if grid exists first! */
+  openvdb::GridBase::Ptr getGrid(const openvdb::Name &name) const;
+  openvdb::math::CoordBBox getGridBounds(const openvdb::Name &name) const;
+  openvdb::math::Transform::Ptr getGridTranform(const openvdb::Name &name) const;
 
-	size_t numGrids() const;
+  size_t numGrids() const;
 };
 
 #endif /* __OPENVDB_READER_H__ */

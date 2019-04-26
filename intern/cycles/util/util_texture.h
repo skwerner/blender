@@ -34,29 +34,29 @@ CCL_NAMESPACE_BEGIN
 /* Interpolation types for textures
  * cuda also use texture space to store other objects */
 typedef enum InterpolationType {
-	INTERPOLATION_NONE = -1,
-	INTERPOLATION_LINEAR = 0,
-	INTERPOLATION_CLOSEST = 1,
-	INTERPOLATION_CUBIC = 2,
-	INTERPOLATION_SMART = 3,
+  INTERPOLATION_NONE = -1,
+  INTERPOLATION_LINEAR = 0,
+  INTERPOLATION_CLOSEST = 1,
+  INTERPOLATION_CUBIC = 2,
+  INTERPOLATION_SMART = 3,
 
-	INTERPOLATION_NUM_TYPES,
+  INTERPOLATION_NUM_TYPES,
 } InterpolationType;
 
 /* Texture types
  * Since we store the type in the lower bits of a flat index,
  * the shift and bit mask constant below need to be kept in sync. */
 typedef enum ImageDataType {
-	IMAGE_DATA_TYPE_FLOAT4 = 0,
-	IMAGE_DATA_TYPE_BYTE4 = 1,
-	IMAGE_DATA_TYPE_HALF4 = 2,
-	IMAGE_DATA_TYPE_FLOAT = 3,
-	IMAGE_DATA_TYPE_BYTE = 4,
-	IMAGE_DATA_TYPE_HALF = 5,
-	IMAGE_DATA_TYPE_USHORT4 = 6,
-	IMAGE_DATA_TYPE_USHORT = 7,
+  IMAGE_DATA_TYPE_FLOAT4 = 0,
+  IMAGE_DATA_TYPE_BYTE4 = 1,
+  IMAGE_DATA_TYPE_HALF4 = 2,
+  IMAGE_DATA_TYPE_FLOAT = 3,
+  IMAGE_DATA_TYPE_BYTE = 4,
+  IMAGE_DATA_TYPE_HALF = 5,
+  IMAGE_DATA_TYPE_USHORT4 = 6,
+  IMAGE_DATA_TYPE_USHORT = 7,
 
-	IMAGE_DATA_NUM_TYPES
+  IMAGE_DATA_NUM_TYPES
 } ImageDataType;
 
 #define IMAGE_DATA_TYPE_SHIFT 3
@@ -64,51 +64,51 @@ typedef enum ImageDataType {
 
 /* Texture Grid Types */
 typedef enum ImageGridType {
-	IMAGE_GRID_TYPE_DEFAULT,
-	IMAGE_GRID_TYPE_SPARSE,
-	IMAGE_GRID_TYPE_SPARSE_PAD,
-	IMAGE_GRID_TYPE_OPENVDB,
+  IMAGE_GRID_TYPE_DEFAULT,
+  IMAGE_GRID_TYPE_SPARSE,
+  IMAGE_GRID_TYPE_SPARSE_PAD,
+  IMAGE_GRID_TYPE_OPENVDB,
 } ImageGridType;
 
 /* Extension types for textures.
  *
  * Defines how the image is extrapolated past its original bounds. */
 typedef enum ExtensionType {
-	/* Cause the image to repeat horizontally and vertically. */
-	EXTENSION_REPEAT = 0,
-	/* Extend by repeating edge pixels of the image. */
-	EXTENSION_EXTEND = 1,
-	/* Clip to image size and set exterior pixels as transparent. */
-	EXTENSION_CLIP = 2,
+  /* Cause the image to repeat horizontally and vertically. */
+  EXTENSION_REPEAT = 0,
+  /* Extend by repeating edge pixels of the image. */
+  EXTENSION_EXTEND = 1,
+  /* Clip to image size and set exterior pixels as transparent. */
+  EXTENSION_CLIP = 2,
 
-	EXTENSION_NUM_TYPES,
+  EXTENSION_NUM_TYPES,
 } ExtensionType;
 
 /* Sparse Texture Information.
  *
  * Data cached to use for converting dense coordinates to sparse. */
 typedef struct SparseTextureInfo {
-	/* Tile offsets for sparse volumes. */
-	uint64_t offsets;
-	/* Dim / TILE_SIZE */
-	uint tiled_w, tiled_h;
-	/* Dim % TILE_SIZE */
-	uint remain_w, remain_h;
-	/* Dim - (Dim % TILE_SIZE) */
-	uint div_w, div_h;
+  /* Tile offsets for sparse volumes. */
+  uint64_t offsets;
+  /* Dim / TILE_SIZE */
+  uint tiled_w, tiled_h;
+  /* Dim % TILE_SIZE */
+  uint remain_w, remain_h;
+  /* Dim - (Dim % TILE_SIZE) */
+  uint div_w, div_h;
 } SparseTextureInfo;
 
 typedef struct TextureInfo {
-	/* Pointer, offset or texture depending on device. */
-	uint64_t data;
-	/* Buffer number for OpenCL. */
-	uint cl_buffer;
-	/* Interpolation and extension type. */
-	uint interpolation, extension;
-	/* Dimensions. */
-	uint width, height, depth;
-	/* Extra info for sparse textures. */
-	SparseTextureInfo sparse_info;
+  /* Pointer, offset or texture depending on device. */
+  uint64_t data;
+  /* Buffer number for OpenCL. */
+  uint cl_buffer;
+  /* Interpolation and extension type. */
+  uint interpolation, extension;
+  /* Dimensions. */
+  uint width, height, depth;
+  /* Extra info for sparse textures. */
+  SparseTextureInfo sparse_info;
 } TextureInfo;
 
 /* Sparse tile size and padding settings. */
@@ -122,4 +122,4 @@ typedef struct TextureInfo {
 
 CCL_NAMESPACE_END
 
-#endif  /* __UTIL_TEXTURE_H__ */
+#endif /* __UTIL_TEXTURE_H__ */

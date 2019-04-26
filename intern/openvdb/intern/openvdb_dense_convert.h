@@ -34,25 +34,25 @@ static const int CUBE_SIZE = 8;
 
 static const int compute_index(int x, int y, int z, int width, int height)
 {
-	return x + width * (y + z * height);
+  return x + width * (y + z * height);
 }
 
 static void copy(float *des, const float *src)
 {
-	*des = *src;
+  *des = *src;
 }
 
 static void copy(unsigned char *des, const int *src)
 {
-	*des = *src;
+  *des = *src;
 }
 
 static void copy(float *des, const openvdb::math::Vec3s *src)
 {
-	*(des + 0) = src->x();
-	*(des + 1) = src->y();
-	*(des + 2) = src->z();
-	*(des + 3) = 1.0f;
+  *(des + 0) = src->x();
+  *(des + 1) = src->y();
+  *(des + 2) = src->z();
+  *(des + 3) = 1.0f;
 }
 
 /* Verify that the name does not correspond to the old format, in which case we
@@ -61,151 +61,151 @@ openvdb::Name do_name_versionning(const openvdb::Name &name);
 
 openvdb::Mat4R convertMatrix(const float mat[4][4]);
 
-template <typename GridType, typename T>
-typename GridType::Ptr OpenVDB_export_grid(
-        OpenVDBWriter *writer,
-        const openvdb::Name &name,
-        const T *data,
-        const int res[3],
-		float fluid_mat[4][4],
-		const float clipping,
-        const openvdb::FloatGrid *mask)
+template<typename GridType, typename T>
+typename GridType::Ptr OpenVDB_export_grid(OpenVDBWriter *writer,
+                                           const openvdb::Name &name,
+                                           const T *data,
+                                           const int res[3],
+                                           float fluid_mat[4][4],
+                                           const float clipping,
+                                           const openvdb::FloatGrid *mask)
 {
-	using namespace openvdb;
+  using namespace openvdb;
 
-	math::CoordBBox bbox(Coord(0), Coord(res[0] - 1, res[1] - 1, res[2] - 1));
+  math::CoordBBox bbox(Coord(0), Coord(res[0] - 1, res[1] - 1, res[2] - 1));
 
-	typename GridType::Ptr grid = GridType::create(T(0));
+  typename GridType::Ptr grid = GridType::create(T(0));
 
-	tools::Dense<const T, openvdb::tools::LayoutXYZ> dense_grid(bbox, data);
-	tools::copyFromDense(dense_grid, grid->tree(), static_cast<T>(clipping));
+  tools::Dense<const T, openvdb::tools::LayoutXYZ> dense_grid(bbox, data);
+  tools::copyFromDense(dense_grid, grid->tree(), static_cast<T>(clipping));
 
-	if(fluid_mat) {
-		Mat4R mat = convertMatrix(fluid_mat);
-		math::Transform::Ptr transform = math::Transform::createLinearTransform(mat);
-		grid->setTransform(transform);
-	}
+  if (fluid_mat) {
+    Mat4R mat = convertMatrix(fluid_mat);
+    math::Transform::Ptr transform = math::Transform::createLinearTransform(mat);
+    grid->setTransform(transform);
+  }
 
-	/* Avoid clipping against an empty grid. */
-	if (mask && !mask->tree().empty()) {
-		grid = tools::clip(*grid, *mask);
-	}
+  /* Avoid clipping against an empty grid. */
+  if (mask && !mask->tree().empty()) {
+    grid = tools::clip(*grid, *mask);
+  }
 
-	grid->setName(name);
-	grid->setIsInWorldSpace(false);
-	grid->setVectorType(openvdb::VEC_INVARIANT);
+  grid->setName(name);
+  grid->setIsInWorldSpace(false);
+  grid->setVectorType(openvdb::VEC_INVARIANT);
 
-	if(writer) {
-		writer->insert(grid);
-	}
+  if (writer) {
+    writer->insert(grid);
+  }
 
-	return grid;
+  return grid;
 }
 
 openvdb::GridBase::Ptr OpenVDB_export_vector_grid(OpenVDBWriter *writer,
-		const openvdb::Name &name,
-		const float *data_x, const float *data_y, const float *data_z,
-		const int res[3],
-		float fluid_mat[4][4],
-		openvdb::VecType vec_type,
-		const bool is_color,
-		const float clipping,
-		const openvdb::FloatGrid *mask);
+                                                  const openvdb::Name &name,
+                                                  const float *data_x,
+                                                  const float *data_y,
+                                                  const float *data_z,
+                                                  const int res[3],
+                                                  float fluid_mat[4][4],
+                                                  openvdb::VecType vec_type,
+                                                  const bool is_color,
+                                                  const float clipping,
+                                                  const openvdb::FloatGrid *mask);
 
-template <typename GridType, typename GridDataType, typename DataType>
-void OpenVDB_import_grid(
-        OpenVDBReader *reader,
-        const char *name,
-        DataType **data,
-        const int raw_res[3],
-        const int min_bound[3],
-		const int channels,
-		const int sample_level,
-		const bool weave)
+template<typename GridType, typename GridDataType, typename DataType>
+void OpenVDB_import_grid(OpenVDBReader *reader,
+                         const char *name,
+                         DataType **data,
+                         const int raw_res[3],
+                         const int min_bound[3],
+                         const int channels,
+                         const int sample_level,
+                         const bool weave)
 {
-	using namespace openvdb;
+  using namespace openvdb;
 
-	/* Weave pattern: xyzxyz...xyz
-	 * Normal pattern: xxx...yyy....zzz
-	 * Normal data is an array of pointers while weave data is a pointer to a
-	 * flat T array. */
+  /* Weave pattern: xyzxyz...xyz
+   * Normal pattern: xxx...yyy....zzz
+   * Normal data is an array of pointers while weave data is a pointer to a
+   * flat T array. */
 
-	int remainder[3], res[3];
-	for(int i = 0; i < 3; ++i) {
-		remainder[i] = res[i] % CUBE_SIZE;
-		res[i] = raw_res[i] / sample_level + (raw_res[i] % sample_level != 0);
-	}
+  int remainder[3], res[3];
+  for (int i = 0; i < 3; ++i) {
+    remainder[i] = res[i] % CUBE_SIZE;
+    res[i] = raw_res[i] / sample_level + (raw_res[i] % sample_level != 0);
+  }
 
-	if(weave) {
-		memset(data[0], 0, res[0] * res[1] * res[2] * channels * sizeof(DataType));
-	}
-	else {
-		for(int c = 0; c < channels; ++c) {
-			memset(data[c], 0, res[0] * res[1] * res[2] * sizeof(DataType));
-		}
-	}
+  if (weave) {
+    memset(data[0], 0, res[0] * res[1] * res[2] * channels * sizeof(DataType));
+  }
+  else {
+    for (int c = 0; c < channels; ++c) {
+      memset(data[c], 0, res[0] * res[1] * res[2] * sizeof(DataType));
+    }
+  }
 
-	openvdb::Name temp_name(name);
+  openvdb::Name temp_name(name);
 
-	if (!reader->hasGrid(temp_name)) {
-		temp_name = do_name_versionning(temp_name);
+  if (!reader->hasGrid(temp_name)) {
+    temp_name = do_name_versionning(temp_name);
 
-		if (!reader->hasGrid(temp_name)) {
-			std::fprintf(stderr, "OpenVDB grid %s not found in file!\n", temp_name.c_str());
-			return;
-		}
-	}
+    if (!reader->hasGrid(temp_name)) {
+      std::fprintf(stderr, "OpenVDB grid %s not found in file!\n", temp_name.c_str());
+      return;
+    }
+  }
 
-	typename GridType::Ptr grid = gridPtrCast<GridType>(reader->getGrid(temp_name));
+  typename GridType::Ptr grid = gridPtrCast<GridType>(reader->getGrid(temp_name));
 
-	const math::Coord min(min_bound[0], min_bound[1], min_bound[2]);
+  const math::Coord min(min_bound[0], min_bound[1], min_bound[2]);
 
-	for (typename GridType::TreeType::LeafCIter iter = grid->tree().cbeginLeaf(); iter; ++iter) {
-		const typename GridType::TreeType::LeafNodeType *leaf = iter.getLeaf();
-		const GridDataType *leaf_data = leaf->buffer().data();
+  for (typename GridType::TreeType::LeafCIter iter = grid->tree().cbeginLeaf(); iter; ++iter) {
+    const typename GridType::TreeType::LeafNodeType *leaf = iter.getLeaf();
+    const GridDataType *leaf_data = leaf->buffer().data();
 
-		const math::Coord start = leaf->getNodeBoundingBox().getStart() - min;
-		const int tile_width = (start.x() + CUBE_SIZE > raw_res[0]) ? remainder[0] : CUBE_SIZE;
-		const int tile_height = (start.y() + CUBE_SIZE > raw_res[1]) ? remainder[1] : CUBE_SIZE;
-		const int tile_depth = (start.z() + CUBE_SIZE > raw_res[2]) ? remainder[2] : CUBE_SIZE;
+    const math::Coord start = leaf->getNodeBoundingBox().getStart() - min;
+    const int tile_width = (start.x() + CUBE_SIZE > raw_res[0]) ? remainder[0] : CUBE_SIZE;
+    const int tile_height = (start.y() + CUBE_SIZE > raw_res[1]) ? remainder[1] : CUBE_SIZE;
+    const int tile_depth = (start.z() + CUBE_SIZE > raw_res[2]) ? remainder[2] : CUBE_SIZE;
 
-		for (int k = 0; k < tile_depth; ++k) {
-			for (int j = 0; j < tile_height; ++j) {
-				for (int i = 0; i < tile_width; ++i) {
-					int x = start.x() + i;
-					int y = start.y() + j;
-					int z = start.z() + k;
+    for (int k = 0; k < tile_depth; ++k) {
+      for (int j = 0; j < tile_height; ++j) {
+        for (int i = 0; i < tile_width; ++i) {
+          int x = start.x() + i;
+          int y = start.y() + j;
+          int z = start.z() + k;
 
-					/* Get every (sample_level)th voxel. */
-					if(sample_level > 1) {
-						if(x % sample_level != 0 || y % sample_level != 0 || z % sample_level != 0) {
-							continue;
-						}
-						x /= sample_level;
-						y /= sample_level;
-						z /= sample_level;
-					}
+          /* Get every (sample_level)th voxel. */
+          if (sample_level > 1) {
+            if (x % sample_level != 0 || y % sample_level != 0 || z % sample_level != 0) {
+              continue;
+            }
+            x /= sample_level;
+            y /= sample_level;
+            z /= sample_level;
+          }
 
-					int data_index = compute_index(x, y, z, res[0], res[1]);
-					/* Index computation by coordinates is reversed in VDB grids. */
-					int leaf_index = compute_index(k, j, i, tile_depth, tile_height);
+          int data_index = compute_index(x, y, z, res[0], res[1]);
+          /* Index computation by coordinates is reversed in VDB grids. */
+          int leaf_index = compute_index(k, j, i, tile_depth, tile_height);
 
-					if(weave) {
-						copy(data[0] + data_index, leaf_data + leaf_index);
-					}
-					else {
-						DataType temp_value[4]; /* We don't expect channels > 4 */
-						copy(temp_value, leaf_data + leaf_index);
-						for(int c = 0; c < channels; ++c) {
-							data[c][data_index] = temp_value[c];
-						}
-					}
-				}
-			}
-		}
-	}
+          if (weave) {
+            copy(data[0] + data_index, leaf_data + leaf_index);
+          }
+          else {
+            DataType temp_value[4]; /* We don't expect channels > 4 */
+            copy(temp_value, leaf_data + leaf_index);
+            for (int c = 0; c < channels; ++c) {
+              data[c][data_index] = temp_value[c];
+            }
+          }
+        }
+      }
+    }
+  }
 }
 
-}  /* namespace internal */
+} /* namespace internal */
 
 #endif /* __OPENVDB_DENSE_CONVERT_H__ */

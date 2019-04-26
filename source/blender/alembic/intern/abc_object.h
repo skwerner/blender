@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,10 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * Contributor(s): Esteban Tovagliari, Cedric Paille, Kevin Dietrich
- *
- * ***** END GPL LICENSE BLOCK *****
+ */
+
+/** \file
+ * \ingroup balembic
  */
 
 #ifndef __ABC_OBJECT_H__
@@ -44,20 +42,18 @@ protected:
 	Object *m_object;
 	ExportSettings &m_settings;
 
-	Scene *m_scene;
 	uint32_t m_time_sampling;
 
 	Imath::Box3d m_bounds;
 	std::vector<AbcObjectWriter *> m_children;
 
-	std::vector< std::pair<std::string, IDProperty *> > m_props;
+	std::vector<std::pair<std::string, IDProperty *>> m_props;
 
 	bool m_first_frame;
 	std::string m_name;
 
 public:
-	AbcObjectWriter(Scene *scene,
-	                Object *ob,
+	AbcObjectWriter(Object *ob,
 	                uint32_t time_sampling,
 	                ExportSettings &settings,
 	                AbcObjectWriter *parent = NULL);
@@ -122,7 +118,7 @@ static bool has_animations(Schema &schema, ImportSettings *settings)
 
 /* ************************************************************************** */
 
-struct DerivedMesh;
+struct Mesh;
 
 using Alembic::AbcCoreAbstract::chrono_t;
 
@@ -178,10 +174,10 @@ public:
 
 	virtual void readObjectData(Main *bmain, const Alembic::Abc::ISampleSelector &sample_sel) = 0;
 
-	virtual DerivedMesh *read_derivedmesh(DerivedMesh *dm,
-	                                      const Alembic::Abc::ISampleSelector &sample_sel,
-	                                      int read_flag,
-	                                      const char **err_str);
+	virtual struct Mesh *read_mesh(struct Mesh *mesh,
+	                               const Alembic::Abc::ISampleSelector &sample_sel,
+	                               int read_flag,
+	                               const char **err_str);
 
 	/** Reads the object matrix and sets up an object transform if animated. */
 	void setupObjectTransform(const float time);

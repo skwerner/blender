@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,22 +15,16 @@
  *
  * The Original Code is Copyright (C) 2013 Blender Foundation
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/blenkernel/intern/freestyle.c
- *  \ingroup bke
+/** \file
+ * \ingroup bke
  */
 
 #include "MEM_guardedalloc.h"
 
+#include "DNA_collection_types.h"
 #include "DNA_freestyle_types.h"
-#include "DNA_group_types.h"
 
 #include "BLI_blenlib.h"
 #include "BLI_math.h"
@@ -61,17 +53,21 @@ void BKE_freestyle_config_init(FreestyleConfig *config)
 	BLI_listbase_clear(&config->linesets);
 }
 
-void BKE_freestyle_config_free(FreestyleConfig *config)
+void BKE_freestyle_config_free(FreestyleConfig *config, const bool do_id_user)
 {
 	FreestyleLineSet *lineset;
 
 	for (lineset = (FreestyleLineSet *)config->linesets.first; lineset; lineset = lineset->next) {
 		if (lineset->group) {
-			id_us_min(&lineset->group->id);
+			if (do_id_user) {
+				id_us_min(&lineset->group->id);
+			}
 			lineset->group = NULL;
 		}
 		if (lineset->linestyle) {
-			id_us_min(&lineset->linestyle->id);
+			if (do_id_user) {
+				id_us_min(&lineset->linestyle->id);
+			}
 			lineset->linestyle = NULL;
 		}
 	}
@@ -79,7 +75,7 @@ void BKE_freestyle_config_free(FreestyleConfig *config)
 	BLI_freelistN(&config->modules);
 }
 
-void BKE_freestyle_config_copy(FreestyleConfig *new_config, FreestyleConfig *config, const int flag)
+void BKE_freestyle_config_copy(FreestyleConfig *new_config, const FreestyleConfig *config, const int flag)
 {
 	FreestyleLineSet *lineset, *new_lineset;
 	FreestyleModuleConfig *module, *new_module;

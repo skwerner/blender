@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,100 +15,170 @@
  *
  * The Original Code is Copyright (C) 2016 Blender Foundation.
  * All rights reserved.
- *
- * Original Author: Sergey Sharybin
- * Contributor(s): None Yet
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/depsgraph/intern/builder/deg_builder.cc
- *  \ingroup depsgraph
+/** \file
+ * \ingroup depsgraph
  */
 
 #include "intern/builder/deg_builder.h"
 
+#include <cstring>
+
 #include "DNA_anim_types.h"
-#include "DNA_object_types.h"
+#include "DNA_layer_types.h"
 #include "DNA_ID.h"
+#include "DNA_object_types.h"
 
 #include "BLI_utildefines.h"
 #include "BLI_ghash.h"
 #include "BLI_stack.h"
 
+extern "C" {
+#include "BKE_animsys.h"
+}
+
 #include "intern/depsgraph.h"
-#include "intern/depsgraph_types.h"
-#include "intern/nodes/deg_node.h"
-#include "intern/nodes/deg_node_component.h"
-#include "intern/nodes/deg_node_id.h"
-#include "intern/nodes/deg_node_operation.h"
+#include "intern/depsgraph_tag.h"
+#include "intern/depsgraph_type.h"
+#include "intern/eval/deg_eval_copy_on_write.h"
+#include "intern/node/deg_node.h"
+#include "intern/node/deg_node_id.h"
+#include "intern/node/deg_node_component.h"
+#include "intern/node/deg_node_operation.h"
 
-#include "util/deg_util_foreach.h"
-
-#include <cstdio>
+#include "DEG_depsgraph.h"
 
 namespace DEG {
 
-static bool check_object_needs_evaluation(Object *object)
+/*******************************************************************************
+ * Base class for builders.
+ */
+
+namespace {
+
+struct VisibilityCheckData {
+	eEvaluationMode eval_mode;
+	bool is_visibility_animated;
+};
+
+void visibility_animated_check_cb(ID * /*id*/, FCurve *fcu, void *user_data)
 {
-	if (object->recalc & OB_RECALC_ALL) {
-		/* Object is tagged for update anyway, no need to re-tag it. */
+	VisibilityCheckData *data =
+	        reinterpret_cast<VisibilityCheckData *>(user_data);
+	if (data->is_visibility_animated) {
+		return;
+	}
+	if (data->eval_mode == DAG_EVAL_VIEWPORT) {
+		if (STREQ(fcu->rna_path, "hide_viewport")) {
+			data->is_visibility_animated = true;
+		}
+	}
+	else if (data->eval_mode == DAG_EVAL_RENDER) {
+		if (STREQ(fcu->rna_path, "hide_render")) {
+			data->is_visibility_animated = true;
+		}
+	}
+}
+
+bool is_object_visibility_animated(const Depsgraph *graph, Object *object)
+{
+	AnimData *anim_data = BKE_animdata_from_id(&object->id);
+	if (anim_data == NULL) {
 		return false;
 	}
-	if (object->type == OB_MESH) {
-		return object->derivedFinal == NULL;
+	VisibilityCheckData data;
+	data.eval_mode = graph->mode;
+	data.is_visibility_animated = false;
+	BKE_fcurves_id_cb(&object->id, visibility_animated_check_cb, &data);
+	return data.is_visibility_animated;
+}
+
+}  // namespace
+
+bool deg_check_base_available_for_build(const Depsgraph *graph, Base *base)
+{
+	const int base_flag = (graph->mode == DAG_EVAL_VIEWPORT) ?
+	        BASE_ENABLED_VIEWPORT : BASE_ENABLED_RENDER;
+	if (base->flag & base_flag) {
+		return true;
 	}
-	else if (ELEM(object->type,
-	              OB_CURVE, OB_SURF, OB_FONT, OB_MBALL, OB_LATTICE))
-	{
-		return object->curve_cache == NULL;
+	if (is_object_visibility_animated(graph, base->object)) {
+		return true;
 	}
 	return false;
 }
 
-void deg_graph_build_flush_layers(Depsgraph *graph)
+DepsgraphBuilder::DepsgraphBuilder(Main *bmain, Depsgraph *graph)
+        : bmain_(bmain),
+          graph_(graph) {
+}
+
+bool DepsgraphBuilder::need_pull_base_into_graph(Base *base)
 {
-	BLI_Stack *stack = BLI_stack_new(sizeof(OperationDepsNode *),
+	return deg_check_base_available_for_build(graph_, base);
+}
+
+/*******************************************************************************
+ * Builder finalizer.
+ */
+
+namespace {
+
+void deg_graph_build_flush_visibility(Depsgraph *graph)
+{
+	enum {
+		DEG_NODE_VISITED = (1 << 0),
+	};
+
+	BLI_Stack *stack = BLI_stack_new(sizeof(OperationNode *),
 	                                 "DEG flush layers stack");
-	foreach (OperationDepsNode *node, graph->operations) {
-		IDDepsNode *id_node = node->owner->owner;
-		node->done = 0;
-		node->num_links_pending = 0;
-		foreach (DepsRelation *rel, node->outlinks) {
-			if ((rel->from->type == DEG_NODE_TYPE_OPERATION) &&
-			    (rel->flag & DEPSREL_FLAG_CYCLIC) == 0)
+	for (IDNode *id_node : graph->id_nodes) {
+		GHASH_FOREACH_BEGIN(ComponentNode *, comp_node, id_node->components)
+		{
+			comp_node->affects_directly_visible |= id_node->is_directly_visible;
+		}
+		GHASH_FOREACH_END();
+	}
+	for (OperationNode *op_node : graph->operations) {
+		op_node->custom_flags = 0;
+		op_node->num_links_pending = 0;
+		for (Relation *rel : op_node->outlinks) {
+			if ((rel->from->type == NodeType::OPERATION) &&
+			    (rel->flag & RELATION_FLAG_CYCLIC) == 0)
 			{
-				++node->num_links_pending;
+				++op_node->num_links_pending;
 			}
 		}
-		if (node->num_links_pending == 0) {
-			BLI_stack_push(stack, &node);
-			node->done = 1;
+		if (op_node->num_links_pending == 0) {
+			BLI_stack_push(stack, &op_node);
+			op_node->custom_flags |= DEG_NODE_VISITED;
 		}
-		node->owner->layers = id_node->layers;
-		id_node->id->tag |= LIB_TAG_DOIT;
 	}
 	while (!BLI_stack_is_empty(stack)) {
-		OperationDepsNode *node;
-		BLI_stack_pop(stack, &node);
+		OperationNode *op_node;
+		BLI_stack_pop(stack, &op_node);
 		/* Flush layers to parents. */
-		foreach (DepsRelation *rel, node->inlinks) {
-			if (rel->from->type == DEG_NODE_TYPE_OPERATION) {
-				OperationDepsNode *from = (OperationDepsNode *)rel->from;
-				from->owner->layers |= node->owner->layers;
+		for (Relation *rel : op_node->inlinks) {
+			if (rel->from->type == NodeType::OPERATION) {
+				OperationNode *op_from = (OperationNode *)rel->from;
+				op_from->owner->affects_directly_visible |=
+				        op_node->owner->affects_directly_visible;
 			}
 		}
 		/* Schedule parent nodes. */
-		foreach (DepsRelation *rel, node->inlinks) {
-			if (rel->from->type == DEG_NODE_TYPE_OPERATION) {
-				OperationDepsNode *from = (OperationDepsNode *)rel->from;
-				if ((rel->flag & DEPSREL_FLAG_CYCLIC) == 0) {
-					BLI_assert(from->num_links_pending > 0);
-					--from->num_links_pending;
+		for (Relation *rel : op_node->inlinks) {
+			if (rel->from->type == NodeType::OPERATION) {
+				OperationNode *op_from = (OperationNode *)rel->from;
+				if ((rel->flag & RELATION_FLAG_CYCLIC) == 0) {
+					BLI_assert(op_from->num_links_pending > 0);
+					--op_from->num_links_pending;
 				}
-				if (from->num_links_pending == 0 && from->done == 0) {
-					BLI_stack_push(stack, &from);
-					from->done = 1;
+				if ((op_from->num_links_pending == 0) &&
+				    (op_from->custom_flags & DEG_NODE_VISITED) == 0)
+				{
+					BLI_stack_push(stack, &op_from);
+					op_from->custom_flags |= DEG_NODE_VISITED;
 				}
 			}
 		}
@@ -118,54 +186,41 @@ void deg_graph_build_flush_layers(Depsgraph *graph)
 	BLI_stack_free(stack);
 }
 
-void deg_graph_build_finalize(Depsgraph *graph)
-{
-	/* STEP 1: Make sure new invisible dependencies are ready for use.
-	 *
-	 * TODO(sergey): This might do a bit of extra tagging, but it's kinda nice
-	 * to do it ahead of a time and don't spend time on flushing updates on
-	 * every frame change.
-	 */
-	foreach (IDDepsNode *id_node, graph->id_nodes) {
-		if (id_node->layers == 0) {
-			ID *id = id_node->id;
-			if (GS(id->name) == ID_OB) {
-				Object *object = (Object *)id;
-				if (check_object_needs_evaluation(object)) {
-					id_node->tag_update(graph);
-				}
-			}
-		}
-	}
-	/* STEP 2: Flush visibility layers from children to parent. */
-	deg_graph_build_flush_layers(graph);
-	/* STEP 3: Re-tag IDs for update if it was tagged before the relations
-	 * update tag.
-	 */
-	foreach (IDDepsNode *id_node, graph->id_nodes) {
-		GHASH_FOREACH_BEGIN(ComponentDepsNode *, comp, id_node->components)
-		{
-			id_node->layers |= comp->layers;
-		}
-		GHASH_FOREACH_END();
+}  // namespace
 
-		if ((id_node->layers & graph->layers) != 0 || graph->layers == 0) {
-			ID *id = id_node->id;
-			if ((id->recalc & ID_RECALC_ALL) &&
-			    (id->tag & LIB_TAG_DOIT))
-			{
-				id_node->tag_update(graph);
-				id->tag &= ~LIB_TAG_DOIT;
-			}
-			else if (GS(id->name) == ID_OB) {
-				Object *object = (Object *)id;
-				if (object->recalc & OB_RECALC_ALL) {
-					id_node->tag_update(graph);
-					id->tag &= ~LIB_TAG_DOIT;
-				}
+void deg_graph_build_finalize(Main *bmain, Depsgraph *graph)
+{
+	/* Make sure dependencies of visible ID datablocks are visible. */
+	deg_graph_build_flush_visibility(graph);
+	/* Re-tag IDs for update if it was tagged before the relations
+	 * update tag. */
+	for (IDNode *id_node : graph->id_nodes) {
+		ID *id = id_node->id_orig;
+		id_node->finalize_build(graph);
+		int flag = 0;
+		/* Tag rebuild if special evaluation flags changed. */
+		if (id_node->eval_flags != id_node->previous_eval_flags) {
+			flag |= ID_RECALC_TRANSFORM | ID_RECALC_GEOMETRY;
+		}
+		/* Tag rebuild if the custom data mask changed. */
+		if (id_node->customdata_masks != id_node->previous_customdata_masks) {
+			flag |= ID_RECALC_GEOMETRY;
+		}
+		if (!deg_copy_on_write_is_expanded(id_node->id_cow)) {
+			flag |= ID_RECALC_COPY_ON_WRITE;
+			/* This means ID is being added to the dependency graph first
+			 * time, which is similar to "ob-visible-change" */
+			if (GS(id->name) == ID_OB) {
+				flag |= ID_RECALC_TRANSFORM | ID_RECALC_GEOMETRY;
 			}
 		}
-		id_node->finalize_build();
+		if (flag != 0) {
+			graph_id_tag_update(bmain,
+			                    graph,
+			                    id_node->id_orig,
+			                    flag,
+			                    DEG_UPDATE_SOURCE_RELATIONS);
+		}
 	}
 }
 

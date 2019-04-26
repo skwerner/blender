@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,14 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * Contributor(s): Andrew Wiggin
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/makesrna/intern/rna_mesh_utils.h
- *  \ingroup RNA
+/** \file
+ * \ingroup RNA
  */
 
 #ifndef __RNA_MESH_UTILS_H__
@@ -101,12 +95,6 @@
 			for (layer = data->layers + layer_index, a = 0; layer_index + a < data->totlayer; layer++, a++) { \
 				if (value.data == layer) {                                                      \
 					CustomData_set_layer_##active_type(data, layer_type, a);                    \
-					                                                                            \
-					/* keep loops in sync */                                                    \
-					if (layer_type == CD_MTEXPOLY) {                                            \
-						CustomData *ldata = rna_mesh_ldata_helper(me);                          \
-						CustomData_set_layer_##active_type(ldata, CD_MLOOPUV, a);               \
-					}                                                                           \
 					BKE_mesh_update_customdata_pointers(me, true);                              \
 					return;                                                                     \
 				}                                                                               \
@@ -131,11 +119,6 @@
 		CustomData *data = rna_mesh_##customdata_type(ptr);                                     \
 		if (data) {                                                                             \
 			CustomData_set_layer_##active_type(data, layer_type, value);                        \
-			/* keep loops in sync */                                                            \
-			if (layer_type == CD_MTEXPOLY) {                                                    \
-				CustomData *ldata = rna_mesh_ldata_helper(me);                                  \
-				CustomData_set_layer_##active_type(ldata, CD_MLOOPUV, value);                   \
-			}                                                                                   \
 			BKE_mesh_update_customdata_pointers(me, true);                                      \
 		}                                                                                       \
 	}

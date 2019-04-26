@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,20 +15,14 @@
  *
  * The Original Code is Copyright (C) 2010 Blender Foundation.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
 #ifndef __BKE_LINESTYLE_H__
 #define __BKE_LINESTYLE_H__
 
-/** \file BKE_linestyle.h
- *  \ingroup bke
- *  \brief Blender kernel freestyle line style functionality.
+/** \file
+ * \ingroup bke
+ * \brief Blender kernel freestyle line style functionality.
  */
 
 #include "DNA_linestyle_types.h"
@@ -44,9 +36,10 @@ extern "C" {
 #define LS_MODIFIER_TYPE_THICKNESS  3
 #define LS_MODIFIER_TYPE_GEOMETRY   4
 
+struct ColorBand;
 struct Main;
 struct Object;
-struct ColorBand;
+struct ViewLayer;
 struct bContext;
 
 void BKE_linestyle_init(struct FreestyleLineStyle *linestyle);
@@ -59,7 +52,7 @@ FreestyleLineStyle *BKE_linestyle_copy(struct Main *bmain, const FreestyleLineSt
 
 void BKE_linestyle_make_local(struct Main *bmain, struct FreestyleLineStyle *linestyle, const bool lib_local);
 
-FreestyleLineStyle *BKE_linestyle_active_from_scene(struct Scene *scene);
+FreestyleLineStyle *BKE_linestyle_active_from_view_layer(struct ViewLayer *view_layer);
 
 LineStyleModifier *BKE_linestyle_color_modifier_add(FreestyleLineStyle *linestyle, const char *name, int type);
 LineStyleModifier *BKE_linestyle_alpha_modifier_add(FreestyleLineStyle *linestyle, const char *name, int type);

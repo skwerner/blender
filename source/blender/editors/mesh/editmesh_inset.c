@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,14 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * Contributor(s): Campbell Barton
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/mesh/editmesh_inset.c
- *  \ingroup edmesh
+/** \file
+ * \ingroup edmesh
  */
 
 #include "MEM_guardedalloc.h"
@@ -37,6 +31,7 @@
 #include "BKE_global.h"
 #include "BKE_editmesh.h"
 #include "BKE_unit.h"
+#include "BKE_layer.h"
 
 #include "RNA_define.h"
 #include "RNA_access.h"
@@ -55,6 +50,10 @@
 
 #include "mesh_intern.h"  /* own include */
 
+typedef struct {
+	BMEditMesh *em;
+	BMBackup mesh_backup;
+} InsetObjectStore;
 
 typedef struct {
 	float old_thickness;
@@ -65,14 +64,16 @@ typedef struct {
 	bool is_modal;
 	bool shift;
 	float shift_amount;
-	BMEditMesh *em;
+	float max_obj_scale;
 	NumInput num_input;
+
+	InsetObjectStore *ob_store;
+	uint              ob_store_len;
 
 	/* modal only */
 	float mcenter[2];
-	BMBackup mesh_backup;
 	void *draw_handle_pixel;
-	short twtype;
+	short gizmo_flag;
 } InsetData;
 
 
@@ -106,7 +107,7 @@ static void edbm_inset_update_header(wmOperator *op, bContext *C)
 		             WM_bool_as_string(RNA_boolean_get(op->ptr, "use_individual"))
 		            );
 
-		ED_area_headerprint(sa, msg);
+		ED_area_status_text(sa, msg);
 	}
 }
 
@@ -115,27 +116,43 @@ static bool edbm_inset_init(bContext *C, wmOperator *op, const bool is_modal)
 {
 	InsetData *opdata;
 	Scene *scene = CTX_data_scene(C);
-	Object *obedit = CTX_data_edit_object(C);
-	BMEditMesh *em = BKE_editmesh_from_object(obedit);
-
-	if (em->bm->totvertsel == 0) {
-		return false;
-	}
+	ViewLayer *view_layer = CTX_data_view_layer(C);
 
 	if (is_modal) {
-		RNA_float_set(op->ptr, "thickness", 0.01f);
+		RNA_float_set(op->ptr, "thickness", 0.0f);
 		RNA_float_set(op->ptr, "depth", 0.0f);
 	}
 
 	op->customdata = opdata = MEM_mallocN(sizeof(InsetData), "inset_operator_data");
 
-	opdata->old_thickness = 0.01;
+	uint objects_used_len = 0;
+
+	opdata->max_obj_scale = FLT_MIN;
+
+	{
+		uint ob_store_len = 0;
+		Object **objects = BKE_view_layer_array_from_objects_in_edit_mode_unique_data(view_layer, CTX_wm_view3d(C), &ob_store_len);
+		opdata->ob_store = MEM_malloc_arrayN(ob_store_len, sizeof(*opdata->ob_store), __func__);
+		for (uint ob_index = 0; ob_index < ob_store_len; ob_index++) {
+			Object *obedit = objects[ob_index];
+			float scale = mat4_to_scale(obedit->obmat);
+			opdata->max_obj_scale = max_ff(opdata->max_obj_scale, scale);
+			BMEditMesh *em = BKE_editmesh_from_object(obedit);
+			if (em->bm->totvertsel > 0) {
+				opdata->ob_store[objects_used_len].em = em;
+				objects_used_len++;
+			}
+		}
+		MEM_freeN(objects);
+		opdata->ob_store_len = objects_used_len;
+	}
+
+	opdata->old_thickness = 0.0;
 	opdata->old_depth = 0.0;
 	opdata->modify_depth = false;
 	opdata->shift = false;
 	opdata->shift_amount = 0.0f;
 	opdata->is_modal = is_modal;
-	opdata->em = em;
 
 	initNumInput(&opdata->num_input);
 	opdata->num_input.idx_max = 1; /* Two elements. */
@@ -147,13 +164,16 @@ static bool edbm_inset_init(bContext *C, wmOperator *op, const bool is_modal)
 		View3D *v3d = CTX_wm_view3d(C);
 		ARegion *ar = CTX_wm_region(C);
 
-		opdata->mesh_backup = EDBM_redo_state_store(em);
+		for (uint ob_index = 0; ob_index < opdata->ob_store_len; ob_index++) {
+			opdata->ob_store[ob_index].mesh_backup = EDBM_redo_state_store(opdata->ob_store[ob_index].em);
+		}
+
 		opdata->draw_handle_pixel = ED_region_draw_cb_activate(
 		        ar->type, ED_region_draw_mouse_line_cb, opdata->mcenter, REGION_DRAW_POST_PIXEL);
 		G.moving = G_TRANSFORM_EDIT;
 		if (v3d) {
-			opdata->twtype = v3d->twtype;
-			v3d->twtype = 0;
+			opdata->gizmo_flag = v3d->gizmo_flag;
+			v3d->gizmo_flag = V3D_GIZMO_HIDE;
 		}
 	}
 
@@ -170,18 +190,22 @@ static void edbm_inset_exit(bContext *C, wmOperator *op)
 	if (opdata->is_modal) {
 		View3D *v3d = CTX_wm_view3d(C);
 		ARegion *ar = CTX_wm_region(C);
-		EDBM_redo_state_free(&opdata->mesh_backup, NULL, false);
+		for (uint ob_index = 0; ob_index < opdata->ob_store_len; ob_index++) {
+			EDBM_redo_state_free(&opdata->ob_store[ob_index].mesh_backup, NULL, false);
+		}
 		ED_region_draw_cb_exit(ar->type, opdata->draw_handle_pixel);
 		if (v3d) {
-			v3d->twtype = opdata->twtype;
+			v3d->gizmo_flag = opdata->gizmo_flag;
 		}
 		G.moving = 0;
 	}
 
 	if (sa) {
-		ED_area_headerprint(sa, NULL);
+		ED_area_status_text(sa, NULL);
 	}
-	MEM_freeN(op->customdata);
+
+	MEM_SAFE_FREE(opdata->ob_store);
+	MEM_SAFE_FREE(op->customdata);
 }
 
 static void edbm_inset_cancel(bContext *C, wmOperator *op)
@@ -190,8 +214,10 @@ static void edbm_inset_cancel(bContext *C, wmOperator *op)
 
 	opdata = op->customdata;
 	if (opdata->is_modal) {
-		EDBM_redo_state_free(&opdata->mesh_backup, opdata->em, true);
-		EDBM_update_generic(opdata->em, false, true);
+		for (uint ob_index = 0; ob_index < opdata->ob_store_len; ob_index++) {
+			EDBM_redo_state_free(&opdata->ob_store[ob_index].mesh_backup, opdata->ob_store[ob_index].em, true);
+			EDBM_update_generic(opdata->ob_store[ob_index].em, false, true);
+		}
 	}
 
 	edbm_inset_exit(C, op);
@@ -205,6 +231,7 @@ static bool edbm_inset_calc(wmOperator *op)
 	InsetData *opdata;
 	BMEditMesh *em;
 	BMOperator bmop;
+	bool changed = false;
 
 	const bool use_boundary        = RNA_boolean_get(op->ptr, "use_boundary");
 	const bool use_even_offset     = RNA_boolean_get(op->ptr, "use_even_offset");
@@ -213,54 +240,61 @@ static bool edbm_inset_calc(wmOperator *op)
 	const float thickness          = RNA_float_get(op->ptr,   "thickness");
 	const float depth              = RNA_float_get(op->ptr,   "depth");
 	const bool use_outset          = RNA_boolean_get(op->ptr, "use_outset");
-	const bool use_select_inset    = RNA_boolean_get(op->ptr, "use_select_inset"); /* not passed onto the BMO */
+	/* not passed onto the BMO */
+	const bool use_select_inset    = RNA_boolean_get(op->ptr, "use_select_inset");
 	const bool use_individual      = RNA_boolean_get(op->ptr, "use_individual");
 	const bool use_interpolate     = RNA_boolean_get(op->ptr, "use_interpolate");
 
 	opdata = op->customdata;
-	em = opdata->em;
 
-	if (opdata->is_modal) {
-		EDBM_redo_state_restore(opdata->mesh_backup, em, false);
-	}
+	for (uint ob_index = 0; ob_index < opdata->ob_store_len; ob_index++) {
+		em = opdata->ob_store[ob_index].em;
 
-	if (use_individual) {
-		EDBM_op_init(em, &bmop, op,
-		             "inset_individual faces=%hf use_even_offset=%b  use_relative_offset=%b "
-		             "use_interpolate=%b thickness=%f depth=%f",
-		             BM_ELEM_SELECT, use_even_offset, use_relative_offset, use_interpolate,
-		             thickness, depth);
-	}
-	else {
-		EDBM_op_init(em, &bmop, op,
-		             "inset_region faces=%hf use_boundary=%b use_even_offset=%b use_relative_offset=%b "
-		             "use_interpolate=%b thickness=%f depth=%f use_outset=%b use_edge_rail=%b",
-		             BM_ELEM_SELECT, use_boundary, use_even_offset, use_relative_offset, use_interpolate,
-		             thickness, depth, use_outset, use_edge_rail);
+		if (opdata->is_modal) {
+			EDBM_redo_state_restore(opdata->ob_store[ob_index].mesh_backup, em, false);
+		}
 
-		if (use_outset) {
-			BMO_slot_buffer_from_enabled_hflag(em->bm, &bmop, bmop.slots_in, "faces_exclude", BM_FACE, BM_ELEM_HIDDEN);
+		if (use_individual) {
+			EDBM_op_init(
+			        em, &bmop, op,
+			        "inset_individual faces=%hf use_even_offset=%b  use_relative_offset=%b "
+			        "use_interpolate=%b thickness=%f depth=%f",
+			        BM_ELEM_SELECT, use_even_offset, use_relative_offset, use_interpolate,
+			        thickness, depth);
+		}
+		else {
+			EDBM_op_init(
+			        em, &bmop, op,
+			        "inset_region faces=%hf use_boundary=%b use_even_offset=%b use_relative_offset=%b "
+			        "use_interpolate=%b thickness=%f depth=%f use_outset=%b use_edge_rail=%b",
+			        BM_ELEM_SELECT, use_boundary, use_even_offset, use_relative_offset, use_interpolate,
+			        thickness, depth, use_outset, use_edge_rail);
+
+			if (use_outset) {
+				BMO_slot_buffer_from_enabled_hflag(em->bm, &bmop, bmop.slots_in, "faces_exclude", BM_FACE, BM_ELEM_HIDDEN);
+			}
+		}
+		BMO_op_exec(em->bm, &bmop);
+
+		if (use_select_inset) {
+			/* deselect original faces/verts */
+			EDBM_flag_disable_all(em, BM_ELEM_SELECT);
+			BMO_slot_buffer_hflag_enable(em->bm, bmop.slots_out, "faces.out", BM_FACE, BM_ELEM_SELECT, true);
+		}
+		else {
+			EDBM_flag_disable_all(em, BM_ELEM_SELECT);
+			BMO_slot_buffer_hflag_enable(em->bm, bmop.slots_in, "faces", BM_FACE, BM_ELEM_SELECT, true);
+		}
+
+		if (!EDBM_op_finish(em, &bmop, op, true)) {
+			continue;
+		}
+		else {
+			EDBM_update_generic(em, true, true);
+			changed = true;
 		}
 	}
-	BMO_op_exec(em->bm, &bmop);
-
-	if (use_select_inset) {
-		/* deselect original faces/verts */
-		EDBM_flag_disable_all(em, BM_ELEM_SELECT);
-		BMO_slot_buffer_hflag_enable(em->bm, bmop.slots_out, "faces.out", BM_FACE, BM_ELEM_SELECT, true);
-	}
-	else {
-		EDBM_flag_disable_all(em, BM_ELEM_SELECT);
-		BMO_slot_buffer_hflag_enable(em->bm, bmop.slots_in, "faces", BM_FACE, BM_ELEM_SELECT, true);
-	}
-
-	if (!EDBM_op_finish(em, &bmop, op, true)) {
-		return false;
-	}
-	else {
-		EDBM_update_generic(em, true, true);
-		return true;
-	}
+	return changed;
 }
 
 static int edbm_inset_exec(bContext *C, wmOperator *op)
@@ -292,7 +326,7 @@ static int edbm_inset_invoke(bContext *C, wmOperator *op, const wmEvent *event)
 	opdata = op->customdata;
 
 	/* initialize mouse values */
-	if (!calculateTransformCenter(C, V3D_AROUND_CENTER_MEAN, center_3d, opdata->mcenter)) {
+	if (!calculateTransformCenter(C, V3D_AROUND_CENTER_MEDIAN, center_3d, opdata->mcenter)) {
 		/* in this case the tool will likely do nothing,
 		 * ideally this will never happen and should be checked for above */
 		opdata->mcenter[0] = opdata->mcenter[1] = 0;
@@ -349,10 +383,14 @@ static int edbm_inset_modal(bContext *C, wmOperator *op, const wmEvent *event)
 					mdiff[0] = opdata->mcenter[0] - event->mval[0];
 					mdiff[1] = opdata->mcenter[1] - event->mval[1];
 
-					if (opdata->modify_depth)
-						amount = opdata->old_depth     + ((len_v2(mdiff) - opdata->initial_length) * opdata->pixel_size);
-					else
-						amount = opdata->old_thickness - ((len_v2(mdiff) - opdata->initial_length) * opdata->pixel_size);
+					if (opdata->modify_depth) {
+						amount = opdata->old_depth +
+							((len_v2(mdiff) - opdata->initial_length) * opdata->pixel_size) / opdata->max_obj_scale;
+					}
+					else {
+						amount = opdata->old_thickness -
+							((len_v2(mdiff) - opdata->initial_length) * opdata->pixel_size) / opdata->max_obj_scale;
+					}
 
 					/* Fake shift-transform... */
 					if (opdata->shift)
@@ -378,7 +416,9 @@ static int edbm_inset_modal(bContext *C, wmOperator *op, const wmEvent *event)
 			case LEFTMOUSE:
 			case PADENTER:
 			case RETKEY:
-				if (event->val == KM_PRESS) {
+				if ((event->val == KM_PRESS) ||
+				    ((event->val == KM_RELEASE) && RNA_boolean_get(op->ptr, "release_confirm")))
+				{
 					edbm_inset_calc(op);
 					edbm_inset_exit(C, op);
 					return OPERATOR_FINISHED;
@@ -529,7 +569,7 @@ void MESH_OT_inset(wmOperatorType *ot)
 	        ot->srna, "use_edge_rail",
 	        false, "Edge Rail", "Inset the region along existing edges");
 
-	prop = RNA_def_float_distance(ot->srna, "thickness", 0.01f, 0.0f, 1e12f, "Thickness", "", 0.0f, 10.0f);
+	prop = RNA_def_float_distance(ot->srna, "thickness", 0.0f, 0.0f, 1e12f, "Thickness", "", 0.0f, 10.0f);
 	/* use 1 rather then 10 for max else dragging the button moves too far */
 	RNA_def_property_ui_range(prop, 0.0, 1.0, 0.01, 4);
 
@@ -540,4 +580,7 @@ void MESH_OT_inset(wmOperatorType *ot)
 	RNA_def_boolean(ot->srna, "use_select_inset", false, "Select Outer", "Select the new inset faces");
 	RNA_def_boolean(ot->srna, "use_individual", false, "Individual", "Individual Face Inset");
 	RNA_def_boolean(ot->srna, "use_interpolate", true, "Interpolate", "Blend face data across the inset");
+
+	prop = RNA_def_boolean(ot->srna, "release_confirm", 0, "Confirm on Release", "");
+	RNA_def_property_flag(prop, PROP_HIDDEN | PROP_SKIP_SAVE);
 }

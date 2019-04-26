@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,14 +15,10 @@
  *
  * The Original Code is Copyright (C) 2012 Blender Foundation.
  * All rights reserved.
- *
- * Contributor(s): Campbell Barton
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/python/bmesh/bmesh_py_ops.c
- *  \ingroup pybmesh
+/** \file
+ * \ingroup pybmesh
  *
  * This file defines the 'bmesh.ops' module.
  * Operators from 'opdefines' are wrapped.
@@ -75,10 +69,14 @@ static char *bmp_slots_as_args(const BMOSlotType slot_types[BMO_OP_MAX_SLOTS], c
 {
 	DynStr *dyn_str = BLI_dynstr_new();
 	char *ret;
+	bool quoted;
+	bool set;
 
 	int i = 0;
 
 	while (*slot_types[i].name) {
+		quoted = false;
+		set = false;
 		/* cut off '.out' by using a string size arg */
 		const int name_len = is_out ?
 		        (strchr(slot_types[i].name, '.') - slot_types[i].name) :
@@ -86,7 +84,19 @@ static char *bmp_slots_as_args(const BMOSlotType slot_types[BMO_OP_MAX_SLOTS], c
 		const char *value = "<Unknown>";
 		switch (slot_types[i].type) {
 			case BMO_OP_SLOT_BOOL:          value = "False"; break;
-			case BMO_OP_SLOT_INT:           value = "0"; break;
+			case BMO_OP_SLOT_INT:
+				if (slot_types[i].subtype.intg == BMO_OP_SLOT_SUBTYPE_INT_ENUM) {
+					value = slot_types[i].enum_flags[0].identifier;
+					quoted = true;
+				}
+				else if (slot_types[i].subtype.intg == BMO_OP_SLOT_SUBTYPE_INT_FLAG) {
+					value = "";
+					set = true;
+				}
+				else {
+					value = "0";
+				}
+				break;
 			case BMO_OP_SLOT_FLT:           value = "0.0"; break;
 			case BMO_OP_SLOT_PTR:           value = "None"; break;
 			case BMO_OP_SLOT_MAT:           value = "Matrix()"; break;
@@ -95,7 +105,12 @@ static char *bmp_slots_as_args(const BMOSlotType slot_types[BMO_OP_MAX_SLOTS], c
 			     (slot_types[i].subtype.elem & BMO_OP_SLOT_SUBTYPE_ELEM_IS_SINGLE) ? "None" : "[]"; break;
 			case BMO_OP_SLOT_MAPPING:       value = "{}"; break;
 		}
-		BLI_dynstr_appendf(dyn_str, i ? ", %.*s=%s" : "%.*s=%s", name_len, slot_types[i].name, value);
+		BLI_dynstr_appendf(
+		        dyn_str, i ? ", %.*s=%s%s%s%s%s" : "%.*s=%s%s%s%s%s",
+		        name_len, slot_types[i].name,
+		        set ? "{" : "", quoted ? "'" : "",
+		        value,
+		        quoted ? "'" : "", set ? "}" : "");
 		i++;
 	}
 
@@ -211,7 +226,7 @@ static PyTypeObject bmesh_op_Type = {
 	NULL,                       /* PyObject *tp_cache; */
 	NULL,                       /* PyObject *tp_subclasses; */
 	NULL,                       /* PyObject *tp_weaklist; */
-	NULL
+	NULL,
 };
 
 
@@ -250,7 +265,7 @@ static PyObject *bpy_bmesh_ops_fakemod_dir(PyObject *UNUSED(self))
 
 static struct PyMethodDef bpy_bmesh_ops_fakemod_methods[] = {
 	{"__dir__", (PyCFunction)bpy_bmesh_ops_fakemod_dir, METH_NOARGS, NULL},
-	{NULL, NULL, 0, NULL}
+	{NULL, NULL, 0, NULL},
 };
 
 static PyTypeObject bmesh_ops_fakemod_Type = {
@@ -297,8 +312,8 @@ static PyTypeObject bmesh_ops_fakemod_Type = {
 	NULL,                       /* inquiry tp_clear; */
 
 	/***  Assigned meaning in release 2.1 ***/
-	/*** rich comparisons ***/
-	NULL, /* subclassed */		/* richcmpfunc tp_richcompare; */
+	/*** rich comparisons (subclassed) ***/
+	NULL, /* richcmpfunc tp_richcompare; */
 
 	/***  weak reference enabler ***/
 	0,
@@ -329,18 +344,20 @@ static PyTypeObject bmesh_ops_fakemod_Type = {
 	NULL,                       /* PyObject *tp_cache; */
 	NULL,                       /* PyObject *tp_subclasses; */
 	NULL,                       /* PyObject *tp_weaklist; */
-	NULL
+	NULL,
 };
 
 PyObject *BPyInit_bmesh_ops(void)
 {
 	PyObject *submodule;
 
-	if (PyType_Ready(&bmesh_ops_fakemod_Type) < 0)
+	if (PyType_Ready(&bmesh_ops_fakemod_Type) < 0) {
 		return NULL;
+	}
 
-	if (PyType_Ready(&bmesh_op_Type) < 0)
+	if (PyType_Ready(&bmesh_op_Type) < 0) {
 		return NULL;
+	}
 
 	submodule = PyObject_New(PyObject, &bmesh_ops_fakemod_Type);
 

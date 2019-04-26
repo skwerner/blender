@@ -16,11 +16,6 @@
 #
 # The Original Code is Copyright (C) 2006, Blender Foundation
 # All rights reserved.
-#
-# The Original Code is: all of this file.
-#
-# Contributor(s): Jacques Beaurain.
-#
 # ***** END GPL LICENSE BLOCK *****
 
 set(SRC
@@ -392,12 +387,12 @@ set(SRC
 	intern/scene_graph/NodeGroup.h
 	intern/scene_graph/NodeLight.cpp
 	intern/scene_graph/NodeLight.h
-	intern/scene_graph/NodeSceneRenderLayer.cpp
-	intern/scene_graph/NodeSceneRenderLayer.h
 	intern/scene_graph/NodeShape.cpp
 	intern/scene_graph/NodeShape.h
 	intern/scene_graph/NodeTransform.cpp
 	intern/scene_graph/NodeTransform.h
+	intern/scene_graph/NodeViewLayer.cpp
+	intern/scene_graph/NodeViewLayer.h
 	intern/scene_graph/OrientedLineRep.cpp
 	intern/scene_graph/OrientedLineRep.h
 	intern/scene_graph/Rep.cpp
@@ -552,11 +547,16 @@ set(SRC
 	intern/winged_edge/WingedEdgeBuilder.h
 )
 
+set(LIB
+	bf_python_mathutils
+)
+
 set(INC
 	.
 	../blenkernel
 	../blenlib
 	../blentranslation
+	../depsgraph
 	../imbuf
 	../makesdna
 	../makesrna
@@ -585,4 +585,4 @@ if(WIN32)
 	)
 endif()
 
-blender_add_lib(bf_freestyle "${SRC}" "${INC}" "${INC_SYS}")
+blender_add_lib(bf_freestyle "${SRC}" "${INC}" "${INC_SYS}" "${LIB}")

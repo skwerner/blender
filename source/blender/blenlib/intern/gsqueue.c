@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,10 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/blenlib/intern/gsqueue.c
- *  \ingroup bli
+/** \file
+ * \ingroup bli
  *
  * \brief A generic structure queue
  * (a queue for fixed length generally small) structures.
@@ -58,7 +50,7 @@ struct _GSQueue {
 /**
  * Create a new GSQueue.
  *
- * \param elem_size The size of the structures in the queue.
+ * \param elem_size: The size of the structures in the queue.
  * \retval The new queue
  */
 GSQueue *BLI_gsqueue_new(size_t elem_size)
@@ -86,8 +78,9 @@ int BLI_gsqueue_len(GSQueue *gq)
 	GSQueueElem *elem;
 	int size = 0;
 
-	for (elem = gq->head; elem; elem = elem->next)
+	for (elem = gq->head; elem; elem = elem->next) {
 		size++;
+	}
 
 	return size;
 }
@@ -131,7 +124,7 @@ void BLI_gsqueue_pop(GSQueue *gq, void *r_item)
 /**
  * Push an element onto the tail of the queue.
  *
- * \param item A pointer to an appropriately
+ * \param item: A pointer to an appropriately
  * sized structure (the size passed to BLI_gsqueue_new).
  */
 void BLI_gsqueue_push(GSQueue *gq, const void *item)
@@ -140,8 +133,9 @@ void BLI_gsqueue_push(GSQueue *gq, const void *item)
 
 	/* compare: prevent events added double in row */
 	if (!BLI_gsqueue_is_empty(gq)) {
-		if (0 == memcmp(item, gq->head->data, gq->elem_size))
+		if (0 == memcmp(item, gq->head->data, gq->elem_size)) {
 			return;
+		}
 	}
 	elem = MEM_mallocN(sizeof(*elem) + gq->elem_size, "gqueue_push");
 	memcpy(elem->data, item, gq->elem_size);
@@ -159,7 +153,7 @@ void BLI_gsqueue_push(GSQueue *gq, const void *item)
  * Push an element back onto the head of the queue (so
  * it would be returned from the next call to BLI_gsqueue_pop).
  *
- * \param item A pointer to an appropriately
+ * \param item: A pointer to an appropriately
  * sized structure (the size passed to BLI_gsqueue_new).
  */
 void BLI_gsqueue_push_back(GSQueue *gq, const void *item)

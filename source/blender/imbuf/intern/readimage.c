@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,18 +15,11 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  * allocimbuf.c
- *
  */
 
-/** \file blender/imbuf/intern/readimage.c
- *  \ingroup imbuf
+/** \file
+ * \ingroup imbuf
  */
 
 
@@ -101,7 +92,9 @@ static void imb_handle_alpha(ImBuf *ibuf, int flags, char colorspace[IM_MAX_SPAC
 	colormanage_imbuf_make_linear(ibuf, effective_colorspace);
 }
 
-ImBuf *IMB_ibImageFromMemory(unsigned char *mem, size_t size, int flags, char colorspace[IM_MAX_SPACE], const char *descr)
+ImBuf *IMB_ibImageFromMemory(
+        const unsigned char *mem, size_t size, int flags,
+        char colorspace[IM_MAX_SPACE], const char *descr)
 {
 	ImBuf *ibuf;
 	const ImFileType *type;
@@ -230,7 +223,6 @@ ImBuf *IMB_loadiffname(const char *filepath, int flags, char colorspace[IM_MAX_S
 		BLI_strncpy(ibuf->cachename, filepath_tx, sizeof(ibuf->cachename));
 		for (a = 1; a < ibuf->miptot; a++)
 			BLI_strncpy(ibuf->mipmap[a - 1]->cachename, filepath_tx, sizeof(ibuf->cachename));
-		if (flags & IB_fields) IMB_de_interlace(ibuf);
 	}
 
 	close(file);

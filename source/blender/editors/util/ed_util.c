@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,17 +15,11 @@
  *
  * The Original Code is Copyright (C) 2008 Blender Foundation.
  * All rights reserved.
- *
- *
- * Contributor(s): Blender Foundation
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/util/ed_util.c
- *  \ingroup edutil
+/** \file
+ * \ingroup edutil
  */
-
 
 #include <stdlib.h>
 #include <string.h>
@@ -35,6 +27,7 @@
 
 #include "MEM_guardedalloc.h"
 
+#include "DNA_armature_types.h"
 #include "DNA_mesh_types.h"
 #include "DNA_object_types.h"
 #include "DNA_screen_types.h"
@@ -46,19 +39,20 @@
 #include "BLI_string.h"
 #include "BLI_path_util.h"
 
-#include "BIF_gl.h"
-#include "BIF_glutil.h"
-
 #include "BLT_translation.h"
 
 #include "BKE_context.h"
 #include "BKE_global.h"
+#include "BKE_layer.h"
 #include "BKE_main.h"
 #include "BKE_multires.h"
+#include "BKE_object.h"
 #include "BKE_packedFile.h"
 #include "BKE_paint.h"
 #include "BKE_screen.h"
 #include "BKE_undo_system.h"
+#include "BKE_workspace.h"
+#include "BKE_material.h"
 
 #include "ED_armature.h"
 #include "ED_buttons.h"
@@ -71,6 +65,9 @@
 #include "ED_space_api.h"
 #include "ED_util.h"
 
+#include "GPU_immediate.h"
+#include "GPU_state.h"
+
 #include "UI_interface.h"
 #include "UI_resources.h"
 
@@ -82,17 +79,30 @@
 
 /* ********* general editor util funcs, not BKE stuff please! ********* */
 
+void ED_editors_init_for_undo(Main *bmain)
+{
+	wmWindowManager *wm = bmain->wm.first;
+	for (wmWindow *win = wm->windows.first; win; win = win->next) {
+		ViewLayer *view_layer = WM_window_get_active_view_layer(win);
+		Base *base = BASACT(view_layer);
+		if (base != NULL) {
+			Object *ob = base->object;
+			if (ob->mode & OB_MODE_TEXTURE_PAINT) {
+				Scene *scene = WM_window_get_active_scene(win);
+
+				BKE_texpaint_slots_refresh_object(scene, ob);
+				BKE_paint_proj_mesh_data_check(scene, ob, NULL, NULL, NULL, NULL);
+			}
+		}
+	}
+}
+
 void ED_editors_init(bContext *C)
 {
-	wmWindowManager *wm = CTX_wm_manager(C);
+	struct Depsgraph *depsgraph = CTX_data_depsgraph(C);
 	Main *bmain = CTX_data_main(C);
-	Scene *sce = CTX_data_scene(C);
-	Object *ob, *obact = (sce && sce->basact) ? sce->basact->object : NULL;
-	ID *data;
-
-	if (wm->undo_stack == NULL) {
-		wm->undo_stack = BKE_undosys_stack_create();
-	}
+	Scene *scene = CTX_data_scene(C);
+	wmWindowManager *wm = CTX_wm_manager(C);
 
 	/* This is called during initialization, so we don't want to store any reports */
 	ReportList *reports = CTX_wm_reports(C);
@@ -100,64 +110,115 @@ void ED_editors_init(bContext *C)
 
 	SWAP(int, reports->flag, reports_flag_prev);
 
+	/* Don't do undo pushes when calling an operator. */
+	wm->op_undo_depth++;
+
 	/* toggle on modes for objects that were saved with these enabled. for
 	 * e.g. linked objects we have to ensure that they are actually the
 	 * active object in this scene. */
-	for (ob = bmain->object.first; ob; ob = ob->id.next) {
-		int mode = ob->mode;
+	Object *obact = CTX_data_active_object(C);
+	if (obact != NULL) {
+		for (Object *ob = bmain->objects.first; ob; ob = ob->id.next) {
+			int mode = ob->mode;
+			if (mode == OB_MODE_OBJECT) {
+				continue;
+			}
+			else if (BKE_object_has_mode_data(ob, mode)) {
+				continue;
+			}
+			else if (ob->type == OB_GPENCIL) {
+				/* For multi-edit mode we may already have mode data.
+				 * (grease pencil does not need it) */
+				continue;
+			}
 
-		if (!ELEM(mode, OB_MODE_OBJECT, OB_MODE_POSE)) {
+			ID *ob_data = ob->data;
 			ob->mode = OB_MODE_OBJECT;
-			data = ob->data;
-
-			if (ob == obact && !ID_IS_LINKED(ob) && !(data && ID_IS_LINKED(data)))
-				ED_object_mode_toggle(C, mode);
+			if ((ob->type == obact->type) &&
+			    !ID_IS_LINKED(ob) &&
+			    !(ob_data && ID_IS_LINKED(ob_data)))
+			{
+				if (mode == OB_MODE_EDIT) {
+					ED_object_editmode_enter_ex(bmain, scene, ob, 0);
+				}
+				else if (mode == OB_MODE_POSE) {
+					ED_object_posemode_enter_ex(bmain, ob);
+				}
+				else if (mode & OB_MODE_ALL_SCULPT) {
+					if (obact == ob) {
+						if (mode == OB_MODE_SCULPT) {
+							ED_object_sculptmode_enter_ex(bmain, depsgraph, scene, ob, true, reports);
+						}
+						else if (mode == OB_MODE_VERTEX_PAINT) {
+							ED_object_vpaintmode_enter_ex(bmain, depsgraph, wm, scene, ob);
+						}
+						else if (mode == OB_MODE_WEIGHT_PAINT) {
+							ED_object_wpaintmode_enter_ex(bmain, depsgraph, wm, scene, ob);
+						}
+						else {
+							BLI_assert(0);
+						}
+					}
+					else {
+						/* Create data for non-active objects which need it for
+						 * mode-switching but don't yet support multi-editing. */
+						if (mode & OB_MODE_ALL_SCULPT) {
+							ob->mode = mode;
+							BKE_object_sculpt_data_create(ob);
+						}
+					}
+				}
+				else {
+					/* TODO(campbell): avoid operator calls. */
+					if (obact == ob) {
+						ED_object_mode_toggle(C, mode);
+					}
+				}
+			}
 		}
 	}
 
+
 	/* image editor paint mode */
-	if (sce) {
-		ED_space_image_paint_update(bmain, wm, sce);
+	if (scene) {
+		ED_space_image_paint_update(bmain, wm, scene);
 	}
 
 	SWAP(int, reports->flag, reports_flag_prev);
+	wm->op_undo_depth--;
 }
 
 /* frees all editmode stuff */
-void ED_editors_exit(bContext *C)
+void ED_editors_exit(Main *bmain, bool do_undo_system)
 {
-	Main *bmain = CTX_data_main(C);
-	Scene *sce;
-
-	if (!bmain)
+	if (!bmain) {
 		return;
+	}
 
 	/* frees all editmode undos */
-	if (G_MAIN->wm.first) {
+	if (do_undo_system && G_MAIN->wm.first) {
 		wmWindowManager *wm = G_MAIN->wm.first;
-		/* normally we don't check for NULL undo stack, do here since it may run in different context. */
+		/* normally we don't check for NULL undo stack,
+		 * do here since it may run in different context. */
 		if (wm->undo_stack) {
 			BKE_undosys_stack_destroy(wm->undo_stack);
 			wm->undo_stack = NULL;
 		}
 	}
 
-	for (sce = bmain->scene.first; sce; sce = sce->id.next) {
-		if (sce->obedit) {
-			Object *ob = sce->obedit;
-
-			if (ob) {
-				if (ob->type == OB_MESH) {
-					Mesh *me = ob->data;
-					if (me->edit_btmesh) {
-						EDBM_mesh_free(me->edit_btmesh);
-						MEM_freeN(me->edit_btmesh);
-						me->edit_btmesh = NULL;
-					}
-				}
-				else if (ob->type == OB_ARMATURE) {
-					ED_armature_edit_free(ob->data);
-				}
+	for (Object *ob = bmain->objects.first; ob; ob = ob->id.next) {
+		if (ob->type == OB_MESH) {
+			Mesh *me = ob->data;
+			if (me->edit_mesh) {
+				EDBM_mesh_free(me->edit_mesh);
+				MEM_freeN(me->edit_mesh);
+				me->edit_mesh = NULL;
+			}
+		}
+		else if (ob->type == OB_ARMATURE) {
+			bArmature *arm = ob->data;
+			if (arm->edbo) {
+				ED_armature_edit_free(ob->data);
 			}
 		}
 	}
@@ -169,19 +230,19 @@ void ED_editors_exit(bContext *C)
 
 /* flush any temp data from object editing to DNA before writing files,
  * rendering, copying, etc. */
-bool ED_editors_flush_edits(const bContext *C, bool for_render)
+bool ED_editors_flush_edits(Main *bmain, bool for_render)
 {
 	bool has_edited = false;
 	Object *ob;
-	Main *bmain = CTX_data_main(C);
 
 	/* loop through all data to find edit mode or object mode, because during
 	 * exiting we might not have a context for edit object and multiple sculpt
 	 * objects can exist at the same time */
-	for (ob = bmain->object.first; ob; ob = ob->id.next) {
+	for (ob = bmain->objects.first; ob; ob = ob->id.next) {
 		if (ob->mode & OB_MODE_SCULPT) {
 			/* Don't allow flushing while in the middle of a stroke (frees data in use).
-			 * Auto-save prevents this from happening but scripts may cause a flush on saving: T53986. */
+			 * Auto-save prevents this from happening but scripts
+			 * may cause a flush on saving: T53986. */
 			if ((ob->sculpt && ob->sculpt->cache) == 0) {
 				/* flush multires changes (for sculpt) */
 				multires_force_update(ob);
@@ -329,22 +390,36 @@ void ED_region_draw_mouse_line_cb(const bContext *C, ARegion *ar, void *arg_info
 {
 	wmWindow *win = CTX_wm_window(C);
 	const float *mval_src = (float *)arg_info;
-	const int mval_dst[2] = {win->eventstate->x - ar->winrct.xmin,
-	                         win->eventstate->y - ar->winrct.ymin};
+	const float mval_dst[2] = {win->eventstate->x - ar->winrct.xmin,
+	                           win->eventstate->y - ar->winrct.ymin};
 
-	UI_ThemeColor(TH_VIEW_OVERLAY);
-	setlinestyle(3);
-	glBegin(GL_LINES);
-	glVertex2iv(mval_dst);
-	glVertex2fv(mval_src);
-	glEnd();
-	setlinestyle(0);
+	const uint shdr_pos = GPU_vertformat_attr_add(immVertexFormat(), "pos", GPU_COMP_F32, 2, GPU_FETCH_FLOAT);
+
+	GPU_line_width(1.0f);
+
+	immBindBuiltinProgram(GPU_SHADER_2D_LINE_DASHED_UNIFORM_COLOR);
+
+	float viewport_size[4];
+	GPU_viewport_size_get_f(viewport_size);
+	immUniform2f("viewport_size", viewport_size[2] / UI_DPI_FAC, viewport_size[3] / UI_DPI_FAC);
+
+	immUniform1i("colors_len", 0);  /* "simple" mode */
+	immUniformThemeColor(TH_VIEW_OVERLAY);
+	immUniform1f("dash_width", 6.0f);
+	immUniform1f("dash_factor", 0.5f);
+
+	immBegin(GPU_PRIM_LINES, 2);
+	immVertex2fv(shdr_pos, mval_src);
+	immVertex2fv(shdr_pos, mval_dst);
+	immEnd();
+
+	immUnbindProgram();
 }
 
 /**
  * Use to free ID references within runtime data (stored outside of DNA)
  *
- * \param new_id may be NULL to unlink \a old_id.
+ * \param new_id: may be NULL to unlink \a old_id.
  */
 void ED_spacedata_id_remap(struct ScrArea *sa, struct SpaceLink *sl, ID *old_id, ID *new_id)
 {
@@ -357,7 +432,8 @@ void ED_spacedata_id_remap(struct ScrArea *sa, struct SpaceLink *sl, ID *old_id,
 
 static int ed_flush_edits_exec(bContext *C, wmOperator *UNUSED(op))
 {
-	ED_editors_flush_edits(C, false);
+	Main *bmain = CTX_data_main(C);
+	ED_editors_flush_edits(bmain, false);
 	return OPERATOR_FINISHED;
 }
 

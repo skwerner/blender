@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,14 +15,10 @@
  *
  * The Original Code is Copyright (C) 2012 Blender Foundation.
  * All rights reserved.
- *
- * Contributor(s): Sergey Sharybin
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/blenlib/intern/voronoi_2d.c
- *  \ingroup bli
+/** \file
+ * \ingroup bli
  *
  * Fortune's algorithm implemented using explanation and some code snippets from
  * http://blog.ivank.net/fortunes-algorithm-and-implementation.html
@@ -41,7 +35,7 @@
 
 enum {
 	voronoiEventType_Site = 0,
-	voronoiEventType_Circle = 1
+	voronoiEventType_Circle = 1,
 };
 
 typedef struct VoronoiEvent {
@@ -142,8 +136,9 @@ static VoronoiParabola *voronoiParabola_getLeftChild(VoronoiParabola *parabola)
 {
 	VoronoiParabola *current_parabola;
 
-	if (!parabola)
+	if (!parabola) {
 		return NULL;
+	}
 
 	current_parabola = parabola->left;
 	while (!current_parabola->is_leaf) {
@@ -158,8 +153,9 @@ static VoronoiParabola *voronoiParabola_getRightChild(VoronoiParabola *parabola)
 {
 	VoronoiParabola *current_parabola;
 
-	if (!parabola)
+	if (!parabola) {
 		return NULL;
+	}
 
 	current_parabola = parabola->right;
 	while (!current_parabola->is_leaf) {
@@ -176,8 +172,9 @@ static VoronoiParabola *voronoiParabola_getLeftParent(VoronoiParabola *parabola)
 	VoronoiParabola *last_parabola = parabola;
 
 	while (current_par->left == last_parabola) {
-		if (!current_par->parent)
+		if (!current_par->parent) {
 			return NULL;
+		}
 
 		last_parabola = current_par;
 		current_par = current_par->parent;
@@ -193,8 +190,9 @@ static VoronoiParabola *voronoiParabola_getRightParent(VoronoiParabola *parabola
 	VoronoiParabola *last_parabola = parabola;
 
 	while (current_parabola->right == last_parabola) {
-		if (!current_parabola->parent)
+		if (!current_parabola->parent) {
 			return NULL;
+		}
 
 		last_parabola = current_parabola;
 		current_parabola = current_parabola->parent;
@@ -256,10 +254,12 @@ static float voronoi_getXOfEdge(VoronoiProcess *process, VoronoiParabola *par, f
 	x1 = (-b + sqrtf(disc)) / (2 * a);
 	x2 = (-b - sqrtf(disc)) / (2 * a);
 
-	if (p[1] < r[1])
+	if (p[1] < r[1]) {
 		ry = max_ff(x1, x2);
-	else
+	}
+	else {
 		ry = min_ff(x1, x2);
+	}
 
 	return ry;
 }
@@ -273,10 +273,12 @@ static VoronoiParabola *voronoi_getParabolaByX(VoronoiProcess *process, float xx
 	while (!par->is_leaf) {
 		x = voronoi_getXOfEdge(process, par, ly);
 
-		if (x > xx)
+		if (x > xx) {
 			par = par->left;
-		else
+		}
+		else {
 			par = par->right;
+		}
 	}
 
 	return par;
@@ -287,17 +289,21 @@ static int voronoi_getEdgeIntersection(VoronoiEdge *a, VoronoiEdge *b, float p[2
 	float x = (b->g - a->g) / (a->f - b->f);
 	float y = a->f * x + a->g;
 
-	if ((x - a->start[0]) / a->direction[0] < 0)
+	if ((x - a->start[0]) / a->direction[0] < 0) {
 		return 0;
+	}
 
-	if ((y - a->start[1]) / a->direction[1] < 0)
+	if ((y - a->start[1]) / a->direction[1] < 0) {
 		return 0;
+	}
 
-	if ((x - b->start[0]) / b->direction[0] < 0)
+	if ((x - b->start[0]) / b->direction[0] < 0) {
 		return 0;
+	}
 
-	if ((y - b->start[1]) / b->direction[1] < 0)
+	if ((y - b->start[1]) / b->direction[1] < 0) {
 		return 0;
+	}
 
 	p[0] = x;
 	p[1] = y;
@@ -318,19 +324,22 @@ static void voronoi_checkCircle(VoronoiProcess *process, VoronoiParabola *b)
 	float ly = process->current_y;
 	float s[2], dx, dy, d;
 
-	if (!a || !c || len_squared_v2v2(a->site, c->site) < VORONOI_EPS)
+	if (!a || !c || len_squared_v2v2(a->site, c->site) < VORONOI_EPS) {
 		return;
+	}
 
-	if (!voronoi_getEdgeIntersection(lp->edge, rp->edge, s))
+	if (!voronoi_getEdgeIntersection(lp->edge, rp->edge, s)) {
 		return;
+	}
 
 	dx = a->site[0] - s[0];
 	dy = a->site[1] - s[1];
 
 	d = sqrtf((dx * dx) + (dy * dy));
 
-	if (s[1] - d >= ly)
+	if (s[1] - d >= ly) {
 		return;
+	}
 
 	event = MEM_callocN(sizeof(VoronoiEvent), "voronoi circle event");
 
@@ -369,10 +378,12 @@ static void voronoi_addParabola(VoronoiProcess *process, float site[2])
 		s[0] = (site[0] + fp[0]) / 2.0f;
 		s[1] = process->height;
 
-		if (site[0] > fp[0])
+		if (site[0] > fp[0]) {
 			root->edge = voronoiEdge_new(s, fp, site);
-		else
+		}
+		else {
 			root->edge = voronoiEdge_new(s, site, fp);
+		}
 
 		BLI_addtail(&process->edges, root->edge);
 
@@ -448,10 +459,12 @@ static void voronoi_removeParabola(VoronoiProcess *process, VoronoiEvent *event)
 	while (par != process->root) {
 		par = par->parent;
 
-		if (par == xl)
+		if (par == xl) {
 			higher = xl;
-		if (par == xr)
+		}
+		if (par == xr) {
 			higher = xr;
+		}
 	}
 
 	higher->edge = voronoiEdge_new(p, p0->site, p2->site);
@@ -459,16 +472,20 @@ static void voronoi_removeParabola(VoronoiProcess *process, VoronoiEvent *event)
 
 	gparent = p1->parent->parent;
 	if (p1->parent->left == p1) {
-		if (gparent->left == p1->parent)
+		if (gparent->left == p1->parent) {
 			voronoiParabola_setLeft(gparent, p1->parent->right);
-		if (gparent->right == p1->parent)
+		}
+		if (gparent->right == p1->parent) {
 			voronoiParabola_setRight(gparent, p1->parent->right);
+		}
 	}
 	else {
-		if (gparent->left == p1->parent)
+		if (gparent->left == p1->parent) {
 			voronoiParabola_setLeft(gparent, p1->parent->left);
-		if (gparent->right == p1->parent)
+		}
+		if (gparent->right == p1->parent) {
 			voronoiParabola_setRight(gparent, p1->parent->left);
+		}
 	}
 
 	MEM_freeN(p1->parent);
@@ -487,10 +504,12 @@ static void voronoi_finishEdge(VoronoiProcess *process, VoronoiParabola *parabol
 		return;
 	}
 
-	if (parabola->edge->direction[0] > 0.0f)
+	if (parabola->edge->direction[0] > 0.0f) {
 		mx = max_ff(process->width, parabola->edge->start[0] + 10);
-	else
+	}
+	else {
 		mx = min_ff(0.0f, parabola->edge->start[0] - 10.0f);
+	}
 
 	parabola->edge->end[0] = mx;
 	parabola->edge->end[1] = mx * parabola->edge->f + parabola->edge->g;
@@ -519,20 +538,26 @@ static void voronoi_clampEdgeVertex(int width, int height, float *coord, float *
 
 		copy_v2_v2(v1, corners[i]);
 
-		if (i == 3)
+		if (i == 3) {
 			copy_v2_v2(v2, corners[0]);
-		else
+		}
+		else {
 			copy_v2_v2(v2, corners[i + 1]);
+		}
 
 		if (isect_seg_seg_v2_point(v1, v2, coord, other_coord, p) == 1) {
-			if (i == 0 && coord[1] > p[1])
+			if (i == 0 && coord[1] > p[1]) {
 				continue;
-			if (i == 1 && coord[0] < p[0])
+			}
+			if (i == 1 && coord[0] < p[0]) {
 				continue;
-			if (i == 2 && coord[1] < p[1])
+			}
+			if (i == 2 && coord[1] < p[1]) {
 				continue;
-			if (i == 3 && coord[0] > p[0])
+			}
+			if (i == 3 && coord[0] > p[0]) {
 				continue;
+			}
 
 			copy_v2_v2(coord, p);
 		}
@@ -636,8 +661,9 @@ static void voronoi_createBoundaryEdges(ListBase *edges, int width, int height)
 		}
 
 		dim = dim ? 0 : 1;
-		if (i == 1)
+		if (i == 1) {
 			dir = -1;
+		}
 	}
 }
 

@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,20 +15,12 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 #ifndef __BKE_TEXT_H__
 #define __BKE_TEXT_H__
 
-/** \file BKE_text.h
- *  \ingroup bke
- *  \since March 2001
- *  \author nzc
+/** \file
+ * \ingroup bke
  */
 
 #ifdef __cplusplus
@@ -112,10 +102,6 @@ bool	txt_cursor_is_line_end(struct Text *text);
 int txt_calc_tab_left(struct TextLine *line, int ch);
 int txt_calc_tab_right(struct TextLine *line, int ch);
 
-#if 0
-void	txt_print_undo		(struct Text *text);
-#endif
-
 /* utility functions, could be moved somewhere more generic but are python/text related  */
 int  text_check_bracket(const char ch);
 bool text_check_delim(const char ch);
@@ -131,7 +117,7 @@ extern int text_check_identifier_nodigit_unicode(const unsigned int ch);
 
 enum {
 	TXT_MOVE_LINE_UP   = -1,
-	TXT_MOVE_LINE_DOWN =  1
+	TXT_MOVE_LINE_DOWN =  1,
 };
 
 typedef struct TextUndoBuf {

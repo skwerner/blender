@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,31 +15,23 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
 #ifndef __BKE_DEFORM_H__
 #define __BKE_DEFORM_H__
 
-/** \file BKE_deform.h
- *  \ingroup bke
- *  \since June 2001
- *  \author Reevan McKay et al
- *  \brief support for deformation groups and hooks.
+/** \file
+ * \ingroup bke
+ * \brief support for deformation groups and hooks.
  */
 
-struct Object;
 struct ListBase;
-struct bDeformGroup;
 struct MDeformVert;
 struct MEdge;
 struct MLoop;
 struct MPoly;
+struct Object;
+struct bDeformGroup;
 
 struct bDeformGroup *BKE_defgroup_new(struct Object *ob, const char *name);
 void                 defgroup_copy_list(struct ListBase *lb1, const struct ListBase *lb2);
@@ -115,5 +105,7 @@ void BKE_defvert_extract_vgroup_to_loopweights(
 void BKE_defvert_extract_vgroup_to_polyweights(
         struct MDeformVert *dvert, const int defgroup, const int num_verts, struct MLoop *loops, const int num_loops,
         struct MPoly *polys, const int num_polys, float *r_weights, const bool invert_vgroup);
+
+void BKE_defvert_weight_to_rgb(float r_rgb[3], const float weight);
 
 #endif  /* __BKE_DEFORM_H__ */

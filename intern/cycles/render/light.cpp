@@ -119,6 +119,7 @@ NODE_DEFINE(Light)
 	SOCKET_FLOAT(sizeu, "Size U", 1.0f);
 	SOCKET_VECTOR(axisv, "Axis V", make_float3(0.0f, 0.0f, 0.0f));
 	SOCKET_FLOAT(sizev, "Size V", 1.0f);
+	SOCKET_BOOLEAN(round, "Round", false);
 
 	SOCKET_INT(map_resolution, "Map Resolution", 0);
 
@@ -185,14 +186,14 @@ LightManager::~LightManager()
 bool LightManager::has_background_light(Scene *scene)
 {
 	foreach(Light *light, scene->lights) {
-		if(light->type == LIGHT_BACKGROUND) {
+		if(light->type == LIGHT_BACKGROUND && light->is_enabled) {
 			return true;
 		}
 	}
 	return false;
 }
 
-void LightManager::disable_ineffective_light(Device *device, Scene *scene)
+void LightManager::disable_ineffective_light(Scene *scene)
 {
 	/* Make all lights enabled by default, and perform some preliminary checks
 	 * needed for finer-tuning of settings (for example, check whether we've
@@ -211,8 +212,7 @@ void LightManager::disable_ineffective_light(Device *device, Scene *scene)
 		 * - If we don't need it (no HDRs etc.)
 		 */
 		Shader *shader = (scene->background->shader) ? scene->background->shader : scene->default_background;
-		bool disable_mis = !(has_portal || shader->has_surface_spatial_varying) ||
-		                   !(device->info.advanced_shading);
+		bool disable_mis = !(has_portal || shader->has_surface_spatial_varying);
 		if(disable_mis) {
 			VLOG(1) << "Background MIS has been disabled.\n";
 			foreach(Light *light, scene->lights) {
@@ -1081,12 +1081,15 @@ void LightManager::device_update_points(Device *,
 			float3 axisu = light->axisu*(light->sizeu*light->size);
 			float3 axisv = light->axisv*(light->sizev*light->size);
 			float area = len(axisu)*len(axisv);
-			float invarea = (area > 0.0f)? 1.0f/area: 1.0f;
+			if(light->round) {
+				area *= -M_PI_4_F;
+			}
+			float invarea = (area != 0.0f)? 1.0f/area: 1.0f;
 			float3 dir = light->dir;
 
 			dir = safe_normalize(dir);
 
-			if(light->use_mis && area > 0.0f)
+			if(light->use_mis && area != 0.0f)
 				shader_id |= SHADER_USE_MIS;
 
 			klights[light_index].co[0] = co.x;
@@ -1155,7 +1158,10 @@ void LightManager::device_update_points(Device *,
 		float3 axisu = light->axisu*(light->sizeu*light->size);
 		float3 axisv = light->axisv*(light->sizev*light->size);
 		float area = len(axisu)*len(axisv);
-		float invarea = (area > 0.0f)? 1.0f/area: 1.0f;
+		if(light->round) {
+			area *= -M_PI_4_F;
+		}
+		float invarea = (area != 0.0f)? 1.0f/area: 1.0f;
 		float3 dir = light->dir;
 
 		dir = safe_normalize(dir);
@@ -1199,7 +1205,7 @@ void LightManager::device_update(Device *device, DeviceScene *dscene, Scene *sce
 
 	use_light_visibility = false;
 
-	disable_ineffective_light(device, scene);
+	disable_ineffective_light(scene);
 
 	device_update_points(device, dscene, scene);
 	if(progress.get_cancel()) return;

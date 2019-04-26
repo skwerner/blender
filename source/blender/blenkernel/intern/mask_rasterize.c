@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,15 +15,10 @@
  *
  * The Original Code is Copyright (C) 2012 Blender Foundation.
  * All rights reserved.
- *
- * Contributor(s): Blender Foundation,
- *                 Campbell Barton
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/blenkernel/intern/mask_rasterize.c
- *  \ingroup bke
+/** \file
+ * \ingroup bke
  *
  * This module exposes a rasterizer that works as a black box - implementation details are confined to this file,
  *
@@ -35,9 +28,7 @@
  * - free the handle.
  *
  * This file is admittedly a bit confusticated, in quite few areas speed was chosen over readability,
- * though it is commented - so shouldn't be so hard to see whats going on.
- *
- *
+ * though it is commented - so shouldn't be so hard to see what's going on.
  * Implementation:
  *
  * To rasterize the mask its converted into geometry that use a ray-cast for each pixel lookup.
@@ -57,8 +48,6 @@
  * - initializing the spacial structure doesn't need to be as optimized as pixel lookups are.
  * - mask lookups need not be pixel aligned so any sub-pixel values from x/y (0 - 1), can be found.
  *   (perhaps masks can be used as a vector texture in 3D later on)
- *
- *
  * Currently, to build the spacial structure we have to calculate the total number of faces ahead of time.
  *
  * This is getting a bit complicated with the addition of unfilled splines and end capping -
@@ -67,6 +56,8 @@
  *
  * - Campbell
  */
+
+#include "CLG_log.h"
 
 #include "MEM_guardedalloc.h"
 
@@ -120,6 +111,8 @@
    /* do nothing */
 #  define FACE_ASSERT(face, vert_max)
 #endif
+
+static CLG_LogRef LOG = {"bke.mask_rasterize"};
 
 static void rotate_point_v2(float r_p[2], const float p[2], const float cent[2], const float angle, const float asp[2])
 {
@@ -486,7 +479,7 @@ static void layer_bucket_init(MaskRasterLayer *layer, const float pixel_size)
 					unsigned int xi_max = (unsigned int) ((xmax - layer->bounds.xmin) * layer->buckets_xy_scalar[0]);
 					unsigned int yi_min = (unsigned int) ((ymin - layer->bounds.ymin) * layer->buckets_xy_scalar[1]);
 					unsigned int yi_max = (unsigned int) ((ymax - layer->bounds.ymin) * layer->buckets_xy_scalar[1]);
-					void *face_index_void = SET_UINT_IN_POINTER(face_index);
+					void *face_index_void = POINTER_FROM_UINT(face_index);
 
 					unsigned int xi, yi;
 
@@ -538,7 +531,7 @@ static void layer_bucket_init(MaskRasterLayer *layer, const float pixel_size)
 					buckets_face[bucket_index] = bucket;
 
 					for (bucket_node = bucketstore[bucket_index]; bucket_node; bucket_node = bucket_node->next) {
-						*bucket = GET_UINT_FROM_POINTER(bucket_node->link);
+						*bucket = POINTER_AS_UINT(bucket_node->link);
 						bucket++;
 					}
 					*bucket = TRI_TERMINATOR_ID;
@@ -749,12 +742,6 @@ void BKE_maskrasterize_handle_init(MaskRasterHandle *mr_handle, struct Mask *mas
 						for (j = 0; j < tot_diff_feather_points; j++) {
 							copy_v2_v2(co_feather, diff_feather_points[j]);
 							sf_vert = BLI_scanfill_vert_add(&sf_ctx, co_feather);
-
-							/* no need for these attrs */
-#if 0
-							sf_vert->tmp.u = sf_vert_tot;
-							sf_vert->keyindex = sf_vert_tot + tot_diff_point; /* absolute index of feather vert */
-#endif
 							sf_vert->keyindex = SF_KEYINDEX_TEMP_ID;
 							sf_vert_tot++;
 						}
@@ -1217,7 +1204,6 @@ static float maskrasterize_layer_z_depth_tri(const float pt[2],
 }
 #endif
 
-#if 1
 static float maskrasterize_layer_z_depth_quad(const float pt[2],
                                               const float v1[3], const float v2[3], const float v3[3], const float v4[3])
 {
@@ -1226,7 +1212,6 @@ static float maskrasterize_layer_z_depth_quad(const float pt[2],
 	//return (v1[2] * w[0]) + (v2[2] * w[1]) + (v3[2] * w[2]) + (v4[2] * w[3]);
 	return w[2] + w[3];  /* we can make this assumption for small speedup */
 }
-#endif
 
 static float maskrasterize_layer_isect(unsigned int *face, float (*cos)[3], const float dist_orig, const float xy[2])
 {
@@ -1247,10 +1232,8 @@ static float maskrasterize_layer_isect(unsigned int *face, float (*cos)[3], cons
 		}
 #else
 		/* we know all tris are close for now */
-		if (1) {
-			if (isect_point_tri_v2_cw(xy, cos[face[0]], cos[face[1]], cos[face[2]])) {
-				return 0.0f;
-			}
+		if (isect_point_tri_v2_cw(xy, cos[face[0]], cos[face[1]], cos[face[2]])) {
+			return 0.0f;
 		}
 #endif
 	}
@@ -1411,6 +1394,7 @@ float BKE_maskrasterize_handle_sample(MaskRasterHandle *mr_handle, const float x
 				value = fabsf(value - value_layer);
 				break;
 			default: /* same as add */
+				CLOG_ERROR(&LOG, "unhandled blend type: %d", layer->blend);
 				BLI_assert(0);
 				value += value_layer;
 				break;
@@ -1475,7 +1459,7 @@ void BKE_maskrasterize_buffer(MaskRasterHandle *mr_handle,
 	    .x_px_ofs = x_inv * 0.5f,
 	    .y_px_ofs = y_inv * 0.5f,
 	    .width = width,
-	    .buffer = buffer
+	    .buffer = buffer,
 	};
 	ParallelRangeSettings settings;
 	BLI_parallel_range_settings_defaults(&settings);

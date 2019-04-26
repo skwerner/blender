@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,15 +15,10 @@
  *
  * The Original Code is Copyright (C) 2008 Blender Foundation.
  * All rights reserved.
- *
- *
- * Contributor(s): Blender Foundation
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/space_file/filesel.c
- *  \ingroup spfile
+/** \file
+ * \ingroup spfile
  */
 
 
@@ -55,27 +48,24 @@
 
 #include "BLI_blenlib.h"
 #include "BLI_utildefines.h"
-#include "BLI_fileops_types.h"
 #include "BLI_fnmatch.h"
 
 #include "BKE_appdir.h"
 #include "BKE_context.h"
-#include "BKE_global.h"
 #include "BKE_main.h"
 
 #include "BLF_api.h"
-
 
 #include "ED_fileselect.h"
 
 #include "WM_api.h"
 #include "WM_types.h"
 
-
 #include "RNA_access.h"
 
 #include "UI_interface.h"
 #include "UI_interface_icons.h"
+#include "UI_view2d.h"
 
 #include "file_intern.h"
 #include "filelist.h"
@@ -221,7 +211,8 @@ short ED_fileselect_set_params(SpaceFile *sfile)
 		                    FILTER_ID_GR | FILTER_ID_IM | FILTER_ID_LA | FILTER_ID_LS | FILTER_ID_LT | FILTER_ID_MA |
 		                    FILTER_ID_MB | FILTER_ID_MC | FILTER_ID_ME | FILTER_ID_MSK | FILTER_ID_NT | FILTER_ID_OB |
 		                    FILTER_ID_PA | FILTER_ID_PAL | FILTER_ID_PC | FILTER_ID_SCE | FILTER_ID_SPK | FILTER_ID_SO |
-		                    FILTER_ID_TE | FILTER_ID_TXT | FILTER_ID_VF | FILTER_ID_WO | FILTER_ID_CF;
+		                    FILTER_ID_TE | FILTER_ID_TXT | FILTER_ID_VF | FILTER_ID_WO | FILTER_ID_CF | FILTER_ID_WS |
+		                    FILTER_ID_LP;
 
 		if (U.uiflag & USER_HIDE_DOT) {
 			params->flag |= FILE_HIDE_DOT;
@@ -234,7 +225,7 @@ short ED_fileselect_set_params(SpaceFile *sfile)
 		if (params->type == FILE_LOADLIB) {
 			params->flag |= RNA_boolean_get(op->ptr, "link") ? FILE_LINK : 0;
 			params->flag |= RNA_boolean_get(op->ptr, "autoselect") ? FILE_AUTOSELECT : 0;
-			params->flag |= RNA_boolean_get(op->ptr, "active_layer") ? FILE_ACTIVELAY : 0;
+			params->flag |= RNA_boolean_get(op->ptr, "active_collection") ? FILE_ACTIVE_COLLECTION : 0;
 		}
 
 		if ((prop = RNA_struct_find_property(op->ptr, "display_type"))) {
@@ -249,14 +240,21 @@ short ED_fileselect_set_params(SpaceFile *sfile)
 		}
 
 		if (params->display == FILE_DEFAULTDISPLAY) {
-			if (U.uiflag & USER_SHOW_THUMBNAILS) {
-				if (params->filter & (FILE_TYPE_IMAGE | FILE_TYPE_MOVIE | FILE_TYPE_FTFONT))
-					params->display = FILE_IMGDISPLAY;
-				else
+			if(params->display_previous == FILE_DEFAULTDISPLAY){
+				if (U.uiflag & USER_SHOW_THUMBNAILS) {
+					if (params->filter & (FILE_TYPE_IMAGE | FILE_TYPE_MOVIE | FILE_TYPE_FTFONT)) {
+						params->display = FILE_IMGDISPLAY;
+					}
+					else {
+						params->display = FILE_SHORTDISPLAY;
+					}
+				}
+				else {
 					params->display = FILE_SHORTDISPLAY;
+				}
 			}
 			else {
-				params->display = FILE_SHORTDISPLAY;
+				params->display = params->display_previous;
 			}
 		}
 
@@ -274,6 +272,7 @@ short ED_fileselect_set_params(SpaceFile *sfile)
 		params->flag |= FILE_HIDE_DOT;
 		params->flag &= ~FILE_DIRSEL_ONLY;
 		params->display = FILE_SHORTDISPLAY;
+		params->display_previous = FILE_DEFAULTDISPLAY;
 		params->sort = FILE_SORT_ALPHA;
 		params->filter = 0;
 		params->filter_glob[0] = '\0';
@@ -546,7 +545,9 @@ void ED_fileselect_init_layout(struct SpaceFile *sfile, ARegion *ar)
 		layout->prv_border_y = 0;
 		layout->tile_h = textheight * 3 / 2;
 		layout->height = (int)(BLI_rctf_size_y(&v2d->cur) - 2 * layout->tile_border_y);
-		layout->rows = layout->height / (layout->tile_h + 2 * layout->tile_border_y);
+		/* Padding by full scrollbar H is too much, can overlap tile border Y. */
+		layout->rows = (layout->height - V2D_SCROLL_HEIGHT + layout->tile_border_y) /
+			           (layout->tile_h + 2 * layout->tile_border_y);
 
 		column_widths(params, layout);
 
@@ -561,7 +562,6 @@ void ED_fileselect_init_layout(struct SpaceFile *sfile, ARegion *ar)
 			         (int)layout->column_widths[COLUMN_DATE] + column_space +
 			         (int)layout->column_widths[COLUMN_TIME] + column_space +
 			         (int)layout->column_widths[COLUMN_SIZE] + column_space;
-
 		}
 		layout->tile_w = maxlen;
 		if (layout->rows > 0)
@@ -573,6 +573,7 @@ void ED_fileselect_init_layout(struct SpaceFile *sfile, ARegion *ar)
 		layout->width = sfile->layout->columns * (layout->tile_w + 2 * layout->tile_border_x) + layout->tile_border_x * 2;
 		layout->flag = FILE_LAYOUT_HOR;
 	}
+	params->display_previous = params->display;
 	layout->dirty = false;
 }
 
@@ -626,7 +627,8 @@ int file_select_match(struct SpaceFile *sfile, const char *pattern, char *matche
 	 */
 	for (i = 0; i < n; i++) {
 		file = filelist_file(sfile->files, i);
-		/* Do not check whether file is a file or dir here! Causes T44243 (we do accept dirs at this stage). */
+		/* Do not check whether file is a file or dir here! Causes T44243
+		 * (we do accept dirs at this stage). */
 		if (fnmatch(pattern, file->relpath, 0) == 0) {
 			filelist_entry_select_set(sfile->files, file, FILE_SEL_ADD, FILE_SEL_SELECTED, CHECK_ALL);
 			if (!match) {
@@ -738,5 +740,39 @@ void ED_fileselect_exit(wmWindowManager *wm, ScrArea *sa, SpaceFile *sfile)
 		MEM_freeN(sfile->files);
 		sfile->files = NULL;
 	}
+}
 
+/** Helper used by both main update code, and smoothscroll timer, to try to enable rename editing from
+ * params->renamefile name. */
+void file_params_renamefile_activate(SpaceFile *sfile, FileSelectParams *params)
+{
+	BLI_assert(params->rename_flag != 0);
+
+	if ((params->rename_flag & (FILE_PARAMS_RENAME_ACTIVE | FILE_PARAMS_RENAME_POSTSCROLL_ACTIVE)) != 0) {
+		return;
+	}
+
+	BLI_assert(params->renamefile[0] != '\0');
+
+	const int idx = filelist_file_findpath(sfile->files, params->renamefile);
+	if (idx >= 0) {
+		FileDirEntry *file = filelist_file(sfile->files, idx);
+		BLI_assert(file != NULL);
+
+		if ((params->rename_flag & FILE_PARAMS_RENAME_PENDING) != 0) {
+			filelist_entry_select_set(sfile->files, file, FILE_SEL_ADD, FILE_SEL_EDITING, CHECK_ALL);
+			params->rename_flag = FILE_PARAMS_RENAME_ACTIVE;
+		}
+		else if ((params->rename_flag & FILE_PARAMS_RENAME_POSTSCROLL_PENDING) != 0) {
+			filelist_entry_select_set(sfile->files, file, FILE_SEL_ADD, FILE_SEL_HIGHLIGHTED, CHECK_ALL);
+			params->renamefile[0] = '\0';
+			params->rename_flag = FILE_PARAMS_RENAME_POSTSCROLL_ACTIVE;
+		}
+	}
+	/* File listing is now async, only reset renaming if matching entry is not found
+	 * when file listing is not done. */
+	else if (filelist_is_ready(sfile->files)) {
+		params->renamefile[0] = '\0';
+		params->rename_flag = 0;
+	}
 }

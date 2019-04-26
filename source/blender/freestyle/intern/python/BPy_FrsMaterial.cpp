@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,12 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file source/blender/freestyle/intern/python/BPy_FrsMaterial.cpp
- *  \ingroup freestyle
+/** \file
+ * \ingroup freestyle
  */
 
 #include "BPy_FrsMaterial.h"
@@ -157,38 +153,38 @@ static int FrsMaterial_mathutils_get(BaseMathObject *bmo, int subtype)
 {
 	BPy_FrsMaterial *self = (BPy_FrsMaterial *)bmo->cb_user;
 	switch (subtype) {
-	case MATHUTILS_SUBTYPE_LINE:
-		bmo->data[0] = self->m->lineR();
-		bmo->data[1] = self->m->lineG();
-		bmo->data[2] = self->m->lineB();
-		bmo->data[3] = self->m->lineA();
-		break;
-	case MATHUTILS_SUBTYPE_DIFFUSE:
-		bmo->data[0] = self->m->diffuseR();
-		bmo->data[1] = self->m->diffuseG();
-		bmo->data[2] = self->m->diffuseB();
-		bmo->data[3] = self->m->diffuseA();
-		break;
-	case MATHUTILS_SUBTYPE_SPECULAR:
-		bmo->data[0] = self->m->specularR();
-		bmo->data[1] = self->m->specularG();
-		bmo->data[2] = self->m->specularB();
-		bmo->data[3] = self->m->specularA();
-		break;
-	case MATHUTILS_SUBTYPE_AMBIENT:
-		bmo->data[0] = self->m->ambientR();
-		bmo->data[1] = self->m->ambientG();
-		bmo->data[2] = self->m->ambientB();
-		bmo->data[3] = self->m->ambientA();
-		break;
-	case MATHUTILS_SUBTYPE_EMISSION:
-		bmo->data[0] = self->m->emissionR();
-		bmo->data[1] = self->m->emissionG();
-		bmo->data[2] = self->m->emissionB();
-		bmo->data[3] = self->m->emissionA();
-		break;
-	default:
-		return -1;
+		case MATHUTILS_SUBTYPE_LINE:
+			bmo->data[0] = self->m->lineR();
+			bmo->data[1] = self->m->lineG();
+			bmo->data[2] = self->m->lineB();
+			bmo->data[3] = self->m->lineA();
+			break;
+		case MATHUTILS_SUBTYPE_DIFFUSE:
+			bmo->data[0] = self->m->diffuseR();
+			bmo->data[1] = self->m->diffuseG();
+			bmo->data[2] = self->m->diffuseB();
+			bmo->data[3] = self->m->diffuseA();
+			break;
+		case MATHUTILS_SUBTYPE_SPECULAR:
+			bmo->data[0] = self->m->specularR();
+			bmo->data[1] = self->m->specularG();
+			bmo->data[2] = self->m->specularB();
+			bmo->data[3] = self->m->specularA();
+			break;
+		case MATHUTILS_SUBTYPE_AMBIENT:
+			bmo->data[0] = self->m->ambientR();
+			bmo->data[1] = self->m->ambientG();
+			bmo->data[2] = self->m->ambientB();
+			bmo->data[3] = self->m->ambientA();
+			break;
+		case MATHUTILS_SUBTYPE_EMISSION:
+			bmo->data[0] = self->m->emissionR();
+			bmo->data[1] = self->m->emissionG();
+			bmo->data[2] = self->m->emissionB();
+			bmo->data[3] = self->m->emissionA();
+			break;
+		default:
+			return -1;
 	}
 	return 0;
 }
@@ -197,23 +193,23 @@ static int FrsMaterial_mathutils_set(BaseMathObject *bmo, int subtype)
 {
 	BPy_FrsMaterial *self = (BPy_FrsMaterial *)bmo->cb_user;
 	switch (subtype) {
-	case MATHUTILS_SUBTYPE_LINE:
-		self->m->setLine(bmo->data[0], bmo->data[1], bmo->data[2], bmo->data[3]);
-		break;
-	case MATHUTILS_SUBTYPE_DIFFUSE:
-		self->m->setDiffuse(bmo->data[0], bmo->data[1], bmo->data[2], bmo->data[3]);
-		break;
-	case MATHUTILS_SUBTYPE_SPECULAR:
-		self->m->setSpecular(bmo->data[0], bmo->data[1], bmo->data[2], bmo->data[3]);
-		break;
-	case MATHUTILS_SUBTYPE_AMBIENT:
-		self->m->setAmbient(bmo->data[0], bmo->data[1], bmo->data[2], bmo->data[3]);
-		break;
-	case MATHUTILS_SUBTYPE_EMISSION:
-		self->m->setEmission(bmo->data[0], bmo->data[1], bmo->data[2], bmo->data[3]);
-		break;
-	default:
-		return -1;
+		case MATHUTILS_SUBTYPE_LINE:
+			self->m->setLine(bmo->data[0], bmo->data[1], bmo->data[2], bmo->data[3]);
+			break;
+		case MATHUTILS_SUBTYPE_DIFFUSE:
+			self->m->setDiffuse(bmo->data[0], bmo->data[1], bmo->data[2], bmo->data[3]);
+			break;
+		case MATHUTILS_SUBTYPE_SPECULAR:
+			self->m->setSpecular(bmo->data[0], bmo->data[1], bmo->data[2], bmo->data[3]);
+			break;
+		case MATHUTILS_SUBTYPE_AMBIENT:
+			self->m->setAmbient(bmo->data[0], bmo->data[1], bmo->data[2], bmo->data[3]);
+			break;
+		case MATHUTILS_SUBTYPE_EMISSION:
+			self->m->setEmission(bmo->data[0], bmo->data[1], bmo->data[2], bmo->data[3]);
+			break;
+		default:
+			return -1;
 	}
 	return 0;
 }
@@ -222,38 +218,38 @@ static int FrsMaterial_mathutils_get_index(BaseMathObject *bmo, int subtype, int
 {
 	BPy_FrsMaterial *self = (BPy_FrsMaterial *)bmo->cb_user;
 	switch (subtype) {
-	case MATHUTILS_SUBTYPE_LINE:
-		{
-			const float *color = self->m->line();
-			bmo->data[index] = color[index];
-		}
-		break;
-	case MATHUTILS_SUBTYPE_DIFFUSE:
-		{
-			const float *color = self->m->diffuse();
-			bmo->data[index] = color[index];
-		}
-		break;
-	case MATHUTILS_SUBTYPE_SPECULAR:
-		{
-			const float *color = self->m->specular();
-			bmo->data[index] = color[index];
-		}
-		break;
-	case MATHUTILS_SUBTYPE_AMBIENT:
-		{
-			const float *color = self->m->ambient();
-			bmo->data[index] = color[index];
-		}
-		break;
-	case MATHUTILS_SUBTYPE_EMISSION:
-		{
-			const float *color = self->m->emission();
-			bmo->data[index] = color[index];
-		}
-		break;
-	default:
-		return -1;
+		case MATHUTILS_SUBTYPE_LINE:
+			{
+				const float *color = self->m->line();
+				bmo->data[index] = color[index];
+			}
+			break;
+		case MATHUTILS_SUBTYPE_DIFFUSE:
+			{
+				const float *color = self->m->diffuse();
+				bmo->data[index] = color[index];
+			}
+			break;
+		case MATHUTILS_SUBTYPE_SPECULAR:
+			{
+				const float *color = self->m->specular();
+				bmo->data[index] = color[index];
+			}
+			break;
+		case MATHUTILS_SUBTYPE_AMBIENT:
+			{
+				const float *color = self->m->ambient();
+				bmo->data[index] = color[index];
+			}
+			break;
+		case MATHUTILS_SUBTYPE_EMISSION:
+			{
+				const float *color = self->m->emission();
+				bmo->data[index] = color[index];
+			}
+			break;
+		default:
+			return -1;
 	}
 	return 0;
 }
@@ -263,33 +259,33 @@ static int FrsMaterial_mathutils_set_index(BaseMathObject *bmo, int subtype, int
 	BPy_FrsMaterial *self = (BPy_FrsMaterial *)bmo->cb_user;
 	float color[4];
 	switch (subtype) {
-	case MATHUTILS_SUBTYPE_LINE:
-		copy_v4_v4(color, self->m->line());
-		color[index] = bmo->data[index];
-		self->m->setLine(color[0], color[1], color[2], color[3]);
-		break;
-	case MATHUTILS_SUBTYPE_DIFFUSE:
-		copy_v4_v4(color, self->m->diffuse());
-		color[index] = bmo->data[index];
-		self->m->setDiffuse(color[0], color[1], color[2], color[3]);
-		break;
-	case MATHUTILS_SUBTYPE_SPECULAR:
-		copy_v4_v4(color, self->m->specular());
-		color[index] = bmo->data[index];
-		self->m->setSpecular(color[0], color[1], color[2], color[3]);
-		break;
-	case MATHUTILS_SUBTYPE_AMBIENT:
-		copy_v4_v4(color, self->m->ambient());
-		color[index] = bmo->data[index];
-		self->m->setAmbient(color[0], color[1], color[2], color[3]);
-		break;
-	case MATHUTILS_SUBTYPE_EMISSION:
-		copy_v4_v4(color, self->m->emission());
-		color[index] = bmo->data[index];
-		self->m->setEmission(color[0], color[1], color[2], color[3]);
-		break;
-	default:
-		return -1;
+		case MATHUTILS_SUBTYPE_LINE:
+			copy_v4_v4(color, self->m->line());
+			color[index] = bmo->data[index];
+			self->m->setLine(color[0], color[1], color[2], color[3]);
+			break;
+		case MATHUTILS_SUBTYPE_DIFFUSE:
+			copy_v4_v4(color, self->m->diffuse());
+			color[index] = bmo->data[index];
+			self->m->setDiffuse(color[0], color[1], color[2], color[3]);
+			break;
+		case MATHUTILS_SUBTYPE_SPECULAR:
+			copy_v4_v4(color, self->m->specular());
+			color[index] = bmo->data[index];
+			self->m->setSpecular(color[0], color[1], color[2], color[3]);
+			break;
+		case MATHUTILS_SUBTYPE_AMBIENT:
+			copy_v4_v4(color, self->m->ambient());
+			color[index] = bmo->data[index];
+			self->m->setAmbient(color[0], color[1], color[2], color[3]);
+			break;
+		case MATHUTILS_SUBTYPE_EMISSION:
+			copy_v4_v4(color, self->m->emission());
+			color[index] = bmo->data[index];
+			self->m->setEmission(color[0], color[1], color[2], color[3]);
+			break;
+		default:
+			return -1;
 	}
 	return 0;
 }
@@ -299,7 +295,7 @@ static Mathutils_Callback FrsMaterial_mathutils_cb = {
 	FrsMaterial_mathutils_get,
 	FrsMaterial_mathutils_set,
 	FrsMaterial_mathutils_get_index,
-	FrsMaterial_mathutils_set_index
+	FrsMaterial_mathutils_set_index,
 };
 
 static unsigned char FrsMaterial_mathutils_cb_index = -1;

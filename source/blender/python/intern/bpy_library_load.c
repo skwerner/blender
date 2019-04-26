@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,12 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/python/intern/bpy_library_load.c
- *  \ingroup pythonintern
+/** \file
+ * \ingroup pythonintern
  *
  * This file exposed blend file library appending/linking to python, typically
  * this would be done via RNA api but in this case a hand written python api
@@ -38,15 +34,15 @@
 #include "BLI_linklist.h"
 #include "BLI_path_util.h"
 
-#include "BLO_readfile.h"
-
-#include "BKE_main.h"
-#include "BKE_library.h"
-#include "BKE_idcode.h"
-#include "BKE_report.h"
 #include "BKE_context.h"
+#include "BKE_idcode.h"
+#include "BKE_library.h"
+#include "BKE_main.h"
+#include "BKE_report.h"
 
 #include "DNA_space_types.h" /* FILE_LINK, FILE_RELPATH */
+
+#include "BLO_readfile.h"
 
 #include "bpy_capi_utils.h"
 #include "bpy_library.h"
@@ -135,8 +131,8 @@ static PyTypeObject bpy_lib_Type = {
 	NULL,                       /* inquiry tp_clear; */
 
 	/***  Assigned meaning in release 2.1 ***/
-	/*** rich comparisons ***/
-	NULL, /* subclassed */		/* richcmpfunc tp_richcompare; */
+	/*** rich comparisons (subclassed) ***/
+	NULL, /* richcmpfunc tp_richcompare; */
 
 	/***  weak reference enabler ***/
 	0,
@@ -167,7 +163,7 @@ static PyTypeObject bpy_lib_Type = {
 	NULL,                       /* PyObject *tp_cache; */
 	NULL,                       /* PyObject *tp_subclasses; */
 	NULL,                       /* PyObject *tp_weaklist; */
-	NULL
+	NULL,
 };
 
 PyDoc_STRVAR(bpy_lib_load_doc,
@@ -332,6 +328,7 @@ static PyObject *bpy_lib_exit(BPy_Library *self, PyObject *UNUSED(args))
 	Main *bmain = CTX_data_main(BPy_GetContext());
 	Main *mainl = NULL;
 	int err = 0;
+	const bool do_append = ((self->flag & FILE_LINK) == 0);
 
 	BKE_main_id_tag_all(bmain, LIB_TAG_PRE_EXISTING, true);
 
@@ -341,7 +338,7 @@ static PyObject *bpy_lib_exit(BPy_Library *self, PyObject *UNUSED(args))
 	{
 		int idcode_step = 0, idcode;
 		while ((idcode = BKE_idcode_iter_step(&idcode_step))) {
-			if (BKE_idcode_is_linkable(idcode)) {
+			if (BKE_idcode_is_linkable(idcode) && (idcode != ID_WS || do_append)) {
 				const char *name_plural = BKE_idcode_to_name_plural(idcode);
 				PyObject *ls = PyDict_GetItemString(self->dict, name_plural);
 				// printf("lib: %s\n", name_plural);
@@ -402,7 +399,7 @@ static PyObject *bpy_lib_exit(BPy_Library *self, PyObject *UNUSED(args))
 	}
 	else {
 		Library *lib = mainl->curlib; /* newly added lib, assign before append end */
-		BLO_library_link_end(mainl, &(self->blo_handle), self->flag, NULL, NULL);
+		BLO_library_link_end(mainl, &(self->blo_handle), self->flag, NULL, NULL, NULL, NULL);
 		BLO_blendhandle_close(self->blo_handle);
 		self->blo_handle = NULL;
 
@@ -414,7 +411,7 @@ static PyObject *bpy_lib_exit(BPy_Library *self, PyObject *UNUSED(args))
 			BKE_main_lib_objects_recalc_all(bmain);
 
 			/* append, rather than linking */
-			if ((self->flag & FILE_LINK) == 0) {
+			if (do_append) {
 				BKE_library_make_local(bmain, lib, old_to_new_ids, true, false);
 			}
 		}
@@ -427,7 +424,7 @@ static PyObject *bpy_lib_exit(BPy_Library *self, PyObject *UNUSED(args))
 		{
 			int idcode_step = 0, idcode;
 			while ((idcode = BKE_idcode_iter_step(&idcode_step))) {
-				if (BKE_idcode_is_linkable(idcode)) {
+				if (BKE_idcode_is_linkable(idcode) && (idcode != ID_WS || do_append)) {
 					const char *name_plural = BKE_idcode_to_name_plural(idcode);
 					PyObject *ls = PyDict_GetItemString(self->dict, name_plural);
 					if (ls && PyList_Check(ls)) {
@@ -479,8 +476,9 @@ int BPY_library_load_module(PyObject *mod_par)
 	/* some compilers don't like accessing this directly, delay assignment */
 	bpy_lib_Type.tp_getattro = PyObject_GenericGetAttr;
 
-	if (PyType_Ready(&bpy_lib_Type) < 0)
+	if (PyType_Ready(&bpy_lib_Type) < 0) {
 		return -1;
+	}
 
 	return 0;
 }

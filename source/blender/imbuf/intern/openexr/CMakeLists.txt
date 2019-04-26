@@ -16,11 +16,6 @@
 #
 # The Original Code is Copyright (C) 2006, Blender Foundation
 # All rights reserved.
-#
-# The Original Code is: all of this file.
-#
-# Contributor(s): Jacques Beaurain.
-#
 # ***** END GPL LICENSE BLOCK *****
 
 set(INC
@@ -45,6 +40,9 @@ set(SRC
 	openexr_api.cpp
 )
 
+set(LIB
+)
+
 if(WITH_IMAGE_OPENEXR)
 	list(APPEND INC_SYS
 		${OPENEXR_INCLUDE_DIRS}
@@ -52,4 +50,4 @@ if(WITH_IMAGE_OPENEXR)
 	add_definitions(-DWITH_OPENEXR)
 endif()
 
-blender_add_lib(bf_imbuf_openexr "${SRC}" "${INC}" "${INC_SYS}")
+blender_add_lib(bf_imbuf_openexr "${SRC}" "${INC}" "${INC_SYS}" "${LIB}")

@@ -1,6 +1,4 @@
 /*
- * Copyright 2011, Blender Foundation.
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -15,9 +13,7 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
- * Contributor:
- *		Jeroen Bakker
- *		Monique Dewanchand
+ * Copyright 2011, Blender Foundation.
  */
 
 #ifndef __COM_PREVIEWOPERATION_H__
@@ -33,7 +29,7 @@ protected:
 	unsigned char *m_outputBuffer;
 
 	/**
-	 * @brief holds reference to the SDNA bNode, where this nodes will render the preview image for
+	 * \brief holds reference to the SDNA bNode, where this nodes will render the preview image for
 	 */
 	bNodePreview *m_preview;
 	SocketReader *m_input;
@@ -48,7 +44,7 @@ public:
 	bool isOutputOperation(bool /*rendering*/) const { return !G.background; }
 	void initExecution();
 	void deinitExecution();
-	const CompositorPriority getRenderPriority() const;
+	CompositorPriority getRenderPriority() const;
 
 	void executeRegion(rcti *rect, unsigned int tileNumber);
 	void determineResolution(unsigned int resolution[2], unsigned int preferredResolution[2]);

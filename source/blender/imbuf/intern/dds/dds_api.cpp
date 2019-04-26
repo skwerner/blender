@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,14 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * Contributors: Amorilia (amorilia@users.sourceforge.net)
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/imbuf/intern/dds/dds_api.cpp
- *  \ingroup imbdds
+/** \file
+ * \ingroup imbdds
  */
 
 
@@ -171,7 +165,9 @@ struct ImBuf *imb_load_dds(const unsigned char *mem, size_t size, int flags, cha
 			ibuf->dds_data.data = (unsigned char *)dds.readData(ibuf->dds_data.size);
 
 			/* flip compressed texture */
-			FlipDXTCImage(dds.width(), dds.height(), dds.mipmapCount(), dds.fourCC(), ibuf->dds_data.data);
+			if (ibuf->dds_data.data) {
+				FlipDXTCImage(dds.width(), dds.height(), dds.mipmapCount(), dds.fourCC(), ibuf->dds_data.data);
+			}
 		}
 		else {
 			ibuf->dds_data.data = NULL;

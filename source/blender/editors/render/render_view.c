@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,13 +15,10 @@
  *
  * The Original Code is Copyright (C) 2008 Blender Foundation.
  * All rights reserved.
- *
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/render/render_view.c
- *  \ingroup edrend
+/** \file
+ * \ingroup edrend
  */
 
 #include <string.h>
@@ -66,7 +61,7 @@ static ScrArea *biggest_non_image_area(bContext *C)
 	for (sa = sc->areabase.first; sa; sa = sa->next) {
 		if (sa->winx > 30 && sa->winy > 30) {
 			size = sa->winx * sa->winy;
-			if (!sa->full && sa->spacetype == SPACE_BUTS) {
+			if (!sa->full && sa->spacetype == SPACE_PROPERTIES) {
 				if (foundwin == 0 && size > bwmaxsize) {
 					bwmaxsize = size;
 					big = sa;
@@ -91,8 +86,10 @@ static ScrArea *find_area_showing_r_result(bContext *C, Scene *scene, wmWindow *
 
 	/* find an imagewindow showing render result */
 	for (*win = wm->windows.first; *win; *win = (*win)->next) {
-		if ((*win)->screen->scene == scene) {
-			for (sa = (*win)->screen->areabase.first; sa; sa = sa->next) {
+		if (WM_window_get_active_scene(*win) == scene) {
+			const bScreen *screen = WM_window_get_active_screen(*win);
+
+			for (sa = screen->areabase.first; sa; sa = sa->next) {
 				if (sa->spacetype == SPACE_IMAGE) {
 					sima = sa->spacedata.first;
 					if (sima->image && sima->image->type == IMA_TYPE_R_RESULT)
@@ -248,7 +245,7 @@ static int render_view_cancel_exec(bContext *C, wmOperator *UNUSED(op))
 	}
 
 	/* test if we have a temp screen in front */
-	if (win->screen->temp) {
+	if (WM_window_is_temp_screen(win)) {
 		wm_window_lower(win);
 		return OPERATOR_FINISHED;
 	}
@@ -294,7 +291,7 @@ static int render_view_show_invoke(bContext *C, wmOperator *op, const wmEvent *e
 	wmWindow *wincur = CTX_wm_window(C);
 
 	/* test if we have currently a temp screen active */
-	if (wincur->screen->temp) {
+	if (WM_window_is_temp_screen(wincur)) {
 		wm_window_lower(wincur);
 	}
 	else {
@@ -303,8 +300,9 @@ static int render_view_show_invoke(bContext *C, wmOperator *op, const wmEvent *e
 
 		/* is there another window on current scene showing result? */
 		for (win = CTX_wm_manager(C)->windows.first; win; win = win->next) {
-			bScreen *sc = win->screen;
-			if ((sc->temp && ((ScrArea *)sc->areabase.first)->spacetype == SPACE_IMAGE) ||
+			const bScreen *sc = WM_window_get_active_screen(win);
+
+			if ((WM_window_is_temp_screen(win) && ((ScrArea *)sc->areabase.first)->spacetype == SPACE_IMAGE) ||
 			    (win == winshow && winshow != wincur))
 			{
 				wm_window_raise(win);

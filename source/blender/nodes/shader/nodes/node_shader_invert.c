@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,10 @@
  *
  * The Original Code is Copyright (C) 2005 Blender Foundation.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/nodes/shader/nodes/node_shader_invert.c
- *  \ingroup shdnodes
+/** \file
+ * \ingroup shdnodes
  */
 
 
@@ -65,9 +57,9 @@ static void node_shader_exec_invert(void *UNUSED(data), int UNUSED(thread), bNod
 		copy_v3_v3(out[0]->vec, icol);
 }
 
-static int gpu_shader_invert(GPUMaterial *mat, bNode *UNUSED(node), bNodeExecData *UNUSED(execdata), GPUNodeStack *in, GPUNodeStack *out)
+static int gpu_shader_invert(GPUMaterial *mat, bNode *node, bNodeExecData *UNUSED(execdata), GPUNodeStack *in, GPUNodeStack *out)
 {
-	return GPU_stack_link(mat, "invert", in, out);
+	return GPU_stack_link(mat, node, "invert", in, out);
 }
 
 void register_node_type_sh_invert(void)
@@ -75,7 +67,6 @@ void register_node_type_sh_invert(void)
 	static bNodeType ntype;
 
 	sh_node_type_base(&ntype, SH_NODE_INVERT, "Invert", NODE_CLASS_OP_COLOR, 0);
-	node_type_compatibility(&ntype, NODE_OLD_SHADING | NODE_NEW_SHADING);
 	node_type_socket_templates(&ntype, sh_node_invert_in, sh_node_invert_out);
 	node_type_exec(&ntype, NULL, NULL, node_shader_exec_invert);
 	node_type_gpu(&ntype, gpu_shader_invert);

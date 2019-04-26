@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,15 +12,13 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
 #ifndef __PBVH_INTERN_H__
 #define __PBVH_INTERN_H__
 
-/** \file blender/blenkernel/intern/pbvh_intern.h
- *  \ingroup bli
+/** \file
+ * \ingroup bli
  */
 
 /* Axis-aligned bounding box */
@@ -112,7 +108,7 @@ struct PBVHNode {
 };
 
 typedef enum {
-	PBVH_DYNTOPO_SMOOTH_SHADING = 1
+	PBVH_DYNTOPO_SMOOTH_SHADING = 1,
 } PBVHFlags;
 
 typedef struct PBVHBMeshLog PBVHBMeshLog;
@@ -144,13 +140,6 @@ struct PBVH {
 	const DMFlagMat *grid_flag_mats;
 	int totgrid;
 	BLI_bitmap **grid_hidden;
-	/* index_buf of GPU_PBVH_Buffers can be the same for all 'fully drawn' nodes (same size).
-	 * Previously was stored in a static var in gpu_buffer.c, but this breaks in case we handle several different
-	 * objects in sculpt mode with different sizes at the same time, so now storing that common gpu buffer
-	 * in an opaque pointer per pbvh. See T47637. */
-	struct GridCommonGPUBuffer *grid_common_gpu_buffer;
-	/* The ccgdm is required for CD_ORIGINDEX lookup in vertex paint + multires */
-	struct CCGDerivedMesh *ccgdm;
 
 	/* Only used during BVH build and update,
 	 * don't need to remain valid after */

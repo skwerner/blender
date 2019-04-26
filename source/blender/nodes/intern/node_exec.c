@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,10 @@
  *
  * The Original Code is Copyright (C) 2007 Blender Foundation.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): Nathan Letwory.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/nodes/intern/node_exec.c
- *  \ingroup nodes
+/** \file
+ * \ingroup nodes
  */
 
 
@@ -47,7 +39,8 @@
 /* supported socket types in old nodes */
 int node_exec_socket_use_stack(bNodeSocket *sock)
 {
-	return ELEM(sock->type, SOCK_FLOAT, SOCK_VECTOR, SOCK_RGBA, SOCK_SHADER);
+	/* NOTE: INT supported as FLOAT. Only for EEVEE. */
+	return ELEM(sock->type, SOCK_INT, SOCK_FLOAT, SOCK_VECTOR, SOCK_RGBA, SOCK_SHADER);
 }
 
 /* for a given socket, find the actual stack entry */
@@ -306,8 +299,6 @@ bool ntreeExecThreadNodes(bNodeTreeExec *exec, bNodeThreadStack *nts, void *call
 			 * If the mute func is not set, assume the node should never be muted,
 			 * and hence execute it!
 			 */
-//			if (node->typeinfo->compatibility == NODE_NEW_SHADING)
-//				return false;
 			if (node->typeinfo->execfunc && !(node->flag & NODE_MUTED))
 				node->typeinfo->execfunc(callerdata, thread, node, &nodeexec->data, nsin, nsout);
 		}

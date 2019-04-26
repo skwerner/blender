@@ -23,17 +23,26 @@ set(BLOSC_EXTRA_ARGS
 	-DBUILD_BENCHMARKS=OFF
 	-DCMAKE_DEBUG_POSTFIX=_d
 	-DThreads_FOUND=1
-	-DPTHREAD_LIBS=${LIBDIR}/pthreads/lib/pthreadVC2.lib
+	-DPTHREAD_LIBS=${LIBDIR}/pthreads/lib/pthreadVC3.lib
 	-DPTHREAD_INCLUDE_DIR=${LIBDIR}/pthreads/inc
 	-DDEACTIVATE_SNAPPY=ON
+	-DCMAKE_POSITION_INDEPENDENT_CODE=ON
 )
+
+if(WIN32)
+	#prevent blosc from including it's own local copy of zlib in the object file
+	#and cause linker errors with everybody else
+	set(BLOSC_EXTRA_ARGS ${BLOSC_EXTRA_ARGS}
+		-DPREFER_EXTERNAL_ZLIB=ON
+	)
+endif()
 
 ExternalProject_Add(external_blosc
 	URL ${BLOSC_URI}
 	DOWNLOAD_DIR ${DOWNLOAD_DIR}
 	URL_HASH MD5=${BLOSC_HASH}
 	PREFIX ${BUILD_DIR}/blosc
-	#PATCH_COMMAND ${PATCH_CMD} --verbose -p 1 -N -d ${BUILD_DIR}/blosc/src/external_blosc < ${PATCH_DIR}/blosc.diff
+	PATCH_COMMAND ${PATCH_CMD} --verbose -p 1 -N -d ${BUILD_DIR}/blosc/src/external_blosc < ${PATCH_DIR}/blosc.diff
 	CMAKE_ARGS -DCMAKE_INSTALL_PREFIX=${LIBDIR}/blosc ${DEFAULT_CMAKE_FLAGS} ${BLOSC_EXTRA_ARGS}
 	INSTALL_DIR ${LIBDIR}/blosc
 )
@@ -64,4 +73,3 @@ if (WIN32)
 		)
 	endif()
 endif()
-

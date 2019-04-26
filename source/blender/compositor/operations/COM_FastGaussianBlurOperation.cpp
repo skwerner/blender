@@ -1,6 +1,4 @@
 /*
- * Copyright 2011, Blender Foundation.
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -15,9 +13,7 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
- * Contributor:
- *		Jeroen Bakker
- *		Monique Dewanchand
+ * Copyright 2011, Blender Foundation.
  */
 
 #include <limits.h>
@@ -128,7 +124,7 @@ void FastGaussianBlurOperation::IIR_gauss(MemoryBuffer *src, float sigma, unsign
 	if ((xy < 1) || (xy > 3)) xy = 3;
 
 	// XXX The YVV macro defined below explicitly expects sources of at least 3x3 pixels,
-	//     so just skiping blur along faulty direction if src's def is below that limit!
+	//     so just skipping blur along faulty direction if src's def is below that limit!
 	if (src_width < 3) xy &= ~1;
 	if (src_height < 3) xy &= ~2;
 	if (xy < 1) return;

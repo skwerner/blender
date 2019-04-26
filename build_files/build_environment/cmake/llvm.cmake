@@ -48,7 +48,6 @@ if(MSVC)
 	else()
 		set(LLVM_HARVEST_COMMAND
 			${CMAKE_COMMAND} -E copy_directory ${LIBDIR}/llvm/lib/ ${HARVEST_TARGET}/llvm/debug/lib/ &&
-			${CMAKE_COMMAND} -E copy_directory ${LIBDIR}/llvm/bin/ ${HARVEST_TARGET}/llvm/debug/bin/ &&
 			${CMAKE_COMMAND} -E copy_directory ${LIBDIR}/llvm/include/ ${HARVEST_TARGET}/llvm/debug/include/
 		)
 	endif()

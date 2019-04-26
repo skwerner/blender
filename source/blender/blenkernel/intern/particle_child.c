@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,10 @@
  *
  * The Original Code is Copyright (C) Blender Foundation
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): Lukas Toenne
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/blenkernel/intern/particle_child.c
- *  \ingroup bke
+/** \file
+ * \ingroup bke
  */
 
 #include "BLI_math.h"
@@ -38,40 +30,6 @@
 #include "BKE_particle.h"
 
 #include "particle_private.h"
-
-struct Material;
-
-static void get_strand_normal(Material *ma, const float surfnor[3], float surfdist, float nor[3])
-{
-	float cross[3], nstrand[3], vnor[3], blend;
-
-	if (!((ma->mode & MA_STR_SURFDIFF) || (ma->strand_surfnor > 0.0f)))
-		return;
-
-	if (ma->mode & MA_STR_SURFDIFF) {
-		cross_v3_v3v3(cross, surfnor, nor);
-		cross_v3_v3v3(nstrand, nor, cross);
-
-		blend = dot_v3v3(nstrand, surfnor);
-		CLAMP(blend, 0.0f, 1.0f);
-
-		interp_v3_v3v3(vnor, nstrand, surfnor, blend);
-		normalize_v3(vnor);
-	}
-	else {
-		copy_v3_v3(vnor, nor);
-	}
-
-	if (ma->strand_surfnor > 0.0f) {
-		if (ma->strand_surfnor > surfdist) {
-			blend = (ma->strand_surfnor - surfdist) / ma->strand_surfnor;
-			interp_v3_v3v3(vnor, vnor, surfnor, blend);
-			normalize_v3(vnor);
-		}
-	}
-
-	copy_v3_v3(nor, vnor);
-}
 
 /* ------------------------------------------------------------------------- */
 
@@ -320,7 +278,7 @@ static bool check_path_length(int k, ParticleCacheKey *keys, ParticleCacheKey *k
 }
 
 void psys_apply_child_modifiers(ParticleThreadContext *ctx, struct ListBase *modifiers,
-                                ChildParticle *cpa, ParticleTexture *ptex, const float orco[3], const float ornor[3], float hairmat[4][4],
+                                ChildParticle *cpa, ParticleTexture *ptex, const float orco[3], float hairmat[4][4],
                                 ParticleCacheKey *keys, ParticleCacheKey *parent_keys, const float parent_orco[3])
 {
 	struct ParticleSettings *part = ctx->sim.psys->part;
@@ -333,11 +291,8 @@ void psys_apply_child_modifiers(ParticleThreadContext *ctx, struct ListBase *mod
 	int totkeys, k;
 	float max_length;
 
-#if 0 /* TODO for the future: use true particle modifiers that work on the whole curve */
-	for (mod = modifiers->first; mod; mod = mod->next) {
-		mod->apply(keys, totkeys, parent_keys);
-	}
-#else
+	/* TODO for the future: use true particle modifiers that work on the whole curve */
+
 	(void)modifiers;
 	(void)mod;
 
@@ -389,9 +344,6 @@ void psys_apply_child_modifiers(ParticleThreadContext *ctx, struct ListBase *mod
 			if (k >= 2) {
 				sub_v3_v3v3((key-1)->vel, key->co, (key-2)->co);
 				mul_v3_fl((key-1)->vel, 0.5);
-
-				if (ma && draw_col_ma)
-					get_strand_normal(ma, ornor, cur_length, (key-1)->vel);
 			}
 
 			if (use_length_check && k > 0) {
@@ -413,11 +365,9 @@ void psys_apply_child_modifiers(ParticleThreadContext *ctx, struct ListBase *mod
 
 			if (ma && draw_col_ma) {
 				copy_v3_v3(key->col, &ma->r);
-				get_strand_normal(ma, ornor, cur_length, key->vel);
 			}
 		}
 	}
-#endif
 }
 
 /* ------------------------------------------------------------------------- */
@@ -737,6 +687,10 @@ static void do_twist(const ParticleChildModifierContext *modifier_ctx,
 	ParticleTexture *ptex = modifier_ctx->ptex;
 	ParticleSettings *part = sim->psys->part;
 	/* Early output checks. */
+	if (modifier_ctx->parent_keys == NULL) {
+		/* Cannot get axis of rotation... */
+		return;
+	}
 	if (part->childtype != PART_CHILD_PARTICLES) {
 		/* Interpolated children behave weird with twist. */
 		return;
@@ -816,7 +770,7 @@ void do_child_modifiers(const ParticleChildModifierContext *modifier_ctx,
 
 	if (part->flag & PART_CHILD_EFFECT)
 		/* state is safe to cast, since only co and vel are used */
-		guided = do_guides(sim->psys->part, sim->psys->effectors, (ParticleKey *)state, cpa->parent, t);
+		guided = do_guides(sim->depsgraph, sim->psys->part, sim->psys->effectors, (ParticleKey *)state, cpa->parent, t);
 
 	if (guided == 0) {
 		float orco_offset[3];

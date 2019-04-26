@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,12 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/blenlib/intern/BLI_filelist.c
- *  \ingroup bli
+/** \file
+ * \ingroup bli
  */
 
 #include <sys/types.h>
@@ -69,28 +65,36 @@ static int bli_compare(struct direntry *entry1, struct direntry *entry2)
 
 	/* directories come before non-directories */
 	if (S_ISDIR(entry1->type)) {
-		if (S_ISDIR(entry2->type) == 0) return (-1);
+		if (S_ISDIR(entry2->type) == 0) {
+			return -1;
+		}
 	}
 	else {
-		if (S_ISDIR(entry2->type)) return (1);
+		if (S_ISDIR(entry2->type)) {
+			return 1;
+		}
 	}
 	/* non-regular files come after regular files */
 	if (S_ISREG(entry1->type)) {
-		if (S_ISREG(entry2->type) == 0) return (-1);
+		if (S_ISREG(entry2->type) == 0) {
+			return -1;
+		}
 	}
 	else {
-		if (S_ISREG(entry2->type)) return (1);
+		if (S_ISREG(entry2->type)) {
+			return 1;
+		}
 	}
 	/* arbitrary, but consistent, ordering of different types of non-regular files */
-	if ((entry1->type & S_IFMT) < (entry2->type & S_IFMT)) return (-1);
-	if ((entry1->type & S_IFMT) > (entry2->type & S_IFMT)) return (1);
+	if ((entry1->type & S_IFMT) < (entry2->type & S_IFMT)) { return -1; }
+	if ((entry1->type & S_IFMT) > (entry2->type & S_IFMT)) { return  1; }
 
 	/* OK, now we know their S_IFMT fields are the same, go on to a name comparison */
 	/* make sure "." and ".." are always first */
-	if (FILENAME_IS_CURRENT(entry1->relname)) return (-1);
-	if (FILENAME_IS_CURRENT(entry2->relname)) return (1);
-	if (FILENAME_IS_PARENT(entry1->relname)) return (-1);
-	if (FILENAME_IS_PARENT(entry2->relname)) return (1);
+	if (FILENAME_IS_CURRENT(entry1->relname)) { return -1; }
+	if (FILENAME_IS_CURRENT(entry2->relname)) { return  1; }
+	if (FILENAME_IS_PARENT(entry1->relname))  { return -1; }
+	if (FILENAME_IS_PARENT(entry2->relname))  { return  1; }
 
 	return (BLI_natstrcmp(entry1->relname, entry2->relname));
 }
@@ -163,8 +167,9 @@ static void bli_builddir(struct BuildDirCtx *dir_ctx, const char *dirname)
 				}
 			}
 
-			if (dir_ctx->files == NULL)
+			if (dir_ctx->files == NULL) {
 				dir_ctx->files = (struct direntry *)MEM_mallocN(newnum * sizeof(struct direntry), __func__);
+			}
 
 			if (dir_ctx->files) {
 				struct dirlink * dlink = (struct dirlink *) dirbase.first;
@@ -179,7 +184,8 @@ static void bli_builddir(struct BuildDirCtx *dir_ctx, const char *dirname)
 						file->type = file->s.st_mode;
 					}
 					else if (FILENAME_IS_CURRPAR(file->relname)) {
-						/* Hack around for UNC paths on windows - does not support stat on '\\SERVER\foo\..', sigh... */
+						/* Hack around for UNC paths on windows:
+						 * does not support stat on '\\SERVER\foo\..', sigh... */
 						file->type |= S_IFDIR;
 					}
 					dir_ctx->nrfiles++;
@@ -237,7 +243,6 @@ unsigned int BLI_filelist_dir_contents(const char *dirname,  struct direntry **r
 
 /**
  * Convert given entry's size into human-readable strings.
- *
  */
 void BLI_filelist_entry_size_to_string(
         const struct stat *st, const uint64_t sz, const bool compact, char r_size[FILELIST_DIRENTRY_SIZE_LEN])
@@ -257,7 +262,9 @@ void BLI_filelist_entry_size_to_string(
 
 	if (size > 1024.0) {
 		const char **u;
-		for (u = compact ? units_compact : units, size /= 1024.0; size > 1024.0 && *(u + 1); u++, size /= 1024.0);
+		for (u = compact ? units_compact : units, size /= 1024.0; size > 1024.0 && *(u + 1); u++, size /= 1024.0) {
+			/* pass */
+		}
 		fmt =  size > 100.0 ? "%.0f %s" : (size > 10.0 ? "%.1f %s" : "%.2f %s");
 		unit = *u;
 	}
@@ -270,7 +277,6 @@ void BLI_filelist_entry_size_to_string(
 
 /**
  * Convert given entry's modes into human-readable strings.
- *
  */
 void BLI_filelist_entry_mode_to_string(
         const struct stat *st, const bool UNUSED(compact), char r_mode1[FILELIST_DIRENTRY_MODE_LEN],
@@ -289,25 +295,36 @@ void BLI_filelist_entry_mode_to_string(
 	BLI_strncpy(r_mode2, types[(mode & 0070) >> 3], sizeof(*r_mode2) * FILELIST_DIRENTRY_MODE_LEN);
 	BLI_strncpy(r_mode3, types[(mode & 0007)],      sizeof(*r_mode3) * FILELIST_DIRENTRY_MODE_LEN);
 
-	if (((mode & S_ISGID) == S_ISGID) && (r_mode2[2] == '-')) r_mode2[2] = 'l';
+	if (((mode & S_ISGID) == S_ISGID) && (r_mode2[2] == '-')) {
+		r_mode2[2] = 'l';
+	}
 
 	if (mode & (S_ISUID | S_ISGID)) {
-		if (r_mode1[2] == 'x') r_mode1[2] = 's';
-		else r_mode1[2] = 'S';
+		if (r_mode1[2] == 'x') {
+			r_mode1[2] = 's';
+		}
+		else {
+			r_mode1[2] = 'S';
+		}
 
-		if (r_mode2[2] == 'x') r_mode2[2] = 's';
+		if (r_mode2[2] == 'x') {
+			r_mode2[2] = 's';
+		}
 	}
 
 	if (mode & S_ISVTX) {
-		if (r_mode3[2] == 'x') r_mode3[2] = 't';
-		else r_mode3[2] = 'T';
+		if (r_mode3[2] == 'x') {
+			r_mode3[2] = 't';
+		}
+		else {
+			r_mode3[2] = 'T';
+		}
 	}
 #endif
 }
 
 /**
  * Convert given entry's owner into human-readable strings.
- *
  */
 void BLI_filelist_entry_owner_to_string(
         const struct stat *st, const bool UNUSED(compact), char r_owner[FILELIST_DIRENTRY_OWNER_LEN])

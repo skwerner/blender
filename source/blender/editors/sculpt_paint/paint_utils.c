@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,10 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/sculpt_paint/paint_utils.c
- *  \ingroup edsculpt
+/** \file
+ * \ingroup edsculpt
  */
 
 #include <math.h>
@@ -50,17 +42,23 @@
 
 #include "BKE_brush.h"
 #include "BKE_context.h"
-#include "BKE_DerivedMesh.h"
+#include "BKE_customdata.h"
 #include "BKE_image.h"
 #include "BKE_material.h"
+#include "BKE_mesh_runtime.h"
+#include "BKE_object.h"
 #include "BKE_paint.h"
 #include "BKE_report.h"
+
+#include "DEG_depsgraph.h"
+#include "DEG_depsgraph_query.h"
 
 #include "RNA_access.h"
 #include "RNA_define.h"
 
-#include "BIF_gl.h"
-#include "BIF_glutil.h"
+#include "GPU_glew.h"
+#include "GPU_matrix.h"
+#include "GPU_state.h"
 
 #include "IMB_colormanagement.h"
 #include "IMB_imbuf_types.h"
@@ -132,16 +130,11 @@ bool paint_convert_bb_to_rect(
 void paint_calc_redraw_planes(
         float planes[4][4],
         const ARegion *ar,
-        RegionView3D *rv3d,
         Object *ob,
         const rcti *screen_rect)
 {
 	BoundBox bb;
-	bglMats mats;
 	rcti rect;
-
-	memset(&bb, 0, sizeof(BoundBox));
-	view3d_get_transformation(ar, rv3d, ob, &mats);
 
 	/* use some extra space just in case */
 	rect = *screen_rect;
@@ -150,7 +143,7 @@ void paint_calc_redraw_planes(
 	rect.ymin -= 2;
 	rect.ymax += 2;
 
-	ED_view3d_clipping_calc(&bb, planes, &mats, &rect);
+	ED_view3d_clipping_calc(&bb, planes, ar, ob, &rect);
 	negate_m4(planes);
 }
 
@@ -216,10 +209,10 @@ void paint_get_tex_pixel_col(
 void paint_stroke_operator_properties(wmOperatorType *ot)
 {
 	static const EnumPropertyItem stroke_mode_items[] = {
-		{BRUSH_STROKE_NORMAL, "NORMAL", 0, "Normal", "Apply brush normally"},
+		{BRUSH_STROKE_NORMAL, "NORMAL", 0, "Regular", "Apply brush normally"},
 		{BRUSH_STROKE_INVERT, "INVERT", 0, "Invert", "Invert action of brush for duration of stroke"},
 		{BRUSH_STROKE_SMOOTH, "SMOOTH", 0, "Smooth", "Switch brush to smooth mode for duration of stroke"},
-		{0}
+		{0},
 	};
 
 	PropertyRNA *prop;
@@ -283,26 +276,28 @@ static void imapaint_tri_weights(
 }
 
 /* compute uv coordinates of mouse in face */
-static void imapaint_pick_uv(Scene *scene, Object *ob, unsigned int faceindex, const int xy[2], float uv[2])
+static void imapaint_pick_uv(Mesh *me_eval, Scene *scene, Object *ob_eval, unsigned int faceindex, const int xy[2], float uv[2])
 {
-	DerivedMesh *dm = mesh_get_derived_final(scene, ob, CD_MASK_BAREMESH);
-	const int tottri = dm->getNumLoopTri(dm);
 	int i, findex;
 	float p[2], w[3], absw, minabsw;
 	float matrix[4][4], proj[4][4];
 	GLint view[4];
 	const eImagePaintMode mode = scene->toolsettings->imapaint.mode;
-	const MLoopTri *lt = dm->getLoopTriArray(dm);
-	const MPoly *mpoly = dm->getPolyArray(dm);
-	const MLoop *mloop = dm->getLoopArray(dm);
-	const int *index_mp_to_orig  = dm->getPolyDataArray(dm, CD_ORIGINDEX);
+
+	const MLoopTri *lt = BKE_mesh_runtime_looptri_ensure(me_eval);
+	const int tottri = me_eval->runtime.looptris.len;
+
+	const MVert *mvert = me_eval->mvert;
+	const MPoly *mpoly = me_eval->mpoly;
+	const MLoop *mloop = me_eval->mloop;
+	const int *index_mp_to_orig  = CustomData_get_layer(&me_eval->pdata, CD_ORIGINDEX);
 
 	/* get the needed opengl matrices */
-	glGetIntegerv(GL_VIEWPORT, view);
-	glGetFloatv(GL_MODELVIEW_MATRIX,  (float *)matrix);
-	glGetFloatv(GL_PROJECTION_MATRIX, (float *)proj);
+	GPU_viewport_size_get_i(view);
+	GPU_matrix_model_view_get(matrix);
+	GPU_matrix_projection_get(proj);
 	view[0] = view[1] = 0;
-	mul_m4_m4m4(matrix, matrix, ob->obmat);
+	mul_m4_m4m4(matrix, matrix, ob_eval->obmat);
 	mul_m4_m4m4(matrix, proj, matrix);
 
 	minabsw = 1e10;
@@ -319,25 +314,25 @@ static void imapaint_pick_uv(Scene *scene, Object *ob, unsigned int faceindex, c
 			const MLoopUV *tri_uv[3];
 			float  tri_co[3][3];
 
-			dm->getVertCo(dm, mloop[lt->tri[0]].v, tri_co[0]);
-			dm->getVertCo(dm, mloop[lt->tri[1]].v, tri_co[1]);
-			dm->getVertCo(dm, mloop[lt->tri[2]].v, tri_co[2]);
+			for (int j = 3; j--; ) {
+				copy_v3_v3(tri_co[j], mvert[mloop[lt->tri[j]].v].co);
+			}
 
 			if (mode == IMAGEPAINT_MODE_MATERIAL) {
 				const Material *ma;
 				const TexPaintSlot *slot;
 
-				ma = dm->mat[mp->mat_nr];
+				ma = give_current_material(ob_eval, mp->mat_nr + 1);
 				slot = &ma->texpaintslot[ma->paint_active_slot];
 
 				if (!(slot && slot->uvname &&
-				      (mloopuv = CustomData_get_layer_named(&dm->loopData, CD_MLOOPUV, slot->uvname))))
+				      (mloopuv = CustomData_get_layer_named(&me_eval->ldata, CD_MLOOPUV, slot->uvname))))
 				{
-					mloopuv = CustomData_get_layer(&dm->loopData, CD_MLOOPUV);
+					mloopuv = CustomData_get_layer(&me_eval->ldata, CD_MLOOPUV);
 				}
 			}
 			else {
-				mloopuv = CustomData_get_layer(&dm->loopData, CD_MLOOPUV);
+				mloopuv = CustomData_get_layer(&me_eval->ldata, CD_MLOOPUV);
 			}
 
 			tri_uv[0] = &mloopuv[lt->tri[0]];
@@ -356,18 +351,18 @@ static void imapaint_pick_uv(Scene *scene, Object *ob, unsigned int faceindex, c
 			}
 		}
 	}
-
-	dm->release(dm);
 }
 
 /* returns 0 if not found, otherwise 1 */
-static int imapaint_pick_face(ViewContext *vc, const int mval[2], unsigned int *r_index, unsigned int totpoly)
+static int imapaint_pick_face(
+        ViewContext *vc, const int mval[2],
+        unsigned int *r_index, unsigned int totpoly)
 {
 	if (totpoly == 0)
 		return 0;
 
 	/* sample only on the exact position */
-	*r_index = ED_view3d_backbuf_sample(vc, mval[0], mval[1]);
+	*r_index = ED_view3d_select_id_sample(vc, mval[0], mval[1]);
 
 	if ((*r_index) == 0 || (*r_index) > (unsigned int)totpoly) {
 		return 0;
@@ -433,6 +428,7 @@ void flip_qt_qt(float out[4], const float in[4], const char symm)
 void paint_sample_color(bContext *C, ARegion *ar, int x, int y, bool texpaint_proj, bool use_palette)
 {
 	Scene *scene = CTX_data_scene(C);
+	Depsgraph *depsgraph = CTX_data_depsgraph(C);
 	Paint *paint = BKE_paint_get_active_from_context(C);
 	Palette *palette = BKE_paint_palette(paint);
 	PaletteColor *color = NULL;
@@ -456,21 +452,25 @@ void paint_sample_color(bContext *C, ARegion *ar, int x, int y, bool texpaint_pr
 
 	if (CTX_wm_view3d(C) && texpaint_proj) {
 		/* first try getting a colour directly from the mesh faces if possible */
-		Object *ob = OBACT;
+		ViewLayer *view_layer = CTX_data_view_layer(C);
+		Object *ob = OBACT(view_layer);
+		Object *ob_eval = DEG_get_evaluated_object(depsgraph, ob);
 		bool sample_success = false;
 		ImagePaintSettings *imapaint = &scene->toolsettings->imapaint;
 		bool use_material = (imapaint->mode == IMAGEPAINT_MODE_MATERIAL);
 
 		if (ob) {
+			CustomData_MeshMasks cddata_masks = CD_MASK_BAREMESH;
+			cddata_masks.pmask |= CD_MASK_ORIGINDEX;
 			Mesh *me = (Mesh *)ob->data;
-			DerivedMesh *dm = mesh_get_derived_final(scene, ob, CD_MASK_BAREMESH);
+			Mesh *me_eval = mesh_get_eval_final(depsgraph, scene, ob_eval, &cddata_masks);
 
 			ViewContext vc;
 			const int mval[2] = {x, y};
 			unsigned int faceindex;
 			unsigned int totpoly = me->totpoly;
 
-			if (dm->getLoopDataArray(dm, CD_MLOOPUV)) {
+			if (CustomData_has_layer(&me_eval->ldata, CD_MLOOPUV)) {
 				ED_view3d_viewcontext_init(C, &vc);
 
 				view3d_operator_needs_opengl(C);
@@ -479,7 +479,7 @@ void paint_sample_color(bContext *C, ARegion *ar, int x, int y, bool texpaint_pr
 					Image *image;
 
 					if (use_material)
-						image = imapaint_face_image(ob, me, faceindex);
+						image = imapaint_face_image(ob_eval, me_eval, faceindex);
 					else
 						image = imapaint->canvas;
 
@@ -488,7 +488,7 @@ void paint_sample_color(bContext *C, ARegion *ar, int x, int y, bool texpaint_pr
 						if (ibuf && ibuf->rect) {
 							float uv[2];
 							float u, v;
-							imapaint_pick_uv(scene, ob, faceindex, mval, uv);
+							imapaint_pick_uv(me_eval, scene, ob_eval, faceindex, mval, uv);
 							sample_success = true;
 
 							u = fmodf(uv[0], 1.0f);
@@ -502,10 +502,7 @@ void paint_sample_color(bContext *C, ARegion *ar, int x, int y, bool texpaint_pr
 
 							if (ibuf->rect_float) {
 								float rgba_f[4];
-								if (U.gameflags & USER_DISABLE_MIPMAP)
-									nearest_interpolation_color_wrap(ibuf, NULL, rgba_f, u, v);
-								else
-									bilinear_interpolation_color_wrap(ibuf, NULL, rgba_f, u, v);
+								bilinear_interpolation_color_wrap(ibuf, NULL, rgba_f, u, v);
 								straight_to_premul_v4(rgba_f);
 								if (use_palette) {
 									linearrgb_to_srgb_v3_v3(color->rgb, rgba_f);
@@ -517,10 +514,7 @@ void paint_sample_color(bContext *C, ARegion *ar, int x, int y, bool texpaint_pr
 							}
 							else {
 								unsigned char rgba[4];
-								if (U.gameflags & USER_DISABLE_MIPMAP)
-									nearest_interpolation_color_wrap(ibuf, rgba, NULL, u, v);
-								else
-									bilinear_interpolation_color_wrap(ibuf, rgba, NULL, u, v);
+								bilinear_interpolation_color_wrap(ibuf, rgba, NULL, u, v);
 								if (use_palette) {
 									rgb_uchar_to_float(color->rgb, rgba);
 								}
@@ -536,7 +530,6 @@ void paint_sample_color(bContext *C, ARegion *ar, int x, int y, bool texpaint_pr
 					}
 				}
 			}
-			dm->release(dm);
 		}
 
 		if (!sample_success) {
@@ -570,8 +563,9 @@ static int brush_curve_preset_exec(bContext *C, wmOperator *op)
 
 	if (br) {
 		Scene *scene = CTX_data_scene(C);
+		ViewLayer *view_layer = CTX_data_view_layer(C);
 		BKE_brush_curve_preset(br, RNA_enum_get(op->ptr, "shape"));
-		BKE_paint_invalidate_cursor_overlay(scene, br->curve);
+		BKE_paint_invalidate_cursor_overlay(scene, view_layer, br->curve);
 	}
 
 	return OPERATOR_FINISHED;
@@ -594,7 +588,8 @@ void BRUSH_OT_curve_preset(wmOperatorType *ot)
 		{CURVE_PRESET_LINE, "LINE", 0, "Line", ""},
 		{CURVE_PRESET_ROUND, "ROUND", 0, "Round", ""},
 		{CURVE_PRESET_ROOT, "ROOT", 0, "Root", ""},
-		{0, NULL, 0, NULL, NULL}};
+		{0, NULL, 0, NULL, NULL},
+	};
 
 	ot->name = "Preset";
 	ot->description = "Set brush shape";
@@ -655,9 +650,11 @@ void PAINT_OT_face_select_linked_pick(wmOperatorType *ot)
 static int face_select_all_exec(bContext *C, wmOperator *op)
 {
 	Object *ob = CTX_data_active_object(C);
-	paintface_deselect_all_visible(ob, RNA_enum_get(op->ptr, "action"), true);
-	ED_region_tag_redraw(CTX_wm_region(C));
-	return OPERATOR_FINISHED;
+	if (paintface_deselect_all_visible(C, ob, RNA_enum_get(op->ptr, "action"), true)) {
+		ED_region_tag_redraw(CTX_wm_region(C));
+		return OPERATOR_FINISHED;
+	}
+	return OPERATOR_CANCELLED;
 }
 
 
@@ -680,6 +677,7 @@ static int vert_select_all_exec(bContext *C, wmOperator *op)
 {
 	Object *ob = CTX_data_active_object(C);
 	paintvert_deselect_all_visible(ob, RNA_enum_get(op->ptr, "action"), true);
+	paintvert_tag_select_update(C, ob);
 	ED_region_tag_redraw(CTX_wm_region(C));
 	return OPERATOR_FINISHED;
 }
@@ -711,6 +709,7 @@ static int vert_select_ungrouped_exec(bContext *C, wmOperator *op)
 	}
 
 	paintvert_select_ungrouped(ob, RNA_boolean_get(op->ptr, "extend"), true);
+	paintvert_tag_select_update(C, ob);
 	ED_region_tag_redraw(CTX_wm_region(C));
 	return OPERATOR_FINISHED;
 }
@@ -736,7 +735,7 @@ static int face_select_hide_exec(bContext *C, wmOperator *op)
 {
 	const bool unselected = RNA_boolean_get(op->ptr, "unselected");
 	Object *ob = CTX_data_active_object(C);
-	paintface_hide(ob, unselected);
+	paintface_hide(C, ob, unselected);
 	ED_region_tag_redraw(CTX_wm_region(C));
 	return OPERATOR_FINISHED;
 }
@@ -759,7 +758,7 @@ static int face_select_reveal_exec(bContext *C, wmOperator *op)
 {
 	const bool select = RNA_boolean_get(op->ptr, "select");
 	Object *ob = CTX_data_active_object(C);
-	paintface_reveal(ob, select);
+	paintface_reveal(C, ob, select);
 	ED_region_tag_redraw(CTX_wm_region(C));
 	return OPERATOR_FINISHED;
 }

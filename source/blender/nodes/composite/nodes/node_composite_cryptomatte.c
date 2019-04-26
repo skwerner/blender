@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,10 @@
  *
  * The Original Code is Copyright (C) 2018 Blender Foundation.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): Lukas Stockner, Stefan Werner
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/nodes/composite/nodes/node_composite_cryptomatte.c
- *  \ingroup cmpnodes
+/** \file
+ * \ingroup cmpnodes
  */
 
 #include "node_composite_util.h"
@@ -37,7 +29,7 @@
 
 /* this is taken from the cryptomatte specification 1.0 */
 
-static inline float hash_to_float(uint32_t hash)
+BLI_INLINE float hash_to_float(uint32_t hash)
 {
 	uint32_t mantissa = hash & ((1 << 23) - 1);
 	uint32_t exponent = (hash >> 23) & ((1 << 8) - 1);
@@ -205,7 +197,7 @@ static bNodeSocketTemplate outputs[] = {
 	{   SOCK_RGBA,  0, N_("Image")},
 	{   SOCK_FLOAT, 0, N_("Matte")},
 	{   SOCK_RGBA,  0, N_("Pick")},
-	{   -1, 0, ""   }
+	{   -1, 0, ""   },
 };
 
 void ntreeCompositCryptomatteSyncFromAdd(bNodeTree *UNUSED(ntree), bNode *node)

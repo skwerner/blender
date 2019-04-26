@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,14 +15,10 @@
  *
  * The Original Code is Copyright (C) 2014 Blender Foundation.
  * All rights reserved.
- *
- * Contributor(s): Antony Riakiotakis.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/gpu/intern/gpu_select_sample_query.c
- *  \ingroup gpu
+/** \file
+ * \ingroup gpu
  *
  * Interface for accessing gpu-related methods for selection. The semantics will be
  * similar to glRenderMode(GL_SELECT) since the goal is to maintain compatibility.
@@ -32,6 +26,8 @@
 
 #include <stdlib.h>
 
+#include "GPU_immediate.h"
+#include "GPU_draw.h"
 #include "GPU_select.h"
 #include "GPU_extensions.h"
 #include "GPU_glew.h"
@@ -41,6 +37,8 @@
 #include "BLI_rect.h"
 
 #include "BLI_utildefines.h"
+
+#include "PIL_time.h"
 
 #include "gpu_select_private.h"
 
@@ -94,15 +92,15 @@ void gpu_select_query_begin(
 	g_query_state.id = MEM_mallocN(g_query_state.num_of_queries * sizeof(*g_query_state.id), "gpu selection ids");
 	glGenQueries(g_query_state.num_of_queries, g_query_state.queries);
 
-	glPushAttrib(GL_DEPTH_BUFFER_BIT | GL_VIEWPORT_BIT);
+	gpuPushAttr(GPU_DEPTH_BUFFER_BIT | GPU_VIEWPORT_BIT | GPU_SCISSOR_BIT);
 	/* disable writing to the framebuffer */
 	glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
 
 	/* In order to save some fill rate we minimize the viewport using rect.
-	 * We need to get the region of the scissor so that our geometry doesn't
+	 * We need to get the region of the viewport so that our geometry doesn't
 	 * get rejected before the depth test. Should probably cull rect against
-	 * scissor for viewport but this is a rare case I think */
-	glGetFloatv(GL_SCISSOR_BOX, viewport);
+	 * the viewport but this is a rare case I think */
+	glGetFloatv(GL_VIEWPORT, viewport);
 	glViewport(viewport[0], viewport[1], BLI_rcti_size_x(input), BLI_rcti_size_y(input));
 
 	/* occlusion queries operates on fragments that pass tests and since we are interested on all
@@ -171,7 +169,16 @@ uint gpu_select_query_end(void)
 	}
 
 	for (i = 0; i < g_query_state.active_query; i++) {
-		uint result;
+		uint result = 0;
+		/* Wait until the result is available. */
+		while (result == 0) {
+			glGetQueryObjectuiv(g_query_state.queries[i], GL_QUERY_RESULT_AVAILABLE, &result);
+			if (result == 0) {
+				/* (fclem) Not sure if this is better than calling
+				 * glGetQueryObjectuiv() indefinitely. */
+				PIL_sleep_ms(1);
+			}
+		}
 		glGetQueryObjectuiv(g_query_state.queries[i], GL_QUERY_RESULT, &result);
 		if (result > 0) {
 			if (g_query_state.mode != GPU_SELECT_NEAREST_SECOND_PASS) {
@@ -206,7 +213,7 @@ uint gpu_select_query_end(void)
 	glDeleteQueries(g_query_state.num_of_queries, g_query_state.queries);
 	MEM_freeN(g_query_state.queries);
 	MEM_freeN(g_query_state.id);
-	glPopAttrib();
+	gpuPopAttr();
 	glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
 
 	return hits;

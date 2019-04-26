@@ -13,9 +13,6 @@
 # You should have received a copy of the GNU General Public License
 # along with this program; if not, write to the Free Software Foundation,
 # Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
-#
-# Contributor(s): Jacques Beaurain.
-#
 # ***** END GPL LICENSE BLOCK *****
 
 set(INC
@@ -37,4 +34,27 @@ set(SRC
 	spacetypes.c
 )
 
-blender_add_lib(bf_editor_space_api "${SRC}" "${INC}" "${INC_SYS}")
+set(LIB
+	bf_editor_io
+	bf_editor_sound
+	bf_editor_space_action
+	bf_editor_space_buttons
+	bf_editor_space_clip
+	bf_editor_space_console
+	bf_editor_space_file
+	bf_editor_space_graph
+	bf_editor_space_image
+	bf_editor_space_info
+	bf_editor_space_nla
+	bf_editor_space_node
+	bf_editor_space_outliner
+	bf_editor_space_script
+	bf_editor_space_sequencer
+	bf_editor_space_statusbar
+	bf_editor_space_text
+	bf_editor_space_topbar
+	bf_editor_space_userpref
+	bf_editor_space_view3d
+)
+
+blender_add_lib(bf_editor_space_api "${SRC}" "${INC}" "${INC_SYS}" "${LIB}")

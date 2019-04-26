@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,14 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * Contributor(s): Campbell Barton
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/space_console/console_draw.c
- *  \ingroup spconsole
+/** \file
+ * \ingroup spconsole
  */
 
 #include <math.h>
@@ -39,7 +33,7 @@
 
 #include "MEM_guardedalloc.h"
 
-#include "BIF_gl.h"
+#include "GPU_immediate.h"
 
 #include "UI_interface.h"
 #include "UI_resources.h"
@@ -138,8 +132,9 @@ static void console_cursor_wrap_offset(const char *str, int width, int *row, int
 			*column = 0;
 		}
 
-		if (end && str >= end)
+		if (end && str >= end) {
 			break;
+		}
 
 		*column += col;
 	}
@@ -157,6 +152,8 @@ static int console_textview_line_color(struct TextViewContext *tvc, unsigned cha
 		int offl = 0, offc = 0;
 		int xy[2] = {CONSOLE_DRAW_MARGIN, CONSOLE_DRAW_MARGIN};
 		int pen[2];
+		GPUVertFormat *format = immVertexFormat();
+		uint pos = GPU_vertformat_attr_add(format, "pos", GPU_COMP_F32, 2, GPU_FETCH_FLOAT);
 		xy[1] += tvc->lheight / 6;
 
 		console_cursor_wrap_offset(sc->prompt, tvc->console_width, &offl, &offc, NULL);
@@ -168,14 +165,17 @@ static int console_textview_line_color(struct TextViewContext *tvc, unsigned cha
 		pen[1] += tvc->lheight * offl;
 
 		/* cursor */
-		UI_GetThemeColor3ubv(TH_CONSOLE_CURSOR, fg);
-		glColor3ubv(fg);
+		immBindBuiltinProgram(GPU_SHADER_2D_UNIFORM_COLOR);
+		immUniformThemeColor(TH_CONSOLE_CURSOR);
 
-		glRecti((xy[0] + pen[0]) - 1,
-		        (xy[1] + pen[1]),
-		        (xy[0] + pen[0]) + 1,
-		        (xy[1] + pen[1] + tvc->lheight)
-		        );
+		immRectf(pos,
+		         (xy[0] + pen[0]) - 1,
+		         (xy[1] + pen[1]),
+		         (xy[0] + pen[0]) + 1,
+		         (xy[1] + pen[1] + tvc->lheight)
+		         );
+
+		immUnbindProgram();
 	}
 
 	console_line_color(fg, cl_iter->type);

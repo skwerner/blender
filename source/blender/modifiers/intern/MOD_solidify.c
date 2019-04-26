@@ -134,8 +134,8 @@ static void mesh_calc_hq_normal(Mesh *mesh, float (*poly_nors)[3], float (*r_ver
 #if 0
           add_v3_v3v3(edge_normal, face_nors[edge_ref->f1], face_nors[edge_ref->f2]);
           normalize_v3_length(
-                  edge_normal,
-                  angle_normalized_v3v3(face_nors[edge_ref->f1], face_nors[edge_ref->f2]));
+              edge_normal,
+              angle_normalized_v3v3(face_nors[edge_ref->f1], face_nors[edge_ref->f2]));
 #else
           mid_v3_v3v3_angle_weighted(
               edge_normal, poly_nors[edge_ref->p1], poly_nors[edge_ref->p2]);
@@ -455,8 +455,11 @@ static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, Mes
       ml2 = mloop + mp->loopstart + mesh->totloop;
 #if 0
       for (j = 0; j < mp->totloop; j++) {
-        CustomData_copy_data(&mesh->ldata, &result->ldata, mp->loopstart + j,
-                             mp->loopstart + (loop_end - j) + mesh->totloop, 1);
+        CustomData_copy_data(&mesh->ldata,
+                             &result->ldata,
+                             mp->loopstart + j,
+                             mp->loopstart + (loop_end - j) + mesh->totloop,
+                             1);
       }
 #else
       /* slightly more involved, keep the first vertex the same for the copy,
@@ -531,10 +534,12 @@ static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, Mes
         const unsigned int i = do_shell_align ? i_orig : new_vert_arr[i_orig];
         if (dvert) {
           MDeformVert *dv = &dvert[i];
-          if (defgrp_invert)
+          if (defgrp_invert) {
             scalar_short_vgroup = 1.0f - defvert_find_weight(dv, defgrp_index);
-          else
+          }
+          else {
             scalar_short_vgroup = defvert_find_weight(dv, defgrp_index);
+          }
           scalar_short_vgroup = (offset_fac_vg + (scalar_short_vgroup * offset_fac_vg_inv)) *
                                 scalar_short;
         }
@@ -565,10 +570,12 @@ static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, Mes
         const unsigned int i = do_shell_align ? i_orig : new_vert_arr[i_orig];
         if (dvert) {
           MDeformVert *dv = &dvert[i];
-          if (defgrp_invert)
+          if (defgrp_invert) {
             scalar_short_vgroup = 1.0f - defvert_find_weight(dv, defgrp_index);
-          else
+          }
+          else {
             scalar_short_vgroup = defvert_find_weight(dv, defgrp_index);
+          }
           scalar_short_vgroup = (offset_fac_vg + (scalar_short_vgroup * offset_fac_vg_inv)) *
                                 scalar_short;
         }
@@ -732,8 +739,9 @@ static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, Mes
     MEM_freeN(vert_angles);
   }
 
-  if (vert_nors)
+  if (vert_nors) {
     MEM_freeN(vert_nors);
+  }
 
   /* must recalculate normals with vgroups since they can displace unevenly [#26888] */
   if ((mesh->runtime.cd_dirty_vert & CD_MASK_NORMAL) || (smd->flag & MOD_SOLIDIFY_RIM) || dvert) {
@@ -945,11 +953,13 @@ static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, Mes
     MEM_freeN(edge_order);
   }
 
-  if (old_vert_arr)
+  if (old_vert_arr) {
     MEM_freeN(old_vert_arr);
+  }
 
-  if (poly_nors)
+  if (poly_nors) {
     MEM_freeN(poly_nors);
+  }
 
   if (numPolys == 0 && numEdges != 0) {
     modifier_setError(md, "Faces needed for useful output");

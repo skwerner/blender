@@ -643,9 +643,9 @@ typedef struct UserDef {
   char _pad3[4];
   short gizmo_flag, gizmo_size;
   short edit_studio_light;
-  char _pad6[4];
+  char _pad6[2];
+  short vbotimeout, vbocollectrate;
   short textimeout, texcollectrate;
-  char _pad14[2];
   int memcachelimit;
   int prefetchframes;
   /** Control the rotation step of the view when PAD2, PAD4, PAD6&PAD8 is use. */
@@ -949,7 +949,8 @@ typedef enum eZoomFrame_Mode {
 } eZoomFrame_Mode;
 
 /** Auto-Keying flag
- * #UserDef.autokey_flag (not strictly used when autokeying only - is also used when keyframing these days)
+ * #UserDef.autokey_flag (not strictly used when autokeying only -
+ * is also used when keyframing these days).
  * \note #eAutokey_Flag is used with a macro, search for lines like IS_AUTOKEY_FLAG(INSERTAVAIL).
  */
 typedef enum eAutokey_Flag {
@@ -1103,10 +1104,9 @@ typedef enum eMultiSample_Type {
 
 /** #UserDef.image_draw_method */
 typedef enum eImageDrawMethod {
-  /* IMAGE_DRAW_METHOD_AUTO = 0, */ /* Currently unused */
+  IMAGE_DRAW_METHOD_AUTO = 0,
   IMAGE_DRAW_METHOD_GLSL = 1,
   IMAGE_DRAW_METHOD_2DTEXTURE = 2,
-  IMAGE_DRAW_METHOD_DRAWPIXELS = 3,
 } eImageDrawMethod;
 
 /** #UserDef.virtual_pixel */

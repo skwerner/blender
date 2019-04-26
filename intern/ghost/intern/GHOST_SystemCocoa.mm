@@ -354,6 +354,7 @@ extern "C" int GHOST_HACK_getFirstFile(char buf[FIRSTFILEBUFLG])
   }
 }
 
+/* clang-format off */
 #pragma mark Cocoa objects
 
 /**
@@ -496,6 +497,8 @@ extern "C" int GHOST_HACK_getFirstFile(char buf[FIRSTFILEBUFLG])
 @end
 
 #pragma mark initialization/finalization
+
+/* clang-format on */
 
 GHOST_SystemCocoa::GHOST_SystemCocoa()
 {
@@ -730,7 +733,6 @@ GHOST_IWindow *GHOST_SystemCocoa::createWindow(const STR_String &title,
                                  state,
                                  type,
                                  glSettings.flags & GHOST_glStereoVisual,
-                                 glSettings.numOfAASamples,
                                  glSettings.flags & GHOST_glDebugContext);
 
   if (window->getValid()) {
@@ -760,7 +762,6 @@ GHOST_IWindow *GHOST_SystemCocoa::createWindow(const STR_String &title,
 GHOST_IContext *GHOST_SystemCocoa::createOffscreenContext()
 {
   GHOST_Context *context = new GHOST_ContextCGL(false,
-                                                0,
                                                 NULL,
                                                 NULL,
 

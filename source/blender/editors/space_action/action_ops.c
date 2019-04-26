@@ -43,9 +43,6 @@
 
 void action_operatortypes(void)
 {
-  /* view */
-  WM_operatortype_append(ACTION_OT_properties);
-
   /* keyframes */
   /* selection */
   WM_operatortype_append(ACTION_OT_clickselect);
@@ -118,8 +115,10 @@ void action_keymap(wmKeyConfig *keyconf)
   WM_keymap_ensure(keyconf, "Dopesheet Generic", SPACE_ACTION, 0);
 
   /* channels */
-  /* Channels are not directly handled by the Action Editor module, but are inherited from the Animation module.
-   * All the relevant operations, keymaps, drawing, etc. can therefore all be found in that module instead, as these
+  /* Channels are not directly handled by the Action Editor module,
+   * but are inherited from the Animation module.
+   * All the relevant operations, keymaps, drawing, etc.
+   * can therefore all be found in that module instead, as these
    * are all used for the Graph-Editor too.
    */
 

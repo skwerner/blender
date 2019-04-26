@@ -271,20 +271,24 @@ void apply_keyb_grid(
     int shift, int ctrl, float *val, float fac1, float fac2, float fac3, int invert)
 {
   /* fac1 is for 'nothing', fac2 for CTRL, fac3 for SHIFT */
-  if (invert)
+  if (invert) {
     ctrl = !ctrl;
+  }
 
   if (ctrl && shift) {
-    if (fac3 != 0.0f)
+    if (fac3 != 0.0f) {
       *val = fac3 * floorf(*val / fac3 + 0.5f);
+    }
   }
   else if (ctrl) {
-    if (fac2 != 0.0f)
+    if (fac2 != 0.0f) {
       *val = fac2 * floorf(*val / fac2 + 0.5f);
+    }
   }
   else {
-    if (fac1 != 0.0f)
+    if (fac1 != 0.0f) {
       *val = fac1 * floorf(*val / fac1 + 0.5f);
+    }
   }
 }
 
@@ -391,8 +395,10 @@ void ED_region_draw_mouse_line_cb(const bContext *C, ARegion *ar, void *arg_info
 {
   wmWindow *win = CTX_wm_window(C);
   const float *mval_src = (float *)arg_info;
-  const float mval_dst[2] = {win->eventstate->x - ar->winrct.xmin,
-                             win->eventstate->y - ar->winrct.ymin};
+  const float mval_dst[2] = {
+      win->eventstate->x - ar->winrct.xmin,
+      win->eventstate->y - ar->winrct.ymin,
+  };
 
   const uint shdr_pos = GPU_vertformat_attr_add(
       immVertexFormat(), "pos", GPU_COMP_F32, 2, GPU_FETCH_FLOAT);

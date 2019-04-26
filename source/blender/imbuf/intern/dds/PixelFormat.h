@@ -51,7 +51,7 @@
 #ifndef __PIXELFORMAT_H__
 #define __PIXELFORMAT_H__
 
-#include <Common.h>
+#include "Common.h"
 
 namespace PixelFormat {
 
@@ -112,17 +112,17 @@ inline float quantizeCeil(float f, int inbits, int outbits)
 }
 
 #if 0
-    inline float quantizeRound(float f, int bits)
-    {
-      float scale = float(1 << bits);
-      return fround(f * scale) / scale;
-    }
+inline float quantizeRound(float f, int bits)
+{
+  float scale = float(1 << bits);
+  return fround(f * scale) / scale;
+}
 
-    inline float quantizeFloor(float f, int bits)
-    {
-      float scale = float(1 << bits);
-      return floor(f * scale) / scale;
-    }
+inline float quantizeFloor(float f, int bits)
+{
+  float scale = float(1 << bits);
+  return floor(f * scale) / scale;
+}
 #endif
 
 }  // namespace PixelFormat

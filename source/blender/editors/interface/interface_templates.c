@@ -127,11 +127,8 @@ static void template_add_button_search_menu(const bContext *C,
 
   if (use_previews) {
     ARegion *region = CTX_wm_region(C);
-    ScrArea *area = CTX_wm_area(C);
-    /* XXX ugly top-bar exception */
-    const bool use_big_size = (
-        /* silly check, could be more generic */
-        (region->regiontype != RGN_TYPE_HEADER) && (area->spacetype != SPACE_TOPBAR));
+    /* Ugly tool header exception. */
+    const bool use_big_size = (region->regiontype != RGN_TYPE_TOOL_HEADER);
     /* Ugly exception for screens here,
      * drawing their preview in icon size looks ugly/useless */
     const bool use_preview_icon = use_big_size || (id && (GS(id->name) != ID_SCR));
@@ -1371,10 +1368,12 @@ void uiTemplateIDTabs(uiLayout *layout,
 /************************ ID Chooser Template ***************************/
 
 /**
- * This is for selecting the type of ID-block to use, and then from the relevant type choosing the block to use
+ * This is for selecting the type of ID-block to use,
+ * and then from the relevant type choosing the block to use.
  *
- * - propname: property identifier for property that ID-pointer gets stored to
- * - proptypename: property identifier for property used to determine the type of ID-pointer that can be used
+ * \param propname: property identifier for property that ID-pointer gets stored to.
+ * \param proptypename: property identifier for property
+ * used to determine the type of ID-pointer that can be used.
  */
 void uiTemplateAnyID(uiLayout *layout,
                      PointerRNA *ptr,
@@ -2354,8 +2353,14 @@ void uiTemplateOperatorRedoProperties(uiLayout *layout, const bContext *C)
   /* Disable for now, doesn't fit well in popover. */
 #if 0
   /* Repeat button with operator name as text. */
-  uiItemFullO(layout, "SCREEN_OT_repeat_last", RNA_struct_ui_name(op->type->srna),
-              ICON_NONE, NULL, WM_OP_INVOKE_DEFAULT, 0, NULL);
+  uiItemFullO(layout,
+              "SCREEN_OT_repeat_last",
+              RNA_struct_ui_name(op->type->srna),
+              ICON_NONE,
+              NULL,
+              WM_OP_INVOKE_DEFAULT,
+              0,
+              NULL);
 #endif
 
   if (WM_operator_repeat_check(C, op)) {
@@ -4801,9 +4806,9 @@ void uiTemplateLayers(uiLayout *layout,
 
   /* the number of layers determines the way we group them
    * - we want 2 rows only (for now)
-   * - the number of columns (cols) is the total number of buttons per row
-   *   the 'remainder' is added to this, as it will be ok to have first row slightly wider if need be
-   * - for now, only split into groups if group will have at least 5 items
+   * - The number of columns (cols) is the total number of buttons per row the 'remainder'
+   *   is added to this, as it will be ok to have first row slightly wider if need be.
+   * - For now, only split into groups if group will have at least 5 items.
    */
   layers = RNA_property_array_length(ptr, prop);
   cols = (layers / 2) + (layers % 2);
@@ -5624,14 +5629,17 @@ void uiTemplateList(uiLayout *layout,
 
   if (glob) {
     /* About UI_BTYPE_GRIP drag-resize:
-     * We can't directly use results from a grip button, since we have a rather complex behavior here
-     * (sizing by discrete steps and, overall, autosize feature).
-     * Since we *never* know whether we are grip-resizing or not (because there is no callback for when a
-     * button enters/leaves its "edit mode"), we use the fact that grip-controlled value (dyn_data->resize)
-     * is completely handled by the grip during the grab resize, so settings its value here has no effect
-     * at all.
-     * It is only meaningful when we are not resizing, in which case this gives us the correct "init drag" value.
-     * Note we cannot affect dyn_data->resize_prev here, since this value is not controlled by the grip!
+     * We can't directly use results from a grip button, since we have a
+     * rather complex behavior here (sizing by discrete steps and, overall, autosize feature).
+     * Since we *never* know whether we are grip-resizing or not
+     * (because there is no callback for when a button enters/leaves its "edit mode"),
+     * we use the fact that grip-controlled value (dyn_data->resize) is completely handled
+     * by the grip during the grab resize, so settings its value here has no effect at all.
+     *
+     * It is only meaningful when we are not resizing,
+     * in which case this gives us the correct "init drag" value.
+     * Note we cannot affect dyn_data->resize_prev here,
+     * since this value is not controlled by the grip!
      */
     dyn_data->resize = dyn_data->resize_prev +
                        (dyn_data->visual_height - ui_list->list_grip) * UI_UNIT_Y;
@@ -5874,7 +5882,8 @@ static bool ui_layout_operator_buts_poll_property(struct PointerRNA *UNUSED(ptr)
 
 /**
  * Draw Operator property buttons for redoing execution with different settings.
- * This function does not initialize the layout, functions can be called on the layout before and after.
+ * This function does not initialize the layout,
+ * functions can be called on the layout before and after.
  */
 eAutoPropButsReturn uiTemplateOperatorPropertyButs(const bContext *C,
                                                    uiLayout *layout,
@@ -5890,8 +5899,8 @@ eAutoPropButsReturn uiTemplateOperatorPropertyButs(const bContext *C,
     op->properties = IDP_New(IDP_GROUP, &val, "wmOperatorProperties");
   }
 
-  /* poll() on this operator may still fail, at the moment there is no nice feedback when this happens
-   * just fails silently */
+  /* poll() on this operator may still fail,
+   * at the moment there is no nice feedback when this happens just fails silently. */
   if (!WM_operator_repeat_check(C, op)) {
     UI_block_lock_set(block, true, "Operator can't' redo");
     return return_info;

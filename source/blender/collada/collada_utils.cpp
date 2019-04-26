@@ -195,8 +195,7 @@ std::vector<bAction *> bc_getSceneActions(const bContext *C, Object *ob, bool al
     for (id = (ID *)bmain->actions.first; id; id = (ID *)(id->next)) {
       bAction *act = (bAction *)id;
       /* XXX This currently creates too many actions.
-         TODO Need to check if the action is compatible to the given object
-      */
+       * TODO Need to check if the action is compatible to the given object. */
       actions.push_back(act);
     }
   }
@@ -228,10 +227,8 @@ void bc_update_scene(BlenderContext &blender_context, float ctime)
   Scene *scene = blender_context.get_scene();
   Depsgraph *depsgraph = blender_context.get_depsgraph();
 
-  /*
-   * See remark in physics_fluid.c lines 395...)
-   * BKE_scene_update_for_newframe(ev_context, bmain, scene, scene->lay);
-  */
+  /* See remark in physics_fluid.c lines 395...) */
+  // BKE_scene_update_for_newframe(ev_context, bmain, scene, scene->lay);
   BKE_scene_frame_set(scene, ctime);
   ED_update_for_newframe(bmain, depsgraph);
 }
@@ -264,13 +261,11 @@ Mesh *bc_get_mesh_copy(BlenderContext &blender_context,
   if (apply_modifiers) {
 #if 0 /* Not supported by new system currently... */
     switch (export_mesh_type) {
-      case BC_MESH_TYPE_VIEW:
-      {
+      case BC_MESH_TYPE_VIEW: {
         dm = mesh_create_derived_view(depsgraph, scene, ob, &mask);
         break;
       }
-      case BC_MESH_TYPE_RENDER:
-      {
+      case BC_MESH_TYPE_RENDER: {
         dm = mesh_create_derived_render(depsgraph, scene, ob, &mask);
         break;
       }
@@ -343,7 +338,7 @@ bool bc_is_in_Export_set(LinkNode *export_set, Object *ob, ViewLayer *view_layer
 
   if (!to_export) {
     /* Mark this object as to_export even if it is not in the
-    export list, but it contains children to export */
+     * export list, but it contains children to export. */
 
     std::vector<Object *> children;
     bc_get_children(children, ob, view_layer);
@@ -826,18 +821,16 @@ void bc_set_IDPropertyMatrix(EditBone *ebone, const char *key, float mat[4][4])
  */
 static void bc_set_IDProperty(EditBone *ebone, const char *key, float value)
 {
-  if (ebone->prop == NULL)
-  {
-    IDPropertyTemplate val = { 0 };
+  if (ebone->prop == NULL) {
+    IDPropertyTemplate val = {0};
     ebone->prop = IDP_New(IDP_GROUP, &val, "RNA_EditBone ID properties");
   }
 
   IDProperty *pgroup = (IDProperty *)ebone->prop;
-  IDPropertyTemplate val = { 0 };
+  IDPropertyTemplate val = {0};
   IDProperty *prop = IDP_New(IDP_FLOAT, &val, key);
   IDP_Float(prop) = value;
   IDP_AddToGroup(pgroup, prop);
-
 }
 #endif
 
@@ -1262,7 +1255,10 @@ bNode *bc_add_node(bContext *C, bNodeTree *ntree, int node_type, int locx, int l
 
 #if 0
 // experimental, probably not used
-static bNodeSocket *bc_group_add_input_socket(bNodeTree *ntree, bNode *to_node, int to_index, std::string label)
+static bNodeSocket *bc_group_add_input_socket(bNodeTree *ntree,
+                                              bNode *to_node,
+                                              int to_index,
+                                              std::string label)
 {
   bNodeSocket *to_socket = (bNodeSocket *)BLI_findlink(&to_node->inputs, to_index);
 
@@ -1278,7 +1274,10 @@ static bNodeSocket *bc_group_add_input_socket(bNodeTree *ntree, bNode *to_node, 
   return newsock;
 }
 
-static bNodeSocket *bc_group_add_output_socket(bNodeTree *ntree, bNode *from_node, int from_index, std::string label)
+static bNodeSocket *bc_group_add_output_socket(bNodeTree *ntree,
+                                               bNode *from_node,
+                                               int from_index,
+                                               std::string label)
 {
   bNodeSocket *from_socket = (bNodeSocket *)BLI_findlink(&from_node->outputs, from_index);
 
@@ -1293,7 +1292,6 @@ static bNodeSocket *bc_group_add_output_socket(bNodeTree *ntree, bNode *from_nod
   strcpy(newsock->name, label.c_str());
   return newsock;
 }
-
 
 void bc_make_group(bContext *C, bNodeTree *ntree, std::map<std::string, bNode *> nmap)
 {

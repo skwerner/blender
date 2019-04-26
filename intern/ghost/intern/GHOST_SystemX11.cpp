@@ -355,7 +355,6 @@ GHOST_IWindow *GHOST_SystemX11::createWindow(const STR_String &title,
                                ((glSettings.flags & GHOST_glStereoVisual) != 0),
                                exclusive,
                                ((glSettings.flags & GHOST_glAlphaBackground) != 0),
-                               glSettings.numOfAASamples,
                                (glSettings.flags & GHOST_glDebugContext) != 0);
 
   if (window) {
@@ -421,7 +420,6 @@ GHOST_IContext *GHOST_SystemX11::createOffscreenContext()
 
   for (int minor = 5; minor >= 0; --minor) {
     context = new GHOST_ContextGLX(false,
-                                   0,
                                    (Window)NULL,
                                    m_display,
                                    (GLXFBConfig)NULL,
@@ -439,7 +437,6 @@ GHOST_IContext *GHOST_SystemX11::createOffscreenContext()
   }
 
   context = new GHOST_ContextGLX(false,
-                                 0,
                                  (Window)NULL,
                                  m_display,
                                  (GLXFBConfig)NULL,
@@ -692,14 +689,16 @@ bool GHOST_SystemX11::processEvents(bool waitForEvent)
 
             if (xev_next.type == KeyPress || xev_next.type == KeyRelease) {
               /* XK_Hyper_L/R currently unused */
-              const static KeySym modifiers[8] = {XK_Shift_L,
-                                                  XK_Shift_R,
-                                                  XK_Control_L,
-                                                  XK_Control_R,
-                                                  XK_Alt_L,
-                                                  XK_Alt_R,
-                                                  XK_Super_L,
-                                                  XK_Super_R};
+              const static KeySym modifiers[8] = {
+                  XK_Shift_L,
+                  XK_Shift_R,
+                  XK_Control_L,
+                  XK_Control_R,
+                  XK_Alt_L,
+                  XK_Alt_R,
+                  XK_Super_L,
+                  XK_Super_R,
+              };
 
               for (int i = 0; i < (sizeof(modifiers) / sizeof(*modifiers)); i++) {
                 KeyCode kc = XKeysymToKeycode(m_display, modifiers[i]);

@@ -480,13 +480,15 @@ BLI_INLINE void cloth_calc_spring_force(ClothModifierData *clmd, ClothSpring *s)
       BPH_mass_spring_get_motion_state(data, s->mn, x_mn, v);
 
       BKE_sim_debug_data_add_dot(clmd->debug_data, x_kl, 0.9, 0.9, 0.9, "target", 7980, s->kl);
-      BKE_sim_debug_data_add_line(clmd->debug_data, x_kl, x_mn, 0.8, 0.8, 0.8, "target", 7981, s->kl);
+      BKE_sim_debug_data_add_line(
+          clmd->debug_data, x_kl, x_mn, 0.8, 0.8, 0.8, "target", 7981, s->kl);
 
       copy_v3_v3(d, s->target);
-      BKE_sim_debug_data_add_vector(clmd->debug_data, x_kl, d, 0.8, 0.8, 0.2, "target", 7982, s->kl);
+      BKE_sim_debug_data_add_vector(
+          clmd->debug_data, x_kl, d, 0.8, 0.8, 0.2, "target", 7982, s->kl);
 
-//          copy_v3_v3(d, s->target_ij);
-//          BKE_sim_debug_data_add_vector(clmd->debug_data, x, d, 1, 0.4, 0.4, "target", 7983, s->kl);
+      //          copy_v3_v3(d, s->target_ij);
+      //          BKE_sim_debug_data_add_vector(clmd->debug_data, x, d, 1, 0.4, 0.4, "target", 7983, s->kl);
     }
 #  endif
 #endif
@@ -589,7 +591,8 @@ static void cloth_calc_force(
           if (hairdata) {
             hair_ij = &hairdata[spring->ij];
             hair_kl = &hairdata[spring->kl];
-            BPH_mass_spring_force_edge_wind(data, spring->ij, spring->kl, hair_ij->radius, hair_kl->radius, winvec);
+            BPH_mass_spring_force_edge_wind(
+                data, spring->ij, spring->kl, hair_ij->radius, hair_kl->radius, winvec);
           }
           else
             BPH_mass_spring_force_edge_wind(data, spring->ij, spring->kl, 1.0f, 1.0f, winvec);
@@ -842,8 +845,10 @@ static void cloth_continuum_step(ClothModifierData *clmd, float dt)
       zero_v3(b);
 
       offset[axis] = shift * clmd->hair_grid_cellsize;
-      a[(axis + 1) % 3] = clmd->hair_grid_max[(axis + 1) % 3] - clmd->hair_grid_min[(axis + 1) % 3];
-      b[(axis + 2) % 3] = clmd->hair_grid_max[(axis + 2) % 3] - clmd->hair_grid_min[(axis + 2) % 3];
+      a[(axis + 1) % 3] = clmd->hair_grid_max[(axis + 1) % 3] -
+                          clmd->hair_grid_min[(axis + 1) % 3];
+      b[(axis + 2) % 3] = clmd->hair_grid_max[(axis + 2) % 3] -
+                          clmd->hair_grid_min[(axis + 2) % 3];
 
       BKE_sim_debug_data_clear_category(clmd->debug_data, "grid velocity");
       for (j = 0; j < size; ++j) {
@@ -856,13 +861,14 @@ static void cloth_continuum_step(ClothModifierData *clmd, float dt)
 
           BPH_hair_volume_grid_interpolate(grid, x, &gdensity, gvel, gvel_smooth, NULL, NULL);
 
-//                  BKE_sim_debug_data_add_circle(clmd->debug_data, x, gdensity, 0.7, 0.3, 1, "grid density", i, j, 3111);
+          //                  BKE_sim_debug_data_add_circle(clmd->debug_data, x, gdensity, 0.7, 0.3, 1, "grid density", i, j, 3111);
           if (!is_zero_v3(gvel) || !is_zero_v3(gvel_smooth)) {
             float dvel[3];
             sub_v3_v3v3(dvel, gvel_smooth, gvel);
-//                      BKE_sim_debug_data_add_vector(clmd->debug_data, x, gvel, 0.4, 0, 1, "grid velocity", i, j, 3112);
-//                      BKE_sim_debug_data_add_vector(clmd->debug_data, x, gvel_smooth, 0.6, 1, 1, "grid velocity", i, j, 3113);
-            BKE_sim_debug_data_add_vector(clmd->debug_data, x, dvel, 0.4, 1, 0.7, "grid velocity", i, j, 3114);
+            //                      BKE_sim_debug_data_add_vector(clmd->debug_data, x, gvel, 0.4, 0, 1, "grid velocity", i, j, 3112);
+            //                      BKE_sim_debug_data_add_vector(clmd->debug_data, x, gvel_smooth, 0.6, 1, 1, "grid velocity", i, j, 3113);
+            BKE_sim_debug_data_add_vector(
+                clmd->debug_data, x, dvel, 0.4, 1, 0.7, "grid velocity", i, j, 3114);
 #  if 0
             if (gdensity > 0.0f) {
               float col0[3] = {0.0, 0.0, 0.0};
@@ -906,7 +912,8 @@ static void cloth_calc_volume_force(ClothModifierData *clmd)
 
   /* gather velocities & density */
   if (smoothfac > 0.0f || pressfac > 0.0f) {
-    HairVertexGrid *vertex_grid = BPH_hair_volume_create_vertex_grid(clmd->sim_parms->voxel_res, gmin, gmax);
+    HairVertexGrid *vertex_grid = BPH_hair_volume_create_vertex_grid(
+        clmd->sim_parms->voxel_res, gmin, gmax);
 
     vert = cloth->verts;
     for (i = 0; i < mvert_num; i++, vert++) {
@@ -932,7 +939,8 @@ static void cloth_calc_volume_force(ClothModifierData *clmd)
 
       /* calculate volumetric forces */
       BPH_mass_spring_get_motion_state(data, vert->solver_index, x, v);
-      BPH_hair_volume_vertex_grid_forces(vertex_grid, x, v, smoothfac, pressfac, minpress, f, dfdx, dfdv);
+      BPH_hair_volume_vertex_grid_forces(
+          vertex_grid, x, v, smoothfac, pressfac, minpress, f, dfdx, dfdv);
       /* apply on hair data */
       BPH_mass_spring_force_extern(data, vert->solver_index, f, dfdx, dfdv);
     }

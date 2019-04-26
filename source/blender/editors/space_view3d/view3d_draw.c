@@ -700,7 +700,8 @@ static void drawviewborder(Scene *scene, Depsgraph *depsgraph, ARegion *ar, View
       /* draw */
       immUniformThemeColorShade(TH_VIEW_OVERLAY, 100);
 
-      /* TODO Was using UI_draw_roundbox_4fv(false, rect.xmin, rect.ymin, rect.xmax, rect.ymax, 2.0f, color).
+      /* TODO Was using:
+       * UI_draw_roundbox_4fv(false, rect.xmin, rect.ymin, rect.xmax, rect.ymax, 2.0f, color);
        * We'll probably need a new imm_draw_line_roundbox_dashed dor that - though in practice the
        * 2.0f round corner effect was nearly not visible anyway... */
       imm_draw_box_wire_2d(shdr_pos, rect.xmin, rect.ymin, rect.xmax, rect.ymax);
@@ -967,7 +968,7 @@ static void draw_rotation_guide(const RegionView3D *rv3d)
     immVertex3fv(pos, end);
 
 #  if 0
-    color[3] = 0.2f + fabsf(rv3d->rot_angle);  /* modulate opacity with angle */
+    color[3] = 0.2f + fabsf(rv3d->rot_angle); /* modulate opacity with angle */
     /* ^^ neat idea, but angle is frame-rate dependent, so it's usually close to 0.2 */
 #  endif
 
@@ -1450,6 +1451,7 @@ void view3d_main_region_draw(const bContext *C, ARegion *ar)
 
   view3d_draw_view(C, ar);
 
+  DRW_cache_free_old_batches(bmain);
   GPU_free_images_old(bmain);
   GPU_pass_cache_garbage_collect();
 

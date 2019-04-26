@@ -88,18 +88,21 @@ static void splineik_init_tree_from_pchan(Scene *UNUSED(scene),
       ikData = con->data;
 
       /* target can only be curve */
-      if ((ikData->tar == NULL) || (ikData->tar->type != OB_CURVE))
+      if ((ikData->tar == NULL) || (ikData->tar->type != OB_CURVE)) {
         continue;
+      }
       /* skip if disabled */
-      if ((con->enforce == 0.0f) || (con->flag & (CONSTRAINT_DISABLE | CONSTRAINT_OFF)))
+      if ((con->enforce == 0.0f) || (con->flag & (CONSTRAINT_DISABLE | CONSTRAINT_OFF))) {
         continue;
+      }
 
       /* otherwise, constraint is ok... */
       break;
     }
   }
-  if (con == NULL)
+  if (con == NULL) {
     return;
+  }
 
   /* find the root bone and the chain of bones from the root to the tip
    * NOTE: this assumes that the bones are connected, but that may not be true... */
@@ -113,10 +116,12 @@ static void splineik_init_tree_from_pchan(Scene *UNUSED(scene),
     totLength += boneLengths[segcount];
   }
 
-  if (segcount == 0)
+  if (segcount == 0) {
     return;
-  else
+  }
+  else {
     pchanRoot = pchanChain[segcount - 1];
+  }
 
   /* perform binding step if required */
   if ((ikData->flag & CONSTRAINT_SPLINEIK_BOUND) == 0) {
@@ -124,8 +129,9 @@ static void splineik_init_tree_from_pchan(Scene *UNUSED(scene),
     int i;
 
     /* setup new empty array for the points list */
-    if (ikData->points)
+    if (ikData->points) {
       MEM_freeN(ikData->points);
+    }
     ikData->numpoints = ikData->chainlen + 1;
     ikData->points = MEM_mallocN(sizeof(float) * ikData->numpoints, "Spline IK Binding");
 
@@ -195,8 +201,9 @@ static void splineik_init_tree(Scene *scene, Object *ob, float UNUSED(ctime))
 
   /* find the tips of Spline IK chains, which are simply the bones which have been tagged as such */
   for (pchan = ob->pose->chanbase.first; pchan; pchan = pchan->next) {
-    if (pchan->constflag & PCHAN_HAS_SPLINEIK)
+    if (pchan->constflag & PCHAN_HAS_SPLINEIK) {
       splineik_init_tree_from_pchan(scene, ob, pchan);
+    }
   }
 }
 
@@ -293,8 +300,9 @@ static void splineik_evaluate_bone(
       /* apply curve's object-mode transforms to the position
        * unless the option to allow curve to be positioned elsewhere is activated (i.e. no root)
        */
-      if ((ikData->flag & CONSTRAINT_SPLINEIK_NO_ROOT) == 0)
+      if ((ikData->flag & CONSTRAINT_SPLINEIK_NO_ROOT) == 0) {
         mul_m4_v3(ikData->tar->obmat, vec);
+      }
 
       /* convert the position to pose-space, then store it */
       mul_m4_v3(ob->imat, vec);
@@ -309,8 +317,9 @@ static void splineik_evaluate_bone(
       /* apply curve's object-mode transforms to the position
        * unless the option to allow curve to be positioned elsewhere is activated (i.e. no root)
        */
-      if ((ikData->flag & CONSTRAINT_SPLINEIK_NO_ROOT) == 0)
+      if ((ikData->flag & CONSTRAINT_SPLINEIK_NO_ROOT) == 0) {
         mul_m4_v3(ikData->tar->obmat, vec);
+      }
 
       /* store the position, and convert it to pose space */
       mul_m4_v3(ob->imat, vec);
@@ -412,8 +421,9 @@ static void splineik_evaluate_bone(
           /* NOTE: these should be fine for now, but should get sanitised in future */
           CLAMP(scale, 0.0001f, 100000.0f);
         }
-        else
+        else {
           scale = 1.0f;
+        }
 
         /* apply the scaling */
         mul_v3_fl(poseMat[0], scale);
@@ -549,8 +559,9 @@ static void splineik_execute_tree(
     }
 
     /* free the tree info specific to SplineIK trees now */
-    if (tree->chain)
+    if (tree->chain) {
       MEM_freeN(tree->chain);
+    }
 
     /* free this tree */
     BLI_freelinkN(&pchan_root->siktree, tree);
@@ -613,13 +624,11 @@ void BKE_pose_eval_init(struct Depsgraph *depsgraph, Scene *UNUSED(scene), Objec
 
     /* Free B-Bone shape data cache if it's not a B-Bone. */
     if (pchan->bone == NULL || pchan->bone->segments <= 1) {
-      BKE_pose_channel_free_bbone_cache(pchan);
+      BKE_pose_channel_free_bbone_cache(&pchan->runtime);
     }
   }
 
   BLI_assert(pose->chan_array != NULL || BLI_listbase_is_empty(&pose->chanbase));
-
-  BKE_armature_cached_bbone_deformation_free_data(object);
 }
 
 void BKE_pose_eval_init_ik(struct Depsgraph *depsgraph, Scene *scene, Object *object)
@@ -714,6 +723,9 @@ void BKE_pose_bone_done(struct Depsgraph *depsgraph, struct Object *object, int 
   if (pchan->bone) {
     invert_m4_m4(imat, pchan->bone->arm_mat);
     mul_m4_m4m4(pchan->chan_mat, pchan->pose_mat, imat);
+    if (!(pchan->bone->flag & BONE_NO_DEFORM)) {
+      mat4_to_dquat(&pchan->runtime.deform_dual_quat, pchan->bone->arm_mat, pchan->chan_mat);
+    }
   }
   if (DEG_is_active(depsgraph) && armature->edbo == NULL) {
     bPoseChannel *pchan_orig = pchan->orig_pchan;
@@ -723,7 +735,7 @@ void BKE_pose_bone_done(struct Depsgraph *depsgraph, struct Object *object, int 
     copy_m4_m4(pchan_orig->constinv, pchan->constinv);
     BKE_pose_where_is_bone_tail(pchan_orig);
     if (pchan->bone == NULL || pchan->bone->segments <= 1) {
-      BKE_pose_channel_free_bbone_cache(pchan_orig);
+      BKE_pose_channel_free_bbone_cache(&pchan_orig->runtime);
     }
   }
 }
@@ -798,7 +810,6 @@ static void pose_eval_done_common(struct Depsgraph *depsgraph, Object *object)
   bPose *pose = object->pose;
   UNUSED_VARS_NDEBUG(pose);
   BLI_assert(pose != NULL);
-  BKE_armature_cached_bbone_deformation_update(object);
   BKE_object_eval_boundbox(depsgraph, object);
 }
 static void pose_eval_cleanup_common(Object *object)
@@ -806,6 +817,7 @@ static void pose_eval_cleanup_common(Object *object)
   bPose *pose = object->pose;
   BLI_assert(pose != NULL);
   BLI_assert(pose->chan_array != NULL || BLI_listbase_is_empty(&pose->chanbase));
+  UNUSED_VARS_NDEBUG(pose);
 }
 
 void BKE_pose_eval_done(struct Depsgraph *depsgraph, Object *object)
@@ -837,8 +849,6 @@ void BKE_pose_eval_proxy_init(struct Depsgraph *depsgraph, Object *object)
   DEG_debug_print_eval(depsgraph, __func__, object->id.name, object);
 
   BLI_assert(object->pose->chan_array != NULL || BLI_listbase_is_empty(&object->pose->chanbase));
-
-  BKE_armature_cached_bbone_deformation_free_data(object);
 }
 
 void BKE_pose_eval_proxy_done(struct Depsgraph *depsgraph, Object *object)
@@ -869,13 +879,13 @@ void BKE_pose_eval_proxy_copy_bone(struct Depsgraph *depsgraph, Object *object, 
    * around for the time while proxies are evaluating.
    */
 #if 0
-  bPoseChannel *pchan_from = pose_pchan_get_indexed(
-          object->proxy_from, pchan_index);
+  bPoseChannel *pchan_from = pose_pchan_get_indexed(object->proxy_from, pchan_index);
 #else
   bPoseChannel *pchan_from = BKE_pose_channel_find_name(object->proxy_from->pose, pchan->name);
 #endif
   BLI_assert(pchan != NULL);
   BLI_assert(pchan_from != NULL);
   BKE_pose_copyesult_pchan_result(pchan, pchan_from);
+  copy_dq_dq(&pchan->runtime.deform_dual_quat, &pchan_from->runtime.deform_dual_quat);
   BKE_pchan_bbone_segments_cache_copy(pchan, pchan_from);
 }

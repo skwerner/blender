@@ -588,8 +588,10 @@ def km_view3d_generic(_params):
     )
 
     items.extend([
-        ("view3d.toolshelf", {"type": 'LEFT_BRACKET', "value": 'PRESS', "ctrl": True}, None),
-        ("view3d.properties", {"type": 'RIGHT_BRACKET', "value": 'PRESS', "ctrl": True}, None),
+        ("wm.context_toggle", {"type": 'LEFT_BRACKET', "value": 'PRESS', "ctrl": True},
+         {"properties": [("data_path", 'space_data.show_region_toolbar')]}),
+        ("wm.context_toggle", {"type": 'RIGHT_BRACKET', "value": 'PRESS', "ctrl": True},
+         {"properties": [("data_path", 'space_data.show_region_ui')]}),
     ])
 
     return keymap
@@ -1128,6 +1130,10 @@ def km_info(params):
 
     items.extend([
         ("info.select_pick", {"type": 'LEFTMOUSE', "value": 'PRESS'}, None),
+        ("info.select_pick", {"type": 'LEFTMOUSE', "value": 'PRESS', "shift": True},
+         {"properties": [("extend", True)]}),
+        ("info.select_box", {"type": 'EVT_TWEAK_L', "value": 'ANY'},
+         {"properties": [("wait_for_input", False)]}),
         ("info.select_all", {"type": 'A', "value": 'PRESS', "ctrl": True}, {"properties": [("action", 'SELECT')]}),
         ("info.select_all", {"type": 'A', "value": 'PRESS', "ctrl": True, "shift": True}, None),
         ("info.select_all", {"type": 'I', "value": 'PRESS', "ctrl": True}, None),
@@ -1277,7 +1283,8 @@ def km_dopesheet_generic(params):
     )
 
     items.extend([
-        ("action.properties", {"type": 'N', "value": 'PRESS'}, None),
+        ("wm.context_toggle", {"type": 'N', "value": 'PRESS'},
+         {"properties": [("data_path", 'space_data.show_region_ui')]}),
         ("wm.context_set_enum", {"type": 'TAB', "value": 'PRESS', "ctrl": True},
          {"properties": [("data_path", 'area.type'), ("value", 'GRAPH_EDITOR')]})
     ])
@@ -1482,7 +1489,8 @@ def km_text_generic(params):
         ("text.jump", {"type": 'J', "value": 'PRESS', "ctrl": True}, None),
         ("text.find", {"type": 'G', "value": 'PRESS', "ctrl": True}, None),
         ("text.replace", {"type": 'H', "value": 'PRESS', "ctrl": True}, None),
-        ("text.properties", {"type": 'I', "value": 'PRESS', "ctrl": True}, None),
+        ("wm.context_toggle", {"type": 'I', "value": 'PRESS', "ctrl": True},
+         {"properties": [("data_path", 'space_data.show_region_ui')]}),
     ])
 
     return keymap
@@ -1638,7 +1646,8 @@ def km_sequencercommon(_params):
     )
 
     items.extend([
-        ("sequencer.properties", {"type": 'N', "value": 'PRESS'}, None),
+        ("wm.context_toggle", {"type": 'N', "value": 'PRESS'},
+         {"properties": [("data_path", 'space_data.show_region_ui')]}),
         ("wm.context_toggle", {"type": 'O', "value": 'PRESS', "shift": True},
          {"properties": [("data_path", 'scene.sequence_editor.show_overlay')]}),
         #("sequencer.view_toggle", {"type": 'TAB', "value": 'PRESS', "ctrl": True}, None),
@@ -3463,20 +3472,97 @@ def km_transform_modal_map(_params):
 # Tool System Keymaps
 
 
-
 def km_3d_view_tool_move(params):
     return (
         "3D View Tool: Move",
         {"space_type": 'VIEW_3D', "region_type": 'WINDOW'},
         {"items": [
-            ("transform.translate", {"type": params.tool_tweak, "value": 'ANY'},
+            ("transform.translate", {"type": 'MIDDLEMOUSE', "value": 'ANY'},
              {"properties": [("release_confirm", True)]}),
-            ("object.duplicate_move", {"type": params.tool_tweak, "value": 'ANY', "shift": True}, None),
-            ("mesh.duplicate_move", {"type": params.tool_tweak, "value": 'ANY', "shift": True}, None),
-            ("curve.duplicate_move", {"type": params.tool_tweak, "value": 'ANY', "shift": True}, None),
-            ("armature.duplicate_move", {"type": params.tool_tweak, "value": 'ANY', "shift": True}, None),
-            ("mball.duplicate_move", {"type": params.tool_tweak, "value": 'ANY', "shift": True}, None),
-            ("gpencil.duplicate_move", {"type": 'D', "value": 'PRESS', "ctrl": True}, None),
+            *_template_items_tool_select_actions("view3d.select_box", type=params.tool_tweak, value='ANY'),
+        ]},
+    )
+
+
+def km_3d_view_tool_rotate(params):
+    return (
+        "3D View Tool: Rotate",
+        {"space_type": 'VIEW_3D', "region_type": 'WINDOW'},
+        {"items": [
+            ("transform.rotate", {"type": 'MIDDLEMOUSE', "value": 'ANY'},
+             {"properties": [("release_confirm", True)]}),
+            *_template_items_tool_select_actions("view3d.select_box", type=params.tool_tweak, value='ANY'),
+        ]},
+    )
+
+
+def km_3d_view_tool_scale(params):
+    return (
+        "3D View Tool: Scale",
+        {"space_type": 'VIEW_3D', "region_type": 'WINDOW'},
+        {"items": [
+            ("transform.resize", {"type": 'MIDDLEMOUSE', "value": 'ANY'},
+             {"properties": [("release_confirm", True)]}),
+            *_template_items_tool_select_actions("view3d.select_box", type=params.tool_tweak, value='ANY'),
+        ]},
+    )
+
+
+def km_3d_view_tool_edit_mesh_extrude_region(params):
+    return (
+        "3D View Tool: Edit Mesh, Extrude Region",
+        {"space_type": 'VIEW_3D', "region_type": 'WINDOW'},
+        {"items": [
+            ("mesh.extrude_context_move", {"type": 'MIDDLEMOUSE', "value": 'ANY'},
+             {"properties": [("TRANSFORM_OT_translate", [("release_confirm", True)])]}),
+            *_template_items_tool_select_actions("view3d.select_box", type=params.tool_tweak, value='ANY'),
+        ]},
+    )
+
+
+def km_3d_view_tool_edit_mesh_shear(params):
+    return (
+        "3D View Tool: Edit Mesh, Shear",
+        {"space_type": 'VIEW_3D', "region_type": 'WINDOW'},
+        {"items": [
+            ("transform.shear", {"type": 'MIDDLEMOUSE', "value": 'ANY'},
+             {"properties": [("release_confirm", True)]}),
+            *_template_items_tool_select_actions("view3d.select_box", type=params.tool_tweak, value='ANY'),
+        ]},
+    )
+
+
+def km_3d_view_tool_edit_mesh_spin(params):
+    return (
+        "3D View Tool: Edit Mesh, Spin",
+        {"space_type": 'VIEW_3D', "region_type": 'WINDOW'},
+        {"items": [
+            ("mesh.spin", {"type": 'MIDDLEMOUSE', "value": 'ANY'}, None),
+            *_template_items_tool_select_actions("view3d.select_box", type=params.tool_tweak, value='ANY'),
+        ]},
+    )
+
+
+def km_3d_view_tool_edit_mesh_spin_duplicate(params):
+    return (
+        "3D View Tool: Edit Mesh, Spin Duplicates",
+        {"space_type": 'VIEW_3D', "region_type": 'WINDOW'},
+        {"items": [
+            ("mesh.spin", {"type": 'MIDDLEMOUSE', "value": 'ANY'},
+             {"properties": [("dupli", True)]}),
+            *_template_items_tool_select_actions("view3d.select_box", type=params.tool_tweak, value='ANY'),
+        ]},
+    )
+
+
+def km_3d_view_tool_edit_curve_extrude(params):
+    return (
+        "3D View Tool: Edit Curve, Extrude",
+        {"space_type": 'VIEW_3D', "region_type": 'WINDOW'},
+        {"items": [
+            ("curve.extrude_move", {"type": 'MIDDLEMOUSE', "value": 'ANY'},
+             {"properties": [("TRANSFORM_OT_translate", [("release_confirm", True)])]}),
+            *_template_items_tool_select_actions("view3d.select_box", type=params.tool_tweak, value='ANY'),
         ]},
     )
 
@@ -3572,4 +3658,11 @@ def generate_keymaps(params=None):
 
         # Tool System.
         km_3d_view_tool_move(params),
+        km_3d_view_tool_rotate(params),
+        km_3d_view_tool_scale(params),
+        km_3d_view_tool_edit_mesh_extrude_region(params),
+        km_3d_view_tool_edit_mesh_shear(params),
+        km_3d_view_tool_edit_mesh_spin(params),
+        km_3d_view_tool_edit_mesh_spin_duplicate(params),
+        km_3d_view_tool_edit_curve_extrude(params),
     ]

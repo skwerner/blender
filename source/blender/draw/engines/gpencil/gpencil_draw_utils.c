@@ -421,7 +421,7 @@ static DRWShadingGroup *DRW_gpencil_shgroup_fill_create(GPENCIL_e_data *e_data,
   DRW_shgroup_uniform_float(grp, "texture_opacity", &gp_style->texture_opacity, 1);
   DRW_shgroup_uniform_float(grp, "layer_opacity", &gpl->opacity, 1);
 
-  stl->shgroups[id].texture_mix = gp_style->flag & GP_STYLE_COLOR_TEX_MIX ? 1 : 0;
+  stl->shgroups[id].texture_mix = gp_style->flag & GP_STYLE_FILL_TEX_MIX ? 1 : 0;
   DRW_shgroup_uniform_int(grp, "texture_mix", &stl->shgroups[id].texture_mix, 1);
 
   stl->shgroups[id].texture_flip = gp_style->flag & GP_STYLE_COLOR_FLIP_FILL ? 1 : 0;
@@ -450,7 +450,7 @@ static DRWShadingGroup *DRW_gpencil_shgroup_fill_create(GPENCIL_e_data *e_data,
   DRW_shgroup_uniform_vec4(grp, "wire_color", stl->shgroups[id].wire_color, 1);
 
   /* image texture */
-  if ((gp_style->flag & GP_STYLE_COLOR_TEX_MIX) ||
+  if ((gp_style->flag & GP_STYLE_FILL_TEX_MIX) ||
       (gp_style->fill_style & GP_STYLE_FILL_STYLE_TEXTURE)) {
     ImBuf *ibuf;
     Image *image = gp_style->ima;
@@ -569,6 +569,12 @@ DRWShadingGroup *DRW_gpencil_shgroup_stroke_create(GPENCIL_e_data *e_data,
     /* wire color */
     set_wireframe_color(ob, gpl, v3d, stl, gp_style, id, false);
     DRW_shgroup_uniform_vec4(grp, "wire_color", stl->shgroups[id].wire_color, 1);
+
+    /* mix stroke factor */
+    stl->shgroups[id].mix_stroke_factor = (gp_style->flag & GP_STYLE_STROKE_TEX_MIX) ?
+                                              gp_style->mix_stroke_factor :
+                                              0.0f;
+    DRW_shgroup_uniform_float(grp, "mix_stroke_factor", &stl->shgroups[id].mix_stroke_factor, 1);
   }
   else {
     stl->storage->obj_scale = 1.0f;
@@ -591,7 +597,15 @@ DRWShadingGroup *DRW_gpencil_shgroup_stroke_create(GPENCIL_e_data *e_data,
     /* viewport x-ray */
     DRW_shgroup_uniform_int(grp, "viewport_xray", &stl->storage->is_xray, 1);
     DRW_shgroup_uniform_int(grp, "shading_type", (const int *)&stl->storage->shade_render, 2);
+
+    /* mix stroke factor */
+    stl->storage->mix_stroke_factor = (gp_style->flag & GP_STYLE_STROKE_TEX_MIX) ?
+                                          gp_style->mix_stroke_factor :
+                                          0.0f;
+    DRW_shgroup_uniform_float(grp, "mix_stroke_factor", &stl->storage->mix_stroke_factor, 1);
   }
+
+  DRW_shgroup_uniform_vec4(grp, "colormix", gp_style->stroke_rgba, 1);
 
   if ((gpd) && (id > -1)) {
     stl->shgroups[id].xray_mode = (ob->dtx & OB_DRAWXRAY) ? GP_XRAY_FRONT : GP_XRAY_3DSPACE;
@@ -703,6 +717,16 @@ static DRWShadingGroup *DRW_gpencil_shgroup_point_create(GPENCIL_e_data *e_data,
     /* wire color */
     set_wireframe_color(ob, gpl, v3d, stl, gp_style, id, false);
     DRW_shgroup_uniform_vec4(grp, "wire_color", stl->shgroups[id].wire_color, 1);
+
+    /* mix stroke factor */
+    stl->shgroups[id].mix_stroke_factor = (gp_style->flag & GP_STYLE_STROKE_TEX_MIX) ?
+                                              gp_style->mix_stroke_factor :
+                                              0.0f;
+    DRW_shgroup_uniform_float(grp, "mix_stroke_factor", &stl->shgroups[id].mix_stroke_factor, 1);
+
+    /* lock rotation of dots and boxes */
+    stl->shgroups[id].use_follow_path = (gp_style->flag & GP_STYLE_COLOR_LOCK_DOTS) ? 0 : 1;
+    DRW_shgroup_uniform_int(grp, "use_follow_path", &stl->shgroups[id].use_follow_path, 1);
   }
   else {
     stl->storage->obj_scale = 1.0f;
@@ -724,25 +748,28 @@ static DRWShadingGroup *DRW_gpencil_shgroup_point_create(GPENCIL_e_data *e_data,
     DRW_shgroup_uniform_vec2(grp, "gradient_s", stl->storage->gradient_s, 1);
 
     /* viewport x-ray */
-    stl->shgroups[id].is_xray = ((ob) && (ob->dt == OB_WIRE)) ? 1 : stl->storage->is_xray;
-    DRW_shgroup_uniform_int(grp, "viewport_xray", (const int *)&stl->shgroups[id].is_xray, 1);
+    DRW_shgroup_uniform_int(grp, "viewport_xray", &stl->storage->is_xray, 1);
     DRW_shgroup_uniform_int(grp, "shading_type", (const int *)&stl->storage->shade_render, 2);
+
+    /* mix stroke factor */
+    stl->storage->mix_stroke_factor = (gp_style->flag & GP_STYLE_STROKE_TEX_MIX) ?
+                                          gp_style->mix_stroke_factor :
+                                          0.0f;
+    DRW_shgroup_uniform_float(grp, "mix_stroke_factor", &stl->storage->mix_stroke_factor, 1);
+
+    /* lock rotation of dots and boxes */
+    DRW_shgroup_uniform_int(grp, "use_follow_path", &stl->storage->use_follow_path, 1);
   }
+
+  DRW_shgroup_uniform_vec4(grp, "colormix", gp_style->stroke_rgba, 1);
 
   if ((gpd) && (id > -1)) {
     stl->shgroups[id].xray_mode = (ob->dtx & OB_DRAWXRAY) ? GP_XRAY_FRONT : GP_XRAY_3DSPACE;
     DRW_shgroup_uniform_int(grp, "xraymode", (const int *)&stl->shgroups[id].xray_mode, 1);
-
-    /* lock rotation of dots and boxes */
-    stl->shgroups[id].use_follow_path = (gp_style->flag & GP_STYLE_COLOR_LOCK_DOTS) ? 0 : 1;
-    DRW_shgroup_uniform_int(grp, "use_follow_path", &stl->shgroups[id].use_follow_path, 1);
   }
   else {
     /* for drawing always on predefined z-depth */
     DRW_shgroup_uniform_int(grp, "xraymode", &stl->storage->xray, 1);
-
-    /* lock rotation of dots and boxes */
-    DRW_shgroup_uniform_int(grp, "use_follow_path", &stl->storage->use_follow_path, 1);
   }
 
   /* image texture */
@@ -1621,6 +1648,16 @@ static void DRW_gpencil_shgroups_create(GPENCIL_e_data *e_data,
   int idx = 0;
   bool tag_first = false;
 
+  const DRWContextState *draw_ctx = DRW_context_state_get();
+  const View3D *v3d = draw_ctx->v3d;
+
+  const bool overlay = draw_ctx->v3d != NULL ?
+                           (bool)((draw_ctx->v3d->flag2 & V3D_HIDE_OVERLAYS) == 0) :
+                           true;
+  const bool main_onion = v3d != NULL ? (v3d->gp_flag & V3D_GP_SHOW_ONION_SKIN) : true;
+  const bool do_onion = (bool)((gpd->flag & GP_DATA_STROKE_WEIGHTMODE) == 0) && main_onion &&
+                        DRW_gpencil_onion_active(gpd) && overlay;
+
   int start_stroke = 0;
   int start_point = 0;
   int start_fill = 0;
@@ -1680,14 +1717,14 @@ static void DRW_gpencil_shgroups_create(GPENCIL_e_data *e_data,
                                                   elm->onion,
                                                   scale,
                                                   cache_ob->shading_type);
-
-        DRW_shgroup_call_range_add(shgrp,
-                                   cache->b_stroke.batch,
-                                   (!cache_ob->is_dup_ob) ? gpf->runtime.viewmatrix :
-                                                            cache_ob->obmat,
-                                   start_stroke,
-                                   len);
-
+        if ((do_onion) || (elm->onion == false)) {
+          DRW_shgroup_call_range_add(shgrp,
+                                     cache->b_stroke.batch,
+                                     (!cache_ob->is_dup_ob) ? gpf->runtime.viewmatrix :
+                                                              cache_ob->obmat,
+                                     start_stroke,
+                                     len);
+        }
         stl->storage->shgroup_id++;
         start_stroke = elm->vertex_idx;
         break;
@@ -1709,13 +1746,14 @@ static void DRW_gpencil_shgroups_create(GPENCIL_e_data *e_data,
                                                  scale,
                                                  cache_ob->shading_type);
 
-        DRW_shgroup_call_range_add(shgrp,
-                                   cache->b_point.batch,
-                                   (!cache_ob->is_dup_ob) ? gpf->runtime.viewmatrix :
-                                                            cache_ob->obmat,
-                                   start_point,
-                                   len);
-
+        if ((do_onion) || (elm->onion == false)) {
+          DRW_shgroup_call_range_add(shgrp,
+                                     cache->b_point.batch,
+                                     (!cache_ob->is_dup_ob) ? gpf->runtime.viewmatrix :
+                                                              cache_ob->obmat,
+                                     start_point,
+                                     len);
+        }
         stl->storage->shgroup_id++;
         start_point = elm->vertex_idx;
         break;
@@ -1734,13 +1772,14 @@ static void DRW_gpencil_shgroups_create(GPENCIL_e_data *e_data,
                                                 stl->storage->shgroup_id,
                                                 cache_ob->shading_type);
 
-        DRW_shgroup_call_range_add(shgrp,
-                                   cache->b_fill.batch,
-                                   (!cache_ob->is_dup_ob) ? gpf->runtime.viewmatrix :
-                                                            cache_ob->obmat,
-                                   start_fill,
-                                   len);
-
+        if ((do_onion) || (elm->onion == false)) {
+          DRW_shgroup_call_range_add(shgrp,
+                                     cache->b_fill.batch,
+                                     (!cache_ob->is_dup_ob) ? gpf->runtime.viewmatrix :
+                                                              cache_ob->obmat,
+                                     start_fill,
+                                     len);
+        }
         stl->storage->shgroup_id++;
         start_fill = elm->vertex_idx;
         break;
@@ -1887,9 +1926,6 @@ void DRW_gpencil_populate_datablock(GPENCIL_e_data *e_data,
   int cfra_eval = (int)DEG_get_ctime(draw_ctx->depsgraph);
 
   bGPDframe *derived_gpf = NULL;
-  const bool main_onion = v3d != NULL ? (v3d->gp_flag & V3D_GP_SHOW_ONION_SKIN) : true;
-  const bool do_onion = (bool)((gpd->flag & GP_DATA_STROKE_WEIGHTMODE) == 0) && main_onion &&
-                        DRW_gpencil_onion_active(gpd);
   const bool overlay = v3d != NULL ? (bool)((v3d->flag2 & V3D_HIDE_OVERLAYS) == 0) : true;
   const bool time_remap = BKE_gpencil_has_time_modifiers(ob);
 
@@ -1980,10 +2016,10 @@ void DRW_gpencil_populate_datablock(GPENCIL_e_data *e_data,
 
     /* draw onion skins */
     if (!ID_IS_LINKED(&gpd->id)) {
-      if ((do_onion) && (gpl->onion_flag & GP_LAYER_ONIONSKIN) &&
+      if ((gpl->onion_flag & GP_LAYER_ONIONSKIN) &&
           ((!playing) || (gpd->onion_flag & GP_ONION_GHOST_ALWAYS)) && (!cache_ob->is_dup_ob) &&
           (gpd->id.us <= 1)) {
-        if (((!stl->storage->is_render) && (overlay)) ||
+        if ((!stl->storage->is_render) ||
             ((stl->storage->is_render) && (gpd->onion_flag & GP_ONION_GHOST_ALWAYS))) {
           gpencil_draw_onionskins(cache, vedata, ob, gpd, gpl, gpf);
         }

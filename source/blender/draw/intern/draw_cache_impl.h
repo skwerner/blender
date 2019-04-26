@@ -61,6 +61,11 @@ void DRW_particle_batch_cache_free(struct ParticleSystem *psys);
 void DRW_gpencil_batch_cache_dirty_tag(struct bGPdata *gpd);
 void DRW_gpencil_batch_cache_free(struct bGPdata *gpd);
 
+/* Garbage collection */
+void DRW_batch_cache_free_old(struct Object *ob, int ctime);
+
+void DRW_mesh_batch_cache_free_old(struct Mesh *me, int ctime);
+
 /* Curve */
 void DRW_curve_batch_cache_create_requested(struct Object *ob);
 
@@ -152,6 +157,7 @@ struct GPUBatch *DRW_mesh_batch_cache_get_edituv_verts(struct Mesh *me);
 struct GPUBatch *DRW_mesh_batch_cache_get_edituv_facedots(struct Mesh *me);
 /* For Image UV editor. */
 struct GPUBatch *DRW_mesh_batch_cache_get_uv_edges(struct Mesh *me);
+struct GPUBatch *DRW_mesh_batch_cache_get_edit_mesh_analysis(struct Mesh *me);
 
 void DRW_mesh_cache_sculpt_coords_ensure(struct Mesh *me);
 

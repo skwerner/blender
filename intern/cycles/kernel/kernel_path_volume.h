@@ -184,8 +184,7 @@ ccl_device void kernel_branched_path_volume_connect_light(KernelGlobals *kg,
                                                                        rphase,
                                                                        rscatter,
                                                                        segment,
-                                                                       (ls.t != FLT_MAX) ? &ls.P :
-                                                                                           NULL,
+                                                                       &ls,
                                                                        false);
 
         /* todo: split up light_sample so we don't have to call it again with new position */
@@ -245,8 +244,7 @@ ccl_device void kernel_branched_path_volume_connect_light(KernelGlobals *kg,
                                                                        rphase,
                                                                        rscatter,
                                                                        segment,
-                                                                       (ls.t != FLT_MAX) ? &ls.P :
-                                                                                           NULL,
+                                                                       &ls,
                                                                        false);
 
         /* todo: split up light_sample so we don't have to call it again with new position */
@@ -294,8 +292,7 @@ ccl_device void kernel_branched_path_volume_connect_light(KernelGlobals *kg,
                                                                    rphase,
                                                                    rscatter,
                                                                    segment,
-                                                                   (ls.t != FLT_MAX) ? &ls.P :
-                                                                                       NULL,
+                                                                   &ls,
                                                                    false);
 
     /* todo: split up light_sample so we don't have to call it again with new position */

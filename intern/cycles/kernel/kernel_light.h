@@ -650,7 +650,7 @@ ccl_device_inline bool lamp_light_sample(
       ls->u = dot(inplane, axisu) * (1.0f / dot(axisu, axisu)) + 0.5f;
       ls->v = dot(inplane, axisv) * (1.0f / dot(axisv, axisv)) + 0.5f;
 
-      ls->Ng = D;
+      ls->Ng = make_float3(klight->area.dir[0], klight->area.dir[1], klight->area.dir[2]);
       ls->D = normalize_len(ls->P - P, &ls->t);
 
       ls->eval_fac = 0.25f * invarea;

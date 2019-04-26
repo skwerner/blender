@@ -275,18 +275,40 @@ ccl_device_noinline void kernel_volume_shadow(KernelGlobals *kg,
 /* Equi-angular sampling as in:
  * "Importance Sampling Techniques for Path Tracing in Participating Media" */
 
-ccl_device float kernel_volume_equiangular_sample(Ray *ray, float3 light_P, float xi, float *pdf)
+ccl_device float kernel_volume_equiangular_sample(Ray *ray, const LightSample *ls, float xi, float *pdf)
 {
   float t = ray->t;
 
-  float delta = dot((light_P - ray->P), ray->D);
-  float D = safe_sqrtf(len_squared(light_P - ray->P) - delta * delta);
+  float delta = dot((ls->P - ray->P), ray->D);
+  float D = safe_sqrtf(len_squared(ls->P - ray->P) - delta * delta);
   if (UNLIKELY(D == 0.0f)) {
     *pdf = 0.0f;
     return 0.0f;
   }
-  float theta_a = -atan2f(delta, D);
-  float theta_b = atan2f(t - delta, D);
+
+  float t_near = 0.0f;
+  float t_far = t;
+
+  /* For area lights, sample only the front (emitting side). */
+  if (ls->type == LIGHT_AREA) {
+    /* Intersect the ray with the light's plane. */
+    const float d_dot_n  = dot(ray->D, ls->Ng);
+    if (fabsf(d_dot_n) > 1e-6) {
+      const float t_intersect = -(dot(ray->P, ls->Ng) - dot(ls->P, ls->Ng)) / d_dot_n;
+      if (t_intersect > 0.0f) {
+        if (d_dot_n > 0.0f) {
+          t_near = t_intersect;
+        }
+        else {
+          t_far = min(t_intersect, t_far);
+        }
+      }
+    }
+  }
+
+  float theta_a = -atan2f(delta - t_near, D);
+  float theta_b = atan2f(t_far - delta, D);
+
   float t_ = D * tanf((xi * theta_b) + (1 - xi) * theta_a);
   if (UNLIKELY(theta_b == theta_a)) {
     *pdf = 0.0f;
@@ -297,10 +319,10 @@ ccl_device float kernel_volume_equiangular_sample(Ray *ray, float3 light_P, floa
   return min(t, delta + t_); /* min is only for float precision errors */
 }
 
-ccl_device float kernel_volume_equiangular_pdf(Ray *ray, float3 light_P, float sample_t)
+ccl_device float kernel_volume_equiangular_pdf(Ray *ray, const LightSample *ls, float sample_t)
 {
-  float delta = dot((light_P - ray->P), ray->D);
-  float D = safe_sqrtf(len_squared(light_P - ray->P) - delta * delta);
+  float delta = dot((ls->P - ray->P), ray->D);
+  float D = safe_sqrtf(len_squared(ls->P - ray->P) - delta * delta);
   if (UNLIKELY(D == 0.0f)) {
     return 0.0f;
   }
@@ -308,8 +330,29 @@ ccl_device float kernel_volume_equiangular_pdf(Ray *ray, float3 light_P, float s
   float t = ray->t;
   float t_ = sample_t - delta;
 
-  float theta_a = -atan2f(delta, D);
-  float theta_b = atan2f(t - delta, D);
+  float t_near = 0.0f;
+  float t_far = t;
+
+  /* For area lights, sample only the front (emitting side). */
+  if (ls->type == LIGHT_AREA) {
+    /* Intersect the ray with the light's plane. */
+    const float d_dot_n  = dot(ray->D, ls->Ng);
+    if (fabsf(d_dot_n) > 1e-6) {
+      const float t_intersect = -(dot(ray->P, ls->Ng) - dot(ls->P, ls->Ng)) / d_dot_n;
+      if (t_intersect > 0.0f) {
+        if (d_dot_n > 0.0f) {
+          t_near = t_intersect;
+        }
+        else {
+          t_far = min(t_intersect, t_far);
+        }
+      }
+    }
+  }
+
+  float theta_a = -atan2f(delta - t_near, D);
+  float theta_b = atan2f(t_far - delta, D);
+
   if (UNLIKELY(theta_b == theta_a)) {
     return 0.0f;
   }
@@ -917,7 +960,7 @@ ccl_device VolumeIntegrateResult kernel_volume_decoupled_scatter(KernelGlobals *
                                                                  float rphase,
                                                                  float rscatter,
                                                                  const VolumeSegment *segment,
-                                                                 const float3 *light_P,
+                                                                 const LightSample *ls,
                                                                  bool probalistic_scatter)
 {
   kernel_assert(segment->closure_flag & SD_SCATTER);
@@ -950,7 +993,9 @@ ccl_device VolumeIntegrateResult kernel_volume_decoupled_scatter(KernelGlobals *
   bool distance_sample = true;
   bool use_mis = false;
 
-  if (segment->sampling_method && light_P) {
+  /* Apply equiangular or MIS sampling only when there is a light sample
+   * and that light sample is from a light wiht a pysical position. */
+  if (segment->sampling_method && ls && ls->t != FLT_MAX) {
     if (segment->sampling_method == SD_VOLUME_MIS) {
       /* multiple importance sample: randomly pick between
        * equiangular and distance sampling strategy */
@@ -1018,14 +1063,14 @@ ccl_device VolumeIntegrateResult kernel_volume_decoupled_scatter(KernelGlobals *
 
     /* multiple importance sampling */
     if (use_mis) {
-      float equi_pdf = kernel_volume_equiangular_pdf(ray, *light_P, sample_t);
+      float equi_pdf = kernel_volume_equiangular_pdf(ray, ls, sample_t);
       mis_weight = 2.0f * power_heuristic(pdf, equi_pdf);
     }
   }
   /* equi-angular sampling */
   else {
     /* sample distance */
-    sample_t = kernel_volume_equiangular_sample(ray, *light_P, xi, &pdf);
+    sample_t = kernel_volume_equiangular_sample(ray, ls, xi, &pdf);
 
     /* find step in which sampled distance is located */
     step = segment->steps;

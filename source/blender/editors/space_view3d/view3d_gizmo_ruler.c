@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,12 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/space_view3d/view3d_gizmo_ruler.c
- *  \ingroup spview3d
+/** \file
+ * \ingroup spview3d
  */
 
 #include "BLI_listbase.h"
@@ -33,6 +29,7 @@
 #include "BKE_context.h"
 #include "BKE_gpencil.h"
 #include "BKE_main.h"
+#include "BKE_report.h"
 
 #include "BKE_object.h"
 #include "BKE_unit.h"
@@ -43,8 +40,7 @@
 #include "DNA_gpencil_types.h"
 #include "DNA_view3d_types.h"
 
-#include "BIF_gl.h"
-
+#include "ED_gizmo_utils.h"
 #include "ED_gpencil.h"
 #include "ED_screen.h"
 #include "ED_transform_snap_object_context.h"
@@ -70,7 +66,6 @@
 
 #include "BLF_api.h"
 
-
 static const char *view3d_gzgt_ruler_id = "VIEW3D_GGT_ruler";
 
 
@@ -78,15 +73,14 @@ static const char *view3d_gzgt_ruler_id = "VIEW3D_GGT_ruler";
 
 /* -------------------------------------------------------------------- */
 /* Ruler Item (we can have many) */
-enum {
-	RULERITEM_USE_ANGLE = (1 << 0),  /* use protractor */
-	RULERITEM_USE_RAYCAST = (1 << 1)
-};
 
 enum {
-	RULERITEM_DIRECTION_IN = 0,
-	RULERITEM_DIRECTION_OUT
+	/** Use protractor. */
+	RULERITEM_USE_ANGLE = (1 << 0),
+	/** Protractor vertex is selected (deleting removes it). */
+	RULERITEM_USE_ANGLE_ACTIVE = (1 << 1),
 };
+
 
 /* keep smaller then selection, since we may want click elsewhere without selecting a ruler */
 #define RULER_PICK_DIST 12.0f
@@ -100,16 +94,17 @@ enum {
 
 enum {
 	RULER_STATE_NORMAL = 0,
-	RULER_STATE_DRAG
+	RULER_STATE_DRAG,
 };
 
 enum {
 	RULER_SNAP_OK = (1 << 0),
 };
 
+struct RulerItem;
+
 typedef struct RulerInfo {
-	// ListBase items;
-	int      item_active;
+	struct RulerItem *item_active;
 	int flag;
 	int snap_flag;
 	int state;
@@ -139,7 +134,6 @@ typedef struct RulerInteraction {
 	/* selected coord */
 	char  co_index; /* 0 -> 2 */
 	float drag_start_co[3];
-	uint inside_region : 1;
 } RulerInteraction;
 
 /* -------------------------------------------------------------------- */
@@ -157,14 +151,16 @@ static RulerItem *ruler_item_add(wmGizmoGroup *gzgroup)
 
 static void ruler_item_remove(bContext *C, wmGizmoGroup *gzgroup, RulerItem *ruler_item)
 {
+	RulerInfo *ruler_info = gzgroup->customdata;
+	if (ruler_info->item_active == ruler_item) {
+		ruler_info->item_active = NULL;
+	}
 	WM_gizmo_unlink(&gzgroup->gizmos, gzgroup->parent_gzmap, &ruler_item->gz, C);
 }
 
 static void ruler_item_as_string(RulerItem *ruler_item, UnitSettings *unit,
                                  char *numstr, size_t numstr_size, int prec)
 {
-	const bool do_split = (unit->flag & USER_UNIT_OPT_SPLIT) != 0;
-
 	if (ruler_item->flag & RULERITEM_USE_ANGLE) {
 		const float ruler_angle = angle_v3v3v3(ruler_item->co[0],
 		                                       ruler_item->co[1],
@@ -174,9 +170,9 @@ static void ruler_item_as_string(RulerItem *ruler_item, UnitSettings *unit,
 			BLI_snprintf(numstr, numstr_size, "%.*f°", prec, RAD2DEGF(ruler_angle));
 		}
 		else {
-			bUnit_AsString(numstr, numstr_size,
-			               (double)ruler_angle,
-			               prec, unit->system, B_UNIT_ROTATION, do_split, false);
+			bUnit_AsString2(
+			        numstr, numstr_size, (double)ruler_angle,
+			        prec, B_UNIT_ROTATION, unit, false);
 		}
 	}
 	else {
@@ -187,9 +183,9 @@ static void ruler_item_as_string(RulerItem *ruler_item, UnitSettings *unit,
 			BLI_snprintf(numstr, numstr_size, "%.*f", prec, ruler_len);
 		}
 		else {
-			bUnit_AsString(numstr, numstr_size,
-			               (double)(ruler_len * unit->scale_length),
-			               prec, unit->system, B_UNIT_LENGTH, do_split, false);
+			bUnit_AsString2(
+			        numstr, numstr_size, (double)(ruler_len * unit->scale_length),
+			        prec, B_UNIT_LENGTH, unit, false);
 		}
 	}
 }
@@ -307,13 +303,13 @@ static bool view3d_ruler_item_mousemove(
         RulerInfo *ruler_info, RulerItem *ruler_item, const int mval[2],
         const bool do_thickness, const bool do_snap)
 {
-	RulerInteraction *inter = ruler_item->gz.interaction_data;
 	const float eps_bias = 0.0002f;
 	float dist_px = MVAL_MAX_PX_DIST * U.pixelsize;  /* snap dist */
 
 	ruler_info->snap_flag &= ~RULER_SNAP_OK;
 
 	if (ruler_item) {
+		RulerInteraction *inter = ruler_item->gz.interaction_data;
 		float *co = ruler_item->co[inter->co_index];
 		/* restore the initial depth */
 		copy_v3_v3(co, inter->drag_start_co);
@@ -410,7 +406,7 @@ static bool view3d_ruler_to_gpencil(bContext *C, wmGizmoGroup *gzgroup)
 		gpl->flag |= GP_LAYER_HIDE;
 	}
 
-	gpf = BKE_gpencil_layer_getframe(gpl, CFRA, true);
+	gpf = BKE_gpencil_layer_getframe(gpl, CFRA, GP_GETFRAME_ADD_NEW);
 	BKE_gpencil_free_strokes(gpf);
 
 	for (ruler_item = gzgroup->gizmos.first; ruler_item; ruler_item = (RulerItem *)ruler_item->gz.next) {
@@ -422,7 +418,6 @@ static bool view3d_ruler_to_gpencil(bContext *C, wmGizmoGroup *gzgroup)
 		if (ruler_item->flag & RULERITEM_USE_ANGLE) {
 			gps->totpoints = 3;
 			pt = gps->points = MEM_callocN(sizeof(bGPDspoint) * gps->totpoints, "gp_stroke_points");
-			gps->dvert = MEM_callocN(sizeof(MDeformVert) * gps->totpoints, "gp_stroke_weights");
 			for (j = 0; j < 3; j++) {
 				copy_v3_v3(&pt->x, ruler_item->co[j]);
 				pt->pressure = 1.0f;
@@ -433,7 +428,6 @@ static bool view3d_ruler_to_gpencil(bContext *C, wmGizmoGroup *gzgroup)
 		else {
 			gps->totpoints = 2;
 			pt = gps->points = MEM_callocN(sizeof(bGPDspoint) * gps->totpoints, "gp_stroke_points");
-			gps->dvert = MEM_callocN(sizeof(MDeformVert) * gps->totpoints, "gp_stroke_weights");
 			for (j = 0; j < 3; j += 2) {
 				copy_v3_v3(&pt->x, ruler_item->co[j]);
 				pt->pressure = 1.0f;
@@ -443,6 +437,9 @@ static bool view3d_ruler_to_gpencil(bContext *C, wmGizmoGroup *gzgroup)
 		}
 		gps->flag = GP_STROKE_3DSPACE;
 		gps->thickness = 3;
+		gps->gradient_f = 1.0f;
+		gps->gradient_s[0] = 1.0f;
+		gps->gradient_s[1] = 1.0f;
 
 		BLI_addtail(&gpf->strokes, gps);
 		changed = true;
@@ -462,7 +459,7 @@ static bool view3d_ruler_from_gpencil(const bContext *C, wmGizmoGroup *gzgroup)
 		gpl = BLI_findstring(&scene->gpd->layers, ruler_name, offsetof(bGPDlayer, info));
 		if (gpl) {
 			bGPDframe *gpf;
-			gpf = BKE_gpencil_layer_getframe(gpl, CFRA, false);
+			gpf = BKE_gpencil_layer_getframe(gpl, CFRA, GP_GETFRAME_USE_PREV);
 			if (gpf) {
 				bGPDstroke *gps;
 				for (gps = gpf->strokes.first; gps; gps = gps->next) {
@@ -510,18 +507,18 @@ static void gizmo_ruler_draw(const bContext *C, wmGizmo *gz)
 	RegionView3D *rv3d = ar->regiondata;
 	const float cap_size = 4.0f;
 	const float bg_margin = 4.0f * U.pixelsize;
-	const float bg_radius = 4.0f * U.pixelsize;
 	const float arc_size = 64.0f * U.pixelsize;
 #define ARC_STEPS 24
 	const int arc_steps = ARC_STEPS;
 	const float color_act[4] = {1.0f, 1.0f, 1.0f, 1.0f};
 	const float color_base[4] = {0.0f, 0.0f, 0.0f, 1.0f};
-	unsigned char color_text[3];
-	unsigned char color_wire[3];
+	uchar color_text[3];
+	uchar color_wire[3];
 	float color_back[4] = {1.0f, 1.0f, 1.0f, 0.5f};
 
 	/* anti-aliased lines for more consistent appearance */
 	GPU_line_smooth(true);
+	GPU_line_width(1.0f);
 
 	BLF_enable(blf_mono_font, BLF_ROTATION);
 	BLF_size(blf_mono_font, 14 * U.pixelsize, U.dpi);
@@ -530,7 +527,12 @@ static void gizmo_ruler_draw(const bContext *C, wmGizmo *gz)
 	UI_GetThemeColor3ubv(TH_TEXT, color_text);
 	UI_GetThemeColor3ubv(TH_WIRE, color_wire);
 
-	const bool is_act = (gz->flag & WM_GIZMO_DRAW_HOVER);
+	/* Avoid white on white text. (TODO Fix by using theme) */
+	if ((int)color_text[0] + (int)color_text[1] + (int)color_text[2] > 127 * 3 * 0.6f) {
+		copy_v3_fl(color_back, 0.0f);
+	}
+
+	const bool is_act = (ruler_info->item_active == ruler_item);
 	float dir_ruler[2];
 	float co_ss[3][2];
 	int j;
@@ -579,7 +581,7 @@ static void gizmo_ruler_draw(const bContext *C, wmGizmo *gz)
 			float quat[4];
 			float axis[3];
 			float angle;
-			const float px_scale = (ED_view3d_pixel_size(rv3d, ruler_item->co[1]) *
+			const float px_scale = (ED_view3d_pixel_size_no_ui_scale(rv3d, ruler_item->co[1]) *
 			                        min_fff(arc_size,
 			                                len_v2v2(co_ss[0], co_ss[1]) / 2.0f,
 			                                len_v2v2(co_ss[2], co_ss[1]) / 2.0f));
@@ -629,6 +631,20 @@ static void gizmo_ruler_draw(const bContext *C, wmGizmo *gz)
 
 			GPU_blend(true);
 
+			if (is_act && (ruler_item->flag & RULERITEM_USE_ANGLE_ACTIVE)) {
+				GPU_line_width(3.0f);
+				immUniformColor3fv(color_act);
+				immBegin(GPU_PRIM_LINES, 4);
+				/* angle vertex */
+				immVertex2f(shdr_pos, co_ss[1][0] - cap_size, co_ss[1][1] - cap_size);
+				immVertex2f(shdr_pos, co_ss[1][0] + cap_size, co_ss[1][1] + cap_size);
+				immVertex2f(shdr_pos, co_ss[1][0] - cap_size, co_ss[1][1] + cap_size);
+				immVertex2f(shdr_pos, co_ss[1][0] + cap_size, co_ss[1][1] - cap_size);
+
+				immEnd();
+				GPU_line_width(1.0f);
+			}
+
 			immUniformColor3ubv(color_wire);
 
 			immBegin(GPU_PRIM_LINES, 8);
@@ -654,30 +670,33 @@ static void gizmo_ruler_draw(const bContext *C, wmGizmo *gz)
 			GPU_blend(false);
 		}
 
+		/* text */
+		char numstr[256];
+		float numstr_size[2];
+		float posit[2];
+		const int prec = 2;  /* XXX, todo, make optional */
+
+		ruler_item_as_string(ruler_item, unit, numstr, sizeof(numstr), prec);
+
+		BLF_width_and_height(blf_mono_font, numstr, sizeof(numstr), &numstr_size[0], &numstr_size[1]);
+
+		posit[0] = co_ss[1][0] + (cap_size * 2.0f);
+		posit[1] = co_ss[1][1] - (numstr_size[1] / 2.0f);
+
+		/* draw text (bg) */
+		{
+			immUniformColor4fv(color_back);
+			GPU_blend(true);
+			immRectf(shdr_pos,
+			         posit[0] - bg_margin,                  posit[1] - bg_margin,
+			         posit[0] + bg_margin + numstr_size[0], posit[1] + bg_margin + numstr_size[1]);
+			GPU_blend(false);
+		}
+
 		immUnbindProgram();
 
-		/* text */
+		/* draw text */
 		{
-			char numstr[256];
-			float numstr_size[2];
-			float posit[2];
-			const int prec = 2;  /* XXX, todo, make optional */
-
-			ruler_item_as_string(ruler_item, unit, numstr, sizeof(numstr), prec);
-
-			BLF_width_and_height(blf_mono_font, numstr, sizeof(numstr), &numstr_size[0], &numstr_size[1]);
-
-			posit[0] = co_ss[1][0] + (cap_size * 2.0f);
-			posit[1] = co_ss[1][1] - (numstr_size[1] / 2.0f);
-
-			/* draw text (bg) */
-			UI_draw_roundbox_corner_set(UI_CNR_ALL);
-			UI_draw_roundbox_aa(
-			        true,
-			        posit[0] - bg_margin,                  posit[1] - bg_margin,
-			        posit[0] + bg_margin + numstr_size[0], posit[1] + bg_margin + numstr_size[1],
-			        bg_radius, color_back);
-			/* draw text */
 			BLF_color3ubv(blf_mono_font, color_text);
 			BLF_position(blf_mono_font, posit[0], posit[1], 0.0f);
 			BLF_rotation(blf_mono_font, 0.0f);
@@ -737,33 +756,36 @@ static void gizmo_ruler_draw(const bContext *C, wmGizmo *gz)
 			GPU_blend(false);
 		}
 
+		/* text */
+		char numstr[256];
+		float numstr_size[2];
+		const int prec = 6;  /* XXX, todo, make optional */
+		float posit[2];
+
+		ruler_item_as_string(ruler_item, unit, numstr, sizeof(numstr), prec);
+
+		BLF_width_and_height(blf_mono_font, numstr, sizeof(numstr), &numstr_size[0], &numstr_size[1]);
+
+		mid_v2_v2v2(posit, co_ss[0], co_ss[2]);
+
+		/* center text */
+		posit[0] -= numstr_size[0] / 2.0f;
+		posit[1] -= numstr_size[1] / 2.0f;
+
+		/* draw text (bg) */
+		{
+			immUniformColor4fv(color_back);
+			GPU_blend(true);
+			immRectf(shdr_pos,
+			         posit[0] - bg_margin,                  posit[1] - bg_margin,
+			         posit[0] + bg_margin + numstr_size[0], posit[1] + bg_margin + numstr_size[1]);
+			GPU_blend(false);
+		}
+
 		immUnbindProgram();
 
-		/* text */
+		/* draw text */
 		{
-			char numstr[256];
-			float numstr_size[2];
-			const int prec = 6;  /* XXX, todo, make optional */
-			float posit[2];
-
-			ruler_item_as_string(ruler_item, unit, numstr, sizeof(numstr), prec);
-
-			BLF_width_and_height(blf_mono_font, numstr, sizeof(numstr), &numstr_size[0], &numstr_size[1]);
-
-			mid_v2_v2v2(posit, co_ss[0], co_ss[2]);
-
-			/* center text */
-			posit[0] -= numstr_size[0] / 2.0f;
-			posit[1] -= numstr_size[1] / 2.0f;
-
-			/* draw text (bg) */
-			UI_draw_roundbox_corner_set(UI_CNR_ALL);
-			UI_draw_roundbox_aa(
-			        true,
-			        posit[0] - bg_margin,                  posit[1] - bg_margin,
-			        posit[0] + bg_margin + numstr_size[0], posit[1] + bg_margin + numstr_size[1],
-			        bg_radius, color_back);
-			/* draw text */
 			BLF_color3ubv(blf_mono_font, color_text);
 			BLF_position(blf_mono_font, posit[0], posit[1], 0.0f);
 			BLF_draw(blf_mono_font, numstr, sizeof(numstr));
@@ -799,10 +821,10 @@ static void gizmo_ruler_draw(const bContext *C, wmGizmo *gz)
 }
 
 static int gizmo_ruler_test_select(
-        bContext *UNUSED(C), wmGizmo *gz, const wmEvent *event)
+        bContext *UNUSED(C), wmGizmo *gz, const int mval[2])
 {
 	RulerItem *ruler_item_pick = (RulerItem *)gz;
-	float mval_fl[2] = {UNPACK2(event->mval)};
+	float mval_fl[2] = {UNPACK2(mval)};
 	int co_index;
 
 	/* select and drag */
@@ -827,7 +849,6 @@ static int gizmo_ruler_modal(
 	int exit_code = OPERATOR_RUNNING_MODAL;
 	RulerInfo *ruler_info = gz->parent_gzgroup->customdata;
 	RulerItem *ruler_item = (RulerItem *)gz;
-	RulerInteraction *inter = ruler_item->gz.interaction_data;
 	ARegion *ar = CTX_wm_region(C);
 
 	ruler_info->ar = ar;
@@ -842,7 +863,6 @@ static int gizmo_ruler_modal(
 				{
 					do_draw = true;
 				}
-				inter->inside_region = BLI_rcti_isect_pt_v(&ar->winrct, &event->x);
 			}
 			break;
 		}
@@ -904,6 +924,15 @@ static int gizmo_ruler_invoke(
 		copy_v3_v3(inter->drag_start_co, ruler_item_pick->co[inter->co_index]);
 	}
 
+	if (inter->co_index == 1) {
+		ruler_item_pick->flag |= RULERITEM_USE_ANGLE_ACTIVE;
+	}
+	else {
+		ruler_item_pick->flag &= ~RULERITEM_USE_ANGLE_ACTIVE;
+	}
+
+	ruler_info->item_active = ruler_item_pick;
+
 	return OPERATOR_RUNNING_MODAL;
 }
 
@@ -914,22 +943,6 @@ static void gizmo_ruler_exit(bContext *C, wmGizmo *gz, const bool cancel)
 
 	if (!cancel) {
 		if (ruler_info->state == RULER_STATE_DRAG) {
-			RulerItem *ruler_item = (RulerItem *)gz;
-			RulerInteraction *inter = gz->interaction_data;
-			/* rubber-band angle removal */
-			if (!inter->inside_region) {
-				if ((inter->co_index == 1) && (ruler_item->flag & RULERITEM_USE_ANGLE)) {
-					ruler_item->flag &= ~RULERITEM_USE_ANGLE;
-				}
-				else {
-					/* Not ideal, since the ruler isn't a mode and we don't want to override delete key
-					 * use dragging out of the view for removal. */
-					ruler_item_remove(C, gzgroup, ruler_item);
-					ruler_item = NULL;
-					gz = NULL;
-					inter = NULL;
-				}
-			}
 			if (ruler_info->snap_flag & RULER_SNAP_OK) {
 				ruler_info->snap_flag &= ~RULER_SNAP_OK;
 			}
@@ -976,18 +989,6 @@ void VIEW3D_GT_ruler_item(wmGizmoType *gzt)
 /** \name Ruler Gizmo Group
  * \{ */
 
-static bool WIDGETGROUP_ruler_poll(const bContext *C, wmGizmoGroupType *gzgt)
-{
-	bToolRef_Runtime *tref_rt = WM_toolsystem_runtime_from_context((bContext *)C);
-	if ((tref_rt == NULL) ||
-	    !STREQ(gzgt->idname, tref_rt->gizmo_group))
-	{
-		WM_gizmo_group_type_unlink_delayed_ptr(gzgt);
-		return false;
-	}
-	return true;
-}
-
 static void WIDGETGROUP_ruler_setup(const bContext *C, wmGizmoGroup *gzgroup)
 {
 	RulerInfo *ruler_info = MEM_callocN(sizeof(RulerInfo), __func__);
@@ -1016,7 +1017,7 @@ void VIEW3D_GGT_ruler(wmGizmoGroupType *gzgt)
 	gzgt->gzmap_params.spaceid = SPACE_VIEW3D;
 	gzgt->gzmap_params.regionid = RGN_TYPE_WINDOW;
 
-	gzgt->poll = WIDGETGROUP_ruler_poll;
+	gzgt->poll = ED_gizmo_poll_or_unlink_delayed_from_tool;
 	gzgt->setup = WIDGETGROUP_ruler_setup;
 }
 
@@ -1038,11 +1039,16 @@ static bool view3d_ruler_poll(bContext *C)
 	return true;
 }
 
-static int view3d_ruler_add_invoke(bContext *C, wmOperator *UNUSED(op), const wmEvent *event)
+static int view3d_ruler_add_invoke(bContext *C, wmOperator *op, const wmEvent *event)
 {
 	ARegion *ar = CTX_wm_region(C);
 	View3D *v3d = CTX_wm_view3d(C);
 	RegionView3D *rv3d = ar->regiondata;
+
+	if (v3d->gizmo_flag & (V3D_GIZMO_HIDE | V3D_GIZMO_HIDE_TOOL)) {
+		BKE_report(op->reports, RPT_WARNING, "Gizmos hidden in this view");
+		return OPERATOR_CANCELLED;
+	}
 
 	wmGizmoMap *gzmap = ar->gizmo_map;
 	wmGizmoGroup *gzgroup = WM_gizmomap_group_find(gzmap, view3d_gzgt_ruler_id);
@@ -1083,9 +1089,58 @@ void VIEW3D_OT_ruler_add(wmOperatorType *ot)
 	/* identifiers */
 	ot->name = "Ruler Add";
 	ot->idname = "VIEW3D_OT_ruler_add";
-	ot->description = "";
 
 	ot->invoke = view3d_ruler_add_invoke;
+	ot->poll = view3d_ruler_poll;
+
+	/* flags */
+	ot->flag = OPTYPE_UNDO | OPTYPE_INTERNAL;
+}
+
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Remove Ruler Operator
+ * \{ */
+
+static int view3d_ruler_remove_invoke(bContext *C, wmOperator *op, const wmEvent *UNUSED(event))
+{
+	ARegion *ar = CTX_wm_region(C);
+	View3D *v3d = CTX_wm_view3d(C);
+
+	if (v3d->gizmo_flag & (V3D_GIZMO_HIDE | V3D_GIZMO_HIDE_TOOL)) {
+		BKE_report(op->reports, RPT_WARNING, "Gizmos hidden in this view");
+		return OPERATOR_CANCELLED;
+	}
+
+	wmGizmoMap *gzmap = ar->gizmo_map;
+	wmGizmoGroup *gzgroup = WM_gizmomap_group_find(gzmap, view3d_gzgt_ruler_id);
+	if (gzgroup) {
+		RulerInfo *ruler_info = gzgroup->customdata;
+		if (ruler_info->item_active) {
+			RulerItem *ruler_item = ruler_info->item_active;
+			if ((ruler_item->flag & RULERITEM_USE_ANGLE) &&
+			    (ruler_item->flag & RULERITEM_USE_ANGLE_ACTIVE))
+			{
+				ruler_item->flag &= ~(RULERITEM_USE_ANGLE | RULERITEM_USE_ANGLE_ACTIVE);
+			}
+			else {
+				ruler_item_remove(C, gzgroup, ruler_item);
+			}
+			ED_region_tag_redraw(ar);
+			return OPERATOR_FINISHED;
+		}
+	}
+	return OPERATOR_PASS_THROUGH;
+}
+
+void VIEW3D_OT_ruler_remove(wmOperatorType *ot)
+{
+	/* identifiers */
+	ot->name = "Ruler Remove";
+	ot->idname = "VIEW3D_OT_ruler_remove";
+
+	ot->invoke = view3d_ruler_remove_invoke;
 	ot->poll = view3d_ruler_poll;
 
 	/* flags */

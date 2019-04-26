@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,15 +15,10 @@
  *
  * The Original Code is Copyright (C) 2009 Blender Foundation.
  * All rights reserved.
- *
- *
- * Contributor(s): Blender Foundation
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/makesrna/intern/rna_meta_api.c
- *  \ingroup RNA
+/** \file
+ * \ingroup RNA
  */
 
 
@@ -52,7 +45,7 @@ static void rna_Meta_transform(struct MetaBall *mb, float *mat)
 
 static void rna_Mball_update_gpu_tag(MetaBall *mb)
 {
-	BKE_mball_batch_cache_dirty(mb, BKE_MBALL_BATCH_DIRTY_ALL);
+	BKE_mball_batch_cache_dirty_tag(mb, BKE_MBALL_BATCH_DIRTY_ALL);
 }
 #else
 

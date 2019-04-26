@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,14 +15,10 @@
  *
  * The Original Code is Copyright (C) 2012 Blender Foundation.
  * All rights reserved.
- *
- * Contributor(s): Campbell Barton
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/python/bmesh/bmesh_py_types_meshdata.c
- *  \ingroup pybmesh
+/** \file
+ * \ingroup pybmesh
  *
  * This file defines customdata types which can't be accessed as primitive
  * python types such as MDeformVert, MLoopUV, MTexPoly
@@ -42,7 +36,6 @@
 #include "BLI_math_vector.h"
 
 #include "BKE_deform.h"
-#include "BKE_library.h"
 
 #include "bmesh_py_types_meshdata.h"
 
@@ -92,13 +85,13 @@ PyDoc_STRVAR(bpy_bmloopuv_flag__select_edge_doc,
 
 static PyObject *bpy_bmloopuv_flag_get(BPy_BMLoopUV *self, void *flag_p)
 {
-	const int flag = GET_INT_FROM_POINTER(flag_p);
+	const int flag = POINTER_AS_INT(flag_p);
 	return PyBool_FromLong(self->data->flag & flag);
 }
 
 static int bpy_bmloopuv_flag_set(BPy_BMLoopUV *self, PyObject *value, void *flag_p)
 {
-	const int flag = GET_INT_FROM_POINTER(flag_p);
+	const int flag = POINTER_AS_INT(flag_p);
 
 	switch (PyC_Long_AsBool(value)) {
 		case true:
@@ -200,13 +193,13 @@ PyDoc_STRVAR(bpy_bmvertskin_flag__use_loose_doc,
 
 static PyObject *bpy_bmvertskin_flag_get(BPy_BMVertSkin *self, void *flag_p)
 {
-	const int flag = GET_INT_FROM_POINTER(flag_p);
+	const int flag = POINTER_AS_INT(flag_p);
 	return PyBool_FromLong(self->data->flag & flag);
 }
 
 static int bpy_bmvertskin_flag_set(BPy_BMVertSkin *self, PyObject *value, void *flag_p)
 {
-	const int flag = GET_INT_FROM_POINTER(flag_p);
+	const int flag = POINTER_AS_INT(flag_p);
 
 	switch (PyC_Long_AsBool(value)) {
 		case true:
@@ -313,8 +306,9 @@ static int mathutils_bmloopcol_set(BaseMathObject *bmo, int UNUSED(subtype))
 static int mathutils_bmloopcol_get_index(BaseMathObject *bmo, int subtype, int UNUSED(index))
 {
 	/* lazy, avoid repeteing the case statement */
-	if (mathutils_bmloopcol_get(bmo, subtype) == -1)
+	if (mathutils_bmloopcol_get(bmo, subtype) == -1) {
 		return -1;
+	}
 	return 0;
 }
 
@@ -323,8 +317,9 @@ static int mathutils_bmloopcol_set_index(BaseMathObject *bmo, int subtype, int i
 	const float f = bmo->data[index];
 
 	/* lazy, avoid repeteing the case statement */
-	if (mathutils_bmloopcol_get(bmo, subtype) == -1)
+	if (mathutils_bmloopcol_get(bmo, subtype) == -1) {
 		return -1;
+	}
 
 	bmo->data[index] = f;
 	return mathutils_bmloopcol_set(bmo, subtype);
@@ -335,7 +330,7 @@ static Mathutils_Callback mathutils_bmloopcol_cb = {
 	mathutils_bmloopcol_get,
 	mathutils_bmloopcol_set,
 	mathutils_bmloopcol_get_index,
-	mathutils_bmloopcol_set_index
+	mathutils_bmloopcol_set_index,
 };
 
 static void bm_init_types_bmloopcol(void)
@@ -388,7 +383,7 @@ PyObject *BPy_BMLoopColor_CreatePyObject(struct MLoopCol *data)
  * This type could eventually be used to access lattice weights.
  *
  * \note: Many of blender-api's dict-like-wrappers act like ordered dicts,
- * This is intentional _not_ ordered, the weights can be in any order and it wont matter,
+ * This is intentionally _not_ ordered, the weights can be in any order and it won't matter,
  * the order should not be used in the api in any meaningful way (as with a python dict)
  * only expose as mapping, not a sequence.
  */
@@ -524,7 +519,7 @@ static PySequenceMethods bpy_bmdeformvert_as_sequence = {
 static PyMappingMethods bpy_bmdeformvert_as_mapping = {
 	(lenfunc)bpy_bmdeformvert_len,
 	(binaryfunc)bpy_bmdeformvert_subscript,
-	(objobjargproc)bpy_bmdeformvert_ass_subscript
+	(objobjargproc)bpy_bmdeformvert_ass_subscript,
 };
 
 /* Methods
@@ -656,7 +651,7 @@ static struct PyMethodDef bpy_bmdeformvert_methods[] = {
 	{"get",     (PyCFunction)bpy_bmdeformvert_get,     METH_VARARGS, bpy_bmdeformvert_get_doc},
 	/* BMESH_TODO pop, popitem, update */
 	{"clear",   (PyCFunction)bpy_bmdeformvert_clear,   METH_NOARGS,  bpy_bmdeformvert_clear_doc},
-	{NULL, NULL, 0, NULL}
+	{NULL, NULL, 0, NULL},
 };
 
 PyTypeObject BPy_BMDeformVert_Type; /* bm.loops.layers.uv.active */

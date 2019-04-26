@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,29 +15,22 @@
  *
  * The Original Code is Copyright (C) 2016 Blender Foundation.
  * All rights reserved.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file arrow2d_gizmo.c
- *  \ingroup wm
+/** \file
+ * \ingroup edgizmolib
  *
  * \name 2D Arrow Gizmo
  *
  * \brief Simple arrow gizmo which is dragged into a certain direction.
  */
 
-#include "BLI_listbase.h"
 #include "BLI_math.h"
-#include "BLI_rect.h"
 
 #include "DNA_windowmanager_types.h"
 
 #include "BKE_context.h"
 
-#include "BIF_gl.h"
 
 #include "GPU_draw.h"
 #include "GPU_immediate.h"
@@ -140,15 +131,15 @@ static int gizmo_arrow2d_invoke(
 }
 
 static int gizmo_arrow2d_test_select(
-        bContext *UNUSED(C), wmGizmo *gz, const wmEvent *event)
+        bContext *UNUSED(C), wmGizmo *gz, const int mval[2])
 {
-	const float mval[2] = {event->mval[0], event->mval[1]};
+	const float mval_fl[2] = {UNPACK2(mval)};
 	const float arrow_length = RNA_float_get(gz->ptr, "length");
 	const float arrow_angle = RNA_float_get(gz->ptr, "angle");
 	const float line_len = arrow_length * gz->scale_final;
 	float mval_local[2];
 
-	copy_v2_v2(mval_local, mval);
+	copy_v2_v2(mval_local, mval_fl);
 	sub_v2_v2(mval_local, gz->matrix_basis[3]);
 
 	float line[2][2];

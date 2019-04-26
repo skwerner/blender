@@ -28,6 +28,7 @@ StructMetaPropGroup = bpy_types.bpy_struct_meta_idprop
 bpy_types.BlendDataLibraries.load = _bpy._library_load
 bpy_types.BlendDataLibraries.write = _bpy._library_write
 bpy_types.BlendData.user_map = _bpy._rna_id_collection_user_map
+bpy_types.BlendData.batch_remove = _bpy._rna_id_collection_batch_remove
 
 
 class Context(StructRNA):
@@ -104,7 +105,7 @@ class Collection(bpy_types.ID):
         """The collection instance objects this collection is used in"""
         import bpy
         return tuple(obj for obj in bpy.data.objects
-                     if self == obj.dupli_group)
+                     if self == obj.instance_collection)
 
 
 class Object(bpy_types.ID):
@@ -112,21 +113,23 @@ class Object(bpy_types.ID):
 
     @property
     def children(self):
-        """All the children of this object"""
+        """All the children of this object. Warning: takes O(len(bpy.data.objects)) time."""
         import bpy
         return tuple(child for child in bpy.data.objects
                      if child.parent == self)
 
     @property
     def users_collection(self):
-        """The collections this object is in"""
+        """The collections this object is in. Warning: takes O(len(bpy.data.collections) + len(bpy.data.scenes)) time."""
         import bpy
         return tuple(collection for collection in bpy.data.collections
-                     if self in collection.objects[:])
+                     if self in collection.objects[:]) + \
+               tuple(scene.collection for scene in bpy.data.scenes
+                     if self in scene.collection.objects[:])
 
     @property
     def users_scene(self):
-        """The scenes this object is in"""
+        """The scenes this object is in. Warning: takes O(len(bpy.data.scenes) * len(bpy.data.objects)) time."""
         import bpy
         return tuple(scene for scene in bpy.data.scenes
                      if self in scene.objects[:])
@@ -137,7 +140,7 @@ class WindowManager(bpy_types.ID):
 
     def popup_menu(self, draw_func, title="", icon='NONE'):
         import bpy
-        popup = self.popmenu_begin__internal(title, icon)
+        popup = self.popmenu_begin__internal(title, icon=icon)
 
         try:
             draw_func(popup, bpy.context)
@@ -157,11 +160,11 @@ class WindowManager(bpy_types.ID):
         try:
             draw_func(popup, bpy.context)
         finally:
-            self.popover_end__internal(popup, keymap)
+            self.popover_end__internal(popup, keymap=keymap)
 
     def popup_menu_pie(self, event, draw_func, title="", icon='NONE'):
         import bpy
-        pie = self.piemenu_begin__internal(title, icon, event)
+        pie = self.piemenu_begin__internal(title, icon=icon, event=event)
 
         if pie:
             try:
@@ -205,21 +208,21 @@ class _GenericBone:
         """ Vector pointing down the x-axis of the bone.
         """
         from mathutils import Vector
-        return self.matrix.to_3x3() * Vector((1.0, 0.0, 0.0))
+        return self.matrix.to_3x3() @ Vector((1.0, 0.0, 0.0))
 
     @property
     def y_axis(self):
         """ Vector pointing down the y-axis of the bone.
         """
         from mathutils import Vector
-        return self.matrix.to_3x3() * Vector((0.0, 1.0, 0.0))
+        return self.matrix.to_3x3() @ Vector((0.0, 1.0, 0.0))
 
     @property
     def z_axis(self):
         """ Vector pointing down the z-axis of the bone.
         """
         from mathutils import Vector
-        return self.matrix.to_3x3() * Vector((0.0, 0.0, 1.0))
+        return self.matrix.to_3x3() @ Vector((0.0, 0.0, 1.0))
 
     @property
     def basename(self):
@@ -268,12 +271,12 @@ class _GenericBone:
 
     @property
     def children(self):
-        """A list of all the bones children."""
+        """A list of all the bones children. Warning: takes O(len(bones)) time."""
         return [child for child in self._other_bones if child.parent == self]
 
     @property
     def children_recursive(self):
-        """A list of all children from this bone."""
+        """A list of all children from this bone. Warning: takes O(len(bones)**2) time."""
         bones_children = []
         for bone in self._other_bones:
             index = bone.parent_index(self)
@@ -290,7 +293,7 @@ class _GenericBone:
         Returns a chain of children with the same base name as this bone.
         Only direct chains are supported, forks caused by multiple children
         with matching base names will terminate the function
-        and not be returned.
+        and not be returned. Warning: takes O(len(bones)**2) time.
         """
         basename = self.basename
         chain = []
@@ -378,9 +381,9 @@ class EditBone(StructRNA, _GenericBone, metaclass=StructMetaPropGroup):
         :type roll: bool
         """
         from mathutils import Vector
-        z_vec = self.matrix.to_3x3() * Vector((0.0, 0.0, 1.0))
-        self.tail = matrix * self.tail
-        self.head = matrix * self.head
+        z_vec = self.matrix.to_3x3() @ Vector((0.0, 0.0, 1.0))
+        self.tail = matrix @ self.tail
+        self.head = matrix @ self.head
 
         if scale:
             scalar = matrix.median_scale
@@ -388,7 +391,7 @@ class EditBone(StructRNA, _GenericBone, metaclass=StructMetaPropGroup):
             self.tail_radius *= scalar
 
         if roll:
-            self.align_roll(matrix * z_vec)
+            self.align_roll(matrix @ z_vec)
 
 
 def ord_ind(i1, i2):
@@ -454,6 +457,8 @@ class Mesh(bpy_types.ID):
         # if no edges - calculate them
         if faces and (not edges):
             self.update(calc_edges=True)
+        elif edges:
+            self.update(calc_edges_loose=True)
 
     @property
     def edge_keys(self):
@@ -468,7 +473,7 @@ class MeshEdge(StructRNA):
         return ord_ind(*tuple(self.vertices))
 
 
-class MeshTessFace(StructRNA):
+class MeshLoopTriangle(StructRNA):
     __slots__ = ()
 
     @property
@@ -476,32 +481,18 @@ class MeshTessFace(StructRNA):
         """The midpoint of the face."""
         face_verts = self.vertices[:]
         mesh_verts = self.id_data.vertices
-        if len(face_verts) == 3:
-            return (mesh_verts[face_verts[0]].co +
-                    mesh_verts[face_verts[1]].co +
-                    mesh_verts[face_verts[2]].co
-                    ) / 3.0
-        else:
-            return (mesh_verts[face_verts[0]].co +
-                    mesh_verts[face_verts[1]].co +
-                    mesh_verts[face_verts[2]].co +
-                    mesh_verts[face_verts[3]].co
-                    ) / 4.0
+        return (mesh_verts[face_verts[0]].co +
+                mesh_verts[face_verts[1]].co +
+                mesh_verts[face_verts[2]].co
+                ) / 3.0
 
     @property
     def edge_keys(self):
         verts = self.vertices[:]
-        if len(verts) == 3:
-            return (ord_ind(verts[0], verts[1]),
-                    ord_ind(verts[1], verts[2]),
-                    ord_ind(verts[2], verts[0]),
-                    )
-        else:
-            return (ord_ind(verts[0], verts[1]),
-                    ord_ind(verts[1], verts[2]),
-                    ord_ind(verts[2], verts[3]),
-                    ord_ind(verts[3], verts[0]),
-                    )
+        return (ord_ind(verts[0], verts[1]),
+                ord_ind(verts[1], verts[2]),
+                ord_ind(verts[2], verts[0]),
+                )
 
 
 class MeshPolygon(StructRNA):
@@ -606,10 +597,8 @@ class Gizmo(StructRNA):
         if matrix is None:
             matrix = self.matrix_world
 
-        batch, dims = shape
-
-        # XXX, can we avoid setting the shader every time?
-        batch.program_set_builtin('3D_UNIFORM_COLOR' if dims == 3 else '2D_UNIFORM_COLOR')
+        batch, shader = shape
+        shader.bind()
 
         if select_id is not None:
             gpu.select.load_id(select_id)
@@ -618,7 +607,7 @@ class Gizmo(StructRNA):
                 color = (*self.color_highlight, self.alpha_highlight)
             else:
                 color = (*self.color, self.alpha)
-            batch.uniform_f32("color", *color)
+            shader.uniform_float("color", color)
 
         with gpu.matrix.push_pop():
             gpu.matrix.multiply_matrix(matrix)
@@ -638,7 +627,8 @@ class Gizmo(StructRNA):
         :return: The newly created shape.
         :rtype: Undefined (it may change).
         """
-        from _gpu.types import (
+        import gpu
+        from gpu.types import (
             GPUBatch,
             GPUVertBuf,
             GPUVertFormat,
@@ -649,14 +639,16 @@ class Gizmo(StructRNA):
         fmt = GPUVertFormat()
         pos_id = fmt.attr_add(id="pos", comp_type='F32', len=dims, fetch_mode='FLOAT')
         vbo = GPUVertBuf(len=len(verts), format=fmt)
-        vbo.fill(id=pos_id, data=verts)
+        vbo.attr_fill(id=pos_id, data=verts)
         batch = GPUBatch(type=type, buf=vbo)
-        return (batch, dims)
+        shader = gpu.shader.from_builtin('3D_UNIFORM_COLOR' if dims == 3 else '2D_UNIFORM_COLOR')
+        batch.program_set(shader)
+        return (batch, shader)
 
 
 # Only defined so operators members can be used by accessing self.order
 # with doc generation 'self.properties.bl_rna.properties' can fail
-class Operator(StructRNA):
+class Operator(StructRNA, metaclass=RNAMeta):
     __slots__ = ()
 
     def __getattribute__(self, attr):
@@ -848,7 +840,7 @@ class Menu(StructRNA, _GenericUI, metaclass=RNAMeta):
         layout = self.layout
 
         if not searchpaths:
-            layout.label("* Missing Paths *")
+            layout.label(text="* Missing Paths *")
 
         # collect paths
         files = []
@@ -887,7 +879,7 @@ class Menu(StructRNA, _GenericUI, metaclass=RNAMeta):
                 props.menu_idname = self.bl_idname
 
             if add_operator:
-                props = row.operator(add_operator, text="", icon='ZOOMOUT')
+                props = row.operator(add_operator, text="", icon='REMOVE')
                 props.name = name
                 props.remove_name = True
 
@@ -901,7 +893,7 @@ class Menu(StructRNA, _GenericUI, metaclass=RNAMeta):
             sub.emboss = 'NORMAL'
             sub.prop(wm, "preset_name", text="")
 
-            props = row.operator(add_operator, text="", icon='ZOOMIN')
+            props = row.operator(add_operator, text="", icon='ADD')
             props.name = wm.preset_name
 
     def draw_preset(self, context):
@@ -931,7 +923,7 @@ class Menu(StructRNA, _GenericUI, metaclass=RNAMeta):
         # only usable within headers
         if context.area.show_menus:
             # Align menus to space them closely.
-            cls.draw_menus(layout.row(align=True), context)
+            layout.row(align=True).menu_contents(cls.__name__)
         else:
             layout.menu(cls.__name__, icon='COLLAPSEMENU')
 
@@ -957,7 +949,7 @@ class NodeSocket(StructRNA, metaclass=RNAMetaPropGroup):
 
     @property
     def links(self):
-        """List of node links from or to this socket"""
+        """List of node links from or to this socket. Warning: takes O(len(nodetree.links)) time."""
         return tuple(link for link in self.id_data.links
                      if (link.from_socket == self or
                          link.to_socket == self))

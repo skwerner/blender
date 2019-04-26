@@ -23,7 +23,6 @@ from bpy.types import Operator
 from bpy.props import (
     BoolProperty,
     EnumProperty,
-    FloatProperty,
     IntProperty,
     StringProperty,
 )
@@ -63,11 +62,13 @@ class SelectPattern(Operator):
             pattern_match = (lambda a, b:
                              fnmatch.fnmatchcase(a.upper(), b.upper()))
         is_ebone = False
+        is_pbone = False
         obj = context.object
         if obj and obj.mode == 'POSE':
             items = obj.data.bones
             if not self.extend:
                 bpy.ops.pose.select_all(action='DESELECT')
+            is_pbone = True
         elif obj and obj.type == 'ARMATURE' and obj.mode == 'EDIT':
             items = obj.data.edit_bones
             if not self.extend:
@@ -78,7 +79,7 @@ class SelectPattern(Operator):
             if not self.extend:
                 bpy.ops.object.select_all(action='DESELECT')
 
-        # Can be pose bones or objects
+        # Can be pose bones, edit bones or objects
         for item in items:
             if pattern_match(item.name, self.pattern):
 
@@ -91,8 +92,10 @@ class SelectPattern(Operator):
                         item_parent = item.parent
                         if item_parent is not None:
                             item_parent.select_tail = True
+                elif is_pbone:
+                    item.select = True
                 else:
-                    item.select_set(action='SELECT')
+                    item.select_set(True)
 
         return {'FINISHED'}
 
@@ -107,6 +110,11 @@ class SelectPattern(Operator):
         row = layout.row()
         row.prop(self, "case_sensitive")
         row.prop(self, "extend")
+
+    @classmethod
+    def poll(cls, context):
+        obj = context.object
+        return (not obj) or (obj.mode == 'OBJECT') or (obj.type == 'ARMATURE')
 
 
 class SelectCamera(Operator):
@@ -125,7 +133,7 @@ class SelectCamera(Operator):
         scene = context.scene
         view_layer = context.view_layer
         view = context.space_data
-        if view.type == 'VIEW_3D' and not view.lock_camera_and_layers:
+        if view.type == 'VIEW_3D' and view.use_local_camera:
             camera = view.camera
         else:
             camera = scene.camera
@@ -139,7 +147,7 @@ class SelectCamera(Operator):
                 bpy.ops.object.select_all(action='DESELECT')
             view_layer.objects.active = camera
             # camera.hide = False  # XXX TODO where is this now?
-            camera.select_set(action='SELECT')
+            camera.select_set(True)
             return {'FINISHED'}
 
         return {'CANCELLED'}
@@ -153,9 +161,10 @@ class SelectHierarchy(Operator):
     bl_options = {'REGISTER', 'UNDO'}
 
     direction: EnumProperty(
-        items=(('PARENT', "Parent", ""),
-               ('CHILD', "Child", ""),
-               ),
+        items=(
+            ('PARENT', "Parent", ""),
+            ('CHILD', "Child", ""),
+        ),
         name="Direction",
         description="Direction to select in the hierarchy",
         default='PARENT',
@@ -171,7 +180,6 @@ class SelectHierarchy(Operator):
         return context.object
 
     def execute(self, context):
-        scene = context.scene
         view_layer = context.view_layer
         select_new = []
         act_new = None
@@ -206,7 +214,7 @@ class SelectHierarchy(Operator):
                 bpy.ops.object.select_all(action='DESELECT')
 
             for obj in select_new:
-                obj.select_set(action='SELECT')
+                obj.select_set(True)
 
             view_layer.objects.active = act_new
             return {'FINISHED'}
@@ -255,7 +263,7 @@ class SubdivisionSet(Operator):
                     if not relative:
                         if level > mod.total_levels:
                             sub = level - mod.total_levels
-                            for i in range(sub):
+                            for _ in range(sub):
                                 bpy.ops.object.multires_subdivide(modifier="Multires")
 
                         if obj.mode == 'SCULPT':
@@ -288,10 +296,10 @@ class SubdivisionSet(Operator):
                 if obj.mode == 'SCULPT':
                     mod = obj.modifiers.new("Multires", 'MULTIRES')
                     if level > 0:
-                        for i in range(0, level):
+                        for _ in range(level):
                             bpy.ops.object.multires_subdivide(modifier="Multires")
                 else:
-                    mod = obj.modifiers.new("Subsurf", 'SUBSURF')
+                    mod = obj.modifiers.new("Subdivision", 'SUBSURF')
                     mod.levels = level
             except:
                 self.report({'WARNING'},
@@ -312,19 +320,20 @@ class ShapeTransfer(Operator):
     bl_options = {'REGISTER', 'UNDO'}
 
     mode: EnumProperty(
-        items=(('OFFSET',
-                "Offset",
-                "Apply the relative positional offset",
-                ),
-               ('RELATIVE_FACE',
-                "Relative Face",
-                "Calculate relative position (using faces)",
-                ),
-               ('RELATIVE_EDGE',
-                "Relative Edge",
-                "Calculate relative position (using edges)",
-                ),
-               ),
+        items=(
+            ('OFFSET',
+             "Offset",
+             "Apply the relative positional offset",
+             ),
+            ('RELATIVE_FACE',
+             "Relative Face",
+             "Calculate relative position (using faces)",
+             ),
+            ('RELATIVE_EDGE',
+             "Relative Edge",
+             "Calculate relative position (using edges)",
+             ),
+        ),
         name="Transformation Mode",
         description="Relative shape positions to the new shape method",
         default='OFFSET',
@@ -476,7 +485,7 @@ class ShapeTransfer(Operator):
         objects = [ob for ob in context.selected_editable_objects
                    if ob != ob_act]
 
-        if 1:  # swap from/to, means we cant copy to many at once.
+        if 1:  # swap from/to, means we can't copy to many at once.
             if len(objects) != 1:
                 self.report({'ERROR'},
                             ("Expected one other selected "
@@ -585,6 +594,7 @@ class MakeDupliFace(Operator):
     @staticmethod
     def _main(context):
         from mathutils import Vector
+        from collections import defaultdict
 
         SCALE_FAC = 0.01
         offset = 0.5 * SCALE_FAC
@@ -599,13 +609,12 @@ class MakeDupliFace(Operator):
             trans = matrix.to_translation()
             rot = matrix.to_3x3()  # also contains scale
 
-            return [(rot * b) + trans for b in base_tri]
+            return [(rot @ b) + trans for b in base_tri]
         scene = context.scene
-        linked = {}
+        linked = defaultdict(list)
         for obj in context.selected_objects:
-            data = obj.data
-            if data:
-                linked.setdefault(data, []).append(obj)
+            if obj.type == 'MESH':
+                linked[obj.data].append(obj)
 
         for data, objects in linked.items():
             face_verts = [axis for obj in objects
@@ -628,27 +637,23 @@ class MakeDupliFace(Operator):
             mesh.polygons.foreach_set("loop_total", (4,) * nbr_faces)
             mesh.update()  # generates edge data
 
-            # pick an object to use
-            obj = objects[0]
-
             ob_new = bpy.data.objects.new(mesh.name, mesh)
-            base = scene.objects.link(ob_new)
-            base.layers[:] = obj.layers
+            context.collection.objects.link(ob_new)
 
             ob_inst = bpy.data.objects.new(data.name, data)
-            base = scene.objects.link(ob_inst)
-            base.layers[:] = obj.layers
+            context.collection.objects.link(ob_inst)
+
+            ob_new.instance_type = 'FACES'
+            ob_inst.parent = ob_new
+            ob_new.use_instance_faces_scale = True
+            ob_new.instance_faces_scale = 1.0 / SCALE_FAC
+
+            ob_inst.select_set(True)
+            ob_new.select_set(True)
 
             for obj in objects:
-                scene.objects.unlink(obj)
-
-            ob_new.dupli_type = 'FACES'
-            ob_inst.parent = ob_new
-            ob_new.use_dupli_faces_scale = True
-            ob_new.dupli_faces_scale = 1.0 / SCALE_FAC
-
-            ob_inst.select_set(action='SELECT')
-            ob_new.select_set(action='SELECT')
+                for collection in obj.users_collection:
+                    collection.objects.unlink(obj)
 
     def execute(self, context):
         self._main(context)
@@ -854,7 +859,7 @@ class TransformsToDeltasAnim(Operator):
 
 class DupliOffsetFromCursor(Operator):
     """Set offset used for collection instances based on cursor position"""
-    bl_idname = "object.dupli_offset_from_cursor"
+    bl_idname = "object.instance_offset_from_cursor"
     bl_label = "Set Offset From Cursor"
     bl_options = {'INTERNAL', 'UNDO'}
 
@@ -866,7 +871,124 @@ class DupliOffsetFromCursor(Operator):
         scene = context.scene
         collection = context.collection
 
-        collection.dupli_offset = scene.cursor_location
+        collection.instance_offset = scene.cursor.location
+
+        return {'FINISHED'}
+
+
+class LoadImageAsEmpty:
+    bl_options = {'REGISTER', 'UNDO'}
+
+    filepath: StringProperty(
+        subtype='FILE_PATH'
+    )
+
+    filter_image: BoolProperty(default=True, options={'HIDDEN', 'SKIP_SAVE'})
+    filter_folder: BoolProperty(default=True, options={'HIDDEN', 'SKIP_SAVE'})
+
+    view_align: BoolProperty(
+        name="Align to view",
+        default=True
+    )
+
+    @classmethod
+    def poll(cls, context):
+        return context.mode == 'OBJECT'
+
+    def invoke(self, context, event):
+        context.window_manager.fileselect_add(self)
+        return {'RUNNING_MODAL'}
+
+    def execute(self, context):
+        scene = context.scene
+        cursor = scene.cursor.location
+
+        try:
+            image = bpy.data.images.load(self.filepath, check_existing=True)
+        except RuntimeError as ex:
+            self.report({'ERROR'}, str(ex))
+            return {'CANCELLED'}
+
+        bpy.ops.object.empty_add(
+            'INVOKE_REGION_WIN',
+            type='IMAGE',
+            location=cursor,
+            view_align=self.view_align,
+        )
+
+        obj = context.active_object
+        obj.data = image
+        obj.empty_display_size = 5.0
+        self.set_settings(context, obj)
+        return {'FINISHED'}
+
+    def set_settings(self, context, obj):
+        pass
+
+
+class LoadBackgroundImage(LoadImageAsEmpty, Operator):
+    """Add a reference image into the background behind objects"""
+    bl_idname = "object.load_background_image"
+    bl_label = "Load Background Image"
+
+    def set_settings(self, context, obj):
+        obj.empty_image_depth = 'BACK'
+        obj.empty_image_side = 'FRONT'
+
+        if context.space_data.type == 'VIEW_3D':
+            if not context.space_data.region_3d.is_perspective:
+                obj.show_empty_image_perspective = False
+
+
+class LoadReferenceImage(LoadImageAsEmpty, Operator):
+    """Add a reference image into the scene between objects"""
+    bl_idname = "object.load_reference_image"
+    bl_label = "Load Reference Image"
+
+    def set_settings(self, context, obj):
+        pass
+
+
+class OBJECT_OT_assign_property_defaults(Operator):
+    """Assign the current values of custom properties as their defaults, """ \
+    """for use as part of the rest pose state in NLA track mixing"""
+    bl_idname = "object.assign_property_defaults"
+    bl_label = "Assign Custom Property Values as Default"
+    bl_options = {'UNDO', 'REGISTER'}
+
+    process_data: BoolProperty(name="Process data properties", default=True)
+    process_bones: BoolProperty(name="Process bone properties", default=True)
+
+    @classmethod
+    def poll(cls, context):
+        obj = context.active_object
+        return obj is not None and obj.library is None and obj.mode in {'POSE', 'OBJECT'}
+
+    @staticmethod
+    def assign_defaults(obj):
+        from rna_prop_ui import rna_idprop_ui_prop_default_set
+
+        rna_properties = {'_RNA_UI'} | {prop.identifier for prop in obj.bl_rna.properties if prop.is_runtime}
+
+        for prop, value in obj.items():
+            if prop not in rna_properties:
+                rna_idprop_ui_prop_default_set(obj, prop, value)
+
+    def execute(self, context):
+        obj = context.active_object
+
+        self.assign_defaults(obj)
+
+        if self.process_bones and obj.pose:
+            for pbone in obj.pose.bones:
+                self.assign_defaults(pbone)
+
+        if self.process_data and obj.data and obj.data.library is None:
+            self.assign_defaults(obj.data)
+
+            if self.process_bones and isinstance(obj.data, bpy.types.Armature):
+                for bone in obj.data.bones:
+                    self.assign_defaults(bone)
 
         return {'FINISHED'}
 
@@ -876,6 +998,8 @@ classes = (
     DupliOffsetFromCursor,
     IsolateTypeRender,
     JoinUVs,
+    LoadBackgroundImage,
+    LoadReferenceImage,
     MakeDupliFace,
     SelectCamera,
     SelectHierarchy,
@@ -884,4 +1008,5 @@ classes = (
     SubdivisionSet,
     TransformsToDeltas,
     TransformsToDeltasAnim,
+    OBJECT_OT_assign_property_defaults,
 )

@@ -79,7 +79,7 @@ class ANIM_OT_keying_set_export(Operator):
         f.write("# Keying Set Level declarations\n")
         f.write("ks = scene.keying_sets.new(idname=\"%s\", name=\"%s\")\n"
                 "" % (ks.bl_idname, ks.bl_label))
-        f.write("ks.bl_description = \"%s\"\n" % ks.bl_description)
+        f.write("ks.bl_description = %r\n" % ks.bl_description)
 
         if not ks.is_path_absolute:
             f.write("ks.is_path_absolute = False\n")
@@ -197,7 +197,7 @@ class ANIM_OT_keying_set_export(Operator):
         return {'RUNNING_MODAL'}
 
 
-class BakeAction(Operator):
+class NLA_OT_bake(Operator):
     """Bake all selected objects loc/scale/rotation animation to an action"""
     bl_idname = "nla.bake"
     bl_label = "Bake Action"
@@ -420,7 +420,7 @@ class UpdateAnimatedTransformConstraint(Operator):
 
 classes = (
     ANIM_OT_keying_set_export,
-    BakeAction,
+    NLA_OT_bake,
     ClearUselessActions,
     UpdateAnimatedTransformConstraint,
 )

@@ -98,7 +98,7 @@ static int wm_openvdb_import_exec(bContext *C, wmOperator *op)
 	smd->domain->sample_level = estimate_sample_level(filepath);
 	BLI_strncpy(smd->domain->volume_filepath, filepath, sizeof(filepath));
 
-	DEG_id_tag_update(&scene->id, DEG_TAG_BASE_FLAGS_UPDATE);
+	DEG_id_tag_update(&scene->id, ID_RECALC_BASE_FLAGS);
 	DEG_relations_tag_update(bmain);
 
 	return OPERATOR_FINISHED;

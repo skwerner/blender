@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,12 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/python/intern/bpy_app_icons.c
- *  \ingroup pythonintern
+/** \file
+ * \ingroup pythonintern
  *
  * Runtime defined icons.
  */
@@ -101,8 +97,8 @@ PyDoc_STRVAR(bpy_app_icons_new_triangles_from_file_doc,
 "\n"
 "   Create a new icon from triangle geometry.\n"
 "\n"
-"   :arg range: File path.\n"
-"   :type range: string.\n"
+"   :arg filename: File path.\n"
+"   :type filename: string.\n"
 "   :return: Unique icon value (pass to interface ``icon_value`` argument).\n"
 "   :rtype: int\n"
 );
@@ -160,7 +156,7 @@ static struct PyMethodDef M_AppIcons_methods[] = {
 	 METH_VARARGS | METH_KEYWORDS, bpy_app_icons_new_triangles_from_file_doc},
 	{"release", (PyCFunction)bpy_app_icons_release,
 	 METH_VARARGS | METH_KEYWORDS, bpy_app_icons_release_doc},
-	{NULL, NULL, 0, NULL}
+	{NULL, NULL, 0, NULL},
 };
 
 static struct PyModuleDef M_AppIcons_module_def = {
@@ -177,7 +173,11 @@ static struct PyModuleDef M_AppIcons_module_def = {
 
 PyObject *BPY_app_icons_module(void)
 {
+	PyObject *sys_modules = PyImport_GetModuleDict();
+
 	PyObject *mod = PyModule_Create(&M_AppIcons_module_def);
+
+	PyDict_SetItem(sys_modules, PyModule_GetNameObject(mod), mod);
 
 	return mod;
 }

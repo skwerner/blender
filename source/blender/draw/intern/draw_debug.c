@@ -1,6 +1,4 @@
 /*
- * Copyright 2018, Blender Foundation.
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -15,12 +13,11 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
- * Contributor(s): Blender Institute
- *
+ * Copyright 2018, Blender Foundation.
  */
 
-/** \file blender/draw/intern/draw_debug.c
- *  \ingroup draw
+/** \file
+ * \ingroup draw
  *
  * \brief Simple API to draw debug shapes in the viewport.
  */
@@ -111,14 +108,17 @@ void DRW_debug_m4_as_bbox(const float m[4][4], const float color[4], const bool 
 {
 	BoundBox bb;
 	const float min[3] = {-1.0f, -1.0f, -1.0f}, max[3] = {1.0f, 1.0f, 1.0f};
-	float minv[4][4];
+	float project_matrix[4][4];
 	if (invert) {
-		invert_m4_m4(minv, m);
+		invert_m4_m4(project_matrix, m);
+	}
+	else {
+		copy_m4_m4(project_matrix, m);
 	}
 
 	BKE_boundbox_init_from_minmax(&bb, min, max);
 	for (int i = 0; i < 8; ++i) {
-		mul_project_m4_v3((invert) ? minv : m, bb.vec[i]);
+		mul_project_m4_v3(project_matrix, bb.vec[i]);
 	}
 	DRW_debug_bbox(&bb, color);
 }
@@ -158,10 +158,10 @@ static void drw_debug_draw_lines(void)
 	while (DST.debug.lines) {
 		void *next = DST.debug.lines->next;
 
-		immAttrib4fv(col, DST.debug.lines->color);
+		immAttr4fv(col, DST.debug.lines->color);
 		immVertex3fv(pos, DST.debug.lines->pos[0]);
 
-		immAttrib4fv(col, DST.debug.lines->color);
+		immAttr4fv(col, DST.debug.lines->color);
 		immVertex3fv(pos, DST.debug.lines->pos[1]);
 
 		MEM_freeN(DST.debug.lines);

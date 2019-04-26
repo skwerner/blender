@@ -42,17 +42,22 @@ set(INC_SYS
 set(SRC
 	intern/FX_shader_util.h
 
-	intern/FX_shader_util.c
 	intern/FX_shader_blur.c
 	intern/FX_shader_colorize.c
 	intern/FX_shader_flip.c
+	intern/FX_shader_glow.c
 	intern/FX_shader_light.c
 	intern/FX_shader_pixel.c
 	intern/FX_shader_rim.c
+	intern/FX_shader_shadow.c
 	intern/FX_shader_swirl.c
+	intern/FX_shader_util.c
 	intern/FX_shader_wave.c
 
 	FX_shader_types.h
+)
+
+set(LIB
 )
 
 if(WITH_INTERNATIONAL)
@@ -61,4 +66,4 @@ endif()
 
 add_definitions(${GL_DEFINITIONS})
 
-blender_add_lib(bf_shader_fx "${SRC}" "${INC}" "${INC_SYS}")
+blender_add_lib(bf_shader_fx "${SRC}" "${INC}" "${INC_SYS}" "${LIB}")

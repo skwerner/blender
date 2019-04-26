@@ -13,9 +13,6 @@
 # You should have received a copy of the GNU General Public License
 # along with this program; if not, write to the Free Software Foundation,
 # Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
-#
-# Contributor(s): Jacques Beaurain.
-#
 # ***** END GPL LICENSE BLOCK *****
 
 set(INC
@@ -42,7 +39,9 @@ set(INC_SYS
 set(SRC
 	ed_transverts.c
 	ed_util.c
+	gizmo_utils.c
 	numinput.c
+	select_utils.c
 
 	# general includes
 	../include/BIF_gl.h
@@ -54,6 +53,8 @@ set(SRC
 	../include/ED_curve.h
 	../include/ED_datafiles.h
 	../include/ED_fileselect.h
+	../include/ED_gizmo_library.h
+	../include/ED_gizmo_utils.h
 	../include/ED_gpencil.h
 	../include/ED_image.h
 	../include/ED_info.h
@@ -63,7 +64,6 @@ set(SRC
 	../include/ED_lattice.h
 	../include/ED_logic.h
 	../include/ED_markers.h
-	../include/ED_gizmo_library.h
 	../include/ED_mask.h
 	../include/ED_mball.h
 	../include/ED_mesh.h
@@ -79,6 +79,7 @@ set(SRC
 	../include/ED_screen.h
 	../include/ED_screen_types.h
 	../include/ED_sculpt.h
+	../include/ED_select_utils.h
 	../include/ED_sequencer.h
 	../include/ED_sound.h
 	../include/ED_space_api.h
@@ -98,6 +99,9 @@ set(SRC
 	../include/UI_view2d.h
 )
 
+set(LIB
+)
+
 add_definitions(${GL_DEFINITIONS})
 
 if(WITH_INTERNATIONAL)
@@ -111,4 +115,4 @@ if(WITH_PYTHON)
 	)
 endif()
 
-blender_add_lib(bf_editor_util "${SRC}" "${INC}" "${INC_SYS}")
+blender_add_lib(bf_editor_util "${SRC}" "${INC}" "${INC_SYS}" "${LIB}")

@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,12 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file button2d_gizmo.c
- *  \ingroup wm
+/** \file
+ * \ingroup edgizmolib
  *
  * \name Button Gizmo
  *
@@ -28,7 +24,6 @@
  * \brief Single click button action for use in gizmo groups.
  *
  * \note Currently only basic icon & vector-shape buttons are supported.
- *
  */
 
 #include "MEM_guardedalloc.h"
@@ -37,8 +32,6 @@
 
 #include "BKE_context.h"
 
-#include "BIF_gl.h"
-#include "BIF_glutil.h"
 
 #include "GPU_immediate.h"
 #include "GPU_immediate_util.h"
@@ -133,8 +126,9 @@ static void button2d_draw_intern(
 
 	bool is_3d = (gz->parent_gzgroup->type->flag & WM_GIZMOGROUPTYPE_3D) != 0;
 
-
-	if (draw_options & ED_GIZMO_BUTTON_SHOW_HELPLINE) {
+	if ((select == false) &&
+	    (draw_options & ED_GIZMO_BUTTON_SHOW_HELPLINE))
+	{
 		float matrix_final_no_offset[4][4];
 		WM_gizmo_calc_matrix_final_no_offset(gz, matrix_final_no_offset);
 		uint pos = GPU_vertformat_attr_add(immVertexFormat(), "pos", GPU_COMP_F32, 3, GPU_FETCH_FLOAT);
@@ -191,22 +185,29 @@ static void button2d_draw_intern(
 			GPU_polygon_smooth(true);
 		}
 		else if (button->icon != ICON_NONE) {
-			button2d_geom_draw_backdrop(gz, color, select);
-			float size[2];
+			if (draw_options & ED_GIZMO_BUTTON_SHOW_BACKDROP) {
+				button2d_geom_draw_backdrop(gz, color, select);
+			}
+
+			float pos[2];
 			if (is_3d) {
 				const float fac = 2.0f;
 				GPU_matrix_translate_2f(-(fac / 2), -(fac / 2));
-				GPU_matrix_scale_2f(fac / (ICON_DEFAULT_WIDTH *  UI_DPI_FAC), fac / (ICON_DEFAULT_HEIGHT * UI_DPI_FAC));
-				size[0] = 1.0f;
-				size[1] = 1.0f;
+				GPU_matrix_scale_2f(fac / (ICON_DEFAULT_WIDTH * UI_DPI_FAC), fac / (ICON_DEFAULT_HEIGHT * UI_DPI_FAC));
+				pos[0] = 1.0f;
+				pos[1] = 1.0f;
 			}
 			else {
-				size[0] = gz->matrix_basis[3][0] - (ICON_DEFAULT_WIDTH / 2.0) * UI_DPI_FAC;
-				size[1] = gz->matrix_basis[3][1] - (ICON_DEFAULT_HEIGHT / 2.0) * UI_DPI_FAC;
+				pos[0] = gz->matrix_basis[3][0] - (ICON_DEFAULT_WIDTH / 2.0) * UI_DPI_FAC;
+				pos[1] = gz->matrix_basis[3][1] - (ICON_DEFAULT_HEIGHT / 2.0) * UI_DPI_FAC;
 				GPU_matrix_pop();
 				need_to_pop = false;
 			}
-			UI_icon_draw(size[0], size[1], button->icon);
+
+			float alpha = (highlight) ? 1.0f : 0.8f;
+			GPU_polygon_smooth(false);
+			UI_icon_draw_alpha(pos[0], pos[1], button->icon, alpha);
+			GPU_polygon_smooth(true);
 		}
 		GPU_blend(false);
 	}
@@ -232,20 +233,20 @@ static void gizmo_button2d_draw(const bContext *C, wmGizmo *gz)
 }
 
 static int gizmo_button2d_test_select(
-        bContext *C, wmGizmo *gz, const wmEvent *event)
+        bContext *C, wmGizmo *gz, const int mval[2])
 {
 	float point_local[2];
 
 	if (0) {
 		/* correct, but unnecessarily slow. */
 		if (gizmo_window_project_2d(
-		        C, gz, (const float[2]){UNPACK2(event->mval)}, 2, true, point_local) == false)
+		        C, gz, (const float[2]){UNPACK2(mval)}, 2, true, point_local) == false)
 		{
 			return -1;
 		}
 	}
 	else {
-		copy_v2_v2(point_local, (float[2]){UNPACK2(event->mval)});
+		copy_v2_v2(point_local, (float[2]){UNPACK2(mval)});
 		sub_v2_v2(point_local, gz->matrix_basis[3]);
 		mul_v2_fl(point_local, 1.0f / (gz->scale_basis * UI_DPI_FAC));
 	}
@@ -298,8 +299,9 @@ static void GIZMO_GT_button_2d(wmGizmoType *gzt)
 	/* rna */
 	static EnumPropertyItem rna_enum_draw_options[] = {
 		{ED_GIZMO_BUTTON_SHOW_OUTLINE, "OUTLINE", 0, "Outline", ""},
+		{ED_GIZMO_BUTTON_SHOW_BACKDROP, "BACKDROP", 0, "Backdrop", ""},
 		{ED_GIZMO_BUTTON_SHOW_HELPLINE, "HELPLINE", 0, "Help Line", ""},
-		{0, NULL, 0, NULL, NULL}
+		{0, NULL, 0, NULL, NULL},
 	};
 	PropertyRNA *prop;
 

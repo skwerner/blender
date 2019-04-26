@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,10 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/mesh/mesh_intern.h
- *  \ingroup edmesh
+/** \file
+ * \ingroup edmesh
  */
 
 /* Internal for editmesh_xxxx.c functions */
@@ -35,15 +27,15 @@
 #define __MESH_INTERN_H__
 
 struct BMEditMesh;
-struct BMOperator;
 struct BMElem;
+struct BMOperator;
 struct EnumPropertyItem;
+struct LinkNode;
 struct bContext;
 struct wmKeyConfig;
 struct wmKeyMap;
 struct wmOperator;
 struct wmOperatorType;
-struct LinkNode;
 
 /* *** editmesh_utils.c *** */
 
@@ -97,6 +89,7 @@ void MESH_OT_primitive_cube_add_gizmo(struct wmOperatorType *ot);
 
 /* *** editmesh_bevel.c *** */
 void MESH_OT_bevel(struct wmOperatorType *ot);
+struct wmKeyMap *bevel_modal_keymap(struct wmKeyConfig *keyconf);
 
 /* *** editmesh_bisect.c *** */
 void MESH_OT_bisect(struct wmOperatorType *ot);
@@ -115,12 +108,14 @@ void MESH_OT_screw(struct wmOperatorType *ot);
 
 /* *** editmesh_extrude_spin.c *** */
 void MESH_OT_spin(struct wmOperatorType *ot);
+/* *** editmesh_extrude_spin_gizmo.c *** */
+void MESH_GGT_spin(struct wmGizmoGroupType *gzgt);
+void MESH_GGT_spin_redo(struct wmGizmoGroupType *gzgt);
 
 /* *** editmesh_polybuild.c *** */
 void MESH_OT_polybuild_face_at_cursor(struct wmOperatorType *ot);
 void MESH_OT_polybuild_split_at_cursor(struct wmOperatorType *ot);
 void MESH_OT_polybuild_dissolve_at_cursor(struct wmOperatorType *ot);
-void MESH_OT_polybuild_hover(struct wmOperatorType *ot);
 
 /* *** editmesh_inset.c *** */
 void MESH_OT_inset(struct wmOperatorType *ot);
@@ -240,6 +235,16 @@ void MESH_OT_duplicate(struct wmOperatorType *ot);
 void MESH_OT_merge(struct wmOperatorType *ot);
 void MESH_OT_remove_doubles(struct wmOperatorType *ot);
 void MESH_OT_poke(struct wmOperatorType *ot);
+void MESH_OT_point_normals(struct wmOperatorType *ot);
+void MESH_OT_merge_normals(struct wmOperatorType *ot);
+void MESH_OT_split_normals(struct wmOperatorType *ot);
+void MESH_OT_normals_tools(struct wmOperatorType *ot);
+void MESH_OT_set_normals_from_faces(struct wmOperatorType *ot);
+void MESH_OT_average_normals(struct wmOperatorType *ot);
+void MESH_OT_smoothen_normals(struct wmOperatorType *ot);
+void MESH_OT_mod_weighted_strength(struct wmOperatorType *ot);
+
+struct wmKeyMap *point_normals_modal_keymap(wmKeyConfig *keyconf);
 
 #ifdef WITH_FREESTYLE
 void MESH_OT_mark_freestyle_edge(struct wmOperatorType *ot);
@@ -257,7 +262,6 @@ void MESH_OT_customdata_skin_add(struct wmOperatorType *ot);
 void MESH_OT_customdata_skin_clear(struct wmOperatorType *ot);
 void MESH_OT_customdata_custom_splitnormals_add(struct wmOperatorType *ot);
 void MESH_OT_customdata_custom_splitnormals_clear(struct wmOperatorType *ot);
-void MESH_OT_drop_named_image(struct wmOperatorType *ot);
 
 
 #endif  /* __MESH_INTERN_H__ */

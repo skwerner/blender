@@ -1,23 +1,24 @@
 
 uniform mat4 ProjectionMatrix;
 uniform mat4 ViewProjectionMatrix;
+uniform mat4 ModelMatrix;
 uniform mat4 ViewMatrix;
 uniform vec2 viewportSize;
 
-/* ---- Instanciated Attribs ---- */
+/* ---- Instantiated Attrs ---- */
 in vec2 pos; /* bone aligned screen space */
 in uint flag;
 
-#define COL_WIRE (1u << 0u)
-#define COL_HEAD (1u << 1u)
-#define COL_TAIL (1u << 2u)
-#define COL_BONE (1u << 3u)
+#define COL_WIRE 1u /* (1 << 0) */
+#define COL_HEAD 2u /* (1 << 1) */
+#define COL_TAIL 4u /* (1 << 2) */
+#define COL_BONE 8u /* (1 << 3) */
 
-#define POS_HEAD (1u << 4u)
-#define POS_TAIL (1u << 5u) /* UNUSED */
-#define POS_BONE (1u << 6u)
+#define POS_HEAD 16u /* (1 << 4) */
+#define POS_TAIL 32u /* (1 << 5) */ /* UNUSED */
+#define POS_BONE 64u /* (1 << 6) */
 
-/* ---- Per instance Attribs ---- */
+/* ---- Per instance Attrs ---- */
 in vec3 boneStart;
 in vec3 boneEnd;
 in vec4 wireColor; /* alpha encode if we do wire. If 0.0 we dont. */
@@ -26,14 +27,14 @@ in vec4 headColor; /* alpha encode if we do head. If 0.0 we dont. */
 in vec4 tailColor; /* alpha encode if we do tail. If 0.0 we dont. */
 
 #define do_wire (wireColor.a > 0.0)
-#define is_head ((flag & POS_HEAD) != 0u)
-#define is_bone ((flag & POS_BONE) != 0u)
+#define is_head bool(flag & POS_HEAD)
+#define is_bone bool(flag & POS_BONE)
 
 noperspective out float colorFac;
 flat out vec4 finalWireColor;
 flat out vec4 finalInnerColor;
 
-uniform float stickSize = 5.0; /* might be dependant on DPI setting in the future. */
+uniform float stickSize = 5.0; /* might be dependent on DPI setting in the future. */
 
 /* project to screen space */
 vec2 proj(vec4 pos)
@@ -49,12 +50,14 @@ void main()
 	/* Make the color */
 	colorFac = ((flag & COL_WIRE) == 0u) ? ((flag & COL_BONE) != 0u) ? 1.0 : 2.0 : 0.0;
 
-	vec4 v0 = ViewMatrix * vec4(boneStart, 1.0);
-	vec4 v1 = ViewMatrix * vec4(boneEnd, 1.0);
+	vec4 boneStart_4d = vec4(boneStart, 1.0);
+	vec4 boneEnd_4d = vec4(boneEnd, 1.0);
+	vec4 v0 = ViewMatrix * boneStart_4d;
+	vec4 v1 = ViewMatrix * boneEnd_4d;
 
 	/* Clip the bone to the camera origin plane (not the clip plane)
 	 * to avoid glitches if one end is behind the camera origin (in persp). */
-	const float clip_dist = -1e-7; /* hardcoded, -1e-8 is giving gliches. */
+	float clip_dist = (ProjectionMatrix[3][3] == 0.0) ? -1e-7 : 1e20; /* hardcoded, -1e-8 is giving gliches. */
 	vec3 bvec = v1.xyz - v0.xyz;
 	vec3 clip_pt = v0.xyz + bvec * ((v0.z - clip_dist) / -bvec.z);
 	if (v0.z > clip_dist) {
@@ -81,6 +84,10 @@ void main()
 		gl_Position = (is_head) ? p0 : p1;
 		gl_Position.xy += stickSize * (vpos / viewportSize);
 		gl_Position.z += (is_bone) ? 0.0 : 1e-6; /* Avoid Z fighting of head/tails. */
+
+#ifdef USE_WORLD_CLIP_PLANES
+		world_clip_planes_calc_clip_distance((ModelMatrix * (is_head ? boneStart_4d : boneEnd_4d)).xyz);
+#endif
 	}
 	else {
 		gl_Position = vec4(0.0);

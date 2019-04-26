@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,12 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/gpu/intern/gpu_immediate_util.c
- *  \ingroup gpu
+/** \file
+ * \ingroup gpu
  *
  * GPU immediate mode drawing utilities
  */
@@ -30,7 +26,6 @@
 #include "BLI_utildefines.h"
 #include "BLI_math.h"
 
-#include "GPU_basic_shader.h"
 #include "GPU_immediate.h"
 #include "GPU_immediate_util.h"
 #include "GPU_matrix.h"
@@ -88,37 +83,48 @@ void immRecti(uint pos, int x1, int y1, int x2, int y2)
 	immEnd();
 }
 
-void immRectf_fast_with_color(uint pos, uint col, float x1, float y1, float x2, float y2, const float color[4])
+void immRectf_fast(uint pos, float x1, float y1, float x2, float y2)
 {
-	immAttrib4fv(col, color);
 	immVertex2f(pos, x1, y1);
-	immAttrib4fv(col, color);
 	immVertex2f(pos, x2, y1);
-	immAttrib4fv(col, color);
 	immVertex2f(pos, x2, y2);
 
-	immAttrib4fv(col, color);
 	immVertex2f(pos, x1, y1);
-	immAttrib4fv(col, color);
 	immVertex2f(pos, x2, y2);
-	immAttrib4fv(col, color);
+	immVertex2f(pos, x1, y2);
+}
+
+void immRectf_fast_with_color(uint pos, uint col, float x1, float y1, float x2, float y2, const float color[4])
+{
+	immAttr4fv(col, color);
+	immVertex2f(pos, x1, y1);
+	immAttr4fv(col, color);
+	immVertex2f(pos, x2, y1);
+	immAttr4fv(col, color);
+	immVertex2f(pos, x2, y2);
+
+	immAttr4fv(col, color);
+	immVertex2f(pos, x1, y1);
+	immAttr4fv(col, color);
+	immVertex2f(pos, x2, y2);
+	immAttr4fv(col, color);
 	immVertex2f(pos, x1, y2);
 }
 
 void immRecti_fast_with_color(uint pos, uint col, int x1, int y1, int x2, int y2, const float color[4])
 {
-	immAttrib4fv(col, color);
+	immAttr4fv(col, color);
 	immVertex2i(pos, x1, y1);
-	immAttrib4fv(col, color);
+	immAttr4fv(col, color);
 	immVertex2i(pos, x2, y1);
-	immAttrib4fv(col, color);
+	immAttr4fv(col, color);
 	immVertex2i(pos, x2, y2);
 
-	immAttrib4fv(col, color);
+	immAttr4fv(col, color);
 	immVertex2i(pos, x1, y1);
-	immAttrib4fv(col, color);
+	immAttr4fv(col, color);
 	immVertex2i(pos, x2, y2);
-	immAttrib4fv(col, color);
+	immAttr4fv(col, color);
 	immVertex2i(pos, x1, y2);
 }
 
@@ -126,7 +132,7 @@ void immRecti_fast_with_color(uint pos, uint col, int x1, int y1, int x2, int y2
 void immRecti_complete(int x1, int y1, int x2, int y2, const float color[4])
 {
 	GPUVertFormat *format = immVertexFormat();
-	uint pos = add_attrib(format, "pos", GPU_COMP_I32, 2, GPU_FETCH_INT_TO_FLOAT);
+	uint pos = add_attr(format, "pos", GPU_COMP_I32, 2, GPU_FETCH_INT_TO_FLOAT);
 	immBindBuiltinProgram(GPU_SHADER_2D_UNIFORM_COLOR);
 	immUniformColor4fv(color);
 	immRecti(pos, x1, y1, x2, y2);
@@ -138,14 +144,14 @@ void immRecti_complete(int x1, int y1, int x2, int y2, const float color[4])
  * Pack color into 3 bytes
  *
  * This define converts a numerical value to the equivalent 24-bit
- * color, while not being endian-sensitive. On little-endians, this
+ * color, while not being endian-sensitive. On little-endian, this
  * is the same as doing a 'naive' indexing, on big-endian, it is not!
  *
  * \note BGR format (i.e. 0xBBGGRR)...
  *
- * \param x color.
+ * \param x: color.
  */
-void imm_cpack(unsigned int x)
+void imm_cpack(uint x)
 {
 	immUniformColor3ub(((x) & 0xFF),
 	                   (((x) >> 8) & 0xFF),
@@ -167,11 +173,11 @@ static void imm_draw_circle(
  * Draw a circle outline with the given \a radius.
  * The circle is centered at \a x, \a y and drawn in the XY plane.
  *
- * \param shdr_pos The vertex attribute number for position.
- * \param x Horizontal center.
- * \param y Vertical center.
- * \param radius The circle's radius.
- * \param nsegments The number of segments to use in drawing (more = smoother).
+ * \param shdr_pos: The vertex attribute number for position.
+ * \param x: Horizontal center.
+ * \param y: Vertical center.
+ * \param rad: The circle's radius.
+ * \param nsegments: The number of segments to use in drawing (more = smoother).
  */
 void imm_draw_circle_wire_2d(uint shdr_pos, float x, float y, float rad, int nsegments)
 {
@@ -182,11 +188,11 @@ void imm_draw_circle_wire_2d(uint shdr_pos, float x, float y, float rad, int nse
  * Draw a filled circle with the given \a radius.
  * The circle is centered at \a x, \a y and drawn in the XY plane.
  *
- * \param shdr_pos The vertex attribute number for position.
- * \param x Horizontal center.
- * \param y Vertical center.
- * \param radius The circle's radius.
- * \param nsegments The number of segments to use in drawing (more = smoother).
+ * \param shdr_pos: The vertex attribute number for position.
+ * \param x: Horizontal center.
+ * \param y: Vertical center.
+ * \param rad: The circle's radius.
+ * \param nsegments: The number of segments to use in drawing (more = smoother).
  */
 void imm_draw_circle_fill_2d(uint shdr_pos, float x, float y, float rad, int nsegments)
 {
@@ -202,13 +208,39 @@ void imm_draw_circle_fill_aspect_2d(uint shdr_pos, float x, float y, float rad_x
 	imm_draw_circle(GPU_PRIM_TRI_FAN, shdr_pos, x, y, rad_x, rad_y, nsegments);
 }
 
-/**
- * \note We could have `imm_draw_lined_disk_partial` but currently there is no need.
- */
+static void imm_draw_circle_partial(
+        GPUPrimType prim_type, uint pos, float x, float y,
+        float rad, int nsegments, float start, float sweep)
+{
+	/* shift & reverse angle, increase 'nsegments' to match gluPartialDisk */
+	const float angle_start = -(DEG2RADF(start)) + (float)(M_PI / 2);
+	const float angle_end   = -(DEG2RADF(sweep) - angle_start);
+	nsegments += 1;
+	immBegin(prim_type, nsegments);
+	for (int i = 0; i < nsegments; ++i) {
+		const float angle = interpf(angle_start, angle_end, ((float)i / (float)(nsegments - 1)));
+		const float angle_sin = sinf(angle);
+		const float angle_cos = cosf(angle);
+		immVertex2f(pos, x + rad * angle_cos, y + rad * angle_sin);
+	}
+	immEnd();
+}
+
+void imm_draw_circle_partial_wire_2d(
+        uint pos, float x, float y,
+        float rad, int nsegments, float start, float sweep)
+{
+	imm_draw_circle_partial(GPU_PRIM_LINE_STRIP, pos, x, y, rad, nsegments, start, sweep);
+}
+
 static void imm_draw_disk_partial(
-        GPUPrimType prim_type, unsigned pos, float x, float y,
+        GPUPrimType prim_type, uint pos, float x, float y,
         float rad_inner, float rad_outer, int nsegments, float start, float sweep)
 {
+	/* to avoid artifacts */
+	const float max_angle = 3 * 360;
+	CLAMP(sweep, -max_angle, max_angle);
+
 	/* shift & reverse angle, increase 'nsegments' to match gluPartialDisk */
 	const float angle_start = -(DEG2RADF(start)) + (float)(M_PI / 2);
 	const float angle_end   = -(DEG2RADF(sweep) - angle_start);
@@ -233,21 +265,21 @@ static void imm_draw_disk_partial(
  * \param pos: The vertex attribute number for position.
  * \param x: Horizontal center.
  * \param y: Vertical center.
- * \param radius_inner: The inner circle's radius.
- * \param radius_outer: The outer circle's radius (can be zero).
+ * \param rad_inner: The inner circle's radius.
+ * \param rad_outer: The outer circle's radius (can be zero).
  * \param nsegments: The number of segments to use in drawing (more = smoother).
  * \param start: Specifies the starting angle, in degrees, of the disk portion.
  * \param sweep: Specifies the sweep angle, in degrees, of the disk portion.
  */
 void imm_draw_disk_partial_fill_2d(
-        unsigned pos, float x, float y,
+        uint pos, float x, float y,
         float rad_inner, float rad_outer, int nsegments, float start, float sweep)
 {
 	imm_draw_disk_partial(GPU_PRIM_TRI_STRIP, pos, x, y, rad_inner, rad_outer, nsegments, start, sweep);
 }
 
 static void imm_draw_circle_3D(
-        GPUPrimType prim_type, unsigned pos, float x, float y,
+        GPUPrimType prim_type, uint pos, float x, float y,
         float rad, int nsegments)
 {
 	immBegin(prim_type, nsegments);
@@ -258,12 +290,12 @@ static void imm_draw_circle_3D(
 	immEnd();
 }
 
-void imm_draw_circle_wire_3d(unsigned pos, float x, float y, float rad, int nsegments)
+void imm_draw_circle_wire_3d(uint pos, float x, float y, float rad, int nsegments)
 {
 	imm_draw_circle_3D(GPU_PRIM_LINE_LOOP, pos, x, y, rad, nsegments);
 }
 
-void imm_draw_circle_fill_3d(unsigned pos, float x, float y, float rad, int nsegments)
+void imm_draw_circle_fill_3d(uint pos, float x, float y, float rad, int nsegments)
 {
 	imm_draw_circle_3D(GPU_PRIM_TRI_FAN, pos, x, y, rad, nsegments);
 }
@@ -271,13 +303,13 @@ void imm_draw_circle_fill_3d(unsigned pos, float x, float y, float rad, int nseg
 /**
  * Draw a lined box.
  *
- * \param pos The vertex attribute number for position.
- * \param x1 left.
- * \param y1 bottom.
- * \param x2 right.
- * \param y2 top.
+ * \param pos: The vertex attribute number for position.
+ * \param x1: left.
+ * \param y1: bottom.
+ * \param x2: right.
+ * \param y2: top.
  */
-void imm_draw_box_wire_2d(unsigned pos, float x1, float y1, float x2, float y2)
+void imm_draw_box_wire_2d(uint pos, float x1, float y1, float x2, float y2)
 {
 	immBegin(GPU_PRIM_LINE_LOOP, 4);
 	immVertex2f(pos, x1, y1);
@@ -287,7 +319,7 @@ void imm_draw_box_wire_2d(unsigned pos, float x1, float y1, float x2, float y2)
 	immEnd();
 }
 
-void imm_draw_box_wire_3d(unsigned pos, float x1, float y1, float x2, float y2)
+void imm_draw_box_wire_3d(uint pos, float x1, float y1, float x2, float y2)
 {
 	/* use this version when GPUVertFormat has a vec3 position */
 	immBegin(GPU_PRIM_LINE_LOOP, 4);
@@ -356,16 +388,16 @@ void imm_draw_cube_wire_3d(uint pos, const float co[3], const float aspect[3])
  * Draw a cylinder. Replacement for gluCylinder.
  * _warning_ : Slow, better use it only if you no other choices.
  *
- * \param pos The vertex attribute number for position.
- * \param nor The vertex attribute number for normal.
- * \param base Specifies the radius of the cylinder at z = 0.
- * \param top Specifies the radius of the cylinder at z = height.
- * \param height Specifies the height of the cylinder.
- * \param slices Specifies the number of subdivisions around the z axis.
- * \param stacks Specifies the number of subdivisions along the z axis.
+ * \param pos: The vertex attribute number for position.
+ * \param nor: The vertex attribute number for normal.
+ * \param base: Specifies the radius of the cylinder at z = 0.
+ * \param top: Specifies the radius of the cylinder at z = height.
+ * \param height: Specifies the height of the cylinder.
+ * \param slices: Specifies the number of subdivisions around the z axis.
+ * \param stacks: Specifies the number of subdivisions along the z axis.
  */
 void imm_draw_cylinder_fill_normal_3d(
-        unsigned int pos, unsigned int nor, float base, float top, float height, int slices, int stacks)
+        uint pos, uint nor, float base, float top, float height, int slices, int stacks)
 {
 	immBegin(GPU_PRIM_TRIS, 6 * slices * stacks);
 	for (int i = 0; i < slices; ++i) {
@@ -400,23 +432,23 @@ void imm_draw_cylinder_fill_normal_3d(
 			n2[0] = cos2; n2[1] = sin2; n2[2] = 1 - n2[2];
 
 			/* first tri */
-			immAttrib3fv(nor, n2);
+			immAttr3fv(nor, n2);
 			immVertex3fv(pos, v1);
 			immVertex3fv(pos, v2);
-			immAttrib3fv(nor, n1);
+			immAttr3fv(nor, n1);
 			immVertex3fv(pos, v3);
 
 			/* second tri */
 			immVertex3fv(pos, v3);
 			immVertex3fv(pos, v4);
-			immAttrib3fv(nor, n2);
+			immAttr3fv(nor, n2);
 			immVertex3fv(pos, v1);
 		}
 	}
 	immEnd();
 }
 
-void imm_draw_cylinder_wire_3d(unsigned int pos, float base, float top, float height, int slices, int stacks)
+void imm_draw_cylinder_wire_3d(uint pos, float base, float top, float height, int slices, int stacks)
 {
 	immBegin(GPU_PRIM_LINES, 6 * slices * stacks);
 	for (int i = 0; i < slices; ++i) {
@@ -453,7 +485,7 @@ void imm_draw_cylinder_wire_3d(unsigned int pos, float base, float top, float he
 	immEnd();
 }
 
-void imm_draw_cylinder_fill_3d(unsigned int pos, float base, float top, float height, int slices, int stacks)
+void imm_draw_cylinder_fill_3d(uint pos, float base, float top, float height, int slices, int stacks)
 {
 	immBegin(GPU_PRIM_TRIS, 6 * slices * stacks);
 	for (int i = 0; i < slices; ++i) {

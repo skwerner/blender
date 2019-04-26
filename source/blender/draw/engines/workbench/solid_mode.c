@@ -1,6 +1,4 @@
 /*
- * Copyright 2016, Blender Foundation.
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -15,12 +13,11 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
- * Contributor(s): Blender Institute
- *
+ * Copyright 2016, Blender Foundation.
  */
 
-/** \file solid_mode.c
- *  \ingroup draw_engine
+/** \file
+ * \ingroup draw_engine
  *
  * Simple engine for drawing color and/or depth.
  * When we only need simple studio shaders.
@@ -65,11 +62,6 @@ static void workbench_solid_draw_background(void *vedata)
 {
 	WORKBENCH_Data *data = vedata;
 	workbench_deferred_draw_background(data);
-}
-
-static void workbench_solid_draw_scene(void *vedata)
-{
-	WORKBENCH_Data *data = vedata;
 	workbench_deferred_draw_scene(data);
 	workbench_deferred_draw_finish(data);
 }
@@ -83,6 +75,17 @@ static void workbench_solid_view_update(void *vedata)
 {
 	WORKBENCH_Data *data = vedata;
 	workbench_taa_view_updated(data);
+}
+
+static void workbench_solid_id_update(void *UNUSED(vedata), struct ID *id)
+{
+	if (GS(id->name) == ID_OB) {
+		WORKBENCH_ObjectData *oed = (WORKBENCH_ObjectData *)DRW_drawdata_get(id, &draw_engine_workbench_solid);
+		if (oed != NULL && oed->dd.recalc != 0) {
+			oed->shadow_bbox_dirty = (oed->dd.recalc & ID_RECALC_ALL) != 0;
+			oed->dd.recalc = 0;
+		}
+	}
 }
 
 static void workbench_render_to_image(void *vedata, RenderEngine *engine, RenderLayer *render_layer, const rcti *rect)
@@ -102,8 +105,8 @@ DrawEngineType draw_engine_workbench_solid = {
 	&workbench_solid_cache_populate,
 	&workbench_solid_cache_finish,
 	&workbench_solid_draw_background,
-	&workbench_solid_draw_scene,
-	&workbench_solid_view_update,
 	NULL,
+	&workbench_solid_view_update,
+	&workbench_solid_id_update,
 	&workbench_render_to_image,
 };

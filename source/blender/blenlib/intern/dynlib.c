@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,10 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * The Original Code is: all of this file, with exception of below:
- *
- * Contributor(s): Peter O'Gorman
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/blenlib/intern/dynlib.c
- *  \ingroup bli
+/** \file
+ * \ingroup bli
  */
 
 #include <stdio.h>
@@ -59,8 +51,9 @@ DynamicLibrary *BLI_dynlib_open(const char *name)
 	handle = LoadLibraryW(name_16);
 	UTF16_UN_ENCODE(name);
 
-	if (!handle)
+	if (!handle) {
 		return NULL;
+	}
 
 	lib = MEM_callocN(sizeof(*lib), "Dynamic Library");
 	lib->handle = handle;
@@ -79,8 +72,9 @@ char *BLI_dynlib_get_error_as_string(DynamicLibrary *lib)
 
 	/* if lib is NULL reset the last error code */
 	err = GetLastError();
-	if (!lib)
+	if (!lib) {
 		SetLastError(ERROR_SUCCESS);
+	}
 
 	if (err) {
 		static char buf[1024];
@@ -111,8 +105,9 @@ DynamicLibrary *BLI_dynlib_open(const char *name)
 	DynamicLibrary *lib;
 	void *handle = dlopen(name, RTLD_LAZY);
 
-	if (!handle)
+	if (!handle) {
 		return NULL;
+	}
 
 	lib = MEM_callocN(sizeof(*lib), "Dynamic Library");
 	lib->handle = handle;

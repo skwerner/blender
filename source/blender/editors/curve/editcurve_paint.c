@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,12 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/curve/editcurve_paint.c
- *  \ingroup edcurve
+/** \file
+ * \ingroup edcurve
  */
 
 #include "DNA_object_types.h"
@@ -34,8 +30,8 @@
 #include "BKE_context.h"
 #include "BKE_curve.h"
 #include "BKE_fcurve.h"
-#include "BKE_main.h"
 #include "BKE_report.h"
+#include "BKE_layer.h"
 
 #include "DEG_depsgraph.h"
 
@@ -47,7 +43,6 @@
 #include "ED_view3d.h"
 #include "ED_curve.h"
 
-#include "BIF_gl.h"
 
 #include "GPU_batch.h"
 #include "GPU_batch_presets.h"
@@ -79,7 +74,6 @@
 #define STROKE_CYCLIC_DIST_PX     8
 
 /* -------------------------------------------------------------------- */
-
 /** \name StrokeElem / #RNA_OperatorStrokeElement Conversion Functions
  * \{ */
 
@@ -107,7 +101,7 @@ struct CurveDrawData {
 		bool use_plane;
 		float    plane[4];
 
-		/* use 'rv3d->depths', note that this will become 'damaged' while drawing, but thats OK. */
+		/* use 'rv3d->depths', note that this will become 'damaged' while drawing, but that's OK. */
 		bool use_depth;
 
 		/* offset projection by this value */
@@ -194,7 +188,6 @@ static bool stroke_elem_project(
         float surface_offset, const float radius,
         float r_location_world[3], float r_normal_world[3])
 {
-	View3D *v3d = cdd->vc.v3d;
 	ARegion *ar = cdd->vc.ar;
 	RegionView3D *rv3d = cdd->vc.rv3d;
 
@@ -203,12 +196,7 @@ static bool stroke_elem_project(
 	/* project to 'location_world' */
 	if (cdd->project.use_plane) {
 		/* get the view vector to 'location' */
-		float ray_origin[3], ray_direction[3];
-		ED_view3d_win_to_ray(cdd->depsgraph, cdd->vc.ar, v3d, mval_fl, ray_origin, ray_direction, false);
-
-		float lambda;
-		if (isect_ray_plane_v3(ray_origin, ray_direction, cdd->project.plane, &lambda, true)) {
-			madd_v3_v3v3fl(r_location_world, ray_origin, ray_direction, lambda);
+		if (ED_view3d_win_to_3d_on_plane(ar, cdd->project.plane, mval_fl, true, r_location_world)) {
 			if (r_normal_world) {
 				zero_v3(r_normal_world);
 			}
@@ -305,7 +293,6 @@ static bool stroke_elem_project_fallback_elem(
 
 
 /* -------------------------------------------------------------------- */
-
 /** \name Operator/Stroke Conversion
  * \{ */
 
@@ -359,7 +346,6 @@ static void curve_draw_stroke_from_operator(wmOperator *op)
 
 
 /* -------------------------------------------------------------------- */
-
 /** \name Operator Callbacks & Helpers
  * \{ */
 
@@ -797,7 +783,8 @@ static int curve_draw_exec(bContext *C, wmOperator *op)
 		stroke_len = BLI_mempool_len(cdd->stroke_elem_pool);
 	}
 
-	ED_curve_deselect_all(cu->editnurb);
+	/* Deselect all existing curves. */
+	ED_curve_deselect_all_multi(C);
 
 	const float radius_min = cps->radius_min;
 	const float radius_max = cps->radius_max;
@@ -1119,7 +1106,7 @@ static int curve_draw_invoke(bContext *C, wmOperator *op, const wmEvent *event)
 
 			/* use view plane (when set or as fallback when surface can't be found) */
 			if (cdd->project.use_depth == false) {
-				plane_co = ED_view3d_cursor3d_get(cdd->vc.scene, v3d)->location;
+				plane_co = cdd->vc.scene->cursor.location;
 				plane_no = rv3d->viewinv[2];
 				cdd->project.use_plane = true;
 			}

@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,14 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/transform/transform_input.c
- *  \ingroup edtransform
+/** \file
+ * \ingroup edtransform
  */
 
 
@@ -137,6 +131,18 @@ void setCustomPoints(TransInfo *UNUSED(t), MouseInput *mi, const int mval_start[
 	data[3] = mval_end[1];
 }
 
+void setCustomPointsFromDirection(TransInfo *t, MouseInput *mi, const float dir[2])
+{
+	BLI_ASSERT_UNIT_V2(dir);
+	const int win_axis = t->ar ? ((abs((int)(t->ar->winx * dir[0])) + abs((int)(t->ar->winy * dir[1]))) / 2) : 1;
+	const int mval_start[2] = {
+		mi->imval[0] + dir[0] * win_axis,
+		mi->imval[1] + dir[1] * win_axis,
+	};
+	const int mval_end[2] = {mi->imval[0], mi->imval[1]};
+	setCustomPoints(t, mi, mval_start, mval_end);
+}
+
 static void InputCustomRatioFlip(TransInfo *UNUSED(t), MouseInput *mi, const double mval[2], float output[3])
 {
 	double length;
@@ -185,7 +191,8 @@ static void InputAngle(TransInfo *UNUSED(t), MouseInput *mi, const double mval[2
 	double dx3 = mval[0] - data->mval_prev[0];
 	double dy3 = mval[1] - data->mval_prev[1];
 
-	/* use doubles here, to make sure a "1.0" (no rotation) doesn't become 9.999999e-01, which gives 0.02 for acos */
+	/* use doubles here, to make sure a "1.0" (no rotation)
+	 * doesn't become 9.999999e-01, which gives 0.02 for acos */
 	double deler = (((dx1 * dx1 + dy1 * dy1) +
 	                 (dx2 * dx2 + dy2 * dy2) -
 	                 (dx3 * dx3 + dy3 * dy3)) / (2.0 * (((A * B) != 0.0) ? (A * B) : 1.0)));
@@ -332,11 +339,11 @@ void initMouseInputMode(TransInfo *t, MouseInput *mi, MouseInputMode mode)
 			break;
 		case INPUT_CUSTOM_RATIO:
 			mi->apply = InputCustomRatio;
-			t->helpline = HLP_NONE;
+			t->helpline = HLP_CARROW;
 			break;
 		case INPUT_CUSTOM_RATIO_FLIP:
 			mi->apply = InputCustomRatioFlip;
-			t->helpline = HLP_NONE;
+			t->helpline = HLP_CARROW;
 			break;
 		case INPUT_NONE:
 		default:
@@ -360,6 +367,7 @@ void initMouseInputMode(TransInfo *t, MouseInput *mi, MouseInputMode mode)
 		case HLP_TRACKBALL:
 		case HLP_HARROW:
 		case HLP_VARROW:
+		case HLP_CARROW:
 			if (t->flag & T_MODAL) {
 				t->flag |= T_MODAL_CURSOR_SET;
 				WM_cursor_modal_set(win, CURSOR_NONE);
@@ -373,12 +381,6 @@ void initMouseInputMode(TransInfo *t, MouseInput *mi, MouseInputMode mode)
 	 * less hassle then checking before every alloc above */
 	if (mi_data_prev && (mi_data_prev != mi->data)) {
 		MEM_freeN(mi_data_prev);
-	}
-
-	/* Don't write into the values when non-modal because they are already set from operator redo values. */
-	if (t->flag & T_MODAL) {
-		/* bootstrap mouse input with initial values */
-		applyMouseInput(t, mi, mi->imval, t->values);
 	}
 }
 

@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,15 +15,10 @@
  *
  * The Original Code is Copyright (C) 2009 Blender Foundation.
  * All rights reserved.
- *
- *
- * Contributor(s): Blender Foundation
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/blenfont/BLF_api.h
- *  \ingroup blf
+/** \file
+ * \ingroup blf
  */
 
 
@@ -38,9 +31,9 @@
 /* enable this only if needed (unused circa 2016) */
 #define BLF_BLUR_ENABLE 0
 
-struct rctf;
 struct ColorManagedDisplay;
 struct ResultBLF;
+struct rctf;
 
 int BLF_init(void);
 void BLF_exit(void);
@@ -51,6 +44,7 @@ void BLF_batch_reset(void); /* call when changing opengl context. */
 
 void BLF_cache_clear(void);
 
+/* Loads a font, or returns an already loaded font and increments its reference count. */
 int BLF_load(const char *name) ATTR_NONNULL();
 int BLF_load_mem(const char *name, const unsigned char *mem, int mem_size) ATTR_NONNULL();
 
@@ -88,7 +82,6 @@ void BLF_color3fv_alpha(int fontid, const float rgb[3], float alpha);
  *  | m[1]  m[5]  m[9]  m[13] |
  *  | m[2]  m[6]  m[10] m[14] |
  *  | m[3]  m[7]  m[11] m[15] |
- *
  */
 void BLF_matrix(int fontid, const float m[16]);
 
@@ -101,6 +94,9 @@ void BLF_batch_draw_end(void);
 /* Draw the string using the default font, size and dpi. */
 void BLF_draw_default(float x, float y, float z, const char *str, size_t len) ATTR_NONNULL();
 void BLF_draw_default_ascii(float x, float y, float z, const char *str, size_t len) ATTR_NONNULL();
+
+/* Set size and DPI, and return default font ID. */
+int BLF_set_default(void);
 
 /* Draw the string using the current font. */
 void BLF_draw_ex(int fontid, const char *str, size_t len, struct ResultBLF *r_info) ATTR_NONNULL(2);
@@ -227,9 +223,11 @@ void BLF_state_print(int fontid);
 #define BLF_KERNING_DEFAULT  (1 << 3)
 #define BLF_MATRIX           (1 << 4)
 #define BLF_ASPECT           (1 << 5)
-#define BLF_HINTING          (1 << 6)
-#define BLF_WORD_WRAP        (1 << 7)
-#define BLF_MONOCHROME       (1 << 8)  /* no-AA */
+#define BLF_WORD_WRAP        (1 << 6)
+#define BLF_MONOCHROME       (1 << 7)  /* no-AA */
+#define BLF_HINTING_NONE     (1 << 8)
+#define BLF_HINTING_SLIGHT   (1 << 9)
+#define BLF_HINTING_FULL     (1 << 10)
 
 #define BLF_DRAW_STR_DUMMY_MAX 1024
 

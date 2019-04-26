@@ -17,8 +17,7 @@
 # ##### END GPL LICENSE BLOCK #####
 
 # <pep8 compliant>
-import bpy
-from bpy.types import Panel, UIList
+from bpy.types import Panel
 
 
 class ViewLayerButtonsPanel:
@@ -34,18 +33,25 @@ class ViewLayerButtonsPanel:
 
 class VIEWLAYER_PT_layer(ViewLayerButtonsPanel, Panel):
     bl_label = "View Layer"
-    COMPAT_ENGINES = {'BLENDER_RENDER', 'BLENDER_EEVEE', 'BLENDER_OPENGL'}
+    COMPAT_ENGINES = {'BLENDER_RENDER', 'BLENDER_EEVEE', 'BLENDER_WORKBENCH'}
 
     def draw(self, context):
         layout = self.layout
+
+        layout.use_property_split = True
+
+        flow = layout.grid_flow(row_major=True, columns=0, even_columns=True, even_rows=False, align=False)
+
         layout.use_property_split = True
 
         scene = context.scene
         rd = scene.render
-        layer = bpy.context.view_layer
+        layer = context.view_layer
 
-        layout.prop(layer, "use", text="Use for Rendering")
-        layout.prop(rd, "use_single_layer", text="Render Single Layer")
+        col = flow.column()
+        col.prop(layer, "use", text="Use for Rendering")
+        col = flow.column()
+        col.prop(rd, "use_single_layer", text="Render Single Layer")
 
 
 class VIEWLAYER_PT_eevee_layer_passes(ViewLayerButtonsPanel, Panel):
@@ -55,19 +61,26 @@ class VIEWLAYER_PT_eevee_layer_passes(ViewLayerButtonsPanel, Panel):
 
     def draw(self, context):
         layout = self.layout
+
         layout.use_property_split = True
 
-        scene = context.scene
-        rd = scene.render
+        flow = layout.grid_flow(row_major=True, columns=0, even_columns=True, even_rows=False, align=False)
+
         view_layer = context.view_layer
 
-        col = layout.column()
+        col = flow.column()
         col.prop(view_layer, "use_pass_combined")
+        col = flow.column()
         col.prop(view_layer, "use_pass_z")
+        col = flow.column()
         col.prop(view_layer, "use_pass_mist")
+        col = flow.column()
         col.prop(view_layer, "use_pass_normal")
+        col = flow.column()
         col.prop(view_layer, "use_pass_ambient_occlusion")
+        col = flow.column()
         col.prop(view_layer, "use_pass_subsurface_direct", text="Subsurface Direct")
+        col = flow.column()
         col.prop(view_layer, "use_pass_subsurface_color", text="Subsurface Color")
 
 

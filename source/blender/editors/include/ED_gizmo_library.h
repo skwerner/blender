@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,12 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file ED_gizmo_library.h
- *  \ingroup wm
+/** \file
+ * \ingroup wm
  *
  * \name Generic Gizmos.
  *
@@ -37,10 +33,19 @@ void ED_gizmotypes_button_2d(void);
 void ED_gizmotypes_cage_2d(void);
 void ED_gizmotypes_cage_3d(void);
 void ED_gizmotypes_dial_3d(void);
-void ED_gizmotypes_grab_3d(void);
+void ED_gizmotypes_move_3d(void);
 void ED_gizmotypes_facemap_3d(void);
+void ED_gizmotypes_preselect_3d(void);
 void ED_gizmotypes_primitive_3d(void);
+void ED_gizmotypes_blank_3d(void);
+void ED_gizmotypes_value_2d(void);
 
+/* gizmo group types */
+void ED_gizmogrouptypes_value_2d(void);
+
+struct Object;
+struct Scene;
+struct bContext;
 struct wmGizmo;
 struct wmGizmoGroup;
 
@@ -59,7 +64,7 @@ void ED_gizmo_draw_preset_arrow(
 void ED_gizmo_draw_preset_circle(
         const struct wmGizmo *gz, float mat[4][4], int axis, int select_id);
 void ED_gizmo_draw_preset_facemap(
-        const struct bContext *C, const struct wmGizmo *gz, struct Scene *scene,
+        const struct bContext *C, const struct wmGizmo *gz,
         struct Object *ob,  const int facemap, int select_id);
 
 
@@ -179,24 +184,28 @@ enum {
 	ED_GIZMO_DIAL_DRAW_FLAG_NOP               = 0,
 	ED_GIZMO_DIAL_DRAW_FLAG_CLIP              = (1 << 0),
 	ED_GIZMO_DIAL_DRAW_FLAG_FILL              = (1 << 1),
-	ED_GIZMO_DIAL_DRAW_FLAG_ANGLE_MIRROR      = (1 << 2),
-	ED_GIZMO_DIAL_DRAW_FLAG_ANGLE_START_Y     = (1 << 3),
+	ED_GIZMO_DIAL_DRAW_FLAG_FILL_SELECT       = (1 << 2),
+	ED_GIZMO_DIAL_DRAW_FLAG_ANGLE_MIRROR      = (1 << 3),
+	ED_GIZMO_DIAL_DRAW_FLAG_ANGLE_START_Y     = (1 << 4),
+	/* Always show the angle value as an arc in the dial. */
+	ED_GIZMO_DIAL_DRAW_FLAG_ANGLE_VALUE       = (1 << 5),
 };
 
 /* -------------------------------------------------------------------- */
-/* Grab Gizmo */
+/* Move Gizmo */
 
 /* draw_options */
 enum {
-	ED_GIZMO_GRAB_DRAW_FLAG_NOP               = 0,
+	ED_GIZMO_MOVE_DRAW_FLAG_NOP               = 0,
 	/* only for solid shapes */
-	ED_GIZMO_GRAB_DRAW_FLAG_FILL              = (1 << 0),
-	ED_GIZMO_GRAB_DRAW_FLAG_ALIGN_VIEW        = (1 << 1),
+	ED_GIZMO_MOVE_DRAW_FLAG_FILL              = (1 << 0),
+	ED_GIZMO_MOVE_DRAW_FLAG_FILL_SELECT       = (1 << 1),
+	ED_GIZMO_MOVE_DRAW_FLAG_ALIGN_VIEW        = (1 << 2),
 };
 
 enum {
-	ED_GIZMO_GRAB_STYLE_RING_2D = 0,
-	ED_GIZMO_GRAB_STYLE_CROSS_2D = 1,
+	ED_GIZMO_MOVE_STYLE_RING_2D = 0,
+	ED_GIZMO_MOVE_STYLE_CROSS_2D = 1,
 };
 
 /* -------------------------------------------------------------------- */
@@ -204,11 +213,12 @@ enum {
 
 enum {
 	ED_GIZMO_BUTTON_SHOW_OUTLINE = (1 << 0),
+	ED_GIZMO_BUTTON_SHOW_BACKDROP = (1 << 1),
 	/**
 	 * Draw a line from the origin to the offset (similar to an arrow)
 	 * sometimes needed to show what the button edits.
 	 */
-	ED_GIZMO_BUTTON_SHOW_HELPLINE = (1 << 1),
+	ED_GIZMO_BUTTON_SHOW_HELPLINE = (1 << 2),
 };
 
 
@@ -218,5 +228,26 @@ enum {
 enum {
 	ED_GIZMO_PRIMITIVE_STYLE_PLANE = 0,
 };
+
+
+/* -------------------------------------------------------------------- */
+/* Gizmo Drawing Functions */
+
+struct Dial3dParams {
+	int draw_options;
+	float angle_ofs;
+	float angle_delta;
+	float angle_increment;
+	float arc_partial_angle;
+	float arc_inner_factor;
+	float *clip_plane;
+};
+void ED_gizmotypes_dial_3d_draw_util(
+        const float matrix_basis[4][4],
+        const float matrix_final[4][4],
+        const float line_width,
+        const float color[4],
+        const bool select,
+        struct Dial3dParams *params);
 
 #endif  /* __ED_GIZMO_LIBRARY_H__ */

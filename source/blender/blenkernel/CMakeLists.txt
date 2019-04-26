@@ -16,11 +16,6 @@
 #
 # The Original Code is Copyright (C) 2006, Blender Foundation
 # All rights reserved.
-#
-# The Original Code is: all of this file.
-#
-# Contributor(s): Jacques Beaurain.
-#
 # ***** END GPL LICENSE BLOCK *****
 
 set(INC
@@ -49,10 +44,10 @@ set(INC
 	../../../intern/iksolver/extern
 	../../../intern/memutil
 	../../../intern/mikktspace
-	../../../intern/smoke/extern
 	../../../intern/atomic
 	../../../intern/clog
 	../../../intern/libmv
+	../../../intern/opensubdiv
 	../../../extern/curve_fit_nd
 )
 
@@ -81,7 +76,6 @@ set(SRC
 	intern/blender_undo.c
 	intern/blender_user_menu.c
 	intern/blendfile.c
-	intern/bmfont.c
 	intern/boids.c
 	intern/bpath.c
 	intern/brush.c
@@ -109,6 +103,7 @@ set(SRC
 	intern/editlattice.c
 	intern/editmesh.c
 	intern/editmesh_bvh.c
+	intern/editmesh_cache.c
 	intern/editmesh_tangent.c
 	intern/effect.c
 	intern/fcurve.c
@@ -127,14 +122,19 @@ set(SRC
 	intern/image_gen.c
 	intern/ipo.c
 	intern/key.c
-	intern/lamp.c
+	intern/keyconfig.c
 	intern/lattice.c
+	intern/layer.c
+	intern/layer_utils.c
 	intern/library.c
 	intern/library_idmap.c
 	intern/library_override.c
 	intern/library_query.c
 	intern/library_remap.c
+	intern/light.c
+	intern/lightprobe.c
 	intern/linestyle.c
+	intern/main.c
 	intern/mask.c
 	intern/mask_evaluate.c
 	intern/mask_rasterize.c
@@ -154,17 +154,20 @@ set(SRC
 	intern/modifier.c
 	intern/movieclip.c
 	intern/multires.c
+	intern/multires_reshape.c
+	intern/multires_subdiv.c
 	intern/nla.c
 	intern/node.c
 	intern/object.c
-	intern/object_facemap.c
 	intern/object_deform.c
 	intern/object_dupli.c
+	intern/object_facemap.c
 	intern/object_update.c
 	intern/ocean.c
 	intern/outliner_treehash.c
 	intern/packedFile.c
 	intern/paint.c
+	intern/paint_toolslots.c
 	intern/particle.c
 	intern/particle_child.c
 	intern/particle_distribute.c
@@ -172,9 +175,6 @@ set(SRC
 	intern/pbvh.c
 	intern/pbvh_bmesh.c
 	intern/pointcache.c
-	intern/layer.c
-	intern/layer_utils.c
-	intern/lightprobe.c
 	intern/report.c
 	intern/rigidbody.c
 	intern/scene.c
@@ -191,9 +191,15 @@ set(SRC
 	intern/speaker.c
 	intern/studiolight.c
 	intern/subdiv.c
+	intern/subdiv_ccg.c
+	intern/subdiv_ccg_mask.c
+	intern/subdiv_ccg_material.c
 	intern/subdiv_converter.c
 	intern/subdiv_converter_mesh.c
+	intern/subdiv_displacement.c
+	intern/subdiv_displacement_multires.c
 	intern/subdiv_eval.c
+	intern/subdiv_foreach.c
 	intern/subdiv_mesh.c
 	intern/subdiv_stats.c
 	intern/subsurf_ccg.c
@@ -225,10 +231,9 @@ set(SRC
 	BKE_blender.h
 	BKE_blender_copybuffer.h
 	BKE_blender_undo.h
+	BKE_blender_user_menu.h
 	BKE_blender_version.h
 	BKE_blendfile.h
-	BKE_bmfont.h
-	BKE_bmfont_types.h
 	BKE_boids.h
 	BKE_bpath.h
 	BKE_brush.h
@@ -255,6 +260,7 @@ set(SRC
 	BKE_editlattice.h
 	BKE_editmesh.h
 	BKE_editmesh_bvh.h
+	BKE_editmesh_cache.h
 	BKE_editmesh_tangent.h
 	BKE_effect.h
 	BKE_fcurve.h
@@ -270,13 +276,16 @@ set(SRC
 	BKE_image.h
 	BKE_ipo.h
 	BKE_key.h
-	BKE_lamp.h
+	BKE_keyconfig.h
 	BKE_lattice.h
+	BKE_layer.h
 	BKE_library.h
 	BKE_library_idmap.h
 	BKE_library_override.h
 	BKE_library_query.h
 	BKE_library_remap.h
+	BKE_light.h
+	BKE_lightprobe.h
 	BKE_linestyle.h
 	BKE_main.h
 	BKE_mask.h
@@ -295,8 +304,8 @@ set(SRC
 	BKE_nla.h
 	BKE_node.h
 	BKE_object.h
-	BKE_object_facemap.h
 	BKE_object_deform.h
+	BKE_object_facemap.h
 	BKE_ocean.h
 	BKE_outliner_treehash.h
 	BKE_packedFile.h
@@ -304,8 +313,6 @@ set(SRC
 	BKE_particle.h
 	BKE_pbvh.h
 	BKE_pointcache.h
-	BKE_layer.h
-	BKE_lightprobe.h
 	BKE_report.h
 	BKE_rigidbody.h
 	BKE_scene.h
@@ -319,6 +326,10 @@ set(SRC
 	BKE_speaker.h
 	BKE_studiolight.h
 	BKE_subdiv.h
+	BKE_subdiv_ccg.h
+	BKE_subdiv_eval.h
+	BKE_subdiv_foreach.h
+	BKE_subdiv_mesh.h
 	BKE_subsurf.h
 	BKE_suggestions.h
 	BKE_text.h
@@ -331,19 +342,51 @@ set(SRC
 	BKE_writeavi.h
 
 	nla_private.h
-	tracking_private.h
 	particle_private.h
+	tracking_private.h
 	intern/CCGSubSurf.h
 	intern/CCGSubSurf_inline.h
 	intern/CCGSubSurf_intern.h
 	intern/data_transfer_intern.h
+	intern/multires_inline.h
 	intern/pbvh_intern.h
 	intern/subdiv_converter.h
+	intern/subdiv_inline.h
+)
+
+set(LIB
+	bf_blenfont
+	bf_blenlib
+	bf_blenloader
+	bf_blentranslation
+	bf_bmesh
+	bf_depsgraph
+	bf_draw
+	bf_gpencil_modifiers
+	bf_gpu
+	bf_ikplugin
+	bf_imbuf
+	bf_intern_clog
+	bf_intern_ghost
+	bf_intern_guardedalloc
+	bf_intern_libmv  # Uses stub when disabled.
+	bf_intern_mikktspace
+	bf_intern_opensubdiv  # Uses stub when disabled.
+	bf_modifiers
+	bf_nodes
+	bf_physics
+	bf_python
+	bf_python_bmesh
+	bf_rna
+	bf_shader_fx
 )
 
 if(WITH_BINRELOC)
 	list(APPEND INC_SYS
 		${BINRELOC_INCLUDE_DIRS}
+	)
+	list(APPEND LIB
+		extern_binreloc
 	)
 	add_definitions(-DWITH_BINRELOC)
 endif()
@@ -370,6 +413,10 @@ if(WITH_BULLET)
 	)
 	list(APPEND INC
 		../../../intern/rigidbody
+	)
+	list(APPEND LIB
+		bf_intern_rigidbody
+		extern_bullet
 	)
 	add_definitions(-DWITH_BULLET)
 endif()
@@ -465,10 +512,19 @@ if(WITH_MOD_FLUID)
 	list(APPEND INC
 		../../../intern/elbeem/extern
 	)
+	list(APPEND LIB
+		bf_intern_elbeem
+	)
 	add_definitions(-DWITH_MOD_FLUID)
 endif()
 
 if(WITH_MOD_SMOKE)
+	list(APPEND INC
+		../../../intern/smoke/extern
+	)
+	list(APPEND LIB
+		bf_intern_smoke
+	)
 	add_definitions(-DWITH_SMOKE)
 endif()
 
@@ -490,6 +546,9 @@ if(WITH_LZO)
 		list(APPEND INC_SYS
 			../../../extern/lzo/minilzo
 		)
+		list(APPEND LIB
+			extern_minilzo
+		)
 	endif()
 	add_definitions(-DWITH_LZO)
 endif()
@@ -497,6 +556,9 @@ endif()
 if(WITH_LZMA)
 	list(APPEND INC_SYS
 		../../../extern/lzma
+	)
+	list(APPEND LIB
+		extern_lzma
 	)
 	add_definitions(-DWITH_LZMA)
 endif()
@@ -528,18 +590,20 @@ if(WITH_ALEMBIC)
 endif()
 
 if(WITH_OPENSUBDIV)
-	add_definitions(-DWITH_OPENSUBDIV)
 	list(APPEND INC_SYS
-		../../../intern/opensubdiv
 		${OPENSUBDIV_INCLUDE_DIRS}
 	)
+	add_definitions(-DWITH_OPENSUBDIV)
 endif()
 
 if(WITH_OPENVDB)
-	add_definitions(-DWITH_OPENVDB)
 	list(APPEND INC
 		 ../../../intern/openvdb
 	)
+	list(APPEND LIB
+		 bf_intern_openvdb
+	)
+	add_definitions(-DWITH_OPENVDB)
 
 	if(WITH_OPENVDB_BLOSC)
 		add_definitions(
@@ -553,4 +617,4 @@ endif()
 #	set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} /WX")
 #endif()
 
-blender_add_lib(bf_blenkernel "${SRC}" "${INC}" "${INC_SYS}")
+blender_add_lib(bf_blenkernel "${SRC}" "${INC}" "${INC_SYS}" "${LIB}")

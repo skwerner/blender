@@ -46,10 +46,11 @@ def add_torus(major_rad, minor_rad, major_seg, minor_seg):
         for minor_index in range(minor_seg):
             angle = pi_2 * minor_index / minor_seg
 
-            vec = matrix * Vector((major_rad + (cos(angle) * minor_rad),
-                                   0.0,
-                                   sin(angle) * minor_rad,
-                                   ))
+            vec = matrix @ Vector((
+                major_rad + (cos(angle) * minor_rad),
+                0.0,
+                sin(angle) * minor_rad,
+            ))
 
             verts.extend(vec[:])
 
@@ -98,10 +99,10 @@ def add_uvs(mesh, minor_seg, major_seg):
 
     u_prev = u_init
     u_next = u_prev + u_step
-    for major_index in range(major_seg):
+    for _major_index in range(major_seg):
         v_prev = v_init
         v_next = v_prev + v_step
-        for minor_index in range(minor_seg):
+        for _minor_index in range(minor_seg):
             loops = polygons[vertex_index].loop_indices
             uv_data[loops[0]].uv = u_prev, v_prev
             uv_data[loops[1]].uv = u_next, v_prev
@@ -148,10 +149,12 @@ class AddTorus(Operator, object_utils.AddObjectHelper):
     )
     mode: bpy.props.EnumProperty(
         name="Torus Dimensions",
-        items=(("MAJOR_MINOR", "Major/Minor",
-                "Use the major/minor radii for torus dimensions"),
-               ("EXT_INT", "Exterior/Interior",
-                "Use the exterior/interior radii for torus dimensions")),
+        items=(
+            ('MAJOR_MINOR', "Major/Minor",
+             "Use the major/minor radii for torus dimensions"),
+            ('EXT_INT', "Exterior/Interior",
+             "Use the exterior/interior radii for torus dimensions"),
+        ),
         update=mode_update_callback,
     )
     major_radius: FloatProperty(
@@ -190,16 +193,16 @@ class AddTorus(Operator, object_utils.AddObjectHelper):
     generate_uvs: BoolProperty(
         name="Generate UVs",
         description="Generate a default UV map",
-        default=False,
+        default=True,
     )
 
     def draw(self, context):
         layout = self.layout
 
         col = layout.column(align=True)
-        col.prop(self, 'generate_uvs')
+        col.prop(self, "generate_uvs")
         col.separator()
-        col.prop(self, 'view_align')
+        col.prop(self, "view_align")
 
         col = layout.column(align=True)
         col.label(text="Location")

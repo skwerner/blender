@@ -25,6 +25,7 @@
 #include "util/util_progress.h"
 #include "util/util_sparse_grid.h"
 #include "util/util_texture.h"
+#include "util/util_unique_ptr.h"
 
 #ifdef WITH_OSL
 #include <OSL/oslexec.h>
@@ -237,7 +238,7 @@ bool ImageManager::get_image_metadata(const string& filename,
 	}
 #endif
 
-	ImageInput *in = ImageInput::create(filename);
+	unique_ptr<ImageInput> in(ImageInput::create(filename));
 
 	if(!in) {
 		return false;
@@ -245,7 +246,6 @@ bool ImageManager::get_image_metadata(const string& filename,
 
 	ImageSpec spec;
 	if(!in->open(filename, spec)) {
-		delete in;
 		return false;
 	}
 
@@ -313,7 +313,6 @@ bool ImageManager::get_image_metadata(const string& filename,
 	}
 
 	in->close();
-	delete in;
 
 	return true;
 }
@@ -381,6 +380,10 @@ int ImageManager::add_image(const string& filename,
 			}
 			if(img->use_alpha != use_alpha) {
 				img->use_alpha = use_alpha;
+				img->need_load = true;
+			}
+			if(!(img->metadata == metadata)) {
+				img->metadata = metadata;
 				img->need_load = true;
 			}
 			img->users++;
@@ -535,7 +538,7 @@ bool ImageManager::allocate_grid_info(Device *device,
 }
 
 bool ImageManager::file_load_image_generic(Image *img,
-                                           ImageInput **in)
+                                           unique_ptr<ImageInput> *in)
 {
 	if(img->filename == "")
 		return false;
@@ -563,7 +566,7 @@ bool ImageManager::file_load_image_generic(Image *img,
 		}
 
 		/* load image from file through OIIO */
-		*in = ImageInput::create(img->filename);
+		*in = unique_ptr<ImageInput>(ImageInput::create(img->filename));
 
 		if(!*in)
 			return false;
@@ -575,8 +578,6 @@ bool ImageManager::file_load_image_generic(Image *img,
 			config.attribute("oiio:UnassociatedAlpha", 1);
 
 		if(!(*in)->open(img->filename, spec, config)) {
-			delete *in;
-			*in = NULL;
 			return false;
 		}
 	}
@@ -585,10 +586,7 @@ bool ImageManager::file_load_image_generic(Image *img,
 	if(!(img->metadata.channels >= 1 && img->metadata.channels <= 4)) {
 		if(*in) {
 			(*in)->close();
-			delete *in;
-			*in = NULL;
 		}
-
 		return false;
 	}
 
@@ -780,7 +778,7 @@ void ImageManager::file_load_image(Device *device,
 	tex_img->interpolation = img->interpolation;
 	tex_img->extension = img->extension;
 
-	ImageInput *in = NULL;
+	unique_ptr<ImageInput> in = NULL;
 	if(!file_load_image_generic(img, &in)) {
 		file_load_failed<DeviceType>(img, type, tex_img);
 		return;
@@ -850,7 +848,6 @@ void ImageManager::file_load_image(Device *device,
 		}
 		cmyk = strcmp(in->format_name(), "jpeg") == 0 && components == 4;
 		in->close();
-		delete in;
 	}
 	else {
 		if(FileFormat == TypeDesc::FLOAT) {

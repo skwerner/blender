@@ -1,6 +1,6 @@
 # Example of an operator which uses gizmos to control its properties.
 #
-# Usage: Run this script, then in mesh edit-mode press Spacebar
+# Usage: Run this script, then in mesh edit-mode press F3
 # to activate the operator "Select Side of Plane"
 # The gizmos can then be used to adjust the plane in the 3D view.
 #
@@ -26,7 +26,7 @@ def main(context, plane_co, plane_no):
     plane_dot = plane_no.dot(plane_co)
 
     for v in bm.verts:
-        co = matrix * v.co
+        co = matrix @ v.co
         v.select = (plane_no.dot(co) > plane_dot)
     bm.select_flush_mode()
 
@@ -55,7 +55,7 @@ class SelectSideOfPlane(Operator):
     def invoke(self, context, event):
 
         if not self.properties.is_property_set("plane_co"):
-            self.plane_co = context.scene.cursor_location
+            self.plane_co = context.scene.cursor.location
 
         if not self.properties.is_property_set("plane_no"):
             if context.space_data.type == 'VIEW_3D':
@@ -68,7 +68,7 @@ class SelectSideOfPlane(Operator):
 
         if context.space_data.type == 'VIEW_3D':
             wm = context.window_manager
-            wm.gizmo_group_type_add(SelectSideOfPlaneGizmoGroup.bl_idname)
+            wm.gizmo_group_type_ensure(SelectSideOfPlaneGizmoGroup.bl_idname)
 
         return {'FINISHED'}
 
@@ -106,7 +106,7 @@ class SelectSideOfPlaneGizmoGroup(GizmoGroup):
         op = cls.my_target_operator(context)
         if op is None:
             wm = context.window_manager
-            wm.gizmo_group_type_remove(SelectSideOfPlaneGizmoGroup.bl_idname)
+            wm.gizmo_group_type_unlink_delayed(SelectSideOfPlaneGizmoGroup.bl_idname)
             return False
         return True
 
@@ -114,20 +114,20 @@ class SelectSideOfPlaneGizmoGroup(GizmoGroup):
         from mathutils import Matrix, Vector
 
         # ----
-        # Grab
+        # Move
 
-        def grab_get_cb():
+        def move_get_cb():
             op = SelectSideOfPlaneGizmoGroup.my_target_operator(context)
             return op.plane_co
 
-        def grab_set_cb(value):
+        def move_set_cb(value):
             op = SelectSideOfPlaneGizmoGroup.my_target_operator(context)
             op.plane_co = value
             # XXX, this may change!
             op.execute(context)
 
-        mpr = self.gizmos.new("GIZMO_GT_grab_3d")
-        mpr.target_set_handler("offset", get=grab_get_cb, set=grab_set_cb)
+        mpr = self.gizmos.new("GIZMO_GT_move_3d")
+        mpr.target_set_handler("offset", get=move_get_cb, set=move_set_cb)
 
         mpr.use_draw_value = True
 
@@ -139,7 +139,7 @@ class SelectSideOfPlaneGizmoGroup(GizmoGroup):
 
         mpr.scale_basis = 0.2
 
-        self.widget_grab = mpr
+        self.widget_move = mpr
 
         # ----
         # Dial
@@ -150,14 +150,14 @@ class SelectSideOfPlaneGizmoGroup(GizmoGroup):
             no_a = self.widget_dial.matrix_basis.col[1].xyz
             no_b = Vector(op.plane_no)
 
-            no_a = (no_a * self.view_inv).xy.normalized()
-            no_b = (no_b * self.view_inv).xy.normalized()
+            no_a = (no_a @ self.view_inv).xy.normalized()
+            no_b = (no_b @ self.view_inv).xy.normalized()
             return no_a.angle_signed(no_b)
 
         def direction_set_cb(value):
             op = SelectSideOfPlaneGizmoGroup.my_target_operator(context)
             matrix_rotate = Matrix.Rotation(-value, 3, self.rotate_axis)
-            no = matrix_rotate * self.widget_dial.matrix_basis.col[1].xyz
+            no = matrix_rotate @ self.widget_dial.matrix_basis.col[1].xyz
             op.plane_no = no
             op.execute(context)
 
@@ -189,12 +189,12 @@ class SelectSideOfPlaneGizmoGroup(GizmoGroup):
         co = Vector(op.plane_co)
         no = Vector(op.plane_no).normalized()
 
-        # Grab
+        # Move
         no_z = no
         no_y = no_z.orthogonal()
         no_x = no_z.cross(no_y)
 
-        matrix = self.widget_grab.matrix_basis
+        matrix = self.widget_move.matrix_basis
         matrix.identity()
         matrix.col[0].xyz = no_x
         matrix.col[1].xyz = no_y

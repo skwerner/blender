@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,14 +15,10 @@
  *
  * The Original Code is Copyright (C) 2016 by Mike Erwin.
  * All rights reserved.
- *
- * Contributor(s): Blender Foundation
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/gpu/intern/gpu_element.c
- *  \ingroup gpu
+/** \file
+ * \ingroup gpu
  *
  * GPU element list (AKA index buffer)
  */
@@ -44,7 +38,7 @@ static GLenum convert_index_type_to_gl(GPUIndexBufType type)
 	static const GLenum table[] = {
 		[GPU_INDEX_U8] = GL_UNSIGNED_BYTE, /* GL has this, Vulkan does not */
 		[GPU_INDEX_U16] = GL_UNSIGNED_SHORT,
-		[GPU_INDEX_U32] = GL_UNSIGNED_INT
+		[GPU_INDEX_U32] = GL_UNSIGNED_INT,
 	};
 	return table[type];
 }
@@ -55,12 +49,32 @@ uint GPU_indexbuf_size_get(const GPUIndexBuf *elem)
 	static const uint table[] = {
 		[GPU_INDEX_U8] = sizeof(GLubyte), /* GL has this, Vulkan does not */
 		[GPU_INDEX_U16] = sizeof(GLushort),
-		[GPU_INDEX_U32] = sizeof(GLuint)
+		[GPU_INDEX_U32] = sizeof(GLuint),
 	};
 	return elem->index_len * table[elem->index_type];
 #else
 	return elem->index_len * sizeof(GLuint);
 #endif
+}
+
+int GPU_indexbuf_primitive_len(GPUPrimType prim_type)
+{
+	switch (prim_type) {
+		case GPU_PRIM_POINTS:
+			return 1;
+		case GPU_PRIM_LINES:
+			return 2;
+		case GPU_PRIM_TRIS:
+			return 3;
+		case GPU_PRIM_LINES_ADJ:
+			return 4;
+		default:
+			break;
+	}
+#if TRUST_NO_ONE
+	assert(false);
+#endif
+	return -1;
 }
 
 void GPU_indexbuf_init_ex(
@@ -77,28 +91,11 @@ void GPU_indexbuf_init_ex(
 
 void GPU_indexbuf_init(GPUIndexBufBuilder *builder, GPUPrimType prim_type, uint prim_len, uint vertex_len)
 {
-	uint verts_per_prim = 0;
-	switch (prim_type) {
-		case GPU_PRIM_POINTS:
-			verts_per_prim = 1;
-			break;
-		case GPU_PRIM_LINES:
-			verts_per_prim = 2;
-			break;
-		case GPU_PRIM_TRIS:
-			verts_per_prim = 3;
-			break;
-		case GPU_PRIM_LINES_ADJ:
-			verts_per_prim = 4;
-			break;
-		default:
+	int verts_per_prim = GPU_indexbuf_primitive_len(prim_type);
 #if TRUST_NO_ONE
-			assert(false);
+	assert(verts_per_prim != -1);
 #endif
-			return;
-	}
-
-	GPU_indexbuf_init_ex(builder, prim_type, prim_len * verts_per_prim, vertex_len, false);
+	GPU_indexbuf_init_ex(builder, prim_type, prim_len * (uint)verts_per_prim, vertex_len, false);
 }
 
 void GPU_indexbuf_add_generic_vert(GPUIndexBufBuilder *builder, uint v)
@@ -257,6 +254,7 @@ void GPU_indexbuf_build_in_place(GPUIndexBufBuilder *builder, GPUIndexBuf *elem)
 #endif
 	elem->index_len = builder->index_len;
 	elem->use_prim_restart = builder->use_prim_restart;
+	elem->ibo_id = 0; /* Created at first use. */
 
 #if GPU_TRACK_INDEX_RANGE
 	uint range = index_range(builder->data, builder->index_len, &elem->min_index, &elem->max_index);
@@ -281,31 +279,40 @@ void GPU_indexbuf_build_in_place(GPUIndexBufBuilder *builder, GPUIndexBuf *elem)
 	elem->gl_index_type = convert_index_type_to_gl(elem->index_type);
 #endif
 
-	if (elem->vbo_id == 0) {
-		elem->vbo_id = GPU_buf_alloc();
-	}
-	/* send data to GPU */
-	/* GL_ELEMENT_ARRAY_BUFFER changes the state of the last VAO bound,
-	 * so we use the GL_ARRAY_BUFFER here to create a buffer without
-	 * interfering in the VAO state. */
-	glBindBuffer(GL_ARRAY_BUFFER, elem->vbo_id);
-	glBufferData(GL_ARRAY_BUFFER, GPU_indexbuf_size_get(elem), builder->data, GL_STATIC_DRAW);
-
-	/* discard builder (one-time use) */
-	MEM_freeN(builder->data);
+	/* Transfer data ownership to GPUIndexBuf.
+	 * It will be uploaded upon first use. */
+	elem->data = builder->data;
 	builder->data = NULL;
 	/* other fields are safe to leave */
 }
 
+static void indexbuf_upload_data(GPUIndexBuf *elem)
+{
+	/* send data to GPU */
+	glBufferData(GL_ELEMENT_ARRAY_BUFFER, GPU_indexbuf_size_get(elem), elem->data, GL_STATIC_DRAW);
+	/* No need to keep copy of data in system memory. */
+	MEM_freeN(elem->data);
+	elem->data = NULL;
+}
+
 void GPU_indexbuf_use(GPUIndexBuf *elem)
 {
-	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, elem->vbo_id);
+	if (elem->ibo_id == 0) {
+		elem->ibo_id = GPU_buf_alloc();
+	}
+	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, elem->ibo_id);
+	if (elem->data != NULL) {
+		indexbuf_upload_data(elem);
+	}
 }
 
 void GPU_indexbuf_discard(GPUIndexBuf *elem)
 {
-	if (elem->vbo_id) {
-		GPU_buf_free(elem->vbo_id);
+	if (elem->ibo_id) {
+		GPU_buf_free(elem->ibo_id);
+	}
+	if (elem->data) {
+		MEM_freeN(elem->data);
 	}
 	MEM_freeN(elem);
 }

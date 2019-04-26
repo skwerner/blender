@@ -25,16 +25,14 @@
 
 CCL_NAMESPACE_BEGIN
 
-static bool node_bvh_is_unaligned(const BVHNode *node)
-{
-	const BVHNode *node0 = node->get_child(0),
-	              *node1 = node->get_child(1);
-	return node0->is_unaligned || node1->is_unaligned;
-}
-
 BVH2::BVH2(const BVHParams& params_, const vector<Object*>& objects_)
 : BVH(params_, objects_)
 {
+}
+
+BVHNode *BVH2::widen_children_nodes(const BVHNode *root)
+{
+	return const_cast<BVHNode *>(root);
 }
 
 void BVH2::pack_leaf(const BVHStackEntry& e,
@@ -195,9 +193,8 @@ void BVH2::pack_nodes(const BVHNode *root)
 	}
 	else {
 		stack.push_back(BVHStackEntry(root, nextNodeIdx));
-		nextNodeIdx += node_bvh_is_unaligned(root)
-		                       ? BVH_UNALIGNED_NODE_SIZE
-		                       : BVH_NODE_SIZE;
+		nextNodeIdx += root->has_unaligned() ? BVH_UNALIGNED_NODE_SIZE
+		                                     : BVH_NODE_SIZE;
 	}
 
 	while(stack.size()) {
@@ -210,7 +207,7 @@ void BVH2::pack_nodes(const BVHNode *root)
 			pack_leaf(e, leaf);
 		}
 		else {
-			/* innner node */
+			/* inner node */
 			int idx[2];
 			for(int i = 0; i < 2; ++i) {
 				if(e.node->get_child(i)->is_leaf()) {
@@ -218,7 +215,7 @@ void BVH2::pack_nodes(const BVHNode *root)
 				}
 				else {
 					idx[i] = nextNodeIdx;
-					nextNodeIdx += node_bvh_is_unaligned(e.node->get_child(i))
+					nextNodeIdx += e.node->get_child(i)->has_unaligned()
 					                       ? BVH_UNALIGNED_NODE_SIZE
 					                       : BVH_NODE_SIZE;
 				}

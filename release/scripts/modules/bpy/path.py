@@ -201,7 +201,7 @@ _display_name_literals = {
 }
 
 
-def display_name(name):
+def display_name(name, *, has_ext=True):
     """
     Creates a display string from name to be used menus and the user interface.
     Capitalize the first letter in all lowercase names,
@@ -209,7 +209,8 @@ def display_name(name):
     filenames and module names.
     """
 
-    name = _os.path.splitext(basename(name))[0]
+    if has_ext:
+        name = _os.path.splitext(basename(name))[0]
 
     # string replacements
     for disp_value, file_value in _display_name_literals.items():
@@ -301,7 +302,7 @@ def resolve_ncase(path):
         if f_iter_nocase:
             return _os.path.join(dirpath, f_iter_nocase) + suffix, True
         else:
-            # cant find the right one, just return the path as is.
+            # can't find the right one, just return the path as is.
             return path, False
 
     ncase_path, found = _ncase_path_found(path)

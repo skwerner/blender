@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,12 +15,10 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/util/ed_transverts.c
- *  \ingroup edutil
+/** \file
+ * \ingroup edutil
  */
 
 #include "MEM_guardedalloc.h"
@@ -43,6 +39,7 @@
 #include "BKE_editmesh.h"
 #include "BKE_DerivedMesh.h"
 #include "BKE_context.h"
+#include "BKE_mesh_iterators.h"
 
 #include "DEG_depsgraph.h"
 
@@ -113,7 +110,7 @@ void ED_transverts_update_obedit(TransVertStore *tvs, Object *obedit)
 				}
 			}
 
-			BKE_nurb_test2D(nu);
+			BKE_nurb_test_2d(nu);
 			BKE_nurb_handles_test(nu, true); /* test for bezier too */
 			nu = nu->next;
 		}
@@ -304,9 +301,9 @@ void ED_transverts_create_from_obedit(TransVertStore *tvs, Object *obedit, const
 			userdata[1] = tvs->transverts;
 		}
 
-		if (tvs->transverts && em->derivedCage) {
+		if (tvs->transverts && em->mesh_eval_cage) {
 			BM_mesh_elem_table_ensure(bm, BM_VERT);
-			em->derivedCage->foreachMappedVert(em->derivedCage, set_mapped_co, userdata, DM_FOREACH_NOP);
+			BKE_mesh_foreach_mapped_vert(em->mesh_eval_cage, set_mapped_co, userdata, MESH_FOREACH_NOP);
 		}
 	}
 	else if (obedit->type == OB_ARMATURE) {

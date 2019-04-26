@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,19 +15,13 @@
  *
  * The Original Code is Copyright (C) 2007 Blender Foundation.
  * All rights reserved.
- *
- *
- * Contributor(s): Blender Foundation
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/windowmanager/intern/wm_files_link.c
- *  \ingroup wm
+/** \file
+ * \ingroup wm
  *
  * Functions for dealing with append/link operators and helpers.
  */
-
 
 #include <float.h>
 #include <string.h>
@@ -46,8 +38,6 @@
 #include "DNA_scene_types.h"
 #include "DNA_windowmanager_types.h"
 
-
-
 #include "BLI_blenlib.h"
 #include "BLI_bitmap.h"
 #include "BLI_linklist.h"
@@ -59,10 +49,10 @@
 #include "BLO_readfile.h"
 
 #include "BKE_context.h"
+#include "BKE_global.h"
 #include "BKE_layer.h"
 #include "BKE_library.h"
 #include "BKE_library_remap.h"
-#include "BKE_global.h"
 #include "BKE_main.h"
 #include "BKE_report.h"
 #include "BKE_scene.h"
@@ -74,6 +64,7 @@
 
 #include "IMB_colormanagement.h"
 
+#include "ED_datafiles.h"
 #include "ED_screen.h"
 
 #include "RNA_access.h"
@@ -94,8 +85,9 @@ static bool wm_link_append_poll(bContext *C)
 		 * but which totally confuses edit mode (i.e. it becoming not so obvious
 		 * to leave from edit mode and invalid tools in toolbar might be displayed)
 		 * so disable link/append when in edit mode (sergey) */
-		if (CTX_data_edit_object(C))
+		if (CTX_data_edit_object(C)) {
 			return 0;
+		}
 
 		return 1;
 	}
@@ -105,11 +97,7 @@ static bool wm_link_append_poll(bContext *C)
 
 static int wm_link_append_invoke(bContext *C, wmOperator *op, const wmEvent *UNUSED(event))
 {
-	if (RNA_struct_property_is_set(op->ptr, "filepath")) {
-		return WM_operator_call_notest(C, op);
-	}
-	else {
-		/* XXX TODO solve where to get last linked library from */
+	if (!RNA_struct_property_is_set(op->ptr, "filepath")) {
 		if (G.lib[0] != '\0') {
 			RNA_string_set(op->ptr, "filepath", G.lib);
 		}
@@ -119,9 +107,10 @@ static int wm_link_append_invoke(bContext *C, wmOperator *op, const wmEvent *UNU
 			BLI_parent_dir(path);
 			RNA_string_set(op->ptr, "filepath", path);
 		}
-		WM_event_add_fileselect(C, op);
-		return OPERATOR_RUNNING_MODAL;
 	}
+
+	WM_event_add_fileselect(C, op);
+	return OPERATOR_RUNNING_MODAL;
 }
 
 static short wm_link_append_flag(wmOperator *op)
@@ -129,16 +118,21 @@ static short wm_link_append_flag(wmOperator *op)
 	PropertyRNA *prop;
 	short flag = 0;
 
-	if (RNA_boolean_get(op->ptr, "autoselect"))
+	if (RNA_boolean_get(op->ptr, "autoselect")) {
 		flag |= FILE_AUTOSELECT;
-	if (RNA_boolean_get(op->ptr, "active_collection"))
+	}
+	if (RNA_boolean_get(op->ptr, "active_collection")) {
 		flag |= FILE_ACTIVE_COLLECTION;
-	if ((prop = RNA_struct_find_property(op->ptr, "relative_path")) && RNA_property_boolean_get(op->ptr, prop))
+	}
+	if ((prop = RNA_struct_find_property(op->ptr, "relative_path")) && RNA_property_boolean_get(op->ptr, prop)) {
 		flag |= FILE_RELPATH;
-	if (RNA_boolean_get(op->ptr, "link"))
+	}
+	if (RNA_boolean_get(op->ptr, "link")) {
 		flag |= FILE_LINK;
-	if (RNA_boolean_get(op->ptr, "instance_collections"))
+	}
+	if (RNA_boolean_get(op->ptr, "instance_collections")) {
 		flag |= FILE_GROUP_INSTANCE;
+	}
 
 	return flag;
 }
@@ -212,7 +206,8 @@ static WMLinkAppendDataItem *wm_link_append_data_item_add(
 }
 
 static void wm_link_do(
-        WMLinkAppendData *lapp_data, ReportList *reports, Main *bmain, Scene *scene, ViewLayer *view_layer)
+        WMLinkAppendData *lapp_data, ReportList *reports, Main *bmain,
+        Scene *scene, ViewLayer *view_layer, const View3D *v3d)
 {
 	Main *mainl;
 	BlendHandle *bh;
@@ -228,7 +223,12 @@ static void wm_link_do(
 	for (lib_idx = 0, liblink = lapp_data->libraries.list; liblink; lib_idx++, liblink = liblink->next) {
 		char *libname = liblink->link;
 
-		bh = BLO_blendhandle_from_file(libname, reports);
+		if (STREQ(libname, BLO_EMBEDDED_STARTUP_BLEND)) {
+			bh = BLO_blendhandle_from_memory(datatoc_startup_blend, datatoc_startup_blend_size);
+		}
+		else {
+			bh = BLO_blendhandle_from_file(libname, reports);
+		}
 
 		if (bh == NULL) {
 			/* Unlikely since we just browsed it, but possible
@@ -259,17 +259,17 @@ static void wm_link_do(
 				continue;
 			}
 
-			new_id = BLO_library_link_named_part_ex(mainl, &bh, item->idcode, item->name, flag, bmain, scene, view_layer);
+			new_id = BLO_library_link_named_part_ex(mainl, &bh, item->idcode, item->name, flag);
 
 			if (new_id) {
 				/* If the link is successful, clear item's libs 'todo' flags.
 				 * This avoids trying to link same item with other libraries to come. */
-				BLI_BITMAP_SET_ALL(item->libraries, false, lapp_data->num_libraries);
+				BLI_bitmap_set_all(item->libraries, false, lapp_data->num_libraries);
 				item->new_id = new_id;
 			}
 		}
 
-		BLO_library_link_end(mainl, &bh, flag, bmain, scene, view_layer);
+		BLO_library_link_end(mainl, &bh, flag, bmain, scene, view_layer, v3d);
 		BLO_blendhandle_close(bh);
 	}
 }
@@ -398,7 +398,7 @@ static int wm_link_append_exec(bContext *C, wmOperator *op)
 				}
 
 				if (!BLI_ghash_haskey(libraries, libname)) {
-					BLI_ghash_insert(libraries, BLI_strdup(libname), SET_INT_IN_POINTER(lib_idx));
+					BLI_ghash_insert(libraries, BLI_strdup(libname), POINTER_FROM_INT(lib_idx));
 					lib_idx++;
 					wm_link_append_data_library_add(lapp_data, libname);
 				}
@@ -419,7 +419,7 @@ static int wm_link_append_exec(bContext *C, wmOperator *op)
 					continue;
 				}
 
-				lib_idx = GET_INT_FROM_POINTER(BLI_ghash_lookup(libraries, libname));
+				lib_idx = POINTER_AS_INT(BLI_ghash_lookup(libraries, libname));
 
 				item = wm_link_append_data_item_add(lapp_data, name, BKE_idcode_from_name(group), NULL);
 				BLI_BITMAP_ENABLE(item->libraries, lib_idx);
@@ -446,7 +446,7 @@ static int wm_link_append_exec(bContext *C, wmOperator *op)
 	/* XXX We'd need re-entrant locking on Main for this to work... */
 	/* BKE_main_lock(bmain); */
 
-	wm_link_do(lapp_data, op->reports, bmain, scene, view_layer);
+	wm_link_do(lapp_data, op->reports, bmain, scene, view_layer, CTX_wm_view3d(C));
 
 	/* BKE_main_unlock(bmain); */
 
@@ -627,7 +627,7 @@ static void lib_relocate_do(
 				/* Note that non-linkable IDs (like e.g. shapekeys) are also explicitly linked here... */
 				BLI_remlink(lbarray[lba_idx], id);
 				item = wm_link_append_data_item_add(lapp_data, id->name + 2, idcode, id);
-				BLI_BITMAP_SET_ALL(item->libraries, true, lapp_data->num_libraries);
+				BLI_bitmap_set_all(item->libraries, true, lapp_data->num_libraries);
 
 #ifdef PRINT_DEBUG
 				printf("\tdatablock to seek for: %s\n", id->name);
@@ -643,8 +643,8 @@ static void lib_relocate_do(
 
 	BKE_main_id_tag_all(bmain, LIB_TAG_PRE_EXISTING, true);
 
-	/* We do not want any instanciation here! */
-	wm_link_do(lapp_data, reports, bmain, NULL, NULL);
+	/* We do not want any instantiation here! */
+	wm_link_do(lapp_data, reports, bmain, NULL, NULL, NULL);
 
 	BKE_main_lock(bmain);
 
@@ -741,7 +741,7 @@ static void lib_relocate_do(
 		ID *old_id = item->customdata;
 
 		if (old_id->us == 0) {
-			BKE_libblock_free(bmain, old_id);
+			BKE_id_free(bmain, old_id);
 		}
 	}
 
@@ -754,7 +754,7 @@ static void lib_relocate_do(
 			id_next = id->next;
 			/* XXX That check may be a bit to generic/permissive? */
 			if (id->lib && (id->flag & LIB_TAG_PRE_EXISTING) && id->us == 0) {
-				BKE_libblock_free(bmain, id);
+				BKE_id_free(bmain, id);
 			}
 		}
 	}
@@ -776,7 +776,7 @@ static void lib_relocate_do(
 		if (lib->id.tag & LIB_TAG_DOIT) {
 			id_us_clear_real(&lib->id);
 			if (lib->id.us == 0) {
-				BKE_libblock_free(bmain, (ID *)lib);
+				BKE_id_free(bmain, (ID *)lib);
 			}
 		}
 	}

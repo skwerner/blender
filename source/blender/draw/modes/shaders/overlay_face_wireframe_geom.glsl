@@ -1,86 +1,60 @@
 
-/* This shader is only used for intel GPU where the Geom shader is faster
- * than doing everything thrice in the vertex shader. */
+/* This shader is only used for edge selection and OSX workaround for large wires. */
 
-layout(triangles) in;
-layout(triangle_strip, max_vertices = 3) out;
+uniform float wireSize;
+uniform vec2 viewportSize;
+uniform vec2 viewportSizeInv;
 
-uniform vec2 wireStepParam;
+layout(lines) in;
+layout(triangle_strip, max_vertices = 4) out;
 
-in vec2 ssPos[];
-in float facingOut[];
+in float facing_g[];
+in float edgeSharpness_g[];
 
-flat out vec3 ssVec0;
-flat out vec3 ssVec1;
-flat out vec3 ssVec2;
+#ifndef SELECT_EDGES
 out float facing;
-
-#ifdef LIGHT_EDGES
-in vec3 obPos[];
-in vec3 vNor[];
-in float forceEdge[];
-
-flat out vec3 edgeSharpness;
+flat out float edgeSharpness;
 #endif
 
-#define NO_EDGE vec3(10000.0);
-
-/* TODO(fclem) remove code duplication. */
-vec3 compute_vec(vec2 v0, vec2 v1)
+void do_vertex(const int i, float coord, vec2 offset)
 {
-	vec2 v = normalize(v1 - v0);
-	v = vec2(-v.y, v.x);
-	return vec3(v, -dot(v, v0));
-}
-
-vec3 get_edge_normal(vec3 n1, vec3 n2, vec3 edge)
-{
-	edge = normalize(edge);
-	vec3 n = n1 + n2;
-	float p = dot(edge, n);
-	return normalize(n - p * edge);
-}
-
-float get_edge_sharpness(vec3 fnor, vec3 vnor)
-{
-	float sharpness = abs(dot(fnor, vnor));
-	return smoothstep(wireStepParam.x, wireStepParam.y, sharpness);
-}
-
-void main(void)
-{
-	vec3 facings = vec3(facingOut[0], facingOut[1], facingOut[2]);
-	bvec3 do_edge = greaterThan(abs(facings), vec3(1.0));
-	facings = fract(facings) - clamp(-sign(facings), 0.0, 1.0);
-
-	ssVec0 = do_edge.x ? compute_vec(ssPos[0], ssPos[1]) : NO_EDGE;
-	ssVec1 = do_edge.y ? compute_vec(ssPos[1], ssPos[2]) : NO_EDGE;
-	ssVec2 = do_edge.z ? compute_vec(ssPos[2], ssPos[0]) : NO_EDGE;
-
-#ifdef LIGHT_EDGES
-	vec3 edges[3];
-	edges[0] = obPos[1] - obPos[0];
-	edges[1] = obPos[2] - obPos[1];
-	edges[2] = obPos[0] - obPos[2];
-	vec3 fnor = normalize(cross(edges[0], -edges[2]));
-
-	edgeSharpness.x = get_edge_sharpness(fnor, get_edge_normal(vNor[0], vNor[1], edges[0]));
-	edgeSharpness.y = get_edge_sharpness(fnor, get_edge_normal(vNor[1], vNor[2], edges[1]));
-	edgeSharpness.z = get_edge_sharpness(fnor, get_edge_normal(vNor[2], vNor[0], edges[2]));
-	edgeSharpness.x = (forceEdge[0] == 1.0) ? 1.0 : edgeSharpness.x;
-	edgeSharpness.y = (forceEdge[1] == 1.0) ? 1.0 : edgeSharpness.y;
-	edgeSharpness.z = (forceEdge[2] == 1.0) ? 1.0 : edgeSharpness.z;
+#ifndef SELECT_EDGES
+	edgeSharpness = edgeSharpness_g[i];
+	facing = facing_g[i];
 #endif
-	gl_Position = gl_in[0].gl_Position;
-	facing = facings.x;
+	gl_Position = gl_in[i].gl_Position;
+	/* Multiply offset by 2 because gl_Position range is [-1..1]. */
+	gl_Position.xy += offset * 2.0 * gl_Position.w;
+#ifdef USE_WORLD_CLIP_PLANES
+	world_clip_planes_set_clip_distance(gl_in[i].gl_ClipDistance);
+#endif
 	EmitVertex();
+}
 
-	gl_Position = gl_in[1].gl_Position;
-	facing = facings.y;
-	EmitVertex();
+void main()
+{
+	vec2 ss_pos[2];
+	ss_pos[0] = gl_in[0].gl_Position.xy / gl_in[0].gl_Position.w;
+	ss_pos[1] = gl_in[1].gl_Position.xy / gl_in[1].gl_Position.w;
 
-	gl_Position = gl_in[2].gl_Position;
-	facing = facings.z;
-	EmitVertex();
+	vec2 line = ss_pos[0] - ss_pos[1];
+	line = abs(line) * viewportSize;
+
+	float half_size = wireSize;
+
+	vec3 edge_ofs = half_size * viewportSizeInv.xyy * vec3(1.0, 1.0, 0.0);
+
+	bool horizontal = line.x > line.y;
+	edge_ofs = (horizontal) ? edge_ofs.zyz : edge_ofs.xzz;
+
+	if (edgeSharpness_g[0] < 0.0) {
+		return;
+	}
+
+	do_vertex(0,  half_size,  edge_ofs.xy);
+	do_vertex(0, -half_size, -edge_ofs.xy);
+	do_vertex(1,  half_size,  edge_ofs.xy);
+	do_vertex(1, -half_size, -edge_ofs.xy);
+
 	EndPrimitive();
 }

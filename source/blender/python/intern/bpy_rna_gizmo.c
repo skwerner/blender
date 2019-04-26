@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,12 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/python/intern/bpy_rna_gizmo.c
- *  \ingroup pythonintern
+/** \file
+ * \ingroup pythonintern
  *
  * .
  */
@@ -32,7 +28,6 @@
 #include "BLI_utildefines.h"
 #include "BLI_alloca.h"
 
-#include "BKE_main.h"
 
 #include "WM_api.h"
 #include "WM_types.h"
@@ -378,11 +373,11 @@ static PyObject *bpy_gizmo_target_get_value(PyObject *UNUSED(self), PyObject *ar
 		{
 			if (array_len != 0) {
 				float *value = BLI_array_alloca(value, array_len);
-				WM_gizmo_target_property_value_get_array(gz, gz_prop, value);
+				WM_gizmo_target_property_float_get_array(gz, gz_prop, value);
 				return PyC_Tuple_PackArray_F32(value, array_len);
 			}
 			else {
-				float value = WM_gizmo_target_property_value_get(gz, gz_prop);
+				float value = WM_gizmo_target_property_float_get(gz, gz_prop);
 				return PyFloat_FromDouble(value);
 			}
 			break;
@@ -451,14 +446,14 @@ static PyObject *bpy_gizmo_target_set_value(PyObject *UNUSED(self), PyObject *ar
 				{
 					goto fail;
 				}
-				WM_gizmo_target_property_value_set_array(BPy_GetContext(), gz, gz_prop, value);
+				WM_gizmo_target_property_float_set_array(BPy_GetContext(), gz, gz_prop, value);
 			}
 			else {
 				float value;
 				if ((value = PyFloat_AsDouble(params.value)) == -1.0f && PyErr_Occurred()) {
 					goto fail;
 				}
-				WM_gizmo_target_property_value_set(BPy_GetContext(), gz, gz_prop, value);
+				WM_gizmo_target_property_float_set(BPy_GetContext(), gz, gz_prop, value);
 			}
 			Py_RETURN_NONE;
 		}
@@ -480,7 +475,6 @@ PyDoc_STRVAR(bpy_gizmo_target_get_range_doc,
 "   Get the range for this target property.\n"
 "\n"
 "   :arg target: Target property name.\n"
-"   :Get the range for this target property"
 "   :return: The range of this property (min, max).\n"
 "   :rtype: tuple pair.\n"
 );
@@ -519,7 +513,7 @@ static PyObject *bpy_gizmo_target_get_range(PyObject *UNUSED(self), PyObject *ar
 		case PROP_FLOAT:
 		{
 			float range[2];
-			WM_gizmo_target_property_range_get(gz, gz_prop, range);
+			WM_gizmo_target_property_float_range_get(gz, gz_prop, range);
 			return PyC_Tuple_PackArray_F32(range, 2);
 		}
 		default:

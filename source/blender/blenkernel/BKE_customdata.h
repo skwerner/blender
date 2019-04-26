@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,18 +15,11 @@
  *
  * The Original Code is Copyright (C) 2006 Blender Foundation.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): Ben Batt <benbatt@gmail.com>
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file BKE_customdata.h
- *  \ingroup bke
- *  \author Ben Batt
- *  \brief CustomData interface, see also DNA_customdata_types.h.
+/** \file
+ * \ingroup bke
+ * \brief CustomData interface, see also DNA_customdata_types.h.
  */
 
 #ifndef __BKE_CUSTOMDATA_H__
@@ -44,20 +35,22 @@ extern "C" {
 #include "DNA_customdata_types.h"
 
 struct BMesh;
-struct ID;
 struct CustomData;
+struct CustomData_MeshMasks;
+struct ID;
 typedef uint64_t CustomDataMask;
 
 /*a data type large enough to hold 1 element from any customdata layer type*/
 typedef struct {unsigned char data[64]; } CDBlockBytes;
 
-extern const CustomDataMask CD_MASK_BAREMESH;
-extern const CustomDataMask CD_MASK_MESH;
-extern const CustomDataMask CD_MASK_EDITMESH;
-extern const CustomDataMask CD_MASK_DERIVEDMESH;
-extern const CustomDataMask CD_MASK_BMESH;
-extern const CustomDataMask CD_MASK_FACECORNERS;
-extern const CustomDataMask CD_MASK_EVERYTHING;
+extern const CustomData_MeshMasks CD_MASK_BAREMESH;
+extern const CustomData_MeshMasks CD_MASK_BAREMESH_ORIGINDEX;
+extern const CustomData_MeshMasks CD_MASK_MESH;
+extern const CustomData_MeshMasks CD_MASK_EDITMESH;
+extern const CustomData_MeshMasks CD_MASK_DERIVEDMESH;
+extern const CustomData_MeshMasks CD_MASK_BMESH;
+extern const CustomData_MeshMasks CD_MASK_FACECORNERS;
+extern const CustomData_MeshMasks CD_MASK_EVERYTHING;
 
 /* for ORIGINDEX layer type, indicates no original index for this element */
 #define ORIGINDEX_NONE -1
@@ -78,10 +71,14 @@ typedef enum eCDAllocType {
 
 #define CD_TYPE_AS_MASK(_type) (CustomDataMask)((CustomDataMask)1 << (CustomDataMask)(_type))
 
-void customData_mask_layers__print(CustomDataMask mask);
+void customData_mask_layers__print(const struct CustomData_MeshMasks *mask);
 
 typedef void (*cd_interp)(const void **sources, const float *weights, const float *sub_weights, int count, void *dest);
 typedef void (*cd_copy)(const void *source, void *dest, int count);
+typedef bool (*cd_validate)(void *item, const uint totitems, const bool do_fixes);
+
+void CustomData_MeshMasks_update(CustomData_MeshMasks *mask_dst, const CustomData_MeshMasks *mask_src);
+bool CustomData_MeshMasks_are_matching(const CustomData_MeshMasks *mask_ref, const CustomData_MeshMasks *mask_required);
 
 /**
  * Checks if the layer at physical offset \a layer_n (in data->layers) support math
@@ -224,12 +221,19 @@ void CustomData_copy_data(const struct CustomData *source,
                           struct CustomData *dest, int source_index,
                           int dest_index, int count);
 void CustomData_copy_data_named(const struct CustomData *source,
-                          struct CustomData *dest, int source_index,
-                          int dest_index, int count);
+                                struct CustomData *dest, int source_index,
+                                int dest_index, int count);
 void CustomData_copy_elements(int type, void *src_data_ofs, void *dst_data_ofs, int count);
 void CustomData_bmesh_copy_data(const struct CustomData *source,
                                 struct CustomData *dest, void *src_block,
                                 void **dest_block);
+
+/* Copies data of a single layer of a given type. */
+void CustomData_copy_layer_type_data(const struct CustomData *source,
+                                     struct CustomData *destination,
+                                     int type,
+                                     int source_index, int destination_index,
+                                     int count);
 
 /* frees data in a CustomData object
  * return 1 on success, 0 on failure
@@ -347,6 +351,7 @@ void CustomData_set_layer_stencil_index(struct CustomData *data, int type, int n
 
 /* adds flag to the layer flags */
 void CustomData_set_layer_flag(struct CustomData *data, int type, int flag);
+void CustomData_clear_layer_flag(struct CustomData *data, int type, int flag);
 
 void CustomData_bmesh_set_default(struct CustomData *data, void **block);
 void CustomData_bmesh_free_block(struct CustomData *data, void **block);
@@ -392,6 +397,9 @@ void CustomData_bmesh_init_pool(struct CustomData *data, int totelem, const char
 bool CustomData_from_bmeshpoly_test(CustomData *fdata, CustomData *ldata, bool fallback);
 #endif
 
+/* Layer data validation. */
+bool CustomData_layer_validate(struct CustomDataLayer *layer, const uint totitems, const bool do_fixes);
+
 /* External file storage */
 
 void CustomData_external_add(struct CustomData *data,
@@ -409,8 +417,8 @@ void CustomData_external_reload(struct CustomData *data,
 
 /* Mesh-to-mesh transfer data. */
 
-struct MeshPairRemap;
 struct CustomDataTransferLayerMap;
+struct MeshPairRemap;
 
 typedef void (*cd_datatransfer_interp)(
         const struct CustomDataTransferLayerMap *laymap, void *dest,
@@ -477,7 +485,7 @@ typedef struct CustomDataTransferLayerMap {
 
 	size_t data_size;    /* Size of actual data we transfer. */
 	size_t data_offset;  /* Offset of actual data we transfer (in element contained in data_src/dst). */
-	uint64_t data_flag;  /* For bitflag transfer, flag(s) to affect in transfered data. */
+	uint64_t data_flag;  /* For bitflag transfer, flag(s) to affect in transferred data. */
 
 	void *interp_data;   /* Opaque pointer, to be used by specific interp callback (e.g. transformspace for normals). */
 

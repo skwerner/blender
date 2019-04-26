@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,10 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): Martin Poirier
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/transform/transform_snap.c
- *  \ingroup edtransform
+/** \file
+ * \ingroup edtransform
  */
 
 #include <stdlib.h>
@@ -52,7 +44,7 @@
 #include "GPU_immediate.h"
 #include "GPU_state.h"
 
-#include "BKE_global.h"
+#include "BKE_layer.h"
 #include "BKE_object.h"
 #include "BKE_anim.h"  /* for duplis */
 #include "BKE_context.h"
@@ -134,6 +126,27 @@ bool activeSnap(const TransInfo *t)
 {
 	return ((t->modifiers & (MOD_SNAP | MOD_SNAP_INVERT)) == MOD_SNAP) ||
 	       ((t->modifiers & (MOD_SNAP | MOD_SNAP_INVERT)) == MOD_SNAP_INVERT);
+}
+
+bool transformModeUseSnap(const TransInfo *t)
+{
+	ToolSettings *ts = t->settings;
+	if (t->mode == TFM_TRANSLATION) {
+		return (ts->snap_transform_mode_flag & SCE_SNAP_TRANSFORM_MODE_TRANSLATE) != 0;
+	}
+	if (t->mode == TFM_ROTATION) {
+		return (ts->snap_transform_mode_flag & SCE_SNAP_TRANSFORM_MODE_ROTATE) != 0;
+	}
+	if (t->mode == TFM_RESIZE) {
+		return (ts->snap_transform_mode_flag & SCE_SNAP_TRANSFORM_MODE_SCALE) != 0;
+	}
+
+	return false;
+}
+
+static bool doForceIncrementSnap(const TransInfo *t)
+{
+	return !transformModeUseSnap(t);
 }
 
 void drawSnapping(const struct bContext *C, TransInfo *t)
@@ -404,8 +417,10 @@ void applyGridAbsolute(TransInfo *t)
 
 void applySnapping(TransInfo *t, float *vec)
 {
-	if (t->tsnap.project && t->tsnap.mode == SCE_SNAP_MODE_FACE) {
-		/* Each Trans Data already makes the snap to face */
+	/* Each Trans Data already makes the snap to face */
+	if (doForceIncrementSnap(t) ||
+	    (t->tsnap.project && t->tsnap.mode == SCE_SNAP_MODE_FACE))
+	{
 		return;
 	}
 
@@ -532,7 +547,7 @@ static void initSnappingMode(TransInfo *t)
 
 		/* Edit mode */
 		if (t->tsnap.applySnap != NULL && // A snapping function actually exist
-		    ((obedit_type != -1) && ELEM(obedit_type, OB_MESH, OB_ARMATURE, OB_CURVE, OB_LATTICE, OB_MBALL)) ) // Temporary limited to edit mode meshes, armature, curves, mballs
+		    ((obedit_type != -1) && ELEM(obedit_type, OB_MESH, OB_ARMATURE, OB_CURVE, OB_LATTICE, OB_MBALL)) ) // Temporary limited to edit mode meshes, armature, curves, metaballs
 		{
 			/* Exclude editmesh if using proportional edit */
 			if ((obedit_type == OB_MESH) && (t->flag & T_PROP_EDIT)) {
@@ -593,7 +608,7 @@ static void initSnappingMode(TransInfo *t)
 			        (bool (*)(BMVert *, void *))BM_elem_cb_check_hflag_disabled,
 			        bm_edge_is_snap_target,
 			        bm_face_is_snap_target,
-			        SET_UINT_IN_POINTER((BM_ELEM_SELECT | BM_ELEM_HIDDEN)));
+			        POINTER_FROM_UINT((BM_ELEM_SELECT | BM_ELEM_HIDDEN)));
 		}
 	}
 }
@@ -638,7 +653,7 @@ void initSnapping(TransInfo *t, wmOperator *op)
 	/* use scene defaults only when transform is modal */
 	else if (t->flag & T_MODAL) {
 		if (ELEM(t->spacetype, SPACE_VIEW3D, SPACE_IMAGE, SPACE_NODE)) {
-			if (ts->snap_flag & SCE_SNAP) {
+			if (transformModeUseSnap(t) && (ts->snap_flag & SCE_SNAP)) {
 				t->modifiers |= MOD_SNAP;
 			}
 
@@ -855,7 +870,9 @@ static void ApplySnapResize(TransInfo *t, float vec[3])
 	getSnapPoint(t, point);
 
 	float dist = ResizeBetween(t, t->tsnap.snapTarget, point);
-	copy_v3_fl(vec, dist);
+	if (dist != TRANSFORM_DIST_INVALID) {
+		copy_v3_fl(vec, dist);
+	}
 }
 
 /********************** DISTANCE **************************/
@@ -991,7 +1008,12 @@ static void CalcSnapGeometry(TransInfo *t, float *UNUSED(vec))
 
 			UI_view2d_region_to_view(&t->ar->v2d, t->mval[0], t->mval[1], &co[0], &co[1]);
 
-			if (ED_uvedit_nearest_uv(t->scene, TRANS_DATA_CONTAINER_FIRST_EVIL(t)->obedit, ima, co, t->tsnap.snapPoint)) {
+			uint objects_len = 0;
+			Object **objects = BKE_view_layer_array_from_objects_in_edit_mode_unique_data_with_uvs(
+			        t->view_layer, NULL, &objects_len);
+
+			float dist_sq = FLT_MAX;
+			if (ED_uvedit_nearest_uv_multi(t->scene, ima, objects, objects_len, co, &dist_sq, t->tsnap.snapPoint)) {
 				t->tsnap.snapPoint[0] *= t->aspect[0];
 				t->tsnap.snapPoint[1] *= t->aspect[1];
 
@@ -1000,6 +1022,7 @@ static void CalcSnapGeometry(TransInfo *t, float *UNUSED(vec))
 			else {
 				t->tsnap.status &= ~POINT_INIT;
 			}
+			MEM_freeN(objects);
 		}
 	}
 	else if (t->spacetype == SPACE_NODE) {
@@ -1095,17 +1118,18 @@ static void TargetSnapMedian(TransInfo *t)
 		FOREACH_TRANS_DATA_CONTAINER (t, tc) {
 			TransData *td = tc->data;
 			int i;
+			float v[3];
+			zero_v3(v);
+
 			for (i = 0; i < tc->data_len && td->flag & TD_SELECTED; i++, td++) {
-				/* TODO(campbell): perform the global transformation once per TransDataContainer */
-				if (tc->use_local_mat) {
-					float v[3];
-					mul_v3_m4v3(v, tc->mat, td->center);
-					add_v3_v3(t->tsnap.snapTarget, v);
-				}
-				else {
-					add_v3_v3(t->tsnap.snapTarget, td->center);
-				}
+				add_v3_v3(v, td->center);
 			}
+
+			if (tc->use_local_mat) {
+				mul_m4_v3(tc->mat, v);
+			}
+
+			add_v3_v3(t->tsnap.snapTarget, v);
 			i_accum += i;
 		}
 
@@ -1442,8 +1466,8 @@ void snapGridIncrement(TransInfo *t, float *val)
 
 	/* only do something if using absolute or incremental grid snapping
 	 * and there is no valid snap point */
-	if (!(t->tsnap.mode & (SCE_SNAP_MODE_INCREMENT | SCE_SNAP_MODE_GRID)) ||
-	    validSnap(t))
+	if ((!(t->tsnap.mode & (SCE_SNAP_MODE_INCREMENT | SCE_SNAP_MODE_GRID)) ||
+	    validSnap(t)) && !doForceIncrementSnap(t))
 	{
 		return;
 	}
@@ -1486,7 +1510,7 @@ static void applyGridIncrement(TransInfo *t, float *val, int max_index, const fl
 	const float *asp = use_aspect ? t->aspect : asp_local;
 	int i;
 
-	BLI_assert(t->tsnap.mode & (SCE_SNAP_MODE_INCREMENT | SCE_SNAP_MODE_GRID));
+	BLI_assert((t->tsnap.mode & (SCE_SNAP_MODE_INCREMENT | SCE_SNAP_MODE_GRID)) || doForceIncrementSnap(t));
 	BLI_assert(max_index <= 2);
 
 	/* Early bailing out if no need to snap */
@@ -1496,10 +1520,10 @@ static void applyGridIncrement(TransInfo *t, float *val, int max_index, const fl
 
 	if (use_aspect) {
 		/* custom aspect for fcurve */
-		if (t->spacetype == SPACE_IPO) {
+		if (t->spacetype == SPACE_GRAPH) {
 			View2D *v2d = &t->ar->v2d;
 			View2DGrid *grid;
-			SpaceIpo *sipo = t->sa->spacedata.first;
+			SpaceGraph *sipo = t->sa->spacedata.first;
 			int unity = V2D_UNIT_VALUES;
 			int unitx = (sipo->flag & SIPO_DRAWTIME) ? V2D_UNIT_SECONDS : V2D_UNIT_FRAMESCALE;
 
@@ -1516,20 +1540,63 @@ static void applyGridIncrement(TransInfo *t, float *val, int max_index, const fl
 	/* absolute snapping on grid based on global center */
 	if ((t->tsnap.snap_spatial_grid) && (t->mode == TFM_TRANSLATION)) {
 		const float *center_global = t->center_global;
+		bool use_local_axis = false;
 
 		/* use a fallback for cursor selection,
 		 * this isn't useful as a global center for absolute grid snapping
 		 * since its not based on the position of the selection. */
 		if (t->around == V3D_AROUND_CURSOR) {
-			const TransCenterData *cd = transformCenter_from_type(t, V3D_AROUND_CENTER_MEAN);
+			const TransCenterData *cd = transformCenter_from_type(t, V3D_AROUND_CENTER_MEDIAN);
 			center_global = cd->global;
+		}
+
+		if (t->con.mode & (CON_AXIS0 | CON_AXIS1 | CON_AXIS2)) {
+			use_local_axis = true;
 		}
 
 		for (i = 0; i <= max_index; i++) {
 			/* do not let unconstrained axis jump to absolute grid increments */
 			if (!(t->con.mode & CON_APPLY) || t->con.mode & (CON_AXIS0 << i)) {
 				const float iter_fac = fac[action] * asp[i];
-				val[i] = iter_fac * roundf((val[i] + center_global[i]) / iter_fac) - center_global[i];
+
+				if (use_local_axis) {
+					float local_axis[3];
+					float pos_on_axis[3];
+
+					copy_v3_v3(local_axis, t->con.mtx[i]);
+					copy_v3_v3(pos_on_axis, t->con.mtx[i]);
+
+					/* amount of movement on axis from initial pos */
+					mul_v3_fl(pos_on_axis, val[i]);
+
+					/* actual global position on axis */
+					add_v3_v3(pos_on_axis, center_global);
+
+					float min_dist = INFINITY;
+					for (int j = 0; j < 3; j++) {
+						if (fabs(local_axis[j]) < 0.01f) {
+							/* Ignore very small (normalized) axis changes */
+							continue;
+						}
+
+						/* closest point on grid */
+						float grid_p = iter_fac * roundf(pos_on_axis[j] / iter_fac);
+						float dist_p = fabs((grid_p - pos_on_axis[j]) / local_axis[j]);
+
+						/* The amount of distance needed to travel along the
+						 * local axis to snap to the closest grid point */
+						/* in the global j axis direction */
+						float move_dist = (grid_p - center_global[j]) / local_axis[j];
+
+						if (dist_p < min_dist) {
+							min_dist = dist_p;
+							val[i] = move_dist;
+						}
+					}
+				}
+				else {
+					val[i] = iter_fac * roundf((val[i]  + center_global[i]) / iter_fac) - center_global[i];
+				}
 			}
 		}
 	}

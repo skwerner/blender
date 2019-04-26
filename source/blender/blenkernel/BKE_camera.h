@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,20 +15,14 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
 #ifndef __BKE_CAMERA_H__
 #define __BKE_CAMERA_H__
 
-/** \file BKE_camera.h
- *  \ingroup bke
- *  \brief Camera datablock and utility functions.
+/** \file
+ * \ingroup bke
+ * \brief Camera datablock and utility functions.
  */
 #ifdef __cplusplus
 extern "C" {
@@ -40,15 +32,15 @@ extern "C" {
 
 struct Camera;
 struct Depsgraph;
+struct GPUFXSettings;
 struct Main;
 struct Object;
 struct RegionView3D;
 struct RenderData;
 struct Scene;
+struct View3D;
 struct ViewLayer;
 struct rctf;
-struct View3D;
-struct GPUFXSettings;
 
 /* Camera Datablock */
 
@@ -62,7 +54,6 @@ void BKE_camera_free(struct Camera *ca);
 /* Camera Usage */
 
 float BKE_camera_object_dof_distance(struct Object *ob);
-void BKE_camera_object_mode(struct RenderData *rd, struct Object *ob);
 
 int BKE_camera_sensor_fit(int sensor_fit, float sizex, float sizey);
 float BKE_camera_sensor_size(int sensor_fit, float sensor_x, float sensor_y);
@@ -90,8 +81,8 @@ typedef struct CameraParams {
 	int sensor_fit;
 
 	/* clipping */
-	float clipsta;
-	float clipend;
+	float clip_start;
+	float clip_end;
 
 	/* computed viewplane */
 	float ycor;
@@ -141,6 +132,8 @@ void BKE_camera_to_gpu_dof(struct Object *camera, struct GPUFXSettings *r_fx_set
 struct Object *BKE_camera_multiview_render(struct Scene *scene, struct Object *camera, const char *viewname);
 void           BKE_camera_multiview_view_matrix(struct RenderData *rd, const struct Object *camera, const bool is_left, float r_viewmat[4][4]);
 void           BKE_camera_multiview_model_matrix(struct RenderData *rd, const struct Object *camera, const char *viewname, float r_modelmat[4][4]);
+void           BKE_camera_multiview_model_matrix_scaled(struct RenderData *rd, const struct Object *camera, const char *viewname, float r_modelmat[4][4]);
+void           BKE_camera_multiview_window_matrix(struct RenderData *rd, const struct Object *camera, const char *viewname, float r_winmat[4][4]);
 float          BKE_camera_multiview_shift_x(struct RenderData *rd, const struct Object *camera, const char *viewname);
 void           BKE_camera_multiview_params(struct RenderData *rd, struct CameraParams *params, const struct Object *camera, const char *viewname);
 bool           BKE_camera_multiview_spherical_stereo(struct RenderData *rd, const struct Object *camera);

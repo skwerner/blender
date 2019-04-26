@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,26 +15,20 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file UI_interface_icons.h
- *  \ingroup editorui
+/** \file
+ * \ingroup editorui
  */
 
 #ifndef __UI_INTERFACE_ICONS_H__
 #define __UI_INTERFACE_ICONS_H__
 
-struct bContext;
 struct ID;
-struct Scene;
-struct PreviewImage;
 struct PointerRNA;
+struct PreviewImage;
+struct Scene;
+struct bContext;
 
 enum eIconSizes;
 
@@ -73,10 +65,10 @@ void UI_icon_draw_preview(float x, float y, int icon_id);
 void UI_icon_draw_preview_aspect(float x, float y, int icon_id, float aspect);
 void UI_icon_draw_preview_aspect_size(float x, float y, int icon_id, float aspect, float alpha, int size);
 
-void UI_icon_draw_aspect(float x, float y, int icon_id, float aspect, float alpha);
-void UI_icon_draw_aspect_color(float x, float y, int icon_id, float aspect, const float rgb[3]);
+void UI_icon_draw_aspect(float x, float y, int icon_id, float aspect, float alpha, const char mono_color[4]);
+void UI_icon_draw_aspect_color(float x, float y, int icon_id, float aspect, const float rgb[3], const char mono_color[4]);
 void UI_icon_draw_size(float x, float y, int size, int icon_id, float alpha);
-void UI_icon_draw_desaturate(float x, float y, int icon_id, float aspect, float alpha, float desaturate);
+void UI_icon_draw_desaturate(float x, float y, int icon_id, float aspect, float alpha, float desaturate, const char mono_color[4]);
 void UI_icons_free(void);
 void UI_icons_free_drawinfo(void *drawinfo);
 

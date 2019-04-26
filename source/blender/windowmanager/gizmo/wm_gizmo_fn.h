@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,12 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/windowmanager/gizmo/wm_gizmo_fn.h
- *  \ingroup wm
+/** \file
+ * \ingroup wm
  *
  * Callback function definitions, needed for both Types & API headers.
  */
@@ -39,6 +35,8 @@ typedef void (*wmGizmoGroupFnRefresh)(
         const struct bContext *, struct wmGizmoGroup *);
 typedef void (*wmGizmoGroupFnDrawPrepare)(
         const struct bContext *, struct wmGizmoGroup *);
+typedef void (*wmGizmoGroupFnInvokePrepare)(
+        const struct bContext *, struct wmGizmoGroup *, struct wmGizmo *);
 typedef struct wmKeyMap *(*wmGizmoGroupFnSetupKeymap)(
         const struct wmGizmoGroupType *, struct wmKeyConfig *)
         ATTR_WARN_UNUSED_RESULT;
@@ -51,7 +49,7 @@ typedef void (*wmGizmoGroupFnMsgBusSubscribe)(
 typedef void    (*wmGizmoFnSetup)(struct wmGizmo *);
 typedef void    (*wmGizmoFnDraw)(const struct bContext *, struct wmGizmo *);
 typedef void    (*wmGizmoFnDrawSelect)(const struct bContext *, struct wmGizmo *, int);
-typedef int     (*wmGizmoFnTestSelect)(struct bContext *, struct wmGizmo *, const struct wmEvent *);
+typedef int     (*wmGizmoFnTestSelect)(struct bContext *, struct wmGizmo *, const int mval[2]);
 typedef int     (*wmGizmoFnModal)(struct bContext *, struct wmGizmo *, const struct wmEvent *, eWM_GizmoFlagTweak);
 typedef void    (*wmGizmoFnPropertyUpdate)(struct wmGizmo *, struct wmGizmoProperty *);
 typedef void    (*wmGizmoFnMatrixBasisGet)(const struct wmGizmo *, float[4][4]);

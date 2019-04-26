@@ -1,6 +1,4 @@
 /*
- * Copyright 2016, Blender Foundation.
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -15,27 +13,25 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
- * Contributor(s): Blender Institute
- *
+ * Copyright 2016, Blender Foundation.
  */
 
-/** \file blender/draw/intern/draw_manager_shader.c
- *  \ingroup draw
+/** \file
+ * \ingroup draw
  */
 
-#include "draw_manager.h"
-
+#include "DNA_object_types.h"
 #include "DNA_world_types.h"
 #include "DNA_material_types.h"
 
 #include "BLI_listbase.h"
-#include "BLI_string.h"
 #include "BLI_string_utils.h"
 #include "BLI_threads.h"
-#include "BLI_task.h"
 
 #include "BKE_global.h"
 #include "BKE_main.h"
+
+#include "DEG_depsgraph_query.h"
 
 #include "GPU_shader.h"
 #include "GPU_material.h"
@@ -43,14 +39,16 @@
 #include "WM_api.h"
 #include "WM_types.h"
 
+#include "draw_manager.h"
+
 extern char datatoc_gpu_shader_2D_vert_glsl[];
 extern char datatoc_gpu_shader_3D_vert_glsl[];
+extern char datatoc_gpu_shader_depth_only_frag_glsl[];
 extern char datatoc_common_fullscreen_vert_glsl[];
 
 #define USE_DEFERRED_COMPILATION 1
 
 /* -------------------------------------------------------------------- */
-
 /** \name Deferred Compilation (DRW_deferred)
  *
  * Since compiling shader can take a long time, we do it in a non blocking
@@ -129,10 +127,13 @@ static void drw_deferred_shader_compilation_exec(void *custom_data, short *stop,
 		*progress = (float)comp->shaders_done / (float)total;
 		*do_update = true;
 
-		glFlush();
+		GPU_flush();
 		BLI_mutex_unlock(&comp->compilation_lock);
 
+		BLI_spin_lock(&comp->list_lock);
 		drw_deferred_shader_free(comp->mat_compiling);
+		comp->mat_compiling = NULL;
+		BLI_spin_unlock(&comp->list_lock);
 	}
 
 	WM_opengl_context_release(gl_context);
@@ -173,7 +174,9 @@ static void drw_deferred_shader_add(GPUMaterial *mat, bool deferred)
 	BLI_assert(DST.draw_ctx.evil_C);
 	wmWindowManager *wm = CTX_wm_manager(DST.draw_ctx.evil_C);
 	wmWindow *win = CTX_wm_window(DST.draw_ctx.evil_C);
-	Scene *scene = DST.draw_ctx.scene;
+
+	/* Use original scene ID since this is what the jobs template tests for. */
+	Scene *scene = (Scene *)DEG_get_original_id(&DST.draw_ctx.scene->id);
 
 	/* Get the running job or a new one if none is running. Can only have one job per type & owner.  */
 	wmJob *wm_job = WM_jobs_get(wm, win, scene, "Shaders Compilation",
@@ -235,12 +238,11 @@ void DRW_deferred_shader_remove(GPUMaterial *mat)
 				}
 
 				/* Wait for compilation to finish */
-				if (comp->mat_compiling != NULL) {
-					if (comp->mat_compiling->mat == mat) {
-						BLI_mutex_lock(&comp->compilation_lock);
-						BLI_mutex_unlock(&comp->compilation_lock);
-					}
+				if ((comp->mat_compiling != NULL) && (comp->mat_compiling->mat == mat)) {
+					BLI_mutex_lock(&comp->compilation_lock);
+					BLI_mutex_unlock(&comp->compilation_lock);
 				}
+
 				BLI_spin_unlock(&comp->list_lock);
 
 				if (dsh) {
@@ -287,18 +289,20 @@ GPUShader *DRW_shader_create_with_lib(
 
 GPUShader *DRW_shader_create_with_transform_feedback(
         const char *vert, const char *geom, const char *defines,
-        const GPUShaderTFBType prim_type, const char **varying_names, const int varying_count)
+        const eGPUShaderTFBType prim_type, const char **varying_names, const int varying_count)
 {
-	return GPU_shader_create_ex(vert, NULL, geom, NULL, defines, GPU_SHADER_FLAGS_NONE,
+	return GPU_shader_create_ex(vert,
+	                            datatoc_gpu_shader_depth_only_frag_glsl,
+	                            geom, NULL, defines,
 	                            prim_type, varying_names, varying_count, __func__);
 }
 
-GPUShader *DRW_shader_create_2D(const char *frag, const char *defines)
+GPUShader *DRW_shader_create_2d(const char *frag, const char *defines)
 {
 	return GPU_shader_create(datatoc_gpu_shader_2D_vert_glsl, frag, NULL, NULL, defines, __func__);
 }
 
-GPUShader *DRW_shader_create_3D(const char *frag, const char *defines)
+GPUShader *DRW_shader_create_3d(const char *frag, const char *defines)
 {
 	return GPU_shader_create(datatoc_gpu_shader_3D_vert_glsl, frag, NULL, NULL, defines, __func__);
 }
@@ -308,9 +312,9 @@ GPUShader *DRW_shader_create_fullscreen(const char *frag, const char *defines)
 	return GPU_shader_create(datatoc_common_fullscreen_vert_glsl, frag, NULL, NULL, defines, __func__);
 }
 
-GPUShader *DRW_shader_create_3D_depth_only(void)
+GPUShader *DRW_shader_create_3d_depth_only(eGPUShaderConfig sh_cfg)
 {
-	return GPU_shader_get_builtin_shader(GPU_SHADER_3D_DEPTH_ONLY);
+	return GPU_shader_get_builtin_shader_with_config(GPU_SHADER_3D_DEPTH_ONLY, sh_cfg);
 }
 
 GPUMaterial *DRW_shader_find_from_world(World *wo, const void *engine_type, int options, bool deferred)
@@ -349,6 +353,7 @@ GPUMaterial *DRW_shader_create_from_world(
 	}
 
 	if (mat == NULL) {
+		scene = (Scene *)DEG_get_original_id(&DST.draw_ctx.scene->id);
 		mat = GPU_material_from_nodetree(
 		        scene, wo->nodetree, &wo->gpumaterial, engine_type, options,
 		        vert, geom, frag_lib, defines, wo->id.name);
@@ -371,6 +376,7 @@ GPUMaterial *DRW_shader_create_from_material(
 	}
 
 	if (mat == NULL) {
+		scene = (Scene *)DEG_get_original_id(&DST.draw_ctx.scene->id);
 		mat = GPU_material_from_nodetree(
 		        scene, ma->nodetree, &ma->gpumaterial, engine_type, options,
 		        vert, geom, frag_lib, defines, ma->id.name);

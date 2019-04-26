@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,12 +15,6 @@
  *
  * The Original Code is Copyright (C) 2005 Blender Foundation.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): Clément Foucault.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
 #include "../node_shader_util.h"
@@ -40,12 +32,12 @@ static bNodeSocketTemplate sh_node_eevee_specular_in[] = {
 	{	SOCK_FLOAT, 1, N_("Clear Coat Roughness"),	0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, PROP_FACTOR},
 	{	SOCK_VECTOR, 1, N_("Clear Coat Normal"),	0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, PROP_NONE, SOCK_HIDE_VALUE},
 	{	SOCK_FLOAT, 1, N_("Ambient Occlusion"),		1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, PROP_NONE, SOCK_HIDE_VALUE},
-	{	-1, 0, ""	}
+	{	-1, 0, ""	},
 };
 
 static bNodeSocketTemplate sh_node_eevee_specular_out[] = {
 	{	SOCK_SHADER, 0, N_("BSDF")},
-	{	-1, 0, ""	}
+	{	-1, 0, ""	},
 };
 
 static int node_shader_gpu_eevee_specular(GPUMaterial *mat, bNode *node, bNodeExecData *UNUSED(execdata), GPUNodeStack *in, GPUNodeStack *out)
@@ -64,10 +56,12 @@ static int node_shader_gpu_eevee_specular(GPUMaterial *mat, bNode *node, bNodeEx
 
 	/* Occlusion */
 	if (!in[9].link) {
-		GPU_link(mat, "set_value", GPU_uniform(&one), &in[9].link);
+		GPU_link(mat, "set_value", GPU_constant(&one), &in[9].link);
 	}
 
-	return GPU_stack_link(mat, node, "node_eevee_specular", in, out, GPU_uniform(&node->ssr_id));
+	GPU_material_flag_set(mat, GPU_MATFLAG_DIFFUSE | GPU_MATFLAG_GLOSSY);
+
+	return GPU_stack_link(mat, node, "node_eevee_specular", in, out, GPU_constant(&node->ssr_id));
 }
 
 

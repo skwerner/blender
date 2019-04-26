@@ -1,6 +1,4 @@
 /*
- * Copyright 2016, Blender Foundation.
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -15,12 +13,11 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
- * Contributor(s): Blender Institute
- *
+ * Copyright 2016, Blender Foundation.
  */
 
-/** \file blender/draw/modes/edit_mesh_mode_text.c
- *  \ingroup draw
+/** \file
+ * \ingroup draw
  */
 
 #include "BLI_math.h"
@@ -31,9 +28,6 @@
 #include "BKE_unit.h"
 
 #include "ED_view3d.h"
-
-#include "GPU_shader.h"
-#include "GPU_viewport.h"
 
 #include "DNA_mesh_types.h"
 #include "DNA_object_types.h"
@@ -56,9 +50,9 @@ void DRW_edit_mesh_mode_text_measure_stats(
 	 * See bug #36090.
 	 */
 	struct DRWTextStore *dt = DRW_text_cache_ensure();
-	const short txt_flag = DRW_TEXT_CACHE_LOCALCLIP | (unit->system ? 0 : DRW_TEXT_CACHE_ASCII);
+	const short txt_flag = DRW_TEXT_CACHE_GLOBALSPACE | (unit->system ? 0 : DRW_TEXT_CACHE_ASCII);
 	Mesh *me = ob->data;
-	BMEditMesh *em = me->edit_btmesh;
+	BMEditMesh *em = me->edit_mesh;
 	float v1[3], v2[3], v3[3], vmid[3], fvec[3];
 	char numstr[32]; /* Stores the measurement display text here */
 	size_t numstr_len;
@@ -66,32 +60,31 @@ void DRW_edit_mesh_mode_text_measure_stats(
 	uchar col[4] = {0, 0, 0, 255}; /* color of the text to draw */
 	float area; /* area of the face */
 	float grid = unit->system ? unit->scale_length : v3d->grid;
-	const bool do_split = (unit->flag & USER_UNIT_OPT_SPLIT) != 0;
 	const bool do_global = (v3d->flag & V3D_GLOBAL_STATS) != 0;
 	const bool do_moving = (G.moving & G_TRANSFORM_EDIT) != 0;
 	/* when 2 edge-info options are enabled, space apart */
-	const bool do_edge_textpair = (me->drawflag & ME_DRAWEXTRA_EDGELEN) && (me->drawflag & ME_DRAWEXTRA_EDGEANG);
-	const float edge_texpair_sep = 0.4f;
+	const bool do_edge_textpair = (v3d->overlay.edit_flag & V3D_OVERLAY_EDIT_EDGE_LEN) && (v3d->overlay.edit_flag & V3D_OVERLAY_EDIT_EDGE_ANG);
+	const short edge_texpair_sep = (short)(5.0f * U.ui_scale);
 	float clip_planes[4][4];
 	/* allow for displaying shape keys and deform mods */
 	BMIter iter;
 
 	/* make the precision of the display value proportionate to the gridsize */
 
-	if (grid <= 0.01f) conv_float = "%.6g";
-	else if (grid <= 0.1f) conv_float = "%.5g";
-	else if (grid <= 1.0f) conv_float = "%.4g";
-	else if (grid <= 10.0f) conv_float = "%.3g";
-	else conv_float = "%.2g";
+	if      (grid <= 0.01f) { conv_float = "%.6g"; }
+	else if (grid <= 0.1f)  { conv_float = "%.5g"; }
+	else if (grid <= 1.0f)  { conv_float = "%.4g"; }
+	else if (grid <= 10.0f) { conv_float = "%.3g"; }
+	else                    { conv_float = "%.2g"; }
 
-	if (me->drawflag & (ME_DRAWEXTRA_EDGELEN | ME_DRAWEXTRA_EDGEANG | ME_DRAWEXTRA_INDICES)) {
+	if (v3d->overlay.edit_flag & (V3D_OVERLAY_EDIT_EDGE_LEN | V3D_OVERLAY_EDIT_EDGE_ANG | V3D_OVERLAY_EDIT_INDICES)) {
 		BoundBox bb;
 		const rcti rect = {0, ar->winx, 0, ar->winy};
 
 		ED_view3d_clipping_calc(&bb, clip_planes, ar, em->ob, &rect);
 	}
 
-	if (me->drawflag & ME_DRAWEXTRA_EDGELEN) {
+	if (v3d->overlay.edit_flag & V3D_OVERLAY_EDIT_EDGE_LEN) {
 		BMEdge *eed;
 
 		UI_GetThemeColor3ubv(TH_DRAWEXTRA_EDGELEN, col);
@@ -109,12 +102,8 @@ void DRW_edit_mesh_mode_text_measure_stats(
 
 				if (clip_segment_v3_plane_n(v1, v2, clip_planes, 4, v1_clip, v2_clip)) {
 
-					if (do_edge_textpair) {
-						interp_v3_v3v3(vmid, v1, v2, edge_texpair_sep);
-					}
-					else {
-						mid_v3_v3v3(vmid, v1_clip, v2_clip);
-					}
+					mid_v3_v3v3(vmid, v1_clip, v2_clip);
+					mul_m4_v3(ob->obmat, vmid);
 
 					if (do_global) {
 						mul_mat3_m4_v3(ob->obmat, v1);
@@ -122,21 +111,23 @@ void DRW_edit_mesh_mode_text_measure_stats(
 					}
 
 					if (unit->system) {
-						numstr_len = bUnit_AsString(
-						       numstr, sizeof(numstr), len_v3v3(v1, v2) * unit->scale_length, 3,
-						       unit->system, B_UNIT_LENGTH, do_split, false);
+						numstr_len = bUnit_AsString2(
+						        numstr, sizeof(numstr), len_v3v3(v1, v2) * unit->scale_length, 3,
+						        B_UNIT_LENGTH, unit, false);
 					}
 					else {
 						numstr_len = BLI_snprintf_rlen(numstr, sizeof(numstr), conv_float, len_v3v3(v1, v2));
 					}
 
-					DRW_text_cache_add(dt, vmid, numstr, numstr_len, 0, txt_flag, col);
+					DRW_text_cache_add(dt, vmid, numstr, numstr_len, 0,
+					                   (do_edge_textpair) ? edge_texpair_sep : 0,
+					                   txt_flag, col);
 				}
 			}
 		}
 	}
 
-	if (me->drawflag & ME_DRAWEXTRA_EDGEANG) {
+	if (v3d->overlay.edit_flag & V3D_OVERLAY_EDIT_EDGE_ANG) {
 		const bool is_rad = (unit->system_rotation == USER_UNIT_ROT_RADIANS);
 		BMEdge *eed;
 
@@ -167,12 +158,8 @@ void DRW_edit_mesh_mode_text_measure_stats(
 						float no_a[3], no_b[3];
 						float angle;
 
-						if (do_edge_textpair) {
-							interp_v3_v3v3(vmid, v2_clip, v1_clip, edge_texpair_sep);
-						}
-						else {
-							mid_v3_v3v3(vmid, v1_clip, v2_clip);
-						}
+						mid_v3_v3v3(vmid, v1_clip, v2_clip);
+						mul_m4_v3(ob->obmat, vmid);
 
 						copy_v3_v3(no_a, l_a->f->no);
 						copy_v3_v3(no_b, l_b->f->no);
@@ -187,16 +174,19 @@ void DRW_edit_mesh_mode_text_measure_stats(
 						angle = angle_normalized_v3v3(no_a, no_b);
 
 						numstr_len = BLI_snprintf_rlen(
-						        numstr, sizeof(numstr), "%.3f", is_rad ? angle : RAD2DEGF(angle));
+						        numstr, sizeof(numstr), "%.3f%s", (is_rad) ? angle : RAD2DEGF(angle),
+						                                          (is_rad) ? "r" : "°");
 
-						DRW_text_cache_add(dt, vmid, numstr, numstr_len, 0, txt_flag, col);
+						DRW_text_cache_add(dt, vmid, numstr, numstr_len, 0,
+						                   (do_edge_textpair) ? -edge_texpair_sep : 0,
+						                   txt_flag, col);
 					}
 				}
 			}
 		}
 	}
 
-	if (me->drawflag & ME_DRAWEXTRA_FACEAREA) {
+	if (v3d->overlay.edit_flag & V3D_OVERLAY_EDIT_FACE_AREA) {
 		/* would be nice to use BM_face_calc_area, but that is for 2d faces
 		 * so instead add up tessellation triangle areas */
 
@@ -231,23 +221,24 @@ void DRW_edit_mesh_mode_text_measure_stats(
 				}
 
 				mul_v3_fl(vmid, 1.0f / (float)n);
+				mul_m4_v3(ob->obmat, vmid);
 
 				if (unit->system) {
-					numstr_len = bUnit_AsString(
+					numstr_len = bUnit_AsString2(
 					        numstr, sizeof(numstr),
 					        (double)(area * unit->scale_length * unit->scale_length),
-					        3, unit->system, B_UNIT_AREA, do_split, false);
+					        3, B_UNIT_AREA, unit, false);
 				}
 				else {
 					numstr_len = BLI_snprintf_rlen(numstr, sizeof(numstr), conv_float, area);
 				}
 
-				DRW_text_cache_add(dt, vmid, numstr, numstr_len, 0, txt_flag, col);
+				DRW_text_cache_add(dt, vmid, numstr, numstr_len, 0, 0, txt_flag, col);
 			}
 		}
 	}
 
-	if (me->drawflag & ME_DRAWEXTRA_FACEANG) {
+	if (v3d->overlay.edit_flag & V3D_OVERLAY_EDIT_FACE_ANG) {
 		BMFace *efa;
 		const bool is_rad = (unit->system_rotation == USER_UNIT_ROT_RADIANS);
 
@@ -290,9 +281,11 @@ void DRW_edit_mesh_mode_text_measure_stats(
 						float angle = angle_v3v3v3(v1, v2, v3);
 
 						numstr_len = BLI_snprintf_rlen(
-						        numstr, sizeof(numstr), "%.3f", is_rad ? angle : RAD2DEGF(angle));
+						        numstr, sizeof(numstr), "%.3f%s", (is_rad) ? angle : RAD2DEGF(angle),
+						                                          (is_rad) ? "r" : "°");
 						interp_v3_v3v3(fvec, vmid, v2_local, 0.8f);
-						DRW_text_cache_add(dt, fvec, numstr, numstr_len, 0, txt_flag, col);
+						mul_m4_v3(ob->obmat, fvec);
+						DRW_text_cache_add(dt, fvec, numstr, numstr_len, 0, 0, txt_flag, col);
 					}
 				}
 			}
@@ -300,7 +293,7 @@ void DRW_edit_mesh_mode_text_measure_stats(
 	}
 
 	/* This option is for mesh ops and addons debugging; only available in UI if Blender starts with --debug */
-	if (me->drawflag & ME_DRAWEXTRA_INDICES) {
+	if (v3d->overlay.edit_flag & V3D_OVERLAY_EDIT_INDICES) {
 		int i;
 
 		/* For now, reuse an appropriate theme color */
@@ -311,8 +304,11 @@ void DRW_edit_mesh_mode_text_measure_stats(
 
 			BM_ITER_MESH_INDEX(v, &iter, em->bm, BM_VERTS_OF_MESH, i) {
 				if (BM_elem_flag_test(v, BM_ELEM_SELECT)) {
+					float vec[3];
+					mul_v3_m4v3(vec, ob->obmat, v->co);
+
 					numstr_len = BLI_snprintf_rlen(numstr, sizeof(numstr), "%d", i);
-					DRW_text_cache_add(dt, v->co, numstr, numstr_len, 0, txt_flag, col);
+					DRW_text_cache_add(dt, vec, numstr, numstr_len, 0, 0, txt_flag, col);
 				}
 			}
 		}
@@ -329,8 +325,10 @@ void DRW_edit_mesh_mode_text_measure_stats(
 
 					if (clip_segment_v3_plane_n(v1, v2, clip_planes, 4, v1_clip, v2_clip)) {
 						mid_v3_v3v3(vmid, v1_clip, v2_clip);
+						mul_m4_v3(ob->obmat, vmid);
+
 						numstr_len = BLI_snprintf_rlen(numstr, sizeof(numstr), "%d", i);
-						DRW_text_cache_add(dt, vmid, numstr, numstr_len, 0, txt_flag, col);
+						DRW_text_cache_add(dt, vmid, numstr, numstr_len, 0, 0, txt_flag, col);
 					}
 				}
 			}
@@ -341,10 +339,11 @@ void DRW_edit_mesh_mode_text_measure_stats(
 
 			BM_ITER_MESH_INDEX(f, &iter, em->bm, BM_FACES_OF_MESH, i) {
 				if (BM_elem_flag_test(f, BM_ELEM_SELECT)) {
-					BM_face_calc_center_mean(f, v1);
+					BM_face_calc_center_median(f, v1);
+					mul_m4_v3(ob->obmat, v1);
 
 					numstr_len = BLI_snprintf_rlen(numstr, sizeof(numstr), "%d", i);
-					DRW_text_cache_add(dt, v1, numstr, numstr_len, 0, txt_flag, col);
+					DRW_text_cache_add(dt, v1, numstr, numstr_len, 0, 0, txt_flag, col);
 				}
 			}
 		}

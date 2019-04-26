@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,12 +15,10 @@
  *
  * The Original Code is Copyright (C) 2013 Blender Foundation.
  * All rights reserved.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/blenlib/intern/sort_utils.c
- *  \ingroup bli
+/** \file
+ * \ingroup bli
  *
  * Utility functions for sorting common types.
  */
@@ -45,52 +41,52 @@ int BLI_sortutil_cmp_float(const void *a_, const void *b_)
 {
 	const struct SortAnyByFloat *a = a_;
 	const struct SortAnyByFloat *b = b_;
-	if      (a->sort_value > b->sort_value) return  1;
-	else if (a->sort_value < b->sort_value) return -1;
-	else                                    return  0;
+	if      (a->sort_value > b->sort_value) { return  1; }
+	else if (a->sort_value < b->sort_value) { return -1; }
+	else                                    { return  0; }
 }
 
 int BLI_sortutil_cmp_float_reverse(const void *a_, const void *b_)
 {
 	const struct SortAnyByFloat *a = a_;
 	const struct SortAnyByFloat *b = b_;
-	if      (a->sort_value < b->sort_value) return  1;
-	else if (a->sort_value > b->sort_value) return -1;
-	else                                    return  0;
+	if      (a->sort_value < b->sort_value) { return  1; }
+	else if (a->sort_value > b->sort_value) { return -1; }
+	else                                    { return  0; }
 }
 
 int BLI_sortutil_cmp_int(const void *a_, const void *b_)
 {
 	const struct SortAnyByInt *a = a_;
 	const struct SortAnyByInt *b = b_;
-	if      (a->sort_value > b->sort_value) return  1;
-	else if (a->sort_value < b->sort_value) return -1;
-	else                                    return  0;
+	if      (a->sort_value > b->sort_value) { return  1; }
+	else if (a->sort_value < b->sort_value) { return -1; }
+	else                                    { return  0; }
 }
 
 int BLI_sortutil_cmp_int_reverse(const void *a_, const void *b_)
 {
 	const struct SortAnyByInt *a = a_;
 	const struct SortAnyByInt *b = b_;
-	if      (a->sort_value < b->sort_value) return  1;
-	else if (a->sort_value > b->sort_value) return -1;
-	else                                    return  0;
+	if      (a->sort_value < b->sort_value) { return  1; }
+	else if (a->sort_value > b->sort_value) { return -1; }
+	else                                    { return  0; }
 }
 
 int BLI_sortutil_cmp_ptr(const void *a_, const void *b_)
 {
 	const struct SortAnyByPtr *a = a_;
 	const struct SortAnyByPtr *b = b_;
-	if      (a->sort_value > b->sort_value) return  1;
-	else if (a->sort_value < b->sort_value) return -1;
-	else                                    return  0;
+	if      (a->sort_value > b->sort_value) { return  1; }
+	else if (a->sort_value < b->sort_value) { return -1; }
+	else                                    { return  0; }
 }
 
 int BLI_sortutil_cmp_ptr_reverse(const void *a_, const void *b_)
 {
 	const struct SortAnyByPtr *a = a_;
 	const struct SortAnyByPtr *b = b_;
-	if      (a->sort_value < b->sort_value) return  1;
-	else if (a->sort_value > b->sort_value) return -1;
-	else                                    return  0;
+	if      (a->sort_value < b->sort_value) { return  1; }
+	else if (a->sort_value > b->sort_value) { return -1; }
+	else                                    { return  0; }
 }

@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,23 +15,22 @@
  *
  * The Original Code is Copyright (C) 2013 by the Blender Foundation.
  * All rights reserved.
- *
- * Contributor(s): Alexander Pinzon Fernandez
- *
- * ***** END GPL LICENSE BLOCK *****
- *
  */
 
-/** \file blender/modifiers/intern/MOD_laplaciandeform.c
- *  \ingroup modifiers
+/** \file
+ * \ingroup modifiers
  */
 
 #include "BLI_utildefines.h"
-#include "BLI_utildefines_stack.h"
+
 #include "BLI_math.h"
 #include "BLI_string.h"
+#include "BLI_utildefines_stack.h"
 
 #include "MEM_guardedalloc.h"
+
+#include "DNA_mesh_types.h"
+#include "DNA_meshdata_types.h"
 
 #include "BKE_deform.h"
 #include "BKE_editmesh.h"
@@ -41,9 +38,6 @@
 #include "BKE_mesh_mapping.h"
 #include "BKE_mesh_runtime.h"
 #include "BKE_particle.h"
-
-#include "DNA_mesh_types.h"
-#include "DNA_meshdata_types.h"
 
 #include "MOD_util.h"
 
@@ -72,7 +66,7 @@ typedef struct LaplacianSystem {
 	float (*co)[3];				/* Original vertex coordinates */
 	float (*no)[3];				/* Original vertex normal */
 	float (*delta)[3];			/* Differential Coordinates */
-	unsigned int (*tris)[3];	/* Copy of MLoopTri (tesselation triangle) v1-v3 */
+	unsigned int (*tris)[3];	/* Copy of MLoopTri (tessellation triangle) v1-v3 */
 	int *index_anchors;			/* Static vertex index list */
 	int *unit_verts;			/* Unit vectors of projected edges onto the plane orthogonal to n */
 	int *ringf_indices;			/* Indices of faces per vertex */
@@ -214,7 +208,7 @@ static void createVertRingMap(
 /**
  * This method computes the Laplacian Matrix and Differential Coordinates for all vertex in the mesh.
  * The Linear system is LV = d
- * Where L is Laplacian Matrix, V as the vertexes in Mesh, d is the differential coordinates
+ * Where L is Laplacian Matrix, V as the vertices in Mesh, d is the differential coordinates
  * The Laplacian Matrix is computes as a
  * Lij = sum(Wij) (if i == j)
  * Lij = Wij (if i != j)
@@ -224,7 +218,7 @@ static void createVertRingMap(
  * di = Vi * sum(Wij) - sum(Wij * Vj)
  * Where :
  * di is the Differential Coordinate i
- * sum (Wij) is the sum of all weights between vertex Vi and its vertexes neighbors (Vj)
+ * sum (Wij) is the sum of all weights between vertex Vi and its vertices neighbors (Vj)
  * sum (Wij * Vj) is the sum of the product between vertex neighbor Vj and weight Wij for all neighborhood.
  *
  * This Laplacian Matrix is described in the paper:
@@ -566,7 +560,7 @@ static void initSystem(
 
 
 		mlooptri = BKE_mesh_runtime_looptri_ensure(mesh);
-		mloop = mesh->mloop;;
+		mloop = mesh->mloop;
 
 		for (i = 0; i < sys->total_tris; i++) {
 			sys->tris[i][0] = mloop[mlooptri[i].tri[0]].v;
@@ -722,22 +716,24 @@ static bool isDisabled(const struct Scene *UNUSED(scene), ModifierData *md, bool
 	return 1;
 }
 
-static CustomDataMask requiredDataMask(Object *UNUSED(ob), ModifierData *md)
+static void requiredDataMask(Object *UNUSED(ob), ModifierData *md, CustomData_MeshMasks *r_cddata_masks)
 {
 	LaplacianDeformModifierData *lmd = (LaplacianDeformModifierData *)md;
-	CustomDataMask dataMask = 0;
-	if (lmd->anchor_grp_name[0]) dataMask |= CD_MASK_MDEFORMVERT;
-	return dataMask;
+
+	if (lmd->anchor_grp_name[0] != '\0') {
+		r_cddata_masks->vmask |= CD_MASK_MDEFORMVERT;
+	}
 }
 
 static void deformVerts(
         ModifierData *md, const ModifierEvalContext *ctx, Mesh *mesh,
         float (*vertexCos)[3], int numVerts)
 {
-	Mesh *mesh_src = MOD_get_mesh_eval(ctx->object, NULL, mesh, NULL, false, false);
+	Mesh *mesh_src = MOD_deform_mesh_eval_get(ctx->object, NULL, mesh, NULL, numVerts, false, false);
 
 	LaplacianDeformModifier_do((LaplacianDeformModifierData *)md, ctx->object, mesh_src, vertexCos, numVerts);
-	if (mesh_src != mesh) {
+
+	if (!ELEM(mesh_src, NULL, mesh)) {
 		BKE_id_free(NULL, mesh_src);
 	}
 }
@@ -746,10 +742,12 @@ static void deformVertsEM(
         ModifierData *md, const ModifierEvalContext *ctx, struct BMEditMesh *editData,
         Mesh *mesh, float (*vertexCos)[3], int numVerts)
 {
-	Mesh *mesh_src = MOD_get_mesh_eval(ctx->object, editData, mesh, NULL, false, false);
+	Mesh *mesh_src = MOD_deform_mesh_eval_get(ctx->object, editData, mesh, NULL, numVerts, false, false);
+
 	LaplacianDeformModifier_do((LaplacianDeformModifierData *)md, ctx->object, mesh_src,
 	                           vertexCos, numVerts);
-	if (mesh_src != mesh) {
+
+	if (!ELEM(mesh_src, NULL, mesh)) {
 		BKE_id_free(NULL, mesh_src);
 	}
 }
@@ -773,19 +771,11 @@ ModifierTypeInfo modifierType_LaplacianDeform = {
 	/* flags */             eModifierTypeFlag_AcceptsMesh | eModifierTypeFlag_SupportsEditmode,
 	/* copyData */          copyData,
 
-	/* deformVerts_DM */    NULL,
-	/* deformMatrices_DM */ NULL,
-	/* deformVertsEM_DM */  NULL,
-	/* deformMatricesEM_DM*/NULL,
-	/* applyModifier_DM */  NULL,
-	/* applyModifierEM_DM */NULL,
-
 	/* deformVerts */       deformVerts,
 	/* deformMatrices */    NULL,
 	/* deformVertsEM */     deformVertsEM,
 	/* deformMatricesEM */  NULL,
 	/* applyModifier */     NULL,
-	/* applyModifierEM */   NULL,
 
 	/* initData */          initData,
 	/* requiredDataMask */  requiredDataMask,
@@ -797,4 +787,5 @@ ModifierTypeInfo modifierType_LaplacianDeform = {
 	/* foreachObjectLink */ NULL,
 	/* foreachIDLink */     NULL,
 	/* foreachTexLink */    NULL,
+	/* freeRuntimeData */   NULL,
 };

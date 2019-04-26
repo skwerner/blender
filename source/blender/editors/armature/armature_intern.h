@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,15 +15,10 @@
  *
  * The Original Code is Copyright (C) 2009 Blender Foundation.
  * All rights reserved.
- *
- *
- * Contributor(s): Blender Foundation
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/armature/armature_intern.h
- *  \ingroup edarmature
+/** \file
+ * \ingroup edarmature
  */
 
 #ifndef __ARMATURE_INTERN_H__
@@ -34,19 +27,19 @@
 /* internal exports only */
 struct wmOperatorType;
 
-struct bContext;
-struct Scene;
-struct Object;
 struct Base;
+struct Object;
+struct Scene;
 struct bAction;
+struct bContext;
 struct bPoseChannel;
 
-struct bArmature;
-struct EditBone;
 struct Bone;
+struct EditBone;
+struct bArmature;
 
-struct ListBase;
 struct LinkData;
+struct ListBase;
 
 /* ******************************************************* */
 /* Armature EditMode Operators */
@@ -128,6 +121,7 @@ void POSE_OT_group_deselect(struct wmOperatorType *ot);
 void POSE_OT_paths_calculate(struct wmOperatorType *ot);
 void POSE_OT_paths_update(struct wmOperatorType *ot);
 void POSE_OT_paths_clear(struct wmOperatorType *ot);
+void POSE_OT_paths_range_update(struct wmOperatorType *ot);
 
 void POSE_OT_autoside_names(struct wmOperatorType *ot);
 void POSE_OT_flip_names(struct wmOperatorType *ot);
@@ -146,35 +140,46 @@ void POSE_OT_bone_layers(struct wmOperatorType *ot);
 typedef struct tPChanFCurveLink {
 	struct tPChanFCurveLink *next, *prev;
 
-	ListBase fcurves;               /* F-Curves for this PoseChannel (wrapped with LinkData) */
-	struct bPoseChannel *pchan;     /* Pose Channel which data is attached to */
+	/** Object this Pose Channel belongs to. */
+	struct Object *ob;
 
-	char *pchan_path;               /* RNA Path to this Pose Channel (needs to be freed when we're done) */
+	/** F-Curves for this PoseChannel (wrapped with LinkData) */
+	ListBase fcurves;
+	/** Pose Channel which data is attached to */
+	struct bPoseChannel *pchan;
 
-	float oldloc[3];                /* transform values at start of operator (to be restored before each modal step) */
+	/** RNA Path to this Pose Channel (needs to be freed when we're done) */
+	char *pchan_path;
+
+	/** transform values at start of operator (to be restored before each modal step) */
+	float oldloc[3];
 	float oldrot[3];
 	float oldscale[3];
 	float oldquat[4];
 	float oldangle;
 	float oldaxis[3];
 
-	float roll1, roll2;             /* old bbone values (to be restored along with the transform properties) */
-	float curveInX, curveInY;       /* (NOTE: we haven't renamed these this time, as their names are already long enough) */
+	/** old bbone values (to be restored along with the transform properties) */
+	float roll1, roll2;
+	/** (NOTE: we haven't renamed these this time, as their names are already long enough) */
+	float curveInX, curveInY;
 	float curveOutX, curveOutY;
 	float ease1, ease2;
 	float scaleIn, scaleOut;
 
-	struct IDProperty *oldprops;    /* copy of custom properties at start of operator (to be restored before each modal step) */
+	/** copy of custom properties at start of operator (to be restored before each modal step) */
+	struct IDProperty *oldprops;
 } tPChanFCurveLink;
 
 /* ----------- */
 
-void poseAnim_mapping_get(struct bContext *C, ListBase *pfLinks, struct Object *ob, struct bAction *act);
+struct Object *poseAnim_object_get(struct Object *ob_);
+void poseAnim_mapping_get(struct bContext *C, ListBase *pfLinks);
 void poseAnim_mapping_free(ListBase *pfLinks);
 
 void poseAnim_mapping_refresh(struct bContext *C, struct Scene *scene, struct Object *ob);
 void poseAnim_mapping_reset(ListBase *pfLinks);
-void poseAnim_mapping_autoKeyframe(struct bContext *C, struct Scene *scene, struct Object *ob, ListBase *pfLinks, float cframe);
+void poseAnim_mapping_autoKeyframe(struct bContext *C, struct Scene *scene, ListBase *pfLinks, float cframe);
 
 LinkData *poseAnim_mapping_getNextFCurve(ListBase *fcuLinks, LinkData *prev, const char *path);
 
@@ -212,7 +217,7 @@ void POSE_OT_propagate(struct wmOperatorType *ot);
  * within each file, but some tools still have a bit of overlap which makes things messy -- Feb 2013
  */
 
-EditBone *make_boneList(struct ListBase *edbo, struct ListBase *bones, struct EditBone *parent, struct Bone *actBone);
+EditBone *make_boneList(struct ListBase *edbo, struct ListBase *bones, struct Bone *actBone);
 
 /* duplicate method */
 void preEditBoneDuplicate(struct ListBase *editbones);

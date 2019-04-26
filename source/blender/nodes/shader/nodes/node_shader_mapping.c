@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,10 @@
  *
  * The Original Code is Copyright (C) 2005 Blender Foundation.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/nodes/shader/nodes/node_shader_mapping.c
- *  \ingroup shdnodes
+/** \file
+ * \ingroup shdnodes
  */
 
 #include "node_shader_util.h"
@@ -34,12 +26,12 @@
 /* **************** MAPPING  ******************** */
 static bNodeSocketTemplate sh_node_mapping_in[] = {
 	{	SOCK_VECTOR, 1, N_("Vector"),	0.0f, 0.0f, 0.0f, 1.0f, -1.0f, 1.0f, PROP_NONE},
-	{	-1, 0, ""	}
+	{	-1, 0, ""	},
 };
 
 static bNodeSocketTemplate sh_node_mapping_out[] = {
 	{	SOCK_VECTOR, 0, N_("Vector")},
-	{	-1, 0, ""	}
+	{	-1, 0, ""	},
 };
 
 static void *node_shader_initexec_mapping(bNodeExecContext *UNUSED(context),
@@ -92,12 +84,12 @@ static int gpu_shader_mapping(GPUMaterial *mat, bNode *node, bNodeExecData *UNUS
 	static float min[3] = {-FLT_MAX, -FLT_MAX, -FLT_MAX};
 	GPUNodeLink *tmin, *tmax, *tmat0, *tmat1, *tmat2, *tmat3;
 
-	tmin = GPU_uniform_buffer((domin) ? texmap->min : min, GPU_VEC3);
-	tmax = GPU_uniform_buffer((domax) ? texmap->max : max, GPU_VEC3);
-	tmat0 = GPU_uniform_buffer((float *)texmap->mat[0], GPU_VEC4);
-	tmat1 = GPU_uniform_buffer((float *)texmap->mat[1], GPU_VEC4);
-	tmat2 = GPU_uniform_buffer((float *)texmap->mat[2], GPU_VEC4);
-	tmat3 = GPU_uniform_buffer((float *)texmap->mat[3], GPU_VEC4);
+	tmin = GPU_uniform((domin) ? texmap->min : min);
+	tmax = GPU_uniform((domax) ? texmap->max : max);
+	tmat0 = GPU_uniform((float *)texmap->mat[0]);
+	tmat1 = GPU_uniform((float *)texmap->mat[1]);
+	tmat2 = GPU_uniform((float *)texmap->mat[2]);
+	tmat3 = GPU_uniform((float *)texmap->mat[3]);
 
 	GPU_stack_link(mat, node, "mapping", in, out, tmat0, tmat1, tmat2, tmat3, tmin, tmax);
 

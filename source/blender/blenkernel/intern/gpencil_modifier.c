@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,11 @@
  *
  * The Original Code is Copyright (C) 2017, Blender Foundation
  * This is a new part of Blender
- *
- * Contributor(s): Antonio Vazquez
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/blenkernel/intern/gpencil_modifier.c
- *  \ingroup bke
+/** \file
+ * \ingroup bke
  */
-
 
 #include <stdio.h>
 
@@ -45,7 +38,6 @@
 #include "DNA_gpencil_types.h"
 #include "DNA_gpencil_modifier_types.h"
 
-#include "BKE_global.h"
 #include "BKE_library.h"
 #include "BKE_library_query.h"
 #include "BKE_gpencil.h"
@@ -220,10 +212,14 @@ static void gpencil_rdp_stroke(bGPDstroke *gps, vec2f *points2d, float epsilon)
 
 	/* adding points marked */
 	bGPDspoint *old_points = MEM_dupallocN(gps->points);
-	MDeformVert *old_dvert = MEM_dupallocN(gps->dvert);
+	MDeformVert *old_dvert = NULL;
+	MDeformVert *dvert_src = NULL;
 
+	if (gps->dvert != NULL) {
+		old_dvert = MEM_dupallocN(gps->dvert);
+	}
 	/* resize gps */
-	gps->flag |= GP_STROKE_RECALC_CACHES;
+	gps->flag |= GP_STROKE_RECALC_GEOMETRY;
 	gps->tot_triangles = 0;
 
 	int j = 0;
@@ -231,16 +227,23 @@ static void gpencil_rdp_stroke(bGPDstroke *gps, vec2f *points2d, float epsilon)
 		bGPDspoint *pt_src = &old_points[i];
 		bGPDspoint *pt = &gps->points[j];
 
-		MDeformVert *dvert_src = &old_dvert[i];
-		MDeformVert *dvert = &gps->dvert[j];
-
 		if ((marked[i]) || (i == 0) || (i == totpoints - 1)) {
 			memcpy(pt, pt_src, sizeof(bGPDspoint));
-			memcpy(dvert, dvert_src, sizeof(MDeformVert));
+			if (gps->dvert != NULL) {
+				dvert_src = &old_dvert[i];
+				MDeformVert *dvert = &gps->dvert[j];
+				memcpy(dvert, dvert_src, sizeof(MDeformVert));
+				if (dvert_src->dw) {
+					memcpy(dvert->dw, dvert_src->dw, sizeof(MDeformWeight));
+				}
+			}
 			j++;
 		}
 		else {
-			BKE_gpencil_free_point_weights(dvert_src);
+			if (gps->dvert != NULL) {
+				dvert_src = &old_dvert[i];
+				BKE_gpencil_free_point_weights(dvert_src);
+			}
 		}
 	}
 
@@ -264,7 +267,7 @@ void BKE_gpencil_simplify_stroke(bGPDstroke *gps, float factor)
 	MEM_SAFE_FREE(points2d);
 }
 
-/* Simplify alternate vertex of stroke except extrems */
+/* Simplify alternate vertex of stroke except extremes */
 void BKE_gpencil_simplify_fixed(bGPDstroke *gps)
 {
 	if (gps->totpoints < 5) {
@@ -273,7 +276,12 @@ void BKE_gpencil_simplify_fixed(bGPDstroke *gps)
 
 	/* save points */
 	bGPDspoint *old_points = MEM_dupallocN(gps->points);
-	MDeformVert *old_dvert = MEM_dupallocN(gps->dvert);
+	MDeformVert *old_dvert = NULL;
+	MDeformVert *dvert_src = NULL;
+
+	if (gps->dvert != NULL) {
+		old_dvert = MEM_dupallocN(gps->dvert);
+	}
 
 	/* resize gps */
 	int newtot = (gps->totpoints - 2) / 2;
@@ -283,8 +291,10 @@ void BKE_gpencil_simplify_fixed(bGPDstroke *gps)
 	newtot += 2;
 
 	gps->points = MEM_recallocN(gps->points, sizeof(*gps->points) * newtot);
-	gps->dvert = MEM_recallocN(gps->dvert, sizeof(*gps->dvert) * newtot);
-	gps->flag |= GP_STROKE_RECALC_CACHES;
+	if (gps->dvert != NULL) {
+		gps->dvert = MEM_recallocN(gps->dvert, sizeof(*gps->dvert) * newtot);
+	}
+	gps->flag |= GP_STROKE_RECALC_GEOMETRY;
 	gps->tot_triangles = 0;
 
 	int j = 0;
@@ -292,16 +302,24 @@ void BKE_gpencil_simplify_fixed(bGPDstroke *gps)
 		bGPDspoint *pt_src = &old_points[i];
 		bGPDspoint *pt = &gps->points[j];
 
-		MDeformVert *dvert_src = &old_dvert[i];
-		MDeformVert *dvert = &gps->dvert[j];
 
 		if ((i == 0) || (i == gps->totpoints - 1) || ((i % 2) > 0.0)) {
 			memcpy(pt, pt_src, sizeof(bGPDspoint));
-			memcpy(dvert, dvert_src, sizeof(MDeformVert));
+			if (gps->dvert != NULL) {
+				dvert_src = &old_dvert[i];
+				MDeformVert *dvert = &gps->dvert[j];
+				memcpy(dvert, dvert_src, sizeof(MDeformVert));
+				if (dvert_src->dw) {
+					memcpy(dvert->dw, dvert_src->dw, sizeof(MDeformWeight));
+				}
+			}
 			j++;
 		}
 		else {
-			BKE_gpencil_free_point_weights(dvert_src);
+			if (gps->dvert != NULL) {
+				dvert_src = &old_dvert[i];
+				BKE_gpencil_free_point_weights(dvert_src);
+			}
 		}
 	}
 
@@ -321,7 +339,7 @@ void BKE_gpencil_simplify_fixed(bGPDstroke *gps)
  * each loop over all the geometry being evaluated.
  */
 
-/* init lattice deform data */
+ /* init lattice deform data */
 void BKE_gpencil_lattice_init(Object *ob)
 {
 	GpencilModifierData *md;
@@ -376,6 +394,20 @@ bool BKE_gpencil_has_geometry_modifiers(Object *ob)
 	return false;
 }
 
+/* check if exist time modifiers */
+bool BKE_gpencil_has_time_modifiers(Object *ob)
+{
+	GpencilModifierData *md;
+	for (md = ob->greasepencil_modifiers.first; md; md = md->next) {
+		const GpencilModifierTypeInfo *mti = BKE_gpencil_modifierType_getInfo(md->type);
+
+		if (mti && mti->remapTime) {
+			return true;
+		}
+	}
+	return false;
+}
+
 /* apply stroke modifiers */
 void BKE_gpencil_stroke_modifiers(Depsgraph *depsgraph, Object *ob, bGPDlayer *gpl, bGPDframe *UNUSED(gpf), bGPDstroke *gps, bool is_render)
 {
@@ -387,12 +419,28 @@ void BKE_gpencil_stroke_modifiers(Depsgraph *depsgraph, Object *ob, bGPDlayer *g
 		if (GPENCIL_MODIFIER_ACTIVE(md, is_render)) {
 			const GpencilModifierTypeInfo *mti = BKE_gpencil_modifierType_getInfo(md->type);
 
-			if (GPENCIL_MODIFIER_EDIT(md, is_edit)) {
+			if ((GPENCIL_MODIFIER_EDIT(md, is_edit)) && (!is_render)) {
 				continue;
 			}
 
 			if (mti && mti->deformStroke) {
 				mti->deformStroke(md, depsgraph, ob, gpl, gps);
+				/* subdivide allways requires update */
+				if (md->type == eGpencilModifierType_Subdiv) {
+					gps->flag |= GP_STROKE_RECALC_GEOMETRY;
+				}
+				/* some modifiers could require a recalc of fill triangulation data */
+				else if (gpd->flag & GP_DATA_STROKE_FORCE_RECALC) {
+					if (ELEM(md->type,
+					         eGpencilModifierType_Armature,
+					         eGpencilModifierType_Hook,
+					         eGpencilModifierType_Lattice,
+					         eGpencilModifierType_Offset))
+					{
+
+						gps->flag |= GP_STROKE_RECALC_GEOMETRY;
+					}
+				}
 			}
 		}
 	}
@@ -409,7 +457,7 @@ void BKE_gpencil_geometry_modifiers(Depsgraph *depsgraph, Object *ob, bGPDlayer 
 		if (GPENCIL_MODIFIER_ACTIVE(md, is_render)) {
 			const GpencilModifierTypeInfo *mti = BKE_gpencil_modifierType_getInfo(md->type);
 
-			if (GPENCIL_MODIFIER_EDIT(md, is_edit)) {
+			if ((GPENCIL_MODIFIER_EDIT(md, is_edit)) && (!is_render)) {
 				continue;
 			}
 
@@ -420,10 +468,40 @@ void BKE_gpencil_geometry_modifiers(Depsgraph *depsgraph, Object *ob, bGPDlayer 
 	}
 }
 
+/* apply time modifiers */
+int BKE_gpencil_time_modifier(Depsgraph *depsgraph, Scene *scene, Object *ob,
+	bGPDlayer *gpl, int cfra, bool is_render)
+{
+	GpencilModifierData *md;
+	bGPdata *gpd = ob->data;
+	const bool is_edit = GPENCIL_ANY_EDIT_MODE(gpd);
+	int nfra = cfra;
+
+	for (md = ob->greasepencil_modifiers.first; md; md = md->next) {
+		if (GPENCIL_MODIFIER_ACTIVE(md, is_render)) {
+			const GpencilModifierTypeInfo *mti = BKE_gpencil_modifierType_getInfo(md->type);
+
+			if ((GPENCIL_MODIFIER_EDIT(md, is_edit)) && (!is_render)) {
+				continue;
+			}
+
+			if (mti->remapTime) {
+				nfra = mti->remapTime(md, depsgraph, scene, ob, gpl, cfra);
+				/* if the frame number changed, don't evaluate more and return */
+				if (nfra != cfra) {
+					return nfra;
+				}
+			}
+		}
+	}
+
+	/* if no time modifier, return original frame number */
+	return nfra;
+}
 /* *************************************************** */
 
 void BKE_gpencil_eval_geometry(Depsgraph *depsgraph,
-                               bGPdata *gpd)
+	bGPdata *gpd)
 {
 	DEG_debug_print_eval(depsgraph, __func__, gpd->id.name, gpd);
 	int ctime = (int)DEG_get_ctime(depsgraph);
@@ -544,8 +622,8 @@ void BKE_gpencil_modifier_copyData_generic(const GpencilModifierData *md_src, Gp
 {
 	const GpencilModifierTypeInfo *mti = BKE_gpencil_modifierType_getInfo(md_src->type);
 
-	/* md_dst may have alredy be fully initialized with some extra allocated data,
-	* we need to free it now to avoid memleak. */
+	/* md_dst may have already be fully initialized with some extra allocated data,
+	 * we need to free it now to avoid memleak. */
 	if (mti->freeData) {
 		mti->freeData(md_dst);
 	}
@@ -609,7 +687,9 @@ void BKE_gpencil_modifiers_foreachIDLink(Object *ob, GreasePencilIDWalkFunc walk
 	for (; md; md = md->next) {
 		const GpencilModifierTypeInfo *mti = BKE_gpencil_modifierType_getInfo(md->type);
 
-		if (mti->foreachIDLink) mti->foreachIDLink(md, ob, walk, userData);
+		if (mti->foreachIDLink) {
+			mti->foreachIDLink(md, ob, walk, userData);
+		}
 		else if (mti->foreachObjectLink) {
 			/* each Object can masquerade as an ID, so this should be OK */
 			GreasePencilObjectWalkFunc fp = (GreasePencilObjectWalkFunc)walk;
@@ -635,43 +715,108 @@ GpencilModifierData *BKE_gpencil_modifiers_findByName(Object *ob, const char *na
 	return BLI_findstring(&(ob->greasepencil_modifiers), name, offsetof(GpencilModifierData, name));
 }
 
-/* helper function for per-instance positioning */
-void BKE_gpencil_instance_modifier_instance_tfm(InstanceGpencilModifierData *mmd, const int elem_idx[3], float r_mat[4][4])
+void BKE_gpencil_subdivide(bGPDstroke *gps, int level, int flag)
 {
-	float offset[3], rot[3], scale[3];
-	int ri = mmd->rnd[0];
-	float factor;
+	bGPDspoint *temp_points;
+	MDeformVert *temp_dverts = NULL;
+	MDeformVert *dvert = NULL;
+	MDeformVert *dvert_final = NULL;
+	MDeformVert *dvert_next = NULL;
+	int totnewpoints, oldtotpoints;
+	int i2;
 
-	offset[0] = mmd->offset[0] * elem_idx[0];
-	offset[1] = mmd->offset[1] * elem_idx[1];
-	offset[2] = mmd->offset[2] * elem_idx[2];
+	for (int s = 0; s < level; s++) {
+		totnewpoints = gps->totpoints - 1;
+		/* duplicate points in a temp area */
+		temp_points = MEM_dupallocN(gps->points);
+		oldtotpoints = gps->totpoints;
 
-	/* rotation */
-	if (mmd->flag & GP_INSTANCE_RANDOM_ROT) {
-		factor = mmd->rnd_rot * mmd->rnd[ri];
-		mul_v3_v3fl(rot, mmd->rot, factor);
-		add_v3_v3(rot, mmd->rot);
-	}
-	else {
-		copy_v3_v3(rot, mmd->rot);
-	}
+		/* resize the points arrays */
+		gps->totpoints += totnewpoints;
+		gps->points = MEM_recallocN(gps->points, sizeof(*gps->points) * gps->totpoints);
+		if (gps->dvert != NULL) {
+			temp_dverts = MEM_dupallocN(gps->dvert);
+			gps->dvert = MEM_recallocN(gps->dvert, sizeof(*gps->dvert) * gps->totpoints);
+		}
+		gps->flag |= GP_STROKE_RECALC_GEOMETRY;
+		gps->tot_triangles = 0;
 
-	/* scale */
-	if (mmd->flag & GP_INSTANCE_RANDOM_SIZE) {
-		factor = mmd->rnd_size * mmd->rnd[ri];
-		mul_v3_v3fl(scale, mmd->scale, factor);
-		add_v3_v3(scale, mmd->scale);
-	}
-	else {
-		copy_v3_v3(scale, mmd->scale);
-	}
+		/* move points from last to first to new place */
+		i2 = gps->totpoints - 1;
+		for (int i = oldtotpoints - 1; i > 0; i--) {
+			bGPDspoint *pt = &temp_points[i];
+			bGPDspoint *pt_final = &gps->points[i2];
 
-	/* advance random index */
-	mmd->rnd[0]++;
-	if (mmd->rnd[0] > 19) {
-		mmd->rnd[0] = 1;
-	}
+			copy_v3_v3(&pt_final->x, &pt->x);
+			pt_final->pressure = pt->pressure;
+			pt_final->strength = pt->strength;
+			pt_final->time = pt->time;
+			pt_final->flag = pt->flag;
 
-	/* calculate matrix */
-	loc_eul_size_to_mat4(r_mat, offset, rot, scale);
+			if (gps->dvert != NULL) {
+				dvert = &temp_dverts[i];
+				dvert_final = &gps->dvert[i2];
+				dvert_final->totweight = dvert->totweight;
+				dvert_final->dw = dvert->dw;
+			}
+			i2 -= 2;
+		}
+		/* interpolate mid points */
+		i2 = 1;
+		for (int i = 0; i < oldtotpoints - 1; i++) {
+			bGPDspoint *pt = &temp_points[i];
+			bGPDspoint *next = &temp_points[i + 1];
+			bGPDspoint *pt_final = &gps->points[i2];
+
+			/* add a half way point */
+			interp_v3_v3v3(&pt_final->x, &pt->x, &next->x, 0.5f);
+			pt_final->pressure = interpf(pt->pressure, next->pressure, 0.5f);
+			pt_final->strength = interpf(pt->strength, next->strength, 0.5f);
+			CLAMP(pt_final->strength, GPENCIL_STRENGTH_MIN, 1.0f);
+			pt_final->time = interpf(pt->time, next->time, 0.5f);
+
+			if (gps->dvert != NULL) {
+				dvert = &temp_dverts[i];
+				dvert_next = &temp_dverts[i + 1];
+				dvert_final = &gps->dvert[i2];
+
+				dvert_final->totweight = dvert->totweight;
+				dvert_final->dw = MEM_dupallocN(dvert->dw);
+
+				/* interpolate weight values */
+				for (int d = 0; d < dvert->totweight; d++) {
+					MDeformWeight *dw_a = &dvert->dw[d];
+					if (dvert_next->totweight > d) {
+						MDeformWeight *dw_b = &dvert_next->dw[d];
+						MDeformWeight *dw_final = &dvert_final->dw[d];
+						dw_final->weight = interpf(dw_a->weight, dw_b->weight, 0.5f);
+					}
+				}
+			}
+
+			i2 += 2;
+		}
+
+		MEM_SAFE_FREE(temp_points);
+		MEM_SAFE_FREE(temp_dverts);
+
+		/* move points to smooth stroke (not simple flag )*/
+		if ((flag & GP_SUBDIV_SIMPLE) == 0) {
+			/* duplicate points in a temp area with the new subdivide data */
+			temp_points = MEM_dupallocN(gps->points);
+
+			/* extreme points are not changed */
+			for (int i = 0; i < gps->totpoints - 2; i++) {
+				bGPDspoint *pt = &temp_points[i];
+				bGPDspoint *next = &temp_points[i + 1];
+				bGPDspoint *pt_final = &gps->points[i + 1];
+
+				/* move point */
+				interp_v3_v3v3(&pt_final->x, &pt->x, &next->x, 0.5f);
+			}
+			/* free temp memory */
+			MEM_SAFE_FREE(temp_points);
+		}
+
+	}
 }

@@ -30,15 +30,14 @@ class TIME_HT_editor_buttons(Header):
     def draw(self, context):
         pass
 
-    @staticmethod
     def draw_header(context, layout):
         scene = context.scene
-        toolsettings = context.tool_settings
+        tool_settings = context.tool_settings
         screen = context.screen
 
         layout.separator_spacer()
 
-        layout.prop(toolsettings, "use_keyframe_insert_auto", text="", toggle=True)
+        layout.prop(tool_settings, "use_keyframe_insert_auto", text="", toggle=True)
 
         row = layout.row(align=True)
         row.operator("screen.frame_jump", text="", icon='REW').end = False
@@ -47,7 +46,7 @@ class TIME_HT_editor_buttons(Header):
             # if using JACK and A/V sync:
             #   hide the play-reversed button
             #   since JACK transport doesn't support reversed playback
-            if scene.sync_mode == 'AUDIO_SYNC' and context.user_preferences.system.audio_device == 'JACK':
+            if scene.sync_mode == 'AUDIO_SYNC' and context.preferences.system.audio_device == 'JACK':
                 sub = row.row(align=True)
                 sub.scale_x = 1.4
                 sub.operator("screen.animation_play", text="", icon='PLAY')
@@ -87,12 +86,14 @@ class TIME_MT_editor_menus(Menu):
     bl_label = ""
 
     def draw(self, context):
-        self.draw_menus(self.layout, context)
+        layout = self.layout
+        horizontal = (layout.direction == 'VERTICAL')
+        if horizontal:
+            row = layout.row()
+            sub = row.row(align=True)
+        else:
+            sub = layout
 
-    @staticmethod
-    def draw_menus(layout, context):
-        row = layout.row()
-        sub = row.row(align=True)
         sub.popover(
             panel="TIME_PT_playback",
             text="Playback",
@@ -102,7 +103,9 @@ class TIME_MT_editor_menus(Menu):
             text="Keying",
         )
 
-        sub = row.row(align=True)
+        if horizontal:
+            sub = row.row(align=True)
+
         sub.menu("TIME_MT_view")
         sub.menu("TIME_MT_marker")
 
@@ -113,7 +116,7 @@ class TIME_MT_marker(Menu):
     def draw(self, context):
         layout = self.layout
 
-        marker_menu_generic(layout)
+        marker_menu_generic(layout, context)
 
 
 class TIME_MT_view(Menu):
@@ -130,6 +133,7 @@ class TIME_MT_view(Menu):
 
         layout.separator()
 
+        layout.prop(st, "show_marker_lines")
         layout.prop(st, "show_frame_indicator")
         layout.prop(scene, "show_keys_from_selected_only")
 
@@ -170,13 +174,12 @@ class TIME_MT_cache(Menu):
         col.prop(st, "cache_rigidbody")
 
 
-def marker_menu_generic(layout):
-    from bpy import context
+def marker_menu_generic(layout, context):
 
     # layout.operator_context = 'EXEC_REGION_WIN'
 
     layout.column()
-    layout.operator("marker.add", "Add Marker")
+    layout.operator("marker.add", text="Add Marker")
     layout.operator("marker.duplicate", text="Duplicate Marker")
 
     if len(bpy.data.scenes) > 10:
@@ -190,7 +193,7 @@ def marker_menu_generic(layout):
     layout.separator()
 
     layout.operator("marker.rename", text="Rename Marker")
-    layout.operator("marker.move", text="Grab/Move Marker")
+    layout.operator("marker.move", text="Move Marker")
 
     layout.separator()
 
@@ -202,8 +205,8 @@ def marker_menu_generic(layout):
     layout.operator("screen.marker_jump", text="Jump to Previous Marker").next = False
 
     layout.separator()
-    ts = context.tool_settings
-    layout.prop(ts, "lock_markers")
+    tool_settings = context.tool_settings
+    layout.prop(tool_settings, "lock_markers")
 
 ###################################
 
@@ -239,7 +242,7 @@ class TIME_PT_playback(TimelinePanelButtons, Panel):
         layout.separator()
 
         col = layout.column()
-        col.label("Play Animation In:")
+        col.label(text="Play Animation In:")
         layout.prop(screen, "use_play_top_left_3d_editor", text="Active Editor Only")
         layout.prop(screen, "use_play_3d_editors")
         layout.prop(screen, "use_play_animation_editors")
@@ -270,27 +273,29 @@ class TIME_PT_keyframing_settings(TimelinePanelButtons, Panel):
         layout = self.layout
 
         scene = context.scene
-        toolsettings = context.tool_settings
-        userprefs = context.user_preferences
+        tool_settings = context.tool_settings
+        prefs = context.preferences
 
         col = layout.column(align=True)
-        col.label("Active Keying Set:")
+        col.label(text="Active Keying Set:")
         row = col.row(align=True)
         row.prop_search(scene.keying_sets_all, "active", scene, "keying_sets_all", text="")
         row.operator("anim.keyframe_insert", text="", icon='KEY_HLT')
         row.operator("anim.keyframe_delete", text="", icon='KEY_DEHLT')
 
         col = layout.column(align=True)
-        col.label("New Keyframe Type:")
-        col.prop(toolsettings, "keyframe_type", text="")
+        col.label(text="New Keyframe Type:")
+        col.prop(tool_settings, "keyframe_type", text="")
 
         col = layout.column(align=True)
-        col.label("Auto Keyframing:")
+        col.label(text="Auto Keyframing:")
         row = col.row()
-        row.prop(toolsettings, "auto_keying_mode", text="")
-        row.prop(toolsettings, "use_keyframe_insert_keyingset", text="")
-        if not userprefs.edit.use_keyframe_insert_available:
-            col.prop(toolsettings, "use_record_with_nla", text="Layered Recording")
+        row.prop(tool_settings, "auto_keying_mode", text="")
+        row.prop(tool_settings, "use_keyframe_insert_keyingset", text="")
+        if not prefs.edit.use_keyframe_insert_available:
+            col.prop(tool_settings, "use_record_with_nla", text="Layered Recording")
+
+        layout.prop(tool_settings, "use_keyframe_cycle_aware")
 
 
 ###################################

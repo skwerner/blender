@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,14 +15,10 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * Contributor(s): Blender Foundation
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/blenkernel/intern/mesh_merge.c
- *  \ingroup bke
+/** \file
+ * \ingroup bke
  */
 #include <string.h> // for memcpy
 
@@ -219,15 +213,15 @@ static bool poly_gset_compare_fn(const void *k1, const void *k2)
  *
  * This frees the given mesh and returns a new mesh.
  *
- * \param vtargetmap  The table that maps vertices to target vertices.  a value of -1
+ * \param vtargetmap: The table that maps vertices to target vertices.  a value of -1
  * indicates a vertex is a target, and is to be kept.
  * This array is aligned with 'mesh->totvert'
  * \warning \a vtargetmap must **not** contain any chained mapping (v1 -> v2 -> v3 etc.), this is not supported
  * and will likely generate corrupted geometry.
  *
- * \param tot_vtargetmap  The number of non '-1' values in vtargetmap. (not the size)
+ * \param tot_vtargetmap: The number of non '-1' values in vtargetmap. (not the size)
  *
- * \param merge_mode enum with two modes.
+ * \param merge_mode: enum with two modes.
  * - #MESH_MERGE_VERTS_DUMP_IF_MAPPED
  * When called by the Mirror Modifier,
  * In this mode it skips any faces that have all vertices merged (to avoid creating pairs
@@ -342,13 +336,13 @@ Mesh *BKE_mesh_merge_verts(Mesh *mesh, const int *vtargetmap, const int tot_vtar
 			void **val_p;
 
 			if (BLI_edgehash_ensure_p(ehash, v1, v2, &val_p)) {
-				newe[i] = GET_INT_FROM_POINTER(*val_p);
+				newe[i] = POINTER_AS_INT(*val_p);
 			}
 			else {
 				STACK_PUSH(olde, i);
 				STACK_PUSH(medge, *med);
 				newe[i] = c;
-				*val_p = SET_INT_IN_POINTER(c);
+				*val_p = POINTER_FROM_INT(c);
 				c++;
 			}
 		}
@@ -507,7 +501,7 @@ Mesh *BKE_mesh_merge_verts(Mesh *mesh, const int *vtargetmap, const int tot_vtar
 					uint v2 = mlv;
 					BLI_assert(v1 != v2);
 					if (BLI_edgehash_ensure_p(ehash, v1, v2, &val_p)) {
-						last_valid_ml->e = GET_INT_FROM_POINTER(*val_p);
+						last_valid_ml->e = POINTER_AS_INT(*val_p);
 					}
 					else {
 						const int new_eidx = STACK_SIZE(medge);
@@ -516,7 +510,7 @@ Mesh *BKE_mesh_merge_verts(Mesh *mesh, const int *vtargetmap, const int tot_vtar
 						medge[new_eidx].v1 = last_valid_ml->v;
 						medge[new_eidx].v2 = ml->v;
 						/* DO NOT change newe mapping, could break actual values due to some deleted original edges. */
-						*val_p = SET_INT_IN_POINTER(new_eidx);
+						*val_p = POINTER_FROM_INT(new_eidx);
 						created_edges++;
 
 						last_valid_ml->e = new_eidx;
@@ -559,7 +553,7 @@ Mesh *BKE_mesh_merge_verts(Mesh *mesh, const int *vtargetmap, const int tot_vtar
 			uint v2 = (vtargetmap[first_valid_ml->v] != -1) ? vtargetmap[first_valid_ml->v] : first_valid_ml->v;
 			BLI_assert(v1 != v2);
 			if (BLI_edgehash_ensure_p(ehash, v1, v2, &val_p)) {
-				last_valid_ml->e = GET_INT_FROM_POINTER(*val_p);
+				last_valid_ml->e = POINTER_AS_INT(*val_p);
 			}
 			else {
 				const int new_eidx = STACK_SIZE(medge);
@@ -568,7 +562,7 @@ Mesh *BKE_mesh_merge_verts(Mesh *mesh, const int *vtargetmap, const int tot_vtar
 				medge[new_eidx].v1 = last_valid_ml->v;
 				medge[new_eidx].v2 = first_valid_ml->v;
 				/* DO NOT change newe mapping, could break actual values due to some deleted original edges. */
-				*val_p = SET_INT_IN_POINTER(new_eidx);
+				*val_p = POINTER_FROM_INT(new_eidx);
 				created_edges++;
 
 				last_valid_ml->e = new_eidx;

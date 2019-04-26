@@ -78,16 +78,14 @@ class BONE_PT_transform(BoneButtonsPanel, Panel):
             sub.prop(pchan, "lock_location", text="")
 
             col = layout.column()
-            if pchan.rotation_mode == 'QUATERNION':
+            rotation_mode = pchan.rotation_mode
+            if rotation_mode == 'QUATERNION':
                 sub = col.row(align=True)
                 sub.prop(pchan, "rotation_quaternion", text="Rotation")
                 subsub = sub.column(align=True)
                 subsub.prop(pchan, "lock_rotation_w", text="")
                 subsub.prop(pchan, "lock_rotation", text="")
-            elif pchan.rotation_mode == 'AXIS_ANGLE':
-                # col.label(text="Rotation")
-                #col.prop(pchan, "rotation_angle", text="Angle")
-                #col.prop(pchan, "rotation_axis", text="Axis")
+            elif rotation_mode == 'AXIS_ANGLE':
                 sub = col.row(align=True)
                 sub.prop(pchan, "rotation_axis_angle", text="Rotation")
                 subsub = sub.column(align=True)
@@ -123,20 +121,20 @@ class BONE_PT_transform(BoneButtonsPanel, Panel):
 
 class BONE_PT_curved(BoneButtonsPanel, Panel):
     bl_label = "Bendy Bones"
-    #bl_options = {'DEFAULT_CLOSED'}
+    bl_options = {'DEFAULT_CLOSED'}
 
     def draw(self, context):
         ob = context.object
         bone = context.bone
-        # arm = context.armature
-        pchan = None
+        arm = context.armature
+        bone_list = "bones"
 
         if ob and bone:
-            pchan = ob.pose.bones[bone.name]
-            bbone = pchan
+            bbone = ob.pose.bones[bone.name]
         elif bone is None:
             bone = context.edit_bone
             bbone = bone
+            bone_list = "edit_bones"
         else:
             bbone = bone
 
@@ -145,51 +143,47 @@ class BONE_PT_curved(BoneButtonsPanel, Panel):
 
         layout.prop(bone, "bbone_segments", text="Segments")
 
-        col = layout.column()
-        col.active = bone.bbone_segments > 1
+        topcol = layout.column()
+        topcol.active = bone.bbone_segments > 1
 
-        col = layout.column(align=True)
+        col = topcol.column(align=True)
         col.prop(bbone, "bbone_curveinx", text="Curve In X")
         col.prop(bbone, "bbone_curveiny", text="In Y")
 
-        col = layout.column(align=True)
+        col = topcol.column(align=True)
         col.prop(bbone, "bbone_curveoutx", text="Curve Out X")
         col.prop(bbone, "bbone_curveouty", text="Out Y")
 
-        col = layout.column(align=True)
+        col = topcol.column(align=True)
         col.prop(bbone, "bbone_rollin", text="Roll In")
         col.prop(bbone, "bbone_rollout", text="Out")
         col.prop(bone, "use_endroll_as_inroll")
 
-        col = layout.column(align=True)
+        col = topcol.column(align=True)
         col.prop(bbone, "bbone_scalein", text="Scale In")
         col.prop(bbone, "bbone_scaleout", text="Out")
 
-        col = layout.column(align=True)
+        col = topcol.column(align=True)
         col.prop(bbone, "bbone_easein", text="Ease In")
         col.prop(bbone, "bbone_easeout", text="Out")
 
-        if pchan:
-            layout.separator()
+        col = topcol.column(align=True)
+        col.prop(bone, "bbone_handle_type_start", text="Start Handle")
 
-            col = layout.column()
-            col.use_property_split = False
-            col.prop(pchan, "use_bbone_custom_handles")
+        col = col.column(align=True)
+        col.active = (bone.bbone_handle_type_start != 'AUTO')
+        col.prop_search(bone, "bbone_custom_handle_start", arm, bone_list, text="Custom")
 
-            col = layout.column(align=True)
-            col.active = pchan.use_bbone_custom_handles
-            col.use_property_split = True
+        col = topcol.column(align=True)
+        col.prop(bone, "bbone_handle_type_end", text="End Handle")
 
-            sub = col.column()
-            sub.prop_search(pchan, "bbone_custom_handle_start", ob.pose, "bones", text="Custom Handle Start")
-            sub.prop_search(pchan, "bbone_custom_handle_end", ob.pose, "bones", text="End")
-
-            sub = col.column(align=True)
-            sub.prop(pchan, "use_bbone_relative_start_handle", text="Relative Handle Start")
-            sub.prop(pchan, "use_bbone_relative_end_handle", text="End")
+        col = col.column(align=True)
+        col.active = (bone.bbone_handle_type_end != 'AUTO')
+        col.prop_search(bone, "bbone_custom_handle_end", arm, bone_list, text="Custom")
 
 
 class BONE_PT_relations(BoneButtonsPanel, Panel):
+    bl_options = {'DEFAULT_CLOSED'}
     bl_label = "Relations"
 
     def draw(self, context):
@@ -234,7 +228,8 @@ class BONE_PT_relations(BoneButtonsPanel, Panel):
 
 
 class BONE_PT_display(BoneButtonsPanel, Panel):
-    bl_label = "Display"
+    bl_label = "Viewport Display"
+    bl_options = {'DEFAULT_CLOSED'}
 
     @classmethod
     def poll(cls, context):
@@ -402,7 +397,7 @@ class BONE_PT_deform(BoneButtonsPanel, Panel):
 
 
 class BONE_PT_custom_props(BoneButtonsPanel, PropertyPanel, Panel):
-    COMPAT_ENGINES = {'BLENDER_RENDER', 'BLENDER_EEVEE', 'BLENDER_OPENGL'}
+    COMPAT_ENGINES = {'BLENDER_RENDER', 'BLENDER_EEVEE', 'BLENDER_WORKBENCH'}
     _property_type = bpy.types.Bone, bpy.types.EditBone, bpy.types.PoseBone
 
     @property
@@ -419,9 +414,9 @@ classes = (
     BONE_PT_transform,
     BONE_PT_curved,
     BONE_PT_relations,
-    BONE_PT_display,
     BONE_PT_inverse_kinematics,
     BONE_PT_deform,
+    BONE_PT_display,
     BONE_PT_custom_props,
 )
 

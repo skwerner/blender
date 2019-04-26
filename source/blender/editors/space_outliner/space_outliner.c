@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,15 +15,10 @@
  *
  * The Original Code is Copyright (C) 2008 Blender Foundation.
  * All rights reserved.
- *
- *
- * Contributor(s): Blender Foundation
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/space_outliner/space_outliner.c
- *  \ingroup spoutliner
+/** \file
+ * \ingroup spoutliner
  */
 
 
@@ -50,8 +43,6 @@
 #include "WM_api.h"
 #include "WM_message.h"
 #include "WM_types.h"
-
-#include "BIF_gl.h"
 
 #include "RNA_access.h"
 
@@ -84,203 +75,13 @@ static void outliner_main_region_init(wmWindowManager *wm, ARegion *ar)
 	UI_view2d_region_reinit(&ar->v2d, V2D_COMMONVIEW_LIST, ar->winx, ar->winy);
 
 	/* own keymap */
-	keymap = WM_keymap_find(wm->defaultconf, "Outliner", SPACE_OUTLINER, 0);
+	keymap = WM_keymap_ensure(wm->defaultconf, "Outliner", SPACE_OUTLINER, 0);
 	/* don't pass on view2d mask, it's always set with scrollbar space, hide fails */
 	WM_event_add_keymap_handler_bb(&ar->handlers, keymap, NULL, &ar->winrct);
 
 	/* Add dropboxes */
 	lb = WM_dropboxmap_find("Outliner", SPACE_OUTLINER, RGN_TYPE_WINDOW);
 	WM_event_add_dropbox_handler(&ar->handlers, lb);
-}
-
-static bool outliner_parent_drop_poll(bContext *C, wmDrag *drag, const wmEvent *event)
-{
-	ARegion *ar = CTX_wm_region(C);
-	SpaceOops *soops = CTX_wm_space_outliner(C);
-	float fmval[2];
-	UI_view2d_region_to_view(&ar->v2d, event->mval[0], event->mval[1], &fmval[0], &fmval[1]);
-
-	if (drag->type == WM_DRAG_ID) {
-		ID *id = drag->poin;
-		if (GS(id->name) == ID_OB) {
-			/* Ensure item under cursor is valid drop target */
-			TreeElement *te = outliner_dropzone_find(soops, fmval, true);
-			TreeStoreElem *tselem = te ? TREESTORE(te) : NULL;
-
-			if (!te) {
-				/* pass */
-			}
-			else if (te->idcode == ID_OB && tselem->type == 0) {
-				Scene *scene;
-				ID *te_id = tselem->id;
-
-				/* check if dropping self or parent */
-				if (te_id == id || (Object *)te_id == ((Object *)id)->parent)
-					return 0;
-
-				/* check that parent/child are both in the same scene */
-				scene = (Scene *)outliner_search_back(soops, te, ID_SCE);
-
-				/* currently outliner organized in a way that if there's no parent scene
-				 * element for object it means that all displayed objects belong to
-				 * active scene and parenting them is allowed (sergey)
-				 */
-				if (!scene) {
-					return 1;
-				}
-				else {
-					for (ViewLayer *view_layer = scene->view_layers.first;
-					     view_layer;
-					     view_layer = view_layer->next)
-					{
-						if (BKE_view_layer_base_find(view_layer, (Object *)id)) {
-							return 1;
-						}
-					}
-				}
-			}
-		}
-	}
-	return 0;
-}
-
-static void outliner_parent_drop_copy(wmDrag *drag, wmDropBox *drop)
-{
-	ID *id = drag->poin;
-
-	RNA_string_set(drop->ptr, "child", id->name + 2);
-}
-
-static bool outliner_parent_clear_poll(bContext *C, wmDrag *drag, const wmEvent *event)
-{
-	ARegion *ar = CTX_wm_region(C);
-	SpaceOops *soops = CTX_wm_space_outliner(C);
-	TreeElement *te = NULL;
-	float fmval[2];
-
-	UI_view2d_region_to_view(&ar->v2d, event->mval[0], event->mval[1], &fmval[0], &fmval[1]);
-
-	if (!ELEM(soops->outlinevis, SO_VIEW_LAYER)) {
-		return false;
-	}
-
-	if (drag->type == WM_DRAG_ID) {
-		ID *id = drag->poin;
-		if (GS(id->name) == ID_OB) {
-			if (((Object *)id)->parent) {
-				if ((te = outliner_dropzone_find(soops, fmval, true))) {
-					TreeStoreElem *tselem = TREESTORE(te);
-
-					switch (te->idcode) {
-						case ID_SCE:
-							return (ELEM(tselem->type, TSE_R_LAYER_BASE, TSE_R_LAYER));
-						case ID_OB:
-							return (ELEM(tselem->type, TSE_MODIFIER_BASE, TSE_CONSTRAINT_BASE));
-						/* Other codes to ignore? */
-					}
-				}
-				return (te == NULL);
-			}
-		}
-	}
-	return 0;
-}
-
-static void outliner_parent_clear_copy(wmDrag *drag, wmDropBox *drop)
-{
-	ID *id = drag->poin;
-	RNA_string_set(drop->ptr, "dragged_obj", id->name + 2);
-
-	/* Set to simple parent clear type. Avoid menus for drag and drop if possible.
-	 * If desired, user can toggle the different "Clear Parent" types in the operator
-	 * menu on tool shelf. */
-	RNA_enum_set(drop->ptr, "type", 0);
-}
-
-static bool outliner_scene_drop_poll(bContext *C, wmDrag *drag, const wmEvent *event)
-{
-	ARegion *ar = CTX_wm_region(C);
-	SpaceOops *soops = CTX_wm_space_outliner(C);
-	float fmval[2];
-	UI_view2d_region_to_view(&ar->v2d, event->mval[0], event->mval[1], &fmval[0], &fmval[1]);
-
-	if (drag->type == WM_DRAG_ID) {
-		ID *id = drag->poin;
-		if (GS(id->name) == ID_OB) {
-			/* Ensure item under cursor is valid drop target */
-			TreeElement *te = outliner_dropzone_find(soops, fmval, false);
-			return (te && te->idcode == ID_SCE && TREESTORE(te)->type == 0);
-		}
-	}
-	return 0;
-}
-
-static void outliner_scene_drop_copy(wmDrag *drag, wmDropBox *drop)
-{
-	ID *id = drag->poin;
-
-	RNA_string_set(drop->ptr, "object", id->name + 2);
-}
-
-static bool outliner_material_drop_poll(bContext *C, wmDrag *drag, const wmEvent *event)
-{
-	ARegion *ar = CTX_wm_region(C);
-	SpaceOops *soops = CTX_wm_space_outliner(C);
-	float fmval[2];
-	UI_view2d_region_to_view(&ar->v2d, event->mval[0], event->mval[1], &fmval[0], &fmval[1]);
-
-	if (drag->type == WM_DRAG_ID) {
-		ID *id = drag->poin;
-		if (GS(id->name) == ID_MA) {
-			/* Ensure item under cursor is valid drop target */
-			TreeElement *te = outliner_dropzone_find(soops, fmval, true);
-			return (te && te->idcode == ID_OB && TREESTORE(te)->type == 0);
-		}
-	}
-	return 0;
-}
-
-static void outliner_material_drop_copy(wmDrag *drag, wmDropBox *drop)
-{
-	ID *id = drag->poin;
-
-	RNA_string_set(drop->ptr, "material", id->name + 2);
-}
-
-static bool outliner_collection_drop_poll(bContext *C, wmDrag *drag, const wmEvent *event)
-{
-	ARegion *ar = CTX_wm_region(C);
-	SpaceOops *soops = CTX_wm_space_outliner(C);
-	float fmval[2];
-	UI_view2d_region_to_view(&ar->v2d, event->mval[0], event->mval[1], &fmval[0], &fmval[1]);
-
-	if (drag->type == WM_DRAG_ID) {
-		ID *id = drag->poin;
-		if (ELEM(GS(id->name), ID_OB, ID_GR)) {
-			/* Ensure item under cursor is valid drop target */
-			TreeElement *te = outliner_dropzone_find(soops, fmval, true);
-			return (te && outliner_is_collection_tree_element(te));
-		}
-	}
-	return 0;
-}
-
-static void outliner_collection_drop_copy(wmDrag *drag, wmDropBox *drop)
-{
-	ID *id = drag->poin;
-	RNA_string_set(drop->ptr, "child", id->name + 2);
-}
-
-/* region dropbox definition */
-static void outliner_dropboxes(void)
-{
-	ListBase *lb = WM_dropboxmap_find("Outliner", SPACE_OUTLINER, RGN_TYPE_WINDOW);
-
-	WM_dropbox_add(lb, "OUTLINER_OT_parent_drop", outliner_parent_drop_poll, outliner_parent_drop_copy);
-	WM_dropbox_add(lb, "OUTLINER_OT_parent_clear", outliner_parent_clear_poll, outliner_parent_clear_copy);
-	WM_dropbox_add(lb, "OUTLINER_OT_scene_drop", outliner_scene_drop_poll, outliner_scene_drop_copy);
-	WM_dropbox_add(lb, "OUTLINER_OT_material_drop", outliner_material_drop_poll, outliner_material_drop_copy);
-	WM_dropbox_add(lb, "OUTLINER_OT_collection_drop", outliner_collection_drop_poll, outliner_collection_drop_copy);
 }
 
 static void outliner_main_region_draw(const bContext *C, ARegion *ar)
@@ -298,7 +99,7 @@ static void outliner_main_region_draw(const bContext *C, ARegion *ar)
 	UI_view2d_view_restore(C);
 
 	/* scrollers */
-	scrollers = UI_view2d_scrollers_calc(C, v2d, V2D_ARG_DUMMY, V2D_ARG_DUMMY, V2D_ARG_DUMMY, V2D_ARG_DUMMY);
+	scrollers = UI_view2d_scrollers_calc(C, v2d, NULL, V2D_ARG_DUMMY, V2D_ARG_DUMMY, V2D_ARG_DUMMY, V2D_ARG_DUMMY);
 	UI_view2d_scrollers_draw(C, v2d, scrollers);
 	UI_view2d_scrollers_free(scrollers);
 }
@@ -370,17 +171,20 @@ static void outliner_main_region_listener(
 			ED_region_tag_redraw(ar);
 			break;
 		case NC_LAMP:
-			/* For updating lamp icons, when changing lamp type */
-			if (wmn->data == ND_LIGHTING_DRAW)
+			/* For updating light icons, when changing light type */
+			if (wmn->data == ND_LIGHTING_DRAW) {
 				ED_region_tag_redraw(ar);
+			}
 			break;
 		case NC_SPACE:
-			if (wmn->data == ND_SPACE_OUTLINER)
+			if (wmn->data == ND_SPACE_OUTLINER) {
 				ED_region_tag_redraw(ar);
+			}
 			break;
 		case NC_ID:
-			if (wmn->action == NA_RENAME)
+			if (wmn->action == NA_RENAME) {
 				ED_region_tag_redraw(ar);
+			}
 			break;
 		case NC_MATERIAL:
 			switch (wmn->data) {
@@ -404,17 +208,29 @@ static void outliner_main_region_listener(
 					ED_region_tag_redraw(ar);
 					break;
 				case ND_ANIMCHAN:
-					if (wmn->action == NA_SELECTED)
+					if (wmn->action == NA_SELECTED) {
 						ED_region_tag_redraw(ar);
+					}
 					break;
 			}
 			break;
 		case NC_GPENCIL:
-			if (ELEM(wmn->action, NA_EDITED, NA_SELECTED))
+			if (ELEM(wmn->action, NA_EDITED, NA_SELECTED)) {
 				ED_region_tag_redraw(ar);
+			}
 			break;
 		case NC_SCREEN:
 			if (ELEM(wmn->data, ND_LAYER)) {
+				ED_region_tag_redraw(ar);
+			}
+			break;
+		case NC_MASK:
+			if (ELEM(wmn->action, NA_ADDED)) {
+				ED_region_tag_redraw(ar);
+			}
+			break;
+		case NC_PAINTCURVE:
+			if (ELEM(wmn->action, NA_ADDED)) {
 				ED_region_tag_redraw(ar);
 			}
 			break;
@@ -428,7 +244,7 @@ static void outliner_main_region_message_subscribe(
         struct bScreen *UNUSED(screen), struct ScrArea *sa, struct ARegion *ar,
         struct wmMsgBus *mbus)
 {
-	SpaceOops *soops = sa->spacedata.first;
+	SpaceOutliner *soops = sa->spacedata.first;
 	wmMsgSubscribeValue msg_sub_value_region_tag_redraw = {
 		.owner = ar,
 		.user_data = ar,
@@ -465,12 +281,14 @@ static void outliner_header_region_listener(
 	/* context changes */
 	switch (wmn->category) {
 		case NC_SCENE:
-			if (wmn->data == ND_KEYINGSET)
+			if (wmn->data == ND_KEYINGSET) {
 				ED_region_tag_redraw(ar);
+			}
 			break;
 		case NC_SPACE:
-			if (wmn->data == ND_SPACE_OUTLINER)
+			if (wmn->data == ND_SPACE_OUTLINER) {
 				ED_region_tag_redraw(ar);
+			}
 			break;
 	}
 }
@@ -480,9 +298,9 @@ static void outliner_header_region_listener(
 static SpaceLink *outliner_new(const ScrArea *UNUSED(area), const Scene *UNUSED(scene))
 {
 	ARegion *ar;
-	SpaceOops *soutliner;
+	SpaceOutliner *soutliner;
 
-	soutliner = MEM_callocN(sizeof(SpaceOops), "initoutliner");
+	soutliner = MEM_callocN(sizeof(SpaceOutliner), "initoutliner");
 	soutliner->spacetype = SPACE_OUTLINER;
 	soutliner->filter_id_type = ID_GR;
 
@@ -491,7 +309,7 @@ static SpaceLink *outliner_new(const ScrArea *UNUSED(area), const Scene *UNUSED(
 
 	BLI_addtail(&soutliner->regionbase, ar);
 	ar->regiontype = RGN_TYPE_HEADER;
-	ar->alignment = RGN_ALIGN_TOP;
+	ar->alignment = (U.uiflag & USER_HEADER_BOTTOM) ? RGN_ALIGN_BOTTOM : RGN_ALIGN_TOP;
 
 	/* main region */
 	ar = MEM_callocN(sizeof(ARegion), "main region for outliner");
@@ -505,7 +323,7 @@ static SpaceLink *outliner_new(const ScrArea *UNUSED(area), const Scene *UNUSED(
 /* not spacelink itself */
 static void outliner_free(SpaceLink *sl)
 {
-	SpaceOops *soutliner = (SpaceOops *)sl;
+	SpaceOutliner *soutliner = (SpaceOutliner *)sl;
 
 	outliner_free_tree(&soutliner->tree);
 	if (soutliner->treestore) {
@@ -524,8 +342,8 @@ static void outliner_init(wmWindowManager *UNUSED(wm), ScrArea *UNUSED(sa))
 
 static SpaceLink *outliner_duplicate(SpaceLink *sl)
 {
-	SpaceOops *soutliner = (SpaceOops *)sl;
-	SpaceOops *soutlinern = MEM_dupallocN(soutliner);
+	SpaceOutliner *soutliner = (SpaceOutliner *)sl;
+	SpaceOutliner *soutlinern = MEM_dupallocN(soutliner);
 
 	BLI_listbase_clear(&soutlinern->tree);
 	soutlinern->treestore = NULL;
@@ -536,7 +354,7 @@ static SpaceLink *outliner_duplicate(SpaceLink *sl)
 
 static void outliner_id_remap(ScrArea *UNUSED(sa), SpaceLink *slink, ID *old_id, ID *new_id)
 {
-	SpaceOops *so = (SpaceOops *)slink;
+	SpaceOutliner *so = (SpaceOutliner *)slink;
 
 	/* Some early out checks. */
 	if (!TREESTORE_ID_TYPE(old_id)) {

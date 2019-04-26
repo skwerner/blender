@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,15 +15,10 @@
  *
  * The Original Code is Copyright (C) 2016 Blender Foundation.
  * All rights reserved.
- *
- *
- * Contributor(s): Mike Erwin
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/gpu/GPU_immediate.h
- *  \ingroup gpu
+/** \file
+ * \ingroup gpu
  *
  * GPU immediate mode work-alike
  */
@@ -40,13 +33,18 @@
 #include "GPU_immediate_util.h"
 #include "GPU_shader.h"
 
-GPUVertFormat *immVertexFormat(void); /* returns a cleared vertex format, ready for add_attrib. */
+/** Returns a cleared vertex format, ready for #add_attr. */
+GPUVertFormat *immVertexFormat(void);
 
-void immBindProgram(uint32_t program, const GPUShaderInterface *); /* every immBegin must have a program bound first. */
-void immUnbindProgram(void); /* call after your last immEnd, or before binding another program. */
+/** Every immBegin must have a program bound first. */
+void immBindProgram(uint32_t program, const GPUShaderInterface *);
+/** Call after your last immEnd, or before binding another program. */
+void immUnbindProgram(void);
 
-void immBegin(GPUPrimType, uint vertex_len); /* must supply exactly vertex_len vertices. */
-void immBeginAtMost(GPUPrimType, uint max_vertex_len); /* can supply fewer vertices. */
+/** Must supply exactly vertex_len vertices. */
+void immBegin(GPUPrimType, uint vertex_len);
+/** Can supply fewer vertices. */
+void immBeginAtMost(GPUPrimType, uint max_vertex_len);
 void immEnd(void); /* finishes and draws. */
 
 /* ImmBegin a batch, then use standard immFunctions as usual. */
@@ -57,46 +55,46 @@ GPUBatch *immBeginBatchAtMost(GPUPrimType, uint vertex_len);
 
 /* Provide attribute values that can change per vertex. */
 /* First vertex after immBegin must have all its attributes specified. */
-/* Skipped attributes will continue using the previous value for that attrib_id. */
-void immAttrib1f(uint attrib_id, float x);
-void immAttrib2f(uint attrib_id, float x, float y);
-void immAttrib3f(uint attrib_id, float x, float y, float z);
-void immAttrib4f(uint attrib_id, float x, float y, float z, float w);
+/* Skipped attributes will continue using the previous value for that attr_id. */
+void immAttr1f(uint attr_id, float x);
+void immAttr2f(uint attr_id, float x, float y);
+void immAttr3f(uint attr_id, float x, float y, float z);
+void immAttr4f(uint attr_id, float x, float y, float z, float w);
 
-void immAttrib2i(uint attrib_id, int x, int y);
+void immAttr2i(uint attr_id, int x, int y);
 
-void immAttrib1u(uint attrib_id, uint x);
+void immAttr1u(uint attr_id, uint x);
 
-void immAttrib2s(uint attrib_id, short x, short y);
+void immAttr2s(uint attr_id, short x, short y);
 
-void immAttrib2fv(uint attrib_id, const float data[2]);
-void immAttrib3fv(uint attrib_id, const float data[3]);
-void immAttrib4fv(uint attrib_id, const float data[4]);
+void immAttr2fv(uint attr_id, const float data[2]);
+void immAttr3fv(uint attr_id, const float data[3]);
+void immAttr4fv(uint attr_id, const float data[4]);
 
-void immAttrib3ub(uint attrib_id, unsigned char r, unsigned char g, unsigned char b);
-void immAttrib4ub(uint attrib_id, unsigned char r, unsigned char g, unsigned char b, unsigned char a);
+void immAttr3ub(uint attr_id, unsigned char r, unsigned char g, unsigned char b);
+void immAttr4ub(uint attr_id, unsigned char r, unsigned char g, unsigned char b, unsigned char a);
 
-void immAttrib3ubv(uint attrib_id, const unsigned char data[4]);
-void immAttrib4ubv(uint attrib_id, const unsigned char data[4]);
+void immAttr3ubv(uint attr_id, const unsigned char data[3]);
+void immAttr4ubv(uint attr_id, const unsigned char data[4]);
 
 /* Explicitly skip an attribute. */
-/* This advanced option kills automatic value copying for this attrib_id. */
-void immSkipAttrib(uint attrib_id);
+/* This advanced option kills automatic value copying for this attr_id. */
+void immAttrSkip(uint attr_id);
 
 /* Provide one last attribute value & end the current vertex. */
 /* This is most often used for 2D or 3D position (similar to glVertex). */
-void immVertex2f(uint attrib_id, float x, float y);
-void immVertex3f(uint attrib_id, float x, float y, float z);
-void immVertex4f(uint attrib_id, float x, float y, float z, float w);
+void immVertex2f(uint attr_id, float x, float y);
+void immVertex3f(uint attr_id, float x, float y, float z);
+void immVertex4f(uint attr_id, float x, float y, float z, float w);
 
-void immVertex2i(uint attrib_id, int x, int y);
+void immVertex2i(uint attr_id, int x, int y);
 
-void immVertex2s(uint attrib_id, short x, short y);
+void immVertex2s(uint attr_id, short x, short y);
 
-void immVertex2fv(uint attrib_id, const float data[2]);
-void immVertex3fv(uint attrib_id, const float data[3]);
+void immVertex2fv(uint attr_id, const float data[2]);
+void immVertex3fv(uint attr_id, const float data[3]);
 
-void immVertex2iv(uint attrib_id, const int data[2]);
+void immVertex2iv(uint attr_id, const int data[2]);
 
 /* Provide uniform values that don't change for the entire draw call. */
 void immUniform1i(const char *name, int x);
@@ -126,9 +124,11 @@ void immUniformColor3ubv(const unsigned char rgb[3]);
 void immUniformColor3ubvAlpha(const unsigned char rgb[3], unsigned char a);
 void immUniformColor4ubv(const unsigned char rgba[4]);
 
-/* Extend immBindProgram to use Blender’s library of built-in shader programs.
- * Use immUnbindProgram() when done. */
-void immBindBuiltinProgram(GPUBuiltinShader shader_id);
+/**
+ * Extend #immBindProgram to use Blender’s library of built-in shader programs.
+ * Use #immUnbindProgram() when done.
+ */
+void immBindBuiltinProgram(eGPUBuiltinShader shader_id);
 
 /* Extend immUniformColor to take Blender's themes */
 void immUniformThemeColor(int color_id);

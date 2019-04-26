@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,12 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/space_node/node_gizmo.c
- *  \ingroup spnode
+/** \file
+ * \ingroup spnode
  */
 
 #include <math.h>
@@ -49,7 +45,6 @@
 
 
 /* -------------------------------------------------------------------- */
-
 /** \name Local Utilities
  * \{ */
 
@@ -78,7 +73,6 @@ static void node_gizmo_calc_matrix_space_with_image_dims(
 
 
 /* -------------------------------------------------------------------- */
-
 /** \name Backdrop Gizmo
  * \{ */
 
@@ -201,7 +195,6 @@ void NODE_GGT_backdrop_transform(wmGizmoGroupType *gzgt)
 /** \} */
 
 /* -------------------------------------------------------------------- */
-
 /** \name Crop Gizmo
  * \{ */
 
@@ -270,8 +263,8 @@ static void gizmo_node_crop_prop_matrix_get(
 	bool is_relative = (bool)node->custom2;
 	rctf rct;
 	two_xy_to_rect(nxy, &rct, dims, is_relative);
-	matrix[0][0] = BLI_rctf_size_x(&rct);
-	matrix[1][1] = BLI_rctf_size_y(&rct);
+	matrix[0][0] = fabsf(BLI_rctf_size_x(&rct));
+	matrix[1][1] = fabsf(BLI_rctf_size_y(&rct));
 	matrix[3][0] = (BLI_rctf_cent_x(&rct) - 0.5f) * dims[0];
 	matrix[3][1] = (BLI_rctf_cent_y(&rct) - 0.5f) * dims[1];
 }
@@ -289,9 +282,17 @@ static void gizmo_node_crop_prop_matrix_set(
 	bool is_relative = (bool)node->custom2;
 	rctf rct;
 	two_xy_to_rect(nxy, &rct, dims, is_relative);
-	BLI_rctf_resize(&rct, matrix[0][0], matrix[1][1]);
+	const bool nx = rct.xmin > rct.xmax;
+	const bool ny = rct.ymin > rct.ymax;
+	BLI_rctf_resize(&rct, fabsf(matrix[0][0]), fabsf(matrix[1][1]));
 	BLI_rctf_recenter(&rct, (matrix[3][0] / dims[0]) + 0.5f, (matrix[3][1] / dims[1]) + 0.5f);
-	BLI_rctf_isect(&(rctf){.xmin = 0, .ymin = 0, .xmax = 1, .ymax = 1}, &rct, &rct);
+	BLI_rctf_isect(&(rctf){ .xmin = 0, .ymin = 0, .xmax = 1, .ymax = 1, }, &rct, &rct);
+	if (nx) {
+		SWAP(float, rct.xmin, rct.xmax);
+	}
+	if (ny) {
+		SWAP(float, rct.ymin, rct.ymax);
+	}
 	two_xy_from_rect(nxy, &rct, dims, is_relative);
 	gizmo_node_crop_update(crop_group);
 }
@@ -309,7 +310,7 @@ static bool WIDGETGROUP_node_crop_poll(const bContext *C, wmGizmoGroupType *UNUS
 
 		if (node && ELEM(node->type, CMP_NODE_CROP)) {
 			/* ignore 'use_crop_size', we can't usefully edit the crop in this case. */
-			if ((node->custom1 & (0 << 1)) == 0) {
+			if ((node->custom1 & (1 << 0)) == 0) {
 				return true;
 			}
 		}
@@ -396,7 +397,6 @@ void NODE_GGT_backdrop_crop(wmGizmoGroupType *gzgt)
 /** \} */
 
 /* -------------------------------------------------------------------- */
-
 /** \name Sun Beams
  * \{ */
 
@@ -431,10 +431,10 @@ static void WIDGETGROUP_node_sbeam_setup(const bContext *UNUSED(C), wmGizmoGroup
 {
 	struct NodeSunBeamsWidgetGroup *sbeam_group = MEM_mallocN(sizeof(struct NodeSunBeamsWidgetGroup), __func__);
 
-	sbeam_group->gizmo = WM_gizmo_new("GIZMO_GT_grab_3d", gzgroup, NULL);
+	sbeam_group->gizmo = WM_gizmo_new("GIZMO_GT_move_3d", gzgroup, NULL);
 	wmGizmo *gz = sbeam_group->gizmo;
 
-	RNA_enum_set(gz->ptr, "draw_style",  ED_GIZMO_GRAB_STYLE_CROSS_2D);
+	RNA_enum_set(gz->ptr, "draw_style",  ED_GIZMO_MOVE_STYLE_CROSS_2D);
 
 	gz->scale_basis = 0.05f;
 
@@ -501,7 +501,6 @@ void NODE_GGT_backdrop_sun_beams(wmGizmoGroupType *gzgt)
 
 
 /* -------------------------------------------------------------------- */
-
 /** \name Corner Pin
  * \{ */
 
@@ -535,13 +534,13 @@ static bool WIDGETGROUP_node_corner_pin_poll(const bContext *C, wmGizmoGroupType
 static void WIDGETGROUP_node_corner_pin_setup(const bContext *UNUSED(C), wmGizmoGroup *gzgroup)
 {
 	struct NodeCornerPinWidgetGroup *cpin_group = MEM_mallocN(sizeof(struct NodeCornerPinWidgetGroup), __func__);
-	const wmGizmoType *gzt_grab_3d = WM_gizmotype_find("GIZMO_GT_grab_3d", false);
+	const wmGizmoType *gzt_move_3d = WM_gizmotype_find("GIZMO_GT_move_3d", false);
 
 	for (int i = 0; i < 4; i++) {
-		cpin_group->gizmos[i] = WM_gizmo_new_ptr(gzt_grab_3d, gzgroup, NULL);
+		cpin_group->gizmos[i] = WM_gizmo_new_ptr(gzt_move_3d, gzgroup, NULL);
 		wmGizmo *gz = cpin_group->gizmos[i];
 
-		RNA_enum_set(gz->ptr, "draw_style",  ED_GIZMO_GRAB_STYLE_CROSS_2D);
+		RNA_enum_set(gz->ptr, "draw_style",  ED_GIZMO_MOVE_STYLE_CROSS_2D);
 
 		gz->scale_basis = 0.01f;
 	}

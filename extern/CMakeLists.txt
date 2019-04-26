@@ -16,11 +16,6 @@
 #
 # The Original Code is Copyright (C) 2006, Blender Foundation
 # All rights reserved.
-#
-# The Original Code is: all of this file.
-#
-# Contributor(s): Jacques Beaurain.
-#
 # ***** END GPL LICENSE BLOCK *****
 
 # Libs that adhere to strict flags
@@ -46,6 +41,10 @@ if(WITH_BULLET)
 	endif()
 endif()
 
+if(WITH_DRACO)
+	add_subdirectory(draco)
+endif()
+
 # now only available in a branch
 #if(WITH_MOD_CLOTH_ELTOPO)
 #	add_subdirectory(eltopo)
@@ -61,10 +60,6 @@ if(NOT WITH_SYSTEM_GLEW)
 	else()
 		add_subdirectory(glew)
 	endif()
-endif()
-
-if(WITH_IMAGE_OPENJPEG AND (NOT WITH_SYSTEM_OPENJPEG))
-	add_subdirectory(libopenjpeg)
 endif()
 
 if(WITH_LZO AND NOT WITH_SYSTEM_LZO)

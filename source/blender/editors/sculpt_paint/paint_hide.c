@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,19 +15,11 @@
  *
  * The Original Code is Copyright (C) 2010 by Nicholas Bishop
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s):
- *
- * ***** END GPL LICENSE BLOCK *****
- *
  * Implements the PBVH node hiding operator
- *
  */
 
-/** \file blender/editors/sculpt_paint/paint_hide.c
- *  \ingroup edsculpt
+/** \file
+ * \ingroup edsculpt
  */
 
 #include "MEM_guardedalloc.h"
@@ -391,8 +381,7 @@ static int hide_show_exec(bContext *C, wmOperator *op)
 
 	clip_planes_from_rect(C, clip_planes, &rect);
 
-	Mesh *me_eval_deform = mesh_get_eval_deform(depsgraph, CTX_data_scene(C), ob, CD_MASK_BAREMESH);
-	pbvh = BKE_sculpt_object_pbvh_ensure(ob, me_eval_deform);
+	pbvh = BKE_sculpt_object_pbvh_ensure(depsgraph, ob);
 	BLI_assert(ob->sculpt->pbvh == pbvh);
 
 	get_pbvh_nodes(pbvh, &nodes, &totnode, clip_planes, area);
@@ -444,7 +433,7 @@ static int hide_show_invoke(bContext *C, wmOperator *op, const wmEvent *event)
 	PartialVisArea area = RNA_enum_get(op->ptr, "area");
 
 	if (!ELEM(area, PARTIALVIS_ALL, PARTIALVIS_MASKED))
-		return WM_gesture_border_invoke(C, op, event);
+		return WM_gesture_box_invoke(C, op, event);
 	else
 		return op->type->exec(C, op);
 }
@@ -454,7 +443,7 @@ void PAINT_OT_hide_show(struct wmOperatorType *ot)
 	static const EnumPropertyItem action_items[] = {
 		{PARTIALVIS_HIDE, "HIDE", 0, "Hide", "Hide vertices"},
 		{PARTIALVIS_SHOW, "SHOW", 0, "Show", "Show vertices"},
-		{0, NULL, 0, NULL, NULL}
+		{0, NULL, 0, NULL, NULL},
 	};
 
 	static const EnumPropertyItem area_items[] = {
@@ -462,7 +451,7 @@ void PAINT_OT_hide_show(struct wmOperatorType *ot)
 		{PARTIALVIS_INSIDE, "INSIDE", 0, "Inside", "Hide or show vertices inside the selection"},
 		{PARTIALVIS_ALL, "ALL", 0, "All", "Hide or show all vertices"},
 		{PARTIALVIS_MASKED, "MASKED", 0, "Masked", "Hide or show vertices that are masked (minimum mask value of 0.5)"},
-		{0, NULL, 0, NULL, NULL}
+		{0, NULL, 0, NULL, NULL},
 	};
 
 	/* identifiers */
@@ -472,7 +461,7 @@ void PAINT_OT_hide_show(struct wmOperatorType *ot)
 
 	/* api callbacks */
 	ot->invoke = hide_show_invoke;
-	ot->modal = WM_gesture_border_modal;
+	ot->modal = WM_gesture_box_modal;
 	ot->exec = hide_show_exec;
 	/* sculpt-only for now */
 	ot->poll = sculpt_mode_poll_view3d;

@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,14 +15,10 @@
  *
  * The Original Code is Copyright (C) 2018 Blender Foundation.
  * All rights reserved.
- *
- * Contributor(s): Blender Foundation, 2018
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/object/object_gpencil_modifier.c
- *  \ingroup edobj
+/** \file
+ * \ingroup edobj
  */
 
 
@@ -39,9 +33,7 @@
 #include "DNA_object_types.h"
 #include "DNA_scene_types.h"
 
-#include "BLI_math.h"
 #include "BLI_listbase.h"
-#include "BLI_string.h"
 #include "BLI_string_utf8.h"
 #include "BLI_utildefines.h"
 
@@ -102,9 +94,9 @@ GpencilModifierData *ED_object_gpencil_modifier_add(
 
 
 	bGPdata *gpd = ob->data;
-	DEG_id_tag_update(&gpd->id, OB_RECALC_OB | OB_RECALC_DATA);
+	DEG_id_tag_update(&gpd->id, ID_RECALC_TRANSFORM | ID_RECALC_GEOMETRY);
 
-	DEG_id_tag_update(&ob->id, OB_RECALC_DATA);
+	DEG_id_tag_update(&ob->id, ID_RECALC_GEOMETRY);
 	DEG_relations_tag_update(bmain);
 
 	return new_md;
@@ -158,7 +150,7 @@ bool ED_object_gpencil_modifier_remove(ReportList *reports, Main *bmain, Object 
 		return 0;
 	}
 
-	DEG_id_tag_update(&ob->id, OB_RECALC_DATA);
+	DEG_id_tag_update(&ob->id, ID_RECALC_GEOMETRY);
 	DEG_relations_tag_update(bmain);
 
 	return 1;
@@ -182,7 +174,7 @@ void ED_object_gpencil_modifier_clear(Main *bmain, Object *ob)
 		md = next_md;
 	}
 
-	DEG_id_tag_update(&ob->id, OB_RECALC_DATA);
+	DEG_id_tag_update(&ob->id, ID_RECALC_GEOMETRY);
 	DEG_relations_tag_update(bmain);
 }
 
@@ -207,7 +199,7 @@ int ED_object_gpencil_modifier_move_down(ReportList *UNUSED(reports), Object *ob
 }
 
 static int gpencil_modifier_apply_obdata(
-        ReportList *reports, Main *bmain, Depsgraph *depsgraph, Object *ob, GpencilModifierData *md)
+        ReportList *reports, Main *bmain, Depsgraph *depsgraph,	Object *ob, GpencilModifierData *md)
 {
 	const GpencilModifierTypeInfo *mti = BKE_gpencil_modifierType_getInfo(md->type);
 
@@ -225,7 +217,7 @@ static int gpencil_modifier_apply_obdata(
 			return 0;
 		}
 		mti->bakeModifier(bmain, depsgraph, md, ob);
-		DEG_id_tag_update(&ob->id, OB_RECALC_DATA);
+		DEG_id_tag_update(&ob->id, ID_RECALC_GEOMETRY);
 	}
 	else {
 		BKE_report(reports, RPT_ERROR, "Cannot apply modifier for this object type");
@@ -269,9 +261,18 @@ int ED_object_gpencil_modifier_apply(
 	return 1;
 }
 
-int ED_object_gpencil_modifier_copy(ReportList *UNUSED(reports), Object *ob, GpencilModifierData *md)
+int ED_object_gpencil_modifier_copy(ReportList *reports, Object *ob, GpencilModifierData *md)
 {
 	GpencilModifierData *nmd;
+	const GpencilModifierTypeInfo *mti = BKE_gpencil_modifierType_getInfo(md->type);
+	GpencilModifierType type = md->type;
+
+	if (mti->flags & eGpencilModifierTypeFlag_Single) {
+		if (BKE_gpencil_modifiers_findByType(ob, type)) {
+			BKE_report(reports, RPT_WARNING, "Only one modifier of this type is allowed");
+			return 0;
+		}
+	}
 
 	nmd = BKE_gpencil_modifier_new(md->type);
 	BKE_gpencil_modifier_copyData(md, nmd);
@@ -369,17 +370,12 @@ static int gpencil_edit_modifier_poll_generic(bContext *C, StructRNA *rna_type, 
 	PointerRNA ptr = CTX_data_pointer_get_type(C, "modifier", rna_type);
 	Object *ob = (ptr.id.data) ? ptr.id.data : ED_object_active_context(C);
 
-	if (!ptr.data) {
-		CTX_wm_operator_poll_msg_set(C, "Context missing 'modifier'");
-		return 0;
-	}
-
 	if (!ob || ID_IS_LINKED(ob)) return 0;
 	if (obtype_flag && ((1 << ob->type) & obtype_flag) == 0) return 0;
 	if (ptr.id.data && ID_IS_LINKED(ptr.id.data)) return 0;
 
 	if (ID_IS_STATIC_OVERRIDE(ob)) {
-		CTX_wm_operator_poll_msg_set(C, "Cannot edit modifiers comming from static override");
+		CTX_wm_operator_poll_msg_set(C, "Cannot edit modifiers coming from static override");
 		return (((GpencilModifierData *)ptr.data)->flag & eGpencilModifierFlag_StaticOverride_Local) != 0;
 	}
 
@@ -393,7 +389,8 @@ static bool gpencil_edit_modifier_poll(bContext *C)
 
 static void gpencil_edit_modifier_properties(wmOperatorType *ot)
 {
-	RNA_def_string(ot->srna, "modifier", NULL, MAX_NAME, "Modifier", "Name of the modifier to edit");
+	PropertyRNA *prop = RNA_def_string(ot->srna, "modifier", NULL, MAX_NAME, "Modifier", "Name of the modifier to edit");
+	RNA_def_property_flag(prop, PROP_HIDDEN);
 }
 
 static int gpencil_edit_modifier_invoke_properties(bContext *C, wmOperator *op)
@@ -478,7 +475,7 @@ static int gpencil_modifier_move_up_exec(bContext *C, wmOperator *op)
 	if (!md || !ED_object_gpencil_modifier_move_up(op->reports, ob, md))
 		return OPERATOR_CANCELLED;
 
-	DEG_id_tag_update(&ob->id, OB_RECALC_DATA);
+	DEG_id_tag_update(&ob->id, ID_RECALC_GEOMETRY);
 	WM_event_add_notifier(C, NC_OBJECT | ND_MODIFIER, ob);
 
 	return OPERATOR_FINISHED;
@@ -517,7 +514,7 @@ static int gpencil_modifier_move_down_exec(bContext *C, wmOperator *op)
 	if (!md || !ED_object_gpencil_modifier_move_down(op->reports, ob, md))
 		return OPERATOR_CANCELLED;
 
-	DEG_id_tag_update(&ob->id, OB_RECALC_DATA);
+	DEG_id_tag_update(&ob->id, ID_RECALC_GEOMETRY);
 	WM_event_add_notifier(C, NC_OBJECT | ND_MODIFIER, ob);
 
 	return OPERATOR_FINISHED;
@@ -560,7 +557,7 @@ static int gpencil_modifier_apply_exec(bContext *C, wmOperator *op)
 		return OPERATOR_CANCELLED;
 	}
 
-	DEG_id_tag_update(&ob->id, OB_RECALC_DATA);
+	DEG_id_tag_update(&ob->id, ID_RECALC_GEOMETRY);
 	WM_event_add_notifier(C, NC_OBJECT | ND_MODIFIER, ob);
 
 	return OPERATOR_FINISHED;
@@ -577,7 +574,7 @@ static int gpencil_modifier_apply_invoke(bContext *C, wmOperator *op, const wmEv
 static const EnumPropertyItem gpencil_modifier_apply_as_items[] = {
 	{MODIFIER_APPLY_DATA, "DATA", 0, "Object Data", "Apply modifier to the object's data"},
 	{MODIFIER_APPLY_SHAPE, "SHAPE", 0, "New Shape", "Apply deform-only modifier to a new shape on this object"},
-	{0, NULL, 0, NULL, NULL}
+	{0, NULL, 0, NULL, NULL},
 };
 
 void OBJECT_OT_gpencil_modifier_apply(wmOperatorType *ot)
@@ -607,7 +604,7 @@ static int gpencil_modifier_copy_exec(bContext *C, wmOperator *op)
 	if (!md || !ED_object_gpencil_modifier_copy(op->reports, ob, md))
 		return OPERATOR_CANCELLED;
 
-	DEG_id_tag_update(&ob->id, OB_RECALC_DATA);
+	DEG_id_tag_update(&ob->id, ID_RECALC_GEOMETRY);
 	WM_event_add_notifier(C, NC_OBJECT | ND_MODIFIER, ob);
 
 	return OPERATOR_FINISHED;

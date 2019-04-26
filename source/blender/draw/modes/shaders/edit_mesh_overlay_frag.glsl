@@ -1,122 +1,36 @@
 
-/* Solid Wirefram implementation
- * Mike Erwin, Clément Foucault */
+#define M_1_SQRTPI   0.5641895835477563    /* 1/sqrt(pi) */
 
-/* This shader follows the principles of
- * http://developer.download.nvidia.com/SDK/10/direct3d/Source/SolidWireframe/Doc/SolidWireframe.pdf */
+/**
+ * We want to know how much a pixel is covered by a line.
+ * We replace the square pixel with acircle of the same area and try to find the intersection area.
+ * The area we search is the circular segment. https://en.wikipedia.org/wiki/Circular_segment
+ * The formula for the area uses inverse trig function and is quite complexe.
+ * Instead, we approximate it by using the smoothstep function and a 1.05 factor to the disc radius.
+ */
+#define DISC_RADIUS (M_1_SQRTPI * 1.05)
+#define GRID_LINE_SMOOTH_START (0.5 - DISC_RADIUS)
+#define GRID_LINE_SMOOTH_END (0.5 + DISC_RADIUS)
 
-/* This is not perfect. Only a subset of intel gpus are affected.
- * This fix have some performance impact.
- * TODO Refine the range to only affect GPUs. */
+uniform float edgeScale;
 
-uniform float faceAlphaMod;
-
-flat in vec3 edgesCrease;
-flat in vec3 edgesBweight;
-flat in vec4 faceColor;
-flat in ivec3 flag;
-#ifdef VERTEX_SELECTION
-in vec3 vertexColor;
-#endif
-#ifdef VERTEX_FACING
-in float facing;
-#endif
-
-flat in vec2 ssPos[3];
+flat in vec4 finalColorOuter_f;
+in vec4 finalColor_f;
+noperspective in float edgeCoord_f;
 
 out vec4 FragColor;
 
-/* Vertex flag is shifted and combined with the edge flag */
-#define FACE_ACTIVE     (1 << (2 + 8))
-
-#define LARGE_EDGE_SIZE 3.0
-
-/* Style Parameters in pixel */
-
-void distToEdgeAndPoint(vec2 dir, vec2 ori, out float edge, out float point)
-{
-	dir = normalize(dir.xy);
-	dir = vec2(-dir.y, dir.x);
-	vec2 of = gl_FragCoord.xy - ori;
-	point = sqrt(dot(of, of));
-	edge = abs(dot(dir, of));
-}
-
-void colorDist(vec4 color, float dist)
-{
-	FragColor = (dist < 0) ? color : FragColor;
-}
-
-#ifdef ANTI_ALIASING
-void colorDistEdge(vec4 color, float dist)
-{
-	FragColor.rgb *= FragColor.a;
-	FragColor = mix(color, FragColor, clamp(dist, 0.0, 1.0));
-	FragColor.rgb /= max(1e-8, FragColor.a);
-}
-#else
-#define colorDistEdge colorDist
-#endif
-
 void main()
 {
-	vec3 e, p;
-
-	/* Step 1 : Computing Distances */
-	distToEdgeAndPoint((ssPos[1] - ssPos[0]) + 1e-8, ssPos[0], e.z, p.x);
-	distToEdgeAndPoint((ssPos[2] - ssPos[1]) + 1e-8, ssPos[1], e.x, p.y);
-	distToEdgeAndPoint((ssPos[0] - ssPos[2]) + 1e-8, ssPos[2], e.y, p.z);
-
-	/* Step 2 : coloring (order dependant) */
-
-	/* Face */
-	FragColor = faceColor;
-	FragColor.a *= faceAlphaMod;
-
-	/* Edges */
-	for (int v = 0; v < 3; ++v) {
-		if ((flag[v] & EDGE_EXISTS) != 0) {
-			/* Outer large edge */
-			float largeEdge = e[v] - sizeEdge * LARGE_EDGE_SIZE;
-
-			vec4 large_edge_color = EDIT_MESH_edge_color_outer(flag[v], (flag[0]& FACE_ACTIVE) != 0, edgesCrease[v], edgesBweight[v]);
-
-			if (large_edge_color.a != 0.0) {
-				colorDistEdge(large_edge_color, largeEdge);
-			}
-
-			/* Inner thin edge */
-			float innerEdge = e[v] - sizeEdge;
-#ifdef ANTI_ALIASING
-			innerEdge += 0.4;
-#endif
-
-#ifdef VERTEX_SELECTION
-			colorDistEdge(vec4(vertexColor, 1.0), innerEdge);
+	float dist = abs(edgeCoord_f) - max(sizeEdge * edgeScale - 0.5, 0.0);
+	float dist_outer = dist - max(sizeEdge * edgeScale, 1.0);
+#ifdef USE_SMOOTH_WIRE
+	float mix_w = smoothstep(GRID_LINE_SMOOTH_START, GRID_LINE_SMOOTH_END, dist);
+	float mix_w_outer = smoothstep(GRID_LINE_SMOOTH_START, GRID_LINE_SMOOTH_END, dist_outer);
 #else
-			vec4 inner_edge_color = EDIT_MESH_edge_color_inner(flag[v], (flag[0]& FACE_ACTIVE) != 0);
-			colorDistEdge(inner_edge_color, innerEdge);
+	float mix_w = step(0.5, dist);
+	float mix_w_outer = step(0.5, dist_outer);
 #endif
-		}
-	}
-
-	/* Points */
-#ifdef VERTEX_SELECTION
-	for (int v = 0; v < 3; ++v) {
-		float size = p[v] - sizeVertex;
-
-		vec4 point_color = colorVertex;
-		point_color = ((flag[v] & EDGE_VERTEX_SELECTED) != 0) ? colorVertexSelect : point_color;
-		point_color = ((flag[v] & EDGE_VERTEX_ACTIVE) != 0) ? vec4(colorEditMeshActive.xyz, 1.0) : point_color;
-
-		colorDist(point_color, size);
-	}
-#endif
-
-#ifdef VERTEX_FACING
-	FragColor.a *= 1.0 - abs(facing) * 0.4;
-#endif
-
-	/* don't write depth if not opaque */
-	if (FragColor.a == 0.0) discard;
+	FragColor = mix(finalColorOuter_f, finalColor_f, 1.0 - mix_w * finalColorOuter_f.a);
+	FragColor.a *= 1.0 - (finalColorOuter_f.a > 0.0 ? mix_w_outer : mix_w);
 }

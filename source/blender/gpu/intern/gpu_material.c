@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,10 @@
  *
  * The Original Code is Copyright (C) 2006 Blender Foundation.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): Brecht Van Lommel.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/gpu/intern/gpu_material.c
- *  \ingroup gpu
+/** \file
+ * \ingroup gpu
  *
  * Manages materials, lights and textures.
  */
@@ -58,20 +50,19 @@
 
 #include "gpu_codegen.h"
 
-#ifdef WITH_OPENSUBDIV
-#  include "BKE_DerivedMesh.h"
-#endif
-
 /* Structs */
+#define MAX_COLOR_BAND 128
+
+typedef struct GPUColorBandBuilder {
+	float pixels[MAX_COLOR_BAND][CM_TABLE + 1][4];
+	int current_layer;
+} GPUColorBandBuilder;
 
 struct GPUMaterial {
-	Scene *scene; /* DEPRECATED was only usefull for lamps */
+	Scene *scene; /* DEPRECATED was only useful for lights. */
 	Material *ma;
 
-	/* material for mesh surface, worlds or something else.
-	 * some code generation is done differently depending on the use case */
-	int type; /* DEPRECATED */
-	GPUMaterialStatus status;
+	eGPUMaterialStatus status;
 
 	const void *engine_type;   /* attached engine type */
 	int options;    /* to identify shader variations (shadow, probe, world background...) */
@@ -83,7 +74,7 @@ struct GPUMaterial {
 	/* for binding the material */
 	GPUPass *pass;
 	ListBase inputs;  /* GPUInput */
-	GPUVertexAttribs attribs;
+	GPUVertAttrLayers attrs;
 	int builtins;
 	int alpha, obcolalpha;
 	int dynproperty;
@@ -102,12 +93,13 @@ struct GPUMaterial {
 
 	int objectinfoloc;
 
-	bool is_opensubdiv;
-
 	/* XXX: Should be in Material. But it depends on the output node
 	 * used and since the output selection is difference for GPUMaterial...
 	 */
 	int domain;
+
+	/* Only used by Eevee to know which bsdf are used. */
+	int flag;
 
 	/* Used by 2.8 pipeline */
 	GPUUniformBuffer *ubo; /* UBOs for shader uniforms. */
@@ -122,6 +114,9 @@ struct GPUMaterial {
 	float sss_sharpness;
 	bool sss_dirty;
 
+	GPUTexture *coba_tex; /* 1D Texture array containing all color bands. */
+	GPUColorBandBuilder *coba_builder;
+
 #ifndef NDEBUG
 	char name[64];
 #endif
@@ -130,10 +125,52 @@ struct GPUMaterial {
 enum {
 	GPU_DOMAIN_SURFACE    = (1 << 0),
 	GPU_DOMAIN_VOLUME     = (1 << 1),
-	GPU_DOMAIN_SSS        = (1 << 2)
+	GPU_DOMAIN_SSS        = (1 << 2),
 };
 
 /* Functions */
+
+/* Returns the address of the future pointer to coba_tex */
+GPUTexture **gpu_material_ramp_texture_row_set(GPUMaterial *mat, int size, float *pixels, float *row)
+{
+	/* In order to put all the colorbands into one 1D array texture,
+	 * we need them to be the same size. */
+	BLI_assert(size == CM_TABLE + 1);
+	UNUSED_VARS_NDEBUG(size);
+
+	if (mat->coba_builder == NULL) {
+		mat->coba_builder = MEM_mallocN(sizeof(GPUColorBandBuilder), "GPUColorBandBuilder");
+		mat->coba_builder->current_layer = 0;
+	}
+
+	int layer = mat->coba_builder->current_layer;
+	*row = (float)layer;
+
+	if (*row == MAX_COLOR_BAND) {
+		printf("Too many color band in shader! Remove some Curve, Black Body or Color Ramp Node.\n");
+	}
+	else {
+		float *dst = (float *)mat->coba_builder->pixels[layer];
+		memcpy(dst, pixels, sizeof(float) * (CM_TABLE + 1) * 4);
+		mat->coba_builder->current_layer += 1;
+	}
+
+	return &mat->coba_tex;
+}
+
+static void gpu_material_ramp_texture_build(GPUMaterial *mat)
+{
+	if (mat->coba_builder == NULL)
+		return;
+
+	GPUColorBandBuilder *builder = mat->coba_builder;
+
+	mat->coba_tex = GPU_texture_create_1d_array(CM_TABLE + 1, builder->current_layer, GPU_RGBA16F,
+	                                            (float *)builder->pixels, NULL);
+
+	MEM_freeN(builder);
+	mat->coba_builder = NULL;
+}
 
 static void gpu_material_free_single(GPUMaterial *material)
 {
@@ -143,19 +180,20 @@ static void gpu_material_free_single(GPUMaterial *material)
 	GPU_pass_free_nodes(&material->nodes);
 	GPU_inputs_free(&material->inputs);
 
-	if (material->pass)
+	if (material->pass != NULL) {
 		GPU_pass_release(material->pass);
-
+	}
 	if (material->ubo != NULL) {
 		GPU_uniformbuffer_free(material->ubo);
 	}
-
 	if (material->sss_tex_profile != NULL) {
 		GPU_texture_free(material->sss_tex_profile);
 	}
-
 	if (material->sss_profile != NULL) {
 		GPU_uniformbuffer_free(material->sss_profile);
+	}
+	if (material->coba_tex != NULL) {
+		GPU_texture_free(material->coba_tex);
 	}
 }
 
@@ -169,7 +207,7 @@ void GPU_material_free(ListBase *gpumaterial)
 	BLI_freelistN(gpumaterial);
 }
 
-GPUBuiltin GPU_get_material_builtins(GPUMaterial *material)
+eGPUBuiltin GPU_get_material_builtins(GPUMaterial *material)
 {
 	return material->builtins;
 }
@@ -177,11 +215,6 @@ GPUBuiltin GPU_get_material_builtins(GPUMaterial *material)
 Scene *GPU_material_scene(GPUMaterial *material)
 {
 	return material->scene;
-}
-
-GPUMatType GPU_Material_get_type(GPUMaterial *material)
-{
-	return material->type;
 }
 
 GPUPass *GPU_material_get_pass(GPUMaterial *material)
@@ -201,7 +234,8 @@ GPUUniformBuffer *GPU_material_uniform_buffer_get(GPUMaterial *material)
 
 /**
  * Create dynamic UBO from parameters
- * \param ListBase of BLI_genericNodeN(GPUInput)
+ *
+ * \param inputs: Items are #LinkData, data is #GPUInput (`BLI_genericNodeN(GPUInput)`).
  */
 void GPU_material_uniform_buffer_create(GPUMaterial *material, ListBase *inputs)
 {
@@ -418,7 +452,7 @@ static void compute_sss_translucence_kernel(
 		/* Distance from surface. */
 		float d = kd->max_radius * ((float)i + 0.00001f) / ((float)resolution);
 
-		/* For each distance d we compute the radiance incomming from an hypothetic parallel plane. */
+		/* For each distance d we compute the radiance incoming from an hypothetic parallel plane. */
 		/* Compute radius of the footprint on the hypothetic plane */
 		float r_fp = sqrtf(kd->max_radius * kd->max_radius - d * d);
 		float r_step = r_fp / INTEGRAL_RESOLUTION;
@@ -433,7 +467,7 @@ static void compute_sss_translucence_kernel(
 			profile[1] = eval_profile(dist, falloff_type, sharpness, kd->param[1]);
 			profile[2] = eval_profile(dist, falloff_type, sharpness, kd->param[2]);
 
-			/* Since the profile and configuration are radially symetrical we
+			/* Since the profile and configuration are radially symmetrical we
 			 * can just evaluate it once and weight it accordingly */
 			float r_next = r + r_step;
 			float disk_area = (M_PI * r_next * r_next) - (M_PI * r * r);
@@ -505,7 +539,7 @@ struct GPUUniformBuffer *GPU_material_sss_profile_get(GPUMaterial *material, int
 			GPU_texture_free(material->sss_tex_profile);
 		}
 
-		material->sss_tex_profile = GPU_texture_create_1D(64, GPU_RGBA16F, translucence_profile, NULL);
+		material->sss_tex_profile = GPU_texture_create_1d(64, GPU_RGBA16F, translucence_profile, NULL);
 
 		MEM_freeN(translucence_profile);
 
@@ -519,12 +553,17 @@ struct GPUUniformBuffer *GPU_material_sss_profile_get(GPUMaterial *material, int
 	return material->sss_profile;
 }
 
+struct GPUUniformBuffer *GPU_material_create_sss_profile_ubo(void)
+{
+	return GPU_uniformbuffer_create(sizeof(GPUSssKernelData), NULL, NULL);
+}
+
 #undef SSS_EXPONENT
 #undef SSS_SAMPLES
 
-void GPU_material_vertex_attributes(GPUMaterial *material, GPUVertexAttribs *attribs)
+void GPU_material_vertex_attrs(GPUMaterial *material, GPUVertAttrLayers *r_attrs)
 {
-	*attribs = material->attribs;
+	*r_attrs = material->attrs;
 }
 
 void GPU_material_output_link(GPUMaterial *material, GPUNodeLink *link)
@@ -539,7 +578,7 @@ void gpu_material_add_node(GPUMaterial *material, GPUNode *node)
 }
 
 /* Return true if the material compilation has not yet begin or begin. */
-GPUMaterialStatus GPU_material_status(GPUMaterial *mat)
+eGPUMaterialStatus GPU_material_status(GPUMaterial *mat)
 {
 	return mat->status;
 }
@@ -562,6 +601,16 @@ bool GPU_material_use_domain_surface(GPUMaterial *mat)
 bool GPU_material_use_domain_volume(GPUMaterial *mat)
 {
 	return (mat->domain & GPU_DOMAIN_VOLUME);
+}
+
+void GPU_material_flag_set(GPUMaterial *mat, eGPUMatFlag flag)
+{
+	mat->flag |= flag;
+}
+
+bool GPU_material_flag_get(GPUMaterial *mat, eGPUMatFlag flag)
+{
+	return (mat->flag & flag);
 }
 
 GPUMaterial *GPU_material_from_nodetree_find(
@@ -595,7 +644,7 @@ GPUMaterial *GPU_material_from_nodetree(
 	BLI_assert(GPU_material_from_nodetree_find(gpumaterials, engine_type, options) == NULL);
 
 	/* allocate material */
-	GPUMaterial *mat = MEM_callocN(sizeof(GPUMaterial), "GPUMaterial");;
+	GPUMaterial *mat = MEM_callocN(sizeof(GPUMaterial), "GPUMaterial");
 	mat->scene = scene;
 	mat->engine_type = engine_type;
 	mat->options = options;
@@ -609,6 +658,8 @@ GPUMaterial *GPU_material_from_nodetree(
 	bNodeTree *localtree = ntreeLocalize(ntree);
 	ntreeGPUMaterialNodes(localtree, mat, &has_surface_output, &has_volume_output);
 
+	gpu_material_ramp_texture_build(mat);
+
 	if (has_surface_output) {
 		mat->domain |= GPU_DOMAIN_SURFACE;
 	}
@@ -617,16 +668,17 @@ GPUMaterial *GPU_material_from_nodetree(
 	}
 
 	if (mat->outlink) {
-		/* Prune the unused nodes and extract attribs before compiling so the
+		/* Prune the unused nodes and extract attributes before compiling so the
 		 * generated VBOs are ready to accept the future shader. */
 		GPU_nodes_prune(&mat->nodes, mat->outlink);
-		GPU_nodes_get_vertex_attributes(&mat->nodes, &mat->attribs);
+		GPU_nodes_get_vertex_attrs(&mat->nodes, &mat->attrs);
 		/* Create source code and search pass cache for an already compiled version. */
-		mat->pass = GPU_generate_pass_new(
+		mat->pass = GPU_generate_pass(
 		        mat,
 		        mat->outlink,
-		        &mat->attribs,
+		        &mat->attrs,
 		        &mat->nodes,
+		        &mat->builtins,
 		        vert_code,
 		        geom_code,
 		        frag_lib,
@@ -654,7 +706,7 @@ GPUMaterial *GPU_material_from_nodetree(
 
 	/* Only free after GPU_pass_shader_get where GPUUniformBuffer
 	 * read data from the local tree. */
-	ntreeFreeTree(localtree);
+	ntreeFreeLocalTree(localtree);
 	MEM_freeN(localtree);
 
 	/* note that even if building the shader fails in some way, we still keep
@@ -702,10 +754,10 @@ void GPU_materials_free(Main *bmain)
 	World *wo;
 	extern Material defmaterial;
 
-	for (ma = bmain->mat.first; ma; ma = ma->id.next)
+	for (ma = bmain->materials.first; ma; ma = ma->id.next)
 		GPU_material_free(&ma->gpumaterial);
 
-	for (wo = bmain->world.first; wo; wo = wo->id.next)
+	for (wo = bmain->worlds.first; wo; wo = wo->id.next)
 		GPU_material_free(&wo->gpumaterial);
 
 	GPU_material_free(&defmaterial.gpumaterial);

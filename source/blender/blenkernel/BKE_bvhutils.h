@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,32 +15,26 @@
  *
  * The Original Code is Copyright (C) 2006 by NaN Holding BV.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): André Pinto
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 #ifndef __BKE_BVHUTILS_H__
 #define __BKE_BVHUTILS_H__
 
-/** \file BKE_bvhutils.h
- *  \ingroup bke
+/** \file
+ * \ingroup bke
  */
 
 #include "BLI_bitmap.h"
 #include "BLI_kdopbvh.h"
 
 /**
- * This header encapsulates necessary code to buld a BVH
+ * This header encapsulates necessary code to build a BVH
  */
 
-struct DerivedMesh;
 struct BMEditMesh;
-struct Mesh;
-struct MVert;
+struct DerivedMesh;
 struct MFace;
+struct MVert;
+struct Mesh;
 
 typedef struct LinkNode BVHCache;
 
@@ -150,10 +142,6 @@ BVHTree *bvhtree_from_mesh_looptri_ex(
         const struct MLoopTri *looptri, const int looptri_num, const bool looptri_allocated,
         const BLI_bitmap *mask, int looptri_num_active,
         float epsilon, int tree_type, int axis);
-
-BVHTree *bvhtree_from_mesh_get(
-        struct BVHTreeFromMesh *data, struct DerivedMesh *mesh,
-        const int type, const int tree_type);
 
 BVHTree *BKE_bvhtree_from_mesh_get(
         struct BVHTreeFromMesh *data, struct Mesh *mesh,

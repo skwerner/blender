@@ -16,11 +16,6 @@
 #
 # The Original Code is Copyright (C) 2006, Blender Foundation
 # All rights reserved.
-#
-# The Original Code is: all of this file.
-#
-# Contributor(s): Jacques Beaurain.
-#
 # ***** END GPL LICENSE BLOCK *****
 
 setup_libdirs()
@@ -42,6 +37,25 @@ blender_include_dirs(
 	../blender/windowmanager
 )
 
+set(LIB
+	bf_blenfont
+	bf_blenkernel
+	bf_blenlib
+	bf_blenloader
+	bf_depsgraph
+	bf_dna
+	bf_editor_datafiles
+	bf_imbuf
+	bf_intern_clog
+	bf_intern_guardedalloc
+	bf_intern_memutil
+	bf_intern_opencolorio
+	bf_python
+	bf_render
+	bf_rna
+	bf_windowmanager
+)
+
 add_definitions(${GL_DEFINITIONS})
 blender_include_dirs("${GLEW_INCLUDE_PATH}")
 
@@ -54,9 +68,14 @@ if(WITH_LIBMV)
 	add_definitions(-DWITH_LIBMV)
 endif()
 
-if(WITH_CYCLES AND WITH_CYCLES_LOGGING)
-	blender_include_dirs(../../intern/cycles/blender)
-	add_definitions(-DWITH_CYCLES_LOGGING)
+if(WITH_CYCLES)
+	if(WITH_CYCLES_LOGGING)
+		blender_include_dirs(../../intern/cycles/blender)
+		add_definitions(-DWITH_CYCLES_LOGGING)
+	endif()
+	list(APPEND LIB
+		bf_intern_cycles
+	)
 endif()
 
 if(WITH_CODEC_FFMPEG)
@@ -78,20 +97,26 @@ endif()
 
 if(WITH_SDL)
 	if(WITH_SDL_DYNLOAD)
-		add_definitions(-DWITH_SDL_DYNLOAD)
 		blender_include_dirs(../../extern/sdlew/include)
+		add_definitions(-DWITH_SDL_DYNLOAD)
 	endif()
 	add_definitions(-DWITH_SDL)
 endif()
 
 if(WITH_BINRELOC)
-	add_definitions(-DWITH_BINRELOC)
 	blender_include_dirs(${BINRELOC_INCLUDE_DIRS})
+	list(APPEND LIB
+		extern_binreloc
+	)
+	add_definitions(-DWITH_BINRELOC)
 endif()
 
 if(WITH_FREESTYLE)
-	add_definitions(-DWITH_FREESTYLE)
 	blender_include_dirs(../blender/freestyle)
+	list(APPEND LIB
+		bf_freestyle
+	)
+	add_definitions(-DWITH_FREESTYLE)
 endif()
 
 # Setup the exe sources and buildinfo
@@ -422,13 +447,6 @@ if(WITH_OPENCOLORIO)
 	)
 endif()
 
-# Add default workspaces.blend to build (under [version]/datafiles
-install(
-	FILES ${CMAKE_SOURCE_DIR}/release/datafiles/workspaces.blend
-	DESTINATION ${TARGETDIR_VER}/datafiles
-)
-
-
 # helpful tip when using make
 if("${CMAKE_GENERATOR}" MATCHES ".*Makefiles.*")
 	# message after building.
@@ -486,6 +504,7 @@ if(UNIX AND NOT APPLE)
 			FILES
 				${CMAKE_SOURCE_DIR}/release/freedesktop/blender.desktop
 				${CMAKE_SOURCE_DIR}/release/freedesktop/icons/scalable/apps/blender.svg
+				${CMAKE_SOURCE_DIR}/release/freedesktop/icons/symbolic/apps/blender-symbolic.svg
 			DESTINATION "."
 		)
 
@@ -516,19 +535,12 @@ if(UNIX AND NOT APPLE)
 			DESTINATION share/applications
 		)
 		install(
-			DIRECTORY
-				${CMAKE_SOURCE_DIR}/release/freedesktop/icons/16x16
-				${CMAKE_SOURCE_DIR}/release/freedesktop/icons/22x22
-				${CMAKE_SOURCE_DIR}/release/freedesktop/icons/24x24
-				${CMAKE_SOURCE_DIR}/release/freedesktop/icons/32x32
-				${CMAKE_SOURCE_DIR}/release/freedesktop/icons/48x48
-				${CMAKE_SOURCE_DIR}/release/freedesktop/icons/256x256
-			DESTINATION share/icons/hicolor
-			PATTERN "*.svg" EXCLUDE
-		)
-		install(
 			FILES ${CMAKE_SOURCE_DIR}/release/freedesktop/icons/scalable/apps/blender.svg
 			DESTINATION share/icons/hicolor/scalable/apps
+		)
+		install(
+			FILES ${CMAKE_SOURCE_DIR}/release/freedesktop/icons/symbolic/apps/blender-symbolic.svg
+			DESTINATION share/icons/hicolor/symbolic/apps
 		)
 		install(
 			PROGRAMS ${CMAKE_SOURCE_DIR}/release/bin/blender-thumbnailer.py
@@ -651,6 +663,13 @@ if(UNIX AND NOT APPLE)
 
 		endif()
 	endif()
+
+	if(WITH_DRACO)
+		install(
+			PROGRAMS $<TARGET_FILE:extern_draco>
+			DESTINATION ${TARGETDIR_VER}/python/lib/python${PYTHON_VERSION}/site-packages
+		)
+	endif()
 elseif(WIN32)
 
 	set(BLENDER_TEXT_FILES_DESTINATION ".")
@@ -718,7 +737,7 @@ elseif(WIN32)
 			)
 
 			if(WITH_PYTHON_INSTALL_NUMPY)
-				set(PYTHON_NUMPY_VERSION 1.13)
+				set(PYTHON_NUMPY_VERSION 1.15)
 				add_custom_command(OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/${BLENDER_VERSION}/python/lib/site-packages
 					COMMAND ${CMAKE_COMMAND} -E
 					        make_directory ${CMAKE_CURRENT_BINARY_DIR}/${BLENDER_VERSION}/python/lib/site-packages)
@@ -754,6 +773,19 @@ elseif(WIN32)
 				DESTINATION ${BLENDER_VERSION}/python/bin
 				CONFIGURATIONS Debug
 			)
+			if(WINDOWS_PYTHON_DEBUG)
+				install(
+					FILES ${LIBDIR}/python/lib/python${_PYTHON_VERSION_NO_DOTS}.pdb
+					DESTINATION "."
+					CONFIGURATIONS Release;RelWithDebInfo;MinSizeRel
+				)
+
+				install(
+					FILES ${LIBDIR}/python/lib/python${_PYTHON_VERSION_NO_DOTS}_d.pdb
+					DESTINATION "."
+					CONFIGURATIONS Debug
+				)
+			endif()
 		endif()
 
 		unset(_PYTHON_VERSION_NO_DOTS)
@@ -771,22 +803,15 @@ elseif(WIN32)
 		endif()
 	endif()
 
-	if(MSVC)
-		install(
-			FILES ${LIBDIR}/pthreads/lib/pthreadVC2.dll
-			DESTINATION "."
-		)
-	endif()
-
 	if(WITH_CODEC_FFMPEG)
 		install(
 			FILES
-				${LIBDIR}/ffmpeg/lib/avcodec-57.dll
-				${LIBDIR}/ffmpeg/lib/avformat-57.dll
-				${LIBDIR}/ffmpeg/lib/avdevice-57.dll
-				${LIBDIR}/ffmpeg/lib/avutil-55.dll
-				${LIBDIR}/ffmpeg/lib/swscale-4.dll
-				${LIBDIR}/ffmpeg/lib/swresample-2.dll
+				${LIBDIR}/ffmpeg/lib/avcodec-58.dll
+				${LIBDIR}/ffmpeg/lib/avformat-58.dll
+				${LIBDIR}/ffmpeg/lib/avdevice-58.dll
+				${LIBDIR}/ffmpeg/lib/avutil-56.dll
+				${LIBDIR}/ffmpeg/lib/swscale-5.dll
+				${LIBDIR}/ffmpeg/lib/swresample-3.dll
 			DESTINATION "."
 		)
 	endif()
@@ -835,15 +860,21 @@ elseif(WIN32)
 		DESTINATION "."
 	)
 
-	if(WITH_OPENCOLORIO)
-		set(OCIOBIN ${LIBDIR}/opencolorio/bin)
-			install(
-				FILES
-					${OCIOBIN}/OpenColorIO.dll
-				DESTINATION "."
-			)
-	endif()
+	install(
+		FILES
+			${CMAKE_SOURCE_DIR}/release/windows/batch/blender_debug_gpu.cmd
+			${CMAKE_SOURCE_DIR}/release/windows/batch/blender_debug_gpu_glitchworkaround.cmd
+			${CMAKE_SOURCE_DIR}/release/windows/batch/blender_debug_log.cmd
+			${CMAKE_SOURCE_DIR}/release/windows/batch/blender_factory_startup.cmd
+		DESTINATION "."
+	)
 
+	if(WITH_DRACO)
+		install(
+			PROGRAMS $<TARGET_FILE:extern_draco>
+			DESTINATION ${TARGETDIR_VER}/python/lib/site-packages
+		)
+	endif()
 elseif(APPLE)
 
 	# handy install macro to exclude files, we use \$ escape for the "to"
@@ -911,6 +942,13 @@ elseif(APPLE)
 		blender.app/Contents/
 	)
 
+	if(WITH_OPENMP AND OPENMP_CUSTOM)
+		install(
+			FILES ${LIBDIR}/openmp/lib/libomp.dylib
+			DESTINATION blender.app/Contents/Resources/lib
+		)
+	endif()
+
 	if(WITH_LLVM AND NOT LLVM_STATIC)
 		install(
 			FILES ${LIBDIR}/llvm/lib/libLLVM-3.4.dylib
@@ -941,6 +979,12 @@ elseif(APPLE)
 		unset(_py_inc_suffix)
 	endif()
 
+	if(WITH_DRACO)
+		install(
+			PROGRAMS $<TARGET_FILE:extern_draco>
+			DESTINATION ${TARGETDIR_VER}/python/lib/python${PYTHON_VERSION}/site-packages
+		)
+	endif()
 endif()
 
 # -----------------------------------------------------------------------------
@@ -1007,11 +1051,11 @@ install(
 # Setup link libs
 
 add_dependencies(blender makesdna)
-
-setup_blender_sorted_libs()
-target_link_libraries(blender ${BLENDER_SORTED_LIBS})
+target_link_libraries(blender ${LIB})
+unset(LIB)
 
 setup_liblinks(blender)
+
 
 # -----------------------------------------------------------------------------
 # Setup launcher
@@ -1021,5 +1065,10 @@ if(WIN32 AND NOT WITH_PYTHON_MODULE)
 		TARGETS blender
 		COMPONENT Blender
 		DESTINATION "."
+	)
+	set_target_properties(
+		blender
+		PROPERTIES
+			VS_USER_PROPS "blender.Cpp.user.props"
 	)
 endif()

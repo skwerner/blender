@@ -43,7 +43,7 @@ class DATA_PT_context_lattice(DataButtonsPanel, Panel):
         lat = context.lattice
         space = context.space_data
 
-        split = layout.split(percentage=0.65)
+        split = layout.split(factor=0.65)
         if ob:
             split.template_ID(ob, "data")
             split.separator()
@@ -85,7 +85,7 @@ class DATA_PT_lattice(DataButtonsPanel, Panel):
 
 
 class DATA_PT_custom_props_lattice(DataButtonsPanel, PropertyPanel, Panel):
-    COMPAT_ENGINES = {'BLENDER_RENDER', 'BLENDER_EEVEE', 'BLENDER_OPENGL'}
+    COMPAT_ENGINES = {'BLENDER_RENDER', 'BLENDER_EEVEE', 'BLENDER_WORKBENCH'}
     _context_path = "object.data"
     _property_type = bpy.types.Lattice
 

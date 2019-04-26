@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,17 +15,13 @@
  *
  * The Original Code is Copyright (C) 2018 by Blender Foundation.
  * All rights reserved.
- *
- * Contributor(s): Sergey Sharybin.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/blenkernel/intern/subdiv_eval.c
- *  \ingroup bke
+/** \file
+ * \ingroup bke
  */
 
-#include "BKE_subdiv.h"
+#include "BKE_subdiv_eval.h"
 
 #include "DNA_mesh_types.h"
 #include "DNA_meshdata_types.h"
@@ -37,35 +31,37 @@
 #include "BLI_math_vector.h"
 
 #include "BKE_customdata.h"
+#include "BKE_subdiv.h"
 
 #include "MEM_guardedalloc.h"
 
-#ifdef WITH_OPENSUBDIV
-#  include "opensubdiv_evaluator_capi.h"
-#  include "opensubdiv_topology_refiner_capi.h"
-#endif
+#include "opensubdiv_evaluator_capi.h"
+#include "opensubdiv_topology_refiner_capi.h"
 
-void BKE_subdiv_eval_begin(Subdiv *subdiv)
+bool BKE_subdiv_eval_begin(Subdiv *subdiv)
 {
-#ifdef WITH_OPENSUBDIV
+	BKE_subdiv_stats_reset(&subdiv->stats, SUBDIV_STATS_EVALUATOR_CREATE);
 	if (subdiv->topology_refiner == NULL) {
-		/* Happens on input mesh with just loose geometry. */
+		/* Happens on input mesh with just loose geometry,
+		 * or when OpenSubdiv is disabled */
+		return false;
 	}
 	else if (subdiv->evaluator == NULL) {
 		BKE_subdiv_stats_begin(&subdiv->stats, SUBDIV_STATS_EVALUATOR_CREATE);
 		subdiv->evaluator = openSubdiv_createEvaluatorFromTopologyRefiner(
 		        subdiv->topology_refiner);
 		BKE_subdiv_stats_end(&subdiv->stats, SUBDIV_STATS_EVALUATOR_CREATE);
+		if (subdiv->evaluator == NULL) {
+			return false;
+		}
 	}
 	else {
 		/* TODO(sergey): Check for topology change. */
 	}
-#else
-	UNUSED_VARS(subdiv);
-#endif
+	BKE_subdiv_eval_init_displacement(subdiv);
+	return true;
 }
 
-#ifdef WITH_OPENSUBDIV
 static void set_coarse_positions(Subdiv *subdiv, const Mesh *mesh)
 {
 	const MVert *mvert = mesh->mvert;
@@ -74,8 +70,7 @@ static void set_coarse_positions(Subdiv *subdiv, const Mesh *mesh)
 	/* Mark vertices which needs new coordinates. */
 	/* TODO(sergey): This is annoying to calculate this on every update,
 	 * maybe it's better to cache this mapping. Or make it possible to have
-	 * OpenSubdiv's vertices match mesh ones?
-	 */
+	 * OpenSubdiv's vertices match mesh ones? */
 	BLI_bitmap *vertex_used_map =
 	        BLI_BITMAP_NEW(mesh->totvert, "vert used map");
 	for (int poly_index = 0; poly_index < mesh->totpoly; poly_index++) {
@@ -130,14 +125,16 @@ static void set_face_varying_data_from_uv(Subdiv *subdiv,
 		}
 	}
 }
-#endif
 
-void BKE_subdiv_eval_update_from_mesh(Subdiv *subdiv, const Mesh *mesh)
+bool BKE_subdiv_eval_update_from_mesh(Subdiv *subdiv, const Mesh *mesh)
 {
-#ifdef WITH_OPENSUBDIV
-	BKE_subdiv_eval_begin(subdiv);
+	if (!BKE_subdiv_eval_begin(subdiv)) {
+		return false;
+	}
 	if (subdiv->evaluator == NULL) {
-		return;
+		/* NOTE: This situation is supposed to be handled by begin(). */
+		BLI_assert(!"Is not supposed to happen");
+		return false;
 	}
 	/* Set coordinates of base mesh vertices. */
 	set_coarse_positions(subdiv, mesh);
@@ -153,9 +150,18 @@ void BKE_subdiv_eval_update_from_mesh(Subdiv *subdiv, const Mesh *mesh)
 	BKE_subdiv_stats_begin(&subdiv->stats, SUBDIV_STATS_EVALUATOR_REFINE);
 	subdiv->evaluator->refine(subdiv->evaluator);
 	BKE_subdiv_stats_end(&subdiv->stats, SUBDIV_STATS_EVALUATOR_REFINE);
-#else
-	UNUSED_VARS(subdiv, mesh);
-#endif
+	return true;
+}
+
+void BKE_subdiv_eval_init_displacement(Subdiv *subdiv)
+{
+	if (subdiv->displacement_evaluator == NULL) {
+		return;
+	}
+	if (subdiv->displacement_evaluator->initialize == NULL) {
+		return;
+	}
+	subdiv->displacement_evaluator->initialize(subdiv->displacement_evaluator);
 }
 
 /* ========================== Single point queries ========================== */
@@ -164,57 +170,53 @@ void BKE_subdiv_eval_limit_point(
         Subdiv *subdiv,
         const int ptex_face_index,
         const float u, const float v,
-        float P[3])
+        float r_P[3])
 {
 	BKE_subdiv_eval_limit_point_and_derivatives(subdiv,
 	                                            ptex_face_index,
 	                                            u, v,
-	                                            P, NULL, NULL);
+	                                            r_P, NULL, NULL);
 }
 
 void BKE_subdiv_eval_limit_point_and_derivatives(
         Subdiv *subdiv,
         const int ptex_face_index,
         const float u, const float v,
-        float P[3], float dPdu[3], float dPdv[3])
+        float r_P[3], float r_dPdu[3], float r_dPdv[3])
 {
-#ifdef WITH_OPENSUBDIV
 	subdiv->evaluator->evaluateLimit(subdiv->evaluator,
 	                                 ptex_face_index,
 	                                 u, v,
-	                                 P, dPdu, dPdv);
-#else
-	UNUSED_VARS(subdiv, ptex_face_index, u, v, P, dPdu, dPdv);
-#endif
+	                                 r_P, r_dPdu, r_dPdv);
 }
 
 void BKE_subdiv_eval_limit_point_and_normal(
         Subdiv *subdiv,
         const int ptex_face_index,
         const float u, const float v,
-        float P[3], float N[3])
+        float r_P[3], float r_N[3])
 {
 	float dPdu[3], dPdv[3];
 	BKE_subdiv_eval_limit_point_and_derivatives(subdiv,
 	                                            ptex_face_index,
 	                                            u, v,
-	                                            P, dPdu, dPdv);
-	cross_v3_v3v3(N, dPdu, dPdv);
-	normalize_v3(N);
+	                                            r_P, dPdu, dPdv);
+	cross_v3_v3v3(r_N, dPdu, dPdv);
+	normalize_v3(r_N);
 }
 
 void BKE_subdiv_eval_limit_point_and_short_normal(
         Subdiv *subdiv,
         const int ptex_face_index,
         const float u, const float v,
-        float P[3], short N[3])
+        float r_P[3], short r_N[3])
 {
 	float N_float[3];
 	BKE_subdiv_eval_limit_point_and_normal(subdiv,
 	                                       ptex_face_index,
 	                                       u, v,
-	                                       P, N_float);
-	normal_float_to_short_v3(N, N_float);
+	                                       r_P, N_float);
+	normal_float_to_short_v3(r_N, N_float);
 }
 
 void BKE_subdiv_eval_face_varying(
@@ -222,17 +224,53 @@ void BKE_subdiv_eval_face_varying(
         const int face_varying_channel,
         const int ptex_face_index,
         const float u, const float v,
-        float face_varying[2])
+        float r_face_varying[2])
 {
-#ifdef WITH_OPENSUBDIV
 	subdiv->evaluator->evaluateFaceVarying(subdiv->evaluator,
 	                                       face_varying_channel,
 	                                       ptex_face_index,
 	                                       u, v,
-	                                       face_varying);
-#else
-	UNUSED_VARS(subdiv, face_varying_channel, ptex_face_index, u, v, face_varying);
-#endif
+	                                       r_face_varying);
+}
+
+void BKE_subdiv_eval_displacement(
+        Subdiv *subdiv,
+        const int ptex_face_index,
+        const float u, const float v,
+        const float dPdu[3], const float dPdv[3],
+        float r_D[3])
+{
+	if (subdiv->displacement_evaluator == NULL) {
+		zero_v3(r_D);
+		return;
+	}
+	subdiv->displacement_evaluator->eval_displacement(
+	        subdiv->displacement_evaluator,
+	        ptex_face_index,
+	        u, v,
+	        dPdu, dPdv,
+	        r_D);
+}
+
+void BKE_subdiv_eval_final_point(
+        Subdiv *subdiv,
+        const int ptex_face_index,
+        const float u, const float v,
+        float r_P[3])
+{
+	if (subdiv->displacement_evaluator) {
+		float dPdu[3], dPdv[3], D[3];
+		BKE_subdiv_eval_limit_point_and_derivatives(
+		        subdiv, ptex_face_index, u, v, r_P, dPdu, dPdv);
+		BKE_subdiv_eval_displacement(subdiv,
+		                             ptex_face_index, u, v,
+		                             dPdu, dPdv,
+		                             D);
+		add_v3_v3(r_P, D);
+	}
+	else {
+		BKE_subdiv_eval_limit_point(subdiv, ptex_face_index, u, v, r_P);
+	}
 }
 
 /* ===================  Patch queries at given resolution =================== */

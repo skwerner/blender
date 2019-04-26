@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,12 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/blenlib/intern/uvproject.c
- *  \ingroup bli
+/** \file
+ * \ingroup bli
  */
 
 #include <math.h>
@@ -50,8 +46,9 @@ void BLI_uvproject_from_camera(float target[2], float source[3], ProjCameraInfo 
 	pv4[3] = 1.0;
 
 	/* rotmat is the object matrix in this case */
-	if (uci->do_rotmat)
+	if (uci->do_rotmat) {
 		mul_m4_v4(uci->rotmat, pv4);
+	}
 
 	/* caminv is the inverse camera matrix */
 	mul_m4_v4(uci->caminv, pv4);
@@ -71,8 +68,9 @@ void BLI_uvproject_from_camera(float target[2], float source[3], ProjCameraInfo 
 		}
 	}
 	else {
-		if (pv4[2] == 0.0f)
+		if (pv4[2] == 0.0f) {
 			pv4[2] = 0.00001f;  /* don't allow div by 0 */
+		}
 
 		if (uci->do_persp == false) {
 			target[0] = (pv4[0] / uci->camsize);

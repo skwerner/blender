@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,14 +15,10 @@
  *
  * The Original Code is Copyright (C) 2016 by Blender Foundation.
  * All rights reserved.
- *
- * Contributor(s): Bastien Montagne.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/blenkernel/intern/library_override.c
- *  \ingroup bke
+/** \file
+ * \ingroup bke
  */
 
 #include <stdlib.h>
@@ -58,6 +52,19 @@ static void bke_override_property_operation_copy(IDOverrideStaticPropertyOperati
 
 static void bke_override_property_clear(IDOverrideStaticProperty *op);
 static void bke_override_property_operation_clear(IDOverrideStaticPropertyOperation *opop);
+
+/* Temp, for until static override is ready and tested enough to go 'public', we hide it by default in UI and such. */
+static bool _override_static_enabled = false;
+
+void BKE_override_static_enable(const bool do_enable)
+{
+	_override_static_enabled = do_enable;
+}
+
+bool BKE_override_static_is_enabled()
+{
+	return _override_static_enabled;
+}
 
 /** Initialize empty overriding of \a reference_id by \a local_id. */
 IDOverrideStatic *BKE_override_static_init(ID *local_id, ID *reference_id)
@@ -157,7 +164,7 @@ static ID *override_static_create_from(Main *bmain, ID *reference_id)
 {
 	ID *local_id;
 
-	if (!id_copy(bmain, reference_id, (ID **)&local_id, false)) {
+	if (!BKE_id_copy(bmain, reference_id, (ID **)&local_id)) {
 		return NULL;
 	}
 	id_us_min(local_id);
@@ -169,7 +176,7 @@ static ID *override_static_create_from(Main *bmain, ID *reference_id)
 }
 
 
-/** Create an overriden local copy of linked reference. */
+/** Create an overridden local copy of linked reference. */
 ID *BKE_override_static_create_from_id(Main *bmain, ID *reference_id)
 {
 	BLI_assert(reference_id != NULL);
@@ -177,13 +184,13 @@ ID *BKE_override_static_create_from_id(Main *bmain, ID *reference_id)
 
 	ID *local_id = override_static_create_from(bmain, reference_id);
 
-	/* Remapping, we obviously only want to affect local data (and not our own reference pointer to overriden ID). */
+	/* Remapping, we obviously only want to affect local data (and not our own reference pointer to overridden ID). */
 	BKE_libblock_remap(bmain, reference_id, local_id, ID_REMAP_SKIP_INDIRECT_USAGE | ID_REMAP_SKIP_STATIC_OVERRIDE);
 
 	return local_id;
 }
 
-/** Create overriden local copies of all tagged data-blocks in given Main.
+/** Create overridden local copies of all tagged data-blocks in given Main.
  *
  * \note Set id->newid of overridden libs with newly created overrides, caller is responsible to clean those pointers
  * before/after usage as needed.
@@ -192,32 +199,28 @@ ID *BKE_override_static_create_from_id(Main *bmain, ID *reference_id)
  */
 bool BKE_override_static_create_from_tag(Main *bmain)
 {
-	ListBase *lbarray[MAX_LIBARRAY];
-	int a;
+	ID *reference_id;
 	bool ret = true;
 
-	const int num_types = a = set_listbasepointers(bmain, lbarray);
-	while (a--) {
-		for (ID *reference_id = lbarray[a]->first; reference_id != NULL; reference_id = reference_id->next) {
-			if ((reference_id->tag & LIB_TAG_DOIT) != 0 && reference_id->lib != NULL) {
-				if ((reference_id->newid = override_static_create_from(bmain, reference_id)) == NULL) {
-					ret = false;
-				}
+	FOREACH_MAIN_ID_BEGIN(bmain, reference_id)
+	{
+		if ((reference_id->tag & LIB_TAG_DOIT) != 0 && reference_id->lib != NULL) {
+			if ((reference_id->newid = override_static_create_from(bmain, reference_id)) == NULL) {
+				ret = false;
 			}
 		}
 	}
+	FOREACH_MAIN_ID_END;
 
-	/* Remapping, we obviously only want to affect local data (and not our own reference pointer to overriden ID). */
-	a = num_types;
-	while (a--) {
-		for (ID *reference_id = lbarray[a]->first; reference_id != NULL; reference_id = reference_id->next) {
-			if ((reference_id->tag & LIB_TAG_DOIT) != 0 && reference_id->lib != NULL && reference_id->newid != NULL) {
-				ID *local_id = reference_id->newid;
-				BKE_libblock_remap(bmain, reference_id, local_id,
-				                   ID_REMAP_SKIP_INDIRECT_USAGE | ID_REMAP_SKIP_STATIC_OVERRIDE);
-			}
+	FOREACH_MAIN_ID_BEGIN(bmain, reference_id)
+	{
+		if ((reference_id->tag & LIB_TAG_DOIT) != 0 && reference_id->lib != NULL && reference_id->newid != NULL) {
+			ID *local_id = reference_id->newid;
+			BKE_libblock_remap(bmain, reference_id, local_id,
+			                   ID_REMAP_SKIP_INDIRECT_USAGE | ID_REMAP_SKIP_STATIC_OVERRIDE);
 		}
 	}
+	FOREACH_MAIN_ID_END;
 
 	return ret;
 }
@@ -236,7 +239,7 @@ IDOverrideStaticProperty *BKE_override_static_property_find(IDOverrideStatic *ov
  */
 IDOverrideStaticProperty *BKE_override_static_property_get(IDOverrideStatic *override, const char *rna_path, bool *r_created)
 {
-	/* XXX TODO we'll most likely want a runtime ghash to store taht mapping at some point. */
+	/* XXX TODO we'll most likely want a runtime ghash to store that mapping at some point. */
 	IDOverrideStaticProperty *op = BKE_override_static_property_find(override, rna_path);
 
 	if (op == NULL) {
@@ -567,27 +570,21 @@ bool BKE_override_static_operations_create(Main *bmain, ID *local, const bool fo
 /** Check all overrides from given \a bmain and create/update overriding operations as needed. */
 void BKE_main_override_static_operations_create(Main *bmain, const bool force_auto)
 {
-	ListBase *lbarray[MAX_LIBARRAY];
-	int base_count, i;
+	ID *id;
 
-	base_count = set_listbasepointers(bmain, lbarray);
-
-	for (i = 0; i < base_count; i++) {
-		ListBase *lb = lbarray[i];
-		ID *id;
-
-		for (id = lb->first; id; id = id->next) {
-			if (force_auto ||
-			    (ID_IS_STATIC_OVERRIDE_AUTO(id) && (id->tag & LIB_TAG_OVERRIDESTATIC_AUTOREFRESH)))
-			{
-				BKE_override_static_operations_create(bmain, id, force_auto);
-				id->tag &= ~LIB_TAG_OVERRIDESTATIC_AUTOREFRESH;
-			}
+	FOREACH_MAIN_ID_BEGIN(bmain, id)
+	{
+		if (force_auto ||
+		    (ID_IS_STATIC_OVERRIDE_AUTO(id) && (id->tag & LIB_TAG_OVERRIDESTATIC_AUTOREFRESH)))
+		{
+			BKE_override_static_operations_create(bmain, id, force_auto);
+			id->tag &= ~LIB_TAG_OVERRIDESTATIC_AUTOREFRESH;
 		}
 	}
+	FOREACH_MAIN_ID_END;
 }
 
-/** Update given override from its reference (re-applying overriden properties). */
+/** Update given override from its reference (re-applying overridden properties). */
 void BKE_override_static_update(Main *bmain, ID *local)
 {
 	if (local->override_static == NULL || local->override_static->reference == NULL) {
@@ -614,7 +611,7 @@ void BKE_override_static_update(Main *bmain, ID *local)
 	 * a (performances) issue here. */
 
 	ID *tmp_id;
-	id_copy(bmain, local->override_static->reference, &tmp_id, false);
+	BKE_id_copy(bmain, local->override_static->reference, &tmp_id);
 
 	if (tmp_id == NULL) {
 		return;
@@ -636,13 +633,13 @@ void BKE_override_static_update(Main *bmain, ID *local)
 
 	/* Again, horribly innefficient in our case, we need something off-Main (aka moar generic nolib copy/free stuff)! */
 	/* XXX And crashing in complex cases (e.g. because depsgraph uses same data...). */
-	BKE_libblock_free_ex(bmain, tmp_id, true, false);
+	BKE_id_free_ex(bmain, tmp_id, LIB_ID_FREE_NO_UI_USER, true);
 
 	if (local->override_static->storage) {
 		/* We know this datablock is not used anywhere besides local->override->storage. */
 		/* XXX For until we get fully shadow copies, we still need to ensure storage releases
 		 *     its usage of any ID pointers it may have. */
-		BKE_libblock_free_ex(bmain, local->override_static->storage, true, false);
+		BKE_id_free_ex(bmain, local->override_static->storage, LIB_ID_FREE_NO_UI_USER, true);
 		local->override_static->storage = NULL;
 	}
 
@@ -655,21 +652,15 @@ void BKE_override_static_update(Main *bmain, ID *local)
 /** Update all overrides from given \a bmain. */
 void BKE_main_override_static_update(Main *bmain)
 {
-	ListBase *lbarray[MAX_LIBARRAY];
-	int base_count, i;
+	ID *id;
 
-	base_count = set_listbasepointers(bmain, lbarray);
-
-	for (i = 0; i < base_count; i++) {
-		ListBase *lb = lbarray[i];
-		ID *id;
-
-		for (id = lb->first; id; id = id->next) {
-			if (id->override_static != NULL && id->lib == NULL) {
-				BKE_override_static_update(bmain, id);
-			}
+	FOREACH_MAIN_ID_BEGIN(bmain, id)
+	{
+		if (id->override_static != NULL && id->lib == NULL) {
+			BKE_override_static_update(bmain, id);
 		}
 	}
+	FOREACH_MAIN_ID_END;
 }
 
 /***********************************************************************************************************************
@@ -681,7 +672,7 @@ void BKE_main_override_static_update(Main *bmain)
  * II) We store the differential value into a second 'ghost' data-block, which is an empty ID of same type as local one,
  *     where we only define values that need differential data.
  *
- * This avoids us having to modify 'real' data-block at write time (and retoring it afterwards), which is inneficient,
+ * This avoids us having to modify 'real' data-block at write time (and restoring it afterwards), which is inneficient,
  * and potentially dangerous (in case of concurrent access...), while not using much extra memory in typical cases.
  * It also ensures stored data-block always contains exact same data as "desired" ones (kind of "baked" data-blocks).
  */
@@ -720,7 +711,7 @@ ID *BKE_override_static_operations_store_start(Main *bmain, OverrideStaticStorag
 	/* This would imply change in handling of usercout all over RNA (and possibly all over Blender code).
 	 * Not impossible to do, but would rather see first is extra useless usual user handling is actually
 	 * a (performances) issue here, before doing it. */
-	id_copy((Main *)override_storage, local, &storage_id, false);
+	BKE_id_copy((Main *)override_storage, local, &storage_id);
 
 	if (storage_id != NULL) {
 		PointerRNA rnaptr_reference, rnaptr_final, rnaptr_storage;
@@ -731,7 +722,7 @@ ID *BKE_override_static_operations_store_start(Main *bmain, OverrideStaticStorag
 		if (!RNA_struct_override_store(
 		        bmain, &rnaptr_final, &rnaptr_reference, &rnaptr_storage, local->override_static))
 		{
-			BKE_libblock_free_ex(override_storage, storage_id, true, false);
+			BKE_id_free_ex(override_storage, storage_id, LIB_ID_FREE_NO_UI_USER, true);
 			storage_id = NULL;
 		}
 	}
@@ -758,19 +749,13 @@ void BKE_override_static_operations_store_finalize(OverrideStaticStorage *overri
 {
 	/* We cannot just call BKE_main_free(override_storage), not until we have option to make 'ghost' copies of IDs
 	 * without increasing usercount of used data-blocks... */
-	ListBase *lbarray[MAX_LIBARRAY];
-	int base_count, i;
+	ID *id;
 
-	base_count = set_listbasepointers(override_storage, lbarray);
-
-	for (i = 0; i < base_count; i++) {
-		ListBase *lb = lbarray[i];
-		ID *id;
-
-		while ((id = lb->first)) {
-			BKE_libblock_free_ex(override_storage, id, true, false);
-		}
+	FOREACH_MAIN_ID_BEGIN(override_storage, id)
+	{
+		BKE_id_free_ex(override_storage, id, LIB_ID_FREE_NO_UI_USER, true);
 	}
+	FOREACH_MAIN_ID_END;
 
 	BKE_main_free(override_storage);
 }

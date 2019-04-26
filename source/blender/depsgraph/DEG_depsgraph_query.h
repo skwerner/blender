@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,15 +15,10 @@
  *
  * The Original Code is Copyright (C) 2013 Blender Foundation.
  * All rights reserved.
- *
- * Original Author: Joshua Leung
- * Contributor(s): Sergey Sharybin
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/depsgraph/DEG_depsgraph_query.h
- *  \ingroup depsgraph
+/** \file
+ * \ingroup depsgraph
  *
  * Public API for Querying and Filtering Depsgraph.
  */
@@ -34,11 +27,13 @@
 #define __DEG_DEPSGRAPH_QUERY_H__
 
 #include "DEG_depsgraph.h"
+#include "DEG_depsgraph_build.h"
 
 struct ID;
 
-struct Base;
 struct BLI_Iterator;
+struct Base;
+struct CustomData_MeshMasks;
 struct Depsgraph;
 struct DupliObject;
 struct ListBase;
@@ -70,7 +65,12 @@ bool DEG_id_type_updated(const struct Depsgraph *depsgraph, short id_type);
 bool DEG_id_type_any_updated(const struct Depsgraph *depsgraph);
 
 /* Get additional evaluation flags for the given ID. */
-short DEG_get_eval_flags_for_id(const struct Depsgraph *graph, struct ID *id);
+uint32_t DEG_get_eval_flags_for_id(const struct Depsgraph *graph, struct ID *id);
+
+/* Get additional mesh CustomData_MeshMasks flags for the given object. */
+void DEG_get_customdata_mask_for_object(const struct Depsgraph *graph,
+                                        struct Object *object,
+                                        struct CustomData_MeshMasks *r_mask);
 
 /* Get scene the despgraph is created for. */
 struct Scene *DEG_get_evaluated_scene(const struct Depsgraph *graph);
@@ -113,7 +113,7 @@ typedef struct DEGObjectIterData {
 
 	struct Scene *scene;
 
-	int visibility_check; /* eObjectVisibilityCheck. */
+	eEvaluationMode eval_mode;
 
 	/* **** Iteration over dupli-list. *** */
 
@@ -124,15 +124,13 @@ typedef struct DEGObjectIterData {
 	/* Next duplicated object to step into. */
 	struct DupliObject *dupli_object_next;
 	/* Corresponds to current object: current iterator object is evaluated from
-	 * this duplicated object.
-	 */
+	 * this duplicated object. */
 	struct DupliObject *dupli_object_current;
 	/* Temporary storage to report fully populated DNA to the render engine or
-	 * other users of the iterator.
-	 */
+	 * other users of the iterator. */
 	struct Object temp_dupli_object;
 
-	/* **** Iteration ober ID nodes **** */
+	/* **** Iteration over ID nodes **** */
 	size_t id_node_index;
 	size_t num_id_nodes;
 } DEGObjectIterData;
@@ -150,7 +148,7 @@ void DEG_iterator_objects_end(struct BLI_Iterator *iter);
 	{                                                                             \
 		DEGObjectIterData data_ = {                                               \
 			graph_,                                                               \
-			flag_                                                                 \
+			flag_,                                                                \
 		};                                                                        \
                                                                                   \
 		ITER_BEGIN(DEG_iterator_objects_begin,                                    \
@@ -160,11 +158,11 @@ void DEG_iterator_objects_end(struct BLI_Iterator *iter);
 
 #define DEG_OBJECT_ITER_END                                                       \
 		ITER_END;                                                                 \
-	}
+	} ((void)0)
 
 /**
-  * Depsgraph objects iterator for draw manager and final render
-  */
+ * Depsgraph objects iterator for draw manager and final render
+ */
 #define DEG_OBJECT_ITER_FOR_RENDER_ENGINE_BEGIN(graph_, instance_)        \
 	DEG_OBJECT_ITER_BEGIN(graph_, instance_,                              \
 	        DEG_ITER_OBJECT_FLAG_LINKED_DIRECTLY |                        \
@@ -197,12 +195,46 @@ typedef void (*DEGForeachIDCallback)(ID *id, void *user_data);
 /* NOTE: Modifies runtime flags in depsgraph nodes, so can not be used in
  * parallel. Keep an eye on that!
  */
+void DEG_foreach_ancestor_ID(const Depsgraph *depsgraph,
+                             const ID *id,
+                             DEGForeachIDCallback callback, void *user_data);
 void DEG_foreach_dependent_ID(const Depsgraph *depsgraph,
                               const ID *id,
                               DEGForeachIDCallback callback, void *user_data);
 
 void DEG_foreach_ID(const Depsgraph *depsgraph,
                     DEGForeachIDCallback callback, void *user_data);
+
+/* ********************* DEG graph filtering ****************** */
+
+/* ComponentKey for nodes we want to be able to evaluate in the filtered graph */
+typedef struct DEG_FilterTarget {
+	struct DEG_FilterTarget *next, *prev;
+
+	struct ID *id;
+	/* TODO: component identifiers - Component Type, Subdata/Component Name */
+} DEG_FilterTarget;
+
+typedef enum eDEG_FilterQuery_Granularity {
+	DEG_FILTER_NODES_ALL           = 0,
+	DEG_FILTER_NODES_NO_OPS        = 1,
+	DEG_FILTER_NODES_ID_ONLY       = 2,
+} eDEG_FilterQuery_Granularity;
+
+
+typedef struct DEG_FilterQuery {
+	/* List of DEG_FilterTarget's */
+	struct ListBase targets;
+
+	/* Level of detail in the resulting graph */
+	eDEG_FilterQuery_Granularity detail_level;
+} DEG_FilterQuery;
+
+/* Obtain a new graph instance that only contains the subset of desired nodes
+ * WARNING: Do NOT pass an already filtered depsgraph through this function again,
+ *          as we are currently unable to accurately recreate it.
+ */
+Depsgraph *DEG_graph_filter(const Depsgraph *depsgraph, struct Main *bmain, DEG_FilterQuery *query);
 
 
 #ifdef __cplusplus

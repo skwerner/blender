@@ -37,4 +37,8 @@ void main()
 
 	FragColor = outcolor;
 	gl_FragDepth = stroke_depth;
+
+	if (outcolor.a < 0.02f) {
+		discard;
+	}
 }

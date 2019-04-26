@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,19 +15,13 @@
  *
  * The Original Code is Copyright (C) 2006 Blender Foundation.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): Campbell Barton <ideasman42@gmail.com>
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
 #ifndef __BKE_POINTCACHE_H__
 #define __BKE_POINTCACHE_H__
 
-/** \file BKE_pointcache.h
- *  \ingroup bke
+/** \file
+ * \ingroup bke
  */
 
 #include "DNA_ID.h"
@@ -89,11 +81,11 @@ struct Object;
 struct ParticleKey;
 struct ParticleSystem;
 struct PointCache;
+struct RigidBodyWorld;
 struct Scene;
-struct ViewLayer;
 struct SmokeModifierData;
 struct SoftBody;
-struct RigidBodyWorld;
+struct ViewLayer;
 
 struct OpenVDBReader;
 struct OpenVDBWriter;
@@ -235,7 +227,7 @@ typedef struct PTCacheUndo {
 
 	/* particles stuff */
 	struct ParticleData *particles;
-	struct KDTree *emitter_field;
+	struct KDTree_3d *emitter_field;
 	float *emitter_cosnos;
 	int psys_flag;
 
@@ -266,7 +258,7 @@ typedef struct PTCacheEdit {
 	struct ParticleSystem *psys_eval;
 	struct ParticleSystemModifierData *psmd;
 	struct ParticleSystemModifierData *psmd_eval;
-	struct KDTree *emitter_field;
+	struct KDTree_3d *emitter_field;
 	float *emitter_cosnos; /* localspace face centers and normals (average of its verts), from the derived mesh */
 	int *mirror_cache;
 
@@ -297,6 +289,11 @@ PTCacheID BKE_ptcache_id_find(struct Object *ob, struct Scene *scene, struct Poi
 void BKE_ptcache_ids_from_object(
         struct ListBase *lb, struct Object *ob, struct Scene *scene, int duplis);
 
+/****************** Query funcs ****************************/
+
+/* Check whether object has a point cache. */
+bool BKE_ptcache_object_has(struct Scene *scene, struct Object *ob, int duplis);
+
 /***************** Global funcs ****************************/
 void BKE_ptcache_remove(void);
 
@@ -314,7 +311,7 @@ void BKE_ptcache_update_info(PTCacheID *pid);
 /* Size of cache data type. */
 int     BKE_ptcache_data_size(int data_type);
 
-/* Is point with indes in memory cache */
+/* Is point with index in memory cache */
 int BKE_ptcache_mem_index_find(struct PTCacheMem *pm, unsigned int index);
 
 /* Memory cache read/write helpers. */

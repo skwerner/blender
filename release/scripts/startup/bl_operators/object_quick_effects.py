@@ -47,7 +47,13 @@ def object_ensure_material(obj, mat_name):
     return mat
 
 
-class QuickFur(Operator):
+class ObjectModeOperator:
+    @classmethod
+    def poll(cls, context):
+        return context.mode == 'OBJECT'
+
+
+class QuickFur(ObjectModeOperator, Operator):
     bl_idname = "object.quick_fur"
     bl_label = "Quick Fur"
     bl_options = {'REGISTER', 'UNDO'}
@@ -77,15 +83,13 @@ class QuickFur(Operator):
     def execute(self, context):
         fake_context = context.copy()
         mesh_objects = [obj for obj in context.selected_objects
-                        if obj.type == 'MESH' and obj.mode == 'OBJECT']
+                        if obj.type == 'MESH']
 
         if not mesh_objects:
             self.report({'ERROR'}, "Select at least one mesh object")
             return {'CANCELLED'}
 
         mat = bpy.data.materials.new("Fur Material")
-        mat.strand.tip_size = 0.25
-        mat.strand.blend_distance = 0.5
 
         for obj in mesh_objects:
             fake_context["object"] = obj
@@ -106,6 +110,7 @@ class QuickFur(Operator):
             psys.settings.use_strand_primitive = True
             psys.settings.use_hair_bspline = True
             psys.settings.child_type = 'INTERPOLATED'
+            psys.settings.tip_radius = 0.25
 
             obj.data.materials.append(mat)
             psys.settings.material = len(obj.data.materials)
@@ -113,7 +118,7 @@ class QuickFur(Operator):
         return {'FINISHED'}
 
 
-class QuickExplode(Operator):
+class QuickExplode(ObjectModeOperator, Operator):
     bl_idname = "object.quick_explode"
     bl_label = "Quick Explode"
     bl_options = {'REGISTER', 'UNDO'}
@@ -193,17 +198,6 @@ class QuickExplode(Operator):
 
                 return {'CANCELLED'}
 
-        if self.fade:
-            tex = bpy.data.textures.new("Explode fade", 'BLEND')
-            tex.use_color_ramp = True
-
-            if self.style == 'BLEND':
-                tex.color_ramp.elements[0].position = 0.333
-                tex.color_ramp.elements[1].position = 0.666
-
-            tex.color_ramp.elements[0].color[3] = 1.0
-            tex.color_ramp.elements[1].color[3] = 0.0
-
         if self.style == 'BLEND':
             from_obj = mesh_objects[1]
             to_obj = mesh_objects[0]
@@ -226,34 +220,63 @@ class QuickExplode(Operator):
 
             if self.fade:
                 explode.show_dead = False
-                uv = obj.data.uv_layers.new("Explode fade")
+                uv = obj.data.uv_layers.new(name="Explode fade")
                 explode.particle_uv = uv.name
 
                 mat = object_ensure_material(obj, "Explode Fade")
+                mat.blend_method = 'BLEND'
+                mat.shadow_method = 'HASHED'
+                if not mat.use_nodes:
+                    mat.use_nodes = True
 
-                mat.use_transparency = True
-                mat.use_transparent_shadows = True
-                mat.alpha = 0.0
-                mat.specular_alpha = 0.0
+                nodes = mat.node_tree.nodes
+                for node in nodes:
+                    if (node.type == 'OUTPUT_MATERIAL'):
+                        node_out_mat = node
+                        break
 
-                tex_slot = mat.texture_slots.add()
+                node_surface = node_out_mat.inputs['Surface'].links[0].from_node
 
-                tex_slot.texture = tex
-                tex_slot.texture_coords = 'UV'
-                tex_slot.uv_layer = uv.name
+                node_x = node_surface.location[0]
+                node_y = node_surface.location[1] - 400
+                offset_x = 200
 
-                tex_slot.use_map_alpha = True
+                node_mix = nodes.new('ShaderNodeMixShader')
+                node_mix.location = (node_x - offset_x, node_y)
+                mat.node_tree.links.new(node_surface.outputs["BSDF"], node_mix.inputs[1])
+                mat.node_tree.links.new(node_mix.outputs["Shader"], node_out_mat.inputs['Surface'])
+                offset_x += 200
+
+                node_trans = nodes.new('ShaderNodeBsdfTransparent')
+                node_trans.location = (node_x - offset_x, node_y)
+                mat.node_tree.links.new(node_trans.outputs["BSDF"], node_mix.inputs[2])
+                offset_x += 200
+
+                node_ramp = nodes.new('ShaderNodeValToRGB')
+                node_ramp.location = (node_x - offset_x, node_y)
+                offset_x += 200
+                mat.node_tree.links.new(node_ramp.outputs["Alpha"], node_mix.inputs["Fac"])
+                color_ramp = node_ramp.color_ramp
+                color_ramp.elements[0].color[3] = 0.0
+                color_ramp.elements[1].color[3] = 1.0
 
                 if self.style == 'BLEND':
+                    color_ramp.elements[0].position = 0.333
+                    color_ramp.elements[1].position = 0.666
                     if obj == to_obj:
-                        tex_slot.alpha_factor = -1.0
-                        elem = tex.color_ramp.elements[1]
-                    else:
-                        elem = tex.color_ramp.elements[0]
-                    # Keep already defined alpha!
-                    elem.color[:3] = mat.diffuse_color
-                else:
-                    tex_slot.use_map_color_diffuse = False
+                        # reverse ramp alpha
+                        color_ramp.elements[0].color[3] = 1.0
+                        color_ramp.elements[1].color[3] = 0.0
+
+                node_sep = nodes.new('ShaderNodeSeparateXYZ')
+                node_sep.location = (node_x - offset_x, node_y)
+                offset_x += 200
+                mat.node_tree.links.new(node_sep.outputs["X"], node_ramp.inputs["Fac"])
+
+                node_uv = nodes.new('ShaderNodeUVMap')
+                node_uv.location = (node_x - offset_x, node_y)
+                node_uv.uv_map = uv.name
+                mat.node_tree.links.new(node_uv.outputs["UV"], node_sep.inputs["Vector"])
 
             if self.style == 'BLEND':
                 settings.physics_type = 'KEYED'
@@ -287,7 +310,7 @@ class QuickExplode(Operator):
 
 def obj_bb_minmax(obj, min_co, max_co):
     for i in range(0, 8):
-        bb_vec = obj.matrix_world * Vector(obj.bound_box[i])
+        bb_vec = obj.matrix_world @ Vector(obj.bound_box[i])
 
         min_co[0] = min(bb_vec[0], min_co[0])
         min_co[1] = min(bb_vec[1], min_co[1])
@@ -301,7 +324,7 @@ def grid_location(x, y):
     return (x * 200, y * 150)
 
 
-class QuickSmoke(Operator):
+class QuickSmoke(ObjectModeOperator, Operator):
     bl_idname = "object.quick_smoke"
     bl_label = "Quick Smoke"
     bl_options = {'REGISTER', 'UNDO'}
@@ -347,7 +370,7 @@ class QuickSmoke(Operator):
             obj.modifiers[-1].flow_settings.smoke_flow_type = self.style
 
             if not self.show_flows:
-                obj.draw_type = 'WIRE'
+                obj.display_type = 'WIRE'
 
             # store bounding box min/max for the domain object
             obj_bb_minmax(obj, min_co, max_co)
@@ -405,7 +428,7 @@ class QuickSmoke(Operator):
         return {'FINISHED'}
 
 
-class QuickFluid(Operator):
+class QuickFluid(ObjectModeOperator, Operator):
     bl_idname = "object.quick_fluid"
     bl_label = "Quick Fluid"
     bl_options = {'REGISTER', 'UNDO'}
@@ -472,7 +495,7 @@ class QuickFluid(Operator):
 
             obj.hide_render = not self.show_flows
             if not self.show_flows:
-                obj.draw_type = 'WIRE'
+                obj.display_type = 'WIRE'
 
             # store bounding box min/max for the domain object
             obj_bb_minmax(obj, min_co, max_co)
@@ -486,10 +509,11 @@ class QuickFluid(Operator):
         # and scale with initial velocity
         v = 0.5 * self.initial_velocity
         obj.location = 0.5 * (max_co + min_co) + Vector((0.0, 0.0, -1.0)) + v
-        obj.scale = (0.5 * (max_co - min_co) +
-                     Vector((1.0, 1.0, 2.0)) +
-                     Vector((abs(v[0]), abs(v[1]), abs(v[2])))
-                     )
+        obj.scale = (
+            0.5 * (max_co - min_co) +
+            Vector((1.0, 1.0, 2.0)) +
+            Vector((abs(v[0]), abs(v[1]), abs(v[2])))
+        )
 
         # setup smoke domain
         bpy.ops.object.modifier_add(type='FLUID_SIMULATION')

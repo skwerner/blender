@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,34 +15,27 @@
  *
  * The Original Code is Copyright (C) 2005 by the Blender Foundation.
  * All rights reserved.
- *
- * Contributor(s): Daniel Dunbar
- *                 Ton Roosendaal,
- *                 Ben Batt,
- *                 Brecht Van Lommel,
- *                 Campbell Barton
- *
- * ***** END GPL LICENSE BLOCK *****
- *
  */
 
-/** \file blender/modifiers/intern/MOD_meshdeform.c
- *  \ingroup modifiers
+/** \file
+ * \ingroup modifiers
  */
+
+#include "BLI_utildefines.h"
+
+#include "BLI_math.h"
+#include "BLI_task.h"
 
 #include "DNA_mesh_types.h"
 #include "DNA_meshdata_types.h"
 #include "DNA_object_types.h"
 #include "DNA_scene_types.h"
 
-#include "BLI_math.h"
-#include "BLI_task.h"
-#include "BLI_utildefines.h"
-
 #include "BKE_global.h"
 #include "BKE_library.h"
 #include "BKE_library_query.h"
 #include "BKE_mesh.h"
+#include "BKE_mesh_runtime.h"
 #include "BKE_modifier.h"
 #include "BKE_deform.h"
 #include "BKE_editmesh.h"
@@ -98,15 +89,14 @@ static void copyData(const ModifierData *md, ModifierData *target, const int fla
 	if (mmd->bindcos) tmmd->bindcos = MEM_dupallocN(mmd->bindcos);  /* deprecated */
 }
 
-static CustomDataMask requiredDataMask(Object *UNUSED(ob), ModifierData *md)
+static void requiredDataMask(Object *UNUSED(ob), ModifierData *md, CustomData_MeshMasks *r_cddata_masks)
 {
 	MeshDeformModifierData *mmd = (MeshDeformModifierData *)md;
-	CustomDataMask dataMask = 0;
 
 	/* ask for vertexgroups if we need them */
-	if (mmd->defgrp_name[0]) dataMask |= CD_MASK_MDEFORMVERT;
-
-	return dataMask;
+	if (mmd->defgrp_name[0] != '\0') {
+		r_cddata_masks->vmask |= CD_MASK_MDEFORMVERT;
+	}
 }
 
 static bool isDisabled(const struct Scene *UNUSED(scene), ModifierData *md, bool UNUSED(useRenderParams))
@@ -286,34 +276,35 @@ static void meshdeformModifier_do(
 	Mesh *cagemesh;
 	MDeformVert *dvert = NULL;
 	float imat[4][4], cagemat[4][4], iobmat[4][4], icagemat[3][3], cmat[4][4];
-	float co[3], (*dco)[3], (*bindcagecos)[3];
+	float co[3], (*dco)[3] = NULL, (*bindcagecos)[3];
 	int a, totvert, totcagevert, defgrp_index;
-	float (*cagecos)[3];
+	float (*cagecos)[3] = NULL;
 	MeshdeformUserdata data;
-	bool free_cagemesh = false;
 
-	if (!mmd->object || (!mmd->bindcagecos && !mmd->bindfunc))
+	static int recursive_bind_sentinel = 0;
+
+	if (mmd->object == NULL || (mmd->bindcagecos == NULL && mmd->bindfunc == NULL))
 		return;
 
 	/* Get cage mesh.
 	 *
 	 * Only do this is the target object is in edit mode by itself, meaning
 	 * we don't allow linked edit meshes here.
-	 * This is because editbmesh_get_derived_cage_and_final() might easily
+	 * This is because editbmesh_get_mesh_cage_and_final() might easily
 	 * conflict with the thread which evaluates object which is in the edit
 	 * mode for this mesh.
 	 *
 	 * We'll support this case once granular dependency graph is landed.
 	 */
-	cagemesh = BKE_modifier_get_evaluated_mesh_from_evaluated_object(mmd->object, &free_cagemesh);
-
+	Object *ob_target = mmd->object;
+	cagemesh = BKE_modifier_get_evaluated_mesh_from_evaluated_object(ob_target, false);
 	if (cagemesh == NULL) {
 		modifier_setError(md, "Cannot get mesh from cage object");
 		return;
 	}
 
 	/* compute matrices to go in and out of cage object space */
-	invert_m4_m4(imat, mmd->object->obmat);
+	invert_m4_m4(imat, ob_target->obmat);
 	mul_m4_m4m4(cagemat, imat, ob->obmat);
 	mul_m4_m4m4(cmat, mmd->bindmat, cagemat);
 	invert_m4_m4(iobmat, cmat);
@@ -321,15 +312,18 @@ static void meshdeformModifier_do(
 
 	/* bind weights if needed */
 	if (!mmd->bindcagecos) {
-		static int recursive = 0;
-
 		/* progress bar redraw can make this recursive .. */
-		if (!recursive) {
-			Scene *scene = DEG_get_evaluated_scene(ctx->depsgraph);
-			recursive = 1;
-			mmd->bindfunc(scene, mmd, cagemesh, (float *)vertexCos, numVerts, cagemat);
-			recursive = 0;
+		if (!DEG_is_active(ctx->depsgraph)) {
+			modifier_setError(md, "Attempt to bind from inactive dependency graph");
+			goto finally;
 		}
+		if (!recursive_bind_sentinel) {
+			recursive_bind_sentinel = 1;
+			mmd->bindfunc(mmd, cagemesh, (float *)vertexCos, numVerts, cagemat);
+			recursive_bind_sentinel = 0;
+		}
+
+		goto finally;
 	}
 
 	/* verify we have compatible weights */
@@ -338,18 +332,15 @@ static void meshdeformModifier_do(
 
 	if (mmd->totvert != totvert) {
 		modifier_setError(md, "Verts changed from %d to %d", mmd->totvert, totvert);
-		if (free_cagemesh) BKE_id_free(NULL, cagemesh);
-		return;
+		goto finally;
 	}
 	else if (mmd->totcagevert != totcagevert) {
 		modifier_setError(md, "Cage verts changed from %d to %d", mmd->totcagevert, totcagevert);
-		if (free_cagemesh) BKE_id_free(NULL, cagemesh);
-		return;
+		goto finally;
 	}
 	else if (mmd->bindcagecos == NULL) {
 		modifier_setError(md, "Bind data missing");
-		if (free_cagemesh) BKE_id_free(NULL, cagemesh);
-		return;
+		goto finally;
 	}
 
 	/* setup deformation data */
@@ -370,8 +361,9 @@ static void meshdeformModifier_do(
 			/* compute difference with world space bind coord */
 			sub_v3_v3v3(dco[a], co, bindcagecos[a]);
 		}
-		else
+		else {
 			copy_v3_v3(dco[a], co);
+		}
 	}
 
 	MOD_get_vgroup(ob, mesh, mmd->defgrp_name, &dvert, &defgrp_index);
@@ -394,12 +386,9 @@ static void meshdeformModifier_do(
 	                        meshdeform_vert_task,
 	                        &settings);
 
-	/* release cage mesh */
-	MEM_freeN(dco);
-	MEM_freeN(cagecos);
-	if (cagemesh != NULL && free_cagemesh) {
-		BKE_id_free(NULL, cagemesh);
-	}
+finally:
+	MEM_SAFE_FREE(dco);
+	MEM_SAFE_FREE(cagecos);
 }
 
 static void deformVerts(
@@ -408,29 +397,29 @@ static void deformVerts(
         float (*vertexCos)[3],
         int numVerts)
 {
-	Mesh *mesh_src = MOD_get_mesh_eval(ctx->object, NULL, mesh, NULL, false, false);
+	Mesh *mesh_src = MOD_deform_mesh_eval_get(ctx->object, NULL, mesh, NULL, numVerts, false, false);
 
 	MOD_previous_vcos_store(md, vertexCos); /* if next modifier needs original vertices */
 
 	meshdeformModifier_do(md, ctx, mesh_src, vertexCos, numVerts);
 
-	if (mesh_src && mesh_src != mesh) {
+	if (!ELEM(mesh_src, NULL, mesh)) {
 		BKE_id_free(NULL, mesh_src);
 	}
 }
 
 static void deformVertsEM(
         ModifierData *md, const ModifierEvalContext *ctx,
-        struct BMEditMesh *UNUSED(editData),
+        struct BMEditMesh *editData,
         Mesh *mesh,
         float (*vertexCos)[3],
         int numVerts)
 {
-	Mesh *mesh_src = MOD_get_mesh_eval(ctx->object, NULL, mesh, NULL, false, false);
+	Mesh *mesh_src = MOD_deform_mesh_eval_get(ctx->object, editData, mesh, NULL, numVerts, false, false);
 
 	meshdeformModifier_do(md, ctx, mesh_src, vertexCos, numVerts);
 
-	if (mesh_src && mesh_src != mesh) {
+	if (!ELEM(mesh_src, NULL, mesh)) {
 		BKE_id_free(NULL, mesh_src);
 	}
 }
@@ -509,19 +498,11 @@ ModifierTypeInfo modifierType_MeshDeform = {
 
 	/* copyData */          copyData,
 
-	/* deformVerts_DM */    NULL,
-	/* deformMatrices_DM */ NULL,
-	/* deformVertsEM_DM */  NULL,
-	/* deformMatricesEM_DM*/NULL,
-	/* applyModifier_DM */  NULL,
-	/* applyModifierEM_DM */NULL,
-
 	/* deformVerts */       deformVerts,
 	/* deformMatrices */    NULL,
 	/* deformVertsEM */     deformVertsEM,
 	/* deformMatricesEM */  NULL,
 	/* applyModifier */     NULL,
-	/* applyModifierEM */   NULL,
 
 	/* initData */          initData,
 	/* requiredDataMask */  requiredDataMask,
@@ -533,4 +514,5 @@ ModifierTypeInfo modifierType_MeshDeform = {
 	/* foreachObjectLink */ foreachObjectLink,
 	/* foreachIDLink */     NULL,
 	/* foreachTexLink */    NULL,
+	/* freeRuntimeData */   NULL,
 };

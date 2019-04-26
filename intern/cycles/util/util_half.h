@@ -166,4 +166,4 @@ ccl_device_inline half4 make_half4(half x, half y, half z, half w)
 
 CCL_NAMESPACE_END
 
-#endif /* __UTIL_HALF_H__ */
+#endif  /* __UTIL_HALF_H__ */

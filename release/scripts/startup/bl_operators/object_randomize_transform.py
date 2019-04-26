@@ -155,7 +155,7 @@ class RandomizeLocRotSize(Operator):
     )
 
     '''scale_min: FloatProperty(
-            name="Minimun Scale Factor",
+            name="Minimum Scale Factor",
             description="Lowest scale percentage possible",
             min=-1.0, max=1.0, precision=3,
             default=0.15,
@@ -167,8 +167,11 @@ class RandomizeLocRotSize(Operator):
         min=-100.0,
         max=100.0,
         default=(1.0, 1.0, 1.0),
-        subtype='TRANSLATION',
     )
+
+    @classmethod
+    def poll(cls, context):
+        return context.mode == 'OBJECT'
 
     def execute(self, context):
         seed = self.random_seed

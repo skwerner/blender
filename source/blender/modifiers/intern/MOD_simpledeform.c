@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,27 +15,19 @@
  *
  * The Original Code is Copyright (C) 2005 by the Blender Foundation.
  * All rights reserved.
- *
- * Contributor(s): Daniel Dunbar
- *                 Ton Roosendaal,
- *                 Ben Batt,
- *                 Brecht Van Lommel,
- *                 Campbell Barton
- *
- * ***** END GPL LICENSE BLOCK *****
- *
  */
 
-/** \file blender/modifiers/intern/MOD_simpledeform.c
- *  \ingroup modifiers
+/** \file
+ * \ingroup modifiers
  */
+
+#include "BLI_utildefines.h"
+
+#include "BLI_math.h"
 
 #include "DNA_mesh_types.h"
 #include "DNA_meshdata_types.h"
 #include "DNA_object_types.h"
-
-#include "BLI_math.h"
-#include "BLI_utildefines.h"
 
 #include "BKE_editmesh.h"
 #include "BKE_mesh.h"
@@ -46,13 +36,15 @@
 #include "BKE_modifier.h"
 #include "BKE_deform.h"
 
+#include "DEG_depsgraph_query.h"
+
 #include "MOD_util.h"
 
 #include "bmesh.h"
 
 #define BEND_EPS 0.000001f
 
-/* Re-maps the indicies for X Y Z by shifting them up and wrapping, such that
+/* Re-maps the indices for X Y Z by shifting them up and wrapping, such that
  * X = Y, Y = Z, Z = X (for X axis), and X = Z, Y = X, Z = Y (for Y axis). This
  * exists because the deformations (excluding bend) are based on the Z axis.
  * Having this helps avoid long, drawn out switches. */
@@ -186,7 +178,8 @@ static void simpleDeform_bend(const float factor, const int axis, const float dc
 
 /* simple deform modifier */
 static void SimpleDeformModifier_do(
-        SimpleDeformModifierData *smd, struct Object *ob, struct Mesh *mesh,
+        SimpleDeformModifierData *smd, const ModifierEvalContext *UNUSED(ctx),
+        struct Object *ob, struct Mesh *mesh,
         float (*vertexCos)[3], int numVerts)
 {
 	const float base_limit[2] = {0.0f, 0.0f};
@@ -200,7 +193,7 @@ static void SimpleDeformModifier_do(
 	/* This is historically the lock axis, _not_ the deform axis as the name would imply */
 	const int deform_axis = smd->deform_axis;
 	int lock_axis = smd->axis;
-	if (smd->mode == MOD_SIMPLEDEFORM_MODE_BEND) { /* Bend mode shouln't have any lock axis */
+	if (smd->mode == MOD_SIMPLEDEFORM_MODE_BEND) { /* Bend mode shouldn't have any lock axis */
 		lock_axis = 0;
 	}
 	else {
@@ -227,7 +220,7 @@ static void SimpleDeformModifier_do(
 	smd->limit[0] = min_ff(smd->limit[0], smd->limit[1]);  /* Upper limit >= than lower limit */
 
 	/* Calculate matrixs do convert between coordinate spaces */
-	if (smd->origin) {
+	if (smd->origin != NULL) {
 		transf = &tmp_transf;
 		BLI_SPACE_TRANSFORM_SETUP(transf, ob, smd->origin);
 	}
@@ -264,7 +257,7 @@ static void SimpleDeformModifier_do(
 		}
 
 
-		/* SMD values are normalized to the BV, calculate the absolut values */
+		/* SMD values are normalized to the BV, calculate the absolute values */
 		smd_limit[1] = lower + (upper - lower) * smd->limit[1];
 		smd_limit[0] = lower + (upper - lower) * smd->limit[0];
 
@@ -351,16 +344,14 @@ static void initData(ModifierData *md)
 	smd->limit[1] =  1.0f;
 }
 
-static CustomDataMask requiredDataMask(Object *UNUSED(ob), ModifierData *md)
+static void requiredDataMask(Object *UNUSED(ob), ModifierData *md, CustomData_MeshMasks *r_cddata_masks)
 {
 	SimpleDeformModifierData *smd = (SimpleDeformModifierData *)md;
-	CustomDataMask dataMask = 0;
 
 	/* ask for vertexgroups if we need them */
-	if (smd->vgroup_name[0])
-		dataMask |= CD_MASK_MDEFORMVERT;
-
-	return dataMask;
+	if (smd->vgroup_name[0] != '\0') {
+		r_cddata_masks->vmask |= CD_MASK_MDEFORMVERT;
+	}
 }
 
 static void foreachObjectLink(
@@ -376,6 +367,7 @@ static void updateDepsgraph(ModifierData *md, const ModifierUpdateDepsgraphConte
 	SimpleDeformModifierData *smd  = (SimpleDeformModifierData *)md;
 	if (smd->origin != NULL) {
 		DEG_add_object_relation(ctx->node, smd->origin, DEG_OB_COMP_TRANSFORM, "SimpleDeform Modifier");
+		DEG_add_modifier_to_transform_relation(ctx->node, "SimpleDeform Modifier");
 	}
 }
 
@@ -385,11 +377,17 @@ static void deformVerts(
         float (*vertexCos)[3],
         int numVerts)
 {
-	Mesh *mesh_src = MOD_get_mesh_eval(ctx->object, NULL, mesh, NULL, false, false);
+	SimpleDeformModifierData *sdmd = (SimpleDeformModifierData *)md;
+	Mesh *mesh_src = NULL;
 
-	SimpleDeformModifier_do((SimpleDeformModifierData *)md, ctx->object, mesh_src, vertexCos, numVerts);
+	if (ctx->object->type == OB_MESH && sdmd->vgroup_name[0] != '\0') {
+		/* mesh_src is only needed for vgroups. */
+		mesh_src = MOD_deform_mesh_eval_get(ctx->object, NULL, mesh, NULL, numVerts, false, false);
+	}
 
-	if (mesh_src != mesh) {
+	SimpleDeformModifier_do(sdmd, ctx, ctx->object, mesh_src, vertexCos, numVerts);
+
+	if (!ELEM(mesh_src, NULL, mesh)) {
 		BKE_id_free(NULL, mesh_src);
 	}
 }
@@ -401,11 +399,17 @@ static void deformVertsEM(
         float (*vertexCos)[3],
         int numVerts)
 {
-	Mesh *mesh_src = MOD_get_mesh_eval(ctx->object, editData, mesh, NULL, false, false);
+	SimpleDeformModifierData *sdmd = (SimpleDeformModifierData *)md;
+	Mesh *mesh_src = NULL;
 
-	SimpleDeformModifier_do((SimpleDeformModifierData *)md, ctx->object, mesh_src, vertexCos, numVerts);
+	if (ctx->object->type == OB_MESH && sdmd->vgroup_name[0] != '\0') {
+		/* mesh_src is only needed for vgroups. */
+		mesh_src = MOD_deform_mesh_eval_get(ctx->object, editData, mesh, NULL, numVerts, false, false);
+	}
 
-	if (mesh_src != mesh) {
+	SimpleDeformModifier_do(sdmd, ctx, ctx->object, mesh_src, vertexCos, numVerts);
+
+	if (!ELEM(mesh_src, NULL, mesh)) {
 		BKE_id_free(NULL, mesh_src);
 	}
 }
@@ -425,19 +429,11 @@ ModifierTypeInfo modifierType_SimpleDeform = {
 
 	/* copyData */          modifier_copyData_generic,
 
-	/* deformVerts_DM */    NULL,
-	/* deformMatrices_DM */ NULL,
-	/* deformVertsEM_DM */  NULL,
-	/* deformMatricesEM_DM*/NULL,
-	/* applyModifier_DM */  NULL,
-	/* applyModifierEM_DM */NULL,
-
 	/* deformVerts */       deformVerts,
 	/* deformMatrices */    NULL,
 	/* deformVertsEM */     deformVertsEM,
 	/* deformMatricesEM */  NULL,
 	/* applyModifier */     NULL,
-	/* applyModifierEM */   NULL,
 
 	/* initData */          initData,
 	/* requiredDataMask */  requiredDataMask,
@@ -449,4 +445,5 @@ ModifierTypeInfo modifierType_SimpleDeform = {
 	/* foreachObjectLink */ foreachObjectLink,
 	/* foreachIDLink */     NULL,
 	/* foreachTexLink */    NULL,
+	/* freeRuntimeData */   NULL,
 };

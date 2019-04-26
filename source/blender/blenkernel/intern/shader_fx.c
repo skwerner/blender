@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,14 +15,10 @@
  *
  * The Original Code is Copyright (C) 2018, Blender Foundation
  * This is a new part of Blender
- *
- * Contributor(s): Antonio Vazquez
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/blenkernel/intern/shader_fx.c
- *  \ingroup bke
+/** \file
+ * \ingroup bke
  */
 
 
@@ -45,7 +39,6 @@
 #include "DNA_gpencil_types.h"
 #include "DNA_shader_fx_types.h"
 
-#include "BKE_global.h"
 #include "BKE_library.h"
 #include "BKE_library_query.h"
 #include "BKE_gpencil.h"
@@ -165,8 +158,8 @@ void BKE_shaderfx_copyData_generic(const ShaderFxData *fx_src, ShaderFxData *fx_
 {
 	const ShaderFxTypeInfo *fxi = BKE_shaderfxType_getInfo(fx_src->type);
 
-	/* fx_dst may have alredy be fully initialized with some extra allocated data,
-	* we need to free it now to avoid memleak. */
+	/* fx_dst may have already be fully initialized with some extra allocated data,
+	 * we need to free it now to avoid memleak. */
 	if (fxi->freeData) {
 		fxi->freeData(fx_dst);
 	}

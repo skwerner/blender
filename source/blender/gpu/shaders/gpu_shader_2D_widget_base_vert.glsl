@@ -47,7 +47,11 @@ const vec2 jit[9] = vec2[9](
 
 /* We can reuse the CORNER_* bits for tria */
 #define TRIA_VEC_RANGE BIT_RANGE(6)
-const vec2 triavec[43] = vec2[43](
+
+/* Some GPUs have performanse issues with this array being const (Doesn't fit in the registers?).
+ * To resolve this issue, store the array as a uniform buffer.
+ * (The array is still stored in the registry, but indexing is done in the uniform buffer.) */
+uniform vec2 triavec[43] = vec2[43](
 
 	/* ROUNDBOX_TRIA_ARROWS */
 	vec2(-0.170000, 0.400000), vec2(-0.050000, 0.520000), vec2( 0.250000, 0.000000), vec2( 0.470000, -0.000000), vec2(-0.170000, -0.400000), vec2(-0.050000, -0.520000),
@@ -65,8 +69,8 @@ const vec2 triavec[43] = vec2[43](
 	vec2(0.000000, -1.000000),
 
 	/* ROUNDBOX_TRIA_MENU - menu arrows */
-	vec2(-0.51, 0.08), vec2(-0.41, 0.20), vec2(-0.05, -0.39),
-	vec2(-0.05, -0.18), vec2(0.41, 0.08), vec2(0.3, 0.20),
+	vec2(-0.51, 0.07), vec2(-0.4, 0.18), vec2(-0.05, -0.39),
+	vec2(-0.05, -0.17), vec2(0.41, 0.07), vec2(0.3, 0.18),
 
 
 	/* ROUNDBOX_TRIA_CHECK - check mark */
@@ -74,10 +78,12 @@ const vec2 triavec[43] = vec2[43](
 	vec2(-0.130000, -0.170000),  vec2(0.720000, 0.430000),   vec2(0.530000, 0.590000),
 
 	/* ROUNDBOX_TRIA_HOLD_ACTION_ARROW - hold action arrows */
-#define OY (-0.2 / 2)
+#define OX (-0.32)
+#define OY (0.1)
 #define SC (0.35 * 2)
 //	vec2(-0.5 + SC, 1.0 + OY),  vec2( 0.5, 1.0 + OY),  vec2( 0.5, 0.0 + OY + SC),
-	vec2( 0.5 - SC, 1.0 + OY),  vec2(-0.5, 1.0 + OY),  vec2(-0.5, 0.0 + OY + SC)
+	vec2((0.5 - SC) + OX, 1.0 + OY), vec2(-0.5 + OX, 1.0 + OY), vec2(-0.5 + OX, SC + OY)
+#undef OX
 #undef OY
 #undef SC
 );

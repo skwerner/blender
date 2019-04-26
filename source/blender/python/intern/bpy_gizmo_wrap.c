@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,12 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/python/intern/bpy_gizmo_wrap.c
- *  \ingroup pythonintern
+/** \file
+ * \ingroup pythonintern
  *
  * This file is so Python can define widget-group's that C can call into.
  * The generic callback functions for Python widget-group are defines in
@@ -48,7 +44,6 @@
 /* we may want to add, but not now */
 
 /* -------------------------------------------------------------------- */
-
 /** \name Gizmo
  * \{ */
 
@@ -186,43 +181,35 @@ void BPY_RNA_gizmo_wrapper(wmGizmoType *gzt, void *userdata)
 
 
 /* -------------------------------------------------------------------- */
-
 /** \name Gizmo Group
  * \{ */
 
 static void gizmogroup_properties_init(wmGizmoGroupType *gzgt)
 {
-#ifdef USE_SRNA
 	PyTypeObject *py_class = gzgt->ext.data;
-#endif
 	RNA_struct_blender_type_set(gzgt->ext.srna, gzgt);
 
-#ifdef USE_SRNA
 	/* only call this so pyrna_deferred_register_class gives a useful error
 	 * WM_operatortype_append_ptr will call RNA_def_struct_identifier
 	 * later */
-	RNA_def_struct_identifier(gzgt->srna, gzgt->idname);
+	RNA_def_struct_identifier_no_struct_map(gzgt->srna, gzgt->idname);
 
 	if (pyrna_deferred_register_class(gzgt->srna, py_class) != 0) {
 		PyErr_Print(); /* failed to register operator props */
 		PyErr_Clear();
 	}
-#endif
 }
 
 void BPY_RNA_gizmogroup_wrapper(wmGizmoGroupType *gzgt, void *userdata)
 {
 	/* take care not to overwrite anything set in
 	 * WM_gizmomaptype_group_link_ptr before opfunc() is called */
-#ifdef USE_SRNA
 	StructRNA *srna = gzgt->srna;
-#endif
 	*gzgt = *((wmGizmoGroupType *)userdata);
-#ifdef USE_SRNA
 	gzgt->srna = srna; /* restore */
-#endif
 
-#ifdef USE_SRNA
+	/* don't do translations here yet */
+#if 0
 	/* Use i18n context from ext.srna if possible (py gizmogroups). */
 	if (gzgt->ext.srna) {
 		RNA_def_struct_translation_context(gzgt->srna, RNA_struct_translation_context(gzgt->ext.srna));

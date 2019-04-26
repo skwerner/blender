@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,9 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
-/** \ingroup GHOST
- *
- * \file GHOST_C-api.h
+/** \file
+ * \ingroup GHOST
  * \brief GHOST C-API function and type declarations.
  */
 
@@ -743,6 +734,13 @@ extern GHOST_TSuccess GHOST_ActivateOpenGLContext(GHOST_ContextHandle contexthan
 extern GHOST_TSuccess GHOST_ReleaseOpenGLContext(GHOST_ContextHandle contexthandle);
 
 /**
+ * Set which tablet API to use. Only affects Windows, other platforms have a single API.
+ * \param systemhandle The handle to the system
+ * \param api Enum indicating which API to use.
+ */
+extern void GHOST_SetTabletAPI(GHOST_SystemHandle systemhandle, GHOST_TTabletAPI api);
+
+/**
  * Returns the status of the tablet
  * \param windowhandle The handle to the window
  * \return Status of tablet
@@ -938,6 +936,11 @@ extern int GHOST_SupportsNativeDialogs(void);
  * Use native pixel size (MacBook pro 'retina'), if supported.
  */
 extern int GHOST_UseNativePixels(void);
+
+/**
+ * Focus window after opening, or put them in the background.
+ */
+extern void GHOST_UseWindowFocus(int use_focus);
 
 /**
  * If window was opened using native pixel size, it returns scaling factor.

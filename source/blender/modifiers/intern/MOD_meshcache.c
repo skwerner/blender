@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,33 +12,28 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * Contributor(s): Campbell Barton
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/modifiers/intern/MOD_meshcache.c
- *  \ingroup modifiers
+/** \file
+ * \ingroup modifiers
  */
 
 #include <stdio.h>
+
+#include "BLI_utildefines.h"
+
+#include "BLI_math.h"
+#include "BLI_path_util.h"
+#include "BLI_string.h"
 
 #include "DNA_scene_types.h"
 #include "DNA_object_types.h"
 #include "DNA_mesh_types.h"
 #include "DNA_meshdata_types.h"
 
-#include "BLI_utildefines.h"
-#include "BLI_string.h"
-#include "BLI_path_util.h"
-#include "BLI_math.h"
-
-#include "BKE_DerivedMesh.h"
-#include "BKE_scene.h"
-#include "BKE_global.h"
-#include "BKE_mesh.h"
 #include "BKE_main.h"
+#include "BKE_mesh.h"
+#include "BKE_scene.h"
 
 #include "DEG_depsgraph_query.h"
 
@@ -82,7 +75,7 @@ static bool isDisabled(const struct Scene *UNUSED(scene), ModifierData *md, bool
 
 
 static void meshcache_do(
-        MeshCacheModifierData *mcmd, Scene *scene, Object *ob, DerivedMesh *UNUSED(dm),
+        MeshCacheModifierData *mcmd, Scene *scene, Object *ob,
         float (*vertexCos_Real)[3], int numVerts)
 {
 	const bool use_factor = mcmd->factor < 1.0f;
@@ -266,24 +259,27 @@ static void meshcache_do(
 
 static void deformVerts(
         ModifierData *md, const ModifierEvalContext *ctx,
-        DerivedMesh *derivedData,
+        Mesh *UNUSED(mesh),
         float (*vertexCos)[3],
         int numVerts)
 {
 	MeshCacheModifierData *mcmd = (MeshCacheModifierData *)md;
 	Scene *scene = DEG_get_evaluated_scene(ctx->depsgraph);
 
-	meshcache_do(mcmd, scene, ctx->object, derivedData, vertexCos, numVerts);
+	meshcache_do(mcmd, scene, ctx->object, vertexCos, numVerts);
 }
 
 static void deformVertsEM(
-        ModifierData *md, const ModifierEvalContext *ctx, struct BMEditMesh *UNUSED(editData),
-        DerivedMesh *derivedData, float (*vertexCos)[3], int numVerts)
+        ModifierData *md, const ModifierEvalContext *ctx,
+        struct BMEditMesh *UNUSED(editData),
+        Mesh *UNUSED(mesh),
+        float (*vertexCos)[3],
+        int numVerts)
 {
 	MeshCacheModifierData *mcmd = (MeshCacheModifierData *)md;
 	Scene *scene = DEG_get_evaluated_scene(ctx->depsgraph);
 
-	meshcache_do(mcmd, scene, ctx->object, derivedData, vertexCos, numVerts);
+	meshcache_do(mcmd, scene, ctx->object, vertexCos, numVerts);
 }
 
 
@@ -298,19 +294,11 @@ ModifierTypeInfo modifierType_MeshCache = {
 
 	/* copyData */          modifier_copyData_generic,
 
-	/* deformVerts_DM */    deformVerts,
-	/* deformMatrices_DM */ NULL,
-	/* deformVertsEM_DM */  deformVertsEM,
-	/* deformMatricesEM_DM*/NULL,
-	/* applyModifier_DM */  NULL,
-	/* applyModifierEM_DM */NULL,
-
-	/* deformVerts */       NULL,
+	/* deformVerts */       deformVerts,
 	/* deformMatrices */    NULL,
-	/* deformVertsEM */     NULL,
+	/* deformVertsEM */     deformVertsEM,
 	/* deformMatricesEM */  NULL,
 	/* applyModifier */     NULL,
-	/* applyModifierEM */   NULL,
 
 	/* initData */          initData,
 	/* requiredDataMask */  NULL,
@@ -322,4 +310,5 @@ ModifierTypeInfo modifierType_MeshCache = {
 	/* foreachObjectLink */ NULL,
 	/* foreachIDLink */     NULL,
 	/* foreachTexLink */    NULL,
+	/* freeRuntimeData */   NULL,
 };

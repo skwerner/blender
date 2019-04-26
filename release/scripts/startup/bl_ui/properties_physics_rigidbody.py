@@ -17,8 +17,16 @@
 # ##### END GPL LICENSE BLOCK #####
 
 # <pep8 compliant>
-import bpy
-from bpy.types import Panel
+
+from bpy.types import (
+    Panel,
+)
+
+
+def rigid_body_warning(layout):
+    row = layout.row(align=True)
+    row.alignment = 'RIGHT'
+    row.label(text="Object does not have a Rigid Body")
 
 
 class PHYSICS_PT_rigidbody_panel:
@@ -29,13 +37,12 @@ class PHYSICS_PT_rigidbody_panel:
 
 class PHYSICS_PT_rigid_body(PHYSICS_PT_rigidbody_panel, Panel):
     bl_label = "Rigid Body"
-    COMPAT_ENGINES = {'BLENDER_RENDER', 'BLENDER_EEVEE', 'BLENDER_OPENGL'}
+    COMPAT_ENGINES = {'BLENDER_RENDER', 'BLENDER_EEVEE', 'BLENDER_WORKBENCH'}
 
     @classmethod
     def poll(cls, context):
         obj = context.object
-        return (obj and obj.rigid_body and
-                (context.engine in cls.COMPAT_ENGINES))
+        return (obj and obj.rigid_body and (context.engine in cls.COMPAT_ENGINES))
 
     def draw(self, context):
         layout = self.layout
@@ -44,28 +51,54 @@ class PHYSICS_PT_rigid_body(PHYSICS_PT_rigidbody_panel, Panel):
         ob = context.object
         rbo = ob.rigid_body
 
-        if rbo is not None:
-            layout.prop(rbo, "type", text="Type")
+        if rbo is None:
+            rigid_body_warning(layout)
+            return
 
-            if rbo.type == 'ACTIVE':
-                layout.prop(rbo, "mass")
+        layout.prop(rbo, "type", text="Type")
 
-            col = layout.column()
-            if rbo.type == 'ACTIVE':
-                col.prop(rbo, "enabled", text="Dynamic")
-            col.prop(rbo, "kinematic", text="Animated")
+
+class PHYSICS_PT_rigid_body_settings(PHYSICS_PT_rigidbody_panel, Panel):
+    bl_label = "Settings"
+    bl_parent_id = 'PHYSICS_PT_rigid_body'
+    COMPAT_ENGINES = {'BLENDER_RENDER', 'BLENDER_EEVEE', 'BLENDER_WORKBENCH'}
+
+    @classmethod
+    def poll(cls, context):
+        obj = context.object
+        return (obj and obj.rigid_body and (context.engine in cls.COMPAT_ENGINES))
+
+    def draw(self, context):
+        layout = self.layout
+        layout.use_property_split = True
+
+        ob = context.object
+        rbo = ob.rigid_body
+
+        if rbo is None:
+            rigid_body_warning(layout)
+            return
+
+        flow = layout.grid_flow(row_major=True, columns=0, even_columns=True, even_rows=False, align=True)
+        col = flow.column()
+
+        if rbo.type == 'ACTIVE':
+            col.prop(rbo, "mass")
+            col.prop(rbo, "enabled", text="Dynamic")
+
+        col = flow.column()
+        col.prop(rbo, "kinematic", text="Animated")
 
 
 class PHYSICS_PT_rigid_body_collisions(PHYSICS_PT_rigidbody_panel, Panel):
     bl_label = "Collisions"
     bl_parent_id = 'PHYSICS_PT_rigid_body'
-    COMPAT_ENGINES = {'BLENDER_RENDER', 'BLENDER_EEVEE', 'BLENDER_OPENGL'}
+    COMPAT_ENGINES = {'BLENDER_RENDER', 'BLENDER_EEVEE', 'BLENDER_WORKBENCH'}
 
     @classmethod
     def poll(cls, context):
         obj = context.object
-        return (obj and obj.rigid_body and
-                (context.engine in cls.COMPAT_ENGINES))
+        return (obj and obj.rigid_body and (context.engine in cls.COMPAT_ENGINES))
 
     def draw(self, context):
         layout = self.layout
@@ -87,23 +120,25 @@ class PHYSICS_PT_rigid_body_collisions_surface(PHYSICS_PT_rigidbody_panel, Panel
     bl_label = "Surface Response"
     bl_parent_id = 'PHYSICS_PT_rigid_body_collisions'
     bl_options = {'DEFAULT_CLOSED'}
-    COMPAT_ENGINES = {'BLENDER_RENDER', 'BLENDER_EEVEE', 'BLENDER_OPENGL'}
+    COMPAT_ENGINES = {'BLENDER_RENDER', 'BLENDER_EEVEE', 'BLENDER_WORKBENCH'}
 
     @classmethod
     def poll(cls, context):
         obj = context.object
-        return (obj and obj.rigid_body and
-                (context.engine in cls.COMPAT_ENGINES))
+        return (obj and obj.rigid_body and (context.engine in cls.COMPAT_ENGINES))
 
     def draw(self, context):
         layout = self.layout
+        layout.use_property_split = True
+        flow = layout.grid_flow(row_major=True, columns=0, even_columns=True, even_rows=False, align=True)
 
         ob = context.object
         rbo = ob.rigid_body
-        layout.use_property_split = True
 
-        col = layout.column()
+        col = flow.column()
         col.prop(rbo, "friction")
+
+        col = flow.column()
         col.prop(rbo, "restitution", text="Bounciness")
 
 
@@ -111,43 +146,43 @@ class PHYSICS_PT_rigid_body_collisions_sensitivity(PHYSICS_PT_rigidbody_panel, P
     bl_label = "Sensitivity"
     bl_parent_id = 'PHYSICS_PT_rigid_body_collisions'
     bl_options = {'DEFAULT_CLOSED'}
-    COMPAT_ENGINES = {'BLENDER_RENDER', 'BLENDER_EEVEE', 'BLENDER_OPENGL'}
+    COMPAT_ENGINES = {'BLENDER_RENDER', 'BLENDER_EEVEE', 'BLENDER_WORKBENCH'}
 
     @classmethod
     def poll(cls, context):
         obj = context.object
-        return (obj and obj.rigid_body and
-                (context.engine in cls.COMPAT_ENGINES))
+        return (obj and obj.rigid_body and (context.engine in cls.COMPAT_ENGINES))
 
     def draw(self, context):
         layout = self.layout
+        layout.use_property_split = True
 
         ob = context.object
         rbo = ob.rigid_body
-        layout.use_property_split = True
-
-        col = layout.column()
 
         if rbo.collision_shape in {'MESH', 'CONE'}:
+            col = layout.column()
             col.prop(rbo, "collision_margin", text="Margin")
         else:
+            flow = layout.grid_flow(row_major=True, columns=0, even_columns=True, even_rows=False, align=True)
+            col = flow.column()
             col.prop(rbo, "use_margin")
-            sub = col.column()
-            sub.active = rbo.use_margin
-            sub.prop(rbo, "collision_margin", text="Margin")
+
+            col = flow.column()
+            col.active = rbo.use_margin
+            col.prop(rbo, "collision_margin", text="Margin")
 
 
 class PHYSICS_PT_rigid_body_collisions_collections(PHYSICS_PT_rigidbody_panel, Panel):
-    bl_label = "Collision Collections"
+    bl_label = "Collections"
     bl_parent_id = 'PHYSICS_PT_rigid_body_collisions'
     bl_options = {'DEFAULT_CLOSED'}
-    COMPAT_ENGINES = {'BLENDER_RENDER', 'BLENDER_EEVEE', 'BLENDER_OPENGL'}
+    COMPAT_ENGINES = {'BLENDER_RENDER', 'BLENDER_EEVEE', 'BLENDER_WORKBENCH'}
 
     @classmethod
     def poll(cls, context):
         obj = context.object
-        return (obj and obj.rigid_body and
-                (context.engine in cls.COMPAT_ENGINES))
+        return (obj and obj.rigid_body and (context.engine in cls.COMPAT_ENGINES))
 
     def draw(self, context):
         layout = self.layout
@@ -155,50 +190,52 @@ class PHYSICS_PT_rigid_body_collisions_collections(PHYSICS_PT_rigidbody_panel, P
         ob = context.object
         rbo = ob.rigid_body
 
-        layout.prop(rbo, "collision_groups", text="")
+        layout.prop(rbo, "collision_collections", text="")
 
 
 class PHYSICS_PT_rigid_body_dynamics(PHYSICS_PT_rigidbody_panel, Panel):
     bl_label = "Dynamics"
     bl_parent_id = 'PHYSICS_PT_rigid_body'
     bl_options = {'DEFAULT_CLOSED'}
-    COMPAT_ENGINES = {'BLENDER_RENDER', 'BLENDER_EEVEE', 'BLENDER_OPENGL'}
+    COMPAT_ENGINES = {'BLENDER_RENDER', 'BLENDER_EEVEE', 'BLENDER_WORKBENCH'}
 
     @classmethod
     def poll(cls, context):
         obj = context.object
-        return (obj and obj.rigid_body and
-                obj.rigid_body.type == 'ACTIVE' and
-                (context.engine in cls.COMPAT_ENGINES))
+        return (obj and obj.rigid_body and obj.rigid_body.type == 'ACTIVE'
+                and (context.engine in cls.COMPAT_ENGINES))
 
     def draw(self, context):
         layout = self.layout
         layout.use_property_split = True
+        flow = layout.grid_flow(row_major=True, columns=0, even_columns=True, even_rows=False, align=True)
 
         ob = context.object
         rbo = ob.rigid_body
 
-        #col = layout.column(align=1)
+        # col = layout.column(align=True)
         # col.label(text="Activation:")
         # XXX: settings such as activate on collison/etc.
 
-        col = layout.column()
-        col.prop(rbo, "linear_damping", text="Translation Damping")
-        col.prop(rbo, "angular_damping", text="Rotation Damping")
+        col = flow.column()
+        col.prop(rbo, "linear_damping", text="Damping Translation")
+
+        col = flow.column()
+        col.prop(rbo, "angular_damping", text="Rotation")
 
 
 class PHYSICS_PT_rigid_body_dynamics_deactivation(PHYSICS_PT_rigidbody_panel, Panel):
     bl_label = "Deactivation"
     bl_parent_id = 'PHYSICS_PT_rigid_body_dynamics'
     bl_options = {'DEFAULT_CLOSED'}
-    COMPAT_ENGINES = {'BLENDER_RENDER', 'BLENDER_EEVEE', 'BLENDER_OPENGL'}
+    COMPAT_ENGINES = {'BLENDER_RENDER', 'BLENDER_EEVEE', 'BLENDER_WORKBENCH'}
 
     @classmethod
     def poll(cls, context):
         obj = context.object
-        return (obj and obj.rigid_body and
-                obj.rigid_body.type == 'ACTIVE' and
-                (context.engine in cls.COMPAT_ENGINES))
+        return (obj and obj.rigid_body
+                and obj.rigid_body.type == 'ACTIVE'
+                and (context.engine in cls.COMPAT_ENGINES))
 
     def draw_header(self, context):
         ob = context.object
@@ -208,21 +245,25 @@ class PHYSICS_PT_rigid_body_dynamics_deactivation(PHYSICS_PT_rigidbody_panel, Pa
     def draw(self, context):
         layout = self.layout
         layout.use_property_split = True
+        flow = layout.grid_flow(row_major=True, columns=0, even_columns=True, even_rows=False, align=True)
 
         ob = context.object
         rbo = ob.rigid_body
 
         layout.active = rbo.use_deactivation
 
-        col = layout.column()
+        col = flow.column()
         col.prop(rbo, "use_start_deactivated")
-        col.prop(rbo, "deactivate_linear_velocity", text="Linear Velocity")
-        col.prop(rbo, "deactivate_angular_velocity", text="Angular Velocity")
+
+        col = flow.column()
+        col.prop(rbo, "deactivate_linear_velocity", text="Velocity Linear")
+        col.prop(rbo, "deactivate_angular_velocity", text="Angular")
         # TODO: other params such as time?
 
 
 classes = (
     PHYSICS_PT_rigid_body,
+    PHYSICS_PT_rigid_body_settings,
     PHYSICS_PT_rigid_body_collisions,
     PHYSICS_PT_rigid_body_collisions_surface,
     PHYSICS_PT_rigid_body_collisions_sensitivity,
@@ -230,6 +271,7 @@ classes = (
     PHYSICS_PT_rigid_body_dynamics,
     PHYSICS_PT_rigid_body_dynamics_deactivation,
 )
+
 
 if __name__ == "__main__":  # only for live edit.
     from bpy.utils import register_class

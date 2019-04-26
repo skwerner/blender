@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,14 +15,10 @@
  *
  * The Original Code is Copyright (C) 2007 Blender Foundation.
  * All rights reserved.
- *
- * Contributor(s): Blender Foundation
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/windowmanager/intern/wm_gesture_ops.c
- *  \ingroup wm
+/** \file
+ * \ingroup wm
  *
  * Default operator callbacks for use with gestures (border/circle/lasso/straightline).
  * Operators themselves are defined elsewhere.
@@ -49,6 +43,7 @@
 #include "wm_event_system.h"
 
 #include "ED_screen.h"
+#include "ED_select_utils.h"
 
 #include "RNA_access.h"
 #include "RNA_define.h"
@@ -88,6 +83,9 @@ static void gesture_modal_state_to_operator(wmOperator *op, int modal_state)
 			if ((prop = RNA_struct_find_property(op->ptr, "deselect"))) {
 				RNA_property_boolean_set(op->ptr, prop, (modal_state == GESTURE_MODAL_DESELECT));
 			}
+			if ((prop = RNA_struct_find_property(op->ptr, "mode"))) {
+				RNA_property_enum_set(op->ptr, prop, (modal_state == GESTURE_MODAL_DESELECT) ? SEL_OP_SUB : SEL_OP_ADD);
+			}
 			break;
 		case GESTURE_MODAL_IN:
 		case GESTURE_MODAL_OUT:
@@ -98,13 +96,18 @@ static void gesture_modal_state_to_operator(wmOperator *op, int modal_state)
 	}
 }
 
-static int gesture_modal_state_from_operator(wmOperator *op)
+static int UNUSED_FUNCTION(gesture_modal_state_from_operator)(wmOperator *op)
 {
 	PropertyRNA *prop;
 
 	if ((prop = RNA_struct_find_property(op->ptr, "deselect"))) {
 		if (RNA_property_is_set(op->ptr, prop)) {
 			return RNA_property_boolean_get(op->ptr, prop) ? GESTURE_MODAL_DESELECT : GESTURE_MODAL_SELECT;
+		}
+	}
+	if ((prop = RNA_struct_find_property(op->ptr, "mode"))) {
+		if (RNA_property_is_set(op->ptr, prop)) {
+			return RNA_property_enum_get(op->ptr, prop) == SEL_OP_SUB ? GESTURE_MODAL_DESELECT : GESTURE_MODAL_SELECT;
 		}
 	}
 	if ((prop = RNA_struct_find_property(op->ptr, "zoom_out"))) {
@@ -128,14 +131,14 @@ static int gesture_modal_state_from_operator(wmOperator *op)
  *
  * \{ */
 
-static bool gesture_border_apply_rect(wmOperator *op)
+static bool gesture_box_apply_rect(wmOperator *op)
 {
 	wmGesture *gesture = op->customdata;
 	rcti *rect = gesture->customdata;
 
-	if (rect->xmin == rect->xmax || rect->ymin == rect->ymax)
+	if (rect->xmin == rect->xmax || rect->ymin == rect->ymax) {
 		return 0;
-
+	}
 
 	/* operator arguments and storage. */
 	RNA_int_set(op->ptr, "xmin", min_ii(rect->xmin, rect->xmax));
@@ -146,17 +149,19 @@ static bool gesture_border_apply_rect(wmOperator *op)
 	return 1;
 }
 
-static bool gesture_border_apply(bContext *C, wmOperator *op)
+static bool gesture_box_apply(bContext *C, wmOperator *op)
 {
 	wmGesture *gesture = op->customdata;
 
 	int retval;
 
-	if (!gesture_border_apply_rect(op)) {
+	if (!gesture_box_apply_rect(op)) {
 		return 0;
 	}
 
-	gesture_modal_state_to_operator(op, gesture->modal_state);
+	if (gesture->wait_for_input) {
+		gesture_modal_state_to_operator(op, gesture->modal_state);
+	}
 
 	retval = op->type->exec(C, op);
 	OPERATOR_RETVAL_CHECK(retval);
@@ -164,25 +169,19 @@ static bool gesture_border_apply(bContext *C, wmOperator *op)
 	return 1;
 }
 
-int WM_gesture_border_invoke(bContext *C, wmOperator *op, const wmEvent *event)
+int WM_gesture_box_invoke(bContext *C, wmOperator *op, const wmEvent *event)
 {
-	int modal_state = gesture_modal_state_from_operator(op);
-
-	if (ISTWEAK(event->type) || (modal_state != GESTURE_MODAL_NOP)) {
-		op->customdata = WM_gesture_new(C, event, WM_GESTURE_RECT);
-	}
-	else {
+	const bool wait_for_input = !ISTWEAK(event->type) && RNA_boolean_get(op->ptr, "wait_for_input");
+	if (wait_for_input) {
 		op->customdata = WM_gesture_new(C, event, WM_GESTURE_CROSS_RECT);
 	}
-
-	/* Starting with the mode starts immediately, like having 'wait_for_input' disabled (some tools use this). */
-	if (modal_state == GESTURE_MODAL_NOP) {
-		wmGesture *gesture = op->customdata;
-		gesture->wait_for_input = true;
-	}
 	else {
+		op->customdata = WM_gesture_new(C, event, WM_GESTURE_RECT);
+	}
+
+	{
 		wmGesture *gesture = op->customdata;
-		gesture->modal_state = modal_state;
+		gesture->wait_for_input = wait_for_input;
 	}
 
 	/* add modal handler */
@@ -193,7 +192,7 @@ int WM_gesture_border_invoke(bContext *C, wmOperator *op, const wmEvent *event)
 	return OPERATOR_RUNNING_MODAL;
 }
 
-int WM_gesture_border_modal(bContext *C, wmOperator *op, const wmEvent *event)
+int WM_gesture_box_modal(bContext *C, wmOperator *op, const wmEvent *event)
 {
 	wmGesture *gesture = op->customdata;
 	rcti *rect = gesture->customdata;
@@ -207,7 +206,7 @@ int WM_gesture_border_modal(bContext *C, wmOperator *op, const wmEvent *event)
 			rect->xmax = event->x - gesture->winrct.xmin;
 			rect->ymax = event->y - gesture->winrct.ymin;
 		}
-		gesture_border_apply_rect(op);
+		gesture_box_apply_rect(op);
 
 		wm_gesture_tag_redraw(C);
 	}
@@ -226,7 +225,7 @@ int WM_gesture_border_modal(bContext *C, wmOperator *op, const wmEvent *event)
 				if (gesture->wait_for_input) {
 					gesture->modal_state = event->val;
 				}
-				if (gesture_border_apply(C, op)) {
+				if (gesture_box_apply(C, op)) {
 					gesture_modal_end(C, op);
 					return OPERATOR_FINISHED;
 				}
@@ -252,10 +251,11 @@ int WM_gesture_border_modal(bContext *C, wmOperator *op, const wmEvent *event)
 	}
 #endif
 
+	gesture->is_active_prev = gesture->is_active;
 	return OPERATOR_RUNNING_MODAL;
 }
 
-void WM_gesture_border_cancel(bContext *C, wmOperator *op)
+void WM_gesture_box_cancel(bContext *C, wmOperator *op)
 {
 	gesture_modal_end(C, op);
 }
@@ -275,7 +275,7 @@ static void gesture_circle_apply(bContext *C, wmOperator *op);
 
 int WM_gesture_circle_invoke(bContext *C, wmOperator *op, const wmEvent *event)
 {
-	int modal_state = gesture_modal_state_from_operator(op);
+	const bool wait_for_input = !ISTWEAK(event->type) && RNA_boolean_get(op->ptr, "wait_for_input");
 
 	op->customdata = WM_gesture_new(C, event, WM_GESTURE_CIRCLE);
 	wmGesture *gesture = op->customdata;
@@ -284,13 +284,11 @@ int WM_gesture_circle_invoke(bContext *C, wmOperator *op, const wmEvent *event)
 	/* Default or previously stored value. */
 	rect->xmax = RNA_int_get(op->ptr, "radius");
 
+	gesture->wait_for_input = wait_for_input;
+
 	/* Starting with the mode starts immediately, like having 'wait_for_input' disabled (some tools use this). */
-	if (modal_state == GESTURE_MODAL_NOP) {
-		gesture->wait_for_input = true;
-	}
-	else {
+	if (gesture->wait_for_input == false) {
 		gesture->is_active = true;
-		gesture->modal_state = modal_state;
 		gesture_circle_apply(C, op);
 	}
 
@@ -307,7 +305,9 @@ static void gesture_circle_apply(bContext *C, wmOperator *op)
 	wmGesture *gesture = op->customdata;
 	rcti *rect = gesture->customdata;
 
-	if (gesture->modal_state == GESTURE_MODAL_NOP) {
+	if (gesture->wait_for_input &&
+	    (gesture->modal_state == GESTURE_MODAL_NOP))
+	{
 		return;
 	}
 
@@ -316,7 +316,11 @@ static void gesture_circle_apply(bContext *C, wmOperator *op)
 	RNA_int_set(op->ptr, "y", rect->ymin);
 	RNA_int_set(op->ptr, "radius", rect->xmax);
 
-	gesture_modal_state_to_operator(op, gesture->modal_state);
+	/* When 'wait_for_input' is false, use properties to get the selection state.
+	 * typically tool settings. This is done so executing as a mode can select & de-select, see: T58594. */
+	if (gesture->wait_for_input) {
+		gesture_modal_state_to_operator(op, gesture->modal_state);
+	}
 
 	if (op->type->exec) {
 		int retval;
@@ -349,11 +353,15 @@ int WM_gesture_circle_modal(bContext *C, wmOperator *op, const wmEvent *event)
 		switch (event->val) {
 			case GESTURE_MODAL_CIRCLE_SIZE:
 				fac = 0.3f * (event->y - event->prevy);
-				if (fac > 0)
+				if (fac > 0) {
 					rect->xmax += ceil(fac);
-				else
+				}
+				else {
 					rect->xmax += floor(fac);
-				if (rect->xmax < 1) rect->xmax = 1;
+				}
+				if (rect->xmax < 1) {
+					rect->xmax = 1;
+				}
 				is_circle_size = true;
 				break;
 			case GESTURE_MODAL_CIRCLE_ADD:
@@ -362,7 +370,9 @@ int WM_gesture_circle_modal(bContext *C, wmOperator *op, const wmEvent *event)
 				break;
 			case GESTURE_MODAL_CIRCLE_SUB:
 				rect->xmax -= 2 + rect->xmax / 10;
-				if (rect->xmax < 1) rect->xmax = 1;
+				if (rect->xmax < 1) {
+					rect->xmax = 1;
+				}
 				is_circle_size = true;
 				break;
 			case GESTURE_MODAL_SELECT:
@@ -380,8 +390,8 @@ int WM_gesture_circle_modal(bContext *C, wmOperator *op, const wmEvent *event)
 				}
 				else {
 					/* apply first click */
-					gesture_circle_apply(C, op);
 					gesture->is_active = true;
+					gesture_circle_apply(C, op);
 					wm_gesture_tag_redraw(C);
 				}
 				break;
@@ -412,14 +422,14 @@ int WM_gesture_circle_modal(bContext *C, wmOperator *op, const wmEvent *event)
 #if 0
 	/* Allow view navigation??? */
 	/* note, this gives issues:
-	 * 1) other modal ops run on top (border select),
+	 * 1) other modal ops run on top (box select),
 	 * 2) middlemouse is used now 3) tablet/trackpad? */
 	else {
 		return OPERATOR_PASS_THROUGH;
 	}
 #endif
 
-
+	gesture->is_active_prev = gesture->is_active;
 	return OPERATOR_RUNNING_MODAL;
 }
 
@@ -474,12 +484,15 @@ static void gesture_tweak_modal(bContext *C, const wmEvent *event)
 				/* We want to get coord from start of drag, not from point where it becomes a tweak event, see T40549 */
 				tevent.x = rect->xmin + gesture->winrct.xmin;
 				tevent.y = rect->ymin + gesture->winrct.ymin;
-				if (gesture->event_type == LEFTMOUSE)
+				if (gesture->event_type == LEFTMOUSE) {
 					tevent.type = EVT_TWEAK_L;
-				else if (gesture->event_type == RIGHTMOUSE)
+				}
+				else if (gesture->event_type == RIGHTMOUSE) {
 					tevent.type = EVT_TWEAK_R;
-				else
+				}
+				else {
 					tevent.type = EVT_TWEAK_M;
+				}
 				tevent.val = val;
 				/* mouse coords! */
 
@@ -531,8 +544,9 @@ void wm_tweakevent_test(bContext *C, const wmEvent *event, int action)
 		if ((action & WM_HANDLER_BREAK)) {
 			WM_gesture_end(C, win->tweak);
 		}
-		else
+		else {
 			gesture_tweak_modal(C, event);
+		}
 	}
 }
 
@@ -652,6 +666,8 @@ int WM_gesture_lasso_modal(bContext *C, wmOperator *op, const wmEvent *event)
 			gesture_modal_end(C, op);
 			return OPERATOR_CANCELLED;
 	}
+
+	gesture->is_active_prev = gesture->is_active;
 	return OPERATOR_RUNNING_MODAL;
 }
 
@@ -758,8 +774,9 @@ static bool gesture_straightline_apply(bContext *C, wmOperator *op)
 	wmGesture *gesture = op->customdata;
 	rcti *rect = gesture->customdata;
 
-	if (rect->xmin == rect->xmax && rect->ymin == rect->ymax)
+	if (rect->xmin == rect->xmax && rect->ymin == rect->ymax) {
 		return 0;
+	}
 
 	/* operator arguments and storage. */
 	RNA_int_set(op->ptr, "xstart", rect->xmin);
@@ -838,6 +855,7 @@ int WM_gesture_straightline_modal(bContext *C, wmOperator *op, const wmEvent *ev
 		}
 	}
 
+	gesture->is_active_prev = gesture->is_active;
 	return OPERATOR_RUNNING_MODAL;
 }
 

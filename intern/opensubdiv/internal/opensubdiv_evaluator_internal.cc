@@ -20,7 +20,6 @@
 
 #include <cassert>
 #include <cstdio>
-#include <vector>
 
 #ifdef _MSC_VER
 #  include <iso646.h>
@@ -39,6 +38,7 @@
 #include "MEM_guardedalloc.h"
 
 #include "internal/opensubdiv_topology_refiner_internal.h"
+#include "internal/opensubdiv_util.h"
 #include "internal/opensubdiv_util.h"
 #include "opensubdiv_topology_refiner_capi.h"
 
@@ -68,7 +68,7 @@ namespace {
 // Helper class to wrap numerous of patch coordinates into a buffer.
 // Used to pass coordinates to the CPU evaluator. Other evaluators are not
 // supported.
-class PatchCoordBuffer : public std::vector<PatchCoord> {
+class PatchCoordBuffer : public vector<PatchCoord> {
  public:
   static PatchCoordBuffer* Create(int size) {
     PatchCoordBuffer* buffer = new PatchCoordBuffer();
@@ -130,7 +130,7 @@ template <int element_size, int num_vertices>
 class StackAllocatedBuffer {
  public:
   static PatchCoordBuffer* Create(int /*size*/) {
-    // TODO(sergey): Validate that requested dize is smaller than static
+    // TODO(sergey): Validate that requested size is smaller than static
     // stack memory size.
     return new StackAllocatedBuffer<element_size, num_vertices>();
   }
@@ -527,12 +527,12 @@ class CpuEvalOutput : public VolatileEvalOutput<CpuVertexBuffer,
                            CpuVertexBuffer,
                            StencilTable,
                            CpuPatchTable,
-                           CpuEvaluator> (vertex_stencils,
-                                          varying_stencils,
-                                          all_face_varying_stencils,
-                                          face_varying_width,
-                                          patch_table,
-                                          evaluator_cache) {
+                           CpuEvaluator>(vertex_stencils,
+                                         varying_stencils,
+                                         all_face_varying_stencils,
+                                         face_varying_width,
+                                         patch_table,
+                                         evaluator_cache) {
   }
 };
 
@@ -702,18 +702,21 @@ OpenSubdiv_EvaluatorInternal* openSubdiv_createEvaluatorInternal(
     return NULL;
   }
   // TODO(sergey): Base this on actual topology.
-  // const bool bas_varying_data = false;
+  const bool has_varying_data = false;
   const int num_face_varying_channels = refiner->GetNumFVarChannels();
   const bool has_face_varying_data = (num_face_varying_channels != 0);
   const int level = topology_refiner->getSubdivisionLevel(topology_refiner);
-  // TODO(sergey): Query from topology refiner.
   const bool is_adaptive = topology_refiner->getIsAdaptive(topology_refiner);
+  // Common settings for stencils and patches.
+  const bool stencil_generate_intermediate_levels = is_adaptive;
+  const bool stencil_generate_offsets = true;
+  const bool use_inf_sharp_patch = true;
   // Refine the topology with given settings.
   // TODO(sergey): What if topology is already refined?
   if (is_adaptive) {
     TopologyRefiner::AdaptiveOptions options(level);
     options.considerFVarChannels = has_face_varying_data;
-    options.useInfSharpPatch = true;
+    options.useInfSharpPatch = use_inf_sharp_patch;
     refiner->RefineAdaptive(options);
   } else {
     TopologyRefiner::UniformOptions options(level);
@@ -724,8 +727,9 @@ OpenSubdiv_EvaluatorInternal* openSubdiv_createEvaluatorInternal(
   //
   // Vertex stencils.
   StencilTableFactory::Options vertex_stencil_options;
-  vertex_stencil_options.generateOffsets = true;
-  vertex_stencil_options.generateIntermediateLevels = is_adaptive;
+  vertex_stencil_options.generateOffsets = stencil_generate_offsets;
+  vertex_stencil_options.generateIntermediateLevels =
+      stencil_generate_intermediate_levels;
   const StencilTable* vertex_stencils =
       StencilTableFactory::Create(*refiner, vertex_stencil_options);
   // Varying stencils.
@@ -733,13 +737,16 @@ OpenSubdiv_EvaluatorInternal* openSubdiv_createEvaluatorInternal(
   // TODO(sergey): Seems currently varying stencils are always required in
   // OpenSubdiv itself.
   const StencilTable* varying_stencils = NULL;
-  StencilTableFactory::Options varying_stencil_options;
-  varying_stencil_options.generateOffsets = true;
-  varying_stencil_options.generateIntermediateLevels = is_adaptive;
-  varying_stencil_options.interpolationMode =
-      StencilTableFactory::INTERPOLATE_VARYING;
-  varying_stencils =
-      StencilTableFactory::Create(*refiner, varying_stencil_options);
+  if (has_varying_data) {
+    StencilTableFactory::Options varying_stencil_options;
+    varying_stencil_options.generateOffsets = stencil_generate_offsets;
+    varying_stencil_options.generateIntermediateLevels =
+        stencil_generate_intermediate_levels;
+    varying_stencil_options.interpolationMode =
+        StencilTableFactory::INTERPOLATE_VARYING;
+    varying_stencils =
+        StencilTableFactory::Create(*refiner, varying_stencil_options);
+  }
   // Face warying stencil.
 vector<const StencilTable*> all_face_varying_stencils;
 #ifdef OPENSUBDIV_HAS_FVAR_EVALUATION
@@ -748,8 +755,9 @@ vector<const StencilTable*> all_face_varying_stencils;
        face_varying_channel < num_face_varying_channels;
        ++face_varying_channel) {
     StencilTableFactory::Options face_varying_stencil_options;
-    face_varying_stencil_options.generateOffsets = true;
-    face_varying_stencil_options.generateIntermediateLevels = is_adaptive;
+    face_varying_stencil_options.generateOffsets = stencil_generate_offsets;
+    face_varying_stencil_options.generateIntermediateLevels =
+        stencil_generate_intermediate_levels;
     face_varying_stencil_options.interpolationMode =
         StencilTableFactory::INTERPOLATE_FACE_VARYING;
     face_varying_stencil_options.fvarChannel = face_varying_channel;
@@ -763,12 +771,13 @@ vector<const StencilTable*> all_face_varying_stencils;
   // subsurf code.
   PatchTableFactory::Options patch_options(level);
   patch_options.SetEndCapType(PatchTableFactory::Options::ENDCAP_BSPLINE_BASIS);
-  patch_options.useInfSharpPatch = true;
+  patch_options.useInfSharpPatch = use_inf_sharp_patch;
   patch_options.generateFVarTables = has_face_varying_data;
   patch_options.generateFVarLegacyLinearPatches = false;
   const PatchTable* patch_table = PatchTableFactory::Create(
       *refiner, patch_options);
   // Append local points stencils.
+  // Point stencils.
   const StencilTable* local_point_stencil_table =
       patch_table->GetLocalPointStencilTable();
   if (local_point_stencil_table != NULL) {
@@ -778,14 +787,17 @@ vector<const StencilTable*> all_face_varying_stencils;
     delete vertex_stencils;
     vertex_stencils = table;
   }
-  const StencilTable* local_point_varying_stencil_table =
-      patch_table->GetLocalPointVaryingStencilTable();
-  if (local_point_varying_stencil_table != NULL) {
-    const StencilTable* table =
-        StencilTableFactory::AppendLocalPointStencilTable(
-            *refiner, varying_stencils, local_point_varying_stencil_table);
-    delete varying_stencils;
-    varying_stencils = table;
+  // Varying stencils.
+  if (has_varying_data) {
+    const StencilTable* local_point_varying_stencil_table =
+        patch_table->GetLocalPointVaryingStencilTable();
+    if (local_point_varying_stencil_table != NULL) {
+      const StencilTable* table =
+          StencilTableFactory::AppendLocalPointStencilTable(
+              *refiner, varying_stencils, local_point_varying_stencil_table);
+      delete varying_stencils;
+      varying_stencils = table;
+    }
   }
 #ifdef OPENSUBDIV_HAS_FVAR_EVALUATION
   for (int face_varying_channel = 0;

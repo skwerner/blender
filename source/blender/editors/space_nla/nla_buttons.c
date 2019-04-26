@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,15 +15,10 @@
  *
  * The Original Code is Copyright (C) 2009 Blender Foundation.
  * All rights reserved.
- *
- *
- * Contributor(s): Blender Foundation, Joshua Leung
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/space_nla/nla_buttons.c
- *  \ingroup spnla
+/** \file
+ * \ingroup spnla
  */
 
 
@@ -95,7 +88,7 @@ bool nla_panel_context(const bContext *C, PointerRNA *adt_ptr, PointerRNA *nlt_p
 		return false;
 
 	/* extract list of active channel(s), of which we should only take the first one
-	 *	- we need the channels flag to get the active AnimData block when there are no NLA Tracks
+	 * - we need the channels flag to get the active AnimData block when there are no NLA Tracks
 	 */
 	// XXX: double-check active!
 	filter = (ANIMFILTER_DATA_VISIBLE | ANIMFILTER_LIST_VISIBLE | ANIMFILTER_ACTIVE | ANIMFILTER_LIST_CHANNELS);
@@ -156,7 +149,8 @@ bool nla_panel_context(const bContext *C, PointerRNA *adt_ptr, PointerRNA *nlt_p
 						id = ale->id;
 					}
 					else {
-						/* ale->data is always the proper ID block we need, but ale->id may not be (i.e. for textures) */
+						/* ale->data is always the proper ID block we need,
+						 * but ale->id may not be (i.e. for textures) */
 						id = (ID *)ale->data;
 					}
 
@@ -277,7 +271,7 @@ static void nla_panel_animdata(const bContext *C, Panel *pa)
 		uiLayoutSetAlignment(row, UI_LAYOUT_ALIGN_LEFT);
 
 		uiItemL(row, id->name + 2, RNA_struct_ui_icon(id_ptr.type));  /* id-block (src) */
-		uiItemL(row, "", VICO_SMALL_TRI_RIGHT_VEC);                   /* expander */
+		uiItemL(row, "", ICON_SMALL_TRI_RIGHT_VEC);                   /* expander */
 		uiItemL(row, IFACE_("Animation Data"), ICON_ANIM_DATA);       /* animdata */
 
 		uiItemS(layout);
@@ -366,8 +360,8 @@ static void nla_panel_properties(const bContext *C, Panel *pa)
 		row = uiLayoutRow(layout, true);
 		uiItemR(row, &strip_ptr, "blend_type", 0, NULL, ICON_NONE);
 
-		/* blend in/out + autoblending
-		 *	- blend in/out can only be set when autoblending is off
+		/* Blend in/out + auto-blending:
+		 * - blend in/out can only be set when autoblending is off
 		 */
 		column = uiLayoutColumn(layout, true);
 		uiLayoutSetActive(column, RNA_boolean_get(&strip_ptr, "use_animated_influence") == false);

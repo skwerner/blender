@@ -1,6 +1,4 @@
 /*
- * Copyright 2016, Blender Foundation.
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -15,36 +13,27 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
- * Contributor(s): Blender Institute
- *
+ * Copyright 2016, Blender Foundation.
  */
 
-/** \file eevee_engine.c
- *  \ingroup draw_engine
+/** \file
+ * \ingroup draw_engine
  */
 
 #include "DRW_render.h"
 
-#include "BLI_dynstr.h"
 #include "BLI_rand.h"
 
 #include "BKE_object.h"
 #include "BKE_global.h" /* for G.debug_value */
-#include "BKE_screen.h"
 
 #include "DNA_world_types.h"
 
-#include "ED_screen.h"
-
-#include "GPU_material.h"
-#include "GPU_glew.h"
-
-#include "eevee_engine.h"
 #include "eevee_private.h"
 
-#define EEVEE_ENGINE "BLENDER_EEVEE"
+#include "eevee_engine.h"  /* own include */
 
-extern GlobalsUboStorage ts;
+#define EEVEE_ENGINE "BLENDER_EEVEE"
 
 /* *********** FUNCTIONS *********** */
 
@@ -66,12 +55,13 @@ static void eevee_engine_init(void *ved)
 		/* Alloc transient pointers */
 		stl->g_data = MEM_callocN(sizeof(*stl->g_data), __func__);
 	}
-	stl->g_data->use_color_view_settings = USE_SCENE_LIGHT(v3d) || !LOOK_DEV_STUDIO_LIGHT_ENABLED(v3d);
+	stl->g_data->use_color_render_settings = USE_SCENE_LIGHT(v3d) || !LOOK_DEV_STUDIO_LIGHT_ENABLED(v3d);
 	stl->g_data->background_alpha = DRW_state_draw_background() ? 1.0f : 0.0f;
 	stl->g_data->valid_double_buffer = (txl->color_double_buffer != NULL);
+	stl->g_data->valid_taa_history = (txl->taa_history != NULL);
 
 	/* Main Buffer */
-	DRW_texture_ensure_fullscreen_2D(&txl->color, GPU_RGBA16F, DRW_TEX_FILTER | DRW_TEX_MIPMAP);
+	DRW_texture_ensure_fullscreen_2d(&txl->color, GPU_RGBA16F, DRW_TEX_FILTER | DRW_TEX_MIPMAP);
 
 	GPU_framebuffer_ensure_config(&fbl->main_fb, {
 		GPU_ATTACHMENT_TEXTURE(dtxl->depth),
@@ -95,7 +85,7 @@ static void eevee_engine_init(void *ved)
 	}
 
 	/* EEVEE_effects_init needs to go first for TAA */
-	EEVEE_effects_init(sldata, vedata, camera);
+	EEVEE_effects_init(sldata, vedata, camera, false);
 	EEVEE_materials_init(sldata, stl, fbl);
 	EEVEE_lights_init(sldata);
 	EEVEE_lightprobes_init(sldata, vedata);
@@ -129,13 +119,14 @@ void EEVEE_cache_populate(void *vedata, Object *ob)
 	EEVEE_ViewLayerData *sldata = EEVEE_view_layer_data_ensure();
 
 	const DRWContextState *draw_ctx = DRW_context_state_get();
+	const int ob_visibility = DRW_object_visibility_in_active_context(ob);
 	bool cast_shadow = false;
 
-	if (ob->base_flag & BASE_VISIBLE) {
+	if (ob_visibility & OB_VISIBLE_PARTICLES) {
 		EEVEE_hair_cache_populate(vedata, sldata, ob, &cast_shadow);
 	}
 
-	if (DRW_check_object_visible_within_active_context(ob)) {
+	if (DRW_object_is_renderable(ob) && (ob_visibility & OB_VISIBLE_SELF)) {
 		if (ELEM(ob->type, OB_MESH, OB_CURVE, OB_SURF, OB_FONT, OB_MBALL)) {
 			EEVEE_materials_cache_populate(vedata, sldata, ob, &cast_shadow);
 		}
@@ -143,7 +134,7 @@ void EEVEE_cache_populate(void *vedata, Object *ob)
 			/* do not add any scene light sources to the cache */
 		}
 		else if (ob->type == OB_LIGHTPROBE) {
-			if ((ob->base_flag & BASE_FROMDUPLI) != 0) {
+			if ((ob->base_flag & BASE_FROM_DUPLI) != 0) {
 				/* TODO: Special case for dupli objects because we cannot save the object pointer. */
 			}
 			else {
@@ -165,7 +156,7 @@ static void eevee_cache_finish(void *vedata)
 	EEVEE_ViewLayerData *sldata = EEVEE_view_layer_data_ensure();
 
 	EEVEE_materials_cache_finish(vedata);
-	EEVEE_lights_cache_finish(sldata);
+	EEVEE_lights_cache_finish(sldata, vedata);
 	EEVEE_lightprobes_cache_finish(sldata, vedata);
 }
 
@@ -198,7 +189,7 @@ static void eevee_draw_background(void *vedata)
 	while (loop_len--) {
 		float clear_col[4] = {0.0f, 0.0f, 0.0f, 0.0f};
 		float clear_depth = 1.0f;
-		uint clear_stencil = 0xFF;
+		uint clear_stencil = 0x0;
 		uint primes[3] = {2, 3, 7};
 		double offset[3] = {0.0, 0.0, 0.0};
 		double r[3];
@@ -212,7 +203,7 @@ static void eevee_draw_background(void *vedata)
 			int samp = taa_use_reprojection
 			            ? stl->effects->taa_reproject_sample + 1
 			            : stl->effects->taa_current_sample;
-			BLI_halton_3D(primes, offset, samp, r);
+			BLI_halton_3d(primes, offset, samp, r);
 			EEVEE_update_noise(psl, fbl, r);
 			EEVEE_volumes_set_jitter(sldata, samp - 1);
 			EEVEE_materials_init(sldata, stl, fbl);
@@ -241,16 +232,18 @@ static void eevee_draw_background(void *vedata)
 		EEVEE_lightprobes_refresh_planar(sldata, vedata);
 		DRW_stats_group_end();
 
-		/* Update common buffer after probe rendering. */
-		DRW_uniformbuffer_update(sldata->common_ubo, &sldata->common_data);
-
 		/* Refresh shadows */
 		DRW_stats_group_start("Shadows");
-		EEVEE_draw_shadows(sldata, psl);
+		EEVEE_draw_shadows(sldata, vedata);
 		DRW_stats_group_end();
 
+		/* Set ray type. */
+		sldata->common_data.ray_type = EEVEE_RAY_CAMERA;
+		sldata->common_data.ray_depth = 0.0f;
+		DRW_uniformbuffer_update(sldata->common_ubo, &sldata->common_data);
+
 		GPU_framebuffer_bind(fbl->main_fb);
-		GPUFrameBufferBits clear_bits = GPU_DEPTH_BIT;
+		eGPUFrameBufferBits clear_bits = GPU_DEPTH_BIT;
 		clear_bits |= (DRW_state_draw_background()) ? 0 : GPU_COLOR_BIT;
 		clear_bits |= ((stl->effects->enabled_effects & EFFECT_SSS) != 0) ? GPU_STENCIL_BIT : 0;
 		GPU_framebuffer_clear(fbl->main_fb, clear_bits, clear_col, clear_depth, clear_stencil);
@@ -276,6 +269,7 @@ static void eevee_draw_background(void *vedata)
 		}
 		EEVEE_draw_default_passes(psl);
 		DRW_draw_pass(psl->material_pass);
+		DRW_draw_pass(psl->material_pass_cull);
 		EEVEE_subsurface_data_render(sldata, vedata);
 		DRW_stats_group_end();
 
@@ -317,39 +311,57 @@ static void eevee_draw_background(void *vedata)
 
 
 	/* Tonemapping and transfer result to default framebuffer. */
-	bool use_view_settings = stl->g_data->use_color_view_settings;
+	bool use_render_settings = stl->g_data->use_color_render_settings;
 
 	GPU_framebuffer_bind(dfbl->default_fb);
-	DRW_transform_to_display(stl->effects->final_tx, use_view_settings);
+	DRW_transform_to_display(stl->effects->final_tx, true, use_render_settings);
 
-	/* Debug : Ouput buffer to view. */
+	/* Debug : Output buffer to view. */
 	switch (G.debug_value) {
 		case 1:
-			if (txl->maxzbuffer) DRW_transform_to_display(txl->maxzbuffer, use_view_settings);
+			if (txl->maxzbuffer) {
+				DRW_transform_to_display(txl->maxzbuffer, false, false);
+			}
 			break;
 		case 2:
-			if (effects->ssr_pdf_output) DRW_transform_to_display(effects->ssr_pdf_output, use_view_settings);
+			if (effects->ssr_pdf_output) {
+				DRW_transform_to_display(effects->ssr_pdf_output, false, false);
+			}
 			break;
 		case 3:
-			if (effects->ssr_normal_input) DRW_transform_to_display(effects->ssr_normal_input, use_view_settings);
+			if (effects->ssr_normal_input) {
+				DRW_transform_to_display(effects->ssr_normal_input, false, false);
+			}
 			break;
 		case 4:
-			if (effects->ssr_specrough_input) DRW_transform_to_display(effects->ssr_specrough_input, use_view_settings);
+			if (effects->ssr_specrough_input) {
+				DRW_transform_to_display(effects->ssr_specrough_input, false, false);
+			}
 			break;
 		case 5:
-			if (txl->color_double_buffer) DRW_transform_to_display(txl->color_double_buffer, use_view_settings);
+			if (txl->color_double_buffer) {
+				DRW_transform_to_display(txl->color_double_buffer, false, false);
+			}
 			break;
 		case 6:
-			if (effects->gtao_horizons_debug) DRW_transform_to_display(effects->gtao_horizons_debug, use_view_settings);
+			if (effects->gtao_horizons_debug) {
+				DRW_transform_to_display(effects->gtao_horizons_debug, false, false);
+			}
 			break;
 		case 7:
-			if (effects->gtao_horizons) DRW_transform_to_display(effects->gtao_horizons, use_view_settings);
+			if (effects->gtao_horizons) {
+				DRW_transform_to_display(effects->gtao_horizons, false, false);
+			}
 			break;
 		case 8:
-			if (effects->sss_data) DRW_transform_to_display(effects->sss_data, use_view_settings);
+			if (effects->sss_data) {
+				DRW_transform_to_display(effects->sss_data, false, false);
+			}
 			break;
 		case 9:
-			if (effects->velocity_tx) DRW_transform_to_display(effects->velocity_tx, use_view_settings);
+			if (effects->velocity_tx) {
+				DRW_transform_to_display(effects->velocity_tx, false, false);
+			}
 			break;
 		default:
 			break;
@@ -375,7 +387,7 @@ static void eevee_id_object_update(void *UNUSED(vedata), Object *object)
 		ped->need_update = (ped->dd.recalc & (ID_RECALC_TRANSFORM | ID_RECALC_COPY_ON_WRITE)) != 0;
 		ped->dd.recalc = 0;
 	}
-	EEVEE_LampEngineData *led = EEVEE_lamp_data_get(object);
+	EEVEE_LightEngineData *led = EEVEE_light_data_get(object);
 	if (led != NULL && led->dd.recalc != 0) {
 		led->need_update = true;
 		led->dd.recalc = 0;
@@ -395,7 +407,7 @@ static void eevee_id_world_update(void *vedata, World *wo)
 	EEVEE_WorldEngineData *wedata = EEVEE_world_data_ensure(wo);
 
 	if (wedata != NULL && wedata->dd.recalc != 0) {
-		if ((lcache->flag & (LIGHTCACHE_BAKED | LIGHTCACHE_BAKING)) == 0) {
+		if ((lcache->flag & LIGHTCACHE_BAKING) == 0) {
 			lcache->flag |= LIGHTCACHE_UPDATE_WORLD;
 		}
 		wedata->dd.recalc = 0;
@@ -427,10 +439,13 @@ static void eevee_render_to_image(void *vedata, RenderEngine *engine, struct Ren
 
 	/* Actually do the rendering. */
 	EEVEE_render_draw(vedata, engine, render_layer, rect);
+
+	EEVEE_volumes_free_smoke_textures();
 }
 
 static void eevee_engine_free(void)
 {
+	EEVEE_shaders_free();
 	EEVEE_bloom_free();
 	EEVEE_depth_of_field_free();
 	EEVEE_effects_free();
@@ -442,7 +457,6 @@ static void eevee_engine_free(void)
 	EEVEE_occlusion_free();
 	EEVEE_screen_raytrace_free();
 	EEVEE_subsurface_free();
-	EEVEE_temporal_sampling_free();
 	EEVEE_volumes_free();
 }
 
@@ -470,7 +484,7 @@ RenderEngineType DRW_engine_viewport_eevee_type = {
 	NULL, &DRW_render_to_image, NULL, NULL, NULL, NULL,
 	&EEVEE_render_update_passes,
 	&draw_engine_eevee_type,
-	{NULL, NULL, NULL}
+	{NULL, NULL, NULL},
 };
 
 

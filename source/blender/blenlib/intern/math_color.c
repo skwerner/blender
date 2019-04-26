@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -20,11 +18,10 @@
  *
  * The Original Code is: some of this file.
  *
- * ***** END GPL LICENSE BLOCK *****
  * */
 
-/** \file blender/blenlib/intern/math_color.c
- *  \ingroup bli
+/** \file
+ * \ingroup bli
  */
 
 #include <assert.h>
@@ -204,7 +201,9 @@ void hex_to_rgb(char *hexcol, float *r, float *g, float *b)
 {
 	unsigned int ri, gi, bi;
 
-	if (hexcol[0] == '#') hexcol++;
+	if (hexcol[0] == '#') {
+		hexcol++;
+	}
 
 	if (sscanf(hexcol, "%02x%02x%02x", &ri, &gi, &bi) == 3) {
 		/* six digit hex colors */
@@ -328,11 +327,12 @@ void rgb_to_hsv_compat(float r, float g, float b, float *lh, float *ls, float *l
 
 	rgb_to_hsv(r, g, b, lh, ls, lv);
 
-	if (*lv <= 0.0f) {
+	if (*lv <= 1e-8) {
+		/* Very low v values will affect the hs values, correct them in post. */
 		*lh = orig_h;
 		*ls = orig_s;
 	}
-	else if (*ls <= 0.0f) {
+	else if (*ls <= 1e-8) {
 		*lh = orig_h;
 	}
 
@@ -355,29 +355,6 @@ void hsv_clamp_v(float hsv[3], float v_max)
 	}
 	CLAMP(hsv[1], 0.0f, 1.0f);
 	CLAMP(hsv[2], 0.0f, v_max);
-}
-
-/*http://brucelindbloom.com/index.html?Eqn_RGB_XYZ_Matrix.html */
-
-void xyz_to_rgb(float xc, float yc, float zc, float *r, float *g, float *b, int colorspace)
-{
-	switch (colorspace) {
-		case BLI_XYZ_SMPTE:
-			*r = (3.50570f * xc) + (-1.73964f * yc) + (-0.544011f * zc);
-			*g = (-1.06906f * xc) + (1.97781f * yc) + (0.0351720f * zc);
-			*b = (0.0563117f * xc) + (-0.196994f * yc) + (1.05005f * zc);
-			break;
-		case BLI_XYZ_REC709_SRGB:
-			*r = (3.240476f * xc) + (-1.537150f * yc) + (-0.498535f * zc);
-			*g = (-0.969256f * xc) + (1.875992f * yc) + (0.041556f * zc);
-			*b = (0.055648f * xc) + (-0.204043f * yc) + (1.057311f * zc);
-			break;
-		case BLI_XYZ_CIE:
-			*r = (2.28783848734076f * xc) + (-0.833367677835217f * yc) + (-0.454470795871421f * zc);
-			*g = (-0.511651380743862f * xc) + (1.42275837632178f * yc) + (0.0888930017552939f * zc);
-			*b = (0.00572040983140966f * xc) + (-0.0159068485104036f * yc) + (1.0101864083734f * zc);
-			break;
-	}
 }
 
 /**
@@ -410,9 +387,9 @@ unsigned int rgb_to_cpack(float r, float g, float b)
 	ig = (unsigned int)floorf(255.0f * max_ff(g, 0.0f));
 	ib = (unsigned int)floorf(255.0f * max_ff(b, 0.0f));
 
-	if (ir > 255) ir = 255;
-	if (ig > 255) ig = 255;
-	if (ib > 255) ib = 255;
+	if (ir > 255) { ir = 255; }
+	if (ig > 255) { ig = 255; }
+	if (ib > 255) { ib = 255; }
 
 	return (ir + (ig * 256) + (ib * 256 * 256));
 }
@@ -454,28 +431,46 @@ void rgba_float_to_uchar(unsigned char r_col[4], const float col_f[4])
 
 float srgb_to_linearrgb(float c)
 {
-	if (c < 0.04045f)
+	if (c < 0.04045f) {
 		return (c < 0.0f) ? 0.0f : c * (1.0f / 12.92f);
-	else
+	}
+	else {
 		return powf((c + 0.055f) * (1.0f / 1.055f), 2.4f);
+	}
 }
 
 float linearrgb_to_srgb(float c)
 {
-	if (c < 0.0031308f)
+	if (c < 0.0031308f) {
 		return (c < 0.0f) ? 0.0f : c * 12.92f;
-	else
+	}
+	else {
 		return 1.055f * powf(c, 1.0f / 2.4f) - 0.055f;
+	}
 }
 
 void minmax_rgb(short c[3])
 {
-	if (c[0] > 255) c[0] = 255;
-	else if (c[0] < 0) c[0] = 0;
-	if (c[1] > 255) c[1] = 255;
-	else if (c[1] < 0) c[1] = 0;
-	if (c[2] > 255) c[2] = 255;
-	else if (c[2] < 0) c[2] = 0;
+	if (c[0] > 255) {
+		c[0] = 255;
+	}
+	else if (c[0] < 0) {
+		c[0] = 0;
+	}
+
+	if (c[1] > 255) {
+		c[1] = 255;
+	}
+	else if (c[1] < 0) {
+		c[1] = 0;
+	}
+
+	if (c[2] > 255) {
+		c[2] = 255;
+	}
+	else if (c[2] < 0) {
+		c[2] = 0;
+	}
 }
 
 /* If the requested RGB shade contains a negative weight for
@@ -501,7 +496,7 @@ int constrain_rgb(float *r, float *g, float *b)
 	return 0; /* Color within RGB gamut */
 }
 
-/* ********************************* lift/gamma/gain / ASC-CDL conversion ********************************* */
+/* ********************** lift/gamma/gain / ASC-CDL conversion ********************************* */
 
 void lift_gamma_gain_to_asc_cdl(float *lift, float *gamma, float *gain, float *offset, float *slope, float *power)
 {
@@ -509,14 +504,16 @@ void lift_gamma_gain_to_asc_cdl(float *lift, float *gamma, float *gain, float *o
 	for (c = 0; c < 3; c++) {
 		offset[c] = lift[c] * gain[c];
 		slope[c] = gain[c] * (1.0f - lift[c]);
-		if (gamma[c] == 0)
+		if (gamma[c] == 0) {
 			power[c] = FLT_MAX;
-		else
+		}
+		else {
 			power[c] = 1.0f / gamma[c];
+		}
 	}
 }
 
-/* ******************************************** other ************************************************* */
+/* ************************************* other ************************************************* */
 
 /* Applies an hue offset to a float rgb color */
 void rgb_float_set_hue_float_offset(float rgb[3], float hue_offset)
@@ -526,8 +523,12 @@ void rgb_float_set_hue_float_offset(float rgb[3], float hue_offset)
 	rgb_to_hsv(rgb[0], rgb[1], rgb[2], hsv, hsv + 1, hsv + 2);
 
 	hsv[0] += hue_offset;
-	if (hsv[0] > 1.0f) hsv[0] -= 1.0f;
-	else if (hsv[0] < 0.0f) hsv[0] += 1.0f;
+	if (hsv[0] > 1.0f) {
+		hsv[0] -= 1.0f;
+	}
+	else if (hsv[0] < 0.0f) {
+		hsv[0] += 1.0f;
+	}
 
 	hsv_to_rgb(hsv[0], hsv[1], hsv[2], rgb, rgb + 1, rgb + 2);
 }
@@ -576,10 +577,16 @@ static float index_to_float(const unsigned short i)
 	} tmp;
 
 	/* positive and negative zeros, and all gradual underflow, turn into zero: */
-	if (i < 0x80 || (i >= 0x8000 && i < 0x8080)) return 0;
+	if (i < 0x80 || (i >= 0x8000 && i < 0x8080)) {
+		return 0;
+	}
 	/* All NaN's and infinity turn into the largest possible legal float: */
-	if (i >= 0x7f80 && i < 0x8000) return FLT_MAX;
-	if (i >= 0xff80) return -FLT_MAX;
+	if (i >= 0x7f80 && i < 0x8000) {
+		return FLT_MAX;
+	}
+	if (i >= 0xff80) {
+		return -FLT_MAX;
+	}
 
 #ifdef __BIG_ENDIAN__
 	tmp.us[0] = i;
@@ -597,16 +604,23 @@ void BLI_init_srgb_conversion(void)
 	static bool initialized = false;
 	unsigned int i, b;
 
-	if (initialized)
+	if (initialized) {
 		return;
+	}
 	initialized = true;
 
 	/* Fill in the lookup table to convert floats to bytes: */
 	for (i = 0; i < 0x10000; i++) {
 		float f = linearrgb_to_srgb(index_to_float((unsigned short)i)) * 255.0f;
-		if (f <= 0) BLI_color_to_srgb_table[i] = 0;
-		else if (f < 255) BLI_color_to_srgb_table[i] = (unsigned short) (f * 0x100 + 0.5f);
-		else BLI_color_to_srgb_table[i] = 0xff00;
+		if (f <= 0) {
+			BLI_color_to_srgb_table[i] = 0;
+		}
+		else if (f < 255) {
+			BLI_color_to_srgb_table[i] = (unsigned short) (f * 0x100 + 0.5f);
+		}
+		else {
+			BLI_color_to_srgb_table[i] = 0xff00;
+		}
 	}
 
 	/* Fill in the lookup table to convert bytes to float: */
@@ -617,64 +631,6 @@ void BLI_init_srgb_conversion(void)
 		/* replace entries so byte->float->byte does not change the data: */
 		BLI_color_to_srgb_table[i] = (unsigned short)(b * 0x100);
 	}
-}
-static float inverse_srgb_companding(float v)
-{
-	if (v > 0.04045f) {
-		return powf((v + 0.055f) / 1.055f, 2.4f);
-	}
-	else {
-		return v / 12.92f;
-	}
-}
-
-/**
- * \note Does sRGB to linear conversion
- */
-void rgb_to_xyz(float r, float g, float b, float *x, float *y, float *z)
-{
-	r = inverse_srgb_companding(r) * 100.0f;
-	g = inverse_srgb_companding(g) * 100.0f;
-	b = inverse_srgb_companding(b) * 100.0f;
-
-	*x = r * 0.412453f + g * 0.357580f + b * 0.180423f;
-	*y = r * 0.212671f + g * 0.715160f + b * 0.072169f;
-	*z = r * 0.019334f + g * 0.119193f + b * 0.950227f;
-}
-
-static float xyz_to_lab_component(float v)
-{
-	const float eps = 0.008856f;
-	const float k = 903.3f;
-
-	if (v > eps) {
-		return powf(v, 1.0f / 3.0f);
-	}
-	else {
-		return (k * v + 16.0f) / 116.0f;
-	}
-}
-
-void xyz_to_lab(float x, float y, float z, float *l, float *a, float *b)
-{
-	const float xr = x / 95.047f;
-	const float yr = y / 100.0f;
-	const float zr = z / 108.883f;
-
-	const float fx = xyz_to_lab_component(xr);
-	const float fy = xyz_to_lab_component(yr);
-	const float fz = xyz_to_lab_component(zr);
-
-	*l = 116.0f * fy - 16.0f;
-	*a = 500.0f * (fx - fy);
-	*b = 200.0f * (fy - fz);
-}
-
-void rgb_to_lab(float r, float g, float b, float *ll, float *la, float *lb)
-{
-	float x, y, z;
-	rgb_to_xyz(r, g, b, &x, &y, &z);
-	xyz_to_lab(x, y, z, ll, la, lb);
 }
 
 /* ****************************** blackbody ******************************** */

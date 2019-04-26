@@ -17,6 +17,10 @@
 # ##### END GPL LICENSE BLOCK #####
 
 # <pep8 compliant>
+from .properties_animviz import (
+    MotionPathButtonsPanel,
+    MotionPathButtonsPanel_display,
+)
 import bpy
 from bpy.types import Panel, Menu
 from rna_prop_ui import PropertyPanel
@@ -58,40 +62,38 @@ class OBJECT_PT_transform(ObjectButtonsPanel, Panel):
         row = col.row(align=True)
         row.prop(ob, "location")
         row.use_property_decorate = False
-        row.prop(ob, "lock_location", text="", emboss=False)
+        row.prop(ob, "lock_location", text="", emboss=False, icon='DECORATE_UNLOCKED')
 
-        if ob.rotation_mode == 'QUATERNION':
+        rotation_mode = ob.rotation_mode
+        if rotation_mode == 'QUATERNION':
             col = flow.column()
             row = col.row(align=True)
             row.prop(ob, "rotation_quaternion", text="Rotation")
             sub = row.column(align=True)
             sub.use_property_decorate = False
-            sub.prop(ob, "lock_rotation_w", text="", emboss=False)
-            sub.prop(ob, "lock_rotation", text="", emboss=False)
-        elif ob.rotation_mode == 'AXIS_ANGLE':
-            # row.column().label(text="Rotation")
-            #row.column().prop(pchan, "rotation_angle", text="Angle")
-            #row.column().prop(pchan, "rotation_axis", text="Axis")
+            sub.prop(ob, "lock_rotation_w", text="", emboss=False, icon='DECORATE_UNLOCKED')
+            sub.prop(ob, "lock_rotation", text="", emboss=False, icon='DECORATE_UNLOCKED')
+        elif rotation_mode == 'AXIS_ANGLE':
             col = flow.column()
             row = col.row(align=True)
             row.prop(ob, "rotation_axis_angle", text="Rotation")
 
             sub = row.column(align=True)
             sub.use_property_decorate = False
-            sub.prop(ob, "lock_rotation_w", text="", emboss=False)
-            sub.prop(ob, "lock_rotation", text="", emboss=False)
+            sub.prop(ob, "lock_rotation_w", text="", emboss=False, icon='DECORATE_UNLOCKED')
+            sub.prop(ob, "lock_rotation", text="", emboss=False, icon='DECORATE_UNLOCKED')
         else:
             col = flow.column()
             row = col.row(align=True)
             row.prop(ob, "rotation_euler", text="Rotation")
             row.use_property_decorate = False
-            row.prop(ob, "lock_rotation", text="", emboss=False)
+            row.prop(ob, "lock_rotation", text="", emboss=False, icon='DECORATE_UNLOCKED')
 
         col = flow.column()
         row = col.row(align=True)
         row.prop(ob, "scale")
         row.use_property_decorate = False
-        row.prop(ob, "lock_scale", text="", emboss=False)
+        row.prop(ob, "lock_scale", text="", emboss=False, icon='DECORATE_UNLOCKED')
 
         row = layout.row(align=True)
         row.prop(ob, "rotation_mode")
@@ -114,13 +116,10 @@ class OBJECT_PT_delta_transform(ObjectButtonsPanel, Panel):
         col.prop(ob, "delta_location")
 
         col = flow.column()
-        if ob.rotation_mode == 'QUATERNION':
+        rotation_mode = ob.rotation_mode
+        if rotation_mode == 'QUATERNION':
             col.prop(ob, "delta_rotation_quaternion", text="Rotation")
-        elif ob.rotation_mode == 'AXIS_ANGLE':
-            # row.column().label(text="Rotation")
-            #row.column().prop(pchan, "delta_rotation_angle", text="Angle")
-            #row.column().prop(pchan, "delta_rotation_axis", text="Axis")
-            #row.column().prop(ob, "delta_rotation_axis_angle", text="Rotation")
+        elif rotation_mode == 'AXIS_ANGLE':
             col.label(text="Not for Axis-Angle")
         else:
             col.prop(ob, "delta_rotation_euler", text="Delta Rotation")
@@ -142,33 +141,28 @@ class OBJECT_PT_relations(ObjectButtonsPanel, Panel):
 
         col = flow.column()
         col.prop(ob, "parent")
-        sub = col.row(align=True)
+        sub = col.column()
         sub.prop(ob, "parent_type")
         parent = ob.parent
         if parent and ob.parent_type == 'BONE' and parent.type == 'ARMATURE':
             sub.prop_search(ob, "parent_bone", parent.data, "bones")
         sub.active = (parent is not None)
 
-        col = flow.column()
-        col.active = (ob.parent is not None)
-        col.prop(ob, "use_slow_parent")
-        sub = col.row(align=True)
-        sub.active = (ob.use_slow_parent)
-        sub.prop(ob, "slow_parent_offset", text="Offset")
+        col.separator()
 
         col = flow.column()
-        col.separator()
 
         col.prop(ob, "track_axis", text="Tracking Axis")
         col.prop(ob, "up_axis", text="Up Axis")
 
-        col = flow.column()
         col.separator()
+
+        col = flow.column()
 
         col.prop(ob, "pass_index")
 
 
-class COLLECTION_MT_specials(Menu):
+class COLLECTION_MT_context_menu(Menu):
     bl_label = "Collection Specials"
 
     def draw(self, context):
@@ -176,7 +170,7 @@ class COLLECTION_MT_specials(Menu):
 
         layout.operator("object.collection_unlink", icon='X')
         layout.operator("object.collection_objects_select")
-        layout.operator("object.dupli_offset_from_cursor")
+        layout.operator("object.instance_offset_from_cursor")
 
 
 class OBJECT_PT_collections(ObjectButtonsPanel, Panel):
@@ -193,11 +187,11 @@ class OBJECT_PT_collections(ObjectButtonsPanel, Panel):
             row.operator("object.collection_link", text="Add to Collection")
         else:
             row.operator("object.collection_add", text="Add to Collection")
-        row.operator("object.collection_add", text="", icon='ZOOMIN')
+        row.operator("object.collection_add", text="", icon='ADD')
 
         obj_name = obj.name
         for collection in bpy.data.collections:
-            # XXX this is slow and stupid!, we need 2 checks, one thats fast
+            # XXX this is slow and stupid!, we need 2 checks, one that's fast
             # and another that we can be sure its not a name collision
             # from linked library data
             collection_objects = collection.objects
@@ -209,10 +203,10 @@ class OBJECT_PT_collections(ObjectButtonsPanel, Panel):
                 row = col.box().row()
                 row.prop(collection, "name", text="")
                 row.operator("object.collection_remove", text="", icon='X', emboss=False)
-                row.menu("COLLECTION_MT_specials", icon='DOWNARROW_HLT', text="")
+                row.menu("COLLECTION_MT_context_menu", icon='DOWNARROW_HLT', text="")
 
                 row = col.box().row()
-                row.prop(collection, "dupli_offset", text="")
+                row.prop(collection, "instance_offset", text="")
 
 
 class OBJECT_PT_display(ObjectButtonsPanel, Panel):
@@ -222,58 +216,79 @@ class OBJECT_PT_display(ObjectButtonsPanel, Panel):
     def draw(self, context):
         layout = self.layout
         layout.use_property_split = True
+
         flow = layout.grid_flow(row_major=True, columns=0, even_columns=True, even_rows=False, align=False)
 
         obj = context.object
         obj_type = obj.type
         is_geometry = (obj_type in {'MESH', 'CURVE', 'SURFACE', 'META', 'FONT'})
         is_wire = (obj_type in {'CAMERA', 'EMPTY'})
-        is_empty_image = (obj_type == 'EMPTY' and obj.empty_draw_type == 'IMAGE')
-        is_dupli = (obj.dupli_type != 'NONE')
+        is_empty_image = (obj_type == 'EMPTY' and obj.empty_display_type == 'IMAGE')
+        is_dupli = (obj.instance_type != 'NONE')
+        is_gpencil = (obj_type == 'GPENCIL')
 
-        col = flow.column(align=True)
+        col = flow.column()
         col.prop(obj, "show_name", text="Name")
+
+        col = flow.column()
         col.prop(obj, "show_axis", text="Axis")
 
         # Makes no sense for cameras, armatures, etc.!
         # but these settings do apply to dupli instances
-        col = flow.column(align=True)
         if is_geometry or is_dupli:
+            col = flow.column()
             col.prop(obj, "show_wire", text="Wireframe")
         if obj_type == 'MESH' or is_dupli:
-            col.prop(obj, "show_all_edges")
-
-        col = flow.column()
-        col.prop(obj, "show_bounds", text="Bounds")
-        sub = col.column()
-        sub.active = obj.show_bounds
-        sub.prop(obj, "draw_bounds_type")
+            col = flow.column()
+            col.prop(obj, "show_all_edges", text="All Edges")
 
         col = flow.column()
         if is_geometry:
             col.prop(obj, "show_texture_space", text="Texture Space")
+            col = flow.column()
             col.prop(obj.display, "show_shadows", text="Shadow")
 
-        col.prop(obj, "show_x_ray", text="X-Ray")
+        col = flow.column()
+        col.prop(obj, "show_in_front", text="In Front")
         # if obj_type == 'MESH' or is_empty_image:
         #    col.prop(obj, "show_transparent", text="Transparency")
 
+        flow = layout.grid_flow(row_major=True, columns=0, even_columns=True, even_rows=False, align=False)
+
         col = flow.column()
         if is_wire:
-            # wire objects only use the max. draw type for duplis
+            # wire objects only use the max. display type for duplis
             col.active = is_dupli
-        col.prop(
-            obj, "draw_type",
-            text="Maximum Draw Type" if is_wire else "Maximum Draw Type",
-        )
+        col.prop(obj, "display_type", text="Display As")
 
-        if is_geometry or is_empty_image:
+        if is_geometry or is_dupli or is_empty_image or is_gpencil:
             # Only useful with object having faces/materials...
+            col = flow.column()
             col.prop(obj, "color")
 
 
-class OBJECT_PT_duplication(ObjectButtonsPanel, Panel):
-    bl_label = "Duplication"
+class OBJECT_PT_display_bounds(ObjectButtonsPanel, Panel):
+    bl_label = "Bounds"
+    bl_parent_id = "OBJECT_PT_display"
+    bl_options = {'DEFAULT_CLOSED'}
+
+    def draw_header(self, context):
+
+        obj = context.object
+
+        self.layout.prop(obj, "show_bounds", text="")
+
+    def draw(self, context):
+        layout = self.layout
+        obj = context.object
+        layout.use_property_split = True
+
+        layout.active = obj.show_bounds or (obj.display_type == 'BOUNDS')
+        layout.prop(obj, "display_bounds_type", text="Shape")
+
+
+class OBJECT_PT_instancing(ObjectButtonsPanel, Panel):
+    bl_label = "Instancing"
     bl_options = {'DEFAULT_CLOSED'}
 
     def draw(self, context):
@@ -282,48 +297,45 @@ class OBJECT_PT_duplication(ObjectButtonsPanel, Panel):
         ob = context.object
 
         row = layout.row()
-        row.prop(ob, "dupli_type", expand=True)
+        row.prop(ob, "instance_type", expand=True)
 
         layout.use_property_split = True
         flow = layout.grid_flow(row_major=True, columns=0, even_columns=True, even_rows=False, align=False)
 
-        if ob.dupli_type == 'FRAMES':
+        if ob.instance_type == 'VERTS':
+            layout.prop(ob, "use_instance_vertices_rotation", text="Align to Vertex Normal")
 
+        elif ob.instance_type == 'COLLECTION':
+            col = layout.column()
+            col.prop(ob, "instance_collection", text="Collection")
+
+        if ob.instance_type != 'NONE' or len(ob.particle_systems):
             col = flow.column(align=True)
-            col.prop(ob, "dupli_frames_start", text="Start")
-            col.prop(ob, "dupli_frames_end", text="End")
-
-            col = flow.column(align=True)
-            col.prop(ob, "dupli_frames_on", text="On")
-            col.prop(ob, "dupli_frames_off", text="Off")
-
-            col = flow.column(align=True)
-            col.prop(ob, "use_dupli_frames_speed", text="Speed")
-
-        elif ob.dupli_type == 'VERTS':
-            layout.prop(ob, "use_dupli_vertices_rotation", text="Rotation")
-
-        elif ob.dupli_type == 'FACES':
-            col = flow.column()
-            col.prop(ob, "use_dupli_faces_scale", text="Scale")
-            sub = col.column()
-            sub.active = ob.use_dupli_faces_scale
-            sub.prop(ob, "dupli_faces_scale", text="Inherit Scale")
-
-        elif ob.dupli_type == 'COLLECTION':
-            col = flow.column()
-            col.prop(ob, "dupli_group", text="Collection")
-
-        if ob.dupli_type != 'NONE' or len(ob.particle_systems):
-            col = flow.column(align=True)
-            col.prop(ob, "show_duplicator_for_viewport")
-            col.prop(ob, "show_duplicator_for_render")
+            col.prop(ob, "show_instancer_for_viewport")
+            col.prop(ob, "show_instancer_for_render")
 
 
-from .properties_animviz import (
-    MotionPathButtonsPanel,
-    OnionSkinButtonsPanel,
-)
+class OBJECT_PT_instancing_size(ObjectButtonsPanel, Panel):
+    bl_label = "Scale by Face Size"
+    bl_parent_id = "OBJECT_PT_instancing"
+
+    @classmethod
+    def poll(cls, context):
+        ob = context.object
+        return ob.instance_type == 'FACES'
+
+    def draw_header(self, context):
+
+        ob = context.object
+        self.layout.prop(ob, "use_instance_faces_scale", text="")
+
+    def draw(self, context):
+        layout = self.layout
+        ob = context.object
+        layout.use_property_split = True
+
+        layout.active = ob.use_instance_faces_scale
+        layout.prop(ob, "instance_faces_scale", text="Factor")
 
 
 class OBJECT_PT_motion_paths(MotionPathButtonsPanel, Panel):
@@ -345,22 +357,28 @@ class OBJECT_PT_motion_paths(MotionPathButtonsPanel, Panel):
         self.draw_settings(context, avs, mpath)
 
 
-class OBJECT_PT_onion_skinning(OnionSkinButtonsPanel):  # , Panel): # inherit from panel when ready
-    #bl_label = "Object Onion Skinning"
+class OBJECT_PT_motion_paths_display(MotionPathButtonsPanel_display, Panel):
+    #bl_label = "Object Motion Paths"
     bl_context = "object"
+    bl_parent_id = "OBJECT_PT_motion_paths"
+    bl_options = {'DEFAULT_CLOSED'}
 
     @classmethod
     def poll(cls, context):
         return (context.object)
 
     def draw(self, context):
-        ob = context.object
+        # layout = self.layout
 
-        self.draw_settings(context, ob.animation_visualization)
+        ob = context.object
+        avs = ob.animation_visualization
+        mpath = ob.motion_path
+
+        self.draw_settings(context, avs, mpath)
 
 
 class OBJECT_PT_custom_props(ObjectButtonsPanel, PropertyPanel, Panel):
-    COMPAT_ENGINES = {'BLENDER_RENDER', 'BLENDER_EEVEE', 'BLENDER_OPENGL'}
+    COMPAT_ENGINES = {'BLENDER_RENDER', 'BLENDER_EEVEE', 'BLENDER_WORKBENCH'}
     _context_path = "object"
     _property_type = bpy.types.Object
 
@@ -370,11 +388,14 @@ classes = (
     OBJECT_PT_transform,
     OBJECT_PT_delta_transform,
     OBJECT_PT_relations,
-    COLLECTION_MT_specials,
+    COLLECTION_MT_context_menu,
     OBJECT_PT_collections,
-    OBJECT_PT_duplication,
-    OBJECT_PT_display,
+    OBJECT_PT_instancing,
+    OBJECT_PT_instancing_size,
     OBJECT_PT_motion_paths,
+    OBJECT_PT_motion_paths_display,
+    OBJECT_PT_display,
+    OBJECT_PT_display_bounds,
     OBJECT_PT_custom_props,
 )
 

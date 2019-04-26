@@ -1,6 +1,4 @@
 /*
- * Copyright 2016, Blender Foundation.
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -15,12 +13,11 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
- * Contributor(s): Blender Institute
- *
+ * Copyright 2016, Blender Foundation.
  */
 
-/** \file blender/draw/modes/sculpt_mode.c
- *  \ingroup draw
+/** \file
+ * \ingroup draw
  */
 
 #include "DRW_engine.h"
@@ -32,16 +29,16 @@
 
 #include "BKE_pbvh.h"
 #include "BKE_paint.h"
-
-#include "DEG_depsgraph.h"
+#include "BKE_subdiv_ccg.h"
 
 /* If builtin shaders are needed */
 #include "GPU_shader.h"
-#include "GPU_matrix.h"
 
 #include "draw_common.h"
-
 #include "draw_mode_engines.h"
+
+extern char datatoc_sculpt_mask_vert_glsl[];
+extern char datatoc_gpu_shader_3D_smooth_color_frag_glsl[];
 
 /* *********** LISTS *********** */
 /* All lists are per viewport specific datas.
@@ -97,7 +94,6 @@ static struct {
 	 * Add sources to source/blender/draw/modes/shaders
 	 * init in SCULPT_engine_init();
 	 * free in SCULPT_engine_free(); */
-	struct GPUShader *shader_flat;
 	struct GPUShader *shader_smooth;
 } e_data = {NULL}; /* Engine data */
 
@@ -121,26 +117,9 @@ static void SCULPT_engine_init(void *vedata)
 
 	UNUSED_VARS(txl, fbl, stl);
 
-	/* Init Framebuffers like this: order is attachment order (for color texs) */
-	/*
-	 * DRWFboTexture tex[2] = {{&txl->depth, GPU_DEPTH_COMPONENT24, 0},
-	 *                         {&txl->color, GPU_RGBA8, DRW_TEX_FILTER}};
-	 */
-
-	/* DRW_framebuffer_init takes care of checking if
-	 * the framebuffer is valid and has the right size*/
-	/*
-	 * float *viewport_size = DRW_viewport_size_get();
-	 * DRW_framebuffer_init(&fbl->occlude_wire_fb,
-	 *                     (int)viewport_size[0], (int)viewport_size[1],
-	 *                     tex, 2);
-	 */
-
-	if (!e_data.shader_flat) {
-		e_data.shader_flat = GPU_shader_get_builtin_shader(GPU_SHADER_3D_FLAT_COLOR);
-	}
 	if (!e_data.shader_smooth) {
-		e_data.shader_smooth = GPU_shader_get_builtin_shader(GPU_SHADER_3D_SMOOTH_COLOR);
+		e_data.shader_smooth = DRW_shader_create(datatoc_sculpt_mask_vert_glsl, NULL,
+		                                         datatoc_gpu_shader_3D_smooth_color_frag_glsl, NULL);
 	}
 }
 
@@ -152,34 +131,46 @@ static void SCULPT_cache_init(void *vedata)
 	SCULPT_StorageList *stl = ((SCULPT_Data *)vedata)->stl;
 
 	if (!stl->g_data) {
-		/* Alloc transient pointers */
 		stl->g_data = MEM_mallocN(sizeof(*stl->g_data), __func__);
 	}
 
 	{
-		/* Create a pass */
 		DRWState state = DRW_STATE_WRITE_COLOR | DRW_STATE_DEPTH_EQUAL | DRW_STATE_MULTIPLY;
 		psl->pass = DRW_pass_create("Sculpt Pass", state);
-
-		/* Create a shadingGroup using a function in draw_common.c or custom one */
-		/*
-		 * stl->g_data->group = shgroup_dynlines_uniform_color(psl->pass, ts.colorWire);
-		 * -- or --
-		 * stl->g_data->group = DRW_shgroup_create(e_data.custom_shader, psl->pass);
-		 */
-		stl->g_data->group_flat = DRW_shgroup_create(e_data.shader_flat, psl->pass);
 		stl->g_data->group_smooth = DRW_shgroup_create(e_data.shader_smooth, psl->pass);
 	}
 }
 
-static bool object_is_flat(const Object *ob)
+static void sculpt_draw_mask_cb(
+        DRWShadingGroup *shgroup,
+        void (*draw_fn)(DRWShadingGroup *shgroup, struct GPUBatch *geom),
+        void *user_data)
 {
-	Mesh *me = ob->data;
-	if (me->mpoly && me->mpoly[0].flag & ME_SMOOTH) {
-		return false;
+	Object *ob = user_data;
+	PBVH *pbvh = ob->sculpt->pbvh;
+
+	if (pbvh) {
+		BKE_pbvh_draw_cb(
+		        pbvh, NULL, NULL, false, false, true,
+		        (void (*)(void *, struct GPUBatch *))draw_fn, shgroup);
 	}
-	else {
-		return true;
+}
+
+static void sculpt_update_pbvh_normals(Object *object)
+{
+	Mesh *mesh = object->data;
+	PBVH *pbvh = object->sculpt->pbvh;
+	SubdivCCG *subdiv_ccg = mesh->runtime.subdiv_ccg;
+	if (pbvh == NULL || subdiv_ccg == NULL) {
+		return;
+	}
+	BKE_sculpt_bvh_update_from_ccg(pbvh, subdiv_ccg);
+	struct CCGFace **faces;
+	int num_faces;
+	BKE_pbvh_get_grid_updates(pbvh, 1, (void ***)&faces, &num_faces);
+	if (num_faces > 0) {
+		BKE_subdiv_ccg_update_normals(subdiv_ccg, faces, num_faces);
+		MEM_freeN(faces);
 	}
 }
 
@@ -195,6 +186,8 @@ static void SCULPT_cache_populate(void *vedata, Object *ob)
 		const DRWContextState *draw_ctx = DRW_context_state_get();
 
 		if (ob->sculpt && (ob == draw_ctx->obact)) {
+			sculpt_update_pbvh_normals(ob);
+
 			/* XXX, needed for dyntopo-undo (which clears).
 			 * probably depsgraph should handlle? in 2.7x getting derived-mesh does this (mesh_build_data) */
 			if (ob->sculpt->pbvh == NULL) {
@@ -207,11 +200,7 @@ static void SCULPT_cache_populate(void *vedata, Object *ob)
 
 			PBVH *pbvh = ob->sculpt->pbvh;
 			if (pbvh && pbvh_has_mask(pbvh)) {
-				/* Get geometry cache */
-				DRWShadingGroup *shgroup = object_is_flat(ob) ? stl->g_data->group_flat : stl->g_data->group_smooth;
-
-				/* Add geom to a shading group */
-				DRW_shgroup_call_sculpt_add(shgroup, ob, ob->obmat);
+				DRW_shgroup_call_generate_add(stl->g_data->group_smooth, sculpt_draw_mask_cb, ob, ob->obmat);
 			}
 		}
 	}
@@ -223,7 +212,7 @@ static void SCULPT_cache_finish(void *vedata)
 	SCULPT_PassList *psl = ((SCULPT_Data *)vedata)->psl;
 	SCULPT_StorageList *stl = ((SCULPT_Data *)vedata)->stl;
 
-	/* Do something here! dependant on the objects gathered */
+	/* Do something here! dependent on the objects gathered */
 	UNUSED_VARS(psl, stl);
 }
 
@@ -260,7 +249,7 @@ static void SCULPT_draw_scene(void *vedata)
  * Mostly used for freeing shaders */
 static void SCULPT_engine_free(void)
 {
-	// DRW_SHADER_FREE_SAFE(custom_shader);
+	DRW_SHADER_FREE_SAFE(e_data.shader_smooth);
 }
 
 static const DrawEngineDataSize SCULPT_data_size = DRW_VIEWPORT_DATA_SIZE(SCULPT_Data);

@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,17 +15,17 @@
  *
  * The Original Code is Copyright (C) Blender Foundation
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): Matt Ebb
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/modifiers/intern/MOD_ocean.c
- *  \ingroup modifiers
+/** \file
+ * \ingroup modifiers
  */
+
+#include "BLI_utildefines.h"
+
+#include "BLI_math.h"
+#include "BLI_math_inline.h"
+#include "BLI_task.h"
 
 #include "DNA_customdata_types.h"
 #include "DNA_object_types.h"
@@ -36,13 +34,7 @@
 #include "DNA_modifier_types.h"
 #include "DNA_scene_types.h"
 
-#include "BLI_math.h"
-#include "BLI_math_inline.h"
-#include "BLI_task.h"
-#include "BLI_utildefines.h"
-
-#include "BKE_global.h"
-#include "BKE_main.h"
+#include "BKE_library.h"
 #include "BKE_mesh.h"
 #include "BKE_modifier.h"
 #include "BKE_ocean.h"
@@ -158,22 +150,17 @@ static void copyData(const ModifierData *md, ModifierData *target, const int fla
 }
 
 #ifdef WITH_OCEANSIM
-static CustomDataMask requiredDataMask(Object *UNUSED(ob), ModifierData *md)
+static void requiredDataMask(Object *UNUSED(ob), ModifierData *md, CustomData_MeshMasks *r_cddata_masks)
 {
 	OceanModifierData *omd = (OceanModifierData *)md;
-	CustomDataMask dataMask = 0;
 
-	if (omd->flag & MOD_OCEAN_GENERATE_FOAM)
-		dataMask |= CD_MASK_MCOL;
-
-	return dataMask;
+	if (omd->flag & MOD_OCEAN_GENERATE_FOAM) {
+		r_cddata_masks->fmask |= CD_MASK_MCOL;  /* XXX Should be loop cddata I guess? */
+	}
 }
 #else /* WITH_OCEANSIM */
-static CustomDataMask requiredDataMask(Object *UNUSED(ob), ModifierData *md)
+static void requiredDataMask(Object *UNUSED(ob), ModifierData *UNUSED(md), CustomData_MeshMasks *UNUSED(r_cddata_masks))
 {
-	/* unused */
-	(void)md;
-	return 0;
 }
 #endif /* WITH_OCEANSIM */
 
@@ -183,45 +170,12 @@ static bool dependsOnNormals(ModifierData *md)
 	return (omd->geometry_mode != MOD_OCEAN_GEOM_GENERATE);
 }
 
-#if 0
-static void dm_get_bounds(DerivedMesh *dm, float *sx, float *sy, float *ox, float *oy)
-{
-	/* get bounding box of underlying dm */
-	int v, totvert = dm->getNumVerts(dm);
-	float min[3], max[3], delta[3];
-
-	MVert *mvert = dm->getVertDataArray(dm, 0);
-
-	copy_v3_v3(min, mvert->co);
-	copy_v3_v3(max, mvert->co);
-
-	for (v = 1; v < totvert; v++, mvert++) {
-		min[0] = min_ff(min[0], mvert->co[0]);
-		min[1] = min_ff(min[1], mvert->co[1]);
-		min[2] = min_ff(min[2], mvert->co[2]);
-
-		max[0] = max_ff(max[0], mvert->co[0]);
-		max[1] = max_ff(max[1], mvert->co[1]);
-		max[2] = max_ff(max[2], mvert->co[2]);
-	}
-
-	sub_v3_v3v3(delta, max, min);
-
-	*sx = delta[0];
-	*sy = delta[1];
-
-	*ox = min[0];
-	*oy = min[1];
-}
-#endif
-
 #ifdef WITH_OCEANSIM
 
 typedef struct GenerateOceanGeometryData {
 	MVert *mverts;
 	MPoly *mpolys;
 	MLoop *mloops;
-	int *origindex;
 	MLoopUV *mloopuvs;
 
 	int res_x, res_y;
@@ -275,9 +229,6 @@ static void generate_ocean_geometry_polygons(
 		mp->totloop = 4;
 
 		mp->flag |= ME_SMOOTH;
-
-		/* generated geometry does not map to original faces */
-		gogd->origindex[fi] = ORIGINDEX_NONE;
 	}
 }
 
@@ -343,8 +294,6 @@ static Mesh *generate_ocean_geometry(OceanModifierData *omd)
 	gogd.mverts = result->mvert;
 	gogd.mpolys = result->mpoly;
 	gogd.mloops = result->mloop;
-
-	gogd.origindex = CustomData_get_layer(&result->pdata, CD_ORIGINDEX);
 
 	ParallelRangeSettings settings;
 	BLI_parallel_range_settings_defaults(&settings);
@@ -425,12 +374,7 @@ static Mesh *doOcean(ModifierData *md, const ModifierEvalContext *ctx, Mesh *mes
 		BKE_mesh_ensure_normals(result);
 	}
 	else if (omd->geometry_mode == MOD_OCEAN_GEOM_DISPLACE) {
-		BKE_id_copy_ex(NULL, &mesh->id, (ID **)&result,
-		               LIB_ID_CREATE_NO_MAIN |
-		               LIB_ID_CREATE_NO_USER_REFCOUNT |
-		               LIB_ID_CREATE_NO_DEG_TAG |
-		               LIB_ID_COPY_NO_PREVIEW,
-		               false);
+		BKE_id_copy_ex(NULL, &mesh->id, (ID **)&result, LIB_ID_COPY_LOCALIZE);
 	}
 
 	cfra_for_cache = cfra_scene;
@@ -553,18 +497,10 @@ ModifierTypeInfo modifierType_Ocean = {
 	/* copyData */          copyData,
 	/* deformMatrices_DM */ NULL,
 
-	/* deformVerts_DM */    NULL,
-	/* deformVertsEM_DM */  NULL,
-	/* deformMatricesEM_DM*/NULL,
-	/* applyModifier_DM */  NULL,
-	/* applyModifierEM_DM */NULL,
-
-	/* deformVerts */       NULL,
 	/* deformMatrices */    NULL,
 	/* deformVertsEM */     NULL,
 	/* deformMatricesEM */  NULL,
 	/* applyModifier */     applyModifier,
-	/* applyModifierEM */   NULL,
 
 	/* initData */          initData,
 	/* requiredDataMask */  requiredDataMask,
@@ -576,4 +512,5 @@ ModifierTypeInfo modifierType_Ocean = {
 	/* foreachObjectLink */ NULL,
 	/* foreachIDLink */     NULL,
 	/* foreachTexLink */    NULL,
+	/* freeRuntimeData */   NULL,
 };

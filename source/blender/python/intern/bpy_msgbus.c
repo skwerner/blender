@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,12 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/python/intern/bpy_msgbus.c
- *  \ingroup pythonintern
+/** \file
+ * \ingroup pythonintern
  * This file defines '_bpy_msgbus' module, exposed as 'bpy.msgbus'.
  */
 
@@ -219,11 +215,16 @@ static void bpy_msgbus_subscribe_value_free_data(
  * \{ */
 
 PyDoc_STRVAR(bpy_msgbus_subscribe_rna_doc,
-".. function:: subscribe_rna(data, owner, args, notify)\n"
+".. function:: subscribe_rna(data, owner, args, notify, options=set())\n"
 "\n"
 BPY_MSGBUS_RNA_MSGKEY_DOC
 "   :arg owner: Handle for this subscription (compared by identity).\n"
 "   :type owner: Any type.\n"
+"   :arg options: Change the behavior of the subscriber.\n"
+"\n"
+"      - ``PERSISTENT`` when set, the subscriber will be kept when remapping ID data.\n"
+"\n"
+"   :type options: set of str.\n"
 "\n"
 "   Returns a new vector int property definition.\n"
 );
@@ -241,10 +242,17 @@ static PyObject *bpy_msgbus_subscribe_rna(PyObject *UNUSED(self), PyObject *args
 	PyObject *py_options = NULL;
 	EnumPropertyItem py_options_enum[] = {
 		{IS_PERSISTENT, "PERSISTENT", 0, ""},
-		{0, NULL, 0, NULL, NULL}
+		{0, NULL, 0, NULL, NULL},
 	};
 	int options = 0;
 
+	if (PyTuple_GET_SIZE(args) != 0) {
+		PyErr_Format(
+		        PyExc_TypeError,
+		        "%s: only keyword arguments are supported",
+		        error_prefix);
+		return NULL;
+	}
 	static const char *_keywords[] = {
 		"key",
 		"owner",
@@ -253,7 +261,7 @@ static PyObject *bpy_msgbus_subscribe_rna(PyObject *UNUSED(self), PyObject *args
 		"options",
 		NULL,
 	};
-	static _PyArg_Parser _parser = {"$OOO!OO!:subscribe_rna", _keywords, 0};
+	static _PyArg_Parser _parser = {"OOO!O|O!:subscribe_rna", _keywords, 0};
 	if (!_PyArg_ParseTupleAndKeywordsFast(
 	        args, kw, &_parser,
 	        &py_sub, &py_owner,
@@ -334,11 +342,18 @@ static PyObject *bpy_msgbus_publish_rna(PyObject *UNUSED(self), PyObject *args, 
 	const char *error_prefix = "publish_rna";
 	PyObject *py_sub = NULL;
 
+	if (PyTuple_GET_SIZE(args) != 0) {
+		PyErr_Format(
+		        PyExc_TypeError,
+		        "%s: only keyword arguments are supported",
+		        error_prefix);
+		return NULL;
+	}
 	static const char *_keywords[] = {
 		"key",
 		NULL,
 	};
-	static _PyArg_Parser _parser = {"$O:publish_rna", _keywords, 0};
+	static _PyArg_Parser _parser = {"O:publish_rna", _keywords, 0};
 	if (!_PyArg_ParseTupleAndKeywordsFast(
 	        args, kw, &_parser,
 	        &py_sub))
@@ -377,7 +392,7 @@ static struct PyMethodDef BPy_msgbus_methods[] = {
 	{"subscribe_rna", (PyCFunction)bpy_msgbus_subscribe_rna, METH_VARARGS | METH_KEYWORDS, bpy_msgbus_subscribe_rna_doc},
 	{"publish_rna", (PyCFunction)bpy_msgbus_publish_rna, METH_VARARGS | METH_KEYWORDS, bpy_msgbus_publish_rna_doc},
 	{"clear_by_owner", (PyCFunction)bpy_msgbus_clear_by_owner, METH_O, bpy_msgbus_clear_by_owner_doc},
-	{NULL, NULL, 0, NULL}
+	{NULL, NULL, 0, NULL},
 };
 
 static struct PyModuleDef _bpy_msgbus_def = {

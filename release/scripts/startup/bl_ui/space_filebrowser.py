@@ -17,7 +17,6 @@
 # ##### END GPL LICENSE BLOCK #####
 
 # <pep8 compliant>
-import bpy
 from bpy.types import Header, Panel, Menu, UIList
 
 
@@ -68,7 +67,7 @@ class FILEBROWSER_HT_header(Header):
             if params.filter_glob:
                 # if st.active_operator and hasattr(st.active_operator, "filter_glob"):
                 #     row.prop(params, "filter_glob", text="")
-                row.label(params.filter_glob)
+                row.label(text=params.filter_glob)
             else:
                 row.prop(params, "use_filter_blender", text="")
                 row.prop(params, "use_filter_backup", text="")
@@ -141,7 +140,7 @@ class FILEBROWSER_PT_system_bookmarks(Panel):
 
     @classmethod
     def poll(cls, context):
-        return not context.user_preferences.filepaths.hide_system_bookmarks
+        return not context.preferences.filepaths.hide_system_bookmarks
 
     def draw(self, context):
         layout = self.layout
@@ -153,7 +152,7 @@ class FILEBROWSER_PT_system_bookmarks(Panel):
                               space, "system_bookmarks_active", item_dyntip_propname="path", rows=1, maxrows=10)
 
 
-class FILEBROWSER_MT_bookmarks_specials(Menu):
+class FILEBROWSER_MT_bookmarks_context_menu(Menu):
     bl_label = "Bookmarks Specials"
 
     def draw(self, context):
@@ -183,16 +182,16 @@ class FILEBROWSER_PT_bookmarks(Panel):
                               rows=(2 if num_rows < 2 else 4), maxrows=10)
 
             col = row.column(align=True)
-            col.operator("file.bookmark_add", icon='ZOOMIN', text="")
-            col.operator("file.bookmark_delete", icon='ZOOMOUT', text="")
-            col.menu("FILEBROWSER_MT_bookmarks_specials", icon='DOWNARROW_HLT', text="")
+            col.operator("file.bookmark_add", icon='ADD', text="")
+            col.operator("file.bookmark_delete", icon='REMOVE', text="")
+            col.menu("FILEBROWSER_MT_bookmarks_context_menu", icon='DOWNARROW_HLT', text="")
 
             if num_rows > 1:
                 col.separator()
                 col.operator("file.bookmark_move", icon='TRIA_UP', text="").direction = 'UP'
                 col.operator("file.bookmark_move", icon='TRIA_DOWN', text="").direction = 'DOWN'
         else:
-            layout.operator("file.bookmark_add", icon='ZOOMIN')
+            layout.operator("file.bookmark_add", icon='ADD')
 
 
 class FILEBROWSER_PT_recent_folders(Panel):
@@ -203,7 +202,7 @@ class FILEBROWSER_PT_recent_folders(Panel):
 
     @classmethod
     def poll(cls, context):
-        return not context.user_preferences.filepaths.hide_recent_locations
+        return not context.preferences.filepaths.hide_recent_locations
 
     def draw(self, context):
         layout = self.layout
@@ -263,7 +262,7 @@ classes = (
     FILEBROWSER_UL_dir,
     FILEBROWSER_PT_system_folders,
     FILEBROWSER_PT_system_bookmarks,
-    FILEBROWSER_MT_bookmarks_specials,
+    FILEBROWSER_MT_bookmarks_context_menu,
     FILEBROWSER_PT_bookmarks,
     FILEBROWSER_PT_recent_folders,
     FILEBROWSER_PT_advanced_filter,

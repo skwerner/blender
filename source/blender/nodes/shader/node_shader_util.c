@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,10 @@
  *
  * The Original Code is Copyright (C) 2005 Blender Foundation.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/nodes/shader/node_shader_util.c
- *  \ingroup nodes
+/** \file
+ * \ingroup nodes
  */
 
 
@@ -96,7 +88,7 @@ void node_gpu_stack_from_data(struct GPUNodeStack *gs, int type, bNodeStack *ns)
 	memset(gs, 0, sizeof(*gs));
 
 	if (ns == NULL) {
-		/* node_get_stack() will generate NULL bNodeStack pointers for unknown/unsuported types of sockets... */
+		/* node_get_stack() will generate NULL bNodeStack pointers for unknown/unsupported types of sockets... */
 		zero_v4(gs->vec);
 		gs->link = NULL;
 		gs->type = GPU_NONE;
@@ -110,6 +102,8 @@ void node_gpu_stack_from_data(struct GPUNodeStack *gs, int type, bNodeStack *ns)
 
 		if (type == SOCK_FLOAT)
 			gs->type = GPU_FLOAT;
+		else if (type == SOCK_INT)
+			gs->type = GPU_FLOAT; /* HACK: Support as float. */
 		else if (type == SOCK_VECTOR)
 			gs->type = GPU_VEC3;
 		else if (type == SOCK_RGBA)
@@ -207,7 +201,7 @@ bNode *nodeGetActiveTexture(bNodeTree *ntree)
 	return inactivenode;
 }
 
-void ntreeExecGPUNodes(bNodeTreeExec *exec, GPUMaterial *mat, int do_outputs)
+void ntreeExecGPUNodes(bNodeTreeExec *exec, GPUMaterial *mat, bNode *output_node)
 {
 	bNodeExec *nodeexec;
 	bNode *node;
@@ -226,7 +220,7 @@ void ntreeExecGPUNodes(bNodeTreeExec *exec, GPUMaterial *mat, int do_outputs)
 		do_it = false;
 		/* for groups, only execute outputs for edited group */
 		if (node->typeinfo->nclass == NODE_CLASS_OUTPUT) {
-			if (do_outputs && (node->flag & NODE_DO_OUTPUT))
+			if ((output_node != NULL) && (node == output_node))
 				do_it = true;
 		}
 		else {
@@ -257,12 +251,12 @@ void node_shader_gpu_tex_mapping(GPUMaterial *mat, bNode *node, GPUNodeStack *in
 		static float min[3] = {-FLT_MAX, -FLT_MAX, -FLT_MAX};
 		GPUNodeLink *tmin, *tmax, *tmat0, *tmat1, *tmat2, *tmat3;
 
-		tmin = GPU_uniform_buffer((domin) ? texmap->min : min, GPU_VEC3);
-		tmax = GPU_uniform_buffer((domax) ? texmap->max : max, GPU_VEC3);
-		tmat0 = GPU_uniform_buffer((float *)texmap->mat[0], GPU_VEC4);
-		tmat1 = GPU_uniform_buffer((float *)texmap->mat[1], GPU_VEC4);
-		tmat2 = GPU_uniform_buffer((float *)texmap->mat[2], GPU_VEC4);
-		tmat3 = GPU_uniform_buffer((float *)texmap->mat[3], GPU_VEC4);
+		tmin = GPU_uniform((domin) ? texmap->min : min);
+		tmax = GPU_uniform((domax) ? texmap->max : max);
+		tmat0 = GPU_uniform((float *)texmap->mat[0]);
+		tmat1 = GPU_uniform((float *)texmap->mat[1]);
+		tmat2 = GPU_uniform((float *)texmap->mat[2]);
+		tmat3 = GPU_uniform((float *)texmap->mat[3]);
 
 		GPU_link(mat, "mapping", in[0].link, tmat0, tmat1, tmat2, tmat3, tmin, tmax, &in[0].link);
 

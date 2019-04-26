@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,15 +15,10 @@
  *
  * The Original Code is Copyright (C) 2008 Blender Foundation.
  * All rights reserved.
- *
- *
- * Contributor(s): Blender Foundation
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/space_view3d/space_view3d.c
- *  \ingroup spview3d
+/** \file
+ * \ingroup spview3d
  */
 
 
@@ -48,7 +41,6 @@
 #include "BKE_curve.h"
 #include "BKE_icons.h"
 #include "BKE_lattice.h"
-#include "BKE_library.h"
 #include "BKE_main.h"
 #include "BKE_mball.h"
 #include "BKE_mesh.h"
@@ -96,13 +88,17 @@ ARegion *view3d_has_buttons_region(ScrArea *sa)
 	ARegion *ar, *arnew;
 
 	ar = BKE_area_find_region_type(sa, RGN_TYPE_UI);
-	if (ar) return ar;
+	if (ar) {
+		return ar;
+	}
 
 	/* add subdiv level; after header */
 	ar = BKE_area_find_region_type(sa, RGN_TYPE_HEADER);
 
 	/* is error! */
-	if (ar == NULL) return NULL;
+	if (ar == NULL) {
+		return NULL;
+	}
 
 	arnew = MEM_callocN(sizeof(ARegion), "buttons for view3d");
 
@@ -120,8 +116,9 @@ ARegion *view3d_has_tools_region(ScrArea *sa)
 	ARegion *ar, *artool = NULL, *arhead;
 
 	for (ar = sa->regionbase.first; ar; ar = ar->next) {
-		if (ar->regiontype == RGN_TYPE_TOOLS)
+		if (ar->regiontype == RGN_TYPE_TOOLS) {
 			artool = ar;
+		}
 	}
 
 	/* tool region hide/unhide also hides props */
@@ -131,12 +128,16 @@ ARegion *view3d_has_tools_region(ScrArea *sa)
 
 	if (artool == NULL) {
 		/* add subdiv level; after header */
-		for (arhead = sa->regionbase.first; arhead; arhead = arhead->next)
-			if (arhead->regiontype == RGN_TYPE_HEADER)
+		for (arhead = sa->regionbase.first; arhead; arhead = arhead->next) {
+			if (arhead->regiontype == RGN_TYPE_HEADER) {
 				break;
+			}
+		}
 
 		/* is error! */
-		if (arhead == NULL) return NULL;
+		if (arhead == NULL) {
+			return NULL;
+		}
 
 		artool = MEM_callocN(sizeof(ARegion), "tools for view3d");
 
@@ -316,9 +317,7 @@ static SpaceLink *view3d_new(const ScrArea *UNUSED(sa), const Scene *scene)
 
 	v3d = MEM_callocN(sizeof(View3D), "initview3d");
 	v3d->spacetype = SPACE_VIEW3D;
-	v3d->lay = v3d->layact = 1;
 	if (scene) {
-		v3d->lay = v3d->layact = scene->lay;
 		v3d->camera = scene->camera;
 	}
 	v3d->scenelock = true;
@@ -327,11 +326,21 @@ static SpaceLink *view3d_new(const ScrArea *UNUSED(sa), const Scene *scene)
 	v3d->gridsubdiv = 10;
 	BKE_screen_view3d_shading_init(&v3d->shading);
 
-	v3d->overlay.wireframe_threshold = 0.5f;
-	v3d->overlay.bone_select_alpha = 0.5f;
-	v3d->overlay.texture_paint_mode_opacity = 0.8;
-	v3d->overlay.weight_paint_mode_opacity = 0.8;
-	v3d->overlay.vertex_paint_mode_opacity = 0.8;
+	v3d->overlay.wireframe_threshold = 1.0f;
+	v3d->overlay.xray_alpha_bone = 0.5f;
+	v3d->overlay.texture_paint_mode_opacity = 1.0f;
+	v3d->overlay.weight_paint_mode_opacity = 1.0f;
+	v3d->overlay.vertex_paint_mode_opacity = 1.0f;
+	v3d->overlay.edit_flag = V3D_OVERLAY_EDIT_FACES |
+	                         V3D_OVERLAY_EDIT_SEAMS |
+	                         V3D_OVERLAY_EDIT_SHARP |
+	                         V3D_OVERLAY_EDIT_FREESTYLE_EDGE |
+	                         V3D_OVERLAY_EDIT_FREESTYLE_FACE |
+	                         V3D_OVERLAY_EDIT_EDGES |
+	                         V3D_OVERLAY_EDIT_CREASES |
+	                         V3D_OVERLAY_EDIT_BWEIGHTS |
+	                         V3D_OVERLAY_EDIT_CU_HANDLES |
+	                         V3D_OVERLAY_EDIT_CU_NORMALS;
 
 	v3d->gridflag = V3D_SHOW_X | V3D_SHOW_Y | V3D_SHOW_FLOOR;
 
@@ -339,13 +348,10 @@ static SpaceLink *view3d_new(const ScrArea *UNUSED(sa), const Scene *scene)
 	v3d->flag2 = V3D_SHOW_RECONSTRUCTION | V3D_SHOW_ANNOTATION;
 
 	v3d->lens = 50.0f;
-	v3d->near = 0.01f;
-	v3d->far = 1000.0f;
+	v3d->clip_start = 0.01f;
+	v3d->clip_end = 1000.0f;
 
-	v3d->overlay.gpencil_grid_scale = 1.0; // Scales
-	v3d->overlay.gpencil_grid_lines = GP_DEFAULT_GRID_LINES; // NUmber of Lines
 	v3d->overlay.gpencil_paper_opacity = 0.5f;
-	v3d->overlay.gpencil_grid_axis = V3D_GP_GRID_AXIS_Y;
 	v3d->overlay.gpencil_grid_opacity = 0.9f;
 
 	v3d->bundle_size = 0.2f;
@@ -366,7 +372,7 @@ static SpaceLink *view3d_new(const ScrArea *UNUSED(sa), const Scene *scene)
 
 	BLI_addtail(&v3d->regionbase, ar);
 	ar->regiontype = RGN_TYPE_HEADER;
-	ar->alignment = RGN_ALIGN_TOP;
+	ar->alignment = (U.uiflag & USER_HEADER_BOTTOM) ? RGN_ALIGN_BOTTOM : RGN_ALIGN_TOP;
 
 	/* tool shelf */
 	ar = MEM_callocN(sizeof(ARegion), "toolshelf for view3d");
@@ -405,14 +411,20 @@ static void view3d_free(SpaceLink *sl)
 {
 	View3D *vd = (View3D *) sl;
 
-	if (vd->localvd) MEM_freeN(vd->localvd);
+	if (vd->localvd) {
+		MEM_freeN(vd->localvd);
+	}
 
-	if (vd->properties_storage) MEM_freeN(vd->properties_storage);
+	if (vd->runtime.properties_storage) {
+		MEM_freeN(vd->runtime.properties_storage);
+	}
 
-	if (vd->fx_settings.ssao)
+	if (vd->fx_settings.ssao) {
 		MEM_freeN(vd->fx_settings.ssao);
-	if (vd->fx_settings.dof)
+	}
+	if (vd->fx_settings.dof) {
 		MEM_freeN(vd->fx_settings.dof);
+	}
 }
 
 
@@ -431,20 +443,22 @@ static SpaceLink *view3d_duplicate(SpaceLink *sl)
 
 	if (v3dn->localvd) {
 		v3dn->localvd = NULL;
-		v3dn->properties_storage = NULL;
-		v3dn->lay = v3do->localvd->lay & 0xFFFFFF;
+		v3dn->runtime.properties_storage = NULL;
 	}
 
-	if (v3dn->shading.type == OB_RENDER)
+	if (v3dn->shading.type == OB_RENDER) {
 		v3dn->shading.type = OB_SOLID;
+	}
 
 	/* copy or clear inside new stuff */
 
-	v3dn->properties_storage = NULL;
-	if (v3dn->fx_settings.dof)
+	v3dn->runtime.properties_storage = NULL;
+	if (v3dn->fx_settings.dof) {
 		v3dn->fx_settings.dof = MEM_dupallocN(v3do->fx_settings.dof);
-	if (v3dn->fx_settings.ssao)
+	}
+	if (v3dn->fx_settings.ssao) {
 		v3dn->fx_settings.ssao = MEM_dupallocN(v3do->fx_settings.ssao);
+	}
 
 	return (SpaceLink *)v3dn;
 }
@@ -455,84 +469,77 @@ static void view3d_main_region_init(wmWindowManager *wm, ARegion *ar)
 	ListBase *lb;
 	wmKeyMap *keymap;
 
-	if (ar->gizmo_map == NULL) {
-		ar->gizmo_map = WM_gizmomap_new_from_type(
-		        &(const struct wmGizmoMapType_Params) {SPACE_VIEW3D, RGN_TYPE_WINDOW});
-	}
-
-	WM_gizmomap_add_handlers(ar, ar->gizmo_map);
-
 	/* object ops. */
 
 	/* important to be before Pose keymap since they can both be enabled at once */
-	keymap = WM_keymap_find(wm->defaultconf, "Face Mask", 0, 0);
+	keymap = WM_keymap_ensure(wm->defaultconf, "Face Mask", 0, 0);
 	WM_event_add_keymap_handler(&ar->handlers, keymap);
 
 
-	keymap = WM_keymap_find(wm->defaultconf, "Weight Paint Vertex Selection", 0, 0);
+	keymap = WM_keymap_ensure(wm->defaultconf, "Weight Paint Vertex Selection", 0, 0);
 	WM_event_add_keymap_handler(&ar->handlers, keymap);
 
 	/* pose is not modal, operator poll checks for this */
-	keymap = WM_keymap_find(wm->defaultconf, "Pose", 0, 0);
+	keymap = WM_keymap_ensure(wm->defaultconf, "Pose", 0, 0);
 	WM_event_add_keymap_handler(&ar->handlers, keymap);
 
-	keymap = WM_keymap_find(wm->defaultconf, "Object Mode", 0, 0);
+	keymap = WM_keymap_ensure(wm->defaultconf, "Object Mode", 0, 0);
 	WM_event_add_keymap_handler(&ar->handlers, keymap);
 
-	keymap = WM_keymap_find(wm->defaultconf, "Paint Curve", 0, 0);
+	keymap = WM_keymap_ensure(wm->defaultconf, "Paint Curve", 0, 0);
 	WM_event_add_keymap_handler(&ar->handlers, keymap);
 
-	keymap = WM_keymap_find(wm->defaultconf, "Curve", 0, 0);
+	keymap = WM_keymap_ensure(wm->defaultconf, "Curve", 0, 0);
 	WM_event_add_keymap_handler(&ar->handlers, keymap);
 
-	keymap = WM_keymap_find(wm->defaultconf, "Image Paint", 0, 0);
+	keymap = WM_keymap_ensure(wm->defaultconf, "Image Paint", 0, 0);
 	WM_event_add_keymap_handler(&ar->handlers, keymap);
 
-	keymap = WM_keymap_find(wm->defaultconf, "Vertex Paint", 0, 0);
+	keymap = WM_keymap_ensure(wm->defaultconf, "Vertex Paint", 0, 0);
 	WM_event_add_keymap_handler(&ar->handlers, keymap);
 
-	keymap = WM_keymap_find(wm->defaultconf, "Weight Paint", 0, 0);
+	keymap = WM_keymap_ensure(wm->defaultconf, "Weight Paint", 0, 0);
 	WM_event_add_keymap_handler(&ar->handlers, keymap);
 
-	keymap = WM_keymap_find(wm->defaultconf, "Sculpt", 0, 0);
+	keymap = WM_keymap_ensure(wm->defaultconf, "Sculpt", 0, 0);
 	WM_event_add_keymap_handler(&ar->handlers, keymap);
 
-	keymap = WM_keymap_find(wm->defaultconf, "Mesh", 0, 0);
+	keymap = WM_keymap_ensure(wm->defaultconf, "Mesh", 0, 0);
 	WM_event_add_keymap_handler(&ar->handlers, keymap);
 
-	keymap = WM_keymap_find(wm->defaultconf, "Curve", 0, 0);
+	keymap = WM_keymap_ensure(wm->defaultconf, "Curve", 0, 0);
 	WM_event_add_keymap_handler(&ar->handlers, keymap);
 
-	keymap = WM_keymap_find(wm->defaultconf, "Armature", 0, 0);
+	keymap = WM_keymap_ensure(wm->defaultconf, "Armature", 0, 0);
 	WM_event_add_keymap_handler(&ar->handlers, keymap);
 
-	keymap = WM_keymap_find(wm->defaultconf, "Pose", 0, 0);
+	keymap = WM_keymap_ensure(wm->defaultconf, "Pose", 0, 0);
 	WM_event_add_keymap_handler(&ar->handlers, keymap);
 
-	keymap = WM_keymap_find(wm->defaultconf, "Metaball", 0, 0);
+	keymap = WM_keymap_ensure(wm->defaultconf, "Metaball", 0, 0);
 	WM_event_add_keymap_handler(&ar->handlers, keymap);
 
-	keymap = WM_keymap_find(wm->defaultconf, "Lattice", 0, 0);
+	keymap = WM_keymap_ensure(wm->defaultconf, "Lattice", 0, 0);
 	WM_event_add_keymap_handler(&ar->handlers, keymap);
 
-	keymap = WM_keymap_find(wm->defaultconf, "Particle", 0, 0);
+	keymap = WM_keymap_ensure(wm->defaultconf, "Particle", 0, 0);
 	WM_event_add_keymap_handler(&ar->handlers, keymap);
 
 	/* editfont keymap swallows all... */
-	keymap = WM_keymap_find(wm->defaultconf, "Font", 0, 0);
+	keymap = WM_keymap_ensure(wm->defaultconf, "Font", 0, 0);
 	WM_event_add_keymap_handler(&ar->handlers, keymap);
 
-	keymap = WM_keymap_find(wm->defaultconf, "Object Non-modal", 0, 0);
+	keymap = WM_keymap_ensure(wm->defaultconf, "Object Non-modal", 0, 0);
 	WM_event_add_keymap_handler(&ar->handlers, keymap);
 
-	keymap = WM_keymap_find(wm->defaultconf, "Frames", 0, 0);
+	keymap = WM_keymap_ensure(wm->defaultconf, "Frames", 0, 0);
 	WM_event_add_keymap_handler(&ar->handlers, keymap);
 
 	/* own keymap, last so modes can override it */
-	keymap = WM_keymap_find(wm->defaultconf, "3D View Generic", SPACE_VIEW3D, 0);
+	keymap = WM_keymap_ensure(wm->defaultconf, "3D View Generic", SPACE_VIEW3D, 0);
 	WM_event_add_keymap_handler(&ar->handlers, keymap);
 
-	keymap = WM_keymap_find(wm->defaultconf, "3D View", SPACE_VIEW3D, 0);
+	keymap = WM_keymap_ensure(wm->defaultconf, "3D View", SPACE_VIEW3D, 0);
 	WM_event_add_keymap_handler(&ar->handlers, keymap);
 
 	/* add drop boxes */
@@ -544,58 +551,33 @@ static void view3d_main_region_init(wmWindowManager *wm, ARegion *ar)
 
 static void view3d_main_region_exit(wmWindowManager *wm, ARegion *ar)
 {
-	RegionView3D *rv3d = ar->regiondata;
-
 	ED_view3d_stop_render_preview(wm, ar);
-
-	if (rv3d->gpuoffscreen) {
-		GPU_offscreen_free(rv3d->gpuoffscreen);
-		rv3d->gpuoffscreen = NULL;
-	}
 }
 
-static bool view3d_ob_drop_poll(bContext *UNUSED(C), wmDrag *drag, const wmEvent *UNUSED(event))
+static bool view3d_ob_drop_poll(bContext *UNUSED(C), wmDrag *drag, const wmEvent *UNUSED(event), const char **UNUSED(tooltip))
 {
-	if (drag->type == WM_DRAG_ID) {
-		ID *id = drag->poin;
-		if (GS(id->name) == ID_OB)
-			return 1;
-	}
-	return 0;
+	return WM_drag_ID(drag, ID_OB) != NULL;
 }
 
-static bool view3d_collection_drop_poll(bContext *UNUSED(C), wmDrag *drag, const wmEvent *UNUSED(event))
+static bool view3d_collection_drop_poll(bContext *UNUSED(C), wmDrag *drag, const wmEvent *UNUSED(event), const char **UNUSED(tooltip))
 {
-	if (drag->type == WM_DRAG_ID) {
-		ID *id = drag->poin;
-		if (GS(id->name) == ID_GR)
-			return 1;
-	}
-	return 0;
+	return WM_drag_ID(drag, ID_GR) != NULL;
 }
 
-static bool view3d_mat_drop_poll(bContext *UNUSED(C), wmDrag *drag, const wmEvent *UNUSED(event))
+static bool view3d_mat_drop_poll(bContext *UNUSED(C), wmDrag *drag, const wmEvent *UNUSED(event), const char **UNUSED(tooltip))
 {
-	if (drag->type == WM_DRAG_ID) {
-		ID *id = drag->poin;
-		if (GS(id->name) == ID_MA)
-			return 1;
-	}
-	return 0;
+	return WM_drag_ID(drag, ID_MA) != NULL;
 }
 
-static bool view3d_ima_drop_poll(bContext *UNUSED(C), wmDrag *drag, const wmEvent *UNUSED(event))
+static bool view3d_ima_drop_poll(bContext *UNUSED(C), wmDrag *drag, const wmEvent *UNUSED(event), const char **UNUSED(tooltip))
 {
-	if (drag->type == WM_DRAG_ID) {
-		ID *id = drag->poin;
-		if (GS(id->name) == ID_IM)
-			return 1;
+	if (drag->type == WM_DRAG_PATH) {
+		/* rule might not work? */
+		return (ELEM(drag->icon, 0, ICON_FILE_IMAGE, ICON_FILE_MOVIE));
 	}
-	else if (drag->type == WM_DRAG_PATH) {
-		if (ELEM(drag->icon, 0, ICON_FILE_IMAGE, ICON_FILE_MOVIE))   /* rule might not work? */
-			return 1;
+	else {
+		return WM_drag_ID(drag, ID_IM) != NULL;
 	}
-	return 0;
 }
 
 static bool view3d_ima_bg_is_camera_view(bContext *C)
@@ -610,55 +592,48 @@ static bool view3d_ima_bg_is_camera_view(bContext *C)
 	return false;
 }
 
-static bool view3d_ima_bg_drop_poll(bContext *C, wmDrag *drag, const wmEvent *event)
+static bool view3d_ima_bg_drop_poll(bContext *C, wmDrag *drag, const wmEvent *event, const char **tooltip)
 {
-	if (view3d_ima_bg_is_camera_view(C)) {
+	if (!view3d_ima_drop_poll(C, drag, event, tooltip)) {
+		return false;
+	}
+
+	if (ED_view3d_is_object_under_cursor(C, event->mval)) {
+		return false;
+	}
+
+	return view3d_ima_bg_is_camera_view(C);
+}
+
+static bool view3d_ima_empty_drop_poll(bContext *C, wmDrag *drag, const wmEvent *event, const char **tooltip)
+{
+	if (!view3d_ima_drop_poll(C, drag, event, tooltip)) {
+		return false;
+	}
+
+	Object *ob = ED_view3d_give_object_under_cursor(C, event->mval);
+
+	if (ob == NULL) {
 		return true;
 	}
 
-	if (!ED_view3d_give_base_under_cursor(C, event->mval)) {
-		return view3d_ima_drop_poll(C, drag, event);
-	}
-	return 0;
-}
-
-static bool view3d_ima_empty_drop_poll(bContext *C, wmDrag *drag, const wmEvent *event)
-{
-	if (!view3d_ima_bg_is_camera_view(C)) {
+	if (ob->type == OB_EMPTY && ob->empty_drawtype == OB_EMPTY_IMAGE) {
 		return true;
 	}
 
-	Base *base = ED_view3d_give_base_under_cursor(C, event->mval);
-
-	/* either holding and ctrl and no object, or dropping to empty */
-	if ((base == NULL) ||
-	    ((base != NULL) && base->object->type == OB_EMPTY))
-	{
-		return view3d_ima_drop_poll(C, drag, event);
-	}
-
-	return 0;
-}
-
-static bool view3d_ima_mesh_drop_poll(bContext *C, wmDrag *drag, const wmEvent *event)
-{
-	Base *base = ED_view3d_give_base_under_cursor(C, event->mval);
-
-	if (base && base->object->type == OB_MESH)
-		return view3d_ima_drop_poll(C, drag, event);
-	return 0;
+	return false;
 }
 
 static void view3d_ob_drop_copy(wmDrag *drag, wmDropBox *drop)
 {
-	ID *id = drag->poin;
+	ID *id = WM_drag_ID(drag, ID_OB);
 
 	RNA_string_set(drop->ptr, "name", id->name + 2);
 }
 
 static void view3d_collection_drop_copy(wmDrag *drag, wmDropBox *drop)
 {
-	ID *id = drag->poin;
+	ID *id = WM_drag_ID(drag, ID_GR);
 
 	drop->opcontext = WM_OP_EXEC_DEFAULT;
 	RNA_string_set(drop->ptr, "name", id->name + 2);
@@ -666,14 +641,14 @@ static void view3d_collection_drop_copy(wmDrag *drag, wmDropBox *drop)
 
 static void view3d_id_drop_copy(wmDrag *drag, wmDropBox *drop)
 {
-	ID *id = drag->poin;
+	ID *id = WM_drag_ID(drag, 0);
 
 	RNA_string_set(drop->ptr, "name", id->name + 2);
 }
 
 static void view3d_id_path_drop_copy(wmDrag *drag, wmDropBox *drop)
 {
-	ID *id = drag->poin;
+	ID *id = WM_drag_ID(drag, 0);
 
 	if (id) {
 		RNA_string_set(drop->ptr, "name", id->name + 2);
@@ -712,9 +687,8 @@ static void view3d_dropboxes(void)
 
 	WM_dropbox_add(lb, "OBJECT_OT_add_named", view3d_ob_drop_poll, view3d_ob_drop_copy);
 	WM_dropbox_add(lb, "OBJECT_OT_drop_named_material", view3d_mat_drop_poll, view3d_id_drop_copy);
-	WM_dropbox_add(lb, "MESH_OT_drop_named_image", view3d_ima_mesh_drop_poll, view3d_id_path_drop_copy);
-	WM_dropbox_add(lb, "OBJECT_OT_drop_named_image", view3d_ima_empty_drop_poll, view3d_id_path_drop_copy);
 	WM_dropbox_add(lb, "VIEW3D_OT_background_image_add", view3d_ima_bg_drop_poll, view3d_id_path_drop_copy);
+	WM_dropbox_add(lb, "OBJECT_OT_drop_named_image", view3d_ima_empty_drop_poll, view3d_id_path_drop_copy);
 	WM_dropbox_add(lb, "OBJECT_OT_collection_instance_add", view3d_collection_drop_poll, view3d_collection_drop_copy);
 }
 
@@ -723,17 +697,22 @@ static void view3d_widgets(void)
 	wmGizmoMapType *gzmap_type = WM_gizmomaptype_ensure(
 	        &(const struct wmGizmoMapType_Params){SPACE_VIEW3D, RGN_TYPE_WINDOW});
 
-	WM_gizmogrouptype_append_and_link(gzmap_type, VIEW3D_GGT_lamp_spot);
-	WM_gizmogrouptype_append_and_link(gzmap_type, VIEW3D_GGT_lamp_area);
-	WM_gizmogrouptype_append_and_link(gzmap_type, VIEW3D_GGT_lamp_target);
+	WM_gizmogrouptype_append_and_link(gzmap_type, VIEW3D_GGT_xform_gizmo_context);
+	WM_gizmogrouptype_append_and_link(gzmap_type, VIEW3D_GGT_light_spot);
+	WM_gizmogrouptype_append_and_link(gzmap_type, VIEW3D_GGT_light_area);
+	WM_gizmogrouptype_append_and_link(gzmap_type, VIEW3D_GGT_light_target);
 	WM_gizmogrouptype_append_and_link(gzmap_type, VIEW3D_GGT_force_field);
 	WM_gizmogrouptype_append_and_link(gzmap_type, VIEW3D_GGT_camera);
 	WM_gizmogrouptype_append_and_link(gzmap_type, VIEW3D_GGT_camera_view);
 	WM_gizmogrouptype_append_and_link(gzmap_type, VIEW3D_GGT_empty_image);
 	WM_gizmogrouptype_append_and_link(gzmap_type, VIEW3D_GGT_armature_spline);
 
-	WM_gizmogrouptype_append(TRANSFORM_GGT_gizmo);
+	WM_gizmogrouptype_append(VIEW3D_GGT_xform_gizmo);
 	WM_gizmogrouptype_append(VIEW3D_GGT_xform_cage);
+	WM_gizmogrouptype_append(VIEW3D_GGT_xform_shear);
+	WM_gizmogrouptype_append(VIEW3D_GGT_xform_extrude);
+	WM_gizmogrouptype_append(VIEW3D_GGT_mesh_preselect_elem);
+	WM_gizmogrouptype_append(VIEW3D_GGT_mesh_preselect_edgering);
 
 	WM_gizmogrouptype_append(VIEW3D_GGT_ruler);
 	WM_gizmotype_append(VIEW3D_GT_ruler_item);
@@ -749,21 +728,25 @@ static void view3d_main_region_free(ARegion *ar)
 	RegionView3D *rv3d = ar->regiondata;
 
 	if (rv3d) {
-		if (rv3d->localvd) MEM_freeN(rv3d->localvd);
-		if (rv3d->clipbb) MEM_freeN(rv3d->clipbb);
+		if (rv3d->localvd) {
+			MEM_freeN(rv3d->localvd);
+		}
+		if (rv3d->clipbb) {
+			MEM_freeN(rv3d->clipbb);
+		}
 
-		if (rv3d->render_engine)
+		if (rv3d->render_engine) {
 			RE_engine_free(rv3d->render_engine);
+		}
 
 		if (rv3d->depths) {
-			if (rv3d->depths->depths) MEM_freeN(rv3d->depths->depths);
+			if (rv3d->depths->depths) {
+				MEM_freeN(rv3d->depths->depths);
+			}
 			MEM_freeN(rv3d->depths);
 		}
 		if (rv3d->sms) {
 			MEM_freeN(rv3d->sms);
-		}
-		if (rv3d->gpuoffscreen) {
-			GPU_offscreen_free(rv3d->gpuoffscreen);
 		}
 
 		MEM_freeN(rv3d);
@@ -778,13 +761,14 @@ static void *view3d_main_region_duplicate(void *poin)
 		RegionView3D *rv3d = poin, *new;
 
 		new = MEM_dupallocN(rv3d);
-		if (rv3d->localvd)
+		if (rv3d->localvd) {
 			new->localvd = MEM_dupallocN(rv3d->localvd);
-		if (rv3d->clipbb)
+		}
+		if (rv3d->clipbb) {
 			new->clipbb = MEM_dupallocN(rv3d->clipbb);
+		}
 
 		new->depths = NULL;
-		new->gpuoffscreen = NULL;
 		new->render_engine = NULL;
 		new->sms = NULL;
 		new->smooth_timer = NULL;
@@ -792,25 +776,6 @@ static void *view3d_main_region_duplicate(void *poin)
 		return new;
 	}
 	return NULL;
-}
-
-static void view3d_recalc_used_layers(ARegion *ar, wmNotifier *wmn, const Scene *UNUSED(scene))
-{
-	wmWindow *win = wmn->wm->winactive;
-	unsigned int lay_used = 0;
-
-	if (!win) return;
-
-	const bScreen *screen = WM_window_get_active_screen(win);
-	for (ScrArea *sa = screen->areabase.first; sa; sa = sa->next) {
-		if (sa->spacetype == SPACE_VIEW3D) {
-			if (BLI_findindex(&sa->regionbase, ar) != -1) {
-				View3D *v3d = sa->spacedata.first;
-				v3d->lay_used = lay_used;
-				break;
-			}
-		}
-	}
 }
 
 static void view3d_main_region_listener(
@@ -836,12 +801,14 @@ static void view3d_main_region_listener(
 					break;
 				case ND_NLA:
 				case ND_KEYFRAME:
-					if (ELEM(wmn->action, NA_EDITED, NA_ADDED, NA_REMOVED))
+					if (ELEM(wmn->action, NA_EDITED, NA_ADDED, NA_REMOVED)) {
 						ED_region_tag_redraw(ar);
+					}
 					break;
 				case ND_ANIMCHAN:
-					if (wmn->action == NA_SELECTED)
+					if (ELEM(wmn->action, NA_EDITED, NA_ADDED, NA_REMOVED, NA_SELECTED)) {
 						ED_region_tag_redraw(ar);
+					}
 					break;
 			}
 			break;
@@ -849,8 +816,6 @@ static void view3d_main_region_listener(
 			switch (wmn->data) {
 				case ND_SCENEBROWSE:
 				case ND_LAYER_CONTENT:
-					if (wmn->reference)
-						view3d_recalc_used_layers(ar, wmn, wmn->reference);
 					ED_region_tag_redraw(ar);
 					WM_gizmomap_tag_refresh(gzmap);
 					break;
@@ -886,8 +851,9 @@ static void view3d_main_region_listener(
 					break;
 				}
 			}
-			if (wmn->action == NA_EDITED)
+			if (wmn->action == NA_EDITED) {
 				ED_region_tag_redraw(ar);
+			}
 			break;
 		case NC_OBJECT:
 			switch (wmn->data) {
@@ -1014,8 +980,9 @@ static void view3d_main_region_listener(
 			ED_region_tag_redraw(ar);
 			break;
 		case NC_MOVIECLIP:
-			if (wmn->data == ND_DISPLAY || wmn->action == NA_EDITED)
+			if (wmn->data == ND_DISPLAY || wmn->action == NA_EDITED) {
 				ED_region_tag_redraw(ar);
+			}
 			break;
 		case NC_SPACE:
 			if (wmn->data == ND_SPACE_VIEW3D) {
@@ -1027,8 +994,9 @@ static void view3d_main_region_listener(
 			}
 			break;
 		case NC_ID:
-			if (wmn->action == NA_RENAME)
+			if (wmn->action == NA_RENAME) {
 				ED_region_tag_redraw(ar);
+			}
 			break;
 		case NC_SCREEN:
 			switch (wmn->data) {
@@ -1141,21 +1109,10 @@ static void view3d_main_region_message_subscribe(
 		WM_msg_subscribe_rna_anon_prop(
 		        mbus, Object, mode,
 		        &msg_sub_value_region_tag_refresh);
+		WM_msg_subscribe_rna_anon_prop(
+		        mbus, LayerObjects, active,
+		        &msg_sub_value_region_tag_refresh);
 	}
-}
-
-static void view3d_tools_region_message_subscribe(
-        const struct bContext *UNUSED(C),
-        struct WorkSpace *UNUSED(workspace), struct Scene *UNUSED(scene),
-        struct bScreen *UNUSED(screen), struct ScrArea *UNUSED(sa), struct ARegion *ar,
-        struct wmMsgBus *mbus)
-{
-	wmMsgSubscribeValue msg_sub_value_region_tag_redraw = {
-		.owner = ar,
-		.user_data = ar,
-		.notify = ED_region_do_msg_notify_tag_redraw,
-	};
-	WM_msg_subscribe_rna_anon_prop(mbus, WorkSpace, tools, &msg_sub_value_region_tag_redraw);
 }
 
 /* concept is to retrieve cursor type context-less */
@@ -1178,7 +1135,7 @@ static void view3d_main_region_cursor(wmWindow *win, ScrArea *sa, ARegion *ar)
 /* add handlers, stuff you only do once or on area/region changes */
 static void view3d_header_region_init(wmWindowManager *wm, ARegion *ar)
 {
-	wmKeyMap *keymap = WM_keymap_find(wm->defaultconf, "3D View Generic", SPACE_VIEW3D, 0);
+	wmKeyMap *keymap = WM_keymap_ensure(wm->defaultconf, "3D View Generic", SPACE_VIEW3D, 0);
 
 	WM_event_add_keymap_handler(&ar->handlers, keymap);
 
@@ -1212,12 +1169,14 @@ static void view3d_header_region_listener(
 			}
 			break;
 		case NC_SPACE:
-			if (wmn->data == ND_SPACE_VIEW3D)
+			if (wmn->data == ND_SPACE_VIEW3D) {
 				ED_region_tag_redraw(ar);
+			}
 			break;
 		case NC_GPENCIL:
-			if (wmn->data & ND_GPENCIL_EDITMODE)
+			if (wmn->data & ND_GPENCIL_EDITMODE) {
 				ED_region_tag_redraw(ar);
+			}
 			break;
 	}
 }
@@ -1259,13 +1218,13 @@ static void view3d_buttons_region_init(wmWindowManager *wm, ARegion *ar)
 
 	ED_region_panels_init(wm, ar);
 
-	keymap = WM_keymap_find(wm->defaultconf, "3D View Generic", SPACE_VIEW3D, 0);
+	keymap = WM_keymap_ensure(wm->defaultconf, "3D View Generic", SPACE_VIEW3D, 0);
 	WM_event_add_keymap_handler(&ar->handlers, keymap);
 }
 
 static void view3d_buttons_region_draw(const bContext *C, ARegion *ar)
 {
-	ED_region_panels(C, ar);
+	ED_region_panels_ex(C, ar, (const char * []){CTX_data_mode_string(C), NULL}, -1, true);
 }
 
 static void view3d_buttons_region_listener(
@@ -1282,8 +1241,9 @@ static void view3d_buttons_region_listener(
 					break;
 				case ND_NLA:
 				case ND_KEYFRAME:
-					if (ELEM(wmn->action, NA_EDITED, NA_ADDED, NA_REMOVED))
+					if (ELEM(wmn->action, NA_EDITED, NA_ADDED, NA_REMOVED)) {
 						ED_region_tag_redraw(ar);
+					}
 					break;
 			}
 			break;
@@ -1327,8 +1287,9 @@ static void view3d_buttons_region_listener(
 					ED_region_tag_redraw(ar);
 					break;
 			}
-			if (wmn->action == NA_EDITED)
+			if (wmn->action == NA_EDITED) {
 				ED_region_tag_redraw(ar);
+			}
 			break;
 		case NC_TEXTURE:
 		case NC_MATERIAL:
@@ -1337,48 +1298,32 @@ static void view3d_buttons_region_listener(
 			break;
 		case NC_BRUSH:
 			/* NA_SELECTED is used on brush changes */
-			if (ELEM(wmn->action, NA_EDITED, NA_SELECTED))
+			if (ELEM(wmn->action, NA_EDITED, NA_SELECTED)) {
 				ED_region_tag_redraw(ar);
+			}
 			break;
 		case NC_SPACE:
-			if (wmn->data == ND_SPACE_VIEW3D)
+			if (wmn->data == ND_SPACE_VIEW3D) {
 				ED_region_tag_redraw(ar);
+			}
 			break;
 		case NC_ID:
-			if (wmn->action == NA_RENAME)
+			if (wmn->action == NA_RENAME) {
 				ED_region_tag_redraw(ar);
+			}
 			break;
 		case NC_GPENCIL:
-			if ((wmn->data & (ND_DATA | ND_GPENCIL_EDITMODE)) || (wmn->action == NA_EDITED))
+			if ((wmn->data & (ND_DATA | ND_GPENCIL_EDITMODE)) || (wmn->action == NA_EDITED)) {
 				ED_region_tag_redraw(ar);
+			}
 			break;
 		case NC_IMAGE:
 			/* Update for the image layers in texture paint. */
-			if (wmn->action == NA_EDITED)
+			if (wmn->action == NA_EDITED) {
 				ED_region_tag_redraw(ar);
+			}
 			break;
 	}
-}
-
-static int view3d_tools_region_snap_size(const ARegion *ar, int size, int axis)
-{
-	if (axis == 0) {
-		/* Note, this depends on the icon size: see #ICON_DEFAULT_HEIGHT_TOOLBAR. */
-		const float snap_units[] = {2 + 0.8f, 4 + 0.8f};
-		const float aspect = BLI_rctf_size_x(&ar->v2d.cur) / (BLI_rcti_size_x(&ar->v2d.mask) + 1);
-		int best_diff = INT_MAX;
-		int best_size = size;
-		for (uint i = 0; i < ARRAY_SIZE(snap_units); i += 1) {
-			const int test_size = (snap_units[i] * U.widget_unit) / (UI_DPI_FAC * aspect);
-			const int test_diff = ABS(test_size - size);
-			if (test_diff < best_diff) {
-				best_size = test_size;
-				best_diff = test_diff;
-			}
-		}
-		return best_size;
-	}
-	return size;
 }
 
 /* add handlers, stuff you only do once or on area/region changes */
@@ -1388,7 +1333,7 @@ static void view3d_tools_region_init(wmWindowManager *wm, ARegion *ar)
 
 	ED_region_panels_init(wm, ar);
 
-	keymap = WM_keymap_find(wm->defaultconf, "3D View Generic", SPACE_VIEW3D, 0);
+	keymap = WM_keymap_ensure(wm->defaultconf, "3D View Generic", SPACE_VIEW3D, 0);
 	WM_event_add_keymap_handler(&ar->handlers, keymap);
 }
 
@@ -1408,8 +1353,9 @@ static void space_view3d_listener(
 		case NC_SCENE:
 			switch (wmn->data) {
 				case ND_WORLD:
-					if (v3d->flag2 & V3D_RENDER_OVERRIDE)
+					if (v3d->flag2 & V3D_HIDE_OVERLAYS) {
 						ED_area_tag_redraw_regiontype(sa, RGN_TYPE_WINDOW);
+					}
 					break;
 			}
 			break;
@@ -1417,16 +1363,18 @@ static void space_view3d_listener(
 			switch (wmn->data) {
 				case ND_WORLD_DRAW:
 				case ND_WORLD:
-					if (v3d->shading.background_type & V3D_SHADING_BACKGROUND_WORLD)
+					if (v3d->shading.background_type == V3D_SHADING_BACKGROUND_WORLD) {
 						ED_area_tag_redraw_regiontype(sa, RGN_TYPE_WINDOW);
+					}
 					break;
 			}
 			break;
 		case NC_MATERIAL:
 			switch (wmn->data) {
 				case ND_NODES:
-					if (v3d->shading.type == OB_TEXTURE)
+					if (v3d->shading.type == OB_TEXTURE) {
 						ED_area_tag_redraw_regiontype(sa, RGN_TYPE_WINDOW);
+					}
 					break;
 			}
 			break;
@@ -1445,12 +1393,13 @@ static void space_view3d_refresh(const bContext *C, ScrArea *UNUSED(sa))
 }
 
 const char *view3d_context_dir[] = {
-	"active_base", "active_object", NULL
+	"active_base", "active_object", NULL,
 };
 
 static int view3d_context(const bContext *C, const char *member, bContextDataResult *result)
 {
-	/* fallback to the scene layer, allows duplicate and other object operators to run outside the 3d view */
+	/* fallback to the scene layer,
+	 * allows duplicate and other object operators to run outside the 3d view */
 
 	if (CTX_data_dir(member)) {
 		CTX_data_dir_set(result, view3d_context_dir);
@@ -1518,7 +1467,8 @@ static void view3d_id_remap(ScrArea *sa, SpaceLink *slink, ID *old_id, ID *new_i
 		if (is_local == false) {
 			if ((ID *)v3d->ob_centre == old_id) {
 				v3d->ob_centre = (Object *)new_id;
-				/* Otherwise, bonename may remain valid... We could be smart and check this, too? */
+				/* Otherwise, bonename may remain valid...
+				 * We could be smart and check this, too? */
 				if (new_id == NULL) {
 					v3d->ob_centre_bone[0] = '\0';
 				}
@@ -1556,7 +1506,7 @@ void ED_spacetype_view3d(void)
 	/* regions: main window */
 	art = MEM_callocN(sizeof(ARegionType), "spacetype view3d main region");
 	art->regionid = RGN_TYPE_WINDOW;
-	art->keymapflag = ED_KEYMAP_GPENCIL;
+	art->keymapflag = ED_KEYMAP_GIZMO | ED_KEYMAP_TOOL | ED_KEYMAP_GPENCIL;
 	art->draw = view3d_main_region_draw;
 	art->init = view3d_main_region_init;
 	art->exit = view3d_main_region_exit;
@@ -1583,12 +1533,12 @@ void ED_spacetype_view3d(void)
 	/* regions: tool(bar) */
 	art = MEM_callocN(sizeof(ARegionType), "spacetype view3d tools region");
 	art->regionid = RGN_TYPE_TOOLS;
-	art->prefsizex = 160; /* XXX */
+	art->prefsizex = 58; /* XXX */
 	art->prefsizey = 50; /* XXX */
 	art->keymapflag = ED_KEYMAP_UI | ED_KEYMAP_FRAMES;
 	art->listener = view3d_buttons_region_listener;
-	art->message_subscribe = view3d_tools_region_message_subscribe;
-	art->snap_size = view3d_tools_region_snap_size;
+	art->message_subscribe = ED_region_generic_tools_region_message_subscribe;
+	art->snap_size = ED_region_generic_tools_region_snap_size;
 	art->init = view3d_tools_region_init;
 	art->draw = view3d_tools_region_draw;
 	BLI_addhead(&st->regiontypes, art);

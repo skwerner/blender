@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,10 @@
  *
  * The Original Code is Copyright (C) 2004 Blender Foundation.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/mesh/editmesh_path.c
- *  \ingroup edmesh
+/** \file
+ * \ingroup edmesh
  */
 
 #include "MEM_guardedalloc.h"
@@ -48,6 +40,7 @@
 #include "BKE_editmesh.h"
 #include "BKE_report.h"
 
+#include "ED_object.h"
 #include "ED_mesh.h"
 #include "ED_screen.h"
 #include "ED_uvedit.h"
@@ -71,7 +64,8 @@
  * \{ */
 
 struct PathSelectParams {
-	bool track_active;  /* ensure the active element is the last selected item (handy for picking) */
+	/** ensure the active element is the last selected item (handy for picking) */
+	bool track_active;
 	bool use_topology_distance;
 	bool use_face_step;
 	bool use_fill;
@@ -180,7 +174,8 @@ static void mouse_mesh_shortest_path_vert(
 			}
 		} while ((node = node->next));
 
-		int depth = 1;
+		/* We need to start as if just *after* a 'skip' block... */
+		int depth = op_params->interval_params.skip;
 		node = path;
 		do {
 			if ((is_path_ordered == false) ||
@@ -292,7 +287,7 @@ static void edgetag_set_cb(BMEdge *e, bool val, void *user_data_v)
 
 static void edgetag_ensure_cd_flag(Mesh *me, const char edge_mode)
 {
-	BMesh *bm = me->edit_btmesh->bm;
+	BMesh *bm = me->edit_mesh->bm;
 
 	switch (edge_mode) {
 		case EDGE_MODE_TAG_CREASE:
@@ -317,7 +312,7 @@ static void edgetag_ensure_cd_flag(Mesh *me, const char edge_mode)
 
 /* since you want to create paths with multiple selects, it doesn't have extend option */
 static void mouse_mesh_shortest_path_edge(
-        Scene *scene, Object *obedit, const struct PathSelectParams *op_params,
+        Scene *UNUSED(scene), Object *obedit, const struct PathSelectParams *op_params,
         BMEdge *e_act, BMEdge *e_dst)
 {
 	BMEditMesh *em = BKE_editmesh_from_object(obedit);
@@ -325,7 +320,6 @@ static void mouse_mesh_shortest_path_edge(
 
 	struct UserData user_data = {bm, obedit->data, op_params};
 	LinkNode *path = NULL;
-	Mesh *me = obedit->data;
 	bool is_path_ordered = false;
 
 	edgetag_ensure_cd_flag(obedit->data, op_params->edge_mode);
@@ -369,7 +363,8 @@ static void mouse_mesh_shortest_path_edge(
 			}
 		} while ((node = node->next));
 
-		int depth = 1;
+		/* We need to start as if just *after* a 'skip' block... */
+		int depth = op_params->interval_params.skip;
 		node = path;
 		do {
 			if ((is_path_ordered == false) ||
@@ -410,29 +405,6 @@ static void mouse_mesh_shortest_path_edge(
 			else
 				BM_select_history_store(bm, e_dst_last);
 		}
-	}
-
-	/* force drawmode for mesh */
-	switch (op_params->edge_mode) {
-
-		case EDGE_MODE_TAG_SEAM:
-			me->drawflag |= ME_DRAWSEAMS;
-			ED_uvedit_live_unwrap(scene, obedit);
-			break;
-		case EDGE_MODE_TAG_SHARP:
-			me->drawflag |= ME_DRAWSHARP;
-			break;
-		case EDGE_MODE_TAG_CREASE:
-			me->drawflag |= ME_DRAWCREASES;
-			break;
-		case EDGE_MODE_TAG_BEVEL:
-			me->drawflag |= ME_DRAWBWEIGHTS;
-			break;
-#ifdef WITH_FREESTYLE
-		case EDGE_MODE_TAG_FREESTYLE:
-			me->drawflag |= ME_DRAW_FREESTYLE_EDGE;
-			break;
-#endif
 	}
 
 	EDBM_update_generic(em, false, false);
@@ -513,7 +485,8 @@ static void mouse_mesh_shortest_path_face(
 			}
 		} while ((node = node->next));
 
-		int depth = 1;
+		/* We need to start as if just *after* a 'skip' block... */
+		int depth = op_params->interval_params.skip;
 		node = path;
 		do {
 			if ((is_path_ordered == false) ||
@@ -559,24 +532,30 @@ static bool edbm_shortest_path_pick_ex(
         Scene *scene, Object *obedit, const struct PathSelectParams *op_params,
         BMElem *ele_src, BMElem *ele_dst)
 {
+	bool ok = false;
 
-	if (ELEM(NULL, ele_src, ele_dst) && (ele_src->head.htype != ele_dst->head.htype)) {
+	if (ELEM(NULL, ele_src, ele_dst) || (ele_src->head.htype != ele_dst->head.htype)) {
 		/* pass */
 	}
 	else if (ele_src->head.htype == BM_VERT) {
 		mouse_mesh_shortest_path_vert(scene, obedit, op_params, (BMVert *)ele_src, (BMVert *)ele_dst);
-		return true;
+		ok = true;
 	}
 	else if (ele_src->head.htype == BM_EDGE) {
 		mouse_mesh_shortest_path_edge(scene, obedit, op_params, (BMEdge *)ele_src, (BMEdge *)ele_dst);
-		return true;
+		ok = true;
 	}
 	else if (ele_src->head.htype == BM_FACE) {
 		mouse_mesh_shortest_path_face(scene, obedit, op_params, (BMFace *)ele_src, (BMFace *)ele_dst);
-		return true;
+		ok = true;
 	}
 
-	return false;
+	if (ok) {
+		DEG_id_tag_update(obedit->data, ID_RECALC_SELECT);
+		WM_main_add_notifier(NC_GEOM | ND_SELECT, obedit->data);
+	}
+
+	return ok;
 }
 
 static int edbm_shortest_path_pick_exec(bContext *C, wmOperator *op);
@@ -616,6 +595,11 @@ static int edbm_shortest_path_pick_invoke(bContext *C, wmOperator *op, const wmE
 		return edbm_shortest_path_pick_exec(C, op);
 	}
 
+	Base *basact = NULL;
+	BMVert *eve = NULL;
+	BMEdge *eed = NULL;
+	BMFace *efa = NULL;
+
 	ViewContext vc;
 	BMEditMesh *em;
 	bool track_active = true;
@@ -625,6 +609,28 @@ static int edbm_shortest_path_pick_invoke(bContext *C, wmOperator *op, const wmE
 	em = vc.em;
 
 	view3d_operator_needs_opengl(C);
+
+	{
+		int base_index = -1;
+		uint bases_len = 0;
+		Base **bases = BKE_view_layer_array_from_bases_in_edit_mode(vc.view_layer, vc.v3d, &bases_len);
+		if (EDBM_unified_findnearest(&vc, bases, bases_len, &base_index, &eve, &eed, &efa)) {
+			basact = bases[base_index];
+			ED_view3d_viewcontext_init_object(&vc, basact->object);
+			em = vc.em;
+		}
+		MEM_freeN(bases);
+	}
+
+	/* If nothing is selected, let's select the picked vertex/edge/face. */
+	if ((vc.em->bm->totvertsel == 0) && (eve || eed || efa)) {
+		/* TODO (dfelinto) right now we try to find the closest element twice.
+		 * The ideal is to refactor EDBM_select_pick so it doesn't
+		 * have to pick the nearest vert/edge/face again.
+		 */
+		EDBM_select_pick(C, event->mval, true, false, false);
+		return OPERATOR_FINISHED;
+	}
 
 	BMElem *ele_src, *ele_dst;
 	if (!(ele_src = edbm_elem_active_elem_or_face_get(em->bm)) ||
@@ -653,6 +659,10 @@ static int edbm_shortest_path_pick_invoke(bContext *C, wmOperator *op, const wmE
 
 	if (!edbm_shortest_path_pick_ex(vc.scene, vc.obedit, &op_params, ele_src, ele_dst)) {
 		return OPERATOR_PASS_THROUGH;
+	}
+
+	if (vc.view_layer->basact != basact) {
+		ED_object_base_activate(C, basact);
 	}
 
 	/* to support redo */
@@ -733,7 +743,7 @@ static int edbm_shortest_path_select_exec(bContext *C, wmOperator *op)
 
 	ViewLayer *view_layer = CTX_data_view_layer(C);
 	uint objects_len = 0;
-	Object **objects = BKE_view_layer_array_from_objects_in_edit_mode_unique_data(view_layer, &objects_len);
+	Object **objects = BKE_view_layer_array_from_objects_in_edit_mode_unique_data(view_layer, CTX_wm_view3d(C), &objects_len);
 	for (uint ob_index = 0; ob_index < objects_len; ob_index++) {
 		Object *obedit = objects[ob_index];
 		BMEditMesh *em = BKE_editmesh_from_object(obedit);

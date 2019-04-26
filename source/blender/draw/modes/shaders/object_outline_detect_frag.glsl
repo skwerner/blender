@@ -7,7 +7,7 @@ uniform usampler2D outlineId;
 uniform sampler2D outlineDepth;
 uniform sampler2D sceneDepth;
 
-uniform int idOffsets[3];
+uniform int idOffsets[4];
 
 uniform float alphaOcclu;
 uniform vec2 viewportSize;
@@ -23,6 +23,9 @@ vec4 convert_id_to_color(int id)
 	else if (id < idOffsets[2]) {
 		return colorSelect;
 	}
+	else if (id < idOffsets[3]) {
+		return colorDupliSelect;
+	}
 	else {
 		return colorTransform;
 	}
@@ -32,7 +35,7 @@ void main()
 {
 	ivec2 texel = ivec2(gl_FragCoord.xy);
 
-#ifdef GL_ARB_texture_gather
+#ifdef GPU_ARB_texture_gather
 	vec2 texel_size = 1.0 / vec2(textureSize(outlineId, 0).xy);
 	vec2 uv = ceil(gl_FragCoord.xy) * texel_size;
 

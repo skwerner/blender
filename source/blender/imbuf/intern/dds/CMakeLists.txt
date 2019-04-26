@@ -16,11 +16,6 @@
 #
 # The Original Code is Copyright (C) 2006, Blender Foundation
 # All rights reserved.
-#
-# The Original Code is: all of this file.
-#
-# Contributor(s):
-#
 # ***** END GPL LICENSE BLOCK *****
 
 set(INC
@@ -59,8 +54,11 @@ set(SRC
 	dds_api.cpp
 )
 
+set(LIB
+)
+
 if(WITH_IMAGE_DDS)
 	add_definitions(-DWITH_DDS)
 endif()
 
-blender_add_lib(bf_imbuf_dds "${SRC}" "${INC}" "${INC_SYS}")
+blender_add_lib(bf_imbuf_dds "${SRC}" "${INC}" "${INC_SYS}" "${LIB}")

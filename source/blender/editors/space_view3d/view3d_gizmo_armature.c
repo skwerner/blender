@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,12 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/space_view3d/view3d_gizmo_armature.c
- *  \ingroup spview3d
+/** \file
+ * \ingroup spview3d
  */
 
 #include "BLI_blenlib.h"
@@ -51,7 +47,6 @@
 
 
 /* -------------------------------------------------------------------- */
-
 /** \name Armature Spline Gizmo
  *
  * \{ */
@@ -59,7 +54,7 @@
 /*
  * TODO(campbell): Current conversion is a approximation (usable not correct),
  * we'll need to take the next/previous bones into account to get the tangent directions.
- * First last matrices from 'b_bone_spline_setup' are close but also not quite accurate
+ * First last matrices from 'BKE_pchan_bbone_spline_setup' are close but also not quite accurate
  * since they're not at either end-points on the curve.
  *
  * Likely we'll need a function especially to get the first/last orientations.
@@ -129,18 +124,20 @@ static void gizmo_bbone_offset_set(
 
 static bool WIDGETGROUP_armature_spline_poll(const bContext *C, wmGizmoGroupType *UNUSED(gzgt))
 {
-	Object *ob = BKE_object_pose_armature_get(CTX_data_active_object(C));
-	if (ob != NULL) {
-		const bArmature *arm = ob->data;
-		if (arm->drawtype == ARM_B_BONE) {
-			if (arm->act_bone && arm->act_bone->segments > 1) {
-				View3D *v3d = CTX_wm_view3d(C);
-				if ((v3d->flag2 & V3D_RENDER_OVERRIDE) ||
-				    (v3d->gizmo_flag & (V3D_GIZMO_HIDE | V3D_GIZMO_HIDE_CONTEXT)))
-				{
-					/* pass */
-				}
-				else {
+	View3D *v3d = CTX_wm_view3d(C);
+	if (v3d->gizmo_flag & (V3D_GIZMO_HIDE | V3D_GIZMO_HIDE_CONTEXT)) {
+		return false;
+	}
+
+	ViewLayer *view_layer = CTX_data_view_layer(C);
+	Base *base = BASACT(view_layer);
+	if (base && BASE_SELECTABLE(v3d, base)) {
+		Object *ob = BKE_object_pose_armature_get(base->object);
+		if (ob) {
+			const bArmature *arm = ob->data;
+			if (arm->drawtype == ARM_B_BONE) {
+				bPoseChannel *pchan = BKE_pose_channel_active(ob);
+				if (pchan && pchan->bone->segments > 1) {
 					return true;
 				}
 			}
@@ -152,10 +149,11 @@ static bool WIDGETGROUP_armature_spline_poll(const bContext *C, wmGizmoGroupType
 
 static void WIDGETGROUP_armature_spline_setup(const bContext *C, wmGizmoGroup *gzgroup)
 {
-	Object *ob = BKE_object_pose_armature_get(CTX_data_active_object(C));
+	ViewLayer *view_layer = CTX_data_view_layer(C);
+	Object *ob = BKE_object_pose_armature_get(OBACT(view_layer));
 	bPoseChannel *pchan = BKE_pose_channel_active(ob);
 
-	const wmGizmoType *gzt_grab = WM_gizmotype_find("GIZMO_GT_grab_3d", true);
+	const wmGizmoType *gzt_move = WM_gizmotype_find("GIZMO_GT_move_3d", true);
 
 	struct BoneSplineWidgetGroup *bspline_group = MEM_callocN(sizeof(struct BoneSplineWidgetGroup), __func__);
 	gzgroup->customdata = bspline_group;
@@ -163,10 +161,10 @@ static void WIDGETGROUP_armature_spline_setup(const bContext *C, wmGizmoGroup *g
 	/* Handles */
 	for (int i = 0; i < ARRAY_SIZE(bspline_group->handles); i++) {
 		wmGizmo *gz;
-		gz = bspline_group->handles[i].gizmo = WM_gizmo_new_ptr(gzt_grab, gzgroup, NULL);
-		RNA_enum_set(gz->ptr, "draw_style", ED_GIZMO_GRAB_STYLE_RING_2D);
+		gz = bspline_group->handles[i].gizmo = WM_gizmo_new_ptr(gzt_move, gzgroup, NULL);
+		RNA_enum_set(gz->ptr, "draw_style", ED_GIZMO_MOVE_STYLE_RING_2D);
 		RNA_enum_set(gz->ptr, "draw_options",
-		             ED_GIZMO_GRAB_DRAW_FLAG_FILL | ED_GIZMO_GRAB_DRAW_FLAG_ALIGN_VIEW);
+		             ED_GIZMO_MOVE_DRAW_FLAG_FILL | ED_GIZMO_MOVE_DRAW_FLAG_ALIGN_VIEW);
 		WM_gizmo_set_flag(gz, WM_GIZMO_DRAW_VALUE, true);
 
 		UI_GetThemeColor3fv(TH_GIZMO_PRIMARY, gz->color);
@@ -182,10 +180,12 @@ static void WIDGETGROUP_armature_spline_setup(const bContext *C, wmGizmoGroup *g
 
 static void WIDGETGROUP_armature_spline_refresh(const bContext *C, wmGizmoGroup *gzgroup)
 {
-	Object *ob = BKE_object_pose_armature_get(CTX_data_active_object(C));
+	ViewLayer *view_layer = CTX_data_view_layer(C);
+	Object *ob = BKE_object_pose_armature_get(OBACT(view_layer));
 
-	if (!gzgroup->customdata)
+	if (!gzgroup->customdata) {
 		return;
+	}
 
 	struct BoneSplineWidgetGroup *bspline_group = gzgroup->customdata;
 	bPoseChannel *pchan = BKE_pose_channel_active(ob);

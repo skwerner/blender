@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,12 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/blenlib/intern/task.c
- *  \ingroup bli
+/** \file
+ * \ingroup bli
  *
  * A generic task system which can be used for any task based subsystem.
  */
@@ -116,7 +112,7 @@ typedef struct Task {
  *   At this moment task queue owns the memory.
  *
  * - When task is done and task_free() is called the memory will be put to the
- *  pool which corresponds to a thread which handled the task.
+ *   pool which corresponds to a thread which handled the task.
  */
 typedef struct TaskMemPool {
 	/* Number of pre-allocated tasks in the pool. */
@@ -175,6 +171,7 @@ struct TaskPool {
 	volatile bool do_work;
 
 	volatile bool is_suspended;
+	bool start_suspended;
 	ListBase suspended_queue;
 	size_t num_suspended;
 
@@ -336,8 +333,9 @@ static void task_pool_num_decrease(TaskPool *pool, size_t done)
 
 	pool->num -= done;
 
-	if (pool->num == 0)
+	if (pool->num == 0) {
 		BLI_condition_notify_all(&pool->num_cond);
+	}
 
 	BLI_mutex_unlock(&pool->num_mutex);
 }
@@ -357,18 +355,20 @@ static bool task_scheduler_thread_wait_pop(TaskScheduler *scheduler, Task **task
 	bool found_task = false;
 	BLI_mutex_lock(&scheduler->queue_mutex);
 
-	while (!scheduler->queue.first && !scheduler->do_exit)
+	while (!scheduler->queue.first && !scheduler->do_exit) {
 		BLI_condition_wait(&scheduler->queue_cond, &scheduler->queue_mutex);
+	}
 
 	do {
 		Task *current_task;
 
-		/* Assuming we can only have a void queue in 'exit' case here seems logical (we should only be here after
-		 * our worker thread has been woken up from a condition_wait(), which only happens after a new task was
-		 * added to the queue), but it is wrong.
-		 * Waiting on condition may wake up the thread even if condition is not signaled (spurious wake-ups), and some
-		 * race condition may also empty the queue **after** condition has been signaled, but **before** awoken thread
-		 * reaches this point...
+		/* Assuming we can only have a void queue in 'exit' case here seems logical
+		 * (we should only be here after our worker thread has been woken up from a
+		 * condition_wait(), which only happens after a new task was added to the queue),
+		 * but it is wrong.
+		 * Waiting on condition may wake up the thread even if condition is not signaled
+		 * (spurious wake-ups), and some race condition may also empty the queue **after**
+		 * condition has been signaled, but **before** awoken thread reaches this point...
 		 * See http://stackoverflow.com/questions/8594591
 		 *
 		 * So we only abort here if do_exit is set.
@@ -393,8 +393,9 @@ static bool task_scheduler_thread_wait_pop(TaskScheduler *scheduler, Task **task
 			BLI_remlink(&scheduler->queue, *task);
 			break;
 		}
-		if (!found_task)
+		if (!found_task) {
 			BLI_condition_wait(&scheduler->queue_cond, &scheduler->queue_mutex);
+		}
 	} while (!found_task);
 
 	BLI_mutex_unlock(&scheduler->queue_mutex);
@@ -527,8 +528,9 @@ void BLI_task_scheduler_free(TaskScheduler *scheduler)
 		int i;
 
 		for (i = 0; i < scheduler->num_threads; i++) {
-			if (pthread_join(scheduler->threads[i], NULL) != 0)
+			if (pthread_join(scheduler->threads[i], NULL) != 0) {
 				fprintf(stderr, "TaskScheduler failed to join thread %d/%d\n", i, scheduler->num_threads);
+			}
 		}
 
 		MEM_freeN(scheduler->threads);
@@ -569,10 +571,12 @@ static void task_scheduler_push(TaskScheduler *scheduler, Task *task, TaskPriori
 	/* add task to queue */
 	BLI_mutex_lock(&scheduler->queue_mutex);
 
-	if (priority == TASK_PRIORITY_HIGH)
+	if (priority == TASK_PRIORITY_HIGH) {
 		BLI_addhead(&scheduler->queue, task);
-	else
+	}
+	else {
 		BLI_addtail(&scheduler->queue, task);
+	}
 
 	BLI_condition_notify_one(&scheduler->queue_cond);
 	BLI_mutex_unlock(&scheduler->queue_mutex);
@@ -634,7 +638,8 @@ static TaskPool *task_pool_create_ex(TaskScheduler *scheduler,
 	TaskPool *pool = MEM_mallocN(sizeof(TaskPool), "TaskPool");
 
 #ifndef NDEBUG
-	/* Assert we do not try to create a background pool from some parent task - those only work OK from main thread. */
+	/* Assert we do not try to create a background pool from some parent task -
+	 * those only work OK from main thread. */
 	if (is_background) {
 		const pthread_t thread_id = pthread_self();
 		int i = scheduler->num_threads;
@@ -650,6 +655,7 @@ static TaskPool *task_pool_create_ex(TaskScheduler *scheduler,
 	pool->do_cancel = false;
 	pool->do_work = false;
 	pool->is_suspended = is_suspended;
+	pool->start_suspended = is_suspended;
 	pool->num_suspended = 0;
 	pool->suspended_queue.first = pool->suspended_queue.last = NULL;
 	pool->run_in_background = is_background;
@@ -728,7 +734,7 @@ TaskPool *BLI_task_pool_create_background(TaskScheduler *scheduler, void *userda
 
 /**
  * Similar to BLI_task_pool_create() but does not schedule any tasks for execution
- * for until BLI_task_pool_work_and_wait() is called. This helps reducing therading
+ * for until BLI_task_pool_work_and_wait() is called. This helps reducing threading
  * overhead when pushing huge amount of small initial tasks from the main thread.
  */
 TaskPool *BLI_task_pool_create_suspended(TaskScheduler *scheduler, void *userdata)
@@ -816,7 +822,7 @@ static void task_pool_push(
 			return;
 		}
 	}
-	/* Do push to a global execution ppol, slowest possible method,
+	/* Do push to a global execution pool, slowest possible method,
 	 * causes quite reasonable amount of threading overhead.
 	 */
 	task_scheduler_push(pool->scheduler, task, priority);
@@ -855,12 +861,16 @@ void BLI_task_pool_work_and_wait(TaskPool *pool)
 
 			BLI_condition_notify_all(&scheduler->queue_cond);
 			BLI_mutex_unlock(&scheduler->queue_mutex);
+
+			pool->num_suspended = 0;
 		}
 	}
 
 	pool->do_work = true;
 
 	ASSERT_THREAD_ID(pool->scheduler, pool->thread_id);
+
+	handle_local_queue(tls, pool->thread_id);
 
 	BLI_mutex_lock(&pool->num_mutex);
 
@@ -904,16 +914,26 @@ void BLI_task_pool_work_and_wait(TaskPool *pool)
 		}
 
 		BLI_mutex_lock(&pool->num_mutex);
-		if (pool->num == 0)
+		if (pool->num == 0) {
 			break;
+		}
 
-		if (!found_task)
+		if (!found_task) {
 			BLI_condition_wait(&pool->num_cond, &pool->num_mutex);
+		}
 	}
 
 	BLI_mutex_unlock(&pool->num_mutex);
 
-	handle_local_queue(tls, pool->thread_id);
+	BLI_assert(tls->num_local_queue == 0);
+}
+
+void BLI_task_pool_work_wait_and_reset(TaskPool *pool)
+{
+	BLI_task_pool_work_and_wait(pool);
+
+	pool->do_work = false;
+	pool->is_suspended = pool->start_suspended;
 }
 
 void BLI_task_pool_cancel(TaskPool *pool)
@@ -924,8 +944,9 @@ void BLI_task_pool_cancel(TaskPool *pool)
 
 	/* wait until all entries are cleared */
 	BLI_mutex_lock(&pool->num_mutex);
-	while (pool->num)
+	while (pool->num) {
 		BLI_condition_wait(&pool->num_cond, &pool->num_mutex);
+	}
 	BLI_mutex_unlock(&pool->num_mutex);
 
 	pool->do_cancel = false;
@@ -982,7 +1003,6 @@ void BLI_task_pool_delayed_push_end(TaskPool *pool, int thread_id)
  * - #BLI_task_parallel_foreach_link (#Link - single linked list)
  * - #BLI_task_parallel_foreach_ghash/gset (#GHash/#GSet - hash & set)
  * - #BLI_task_parallel_foreach_mempool (#BLI_mempool - iterate over mempools)
- *
  */
 
 /* Allows to avoid using malloc for userdata_chunk in tasks, when small enough. */
@@ -1029,7 +1049,7 @@ static void parallel_range_func(
 	}
 }
 
-static void palallel_range_single_thread(const int start, int const stop,
+static void parallel_range_single_thread(const int start, int const stop,
                                          void *userdata,
                                          TaskParallelRangeFunc func,
                                          const ParallelRangeSettings *settings)
@@ -1089,7 +1109,7 @@ void BLI_task_parallel_range(const int start, const int stop,
 	 * do everything from the main thread.
 	 */
 	if (!settings->use_threading) {
-		palallel_range_single_thread(start, stop,
+		parallel_range_single_thread(start, stop,
 		                             userdata,
 		                             func,
 		                             settings);
@@ -1126,7 +1146,7 @@ void BLI_task_parallel_range(const int start, const int stop,
 	                   max_ii(1, (stop - start) / state.chunk_size));
 
 	if (num_tasks == 1) {
-		palallel_range_single_thread(start, stop,
+		parallel_range_single_thread(start, stop,
 		                             userdata,
 		                             func,
 		                             settings);
@@ -1221,13 +1241,38 @@ static void parallel_listbase_func(
 	}
 }
 
+static void task_parallel_listbase_no_threads(
+        struct ListBase *listbase,
+        void *userdata,
+        TaskParallelListbaseFunc func)
+{
+	int i = 0;
+	for (Link *link = listbase->first; link != NULL; link = link->next, ++i) {
+		func(userdata, link, i);
+	}
+}
+
+/* NOTE: The idea here is to compensate for rather measurable threading
+ * overhead caused by fetching tasks. With too many CPU threads we are starting
+ * to spend too much time in those overheads. */
+BLI_INLINE int task_parallel_listbasecalc_chunk_size(const int num_threads)
+{
+	if (num_threads > 32) {
+		return 128;
+	}
+	else if (num_threads > 16) {
+		return 64;
+	}
+	return 32;
+}
+
 /**
  * This function allows to parallelize for loops over ListBase items.
  *
- * \param listbase The double linked list to loop over.
- * \param userdata Common userdata passed to all instances of \a func.
- * \param func Callback function.
- * \param use_threading If \a true, actually split-execute loop in threads, else just do a sequential forloop
+ * \param listbase: The double linked list to loop over.
+ * \param userdata: Common userdata passed to all instances of \a func.
+ * \param func: Callback function.
+ * \param use_threading: If \a true, actually split-execute loop in threads, else just do a sequential forloop
  *                      (allows caller to use any kind of test to switch on parallelization or not).
  *
  * \note There is no static scheduling here, since it would need another full loop over items to count them...
@@ -1238,41 +1283,37 @@ void BLI_task_parallel_listbase(
         TaskParallelListbaseFunc func,
         const bool use_threading)
 {
-	TaskScheduler *task_scheduler;
-	TaskPool *task_pool;
-	ParallelListState state;
-	int i, num_threads, num_tasks;
-
 	if (BLI_listbase_is_empty(listbase)) {
 		return;
 	}
-
 	if (!use_threading) {
-		i = 0;
-		for (Link *link = listbase->first; link != NULL; link = link->next, ++i) {
-			func(userdata, link, i);
-		}
+		task_parallel_listbase_no_threads(listbase, userdata, func);
+		return;
+	}
+	TaskScheduler *task_scheduler = BLI_task_scheduler_get();
+	const int num_threads = BLI_task_scheduler_num_threads(task_scheduler);
+	/* TODO(sergey): Consider making chunk size configurable. */
+	const int chunk_size = task_parallel_listbasecalc_chunk_size(num_threads);
+	const int num_tasks = min_ii(
+	        num_threads,
+	        BLI_listbase_count(listbase) / chunk_size);
+	if (num_tasks <= 1) {
+		task_parallel_listbase_no_threads(listbase, userdata, func);
 		return;
 	}
 
-	task_scheduler = BLI_task_scheduler_get();
-	task_pool = BLI_task_pool_create_suspended(task_scheduler, &state);
-	num_threads = BLI_task_scheduler_num_threads(task_scheduler);
-
-	/* The idea here is to prevent creating task for each of the loop iterations
-	 * and instead have tasks which are evenly distributed across CPU cores and
-	 * pull next iter to be crunched using the queue.
-	 */
-	num_tasks = num_threads + 2;
+	ParallelListState state;
+	TaskPool *task_pool = BLI_task_pool_create_suspended(task_scheduler, &state);
 
 	state.index = 0;
 	state.link = listbase->first;
 	state.userdata = userdata;
 	state.func = func;
-	state.chunk_size = 32;
+	state.chunk_size = chunk_size;
 	BLI_spin_init(&state.lock);
 
-	for (i = 0; i < num_tasks; i++) {
+	BLI_assert(num_tasks > 0);
+	for (int i = 0; i < num_tasks; i++) {
 		/* Use this pool's pre-allocated tasks. */
 		BLI_task_pool_push_from_thread(task_pool,
 		                               parallel_listbase_func,

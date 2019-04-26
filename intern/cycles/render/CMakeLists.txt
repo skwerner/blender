@@ -15,11 +15,14 @@ set(SRC
 	buffers.cpp
 	camera.cpp
 	constant_fold.cpp
+	coverage.cpp
+	denoising.cpp
 	film.cpp
 	graph.cpp
 	image.cpp
 	integrator.cpp
 	light.cpp
+	merge.cpp
 	mesh.cpp
 	mesh_displace.cpp
 	mesh_subdivision.cpp
@@ -46,11 +49,14 @@ set(SRC_HEADERS
 	buffers.h
 	camera.h
 	constant_fold.h
+	coverage.h
+	denoising.h
 	film.h
 	graph.h
 	image.h
 	integrator.h
 	light.h
+	merge.h
 	mesh.h
 	nodes.h
 	object.h
@@ -72,6 +78,16 @@ if(WITH_OPENVDB)
 	list(APPEND SRC_HEADERS openvdb.h)
 endif()
 
+set(LIB
+	cycles_bvh
+)
+
+if(WITH_CYCLES_OSL)
+	list(APPEND LIB
+		cycles_kernel_osl
+	)
+endif()
+
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${RTTI_DISABLE_FLAGS}")
 
 include_directories(${INC})
@@ -79,4 +95,4 @@ include_directories(SYSTEM ${INC_SYS})
 
 add_definitions(${GL_DEFINITIONS})
 
-cycles_add_library(cycles_render ${SRC} ${SRC_HEADERS})
+cycles_add_library(cycles_render "${LIB}" ${SRC} ${SRC_HEADERS})

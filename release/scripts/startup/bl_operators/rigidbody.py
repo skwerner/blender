@@ -47,7 +47,7 @@ class CopyRigidbodySettings(Operator):
         "deactivate_angular_velocity",
         "linear_damping",
         "angular_damping",
-        "collision_groups",
+        "collision_collections",
         "mesh_source",
         "use_deform",
         "enabled",
@@ -65,7 +65,7 @@ class CopyRigidbodySettings(Operator):
         # deselect all but mesh objects
         for o in context.selected_objects:
             if o.type != 'MESH':
-                o.select_set(action='DESELECT')
+                o.select_set(False)
             elif o.rigid_body is None:
                 # Add rigidbody to object!
                 view_layer.objects.active = o
@@ -127,7 +127,7 @@ class BakeToKeyframes(Operator):
         # filter objects selection
         for obj in context.selected_objects:
             if not obj.rigid_body or obj.rigid_body.type != 'ACTIVE':
-                obj.select_set(action='DESELECT')
+                obj.select_set(False)
 
         objects = context.selected_objects
 
@@ -149,7 +149,7 @@ class BakeToKeyframes(Operator):
                     mat = bake[i][j]
                     # convert world space transform to parent space, so parented objects don't get offset after baking
                     if (obj.parent):
-                        mat = obj.matrix_parent_inverse.inverted() * obj.parent.matrix_world.inverted() * mat
+                        mat = obj.matrix_parent_inverse.inverted() @ obj.parent.matrix_world.inverted() @ mat
 
                     obj.location = mat.to_translation()
 
@@ -264,13 +264,13 @@ class ConnectRigidBodies(Operator):
 
         ob = bpy.data.objects.new("Constraint", object_data=None)
         ob.location = loc
-        context.scene.objects.link(ob)
+        context.scene.collection.objects.link(ob)
         context.view_layer.objects.active = ob
-        ob.select_set(action='SELECT')
+        ob.select_set(True)
 
         bpy.ops.rigidbody.constraint_add()
         con_obj = context.active_object
-        con_obj.empty_draw_type = 'ARROWS'
+        con_obj.empty_display_type = 'ARROWS'
         con = con_obj.rigid_body_constraint
         con.type = self.con_type
 
@@ -311,7 +311,7 @@ class ConnectRigidBodies(Operator):
             # restore selection
             bpy.ops.object.select_all(action='DESELECT')
             for obj in objects:
-                obj.select_set(action='SELECT')
+                obj.select_set(True)
             view_layer.objects.active = obj_act
             return {'FINISHED'}
         else:

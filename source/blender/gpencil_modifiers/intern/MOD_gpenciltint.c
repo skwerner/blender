@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,31 +15,25 @@
  *
  * The Original Code is Copyright (C) 2017, Blender Foundation
  * This is a new part of Blender
- *
- * Contributor(s): Antonio Vazquez
- *
- * ***** END GPL LICENSE BLOCK *****
- *
  */
 
-/** \file blender/gpencil_modifiers/intern/MOD_gpenciltint.c
- *  \ingroup modifiers
+/** \file
+ * \ingroup modifiers
  */
 
 #include <stdio.h>
+
+#include "BLI_utildefines.h"
+
+#include "BLI_blenlib.h"
+#include "BLI_ghash.h"
+#include "BLI_math_vector.h"
 
 #include "DNA_scene_types.h"
 #include "DNA_object_types.h"
 #include "DNA_gpencil_types.h"
 #include "DNA_gpencil_modifier_types.h"
 
-#include "BLI_blenlib.h"
-#include "BLI_ghash.h"
-#include "BLI_math_vector.h"
-#include "BLI_utildefines.h"
-
-#include "BKE_context.h"
-#include "BKE_global.h"
 #include "BKE_gpencil.h"
 #include "BKE_gpencil_modifier.h"
 #include "BKE_material.h"
@@ -60,6 +52,7 @@ static void initData(GpencilModifierData *md)
 	gpmd->layername[0] = '\0';
 	ARRAY_SET_ITEMS(gpmd->rgb, 1.0f, 1.0f, 1.0f);
 	gpmd->flag |= GP_TINT_CREATE_COLORS;
+	gpmd->modify_color = GP_MODIFY_COLOR_BOTH;
 }
 
 static void copyData(const GpencilModifierData *md, GpencilModifierData *target)
@@ -74,26 +67,32 @@ static void deformStroke(
 {
 	TintGpencilModifierData *mmd = (TintGpencilModifierData *)md;
 
-	if (!is_stroke_affected_by_modifier(ob,
-	        mmd->layername, mmd->pass_index, 1, gpl, gps,
-	        mmd->flag & GP_TINT_INVERT_LAYER, mmd->flag & GP_TINT_INVERT_PASS))
+	if (!is_stroke_affected_by_modifier(
+	            ob,
+	            mmd->layername, mmd->pass_index, mmd->layer_pass, 1, gpl, gps,
+	            mmd->flag & GP_TINT_INVERT_LAYER, mmd->flag & GP_TINT_INVERT_PASS,
+	            mmd->flag & GP_TINT_INVERT_LAYERPASS))
 	{
 		return;
 	}
 
-	interp_v3_v3v3(gps->runtime.tmp_stroke_rgba, gps->runtime.tmp_stroke_rgba, mmd->rgb, mmd->factor);
-	interp_v3_v3v3(gps->runtime.tmp_fill_rgba, gps->runtime.tmp_fill_rgba, mmd->rgb, mmd->factor);
-
-	/* if factor is > 1, the alpha must be changed to get full tint */
-	if (mmd->factor > 1.0f) {
-		gps->runtime.tmp_stroke_rgba[3] += mmd->factor - 1.0f;
-		if (gps->runtime.tmp_fill_rgba[3] > 1e-5) {
-			gps->runtime.tmp_fill_rgba[3] += mmd->factor - 1.0f;
+	if (mmd->modify_color != GP_MODIFY_COLOR_FILL) {
+		interp_v3_v3v3(gps->runtime.tmp_stroke_rgba, gps->runtime.tmp_stroke_rgba, mmd->rgb, mmd->factor);
+		/* if factor is > 1, the alpha must be changed to get full tint */
+		if (mmd->factor > 1.0f) {
+			gps->runtime.tmp_stroke_rgba[3] += mmd->factor - 1.0f;
 		}
+		CLAMP4(gps->runtime.tmp_stroke_rgba, 0.0f, 1.0f);
 	}
 
-	CLAMP4(gps->runtime.tmp_stroke_rgba, 0.0f, 1.0f);
-	CLAMP4(gps->runtime.tmp_fill_rgba, 0.0f, 1.0f);
+	if (mmd->modify_color != GP_MODIFY_COLOR_STROKE) {
+		interp_v3_v3v3(gps->runtime.tmp_fill_rgba, gps->runtime.tmp_fill_rgba, mmd->rgb, mmd->factor);
+		/* if factor is > 1, the alpha must be changed to get full tint */
+		if (mmd->factor > 1.0f && gps->runtime.tmp_fill_rgba[3] > 1e-5) {
+			gps->runtime.tmp_fill_rgba[3] += mmd->factor - 1.0f;
+		}
+		CLAMP4(gps->runtime.tmp_fill_rgba, 0.0f, 1.0f);
+	}
 
 	/* if factor > 1.0, affect the strength of the stroke */
 	if (mmd->factor > 1.0f) {
@@ -130,40 +129,9 @@ static void bakeModifier(
 
 				deformStroke(md, depsgraph, ob, gpl, gps);
 
-				/* look for color */
-				if (mmd->flag & GP_TINT_CREATE_COLORS) {
-					Material *newmat = (Material *)BLI_ghash_lookup(gh_color, mat->id.name);
-					if (newmat == NULL) {
-						BKE_object_material_slot_add(bmain, ob);
-						newmat = BKE_material_copy(bmain, mat);
-						newmat->preview = NULL;
-
-						assign_material(bmain, ob, newmat, ob->totcol, BKE_MAT_ASSIGN_USERPREF);
-
-						copy_v4_v4(newmat->gp_style->stroke_rgba, gps->runtime.tmp_stroke_rgba);
-						copy_v4_v4(newmat->gp_style->fill_rgba, gps->runtime.tmp_fill_rgba);
-
-						BLI_ghash_insert(gh_color, mat->id.name, newmat);
-						DEG_id_tag_update(&newmat->id, DEG_TAG_COPY_ON_WRITE);
-					}
-					/* reasign color index */
-					int idx = BKE_object_material_slot_find_index(ob, newmat);
-					gps->mat_nr = idx - 1;
-				}
-				else {
-					/* reuse existing color (but update only first time) */
-					if (BLI_ghash_lookup(gh_color, mat->id.name) == NULL) {
-						copy_v4_v4(gp_style->stroke_rgba, gps->runtime.tmp_stroke_rgba);
-						copy_v4_v4(gp_style->fill_rgba, gps->runtime.tmp_fill_rgba);
-						BLI_ghash_insert(gh_color, mat->id.name, mat);
-					}
-					/* update previews (icon and thumbnail) */
-					if (mat->preview != NULL) {
-						mat->preview->flag[ICON_SIZE_ICON] |= PRV_CHANGED;
-						mat->preview->flag[ICON_SIZE_PREVIEW] |= PRV_CHANGED;
-					}
-					DEG_id_tag_update(&mat->id, DEG_TAG_COPY_ON_WRITE);
-				}
+				gpencil_apply_modifier_material(
+				        bmain, ob, mat, gh_color, gps,
+				        (bool)(mmd->flag & GP_TINT_CREATE_COLORS));
 			}
 		}
 	}
@@ -185,7 +153,8 @@ GpencilModifierTypeInfo modifierType_Gpencil_Tint = {
 
 	/* deformStroke */      deformStroke,
 	/* generateStrokes */   NULL,
-	/* bakeModifier */    bakeModifier,
+	/* bakeModifier */      bakeModifier,
+	/* remapTime */         NULL,
 
 	/* initData */          initData,
 	/* freeData */          NULL,
@@ -195,4 +164,5 @@ GpencilModifierTypeInfo modifierType_Gpencil_Tint = {
 	/* foreachObjectLink */ NULL,
 	/* foreachIDLink */     NULL,
 	/* foreachTexLink */    NULL,
+	/* getDuplicationFactor */ NULL,
 };

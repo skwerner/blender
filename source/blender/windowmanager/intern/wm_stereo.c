@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,10 @@
  *
  * The Original Code is Copyright (C) 2015 by Blender Foundation
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): Dalai Felinto
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/windowmanager/intern/wm_stereo.c
- *  \ingroup wm
+/** \file
+ * \ingroup wm
  */
 
 
@@ -39,7 +31,6 @@
 
 #include "MEM_guardedalloc.h"
 
-#include "BLI_listbase.h"
 #include "BLI_utildefines.h"
 
 #include "BIF_gl.h"
@@ -65,7 +56,7 @@
 #include "UI_interface.h"
 #include "UI_resources.h"
 
-static GPUInterlaceShader interlace_gpu_id_from_type(eStereo3dInterlaceType interlace_type)
+static eGPUInterlaceShader interlace_gpu_id_from_type(eStereo3dInterlaceType interlace_type)
 {
 	switch (interlace_type) {
 		case S3D_INTERLACE_ROW:
@@ -106,16 +97,16 @@ void wm_stereo3d_draw_interlace(wmWindow *win, ARegion *ar)
 
 	immBegin(GPU_PRIM_TRI_FAN, 4);
 
-	immAttrib2f(texcoord, halfx, halfy);
+	immAttr2f(texcoord, halfx, halfy);
 	immVertex2f(pos, ar->winrct.xmin, ar->winrct.ymin);
 
-	immAttrib2f(texcoord, 1.0f + halfx, halfy);
+	immAttr2f(texcoord, 1.0f + halfx, halfy);
 	immVertex2f(pos, ar->winrct.xmax + 1, ar->winrct.ymin);
 
-	immAttrib2f(texcoord, 1.0f + halfx, 1.0f + halfy);
+	immAttr2f(texcoord, 1.0f + halfx, 1.0f + halfy);
 	immVertex2f(pos, ar->winrct.xmax + 1, ar->winrct.ymax + 1);
 
-	immAttrib2f(texcoord, halfx, 1.0f + halfy);
+	immAttr2f(texcoord, halfx, 1.0f + halfy);
 	immVertex2f(pos, ar->winrct.xmin, ar->winrct.ymax + 1);
 
 	immEnd();
@@ -171,12 +162,14 @@ void wm_stereo3d_draw_sidebyside(wmWindow *win, int view)
 
 	int soffx = WM_window_pixels_x(win) * 0.5f;
 	if (view == STEREO_LEFT_ID) {
-		if (!cross_eyed)
+		if (!cross_eyed) {
 			soffx = 0;
+		}
 	}
 	else { //RIGHT_LEFT_ID
-		if (cross_eyed)
+		if (cross_eyed) {
 			soffx = 0;
+		}
 	}
 
 	const int sizex = WM_window_pixels_x(win);
@@ -190,16 +183,16 @@ void wm_stereo3d_draw_sidebyside(wmWindow *win, int view)
 
 	immBegin(GPU_PRIM_TRI_FAN, 4);
 
-	immAttrib2f(texcoord, halfx, halfy);
+	immAttr2f(texcoord, halfx, halfy);
 	immVertex2f(pos, soffx, 0.0f);
 
-	immAttrib2f(texcoord, 1.0f + halfx, halfy);
+	immAttr2f(texcoord, 1.0f + halfx, halfy);
 	immVertex2f(pos, soffx + (sizex * 0.5f), 0.0f);
 
-	immAttrib2f(texcoord, 1.0f + halfx, 1.0f + halfy);
+	immAttr2f(texcoord, 1.0f + halfx, 1.0f + halfy);
 	immVertex2f(pos, soffx + (sizex * 0.5f), sizey);
 
-	immAttrib2f(texcoord, halfx, 1.0f + halfy);
+	immAttr2f(texcoord, halfx, 1.0f + halfy);
 	immVertex2f(pos, soffx, sizey);
 
 	immEnd();
@@ -234,16 +227,16 @@ void wm_stereo3d_draw_topbottom(wmWindow *win, int view)
 
 	immBegin(GPU_PRIM_TRI_FAN, 4);
 
-	immAttrib2f(texcoord, halfx, halfy);
+	immAttr2f(texcoord, halfx, halfy);
 	immVertex2f(pos, 0.0f, soffy);
 
-	immAttrib2f(texcoord, 1.0f + halfx, halfy);
+	immAttr2f(texcoord, 1.0f + halfx, halfy);
 	immVertex2f(pos, sizex, soffy);
 
-	immAttrib2f(texcoord, 1.0f + halfx, 1.0f + halfy);
+	immAttr2f(texcoord, 1.0f + halfx, 1.0f + halfy);
 	immVertex2f(pos, sizex, soffy + (sizey * 0.5f));
 
-	immAttrib2f(texcoord, halfx, 1.0f + halfy);
+	immAttr2f(texcoord, halfx, 1.0f + halfy);
 	immVertex2f(pos, 0.0f, soffy + (sizey * 0.5f));
 
 	immEnd();
@@ -295,8 +288,9 @@ bool WM_stereo3d_enabled(wmWindow *win, bool skip_stereo3d_check)
  */
 void wm_stereo3d_mouse_offset_apply(wmWindow *win, int *r_mouse_xy)
 {
-	if (!WM_stereo3d_enabled(win, false))
+	if (!WM_stereo3d_enabled(win, false)) {
 		return;
+	}
 
 	if (win->stereo3d_format->display_mode == S3D_DISPLAY_SIDEBYSIDE) {
 		const int half_x = win->sizex / 2;
@@ -348,19 +342,23 @@ static bool wm_stereo3d_set_properties(bContext *UNUSED(C), wmOperator *op)
 
 	prop = RNA_struct_find_property(op->ptr, "use_interlace_swap");
 	if (RNA_property_is_set(op->ptr, prop)) {
-		if (RNA_property_boolean_get(op->ptr, prop))
+		if (RNA_property_boolean_get(op->ptr, prop)) {
 			s3d->flag |= S3D_INTERLACE_SWAP;
-		else
+		}
+		else {
 			s3d->flag &= ~S3D_INTERLACE_SWAP;
+		}
 		is_set = true;
 	}
 
 	prop = RNA_struct_find_property(op->ptr, "use_sidebyside_crosseyed");
 	if (RNA_property_is_set(op->ptr, prop)) {
-		if (RNA_property_boolean_get(op->ptr, prop))
+		if (RNA_property_boolean_get(op->ptr, prop)) {
 			s3d->flag |= S3D_SIDEBYSIDE_CROSSEYED;
-		else
+		}
+		else {
 			s3d->flag &= ~S3D_SIDEBYSIDE_CROSSEYED;
+		}
 		is_set = true;
 	}
 
@@ -388,8 +386,9 @@ int wm_stereo3d_set_exec(bContext *C, wmOperator *op)
 	Stereo3dData *s3dd;
 	bool ok = true;
 
-	if (G.background)
+	if (G.background) {
 		return OPERATOR_CANCELLED;
+	}
 
 	if (op->customdata == NULL) {
 		/* no invoke means we need to set the operator properties here */
@@ -403,7 +402,7 @@ int wm_stereo3d_set_exec(bContext *C, wmOperator *op)
 	if (prev_display_mode == S3D_DISPLAY_PAGEFLIP &&
 	    prev_display_mode != win_src->stereo3d_format->display_mode)
 	{
-		/* in case the hardward supports pageflip but not the display */
+		/* in case the hardware supports pageflip but not the display */
 		if ((win_dst = wm_window_copy_test(C, win_src, false, false))) {
 			/* pass */
 		}
@@ -469,10 +468,12 @@ int wm_stereo3d_set_invoke(bContext *C, wmOperator *op, const wmEvent *UNUSED(ev
 {
 	wm_stereo3d_set_init(C, op);
 
-	if (wm_stereo3d_set_properties(C, op))
+	if (wm_stereo3d_set_properties(C, op)) {
 		return wm_stereo3d_set_exec(C, op);
-	else
+	}
+	else {
 		return WM_operator_props_dialog_popup(C, op, 250, 100);
+	}
 }
 
 void wm_stereo3d_set_draw(bContext *UNUSED(C), wmOperator *op)

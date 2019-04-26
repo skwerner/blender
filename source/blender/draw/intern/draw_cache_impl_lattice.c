@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,14 +15,10 @@
  *
  * The Original Code is Copyright (C) 2017 by Blender Foundation.
  * All rights reserved.
- *
- * Contributor(s): Blender Foundation, Mike Erwin, Dalai Felinto
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file draw_cache_impl_lattice.c
- *  \ingroup draw
+/** \file
+ * \ingroup draw
  *
  * \brief Lattice API for render engines
  */
@@ -273,11 +267,6 @@ static void lattice_render_data_weight_col_get(const LatticeRenderData *rdata, c
 	}
 }
 
-enum {
-	VFLAG_VERTEX_SELECTED = 1 << 0,
-	VFLAG_VERTEX_ACTIVE   = 1 << 1,
-};
-
 /* ---------------------------------------------------------------------- */
 /* Lattice GPUBatch Cache */
 
@@ -361,7 +350,7 @@ static LatticeBatchCache *lattice_batch_cache_get(Lattice *lt)
 	return lt->batch_cache;
 }
 
-void DRW_lattice_batch_cache_dirty(Lattice *lt, int mode)
+void DRW_lattice_batch_cache_dirty_tag(Lattice *lt, int mode)
 {
 	LatticeBatchCache *cache = lt->batch_cache;
 	if (cache == NULL) {
@@ -431,6 +420,7 @@ static GPUVertBuf *lattice_batch_cache_get_pos(LatticeRenderData *rdata, Lattice
 			if (use_weight) {
 				float w_col[4];
 				lattice_render_data_weight_col_get(rdata, i, actdef, w_col);
+				w_col[3] = 1.0f;
 
 				GPU_vertbuf_attr_set(cache->pos, attr_id.col, i, w_col);
 			}
@@ -523,10 +513,10 @@ static void lattice_batch_cache_create_overlay_batches(Lattice *lt)
 			char vflag = 0;
 			if (bp->f1 & SELECT) {
 				if (i == rdata->actbp) {
-					vflag |= VFLAG_VERTEX_ACTIVE;
+					vflag |= VFLAG_VERT_ACTIVE;
 				}
 				else {
-					vflag |= VFLAG_VERTEX_SELECTED;
+					vflag |= VFLAG_VERT_SELECTED;
 				}
 			}
 
@@ -572,7 +562,7 @@ GPUBatch *DRW_lattice_batch_cache_get_all_verts(Lattice *lt)
 	return cache->all_verts;
 }
 
-GPUBatch *DRW_lattice_batch_cache_get_overlay_verts(Lattice *lt)
+GPUBatch *DRW_lattice_batch_cache_get_edit_verts(Lattice *lt)
 {
 	LatticeBatchCache *cache = lattice_batch_cache_get(lt);
 

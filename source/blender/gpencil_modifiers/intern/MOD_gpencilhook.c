@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,18 +15,17 @@
  *
  * The Original Code is Copyright (C) 2017, Blender Foundation
  * This is a new part of Blender
- *
- * Contributor(s): Antonio Vazquez
- *
- * ***** END GPL LICENSE BLOCK *****
- *
  */
 
-/** \file blender/gpencil_modifiers/intern/MOD_gpencilhook.c
- *  \ingroup modifiers
+/** \file
+ * \ingroup modifiers
  */
 
 #include <stdio.h>
+
+#include "BLI_utildefines.h"
+
+#include "BLI_math.h"
 
 #include "DNA_meshdata_types.h"
 #include "DNA_scene_types.h"
@@ -36,12 +33,8 @@
 #include "DNA_gpencil_types.h"
 #include "DNA_gpencil_modifier_types.h"
 #include "DNA_modifier_types.h"
-#include "BLI_math.h"
-
-#include "BLI_utildefines.h"
 
 #include "BKE_action.h"
-#include "BKE_context.h"
 #include "BKE_colortools.h"
 #include "BKE_deform.h"
 #include "BKE_gpencil.h"
@@ -151,7 +144,6 @@ static float gp_hook_falloff(const struct GPHookData_cb *tData,	const float len_
 				fac = sqrtf(2 * fac - fac * fac);
 				break;
 			default:
-				fac = fac;
 				break;
 		}
 
@@ -203,16 +195,17 @@ static void deformStroke(
 		return;
 	}
 
-	int vindex = defgroup_name_index(ob, mmd->vgname);
-	float weight = 1.0f;
+	const int def_nr = defgroup_name_index(ob, mmd->vgname);
 
 	bPoseChannel *pchan = BKE_pose_channel_find_name(mmd->object->pose, mmd->subtarget);
 	float dmat[4][4];
 	struct GPHookData_cb tData;
 
-	if (!is_stroke_affected_by_modifier(ob,
-	        mmd->layername, mmd->pass_index, 3, gpl, gps,
-	        mmd->flag & GP_HOOK_INVERT_LAYER, mmd->flag & GP_HOOK_INVERT_PASS))
+	if (!is_stroke_affected_by_modifier(
+	            ob,
+	            mmd->layername, mmd->pass_index, mmd->layer_pass, 1, gpl, gps,
+	            mmd->flag & GP_HOOK_INVERT_LAYER, mmd->flag & GP_HOOK_INVERT_PASS,
+	            mmd->flag & GP_HOOK_INVERT_LAYERPASS))
 	{
 		return;
 	}
@@ -250,11 +243,11 @@ static void deformStroke(
 	/* loop points and apply deform */
 	for (int i = 0; i < gps->totpoints; i++) {
 		bGPDspoint *pt = &gps->points[i];
-		MDeformVert *dvert = &gps->dvert[i];
+		MDeformVert *dvert = gps->dvert != NULL ? &gps->dvert[i] : NULL;
 
 		/* verify vertex group */
-		weight = get_modifier_point_weight(dvert, (int)((mmd->flag & GP_HOOK_INVERT_VGROUP) != 0), vindex);
-		if (weight < 0) {
+		const float weight = get_modifier_point_weight(dvert, (mmd->flag & GP_HOOK_INVERT_VGROUP) != 0, def_nr);
+		if (weight < 0.0f) {
 			continue;
 		}
 		gp_hook_co_apply(&tData, weight, pt);
@@ -336,13 +329,14 @@ GpencilModifierTypeInfo modifierType_Gpencil_Hook = {
 	/* structName */        "HookGpencilModifierData",
 	/* structSize */        sizeof(HookGpencilModifierData),
 	/* type */              eGpencilModifierTypeType_Gpencil,
-	/* flags */             0,
+	/* flags */             eGpencilModifierTypeFlag_SupportsEditmode,
 
 	/* copyData */          copyData,
 
 	/* deformStroke */      deformStroke,
 	/* generateStrokes */   NULL,
-	/* bakeModifier */    bakeModifier,
+	/* bakeModifier */      bakeModifier,
+	/* remapTime */         NULL,
 
 	/* initData */          initData,
 	/* freeData */          freeData,
@@ -352,4 +346,5 @@ GpencilModifierTypeInfo modifierType_Gpencil_Hook = {
 	/* foreachObjectLink */ foreachObjectLink,
 	/* foreachIDLink */     NULL,
 	/* foreachTexLink */    NULL,
+	/* getDuplicationFactor */ NULL,
 };

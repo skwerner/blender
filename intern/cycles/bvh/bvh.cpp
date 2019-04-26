@@ -22,8 +22,13 @@
 
 #include "bvh/bvh2.h"
 #include "bvh/bvh4.h"
+#include "bvh/bvh8.h"
 #include "bvh/bvh_build.h"
 #include "bvh/bvh_node.h"
+
+#ifdef WITH_EMBREE
+#include "bvh/bvh_embree.h"
+#endif
 
 #include "util/util_foreach.h"
 #include "util/util_logging.h"
@@ -38,7 +43,9 @@ const char *bvh_layout_name(BVHLayout layout)
 	switch(layout) {
 		case BVH_LAYOUT_BVH2: return "BVH2";
 		case BVH_LAYOUT_BVH4: return "BVH4";
+		case BVH_LAYOUT_BVH8: return "BVH8";
 		case BVH_LAYOUT_NONE: return "NONE";
+		case BVH_LAYOUT_EMBREE: return "EMBREE";
 		case BVH_LAYOUT_ALL:  return "ALL";
 	}
 	LOG(DFATAL) << "Unsupported BVH layout was passed.";
@@ -92,6 +99,12 @@ BVH *BVH::create(const BVHParams& params, const vector<Object*>& objects)
 			return new BVH2(params, objects);
 		case BVH_LAYOUT_BVH4:
 			return new BVH4(params, objects);
+		case BVH_LAYOUT_BVH8:
+			return new BVH8(params, objects);
+		case BVH_LAYOUT_EMBREE:
+#ifdef WITH_EMBREE
+			return new BVHEmbree(params, objects);
+#endif
 		case BVH_LAYOUT_NONE:
 		case BVH_LAYOUT_ALL:
 			break;
@@ -102,7 +115,7 @@ BVH *BVH::create(const BVHParams& params, const vector<Object*>& objects)
 
 /* Building */
 
-void BVH::build(Progress& progress)
+void BVH::build(Progress& progress, Stats*)
 {
 	progress.set_substatus("Building BVH");
 
@@ -114,10 +127,26 @@ void BVH::build(Progress& progress)
 	                   pack.prim_time,
 	                   params,
 	                   progress);
-	BVHNode *root = bvh_build.run();
+	BVHNode *bvh2_root = bvh_build.run();
 
 	if(progress.get_cancel()) {
-		if(root) root->deleteSubtree();
+		if(bvh2_root != NULL) {
+			bvh2_root->deleteSubtree();
+		}
+		return;
+	}
+
+	/* BVH builder returns tree in a binary mode (with two children per inner
+	 * node. Need to adopt that for a wider BVH implementations. */
+	BVHNode *root = widen_children_nodes(bvh2_root);
+	if(root != bvh2_root) {
+		bvh2_root->deleteSubtree();
+	}
+
+	if(progress.get_cancel()) {
+		if(root != NULL) {
+			root->deleteSubtree();
+		}
 		return;
 	}
 
@@ -215,6 +244,7 @@ void BVH::refit_primitives(int start, int end, BoundBox& bbox, uint& visibility)
 			}
 		}
 		visibility |= ob->visibility_for_tracing();
+
 	}
 }
 
@@ -291,8 +321,8 @@ void BVH::pack_instances(size_t nodes_size, size_t leaf_nodes_size)
 	 * BVH's are stored in global arrays. This function merges them into the
 	 * top level BVH, adjusting indexes and offsets where appropriate.
 	 */
-	/* TODO(sergey): This code needs adjustment for wider BVH than 4. */
 	const bool use_qbvh = (params.bvh_layout == BVH_LAYOUT_BVH4);
+	const bool use_obvh = (params.bvh_layout == BVH_LAYOUT_BVH8);
 
 	/* Adjust primitive index to point to the triangle in the global array, for
 	 * meshes with transform applied and already in the top level BVH.
@@ -469,14 +499,26 @@ void BVH::pack_instances(size_t nodes_size, size_t leaf_nodes_size)
 			for(size_t i = 0, j = 0; i < bvh_nodes_size; j++) {
 				size_t nsize, nsize_bbox;
 				if(bvh_nodes[i].x & PATH_RAY_NODE_UNALIGNED) {
-					nsize = use_qbvh
-					            ? BVH_UNALIGNED_QNODE_SIZE
-					            : BVH_UNALIGNED_NODE_SIZE;
-					nsize_bbox = (use_qbvh)? 13: 0;
+					if(use_obvh) {
+						nsize = BVH_UNALIGNED_ONODE_SIZE;
+						nsize_bbox = BVH_UNALIGNED_ONODE_SIZE-1;
+					}
+					else {
+						nsize = use_qbvh
+							? BVH_UNALIGNED_QNODE_SIZE
+							: BVH_UNALIGNED_NODE_SIZE;
+						nsize_bbox = (use_qbvh) ? BVH_UNALIGNED_QNODE_SIZE-1 : 0;
+					}
 				}
 				else {
-					nsize = (use_qbvh)? BVH_QNODE_SIZE: BVH_NODE_SIZE;
-					nsize_bbox = (use_qbvh)? 7: 0;
+					if(use_obvh) {
+						nsize = BVH_ONODE_SIZE;
+						nsize_bbox = BVH_ONODE_SIZE-1;
+					}
+					else {
+						nsize = (use_qbvh)? BVH_QNODE_SIZE: BVH_NODE_SIZE;
+						nsize_bbox = (use_qbvh)? BVH_QNODE_SIZE-1 : 0;
+					}
 				}
 
 				memcpy(pack_nodes + pack_nodes_offset,
@@ -485,16 +527,29 @@ void BVH::pack_instances(size_t nodes_size, size_t leaf_nodes_size)
 
 				/* Modify offsets into arrays */
 				int4 data = bvh_nodes[i + nsize_bbox];
-
-				data.z += (data.z < 0)? -noffset_leaf: noffset;
-				data.w += (data.w < 0)? -noffset_leaf: noffset;
-
-				if(use_qbvh) {
-					data.x += (data.x < 0)? -noffset_leaf: noffset;
-					data.y += (data.y < 0)? -noffset_leaf: noffset;
+				int4 data1 = bvh_nodes[i + nsize_bbox-1];
+				if(use_obvh) {
+					data.z += (data.z < 0) ? -noffset_leaf : noffset;
+					data.w += (data.w < 0) ? -noffset_leaf : noffset;
+					data.x += (data.x < 0) ? -noffset_leaf : noffset;
+					data.y += (data.y < 0) ? -noffset_leaf : noffset;
+					data1.z += (data1.z < 0) ? -noffset_leaf : noffset;
+					data1.w += (data1.w < 0) ? -noffset_leaf : noffset;
+					data1.x += (data1.x < 0) ? -noffset_leaf : noffset;
+					data1.y += (data1.y < 0) ? -noffset_leaf : noffset;
 				}
-
+				else {
+					data.z += (data.z < 0) ? -noffset_leaf : noffset;
+					data.w += (data.w < 0) ? -noffset_leaf : noffset;
+					if(use_qbvh) {
+						data.x += (data.x < 0)? -noffset_leaf: noffset;
+						data.y += (data.y < 0)? -noffset_leaf: noffset;
+					}
+				}
 				pack_nodes[pack_nodes_offset + nsize_bbox] = data;
+				if(use_obvh) {
+					pack_nodes[pack_nodes_offset + nsize_bbox - 1] = data1;
+				}
 
 				/* Usually this copies nothing, but we better
 				 * be prepared for possible node size extension.

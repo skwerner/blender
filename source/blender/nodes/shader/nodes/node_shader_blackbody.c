@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,12 +15,6 @@
  *
  * The Original Code is Copyright (C) 2005 Blender Foundation.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
 #include "../node_shader_util.h"
@@ -30,22 +22,25 @@
 /* **************** Blackbody ******************** */
 static bNodeSocketTemplate sh_node_blackbody_in[] = {
 	{	SOCK_FLOAT, 1, N_("Temperature"),	1500.0f, 0.0f, 0.0f, 0.0f, 800.0f, 12000.0f},
-	{	-1, 0, ""	}
+	{	-1, 0, ""	},
 };
 
 static bNodeSocketTemplate sh_node_blackbody_out[] = {
 	{	SOCK_RGBA, 0, N_("Color")},
-	{	-1, 0, ""	}
+	{	-1, 0, ""	},
 };
 
 static int node_shader_gpu_blackbody(GPUMaterial *mat, bNode *node, bNodeExecData *UNUSED(execdata), GPUNodeStack *in, GPUNodeStack *out)
 {
-	const int size = 256;
+	const int size = CM_TABLE + 1;
 	float *data = MEM_mallocN(sizeof(float) * size * 4, "blackbody texture");
 
 	blackbody_temperature_to_rgb_table(data, size, 965.0f, 12000.0f);
 
-	return GPU_stack_link(mat, node, "node_blackbody", in, out, GPU_texture(size, data));
+	float layer;
+	GPUNodeLink *ramp_texture = GPU_color_band(mat, size, data, &layer);
+
+	return GPU_stack_link(mat, node, "node_blackbody", in, out, ramp_texture, GPU_constant(&layer));
 }
 
 /* node type definition */

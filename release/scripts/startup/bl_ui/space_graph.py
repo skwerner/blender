@@ -18,7 +18,6 @@
 
 # <pep8 compliant>
 
-import bpy
 from bpy.types import Header, Menu, Panel
 from .space_dopesheet import (
     DopesheetFilterPopoverBase,
@@ -31,7 +30,7 @@ class GRAPH_HT_header(Header):
 
     def draw(self, context):
         layout = self.layout
-        toolsettings = context.tool_settings
+        tool_settings = context.tool_settings
 
         st = context.space_data
 
@@ -65,20 +64,15 @@ class GRAPH_HT_header(Header):
             icon='FILTER',
         )
 
+        layout.prop(st, "pivot_point", icon_only=True)
+
         layout.prop(st, "auto_snap", text="")
 
         row = layout.row(align=True)
-        row.prop(toolsettings, "use_proportional_fcurve", text="", icon_only=True)
+        row.prop(tool_settings, "use_proportional_fcurve", text="", icon_only=True)
         sub = row.row(align=True)
-        sub.active = toolsettings.use_proportional_fcurve
-        sub.prop(toolsettings, "proportional_edit_falloff", text="", icon_only=True)
-
-        layout.prop(st, "pivot_point", icon_only=True)
-
-        row = layout.row(align=True)
-        row.operator("graph.copy", text="", icon='COPYDOWN')
-        row.operator("graph.paste", text="", icon='PASTEDOWN')
-        row.operator("graph.paste", text="", icon='PASTEFLIPDOWN').flipped = True
+        sub.active = tool_settings.use_proportional_fcurve
+        sub.prop(tool_settings, "proportional_edit_falloff", text="", icon_only=True)
 
 
 class GRAPH_PT_filters(DopesheetFilterPopoverBase, Panel):
@@ -101,10 +95,7 @@ class GRAPH_MT_editor_menus(Menu):
     bl_label = ""
 
     def draw(self, context):
-        self.draw_menus(self.layout, context)
-
-    @staticmethod
-    def draw_menus(layout, context):
+        layout = self.layout
         layout.menu("GRAPH_MT_view")
         layout.menu("GRAPH_MT_select")
         layout.menu("GRAPH_MT_marker")
@@ -128,6 +119,7 @@ class GRAPH_MT_view(Menu):
         layout.prop(st, "show_cursor")
         layout.prop(st, "show_sliders")
         layout.prop(st, "show_group_colors")
+        layout.prop(st, "show_marker_lines")
         layout.prop(st, "use_auto_merge_keyframes")
 
         layout.separator()
@@ -153,6 +145,12 @@ class GRAPH_MT_view(Menu):
         layout.operator("graph.view_selected")
         layout.operator("graph.view_frame")
 
+        # Add this to show key-binding (reverse action in dope-sheet).
+        layout.separator()
+        props = layout.operator("wm.context_set_enum", text="Toggle Dope Sheet")
+        props.data_path = "area.type"
+        props.value = 'DOPESHEET_EDITOR'
+
         layout.separator()
         layout.menu("INFO_MT_area")
 
@@ -169,13 +167,13 @@ class GRAPH_MT_select(Menu):
 
         layout.separator()
 
-        props = layout.operator("graph.select_border")
+        props = layout.operator("graph.select_box")
         props.axis_range = False
         props.include_handles = False
-        props = layout.operator("graph.select_border", text="Border Axis Range")
+        props = layout.operator("graph.select_box", text="Border Axis Range")
         props.axis_range = True
         props.include_handles = False
-        props = layout.operator("graph.select_border", text="Border (Include Handles)")
+        props = layout.operator("graph.select_box", text="Border (Include Handles)")
         props.axis_range = False
         props.include_handles = True
 
@@ -211,7 +209,7 @@ class GRAPH_MT_marker(Menu):
         layout = self.layout
 
         from .space_time import marker_menu_generic
-        marker_menu_generic(layout)
+        marker_menu_generic(layout, context)
 
         # TODO: pose markers for action edit mode only?
 
@@ -277,6 +275,9 @@ class GRAPH_MT_key(Menu):
         layout.operator("graph.frame_jump")
 
         layout.separator()
+        layout.operator("graph.copy")
+        layout.operator("graph.paste")
+        layout.operator("graph.paste", text="Paste Flipped").flipped = True
         layout.operator("graph.duplicate_move")
         layout.operator("graph.delete")
 
@@ -293,10 +294,6 @@ class GRAPH_MT_key(Menu):
         layout.operator("graph.bake")
 
         layout.separator()
-        layout.operator("graph.copy")
-        layout.operator("graph.paste")
-
-        layout.separator()
         layout.operator("graph.euler_filter", text="Discontinuity (Euler) Filter")
 
 
@@ -306,7 +303,7 @@ class GRAPH_MT_key_transform(Menu):
     def draw(self, context):
         layout = self.layout
 
-        layout.operator("transform.translate", text="Grab/Move")
+        layout.operator("transform.translate", text="Move")
         layout.operator("transform.transform", text="Extend").mode = 'TIME_EXTEND'
         layout.operator("transform.rotate", text="Rotate")
         layout.operator("transform.resize", text="Scale")
@@ -326,7 +323,7 @@ class GRAPH_MT_delete(Menu):
         layout.operator("graph.clean", text="Clean Channels").channels = True
 
 
-class GRAPH_MT_specials(Menu):
+class GRAPH_MT_context_menu(Menu):
     bl_label = "F-Curve Context Menu"
 
     def draw(self, context):
@@ -354,7 +351,34 @@ class GRAPH_MT_specials(Menu):
         layout.operator_menu_enum("graph.snap", "type", text="Snap")
 
 
-class GRAPH_MT_channel_specials(Menu):
+class GRAPH_MT_pivot_pie(Menu):
+    bl_label = "Pivot Point"
+
+    def draw(self, context):
+        layout = self.layout
+        pie = layout.menu_pie()
+
+        pie.prop_enum(context.space_data, "pivot_point", value='BOUNDING_BOX_CENTER')
+        pie.prop_enum(context.space_data, "pivot_point", value='CURSOR')
+        pie.prop_enum(context.space_data, "pivot_point", value='INDIVIDUAL_ORIGINS')
+
+
+class GRAPH_MT_snap_pie(Menu):
+    bl_label = "Snap"
+
+    def draw(self, context):
+        layout = self.layout
+        pie = layout.menu_pie()
+
+        pie.operator("graph.snap", text="Current Frame").type = 'CFRA'
+        pie.operator("graph.snap", text="Cursor Value").type = 'VALUE'
+        pie.operator("graph.snap", text="Nearest Frame").type = 'NEAREST_FRAME'
+        pie.operator("graph.snap", text="Nearest Second").type = 'NEAREST_SECOND'
+        pie.operator("graph.snap", text="Nearest Marker").type = 'NEAREST_MARKER'
+        pie.operator("graph.snap", text="Flatten Handles").type = 'HORIZONTAL'
+
+
+class GRAPH_MT_channel_context_menu(Menu):
     bl_label = "F-Curve Channel Context Menu"
 
     def draw(self, context):
@@ -405,8 +429,10 @@ classes = (
     GRAPH_MT_key,
     GRAPH_MT_key_transform,
     GRAPH_MT_delete,
-    GRAPH_MT_specials,
-    GRAPH_MT_channel_specials,
+    GRAPH_MT_context_menu,
+    GRAPH_MT_channel_context_menu,
+    GRAPH_MT_pivot_pie,
+    GRAPH_MT_snap_pie,
     GRAPH_PT_filters,
 )
 

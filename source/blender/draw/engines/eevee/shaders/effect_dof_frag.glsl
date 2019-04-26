@@ -4,11 +4,10 @@ uniform mat4 ProjectionMatrix;
 uniform sampler2D colorBuffer;
 uniform sampler2D depthBuffer;
 
-uniform vec3 dofParams;
+uniform vec2 dofParams;
 
-#define dof_aperturesize    dofParams.x
-#define dof_distance        dofParams.y
-#define dof_invsensorsize   dofParams.z
+#define dof_mul    dofParams.x /* distance * aperturesize * invsensorsize */
+#define dof_bias   dofParams.y /* aperturesize * invsensorsize */
 
 uniform vec4 bokehParams[2];
 
@@ -25,17 +24,18 @@ uniform vec2 nearFar; /* Near & far view depths values */
 /* -------------- Utils ------------- */
 
 /* divide by sensor size to get the normalized size */
-#define calculate_coc(zdepth) (dof_aperturesize * (dof_distance / zdepth - 1.0) * dof_invsensorsize)
+#define calculate_coc(zdepth) (dof_mul / zdepth - dof_bias)
 
-#define linear_depth(z) ((ProjectionMatrix[3][3] == 0.0) \
-		? (nearFar.x  * nearFar.y) / (z * (nearFar.x - nearFar.y) + nearFar.y) \
-		: (z * 2.0 - 1.0) * nearFar.y)
+#define linear_depth(z) \
+	((ProjectionMatrix[3][3] == 0.0) ? \
+	 (nearFar.x  * nearFar.y) / (z * (nearFar.x - nearFar.y) + nearFar.y) : \
+	 z * (nearFar.y - nearFar.x) + nearFar.x) /* Only true for camera view! */
 
-#define weighted_sum(a, b, c, d, e) (a * e.x + b * e.y + c * e.z + d * e.w)
+#define weighted_sum(a, b, c, d, e) (a * e.x + b * e.y + c * e.z + d * e.w) / max(1e-6, dot(e, vec4(1.0)));
 
 float max_v4(vec4 v) { return max(max(v.x, v.y), max(v.z, v.w)); }
 
-#define THRESHOLD 0.0
+#define THRESHOLD 1.0
 
 #ifdef STEP_DOWNSAMPLE
 
@@ -69,47 +69,56 @@ void main(void)
 	vec4 coc_near = calculate_coc(zdepth);
 	vec4 coc_far = -coc_near;
 
-	/* now we need to write the near-far fields premultiplied by the coc */
-	vec4 near_weights = step(THRESHOLD, coc_near);
-	vec4 far_weights = step(THRESHOLD, coc_far);
+	cocData.x = max(max_v4(coc_near), 0.0);
+	cocData.y = max(max_v4(coc_far), 0.0);
+
+	/* now we need to write the near-far fields premultiplied by the coc
+	 * also use bilateral weighting by each coc values to avoid bleeding. */
+	vec4 near_weights = step(THRESHOLD, coc_near) * clamp(1.0 - abs(cocData.x - coc_near), 0.0, 1.0);
+	vec4 far_weights  = step(THRESHOLD, coc_far)  * clamp(1.0 - abs(cocData.y - coc_far),  0.0, 1.0);
+
+#  ifdef USE_ALPHA_DOF
+	/* Premult */
+	color1.rgb *= color1.a;
+	color2.rgb *= color2.a;
+	color3.rgb *= color3.a;
+	color4.rgb *= color4.a;
+#  endif
 
 	/* now write output to weighted buffers. */
 	nearColor = weighted_sum(color1, color2, color3, color4, near_weights);
 	farColor = weighted_sum(color1, color2, color3, color4, far_weights);
-
-	/* Normalize the color (don't divide by 0.0) */
-	nearColor /= max(1e-6, dot(near_weights, near_weights));
-	farColor /= max(1e-6, dot(far_weights, far_weights));
-
-	float max_near_coc = max(max_v4(coc_near), 0.0);
-	float max_far_coc = max(max_v4(coc_far), 0.0);
-
-	cocData = vec2(max_near_coc, max_far_coc);
 }
 
 #elif defined(STEP_SCATTER)
 
 flat in vec4 color;
+flat in float weight;
 flat in float smoothFac;
 flat in ivec2 edge;
 /* coordinate used for calculating radius */
 in vec2 particlecoord;
 
-out vec4 fragColor;
+layout(location = 0) out vec4 fragColor;
+#  ifdef USE_ALPHA_DOF
+layout(location = 1) out float fragAlpha;
+#  endif
 
 /* accumulate color in the near/far blur buffers */
 void main(void)
 {
 	/* Discard to avoid bleeding onto the next layer */
-	if (int(gl_FragCoord.x) * edge.x + edge.y > 0)
+	if (int(gl_FragCoord.x) * edge.x + edge.y > 0) {
 		discard;
+	}
 
 	/* Circle Dof */
 	float dist = length(particlecoord);
 
 	/* Ouside of bokeh shape */
-	if (dist > 1.0)
+	if (dist > 1.0) {
 		discard;
+	}
 
 	/* Regular Polygon Dof */
 	if (bokeh_sides.x > 0.0) {
@@ -127,17 +136,23 @@ void main(void)
 		dist /= r;
 
 		/* Ouside of bokeh shape */
-		if (dist > 1.0)
+		if (dist > 1.0) {
 			discard;
+		}
 	}
 
 	fragColor = color;
 
 	/* Smooth the edges a bit. This effectively reduce the bokeh shape
 	 * but does fade out the undersampling artifacts. */
-	if (smoothFac < 1.0) {
-		fragColor *= smoothstep(1.0, smoothFac, dist);
-	}
+	float shape = smoothstep(1.0, min(0.999, smoothFac), dist);
+
+	fragColor *= shape;
+
+#  ifdef USE_ALPHA_DOF
+	fragAlpha = fragColor.a;
+	fragColor.a = weight * shape;
+#  endif
 }
 
 #elif defined(STEP_RESOLVE)
@@ -145,6 +160,7 @@ void main(void)
 #define MERGE_THRESHOLD 4.0
 
 uniform sampler2D scatterBuffer;
+uniform sampler2D scatterAlphaBuffer;
 
 in vec4 uvcoordsvar;
 out vec4 fragColor;
@@ -197,26 +213,32 @@ void main(void)
 	float coc_far = max(-coc_signed, 0.0);
 	float coc_near = max(coc_signed, 0.0);
 
-	vec2 texelSize = vec2(0.5, 1.0) / vec2(textureSize(scatterBuffer, 0));
-	vec4 srccolor = textureLod(colorBuffer, uv, 0.0);
+	vec4 focus_col = textureLod(colorBuffer, uv, 0.0);
 
+	vec2 texelSize = vec2(0.5, 1.0) / vec2(textureSize(scatterBuffer, 0));
 	vec2 near_uv = uv * vec2(0.5, 1.0);
 	vec2 far_uv = near_uv + vec2(0.5, 0.0);
-	vec4 farcolor = upsample_filter(scatterBuffer, far_uv, texelSize);
-	vec4 nearcolor = upsample_filter(scatterBuffer, near_uv, texelSize);
+	vec4 near_col = upsample_filter(scatterBuffer, near_uv, texelSize);
+	vec4 far_col = upsample_filter(scatterBuffer, far_uv, texelSize);
 
-	float farweight = farcolor.a;
-	float nearweight = nearcolor.a;
+	float far_w = far_col.a;
+	float near_w = near_col.a;
+	float focus_w = 1.0 - smoothstep(1.0, MERGE_THRESHOLD, abs(coc_signed));
+	float inv_weight_sum = 1.0 / (near_w + focus_w + far_w);
 
-	if (farcolor.a > 0.0) farcolor /= farcolor.a;
-	if (nearcolor.a > 0.0) nearcolor /= nearcolor.a;
+	focus_col *= focus_w; /* Premul */
 
-	float mixfac = smoothstep(1.0, MERGE_THRESHOLD, abs(coc_signed));
+#  ifdef USE_ALPHA_DOF
+	near_col.a = upsample_filter(scatterAlphaBuffer, near_uv, texelSize).r;
+	far_col.a = upsample_filter(scatterAlphaBuffer, far_uv, texelSize).r;
+#  endif
 
-	float totalweight = nearweight + farweight;
-	farcolor = mix(srccolor, farcolor, mixfac);
-	nearcolor = mix(srccolor, nearcolor, mixfac);
-	fragColor = mix(farcolor, nearcolor, nearweight / max(1e-6, totalweight));
+	fragColor = (far_col + near_col + focus_col) * inv_weight_sum;
+
+#  ifdef USE_ALPHA_DOF
+	/* Unpremult */
+	fragColor.rgb /= (fragColor.a > 0.0) ? fragColor.a : 1.0;
+#  endif
 }
 
 #endif

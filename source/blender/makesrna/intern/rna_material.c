@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,14 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * Contributor(s): Blender Foundation (2008), Nathan Letwory
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/makesrna/intern/rna_material.c
- *  \ingroup RNA
+/** \file
+ * \ingroup RNA
  */
 
 #include <float.h>
@@ -40,24 +34,29 @@
 
 const EnumPropertyItem rna_enum_ramp_blend_items[] = {
 	{MA_RAMP_BLEND, "MIX", 0, "Mix", ""},
-	{MA_RAMP_ADD, "ADD", 0, "Add", ""},
-	{MA_RAMP_MULT, "MULTIPLY", 0, "Multiply", ""},
-	{MA_RAMP_SUB, "SUBTRACT", 0, "Subtract", ""},
-	{MA_RAMP_SCREEN, "SCREEN", 0, "Screen", ""},
-	{MA_RAMP_DIV, "DIVIDE", 0, "Divide", ""},
-	{MA_RAMP_DIFF, "DIFFERENCE", 0, "Difference", ""},
+	{0, "", ICON_NONE, NULL, NULL},
 	{MA_RAMP_DARK, "DARKEN", 0, "Darken", ""},
-	{MA_RAMP_LIGHT, "LIGHTEN", 0, "Lighten", ""},
-	{MA_RAMP_OVERLAY, "OVERLAY", 0, "Overlay", ""},
-	{MA_RAMP_DODGE, "DODGE", 0, "Dodge", ""},
+	{MA_RAMP_MULT, "MULTIPLY", 0, "Multiply", ""},
 	{MA_RAMP_BURN, "BURN", 0, "Burn", ""},
-	{MA_RAMP_HUE, "HUE", 0, "Hue", ""},
-	{MA_RAMP_SAT, "SATURATION", 0, "Saturation", ""},
-	{MA_RAMP_VAL, "VALUE", 0, "Value", ""},
-	{MA_RAMP_COLOR, "COLOR", 0, "Color", ""},
+	{0, "", ICON_NONE, NULL, NULL},
+	{MA_RAMP_LIGHT, "LIGHTEN", 0, "Lighten", ""},
+	{MA_RAMP_SCREEN, "SCREEN", 0, "Screen", ""},
+	{MA_RAMP_DODGE, "DODGE", 0, "Dodge", ""},
+	{MA_RAMP_ADD, "ADD", 0, "Add", ""},
+	{0, "", ICON_NONE, NULL, NULL},
+	{MA_RAMP_OVERLAY, "OVERLAY", 0, "Overlay", ""},
 	{MA_RAMP_SOFT, "SOFT_LIGHT", 0, "Soft Light", ""},
 	{MA_RAMP_LINEAR, "LINEAR_LIGHT", 0, "Linear Light", ""},
-	{0, NULL, 0, NULL, NULL}
+	{0, "", ICON_NONE, NULL, NULL},
+	{MA_RAMP_DIFF, "DIFFERENCE", 0, "Difference", ""},
+	{MA_RAMP_SUB, "SUBTRACT", 0, "Subtract", ""},
+	{MA_RAMP_DIV, "DIVIDE", 0, "Divide", ""},
+	{0, "", ICON_NONE, NULL, NULL},
+	{MA_RAMP_HUE, "HUE", 0, "Hue", ""},
+	{MA_RAMP_SAT, "SATURATION", 0, "Saturation", ""},
+	{MA_RAMP_COLOR, "COLOR", 0, "Color", ""},
+	{MA_RAMP_VAL, "VALUE", 0, "Value", ""},
+	{0, NULL, 0, NULL, NULL},
 };
 
 #ifdef RNA_RUNTIME
@@ -92,7 +91,7 @@ static void rna_Material_update(Main *UNUSED(bmain), Scene *UNUSED(scene), Point
 {
 	Material *ma = ptr->id.data;
 
-	DEG_id_tag_update(&ma->id, DEG_TAG_COPY_ON_WRITE);
+	DEG_id_tag_update(&ma->id, ID_RECALC_SHADING);
 	WM_main_add_notifier(NC_MATERIAL | ND_SHADING, ma);
 }
 
@@ -109,16 +108,8 @@ static void rna_Material_update_previews(Main *UNUSED(bmain), Scene *UNUSED(scen
 static void rna_MaterialGpencil_update(Main *bmain, Scene *scene, PointerRNA *ptr)
 {
 	Material *ma = ptr->id.data;
-	PreviewImage *preview = ma->preview;
 
 	rna_Material_update(bmain, scene, ptr);
-
-	/* update previews (icon and thumbnail) */
-	if (preview != NULL) {
-		preview->flag[ICON_SIZE_ICON] |= PRV_CHANGED;
-		preview->flag[ICON_SIZE_PREVIEW] |= PRV_CHANGED;
-		WM_main_add_notifier(NC_MATERIAL | ND_SHADING_PREVIEW, ma);
-	}
 	WM_main_add_notifier(NC_GPENCIL | ND_DATA, ma);
 }
 
@@ -127,7 +118,6 @@ static void rna_MaterialGpencil_nopreview_update(Main *bmain, Scene *scene, Poin
 	Material *ma = ptr->id.data;
 
 	rna_Material_update(bmain, scene, ptr);
-
 	WM_main_add_notifier(NC_GPENCIL | ND_DATA, ma);
 }
 
@@ -135,7 +125,7 @@ static void rna_Material_draw_update(Main *UNUSED(bmain), Scene *UNUSED(scene), 
 {
 	Material *ma = ptr->id.data;
 
-	DEG_id_tag_update(&ma->id, DEG_TAG_COPY_ON_WRITE);
+	DEG_id_tag_update(&ma->id, ID_RECALC_SHADING);
 	WM_main_add_notifier(NC_MATERIAL | ND_SHADING_DRAW, ma);
 }
 
@@ -146,7 +136,7 @@ static void rna_Material_texpaint_begin(CollectionPropertyIterator *iter, Pointe
 }
 
 
-static void rna_Material_active_paint_texture_index_update(Main *bmain, Scene *scene, PointerRNA *ptr)
+static void rna_Material_active_paint_texture_index_update(Main *bmain, Scene *UNUSED(scene), PointerRNA *ptr)
 {
 	bScreen *sc;
 	Material *ma = ptr->id.data;
@@ -167,7 +157,7 @@ static void rna_Material_active_paint_texture_index_update(Main *bmain, Scene *s
 
 	if (ma->texpaintslot) {
 		Image *image = ma->texpaintslot[ma->paint_active_slot].ima;
-		for (sc = bmain->screen.first; sc; sc = sc->id.next) {
+		for (sc = bmain->screens.first; sc; sc = sc->id.next) {
 			wmWindow *win = ED_screen_window_find(sc, bmain->wm.first);
 			if (win == NULL) {
 				continue;
@@ -186,7 +176,7 @@ static void rna_Material_active_paint_texture_index_update(Main *bmain, Scene *s
 					if (sl->spacetype == SPACE_IMAGE) {
 						SpaceImage *sima = (SpaceImage *)sl;
 						if (!sima->pin) {
-							ED_space_image_set(bmain, sima, scene, obedit, image);
+							ED_space_image_set(bmain, sima, obedit, image, true);
 						}
 					}
 				}
@@ -206,7 +196,7 @@ static void rna_Material_use_nodes_update(bContext *C, PointerRNA *ptr)
 	if (ma->use_nodes && ma->nodetree == NULL)
 		ED_node_shader_default(C, &ma->id);
 
-	DEG_id_tag_update(&ma->id, DEG_TAG_COPY_ON_WRITE);
+	DEG_id_tag_update(&ma->id, ID_RECALC_COPY_ON_WRITE);
 	DEG_relations_tag_update(bmain);
 	rna_Material_draw_update(bmain, CTX_data_scene(C), ptr);
 }
@@ -270,6 +260,33 @@ void rna_mtex_texture_slots_clear(ID *self_id, struct bContext *C, ReportList *r
 	WM_event_add_notifier(C, NC_TEXTURE, CTX_data_scene(C));
 }
 
+static void rna_TexPaintSlot_uv_layer_get(PointerRNA *ptr, char *value)
+{
+	TexPaintSlot *data = (TexPaintSlot *)(ptr->data);
+
+	if (data->uvname != NULL) {
+		BLI_strncpy_utf8(value, data->uvname, 64);
+	}
+	else {
+		value[0] = '\0';
+	}
+}
+
+static int rna_TexPaintSlot_uv_layer_length(PointerRNA *ptr)
+{
+	TexPaintSlot *data = (TexPaintSlot *)(ptr->data);
+	return data->uvname == NULL ? 0 : strlen(data->uvname);
+}
+
+static void rna_TexPaintSlot_uv_layer_set(PointerRNA *ptr, const char *value)
+{
+	TexPaintSlot *data = (TexPaintSlot *)(ptr->data);
+
+	if (data->uvname != NULL) {
+		BLI_strncpy_utf8(data->uvname, value, 64);
+	}
+}
+
 static bool rna_is_grease_pencil_get(PointerRNA *ptr)
 {
 	Material *ma = (Material *)ptr->data;
@@ -290,7 +307,7 @@ static void rna_gpcolordata_uv_update(Main *bmain, Scene *scene, PointerRNA *ptr
 
 static char *rna_GpencilColorData_path(PointerRNA *UNUSED(ptr))
 {
-	return BLI_sprintfN("grease_pencil");
+	return BLI_strdup("grease_pencil");
 }
 
 static int rna_GpencilColorData_is_stroke_visible_get(PointerRNA *ptr)
@@ -331,7 +348,7 @@ static void rna_def_material_display(StructRNA *srna)
 
 	prop = RNA_def_property(srna, "diffuse_color", PROP_FLOAT, PROP_COLOR);
 	RNA_def_property_float_sdna(prop, NULL, "r");
-	RNA_def_property_array(prop, 3);
+	RNA_def_property_array(prop, 4);
 	RNA_def_property_ui_text(prop, "Diffuse Color", "Diffuse color of the material");
 	RNA_def_property_update(prop, 0, "rna_Material_draw_update");
 
@@ -383,32 +400,32 @@ static void rna_def_material_greasepencil(BlenderRNA *brna)
 
 	/* mode type styles */
 	static EnumPropertyItem gpcolordata_mode_types_items[] = {
-		{ GP_STYLE_MODE_LINE, "LINE", 0, "Line", "Draw strokes using a continuous line" },
-		{ GP_STYLE_MODE_DOTS, "DOTS", 0, "Dots", "Draw strokes using separated dots" },
-		{ GP_STYLE_MODE_BOX, "BOX", 0, "Boxes", "Draw strokes using separated rectangle boxes" },
-		{ 0, NULL, 0, NULL, NULL }
+		{GP_STYLE_MODE_LINE, "LINE", 0, "Line", "Draw strokes using a continuous line"},
+		{GP_STYLE_MODE_DOTS, "DOTS", 0, "Dots", "Draw strokes using separated dots"},
+		{GP_STYLE_MODE_BOX, "BOX", 0, "Boxes", "Draw strokes using separated rectangle boxes"},
+		{0, NULL, 0, NULL, NULL},
 	};
 
 	/* stroke styles */
 	static EnumPropertyItem stroke_style_items[] = {
-		{ GP_STYLE_STROKE_STYLE_SOLID, "SOLID", 0, "Solid", "Draw strokes with solid color" },
-		{ GP_STYLE_STROKE_STYLE_TEXTURE, "TEXTURE", 0, "Texture", "Draw strokes using texture" },
-		{ 0, NULL, 0, NULL, NULL }
+		{GP_STYLE_STROKE_STYLE_SOLID, "SOLID", 0, "Solid", "Draw strokes with solid color"},
+		{GP_STYLE_STROKE_STYLE_TEXTURE, "TEXTURE", 0, "Texture", "Draw strokes using texture"},
+		{0, NULL, 0, NULL, NULL},
 	};
 
 	/* fill styles */
 	static EnumPropertyItem fill_style_items[] = {
-		{ GP_STYLE_FILL_STYLE_SOLID, "SOLID", 0, "Solid", "Fill area with solid color" },
-		{ GP_STYLE_FILL_STYLE_GRADIENT, "GRADIENT", 0, "Gradient", "Fill area with gradient color" },
-		{ GP_STYLE_FILL_STYLE_CHESSBOARD, "CHESSBOARD", 0, "Checker Board", "Fill area with chessboard pattern" },
-		{ GP_STYLE_FILL_STYLE_TEXTURE, "TEXTURE", 0, "Texture", "Fill area with image texture" },
-		{ 0, NULL, 0, NULL, NULL }
+		{GP_STYLE_FILL_STYLE_SOLID, "SOLID", 0, "Solid", "Fill area with solid color"},
+		{GP_STYLE_FILL_STYLE_GRADIENT, "GRADIENT", 0, "Gradient", "Fill area with gradient color"},
+		{GP_STYLE_FILL_STYLE_CHESSBOARD, "CHESSBOARD", 0, "Checker Board", "Fill area with chessboard pattern"},
+		{GP_STYLE_FILL_STYLE_TEXTURE, "TEXTURE", 0, "Texture", "Fill area with image texture"},
+		{0, NULL, 0, NULL, NULL},
 	};
 
 	static EnumPropertyItem fill_gradient_items[] = {
-		{ GP_STYLE_GRADIENT_LINEAR, "LINEAR", 0, "Linear", "Fill area with gradient color" },
-		{ GP_STYLE_GRADIENT_RADIAL, "RADIAL", 0, "Radial", "Fill area with radial gradient" },
-		{ 0, NULL, 0, NULL, NULL }
+		{GP_STYLE_GRADIENT_LINEAR, "LINEAR", 0, "Linear", "Fill area with gradient color"},
+		{GP_STYLE_GRADIENT_RADIAL, "RADIAL", 0, "Radial", "Fill area with radial gradient"},
+		{0, NULL, 0, NULL, NULL},
 	};
 
 	srna = RNA_def_struct(brna, "MaterialGPencilStyle", NULL);
@@ -517,7 +534,7 @@ static void rna_def_material_greasepencil(BlenderRNA *brna)
 	/* Flags */
 	prop = RNA_def_property(srna, "hide", PROP_BOOLEAN, PROP_NONE);
 	RNA_def_property_boolean_sdna(prop, NULL, "flag", GP_STYLE_COLOR_HIDE);
-	RNA_def_property_ui_icon(prop, ICON_RESTRICT_VIEW_OFF, 1);
+	RNA_def_property_ui_icon(prop, ICON_HIDE_OFF, -1);
 	RNA_def_property_ui_text(prop, "Hide", "Set color Visibility");
 	RNA_def_property_update(prop, NC_GPENCIL | ND_SHADING, "rna_MaterialGpencil_nopreview_update");
 
@@ -557,6 +574,23 @@ static void rna_def_material_greasepencil(BlenderRNA *brna)
 	RNA_def_property_boolean_sdna(prop, NULL, "flag", GP_STYLE_FILL_PATTERN);
 	RNA_def_property_ui_text(prop, "Pattern", "Use Fill Texture as a pattern to apply color");
 	RNA_def_property_update(prop, NC_GPENCIL | ND_SHADING, "rna_MaterialGpencil_update");
+
+	prop = RNA_def_property(srna, "show_stroke", PROP_BOOLEAN, PROP_NONE);
+	RNA_def_property_boolean_sdna(prop, NULL, "flag", GP_STYLE_STROKE_SHOW);
+	RNA_def_property_ui_text(prop, "Show Stroke", "Show stroke lines of this material");
+	RNA_def_property_update(prop, NC_GPENCIL | ND_SHADING, "rna_MaterialGpencil_update");
+
+	prop = RNA_def_property(srna, "show_fill", PROP_BOOLEAN, PROP_NONE);
+	RNA_def_property_boolean_sdna(prop, NULL, "flag", GP_STYLE_FILL_SHOW);
+	RNA_def_property_ui_text(prop, "Show Fill", "Show stroke fills of this material");
+	RNA_def_property_update(prop, NC_GPENCIL | ND_SHADING, "rna_MaterialGpencil_update");
+
+	/* keep Dots and Boxes aligned to screen and not to drawing path */
+	prop = RNA_def_property(srna, "use_follow_path", PROP_BOOLEAN, PROP_NONE);
+	RNA_def_property_boolean_negative_sdna(prop, NULL, "flag", GP_STYLE_COLOR_LOCK_DOTS);
+	RNA_def_property_ui_text(prop, "Follow Path",
+		"Keep Dots and Boxes aligned to drawing path");
+	RNA_def_property_update(prop, NC_GPENCIL | ND_SHADING, "rna_MaterialGpencil_nopreview_update");
 
 	/* pass index for future compositing and editing tools */
 	prop = RNA_def_property(srna, "pass_index", PROP_INT, PROP_UNSIGNED);
@@ -631,10 +665,11 @@ void RNA_def_material(BlenderRNA *brna)
 		{MA_FLAT, "FLAT", ICON_MATPLANE, "Flat", "Flat XY plane"},
 		{MA_SPHERE, "SPHERE", ICON_MATSPHERE, "Sphere", "Sphere"},
 		{MA_CUBE, "CUBE", ICON_MATCUBE, "Cube", "Cube"},
-		{MA_MONKEY, "MONKEY", ICON_MONKEY, "Monkey", "Monkey"},
 		{MA_HAIR, "HAIR", ICON_HAIR, "Hair", "Hair strands"},
-		{MA_SPHERE_A, "SPHERE_A", ICON_MAT_SPHERE_SKY, "World Sphere", "Large sphere with sky"},
-		{0, NULL, 0, NULL, NULL}
+		{MA_SHADERBALL, "SHADERBALL", ICON_MATSHADERBALL, "Shader Ball", "Shader Ball"},
+		{MA_CLOTH, "CLOTH", ICON_MATCLOTH, "Cloth", "Cloth"},
+		{MA_FLUID, "FLUID", ICON_MATFLUID, "Fluid", "Fluid"},
+		{0, NULL, 0, NULL, NULL},
 	};
 
 	static EnumPropertyItem prop_eevee_blend_items[] = {
@@ -644,15 +679,15 @@ void RNA_def_material(BlenderRNA *brna)
 		{MA_BM_CLIP, "CLIP", 0, "Alpha Clip", "Use the alpha threshold to clip the visibility (binary visibility)"},
 		{MA_BM_HASHED, "HASHED", 0, "Alpha Hashed", "Use noise to dither the binary visibility (works well with multi-samples)"},
 		{MA_BM_BLEND, "BLEND", 0, "Alpha Blend", "Render polygon transparent, depending on alpha channel of the texture"},
-		{0, NULL, 0, NULL, NULL}
+		{0, NULL, 0, NULL, NULL},
 	};
 
 	static EnumPropertyItem prop_eevee_blend_shadow_items[] = {
 		{MA_BS_NONE, "NONE", 0, "None", "Material will cast no shadow"},
 		{MA_BS_SOLID, "OPAQUE", 0, "Opaque", "Material will cast shadows without transparency"},
-		{MA_BS_CLIP, "CLIP", 0, "Clip", "Use the alpha threshold to clip the visibility (binary visibility)"},
-		{MA_BS_HASHED, "HASHED", 0, "Hashed", "Use noise to dither the binary visibility and use filtering to reduce the noise"},
-		{0, NULL, 0, NULL, NULL}
+		{MA_BS_CLIP, "CLIP", 0, "Alpha Clip", "Use the alpha threshold to clip the visibility (binary visibility)"},
+		{MA_BS_HASHED, "HASHED", 0, "Alpha Hashed", "Use noise to dither the binary visibility and use filtering to reduce the noise"},
+		{0, NULL, 0, NULL, NULL},
 	};
 
 	srna = RNA_def_struct(brna, "Material", "ID");
@@ -666,10 +701,10 @@ void RNA_def_material(BlenderRNA *brna)
 	RNA_def_property_ui_text(prop, "Blend Mode", "Blend Mode for Transparent Faces");
 	RNA_def_property_update(prop, 0, "rna_Material_draw_update");
 
-	prop = RNA_def_property(srna, "transparent_shadow_method", PROP_ENUM, PROP_NONE);
+	prop = RNA_def_property(srna, "shadow_method", PROP_ENUM, PROP_NONE);
 	RNA_def_property_enum_sdna(prop, NULL, "blend_shadow");
 	RNA_def_property_enum_items(prop, prop_eevee_blend_shadow_items);
-	RNA_def_property_ui_text(prop, "Transparent Shadow", "Shadow method for transparent material");
+	RNA_def_property_ui_text(prop, "Shadow Mode", "Shadow mapping method");
 	RNA_def_property_update(prop, 0, "rna_Material_draw_update");
 
 	prop = RNA_def_property(srna, "alpha_threshold", PROP_FLOAT, PROP_FACTOR);
@@ -677,20 +712,15 @@ void RNA_def_material(BlenderRNA *brna)
 	RNA_def_property_ui_text(prop, "Clip Threshold", "A pixel is rendered only if its alpha value is above this threshold");
 	RNA_def_property_update(prop, 0, "rna_Material_draw_update");
 
-	prop = RNA_def_property(srna, "show_transparent_backside", PROP_BOOLEAN, PROP_NONE);
-	RNA_def_property_boolean_negative_sdna(prop, NULL, "blend_flag", MA_BL_HIDE_BACKSIDE);
-	RNA_def_property_ui_text(prop, "Show Backside", "Limit transparency to a single layer "
+	prop = RNA_def_property(srna, "show_transparent_back", PROP_BOOLEAN, PROP_NONE);
+	RNA_def_property_boolean_negative_sdna(prop, NULL, "blend_flag", MA_BL_HIDE_BACKFACE);
+	RNA_def_property_ui_text(prop, "Show Backface", "Limit transparency to a single layer "
 	                                                 "(avoids transparency sorting problems)");
 	RNA_def_property_update(prop, 0, "rna_Material_draw_update");
 
 	prop = RNA_def_property(srna, "use_screen_refraction", PROP_BOOLEAN, PROP_NONE);
 	RNA_def_property_boolean_sdna(prop, NULL, "blend_flag", MA_BL_SS_REFRACTION);
 	RNA_def_property_ui_text(prop, "Screen Space Refraction", "Use raytraced screen space refractions");
-	RNA_def_property_update(prop, 0, "rna_Material_draw_update");
-
-	prop = RNA_def_property(srna, "use_screen_subsurface", PROP_BOOLEAN, PROP_NONE);
-	RNA_def_property_boolean_sdna(prop, NULL, "blend_flag", MA_BL_SS_SUBSURFACE);
-	RNA_def_property_ui_text(prop, "Screen Space Subsurface Scattering", "Use post process subsurface scattering");
 	RNA_def_property_update(prop, 0, "rna_Material_draw_update");
 
 	prop = RNA_def_property(srna, "use_sss_translucency", PROP_BOOLEAN, PROP_NONE);
@@ -709,7 +739,12 @@ void RNA_def_material(BlenderRNA *brna)
 	prop = RNA_def_property(srna, "preview_render_type", PROP_ENUM, PROP_NONE);
 	RNA_def_property_enum_sdna(prop, NULL, "pr_type");
 	RNA_def_property_enum_items(prop, preview_type_items);
-	RNA_def_property_ui_text(prop, "Preview render type", "Type of preview render");
+	RNA_def_property_ui_text(prop, "Preview Render Type", "Type of preview render");
+	RNA_def_property_update(prop, 0, "rna_Material_update_previews");
+
+	prop = RNA_def_property(srna, "use_preview_world", PROP_BOOLEAN, PROP_NONE);
+	RNA_def_property_boolean_sdna(prop, NULL, "pr_flag", MA_PREVIEW_WORLD);
+	RNA_def_property_ui_text(prop, "Preview World", "Use the current world background to light the preview render");
 	RNA_def_property_update(prop, 0, "rna_Material_update_previews");
 
 	prop = RNA_def_property(srna, "pass_index", PROP_INT, PROP_UNSIGNED);
@@ -826,6 +861,8 @@ static void rna_def_tex_slot(BlenderRNA *brna)
 	prop = RNA_def_property(srna, "uv_layer", PROP_STRING, PROP_NONE);
 	RNA_def_property_string_maxlength(prop, 64); /* else it uses the pointer size! */
 	RNA_def_property_string_sdna(prop, NULL, "uvname");
+	RNA_def_property_string_funcs(prop, "rna_TexPaintSlot_uv_layer_get", "rna_TexPaintSlot_uv_layer_length",
+	                              "rna_TexPaintSlot_uv_layer_set");
 	RNA_def_property_ui_text(prop, "UV Map", "Name of UV map");
 	RNA_def_property_update(prop, NC_GEOM | ND_DATA, "rna_Material_update");
 

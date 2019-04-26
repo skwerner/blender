@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,12 +15,6 @@
  *
  * The Original Code is Copyright (C) 2005 Blender Foundation.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
 #include "../node_shader_util.h"
@@ -42,12 +34,12 @@ static bNodeSocketTemplate sh_node_volume_principled_in[] = {
 	{	SOCK_RGBA, 1, N_("Blackbody Tint"),			1.0f, 1.0f, 1.0f, 1.0f, 0.0f, 1.0f},
 	{	SOCK_FLOAT, 1, N_("Temperature"),			1000.0f, 0.0f, 0.0f, 0.0f, 0.0f, 6500.0f},
 	{	SOCK_STRING, 1, N_("Temperature Attribute"), 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f},
-	{	-1, 0, ""	}
+	{	-1, 0, ""	},
 };
 
 static bNodeSocketTemplate sh_node_volume_principled_out[] = {
 	{	SOCK_SHADER, 0, N_("Volume")},
-	{	-1, 0, ""	}
+	{	-1, 0, ""	},
 };
 
 static void node_shader_init_volume_principled(bNodeTree *UNUSED(ntree), bNode *node)
@@ -120,31 +112,31 @@ static int node_shader_gpu_volume_principled(GPUMaterial *mat, bNode *node, bNod
 	/* Default values if attributes not found. */
 	if (!density) {
 		static float one = 1.0f;
-		density = GPU_uniform(&one);
+		density = GPU_constant(&one);
 	}
 	if (!color) {
 		static float white[4] = {1.0f, 1.0f, 1.0f, 1.0f};
-		color = GPU_uniform(white);
+		color = GPU_constant(white);
 	}
 	if (!temperature) {
 		static float one = 1.0f;
-		temperature = GPU_uniform(&one);
+		temperature = GPU_constant(&one);
 	}
 
 	/* Create blackbody spectrum. */
-	GPUNodeLink *spectrummap;
+	const int size = CM_TABLE + 1;
+	float *data, layer;
 	if (use_blackbody) {
-		const int size = 256;
-		float *data = MEM_mallocN(sizeof(float) * size * 4, "blackbody texture");
+		data = MEM_mallocN(sizeof(float) * size * 4, "blackbody texture");
 		blackbody_temperature_to_rgb_table(data, size, 965.0f, 12000.0f);
-		spectrummap = GPU_texture(size, data);
 	}
 	else {
-		float *data = MEM_callocN(sizeof(float) * 4, "blackbody black");
-		spectrummap = GPU_texture(1, data);
+		data = MEM_callocN(sizeof(float) * size * 4, "blackbody black");
 	}
+	GPUNodeLink *spectrummap = GPU_color_band(mat, size, data, &layer);
 
-	return GPU_stack_link(mat, node, "node_volume_principled", in, out, density, color, temperature, spectrummap);
+	return GPU_stack_link(mat, node, "node_volume_principled", in, out, density, color, temperature, spectrummap,
+	                                                           GPU_constant(&layer));
 }
 
 /* node type definition */

@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,10 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/blenkernel/intern/screen.c
- *  \ingroup bke
+/** \file
+ * \ingroup bke
  */
 
 #ifdef WIN32
@@ -309,6 +301,30 @@ void BKE_spacedata_draw_locks(int set)
 	}
 }
 
+/**
+ * Version of #BKE_area_find_region_type that also works if \a slink is not the active space of \a sa.
+ */
+ARegion *BKE_spacedata_find_region_type(const SpaceLink *slink, const ScrArea *sa, int region_type)
+{
+	const bool is_slink_active = slink == sa->spacedata.first;
+	const ListBase *regionbase = (is_slink_active) ?
+	                           &sa->regionbase : &slink->regionbase;
+	ARegion *ar = NULL;
+
+	BLI_assert(BLI_findindex(&sa->spacedata, slink) != -1);
+	for (ar = regionbase->first; ar; ar = ar->next) {
+		if (ar->regiontype == region_type) {
+			break;
+		}
+	}
+
+	/* Should really unit test this instead. */
+	BLI_assert(!is_slink_active || ar == BKE_area_find_region_type(sa, region_type));
+
+	return ar;
+}
+
+
 static void (*spacedata_id_remap_cb)(struct ScrArea *sa, struct SpaceLink *sl, ID *old_id, ID *new_id) = NULL;
 
 void BKE_spacedata_callback_id_remap_set(void (*func)(ScrArea *sa, SpaceLink *sl, ID *, ID *))
@@ -361,7 +377,7 @@ void BKE_region_callback_free_gizmomap_set(void (*callback)(struct wmGizmoMap *)
 	region_free_gizmomap_callback = callback;
 }
 
-static void panel_list_free(ListBase *lb)
+void BKE_area_region_panels_free(ListBase *lb)
 {
 	Panel *pa, *pa_next;
 	for (pa = lb->first; pa; pa = pa_next) {
@@ -369,9 +385,10 @@ static void panel_list_free(ListBase *lb)
 		if (pa->activedata) {
 			MEM_freeN(pa->activedata);
 		}
-		panel_list_free(&pa->children);
-		MEM_freeN(pa);
+		BKE_area_region_panels_free(&pa->children);
 	}
+
+	BLI_freelistN(lb);
 }
 
 /* not region itself */
@@ -396,7 +413,7 @@ void BKE_area_region_free(SpaceType *st, ARegion *ar)
 		ar->v2d.tab_offset = NULL;
 	}
 
-	panel_list_free(&ar->panels);
+	BKE_area_region_panels_free(&ar->panels);
 
 	for (uilst = ar->ui_lists.first; uilst; uilst = uilst->next) {
 		if (uilst->dyn_data) {
@@ -473,26 +490,6 @@ void BKE_screen_free(bScreen *sc)
 	/* Region and timer are freed by the window manager. */
 	MEM_SAFE_FREE(sc->tool_tip);
 }
-
-/* for depsgraph */
-unsigned int BKE_screen_visible_layers(bScreen *screen, Scene *scene)
-{
-	ScrArea *sa;
-	unsigned int layer = 0;
-
-	if (screen) {
-		/* get all used view3d layers */
-		for (sa = screen->areabase.first; sa; sa = sa->next)
-			if (sa->spacetype == SPACE_VIEW3D)
-				layer |= ((View3D *)sa->spacedata.first)->lay;
-	}
-
-	if (!layer)
-		return scene->lay;
-
-	return layer;
-}
-
 
 /* ***************** Screen edges & verts ***************** */
 
@@ -663,17 +660,21 @@ void BKE_screen_remove_unused_scrverts(bScreen *sc)
 
 /* ***************** Utilities ********************** */
 
-/* Find a region of the specified type from the given area */
-ARegion *BKE_area_find_region_type(ScrArea *sa, int type)
+/**
+ * Find a region of type \a region_type in the currently active space of \a sa.
+ *
+ * \note This does _not_ work if the region to look up is not in the active
+ *       space. Use #BKE_spacedata_find_region_type if that may be the case.
+ */
+ARegion *BKE_area_find_region_type(const ScrArea *sa, int region_type)
 {
 	if (sa) {
-		ARegion *ar;
-
-		for (ar = sa->regionbase.first; ar; ar = ar->next) {
-			if (ar->regiontype == type)
+		for (ARegion *ar = sa->regionbase.first; ar; ar = ar->next) {
+			if (ar->regiontype == region_type)
 				return ar;
 		}
 	}
+
 	return NULL;
 }
 
@@ -766,56 +767,9 @@ ScrArea *BKE_screen_find_area_xy(bScreen *sc, const int spacetype, int x, int y)
 	return BKE_screen_area_map_find_area_xy(AREAMAP_FROM_SCREEN(sc), spacetype, x, y);
 }
 
-
-/**
- * Utility function to get the active layer to use when adding new objects.
- */
-unsigned int BKE_screen_view3d_layer_active_ex(const View3D *v3d, const Scene *scene, bool use_localvd)
-{
-	unsigned int lay;
-	if ((v3d == NULL) || (v3d->scenelock && !v3d->localvd)) {
-		lay = scene->layact;
-	}
-	else {
-		lay = v3d->layact;
-	}
-
-	if (use_localvd) {
-		if (v3d && v3d->localvd) {
-			lay |= v3d->lay;
-		}
-	}
-
-	return lay;
-}
-unsigned int BKE_screen_view3d_layer_active(const struct View3D *v3d, const struct Scene *scene)
-{
-	return BKE_screen_view3d_layer_active_ex(v3d, scene, true);
-}
-
-/**
- * Accumulate all visible layers on this screen.
- */
-unsigned int BKE_screen_view3d_layer_all(const bScreen *sc)
-{
-	const ScrArea *sa;
-	unsigned int lay = 0;
-	for (sa = sc->areabase.first; sa; sa = sa->next) {
-		if (sa->spacetype == SPACE_VIEW3D) {
-			View3D *v3d = sa->spacedata.first;
-			lay |= v3d->lay;
-		}
-	}
-
-	return lay;
-}
-
 void BKE_screen_view3d_sync(View3D *v3d, struct Scene *scene)
 {
-	int bit;
-
 	if (v3d->scenelock && v3d->localvd == NULL) {
-		v3d->lay = scene->lay;
 		v3d->camera = scene->camera;
 
 		if (v3d->camera == NULL) {
@@ -826,15 +780,6 @@ void BKE_screen_view3d_sync(View3D *v3d, struct Scene *scene)
 					RegionView3D *rv3d = ar->regiondata;
 					if (rv3d->persp == RV3D_CAMOB)
 						rv3d->persp = RV3D_PERSP;
-				}
-			}
-		}
-
-		if ((v3d->lay & v3d->layact) == 0) {
-			for (bit = 0; bit < 32; bit++) {
-				if (v3d->lay & (1u << bit)) {
-					v3d->layact = (1u << bit);
-					break;
 				}
 			}
 		}
@@ -862,12 +807,15 @@ void BKE_screen_view3d_shading_init(View3DShading *shading)
 
 	shading->type = OB_SOLID;
 	shading->prev_type = OB_SOLID;
-	shading->flag = V3D_SHADING_SPECULAR_HIGHLIGHT;
+	shading->flag = V3D_SHADING_SPECULAR_HIGHLIGHT | V3D_SHADING_XRAY_BONE;
 	shading->light = V3D_LIGHTING_STUDIO;
 	shading->shadow_intensity = 0.5f;
 	shading->xray_alpha = 0.5f;
+	shading->xray_alpha_wire = 0.5f;
 	shading->cavity_valley_factor = 1.0f;
 	shading->cavity_ridge_factor = 1.0f;
+	shading->curvature_ridge_factor = 1.0f;
+	shading->curvature_valley_factor = 1.0f;
 	copy_v3_fl(shading->single_color, 0.8f);
 	copy_v3_fl(shading->background_color, 0.05f);
 }
@@ -898,4 +846,28 @@ bool BKE_screen_is_fullscreen_area(const bScreen *screen)
 bool BKE_screen_is_used(const bScreen *screen)
 {
 	return (screen->winid != 0);
+}
+
+void BKE_screen_header_alignment_reset(bScreen *screen)
+{
+	int alignment = (U.uiflag & USER_HEADER_BOTTOM) ? RGN_ALIGN_BOTTOM : RGN_ALIGN_TOP;
+	for (ScrArea *sa = screen->areabase.first; sa; sa = sa->next) {
+		for (ARegion *ar = sa->regionbase.first; ar; ar = ar->next) {
+			if (ar->regiontype == RGN_TYPE_HEADER) {
+				if (ELEM(sa->spacetype, SPACE_FILE, SPACE_USERPREF, SPACE_OUTLINER, SPACE_PROPERTIES)) {
+					ar->alignment = RGN_ALIGN_TOP;
+					continue;
+				}
+				ar->alignment = alignment;
+			}
+			if (ar->regiontype == RGN_TYPE_FOOTER) {
+				if (ELEM(sa->spacetype, SPACE_FILE, SPACE_USERPREF, SPACE_OUTLINER, SPACE_PROPERTIES)) {
+					ar->alignment = RGN_ALIGN_BOTTOM;
+					continue;
+				}
+				ar->alignment = (U.uiflag & USER_HEADER_BOTTOM) ? RGN_ALIGN_TOP : RGN_ALIGN_BOTTOM;
+			}
+		}
+	}
+	screen->do_refresh = true;
 }

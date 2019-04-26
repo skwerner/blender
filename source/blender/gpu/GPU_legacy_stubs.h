@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,21 +15,15 @@
  *
  * The Original Code is Copyright (C) 2017 Blender Foundation.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): Blender Foundation, Dalai Felinto.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file GPU_legacy_stubs.h
- *  \ingroup gpu
+/** \file
+ * \ingroup gpu
  *
- *  This is to mark the transition to OpenGL core profile
- *  The idea is to allow Blender 2.8 to be built with OpenGL 3.3 even if it means breaking things
+ * This is to mark the transition to OpenGL core profile
+ * The idea is to allow Blender 2.8 to be built with OpenGL 3.3 even if it means breaking things
  *
- *  This file should be removed in the future
+ * This file should be removed in the future
  */
 
 #ifndef __GPU_LEGACY_STUBS_H__
@@ -48,7 +40,7 @@
 #include "BLI_utildefines.h"
 
 /**
- * Empty function, use for breakpoint when a depreacated
+ * Empty function, use for breakpoint when a deprecated
  * OpenGL function is called.
  */
 static void gl_deprecated(void)

@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,15 +15,10 @@
  *
  * The Original Code is Copyright (C) 2008 Blender Foundation.
  * All rights reserved.
- *
- *
- * Contributor(s): Blender Foundation
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/curve/curve_intern.h
- *  \ingroup edcurve
+/** \file
+ * \ingroup edcurve
  */
 
 
@@ -33,12 +26,12 @@
 #define __CURVE_INTERN_H__
 
 /* internal exports only */
-struct ListBase;
 struct EditNurb;
 struct GHash;
+struct ListBase;
 struct Object;
-struct wmOperatorType;
 struct ViewContext;
+struct wmOperatorType;
 
 /* editfont.c */
 enum { DEL_NEXT_CHAR, DEL_PREV_CHAR, DEL_NEXT_WORD, DEL_PREV_WORD, DEL_SELECTION, DEL_NEXT_SEL, DEL_PREV_SEL };
@@ -67,7 +60,6 @@ bool select_bpoint(BPoint *bp, bool selstatus, short flag, bool hidden);
 
 void FONT_OT_text_insert(struct wmOperatorType *ot);
 void FONT_OT_line_break(struct wmOperatorType *ot);
-void FONT_OT_insert_lorem(struct wmOperatorType *ot);
 
 void FONT_OT_case_toggle(struct wmOperatorType *ot);
 void FONT_OT_case_set(struct wmOperatorType *ot);
@@ -135,13 +127,14 @@ struct GHash *ED_curve_keyindex_hash_duplicate(struct GHash *keyindex);
 void          ED_curve_keyindex_update_nurb(struct EditNurb *editnurb, struct Nurb *nu, struct Nurb *newnu);
 
 bool ED_curve_pick_vert(
-        struct ViewContext *vc, short sel, const int mval[2],
-        struct Nurb **r_nurb, struct BezTriple **r_bezt, struct BPoint **r_bp, short *r_handle);
+        struct ViewContext *vc, short sel,
+        struct Nurb **r_nurb, struct BezTriple **r_bezt, struct BPoint **r_bp, short *r_handle,
+        struct Base **r_base);
 
 /* helper functions */
 void ed_editnurb_translate_flag(struct ListBase *editnurb, short flag, const float vec[3]);
 bool ed_editnurb_extrude_flag(struct EditNurb *editnurb, const short flag);
-bool ed_editnurb_spin(float viewmat[4][4], struct Object *obedit, const float axis[3], const float cent[3]);
+bool ed_editnurb_spin(float viewmat[4][4], struct View3D *v3d, struct Object *obedit, const float axis[3], const float cent[3]);
 
 /* editcurve_select.c */
 void CURVE_OT_de_select_first(struct wmOperatorType *ot);

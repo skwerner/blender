@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,24 +12,20 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * Contributor(s): Blender Foundation (2008).
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
 #ifndef __RNA_ENUM_TYPES_H__
 #define __RNA_ENUM_TYPES_H__
 
-/** \file RNA_enum_types.h
- *  \ingroup RNA
+/** \file
+ * \ingroup RNA
  */
 
 #include "RNA_types.h"
 
+struct bNodeSocketType;
 struct bNodeTreeType;
 struct bNodeType;
-struct bNodeSocketType;
 
 /* Types */
 
@@ -43,6 +37,7 @@ extern const EnumPropertyItem DummyRNA_DEFAULT_items[];
 extern const EnumPropertyItem rna_enum_id_type_items[];
 
 extern const EnumPropertyItem rna_enum_object_mode_items[];
+extern const EnumPropertyItem rna_enum_workspace_object_mode_items[];
 extern const EnumPropertyItem rna_enum_object_empty_drawtype_items[];
 extern const EnumPropertyItem rna_enum_object_gpencil_type_items[];
 extern const EnumPropertyItem rna_enum_metaelem_type_items[];
@@ -60,6 +55,7 @@ extern const EnumPropertyItem rna_enum_mesh_delimit_mode_items[];
 extern const EnumPropertyItem rna_enum_space_graph_mode_items[];
 extern const EnumPropertyItem rna_enum_space_type_items[];
 extern const EnumPropertyItem rna_enum_space_image_mode_items[];
+extern const EnumPropertyItem rna_enum_space_image_mode_all_items[];
 extern const EnumPropertyItem rna_enum_space_action_mode_items[];
 extern const EnumPropertyItem rna_enum_region_type_items[];
 extern const EnumPropertyItem rna_enum_object_modifier_type_items[];
@@ -71,6 +67,7 @@ extern const EnumPropertyItem rna_enum_object_shaderfx_type_items[];
 
 extern const EnumPropertyItem rna_enum_modifier_triangulate_quad_method_items[];
 extern const EnumPropertyItem rna_enum_modifier_triangulate_ngon_method_items[];
+extern const EnumPropertyItem rna_enum_modifier_shrinkwrap_mode_items[];
 
 extern const EnumPropertyItem rna_enum_image_type_items[];
 extern const EnumPropertyItem rna_enum_image_color_mode_items[];
@@ -113,16 +110,20 @@ extern const EnumPropertyItem rna_enum_motionpath_bake_location_items[];
 
 extern const EnumPropertyItem rna_enum_event_value_items[];
 extern const EnumPropertyItem rna_enum_event_type_items[];
+extern const EnumPropertyItem rna_enum_event_type_mask_items[];
 extern const EnumPropertyItem rna_enum_operator_return_items[];
 extern const EnumPropertyItem rna_enum_operator_property_tags[];
 
 extern const EnumPropertyItem rna_enum_brush_sculpt_tool_items[];
 extern const EnumPropertyItem rna_enum_brush_vertex_tool_items[];
+extern const EnumPropertyItem rna_enum_brush_weight_tool_items[];
+extern const EnumPropertyItem rna_enum_brush_gpencil_types_items[];
 extern const EnumPropertyItem rna_enum_brush_image_tool_items[];
 
 extern const EnumPropertyItem rna_enum_particle_edit_hair_brush_items[];
 extern const EnumPropertyItem rna_enum_particle_edit_disconnected_hair_brush_items[];
 extern const EnumPropertyItem rna_enum_gpencil_sculpt_brush_items[];
+extern const EnumPropertyItem rna_enum_gpencil_weight_brush_items[];
 
 extern const EnumPropertyItem rna_enum_uv_sculpt_tool_items[];
 
@@ -140,6 +141,7 @@ extern const EnumPropertyItem rna_enum_light_type_items[];
 extern const EnumPropertyItem rna_enum_unpack_method_items[];
 
 extern const EnumPropertyItem rna_enum_object_type_items[];
+extern const EnumPropertyItem rna_enum_object_rotation_mode_items[];
 
 extern const EnumPropertyItem rna_enum_object_type_curve_items[];
 
@@ -164,9 +166,8 @@ extern const EnumPropertyItem rna_enum_operator_context_items[];
 extern const EnumPropertyItem rna_enum_wm_report_items[];
 
 extern const EnumPropertyItem rna_enum_transform_pivot_items_full[];
+extern const EnumPropertyItem rna_enum_transform_orientation_items[];
 extern const EnumPropertyItem rna_enum_transform_mode_types[];
-
-extern const EnumPropertyItem rna_enum_posebone_rotmode_items[];
 
 extern const EnumPropertyItem rna_enum_property_type_items[];
 extern const EnumPropertyItem rna_enum_property_subtype_items[];
@@ -179,7 +180,6 @@ extern const EnumPropertyItem rna_enum_navigation_mode_items[];
 extern const EnumPropertyItem rna_enum_file_sort_items[];
 
 extern const EnumPropertyItem rna_enum_node_socket_in_out_items[];
-extern const EnumPropertyItem rna_enum_node_icon_items[];
 
 extern const EnumPropertyItem rna_enum_node_math_items[];
 extern const EnumPropertyItem rna_enum_node_vec_math_items[];
@@ -230,13 +230,11 @@ struct bNodeSocketType *rna_node_socket_type_from_enum(int value);
 const EnumPropertyItem *rna_node_socket_type_itemf(
         void *data, bool (*poll)(void *data, struct bNodeSocketType *), bool *r_free);
 
-struct bContext;
 struct PointerRNA;
 struct PropertyRNA;
+struct bContext;
 
 const EnumPropertyItem *rna_TransformOrientation_itemf(struct bContext *C, struct PointerRNA *ptr, struct PropertyRNA *prop, bool *r_free);
-const EnumPropertyItem *rna_Sensor_type_itemf(struct bContext *C, struct PointerRNA *ptr, struct PropertyRNA *prop, bool *r_free);
-const EnumPropertyItem *rna_Actuator_type_itemf(struct bContext *C, struct PointerRNA *ptr, struct PropertyRNA *prop, bool *r_free);
 
 /* Generic functions, return an enum from library data, index is the position
  * in the linked list can add more for different types as needed */

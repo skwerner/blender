@@ -77,9 +77,9 @@ class prettyface:
             # f, (len_min, len_mid, len_max)
             self.uv = data
 
-            f1, lens1, lens1ord = data[0]
+            _f1, lens1, lens1ord = data[0]
             if data[1]:
-                f2, lens2, lens2ord = data[1]
+                _f2, lens2, lens2ord = data[1]
                 self.width = (lens1[lens1ord[0]] + lens2[lens2ord[0]]) / 2.0
                 self.height = (lens1[lens1ord[1]] + lens2[lens2ord[1]]) / 2.0
             else:  # 1 tri :/
@@ -107,12 +107,12 @@ class prettyface:
 
                 no = data.normal
                 r = no.rotation_difference(mathutils.Vector((0.0, 0.0, 1.0)))
-                cos_2d = [(r * co).xy for co in cos]
+                cos_2d = [(r @ co).xy for co in cos]
                 # print(cos_2d)
                 angle = mathutils.geometry.box_fit_2d(cos_2d)
 
                 mat = mathutils.Matrix.Rotation(angle, 2)
-                cos_2d = [(mat * co) for co in cos_2d]
+                cos_2d = [(mat @ co) for co in cos_2d]
                 xs = [co.x for co in cos_2d]
                 ys = [co.y for co in cos_2d]
 
@@ -205,12 +205,12 @@ class prettyface:
                     fuv[I[0]][:] = p2
                     fuv[I[1]][:] = p3
 
-            f, lens, lensord = uv[0]
+            f = uv[0][0]
 
             set_uv(f, (x1, y1), (x1, y2 - margin_h), (x2 - margin_w, y1))
 
             if uv[1]:
-                f, lens, lensord = uv[1]
+                f = uv[1][0]
                 set_uv(f, (x2, y2), (x2, y1 + margin_h), (x1 + margin_w, y2))
 
         else:  # 1 QUAD
@@ -450,7 +450,7 @@ def lightmap_uvpack(meshes,
             max_int_dimension = int(((side_len / float_to_int_factor)) / PREF_BOX_DIV)
             ok = True
         else:
-            max_int_dimension = 0.0  # wont be used
+            max_int_dimension = 0.0  # won't be used
             ok = False
 
         # RECURSIVE pretty face grouping
@@ -558,32 +558,13 @@ def lightmap_uvpack(meshes,
 
 
 def unwrap(operator, context, **kwargs):
-
-    # only unwrap active object if True
-    PREF_ACT_ONLY = kwargs.pop("PREF_ACT_ONLY")
-
-    # ensure object(s) are selected if necessary and active object is set
-    if context.object is None:
-        if PREF_ACT_ONLY:
-            operator.report({'WARNING'}, "Active object not set")
-            return {'CANCELLED'}
-        elif len(context.selected_objects) == 0:
-            operator.report({'WARNING'}, "No selected objects")
-            return {'CANCELLED'}
-
      # switch to object mode
     is_editmode = context.object and context.object.mode == 'EDIT'
     if is_editmode:
         bpy.ops.object.mode_set(mode='OBJECT', toggle=False)
 
     # define list of meshes
-    meshes = []
-    if PREF_ACT_ONLY:
-        obj = context.view_layer.objects.active
-        if obj and obj.type == 'MESH':
-            meshes = [obj.data]
-    else:
-        meshes = list({me for obj in context.selected_objects if obj.type == 'MESH' for me in (obj.data,) if me.polygons and me.library is None})
+    meshes = list({me for obj in context.selected_objects if obj.type == 'MESH' for me in (obj.data,) if me.polygons and me.library is None})
 
     if not meshes:
         operator.report({'ERROR'}, "No mesh object")
@@ -621,7 +602,6 @@ class LightMapPack(Operator):
         items=(
             ('SEL_FACES', "Selected Faces", "Space all UVs evenly"),
             ('ALL_FACES', "All Faces", "Average space UVs edge length of each loop"),
-            ('ALL_OBJECTS', "Selected Mesh Object", "Average space UVs edge length of each loop")
         ),
     )
 
@@ -667,18 +647,37 @@ class LightMapPack(Operator):
         default=0.1,
     )
 
+    def draw(self, context):
+        layout = self.layout
+        layout.use_property_split = True
+
+        is_editmode = context.active_object.mode == 'EDIT'
+        if is_editmode:
+            layout.prop(self, "PREF_CONTEXT")
+
+        layout.prop(self, "PREF_PACK_IN_ONE")
+        layout.prop(self, "PREF_NEW_UVLAYER")
+        layout.prop(self, "PREF_APPLY_IMAGE")
+        layout.prop(self, "PREF_IMG_PX_SIZE")
+        layout.prop(self, "PREF_BOX_DIV")
+        layout.prop(self, "PREF_MARGIN_DIV")
+
+    @classmethod
+    def poll(cls, context):
+        ob = context.active_object
+        return ob and ob.type == 'MESH'
+
     def execute(self, context):
         kwargs = self.as_keywords()
         PREF_CONTEXT = kwargs.pop("PREF_CONTEXT")
 
-        if PREF_CONTEXT == 'SEL_FACES':
-            kwargs["PREF_ACT_ONLY"] = True
+        is_editmode = context.active_object.mode == 'EDIT'
+
+        if not is_editmode:
+            kwargs["PREF_SEL_ONLY"] = False
+        elif PREF_CONTEXT == 'SEL_FACES':
             kwargs["PREF_SEL_ONLY"] = True
         elif PREF_CONTEXT == 'ALL_FACES':
-            kwargs["PREF_ACT_ONLY"] = True
-            kwargs["PREF_SEL_ONLY"] = False
-        elif PREF_CONTEXT == 'ALL_OBJECTS':
-            kwargs["PREF_ACT_ONLY"] = False
             kwargs["PREF_SEL_ONLY"] = False
         else:
             raise Exception("invalid context")

@@ -136,10 +136,10 @@ ccl_device_forceinline bool ray_triangle_intersect(
 
 #if defined(__KERNEL_SSE2__)  && defined (__KERNEL_SSE__)
 	int uvw_sign = movemask(UVWW) & 0x7;
-	if (uvw_sign != 0)
-	{
-		if (uvw_sign != 0x7)
+	if(uvw_sign != 0) {
+		if(uvw_sign != 0x7) {
 			return false;
+		}
 	}
 #else
 	const float minUVW = min(U, min(V, W));
@@ -227,4 +227,4 @@ ccl_device bool ray_quad_intersect(float3 ray_P, float3 ray_D,
 
 CCL_NAMESPACE_END
 
-#endif /* __UTIL_MATH_INTERSECT_H__ */
+#endif  /* __UTIL_MATH_INTERSECT_H__ */

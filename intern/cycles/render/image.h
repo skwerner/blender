@@ -23,6 +23,7 @@
 #include "util/util_image.h"
 #include "util/util_string.h"
 #include "util/util_thread.h"
+#include "util/util_unique_ptr.h"
 #include "util/util_vector.h"
 
 CCL_NAMESPACE_BEGIN
@@ -43,6 +44,18 @@ public:
 	/* Automatically set. */
 	ImageDataType type;
 	bool is_linear;
+
+	bool operator==(const ImageMetaData& other) const
+	{
+		return is_float == other.is_float &&
+		       is_half == other.is_half &&
+		       channels == other.channels &&
+		       width == other.width &&
+		       height == other.height &&
+		       depth == other.depth &&
+		       type == other.type &&
+		       is_linear == other.is_linear;
+	}
 };
 
 class ImageManager {
@@ -159,8 +172,7 @@ private:
 	                        device_memory *tex_img,
 	                        vector<int> *sparse_index);
 
-	bool file_load_image_generic(Image *img,
-	                             ImageInput **in);
+	bool file_load_image_generic(Image *img, unique_ptr<ImageInput> *in);
 
 	template<typename DeviceType>
 	void file_load_failed(Image *img,
@@ -194,4 +206,4 @@ private:
 
 CCL_NAMESPACE_END
 
-#endif /* __IMAGE_H__ */
+#endif  /* __IMAGE_H__ */

@@ -185,14 +185,14 @@ LightManager::~LightManager()
 bool LightManager::has_background_light(Scene *scene)
 {
 	foreach(Light *light, scene->lights) {
-		if(light->type == LIGHT_BACKGROUND) {
+		if(light->type == LIGHT_BACKGROUND && light->is_enabled) {
 			return true;
 		}
 	}
 	return false;
 }
 
-void LightManager::disable_ineffective_light(Device *device, Scene *scene)
+void LightManager::disable_ineffective_light(Scene *scene)
 {
 	/* Make all lights enabled by default, and perform some preliminary checks
 	 * needed for finer-tuning of settings (for example, check whether we've
@@ -211,8 +211,7 @@ void LightManager::disable_ineffective_light(Device *device, Scene *scene)
 		 * - If we don't need it (no HDRs etc.)
 		 */
 		Shader *shader = (scene->background->shader) ? scene->background->shader : scene->default_background;
-		bool disable_mis = !(has_portal || shader->has_surface_spatial_varying) ||
-		                   !(device->info.advanced_shading);
+		bool disable_mis = !(has_portal || shader->has_surface_spatial_varying);
 		if(disable_mis) {
 			VLOG(1) << "Background MIS has been disabled.\n";
 			foreach(Light *light, scene->lights) {
@@ -549,7 +548,7 @@ void LightManager::device_update_background(Device *device,
 	/* get the resolution from the light's size (we stuff it in there) */
 	int2 res = make_int2(background_light->map_resolution, background_light->map_resolution/2);
 	/* If the resolution isn't set manually, try to find an environment texture. */
-	if (res.x == 0) {
+	if(res.x == 0) {
 		Shader *shader = (scene->background->shader) ? scene->background->shader : scene->default_background;
 		foreach(ShaderNode *node, shader->graph->nodes) {
 			if(node->type == EnvironmentTextureNode::node_type) {
@@ -561,12 +560,12 @@ void LightManager::device_update_background(Device *device,
 				}
 			}
 		}
-		if (res.x > 0 && res.y > 0) {
+		if(res.x > 0 && res.y > 0) {
 			VLOG(2) << "Automatically set World MIS resolution to " << res.x << " by " << res.y << "\n";
 		}
 	}
 	/* If it's still unknown, just use the default. */
-	if (res.x == 0 || res.y == 0) {
+	if(res.x == 0 || res.y == 0) {
 		res = make_int2(1024, 512);
 		VLOG(2) << "Setting World MIS resolution to default\n";
 	}
@@ -881,7 +880,7 @@ void LightManager::device_update(Device *device, DeviceScene *dscene, Scene *sce
 
 	use_light_visibility = false;
 
-	disable_ineffective_light(device, scene);
+	disable_ineffective_light(scene);
 
 	device_update_points(device, dscene, scene);
 	if(progress.get_cancel()) return;

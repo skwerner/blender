@@ -10,6 +10,7 @@ uniform sampler2D farBuffer;
 uniform sampler2D cocBuffer;
 
 flat out vec4 color;
+flat out float weight;
 flat out float smoothFac;
 flat out ivec2 edge;
 out vec2 particlecoord;
@@ -47,8 +48,10 @@ void main()
 			color = texelFetch(farBuffer, texelco, 0);
 		}
 		/* find the area the pixel will cover and divide the color by it */
-		color.a = 1.0 / (coc * coc * M_PI);
-		color.rgb *= color.a;
+		/* HACK: 4.0 out of nowhere (I suppose it's 4 pixels footprint for coc 0?)
+		 * Makes near in focus more closer to 1.0 alpha. */
+		weight = 4.0 / (coc * coc * M_PI);
+		color *= weight;
 
 		/* Compute edge to discard fragment that does not belong to the other layer. */
 		edge.x = (is_near) ? 1 : -1;
@@ -78,7 +81,7 @@ void main()
 	 *    |   Origin      \
 	 * -1 0 --------------- 2
 	 *   -1     0     1     ex
-	 **/
+	 */
 	gl_Position.x = float(v_id / 2) * extend - 1.0; /* int divisor round down */
 	gl_Position.y = float(v_id % 2) * extend - 1.0;
 	gl_Position.z = 0.0;
@@ -92,7 +95,9 @@ void main()
 	gl_Position.xy += (0.5 + vec2(texelco) * 2.0) * texel_size;
 
 	/* Push far plane to left side. */
-	gl_Position.x  += (!is_near) ? 1.0 : 0.0;
+	if (!is_near) {
+		gl_Position.x += 2.0 / 2.0;
+	}
 
 	/* don't do smoothing for small sprites */
 	if (coc > 3.0) {
@@ -101,6 +106,4 @@ void main()
 	else {
 		smoothFac = 1.0;
 	}
-
-	int tex_width = textureSize(cocBuffer, 0).x;
 }

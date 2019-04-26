@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,19 +15,13 @@
  *
  * The Original Code is Copyright (C) 2016 by Blender Foundation.
  * All rights reserved.
- *
- * Contributor(s): Bastien Montagne.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
 #ifndef __BKE_LIBRARY_OVERRIDE_H__
 #define __BKE_LIBRARY_OVERRIDE_H__
 
-/** \file BKE_library_override.h
- *  \ingroup bke
- *  \since December 2016
- *  \author mont29
+/** \file
+ * \ingroup bke
  */
 
 struct ID;
@@ -37,6 +29,9 @@ struct IDOverrideStatic;
 struct IDOverrideStaticProperty;
 struct IDOverrideStaticPropertyOperation;
 struct Main;
+
+void BKE_override_static_enable(const bool do_enable);
+bool BKE_override_static_is_enabled(void);
 
 struct IDOverrideStatic *BKE_override_static_init(struct ID *local_id, struct ID *reference_id);
 void BKE_override_static_copy(struct ID *dst_id, const struct ID *src_id);

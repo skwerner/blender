@@ -1,6 +1,4 @@
 /*
- * Copyright 2016, Blender Foundation.
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -15,12 +13,11 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
- * Contributor(s): Blender Institute
- *
+ * Copyright 2016, Blender Foundation.
  */
 
-/** \file blender/draw/modes/edit_text_mode.c
- *  \ingroup draw
+/** \file
+ * \ingroup draw
  */
 
 #include "DRW_engine.h"
@@ -30,19 +27,13 @@
 
 #include "BIF_glutil.h"
 
+#include "BKE_font.h"
+
 /* If builtin shaders are needed */
 #include "GPU_shader.h"
-#include "GPU_batch.h"
 
 #include "draw_common.h"
-
 #include "draw_mode_engines.h"
-
-/* If needed, contains all global/Theme colors
- * Add needed theme colors / values to DRW_globals_update() and update UBO
- * Not needed for constant color. */
-extern struct GPUUniformBuffer *globals_ubo; /* draw_common.c */
-extern struct GlobalsUboStorage ts; /* draw_common.c */
 
 /* *********** LISTS *********** */
 /* All lists are per viewport specific datas.
@@ -58,6 +49,7 @@ typedef struct EDIT_TEXT_PassList {
 	struct DRWPass *wire_pass;
 	struct DRWPass *overlay_select_pass;
 	struct DRWPass *overlay_cursor_pass;
+	struct DRWPass *text_box_pass;
 } EDIT_TEXT_PassList;
 
 typedef struct EDIT_TEXT_FramebufferList {
@@ -110,6 +102,8 @@ typedef struct EDIT_TEXT_PrivateData {
 	DRWShadingGroup *wire_shgrp;
 	DRWShadingGroup *overlay_select_shgrp;
 	DRWShadingGroup *overlay_cursor_shgrp;
+	DRWShadingGroup *box_shgrp;
+	DRWShadingGroup *box_active_shgrp;
 } EDIT_TEXT_PrivateData; /* Transient data */
 
 /* *********** FUNCTIONS *********** */
@@ -157,8 +151,10 @@ static void EDIT_TEXT_engine_init(void *vedata)
  * Assume that all Passes are NULL */
 static void EDIT_TEXT_cache_init(void *vedata)
 {
+	const DRWContextState *draw_ctx = DRW_context_state_get();
 	EDIT_TEXT_PassList *psl = ((EDIT_TEXT_Data *)vedata)->psl;
 	EDIT_TEXT_StorageList *stl = ((EDIT_TEXT_Data *)vedata)->stl;
+
 
 	if (!stl->g_data) {
 		/* Alloc transient pointers */
@@ -181,6 +177,141 @@ static void EDIT_TEXT_cache_init(void *vedata)
 		        "Font Cursor",
 		        DRW_STATE_WRITE_COLOR | DRW_STATE_WRITE_DEPTH);
 		stl->g_data->overlay_cursor_shgrp = DRW_shgroup_create(e_data.overlay_cursor_sh, psl->overlay_cursor_pass);
+
+		psl->text_box_pass = DRW_pass_create(
+		        "Font Text Boxes",
+		        DRW_STATE_WRITE_COLOR | DRW_STATE_WRITE_DEPTH);
+		stl->g_data->box_shgrp = shgroup_dynlines_dashed_uniform_color(psl->text_box_pass, G_draw.block.colorWire, draw_ctx->sh_cfg);
+		stl->g_data->box_active_shgrp = shgroup_dynlines_dashed_uniform_color(psl->text_box_pass, G_draw.block.colorActive, draw_ctx->sh_cfg);
+	}
+}
+
+/* Use 2D quad corners to create a matrix that set
+ * a [-1..1] quad at the right position. */
+static void v2_quad_corners_to_mat4(float corners[4][2], float r_mat[4][4])
+{
+	unit_m4(r_mat);
+	sub_v2_v2v2(r_mat[0], corners[1], corners[0]);
+	sub_v2_v2v2(r_mat[1], corners[3], corners[0]);
+	mul_v2_fl(r_mat[0], 0.5f);
+	mul_v2_fl(r_mat[1], 0.5f);
+	copy_v2_v2(r_mat[3], corners[0]);
+	add_v2_v2(r_mat[3], r_mat[0]);
+	add_v2_v2(r_mat[3], r_mat[1]);
+}
+
+static void edit_text_cache_populate_select(void *vedata, Object *ob)
+{
+	EDIT_TEXT_StorageList *stl = ((EDIT_TEXT_Data *)vedata)->stl;
+	const Curve *cu = ob->data;
+	EditFont *ef = cu->editfont;
+	float final_mat[4][4], box[4][2];
+	struct GPUBatch *geom = DRW_cache_quad_get();
+
+	for (int i = 0; i < ef->selboxes_len; i++) {
+		EditFontSelBox *sb = &ef->selboxes[i];
+
+		float selboxw;
+		if (i + 1 != ef->selboxes_len) {
+			if (ef->selboxes[i + 1].y == sb->y) {
+				selboxw = ef->selboxes[i + 1].x - sb->x;
+			}
+			else {
+				selboxw = sb->w;
+			}
+		}
+		else {
+			selboxw = sb->w;
+		}
+		/* NOTE: v2_quad_corners_to_mat4 don't need the 3rd corner. */
+		if (sb->rot == 0.0f) {
+			copy_v2_fl2(box[0], sb->x, sb->y);
+			copy_v2_fl2(box[1], sb->x + selboxw, sb->y);
+			copy_v2_fl2(box[3], sb->x, sb->y + sb->h);
+		}
+		else {
+			float mat[2][2];
+			angle_to_mat2(mat, sb->rot);
+			copy_v2_fl2(box[0], sb->x, sb->y);
+			mul_v2_v2fl(box[1], mat[0], selboxw);
+			add_v2_v2(box[1], &sb->x);
+			mul_v2_v2fl(box[3], mat[1], sb->h);
+			add_v2_v2(box[3], &sb->x);
+		}
+		v2_quad_corners_to_mat4(box, final_mat);
+		mul_m4_m4m4(final_mat, ob->obmat, final_mat);
+
+		DRW_shgroup_call_add(stl->g_data->overlay_select_shgrp, geom, final_mat);
+	}
+}
+
+static void edit_text_cache_populate_cursor(void *vedata, Object *ob)
+{
+	EDIT_TEXT_StorageList *stl = ((EDIT_TEXT_Data *)vedata)->stl;
+	const Curve *cu = ob->data;
+	EditFont *edit_font = cu->editfont;
+	float (*cursor)[2] = edit_font->textcurs;
+	float mat[4][4];
+
+	v2_quad_corners_to_mat4(cursor, mat);
+	mul_m4_m4m4(mat, ob->obmat, mat);
+
+	struct GPUBatch *geom = DRW_cache_quad_get();
+	DRW_shgroup_call_add(stl->g_data->overlay_cursor_shgrp, geom, mat);
+}
+
+static void edit_text_cache_populate_boxes(void *vedata, Object *ob)
+{
+	EDIT_TEXT_StorageList *stl = ((EDIT_TEXT_Data *)vedata)->stl;
+	const Curve *cu = ob->data;
+
+	DRWShadingGroup *shading_groups[] = {
+	    stl->g_data->box_active_shgrp,
+	    stl->g_data->box_shgrp,
+	};
+
+	float vec[3], vec1[3], vec2[3];
+	for (int i = 0; i < cu->totbox; i++) {
+		TextBox *tb = &cu->tb[i];
+
+		if ((tb->w == 0.0f) && (tb->h == 0.0f)) {
+			continue;
+		}
+
+		const bool is_active = i == (cu->actbox - 1);
+		DRWShadingGroup *shading_group = shading_groups[is_active ? 0 : 1];
+
+		vec[0] = cu->xof + tb->x;
+		vec[1] = cu->yof + tb->y + cu->fsize_realtime;
+		vec[2] = 0.001;
+
+		mul_v3_m4v3(vec1, ob->obmat, vec);
+		vec[0] += tb->w;
+		mul_v3_m4v3(vec2, ob->obmat, vec);
+
+		DRW_shgroup_call_dynamic_add(shading_group, vec1);
+		DRW_shgroup_call_dynamic_add(shading_group, vec2);
+
+		vec[1] -= tb->h;
+		copy_v3_v3(vec1, vec2);
+		mul_v3_m4v3(vec2, ob->obmat, vec);
+
+		DRW_shgroup_call_dynamic_add(shading_group, vec1);
+		DRW_shgroup_call_dynamic_add(shading_group, vec2);
+
+		vec[0] -= tb->w;
+		copy_v3_v3(vec1, vec2);
+		mul_v3_m4v3(vec2, ob->obmat, vec);
+
+		DRW_shgroup_call_dynamic_add(shading_group, vec1);
+		DRW_shgroup_call_dynamic_add(shading_group, vec2);
+
+		vec[1] += tb->h;
+		copy_v3_v3(vec1, vec2);
+		mul_v3_m4v3(vec2, ob->obmat, vec);
+
+		DRW_shgroup_call_dynamic_add(shading_group, vec1);
+		DRW_shgroup_call_dynamic_add(shading_group, vec2);
 	}
 }
 
@@ -199,7 +330,8 @@ static void EDIT_TEXT_cache_populate(void *vedata, Object *ob)
 			/* Get geometry cache */
 			struct GPUBatch *geom;
 
-			if (cu->flag & CU_FAST) {
+			bool has_surface = (cu->flag & (CU_FRONT | CU_BACK)) || cu->ext1 != 0.0f || cu->ext2 != 0.0f;
+			if ((cu->flag & CU_FAST) || !has_surface) {
 				geom = DRW_cache_text_edge_wire_get(ob);
 				if (geom) {
 					DRW_shgroup_call_add(stl->g_data->wire_shgrp, geom, ob->obmat);
@@ -209,15 +341,9 @@ static void EDIT_TEXT_cache_populate(void *vedata, Object *ob)
 				/* object mode draws */
 			}
 
-			geom = DRW_cache_text_select_overlay_get(ob);
-			if (geom) {
-				DRW_shgroup_call_add(stl->g_data->overlay_select_shgrp, geom, ob->obmat);
-			}
-
-			geom = DRW_cache_text_cursor_overlay_get(ob);
-			if (geom) {
-				DRW_shgroup_call_add(stl->g_data->overlay_cursor_shgrp, geom, ob->obmat);
-			}
+			edit_text_cache_populate_select(vedata, ob);
+			edit_text_cache_populate_cursor(vedata, ob);
+			edit_text_cache_populate_boxes(vedata, ob);
 		}
 	}
 }
@@ -228,7 +354,7 @@ static void EDIT_TEXT_cache_finish(void *vedata)
 	EDIT_TEXT_PassList *psl = ((EDIT_TEXT_Data *)vedata)->psl;
 	EDIT_TEXT_StorageList *stl = ((EDIT_TEXT_Data *)vedata)->stl;
 
-	/* Do something here! dependant on the objects gathered */
+	/* Do something here! dependent on the objects gathered */
 	UNUSED_VARS(psl, stl);
 }
 
@@ -254,6 +380,10 @@ static void EDIT_TEXT_draw_scene(void *vedata)
 	 */
 
 	DRW_draw_pass(psl->wire_pass);
+
+	if (!DRW_pass_is_empty(psl->text_box_pass)) {
+		DRW_draw_pass(psl->text_box_pass);
+	}
 
 	set_inverted_drawing(1);
 	DRW_draw_pass(psl->overlay_select_pass);

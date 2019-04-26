@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,10 @@
  *
  * The Original Code is Copyright (C) Blender Foundation
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): Lukas Toenne
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/blenkernel/intern/particle_child.c
- *  \ingroup bke
+/** \file
+ * \ingroup bke
  */
 
 #include "BLI_math.h"
@@ -299,11 +291,8 @@ void psys_apply_child_modifiers(ParticleThreadContext *ctx, struct ListBase *mod
 	int totkeys, k;
 	float max_length;
 
-#if 0 /* TODO for the future: use true particle modifiers that work on the whole curve */
-	for (mod = modifiers->first; mod; mod = mod->next) {
-		mod->apply(keys, totkeys, parent_keys);
-	}
-#else
+	/* TODO for the future: use true particle modifiers that work on the whole curve */
+
 	(void)modifiers;
 	(void)mod;
 
@@ -379,7 +368,6 @@ void psys_apply_child_modifiers(ParticleThreadContext *ctx, struct ListBase *mod
 			}
 		}
 	}
-#endif
 }
 
 /* ------------------------------------------------------------------------- */
@@ -699,6 +687,10 @@ static void do_twist(const ParticleChildModifierContext *modifier_ctx,
 	ParticleTexture *ptex = modifier_ctx->ptex;
 	ParticleSettings *part = sim->psys->part;
 	/* Early output checks. */
+	if (modifier_ctx->parent_keys == NULL) {
+		/* Cannot get axis of rotation... */
+		return;
+	}
 	if (part->childtype != PART_CHILD_PARTICLES) {
 		/* Interpolated children behave weird with twist. */
 		return;

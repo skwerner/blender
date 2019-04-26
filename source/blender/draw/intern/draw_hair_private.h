@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,14 +15,10 @@
  *
  * The Original Code is Copyright (C) 2017 by Blender Foundation.
  * All rights reserved.
- *
- * Contributor(s): Blender Foundation, Mike Erwin, Dalai Felinto
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file draw_hair_private.h
- *  \ingroup draw
+/** \file
+ * \ingroup draw
  */
 
 #ifndef __DRAW_HAIR_PRIVATE_H__
@@ -35,10 +29,10 @@
 #define MAX_THICKRES        2 /* see eHairType */
 #define MAX_HAIR_SUBDIV     4 /* see hair_subdiv rna */
 
-struct Object;
-struct ParticleSystem;
 struct ModifierData;
+struct Object;
 struct ParticleHairCache;
+struct ParticleSystem;
 
 typedef struct ParticleHairFinalCache {
 	/* Output of the subdivision stage: vertex buff sized to subdiv level. */
@@ -60,8 +54,12 @@ typedef struct ParticleHairCache {
 	GPUVertBuf *proc_point_buf; /* Input control points */
 	GPUTexture *point_tex;
 
-	GPUVertBuf *proc_strand_buf; /* Infos of control points strands (segment count and base index) */
+	/** Infos of control points strands (segment count and base index) */
+	GPUVertBuf *proc_strand_buf;
 	GPUTexture *strand_tex;
+
+	GPUVertBuf *proc_strand_seg_buf;
+	GPUTexture *strand_seg_tex;
 
 	GPUVertBuf *proc_uv_buf[MAX_MTFACE];
 	GPUTexture *uv_tex[MAX_MTFACE];

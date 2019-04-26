@@ -35,7 +35,7 @@ from rna_prop_ui import PropertyPanel
 from .properties_paint_common import brush_texture_settings
 
 
-class TEXTURE_MT_specials(Menu):
+class TEXTURE_MT_context_menu(Menu):
     bl_label = "Texture Specials"
     COMPAT_ENGINES = {'BLENDER_RENDER'}
 
@@ -85,7 +85,7 @@ class TextureButtonsPanel:
 
 class TEXTURE_PT_preview(TextureButtonsPanel, Panel):
     bl_label = "Preview"
-    COMPAT_ENGINES = {'BLENDER_RENDER', 'BLENDER_EEVEE', 'BLENDER_OPENGL'}
+    COMPAT_ENGINES = {'BLENDER_RENDER', 'BLENDER_EEVEE', 'BLENDER_WORKBENCH'}
 
     @classmethod
     def poll(cls, context):
@@ -114,7 +114,7 @@ class TEXTURE_PT_context(TextureButtonsPanel, Panel):
     bl_label = ""
     bl_context = "texture"
     bl_options = {'HIDE_HEADER'}
-    COMPAT_ENGINES = {'BLENDER_RENDER', 'BLENDER_EEVEE', 'BLENDER_OPENGL'}
+    COMPAT_ENGINES = {'BLENDER_RENDER', 'BLENDER_EEVEE', 'BLENDER_WORKBENCH'}
 
     def draw(self, context):
         layout = self.layout
@@ -145,7 +145,7 @@ class TEXTURE_PT_context(TextureButtonsPanel, Panel):
             if tex:
                 col.separator()
 
-                split = col.split(percentage=0.2)
+                split = col.split(factor=0.2)
                 split.label(text="Type")
                 split.prop(tex, "type", text="")
 
@@ -153,7 +153,7 @@ class TEXTURE_PT_context(TextureButtonsPanel, Panel):
 class TEXTURE_PT_node(TextureButtonsPanel, Panel):
     bl_label = "Node"
     bl_context = "texture"
-    COMPAT_ENGINES = {'BLENDER_RENDER', 'BLENDER_EEVEE', 'BLENDER_OPENGL'}
+    COMPAT_ENGINES = {'BLENDER_RENDER', 'BLENDER_EEVEE', 'BLENDER_WORKBENCH'}
 
     @classmethod
     def poll(cls, context):
@@ -168,50 +168,6 @@ class TEXTURE_PT_node(TextureButtonsPanel, Panel):
         layout.template_node_view(ntree, node, None)
 
 
-class TEXTURE_PT_node_mapping(TextureButtonsPanel, Panel):
-    bl_label = "Mapping"
-    bl_context = "texture"
-    COMPAT_ENGINES = {'BLENDER_RENDER', 'BLENDER_EEVEE', 'BLENDER_OPENGL'}
-
-    @classmethod
-    def poll(cls, context):
-        node = context.texture_node
-        # TODO(sergey): perform a faster/nicer check?
-        return node and hasattr(node, 'texture_mapping') and (context.engine in cls.COMPAT_ENGINES)
-
-    def draw(self, context):
-        layout = self.layout
-        layout.use_property_split = True
-        layout.use_property_decorate = False  # No animation.
-
-        flow = layout.grid_flow(row_major=True, columns=0, even_columns=True, even_rows=False, align=False)
-
-        node = context.texture_node
-
-        mapping = node.texture_mapping
-
-        col = flow.column()
-        col.prop(mapping, "vector_type")
-
-        col.separator()
-
-        col = col.column(align=True)
-        col.prop(mapping, "mapping_x", text="Projection X")
-        col.prop(mapping, "mapping_y", text="Y")
-        col.prop(mapping, "mapping_z", text="Z")
-
-        col.separator()
-
-        col = flow.column()
-        col.column().prop(mapping, "translation")
-
-        col = flow.column()
-        col.column().prop(mapping, "rotation")
-
-        col = flow.column()
-        col.column().prop(mapping, "scale")
-
-
 class TextureTypePanel(TextureButtonsPanel):
 
     @classmethod
@@ -224,7 +180,7 @@ class TextureTypePanel(TextureButtonsPanel):
 class TEXTURE_PT_clouds(TextureTypePanel, Panel):
     bl_label = "Clouds"
     tex_type = 'CLOUDS'
-    COMPAT_ENGINES = {'BLENDER_RENDER', 'BLENDER_EEVEE', 'BLENDER_OPENGL'}
+    COMPAT_ENGINES = {'BLENDER_RENDER', 'BLENDER_EEVEE', 'BLENDER_WORKBENCH'}
 
     def draw(self, context):
         layout = self.layout
@@ -256,7 +212,7 @@ class TEXTURE_PT_clouds(TextureTypePanel, Panel):
 class TEXTURE_PT_wood(TextureTypePanel, Panel):
     bl_label = "Wood"
     tex_type = 'WOOD'
-    COMPAT_ENGINES = {'BLENDER_RENDER', 'BLENDER_EEVEE', 'BLENDER_OPENGL'}
+    COMPAT_ENGINES = {'BLENDER_RENDER', 'BLENDER_EEVEE', 'BLENDER_WORKBENCH'}
 
     def draw(self, context):
         layout = self.layout
@@ -293,7 +249,7 @@ class TEXTURE_PT_wood(TextureTypePanel, Panel):
 class TEXTURE_PT_marble(TextureTypePanel, Panel):
     bl_label = "Marble"
     tex_type = 'MARBLE'
-    COMPAT_ENGINES = {'BLENDER_RENDER', 'BLENDER_EEVEE', 'BLENDER_OPENGL'}
+    COMPAT_ENGINES = {'BLENDER_RENDER', 'BLENDER_EEVEE', 'BLENDER_WORKBENCH'}
 
     def draw(self, context):
         layout = self.layout
@@ -327,7 +283,7 @@ class TEXTURE_PT_marble(TextureTypePanel, Panel):
 class TEXTURE_PT_magic(TextureTypePanel, Panel):
     bl_label = "Magic"
     tex_type = 'MAGIC'
-    COMPAT_ENGINES = {'BLENDER_RENDER', 'BLENDER_EEVEE', 'BLENDER_OPENGL'}
+    COMPAT_ENGINES = {'BLENDER_RENDER', 'BLENDER_EEVEE', 'BLENDER_WORKBENCH'}
 
     def draw(self, context):
         layout = self.layout
@@ -346,7 +302,7 @@ class TEXTURE_PT_magic(TextureTypePanel, Panel):
 class TEXTURE_PT_blend(TextureTypePanel, Panel):
     bl_label = "Blend"
     tex_type = 'BLEND'
-    COMPAT_ENGINES = {'BLENDER_RENDER', 'BLENDER_EEVEE', 'BLENDER_OPENGL'}
+    COMPAT_ENGINES = {'BLENDER_RENDER', 'BLENDER_EEVEE', 'BLENDER_WORKBENCH'}
 
     def draw(self, context):
         layout = self.layout
@@ -368,7 +324,7 @@ class TEXTURE_PT_blend(TextureTypePanel, Panel):
 class TEXTURE_PT_stucci(TextureTypePanel, Panel):
     bl_label = "Stucci"
     tex_type = 'STUCCI'
-    COMPAT_ENGINES = {'BLENDER_RENDER', 'BLENDER_EEVEE', 'BLENDER_OPENGL'}
+    COMPAT_ENGINES = {'BLENDER_RENDER', 'BLENDER_EEVEE', 'BLENDER_WORKBENCH'}
 
     def draw(self, context):
         layout = self.layout
@@ -399,7 +355,7 @@ class TEXTURE_PT_stucci(TextureTypePanel, Panel):
 class TEXTURE_PT_image(TextureTypePanel, Panel):
     bl_label = "Image"
     tex_type = 'IMAGE'
-    COMPAT_ENGINES = {'BLENDER_RENDER', 'BLENDER_EEVEE', 'BLENDER_OPENGL'}
+    COMPAT_ENGINES = {'BLENDER_RENDER', 'BLENDER_EEVEE', 'BLENDER_WORKBENCH'}
 
     def draw(self, context):
         # TODO: maybe expose the template_ID from the template image here.
@@ -411,7 +367,7 @@ class TEXTURE_PT_image_settings(TextureTypePanel, Panel):
     bl_label = "Settings"
     bl_parent_id = 'TEXTURE_PT_image'
     tex_type = 'IMAGE'
-    COMPAT_ENGINES = {'BLENDER_RENDER', 'BLENDER_EEVEE', 'BLENDER_OPENGL'}
+    COMPAT_ENGINES = {'BLENDER_RENDER', 'BLENDER_EEVEE', 'BLENDER_WORKBENCH'}
 
     def draw(self, context):
         layout = self.layout
@@ -566,7 +522,7 @@ class TEXTURE_PT_image_mapping_crop(TextureTypePanel, Panel):
 class TEXTURE_PT_musgrave(TextureTypePanel, Panel):
     bl_label = "Musgrave"
     tex_type = 'MUSGRAVE'
-    COMPAT_ENGINES = {'BLENDER_RENDER', 'BLENDER_EEVEE', 'BLENDER_OPENGL'}
+    COMPAT_ENGINES = {'BLENDER_RENDER', 'BLENDER_EEVEE', 'BLENDER_WORKBENCH'}
 
     def draw(self, context):
         layout = self.layout
@@ -611,7 +567,7 @@ class TEXTURE_PT_musgrave(TextureTypePanel, Panel):
 class TEXTURE_PT_voronoi(TextureTypePanel, Panel):
     bl_label = "Voronoi"
     tex_type = 'VORONOI'
-    COMPAT_ENGINES = {'BLENDER_RENDER', 'BLENDER_EEVEE', 'BLENDER_OPENGL'}
+    COMPAT_ENGINES = {'BLENDER_RENDER', 'BLENDER_EEVEE', 'BLENDER_WORKBENCH'}
 
     def draw(self, context):
         layout = self.layout
@@ -644,7 +600,7 @@ class TEXTURE_PT_voronoi_feature_weights(TextureTypePanel, Panel):
     bl_label = "Feature Weights"
     bl_parent_id = "TEXTURE_PT_voronoi"
     tex_type = 'VORONOI'
-    COMPAT_ENGINES = {'BLENDER_RENDER', 'BLENDER_EEVEE', 'BLENDER_OPENGL'}
+    COMPAT_ENGINES = {'BLENDER_RENDER', 'BLENDER_EEVEE', 'BLENDER_WORKBENCH'}
 
     def draw(self, context):
         layout = self.layout
@@ -665,7 +621,7 @@ class TEXTURE_PT_voronoi_feature_weights(TextureTypePanel, Panel):
 class TEXTURE_PT_distortednoise(TextureTypePanel, Panel):
     bl_label = "Distorted Noise"
     tex_type = 'DISTORTED_NOISE'
-    COMPAT_ENGINES = {'BLENDER_RENDER', 'BLENDER_EEVEE', 'BLENDER_OPENGL'}
+    COMPAT_ENGINES = {'BLENDER_RENDER', 'BLENDER_EEVEE', 'BLENDER_WORKBENCH'}
 
     def draw(self, context):
         layout = self.layout
@@ -690,7 +646,7 @@ class TEXTURE_PT_distortednoise(TextureTypePanel, Panel):
 
 
 class TextureSlotPanel(TextureButtonsPanel):
-    COMPAT_ENGINES = {'BLENDER_RENDER', 'BLENDER_EEVEE', 'BLENDER_OPENGL'}
+    COMPAT_ENGINES = {'BLENDER_RENDER', 'BLENDER_EEVEE', 'BLENDER_WORKBENCH'}
 
     @classmethod
     def poll(cls, context):
@@ -702,7 +658,7 @@ class TextureSlotPanel(TextureButtonsPanel):
 
 class TEXTURE_PT_mapping(TextureSlotPanel, Panel):
     bl_label = "Mapping"
-    COMPAT_ENGINES = {'BLENDER_RENDER', 'BLENDER_EEVEE', 'BLENDER_OPENGL'}
+    COMPAT_ENGINES = {'BLENDER_RENDER', 'BLENDER_EEVEE', 'BLENDER_WORKBENCH'}
 
     @classmethod
     def poll(cls, context):
@@ -738,18 +694,12 @@ class TEXTURE_PT_mapping(TextureSlotPanel, Panel):
                 ob = context.object
 
                 if ob and ob.type == 'MESH':
-                    # Note: TODO prop_search doesn't align on the right.
-                    row = col.row(align=True)
-                    row.prop_search(tex, "uv_layer", ob.data, "uv_layers", text="Map")
-                    row.label(text="", icon='BLANK1')
+                    col.prop_search(tex, "uv_layer", ob.data, "uv_layers", text="Map")
                 else:
                     col.prop(tex, "uv_layer", text="Map")
 
             elif tex.texture_coords == 'OBJECT':
                 col.prop(tex, "object", text="Object")
-
-            elif tex.texture_coords == 'ALONG_STROKE':
-                col.prop(tex, "use_tips", text="Use Tips")
 
             col.separator()
 
@@ -776,7 +726,7 @@ class TEXTURE_PT_mapping(TextureSlotPanel, Panel):
 class TEXTURE_PT_influence(TextureSlotPanel, Panel):
     bl_label = "Influence"
     bl_options = {'DEFAULT_CLOSED'}
-    COMPAT_ENGINES = {'BLENDER_RENDER', 'BLENDER_EEVEE', 'BLENDER_OPENGL'}
+    COMPAT_ENGINES = {'BLENDER_RENDER', 'BLENDER_EEVEE', 'BLENDER_WORKBENCH'}
 
     @classmethod
     def poll(cls, context):
@@ -843,14 +793,9 @@ class TEXTURE_PT_influence(TextureSlotPanel, Panel):
             col = flow.column()
 
             col.prop(tex, "blend_type", text="Blend")
-            col.prop(tex, "use_rgb_to_intensity")
 
-            # color is used on gray-scale textures even when use_rgb_to_intensity is disabled.
+            # Color is used on gray-scale textures
             col.prop(tex, "color", text="")
-
-            col = flow.column()
-            col.prop(tex, "invert", text="Negative")
-            col.prop(tex, "use_stencil")
 
 
 class TextureColorsPoll:
@@ -863,7 +808,7 @@ class TextureColorsPoll:
 class TEXTURE_PT_colors(TextureButtonsPanel, TextureColorsPoll, Panel):
     bl_label = "Colors"
     bl_options = {'DEFAULT_CLOSED'}
-    COMPAT_ENGINES = {'BLENDER_RENDER', 'BLENDER_EEVEE', 'BLENDER_OPENGL'}
+    COMPAT_ENGINES = {'BLENDER_RENDER', 'BLENDER_EEVEE', 'BLENDER_WORKBENCH'}
 
     def draw(self, context):
         layout = self.layout
@@ -892,7 +837,7 @@ class TEXTURE_PT_colors_ramp(TextureButtonsPanel, TextureColorsPoll, Panel):
     bl_label = "Color Ramp"
     bl_options = {'DEFAULT_CLOSED'}
     bl_parent_id = 'TEXTURE_PT_colors'
-    COMPAT_ENGINES = {'BLENDER_RENDER', 'BLENDER_EEVEE', 'BLENDER_OPENGL'}
+    COMPAT_ENGINES = {'BLENDER_RENDER', 'BLENDER_EEVEE', 'BLENDER_WORKBENCH'}
 
     def draw_header(self, context):
         tex = context.texture
@@ -910,11 +855,11 @@ class TEXTURE_PT_colors_ramp(TextureButtonsPanel, TextureColorsPoll, Panel):
             layout.template_color_ramp(tex, "color_ramp", expand=True)
         else:
             layout.alignment = 'RIGHT'
-            layout.label("Please enable the Color Ramp first")
+            layout.label(text="Enable the Color Ramp first")
 
 
 class TEXTURE_PT_custom_props(TextureButtonsPanel, PropertyPanel, Panel):
-    COMPAT_ENGINES = {'BLENDER_RENDER', 'BLENDER_EEVEE', 'BLENDER_OPENGL'}
+    COMPAT_ENGINES = {'BLENDER_RENDER', 'BLENDER_EEVEE', 'BLENDER_WORKBENCH'}
     _context_path = "texture"
     _property_type = Texture
 
@@ -924,12 +869,11 @@ class TEXTURE_PT_custom_props(TextureButtonsPanel, PropertyPanel, Panel):
 
 
 classes = (
-    TEXTURE_MT_specials,
+    TEXTURE_MT_context_menu,
     TEXTURE_UL_texslots,
     TEXTURE_PT_preview,
     TEXTURE_PT_context,
     TEXTURE_PT_node,
-    TEXTURE_PT_node_mapping,
     TEXTURE_PT_clouds,
     TEXTURE_PT_wood,
     TEXTURE_PT_marble,

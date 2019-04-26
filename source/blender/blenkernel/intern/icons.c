@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,17 +15,10 @@
  *
  * The Original Code is Copyright (C) 2006-2007 Blender Foundation.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
- *
  */
 
-/** \file blender/blenkernel/intern/icons.c
- *  \ingroup bke
+/** \file
+ * \ingroup bke
  */
 
 
@@ -35,12 +26,14 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "CLG_log.h"
+
 #include "MEM_guardedalloc.h"
 
 #include "DNA_brush_types.h"
+#include "DNA_collection_types.h"
 #include "DNA_gpencil_types.h"
-#include "DNA_group_types.h"
-#include "DNA_lamp_types.h"
+#include "DNA_light_types.h"
 #include "DNA_material_types.h"
 #include "DNA_object_types.h"
 #include "DNA_scene_types.h"
@@ -76,6 +69,8 @@ enum {
 };
 
 /* GLOBALS */
+
+static CLG_LogRef LOG = {"bke.icons"};
 
 static GHash *gIcons = NULL;
 
@@ -157,7 +152,7 @@ static int get_next_free_id(void)
 		return gNextIconId++;
 
 	/* now we try to find the smallest icon id not stored in the gIcons hash */
-	while (BLI_ghash_lookup(gIcons, SET_INT_IN_POINTER(startId)) && startId >= gFirstIconId)
+	while (BLI_ghash_lookup(gIcons, POINTER_FROM_INT(startId)) && startId >= gFirstIconId)
 		startId++;
 
 	/* if we found a suitable one that isn't used yet, return it */
@@ -211,7 +206,7 @@ void BKE_icons_deferred_free(void)
 	     node != NULL;
 	     node = node->next)
 	{
-		BLI_ghash_remove(gIcons, SET_INT_IN_POINTER(node->icon_id), NULL, icon_free);
+		BLI_ghash_remove(gIcons, POINTER_FROM_INT(node->icon_id), NULL, icon_free);
 	}
 	BLI_linklist_lockfree_clear(&g_icon_delete_queue, MEM_freeN);
 }
@@ -328,7 +323,7 @@ PreviewImage **BKE_previewimg_id_get_p(const ID *id)
 		ID_PRV_CASE(ID_MA, Material);
 		ID_PRV_CASE(ID_TE, Tex);
 		ID_PRV_CASE(ID_WO, World);
-		ID_PRV_CASE(ID_LA, Lamp);
+		ID_PRV_CASE(ID_LA, Light);
 		ID_PRV_CASE(ID_IM, Image);
 		ID_PRV_CASE(ID_BR, Brush);
 		ID_PRV_CASE(ID_OB, Object);
@@ -522,7 +517,7 @@ void BKE_icon_changed(const int icon_id)
 
 	if (!icon_id || G.background) return;
 
-	icon = BLI_ghash_lookup(gIcons, SET_INT_IN_POINTER(icon_id));
+	icon = BLI_ghash_lookup(gIcons, POINTER_FROM_INT(icon_id));
 
 	if (icon) {
 		/* We *only* expect ID-tied icons here, not non-ID icon/preview! */
@@ -557,7 +552,7 @@ static Icon *icon_create(int icon_id, int obj_type, void *obj)
 	new_icon->drawinfo = NULL;
 	new_icon->drawinfo_free = NULL;
 
-	BLI_ghash_insert(gIcons, SET_INT_IN_POINTER(icon_id), new_icon);
+	BLI_ghash_insert(gIcons, POINTER_FROM_INT(icon_id), new_icon);
 
 	return new_icon;
 }
@@ -588,7 +583,7 @@ int BKE_icon_id_ensure(struct ID *id)
 	id->icon_id = get_next_free_id();
 
 	if (!id->icon_id) {
-		printf("%s: Internal error - not enough IDs\n", __func__);
+		CLOG_ERROR(&LOG, "not enough IDs");
 		return 0;
 	}
 
@@ -633,7 +628,7 @@ int BKE_icon_gplayer_color_ensure(bGPDlayer *gpl)
 	gpl->runtime.icon_id = get_next_free_id();
 
 	if (!gpl->runtime.icon_id) {
-		printf("%s: Internal error - not enough IDs\n", __func__);
+		CLOG_ERROR(&LOG, "not enough IDs");
 		return 0;
 	}
 
@@ -665,7 +660,7 @@ int BKE_icon_preview_ensure(ID *id, PreviewImage *preview)
 	preview->icon_id = get_next_free_id();
 
 	if (!preview->icon_id) {
-		printf("%s: Internal error - not enough IDs\n", __func__);
+		CLOG_ERROR(&LOG, "not enough IDs");
 		return 0;
 	}
 
@@ -687,10 +682,10 @@ Icon *BKE_icon_get(const int icon_id)
 
 	Icon *icon = NULL;
 
-	icon = BLI_ghash_lookup(gIcons, SET_INT_IN_POINTER(icon_id));
+	icon = BLI_ghash_lookup(gIcons, POINTER_FROM_INT(icon_id));
 
 	if (!icon) {
-		printf("%s: Internal error, no icon for icon ID: %d\n", __func__, icon_id);
+		CLOG_ERROR(&LOG, "no icon for icon ID: %d", icon_id);
 		return NULL;
 	}
 
@@ -703,8 +698,8 @@ void BKE_icon_set(const int icon_id, struct Icon *icon)
 
 	void **val_p;
 
-	if (BLI_ghash_ensure_p(gIcons, SET_INT_IN_POINTER(icon_id), &val_p)) {
-		printf("%s: Internal error, icon already set: %d\n", __func__, icon_id);
+	if (BLI_ghash_ensure_p(gIcons, POINTER_FROM_INT(icon_id), &val_p)) {
+		CLOG_ERROR(&LOG, "icon already set: %d", icon_id);
 		return;
 	}
 
@@ -732,7 +727,7 @@ void BKE_icon_id_delete(struct ID *id)
 	}
 
 	BKE_icons_deferred_free();
-	BLI_ghash_remove(gIcons, SET_INT_IN_POINTER(icon_id), NULL, icon_free);
+	BLI_ghash_remove(gIcons, POINTER_FROM_INT(icon_id), NULL, icon_free);
 }
 
 /**
@@ -745,7 +740,7 @@ bool BKE_icon_delete(const int icon_id)
 		return false;
 	}
 
-	Icon *icon = BLI_ghash_popkey(gIcons, SET_INT_IN_POINTER(icon_id), NULL);
+	Icon *icon = BLI_ghash_popkey(gIcons, POINTER_FROM_INT(icon_id), NULL);
 	if (icon) {
 		icon_free_data(icon_id, icon);
 		icon_free(icon);
@@ -763,10 +758,10 @@ bool BKE_icon_delete_unmanaged(const int icon_id)
 		return false;
 	}
 
-	Icon *icon = BLI_ghash_popkey(gIcons, SET_INT_IN_POINTER(icon_id), NULL);
+	Icon *icon = BLI_ghash_popkey(gIcons, POINTER_FROM_INT(icon_id), NULL);
 	if (icon) {
 		if (UNLIKELY(icon->flag & ICON_FLAG_MANAGED)) {
-			BLI_ghash_insert(gIcons, SET_INT_IN_POINTER(icon_id), icon);
+			BLI_ghash_insert(gIcons, POINTER_FROM_INT(icon_id), icon);
 			return false;
 		}
 		else {

@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,14 +15,10 @@
  *
  * The Original Code is Copyright (C) 2018 Blender Foundation.
  * All rights reserved.
- *
- * Contributor(s): Blender Foundation, 2018
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/object/object_shader_fx.c
- *  \ingroup edobj
+/** \file
+ * \ingroup edobj
  */
 
 
@@ -39,11 +33,11 @@
 #include "DNA_object_types.h"
 #include "DNA_scene_types.h"
 
-#include "BLI_math.h"
 #include "BLI_listbase.h"
-#include "BLI_string.h"
 #include "BLI_string_utf8.h"
 #include "BLI_utildefines.h"
+
+#include "BLT_translation.h"
 
 #include "BKE_context.h"
 #include "BKE_main.h"
@@ -99,9 +93,9 @@ ShaderFxData *ED_object_shaderfx_add(ReportList *reports, Main *bmain, Scene *UN
 	BKE_shaderfx_unique_name(&ob->shader_fx, new_fx);
 
 	bGPdata *gpd = ob->data;
-	DEG_id_tag_update(&gpd->id, OB_RECALC_OB | OB_RECALC_DATA);
+	DEG_id_tag_update(&gpd->id, ID_RECALC_TRANSFORM | ID_RECALC_GEOMETRY);
 
-	DEG_id_tag_update(&ob->id, OB_RECALC_DATA);
+	DEG_id_tag_update(&ob->id, ID_RECALC_GEOMETRY);
 	DEG_relations_tag_update(bmain);
 
 	return new_fx;
@@ -155,7 +149,7 @@ bool ED_object_shaderfx_remove(ReportList *reports, Main *bmain, Object *ob, Sha
 		return 0;
 	}
 
-	DEG_id_tag_update(&ob->id, OB_RECALC_DATA);
+	DEG_id_tag_update(&ob->id, ID_RECALC_GEOMETRY);
 	DEG_relations_tag_update(bmain);
 
 	return 1;
@@ -179,7 +173,7 @@ void ED_object_shaderfx_clear(Main *bmain, Object *ob)
 		fx = next_fx;
 	}
 
-	DEG_id_tag_update(&ob->id, OB_RECALC_DATA);
+	DEG_id_tag_update(&ob->id, ID_RECALC_GEOMETRY);
 	DEG_relations_tag_update(bmain);
 }
 
@@ -263,8 +257,6 @@ static const EnumPropertyItem *shaderfx_add_itemf(
 
 void OBJECT_OT_shaderfx_add(wmOperatorType *ot)
 {
-	PropertyRNA *prop;
-
 	/* identifiers */
 	ot->name = "Add Effect";
 	ot->description = "Add a visual effect to the active object";
@@ -279,9 +271,9 @@ void OBJECT_OT_shaderfx_add(wmOperatorType *ot)
 	ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
 
 	/* properties */
-	prop = RNA_def_enum(ot->srna, "type", rna_enum_object_shaderfx_type_items, eShaderFxType_Blur, "Type", "");
-	RNA_def_enum_funcs(prop, shaderfx_add_itemf);
-	ot->prop = prop;
+	ot->prop = RNA_def_enum(ot->srna, "type", rna_enum_object_shaderfx_type_items, eShaderFxType_Blur, "Type", "");
+	RNA_def_enum_funcs(ot->prop, shaderfx_add_itemf);
+	RNA_def_property_translation_context(ot->prop, BLT_I18NCONTEXT_ID_ID);  /* Abused, for "Light"... */
 }
 
 /************************ generic functions for operators using names and data context *********************/
@@ -301,7 +293,7 @@ static bool edit_shaderfx_poll_generic(bContext *C, StructRNA *rna_type, int obt
 	if (ptr.id.data && ID_IS_LINKED(ptr.id.data)) return 0;
 
 	if (ID_IS_STATIC_OVERRIDE(ob)) {
-		CTX_wm_operator_poll_msg_set(C, "Cannot edit shaderfxs comming from static override");
+		CTX_wm_operator_poll_msg_set(C, "Cannot edit shaderfxs coming from static override");
 		return (((ShaderFxData *)ptr.data)->flag & eShaderFxFlag_StaticOverride_Local) != 0;
 	}
 
@@ -315,7 +307,8 @@ static bool edit_shaderfx_poll(bContext *C)
 
 static void edit_shaderfx_properties(wmOperatorType *ot)
 {
-	RNA_def_string(ot->srna, "shaderfx", NULL, MAX_NAME, "Shader", "Name of the shaderfx to edit");
+	PropertyRNA *prop = RNA_def_string(ot->srna, "shaderfx", NULL, MAX_NAME, "Shader", "Name of the shaderfx to edit");
+	RNA_def_property_flag(prop, PROP_HIDDEN);
 }
 
 static int edit_shaderfx_invoke_properties(bContext *C, wmOperator *op)
@@ -400,7 +393,7 @@ static int shaderfx_move_up_exec(bContext *C, wmOperator *op)
 	if (!fx || !ED_object_shaderfx_move_up(op->reports, ob, fx))
 		return OPERATOR_CANCELLED;
 
-	DEG_id_tag_update(&ob->id, OB_RECALC_DATA);
+	DEG_id_tag_update(&ob->id, ID_RECALC_GEOMETRY);
 	WM_event_add_notifier(C, NC_OBJECT | ND_MODIFIER, ob);
 
 	return OPERATOR_FINISHED;
@@ -439,7 +432,7 @@ static int shaderfx_move_down_exec(bContext *C, wmOperator *op)
 	if (!fx || !ED_object_shaderfx_move_down(op->reports, ob, fx))
 		return OPERATOR_CANCELLED;
 
-	DEG_id_tag_update(&ob->id, OB_RECALC_DATA);
+	DEG_id_tag_update(&ob->id, ID_RECALC_GEOMETRY);
 	WM_event_add_notifier(C, NC_OBJECT | ND_MODIFIER, ob);
 
 	return OPERATOR_FINISHED;

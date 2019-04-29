@@ -244,6 +244,62 @@ ccl_device bool ray_quad_intersect(float3 ray_P,
   return true;
 }
 
+/* From PBRT.
+ * t0 is alwasy the smaller of the two solutions. */
+ccl_device_inline bool util_solve_quadratic(float A, float B, float C, float *t0, float *t1)
+{
+  /* Find quadratic discriminant. */
+  const float discrim = B * B - 4.0f * A * C;
+  if (discrim < 0.0f) {
+    return false;
+  }
+  float rootDiscrim = sqrtf(discrim);
+
+  /* Compute quadratic _t_ values. */
+  float q;
+  if (B < 0) {
+    q = -0.5f * (B - rootDiscrim);
+  }
+  else {
+    q = -0.5f * (B + rootDiscrim);
+  }
+  *t0 = q / A;
+  *t1 = C / q;
+  if (*t0 > *t1) {
+    float tmp = *t0;
+    *t0 = *t1;
+    *t1 = tmp;
+  }
+  return true;
+}
+
+/* Intersection of a semi-infinite ray with a semi-infinite cone.
+ * Following the derivation by Julien Guertault
+ * http://lousodrome.net/blog/light/2017/01/03/intersection-of-a-ray-and-a-cone/
+ */
+ccl_device bool ray_cone_intersect(float3 ray_P,
+                                  float3 ray_D,
+                                  float3 cone_P,
+                                  float3 cone_D,
+                                  float cos_cone_half_angle,
+                                  float *isect_t1,
+                                  float *isect_t2)
+{
+  const float k = cos_cone_half_angle * cos_cone_half_angle;
+  const float DdotV = dot(ray_D, cone_D);
+  const float3 CO = ray_P - cone_P;
+  const float COdotV = dot(CO, cone_D);
+  const float a = DdotV * DdotV - k;
+  const float b = 2.0f * (DdotV * COdotV - dot(ray_D, CO) * k);
+  const float c = COdotV * COdotV - dot(CO, CO) * k;
+  const bool hit = util_solve_quadratic(a, b, c, isect_t1, isect_t2);
+  if (!hit) {
+    return false;
+  }
+  const float3 P1_hit = ray_P + (*isect_t1) * ray_D;
+  return dot(P1_hit - cone_P, cone_D) > 0.0f;
+}
+
 CCL_NAMESPACE_END
 
 #endif /* __UTIL_MATH_INTERSECT_H__ */

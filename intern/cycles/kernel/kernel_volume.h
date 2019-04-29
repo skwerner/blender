@@ -275,7 +275,11 @@ ccl_device_noinline void kernel_volume_shadow(KernelGlobals *kg,
 /* Equi-angular sampling as in:
  * "Importance Sampling Techniques for Path Tracing in Participating Media" */
 
-ccl_device float kernel_volume_equiangular_sample(Ray *ray, const LightSample *ls, float xi, float *pdf)
+ccl_device float kernel_volume_equiangular_sample(KernelGlobals *kg,
+                                                  Ray *ray,
+                                                  const LightSample *ls,
+                                                  float xi,
+                                                  float *pdf)
 {
   float t = ray->t;
 
@@ -305,6 +309,33 @@ ccl_device float kernel_volume_equiangular_sample(Ray *ray, const LightSample *l
       }
     }
   }
+  else if (ls->type == LIGHT_SPOT) {
+    /* Intersect the ray with the light's cone, then sample from that ray segment. */
+    const ccl_global KernelLight &klight = kernel_tex_fetch(__lights, ls->lamp);
+    float t0, t1;
+    const float3 spot_D = make_float3(klight.spot.dir[0], klight.spot.dir[1], klight.spot.dir[2]);
+    if (ray_cone_intersect(ray->P,
+                           ray->D,
+                           ls->P,
+                           spot_D,
+                           klight.spot.spot_angle,
+                           &t0,
+                           &t1)) {
+      /* If the ray origin is inside the cone, use only the first intersection. */
+      if (dot(normalize(ls->P - ray->P), spot_D) > klight.spot.spot_angle) {
+        t_far = min(t_far, t0);
+      }
+      else {
+        t_near = max(t_near, t0);
+        t_far = min(t_far, t1);
+      }
+    }
+    else {
+      /* Ray misses the light cone completely, don't draw samples. */
+      *pdf = 0.0f;
+      return 0.0;
+    }
+  }
 
   float theta_a = -atan2f(delta - t_near, D);
   float theta_b = atan2f(t_far - delta, D);
@@ -319,7 +350,7 @@ ccl_device float kernel_volume_equiangular_sample(Ray *ray, const LightSample *l
   return min(t, delta + t_); /* min is only for float precision errors */
 }
 
-ccl_device float kernel_volume_equiangular_pdf(Ray *ray, const LightSample *ls, float sample_t)
+ccl_device float kernel_volume_equiangular_pdf(KernelGlobals *kg, Ray *ray, const LightSample *ls, float sample_t)
 {
   float delta = dot((ls->P - ray->P), ray->D);
   float D = safe_sqrtf(len_squared(ls->P - ray->P) - delta * delta);
@@ -346,7 +377,36 @@ ccl_device float kernel_volume_equiangular_pdf(Ray *ray, const LightSample *ls, 
         else {
           t_far = min(t_intersect, t_far);
         }
+        if (sample_t < t_near || sample_t > t_far) {
+          return 0.0f;
+        }
       }
+    }
+  }
+  else if (ls->type == LIGHT_SPOT) {
+    /* Intersect the ray with the light's cone, then sample from that ray segment. */
+    const ccl_global KernelLight &klight = kernel_tex_fetch(__lights, ls->lamp);
+    float t0, t1;
+    const float3 spot_D = make_float3(klight.spot.dir[0], klight.spot.dir[1], klight.spot.dir[2]);
+    if (ray_cone_intersect(ray->P,
+                           ray->D,
+                           ls->P,
+                           spot_D,
+                           klight.spot.spot_angle,
+                           &t0,
+                           &t1)) {
+      /* If the ray origin is inside the cone, use only the first intersection. */
+      if (dot(normalize(ls->P - ray->P), spot_D) > klight.spot.spot_angle) {
+        t_far = min(t_far, t0);
+      }
+      else {
+        t_near = max(t_near, t0);
+        t_far = min(t_far, t1);
+      }
+    }
+    else {
+      /* Ray misses the light cone completely, don't draw samples. */
+      return 0.0;
     }
   }
 
@@ -1063,14 +1123,18 @@ ccl_device VolumeIntegrateResult kernel_volume_decoupled_scatter(KernelGlobals *
 
     /* multiple importance sampling */
     if (use_mis) {
-      float equi_pdf = kernel_volume_equiangular_pdf(ray, ls, sample_t);
+      float equi_pdf = kernel_volume_equiangular_pdf(kg, ray, ls, sample_t);
       mis_weight = 2.0f * power_heuristic(pdf, equi_pdf);
     }
   }
   /* equi-angular sampling */
   else {
     /* sample distance */
-    sample_t = kernel_volume_equiangular_sample(ray, ls, xi, &pdf);
+    sample_t = kernel_volume_equiangular_sample(kg, ray, ls, xi, &pdf);
+
+    if(pdf == 0.0f) {
+      return VOLUME_PATH_MISSED;
+    }
 
     /* find step in which sampled distance is located */
     step = segment->steps;

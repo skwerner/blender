@@ -21,6 +21,20 @@ CCL_NAMESPACE_BEGIN
 
 /* Ray Intersection */
 
+ccl_device_inline bool ray_plane_intersect(float3 ray_P,
+                                           float3 ray_D,
+                                           float3 plane_P,
+                                           float3 plane_N,
+                                           float *isect_t)
+{
+  const float det = dot(ray_D, plane_N);
+  if (fabsf(det) > 1e-6f) {
+    *isect_t = -(dot(ray_P, plane_N) - dot(plane_P, plane_N)) / det;
+      return true;
+  }
+  return false;
+}
+
 ccl_device bool ray_sphere_intersect(float3 ray_P,
                                      float3 ray_D,
                                      float ray_t,

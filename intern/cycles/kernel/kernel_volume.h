@@ -276,7 +276,7 @@ ccl_device_noinline void kernel_volume_shadow(KernelGlobals *kg,
  * "Importance Sampling Techniques for Path Tracing in Participating Media" */
 
 ccl_device float kernel_volume_equiangular_sample(KernelGlobals *kg,
-                                                  Ray *ray,
+                                                  const Ray *ray,
                                                   const LightSample *ls,
                                                   float xi,
                                                   float *pdf)
@@ -296,11 +296,13 @@ ccl_device float kernel_volume_equiangular_sample(KernelGlobals *kg,
   /* For area lights, sample only the front (emitting side). */
   if (ls->type == LIGHT_AREA) {
     /* Intersect the ray with the light's plane. */
-    const float d_dot_n  = dot(ray->D, ls->Ng);
-    if (fabsf(d_dot_n) > 1e-6) {
-      const float t_intersect = -(dot(ray->P, ls->Ng) - dot(ls->P, ls->Ng)) / d_dot_n;
+    const ccl_global KernelLight &klight = kernel_tex_fetch(__lights, ls->lamp);
+    float t_intersect;
+    const float3 co = make_float3(klight.co[0], klight.co[1], klight.co[2]);
+    const float3 Ng = make_float3(klight.area.dir[0], klight.area.dir[1], klight.area.dir[2]);
+    if (ray_plane_intersect(ray->P, ray->D, co, Ng, &t_intersect)) {
       if (t_intersect > 0.0f) {
-        if (d_dot_n > 0.0f) {
+        if (dot(Ng, ray->D) > 0.0f) {
           t_near = t_intersect;
         }
         else {
@@ -350,7 +352,7 @@ ccl_device float kernel_volume_equiangular_sample(KernelGlobals *kg,
   return min(t, delta + t_); /* min is only for float precision errors */
 }
 
-ccl_device float kernel_volume_equiangular_pdf(KernelGlobals *kg, Ray *ray, const LightSample *ls, float sample_t)
+ccl_device float kernel_volume_equiangular_pdf(KernelGlobals *kg, const Ray *ray, const LightSample *ls, float sample_t)
 {
   float delta = dot((ls->P - ray->P), ray->D);
   float D = safe_sqrtf(len_squared(ls->P - ray->P) - delta * delta);
@@ -1014,7 +1016,7 @@ ccl_device void kernel_volume_decoupled_free(KernelGlobals *kg, VolumeSegment *s
  * function is expected to return VOLUME_PATH_SCATTERED when probalistic_scatter is false */
 ccl_device VolumeIntegrateResult kernel_volume_decoupled_scatter(KernelGlobals *kg,
                                                                  PathState *state,
-                                                                 Ray *ray,
+                                                                 const Ray *ray,
                                                                  ShaderData *sd,
                                                                  float3 *throughput,
                                                                  float rphase,
@@ -1131,10 +1133,6 @@ ccl_device VolumeIntegrateResult kernel_volume_decoupled_scatter(KernelGlobals *
   else {
     /* sample distance */
     sample_t = kernel_volume_equiangular_sample(kg, ray, ls, xi, &pdf);
-
-    if(pdf == 0.0f) {
-      return VOLUME_PATH_MISSED;
-    }
 
     /* find step in which sampled distance is located */
     step = segment->steps;

@@ -369,18 +369,17 @@ ccl_device float kernel_volume_equiangular_pdf(KernelGlobals *kg, const Ray *ray
   /* For area lights, sample only the front (emitting side). */
   if (ls->type == LIGHT_AREA) {
     /* Intersect the ray with the light's plane. */
-    const float d_dot_n  = dot(ray->D, ls->Ng);
-    if (fabsf(d_dot_n) > 1e-6) {
-      const float t_intersect = -(dot(ray->P, ls->Ng) - dot(ls->P, ls->Ng)) / d_dot_n;
+    const ccl_global KernelLight &klight = kernel_tex_fetch(__lights, ls->lamp);
+    float t_intersect;
+    const float3 co = make_float3(klight.co[0], klight.co[1], klight.co[2]);
+    const float3 Ng = make_float3(klight.area.dir[0], klight.area.dir[1], klight.area.dir[2]);
+    if (ray_plane_intersect(ray->P, ray->D, co, Ng, &t_intersect)) {
       if (t_intersect > 0.0f) {
-        if (d_dot_n > 0.0f) {
+        if (dot(Ng, ray->D) > 0.0f) {
           t_near = t_intersect;
         }
         else {
           t_far = min(t_intersect, t_far);
-        }
-        if (sample_t < t_near || sample_t > t_far) {
-          return 0.0f;
         }
       }
     }
@@ -410,6 +409,9 @@ ccl_device float kernel_volume_equiangular_pdf(KernelGlobals *kg, const Ray *ray
       /* Ray misses the light cone completely, don't draw samples. */
       return 0.0;
     }
+  }
+  if (sample_t < t_near || sample_t > t_far) {
+    return 0.0f;
   }
 
   float theta_a = -atan2f(delta - t_near, D);

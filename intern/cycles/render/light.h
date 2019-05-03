@@ -31,7 +31,7 @@ CCL_NAMESPACE_BEGIN
 class Device;
 class DeviceScene;
 class Object;
-class Primitive;
+struct Primitive;
 class Progress;
 class Scene;
 class Shader;

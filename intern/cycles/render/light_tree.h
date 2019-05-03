@@ -25,8 +25,6 @@ class Light;
 class Object;
 class Scene;
 
-#define LIGHT_TREE_NODE_SIZE 4
-
 /* Data structure to represent orientation bounds. It consists of two bounding
  * cones represented by a direction(axis) and two angles out from this axis.
  * This can be thought of as two cones.

@@ -107,14 +107,14 @@ class DeviceScene {
   device_vector<KernelLight> lights;
   device_vector<float2> light_background_marginal_cdf;
   device_vector<float2> light_background_conditional_cdf;
-  device_vector<float4> light_tree_nodes;
+  device_vector<KernelLightNode> light_tree_nodes;
   device_vector<uint> light_distribution_to_node;
   device_vector<uint> lamp_to_distribution;
-  device_vector<uint> triangle_to_distribution;
+  device_vector<KernelTriangleToDistribution> triangle_to_distribution;
   device_vector<float> light_group_sample_cdf;
   device_vector<float> light_group_sample_prob;
   device_vector<int> leaf_to_first_emitter;
-  device_vector<float4> light_tree_leaf_emitters;
+  device_vector<KernelLightLeaf> light_tree_leaf_emitters;
 
   /* particles */
   device_vector<KernelParticle> particles;

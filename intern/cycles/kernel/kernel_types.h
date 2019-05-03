@@ -1490,6 +1490,34 @@ typedef struct KernelLight {
 } KernelLight;
 static_assert_align(KernelLight, 16);
 
+typedef struct KernelLightNode {
+  float energy;
+  int right_child_offset;
+  int first_prim_offset;
+  int num_lights;
+  float bbox_min[3];
+  float bbox_max[3];
+  float bounds_o_theta_o;
+  float bounds_o_theta_e;
+  float axis[3];
+  float energy_variance;
+} KernelLightNode;
+
+typedef struct KernelLightLeaf {
+  float bbox_min[3];
+  float bbox_max[3];
+  float theta_o;
+  float theta_e;
+  float axis[3];
+  float energy;
+} KernelLightLeaf;
+
+typedef struct KernelTriangleToDistribution {
+  int prim_id;
+  int geom_id;
+  int dist_index;
+} KernelTriangleToDistribution;
+
 typedef struct KernelLightDistribution {
   float area;
   float totarea;

@@ -145,8 +145,8 @@ ccl_device void accum_light_tree_contribution(KernelGlobals *kg,
   }
   else {  // Interior node, choose which child(ren) to go down
 
-    int child_offsetL = offset + 4;
-    int child_offsetR = 4 * right_child_offset;
+    int child_offsetL = offset + 1;
+    int child_offsetR = right_child_offset;
 
     /* choose whether to go down both(split) or only one of the children */
     if (can_split && split(kg, P, offset)) {

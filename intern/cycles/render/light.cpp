@@ -434,7 +434,7 @@ void LightManager::device_update_distribution(Device *device,
 
     /* create the nodes to be used on the device */
     const vector<CompactNode> &nodes = light_tree.get_nodes();
-    float4 *dnodes = dscene->light_tree_nodes.alloc(nodes.size() * LIGHT_TREE_NODE_SIZE);
+    KernelLightNode *dnodes = dscene->light_tree_nodes.alloc(nodes.size());
 
     /* convert each compact node into 4xfloat4
      * 4 for energy, right_child_offset, prim_id, num_emitters
@@ -444,27 +444,26 @@ void LightManager::device_update_distribution(Device *device,
     size_t offset = 0;
     size_t num_leaf_lights = 0;
     foreach (CompactNode node, nodes) {
-      dnodes[offset].x = node.energy;
-      dnodes[offset].y = __int_as_float(node.right_child_offset);
-      dnodes[offset].z = __int_as_float(node.first_prim_offset);
-      dnodes[offset].w = __int_as_float(node.num_lights);
+      dnodes[offset].energy = node.energy;
+      dnodes[offset].right_child_offset = node.right_child_offset;
+      dnodes[offset].first_prim_offset = node.first_prim_offset;
+      dnodes[offset].num_lights = node.num_lights;
 
-      dnodes[offset + 1].x = node.bounds_s.min[0];
-      dnodes[offset + 1].y = node.bounds_s.min[1];
-      dnodes[offset + 1].z = node.bounds_s.min[2];
-      dnodes[offset + 1].w = node.bounds_s.max[0];
+      dnodes[offset].bbox_min[0] = node.bounds_s.min[0];
+      dnodes[offset].bbox_min[1] = node.bounds_s.min[1];
+      dnodes[offset].bbox_min[2] = node.bounds_s.min[2];
+      dnodes[offset].bbox_max[0] = node.bounds_s.max[0];
 
-      dnodes[offset + 2].x = node.bounds_s.max[1];
-      dnodes[offset + 2].y = node.bounds_s.max[2];
-      dnodes[offset + 2].z = node.bounds_o.theta_o;
-      dnodes[offset + 2].w = node.bounds_o.theta_e;
+      dnodes[offset].bbox_max[1] = node.bounds_s.max[1];
+      dnodes[offset].bbox_max[2] = node.bounds_s.max[2];
+      dnodes[offset].bounds_o_theta_o = node.bounds_o.theta_o;
+      dnodes[offset].bounds_o_theta_e = node.bounds_o.theta_e;
 
-      dnodes[offset + 3].x = node.bounds_o.axis[0];
-      dnodes[offset + 3].y = node.bounds_o.axis[1];
-      dnodes[offset + 3].z = node.bounds_o.axis[2];
-      dnodes[offset + 3].w = node.energy_variance;
-
-      offset += 4;
+      dnodes[offset].axis[0] = node.bounds_o.axis[0];
+      dnodes[offset].axis[1] = node.bounds_o.axis[1];
+      dnodes[offset].axis[2] = node.bounds_o.axis[2];
+      dnodes[offset].energy_variance = node.energy_variance;
+      ++offset;
 
       if ((node.right_child_offset == -1) && (node.num_lights > 1)) {
         num_leaf_lights += node.num_lights;
@@ -479,7 +478,7 @@ void LightManager::device_update_distribution(Device *device,
      * also stores an offset into the light_tree_leaf_emitters array to where
      * its first light is. this offset is stored in leaf_to_first_emitter.
      */
-    float4 *leaf_emitters = dscene->light_tree_leaf_emitters.alloc(num_leaf_lights * 3);
+    KernelLightLeaf *leaf_emitters = dscene->light_tree_leaf_emitters.alloc(num_leaf_lights);
     int *leaf_to_first_emitter = dscene->leaf_to_first_emitter.alloc(nodes.size());
 
     offset = 0;
@@ -497,28 +496,28 @@ void LightManager::device_update_distribution(Device *device,
       int start = node.first_prim_offset;  // distribution id
       int end = start + node.num_lights;
       for (int j = start; j < end; ++j) {
-
         /* todo: is there a better way than recalcing this? */
         /* have getters for the light tree that just accesses build_data? */
         BoundBox bbox = light_tree.compute_bbox(emissive_prims[j]);
         Orientation bcone = light_tree.compute_bcone(emissive_prims[j]);
         float energy = light_tree.compute_energy(emissive_prims[j]);
 
-        leaf_emitters[offset].x = bbox.min[0];
-        leaf_emitters[offset].y = bbox.min[1];
-        leaf_emitters[offset].z = bbox.min[2];
-        leaf_emitters[offset].w = bbox.max[0];
+        leaf_emitters[offset].bbox_min[0] = bbox.min[0];
+        leaf_emitters[offset].bbox_min[1] = bbox.min[1];
+        leaf_emitters[offset].bbox_min[2] = bbox.min[2];
 
-        leaf_emitters[offset + 1].x = bbox.max[1];
-        leaf_emitters[offset + 1].y = bbox.max[2];
-        leaf_emitters[offset + 1].z = bcone.theta_o;
-        leaf_emitters[offset + 1].w = bcone.theta_e;
+        leaf_emitters[offset].bbox_max[0] = bbox.max[0];
+        leaf_emitters[offset].bbox_max[1] = bbox.max[1];
+        leaf_emitters[offset].bbox_max[2] = bbox.max[2];
 
-        leaf_emitters[offset + 2].x = bcone.axis[0];
-        leaf_emitters[offset + 2].y = bcone.axis[1];
-        leaf_emitters[offset + 2].z = bcone.axis[2];
-        leaf_emitters[offset + 2].w = energy;
-        offset += 3;
+        leaf_emitters[offset].theta_o = bcone.theta_o;
+        leaf_emitters[offset].theta_e = bcone.theta_e;
+
+        leaf_emitters[offset].axis[0] = bcone.axis[0];
+        leaf_emitters[offset].axis[1] = bcone.axis[1];
+        leaf_emitters[offset].axis[2] = bcone.axis[2];
+        leaf_emitters[offset].energy = energy;
+        ++offset;
       }
     }
 
@@ -582,7 +581,7 @@ void LightManager::device_update_distribution(Device *device,
       int start = node.first_prim_offset;  // distribution id
       int end = start + node.num_lights;
       for (int j = start; j < end; ++j) {
-        distribution_to_node[j] = 4 * i;
+        distribution_to_node[j] = i;
       }
     }
   }
@@ -616,11 +615,11 @@ void LightManager::device_update_distribution(Device *device,
   std::sort(tri_to_distr.begin(), tri_to_distr.end());
 
   assert(num_triangles == tri_to_distr.size());
-  uint *triangle_to_distribution = dscene->triangle_to_distribution.alloc(num_triangles * 3);
+  KernelTriangleToDistribution *triangle_to_distribution = dscene->triangle_to_distribution.alloc(num_triangles);
   for (int i = 0; i < tri_to_distr.size(); ++i) {
-    triangle_to_distribution[3 * i] = std::get<0>(tri_to_distr[i]);
-    triangle_to_distribution[3 * i + 1] = std::get<1>(tri_to_distr[i]);
-    triangle_to_distribution[3 * i + 2] = std::get<2>(tri_to_distr[i]);
+    triangle_to_distribution[i].prim_id = std::get<0>(tri_to_distr[i]);
+    triangle_to_distribution[i].geom_id = std::get<1>(tri_to_distr[i]);
+    triangle_to_distribution[i].dist_index = std::get<2>(tri_to_distr[i]);
   }
 
   if (progress.get_cancel())
@@ -755,7 +754,7 @@ void LightManager::device_update_distribution(Device *device,
     dscene->light_group_sample_prob.copy_to_device();
     dscene->leaf_to_first_emitter.copy_to_device();
     dscene->light_tree_leaf_emitters.copy_to_device();
-    kintegrator->num_light_nodes = dscene->light_tree_nodes.size() / LIGHT_TREE_NODE_SIZE;
+    kintegrator->num_light_nodes = dscene->light_tree_nodes.size();
     // TODO: Currently this is only the correct offset when using light tree
     kintegrator->distant_lights_offset = num_distribution - num_distant_lights;
     kintegrator->background_light_index = background_index;

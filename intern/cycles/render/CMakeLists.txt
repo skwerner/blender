@@ -57,6 +57,7 @@ set(SRC_HEADERS
   image.h
   integrator.h
   light.h
+  light_tree.h
   merge.h
   mesh.h
   nodes.h

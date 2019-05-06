@@ -215,6 +215,8 @@ Orientation LightTree::compute_bcone(const Primitive &prim)
       p2 = transform_point(&tfm, p2);
     }
 
+#if 0
+    /* This would be valid for one-sided emissive geometry. */
     float3 normal = make_float3(1.0f, 0.0f, 0.0f);
     const float3 norm = cross(p1 - p0, p2 - p0);
     const float normlen = len(norm);
@@ -224,6 +226,9 @@ Orientation LightTree::compute_bcone(const Primitive &prim)
 
     bcone.axis = normal;
     bcone.theta_o = 0.0f;
+#else
+    bcone.theta_o = M_PI_F;
+#endif
     bcone.theta_e = M_PI_2_F;
   }
   else {

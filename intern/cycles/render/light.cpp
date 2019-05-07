@@ -284,6 +284,10 @@ float LightManager::distant_lights_energy(const Scene *scene, const vector<Primi
     scene_bbox.grow(object->bounds);
   }
 
+  if (!scene_bbox.valid()) {
+    return 0.0f;
+  }
+  
   float radius_squared = len_squared(scene_bbox.max - scene_bbox.center());
 
   return M_PI_F * radius_squared * luminance;

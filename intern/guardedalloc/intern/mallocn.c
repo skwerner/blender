@@ -76,7 +76,7 @@ void *aligned_malloc(size_t size, size_t alignment)
   /* On Mac OS X, both the heap and the stack are guaranteed 16-byte aligned so
    * they work natively with SSE types with no further work.
    */
-  assert(alignment == 16);
+//  assert(alignment == 16);
   (void)alignment;
   return malloc(size);
 #elif defined(__FreeBSD__) || defined(__NetBSD__)

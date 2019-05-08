@@ -633,15 +633,14 @@ static PyObject *osl_compile_func(PyObject * /*self*/, PyObject *args)
 
 static PyObject *oiio_make_tx(PyObject * /*self*/, PyObject *args)
 {
-  const char *inputfile = NULL, *outputfile = NULL;
-  int srgb = 1;
+  const char *inputfile = NULL, *outputfile = NULL, *colorspace = NULL;
   int extension = EXTENSION_CLIP;
 
-  if (!PyArg_ParseTuple(args, "sspi", &inputfile, &outputfile, &srgb, &extension))
+  if (!PyArg_ParseTuple(args, "sssi", &inputfile, &outputfile, &colorspace, &extension))
     return NULL;
 
   /* return */
-  if (!ImageManager::make_tx(inputfile, outputfile, srgb, (ExtensionType)extension))
+  if (!ImageManager::make_tx(inputfile, outputfile, ustring(colorspace), (ExtensionType)extension))
     Py_RETURN_FALSE;
 
   Py_RETURN_TRUE;

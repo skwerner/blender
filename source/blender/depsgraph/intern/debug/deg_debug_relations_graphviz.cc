@@ -122,8 +122,9 @@ static int deg_debug_node_color_index(const Node *node)
       return 5;
     case NodeType::OPERATION: {
       OperationNode *op_node = (OperationNode *)node;
-      if (op_node->is_noop())
+      if (op_node->is_noop()) {
         return 8;
+      }
       break;
     }
 
@@ -433,6 +434,7 @@ static void deg_debug_graphviz_node(const DebugContext &ctx, const Node *node)
     case NodeType::BATCH_CACHE:
     case NodeType::DUPLI:
     case NodeType::SYNCHRONIZATION:
+    case NodeType::AUDIO:
     case NodeType::GENERIC_DATABLOCK: {
       ComponentNode *comp_node = (ComponentNode *)node;
       if (!comp_node->operations.empty()) {
@@ -485,16 +487,19 @@ static bool deg_debug_graphviz_is_owner(const Node *node, const Node *other)
   switch (node->get_class()) {
     case NodeClass::COMPONENT: {
       ComponentNode *comp_node = (ComponentNode *)node;
-      if (comp_node->owner == other)
+      if (comp_node->owner == other) {
         return true;
+      }
       break;
     }
     case NodeClass::OPERATION: {
       OperationNode *op_node = (OperationNode *)node;
-      if (op_node->owner == other)
+      if (op_node->owner == other) {
         return true;
-      else if (op_node->owner->owner == other)
+      }
+      else if (op_node->owner->owner == other) {
         return true;
+      }
       break;
     }
     default:

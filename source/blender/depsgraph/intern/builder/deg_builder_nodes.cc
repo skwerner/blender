@@ -58,6 +58,7 @@ extern "C" {
 #include "DNA_lightprobe_types.h"
 #include "DNA_rigidbody_types.h"
 #include "DNA_scene_types.h"
+#include "DNA_sound_types.h"
 #include "DNA_speaker_types.h"
 #include "DNA_texture_types.h"
 #include "DNA_world_types.h"
@@ -65,6 +66,7 @@ extern "C" {
 #include "BKE_action.h"
 #include "BKE_armature.h"
 #include "BKE_animsys.h"
+#include "BKE_cachefile.h"
 #include "BKE_collection.h"
 #include "BKE_constraint.h"
 #include "BKE_curve.h"
@@ -129,8 +131,10 @@ void free_copy_on_write_datablock(void *id_info_v)
 
 /* **** General purpose functions **** */
 
-DepsgraphNodeBuilder::DepsgraphNodeBuilder(Main *bmain, Depsgraph *graph)
-    : DepsgraphBuilder(bmain, graph),
+DepsgraphNodeBuilder::DepsgraphNodeBuilder(Main *bmain,
+                                           Depsgraph *graph,
+                                           DepsgraphBuilderCache *cache)
+    : DepsgraphBuilder(bmain, graph, cache),
       scene_(NULL),
       view_layer_(NULL),
       view_layer_index_(-1),
@@ -335,7 +339,7 @@ void DepsgraphNodeBuilder::begin_build()
     entry_tag.name = op_node->name;
     entry_tag.name_tag = op_node->name_tag;
     saved_entry_tags_.push_back(entry_tag);
-  };
+  }
   GSET_FOREACH_END();
 
   /* Make sure graph has no nodes left from previous state. */
@@ -440,6 +444,9 @@ void DepsgraphNodeBuilder::build_id(ID *id)
     case ID_SPK:
       build_speaker((Speaker *)id);
       break;
+    case ID_SO:
+      build_sound((bSound *)id);
+      break;
     case ID_TXT:
       /* Not a part of dependency graph. */
       break;
@@ -526,6 +533,7 @@ void DepsgraphNodeBuilder::build_object(int base_index,
     if (id_node->linked_state == DEG_ID_LINKED_DIRECTLY) {
       id_node->is_directly_visible |= is_visible;
     }
+    id_node->has_base |= (base_index != -1);
     return;
   }
   /* Create ID node for object and begin init. */
@@ -538,6 +546,7 @@ void DepsgraphNodeBuilder::build_object(int base_index,
   else {
     id_node->is_directly_visible = is_visible;
   }
+  id_node->has_base |= (base_index != -1);
   /* Various flags, flushing from bases/collections. */
   build_object_flags(base_index, object, linked_state);
   /* Transform. */
@@ -703,7 +712,7 @@ void DepsgraphNodeBuilder::build_object_data_speaker(Object *object)
 {
   Speaker *speaker = (Speaker *)object->data;
   build_speaker(speaker);
-  add_operation_node(&object->id, NodeType::PARAMETERS, OperationCode::SPEAKER_EVAL);
+  add_operation_node(&object->id, NodeType::AUDIO, OperationCode::SPEAKER_EVAL);
 }
 
 void DepsgraphNodeBuilder::build_object_transform(Object *object)
@@ -1149,7 +1158,7 @@ void DepsgraphNodeBuilder::build_shapekeys(Key *key)
   /* This is an exit operation for the entire key datablock, is what is used
    * as dependency for modifiers evaluation. */
   add_operation_node(&key->id, NodeType::GEOMETRY, OperationCode::GEOMETRY_SHAPEKEY);
-  /* Create per-key block properties, allowing tricky inter-dependnecies for
+  /* Create per-key block properties, allowing tricky inter-dependencies for
    * drivers evaluation. */
   LISTBASE_FOREACH (KeyBlock *, key_block, &key->block) {
     add_operation_node(
@@ -1177,12 +1186,6 @@ void DepsgraphNodeBuilder::build_object_data_geometry(Object *object, bool is_ob
   op_node->set_as_exit();
   /* Materials. */
   if (object->totcol != 0) {
-    if (object->type == OB_MESH) {
-      add_operation_node(&object->id,
-                         NodeType::SHADING,
-                         OperationCode::SHADING,
-                         function_bind(BKE_object_eval_update_shading, _1, object_cow));
-    }
     for (int a = 1; a <= object->totcol; a++) {
       Material *ma = give_current_material(object, a);
       if (ma != NULL) {
@@ -1441,7 +1444,7 @@ void DepsgraphNodeBuilder::build_compositor(Scene *scene)
   /* For now, just a plain wrapper? */
   // TODO: create compositing component?
   // XXX: component type undefined!
-  //graph->get_node(&scene->id, NULL, NodeType::COMPOSITING, NULL);
+  // graph->get_node(&scene->id, NULL, NodeType::COMPOSITING, NULL);
 
   /* for now, nodetrees are just parameters; compositing occurs in internals
    * of renderer... */
@@ -1471,11 +1474,16 @@ void DepsgraphNodeBuilder::build_cachefile(CacheFile *cache_file)
     return;
   }
   ID *cache_file_id = &cache_file->id;
+  add_id_node(cache_file_id);
+  CacheFile *cache_file_cow = get_cow_datablock(cache_file);
   /* Animation, */
   build_animdata(cache_file_id);
   build_parameters(cache_file_id);
   /* Cache evaluation itself. */
-  add_operation_node(cache_file_id, NodeType::CACHE, OperationCode::FILE_CACHE_UPDATE);
+  add_operation_node(cache_file_id,
+                     NodeType::CACHE,
+                     OperationCode::FILE_CACHE_UPDATE,
+                     function_bind(BKE_cachefile_eval, bmain_, _1, cache_file_cow));
 }
 
 void DepsgraphNodeBuilder::build_mask(Mask *mask)
@@ -1539,9 +1547,23 @@ void DepsgraphNodeBuilder::build_speaker(Speaker *speaker)
     return;
   }
   /* Placeholder so we can add relations and tag ID node for update. */
-  add_operation_node(&speaker->id, NodeType::PARAMETERS, OperationCode::SPEAKER_EVAL);
+  add_operation_node(&speaker->id, NodeType::AUDIO, OperationCode::SPEAKER_EVAL);
   build_animdata(&speaker->id);
   build_parameters(&speaker->id);
+  if (speaker->sound != NULL) {
+    build_sound(speaker->sound);
+  }
+}
+
+void DepsgraphNodeBuilder::build_sound(bSound *sound)
+{
+  if (built_map_.checkIsBuiltAndTag(sound)) {
+    return;
+  }
+  /* Placeholder so we can add relations and tag ID node for update. */
+  add_operation_node(&sound->id, NodeType::AUDIO, OperationCode::SOUND_EVAL);
+  build_animdata(&sound->id);
+  build_parameters(&sound->id);
 }
 
 /* **** ID traversal callbacks functions **** */

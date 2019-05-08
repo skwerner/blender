@@ -66,10 +66,12 @@ static int gpencil_sort_points(const void *a1, const void *a2)
 {
   const tGPencilPointCache *ps1 = a1, *ps2 = a2;
 
-  if (ps1->factor < ps2->factor)
+  if (ps1->factor < ps2->factor) {
     return -1;
-  else if (ps1->factor > ps2->factor)
+  }
+  else if (ps1->factor > ps2->factor) {
     return 1;
+  }
 
   return 0;
 }
@@ -108,7 +110,7 @@ static bGPDstroke *gpencil_prepare_stroke(bContext *C, wmOperator *op, int totpo
 
   Paint *paint = &ts->gp_paint->paint;
   /* if not exist, create a new one */
-  if (paint->brush == NULL) {
+  if ((paint->brush == NULL) || (paint->brush->gpencil_settings == NULL)) {
     /* create new brushes */
     BKE_brush_gpencil_presets(C);
   }

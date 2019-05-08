@@ -44,6 +44,7 @@
 #include "render/buffers.h"
 #include "render/coverage.h"
 
+#include "util/util_aligned_malloc.h"
 #include "util/util_debug.h"
 #include "util/util_foreach.h"
 #include "util/util_function.h"
@@ -166,7 +167,7 @@ class CPUDevice : public Device {
   bool need_texture_info;
 
 #ifdef WITH_OSL
-  OSLGlobals osl_globals;
+  OSLGlobals *osl_globals;
 #endif
   OIIOGlobals oiio_globals;
 
@@ -284,7 +285,9 @@ class CPUDevice : public Device {
     }
 
 #ifdef WITH_OSL
-    kernel_globals.osl = &osl_globals;
+    /* Must use aligned malloc due to concurrent hash map. */
+    osl_globals = util_aligned_new<OSLGlobals>();
+    kernel_globals.osl = osl_globals;
 #endif
     oiio_globals.tex_sys = NULL;
     kernel_globals.oiio = &oiio_globals;
@@ -322,6 +325,9 @@ class CPUDevice : public Device {
 
   ~CPUDevice()
   {
+#ifdef WITH_OSL
+    util_aligned_delete(osl_globals);
+#endif
     task_pool.stop();
     texture_info.free();
     if (oiio_globals.tex_sys) {
@@ -503,7 +509,7 @@ class CPUDevice : public Device {
   void *osl_memory()
   {
 #ifdef WITH_OSL
-    return &osl_globals;
+    return osl_globals;
 #else
     return NULL;
 #endif
@@ -997,7 +1003,7 @@ class CPUDevice : public Device {
     KernelGlobals kg = kernel_globals;
 
 #ifdef WITH_OSL
-    OSLShader::thread_init(&kg, &kernel_globals, &osl_globals);
+    OSLShader::thread_init(&kg, &kernel_globals, osl_globals);
 #endif
     if (kg.oiio && kg.oiio->tex_sys) {
       kg.oiio_tdata = kg.oiio->tex_sys->get_perthread_info();
@@ -1076,7 +1082,7 @@ class CPUDevice : public Device {
     kg.decoupled_volume_steps_index = 0;
     kg.coverage_asset = kg.coverage_object = kg.coverage_material = NULL;
 #ifdef WITH_OSL
-    OSLShader::thread_init(&kg, &kernel_globals, &osl_globals);
+    OSLShader::thread_init(&kg, &kernel_globals, osl_globals);
 #endif
     if (kg.oiio && kg.oiio->tex_sys) {
       kg.oiio_tdata = kg.oiio->tex_sys->get_perthread_info();

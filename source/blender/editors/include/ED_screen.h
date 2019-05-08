@@ -135,6 +135,21 @@ void ED_area_do_msg_notify_tag_refresh(struct bContext *C,
                                        struct wmMsgSubscribeKey *msg_key,
                                        struct wmMsgSubscribeValue *msg_val);
 
+void ED_area_do_mgs_subscribe_for_tool_header(const struct bContext *C,
+                                              struct WorkSpace *workspace,
+                                              struct Scene *scene,
+                                              struct bScreen *screen,
+                                              struct ScrArea *sa,
+                                              struct ARegion *ar,
+                                              struct wmMsgBus *mbus);
+void ED_area_do_mgs_subscribe_for_tool_ui(const struct bContext *C,
+                                          struct WorkSpace *workspace,
+                                          struct Scene *scene,
+                                          struct bScreen *screen,
+                                          struct ScrArea *sa,
+                                          struct ARegion *ar,
+                                          struct wmMsgBus *mbus);
+
 /* message bus */
 void ED_region_message_subscribe(struct bContext *C,
                                  struct WorkSpace *workspace,
@@ -395,6 +410,21 @@ void ED_region_generic_tools_region_message_subscribe(const struct bContext *C,
                                                       struct wmMsgBus *mbus);
 int ED_region_generic_tools_region_snap_size(const struct ARegion *ar, int size, int axis);
 
+/* area_query.c */
+bool ED_region_overlap_isect_x(const ARegion *ar, const int event_x);
+bool ED_region_overlap_isect_y(const ARegion *ar, const int event_y);
+bool ED_region_overlap_isect_xy(const ARegion *ar, const int event_xy[2]);
+bool ED_region_overlap_isect_x_with_margin(const ARegion *ar, const int event_x, const int margin);
+bool ED_region_overlap_isect_y_with_margin(const ARegion *ar, const int event_y, const int margin);
+bool ED_region_overlap_isect_xy_with_margin(const ARegion *ar,
+                                            const int event_xy[2],
+                                            const int margin);
+
+bool ED_region_panel_category_gutter_calc_rect(const ARegion *ar, rcti *r_ar_gutter);
+bool ED_region_panel_category_gutter_isect_xy(const ARegion *ar, const int event_xy[2]);
+
+bool ED_region_contains_xy(const struct ARegion *ar, const int event_xy[2]);
+
 /* interface_region_hud.c */
 struct ARegionType *ED_area_type_hud(int space_type);
 void ED_area_type_hud_clear(struct wmWindowManager *wm, ScrArea *sa_keep);
@@ -406,12 +436,11 @@ enum {
   ED_KEYMAP_GIZMO = (1 << 2),
   ED_KEYMAP_TOOL = (1 << 3),
   ED_KEYMAP_VIEW2D = (1 << 4),
-  ED_KEYMAP_MARKERS = (1 << 5),
-  ED_KEYMAP_ANIMATION = (1 << 6),
-  ED_KEYMAP_FRAMES = (1 << 7),
-  ED_KEYMAP_HEADER = (1 << 8),
-  ED_KEYMAP_GPENCIL = (1 << 9),
-  ED_KEYMAP_FOOTER = (1 << 10),
+  ED_KEYMAP_ANIMATION = (1 << 5),
+  ED_KEYMAP_FRAMES = (1 << 6),
+  ED_KEYMAP_HEADER = (1 << 7),
+  ED_KEYMAP_GPENCIL = (1 << 8),
+  ED_KEYMAP_FOOTER = (1 << 9),
 };
 
 /* SCREEN_OT_space_context_cycle direction */

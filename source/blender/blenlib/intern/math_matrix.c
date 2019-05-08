@@ -931,6 +931,13 @@ float determinant_m3_array(const float m[3][3])
           m[2][0] * (m[0][1] * m[1][2] - m[0][2] * m[1][1]));
 }
 
+float determinant_m4_mat3_array(const float m[4][4])
+{
+  return (m[0][0] * (m[1][1] * m[2][2] - m[1][2] * m[2][1]) -
+          m[1][0] * (m[0][1] * m[2][2] - m[0][2] * m[2][1]) +
+          m[2][0] * (m[0][1] * m[1][2] - m[0][2] * m[1][1]));
+}
+
 bool invert_m3_ex(float m[3][3], const float epsilon)
 {
   float tmp[3][3];
@@ -1009,6 +1016,81 @@ bool invert_m4(float m[4][4])
 
   copy_m4_m4(m, tmp);
   return success;
+}
+
+/**
+ * Computes the inverse of mat and puts it in inverse.
+ * Uses Gaussian Elimination with partial (maximal column) pivoting.
+ * \return true on success (i.e. can always find a pivot) and false on failure.
+ * Mark Segal - 1992.
+ *
+ * \note this is less performant than #EIG_invert_m4_m4 (Eigen), but e.g.
+ * for non-invertible scale matrices, findinging a partial solution can
+ * be useful to have a valid local transform center, see T57767.
+ */
+bool invert_m4_m4_fallback(float inverse[4][4], const float mat[4][4])
+{
+  if (EIG_invert_m4_m4(inverse, mat)) {
+    return true;
+  }
+
+  int i, j, k;
+  double temp;
+  float tempmat[4][4];
+  float max;
+  int maxj;
+
+  BLI_assert(inverse != mat);
+
+  /* Set inverse to identity */
+  for (i = 0; i < 4; i++)
+    for (j = 0; j < 4; j++)
+      inverse[i][j] = 0;
+  for (i = 0; i < 4; i++)
+    inverse[i][i] = 1;
+
+  /* Copy original matrix so we don't mess it up */
+  for (i = 0; i < 4; i++)
+    for (j = 0; j < 4; j++)
+      tempmat[i][j] = mat[i][j];
+
+  for (i = 0; i < 4; i++) {
+    /* Look for row with max pivot */
+    max = fabsf(tempmat[i][i]);
+    maxj = i;
+    for (j = i + 1; j < 4; j++) {
+      if (fabsf(tempmat[j][i]) > max) {
+        max = fabsf(tempmat[j][i]);
+        maxj = j;
+      }
+    }
+    /* Swap rows if necessary */
+    if (maxj != i) {
+      for (k = 0; k < 4; k++) {
+        SWAP(float, tempmat[i][k], tempmat[maxj][k]);
+        SWAP(float, inverse[i][k], inverse[maxj][k]);
+      }
+    }
+
+    if (UNLIKELY(tempmat[i][i] == 0.0f)) {
+      return false; /* No non-zero pivot */
+    }
+    temp = (double)tempmat[i][i];
+    for (k = 0; k < 4; k++) {
+      tempmat[i][k] = (float)((double)tempmat[i][k] / temp);
+      inverse[i][k] = (float)((double)inverse[i][k] / temp);
+    }
+    for (j = 0; j < 4; j++) {
+      if (j != i) {
+        temp = tempmat[j][i];
+        for (k = 0; k < 4; k++) {
+          tempmat[j][k] -= (float)((double)tempmat[i][k] * temp);
+          inverse[j][k] -= (float)((double)inverse[i][k] * temp);
+        }
+      }
+    }
+  }
+  return true;
 }
 
 bool invert_m4_m4(float inverse[4][4], const float mat[4][4])
@@ -1641,9 +1723,26 @@ void mat4_to_size(float size[3], const float mat[4][4])
   size[2] = len_v3(mat[2]);
 }
 
-/* this gets the average scale of a matrix, only use when your scaling
+/**
+ * This computes the overall volume scale factor of a transformation matrix.
+ * For an orthogonal matrix, it is the product of all three scale values.
+ * Returns a negative value if the transform is flipped by negative scale.
+ */
+float mat3_to_volume_scale(const float mat[3][3])
+{
+  return determinant_m3_array(mat);
+}
+
+float mat4_to_volume_scale(const float mat[4][4])
+{
+  return determinant_m4_mat3_array(mat);
+}
+
+/**
+ * This gets the average scale of a matrix, only use when your scaling
  * data that has no idea of scale axis, examples are bone-envelope-radius
- * and curve radius */
+ * and curve radius.
+ */
 float mat3_to_scale(const float mat[3][3])
 {
   /* unit length vector */
@@ -1897,8 +1996,10 @@ void blend_m4_m4m4(float out[4][4],
  * A polar-decomposition-based interpolation between matrix A and matrix B.
  *
  * \note This code is about five times slower as the 'naive' interpolation done by #blend_m3_m3m3
- *       (it typically remains below 2 usec on an average i74700, while #blend_m3_m3m3 remains below 0.4 usec).
- *       However, it gives expected results even with non-uniformly scaled matrices, see T46418 for an example.
+ * (it typically remains below 2 usec on an average i74700,
+ * while #blend_m3_m3m3 remains below 0.4 usec).
+ * However, it gives expected results even with non-uniformly scaled matrices,
+ * see T46418 for an example.
  *
  * Based on "Matrix Animation and Polar Decomposition", by Ken Shoemake & Tom Duff
  *
@@ -1937,7 +2038,8 @@ void interp_m3_m3m3(float R[3][3], const float A[3][3], const float B[3][3], con
 }
 
 /**
- * Complete transform matrix interpolation, based on polar-decomposition-based interpolation from #interp_m3_m3m3.
+ * Complete transform matrix interpolation,
+ * based on polar-decomposition-based interpolation from #interp_m3_m3m3.
  *
  * \param R: Resulting interpolated matrix.
  * \param A: Input matrix which is totally effective with `t = 0.0`.
@@ -2000,10 +2102,12 @@ bool equals_m4m4(const float mat1[4][4], const float mat2[4][4])
           equals_v4v4(mat1[2], mat2[2]) && equals_v4v4(mat1[3], mat2[3]));
 }
 
-/* make a 4x4 matrix out of 3 transform components */
-/* matrices are made in the order: scale * rot * loc */
-/* TODO: need to have a version that allows for rotation order... */
-
+/**
+ * Make a 4x4 matrix out of 3 transform components.
+ * Matrices are made in the order: `scale * rot * loc`
+ *
+ * TODO: need to have a version that allows for rotation order...
+ */
 void loc_eul_size_to_mat4(float mat[4][4],
                           const float loc[3],
                           const float eul[3],
@@ -2028,9 +2132,10 @@ void loc_eul_size_to_mat4(float mat[4][4],
   mat[3][2] = loc[2];
 }
 
-/* make a 4x4 matrix out of 3 transform components */
-
-/* matrices are made in the order: scale * rot * loc */
+/**
+ * Make a 4x4 matrix out of 3 transform components.
+ * Matrices are made in the order: `scale * rot * loc`
+ */
 void loc_eulO_size_to_mat4(float mat[4][4],
                            const float loc[3],
                            const float eul[3],
@@ -2056,9 +2161,10 @@ void loc_eulO_size_to_mat4(float mat[4][4],
   mat[3][2] = loc[2];
 }
 
-/* make a 4x4 matrix out of 3 transform components */
-
-/* matrices are made in the order: scale * rot * loc */
+/**
+ * Make a 4x4 matrix out of 3 transform components.
+ * Matrices are made in the order: `scale * rot * loc`
+ */
 void loc_quat_size_to_mat4(float mat[4][4],
                            const float loc[3],
                            const float quat[4],
@@ -2626,11 +2732,13 @@ void invert_m4_m4_safe(float Ainv[4][4], const float A[4][4])
  * - #BLI_SPACE_TRANSFORM_SETUP(&data,  ob1, ob2)
  *
  * After that the following calls can be used:
- * - #BLI_space_transform_apply(&data, co);  // converts a coordinate in ob1 space to the corresponding ob2 space.
- * - #BLI_space_transform_invert(&data, co);  // converts a coordinate in ob2 space to the corresponding ob1 space.
+ * - Converts a coordinate in ob1 space to the corresponding ob2 space:
+ *   #BLI_space_transform_apply(&data, co);
+ * - Converts a coordinate in ob2 space to the corresponding ob1 space:
+ *   #BLI_space_transform_invert(&data, co);
  *
- * Same concept as #BLI_space_transform_apply and #BLI_space_transform_invert, but no is normalized after conversion
- * (and not translated at all!):
+ * Same concept as #BLI_space_transform_apply and #BLI_space_transform_invert,
+ * but no is normalized after conversion (and not translated at all!):
  * - #BLI_space_transform_apply_normal(&data, no);
  * - #BLI_space_transform_invert_normal(&data, no);
  */
@@ -2638,12 +2746,14 @@ void invert_m4_m4_safe(float Ainv[4][4], const float A[4][4])
 /**
  * Global-invariant transform.
  *
- * This defines a matrix transforming a point in local space to a point in target space such that its global
- * coordinates remain unchanged.
+ * This defines a matrix transforming a point in local space to a point in target space
+ * such that its global coordinates remain unchanged.
  *
- * In other words, if we have a global point P with local coordinates (x, y, z) and global coordinates (X, Y, Z),
+ * In other words, if we have a global point P with local coordinates (x, y, z)
+ * and global coordinates (X, Y, Z),
  * this defines a transform matrix TM such that (x', y', z') = TM * (x, y, z)
- * where (x', y', z') are the coordinates of P' in target space such that it keeps (X, Y, Z) coordinates in global space.
+ * where (x', y', z') are the coordinates of P' in target space
+ * such that it keeps (X, Y, Z) coordinates in global space.
  */
 void BLI_space_transform_from_matrices(SpaceTransform *data,
                                        const float local[4][4],
@@ -2658,12 +2768,14 @@ void BLI_space_transform_from_matrices(SpaceTransform *data,
 /**
  * Local-invariant transform.
  *
- * This defines a matrix transforming a point in global space such that its local coordinates
- * (from local space to target space) remain unchanged.
+ * This defines a matrix transforming a point in global space
+ * such that its local coordinates (from local space to target space) remain unchanged.
  *
- * In other words, if we have a local point p with local coordinates (x, y, z) and global coordinates (X, Y, Z),
+ * In other words, if we have a local point p with local coordinates (x, y, z)
+ * and global coordinates (X, Y, Z),
  * this defines a transform matrix TM such that (X', Y', Z') = TM * (X, Y, Z)
- * where (X', Y', Z') are the coordinates of p' in global space such that it keeps (x, y, z) coordinates in target space.
+ * where (X', Y', Z') are the coordinates of p' in global space
+ * such that it keeps (x, y, z) coordinates in target space.
  */
 void BLI_space_transform_global_from_matrices(SpaceTransform *data,
                                               const float local[4][4],

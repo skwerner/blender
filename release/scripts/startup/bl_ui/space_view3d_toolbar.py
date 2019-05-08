@@ -17,7 +17,6 @@
 # ##### END GPL LICENSE BLOCK #####
 
 # <pep8 compliant>
-import bpy
 from bpy.types import Menu, Panel, UIList
 from .properties_grease_pencil_common import (
     GreasePencilStrokeEditPanel,
@@ -44,15 +43,6 @@ class View3DPanel:
 
 
 # **************** standard tool clusters ******************
-
-# Keyframing tools
-def draw_keyframing_tools(context, layout):
-    col = layout.column(align=True)
-    col.label(text="Keyframes:")
-    row = col.row(align=True)
-    row.operator("anim.keyframe_insert_menu", text="Insert")
-    row.operator("anim.keyframe_delete_v3d", text="Remove")
-
 
 # Used by vertex & weight paint
 def draw_vpaint_symmetry(layout, vpaint):
@@ -202,9 +192,13 @@ class VIEW3D_PT_tools_posemode_options(View3DPanel, Panel):
 
     def draw(self, context):
         arm = context.active_object.data
+        layout = self.layout
 
-        self.layout.prop(arm, "use_auto_ik")
-        self.layout.prop(arm, "use_mirror_x")
+        layout.prop(arm, "use_auto_ik")
+        layout.prop(arm, "use_mirror_x")
+        col = layout.column()
+        col.active = arm.use_mirror_x
+        col.prop(arm, "use_mirror_relative")
 
 # ********** default tools for paint modes ****************
 
@@ -398,8 +392,8 @@ class VIEW3D_PT_tools_brush_color(Panel, View3DPaintPanel):
     bl_label = "Color Picker"
 
     @classmethod
-    def poll(self, context):
-        settings = self.paint_settings(context)
+    def poll(cls, context):
+        settings = cls.paint_settings(context)
         brush = settings.brush
         if context.image_paint_object:
             capabilities = brush.image_paint_capabilities
@@ -414,7 +408,7 @@ class VIEW3D_PT_tools_brush_color(Panel, View3DPaintPanel):
         settings = self.paint_settings(context)
         brush = settings.brush
 
-        layout.active = brush.use_gradient == False
+        layout.active = not brush.use_gradient
 
         brush_texpaint_common_color(self, context, layout, brush, settings, True)
 
@@ -426,8 +420,8 @@ class VIEW3D_PT_tools_brush_swatches(Panel, View3DPaintPanel):
     bl_options = {'DEFAULT_CLOSED'}
 
     @classmethod
-    def poll(self, context):
-        settings = self.paint_settings(context)
+    def poll(cls, context):
+        settings = cls.paint_settings(context)
         brush = settings.brush
         if context.image_paint_object:
             capabilities = brush.image_paint_capabilities
@@ -453,8 +447,8 @@ class VIEW3D_PT_tools_brush_gradient(Panel, View3DPaintPanel):
     bl_options = {'DEFAULT_CLOSED'}
 
     @classmethod
-    def poll(self, context):
-        settings = self.paint_settings(context)
+    def poll(cls, context):
+        settings = cls.paint_settings(context)
         brush = settings.brush
         capabilities = brush.image_paint_capabilities
 
@@ -484,8 +478,8 @@ class VIEW3D_PT_tools_brush_clone(Panel, View3DPaintPanel):
     bl_options = {'DEFAULT_CLOSED'}
 
     @classmethod
-    def poll(self, context):
-        settings = self.paint_settings(context)
+    def poll(cls, context):
+        settings = cls.paint_settings(context)
         brush = settings.brush
 
         return brush.image_tool == 'CLONE'
@@ -559,7 +553,7 @@ class VIEW3D_PT_tools_brush_options(Panel, View3DPaintPanel):
 
 
 class TEXTURE_UL_texpaintslots(UIList):
-    def draw_item(self, context, layout, data, item, icon, active_data, active_propname, index):
+    def draw_item(self, _context, layout, _data, item, icon, _active_data, _active_propname, _index):
         # mat = data
 
         if self.layout_type in {'DEFAULT', 'COMPACT'}:
@@ -1496,7 +1490,8 @@ class VIEW3D_PT_tools_imagepaint_options_cavity(View3DPaintPanel, Panel):
 
         layout.active = ipaint.use_cavity
 
-        layout.template_curve_mapping(ipaint, "cavity_curve", brush=True)
+        layout.template_curve_mapping(ipaint, "cavity_curve", brush=True,
+                                      use_negative_slope=True)
 
 
 # TODO, move to space_view3d.py
@@ -1707,7 +1702,7 @@ class VIEW3D_PT_tools_grease_pencil_brush_option(View3DPanel, Panel):
         brush = context.tool_settings.gpencil_paint.brush
         return brush is not None and brush.gpencil_tool not in {'ERASE', 'FILL'}
 
-    def draw_header_preset(self, context):
+    def draw_header_preset(self, _context):
         VIEW3D_PT_gpencil_brush_presets.draw_panel_header(self.layout)
 
     def draw(self, context):
@@ -1732,13 +1727,14 @@ class VIEW3D_PT_tools_grease_pencil_brush_option(View3DPanel, Panel):
             ob = context.object
             if ob:
                 ma = ob.active_material
-                    
-            if brush.gpencil_settings.material:
+            elif brush.gpencil_settings.material:
                 ma = brush.gpencil_settings.material
+            else:
+                ma = None
 
             col.separator()
             subcol = col.column(align=True)
-            if ma and ma.grease_pencil.mode != 'DOTS':
+            if ma and ma.grease_pencil.mode == 'LINE':
                 subcol.enabled = False
             subcol.prop(gp_settings, "gradient_factor", slider=True)
             subcol.prop(gp_settings, "gradient_shape")
@@ -1875,7 +1871,8 @@ class VIEW3D_PT_tools_grease_pencil_brushcurves_sensitivity(View3DPanel, Panel):
         brush = context.tool_settings.gpencil_paint.brush
         gp_settings = brush.gpencil_settings
 
-        layout.template_curve_mapping(gp_settings, "curve_sensitivity", brush=True)
+        layout.template_curve_mapping(gp_settings, "curve_sensitivity", brush=True,
+                                      use_negative_slope=True)
 
 
 class VIEW3D_PT_tools_grease_pencil_brushcurves_strength(View3DPanel, Panel):
@@ -1890,7 +1887,8 @@ class VIEW3D_PT_tools_grease_pencil_brushcurves_strength(View3DPanel, Panel):
         brush = context.tool_settings.gpencil_paint.brush
         gp_settings = brush.gpencil_settings
 
-        layout.template_curve_mapping(gp_settings, "curve_strength", brush=True)
+        layout.template_curve_mapping(gp_settings, "curve_strength", brush=True,
+                                      use_negative_slope=True)
 
 
 class VIEW3D_PT_tools_grease_pencil_brushcurves_jitter(View3DPanel, Panel):
@@ -1905,7 +1903,8 @@ class VIEW3D_PT_tools_grease_pencil_brushcurves_jitter(View3DPanel, Panel):
         brush = context.tool_settings.gpencil_paint.brush
         gp_settings = brush.gpencil_settings
 
-        layout.template_curve_mapping(gp_settings, "curve_jitter", brush=True)
+        layout.template_curve_mapping(gp_settings, "curve_jitter", brush=True,
+                                      use_negative_slope=True)
 
 
 # Grease Pencil stroke editing tools
@@ -1947,7 +1946,8 @@ class VIEW3D_PT_tools_grease_pencil_interpolate(Panel):
         col.prop(settings, "type")
         if settings.type == 'CUSTOM':
             # TODO: Options for loading/saving curve presets?
-            col.template_curve_mapping(settings, "interpolation_curve", brush=True)
+            col.template_curve_mapping(settings, "interpolation_curve", brush=True,
+                                       use_negative_slope=True)
         elif settings.type != 'LINEAR':
             col.prop(settings, "easing")
 

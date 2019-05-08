@@ -1002,7 +1002,8 @@ static void rna_Mesh_face_map_remove(struct Mesh *me,
 static int rna_MeshPoly_vertices_get_length(PointerRNA *ptr, int length[RNA_MAX_ARRAY_DIMENSION])
 {
   MPoly *mp = (MPoly *)ptr->data;
-  /* note, raw access uses dummy item, this _could_ crash, watch out for this, mface uses it but it cant work here */
+  /* note, raw access uses dummy item, this _could_ crash,
+   * watch out for this, mface uses it but it cant work here. */
   return (length[0] = mp->totloop);
 }
 
@@ -2076,7 +2077,8 @@ static void rna_def_mproperties(BlenderRNA *brna)
     prop = RNA_def_property(srna, "value", PROP_FLOAT, PROP_NONE); \
     RNA_def_property_float_sdna(prop, NULL, "f"); \
     RNA_def_property_ui_text(prop, "Value", ""); \
-    RNA_def_property_update(prop, 0, "rna_Mesh_update_data");
+    RNA_def_property_update(prop, 0, "rna_Mesh_update_data"); \
+    ((void)0)
 
   /* Int */
 #  define MESH_INT_PROPERTY_LAYER(elemname) \
@@ -2116,7 +2118,8 @@ static void rna_def_mproperties(BlenderRNA *brna)
     prop = RNA_def_property(srna, "value", PROP_INT, PROP_NONE); \
     RNA_def_property_int_sdna(prop, NULL, "i"); \
     RNA_def_property_ui_text(prop, "Value", ""); \
-    RNA_def_property_update(prop, 0, "rna_Mesh_update_data");
+    RNA_def_property_update(prop, 0, "rna_Mesh_update_data"); \
+    ((void)0)
 
   /* String */
 #  define MESH_STRING_PROPERTY_LAYER(elemname) \
@@ -2163,10 +2166,10 @@ static void rna_def_mproperties(BlenderRNA *brna)
     RNA_def_property_ui_text(prop, "Value", ""); \
     RNA_def_property_update(prop, 0, "rna_Mesh_update_data");
 
-  MESH_FLOAT_PROPERTY_LAYER("Vertex")
-  MESH_FLOAT_PROPERTY_LAYER("Polygon")
-  MESH_INT_PROPERTY_LAYER("Vertex")
-  MESH_INT_PROPERTY_LAYER("Polygon")
+  MESH_FLOAT_PROPERTY_LAYER("Vertex");
+  MESH_FLOAT_PROPERTY_LAYER("Polygon");
+  MESH_INT_PROPERTY_LAYER("Vertex");
+  MESH_INT_PROPERTY_LAYER("Polygon");
   MESH_STRING_PROPERTY_LAYER("Vertex")
   MESH_STRING_PROPERTY_LAYER("Polygon")
 #  undef MESH_PROPERTY_LAYER

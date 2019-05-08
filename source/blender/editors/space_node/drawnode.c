@@ -55,6 +55,7 @@
 #include "RNA_define.h"
 
 #include "ED_node.h"
+#include "ED_space_api.h"
 
 #include "WM_api.h"
 #include "WM_types.h"
@@ -3414,6 +3415,14 @@ void draw_nodespace_back_pix(const bContext *C,
   void *lock;
   ImBuf *ibuf;
 
+  GPU_matrix_push_projection();
+  GPU_matrix_push();
+  wmOrtho2_region_pixelspace(ar);
+  GPU_matrix_identity_set();
+  ED_region_draw_cb_draw(C, ar, REGION_DRAW_BACKDROP);
+  GPU_matrix_pop_projection();
+  GPU_matrix_pop();
+
   if (!(snode->flag & SNODE_BACKDRAW) || !ED_node_is_compositor(snode)) {
     return;
   }
@@ -3481,12 +3490,12 @@ void draw_nodespace_back_pix(const bContext *C,
         GPU_blend_set_func_separate(
             GPU_SRC_ALPHA, GPU_ONE_MINUS_SRC_ALPHA, GPU_ONE, GPU_ONE_MINUS_SRC_ALPHA);
 
-        glaDrawImBuf_glsl_ctx(C, ibuf, x, y, GL_NEAREST, snode->zoom, snode->zoom);
+        ED_draw_imbuf_ctx(C, ibuf, x, y, GL_NEAREST, snode->zoom, snode->zoom);
 
         GPU_blend(false);
       }
       else {
-        glaDrawImBuf_glsl_ctx(C, ibuf, x, y, GL_NEAREST, snode->zoom, snode->zoom);
+        ED_draw_imbuf_ctx(C, ibuf, x, y, GL_NEAREST, snode->zoom, snode->zoom);
       }
 
       if (cache_handle) {

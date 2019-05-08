@@ -52,10 +52,12 @@ static const int proxy_sizes[] = {IMB_PROXY_25, IMB_PROXY_50, IMB_PROXY_75, IMB_
 static const float proxy_fac[] = {0.25, 0.50, 0.75, 1.00};
 
 #ifdef WITH_FFMPEG
-static int tc_types[] = {IMB_TC_RECORD_RUN,
-                         IMB_TC_FREE_RUN,
-                         IMB_TC_INTERPOLATED_REC_DATE_FREE_RUN,
-                         IMB_TC_RECORD_RUN_NO_GAPS};
+static int tc_types[] = {
+    IMB_TC_RECORD_RUN,
+    IMB_TC_FREE_RUN,
+    IMB_TC_INTERPOLATED_REC_DATE_FREE_RUN,
+    IMB_TC_RECORD_RUN_NO_GAPS,
+};
 #endif
 
 #define INDEX_FILE_VERSION 1
@@ -865,8 +867,9 @@ static void index_rebuild_ffmpeg_proc_decoded_frame(FFmpegIndexBuilderContext *c
     if (context->tcs_in_use & tc_types[i]) {
       int tc_frameno = context->frameno;
 
-      if (tc_types[i] == IMB_TC_RECORD_RUN_NO_GAPS)
+      if (tc_types[i] == IMB_TC_RECORD_RUN_NO_GAPS) {
         tc_frameno = context->frameno_gapless;
+      }
 
       IMB_index_builder_proc_frame(context->indexer[i],
                                    curr_packet->data,
@@ -1199,8 +1202,9 @@ IndexBuildContext *IMB_anim_index_rebuild_context(struct anim *anim,
 #endif
   }
 
-  if (context)
+  if (context) {
     context->anim_type = anim->curtype;
+  }
 
   return context;
 

@@ -56,7 +56,9 @@
 
 #  define PROFILE_TIMER_FALLOFF 0.04
 
-#  define PROFILE_START(time_start) double time_start = PIL_check_seconds_timer();
+#  define PROFILE_START(time_start) \
+    double time_start = PIL_check_seconds_timer(); \
+    ((void)0)
 
 #  define PROFILE_END_ACCUM(time_accum, time_start) \
     { \
@@ -140,8 +142,6 @@ typedef enum {
   DRW_CALL_RANGE,
   /** Draw instances without any instancing attributes. */
   DRW_CALL_INSTANCES,
-  /** Uses a callback to draw with any number of batches. */
-  DRW_CALL_GENERATE,
   /** Generate a drawcall without any #GPUBatch. */
   DRW_CALL_PROCEDURAL,
 } DRWCallType;
@@ -164,10 +164,6 @@ typedef struct DRWCall {
       /* Count can be adjusted between redraw. If needed, we can add fixed count. */
       uint *count;
     } instances;
-    struct { /* type == DRW_CALL_GENERATE */
-      DRWCallGenerateFn *geometry_fn;
-      void *user_data;
-    } generate;
     struct { /* type == DRW_CALL_PROCEDURAL */
       uint vert_count;
       GPUPrimType prim_type;
@@ -251,10 +247,12 @@ struct DRWShadingGroup {
     };
   };
 
-  DRWState state_extra; /* State changes for this batch only (or'd with the pass's state) */
-  DRWState
-      state_extra_disable; /* State changes for this batch only (and'd with the pass's state) */
-  uint stencil_mask;       /* Stencil mask to use for stencil test / write operations */
+  /** State changes for this batch only (or'd with the pass's state) */
+  DRWState state_extra;
+  /** State changes for this batch only (and'd with the pass's state) */
+  DRWState state_extra_disable;
+  /** Stencil mask to use for stencil test / write operations */
+  uint stencil_mask;
   DRWShadingGroupType type;
 
   /* Builtin matrices locations */
@@ -393,10 +391,11 @@ typedef struct DRWManager {
 
   /* gl_context serves as the offset for clearing only
    * the top portion of the struct so DO NOT MOVE IT! */
-  void *gl_context; /* Unique ghost context used by the draw manager. */
+  /** Unique ghost context used by the draw manager. */
+  void *gl_context;
   GPUContext *gpu_context;
-  TicketMutex
-      *gl_context_mutex; /* Mutex to lock the drw manager and avoid concurrent context usage. */
+  /** Mutex to lock the drw manager and avoid concurrent context usage. */
+  TicketMutex *gl_context_mutex;
 
   /** GPU Resource State: Memory storage between drawing. */
   struct {

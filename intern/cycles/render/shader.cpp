@@ -14,9 +14,11 @@
  * limitations under the License.
  */
 
+#include "device/device.h"
+
 #include "render/background.h"
 #include "render/camera.h"
-#include "device/device.h"
+#include "render/colorspace.h"
 #include "render/graph.h"
 #include "render/integrator.h"
 #include "render/light.h"
@@ -749,6 +751,8 @@ void ShaderManager::free_memory()
 #ifdef WITH_OSL
   OSLShaderManager::free_memory();
 #endif
+
+  ColorSpaceManager::free_memory();
 }
 
 void ShaderManager::texture_system_init()

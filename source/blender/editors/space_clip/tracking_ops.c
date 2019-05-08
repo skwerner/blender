@@ -512,8 +512,9 @@ static bool slide_check_corners(float (*corners)[2])
   float cross = 0.0f;
   float p[2] = {0.0f, 0.0f};
 
-  if (!isect_point_quad_v2(p, corners[0], corners[1], corners[2], corners[3]))
+  if (!isect_point_quad_v2(p, corners[0], corners[1], corners[2], corners[3])) {
     return false;
+  }
 
   for (i = 0; i < 4; i++) {
     float v1[2], v2[2], cur_cross;
@@ -562,8 +563,9 @@ MovieTrackingTrack *tracking_marker_check_slide(
 
   ED_space_clip_get_size(sc, &width, &height);
 
-  if (width == 0 || height == 0)
+  if (width == 0 || height == 0) {
     return NULL;
+  }
 
   ED_clip_mouse_pos(sc, ar, event->mval, co);
 
@@ -1297,6 +1299,12 @@ void CLIP_OT_hide_tracks_clear(wmOperatorType *ot)
 
 /********************** frame jump operator *********************/
 
+static bool frame_jump_poll(bContext *C)
+{
+  SpaceClip *space_clip = CTX_wm_space_clip(C);
+  return space_clip != NULL;
+}
+
 static int frame_jump_exec(bContext *C, wmOperator *op)
 {
   Scene *scene = CTX_data_scene(C);
@@ -1375,7 +1383,7 @@ void CLIP_OT_frame_jump(wmOperatorType *ot)
 
   /* api callbacks */
   ot->exec = frame_jump_exec;
-  ot->poll = ED_space_clip_poll;
+  ot->poll = frame_jump_poll;
 
   /* flags */
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;

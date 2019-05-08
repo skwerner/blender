@@ -148,7 +148,7 @@ static uiBlock *menu_add_shortcut(bContext *C, ARegion *ar, void *arg)
   if (prop) {
     prop = IDP_CopyProperty(prop);
   }
-  WM_keymap_properties_reset(kmi, prop);
+  WM_keymap_item_properties_reset(kmi, prop);
 
   /* update and get pointers again */
   WM_keyconfig_update(wm);
@@ -1064,7 +1064,7 @@ bool ui_popup_context_menu_for_button(bContext *C, uiBut *but)
     if (!ar) {
       /* skip */
     }
-    else if (ar->regiontype == RGN_TYPE_HEADER) {
+    else if (ELEM(ar->regiontype, RGN_TYPE_HEADER, RGN_TYPE_TOOL_HEADER)) {
       uiItemMenuF(layout, IFACE_("Header"), ICON_NONE, ED_screens_header_tools_menu_create, NULL);
     }
     else if (ar->regiontype == RGN_TYPE_NAV_BAR) {

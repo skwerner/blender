@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+#include "render/colorspace.h"
 #include "render/mesh.h"
 #include "render/object.h"
 #include "render/scene.h"
@@ -301,8 +302,8 @@ static void create_mesh_volume_attribute(
                                                INTERPOLATION_LINEAR,
                                                EXTENSION_CLIP,
                                                use_alpha,
-                                               metadata,
-                                               false);
+                                               u_colorspace_raw,
+                                               metadata);
 }
 
 static void create_mesh_volume_attributes(Scene *scene, BL::Object &b_ob, Mesh *mesh, float frame)

@@ -40,6 +40,7 @@
 #include "ED_anim_api.h"
 #include "ED_markers.h"
 #include "ED_screen.h"
+#include "ED_scrubbing.h"
 
 #include "WM_api.h"
 #include "WM_types.h"
@@ -52,34 +53,6 @@
 
 #include "nla_intern.h" /* own include */
 #include "GPU_framebuffer.h"
-
-/* ******************** manage regions ********************* */
-
-ARegion *nla_has_buttons_region(ScrArea *sa)
-{
-  ARegion *ar, *arnew;
-
-  ar = BKE_area_find_region_type(sa, RGN_TYPE_UI);
-  if (ar)
-    return ar;
-
-  /* add subdiv level; after main */
-  ar = BKE_area_find_region_type(sa, RGN_TYPE_WINDOW);
-
-  /* is error! */
-  if (ar == NULL)
-    return NULL;
-
-  arnew = MEM_callocN(sizeof(ARegion), "buttons for nla");
-
-  BLI_insertlinkafter(&sa->regionbase, ar, arnew);
-  arnew->regiontype = RGN_TYPE_UI;
-  arnew->alignment = RGN_ALIGN_RIGHT;
-
-  arnew->flag = RGN_FLAG_HIDDEN;
-
-  return arnew;
-}
 
 /* ******************** default callbacks for nla space ***************** */
 
@@ -202,13 +175,13 @@ static void nla_channel_region_init(wmWindowManager *wm, ARegion *ar)
   /* own keymap */
   /* own channels map first to override some channel keymaps */
   keymap = WM_keymap_ensure(wm->defaultconf, "NLA Channels", SPACE_NLA, 0);
-  WM_event_add_keymap_handler_bb(&ar->handlers, keymap, &ar->v2d.mask, &ar->winrct);
+  WM_event_add_keymap_handler_v2d_mask(&ar->handlers, keymap);
   /* now generic channels map for everything else that can apply */
   keymap = WM_keymap_ensure(wm->defaultconf, "Animation Channels", 0, 0);
-  WM_event_add_keymap_handler_bb(&ar->handlers, keymap, &ar->v2d.mask, &ar->winrct);
+  WM_event_add_keymap_handler_v2d_mask(&ar->handlers, keymap);
 
   keymap = WM_keymap_ensure(wm->defaultconf, "NLA Generic", SPACE_NLA, 0);
-  WM_event_add_keymap_handler_bb(&ar->handlers, keymap, &ar->v2d.mask, &ar->winrct);
+  WM_event_add_keymap_handler_v2d_mask(&ar->handlers, keymap);
 }
 
 /* draw entirely, view changes should be handled here */
@@ -229,13 +202,15 @@ static void nla_channel_region_draw(const bContext *C, ARegion *ar)
     draw_nla_channel_list(C, &ac, ar);
   }
 
+  /* channel filter next to scrubbing area */
+  ED_channel_search_draw(C, ar, ac.ads);
+
   /* reset view matrix */
   UI_view2d_view_restore(C);
 
   /* scrollers */
-  scrollers = UI_view2d_scrollers_calc(
-      C, v2d, NULL, V2D_ARG_DUMMY, V2D_ARG_DUMMY, V2D_ARG_DUMMY, V2D_ARG_DUMMY);
-  UI_view2d_scrollers_draw(C, v2d, scrollers);
+  scrollers = UI_view2d_scrollers_calc(v2d, NULL);
+  UI_view2d_scrollers_draw(v2d, scrollers);
   UI_view2d_scrollers_free(scrollers);
 }
 
@@ -248,7 +223,7 @@ static void nla_main_region_init(wmWindowManager *wm, ARegion *ar)
 
   /* own keymap */
   keymap = WM_keymap_ensure(wm->defaultconf, "NLA Editor", SPACE_NLA, 0);
-  WM_event_add_keymap_handler_bb(&ar->handlers, keymap, &ar->v2d.mask, &ar->winrct);
+  WM_event_add_keymap_handler_v2d_mask(&ar->handlers, keymap);
   keymap = WM_keymap_ensure(wm->defaultconf, "NLA Generic", SPACE_NLA, 0);
   WM_event_add_keymap_handler(&ar->handlers, keymap);
 }
@@ -260,9 +235,8 @@ static void nla_main_region_draw(const bContext *C, ARegion *ar)
   Scene *scene = CTX_data_scene(C);
   bAnimContext ac;
   View2D *v2d = &ar->v2d;
-  View2DGrid *grid;
   View2DScrollers *scrollers;
-  short unit = 0, cfra_flag = 0;
+  short cfra_flag = 0;
 
   /* clear and setup matrix */
   UI_ThemeClearColor(TH_BACK);
@@ -271,17 +245,7 @@ static void nla_main_region_draw(const bContext *C, ARegion *ar)
   UI_view2d_view_ortho(v2d);
 
   /* time grid */
-  unit = (snla->flag & SNLA_DRAWTIME) ? V2D_UNIT_SECONDS : V2D_UNIT_FRAMES;
-  grid = UI_view2d_grid_calc(CTX_data_scene(C),
-                             v2d,
-                             unit,
-                             V2D_GRID_CLAMP,
-                             V2D_ARG_DUMMY,
-                             V2D_ARG_DUMMY,
-                             ar->winx,
-                             ar->winy);
-  UI_view2d_grid_draw(v2d, grid, V2D_GRIDLINES_ALL);
-  UI_view2d_grid_free(grid);
+  UI_view2d_draw_lines_x__discrete_frames_or_seconds(v2d, scene, snla->flag & SNLA_DRAWTIME);
 
   ED_region_draw_cb_draw(C, ar, REGION_DRAW_PRE_VIEW);
 
@@ -300,15 +264,17 @@ static void nla_main_region_draw(const bContext *C, ARegion *ar)
   UI_view2d_view_ortho(v2d);
 
   /* current frame */
-  if (snla->flag & SNLA_DRAWTIME)
+  if (snla->flag & SNLA_DRAWTIME) {
     cfra_flag |= DRAWCFRA_UNIT_SECONDS;
+  }
   ANIM_draw_cfra(C, v2d, cfra_flag);
 
   /* markers */
   UI_view2d_view_orthoSpecial(ar, v2d, 1);
   int marker_draw_flag = DRAW_MARKERS_MARGIN;
-  if (snla->flag & SNLA_SHOW_MARKER_LINES)
+  if (snla->flag & SNLA_SHOW_MARKER_LINES) {
     marker_draw_flag |= DRAW_MARKERS_LINES;
+  }
   ED_markers_draw(C, marker_draw_flag);
 
   /* preview range */
@@ -322,17 +288,12 @@ static void nla_main_region_draw(const bContext *C, ARegion *ar)
   /* reset view matrix */
   UI_view2d_view_restore(C);
 
-  /* scrollers */
-  scrollers = UI_view2d_scrollers_calc(
-      C, v2d, NULL, unit, V2D_GRID_CLAMP, V2D_ARG_DUMMY, V2D_ARG_DUMMY);
-  UI_view2d_scrollers_draw(C, v2d, scrollers);
-  UI_view2d_scrollers_free(scrollers);
+  ED_scrubbing_draw(ar, scene, snla->flag & SNLA_DRAWTIME, true);
 
-  /* draw current frame number-indicator on top of scrollers */
-  if ((snla->flag & SNLA_NODRAWCFRANUM) == 0) {
-    UI_view2d_view_orthoSpecial(ar, v2d, 1);
-    ANIM_draw_cfra_number(C, v2d, cfra_flag);
-  }
+  /* scrollers */
+  scrollers = UI_view2d_scrollers_calc(v2d, NULL);
+  UI_view2d_scrollers_draw(v2d, scrollers);
+  UI_view2d_scrollers_free(scrollers);
 }
 
 /* add handlers, stuff you only do once or on area/region changes */
@@ -354,7 +315,7 @@ static void nla_buttons_region_init(wmWindowManager *wm, ARegion *ar)
   ED_region_panels_init(wm, ar);
 
   keymap = WM_keymap_ensure(wm->defaultconf, "NLA Generic", SPACE_NLA, 0);
-  WM_event_add_keymap_handler_bb(&ar->handlers, keymap, &ar->v2d.mask, &ar->winrct);
+  WM_event_add_keymap_handler_v2d_mask(&ar->handlers, keymap);
 }
 
 static void nla_buttons_region_draw(const bContext *C, ARegion *ar)
@@ -392,8 +353,9 @@ static void nla_region_listener(wmWindow *UNUSED(win),
       }
       break;
     default:
-      if (wmn->data == ND_KEYS)
+      if (wmn->data == ND_KEYS) {
         ED_region_tag_redraw(ar);
+      }
       break;
   }
 }
@@ -438,8 +400,9 @@ static void nla_main_region_listener(wmWindow *UNUSED(win),
       }
       break;
     case NC_ID:
-      if (wmn->action == NA_RENAME)
+      if (wmn->action == NA_RENAME) {
         ED_region_tag_redraw(ar);
+      }
       break;
     case NC_SCREEN:
       if (ELEM(wmn->data, ND_LAYER)) {
@@ -447,8 +410,9 @@ static void nla_main_region_listener(wmWindow *UNUSED(win),
       }
       break;
     default:
-      if (wmn->data == ND_KEYS)
+      if (wmn->data == ND_KEYS) {
         ED_region_tag_redraw(ar);
+      }
       break;
   }
 }
@@ -523,12 +487,14 @@ static void nla_channel_region_listener(wmWindow *UNUSED(win),
       }
       break;
     case NC_ID:
-      if (wmn->action == NA_RENAME)
+      if (wmn->action == NA_RENAME) {
         ED_region_tag_redraw(ar);
+      }
       break;
     default:
-      if (wmn->data == ND_KEYS)
+      if (wmn->data == ND_KEYS) {
         ED_region_tag_redraw(ar);
+      }
       break;
   }
 }
@@ -598,8 +564,9 @@ static void nla_listener(wmWindow *UNUSED(win), ScrArea *sa, wmNotifier *wmn, Sc
       }
       break;
     case NC_SPACE:
-      if (wmn->data == ND_SPACE_NLA)
+      if (wmn->data == ND_SPACE_NLA) {
         ED_area_tag_redraw(sa);
+      }
       break;
   }
 }
@@ -643,7 +610,7 @@ void ED_spacetype_nla(void)
   art->draw = nla_main_region_draw;
   art->listener = nla_main_region_listener;
   art->message_subscribe = nla_main_region_message_subscribe;
-  art->keymapflag = ED_KEYMAP_VIEW2D | ED_KEYMAP_MARKERS | ED_KEYMAP_ANIMATION | ED_KEYMAP_FRAMES;
+  art->keymapflag = ED_KEYMAP_VIEW2D | ED_KEYMAP_ANIMATION | ED_KEYMAP_FRAMES;
 
   BLI_addhead(&st->regiontypes, art);
 

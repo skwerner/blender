@@ -214,7 +214,8 @@ bool WM_operator_py_idname_ok_or_report(ReportList *reports,
 }
 
 /**
- * Print a string representation of the operator, with the args that it runs so python can run it again.
+ * Print a string representation of the operator,
+ * with the args that it runs so python can run it again.
  *
  * When calling from an existing wmOperator, better to use simple version:
  * `WM_operator_pystring(C, op);`
@@ -353,7 +354,8 @@ static const char *wm_context_member_from_ptr(bContext *C, const PointerRNA *ptr
    * - see if the pointers ID is in the context.
    */
 
-  /* don't get from the context store since this is normally set only for the UI and not usable elsewhere */
+  /* Don't get from the context store since this is normally
+   * set only for the UI and not usable elsewhere. */
   ListBase lb = CTX_data_dir_get_ex(C, false, true, true);
   LinkData *link;
 
@@ -777,13 +779,14 @@ struct EnumSearchMenu {
   short prv_cols, prv_rows;
 };
 
-/* generic enum search invoke popup */
+/** Generic enum search invoke popup. */
 static uiBlock *wm_enum_search_menu(bContext *C, ARegion *ar, void *arg)
 {
   struct EnumSearchMenu *search_menu = arg;
   wmWindow *win = CTX_wm_window(C);
   wmOperator *op = search_menu->op;
-  /* template_ID uses 4 * widget_unit for width, we use a bit more, some items may have a suffix to show */
+  /* template_ID uses 4 * widget_unit for width,
+   * we use a bit more, some items may have a suffix to show. */
   const int width = search_menu->use_previews ? 5 * U.widget_unit * search_menu->prv_cols :
                                                 UI_searchbox_size_x();
   const int height = search_menu->use_previews ? 5 * U.widget_unit * search_menu->prv_rows :
@@ -1155,13 +1158,14 @@ static void dialog_exec_cb(bContext *C, void *arg1, void *arg2)
   WM_operator_call_ex(C, data->op, true);
 
   /* let execute handle freeing it */
-  //data->free_op = false;
-  //data->op = NULL;
+  // data->free_op = false;
+  // data->op = NULL;
 
   /* in this case, wm_operator_ui_popup_cancel wont run */
   MEM_freeN(data);
 
-  /* get context data *after* WM_operator_call_ex which might have closed the current file and changed context */
+  /* Get context data *after* WM_operator_call_ex
+   * which might have closed the current file and changed context. */
   wmWindowManager *wm = CTX_wm_manager(C);
   wmWindow *win = CTX_wm_window(C);
 
@@ -3343,14 +3347,16 @@ static const EnumPropertyItem preview_id_type_items[] = {
 static int previews_clear_exec(bContext *C, wmOperator *op)
 {
   Main *bmain = CTX_data_main(C);
-  ListBase *lb[] = {&bmain->objects,
-                    &bmain->collections,
-                    &bmain->materials,
-                    &bmain->worlds,
-                    &bmain->lights,
-                    &bmain->textures,
-                    &bmain->images,
-                    NULL};
+  ListBase *lb[] = {
+      &bmain->objects,
+      &bmain->collections,
+      &bmain->materials,
+      &bmain->worlds,
+      &bmain->lights,
+      &bmain->textures,
+      &bmain->images,
+      NULL,
+  };
   int i;
 
   const int id_filters = RNA_enum_get(op->ptr, "id_type");
@@ -3361,8 +3367,14 @@ static int previews_clear_exec(bContext *C, wmOperator *op)
       continue;
     }
 
-    //      printf("%s: %d, %d, %d -> %d\n", id->name, GS(id->name), BKE_idcode_to_idfilter(GS(id->name)),
-    //                                       id_filters, BKE_idcode_to_idfilter(GS(id->name)) & id_filters);
+#if 0
+    printf("%s: %d, %d, %d -> %d\n",
+           id->name,
+           GS(id->name),
+           BKE_idcode_to_idfilter(GS(id->name)),
+           id_filters,
+           BKE_idcode_to_idfilter(GS(id->name)) & id_filters);
+#endif
 
     if (!id || !(BKE_idcode_to_idfilter(GS(id->name)) & id_filters)) {
       continue;
@@ -3636,9 +3648,8 @@ static void gesture_box_modal_keymap(wmKeyConfig *keyconf)
   WM_modalkeymap_assign(keymap, "VIEW3D_OT_clip_border");
   WM_modalkeymap_assign(keymap, "VIEW3D_OT_render_border");
   WM_modalkeymap_assign(keymap, "VIEW3D_OT_select_box");
-  WM_modalkeymap_assign(
-      keymap,
-      "VIEW3D_OT_zoom_border"); /* XXX TODO: zoom border should perhaps map rightmouse to zoom out instead of in+cancel */
+  /* XXX TODO: zoom border should perhaps map rightmouse to zoom out instead of in+cancel */
+  WM_modalkeymap_assign(keymap, "VIEW3D_OT_zoom_border");
   WM_modalkeymap_assign(keymap, "IMAGE_OT_render_border");
   WM_modalkeymap_assign(keymap, "IMAGE_OT_view_zoom_border");
   WM_modalkeymap_assign(keymap, "GPENCIL_OT_select_box");
@@ -3803,7 +3814,7 @@ const EnumPropertyItem *RNA_scene_without_active_itemf(bContext *C,
                       ptr,
                       r_free,
                       C ? (ID *)CTX_data_main(C)->scenes.first : NULL,
-                      true,
+                      false,
                       rna_id_enum_filter_single,
                       scene_active);
 }

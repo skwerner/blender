@@ -92,13 +92,18 @@ class ImageTextureNode : public ImageSlotTextureNode {
     return true;
   }
 
-  ImageManager *image_manager;
-  int is_float;
-  bool is_linear;
+  virtual bool equals(const ShaderNode &other)
+  {
+    const ImageTextureNode &image_node = (const ImageTextureNode &)other;
+    return ImageSlotTextureNode::equals(other) && builtin_data == image_node.builtin_data &&
+           animated == image_node.animated;
+  }
+
+  /* Parameters. */
   bool use_alpha;
   ustring filename;
   void *builtin_data;
-  NodeImageColorSpace color_space;
+  ustring colorspace;
   NodeImageProjection projection;
   InterpolationType interpolation;
   ExtensionType extension;
@@ -107,12 +112,11 @@ class ImageTextureNode : public ImageSlotTextureNode {
   float3 vector;
   float3 vector_dx, vector_dy;
 
-  virtual bool equals(const ShaderNode &other)
-  {
-    const ImageTextureNode &image_node = (const ImageTextureNode &)other;
-    return ImageSlotTextureNode::equals(other) && builtin_data == image_node.builtin_data &&
-           animated == image_node.animated;
-  }
+  /* Runtime. */
+  ImageManager *image_manager;
+  int is_float;
+  bool compress_as_srgb;
+  ustring known_colorspace;
 };
 
 class EnvironmentTextureNode : public ImageSlotTextureNode {
@@ -130,25 +134,29 @@ class EnvironmentTextureNode : public ImageSlotTextureNode {
     return NODE_GROUP_LEVEL_2;
   }
 
-  ImageManager *image_manager;
-  int is_float;
-  bool is_linear;
-  bool use_alpha;
-  ustring filename;
-  void *builtin_data;
-  NodeImageColorSpace color_space;
-  NodeEnvironmentProjection projection;
-  InterpolationType interpolation;
-  bool animated;
-  float3 vector;
-  float3 vector_dx, vector_dy;
-
   virtual bool equals(const ShaderNode &other)
   {
     const EnvironmentTextureNode &env_node = (const EnvironmentTextureNode &)other;
     return ImageSlotTextureNode::equals(other) && builtin_data == env_node.builtin_data &&
            animated == env_node.animated;
   }
+
+  /* Parameters. */
+  bool use_alpha;
+  ustring filename;
+  void *builtin_data;
+  ustring colorspace;
+  NodeEnvironmentProjection projection;
+  InterpolationType interpolation;
+  bool animated;
+  float3 vector;
+  float3 vector_dx, vector_dy;
+
+  /* Runtime. */
+  ImageManager *image_manager;
+  int is_float;
+  bool compress_as_srgb;
+  ustring known_colorspace;
 };
 
 class SkyTextureNode : public TextureNode {
@@ -321,15 +329,17 @@ class PointDensityTextureNode : public ShaderNode {
 
   void add_image();
 
+  /* Parameters. */
   ustring filename;
   NodeTexVoxelSpace space;
   InterpolationType interpolation;
   Transform tfm;
   float3 vector;
+  void *builtin_data;
 
+  /* Runtime. */
   ImageManager *image_manager;
   int slot;
-  void *builtin_data;
 
   virtual bool equals(const ShaderNode &other)
   {

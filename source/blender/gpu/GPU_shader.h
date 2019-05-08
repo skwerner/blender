@@ -239,7 +239,8 @@ typedef enum eGPUBuiltinShader {
    */
   GPU_SHADER_2D_POINT_UNIFORM_SIZE_UNIFORM_COLOR_OUTLINE_AA,
   /**
-   * Draw round points with a constant size and an outline. Take a 2D position and a color for each vertex.
+   * Draw round points with a constant size and an outline.
+   * Take a 2D position and a color for each vertex.
    *
    * \param size: uniform float
    * \param outlineWidth: uniform float
@@ -249,7 +250,8 @@ typedef enum eGPUBuiltinShader {
    */
   GPU_SHADER_2D_POINT_UNIFORM_SIZE_VARYING_COLOR_OUTLINE_AA,
   /**
-   * Draw round points with a constant size and an outline. Take a 2D position and a color for each vertex.
+   * Draw round points with a constant size and an outline.
+   * Take a 2D position and a color for each vertex.
    *
    * \param size: in float
    * \param color: in vec4
@@ -302,7 +304,8 @@ typedef enum eGPUBuiltinShader {
    */
   GPU_SHADER_3D_POINT_VARYING_SIZE_UNIFORM_COLOR,
   /**
-   * Draw round points with a constant size and an outline. Take a 3D position and a color for each vertex.
+   * Draw round points with a constant size and an outline.
+   * Take a 3D position and a color for each vertex.
    *
    * \param size: in float
    * \param color: in vec4
@@ -399,10 +402,7 @@ void GPU_shader_free_builtin_shaders(void);
 
 typedef struct GPUVertAttrLayers {
   struct {
-    int type;
-    int glindex;
-    int glinfoindoex;
-    int gltexco;
+    int type; /* CustomDataType */
     int attr_id;
     char name[64]; /* MAX_CUSTOMDATA_LAYER_NAME */
   } layer[GPU_MAX_ATTR];

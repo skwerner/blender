@@ -130,6 +130,7 @@ static int weight_from_bones_exec(bContext *C, wmOperator *op)
       op->reports, depsgraph, scene, ob, armob, type, (me->editflag & ME_EDIT_MIRROR_X));
 
   DEG_id_tag_update(&me->id, 0);
+  DEG_relations_tag_update(CTX_data_main(C));
   WM_event_add_notifier(C, NC_GEOM | ND_DATA, me);
 
   return OPERATOR_FINISHED;
@@ -160,7 +161,7 @@ void PAINT_OT_weight_from_bones(wmOperatorType *ot)
   ot->poll = weight_from_bones_poll;
 
   /* flags */
-  ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
+  ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO | OPTYPE_USE_EVAL_DATA;
 
   /* properties */
   ot->prop = RNA_def_enum(
@@ -879,7 +880,7 @@ void PAINT_OT_weight_gradient(wmOperatorType *ot)
   ot->cancel = WM_gesture_straightline_cancel;
 
   /* flags */
-  ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
+  ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO | OPTYPE_USE_EVAL_DATA;
 
   prop = RNA_def_enum(ot->srna, "type", gradient_types, 0, "Type", "");
   RNA_def_property_flag(prop, PROP_SKIP_SAVE);

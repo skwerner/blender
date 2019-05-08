@@ -109,7 +109,8 @@ static WorkSpaceLayout *workspace_change_get_new_layout(Main *bmain,
                                                         WorkSpace *workspace_new,
                                                         wmWindow *win)
 {
-  /* ED_workspace_duplicate may have stored a layout to activate once the workspace gets activated. */
+  /* ED_workspace_duplicate may have stored a layout to activate
+   * once the workspace gets activated. */
   WorkSpaceLayout *layout_old = WM_window_get_active_layout(win);
   WorkSpaceLayout *layout_new;
   bScreen *screen_new;
@@ -158,12 +159,15 @@ bool ED_workspace_change(WorkSpace *workspace_new, bContext *C, wmWindowManager 
 
   win->workspace_hook->temp_layout_store = NULL;
   if (workspace_old == workspace_new) {
-    /* Could also return true, everything that needs to be done was done (nothing :P), but nothing changed */
+    /* Could also return true, everything that needs to be done was done (nothing :P),
+     * but nothing changed */
     return false;
   }
 
   screen_new = screen_change_prepare(screen_old, screen_new, bmain, C, win);
-  BLI_assert(BKE_workspace_layout_screen_get(layout_new) == screen_new);
+  if (BKE_workspace_layout_screen_get(layout_new) != screen_new) {
+    layout_new = BKE_workspace_layout_find(workspace_new, screen_new);
+  }
 
   if (screen_new == NULL) {
     return false;

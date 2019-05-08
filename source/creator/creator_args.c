@@ -633,8 +633,8 @@ static int arg_handle_print_help(int UNUSED(argc), const char **UNUSED(argv), vo
 
   BLI_argsPrintArgDoc(ba, "--");
 
-  //printf("\n");
-  //printf("Experimental Features:\n");
+  // printf("\n");
+  // printf("Experimental Features:\n");
 
   /* Other options _must_ be last (anything not handled will show here) */
   printf("\n");
@@ -1520,7 +1520,7 @@ static int arg_handle_render_frame(int argc, const char **argv, void *data)
         }
 
         for (int frame = frame_range_arr[i][0]; frame <= frame_range_arr[i][1]; frame++) {
-          RE_BlenderAnim(re, bmain, scene, NULL, NULL, frame, frame, scene->r.frame_step);
+          RE_RenderAnim(re, bmain, scene, NULL, NULL, frame, frame, scene->r.frame_step);
         }
       }
       RE_SetReports(re, NULL);
@@ -1553,8 +1553,7 @@ static int arg_handle_render_animation(int UNUSED(argc), const char **UNUSED(arg
     BLI_threaded_malloc_begin();
     BKE_reports_init(&reports, RPT_STORE);
     RE_SetReports(re, &reports);
-    RE_BlenderAnim(
-        re, bmain, scene, NULL, NULL, scene->r.sfra, scene->r.efra, scene->r.frame_step);
+    RE_RenderAnim(re, bmain, scene, NULL, NULL, scene->r.sfra, scene->r.efra, scene->r.frame_step);
     RE_SetReports(re, NULL);
     BKE_reports_clear(&reports);
     BLI_threaded_malloc_end();
@@ -1944,7 +1943,7 @@ void main_args_setup(bContext *C, bArgs *ba)
 #  define CB(a) a##_doc, a
 #  define CB_EX(a, b) a##_doc_##b, a
 
-  //BLI_argsAdd(ba, pass, short_arg, long_arg, doc, cb, C);
+  // BLI_argsAdd(ba, pass, short_arg, long_arg, doc, cb, C);
 
   /* end argument processing after -- */
   BLI_argsAdd(ba, -1, "--", NULL, CB(arg_handle_arguments_end), NULL);

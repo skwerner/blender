@@ -1778,7 +1778,11 @@ static bool ui_but_drag_init(bContext *C,
 
       /* Initialize alignment for single row/column regions,
        * otherwise we use the relative position of the first other button dragged over. */
-      if (ELEM(data->region->regiontype, RGN_TYPE_NAV_BAR, RGN_TYPE_HEADER, RGN_TYPE_FOOTER)) {
+      if (ELEM(data->region->regiontype,
+               RGN_TYPE_NAV_BAR,
+               RGN_TYPE_HEADER,
+               RGN_TYPE_TOOL_HEADER,
+               RGN_TYPE_FOOTER)) {
         int lock_axis = -1;
         if (ELEM(data->region->alignment, RGN_ALIGN_LEFT, RGN_ALIGN_RIGHT)) {
           lock_axis = 0;
@@ -3793,7 +3797,7 @@ static void ui_block_open_begin(bContext *C, uiBut *but, uiHandleButtonData *dat
 #endif
 
   /* this makes adjacent blocks auto open from now on */
-  //if (but->block->auto_open == 0) {
+  // if (but->block->auto_open == 0) {
   //  but->block->auto_open = 1;
   //}
 }
@@ -3943,6 +3947,9 @@ static int ui_do_but_HOTKEYEVT(bContext *C,
   }
   else if (data->state == BUTTON_STATE_WAIT_KEY_EVENT) {
     if (ELEM(event->type, MOUSEMOVE, INBETWEEN_MOUSEMOVE)) {
+      return WM_UI_HANDLER_CONTINUE;
+    }
+    else if (event->type == UNKNOWNKEY) {
       return WM_UI_HANDLER_CONTINUE;
     }
 
@@ -7688,6 +7695,11 @@ uiBut *UI_region_active_but_get(ARegion *ar)
   return ui_context_button_active(ar, NULL);
 }
 
+uiBut *UI_region_but_find_rect_over(const ARegion *ar, const rcti *rect_px)
+{
+  return ui_but_find_rect_over(ar, rect_px);
+}
+
 /**
  * Version of #UI_context_active_but_get that also returns RNA property info.
  * Helper function for insert keyframe, reset to default, etc operators.
@@ -8738,6 +8750,13 @@ static bool ui_menu_scroll_step(ARegion *ar, uiBlock *block, const int scroll_di
 /** \name Menu Event Handling
  * \{ */
 
+static void ui_region_auto_open_clear(ARegion *ar)
+{
+  for (uiBlock *block = ar->uiblocks.first; block; block = block->next) {
+    block->auto_open = false;
+  }
+}
+
 /**
  * Special function to handle nested menus.
  * let the parent menu get the event.
@@ -8780,6 +8799,7 @@ static int ui_handle_menu_button(bContext *C, const wmEvent *event, uiPopupBlock
     }
     else if (!ui_region_contains_point_px(but->active->region, event->x, event->y)) {
       /* pass, needed to click-exit outside of non-flaoting menus */
+      ui_region_auto_open_clear(but->active->region);
     }
     else if ((!ELEM(event->type, MOUSEMOVE, WHEELUPMOUSE, WHEELDOWNMOUSE, MOUSEPAN)) &&
              ISMOUSE(event->type)) {

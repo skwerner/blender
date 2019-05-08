@@ -33,8 +33,7 @@ class NLA_HT_header(Header):
 
         st = context.space_data
 
-        row = layout.row(align=True)
-        row.template_header()
+        layout.template_header()
 
         NLA_MT_editor_menus.draw_collapsible(context, layout)
 
@@ -70,7 +69,7 @@ class NLA_MT_editor_menus(Menu):
     bl_idname = "NLA_MT_editor_menus"
     bl_label = ""
 
-    def draw(self, context):
+    def draw(self, _context):
         layout = self.layout
         layout.menu("NLA_MT_view")
         layout.menu("NLA_MT_select")
@@ -117,7 +116,7 @@ class NLA_MT_view(Menu):
 class NLA_MT_select(Menu):
     bl_label = "Select"
 
-    def draw(self, context):
+    def draw(self, _context):
         layout = self.layout
 
         layout.operator("nla.select_all", text="All").action = 'SELECT'
@@ -199,7 +198,7 @@ class NLA_MT_edit(Menu):
 class NLA_MT_add(Menu):
     bl_label = "Add"
 
-    def draw(self, context):
+    def draw(self, _context):
         layout = self.layout
 
         layout.operator("nla.actionclip_add")
@@ -221,7 +220,7 @@ class NLA_MT_add(Menu):
 class NLA_MT_edit_transform(Menu):
     bl_label = "Transform"
 
-    def draw(self, context):
+    def draw(self, _context):
         layout = self.layout
 
         layout.operator("transform.translate", text="Move")
@@ -232,7 +231,7 @@ class NLA_MT_edit_transform(Menu):
 class NLA_MT_snap_pie(Menu):
     bl_label = "Snap"
 
-    def draw(self, context):
+    def draw(self, _context):
         layout = self.layout
         pie = layout.menu_pie()
 
@@ -240,6 +239,49 @@ class NLA_MT_snap_pie(Menu):
         pie.operator("nla.snap", text="Nearest Frame").type = 'NEAREST_FRAME'
         pie.operator("nla.snap", text="Nearest Second").type = 'NEAREST_SECOND'
         pie.operator("nla.snap", text="Nearest Marker").type = 'NEAREST_MARKER'
+
+class NLA_MT_context_menu(Menu):
+    bl_label = "NLA Context Menu"
+
+    def draw(self, context):
+        layout = self.layout
+        scene = context.scene
+
+        if scene.is_nla_tweakmode:
+            layout.operator("nla.tweakmode_exit", text="Stop Editing Stashed Action").isolate_action = True
+            layout.operator("nla.tweakmode_exit", text="Stop Tweaking Strip Actions")
+        else:
+            layout.operator("nla.tweakmode_enter", text="Start Editing Stashed Action").isolate_action = True
+            layout.operator("nla.tweakmode_enter", text="Start Tweaking Strip Actions")
+
+        layout.separator()
+
+        layout.operator("nla.duplicate", text="Duplicate").linked = False
+        layout.operator("nla.duplicate", text="Linked Duplicate").linked = True
+
+        layout.separator()
+
+        layout.operator("nla.split")
+        layout.operator("nla.delete")
+
+        layout.separator()
+
+        layout.operator("nla.swap")
+
+        layout.separator()
+
+        layout.operator_menu_enum("nla.snap", "type", text="Snap")
+
+
+class NLA_MT_channel_context_menu(Menu):
+    bl_label = "NLA Channel Context Menu"
+
+    def draw(self, context):
+        layout = self.layout
+
+        layout.operator_menu_enum("anim.channels_move", "direction", text="Track Ordering...")
+        layout.operator("anim.channels_clean_empty")
+
 
 
 classes = (
@@ -252,6 +294,8 @@ classes = (
     NLA_MT_add,
     NLA_MT_edit_transform,
     NLA_MT_snap_pie,
+    NLA_MT_context_menu,
+    NLA_MT_channel_context_menu,
     NLA_PT_filters,
 )
 

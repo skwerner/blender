@@ -1478,7 +1478,8 @@ void OUTLINER_OT_show_one_level(wmOperatorType *ot)
 
 /* Show Hierarchy ----------------------------------------------- */
 
-/* helper function for tree_element_shwo_hierarchy() - recursively checks whether subtrees have any objects*/
+/* Helper function for tree_element_shwo_hierarchy() -
+ * recursively checks whether subtrees have any objects. */
 static int subtree_has_objects(ListBase *lb)
 {
   TreeElement *te;
@@ -1633,7 +1634,8 @@ static void tree_element_to_path(TreeElement *te,
     /* check if we're looking for first ID, or appending to path */
     if (*id) {
       /* just 'append' property to path
-       * - to prevent memory leaks, we must write to newpath not path, then free old path + swap them
+       * - to prevent memory leaks, we must write to newpath not path,
+       *   then free old path + swap them.
        */
       if (tse->type == TSE_RNA_PROPERTY) {
         if (RNA_property_type(prop) == PROP_POINTER) {
@@ -1682,7 +1684,8 @@ static void tree_element_to_path(TreeElement *te,
       }
     }
     else {
-      /* no ID, so check if entry is RNA-struct, and if that RNA-struct is an ID datablock to extract info from */
+      /* no ID, so check if entry is RNA-struct,
+       * and if that RNA-struct is an ID datablock to extract info from. */
       if (tse->type == TSE_RNA_STRUCT) {
         /* ptr->data not ptr->id.data seems to be the one we want,
          * since ptr->data is sometimes the owner of this ID? */
@@ -2101,8 +2104,7 @@ static int outliner_orphans_purge_invoke(bContext *C, wmOperator *op, const wmEv
 
   /* Tag all IDs having zero users. */
   ID *id;
-  FOREACH_MAIN_ID_BEGIN(bmain, id)
-  {
+  FOREACH_MAIN_ID_BEGIN (bmain, id) {
     outliner_orphans_purge_tag(id, num_tagged);
   }
   FOREACH_MAIN_ID_END;
@@ -2149,8 +2151,7 @@ static int outliner_orphans_purge_exec(bContext *C, wmOperator *op)
   if ((num_tagged[INDEX_ID_NULL] = RNA_int_get(op->ptr, "num_deleted")) == 0) {
     /* Tag all IDs having zero users. */
     ID *id;
-    FOREACH_MAIN_ID_BEGIN(bmain, id)
-    {
+    FOREACH_MAIN_ID_BEGIN (bmain, id) {
       outliner_orphans_purge_tag(id, num_tagged);
     }
     FOREACH_MAIN_ID_END;

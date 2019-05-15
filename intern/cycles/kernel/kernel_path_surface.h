@@ -83,7 +83,7 @@ ccl_device void accum_light_tree_contribution(KernelGlobals *kg,
        * see comment in light_tree_sample() for this piece of code */
       float sum = 0.0f;
       for (int i = 0; i < num_emitters; ++i) {
-        sum += calc_light_importance(kg, P, N, offset, i);
+        sum += calc_light_importance(kg, P, N, -1.0f, offset, i);
       }
 
       if (sum == 0.0f) {
@@ -96,7 +96,7 @@ ccl_device void accum_light_tree_contribution(KernelGlobals *kg,
       float prob = 0.0f;
       int light;
       for (int i = 1; i < num_emitters + 1; ++i) {
-        prob = calc_light_importance(kg, P, N, offset, i - 1) * sum_inv;
+        prob = calc_light_importance(kg, P, N, -1.0f, offset, i - 1) * sum_inv;
         cdf_R = cdf_L + prob;
         if (randu < cdf_R) {
           light = i - 1;
@@ -180,8 +180,8 @@ ccl_device void accum_light_tree_contribution(KernelGlobals *kg,
       /* go down one of the child nodes */
 
       /* evaluate the importance of each of the child nodes */
-      float I_L = calc_node_importance(kg, P, N, child_offsetL);
-      float I_R = calc_node_importance(kg, P, N, child_offsetR);
+      float I_L = calc_node_importance(kg, P, N, -1.0f, child_offsetL);
+      float I_R = calc_node_importance(kg, P, N, -1.0f, child_offsetR);
 
       if ((I_L == 0.0f) && (I_R == 0.0f)) {
         return;
@@ -375,9 +375,9 @@ ccl_device_noinline void kernel_branched_path_surface_connect_light(
                          sd->time,
                          sd->P_pick,
                          sd->N_pick,
+                         -1.0f,
                          state->bounce,
-                         &ls,
-                         false)) {
+                         &ls)) {
           /* Same as above, probability needs to be corrected since the sampling was forced to select a mesh light. */
           if (kernel_data.integrator.num_all_lights)
             ls.pdf *= 2.0f;
@@ -406,7 +406,7 @@ ccl_device_noinline void kernel_branched_path_surface_connect_light(
 
     LightSample ls;
     if (light_sample(
-            kg, light_u, light_v, sd->time, sd->P_pick, sd->N_pick, state->bounce, &ls, false)) {
+            kg, light_u, light_v, sd->time, sd->P_pick, sd->N_pick, -1.0f, state->bounce, &ls)) {
       accum_light_contribution(kg,
                                sd,
                                emission_sd,
@@ -536,9 +536,9 @@ ccl_device_inline void kernel_path_surface_connect_light(KernelGlobals *kg,
                    sd->time,
                    sd->P_pick,
                    sd->N_pick,
+                   -1.0f,
                    state->bounce,
-                   &ls,
-                   has_volume)) {
+                   &ls)) {
     float terminate = path_state_rng_light_termination(kg, state);
     accum_light_contribution(kg,
                              sd,

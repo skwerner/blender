@@ -84,6 +84,7 @@ ccl_device_inline void compute_light_pass(
               kg, &ss_indirect, &state, &ray, &L_sample, &throughput);
           indirect_sd.P_pick = sd->P_pick;
           indirect_sd.N_pick = sd->N_pick;
+          indirect_sd.t_pick = sd->t_pick;
           kernel_path_indirect(
               kg, &indirect_sd, &emission_sd, &ray, throughput, &state, &L_sample);
         }
@@ -103,6 +104,7 @@ ccl_device_inline void compute_light_pass(
         /* compute indirect light */
         indirect_sd.P_pick = sd->P_pick;
         indirect_sd.N_pick = sd->N_pick;
+        indirect_sd.t_pick = sd->t_pick;
         kernel_path_indirect(kg, &indirect_sd, &emission_sd, &ray, throughput, &state, &L_sample);
 
         /* sum and reset indirect light pass variables for the next samples */

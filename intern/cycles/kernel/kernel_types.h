@@ -937,6 +937,8 @@ typedef ccl_addr_space struct ShaderData {
   float3 P_pick;
   /* normal used in light picking */
   float3 N_pick;
+  /* ray distance used in volumetric light picking */
+  float t_pick;
   /* view/incoming direction */
   float3 I;
   /* shader id */

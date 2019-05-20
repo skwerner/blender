@@ -1260,13 +1260,64 @@ ccl_device float calc_importance_ray(KernelGlobals *kg,
                                  float energy,
                                  float3 centroid)
 {
-
-  /* eq. 7 */
   /* Find the point along the ray closest to the bbox centroid. */
   const float t = min(t_max, sqrtf(max(0.0f, dot(D, centroid - P))));
   const float d_min = len(centroid - P + D * t);
-  
-  return energy / d_min;
+  const float r2 = len_squared(bboxMax - centroid);
+
+  if (dot(axis, axis) == 0.0f) {
+    return energy / d_min;
+  }
+
+  const float3 v0 = normalize(P - centroid);
+  const float3 v1 = normalize(v0 + min(t_max, 1e12f) * D);
+
+  const float3& o0 = v0;
+  float3 o1, o2;
+  make_orthonormals_tangent(o0, v1, &o1, &o2);
+
+  const float b_max = max(dot(v0, axis), dot(v1, axis));
+  const float dot_o0_axis = dot(o0, axis);
+  const float dot_o1_axis = dot(o1, axis);
+
+  /* Equation 5. */
+  const float cos_phi0 = dot_o0_axis / sqrtf(sqr(dot_o0_axis) + sqr(dot_o1_axis));
+  const float3 v = cos_phi0 * o0 + sinf(fast_acosf(cos_phi0)) * o1;
+
+  /* Equation 6. */
+  float cos_theta_min;
+  if ((dot_o1_axis < 0.0f) || dot(v0, v1) > cos_phi0) {
+    cos_theta_min = b_max;
+  }
+  else {
+    cos_theta_min = dot(axis, v);
+  }
+  const float theta_min = fast_acosf(cos_theta_min);
+
+  const float angle_to_centroid = fast_acosf(dot(D, normalize(centroid - P)));
+
+  /* Use law of sines to calculate the point on the ray for theta_min. */
+  const float d = fast_sinf(angle_to_centroid) * len(P - centroid) / fast_sinf(M_PI_F - theta_min - angle_to_centroid);
+  const float d2 = d*d;
+
+  float theta_u;
+  if (d2 <= r2) {
+    /* P is inside bounding sphere */
+    theta_u = M_PI_F;
+  }
+  else {
+    const float sin_theta_u_squared = r2 / d2;
+    const float cos_theta_u = safe_sqrtf(1.0f - sin_theta_u_squared);
+    theta_u = fast_acosf(cos_theta_u);
+  }
+
+  /* Equation 7. */
+  const float theta = theta_min - theta_o - theta_u;
+  if (theta > theta_e) {
+    return 0.0f;
+  }
+
+  return fast_cosf(max(theta, 0.0f)) * energy / d_min;
 }
 
 /* the energy, spatial and orientation bounds for the light are loaded and decoded

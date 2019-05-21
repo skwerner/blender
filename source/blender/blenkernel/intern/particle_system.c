@@ -433,8 +433,6 @@ void psys_thread_context_init(ParticleThreadContext *ctx, ParticleSimulationData
 	ctx->ma = give_current_material(sim->ob, sim->psys->part->omat);
 }
 
-#define MAX_PARTICLES_PER_TASK 256 /* XXX arbitrary - maybe use at least number of points instead for better balancing? */
-
 BLI_INLINE int ceil_ii(int a, int b)
 {
 	return (a + b - 1) / b;
@@ -443,7 +441,7 @@ BLI_INLINE int ceil_ii(int a, int b)
 void psys_tasks_create(ParticleThreadContext *ctx, int startpart, int endpart, ParticleTask **r_tasks, int *r_numtasks)
 {
 	ParticleTask *tasks;
-	int numtasks = ceil_ii((endpart - startpart), MAX_PARTICLES_PER_TASK);
+	int numtasks = min_ii(BLI_system_thread_count() * 4, endpart - startpart);
 	float particles_per_task = (float)(endpart - startpart) / (float)numtasks, p, pnext;
 	int i;
 

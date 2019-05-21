@@ -356,7 +356,7 @@ Orientation LightTree::cone_union(const Orientation &cone1, const Orientation &c
   }
 
   float theta_r = theta_o - a->theta_o;
-  float3 axis = rotate_around_axis(a->axis, cross(a->axis, b->axis), theta_r);
+  float3 axis = rotate_around_axis(a->axis, normalize(cross(a->axis, b->axis)), theta_r);
   axis = normalize(axis);
   return Orientation(axis, theta_o, theta_e);
 }

@@ -1260,9 +1260,11 @@ ccl_device float calc_importance_ray(KernelGlobals *kg,
                                  float energy,
                                  float3 centroid)
 {
+  const float3 p_to_c = centroid - P;
   /* Find the point along the ray closest to the bbox centroid. */
-  const float t = min(t_max, sqrtf(max(0.0f, dot(D, centroid - P))));
-  const float d_min = len(centroid - P + D * t);
+  const float t = min(t_max, max(0.0f, dot(D, p_to_c)));
+  const float3 closest_point = P + D * t;
+  const float d_min = len(centroid - closest_point);
   const float r2 = len_squared(bboxMax - centroid);
 
   if (dot(axis, axis) == 0.0f) {
@@ -1294,11 +1296,12 @@ ccl_device float calc_importance_ray(KernelGlobals *kg,
   }
   const float theta_min = fast_acosf(cos_theta_min);
 
-  const float angle_to_centroid = fast_acosf(dot(D, normalize(centroid - P)));
+  float d2 = d_min * d_min;
 
-  /* Use law of sines to calculate the point on the ray for theta_min. */
-  const float d = fast_sinf(angle_to_centroid) * len(P - centroid) / fast_sinf(M_PI_F - theta_min - angle_to_centroid);
-  const float d2 = d*d;
+  const bool splitting = kernel_data.integrator.splitting_threshold != 0.0f;
+  if (!splitting) {
+    d2 = max(d2, r2 * 0.25f);
+  }
 
   float theta_u;
   if (d2 <= r2) {

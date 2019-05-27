@@ -400,8 +400,8 @@ void LightTree::split_saoh(const BoundBox &centroid_bbox,
   const float extent_max = max3(centroid_bbox.size());
   for (int dim = 0; dim < 3; ++dim) {
 
-    BucketInfo buckets[num_buckets];
-    vector<Orientation> bucket_bcones[num_buckets];
+    vector<BucketInfo> buckets(num_buckets);
+    vector<vector<Orientation>> bucket_bcones(num_buckets);
 
     /* calculate total energy in each bucket and a bbox of it */
     const float extent = centroid_bbox.max[dim] - centroid_bbox.min[dim];
@@ -428,7 +428,7 @@ void LightTree::split_saoh(const BoundBox &centroid_bbox,
     }
 
     /* compute costs for splitting at bucket boundaries */
-    float cost[num_buckets - 1];
+    vector<float> cost(num_buckets - 1);
     BoundBox bbox_L, bbox_R;
     float energy_L, energy_R;
     vector<Orientation> bcones_L, bcones_R;

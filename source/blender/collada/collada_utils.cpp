@@ -60,10 +60,11 @@ extern "C" {
 #include "ED_armature.h"
 #include "ED_screen.h"
 #include "ED_node.h"
+#include "ED_object.h"
 
 #include "MEM_guardedalloc.h"
 
-#include "WM_api.h"  // XXX hrm, see if we can do without this
+#include "WM_api.h" /* XXX hrm, see if we can do without this */
 #include "WM_types.h"
 
 #include "bmesh.h"
@@ -91,7 +92,7 @@ float bc_get_float_value(const COLLADAFW::FloatOrDoubleArray &array, unsigned in
     return array.getDoubleValues()->getData()[index];
 }
 
-// copied from /editors/object/object_relations.c
+/* copied from /editors/object/object_relations.c */
 int bc_test_parent_loop(Object *par, Object *ob)
 {
   /* test if 'ob' is a parent somewhere in par's parents */
@@ -102,26 +103,6 @@ int bc_test_parent_loop(Object *par, Object *ob)
     return 1;
 
   return bc_test_parent_loop(par->parent, ob);
-}
-
-void bc_get_children(std::vector<Object *> &child_set, Object *ob, ViewLayer *view_layer)
-{
-  Base *base;
-  for (base = (Base *)view_layer->object_bases.first; base; base = base->next) {
-    Object *cob = base->object;
-    if (cob->parent == ob) {
-      switch (ob->type) {
-        case OB_MESH:
-        case OB_CAMERA:
-        case OB_LAMP:
-        case OB_EMPTY:
-        case OB_ARMATURE:
-          child_set.push_back(cob);
-        default:
-          break;
-      }
-    }
-  }
 }
 
 bool bc_validateConstraints(bConstraint *con)
@@ -146,43 +127,19 @@ bool bc_validateConstraints(bConstraint *con)
   return true;
 }
 
-// a shortened version of parent_set_exec()
-// if is_parent_space is true then ob->obmat will be multiplied by par->obmat before parenting
-int bc_set_parent(Object *ob, Object *par, bContext *C, bool is_parent_space)
+bool bc_set_parent(Object *ob, Object *par, bContext *C, bool is_parent_space)
 {
-  Object workob;
-  Depsgraph *depsgraph = CTX_data_depsgraph(C);
-  Scene *sce = CTX_data_scene(C);
+  Scene *scene = CTX_data_scene(C);
+  int partype = PAR_OBJECT;
+  const bool xmirror = false;
+  const bool keep_transform = false;
 
-  if (!par || bc_test_parent_loop(par, ob))
-    return false;
-
-  ob->parent = par;
-  ob->partype = PAROBJECT;
-
-  ob->parsubstr[0] = 0;
-
-  if (is_parent_space) {
-    float mat[4][4];
-    // calc par->obmat
-    BKE_object_where_is_calc(depsgraph, sce, par);
-
-    // move child obmat into world space
-    mul_m4_m4m4(mat, par->obmat, ob->obmat);
-    copy_m4_m4(ob->obmat, mat);
+  if (par && is_parent_space) {
+    mul_m4_m4m4(ob->obmat, par->obmat, ob->obmat);
   }
 
-  // apply child obmat (i.e. decompose it into rot/loc/size)
-  BKE_object_apply_mat4(ob, ob->obmat, 0, 0);
-
-  // compute parentinv
-  BKE_object_workob_calc_parent(depsgraph, sce, ob, &workob);
-  invert_m4_m4(ob->parentinv, workob.obmat);
-
-  DEG_id_tag_update(&ob->id, ID_RECALC_TRANSFORM | ID_RECALC_GEOMETRY);
-  DEG_id_tag_update(&par->id, ID_RECALC_TRANSFORM);
-
-  return true;
+  bool ok = ED_object_parent_set(NULL, C, scene, ob, par, partype, xmirror, keep_transform, NULL);
+  return ok;
 }
 
 std::vector<bAction *> bc_getSceneActions(const bContext *C, Object *ob, bool all_actions)
@@ -309,49 +266,6 @@ Object *bc_get_assigned_armature(Object *ob)
   return ob_arm;
 }
 
-/**
- * Returns the highest selected ancestor
- * returns NULL if no ancestor is selected
- * IMPORTANT: This function expects that all exported objects have set:
- * ob->id.tag & LIB_TAG_DOIT
- */
-Object *bc_get_highest_selected_ancestor_or_self(LinkNode *export_set, Object *ob)
-
-{
-  Object *ancestor = ob;
-  while (ob->parent && bc_is_marked(ob->parent)) {
-    ob = ob->parent;
-    ancestor = ob;
-  }
-  return ancestor;
-}
-
-bool bc_is_base_node(LinkNode *export_set, Object *ob)
-{
-  Object *root = bc_get_highest_selected_ancestor_or_self(export_set, ob);
-  return (root == ob);
-}
-
-bool bc_is_in_Export_set(LinkNode *export_set, Object *ob, ViewLayer *view_layer)
-{
-  bool to_export = (BLI_linklist_index(export_set, ob) != -1);
-
-  if (!to_export) {
-    /* Mark this object as to_export even if it is not in the
-     * export list, but it contains children to export. */
-
-    std::vector<Object *> children;
-    bc_get_children(children, ob, view_layer);
-    for (int i = 0; i < children.size(); i++) {
-      if (bc_is_in_Export_set(export_set, children[i], view_layer)) {
-        to_export = true;
-        break;
-      }
-    }
-  }
-  return to_export;
-}
-
 bool bc_has_object_type(LinkNode *export_set, short obtype)
 {
   LinkNode *node;
@@ -366,22 +280,7 @@ bool bc_has_object_type(LinkNode *export_set, short obtype)
   return false;
 }
 
-int bc_is_marked(Object *ob)
-{
-  return ob && (ob->id.tag & LIB_TAG_DOIT);
-}
-
-void bc_remove_mark(Object *ob)
-{
-  ob->id.tag &= ~LIB_TAG_DOIT;
-}
-
-void bc_set_mark(Object *ob)
-{
-  ob->id.tag |= LIB_TAG_DOIT;
-}
-
-// Use bubble sort algorithm for sorting the export set
+/* Use bubble sort algorithm for sorting the export set */
 void bc_bubble_sort_by_Object_name(LinkNode *export_set)
 {
   bool sorted = false;
@@ -520,21 +419,22 @@ void bc_rotate_from_reference_quat(float quat_to[4], float quat_from[4], float m
   float mat_from[4][4];
   quat_to_mat4(mat_from, quat_from);
 
-  // Calculate the difference matrix matd between mat_from and mat_to
+  /* Calculate the difference matrix matd between mat_from and mat_to */
   invert_m4_m4(mati, mat_from);
   mul_m4_m4m4(matd, mati, mat_to);
 
   mat4_to_quat(qd, matd);
 
-  mul_qt_qtqt(quat_to, qd, quat_from);  // rot is the final rotation corresponding to mat_to
+  mul_qt_qtqt(quat_to, qd, quat_from); /* rot is the final rotation corresponding to mat_to */
 }
 
 void bc_triangulate_mesh(Mesh *me)
 {
   bool use_beauty = false;
   bool tag_only = false;
-  int quad_method =
-      MOD_TRIANGULATE_QUAD_SHORTEDGE; /* XXX: The triangulation method selection could be offered in the UI */
+
+  /* XXX: The triangulation method selection could be offered in the UI. */
+  int quad_method = MOD_TRIANGULATE_QUAD_SHORTEDGE;
 
   const struct BMeshCreateParams bm_create_params = {0};
   BMesh *bm = BM_mesh_create(&bm_mesh_allocsize_default, &bm_create_params);
@@ -774,8 +674,8 @@ std::string BoneExtended::get_bone_layers(int bitfield)
 
 int BoneExtended::get_bone_layers()
 {
-  return (bone_layers == 0) ? 1 :
-                              bone_layers;  // ensure that the bone is in at least one bone layer!
+  /* ensure that the bone is in at least one bone layer! */
+  return (bone_layers == 0) ? 1 : bone_layers;
 }
 
 void BoneExtended::set_use_connect(int use_connect)
@@ -983,7 +883,7 @@ bool bc_is_animated(BCMatrixSampleMap &values)
   static float MIN_DISTANCE = 0.00001;
 
   if (values.size() < 2)
-    return false;  // need at least 2 entries to be not flat
+    return false; /* need at least 2 entries to be not flat */
 
   BCMatrixSampleMap::iterator it;
   const BCMatrix *refmat = NULL;
@@ -1009,7 +909,7 @@ bool bc_has_animations(Object *ob)
       (bc_getSceneCameraAction(ob) && bc_getSceneCameraAction(ob)->curves.first))
     return true;
 
-  //Check Material Effect parameter animations.
+  /* Check Material Effect parameter animations. */
   for (int a = 0; a < ob->totcol; a++) {
     Material *ma = give_current_material(ob, a + 1);
     if (!ma)
@@ -1025,17 +925,66 @@ bool bc_has_animations(Object *ob)
   return false;
 }
 
-bool bc_has_animations(Scene *sce, LinkNode &export_set)
+bool bc_has_animations(Scene *sce, LinkNode *export_set)
 {
   LinkNode *node;
+  if (export_set) {
+    for (node = export_set; node; node = node->next) {
+      Object *ob = (Object *)node->link;
 
-  for (node = &export_set; node; node = node->next) {
-    Object *ob = (Object *)node->link;
-
-    if (bc_has_animations(ob))
-      return true;
+      if (bc_has_animations(ob))
+        return true;
+    }
   }
   return false;
+}
+
+void bc_add_global_transform(Matrix &to_mat,
+                             const Matrix &from_mat,
+                             const BCMatrix &global_transform,
+                             const bool invert)
+{
+  copy_m4_m4(to_mat, from_mat);
+  bc_add_global_transform(to_mat, global_transform, invert);
+}
+
+void bc_add_global_transform(Vector &to_vec,
+                             const Vector &from_vec,
+                             const BCMatrix &global_transform,
+                             const bool invert)
+{
+  copy_v3_v3(to_vec, from_vec);
+  bc_add_global_transform(to_vec, global_transform, invert);
+}
+
+void bc_add_global_transform(Matrix &to_mat, const BCMatrix &global_transform, const bool invert)
+{
+  BCMatrix mat(to_mat);
+  mat.add_transform(global_transform, invert);
+  mat.get_matrix(to_mat);
+}
+
+void bc_add_global_transform(Vector &to_vec, const BCMatrix &global_transform, const bool invert)
+{
+  Matrix mat;
+  Vector from_vec;
+  copy_v3_v3(from_vec, to_vec);
+  global_transform.get_matrix(mat, false, 6, invert);
+  mul_v3_m4v3(to_vec, mat, from_vec);
+}
+
+void bc_apply_global_transform(Matrix &to_mat, const BCMatrix &global_transform, const bool invert)
+{
+  BCMatrix mat(to_mat);
+  mat.apply_transform(global_transform, invert);
+  mat.get_matrix(to_mat);
+}
+
+void bc_apply_global_transform(Vector &to_vec, const BCMatrix &global_transform, const bool invert)
+{
+  Matrix transform;
+  global_transform.get_matrix(transform);
+  mul_v3_m4v3(to_vec, transform, to_vec);
 }
 
 /**
@@ -1044,7 +993,7 @@ bool bc_has_animations(Scene *sce, LinkNode &export_set)
  *
  * Note: This is old style for Blender <= 2.78 only kept for compatibility
  */
-void bc_create_restpose_mat(const ExportSettings *export_settings,
+void bc_create_restpose_mat(BCExportSettings &export_settings,
                             Bone *bone,
                             float to_mat[4][4],
                             float from_mat[4][4],
@@ -1055,9 +1004,9 @@ void bc_create_restpose_mat(const ExportSettings *export_settings,
   float scale[3];
   static const float V0[3] = {0, 0, 0};
 
-  if (!has_custom_props(bone, export_settings->keep_bind_info, "restpose_loc") &&
-      !has_custom_props(bone, export_settings->keep_bind_info, "restpose_rot") &&
-      !has_custom_props(bone, export_settings->keep_bind_info, "restpose_scale")) {
+  if (!has_custom_props(bone, export_settings.get_keep_bind_info(), "restpose_loc") &&
+      !has_custom_props(bone, export_settings.get_keep_bind_info(), "restpose_rot") &&
+      !has_custom_props(bone, export_settings.get_keep_bind_info(), "restpose_scale")) {
     /* No need */
     copy_m4_m4(to_mat, from_mat);
     return;
@@ -1066,7 +1015,7 @@ void bc_create_restpose_mat(const ExportSettings *export_settings,
   bc_decompose(from_mat, loc, rot, NULL, scale);
   loc_eulO_size_to_mat4(to_mat, loc, rot, scale, 6);
 
-  if (export_settings->keep_bind_info) {
+  if (export_settings.get_keep_bind_info()) {
     bc_get_property_vector(bone, "restpose_loc", loc, loc);
 
     if (use_local_space && bone->parent) {
@@ -1082,7 +1031,7 @@ void bc_create_restpose_mat(const ExportSettings *export_settings,
     }
   }
 
-  if (export_settings->keep_bind_info) {
+  if (export_settings.get_keep_bind_info()) {
     if (bc_get_IDProperty(bone, "restpose_rot_x"))
       rot[0] = DEG2RADF(bc_get_property(bone, "restpose_rot_x", 0));
     if (bc_get_IDProperty(bone, "restpose_rot_y"))
@@ -1091,7 +1040,7 @@ void bc_create_restpose_mat(const ExportSettings *export_settings,
       rot[2] = DEG2RADF(bc_get_property(bone, "restpose_rot_z", 0));
   }
 
-  if (export_settings->keep_bind_info) {
+  if (export_settings.get_keep_bind_info()) {
     bc_get_property_vector(bone, "restpose_scale", scale, scale);
   }
 
@@ -1254,7 +1203,7 @@ bNode *bc_add_node(bContext *C, bNodeTree *ntree, int node_type, int locx, int l
 }
 
 #if 0
-// experimental, probably not used
+/* experimental, probably not used */
 static bNodeSocket *bc_group_add_input_socket(bNodeTree *ntree,
                                               bNode *to_node,
                                               int to_index,
@@ -1337,7 +1286,7 @@ void bc_add_default_shader(bContext *C, Material *ma)
   bc_node_add_link(ntree, nmap["transparent"], 0, nmap["mix"], 2);
 
   bc_node_add_link(ntree, nmap["mix"], 0, nmap["out"], 0);
-  // experimental, probably not used.
+  /* experimental, probably not used. */
   bc_make_group(C, ntree, nmap);
 #else
   nmap["main"] = bc_add_node(C, ntree, SH_NODE_BSDF_PRINCIPLED, 0, 300);
@@ -1366,7 +1315,7 @@ COLLADASW::ColorOrTexture bc_get_base_color(bNode *shader)
     return bc_get_cot(col[0], col[1], col[2], col[3]);
   }
   else {
-    return bc_get_cot(0.8, 0.8, 0.8, 1.0);  //default white
+    return bc_get_cot(0.8, 0.8, 0.8, 1.0); /* default white */
   }
 }
 
@@ -1383,7 +1332,7 @@ bool bc_get_reflectivity(bNode *shader, double &reflectivity)
 
 double bc_get_reflectivity(Material *ma)
 {
-  double reflectivity = ma->spec;  // fallback if no socket found
+  double reflectivity = ma->spec; /* fallback if no socket found */
   bNode *master_shader = bc_get_master_shader(ma);
   if (ma->use_nodes && master_shader) {
     bc_get_reflectivity(master_shader, reflectivity);

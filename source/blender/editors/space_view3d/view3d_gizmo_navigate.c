@@ -131,7 +131,7 @@ static bool WIDGETGROUP_navigate_poll(const bContext *C, wmGizmoGroupType *UNUSE
   return true;
 }
 
-static void WIDGETGROUP_navigate_setup(const bContext *UNUSED(C), wmGizmoGroup *gzgroup)
+static void WIDGETGROUP_navigate_setup(const bContext *C, wmGizmoGroup *gzgroup)
 {
   struct NavigateWidgetGroup *navgroup = MEM_callocN(sizeof(struct NavigateWidgetGroup), __func__);
 
@@ -227,6 +227,9 @@ static void WIDGETGROUP_navigate_setup(const bContext *UNUSED(C), wmGizmoGroup *
     }
 
     /* When dragging an axis, use this instead. */
+    wmWindowManager *wm = CTX_wm_manager(C);
+    gz->keymap = WM_keymap_ensure(
+        wm->defaultconf, "Generic Gizmo Click Drag", SPACE_EMPTY, RGN_TYPE_WINDOW);
     gz->drag_part = 0;
   }
 
@@ -259,8 +262,7 @@ static void WIDGETGROUP_navigate_draw_prepare(const bContext *C, wmGizmoGroup *g
   navgroup->state.rv3d.is_camera = (rv3d->persp == RV3D_CAMOB);
   navgroup->state.rv3d.viewlock = rv3d->viewlock;
 
-  const bool show_rotate = (((rv3d->viewlock & RV3D_LOCKED) == 0) &&
-                            (navgroup->state.rv3d.is_camera == false));
+  const bool show_rotate = (rv3d->viewlock & RV3D_LOCKED) == 0;
   const bool show_fixed_offset = navgroup->state.rv3d.is_camera;
   const float icon_size = GIZMO_SIZE;
   const float icon_offset = (icon_size * 0.52f) * GIZMO_OFFSET_FAC * UI_DPI_FAC;

@@ -110,21 +110,13 @@ static void GPENCIL_dof_nearfar(Object *camera, float coc, float nearfar[2])
   if (camera == NULL) {
     return;
   }
+  Camera *cam = camera->data;
 
-  const DRWContextState *draw_ctx = DRW_context_state_get();
-  Scene *scene = draw_ctx->scene;
-  Camera *cam = (Camera *)camera->data;
-
-  float fstop = cam->gpu_dof.fstop;
+  float fstop = cam->dof.aperture_fstop;
   float focus_dist = BKE_camera_object_dof_distance(camera);
   float focal_len = cam->lens;
 
-  /* this is factor that converts to the scene scale. focal length and sensor are expressed in mm
-   * unit.scale_length is how many meters per blender unit we have. We want to convert to blender units though
-   * because the shader reads coordinates in world space, which is in blender units.
-   * Note however that focus_distance is already in blender units and shall not be scaled here (see T48157). */
-  float scale = (scene->unit.system) ? scene->unit.scale_length : 1.0f;
-  float scale_camera = 0.001f / scale;
+  const float scale_camera = 0.001f;
   /* we want radius here for the aperture number  */
   float aperture_scaled = 0.5f * scale_camera * focal_len / fstop;
   float focal_len_scaled = scale_camera * focal_len;
@@ -209,7 +201,7 @@ static void DRW_gpencil_fx_blur(ShaderFxData *fx,
   GPUBatch *fxquad = DRW_cache_fullscreen_quad_get();
 
   fx_shgrp = DRW_shgroup_create(e_data->gpencil_fx_blur_sh, psl->fx_shader_pass_blend);
-  DRW_shgroup_call_add(fx_shgrp, fxquad, NULL);
+  DRW_shgroup_call(fx_shgrp, fxquad, NULL);
   DRW_shgroup_uniform_texture_ref(fx_shgrp, "strokeColor", &e_data->temp_color_tx_a);
   DRW_shgroup_uniform_texture_ref(fx_shgrp, "strokeDepth", &e_data->temp_depth_tx_a);
   DRW_shgroup_uniform_vec2(fx_shgrp, "Viewport", DRW_viewport_size_get(), 1);
@@ -234,7 +226,7 @@ static void DRW_gpencil_fx_colorize(ShaderFxData *fx, GPENCIL_e_data *e_data, GP
 
   GPUBatch *fxquad = DRW_cache_fullscreen_quad_get();
   fx_shgrp = DRW_shgroup_create(e_data->gpencil_fx_colorize_sh, psl->fx_shader_pass);
-  DRW_shgroup_call_add(fx_shgrp, fxquad, NULL);
+  DRW_shgroup_call(fx_shgrp, fxquad, NULL);
   DRW_shgroup_uniform_texture_ref(fx_shgrp, "strokeColor", &e_data->temp_color_tx_a);
   DRW_shgroup_uniform_texture_ref(fx_shgrp, "strokeDepth", &e_data->temp_depth_tx_a);
   DRW_shgroup_uniform_vec4(fx_shgrp, "low_color", &fxd->low_color[0], 1);
@@ -266,7 +258,7 @@ static void DRW_gpencil_fx_flip(ShaderFxData *fx, GPENCIL_e_data *e_data, GPENCI
 
   GPUBatch *fxquad = DRW_cache_fullscreen_quad_get();
   fx_shgrp = DRW_shgroup_create(e_data->gpencil_fx_flip_sh, psl->fx_shader_pass);
-  DRW_shgroup_call_add(fx_shgrp, fxquad, NULL);
+  DRW_shgroup_call(fx_shgrp, fxquad, NULL);
   DRW_shgroup_uniform_texture_ref(fx_shgrp, "strokeColor", &e_data->temp_color_tx_a);
   DRW_shgroup_uniform_texture_ref(fx_shgrp, "strokeDepth", &e_data->temp_depth_tx_a);
   DRW_shgroup_uniform_int(fx_shgrp, "flipmode", &fxd->flipmode, 1);
@@ -296,7 +288,7 @@ static void DRW_gpencil_fx_light(ShaderFxData *fx,
 
   GPUBatch *fxquad = DRW_cache_fullscreen_quad_get();
   fx_shgrp = DRW_shgroup_create(e_data->gpencil_fx_light_sh, psl->fx_shader_pass);
-  DRW_shgroup_call_add(fx_shgrp, fxquad, NULL);
+  DRW_shgroup_call(fx_shgrp, fxquad, NULL);
   DRW_shgroup_uniform_texture_ref(fx_shgrp, "strokeColor", &e_data->temp_color_tx_a);
   DRW_shgroup_uniform_texture_ref(fx_shgrp, "strokeDepth", &e_data->temp_depth_tx_a);
 
@@ -351,7 +343,7 @@ static void DRW_gpencil_fx_pixel(ShaderFxData *fx,
 
   GPUBatch *fxquad = DRW_cache_fullscreen_quad_get();
   fx_shgrp = DRW_shgroup_create(e_data->gpencil_fx_pixel_sh, psl->fx_shader_pass);
-  DRW_shgroup_call_add(fx_shgrp, fxquad, NULL);
+  DRW_shgroup_call(fx_shgrp, fxquad, NULL);
   DRW_shgroup_uniform_texture_ref(fx_shgrp, "strokeColor", &e_data->temp_color_tx_a);
   DRW_shgroup_uniform_texture_ref(fx_shgrp, "strokeDepth", &e_data->temp_depth_tx_a);
   DRW_shgroup_uniform_int(fx_shgrp, "size", &fxd->size[0], 3);
@@ -385,7 +377,7 @@ static void DRW_gpencil_fx_rim(ShaderFxData *fx,
 
   /* prepare pass */
   fx_shgrp = DRW_shgroup_create(e_data->gpencil_fx_rim_prepare_sh, psl->fx_shader_pass_blend);
-  DRW_shgroup_call_add(fx_shgrp, fxquad, NULL);
+  DRW_shgroup_call(fx_shgrp, fxquad, NULL);
   DRW_shgroup_uniform_texture_ref(fx_shgrp, "strokeColor", &e_data->temp_color_tx_a);
   DRW_shgroup_uniform_texture_ref(fx_shgrp, "strokeDepth", &e_data->temp_depth_tx_a);
   DRW_shgroup_uniform_vec2(fx_shgrp, "Viewport", DRW_viewport_size_get(), 1);
@@ -402,7 +394,7 @@ static void DRW_gpencil_fx_rim(ShaderFxData *fx,
 
   /* blur pass */
   fx_shgrp = DRW_shgroup_create(e_data->gpencil_fx_blur_sh, psl->fx_shader_pass_blend);
-  DRW_shgroup_call_add(fx_shgrp, fxquad, NULL);
+  DRW_shgroup_call(fx_shgrp, fxquad, NULL);
   DRW_shgroup_uniform_texture_ref(fx_shgrp, "strokeColor", &e_data->temp_color_tx_fx);
   DRW_shgroup_uniform_texture_ref(fx_shgrp, "strokeDepth", &e_data->temp_depth_tx_fx);
   DRW_shgroup_uniform_vec2(fx_shgrp, "Viewport", DRW_viewport_size_get(), 1);
@@ -416,7 +408,7 @@ static void DRW_gpencil_fx_rim(ShaderFxData *fx,
 
   /* resolve pass */
   fx_shgrp = DRW_shgroup_create(e_data->gpencil_fx_rim_resolve_sh, psl->fx_shader_pass_blend);
-  DRW_shgroup_call_add(fx_shgrp, fxquad, NULL);
+  DRW_shgroup_call(fx_shgrp, fxquad, NULL);
   DRW_shgroup_uniform_texture_ref(fx_shgrp, "strokeColor", &e_data->temp_color_tx_a);
   DRW_shgroup_uniform_texture_ref(fx_shgrp, "strokeDepth", &e_data->temp_depth_tx_a);
   DRW_shgroup_uniform_texture_ref(fx_shgrp, "strokeRim", &e_data->temp_color_tx_fx);
@@ -452,7 +444,7 @@ static void DRW_gpencil_fx_shadow(ShaderFxData *fx,
   GPUBatch *fxquad = DRW_cache_fullscreen_quad_get();
   /* prepare pass */
   fx_shgrp = DRW_shgroup_create(e_data->gpencil_fx_shadow_prepare_sh, psl->fx_shader_pass_blend);
-  DRW_shgroup_call_add(fx_shgrp, fxquad, NULL);
+  DRW_shgroup_call(fx_shgrp, fxquad, NULL);
   DRW_shgroup_uniform_texture_ref(fx_shgrp, "strokeColor", &e_data->temp_color_tx_a);
   DRW_shgroup_uniform_texture_ref(fx_shgrp, "strokeDepth", &e_data->temp_depth_tx_a);
   DRW_shgroup_uniform_vec2(fx_shgrp, "Viewport", DRW_viewport_size_get(), 1);
@@ -487,7 +479,7 @@ static void DRW_gpencil_fx_shadow(ShaderFxData *fx,
 
   /* blur pass */
   fx_shgrp = DRW_shgroup_create(e_data->gpencil_fx_blur_sh, psl->fx_shader_pass_blend);
-  DRW_shgroup_call_add(fx_shgrp, fxquad, NULL);
+  DRW_shgroup_call(fx_shgrp, fxquad, NULL);
   DRW_shgroup_uniform_texture_ref(fx_shgrp, "strokeColor", &e_data->temp_color_tx_fx);
   DRW_shgroup_uniform_texture_ref(fx_shgrp, "strokeDepth", &e_data->temp_depth_tx_fx);
   DRW_shgroup_uniform_vec2(fx_shgrp, "Viewport", DRW_viewport_size_get(), 1);
@@ -501,7 +493,7 @@ static void DRW_gpencil_fx_shadow(ShaderFxData *fx,
 
   /* resolve pass */
   fx_shgrp = DRW_shgroup_create(e_data->gpencil_fx_shadow_resolve_sh, psl->fx_shader_pass_blend);
-  DRW_shgroup_call_add(fx_shgrp, fxquad, NULL);
+  DRW_shgroup_call(fx_shgrp, fxquad, NULL);
   DRW_shgroup_uniform_texture_ref(fx_shgrp, "strokeColor", &e_data->temp_color_tx_a);
   DRW_shgroup_uniform_texture_ref(fx_shgrp, "strokeDepth", &e_data->temp_depth_tx_a);
   DRW_shgroup_uniform_texture_ref(fx_shgrp, "shadowColor", &e_data->temp_color_tx_fx);
@@ -530,7 +522,7 @@ static void DRW_gpencil_fx_glow(ShaderFxData *fx,
   GPUBatch *fxquad = DRW_cache_fullscreen_quad_get();
   /* prepare pass */
   fx_shgrp = DRW_shgroup_create(e_data->gpencil_fx_glow_prepare_sh, psl->fx_shader_pass_blend);
-  DRW_shgroup_call_add(fx_shgrp, fxquad, NULL);
+  DRW_shgroup_call(fx_shgrp, fxquad, NULL);
   DRW_shgroup_uniform_texture_ref(fx_shgrp, "strokeColor", &e_data->temp_color_tx_a);
   DRW_shgroup_uniform_texture_ref(fx_shgrp, "strokeDepth", &e_data->temp_depth_tx_a);
 
@@ -543,7 +535,7 @@ static void DRW_gpencil_fx_glow(ShaderFxData *fx,
 
   /* blur pass */
   fx_shgrp = DRW_shgroup_create(e_data->gpencil_fx_blur_sh, psl->fx_shader_pass_blend);
-  DRW_shgroup_call_add(fx_shgrp, fxquad, NULL);
+  DRW_shgroup_call(fx_shgrp, fxquad, NULL);
   DRW_shgroup_uniform_texture_ref(fx_shgrp, "strokeColor", &e_data->temp_color_tx_fx);
   DRW_shgroup_uniform_texture_ref(fx_shgrp, "strokeDepth", &e_data->temp_depth_tx_fx);
   DRW_shgroup_uniform_vec2(fx_shgrp, "Viewport", DRW_viewport_size_get(), 1);
@@ -557,7 +549,7 @@ static void DRW_gpencil_fx_glow(ShaderFxData *fx,
 
   /* resolve pass */
   fx_shgrp = DRW_shgroup_create(e_data->gpencil_fx_glow_resolve_sh, psl->fx_shader_pass_blend);
-  DRW_shgroup_call_add(fx_shgrp, fxquad, NULL);
+  DRW_shgroup_call(fx_shgrp, fxquad, NULL);
   DRW_shgroup_uniform_texture_ref(fx_shgrp, "strokeColor", &e_data->temp_color_tx_a);
   DRW_shgroup_uniform_texture_ref(fx_shgrp, "strokeDepth", &e_data->temp_depth_tx_a);
   DRW_shgroup_uniform_texture_ref(fx_shgrp, "glowColor", &e_data->temp_color_tx_fx);
@@ -592,7 +584,7 @@ static void DRW_gpencil_fx_swirl(ShaderFxData *fx,
 
   GPUBatch *fxquad = DRW_cache_fullscreen_quad_get();
   fx_shgrp = DRW_shgroup_create(e_data->gpencil_fx_swirl_sh, psl->fx_shader_pass);
-  DRW_shgroup_call_add(fx_shgrp, fxquad, NULL);
+  DRW_shgroup_call(fx_shgrp, fxquad, NULL);
   DRW_shgroup_uniform_texture_ref(fx_shgrp, "strokeColor", &e_data->temp_color_tx_a);
   DRW_shgroup_uniform_texture_ref(fx_shgrp, "strokeDepth", &e_data->temp_depth_tx_a);
 
@@ -623,7 +615,7 @@ static void DRW_gpencil_fx_wave(ShaderFxData *fx, GPENCIL_e_data *e_data, GPENCI
   GPUBatch *fxquad = DRW_cache_fullscreen_quad_get();
 
   DRWShadingGroup *fx_shgrp = DRW_shgroup_create(e_data->gpencil_fx_wave_sh, psl->fx_shader_pass);
-  DRW_shgroup_call_add(fx_shgrp, fxquad, NULL);
+  DRW_shgroup_call(fx_shgrp, fxquad, NULL);
   DRW_shgroup_uniform_texture_ref(fx_shgrp, "strokeColor", &e_data->temp_color_tx_a);
   DRW_shgroup_uniform_texture_ref(fx_shgrp, "strokeDepth", &e_data->temp_depth_tx_a);
   DRW_shgroup_uniform_float(fx_shgrp, "amplitude", &fxd->amplitude, 1);

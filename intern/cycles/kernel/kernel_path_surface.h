@@ -224,7 +224,8 @@ ccl_device void accum_light_tree_contribution(KernelGlobals *kg,
 
 #if defined(__BRANCHED_PATH__) || defined(__SUBSURFACE__) || defined(__SHADOW_TRICKS__) || \
     defined(__BAKING__)
-/* branched path tracing: connect path directly to position on one or more lights and add it to L */
+/* branched path tracing: connect path directly to position on one or more lights and add it to L
+ */
 ccl_device_noinline void kernel_branched_path_surface_connect_light(
     KernelGlobals *kg,
     ShaderData *sd,
@@ -378,7 +379,8 @@ ccl_device_noinline void kernel_branched_path_surface_connect_light(
                          -1.0f,
                          state->bounce,
                          &ls)) {
-          /* Same as above, probability needs to be corrected since the sampling was forced to select a mesh light. */
+          /* Same as above, probability needs to be corrected since the sampling was forced to
+           * select a mesh light. */
           if (kernel_data.integrator.num_all_lights)
             ls.pdf *= 2.0f;
 

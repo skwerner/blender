@@ -95,7 +95,7 @@ static void EDIT_ARMATURE_cache_init(void *vedata)
     psl->bone_envelope[i] = DRW_pass_create("Bone Envelope Outline Pass", state);
 
     state = DRW_STATE_WRITE_COLOR | DRW_STATE_WRITE_DEPTH | DRW_STATE_DEPTH_LESS_EQUAL |
-            DRW_STATE_BLEND | DRW_STATE_WIRE;
+            DRW_STATE_BLEND;
     psl->relationship[i] = DRW_pass_create("Bone Relationship Pass", state);
   }
 
@@ -126,6 +126,7 @@ static void EDIT_ARMATURE_cache_populate(void *vedata, Object *ob)
           .bone_envelope = psl->bone_envelope[ghost],
           .bone_axes = psl->bone_axes,
           .relationship_lines = psl->relationship[ghost],
+          .custom_shapes = NULL, /* Not needed in edit mode. */
       };
       DRW_shgroup_armature_edit(ob, passes, transp);
     }

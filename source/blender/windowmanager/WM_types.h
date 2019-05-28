@@ -120,6 +120,19 @@ struct wmWindowManager;
 /* Include external gizmo API's */
 #include "gizmo/WM_gizmo_api.h"
 
+typedef struct wmGenericUserData {
+  void *data;
+  /** When NULL, use #MEM_freeN. */
+  void (*free_fn)(void *data);
+  bool use_free;
+} wmGenericUserData;
+
+typedef struct wmGenericCallback {
+  void (*exec)(struct bContext *C, void *user_data);
+  void *user_data;
+  void (*free_user_data)(void *user_data);
+} wmGenericCallback;
+
 /* ************** wmOperatorType ************************ */
 
 /* flag */
@@ -442,8 +455,7 @@ typedef struct wmGesture {
   /* customdata for straight line is a recti: (xmin,ymin) is start, (xmax, ymax) is end */
 
   /* free pointer to use for operator allocs (if set, its freed on exit)*/
-  void *userdata;
-  bool userdata_free;
+  wmGenericUserData user_data;
 } wmGesture;
 
 /* ************** wmEvent ************************ */
@@ -605,7 +617,7 @@ typedef struct wmOperatorType {
    * that the operator might still fail to execute even if this return true */
   bool (*poll)(struct bContext *) ATTR_WARN_UNUSED_RESULT;
 
-  /* Use to check of properties should be displayed in auto-generated UI.
+  /* Use to check if properties should be displayed in auto-generated UI.
    * Use 'check' callback to enforce refreshing. */
   bool (*poll_property)(const struct bContext *C,
                         struct wmOperator *op,

@@ -1299,6 +1299,12 @@ void CLIP_OT_hide_tracks_clear(wmOperatorType *ot)
 
 /********************** frame jump operator *********************/
 
+static bool frame_jump_poll(bContext *C)
+{
+  SpaceClip *space_clip = CTX_wm_space_clip(C);
+  return space_clip != NULL;
+}
+
 static int frame_jump_exec(bContext *C, wmOperator *op)
 {
   Scene *scene = CTX_data_scene(C);
@@ -1377,7 +1383,7 @@ void CLIP_OT_frame_jump(wmOperatorType *ot)
 
   /* api callbacks */
   ot->exec = frame_jump_exec;
-  ot->poll = ED_space_clip_poll;
+  ot->poll = frame_jump_poll;
 
   /* flags */
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
@@ -1460,6 +1466,7 @@ static int join_tracks_exec(bContext *C, wmOperator *op)
   }
 
   BLI_gset_free(point_tracks, NULL);
+  DEG_id_tag_update(&clip->id, 0);
 
   WM_event_add_notifier(C, NC_MOVIECLIP | NA_EDITED, clip);
 
@@ -1619,6 +1626,7 @@ static int track_copy_color_exec(bContext *C, wmOperator *UNUSED(op))
     }
   }
 
+  DEG_id_tag_update(&clip->id, 0);
   WM_event_add_notifier(C, NC_MOVIECLIP | ND_DISPLAY, clip);
 
   return OPERATOR_FINISHED;
@@ -1800,6 +1808,7 @@ static int clean_tracks_exec(bContext *C, wmOperator *op)
     }
   }
 
+  DEG_id_tag_update(&clip->id, 0);
   BKE_tracking_dopesheet_tag_update(tracking);
 
   WM_event_add_notifier(C, NC_MOVIECLIP | ND_SELECT, clip);

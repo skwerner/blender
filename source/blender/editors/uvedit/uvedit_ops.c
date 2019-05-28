@@ -128,15 +128,6 @@ bool ED_uvedit_test(Object *obedit)
   return ret;
 }
 
-static bool ED_operator_uvedit_can_uv_sculpt(struct bContext *C)
-{
-  SpaceImage *sima = CTX_wm_space_image(C);
-  ToolSettings *toolsettings = CTX_data_tool_settings(C);
-  Object *obedit = CTX_data_edit_object(C);
-
-  return ED_space_image_show_uvedit(sima, obedit) && !(toolsettings->use_uv_sculpt);
-}
-
 static int UNUSED_FUNCTION(ED_operator_uvmap_mesh)(bContext *C)
 {
   Object *ob = CTX_data_active_object(C);
@@ -2212,7 +2203,7 @@ static int uv_remove_doubles_exec(bContext *C, wmOperator *op)
 static void UV_OT_remove_doubles(wmOperatorType *ot)
 {
   /* identifiers */
-  ot->name = "Remove Doubles UV";
+  ot->name = "Merge UVs by Distance";
   ot->description =
       "Selected UV vertices that are within a radius of each other are welded together";
   ot->idname = "UV_OT_remove_doubles";
@@ -2457,8 +2448,13 @@ static bool uv_sticky_select(
   return false;
 }
 
-static int uv_mouse_select_multi(
-    bContext *C, Object **objects, uint objects_len, const float co[2], bool extend, bool loop)
+static int uv_mouse_select_multi(bContext *C,
+                                 Object **objects,
+                                 uint objects_len,
+                                 const float co[2],
+                                 const bool extend,
+                                 const bool deselect_all,
+                                 const bool loop)
 {
   Depsgraph *depsgraph = CTX_data_depsgraph(C);
   SpaceImage *sima = CTX_wm_space_image(C);
@@ -2472,6 +2468,7 @@ static int uv_mouse_select_multi(
   UvNearestHit hit = UV_NEAREST_HIT_INIT;
   int i, selectmode, sticky, sync, *hitv = NULL;
   bool select = true;
+  bool found_item = false;
   /* 0 == don't flush, 1 == sel, -1 == desel;  only use when selection sync is enabled */
   int flush = 0;
   int hitlen = 0;
@@ -2516,79 +2513,86 @@ static int uv_mouse_select_multi(
   /* find nearest element */
   if (loop) {
     /* find edge */
-    if (!uv_find_nearest_edge_multi(scene, ima, objects, objects_len, co, &hit)) {
-      return OPERATOR_CANCELLED;
-    }
-
-    hitlen = 0;
+    found_item = uv_find_nearest_edge_multi(scene, ima, objects, objects_len, co, &hit);
   }
   else if (selectmode == UV_SELECT_VERTEX) {
     /* find vertex */
-    if (!uv_find_nearest_vert_multi(scene, ima, objects, objects_len, co, penalty_dist, &hit)) {
-      return OPERATOR_CANCELLED;
+    found_item = uv_find_nearest_vert_multi(
+        scene, ima, objects, objects_len, co, penalty_dist, &hit);
+    found_item = found_item && (!deselect_all || hit.dist_sq < penalty_dist);
+
+    if (found_item) {
+      /* mark 1 vertex as being hit */
+      hitv = BLI_array_alloca(hitv, hit.efa->len);
+      hituv = BLI_array_alloca(hituv, hit.efa->len);
+      copy_vn_i(hitv, hit.efa->len, 0xFFFFFFFF);
+
+      hitv[hit.lindex] = BM_elem_index_get(hit.l->v);
+      hituv[hit.lindex] = hit.luv->uv;
+
+      hitlen = hit.efa->len;
     }
-
-    /* mark 1 vertex as being hit */
-    hitv = BLI_array_alloca(hitv, hit.efa->len);
-    hituv = BLI_array_alloca(hituv, hit.efa->len);
-    copy_vn_i(hitv, hit.efa->len, 0xFFFFFFFF);
-
-    hitv[hit.lindex] = BM_elem_index_get(hit.l->v);
-    hituv[hit.lindex] = hit.luv->uv;
-
-    hitlen = hit.efa->len;
   }
   else if (selectmode == UV_SELECT_EDGE) {
     /* find edge */
-    if (!uv_find_nearest_edge_multi(scene, ima, objects, objects_len, co, &hit)) {
-      return OPERATOR_CANCELLED;
+    found_item = uv_find_nearest_edge_multi(scene, ima, objects, objects_len, co, &hit);
+    found_item = found_item && (!deselect_all || hit.dist_sq < penalty_dist);
+
+    if (found_item) {
+      /* mark 2 edge vertices as being hit */
+      hitv = BLI_array_alloca(hitv, hit.efa->len);
+      hituv = BLI_array_alloca(hituv, hit.efa->len);
+      copy_vn_i(hitv, hit.efa->len, 0xFFFFFFFF);
+
+      hitv[hit.lindex] = BM_elem_index_get(hit.l->v);
+      hitv[(hit.lindex + 1) % hit.efa->len] = BM_elem_index_get(hit.l->next->v);
+      hituv[hit.lindex] = hit.luv->uv;
+      hituv[(hit.lindex + 1) % hit.efa->len] = hit.luv_next->uv;
+
+      hitlen = hit.efa->len;
     }
-
-    /* mark 2 edge vertices as being hit */
-    hitv = BLI_array_alloca(hitv, hit.efa->len);
-    hituv = BLI_array_alloca(hituv, hit.efa->len);
-    copy_vn_i(hitv, hit.efa->len, 0xFFFFFFFF);
-
-    hitv[hit.lindex] = BM_elem_index_get(hit.l->v);
-    hitv[(hit.lindex + 1) % hit.efa->len] = BM_elem_index_get(hit.l->next->v);
-    hituv[hit.lindex] = hit.luv->uv;
-    hituv[(hit.lindex + 1) % hit.efa->len] = hit.luv_next->uv;
-
-    hitlen = hit.efa->len;
   }
   else if (selectmode == UV_SELECT_FACE) {
     /* find face */
-    if (!uv_find_nearest_face_multi(scene, ima, objects, objects_len, co, &hit)) {
-      return OPERATOR_CANCELLED;
+    found_item = uv_find_nearest_face_multi(scene, ima, objects, objects_len, co, &hit);
+    found_item = found_item && (!deselect_all || hit.dist_sq < penalty_dist);
+
+    if (found_item) {
+      BMEditMesh *em = BKE_editmesh_from_object(hit.ob);
+      const int cd_loop_uv_offset = CustomData_get_offset(&em->bm->ldata, CD_MLOOPUV);
+
+      /* make active */
+      BM_mesh_active_face_set(em->bm, hit.efa);
+
+      /* mark all face vertices as being hit */
+
+      hitv = BLI_array_alloca(hitv, hit.efa->len);
+      hituv = BLI_array_alloca(hituv, hit.efa->len);
+      BM_ITER_ELEM_INDEX (l, &liter, hit.efa, BM_LOOPS_OF_FACE, i) {
+        luv = BM_ELEM_CD_GET_VOID_P(l, cd_loop_uv_offset);
+        hituv[i] = luv->uv;
+        hitv[i] = BM_elem_index_get(l->v);
+      }
+
+      hitlen = hit.efa->len;
     }
-
-    BMEditMesh *em = BKE_editmesh_from_object(hit.ob);
-    const int cd_loop_uv_offset = CustomData_get_offset(&em->bm->ldata, CD_MLOOPUV);
-
-    /* make active */
-    BM_mesh_active_face_set(em->bm, hit.efa);
-
-    /* mark all face vertices as being hit */
-
-    hitv = BLI_array_alloca(hitv, hit.efa->len);
-    hituv = BLI_array_alloca(hituv, hit.efa->len);
-    BM_ITER_ELEM_INDEX (l, &liter, hit.efa, BM_LOOPS_OF_FACE, i) {
-      luv = BM_ELEM_CD_GET_VOID_P(l, cd_loop_uv_offset);
-      hituv[i] = luv->uv;
-      hitv[i] = BM_elem_index_get(l->v);
-    }
-
-    hitlen = hit.efa->len;
   }
   else if (selectmode == UV_SELECT_ISLAND) {
-    if (!uv_find_nearest_edge_multi(scene, ima, objects, objects_len, co, &hit)) {
-      return OPERATOR_CANCELLED;
-    }
-
-    hitlen = 0;
+    found_item = uv_find_nearest_edge_multi(scene, ima, objects, objects_len, co, &hit);
+    found_item = found_item && (!deselect_all || hit.dist_sq < penalty_dist);
   }
-  else {
-    hitlen = 0;
+
+  if (!found_item) {
+    if (deselect_all) {
+      uv_select_all_perform_multi(scene, ima, objects, objects_len, SEL_DESELECT);
+
+      for (uint ob_index = 0; ob_index < objects_len; ob_index++) {
+        Object *obedit = objects[ob_index];
+        uv_select_tag_update_for_object(depsgraph, ts, obedit);
+      }
+
+      return OPERATOR_PASS_THROUGH | OPERATOR_FINISHED;
+    }
     return OPERATOR_CANCELLED;
   }
 
@@ -2742,13 +2746,14 @@ static int uv_mouse_select_multi(
 
   return OPERATOR_PASS_THROUGH | OPERATOR_FINISHED;
 }
-static int uv_mouse_select(bContext *C, const float co[2], bool extend, bool loop)
+static int uv_mouse_select(
+    bContext *C, const float co[2], const bool extend, const bool deselect_all, const bool loop)
 {
   ViewLayer *view_layer = CTX_data_view_layer(C);
   uint objects_len = 0;
   Object **objects = BKE_view_layer_array_from_objects_in_edit_mode_unique_data_with_uvs(
       view_layer, ((View3D *)NULL), &objects_len);
-  int ret = uv_mouse_select_multi(C, objects, objects_len, co, extend, loop);
+  int ret = uv_mouse_select_multi(C, objects, objects_len, co, extend, deselect_all, loop);
   MEM_freeN(objects);
   return ret;
 }
@@ -2756,13 +2761,13 @@ static int uv_mouse_select(bContext *C, const float co[2], bool extend, bool loo
 static int uv_select_exec(bContext *C, wmOperator *op)
 {
   float co[2];
-  bool extend, loop;
 
   RNA_float_get_array(op->ptr, "location", co);
-  extend = RNA_boolean_get(op->ptr, "extend");
-  loop = false;
+  const bool extend = RNA_boolean_get(op->ptr, "extend");
+  const bool deselect_all = RNA_boolean_get(op->ptr, "deselect_all");
+  const bool loop = false;
 
-  return uv_mouse_select(C, co, extend, loop);
+  return uv_mouse_select(C, co, extend, deselect_all, loop);
 }
 
 static int uv_select_invoke(bContext *C, wmOperator *op, const wmEvent *event)
@@ -2790,11 +2795,19 @@ static void UV_OT_select(wmOperatorType *ot)
   ot->poll = ED_operator_uvedit; /* requires space image */
 
   /* properties */
+  PropertyRNA *prop;
   RNA_def_boolean(ot->srna,
                   "extend",
                   0,
                   "Extend",
                   "Extend selection rather than clearing the existing selection");
+  prop = RNA_def_boolean(ot->srna,
+                         "deselect_all",
+                         false,
+                         "Deselect On Nothing",
+                         "Deselect all when nothing under the cursor");
+  RNA_def_property_flag(prop, PROP_SKIP_SAVE);
+
   RNA_def_float_vector(
       ot->srna,
       "location",
@@ -2817,13 +2830,13 @@ static void UV_OT_select(wmOperatorType *ot)
 static int uv_select_loop_exec(bContext *C, wmOperator *op)
 {
   float co[2];
-  bool extend, loop;
 
   RNA_float_get_array(op->ptr, "location", co);
-  extend = RNA_boolean_get(op->ptr, "extend");
-  loop = true;
+  const bool extend = RNA_boolean_get(op->ptr, "extend");
+  const bool deselect_all = false;
+  const bool loop = true;
 
-  return uv_mouse_select(C, co, extend, loop);
+  return uv_mouse_select(C, co, extend, deselect_all, loop);
 }
 
 static int uv_select_loop_invoke(bContext *C, wmOperator *op, const wmEvent *event)
@@ -2875,7 +2888,7 @@ static void UV_OT_select_loop(wmOperatorType *ot)
 /** \name Select Linked Operator
  * \{ */
 
-static int uv_select_linked_internal(bContext *C, wmOperator *op, const wmEvent *event, int pick)
+static int uv_select_linked_internal(bContext *C, wmOperator *op, const wmEvent *event, bool pick)
 {
   SpaceImage *sima = CTX_wm_space_image(C);
   Scene *scene = CTX_data_scene(C);
@@ -2962,7 +2975,7 @@ static int uv_select_linked_internal(bContext *C, wmOperator *op, const wmEvent 
 
 static int uv_select_linked_exec(bContext *C, wmOperator *op)
 {
-  return uv_select_linked_internal(C, op, NULL, 0);
+  return uv_select_linked_internal(C, op, NULL, false);
 }
 
 static void UV_OT_select_linked(wmOperatorType *ot)
@@ -2976,6 +2989,9 @@ static void UV_OT_select_linked(wmOperatorType *ot)
   /* api callbacks */
   ot->exec = uv_select_linked_exec;
   ot->poll = ED_operator_uvedit; /* requires space image */
+
+  /* flags */
+  ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
 }
 
 /** \} */
@@ -2986,12 +3002,12 @@ static void UV_OT_select_linked(wmOperatorType *ot)
 
 static int uv_select_linked_pick_invoke(bContext *C, wmOperator *op, const wmEvent *event)
 {
-  return uv_select_linked_internal(C, op, event, 1);
+  return uv_select_linked_internal(C, op, event, true);
 }
 
 static int uv_select_linked_pick_exec(bContext *C, wmOperator *op)
 {
-  return uv_select_linked_internal(C, op, NULL, 1);
+  return uv_select_linked_internal(C, op, NULL, true);
 }
 
 static void UV_OT_select_linked_pick(wmOperatorType *ot)
@@ -3000,7 +3016,9 @@ static void UV_OT_select_linked_pick(wmOperatorType *ot)
   ot->name = "Select Linked Pick";
   ot->description = "Select all UV vertices linked under the mouse";
   ot->idname = "UV_OT_select_linked_pick";
-  ot->flag = OPTYPE_UNDO;
+
+  /* flags */
+  ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
 
   /* api callbacks */
   ot->invoke = uv_select_linked_pick_invoke;
@@ -4986,7 +5004,7 @@ void ED_keymap_uvedit(wmKeyConfig *keyconf)
   wmKeyMap *keymap;
 
   keymap = WM_keymap_ensure(keyconf, "UV Editor", 0, 0);
-  keymap->poll = ED_operator_uvedit_can_uv_sculpt;
+  keymap->poll = ED_operator_uvedit;
 }
 
 /** \} */

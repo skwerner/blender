@@ -154,12 +154,12 @@ static void update_node_vb(PBVH *bvh, PBVHNode *node)
   node->vb = vb;
 }
 
-//void BKE_pbvh_node_BB_reset(PBVHNode *node)
+// void BKE_pbvh_node_BB_reset(PBVHNode *node)
 //{
 //  BB_reset(&node->vb);
 //}
 //
-//void BKE_pbvh_node_BB_expand(PBVHNode *node, float co[3])
+// void BKE_pbvh_node_BB_expand(PBVHNode *node, float co[3])
 //{
 //  BB_expand(&node->vb, co);
 //}
@@ -181,10 +181,10 @@ static int partition_indices(int *prim_indices, int lo, int hi, int axis, float 
   int i = lo, j = hi;
   for (;;) {
     for (; prim_bbc[prim_indices[i]].bcentroid[axis] < mid; i++) {
-      ;
+      /* pass */
     }
     for (; mid < prim_bbc[prim_indices[j]].bcentroid[axis]; j--) {
-      ;
+      /* pass */
     }
 
     if (!(i < j)) {
@@ -216,18 +216,18 @@ static int partition_indices_material(PBVH *bvh, int lo, int hi)
   for (;;) {
     if (bvh->looptri) {
       for (; face_materials_match(first, &mpoly[looptri[indices[i]].poly]); i++) {
-        ;
+        /* pass */
       }
       for (; !face_materials_match(first, &mpoly[looptri[indices[j]].poly]); j--) {
-        ;
+        /* pass */
       }
     }
     else {
       for (; grid_materials_match(first, &flagmats[indices[i]]); i++) {
-        ;
+        /* pass */
       }
       for (; !grid_materials_match(first, &flagmats[indices[j]]); j--) {
-        ;
+        /* pass */
       }
     }
 
@@ -1038,9 +1038,10 @@ static void pbvh_update_normals_accum_task_cb(void *__restrict userdata,
         const int v = vtri[j];
 
         if (bvh->verts[v].flag & ME_VERT_PBVH_UPDATE) {
-          /* Note: This avoids `lock, add_v3_v3, unlock` and is five to ten times quicker than a spinlock.
-           *       Not exact equivalent though, since atomicity is only ensured for one component
-           *       of the vector at a time, but here it shall not make any sensible difference. */
+          /* Note: This avoids `lock, add_v3_v3, unlock`
+           * and is five to ten times quicker than a spinlock.
+           * Not exact equivalent though, since atomicity is only ensured for one component
+           * of the vector at a time, but here it shall not make any sensible difference. */
           for (int k = 3; k--;) {
             atomic_add_and_fetch_fl(&vnors[v][k], fn[k]);
           }
@@ -1924,8 +1925,8 @@ void BKE_pbvh_raycast_project_ray_root(
       BKE_pbvh_node_get_BB(bvh->nodes, bb_min_root, bb_max_root);
     }
 
-    /* slightly offset min and max in case we have a zero width node (due to a plane mesh for instance),
-     * or faces very close to the bounding box boundary. */
+    /* Slightly offset min and max in case we have a zero width node
+     * (due to a plane mesh for instance), or faces very close to the bounding box boundary. */
     mid_v3_v3v3(bb_center, bb_max_root, bb_min_root);
     /* diff should be same for both min/max since it's calculated from center */
     sub_v3_v3v3(bb_diff, bb_max_root, bb_center);
@@ -2201,26 +2202,17 @@ bool BKE_pbvh_node_planes_exclude_AABB(PBVHNode *node, void *data)
   return test_planes_aabb(bb_min, bb_max, data) != ISECT_INSIDE;
 }
 
-struct PBVHNodeDrawCallbackData {
-  void (*draw_fn)(void *user_data, GPUBatch *batch);
+typedef struct PBVHNodeDrawCallbackData {
+  void (*draw_fn)(void *user_data, GPU_PBVH_Buffers *buffers);
   void *user_data;
-  bool fast;
-  bool only_mask; /* Only draw nodes that have mask data. */
-  bool wires;
-};
+} PBVHNodeDrawCallbackData;
 
 static void pbvh_node_draw_cb(PBVHNode *node, void *data_v)
 {
-  struct PBVHNodeDrawCallbackData *data = data_v;
+  PBVHNodeDrawCallbackData *data = data_v;
 
   if (!(node->flag & PBVH_FullyHidden)) {
-    GPUBatch *batch = GPU_pbvh_buffers_batch_get(node->draw_buffers, data->fast, data->wires);
-    bool show_mask = GPU_pbvh_buffers_has_mask(node->draw_buffers);
-    if (!data->only_mask || show_mask) {
-      if (batch != NULL) {
-        data->draw_fn(data->user_data, batch);
-      }
-    }
+    data->draw_fn(data->user_data, node->draw_buffers);
   }
 }
 
@@ -2230,20 +2222,10 @@ static void pbvh_node_draw_cb(PBVHNode *node, void *data_v)
 void BKE_pbvh_draw_cb(PBVH *bvh,
                       float (*planes)[4],
                       float (*fnors)[3],
-                      bool fast,
-                      bool wires,
-                      bool only_mask,
                       bool show_vcol,
-                      void (*draw_fn)(void *user_data, GPUBatch *batch),
+                      void (*draw_fn)(void *user_data, GPU_PBVH_Buffers *buffers),
                       void *user_data)
 {
-  struct PBVHNodeDrawCallbackData draw_data = {
-      .only_mask = only_mask,
-      .fast = fast,
-      .wires = wires,
-      .draw_fn = draw_fn,
-      .user_data = user_data,
-  };
   PBVHNode **nodes;
   int totnode;
 
@@ -2260,6 +2242,11 @@ void BKE_pbvh_draw_cb(PBVH *bvh,
     MEM_freeN(nodes);
   }
 
+  PBVHNodeDrawCallbackData draw_data = {
+      .draw_fn = draw_fn,
+      .user_data = user_data,
+  };
+
   if (planes) {
     BKE_pbvh_search_callback(
         bvh, BKE_pbvh_node_planes_contain_AABB, planes, pbvh_node_draw_cb, &draw_data);
@@ -2267,10 +2254,18 @@ void BKE_pbvh_draw_cb(PBVH *bvh,
   else {
     BKE_pbvh_search_callback(bvh, NULL, NULL, pbvh_node_draw_cb, &draw_data);
   }
-#if 0
-  if (G.debug_value == 14)
-    pbvh_draw_BB(bvh);
-#endif
+}
+
+void BKE_pbvh_draw_debug_cb(
+    PBVH *bvh,
+    void (*draw_fn)(void *user_data, const float bmin[3], const float bmax[3], PBVHNodeFlags flag),
+    void *user_data)
+{
+  for (int a = 0; a < bvh->totnode; a++) {
+    PBVHNode *node = &bvh->nodes[a];
+
+    draw_fn(user_data, node->vb.bmin, node->vb.bmax, node->flag);
+  }
 }
 
 void BKE_pbvh_grids_update(
@@ -2341,7 +2336,8 @@ void BKE_pbvh_apply_vertCos(PBVH *pbvh, float (*vertCos)[3], const int totvert)
       /* unneeded deformation -- duplicate verts/faces to avoid this */
 
       pbvh->verts = MEM_dupallocN(pbvh->verts);
-      /* No need to dupalloc pbvh->looptri, this one is 'totally owned' by pbvh, it's never some mesh data. */
+      /* No need to dupalloc pbvh->looptri, this one is 'totally owned' by pbvh,
+       * it's never some mesh data. */
 
       pbvh->deformed = true;
     }

@@ -87,9 +87,12 @@ void ED_region_panels_ex(const struct bContext *C,
 void ED_region_panels(const struct bContext *C, struct ARegion *ar);
 void ED_region_panels_layout_ex(const struct bContext *C,
                                 struct ARegion *ar,
+                                struct ListBase *paneltypes,
                                 const char *contexts[],
                                 int contextnr,
-                                const bool vertical);
+                                const bool vertical,
+                                const char *category_override);
+
 void ED_region_panels_layout(const struct bContext *C, struct ARegion *ar);
 void ED_region_panels_draw(const struct bContext *C, struct ARegion *ar);
 
@@ -142,6 +145,13 @@ void ED_area_do_mgs_subscribe_for_tool_header(const struct bContext *C,
                                               struct ScrArea *sa,
                                               struct ARegion *ar,
                                               struct wmMsgBus *mbus);
+void ED_area_do_mgs_subscribe_for_tool_ui(const struct bContext *C,
+                                          struct WorkSpace *workspace,
+                                          struct Scene *scene,
+                                          struct bScreen *screen,
+                                          struct ScrArea *sa,
+                                          struct ARegion *ar,
+                                          struct wmMsgBus *mbus);
 
 /* message bus */
 void ED_region_message_subscribe(struct bContext *C,
@@ -433,8 +443,9 @@ enum {
   ED_KEYMAP_ANIMATION = (1 << 6),
   ED_KEYMAP_FRAMES = (1 << 7),
   ED_KEYMAP_HEADER = (1 << 8),
-  ED_KEYMAP_GPENCIL = (1 << 9),
-  ED_KEYMAP_FOOTER = (1 << 10),
+  ED_KEYMAP_FOOTER = (1 << 9),
+  ED_KEYMAP_GPENCIL = (1 << 10),
+  ED_KEYMAP_NAVBAR = (1 << 11),
 };
 
 /* SCREEN_OT_space_context_cycle direction */

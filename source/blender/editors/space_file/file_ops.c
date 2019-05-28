@@ -1011,7 +1011,7 @@ static int bookmark_cleanup_exec(bContext *C, wmOperator *UNUSED(op))
     BLI_make_file_string(
         "/", name, BKE_appdir_folder_id_create(BLENDER_USER_CONFIG, NULL), BLENDER_BOOKMARK_FILE);
     fsmenu_write_file(fsmenu, name);
-    fsmenu_refresh_bookmarks_status(fsmenu);
+    fsmenu_refresh_bookmarks_status(CTX_wm_manager(C), fsmenu);
     ED_area_tag_refresh(sa);
     ED_area_tag_redraw(sa);
   }
@@ -1461,8 +1461,7 @@ int file_exec(bContext *C, wmOperator *exec_op)
   else if (sfile->op) {
     wmOperator *op = sfile->op;
 
-    /* when used as a macro, for doubleclick,
-     * to prevent closing when doubleclicking on .. item */
+    /* When used as a macro, for double-click, to prevent closing when double-clicking on item. */
     if (RNA_boolean_get(exec_op->ptr, "need_active")) {
       const int numfiles = filelist_files_ensure(sfile->files);
       int i, active = 0;
@@ -1567,6 +1566,9 @@ static int file_refresh_exec(bContext *C, wmOperator *UNUSED(unused))
 
   /* refresh system directory menu */
   fsmenu_refresh_system_category(fsmenu);
+
+  /* Update bookmarks 'valid' state. */
+  fsmenu_refresh_bookmarks_status(wm, fsmenu);
 
   WM_event_add_notifier(C, NC_SPACE | ND_SPACE_FILE_LIST, NULL);
 
@@ -1723,8 +1725,8 @@ static int file_smoothscroll_invoke(bContext *C, wmOperator *UNUSED(op), const w
       (sfile->scroll_offset < offset + numfiles_layout - numfiles_layout_margin)) {
     WM_event_remove_timer(CTX_wm_manager(C), CTX_wm_window(C), sfile->smoothscroll_timer);
     sfile->smoothscroll_timer = NULL;
-    /* Postscroll (after rename has been validated by user) is done,
-     * rename process is totally finisehd, cleanup. */
+    /* Post-scroll (after rename has been validated by user) is done,
+     * rename process is totally finished, cleanup. */
     if ((params->rename_flag & FILE_PARAMS_RENAME_POSTSCROLL_ACTIVE) != 0) {
       params->renamefile[0] = '\0';
       params->rename_flag = 0;

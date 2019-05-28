@@ -60,7 +60,7 @@ namespace DEG {
 
 void DepsgraphNodeBuilder::build_layer_collections(ListBase *lb)
 {
-  const int restrict_flag = (graph_->mode == DAG_EVAL_VIEWPORT) ? COLLECTION_RESTRICT_VIEW :
+  const int restrict_flag = (graph_->mode == DAG_EVAL_VIEWPORT) ? COLLECTION_RESTRICT_VIEWPORT :
                                                                   COLLECTION_RESTRICT_RENDER;
 
   for (LayerCollection *lc = (LayerCollection *)lb->first; lc; lc = lc->next) {
@@ -92,7 +92,6 @@ void DepsgraphNodeBuilder::build_view_layer(Scene *scene,
   /* Get pointer to a CoW version of scene ID. */
   Scene *scene_cow = get_cow_datablock(scene);
   /* Scene objects. */
-  int select_id = 1;
   /* NOTE: Base is used for function bindings as-is, so need to pass CoW base,
    * but object is expected to be an original one. Hence we go into some
    * tricks here iterating over the view layer. */
@@ -108,7 +107,6 @@ void DepsgraphNodeBuilder::build_view_layer(Scene *scene,
       build_object(base_index, base->object, linked_state, true);
       ++base_index;
     }
-    base->object->select_id = select_id++;
   }
   build_layer_collections(&view_layer->layer_collections);
   if (scene->camera != NULL) {
@@ -127,9 +125,7 @@ void DepsgraphNodeBuilder::build_view_layer(Scene *scene,
     build_world(scene->world);
   }
   /* Compositor nodes */
-  if (scene->nodetree != NULL) {
-    build_compositor(scene);
-  }
+  build_scene_compositor(scene);
   /* Cache file. */
   LISTBASE_FOREACH (CacheFile *, cachefile, &bmain_->cachefiles) {
     build_cachefile(cachefile);
@@ -159,7 +155,7 @@ void DepsgraphNodeBuilder::build_view_layer(Scene *scene,
       OperationCode::VIEW_LAYER_EVAL,
       function_bind(BKE_layer_eval_view_layer_indexed, _1, scene_cow, view_layer_index_));
   /* Parameters evaluation for scene relations mainly. */
-  add_operation_node(&scene->id, NodeType::PARAMETERS, OperationCode::SCENE_EVAL);
+  build_scene_parameters(scene);
   /* Build all set scenes. */
   if (scene->set != NULL) {
     ViewLayer *set_view_layer = BKE_view_layer_default_render(scene->set);

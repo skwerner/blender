@@ -46,6 +46,11 @@
 
 /* Structures */
 
+typedef struct OVERLAY_DupliData {
+  DRWShadingGroup *shgrp;
+  struct GPUBatch *geom;
+} OVERLAY_DupliData;
+
 typedef struct OVERLAY_StorageList {
   struct OVERLAY_PrivateData *g_data;
 } OVERLAY_StorageList;
@@ -66,6 +71,7 @@ typedef struct OVERLAY_Data {
 typedef struct OVERLAY_PrivateData {
   DRWShadingGroup *face_orientation_shgrp;
   DRWShadingGroup *face_wires_shgrp;
+  DRWView *view_wires;
   BLI_mempool *wire_color_mempool;
   View3DOverlay overlay;
   float wire_step_param;
@@ -95,6 +101,8 @@ extern char datatoc_overlay_face_wireframe_geom_glsl[];
 extern char datatoc_overlay_face_wireframe_frag_glsl[];
 extern char datatoc_gpu_shader_depth_only_frag_glsl[];
 
+extern char datatoc_common_view_lib_glsl[];
+
 /* Functions */
 static void overlay_engine_init(void *vedata)
 {
@@ -103,10 +111,6 @@ static void overlay_engine_init(void *vedata)
 
   const DRWContextState *draw_ctx = DRW_context_state_get();
   OVERLAY_Shaders *sh_data = &e_data.sh_data[draw_ctx->sh_cfg];
-
-  if (draw_ctx->sh_cfg == GPU_SHADER_CFG_CLIPPED) {
-    DRW_state_clip_planes_set_from_rv3d(draw_ctx->rv3d);
-  }
 
   if (!stl->g_data) {
     /* Alloc transient pointers */
@@ -119,8 +123,10 @@ static void overlay_engine_init(void *vedata)
   if (!sh_data->face_orientation) {
     /* Face orientation */
     sh_data->face_orientation = GPU_shader_create_from_arrays({
-        .vert =
-            (const char *[]){sh_cfg_data->lib, datatoc_overlay_face_orientation_vert_glsl, NULL},
+        .vert = (const char *[]){sh_cfg_data->lib,
+                                 datatoc_common_view_lib_glsl,
+                                 datatoc_overlay_face_orientation_vert_glsl,
+                                 NULL},
         .frag = (const char *[]){datatoc_overlay_face_orientation_frag_glsl, NULL},
         .defs = (const char *[]){sh_cfg_data->def, NULL},
     });
@@ -128,7 +134,10 @@ static void overlay_engine_init(void *vedata)
 
   if (!sh_data->face_wireframe) {
     sh_data->select_wireframe = GPU_shader_create_from_arrays({
-        .vert = (const char *[]){sh_cfg_data->lib, datatoc_overlay_face_wireframe_vert_glsl, NULL},
+        .vert = (const char *[]){sh_cfg_data->lib,
+                                 datatoc_common_view_lib_glsl,
+                                 datatoc_overlay_face_wireframe_vert_glsl,
+                                 NULL},
         .geom = (const char *[]){sh_cfg_data->lib, datatoc_overlay_face_wireframe_geom_glsl, NULL},
         .frag = (const char *[]){datatoc_gpu_shader_depth_only_frag_glsl, NULL},
         .defs = (const char *[]){sh_cfg_data->def, "#define SELECT_EDGES\n", NULL},
@@ -136,19 +145,27 @@ static void overlay_engine_init(void *vedata)
 #if USE_GEOM_SHADER_WORKAROUND
     /* Apple drivers does not support wide wires. Use geometry shader as a workaround. */
     sh_data->face_wireframe = GPU_shader_create_from_arrays({
-        .vert = (const char *[]){sh_cfg_data->lib, datatoc_overlay_face_wireframe_vert_glsl, NULL},
+        .vert = (const char *[]){sh_cfg_data->lib,
+                                 datatoc_common_view_lib_glsl,
+                                 datatoc_overlay_face_wireframe_vert_glsl,
+                                 NULL},
         .geom = (const char *[]){sh_cfg_data->lib, datatoc_overlay_face_wireframe_geom_glsl, NULL},
         .frag = (const char *[]){datatoc_overlay_face_wireframe_frag_glsl, NULL},
         .defs = (const char *[]){sh_cfg_data->def, "#define USE_GEOM\n", NULL},
     });
 #else
     sh_data->face_wireframe = GPU_shader_create_from_arrays({
-        .vert = (const char *[]){sh_cfg_data->lib, datatoc_overlay_face_wireframe_vert_glsl, NULL},
+        .vert = (const char *[]){sh_cfg_data->lib,
+                                 datatoc_common_view_lib_glsl,
+                                 datatoc_overlay_face_wireframe_vert_glsl,
+                                 NULL},
         .frag = (const char *[]){datatoc_overlay_face_wireframe_frag_glsl, NULL},
         .defs = (const char *[]){sh_cfg_data->def, NULL},
     });
 #endif
   }
+
+  stl->g_data->view_wires = DRW_view_create_with_zoffset(draw_ctx->rv3d, 1.0f);
 }
 
 static void overlay_cache_init(void *vedata)
@@ -193,19 +210,19 @@ static void overlay_cache_init(void *vedata)
     g_data->face_orientation_shgrp = DRW_shgroup_create(sh_data->face_orientation,
                                                         psl->face_orientation_pass);
     if (rv3d->rflag & RV3D_CLIPPING) {
-      DRW_shgroup_world_clip_planes_from_rv3d(g_data->face_orientation_shgrp, rv3d);
+      DRW_shgroup_state_enable(g_data->face_orientation_shgrp, DRW_STATE_CLIP_PLANES);
     }
   }
 
   {
     /* Wireframe */
     DRWState state = DRW_STATE_WRITE_COLOR | DRW_STATE_WRITE_DEPTH | DRW_STATE_DEPTH_LESS |
-                     DRW_STATE_FIRST_VERTEX_CONVENTION | DRW_STATE_OFFSET_NEGATIVE;
+                     DRW_STATE_FIRST_VERTEX_CONVENTION;
     float wire_size = U.pixelsize * 0.5f;
 
     float winmat[4][4];
     float viewdist = rv3d->dist;
-    DRW_viewport_matrix_get(winmat, DRW_MAT_WIN);
+    DRW_view_winmat_get(NULL, winmat, false);
     /* special exception for ortho camera (viewdist isnt used for perspective cameras) */
     if (rv3d->persp == RV3D_CAMOB && rv3d->is_persp == false) {
       viewdist = 1.0f / max_ff(fabsf(rv3d->winmat[0][0]), fabsf(rv3d->winmat[1][1]));
@@ -229,7 +246,7 @@ static void overlay_cache_init(void *vedata)
           g_data->face_wires_shgrp, "viewportSizeInv", DRW_viewport_invert_size_get(), 1);
     }
     if (rv3d->rflag & RV3D_CLIPPING) {
-      DRW_shgroup_world_clip_planes_from_rv3d(g_data->face_wires_shgrp, rv3d);
+      DRW_shgroup_state_enable(g_data->face_wires_shgrp, DRW_STATE_CLIP_PLANES);
     }
 
     g_data->wire_step_param = stl->g_data->overlay.wireframe_threshold - 254.0f / 255.0f;
@@ -337,12 +354,27 @@ static void overlay_cache_populate(void *vedata, Object *ob)
   if (DRW_object_is_renderable(ob) && pd->overlay.flag & V3D_OVERLAY_FACE_ORIENTATION) {
     struct GPUBatch *geom = DRW_cache_object_surface_get(ob);
     if (geom) {
-      DRW_shgroup_call_add(pd->face_orientation_shgrp, geom, ob->obmat);
+      DRW_shgroup_call_object(pd->face_orientation_shgrp, geom, ob);
     }
   }
 
   if ((pd->overlay.flag & V3D_OVERLAY_WIREFRAMES) || (v3d->shading.type == OB_WIRE) ||
       (ob->dtx & OB_DRAWWIRE) || (ob->dt == OB_WIRE)) {
+
+    /* Fast path for duplis. */
+    OVERLAY_DupliData **dupli_data = (OVERLAY_DupliData **)DRW_duplidata_get(vedata);
+    if (dupli_data) {
+      if (*dupli_data == NULL) {
+        *dupli_data = MEM_callocN(sizeof(OVERLAY_DupliData), "OVERLAY_DupliData");
+      }
+      else {
+        if ((*dupli_data)->shgrp && (*dupli_data)->geom) {
+          DRW_shgroup_call_object((*dupli_data)->shgrp, (*dupli_data)->geom, ob);
+        }
+        return;
+      }
+    }
+
     const bool is_edit_mode = BKE_object_is_in_editmode(ob);
     bool has_edit_mesh_cage = false;
     if (ob->type == OB_MESH) {
@@ -359,8 +391,7 @@ static void overlay_cache_populate(void *vedata, Object *ob)
     if ((!pd->show_overlays) ||
         (((ob != draw_ctx->object_edit) && !is_edit_mode) || has_edit_mesh_cage) ||
         ob->type != OB_MESH) {
-      const bool is_active = (ob == draw_ctx->obact);
-      const bool is_sculpt_mode = is_active && (draw_ctx->object_mode & OB_MODE_SCULPT) != 0;
+      const bool is_sculpt_mode = DRW_object_use_pbvh_drawing(ob);
       const bool all_wires = (ob->dtx & OB_DRAW_ALL_EDGES);
       const bool is_wire = (ob->dt < OB_SOLID);
       const bool use_coloring = (pd->show_overlays && !is_edit_mode && !is_sculpt_mode &&
@@ -390,12 +421,18 @@ static void overlay_cache_populate(void *vedata, Object *ob)
         }
 
         if (is_sculpt_mode) {
-          DRW_shgroup_call_sculpt_wires_add(shgrp, ob, ob->obmat);
+          DRW_shgroup_call_sculpt(shgrp, ob, true, false, false);
         }
         else {
-          DRW_shgroup_call_add(shgrp, geom, ob->obmat);
+          DRW_shgroup_call_object(shgrp, geom, ob);
         }
       }
+
+      if (dupli_data) {
+        (*dupli_data)->shgrp = shgrp;
+        (*dupli_data)->geom = geom;
+      }
+
       if (is_wire && shgrp != NULL) {
         /* If object is wireframe, don't try to use stencil test. */
         DRW_shgroup_state_disable(shgrp, DRW_STATE_STENCIL_EQUAL);
@@ -455,7 +492,10 @@ static void overlay_draw_scene(void *vedata)
     DRW_stats_query_end();
   }
 
+  DRW_view_set_active(stl->g_data->view_wires);
   DRW_draw_pass(psl->face_wireframe_pass);
+
+  DRW_view_set_active(NULL);
 
   /* TODO(fclem): find a way to unify the multisample pass together
    * (non meshes + armature + wireframe) */

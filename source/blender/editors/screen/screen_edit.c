@@ -675,6 +675,12 @@ void ED_screen_set_active_region(bContext *C, wmWindow *win, const int xy[2])
         bool do_draw = false;
 
         for (ar = area_iter->regionbase.first; ar; ar = ar->next) {
+
+          /* call old area's deactivate if assigned */
+          if (ar == old_ar && area_iter->type->deactivate) {
+            area_iter->type->deactivate(area_iter);
+          }
+
           if (ar == old_ar || ar == scr->active_region) {
             do_draw = true;
           }
@@ -884,9 +890,11 @@ static bScreen *screen_fullscreen_find_associated_normal_screen(const Main *bmai
 {
   for (bScreen *screen_iter = bmain->screens.first; screen_iter;
        screen_iter = screen_iter->id.next) {
-    ScrArea *sa = screen_iter->areabase.first;
-    if (sa && sa->full == screen) {
-      return screen_iter;
+    if ((screen_iter != screen) && ELEM(screen_iter->state, SCREENMAXIMIZED, SCREENFULL)) {
+      ScrArea *sa = screen_iter->areabase.first;
+      if (sa && sa->full == screen) {
+        return screen_iter;
+      }
     }
   }
 
@@ -905,9 +913,7 @@ bScreen *screen_change_prepare(
     return NULL;
   }
 
-  if (ELEM(screen_new->state, SCREENMAXIMIZED, SCREENFULL)) {
-    screen_new = screen_fullscreen_find_associated_normal_screen(bmain, screen_new);
-  }
+  screen_new = screen_fullscreen_find_associated_normal_screen(bmain, screen_new);
 
   /* check for valid winid */
   if (!(screen_new->winid == 0 || screen_new->winid == win->winid)) {

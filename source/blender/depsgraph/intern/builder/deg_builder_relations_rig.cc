@@ -374,7 +374,7 @@ void DepsgraphRelationBuilder::build_rig(Object *object)
      *       to done, with transitive reduction removing this one. */
     add_relation(bone_ready_key, bone_done_key, "Ready -> Done");
     /* B-Bone shape is the real final step after Done if present. */
-    if (pchan->bone != NULL && pchan->bone->segments > 1) {
+    if (check_pchan_has_bbone(object, pchan)) {
       OperationKey bone_segments_key(
           &object->id, NodeType::BONE, pchan->name, OperationCode::BONE_SEGMENTS);
       /* B-Bone shape depends on the final position of the bone. */
@@ -383,7 +383,13 @@ void DepsgraphRelationBuilder::build_rig(Object *object)
       bPoseChannel *prev, *next;
       BKE_pchan_bbone_handles_get(pchan, &prev, &next);
       if (prev) {
-        OperationKey prev_key(&object->id, NodeType::BONE, prev->name, OperationCode::BONE_DONE);
+        OperationCode opcode = OperationCode::BONE_DONE;
+        /* Inheriting parent roll requires access to prev handle's B-Bone properties. */
+        if ((pchan->bone->flag & BONE_ADD_PARENT_END_ROLL) != 0 &&
+            check_pchan_has_bbone_segments(object, prev)) {
+          opcode = OperationCode::BONE_SEGMENTS;
+        }
+        OperationKey prev_key(&object->id, NodeType::BONE, prev->name, opcode);
         add_relation(prev_key, bone_segments_key, "Prev Handle -> B-Bone Segments");
       }
       if (next) {
@@ -434,7 +440,7 @@ void DepsgraphRelationBuilder::build_proxy_rig(Object *object)
     add_relation(bone_done_key, pose_cleanup_key, "Bone Done -> Pose Cleanup");
     add_relation(bone_done_key, pose_done_key, "Bone Done -> Pose Done", RELATION_FLAG_GODMODE);
     /* Make sure bone in the proxy is not done before it's FROM is done. */
-    if (pchan->bone && pchan->bone->segments > 1) {
+    if (check_pchan_has_bbone(object, pchan)) {
       OperationKey from_bone_segments_key(
           &proxy_from->id, NodeType::BONE, pchan->name, OperationCode::BONE_SEGMENTS);
       add_relation(from_bone_segments_key,

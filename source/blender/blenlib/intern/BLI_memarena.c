@@ -53,8 +53,9 @@
 #if defined(__SANITIZE_ADDRESS__) || __has_feature(address_sanitizer)
 #  include "sanitizer/asan_interface.h"
 #else
-#  define ASAN_POISON_MEMORY_REGION(addr, size) UNUSED_VARS(addr, size)
-#  define ASAN_UNPOISON_MEMORY_REGION(addr, size) UNUSED_VARS(addr, size)
+/* Ensure return value is used. */
+#  define ASAN_POISON_MEMORY_REGION(addr, size) (void)(0 && ((size) != 0 && (addr) != NULL))
+#  define ASAN_UNPOISON_MEMORY_REGION(addr, size) (void)(0 && ((size) != 0 && (addr) != NULL))
 #endif
 
 struct MemBuf {
@@ -77,6 +78,10 @@ static void memarena_buf_free_all(struct MemBuf *mb)
 {
   while (mb != NULL) {
     struct MemBuf *mb_next = mb->next;
+
+    /* Unpoison memory because MEM_freeN might overwrite it. */
+    ASAN_UNPOISON_MEMORY_REGION(mb, (uint)MEM_allocN_len(mb));
+
     MEM_freeN(mb);
     mb = mb_next;
   }

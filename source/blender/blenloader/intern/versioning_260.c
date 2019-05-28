@@ -1808,6 +1808,7 @@ void blo_do_versions_260(FileData *fd, Library *UNUSED(lib), Main *bmain)
         Image *image = blo_do_versions_newlibadr(fd, tex->id.lib, tex->ima);
 
         if (image && (image->flag & IMA_DO_PREMUL) == 0) {
+          const int IMA_IGNORE_ALPHA = (1 << 12);
           image->flag |= IMA_IGNORE_ALPHA;
         }
       }
@@ -1997,7 +1998,7 @@ void blo_do_versions_260(FileData *fd, Library *UNUSED(lib), Main *bmain)
   }
 
   if (bmain->versionfile < 267) {
-    //if (!DNA_struct_elem_find(fd->filesdna, "Brush", "int", "stencil_pos")) {
+    // if (!DNA_struct_elem_find(fd->filesdna, "Brush", "int", "stencil_pos")) {
     Brush *brush;
 
     for (brush = bmain->brushes.first; brush; brush = brush->id.next) {

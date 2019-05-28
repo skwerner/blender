@@ -622,8 +622,10 @@ bGPDlayer *BKE_gpencil_layer_duplicate(const bGPDlayer *gpl_src)
 }
 
 /**
- * Only copy internal data of GreasePencil ID from source to already allocated/initialized destination.
- * You probably never want to use that directly, use BKE_id_copy or BKE_id_copy_ex for typical needs.
+ * Only copy internal data of GreasePencil ID from source
+ * to already allocated/initialized destination.
+ * You probably never want to use that directly,
+ * use #BKE_id_copy or #BKE_id_copy_ex for typical needs.
  *
  * WARNING! This function will not handle ID user count!
  *
@@ -1107,7 +1109,8 @@ Material *BKE_gpencil_object_material_new(Main *bmain, Object *ob, const char *n
 /* Returns the material for a brush with respect to its pinned state. */
 Material *BKE_gpencil_object_material_get_from_brush(Object *ob, Brush *brush)
 {
-  if ((brush) && (brush->gpencil_settings->flag & GP_BRUSH_MATERIAL_PINNED)) {
+  if ((brush) && (brush->gpencil_settings) &&
+      (brush->gpencil_settings->flag & GP_BRUSH_MATERIAL_PINNED)) {
     Material *ma = BKE_gpencil_brush_material_get(brush);
     return ma;
   }
@@ -1159,7 +1162,10 @@ Material *BKE_gpencil_object_material_ensure_from_active_input_brush(Main *bmain
   return BKE_gpencil_object_material_ensure_from_active_input_material(bmain, ob);
 }
 
-/* Guaranteed to return a material assigned to object. Returns never NULL. Only use this for materials unrelated to user input */
+/**
+ * Guaranteed to return a material assigned to object. Returns never NULL.
+ * Only use this for materials unrelated to user input.
+ */
 Material *BKE_gpencil_object_material_ensure_from_active_input_material(Main *bmain, Object *ob)
 {
   Material *ma = give_current_material(ob, ob->actcol);
@@ -1416,9 +1422,11 @@ bool BKE_gpencil_smooth_stroke(bGPDstroke *gps, int i, float inf)
   }
 
   /* Compute smoothed coordinate by taking the ones nearby */
-  /* XXX: This is potentially slow, and suffers from accumulation error as earlier points are handled before later ones */
+  /* XXX: This is potentially slow,
+   *      and suffers from accumulation error as earlier points are handled before later ones. */
   {
-    // XXX: this is hardcoded to look at 2 points on either side of the current one (i.e. 5 items total)
+    /* XXX: this is hardcoded to look at 2 points on either side of the current one
+     * (i.e. 5 items total). */
     const int steps = 2;
     const float average_fac = 1.0f / (float)(steps * 2 + 1);
     int step;
@@ -1427,8 +1435,9 @@ bool BKE_gpencil_smooth_stroke(bGPDstroke *gps, int i, float inf)
     madd_v3_v3fl(sco, &pt->x, average_fac);
 
     /* n-steps before/after current point */
-    // XXX: review how the endpoints are treated by this algorithm
-    // XXX: falloff measures should also introduce some weighting variations, so that further-out points get less weight
+    /* XXX: review how the endpoints are treated by this algorithm. */
+    /* XXX: falloff measures should also introduce some weighting variations,
+     *      so that further-out points get less weight. */
     for (step = 1; step <= steps; step++) {
       bGPDspoint *pt1, *pt2;
       int before = i - step;

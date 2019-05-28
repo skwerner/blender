@@ -567,7 +567,7 @@ static int rna_color_quantize(PropertyRNA *prop, PropertyDefRNA *dp)
           (IS_DNATYPE_FLOAT_COMPAT(dp->dnatype) == 0));
 }
 
-static const char *rna_function_string(void *func)
+static const char *rna_function_string(const void *func)
 {
   return (func) ? (const char *)func : "NULL";
 }
@@ -1033,10 +1033,10 @@ static char *rna_def_property_set_func(
       break;
     }
     case PROP_POINTER: {
-      fprintf(f, "void %s(PointerRNA *ptr, PointerRNA value)\n", func);
+      fprintf(f, "void %s(PointerRNA *ptr, PointerRNA value, struct ReportList *reports)\n", func);
       fprintf(f, "{\n");
       if (manualfunc) {
-        fprintf(f, "    %s(ptr, value);\n", manualfunc);
+        fprintf(f, "    %s(ptr, value, reports);\n", manualfunc);
       }
       else {
         rna_print_data_get(f, dp);
@@ -2024,7 +2024,7 @@ static void rna_def_function_funcs_header(FILE *f, StructRNA *srna, FunctionDefR
   char funcname[2048];
 
   rna_construct_wrapper_function_name(
-      funcname, sizeof(funcname), srna->identifier, func->identifier, NULL);
+      funcname, sizeof(funcname), srna->identifier, func->identifier, "func");
   rna_generate_static_parameter_prototypes(f, srna, dfunc, funcname, 1);
 }
 
@@ -2452,7 +2452,7 @@ static void rna_def_struct_function_call_impl_cpp(FILE *f, StructRNA *srna, Func
   int first = 1;
 
   rna_construct_wrapper_function_name(
-      funcname, sizeof(funcname), srna->identifier, func->identifier, NULL);
+      funcname, sizeof(funcname), srna->identifier, func->identifier, "func");
 
   fprintf(f, "%s(", funcname);
 
@@ -2615,7 +2615,7 @@ static void rna_def_function_wrapper_funcs(FILE *f, StructDefRNA *dsrna, Functio
   }
 
   rna_construct_wrapper_function_name(
-      funcname, sizeof(funcname), srna->identifier, func->identifier, NULL);
+      funcname, sizeof(funcname), srna->identifier, func->identifier, "func");
 
   rna_generate_static_parameter_prototypes(f, srna, dfunc, funcname, 0);
 
@@ -2731,7 +2731,7 @@ static void rna_def_function_funcs(FILE *f, StructDefRNA *dsrna, FunctionDefRNA 
     else if (cptr || (flag & PROP_DYNAMIC)) {
       ptrstr = pout ? "**" : "*";
       /* Fixed size arrays and RNA pointers are pre-allocated on the ParameterList stack,
-     * pass a pointer to it. */
+       * pass a pointer to it. */
     }
     else if (type == PROP_POINTER || dparm->prop->arraydimension) {
       ptrstr = "*";
@@ -2740,7 +2740,7 @@ static void rna_def_function_funcs(FILE *f, StructDefRNA *dsrna, FunctionDefRNA 
              !(flag & PROP_THICK_WRAP)) {
       ptrstr = "*";
       /* PROP_THICK_WRAP strings are pre-allocated on the ParameterList stack,
-     * but type name for string props is already (char *), so leave empty */
+       * but type name for string props is already (char *), so leave empty */
     }
     else if (type == PROP_STRING && (flag & PROP_THICK_WRAP)) {
       ptrstr = "";

@@ -316,7 +316,9 @@ static PointerRNA rna_ShapeKey_relative_key_get(PointerRNA *ptr)
   return rna_object_shapekey_index_get(ptr->id.data, kb->relative);
 }
 
-static void rna_ShapeKey_relative_key_set(PointerRNA *ptr, PointerRNA value)
+static void rna_ShapeKey_relative_key_set(PointerRNA *ptr,
+                                          PointerRNA value,
+                                          struct ReportList *UNUSED(reports))
 {
   KeyBlock *kb = (KeyBlock *)ptr->data;
 

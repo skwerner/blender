@@ -608,17 +608,16 @@ DO_INLINE void initdiag_bfmatrix(fmatrix3x3 *matrix, float m3[3][3])
 /* STATUS: verified */
 DO_INLINE void mul_bfmatrix_lfvector(float (*to)[3], fmatrix3x3 *from, lfVector *fLongVector)
 {
-  unsigned int i = 0;
   unsigned int vcount = from[0].vcount;
   lfVector *temp = create_lfvector(vcount);
 
   zero_lfvector(to, vcount);
 
-#  pragma omp parallel sections private(i) if (vcount > CLOTH_OPENMP_LIMIT)
+#  pragma omp parallel sections if (vcount > CLOTH_OPENMP_LIMIT)
   {
 #  pragma omp section
     {
-      for (i = from[0].vcount; i < from[0].vcount + from[0].scount; i++) {
+      for (unsigned int i = from[0].vcount; i < from[0].vcount + from[0].scount; i++) {
         /* This is the lower triangle of the sparse matrix,
          * therefore multiplication occurs with transposed submatrices. */
         muladd_fmatrixT_fvector(to[from[i].c], from[i].m, fLongVector[from[i].r]);
@@ -626,7 +625,7 @@ DO_INLINE void mul_bfmatrix_lfvector(float (*to)[3], fmatrix3x3 *from, lfVector 
     }
 #  pragma omp section
     {
-      for (i = 0; i < from[0].vcount + from[0].scount; i++) {
+      for (unsigned int i = 0; i < from[0].vcount + from[0].scount; i++) {
         muladd_fmatrix_fvector(temp[from[i].r], from[i].m, fLongVector[from[i].c]);
       }
     }
@@ -766,7 +765,9 @@ DO_INLINE void filter(lfVector *V, fmatrix3x3 *S)
   }
 }
 
-#  if 0 /* this version of the CG algorithm does not work very well with partial constraints (where S has non-zero elements) */
+/* this version of the CG algorithm does not work very well with partial constraints
+ * (where S has non-zero elements). */
+#  if 0
 static int cg_filtered(lfVector *ldV, fmatrix3x3 *lA, lfVector *lB, lfVector *z, fmatrix3x3 *S)
 {
   // Solves for unknown X in equation AX=B
@@ -1455,7 +1456,8 @@ static float calc_nor_area_tri(float nor[3],
   return normalize_v3(nor);
 }
 
-/* XXX does not support force jacobians yet, since the effector system does not provide them either */
+/* XXX does not support force jacobians yet, since the effector system does not provide them either
+ */
 void BPH_mass_spring_force_face_wind(
     Implicit_Data *data, int v1, int v2, int v3, const float (*winvec)[3])
 {
@@ -1538,7 +1540,7 @@ void BPH_mass_spring_force_vertex_wind(Implicit_Data *data,
 BLI_INLINE void dfdx_spring(float to[3][3], const float dir[3], float length, float L, float k)
 {
   // dir is unit length direction, rest is spring's restlength, k is spring constant.
-  //return  ( (I-outerprod(dir, dir))*Min(1.0f, rest/length) - I) * -k;
+  // return  ( (I-outerprod(dir, dir))*Min(1.0f, rest/length) - I) * -k;
   outerproduct(to, dir, dir);
   sub_m3_m3m3(to, I, to);
 
@@ -1699,7 +1701,8 @@ bool BPH_mass_spring_force_spring_linear(Implicit_Data *data,
     dfdx_spring(dfdx, dir, length, restlen, stiffness_tension);
   }
   else if (new_compress) {
-    /* This is based on the Choi and Ko bending model, which works surprisingly well for compression. */
+    /* This is based on the Choi and Ko bending model,
+     * which works surprisingly well for compression. */
     float kb = stiffness_compression;
     float cb = kb; /* cb equal to kb seems to work, but a factor can be added if necessary */
 
@@ -1828,7 +1831,8 @@ BLI_INLINE void spring_angle(Implicit_Data *data,
   sub_v3_v3(r_vel_b, vel_e);
 }
 
-/* Angular springs roughly based on the bending model proposed by Baraff and Witkin in "Large Steps in Cloth Simulation". */
+/* Angular springs roughly based on the bending model proposed by Baraff and Witkin in "Large Steps
+ * in Cloth Simulation". */
 bool BPH_mass_spring_force_spring_angular(Implicit_Data *data,
                                           int i,
                                           int j,

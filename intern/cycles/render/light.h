@@ -43,10 +43,12 @@ class Light : public Node {
   Light();
 
   LightType type;
+  float3 strength;
   float3 co;
 
   float3 dir;
   float size;
+  float angle;
 
   float3 axisu;
   float sizeu;

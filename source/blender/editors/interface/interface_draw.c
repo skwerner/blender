@@ -1610,16 +1610,10 @@ void ui_draw_but_COLORBAND(uiBut *but, const uiWidgetColors *UNUSED(wcol), const
   immBindBuiltinProgram(GPU_SHADER_2D_CHECKER);
 
   /* Drawing the checkerboard. */
-  immUniform4f("color1",
-               UI_ALPHA_CHECKER_DARK / 255.0f,
-               UI_ALPHA_CHECKER_DARK / 255.0f,
-               UI_ALPHA_CHECKER_DARK / 255.0f,
-               1.0f);
-  immUniform4f("color2",
-               UI_ALPHA_CHECKER_LIGHT / 255.0f,
-               UI_ALPHA_CHECKER_LIGHT / 255.0f,
-               UI_ALPHA_CHECKER_LIGHT / 255.0f,
-               1.0f);
+  const float checker_dark = UI_ALPHA_CHECKER_DARK / 255.0f;
+  const float checker_light = UI_ALPHA_CHECKER_LIGHT / 255.0f;
+  immUniform4f("color1", checker_dark, checker_dark, checker_dark, 1.0f);
+  immUniform4f("color2", checker_light, checker_light, checker_light, 1.0f);
   immUniform1i("size", 8);
   immRectf(pos_id, x1, y1, x1 + sizex, rect->ymax);
   immUnbindProgram();
@@ -1804,12 +1798,12 @@ static void ui_draw_but_curve_grid(
                       1.0f);
 
   immBegin(GPU_PRIM_LINES, (int)line_count * 2);
-  while (fx < rect->xmax) {
+  while (fx <= rect->xmax) {
     immVertex2f(pos, fx, rect->ymin);
     immVertex2f(pos, fx, rect->ymax);
     fx += dx;
   }
-  while (fy < rect->ymax) {
+  while (fy <= rect->ymax) {
     immVertex2f(pos, rect->xmin, fy);
     immVertex2f(pos, rect->xmax, fy);
     fy += dy;
@@ -1849,6 +1843,17 @@ void ui_draw_but_CURVE(ARegion *ar, uiBut *but, const uiWidgetColors *wcol, cons
     cumap = (CurveMapping *)but->poin;
   }
 
+  /* calculate offset and zoom */
+  float zoomx = (BLI_rcti_size_x(rect) - 2.0f) / BLI_rctf_size_x(&cumap->curr);
+  float zoomy = (BLI_rcti_size_y(rect) - 2.0f) / BLI_rctf_size_y(&cumap->curr);
+  float offsx = cumap->curr.xmin - (1.0f / zoomx);
+  float offsy = cumap->curr.ymin - (1.0f / zoomy);
+
+  /* exit early if too narrow */
+  if (zoomx == 0.0f) {
+    return;
+  }
+
   CurveMap *cuma = &cumap->cm[cumap->cur];
 
   /* need scissor test, curve can draw outside of boundary */
@@ -1866,12 +1871,6 @@ void ui_draw_but_CURVE(ARegion *ar, uiBut *but, const uiWidgetColors *wcol, cons
               scissor_new.ymin,
               BLI_rcti_size_x(&scissor_new),
               BLI_rcti_size_y(&scissor_new));
-
-  /* calculate offset and zoom */
-  float zoomx = (BLI_rcti_size_x(rect) - 2.0f) / BLI_rctf_size_x(&cumap->curr);
-  float zoomy = (BLI_rcti_size_y(rect) - 2.0f) / BLI_rctf_size_y(&cumap->curr);
-  float offsx = cumap->curr.xmin - (1.0f / zoomx);
-  float offsy = cumap->curr.ymin - (1.0f / zoomy);
 
   /* Do this first to not mess imm context */
   if (but->a1 == UI_GRAD_H) {

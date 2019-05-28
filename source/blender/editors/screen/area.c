@@ -50,6 +50,7 @@
 #include "ED_screen.h"
 #include "ED_screen_types.h"
 #include "ED_space_api.h"
+#include "ED_time_scrub_ui.h"
 
 #include "GPU_immediate.h"
 #include "GPU_immediate_util.h"
@@ -202,7 +203,7 @@ static void area_draw_azone_fullscreen(short x1, short y1, short x2, short y2, f
 
   alpha = min_ff(alpha, 0.75f);
 
-  UI_icon_draw_aspect(x, y, ICON_FULLSCREEN_EXIT, 0.7f / UI_DPI_FAC, alpha, NULL);
+  UI_icon_draw_ex(x, y, ICON_FULLSCREEN_EXIT, 0.7f * U.inv_dpi_fac, 0.0f, alpha, NULL, false);
 
   /* debug drawing :
    * The click_rect is the same as defined in fullscreen_click_rcti_init
@@ -457,19 +458,6 @@ void ED_area_do_msg_notify_tag_refresh(
   ED_area_tag_refresh(sa);
 }
 
-static void region_do_msg_notify_tag_redraw(
-    /* Follow wmMsgNotifyFn spec */
-    bContext *UNUSED(C),
-    wmMsgSubscribeKey *UNUSED(msg_key),
-    wmMsgSubscribeValue *msg_val)
-{
-  ARegion *ar = msg_val->owner;
-  ED_region_tag_redraw(ar);
-
-  /* FIXME(campbell): shouldn't be needed. */
-  WM_main_add_notifier(NC_SPACE | ND_SPACE_VIEW3D, NULL);
-}
-
 void ED_area_do_mgs_subscribe_for_tool_header(
     /* Follow ARegionType.message_subscribe */
     const struct bContext *UNUSED(C),
@@ -480,16 +468,37 @@ void ED_area_do_mgs_subscribe_for_tool_header(
     struct ARegion *ar,
     struct wmMsgBus *mbus)
 {
+  BLI_assert(ar->regiontype == RGN_TYPE_TOOL_HEADER);
   wmMsgSubscribeValue msg_sub_value_region_tag_redraw = {
       .owner = ar,
       .user_data = ar,
-      /* TODO(campbell): investigate why
-       * ED_region_do_msg_notify_tag_redraw doesn't work here. */
-      // .notify = ED_region_do_msg_notify_tag_redraw,
-      .notify = region_do_msg_notify_tag_redraw,
+      .notify = ED_region_do_msg_notify_tag_redraw,
   };
   WM_msg_subscribe_rna_prop(
       mbus, &workspace->id, workspace, WorkSpace, tools, &msg_sub_value_region_tag_redraw);
+}
+
+void ED_area_do_mgs_subscribe_for_tool_ui(
+    /* Follow ARegionType.message_subscribe */
+    const struct bContext *UNUSED(C),
+    struct WorkSpace *workspace,
+    struct Scene *UNUSED(scene),
+    struct bScreen *UNUSED(screen),
+    struct ScrArea *UNUSED(sa),
+    struct ARegion *ar,
+    struct wmMsgBus *mbus)
+{
+  BLI_assert(ar->regiontype == RGN_TYPE_UI);
+  const char *category = UI_panel_category_active_get(ar, false);
+  if (category && STREQ(category, "Tool")) {
+    wmMsgSubscribeValue msg_sub_value_region_tag_redraw = {
+        .owner = ar,
+        .user_data = ar,
+        .notify = ED_region_do_msg_notify_tag_redraw,
+    };
+    WM_msg_subscribe_rna_prop(
+        mbus, &workspace->id, workspace, WorkSpace, tools, &msg_sub_value_region_tag_redraw);
+  }
 }
 
 /**
@@ -1050,11 +1059,11 @@ static void region_azones_scrollbars_initialize(ScrArea *sa, ARegion *ar)
 {
   const View2D *v2d = &ar->v2d;
 
-  if ((v2d->scroll & V2D_SCROLL_VERTICAL) && ((v2d->scroll & V2D_SCROLL_SCALE_VERTICAL) == 0)) {
+  if ((v2d->scroll & V2D_SCROLL_VERTICAL) && ((v2d->scroll & V2D_SCROLL_VERTICAL_HANDLES) == 0)) {
     region_azone_scrollbar_initialize(sa, ar, AZ_SCROLL_VERT);
   }
   if ((v2d->scroll & V2D_SCROLL_HORIZONTAL) &&
-      ((v2d->scroll & V2D_SCROLL_SCALE_HORIZONTAL) == 0)) {
+      ((v2d->scroll & V2D_SCROLL_HORIZONTAL_HANDLES) == 0)) {
     region_azone_scrollbar_initialize(sa, ar, AZ_SCROLL_HOR);
   }
 }
@@ -1110,7 +1119,7 @@ static int rct_fits(const rcti *rect, char dir, int size)
 static void region_overlap_fix(ScrArea *sa, ARegion *ar)
 {
   ARegion *ar1;
-  const int align = ar->alignment & ~RGN_SPLIT_PREV;
+  const int align = RGN_ALIGN_ENUM_FROM_MASK(ar->alignment);
   int align1 = 0;
 
   /* find overlapping previous region on same place */
@@ -1227,7 +1236,7 @@ static void region_rect_recursive(
     }
   }
 
-  int alignment = ar->alignment & ~RGN_SPLIT_PREV;
+  int alignment = RGN_ALIGN_ENUM_FROM_MASK(ar->alignment);
 
   /* set here, assuming userpref switching forces to call this again */
   ar->overlap = ED_region_is_overlap(sa->spacetype, ar->regiontype);
@@ -1524,7 +1533,8 @@ static void area_calc_totrct(ScrArea *sa, const rcti *window_rect)
     sa->totrct.ymax -= px;
   }
   /* Although the following asserts are correct they lead to a very unstable Blender.
-   * And the asserts would fail even in 2.7x (they were added in 2.8x as part of the top-bar commit).
+   * And the asserts would fail even in 2.7x
+   * (they were added in 2.8x as part of the top-bar commit).
    * For more details see T54864. */
 #if 0
   BLI_assert(sa->totrct.xmin >= 0);
@@ -1595,14 +1605,19 @@ static void ed_default_handlers(
     wmKeyMap *keymap = WM_keymap_ensure(wm->defaultconf, "View2D", 0, 0);
     WM_event_add_keymap_handler(handlers, keymap);
   }
-  if (flag & ED_KEYMAP_MARKERS) {
-    /* time-markers */
-    wmKeyMap *keymap = WM_keymap_ensure(wm->defaultconf, "Markers", 0, 0);
-    WM_event_add_keymap_handler_poll(handlers, keymap, event_in_markers_region);
-  }
   if (flag & ED_KEYMAP_ANIMATION) {
+    wmKeyMap *keymap;
+
+    /* time-markers */
+    keymap = WM_keymap_ensure(wm->defaultconf, "Markers", 0, 0);
+    WM_event_add_keymap_handler_poll(handlers, keymap, event_in_markers_region);
+
+    /* time-scrub */
+    keymap = WM_keymap_ensure(wm->defaultconf, "Time Scrub", 0, 0);
+    WM_event_add_keymap_handler_poll(handlers, keymap, ED_time_scrub_event_in_region);
+
     /* frame changing and timeline operators (for time spaces) */
-    wmKeyMap *keymap = WM_keymap_ensure(wm->defaultconf, "Animation", 0, 0);
+    keymap = WM_keymap_ensure(wm->defaultconf, "Animation", 0, 0);
     WM_event_add_keymap_handler(handlers, keymap);
   }
   if (flag & ED_KEYMAP_FRAMES) {
@@ -1612,13 +1627,18 @@ static void ed_default_handlers(
   }
   if (flag & ED_KEYMAP_HEADER) {
     /* standard keymap for headers regions */
-    wmKeyMap *keymap = WM_keymap_ensure(wm->defaultconf, "Header", 0, 0);
+    wmKeyMap *keymap = WM_keymap_ensure(wm->defaultconf, "Region Context Menu", 0, 0);
     WM_event_add_keymap_handler(handlers, keymap);
   }
   if (flag & ED_KEYMAP_FOOTER) {
     /* standard keymap for footer regions */
-    wmKeyMap *keymap = WM_keymap_ensure(wm->defaultconf, "Footer", 0, 0);
+    wmKeyMap *keymap = WM_keymap_ensure(wm->defaultconf, "Region Context Menu", 0, 0);
     WM_event_add_keymap_handler(handlers, keymap);
+  }
+  if (flag & ED_KEYMAP_NAVBAR) {
+    /* standard keymap for Navigation bar regions */
+    wmKeyMap *keymap = WM_keymap_ensure(wm->defaultconf, "Region Context Menu", 0, 0);
+    WM_event_add_keymap_handler(&ar->handlers, keymap);
   }
 
   /* Keep last because of LMB/RMB handling, see: T57527. */
@@ -1689,7 +1709,7 @@ void ED_area_update_region_sizes(wmWindowManager *wm, wmWindow *win, ScrArea *ar
     }
 
     /* Some AZones use View2D data which is only updated in region init, so call that first! */
-    region_azones_add(screen, area, ar, ar->alignment & ~RGN_SPLIT_PREV);
+    region_azones_add(screen, area, ar, RGN_ALIGN_ENUM_FROM_MASK(ar->alignment));
   }
   ED_area_azones_update(area, &win->eventstate->x);
 
@@ -1760,7 +1780,7 @@ void ED_area_initialize(wmWindowManager *wm, wmWindow *win, ScrArea *sa)
     }
 
     /* Some AZones use View2D data which is only updated in region init, so call that first! */
-    region_azones_add(screen, sa, ar, ar->alignment & ~RGN_SPLIT_PREV);
+    region_azones_add(screen, sa, ar, RGN_ALIGN_ENUM_FROM_MASK(ar->alignment));
   }
 
   /* Avoid re-initializing tools while resizing the window. */
@@ -2272,7 +2292,7 @@ static void ed_panel_draw(const bContext *C,
     }
   }
 
-  UI_panel_end(block, w, h);
+  UI_panel_end(block, w, h, open);
 }
 
 /**
@@ -2280,34 +2300,62 @@ static void ed_panel_draw(const bContext *C,
  * Matching against any of these strings will draw the panel.
  * Can be NULL to skip context checks.
  */
-void ED_region_panels_layout_ex(
-    const bContext *C, ARegion *ar, const char *contexts[], int contextnr, const bool vertical)
+void ED_region_panels_layout_ex(const bContext *C,
+                                ARegion *ar,
+                                ListBase *paneltypes,
+                                const char *contexts[],
+                                int contextnr,
+                                const bool vertical,
+                                const char *category_override)
 {
+  /* collect panels to draw */
+  WorkSpace *workspace = CTX_wm_workspace(C);
+  LinkNode *panel_types_stack = NULL;
+  for (PanelType *pt = paneltypes->last; pt; pt = pt->prev) {
+    /* Only draw top level panels. */
+    if (pt->parent) {
+      continue;
+    }
+
+    if (category_override) {
+      if (!STREQ(pt->category, category_override)) {
+        continue;
+      }
+    }
+
+    /* verify context */
+    if (contexts && pt->context[0] && !streq_array_any(pt->context, contexts)) {
+      continue;
+    }
+
+    /* If we're tagged, only use compatible. */
+    if (pt->owner_id[0] && BKE_workspace_owner_id_check(workspace, pt->owner_id) == false) {
+      continue;
+    }
+
+    /* draw panel */
+    if (pt->draw && (!pt->poll || pt->poll(C, pt))) {
+      BLI_linklist_prepend_alloca(&panel_types_stack, pt);
+    }
+  }
+
   ar->runtime.category = NULL;
 
-  const WorkSpace *workspace = CTX_wm_workspace(C);
   ScrArea *sa = CTX_wm_area(C);
-  PanelType *pt;
   View2D *v2d = &ar->v2d;
   int x, y, w, em;
-  bool is_context_new = 0;
-  int scroll;
 
   /* XXX, should use some better check? */
   /* For now also has hardcoded check for clip editor until it supports actual toolbar. */
-  bool use_category_tabs = ((1 << ar->regiontype) & RGN_TYPE_HAS_CATEGORY_MASK) ||
-                           (ar->regiontype == RGN_TYPE_TOOLS && sa->spacetype == SPACE_CLIP);
+  bool use_category_tabs = (category_override == NULL) &&
+                           ((((1 << ar->regiontype) & RGN_TYPE_HAS_CATEGORY_MASK) ||
+                             (ar->regiontype == RGN_TYPE_TOOLS && sa->spacetype == SPACE_CLIP)));
   /* offset panels for small vertical tab area */
   const char *category = NULL;
   const int category_tabs_width = UI_PANEL_CATEGORY_MARGIN_WIDTH;
   int margin_x = 0;
   const bool region_layout_based = ar->flag & RGN_FLAG_DYNAMIC_SIZE;
-
-  BLI_SMALLSTACK_DECLARE(pt_stack, PanelType *);
-
-  if (contextnr != -1) {
-    is_context_new = UI_view2d_tab_set(v2d, contextnr);
-  }
+  const bool is_context_new = (contextnr != -1) ? UI_view2d_tab_set(v2d, contextnr) : false;
 
   /* before setting the view */
   if (vertical) {
@@ -2325,45 +2373,21 @@ void ED_region_panels_layout_ex(
     v2d->scroll |= (V2D_SCROLL_BOTTOM);
     v2d->scroll &= ~(V2D_SCROLL_RIGHT);
   }
-
-  scroll = v2d->scroll;
-
-  /* collect panels to draw */
-  for (pt = ar->type->paneltypes.last; pt; pt = pt->prev) {
-    /* Only draw top level panels. */
-    if (pt->parent) {
-      continue;
-    }
-
-    /* verify context */
-    if (contexts && pt->context[0] && !streq_array_any(pt->context, contexts)) {
-      continue;
-    }
-
-    /* If we're tagged, only use compatible. */
-    if (pt->owner_id[0] && BKE_workspace_owner_id_check(workspace, pt->owner_id) == false) {
-      continue;
-    }
-
-    /* draw panel */
-    if (pt->draw && (!pt->poll || pt->poll(C, pt))) {
-      BLI_SMALLSTACK_PUSH(pt_stack, pt);
-    }
-  }
+  const int scroll = v2d->scroll;
 
   /* collect categories */
   if (use_category_tabs) {
     UI_panel_category_clear_all(ar);
 
     /* gather unique categories */
-    BLI_SMALLSTACK_ITER_BEGIN (pt_stack, pt) {
+    for (LinkNode *pt_link = panel_types_stack; pt_link; pt_link = pt_link->next) {
+      PanelType *pt = pt_link->link;
       if (pt->category[0]) {
         if (!UI_panel_category_find(ar, pt->category)) {
           UI_panel_category_add(ar, pt->category);
         }
       }
     }
-    BLI_SMALLSTACK_ITER_END;
 
     if (!UI_panel_category_is_visible(ar)) {
       use_category_tabs = false;
@@ -2391,7 +2415,8 @@ void ED_region_panels_layout_ex(
   /* set view2d view matrix  - UI_block_begin() stores it */
   UI_view2d_view_ortho(v2d);
 
-  BLI_SMALLSTACK_ITER_BEGIN (pt_stack, pt) {
+  for (LinkNode *pt_link = panel_types_stack; pt_link; pt_link = pt_link->next) {
+    PanelType *pt = pt_link->link;
     Panel *panel = UI_panel_find_by_type(&ar->panels, pt);
 
     if (use_category_tabs && pt->category[0] && !STREQ(category, pt->category)) {
@@ -2402,7 +2427,6 @@ void ED_region_panels_layout_ex(
 
     ed_panel_draw(C, sa, ar, &ar->panels, pt, panel, w, em, vertical);
   }
-  BLI_SMALLSTACK_ITER_END;
 
   /* align panels and return size */
   UI_panels_end(C, ar, &x, &y);
@@ -2473,9 +2497,11 @@ void ED_region_panels_layout_ex(
     ar->runtime.category = category;
   }
 }
+
 void ED_region_panels_layout(const bContext *C, ARegion *ar)
 {
-  ED_region_panels_layout_ex(C, ar, NULL, -1, true);
+  bool vertical = true;
+  ED_region_panels_layout_ex(C, ar, &ar->type->paneltypes, NULL, -1, vertical, NULL);
 }
 
 void ED_region_panels_draw(const bContext *C, ARegion *ar)
@@ -2515,9 +2541,8 @@ void ED_region_panels_draw(const bContext *C, ARegion *ar)
     mask_buf.xmax -= UI_PANEL_CATEGORY_MARGIN_WIDTH;
     mask = &mask_buf;
   }
-  View2DScrollers *scrollers = UI_view2d_scrollers_calc(
-      C, v2d, mask, V2D_ARG_DUMMY, V2D_ARG_DUMMY, V2D_ARG_DUMMY, V2D_ARG_DUMMY);
-  UI_view2d_scrollers_draw(C, v2d, scrollers);
+  View2DScrollers *scrollers = UI_view2d_scrollers_calc(v2d, mask);
+  UI_view2d_scrollers_draw(v2d, scrollers);
   UI_view2d_scrollers_free(scrollers);
 }
 
@@ -2525,7 +2550,7 @@ void ED_region_panels_ex(
     const bContext *C, ARegion *ar, const char *contexts[], int contextnr, const bool vertical)
 {
   /* TODO: remove? */
-  ED_region_panels_layout_ex(C, ar, contexts, contextnr, vertical);
+  ED_region_panels_layout_ex(C, ar, &ar->type->paneltypes, contexts, contextnr, vertical, NULL);
   ED_region_panels_draw(C, ar);
 }
 

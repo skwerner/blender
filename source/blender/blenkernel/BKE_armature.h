@@ -84,7 +84,9 @@ bool BKE_pose_minmax(
 int bone_autoside_name(char name[64], int strip_number, short axis, float head, float tail);
 
 struct Bone *BKE_armature_find_bone_name(struct bArmature *arm, const char *name);
-struct GHash *BKE_armature_bone_from_name_map(struct bArmature *arm);
+
+void BKE_armature_bone_hash_make(struct bArmature *arm);
+void BKE_armature_bone_hash_free(struct bArmature *arm);
 
 bool BKE_armature_bone_flag_test_recursive(const struct Bone *bone, int flag);
 
@@ -144,8 +146,9 @@ void BKE_armature_mat_pose_to_bone_ex(struct Depsgraph *depsgraph,
                                       float outmat[4][4]);
 
 void BKE_pchan_mat3_to_rot(struct bPoseChannel *pchan, float mat[3][3], bool use_compat);
+void BKE_pchan_rot_to_mat3(const struct bPoseChannel *pchan, float mat[3][3]);
 void BKE_pchan_apply_mat4(struct bPoseChannel *pchan, float mat[4][4], bool use_comat);
-void BKE_pchan_to_mat4(struct bPoseChannel *pchan, float chan_mat[4][4]);
+void BKE_pchan_to_mat4(const struct bPoseChannel *pchan, float chan_mat[4][4]);
 void BKE_pchan_calc_mat(struct bPoseChannel *pchan);
 
 /* Simple helper, computes the offset bone matrix. */

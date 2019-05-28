@@ -1298,7 +1298,7 @@ static int object_origin_set_exec(bContext *C, wmOperator *op)
         ignore_parent_tx(C, bmain, scene, ob);
 
         /* other users? */
-        //CTX_DATA_BEGIN (C, Object *, ob_other, selected_editable_objects)
+        // CTX_DATA_BEGIN (C, Object *, ob_other, selected_editable_objects)
         //{
 
         /* use existing context looper */
@@ -1324,7 +1324,7 @@ static int object_origin_set_exec(bContext *C, wmOperator *op)
             ignore_parent_tx(C, bmain, scene, ob_other);
           }
         }
-        //CTX_DATA_END;
+        // CTX_DATA_END;
       }
     }
   }
@@ -1334,6 +1334,11 @@ static int object_origin_set_exec(bContext *C, wmOperator *op)
     if (tob->data && (((ID *)tob->data)->tag & LIB_TAG_DOIT)) {
       BKE_object_batch_cache_dirty_tag(tob);
       DEG_id_tag_update(&tob->id, ID_RECALC_TRANSFORM | ID_RECALC_GEOMETRY);
+    }
+    /* special support for dupligroups */
+    else if (tob->instance_collection && tob->instance_collection->id.tag & LIB_TAG_DOIT) {
+      DEG_id_tag_update(&tob->id, ID_RECALC_TRANSFORM);
+      DEG_id_tag_update(&tob->instance_collection->id, ID_RECALC_COPY_ON_WRITE);
     }
   }
 

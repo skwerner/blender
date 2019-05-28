@@ -52,6 +52,7 @@
 #include "BLO_writefile.h"
 #include "BLO_undofile.h"
 
+#include "BKE_blendfile.h"
 #include "BKE_blender.h"
 #include "BKE_blender_undo.h"
 #include "BKE_context.h"
@@ -254,11 +255,15 @@ void WM_init(bContext *C, int argc, const char **argv)
 
   /* get the default database, plus a wm */
   bool is_factory_startup = true;
+  const bool use_data = true;
+  const bool use_userdef = true;
+
   wm_homefile_read(C,
                    NULL,
                    G.factory_startup,
                    false,
-                   true,
+                   use_data,
+                   use_userdef,
                    NULL,
                    WM_init_state_app_template_get(),
                    &is_factory_startup);
@@ -468,6 +473,14 @@ void WM_exit_ext(bContext *C, const bool do_python)
       WM_event_remove_handlers(C, &win->handlers);
       WM_event_remove_handlers(C, &win->modalhandlers);
       ED_screen_exit(C, win, WM_window_get_active_screen(win));
+    }
+
+    if (!G.background) {
+      if ((U.pref_flag & USER_PREF_FLAG_SAVE) && ((G.f & G_FLAG_USERPREF_NO_SAVE_ON_EXIT) == 0)) {
+        if (U.runtime.is_dirty) {
+          BKE_blendfile_userdef_write_all(NULL);
+        }
+      }
     }
   }
 

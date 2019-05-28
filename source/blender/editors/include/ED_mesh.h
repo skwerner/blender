@@ -142,44 +142,55 @@ bool BMBVH_EdgeVisible(struct BMBVHTree *tree,
 void ED_mesh_undosys_type(struct UndoType *ut);
 
 /* editmesh_select.c */
+struct EDBMSelectID_Context;
+struct EDBMSelectID_Context *EDBM_select_id_context_create(struct ViewContext *vc,
+                                                           struct Base **bases,
+                                                           const uint bases_len,
+                                                           short select_mode);
+void EDBM_select_id_context_destroy(struct EDBMSelectID_Context *sel_id_ctx);
+struct BMElem *EDBM_select_id_bm_elem_get(struct EDBMSelectID_Context *sel_id_ctx,
+                                          const uint sel_id,
+                                          uint *r_base_index);
+
+uint EDBM_select_id_context_offset_for_object_elem(const struct EDBMSelectID_Context *sel_id_ctx,
+                                                   int base_index,
+                                                   char htype);
+
+uint EDBM_select_id_context_elem_len(const struct EDBMSelectID_Context *sel_id_ctx);
+
 void EDBM_select_mirrored(
     struct BMEditMesh *em, const int axis, const bool extend, int *r_totmirr, int *r_totfail);
 void EDBM_automerge(struct Scene *scene, struct Object *ob, bool update, const char hflag);
 
-bool EDBM_backbuf_border_init(
-    struct ViewContext *vc, short xmin, short ymin, short xmax, short ymax);
-bool EDBM_backbuf_check(unsigned int index);
-void EDBM_backbuf_free(void);
-
-bool EDBM_backbuf_border_mask_init(struct ViewContext *vc,
-                                   const int mcords[][2],
-                                   short tot,
-                                   short xmin,
-                                   short ymin,
-                                   short xmax,
-                                   short ymax);
-bool EDBM_backbuf_circle_init(struct ViewContext *vc, short xs, short ys, short rads);
-
 struct BMVert *EDBM_vert_find_nearest_ex(struct ViewContext *vc,
                                          float *r_dist,
                                          const bool use_select_bias,
-                                         bool use_cycle);
+                                         bool use_cycle,
+                                         struct Base **bases,
+                                         uint bases_len,
+                                         uint *r_base_index);
 struct BMVert *EDBM_vert_find_nearest(struct ViewContext *vc, float *r_dist);
 
 struct BMEdge *EDBM_edge_find_nearest_ex(struct ViewContext *vc,
                                          float *r_dist,
                                          float *r_dist_center,
                                          const bool use_select_bias,
-                                         const bool use_cycle,
-                                         struct BMEdge **r_eed_zbuf);
+                                         bool use_cycle,
+                                         struct BMEdge **r_eed_zbuf,
+                                         struct Base **bases,
+                                         uint bases_len,
+                                         uint *r_base_index);
 struct BMEdge *EDBM_edge_find_nearest(struct ViewContext *vc, float *r_dist);
 
 struct BMFace *EDBM_face_find_nearest_ex(struct ViewContext *vc,
                                          float *r_dist,
                                          float *r_dist_center,
                                          const bool use_select_bias,
-                                         const bool use_cycle,
-                                         struct BMFace **r_efa_zbuf);
+                                         bool use_cycle,
+                                         struct BMFace **r_efa_zbuf,
+                                         struct Base **bases,
+                                         uint bases_len,
+                                         uint *r_base_index);
 struct BMFace *EDBM_face_find_nearest(struct ViewContext *vc, float *r_dist);
 
 bool EDBM_unified_findnearest(struct ViewContext *vc,
@@ -230,8 +241,6 @@ void em_setup_viewcontext(struct bContext *C, struct ViewContext *vc); /* rename
 bool EDBM_mesh_deselect_all_multi_ex(struct Base **bases, const uint bases_len);
 bool EDBM_mesh_deselect_all_multi(struct bContext *C);
 
-extern unsigned int bm_vertoffs, bm_solidoffs, bm_wireoffs;
-
 /* editmesh_preselect_edgering.c */
 struct EditMesh_PreSelEdgeRing;
 struct EditMesh_PreSelEdgeRing *EDBM_preselect_edgering_create(void);
@@ -271,7 +280,6 @@ bool paintface_mouse_select(struct bContext *C,
                             bool extend,
                             bool deselect,
                             bool toggle);
-bool do_paintface_box_select(struct ViewContext *vc, const struct rcti *rect, int sel_op);
 bool paintface_deselect_all_visible(struct bContext *C,
                                     struct Object *ob,
                                     int action,

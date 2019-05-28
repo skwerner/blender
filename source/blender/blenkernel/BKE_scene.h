@@ -102,7 +102,6 @@ int BKE_scene_base_iter_next(struct Depsgraph *depsgraph,
 
 void BKE_scene_base_flag_to_objects(struct ViewLayer *view_layer);
 void BKE_scene_object_base_flag_sync_from_base(struct Base *base);
-void BKE_scene_object_base_flag_sync_from_object(struct Base *base);
 
 void BKE_scene_set_background(struct Main *bmain, struct Scene *sce);
 struct Scene *BKE_scene_set_name(struct Main *bmain, const char *name);
@@ -240,6 +239,11 @@ void BKE_scene_cursor_rot_to_quat(const struct View3DCursor *cursor, float quat[
 void BKE_scene_cursor_quat_to_rot(struct View3DCursor *cursor,
                                   const float quat[4],
                                   bool use_compat);
+
+void BKE_scene_cursor_to_mat4(const struct View3DCursor *cursor, float mat[4][4]);
+void BKE_scene_cursor_from_mat4(struct View3DCursor *cursor,
+                                const float mat[4][4],
+                                bool use_compat);
 
 #ifdef __cplusplus
 }

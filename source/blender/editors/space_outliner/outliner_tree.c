@@ -302,6 +302,9 @@ static void outliner_add_scene_contents(SpaceOutliner *soops,
     tenlay->directdata = view_layer;
   }
 
+  /* World */
+  outliner_add_element(soops, lb, sce->world, te, 0, 0);
+
   /* Collections */
   ten = outliner_add_element(soops, lb, &sce->id, te, TSE_SCENE_COLLECTION_BASE, 0);
   ten->name = IFACE_("Scene Collection");
@@ -360,12 +363,12 @@ static void outliner_add_object_contents(SpaceOutliner *soops,
         pchan->temp = (void *)ten;
 
         if (pchan->constraints.first) {
-          //Object *target;
+          // Object *target;
           bConstraint *con;
           TreeElement *ten1;
           TreeElement *tenla1 = outliner_add_element(
               soops, &ten->subtree, ob, ten, TSE_CONSTRAINT_BASE, 0);
-          //char *str;
+          // char *str;
 
           tenla1->name = IFACE_("Constraints");
           for (con = pchan->constraints.first; con; con = con->next, const_index++) {
@@ -426,11 +429,11 @@ static void outliner_add_object_contents(SpaceOutliner *soops,
   }
 
   if (ob->constraints.first) {
-    //Object *target;
+    // Object *target;
     bConstraint *con;
     TreeElement *ten;
     TreeElement *tenla = outliner_add_element(soops, &te->subtree, ob, te, TSE_CONSTRAINT_BASE, 0);
-    //char *str;
+    // char *str;
     int a;
 
     tenla->name = IFACE_("Constraints");
@@ -654,7 +657,7 @@ static void outliner_add_id_contents(SpaceOutliner *soops,
     }
     case ID_AC: {
       // XXX do we want to be exposing the F-Curves here?
-      //bAction *act = (bAction *)id;
+      // bAction *act = (bAction *)id;
       break;
     }
     case ID_AR: {
@@ -1370,6 +1373,12 @@ static void outliner_add_layer_collections_recursive(SpaceOutliner *soops,
                                                      const bool show_objects)
 {
   for (LayerCollection *lc = layer_collections->first; lc; lc = lc->next) {
+    const bool exclude = (lc->flag & LAYER_COLLECTION_EXCLUDE) != 0;
+
+    if (exclude && ((soops->show_restrict_flags & SO_RESTRICT_ENABLE) == 0)) {
+      continue;
+    }
+
     ID *id = &lc->collection->id;
     TreeElement *ten = outliner_add_element(soops, tree, id, parent_ten, TSE_LAYER_COLLECTION, 0);
 
@@ -1382,8 +1391,7 @@ static void outliner_add_layer_collections_recursive(SpaceOutliner *soops,
       tselem->flag &= ~TSE_CLOSED;
     }
 
-    const bool exclude = (lc->flag & LAYER_COLLECTION_EXCLUDE) != 0;
-    if (exclude || ((lc->runtime_flag & LAYER_COLLECTION_VISIBLE) == 0)) {
+    if (exclude || (lc->runtime_flag & LAYER_COLLECTION_VISIBLE) == 0) {
       ten->flag |= TE_DISABLED;
     }
 
@@ -1479,8 +1487,9 @@ static void outliner_make_object_parent_hierarchy(ListBase *lb)
 }
 
 /**
-  * For all objects in the tree, lookup the parent in this map, and move or add tree elements as needed.
-  */
+ * For all objects in the tree, lookup the parent in this map,
+ * and move or add tree elements as needed.
+ */
 static void outliner_make_object_parent_hierarchy_collections(SpaceOutliner *soops,
                                                               GHash *object_tree_elements_hash)
 {
@@ -1799,7 +1808,7 @@ static void outliner_collections_children_sort(ListBase *lb)
   }
 
   for (te = lb->first; te; te = te->next) {
-    outliner_sort(&te->subtree);
+    outliner_collections_children_sort(&te->subtree);
   }
 }
 

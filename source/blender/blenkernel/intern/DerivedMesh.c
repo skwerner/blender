@@ -246,8 +246,8 @@ static const MLoopTri *dm_getLoopTriArray(DerivedMesh *dm)
   }
   else {
     BLI_rw_mutex_lock(&loops_cache_lock, THREAD_LOCK_WRITE);
-    /* We need to ensure array is still NULL inside mutex-protected code, some other thread might have already
-     * recomputed those looptris. */
+    /* We need to ensure array is still NULL inside mutex-protected code,
+     * some other thread might have already recomputed those looptris. */
     if (dm->looptris.array == NULL) {
       dm->recalcLoopTri(dm);
     }
@@ -485,7 +485,8 @@ void DM_ensure_normals(DerivedMesh *dm)
 /**
  * Ensure the array is large enough
  *
- * \note This function must always be thread-protected by caller. It should only be used by internal code.
+ * \note This function must always be thread-protected by caller.
+ * It should only be used by internal code.
  */
 void DM_ensure_looptri_data(DerivedMesh *dm)
 {
@@ -1039,16 +1040,28 @@ static void mesh_calc_modifier_final_normals(const Mesh *mesh_input,
   /* Compute normals. */
   const bool do_loop_normals = ((mesh_input->flag & ME_AUTOSMOOTH) != 0 ||
                                 (dataMask->lmask & CD_MASK_NORMAL) != 0);
-  /* Some modifiers may need this info from their target (other) object, simpler to generate it here as well.
+  /* Some modifiers may need this info from their target (other) object,
+   * simpler to generate it here as well.
    * Note that they will always be generated when no loop normals are comptuted,
    * since they are needed by drawing code. */
   const bool do_poly_normals = ((dataMask->pmask & CD_MASK_NORMAL) != 0);
 
   if (do_loop_normals) {
-    /* In case we also need poly normals, add the layer here, then BKE_mesh_calc_normals_split() will fill it. */
+    /* In case we also need poly normals, add the layer and compute them here
+     * (BKE_mesh_calc_normals_split() assumes that if that data exists, it is always valid). */
     if (do_poly_normals) {
       if (!CustomData_has_layer(&mesh_final->pdata, CD_NORMAL)) {
-        CustomData_add_layer(&mesh_final->pdata, CD_NORMAL, CD_CALLOC, NULL, mesh_final->totpoly);
+        float(*polynors)[3] = CustomData_add_layer(
+            &mesh_final->pdata, CD_NORMAL, CD_CALLOC, NULL, mesh_final->totpoly);
+        BKE_mesh_calc_normals_poly(mesh_final->mvert,
+                                   NULL,
+                                   mesh_final->totvert,
+                                   mesh_final->mloop,
+                                   mesh_final->mpoly,
+                                   mesh_final->totloop,
+                                   mesh_final->totpoly,
+                                   polynors,
+                                   false);
       }
     }
     /* Compute loop normals (note: will compute poly and vert normals as well, if needed!) */
@@ -1076,8 +1089,9 @@ static void mesh_calc_modifier_final_normals(const Mesh *mesh_input,
     }
   }
 
-  /* Some modifiers, like datatransfer, may generate those data as temp layer, we do not want to keep them,
-   * as they are used by display code when available (i.e. even if autosmooth is disabled). */
+  /* Some modifiers, like data-transfer, may generate those data as temp layer,
+   * we do not want to keep them, as they are used by display code when available
+   * (i.e. even if autosmooth is disabled). */
   if (!do_loop_normals && CustomData_has_layer(&mesh_final->ldata, CD_NORMAL)) {
     CustomData_free_layers(&mesh_final->ldata, CD_NORMAL, mesh_final->totloop);
   }
@@ -1354,7 +1368,8 @@ static void mesh_calc_modifiers(struct Depsgraph *depsgraph,
           CustomData_add_layer(
               &mesh_final->pdata, CD_ORIGINDEX, CD_CALLOC, NULL, mesh_final->totpoly);
 
-          /* Not worth parallelizing this, gives less than 0.1% overall speedup in best of best cases... */
+          /* Not worth parallelizing this,
+           * gives less than 0.1% overall speedup in best of best cases... */
           range_vn_i(
               CustomData_get_layer(&mesh_final->vdata, CD_ORIGINDEX), mesh_final->totvert, 0);
           range_vn_i(
@@ -1574,11 +1589,13 @@ static void editbmesh_calc_modifier_final_normals(const Mesh *mesh_input,
 {
   const bool do_loop_normals = ((mesh_input->flag & ME_AUTOSMOOTH) != 0 ||
                                 (dataMask->lmask & CD_MASK_NORMAL) != 0);
-  /* Some modifiers may need this info from their target (other) object, simpler to generate it here as well. */
+  /* Some modifiers may need this info from their target (other) object,
+   * simpler to generate it here as well. */
   const bool do_poly_normals = ((dataMask->pmask & CD_MASK_NORMAL) != 0);
 
   if (do_loop_normals) {
-    /* In case we also need poly normals, add the layer here, then BKE_mesh_calc_normals_split() will fill it. */
+    /* In case we also need poly normals, add the layer here,
+     * then BKE_mesh_calc_normals_split() will fill it. */
     if (do_poly_normals) {
       if (!CustomData_has_layer(&mesh_final->pdata, CD_NORMAL)) {
         CustomData_add_layer(&mesh_final->pdata, CD_NORMAL, CD_CALLOC, NULL, mesh_final->totpoly);
@@ -2009,7 +2026,10 @@ static void mesh_build_data(struct Depsgraph *depsgraph,
      * but this avoids waiting on first stroke) */
     /* XXX Disabled for now.
      * This can create horrible nasty bugs by generating re-entrant call of mesh_get_eval_final! */
-    //      BKE_sculpt_update_mesh_elements(depsgraph, scene, scene->toolsettings->sculpt, ob, false, false);
+#if 0
+    BKE_sculpt_update_mesh_elements(
+        depsgraph, scene, scene->toolsettings->sculpt, ob, false, false);
+#endif
   }
 
   mesh_runtime_check_normals_valid(ob->runtime.mesh_eval);
@@ -2050,7 +2070,6 @@ static void object_get_datamask(const Depsgraph *depsgraph,
                                 bool *r_need_mapping)
 {
   ViewLayer *view_layer = DEG_get_evaluated_view_layer(depsgraph);
-  Object *actob = view_layer->basact ? DEG_get_original_object(view_layer->basact->object) : NULL;
 
   DEG_get_customdata_mask_for_object(depsgraph, ob, r_mask);
 
@@ -2058,6 +2077,13 @@ static void object_get_datamask(const Depsgraph *depsgraph,
     *r_need_mapping = false;
   }
 
+  /* Must never access original objects when dependency graph is not active: it might be already
+   * freed. */
+  if (!DEG_is_active(depsgraph)) {
+    return;
+  }
+
+  Object *actob = view_layer->basact ? DEG_get_original_object(view_layer->basact->object) : NULL;
   if (DEG_get_original_object(ob) == actob) {
     bool editing = BKE_paint_select_face_test(actob);
 
@@ -2433,7 +2459,8 @@ static void mesh_init_origspace(Mesh *mesh)
       }
       invert_v2(scale);
 
-      /* Finally, transform all vcos_2d into ((0, 0), (1, 1)) square and assign them as origspace. */
+      /* Finally, transform all vcos_2d into ((0, 0), (1, 1))
+       * square and assign them as origspace. */
       for (j = 0; j < mp->totloop; j++, lof++) {
         add_v2_v2v2(lof->uv, vcos_2d[j], translate);
         mul_v2_v2(lof->uv, scale);

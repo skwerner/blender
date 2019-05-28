@@ -223,7 +223,8 @@ void BKE_object_modifier_hook_reset(Object *ob, HookModifierData *hmd)
     if (hmd->subtarget[0] && pchan) {
       float imat[4][4], mat[4][4];
 
-      /* calculate the world-space matrix for the pose-channel target first, then carry on as usual */
+      /* Calculate the world-space matrix for the pose-channel target first,
+       * then carry on as usual. */
       mul_m4_m4m4(mat, hmd->object->obmat, pchan->pose_mat);
 
       invert_m4_m4(imat, mat);
@@ -247,7 +248,8 @@ void BKE_object_modifier_gpencil_hook_reset(Object *ob, HookGpencilModifierData 
   if (hmd->subtarget[0] && pchan) {
     float imat[4][4], mat[4][4];
 
-    /* calculate the world-space matrix for the pose-channel target first, then carry on as usual */
+    /* Calculate the world-space matrix for the pose-channel target first,
+     * then carry on as usual. */
     mul_m4_m4m4(mat, hmd->object->obmat, pchan->pose_mat);
 
     invert_m4_m4(imat, mat);
@@ -467,6 +469,7 @@ void BKE_object_free_derived_caches(Object *ob)
     ob->runtime.mesh_deform_eval = NULL;
   }
 
+  BKE_object_to_mesh_clear(ob);
   BKE_object_free_curve_cache(ob);
 
   /* clear grease pencil data */
@@ -1159,7 +1162,8 @@ static void copy_object_pose(Object *obn, const Object *ob, const int flag)
 
     chan->flag &= ~(POSE_LOC | POSE_ROT | POSE_SIZE);
 
-    /* XXX Remapping object pointing onto itself should be handled by generic BKE_library_remap stuff, but...
+    /* XXX Remapping object pointing onto itself should be handled by generic
+     *     BKE_library_remap stuff, but...
      *     the flush_constraint_targets callback am not sure about, so will delay that for now. */
     for (con = chan->constraints.first; con; con = con->next) {
       const bConstraintTypeInfo *cti = BKE_constraint_typeinfo_get(con);
@@ -1334,8 +1338,10 @@ void BKE_object_transform_copy(Object *ob_tar, const Object *ob_src)
 }
 
 /**
- * Only copy internal data of Object ID from source to already allocated/initialized destination.
- * You probably never want to use that directly, use BKE_id_copy or BKE_id_copy_ex for typical needs.
+ * Only copy internal data of Object ID from source
+ * to already allocated/initialized destination.
+ * You probably never want to use that directly,
+ * use #BKE_id_copy or #BKE_id_copy_ex for typical needs.
  *
  * WARNING! This function will not handle ID user count!
  *
@@ -1438,7 +1444,8 @@ void BKE_object_copy_data(Main *bmain, Object *ob_dst, const Object *ob_src, con
 
   copy_object_lod(ob_dst, ob_src, flag_subdata);
 
-  /* Do not copy object's preview (mostly due to the fact renderers create temp copy of objects). */
+  /* Do not copy object's preview
+   * (mostly due to the fact renderers create temp copy of objects). */
   if ((flag & LIB_ID_COPY_NO_PREVIEW) == 0 && false) { /* XXX TODO temp hack */
     BKE_previewimg_id_copy(&ob_dst->id, &ob_src->id);
   }
@@ -1461,11 +1468,13 @@ Object *BKE_object_copy(Main *bmain, const Object *ob)
 
 /** Perform deep-copy of object and its 'children' data-blocks (obdata, materials, actions, etc.).
  *
- * \param dupflag Controls which sub-data are also duplicated (see #eDupli_ID_Flags in DNA_userdef_types.h).
+ * \param dupflag: Controls which sub-data are also duplicated
+ * (see #eDupli_ID_Flags in DNA_userdef_types.h).
  *
- * \note This function does not do any remapping to new IDs, caller must do it (\a #BKE_libblock_relink_to_newid()).
- * \note Caller MUST free \a newid pointers itself (#BKE_main_id_clear_newpoins()) and call updates of DEG too
- *       (#DAG_relations_tag_update()).
+ * \note This function does not do any remapping to new IDs, caller must do it
+ * (\a #BKE_libblock_relink_to_newid()).
+ * \note Caller MUST free \a newid pointers itself (#BKE_main_id_clear_newpoins()) and call updates
+ * of DEG too (#DAG_relations_tag_update()).
  */
 Object *BKE_object_duplicate(Main *bmain, const Object *ob, const int dupflag)
 {
@@ -1643,7 +1652,7 @@ Object *BKE_object_duplicate(Main *bmain, const Object *ob, const int dupflag)
       }
       break;
     case OB_LIGHTPROBE:
-      if (dupflag != 0) {
+      if (dupflag & USER_DUP_LIGHTPROBE) {
         ID_NEW_REMAP_US2(obn->data)
         else
         {
@@ -1665,7 +1674,7 @@ Object *BKE_object_duplicate(Main *bmain, const Object *ob, const int dupflag)
       }
       break;
     case OB_GPENCIL:
-      if (dupflag != 0) {
+      if (dupflag & USER_DUP_GPENCIL) {
         ID_NEW_REMAP_US2(obn->data)
         else
         {
@@ -1731,7 +1740,8 @@ void BKE_object_make_local_ex(Main *bmain,
   /* - only lib users: do nothing (unless force_local is set)
    * - only local users: set flag
    * - mixed: make copy
-   * In case we make a whole lib's content local, we always want to localize, and we skip remapping (done later).
+   * In case we make a whole lib's content local,
+   * we always want to localize, and we skip remapping (done later).
    */
 
   if (!ID_IS_LINKED(ob)) {
@@ -1844,10 +1854,12 @@ void BKE_object_copy_proxy_drivers(Object *ob, Object *target)
   }
 }
 
-/* proxy rule: lib_object->proxy_from == the one we borrow from, set temporally while object_update */
-/*             local_object->proxy == pointer to library object, saved in files and read */
-/*             local_object->proxy_group == pointer to collection dupli-object, saved in files and read */
-
+/**
+ * Proxy rule:
+ * - lib_object->proxy_from == the one we borrow from, set temporally while object_update.
+ * - local_object->proxy == pointer to library object, saved in files and read.
+ * - local_object->proxy_group == pointer to collection dupli-object, saved in files and read.
+ */
 void BKE_object_make_proxy(Main *bmain, Object *ob, Object *target, Object *cob)
 {
   /* paranoia checks */
@@ -1940,7 +1952,6 @@ void BKE_object_make_proxy(Main *bmain, Object *ob, Object *target, Object *cob)
   /* copy IDProperties */
   if (ob->id.properties) {
     IDP_FreeProperty(ob->id.properties);
-    MEM_freeN(ob->id.properties);
     ob->id.properties = NULL;
   }
   if (target->id.properties) {
@@ -2005,7 +2016,7 @@ void BKE_object_scale_to_mat3(Object *ob, float mat[3][3])
   size_to_mat3(mat, vec);
 }
 
-void BKE_object_rot_to_mat3(Object *ob, float mat[3][3], bool use_drot)
+void BKE_object_rot_to_mat3(const Object *ob, float mat[3][3], bool use_drot)
 {
   float rmat[3][3], dmat[3][3];
 
@@ -2015,7 +2026,8 @@ void BKE_object_rot_to_mat3(Object *ob, float mat[3][3], bool use_drot)
 
   /* rotations may either be quats, eulers (with various rotation orders), or axis-angle */
   if (ob->rotmode > 0) {
-    /* euler rotations (will cause gimble lock, but this can be alleviated a bit with rotation orders) */
+    /* Euler rotations
+     * (will cause gimble lock, but this can be alleviated a bit with rotation orders). */
     eulO_to_mat3(rmat, ob->rot, ob->rotmode);
     eulO_to_mat3(dmat, ob->drot, ob->rotmode);
   }
@@ -2242,11 +2254,11 @@ static bool ob_parcurve(Object *ob, Object *par, float mat[4][4])
     return false;
   }
 
-  /* ctime is now a proper var setting of Curve which gets set by Animato like any other var that's animated,
-   * but this will only work if it actually is animated...
+  /* ctime is now a proper var setting of Curve which gets set by Animato like any other var
+   * that's animated, but this will only work if it actually is animated.
    *
-   * we divide the curvetime calculated in the previous step by the length of the path, to get a time
-   * factor, which then gets clamped to lie within 0.0 - 1.0 range
+   * We divide the curvetime calculated in the previous step by the length of the path,
+   * to get a time factor, which then gets clamped to lie within 0.0 - 1.0 range.
    */
   if (cu->pathlen) {
     ctime = cu->ctime / cu->pathlen;
@@ -2491,7 +2503,8 @@ void BKE_object_get_parent_matrix(Object *ob, Object *par, float parentmat[4][4]
 }
 
 /**
- * \param r_originmat: Optional matrix that stores the space the object is in (without its own matrix applied)
+ * \param r_originmat: Optional matrix that stores the space the object is in
+ * (without its own matrix applied)
  */
 static void solve_parenting(
     Object *ob, Object *par, float obmat[4][4], float r_originmat[3][3], const bool set_origin)
@@ -2614,7 +2627,8 @@ void BKE_object_workob_calc_parent(Depsgraph *depsgraph, Scene *scene, Object *o
   unit_m4(workob->parentinv);
   unit_m4(workob->constinv);
 
-  /* Since this is used while calculating parenting, at this moment ob_eval->parent is still NULL. */
+  /* Since this is used while calculating parenting,
+   * at this moment ob_eval->parent is still NULL. */
   workob->parent = DEG_get_evaluated_object(depsgraph, ob->parent);
 
   workob->trackflag = ob->trackflag;
@@ -2636,8 +2650,10 @@ void BKE_object_workob_calc_parent(Depsgraph *depsgraph, Scene *scene, Object *o
  * Applies the global transformation \a mat to the \a ob using a relative parent space if supplied.
  *
  * \param mat: the global transformation mat that the object should be set object to.
- * \param parent: the parent space in which this object will be set relative to (should probably always be parent_eval).
- * \param use_compat: true to ensure that rotations are set using the min difference between the old and new orientation.
+ * \param parent: the parent space in which this object will be set relative to
+ * (should probably always be parent_eval).
+ * \param use_compat: true to ensure that rotations are set using the
+ * min difference between the old and new orientation.
  */
 void BKE_object_apply_mat4_ex(
     Object *ob, float mat[4][4], Object *parent, float parentinv[4][4], const bool use_compat)
@@ -3177,14 +3193,19 @@ static void object_handle_update_proxy(Depsgraph *depsgraph,
   }
 }
 
-/* proxy rule: lib_object->proxy_from == the one we borrow from, only set temporal and cleared here */
-/*           local_object->proxy      == pointer to library object, saved in files and read */
-
-/* function below is polluted with proxy exceptions, cleanup will follow! */
-
-/* the main object update call, for object matrix, constraints, keys and displist (modifiers) */
-/* requires flags to be set! */
-/* Ideally we shouldn't have to pass the rigid body world, but need bigger restructuring to avoid id */
+/**
+ * Proxy rule:
+ * - lib_object->proxy_from == the one we borrow from, only set temporal and cleared here.
+ * - local_object->proxy    == pointer to library object, saved in files and read.
+ *
+ * Function below is polluted with proxy exceptions, cleanup will follow!
+ *
+ * The main object update call, for object matrix, constraints, keys and displist (modifiers)
+ * requires flags to be set!
+ *
+ * Ideally we shouldn't have to pass the rigid body world,
+ * but need bigger restructuring to avoid id.
+ */
 void BKE_object_handle_update_ex(Depsgraph *depsgraph,
                                  Scene *scene,
                                  Object *ob,
@@ -4465,4 +4486,33 @@ void BKE_object_type_set_empty_for_versioning(Object *ob)
     ob->pose = NULL;
   }
   ob->mode = OB_MODE_OBJECT;
+}
+
+/* Updates select_id of all objects in the given bmain. */
+void BKE_object_update_select_id(struct Main *bmain)
+{
+  Object *ob = bmain->objects.first;
+  int select_id = 1;
+  while (ob) {
+    ob->runtime.select_id = select_id++;
+    ob = ob->id.next;
+  }
+}
+
+Mesh *BKE_object_to_mesh(Depsgraph *depsgraph, Object *object, bool preserve_all_data_layers)
+{
+  BKE_object_to_mesh_clear(object);
+
+  Mesh *mesh = BKE_mesh_new_from_object(depsgraph, object, preserve_all_data_layers);
+  object->runtime.object_as_temp_mesh = mesh;
+  return mesh;
+}
+
+void BKE_object_to_mesh_clear(Object *object)
+{
+  if (object->runtime.object_as_temp_mesh == NULL) {
+    return;
+  }
+  BKE_id_free(NULL, object->runtime.object_as_temp_mesh);
+  object->runtime.object_as_temp_mesh = NULL;
 }

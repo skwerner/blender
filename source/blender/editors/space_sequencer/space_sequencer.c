@@ -157,8 +157,8 @@ static SpaceLink *sequencer_new(const ScrArea *UNUSED(sa), const Scene *scene)
   ar->v2d.minzoom = 0.01f;
   ar->v2d.maxzoom = 100.0f;
 
-  ar->v2d.scroll |= (V2D_SCROLL_BOTTOM | V2D_SCROLL_SCALE_HORIZONTAL);
-  ar->v2d.scroll |= (V2D_SCROLL_LEFT | V2D_SCROLL_SCALE_VERTICAL);
+  ar->v2d.scroll |= (V2D_SCROLL_BOTTOM | V2D_SCROLL_HORIZONTAL_HANDLES);
+  ar->v2d.scroll |= (V2D_SCROLL_RIGHT | V2D_SCROLL_VERTICAL_HANDLES);
   ar->v2d.keepzoom = 0;
   ar->v2d.keeptot = 0;
   ar->v2d.align = V2D_ALIGN_NO_NEG_Y;
@@ -695,8 +695,6 @@ static void sequencer_preview_region_listener(wmWindow *UNUSED(win),
     case NC_ANIMATION:
       switch (wmn->data) {
         case ND_KEYFRAME:
-          /* Otherwise, often prevents seeing immediately effects of keyframe editing... */
-          BKE_sequencer_cache_cleanup();
           ED_region_tag_redraw(ar);
           break;
       }
@@ -731,6 +729,7 @@ static void sequencer_buttons_region_init(wmWindowManager *wm, ARegion *ar)
   keymap = WM_keymap_ensure(wm->defaultconf, "SequencerCommon", SPACE_SEQ, 0);
   WM_event_add_keymap_handler_v2d_mask(&ar->handlers, keymap);
 
+  UI_panel_category_active_set_default(ar, "Strip");
   ED_region_panels_init(wm, ar);
 }
 
@@ -818,7 +817,7 @@ void ED_spacetype_sequencer(void)
   art->draw = sequencer_main_region_draw;
   art->listener = sequencer_main_region_listener;
   art->message_subscribe = sequencer_main_region_message_subscribe;
-  art->keymapflag = ED_KEYMAP_VIEW2D | ED_KEYMAP_MARKERS | ED_KEYMAP_FRAMES | ED_KEYMAP_ANIMATION;
+  art->keymapflag = ED_KEYMAP_VIEW2D | ED_KEYMAP_FRAMES | ED_KEYMAP_ANIMATION;
 
   BLI_addhead(&st->regiontypes, art);
 
@@ -834,7 +833,7 @@ void ED_spacetype_sequencer(void)
   /* regions: listview/buttons */
   art = MEM_callocN(sizeof(ARegionType), "spacetype sequencer region");
   art->regionid = RGN_TYPE_UI;
-  art->prefsizex = 220;  // XXX
+  art->prefsizex = UI_SIDEBAR_PANEL_WIDTH;
   art->keymapflag = ED_KEYMAP_UI | ED_KEYMAP_FRAMES;
   art->listener = sequencer_buttons_region_listener;
   art->init = sequencer_buttons_region_init;

@@ -21,10 +21,14 @@ import bpy
 import nodeitems_utils
 from bpy.types import Header, Menu, Panel
 from bpy.app.translations import pgettext_iface as iface_
+from bpy.app.translations import contexts as i18n_contexts
 from bl_ui.utils import PresetPanel
 from .properties_grease_pencil_common import (
     AnnotationDataPanel,
     GreasePencilToolsPanel,
+)
+from .space_toolsystem_common import (
+    ToolActivePanelHelper,
 )
 from .properties_material import (
     EEVEE_MATERIAL_PT_settings,
@@ -50,6 +54,7 @@ class NODE_HT_header(Header):
         snode_id = snode.id
         id_from = snode.id_from
         tool_settings = context.tool_settings
+        is_compositor = snode.tree_type == 'CompositorNodeTree'
 
         layout.template_header()
 
@@ -146,12 +151,6 @@ class NODE_HT_header(Header):
             if snode_id:
                 layout.prop(snode_id, "use_nodes")
 
-            layout.prop(snode, "use_auto_render")
-            layout.prop(snode, "show_backdrop")
-            if snode.show_backdrop:
-                row = layout.row(align=True)
-                row.prop(snode, "backdrop_channels", text="", expand=True)
-
         else:
             # Custom node tree is edited as independent ID block
             NODE_MT_editor_menus.draw_collapsible(context, layout)
@@ -160,12 +159,25 @@ class NODE_HT_header(Header):
 
             layout.template_ID(snode, "node_tree", new="node.new_node_tree")
 
-        layout.prop(snode, "pin", text="")
+        # Put pin next to ID block
+        if not is_compositor:
+            layout.prop(snode, "pin", text="", emboss=False)
+
         layout.separator_spacer()
 
-        layout.template_running_jobs()
+        # Put pin on the right for Compositing
+        if is_compositor:
+            layout.prop(snode, "pin", text="", emboss=False)
 
         layout.operator("node.tree_path_parent", text="", icon='FILE_PARENT')
+
+        # Backdrop
+        if is_compositor:
+            row=layout.row(align=True)
+            row.prop(snode, "show_backdrop", toggle=True)
+            sub=row.row(align=True)
+            sub.active = snode.show_backdrop
+            sub.prop(snode, "backdrop_channels", icon_only=True, text="", expand=True)
 
         # Snap
         row = layout.row(align=True)
@@ -190,6 +202,7 @@ class NODE_MT_editor_menus(Menu):
 class NODE_MT_add(bpy.types.Menu):
     bl_space_type = 'NODE_EDITOR'
     bl_label = "Add"
+    bl_translation_context = i18n_contexts.operator_default
 
     def draw(self, context):
         layout = self.layout
@@ -319,8 +332,14 @@ class NODE_MT_node(Menu):
         layout.operator("node.read_viewlayers")
 
 
+class NODE_PT_active_tool(ToolActivePanelHelper, Panel):
+    bl_space_type = 'NODE_EDITOR'
+    bl_region_type = 'UI'
+    bl_category = "Tool"
+
+
 class NODE_PT_material_slots(Panel):
-    bl_space_type = "NODE_EDITOR"
+    bl_space_type = 'NODE_EDITOR'
     bl_region_type = 'HEADER'
     bl_label = "Slot"
     bl_ui_units_x = 8
@@ -428,7 +447,7 @@ class NODE_MT_context_menu(Menu):
 class NODE_PT_active_node_generic(Panel):
     bl_space_type = 'NODE_EDITOR'
     bl_region_type = 'UI'
-    bl_category = "Node"
+    bl_category = "Item"
     bl_label = "Node"
 
     @classmethod
@@ -446,7 +465,7 @@ class NODE_PT_active_node_generic(Panel):
 class NODE_PT_active_node_color(Panel):
     bl_space_type = 'NODE_EDITOR'
     bl_region_type = 'UI'
-    bl_category = "Node"
+    bl_category = "Item"
     bl_label = "Color"
     bl_options = {'DEFAULT_CLOSED'}
     bl_parent_id = 'NODE_PT_active_node_generic'
@@ -476,10 +495,9 @@ class NODE_PT_active_node_color(Panel):
 class NODE_PT_active_node_properties(Panel):
     bl_space_type = 'NODE_EDITOR'
     bl_region_type = 'UI'
-    bl_category = "Node"
+    bl_category = "Item"
     bl_label = "Properties"
     bl_options = {'DEFAULT_CLOSED'}
-    bl_parent_id = 'NODE_PT_active_node_generic'
 
     @classmethod
     def poll(cls, context):
@@ -510,7 +528,7 @@ class NODE_PT_active_node_properties(Panel):
 class NODE_PT_texture_mapping(Panel):
     bl_space_type = 'NODE_EDITOR'
     bl_region_type = 'UI'
-    bl_category = "Node"
+    bl_category = "Item"
     bl_label = "Texture Mapping"
     bl_options = {'DEFAULT_CLOSED'}
     COMPAT_ENGINES = {'BLENDER_RENDER', 'BLENDER_EEVEE', 'BLENDER_WORKBENCH'}
@@ -548,7 +566,7 @@ class NODE_PT_texture_mapping(Panel):
 class NODE_PT_backdrop(Panel):
     bl_space_type = 'NODE_EDITOR'
     bl_region_type = 'UI'
-    bl_category = "Node"
+    bl_category = "View"
     bl_label = "Backdrop"
 
     @classmethod
@@ -563,6 +581,7 @@ class NODE_PT_backdrop(Panel):
     def draw(self, context):
         layout = self.layout
         layout.use_property_split = True
+        layout.use_property_decorate = False
 
         snode = context.space_data
         layout.active = snode.show_backdrop
@@ -583,7 +602,7 @@ class NODE_PT_backdrop(Panel):
 class NODE_PT_quality(bpy.types.Panel):
     bl_space_type = 'NODE_EDITOR'
     bl_region_type = 'UI'
-    bl_category = "Node"
+    bl_category = "Options"
     bl_label = "Performance"
 
     @classmethod
@@ -594,6 +613,7 @@ class NODE_PT_quality(bpy.types.Panel):
     def draw(self, context):
         layout = self.layout
         layout.use_property_split = True
+        layout.use_property_decorate = False
 
         snode = context.space_data
         tree = snode.node_tree
@@ -608,6 +628,8 @@ class NODE_PT_quality(bpy.types.Panel):
         col.prop(tree, "use_groupnode_buffer")
         col.prop(tree, "use_two_pass")
         col.prop(tree, "use_viewer_border")
+        col.separator()
+        col.prop(snode, "use_auto_render")
 
 
 class NODE_UL_interface_sockets(bpy.types.UIList):
@@ -637,7 +659,7 @@ class NODE_UL_interface_sockets(bpy.types.UIList):
 class NODE_PT_grease_pencil(AnnotationDataPanel, Panel):
     bl_space_type = 'NODE_EDITOR'
     bl_region_type = 'UI'
-    bl_category = "Node"
+    bl_category = "View"
     bl_options = {'DEFAULT_CLOSED'}
 
     # NOTE: this is just a wrapper around the generic GP Panel
@@ -651,7 +673,7 @@ class NODE_PT_grease_pencil(AnnotationDataPanel, Panel):
 class NODE_PT_grease_pencil_tools(GreasePencilToolsPanel, Panel):
     bl_space_type = 'NODE_EDITOR'
     bl_region_type = 'UI'
-    bl_category = "Node"
+    bl_category = "View"
     bl_options = {'DEFAULT_CLOSED'}
 
     # NOTE: this is just a wrapper around the generic GP tools panel
@@ -670,7 +692,7 @@ def node_panel(cls):
 
     node_cls.bl_space_type = 'NODE_EDITOR'
     node_cls.bl_region_type = 'UI'
-    node_cls.bl_category = "Node"
+    node_cls.bl_category = "Options"
     if hasattr(node_cls, 'bl_parent_id'):
         node_cls.bl_parent_id = 'NODE_' + node_cls.bl_parent_id
 
@@ -692,6 +714,7 @@ classes = (
     NODE_PT_active_node_color,
     NODE_PT_active_node_properties,
     NODE_PT_texture_mapping,
+    NODE_PT_active_tool,
     NODE_PT_backdrop,
     NODE_PT_quality,
     NODE_PT_grease_pencil,

@@ -101,7 +101,7 @@ static char *buf_tabs_to_spaces(const char *in_buf, const int tab_size)
   }
 
   /* Allocate output before with extra space for expanded tabs. */
-  const int out_size = strlen(in_buf) + num_tabs * (tab_size - 1);
+  const int out_size = strlen(in_buf) + num_tabs * (tab_size - 1) + 1;
   char *out_buf = MEM_mallocN(out_size * sizeof(char), __func__);
 
   /* Fill output buffer. */
@@ -247,7 +247,7 @@ static int text_new_exec(bContext *C, wmOperator *UNUSED(op))
 
   if (prop) {
     RNA_id_pointer_create(&text->id, &idptr);
-    RNA_property_pointer_set(&ptr, prop, idptr);
+    RNA_property_pointer_set(&ptr, prop, idptr, NULL);
     RNA_property_update(C, &ptr, prop);
   }
   else if (st) {
@@ -326,7 +326,7 @@ static int text_open_exec(bContext *C, wmOperator *op)
 
   if (pprop->prop) {
     RNA_id_pointer_create(&text->id, &idptr);
-    RNA_property_pointer_set(&pprop->ptr, pprop->prop, idptr);
+    RNA_property_pointer_set(&pprop->ptr, pprop->prop, idptr, NULL);
     RNA_property_update(C, &pprop->ptr, pprop->prop);
   }
   else if (st) {
@@ -385,7 +385,7 @@ void TEXT_OT_open(wmOperatorType *ot)
                                  FILE_OPENFILE,
                                  WM_FILESEL_FILEPATH,
                                  FILE_DEFAULTDISPLAY,
-                                 FILE_SORT_ALPHA);  //XXX TODO, relative_path
+                                 FILE_SORT_ALPHA);  // XXX TODO, relative_path
   RNA_def_boolean(
       ot->srna, "internal", 0, "Make internal", "Make text file internal after loading");
 }
@@ -685,7 +685,7 @@ void TEXT_OT_save_as(wmOperatorType *ot)
                                  FILE_SAVE,
                                  WM_FILESEL_FILEPATH,
                                  FILE_DEFAULTDISPLAY,
-                                 FILE_SORT_ALPHA);  //XXX TODO, relative_path
+                                 FILE_SORT_ALPHA);  // XXX TODO, relative_path
 }
 
 /******************* run script operator *********************/
@@ -1268,7 +1268,7 @@ static int text_convert_whitespace_exec(bContext *C, wmOperator *op)
           for (j = 1;
                (j < tab_len) && (a + j < text_check_line_len) && (text_check_line[a + j] == ' ');
                j++) {
-            ;
+            /* pass */
           }
 
           if (j == tab_len) {

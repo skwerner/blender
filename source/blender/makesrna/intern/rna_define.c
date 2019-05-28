@@ -709,6 +709,14 @@ void RNA_define_animate_sdna(bool animate)
 }
 #endif
 
+#ifndef RNA_RUNTIME
+void RNA_define_fallback_property_update(int noteflag, const char *updatefunc)
+{
+  DefRNA.fallback.property_update.noteflag = noteflag;
+  DefRNA.fallback.property_update.updatefunc = updatefunc;
+}
+#endif
+
 void RNA_struct_free_extension(StructRNA *srna, ExtensionRNA *ext)
 {
 #ifdef RNA_RUNTIME
@@ -890,9 +898,9 @@ StructRNA *RNA_def_struct_ptr(BlenderRNA *brna, const char *identifier, StructRN
   srna->description = "";
   /* may be overwritten later RNA_def_struct_translation_context */
   srna->translation_context = BLT_I18NCONTEXT_DEFAULT_BPYRNA;
-  srna->flag |= STRUCT_UNDO;
   if (!srnafrom) {
     srna->icon = ICON_DOT;
+    srna->flag |= STRUCT_UNDO;
   }
 
   if (DefRNA.preprocess) {
@@ -1412,6 +1420,12 @@ PropertyRNA *RNA_def_property(StructOrFunctionRNA *cont_,
     prop->override_apply = (RNAPropOverrideApply) "rna_property_override_apply_default";
   }
   /* TODO: do we want that for runtime-defined stuff too? I’d say no, but... maybe yes :/ */
+
+#ifndef RNA_RUNTIME
+  /* Both are typically cleared. */
+  RNA_def_property_update(
+      prop, DefRNA.fallback.property_update.noteflag, DefRNA.fallback.property_update.updatefunc);
+#endif
 
   rna_addtail(&cont->properties, prop);
 

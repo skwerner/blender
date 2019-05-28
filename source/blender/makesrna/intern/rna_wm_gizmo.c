@@ -384,6 +384,7 @@ static void rna_Gizmo_matrix_world_get(PointerRNA *ptr, float value[16])
 
 RNA_GIZMO_GENERIC_FLOAT_RW_DEF(scale_basis, scale_basis);
 RNA_GIZMO_GENERIC_FLOAT_RW_DEF(line_width, line_width);
+RNA_GIZMO_GENERIC_FLOAT_RW_DEF(select_bias, select_bias);
 
 RNA_GIZMO_GENERIC_FLAG_RW_DEF(flag_use_draw_hover, flag, WM_GIZMO_DRAW_HOVER);
 RNA_GIZMO_GENERIC_FLAG_RW_DEF(flag_use_draw_modal, flag, WM_GIZMO_DRAW_MODAL);
@@ -743,7 +744,10 @@ static void rna_gizmogroup_draw_prepare_cb(const bContext *C, wmGizmoGroup *gzgr
   RNA_parameter_list_free(&list);
 }
 
-static void rna_gizmogroup_invoke_prepare_cb(const bContext *C, wmGizmoGroup *gzgroup, wmGizmo *gz)
+static void rna_gizmogroup_invoke_prepare_cb(const bContext *C,
+                                             wmGizmoGroup *gzgroup,
+                                             wmGizmo *gz,
+                                             const wmEvent *event)
 {
   extern FunctionRNA rna_GizmoGroup_invoke_prepare_func;
 
@@ -758,6 +762,7 @@ static void rna_gizmogroup_invoke_prepare_cb(const bContext *C, wmGizmoGroup *gz
   RNA_parameter_list_create(&list, &gzgroup_ptr, func);
   RNA_parameter_set_lookup(&list, "context", &C);
   RNA_parameter_set_lookup(&list, "gizmo", &gz);
+  RNA_parameter_set_lookup(&list, "event", &event);
   gzgroup->type->ext.call((bContext *)C, &gzgroup_ptr, func, &list);
 
   RNA_parameter_list_free(&list);
@@ -1158,6 +1163,12 @@ static void rna_def_gizmo(BlenderRNA *brna, PropertyRNA *cprop)
   RNA_def_property_float_funcs(prop, "rna_Gizmo_line_width_get", "rna_Gizmo_line_width_set", NULL);
   RNA_def_property_range(prop, 0.0f, FLT_MAX);
   RNA_def_property_update(prop, NC_SCREEN | NA_EDITED, NULL);
+
+  prop = RNA_def_property(srna, "select_bias", PROP_FLOAT, PROP_NONE);
+  RNA_def_property_ui_text(prop, "Select Bias", "Depth bias used for selection");
+  RNA_def_property_float_funcs(
+      prop, "rna_Gizmo_select_bias_get", "rna_Gizmo_select_bias_set", NULL);
+  RNA_def_property_range(prop, -FLT_MAX, FLT_MAX);
 
   /* wmGizmo.flag */
   /* WM_GIZMO_HIDDEN */

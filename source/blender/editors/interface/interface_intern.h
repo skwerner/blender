@@ -500,6 +500,7 @@ extern int ui_but_string_get_max_length(uiBut *but);
 extern uiBut *ui_but_drag_multi_edit_get(uiBut *but);
 
 void ui_def_but_icon(uiBut *but, const int icon, const int flag);
+void ui_def_but_icon_clear(uiBut *but);
 extern uiButExtraIconType ui_but_icon_extra_get(uiBut *but);
 
 extern void ui_but_default_set(struct bContext *C, const bool all, const bool use_afterfunc);
@@ -539,13 +540,12 @@ struct uiKeyNavLock {
 typedef uiBlock *(*uiBlockHandleCreateFunc)(struct bContext *C,
                                             struct uiPopupBlockHandle *handle,
                                             void *arg1);
-typedef void (*uiBlockHandleFreeFunc)(struct uiPopupBlockHandle *handle, void *arg1);
 
 struct uiPopupBlockCreate {
   uiBlockCreateFunc create_func;
   uiBlockHandleCreateFunc handle_create_func;
-  uiBlockHandleFreeFunc free_func;
   void *arg;
+  void (*arg_free)(void *arg);
 
   int event_xy[2];
 
@@ -662,7 +662,8 @@ uiPopupBlockHandle *ui_popup_block_create(struct bContext *C,
                                           uiBut *but,
                                           uiBlockCreateFunc create_func,
                                           uiBlockHandleCreateFunc handle_create_func,
-                                          void *arg);
+                                          void *arg,
+                                          void (*arg_free)(void *arg));
 uiPopupBlockHandle *ui_popup_menu_create(struct bContext *C,
                                          struct ARegion *butregion,
                                          uiBut *but,

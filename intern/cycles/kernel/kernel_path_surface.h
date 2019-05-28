@@ -94,7 +94,7 @@ ccl_device void accum_light_tree_contribution(KernelGlobals *kg,
       float cdf_L = 0.0f;
       float cdf_R = 0.0f;
       float prob = 0.0f;
-      int light;
+      int light = 0;
       for (int i = 1; i < num_emitters + 1; ++i) {
         prob = calc_light_importance(kg, P, N, -1.0f, offset, i - 1) * sum_inv;
         cdf_R = cdf_L + prob;

@@ -1678,42 +1678,16 @@ ccl_device float light_tree_pdf(KernelGlobals *kg,
                                 float pdf,
                                 bool can_split)
 {
-
-  /* find mapping from distribution_id to node_id */
-  int node_id = kernel_tex_fetch(__light_distribution_to_node, distribution_id);
-
-  /* read in first part of node of light tree */
   int right_child_offset, first_distribution_id, num_emitters;
-  update_node(kg, offset, &right_child_offset, &first_distribution_id, &num_emitters);
+  do {
+    /* find mapping from distribution_id to node_id */
+    int node_id = kernel_tex_fetch(__light_distribution_to_node, distribution_id);
 
-  /* found a leaf */
-  if (right_child_offset == -1) {
-
-    /* if there are several emitters in this leaf then pick one of them */
-    if (num_emitters > 1) {
-
-      /* the case of being a light inside a leaf node with several lights.
-       * during sampling, a CDF is created based on importance, so here
-       * the probability of sampling this light using the CDF has to be
-       * computed. This is done by dividing the importance of this light
-       * by the total sum of the importance of all lights in the leaf. */
-      float sum = 0.0f;
-      for (int i = 0; i < num_emitters; ++i) {
-        sum += calc_light_importance(kg, P, N, t_max, offset, i);
-      }
-
-      if (sum == 0.0f) {
-        return 0.0f;
-      }
-
-      pdf *= calc_light_importance(kg, P, N, t_max, offset, distribution_id - first_distribution_id) /
-             sum;
+    /* read in first part of node of light tree */
+    update_node(kg, offset, &right_child_offset, &first_distribution_id, &num_emitters);
+    if(right_child_offset == -1) {
+      break;
     }
-
-    return pdf;
-  }
-  else {  // Interior node, choose which child(ren) to go down
-
     int child_offsetL = offset + 1;
     int child_offsetR = right_child_offset;
 
@@ -1728,8 +1702,6 @@ ccl_device float light_tree_pdf(KernelGlobals *kg,
       else {
         offset = child_offsetR;
       }
-
-      return light_tree_pdf(kg, P, N, t_max, distribution_id, offset, pdf, true);
     }
     else {
       /* go down one of the child nodes */
@@ -1754,10 +1726,33 @@ ccl_device float light_tree_pdf(KernelGlobals *kg,
         offset = child_offsetR;
         pdf *= 1.0f - P_L;
       }
-
-      return light_tree_pdf(kg, P, N, t_max, distribution_id, offset, pdf, false);
     }
+  } while(true);
+
+  update_node(kg, offset, &right_child_offset, &first_distribution_id, &num_emitters);
+
+  /* if there are several emitters in this leaf then pick one of them */
+  if (num_emitters > 1) {
+
+    /* the case of being a light inside a leaf node with several lights.
+     * during sampling, a CDF is created based on importance, so here
+     * the probability of sampling this light using the CDF has to be
+     * computed. This is done by dividing the importance of this light
+     * by the total sum of the importance of all lights in the leaf. */
+    float sum = 0.0f;
+    for (int i = 0; i < num_emitters; ++i) {
+      sum += calc_light_importance(kg, P, N, t_max, offset, i);
+    }
+
+    if (sum == 0.0f) {
+      return 0.0f;
+    }
+
+    pdf *= calc_light_importance(kg, P, N, t_max, offset, distribution_id - first_distribution_id) /
+           sum;
   }
+
+  return pdf;
 }
 
 /* computes the the probability of picking the given light out of all lights.

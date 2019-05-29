@@ -1508,12 +1508,12 @@ typedef struct KernelLightNode {
 } KernelLightNode;
 
 typedef struct KernelLightLeaf {
-  float bbox_min[3];
-  float bbox_max[3];
-  float theta_o;
-  float theta_e;
+  float centroid[3];
+  float size;
   float axis[3];
   float energy;
+  float theta_o;
+  float theta_e;
 } KernelLightLeaf;
 
 typedef struct KernelTriangleToDistribution {

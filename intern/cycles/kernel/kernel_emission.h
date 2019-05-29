@@ -278,7 +278,6 @@ ccl_device_noinline bool indirect_lamp_emission(KernelGlobals *kg,
     float3 L = direct_emissive_eval(
         kg, emission_sd, &ls, state, -ray->D, ray->dD, ls.t, ray->time);
 
-    bool has_volume = false;
 #ifdef __VOLUME__
     if (state->volume_stack[0].shader != SHADER_NONE) {
       /* shadow attenuation */
@@ -288,8 +287,6 @@ ccl_device_noinline bool indirect_lamp_emission(KernelGlobals *kg,
       kernel_volume_shadow(kg, emission_sd, state, &volume_ray, &volume_tp);
       L *= volume_tp;
     }
-
-    has_volume = ((emission_sd->flag & SD_HAS_VOLUME) != 0);
 #endif
 
     if (!(state->flag & PATH_RAY_MIS_SKIP)) {
@@ -336,12 +333,6 @@ ccl_device_noinline float3 indirect_background(KernelGlobals *kg,
         ((shader & SHADER_EXCLUDE_SCATTER) && (state->flag & PATH_RAY_VOLUME_SCATTER)))
       return make_float3(0.0f, 0.0f, 0.0f);
   }
-
-  bool has_volume = false;
-#  if defined(__BACKGROUND_MIS__) && defined(__VOLUME__)
-  /* This has to be done before shader_setup_* below. */
-  has_volume = ((emission_sd->flag & SD_HAS_VOLUME) != 0);
-#  endif
 
   /* Evaluate background shader. */
   float3 L;

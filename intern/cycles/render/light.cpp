@@ -292,7 +292,7 @@ float LightManager::distant_lights_energy(const Scene *scene, const vector<Primi
   if (!scene_bbox.valid()) {
     return 0.0f;
   }
-  
+
   float radius_squared = len_squared(scene_bbox.max - scene_bbox.center());
 
   return M_PI_F * radius_squared * luminance;
@@ -361,16 +361,16 @@ void LightManager::device_update_distribution(Device *device,
   bool background_mis = false;
 
   /* The emissive_prims vector contains all emissive primitives in the scene,
-  * i.e., all mesh light triangles and all lamps. The order of the primitives
-  * in the vector is important since it has the same order as the
-  * light_distribution array.
-  *
-  * If using the light tree then the order is important since the light tree
-  * reordered the lights so lights in the same node are next to each other
-  * in memory.
-  *
-  * If NOT using the light tree then the order is important since during
-  * sampling we assume all triangles are first in the array. */
+   * i.e., all mesh light triangles and all lamps. The order of the primitives
+   * in the vector is important since it has the same order as the
+   * light_distribution array.
+   *
+   * If using the light tree then the order is important since the light tree
+   * reordered the lights so lights in the same node are next to each other
+   * in memory.
+   *
+   * If NOT using the light tree then the order is important since during
+   * sampling we assume all triangles are first in the array. */
   vector<Primitive> emissive_prims;
   emissive_prims.reserve(scene->lights.size());
 
@@ -511,13 +511,12 @@ void LightManager::device_update_distribution(Device *device,
         Orientation bcone = light_tree.compute_bcone(emissive_prims[j]);
         float energy = light_tree.compute_energy(emissive_prims[j]);
 
-        leaf_emitters[offset].bbox_min[0] = bbox.min[0];
-        leaf_emitters[offset].bbox_min[1] = bbox.min[1];
-        leaf_emitters[offset].bbox_min[2] = bbox.min[2];
+        float3 center = bbox.center();
+        leaf_emitters[offset].centroid[0] = center.x;
+        leaf_emitters[offset].centroid[1] = center.y;
+        leaf_emitters[offset].centroid[2] = center.z;
 
-        leaf_emitters[offset].bbox_max[0] = bbox.max[0];
-        leaf_emitters[offset].bbox_max[1] = bbox.max[1];
-        leaf_emitters[offset].bbox_max[2] = bbox.max[2];
+        leaf_emitters[offset].size = len(bbox.size());
 
         leaf_emitters[offset].theta_o = bcone.theta_o;
         leaf_emitters[offset].theta_e = bcone.theta_e;
@@ -624,7 +623,8 @@ void LightManager::device_update_distribution(Device *device,
   std::sort(tri_to_distr.begin(), tri_to_distr.end());
 
   assert(num_triangles == tri_to_distr.size());
-  KernelTriangleToDistribution *triangle_to_distribution = dscene->triangle_to_distribution.alloc(num_triangles);
+  KernelTriangleToDistribution *triangle_to_distribution = dscene->triangle_to_distribution.alloc(
+      num_triangles);
   for (int i = 0; i < tri_to_distr.size(); ++i) {
     triangle_to_distribution[i].prim_id = std::get<0>(tri_to_distr[i]);
     triangle_to_distribution[i].geom_id = std::get<1>(tri_to_distr[i]);

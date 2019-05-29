@@ -87,7 +87,7 @@ ccl_device void kernel_direct_lighting(KernelGlobals *kg,
 
       LightSample ls;
       if (light_sample(
-              kg, light_u, light_v, sd->time, sd->P_pick, sd->N_pick, -1.0f, state->bounce, &ls)) {
+              kg, light_u, light_v, sd->time, sd->P_pick, sd->N_pick, -1.0f, state->bounce, &ls, NULL)) {
 
         Ray light_ray;
         light_ray.time = sd->time;

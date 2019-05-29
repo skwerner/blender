@@ -190,7 +190,7 @@ ccl_device_forceinline VolumeIntegrateResult kernel_path_volume(KernelGlobals *k
     shader_setup_from_volume(kg, sd, &volume_ray);
     kernel_volume_decoupled_record(kg, state, &volume_ray, sd, &volume_segment, heterogeneous);
 
-    kernel_update_light_picking(sd, state);
+    kernel_update_light_picking(sd, state, NULL);
 
     volume_segment.sampling_method = sampling_method;
 
@@ -238,7 +238,7 @@ ccl_device_forceinline VolumeIntegrateResult kernel_path_volume(KernelGlobals *k
     VolumeIntegrateResult result = kernel_volume_integrate(
         kg, state, sd, &volume_ray, L, throughput, heterogeneous);
 
-    kernel_update_light_picking(sd, state);
+    kernel_update_light_picking(sd, state, NULL);
 
 #    ifdef __VOLUME_SCATTER__
     if (result == VOLUME_PATH_SCATTERED) {
@@ -488,7 +488,7 @@ ccl_device void kernel_path_indirect(KernelGlobals *kg,
           throughput /= probability;
         }
 
-        kernel_update_light_picking(sd, state);
+        kernel_update_light_picking(sd, state, NULL);
 
         kernel_update_denoising_features(kg, sd, state, L);
 
@@ -629,7 +629,7 @@ ccl_device_forceinline void kernel_path_integrate(KernelGlobals *kg,
           throughput /= probability;
         }
 
-        kernel_update_light_picking(&sd, state);
+        kernel_update_light_picking(&sd, state, NULL);
 
         kernel_update_denoising_features(kg, &sd, state, L);
 

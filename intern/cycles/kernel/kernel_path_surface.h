@@ -378,7 +378,8 @@ ccl_device_noinline void kernel_branched_path_surface_connect_light(
                          sd->N_pick,
                          -1.0f,
                          state->bounce,
-                         &ls)) {
+                         &ls,
+                         NULL)) {
           /* Same as above, probability needs to be corrected since the sampling was forced to
            * select a mesh light. */
           if (kernel_data.integrator.num_all_lights)
@@ -408,7 +409,7 @@ ccl_device_noinline void kernel_branched_path_surface_connect_light(
 
     LightSample ls;
     if (light_sample(
-            kg, light_u, light_v, sd->time, sd->P_pick, sd->N_pick, -1.0f, state->bounce, &ls)) {
+            kg, light_u, light_v, sd->time, sd->P_pick, sd->N_pick, -1.0f, state->bounce, &ls, NULL)) {
       accum_light_contribution(kg,
                                sd,
                                emission_sd,
@@ -530,7 +531,6 @@ ccl_device_inline void kernel_path_surface_connect_light(KernelGlobals *kg,
   light_ray.time = sd->time;
 #  endif
 
-  bool has_volume = ((sd->flag & SD_HAS_VOLUME) != 0);
   LightSample ls;
   if (light_sample(kg,
                    light_u,
@@ -540,7 +540,8 @@ ccl_device_inline void kernel_path_surface_connect_light(KernelGlobals *kg,
                    sd->N_pick,
                    -1.0f,
                    state->bounce,
-                   &ls)) {
+                   &ls,
+                   NULL)) {
     float terminate = path_state_rng_light_termination(kg, state);
     accum_light_contribution(kg,
                              sd,
@@ -602,7 +603,7 @@ ccl_device bool kernel_path_surface_bounce(KernelGlobals *kg,
 
     /* setup ray */
     ray->P = ray_offset(sd->P, (label & LABEL_TRANSMIT) ? -sd->Ng : sd->Ng);
-    kernel_update_light_picking(sd, state);
+    kernel_update_light_picking(sd, state, NULL);
     ray->D = normalize(bsdf_omega_in);
 
     if (state->bounce == 0)
@@ -635,7 +636,7 @@ ccl_device bool kernel_path_surface_bounce(KernelGlobals *kg,
 
     /* setup ray position, direction stays unchanged */
     ray->P = ray_offset(sd->P, -sd->Ng);
-    kernel_update_light_picking(sd, state);
+    kernel_update_light_picking(sd, state, NULL);
 
 #  ifdef __RAY_DIFFERENTIALS__
     ray->dP = sd->dP;

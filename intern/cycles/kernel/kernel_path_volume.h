@@ -41,7 +41,7 @@ ccl_device_inline void kernel_path_volume_connect_light(KernelGlobals *kg,
   /* connect to light from given point where shader has been evaluated */
   light_ray.time = sd->time;
   if (light_sample(
-          kg, light_u, light_v, sd->time, sd->P_pick, sd->N_pick, sd->t_pick, state->bounce, &ls)) {
+          kg, light_u, light_v, sd->time, sd->P_pick, sd->N_pick, sd->t_pick, state->bounce, &ls, NULL)) {
     float terminate = path_state_rng_light_termination(kg, state);
     if (direct_emission(
             kg, sd, emission_sd, &ls, state, &light_ray, &L_light, &is_lamp, terminate)) {
@@ -225,7 +225,7 @@ ccl_device void kernel_branched_path_volume_connect_light(KernelGlobals *kg,
 
         LightSample ls;
         light_sample(
-            kg, light_u, light_v, sd->time, ray->P, ray->D, ray->t, state->bounce, &ls);
+            kg, light_u, light_v, sd->time, ray->P, ray->D, ray->t, state->bounce, &ls, ray);
 
         float3 tp = throughput;
 
@@ -284,7 +284,7 @@ ccl_device void kernel_branched_path_volume_connect_light(KernelGlobals *kg,
     path_state_rng_2D(kg, state, PRNG_LIGHT_U, &light_u, &light_v);
 
     LightSample ls;
-    light_sample(kg, light_u, light_v, sd->time, ray->P, ray->D, ray->t, state->bounce, &ls);
+    light_sample(kg, light_u, light_v, sd->time, ray->P, ray->D, ray->t, state->bounce, &ls, ray);
 
     float3 tp = throughput;
 

@@ -42,7 +42,7 @@ typedef struct LightSample {
  * importance for the lights in the lower hemisphere. This is done by setting
  * the normal to either [0,0,0] to indicate that it should not be used in the
  * importance calculations or to flip the normal if we know it must refract. */
-ccl_device void kernel_update_light_picking(ShaderData *sd, ccl_addr_space PathState *state, Ray *ray = NULL)
+ccl_device void kernel_update_light_picking(ShaderData *sd, ccl_addr_space PathState *state, Ray *ray)
 {
   if (ray) {
     sd->P_pick = ray->P;
@@ -1139,7 +1139,7 @@ ccl_device int light_group_distribution_sample(KernelGlobals *kg, float *randu)
 
 /* Light Distribution */
 
-ccl_device int light_distribution_sample(KernelGlobals *kg, float *randu)
+ccl_device int light_distribution_sample_cdf(KernelGlobals *kg, float *randu)
 {
   /* This is basically std::upper_bound as used by pbrt, to find a point light or
    * triangle to emit from, proportional to area. a good improvement would be to
@@ -1186,12 +1186,12 @@ ccl_device bool light_select_reached_max_bounces(KernelGlobals *kg, int index, i
 ccl_device float calc_importance(KernelGlobals *kg,
                                  float3 P,
                                  float3 N,
-                                 float3 bboxMax,
+                                 float3 centroid,
+                                 float size,
                                  float theta_o,
                                  float theta_e,
                                  float3 axis,
-                                 float energy,
-                                 float3 centroid)
+                                 float energy)
 {
   /* eq. 3 */
 
@@ -1205,7 +1205,7 @@ ccl_device float calc_importance(KernelGlobals *kg,
    * sin(th) = r/d <=> sin^2(th) = r^2 / d^2 */
   const float3 centroid_to_P = P - centroid;
   const float3 centroid_to_P_dir = normalize(centroid_to_P);
-  const float r2 = len_squared(bboxMax - centroid);
+  const float r2 = size*size;
   float d2 = len_squared(centroid_to_P);
 
   /* based on comment in the implementation details of the paper */
@@ -1234,7 +1234,7 @@ ccl_device float calc_importance(KernelGlobals *kg,
   const float cos_theta_prime = fast_cosf(theta_prime);
 
   /* f_a|cos(theta'_i)| -- diffuse approximation */
-  if (N != make_float3(0.0f, 0.0f, 0.0f)) {
+  if (dot(N, N) != 0.0f) {
     const float theta_i = fast_acosf(dot(N, -centroid_to_P_dir));
     const float theta_i_prime = fmaxf(theta_i - theta_u, 0.0f);
     const float cos_theta_i_prime = fast_cosf(theta_i_prime);
@@ -1254,19 +1254,19 @@ ccl_device float calc_importance_ray(KernelGlobals *kg,
                                  float3 P,
                                  float3 D,
                                  float t_max,
-                                 float3 bboxMax,
+                                 float3 centroid,
+                                 float size,
                                  float theta_o,
                                  float theta_e,
                                  float3 axis,
-                                 float energy,
-                                 float3 centroid)
+                                 float energy)
 {
   const float3 p_to_c = centroid - P;
   /* Find the point along the ray closest to the bbox centroid. */
   const float t = min(t_max, max(0.0f, dot(D, p_to_c)));
   const float3 closest_point = P + D * t;
   const float d_min = len(centroid - closest_point);
-  const float r2 = len_squared(bboxMax - centroid);
+  const float r2 = size * size;
 
   if (dot(axis, axis) == 0.0f) {
     return energy / d_min;
@@ -1275,7 +1275,7 @@ ccl_device float calc_importance_ray(KernelGlobals *kg,
   const float3 v0 = normalize(P - centroid);
   const float3 v1 = normalize(v0 + min(t_max, 1e12f) * D);
 
-  const float3& o0 = v0;
+  const float3 o0 = v0;
   float3 o1, o2;
   make_orthonormals_tangent(o0, v1, &o1, &o2);
 
@@ -1340,19 +1340,18 @@ ccl_device float calc_light_importance(
   const KernelLightLeaf leaf = kernel_tex_fetch(__light_tree_leaf_emitters, offset);
 
   /* decode data for this light */
-  const float3 bbox_min = make_float3(leaf.bbox_min[0], leaf.bbox_min[1], leaf.bbox_min[2]);
-  const float3 bbox_max = make_float3(leaf.bbox_max[0], leaf.bbox_max[1], leaf.bbox_max[2]);
+  const float3 centroid = make_float3(leaf.centroid[0], leaf.centroid[1], leaf.centroid[2]);
+  const float size = leaf.size;
   const float theta_o = leaf.theta_o;
   const float theta_e = leaf.theta_e;
   const float3 axis = make_float3(leaf.axis[0], leaf.axis[1], leaf.axis[2]);
   const float energy = leaf.energy;
-  const float3 centroid = 0.5f * (bbox_max + bbox_min);
 
   if (t_max > 0.0f) {
-    return calc_importance_ray(kg, P, N, t_max, bbox_max, theta_o, theta_e, axis, energy, centroid);
+    return calc_importance_ray(kg, P, N, t_max, centroid, size, theta_o, theta_e, axis, energy);
   }
   else {
-    return calc_importance(kg, P, N, bbox_max, theta_o, theta_e, axis, energy, centroid);
+    return calc_importance(kg, P, N, centroid, size, theta_o, theta_e, axis, energy);
   }
 }
 
@@ -1362,22 +1361,23 @@ ccl_device float calc_light_importance(
 ccl_device float calc_node_importance(KernelGlobals *kg, float3 P, float3 N, float t_max, int node_offset)
 {
   /* load the data for this node */
-  const KernelLightNode &node = kernel_tex_fetch(__light_tree_nodes, node_offset);
+  const ccl_global KernelLightNode *node = &kernel_tex_fetch(__light_tree_nodes, node_offset);
 
   /* decode the data so it can be used to calculate the importance */
-  const float energy = node.energy;
-  const float3 bbox_min = make_float3(node.bbox_min[0], node.bbox_min[1], node.bbox_min[2]);
-  const float3 bbox_max = make_float3(node.bbox_max[0], node.bbox_max[1], node.bbox_max[2]);
-  const float theta_o = node.bounds_o_theta_o;
-  const float theta_e = node.bounds_o_theta_e;
-  const float3 axis = make_float3(node.axis[0], node.axis[1], node.axis[2]);
+  const float energy = node->energy;
+  const float3 bbox_min = make_float3(node->bbox_min[0], node->bbox_min[1], node->bbox_min[2]);
+  const float3 bbox_max = make_float3(node->bbox_max[0], node->bbox_max[1], node->bbox_max[2]);
+  const float theta_o = node->bounds_o_theta_o;
+  const float theta_e = node->bounds_o_theta_e;
+  const float3 axis = make_float3(node->axis[0], node->axis[1], node->axis[2]);
   const float3 centroid = 0.5f * (bbox_max + bbox_min);
+  const float size = len(bbox_max - centroid);
 
   if (t_max > 0.0f) {
-    return calc_importance_ray(kg, P, N, t_max, bbox_max, theta_o, theta_e, axis, energy, centroid);
+    return calc_importance_ray(kg, P, N, t_max, centroid, size, theta_o, theta_e, axis, energy);
   }
   else {
-    return calc_importance(kg, P, N, bbox_max, theta_o, theta_e, axis, energy, centroid);
+    return calc_importance(kg, P, N, centroid, size, theta_o, theta_e, axis, energy);
   }
 }
 
@@ -1393,17 +1393,17 @@ ccl_device float calc_node_importance(KernelGlobals *kg, float3 P, float3 N, flo
 ccl_device void update_node(
     KernelGlobals *kg, int node_offset, int *child_offset, int *distribution_id, int *num_emitters)
 {
-  const KernelLightNode &node = kernel_tex_fetch(__light_tree_nodes, node_offset);
-  (*child_offset) = node.right_child_offset;
-  (*distribution_id) = node.first_prim_offset;
-  (*num_emitters) = node.num_lights;
+  const ccl_global KernelLightNode *node = &kernel_tex_fetch(__light_tree_nodes, node_offset);
+  (*child_offset) = node->right_child_offset;
+  (*distribution_id) = node->first_prim_offset;
+  (*num_emitters) = node->num_lights;
 }
 
 /* picks one of the distant lights and computes the probability of picking it */
 ccl_device void light_distant_sample(
     KernelGlobals *kg, float3 P, float *randu, int *index, float *pdf)
 {
-  light_distribution_sample(kg, randu);  // rescale random number
+  light_distribution_sample_cdf(kg, randu);  // rescale random number
 
   /* choose one of the distant lights randomly */
   int num_distant = kernel_data.integrator.num_distant_lights;
@@ -1596,9 +1596,9 @@ ccl_device bool split(KernelGlobals *kg, float3 P, int node_offset)
   }
 
   /* extract bounding box of cluster */
-  const KernelLightNode &node = kernel_tex_fetch(__light_tree_nodes, node_offset);
-  const float3 bboxMin = make_float3(node.bbox_min[0], node.bbox_min[1], node.bbox_min[2]);
-  const float3 bboxMax = make_float3(node.bbox_max[0], node.bbox_max[1], node.bbox_max[2]);
+  const ccl_global KernelLightNode *node = &kernel_tex_fetch(__light_tree_nodes, node_offset);
+  const float3 bboxMin = make_float3(node->bbox_min[0], node->bbox_min[1], node->bbox_min[2]);
+  const float3 bboxMax = make_float3(node->bbox_max[0], node->bbox_max[1], node->bbox_max[2]);
 
   /* if P is inside bounding sphere then split */
   const float3 centroid = 0.5f * (bboxMax + bboxMin);
@@ -1627,9 +1627,9 @@ ccl_device bool split(KernelGlobals *kg, float3 P, int node_offset)
   const float g_variance = (b3 - a3) / (3.0f * (b - a) * a3 * b3) - g_mean_squared;
 
   /* eq. 10 */
-  const float energy = node.energy;
-  const float e_variance = node.energy_variance;
-  const float num_emitters = node.num_lights;
+  const float energy = node->energy;
+  const float e_variance = node->energy_variance;
+  const float num_emitters = node->num_lights;
   const float num_emitters_squared = num_emitters * num_emitters;
   const float e_mean = energy / num_emitters;
   const float e_mean_squared = e_mean * e_mean;
@@ -1846,7 +1846,7 @@ ccl_device void light_distribution_sample(
     *pdf *= group_prob;
   }
   else {  // Sample light distribution CDF
-    *index = light_distribution_sample(kg, randu);
+    *index = light_distribution_sample_cdf(kg, randu);
     const ccl_global KernelLightDistribution *kdistribution = &kernel_tex_fetch(
         __light_distribution, *index);
     *pdf = kdistribution->area * kernel_data.integrator.pdf_inv_totarea;
@@ -1901,7 +1901,7 @@ ccl_device_noinline bool light_sample(KernelGlobals *kg,
                                       float t_max,
                                       int bounce,
                                       LightSample *ls,
-                                      Ray *ray = NULL)
+                                      Ray *ray)
 {
   /* pick a light and compute the probability of picking this light */
   float pdf_factor = 0.0f;

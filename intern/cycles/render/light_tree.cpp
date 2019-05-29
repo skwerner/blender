@@ -66,7 +66,7 @@ LightTree::LightTree(const vector<Primitive> &prims_,
     Orientation bcone = compute_bcone(primitives[i]);
     float energy = compute_energy(primitives[i]);
 
-    build_data.push_back(BVHPrimitiveInfo(i, bbox, bcone, energy));
+    build_data.emplace_back(BVHPrimitiveInfo(i, bbox, bcone, energy));
   }
 
   /* recursively build BVH tree */
@@ -418,7 +418,7 @@ void LightTree::split_saoh(const BoundBox &centroid_bbox,
       buckets[bucket_id].count++;
       buckets[bucket_id].energy += build_data[i].energy;
       buckets[bucket_id].bounds.grow(build_data[i].bbox);
-      bucket_bcones[bucket_id].push_back(build_data[i].bcone);
+      bucket_bcones[bucket_id].emplace_back(build_data[i].bcone);
     }
 
     for (unsigned int i = 0; i < num_buckets; ++i) {
@@ -446,7 +446,7 @@ void LightTree::split_saoh(const BoundBox &centroid_bbox,
         if (buckets[j].count != 0) {
           energy_L += buckets[j].energy;
           bbox_L.grow(buckets[j].bounds);
-          bcones_L.push_back(buckets[j].bcone);
+          bcones_L.emplace_back(buckets[j].bcone);
         }
       }
 
@@ -455,7 +455,7 @@ void LightTree::split_saoh(const BoundBox &centroid_bbox,
         if (buckets[j].count != 0) {
           energy_R += buckets[j].energy;
           bbox_R.grow(buckets[j].bounds);
-          bcones_R.push_back(buckets[j].bcone);
+          bcones_R.emplace_back(buckets[j].bcone);
         }
       }
 
@@ -504,7 +504,7 @@ BVHBuildNode *LightTree::recursive_build(const uint start,
   for (unsigned int i = start; i < end; ++i) {
     const BVHPrimitiveInfo &light = build_data.at(i);
     node_bbox.grow(light.bbox);
-    bcones.push_back(light.bcone);
+    bcones.emplace_back(light.bcone);
 
     double energy = (double)light.energy;
     node_energy += energy;

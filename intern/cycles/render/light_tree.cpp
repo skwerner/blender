@@ -338,6 +338,13 @@ Orientation LightTree::cone_union(const Orientation &cone1, const Orientation &c
 {
   const Orientation *a = &cone1;
   const Orientation *b = &cone2;
+
+  /* Fast path for omnidirectional nodes. */
+  if ((a->theta_o == M_PI_F && b->theta_e == M_PI_2_F) ||
+      (b->theta_o == M_PI_F && b->theta_e == M_PI_2_F)) {
+    return Orientation(a->axis, M_PI_F, M_PI_2_F);
+  }
+
   if (b->theta_o > a->theta_o) {
     a = &cone2;
     b = &cone1;
@@ -401,7 +408,6 @@ void LightTree::split_saoh(const BoundBox &centroid_bbox,
   for (int dim = 0; dim < 3; ++dim) {
 
     vector<BucketInfo> buckets(num_buckets);
-    vector<vector<Orientation>> bucket_bcones(num_buckets);
 
     /* calculate total energy in each bucket and a bbox of it */
     const float extent = centroid_bbox.max[dim] - centroid_bbox.min[dim];
@@ -418,12 +424,11 @@ void LightTree::split_saoh(const BoundBox &centroid_bbox,
       buckets[bucket_id].count++;
       buckets[bucket_id].energy += build_data[i].energy;
       buckets[bucket_id].bounds.grow(build_data[i].bbox);
-      bucket_bcones[bucket_id].emplace_back(build_data[i].bcone);
-    }
-
-    for (unsigned int i = 0; i < num_buckets; ++i) {
-      if (buckets[i].count != 0) {
-        buckets[i].bcone = combine_bounding_cones(bucket_bcones[i]);
+      if (buckets[bucket_id].count > 1) {
+        buckets[bucket_id].bcone = cone_union(buckets[bucket_id].bcone, build_data[i].bcone);
+      }
+      else {
+        buckets[bucket_id].bcone = build_data[i].bcone;
       }
     }
 

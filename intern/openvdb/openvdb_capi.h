@@ -33,81 +33,103 @@ struct OpenVDBVectorGrid;
 int OpenVDB_getVersionHex(void);
 
 enum {
-	VEC_INVARIANT = 0,
-	VEC_COVARIANT = 1,
-	VEC_COVARIANT_NORMALIZE = 2,
-	VEC_CONTRAVARIANT_RELATIVE = 3,
-	VEC_CONTRAVARIANT_ABSOLUTE = 4,
+  VEC_INVARIANT = 0,
+  VEC_COVARIANT = 1,
+  VEC_COVARIANT_NORMALIZE = 2,
+  VEC_CONTRAVARIANT_RELATIVE = 3,
+  VEC_CONTRAVARIANT_ABSOLUTE = 4,
 };
 
 enum {
-	GRID_TRANSFORM_INVALID = 0,
-	GRID_TRANSFORM_VALID = 1,
+  GRID_TRANSFORM_INVALID = 0,
+  GRID_TRANSFORM_VALID = 1,
 };
 
-struct OpenVDBFloatGrid *OpenVDB_export_grid_fl(
-        struct OpenVDBWriter *writer,
-        const char *name, float *data,
-		const int res[3], float matrix[4][4], const float clipping,
-        struct OpenVDBFloatGrid *mask);
+struct OpenVDBFloatGrid *OpenVDB_export_grid_fl(struct OpenVDBWriter *writer,
+                                                const char *name,
+                                                float *data,
+                                                const int res[3],
+                                                float matrix[4][4],
+                                                const float clipping,
+                                                struct OpenVDBFloatGrid *mask);
 
 struct OpenVDBIntGrid *OpenVDB_export_grid_ch(struct OpenVDBWriter *writer,
-		const char *name, unsigned char *data,
-		const int res[3], float matrix[4][4], const float clipping,
-		struct OpenVDBFloatGrid *mask);
+                                              const char *name,
+                                              unsigned char *data,
+                                              const int res[3],
+                                              float matrix[4][4],
+                                              const float clipping,
+                                              struct OpenVDBFloatGrid *mask);
 
 struct OpenVDBVectorGrid *OpenVDB_export_grid_vec(struct OpenVDBWriter *writer,
-		const char *name,
-		const float *data_x, const float *data_y, const float *data_z,
-		const int res[3], float matrix[4][4], short vec_type, const float clipping,
-		const bool is_color,
-		struct OpenVDBFloatGrid *mask);
+                                                  const char *name,
+                                                  const float *data_x,
+                                                  const float *data_y,
+                                                  const float *data_z,
+                                                  const int res[3],
+                                                  float matrix[4][4],
+                                                  short vec_type,
+                                                  const float clipping,
+                                                  const bool is_color,
+                                                  struct OpenVDBFloatGrid *mask);
 
-void OpenVDB_import_grid_fl(
-        struct OpenVDBReader *reader,
-        const char *name, float **data,
-        const int res[3]);
+void OpenVDB_import_grid_fl(struct OpenVDBReader *reader,
+                            const char *name,
+                            float **data,
+                            const int res[3]);
 
-bool OpenVDB_import_grid_fl_extern(
-        struct OpenVDBReader *reader,
-        const char *name, float **data,
-        const int res_min[3], const int res_max[3],
-        const int res[3], const int level, short up, short front,
-        float *max_value);
+bool OpenVDB_import_grid_fl_extern(struct OpenVDBReader *reader,
+                                   const char *name,
+                                   float **data,
+                                   const int res_min[3],
+                                   const int res_max[3],
+                                   const int res[3],
+                                   const int level,
+                                   short up,
+                                   short front,
+                                   float *max_value);
 
-void OpenVDB_import_grid_ch(
-        struct OpenVDBReader *reader,
-        const char *name, unsigned char **data,
-        const int res[3]);
+void OpenVDB_import_grid_ch(struct OpenVDBReader *reader,
+                            const char *name,
+                            unsigned char **data,
+                            const int res[3]);
 
-void OpenVDB_import_grid_vec(
-        struct OpenVDBReader *reader,
-        const char *name,
-        float **data_x, float **data_y, float **data_z,
-        const int res[3]);
+void OpenVDB_import_grid_vec(struct OpenVDBReader *reader,
+                             const char *name,
+                             float **data_x,
+                             float **data_y,
+                             float **data_z,
+                             const int res[3]);
 
-bool OpenVDB_import_grid_vec_extern(
-        struct OpenVDBReader *reader,
-        const char *name,
-        float **data_x, float **data_y, float **data_z,
-        const int res_min[3], const int res_max[3],
-        const int res[3], const int level, short up, short front,
-        float *max_value);
+bool OpenVDB_import_grid_vec_extern(struct OpenVDBReader *reader,
+                                    const char *name,
+                                    float **data_x,
+                                    float **data_y,
+                                    float **data_z,
+                                    const int res_min[3],
+                                    const int res_max[3],
+                                    const int res[3],
+                                    const int level,
+                                    short up,
+                                    short front,
+                                    float *max_value);
 
 bool OpenVDB_has_grid(struct OpenVDBReader *reader, const char *name);
 
-int OpenVDB_get_bbox(
-        struct OpenVDBReader *reader,
-        char *density, char *heat,
-        char *flame, char color[3][64],
-        bool split_color,
-        short up, short front,
-        int r_res_min[3],
-        int r_res_max[3],
-        int r_res[3],
-        float r_bbox_min[3],
-        float r_bbox_max[3],
-        float r_voxel_size[3]);
+int OpenVDB_get_bbox(struct OpenVDBReader *reader,
+                     char *density,
+                     char *heat,
+                     char *flame,
+                     char color[3][64],
+                     bool split_color,
+                     short up,
+                     short front,
+                     int r_res_min[3],
+                     int r_res_max[3],
+                     int r_res[3],
+                     float r_bbox_min[3],
+                     float r_bbox_max[3],
+                     float r_voxel_size[3]);
 
 bool OpenVDB_has_metadata(struct OpenVDBReader *reader, const char *name);
 
@@ -119,9 +141,15 @@ void OpenVDBWriter_free(struct OpenVDBWriter *writer);
 void OpenVDBWriter_set_flags(struct OpenVDBWriter *writer, const int flag, const bool half);
 void OpenVDBWriter_add_meta_fl(struct OpenVDBWriter *writer, const char *name, const float value);
 void OpenVDBWriter_add_meta_int(struct OpenVDBWriter *writer, const char *name, const int value);
-void OpenVDBWriter_add_meta_v3(struct OpenVDBWriter *writer, const char *name, const float value[3]);
-void OpenVDBWriter_add_meta_v3_int(struct OpenVDBWriter *writer, const char *name, const int value[3]);
-void OpenVDBWriter_add_meta_mat4(struct OpenVDBWriter *writer, const char *name, float value[4][4]);
+void OpenVDBWriter_add_meta_v3(struct OpenVDBWriter *writer,
+                               const char *name,
+                               const float value[3]);
+void OpenVDBWriter_add_meta_v3_int(struct OpenVDBWriter *writer,
+                                   const char *name,
+                                   const int value[3]);
+void OpenVDBWriter_add_meta_mat4(struct OpenVDBWriter *writer,
+                                 const char *name,
+                                 float value[4][4]);
 void OpenVDBWriter_write(struct OpenVDBWriter *writer, const char *filename);
 
 struct OpenVDBReader *OpenVDBReader_create(void);
@@ -131,7 +159,9 @@ void OpenVDBReader_get_meta_fl(struct OpenVDBReader *reader, const char *name, f
 void OpenVDBReader_get_meta_int(struct OpenVDBReader *reader, const char *name, int *value);
 void OpenVDBReader_get_meta_v3(struct OpenVDBReader *reader, const char *name, float value[3]);
 void OpenVDBReader_get_meta_v3_int(struct OpenVDBReader *reader, const char *name, int value[3]);
-void OpenVDBReader_get_meta_mat4(struct OpenVDBReader *reader, const char *name, float value[4][4]);
+void OpenVDBReader_get_meta_mat4(struct OpenVDBReader *reader,
+                                 const char *name,
+                                 float value[4][4]);
 
 #ifdef __cplusplus
 }

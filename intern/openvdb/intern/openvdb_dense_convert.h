@@ -36,193 +36,187 @@ openvdb::Name do_name_versionning(const openvdb::Name &name);
 
 openvdb::Mat4R convertMatrix(const float mat[4][4]);
 
-template <typename GridType, typename T>
-GridType *OpenVDB_export_grid(
-        OpenVDBWriter *writer,
-        const openvdb::Name &name,
-        const T *data,
-        const int res[3],
-		float fluid_mat[4][4],
-		const float clipping,
-        const openvdb::FloatGrid *mask)
+template<typename GridType, typename T>
+GridType *OpenVDB_export_grid(OpenVDBWriter *writer,
+                              const openvdb::Name &name,
+                              const T *data,
+                              const int res[3],
+                              float fluid_mat[4][4],
+                              const float clipping,
+                              const openvdb::FloatGrid *mask)
 {
-	using namespace openvdb;
+  using namespace openvdb;
 
-	math::CoordBBox bbox(Coord(0), Coord(res[0] - 1, res[1] - 1, res[2] - 1));
-	Mat4R mat = convertMatrix(fluid_mat);
-	math::Transform::Ptr transform = math::Transform::createLinearTransform(mat);
+  math::CoordBBox bbox(Coord(0), Coord(res[0] - 1, res[1] - 1, res[2] - 1));
+  Mat4R mat = convertMatrix(fluid_mat);
+  math::Transform::Ptr transform = math::Transform::createLinearTransform(mat);
 
-	typename GridType::Ptr grid = GridType::create(T(0));
+  typename GridType::Ptr grid = GridType::create(T(0));
 
-	tools::Dense<const T, openvdb::tools::LayoutXYZ> dense_grid(bbox, data);
-	tools::copyFromDense(dense_grid, grid->tree(), static_cast<T>(clipping));
+  tools::Dense<const T, openvdb::tools::LayoutXYZ> dense_grid(bbox, data);
+  tools::copyFromDense(dense_grid, grid->tree(), static_cast<T>(clipping));
 
-	grid->setTransform(transform);
+  grid->setTransform(transform);
 
-	/* Avoid clipping against an empty grid. */
-	if (mask && !mask->tree().empty()) {
-		grid = tools::clip(*grid, *mask);
-	}
+  /* Avoid clipping against an empty grid. */
+  if (mask && !mask->tree().empty()) {
+    grid = tools::clip(*grid, *mask);
+  }
 
-	grid->setName(name);
-	grid->setIsInWorldSpace(false);
-	grid->setVectorType(openvdb::VEC_INVARIANT);
+  grid->setName(name);
+  grid->setIsInWorldSpace(false);
+  grid->setVectorType(openvdb::VEC_INVARIANT);
 
-	writer->insert(grid);
+  writer->insert(grid);
 
-	return grid.get();
+  return grid.get();
 }
 
-template <typename GridType, typename T>
-void OpenVDB_import_grid(
-        OpenVDBReader *reader,
-        const openvdb::Name &name,
-        T **data,
-        const int res[3])
+template<typename GridType, typename T>
+void OpenVDB_import_grid(OpenVDBReader *reader,
+                         const openvdb::Name &name,
+                         T **data,
+                         const int res[3])
 {
-	using namespace openvdb;
+  using namespace openvdb;
 
-	openvdb::Name temp_name = name;
+  openvdb::Name temp_name = name;
 
-	if (!reader->hasGrid(temp_name)) {
-		temp_name = do_name_versionning(temp_name);
+  if (!reader->hasGrid(temp_name)) {
+    temp_name = do_name_versionning(temp_name);
 
-		if (!reader->hasGrid(temp_name)) {
-			std::fprintf(stderr, "OpenVDB grid %s not found in file!\n", temp_name.c_str());
-			memset(*data, 0, sizeof(T) * res[0] * res[1] * res[2]);
-			return;
-		}
-	}
+    if (!reader->hasGrid(temp_name)) {
+      std::fprintf(stderr, "OpenVDB grid %s not found in file!\n", temp_name.c_str());
+      memset(*data, 0, sizeof(T) * res[0] * res[1] * res[2]);
+      return;
+    }
+  }
 
-	typename GridType::Ptr grid = gridPtrCast<GridType>(reader->getGrid(temp_name));
-	typename GridType::ConstAccessor acc = grid->getConstAccessor();
+  typename GridType::Ptr grid = gridPtrCast<GridType>(reader->getGrid(temp_name));
+  typename GridType::ConstAccessor acc = grid->getConstAccessor();
 
-	math::Coord xyz;
-	int &x = xyz[0], &y = xyz[1], &z = xyz[2];
+  math::Coord xyz;
+  int &x = xyz[0], &y = xyz[1], &z = xyz[2];
 
-	size_t index = 0;
-	for (z = 0; z < res[2]; ++z) {
-		for (y = 0; y < res[1]; ++y) {
-			for (x = 0; x < res[0]; ++x, ++index) {
-				(*data)[index] = acc.getValue(xyz);
-			}
-		}
-	}
+  size_t index = 0;
+  for (z = 0; z < res[2]; ++z) {
+    for (y = 0; y < res[1]; ++y) {
+      for (x = 0; x < res[0]; ++x, ++index) {
+        (*data)[index] = acc.getValue(xyz);
+      }
+    }
+  }
 }
 
 openvdb::GridBase *OpenVDB_export_vector_grid(OpenVDBWriter *writer,
-		const openvdb::Name &name,
-		const float *data_x, const float *data_y, const float *data_z,
-		const int res[3],
-		float fluid_mat[4][4],
-		openvdb::VecType vec_type,
-		const bool is_color,
-		const float clipping,
-		const openvdb::FloatGrid *mask);
+                                              const openvdb::Name &name,
+                                              const float *data_x,
+                                              const float *data_y,
+                                              const float *data_z,
+                                              const int res[3],
+                                              float fluid_mat[4][4],
+                                              openvdb::VecType vec_type,
+                                              const bool is_color,
+                                              const float clipping,
+                                              const openvdb::FloatGrid *mask);
 
-template <typename GridType, typename T>
-bool OpenVDB_import_grid_extern(
-        OpenVDBReader *reader,
-        const openvdb::Name &name,
-        T **data,
-        const int res_min[3],
-        const int res_max[3],
-        const int res[3],
-        const int level,
-        short up, short front,
-        float *max_value)
+template<typename GridType, typename T>
+bool OpenVDB_import_grid_extern(OpenVDBReader *reader,
+                                const openvdb::Name &name,
+                                T **data,
+                                const int res_min[3],
+                                const int res_max[3],
+                                const int res[3],
+                                const int level,
+                                short up,
+                                short front,
+                                float *max_value)
 {
-	using namespace openvdb;
+  using namespace openvdb;
 
-	if (!reader->hasGrid(name)) {
-		std::fprintf(stderr, "OpenVDB grid %s not found in file!\n", name.c_str());
-		memset(*data, 0, sizeof(T) * res[0] * res[1] * res[2]);
-		return true;
-	}
+  if (!reader->hasGrid(name)) {
+    std::fprintf(stderr, "OpenVDB grid %s not found in file!\n", name.c_str());
+    memset(*data, 0, sizeof(T) * res[0] * res[1] * res[2]);
+    return true;
+  }
 
-	GridBase::Ptr grid_b = reader->getGrid(name);
+  GridBase::Ptr grid_b = reader->getGrid(name);
 
-	if (!grid_b->isType<GridType>()) {
-		return false;
-	}
+  if (!grid_b->isType<GridType>()) {
+    return false;
+  }
 
-	typename GridType::Ptr grid = gridPtrCast<GridType>(grid_b);
-	typename GridType::ConstAccessor acc = grid->getConstAccessor();
+  typename GridType::Ptr grid = gridPtrCast<GridType>(grid_b);
+  typename GridType::ConstAccessor acc = grid->getConstAccessor();
 
-	bool inv_z = up >= 3;
-	bool inv_y = front < 3;
-	up %= 3;
-	front %= 3;
-	short right = 3 - (up + front);
-	bool inv_x = !(inv_z == inv_y);
+  bool inv_z = up >= 3;
+  bool inv_y = front < 3;
+  up %= 3;
+  front %= 3;
+  short right = 3 - (up + front);
+  bool inv_x = !(inv_z == inv_y);
 
-	if (up < front) {
-		inv_x = !inv_x;
-	}
+  if (up < front) {
+    inv_x = !inv_x;
+  }
 
-	if (abs(up - front) == 2) {
-		inv_x = !inv_x;
-	}
+  if (abs(up - front) == 2) {
+    inv_x = !inv_x;
+  }
 
-	if (max_value) {
-		*max_value = 0.0f;
-	}
+  if (max_value) {
+    *max_value = 0.0f;
+  }
 
-	math::Coord xyz;
-	int &x = xyz[right], &y = xyz[front], &z = xyz[up];
-	int index = 0;
+  math::Coord xyz;
+  int &x = xyz[right], &y = xyz[front], &z = xyz[up];
+  int index = 0;
 
-	for (z = inv_z ? res_max[2] - 1 : res_min[2];
-	     inv_z ? (z >= res_min[2]) : (z < res_max[2]);
-	     inv_z ? z -= level : z += level)
-	{
-		for (y = inv_y ? res_max[1] - 1 : res_min[1];
-		     inv_y ? (y >= res_min[1]) : (y < res_max[1]);
-		     inv_y ? y -= level : y += level)
-		{
-			for (x = inv_x ? res_max[0] - 1 : res_min[0];
-			     inv_x ? (x >= res_min[0]) : (x < res_max[0]);
-			     inv_x ? x -= level : x += level)
-			{
-				(*data)[index] = acc.getValue(xyz);
+  for (z = inv_z ? res_max[2] - 1 : res_min[2]; inv_z ? (z >= res_min[2]) : (z < res_max[2]);
+       inv_z ? z -= level : z += level) {
+    for (y = inv_y ? res_max[1] - 1 : res_min[1]; inv_y ? (y >= res_min[1]) : (y < res_max[1]);
+         inv_y ? y -= level : y += level) {
+      for (x = inv_x ? res_max[0] - 1 : res_min[0]; inv_x ? (x >= res_min[0]) : (x < res_max[0]);
+           inv_x ? x -= level : x += level) {
+        (*data)[index] = acc.getValue(xyz);
 
-				if (max_value && (*data)[index] > *max_value) {
-					*max_value = (*data)[index];
-				}
+        if (max_value && (*data)[index] > *max_value) {
+          *max_value = (*data)[index];
+        }
 
-				index++;
-			}
-		}
-	}
+        index++;
+      }
+    }
+  }
 
-	return true;
+  return true;
 }
 
-void OpenVDB_import_grid_vector(
-        OpenVDBReader *reader,
-        const openvdb::Name &name,
-        float **data_x, float **data_y, float **data_z,
-        const int res[3]);
+void OpenVDB_import_grid_vector(OpenVDBReader *reader,
+                                const openvdb::Name &name,
+                                float **data_x,
+                                float **data_y,
+                                float **data_z,
+                                const int res[3]);
 
-bool OpenVDB_import_grid_vector_extern(
-        OpenVDBReader *reader,
-        const openvdb::Name &name,
-        float **data_x, float **data_y, float **data_z,
-        const int res_min[3],
-        const int res_max[3],
-        const int res[3],
-        const int level,
-        short up, short front,
-        float *max_value);
+bool OpenVDB_import_grid_vector_extern(OpenVDBReader *reader,
+                                       const openvdb::Name &name,
+                                       float **data_x,
+                                       float **data_y,
+                                       float **data_z,
+                                       const int res_min[3],
+                                       const int res_max[3],
+                                       const int res[3],
+                                       const int level,
+                                       short up,
+                                       short front,
+                                       float *max_value);
 
-openvdb::CoordBBox OpenVDB_get_grid_bounds(
-        OpenVDBReader *reader,
-        const openvdb::Name &name);
+openvdb::CoordBBox OpenVDB_get_grid_bounds(OpenVDBReader *reader, const openvdb::Name &name);
 
-openvdb::math::Transform::Ptr OpenVDB_get_grid_transform(
-        OpenVDBReader *reader,
-        const openvdb::Name &name);
+openvdb::math::Transform::Ptr OpenVDB_get_grid_transform(OpenVDBReader *reader,
+                                                         const openvdb::Name &name);
 
-}  /* namespace internal */
+} /* namespace internal */
 
 #endif /* __OPENVDB_DENSE_CONVERT_H__ */

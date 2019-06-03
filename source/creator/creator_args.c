@@ -274,8 +274,7 @@ static bool parse_int_clamp(const char *str,
  * that parses a comma separated list of numbers.
  */
 static int *parse_int_relative_clamp_n(
-        const char *str, int pos, int neg, int min, int max,
-        int *r_value_len, const char **r_err_msg)
+    const char *str, int pos, int neg, int min, int max, int *r_value_len, const char **r_err_msg)
 {
   const char sep = ',';
   int len = 1;
@@ -293,19 +292,18 @@ static int *parse_int_relative_clamp_n(
       static const char *msg = "incorrect comma use";
       *r_err_msg = msg;
       goto fail;
-
     }
     else if (parse_int_relative_clamp(str, str_end, pos, neg, min, max, &values[i], r_err_msg)) {
       i++;
     }
     else {
-      goto fail;  /* error message already set */
+      goto fail; /* error message already set */
     }
 
-    if (str_end) {  /* next */
+    if (str_end) { /* next */
       str = str_end + 1;
     }
-    else {  /* finished */
+    else { /* finished */
       break;
     }
   }
@@ -635,8 +633,8 @@ static int arg_handle_print_help(int UNUSED(argc), const char **UNUSED(argv), vo
 
   BLI_argsPrintArgDoc(ba, "--");
 
-  //printf("\n");
-  //printf("Experimental Features:\n");
+  // printf("\n");
+  // printf("Experimental Features:\n");
 
   /* Other options _must_ be last (anything not handled will show here) */
   printf("\n");
@@ -1070,6 +1068,7 @@ static int arg_handle_factory_startup_set(int UNUSED(argc),
                                           void *UNUSED(data))
 {
   G.factory_startup = 1;
+  G.f |= G_FLAG_USERPREF_NO_SAVE_ON_EXIT;
   return 0;
 }
 
@@ -1241,8 +1240,9 @@ static const char arg_handle_register_extension_doc_silent[] =
 static int arg_handle_register_extension(int UNUSED(argc), const char **UNUSED(argv), void *data)
 {
 #  ifdef WIN32
-  if (data)
+  if (data) {
     G.background = 1;
+  }
   RegisterBlendExtension();
 #  else
   (void)data; /* unused */
@@ -1522,7 +1522,7 @@ static int arg_handle_render_frame(int argc, const char **argv, void *data)
         }
 
         for (int frame = frame_range_arr[i][0]; frame <= frame_range_arr[i][1]; frame++) {
-          RE_BlenderAnim(re, bmain, scene, NULL, NULL, frame, frame, scene->r.frame_step);
+          RE_RenderAnim(re, bmain, scene, NULL, NULL, frame, frame, scene->r.frame_step);
         }
       }
       RE_SetReports(re, NULL);
@@ -1555,8 +1555,7 @@ static int arg_handle_render_animation(int UNUSED(argc), const char **UNUSED(arg
     BLI_threaded_malloc_begin();
     BKE_reports_init(&reports, RPT_STORE);
     RE_SetReports(re, &reports);
-    RE_BlenderAnim(
-        re, bmain, scene, NULL, NULL, scene->r.sfra, scene->r.efra, scene->r.frame_step);
+    RE_RenderAnim(re, bmain, scene, NULL, NULL, scene->r.sfra, scene->r.efra, scene->r.frame_step);
     RE_SetReports(re, NULL);
     BKE_reports_clear(&reports);
     BLI_threaded_malloc_end();
@@ -1946,7 +1945,7 @@ void main_args_setup(bContext *C, bArgs *ba)
 #  define CB(a) a##_doc, a
 #  define CB_EX(a, b) a##_doc_##b, a
 
-  //BLI_argsAdd(ba, pass, short_arg, long_arg, doc, cb, C);
+  // BLI_argsAdd(ba, pass, short_arg, long_arg, doc, cb, C);
 
   /* end argument processing after -- */
   BLI_argsAdd(ba, -1, "--", NULL, CB(arg_handle_arguments_end), NULL);

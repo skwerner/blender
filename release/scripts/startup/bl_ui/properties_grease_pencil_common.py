@@ -84,10 +84,6 @@ class AnnotationDrawingToolsPanel:
     bl_category = "Annotation"
     bl_region_type = 'TOOLS'
 
-    @classmethod
-    def poll(cls, context):
-        return True
-
     def draw(self, context):
         layout = self.layout
 
@@ -133,15 +129,6 @@ class AnnotationDrawingToolsPanel:
         # col.separator()
 
         gpencil_stroke_placement_settings(context, col)
-
-        gpd = context.gpencil_data
-
-        if gpd and not is_3d_view:
-            layout.separator()
-            layout.separator()
-
-            col = layout.column(align=True)
-            col.prop(gpd, "use_stroke_edit_mode", text="Enable Editing", toggle=True)  # was: icon='EDIT'
 
 
 class GreasePencilStrokeEditPanel:
@@ -374,7 +361,10 @@ class GPENCIL_MT_pie_tool_palette(Menu):
         # E - "Settings" Palette is included here too, since it needs to be in a stable position...
         if gpd and gpd.layers.active:
             col.separator()
-            col.operator("wm.call_menu_pie", text="Settings...", icon='SCRIPTWIN').name = "GPENCIL_MT_pie_settings_palette"
+            col.operator(
+                "wm.call_menu_pie",
+                text="Settings...",
+                icon='SCRIPTWIN').name = "GPENCIL_MT_pie_settings_palette"
 
         # Editing tools
         if gpd:
@@ -390,7 +380,7 @@ class GPENCIL_MT_pie_tool_palette(Menu):
                 row.operator("transform.resize", text="Scale", icon='MAN_SCALE')
                 row = col.row(align=True)
                 row.label(text="Proportional Edit:")
-                row.prop(context.tool_settings, "proportional_edit", text="", icon_only=True)
+                row.prop(context.tool_settings, "use_proportional_edit", text="", icon_only=True)
                 row.prop(context.tool_settings, "proportional_edit_falloff", text="", icon_only=True)
 
                 # NW - Select (Non-Modal)
@@ -510,7 +500,7 @@ class GPENCIL_MT_pie_tools_more(Menu):
         gpd = context.gpencil_data
         return bool(gpd and gpd.use_stroke_edit_mode and context.editable_gpencil_strokes)
 
-    def draw(self, context):
+    def draw(self, _context):
         layout = self.layout
 
         pie = layout.menu_pie()
@@ -586,7 +576,7 @@ class GPENCIL_MT_pie_sculpt(Menu):
 class GPENCIL_MT_snap(Menu):
     bl_label = "Snap"
 
-    def draw(self, context):
+    def draw(self, _context):
         layout = self.layout
 
         layout.operator("gpencil.snap_to_grid", text="Selection to Grid")
@@ -603,7 +593,7 @@ class GPENCIL_MT_snap(Menu):
 class GPENCIL_MT_separate(Menu):
     bl_label = "Separate"
 
-    def draw(self, context):
+    def draw(self, _context):
         layout = self.layout
         layout.operator("gpencil.stroke_separate", text="Selected Points").mode = 'POINT'
         layout.operator("gpencil.stroke_separate", text="Selected Strokes").mode = 'STROKE'
@@ -613,7 +603,7 @@ class GPENCIL_MT_separate(Menu):
 class GPENCIL_MT_gpencil_draw_delete(Menu):
     bl_label = "GPencil Draw Delete"
 
-    def draw(self, context):
+    def draw(self, _context):
         layout = self.layout
 
         layout.operator_context = 'INVOKE_REGION_WIN'
@@ -624,7 +614,7 @@ class GPENCIL_MT_gpencil_draw_delete(Menu):
 class GPENCIL_MT_cleanup(Menu):
     bl_label = "Clean Up"
 
-    def draw(self, context):
+    def draw(self, _context):
         layout = self.layout
         layout.operator("gpencil.frame_clean_loose", text="Loose Points")
         layout.separator()
@@ -637,7 +627,7 @@ class GPENCIL_MT_cleanup(Menu):
 
 
 class GPENCIL_UL_annotation_layer(UIList):
-    def draw_item(self, context, layout, data, item, icon, active_data, active_propname, index):
+    def draw_item(self, _context, layout, _data, item, icon, _active_data, _active_propname, _index):
         # assert(isinstance(item, bpy.types.GPencilLayer)
         gpl = item
 
@@ -804,20 +794,6 @@ class GreasePencilToolsPanel:
     def draw(self, context):
         layout = self.layout
 
-        gpd = context.gpencil_data
-
-        layout.prop(gpd, "use_stroke_edit_mode", text="Enable Editing", icon='EDIT', toggle=True)
-
-        layout.separator()
-
-        layout.label(text="Proportional Edit:")
-        row = layout.row()
-        row.prop(context.tool_settings, "proportional_edit", text="")
-        row.prop(context.tool_settings, "proportional_edit_falloff", text="")
-
-        layout.separator()
-        layout.separator()
-
         gpencil_active_brush_settings_simple(context, layout)
 
         layout.separator()
@@ -885,6 +861,24 @@ class GreasePencilMaterialsPanel:
                     row.operator("gpencil.stroke_change_color", text="Assign")
                     row.operator("gpencil.color_select", text="Select").deselect = False
                     row.operator("gpencil.color_select", text="Deselect").deselect = True
+        # stroke color
+            ma = None
+            if is_view3d and brush is not None:
+                gp_settings = brush.gpencil_settings
+                if gp_settings.use_material_pin is False:
+                    ma = ob.material_slots[ob.active_material_index].material
+                else:
+                    ma = gp_settings.material
+
+            if ma is not None and ma.grease_pencil is not None:
+                gpcolor = ma.grease_pencil
+                if (
+                        gpcolor.stroke_style == 'SOLID' or
+                        gpcolor.use_stroke_pattern or
+                        gpcolor.use_stroke_texture_mix
+                ):
+                    row = layout.row()
+                    row.prop(gpcolor, "color", text="Stroke Color")
 
         else:
             space = context.space_data
@@ -892,7 +886,7 @@ class GreasePencilMaterialsPanel:
 
 
 class GPENCIL_UL_layer(UIList):
-    def draw_item(self, context, layout, data, item, icon, active_data, active_propname, index):
+    def draw_item(self, _context, layout, _data, item, icon, _active_data, _active_propname, _index):
         # assert(isinstance(item, bpy.types.GPencilLayer)
         gpl = item
 

@@ -161,6 +161,11 @@ bool BKE_collection_move(struct Main *bmain,
 
 bool BKE_collection_find_cycle(struct Collection *new_ancestor, struct Collection *collection);
 
+bool BKE_collection_has_collection(struct Collection *parent, struct Collection *collection);
+
+void BKE_collection_parent_relations_rebuild(struct Collection *collection);
+void BKE_main_collections_parent_relations_rebuild(struct Main *bmain);
+
 /* Iteration callbacks. */
 
 typedef void (*BKE_scene_objects_Cb)(struct Object *ob, void *data);
@@ -180,7 +185,8 @@ typedef void (*BKE_scene_collections_Cb)(struct Collection *ob, void *data);
 #define FOREACH_COLLECTION_VISIBLE_OBJECT_RECURSIVE_END \
   } \
   } \
-  }
+  } \
+  ((void)0)
 
 #define FOREACH_COLLECTION_OBJECT_RECURSIVE_BEGIN(_collection, _object) \
   for (Base *_base = (Base *)BKE_collection_object_cache_get(_collection).first; _base; \

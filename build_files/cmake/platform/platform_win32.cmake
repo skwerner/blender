@@ -190,6 +190,12 @@ if(NOT EXISTS "${LIBDIR}/")
   message(FATAL_ERROR "Windows requires pre-compiled libs at: '${LIBDIR}'")
 endif()
 
+# Mark libdir as system headers with a lower warn level, to resolve some warnings
+# that we have very little control over
+if(MSVC_VERSION GREATER_EQUAL 1914 AND NOT MSVC_CLANG)
+  add_compile_options(/experimental:external /external:templates- /external:I "${LIBDIR}" /external:W0)
+endif()
+
 # Add each of our libraries to our cmake_prefix_path so find_package() could work
 file(GLOB children RELATIVE ${LIBDIR} ${LIBDIR}/*)
 foreach(child ${children})
@@ -339,6 +345,8 @@ if(WITH_PYTHON)
   string(REPLACE "." "" _PYTHON_VERSION_NO_DOTS ${PYTHON_VERSION})
   # Use shared libs for vc2008 and vc2010 until we actually have vc2010 libs
   set(PYTHON_LIBRARY ${LIBDIR}/python/lib/python${_PYTHON_VERSION_NO_DOTS}.lib)
+  set(PYTHON_LIBRARY_DEBUG ${LIBDIR}/python/lib/python${_PYTHON_VERSION_NO_DOTS}_d.lib)
+
   unset(_PYTHON_VERSION_NO_DOTS)
 
   # Shared includes for both vc2008 and vc2010
@@ -346,7 +354,7 @@ if(WITH_PYTHON)
 
   # uncached vars
   set(PYTHON_INCLUDE_DIRS "${PYTHON_INCLUDE_DIR}")
-  set(PYTHON_LIBRARIES  "${PYTHON_LIBRARY}")
+  set(PYTHON_LIBRARIES debug "${PYTHON_LIBRARY_DEBUG}" optimized "${PYTHON_LIBRARY}" )
 endif()
 
 if(WITH_BOOST)

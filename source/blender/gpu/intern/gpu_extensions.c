@@ -232,24 +232,17 @@ void gpu_extensions_init(void)
   glGetIntegerv(GL_MAX_ARRAY_TEXTURE_LAYERS, &GG.maxtexlayers);
   glGetIntegerv(GL_MAX_CUBE_MAP_TEXTURE_SIZE, &GG.maxcubemapsize);
 
-  if (GLEW_EXT_texture_filter_anisotropic)
+  if (GLEW_EXT_texture_filter_anisotropic) {
     glGetFloatv(GL_MAX_TEXTURE_MAX_ANISOTROPY_EXT, &GG.max_anisotropy);
-  else
+  }
+  else {
     GG.max_anisotropy = 1.0f;
+  }
 
   glGetIntegerv(GL_MAX_FRAGMENT_UNIFORM_BLOCKS, &GG.maxubobinds);
   glGetIntegerv(GL_MAX_UNIFORM_BLOCK_SIZE, &GG.maxubosize);
 
   glGetFloatv(GL_ALIASED_LINE_WIDTH_RANGE, GG.line_width_range);
-
-#ifndef NDEBUG
-  GLint ret;
-  glBindFramebuffer(GL_FRAMEBUFFER, 0);
-  glGetFramebufferAttachmentParameteriv(
-      GL_FRAMEBUFFER, GL_FRONT_LEFT, GL_FRAMEBUFFER_ATTACHMENT_OBJECT_TYPE, &ret);
-  /* We expect FRONT_LEFT to be the default buffer. */
-  BLI_assert(ret == GL_FRAMEBUFFER_DEFAULT);
-#endif
 
   glGetIntegerv(GL_MAX_COLOR_TEXTURE_SAMPLES, &GG.samples_color_texture_max);
 

@@ -120,29 +120,62 @@ struct wmWindowManager;
 /* Include external gizmo API's */
 #include "gizmo/WM_gizmo_api.h"
 
+typedef struct wmGenericUserData {
+  void *data;
+  /** When NULL, use #MEM_freeN. */
+  void (*free_fn)(void *data);
+  bool use_free;
+} wmGenericUserData;
+
+typedef struct wmGenericCallback {
+  void (*exec)(struct bContext *C, void *user_data);
+  void *user_data;
+  void (*free_user_data)(void *user_data);
+} wmGenericCallback;
+
 /* ************** wmOperatorType ************************ */
 
-/* flag */
+/** #wmOperatorType.flag */
 enum {
-  OPTYPE_REGISTER = (1 << 0), /* register operators in stack after finishing */
-  OPTYPE_UNDO = (1 << 1),     /* do undo push after after */
-  OPTYPE_BLOCKING = (1 << 2), /* let blender grab all input from the WM (X11) */
+  /** Register operators in stack after finishing (needed for redo). */
+  OPTYPE_REGISTER = (1 << 0),
+  /** Do an undo push after the operator runs. */
+  OPTYPE_UNDO = (1 << 1),
+  /** Let Blender grab all input from the WM (X11) */
+  OPTYPE_BLOCKING = (1 << 2),
   OPTYPE_MACRO = (1 << 3),
-  OPTYPE_GRAB_CURSOR =
-      (1 << 4), /* grabs the cursor and optionally enables continuous cursor wrapping */
-  OPTYPE_PRESET = (1 << 5), /* show preset menu */
 
-  /* some operators are mainly for internal use
-   * and don't make sense to be accessed from the
-   * search menu, even if poll() returns true.
-   * currently only used for the search toolbox */
-  OPTYPE_INTERNAL = (1 << 6),
+  /** Grabs the cursor and optionally enables continuous cursor wrapping. */
+  OPTYPE_GRAB_CURSOR_XY = (1 << 4),
+  /** Only warp on the X axis. */
+  OPTYPE_GRAB_CURSOR_X = (1 << 5),
+  /** Only warp on the Y axis. */
+  OPTYPE_GRAB_CURSOR_Y = (1 << 6),
 
-  OPTYPE_LOCK_BYPASS = (1 << 7), /* Allow operator to run when interface is locked */
-  OPTYPE_UNDO_GROUPED =
-      (1 << 8), /* Special type of undo which doesn't store itself multiple times */
-  OPTYPE_USE_EVAL_DATA =
-      (1 << 9), /* Need evaluated data (i.e. a valid, up-to-date depsgraph for current context) */
+  /** Show preset menu. */
+  OPTYPE_PRESET = (1 << 7),
+
+  /**
+   * Some operators are mainly for internal use and don't make sense
+   * to be accessed from the search menu, even if poll() returns true.
+   * Currently only used for the search toolbox.
+   */
+  OPTYPE_INTERNAL = (1 << 8),
+
+  /** Allow operator to run when interface is locked. */
+  OPTYPE_LOCK_BYPASS = (1 << 9),
+  /** Special type of undo which doesn't store itself multiple times. */
+  OPTYPE_UNDO_GROUPED = (1 << 10),
+  /** Need evaluated data (i.e. a valid, up-to-date depsgraph for current context). */
+  OPTYPE_USE_EVAL_DATA = (1 << 11),
+};
+
+/** For #WM_cursor_grab_enable wrap axis. */
+enum {
+  WM_CURSOR_WRAP_NONE = 0,
+  WM_CURSOR_WRAP_X,
+  WM_CURSOR_WRAP_Y,
+  WM_CURSOR_WRAP_XY,
 };
 
 /* context to call operator in for WM_operator_name_call */
@@ -427,7 +460,8 @@ typedef struct wmGesture {
   int modal_state;
 
   /* For modal operators which may be running idle, waiting for an event to activate the gesture.
-   * Typically this is set when the user is click-dragging the gesture (border and circle select for eg). */
+   * Typically this is set when the user is click-dragging the gesture
+   * (border and circle select for eg). */
   uint is_active : 1;
   /* Previous value of is-active (use to detect first run & edge cases). */
   uint is_active_prev : 1;
@@ -441,8 +475,7 @@ typedef struct wmGesture {
   /* customdata for straight line is a recti: (xmin,ymin) is start, (xmax, ymax) is end */
 
   /* free pointer to use for operator allocs (if set, its freed on exit)*/
-  void *userdata;
-  bool userdata_free;
+  wmGenericUserData user_data;
 } wmGesture;
 
 /* ************** wmEvent ************************ */
@@ -457,8 +490,8 @@ typedef struct wmEvent {
   int x, y;         /* mouse pointer position, screen coord */
   int mval[2];      /* region mouse position, name convention pre 2.5 :) */
   char utf8_buf[6]; /* from, ghost if utf8 is enabled for the platform,
-             * BLI_str_utf8_size() must _always_ be valid, check
-             * when assigning s we don't need to check on every access after */
+                     * BLI_str_utf8_size() must _always_ be valid, check
+                     * when assigning s we don't need to check on every access after */
   char ascii;       /* from ghost, fallback if utf8 isn't set */
   char pad;
 
@@ -495,7 +528,9 @@ typedef struct wmEvent {
 /**
  * Values below are considered a click, above are considered a drag.
  */
-#define WM_EVENT_CURSOR_CLICK_DRAG_THRESHOLD (U.tweak_threshold * U.dpi_fac)
+int WM_event_cursor_click_drag_threshold_from_event_(const wmEvent *event);
+
+bool WM_event_cursor_click_drag_threshold_met(const wmEvent *event);
 
 /**
  * Values below are ignored when detecting if the user interntionally moved the cursor.
@@ -526,7 +561,8 @@ typedef enum { /* motion progress, for modal handlers */
 typedef struct wmNDOFMotionData {
   /* awfully similar to GHOST_TEventNDOFMotionData... */
   /* Each component normally ranges from -1 to +1, but can exceed that.
-   * These use blender standard view coordinates, with positive rotations being CCW about the axis. */
+   * These use blender standard view coordinates,
+   * with positive rotations being CCW about the axis. */
   float tvec[3]; /* translation */
   float rvec[3]; /* rotation: */
   /* axis = (rx,ry,rz).normalized */
@@ -603,7 +639,7 @@ typedef struct wmOperatorType {
    * that the operator might still fail to execute even if this return true */
   bool (*poll)(struct bContext *) ATTR_WARN_UNUSED_RESULT;
 
-  /* Use to check of properties should be displayed in auto-generated UI.
+  /* Use to check if properties should be displayed in auto-generated UI.
    * Use 'check' callback to enforce refreshing. */
   bool (*poll_property)(const struct bContext *C,
                         struct wmOperator *op,

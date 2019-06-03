@@ -112,7 +112,7 @@ typedef enum uiItemType {
 
   ITEM_LAYOUT_ROOT
 #if 0
-  TEMPLATE_COLUMN_FLOW,
+      TEMPLATE_COLUMN_FLOW,
   TEMPLATE_SPLIT,
   TEMPLATE_BOX,
 
@@ -304,10 +304,14 @@ static int ui_text_icon_width(uiLayout *layout, const char *name, int icon, bool
       layout->item.flag |= UI_ITEM_MIN;
     }
     const uiFontStyle *fstyle = UI_FSTYLE_WIDGET;
-    /* it may seem odd that the icon only adds (unit_x / 4)
-     * but taking margins into account its fine */
-    return (UI_fontstyle_string_width(fstyle, name) +
-            (unit_x * ((compact ? 1.25f : 1.50f) + (icon ? 0.25f : 0.0f))));
+    float margin = compact ? 1.25 : 1.50;
+    if (icon) {
+      /* It may seem odd that the icon only adds (unit_x / 4)
+       * but taking margins into account its fine, except
+       * in compact mode a bit more margin is required. */
+      margin += compact ? 0.35 : 0.25;
+    }
+    return UI_fontstyle_string_width(fstyle, name) + (unit_x * margin);
   }
   else {
     return unit_x * 10;
@@ -480,7 +484,7 @@ static void ui_item_array(uiLayout *layout,
                           int UNUSED(h),
                           bool expand,
                           bool slider,
-                          bool toggle,
+                          int toggle,
                           bool icon_only,
                           bool compact,
                           bool show_text)
@@ -687,7 +691,7 @@ static void ui_item_array(uiLayout *layout,
         if (slider && but->type == UI_BTYPE_NUM) {
           but->type = UI_BTYPE_NUM_SLIDER;
         }
-        if (toggle && but->type == UI_BTYPE_CHECKBOX) {
+        if ((toggle == 1) && but->type == UI_BTYPE_CHECKBOX) {
           but->type = UI_BTYPE_TOGGLE;
         }
         if ((a == 0) && (subtype == PROP_AXISANGLE)) {
@@ -722,33 +726,88 @@ static void ui_item_enum_expand_handle(bContext *C, void *arg1, void *arg2)
     RNA_property_enum_set(&but->rnapoin, but->rnaprop, current_value);
   }
 }
+
+/**
+ * Draw a single enum button, a utility for #ui_item_enum_expand_exec
+ */
+static void ui_item_enum_expand_elem_exec(uiLayout *layout,
+                                          uiBlock *block,
+                                          PointerRNA *ptr,
+                                          PropertyRNA *prop,
+                                          const char *uiname,
+                                          const int h,
+                                          const eButType but_type,
+                                          const bool icon_only,
+                                          const EnumPropertyItem *item,
+                                          const bool is_first)
+{
+  const char *name = (!uiname || uiname[0]) ? item->name : "";
+  const int icon = item->icon;
+  const int value = item->value;
+  const int itemw = ui_text_icon_width(block->curlayout, icon_only ? "" : name, icon, 0);
+
+  uiBut *but;
+
+  if (icon && name[0] && !icon_only) {
+    but = uiDefIconTextButR_prop(
+        block, but_type, 0, icon, name, 0, 0, itemw, h, ptr, prop, -1, 0, value, -1, -1, NULL);
+  }
+  else if (icon) {
+    const int w = (is_first) ? itemw : ceilf(itemw - U.pixelsize);
+    but = uiDefIconButR_prop(
+        block, but_type, 0, icon, 0, 0, w, h, ptr, prop, -1, 0, value, -1, -1, NULL);
+  }
+  else {
+    but = uiDefButR_prop(
+        block, but_type, 0, name, 0, 0, itemw, h, ptr, prop, -1, 0, value, -1, -1, NULL);
+  }
+
+  if (RNA_property_flag(prop) & PROP_ENUM_FLAG) {
+    /* If this is set, assert since we're clobbering someone elses callback. */
+    /* Buttons get their block's func by default, so we cannot assert in that case either. */
+    BLI_assert(ELEM(but->func, NULL, block->func));
+    UI_but_func_set(but, ui_item_enum_expand_handle, but, POINTER_FROM_INT(value));
+  }
+
+  if (uiLayoutGetLocalDir(layout) != UI_LAYOUT_HORIZONTAL) {
+    but->drawflag |= UI_BUT_TEXT_LEFT;
+  }
+
+  /* Allow quick, inaccurate swipe motions to switch tabs
+   * (no need to keep cursor over them). */
+  if (but_type == UI_BTYPE_TAB) {
+    but->flag |= UI_BUT_DRAG_LOCK;
+  }
+}
+
 static void ui_item_enum_expand_exec(uiLayout *layout,
                                      uiBlock *block,
                                      PointerRNA *ptr,
                                      PropertyRNA *prop,
                                      const char *uiname,
-                                     int h,
-                                     int but_type,
-                                     bool icon_only)
+                                     const int h,
+                                     const eButType but_type,
+                                     const bool icon_only)
 {
-  /* XXX The way this function currently handles uiname parameter is insane and inconsistent with general UI API:
-   *     * uiname is the *enum property* label.
-   *     * when it is NULL or empty, we do not draw *enum items* labels, this doubles the icon_only parameter.
-   *     * we *never* draw (i.e. really use) the enum label uiname, it is just used as a mere flag!
-   *     Unfortunately, fixing this implies an API "soft break", so better to defer it for later... :/
-   *     --mont29
+  /* XXX: The way this function currently handles uiname parameter
+   * is insane and inconsistent with general UI API:
+   *
+   * - uiname is the *enum property* label.
+   * - when it is NULL or empty, we do not draw *enum items* labels,
+   *   this doubles the icon_only parameter.
+   * - we *never* draw (i.e. really use) the enum label uiname, it is just used as a mere flag!
+   *
+   * Unfortunately, fixing this implies an API "soft break", so better to defer it for later... :/
+   * - mont29
    */
 
-  uiBut *but;
-  uiLayout *layout_radial = NULL;
   const EnumPropertyItem *item, *item_array;
-  const char *name;
-  int itemw, icon, value;
   bool free;
-  bool radial = (layout->root->type == UI_LAYOUT_PIEMENU);
 
   BLI_assert(RNA_property_type(prop) == PROP_ENUM);
 
+  uiLayout *layout_radial = NULL;
+  bool radial = (layout->root->type == UI_LAYOUT_PIEMENU);
   if (radial) {
     RNA_property_enum_items_gettexted_all(block->evil_C, ptr, prop, &item_array, NULL, &free);
   }
@@ -769,11 +828,12 @@ static void ui_item_enum_expand_exec(uiLayout *layout,
       UI_block_layout_set_current(block, layout);
     }
   }
-  else if (layout->root->type != UI_LAYOUT_MENU) {
-    UI_block_layout_set_current(block, ui_item_local_sublayout(layout, layout, 1));
+  else if (ELEM(layout->item.type, ITEM_LAYOUT_GRID_FLOW, ITEM_LAYOUT_COLUMN_FLOW) ||
+           layout->root->type == UI_LAYOUT_MENU) {
+    UI_block_layout_set_current(block, layout);
   }
   else {
-    UI_block_layout_set_current(block, layout);
+    UI_block_layout_set_current(block, ui_item_local_sublayout(layout, layout, 1));
   }
 
   for (item = item_array; item->identifier; item++) {
@@ -802,54 +862,10 @@ static void ui_item_enum_expand_exec(uiLayout *layout,
       continue;
     }
 
-    name = (!uiname || uiname[0]) ? item->name : "";
-    icon = item->icon;
-    value = item->value;
-    itemw = ui_text_icon_width(block->curlayout, icon_only ? "" : name, icon, 0);
-
-    if (icon && name[0] && !icon_only) {
-      but = uiDefIconTextButR_prop(
-          block, but_type, 0, icon, name, 0, 0, itemw, h, ptr, prop, -1, 0, value, -1, -1, NULL);
-    }
-    else if (icon) {
-      but = uiDefIconButR_prop(block,
-                               but_type,
-                               0,
-                               icon,
-                               0,
-                               0,
-                               (is_first) ? itemw : ceilf(itemw - U.pixelsize),
-                               h,
-                               ptr,
-                               prop,
-                               -1,
-                               0,
-                               value,
-                               -1,
-                               -1,
-                               NULL);
-    }
-    else {
-      but = uiDefButR_prop(
-          block, but_type, 0, name, 0, 0, itemw, h, ptr, prop, -1, 0, value, -1, -1, NULL);
-    }
-
-    if (RNA_property_flag(prop) & PROP_ENUM_FLAG) {
-      /* If this is set, assert since we're clobbering someone elses callback. */
-      BLI_assert(but->func == NULL);
-      UI_but_func_set(but, ui_item_enum_expand_handle, but, POINTER_FROM_INT(value));
-    }
-
-    if (uiLayoutGetLocalDir(layout) != UI_LAYOUT_HORIZONTAL) {
-      but->drawflag |= UI_BUT_TEXT_LEFT;
-    }
-
-    /* Allow quick, inaccurate swipe motions to switch tabs
-     * (no need to keep cursor over them). */
-    if (but_type == UI_BTYPE_TAB) {
-      but->flag |= UI_BUT_DRAG_LOCK;
-    }
+    ui_item_enum_expand_elem_exec(
+        layout, block, ptr, prop, uiname, h, but_type, icon_only, item, is_first);
   }
+
   UI_block_layout_set_current(block, layout);
 
   if (free) {
@@ -861,8 +877,8 @@ static void ui_item_enum_expand(uiLayout *layout,
                                 PointerRNA *ptr,
                                 PropertyRNA *prop,
                                 const char *uiname,
-                                int h,
-                                bool icon_only)
+                                const int h,
+                                const bool icon_only)
 {
   ui_item_enum_expand_exec(layout, block, ptr, prop, uiname, h, UI_BTYPE_ROW, icon_only);
 }
@@ -872,8 +888,8 @@ static void ui_item_enum_expand_tabs(uiLayout *layout,
                                      PointerRNA *ptr,
                                      PropertyRNA *prop,
                                      const char *uiname,
-                                     int h,
-                                     bool icon_only)
+                                     const int h,
+                                     const bool icon_only)
 {
   uiBut *last = block->buttons.last;
 
@@ -1439,7 +1455,6 @@ void uiItemsFullEnumO_items(uiLayout *layout,
       if (properties) {
         if (tptr.data) {
           IDP_FreeProperty(tptr.data);
-          MEM_freeN(tptr.data);
         }
         tptr.data = IDP_CopyProperty(properties);
       }
@@ -1533,12 +1548,14 @@ void uiItemsFullEnumO(uiLayout *layout,
     bool free;
 
     if (ui_layout_is_radial(layout)) {
-      /* XXX: While "_all()" guarantees spatial stability, it's bad when an enum has > 8 items total,
-       * but only a small subset will ever be shown at once (e.g. Mode Switch menu, after the
-       * introduction of GP editing modes)
+      /* XXX: While "_all()" guarantees spatial stability,
+       * it's bad when an enum has > 8 items total,
+       * but only a small subset will ever be shown at once
+       * (e.g. Mode Switch menu, after the introduction of GP editing modes).
        */
 #if 0
-      RNA_property_enum_items_gettexted_all(block->evil_C, &ptr, prop, &item_array, &totitem, &free);
+      RNA_property_enum_items_gettexted_all(
+          block->evil_C, &ptr, prop, &item_array, &totitem, &free);
 #else
       RNA_property_enum_items_gettexted(block->evil_C, &ptr, prop, &item_array, &totitem, &free);
 #endif
@@ -1841,12 +1858,7 @@ void uiItemFullR(uiLayout *layout,
                  int icon)
 {
   uiBlock *block = layout->root->block;
-  uiBut *but = NULL;
-  PropertyType type;
   char namestr[UI_MAX_NAME_STR];
-  int len, w, h;
-  bool slider, toggle, expand, icon_only, no_bg, compact;
-  bool is_array;
   const bool use_prop_sep = ((layout->item.flag & UI_ITEM_PROP_SEP) != 0);
 
   /* By default 'use_prop_sep' uses a separate column for labels.
@@ -1871,11 +1883,15 @@ void uiItemFullR(uiLayout *layout,
   UI_block_layout_set_current(block, layout);
 
   /* retrieve info */
-  type = RNA_property_type(prop);
-  is_array = RNA_property_array_check(prop);
-  len = (is_array) ? RNA_property_array_length(ptr, prop) : 0;
+  const PropertyType type = RNA_property_type(prop);
+  const bool is_array = RNA_property_array_check(prop);
+  const int len = (is_array) ? RNA_property_array_length(ptr, prop) : 0;
 
-  icon_only = (flag & UI_ITEM_R_ICON_ONLY) != 0;
+  const bool icon_only = (flag & UI_ITEM_R_ICON_ONLY) != 0;
+
+  /* Boolean with -1 to signify that the value depends on the presence of an icon. */
+  const int toggle = ((flag & UI_ITEM_R_TOGGLE) ? 1 : ((flag & UI_ITEM_R_ICON_NEVER) ? 0 : -1));
+  const bool no_icon = (toggle == 0);
 
   /* set name and icon */
   if (!name) {
@@ -1887,8 +1903,8 @@ void uiItemFullR(uiLayout *layout,
     }
   }
 
-  if (icon == ICON_NONE) {
-    icon = RNA_property_ui_icon(prop);
+  if (type != PROP_BOOLEAN) {
+    flag &= ~UI_ITEM_R_CHECKBOX_INVERT;
   }
 
   if (flag & UI_ITEM_R_ICON_ONLY) {
@@ -1915,6 +1931,47 @@ void uiItemFullR(uiLayout *layout,
     }
   }
 
+  if (no_icon == false) {
+    if (icon == ICON_NONE) {
+      icon = RNA_property_ui_icon(prop);
+    }
+
+    /* Menus and pie-menus don't show checkbox without this. */
+    if ((layout->root->type == UI_LAYOUT_MENU) ||
+        /* Use checkboxes only as a fallback in pie-menu's, when no icon is defined. */
+        ((layout->root->type == UI_LAYOUT_PIEMENU) && (icon == ICON_NONE))) {
+      int prop_flag = RNA_property_flag(prop);
+      if (type == PROP_BOOLEAN) {
+        if ((is_array == false) || (index != RNA_NO_INDEX)) {
+          if (prop_flag & PROP_ICONS_CONSECUTIVE) {
+            icon = ICON_CHECKBOX_DEHLT; /* but->iconadd will set to correct icon */
+          }
+          else if (is_array) {
+            icon = (RNA_property_boolean_get_index(ptr, prop, index)) ? ICON_CHECKBOX_HLT :
+                                                                        ICON_CHECKBOX_DEHLT;
+          }
+          else {
+            icon = (RNA_property_boolean_get(ptr, prop)) ? ICON_CHECKBOX_HLT : ICON_CHECKBOX_DEHLT;
+          }
+        }
+      }
+      else if (type == PROP_ENUM) {
+        if (index == RNA_ENUM_VALUE) {
+          int enum_value = RNA_property_enum_get(ptr, prop);
+          if (prop_flag & PROP_ICONS_CONSECUTIVE) {
+            icon = ICON_CHECKBOX_DEHLT; /* but->iconadd will set to correct icon */
+          }
+          else if (prop_flag & PROP_ENUM_FLAG) {
+            icon = (enum_value & value) ? ICON_CHECKBOX_HLT : ICON_CHECKBOX_DEHLT;
+          }
+          else {
+            icon = (enum_value == value) ? ICON_CHECKBOX_HLT : ICON_CHECKBOX_DEHLT;
+          }
+        }
+      }
+    }
+  }
+
 #ifdef UI_PROP_SEP_ICON_WIDTH_EXCEPTION
   if (use_prop_sep) {
     if (type == PROP_BOOLEAN && (icon == ICON_NONE) && !icon_only) {
@@ -1923,54 +1980,25 @@ void uiItemFullR(uiLayout *layout,
   }
 #endif
 
-  /* menus and pie-menus don't show checkbox without this */
-  if ((layout->root->type == UI_LAYOUT_MENU) ||
-      /* use checkboxes only as a fallback in pie-menu's, when no icon is defined */
-      ((layout->root->type == UI_LAYOUT_PIEMENU) && (icon == ICON_NONE))) {
-    int prop_flag = RNA_property_flag(prop);
-    if (type == PROP_BOOLEAN && ((is_array == false) || (index != RNA_NO_INDEX))) {
-      if (prop_flag & PROP_ICONS_CONSECUTIVE) {
-        icon = ICON_CHECKBOX_DEHLT; /* but->iconadd will set to correct icon */
-      }
-      else if (is_array) {
-        icon = (RNA_property_boolean_get_index(ptr, prop, index)) ? ICON_CHECKBOX_HLT :
-                                                                    ICON_CHECKBOX_DEHLT;
-      }
-      else {
-        icon = (RNA_property_boolean_get(ptr, prop)) ? ICON_CHECKBOX_HLT : ICON_CHECKBOX_DEHLT;
-      }
-    }
-    else if (type == PROP_ENUM && index == RNA_ENUM_VALUE) {
-      int enum_value = RNA_property_enum_get(ptr, prop);
-      if (prop_flag & PROP_ICONS_CONSECUTIVE) {
-        icon = ICON_CHECKBOX_DEHLT; /* but->iconadd will set to correct icon */
-      }
-      else if (prop_flag & PROP_ENUM_FLAG) {
-        icon = (enum_value & value) ? ICON_CHECKBOX_HLT : ICON_CHECKBOX_DEHLT;
-      }
-      else {
-        icon = (enum_value == value) ? ICON_CHECKBOX_HLT : ICON_CHECKBOX_DEHLT;
-      }
-    }
-  }
-
   if ((type == PROP_ENUM) && (RNA_property_flag(prop) & PROP_ENUM_FLAG)) {
     flag |= UI_ITEM_R_EXPAND;
   }
 
-  slider = (flag & UI_ITEM_R_SLIDER) != 0;
-  toggle = (flag & UI_ITEM_R_TOGGLE) != 0;
-  expand = (flag & UI_ITEM_R_EXPAND) != 0;
-  no_bg = (flag & UI_ITEM_R_NO_BG) != 0;
-  compact = (flag & UI_ITEM_R_COMPACT) != 0;
+  const bool slider = (flag & UI_ITEM_R_SLIDER) != 0;
+  const bool expand = (flag & UI_ITEM_R_EXPAND) != 0;
+  const bool no_bg = (flag & UI_ITEM_R_NO_BG) != 0;
+  const bool compact = (flag & UI_ITEM_R_COMPACT) != 0;
 
   /* get size */
+  int w, h;
   ui_item_rna_size(layout, name, icon, ptr, prop, index, icon_only, compact, &w, &h);
 
   int prev_emboss = layout->emboss;
   if (no_bg) {
     layout->emboss = UI_EMBOSS_NONE;
   }
+
+  uiBut *but = NULL;
 
   /* Split the label / property. */
   uiLayout *layout_parent = layout;
@@ -2139,7 +2167,13 @@ void uiItemFullR(uiLayout *layout,
       but->type = UI_BTYPE_NUM_SLIDER;
     }
 
-    if (toggle && but->type == UI_BTYPE_CHECKBOX) {
+    if (flag & UI_ITEM_R_CHECKBOX_INVERT) {
+      if (ELEM(but->type, UI_BTYPE_CHECKBOX, UI_BTYPE_CHECKBOX_N)) {
+        but->drawflag |= UI_BUT_CHECKBOX_INVERT;
+      }
+    }
+
+    if ((toggle == 1) && but->type == UI_BTYPE_CHECKBOX) {
       but->type = UI_BTYPE_TOGGLE;
     }
 
@@ -2155,6 +2189,18 @@ void uiItemFullR(uiLayout *layout,
       /* When the button uses it's own text right align it. */
       but->drawflag |= UI_BUT_TEXT_RIGHT;
       but->drawflag &= ~UI_BUT_TEXT_LEFT;
+    }
+  }
+
+  /* The resulting button may have the icon set since boolean button drawing
+   * is being 'helpful' and adding an icon for us.
+   * In this case we want the ability not to have an icon.
+   *
+   * We could pass an argument not to set the icon to begin with however this is the one case
+   * the functionality is needed.  */
+  if (but && no_icon) {
+    if ((icon == ICON_NONE) && (but->icon != ICON_NONE)) {
+      ui_def_but_icon_clear(but);
     }
   }
 
@@ -2727,14 +2773,8 @@ static uiBut *ui_item_menu(uiLayout *layout,
   return but;
 }
 
-void uiItemM(uiLayout *layout, const char *menuname, const char *name, int icon)
+void uiItemM_ptr(uiLayout *layout, MenuType *mt, const char *name, int icon)
 {
-  MenuType *mt = WM_menutype_find(menuname, false);
-  if (mt == NULL) {
-    RNA_warning("not found %s", menuname);
-    return;
-  }
-
   if (!name) {
     name = CTX_IFACE_(mt->translation_context, mt->label);
   }
@@ -2751,6 +2791,16 @@ void uiItemM(uiLayout *layout, const char *menuname, const char *name, int icon)
                NULL,
                mt->description ? TIP_(mt->description) : "",
                false);
+}
+
+void uiItemM(uiLayout *layout, const char *menuname, const char *name, int icon)
+{
+  MenuType *mt = WM_menutype_find(menuname, false);
+  if (mt == NULL) {
+    RNA_warning("not found %s", menuname);
+    return;
+  }
+  uiItemM_ptr(layout, mt, name, icon);
 }
 
 void uiItemMContents(uiLayout *layout, const char *menuname)
@@ -2955,6 +3005,9 @@ void uiItemS_ex(uiLayout *layout, float factor)
 {
   uiBlock *block = layout->root->block;
   bool is_menu = ui_block_is_menu(block);
+  if (is_menu && !UI_block_can_add_separator(block)) {
+    return;
+  }
   int space = (is_menu) ? 0.45f * UI_UNIT_X : 0.3f * UI_UNIT_X;
   space *= factor;
 
@@ -3736,9 +3789,10 @@ static void ui_litem_layout_column_flow(uiLayout *litem)
       emy = 0; /* need to reset height again for next column */
       col++;
 
-      /*  (<     remaining width     > - <      space between remaining columns      >) / <remamining columns > */
-      w = ((litem->w - (x - litem->x)) - (flow->totcol - col - 1) * style->columnspace) /
-          (flow->totcol - col);
+      const int remaining_width = litem->w - (x - litem->x);
+      const int remaining_width_between_columns = (flow->totcol - col - 1) * style->columnspace;
+      const int remaining_columns = flow->totcol - col;
+      w = (remaining_width - remaining_width_between_columns) / remaining_columns;
     }
   }
 
@@ -3963,9 +4017,10 @@ static void ui_litem_estimate_grid_flow(uiLayout *litem)
       return;
     }
 
-    /* Even in varying column width case, we fix our columns number from weighted average width of items,
-     * a proper solving of required width would be too costly, and this should give reasonably good results
-     * in all reasonable cases... */
+    /* Even in varying column width case,
+     * we fix our columns number from weighted average width of items,
+     * a proper solving of required width would be too costly,
+     * and this should give reasonably good results in all reasonable cases. */
     if (gflow->columns_len > 0) {
       gflow->tot_columns = gflow->columns_len;
     }
@@ -4434,7 +4489,8 @@ uiLayout *uiLayoutBox(uiLayout *layout)
 }
 
 /**
- * Check all buttons defined in this layout, and set any button flagged as UI_BUT_LIST_ITEM as active/selected.
+ * Check all buttons defined in this layout,
+ * and set any button flagged as UI_BUT_LIST_ITEM as active/selected.
  * Needed to handle correctly text colors of active (selected) list item.
  */
 void ui_layout_list_set_labels_active(uiLayout *layout)

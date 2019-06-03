@@ -317,19 +317,21 @@ static StructRNA *rna_Panel_register(Main *bmain,
   pt->draw_header = (have_function[2]) ? panel_draw_header : NULL;
   pt->draw_header_preset = (have_function[3]) ? panel_draw_header_preset : NULL;
 
-  /* XXX use "no header" flag for some ordering of panels until we have real panel ordering */
-  if (pt->flag & PNL_NO_HEADER) {
-    PanelType *pth = art->paneltypes.first;
-    while (pth && pth->flag & PNL_NO_HEADER)
-      pth = pth->next;
+  /* Find position to insert panel based on order. */
+  PanelType *pt_iter = art->paneltypes.last;
 
-    if (pth)
-      BLI_insertlinkbefore(&art->paneltypes, pth, pt);
-    else
-      BLI_addtail(&art->paneltypes, pt);
+  for (; pt_iter; pt_iter = pt_iter->prev) {
+    /* No header has priority. */
+    if ((pt->flag & PNL_NO_HEADER) && !(pt_iter->flag & PNL_NO_HEADER)) {
+      continue;
+    }
+    if (pt_iter->order <= pt->order) {
+      break;
+    }
   }
-  else
-    BLI_addtail(&art->paneltypes, pt);
+
+  /* Insert into list. */
+  BLI_insertlinkafter(&art->paneltypes, pt_iter, pt);
 
   if (parent) {
     pt->parent = parent;
@@ -496,8 +498,8 @@ static void uilist_filter_items(uiList *ui_list,
       memcpy(flt_data->items_filter_flags, filter_flags, sizeof(int) * len);
 
       if (filter_neworder) {
-        /* For sake of simplicity, py filtering is expected to filter all items, but we actually only want
-         * reordering data for shown items!
+        /* For sake of simplicity, py filtering is expected to filter all items,
+         * but we actually only want reordering data for shown items!
          */
         int items_shown, shown_idx;
         int t_idx, t_ni, prev_ni;
@@ -1171,7 +1173,8 @@ static void rna_def_ui_layout(BlenderRNA *brna)
 
 #  if 0
   prop = RNA_def_property(srna, "keep_aspect", PROP_BOOLEAN, PROP_NONE);
-  RNA_def_property_boolean_funcs(prop, "rna_UILayout_keep_aspect_get", "rna_UILayout_keep_aspect_set");
+  RNA_def_property_boolean_funcs(
+      prop, "rna_UILayout_keep_aspect_get", "rna_UILayout_keep_aspect_set");
 #  endif
 
   prop = RNA_def_property(srna, "scale_x", PROP_FLOAT, PROP_UNSIGNED);
@@ -1346,6 +1349,14 @@ static void rna_def_panel(BlenderRNA *brna)
   RNA_def_property_flag(prop, PROP_REGISTER_OPTIONAL);
   RNA_def_property_ui_text(prop, "Units X", "When set, defines popup panel width");
 
+  prop = RNA_def_property(srna, "bl_order", PROP_INT, PROP_UNSIGNED);
+  RNA_def_property_int_sdna(prop, NULL, "type->order");
+  RNA_def_property_flag(prop, PROP_REGISTER_OPTIONAL);
+  RNA_def_property_ui_text(
+      prop,
+      "Order",
+      "Panels with lower numbers are default ordered before panels with higher numbers");
+
   prop = RNA_def_property(srna, "use_pin", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_sdna(prop, NULL, "flag", PNL_PIN);
   RNA_def_property_ui_text(prop, "Pin", "");
@@ -1404,8 +1415,8 @@ static void rna_def_uilist(BlenderRNA *brna)
   RNA_def_property_boolean_sdna(prop, NULL, "filter_flag", UILST_FLT_EXCLUDE);
   RNA_def_property_ui_text(prop, "Invert", "Invert filtering (show hidden items, and vice-versa)");
 
-  /* WARNING: This is sort of an abuse, sort-by-alpha is actually a value, should even be an enum in full logic
-   * (of two values, sort by index and sort by name).
+  /* WARNING: This is sort of an abuse, sort-by-alpha is actually a value,
+   * should even be an enum in full logic (of two values, sort by index and sort by name).
    * But for default UIList, it's nicer (better UI-wise) to show this as a boolean bit-flag option,
    * avoids having to define custom setters/getters using UILST_FLT_SORT_MASK to mask out
    * actual bitflags on same var, etc.

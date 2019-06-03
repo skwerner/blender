@@ -34,6 +34,7 @@
 #include "DNA_brush_types.h"
 #include "DNA_space_types.h"
 #include "DNA_gpencil_types.h"
+#include "DNA_view3d_types.h"
 #include "DNA_workspace_types.h"
 
 #include "BLI_bitmap.h"
@@ -82,24 +83,34 @@ static eOverlayControlFlags overlay_flags = 0;
 void BKE_paint_invalidate_overlay_tex(Scene *scene, ViewLayer *view_layer, const Tex *tex)
 {
   Paint *p = BKE_paint_get_active(scene, view_layer);
-  Brush *br = p->brush;
-
-  if (!br)
+  if (!p) {
     return;
+  }
 
-  if (br->mtex.tex == tex)
+  Brush *br = p->brush;
+  if (!br) {
+    return;
+  }
+
+  if (br->mtex.tex == tex) {
     overlay_flags |= PAINT_OVERLAY_INVALID_TEXTURE_PRIMARY;
-  if (br->mask_mtex.tex == tex)
+  }
+  if (br->mask_mtex.tex == tex) {
     overlay_flags |= PAINT_OVERLAY_INVALID_TEXTURE_SECONDARY;
+  }
 }
 
 void BKE_paint_invalidate_cursor_overlay(Scene *scene, ViewLayer *view_layer, CurveMapping *curve)
 {
   Paint *p = BKE_paint_get_active(scene, view_layer);
-  Brush *br = p->brush;
+  if (p == NULL) {
+    return;
+  }
 
-  if (br && br->curve == curve)
+  Brush *br = p->brush;
+  if (br && br->curve == curve) {
     overlay_flags |= PAINT_OVERLAY_INVALID_CURVE;
+  }
 }
 
 void BKE_paint_invalidate_overlay_all(void)
@@ -116,12 +127,15 @@ eOverlayControlFlags BKE_paint_get_overlay_flags(void)
 void BKE_paint_set_overlay_override(eOverlayFlags flags)
 {
   if (flags & BRUSH_OVERLAY_OVERRIDE_MASK) {
-    if (flags & BRUSH_OVERLAY_CURSOR_OVERRIDE_ON_STROKE)
+    if (flags & BRUSH_OVERLAY_CURSOR_OVERRIDE_ON_STROKE) {
       overlay_flags |= PAINT_OVERLAY_OVERRIDE_CURSOR;
-    if (flags & BRUSH_OVERLAY_PRIMARY_OVERRIDE_ON_STROKE)
+    }
+    if (flags & BRUSH_OVERLAY_PRIMARY_OVERRIDE_ON_STROKE) {
       overlay_flags |= PAINT_OVERLAY_OVERRIDE_PRIMARY;
-    if (flags & BRUSH_OVERLAY_SECONDARY_OVERRIDE_ON_STROKE)
+    }
+    if (flags & BRUSH_OVERLAY_SECONDARY_OVERRIDE_ON_STROKE) {
       overlay_flags |= PAINT_OVERLAY_OVERRIDE_SECONDARY;
+    }
   }
   else {
     overlay_flags &= ~(PAINT_OVERRIDE_MASK);
@@ -131,6 +145,40 @@ void BKE_paint_set_overlay_override(eOverlayFlags flags)
 void BKE_paint_reset_overlay_invalid(eOverlayControlFlags flag)
 {
   overlay_flags &= ~(flag);
+}
+
+bool BKE_paint_ensure_from_paintmode(Scene *sce, ePaintMode mode)
+{
+  ToolSettings *ts = sce->toolsettings;
+  Paint **paint_ptr = NULL;
+
+  switch (mode) {
+    case PAINT_MODE_SCULPT:
+      paint_ptr = (Paint **)&ts->sculpt;
+      break;
+    case PAINT_MODE_VERTEX:
+      paint_ptr = (Paint **)&ts->vpaint;
+      break;
+    case PAINT_MODE_WEIGHT:
+      paint_ptr = (Paint **)&ts->wpaint;
+      break;
+    case PAINT_MODE_TEXTURE_2D:
+    case PAINT_MODE_TEXTURE_3D:
+      break;
+    case PAINT_MODE_SCULPT_UV:
+      paint_ptr = (Paint **)&ts->uvsculpt;
+      break;
+    case PAINT_MODE_GPENCIL:
+      paint_ptr = (Paint **)&ts->gp_paint;
+      break;
+    case PAINT_MODE_INVALID:
+      break;
+  }
+  if (paint_ptr && (*paint_ptr == NULL)) {
+    BKE_paint_ensure(ts, paint_ptr);
+    return true;
+  }
+  return false;
 }
 
 Paint *BKE_paint_get_active_from_paintmode(Scene *sce, ePaintMode mode)
@@ -175,6 +223,7 @@ const EnumPropertyItem *BKE_paint_get_tool_enum_from_paintmode(ePaintMode mode)
     case PAINT_MODE_TEXTURE_3D:
       return rna_enum_brush_image_tool_items;
     case PAINT_MODE_SCULPT_UV:
+      return rna_enum_brush_uv_sculpt_tool_items;
       return NULL;
     case PAINT_MODE_GPENCIL:
       return rna_enum_brush_gpencil_types_items;
@@ -196,6 +245,8 @@ const char *BKE_paint_get_tool_prop_id_from_paintmode(ePaintMode mode)
     case PAINT_MODE_TEXTURE_2D:
     case PAINT_MODE_TEXTURE_3D:
       return "image_tool";
+    case PAINT_MODE_SCULPT_UV:
+      return "uv_sculpt_tool";
     case PAINT_MODE_GPENCIL:
       return "gpencil_tool";
     default:
@@ -222,9 +273,7 @@ Paint *BKE_paint_get_active(Scene *sce, ViewLayer *view_layer)
         case OB_MODE_PAINT_GPENCIL:
           return &ts->gp_paint->paint;
         case OB_MODE_EDIT:
-          if (ts->use_uv_sculpt)
-            return &ts->uvsculpt->paint;
-          return &ts->imapaint.paint;
+          return &ts->uvsculpt->paint;
         default:
           break;
       }
@@ -247,15 +296,18 @@ Paint *BKE_paint_get_active_from_context(const bContext *C)
     ToolSettings *ts = sce->toolsettings;
     Object *obact = NULL;
 
-    if (view_layer->basact && view_layer->basact->object)
+    if (view_layer->basact && view_layer->basact->object) {
       obact = view_layer->basact->object;
+    }
 
     if ((sima = CTX_wm_space_image(C)) != NULL) {
       if (obact && obact->mode == OB_MODE_EDIT) {
-        if (sima->mode == SI_MODE_PAINT)
+        if (sima->mode == SI_MODE_PAINT) {
           return &ts->imapaint.paint;
-        else if (ts->use_uv_sculpt)
+        }
+        else if (sima->mode == SI_MODE_UV) {
           return &ts->uvsculpt->paint;
+        }
       }
       else {
         return &ts->imapaint.paint;
@@ -276,18 +328,20 @@ ePaintMode BKE_paintmode_get_active_from_context(const bContext *C)
   SpaceImage *sima;
 
   if (sce && view_layer) {
-    ToolSettings *ts = sce->toolsettings;
     Object *obact = NULL;
 
-    if (view_layer->basact && view_layer->basact->object)
+    if (view_layer->basact && view_layer->basact->object) {
       obact = view_layer->basact->object;
+    }
 
     if ((sima = CTX_wm_space_image(C)) != NULL) {
       if (obact && obact->mode == OB_MODE_EDIT) {
-        if (sima->mode == SI_MODE_PAINT)
+        if (sima->mode == SI_MODE_PAINT) {
           return PAINT_MODE_TEXTURE_2D;
-        else if (ts->use_uv_sculpt)
+        }
+        else if (sima->mode == SI_MODE_UV) {
           return PAINT_MODE_SCULPT_UV;
+        }
       }
       else {
         return PAINT_MODE_TEXTURE_2D;
@@ -304,9 +358,7 @@ ePaintMode BKE_paintmode_get_active_from_context(const bContext *C)
         case OB_MODE_TEXTURE_PAINT:
           return PAINT_MODE_TEXTURE_3D;
         case OB_MODE_EDIT:
-          if (ts->use_uv_sculpt)
-            return PAINT_MODE_SCULPT_UV;
-          return PAINT_MODE_TEXTURE_2D;
+          return PAINT_MODE_SCULPT_UV;
         default:
           return PAINT_MODE_TEXTURE_2D;
       }
@@ -340,6 +392,8 @@ ePaintMode BKE_paintmode_get_from_tool(const struct bToolRef *tref)
     switch (tref->mode) {
       case SI_MODE_PAINT:
         return PAINT_MODE_TEXTURE_2D;
+      case SI_MODE_UV:
+        return PAINT_MODE_SCULPT_UV;
     }
   }
 
@@ -380,14 +434,13 @@ void BKE_paint_runtime_init(const ToolSettings *ts, Paint *paint)
     paint->runtime.tool_offset = offsetof(Brush, weightpaint_tool);
     paint->runtime.ob_mode = OB_MODE_WEIGHT_PAINT;
   }
+  else if (paint == &ts->uvsculpt->paint) {
+    paint->runtime.tool_offset = offsetof(Brush, uv_sculpt_tool);
+    paint->runtime.ob_mode = OB_MODE_EDIT;
+  }
   else if (paint == &ts->gp_paint->paint) {
     paint->runtime.tool_offset = offsetof(Brush, gpencil_tool);
     paint->runtime.ob_mode = OB_MODE_PAINT_GPENCIL;
-  }
-  else if (paint == &ts->uvsculpt->paint) {
-    /* We don't use these yet. */
-    paint->runtime.tool_offset = 0;
-    paint->runtime.ob_mode = 0;
   }
   else {
     BLI_assert(0);
@@ -406,9 +459,10 @@ uint BKE_paint_get_brush_tool_offset_from_paintmode(const ePaintMode mode)
       return offsetof(Brush, vertexpaint_tool);
     case PAINT_MODE_WEIGHT:
       return offsetof(Brush, weightpaint_tool);
+    case PAINT_MODE_SCULPT_UV:
+      return offsetof(Brush, uv_sculpt_tool);
     case PAINT_MODE_GPENCIL:
       return offsetof(Brush, gpencil_tool);
-    case PAINT_MODE_SCULPT_UV:
     case PAINT_MODE_INVALID:
       break; /* We don't use these yet. */
   }
@@ -432,8 +486,10 @@ PaintCurve *BKE_paint_curve_add(Main *bmain, const char *name)
 }
 
 /**
- * Only copy internal data of PaintCurve ID from source to already allocated/initialized destination.
- * You probably never want to use that directly, use BKE_id_copy or BKE_id_copy_ex for typical needs.
+ * Only copy internal data of PaintCurve ID from source to
+ * already allocated/initialized destination.
+ * You probably never want to use that directly,
+ * use #BKE_id_copy or #BKE_id_copy_ex for typical needs.
  *
  * WARNING! This function will not handle ID user count!
  *
@@ -489,7 +545,7 @@ void BKE_paint_curve_clamp_endpoint_add_index(PaintCurve *pc, const int add_inde
   pc->add_index = (add_index || pc->tot_points == 1) ? (add_index + 1) : 0;
 }
 
-/* remove colour from palette. Must be certain color is inside the palette! */
+/** Remove color from palette. Must be certain color is inside the palette! */
 void BKE_palette_color_remove(Palette *palette, PaletteColor *color)
 {
   if (BLI_listbase_count_at_most(&palette->colors, palette->active_color) ==
@@ -519,8 +575,10 @@ Palette *BKE_palette_add(Main *bmain, const char *name)
 }
 
 /**
- * Only copy internal data of Palette ID from source to already allocated/initialized destination.
- * You probably never want to use that directly, use BKE_id_copy or BKE_id_copy_ex for typical needs.
+ * Only copy internal data of Palette ID from source
+ * to already allocated/initialized destination.
+ * You probably never want to use that directly,
+ * use #BKE_id_copy or #BKE_id_copy_ex for typical needs.
  *
  * WARNING! This function will not handle ID user count!
  *
@@ -599,8 +657,9 @@ void BKE_paint_cavity_curve_preset(Paint *p, int preset)
 {
   CurveMap *cm = NULL;
 
-  if (!p->cavity_curve)
+  if (!p->cavity_curve) {
     p->cavity_curve = curvemapping_add(1, 0, 0, 1, 1);
+  }
 
   cm = p->cavity_curve->cm;
   cm->flag &= ~CUMA_EXTEND_EXTRAPOLATE;
@@ -712,8 +771,9 @@ void BKE_paint_init(Main *bmain, Scene *sce, ePaintMode mode, const char col[3])
   ups->last_stroke_valid = false;
   zero_v3(ups->average_stroke_accum);
   ups->average_stroke_counter = 0;
-  if (!paint->cavity_curve)
+  if (!paint->cavity_curve) {
     BKE_paint_cavity_curve_preset(paint, CURVE_PRESET_LINE);
+  }
 }
 
 void BKE_paint_free(Paint *paint)
@@ -805,15 +865,19 @@ float paint_grid_paint_mask(const GridPaintMask *gpm, unsigned level, unsigned x
 
 void paint_update_brush_rake_rotation(UnifiedPaintSettings *ups, Brush *brush, float rotation)
 {
-  if (brush->mtex.brush_angle_mode & MTEX_ANGLE_RAKE)
+  if (brush->mtex.brush_angle_mode & MTEX_ANGLE_RAKE) {
     ups->brush_rotation = rotation;
-  else
+  }
+  else {
     ups->brush_rotation = 0.0f;
+  }
 
-  if (brush->mask_mtex.brush_angle_mode & MTEX_ANGLE_RAKE)
+  if (brush->mask_mtex.brush_angle_mode & MTEX_ANGLE_RAKE) {
     ups->brush_rotation_sec = rotation;
-  else
+  }
+  else {
     ups->brush_rotation_sec = 0.0f;
+  }
 }
 
 bool paint_calculate_rake_rotation(UnifiedPaintSettings *ups,
@@ -899,8 +963,9 @@ static void sculptsession_bm_to_me_update_data_only(Object *ob, bool reorder)
       BM_ITER_MESH (efa, &iter, ss->bm, BM_FACES_OF_MESH) {
         BM_elem_flag_set(efa, BM_ELEM_SMOOTH, ss->bm_smooth_shading);
       }
-      if (reorder)
+      if (reorder) {
         BM_log_mesh_elems_reorder(ss->bm, ss->bm_log);
+      }
       BM_mesh_bm_to_me(NULL,
                        ss->bm,
                        ob->data,
@@ -916,8 +981,24 @@ void BKE_sculptsession_bm_to_me(Object *ob, bool reorder)
   if (ob && ob->sculpt) {
     sculptsession_bm_to_me_update_data_only(ob, reorder);
 
-    /* ensure the objects evaluated mesh doesn't hold onto arrays now realloc'd in the mesh [#34473] */
+    /* Ensure the objects evaluated mesh doesn't hold onto arrays
+     * now realloc'd in the mesh T34473. */
     DEG_id_tag_update(&ob->id, ID_RECALC_GEOMETRY);
+  }
+}
+
+static void sculptsession_free_pbvh(Object *object)
+{
+  SculptSession *ss = object->sculpt;
+
+  if (ss && ss->pbvh) {
+    /* Ensure all normals are updated before freeing the PBVH, because
+     * we skip updating them for performance when we don't draw the PBVH. */
+    Mesh *mesh = object->data;
+    BKE_pbvh_update_normals(ss->pbvh, mesh->runtime.subdiv_ccg);
+
+    BKE_pbvh_free(ss->pbvh);
+    ss->pbvh = NULL;
   }
 }
 
@@ -932,11 +1013,6 @@ void BKE_sculptsession_bm_to_me_for_render(Object *object)
        * surface to disappear, so we'll release DM in place.
        */
       BKE_object_free_derived_caches(object);
-
-      if (object->sculpt->pbvh) {
-        BKE_pbvh_free(object->sculpt->pbvh);
-        object->sculpt->pbvh = NULL;
-      }
 
       sculptsession_bm_to_me_update_data_only(object, false);
 
@@ -958,28 +1034,35 @@ void BKE_sculptsession_free(Object *ob)
       BM_mesh_free(ss->bm);
     }
 
-    if (ss->pbvh)
-      BKE_pbvh_free(ss->pbvh);
+    sculptsession_free_pbvh(ob);
+
     MEM_SAFE_FREE(ss->pmap);
     MEM_SAFE_FREE(ss->pmap_mem);
-    if (ss->bm_log)
+    if (ss->bm_log) {
       BM_log_free(ss->bm_log);
+    }
 
-    if (ss->texcache)
+    if (ss->texcache) {
       MEM_freeN(ss->texcache);
+    }
 
-    if (ss->tex_pool)
+    if (ss->tex_pool) {
       BKE_image_pool_free(ss->tex_pool);
+    }
 
-    if (ss->layer_co)
+    if (ss->layer_co) {
       MEM_freeN(ss->layer_co);
+    }
 
-    if (ss->orig_cos)
+    if (ss->orig_cos) {
       MEM_freeN(ss->orig_cos);
-    if (ss->deform_cos)
+    }
+    if (ss->deform_cos) {
       MEM_freeN(ss->deform_cos);
-    if (ss->deform_imats)
+    }
+    if (ss->deform_imats) {
       MEM_freeN(ss->deform_imats);
+    }
 
     BKE_sculptsession_free_vwpaint_data(ob->sculpt);
 
@@ -1011,13 +1094,16 @@ MultiresModifierData *BKE_sculpt_multires_active(Scene *scene, Object *ob)
     if (md->type == eModifierType_Multires) {
       MultiresModifierData *mmd = (MultiresModifierData *)md;
 
-      if (!modifier_isEnabled(scene, md, eModifierMode_Realtime))
+      if (!modifier_isEnabled(scene, md, eModifierMode_Realtime)) {
         continue;
+      }
 
-      if (mmd->sculptlvl > 0)
+      if (mmd->sculptlvl > 0) {
         return mmd;
-      else
+      }
+      else {
         return NULL;
+      }
     }
   }
 
@@ -1032,27 +1118,33 @@ static bool sculpt_modifiers_active(Scene *scene, Sculpt *sd, Object *ob)
   MultiresModifierData *mmd = BKE_sculpt_multires_active(scene, ob);
   VirtualModifierData virtualModifierData;
 
-  if (mmd || ob->sculpt->bm)
+  if (mmd || ob->sculpt->bm) {
     return false;
+  }
 
   /* non-locked shape keys could be handled in the same way as deformed mesh */
-  if ((ob->shapeflag & OB_SHAPE_LOCK) == 0 && me->key && ob->shapenr)
+  if ((ob->shapeflag & OB_SHAPE_LOCK) == 0 && me->key && ob->shapenr) {
     return true;
+  }
 
   md = modifiers_getVirtualModifierList(ob, &virtualModifierData);
 
   /* exception for shape keys because we can edit those */
   for (; md; md = md->next) {
     const ModifierTypeInfo *mti = modifierType_getInfo(md->type);
-    if (!modifier_isEnabled(scene, md, eModifierMode_Realtime))
+    if (!modifier_isEnabled(scene, md, eModifierMode_Realtime)) {
       continue;
-    if (ELEM(md->type, eModifierType_ShapeKey, eModifierType_Multires))
+    }
+    if (ELEM(md->type, eModifierType_ShapeKey, eModifierType_Multires)) {
       continue;
+    }
 
-    if (mti->type == eModifierTypeType_OnlyDeform)
+    if (mti->type == eModifierTypeType_OnlyDeform) {
       return true;
-    else if ((sd->flags & SCULPT_ONLY_DEFORM) == 0)
+    }
+    else if ((sd->flags & SCULPT_ONLY_DEFORM) == 0) {
       return true;
+    }
   }
 
   return false;
@@ -1061,20 +1153,11 @@ static bool sculpt_modifiers_active(Scene *scene, Sculpt *sd, Object *ob)
 /**
  * \param need_mask: So that the evaluated mesh that is returned has mask data.
  */
-void BKE_sculpt_update_mesh_elements(
-    Depsgraph *depsgraph, Scene *scene, Sculpt *sd, Object *ob, bool need_pmap, bool need_mask)
+static void sculpt_update_object(
+    Depsgraph *depsgraph, Object *ob, Mesh *me_eval, bool need_pmap, bool need_mask)
 {
-  /* TODO(sergey): Make sure ob points to an original object. This is what it
-   * is supposed to be pointing to. The issue is, currently draw code takes
-   * care of PBVH creation, even though this is something up to dependency
-   * graph.
-   * Probably, we need to being back logic which was checking for sculpt mode
-   * and (re)create PBVH if needed in that case, similar to how DerivedMesh
-   * was handling this.
-   */
-  ob = DEG_get_original_object(ob);
-  Object *ob_eval = DEG_get_evaluated_object(depsgraph, ob);
-
+  Scene *scene = DEG_get_input_scene(depsgraph);
+  Sculpt *sd = scene->toolsettings->sculpt;
   SculptSession *ss = ob->sculpt;
   Mesh *me = BKE_object_get_original_mesh(ob);
   MultiresModifierData *mmd = BKE_sculpt_multires_active(scene, ob);
@@ -1093,15 +1176,7 @@ void BKE_sculpt_update_mesh_elements(
     }
     else {
       if (!CustomData_has_layer(&me->ldata, CD_GRID_PAINT_MASK)) {
-#if 1
         BKE_sculpt_mask_layers_ensure(ob, mmd);
-#else /* if we wanted to support adding mask data while multi-res painting, we would need to do this */
-        if ((ED_sculpt_mask_layers_ensure(ob, mmd) & ED_SCULPT_MASK_LAYER_CALC_LOOP)) {
-          /* remake the derived mesh */
-          ob->recalc |= ID_RECALC_GEOMETRY;
-          BKE_object_handle_update(scene, ob);
-        }
-#endif
       }
     }
   }
@@ -1110,8 +1185,6 @@ void BKE_sculpt_update_mesh_elements(
   BKE_mesh_tessface_clear(me);
 
   ss->kb = (mmd == NULL) ? BKE_keyblock_from_object(ob) : NULL;
-
-  Mesh *me_eval = mesh_get_eval_final(depsgraph, scene, ob_eval, &CD_MASK_BAREMESH);
 
   /* VWPaint require mesh info for loop lookup, so require sculpt mode here */
   if (mmd && ob->mode & OB_MODE_SCULPT) {
@@ -1137,6 +1210,7 @@ void BKE_sculpt_update_mesh_elements(
   PBVH *pbvh = BKE_sculpt_object_pbvh_ensure(depsgraph, ob);
   BLI_assert(pbvh == ss->pbvh);
   UNUSED_VARS_NDEBUG(pbvh);
+
   MEM_SAFE_FREE(ss->pmap);
   MEM_SAFE_FREE(ss->pmap_mem);
   if (need_pmap && ob->type == OB_MESH) {
@@ -1149,7 +1223,6 @@ void BKE_sculpt_update_mesh_elements(
 
   if (ss->modifiers_active) {
     if (!ss->orig_cos) {
-      Object *object_orig = DEG_get_original_object(ob);
       int a;
 
       BKE_sculptsession_free_deformMats(ss);
@@ -1157,8 +1230,7 @@ void BKE_sculpt_update_mesh_elements(
       ss->orig_cos = (ss->kb) ? BKE_keyblock_convert_to_vertcos(ob, ss->kb) :
                                 BKE_mesh_vertexCos_get(me, NULL);
 
-      BKE_crazyspace_build_sculpt(
-          depsgraph, scene, object_orig, &ss->deform_imats, &ss->deform_cos);
+      BKE_crazyspace_build_sculpt(depsgraph, scene, ob, &ss->deform_imats, &ss->deform_cos);
       BKE_pbvh_apply_vertCos(ss->pbvh, ss->deform_cos, me->totvert);
 
       for (a = 0; a < me->totvert; ++a) {
@@ -1194,9 +1266,66 @@ void BKE_sculpt_update_mesh_elements(
       }
     }
   }
+}
 
-  /* 2.8x - avoid full mesh update! */
-  BKE_mesh_batch_cache_dirty_tag(me, BKE_MESH_BATCH_DIRTY_SCULPT_COORDS);
+void BKE_sculpt_update_object_before_eval(Object *ob)
+{
+  /* Update before mesh evaluation in the dependency graph. */
+  SculptSession *ss = ob->sculpt;
+
+  if (ss && ss->building_vp_handle == false) {
+    if (!ss->cache) {
+      /* We free pbvh on changes, except in the middle of drawing a stroke
+       * since it can't deal with changing PVBH node organization, we hope
+       * topology does not change in the meantime .. weak. */
+      sculptsession_free_pbvh(ob);
+
+      BKE_sculptsession_free_deformMats(ob->sculpt);
+
+      /* In vertex/weight paint, force maps to be rebuilt. */
+      BKE_sculptsession_free_vwpaint_data(ob->sculpt);
+    }
+    else {
+      PBVHNode **nodes;
+      int n, totnode;
+
+      BKE_pbvh_search_gather(ss->pbvh, NULL, NULL, &nodes, &totnode);
+
+      for (n = 0; n < totnode; n++) {
+        BKE_pbvh_node_mark_update(nodes[n]);
+      }
+
+      MEM_freeN(nodes);
+    }
+  }
+}
+
+void BKE_sculpt_update_object_after_eval(Depsgraph *depsgraph, Object *ob_eval)
+{
+  /* Update after mesh evaluation in the dependency graph, to rebuild PBVH or
+   * other data when modifiers change the mesh. */
+  Object *ob_orig = DEG_get_original_object(ob_eval);
+  Mesh *me_eval = ob_eval->runtime.mesh_eval;
+
+  BLI_assert(me_eval != NULL);
+
+  sculpt_update_object(depsgraph, ob_orig, me_eval, false, false);
+}
+
+void BKE_sculpt_update_object_for_edit(Depsgraph *depsgraph,
+                                       Object *ob_orig,
+                                       bool need_pmap,
+                                       bool need_mask)
+{
+  /* Update from sculpt operators and undo, to update sculpt session
+   * and PBVH after edits. */
+  Scene *scene_eval = DEG_get_evaluated_scene(depsgraph);
+  Object *ob_eval = DEG_get_evaluated_object(depsgraph, ob_orig);
+  Mesh *me_eval = mesh_get_eval_final(depsgraph, scene_eval, ob_eval, &CD_MASK_BAREMESH);
+
+  BLI_assert(ob_orig == DEG_get_original_object(ob_orig));
+
+  sculpt_update_object(depsgraph, ob_orig, me_eval, need_pmap, need_mask);
 }
 
 int BKE_sculpt_mask_layers_ensure(Object *ob, MultiresModifierData *mmd)
@@ -1340,8 +1469,15 @@ static PBVH *build_pbvh_from_regular_mesh(Object *ob, Mesh *me_eval_deform)
 
   BKE_mesh_recalc_looptri(me->mloop, me->mpoly, me->mvert, me->totloop, me->totpoly, looptri);
 
-  BKE_pbvh_build_mesh(
-      pbvh, me->mpoly, me->mloop, me->mvert, me->totvert, &me->vdata, looptri, looptris_num);
+  BKE_pbvh_build_mesh(pbvh,
+                      me->mpoly,
+                      me->mloop,
+                      me->mvert,
+                      me->totvert,
+                      &me->vdata,
+                      &me->ldata,
+                      looptri,
+                      looptris_num);
 
   pbvh_show_diffuse_color_set(pbvh, ob->sculpt->show_diffuse_color);
   pbvh_show_mask_set(pbvh, ob->sculpt->show_mask);
@@ -1405,8 +1541,7 @@ PBVH *BKE_sculpt_object_pbvh_ensure(Depsgraph *depsgraph, Object *ob)
       pbvh = build_pbvh_from_ccg(ob, mesh_eval->runtime.subdiv_ccg);
     }
     else if (ob->type == OB_MESH) {
-      Mesh *me_eval_deform = mesh_get_eval_deform(
-          depsgraph, DEG_get_evaluated_scene(depsgraph), object_eval, &CD_MASK_BAREMESH);
+      Mesh *me_eval_deform = object_eval->runtime.mesh_deform_eval;
       pbvh = build_pbvh_from_regular_mesh(ob, me_eval_deform);
     }
   }
@@ -1422,4 +1557,24 @@ void BKE_sculpt_bvh_update_from_ccg(PBVH *pbvh, SubdivCCG *subdiv_ccg)
                         (void **)subdiv_ccg->grid_faces,
                         subdiv_ccg->grid_flag_mats,
                         subdiv_ccg->grid_hidden);
+}
+
+/* Test if PBVH can be used directly for drawing, which is faster than
+ * drawing the mesh and all updates that come with it. */
+bool BKE_sculptsession_use_pbvh_draw(const Object *ob, const View3D *v3d)
+{
+  SculptSession *ss = ob->sculpt;
+  if (ss == NULL || ss->pbvh == NULL || ss->mode_type != OB_MODE_SCULPT) {
+    return false;
+  }
+
+  if (BKE_pbvh_type(ss->pbvh) == PBVH_FACES) {
+    /* Regular mesh only draws from PBVH without modifiers and shape keys. */
+    const bool full_shading = (v3d && (v3d->shading.type > OB_SOLID));
+    return !(ss->kb || ss->modifiers_active || full_shading);
+  }
+  else {
+    /* Multires and dyntopo always draw directly from the PBVH. */
+    return true;
+  }
 }

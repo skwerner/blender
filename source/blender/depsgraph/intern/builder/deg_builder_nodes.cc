@@ -58,6 +58,7 @@ extern "C" {
 #include "DNA_lightprobe_types.h"
 #include "DNA_rigidbody_types.h"
 #include "DNA_scene_types.h"
+#include "DNA_sound_types.h"
 #include "DNA_speaker_types.h"
 #include "DNA_texture_types.h"
 #include "DNA_world_types.h"
@@ -65,6 +66,7 @@ extern "C" {
 #include "BKE_action.h"
 #include "BKE_armature.h"
 #include "BKE_animsys.h"
+#include "BKE_cachefile.h"
 #include "BKE_collection.h"
 #include "BKE_constraint.h"
 #include "BKE_curve.h"
@@ -129,8 +131,10 @@ void free_copy_on_write_datablock(void *id_info_v)
 
 /* **** General purpose functions **** */
 
-DepsgraphNodeBuilder::DepsgraphNodeBuilder(Main *bmain, Depsgraph *graph)
-    : DepsgraphBuilder(bmain, graph),
+DepsgraphNodeBuilder::DepsgraphNodeBuilder(Main *bmain,
+                                           Depsgraph *graph,
+                                           DepsgraphBuilderCache *cache)
+    : DepsgraphBuilder(bmain, graph, cache),
       scene_(NULL),
       view_layer_(NULL),
       view_layer_index_(-1),
@@ -335,7 +339,7 @@ void DepsgraphNodeBuilder::begin_build()
     entry_tag.name = op_node->name;
     entry_tag.name_tag = op_node->name_tag;
     saved_entry_tags_.push_back(entry_tag);
-  };
+  }
   GSET_FOREACH_END();
 
   /* Make sure graph has no nodes left from previous state. */
@@ -440,11 +444,17 @@ void DepsgraphNodeBuilder::build_id(ID *id)
     case ID_SPK:
       build_speaker((Speaker *)id);
       break;
+    case ID_SO:
+      build_sound((bSound *)id);
+      break;
     case ID_TXT:
       /* Not a part of dependency graph. */
       break;
     case ID_CF:
       build_cachefile((CacheFile *)id);
+      break;
+    case ID_SCE:
+      build_scene_parameters((Scene *)id);
       break;
     default:
       fprintf(stderr, "Unhandled ID %s\n", id->name);
@@ -456,7 +466,7 @@ void DepsgraphNodeBuilder::build_id(ID *id)
 void DepsgraphNodeBuilder::build_collection(LayerCollection *from_layer_collection,
                                             Collection *collection)
 {
-  const int restrict_flag = (graph_->mode == DAG_EVAL_VIEWPORT) ? COLLECTION_RESTRICT_VIEW :
+  const int restrict_flag = (graph_->mode == DAG_EVAL_VIEWPORT) ? COLLECTION_RESTRICT_VIEWPORT :
                                                                   COLLECTION_RESTRICT_RENDER;
   const bool is_collection_restricted = (collection->flag & restrict_flag);
   const bool is_collection_visible = !is_collection_restricted && is_parent_collection_visible_;
@@ -526,18 +536,23 @@ void DepsgraphNodeBuilder::build_object(int base_index,
     if (id_node->linked_state == DEG_ID_LINKED_DIRECTLY) {
       id_node->is_directly_visible |= is_visible;
     }
+    id_node->has_base |= (base_index != -1);
     return;
   }
   /* Create ID node for object and begin init. */
   IDNode *id_node = add_id_node(&object->id);
   Object *object_cow = get_cow_datablock(object);
   id_node->linked_state = linked_state;
-  if (object == scene_->camera) {
+  /* NOTE: Scene is NULL when building dependency graph for render pipeline.
+   * Probably need to assign that to something non-NULL, but then the logic here will still be
+   * somewhat weird. */
+  if (scene_ != NULL && object == scene_->camera) {
     id_node->is_directly_visible = true;
   }
   else {
     id_node->is_directly_visible = is_visible;
   }
+  id_node->has_base |= (base_index != -1);
   /* Various flags, flushing from bases/collections. */
   build_object_flags(base_index, object, linked_state);
   /* Transform. */
@@ -672,7 +687,7 @@ void DepsgraphNodeBuilder::build_object_data(Object *object, bool is_object_visi
       break;
     default: {
       ID *obdata = (ID *)object->data;
-      if (built_map_.checkIsBuilt(obdata) == 0) {
+      if (!built_map_.checkIsBuilt(obdata)) {
         build_animdata(obdata);
       }
       break;
@@ -703,7 +718,7 @@ void DepsgraphNodeBuilder::build_object_data_speaker(Object *object)
 {
   Speaker *speaker = (Speaker *)object->data;
   build_speaker(speaker);
-  add_operation_node(&object->id, NodeType::PARAMETERS, OperationCode::SPEAKER_EVAL);
+  add_operation_node(&object->id, NodeType::AUDIO, OperationCode::SPEAKER_EVAL);
 }
 
 void DepsgraphNodeBuilder::build_object_transform(Object *object)
@@ -1149,7 +1164,7 @@ void DepsgraphNodeBuilder::build_shapekeys(Key *key)
   /* This is an exit operation for the entire key datablock, is what is used
    * as dependency for modifiers evaluation. */
   add_operation_node(&key->id, NodeType::GEOMETRY, OperationCode::GEOMETRY_SHAPEKEY);
-  /* Create per-key block properties, allowing tricky inter-dependnecies for
+  /* Create per-key block properties, allowing tricky inter-dependencies for
    * drivers evaluation. */
   LISTBASE_FOREACH (KeyBlock *, key_block, &key->block) {
     add_operation_node(
@@ -1177,12 +1192,6 @@ void DepsgraphNodeBuilder::build_object_data_geometry(Object *object, bool is_ob
   op_node->set_as_exit();
   /* Materials. */
   if (object->totcol != 0) {
-    if (object->type == OB_MESH) {
-      add_operation_node(&object->id,
-                         NodeType::SHADING,
-                         OperationCode::SHADING,
-                         function_bind(BKE_object_eval_update_shading, _1, object_cow));
-    }
     for (int a = 1; a <= object->totcol; a++) {
       Material *ma = give_current_material(object, a);
       if (ma != NULL) {
@@ -1303,6 +1312,9 @@ void DepsgraphNodeBuilder::build_camera(Camera *camera)
   }
   build_animdata(&camera->id);
   build_parameters(&camera->id);
+  if (camera->dof.focus_object != NULL) {
+    build_object(-1, camera->dof.focus_object, DEG_ID_LINKED_INDIRECTLY, false);
+  }
 }
 
 void DepsgraphNodeBuilder::build_light(Light *lamp)
@@ -1360,8 +1372,16 @@ void DepsgraphNodeBuilder::build_nodetree(bNodeTree *ntree)
       build_object(-1, (Object *)id, DEG_ID_LINKED_INDIRECTLY, true);
     }
     else if (id_type == ID_SCE) {
-      /* Scenes are used by compositor trees, and handled by render
-       * pipeline. No need to build dependencies for them here. */
+      Scene *node_scene = (Scene *)id;
+      build_scene_parameters(node_scene);
+      /* Camera is used by defocus node.
+       *
+       * On the one hand it's annoying to always pull it in, but on another hand it's also annoying
+       * to have hardcoded node-type exception here. */
+      if (node_scene->camera != NULL) {
+        /* TODO(sergey): Use visibility of owner of the node tree. */
+        build_object(-1, node_scene->camera, DEG_ID_LINKED_INDIRECTLY, true);
+      }
     }
     else if (id_type == ID_TXT) {
       /* Ignore script nodes. */
@@ -1436,19 +1456,6 @@ void DepsgraphNodeBuilder::build_image(Image *image)
       &image->id, NodeType::GENERIC_DATABLOCK, OperationCode::GENERIC_DATABLOCK_UPDATE);
 }
 
-void DepsgraphNodeBuilder::build_compositor(Scene *scene)
-{
-  /* For now, just a plain wrapper? */
-  // TODO: create compositing component?
-  // XXX: component type undefined!
-  //graph->get_node(&scene->id, NULL, NodeType::COMPOSITING, NULL);
-
-  /* for now, nodetrees are just parameters; compositing occurs in internals
-   * of renderer... */
-  add_component_node(&scene->id, NodeType::PARAMETERS);
-  build_nodetree(scene->nodetree);
-}
-
 void DepsgraphNodeBuilder::build_gpencil(bGPdata *gpd)
 {
   if (built_map_.checkIsBuiltAndTag(gpd)) {
@@ -1471,11 +1478,16 @@ void DepsgraphNodeBuilder::build_cachefile(CacheFile *cache_file)
     return;
   }
   ID *cache_file_id = &cache_file->id;
+  add_id_node(cache_file_id);
+  CacheFile *cache_file_cow = get_cow_datablock(cache_file);
   /* Animation, */
   build_animdata(cache_file_id);
   build_parameters(cache_file_id);
   /* Cache evaluation itself. */
-  add_operation_node(cache_file_id, NodeType::CACHE, OperationCode::FILE_CACHE_UPDATE);
+  add_operation_node(cache_file_id,
+                     NodeType::CACHE,
+                     OperationCode::FILE_CACHE_UPDATE,
+                     function_bind(BKE_cachefile_eval, bmain_, _1, cache_file_cow));
 }
 
 void DepsgraphNodeBuilder::build_mask(Mask *mask)
@@ -1484,7 +1496,7 @@ void DepsgraphNodeBuilder::build_mask(Mask *mask)
     return;
   }
   ID *mask_id = &mask->id;
-  Mask *mask_cow = get_cow_datablock(mask);
+  Mask *mask_cow = (Mask *)ensure_cow_id(mask_id);
   /* F-Curve based animation. */
   build_animdata(mask_id);
   build_parameters(mask_id);
@@ -1539,9 +1551,23 @@ void DepsgraphNodeBuilder::build_speaker(Speaker *speaker)
     return;
   }
   /* Placeholder so we can add relations and tag ID node for update. */
-  add_operation_node(&speaker->id, NodeType::PARAMETERS, OperationCode::SPEAKER_EVAL);
+  add_operation_node(&speaker->id, NodeType::AUDIO, OperationCode::SPEAKER_EVAL);
   build_animdata(&speaker->id);
   build_parameters(&speaker->id);
+  if (speaker->sound != NULL) {
+    build_sound(speaker->sound);
+  }
+}
+
+void DepsgraphNodeBuilder::build_sound(bSound *sound)
+{
+  if (built_map_.checkIsBuiltAndTag(sound)) {
+    return;
+  }
+  /* Placeholder so we can add relations and tag ID node for update. */
+  add_operation_node(&sound->id, NodeType::AUDIO, OperationCode::SOUND_EVAL);
+  build_animdata(&sound->id);
+  build_parameters(&sound->id);
 }
 
 /* **** ID traversal callbacks functions **** */

@@ -149,7 +149,7 @@ void BlenderSync::sync_light(BL::Object &b_parent,
     // }
     case BL::Light::type_SUN: {
       BL::SunLight b_sun_light(b_light);
-      light->size = b_sun_light.shadow_soft_size();
+      light->angle = b_sun_light.angle();
       light->type = LIGHT_DISTANT;
       break;
     }
@@ -181,6 +181,10 @@ void BlenderSync::sync_light(BL::Object &b_parent,
       break;
     }
   }
+
+  /* strength */
+  light->strength = get_float3(b_light.color());
+  light->strength *= BL::PointLight(b_light).energy();
 
   /* location and (inverted!) direction */
   light->co = transform_get_column(&tfm, 3);
@@ -307,8 +311,7 @@ Object *BlenderSync::sync_object(BL::Depsgraph &b_depsgraph,
     /* TODO: don't use lights for excluded layers used as mask layer,
      * when dynamic overrides are back. */
 #if 0
-    if(!((layer_flag & view_layer.holdout_layer) &&
-         (layer_flag & view_layer.exclude_layer)))
+    if (!((layer_flag & view_layer.holdout_layer) && (layer_flag & view_layer.exclude_layer)))
 #endif
     {
       sync_light(b_parent,
@@ -345,7 +348,7 @@ Object *BlenderSync::sync_object(BL::Depsgraph &b_depsgraph,
 
   /* TODO: make holdout objects on excluded layer invisible for non-camera rays. */
 #if 0
-  if(use_holdout && (layer_flag & view_layer.exclude_layer)) {
+  if (use_holdout && (layer_flag & view_layer.exclude_layer)) {
     visibility &= ~(PATH_RAY_ALL_VISIBILITY - PATH_RAY_CAMERA);
   }
 #endif

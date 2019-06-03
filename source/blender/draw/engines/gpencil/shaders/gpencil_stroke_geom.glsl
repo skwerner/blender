@@ -1,4 +1,3 @@
-uniform mat4 ModelViewProjectionMatrix;
 uniform vec2 Viewport;
 uniform int xraymode;
 uniform int color_type;
@@ -35,7 +34,7 @@ vec2 toScreenSpace(vec4 vertex)
 float getZdepth(vec4 point)
 {
   if (xraymode == GP_XRAY_FRONT) {
-    return 0.000001;
+    return min(-0.05, (point.z / point.w));
   }
   if (xraymode == GP_XRAY_3DSPACE) {
     return (point.z / point.w);

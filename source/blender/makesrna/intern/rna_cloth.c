@@ -306,7 +306,9 @@ static PointerRNA rna_ClothSettings_rest_shape_key_get(PointerRNA *ptr)
   return rna_object_shapekey_index_get(ob->data, sim->shapekey_rest);
 }
 
-static void rna_ClothSettings_rest_shape_key_set(PointerRNA *ptr, PointerRNA value)
+static void rna_ClothSettings_rest_shape_key_set(PointerRNA *ptr,
+                                                 PointerRNA value,
+                                                 struct ReportList *UNUSED(reports))
 {
   Object *ob = (Object *)ptr->id.data;
   ClothSimSettings *sim = (ClothSimSettings *)ptr->data;
@@ -788,7 +790,8 @@ static void rna_def_cloth_sim_settings(BlenderRNA *brna)
   prop = RNA_def_property(srna, "max_spring_extensions", PROP_INT, PROP_NONE);
   RNA_def_property_int_sdna(prop, NULL, "maxspringlen");
   RNA_def_property_range(prop, 1.0, 1000.0);
-  RNA_def_property_ui_text(prop, "Maximum Spring Extension", "Maximum extension before spring gets cut");
+  RNA_def_property_ui_text(
+      prop, "Maximum Spring Extension", "Maximum extension before spring gets cut");
 #  endif
 }
 

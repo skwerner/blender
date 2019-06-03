@@ -103,7 +103,7 @@ class DATA_PT_display(ArmatureButtonsPanel, Panel):
 class DATA_MT_bone_group_context_menu(Menu):
     bl_label = "Bone Group Specials"
 
-    def draw(self, context):
+    def draw(self, _context):
         layout = self.layout
 
         layout.operator("pose.group_sort", icon='SORTALPHA')
@@ -129,7 +129,15 @@ class DATA_PT_bone_groups(ArmatureButtonsPanel, Panel):
         rows = 1
         if group:
             rows = 4
-        row.template_list("UI_UL_list", "bone_groups", pose, "bone_groups", pose.bone_groups, "active_index", rows=rows)
+        row.template_list(
+            "UI_UL_list",
+            "bone_groups",
+            pose,
+            "bone_groups",
+            pose.bone_groups,
+            "active_index",
+            rows=rows,
+        )
 
         col = row.column(align=True)
         col.active = (ob.proxy is None)

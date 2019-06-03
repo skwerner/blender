@@ -205,22 +205,23 @@ class GHOST_IWindow {
 
   /**
    * Gets the current swap interval for swapBuffers.
-   * \param intervalOut pointer to location to return swap interval (left untouched if there is an error)
+   * \param intervalOut pointer to location to return swap interval
+   * (left untouched if there is an error)
    * \return A boolean success indicator of if swap interval was successfully read.
    */
   virtual GHOST_TSuccess getSwapInterval(int &intervalOut) = 0;
-
-  /**
-   * Gets the current swap interval for swapBuffers.
-   * \return Number of AA Samples (0 if there is no multisample buffer)
-   */
-  virtual GHOST_TUns16 getNumOfAASamples() = 0;
 
   /**
    * Activates the drawing context of this window.
    * \return  A boolean success indicator.
    */
   virtual GHOST_TSuccess activateDrawingContext() = 0;
+
+  /**
+   * Gets the OpenGL framebuffer associated with the window's contents.
+   * \return The name of an OpenGL framebuffer object.
+   */
+  virtual unsigned int getDefaultFramebuffer() = 0;
 
   /**
    * Invalidates the contents of this window.
@@ -319,6 +320,7 @@ class GHOST_IWindow {
    * \return  Indication of success.
    */
   virtual GHOST_TSuccess setCursorGrab(GHOST_TGrabCursorMode /*mode*/,
+                                       GHOST_TAxisFlag /*wrap_axis*/,
                                        GHOST_Rect * /*bounds*/,
                                        GHOST_TInt32 /*mouse_ungrab_xy*/[2])
   {

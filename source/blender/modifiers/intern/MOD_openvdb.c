@@ -186,7 +186,7 @@ static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, Mes
   return r_dm;
 #else
   UNUSED_VARS(md, ob, flag);
-  return dm;
+  return mesh;
 #endif
 }
 
@@ -199,12 +199,6 @@ ModifierTypeInfo modifierType_OpenVDB = {
         eModifierTypeFlag_Single,
 
     /* copyData */ copyData,
-
-    /* deformVerts_DM */ NULL,
-    /* deformMatrices_DM */ NULL,
-    /* deformVertsEM_DM */ NULL,
-    /* deformMatricesEM_DM*/ NULL,
-    /* applyModifier_DM */ NULL,
 
     /* deformVerts */ NULL,
     /* deformMatrices */ NULL,

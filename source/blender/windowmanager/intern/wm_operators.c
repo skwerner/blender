@@ -214,7 +214,8 @@ bool WM_operator_py_idname_ok_or_report(ReportList *reports,
 }
 
 /**
- * Print a string representation of the operator, with the args that it runs so python can run it again.
+ * Print a string representation of the operator,
+ * with the args that it runs so python can run it again.
  *
  * When calling from an existing wmOperator, better to use simple version:
  * `WM_operator_pystring(C, op);`
@@ -353,7 +354,8 @@ static const char *wm_context_member_from_ptr(bContext *C, const PointerRNA *ptr
    * - see if the pointers ID is in the context.
    */
 
-  /* don't get from the context store since this is normally set only for the UI and not usable elsewhere */
+  /* Don't get from the context store since this is normally
+   * set only for the UI and not usable elsewhere. */
   ListBase lb = CTX_data_dir_get_ex(C, false, true, true);
   LinkData *link;
 
@@ -362,16 +364,15 @@ static const char *wm_context_member_from_ptr(bContext *C, const PointerRNA *ptr
 
   for (link = lb.first; link; link = link->next) {
     const char *identifier = link->data;
-    PointerRNA ctx_item_ptr = {{0}}; // CTX_data_pointer_get(C, identifier); // XXX, this isnt working
+    PointerRNA ctx_item_ptr = {
+        {0}};  // CTX_data_pointer_get(C, identifier); // XXX, this isnt working
 
     if (ctx_item_ptr.type == NULL) {
       continue;
     }
 
     if (ptr->id.data == ctx_item_ptr.id.data) {
-      if ((ptr->data == ctx_item_ptr.data) &&
-          (ptr->type == ctx_item_ptr.type))
-      {
+      if ((ptr->data == ctx_item_ptr.data) && (ptr->type == ctx_item_ptr.type)) {
         /* found! */
         member_found = identifier;
         break;
@@ -690,7 +691,6 @@ void WM_operator_properties_free(PointerRNA *ptr)
 
   if (properties) {
     IDP_FreeProperty(properties);
-    MEM_freeN(properties);
     ptr->data = NULL; /* just in case */
   }
 }
@@ -778,13 +778,14 @@ struct EnumSearchMenu {
   short prv_cols, prv_rows;
 };
 
-/* generic enum search invoke popup */
+/** Generic enum search invoke popup. */
 static uiBlock *wm_enum_search_menu(bContext *C, ARegion *ar, void *arg)
 {
   struct EnumSearchMenu *search_menu = arg;
   wmWindow *win = CTX_wm_window(C);
   wmOperator *op = search_menu->op;
-  /* template_ID uses 4 * widget_unit for width, we use a bit more, some items may have a suffix to show */
+  /* template_ID uses 4 * widget_unit for width,
+   * we use a bit more, some items may have a suffix to show. */
   const int width = search_menu->use_previews ? 5 * U.widget_unit * search_menu->prv_cols :
                                                 UI_searchbox_size_x();
   const int height = search_menu->use_previews ? 5 * U.widget_unit * search_menu->prv_rows :
@@ -801,7 +802,20 @@ static uiBlock *wm_enum_search_menu(bContext *C, ARegion *ar, void *arg)
   BLI_assert(search_menu->use_previews ||
              (search_menu->prv_cols == 0 && search_menu->prv_rows == 0));
 #if 0 /* ok, this isn't so easy... */
-  uiDefBut(block, UI_BTYPE_LABEL, 0, RNA_struct_ui_name(op->type->srna), 10, 10, UI_searchbox_size_x(), UI_UNIT_Y, NULL, 0.0, 0.0, 0, 0, "");
+  uiDefBut(block,
+           UI_BTYPE_LABEL,
+           0,
+           RNA_struct_ui_name(op->type->srna),
+           10,
+           10,
+           UI_searchbox_size_x(),
+           UI_UNIT_Y,
+           NULL,
+           0.0,
+           0.0,
+           0,
+           0,
+           "");
 #endif
   but = uiDefSearchButO_ptr(block,
                             op->type,
@@ -855,7 +869,7 @@ int WM_enum_search_invoke_previews(bContext *C, wmOperator *op, short prv_cols, 
   search_menu.prv_cols = prv_cols;
   search_menu.prv_rows = prv_rows;
 
-  UI_popup_block_invoke(C, wm_enum_search_menu, &search_menu);
+  UI_popup_block_invoke(C, wm_enum_search_menu, &search_menu, NULL);
 
   return OPERATOR_INTERFACE;
 }
@@ -864,13 +878,17 @@ int WM_enum_search_invoke(bContext *C, wmOperator *op, const wmEvent *UNUSED(eve
 {
   static struct EnumSearchMenu search_menu;
   search_menu.op = op;
-  UI_popup_block_invoke(C, wm_enum_search_menu, &search_menu);
+  UI_popup_block_invoke(C, wm_enum_search_menu, &search_menu, NULL);
   return OPERATOR_INTERFACE;
 }
 
 /* Can't be used as an invoke directly, needs message arg (can be NULL) */
-int WM_operator_confirm_message_ex(
-    bContext *C, wmOperator *op, const char *title, const int icon, const char *message)
+int WM_operator_confirm_message_ex(bContext *C,
+                                   wmOperator *op,
+                                   const char *title,
+                                   const int icon,
+                                   const char *message,
+                                   const short opcontext)
 {
   uiPopupMenu *pup;
   uiLayout *layout;
@@ -885,8 +903,7 @@ int WM_operator_confirm_message_ex(
 
   pup = UI_popup_menu_begin(C, title, icon);
   layout = UI_popup_menu_layout(pup);
-  uiItemFullO_ptr(
-      layout, op->type, message, ICON_NONE, properties, WM_OP_EXEC_REGION_WIN, 0, NULL);
+  uiItemFullO_ptr(layout, op->type, message, ICON_NONE, properties, opcontext, 0, NULL);
   UI_popup_menu_end(C, pup);
 
   return OPERATOR_INTERFACE;
@@ -894,7 +911,8 @@ int WM_operator_confirm_message_ex(
 
 int WM_operator_confirm_message(bContext *C, wmOperator *op, const char *message)
 {
-  return WM_operator_confirm_message_ex(C, op, IFACE_("OK?"), ICON_QUESTION, message);
+  return WM_operator_confirm_message_ex(
+      C, op, IFACE_("OK?"), ICON_QUESTION, message, WM_OP_EXEC_REGION_WIN);
 }
 
 int WM_operator_confirm(bContext *C, wmOperator *op, const wmEvent *UNUSED(event))
@@ -1143,13 +1161,14 @@ static void dialog_exec_cb(bContext *C, void *arg1, void *arg2)
   WM_operator_call_ex(C, data->op, true);
 
   /* let execute handle freeing it */
-  //data->free_op = false;
-  //data->op = NULL;
+  // data->free_op = false;
+  // data->op = NULL;
 
   /* in this case, wm_operator_ui_popup_cancel wont run */
   MEM_freeN(data);
 
-  /* get context data *after* WM_operator_call_ex which might have closed the current file and changed context */
+  /* Get context data *after* WM_operator_call_ex
+   * which might have closed the current file and changed context. */
   wmWindowManager *wm = CTX_wm_manager(C);
   wmWindow *win = CTX_wm_window(C);
 
@@ -1382,7 +1401,7 @@ int WM_operator_redo_popup(bContext *C, wmOperator *op)
     return OPERATOR_CANCELLED;
   }
 
-  UI_popup_block_invoke(C, wm_block_create_redo, op);
+  UI_popup_block_invoke(C, wm_block_create_redo, op, NULL);
 
   return OPERATOR_CANCELLED;
 }
@@ -1694,7 +1713,7 @@ static uiBlock *wm_block_create_splash(bContext *C, ARegion *ar, void *UNUSED(ar
 
 static int wm_splash_invoke(bContext *C, wmOperator *UNUSED(op), const wmEvent *UNUSED(event))
 {
-  UI_popup_block_invoke(C, wm_block_create_splash, NULL);
+  UI_popup_block_invoke(C, wm_block_create_splash, NULL, NULL);
 
   return OPERATOR_FINISHED;
 }
@@ -1800,7 +1819,7 @@ static int wm_search_menu_invoke(bContext *C, wmOperator *UNUSED(op), const wmEv
   data.size[0] = UI_searchbox_size_x() * 2;
   data.size[1] = UI_searchbox_size_y();
 
-  UI_popup_block_invoke(C, wm_block_search_menu, &data);
+  UI_popup_block_invoke(C, wm_block_search_menu, &data, NULL);
 
   return OPERATOR_INTERFACE;
 }
@@ -3066,8 +3085,7 @@ static void redraw_timer_step(bContext *C,
 {
   if (type == eRTDrawRegion) {
     if (ar) {
-      ED_region_do_draw(C, ar);
-      ar->do_draw = false;
+      wm_draw_region_test(C, sa, ar);
     }
   }
   else if (type == eRTDrawRegionSwap) {
@@ -3091,8 +3109,7 @@ static void redraw_timer_step(bContext *C,
       for (ar_iter = sa_iter->regionbase.first; ar_iter; ar_iter = ar_iter->next) {
         if (ar_iter->visible) {
           CTX_wm_region_set(C, ar_iter);
-          ED_region_do_draw(C, ar_iter);
-          ar_iter->do_draw = false;
+          wm_draw_region_test(C, sa_iter, ar_iter);
         }
       }
     }
@@ -3137,6 +3154,7 @@ static int redraw_timer_exec(bContext *C, wmOperator *op)
   wmWindow *win = CTX_wm_window(C);
   ScrArea *sa = CTX_wm_area(C);
   ARegion *ar = CTX_wm_region(C);
+  wmWindowManager *wm = CTX_wm_manager(C);
   double time_start, time_delta;
   const int type = RNA_enum_get(op->ptr, "type");
   const int iter = RNA_int_get(op->ptr, "iterations");
@@ -3149,6 +3167,8 @@ static int redraw_timer_exec(bContext *C, wmOperator *op)
   WM_cursor_wait(1);
 
   time_start = PIL_check_seconds_timer();
+
+  wm_window_make_drawable(wm, win);
 
   for (a = 0; a < iter; a++) {
     redraw_timer_step(C, bmain, scene, depsgraph, win, sa, ar, type, cfra);
@@ -3331,14 +3351,16 @@ static const EnumPropertyItem preview_id_type_items[] = {
 static int previews_clear_exec(bContext *C, wmOperator *op)
 {
   Main *bmain = CTX_data_main(C);
-  ListBase *lb[] = {&bmain->objects,
-                    &bmain->collections,
-                    &bmain->materials,
-                    &bmain->worlds,
-                    &bmain->lights,
-                    &bmain->textures,
-                    &bmain->images,
-                    NULL};
+  ListBase *lb[] = {
+      &bmain->objects,
+      &bmain->collections,
+      &bmain->materials,
+      &bmain->worlds,
+      &bmain->lights,
+      &bmain->textures,
+      &bmain->images,
+      NULL,
+  };
   int i;
 
   const int id_filters = RNA_enum_get(op->ptr, "id_type");
@@ -3349,8 +3371,14 @@ static int previews_clear_exec(bContext *C, wmOperator *op)
       continue;
     }
 
-    //      printf("%s: %d, %d, %d -> %d\n", id->name, GS(id->name), BKE_idcode_to_idfilter(GS(id->name)),
-    //                                       id_filters, BKE_idcode_to_idfilter(GS(id->name)) & id_filters);
+#if 0
+    printf("%s: %d, %d, %d -> %d\n",
+           id->name,
+           GS(id->name),
+           BKE_idcode_to_idfilter(GS(id->name)),
+           id_filters,
+           BKE_idcode_to_idfilter(GS(id->name)) & id_filters);
+#endif
 
     if (!id || !(BKE_idcode_to_idfilter(GS(id->name)) & id_filters)) {
       continue;
@@ -3480,6 +3508,8 @@ void wm_operatortypes_register(void)
   WM_operatortype_append(WM_OT_read_factory_settings);
   WM_operatortype_append(WM_OT_save_homefile);
   WM_operatortype_append(WM_OT_save_userpref);
+  WM_operatortype_append(WM_OT_read_userpref);
+  WM_operatortype_append(WM_OT_read_factory_userpref);
   WM_operatortype_append(WM_OT_userpref_autoexec_path_add);
   WM_operatortype_append(WM_OT_userpref_autoexec_path_remove);
   WM_operatortype_append(WM_OT_window_fullscreen_toggle);
@@ -3624,9 +3654,8 @@ static void gesture_box_modal_keymap(wmKeyConfig *keyconf)
   WM_modalkeymap_assign(keymap, "VIEW3D_OT_clip_border");
   WM_modalkeymap_assign(keymap, "VIEW3D_OT_render_border");
   WM_modalkeymap_assign(keymap, "VIEW3D_OT_select_box");
-  WM_modalkeymap_assign(
-      keymap,
-      "VIEW3D_OT_zoom_border"); /* XXX TODO: zoom border should perhaps map rightmouse to zoom out instead of in+cancel */
+  /* XXX TODO: zoom border should perhaps map rightmouse to zoom out instead of in+cancel */
+  WM_modalkeymap_assign(keymap, "VIEW3D_OT_zoom_border");
   WM_modalkeymap_assign(keymap, "IMAGE_OT_render_border");
   WM_modalkeymap_assign(keymap, "IMAGE_OT_view_zoom_border");
   WM_modalkeymap_assign(keymap, "GPENCIL_OT_select_box");
@@ -3722,7 +3751,10 @@ const EnumPropertyItem *RNA_action_itemf(bContext *C,
       C, ptr, r_free, C ? (ID *)CTX_data_main(C)->actions.first : NULL, false, NULL, NULL);
 }
 #if 0 /* UNUSED */
-const EnumPropertyItem *RNA_action_local_itemf(bContext *C, PointerRNA *ptr, PropertyRNA *UNUSED(prop), bool *r_free)
+const EnumPropertyItem *RNA_action_local_itemf(bContext *C,
+                                               PointerRNA *ptr,
+                                               PropertyRNA *UNUSED(prop),
+                                               bool *r_free)
 {
   return rna_id_itemf(C, ptr, r_free, C ? (ID *)CTX_data_main(C)->action.first : NULL, true);
 }
@@ -3788,7 +3820,7 @@ const EnumPropertyItem *RNA_scene_without_active_itemf(bContext *C,
                       ptr,
                       r_free,
                       C ? (ID *)CTX_data_main(C)->scenes.first : NULL,
-                      true,
+                      false,
                       rna_id_enum_filter_single,
                       scene_active);
 }

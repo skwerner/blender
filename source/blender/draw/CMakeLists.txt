@@ -39,9 +39,9 @@ set(INC
   ../render/intern/include
   ../windowmanager
 
+  ../../../intern/atomic
   ../../../intern/glew-mx
   ../../../intern/guardedalloc
-  ../../../intern/atomic
 )
 
 set(INC_SYS
@@ -131,6 +131,7 @@ set(SRC
   intern/DRW_render.h
   intern/draw_cache.h
   intern/draw_cache_impl.h
+  intern/draw_cache_inline.h
   intern/draw_common.h
   intern/draw_debug.h
   intern/draw_hair_private.h
@@ -277,6 +278,8 @@ data_to_c_simple(modes/shaders/edit_mesh_overlay_geom.glsl SRC)
 data_to_c_simple(modes/shaders/edit_mesh_overlay_mix_frag.glsl SRC)
 data_to_c_simple(modes/shaders/edit_mesh_overlay_facefill_vert.glsl SRC)
 data_to_c_simple(modes/shaders/edit_mesh_overlay_facefill_frag.glsl SRC)
+data_to_c_simple(modes/shaders/edit_mesh_overlay_mesh_analysis_frag.glsl SRC)
+data_to_c_simple(modes/shaders/edit_mesh_overlay_mesh_analysis_vert.glsl SRC)
 data_to_c_simple(modes/shaders/edit_curve_overlay_handle_vert.glsl SRC)
 data_to_c_simple(modes/shaders/edit_curve_overlay_handle_geom.glsl SRC)
 data_to_c_simple(modes/shaders/edit_curve_overlay_loosevert_vert.glsl SRC)

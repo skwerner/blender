@@ -327,7 +327,7 @@ ViewLayer *get_original_view_layer(const Depsgraph *depsgraph, const IDNode *id_
     return BKE_view_layer_default_render(scene_orig);
   }
   /* Is possible to have scene linked indirectly (i.e. via the driver) which
-   * we need to support. Currently there aer issues somewhere else, which
+   * we need to support. Currently there are issues somewhere else, which
    * makes testing hard. This is a reported problem, so will eventually be
    * properly fixed.
    *
@@ -340,7 +340,30 @@ void scene_remove_unused_view_layers(const Depsgraph *depsgraph,
                                      const IDNode *id_node,
                                      Scene *scene_cow)
 {
-  const ViewLayer *view_layer_input = get_original_view_layer(depsgraph, id_node);
+  const ViewLayer *view_layer_input;
+  if (depsgraph->is_render_pipeline_depsgraph) {
+    /* If the dependency graph is used for post-processing (such as compositor) we do need to
+     * have access to its view layer names so can not remove any view layers.
+     * On a more positive side we can remove all the bases from all the view layers.
+     *
+     * NOTE: Need to clear pointers which might be pointing to original on freed (due to being
+     * unused) data.
+     *
+     * NOTE: Need to keep view layers for all scenes, even indirect ones. This is because of
+     * render layer node possibly pointing to another scene. */
+    LISTBASE_FOREACH (ViewLayer *, view_layer, &scene_cow->view_layers) {
+      view_layer->basact = NULL;
+    }
+    return;
+  }
+  else if (id_node->linked_state == DEG_ID_LINKED_INDIRECTLY) {
+    /* Indirectly linked scenes means it's not an input scene and not a set scene, and is pulled
+     * via some driver. Such scenes should not have view layers after copy. */
+    view_layer_input = NULL;
+  }
+  else {
+    view_layer_input = get_original_view_layer(depsgraph, id_node);
+  }
   ViewLayer *view_layer_eval = NULL;
   /* Find evaluated view layer. At the same time we free memory used by
    * all other of the view layers. */
@@ -349,27 +372,37 @@ void scene_remove_unused_view_layers(const Depsgraph *depsgraph,
        view_layer_cow != NULL;
        view_layer_cow = view_layer_next) {
     view_layer_next = view_layer_cow->next;
-    if (STREQ(view_layer_input->name, view_layer_cow->name)) {
+    if (view_layer_input != NULL && STREQ(view_layer_input->name, view_layer_cow->name)) {
       view_layer_eval = view_layer_cow;
     }
     else {
       BKE_view_layer_free_ex(view_layer_cow, false);
     }
   }
-  BLI_assert(view_layer_eval != NULL);
-  /* Make evaluated view layer the only one in the evaluated scene. */
-  view_layer_eval->prev = view_layer_eval->next = NULL;
+  /* Make evaluated view layer the only one in the evaluated scene (if it exists). */
+  if (view_layer_eval != NULL) {
+    view_layer_eval->prev = view_layer_eval->next = NULL;
+  }
   scene_cow->view_layers.first = view_layer_eval;
   scene_cow->view_layers.last = view_layer_eval;
+}
+
+void scene_remove_all_bases(Scene *scene_cow)
+{
+  LISTBASE_FOREACH (ViewLayer *, view_layer, &scene_cow->view_layers) {
+    BLI_freelistN(&view_layer->object_bases);
+  }
 }
 
 /* Makes it so given view layer only has bases corresponding to enabled
  * objects. */
 void view_layer_remove_disabled_bases(const Depsgraph *depsgraph, ViewLayer *view_layer)
 {
+  if (view_layer == NULL) {
+    return;
+  }
   ListBase enabled_bases = {NULL, NULL};
-  LISTBASE_FOREACH_MUTABLE(Base *, base, &view_layer->object_bases)
-  {
+  LISTBASE_FOREACH_MUTABLE (Base *, base, &view_layer->object_bases) {
     /* TODO(sergey): Would be cool to optimize this somehow, or make it so
      * builder tags bases.
      *
@@ -381,7 +414,7 @@ void view_layer_remove_disabled_bases(const Depsgraph *depsgraph, ViewLayer *vie
      * points to is not yet copied. This is dangerous access from evaluated
      * domain to original one, but this is how the entire copy-on-write works:
      * it does need to access original for an initial copy. */
-    const bool is_object_enabled = deg_check_base_available_for_build(depsgraph, base->base_orig);
+    const bool is_object_enabled = deg_check_base_in_depsgraph(depsgraph, base);
     if (is_object_enabled) {
       BLI_addtail(&enabled_bases, base);
     }
@@ -398,6 +431,10 @@ void view_layer_remove_disabled_bases(const Depsgraph *depsgraph, ViewLayer *vie
 void view_layer_update_orig_base_pointers(const ViewLayer *view_layer_orig,
                                           ViewLayer *view_layer_eval)
 {
+  if (view_layer_orig == NULL || view_layer_eval == NULL) {
+    /* Happens when scene is only used for parameters or compositor/sequencer. */
+    return;
+  }
   Base *base_orig = reinterpret_cast<Base *>(view_layer_orig->object_bases.first);
   LISTBASE_FOREACH (Base *, base_eval, &view_layer_eval->object_bases) {
     base_eval->base_orig = base_orig;
@@ -410,6 +447,11 @@ void scene_setup_view_layers_before_remap(const Depsgraph *depsgraph,
                                           Scene *scene_cow)
 {
   scene_remove_unused_view_layers(depsgraph, id_node, scene_cow);
+  /* If dependency graph is used for post-processing we don't need any bases and can free of them.
+   * Do it before re-mapping to make that process faster. */
+  if (depsgraph->is_render_pipeline_depsgraph) {
+    scene_remove_all_bases(scene_cow);
+  }
 }
 
 void scene_setup_view_layers_after_remap(const Depsgraph *depsgraph,
@@ -634,6 +676,40 @@ void update_modifiers_orig_pointers(const Object *object_orig, Object *object_co
       &object_orig->modifiers, &object_cow->modifiers, &ModifierData::orig_modifier_data);
 }
 
+void update_nla_strips_orig_pointers(const ListBase *strips_orig, ListBase *strips_cow)
+{
+  NlaStrip *strip_orig = reinterpret_cast<NlaStrip *>(strips_orig->first);
+  NlaStrip *strip_cow = reinterpret_cast<NlaStrip *>(strips_cow->first);
+  while (strip_orig != NULL) {
+    strip_cow->orig_strip = strip_orig;
+    update_nla_strips_orig_pointers(&strip_orig->strips, &strip_cow->strips);
+    strip_cow = strip_cow->next;
+    strip_orig = strip_orig->next;
+  }
+}
+
+void update_nla_tracks_orig_pointers(const ListBase *tracks_orig, ListBase *tracks_cow)
+{
+  NlaTrack *track_orig = reinterpret_cast<NlaTrack *>(tracks_orig->first);
+  NlaTrack *track_cow = reinterpret_cast<NlaTrack *>(tracks_cow->first);
+  while (track_orig != NULL) {
+    update_nla_strips_orig_pointers(&track_orig->strips, &track_cow->strips);
+    track_cow = track_cow->next;
+    track_orig = track_orig->next;
+  }
+}
+
+void update_animation_data_after_copy(const ID *id_orig, ID *id_cow)
+{
+  const AnimData *anim_data_orig = BKE_animdata_from_id(const_cast<ID *>(id_orig));
+  if (anim_data_orig == NULL) {
+    return;
+  }
+  AnimData *anim_data_cow = BKE_animdata_from_id(id_cow);
+  BLI_assert(anim_data_cow != NULL);
+  update_nla_tracks_orig_pointers(&anim_data_orig->nla_tracks, &anim_data_cow->nla_tracks);
+}
+
 /* Do some special treatment of data transfer from original ID to it's
  * CoW complementary part.
  *
@@ -644,6 +720,7 @@ void update_id_after_copy(const Depsgraph *depsgraph,
                           ID *id_cow)
 {
   const ID_Type type = GS(id_orig->name);
+  update_animation_data_after_copy(id_orig, id_cow);
   switch (type) {
     case ID_OB: {
       /* Ensure we don't drag someone's else derived mesh to the
@@ -787,7 +864,7 @@ ID *deg_expand_copy_on_write_datablock(const Depsgraph *depsgraph,
   /* Correct or tweak some pointers which are not taken care by foreach
    * from above. */
   update_id_after_copy(depsgraph, id_node, id_orig, id_cow);
-  id_cow->recalc = id_orig->recalc | id_cow_recalc;
+  id_cow->recalc = id_cow_recalc;
   return id_cow;
 }
 
@@ -841,6 +918,9 @@ class ModifierDataBackupID {
 /* Storage for backed up runtime modifier data. */
 typedef map<ModifierDataBackupID, void *> ModifierRuntimeDataBackup;
 
+/* Storage for backed up pose channel runtime data. */
+typedef map<bPoseChannel *, bPoseChannel_Runtime> PoseChannelRuntimeDataBackup;
+
 struct ObjectRuntimeBackup {
   ObjectRuntimeBackup() : base_flag(0), base_local_view_bits(0)
   {
@@ -853,16 +933,19 @@ struct ObjectRuntimeBackup {
    * pointers. */
   void init_from_object(Object *object);
   void backup_modifier_runtime_data(Object *object);
+  void backup_pose_channel_runtime_data(Object *object);
 
   /* Restore all fields to the given object. */
   void restore_to_object(Object *object);
   /* NOTE: Will free all runtime data which has not been restored. */
   void restore_modifier_runtime_data(Object *object);
+  void restore_pose_channel_runtime_data(Object *object);
 
   Object_Runtime runtime;
   short base_flag;
   unsigned short base_local_view_bits;
   ModifierRuntimeDataBackup modifier_runtime_data;
+  PoseChannelRuntimeDataBackup pose_channel_runtime_data;
 };
 
 void ObjectRuntimeBackup::init_from_object(Object *object)
@@ -884,6 +967,8 @@ void ObjectRuntimeBackup::init_from_object(Object *object)
   base_local_view_bits = object->base_local_view_bits;
   /* Backup tuntime data of all modifiers. */
   backup_modifier_runtime_data(object);
+  /* Backup runtime data of all pose channels. */
+  backup_pose_channel_runtime_data(object);
 }
 
 inline ModifierDataBackupID create_modifier_data_id(const ModifierData *modifier_data)
@@ -902,6 +987,19 @@ void ObjectRuntimeBackup::backup_modifier_runtime_data(Object *object)
     ModifierDataBackupID modifier_data_id = create_modifier_data_id(modifier_data);
     modifier_runtime_data.insert(make_pair(modifier_data_id, modifier_data->runtime));
     modifier_data->runtime = NULL;
+  }
+}
+
+void ObjectRuntimeBackup::backup_pose_channel_runtime_data(Object *object)
+{
+  if (object->pose != NULL) {
+    LISTBASE_FOREACH (bPoseChannel *, pchan, &object->pose->chanbase) {
+      /* This is NULL in Edit mode. */
+      if (pchan->orig_pchan != NULL) {
+        pose_channel_runtime_data[pchan->orig_pchan] = pchan->runtime;
+        BKE_pose_channel_runtime_reset(&pchan->runtime);
+      }
+    }
   }
 }
 
@@ -941,6 +1039,7 @@ void ObjectRuntimeBackup::restore_to_object(Object *object)
   /* Restore modifier's runtime data.
    * NOTE: Data of unused modifiers will be freed there. */
   restore_modifier_runtime_data(object);
+  restore_pose_channel_runtime_data(object);
 }
 
 void ObjectRuntimeBackup::restore_modifier_runtime_data(Object *object)
@@ -964,6 +1063,26 @@ void ObjectRuntimeBackup::restore_modifier_runtime_data(Object *object)
     const ModifierTypeInfo *modifier_type_info = modifierType_getInfo(modifier_data_id.type);
     BLI_assert(modifier_type_info != NULL);
     modifier_type_info->freeRuntimeData(runtime);
+  }
+}
+
+void ObjectRuntimeBackup::restore_pose_channel_runtime_data(Object *object)
+{
+  if (object->pose != NULL) {
+    LISTBASE_FOREACH (bPoseChannel *, pchan, &object->pose->chanbase) {
+      /* This is NULL in Edit mode. */
+      if (pchan->orig_pchan != NULL) {
+        PoseChannelRuntimeDataBackup::iterator runtime_data_iterator =
+            pose_channel_runtime_data.find(pchan->orig_pchan);
+        if (runtime_data_iterator != pose_channel_runtime_data.end()) {
+          pchan->runtime = runtime_data_iterator->second;
+          pose_channel_runtime_data.erase(runtime_data_iterator);
+        }
+      }
+    }
+  }
+  for (PoseChannelRuntimeDataBackup::value_type &value : pose_channel_runtime_data) {
+    BKE_pose_channel_runtime_free(&value.second);
   }
 }
 
@@ -1202,7 +1321,9 @@ bool deg_copy_on_write_is_expanded(const ID *id_cow)
 bool deg_copy_on_write_is_needed(const ID *id_orig)
 {
   const ID_Type id_type = GS(id_orig->name);
-  return !ELEM(id_type, ID_IM);
+  /* TODO(sergey): Make Sound copyable. It is here only because the code for dependency graph is
+   * being work in progress. */
+  return !ELEM(id_type, ID_IM, ID_SO);
 }
 
 }  // namespace DEG

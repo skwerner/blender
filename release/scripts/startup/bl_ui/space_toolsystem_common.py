@@ -147,6 +147,25 @@ ToolDef.from_fn = from_fn
 del from_dict, from_fn, with_args
 
 
+class ToolActivePanelHelper:
+    # Sub-class must define.
+    # bl_space_type = 'VIEW_3D'
+    # bl_region_type = 'UI'
+    bl_label = "Active Tool"
+    # bl_category = "Tool"
+
+    def draw(self, context):
+        layout = self.layout
+        layout.use_property_split = True
+        layout.use_property_decorate = False
+        ToolSelectPanelHelper.draw_active_tool_header(
+            context,
+            layout,
+            show_tool_name=True,
+            tool_key=ToolSelectPanelHelper._tool_key_from_context(context, space_type=self.bl_space_type),
+        )
+
+
 class ToolSelectPanelHelper:
     """
     Generic Class, can be used for any toolbar.
@@ -544,23 +563,43 @@ class ToolSelectPanelHelper:
         self.draw_cls(self.layout, context)
 
     @staticmethod
+    def _tool_key_from_context(context, *, space_type=None):
+        if space_type is None:
+            space_data = context.space_data
+            space_type = space_data.type
+        else:
+            space_data = None
+
+        if space_type == 'VIEW_3D':
+            return space_type, context.mode
+        elif space_type == 'IMAGE_EDITOR':
+            if space_data is None:
+                space_data = context.space_data
+            return space_type, space_data.mode
+        elif space_type == 'NODE_EDITOR':
+            return space_type, None
+        else:
+            return None, None
+
+    @staticmethod
     def tool_active_from_context(context):
-        # BAD DESIGN WARNING: last used tool
-        workspace = context.workspace
-        space_type = workspace.tools_space_type
-        mode = workspace.tools_mode
-        return ToolSelectPanelHelper._tool_active_from_context(context, space_type, mode)
+        space_type = context.space_data.type
+        return ToolSelectPanelHelper._tool_active_from_context(context, space_type)
 
     @staticmethod
     def draw_active_tool_header(
             context, layout,
             *,
             show_tool_name=False,
+            tool_key=None,
     ):
-        # BAD DESIGN WARNING: last used tool
-        workspace = context.workspace
-        space_type = workspace.tools_space_type
-        mode = workspace.tools_mode
+        if tool_key is None:
+            space_type, mode = ToolSelectPanelHelper._tool_key_from_context(context)
+        else:
+            space_type, mode = tool_key
+
+        if space_type is None:
+            return None
         item, tool, icon_value = ToolSelectPanelHelper._tool_get_active(context, space_type, mode, with_icon=True)
         if item is None:
             return None

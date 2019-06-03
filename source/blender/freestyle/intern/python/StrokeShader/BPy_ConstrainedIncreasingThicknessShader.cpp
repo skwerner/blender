@@ -62,13 +62,14 @@ static int ConstrainedIncreasingThicknessShader___init__(
   static const char *kwlist[] = {"thickness_min", "thickness_max", "ratio", NULL};
   float f1, f2, f3;
 
-  if (!PyArg_ParseTupleAndKeywords(args, kwds, "fff", (char **)kwlist, &f1, &f2, &f3))
+  if (!PyArg_ParseTupleAndKeywords(args, kwds, "fff", (char **)kwlist, &f1, &f2, &f3)) {
     return -1;
+  }
   self->py_ss.ss = new StrokeShaders::ConstrainedIncreasingThicknessShader(f1, f2, f3);
   return 0;
 }
 
-/*-----------------------BPy_ConstrainedIncreasingThicknessShader type definition ------------------------------*/
+/*-----------------------BPy_ConstrainedIncreasingThicknessShader type definition ---------------*/
 
 PyTypeObject ConstrainedIncreasingThicknessShader_Type = {
     PyVarObject_HEAD_INIT(NULL, 0) "ConstrainedIncreasingThicknessShader", /* tp_name */

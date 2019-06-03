@@ -100,10 +100,6 @@ typedef enum eGPUBuiltinShader {
   /* specialized drawing */
   GPU_SHADER_TEXT,
   GPU_SHADER_TEXT_SIMPLE,
-  GPU_SHADER_EDGES_FRONT_BACK_PERSP,
-  GPU_SHADER_EDGES_FRONT_BACK_ORTHO,
-  GPU_SHADER_EDGES_OVERLAY_SIMPLE,
-  GPU_SHADER_EDGES_OVERLAY,
   GPU_SHADER_KEYFRAME_DIAMOND,
   GPU_SHADER_SIMPLE_LIGHTING,
   GPU_SHADER_SIMPLE_LIGHTING_FLAT_COLOR,
@@ -160,7 +156,6 @@ typedef enum eGPUBuiltinShader {
   GPU_SHADER_3D_UNIFORM_COLOR,
   /* Sets Z-depth to 1.0 (draw onto background). */
   GPU_SHADER_3D_UNIFORM_COLOR_BACKGROUND,
-  GPU_SHADER_3D_UNIFORM_COLOR_INSTANCE,
   /**
    * Take a 3D position and color for each vertex without color interpolation.
    *
@@ -239,7 +234,8 @@ typedef enum eGPUBuiltinShader {
    */
   GPU_SHADER_2D_POINT_UNIFORM_SIZE_UNIFORM_COLOR_OUTLINE_AA,
   /**
-   * Draw round points with a constant size and an outline. Take a 2D position and a color for each vertex.
+   * Draw round points with a constant size and an outline.
+   * Take a 2D position and a color for each vertex.
    *
    * \param size: uniform float
    * \param outlineWidth: uniform float
@@ -249,7 +245,8 @@ typedef enum eGPUBuiltinShader {
    */
   GPU_SHADER_2D_POINT_UNIFORM_SIZE_VARYING_COLOR_OUTLINE_AA,
   /**
-   * Draw round points with a constant size and an outline. Take a 2D position and a color for each vertex.
+   * Draw round points with a constant size and an outline.
+   * Take a 2D position and a color for each vertex.
    *
    * \param size: in float
    * \param color: in vec4
@@ -302,7 +299,8 @@ typedef enum eGPUBuiltinShader {
    */
   GPU_SHADER_3D_POINT_VARYING_SIZE_UNIFORM_COLOR,
   /**
-   * Draw round points with a constant size and an outline. Take a 3D position and a color for each vertex.
+   * Draw round points with a constant size and an outline.
+   * Take a 3D position and a color for each vertex.
    *
    * \param size: in float
    * \param color: in vec4
@@ -399,10 +397,7 @@ void GPU_shader_free_builtin_shaders(void);
 
 typedef struct GPUVertAttrLayers {
   struct {
-    int type;
-    int glindex;
-    int glinfoindoex;
-    int gltexco;
+    int type; /* CustomDataType */
     int attr_id;
     char name[64]; /* MAX_CUSTOMDATA_LAYER_NAME */
   } layer[GPU_MAX_ATTR];

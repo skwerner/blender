@@ -153,11 +153,8 @@ const EnumPropertyItem rna_enum_object_gpencil_type_items[] = {
 static const EnumPropertyItem parent_type_items[] = {
     {PAROBJECT, "OBJECT", 0, "Object", "The object is parented to an object"},
     {PARSKEL, "ARMATURE", 0, "Armature", ""},
-    {PARSKEL,
-     "LATTICE",
-     0,
-     "Lattice",
-     "The object is parented to a lattice"}, /* PARSKEL reuse will give issues */
+    /* PARSKEL reuse will give issues. */
+    {PARSKEL, "LATTICE", 0, "Lattice", "The object is parented to a lattice"},
     {PARVERT1, "VERTEX", 0, "Vertex", "The object is parented to a vertex"},
     {PARVERT3, "VERTEX_3", 0, "3 Vertices", ""},
     {PARBONE, "BONE", 0, "Bone", "The object is parented to a bone"},
@@ -193,11 +190,8 @@ const EnumPropertyItem rna_enum_metaelem_type_items[] = {
     {MB_BALL, "BALL", ICON_META_BALL, "Ball", ""},
     {MB_TUBE, "CAPSULE", ICON_META_CAPSULE, "Capsule", ""},
     {MB_PLANE, "PLANE", ICON_META_PLANE, "Plane", ""},
-    {MB_ELIPSOID,
-     "ELLIPSOID",
-     ICON_META_ELLIPSOID,
-     "Ellipsoid",
-     ""}, /* NOTE: typo at original definition! */
+    /* NOTE: typo at original definition! */
+    {MB_ELIPSOID, "ELLIPSOID", ICON_META_ELLIPSOID, "Ellipsoid", ""},
     {MB_CUBE, "CUBE", ICON_META_CUBE, "Cube", ""},
     {0, NULL, 0, NULL, NULL},
 };
@@ -352,8 +346,9 @@ static void rna_Object_matrix_local_set(PointerRNA *ptr, const float values[16])
   Object *ob = ptr->id.data;
   float local_mat[4][4];
 
-  /* localspace matrix is truly relative to the parent, but parameters stored in object are
-   * relative to parentinv matrix. Undo the parent inverse part before applying it as local matrix. */
+  /* Localspace matrix is truly relative to the parent,
+   * but parameters stored in object are relative to parentinv matrix.
+   * Undo the parent inverse part before applying it as local matrix. */
   if (ob->parent) {
     float invmat[4][4];
     invert_m4_m4(invmat, ob->parentinv);
@@ -363,7 +358,8 @@ static void rna_Object_matrix_local_set(PointerRNA *ptr, const float values[16])
     copy_m4_m4(local_mat, (float(*)[4])values);
   }
 
-  /* don't use compat so we get predictable rotation, and do not use parenting either, because it's a local matrix! */
+  /* Don't use compat so we get predictable rotation, and do not use parenting either,
+   * because it's a local matrix! */
   BKE_object_apply_mat4(ob, local_mat, false, false);
 }
 
@@ -383,6 +379,12 @@ void rna_Object_internal_update_data(Main *UNUSED(bmain), Scene *UNUSED(scene), 
 {
   DEG_id_tag_update(ptr->id.data, ID_RECALC_GEOMETRY);
   WM_main_add_notifier(NC_OBJECT | ND_DRAW, ptr->id.data);
+}
+
+void rna_Object_internal_update_data_dependency(Main *bmain, Scene *scene, PointerRNA *ptr)
+{
+  DEG_relations_tag_update(bmain);
+  rna_Object_internal_update_data(bmain, scene, ptr);
 }
 
 static void rna_Object_active_shape_update(bContext *C, PointerRNA *ptr)
@@ -425,7 +427,7 @@ static void rna_Object_dependency_update(Main *bmain, Scene *UNUSED(scene), Poin
   WM_main_add_notifier(NC_OBJECT | ND_PARENT, ptr->id.data);
 }
 
-static void rna_Object_data_set(PointerRNA *ptr, PointerRNA value)
+static void rna_Object_data_set(PointerRNA *ptr, PointerRNA value, struct ReportList *reports)
 {
   Object *ob = (Object *)ptr->data;
   ID *id = value.data;
@@ -439,8 +441,13 @@ static void rna_Object_data_set(PointerRNA *ptr, PointerRNA value)
     return;
   }
 
-  BLI_assert(BKE_id_is_in_global_main(&ob->id));
-  BLI_assert(BKE_id_is_in_global_main(id));
+  if ((id->tag & LIB_TAG_NO_MAIN) != (ob->id.tag & LIB_TAG_NO_MAIN)) {
+    BKE_report(reports,
+               RPT_ERROR,
+               "Can only assign evaluated data to to evaluated object, or original data to "
+               "original object");
+    return;
+  }
 
   if (ob->type == OB_EMPTY) {
     if (ob->data) {
@@ -527,7 +534,9 @@ static bool rna_Object_data_poll(PointerRNA *ptr, const PointerRNA value)
   return true;
 }
 
-static void rna_Object_parent_set(PointerRNA *ptr, PointerRNA value)
+static void rna_Object_parent_set(PointerRNA *ptr,
+                                  PointerRNA value,
+                                  struct ReportList *UNUSED(reports))
 {
   Object *ob = (Object *)ptr->data;
   Object *par = (Object *)value.data;
@@ -612,7 +621,9 @@ static const EnumPropertyItem *rna_Object_instance_type_itemf(bContext *UNUSED(C
   return item;
 }
 
-static void rna_Object_dup_collection_set(PointerRNA *ptr, PointerRNA value)
+static void rna_Object_dup_collection_set(PointerRNA *ptr,
+                                          PointerRNA value,
+                                          struct ReportList *UNUSED(reports))
 {
   Object *ob = (Object *)ptr->data;
   Collection *grp = (Collection *)value.data;
@@ -714,9 +725,8 @@ void rna_object_vgroup_name_set(PointerRNA *ptr, const char *value, char *result
   Object *ob = (Object *)ptr->id.data;
   bDeformGroup *dg = defgroup_find_name(ob, value);
   if (dg) {
-    BLI_strncpy(result,
-                value,
-                maxlen); /* no need for BLI_strncpy_utf8, since this matches an existing group */
+    /* No need for BLI_strncpy_utf8, since this matches an existing group. */
+    BLI_strncpy(result, value, maxlen);
     return;
   }
 
@@ -798,9 +808,8 @@ void rna_object_fmap_name_set(PointerRNA *ptr, const char *value, char *result, 
   Object *ob = (Object *)ptr->id.data;
   bFaceMap *fmap = BKE_object_facemap_find_name(ob, value);
   if (fmap) {
-    BLI_strncpy(result,
-                value,
-                maxlen); /* no need for BLI_strncpy_utf8, since this matches an existing group */
+    /* No need for BLI_strncpy_utf8, since this matches an existing group. */
+    BLI_strncpy(result, value, maxlen);
     return;
   }
 
@@ -890,7 +899,9 @@ static PointerRNA rna_Object_active_material_get(PointerRNA *ptr)
   return rna_pointer_inherit_refine(ptr, &RNA_Material, ma);
 }
 
-static void rna_Object_active_material_set(PointerRNA *ptr, PointerRNA value)
+static void rna_Object_active_material_set(PointerRNA *ptr,
+                                           PointerRNA value,
+                                           struct ReportList *UNUSED(reports))
 {
   Object *ob = (Object *)ptr->id.data;
 
@@ -1089,7 +1100,9 @@ static PointerRNA rna_MaterialSlot_material_get(PointerRNA *ptr)
   return rna_pointer_inherit_refine(ptr, &RNA_Material, ma);
 }
 
-static void rna_MaterialSlot_material_set(PointerRNA *ptr, PointerRNA value)
+static void rna_MaterialSlot_material_set(PointerRNA *ptr,
+                                          PointerRNA value,
+                                          struct ReportList *UNUSED(reports))
 {
   Object *ob = (Object *)ptr->id.data;
   int index = (Material **)ptr->data - ob->mat;
@@ -1277,7 +1290,9 @@ static PointerRNA rna_Object_active_constraint_get(PointerRNA *ptr)
   return rna_pointer_inherit_refine(ptr, &RNA_Constraint, con);
 }
 
-static void rna_Object_active_constraint_set(PointerRNA *ptr, PointerRNA value)
+static void rna_Object_active_constraint_set(PointerRNA *ptr,
+                                             PointerRNA value,
+                                             struct ReportList *UNUSED(reports))
 {
   Object *ob = (Object *)ptr->id.data;
   BKE_constraints_active_set(&ob->constraints, (bConstraint *)value.data);
@@ -1377,8 +1392,8 @@ bool rna_Object_constraints_override_apply(Main *UNUSED(bmain),
   /* This handles NULL anchor as expected by adding at head of list. */
   BLI_insertlinkafter(&ob_dst->constraints, con_anchor, con_dst);
 
-  /* This should actually *not* be needed in typical cases. However, if overridden source was edited,
-   * we *may* have some new conflicting names. */
+  /* This should actually *not* be needed in typical cases.
+   * However, if overridden source was edited, we *may* have some new conflicting names. */
   BKE_constraint_unique_name(con_dst, &ob_dst->constraints);
 
   //  printf("%s: We inserted a constraint...\n", __func__);
@@ -1466,7 +1481,8 @@ bool rna_Object_modifiers_override_apply(Main *UNUSED(bmain),
   /* This handles NULL anchor as expected by adding at head of list. */
   BLI_insertlinkafter(&ob_dst->modifiers, mod_anchor, mod_dst);
 
-  /* This should actually *not* be needed in typical cases. However, if overridden source was edited,
+  /* This should actually *not* be needed in typical cases.
+   * However, if overridden source was edited,
    * we *may* have some new conflicting names. */
   modifier_unique_name(&ob_dst->modifiers, mod_dst);
 
@@ -1544,16 +1560,20 @@ static void rna_Object_boundbox_get(PointerRNA *ptr, float *values)
   }
 }
 
-static bDeformGroup *rna_Object_vgroup_new(Object *ob, const char *name)
+static bDeformGroup *rna_Object_vgroup_new(Object *ob, Main *bmain, const char *name)
 {
   bDeformGroup *defgroup = BKE_object_defgroup_add_name(ob, name);
 
+  DEG_relations_tag_update(bmain);
   WM_main_add_notifier(NC_OBJECT | ND_DRAW, ob);
 
   return defgroup;
 }
 
-static void rna_Object_vgroup_remove(Object *ob, ReportList *reports, PointerRNA *defgroup_ptr)
+static void rna_Object_vgroup_remove(Object *ob,
+                                     Main *bmain,
+                                     ReportList *reports,
+                                     PointerRNA *defgroup_ptr)
 {
   bDeformGroup *defgroup = defgroup_ptr->data;
   if (BLI_findindex(&ob->defbase, defgroup) == -1) {
@@ -1568,13 +1588,15 @@ static void rna_Object_vgroup_remove(Object *ob, ReportList *reports, PointerRNA
   BKE_object_defgroup_remove(ob, defgroup);
   RNA_POINTER_INVALIDATE(defgroup_ptr);
 
+  DEG_relations_tag_update(bmain);
   WM_main_add_notifier(NC_OBJECT | ND_DRAW, ob);
 }
 
-static void rna_Object_vgroup_clear(Object *ob)
+static void rna_Object_vgroup_clear(Object *ob, Main *bmain)
 {
   BKE_object_defgroup_remove_all(ob);
 
+  DEG_relations_tag_update(bmain);
   WM_main_add_notifier(NC_OBJECT | ND_DRAW, ob);
 }
 
@@ -1762,7 +1784,8 @@ static void rna_def_vertex_group(BlenderRNA *brna)
   RNA_def_struct_name_property(srna, prop);
   RNA_def_property_string_funcs(prop, NULL, NULL, "rna_VertexGroup_name_set");
   /* update data because modifiers may use [#24761] */
-  RNA_def_property_update(prop, NC_GEOM | ND_DATA | NA_RENAME, "rna_Object_internal_update_data");
+  RNA_def_property_update(
+      prop, NC_GEOM | ND_DATA | NA_RENAME, "rna_Object_internal_update_data_dependency");
 
   prop = RNA_def_property(srna, "lock_weight", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_ui_text(prop, "", "Maintain the relative weights for the group");
@@ -1868,7 +1891,8 @@ static void rna_def_material_slot(BlenderRNA *brna)
   RNA_def_struct_ui_icon(srna, ICON_MATERIAL_DATA);
 
   /* WARNING! Order is crucial for override to work properly here... :/
-   * 'link' must come before material pointer, since it defines where (in object or obdata) that one is set! */
+   * 'link' must come before material pointer,
+   * since it defines where (in object or obdata) that one is set! */
   prop = RNA_def_property(srna, "link", PROP_ENUM, PROP_NONE);
   RNA_def_property_enum_items(prop, link_items);
   RNA_def_property_enum_funcs(
@@ -2164,19 +2188,21 @@ static void rna_def_object_vertex_groups(BlenderRNA *brna, PropertyRNA *cprop)
 
   /* vertex groups */ /* add_vertex_group */
   func = RNA_def_function(srna, "new", "rna_Object_vgroup_new");
+  RNA_def_function_flag(func, FUNC_USE_MAIN);
   RNA_def_function_ui_description(func, "Add vertex group to object");
   RNA_def_string(func, "name", "Group", 0, "", "Vertex group name"); /* optional */
   parm = RNA_def_pointer(func, "group", "VertexGroup", "", "New vertex group");
   RNA_def_function_return(func, parm);
 
   func = RNA_def_function(srna, "remove", "rna_Object_vgroup_remove");
-  RNA_def_function_flag(func, FUNC_USE_REPORTS);
+  RNA_def_function_flag(func, FUNC_USE_MAIN | FUNC_USE_REPORTS);
   RNA_def_function_ui_description(func, "Delete vertex group from object");
   parm = RNA_def_pointer(func, "group", "VertexGroup", "", "Vertex group to remove");
   RNA_def_parameter_flags(parm, PROP_NEVER_NULL, PARM_REQUIRED | PARM_RNAPTR);
   RNA_def_parameter_clear_flags(parm, PROP_THICK_WRAP, 0);
 
   func = RNA_def_function(srna, "clear", "rna_Object_vgroup_clear");
+  RNA_def_function_flag(func, FUNC_USE_MAIN);
   RNA_def_function_ui_description(func, "Delete all vertex groups from object");
 }
 
@@ -2521,8 +2547,10 @@ static void rna_def_object(BlenderRNA *brna)
   /* FIXME: this is not a single field any more! (drotAxis and drotAngle) */
   RNA_def_property_float_sdna(prop, NULL, "dquat");
   RNA_def_property_float_array_default(prop, rna_default_axis_angle);
-  RNA_def_property_ui_text(prop, "Delta Rotation (Axis Angle)",
-                           "Extra rotation added to the rotation of the object (when using Axis-Angle rotations)");
+  RNA_def_property_ui_text(
+      prop,
+      "Delta Rotation (Axis Angle)",
+      "Extra rotation added to the rotation of the object (when using Axis-Angle rotations)");
   RNA_def_property_update(prop, NC_OBJECT | ND_TRANSFORM, "rna_Object_internal_update");
 #  endif
 
@@ -2646,7 +2674,10 @@ static void rna_def_object(BlenderRNA *brna)
   RNA_def_property_ui_text(
       prop, "Constraints", "Constraints affecting the transformation of the object");
   RNA_def_property_override_funcs(prop, NULL, NULL, "rna_Object_constraints_override_apply");
-  /*  RNA_def_property_collection_funcs(prop, NULL, NULL, NULL, NULL, NULL, NULL, NULL, "constraints__add", "constraints__remove"); */
+#  if 0
+  RNA_def_property_collection_funcs(
+      prop, NULL, NULL, NULL, NULL, NULL, NULL, NULL, "constraints__add", "constraints__remove");
+#  endif
   rna_def_object_constraints(brna, prop);
 
   /* vertex groups */
@@ -2785,9 +2816,9 @@ static void rna_def_object(BlenderRNA *brna)
 
   /* restrict */
   prop = RNA_def_property(srna, "hide_viewport", PROP_BOOLEAN, PROP_NONE);
-  RNA_def_property_boolean_sdna(prop, NULL, "restrictflag", OB_RESTRICT_VIEW);
+  RNA_def_property_boolean_sdna(prop, NULL, "restrictflag", OB_RESTRICT_VIEWPORT);
   RNA_def_property_override_flag(prop, PROPOVERRIDE_OVERRIDABLE_STATIC);
-  RNA_def_property_ui_text(prop, "Disable View", "Disable object in the viewport");
+  RNA_def_property_ui_text(prop, "Disable in Viewports", "Globally disable in viewports");
   RNA_def_property_ui_icon(prop, ICON_RESTRICT_VIEW_OFF, -1);
   RNA_def_property_update(prop, NC_OBJECT | ND_DRAW, "rna_Object_hide_update");
 
@@ -2795,14 +2826,14 @@ static void rna_def_object(BlenderRNA *brna)
   RNA_def_property_boolean_sdna(prop, NULL, "restrictflag", OB_RESTRICT_SELECT);
   RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
   RNA_def_property_override_flag(prop, PROPOVERRIDE_OVERRIDABLE_STATIC);
-  RNA_def_property_ui_text(prop, "Disable Select", "Disable object selection in the viewport");
+  RNA_def_property_ui_text(prop, "Disable Selection", "Disable selection in viewport");
   RNA_def_property_ui_icon(prop, ICON_RESTRICT_SELECT_OFF, -1);
   RNA_def_property_update(prop, NC_OBJECT | ND_DRAW, "rna_Object_hide_update");
 
   prop = RNA_def_property(srna, "hide_render", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_sdna(prop, NULL, "restrictflag", OB_RESTRICT_RENDER);
   RNA_def_property_override_flag(prop, PROPOVERRIDE_OVERRIDABLE_STATIC);
-  RNA_def_property_ui_text(prop, "Disable Render", "Disable object in renders");
+  RNA_def_property_ui_text(prop, "Disable in Renders", "Globally disable in renders");
   RNA_def_property_ui_icon(prop, ICON_RESTRICT_RENDER_OFF, -1);
   RNA_def_property_update(prop, NC_OBJECT | ND_DRAW, "rna_Object_hide_update");
 

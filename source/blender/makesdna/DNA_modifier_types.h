@@ -1853,12 +1853,15 @@ typedef struct MeshSeqCacheModifierData {
   ModifierData modifier;
 
   struct CacheFile *cache_file;
-  struct CacheReader *reader;
   /** 1024 = FILE_MAX. */
   char object_path[1024];
 
   char read_flag;
   char _pad[7];
+
+  /* Runtime. */
+  struct CacheReader *reader;
+  char reader_object_path[1024];
 } MeshSeqCacheModifierData;
 
 /* MeshSeqCacheModifierData.read_flag */
@@ -1963,7 +1966,7 @@ typedef struct OpenVDBModifierData {
   short front_axis;
 
   short simplify;
-  short pad[3];
+  short _pad1[3];
 
   SmokeModifierData *smoke;
 
@@ -1973,7 +1976,7 @@ typedef struct OpenVDBModifierData {
   float max_color;
 
   int numeric_display;
-  int pad1;
+  char _pad2[4];
 } OpenVDBModifierData;
 
 /* OpenVDBModifierData flags */

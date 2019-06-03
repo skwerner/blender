@@ -55,10 +55,9 @@ class CustomRenderEngine(bpy.types.RenderEngine):
     # whenever the scene or 3D viewport changes. This method is where data
     # should be read from Blender in the same thread. Typically a render
     # thread will be started to do the work while keeping Blender responsive.
-    def view_update(self, context):
+    def view_update(self, context, depsgraph):
         region = context.region
         view3d = context.space_data
-        depsgraph = context.depsgraph
         scene = depsgraph.scene
 
         # Get viewport dimensions
@@ -80,11 +79,11 @@ class CustomRenderEngine(bpy.types.RenderEngine):
                 print("Datablock updated: ", update.id.name)
 
             # Test if any material was added, removed or changed.
-            if depsgraph.id_type_update('MATERIAL'):
+            if depsgraph.id_type_updated('MATERIAL'):
                 print("Materials updated")
 
         # Loop over all object instances in the scene.
-        if first_time or depsgraph.id_type_update('OBJECT'):
+        if first_time or depsgraph.id_type_updated('OBJECT'):
             for instance in depsgraph.object_instances:
                 pass
 
@@ -93,9 +92,8 @@ class CustomRenderEngine(bpy.types.RenderEngine):
     # with OpenGL, and not perform other expensive work.
     # Blender will draw overlays for selection and editing on top of the
     # rendered image automatically.
-    def view_draw(self, context):
+    def view_draw(self, context, depsgraph):
         region = context.region
-        depsgraph = context.depsgraph
         scene = depsgraph.scene
 
         # Get viewport dimensions

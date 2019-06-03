@@ -36,11 +36,16 @@
 
 #ifdef RNA_RUNTIME
 
+#  ifdef WITH_PYTHON
+#    include "BPY_extern.h"
+#  endif
+
 #  include "BLI_iterator.h"
 #  include "BLI_math.h"
 
 #  include "BKE_anim.h"
 #  include "BKE_object.h"
+#  include "BKE_scene.h"
 
 #  include "DEG_depsgraph_build.h"
 #  include "DEG_depsgraph_debug.h"
@@ -256,6 +261,20 @@ static void rna_Depsgraph_debug_stats(Depsgraph *depsgraph, char *result)
                outer);
 }
 
+static void rna_Depsgraph_update(Depsgraph *depsgraph, Main *bmain)
+{
+#  ifdef WITH_PYTHON
+  /* Allow drivers to be evaluated */
+  BPy_BEGIN_ALLOW_THREADS;
+#  endif
+
+  BKE_scene_graph_update_tagged(depsgraph, bmain);
+
+#  ifdef WITH_PYTHON
+  BPy_END_ALLOW_THREADS;
+#  endif
+}
+
 /* Iteration over objects, simple version */
 
 static void rna_Depsgraph_objects_begin(CollectionPropertyIterator *iter, PointerRNA *ptr)
@@ -297,8 +316,8 @@ static PointerRNA rna_Depsgraph_objects_get(CollectionPropertyIterator *iter)
  */
 
 /* XXX Ugly python seems to query next item of an iterator before using current one (see T57558).
- * This forces us to use that nasty ping-pong game between two sets of iterator data, so that previous one remains
- * valid memory for python to access to. Yuck.
+ * This forces us to use that nasty ping-pong game between two sets of iterator data,
+ * so that previous one remains valid memory for python to access to. Yuck.
  */
 typedef struct RNA_Depsgraph_Instances_Iterator {
   BLI_Iterator iterators[2];
@@ -335,8 +354,10 @@ static void rna_Depsgraph_object_instances_next(CollectionPropertyIterator *iter
   di_it->iterators[di_it->counter % 2].data = &di_it->deg_data[di_it->counter % 2];
   DEG_iterator_objects_next(&di_it->iterators[di_it->counter % 2]);
   /* Dupli_object_current is also temp memory generated during the iterations,
-   * it may be freed when last item has been iterated, so we have same issue as with the iterator itself:
-   * we need to keep a local copy, which memory remains valid a bit longer, for python accesses to work. */
+   * it may be freed when last item has been iterated,
+   * so we have same issue as with the iterator itself:
+   * we need to keep a local copy, which memory remains valid a bit longer,
+   * for Python accesses to work. */
   if (di_it->deg_data[di_it->counter % 2].dupli_object_current != NULL) {
     di_it->dupli_object_current[di_it->counter % 2] =
         *di_it->deg_data[di_it->counter % 2].dupli_object_current;
@@ -601,21 +622,13 @@ static void rna_def_depsgraph(BlenderRNA *brna)
 
   func = RNA_def_function(
       srna, "debug_relations_graphviz", "rna_Depsgraph_debug_relations_graphviz");
-  parm = RNA_def_string_file_path(func,
-                                  "filename",
-                                  NULL,
-                                  FILE_MAX,
-                                  "File Name",
-                                  "File in which to store graphviz debug output");
+  parm = RNA_def_string_file_path(
+      func, "filename", NULL, FILE_MAX, "File Name", "Output path for the graphviz debug file");
   RNA_def_parameter_flags(parm, 0, PARM_REQUIRED);
 
   func = RNA_def_function(srna, "debug_stats_gnuplot", "rna_Depsgraph_debug_stats_gnuplot");
-  parm = RNA_def_string_file_path(func,
-                                  "filename",
-                                  NULL,
-                                  FILE_MAX,
-                                  "File Name",
-                                  "File in which to store graphviz debug output");
+  parm = RNA_def_string_file_path(
+      func, "filename", NULL, FILE_MAX, "File Name", "Output path for the gnuplot debug file");
   RNA_def_parameter_flags(parm, 0, PARM_REQUIRED);
   parm = RNA_def_string_file_path(func,
                                   "output_filename",
@@ -633,6 +646,15 @@ static void rna_def_depsgraph(BlenderRNA *brna)
   parm = RNA_def_string(func, "result", NULL, STATS_MAX_SIZE, "result", "");
   RNA_def_parameter_flags(parm, PROP_THICK_WRAP, 0); /* needed for string return value */
   RNA_def_function_output(func, parm);
+
+  /* Updates. */
+
+  func = RNA_def_function(srna, "update", "rna_Depsgraph_update");
+  RNA_def_function_ui_description(
+      func,
+      "Re-evaluate any modified data-blocks, for example for animation or modifiers. "
+      "This invalidates all references to evaluated data-blocks from this dependency graph.");
+  RNA_def_function_flag(func, FUNC_USE_MAIN);
 
   /* Queries for original datablockls (the ones depsgraph is built for). */
 

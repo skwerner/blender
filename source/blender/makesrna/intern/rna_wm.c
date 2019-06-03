@@ -49,6 +49,8 @@ static const EnumPropertyItem event_keymouse_value_items[] = {
     {KM_CLICK, "CLICK", 0, "Click", ""},
     {KM_DBL_CLICK, "DOUBLE_CLICK", 0, "Double Click", ""},
     {KM_CLICK_DRAG, "CLICK_DRAG", 0, "Click Drag", ""},
+    /* Used for NDOF and trackpad events. */
+    {KM_NOTHING, "NOTHING", 0, "Nothing", ""},
     {0, NULL, 0, NULL, NULL},
 };
 
@@ -382,7 +384,6 @@ const EnumPropertyItem rna_enum_event_type_items[] = {
 
 const EnumPropertyItem rna_enum_event_value_items[] = {
     {KM_ANY, "ANY", 0, "Any", ""},
-    {KM_NOTHING, "NOTHING", 0, "Nothing", ""},
     {KM_PRESS, "PRESS", 0, "Press", ""},
     {KM_RELEASE, "RELEASE", 0, "Release", ""},
     {KM_CLICK, "CLICK", 0, "Click", ""},
@@ -396,6 +397,7 @@ const EnumPropertyItem rna_enum_event_value_items[] = {
     {EVT_GESTURE_SW, "SOUTH_WEST", 0, "South-West", ""},
     {EVT_GESTURE_W, "WEST", 0, "West", ""},
     {EVT_GESTURE_NW, "NORTH_WEST", 0, "North-West", ""},
+    {KM_NOTHING, "NOTHING", 0, "Nothing", ""},
     {0, NULL, 0, NULL, NULL},
 };
 
@@ -420,11 +422,11 @@ const EnumPropertyItem rna_enum_event_type_mask_items[] = {
 
 #if 0
 static const EnumPropertyItem keymap_modifiers_items[] = {
-  {KM_ANY, "ANY", 0, "Any", ""},
-  {0, "NONE", 0, "None", ""},
-  {1, "FIRST", 0, "First", ""},
-  {2, "SECOND", 0, "Second", ""},
-  {0, NULL, 0, NULL, NULL},
+    {KM_ANY, "ANY", 0, "Any", ""},
+    {0, "NONE", 0, "None", ""},
+    {1, "FIRST", 0, "First", ""},
+    {2, "SECOND", 0, "Second", ""},
+    {0, NULL, 0, NULL, NULL},
 };
 #endif
 
@@ -443,19 +445,16 @@ static const EnumPropertyItem operator_flag_items[] = {
      "Push a single undo event for repetead instances of this operator"},
     {OPTYPE_BLOCKING, "BLOCKING", 0, "Blocking", "Block anything else from using the cursor"},
     {OPTYPE_MACRO, "MACRO", 0, "Macro", "Use to check if an operator is a macro"},
-    {OPTYPE_GRAB_CURSOR,
+    {OPTYPE_GRAB_CURSOR_XY,
      "GRAB_CURSOR",
      0,
      "Grab Pointer",
      "Use so the operator grabs the mouse focus, enables wrapping when continuous grab "
      "is enabled"},
+    {OPTYPE_GRAB_CURSOR_X, "GRAB_CURSOR_X", 0, "Grab Pointer X", "Grab, only warping the X axis"},
+    {OPTYPE_GRAB_CURSOR_Y, "GRAB_CURSOR_Y", 0, "Grab Pointer Y", "Grab, only warping the Y axis"},
     {OPTYPE_PRESET, "PRESET", 0, "Preset", "Display a preset button with the operators settings"},
     {OPTYPE_INTERNAL, "INTERNAL", 0, "Internal", "Removes the operator from search results"},
-    {OPTYPE_USE_EVAL_DATA,
-     "USE_EVAL_DATA",
-     0,
-     "Use Evaluated Data",
-     "Uses evaluated data (i.e. needs a valid depsgraph for current context)"},
     {0, NULL, 0, NULL, NULL},
 };
 #endif
@@ -694,7 +693,9 @@ static PointerRNA rna_PieMenu_layout_get(PointerRNA *ptr)
   return rptr;
 }
 
-static void rna_Window_scene_set(PointerRNA *ptr, PointerRNA value)
+static void rna_Window_scene_set(PointerRNA *ptr,
+                                 PointerRNA value,
+                                 struct ReportList *UNUSED(reports))
 {
   wmWindow *win = ptr->data;
 
@@ -738,7 +739,9 @@ static PointerRNA rna_Window_workspace_get(PointerRNA *ptr)
       ptr, &RNA_WorkSpace, BKE_workspace_active_get(win->workspace_hook));
 }
 
-static void rna_Window_workspace_set(PointerRNA *ptr, PointerRNA value)
+static void rna_Window_workspace_set(PointerRNA *ptr,
+                                     PointerRNA value,
+                                     struct ReportList *UNUSED(reports))
 {
   wmWindow *win = (wmWindow *)ptr->data;
 
@@ -774,7 +777,9 @@ PointerRNA rna_Window_screen_get(PointerRNA *ptr)
       ptr, &RNA_Screen, BKE_workspace_active_screen_get(win->workspace_hook));
 }
 
-static void rna_Window_screen_set(PointerRNA *ptr, PointerRNA value)
+static void rna_Window_screen_set(PointerRNA *ptr,
+                                  PointerRNA value,
+                                  struct ReportList *UNUSED(reports))
 {
   wmWindow *win = ptr->data;
   WorkSpace *workspace = BKE_workspace_active_get(win->workspace_hook);
@@ -824,7 +829,9 @@ static PointerRNA rna_Window_view_layer_get(PointerRNA *ptr)
   return rna_pointer_inherit_refine(&scene_ptr, &RNA_ViewLayer, view_layer);
 }
 
-static void rna_Window_view_layer_set(PointerRNA *ptr, PointerRNA value)
+static void rna_Window_view_layer_set(PointerRNA *ptr,
+                                      PointerRNA value,
+                                      struct ReportList *UNUSED(reports))
 {
   wmWindow *win = ptr->data;
   ViewLayer *view_layer = value.data;
@@ -847,7 +854,7 @@ static int rna_wmKeyMapItem_map_type_get(PointerRNA *ptr)
 {
   wmKeyMapItem *kmi = ptr->data;
 
-  return WM_keymap_map_type_get(kmi);
+  return WM_keymap_item_map_type_get(kmi);
 }
 
 static void rna_wmKeyMapItem_map_type_set(PointerRNA *ptr, int value)
@@ -1028,7 +1035,9 @@ static PointerRNA rna_WindowManager_active_keyconfig_get(PointerRNA *ptr)
   return rna_pointer_inherit_refine(ptr, &RNA_KeyConfig, kc);
 }
 
-static void rna_WindowManager_active_keyconfig_set(PointerRNA *ptr, PointerRNA value)
+static void rna_WindowManager_active_keyconfig_set(PointerRNA *ptr,
+                                                   PointerRNA value,
+                                                   struct ReportList *UNUSED(reports))
 {
   wmWindowManager *wm = ptr->data;
   wmKeyConfig *kc = value.data;
@@ -1169,7 +1178,7 @@ static void rna_wmKeyMapItem_idname_set(PointerRNA *ptr, const char *value)
   if (!STREQ(idname, kmi->idname)) {
     BLI_strncpy(kmi->idname, idname, sizeof(kmi->idname));
 
-    WM_keymap_properties_reset(kmi, NULL);
+    WM_keymap_item_properties_reset(kmi, NULL);
   }
 }
 
@@ -1532,7 +1541,8 @@ static void rna_Operator_unregister(struct Main *bmain, StructRNA *type)
   idname = ot->idname;
   WM_operatortype_remove_ptr(ot);
 
-  /* not to be confused with the RNA_struct_free that WM_operatortype_remove calls, they are 2 different srna's */
+  /* Not to be confused with the RNA_struct_free that WM_operatortype_remove calls,
+   * they are 2 different srna's. */
   RNA_struct_free(&BLENDER_RNA, type);
 
   MEM_freeN((void *)idname);
@@ -1728,7 +1738,8 @@ static void rna_KeyMapItem_update(Main *UNUSED(bmain), Scene *UNUSED(scene), Poi
 #else /* RNA_RUNTIME */
 
 /**
- * expose ``Operator.options`` as its own type so we can control each flags use (some are read-only).
+ * expose ``Operator.options`` as its own type so we can control each flags use
+ * (some are read-only).
  */
 static void rna_def_operator_options_runtime(BlenderRNA *brna)
 {
@@ -1866,6 +1877,7 @@ static void rna_def_operator(BlenderRNA *brna)
   RNA_def_struct_idprops_func(srna, "rna_OperatorProperties_idprops");
   RNA_def_struct_property_tags(srna, rna_enum_operator_property_tags);
   RNA_def_struct_flag(srna, STRUCT_NO_DATABLOCK_IDPROPERTIES);
+  RNA_def_struct_clear_flag(srna, STRUCT_UNDO);
 }
 
 static void rna_def_macro_operator(BlenderRNA *brna)
@@ -2103,6 +2115,7 @@ static void rna_def_event(BlenderRNA *brna)
   RNA_def_property_boolean_sdna(prop, NULL, "shift", 1);
   RNA_def_property_clear_flag(prop, PROP_EDITABLE);
   RNA_def_property_ui_text(prop, "Shift", "True when the Shift key is held");
+  RNA_def_property_translation_context(prop, BLT_I18NCONTEXT_ID_WINDOWMANAGER);
 
   prop = RNA_def_property(srna, "ctrl", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_sdna(prop, NULL, "ctrl", 1);
@@ -2599,6 +2612,7 @@ static void rna_def_keyconfig(BlenderRNA *brna)
   /*  RNA_def_property_enum_sdna(prop, NULL, "shift"); */
   /*  RNA_def_property_enum_items(prop, keymap_modifiers_items); */
   RNA_def_property_ui_text(prop, "Shift", "Shift key pressed");
+  RNA_def_property_translation_context(prop, BLT_I18NCONTEXT_ID_WINDOWMANAGER);
   RNA_def_property_update(prop, 0, "rna_KeyMapItem_update");
 
   prop = RNA_def_property(srna, "ctrl", PROP_BOOLEAN, PROP_NONE);

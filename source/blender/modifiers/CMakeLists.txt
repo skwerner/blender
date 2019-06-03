@@ -21,18 +21,18 @@
 set(INC
   .
   intern
+  ../blenfont
   ../blenkernel
   ../blenlib
-  ../blenfont
+  ../bmesh
   ../depsgraph
   ../makesdna
   ../makesrna
-  ../bmesh
   ../render/extern/include
   ../../../intern/elbeem/extern
-  ../../../intern/guardedalloc
   ../../../intern/eigen
   ../../../intern/openvdb
+  ../../../intern/guardedalloc
 )
 
 set(INC_SYS

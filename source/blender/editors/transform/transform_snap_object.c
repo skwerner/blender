@@ -337,6 +337,7 @@ static bool raycastMesh(SnapObjectContext *sctx,
                         Mesh *me,
                         float obmat[4][4],
                         const unsigned int ob_index,
+                        bool use_hide,
                         /* read/write args */
                         float *ray_depth,
                         /* return args */
@@ -419,7 +420,12 @@ static bool raycastMesh(SnapObjectContext *sctx,
   }
 
   if (treedata->tree == NULL) {
-    BKE_bvhtree_from_mesh_get(treedata, me, BVHTREE_FROM_LOOPTRI, 4);
+    if (use_hide) {
+      BKE_bvhtree_from_mesh_get(treedata, me, BVHTREE_FROM_LOOPTRI_NO_HIDDEN, 4);
+    }
+    else {
+      BKE_bvhtree_from_mesh_get(treedata, me, BVHTREE_FROM_LOOPTRI, 4);
+    }
 
     /* required for snapping with occlusion. */
     treedata->edge = me->medge;
@@ -706,23 +712,23 @@ static bool raycastObj(SnapObjectContext *sctx,
                        ListBase *r_hit_list)
 {
   bool retval = false;
+  if (use_occlusion_test) {
+    if (use_obedit && sctx->use_v3d && XRAY_ENABLED(sctx->v3d_data.v3d)) {
+      /* Use of occlude geometry in editing mode disabled. */
+      return false;
+    }
+
+    if (ELEM(ob->dt, OB_BOUNDBOX, OB_WIRE)) {
+      /* Do not hit objects that are in wire or bounding box
+       * display mode. */
+      return false;
+    }
+  }
 
   switch (ob->type) {
     case OB_MESH: {
-      if (use_occlusion_test) {
-        if (use_obedit && sctx->use_v3d && XRAY_ENABLED(sctx->v3d_data.v3d)) {
-          /* Use of occlude geometry in editing mode disabled. */
-          return false;
-        }
-
-        if (ELEM(ob->dt, OB_BOUNDBOX, OB_WIRE)) {
-          /* Do not hit objects that are in wire or bounding box
-           * display mode. */
-          return false;
-        }
-      }
-
       Mesh *me = ob->data;
+      bool use_hide = false;
       if (BKE_object_is_in_editmode(ob)) {
         BMEditMesh *em = BKE_editmesh_from_object(ob);
         if (use_obedit) {
@@ -742,6 +748,7 @@ static bool raycastObj(SnapObjectContext *sctx,
         }
         else if (em->mesh_eval_final) {
           me = em->mesh_eval_final;
+          use_hide = true;
         }
       }
       retval = raycastMesh(sctx,
@@ -751,12 +758,33 @@ static bool raycastObj(SnapObjectContext *sctx,
                            me,
                            obmat,
                            ob_index,
+                           use_hide,
                            ray_depth,
                            r_loc,
                            r_no,
                            r_index,
                            r_hit_list);
       break;
+    }
+    case OB_CURVE:
+    case OB_SURF:
+    case OB_FONT: {
+      if (ob->runtime.mesh_eval) {
+        retval = raycastMesh(sctx,
+                             ray_start,
+                             ray_dir,
+                             ob,
+                             ob->runtime.mesh_eval,
+                             obmat,
+                             ob_index,
+                             false,
+                             ray_depth,
+                             r_loc,
+                             r_no,
+                             r_index,
+                             r_hit_list);
+        break;
+      }
     }
   }
 
@@ -826,7 +854,8 @@ static void raycast_obj_cb(
  * Read/Write Args
  * ---------------
  *
- * \param ray_depth: maximum depth allowed for r_co, elements deeper than this value will be ignored.
+ * \param ray_depth: maximum depth allowed for r_co,
+ * elements deeper than this value will be ignored.
  *
  * Output Args
  * -----------
@@ -887,7 +916,8 @@ static bool snap_bound_box_check_dist(float min[3],
                                       float mval[2],
                                       float dist_px_sq)
 {
-  /* In vertex and edges you need to get the pixel distance from ray to BoundBox, see: T46099, T46816 */
+  /* In vertex and edges you need to get the pixel distance from ray to BoundBox,
+   * see: T46099, T46816 */
 
   struct DistProjectedAABBPrecalc data_precalc;
   dist_squared_to_projected_aabb_precalc(&data_precalc, lpmat, win_size, mval);
@@ -951,11 +981,12 @@ static void cb_mlooptri_edges_get(const int index, int v_index[3], const BVHTree
     const MEdge *ed = &medge[mloop[lt->tri[j]].e];
     unsigned int tri_edge[2] = {mloop[lt->tri[j]].v, mloop[lt->tri[j_next]].v};
     if (ELEM(ed->v1, tri_edge[0], tri_edge[1]) && ELEM(ed->v2, tri_edge[0], tri_edge[1])) {
-      //printf("real edge found\n");
+      // printf("real edge found\n");
       v_index[j] = mloop[lt->tri[j]].e;
     }
-    else
+    else {
       v_index[j] = -1;
+    }
   }
 }
 
@@ -1626,7 +1657,8 @@ static short snapCurve(SnapData *snapdata,
                                                  nu->bezt[u].vec[1],
                                                  &dist_px_sq,
                                                  r_loc);
-            /* don't snap if handle is selected (moving), or if it is aligning to a moving handle */
+            /* Don't snap if handle is selected (moving),
+             * or if it is aligning to a moving handle. */
             if (!(nu->bezt[u].f1 & SELECT) &&
                 !(nu->bezt[u].h1 & HD_ALIGN && nu->bezt[u].f3 & SELECT)) {
               has_snap |= test_projected_vert_dist(&neasrest_precalc,

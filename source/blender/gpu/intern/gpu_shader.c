@@ -145,17 +145,8 @@ extern char datatoc_gpu_shader_selection_id_frag_glsl[];
 extern char datatoc_gpu_shader_2D_line_dashed_uniform_color_vert_glsl[];
 extern char datatoc_gpu_shader_2D_line_dashed_frag_glsl[];
 extern char datatoc_gpu_shader_2D_line_dashed_geom_glsl[];
-extern char datatoc_gpu_shader_3D_line_dashed_uniform_color_legacy_vert_glsl[];
 extern char datatoc_gpu_shader_3D_line_dashed_uniform_color_vert_glsl[];
 
-extern char datatoc_gpu_shader_edges_front_back_persp_vert_glsl[];
-extern char datatoc_gpu_shader_edges_front_back_persp_geom_glsl[];
-extern char datatoc_gpu_shader_edges_front_back_persp_legacy_vert_glsl[];
-extern char datatoc_gpu_shader_edges_front_back_ortho_vert_glsl[];
-extern char datatoc_gpu_shader_edges_overlay_vert_glsl[];
-extern char datatoc_gpu_shader_edges_overlay_geom_glsl[];
-extern char datatoc_gpu_shader_edges_overlay_simple_geom_glsl[];
-extern char datatoc_gpu_shader_edges_overlay_frag_glsl[];
 extern char datatoc_gpu_shader_text_vert_glsl[];
 extern char datatoc_gpu_shader_text_geom_glsl[];
 extern char datatoc_gpu_shader_text_frag_glsl[];
@@ -266,20 +257,26 @@ static void gpu_shader_standard_extensions(char defines[MAX_EXT_DEFINE_LENGTH])
 static void gpu_shader_standard_defines(char defines[MAX_DEFINE_LENGTH])
 {
   /* some useful defines to detect GPU type */
-  if (GPU_type_matches(GPU_DEVICE_ATI, GPU_OS_ANY, GPU_DRIVER_ANY))
+  if (GPU_type_matches(GPU_DEVICE_ATI, GPU_OS_ANY, GPU_DRIVER_ANY)) {
     strcat(defines, "#define GPU_ATI\n");
-  else if (GPU_type_matches(GPU_DEVICE_NVIDIA, GPU_OS_ANY, GPU_DRIVER_ANY))
+  }
+  else if (GPU_type_matches(GPU_DEVICE_NVIDIA, GPU_OS_ANY, GPU_DRIVER_ANY)) {
     strcat(defines, "#define GPU_NVIDIA\n");
-  else if (GPU_type_matches(GPU_DEVICE_INTEL, GPU_OS_ANY, GPU_DRIVER_ANY))
+  }
+  else if (GPU_type_matches(GPU_DEVICE_INTEL, GPU_OS_ANY, GPU_DRIVER_ANY)) {
     strcat(defines, "#define GPU_INTEL\n");
+  }
 
   /* some useful defines to detect OS type */
-  if (GPU_type_matches(GPU_DEVICE_ANY, GPU_OS_WIN, GPU_DRIVER_ANY))
+  if (GPU_type_matches(GPU_DEVICE_ANY, GPU_OS_WIN, GPU_DRIVER_ANY)) {
     strcat(defines, "#define OS_WIN\n");
-  else if (GPU_type_matches(GPU_DEVICE_ANY, GPU_OS_MAC, GPU_DRIVER_ANY))
+  }
+  else if (GPU_type_matches(GPU_DEVICE_ANY, GPU_OS_MAC, GPU_DRIVER_ANY)) {
     strcat(defines, "#define OS_MAC\n");
-  else if (GPU_type_matches(GPU_DEVICE_ANY, GPU_OS_UNIX, GPU_DRIVER_ANY))
+  }
+  else if (GPU_type_matches(GPU_DEVICE_ANY, GPU_OS_UNIX, GPU_DRIVER_ANY)) {
     strcat(defines, "#define OS_UNIX\n");
+  }
 
   return;
 }
@@ -371,12 +368,15 @@ GPUShader *GPU_shader_create_ex(const char *vertexcode,
   /* At least a vertex shader and a fragment shader are required. */
   BLI_assert((fragcode != NULL) && (vertexcode != NULL));
 
-  if (vertexcode)
+  if (vertexcode) {
     shader->vertex = glCreateShader(GL_VERTEX_SHADER);
-  if (fragcode)
+  }
+  if (fragcode) {
     shader->fragment = glCreateShader(GL_FRAGMENT_SHADER);
-  if (geocode)
+  }
+  if (geocode) {
     shader->geometry = glCreateShader(GL_GEOMETRY_SHADER);
+  }
 
   shader->program = glCreateProgram();
 
@@ -400,8 +400,9 @@ GPUShader *GPU_shader_create_ex(const char *vertexcode,
     source[num_source++] = standard_extensions;
     source[num_source++] = standard_defines;
 
-    if (defines)
+    if (defines) {
       source[num_source++] = defines;
+    }
     source[num_source++] = vertexcode;
 
     gpu_dump_shaders(source, num_source, DEBUG_SHADER_VERTEX);
@@ -430,10 +431,12 @@ GPUShader *GPU_shader_create_ex(const char *vertexcode,
     source[num_source++] = standard_extensions;
     source[num_source++] = standard_defines;
 
-    if (defines)
+    if (defines) {
       source[num_source++] = defines;
-    if (libcode)
+    }
+    if (libcode) {
       source[num_source++] = libcode;
+    }
     source[num_source++] = fragcode;
 
     gpu_dump_shaders(source, num_source, DEBUG_SHADER_FRAGMENT);
@@ -462,8 +465,9 @@ GPUShader *GPU_shader_create_ex(const char *vertexcode,
     source[num_source++] = standard_extensions;
     source[num_source++] = standard_defines;
 
-    if (defines)
+    if (defines) {
       source[num_source++] = defines;
+    }
     source[num_source++] = geocode;
 
     gpu_dump_shaders(source, num_source, DEBUG_SHADER_GEOMETRY);
@@ -495,14 +499,18 @@ GPUShader *GPU_shader_create_ex(const char *vertexcode,
   if (!status) {
     glGetProgramInfoLog(shader->program, sizeof(log), &length, log);
     /* print attached shaders in pipeline order */
-    if (vertexcode)
+    if (vertexcode) {
       shader_print_errors("linking", log, &vertexcode, 1);
-    if (geocode)
+    }
+    if (geocode) {
       shader_print_errors("linking", log, &geocode, 1);
-    if (libcode)
+    }
+    if (libcode) {
       shader_print_errors("linking", log, &libcode, 1);
-    if (fragcode)
+    }
+    if (fragcode) {
       shader_print_errors("linking", log, &fragcode, 1);
+    }
 
     GPU_shader_free(shader);
     return NULL;
@@ -557,10 +565,10 @@ static const char *string_join_array_maybe_alloc(const char **str_arr, bool *r_i
  * Example:
  * \code{.c}
  * sh = GPU_shader_create_from_arrays({
- *         .vert = (const char *[]){shader_lib_glsl, shader_vert_glsl, NULL},
- *         .geom = (const char *[]){shader_geom_glsl, NULL},
- *         .frag = (const char *[]){shader_frag_glsl, NULL},
- *         .defs = (const char *[]){"#define DEFINE\n", test ? "#define OTHER_DEFINE\n" : "", NULL},
+ *     .vert = (const char *[]){shader_lib_glsl, shader_vert_glsl, NULL},
+ *     .geom = (const char *[]){shader_geom_glsl, NULL},
+ *     .frag = (const char *[]){shader_frag_glsl, NULL},
+ *     .defs = (const char *[]){"#define DEFINE\n", test ? "#define OTHER_DEFINE\n" : "", NULL},
  * });
  * \endcode
  */
@@ -631,23 +639,28 @@ void GPU_shader_transform_feedback_disable(GPUShader *UNUSED(shader))
 
 void GPU_shader_free(GPUShader *shader)
 {
-#if 0 /* Would be nice to have, but for now the Deferred compilation
+#if 0 /* Would be nice to have, but for now the Deferred compilation \
        * does not have a GPUContext. */
   BLI_assert(GPU_context_active_get() != NULL);
 #endif
   BLI_assert(shader);
 
-  if (shader->vertex)
+  if (shader->vertex) {
     glDeleteShader(shader->vertex);
-  if (shader->geometry)
+  }
+  if (shader->geometry) {
     glDeleteShader(shader->geometry);
-  if (shader->fragment)
+  }
+  if (shader->fragment) {
     glDeleteShader(shader->fragment);
-  if (shader->program)
+  }
+  if (shader->program) {
     glDeleteProgram(shader->program);
+  }
 
-  if (shader->interface)
+  if (shader->interface) {
     GPU_shaderinterface_discard(shader->interface);
+  }
 
   MEM_freeN(shader);
 }
@@ -693,8 +706,9 @@ int GPU_shader_get_program(GPUShader *shader)
 
 void GPU_shader_uniform_float(GPUShader *UNUSED(shader), int location, float value)
 {
-  if (location == -1)
+  if (location == -1) {
     return;
+  }
 
   glUniform1f(location, value);
 }
@@ -702,43 +716,66 @@ void GPU_shader_uniform_float(GPUShader *UNUSED(shader), int location, float val
 void GPU_shader_uniform_vector(
     GPUShader *UNUSED(shader), int location, int length, int arraysize, const float *value)
 {
-  if (location == -1 || value == NULL)
+  if (location == -1 || value == NULL) {
     return;
+  }
 
-  if (length == 1)
-    glUniform1fv(location, arraysize, value);
-  else if (length == 2)
-    glUniform2fv(location, arraysize, value);
-  else if (length == 3)
-    glUniform3fv(location, arraysize, value);
-  else if (length == 4)
-    glUniform4fv(location, arraysize, value);
-  else if (length == 9)
-    glUniformMatrix3fv(location, arraysize, 0, value);
-  else if (length == 16)
-    glUniformMatrix4fv(location, arraysize, 0, value);
+  switch (length) {
+    case 1:
+      glUniform1fv(location, arraysize, value);
+      break;
+    case 2:
+      glUniform2fv(location, arraysize, value);
+      break;
+    case 3:
+      glUniform3fv(location, arraysize, value);
+      break;
+    case 4:
+      glUniform4fv(location, arraysize, value);
+      break;
+    case 9:
+      glUniformMatrix3fv(location, arraysize, 0, value);
+      break;
+    case 16:
+      glUniformMatrix4fv(location, arraysize, 0, value);
+      break;
+    default:
+      BLI_assert(0);
+      break;
+  }
 }
 
 void GPU_shader_uniform_vector_int(
     GPUShader *UNUSED(shader), int location, int length, int arraysize, const int *value)
 {
-  if (location == -1)
+  if (location == -1) {
     return;
+  }
 
-  if (length == 1)
-    glUniform1iv(location, arraysize, value);
-  else if (length == 2)
-    glUniform2iv(location, arraysize, value);
-  else if (length == 3)
-    glUniform3iv(location, arraysize, value);
-  else if (length == 4)
-    glUniform4iv(location, arraysize, value);
+  switch (length) {
+    case 1:
+      glUniform1iv(location, arraysize, value);
+      break;
+    case 2:
+      glUniform2iv(location, arraysize, value);
+      break;
+    case 3:
+      glUniform3iv(location, arraysize, value);
+      break;
+    case 4:
+      glUniform4iv(location, arraysize, value);
+      break;
+    default:
+      BLI_assert(0);
+      break;
+  }
 }
 
 void GPU_shader_uniform_int(GPUShader *UNUSED(shader), int location, int value)
 {
-  if (location == -1)
+  if (location == -1) {
     return;
+  }
 
   glUniform1i(location, value);
 }
@@ -764,8 +801,9 @@ void GPU_shader_uniform_texture(GPUShader *UNUSED(shader), int location, GPUText
     return;
   }
 
-  if (location == -1)
+  if (location == -1) {
     return;
+  }
 
   glUniform1i(location, number);
 }
@@ -794,30 +832,6 @@ static const GPUShaderStages builtin_shader_stages[GPU_SHADER_BUILTIN_LEN] = {
         {
             .vert = datatoc_gpu_shader_keyframe_diamond_vert_glsl,
             .frag = datatoc_gpu_shader_keyframe_diamond_frag_glsl,
-        },
-    /*  This version is magical but slow!  */
-    [GPU_SHADER_EDGES_FRONT_BACK_PERSP] =
-        {
-            .vert = datatoc_gpu_shader_edges_front_back_persp_vert_glsl,
-            .geom = datatoc_gpu_shader_edges_front_back_persp_geom_glsl,
-            .frag = datatoc_gpu_shader_flat_color_frag_glsl,
-        },
-    [GPU_SHADER_EDGES_FRONT_BACK_ORTHO] =
-        {
-            .vert = datatoc_gpu_shader_edges_front_back_ortho_vert_glsl,
-            .frag = datatoc_gpu_shader_flat_color_frag_glsl,
-        },
-    [GPU_SHADER_EDGES_OVERLAY_SIMPLE] =
-        {
-            .vert = datatoc_gpu_shader_3D_vert_glsl,
-            .geom = datatoc_gpu_shader_edges_overlay_simple_geom_glsl,
-            .frag = datatoc_gpu_shader_edges_overlay_frag_glsl,
-        },
-    [GPU_SHADER_EDGES_OVERLAY] =
-        {
-            .vert = datatoc_gpu_shader_edges_overlay_vert_glsl,
-            .geom = datatoc_gpu_shader_edges_overlay_geom_glsl,
-            .frag = datatoc_gpu_shader_edges_overlay_frag_glsl,
         },
     [GPU_SHADER_SIMPLE_LIGHTING] =
         {
@@ -1285,26 +1299,7 @@ GPUShader *GPU_shader_get_builtin_shader_with_config(eGPUBuiltinShader shader,
   GPUShader **sh_p = &builtin_shaders[sh_cfg][shader];
 
   if (*sh_p == NULL) {
-    GPUShaderStages stages_legacy = {NULL};
     const GPUShaderStages *stages = &builtin_shader_stages[shader];
-
-    if (shader == GPU_SHADER_EDGES_FRONT_BACK_PERSP) {
-      /* TODO: remove after switch to core profile (maybe) */
-      if (!GLEW_VERSION_3_2) {
-        stages_legacy.vert = datatoc_gpu_shader_edges_front_back_persp_legacy_vert_glsl;
-        stages_legacy.frag = datatoc_gpu_shader_flat_color_alpha_test_0_frag_glsl;
-        stages = &stages_legacy;
-      }
-    }
-    else if (shader == GPU_SHADER_3D_LINE_DASHED_UNIFORM_COLOR) {
-      /* Dashed need geometry shader, which are not supported by legacy OpenGL, fallback to solid lines. */
-      /* TODO: remove after switch to core profile (maybe) */
-      if (!GLEW_VERSION_3_2) {
-        stages_legacy.vert = datatoc_gpu_shader_3D_line_dashed_uniform_color_legacy_vert_glsl;
-        stages_legacy.frag = datatoc_gpu_shader_2D_line_dashed_frag_glsl;
-        stages = &stages_legacy;
-      }
-    }
 
     /* common case */
     if (sh_cfg == GPU_SHADER_CFG_DEFAULT) {
@@ -1324,13 +1319,17 @@ GPUShader *GPU_shader_get_builtin_shader_with_config(eGPUBuiltinShader shader,
                       GPU_SHADER_3D_POINT_UNIFORM_SIZE_UNIFORM_COLOR_AA,
                       GPU_SHADER_3D_SCREENSPACE_VARIYING_COLOR,
                       GPU_SHADER_3D_INSTANCE_SCREEN_ALIGNED,
+
                       GPU_SHADER_3D_GROUNDLINE,
                       GPU_SHADER_3D_GROUNDPOINT,
                       GPU_SHADER_DISTANCE_LINES,
                       GPU_SHADER_INSTANCE_EDGES_VARIYING_COLOR,
                       GPU_SHADER_3D_FLAT_SELECT_ID,
                       GPU_SHADER_3D_UNIFORM_SELECT_ID) ||
-                 ELEM(shader, GPU_SHADER_3D_FLAT_COLOR, GPU_SHADER_3D_LINE_DASHED_UNIFORM_COLOR));
+                 ELEM(shader,
+                      GPU_SHADER_3D_FLAT_COLOR,
+                      GPU_SHADER_3D_LINE_DASHED_UNIFORM_COLOR,
+                      GPU_SHADER_INSTANCE_VARIYING_ID_VARIYING_SIZE));
       const char *world_clip_lib = datatoc_gpu_shader_cfg_world_clip_lib_glsl;
       const char *world_clip_def = "#define USE_WORLD_CLIP_PLANES\n";
       /* In rare cases geometry shaders calculate clipping themselves. */

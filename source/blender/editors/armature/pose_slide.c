@@ -134,6 +134,8 @@ typedef enum ePoseSlide_Modes {
   POSESLIDE_PUSH = 0,  /* exaggerate the pose... */
   POSESLIDE_RELAX,     /* soften the pose... */
   POSESLIDE_BREAKDOWN, /* slide between the endpoint poses, finding a 'soft' spot */
+  POSESLIDE_PUSH_REST,
+  POSESLIDE_RELAX_REST,
 } ePoseSlide_Modes;
 
 /* Transforms/Channels to Affect */
@@ -335,12 +337,6 @@ static void pose_slide_apply_val(tPoseSlideOp *pso, FCurve *fcu, Object *ob, flo
   /* next/end */
   eVal = evaluate_fcurve(fcu, nextFrameF);
 
-  /* if both values are equal, don't do anything */
-  if (IS_EQF(sVal, eVal)) {
-    (*val) = sVal;
-    return;
-  }
-
   /* calculate the relative weights of the endpoints */
   if (pso->mode == POSESLIDE_BREAKDOWN) {
     /* get weights from the percentage control */
@@ -362,9 +358,10 @@ static void pose_slide_apply_val(tPoseSlideOp *pso, FCurve *fcu, Object *ob, flo
     w2 = (w2 / wtot);
   }
 
-  /* depending on the mode, calculate the new value
-   * - in all of these, the start+end values are multiplied by w2 and w1 (respectively),
-   *   since multiplication in another order would decrease the value the current frame is closer to
+  /* Depending on the mode, calculate the new value:
+   * - In all of these, the start+end values are multiplied by w2 and w1 (respectively),
+   *   since multiplication in another order would decrease
+   *   the value the current frame is closer to.
    */
   switch (pso->mode) {
     case POSESLIDE_PUSH: /* make the current pose more pronounced */
@@ -397,7 +394,8 @@ static void pose_slide_apply_val(tPoseSlideOp *pso, FCurve *fcu, Object *ob, flo
     }
     case POSESLIDE_BREAKDOWN: /* make the current pose slide around between the endpoints */
     {
-      /* perform simple linear interpolation - coefficient for start must come from pso->percentage... */
+      /* Perform simple linear interpolation -
+       * coefficient for start must come from pso->percentage. */
       /* TODO: make this use some kind of spline interpolation instead? */
       (*val) = ((sVal * w2) + (eVal * w1));
       break;
@@ -458,8 +456,9 @@ static void pose_slide_apply_props(tPoseSlideOp *pso,
     FCurve *fcu = (FCurve *)ld->data;
     const char *bPtr, *pPtr;
 
-    if (fcu->rna_path == NULL)
+    if (fcu->rna_path == NULL) {
       continue;
+    }
 
     /* do we have a match?
      * - bPtr is the RNA Path with the standard part chopped off
@@ -507,7 +506,7 @@ static void pose_slide_apply_props(tPoseSlideOp *pso,
 
           default:
             /* cannot handle */
-            //printf("Cannot Pose Slide non-numerical property\n");
+            // printf("Cannot Pose Slide non-numerical property\n");
             break;
         }
       }
@@ -583,7 +582,8 @@ static void pose_slide_apply_quat(tPoseSlideOp *pso, tPChanFCurveLink *pfl)
 
     /* perform blending */
     if (pso->mode == POSESLIDE_BREAKDOWN) {
-      /* just perform the interpol between quat_prev and quat_next using pso->percentage as a guide */
+      /* Just perform the interpol between quat_prev and
+       * quat_next using pso->percentage as a guide. */
       interp_qt_qtqt(quat_final, quat_prev, quat_next, pso->percentage);
     }
     else if (pso->mode == POSESLIDE_PUSH) {
@@ -627,6 +627,103 @@ static void pose_slide_apply_quat(tPoseSlideOp *pso, tPChanFCurveLink *pfl)
 
   /* free the path now */
   MEM_freeN(path);
+}
+
+static void pose_slide_rest_pose_apply_vec3(tPoseSlideOp *pso, float vec[3], float default_value)
+{
+  /* We only slide to the rest pose. So only use the default rest pose value */
+  const int lock = pso->axislock;
+  for (int idx = 0; idx < 3; idx++) {
+    if ((lock == 0) || ((lock & PS_LOCK_X) && (idx == 0)) || ((lock & PS_LOCK_Y) && (idx == 1)) ||
+        ((lock & PS_LOCK_Z) && (idx == 2))) {
+      float diff_val = default_value - vec[idx];
+      if (pso->mode == POSESLIDE_RELAX_REST) {
+        vec[idx] += pso->percentage * diff_val;
+      }
+      else {
+        /* Push */
+        vec[idx] -= pso->percentage * diff_val;
+      }
+    }
+  }
+}
+
+static void pose_slide_rest_pose_apply_other_rot(tPoseSlideOp *pso, float vec[4], bool quat)
+{
+  /* We only slide to the rest pose. So only use the default rest pose value */
+  float default_values[] = {1.0f, 0.0f, 0.0f, 0.0f};
+  if (!quat) {
+    /* Axis Angle */
+    default_values[0] = 0.0f;
+    default_values[2] = 1.0f;
+  }
+  for (int idx = 0; idx < 4; idx++) {
+    float diff_val = default_values[idx] - vec[idx];
+    if (pso->mode == POSESLIDE_RELAX_REST) {
+      vec[idx] += pso->percentage * diff_val;
+    }
+    else {
+      /* Push */
+      vec[idx] -= pso->percentage * diff_val;
+    }
+  }
+}
+
+/* apply() - perform the pose sliding between the current pose and the rest pose */
+static void pose_slide_rest_pose_apply(bContext *C, tPoseSlideOp *pso)
+{
+  tPChanFCurveLink *pfl;
+
+  /* for each link, handle each set of transforms */
+  for (pfl = pso->pfLinks.first; pfl; pfl = pfl->next) {
+    /* valid transforms for each PoseChannel should have been noted already
+     * - sliding the pose should be a straightforward exercise for location+rotation,
+     *   but rotations get more complicated since we may want to use quaternion blending
+     *   for quaternions instead...
+     */
+    bPoseChannel *pchan = pfl->pchan;
+
+    if (ELEM(pso->channels, PS_TFM_ALL, PS_TFM_LOC) && (pchan->flag & POSE_LOC)) {
+      /* calculate these for the 'location' vector, and use location curves */
+      pose_slide_rest_pose_apply_vec3(pso, pchan->loc, 0.0f);
+    }
+
+    if (ELEM(pso->channels, PS_TFM_ALL, PS_TFM_SIZE) && (pchan->flag & POSE_SIZE)) {
+      /* calculate these for the 'scale' vector, and use scale curves */
+      pose_slide_rest_pose_apply_vec3(pso, pchan->size, 1.0f);
+    }
+
+    if (ELEM(pso->channels, PS_TFM_ALL, PS_TFM_ROT) && (pchan->flag & POSE_ROT)) {
+      /* everything depends on the rotation mode */
+      if (pchan->rotmode > 0) {
+        /* eulers - so calculate these for the 'eul' vector, and use euler_rotation curves */
+        pose_slide_rest_pose_apply_vec3(pso, pchan->eul, 0.0f);
+      }
+      else if (pchan->rotmode == ROT_MODE_AXISANGLE) {
+        pose_slide_rest_pose_apply_other_rot(pso, pchan->quat, false);
+      }
+      else {
+        /* quaternions - use quaternion blending */
+        pose_slide_rest_pose_apply_other_rot(pso, pchan->quat, true);
+      }
+    }
+
+    if (ELEM(pso->channels, PS_TFM_ALL, PS_TFM_BBONE_SHAPE) && (pchan->flag & POSE_BBONE_SHAPE)) {
+      /* bbone properties - they all start a "bbone_" prefix */
+      // TODO Not implemented
+      // pose_slide_apply_props(pso, pfl, "bbone_");
+    }
+
+    if (ELEM(pso->channels, PS_TFM_ALL, PS_TFM_PROPS) && (pfl->oldprops)) {
+      /* Not strictly a transform, but custom properties contribute
+       * to the pose produced in many rigs (e.g. the facial rigs used in Sintel). */
+      // TODO Not implemented
+      // pose_slide_apply_props(pso, pfl, "[\""); /* dummy " for texteditor bugs */
+    }
+  }
+
+  /* depsgraph updates + redraws */
+  pose_slide_refresh(C, pso);
 }
 
 /* apply() - perform the pose sliding based on weighting various poses */
@@ -695,9 +792,8 @@ static void pose_slide_apply(bContext *C, tPoseSlideOp *pso)
     }
 
     if (ELEM(pso->channels, PS_TFM_ALL, PS_TFM_PROPS) && (pfl->oldprops)) {
-      /* not strictly a transform, but custom properties contribute to the pose produced in many rigs
-       * (e.g. the facial rigs used in Sintel)
-       */
+      /* Not strictly a transform, but custom properties contribute
+       * to the pose produced in many rigs (e.g. the facial rigs used in Sintel). */
       pose_slide_apply_props(pso, pfl, "[\""); /* dummy " for texteditor bugs */
     }
   }
@@ -891,7 +987,12 @@ static int pose_slide_invoke_common(bContext *C, wmOperator *op, tPoseSlideOp *p
 
   /* initial apply for operator... */
   /* TODO: need to calculate percentage for initial round too... */
-  pose_slide_apply(C, pso);
+  if (pso->mode != POSESLIDE_PUSH_REST && pso->mode != POSESLIDE_RELAX_REST) {
+    pose_slide_apply(C, pso);
+  }
+  else {
+    pose_slide_rest_pose_apply(C, pso);
+  }
 
   /* depsgraph updates + redraws */
   pose_slide_refresh(C, pso);
@@ -979,35 +1080,41 @@ static int pose_slide_modal(bContext *C, wmOperator *op, const wmEvent *event)
     case LEFTMOUSE: /* confirm */
     case RETKEY:
     case PADENTER: {
-      /* return to normal cursor and header status */
-      ED_area_status_text(pso->sa, NULL);
-      WM_cursor_modal_restore(win);
+      if (event->val == KM_PRESS) {
+        /* return to normal cursor and header status */
+        ED_area_status_text(pso->sa, NULL);
+        WM_cursor_modal_restore(win);
 
-      /* insert keyframes as required... */
-      pose_slide_autoKeyframe(C, pso);
-      pose_slide_exit(op);
+        /* insert keyframes as required... */
+        pose_slide_autoKeyframe(C, pso);
+        pose_slide_exit(op);
 
-      /* done! */
-      return OPERATOR_FINISHED;
+        /* done! */
+        return OPERATOR_FINISHED;
+      }
+      break;
     }
 
     case ESCKEY: /* cancel */
     case RIGHTMOUSE: {
-      /* return to normal cursor and header status */
-      ED_area_status_text(pso->sa, NULL);
-      WM_cursor_modal_restore(win);
+      if (event->val == KM_PRESS) {
+        /* return to normal cursor and header status */
+        ED_area_status_text(pso->sa, NULL);
+        WM_cursor_modal_restore(win);
 
-      /* reset transforms back to original state */
-      pose_slide_reset(pso);
+        /* reset transforms back to original state */
+        pose_slide_reset(pso);
 
-      /* depsgraph updates + redraws */
-      pose_slide_refresh(C, pso);
+        /* depsgraph updates + redraws */
+        pose_slide_refresh(C, pso);
 
-      /* clean up temp data */
-      pose_slide_exit(op);
+        /* clean up temp data */
+        pose_slide_exit(op);
 
-      /* canceled! */
-      return OPERATOR_CANCELLED;
+        /* canceled! */
+        return OPERATOR_CANCELLED;
+      }
+      break;
     }
 
     /* Percentage Chane... */
@@ -1109,7 +1216,8 @@ static int pose_slide_modal(bContext *C, wmOperator *op, const wmEvent *event)
     }
   }
 
-  /* perform pose updates - in response to some user action (e.g. pressing a key or moving the mouse) */
+  /* Perform pose updates - in response to some user action
+   * (e.g. pressing a key or moving the mouse). */
   if (do_pose_update) {
     /* update percentage indicator in header */
     pose_slide_draw_status(pso);
@@ -1118,7 +1226,12 @@ static int pose_slide_modal(bContext *C, wmOperator *op, const wmEvent *event)
     pose_slide_reset(pso);
 
     /* apply... */
-    pose_slide_apply(C, pso);
+    if (pso->mode != POSESLIDE_PUSH_REST && pso->mode != POSESLIDE_RELAX_REST) {
+      pose_slide_apply(C, pso);
+    }
+    else {
+      pose_slide_rest_pose_apply(C, pso);
+    }
   }
 
   /* still running... */
@@ -1136,7 +1249,12 @@ static void pose_slide_cancel(bContext *UNUSED(C), wmOperator *op)
 static int pose_slide_exec_common(bContext *C, wmOperator *op, tPoseSlideOp *pso)
 {
   /* settings should have been set up ok for applying, so just apply! */
-  pose_slide_apply(C, pso);
+  if (pso->mode != POSESLIDE_PUSH_REST && pso->mode != POSESLIDE_RELAX_REST) {
+    pose_slide_apply(C, pso);
+  }
+  else {
+    pose_slide_rest_pose_apply(C, pso);
+  }
 
   /* insert keyframes if needed */
   pose_slide_autoKeyframe(C, pso);
@@ -1158,8 +1276,8 @@ static void pose_slide_opdef_properties(wmOperatorType *ot)
                            1.0f,
                            "Percentage",
                            "Weighting factor for which keyframe is favored more",
-                           0.3,
-                           0.7);
+                           0.0,
+                           1.0);
 
   RNA_def_int(ot->srna,
               "prev_frame",
@@ -1196,7 +1314,7 @@ static void pose_slide_opdef_properties(wmOperatorType *ot)
 
 /* ------------------------------------ */
 
-/* invoke() - for 'push' mode */
+/* invoke() - for 'push from breakdown' mode */
 static int pose_slide_push_invoke(bContext *C, wmOperator *op, const wmEvent *event)
 {
   tPoseSlideOp *pso;
@@ -1206,8 +1324,9 @@ static int pose_slide_push_invoke(bContext *C, wmOperator *op, const wmEvent *ev
     pose_slide_exit(op);
     return OPERATOR_CANCELLED;
   }
-  else
+  else {
     pso = op->customdata;
+  }
 
   /* initialise percentage so that it won't pop on first mouse move */
   pose_slide_mouse_update_percentage(pso, op, event);
@@ -1226,8 +1345,9 @@ static int pose_slide_push_exec(bContext *C, wmOperator *op)
     pose_slide_exit(op);
     return OPERATOR_CANCELLED;
   }
-  else
+  else {
     pso = op->customdata;
+  }
 
   /* do common exec work */
   return pose_slide_exec_common(C, op, pso);
@@ -1236,9 +1356,9 @@ static int pose_slide_push_exec(bContext *C, wmOperator *op)
 void POSE_OT_push(wmOperatorType *ot)
 {
   /* identifiers */
-  ot->name = "Push Pose";
+  ot->name = "Push Pose from Breakdown";
   ot->idname = "POSE_OT_push";
-  ot->description = "Exaggerate the current pose";
+  ot->description = "Exaggerate the current pose in regards to the breakdown pose";
 
   /* callbacks */
   ot->exec = pose_slide_push_exec;
@@ -1248,7 +1368,7 @@ void POSE_OT_push(wmOperatorType *ot)
   ot->poll = ED_operator_posemode;
 
   /* flags */
-  ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO | OPTYPE_BLOCKING;
+  ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO | OPTYPE_BLOCKING | OPTYPE_USE_EVAL_DATA;
 
   /* Properties */
   pose_slide_opdef_properties(ot);
@@ -1256,7 +1376,7 @@ void POSE_OT_push(wmOperatorType *ot)
 
 /* ........................ */
 
-/* invoke() - for 'relax' mode */
+/* invoke() - for 'relax to breakdown' mode */
 static int pose_slide_relax_invoke(bContext *C, wmOperator *op, const wmEvent *event)
 {
   tPoseSlideOp *pso;
@@ -1266,8 +1386,9 @@ static int pose_slide_relax_invoke(bContext *C, wmOperator *op, const wmEvent *e
     pose_slide_exit(op);
     return OPERATOR_CANCELLED;
   }
-  else
+  else {
     pso = op->customdata;
+  }
 
   /* initialise percentage so that it won't pop on first mouse move */
   pose_slide_mouse_update_percentage(pso, op, event);
@@ -1286,8 +1407,9 @@ static int pose_slide_relax_exec(bContext *C, wmOperator *op)
     pose_slide_exit(op);
     return OPERATOR_CANCELLED;
   }
-  else
+  else {
     pso = op->customdata;
+  }
 
   /* do common exec work */
   return pose_slide_exec_common(C, op, pso);
@@ -1296,9 +1418,9 @@ static int pose_slide_relax_exec(bContext *C, wmOperator *op)
 void POSE_OT_relax(wmOperatorType *ot)
 {
   /* identifiers */
-  ot->name = "Relax Pose";
+  ot->name = "Relax Pose to Breakdown";
   ot->idname = "POSE_OT_relax";
-  ot->description = "Make the current pose more similar to its surrounding ones";
+  ot->description = "Make the current pose more similar to its breakdown pose";
 
   /* callbacks */
   ot->exec = pose_slide_relax_exec;
@@ -1308,7 +1430,130 @@ void POSE_OT_relax(wmOperatorType *ot)
   ot->poll = ED_operator_posemode;
 
   /* flags */
-  ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO | OPTYPE_BLOCKING;
+  ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO | OPTYPE_BLOCKING | OPTYPE_USE_EVAL_DATA;
+
+  /* Properties */
+  pose_slide_opdef_properties(ot);
+}
+
+/* ........................ */
+/* invoke() - for 'push from rest pose' mode */
+static int pose_slide_push_rest_invoke(bContext *C, wmOperator *op, const wmEvent *event)
+{
+  tPoseSlideOp *pso;
+
+  /* initialize data  */
+  if (pose_slide_init(C, op, POSESLIDE_PUSH_REST) == 0) {
+    pose_slide_exit(op);
+    return OPERATOR_CANCELLED;
+  }
+  else {
+    pso = op->customdata;
+  }
+
+  /* initialise percentage so that it won't pop on first mouse move */
+  pose_slide_mouse_update_percentage(pso, op, event);
+
+  /* do common setup work */
+  return pose_slide_invoke_common(C, op, pso);
+}
+
+/* exec() - for push */
+static int pose_slide_push_rest_exec(bContext *C, wmOperator *op)
+{
+  tPoseSlideOp *pso;
+
+  /* initialize data (from RNA-props) */
+  if (pose_slide_init(C, op, POSESLIDE_PUSH_REST) == 0) {
+    pose_slide_exit(op);
+    return OPERATOR_CANCELLED;
+  }
+  else {
+    pso = op->customdata;
+  }
+
+  /* do common exec work */
+  return pose_slide_exec_common(C, op, pso);
+}
+
+void POSE_OT_push_rest(wmOperatorType *ot)
+{
+  /* identifiers */
+  ot->name = "Push Pose from Rest Pose";
+  ot->idname = "POSE_OT_push_rest";
+  ot->description = "Push the current pose further away from the rest pose";
+
+  /* callbacks */
+  ot->exec = pose_slide_push_rest_exec;
+  ot->invoke = pose_slide_push_rest_invoke;
+  ot->modal = pose_slide_modal;
+  ot->cancel = pose_slide_cancel;
+  ot->poll = ED_operator_posemode;
+
+  /* flags */
+  ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO | OPTYPE_BLOCKING | OPTYPE_USE_EVAL_DATA;
+
+  /* Properties */
+  pose_slide_opdef_properties(ot);
+}
+
+/* ........................ */
+
+/* invoke() - for 'relax' mode */
+static int pose_slide_relax_rest_invoke(bContext *C, wmOperator *op, const wmEvent *event)
+{
+  tPoseSlideOp *pso;
+
+  /* initialize data  */
+  if (pose_slide_init(C, op, POSESLIDE_RELAX_REST) == 0) {
+    pose_slide_exit(op);
+    return OPERATOR_CANCELLED;
+  }
+  else {
+    pso = op->customdata;
+  }
+
+  /* initialise percentage so that it won't pop on first mouse move */
+  pose_slide_mouse_update_percentage(pso, op, event);
+
+  /* do common setup work */
+  return pose_slide_invoke_common(C, op, pso);
+}
+
+/* exec() - for relax */
+static int pose_slide_relax_rest_exec(bContext *C, wmOperator *op)
+{
+  tPoseSlideOp *pso;
+
+  /* initialize data (from RNA-props) */
+  if (pose_slide_init(C, op, POSESLIDE_RELAX_REST) == 0) {
+    pose_slide_exit(op);
+    return OPERATOR_CANCELLED;
+  }
+  else {
+    pso = op->customdata;
+  }
+
+  /* do common exec work */
+  return pose_slide_exec_common(C, op, pso);
+}
+
+void POSE_OT_relax_rest(wmOperatorType *ot)
+{
+  /* identifiers */
+  ot->name = "Relax Pose to Rest Pose";
+  ot->idname = "POSE_OT_relax_rest";
+  ot->description = "Make the current pose more similar to the rest pose";
+
+  /* callbacks */
+  ot->exec = pose_slide_relax_rest_exec;
+  ot->invoke = pose_slide_relax_rest_invoke;
+  ot->modal = pose_slide_modal;
+  ot->cancel = pose_slide_cancel;
+  ot->poll = ED_operator_posemode;
+
+  /* flags */
+  ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO | OPTYPE_BLOCKING | OPTYPE_USE_EVAL_DATA;
 
   /* Properties */
   pose_slide_opdef_properties(ot);
@@ -1326,8 +1571,9 @@ static int pose_slide_breakdown_invoke(bContext *C, wmOperator *op, const wmEven
     pose_slide_exit(op);
     return OPERATOR_CANCELLED;
   }
-  else
+  else {
     pso = op->customdata;
+  }
 
   /* initialise percentage so that it won't pop on first mouse move */
   pose_slide_mouse_update_percentage(pso, op, event);
@@ -1346,8 +1592,9 @@ static int pose_slide_breakdown_exec(bContext *C, wmOperator *op)
     pose_slide_exit(op);
     return OPERATOR_CANCELLED;
   }
-  else
+  else {
     pso = op->customdata;
+  }
 
   /* do common exec work */
   return pose_slide_exec_common(C, op, pso);
@@ -1368,7 +1615,7 @@ void POSE_OT_breakdown(wmOperatorType *ot)
   ot->poll = ED_operator_posemode;
 
   /* flags */
-  ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO | OPTYPE_BLOCKING;
+  ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO | OPTYPE_BLOCKING | OPTYPE_USE_EVAL_DATA;
 
   /* Properties */
   pose_slide_opdef_properties(ot);
@@ -1396,7 +1643,8 @@ typedef enum ePosePropagate_Termination {
   POSE_PROPAGATE_SELECTED_MARKERS,
 } ePosePropagate_Termination;
 
-/* termination data needed for some modes - assumes only one of these entries will be needed at a time */
+/* Termination data needed for some modes -
+ * assumes only one of these entries will be needed at a time. */
 typedef union tPosePropagate_ModeData {
   /* smart holds + before frame: frame number to stop on */
   float end_frame;
@@ -1561,15 +1809,17 @@ static void pose_propagate_fcurve(
   short first = 1;
 
   /* skip if no keyframes to edit */
-  if ((fcu->bezt == NULL) || (fcu->totvert < 2))
+  if ((fcu->bezt == NULL) || (fcu->totvert < 2)) {
     return;
+  }
 
   /* find the reference value from bones directly, which means that the user
    * doesn't need to firstly keyframe the pose (though this doesn't mean that
    * they can't either)
    */
-  if (!pose_propagate_get_refVal(ob, fcu, &refVal))
+  if (!pose_propagate_get_refVal(ob, fcu, &refVal)) {
     return;
+  }
 
   /* find the first keyframe to start propagating from
    * - if there's a keyframe on the current frame, we probably want to save this value there too
@@ -1581,10 +1831,12 @@ static void pose_propagate_fcurve(
   if (mode != POSE_PROPAGATE_SELECTED_KEYS) {
     match = binarysearch_bezt_index(fcu->bezt, startFrame, fcu->totvert, &keyExists);
 
-    if (fcu->bezt[match].vec[1][0] < startFrame)
+    if (fcu->bezt[match].vec[1][0] < startFrame) {
       i = match + 1;
-    else
+    }
+    else {
       i = match;
+    }
   }
   else {
     /* selected - start from first keyframe */
@@ -1595,18 +1847,21 @@ static void pose_propagate_fcurve(
     /* additional termination conditions based on the operator 'mode' property go here... */
     if (ELEM(mode, POSE_PROPAGATE_BEFORE_FRAME, POSE_PROPAGATE_SMART_HOLDS)) {
       /* stop if keyframe is outside the accepted range */
-      if (bezt->vec[1][0] > modeData.end_frame)
+      if (bezt->vec[1][0] > modeData.end_frame) {
         break;
+      }
     }
     else if (mode == POSE_PROPAGATE_NEXT_KEY) {
       /* stop after the first keyframe has been processed */
-      if (first == 0)
+      if (first == 0) {
         break;
+      }
     }
     else if (mode == POSE_PROPAGATE_LAST_KEY) {
       /* only affect this frame if it will be the last one */
-      if (i != (fcu->totvert - 1))
+      if (i != (fcu->totvert - 1)) {
         continue;
+      }
     }
     else if (mode == POSE_PROPAGATE_SELECTED_MARKERS) {
       /* only allow if there's a marker on this frame */
@@ -1614,18 +1869,21 @@ static void pose_propagate_fcurve(
 
       /* stop on matching marker if there is one */
       for (ce = modeData.sel_markers.first; ce; ce = ce->next) {
-        if (ce->cfra == round_fl_to_int(bezt->vec[1][0]))
+        if (ce->cfra == round_fl_to_int(bezt->vec[1][0])) {
           break;
+        }
       }
 
       /* skip this keyframe if no marker */
-      if (ce == NULL)
+      if (ce == NULL) {
         continue;
+      }
     }
     else if (mode == POSE_PROPAGATE_SELECTED_KEYS) {
       /* only allow if this keyframe is already selected - skip otherwise */
-      if (BEZT_ISSEL_ANY(bezt) == 0)
+      if (BEZT_ISSEL_ANY(bezt) == 0) {
         continue;
+      }
     }
 
     /* just flatten handles, since values will now be the same either side... */
@@ -1656,7 +1914,8 @@ static int pose_propagate_exec(bContext *C, wmOperator *op)
   poseAnim_mapping_get(C, &pflinks);
 
   if (BLI_listbase_is_empty(&pflinks)) {
-    /* There is a change the reason the list is empty is that there is no valid object to propagate poses for.
+    /* There is a change the reason the list is empty is
+     * that there is no valid object to propagate poses for.
      * This is very unlikely though, so we focus on the most likely issue. */
     BKE_report(op->reports, RPT_ERROR, "No keyframed poses to propagate to");
     return OPERATOR_CANCELLED;
@@ -1693,8 +1952,9 @@ static int pose_propagate_exec(bContext *C, wmOperator *op)
   /* free temp data */
   poseAnim_mapping_free(&pflinks);
 
-  if (mode == POSE_PROPAGATE_SELECTED_MARKERS)
+  if (mode == POSE_PROPAGATE_SELECTED_MARKERS) {
     BLI_freelistN(&modeData.sel_markers);
+  }
 
   /* updates + notifiers */
   FOREACH_OBJECT_IN_MODE_BEGIN (view_layer, v3d, OB_ARMATURE, OB_MODE_POSE, ob) {
@@ -1760,7 +2020,7 @@ void POSE_OT_propagate(wmOperatorType *ot)
   ot->poll = ED_operator_posemode; /* XXX: needs selected bones! */
 
   /* flag */
-  ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
+  ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO | OPTYPE_USE_EVAL_DATA;
 
   /* properties */
   /* TODO: add "fade out" control for tapering off amount of propagation as time goes by? */

@@ -16,12 +16,13 @@
 
 #include <stdlib.h>
 
+#include "device/device.h"
 #include "render/background.h"
 #include "render/buffers.h"
 #include "render/camera.h"
-#include "device/device.h"
-#include "render/integrator.h"
+#include "render/colorspace.h"
 #include "render/film.h"
+#include "render/integrator.h"
 #include "render/light.h"
 #include "render/mesh.h"
 #include "render/object.h"
@@ -146,17 +147,17 @@ void BlenderSession::create_session()
   scene->image_manager->builtin_image_info_cb = function_bind(
       &BlenderSession::builtin_image_info, this, _1, _2, _3);
   scene->image_manager->builtin_image_pixels_cb = function_bind(
-      &BlenderSession::builtin_image_pixels, this, _1, _2, _3, _4, _5);
+      &BlenderSession::builtin_image_pixels, this, _1, _2, _3, _4, _5, _6);
   scene->image_manager->builtin_image_float_pixels_cb = function_bind(
-      &BlenderSession::builtin_image_float_pixels, this, _1, _2, _3, _4, _5);
+      &BlenderSession::builtin_image_float_pixels, this, _1, _2, _3, _4, _5, _6);
 
   session->scene = scene;
 
   /* There is no single depsgraph to use for the entire render.
    * So we need to handle this differently.
    *
-   * We could loop over the final render result render layers in pipeline and keep Cycles unaware of multiple layers,
-   * or perhaps move syncing further down in the pipeline.
+   * We could loop over the final render result render layers in pipeline and keep Cycles unaware
+   * of multiple layers, or perhaps move syncing further down in the pipeline.
    */
   /* create sync */
   sync = new BlenderSync(b_engine, b_data, b_scene, scene, !background, session->progress);
@@ -528,14 +529,15 @@ void BlenderSession::render(BL::Depsgraph &b_depsgraph_)
     /* Attempt to free all data which is held by Blender side, since at this
      * point we knwo that we've got everything to render current view layer.
      */
-    /* At the moment we only free if we are not doing multi-view (or if we are rendering the last view).
-     * See T58142/D4239 for discussion.
+    /* At the moment we only free if we are not doing multi-view
+     * (or if we are rendering the last view). See T58142/D4239 for discussion.
      */
     if (view_index == num_views - 1) {
       free_blender_memory_if_possible();
     }
 
-    /* Make sure all views have different noise patterns. - hardcoded value just to make it random */
+    /* Make sure all views have different noise patterns. - hardcoded value just to make it random
+     */
     if (view_index != 0) {
       scene->integrator->seed += hash_int_2d(scene->integrator->seed,
                                              hash_int(view_index * 0xdeadbeef));
@@ -1057,8 +1059,9 @@ void BlenderSession::update_status_progress()
   }
 
   double current_time = time_dt();
-  /* When rendering in a window, redraw the status at least once per second to keep the elapsed and remaining time up-to-date.
-   * For headless rendering, only report when something significant changes to keep the console output readable. */
+  /* When rendering in a window, redraw the status at least once per second to keep the elapsed and
+   * remaining time up-to-date. For headless rendering, only report when something significant
+   * changes to keep the console output readable. */
   if (status != last_status || (!headless && (current_time - last_status_time) > 1.0)) {
     b_engine.update_stats("", (timestatus + scene_status + status).c_str());
     b_engine.update_memory_stats(mem_used, mem_peak);
@@ -1156,6 +1159,12 @@ void BlenderSession::builtin_image_info(const string &builtin_name,
     metadata.height = b_image.size()[1];
     metadata.depth = 1;
     metadata.channels = b_image.channels();
+
+    if (metadata.is_float) {
+      /* Float images are already converted on the Blender side,
+       * no need to do anything in Cycles. */
+      metadata.colorspace = u_colorspace_raw;
+    }
   }
   else if (b_id.is_a(&RNA_Object)) {
     /* smoke volume data */
@@ -1214,6 +1223,7 @@ bool BlenderSession::builtin_image_pixels(const string &builtin_name,
                                           void *builtin_data,
                                           unsigned char *pixels,
                                           const size_t pixels_size,
+                                          const bool associate_alpha,
                                           const bool free_cache)
 {
   if (!builtin_data) {
@@ -1263,12 +1273,14 @@ bool BlenderSession::builtin_image_pixels(const string &builtin_name,
     b_image.buffers_free();
   }
 
-  /* Premultiply, byte images are always straight for Blender. */
-  unsigned char *cp = pixels;
-  for (size_t i = 0; i < num_pixels; i++, cp += channels) {
-    cp[0] = (cp[0] * cp[3]) >> 8;
-    cp[1] = (cp[1] * cp[3]) >> 8;
-    cp[2] = (cp[2] * cp[3]) >> 8;
+  if (associate_alpha) {
+    /* Premultiply, byte images are always straight for Blender. */
+    unsigned char *cp = pixels;
+    for (size_t i = 0; i < num_pixels; i++, cp += channels) {
+      cp[0] = (cp[0] * cp[3]) >> 8;
+      cp[1] = (cp[1] * cp[3]) >> 8;
+      cp[2] = (cp[2] * cp[3]) >> 8;
+    }
   }
   return true;
 }
@@ -1277,6 +1289,7 @@ bool BlenderSession::builtin_image_float_pixels(const string &builtin_name,
                                                 void *builtin_data,
                                                 float *pixels,
                                                 const size_t pixels_size,
+                                                const bool,
                                                 const bool free_cache)
 {
   if (!builtin_data) {
@@ -1431,7 +1444,12 @@ void BlenderSession::builtin_images_load()
 {
   /* Force builtin images to be loaded along with Blender data sync. This
    * is needed because we may be reading from depsgraph evaluated data which
-   * can be freed by Blender before Cycles reads it. */
+   * can be freed by Blender before Cycles reads it.
+   *
+   * TODO: the assumption that no further access to builtin image data will
+   * happen is really weak, and likely to break in the future. We should find
+   * a better solution to hand over the data directly to the image manager
+   * instead of through callbacks whose timing is difficult to control. */
   ImageManager *manager = session->scene->image_manager;
   Device *device = session->device;
   manager->device_load_builtin(device, session->scene, session->progress);

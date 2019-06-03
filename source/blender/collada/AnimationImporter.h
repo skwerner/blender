@@ -80,6 +80,7 @@ class AnimationImporter : private TransformReader, public AnimationImporterBase 
   void animation_to_fcurves(COLLADAFW::AnimationCurve *curve);
 
   void fcurve_deg_to_rad(FCurve *cu);
+  void fcurve_scale(FCurve *cu, int scale);
 
   void fcurve_is_used(FCurve *fcu);
 
@@ -194,7 +195,7 @@ class AnimationImporter : private TransformReader, public AnimationImporterBase 
 
   int setAnimType(const COLLADAFW::Animatable *prop, int type, int addition);
 
-  void modify_fcurve(std::vector<FCurve *> *curves, const char *rna_path, int array_index);
+  void modify_fcurve(std::vector<FCurve *> *curves, const char *rna_path, int array_index, int scale=1);
   void unused_fcurve(std::vector<FCurve *> *curves);
   // prerequisites:
   // animlist_map - map animlist id -> animlist
@@ -238,7 +239,8 @@ class AnimationImporter : private TransformReader, public AnimationImporterBase 
 #if 0
   // recursively evaluates joint tree until end is found, mat then is world-space matrix of end
   // mat must be identity on enter, node must be root
-  bool evaluate_joint_world_transform_at_frame(float mat[4][4], float par[4][4], COLLADAFW::Node *node, COLLADAFW::Node *end, float fra);
+  bool evaluate_joint_world_transform_at_frame(
+      float mat[4][4], float par[4][4], COLLADAFW::Node *node, COLLADAFW::Node *end, float fra);
 #endif
 
   void add_bone_fcurve(Object *ob, COLLADAFW::Node *node, FCurve *fcu);

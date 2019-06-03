@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,16 +12,17 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
 #ifndef __BLI_UTILDEFINES_VARIADIC_H__
 #define __BLI_UTILDEFINES_VARIADIC_H__
 
-/** \file BLI_utildefines_variadic.h
- *  \ingroup bli
+/** \file
+ * \ingroup bli
  */
+
+/* Over wrapped args. */
+/* clang-format off */
 
 /* --- internal helpers --- */
 #define _VA_NARGS_GLUE(x, y) x y
@@ -46,5 +45,7 @@
 	16, 15, 14, 13, 12, 11, 10,  9,  8,  7,  6,  5,  4,  3,  2, 1, 0))
 #define VA_NARGS_CALL_OVERLOAD(name, ...) \
 	_VA_NARGS_GLUE(_VA_NARGS_OVERLOAD_MACRO(name, VA_NARGS_COUNT(__VA_ARGS__)), (__VA_ARGS__))
+
+/* clang-format on */
 
 #endif  /* __BLI_UTILDEFINES_VARIADIC_H__ */

@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,15 +15,10 @@
  *
  * The Original Code is Copyright (C) 2008 Blender Foundation.
  * All rights reserved.
- *
- *
- * Contributor(s): Blender Foundation
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/space_file/space_file.c
- *  \ingroup spfile
+/** \file
+ * \ingroup spfile
  */
 
 #include <string.h>
@@ -33,11 +26,9 @@
 
 #include "MEM_guardedalloc.h"
 
-#include "BIF_gl.h"
 
 #include "BLI_blenlib.h"
 #include "BLI_utildefines.h"
-#include "BLI_fileops_types.h"
 
 
 #include "BKE_appdir.h"
@@ -268,20 +259,8 @@ static void file_refresh(const bContext *C, ScrArea *sa)
 		}
 	}
 
-	if (params->renamefile[0] != '\0') {
-		int idx = filelist_file_findpath(sfile->files, params->renamefile);
-		if (idx >= 0) {
-			FileDirEntry *file = filelist_file(sfile->files, idx);
-			if (file) {
-				filelist_entry_select_set(sfile->files, file, FILE_SEL_ADD, FILE_SEL_EDITING, CHECK_ALL);
-			}
-		}
-		BLI_strncpy(sfile->params->renameedit, sfile->params->renamefile, sizeof(sfile->params->renameedit));
-		/* File listing is now async, do not clear renamefile if matching entry not found
-		 * and dirlist is not finished! */
-		if (idx >= 0 || filelist_is_ready(sfile->files)) {
-			params->renamefile[0] = '\0';
-		}
+	if (params->rename_flag != 0) {
+		file_params_renamefile_activate(sfile, params);
 	}
 
 	if (sfile->layout) {

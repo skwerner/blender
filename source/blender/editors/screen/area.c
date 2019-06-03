@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,15 +15,10 @@
  *
  * The Original Code is Copyright (C) 2008 Blender Foundation.
  * All rights reserved.
- *
- *
- * Contributor(s): Blender Foundation
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/screen/area.c
- *  \ingroup edscr
+/** \file
+ * \ingroup edscr
  */
 
 
@@ -43,6 +36,7 @@
 
 #include "BKE_context.h"
 #include "BKE_global.h"
+#include "BKE_image.h"
 #include "BKE_screen.h"
 #include "BKE_workspace.h"
 
@@ -210,7 +204,7 @@ static void area_draw_azone_fullscreen(short x1, short y1, short x2, short y2, f
 	 * The click_rect is the same as defined in fullscreen_click_rcti_init
 	 * Keep them both in sync */
 
-	if (G.debug_value == 1) {
+	if (G.debug_value == 101) {
 		rcti click_rect;
 		float icon_size = UI_DPI_ICON_SIZE + 7 * UI_DPI_FAC;
 
@@ -452,7 +446,7 @@ void ED_area_do_msg_notify_tag_refresh(
 /**
  * Although there's no general support for minimizing areas, the status-bar can
  * be snapped to be only a few pixels high. A few pixels rather than 0 so it
- * can be un-minimized again. We consider it pseudo-minimalized and don't draw
+ * can be un-minimized again. We consider it pseudo-minimized and don't draw
  * it then.
  */
 static bool area_is_pseudo_minimized(const ScrArea *area)
@@ -541,12 +535,23 @@ void ED_region_do_draw(bContext *C, ARegion *ar)
 	if (sa) {
 		const bScreen *screen = WM_window_get_active_screen(win);
 
-		/* Only draw region emboss for top-bar and quad-view. */
+		/* Only region emboss for top-bar */
 		if ((screen->state != SCREENFULL) && ED_area_is_global(sa)) {
 			region_draw_emboss(ar, &ar->winrct, (REGION_EMBOSS_LEFT | REGION_EMBOSS_RIGHT));
 		}
 		else if ((ar->regiontype == RGN_TYPE_WINDOW) && (ar->alignment == RGN_ALIGN_QSPLIT)) {
-			region_draw_emboss(ar, &ar->winrct, REGION_EMBOSS_ALL);
+
+			/* draw separating lines between the quad views */
+
+			float color[4] = { 0.0f, 0.0f, 0.0f, 0.8f };
+			UI_GetThemeColor3fv(TH_EDITOR_OUTLINE, color);
+			GPUVertFormat *format = immVertexFormat();
+			uint pos = GPU_vertformat_attr_add(format, "pos", GPU_COMP_F32, 2, GPU_FETCH_FLOAT);
+			immBindBuiltinProgram(GPU_SHADER_2D_UNIFORM_COLOR);
+			immUniformColor4fv(color);
+			GPU_line_width(1.0f);
+			imm_draw_box_wire_2d(pos, 0, 0, ar->winrct.xmax - ar->winrct.xmin + 1, ar->winrct.ymax - ar->winrct.ymin + 1);
+			immUnbindProgram();
 		}
 	}
 
@@ -756,27 +761,31 @@ static void area_azone_initialize(wmWindow *win, const bScreen *screen, ScrArea 
 		return;
 	}
 
+	if (screen->temp) {
+		return;
+	}
+
 	float coords[4][4] = {
 	    /* Bottom-left. */
-	    {sa->totrct.xmin,
-	     sa->totrct.ymin,
-	     sa->totrct.xmin + (AZONESPOT - 1),
-	     sa->totrct.ymin + (AZONESPOT - 1)},
+	    {sa->totrct.xmin - U.pixelsize,
+	     sa->totrct.ymin - U.pixelsize,
+	     sa->totrct.xmin + AZONESPOTW,
+	     sa->totrct.ymin + AZONESPOTH},
 	    /* Bottom-right. */
-	    {sa->totrct.xmax - (AZONESPOT - 1),
-	     sa->totrct.ymin,
-	     sa->totrct.xmax,
-	     sa->totrct.ymin + (AZONESPOT - 1)},
+	    {sa->totrct.xmax - AZONESPOTW,
+	     sa->totrct.ymin - U.pixelsize,
+	     sa->totrct.xmax + U.pixelsize,
+	     sa->totrct.ymin + AZONESPOTH},
 	    /* Top-left. */
-	    {sa->totrct.xmin,
-	     sa->totrct.ymax - (AZONESPOT - 1),
-	     sa->totrct.xmin + (AZONESPOT - 1),
-	     sa->totrct.ymax},
+	    {sa->totrct.xmin - U.pixelsize,
+	     sa->totrct.ymax - AZONESPOTH,
+	     sa->totrct.xmin + AZONESPOTW,
+	     sa->totrct.ymax + U.pixelsize},
 	    /* Top-right. */
-	    {sa->totrct.xmax - (AZONESPOT - 1),
-	     sa->totrct.ymax - (AZONESPOT - 1),
-	     sa->totrct.xmax,
-	     sa->totrct.ymax}};
+	    {sa->totrct.xmax - AZONESPOTW,
+	     sa->totrct.ymax - AZONESPOTH,
+	     sa->totrct.xmax + U.pixelsize,
+	     sa->totrct.ymax + U.pixelsize}};
 
 	for (int i = 0; i < 4; i++) {
 		/* can't click on bottom corners on OS X, already used for resizing */
@@ -987,17 +996,7 @@ static void region_azones_add(const bScreen *screen, ScrArea *sa, ARegion *ar, c
 	const bool is_fullscreen = screen->state == SCREENFULL;
 
 	/* edge code (t b l r) is along which area edge azone will be drawn */
-
-	if (ar->regiontype == RGN_TYPE_HEADER && ar->winy + 6 > sa->winy) {
-		/* The logic for this is: when the header takes up the full area,
-		 * disallow hiding it to view the main window.
-		 *
-		 * Without this, you can drag down the file selectors header and hide it
-		 * by accident very easily (highly annoying!), the value 6 is arbitrary
-		 * but accounts for small common rounding problems when scaling the UI,
-		 * must be minimum '4' */
-	}
-	else if (alignment == RGN_ALIGN_TOP)
+	if (alignment == RGN_ALIGN_TOP)
 		region_azone_edge_initialize(sa, ar, AE_BOTTOM_TO_TOPLEFT, is_fullscreen);
 	else if (alignment == RGN_ALIGN_BOTTOM)
 		region_azone_edge_initialize(sa, ar, AE_TOP_TO_BOTTOMRIGHT, is_fullscreen);
@@ -1111,15 +1110,9 @@ bool ED_region_is_overlap(int spacetype, int regiontype)
 				return true;
 			}
 		}
-		else if (ELEM(spacetype, SPACE_VIEW3D, SPACE_SEQ, SPACE_IMAGE)) {
-			if (ELEM(regiontype, RGN_TYPE_TOOLS, RGN_TYPE_UI, RGN_TYPE_TOOL_PROPS)) {
+		else if (ELEM(spacetype, SPACE_VIEW3D, SPACE_IMAGE)) {
+			if (ELEM(regiontype, RGN_TYPE_TOOLS, RGN_TYPE_UI, RGN_TYPE_TOOL_PROPS, RGN_TYPE_HEADER, RGN_TYPE_FOOTER)) {
 				return true;
-			}
-
-			if (ELEM(spacetype, SPACE_VIEW3D, SPACE_IMAGE)) {
-				if (regiontype == RGN_TYPE_HEADER) {
-					return true;
-				}
 			}
 		}
 	}
@@ -1151,7 +1144,7 @@ static void region_rect_recursive(ScrArea *sa, ARegion *ar, rcti *remainder, rct
 	ar->overlap = ED_region_is_overlap(sa->spacetype, ar->regiontype);
 
 	/* clear state flags first */
-	ar->flag &= ~RGN_FLAG_TOO_SMALL;
+	ar->flag &= ~(RGN_FLAG_TOO_SMALL | RGN_FLAG_SIZE_CLAMP_X | RGN_FLAG_SIZE_CLAMP_Y);
 	/* user errors */
 	if ((ar->next == NULL) && !ELEM(alignment, RGN_ALIGN_QSPLIT, RGN_ALIGN_FLOAT)) {
 		alignment = RGN_ALIGN_NONE;
@@ -1167,6 +1160,9 @@ static void region_rect_recursive(ScrArea *sa, ARegion *ar, rcti *remainder, rct
 	}
 	else if (ar->regiontype == RGN_TYPE_HEADER) {
 		prefsizey = ED_area_headersize();
+	}
+	else if (ar->regiontype == RGN_TYPE_FOOTER) {
+		prefsizey = ED_area_footersize();
 	}
 	else if (ED_area_is_global(sa)) {
 		prefsizey = ED_region_global_size_y();
@@ -1201,6 +1197,13 @@ static void region_rect_recursive(ScrArea *sa, ARegion *ar, rcti *remainder, rct
 		ar->winrct.ymax = ar->winrct.ymin + prefsizey - 1;
 
 		BLI_rcti_isect(&ar->winrct, &overlap_remainder_margin, &ar->winrct);
+
+		if (BLI_rcti_size_x(&ar->winrct) != prefsizex - 1) {
+			ar->flag |= RGN_FLAG_SIZE_CLAMP_X;
+		}
+		if (BLI_rcti_size_y(&ar->winrct) != prefsizey - 1) {
+			ar->flag |= RGN_FLAG_SIZE_CLAMP_Y;
+		}
 
 		/* We need to use a test that wont have been previously clamped. */
 		rcti winrct_test = {
@@ -1480,6 +1483,9 @@ static void ed_default_handlers(wmWindowManager *wm, ScrArea *sa, ARegion *ar, L
 			WM_gizmomap_add_handlers(ar, ar->gizmo_map);
 		}
 	}
+	if (flag & ED_KEYMAP_TOOL) {
+		WM_event_add_keymap_handler_dynamic(&ar->handlers, WM_event_get_keymap_from_toolsystem, sa);
+	}
 	if (flag & ED_KEYMAP_VIEW2D) {
 		/* 2d-viewport handling+manipulation */
 		wmKeyMap *keymap = WM_keymap_ensure(wm->defaultconf, "View2D", 0, 0);
@@ -1509,6 +1515,11 @@ static void ed_default_handlers(wmWindowManager *wm, ScrArea *sa, ARegion *ar, L
 	if (flag & ED_KEYMAP_HEADER) {
 		/* standard keymap for headers regions */
 		wmKeyMap *keymap = WM_keymap_ensure(wm->defaultconf, "Header", 0, 0);
+		WM_event_add_keymap_handler(handlers, keymap);
+	}
+	if (flag & ED_KEYMAP_FOOTER) {
+		/* standard keymap for footer regions */
+		wmKeyMap *keymap = WM_keymap_ensure(wm->defaultconf, "Footer", 0, 0);
 		WM_event_add_keymap_handler(handlers, keymap);
 	}
 
@@ -1901,10 +1912,25 @@ void ED_area_newspace(bContext *C, ScrArea *sa, int type, const bool skip_ar_exi
 
 		/* Sync header alignment. */
 		if (sync_header_alignment) {
-			for (ARegion *ar = sa->regionbase.first; ar; ar = ar->next) {
-				if (ar->regiontype == RGN_TYPE_HEADER) {
-					ar->alignment = header_alignment;
-					break;
+			/* Spaces with footer. */
+			if (st->spaceid == SPACE_TEXT) {
+				for (ARegion *ar = sa->regionbase.first; ar; ar = ar->next) {
+					if (ar->regiontype == RGN_TYPE_HEADER) {
+						ar->alignment = header_alignment;
+					}
+					if (ar->regiontype == RGN_TYPE_FOOTER) {
+						int footer_alignment = (header_alignment == RGN_ALIGN_BOTTOM) ? RGN_ALIGN_TOP : RGN_ALIGN_BOTTOM;
+						ar->alignment = footer_alignment;
+						break;
+					}
+				}
+			}
+			else {
+				for (ARegion *ar = sa->regionbase.first; ar; ar = ar->next) {
+					if (ar->regiontype == RGN_TYPE_HEADER) {
+						ar->alignment = header_alignment;
+						break;
+					}
 				}
 			}
 		}
@@ -1940,7 +1966,7 @@ void ED_area_prevspace(bContext *C, ScrArea *sa)
 		/* no change */
 		return;
 	}
-	sa->flag &= ~AREA_FLAG_STACKED_FULLSCREEN;
+	sa->flag &= ~(AREA_FLAG_STACKED_FULLSCREEN | AREA_FLAG_TEMP_TYPE);
 
 	ED_area_tag_redraw(sa);
 
@@ -2507,10 +2533,10 @@ void ED_region_header_init(ARegion *ar)
 	UI_view2d_region_reinit(&ar->v2d, V2D_COMMONVIEW_HEADER, ar->winx, ar->winy);
 }
 
-/* UI_UNIT_Y is defined as U variable now, depending dpi */
 int ED_area_headersize(void)
 {
-	return (int)(HEADERY * UI_DPI_FAC);
+	/* Accomodate widget and padding. */
+	return U.widget_unit + (int)(UI_DPI_FAC * HEADER_PADDING_Y);
 }
 
 int ED_area_header_alignment_or_fallback(const ScrArea *area, int fallback)
@@ -2527,6 +2553,27 @@ int ED_area_header_alignment(const ScrArea *area)
 {
 	return ED_area_header_alignment_or_fallback(
 	        area, (U.uiflag & USER_HEADER_BOTTOM) ? RGN_ALIGN_BOTTOM : RGN_ALIGN_TOP);
+}
+
+int ED_area_footersize(void)
+{
+	return ED_area_headersize();
+}
+
+int ED_area_footer_alignment_or_fallback(const ScrArea *area, int fallback)
+{
+	for (ARegion *ar = area->regionbase.first; ar; ar = ar->next) {
+		if (ar->regiontype == RGN_TYPE_FOOTER) {
+			return ar->alignment;
+		}
+	}
+	return fallback;
+}
+
+int ED_area_footer_alignment(const ScrArea *area)
+{
+	return ED_area_footer_alignment_or_fallback(
+	        area, (U.uiflag & USER_HEADER_BOTTOM) ? RGN_ALIGN_TOP : RGN_ALIGN_BOTTOM);
 }
 
 /**
@@ -2678,12 +2725,51 @@ static const char *meta_data_list[] =
 	"Time",
 	"Frame",
 	"Camera",
-	"Scene"
+	"Scene",
 };
 
 BLI_INLINE bool metadata_is_valid(ImBuf *ibuf, char *r_str, short index, int offset)
 {
 	return (IMB_metadata_get_field(ibuf->metadata, meta_data_list[index], r_str + offset, MAX_METADATA_STR - offset) && r_str[0]);
+}
+
+BLI_INLINE bool metadata_is_custom_drawable(const char *field)
+{
+	/* Metadata field stored by Blender for multilayer EXR images. Is rather
+	 * useless to be viewed all the time. Can still be seen in the Metadata
+	 * panel. */
+	if (STREQ(field, "BlenderMultiChannel")) {
+		return false;
+	}
+	/* Is almost always has value "scanlineimage", also useless to be seen
+	 * all the time. */
+	if (STREQ(field, "type")) {
+		return false;
+	}
+	return !BKE_stamp_is_known_field(field);
+}
+
+typedef struct MetadataCustomDrawContext {
+	int fontid;
+	int xmin, ymin;
+	int vertical_offset;
+	int current_y;
+} MetadataCustomDrawContext;
+
+static void metadata_custom_draw_fields(
+        const char *field,
+        const char *value,
+        void *ctx_v)
+{
+	if (!metadata_is_custom_drawable(field)) {
+		return;
+	}
+	MetadataCustomDrawContext *ctx = (MetadataCustomDrawContext *)ctx_v;
+	char temp_str[MAX_METADATA_STR];
+	BLI_snprintf(temp_str, MAX_METADATA_STR, "%s: %s", field, value);
+	BLF_position(ctx->fontid, ctx->xmin, ctx->ymin + ctx->current_y, 0.0f);
+	BLF_draw(ctx->fontid, temp_str, BLF_DRAW_STR_DUMMY_MAX);
+	ctx->current_y += ctx->vertical_offset;
 }
 
 static void metadata_draw_imbuf(ImBuf *ibuf, const rctf *rect, int fontid, const bool is_top)
@@ -2760,11 +2846,20 @@ static void metadata_draw_imbuf(ImBuf *ibuf, const rctf *rect, int fontid, const
 		}
 	}
 	else {
+		MetadataCustomDrawContext ctx;
+		ctx.fontid = fontid;
+		ctx.xmin = xmin;
+		ctx.ymin = ymin;
+		ctx.vertical_offset = vertical_offset;
+		ctx.current_y = ofs_y;
+		ctx.vertical_offset = vertical_offset;
+		IMB_metadata_foreach(ibuf, metadata_custom_draw_fields, &ctx);
 		int ofs_x = 0;
+		ofs_y = ctx.current_y;
 		for (i = 5; i < 10; i++) {
 			len = BLI_snprintf_rlen(temp_str, MAX_METADATA_STR, "%s: ", meta_data_list[i]);
 			if (metadata_is_valid(ibuf, temp_str, i, len)) {
-				BLF_position(fontid, xmin + ofs_x, ymin, 0.0f);
+				BLF_position(fontid, xmin + ofs_x, ymin + ofs_y, 0.0f);
 				BLF_draw(fontid, temp_str, BLF_DRAW_STR_DUMMY_MAX);
 
 				ofs_x += BLF_width(fontid, temp_str, BLF_DRAW_STR_DUMMY_MAX) + UI_UNIT_X;
@@ -2772,6 +2867,23 @@ static void metadata_draw_imbuf(ImBuf *ibuf, const rctf *rect, int fontid, const
 		}
 	}
 }
+
+typedef struct MetadataCustomCountContext {
+	int count;
+} MetadataCustomCountContext;
+
+static void metadata_custom_count_fields(
+        const char *field,
+        const char *UNUSED(value),
+        void *ctx_v)
+{
+	if (!metadata_is_custom_drawable(field)) {
+		return;
+	}
+	MetadataCustomCountContext *ctx = (MetadataCustomCountContext *)ctx_v;
+	ctx->count++;
+}
+
 
 static float metadata_box_height_get(ImBuf *ibuf, int fontid, const bool is_top)
 {
@@ -2810,8 +2922,13 @@ static float metadata_box_height_get(ImBuf *ibuf, int fontid, const bool is_top)
 		for (i = 5; i < 10; i++) {
 			if (metadata_is_valid(ibuf, str, i, 0)) {
 				count = 1;
+				break;
 			}
 		}
+		MetadataCustomCountContext ctx;
+		ctx.count = 0;
+		IMB_metadata_foreach(ibuf, metadata_custom_count_fields, &ctx);
+		count += ctx.count;
 	}
 
 	if (count) {
@@ -2892,6 +3009,28 @@ void ED_region_image_metadata_draw(int x, int y, ImBuf *ibuf, const rctf *frame,
 	}
 
 	GPU_matrix_pop();
+}
+
+typedef struct MetadataPanelDrawContext {
+	uiLayout *layout;
+} MetadataPanelDrawContext;
+
+static void metadata_panel_draw_field(
+        const char *field,
+        const char *value,
+        void *ctx_v)
+{
+	MetadataPanelDrawContext *ctx = (MetadataPanelDrawContext *)ctx_v;
+	uiLayout *row = uiLayoutRow(ctx->layout, false);
+	uiItemL(row, field, ICON_NONE);
+	uiItemL(row, value, ICON_NONE);
+}
+
+void ED_region_image_metadata_panel_draw(ImBuf *ibuf, uiLayout *layout)
+{
+	MetadataPanelDrawContext ctx;
+	ctx.layout = layout;
+	IMB_metadata_foreach(ibuf, metadata_panel_draw_field, &ctx);
 }
 
 void ED_region_grid_draw(ARegion *ar, float zoomx, float zoomy)

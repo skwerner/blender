@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,14 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * Contributor(s): Campbell Barton
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/modifiers/intern/MOD_meshsequencecache.c
- *  \ingroup modifiers
+/** \file
+ * \ingroup modifiers
  */
 
 #include "DNA_cachefile_types.h"
@@ -32,7 +26,6 @@
 #include "DNA_scene_types.h"
 
 #include "BKE_cachefile.h"
-#include "BKE_library.h"
 #include "BKE_library_query.h"
 #include "BKE_scene.h"
 
@@ -44,6 +37,7 @@
 #ifdef WITH_ALEMBIC
 #  include "ABC_alembic.h"
 #  include "BKE_global.h"
+#  include "BKE_library.h"
 #endif
 
 static void initData(ModifierData *md)
@@ -128,8 +122,7 @@ static Mesh *applyModifier(
 			               LIB_ID_CREATE_NO_MAIN |
 			               LIB_ID_CREATE_NO_USER_REFCOUNT |
 			               LIB_ID_CREATE_NO_DEG_TAG |
-			               LIB_ID_COPY_NO_PREVIEW,
-			               false);
+			               LIB_ID_COPY_NO_PREVIEW);
 		}
 	}
 
@@ -196,12 +189,6 @@ ModifierTypeInfo modifierType_MeshSequenceCache = {
 
 	/* copyData */          copyData,
 
-	/* deformVerts_DM */    NULL,
-	/* deformMatrices_DM */ NULL,
-	/* deformVertsEM_DM */  NULL,
-	/* deformMatricesEM_DM*/NULL,
-	/* applyModifier_DM */  NULL,
-
 	/* deformVerts */       NULL,
 	/* deformMatrices */    NULL,
 	/* deformVertsEM */     NULL,
@@ -218,4 +205,5 @@ ModifierTypeInfo modifierType_MeshSequenceCache = {
 	/* foreachObjectLink */ NULL,
 	/* foreachIDLink */     foreachIDLink,
 	/* foreachTexLink */    NULL,
+	/* freeRuntimeData */   NULL,
 };

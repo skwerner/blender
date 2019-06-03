@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,12 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/sculpt_paint/paint_curve.c
- *  \ingroup edsculpt
+/** \file
+ * \ingroup edsculpt
  */
 
 #include <string.h>
@@ -169,6 +165,8 @@ static int paintcurve_new_exec(bContext *C, wmOperator *UNUSED(op))
 	if (p && p->brush) {
 		p->brush->paint_curve = BKE_paint_curve_add(bmain, "PaintCurve");
 	}
+
+	WM_event_add_notifier(C, NC_PAINTCURVE | NA_ADDED, NULL);
 
 	return OPERATOR_FINISHED;
 }

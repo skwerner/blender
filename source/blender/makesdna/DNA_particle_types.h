@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,10 @@
  *
  * The Original Code is Copyright (C) 2007 by Janne Karhu.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file DNA_particle_types.h
- *  \ingroup DNA
+/** \file
+ * \ingroup DNA
  */
 
 #ifndef __DNA_PARTICLE_TYPES_H__
@@ -47,7 +39,7 @@ typedef struct HairKey {
 	float weight;
 	/** Saved particled edit mode flags. */
 	short editflag;
-	short pad;
+	char _pad[2];
 	float world_co[3];
 } HairKey;
 
@@ -149,7 +141,7 @@ typedef struct ParticleData {
 
 	/** Density of sph particle. */
 	float sphdensity;
-	int pad;
+	char _pad[4];
 
 	int hair_index;
 	short flag;
@@ -167,7 +159,7 @@ typedef struct SPHFluidSettings {
 	float buoyancy;
 	int flag, spring_frames;
 	short solver;
-	short pad[3];
+	char _pad[6];
 } SPHFluidSettings;
 
 /* fluid->flag */
@@ -199,7 +191,8 @@ typedef struct ParticleSettings {
 	short phystype, rotmode, avemode, reactevent;
 	int draw;
 	float draw_size;
-	short draw_as, pad1, childtype, pad2;
+	short draw_as, childtype;
+	char _pad2[4];
 	short ren_as, subframes, draw_col;
 	/* number of path segments, power of 2 except */
 	short draw_step, ren_step;
@@ -213,8 +206,8 @@ typedef struct ParticleSettings {
 	short kink, kink_axis;
 
 	/* billboards */
-	short bb_align, bb_uv_split, bb_anim, bb_split_offset;
-	float bb_tilt, bb_rand_tilt, bb_offset[2], bb_size[2], bb_vel_head, bb_vel_tail;
+	short bb_align, bb_uv_split, bb_anim, bb_split_offset DNA_DEPRECATED;
+	float bb_tilt, bb_rand_tilt, bb_offset[2], bb_size[2], bb_vel_head, bb_vel_tail DNA_DEPRECATED;
 
 	/* draw color */
 	float color_vec_max;
@@ -224,7 +217,8 @@ typedef struct ParticleSettings {
 	float timetweak, courant_target;
 	float jitfac, eff_hair, grid_rand, ps_offset[1];
 	int totpart, userjit, grid_res, effector_amount;
-	short time_flag, time_pad[3];
+	short time_flag;
+	char _pad0[6];
 
 	/* initial velocity factors */
 	float normfac, obfac, randfac, partfac, tanfac, tanphase, reactfac;
@@ -238,7 +232,7 @@ typedef struct ParticleSettings {
 	float randlength;
 	/* children */
 	int child_flag;
-	int pad3;
+	char _pad3[4];
 	int child_nbr, ren_child_nbr;
 	float parents, childsize, childrandsize;
 	float childrad, childflat;
@@ -247,7 +241,8 @@ typedef struct ParticleSettings {
 	/* kink */
 	float kink_amp, kink_freq, kink_shape, kink_flat;
 	float kink_amp_clump;
-	int kink_extra_steps, pad4;
+	int kink_extra_steps;
+	char _pad4[4];
 	float kink_axis_random, kink_amp_random;
 	/* rough */
 	float rough1, rough1_size;
@@ -276,10 +271,10 @@ typedef struct ParticleSettings {
 	/** MAX_MTEX. */
 	struct MTex *mtex[18];
 
-	struct Collection *dup_group;
-	struct ListBase dupliweights;
+	struct Collection *instance_collection;
+	struct ListBase instance_weights;
 	struct Collection *eff_group  DNA_DEPRECATED;		// deprecated
-	struct Object *dup_ob;
+	struct Object *instance_object;
 	struct Object *bb_ob;
 	/** Old animation system, deprecated for 2.5. */
 	struct Ipo *ipo  DNA_DEPRECATED;
@@ -288,25 +283,29 @@ typedef struct ParticleSettings {
 
 	/* modified dm support */
 	short use_modifier_stack;
-	short pad5;
+	char _pad5[2];
 
 	/* hair shape */
 	short shape_flag;
-	short pad6;
+	char _pad6[2];
 
-	float twist, pad8;
+	float twist;
+	char _pad8[4];
 
 	/* hair thickness shape */
 	float shape;
 	float rad_root, rad_tip, rad_scale;
 
 	struct CurveMapping *twistcurve;
-	void *pad7;
+	void *_pad7;
 } ParticleSettings;
 
 typedef struct ParticleSystem {
-	/* note1: make sure all (runtime) are NULL's in 'copy_particlesystem' XXX, this function is no more! - need to invstigate */
-	/* note2: make sure any uses of this struct in DNA are accounted for in 'BKE_object_copy_particlesystems' */
+	/* note1: make sure all (runtime) are NULL's in 'copy_particlesystem' XXX,
+	 * this function is no more! - need to invstigate */
+
+	/* note2: make sure any uses of this struct in DNA are
+	 * accounted for in 'BKE_object_copy_particlesystems' */
 
 	struct ParticleSystem *next, *prev;
 
@@ -349,7 +348,7 @@ typedef struct ParticleSystem {
 	/** Particle system name, MAX_NAME. */
 	char name[64];
 
-	/** Used for duplicators. */
+	/** Used for instancing. */
 	float imat[4][4];
 	float cfra, tree_frame, bvhtree_frame;
 	int seed, child_seed;
@@ -359,17 +358,16 @@ typedef struct ParticleSystem {
 	 * TODO(sergey): Use part->id.recalc instead of this duplicated flag
 	 * somehow. */
 	int recalc;
-	int pad1;
 	short target_psys, totkeyed, bakespace;
-	short pad2;
+	char _pad1[6];
 
 	/** Billboard uv name, MAX_CUSTOMDATA_LAYER_NAME. */
-	char bb_uvname[3][64];
+	char bb_uvname[3][64] DNA_DEPRECATED;
 
 	/* if you change these remember to update array lengths to PSYS_TOT_VG! */
 	/** Vertex groups, 0==disable, 1==starting index. */
 	short vgroup[13], vg_neg, rt3;
-	char pad[6];
+	char _pad[6];
 
 	/* point cache */
 	struct PointCache *pointcache;
@@ -381,7 +379,7 @@ typedef struct ParticleSystem {
 	int tot_fluidsprings, alloc_fluidsprings;
 
 	/** Used for interactions with self and other systems. */
-	struct KDTree *tree;
+	struct KDTree_3d *tree;
 	/** Used for interactions with self and other systems. */
 	struct BVHTree *bvhtree;
 
@@ -409,13 +407,14 @@ typedef enum eParticleDrawFlag {
 	PART_DRAW_GLOBAL_OB	    = (1 << 1),
 	PART_DRAW_SIZE          = (1 << 2),
 #ifdef DNA_DEPRECATED
-	PART_DRAW_EMITTER       = (1 << 3),  /* render emitter also */ /* DEPRECATED */
+	/** Render emitter as well. */
+	PART_DRAW_EMITTER       = (1 << 3), /* DEPRECATED */
 #endif
 	PART_DRAW_HEALTH        = (1 << 4),
 	PART_ABS_PATH_TIME      = (1 << 5),
 	PART_DRAW_COUNT_GR      = (1 << 6),
-	PART_DRAW_BB_LOCK       = (1 << 7), /* used with billboards */
-	PART_DRAW_ROTATE_OB     = (1 << 7), /* used with dupliobjects/groups */
+	PART_DRAW_BB_LOCK       = (1 << 7), /* used with billboards */ /* DEPRECATED */
+	PART_DRAW_ROTATE_OB     = (1 << 7), /* used with instance object/collection */
 	PART_DRAW_PARENT        = (1 << 8),
 	PART_DRAW_NUM           = (1 << 9),
 	PART_DRAW_RAND_GR       = (1 << 10),
@@ -424,7 +423,7 @@ typedef enum eParticleDrawFlag {
 	PART_DRAW_MAT_COL       = (1 << 13), /* deprecated, but used in do_versions */
 	PART_DRAW_WHOLE_GR      = (1 << 14),
 	PART_DRAW_REN_STRAND    = (1 << 15),
-	PART_DRAW_NO_SCALE_OB   = (1 << 16), /* used with dupliobjects/groups */
+	PART_DRAW_NO_SCALE_OB   = (1 << 16), /* used with instance object/collection */
 	PART_DRAW_GUIDE_HAIRS   = (1 << 17),
 	PART_DRAW_HAIR_GRID     = (1 << 18),
 } eParticleDrawFlag;
@@ -454,32 +453,32 @@ typedef enum eParticleDrawFlag {
 #define PART_EDISTR			256	/* particle/face from face areas */
 
 #define PART_ROTATIONS		512	/* calculate particle rotations (and store them in pointcache) */
-#define PART_DIE_ON_COL		(1<<12)
-#define PART_SIZE_DEFL		(1<<13) /* swept sphere deflections */
-#define PART_ROT_DYN		(1<<14)	/* dynamic rotation */
-#define PART_SIZEMASS		(1<<16)
+#define PART_DIE_ON_COL		(1 << 12)
+#define PART_SIZE_DEFL		(1 << 13) /* swept sphere deflections */
+#define PART_ROT_DYN		(1 << 14)	/* dynamic rotation */
+#define PART_SIZEMASS		(1 << 16)
 
-#define PART_HIDE_ADVANCED_HAIR	(1<<15)
+#define PART_HIDE_ADVANCED_HAIR	(1 << 15)
 
-//#define PART_ABS_TIME		(1<<17)
-//#define PART_GLOB_TIME		(1<<18)
+//#define PART_ABS_TIME		(1 << 17)
+//#define PART_GLOB_TIME		(1 << 18)
 
-#define PART_BOIDS_2D		(1<<19)
+#define PART_BOIDS_2D		(1 << 19)
 
-//#define PART_BRANCHING		(1<<20)
-//#define PART_ANIM_BRANCHING	(1<<21)
+//#define PART_BRANCHING		(1 << 20)
+//#define PART_ANIM_BRANCHING	(1 << 21)
 
 #define PART_HAIR_BSPLINE	1024
 
-#define PART_GRID_HEXAGONAL	(1<<24)
-#define PART_GRID_INVERT	(1<<26)
+#define PART_GRID_HEXAGONAL	(1 << 24)
+#define PART_GRID_INVERT	(1 << 26)
 
-#define PART_CHILD_EFFECT		(1<<27)
-#define PART_CHILD_LONG_HAIR	(1<<28)
-/* #define PART_CHILD_RENDER		(1<<29) */ /*UNUSED*/
-#define PART_CHILD_GUIDE		(1<<30)
+#define PART_CHILD_EFFECT		(1 << 27)
+#define PART_CHILD_LONG_HAIR	(1 << 28)
+/* #define PART_CHILD_RENDER		(1 << 29) */ /*UNUSED*/
+#define PART_CHILD_GUIDE		(1 << 30)
 
-#define PART_SELF_EFFECT	(1<<22)
+#define PART_SELF_EFFECT	(1 << 22)
 
 /* part->from */
 #define PART_FROM_VERT		0
@@ -512,15 +511,15 @@ typedef enum eParticleKink {
 
 /* part->child_flag */
 typedef enum eParticleChildFlag {
-	PART_CHILD_USE_CLUMP_NOISE  = (1<<0),
-	PART_CHILD_USE_CLUMP_CURVE  = (1<<1),
-	PART_CHILD_USE_ROUGH_CURVE  = (1<<2),
-	PART_CHILD_USE_TWIST_CURVE  = (1<<3),
+	PART_CHILD_USE_CLUMP_NOISE  = (1 << 0),
+	PART_CHILD_USE_CLUMP_CURVE  = (1 << 1),
+	PART_CHILD_USE_ROUGH_CURVE  = (1 << 2),
+	PART_CHILD_USE_TWIST_CURVE  = (1 << 3),
 } eParticleChildFlag;
 
 /* part->shape_flag */
 typedef enum eParticleShapeFlag {
-	PART_SHAPE_CLOSE_TIP     = (1<<0),
+	PART_SHAPE_CLOSE_TIP     = (1 << 0),
 } eParticleShapeFlag;
 
 /* part->draw_col */
@@ -529,31 +528,8 @@ typedef enum eParticleShapeFlag {
 #define PART_DRAW_COL_VEL		2
 #define PART_DRAW_COL_ACC		3
 
-
-/* part->simplify_flag */
-#define PART_SIMPLIFY_ENABLE	1
-#define PART_SIMPLIFY_VIEWPORT	2
-
 /* part->time_flag */
 #define PART_TIME_AUTOSF	1 /* Automatic subframes */
-
-/* part->bb_align */
-#define PART_BB_X		0
-#define PART_BB_Y		1
-#define PART_BB_Z		2
-#define PART_BB_VIEW	3
-#define PART_BB_VEL		4
-
-/* part->bb_anim */
-#define PART_BB_ANIM_NONE	0
-#define PART_BB_ANIM_AGE	1
-#define PART_BB_ANIM_ANGLE	2
-#define PART_BB_ANIM_FRAME	3
-
-/* part->bb_split_offset */
-#define PART_BB_OFF_NONE	0
-#define PART_BB_OFF_LINEAR	1
-#define PART_BB_OFF_RANDOM	2
 
 /* part->draw_as */
 /* part->ren_as*/
@@ -567,7 +543,7 @@ typedef enum eParticleShapeFlag {
 #define PART_DRAW_PATH		6
 #define PART_DRAW_OB		7
 #define PART_DRAW_GR		8
-#define PART_DRAW_BB		9
+#define PART_DRAW_BB		9 /* deprecated */
 #define PART_DRAW_REND		10
 
 /* part->integrator */
@@ -612,8 +588,8 @@ typedef enum eParticleShapeFlag {
 #define	PSYS_KEYED_TIMING	8
 //#define PSYS_ENABLED		16	/* deprecated */
 #define PSYS_HAIR_UPDATED	32  /* signal for updating hair particle mode */
-#define PSYS_DRAWING		64
-#define PSYS_USE_IMAT		128
+/* #define PSYS_DRAWING		64 */ /* deprecated */
+/* #define PSYS_USE_IMAT		128 */ /* deprecated */
 #define PSYS_DELETE			256	/* remove particlesystem as soon as possible */
 #define PSYS_HAIR_DONE		512
 #define PSYS_KEYED			1024
@@ -668,25 +644,25 @@ typedef enum eParticleShapeFlag {
 /* mapto */
 typedef enum eParticleTextureInfluence {
 	/* init */
-	PAMAP_TIME		= (1<<0),	/* emission time */
-	PAMAP_LIFE		= (1<<1),	/* life time */
-	PAMAP_DENS		= (1<<2),	/* density */
-	PAMAP_SIZE		= (1<<3),	/* physical size */
+	PAMAP_TIME		= (1 << 0),	/* emission time */
+	PAMAP_LIFE		= (1 << 1),	/* life time */
+	PAMAP_DENS		= (1 << 2),	/* density */
+	PAMAP_SIZE		= (1 << 3),	/* physical size */
 	PAMAP_INIT		= (PAMAP_TIME | PAMAP_LIFE | PAMAP_DENS | PAMAP_SIZE),
 	/* reset */
-	PAMAP_IVEL		= (1<<5),	/* initial velocity */
+	PAMAP_IVEL		= (1 << 5),	/* initial velocity */
 	/* physics */
-	PAMAP_FIELD		= (1<<6),	/* force fields */
-	PAMAP_GRAVITY	= (1<<10),
-	PAMAP_DAMP		= (1<<11),
+	PAMAP_FIELD		= (1 << 6),	/* force fields */
+	PAMAP_GRAVITY	= (1 << 10),
+	PAMAP_DAMP		= (1 << 11),
 	PAMAP_PHYSICS	= (PAMAP_FIELD | PAMAP_GRAVITY | PAMAP_DAMP),
 	/* children */
-	PAMAP_CLUMP		= (1<<7),
-	PAMAP_KINK_FREQ	= (1<<8),
-	PAMAP_KINK_AMP	= (1<<12),
-	PAMAP_ROUGH		= (1<<9),
-	PAMAP_LENGTH	= (1<<4),
-	PAMAP_TWIST	= (1<<13),
+	PAMAP_CLUMP		= (1 << 7),
+	PAMAP_KINK_FREQ	= (1 << 8),
+	PAMAP_KINK_AMP	= (1 << 12),
+	PAMAP_ROUGH		= (1 << 9),
+	PAMAP_LENGTH	= (1 << 4),
+	PAMAP_TWIST	= (1 << 13),
 	PAMAP_CHILD		= (PAMAP_CLUMP | PAMAP_KINK_FREQ | PAMAP_KINK_AMP | PAMAP_ROUGH | PAMAP_LENGTH | PAMAP_TWIST),
 } eParticleTextureInfluence;
 

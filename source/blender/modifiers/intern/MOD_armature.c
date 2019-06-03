@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,30 +15,20 @@
  *
  * The Original Code is Copyright (C) 2005 by the Blender Foundation.
  * All rights reserved.
- *
- * Contributor(s): Daniel Dunbar
- *                 Ton Roosendaal,
- *                 Ben Batt,
- *                 Brecht Van Lommel,
- *                 Campbell Barton
- *
- * ***** END GPL LICENSE BLOCK *****
- *
  */
 
-/** \file blender/modifiers/intern/MOD_armature.c
- *  \ingroup modifiers
+/** \file
+ * \ingroup modifiers
  */
 
 
 #include <string.h>
 
+#include "BLI_utildefines.h"
+
 #include "DNA_armature_types.h"
 #include "DNA_object_types.h"
 #include "DNA_mesh_types.h"
-
-#include "BLI_utildefines.h"
-#include "BLI_string.h"
 
 #include "BKE_editmesh.h"
 #include "BKE_lattice.h"
@@ -77,14 +65,10 @@ static void copyData(const ModifierData *md, ModifierData *target, const int fla
 	tamd->prevCos = NULL;
 }
 
-static CustomDataMask requiredDataMask(Object *UNUSED(ob), ModifierData *UNUSED(md))
+static void requiredDataMask(Object *UNUSED(ob), ModifierData *UNUSED(md), CustomData_MeshMasks *r_cddata_masks)
 {
-	CustomDataMask dataMask = 0;
-
 	/* ask for vertexgroups */
-	dataMask |= CD_MASK_MDEFORMVERT;
-
-	return dataMask;
+	r_cddata_masks->vmask |= CD_MASK_MDEFORMVERT;
 }
 
 static bool isDisabled(const struct Scene *UNUSED(scene), ModifierData *md, bool UNUSED(useRenderParams))
@@ -110,7 +94,7 @@ static void updateDepsgraph(ModifierData *md, const ModifierUpdateDepsgraphConte
 		DEG_add_object_relation(ctx->node, amd->object, DEG_OB_COMP_EVAL_POSE, "Armature Modifier");
 		DEG_add_object_relation(ctx->node, amd->object, DEG_OB_COMP_TRANSFORM, "Armature Modifier");
 	}
-	DEG_add_object_relation(ctx->node, ctx->object, DEG_OB_COMP_TRANSFORM, "Armature Modifier");
+	DEG_add_modifier_to_transform_relation(ctx->node, "Armature Modifier");
 }
 
 static void deformVerts(
@@ -123,7 +107,7 @@ static void deformVerts(
 
 	MOD_previous_vcos_store(md, vertexCos); /* if next modifier needs original vertices */
 
-	armature_deform_verts(DEG_get_evaluated_object(ctx->depsgraph, amd->object), ctx->object, mesh, vertexCos, NULL,
+	armature_deform_verts(amd->object, ctx->object, mesh, vertexCos, NULL,
 	                      numVerts, amd->deformflag, (float(*)[3])amd->prevCos, amd->defgrp_name, NULL);
 
 	/* free cache */
@@ -142,7 +126,7 @@ static void deformVertsEM(
 
 	MOD_previous_vcos_store(md, vertexCos); /* if next modifier needs original vertices */
 
-	armature_deform_verts(DEG_get_evaluated_object(ctx->depsgraph, amd->object), ctx->object, mesh_src, vertexCos, NULL,
+	armature_deform_verts(amd->object, ctx->object, mesh_src, vertexCos, NULL,
 	                      numVerts, amd->deformflag, (float(*)[3])amd->prevCos, amd->defgrp_name, NULL);
 
 	/* free cache */
@@ -164,7 +148,7 @@ static void deformMatricesEM(
 	ArmatureModifierData *amd = (ArmatureModifierData *) md;
 	Mesh *mesh_src = MOD_deform_mesh_eval_get(ctx->object, em, mesh, NULL, numVerts, false, false);
 
-	armature_deform_verts(DEG_get_evaluated_object(ctx->depsgraph, amd->object), ctx->object, mesh_src, vertexCos, defMats,
+	armature_deform_verts(amd->object, ctx->object, mesh_src, vertexCos, defMats,
 	                      numVerts, amd->deformflag, NULL, amd->defgrp_name, NULL);
 
 	if (mesh_src != mesh) {
@@ -179,7 +163,7 @@ static void deformMatrices(
 	ArmatureModifierData *amd = (ArmatureModifierData *) md;
 	Mesh *mesh_src = MOD_deform_mesh_eval_get(ctx->object, NULL, mesh, NULL, numVerts, false, false);
 
-	armature_deform_verts(DEG_get_evaluated_object(ctx->depsgraph, amd->object), ctx->object, mesh_src, vertexCos, defMats,
+	armature_deform_verts(amd->object, ctx->object, mesh_src, vertexCos, defMats,
 	                      numVerts, amd->deformflag, NULL, amd->defgrp_name, NULL);
 
 	if (mesh_src != mesh) {
@@ -198,12 +182,6 @@ ModifierTypeInfo modifierType_Armature = {
 
 	/* copyData */          copyData,
 
-	/* deformVerts_DM */    NULL,
-	/* deformMatrices_DM */ NULL,
-	/* deformVertsEM_DM */  NULL,
-	/* deformMatricesEM_DM*/NULL,
-	/* applyModifier_DM */  NULL,
-
 	/* deformVerts */       deformVerts,
 	/* deformMatrices */    deformMatrices,
 	/* deformVertsEM */     deformVertsEM,
@@ -220,4 +198,5 @@ ModifierTypeInfo modifierType_Armature = {
 	/* foreachObjectLink */ foreachObjectLink,
 	/* foreachIDLink */     NULL,
 	/* foreachTexLink */    NULL,
+	/* freeRuntimeData */   NULL,
 };

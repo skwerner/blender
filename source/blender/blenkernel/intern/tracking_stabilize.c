@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,17 +15,10 @@
  *
  * The Original Code is Copyright (C) 2011 Blender Foundation.
  * All rights reserved.
- *
- * Contributor(s): Blender Foundation,
- *                 Sergey Sharybin
- *                 Keir Mierle
- *                 Ichthyostega
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/blenkernel/intern/tracking_stabilize.c
- *  \ingroup bke
+/** \file
+ * \ingroup bke
  *
  * This file contains implementation of 2D image stabilization.
  */
@@ -275,12 +266,13 @@ static StabContext *initialize_stabilization_working_context(MovieClip *clip)
 	return ctx;
 }
 
-/* Discard all private working data attached to this call context.
- * NOTE: We allocate the record for the per track baseline contribution
- *       locally for each call context (i.e. call to
- *       BKE_tracking_stabilization_data_get()
- *       Thus it is correct to discard all allocations found within the
- *       corresponding _local_ GHash
+/**
+ * Discard all private working data attached to this call context.
+ *
+ * \note We allocate the record for the per track baseline contribution
+ * locally for each call context (i.e. call to #BKE_tracking_stabilization_data_get)
+ * Thus it is correct to discard all allocations found within the
+ * corresponding _local_ GHash.
  */
 static void discard_stabilization_working_context(StabContext *ctx)
 {

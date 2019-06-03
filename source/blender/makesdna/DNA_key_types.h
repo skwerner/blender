@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,18 +15,12 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 #ifndef __DNA_KEY_TYPES_H__
 #define __DNA_KEY_TYPES_H__
 
-/** \file DNA_key_types.h
- *  \ingroup DNA
+/** \file
+ * \ingroup DNA
  *
  * This file defines structures for Shape-Keys (not animation keyframes),
  * attached to Mesh, Curve and Lattice Data. Even though Key's are ID blocks they
@@ -56,7 +48,7 @@ typedef struct KeyBlock {
 
 	/** interpolation type (Key->type == KEY_NORMAL) only. */
 	short type;
-	short pad1;
+	char _pad1[2];
 
 	/** relative == 0 means first key is reference, otherwise the index of Key->blocks */
 	short relative;
@@ -100,7 +92,7 @@ typedef struct Key {
 	char elemstr[32];
 	/** Size of each element in #KeyBlock.data, use for allocation and stride. */
 	int elemsize;
-	int pad;
+	char _pad[4];
 
 	/** list of KeyBlock's */
 	ListBase block;
@@ -114,7 +106,7 @@ typedef struct Key {
 	short flag;
 	/** absolute or relative shape key */
 	char type;
-	char pad2;
+	char _pad2;
 
 	/** Only used when (Key->type == KEY_NORMAL), this value is used as a time slider,
 	 * rather then using the scenes time, this value can be animated to give greater control */
@@ -135,12 +127,12 @@ enum {
 	KEY_NORMAL      = 0,
 
 	/* States to blend between (default) */
-	KEY_RELATIVE    = 1
+	KEY_RELATIVE    = 1,
 };
 
 /* Key->flag */
 enum {
-	KEY_DS_EXPAND   = 1
+	KEY_DS_EXPAND   = 1,
 };
 
 /* KeyBlock->type */
@@ -155,7 +147,7 @@ enum {
 enum {
 	KEYBLOCK_MUTE       = (1 << 0),
 	KEYBLOCK_SEL        = (1 << 1),
-	KEYBLOCK_LOCKED     = (1 << 2)
+	KEYBLOCK_LOCKED     = (1 << 2),
 };
 
 #define KEYELEM_FLOAT_LEN_COORD 3

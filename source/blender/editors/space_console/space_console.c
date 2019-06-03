@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,14 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * Contributor(s): Campbell Barton
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/space_console/space_console.c
- *  \ingroup spconsole
+/** \file
+ * \ingroup spconsole
  */
 
 #include <string.h>
@@ -37,8 +31,6 @@
 
 #include "ED_space_api.h"
 #include "ED_screen.h"
-
-#include "BIF_gl.h"
 
 #include "RNA_access.h"
 
@@ -96,11 +88,13 @@ static void console_free(SpaceLink *sl)
 {
 	SpaceConsole *sc = (SpaceConsole *) sl;
 
-	while (sc->scrollback.first)
+	while (sc->scrollback.first) {
 		console_scrollback_free(sc, sc->scrollback.first);
+	}
 
-	while (sc->history.first)
+	while (sc->history.first) {
 		console_history_free(sc, sc->history.first);
+	}
 }
 
 
@@ -216,8 +210,9 @@ static void console_main_region_draw(const bContext *C, ARegion *ar)
 	View2D *v2d = &ar->v2d;
 	View2DScrollers *scrollers;
 
-	if (BLI_listbase_is_empty(&sc->scrollback))
+	if (BLI_listbase_is_empty(&sc->scrollback)) {
 		WM_operator_name_call((bContext *)C, "CONSOLE_OT_banner", WM_OP_EXEC_DEFAULT, NULL);
+	}
 
 	/* clear and setup matrix */
 	UI_ThemeClearColor(TH_BACK);

@@ -96,16 +96,20 @@ class PHYSICS_PT_smoke_settings(PhysicButtonsPanel, Panel):
             domain = md.domain_settings
 
             flow = layout.grid_flow(row_major=True, columns=0, even_columns=True, even_rows=False, align=False)
-            flow.enabled = (not domain.point_cache.is_baked)
 
             col = flow.column()
+            col.enabled = (not domain.point_cache.is_baked)
             col.prop(domain, "resolution_max", text="Resolution Divisions")
             col.prop(domain, "time_scale", text="Time Scale")
 
             col.separator()
 
             col = flow.column()
-            col.prop(domain, "collision_extents", text="Border Collisions")
+            sub = col.row()
+            sub.enabled = (not domain.point_cache.is_baked)
+            sub.prop(domain, "collision_extents", text="Border Collisions")
+
+            # This can be tweaked after baking, for render.
             col.prop(domain, "clipping", text="Empty Space")
 
         elif md.smoke_type == 'FLOW':
@@ -645,7 +649,7 @@ class PHYSICS_PT_smoke_viewport_display_debug(PhysicButtonsPanel, Panel):
     def draw_header(self, context):
         md = context.smoke.domain_settings
 
-        self.layout.prop(md, "display_velocity", text="")
+        self.layout.prop(md, "show_velocity", text="")
 
     def draw(self, context):
         layout = self.layout
@@ -655,7 +659,7 @@ class PHYSICS_PT_smoke_viewport_display_debug(PhysicButtonsPanel, Panel):
         domain = context.smoke.domain_settings
 
         col = flow.column()
-        col.enabled = domain.display_velocity
+        col.enabled = domain.show_velocity
         col.prop(domain, "vector_display_type", text="Display As")
         col.prop(domain, "vector_scale")
 

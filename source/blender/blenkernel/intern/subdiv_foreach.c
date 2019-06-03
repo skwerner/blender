@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,14 +15,10 @@
  *
  * The Original Code is Copyright (C) 2018 by Blender Foundation.
  * All rights reserved.
- *
- * Contributor(s): Sergey Sharybin.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/blenkernel/intern/subdiv_foreach.c
- *  \ingroup bke
+/** \file
+ * \ingroup bke
  */
 
 #include "BKE_subdiv_foreach.h"
@@ -35,11 +29,10 @@
 #include "DNA_meshdata_types.h"
 #include "DNA_key_types.h"
 
-#include "BLI_alloca.h"
 #include "BLI_bitmap.h"
-#include "BLI_math_vector.h"
 #include "BLI_task.h"
 
+#include "BKE_customdata.h"
 #include "BKE_mesh.h"
 #include "BKE_key.h"
 #include "BKE_subdiv.h"
@@ -627,8 +620,8 @@ static void subdiv_foreach_edge_vertices_special_do(
 			        corner,
 			        subdiv_vertex_index);
 		}
-		const int next_ptex_face_index =
-		        ptex_face_start_index + (corner + 1) % coarse_poly->totloop;
+		const int next_corner = (corner + 1) % coarse_poly->totloop;
+		const int next_ptex_face_index = ptex_face_start_index + next_corner;
 		for (int vertex_index = 1;
 		     vertex_index < num_vertices_per_ptex_edge - 1;
 		     vertex_index++, subdiv_vertex_index += veretx_delta)
@@ -641,7 +634,7 @@ static void subdiv_foreach_edge_vertices_special_do(
 			        0.0f, v,
 			        coarse_edge_index,
 			        coarse_poly_index,
-			        corner,
+			        next_corner,
 			        subdiv_vertex_index);
 		}
 	}

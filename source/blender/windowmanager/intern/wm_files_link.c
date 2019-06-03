@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,19 +15,13 @@
  *
  * The Original Code is Copyright (C) 2007 Blender Foundation.
  * All rights reserved.
- *
- *
- * Contributor(s): Blender Foundation
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/windowmanager/intern/wm_files_link.c
- *  \ingroup wm
+/** \file
+ * \ingroup wm
  *
  * Functions for dealing with append/link operators and helpers.
  */
-
 
 #include <float.h>
 #include <string.h>
@@ -45,8 +37,6 @@
 #include "DNA_screen_types.h"
 #include "DNA_scene_types.h"
 #include "DNA_windowmanager_types.h"
-
-
 
 #include "BLI_blenlib.h"
 #include "BLI_bitmap.h"
@@ -95,8 +85,9 @@ static bool wm_link_append_poll(bContext *C)
 		 * but which totally confuses edit mode (i.e. it becoming not so obvious
 		 * to leave from edit mode and invalid tools in toolbar might be displayed)
 		 * so disable link/append when in edit mode (sergey) */
-		if (CTX_data_edit_object(C))
+		if (CTX_data_edit_object(C)) {
 			return 0;
+		}
 
 		return 1;
 	}
@@ -127,16 +118,21 @@ static short wm_link_append_flag(wmOperator *op)
 	PropertyRNA *prop;
 	short flag = 0;
 
-	if (RNA_boolean_get(op->ptr, "autoselect"))
+	if (RNA_boolean_get(op->ptr, "autoselect")) {
 		flag |= FILE_AUTOSELECT;
-	if (RNA_boolean_get(op->ptr, "active_collection"))
+	}
+	if (RNA_boolean_get(op->ptr, "active_collection")) {
 		flag |= FILE_ACTIVE_COLLECTION;
-	if ((prop = RNA_struct_find_property(op->ptr, "relative_path")) && RNA_property_boolean_get(op->ptr, prop))
+	}
+	if ((prop = RNA_struct_find_property(op->ptr, "relative_path")) && RNA_property_boolean_get(op->ptr, prop)) {
 		flag |= FILE_RELPATH;
-	if (RNA_boolean_get(op->ptr, "link"))
+	}
+	if (RNA_boolean_get(op->ptr, "link")) {
 		flag |= FILE_LINK;
-	if (RNA_boolean_get(op->ptr, "instance_collections"))
+	}
+	if (RNA_boolean_get(op->ptr, "instance_collections")) {
 		flag |= FILE_GROUP_INSTANCE;
+	}
 
 	return flag;
 }
@@ -263,9 +259,7 @@ static void wm_link_do(
 				continue;
 			}
 
-			new_id = BLO_library_link_named_part_ex(
-			        mainl, &bh, item->idcode, item->name, flag, bmain,
-			        scene, view_layer, v3d);
+			new_id = BLO_library_link_named_part_ex(mainl, &bh, item->idcode, item->name, flag);
 
 			if (new_id) {
 				/* If the link is successful, clear item's libs 'todo' flags.
@@ -747,7 +741,7 @@ static void lib_relocate_do(
 		ID *old_id = item->customdata;
 
 		if (old_id->us == 0) {
-			BKE_libblock_free(bmain, old_id);
+			BKE_id_free(bmain, old_id);
 		}
 	}
 
@@ -760,7 +754,7 @@ static void lib_relocate_do(
 			id_next = id->next;
 			/* XXX That check may be a bit to generic/permissive? */
 			if (id->lib && (id->flag & LIB_TAG_PRE_EXISTING) && id->us == 0) {
-				BKE_libblock_free(bmain, id);
+				BKE_id_free(bmain, id);
 			}
 		}
 	}
@@ -782,7 +776,7 @@ static void lib_relocate_do(
 		if (lib->id.tag & LIB_TAG_DOIT) {
 			id_us_clear_real(&lib->id);
 			if (lib->id.us == 0) {
-				BKE_libblock_free(bmain, (ID *)lib);
+				BKE_id_free(bmain, (ID *)lib);
 			}
 		}
 	}

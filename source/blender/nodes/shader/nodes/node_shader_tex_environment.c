@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,12 +15,6 @@
  *
  * The Original Code is Copyright (C) 2005 Blender Foundation.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
 #include "../node_shader_util.h"
@@ -31,12 +23,12 @@
 
 static bNodeSocketTemplate sh_node_tex_environment_in[] = {
 	{	SOCK_VECTOR, 1, N_("Vector"),		0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, PROP_NONE, SOCK_HIDE_VALUE},
-	{	-1, 0, ""	}
+	{	-1, 0, ""	},
 };
 
 static bNodeSocketTemplate sh_node_tex_environment_out[] = {
 	{	SOCK_RGBA, 0, N_("Color"),		0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, PROP_NONE, SOCK_NO_INTERNAL_LINK},
-	{	-1, 0, ""	}
+	{	-1, 0, ""	},
 };
 
 static void node_shader_init_tex_environment(bNodeTree *UNUSED(ntree), bNode *node)
@@ -56,8 +48,14 @@ static void node_shader_init_tex_environment(bNodeTree *UNUSED(ntree), bNode *no
 static int node_shader_gpu_tex_environment(GPUMaterial *mat, bNode *node, bNodeExecData *UNUSED(execdata), GPUNodeStack *in, GPUNodeStack *out)
 {
 	Image *ima = (Image *)node->id;
-	ImageUser *iuser = NULL;
 	NodeTexEnvironment *tex = node->storage;
+
+	/* We get the image user from the original node, since GPU image keeps
+	 * a pointer to it and the dependency refreshes the original. */
+	bNode *node_original = node->original ? node->original : node;
+	NodeTexImage *tex_original = node_original->storage;
+	ImageUser *iuser = &tex_original->iuser;
+
 	int isdata = tex->color_space == SHD_COLORSPACE_NONE;
 	GPUNodeLink *outalpha;
 

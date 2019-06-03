@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,10 @@
  *
  * The Original Code is Copyright (C) Blender Foundation
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/object/object_collection.c
- *  \ingroup edobj
+/** \file
+ * \ingroup edobj
  */
 
 
@@ -42,7 +34,6 @@
 #include "BKE_collection.h"
 #include "BKE_context.h"
 #include "BKE_library.h"
-#include "BKE_library_remap.h"
 #include "BKE_main.h"
 #include "BKE_object.h"
 #include "BKE_report.h"
@@ -68,6 +59,7 @@
 static const EnumPropertyItem *collection_object_active_itemf(bContext *C, PointerRNA *UNUSED(ptr), PropertyRNA *UNUSED(prop), bool *r_free)
 {
 	Main *bmain = CTX_data_main(C);
+	Scene *scene = CTX_data_scene(C);
 	Object *ob;
 	EnumPropertyItem *item = NULL, item_tmp = {0};
 	int totitem = 0;
@@ -85,7 +77,7 @@ static const EnumPropertyItem *collection_object_active_itemf(bContext *C, Point
 
 		/* if 2 or more collections, add option to add to all collections */
 		collection = NULL;
-		while ((collection = BKE_collection_object_find(bmain, collection, ob)))
+		while ((collection = BKE_collection_object_find(bmain, scene, collection, ob)))
 			count++;
 
 		if (count >= 2) {
@@ -97,7 +89,7 @@ static const EnumPropertyItem *collection_object_active_itemf(bContext *C, Point
 
 		/* add collections */
 		collection = NULL;
-		while ((collection = BKE_collection_object_find(bmain, collection, ob))) {
+		while ((collection = BKE_collection_object_find(bmain, scene, collection, ob))) {
 			item_tmp.identifier = item_tmp.name = collection->id.name + 2;
 			/* item_tmp.icon = ICON_ARMATURE_DATA; */
 			item_tmp.value = i;
@@ -113,11 +105,11 @@ static const EnumPropertyItem *collection_object_active_itemf(bContext *C, Point
 }
 
 /* get the collection back from the enum index, quite awkward and UI specific */
-static Collection *collection_object_active_find_index(Main *bmain, Object *ob, const int collection_object_index)
+static Collection *collection_object_active_find_index(Main *bmain, Scene *scene, Object *ob, const int collection_object_index)
 {
 	Collection *collection = NULL;
 	int i = 0;
-	while ((collection = BKE_collection_object_find(bmain, collection, ob))) {
+	while ((collection = BKE_collection_object_find(bmain, scene, collection, ob))) {
 		if (i == collection_object_index) {
 			break;
 		}
@@ -131,9 +123,9 @@ static int objects_add_active_exec(bContext *C, wmOperator *op)
 {
 	Object *ob = ED_object_context(C);
 	Main *bmain = CTX_data_main(C);
+	Scene *scene = CTX_data_scene(C);
 	int single_collection_index = RNA_enum_get(op->ptr, "collection");
-	Collection *single_collection = collection_object_active_find_index(bmain, ob, single_collection_index);
-	Collection *collection;
+	Collection *single_collection = collection_object_active_find_index(bmain, scene, ob, single_collection_index);
 	bool is_cycle = false;
 	bool updated = false;
 
@@ -141,7 +133,8 @@ static int objects_add_active_exec(bContext *C, wmOperator *op)
 		return OPERATOR_CANCELLED;
 
 	/* now add all selected objects to the collection(s) */
-	for (collection = bmain->collection.first; collection; collection = collection->id.next) {
+	FOREACH_COLLECTION_BEGIN(bmain, scene, Collection *, collection)
+	{
 		if (single_collection && collection != single_collection)
 			continue;
 		if (!BKE_collection_has_object(collection, ob))
@@ -163,6 +156,7 @@ static int objects_add_active_exec(bContext *C, wmOperator *op)
 		}
 		CTX_DATA_END;
 	}
+	FOREACH_COLLECTION_END;
 
 	if (is_cycle)
 		BKE_report(op->reports, RPT_WARNING, "Skipped some collections because of cycle detected");
@@ -203,20 +197,20 @@ void COLLECTION_OT_objects_add_active(wmOperatorType *ot)
 static int objects_remove_active_exec(bContext *C, wmOperator *op)
 {
 	Main *bmain = CTX_data_main(C);
+	Scene *scene = CTX_data_scene(C);
 	ViewLayer *view_layer = CTX_data_view_layer(C);
 	Object *ob = OBACT(view_layer);
 	int single_collection_index = RNA_enum_get(op->ptr, "collection");
-	Collection *single_collection = collection_object_active_find_index(bmain, ob, single_collection_index);
-	Collection *collection;
+	Collection *single_collection = collection_object_active_find_index(bmain, scene, ob, single_collection_index);
 	bool ok = false;
 
 	if (ob == NULL)
 		return OPERATOR_CANCELLED;
 
-	/* linking to same collection requires its own loop so we can avoid
-	 * looking up the active objects collections each time */
-
-	for (collection = bmain->collection.first; collection; collection = collection->id.next) {
+	/* Linking to same collection requires its own loop so we can avoid
+	 * looking up the active objects collections each time. */
+	FOREACH_COLLECTION_BEGIN(bmain, scene, Collection *, collection)
+	{
 		if (single_collection && collection != single_collection)
 			continue;
 
@@ -231,6 +225,7 @@ static int objects_remove_active_exec(bContext *C, wmOperator *op)
 			CTX_DATA_END;
 		}
 	}
+	FOREACH_COLLECTION_END;
 
 	if (!ok)
 		BKE_report(op->reports, RPT_ERROR, "Active object contains no collections");
@@ -268,10 +263,11 @@ void COLLECTION_OT_objects_remove_active(wmOperatorType *ot)
 static int collection_objects_remove_all_exec(bContext *C, wmOperator *UNUSED(op))
 {
 	Main *bmain = CTX_data_main(C);
+	Scene *scene = CTX_data_scene(C);
 
 	CTX_DATA_BEGIN (C, Base *, base, selected_editable_bases)
 	{
-		BKE_object_groups_clear(bmain, base->object);
+		BKE_object_groups_clear(bmain, scene, base->object);
 	}
 	CTX_DATA_END;
 
@@ -300,15 +296,16 @@ static int collection_objects_remove_exec(bContext *C, wmOperator *op)
 {
 	Object *ob = ED_object_context(C);
 	Main *bmain = CTX_data_main(C);
+	Scene *scene = CTX_data_scene(C);
 	int single_collection_index = RNA_enum_get(op->ptr, "collection");
-	Collection *single_collection = collection_object_active_find_index(bmain, ob, single_collection_index);
-	Collection *collection;
+	Collection *single_collection = collection_object_active_find_index(bmain, scene, ob, single_collection_index);
 	bool updated = false;
 
 	if (ob == NULL)
 		return OPERATOR_CANCELLED;
 
-	for (collection = bmain->collection.first; collection; collection = collection->id.next) {
+	FOREACH_COLLECTION_BEGIN(bmain, scene, Collection *, collection)
+	{
 		if (single_collection && collection != single_collection)
 			continue;
 		if (!BKE_collection_has_object(collection, ob))
@@ -323,6 +320,7 @@ static int collection_objects_remove_exec(bContext *C, wmOperator *op)
 		}
 		CTX_DATA_END;
 	}
+	FOREACH_COLLECTION_END;
 
 	if (!updated)
 		return OPERATOR_CANCELLED;
@@ -438,7 +436,7 @@ static int collection_link_exec(bContext *C, wmOperator *op)
 {
 	Main *bmain = CTX_data_main(C);
 	Object *ob = ED_object_context(C);
-	Collection *collection = BLI_findlink(&bmain->collection, RNA_enum_get(op->ptr, "collection"));
+	Collection *collection = BLI_findlink(&bmain->collections, RNA_enum_get(op->ptr, "collection"));
 
 	if (ELEM(NULL, ob, collection))
 		return OPERATOR_CANCELLED;
@@ -538,7 +536,7 @@ static int collection_unlink_exec(bContext *C, wmOperator *UNUSED(op))
 	if (!collection)
 		return OPERATOR_CANCELLED;
 
-	BKE_libblock_delete(bmain, collection);
+	BKE_id_delete(bmain, collection);
 
 	DEG_relations_tag_update(bmain);
 
@@ -562,7 +560,8 @@ void OBJECT_OT_collection_unlink(wmOperatorType *ot)
 	ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
 }
 
-static int select_grouped_exec(bContext *C, wmOperator *UNUSED(op))  /* Select objects in the same collection as the active */
+/* Select objects in the same collection as the active */
+static int select_grouped_exec(bContext *C, wmOperator *UNUSED(op))
 {
 	Scene *scene = CTX_data_scene(C);
 	Collection *collection = CTX_data_pointer_get_type(C, "collection", &RNA_Collection).data;

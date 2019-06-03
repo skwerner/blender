@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,14 +15,10 @@
  *
  * The Original Code is Copyright (C) 2018 Blender Foundation.
  * All rights reserved.
- *
- * Contributor(s): Blender Foundation, 2018
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/object/object_shader_fx.c
- *  \ingroup edobj
+/** \file
+ * \ingroup edobj
  */
 
 
@@ -39,11 +33,11 @@
 #include "DNA_object_types.h"
 #include "DNA_scene_types.h"
 
-#include "BLI_math.h"
 #include "BLI_listbase.h"
-#include "BLI_string.h"
 #include "BLI_string_utf8.h"
 #include "BLI_utildefines.h"
+
+#include "BLT_translation.h"
 
 #include "BKE_context.h"
 #include "BKE_main.h"
@@ -263,8 +257,6 @@ static const EnumPropertyItem *shaderfx_add_itemf(
 
 void OBJECT_OT_shaderfx_add(wmOperatorType *ot)
 {
-	PropertyRNA *prop;
-
 	/* identifiers */
 	ot->name = "Add Effect";
 	ot->description = "Add a visual effect to the active object";
@@ -279,9 +271,9 @@ void OBJECT_OT_shaderfx_add(wmOperatorType *ot)
 	ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
 
 	/* properties */
-	prop = RNA_def_enum(ot->srna, "type", rna_enum_object_shaderfx_type_items, eShaderFxType_Blur, "Type", "");
-	RNA_def_enum_funcs(prop, shaderfx_add_itemf);
-	ot->prop = prop;
+	ot->prop = RNA_def_enum(ot->srna, "type", rna_enum_object_shaderfx_type_items, eShaderFxType_Blur, "Type", "");
+	RNA_def_enum_funcs(ot->prop, shaderfx_add_itemf);
+	RNA_def_property_translation_context(ot->prop, BLT_I18NCONTEXT_ID_ID);  /* Abused, for "Light"... */
 }
 
 /************************ generic functions for operators using names and data context *********************/

@@ -39,13 +39,21 @@ def physics_add(self, layout, md, name, type, typeicon, toggles):
     row = layout.row(align=True)
     if md:
         row.context_pointer_set("modifier", md)
-        row.operator("object.modifier_remove", text=name, text_ctxt=i18n_contexts.default, icon='X')
+        row.operator(
+            "object.modifier_remove",
+            text=name,
+            text_ctxt=i18n_contexts.default,
+            icon='X',
+        )
         if toggles:
             row.prop(md, "show_render", text="")
             row.prop(md, "show_viewport", text="")
     else:
         row.operator(
-            "object.modifier_add", text=name, text_ctxt=i18n_contexts.default, icon='BLANK1'
+            "object.modifier_add",
+            text=name,
+            text_ctxt=i18n_contexts.default,
+            icon='BLANK1',
         ).type = type
 
 
@@ -66,7 +74,7 @@ class PHYSICS_PT_add(PhysicButtonsPanel, Panel):
         layout = self.layout
 
         row = layout.row(align=True)
-        row.alignment = 'RIGHT'
+        row.alignment = 'LEFT'
         row.label(text="Enable physics for:")
 
         flow = layout.grid_flow(row_major=True, columns=0, even_columns=True, even_rows=False, align=True)
@@ -189,12 +197,12 @@ def point_cache_ui(self, context, cache, enabled, cachetype):
             flow = layout.grid_flow(row_major=True, columns=0, even_columns=True, even_rows=False, align=True)
             flow.enabled = enabled and is_saved
 
-            col = flow.column()
+            col = flow.column(align=True)
             col.prop(cache, "use_disk_cache")
 
             subcol = col.column()
             subcol.active = cache.use_disk_cache
-            subcol.prop(cache, "use_library_path", text="Use Lib Path")
+            subcol.prop(cache, "use_library_path", text="Use Library Path")
 
             col = flow.column()
             col.active = cache.use_disk_cache
@@ -217,7 +225,7 @@ def point_cache_ui(self, context, cache, enabled, cachetype):
         col.active = can_bake
 
         if cache.is_baked is True:
-            col.operator("ptcache.free_bake", text="Free Bake")
+            col.operator("ptcache.free_bake", text="Delete Bake")
         else:
             col.operator("ptcache.bake", text="Bake").bake = True
 
@@ -231,7 +239,7 @@ def point_cache_ui(self, context, cache, enabled, cachetype):
 
         col = flow.column()
         col.operator("ptcache.bake_all", text="Bake All Dynamics").bake = True
-        col.operator("ptcache.free_bake_all", text="Free All Bakes")
+        col.operator("ptcache.free_bake_all", text="Delete All Bakes")
         col.operator("ptcache.bake_all", text="Update All To Frame").bake = False
 
 
@@ -306,7 +314,7 @@ def basic_force_field_settings_ui(self, context, field):
         col.prop(field, "flow")
 
     col.prop(field, "apply_to_location", text="Affect Location")
-    col.prop(field, "apply_to_rotation", text="Rotation")
+    col.prop(field, "apply_to_rotation", text="Affect Rotation")
 
     col = flow.column()
     sub = col.column(align=True)

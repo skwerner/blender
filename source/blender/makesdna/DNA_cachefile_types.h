@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,14 +15,10 @@
  *
  * The Original Code is Copyright (C) 2016 Blender Foundation.
  * All rights reserved.
- *
- * Contributor(s): Kevin Dietrich.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file DNA_cachefile_types.h
- *  \ingroup DNA
+/** \file
+ * \ingroup DNA
  */
 
 #ifndef __DNA_CACHEFILE_TYPES_H__
@@ -83,7 +77,7 @@ typedef struct CacheFile {
 	short flag;
 	short draw_flag;
 
-	char padding[4];
+	char _pad[4];
 } CacheFile;
 
 #ifdef __cplusplus

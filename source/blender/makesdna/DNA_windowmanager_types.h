@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,15 +15,10 @@
  *
  * The Original Code is Copyright (C) 2007 Blender Foundation.
  * All rights reserved.
- *
- *
- * Contributor(s): Blender Foundation
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file DNA_windowmanager_types.h
- *  \ingroup DNA
+/** \file
+ * \ingroup DNA
  */
 
 #ifndef __DNA_WINDOWMANAGER_TYPES_H__
@@ -39,28 +32,27 @@
 #include "DNA_ID.h"
 
 /* defined here: */
-struct wmWindowManager;
 struct wmWindow;
+struct wmWindowManager;
 
-struct wmMsgBus;
 struct wmEvent;
 struct wmGesture;
-struct wmOperatorType;
-struct wmOperator;
-struct wmKeyMap;
 struct wmKeyConfig;
+struct wmKeyMap;
+struct wmMsgBus;
+struct wmOperator;
+struct wmOperatorType;
 
 /* forwards */
-struct bContext;
-struct bScreen;
-struct wmSubWindow;
-struct wmTimer;
 struct PointerRNA;
-struct ReportList;
 struct Report;
-struct uiLayout;
+struct ReportList;
 struct Stereo3dFormat;
 struct UndoStep;
+struct bContext;
+struct bScreen;
+struct uiLayout;
+struct wmTimer;
 
 #define OP_MAX_TYPENAME 64
 #define KMAP_MAX_NAME   64
@@ -113,7 +105,8 @@ typedef struct ReportList {
 	int printlevel;
 	/** ReportType. */
 	int storelevel;
-	int flag, pad;
+	int flag;
+	char _pad[4];
 	struct wmTimer *reporttimer;
 } ReportList;
 
@@ -189,14 +182,14 @@ typedef struct wmWindowManager {
 
 /* wmWindowManager.initialized */
 enum {
-	WM_WINDOW_IS_INITIALIZED = (1<<0),
-	WM_KEYCONFIG_IS_INITIALIZED = (1<<1),
+	WM_WINDOW_IS_INITIALIZED = (1 << 0),
+	WM_KEYCONFIG_IS_INITIALIZED = (1 << 1),
 };
 
 #define WM_KEYCONFIG_STR_DEFAULT "blender"
 
 /* IME is win32 only! */
-#ifndef WIN32
+#if !defined(WIN32) && !defined(DNA_DEPRECATED)
 #  ifdef __GNUC__
 #    define ime_data ime_data __attribute__ ((deprecated))
 #  endif
@@ -245,9 +238,9 @@ typedef struct wmWindow {
 	short modalcursor;
 	/** Cursor grab mode. */
 	short grabcursor;
-	/** Internal: tag this for extra mousemove event, makes cursors/buttons active on UI switching. */
+	/** Internal: tag this for extra mousemove event,
+	 * makes cursors/buttons active on UI switching. */
 	short addmousemove;
-	short pad[4];
 
 	/** Winid also in screens, is for retrieving this window after read. */
 	int winid;
@@ -344,7 +337,7 @@ typedef struct wmKeyMapItem {
 	short maptype;
 	/** Unique identifier. Positive for kmi that override builtins, negative otherwise. */
 	short id;
-	short pad;
+	char _pad[2];
 	/** Rna pointer to access properties. */
 	struct PointerRNA *ptr;
 } wmKeyMapItem;
@@ -481,7 +474,8 @@ typedef struct wmOperator {
 	struct wmOperator *opm;
 	/** Runtime for drawing. */
 	struct uiLayout *layout;
-	short flag, pad[3];
+	short flag;
+	char _pad[6];
 } wmOperator;
 
 /* operator type return flags: exec(), invoke() modal(), return values */
@@ -511,16 +505,17 @@ enum {
 
 /* wmOperator flag */
 enum {
-	/* low level flag so exec() operators can tell if they were invoked, use with care.
-	 * typically this shouldn't make any difference, but it rare cases its needed (see smooth-view) */
+	/** low level flag so exec() operators can tell if they were invoked, use with care.
+	 * Typically this shouldn't make any difference, but it rare cases its needed
+	 * (see smooth-view) */
 	OP_IS_INVOKE = (1 << 0),
-	/* So we can detect if an operators exec() call is activated from an interactive repeat. */
+	/** So we can detect if an operators exec() call is activated from an interactive repeat. */
 	OP_IS_REPEAT = (1 << 1),
 
-	/* When the cursor is grabbed */
+	/** When the cursor is grabbed */
 	OP_IS_MODAL_GRAB_CURSOR    = (1 << 2),
 
-	/* allow modal operators to have the region under the cursor for their context
+	/** Allow modal operators to have the region under the cursor for their context
 	 * (the regiontype is maintained to prevent errors) */
 	OP_IS_MODAL_CURSOR_REGION = (1 << 3),
 };

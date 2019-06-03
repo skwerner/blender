@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,14 +15,10 @@
  *
  * The Original Code is Copyright (C) Blender Foundation
  * All rights reserved.
- *
- * Contributor(s): Daniel Genrich
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/blenkernel/intern/cloth.c
- *  \ingroup bke
+/** \file
+ * \ingroup bke
  */
 
 
@@ -515,8 +509,9 @@ void cloth_free_modifier(ClothModifierData *clmd )
 void cloth_free_modifier_extern(ClothModifierData *clmd )
 {
 	Cloth	*cloth = NULL;
-	if (G.debug_value > 0)
+	if (G.debug & G_DEBUG_SIMDATA) {
 		printf("cloth_free_modifier_extern\n");
+	}
 
 	if ( !clmd )
 		return;
@@ -524,8 +519,9 @@ void cloth_free_modifier_extern(ClothModifierData *clmd )
 	cloth = clmd->clothObject;
 
 	if ( cloth ) {
-		if (G.debug_value > 0)
+		if (G.debug & G_DEBUG_SIMDATA) {
 			printf("cloth_free_modifier_extern in\n");
+		}
 
 		BPH_cloth_solver_free(clmd);
 
@@ -588,9 +584,8 @@ void cloth_free_modifier_extern(ClothModifierData *clmd )
  ******************************************************************************/
 
 /**
- * cloth_to_object - copies the deformed vertices to the object.
- *
- **/
+ * Copies the deformed vertices to the object.
+ */
 static void cloth_to_object (Object *ob,  ClothModifierData *clmd, float (*vertexCos)[3])
 {
 	unsigned int i = 0;
@@ -618,12 +613,11 @@ int cloth_uses_vgroup(ClothModifierData *clmd)
 }
 
 /**
- * cloth_apply_vgroup - applies a vertex group as specified by type
- *
- **/
-/* can be optimized to do all groups in one loop */
+ * Applies a vertex group as specified by type.
+ */
 static void cloth_apply_vgroup ( ClothModifierData *clmd, Mesh *mesh )
 {
+	/* Can be optimized to do all groups in one loop. */
 	int i = 0;
 	int j = 0;
 	MDeformVert *dvert = NULL;
@@ -728,8 +722,9 @@ static int cloth_from_object(Object *ob, ClothModifierData *clmd, Mesh *mesh, fl
 	// If we have a clothObject, free it.
 	if ( clmd->clothObject != NULL ) {
 		cloth_free_modifier ( clmd );
-		if (G.debug_value > 0)
+		if (G.debug & G_DEBUG_SIMDATA) {
 			printf("cloth_free_modifier cloth_from_object\n");
+		}
 	}
 
 	// Allocate a new cloth object.

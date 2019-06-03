@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,15 +15,10 @@
  *
  * The Original Code is Copyright (C) 2008 Blender Foundation.
  * All rights reserved.
- *
- *
- * Contributor(s): Blender Foundation
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/io/io_collada.c
- *  \ingroup collada
+/** \file
+ * \ingroup collada
  */
 #ifdef WITH_COLLADA
 #include "DNA_space_types.h"
@@ -419,7 +412,7 @@ void WM_OT_collada_export(wmOperatorType *ot)
 	static const EnumPropertyItem prop_bc_export_mesh_type[] = {
 		{BC_MESH_TYPE_VIEW, "view", 0, "View", "Apply modifier's view settings"},
 		{BC_MESH_TYPE_RENDER, "render", 0, "Render", "Apply modifier's render settings"},
-		{0, NULL, 0, NULL, NULL}
+		{0, NULL, 0, NULL, NULL},
 	};
 
 	static const EnumPropertyItem prop_bc_export_transformation_type[] = {
@@ -507,11 +500,13 @@ void WM_OT_collada_export(wmOperatorType *ot)
 	                "Export also the curve handles (if available) (this does only work when the inverse parent matrix "
 	                "is the unity matrix, otherwise you may end up with odd results)");
 
-	RNA_def_boolean(func, "keep_keyframes", 0, "Keep Keyframes",
-		"Use existing keyframes as additional sample points (this helps when you want to keep manual tweaks)");
+	RNA_def_boolean(
+	        func, "keep_keyframes", 0, "Keep Keyframes",
+	        "Use existing keyframes as additional sample points (this helps when you want to keep manual tweaks)");
 
-	RNA_def_boolean(func, "keep_flat_curves", 0, "All keyed curves",
-		"Export also curves which have only one key or are totally flat");
+	RNA_def_boolean(
+	        func, "keep_flat_curves", 0, "All keyed curves",
+	        "Export also curves which have only one key or are totally flat");
 
 	RNA_def_boolean(func, "active_uv_only", 0, "Only Selected UV Map",
 	                "Export only the selected UV Map");

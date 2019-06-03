@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,10 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): Martin Poirier
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/transform/transform_snap.c
- *  \ingroup edtransform
+/** \file
+ * \ingroup edtransform
  */
 
 #include <stdlib.h>
@@ -52,7 +44,6 @@
 #include "GPU_immediate.h"
 #include "GPU_state.h"
 
-#include "BKE_global.h"
 #include "BKE_layer.h"
 #include "BKE_object.h"
 #include "BKE_anim.h"  /* for duplis */
@@ -556,7 +547,7 @@ static void initSnappingMode(TransInfo *t)
 
 		/* Edit mode */
 		if (t->tsnap.applySnap != NULL && // A snapping function actually exist
-		    ((obedit_type != -1) && ELEM(obedit_type, OB_MESH, OB_ARMATURE, OB_CURVE, OB_LATTICE, OB_MBALL)) ) // Temporary limited to edit mode meshes, armature, curves, mballs
+		    ((obedit_type != -1) && ELEM(obedit_type, OB_MESH, OB_ARMATURE, OB_CURVE, OB_LATTICE, OB_MBALL)) ) // Temporary limited to edit mode meshes, armature, curves, metaballs
 		{
 			/* Exclude editmesh if using proportional edit */
 			if ((obedit_type == OB_MESH) && (t->flag & T_PROP_EDIT)) {
@@ -879,7 +870,9 @@ static void ApplySnapResize(TransInfo *t, float vec[3])
 	getSnapPoint(t, point);
 
 	float dist = ResizeBetween(t, t->tsnap.snapTarget, point);
-	copy_v3_fl(vec, dist);
+	if (dist != TRANSFORM_DIST_INVALID) {
+		copy_v3_fl(vec, dist);
+	}
 }
 
 /********************** DISTANCE **************************/
@@ -1527,10 +1520,10 @@ static void applyGridIncrement(TransInfo *t, float *val, int max_index, const fl
 
 	if (use_aspect) {
 		/* custom aspect for fcurve */
-		if (t->spacetype == SPACE_IPO) {
+		if (t->spacetype == SPACE_GRAPH) {
 			View2D *v2d = &t->ar->v2d;
 			View2DGrid *grid;
-			SpaceIpo *sipo = t->sa->spacedata.first;
+			SpaceGraph *sipo = t->sa->spacedata.first;
 			int unity = V2D_UNIT_VALUES;
 			int unitx = (sipo->flag & SIPO_DRAWTIME) ? V2D_UNIT_SECONDS : V2D_UNIT_FRAMESCALE;
 
@@ -1590,7 +1583,8 @@ static void applyGridIncrement(TransInfo *t, float *val, int max_index, const fl
 						float grid_p = iter_fac * roundf(pos_on_axis[j] / iter_fac);
 						float dist_p = fabs((grid_p - pos_on_axis[j]) / local_axis[j]);
 
-						/* The amount of distance needed to travel along the local axis to snap to the closest grid point */
+						/* The amount of distance needed to travel along the
+						 * local axis to snap to the closest grid point */
 						/* in the global j axis direction */
 						float move_dist = (grid_p - center_global[j]) / local_axis[j];
 

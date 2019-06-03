@@ -1,24 +1,18 @@
 /*
-* ***** BEGIN GPL LICENSE BLOCK *****
-*
-* This program is free software; you can redistribute it and/or
-* modify it under the terms of the GNU General Public License
-* as published by the Free Software Foundation; either version 2
-* of the License, or (at your option) any later version.
-*
-* This program is distributed in the hope that it will be useful,
-* but WITHOUT ANY WARRANTY; without even the implied warranty of
-* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-* GNU General Public License for more details.
-*
-* You should have received a copy of the GNU General Public License
-* along with this program; if not, write to the Free Software Foundation,
-* Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
-*
-* Contributor(s): Gaia Clary.
-*
-* ***** END GPL LICENSE BLOCK *****
-*/
+ * This program is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU General Public License
+ * as published by the Free Software Foundation; either version 2
+ * of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software Foundation,
+ * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
+ */
 
 #include "Materials.h"
 
@@ -145,15 +139,13 @@ void MaterialNode::set_diffuse(COLLADAFW::ColorOrTexture &cot, std::string label
 	int locy = -300 * (node_map.size()-2);
 	if (cot.isColor()) {
 		COLLADAFW::Color col = cot.getColor();
-		material->r = col.getRed();
-		material->g = col.getGreen();
-		material->b = col.getBlue();
-
 		bNodeSocket *socket = (bNodeSocket *)BLI_findlink(&shader_node->inputs, BC_PBR_DIFFUSE);
 		float *fcol = (float *)socket->default_value;
-		fcol[0] = col.getRed();
-		fcol[1] = col.getGreen();
-		fcol[2] = col.getBlue();
+
+		fcol[0] = material->r = col.getRed();
+		fcol[1] = material->g = col.getGreen();
+		fcol[2] = material->b = col.getBlue();
+		fcol[3] = material->a = col.getAlpha();
 	}
 	else if (cot.isTexture()) {
 		bNode *texture_node = add_texture_node(cot, -300, locy, label);

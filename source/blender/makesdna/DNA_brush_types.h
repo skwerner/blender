@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,10 @@
  *
  * The Original Code is Copyright (C) 2005 Blender Foundation.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file DNA_brush_types.h
- *  \ingroup DNA
+/** \file
+ * \ingroup DNA
  */
 
 #ifndef __DNA_BRUSH_TYPES_H__
@@ -42,8 +34,8 @@
 //#endif
 
 struct CurveMapping;
-struct MTex;
 struct Image;
+struct MTex;
 struct Material;
 
 typedef struct BrushClone {
@@ -52,7 +44,8 @@ typedef struct BrushClone {
 	/** Offset of clone image from canvas. */
 	float offset[2];
 	/** Transparency for drawing of clone image. */
-	float alpha, pad;
+	float alpha;
+	char _pad[4];
 } BrushClone;
 
 
@@ -79,8 +72,7 @@ typedef struct BrushGpencilSettings {
 	short draw_smoothlvl;
 	/** Number of times to subdivide new strokes. */
 	short draw_subdivide;
-	/** Internal grease pencil drawing flags. */
-	short flag;
+	short _pad;
 
 	/** Number of times to apply thickness smooth factor to new strokes. */
 	short thick_smoothlvl;
@@ -91,30 +83,39 @@ typedef struct BrushGpencilSettings {
 	float fill_threshold;
 	/** Number of pixel to consider the leak is too small (x 2). */
 	short fill_leak;
-	char pad_1[6];
+	/** Fill zoom factor */
+	short fill_factor;
+	char _pad_1[4];
 
 	/** Number of simplify steps. */
-	int   fill_simplylvl;
+	int fill_simplylvl;
 	/** Type of control lines drawing mode. */
-	int   fill_draw_mode;
+	int fill_draw_mode;
 	/** Icon identifier. */
-	int   icon_id;
+	int icon_id;
 
 	/** Maximum distance before generate new point for very fast mouse movements. */
-	int   input_samples;
+	int input_samples;
 	/** Random factor for UV rotation. */
 	float uv_random;
 	/** Moved to 'Brush.gpencil_tool'. */
-	int   brush_type DNA_DEPRECATED;
+	int brush_type DNA_DEPRECATED;
 	/** Soft, hard or stroke. */
-	int   eraser_mode;
+	int eraser_mode;
 	/** Smooth while drawing factor. */
 	float active_smooth;
 	/** Factor to apply to strength for soft eraser. */
 	float era_strength_f;
 	/** Factor to apply to thickness for soft eraser. */
 	float era_thickness_f;
-	char pad_2[4];
+	/** Internal grease pencil drawing flags. */
+	int flag;
+
+	/** gradient control along y for color */
+	float gradient_f;
+	/** factor xy of shape for dots gradients */
+	float gradient_s[2];
+	char _pad_2[4];
 
 	struct CurveMapping *curve_sensitivity;
 	struct CurveMapping *curve_strength;
@@ -155,6 +156,8 @@ typedef enum eGPDbrush_Flag {
 	GP_BRUSH_DISSABLE_LASSO = (1 << 14),
 	/* Do not erase strokes oLcluded */
 	GP_BRUSH_OCCLUDE_ERASER = (1 << 15),
+	/* Post process trim stroke */
+	GP_BRUSH_TRIM_STROKE = (1 << 16),
 } eGPDbrush_Flag;
 
 /* BrushGpencilSettings->gp_fill_draw_mode */
@@ -182,7 +185,7 @@ typedef enum eGP_BrushIcons {
 	GP_BRUSH_ICON_FILL = 7,
 	GP_BRUSH_ICON_ERASE_SOFT = 8,
 	GP_BRUSH_ICON_ERASE_HARD = 9,
-	GP_BRUSH_ICON_ERASE_STROKE = 10
+	GP_BRUSH_ICON_ERASE_STROKE = 10,
 } eGP_BrushIcons;
 
 typedef struct Brush {
@@ -255,7 +258,7 @@ typedef struct Brush {
 	/** Source for fill tool color gradient application. */
 	char gradient_fill_mode;
 
-	char pad;
+	char _pad;
 	/** Projection shape (sphere, circle). */
 	char falloff_shape;
 	float falloff_angle;
@@ -272,9 +275,11 @@ typedef struct Brush {
 	char mask_tool;
 	/** Active grease pencil tool. */
 	char gpencil_tool;
-	char _pad0[6];
+	char _pad0[2];
 
 	float autosmooth_factor;
+
+	float topology_rake_factor;
 
 	float crease_pinch_factor;
 
@@ -325,7 +330,7 @@ typedef struct Palette {
 	ListBase colors;
 
 	int active_color;
-	int pad;
+	char _pad[4];
 } Palette;
 
 typedef struct PaintCurvePoint {
@@ -348,24 +353,24 @@ typedef struct PaintCurve {
 typedef enum eBrushGradientSourceStroke {
 	BRUSH_GRADIENT_PRESSURE = 0, /* gradient from pressure */
 	BRUSH_GRADIENT_SPACING_REPEAT = 1, /* gradient from spacing */
-	BRUSH_GRADIENT_SPACING_CLAMP = 2 /* gradient from spacing */
+	BRUSH_GRADIENT_SPACING_CLAMP = 2, /* gradient from spacing */
 } eBrushGradientSourceStroke;
 
 typedef enum eBrushGradientSourceFill {
 	BRUSH_GRADIENT_LINEAR = 0, /* gradient from pressure */
-	BRUSH_GRADIENT_RADIAL = 1 /* gradient from spacing */
+	BRUSH_GRADIENT_RADIAL = 1, /* gradient from spacing */
 } eBrushGradientSourceFill;
 
 /* Brush.flag */
 typedef enum eBrushFlags {
 	BRUSH_AIRBRUSH = (1 << 0),
-	BRUSH_FLAG_DEPRECATED_1 = (1 << 1),
+	BRUSH_FLAG_UNUSED_1 = (1 << 1),  /* cleared */
 	BRUSH_ALPHA_PRESSURE = (1 << 2),
 	BRUSH_SIZE_PRESSURE = (1 << 3),
 	BRUSH_JITTER_PRESSURE = (1 << 4),
 	BRUSH_SPACING_PRESSURE = (1 << 5),
-	BRUSH_FLAG_DEPRECATED_2 = (1 << 6),
-	BRUSH_FLAG_DEPRECATED_3 = (1 << 7),
+	BRUSH_FLAG_UNUSED_6 = (1 << 6),  /* cleared */
+	BRUSH_FLAG_UNUSED_7 = (1 << 7),  /* cleared */
 	BRUSH_ANCHORED = (1 << 8),
 	BRUSH_DIR_IN = (1 << 9),
 	BRUSH_SPACE = (1 << 10),
@@ -375,7 +380,7 @@ typedef enum eBrushFlags {
 	BRUSH_LOCK_ALPHA = (1 << 14),
 	BRUSH_ORIGINAL_NORMAL = (1 << 15),
 	BRUSH_OFFSET_PRESSURE = (1 << 16),
-	BRUSH_FLAG_DEPRECATED_4 = (1 << 17),
+	BRUSH_FLAG_UNUSED_17 = (1 << 17),  /* cleared */
 	BRUSH_SPACE_ATTEN = (1 << 18),
 	BRUSH_ADAPTIVE_SPACE = (1 << 19),
 	BRUSH_LOCK_SIZE = (1 << 20),
@@ -389,12 +394,12 @@ typedef enum eBrushFlags {
 	BRUSH_CUSTOM_ICON = (1 << 28),
 	BRUSH_LINE = (1 << 29),
 	BRUSH_ABSOLUTE_JITTER = (1 << 30),
-	BRUSH_CURVE = (1u << 31)
+	BRUSH_CURVE = (1u << 31),
 } eBrushFlags;
 
 typedef enum {
 	BRUSH_MASK_PRESSURE_RAMP = (1 << 1),
-	BRUSH_MASK_PRESSURE_CUTOFF = (1 << 2)
+	BRUSH_MASK_PRESSURE_CUTOFF = (1 << 2),
 } BrushMaskPressureFlags;
 
 /* Brush.overlay_flags */
@@ -404,7 +409,7 @@ typedef enum eOverlayFlags {
 	BRUSH_OVERLAY_SECONDARY = (1 << 2),
 	BRUSH_OVERLAY_CURSOR_OVERRIDE_ON_STROKE = (1 << 3),
 	BRUSH_OVERLAY_PRIMARY_OVERRIDE_ON_STROKE = (1 << 4),
-	BRUSH_OVERLAY_SECONDARY_OVERRIDE_ON_STROKE = (1 << 5)
+	BRUSH_OVERLAY_SECONDARY_OVERRIDE_ON_STROKE = (1 << 5),
 } eOverlayFlags;
 
 #define BRUSH_OVERLAY_OVERRIDE_MASK (BRUSH_OVERLAY_CURSOR_OVERRIDE_ON_STROKE | \
@@ -431,7 +436,7 @@ typedef enum eBrushSculptTool {
 	SCULPT_TOOL_CREASE = 16,
 	SCULPT_TOOL_BLOB = 17,
 	SCULPT_TOOL_CLAY_STRIPS = 18,
-	SCULPT_TOOL_MASK = 19
+	SCULPT_TOOL_MASK = 19,
 } eBrushSculptTool;
 
 /** When #BRUSH_ACCUMULATE is used */
@@ -463,8 +468,17 @@ typedef enum eBrushSculptTool {
 	SCULPT_TOOL_THUMB, \
 	SCULPT_TOOL_LAYER, \
 	\
-	/* These brushes could handle dynamic topology, but user feedback indicates it's better not to */ \
+	/* These brushes could handle dynamic topology, \
+	 * but user feedback indicates it's better not to */ \
 	SCULPT_TOOL_SMOOTH, \
+	SCULPT_TOOL_MASK \
+	) == 0)
+
+#define SCULPT_TOOL_HAS_TOPOLOGY_RAKE(t) (ELEM(t, \
+	/* These brushes, as currently coded, cannot support topology rake. */ \
+	SCULPT_TOOL_GRAB, \
+	SCULPT_TOOL_ROTATE, \
+	SCULPT_TOOL_THUMB, \
 	SCULPT_TOOL_MASK \
 	) == 0)
 
@@ -475,7 +489,7 @@ typedef enum eBrushImagePaintTool {
 	PAINT_TOOL_SMEAR = 2,
 	PAINT_TOOL_CLONE = 3,
 	PAINT_TOOL_FILL = 4,
-	PAINT_TOOL_MASK = 5
+	PAINT_TOOL_MASK = 5,
 } eBrushImagePaintTool;
 
 typedef enum eBrushVertexPaintTool {
@@ -506,18 +520,18 @@ enum {
 	SCULPT_DISP_DIR_VIEW = 1,
 	SCULPT_DISP_DIR_X = 2,
 	SCULPT_DISP_DIR_Y = 3,
-	SCULPT_DISP_DIR_Z = 4
+	SCULPT_DISP_DIR_Z = 4,
 };
 
 typedef enum {
 	BRUSH_MASK_DRAW = 0,
-	BRUSH_MASK_SMOOTH = 1
+	BRUSH_MASK_SMOOTH = 1,
 } BrushMaskTool;
 
 /* blur kernel types, Brush.blur_mode */
 typedef enum eBlurKernelType {
 	KERNEL_GAUSSIAN,
-	KERNEL_BOX
+	KERNEL_BOX,
 } eBlurKernelType;
 
 /* Brush.falloff_shape */

@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,28 +15,19 @@
  *
  * The Original Code is Copyright (C) 2005 by the Blender Foundation.
  * All rights reserved.
- *
- * Contributor(s): Daniel Dunbar
- *                 Ton Roosendaal,
- *                 Ben Batt,
- *                 Brecht Van Lommel,
- *                 Campbell Barton
- *
- * ***** END GPL LICENSE BLOCK *****
- *
  */
 
-/** \file blender/modifiers/intern/MOD_softbody.c
- *  \ingroup modifiers
+/** \file
+ * \ingroup modifiers
  */
 
 #include <stdio.h>
 
+#include "BLI_utildefines.h"
+
 #include "DNA_scene_types.h"
 #include "DNA_mesh_types.h"
 #include "DNA_object_force_types.h"
-
-#include "BLI_utildefines.h"
 
 #include "BKE_layer.h"
 #include "BKE_particle.h"
@@ -87,12 +76,6 @@ ModifierTypeInfo modifierType_Softbody = {
 
 	/* copyData */          NULL,
 
-	/* deformVerts_DM */    NULL,
-	/* deformMatrices_DM */ NULL,
-	/* deformVertsEM_DM */  NULL,
-	/* deformMatricesEM_DM*/NULL,
-	/* applyModifier_DM */  NULL,
-
 	/* deformVerts */       deformVerts,
 	/* deformMatrices */    NULL,
 	/* deformVertsEM */     NULL,
@@ -109,4 +92,5 @@ ModifierTypeInfo modifierType_Softbody = {
 	/* foreachObjectLink */ NULL,
 	/* foreachIDLink */     NULL,
 	/* foreachTexLink */    NULL,
+	/* freeRuntimeData */   NULL,
 };

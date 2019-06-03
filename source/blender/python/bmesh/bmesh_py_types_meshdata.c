@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,14 +15,10 @@
  *
  * The Original Code is Copyright (C) 2012 Blender Foundation.
  * All rights reserved.
- *
- * Contributor(s): Campbell Barton
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/python/bmesh/bmesh_py_types_meshdata.c
- *  \ingroup pybmesh
+/** \file
+ * \ingroup pybmesh
  *
  * This file defines customdata types which can't be accessed as primitive
  * python types such as MDeformVert, MLoopUV, MTexPoly
@@ -312,8 +306,9 @@ static int mathutils_bmloopcol_set(BaseMathObject *bmo, int UNUSED(subtype))
 static int mathutils_bmloopcol_get_index(BaseMathObject *bmo, int subtype, int UNUSED(index))
 {
 	/* lazy, avoid repeteing the case statement */
-	if (mathutils_bmloopcol_get(bmo, subtype) == -1)
+	if (mathutils_bmloopcol_get(bmo, subtype) == -1) {
 		return -1;
+	}
 	return 0;
 }
 
@@ -322,8 +317,9 @@ static int mathutils_bmloopcol_set_index(BaseMathObject *bmo, int subtype, int i
 	const float f = bmo->data[index];
 
 	/* lazy, avoid repeteing the case statement */
-	if (mathutils_bmloopcol_get(bmo, subtype) == -1)
+	if (mathutils_bmloopcol_get(bmo, subtype) == -1) {
 		return -1;
+	}
 
 	bmo->data[index] = f;
 	return mathutils_bmloopcol_set(bmo, subtype);
@@ -334,7 +330,7 @@ static Mathutils_Callback mathutils_bmloopcol_cb = {
 	mathutils_bmloopcol_get,
 	mathutils_bmloopcol_set,
 	mathutils_bmloopcol_get_index,
-	mathutils_bmloopcol_set_index
+	mathutils_bmloopcol_set_index,
 };
 
 static void bm_init_types_bmloopcol(void)
@@ -523,7 +519,7 @@ static PySequenceMethods bpy_bmdeformvert_as_sequence = {
 static PyMappingMethods bpy_bmdeformvert_as_mapping = {
 	(lenfunc)bpy_bmdeformvert_len,
 	(binaryfunc)bpy_bmdeformvert_subscript,
-	(objobjargproc)bpy_bmdeformvert_ass_subscript
+	(objobjargproc)bpy_bmdeformvert_ass_subscript,
 };
 
 /* Methods
@@ -655,7 +651,7 @@ static struct PyMethodDef bpy_bmdeformvert_methods[] = {
 	{"get",     (PyCFunction)bpy_bmdeformvert_get,     METH_VARARGS, bpy_bmdeformvert_get_doc},
 	/* BMESH_TODO pop, popitem, update */
 	{"clear",   (PyCFunction)bpy_bmdeformvert_clear,   METH_NOARGS,  bpy_bmdeformvert_clear_doc},
-	{NULL, NULL, 0, NULL}
+	{NULL, NULL, 0, NULL},
 };
 
 PyTypeObject BPy_BMDeformVert_Type; /* bm.loops.layers.uv.active */

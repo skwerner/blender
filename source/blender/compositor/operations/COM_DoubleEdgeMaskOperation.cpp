@@ -1,6 +1,4 @@
 /*
- * Copyright 2011, Blender Foundation.
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -15,9 +13,7 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
- * Contributor:
- *      Jeroen Bakker
- *      Monique Dewanchand
+ * Copyright 2011, Blender Foundation.
  */
 
 #include <stdlib.h>
@@ -28,7 +24,6 @@
 #include "MEM_guardedalloc.h"
 
 // this part has been copied from the double edge mask
-// Contributor(s): Peter Larabell.
 static void do_adjacentKeepBorders(unsigned int t, unsigned int rw, unsigned int *limask, unsigned int *lomask, unsigned int *lres, float *res, unsigned int *rsize)
 {
 	int x;

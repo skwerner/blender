@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,20 +15,14 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
 #ifndef __BKE_CAMERA_H__
 #define __BKE_CAMERA_H__
 
-/** \file BKE_camera.h
- *  \ingroup bke
- *  \brief Camera datablock and utility functions.
+/** \file
+ * \ingroup bke
+ * \brief Camera datablock and utility functions.
  */
 #ifdef __cplusplus
 extern "C" {
@@ -40,15 +32,15 @@ extern "C" {
 
 struct Camera;
 struct Depsgraph;
+struct GPUFXSettings;
 struct Main;
 struct Object;
 struct RegionView3D;
 struct RenderData;
 struct Scene;
+struct View3D;
 struct ViewLayer;
 struct rctf;
-struct View3D;
-struct GPUFXSettings;
 
 /* Camera Datablock */
 
@@ -89,8 +81,8 @@ typedef struct CameraParams {
 	int sensor_fit;
 
 	/* clipping */
-	float clipsta;
-	float clipend;
+	float clip_start;
+	float clip_end;
 
 	/* computed viewplane */
 	float ycor;

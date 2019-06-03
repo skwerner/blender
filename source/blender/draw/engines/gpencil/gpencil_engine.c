@@ -1,6 +1,4 @@
 /*
- * Copyright 2017, Blender Foundation.
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -15,20 +13,19 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
- * Contributor(s): Antonio Vazquez
- *
+ * Copyright 2017, Blender Foundation.
  */
 
-/** \file blender/draw/engines/gpencil/gpencil_engine.c
- *  \ingroup draw
+/** \file
+ * \ingroup draw
  */
 #include "DRW_engine.h"
 #include "DRW_render.h"
 
-#include "BKE_camera.h"
+#include "BKE_gpencil.h"
+#include "BKE_library.h"
 #include "BKE_object.h"
 #include "BKE_paint.h"
-#include "BKE_gpencil.h"
 #include "BKE_shader_fx.h"
 
 #include "DNA_gpencil_types.h"
@@ -36,18 +33,17 @@
 
 #include "draw_mode_engines.h"
 
-#include "UI_resources.h"
-
 #include "GPU_texture.h"
 
 #include "gpencil_engine.h"
 
 #include "DEG_depsgraph_query.h"
 
+#include "ED_view3d.h"
 #include "ED_screen.h"
-#include "ED_gpencil.h"
 
-#include "WM_api.h"
+#include "UI_resources.h"
+
 
 extern char datatoc_gpencil_fill_vert_glsl[];
 extern char datatoc_gpencil_fill_frag_glsl[];
@@ -85,11 +81,11 @@ void DRW_gpencil_multisample_ensure(GPENCIL_Data *vedata, int rect_w, int rect_h
 			fbl->multisample_fb = GPU_framebuffer_create();
 			if (fbl->multisample_fb) {
 				if (txl->multisample_color == NULL) {
-					txl->multisample_color = GPU_texture_create_2D_multisample(
+					txl->multisample_color = GPU_texture_create_2d_multisample(
 					        rect_w, rect_h, GPU_RGBA16F, NULL, samples, NULL);
 				}
 				if (txl->multisample_depth == NULL) {
-					txl->multisample_depth = GPU_texture_create_2D_multisample(
+					txl->multisample_depth = GPU_texture_create_2d_multisample(
 					        rect_w, rect_h, GPU_DEPTH_COMPONENT24, NULL, samples, NULL);
 				}
 				GPU_framebuffer_ensure_config(
@@ -108,7 +104,7 @@ static void GPENCIL_create_framebuffers(void *vedata)
 	GPENCIL_StorageList *stl = ((GPENCIL_Data *)vedata)->stl;
 
 	/* Go full 32bits for rendering */
-	GPUTextureFormat fb_format = DRW_state_is_image_render() ? GPU_RGBA32F : GPU_RGBA16F;
+	eGPUTextureFormat fb_format = DRW_state_is_image_render() ? GPU_RGBA32F : GPU_RGBA16F;
 
 	if (DRW_state_is_fbo()) {
 		const float *viewport_size = DRW_viewport_size_get();
@@ -124,57 +120,57 @@ static void GPENCIL_create_framebuffers(void *vedata)
 		/* Framebufers for basic object drawing */
 		if (stl->storage->framebuffer_flag & GP_FRAMEBUFFER_BASIC) {
 			/* temp textures for ping-pong buffers */
-			e_data.temp_depth_tx_a = DRW_texture_pool_query_2D(
+			e_data.temp_depth_tx_a = DRW_texture_pool_query_2d(
 			        size[0], size[1], GPU_DEPTH_COMPONENT24,
 			        &draw_engine_gpencil_type);
-			e_data.temp_color_tx_a = DRW_texture_pool_query_2D(
+			e_data.temp_color_tx_a = DRW_texture_pool_query_2d(
 			        size[0], size[1], fb_format,
 			        &draw_engine_gpencil_type);
 			GPU_framebuffer_ensure_config(
-				&fbl->temp_fb_a, {
-					GPU_ATTACHMENT_TEXTURE(e_data.temp_depth_tx_a),
-					GPU_ATTACHMENT_TEXTURE(e_data.temp_color_tx_a)
-				});
+			        &fbl->temp_fb_a, {
+			            GPU_ATTACHMENT_TEXTURE(e_data.temp_depth_tx_a),
+			            GPU_ATTACHMENT_TEXTURE(e_data.temp_color_tx_a),
+			        });
 
-			e_data.temp_depth_tx_b = DRW_texture_pool_query_2D(
+			e_data.temp_depth_tx_b = DRW_texture_pool_query_2d(
 			        size[0], size[1], GPU_DEPTH_COMPONENT24,
 			        &draw_engine_gpencil_type);
-			e_data.temp_color_tx_b = DRW_texture_pool_query_2D(
+			e_data.temp_color_tx_b = DRW_texture_pool_query_2d(
 			        size[0], size[1], fb_format,
 			        &draw_engine_gpencil_type);
 			GPU_framebuffer_ensure_config(
-				&fbl->temp_fb_b, {
-					GPU_ATTACHMENT_TEXTURE(e_data.temp_depth_tx_b),
-					GPU_ATTACHMENT_TEXTURE(e_data.temp_color_tx_b)
-				});
+			        &fbl->temp_fb_b, {
+			            GPU_ATTACHMENT_TEXTURE(e_data.temp_depth_tx_b),
+			            GPU_ATTACHMENT_TEXTURE(e_data.temp_color_tx_b),
+			        });
 
 			/* used for FX effects and Layer blending */
-			e_data.temp_depth_tx_fx = DRW_texture_pool_query_2D(
+			e_data.temp_depth_tx_fx = DRW_texture_pool_query_2d(
 			        size[0], size[1], GPU_DEPTH_COMPONENT24,
 			        &draw_engine_gpencil_type);
-			e_data.temp_color_tx_fx = DRW_texture_pool_query_2D(
+			e_data.temp_color_tx_fx = DRW_texture_pool_query_2d(
 			        size[0], size[1], fb_format,
 			        &draw_engine_gpencil_type);
 			GPU_framebuffer_ensure_config(
-				&fbl->temp_fb_fx, {
-					GPU_ATTACHMENT_TEXTURE(e_data.temp_depth_tx_fx),
-					GPU_ATTACHMENT_TEXTURE(e_data.temp_color_tx_fx),
-				});
+			        &fbl->temp_fb_fx, {
+			            GPU_ATTACHMENT_TEXTURE(e_data.temp_depth_tx_fx),
+			            GPU_ATTACHMENT_TEXTURE(e_data.temp_color_tx_fx),
+			        });
 		}
 
 		/* background framebuffer to speed up drawing process (always 16 bits) */
 		if (stl->storage->framebuffer_flag & GP_FRAMEBUFFER_DRAW) {
-			e_data.background_depth_tx = DRW_texture_pool_query_2D(
+			e_data.background_depth_tx = DRW_texture_pool_query_2d(
 			        size[0], size[1], GPU_DEPTH_COMPONENT24,
 			        &draw_engine_gpencil_type);
-			e_data.background_color_tx = DRW_texture_pool_query_2D(
+			e_data.background_color_tx = DRW_texture_pool_query_2d(
 			        size[0], size[1], GPU_RGBA32F,
 			        &draw_engine_gpencil_type);
 			GPU_framebuffer_ensure_config(
-				&fbl->background_fb, {
-					GPU_ATTACHMENT_TEXTURE(e_data.background_depth_tx),
-					GPU_ATTACHMENT_TEXTURE(e_data.background_color_tx)
-				});
+			        &fbl->background_fb, {
+			            GPU_ATTACHMENT_TEXTURE(e_data.background_depth_tx),
+			            GPU_ATTACHMENT_TEXTURE(e_data.background_color_tx),
+			        });
 		}
 	}
 }
@@ -254,6 +250,8 @@ void GPENCIL_engine_init(void *vedata)
 
 		/* unit matrix */
 		unit_m4(stl->storage->unit_matrix);
+		stl->storage->shade_render[0] = OB_RENDER;
+		stl->storage->shade_render[1] = 0;
 	}
 
 	stl->storage->multisamples = U.gpencil_multisamples;
@@ -265,7 +263,7 @@ void GPENCIL_engine_init(void *vedata)
 	/* blank texture used if no texture defined for fill shader */
 	if (!e_data.gpencil_blank_texture) {
 		float rect[16][16][4] = {{{0.0f}}};
-		e_data.gpencil_blank_texture = DRW_texture_create_2D(16, 16, GPU_RGBA8, DRW_TEX_FILTER, (float *)rect);
+		e_data.gpencil_blank_texture = DRW_texture_create_2d(16, 16, GPU_RGBA8, DRW_TEX_FILTER, (float *)rect);
 	}
 }
 
@@ -306,7 +304,9 @@ void GPENCIL_cache_init(void *vedata)
 	GPENCIL_StorageList *stl = ((GPENCIL_Data *)vedata)->stl;
 	const DRWContextState *draw_ctx = DRW_context_state_get();
 	Scene *scene = draw_ctx->scene;
+	ToolSettings *ts = scene->toolsettings;
 	View3D *v3d = draw_ctx->v3d;
+	Brush *brush = BKE_paint_brush(&ts->gp_paint->paint);
 
 	/* Special handling for when active object is GP object (e.g. for draw mode) */
 	Object *obact = draw_ctx->obact;
@@ -315,7 +315,15 @@ void GPENCIL_cache_init(void *vedata)
 
 	if (obact && (obact->type == OB_GPENCIL) && (obact->data)) {
 		obact_gpd = (bGPdata *)obact->data;
-		gp_style = BKE_material_gpencil_settings_get(obact, obact->actcol);
+		/* use the brush material */
+		Material *ma = BKE_gpencil_object_material_get_from_brush(obact, brush);
+		if (ma != NULL) {
+			gp_style = ma->gp_style;
+		}
+		/* this is not common, but avoid any special situations when brush could be without material */
+		if (gp_style == NULL) {
+			gp_style = BKE_material_gpencil_settings_get(obact, obact->actcol);
+		}
 	}
 
 	if (!stl->g_data) {
@@ -339,12 +347,18 @@ void GPENCIL_cache_init(void *vedata)
 	stl->g_data->gp_cache_used = 0;
 	stl->g_data->gp_cache_size = 0;
 	stl->g_data->gp_object_cache = NULL;
+	stl->g_data->do_instances = false;
 
 	{
-		/* Stroke pass */
-		psl->stroke_pass = DRW_pass_create(
+		/* Stroke pass 2D */
+		psl->stroke_pass_2d = DRW_pass_create(
 		        "GPencil Stroke Pass",
 		        DRW_STATE_WRITE_COLOR | DRW_STATE_WRITE_DEPTH | DRW_STATE_DEPTH_ALWAYS | DRW_STATE_BLEND);
+		stl->storage->shgroup_id = 0;
+		/* Stroke pass 3D */
+		psl->stroke_pass_3d = DRW_pass_create(
+		        "GPencil Stroke Pass",
+		        DRW_STATE_WRITE_COLOR | DRW_STATE_WRITE_DEPTH | DRW_STATE_DEPTH_LESS_EQUAL | DRW_STATE_BLEND);
 		stl->storage->shgroup_id = 0;
 
 		/* edit pass */
@@ -389,6 +403,14 @@ void GPENCIL_cache_init(void *vedata)
 		stl->storage->simplify_fx = GP_SIMPLIFY_FX(scene, stl->storage->is_playing);
 		stl->storage->simplify_blend = GP_SIMPLIFY_BLEND(scene, stl->storage->is_playing);
 
+		/* xray mode */
+		if (v3d) {
+			stl->storage->is_xray = XRAY_ACTIVE(v3d);
+		}
+		else {
+			stl->storage->is_xray = 0;
+		}
+
 		/* save pixsize */
 		stl->storage->pixsize = DRW_viewport_pixelsize_get();
 		if ((!DRW_state_is_opengl_render()) && (stl->storage->is_render)) {
@@ -404,7 +426,8 @@ void GPENCIL_cache_init(void *vedata)
 			bGPdata *gpd_orig = (bGPdata *)DEG_get_original_id(&obact_gpd->id);
 			if (((gpd_orig->runtime.sbuffer_sflag & GP_STROKE_ERASER) == 0) &&
 			    (gpd_orig->runtime.sbuffer_size > 0) &&
-			    ((gpd_orig->flag & GP_DATA_STROKE_POLYGON) == 0))
+			    ((gpd_orig->flag & GP_DATA_STROKE_POLYGON) == 0) &&
+			    !DRW_state_is_depth())
 			{
 				stl->g_data->session_flag |= GP_DRW_PAINT_PAINTING;
 			}
@@ -449,6 +472,8 @@ void GPENCIL_cache_init(void *vedata)
 		DRW_shgroup_uniform_texture_ref(mix_shgrp, "strokeColor", &e_data.input_color_tx);
 		DRW_shgroup_uniform_texture_ref(mix_shgrp, "strokeDepth", &e_data.input_depth_tx);
 		DRW_shgroup_uniform_int(mix_shgrp, "tonemapping", &stl->storage->tonemapping, 1);
+		DRW_shgroup_uniform_int(mix_shgrp, "do_select", &stl->storage->do_select_outline, 1);
+		DRW_shgroup_uniform_vec4(mix_shgrp, "select_color", stl->storage->select_color, 1);
 
 		/* mix pass no blend used to copy between passes. A separated pass is required
 		 * because if mix_pass is used, the acumulation of blend degrade the colors.
@@ -464,6 +489,8 @@ void GPENCIL_cache_init(void *vedata)
 		DRW_shgroup_uniform_texture_ref(mix_shgrp_noblend, "strokeColor", &e_data.input_color_tx);
 		DRW_shgroup_uniform_texture_ref(mix_shgrp_noblend, "strokeDepth", &e_data.input_depth_tx);
 		DRW_shgroup_uniform_int(mix_shgrp_noblend, "tonemapping", &stl->storage->tonemapping, 1);
+		DRW_shgroup_uniform_int(mix_shgrp_noblend, "do_select", &stl->storage->do_select_outline, 1);
+		DRW_shgroup_uniform_vec4(mix_shgrp_noblend, "select_color", stl->storage->select_color, 1);
 
 		/* Painting session pass (used only to speedup while the user is drawing )
 		 * This pass is used to show the snapshot of the current grease pencil strokes captured
@@ -504,8 +531,8 @@ void GPENCIL_cache_init(void *vedata)
 
 		/* blend layers pass */
 		psl->blend_pass = DRW_pass_create(
-			"GPencil Blend Layers Pass",
-			DRW_STATE_WRITE_COLOR | DRW_STATE_BLEND | DRW_STATE_WRITE_DEPTH | DRW_STATE_DEPTH_LESS);
+		        "GPencil Blend Layers Pass",
+		        DRW_STATE_WRITE_COLOR | DRW_STATE_BLEND | DRW_STATE_WRITE_DEPTH | DRW_STATE_DEPTH_LESS);
 		DRWShadingGroup *blend_shgrp = DRW_shgroup_create(e_data.gpencil_blend_fullscreen_sh, psl->blend_pass);
 		DRW_shgroup_call_add(blend_shgrp, quad, NULL);
 		DRW_shgroup_uniform_texture_ref(blend_shgrp, "strokeColor", &e_data.temp_color_tx_a);
@@ -535,7 +562,7 @@ static void gpencil_add_draw_data(void *vedata, Object *ob)
 
 	if (!cache_ob->is_dup_ob) {
 		/* fill shading groups */
-		if (!is_multiedit) {
+		if ((!is_multiedit) || (stl->storage->is_render)) {
 			DRW_gpencil_populate_datablock(&e_data, vedata, ob, cache_ob);
 		}
 		else {
@@ -546,6 +573,7 @@ static void gpencil_add_draw_data(void *vedata, Object *ob)
 	/* FX passses */
 	cache_ob->has_fx = false;
 	if ((!stl->storage->simplify_fx) &&
+	    (!ELEM(cache_ob->shading_type[0], OB_WIRE, OB_SOLID)) &&
 	    (BKE_shaderfx_has_gpencil(ob)))
 	{
 		cache_ob->has_fx = true;
@@ -553,7 +581,6 @@ static void gpencil_add_draw_data(void *vedata, Object *ob)
 			DRW_gpencil_fx_prepare(&e_data, vedata, cache_ob);
 		}
 	}
-
 }
 
 void GPENCIL_cache_populate(void *vedata, Object *ob)
@@ -568,6 +595,7 @@ void GPENCIL_cache_populate(void *vedata, Object *ob)
 	Scene *scene = draw_ctx->scene;
 	ToolSettings *ts = scene->toolsettings;
 	View3D *v3d = draw_ctx->v3d;
+	const View3DCursor *cursor = &scene->cursor;
 
 	if (ob->type == OB_GPENCIL && ob->data) {
 		bGPdata *gpd = (bGPdata *)ob->data;
@@ -583,30 +611,50 @@ void GPENCIL_cache_populate(void *vedata, Object *ob)
 		}
 
 		if ((stl->g_data->session_flag & GP_DRW_PAINT_READY) == 0) {
+			/* bound box object are not visible, only external box*/
+			if (ob->dt != OB_BOUNDBOX) {
+				/* save gp objects for drawing later */
+				stl->g_data->gp_object_cache = gpencil_object_cache_add(
+				        stl->g_data->gp_object_cache, ob,
+				        &stl->g_data->gp_cache_size, &stl->g_data->gp_cache_used);
 
-			/* save gp objects for drawing later */
-			stl->g_data->gp_object_cache = gpencil_object_cache_add(
-				stl->g_data->gp_object_cache, ob,
-				&stl->g_data->gp_cache_size, &stl->g_data->gp_cache_used);
+				/* enable instance loop */
+				if (!stl->g_data->do_instances) {
+					tGPencilObjectCache *cache_ob = &stl->g_data->gp_object_cache[stl->g_data->gp_cache_used - 1];
+					stl->g_data->do_instances = cache_ob->is_dup_ob;
+				}
 
-			/* load drawing data */
-			gpencil_add_draw_data(vedata, ob);
+				/* load drawing data */
+				gpencil_add_draw_data(vedata, ob);
+			}
 		}
 
 		/* draw current painting strokes
-		* (only if region is equal to originated paint region)
-		*/
+		 * (only if region is equal to originated paint region)
+		 *
+		 * Need to use original data because to use the copy of data, the paint
+		 * operator must update depsgraph and this makes that first events of the
+		 * mouse are missed if the datablock is very big due the time required to
+		 * copy the datablock. The search of the original data is faster than a
+		 * full datablock copy.
+		 * Using the original data doesn't require a copy and the feel when drawing
+		 * is far better.
+		 */
+
+		bGPdata *gpd_orig = (bGPdata *)DEG_get_original_id(&gpd->id);
 		if ((draw_ctx->obact == ob) &&
-		    ((gpd->runtime.ar == NULL) || (gpd->runtime.ar == draw_ctx->ar)))
+		    ((gpd_orig->runtime.ar == NULL) || (gpd_orig->runtime.ar == draw_ctx->ar)))
 		{
 			DRW_gpencil_populate_buffer_strokes(&e_data, vedata, ts, ob);
 		}
 
 		/* grid */
 		if ((v3d) &&
-		    ((v3d->flag2 & V3D_RENDER_OVERRIDE) == 0) &&
+		    ((v3d->flag2 & V3D_HIDE_OVERLAYS) == 0) &&
 		    (v3d->gp_flag & V3D_GP_SHOW_GRID) &&
-		    (ob->type == OB_GPENCIL) && (ob == draw_ctx->obact))
+		    (ob->type == OB_GPENCIL) && (ob == draw_ctx->obact) &&
+		    ((ts->gpencil_v3d_align & GP_PROJECT_DEPTH_VIEW) == 0) &&
+		    ((ts->gpencil_v3d_align & GP_PROJECT_DEPTH_STROKE) == 0))
 		{
 			GPU_BATCH_DISCARD_SAFE(e_data.batch_grid);
 			MEM_SAFE_FREE(e_data.batch_grid);
@@ -614,13 +662,37 @@ void GPENCIL_cache_populate(void *vedata, Object *ob)
 			e_data.batch_grid = DRW_gpencil_get_grid(ob);
 
 			/* define grid orientation */
-			if (ts->gp_sculpt.lock_axis != GP_LOCKAXIS_VIEW) {
-				copy_m4_m4(stl->storage->grid_matrix, ob->obmat);
+			switch (ts->gp_sculpt.lock_axis) {
+				case GP_LOCKAXIS_VIEW:
+				{
+					/* align always to view */
+					invert_m4_m4(stl->storage->grid_matrix, draw_ctx->rv3d->viewmat);
+					/* copy ob location */
+					copy_v3_v3(stl->storage->grid_matrix[3], ob->obmat[3]);
+					break;
+				}
+				case GP_LOCKAXIS_CURSOR:
+				{
+					float scale[3] = { 1.0f, 1.0f, 1.0f };
+					loc_eul_size_to_mat4(
+					        stl->storage->grid_matrix,
+					        cursor->location,
+					        cursor->rotation_euler,
+					        scale);
+					break;
+				}
+				default:
+				{
+					copy_m4_m4(stl->storage->grid_matrix, ob->obmat);
+					break;
+				}
+			}
+
+			/* Move the origin to Object or Cursor */
+			if (ts->gpencil_v3d_align & GP_PROJECT_CURSOR) {
+				copy_v3_v3(stl->storage->grid_matrix[3], cursor->location);
 			}
 			else {
-				/* align always to view */
-				invert_m4_m4(stl->storage->grid_matrix, draw_ctx->rv3d->viewmat);
-				/* copy ob location */
 				copy_v3_v3(stl->storage->grid_matrix[3], ob->obmat[3]);
 			}
 
@@ -635,17 +707,37 @@ void GPENCIL_cache_populate(void *vedata, Object *ob)
 void GPENCIL_cache_finish(void *vedata)
 {
 	GPENCIL_StorageList *stl = ((GPENCIL_Data *)vedata)->stl;
+	tGPencilObjectCache *cache_ob = NULL;
+	Object *ob = NULL;
 
-	/* draw particles */
-	DRW_gpencil_populate_particles(&e_data, vedata);
+	/* create data for instances */
+	if (stl->g_data->do_instances) {
+		GHash *gh_objects = BLI_ghash_str_new(__func__);
+		/* create hash of real object (non duplicated) */
+		for (int i = 0; i < stl->g_data->gp_cache_used; i++) {
+			cache_ob = &stl->g_data->gp_object_cache[i];
+			if (!cache_ob->is_dup_ob) {
+				ob = cache_ob->ob;
+				char *name = BKE_id_to_unique_string_key(&ob->id);
+				BLI_ghash_insert(gh_objects, name, cache_ob->ob);
+			}
+		}
+
+		/* draw particles */
+		DRW_gpencil_populate_particles(&e_data, gh_objects, vedata);
+
+		/* free hash */
+		BLI_ghash_free(gh_objects, MEM_freeN, NULL);
+	}
 
 	if (stl->g_data->session_flag & (GP_DRW_PAINT_IDLE | GP_DRW_PAINT_FILLING)) {
 		stl->storage->framebuffer_flag |= GP_FRAMEBUFFER_DRAW;
 	}
 
-	/* create framebuffers */
-	GPENCIL_create_framebuffers(vedata);
-
+	/* create framebuffers (only for normal drawing) */
+	if (!DRW_state_is_select() || !DRW_state_is_depth()) {
+		GPENCIL_create_framebuffers(vedata);
+	}
 }
 
 /* helper function to sort inverse gpencil objects using qsort */
@@ -653,8 +745,12 @@ static int gpencil_object_cache_compare_zdepth(const void *a1, const void *a2)
 {
 	const tGPencilObjectCache *ps1 = a1, *ps2 = a2;
 
-	if (ps1->zdepth < ps2->zdepth) return 1;
-	else if (ps1->zdepth > ps2->zdepth) return -1;
+	if (ps1->zdepth < ps2->zdepth) {
+		return 1;
+	}
+	else if (ps1->zdepth > ps2->zdepth) {
+		return -1;
+	}
 
 	return 0;
 }
@@ -681,15 +777,22 @@ static void gpencil_prepare_fast_drawing(
 
 static void gpencil_free_obj_runtime(GPENCIL_StorageList *stl)
 {
+	if (stl->g_data->gp_object_cache == NULL) {
+		return;
+	}
+
 	/* reset all cache flags */
 	for (int i = 0; i < stl->g_data->gp_cache_used; i++) {
 		tGPencilObjectCache *cache_ob = &stl->g_data->gp_object_cache[i];
-		bGPdata *gpd = cache_ob->gpd;
-		gpd->flag &= ~GP_DATA_CACHE_IS_DIRTY;
+		if (cache_ob) {
+			bGPdata *gpd = cache_ob->gpd;
+			gpd->flag &= ~GP_DATA_CACHE_IS_DIRTY;
 
-		/* free shgrp array */
-		cache_ob->tot_layers = 0;
-		MEM_SAFE_FREE(cache_ob->shgrp_array);
+			/* free shgrp array */
+			cache_ob->tot_layers = 0;
+			MEM_SAFE_FREE(cache_ob->name);
+			MEM_SAFE_FREE(cache_ob->shgrp_array);
+		}
 	}
 
 	/* free the cache itself */
@@ -699,7 +802,7 @@ static void gpencil_free_obj_runtime(GPENCIL_StorageList *stl)
 static void gpencil_draw_pass_range(
 	GPENCIL_FramebufferList *fbl, GPENCIL_StorageList *stl,
 	GPENCIL_PassList *psl, GPENCIL_TextureList *txl,
-	GPUFrameBuffer *fb,
+	GPUFrameBuffer *fb, Object *ob, bGPdata *gpd,
 	DRWShadingGroup *init_shgrp, DRWShadingGroup *end_shgrp, bool multi)
 {
 	if (init_shgrp == NULL) {
@@ -712,12 +815,54 @@ static void gpencil_draw_pass_range(
 	}
 
 	DRW_draw_pass_subset(
-		psl->stroke_pass, init_shgrp, end_shgrp);
+	        GPENCIL_3D_DRAWMODE(ob, gpd) ? psl->stroke_pass_3d : psl->stroke_pass_2d,
+	        init_shgrp, end_shgrp);
 
 	if ((!stl->storage->is_mat_preview) && (multi)) {
 		MULTISAMPLE_GP_SYNC_DISABLE(stl->storage->multisamples, fbl, fb, txl);
 	}
+}
 
+/* draw strokes to use for selection */
+static void drw_gpencil_select_render(GPENCIL_StorageList *stl, GPENCIL_PassList *psl)
+{
+	tGPencilObjectCache *cache_ob;
+	tGPencilObjectCache_shgrp *array_elm = NULL;
+	DRWShadingGroup *init_shgrp = NULL;
+	DRWShadingGroup *end_shgrp = NULL;
+
+	/* Draw all pending objects */
+	if ((stl->g_data->gp_cache_used > 0) &&
+	    (stl->g_data->gp_object_cache))
+	{
+		/* sort by zdepth */
+		qsort(stl->g_data->gp_object_cache, stl->g_data->gp_cache_used,
+		      sizeof(tGPencilObjectCache), gpencil_object_cache_compare_zdepth);
+
+		for (int i = 0; i < stl->g_data->gp_cache_used; i++) {
+			cache_ob = &stl->g_data->gp_object_cache[i];
+			if (cache_ob) {
+				Object *ob = cache_ob->ob;
+				bGPdata *gpd = cache_ob->gpd;
+				init_shgrp = NULL;
+				if (cache_ob->tot_layers > 0) {
+					for (int e = 0; e < cache_ob->tot_layers; e++) {
+						array_elm = &cache_ob->shgrp_array[e];
+						if (init_shgrp == NULL) {
+							init_shgrp = array_elm->init_shgrp;
+						}
+						end_shgrp = array_elm->end_shgrp;
+					}
+					/* draw group */
+					DRW_draw_pass_subset(
+					        GPENCIL_3D_DRAWMODE(ob, gpd) ? psl->stroke_pass_3d : psl->stroke_pass_2d,
+					        init_shgrp, end_shgrp);
+				}
+				/* the cache must be dirty for next loop */
+				gpd->flag |= GP_DATA_CACHE_IS_DIRTY;
+			}
+		}
+	}
 }
 
 /* draw scene */
@@ -745,10 +890,19 @@ void GPENCIL_draw_scene(void *ved)
 	const bool is_render = stl->storage->is_render;
 	bGPdata *gpd_act = (obact) && (obact->type == OB_GPENCIL) ? (bGPdata *)obact->data : NULL;
 	const bool is_edit = GPENCIL_ANY_EDIT_MODE(gpd_act);
+	const bool overlay = v3d != NULL ? (bool)((v3d->flag2 & V3D_HIDE_OVERLAYS) == 0) : true;
+
+	/* if the draw is for select, do a basic drawing and return */
+	if (DRW_state_is_select() || DRW_state_is_depth()) {
+		drw_gpencil_select_render(stl, psl);
+		/* free memory */
+		gpencil_free_obj_runtime(stl);
+		return;
+	}
 
 	/* paper pass to display a comfortable area to draw over complex scenes with geometry */
 	if ((!is_render) && (obact) && (obact->type == OB_GPENCIL)) {
-		if (((v3d->flag2 & V3D_RENDER_OVERRIDE) == 0) &&
+		if (((v3d->flag2 & V3D_HIDE_OVERLAYS) == 0) &&
 		    (v3d->gp_flag & V3D_GP_SHOW_PAPER))
 		{
 			DRW_draw_pass(psl->paper_pass);
@@ -760,8 +914,9 @@ void GPENCIL_draw_scene(void *ved)
 		GPU_framebuffer_bind(dfbl->default_fb);
 
 		MULTISAMPLE_GP_SYNC_ENABLE(stl->storage->multisamples, fbl);
-
-		DRW_draw_pass(psl->background_pass);
+		if (obact->dt != OB_BOUNDBOX) {
+			DRW_draw_pass(psl->background_pass);
+		}
 		DRW_draw_pass(psl->drawing_pass);
 
 		MULTISAMPLE_GP_SYNC_DISABLE(stl->storage->multisamples, fbl, dfbl->default_fb, txl);
@@ -771,13 +926,12 @@ void GPENCIL_draw_scene(void *ved)
 
 		/* grid pass */
 		if ((!is_render) && (obact) && (obact->type == OB_GPENCIL)) {
-			if (((v3d->flag2 & V3D_RENDER_OVERRIDE) == 0) &&
+			if (((v3d->flag2 & V3D_HIDE_OVERLAYS) == 0) &&
 			    (v3d->gp_flag & V3D_GP_SHOW_GRID))
 			{
 				DRW_draw_pass(psl->grid_pass);
 			}
 		}
-
 		return;
 	}
 
@@ -785,13 +939,13 @@ void GPENCIL_draw_scene(void *ved)
 
 		/* Draw all pending objects */
 		if (stl->g_data->gp_cache_used > 0) {
-
 			/* sort by zdepth */
 			qsort(stl->g_data->gp_object_cache, stl->g_data->gp_cache_used,
 			      sizeof(tGPencilObjectCache), gpencil_object_cache_compare_zdepth);
 
 			for (int i = 0; i < stl->g_data->gp_cache_used; i++) {
 				cache_ob = &stl->g_data->gp_object_cache[i];
+				Object *ob = cache_ob->ob;
 				bGPdata *gpd = cache_ob->gpd;
 				init_shgrp = NULL;
 				/* Render stroke in separated framebuffer */
@@ -820,8 +974,8 @@ void GPENCIL_draw_scene(void *ved)
 							use_blend = true;
 							/* draw pending groups */
 							gpencil_draw_pass_range(
-								fbl, stl, psl, txl, fbl->temp_fb_a,
-								init_shgrp, end_shgrp, is_last);
+							        fbl, stl, psl, txl, fbl->temp_fb_a,
+							        ob, gpd, init_shgrp, end_shgrp, is_last);
 
 							/* draw current group in separated texture */
 							init_shgrp = array_elm->init_shgrp;
@@ -831,7 +985,7 @@ void GPENCIL_draw_scene(void *ved)
 							GPU_framebuffer_clear_color_depth(fbl->temp_fb_fx, clearcol, 1.0f);
 							gpencil_draw_pass_range(
 							        fbl, stl, psl, txl, fbl->temp_fb_fx,
-							        init_shgrp, end_shgrp,
+							        ob, gpd, init_shgrp, end_shgrp,
 							        is_last);
 
 							/* Blend A texture and FX texture */
@@ -855,12 +1009,11 @@ void GPENCIL_draw_scene(void *ved)
 							/* prepare next group */
 							init_shgrp = NULL;
 						}
-
 					}
 					/* last group */
 					gpencil_draw_pass_range(
 					        fbl, stl, psl, txl, fbl->temp_fb_a,
-					        init_shgrp, end_shgrp,
+					        ob, gpd, init_shgrp, end_shgrp,
 					        true);
 				}
 
@@ -887,7 +1040,27 @@ void GPENCIL_draw_scene(void *ved)
 				/* tonemapping */
 				stl->storage->tonemapping = stl->storage->is_render ? 1 : 0;
 
+				/* active select flag and selection color */
+				stl->storage->do_select_outline = (
+				        (overlay) &&
+				        (ob->base_flag & BASE_SELECTED) &&
+				        (ob->mode == OB_MODE_OBJECT) &&
+				        (!is_render) && (!playing) &&
+				        (v3d->flag & V3D_SELECT_OUTLINE));
+
+				/* if active object is not object mode, disable for all objects */
+				if ((draw_ctx->obact) && (draw_ctx->obact->mode != OB_MODE_OBJECT)) {
+					stl->storage->do_select_outline = 0;
+				}
+				UI_GetThemeColorShadeAlpha4fv(
+				        (ob == draw_ctx->obact) ? TH_ACTIVE : TH_SELECT, 0, -40,
+				        stl->storage->select_color);
+
+				/* draw mix pass */
 				DRW_draw_pass(psl->mix_pass);
+
+				/* disable select flag */
+				stl->storage->do_select_outline = 0;
 
 				/* prepare for fast drawing */
 				if (!is_render) {
@@ -907,7 +1080,7 @@ void GPENCIL_draw_scene(void *ved)
 		}
 		/* grid pass */
 		if ((!is_render) && (obact) && (obact->type == OB_GPENCIL)) {
-			if (((v3d->flag2 & V3D_RENDER_OVERRIDE) == 0) &&
+			if (((v3d->flag2 & V3D_HIDE_OVERLAYS) == 0) &&
 			    (v3d->gp_flag & V3D_GP_SHOW_GRID))
 			{
 				DRW_draw_pass(psl->grid_pass);

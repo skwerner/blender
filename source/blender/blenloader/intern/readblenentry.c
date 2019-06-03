@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,17 +15,11 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  * .blend file reading entry point
  */
 
-/** \file blender/blenloader/intern/readblenentry.c
- *  \ingroup blenloader
+/** \file
+ * \ingroup blenloader
  */
 
 
@@ -41,7 +33,6 @@
 #include "MEM_guardedalloc.h"
 
 #include "BLI_utildefines.h"
-#include "BLI_path_util.h"
 #include "BLI_ghash.h"
 #include "BLI_linklist.h"
 #include "BLI_listbase.h"
@@ -52,7 +43,6 @@
 
 
 #include "BKE_main.h"
-#include "BKE_library.h" // for BKE_main_free
 #include "BKE_idcode.h"
 
 #include "BLO_readfile.h"
@@ -83,7 +73,7 @@ BlendHandle *BLO_blendhandle_from_file(const char *filepath, ReportList *reports
 {
 	BlendHandle *bh;
 
-	bh = (BlendHandle *)blo_openblenderfile(filepath, reports);
+	bh = (BlendHandle *)blo_filedata_from_file(filepath, reports);
 
 	return bh;
 }
@@ -99,7 +89,7 @@ BlendHandle *BLO_blendhandle_from_memory(const void *mem, int memsize)
 {
 	BlendHandle *bh;
 
-	bh = (BlendHandle *)blo_openblendermemory(mem, memsize, NULL);
+	bh = (BlendHandle *)blo_filedata_from_memory(mem, memsize, NULL);
 
 	return bh;
 }
@@ -110,7 +100,7 @@ void BLO_blendhandle_print_sizes(BlendHandle *bh, void *fp)
 	BHead *bhead;
 
 	fprintf(fp, "[\n");
-	for (bhead = blo_firstbhead(fd); bhead; bhead = blo_nextbhead(fd, bhead)) {
+	for (bhead = blo_bhead_first(fd); bhead; bhead = blo_bhead_next(fd, bhead)) {
 		if (bhead->code == ENDB)
 			break;
 		else {
@@ -149,9 +139,9 @@ LinkNode *BLO_blendhandle_get_datablock_names(BlendHandle *bh, int ofblocktype, 
 	BHead *bhead;
 	int tot = 0;
 
-	for (bhead = blo_firstbhead(fd); bhead; bhead = blo_nextbhead(fd, bhead)) {
+	for (bhead = blo_bhead_first(fd); bhead; bhead = blo_bhead_next(fd, bhead)) {
 		if (bhead->code == ofblocktype) {
-			const char *idname = bhead_id_name(fd, bhead);
+			const char *idname = blo_bhead_id_name(fd, bhead);
 
 			BLI_linklist_prepend(&names, strdup(idname + 2));
 			tot++;
@@ -182,9 +172,9 @@ LinkNode *BLO_blendhandle_get_previews(BlendHandle *bh, int ofblocktype, int *to
 	PreviewImage *new_prv = NULL;
 	int tot = 0;
 
-	for (bhead = blo_firstbhead(fd); bhead; bhead = blo_nextbhead(fd, bhead)) {
+	for (bhead = blo_bhead_first(fd); bhead; bhead = blo_bhead_next(fd, bhead)) {
 		if (bhead->code == ofblocktype) {
-			const char *idname = bhead_id_name(fd, bhead);
+			const char *idname = blo_bhead_id_name(fd, bhead);
 			switch (GS(idname)) {
 				case ID_MA: /* fall through */
 				case ID_TE: /* fall through */
@@ -210,13 +200,9 @@ LinkNode *BLO_blendhandle_get_previews(BlendHandle *bh, int ofblocktype, int *to
 					if (prv) {
 						memcpy(new_prv, prv, sizeof(PreviewImage));
 						if (prv->rect[0] && prv->w[0] && prv->h[0]) {
-							uint *rect = NULL;
-							size_t len = new_prv->w[0] * new_prv->h[0] * sizeof(uint);
-							new_prv->rect[0] = MEM_callocN(len, __func__);
-							bhead = blo_nextbhead(fd, bhead);
-							rect = (uint *)(bhead + 1);
-							BLI_assert(len == bhead->len);
-							memcpy(new_prv->rect[0], rect, len);
+							bhead = blo_bhead_next(fd, bhead);
+							BLI_assert((new_prv->w[0] * new_prv->h[0] * sizeof(uint)) == bhead->len);
+							new_prv->rect[0] = BLO_library_read_struct(fd, bhead, "PreviewImage Icon Rect");
 						}
 						else {
 							/* This should not be needed, but can happen in 'broken' .blend files,
@@ -227,13 +213,9 @@ LinkNode *BLO_blendhandle_get_previews(BlendHandle *bh, int ofblocktype, int *to
 						}
 
 						if (prv->rect[1] && prv->w[1] && prv->h[1]) {
-							uint *rect = NULL;
-							size_t len = new_prv->w[1] * new_prv->h[1] * sizeof(uint);
-							new_prv->rect[1] = MEM_callocN(len, __func__);
-							bhead = blo_nextbhead(fd, bhead);
-							rect = (uint *)(bhead + 1);
-							BLI_assert(len == bhead->len);
-							memcpy(new_prv->rect[1], rect, len);
+							bhead = blo_bhead_next(fd, bhead);
+							BLI_assert((new_prv->w[1] * new_prv->h[1] * sizeof(uint)) == bhead->len);
+							new_prv->rect[1] = BLO_library_read_struct(fd, bhead, "PreviewImage Image Rect");
 						}
 						else {
 							/* This should not be needed, but can happen in 'broken' .blend files,
@@ -263,7 +245,7 @@ LinkNode *BLO_blendhandle_get_previews(BlendHandle *bh, int ofblocktype, int *to
 }
 
 /**
- * Gets the names of all the linkable datablock types available in a file. (e.g. "Scene", "Mesh", "Lamp", etc.).
+ * Gets the names of all the linkable datablock types available in a file. (e.g. "Scene", "Mesh", "Light", etc.).
  *
  * \param bh: The blendhandle to access.
  * \return A BLI_linklist of strings. The string links should be freed with malloc.
@@ -275,7 +257,7 @@ LinkNode *BLO_blendhandle_get_linkable_groups(BlendHandle *bh)
 	LinkNode *names = NULL;
 	BHead *bhead;
 
-	for (bhead = blo_firstbhead(fd); bhead; bhead = blo_nextbhead(fd, bhead)) {
+	for (bhead = blo_bhead_first(fd); bhead; bhead = blo_bhead_next(fd, bhead)) {
 		if (bhead->code == ENDB) {
 			break;
 		}
@@ -304,7 +286,7 @@ void BLO_blendhandle_close(BlendHandle *bh)
 {
 	FileData *fd = (FileData *)bh;
 
-	blo_freefiledata(fd);
+	blo_filedata_free(fd);
 }
 
 /**********/
@@ -325,12 +307,12 @@ BlendFileData *BLO_read_from_file(
 	BlendFileData *bfd = NULL;
 	FileData *fd;
 
-	fd = blo_openblenderfile(filepath, reports);
+	fd = blo_filedata_from_file(filepath, reports);
 	if (fd) {
 		fd->reports = reports;
 		fd->skip_flags = skip_flags;
 		bfd = blo_read_file_internal(fd, filepath);
-		blo_freefiledata(fd);
+		blo_filedata_free(fd);
 	}
 
 	return bfd;
@@ -353,12 +335,12 @@ BlendFileData *BLO_read_from_memory(
 	BlendFileData *bfd = NULL;
 	FileData *fd;
 
-	fd = blo_openblendermemory(mem, memsize,  reports);
+	fd = blo_filedata_from_memory(mem, memsize,  reports);
 	if (fd) {
 		fd->reports = reports;
 		fd->skip_flags = skip_flags;
 		bfd = blo_read_file_internal(fd, "");
-		blo_freefiledata(fd);
+		blo_filedata_free(fd);
 	}
 
 	return bfd;
@@ -379,7 +361,7 @@ BlendFileData *BLO_read_from_memfile(
 	FileData *fd;
 	ListBase old_mainlist;
 
-	fd = blo_openblendermemfile(memfile, reports);
+	fd = blo_filedata_from_memfile(memfile, reports);
 	if (fd) {
 		fd->reports = reports;
 		fd->skip_flags = skip_flags;
@@ -449,7 +431,7 @@ BlendFileData *BLO_read_from_memfile(
 			}
 			/* In any case, we need to move all lib datablocks themselves - those are 'first level data',
 			 * getting rid of them would imply updating spaces & co to prevent invalid pointers access. */
-			BLI_movelisttolist(&newmain->library, &oldmain->library);
+			BLI_movelisttolist(&newmain->libraries, &oldmain->libraries);
 
 			blo_join_main(&new_mainlist);
 		}
@@ -460,7 +442,7 @@ BlendFileData *BLO_read_from_memfile(
 		 * will be cleared together with oldmain... */
 		blo_join_main(&old_mainlist);
 
-		blo_freefiledata(fd);
+		blo_filedata_free(fd);
 	}
 
 	return bfd;

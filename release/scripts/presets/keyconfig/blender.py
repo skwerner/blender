@@ -81,6 +81,20 @@ class Prefs(bpy.types.KeyConfigPreferences):
         default=False,
         update=update_fn,
     )
+    # Developer note, this is an experemental option.
+    use_pie_click_drag: BoolProperty(
+        name="Pie Menu on Drag",
+        description=(
+            "Activate some pie menus on drag,\n"
+            "allowing the tapping the same key to have a secondary action.\n"
+            "\n"
+             "\u2022 Tapping Tab in the 3D view toggles edit-mode, drag for mode menu.\n"
+             "\u2022 Tapping Z in the 3D view toggles wireframe, drag for draw modes.\n"
+             "\u2022 Tapping Tilde in the 3D view for first person navigation, drag for view axes"
+        ),
+        default=False,
+        update=update_fn,
+    )
 
     def draw(self, layout):
         split = layout.split()
@@ -97,6 +111,7 @@ class Prefs(bpy.types.KeyConfigPreferences):
         split = layout.split()
         col = split.column()
         col.prop(self, "use_v3d_tab_menu")
+        col.prop(self, "use_pie_click_drag")
         col = split.column()
         col.prop(self, "use_v3d_shade_ex_pie")
 
@@ -120,6 +135,7 @@ def load():
             use_select_all_toggle=kc_prefs.use_select_all_toggle,
             use_v3d_tab_menu=kc_prefs.use_v3d_tab_menu,
             use_v3d_shade_ex_pie=kc_prefs.use_v3d_shade_ex_pie,
+            use_pie_click_drag=kc_prefs.use_pie_click_drag,
         ),
     )
     keyconfig_init_from_data(kc, keyconfig_data)

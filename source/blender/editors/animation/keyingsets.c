@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,10 @@
  *
  * The Original Code is Copyright (C) 2009 Blender Foundation, Joshua Leung
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): Joshua Leung (full recode)
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/animation/keyingsets.c
- *  \ingroup edanimation
+/** \file
+ * \ingroup edanimation
  */
 
 
@@ -615,7 +607,7 @@ void ANIM_keyingset_info_unregister(Main *bmain, KeyingSetInfo *ksi)
 			BKE_keyingset_free(ks);
 			BLI_remlink(&builtin_keyingsets, ks);
 
-			for (scene = bmain->scene.first; scene; scene = scene->id.next)
+			for (scene = bmain->scenes.first; scene; scene = scene->id.next)
 				BLI_remlink_safe(&scene->keyingsets, ks);
 
 			MEM_freeN(ks);
@@ -790,6 +782,40 @@ const EnumPropertyItem *ANIM_keying_sets_enum_itemf(bContext *C, PointerRNA *UNU
 	*r_free = true;
 
 	return item;
+}
+
+/**
+ * Get the keying set from enum values generated in #ANIM_keying_sets_enum_itemf.
+ *
+ * Type is the Keying Set the user specified to use when calling the operator:
+ * - type == 0: use scene's active Keying Set
+ * - type > 0: use a user-defined Keying Set from the active scene
+ * - type < 0: use a builtin Keying Set
+ */
+KeyingSet *ANIM_keyingset_get_from_enum_type(Scene *scene, int type)
+{
+	KeyingSet *ks = NULL;
+
+	if (type == 0) {
+		type = scene->active_keyingset;
+	}
+
+	if (type > 0) {
+		ks = BLI_findlink(&scene->keyingsets, type - 1);
+	}
+	else {
+		ks = BLI_findlink(&builtin_keyingsets, -type - 1);
+	}
+	return ks;
+}
+
+KeyingSet *ANIM_keyingset_get_from_idname(Scene *scene, const char *idname)
+{
+	KeyingSet *ks = BLI_findstring(&scene->keyingsets, idname, offsetof(KeyingSet, idname));
+	if (ks == NULL) {
+		ks = BLI_findstring(&builtin_keyingsets, idname, offsetof(KeyingSet, idname));
+	}
+	return ks;
 }
 
 /* ******************************************* */
@@ -1026,7 +1052,8 @@ int ANIM_apply_keyingset(bContext *C, ListBase *dsources, bAction *act, KeyingSe
 			RNA_id_pointer_create(ksp->id, &id_ptr);
 			if (RNA_path_resolve_property(&id_ptr, ksp->rna_path, &ptr, &prop)) {
 				arraylen = RNA_property_array_length(&ptr, prop);
-				i = 0;  /* start from start of array, instead of the previously specified index - T48020 */
+				/* start from start of array, instead of the previously specified index - T48020 */
+				i = 0;
 			}
 		}
 
@@ -1056,7 +1083,7 @@ int ANIM_apply_keyingset(bContext *C, ListBase *dsources, bAction *act, KeyingSe
 				break;
 			}
 			default:
-				DEG_id_tag_update(ksp->id, ID_RECALC_COPY_ON_WRITE);
+				DEG_id_tag_update(ksp->id, ID_RECALC_ANIMATION_NO_FLUSH);
 				break;
 		}
 

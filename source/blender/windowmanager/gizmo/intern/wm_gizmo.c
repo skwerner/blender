@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,22 +15,16 @@
  *
  * The Original Code is Copyright (C) 2014 Blender Foundation.
  * All rights reserved.
- *
- * Contributor(s): Blender Foundation
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/windowmanager/gizmo/intern/wm_gizmo.c
- *  \ingroup wm
+/** \file
+ * \ingroup wm
  */
 
 #include "MEM_guardedalloc.h"
 
 #include "BLI_listbase.h"
 #include "BLI_math.h"
-#include "BLI_string.h"
-#include "BLI_string_utils.h"
 
 #include "BKE_context.h"
 
@@ -48,6 +40,7 @@
 #include "BKE_idprop.h"
 
 #include "WM_api.h"
+#include "WM_toolsystem.h"
 #include "WM_types.h"
 
 #include "ED_screen.h"
@@ -271,6 +264,23 @@ PointerRNA *WM_gizmo_operator_set(
 	return &gzop->ptr;
 }
 
+int WM_gizmo_operator_invoke(bContext *C, wmGizmo *gz, wmGizmoOpElem *gzop)
+{
+	if (gz->flag & WM_GIZMO_OPERATOR_TOOL_INIT) {
+		/* Merge toolsettings into the gizmo properties. */
+		PointerRNA tref_ptr;
+		bToolRef *tref = WM_toolsystem_ref_from_context(C);
+		if (tref && WM_toolsystem_ref_properties_get_from_operator(tref, gzop->type, &tref_ptr)) {
+			if (gzop->ptr.data == NULL) {
+				IDPropertyTemplate val = {0};
+				gzop->ptr.data = IDP_New(IDP_GROUP, &val, "wmOperatorProperties");
+			}
+			IDP_MergeGroup(gzop->ptr.data, tref_ptr.data, false);
+		}
+	}
+	return WM_operator_name_call_ptr(C, gzop->type, WM_OP_INVOKE_DEFAULT, &gzop->ptr);
+}
+
 static void wm_gizmo_set_matrix_rotation_from_z_axis__internal(
         float matrix[4][4], const float z_axis[3])
 {
@@ -391,7 +401,6 @@ void WM_gizmo_set_fn_custom_modal(struct wmGizmo *gz, wmGizmoFnModal fn)
 
 
 /* -------------------------------------------------------------------- */
-
 /**
  * Add/Remove \a gizmo to selection.
  * Reallocates memory for selected gizmos so better not call for selecting multiple ones.
@@ -635,10 +644,12 @@ void WM_gizmo_properties_create(PointerRNA *ptr, const char *gtstring)
 {
 	const wmGizmoType *gzt = WM_gizmotype_find(gtstring, false);
 
-	if (gzt)
+	if (gzt) {
 		WM_gizmo_properties_create_ptr(ptr, (wmGizmoType *)gzt);
-	else
+	}
+	else {
 		RNA_pointer_create(NULL, &RNA_GizmoProperties, NULL, ptr);
+	}
 }
 
 /* similar to the function above except its uses ID properties
@@ -665,10 +676,12 @@ void WM_gizmo_properties_sanitize(PointerRNA *ptr, const bool no_context)
 	{
 		switch (RNA_property_type(prop)) {
 			case PROP_ENUM:
-				if (no_context)
+				if (no_context) {
 					RNA_def_property_flag(prop, PROP_ENUM_NO_CONTEXT);
-				else
+				}
+				else {
 					RNA_def_property_clear_flag(prop, PROP_ENUM_NO_CONTEXT);
+				}
 				break;
 			case PROP_POINTER:
 			{

@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,11 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * Contributor(s): Blender Foundation, 2002-2009 full recode.
- *
- * ***** END GPL LICENSE BLOCK *****
- *
  * API's and Operators for selecting armature bones in EditMode
  */
 
-/** \file blender/editors/armature/armature_select.c
- *  \ingroup edarmature
+/** \file
+ * \ingroup edarmature
  */
 
 #include "MEM_guardedalloc.h"
@@ -44,8 +37,6 @@
 #include "BKE_object.h"
 #include "BKE_report.h"
 #include "BKE_layer.h"
-
-#include "BIF_gl.h"
 
 #include "RNA_access.h"
 #include "RNA_define.h"
@@ -77,7 +68,7 @@ Base *ED_armature_base_and_ebone_from_select_buffer(
 	EditBone *ebone = NULL;
 	/* TODO(campbell): optimize, eg: sort & binary search. */
 	for (uint base_index = 0; base_index < bases_len; base_index++) {
-		if (bases[base_index]->object->select_color == hit_object) {
+		if (bases[base_index]->object->select_id == hit_object) {
 			base = bases[base_index];
 			break;
 		}
@@ -99,7 +90,7 @@ Object *ED_armature_object_and_ebone_from_select_buffer(
 	EditBone *ebone = NULL;
 	/* TODO(campbell): optimize, eg: sort & binary search. */
 	for (uint ob_index = 0; ob_index < objects_len; ob_index++) {
-		if (objects[ob_index]->select_color == hit_object) {
+		if (objects[ob_index]->select_id == hit_object) {
 			ob = objects[ob_index];
 			break;
 		}
@@ -121,7 +112,7 @@ Base *ED_armature_base_and_bone_from_select_buffer(
 	Bone *bone = NULL;
 	/* TODO(campbell): optimize, eg: sort & binary search. */
 	for (uint base_index = 0; base_index < bases_len; base_index++) {
-		if (bases[base_index]->object->select_color == hit_object) {
+		if (bases[base_index]->object->select_id == hit_object) {
 			base = bases[base_index];
 			break;
 		}
@@ -428,16 +419,16 @@ static EditBone *get_nearest_editbonepoint(
 	if (use_cycle) {
 		static int last_mval[2] = {-100, -100};
 
-		if (vc->v3d->shading.type > OB_WIRE) {
+		if (!XRAY_ACTIVE(vc->v3d)) {
 			do_nearest = true;
-			if (len_manhattan_v2v2_int(vc->mval, last_mval) < 3) {
+			if (len_manhattan_v2v2_int(vc->mval, last_mval) <= WM_EVENT_CURSOR_MOTION_THRESHOLD) {
 				do_nearest = false;
 			}
 		}
 		copy_v2_v2_int(last_mval, vc->mval);
 	}
 	else {
-		if (vc->v3d->shading.type > OB_WIRE) {
+		if (!XRAY_ACTIVE(vc->v3d)) {
 			do_nearest = true;
 		}
 	}
@@ -570,46 +561,69 @@ cache_end:
 	return NULL;
 }
 
-void ED_armature_edit_deselect_all(Object *obedit)
+bool ED_armature_edit_deselect_all(Object *obedit)
 {
 	bArmature *arm = obedit->data;
-	EditBone *ebone;
-
-	for (ebone = arm->edbo->first; ebone; ebone = ebone->next) {
-		ebone->flag &= ~(BONE_SELECTED | BONE_TIPSEL | BONE_ROOTSEL);
+	bool changed = false;
+	for (EditBone *ebone = arm->edbo->first; ebone; ebone = ebone->next) {
+		if (ebone->flag & (BONE_SELECTED | BONE_TIPSEL | BONE_ROOTSEL)) {
+			ebone->flag &= ~(BONE_SELECTED | BONE_TIPSEL | BONE_ROOTSEL);
+			changed = true;
+		}
 	}
+	return changed;
 }
 
-void ED_armature_edit_deselect_all_visible(Object *obedit)
+bool ED_armature_edit_deselect_all_visible(Object *obedit)
 {
 	bArmature *arm = obedit->data;
-	EditBone    *ebone;
-
-	for (ebone = arm->edbo->first; ebone; ebone = ebone->next) {
+	bool changed = false;
+	for (EditBone *ebone = arm->edbo->first; ebone; ebone = ebone->next) {
 		/* first and foremost, bone must be visible and selected */
 		if (EBONE_VISIBLE(arm, ebone)) {
-			ebone->flag &= ~(BONE_SELECTED | BONE_TIPSEL | BONE_ROOTSEL);
+			if (ebone->flag & (BONE_SELECTED | BONE_TIPSEL | BONE_ROOTSEL)) {
+				ebone->flag &= ~(BONE_SELECTED | BONE_TIPSEL | BONE_ROOTSEL);
+				changed = true;
+			}
 		}
 	}
 
-	ED_armature_edit_sync_selection(arm->edbo);
+	if (changed) {
+		ED_armature_edit_sync_selection(arm->edbo);
+	}
+	return changed;
 }
 
 
-void ED_armature_edit_deselect_all_multi(struct Object **objects, uint objects_len)
+bool ED_armature_edit_deselect_all_multi_ex(struct Base **bases, uint bases_len)
 {
-	for (uint ob_index = 0; ob_index < objects_len; ob_index++) {
-		Object *obedit = objects[ob_index];
-		ED_armature_edit_deselect_all(obedit);
+	bool changed_multi = false;
+	for (uint base_index = 0; base_index < bases_len; base_index++) {
+		Object *obedit = bases[base_index]->object;
+		changed_multi |= ED_armature_edit_deselect_all(obedit);
 	}
+	return changed_multi;
 }
 
-void ED_armature_edit_deselect_all_visible_multi(struct Object **objects, uint objects_len)
+bool ED_armature_edit_deselect_all_visible_multi_ex(struct Base **bases, uint bases_len)
 {
-	for (uint ob_index = 0; ob_index < objects_len; ob_index++) {
-		Object *obedit = objects[ob_index];
-		ED_armature_edit_deselect_all_visible(obedit);
+	bool changed_multi = false;
+	for (uint base_index = 0; base_index < bases_len; base_index++) {
+		Object *obedit = bases[base_index]->object;
+		changed_multi |= ED_armature_edit_deselect_all_visible(obedit);
 	}
+	return changed_multi;
+}
+
+bool ED_armature_edit_deselect_all_visible_multi(bContext *C)
+{
+	ViewContext vc;
+	ED_view3d_viewcontext_init(C, &vc);
+	uint bases_len = 0;
+	Base **bases = BKE_view_layer_array_from_bases_in_edit_mode_unique_data(vc.view_layer, vc.v3d, &bases_len);
+	bool changed_multi = ED_armature_edit_deselect_all_multi_ex(bases, bases_len);
+	MEM_freeN(bases);
+	return changed_multi;
 }
 
 /* accounts for connected parents */
@@ -640,11 +654,15 @@ bool ED_armature_edit_select_pick(bContext *C, const int mval[2], bool extend, b
 		ED_view3d_viewcontext_init_object(&vc, basact->object);
 		bArmature *arm = vc.obedit->data;
 
+		if (!EBONE_SELECTABLE(arm, nearBone)) {
+			return false;
+		}
+
 		if (!extend && !deselect && !toggle) {
-			uint objects_len = 0;
-			Object **objects = BKE_view_layer_array_from_objects_in_edit_mode_unique_data(vc.view_layer, vc.v3d, &objects_len);
-			ED_armature_edit_deselect_all_multi(objects, objects_len);
-			MEM_freeN(objects);
+			uint bases_len = 0;
+			Base **bases = BKE_view_layer_array_from_bases_in_edit_mode_unique_data(vc.view_layer, vc.v3d, &bases_len);
+			ED_armature_edit_deselect_all_multi_ex(bases, bases_len);
+			MEM_freeN(bases);
 		}
 
 		/* by definition the non-root connected bones have no root point drawn,
@@ -1159,7 +1177,7 @@ static const EnumPropertyItem prop_similar_types[] = {
 	{SIMEDBONE_LAYER, "LAYER", 0, "Layer", ""},
 	{SIMEDBONE_GROUP, "GROUP", 0, "Group", ""},
 	{SIMEDBONE_SHAPE, "SHAPE", 0, "Shape", ""},
-	{0, NULL, 0, NULL, NULL}
+	{0, NULL, 0, NULL, NULL},
 };
 
 static float bone_length_squared_worldspace_get(Object *ob, EditBone *ebone)
@@ -1614,7 +1632,7 @@ void ARMATURE_OT_select_hierarchy(wmOperatorType *ot)
 	static const EnumPropertyItem direction_items[] = {
 		{BONE_SELECT_PARENT, "PARENT", 0, "Select Parent", ""},
 		{BONE_SELECT_CHILD, "CHILD", 0, "Select Child", ""},
-		{0, NULL, 0, NULL, NULL}
+		{0, NULL, 0, NULL, NULL},
 	};
 
 	/* identifiers */

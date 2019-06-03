@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,12 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/python/gpu/gpu_py_shader.c
- *  \ingroup bpygpu
+/** \file
+ * \ingroup bpygpu
  *
  * - Use ``bpygpu_`` for local API.
  * - Use ``BPyGPU`` for public API.
@@ -64,7 +60,7 @@ static int bpygpu_ParseBultinShaderEnum(PyObject *o, void *p)
 		} \
 	} ((void)0)
 
-	GPUBuiltinShader mode;
+	eGPUBuiltinShader mode;
 	MATCH_ID(2D_UNIFORM_COLOR);
 	MATCH_ID(2D_FLAT_COLOR);
 	MATCH_ID(2D_SMOOTH_COLOR);
@@ -80,13 +76,13 @@ static int bpygpu_ParseBultinShaderEnum(PyObject *o, void *p)
 	return 0;
 
 success:
-	(*(GPUBuiltinShader *)p) = mode;
+	(*(eGPUBuiltinShader *)p) = mode;
 	return 1;
 }
 
 static int bpygpu_uniform_location_get(GPUShader *shader, const char *name, const char *error_prefix)
 {
-	int uniform = GPU_shader_get_uniform(shader, name);
+	int uniform = GPU_shader_get_uniform_ensure(shader, name);
 
 	if (uniform == -1) {
 		PyErr_Format(PyExc_ValueError, "%s: uniform %.32s %.32s not found", error_prefix, name);
@@ -99,7 +95,6 @@ static int bpygpu_uniform_location_get(GPUShader *shader, const char *name, cons
 
 
 /* -------------------------------------------------------------------- */
-
 /** \name Shader Type
  * \{ */
 
@@ -611,7 +606,7 @@ static struct PyMethodDef bpygpu_shader_methods[] = {
 	{"format_calc",
 	 (PyCFunction)bpygpu_shader_calc_format,
 	 METH_NOARGS, bpygpu_shader_calc_format_doc},
-	{NULL, NULL, 0, NULL}
+	{NULL, NULL, 0, NULL},
 };
 
 PyDoc_STRVAR(bpygpu_shader_program_doc,
@@ -682,7 +677,6 @@ PyTypeObject BPyGPUShader_Type = {
 
 
 /* -------------------------------------------------------------------- */
-
 /** \name gpu.shader Module API
  * \{ */
 
@@ -720,7 +714,7 @@ static PyObject *bpygpu_shader_from_builtin(PyObject *UNUSED(self), PyObject *ar
 {
 	BPYGPU_IS_INIT_OR_ERROR_OBJ;
 
-	GPUBuiltinShader shader_id;
+	eGPUBuiltinShader shader_id;
 
 	if (!bpygpu_ParseBultinShaderEnum(arg, &shader_id)) {
 		return NULL;
@@ -750,7 +744,7 @@ PyDoc_STRVAR(bpygpu_shader_code_from_builtin_doc,
 );
 static PyObject *bpygpu_shader_code_from_builtin(BPyGPUShader *UNUSED(self), PyObject *arg)
 {
-	GPUBuiltinShader shader_id;
+	eGPUBuiltinShader shader_id;
 
 	const char *vert;
 	const char *frag;
@@ -795,7 +789,7 @@ static struct PyMethodDef bpygpu_shader_module_methods[] = {
 	{"code_from_builtin",
 	 (PyCFunction)bpygpu_shader_code_from_builtin,
 	 METH_O, bpygpu_shader_code_from_builtin_doc},
-	{NULL, NULL, 0, NULL}
+	{NULL, NULL, 0, NULL},
 };
 
 PyDoc_STRVAR(bpygpu_shader_module_doc,
@@ -812,7 +806,6 @@ static PyModuleDef BPyGPU_shader_module_def = {
 
 
 /* -------------------------------------------------------------------- */
-
 /** \name Public API
  * \{ */
 

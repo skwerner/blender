@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,14 +15,10 @@
  *
  * The Original Code is Copyright (C) 2008 Blender Foundation.
  * All rights reserved.
- *
- * Contributor(s): Blender Foundation
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/interface/interface_region_hud.c
- *  \ingroup edinterface
+/** \file
+ * \ingroup edinterface
  *
  * Floating Persistent Region
  */
@@ -39,18 +33,15 @@
 #include "BLI_rect.h"
 #include "BLI_listbase.h"
 #include "BLI_utildefines.h"
-#include "BLI_math_color.h"
 
 #include "BKE_context.h"
 #include "BKE_screen.h"
-#include "BKE_main.h"
 
 #include "WM_api.h"
 #include "WM_types.h"
 
 #include "RNA_access.h"
 
-#include "BIF_gl.h"
 
 #include "UI_interface.h"
 #include "UI_view2d.h"
@@ -187,9 +178,19 @@ static void hud_region_layout(const bContext *C, ARegion *ar)
 	ED_region_panels_layout(C, ar);
 
 	if (ar->panels.first && (ar->sizey != size_y)) {
+		int winx_new = UI_DPI_FAC * (ar->sizex + 0.5f);
+		int winy_new = UI_DPI_FAC * (ar->sizey + 0.5f);
 		View2D *v2d = &ar->v2d;
-		ar->winx = ar->sizex * UI_DPI_FAC;
-		ar->winy = ar->sizey * UI_DPI_FAC;
+
+		if (ar->flag & RGN_FLAG_SIZE_CLAMP_X) {
+			CLAMP_MAX(winx_new, ar->winx);
+		}
+		if (ar->flag & RGN_FLAG_SIZE_CLAMP_Y) {
+			CLAMP_MAX(winy_new, ar->winy);
+		}
+
+		ar->winx = winx_new;
+		ar->winy = winy_new;
 
 		ar->winrct.xmax = (ar->winrct.xmin + ar->winx) - 1;
 		ar->winrct.ymax = (ar->winrct.ymin + ar->winy) - 1;

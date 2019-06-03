@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,9 +15,10 @@
  *
  * The Original Code is Copyright (C) 2016 Kévin Dietrich.
  * All rights reserved.
- *
- * ***** END GPL LICENSE BLOCK *****
- *
+ */
+
+/** \file
+ * \ingroup balembic
  */
 
 #include "abc_customdata.h"
@@ -158,9 +157,9 @@ static void write_uv(const OCompoundProperty &prop, const CDStreamConfig &config
 	OV2fGeomParam param(prop, name, true, kFacevaryingScope, 1);
 
 	OV2fGeomParam::Sample sample(
-		V2fArraySample(&uvs.front(), uvs.size()),
-		UInt32ArraySample(&indices.front(), indices.size()),
-		kFacevaryingScope);
+	        V2fArraySample(&uvs.front(), uvs.size()),
+	        UInt32ArraySample(&indices.front(), indices.size()),
+	        kFacevaryingScope);
 
 	param.set(sample);
 }
@@ -206,9 +205,9 @@ static void write_mcol(const OCompoundProperty &prop, const CDStreamConfig &conf
 	OC4fGeomParam param(prop, name, true, kFacevaryingScope, 1);
 
 	OC4fGeomParam::Sample sample(
-		C4fArraySample(&buffer.front(), buffer.size()),
-		UInt32ArraySample(&indices.front(), indices.size()),
-		kVertexScope);
+	        C4fArraySample(&buffer.front(), buffer.size()),
+	        UInt32ArraySample(&indices.front(), indices.size()),
+	        kVertexScope);
 
 	param.set(sample);
 }

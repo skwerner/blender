@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -16,14 +14,10 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
  * The Original Code is Copyright (C) 2008 Blender Foundation
- *
- * Contributor(s): Joshua Leung
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/space_action/action_select.c
- *  \ingroup spaction
+/** \file
+ * \ingroup spaction
  */
 
 
@@ -96,10 +90,12 @@ static void deselect_action_keys(bAnimContext *ac, short test, short sel)
 	KeyframeEditFunc test_cb, sel_cb;
 
 	/* determine type-based settings */
-	if (ELEM(ac->datatype, ANIMCONT_GPENCIL, ANIMCONT_MASK))
+	if (ELEM(ac->datatype, ANIMCONT_GPENCIL, ANIMCONT_MASK)) {
 		filter = (ANIMFILTER_DATA_VISIBLE | ANIMFILTER_LIST_VISIBLE | ANIMFILTER_NODUPLIS);
-	else
+	}
+	else {
 		filter = (ANIMFILTER_DATA_VISIBLE | ANIMFILTER_LIST_VISIBLE /*| ANIMFILTER_CURVESONLY*/ | ANIMFILTER_NODUPLIS);
+	}
 
 	/* filter data */
 	ANIM_animdata_filter(ac, &anim_data, filter, ac->data, ac->datatype);
@@ -310,11 +306,15 @@ static void box_select_action(bAnimContext *ac, const rcti rect, short mode, sho
 					break;
 				}
 				case ANIMTYPE_MASKLAYER:
+				{
 					ED_masklayer_frames_select_box(ale->data, rectf.xmin, rectf.xmax, selectmode);
 					break;
+				}
 				default:
+				{
 					ANIM_animchannel_keyframes_loop(&ked, ac->ads, ale, ok_cb, select_cb, NULL);
 					break;
+				}
 			}
 		}
 
@@ -333,28 +333,21 @@ static int actkeys_box_select_exec(bContext *C, wmOperator *op)
 {
 	bAnimContext ac;
 	rcti rect;
-	short mode = 0, selectmode = 0;
-	const bool select = !RNA_boolean_get(op->ptr, "deselect");
-	const bool extend = RNA_boolean_get(op->ptr, "extend");
+	short mode = 0;
 
 	/* get editor data */
-	if (ANIM_animdata_get_context(C, &ac) == 0)
+	if (ANIM_animdata_get_context(C, &ac) == 0) {
 		return OPERATOR_CANCELLED;
+	}
 
-	/* clear all selection if not extending selection */
-	if (!extend) {
+	const eSelectOp sel_op = RNA_enum_get(op->ptr, "mode");
+	const int selectmode = (sel_op != SEL_OP_SUB) ? SELECT_ADD : SELECT_SUBTRACT;
+	if (SEL_OP_USE_PRE_DESELECT(sel_op)) {
 		deselect_action_keys(&ac, 1, SELECT_SUBTRACT);
 	}
 
 	/* get settings from operator */
 	WM_operator_properties_border_to_rcti(op, &rect);
-
-	if (select) {
-		selectmode = SELECT_ADD;
-	}
-	else {
-		selectmode = SELECT_SUBTRACT;
-	}
 
 	/* selection 'mode' depends on whether box_select region only matters on one axis */
 	if (RNA_boolean_get(op->ptr, "axis_range")) {
@@ -399,9 +392,11 @@ void ACTION_OT_select_box(wmOperatorType *ot)
 	ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
 
 	/* rna */
-	WM_operator_properties_gesture_box_select(ot);
-
 	ot->prop = RNA_def_boolean(ot->srna, "axis_range", 0, "Axis Range", "");
+
+	/* properties */
+	WM_operator_properties_gesture_box(ot);
+	WM_operator_properties_select_operation_simple(ot);
 }
 
 /* ******************** Region Select Operators ***************************** */
@@ -547,9 +542,6 @@ static int actkeys_lassoselect_exec(bContext *C, wmOperator *op)
 	rcti rect;
 	rctf rect_fl;
 
-	short selectmode;
-	bool extend;
-
 	/* get editor data */
 	if (ANIM_animdata_get_context(C, &ac) == 0)
 		return OPERATOR_CANCELLED;
@@ -559,15 +551,11 @@ static int actkeys_lassoselect_exec(bContext *C, wmOperator *op)
 	if (data_lasso.mcords == NULL)
 		return OPERATOR_CANCELLED;
 
-	/* clear all selection if not extending selection */
-	extend = RNA_boolean_get(op->ptr, "extend");
-	if (!extend)
+	const eSelectOp sel_op = RNA_enum_get(op->ptr, "mode");
+	const int selectmode = (sel_op != SEL_OP_SUB) ? SELECT_ADD : SELECT_SUBTRACT;
+	if (SEL_OP_USE_PRE_DESELECT(sel_op)) {
 		deselect_action_keys(&ac, 1, SELECT_SUBTRACT);
-
-	if (!RNA_boolean_get(op->ptr, "deselect"))
-		selectmode = SELECT_ADD;
-	else
-		selectmode = SELECT_SUBTRACT;
+	}
 
 	/* get settings from operator */
 	BLI_lasso_boundbox(&rect, data_lasso.mcords, data_lasso.mcords_tot);
@@ -602,7 +590,8 @@ void ACTION_OT_select_lasso(wmOperatorType *ot)
 	ot->flag = OPTYPE_UNDO;
 
 	/* properties */
-	WM_operator_properties_gesture_lasso_select(ot);
+	WM_operator_properties_gesture_lasso(ot);
+	WM_operator_properties_select_operation_simple(ot);
 }
 
 /* ------------------- */
@@ -610,8 +599,6 @@ void ACTION_OT_select_lasso(wmOperatorType *ot)
 static int action_circle_select_exec(bContext *C, wmOperator *op)
 {
 	bAnimContext ac;
-	const bool select = !RNA_boolean_get(op->ptr, "deselect");
-	const short selectmode = select ? SELECT_ADD : SELECT_SUBTRACT;
 
 	KeyframeEdit_CircleData data = {0};
 	rctf rect_fl;
@@ -623,6 +610,13 @@ static int action_circle_select_exec(bContext *C, wmOperator *op)
 	/* get editor data */
 	if (ANIM_animdata_get_context(C, &ac) == 0)
 		return OPERATOR_CANCELLED;
+
+	const eSelectOp sel_op = ED_select_op_modal(
+	        RNA_enum_get(op->ptr, "mode"), WM_gesture_is_modal_first(op->customdata));
+	const short selectmode = (sel_op != SEL_OP_SUB) ? SELECT_ADD : SELECT_SUBTRACT;
+	if (SEL_OP_USE_PRE_DESELECT(sel_op)) {
+		deselect_action_keys(&ac, 0, SELECT_SUBTRACT);
+	}
 
 	data.mval[0] = x;
 	data.mval[1] = y;
@@ -659,7 +653,8 @@ void ACTION_OT_select_circle(wmOperatorType *ot)
 	ot->flag = OPTYPE_UNDO;
 
 	/* properties */
-	WM_operator_properties_gesture_circle_select(ot);
+	WM_operator_properties_gesture_circle(ot);
+	WM_operator_properties_select_operation_simple(ot);
 }
 
 /* ******************** Column Select Operator **************************** */
@@ -676,7 +671,7 @@ static const EnumPropertyItem prop_column_select_types[] = {
 	{ACTKEYS_COLUMNSEL_CFRA, "CFRA", 0, "On Current Frame", ""},
 	{ACTKEYS_COLUMNSEL_MARKERS_COLUMN, "MARKERS_COLUMN", 0, "On Selected Markers", ""},
 	{ACTKEYS_COLUMNSEL_MARKERS_BETWEEN, "MARKERS_BETWEEN", 0, "Between Min/Max Selected Markers", ""},
-	{0, NULL, 0, NULL, NULL}
+	{0, NULL, 0, NULL, NULL},
 };
 
 /* ------------------- */
@@ -1049,7 +1044,7 @@ static const EnumPropertyItem prop_actkeys_leftright_select_types[] = {
 	{ACTKEYS_LRSEL_TEST, "CHECK", 0, "Check if Select Left or Right", ""},
 	{ACTKEYS_LRSEL_LEFT, "LEFT", 0, "Before current frame", ""},
 	{ACTKEYS_LRSEL_RIGHT, "RIGHT", 0, "After current frame", ""},
-	{0, NULL, 0, NULL, NULL}
+	{0, NULL, 0, NULL, NULL},
 };
 
 /* --------------------------------- */
@@ -1088,10 +1083,12 @@ static void actkeys_select_leftright(bAnimContext *ac, short leftright, short se
 	}
 
 	/* filter data */
-	if (ELEM(ac->datatype, ANIMCONT_GPENCIL, ANIMCONT_MASK))
+	if (ELEM(ac->datatype, ANIMCONT_GPENCIL, ANIMCONT_MASK)) {
 		filter = (ANIMFILTER_DATA_VISIBLE | ANIMFILTER_LIST_VISIBLE | ANIMFILTER_NODUPLIS);
-	else
+	}
+	else {
 		filter = (ANIMFILTER_DATA_VISIBLE | ANIMFILTER_LIST_VISIBLE /*| ANIMFILTER_CURVESONLY*/ | ANIMFILTER_NODUPLIS);
+	}
 	ANIM_animdata_filter(ac, &anim_data, filter, ac->data, ac->datatype);
 
 	/* select keys */
@@ -1288,7 +1285,8 @@ static void actkeys_mselect_single(bAnimContext *ac, bAnimListElem *ale, short s
 	}
 }
 
-/* Option 2) Selects all the keyframes on either side of the current frame (depends on which side the mouse is on) */
+/* Option 2) Selects all the keyframes on either side of the current frame
+ * (depends on which side the mouse is on) */
 /* (see actkeys_select_leftright) */
 
 /* Option 3) Selects all visible keyframes in the same frame as the mouse click */
@@ -1308,10 +1306,12 @@ static void actkeys_mselect_column(bAnimContext *ac, short select_mode, float se
 	/* loop through all of the keys and select additional keyframes
 	 * based on the keys found to be selected above
 	 */
-	if (ELEM(ac->datatype, ANIMCONT_GPENCIL, ANIMCONT_MASK))
+	if (ELEM(ac->datatype, ANIMCONT_GPENCIL, ANIMCONT_MASK)) {
 		filter = (ANIMFILTER_DATA_VISIBLE | ANIMFILTER_LIST_VISIBLE /*| ANIMFILTER_CURVESONLY */ | ANIMFILTER_NODUPLIS);
-	else
+	}
+	else {
 		filter = (ANIMFILTER_DATA_VISIBLE | ANIMFILTER_LIST_VISIBLE | ANIMFILTER_NODUPLIS);
+	}
 	ANIM_animdata_filter(ac, &anim_data, filter, ac->data, ac->datatype);
 
 	for (ale = anim_data.first; ale; ale = ale->next) {
@@ -1418,8 +1418,11 @@ static void mouse_action_keys(bAnimContext *ac, const int mval[2], short select_
 	/* x-range to check is +/- 7px for standard keyframe under standard dpi/y-scale (in screen/region-space),
 	 * on either side of mouse click (size of keyframe icon)
 	 */
-	key_hsize = ACHANNEL_HEIGHT(ac) * 0.8f;    /* standard channel height (to allow for some slop) */
-	key_hsize = roundf(key_hsize / 2.0f);      /* half-size (for either side), but rounded up to nearest int (for easier targeting) */
+
+	/* standard channel height (to allow for some slop) */
+	key_hsize = ACHANNEL_HEIGHT(ac) * 0.8f;
+	/* half-size (for either side), but rounded up to nearest int (for easier targeting) */
+	key_hsize = roundf(key_hsize / 2.0f);
 
 	UI_view2d_region_to_view(v2d, mval[0] - (int)key_hsize, mval[1], &rectf.xmin, &rectf.ymin);
 	UI_view2d_region_to_view(v2d, mval[0] + (int)key_hsize, mval[1], &rectf.xmax, &rectf.ymax);
@@ -1492,7 +1495,8 @@ static void mouse_action_keys(bAnimContext *ac, const int mval[2], short select_
 			mask_to_keylist(ads, masklay, &anim_keys);
 		}
 
-		/* start from keyframe at root of BST, traversing until we find one within the range that was clicked on */
+		/* start from keyframe at root of BST,
+		 * traversing until we find one within the range that was clicked on */
 		for (ak = anim_keys.root; ak; ak = akn) {
 			if (IN_RANGE(ak->cfra, rectf.xmin, rectf.xmax)) {
 				/* set the frame to use, and apply inverse-correction for NLA-mapping

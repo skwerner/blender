@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,10 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file DNA_mesh_types.h
- *  \ingroup DNA
+/** \file
+ * \ingroup DNA
  */
 
 #ifndef __DNA_MESH_TYPES_H__
@@ -73,8 +65,9 @@ typedef struct EditMeshData {
  * \warning Typical access is done via #BKE_mesh_runtime_looptri_ensure, #BKE_mesh_runtime_looptri_len.
  */
 struct MLoopTri_Store {
-	/* WARNING! swapping between array (ready-to-be-used data) and array_wip (where data is actually computed)
-	 *          shall always be protected by same lock as one used for looptris computing. */
+	/* WARNING! swapping between array (ready-to-be-used data) and array_wip
+	 * (where data is actually computed)
+	 * shall always be protected by same lock as one used for looptris computing. */
 	struct MLoopTri *array, *array_wip;
 	int len;
 	int len_alloc;
@@ -86,9 +79,9 @@ typedef struct Mesh_Runtime {
 	void *batch_cache;
 
 	struct SubdivCCG *subdiv_ccg;
-	void  *pad1;
+	void *_pad1;
 	int subdiv_ccg_tot_level;
-	int pad2;
+	char _pad2[4];
 
 	int64_t cd_dirty_vert;
 	int64_t cd_dirty_edge;
@@ -110,7 +103,7 @@ typedef struct Mesh_Runtime {
 	 * In the future we may leave the mesh-data empty
 	 * since its not needed if we can use edit-mesh data. */
 	char is_original;
-	char padding[6];
+	char _pad[6];
 } Mesh_Runtime;
 
 typedef struct Mesh {
@@ -156,7 +149,7 @@ typedef struct Mesh {
 
 	/* When the object is available, the preferred access method is: BKE_editmesh_from_object(ob) */
 	/** Not saved in file!. */
-	struct BMEditMesh *edit_btmesh;
+	struct BMEditMesh *edit_mesh;
 
 	struct CustomData vdata, edata, fdata;
 
@@ -185,7 +178,7 @@ typedef struct Mesh {
 	float smoothresh;
 
 	/* customdata flag, for bevel-weight and crease, which are now optional */
-	char cd_flag, pad;
+	char cd_flag, _pad;
 
 	char subdiv  DNA_DEPRECATED, subdivr  DNA_DEPRECATED;
 	/** Only kept for backwards compat, not used anymore. */
@@ -196,6 +189,7 @@ typedef struct Mesh {
 
 	/** Deprecated multiresolution modeling data, only keep for loading old files. */
 	struct Multires *mr DNA_DEPRECATED;
+	void *_pad1;
 
 	Mesh_Runtime runtime;
 } Mesh;
@@ -240,15 +234,15 @@ enum {
 
 /* me->flag */
 enum {
-	ME_FLAG_DEPRECATED_0       = 1 << 0,  /* cleared */
-	ME_FLAG_DEPRECATED_1       = 1 << 1,  /* cleared */
+	ME_FLAG_UNUSED_0           = 1 << 0,  /* cleared */
+	ME_FLAG_UNUSED_1           = 1 << 1,  /* cleared */
 	ME_TWOSIDED                = 1 << 2,
-	ME_FLAG_DEPRECATED_3       = 1 << 3,  /* cleared */
-	ME_FLAG_DEPRECATED_4       = 1 << 4,  /* cleared */
+	ME_FLAG_UNUSED_3           = 1 << 3,  /* cleared */
+	ME_FLAG_UNUSED_4           = 1 << 4,  /* cleared */
 	ME_AUTOSMOOTH              = 1 << 5,
-	ME_FLAG_DEPRECATED_6       = 1 << 6,  /* cleared */
-	ME_FLAG_DEPRECATED_7       = 1 << 7,  /* cleared */
-	ME_FLAG_DEPRECATED_8       = 1 << 8,  /* cleared */
+	ME_FLAG_UNUSED_6           = 1 << 6,  /* cleared */
+	ME_FLAG_UNUSED_7           = 1 << 7,  /* cleared */
+	ME_FLAG_UNUSED_8           = 1 << 8,  /* cleared */
 	ME_DS_EXPAND               = 1 << 9,
 	ME_SCULPT_DYNAMIC_TOPOLOGY = 1 << 10,
 };

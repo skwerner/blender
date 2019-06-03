@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,13 +15,10 @@
  *
  * The Original Code is Copyright (C) 2016 Blender Foundation.
  * All rights reserved.
- *
- * ***** END GPL LICENSE BLOCK *****
- *
  */
 
-/** \file blender/editors/io/io_alembic.c
- *  \ingroup editor/io
+/** \file
+ * \ingroup editor/io
  */
 
 #ifdef WITH_ALEMBIC
@@ -130,6 +125,7 @@ static int wm_alembic_export_exec(bContext *C, wmOperator *op)
 	    .normals = RNA_boolean_get(op->ptr, "normals"),
 	    .vcolors = RNA_boolean_get(op->ptr, "vcolors"),
 	    .apply_subdiv = RNA_boolean_get(op->ptr, "apply_subdiv"),
+	    .curves_as_mesh = RNA_boolean_get(op->ptr, "curves_as_mesh"),
 	    .flatten_hierarchy = RNA_boolean_get(op->ptr, "flatten"),
 	    .visible_layers_only = RNA_boolean_get(op->ptr, "visible_layers_only"),
 	    .renderable_only = RNA_boolean_get(op->ptr, "renderable_only"),
@@ -244,6 +240,9 @@ static void ui_alembic_export_settings(uiLayout *layout, PointerRNA *imfptr)
 
 	row = uiLayoutRow(box, false);
 	uiItemR(row, imfptr, "apply_subdiv", 0, NULL, ICON_NONE);
+
+	row = uiLayoutRow(box, false);
+	uiItemR(row, imfptr, "curves_as_mesh", 0, NULL, ICON_NONE);
 
 	row = uiLayoutRow(box, false);
 	uiItemR(row, imfptr, "triangulate", 0, NULL, ICON_NONE);
@@ -372,6 +371,9 @@ void WM_OT_alembic_export(wmOperatorType *ot)
 
 	RNA_def_boolean(ot->srna, "apply_subdiv", 0,
 	                "Apply Subsurf", "Export subdivision surfaces as meshes");
+
+	RNA_def_boolean(ot->srna, "curves_as_mesh", false,
+	                "Curves as Mesh", "Export curves and NURBS surfaces as meshes");
 
 	RNA_def_enum(ot->srna, "compression_type", rna_enum_abc_compression_items,
 	             ABC_ARCHIVE_OGAWA, "Compression", "");

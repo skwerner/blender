@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,14 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * Contributor(s): Campbell Barton
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/makesrna/intern/rna_sculpt_paint.c
- *  \ingroup RNA
+/** \file
+ * \ingroup RNA
  */
 
 
@@ -42,7 +36,6 @@
 #include "DNA_screen_types.h"
 #include "DNA_space_types.h"
 
-#include "BKE_main.h"
 #include "BKE_material.h"
 #include "BKE_paint.h"
 #include "BKE_brush.h"
@@ -55,7 +48,6 @@
 #include "bmesh.h"
 
 const EnumPropertyItem rna_enum_particle_edit_hair_brush_items[] = {
-	{PE_BRUSH_NONE, "NONE", 0, "None", "Don't use any brush"},
 	{PE_BRUSH_COMB, "COMB", 0, "Comb", "Comb hairs"},
 	{PE_BRUSH_SMOOTH, "SMOOTH", 0, "Smooth", "Smooth hairs"},
 	{PE_BRUSH_ADD, "ADD", 0, "Add", "Add hairs"},
@@ -63,7 +55,7 @@ const EnumPropertyItem rna_enum_particle_edit_hair_brush_items[] = {
 	{PE_BRUSH_PUFF, "PUFF", 0, "Puff", "Make hairs stand up"},
 	{PE_BRUSH_CUT, "CUT", 0, "Cut", "Cut hairs"},
 	{PE_BRUSH_WEIGHT, "WEIGHT", 0, "Weight", "Weight hair particles"},
-	{0, NULL, 0, NULL, NULL}
+	{0, NULL, 0, NULL, NULL},
 };
 
 const EnumPropertyItem rna_enum_gpencil_sculpt_brush_items[] = {
@@ -81,7 +73,7 @@ const EnumPropertyItem rna_enum_gpencil_sculpt_brush_items[] = {
 
 const EnumPropertyItem rna_enum_gpencil_weight_brush_items[] = {
 	{GP_SCULPT_TYPE_WEIGHT, "WEIGHT", ICON_GPBRUSH_WEIGHT, "Weight", "Weight Paint for Vertex Groups"},
-	{0, NULL, 0, NULL, NULL}
+	{0, NULL, 0, NULL, NULL},
 };
 
 #ifndef RNA_RUNTIME
@@ -90,7 +82,8 @@ static const EnumPropertyItem rna_enum_gpencil_lock_axis_items[] = {
 	{GP_LOCKAXIS_Y, "AXIS_Y", ICON_AXIS_FRONT, "Front (X-Z)", "Project strokes to plane locked to Y"},
 	{GP_LOCKAXIS_X, "AXIS_X", ICON_AXIS_SIDE, "Side (Y-Z)", "Project strokes to plane locked to X"},
 	{GP_LOCKAXIS_Z, "AXIS_Z", ICON_AXIS_TOP, "Top (X-Y)", "Project strokes to plane locked to Z"},
-	{0, NULL, 0, NULL, NULL}
+	{GP_LOCKAXIS_CURSOR, "CURSOR", ICON_PIVOT_CURSOR, "Cursor", "Align strokes to current 3D cursor orientation"},
+	{0, NULL, 0, NULL, NULL},
 };
 #endif
 
@@ -143,21 +136,19 @@ static void rna_GPencil_update(Main *UNUSED(bmain), Scene *scene, PointerRNA *UN
 }
 
 const EnumPropertyItem rna_enum_particle_edit_disconnected_hair_brush_items[] = {
-	{PE_BRUSH_NONE, "NONE", 0, "None", "Don't use any brush"},
 	{PE_BRUSH_COMB, "COMB", 0, "Comb", "Comb hairs"},
 	{PE_BRUSH_SMOOTH, "SMOOTH", 0, "Smooth", "Smooth hairs"},
 	{PE_BRUSH_LENGTH, "LENGTH", 0, "Length", "Make hairs longer or shorter"},
 	{PE_BRUSH_CUT, "CUT", 0, "Cut", "Cut hairs"},
 	{PE_BRUSH_WEIGHT, "WEIGHT", 0, "Weight", "Weight hair particles"},
-	{0, NULL, 0, NULL, NULL}
+	{0, NULL, 0, NULL, NULL},
 };
 
 static const EnumPropertyItem particle_edit_cache_brush_items[] = {
-	{PE_BRUSH_NONE, "NONE", 0, "None", "Don't use any brush"},
 	{PE_BRUSH_COMB, "COMB", 0, "Comb", "Comb paths"},
 	{PE_BRUSH_SMOOTH, "SMOOTH", 0, "Smooth", "Smooth paths"},
 	{PE_BRUSH_LENGTH, "LENGTH", 0, "Length", "Make paths longer or shorter"},
-	{0, NULL, 0, NULL, NULL}
+	{0, NULL, 0, NULL, NULL},
 };
 
 static PointerRNA rna_ParticleEdit_brush_get(PointerRNA *ptr)
@@ -165,8 +156,7 @@ static PointerRNA rna_ParticleEdit_brush_get(PointerRNA *ptr)
 	ParticleEditSettings *pset = (ParticleEditSettings *)ptr->data;
 	ParticleBrushData *brush = NULL;
 
-	if (pset->brushtype != PE_BRUSH_NONE)
-		brush = &pset->brush[pset->brushtype];
+	brush = &pset->brush[pset->brushtype];
 
 	return rna_pointer_inherit_refine(ptr, &RNA_ParticleBrush, brush);
 }
@@ -492,7 +482,7 @@ static void rna_ImaPaint_canvas_update(bContext *C, PointerRNA *UNUSED(ptr))
 	bScreen *sc;
 	Image *ima = scene->toolsettings->imapaint.canvas;
 
-	for (sc = bmain->screen.first; sc; sc = sc->id.next) {
+	for (sc = bmain->screens.first; sc; sc = sc->id.next) {
 		ScrArea *sa;
 		for (sa = sc->areabase.first; sa; sa = sa->next) {
 			SpaceLink *slink;
@@ -501,7 +491,7 @@ static void rna_ImaPaint_canvas_update(bContext *C, PointerRNA *UNUSED(ptr))
 					SpaceImage *sima = (SpaceImage *)slink;
 
 					if (!sima->pin)
-						ED_space_image_set(bmain, sima, scene, obedit, ima);
+						ED_space_image_set(bmain, sima, obedit, ima, true);
 				}
 			}
 		}
@@ -688,19 +678,19 @@ static void rna_def_sculpt(BlenderRNA  *brna)
 		 "Collapse Edges", "Collapse short edges to remove mesh detail where possible"},
 		{SCULPT_DYNTOPO_SUBDIVIDE | SCULPT_DYNTOPO_COLLAPSE, "SUBDIVIDE_COLLAPSE", 0,
 		 "Subdivide Collapse", "Both subdivide long edges and collapse short edges to refine mesh detail"},
-		{0, NULL, 0, NULL, NULL}
+		{0, NULL, 0, NULL, NULL},
 	};
 
 	static const EnumPropertyItem detail_type_items[] = {
 		{0, "RELATIVE", 0,
 		 "Relative Detail", "Mesh detail is relative to the brush size and detail size"},
 		{SCULPT_DYNTOPO_DETAIL_CONSTANT, "CONSTANT", 0,
-		 "Constant Detail", "Mesh detail is constant in object space according to detail size"},
+		 "Constant Detail", "Mesh detail is constant in world space according to detail size"},
 		{SCULPT_DYNTOPO_DETAIL_BRUSH, "BRUSH", 0,
 		 "Brush Detail", "Mesh detail is relative to brush radius"},
 		{SCULPT_DYNTOPO_DETAIL_MANUAL, "MANUAL", 0,
 		 "Manual Detail", "Mesh detail does not change on each stroke, only when using Flood Fill"},
-		{0, NULL, 0, NULL, NULL}
+		{0, NULL, 0, NULL, NULL},
 	};
 
 	StructRNA *srna;
@@ -804,7 +794,7 @@ static void rna_def_sculpt(BlenderRNA  *brna)
 	                         "In dynamic-topology mode, how mesh detail size is calculated");
 	RNA_def_property_update(prop, NC_SCENE | ND_TOOLSETTINGS, NULL);
 
-	prop = RNA_def_property(srna, "gravity", PROP_FLOAT, PROP_NONE);
+	prop = RNA_def_property(srna, "gravity", PROP_FLOAT, PROP_FACTOR);
 	RNA_def_property_float_sdna(prop, NULL, "gravity_factor");
 	RNA_def_property_range(prop, 0.0f, 1.0f);
 	RNA_def_property_ui_range(prop, 0.0f, 1.0f, 0.1, 3);
@@ -874,7 +864,7 @@ static void rna_def_image_paint(BlenderRNA *brna)
 		 "Material", "Detect image slots from the material"},
 		{IMAGEPAINT_MODE_IMAGE, "IMAGE", 0,
 		 "Single Image", "Set image for texture painting directly"},
-		{0, NULL, 0, NULL, NULL}
+		{0, NULL, 0, NULL, NULL},
 	};
 
 	static const EnumPropertyItem paint_interp_items[] = {
@@ -882,7 +872,7 @@ static void rna_def_image_paint(BlenderRNA *brna)
 		 "Linear", "Linear interpolation"},
 		{IMAGEPAINT_INTERP_CLOSEST, "CLOSEST", 0,
 		 "Closest", "No interpolation (sample closest texel)"},
-		{0, NULL, 0, NULL, NULL}
+		{0, NULL, 0, NULL, NULL},
 	};
 
 	srna = RNA_def_struct(brna, "ImagePaint", "Paint");
@@ -1019,26 +1009,26 @@ static void rna_def_particle_edit(BlenderRNA *brna)
 		{SCE_SELECT_PATH, "PATH", ICON_PARTICLE_PATH, "Path", "Path edit mode"},
 		{SCE_SELECT_POINT, "POINT", ICON_PARTICLE_POINT, "Point", "Point select mode"},
 		{SCE_SELECT_END, "TIP", ICON_PARTICLE_TIP, "Tip", "Tip select mode"},
-		{0, NULL, 0, NULL, NULL}
+		{0, NULL, 0, NULL, NULL},
 	};
 
 	static const EnumPropertyItem puff_mode[] = {
 		{0, "ADD", 0, "Add", "Make hairs more puffy"},
 		{1, "SUB", 0, "Sub", "Make hairs less puffy"},
-		{0, NULL, 0, NULL, NULL}
+		{0, NULL, 0, NULL, NULL},
 	};
 
 	static const EnumPropertyItem length_mode[] = {
 		{0, "GROW", 0, "Grow", "Make hairs longer"},
 		{1, "SHRINK", 0, "Shrink", "Make hairs shorter"},
-		{0, NULL, 0, NULL, NULL}
+		{0, NULL, 0, NULL, NULL},
 	};
 
 	static const EnumPropertyItem edit_type_items[] = {
 		{PE_TYPE_PARTICLES, "PARTICLES", 0, "Particles", ""},
 		{PE_TYPE_SOFTBODY, "SOFT_BODY", 0, "Soft body", ""},
 		{PE_TYPE_CLOTH, "CLOTH", 0, "Cloth", ""},
-		{0, NULL, 0, NULL, NULL}
+		{0, NULL, 0, NULL, NULL},
 	};
 
 
@@ -1074,7 +1064,7 @@ static void rna_def_particle_edit(BlenderRNA *brna)
 	RNA_def_property_boolean_sdna(prop, NULL, "flag", PE_DEFLECT_EMITTER);
 	RNA_def_property_ui_text(prop, "Deflect Emitter", "Keep paths from intersecting the emitter");
 
-	prop = RNA_def_property(srna, "emitter_distance", PROP_FLOAT, PROP_UNSIGNED);
+	prop = RNA_def_property(srna, "emitter_distance", PROP_FLOAT, PROP_DISTANCE);
 	RNA_def_property_float_sdna(prop, NULL, "emitterdist");
 	RNA_def_property_ui_range(prop, 0.0f, 10.0f, 10, 3);
 	RNA_def_property_ui_text(prop, "Emitter Distance", "Distance to keep particles away from the emitter");
@@ -1092,7 +1082,7 @@ static void rna_def_particle_edit(BlenderRNA *brna)
 	prop = RNA_def_property(srna, "show_particles", PROP_BOOLEAN, PROP_NONE);
 	RNA_def_property_flag(prop, PROP_CONTEXT_UPDATE);
 	RNA_def_property_boolean_sdna(prop, NULL, "flag", PE_DRAW_PART);
-	RNA_def_property_ui_text(prop, "Draw Particles", "Draw actual particles");
+	RNA_def_property_ui_text(prop, "Display Particles", "Display actual particles");
 	RNA_def_property_update(prop, NC_OBJECT | ND_DRAW, "rna_ParticleEdit_redo");
 
 	prop = RNA_def_property(srna, "use_default_interpolate", PROP_BOOLEAN, PROP_NONE);
@@ -1215,28 +1205,28 @@ static void rna_def_gpencil_guides(BlenderRNA *brna)
 		{GP_GUIDE_RADIAL, "RADIAL", 0, "Radial", "Use single point as direction"},
 		{GP_GUIDE_PARALLEL, "PARALLEL", 0, "Parallel", "Parallel lines"},
 		{GP_GUIDE_GRID, "GRID", 0, "Grid", "Grid allows horizontal and vertical lines"},
-		{0, NULL, 0, NULL, NULL}
+		{0, NULL, 0, NULL, NULL},
 	};
 
 	static const EnumPropertyItem prop_gpencil_guide_references[] = {
 		{GP_GUIDE_REF_CURSOR, "CURSOR", 0, "Cursor", "Use cursor as reference point"},
 		{GP_GUIDE_REF_CUSTOM, "CUSTOM", 0, "Custom", "Use custom reference point"},
 		{GP_GUIDE_REF_OBJECT, "OBJECT", 0, "Object", "Use object as reference point"},
-		{0, NULL, 0, NULL, NULL}
+		{0, NULL, 0, NULL, NULL},
 	};
 
 	prop = RNA_def_property(srna, "use_guide", PROP_BOOLEAN, PROP_NONE);
 	RNA_def_property_boolean_sdna(prop, NULL, "use_guide", false);
 	RNA_def_property_boolean_default(prop, false);
 	RNA_def_property_ui_text(prop, "Use Guides", "Enable speed guides");
-	RNA_def_parameter_clear_flags(prop, PROP_ANIMATABLE, 0);
+	RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
 	RNA_def_property_update(prop, NC_SCENE | ND_TOOLSETTINGS, NULL);
 
 	prop = RNA_def_property(srna, "use_snapping", PROP_BOOLEAN, PROP_NONE);
 	RNA_def_property_boolean_sdna(prop, NULL, "use_snapping", false);
 	RNA_def_property_boolean_default(prop, false);
 	RNA_def_property_ui_text(prop, "Use Snapping", "Enable snapping to guides angle or spacing options");
-	RNA_def_parameter_clear_flags(prop, PROP_ANIMATABLE, 0);
+	RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
 	RNA_def_property_update(prop, NC_SCENE | ND_TOOLSETTINGS, NULL);
 
 	prop = RNA_def_property(srna, "reference_object", PROP_POINTER, PROP_NONE);
@@ -1249,28 +1239,28 @@ static void rna_def_gpencil_guides(BlenderRNA *brna)
 	RNA_def_property_enum_sdna(prop, NULL, "reference_point");
 	RNA_def_property_enum_items(prop, prop_gpencil_guide_references);
 	RNA_def_property_ui_text(prop, "Type", "Type of speed guide");
-	RNA_def_parameter_clear_flags(prop, PROP_ANIMATABLE, 0);
+	RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
 	RNA_def_property_update(prop, NC_SCENE | ND_TOOLSETTINGS, "rna_ImaPaint_viewport_update");
 
 	prop = RNA_def_property(srna, "type", PROP_ENUM, PROP_NONE);
 	RNA_def_property_enum_sdna(prop, NULL, "type");
 	RNA_def_property_enum_items(prop, prop_gpencil_guidetypes);
 	RNA_def_property_ui_text(prop, "Type", "Type of speed guide");
-	RNA_def_parameter_clear_flags(prop, PROP_ANIMATABLE, 0);
+	RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
 	RNA_def_property_update(prop, NC_SCENE | ND_TOOLSETTINGS, NULL);
 
 	prop = RNA_def_property(srna, "angle", PROP_FLOAT, PROP_ANGLE);
 	RNA_def_property_float_sdna(prop, NULL, "angle");
 	RNA_def_property_range(prop, -(M_PI * 2.0f), (M_PI * 2.0f));
 	RNA_def_property_ui_text(prop, "Angle", "Direction of lines");
-	RNA_def_parameter_clear_flags(prop, PROP_ANIMATABLE, 0);
+	RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
 	RNA_def_property_update(prop, NC_SCENE | ND_TOOLSETTINGS, NULL);
 
 	prop = RNA_def_property(srna, "angle_snap", PROP_FLOAT, PROP_ANGLE);
 	RNA_def_property_float_sdna(prop, NULL, "angle_snap");
 	RNA_def_property_range(prop, -(M_PI * 2.0f), (M_PI * 2.0f));
 	RNA_def_property_ui_text(prop, "Angle Snap", "Angle snapping");
-	RNA_def_parameter_clear_flags(prop, PROP_ANIMATABLE, 0);
+	RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
 	RNA_def_property_update(prop, NC_SCENE | ND_TOOLSETTINGS, NULL);
 
 	prop = RNA_def_property(srna, "spacing", PROP_FLOAT, PROP_DISTANCE);
@@ -1279,13 +1269,13 @@ static void rna_def_gpencil_guides(BlenderRNA *brna)
 	RNA_def_property_range(prop, 0.0f, FLT_MAX);
 	RNA_def_property_ui_range(prop, 0.0f, FLT_MAX, 1, 3);
 	RNA_def_property_ui_text(prop, "Spacing", "Guide spacing");
-	RNA_def_parameter_clear_flags(prop, PROP_ANIMATABLE, 0);
+	RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
 	RNA_def_property_update(prop, NC_SCENE | ND_TOOLSETTINGS, NULL);
 
 	prop = RNA_def_property(srna, "location", PROP_FLOAT, PROP_DISTANCE);
 	RNA_def_property_float_sdna(prop, NULL, "location");
 	RNA_def_property_array(prop, 3);
-	RNA_def_parameter_clear_flags(prop, PROP_ANIMATABLE, 0);
+	RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
 	RNA_def_property_ui_text(prop, "Location", "Custom reference point for guides");
 	RNA_def_property_range(prop, -FLT_MAX, FLT_MAX);
 	RNA_def_property_ui_range(prop, -FLT_MAX, FLT_MAX, 1, 3);
@@ -1297,7 +1287,8 @@ static void rna_def_gpencil_sculpt(BlenderRNA *brna)
 	static const EnumPropertyItem prop_direction_items[] = {
 		{0, "ADD", ICON_ADD, "Add", "Add effect of brush"},
 		{GP_SCULPT_FLAG_INVERT, "SUBTRACT", ICON_REMOVE, "Subtract", "Subtract effect of brush"},
-		{0, NULL, 0, NULL, NULL}};
+		{0, NULL, 0, NULL, NULL},
+	};
 
 	StructRNA *srna;
 	PropertyRNA *prop;
@@ -1312,86 +1303,88 @@ static void rna_def_gpencil_sculpt(BlenderRNA *brna)
 	RNA_def_property_enum_sdna(prop, NULL, "brushtype");
 	RNA_def_property_enum_items(prop, rna_enum_gpencil_sculpt_brush_items);
 	RNA_def_property_ui_text(prop, "Tool", "");
-	RNA_def_parameter_clear_flags(prop, PROP_ANIMATABLE, 0);
+	RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
 	RNA_def_property_update(prop, NC_SCENE | ND_TOOLSETTINGS, "rna_GPencil_update");
 
 	prop = RNA_def_property(srna, "weight_tool", PROP_ENUM, PROP_NONE);
 	RNA_def_property_enum_sdna(prop, NULL, "weighttype");
 	RNA_def_property_enum_items(prop, rna_enum_gpencil_weight_brush_items);
 	RNA_def_property_ui_text(prop, "Tool", "Tool for weight painting");
-	RNA_def_parameter_clear_flags(prop, PROP_ANIMATABLE, 0);
+	RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
 	RNA_def_property_update(prop, NC_SCENE | ND_TOOLSETTINGS, "rna_GPencil_update");
 
 	prop = RNA_def_property(srna, "brush", PROP_POINTER, PROP_NONE);
 	RNA_def_property_struct_type(prop, "GPencilSculptBrush");
 	RNA_def_property_pointer_funcs(prop, "rna_GPencilSculptSettings_brush_get", NULL, NULL, NULL);
-	RNA_def_parameter_clear_flags(prop, PROP_ANIMATABLE, 0);
+	RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
 	RNA_def_property_ui_text(prop, "Brush", "");
 
 	prop = RNA_def_property(srna, "guide", PROP_POINTER, PROP_NONE);
 	RNA_def_property_struct_type(prop, "GPencilSculptGuide");
-	RNA_def_parameter_clear_flags(prop, PROP_ANIMATABLE, 0);
+	RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
 	RNA_def_property_ui_text(prop, "Guide", "");
 
 	prop = RNA_def_property(srna, "use_select_mask", PROP_BOOLEAN, PROP_NONE);
 	RNA_def_property_boolean_sdna(prop, NULL, "flag", GP_SCULPT_SETT_FLAG_SELECT_MASK);
 	RNA_def_property_ui_text(prop, "Selection Mask", "Only sculpt selected stroke points");
 	RNA_def_property_ui_icon(prop, ICON_GP_ONLY_SELECTED, 0);
-	RNA_def_parameter_clear_flags(prop, PROP_ANIMATABLE, 0);
+	RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
 	RNA_def_property_update(prop, NC_SCENE | ND_TOOLSETTINGS, NULL);
 
 	prop = RNA_def_property(srna, "use_edit_position", PROP_BOOLEAN, PROP_NONE);
 	RNA_def_property_boolean_sdna(prop, NULL, "flag", GP_SCULPT_SETT_FLAG_APPLY_POSITION);
 	RNA_def_property_ui_text(prop, "Affect Position", "The brush affects the position of the point");
-	RNA_def_parameter_clear_flags(prop, PROP_ANIMATABLE, 0);
+	RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
 	RNA_def_property_update(prop, NC_SCENE | ND_TOOLSETTINGS, NULL);
 
 	prop = RNA_def_property(srna, "use_edit_strength", PROP_BOOLEAN, PROP_NONE);
 	RNA_def_property_boolean_sdna(prop, NULL, "flag", GP_SCULPT_SETT_FLAG_APPLY_STRENGTH);
 	RNA_def_property_ui_text(prop, "Affect Strength", "The brush affects the color strength of the point");
-	RNA_def_parameter_clear_flags(prop, PROP_ANIMATABLE, 0);
+	RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
 	RNA_def_property_update(prop, NC_SCENE | ND_TOOLSETTINGS, NULL);
 
 	prop = RNA_def_property(srna, "use_edit_thickness", PROP_BOOLEAN, PROP_NONE);
 	RNA_def_property_boolean_sdna(prop, NULL, "flag", GP_SCULPT_SETT_FLAG_APPLY_THICKNESS);
 	RNA_def_property_ui_text(prop, "Affect Thickness", "The brush affects the thickness of the point");
-	RNA_def_parameter_clear_flags(prop, PROP_ANIMATABLE, 0);
+	RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
 	RNA_def_property_update(prop, NC_SCENE | ND_TOOLSETTINGS, NULL);
 
 	prop = RNA_def_property(srna, "use_edit_uv", PROP_BOOLEAN, PROP_NONE);
 	RNA_def_property_boolean_sdna(prop, NULL, "flag", GP_SCULPT_SETT_FLAG_APPLY_UV);
 	RNA_def_property_ui_text(prop, "Affect UV", "The brush affects the UV rotation of the point");
-	RNA_def_parameter_clear_flags(prop, PROP_ANIMATABLE, 0);
+	RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
 	RNA_def_property_update(prop, NC_SCENE | ND_TOOLSETTINGS, NULL);
 
 	prop = RNA_def_property(srna, "use_multiframe_falloff", PROP_BOOLEAN, PROP_NONE);
 	RNA_def_property_boolean_sdna(prop, NULL, "flag", GP_SCULPT_SETT_FLAG_FRAME_FALLOFF);
 	RNA_def_property_ui_text(prop, "Use Falloff", "Use falloff effect when edit in multiframe mode to compute brush effect by frame");
-	RNA_def_parameter_clear_flags(prop, PROP_ANIMATABLE, 0);
+	RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
 	RNA_def_property_update(prop, NC_SCENE | ND_TOOLSETTINGS, NULL);
 
 	prop = RNA_def_property(srna, "use_thickness_curve", PROP_BOOLEAN, PROP_NONE);
 	RNA_def_property_boolean_sdna(prop, NULL, "flag", GP_SCULPT_SETT_FLAG_PRIMITIVE_CURVE);
 	RNA_def_property_ui_text(prop, "Use Curve", "Use curve to define primitive stroke thickness");
-	RNA_def_parameter_clear_flags(prop, PROP_ANIMATABLE, 0);
+	RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
 	RNA_def_property_update(prop, NC_SCENE | ND_TOOLSETTINGS, NULL);
 
 	/* custom falloff curve */
 	prop = RNA_def_property(srna, "multiframe_falloff_curve", PROP_POINTER, PROP_NONE);
 	RNA_def_property_pointer_sdna(prop, NULL, "cur_falloff");
 	RNA_def_property_struct_type(prop, "CurveMapping");
-	RNA_def_property_ui_text(prop, "Curve",
-		"Custom curve to control falloff of brush effect by Grease Pencil frames");
-	RNA_def_parameter_clear_flags(prop, PROP_ANIMATABLE, 0);
+	RNA_def_property_ui_text(
+	        prop, "Curve",
+	        "Custom curve to control falloff of brush effect by Grease Pencil frames");
+	RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
 	RNA_def_property_update(prop, NC_SCENE | ND_TOOLSETTINGS, NULL);
 
 	/* custom primitive curve */
 	prop = RNA_def_property(srna, "thickness_primitive_curve", PROP_POINTER, PROP_NONE);
 	RNA_def_property_pointer_sdna(prop, NULL, "cur_primitive");
 	RNA_def_property_struct_type(prop, "CurveMapping");
-	RNA_def_property_ui_text(prop, "Curve",
-		"Custom curve to control primitive thickness");
-	RNA_def_parameter_clear_flags(prop, PROP_ANIMATABLE, 0);
+	RNA_def_property_ui_text(
+	        prop, "Curve",
+	        "Custom curve to control primitive thickness");
+	RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
 	RNA_def_property_update(prop, NC_SCENE | ND_TOOLSETTINGS, NULL);
 
 	/* lock axis */
@@ -1399,7 +1392,7 @@ static void rna_def_gpencil_sculpt(BlenderRNA *brna)
 	RNA_def_property_enum_sdna(prop, NULL, "lock_axis");
 	RNA_def_property_enum_items(prop, rna_enum_gpencil_lock_axis_items);
 	RNA_def_property_ui_text(prop, "Lock Axis", "");
-	RNA_def_parameter_clear_flags(prop, PROP_ANIMATABLE, 0);
+	RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
 	RNA_def_property_update(prop, NC_GPENCIL | ND_DATA, "rna_GPencil_update");
 
 	/* threshold for cutter */
@@ -1408,65 +1401,64 @@ static void rna_def_gpencil_sculpt(BlenderRNA *brna)
 	RNA_def_property_range(prop, 0.0f, 10.0f);
 	RNA_def_property_float_default(prop, 0.1f);
 	RNA_def_property_ui_text(prop, "Threshold", "Threshold for stroke intersections");
-	RNA_def_parameter_clear_flags(prop, PROP_ANIMATABLE, 0);
+	RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
 
 	/* brush */
 	srna = RNA_def_struct(brna, "GPencilSculptBrush", NULL);
 	RNA_def_struct_sdna(srna, "GP_Sculpt_Data");
 	RNA_def_struct_path_func(srna, "rna_GPencilSculptBrush_path");
 	RNA_def_struct_ui_text(srna, "GPencil Sculpt Brush", "Stroke editing brush");
-	RNA_def_parameter_clear_flags(prop, PROP_ANIMATABLE, 0);
 
 	prop = RNA_def_property(srna, "size", PROP_INT, PROP_PIXEL);
 	RNA_def_property_range(prop, 1, GP_MAX_BRUSH_PIXEL_RADIUS);
 	RNA_def_property_ui_range(prop, 1, 500, 10, 3);
 	RNA_def_property_ui_text(prop, "Radius", "Radius of the brush in pixels");
-	RNA_def_parameter_clear_flags(prop, PROP_ANIMATABLE, 0);
+	RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
 	RNA_def_property_update(prop, NC_SCENE | ND_TOOLSETTINGS, NULL);
 
 	prop = RNA_def_property(srna, "strength", PROP_FLOAT, PROP_FACTOR);
 	RNA_def_property_range(prop, 0.001, 1.0);
 	RNA_def_property_ui_text(prop, "Strength", "Brush strength");
-	RNA_def_parameter_clear_flags(prop, PROP_ANIMATABLE, 0);
+	RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
 	RNA_def_property_update(prop, NC_SCENE | ND_TOOLSETTINGS, NULL);
 
 	prop = RNA_def_property(srna, "weight", PROP_FLOAT, PROP_FACTOR);
 	RNA_def_property_range(prop, 0.0, 1.0);
 	RNA_def_property_ui_text(prop, "Weight", "Target weight");
-	RNA_def_parameter_clear_flags(prop, PROP_ANIMATABLE, 0);
+	RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
 	RNA_def_property_update(prop, NC_SCENE | ND_TOOLSETTINGS, NULL);
 
 	prop = RNA_def_property(srna, "use_pressure_strength", PROP_BOOLEAN, PROP_NONE);
 	RNA_def_property_boolean_sdna(prop, NULL, "flag", GP_SCULPT_FLAG_USE_PRESSURE);
 	RNA_def_property_ui_icon(prop, ICON_STYLUS_PRESSURE, 0);
 	RNA_def_property_ui_text(prop, "Strength Pressure", "Enable tablet pressure sensitivity for strength");
-	RNA_def_parameter_clear_flags(prop, PROP_ANIMATABLE, 0);
+	RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
 	RNA_def_property_update(prop, NC_SCENE | ND_TOOLSETTINGS, NULL);
 
 	prop = RNA_def_property(srna, "use_pressure_radius", PROP_BOOLEAN, PROP_NONE);
 	RNA_def_property_boolean_sdna(prop, NULL, "flag", GP_SCULPT_FLAG_PRESSURE_RADIUS);
 	RNA_def_property_ui_icon(prop, ICON_STYLUS_PRESSURE, 0);
 	RNA_def_property_ui_text(prop, "Radius Pressure", "Enable tablet pressure sensitivity for radius");
-	RNA_def_parameter_clear_flags(prop, PROP_ANIMATABLE, 0);
+	RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
 	RNA_def_property_update(prop, NC_SCENE | ND_TOOLSETTINGS, NULL);
 
 	prop = RNA_def_property(srna, "use_falloff", PROP_BOOLEAN, PROP_NONE);
 	RNA_def_property_boolean_sdna(prop, NULL, "flag", GP_SCULPT_FLAG_USE_FALLOFF);
 	RNA_def_property_ui_text(prop, "Use Falloff", "Strength of brush decays with distance from cursor");
-	RNA_def_parameter_clear_flags(prop, PROP_ANIMATABLE, 0);
+	RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
 	RNA_def_property_update(prop, NC_SCENE | ND_TOOLSETTINGS, NULL);
 
 	prop = RNA_def_property(srna, "use_edit_pressure", PROP_BOOLEAN, PROP_NONE);
 	RNA_def_property_boolean_sdna(prop, NULL, "flag", GP_SCULPT_FLAG_SMOOTH_PRESSURE);
 	RNA_def_property_ui_text(prop, "Affect Pressure", "Affect pressure values as well when smoothing strokes");
-	RNA_def_parameter_clear_flags(prop, PROP_ANIMATABLE, 0);
+	RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
 	RNA_def_property_update(prop, NC_SCENE | ND_TOOLSETTINGS, NULL);
 
 	prop = RNA_def_property(srna, "direction", PROP_ENUM, PROP_NONE);
 	RNA_def_property_enum_bitflag_sdna(prop, NULL, "flag");
 	RNA_def_property_enum_items(prop, prop_direction_items);
 	RNA_def_property_ui_text(prop, "Direction", "");
-	RNA_def_parameter_clear_flags(prop, PROP_ANIMATABLE, 0);
+	RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
 	RNA_def_property_update(prop, NC_SCENE | ND_TOOLSETTINGS, NULL);
 
 	/* Cursor Color */
@@ -1479,7 +1471,7 @@ static void rna_def_gpencil_sculpt(BlenderRNA *brna)
 	RNA_def_property_range(prop, 0.0f, 1.0f);
 	RNA_def_property_float_array_default(prop, default_1);
 	RNA_def_property_ui_text(prop, "Cursor Add", "Color for the cursor for addition");
-	RNA_def_parameter_clear_flags(prop, PROP_ANIMATABLE, 0);
+	RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
 
 	prop = RNA_def_property(srna, "cursor_color_sub", PROP_FLOAT, PROP_COLOR_GAMMA);
 	RNA_def_property_float_sdna(prop, NULL, "curcolor_sub");
@@ -1487,13 +1479,13 @@ static void rna_def_gpencil_sculpt(BlenderRNA *brna)
 	RNA_def_property_range(prop, 0.0f, 1.0f);
 	RNA_def_property_float_array_default(prop, default_2);
 	RNA_def_property_ui_text(prop, "Cursor Sub", "Color for the cursor for subtraction");
-	RNA_def_parameter_clear_flags(prop, PROP_ANIMATABLE, 0);
+	RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
 
 	prop = RNA_def_property(srna, "use_cursor", PROP_BOOLEAN, PROP_NONE);
 	RNA_def_property_boolean_sdna(prop, NULL, "flag", GP_SCULPT_FLAG_ENABLE_CURSOR);
 	RNA_def_property_boolean_default(prop, true);
 	RNA_def_property_ui_text(prop, "Enable Cursor", "Enable cursor on screen");
-	RNA_def_parameter_clear_flags(prop, PROP_ANIMATABLE, 0);
+	RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
 }
 
 void RNA_def_sculpt_paint(BlenderRNA *brna)

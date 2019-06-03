@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,14 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * Contributor(s): Blender Foundation (2014).
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/makesrna/intern/rna_depsgraph.c
- *  \ingroup RNA
+/** \file
+ * \ingroup RNA
  */
 
 #include <stdlib.h>
@@ -151,7 +145,10 @@ static void rna_DepsgraphObjectInstance_matrix_world_get(PointerRNA *ptr, float 
 		copy_m4_m4((float(*)[4])mat, deg_iter->dupli_object_current->mat);
 	}
 	else {
-		unit_m4((float(*)[4])mat);
+		/* We can return actual object's matrix here, no reason to return identity matrix
+		 * when this is not actually an instance... */
+		Object *ob = (Object *)iterator->current;
+		copy_m4_m4((float(*)[4])mat, ob->obmat);
 	}
 }
 
@@ -305,6 +302,7 @@ typedef struct RNA_Depsgraph_Instances_Iterator
 {
 	BLI_Iterator iterators[2];
 	DEGObjectIterData deg_data[2];
+	DupliObject dupli_object_current[2];
 	int counter;
 } RNA_Depsgraph_Instances_Iterator;
 
@@ -335,6 +333,13 @@ static void rna_Depsgraph_object_instances_next(CollectionPropertyIterator *iter
 
 	di_it->iterators[di_it->counter % 2].data = &di_it->deg_data[di_it->counter % 2];
 	DEG_iterator_objects_next(&di_it->iterators[di_it->counter % 2]);
+	/* Dupli_object_current is also temp memory generated during the iterations,
+	 * it may be freed when last item has been iterated, so we have same issue as with the iterator itself:
+	 * we need to keep a local copy, which memory remains valid a bit longer, for python accesses to work. */
+	if (di_it->deg_data[di_it->counter % 2].dupli_object_current != NULL) {
+		di_it->dupli_object_current[di_it->counter % 2] = *di_it->deg_data[di_it->counter % 2].dupli_object_current;
+		di_it->deg_data[di_it->counter % 2].dupli_object_current = &di_it->dupli_object_current[di_it->counter % 2];
+	}
 	iter->valid = di_it->iterators[di_it->counter % 2].valid;
 }
 
@@ -564,7 +569,7 @@ static void rna_def_depsgraph(BlenderRNA *brna)
 	static EnumPropertyItem enum_depsgraph_mode_items[] = {
 		{DAG_EVAL_VIEWPORT, "VIEWPORT", 0, "Viewport", "Viewport non-rendered mode"},
 		{DAG_EVAL_RENDER, "RENDER", 0, "Render", "Render"},
-		{0, NULL, 0, NULL, NULL}
+		{0, NULL, 0, NULL, NULL},
 	};
 
 	srna = RNA_def_struct(brna, "Depsgraph", NULL);
@@ -668,7 +673,10 @@ static void rna_def_depsgraph(BlenderRNA *brna)
 	                                  "rna_Depsgraph_object_instances_end",
 	                                  "rna_Depsgraph_object_instances_get",
 	                                  NULL, NULL, NULL, NULL);
-	RNA_def_property_ui_text(prop, "Object Instances", "All object instances to display or render");
+	RNA_def_property_ui_text(prop, "Object Instances",
+	                         "All object instances to display or render "
+	                         "(WARNING: only use this as an iterator, never as a sequence, "
+	                         "and do not keep any references to its items)");
 
 	prop = RNA_def_property(srna, "updates", PROP_COLLECTION, PROP_NONE);
 	RNA_def_property_struct_type(prop, "DepsgraphUpdate");

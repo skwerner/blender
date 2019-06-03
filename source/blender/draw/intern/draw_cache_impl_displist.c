@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,22 +15,20 @@
  *
  * The Original Code is Copyright (C) 2017 by Blender Foundation.
  * All rights reserved.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file draw_cache_impl_displist.c
- *  \ingroup draw
+/** \file
+ * \ingroup draw
  *
  * \brief DispList API for render engines
  *
  * \note DispList may be removed soon! This is a utility for object types that use render.
  */
 
-#include "MEM_guardedalloc.h"
 
 #include "BLI_alloca.h"
 #include "BLI_utildefines.h"
+#include "BLI_edgehash.h"
 #include "BLI_math_vector.h"
 
 #include "DNA_curve_types.h"
@@ -40,6 +36,7 @@
 #include "BKE_displist.h"
 
 #include "GPU_batch.h"
+#include "GPU_extensions.h"
 
 #include "draw_cache_impl.h"  /* own include */
 
@@ -177,7 +174,7 @@ void DRW_displist_vertbuf_create_pos_and_nor(ListBase *lb, GPUVertBuf *vbo)
 	if (format.attr_len == 0) {
 		/* initialize vertex format */
 		attr_id.pos = GPU_vertformat_attr_add(&format, "pos", GPU_COMP_F32, 3, GPU_FETCH_FLOAT);
-		attr_id.nor = GPU_vertformat_attr_add(&format, "nor", GPU_COMP_I16, 4, GPU_FETCH_INT_TO_FLOAT_UNIT);
+		attr_id.nor = GPU_vertformat_attr_add(&format, "nor", GPU_COMP_I10, 4, GPU_FETCH_INT_TO_FLOAT_UNIT);
 	}
 
 	GPU_vertbuf_init_with_format(vbo, &format);
@@ -195,9 +192,8 @@ void DRW_displist_vertbuf_create_pos_and_nor(ListBase *lb, GPUVertBuf *vbo)
 			while (vbo_len_used < vbo_end) {
 				GPU_vertbuf_attr_set(vbo, attr_id.pos, vbo_len_used, fp_co);
 				if (fp_no) {
-					static short short_no[4];
-					normal_float_to_short_v3(short_no, fp_no);
-					GPU_vertbuf_attr_set(vbo, attr_id.nor, vbo_len_used, short_no);
+					GPUPackedNormal vnor_pack = GPU_normal_convert_i10_v3(fp_no);
+					GPU_vertbuf_attr_set(vbo, attr_id.nor, vbo_len_used, &vnor_pack);
 					if (ndata_is_single == false) {
 						fp_no += 3;
 					}
@@ -205,6 +201,38 @@ void DRW_displist_vertbuf_create_pos_and_nor(ListBase *lb, GPUVertBuf *vbo)
 				fp_co += 3;
 				vbo_len_used += 1;
 			}
+		}
+	}
+}
+
+void DRW_displist_vertbuf_create_wiredata(ListBase *lb, GPUVertBuf *vbo)
+{
+	static GPUVertFormat format = { 0 };
+	static struct { uint wd; } attr_id;
+	if (format.attr_len == 0) {
+		/* initialize vertex format */
+		if (!GPU_crappy_amd_driver()) {
+			/* Some AMD drivers strangely crash with a vbo with this format. */
+			attr_id.wd = GPU_vertformat_attr_add(&format, "wd", GPU_COMP_U8, 1, GPU_FETCH_INT_TO_FLOAT_UNIT);
+		}
+		else {
+			attr_id.wd = GPU_vertformat_attr_add(&format, "wd", GPU_COMP_F32, 1, GPU_FETCH_FLOAT);
+		}
+	}
+
+	int vbo_len_used = curve_render_surface_vert_len_get(lb);
+
+	GPU_vertbuf_init_with_format(vbo, &format);
+	GPU_vertbuf_data_alloc(vbo, vbo_len_used);
+
+	if (vbo->format.stride == 1) {
+		memset(vbo->data, 0xFF, (size_t)vbo_len_used);
+	}
+	else {
+		GPUVertBufRaw wd_step;
+		GPU_vertbuf_attr_get_raw_data(vbo, attr_id.wd, &wd_step);
+		for (int i = 0; i < vbo_len_used; i++) {
+			*((float *)GPU_vertbuf_raw_step(&wd_step)) = 1.0f;
 		}
 	}
 }
@@ -229,7 +257,7 @@ void DRW_displist_indexbuf_create_triangles_in_order(ListBase *lb, GPUIndexBuf *
 	GPU_indexbuf_build_in_place(&elb, ibo);
 }
 
-void DRW_displist_indexbuf_create_triangles_tess_split_by_material(
+void DRW_displist_indexbuf_create_triangles_loop_split_by_material(
         ListBase *lb,
         GPUIndexBuf **ibo_mats, uint mat_len)
 {
@@ -257,65 +285,39 @@ void DRW_displist_indexbuf_create_triangles_tess_split_by_material(
 	}
 }
 
-typedef struct DRWDisplistWireThunk {
-	uint wd_id, ofs;
-	const DispList *dl;
-	GPUVertBuf *vbo;
-} DRWDisplistWireThunk;
-
 static void set_overlay_wires_tri_indices(void *thunk, uint v1, uint v2, uint v3)
 {
-	DRWDisplistWireThunk *dwt = (DRWDisplistWireThunk *)thunk;
-	uint indices[3] = {v1, v2, v3};
-
-	for (int i = 0; i < 3; ++i) {
-		/* TODO: Compute sharpness. For now, only tag real egdes. */
-		uchar sharpness = 0xFF;
-		GPU_vertbuf_attr_set(dwt->vbo, dwt->wd_id, indices[i], &sharpness);
-	}
+	GPUIndexBufBuilder *eld = (GPUIndexBufBuilder *)thunk;
+	GPU_indexbuf_add_line_verts(eld, v1, v2);
+	GPU_indexbuf_add_line_verts(eld, v2, v3);
+	GPU_indexbuf_add_line_verts(eld, v3, v1);
 }
 
 static void set_overlay_wires_quad_tri_indices(void *thunk, uint v1, uint v2, uint v3)
 {
-	DRWDisplistWireThunk *dwt = (DRWDisplistWireThunk *)thunk;
-	uint indices[3] = {v1, v2, v3};
-
-	for (int i = 0; i < 3; ++i) {
-		/* TODO: Compute sharpness. For now, only tag real egdes. */
-		uchar sharpness = (i == 0) ? 0x00 : 0xFF;
-		GPU_vertbuf_attr_set(dwt->vbo, dwt->wd_id, indices[i], &sharpness);
-	}
+	GPUIndexBufBuilder *eld = (GPUIndexBufBuilder *)thunk;
+	GPU_indexbuf_add_line_verts(eld, v1, v3);
+	GPU_indexbuf_add_line_verts(eld, v3, v2);
 }
 
-/* TODO reuse the position and normals from other tesselation vertbuf. */
-void DRW_displist_vertbuf_create_wireframe_data_tess(ListBase *lb, GPUVertBuf *vbo)
+void DRW_displist_indexbuf_create_lines_in_order(ListBase *lb, GPUIndexBuf *ibo)
 {
-	static DRWDisplistWireThunk thunk;
-	static GPUVertFormat format = {0};
-	if (format.attr_len == 0) {
-		thunk.wd_id  = GPU_vertformat_attr_add(&format, "wd", GPU_COMP_U8, 1, GPU_FETCH_INT_TO_FLOAT_UNIT);
-		GPU_vertformat_triple_load(&format);
-	}
+	const int tri_len = curve_render_surface_tri_len_get(lb);
+	const int vert_len = curve_render_surface_vert_len_get(lb);
 
-	GPU_vertbuf_init_with_format(vbo, &format);
-	thunk.vbo = vbo;
+	GPUIndexBufBuilder elb;
+	GPU_indexbuf_init(&elb, GPU_PRIM_LINES, tri_len * 3, vert_len);
 
-	int vert_len = curve_render_surface_tri_len_get(lb) * 3;
-	GPU_vertbuf_data_alloc(thunk.vbo, vert_len);
-
-	thunk.ofs = 0;
+	int ofs = 0;
 	for (const DispList *dl = lb->first; dl; dl = dl->next) {
-		thunk.dl = dl;
-		/* TODO consider non-manifold edges correctly. */
-		thunk.ofs = displist_indexbufbuilder_tess_set(
+		displist_indexbufbuilder_set(
 		        set_overlay_wires_tri_indices,
 		        set_overlay_wires_quad_tri_indices,
-		        &thunk, dl, thunk.ofs);
+		        &elb, dl, ofs);
+		ofs += dl_vert_len(dl);
 	}
 
-	if (thunk.ofs < vert_len) {
-		GPU_vertbuf_data_resize(thunk.vbo, thunk.ofs);
-	}
+	GPU_indexbuf_build_in_place(&elb, ibo);
 }
 
 static void surf_uv_quad(const DispList *dl, const uint quad[4], float r_uv[4][2])
@@ -369,7 +371,7 @@ static void displist_vertbuf_attr_set_tri_pos_nor_uv(
 	}
 }
 
-void DRW_displist_vertbuf_create_pos_and_nor_and_uv_tess(
+void DRW_displist_vertbuf_create_loop_pos_and_nor_and_uv(
         ListBase *lb,
         GPUVertBuf *vbo_pos_nor, GPUVertBuf *vbo_uv)
 {
@@ -560,3 +562,97 @@ void DRW_displist_vertbuf_create_pos_and_nor_and_uv_tess(
 		}
 	}
 }
+
+/* Edge detection/adjecency */
+#define NO_EDGE INT_MAX
+static void set_edge_adjacency_lines_indices(EdgeHash *eh, GPUIndexBufBuilder *elb, bool *r_is_manifold, uint v1, uint v2, uint v3)
+{
+	bool inv_indices = (v2 > v3);
+	void **pval;
+	bool value_is_init = BLI_edgehash_ensure_p(eh, v2, v3, &pval);
+	int v_data = POINTER_AS_INT(*pval);
+	if (!value_is_init || v_data == NO_EDGE) {
+		/* Save the winding order inside the sign bit. Because the
+		 * edgehash sort the keys and we need to compare winding later. */
+		int value = (int)v1 + 1; /* Int 0 bm_looptricannot be signed */
+		*pval = POINTER_FROM_INT((inv_indices) ? -value : value);
+	}
+	else {
+		/* HACK Tag as not used. Prevent overhead of BLI_edgehash_remove. */
+		*pval = POINTER_FROM_INT(NO_EDGE);
+		bool inv_opposite = (v_data < 0);
+		uint v_opposite = (uint)abs(v_data) - 1;
+
+		if (inv_opposite == inv_indices) {
+			/* Don't share edge if triangles have non matching winding. */
+			GPU_indexbuf_add_line_adj_verts(elb, v1, v2, v3, v1);
+			GPU_indexbuf_add_line_adj_verts(elb, v_opposite, v2, v3, v_opposite);
+			*r_is_manifold = false;
+		}
+		else {
+			GPU_indexbuf_add_line_adj_verts(elb, v1, v2, v3, v_opposite);
+		}
+	}
+}
+
+static void set_edges_adjacency_lines_indices(void *thunk, uint v1, uint v2, uint v3)
+{
+	void **packed = (void **)thunk;
+	GPUIndexBufBuilder *elb = (GPUIndexBufBuilder *)packed[0];
+	EdgeHash *eh = (EdgeHash *)packed[1];
+	bool *r_is_manifold = (bool *)packed[2];
+
+	set_edge_adjacency_lines_indices(eh, elb, r_is_manifold, v1, v2, v3);
+	set_edge_adjacency_lines_indices(eh, elb, r_is_manifold, v2, v3, v1);
+	set_edge_adjacency_lines_indices(eh, elb, r_is_manifold, v3, v1, v2);
+}
+
+void DRW_displist_indexbuf_create_edges_adjacency_lines(struct ListBase *lb, struct GPUIndexBuf *ibo, bool *r_is_manifold)
+{
+	const int tri_len = curve_render_surface_tri_len_get(lb);
+	const int vert_len = curve_render_surface_vert_len_get(lb);
+
+	*r_is_manifold = true;
+
+	/* Allocate max but only used indices are sent to GPU. */
+	GPUIndexBufBuilder elb;
+	GPU_indexbuf_init(&elb, GPU_PRIM_LINES_ADJ, tri_len * 3, vert_len);
+
+	EdgeHash *eh = BLI_edgehash_new_ex(__func__, tri_len * 3);
+
+	/* pack values to pass to `set_edges_adjacency_lines_indices` function. */
+	void *thunk[3] = {&elb, eh, r_is_manifold};
+	int v_idx = 0;
+	for (const DispList *dl = lb->first; dl; dl = dl->next) {
+		displist_indexbufbuilder_set(
+		        (SetTriIndicesFn *)set_edges_adjacency_lines_indices,
+		        (SetTriIndicesFn *)set_edges_adjacency_lines_indices,
+		        thunk, dl, v_idx);
+		v_idx += dl_vert_len(dl);
+	}
+
+	/* Create edges for remaning non manifold edges. */
+	EdgeHashIterator *ehi;
+	for (ehi = BLI_edgehashIterator_new(eh);
+	     BLI_edgehashIterator_isDone(ehi) == false;
+	     BLI_edgehashIterator_step(ehi))
+	{
+		uint v1, v2;
+		int v_data = POINTER_AS_INT(BLI_edgehashIterator_getValue(ehi));
+		if (v_data == NO_EDGE) {
+			continue;
+		}
+		BLI_edgehashIterator_getKey(ehi, &v1, &v2);
+		uint v0 = (uint)abs(v_data) - 1;
+		if (v_data < 0) { /* inv_opposite  */
+			SWAP(uint, v1, v2);
+		}
+		GPU_indexbuf_add_line_adj_verts(&elb, v0, v1, v2, v0);
+		*r_is_manifold = false;
+	}
+	BLI_edgehashIterator_free(ehi);
+	BLI_edgehash_free(eh, NULL);
+
+	GPU_indexbuf_build_in_place(&elb, ibo);
+}
+#undef NO_EDGE

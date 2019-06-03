@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,15 +15,10 @@
  *
  * The Original Code is Copyright (C) 2008 Blender Foundation.
  * All rights reserved.
- *
- *
- * Contributor(s): Blender Foundation
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/animation/anim_markers.c
- *  \ingroup edanimation
+/** \file
+ * \ingroup edanimation
  */
 
 #include <math.h>
@@ -56,8 +49,6 @@
 
 #include "WM_api.h"
 #include "WM_types.h"
-
-#include "BIF_glutil.h"
 
 #include "GPU_immediate.h"
 #include "GPU_matrix.h"
@@ -297,6 +288,28 @@ void ED_markers_make_cfra_list(ListBase *markers, ListBase *lb, short only_sel)
 		add_marker_to_cfra_elem(lb, marker, only_sel);
 }
 
+void ED_markers_deselect_all(ListBase *markers, int action)
+{
+	if (action == SEL_TOGGLE) {
+		action = ED_markers_get_first_selected(markers) ? SEL_DESELECT : SEL_SELECT;
+	}
+
+	for (TimeMarker *marker = markers->first; marker; marker = marker->next) {
+		if (action == SEL_SELECT) {
+			marker->flag |= SELECT;
+		}
+		else if (action == SEL_DESELECT) {
+			marker->flag &= ~SELECT;
+		}
+		else if (action == SEL_INVERT) {
+			marker->flag ^= SELECT;
+		}
+		else {
+			BLI_assert(0);
+		}
+	}
+}
+
 /* --------------------------------- */
 
 /* Get the first selected marker */
@@ -377,11 +390,35 @@ static void draw_marker_name(
 	UI_fontstyle_draw_simple(fstyle, x, y, name, text_col);
 }
 
+static void draw_marker_line(const float color[4], float x, float ymin, float ymax)
+{
+	GPUVertFormat *format = immVertexFormat();
+	uint pos = GPU_vertformat_attr_add(format, "pos", GPU_COMP_F32, 2, GPU_FETCH_FLOAT);
+
+	immBindBuiltinProgram(GPU_SHADER_2D_LINE_DASHED_UNIFORM_COLOR);
+
+	float viewport_size[4];
+	GPU_viewport_size_get_f(viewport_size);
+	immUniform2f("viewport_size", viewport_size[2] / UI_DPI_FAC, viewport_size[3] / UI_DPI_FAC);
+
+	immUniformColor4fv(color);
+	immUniform1i("colors_len", 0);  /* "simple" mode */
+	immUniform1f("dash_width", 6.0f);
+	immUniform1f("dash_factor", 0.5f);
+
+	immBegin(GPU_PRIM_LINES, 2);
+	immVertex2f(pos, x, ymin);
+	immVertex2f(pos, x, ymax);
+	immEnd();
+
+	immUnbindProgram();
+}
+
 /* function to draw markers */
 static void draw_marker(
-        View2D *v2d, const uiFontStyle *fstyle, TimeMarker *marker, int cfra, int flag,
+        const uiFontStyle *fstyle, TimeMarker *marker, int cfra, int flag,
         /* avoid re-calculating each time */
-        const float ypixels, const float xscale, const float yscale)
+        const float ypixels, const float xscale, int height)
 {
 	const float xpos = marker->frame * xscale;
 #ifdef DURIAN_CAMERA_SWITCH
@@ -401,31 +438,15 @@ static void draw_marker(
 	if (flag & DRAW_MARKERS_LINES)
 #endif
 	{
-		GPUVertFormat *format = immVertexFormat();
-		uint pos = GPU_vertformat_attr_add(format, "pos", GPU_COMP_F32, 2, GPU_FETCH_FLOAT);
-
-		immBindBuiltinProgram(GPU_SHADER_2D_LINE_DASHED_UNIFORM_COLOR);
-
-		float viewport_size[4];
-		GPU_viewport_size_get_f(viewport_size);
-		immUniform2f("viewport_size", viewport_size[2] / UI_DPI_FAC, viewport_size[3] / UI_DPI_FAC);
-
+		float color[4];
 		if (marker->flag & SELECT) {
-			immUniformColor4f(1.0f, 1.0f, 1.0f, 0.38f);
+			copy_v4_fl4(color, 1.0f, 1.0f, 1.0f, 0.38f);
 		}
 		else {
-			immUniformColor4f(0.0f, 0.0f, 0.0f, 0.38f);
+			copy_v4_fl4(color, 0.0f, 0.0f, 0.0f, 0.38f);
 		}
-		immUniform1i("colors_len", 0);  /* "simple" mode */
-		immUniform1f("dash_width", 6.0f);
-		immUniform1f("dash_factor", 0.5f);
 
-		immBegin(GPU_PRIM_LINES, 2);
-		immVertex2f(pos, xpos + 0.5f, 12.0f);
-		immVertex2f(pos, xpos + 0.5f, (v2d->cur.ymax + 12.0f) * yscale);
-		immEnd();
-
-		immUnbindProgram();
+		draw_marker_line(color, xpos, yoffs + 1.5f * UI_DPI_ICON_SIZE, height);
 	}
 
 	/* 5 px to offset icon to align properly, space / pixels corrects for zoom */
@@ -445,7 +466,7 @@ static void draw_marker(
 		          ICON_MARKER;
 	}
 
-	UI_icon_draw(xpos - 0.45f * UI_DPI_ICON_SIZE, yoffs + UI_DPI_ICON_SIZE, icon_id);
+	UI_icon_draw(xpos - 0.55f * UI_DPI_ICON_SIZE, yoffs + UI_DPI_ICON_SIZE, icon_id);
 
 	GPU_blend(false);
 
@@ -486,6 +507,7 @@ void ED_markers_draw(const bContext *C, int flag)
 
 	scene = CTX_data_scene(C);
 	v2d = UI_view2d_fromcontext(C);
+	int height = v2d->mask.ymax - v2d->mask.ymin;
 
 	if (flag & DRAW_MARKERS_MARGIN) {
 		uint pos = GPU_vertformat_attr_add(immVertexFormat(), "pos", GPU_COMP_F32, 2, GPU_FETCH_FLOAT);
@@ -524,8 +546,8 @@ void ED_markers_draw(const bContext *C, int flag)
 				if ((marker->frame >= v2d_clip_range_x[0]) &&
 				    (marker->frame <= v2d_clip_range_x[1]))
 				{
-					draw_marker(v2d, fstyle, marker, scene->r.cfra, flag,
-					            ypixels, xscale, yscale);
+					draw_marker(fstyle, marker, scene->r.cfra, flag,
+					            ypixels, xscale, height);
 				}
 			}
 		}
@@ -616,7 +638,8 @@ static int ed_markers_opwrap_invoke_custom(bContext *C, wmOperator *op, const wm
 		BKE_report(op->reports, RPT_ERROR, "Programming error: operator does not actually have code to do anything!");
 
 
-	/* unless successful, must add "pass-through" to let normal operator's have a chance at tackling this event */
+	/* unless successful, must add "pass-through"
+	 * to let normal operator's have a chance at tackling this event */
 	if ((retval & (OPERATOR_FINISHED | OPERATOR_INTERFACE)) == 0) {
 		retval |= OPERATOR_PASS_THROUGH;
 	}
@@ -707,7 +730,6 @@ static void MARKER_OT_add(wmOperatorType *ot)
  *     invoke() calls init, adds modal handler
  *
  *     modal()    accept modal events while doing it, ends with apply and exit, or cancel
- *
  */
 
 typedef struct MarkerMove {
@@ -722,7 +744,7 @@ static bool ed_marker_move_use_time(MarkerMove *mm)
 {
 	if (((mm->slink->spacetype == SPACE_SEQ) && !(((SpaceSeq *)mm->slink)->flag & SEQ_DRAWFRAMES)) ||
 	    ((mm->slink->spacetype == SPACE_ACTION) && (((SpaceAction *)mm->slink)->flag & SACTION_DRAWTIME)) ||
-	    ((mm->slink->spacetype == SPACE_IPO) && !(((SpaceIpo *)mm->slink)->flag & SIPO_DRAWTIME)) ||
+	    ((mm->slink->spacetype == SPACE_GRAPH) && !(((SpaceGraph *)mm->slink)->flag & SIPO_DRAWTIME)) ||
 	    ((mm->slink->spacetype == SPACE_NLA) && !(((SpaceNla *)mm->slink)->flag & SNLA_DRAWTIME)))
 	{
 		return true;
@@ -1279,9 +1301,6 @@ static int ed_marker_box_select_exec(bContext *C, wmOperator *op)
 {
 	View2D *v2d = UI_view2d_fromcontext(C);
 	ListBase *markers = ED_context_get_markers(C);
-	TimeMarker *marker;
-	bool select = !RNA_boolean_get(op->ptr, "deselect");
-	bool extend = RNA_boolean_get(op->ptr, "extend");
 	rctf rect;
 
 	WM_operator_properties_border_to_rctf(op, &rect);
@@ -1290,18 +1309,15 @@ static int ed_marker_box_select_exec(bContext *C, wmOperator *op)
 	if (markers == NULL)
 		return 0;
 
-	/* XXX marker context */
-	for (marker = markers->first; marker; marker = marker->next) {
+	const eSelectOp sel_op = RNA_enum_get(op->ptr, "mode");
+	const bool select = (sel_op != SEL_OP_SUB);
+	if (SEL_OP_USE_PRE_DESELECT(sel_op)) {
+		ED_markers_deselect_all(markers, SEL_DESELECT);
+	}
+
+	for (TimeMarker *marker = markers->first; marker; marker = marker->next) {
 		if (BLI_rctf_isect_x(&rect, marker->frame)) {
-			if (select) {
-				marker->flag |= SELECT;
-			}
-			else {
-				marker->flag &= ~SELECT;
-			}
-		}
-		else if (!extend) {
-			marker->flag &= ~SELECT;
+			SET_FLAG_FROM_TEST(marker->flag, select, SELECT);
 		}
 	}
 
@@ -1334,8 +1350,9 @@ static void MARKER_OT_select_box(wmOperatorType *ot)
 	/* flags */
 	ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
 
-	/* rna */
-	WM_operator_properties_gesture_box_select(ot);
+	/* properties */
+	WM_operator_properties_gesture_box(ot);
+	WM_operator_properties_select_operation_simple(ot);
 }
 
 /* *********************** (de)select all ***************** */
@@ -1343,29 +1360,12 @@ static void MARKER_OT_select_box(wmOperatorType *ot)
 static int ed_marker_select_all_exec(bContext *C, wmOperator *op)
 {
 	ListBase *markers = ED_context_get_markers(C);
-	TimeMarker *marker;
-	int action = RNA_enum_get(op->ptr, "action");
-
-	if (markers == NULL)
+	if (markers == NULL) {
 		return OPERATOR_CANCELLED;
-
-	if (action == SEL_TOGGLE) {
-		action = (ED_markers_get_first_selected(markers) != NULL) ? SEL_DESELECT : SEL_SELECT;
 	}
 
-	for (marker = markers->first; marker; marker = marker->next) {
-		switch (action) {
-			case SEL_SELECT:
-				marker->flag |= SELECT;
-				break;
-			case SEL_DESELECT:
-				marker->flag &= ~SELECT;
-				break;
-			case SEL_INVERT:
-				marker->flag ^= SELECT;
-				break;
-		}
-	}
+	int action = RNA_enum_get(op->ptr, "action");
+	ED_markers_deselect_all(markers, action);
 
 	WM_event_add_notifier(C, NC_SCENE | ND_MARKERS, NULL);
 	WM_event_add_notifier(C, NC_ANIMATION | ND_MARKERS, NULL);
@@ -1499,7 +1499,7 @@ static void MARKER_OT_rename(wmOperatorType *ot)
 static int ed_marker_make_links_scene_exec(bContext *C, wmOperator *op)
 {
 	ListBase *markers = ED_context_get_markers(C);
-	Scene *scene_to = BLI_findlink(&CTX_data_main(C)->scene, RNA_enum_get(op->ptr, "scene"));
+	Scene *scene_to = BLI_findlink(&CTX_data_main(C)->scenes, RNA_enum_get(op->ptr, "scene"));
 	TimeMarker *marker, *marker_new;
 
 	if (scene_to == NULL) {

@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,14 +15,10 @@
  *
  * The Original Code is Copyright (C) 2009 Blender Foundation.
  * All rights reserved.
- *
- * Contributor(s): Blender Foundation
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/space_buttons/buttons_ops.c
- *  \ingroup spbuttons
+/** \file
+ * \ingroup spbuttons
  */
 
 
@@ -43,7 +37,6 @@
 #include "BLT_translation.h"
 
 #include "BKE_context.h"
-#include "BKE_global.h"
 #include "BKE_main.h"
 #include "BKE_report.h"
 
@@ -106,8 +99,9 @@ static int file_browse_exec(bContext *C, wmOperator *op)
 	char *str, path[FILE_MAX];
 	const char *path_prop = RNA_struct_find_property(op->ptr, "directory") ? "directory" : "filepath";
 
-	if (RNA_struct_property_is_set(op->ptr, path_prop) == 0 || fbo == NULL)
+	if (RNA_struct_property_is_set(op->ptr, path_prop) == 0 || fbo == NULL) {
 		return OPERATOR_CANCELLED;
+	}
 
 	str = RNA_string_get_alloc(op->ptr, path_prop, NULL, 0);
 
@@ -134,7 +128,9 @@ static int file_browse_exec(bContext *C, wmOperator *op)
 		}
 		else {
 			char * const lslash = (char *)BLI_last_slash(str);
-			if (lslash) lslash[1] = '\0';
+			if (lslash) {
+				lslash[1] = '\0';
+			}
 		}
 	}
 
@@ -183,8 +179,9 @@ static int file_browse_invoke(bContext *C, wmOperator *op, const wmEvent *event)
 
 	UI_context_active_but_prop_get_filebrowser(C, &ptr, &prop, &is_undo);
 
-	if (!prop)
+	if (!prop) {
 		return OPERATOR_CANCELLED;
+	}
 
 	str = RNA_property_string_get_alloc(&ptr, prop, NULL, 0, NULL);
 
@@ -196,8 +193,9 @@ static int file_browse_invoke(bContext *C, wmOperator *op, const wmEvent *event)
 
 		if (event->alt) {
 			char *lslash = (char *)BLI_last_slash(str);
-			if (lslash)
+			if (lslash) {
 				*lslash = '\0';
+			}
 		}
 
 

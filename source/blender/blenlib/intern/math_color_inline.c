@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -20,11 +18,10 @@
  *
  * The Original Code is: some of this file.
  *
- * ***** END GPL LICENSE BLOCK *****
  * */
 
-/** \file blender/blenlib/intern/math_color_inline.c
- *  \ingroup bli
+/** \file
+ * \ingroup bli
  */
 
 
@@ -225,8 +222,9 @@ MINLINE void srgb_to_linearrgb_uchar4_predivide(float linear[4], const unsigned 
 		return;
 	}
 
-	for (i = 0; i < 4; i++)
+	for (i = 0; i < 4; i++) {
 		fsrgb[i] = srgb[i] * (1.0f / 255.0f);
+	}
 
 	srgb_to_linearrgb_predivide_v4(linear, fsrgb);
 }

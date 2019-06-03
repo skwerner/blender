@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,12 +15,10 @@
  *
  * The Original Code is Copyright (C) 2014 by Blender Foundation
  * All rights reserved.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/object/object_random.c
- *  \ingroup edobj
+/** \file
+ * \ingroup edobj
  */
 
 #include "MEM_guardedalloc.h"
@@ -162,12 +158,12 @@ void TRANSFORM_OT_vertex_random(struct wmOperatorType *ot)
 	ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
 
 	/* props */
-	ot->prop = RNA_def_float(
+	ot->prop = RNA_def_float_distance(
 	        ot->srna, "offset",  0.1f, -FLT_MAX, FLT_MAX,
 	        "Amount", "Distance to offset", -10.0f, 10.0f);
-	RNA_def_float(ot->srna, "uniform",  0.0f, 0.0f, 1.0f, "Uniform",
+	RNA_def_float_factor(ot->srna, "uniform",  0.0f, 0.0f, 1.0f, "Uniform",
 	              "Increase for uniform offset distance", 0.0f, 1.0f);
-	RNA_def_float(ot->srna, "normal",  0.0f, 0.0f, 1.0f, "Normal",
+	RNA_def_float_factor(ot->srna, "normal",  0.0f, 0.0f, 1.0f, "Normal",
 	              "Align offset direction to normals", 0.0f, 1.0f);
 	RNA_def_int(ot->srna, "seed", 0, 0, 10000, "Random Seed", "Seed for the random number generator", 0, 50);
 }

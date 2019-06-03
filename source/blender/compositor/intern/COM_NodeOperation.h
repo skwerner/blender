@@ -1,6 +1,4 @@
 /*
- * Copyright 2011, Blender Foundation.
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -15,9 +13,7 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
- * Contributor:
- *      Jeroen Bakker
- *      Monique Dewanchand
+ * Copyright 2011, Blender Foundation.
  */
 
 #ifndef __COM_NODEOPERATION_H__
@@ -68,7 +64,7 @@ typedef enum InputResizeMode {
 	/** \brief Fit the width or the height of the input image to the width or height of the working area of the node, image will be larger than the working area */
 	COM_SC_FIT = NS_CR_FIT,
 	/** \brief Fit the width and the height of the input image to the width and height of the working area of the node, image will be equally larger than the working area */
-	COM_SC_STRETCH = NS_CR_STRETCH
+	COM_SC_STRETCH = NS_CR_STRETCH,
 } InputResizeMode;
 
 /**

@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,17 +15,9 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
-/** \file DNA_text_types.h
- *  \ingroup DNA
- *  \since mar-2001
- *  \author nzc
+/** \file
+ * \ingroup DNA
  *
  * Text blocks used for Python-Scripts, OpenShadingLanguage
  * and arbitrary text data to store in blend files.
@@ -69,12 +59,18 @@ typedef struct Text {
 #define TXT_MAX_UNDO	(TXT_INIT_UNDO*TXT_INIT_UNDO)
 
 /* text flags */
-#define TXT_ISDIRTY             (1 << 0)
-#define TXT_ISMEM               (1 << 2)
-#define TXT_ISEXT               (1 << 3)
-#define TXT_ISSCRIPT            (1 << 4) /* used by space handler scriptlinks */
-// #define TXT_READONLY            (1 << 8)
-// #define TXT_FOLLOW              (1 << 9) /* always follow cursor (console) */
-#define TXT_TABSTOSPACES        (1 << 10) /* use space instead of tabs */
+enum {
+	TXT_ISDIRTY             = 1 << 0,
+	TXT_ISMEM               = 1 << 2,
+	TXT_ISEXT               = 1 << 3,
+	/** Used by space handler scriptlinks. */
+	TXT_ISSCRIPT            = 1 << 4,
+
+	TXT_FLAG_UNUSED_8       = 1 << 8,  /* cleared */
+	TXT_FLAG_UNUSED_9       = 1 << 9,  /* cleared */
+
+	/** Use space instead of tabs. */
+	TXT_TABSTOSPACES        = 1 << 10,
+};
 
 #endif  /* __DNA_TEXT_TYPES_H__ */

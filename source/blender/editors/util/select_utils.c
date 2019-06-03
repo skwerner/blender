@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,12 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file select_utils.c
- *  \ingroup edutil
+/** \file
+ * \ingroup edutil
  */
 
 #include "BLI_utildefines.h"
@@ -73,6 +69,19 @@ int ED_select_op_action_deselected(const eSelectOp sel_op, const bool is_select,
 	return -1;
 }
 
+/**
+ * Utility to use for selection operations that run multiple times (circle select).
+ */
+eSelectOp ED_select_op_modal(const eSelectOp sel_op, const bool is_first)
+{
+	if (sel_op == SEL_OP_SET) {
+		if (is_first == false) {
+			return SEL_OP_ADD;
+		}
+	}
+	return sel_op;
+}
+
 int ED_select_similar_compare_float(const float delta, const float thresh, const int compare)
 {
 	switch (compare) {
@@ -88,7 +97,7 @@ int ED_select_similar_compare_float(const float delta, const float thresh, const
 	}
 }
 
-bool ED_select_similar_compare_float_tree(const KDTree *tree, const float length, const float thresh, const int compare)
+bool ED_select_similar_compare_float_tree(const KDTree_1d *tree, const float length, const float thresh, const int compare)
 {
 	/* Length of the edge we want to compare against. */
 	float nearest_edge_length;
@@ -114,9 +123,8 @@ bool ED_select_similar_compare_float_tree(const KDTree *tree, const float length
 			return false;
 	}
 
-	KDTreeNearest nearest;
-	float dummy[3] = {nearest_edge_length, 0.0f, 0.0f};
-	if (BLI_kdtree_find_nearest(tree, dummy, &nearest) != -1) {
+	KDTreeNearest_1d nearest;
+	if (BLI_kdtree_1d_find_nearest(tree, &nearest_edge_length, &nearest) != -1) {
 		float delta = length - nearest.co[0];
 		return ED_select_similar_compare_float(delta, thresh, compare);
 	}

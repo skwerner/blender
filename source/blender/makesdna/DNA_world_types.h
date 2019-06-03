@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,10 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file DNA_world_types.h
- *  \ingroup DNA
+/** \file
+ * \ingroup DNA
  */
 
 #ifndef __DNA_WORLD_TYPES_H__
@@ -36,9 +28,9 @@
 #include "DNA_ID.h"
 
 struct AnimData;
-struct bNodeTree;
 struct Ipo;
 struct MTex;
+struct bNodeTree;
 
 #ifndef MAX_MTEX
 #define MAX_MTEX	18
@@ -73,7 +65,7 @@ typedef struct World {
 	 * bit 0: Do mist
 	 */
 	short mode;
-	short pad2[3];
+	char _pad2[6];
 
 	float misi, miststa, mistdist, misthi;
 
@@ -81,11 +73,13 @@ typedef struct World {
 	float aodist, aoenergy;
 
 	/** Assorted settings. */
-	short flag, pad3[3];
+	short flag;
+	char _pad3[6];
 
 	/** Old animation system, deprecated for 2.5. */
 	struct Ipo *ipo  DNA_DEPRECATED;
-	short pr_texture, use_nodes, pad[2];
+	short pr_texture, use_nodes;
+	char _pad[4];
 
 	/* previews */
 	struct PreviewImage *preview;
@@ -94,7 +88,8 @@ typedef struct World {
 	struct bNodeTree *nodetree;
 
 	/** Runtime : miststa + mistdist, used for drawing camera. */
-	float mistend, pad1;
+	float mistend;
+	char _pad1[4];
 	/** Runtime. */
 	ListBase gpumaterial;
 } World;
@@ -103,13 +98,13 @@ typedef struct World {
 
 /* mode */
 #define WO_MIST                   (1 << 0)
-#define WO_MODE_DEPRECATED_1      (1 << 1)  /* cleared */
-#define WO_MODE_DEPRECATED_2      (1 << 2)  /* cleared */
-#define WO_MODE_DEPRECATED_3      (1 << 3)  /* cleared */
-#define WO_MODE_DEPRECATED_4      (1 << 4)  /* cleared */
-#define WO_MODE_DEPRECATED_5      (1 << 5)  /* cleared */
+#define WO_MODE_UNUSED_1          (1 << 1)  /* cleared */
+#define WO_MODE_UNUSED_2          (1 << 2)  /* cleared */
+#define WO_MODE_UNUSED_3          (1 << 3)  /* cleared */
+#define WO_MODE_UNUSED_4          (1 << 4)  /* cleared */
+#define WO_MODE_UNUSED_5          (1 << 5)  /* cleared */
 #define WO_AMB_OCC                (1 << 6)
-#define WO_MODE_DEPRECATED_7      (1 << 7)  /* cleared */
+#define WO_MODE_UNUSED_7          (1 << 7)  /* cleared */
 
 enum {
 	WO_MIST_QUADRATIC          = 0,
@@ -118,10 +113,10 @@ enum {
 };
 
 /* flag */
-#define WO_DS_EXPAND	(1<<0)
+#define WO_DS_EXPAND	(1 << 0)
 	/* NOTE: this must have the same value as MA_DS_SHOW_TEXS,
 	 * otherwise anim-editors will not read correctly
 	 */
-#define WO_DS_SHOW_TEXS	(1<<2)
+#define WO_DS_SHOW_TEXS	(1 << 2)
 
 #endif

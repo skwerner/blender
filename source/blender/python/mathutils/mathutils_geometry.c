@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,14 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * Contributor(s): Joseph Gilbert, Campbell Barton
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/python/mathutils/mathutils_geometry.c
- *  \ingroup pymathutils
+/** \file
+ * \ingroup pymathutils
  */
 
 
@@ -627,12 +621,12 @@ static PyObject *M_Geometry_intersect_line_sphere(PyObject *UNUSED(self), PyObje
 
 		switch (isect_line_sphere_v3(line_a, line_b, sphere_co, sphere_radius, isect_a, isect_b)) {
 			case 1:
-				if (!(!clip || (((lambda = line_point_factor_v3(isect_a, line_a, line_b)) >= 0.0f) && (lambda <= 1.0f)))) use_a = false;
+				if (!(!clip || (((lambda = line_point_factor_v3(isect_a, line_a, line_b)) >= 0.0f) && (lambda <= 1.0f)))) { use_a = false; }
 				use_b = false;
 				break;
 			case 2:
-				if (!(!clip || (((lambda = line_point_factor_v3(isect_a, line_a, line_b)) >= 0.0f) && (lambda <= 1.0f)))) use_a = false;
-				if (!(!clip || (((lambda = line_point_factor_v3(isect_b, line_a, line_b)) >= 0.0f) && (lambda <= 1.0f)))) use_b = false;
+				if (!(!clip || (((lambda = line_point_factor_v3(isect_a, line_a, line_b)) >= 0.0f) && (lambda <= 1.0f)))) { use_a = false; }
+				if (!(!clip || (((lambda = line_point_factor_v3(isect_b, line_a, line_b)) >= 0.0f) && (lambda <= 1.0f)))) { use_b = false; }
 				break;
 			default:
 				use_a = false;
@@ -700,12 +694,12 @@ static PyObject *M_Geometry_intersect_line_sphere_2d(PyObject *UNUSED(self), PyO
 
 		switch (isect_line_sphere_v2(line_a, line_b, sphere_co, sphere_radius, isect_a, isect_b)) {
 			case 1:
-				if (!(!clip || (((lambda = line_point_factor_v2(isect_a, line_a, line_b)) >= 0.0f) && (lambda <= 1.0f)))) use_a = false;
+				if (!(!clip || (((lambda = line_point_factor_v2(isect_a, line_a, line_b)) >= 0.0f) && (lambda <= 1.0f)))) { use_a = false; }
 				use_b = false;
 				break;
 			case 2:
-				if (!(!clip || (((lambda = line_point_factor_v2(isect_a, line_a, line_b)) >= 0.0f) && (lambda <= 1.0f)))) use_a = false;
-				if (!(!clip || (((lambda = line_point_factor_v2(isect_b, line_a, line_b)) >= 0.0f) && (lambda <= 1.0f)))) use_b = false;
+				if (!(!clip || (((lambda = line_point_factor_v2(isect_a, line_a, line_b)) >= 0.0f) && (lambda <= 1.0f)))) { use_a = false; }
+				if (!(!clip || (((lambda = line_point_factor_v2(isect_b, line_a, line_b)) >= 0.0f) && (lambda <= 1.0f)))) { use_b = false; }
 				break;
 			default:
 				use_a = false;
@@ -1231,15 +1225,19 @@ static PyObject *M_Geometry_tessellate_polygon(PyObject *UNUSED(self), PyObject 
 				polyVec = PySequence_GetItem(polyLine, index);
 				if (VectorObject_Check(polyVec)) {
 
-					if (BaseMath_ReadCallback((VectorObject *)polyVec) == -1)
+					if (BaseMath_ReadCallback((VectorObject *)polyVec) == -1) {
 						ls_error = 1;
+					}
 
 					fp[0] = ((VectorObject *)polyVec)->vec[0];
 					fp[1] = ((VectorObject *)polyVec)->vec[1];
-					if (((VectorObject *)polyVec)->size > 2)
+					if (((VectorObject *)polyVec)->size > 2) {
 						fp[2] = ((VectorObject *)polyVec)->vec[2];
-					else
-						fp[2] = 0.0f;  /* if its a 2d vector then set the z to be zero */
+					}
+					else {
+						/* if its a 2d vector then set the z to be zero */
+						fp[2] = 0.0f;
+					}
 				}
 				else {
 					ls_error = 1;
@@ -1516,7 +1514,7 @@ static PyMethodDef M_Geometry_methods[] = {
 	{"box_fit_2d", (PyCFunction) M_Geometry_box_fit_2d, METH_O, M_Geometry_box_fit_2d_doc},
 	{"box_pack_2d", (PyCFunction) M_Geometry_box_pack_2d, METH_O, M_Geometry_box_pack_2d_doc},
 #endif
-	{NULL, NULL, 0, NULL}
+	{NULL, NULL, 0, NULL},
 };
 
 static struct PyModuleDef M_Geometry_module_def = {

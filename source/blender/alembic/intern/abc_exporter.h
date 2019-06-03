@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,10 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * Contributor(s): Esteban Tovagliari, Cedric Paille, Kevin Dietrich
- *
- * ***** END GPL LICENSE BLOCK *****
+ */
+
+/** \file
+ * \ingroup balembic
  */
 
 #ifndef __ABC_EXPORTER_H__
@@ -34,12 +32,12 @@ class AbcObjectWriter;
 class AbcTransformWriter;
 class ArchiveWriter;
 
+struct Base;
 struct Depsgraph;
 struct Main;
 struct Object;
 struct Scene;
 struct ViewLayer;
-struct Base;
 
 struct ExportSettings {
 	ExportSettings();
@@ -71,6 +69,7 @@ struct ExportSettings {
 	bool export_particles;
 
 	bool apply_subdiv;
+	bool curves_as_mesh;
 	bool use_subdiv_schema;
 	bool export_child_hairs;
 	bool export_ogawa;
@@ -117,8 +116,8 @@ private:
 
 	void createTransformWritersHierarchy();
 	AbcTransformWriter *createTransformWriter(Object *ob,  Object *parent, Object *dupliObParent);
-	void exploreTransform(Base *ob_base, Object *parent, Object *dupliObParent);
-	void exploreObject(Base *ob_base, Object *dupliObParent);
+	void exploreTransform(Base *base, Object *object, Object *parent, Object *dupliObParent);
+	void exploreObject(Base *base, Object *object, Object *dupliObParent);
 	void createShapeWriters();
 	void createShapeWriter(Object *ob, Object *dupliObParent);
 	void createParticleSystemsWriters(Object *ob, AbcTransformWriter *xform);

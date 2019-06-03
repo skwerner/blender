@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,14 +15,10 @@
  *
  * The Original Code is Copyright (C) 2009, Blender Foundation, Joshua Leung
  * This is a new part of Blender
- *
- * Contributor(s): Joshua Leung
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/armature/pose_utils.c
- *  \ingroup edarmature
+/** \file
+ * \ingroup edarmature
  */
 
 #include "MEM_guardedalloc.h"
@@ -41,7 +35,6 @@
 #include "BKE_armature.h"
 #include "BKE_idprop.h"
 #include "BKE_layer.h"
-#include "BKE_main.h"
 #include "BKE_object.h"
 
 #include "BKE_context.h"
@@ -132,7 +125,7 @@ static void fcurves_to_pchan_links_get(ListBase *pfLinks, Object *ob, bAction *a
 
 /**
  *  Returns a valid pose armature for this object, else returns NULL.
- **/
+ */
 Object *poseAnim_object_get(Object *ob_)
 {
 	Object *ob = BKE_object_pose_armature_get(ob_);
@@ -244,7 +237,8 @@ void poseAnim_mapping_refresh(bContext *C, Scene *scene, Object *ob)
 	else
 		BKE_pose_where_is(depsgraph, scene, ob);
 
-	DEG_id_tag_update(&ob->id, ID_RECALC_COPY_ON_WRITE); /* otherwise animation doesn't get updated */
+	/* otherwise animation doesn't get updated */
+	DEG_id_tag_update(&ob->id, ID_RECALC_COPY_ON_WRITE);
 	WM_event_add_notifier(C, NC_OBJECT | ND_POSE, ob);
 }
 
@@ -283,7 +277,7 @@ void poseAnim_mapping_reset(ListBase *pfLinks)
 	}
 }
 
-/* perform autokeyframing after changes were made + confirmed */
+/* perform auto-key-framing after changes were made + confirmed */
 void poseAnim_mapping_autoKeyframe(bContext *C, Scene *scene, ListBase *pfLinks, float cframe)
 {
 	ViewLayer *view_layer = CTX_data_view_layer(C);
@@ -309,7 +303,7 @@ void poseAnim_mapping_autoKeyframe(bContext *C, Scene *scene, ListBase *pfLinks,
 		return;
 	}
 
-	/* insert keyframes as necessary if autokeyframing */
+	/* Insert keyframes as necessary if auto-key-framing. */
 	KeyingSet *ks = ANIM_get_keyingset_for_autokeying(scene, ANIM_KS_WHOLE_CHARACTER_ID);
 	ListBase dsources = {NULL, NULL};
 	tPChanFCurveLink *pfl;

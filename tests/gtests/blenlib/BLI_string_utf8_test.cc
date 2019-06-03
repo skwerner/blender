@@ -35,6 +35,9 @@ int mk_wcswidth(const wchar_t *pwcs, size_t n)
 /* -------------------------------------------------------------------- */
 /* tests */
 
+/* Breaking strings is confusing here, prefer over-long lines. */
+/* clang-format off */
+
 /* Each test is made of a 79 bytes (80 with NULL char) string to test, expected string result after
  * stripping invalid utf8 bytes, and a single-byte string encoded with expected number of errors.
  *
@@ -281,8 +284,9 @@ const char *utf8_invalid_tests[][3] = {
     /* Fo now, we ignore those, they do not seem to be crucial anyway... */
 //    5.3.3  U+FDD0 .. U+FDEF
 //    5.3.4  U+nFFFE U+nFFFF (for n = 1..10)
-    {NULL, NULL, NULL}
+    {NULL, NULL, NULL},
 };
+/* clang-format on */
 
 /* BLI_utf8_invalid_strip (and indirectly, BLI_utf8_invalid_byte). */
 TEST(string, Utf8InvalidBytes)

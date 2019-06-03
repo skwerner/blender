@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,15 +15,10 @@
  *
  * The Original Code is Copyright (C) 2008 Blender Foundation.
  * All rights reserved.
- *
- *
- * Contributor(s): Blender Foundation
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/windowmanager/intern/wm_gesture.c
- *  \ingroup wm
+/** \file
+ * \ingroup wm
  *
  * Gestures (cursor motions) creating, evaluating and drawing, shared between operators.
  */
@@ -105,8 +98,9 @@ void WM_gesture_end(bContext *C, wmGesture *gesture)
 {
 	wmWindow *win = CTX_wm_window(C);
 
-	if (win->tweak == gesture)
+	if (win->tweak == gesture) {
 		win->tweak = NULL;
+	}
 	BLI_remlink(&win->gesture, gesture);
 	MEM_freeN(gesture->customdata);
 	if (gesture->userdata && gesture->userdata_free) {
@@ -119,10 +113,18 @@ void WM_gestures_remove(bContext *C)
 {
 	wmWindow *win = CTX_wm_window(C);
 
-	while (win->gesture.first)
+	while (win->gesture.first) {
 		WM_gesture_end(C, win->gesture.first);
+	}
 }
 
+bool WM_gesture_is_modal_first(const wmGesture *gesture)
+{
+	if (gesture == NULL) {
+		return true;
+	}
+	return (gesture->is_active_prev == false);
+}
 
 /* tweak and line gestures */
 int wm_gesture_evaluate(wmGesture *gesture)
@@ -136,13 +138,27 @@ int wm_gesture_evaluate(wmGesture *gesture)
 			int theta = round_fl_to_int(4.0f * atan2f((float)dy, (float)dx) / (float)M_PI);
 			int val = EVT_GESTURE_W;
 
-			if (theta == 0) val = EVT_GESTURE_E;
-			else if (theta == 1) val = EVT_GESTURE_NE;
-			else if (theta == 2) val = EVT_GESTURE_N;
-			else if (theta == 3) val = EVT_GESTURE_NW;
-			else if (theta == -1) val = EVT_GESTURE_SE;
-			else if (theta == -2) val = EVT_GESTURE_S;
-			else if (theta == -3) val = EVT_GESTURE_SW;
+			if (theta == 0) {
+				val = EVT_GESTURE_E;
+			}
+			else if (theta == 1) {
+				val = EVT_GESTURE_NE;
+			}
+			else if (theta == 2) {
+				val = EVT_GESTURE_N;
+			}
+			else if (theta == 3) {
+				val = EVT_GESTURE_NW;
+			}
+			else if (theta == -1) {
+				val = EVT_GESTURE_SE;
+			}
+			else if (theta == -2) {
+				val = EVT_GESTURE_S;
+			}
+			else if (theta == -3) {
+				val = EVT_GESTURE_SW;
+			}
 
 #if 0
 			/* debug */
@@ -197,7 +213,7 @@ static void wm_gesture_draw_rect(wmGesture *gt)
 
 	uint shdr_pos = GPU_vertformat_attr_add(immVertexFormat(), "pos", GPU_COMP_I32, 2, GPU_FETCH_INT_TO_FLOAT);
 
-	glEnable(GL_BLEND);
+	GPU_blend(true);
 
 	immBindBuiltinProgram(GPU_SHADER_2D_UNIFORM_COLOR);
 	immUniformColor4f(1.0f, 1.0f, 1.0f, 0.05f);
@@ -206,7 +222,7 @@ static void wm_gesture_draw_rect(wmGesture *gt)
 
 	immUnbindProgram();
 
-	glDisable(GL_BLEND);
+	GPU_blend(false);
 
 	shdr_pos = GPU_vertformat_attr_add(immVertexFormat(), "pos", GPU_COMP_F32, 2, GPU_FETCH_FLOAT);
 
@@ -231,7 +247,7 @@ static void wm_gesture_draw_circle(wmGesture *gt)
 {
 	rcti *rect = (rcti *)gt->customdata;
 
-	glEnable(GL_BLEND);
+	GPU_blend(true);
 
 	const uint shdr_pos = GPU_vertformat_attr_add(immVertexFormat(), "pos", GPU_COMP_F32, 2, GPU_FETCH_FLOAT);
 
@@ -242,7 +258,7 @@ static void wm_gesture_draw_circle(wmGesture *gt)
 
 	immUnbindProgram();
 
-	glDisable(GL_BLEND);
+	GPU_blend(false);
 
 	immBindBuiltinProgram(GPU_SHADER_2D_LINE_DASHED_UNIFORM_COLOR);
 
@@ -304,7 +320,7 @@ static void draw_filled_lasso(wmGesture *gt)
 		       draw_filled_lasso_px_cb, &lasso_fill_data);
 
 		/* Additive Blending */
-		glEnable(GL_BLEND);
+		GPU_blend(true);
 		glBlendFunc(GL_ONE, GL_ONE);
 
 		GLint unpack_alignment;
@@ -314,7 +330,7 @@ static void draw_filled_lasso(wmGesture *gt)
 
 		IMMDrawPixelsTexState state = immDrawPixelsTexSetup(GPU_SHADER_2D_IMAGE_SHUFFLE_COLOR);
 		GPU_shader_bind(state.shader);
-		GPU_shader_uniform_vector(state.shader, GPU_shader_get_uniform(state.shader, "shuffle"), 4, 1, red);
+		GPU_shader_uniform_vector(state.shader, GPU_shader_get_uniform_ensure(state.shader, "shuffle"), 4, 1, red);
 
 		immDrawPixelsTex(&state, rect.xmin, rect.ymin, w, h, GL_RED, GL_UNSIGNED_BYTE, GL_NEAREST, pixel_buf, 1.0f, 1.0f, NULL);
 
@@ -324,7 +340,7 @@ static void draw_filled_lasso(wmGesture *gt)
 
 		MEM_freeN(pixel_buf);
 
-		glDisable(GL_BLEND);
+		GPU_blend(false);
 		glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 	}
 
@@ -424,12 +440,14 @@ void wm_gesture_draw(wmWindow *win)
 		/* all in subwindow space */
 		wmViewport(&gt->winrct);
 
-		if (gt->type == WM_GESTURE_RECT)
+		if (gt->type == WM_GESTURE_RECT) {
 			wm_gesture_draw_rect(gt);
+		}
 //		else if (gt->type == WM_GESTURE_TWEAK)
 //			wm_gesture_draw_line(gt);
-		else if (gt->type == WM_GESTURE_CIRCLE)
+		else if (gt->type == WM_GESTURE_CIRCLE) {
 			wm_gesture_draw_circle(gt);
+		}
 		else if (gt->type == WM_GESTURE_CROSS_RECT) {
 			if (gt->is_active) {
 				wm_gesture_draw_rect(gt);
@@ -438,12 +456,15 @@ void wm_gesture_draw(wmWindow *win)
 				wm_gesture_draw_cross(win, gt);
 			}
 		}
-		else if (gt->type == WM_GESTURE_LINES)
+		else if (gt->type == WM_GESTURE_LINES) {
 			wm_gesture_draw_lasso(gt, false);
-		else if (gt->type == WM_GESTURE_LASSO)
+		}
+		else if (gt->type == WM_GESTURE_LASSO) {
 			wm_gesture_draw_lasso(gt, true);
-		else if (gt->type == WM_GESTURE_STRAIGHTLINE)
+		}
+		else if (gt->type == WM_GESTURE_STRAIGHTLINE) {
 			wm_gesture_draw_line(gt);
+		}
 	}
 }
 
@@ -451,6 +472,7 @@ void wm_gesture_tag_redraw(bContext *C)
 {
 	bScreen *screen = CTX_wm_screen(C);
 
-	if (screen)
+	if (screen) {
 		screen->do_draw_gesture = true;
+	}
 }

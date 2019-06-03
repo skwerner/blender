@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,26 +15,21 @@
  *
  * The Original Code is Copyright (C) 2008 Blender Foundation.
  * All rights reserved.
- *
- *
- * Contributor(s): Blender Foundation
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file ED_markers.h
- *  \ingroup editors
+/** \file
+ * \ingroup editors
  */
 
 #ifndef __ED_MARKERS_H__
 #define __ED_MARKERS_H__
 
-struct wmKeyConfig;
-struct wmKeyMap;
-struct bContext;
-struct bAnimContext;
 struct Scene;
 struct TimeMarker;
+struct bAnimContext;
+struct bContext;
+struct wmKeyConfig;
+struct wmKeyMap;
 
 /* Drawing API ------------------------------ */
 
@@ -62,6 +55,8 @@ int ED_markers_find_nearest_marker_time(ListBase *markers, float x);
 void ED_markers_get_minmax(ListBase *markers, short sel, float *first, float *last);
 
 void ED_markers_make_cfra_list(ListBase *markers, ListBase *lb, short sel);
+
+void ED_markers_deselect_all(ListBase *markers, int action);
 
 struct TimeMarker *ED_markers_get_first_selected(ListBase *markers);
 

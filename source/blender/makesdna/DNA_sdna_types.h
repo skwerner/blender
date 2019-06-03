@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,20 +15,15 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
-/**
- * \file DNA_sdna_types.h
+/** \file
  * \ingroup DNA
  */
 
 #ifndef __DNA_SDNA_TYPES_H__
 #define __DNA_SDNA_TYPES_H__
+
+struct MemArena;
 
 #
 #
@@ -38,23 +31,25 @@ typedef struct SDNA {
 	/** Full copy of 'encoded' data (when data_alloc is set, otherwise borrowed). */
 	const char *data;
 	/** Length of data. */
-	int datalen;
+	int data_len;
 	bool data_alloc;
 
 	/** Total number of struct members. */
-	int nr_names;
+	int nr_names, nr_names_alloc;
 	/** Struct member names. */
 	const char **names;
+	/** Result of #DNA_elem_array_size (aligned with #names). */
+	short *names_array_len;
 
 	/** Size of a pointer in bytes. */
-	int pointerlen;
+	int pointer_size;
 
 	/** Number of basic types + struct types. */
 	int nr_types;
 	/** Type names. */
 	const char **types;
 	/** Type lengths. */
-	short *typelens;
+	short *types_size;
 
 	/** Number of struct types. */
 	int nr_structs;
@@ -69,6 +64,17 @@ typedef struct SDNA {
 
 	/** #GHash for faster lookups, requires WITH_DNA_GHASH to be used for now. */
 	struct GHash *structs_map;
+
+	/** Temporary memory currently only used for version patching DNA. */
+	struct MemArena *mem_arena;
+	/** Runtime versions of data stored in DNA, lazy initialized,
+	 * only different when renaming is done. */
+	struct {
+		/** Aligned with #SDNA.names, same pointers when unchanged. */
+		const char **names;
+		/** Aligned with #SDNA.types, same pointers when unchanged. */
+		const char **types;
+	} alias;
 } SDNA;
 
 #

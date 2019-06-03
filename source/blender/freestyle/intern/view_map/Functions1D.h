@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,19 +12,14 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
 #ifndef __FREESTYLE_FUNCTIONS_1D_H__
 #define __FREESTYLE_FUNCTIONS_1D_H__
 
-/** \file blender/freestyle/intern/view_map/Functions1D.h
- *  \ingroup freestyle
- *  \brief Functions taking 1D input
- *  \author Stephane Grabli
- *  \author Emmanuel Turquin
- *  \date 01/07/2003
+/** \file
+ * \ingroup freestyle
+ * \brief Functions taking 1D input
  */
 
 #include "Functions0D.h"
@@ -52,7 +45,7 @@ namespace Freestyle {
 
 /*! Base class for Unary Functions (functors) working on Interface1D.
  *  A unary function will be used by calling its operator() on an Interface1D.
- *  \attention In the scripting language, there exists several prototypes depending on the returned value type.
+ * \attention In the scripting language, there exists several prototypes depending on the returned value type.
  *  For example, you would inherit from a UnaryFunction1DDouble if you wish to define a function that returns a double.
  *  The different existing prototypes are:
  *    - UnaryFunction1DDouble

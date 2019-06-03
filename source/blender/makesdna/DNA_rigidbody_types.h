@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,17 +15,11 @@
  *
  * The Original Code is Copyright (C) 2013 Blender Foundation
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): Joshua Leung, Sergej Reich
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file DNA_rigidbody_types.h
- *  \ingroup DNA
- *  \brief Types and defines for representing Rigid Body entities
+/** \file
+ * \ingroup DNA
+ * \brief Types and defines for representing Rigid Body entities
  */
 
 #ifndef __DNA_RIGIDBODY_TYPES_H__
@@ -70,7 +62,7 @@ typedef struct RigidBodyWorld {
 	/** Group containing objects to use for Rigid Body Constraint.s*/
 	struct Collection *constraints;
 
-	int pad;
+	char _pad[4];
 	/** Last frame world was evaluated for (internal). */
 	float ltime;
 
@@ -101,7 +93,7 @@ typedef enum eRigidBodyWorld_Flag {
 	/* sim data needs to be rebuilt */
 	RBW_FLAG_NEEDS_REBUILD		= (1 << 1),
 	/* usse split impulse when stepping the simulation */
-	RBW_FLAG_USE_SPLIT_IMPULSE	= (1 << 2)
+	RBW_FLAG_USE_SPLIT_IMPULSE	= (1 << 2),
 } eRigidBodyWorld_Flag;
 
 /* ******************************** */
@@ -140,7 +132,7 @@ typedef struct RigidBodyOb {
 	int col_groups;
 	/** (eRigidBody_MeshSource) mesh source for mesh based collision shapes. */
 	short mesh_source;
-	short pad;
+	char _pad[2];
 
 	/* Physics Parameters */
 	/** How much object 'weighs' (i.e. absolute 'amount of stuff' it holds). */
@@ -168,7 +160,7 @@ typedef struct RigidBodyOb {
 	float orn[4];
 	/** Rigid body position. */
 	float pos[3];
-	float pad1;
+	char _pad1[4];
 
 	/** This pointer is shared between all evaluated copies. */
 	struct RigidBodyOb_Shared *shared;
@@ -180,7 +172,7 @@ typedef enum eRigidBodyOb_Type {
 	/* active geometry participant in simulation. is directly controlled by sim */
 	RBO_TYPE_ACTIVE	= 0,
 	/* passive geometry participant in simulation. is directly controlled by animsys */
-	RBO_TYPE_PASSIVE
+	RBO_TYPE_PASSIVE,
 } eRigidBodyOb_Type;
 
 /* Flags for RigidBodyOb */
@@ -200,28 +192,28 @@ typedef enum eRigidBodyOb_Flag {
 	/* collision margin is not embedded (only used by convex hull shapes for now) */
 	RBO_FLAG_USE_MARGIN			= (1 << 6),
 	/* collision shape deforms during simulation (only for passive triangle mesh shapes) */
-	RBO_FLAG_USE_DEFORM			= (1 << 7)
+	RBO_FLAG_USE_DEFORM			= (1 << 7),
 } eRigidBodyOb_Flag;
 
 /* RigidBody Collision Shape */
 typedef enum eRigidBody_Shape {
-		/* simple box (i.e. bounding box) */
+	/** Simple box (i.e. bounding box). */
 	RB_SHAPE_BOX = 0,
-		/* sphere */
+	/** Sphere. */
 	RB_SHAPE_SPHERE,
-		/* rounded "pill" shape (i.e. calcium tablets) */
+	/** Rounded "pill" shape (i.e. calcium tablets). */
 	RB_SHAPE_CAPSULE,
-		/* cylinder (i.e. pringles can) */
+	/** Cylinder (i.e. pringles can). */
 	RB_SHAPE_CYLINDER,
-		/* cone (i.e. party hat) */
+	/** Cone (i.e. party hat). */
 	RB_SHAPE_CONE,
 
-		/* convex hull (minimal shrinkwrap encompassing all verts) */
+	/** Convex hull (minimal shrinkwrap encompassing all verts). */
 	RB_SHAPE_CONVEXH,
-		/* triangulated mesh */
+	/** Triangulated mesh. */
 	RB_SHAPE_TRIMESH,
 
-		/* concave mesh approximated using primitives */
+	/* concave mesh approximated using primitives */
 	//RB_SHAPE_COMPOUND,
 } eRigidBody_Shape;
 
@@ -231,7 +223,7 @@ typedef enum eRigidBody_MeshSource {
 	/* only deformations */
 	RBO_MESH_DEFORM,
 	/* final derived mesh */
-	RBO_MESH_FINAL
+	RBO_MESH_FINAL,
 } eRigidBody_MeshSource;
 
 /* ******************************** */
@@ -260,7 +252,7 @@ typedef struct RigidBodyCon {
 	float breaking_threshold;
 	/** Spring implementation to use. */
 	char spring_type;
-	char pad[3];
+	char _pad[3];
 
 	/* limits */
 	/* translation limits */
@@ -312,29 +304,30 @@ typedef struct RigidBodyCon {
 
 /* Participation types for RigidBodyOb */
 typedef enum eRigidBodyCon_Type {
-	/* lets bodies rotate around a specified point */
+	/** lets bodies rotate around a specified point */
 	RBC_TYPE_POINT = 0,
-	/* lets bodies rotate around a specified axis */
+	/** lets bodies rotate around a specified axis */
 	RBC_TYPE_HINGE,
-	/* simulates wheel suspension */
+	/** simulates wheel suspension */
 	RBC_TYPE_HINGE2,
-	/* restricts movent to a specified axis */
+	/** restricts movent to a specified axis */
 	RBC_TYPE_SLIDER,
-	/* lets object rotate within a cpecified cone */
+	/** lets object rotate within a cpecified cone */
 	RBC_TYPE_CONE_TWIST,
-	/* allows user to specify constraint axes */
+	/** allows user to specify constraint axes */
 	RBC_TYPE_6DOF,
-	/* like 6DOF but has springs */
+	/** like 6DOF but has springs */
 	RBC_TYPE_6DOF_SPRING,
-	/* simulates a universal joint */
+	/** simulates a universal joint */
 	RBC_TYPE_UNIVERSAL,
-	/* glues two bodies together */
+	/** glues two bodies together */
 	RBC_TYPE_FIXED,
-	/* similar to slider but also allows rotation around slider axis */
+	/** similar to slider but also allows rotation around slider axis */
 	RBC_TYPE_PISTON,
-	/* Simplified spring constraint with only once axis that's automatically placed between the connected bodies */
+	/** Simplified spring constraint with only once axis that's
+	 * automatically placed between the connected bodies */
 	RBC_TYPE_SPRING,
-	/* dirves bodies by applying linear and angular forces */
+	/** dirves bodies by applying linear and angular forces */
 	RBC_TYPE_MOTOR,
 } eRigidBodyCon_Type;
 
@@ -373,7 +366,7 @@ typedef enum eRigidBodyCon_Flag {
 	/* angular springs */
 	RBC_FLAG_USE_SPRING_ANG_X			= (1 << 16),
 	RBC_FLAG_USE_SPRING_ANG_Y			= (1 << 17),
-	RBC_FLAG_USE_SPRING_ANG_Z			= (1 << 18)
+	RBC_FLAG_USE_SPRING_ANG_Z			= (1 << 18),
 } eRigidBodyCon_Flag;
 
 /* ******************************** */

@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,18 +12,14 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
 #ifndef __FREESTYLE_BASIC_STROKE_SHADERS_H__
 #define __FREESTYLE_BASIC_STROKE_SHADERS_H__
 
-/** \file blender/freestyle/intern/stroke/BasicStrokeShaders.h
- *  \ingroup freestyle
- *  \brief Class gathering basic stroke shaders
- *  \author Stephane Grabli
- *  \date 17/12/2002
+/** \file
+ * \ingroup freestyle
+ * \brief Class gathering basic stroke shaders
  */
 
 #include <fstream>
@@ -428,7 +422,7 @@ public:
 
 /*! [ Geometry Shader. ]
  *  Resamples the stroke.
- *  \see Stroke::Resample(float).
+ * \see Stroke::Resample(float).
  */
 class SamplingShader: public StrokeShader
 {
@@ -479,7 +473,7 @@ public:
 /*! [ Geometry Shader ].
  *  Transforms the stroke backbone geometry so that it corresponds to a Bezier Curve approximation of the
  *  original backbone geometry.
- *  \see \htmlonly <a href=bezier/bezier.html>bezier/bezier.html</a> \endhtmlonly
+ * \see \htmlonly <a href=bezier/bezier.html>bezier/bezier.html</a> \endhtmlonly
  */
 class BezierCurveShader : public StrokeShader
 {

@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,10 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/transform/transform_conversions.c
- *  \ingroup edtransform
+/** \file
+ * \ingroup edtransform
  */
 
 #include <string.h>
@@ -413,15 +405,39 @@ static void createTransCursor_view3d(TransInfo *t)
 	td->ob = NULL;
 
 	unit_m3(td->mtx);
-	quat_to_mat3(td->axismtx, cursor->rotation);
+	BKE_scene_cursor_rot_to_mat3(cursor, td->axismtx);
 	normalize_m3(td->axismtx);
 	pseudoinverse_m3_m3(td->smtx, td->mtx, PSEUDOINVERSE_EPSILON);
 
 	td->loc = cursor->location;
 	copy_v3_v3(td->iloc, cursor->location);
 
-	td->ext->quat = cursor->rotation;
-	copy_qt_qt(td->ext->iquat, cursor->rotation);
+	if (cursor->rotation_mode > 0) {
+		td->ext->rot = cursor->rotation_euler;
+		td->ext->rotAxis = NULL;
+		td->ext->rotAngle = NULL;
+		td->ext->quat = NULL;
+
+		copy_v3_v3(td->ext->irot, cursor->rotation_euler);
+	}
+	else if (cursor->rotation_mode == ROT_MODE_AXISANGLE) {
+		td->ext->rot = NULL;
+		td->ext->rotAxis = cursor->rotation_axis;
+		td->ext->rotAngle = &cursor->rotation_angle;
+		td->ext->quat = NULL;
+
+		td->ext->irotAngle = cursor->rotation_angle;
+		copy_v3_v3(td->ext->irotAxis, cursor->rotation_axis);
+	}
+	else {
+		td->ext->rot = NULL;
+		td->ext->rotAxis = NULL;
+		td->ext->rotAngle = NULL;
+		td->ext->quat = cursor->rotation_quaternion;
+
+		copy_qt_qt(td->ext->iquat, cursor->rotation_quaternion);
+	}
+	td->ext->rotOrder = cursor->rotation_mode;
 }
 
 /** \} */
@@ -997,14 +1013,16 @@ static short pose_grab_with_ik_add(bPoseChannel *pchan)
 			data = con->data;
 
 			if (data->tar == NULL || (data->tar->type == OB_ARMATURE && data->subtarget[0] == '\0')) {
-				/* make reference to constraint to base things off later (if it's the last targetless constraint encountered) */
+				/* make reference to constraint to base things off later
+				 * (if it's the last targetless constraint encountered) */
 				targetless = (bKinematicConstraint *)con->data;
 
 				/* but, if this is a targetless IK, we make it auto anyway (for the children loop) */
 				if (con->enforce != 0.0f) {
 					data->flag |= CONSTRAINT_IK_AUTO;
 
-					/* if no chain length has been specified, just make things obey standard rotation locks too */
+					/* if no chain length has been specified,
+					 * just make things obey standard rotation locks too */
 					if (data->rootbone == 0) {
 						for (; pchan; pchan = pchan->parent) {
 							/* here, we set ik-settings for bone from pchan->protectflag */
@@ -1025,7 +1043,10 @@ static short pose_grab_with_ik_add(bPoseChannel *pchan)
 	}
 
 	con = BKE_constraint_add_for_pose(NULL, pchan, "TempConstraint", CONSTRAINT_TYPE_KINEMATIC);
-	pchan->constflag |= (PCHAN_HAS_IK | PCHAN_HAS_TARGET);    /* for draw, but also for detecting while pose solving */
+
+	/* for draw, but also for detecting while pose solving */
+	pchan->constflag |= (PCHAN_HAS_IK | PCHAN_HAS_TARGET);
+
 	data = con->data;
 	if (targetless) {
 		/* if exists, use values from last targetless (but disabled) IK-constraint as base */
@@ -1035,7 +1056,10 @@ static short pose_grab_with_ik_add(bPoseChannel *pchan)
 		data->flag = CONSTRAINT_IK_TIP;
 	data->flag |= CONSTRAINT_IK_TEMP | CONSTRAINT_IK_AUTO | CONSTRAINT_IK_POS;
 	copy_v3_v3(data->grabtarget, pchan->pose_tail);
-	data->rootbone = 0; /* watch-it! has to be 0 here, since we're still on the same bone for the first time through the loop [#25885] */
+
+	/* watch-it! has to be 0 here, since we're still on the
+	 * same bone for the first time through the loop T25885. */
+	data->rootbone = 0;
 
 	/* we only include bones that are part of a continual connected chain */
 	do {
@@ -1096,7 +1120,8 @@ static short pose_grab_with_ik(Main *bmain, Object *ob)
 
 	arm = ob->data;
 
-	/* Rule: allow multiple Bones (but they must be selected, and only one ik-solver per chain should get added) */
+	/* Rule: allow multiple Bones
+	 * (but they must be selected, and only one ik-solver per chain should get added) */
 	for (pchan = ob->pose->chanbase.first; pchan; pchan = pchan->next) {
 		if (pchan->bone->layer & arm->layer) {
 			if (pchan->bone->flag & BONE_SELECTED) {
@@ -1179,7 +1204,10 @@ static void createTransPose(TransInfo *t)
 		/* do we need to add temporal IK chains? */
 		if ((arm->flag & ARM_AUTO_IK) && t->mode == TFM_TRANSLATION) {
 			ik_on = pose_grab_with_ik(bmain, ob);
-			if (ik_on) t->flag |= T_AUTOIK;
+			if (ik_on) {
+				t->flag |= T_AUTOIK;
+				has_translate_rotate[0] = true;
+			}
 		}
 	}
 
@@ -1853,13 +1881,14 @@ static void createTransCurveVerts(TransInfo *t)
 							else td->flag = 0;
 							td->ext = NULL;
 
-							if (t->mode == TFM_CURVE_SHRINKFATTEN) { /* || t->mode==TFM_RESIZE) {*/ /* TODO - make points scale */
+							/* TODO - make points scale */
+							if (t->mode == TFM_CURVE_SHRINKFATTEN) { /* || t->mode==TFM_RESIZE) {*/
 								td->val = &(bezt->radius);
 								td->ival = bezt->radius;
 							}
 							else if (t->mode == TFM_TILT) {
-								td->val = &(bezt->alfa);
-								td->ival = bezt->alfa;
+								td->val = &(bezt->tilt);
+								td->ival = bezt->tilt;
 							}
 							else {
 								td->val = NULL;
@@ -1873,7 +1902,8 @@ static void createTransCurveVerts(TransInfo *t)
 
 							if ((bezt_tx & SEL_F1) == 0 && (bezt_tx & SEL_F3) == 0)
 								/* If the middle is selected but the sides arnt, this is needed */
-								if (hdata == NULL) { /* if the handle was not saved by the previous handle */
+								if (hdata == NULL) {
+									/* if the handle was not saved by the previous handle */
 									hdata = initTransDataCurveHandles(td, bezt);
 								}
 
@@ -1897,7 +1927,8 @@ static void createTransCurveVerts(TransInfo *t)
 							td->ext = NULL;
 							td->val = NULL;
 
-							if (hdata == NULL) { /* if the handle was not saved by the previous handle */
+							if (hdata == NULL) {
+								/* if the handle was not saved by the previous handle */
 								hdata = initTransDataCurveHandles(td, bezt);
 							}
 
@@ -1924,7 +1955,8 @@ static void createTransCurveVerts(TransInfo *t)
 				/* TODO - in the case of tilt and radius we can also avoid allocating the initTransDataCurveHandles
 				 * but for now just don't change handle types */
 				if (ELEM(t->mode, TFM_CURVE_SHRINKFATTEN, TFM_TILT, TFM_DUMMY) == 0) {
-					/* sets the handles based on their selection, do this after the data is copied to the TransData */
+					/* sets the handles based on their selection,
+					 * do this after the data is copied to the TransData */
 					BKE_nurb_handles_test(nu, !hide_handles);
 				}
 			}
@@ -1966,8 +1998,8 @@ static void createTransCurveVerts(TransInfo *t)
 								td->ival = bp->radius;
 							}
 							else {
-								td->val = &(bp->alfa);
-								td->ival = bp->alfa;
+								td->val = &(bp->tilt);
+								td->ival = bp->tilt;
 							}
 
 							copy_m3_m3(td->smtx, smtx);
@@ -2071,7 +2103,6 @@ static void createTransParticleVerts(bContext *C, TransInfo *t)
 		ParticleEditSettings *pset = PE_settings(t->scene);
 		PTCacheEdit *edit = PE_get_current(t->scene, ob);
 		ParticleSystem *psys = NULL;
-		ParticleSystemModifierData *psmd = NULL;
 		PTCacheEditPoint *point;
 		PTCacheEditKey *key;
 		float mat[4][4];
@@ -2082,9 +2113,6 @@ static void createTransParticleVerts(bContext *C, TransInfo *t)
 		if (edit == NULL || t->settings->particle.selectmode == SCE_SELECT_PATH) return;
 
 		psys = edit->psys;
-
-		if (psys)
-			psmd = psys_get_modifier(ob, psys);
 
 		for (i = 0, point = edit->points; i < edit->totpoint; i++, point++) {
 			point->flag &= ~PEP_TRANSFORM;
@@ -2130,8 +2158,10 @@ static void createTransParticleVerts(bContext *C, TransInfo *t)
 
 			if (!(point->flag & PEP_TRANSFORM)) continue;
 
-			if (psys && !(psys->flag & PSYS_GLOBAL_HAIR))
-				psys_mat_hair_to_global(ob, psmd->mesh_final, psys->part->from, psys->particles + i, mat);
+			if (psys && !(psys->flag & PSYS_GLOBAL_HAIR)) {
+				ParticleSystemModifierData *psmd_eval = edit->psmd_eval;
+				psys_mat_hair_to_global(ob, psmd_eval->mesh_final, psys->part->from, psys->particles + i, mat);
+			}
 
 			for (k = 0, key = point->keys; k < point->totkey; k++, key++) {
 				if (key->flag & PEK_USE_WCO) {
@@ -2190,16 +2220,12 @@ void flushTransParticles(TransInfo *t)
 		Object *ob = OBACT(view_layer);
 		PTCacheEdit *edit = PE_get_current(scene, ob);
 		ParticleSystem *psys = edit->psys;
-		ParticleSystemModifierData *psmd = NULL;
 		PTCacheEditPoint *point;
 		PTCacheEditKey *key;
 		TransData *td;
 		float mat[4][4], imat[4][4], co[3];
 		int i, k;
 		const bool is_prop_edit = (t->flag & T_PROP_EDIT) != 0;
-
-		if (psys)
-			psmd = psys_get_modifier(ob, psys);
 
 		/* we do transform in world space, so flush world space position
 		 * back to particle local space (only for hair particles) */
@@ -2208,7 +2234,8 @@ void flushTransParticles(TransInfo *t)
 			if (!(point->flag & PEP_TRANSFORM)) continue;
 
 			if (psys && !(psys->flag & PSYS_GLOBAL_HAIR)) {
-				psys_mat_hair_to_global(ob, psmd->mesh_final, psys->part->from, psys->particles + i, mat);
+				ParticleSystemModifierData *psmd_eval = edit->psmd_eval;
+				psys_mat_hair_to_global(ob, psmd_eval->mesh_final, psys->part->from, psys->particles + i, mat);
 				invert_m4_m4(imat, mat);
 
 				for (k = 0, key = point->keys; k < point->totkey; k++, key++) {
@@ -2228,6 +2255,7 @@ void flushTransParticles(TransInfo *t)
 		}
 
 		PE_update_object(t->depsgraph, scene, OBACT(view_layer), 1);
+		DEG_id_tag_update(&ob->id, ID_RECALC_PSYS_REDO);
 	}
 }
 
@@ -2264,7 +2292,7 @@ static bool bmesh_test_dist_add(
 }
 
 /**
- * \param mtx: Measure disatnce in this space.
+ * \param mtx: Measure distance in this space.
  * \param dists: Store the closest connected distance to selected vertices.
  * \param index: Optionally store the original index we're measuring the distance to (can be NULL).
  */
@@ -2452,7 +2480,8 @@ static struct TransIslandData *editmesh_islands_info_calc(
 
 	vert_map = MEM_mallocN(sizeof(*vert_map) * bm->totvert, __func__);
 	/* we shouldn't need this, but with incorrect selection flushing
-	 * its possible we have a selected vertex that's not in a face, for now best not crash in that case. */
+	 * its possible we have a selected vertex that's not in a face,
+	 * for now best not crash in that case. */
 	copy_vn_i(vert_map, bm->totvert, -1);
 
 	BM_mesh_elem_table_ensure(bm, htype);
@@ -2664,10 +2693,12 @@ static void createTransEditVerts(TransInfo *t)
 		int island_info_tot;
 		int *island_vert_map = NULL;
 
-		/* Snap rotation along normal needs a common axis for whole islands, otherwise one get random crazy results,
-		 * see T59104. However, we do not want to use the island center for the pivot/translation reference... */
+		/* Snap rotation along normal needs a common axis for whole islands,
+		 * otherwise one get random crazy results, see T59104.
+		 * However, we do not want to use the island center for the pivot/translation reference. */
 		const bool is_snap_rotate = ((t->mode == TFM_TRANSLATION) &&
-		                             /* There is not guarantee that snapping is initialized yet at this point... */
+		                             /* There is not guarantee that snapping
+		                              * is initialized yet at this point... */
 		                             (usingSnappingNormal(t) || (t->settings->snap_flag & SCE_SNAP_ROTATE) != 0) &&
 		                             (t->around != V3D_AROUND_LOCAL_ORIGINS));
 		/* Even for translation this is needed because of island-orientation, see: T51651. */
@@ -2966,7 +2997,8 @@ BLI_INLINE void trans_update_seq(Scene *sce, Sequence *seq, int old_start, int s
 
 void flushTransSeq(TransInfo *t)
 {
-	ListBase *seqbasep = BKE_sequencer_editing_get(t->scene, false)->seqbasep; /* Editing null check already done */
+	/* Editing null check already done */
+	ListBase *seqbasep = BKE_sequencer_editing_get(t->scene, false)->seqbasep;
 
 	int a, new_frame;
 	TransData *td = NULL;
@@ -2993,11 +3025,15 @@ void flushTransSeq(TransInfo *t)
 		switch (tdsq->sel_flag) {
 			case SELECT:
 #ifdef SEQ_TX_NESTED_METAS
-				if ((seq->depth != 0 || BKE_sequence_tx_test(seq))) /* for meta's, their children move */
+				if ((seq->depth != 0 || BKE_sequence_tx_test(seq))) {
+					/* for meta's, their children move */
 					seq->start = new_frame - tdsq->start_offset;
+				}
 #else
-				if (seq->type != SEQ_TYPE_META && (seq->depth != 0 || seq_tx_test(seq))) /* for meta's, their children move */
+				if (seq->type != SEQ_TYPE_META && (seq->depth != 0 || seq_tx_test(seq))) {
+					/* for meta's, their children move */
 					seq->start = new_frame - tdsq->start_offset;
+				}
 #endif
 				if (seq->depth == 0) {
 					seq->machine = round_fl_to_int(td2d->loc[1]);
@@ -3007,12 +3043,16 @@ void flushTransSeq(TransInfo *t)
 			case SEQ_LEFTSEL: /* no vertical transform  */
 				BKE_sequence_tx_set_final_left(seq, new_frame);
 				BKE_sequence_tx_handle_xlimits(seq, tdsq->flag & SEQ_LEFTSEL, tdsq->flag & SEQ_RIGHTSEL);
-				BKE_sequence_single_fix(seq); /* todo - move this into aftertrans update? - old seq tx needed it anyway */
+
+				/* todo - move this into aftertrans update? - old seq tx needed it anyway */
+				BKE_sequence_single_fix(seq);
 				break;
 			case SEQ_RIGHTSEL: /* no vertical transform  */
 				BKE_sequence_tx_set_final_right(seq, new_frame);
 				BKE_sequence_tx_handle_xlimits(seq, tdsq->flag & SEQ_LEFTSEL, tdsq->flag & SEQ_RIGHTSEL);
-				BKE_sequence_single_fix(seq); /* todo - move this into aftertrans update? - old seq tx needed it anyway */
+
+				/* todo - move this into aftertrans update? - old seq tx needed it anyway */
+				BKE_sequence_single_fix(seq);
 				break;
 		}
 
@@ -3039,8 +3079,8 @@ void flushTransSeq(TransInfo *t)
 		trans_update_seq(t->scene, seq_prev, old_start_prev, sel_flag_prev);
 	}
 
-
-	if (ELEM(t->mode, TFM_SEQ_SLIDE, TFM_TIME_TRANSLATE)) { /* originally TFM_TIME_EXTEND, transform changes */
+	/* originally TFM_TIME_EXTEND, transform changes */
+	if (ELEM(t->mode, TFM_SEQ_SLIDE, TFM_TIME_TRANSLATE)) {
 		/* Special annoying case here, need to calc metas with TFM_TIME_EXTEND only */
 
 		/* calc all meta's then effects [#27953] */
@@ -3298,7 +3338,8 @@ finally:
 void flushTransUVs(TransInfo *t)
 {
 	SpaceImage *sima = t->sa->spacedata.first;
-	const bool use_pixel_snap = ((sima->flag & SI_PIXELSNAP) && (t->state != TRANS_CANCEL));
+	const bool use_pixel_snap = ((sima->pixel_snap_mode != SI_PIXEL_SNAP_DISABLED) &&
+	                             (t->state != TRANS_CANCEL));
 
 	FOREACH_TRANS_DATA_CONTAINER (t, tc) {
 		TransData2D *td;
@@ -3321,8 +3362,22 @@ void flushTransUVs(TransInfo *t)
 			td->loc2d[1] = td->loc[1] * aspect_inv[1];
 
 			if (use_pixel_snap) {
-				td->loc2d[0] = roundf(td->loc2d[0] * size[0]) / size[0];
-				td->loc2d[1] = roundf(td->loc2d[1] * size[1]) / size[1];
+				td->loc2d[0] *= size[0];
+				td->loc2d[1] *= size[1];
+
+				switch (sima->pixel_snap_mode) {
+					case SI_PIXEL_SNAP_CENTER:
+						td->loc2d[0] = roundf(td->loc2d[0] - 0.5f) + 0.5f;
+						td->loc2d[1] = roundf(td->loc2d[1] - 0.5f) + 0.5f;
+						break;
+					case SI_PIXEL_SNAP_CORNER:
+						td->loc2d[0] = roundf(td->loc2d[0]);
+						td->loc2d[1] = roundf(td->loc2d[1]);
+						break;
+				}
+
+				td->loc2d[0] /= size[0];
+				td->loc2d[1] /= size[1];
 			}
 		}
 	}
@@ -3572,7 +3627,8 @@ static void createTransNlaData(bContext *C, TransInfo *t)
 							td++;
 						}
 						if (FrameOnMouseSide(t->frame_side, strip->end, (float)CFRA)) {
-							/* if tdn is already holding the start handle, then we're doing both, otherwise, only end */
+							/* if tdn is already holding the start handle,
+							 * then we're doing both, otherwise, only end */
 							tdn->handle = (tdn->handle) ? 2 : 1;
 
 							/* now, link the transform data up to this data */
@@ -3991,7 +4047,8 @@ static TransData *ActionFCurveToTransData(TransData *td, TransData2D **td2dv, FC
 
 	for (i = 0, bezt = fcu->bezt; i < fcu->totvert; i++, bezt++) {
 		/* only add selected keyframes (for now, proportional edit is not enabled) */
-		if (is_prop_edit || (bezt->f2 & SELECT)) { /* note this MUST match count_fcurve_keys(), so can't use BEZT_ISSEL_ANY() macro */
+		if (is_prop_edit || (bezt->f2 & SELECT)) { /* note this MUST match count_fcurve_keys(),
+		                                            * so can't use BEZT_ISSEL_ANY() macro */
 			/* only add if on the right 'side' of the current frame */
 			if (FrameOnMouseSide(side, bezt->vec[1][0], cfra)) {
 				TimeToTransData(td, bezt->vec[1], adt, ypos);
@@ -4475,7 +4532,7 @@ static void graph_key_shortest_dist(TransInfo *t, FCurve *fcu, TransData *td_sta
 
 static void createTransGraphEditData(bContext *C, TransInfo *t)
 {
-	SpaceIpo *sipo = (SpaceIpo *)t->sa->spacedata.first;
+	SpaceGraph *sipo = (SpaceGraph *)t->sa->spacedata.first;
 	Scene *scene = t->scene;
 	ARegion *ar = t->ar;
 	View2D *v2d = &ar->v2d;
@@ -4644,7 +4701,8 @@ static void createTransGraphEditData(bContext *C, TransInfo *t)
 
 		unit_scale = ANIM_unit_mapping_get_factor(ac.scene, ale->id, ale->key_data, anim_map_flag, &offset);
 
-		/* only include BezTriples whose 'keyframe' occurs on the same side of the current frame as mouse (if applicable) */
+		/* only include BezTriples whose 'keyframe' occurs on the same side
+		 * of the current frame as mouse (if applicable) */
 		for (i = 0, bezt = fcu->bezt; i < fcu->totvert; i++, bezt++) {
 			if (FrameOnMouseSide(t->frame_side, bezt->vec[1][0], cfra)) {
 				const bool sel2 = (bezt->f2 & SELECT) != 0;
@@ -4748,7 +4806,8 @@ static void createTransGraphEditData(bContext *C, TransInfo *t)
 			else
 				cfra = (float)CFRA;
 
-			/* only include BezTriples whose 'keyframe' occurs on the same side of the current frame as mouse (if applicable) */
+			/* only include BezTriples whose 'keyframe' occurs on the
+			 * same side of the current frame as mouse (if applicable) */
 			for (i = 0, bezt = fcu->bezt; i < fcu->totvert; i++, bezt++) {
 				if (FrameOnMouseSide(t->frame_side, bezt->vec[1][0], cfra)) {
 					const bool sel2 = (bezt->f2 & SELECT) != 0;
@@ -4962,7 +5021,7 @@ static void beztmap_to_data(TransInfo *t, FCurve *fcu, BeztMap *bezms, int totve
  */
 void remake_graph_transdata(TransInfo *t, ListBase *anim_data)
 {
-	SpaceIpo *sipo = (SpaceIpo *)t->sa->spacedata.first;
+	SpaceGraph *sipo = (SpaceGraph *)t->sa->spacedata.first;
 	bAnimListElem *ale;
 	const bool use_handle = (sipo->flag & SIPO_NOHANDLES) == 0;
 
@@ -4996,7 +5055,7 @@ void remake_graph_transdata(TransInfo *t, ListBase *anim_data)
  */
 void flushTransGraphData(TransInfo *t)
 {
-	SpaceIpo *sipo = (SpaceIpo *)t->sa->spacedata.first;
+	SpaceGraph *sipo = (SpaceGraph *)t->sa->spacedata.first;
 	TransData *td;
 	TransData2D *td2d;
 	TransDataGraph *tdg;
@@ -5011,7 +5070,9 @@ void flushTransGraphData(TransInfo *t)
 	     a < tc->data_len;
 	     a++, td++, td2d++, tdg++)
 	{
-		AnimData *adt = (AnimData *)td->extra; /* pointers to relevant AnimData blocks are stored in the td->extra pointers */
+		/* pointers to relevant AnimData blocks are stored in the td->extra pointers */
+		AnimData *adt = (AnimData *)td->extra;
+
 		float inv_unit_scale = 1.0f / tdg->unit_scale;
 
 		/* handle snapping for time values
@@ -5431,8 +5492,8 @@ static void freeSeqData(TransInfo *t, TransDataContainer *tc, TransCustomData *c
 								}
 							}
 							else {
-								/* Tag seq with a non zero value,
-								 * used by BKE_sequence_base_shuffle_time to identify the ones to shuffle */
+								/* Tag seq with a non zero value, used by
+								 * BKE_sequence_base_shuffle_time to identify the ones to shuffle */
 								if (seq->depth == 0) {
 									seq->tmp = (void *)1;
 								}
@@ -5704,7 +5765,8 @@ static void ObjectToTransData(TransInfo *t, TransData *td, Object *ob)
 		float rot[3][3], scale[3];
 		float ctime = BKE_scene_frame_get(scene);
 
-		/* only use rigid body transform if simulation is running, avoids problems with initial setup of rigid bodies */
+		/* only use rigid body transform if simulation is running,
+		 * avoids problems with initial setup of rigid bodies */
 		if (BKE_rigidbody_check_sim_running(scene->rigidbody_world, ctime)) {
 
 			/* save original object transform */
@@ -5744,13 +5806,34 @@ static void ObjectToTransData(TransInfo *t, TransData *td, Object *ob)
 	if (t->mode == TFM_DUMMY)
 		skip_invert = true;
 
+	/* NOTE: This is not really following copy-on-write design and we should not
+	 * be re-evaluating the evaluated object. But as the comment above mentioned
+	 * this is part of a hack.
+	 * More proper solution would be to make a shallow copy of the object  and
+	 * evaluate that, and access matrix of that evaluated copy of the object.
+	 * Might be more tricky than it sounds, if some logic later on accesses the
+	 * object matrix via td->ob->obmat. */
+	Object *object_eval = DEG_get_evaluated_object(t->depsgraph, ob);
 	if (skip_invert == false && constinv == false) {
-		ob->transflag |= OB_NO_CONSTRAINTS;  /* BKE_object_where_is_calc_time checks this */
-		BKE_object_where_is_calc(t->depsgraph, t->scene, ob);
-		ob->transflag &= ~OB_NO_CONSTRAINTS;
+		object_eval->transflag |= OB_NO_CONSTRAINTS;  /* BKE_object_where_is_calc checks this */
+		/* It is possible to have transform data initialization prior to a
+		 * complete dependency graph evaluated. Happens, for example, when
+		 * changing transformation mode. */
+		BKE_object_tfm_copy(object_eval, ob);
+		BKE_object_where_is_calc(t->depsgraph, t->scene, object_eval);
+		object_eval->transflag &= ~OB_NO_CONSTRAINTS;
 	}
-	else
-		BKE_object_where_is_calc(t->depsgraph, t->scene, ob);
+	else {
+		BKE_object_where_is_calc(t->depsgraph, t->scene, object_eval);
+	}
+	/* Copy newly evaluated fields to the original object, similar to how
+	 * active dependency graph will do it. */
+	copy_m4_m4(ob->obmat, object_eval->obmat);
+	/* Only copy negative scale flag, this is the only flag which is modified by
+	 * the BKE_object_where_is_calc(). The rest of the flags we need to keep,
+	 * otherwise we might loose dupli flags  (see T61787). */
+	ob->transflag &= ~OB_NEG_SCALE;
+	ob->transflag |= (object_eval->transflag & OB_NEG_SCALE);
 
 	td->ob = ob;
 
@@ -5788,8 +5871,8 @@ static void ObjectToTransData(TransInfo *t, TransData *td, Object *ob)
 	}
 	td->ext->rotOrder = ob->rotmode;
 
-	td->ext->size = ob->size;
-	copy_v3_v3(td->ext->isize, ob->size);
+	td->ext->size = ob->scale;
+	copy_v3_v3(td->ext->isize, ob->scale);
 	copy_v3_v3(td->ext->dscale, ob->dscale);
 
 	copy_v3_v3(td->center, ob->obmat[3]);
@@ -6359,7 +6442,7 @@ static void special_aftertrans_update__node(bContext *C, TransInfo *t)
 			for (node = ntree->nodes.first; node; node = node_next) {
 				node_next = node->next;
 				if (node->flag & NODE_SELECT)
-					nodeDeleteNode(bmain, ntree, node);
+					nodeRemoveNode(bmain, ntree, node, true);
 			}
 		}
 	}
@@ -6382,8 +6465,8 @@ static void special_aftertrans_update__mesh(bContext *UNUSED(C), TransInfo *t)
 				TransData *td;
 				int i;
 
-				/* rather then adjusting the selection (which the user would notice)
-				 * tag all mirrored verts, then automerge those */
+				/* Rather then adjusting the selection (which the user would notice)
+				 * tag all mirrored verts, then auto-merge those. */
 				BM_mesh_elem_hflag_disable_all(bm, BM_VERT, BM_ELEM_TAG, false);
 
 				for (i = 0, td = tc->data; i < tc->data_len; i++, td++) {
@@ -6445,8 +6528,8 @@ void special_aftertrans_update(bContext *C, TransInfo *t)
 					FOREACH_TRANS_DATA_CONTAINER (t, tc) {
 						EdgeSlideData *sld = tc->custom.mode.data;
 
-						/* free temporary faces to avoid automerging and deleting
-						 * during cleanup - psy-fi */
+						/* Free temporary faces to avoid auto-merging and deleting
+						 * during cleanup - psy-fi. */
 						freeEdgeSlideTempFaces(sld);
 					}
 				}
@@ -6552,9 +6635,11 @@ void special_aftertrans_update(bContext *C, TransInfo *t)
 				FCurve *fcu = (FCurve *)ale->key_data;
 
 				/* 3 cases here for curve cleanups:
-				 * 1) NOTRANSKEYCULL on     -> cleanup of duplicates shouldn't be done
-				 * 2) canceled == 0        -> user confirmed the transform, so duplicates should be removed
-				 * 3) canceled + duplicate -> user canceled the transform, but we made duplicates, so get rid of these
+				 * 1) NOTRANSKEYCULL on    -> cleanup of duplicates shouldn't be done
+				 * 2) canceled == 0        -> user confirmed the transform,
+				 *                            so duplicates should be removed
+				 * 3) canceled + duplicate -> user canceled the transform,
+				 *                            but we made duplicates, so get rid of these
 				 */
 				if ((saction->flag & SACTION_NOTRANSKEYCULL) == 0 &&
 				    ((canceled == 0) || (duplicate)) )
@@ -6583,9 +6668,11 @@ void special_aftertrans_update(bContext *C, TransInfo *t)
 			}
 
 			/* 3 cases here for curve cleanups:
-			 * 1) NOTRANSKEYCULL on     -> cleanup of duplicates shouldn't be done
-			 * 2) canceled == 0        -> user confirmed the transform, so duplicates should be removed
-			 * 3) canceled + duplicate -> user canceled the transform, but we made duplicates, so get rid of these
+			 * 1) NOTRANSKEYCULL on    -> cleanup of duplicates shouldn't be done
+			 * 2) canceled == 0        -> user confirmed the transform,
+			 *                            so duplicates should be removed.
+			 * 3) canceled + duplicate -> user canceled the transform,
+			 *                            but we made duplicates, so get rid of these.
 			 */
 			if ((saction->flag & SACTION_NOTRANSKEYCULL) == 0 &&
 			    ((canceled == 0) || (duplicate)))
@@ -6596,9 +6683,11 @@ void special_aftertrans_update(bContext *C, TransInfo *t)
 		else if (ac.datatype == ANIMCONT_GPENCIL) {
 			/* remove duplicate frames and also make sure points are in order! */
 			/* 3 cases here for curve cleanups:
-			 * 1) NOTRANSKEYCULL on     -> cleanup of duplicates shouldn't be done
-			 * 2) canceled == 0        -> user confirmed the transform, so duplicates should be removed
-			 * 3) canceled + duplicate -> user canceled the transform, but we made duplicates, so get rid of these
+			 * 1) NOTRANSKEYCULL on    -> cleanup of duplicates shouldn't be done
+			 * 2) canceled == 0        -> user confirmed the transform,
+			 *                            so duplicates should be removed
+			 * 3) canceled + duplicate -> user canceled the transform,
+			 *                            but we made duplicates, so get rid of these
 			 */
 			if ((saction->flag & SACTION_NOTRANSKEYCULL) == 0 &&
 			    ((canceled == 0) || (duplicate)))
@@ -6607,7 +6696,7 @@ void special_aftertrans_update(bContext *C, TransInfo *t)
 
 				// XXX: BAD! this get gpencil datablocks directly from main db...
 				// but that's how this currently works :/
-				for (gpd = bmain->gpencil.first; gpd; gpd = gpd->id.next) {
+				for (gpd = bmain->gpencils.first; gpd; gpd = gpd->id.next) {
 					if (ID_REAL_USERS(gpd))
 						posttrans_gpd_clean(gpd);
 				}
@@ -6627,7 +6716,7 @@ void special_aftertrans_update(bContext *C, TransInfo *t)
 
 				// XXX: BAD! this get gpencil datablocks directly from main db...
 				// but that's how this currently works :/
-				for (mask = bmain->mask.first; mask; mask = mask->id.next) {
+				for (mask = bmain->masks.first; mask; mask = mask->id.next) {
 					if (ID_REAL_USERS(mask))
 						posttrans_mask_clean(mask);
 				}
@@ -6662,8 +6751,8 @@ void special_aftertrans_update(bContext *C, TransInfo *t)
 		/* clear flag that was set for time-slide drawing */
 		saction->flag &= ~SACTION_MOVING;
 	}
-	else if (t->spacetype == SPACE_IPO) {
-		SpaceIpo *sipo = (SpaceIpo *)t->sa->spacedata.first;
+	else if (t->spacetype == SPACE_GRAPH) {
+		SpaceGraph *sipo = (SpaceGraph *)t->sa->spacedata.first;
 		bAnimContext ac;
 		const bool use_handle = (sipo->flag & SIPO_NOHANDLES) == 0;
 
@@ -6684,9 +6773,11 @@ void special_aftertrans_update(bContext *C, TransInfo *t)
 				FCurve *fcu = (FCurve *)ale->key_data;
 
 				/* 3 cases here for curve cleanups:
-				 * 1) NOTRANSKEYCULL on     -> cleanup of duplicates shouldn't be done
-				 * 2) canceled == 0        -> user confirmed the transform, so duplicates should be removed
-				 * 3) canceled + duplicate -> user canceled the transform, but we made duplicates, so get rid of these
+				 * 1) NOTRANSKEYCULL on    -> cleanup of duplicates shouldn't be done
+				 * 2) canceled == 0        -> user confirmed the transform,
+				 *                            so duplicates should be removed
+				 * 3) canceled + duplicate -> user canceled the transform,
+				 *                            but we made duplicates, so get rid of these
 				 */
 				if ((sipo->flag & SIPO_NOTRANSKEYCULL) == 0 &&
 				    ((canceled == 0) || (duplicate)))
@@ -6758,7 +6849,8 @@ void special_aftertrans_update(bContext *C, TransInfo *t)
 	}
 	else if (t->flag & T_POSE && (t->mode == TFM_BONESIZE)) {
 		/* Handle the exception where for TFM_BONESIZE in edit mode we pretend to be
-		 * in pose mode (to use bone orientation matrix), in that case we don't do operations like autokeyframing. */
+		 * in pose mode (to use bone orientation matrix),
+		 * in that case we don't do operations like autokeyframing. */
 		FOREACH_TRANS_DATA_CONTAINER (t, tc) {
 			ob = tc->poseobj;
 			DEG_id_tag_update(&ob->id, ID_RECALC_GEOMETRY);
@@ -6803,7 +6895,8 @@ void special_aftertrans_update(bContext *C, TransInfo *t)
 			if (t->mode == TFM_TRANSLATION)
 				pose_grab_with_ik_clear(bmain, ob);
 
-			/* automatic inserting of keys and unkeyed tagging - only if transform wasn't canceled (or TFM_DUMMY) */
+			/* automatic inserting of keys and unkeyed tagging -
+			 * only if transform wasn't canceled (or TFM_DUMMY) */
 			if (!canceled && (t->mode != TFM_DUMMY)) {
 				autokeyframe_pose(C, t->scene, ob, t->mode, targetless_ik);
 				DEG_id_tag_update(&ob->id, ID_RECALC_GEOMETRY);
@@ -6868,8 +6961,10 @@ void special_aftertrans_update(bContext *C, TransInfo *t)
 			/* flag object caches as outdated */
 			BKE_ptcache_ids_from_object(&pidlist, ob, t->scene, MAX_DUPLI_RECUR);
 			for (pid = pidlist.first; pid; pid = pid->next) {
-				if (pid->type != PTCACHE_TYPE_PARTICLES) /* particles don't need reset on geometry change */
+				if (pid->type != PTCACHE_TYPE_PARTICLES) {
+					/* particles don't need reset on geometry change */
 					pid->cache->flag |= PTCACHE_OUTDATED;
+				}
 			}
 			BLI_freelistN(&pidlist);
 
@@ -6913,7 +7008,7 @@ int special_transform_moving(TransInfo *t)
 	if (t->spacetype == SPACE_SEQ) {
 		return G_TRANSFORM_SEQ;
 	}
-	else if (t->spacetype == SPACE_IPO) {
+	else if (t->spacetype == SPACE_GRAPH) {
 		return G_TRANSFORM_FCURVES;
 	}
 	else if ((t->flag & T_EDIT) || (t->flag & T_POSE)) {
@@ -6986,7 +7081,8 @@ static void createTransObject(bContext *C, TransInfo *t)
 		for (base = view_layer->object_bases.first; base; base = base->next) {
 			Object *ob = base->object;
 
-			/* if base is not selected, not a parent of selection or not a child of selection and it is editable */
+			/* if base is not selected, not a parent of selection
+			 * or not a child of selection and it is editable */
 			if ((ob->flag & (BA_TRANSFORM_CHILD | BA_TRANSFORM_PARENT)) == 0 &&
 			    (base->flag & BASE_SELECTED) == 0 &&
 			    BASE_EDITABLE(v3d, base))
@@ -8261,8 +8357,8 @@ static void createTransGPencil(bContext *C, TransInfo *t)
 		curvemapping_initialize(ts->gp_sculpt.cur_falloff);
 	}
 
-	/* First Pass: Count the number of datapoints required for the strokes,
-	 * (and additional info about the configuration - e.g. 2D/3D?)
+	/* First Pass: Count the number of data-points required for the strokes,
+	 * (and additional info about the configuration - e.g. 2D/3D?).
 	 */
 	for (gpl = gpd->layers.first; gpl; gpl = gpl->next) {
 		/* only editable and visible layers are considered */
@@ -8384,8 +8480,9 @@ static void createTransGPencil(bContext *C, TransInfo *t)
 					float falloff = 1.0f; /* by default no falloff */
 					if ((is_multiedit) && (use_multiframe_falloff)) {
 						/* Faloff depends on distance to active frame (relative to the overall frame range) */
-						falloff = BKE_gpencil_multiframe_falloff_calc(gpf, gpl->actframe->framenum,
-							f_init, f_end, ts->gp_sculpt.cur_falloff);
+						falloff = BKE_gpencil_multiframe_falloff_calc(
+						        gpf, gpl->actframe->framenum,
+						        f_init, f_end, ts->gp_sculpt.cur_falloff);
 					}
 
 					for (gps = gpf->strokes.first; gps; gps = gps->next) {
@@ -8447,7 +8544,8 @@ static void createTransGPencil(bContext *C, TransInfo *t)
 								if (point_ok) {
 									copy_v3_v3(td->iloc, &pt->x);
 									/* only copy center in local origins.
-									 * This allows get interesting effects also when move using proportional editing */
+									 * This allows get interesting effects also when move
+									 * using proportional editing */
 									if ((gps->flag & GP_STROKE_SELECT) &&
 									    (ts->transform_pivot_point == V3D_AROUND_LOCAL_ORIGINS))
 									{
@@ -8469,8 +8567,14 @@ static void createTransGPencil(bContext *C, TransInfo *t)
 									 * but never for scale or mirror
 									 */
 									if ((t->mode != TFM_RESIZE) && (t->mode != TFM_MIRROR)) {
-										td->val = &pt->pressure;
-										td->ival = pt->pressure;
+										if (t->mode != TFM_GPENCIL_OPACITY) {
+											td->val = &pt->pressure;
+											td->ival = pt->pressure;
+										}
+										else {
+											td->val = &pt->strength;
+											td->ival = pt->strength;
+										}
 									}
 
 									/* screenspace needs special matrices... */
@@ -8489,7 +8593,8 @@ static void createTransGPencil(bContext *C, TransInfo *t)
 									copy_m3_m4(td->mtx, diff_mat);  /* display position */
 									copy_m3_m4(td->axismtx, diff_mat); /* axis orientation */
 
-									/* Triangulation must be calculated again, so save the stroke for recalc function */
+									/* Triangulation must be calculated again,
+									 * so save the stroke for recalc function */
 									td->extra = gps;
 
 									/* save pointer to object */
@@ -8547,6 +8652,7 @@ void createTransData(bContext *C, TransInfo *t)
 	ViewLayer *view_layer = t->view_layer;
 	Object *ob = OBACT(view_layer);
 
+	bool has_transform_context = true;
 	t->data_len_all = -1;
 
 	/* if tests must match recalcData for correct updates */
@@ -8619,6 +8725,9 @@ void createTransData(bContext *C, TransInfo *t)
 				createTransPaintCurveVerts(C, t);
 				countAndCleanTransDataContainer(t);
 			}
+			else {
+				has_transform_context = false;
+			}
 		}
 		else if (t->obedit_type == OB_MESH) {
 
@@ -8634,6 +8743,9 @@ void createTransData(bContext *C, TransInfo *t)
 				sort_trans_data_dist(t);
 			}
 		}
+		else {
+			has_transform_context = false;
+		}
 	}
 	else if (t->spacetype == SPACE_ACTION) {
 		t->flag |= T_POINTS | T_2D_EDIT;
@@ -8644,7 +8756,8 @@ void createTransData(bContext *C, TransInfo *t)
 
 		if (t->data_len_all && (t->flag & T_PROP_EDIT)) {
 			sort_trans_data(t); // makes selected become first in array
-			//set_prop_dist(t, false); /* don't do that, distance has been set in createTransActionData already */
+			/* don't do that, distance has been set in createTransActionData already */
+			//set_prop_dist(t, false);
 			sort_trans_data_dist(t);
 		}
 	}
@@ -8659,11 +8772,11 @@ void createTransData(bContext *C, TransInfo *t)
 		t->flag |= T_POINTS | T_2D_EDIT;
 		t->obedit_type = -1;
 
-		t->num.flag |= NUM_NO_FRACTION; /* sequencer has no use for floating point transformations */
+		t->num.flag |= NUM_NO_FRACTION; /* sequencer has no use for floating point trasnform */
 		createTransSeqData(C, t);
 		countAndCleanTransDataContainer(t);
 	}
-	else if (t->spacetype == SPACE_IPO) {
+	else if (t->spacetype == SPACE_GRAPH) {
 		t->flag |= T_POINTS | T_2D_EDIT;
 		t->obedit_type = -1;
 
@@ -8671,8 +8784,12 @@ void createTransData(bContext *C, TransInfo *t)
 		countAndCleanTransDataContainer(t);
 
 		if (t->data_len_all && (t->flag & T_PROP_EDIT)) {
-			sort_trans_data(t); // makes selected become first in array
-			set_prop_dist(t, false); /* don't do that, distance has been set in createTransGraphEditData already */
+			/* makes selected become first in array */
+			sort_trans_data(t);
+
+			/* don't do that, distance has been set in createTransGraphEditData already */
+			set_prop_dist(t, false);
+
 			sort_trans_data_dist(t);
 		}
 	}
@@ -8707,6 +8824,9 @@ void createTransData(bContext *C, TransInfo *t)
 				set_prop_dist(t, true);
 				sort_trans_data_dist(t);
 			}
+		}
+		else {
+			has_transform_context = false;
 		}
 	}
 	else if (t->obedit_type != -1) {
@@ -8782,6 +8902,7 @@ void createTransData(bContext *C, TransInfo *t)
 	else if (ob && (ob->mode & OB_MODE_WEIGHT_PAINT) && !(t->options & CTX_PAINT_CURVE)) {
 		/* important that ob_armature can be set even when its not selected [#23412]
 		 * lines below just check is also visible */
+		has_transform_context = false;
 		Object *ob_armature = modifiers_isDeformedByArmature(ob);
 		if (ob_armature && ob_armature->mode & OB_MODE_POSE) {
 			Base *base_arm = BKE_view_layer_base_find(t->view_layer, ob_armature);
@@ -8794,12 +8915,9 @@ void createTransData(bContext *C, TransInfo *t)
 					initTransDataContainers_FromObjectData(t, ob_armature, objects, objects_len);
 					createTransPose(t);
 					countAndCleanTransDataContainer(t);
+					has_transform_context = true;
 				}
 			}
-		}
-		/* Mark as initialized if above checks fail. */
-		if (t->data_len_all == -1) {
-			t->data_len_all = 0;
 		}
 	}
 	else if (ob && (ob->mode & OB_MODE_PARTICLE_EDIT) && PE_start_edit(PE_get_current(scene, ob))) {
@@ -8819,10 +8937,16 @@ void createTransData(bContext *C, TransInfo *t)
 			createTransPaintCurveVerts(C, t);
 			countAndCleanTransDataContainer(t);
 		}
-		/* Mark as initialized if above checks fail. */
-		if (t->data_len_all == -1) {
-			t->data_len_all = 0;
+		else {
+			has_transform_context = false;
 		}
+	}
+	else if ((ob) &&
+  			 (ELEM(ob->mode, OB_MODE_PAINT_GPENCIL,
+				OB_MODE_SCULPT_GPENCIL, OB_MODE_WEIGHT_GPENCIL)))
+	{
+		/* In grease pencil all transformations must be canceled if not Object or Edit. */
+		has_transform_context = false;
 	}
 	else {
 		createTransObject(C, t);
@@ -8849,7 +8973,13 @@ void createTransData(bContext *C, TransInfo *t)
 	}
 
 	/* Check that 'countAndCleanTransDataContainer' ran. */
-	BLI_assert(t->data_len_all != -1);
+	if (has_transform_context) {
+		BLI_assert(t->data_len_all != -1);
+	}
+	else {
+		BLI_assert(t->data_len_all == -1);
+		t->data_len_all = 0;
+	}
 
 	BLI_assert((!(t->flag & T_EDIT)) == (!(t->obedit_type != -1)));
 }

@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,15 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * Contributor(s): Chingiz Dyussenov, Arystanbek Dyussenov, Jan Diederich, Tod Liverseed,
- *                 Nathan Letwory
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/collada/EffectExporter.cpp
- *  \ingroup collada
+/** \file
+ * \ingroup collada
  */
 
 
@@ -105,14 +98,14 @@ void EffectsExporter::set_shader_type(COLLADASW::EffectProfile &ep, Material *ma
 
 void EffectsExporter::set_transparency(COLLADASW::EffectProfile &ep, Material *ma)
 {
-	if (ma->alpha == 1.0f) {
-		return; // have no transparency
+	COLLADASW::ColorOrTexture cot = bc_get_base_color(ma);
+	float transparency = cot.getColor().getAlpha();
+	if (transparency < 1) {
+		// Tod: because we are in A_ONE mode transparency is calculated like this:
+		COLLADASW::ColorOrTexture cot = getcol(1.0f, 1.0f, 1.0f, transparency);
+		ep.setTransparent(cot);
+		ep.setOpaque(COLLADASW::EffectProfile::A_ONE);
 	}
-
-	// Tod: because we are in A_ONE mode transparency is calculated like this:
-	COLLADASW::ColorOrTexture cot = getcol(1.0f, 1.0f, 1.0f, ma->alpha);
-	ep.setTransparent(cot);
-	ep.setOpaque(COLLADASW::EffectProfile::A_ONE);
 }
 void EffectsExporter::set_diffuse_color(COLLADASW::EffectProfile &ep, Material *ma)
 {
@@ -121,11 +114,10 @@ void EffectsExporter::set_diffuse_color(COLLADASW::EffectProfile &ep, Material *
 	ep.setDiffuse(cot, false, "diffuse");
 }
 
-void EffectsExporter::set_specular_color(COLLADASW::EffectProfile &ep, Material *ma)
+void EffectsExporter::set_reflectivity(COLLADASW::EffectProfile &ep, Material *ma)
 {
-	bool use_fallback = ep.getShaderType() != COLLADASW::EffectProfile::LAMBERT;
-	COLLADASW::ColorOrTexture cot = bc_get_specular_color(ma, use_fallback);
-	ep.setSpecular(cot, false, "specular");
+	double reflectivity = bc_get_reflectivity(ma);
+	ep.setReflectivity(reflectivity, false, "specular");
 }
 
 void EffectsExporter::set_emission(COLLADASW::EffectProfile &ep, Material *ma)
@@ -164,9 +156,10 @@ void EffectsExporter::create_image_samplers(COLLADASW::EffectProfile &ep, KeyIma
 		std::string uid(id_name(image));
 		std::string key = translate_id(uid);
 
-		COLLADASW::Sampler *sampler = new COLLADASW::Sampler(COLLADASW::Sampler::SAMPLER_TYPE_2D,
-			key + COLLADASW::Sampler::SAMPLER_SID_SUFFIX,
-			key + COLLADASW::Sampler::SURFACE_SID_SUFFIX);
+		COLLADASW::Sampler *sampler = new COLLADASW::Sampler(
+		        COLLADASW::Sampler::SAMPLER_TYPE_2D,
+		        key + COLLADASW::Sampler::SAMPLER_SID_SUFFIX,
+		        key + COLLADASW::Sampler::SURFACE_SID_SUFFIX);
 
 		sampler->setImageId(key);
 
@@ -189,7 +182,7 @@ void EffectsExporter::operator()(Material *ma, Object *ob)
 
 	set_transparency(ep, ma);
 	set_diffuse_color(ep, ma);
-	set_specular_color(ep, ma);
+	set_reflectivity(ep, ma);
 	set_emission(ep, ma);
 
 	get_images(ma, material_image_map);
@@ -211,9 +204,10 @@ void EffectsExporter::operator()(Material *ma, Object *ob)
 		// create only one <sampler>/<surface> pair for each unique image
 		if (im_samp_map.find(key) == im_samp_map.end()) {
 			//<newparam> <sampler> <source>
-			COLLADASW::Sampler sampler(COLLADASW::Sampler::SAMPLER_TYPE_2D,
-				key + COLLADASW::Sampler::SAMPLER_SID_SUFFIX,
-				key + COLLADASW::Sampler::SURFACE_SID_SUFFIX);
+			COLLADASW::Sampler sampler(
+			        COLLADASW::Sampler::SAMPLER_TYPE_2D,
+			        key + COLLADASW::Sampler::SAMPLER_SID_SUFFIX,
+			        key + COLLADASW::Sampler::SURFACE_SID_SUFFIX);
 			sampler.setImageId(key);
 			// copy values to arrays since they will live longer
 			samplers[a] = sampler;

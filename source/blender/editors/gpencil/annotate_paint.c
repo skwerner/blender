@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,14 +15,10 @@
  *
  * The Original Code is Copyright (C) 2008/2018, Blender Foundation
  * This is a new part of Blender
- *
- * Contributor(s): Joshua Leung
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/gpencil/annotate_paint.c
- *  \ingroup edgpencil
+/** \file
+ * \ingroup edgpencil
  */
 
 
@@ -67,7 +61,6 @@
 #include "ED_view3d.h"
 #include "ED_clip.h"
 
-#include "BIF_glutil.h"
 
 #include "GPU_immediate.h"
 #include "GPU_immediate_util.h"
@@ -91,7 +84,8 @@ typedef enum eGPencil_PaintStatus {
 	GP_STATUS_IDLING = 0,   /* stroke isn't in progress yet */
 	GP_STATUS_PAINTING,     /* a stroke is in progress */
 	GP_STATUS_ERROR,        /* something wasn't correctly set up */
-	GP_STATUS_DONE          /* painting done */
+	GP_STATUS_DONE,         /* painting done */
+	GP_STATUS_CAPTURE       /* capture event, but cancel */
 } eGPencil_PaintStatus;
 
 /* Return flags for adding points to stroke buffer */
@@ -99,7 +93,7 @@ typedef enum eGP_StrokeAdd_Result {
 	GP_STROKEADD_INVALID    = -2,       /* error occurred - insufficient info to do so */
 	GP_STROKEADD_OVERFLOW   = -1,       /* error occurred - cannot fit any more points */
 	GP_STROKEADD_NORMAL,                /* point was successfully added */
-	GP_STROKEADD_FULL                   /* cannot add any more points to buffer */
+	GP_STROKEADD_FULL,                   /* cannot add any more points to buffer */
 } eGP_StrokeAdd_Result;
 
 /* Runtime flags */
@@ -226,12 +220,24 @@ static void gp_session_validatebuffer(tGPsdata *p);
 /* check if context is suitable for drawing */
 static bool gpencil_draw_poll(bContext *C)
 {
+	/* if is inside grease pencil draw mode cannot use annotations */
+	Object *obact = CTX_data_active_object(C);
+	ScrArea *sa = CTX_wm_area(C);
+	if ((sa) && (sa->spacetype == SPACE_VIEW3D)) {
+		if ((obact) && (obact->type == OB_GPENCIL) &&
+		    (obact->mode == OB_MODE_PAINT_GPENCIL))
+		{
+			CTX_wm_operator_poll_msg_set(C, "Annotation cannot be used in grease pencil draw mode");
+			return false;
+		}
+	}
+
 	if (ED_operator_regionactive(C)) {
 		/* check if current context can support GPencil data */
 		if (ED_gpencil_data_get_pointers(C, NULL) != NULL) {
 			/* check if Grease Pencil isn't already running */
 			if (ED_gpencil_session_active() == 0)
-				return 1;
+				return true;
 			else
 				CTX_wm_operator_poll_msg_set(C, "Annotation operator is already active");
 		}
@@ -243,7 +249,7 @@ static bool gpencil_draw_poll(bContext *C)
 		CTX_wm_operator_poll_msg_set(C, "Active region not set");
 	}
 
-	return 0;
+	return false;
 }
 
 /* check if projecting strokes into 3d-geometry in the 3D-View */
@@ -359,6 +365,63 @@ static void gp_stroke_convertcoords(tGPsdata *p, const float mval[2], float out[
 	}
 }
 
+/* Apply smooth to buffer while drawing
+ * to smooth point C, use 2 before (A, B) and current point (D):
+ *
+ *   A----B-----C------D
+ *
+ * \param p: Temp data
+ * \param inf: Influence factor
+ * \param idx: Index of the last point (need minimum 3 points in the array)
+ */
+static void gp_smooth_buffer(tGPsdata *p, float inf, int idx)
+{
+	bGPdata *gpd = p->gpd;
+	short num_points = gpd->runtime.sbuffer_size;
+
+	/* Do nothing if not enough points to smooth out */
+	if ((num_points < 3) || (idx < 3) || (inf == 0.0f)) {
+		return;
+	}
+
+	tGPspoint *points = (tGPspoint *)gpd->runtime.sbuffer;
+	float steps = 4.0f;
+	if (idx < 4) {
+		steps--;
+	}
+
+	tGPspoint *pta = idx >= 4 ? &points[idx - 4] : NULL;
+	tGPspoint *ptb = idx >= 3 ? &points[idx - 3] : NULL;
+	tGPspoint *ptc = idx >= 2 ? &points[idx - 2] : NULL;
+	tGPspoint *ptd = &points[idx - 1];
+
+	float sco[2] = { 0.0f };
+	float a[2], b[2], c[2], d[2];
+	const float average_fac = 1.0f / steps;
+
+	/* Compute smoothed coordinate by taking the ones nearby */
+	if (pta) {
+		copy_v2_v2(a, &pta->x);
+		madd_v2_v2fl(sco, a, average_fac);
+	}
+	if (ptb) {
+		copy_v2_v2(b, &ptb->x);
+		madd_v2_v2fl(sco, b, average_fac);
+	}
+	if (ptc) {
+		copy_v2_v2(c, &ptc->x);
+		madd_v2_v2fl(sco, c, average_fac);
+	}
+	if (ptd) {
+		copy_v2_v2(d, &ptd->x);
+		madd_v2_v2fl(sco, d, average_fac);
+	}
+
+	/* Based on influence factor, blend between original and optimal smoothed coordinate */
+	interp_v2_v2v2(c, c, sco, inf);
+	copy_v2_v2(&ptc->x, c);
+}
+
 /* add current stroke-point to buffer (returns whether point was successfully added) */
 static short gp_stroke_addpoint(
         tGPsdata *p, const float mval[2], float pressure, double curtime)
@@ -423,6 +486,10 @@ static short gp_stroke_addpoint(
 
 		/* increment counters */
 		gpd->runtime.sbuffer_size++;
+		/* smooth while drawing previous points with a reduction factor for previous */
+		for (int s = 0; s < 3; s++) {
+			gp_smooth_buffer(p, 0.5f * ((3.0f - s) / 3.0f), gpd->runtime.sbuffer_size - s);
+		}
 
 		/* check if another operation can still occur */
 		if (gpd->runtime.sbuffer_size == GP_STROKE_BUFFER_MAX)
@@ -614,6 +681,9 @@ static void gp_stroke_newfrombuffer(tGPsdata *p)
 	/* copy appropriate settings for stroke */
 	gps->totpoints = totelem;
 	gps->thickness = gpl->thickness;
+	gps->gradient_f = 1.0f;
+	gps->gradient_s[0] = 1.0f;
+	gps->gradient_s[1] = 1.0f;
 	gps->flag = gpd->runtime.sbuffer_sflag;
 	gps->inittime = p->inittime;
 
@@ -1134,9 +1204,6 @@ static bool gp_session_initdata(bContext *C, tGPsdata *p)
 
 			/* mark datablock as being used for annotations */
 			gpd->flag |= GP_DATA_ANNOTATIONS;
-
-			/* annotations always in front of all objects */
-			gpd->xray_mode = GP_XRAY_FRONT;
 		}
 		p->gpd = *gpd_ptr;
 	}
@@ -1265,7 +1332,7 @@ static void gp_paint_initstroke(tGPsdata *p, eGPencil_PaintModes paintmode, Deps
 		}
 
 		if (has_layer_to_erase == false) {
-			p->status = GP_STATUS_ERROR;
+			p->status = GP_STATUS_CAPTURE;
 			//if (G.debug & G_DEBUG)
 				printf("Error: Eraser will not be affecting anything (gpencil_paint_init)\n");
 			return;
@@ -1359,34 +1426,8 @@ static void gp_paint_initstroke(tGPsdata *p, eGPencil_PaintModes paintmode, Deps
 				break;
 			}
 			case SPACE_NODE:
-			{
-				p->gpd->runtime.sbuffer_sflag |= GP_STROKE_2DSPACE;
-				break;
-			}
 			case SPACE_SEQ:
-			{
-				p->gpd->runtime.sbuffer_sflag |= GP_STROKE_2DSPACE;
-				break;
-			}
 			case SPACE_IMAGE:
-			{
-				SpaceImage *sima = (SpaceImage *)p->sa->spacedata.first;
-
-				/* only set these flags if the image editor doesn't have an image active,
-				 * otherwise user will be confused by strokes not appearing after they're drawn
-				 *
-				 * Admittedly, this is a bit hacky, but it works much nicer from an ergonomic standpoint!
-				 */
-				if (ELEM(NULL, sima, sima->image)) {
-					/* make strokes be drawn in screen space */
-					p->gpd->runtime.sbuffer_sflag &= ~GP_STROKE_2DSPACE;
-					*(p->align_flag) &= ~GP_PROJECT_VIEWSPACE;
-				}
-				else {
-					p->gpd->runtime.sbuffer_sflag |= GP_STROKE_2DSPACE;
-				}
-				break;
-			}
 			case SPACE_CLIP:
 			{
 				p->gpd->runtime.sbuffer_sflag |= GP_STROKE_2DSPACE;
@@ -1650,6 +1691,7 @@ static void gpencil_draw_status_indicators(bContext *C, tGPsdata *p)
 
 		case GP_STATUS_ERROR:
 		case GP_STATUS_DONE:
+		case GP_STATUS_CAPTURE:
 			/* clear status string */
 			ED_workspace_status_text(C, NULL);
 			break;
@@ -1714,7 +1756,7 @@ static void gpencil_draw_apply(wmOperator *op, tGPsdata *p, Depsgraph *depsgraph
 }
 
 /* handle draw event */
-static void gpencil_draw_apply_event(wmOperator *op, const wmEvent *event, Depsgraph *depsgraph)
+static void annotation_draw_apply_event(wmOperator *op, const wmEvent *event, Depsgraph *depsgraph, float x, float y)
 {
 	tGPsdata *p = op->customdata;
 	PointerRNA itemptr;
@@ -1722,11 +1764,10 @@ static void gpencil_draw_apply_event(wmOperator *op, const wmEvent *event, Depsg
 	int tablet = 0;
 
 	/* convert from window-space to area-space mouse coordinates
-	 * NOTE: float to ints conversions,
-	 * +1 factor is probably used to ensure a bit more accurate rounding...
+	 * add any x,y override position for fake events
 	 */
-	p->mval[0] = event->mval[0] + 1;
-	p->mval[1] = event->mval[1] + 1;
+	p->mval[0] = (float)event->mval[0] - x;
+	p->mval[1] = (float)event->mval[1] - y;
 
 	/* verify key status for straight lines */
 	if ((event->ctrl > 0) || (event->alt > 0)) {
@@ -1912,6 +1953,11 @@ static int gpencil_draw_invoke(bContext *C, wmOperator *op, const wmEvent *event
 	Scene *scene = CTX_data_scene(C);
 	tGPsdata *p = NULL;
 
+	/* support for tablets eraser pen */
+	if (gpencil_is_tablet_eraser_active(event)) {
+		RNA_enum_set(op->ptr, "mode", GP_PAINTMODE_ERASER);
+	}
+
 	/* if try to do annotations with a gp object selected, first
 	 * unselect the object to avoid conflicts.
 	 * The solution is not perfect but we can keep running the annotations while
@@ -1946,6 +1992,14 @@ static int gpencil_draw_invoke(bContext *C, wmOperator *op, const wmEvent *event
 	else
 		p = op->customdata;
 
+	/* if empty erase capture and finish */
+	if (p->status == GP_STATUS_CAPTURE) {
+		gpencil_draw_exit(C, op);
+
+		BKE_report(op->reports, RPT_ERROR, "Nothing to erase");
+		return OPERATOR_FINISHED;
+	}
+
 	/* TODO: set any additional settings that we can take from the events?
 	 * TODO? if tablet is erasing, force eraser to be on? */
 
@@ -1968,7 +2022,7 @@ static int gpencil_draw_invoke(bContext *C, wmOperator *op, const wmEvent *event
 		p->status = GP_STATUS_PAINTING;
 
 		/* handle the initial drawing - i.e. for just doing a simple dot */
-		gpencil_draw_apply_event(op, event, CTX_data_depsgraph(C));
+		annotation_draw_apply_event(op, event, CTX_data_depsgraph(C), 0.0f, 0.0f);
 		op->flag |= OP_IS_MODAL_CURSOR_REGION;
 	}
 	else {
@@ -2035,6 +2089,40 @@ static void gpencil_stroke_end(wmOperator *op)
 	p->gpd = NULL;
 	p->gpl = NULL;
 	p->gpf = NULL;
+}
+
+/* add events for missing mouse movements when the artist draw very fast */
+static void annotation_add_missing_events(bContext *C, wmOperator *op, const wmEvent *event, tGPsdata *p)
+{
+	float pt[2], a[2], b[2];
+	float factor = 10.0f;
+
+	copy_v2_v2(a, p->mvalo);
+	b[0] = (float)event->mval[0] + 1.0f;
+	b[1] = (float)event->mval[1] + 1.0f;
+
+	/* get distance in pixels */
+	float dist = len_v2v2(a, b);
+
+	/* for very small distances, add a half way point */
+	if (dist <= 2.0f) {
+		interp_v2_v2v2(pt, a, b, 0.5f);
+		sub_v2_v2v2(pt, b, pt);
+		/* create fake event */
+		annotation_draw_apply_event(op, event, CTX_data_depsgraph(C), pt[0], pt[1]);
+	}
+	else if (dist >= factor) {
+		int slices = 2 + (int)((dist - 1.0) / factor);
+		float n = 1.0f / slices;
+		for (int i = 1; i < slices; i++) {
+			interp_v2_v2v2(pt, a, b, n * i);
+			sub_v2_v2v2(pt, b, pt);
+			/* create fake event */
+			annotation_draw_apply_event(
+			        op, event, CTX_data_depsgraph(C),
+			        pt[0], pt[1]);
+		}
+	}
 }
 
 /* events handling during interactive drawing part of operator */
@@ -2169,8 +2257,8 @@ static int gpencil_draw_modal(bContext *C, wmOperator *op, const wmEvent *event)
 
 				if (G.debug & G_DEBUG) {
 					printf("found alternative region %p (old was %p) - at %d %d (sa: %d %d -> %d %d)\n",
-						current_region, p->ar, event->x, event->y,
-						p->sa->totrct.xmin, p->sa->totrct.ymin, p->sa->totrct.xmax, p->sa->totrct.ymax);
+					       current_region, p->ar, event->x, event->y,
+					       p->sa->totrct.xmin, p->sa->totrct.ymin, p->sa->totrct.xmax, p->sa->totrct.ymax);
 				}
 
 				if (current_region) {
@@ -2247,8 +2335,11 @@ static int gpencil_draw_modal(bContext *C, wmOperator *op, const wmEvent *event)
 		/* handle painting mouse-movements? */
 		if (ELEM(event->type, MOUSEMOVE, INBETWEEN_MOUSEMOVE) || (p->flags & GP_PAINTFLAG_FIRSTRUN)) {
 			/* handle drawing event */
-			/* printf("\t\tGP - add point\n"); */
-			gpencil_draw_apply_event(op, event, CTX_data_depsgraph(C));
+			if ((p->flags & GP_PAINTFLAG_FIRSTRUN) == 0) {
+				annotation_add_missing_events(C, op, event, p);
+			}
+
+			annotation_draw_apply_event(op, event, CTX_data_depsgraph(C), 0.0f, 0.0f);
 
 			/* finish painting operation if anything went wrong just now */
 			if (p->status == GP_STATUS_ERROR) {
@@ -2342,7 +2433,7 @@ static const EnumPropertyItem prop_gpencil_drawmodes[] = {
 	{GP_PAINTMODE_DRAW_STRAIGHT, "DRAW_STRAIGHT", 0, "Draw Straight Lines", "Draw straight line segment(s)"},
 	{GP_PAINTMODE_DRAW_POLY, "DRAW_POLY", 0, "Draw Poly Line", "Click to place endpoints of straight line segments (connected)"},
 	{GP_PAINTMODE_ERASER, "ERASER", 0, "Eraser", "Erase Annotation strokes"},
-	{0, NULL, 0, NULL, NULL}
+	{0, NULL, 0, NULL, NULL},
 };
 
 void GPENCIL_OT_annotate(wmOperatorType *ot)
@@ -2370,7 +2461,8 @@ void GPENCIL_OT_annotate(wmOperatorType *ot)
 	prop = RNA_def_collection_runtime(ot->srna, "stroke", &RNA_OperatorStrokeElement, "Stroke", "");
 	RNA_def_property_flag(prop, PROP_HIDDEN | PROP_SKIP_SAVE);
 
-	/* NOTE: wait for input is enabled by default, so that all UI code can work properly without needing users to know about this */
+	/* NOTE: wait for input is enabled by default,
+	 * so that all UI code can work properly without needing users to know about this */
 	prop = RNA_def_boolean(ot->srna, "wait_for_input", true, "Wait for Input", "Wait for first click instead of painting immediately");
 	RNA_def_property_flag(prop, PROP_SKIP_SAVE);
 }

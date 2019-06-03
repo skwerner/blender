@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,11 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
  */
 
-/** \file blender/blenkernel/intern/appdir.c
- *  \ingroup bke
+/** \file
+ * \ingroup bke
  *
  * Access to application level directories.
  */
@@ -41,6 +38,8 @@
 
 #include "MEM_guardedalloc.h"
 
+#include "CLG_log.h"
+
 #ifdef WIN32
 #  include "utf_winfunc.h"
 #  include "utfconv.h"
@@ -60,6 +59,7 @@
 #endif /* WIN32 */
 
 /* local */
+static CLG_LogRef LOG = {"bke.appdir"};
 static char bprogname[FILE_MAX];    /* full path to program executable */
 static char bprogdir[FILE_MAX];     /* full path to directory in which executable is located */
 static char btempdir_base[FILE_MAX];          /* persistent temporary directory */
@@ -244,7 +244,7 @@ bool BKE_appdir_app_is_portable_install(void)
  * \param targetpath: String to return path.
  * \param subfolder_name: optional name of subfolder within folder.
  * \param envvar: name of environment variable to check folder_name.
- * \return true if it was able to construct such a path.
+ * \return true if it was able to construct such a path and the path exists.
  */
 static bool get_path_environment(
         char *targetpath,
@@ -272,13 +272,40 @@ static bool get_path_environment(
 }
 
 /**
+ * Returns the path of a folder from environment variables
+ *
+ * \param targetpath: String to return path.
+ * \param subfolder_name: optional name of subfolder within folder.
+ * \param envvar: name of environment variable to check folder_name.
+ * \return true if it was able to construct such a path.
+ */
+static bool get_path_environment_notest(
+        char *targetpath,
+        size_t targetpath_len,
+        const char *subfolder_name,
+        const char *envvar)
+{
+	char user_path[FILE_MAX];
+
+	if (test_env_path(user_path, envvar)) {
+		if (subfolder_name) {
+			BLI_join_dirfile(targetpath, targetpath_len, user_path, subfolder_name);
+			return true;
+		}
+		else {
+			BLI_strncpy(targetpath, user_path, FILE_MAX);
+			return true;
+		}
+	}
+	return false;
+}
+
+/**
  * Returns the path of a folder within the user-files area.
- *
- *
  * \param targetpath: String to return path
  * \param folder_name: default name of folder within user area
  * \param subfolder_name: optional name of subfolder within folder
-  * \param ver: Blender version, used to construct a subdirectory name
+ * \param ver: Blender version, used to construct a subdirectory name
  * \return true if it was able to construct such a path.
  */
 static bool get_path_user(
@@ -449,19 +476,19 @@ const char *BKE_appdir_folder_id_user_notest(const int folder_id, const char *su
 
 	switch (folder_id) {
 		case BLENDER_USER_DATAFILES:
-			if (get_path_environment(path, sizeof(path), subfolder, "BLENDER_USER_DATAFILES")) break;
+			if (get_path_environment_notest(path, sizeof(path), subfolder, "BLENDER_USER_DATAFILES")) break;
 			get_path_user(path, sizeof(path), "datafiles", subfolder, ver);
 			break;
 		case BLENDER_USER_CONFIG:
-			if (get_path_environment(path, sizeof(path), subfolder, "BLENDER_USER_CONFIG")) break;
+			if (get_path_environment_notest(path, sizeof(path), subfolder, "BLENDER_USER_CONFIG")) break;
 			get_path_user(path, sizeof(path), "config", subfolder, ver);
 			break;
 		case BLENDER_USER_AUTOSAVE:
-			if (get_path_environment(path, sizeof(path), subfolder, "BLENDER_USER_AUTOSAVE")) break;
+			if (get_path_environment_notest(path, sizeof(path), subfolder, "BLENDER_USER_AUTOSAVE")) break;
 			get_path_user(path, sizeof(path), "autosave", subfolder, ver);
 			break;
 		case BLENDER_USER_SCRIPTS:
-			if (get_path_environment(path, sizeof(path), subfolder, "BLENDER_USER_SCRIPTS")) break;
+			if (get_path_environment_notest(path, sizeof(path), subfolder, "BLENDER_USER_SCRIPTS")) break;
 			get_path_user(path, sizeof(path), "scripts", subfolder, ver);
 			break;
 		default:
@@ -569,7 +596,7 @@ static void where_am_i(char *fullname, const size_t maxlen, const char *name)
 		if (GetModuleFileNameW(0, fullname_16, maxlen)) {
 			conv_utf_16_to_8(fullname_16, fullname, maxlen);
 			if (!BLI_exists(fullname)) {
-				printf("path can't be found: \"%.*s\"\n", (int)maxlen, fullname);
+				CLOG_ERROR(&LOG, "path can't be found: \"%.*s\"", (int)maxlen, fullname);
 				MessageBox(NULL, "path contains invalid characters or is too long (see console)", "Error", MB_OK);
 			}
 			MEM_freeN(fullname_16);
@@ -605,7 +632,7 @@ static void where_am_i(char *fullname, const size_t maxlen, const char *name)
 
 #if defined(DEBUG)
 		if (!STREQ(name, fullname)) {
-			printf("guessing '%s' == '%s'\n", name, fullname);
+			CLOG_INFO(&LOG, 2, "guessing '%s' == '%s'", name, fullname);
 		}
 #endif
 	}
@@ -852,7 +879,7 @@ static void where_is_temp(char *fullname, char *basename, const size_t maxlen, c
 			BLI_add_slash(fullname);
 		}
 		else {
-			printf("Warning! Could not generate a temp file name for '%s', falling back to '%s'\n", tmp_name, fullname);
+			CLOG_WARN(&LOG, "Could not generate a temp file name for '%s', falling back to '%s'", tmp_name, fullname);
 		}
 
 		MEM_freeN(tmp_name);

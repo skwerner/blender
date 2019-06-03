@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,14 +15,10 @@
  *
  * The Original Code is Copyright (C) 2018 Blender Foundation.
  * All rights reserved.
- *
- * Contributor(s): Sergey Sharybin.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/blenkernel/intern/multires_subdiv.c
- *  \ingroup bke
+/** \file
+ * \ingroup bke
  */
 
 #include "MEM_guardedalloc.h"
@@ -34,7 +28,6 @@
 
 #include "BLI_utildefines.h"
 
-#include "BKE_library.h"
 #include "BKE_mesh.h"
 #include "BKE_modifier.h"
 #include "BKE_multires.h"
@@ -48,6 +41,7 @@ void BKE_multires_subdiv_settings_init(
 	settings->is_simple = (mmd->simple != 0);
 	settings->is_adaptive = true;
 	settings->level = settings->is_simple ? 1 : mmd->quality;
+	settings->use_creases = (mmd->flags & eMultiresModifierFlag_UseCrease);
 	settings->vtx_boundary_interpolation = SUBDIV_VTX_BOUNDARY_EDGE_ONLY;
 	settings->fvar_linear_interpolation =
 	        BKE_subdiv_fvar_interpolation_from_uv_smooth(mmd->uv_smooth);

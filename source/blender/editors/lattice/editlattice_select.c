@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,14 +15,10 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * Contributor(s): Blender Foundation
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/lattice/editlattice_select.c
- *  \ingroup edlattice
+/** \file
+ * \ingroup edlattice
  */
 
 #include <stdlib.h>
@@ -79,6 +73,29 @@ static void bpoint_select_set(BPoint *bp, bool select)
 	else {
 		bp->f1 &= ~SELECT;
 	}
+}
+
+bool ED_lattice_deselect_all_multi_ex(struct Base **bases, const uint bases_len)
+{
+	bool changed_multi = false;
+	for (uint base_index = 0; base_index < bases_len; base_index++) {
+		Base *base_iter = bases[base_index];
+		Object *ob_iter = base_iter->object;
+		changed_multi |= ED_lattice_flags_set(ob_iter, 0);
+		DEG_id_tag_update(ob_iter->data, ID_RECALC_SELECT);
+	}
+	return changed_multi;
+}
+
+bool ED_lattice_deselect_all_multi(struct bContext *C)
+{
+	ViewContext vc;
+	ED_view3d_viewcontext_init(C, &vc);
+	uint bases_len = 0;
+	Base **bases = BKE_view_layer_array_from_bases_in_edit_mode_unique_data(vc.view_layer, vc.v3d, &bases_len);
+	bool changed_multi = ED_lattice_deselect_all_multi_ex(bases, bases_len);
+	MEM_freeN(bases);
+	return changed_multi;
 }
 
 /** \} */
@@ -362,23 +379,32 @@ void LATTICE_OT_select_less(wmOperatorType *ot)
 /** \name Select All Operator
  * \{ */
 
-void ED_lattice_flags_set(Object *obedit, int flag)
+bool ED_lattice_flags_set(Object *obedit, int flag)
 {
 	Lattice *lt = obedit->data;
 	BPoint *bp;
 	int a;
+	bool changed = false;
 
 	bp = lt->editlatt->latt->def;
 
 	a = lt->editlatt->latt->pntsu * lt->editlatt->latt->pntsv * lt->editlatt->latt->pntsw;
-	lt->editlatt->latt->actbp = LT_ACTBP_NONE;
+
+	if (lt->editlatt->latt->actbp != LT_ACTBP_NONE) {
+		lt->editlatt->latt->actbp = LT_ACTBP_NONE;
+		changed = true;
+	}
 
 	while (a--) {
 		if (bp->hide == 0) {
-			bp->f1 = flag;
+			if (bp->f1 != flag) {
+				bp->f1 = flag;
+				changed = true;
+			}
 		}
 		bp++;
 	}
+	return changed;
 }
 
 static int lattice_select_all_exec(bContext *C, wmOperator *op)
@@ -401,18 +427,20 @@ static int lattice_select_all_exec(bContext *C, wmOperator *op)
 		}
 	}
 
+	bool changed_multi = false;
 	for (uint ob_index = 0; ob_index < objects_len; ob_index++) {
 		Object *obedit = objects[ob_index];
 		Lattice *lt;
 		BPoint *bp;
 		int a;
+		bool changed = false;
 
 		switch (action) {
 			case SEL_SELECT:
-				ED_lattice_flags_set(obedit, 1);
+				changed = ED_lattice_flags_set(obedit, 1);
 				break;
 			case SEL_DESELECT:
-				ED_lattice_flags_set(obedit, 0);
+				changed = ED_lattice_flags_set(obedit, 0);
 				break;
 			case SEL_INVERT:
 				lt = obedit->data;
@@ -423,18 +451,24 @@ static int lattice_select_all_exec(bContext *C, wmOperator *op)
 				while (a--) {
 					if (bp->hide == 0) {
 						bp->f1 ^= SELECT;
+						changed = true;
 					}
 					bp++;
 				}
 				break;
 		}
-		DEG_id_tag_update(obedit->data, ID_RECALC_SELECT);
-		WM_event_add_notifier(C, NC_GEOM | ND_SELECT, obedit->data);
+		if (changed) {
+			changed_multi = true;
+			DEG_id_tag_update(obedit->data, ID_RECALC_SELECT);
+			WM_event_add_notifier(C, NC_GEOM | ND_SELECT, obedit->data);
+		}
 	}
 	MEM_freeN(objects);
 
-
-	return OPERATOR_FINISHED;
+	if (changed_multi) {
+		return OPERATOR_FINISHED;
+	}
+	return OPERATOR_CANCELLED;
 }
 
 void LATTICE_OT_select_all(wmOperatorType *ot)
@@ -603,10 +637,10 @@ bool ED_lattice_select_pick(bContext *C, const int mval[2], bool extend, bool de
 			Object **objects = BKE_view_layer_array_from_objects_in_edit_mode_unique_data(vc.view_layer, vc.v3d, &objects_len);
 			for (uint ob_index = 0; ob_index < objects_len; ob_index++) {
 				Object *ob = objects[ob_index];
-				ED_lattice_flags_set(ob, 0);
-
-				DEG_id_tag_update(ob->data, ID_RECALC_SELECT);
-				WM_event_add_notifier(C, NC_GEOM | ND_SELECT, ob->data);
+				if (ED_lattice_flags_set(ob, 0)) {
+					DEG_id_tag_update(ob->data, ID_RECALC_SELECT);
+					WM_event_add_notifier(C, NC_GEOM | ND_SELECT, ob->data);
+				}
 			}
 			MEM_freeN(objects);
 		}

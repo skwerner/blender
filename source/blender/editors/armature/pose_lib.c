@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,14 +15,10 @@
  *
  * The Original Code is Copyright (C) 2007, Blender Foundation
  * This is a new part of Blender
- *
- * Contributor(s): Joshua Leung
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/armature/pose_lib.c
- *  \ingroup edarmature
+/** \file
+ * \ingroup edarmature
  */
 
 #include <string.h>
@@ -46,7 +40,6 @@
 #include "BKE_action.h"
 #include "BKE_animsys.h"
 #include "BKE_armature.h"
-#include "BKE_global.h"
 #include "BKE_idprop.h"
 #include "BKE_library.h"
 #include "BKE_main.h"
@@ -167,7 +160,7 @@ static Object *get_poselib_object(bContext *C)
 
 	sa = CTX_wm_area(C);
 
-	if (sa && (sa->spacetype == SPACE_BUTS))
+	if (sa && (sa->spacetype == SPACE_PROPERTIES))
 		return ED_object_context(C);
 	else
 		return BKE_object_pose_armature_get(CTX_data_active_object(C));
@@ -498,7 +491,10 @@ static int poselib_add_exec(bContext *C, wmOperator *op)
 	BLI_uniquename(&act->markers, marker, DATA_("Pose"), '.', offsetof(TimeMarker, name), sizeof(marker->name));
 
 	/* use Keying Set to determine what to store for the pose */
-	ks = ANIM_builtin_keyingset_get_named(NULL, ANIM_KS_WHOLE_CHARACTER_SELECTED_ID); /* this includes custom props :)*/
+
+	/* this includes custom props :)*/
+	ks = ANIM_builtin_keyingset_get_named(NULL, ANIM_KS_WHOLE_CHARACTER_SELECTED_ID);
+
 	ANIM_apply_keyingset(C, NULL, act, ks, MODIFYKEY_MODE_INSERT, (float)frame);
 
 	/* store new 'active' pose number */
@@ -730,7 +726,8 @@ void POSELIB_OT_pose_rename(wmOperatorType *ot)
 	ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
 
 	/* properties */
-	/* NOTE: name not pose is the operator's "main" property, so that it will get activated in the popup for easy renaming */
+	/* NOTE: name not pose is the operator's "main" property,
+	 * so that it will get activated in the popup for easy renaming */
 	ot->prop = RNA_def_string(ot->srna, "name", "RenamedPose", 64, "New Pose Name", "New name for pose");
 	prop = RNA_def_enum(ot->srna, "pose", DummyRNA_NULL_items, 0, "Pose", "The pose to rename");
 	RNA_def_enum_funcs(prop, poselib_stored_pose_itemf);
@@ -792,7 +789,7 @@ void POSELIB_OT_pose_move(wmOperatorType *ot)
 	static const EnumPropertyItem pose_lib_pose_move[] = {
 		{-1, "UP", 0, "Up", ""},
 		{1, "DOWN", 0, "Down", ""},
-		{0, NULL, 0, NULL, NULL}
+		{0, NULL, 0, NULL, NULL},
 	};
 
 	/* identifiers */
@@ -876,7 +873,7 @@ enum {
 	PL_PREVIEW_RUNNING,
 	PL_PREVIEW_CONFIRM,
 	PL_PREVIEW_CANCEL,
-	PL_PREVIEW_RUNONCE
+	PL_PREVIEW_RUNONCE,
 };
 
 /* defines for tPoseLib_PreviewData->redraw values */
@@ -963,7 +960,8 @@ static void poselib_backup_restore(tPoseLib_PreviewData *pld)
 		if (plb->oldprops)
 			IDP_SyncGroupValues(plb->pchan->prop, plb->oldprops);
 
-		/* TODO: constraints settings aren't restored yet, even though these could change (though not that likely) */
+		/* TODO: constraints settings aren't restored yet,
+		 * even though these could change (though not that likely) */
 	}
 }
 
@@ -1120,7 +1118,7 @@ static void poselib_preview_apply(bContext *C, wmOperator *op)
 		else
 			RNA_int_set(op->ptr, "pose_index", -2);  /* -2 means don't apply any pose */
 
-		/* old optimize trick... this enforces to bypass the depgraph
+		/* old optimize trick... this enforces to bypass the depsgraph
 		 * - note: code copied from transform_generics.c -> recalcData()
 		 */
 		// FIXME: shouldn't this use the builtin stuff?
@@ -1785,7 +1783,11 @@ void POSELIB_OT_browse_interactive(wmOperatorType *ot)
 
 	// XXX: percentage vs factor?
 	/* not used yet */
-	/* RNA_def_float_factor(ot->srna, "blend_factor", 1.0f, 0.0f, 1.0f, "Blend Factor", "Amount that the pose is applied on top of the existing poses", 0.0f, 1.0f); */
+#if 0
+	RNA_def_float_factor(
+	        ot->srna, "blend_factor", 1.0f, 0.0f, 1.0f, "Blend Factor",
+	        "Amount that the pose is applied on top of the existing poses", 0.0f, 1.0f);
+#endif
 }
 
 void POSELIB_OT_apply_pose(wmOperatorType *ot)

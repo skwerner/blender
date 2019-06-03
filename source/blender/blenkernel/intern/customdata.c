@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,21 +15,13 @@
  *
  * The Original Code is Copyright (C) 2006 Blender Foundation.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): Ben Batt <benbatt@gmail.com>
- *
- * ***** END GPL LICENSE BLOCK *****
- *
  * Implementation of CustomData.
  *
  * BKE_customdata.h contains the function prototypes for this file.
- *
  */
 
-/** \file blender/blenkernel/intern/customdata.c
- *  \ingroup bke
+/** \file
+ * \ingroup bke
  */
 
 #include "MEM_guardedalloc.h"
@@ -52,14 +42,14 @@
 
 #include "BKE_customdata.h"
 #include "BKE_customdata_file.h"
-#include "BKE_global.h"
-#include "BKE_library.h"
 #include "BKE_main.h"
 #include "BKE_mesh_mapping.h"
 #include "BKE_mesh_remap.h"
 #include "BKE_multires.h"
 
 #include "bmesh.h"
+
+#include "CLG_log.h"
 
 /* only for customdata_data_transfer_interp_normal_normals */
 #include "data_transfer_intern.h"
@@ -69,6 +59,29 @@
 
 /* ensure typemap size is ok */
 BLI_STATIC_ASSERT(ARRAY_SIZE(((CustomData *)NULL)->typemap) == CD_NUMTYPES, "size mismatch");
+
+static CLG_LogRef LOG = {"bke.customdata"};
+
+
+/** Update mask_dst with layers defined in mask_src (equivalent to a bitwise OR). */
+void CustomData_MeshMasks_update(CustomData_MeshMasks *mask_dst, const CustomData_MeshMasks *mask_src)
+{
+	mask_dst->vmask |= mask_src->vmask;
+	mask_dst->emask |= mask_src->emask;
+	mask_dst->fmask |= mask_src->fmask;
+	mask_dst->pmask |= mask_src->pmask;
+	mask_dst->lmask |= mask_src->lmask;
+}
+
+/** Return True if all layers set in \a mask_required are also set in \a mask_ref */
+bool CustomData_MeshMasks_are_matching(const CustomData_MeshMasks *mask_ref, const CustomData_MeshMasks *mask_required)
+{
+	return (((mask_required->vmask & mask_ref->vmask) == mask_required->vmask) &&
+	        ((mask_required->emask & mask_ref->emask) == mask_required->emask) &&
+	        ((mask_required->fmask & mask_ref->fmask) == mask_required->fmask) &&
+	        ((mask_required->pmask & mask_ref->pmask) == mask_required->pmask) &&
+	        ((mask_required->lmask & mask_ref->lmask) == mask_required->lmask));
+}
 
 
 /********************* Layer type information **********************/
@@ -622,7 +635,7 @@ static int layerRead_mdisps(CDataFile *cdf, void *data, int count)
 			d[i].disps = MEM_calloc_arrayN(d[i].totdisp, 3 * sizeof(float), "mdisps read");
 
 		if (!cdf_read_data(cdf, d[i].totdisp * 3 * sizeof(float), d[i].disps)) {
-			printf("failed to read multires displacement %d/%d %d\n", i, count, d[i].totdisp);
+			CLOG_ERROR(&LOG, "failed to read multires displacement %d/%d %d", i, count, d[i].totdisp);
 			return 0;
 		}
 	}
@@ -637,7 +650,7 @@ static int layerWrite_mdisps(CDataFile *cdf, const void *data, int count)
 
 	for (i = 0; i < count; ++i) {
 		if (!cdf_write_data(cdf, d[i].totdisp * 3 * sizeof(float), d[i].disps)) {
-			printf("failed to write multires displacement %d/%d %d\n", i, count, d[i].totdisp);
+			CLOG_ERROR(&LOG, "failed to write multires displacement %d/%d %d", i, count, d[i].totdisp);
 			return 0;
 		}
 	}
@@ -1239,9 +1252,8 @@ static void layerSwap_flnor(void *data, const int *corner_indices)
 static void layerDefault_fmap(void *data, int count)
 {
 	int *fmap_num = (int *)data;
-	int i;
-	for (i = 0; i < count; i++) {
-		*fmap_num = -1;
+	for (int i = 0; i < count; i++) {
+		fmap_num[i] = -1;
 	}
 }
 
@@ -1379,59 +1391,82 @@ static const char *LAYERTYPENAMES[CD_NUMTYPES] = {
 };
 
 
-const CustomDataMask CD_MASK_BAREMESH =
-    CD_MASK_MVERT | CD_MASK_MEDGE | CD_MASK_MLOOP | CD_MASK_MPOLY | CD_MASK_BWEIGHT | CD_MASK_FACEMAP;
-const CustomDataMask CD_MASK_MESH =
-    CD_MASK_MVERT | CD_MASK_MEDGE |
-    CD_MASK_MDEFORMVERT |
-    CD_MASK_PROP_FLT | CD_MASK_PROP_INT | CD_MASK_PROP_STR | CD_MASK_MDISPS |
-    CD_MASK_MLOOPUV | CD_MASK_MLOOPCOL | CD_MASK_MPOLY | CD_MASK_MLOOP |
-    CD_MASK_RECAST | CD_MASK_PAINT_MASK |
-    CD_MASK_GRID_PAINT_MASK | CD_MASK_MVERT_SKIN | CD_MASK_FREESTYLE_EDGE | CD_MASK_FREESTYLE_FACE |
-    CD_MASK_CUSTOMLOOPNORMAL | CD_MASK_FACEMAP;
-const CustomDataMask CD_MASK_EDITMESH =
-    CD_MASK_MDEFORMVERT | CD_MASK_MLOOPUV |
-    CD_MASK_MLOOPCOL | CD_MASK_SHAPE_KEYINDEX |
-    CD_MASK_PROP_FLT | CD_MASK_PROP_INT | CD_MASK_PROP_STR |
-    CD_MASK_MDISPS | CD_MASK_SHAPEKEY | CD_MASK_RECAST | CD_MASK_PAINT_MASK |
-    CD_MASK_GRID_PAINT_MASK | CD_MASK_MVERT_SKIN | CD_MASK_CUSTOMLOOPNORMAL | CD_MASK_FACEMAP;
-const CustomDataMask CD_MASK_DERIVEDMESH =
-    CD_MASK_MDEFORMVERT |
-    CD_MASK_PROP_FLT | CD_MASK_PROP_INT | CD_MASK_CLOTH_ORCO |
-    CD_MASK_MLOOPUV | CD_MASK_MLOOPCOL | CD_MASK_PREVIEW_MLOOPCOL |
-    CD_MASK_PROP_STR | CD_MASK_ORIGSPACE | CD_MASK_ORIGSPACE_MLOOP | CD_MASK_ORCO | CD_MASK_TANGENT |
-    CD_MASK_PREVIEW_MCOL | CD_MASK_SHAPEKEY | CD_MASK_RECAST |
-    CD_MASK_ORIGINDEX | CD_MASK_MVERT_SKIN | CD_MASK_FREESTYLE_EDGE | CD_MASK_FREESTYLE_FACE |
-    CD_MASK_CUSTOMLOOPNORMAL | CD_MASK_FACEMAP;
-const CustomDataMask CD_MASK_BMESH =
-    CD_MASK_MLOOPUV | CD_MASK_MLOOPCOL |
-    CD_MASK_MDEFORMVERT | CD_MASK_PROP_FLT | CD_MASK_PROP_INT |
-    CD_MASK_PROP_STR | CD_MASK_SHAPEKEY | CD_MASK_SHAPE_KEYINDEX | CD_MASK_MDISPS |
-    CD_MASK_CREASE | CD_MASK_BWEIGHT | CD_MASK_RECAST | CD_MASK_PAINT_MASK |
-    CD_MASK_GRID_PAINT_MASK | CD_MASK_MVERT_SKIN | CD_MASK_FREESTYLE_EDGE | CD_MASK_FREESTYLE_FACE |
-    CD_MASK_CUSTOMLOOPNORMAL | CD_MASK_FACEMAP;
+const CustomData_MeshMasks CD_MASK_BAREMESH = {
+    .vmask = CD_MASK_MVERT | CD_MASK_BWEIGHT,
+    .emask = CD_MASK_MEDGE | CD_MASK_BWEIGHT,
+    .fmask = 0,
+    .lmask = CD_MASK_MLOOP,
+    .pmask = CD_MASK_MPOLY | CD_MASK_FACEMAP,
+};
+const CustomData_MeshMasks CD_MASK_BAREMESH_ORIGINDEX = {
+    .vmask = CD_MASK_MVERT | CD_MASK_BWEIGHT | CD_MASK_ORIGINDEX,
+    .emask = CD_MASK_MEDGE | CD_MASK_BWEIGHT | CD_MASK_ORIGINDEX,
+    .fmask = 0,
+    .lmask = CD_MASK_MLOOP,
+    .pmask = CD_MASK_MPOLY | CD_MASK_FACEMAP | CD_MASK_ORIGINDEX,
+};
+const CustomData_MeshMasks CD_MASK_MESH = {
+    .vmask = (CD_MASK_MVERT | CD_MASK_MDEFORMVERT | CD_MASK_MVERT_SKIN | CD_MASK_PAINT_MASK | CD_MASK_GENERIC_DATA),
+    .emask = (CD_MASK_MEDGE | CD_MASK_FREESTYLE_EDGE | CD_MASK_GENERIC_DATA),
+    .fmask = 0,
+    .lmask = (CD_MASK_MLOOP | CD_MASK_MDISPS | CD_MASK_MLOOPUV | CD_MASK_MLOOPCOL | CD_MASK_CUSTOMLOOPNORMAL |
+              CD_MASK_GRID_PAINT_MASK | CD_MASK_GENERIC_DATA),
+    .pmask = (CD_MASK_MPOLY | CD_MASK_RECAST | CD_MASK_FACEMAP | CD_MASK_FREESTYLE_FACE | CD_MASK_GENERIC_DATA),
+};
+const CustomData_MeshMasks CD_MASK_EDITMESH = {
+    .vmask = (CD_MASK_MDEFORMVERT | CD_MASK_PAINT_MASK | CD_MASK_MVERT_SKIN | CD_MASK_SHAPEKEY |
+              CD_MASK_SHAPE_KEYINDEX | CD_MASK_GENERIC_DATA),
+    .emask = (CD_MASK_GENERIC_DATA),
+    .fmask = 0,
+    .lmask = (CD_MASK_MDISPS | CD_MASK_MLOOPUV | CD_MASK_MLOOPCOL | CD_MASK_CUSTOMLOOPNORMAL |
+              CD_MASK_GRID_PAINT_MASK | CD_MASK_GENERIC_DATA),
+    .pmask = (CD_MASK_RECAST | CD_MASK_FACEMAP | CD_MASK_GENERIC_DATA),
+};
+const CustomData_MeshMasks CD_MASK_DERIVEDMESH = {
+    .vmask = (CD_MASK_ORIGINDEX | CD_MASK_MDEFORMVERT | CD_MASK_SHAPEKEY | CD_MASK_MVERT_SKIN |
+              CD_MASK_ORCO | CD_MASK_CLOTH_ORCO | CD_MASK_GENERIC_DATA),
+    .emask = (CD_MASK_ORIGINDEX | CD_MASK_FREESTYLE_EDGE | CD_MASK_GENERIC_DATA),
+    .fmask = (CD_MASK_ORIGINDEX | CD_MASK_ORIGSPACE | CD_MASK_PREVIEW_MCOL | CD_MASK_TANGENT),
+    .lmask = (CD_MASK_MLOOPUV | CD_MASK_MLOOPCOL | CD_MASK_CUSTOMLOOPNORMAL | CD_MASK_PREVIEW_MLOOPCOL |
+              CD_MASK_ORIGSPACE_MLOOP | CD_MASK_GENERIC_DATA),  /* XXX MISSING CD_MASK_MLOOPTANGENT ? */
+    .pmask = (CD_MASK_ORIGINDEX | CD_MASK_RECAST | CD_MASK_FREESTYLE_FACE | CD_MASK_FACEMAP | CD_MASK_GENERIC_DATA),
+};
+const CustomData_MeshMasks CD_MASK_BMESH = {
+    .vmask = (CD_MASK_MDEFORMVERT | CD_MASK_BWEIGHT | CD_MASK_MVERT_SKIN | CD_MASK_SHAPEKEY |
+              CD_MASK_SHAPE_KEYINDEX | CD_MASK_PAINT_MASK | CD_MASK_GENERIC_DATA),
+    .emask = (CD_MASK_BWEIGHT | CD_MASK_CREASE | CD_MASK_FREESTYLE_EDGE | CD_MASK_GENERIC_DATA),
+    .fmask = 0,
+    .lmask = (CD_MASK_MDISPS | CD_MASK_MLOOPUV | CD_MASK_MLOOPCOL | CD_MASK_CUSTOMLOOPNORMAL |
+              CD_MASK_GRID_PAINT_MASK | CD_MASK_GENERIC_DATA),
+    .pmask = (CD_MASK_RECAST | CD_MASK_FREESTYLE_FACE | CD_MASK_FACEMAP | CD_MASK_GENERIC_DATA),
+};
 /**
  * cover values copied by #BKE_mesh_loops_to_tessdata
  */
-const CustomDataMask CD_MASK_FACECORNERS =
-    CD_MASK_MTFACE | CD_MASK_MLOOPUV |
-    CD_MASK_MCOL | CD_MASK_MLOOPCOL |
-    CD_MASK_PREVIEW_MCOL | CD_MASK_PREVIEW_MLOOPCOL |
-    CD_MASK_ORIGSPACE | CD_MASK_ORIGSPACE_MLOOP |
-    CD_MASK_TESSLOOPNORMAL | CD_MASK_NORMAL |
-    CD_MASK_TANGENT | CD_MASK_MLOOPTANGENT;
-const CustomDataMask CD_MASK_EVERYTHING =
-    CD_MASK_MVERT | CD_MASK_MDEFORMVERT | CD_MASK_MEDGE | CD_MASK_MFACE |
-    CD_MASK_MTFACE | CD_MASK_MCOL | CD_MASK_ORIGINDEX | CD_MASK_NORMAL /* | CD_MASK_POLYINDEX */ | CD_MASK_PROP_FLT |
-    CD_MASK_PROP_INT | CD_MASK_PROP_STR | CD_MASK_ORIGSPACE | CD_MASK_ORCO | CD_MASK_MLOOPUV |
-    CD_MASK_MLOOPCOL | CD_MASK_TANGENT | CD_MASK_MDISPS | CD_MASK_PREVIEW_MCOL | CD_MASK_CLOTH_ORCO | CD_MASK_RECAST |
-    /* BMESH ONLY START */
-    CD_MASK_MPOLY | CD_MASK_MLOOP | CD_MASK_SHAPE_KEYINDEX | CD_MASK_SHAPEKEY | CD_MASK_BWEIGHT | CD_MASK_CREASE |
-    CD_MASK_ORIGSPACE_MLOOP | CD_MASK_PREVIEW_MLOOPCOL | CD_MASK_BM_ELEM_PYPTR |
-    /* BMESH ONLY END */
-    CD_MASK_PAINT_MASK | CD_MASK_GRID_PAINT_MASK | CD_MASK_MVERT_SKIN |
-    CD_MASK_FREESTYLE_EDGE | CD_MASK_FREESTYLE_FACE |
-    CD_MASK_MLOOPTANGENT | CD_MASK_TESSLOOPNORMAL | CD_MASK_CUSTOMLOOPNORMAL | CD_MASK_FACEMAP;
+const CustomData_MeshMasks CD_MASK_FACECORNERS = {
+    .vmask = 0,
+    .emask = 0,
+    .fmask = (CD_MASK_MTFACE | CD_MASK_MCOL | CD_MASK_PREVIEW_MCOL | CD_MASK_ORIGSPACE |
+              CD_MASK_TESSLOOPNORMAL | CD_MASK_TANGENT),
+    .lmask = (CD_MASK_MLOOPUV | CD_MASK_MLOOPCOL | CD_MASK_PREVIEW_MLOOPCOL | CD_MASK_ORIGSPACE_MLOOP |
+              CD_MASK_NORMAL | CD_MASK_MLOOPTANGENT),
+    .pmask = 0,
+};
+const CustomData_MeshMasks CD_MASK_EVERYTHING = {
+    .vmask = (CD_MASK_MVERT | CD_MASK_BM_ELEM_PYPTR | CD_MASK_ORIGINDEX | CD_MASK_NORMAL | CD_MASK_MDEFORMVERT |
+              CD_MASK_BWEIGHT | CD_MASK_MVERT_SKIN | CD_MASK_ORCO | CD_MASK_CLOTH_ORCO | CD_MASK_SHAPEKEY |
+              CD_MASK_SHAPE_KEYINDEX | CD_MASK_PAINT_MASK | CD_MASK_GENERIC_DATA),
+    .emask = (CD_MASK_MEDGE | CD_MASK_BM_ELEM_PYPTR | CD_MASK_ORIGINDEX | CD_MASK_BWEIGHT | CD_MASK_CREASE |
+              CD_MASK_FREESTYLE_EDGE | CD_MASK_GENERIC_DATA),
+    .fmask = (CD_MASK_MFACE | CD_MASK_ORIGINDEX | CD_MASK_NORMAL | CD_MASK_MTFACE | CD_MASK_MCOL |
+              CD_MASK_ORIGSPACE | CD_MASK_TANGENT | CD_MASK_TESSLOOPNORMAL | CD_MASK_PREVIEW_MCOL |
+              CD_MASK_GENERIC_DATA),
+    .lmask = (CD_MASK_MLOOP | CD_MASK_BM_ELEM_PYPTR | CD_MASK_MDISPS | CD_MASK_NORMAL | CD_MASK_MLOOPUV |
+              CD_MASK_MLOOPCOL | CD_MASK_CUSTOMLOOPNORMAL | CD_MASK_MLOOPTANGENT | CD_MASK_PREVIEW_MLOOPCOL |
+              CD_MASK_ORIGSPACE_MLOOP | CD_MASK_GRID_PAINT_MASK | CD_MASK_GENERIC_DATA),
+    .pmask = (CD_MASK_MPOLY | CD_MASK_BM_ELEM_PYPTR | CD_MASK_ORIGINDEX | CD_MASK_NORMAL | CD_MASK_RECAST |
+              CD_MASK_FACEMAP | CD_MASK_FREESTYLE_FACE | CD_MASK_GENERIC_DATA),
+};
 
 static const LayerTypeInfo *layerType_getInfo(int type)
 {
@@ -1447,13 +1482,41 @@ static const char *layerType_getName(int type)
 	return LAYERTYPENAMES[type];
 }
 
-void customData_mask_layers__print(CustomDataMask mask)
+void customData_mask_layers__print(const CustomData_MeshMasks *mask)
 {
 	int i;
 
-	printf("mask=0x%lx:\n", (long unsigned int)mask);
+	printf("verts mask=0x%lx:\n", (long unsigned int)mask->vmask);
 	for (i = 0; i < CD_NUMTYPES; i++) {
-		if (mask & CD_TYPE_AS_MASK(i)) {
+		if (mask->vmask & CD_TYPE_AS_MASK(i)) {
+			printf("  %s\n", layerType_getName(i));
+		}
+	}
+
+	printf("edges mask=0x%lx:\n", (long unsigned int)mask->emask);
+	for (i = 0; i < CD_NUMTYPES; i++) {
+		if (mask->emask & CD_TYPE_AS_MASK(i)) {
+			printf("  %s\n", layerType_getName(i));
+		}
+	}
+
+	printf("faces mask=0x%lx:\n", (long unsigned int)mask->fmask);
+	for (i = 0; i < CD_NUMTYPES; i++) {
+		if (mask->fmask & CD_TYPE_AS_MASK(i)) {
+			printf("  %s\n", layerType_getName(i));
+		}
+	}
+
+	printf("loops mask=0x%lx:\n", (long unsigned int)mask->lmask);
+	for (i = 0; i < CD_NUMTYPES; i++) {
+		if (mask->lmask & CD_TYPE_AS_MASK(i)) {
+			printf("  %s\n", layerType_getName(i));
+		}
+	}
+
+	printf("polys mask=0x%lx:\n", (long unsigned int)mask->pmask);
+	for (i = 0; i < CD_NUMTYPES; i++) {
+		if (mask->pmask & CD_TYPE_AS_MASK(i)) {
 			printf("  %s\n", layerType_getName(i));
 		}
 	}
@@ -1862,6 +1925,17 @@ void CustomData_set_layer_flag(struct CustomData *data, int type, int flag)
 			data->layers[i].flag |= flag;
 }
 
+void CustomData_clear_layer_flag(struct CustomData *data, int type, int flag)
+{
+	const int nflag = ~flag;
+
+	for (int i = 0; i < data->totlayer; ++i) {
+		if (data->layers[i].type == type) {
+			data->layers[i].flag &= nflag;
+		}
+	}
+}
+
 static int customData_resize(CustomData *data, int amount)
 {
 	CustomDataLayer *tmp = MEM_calloc_arrayN((data->maxlayer + amount), sizeof(*tmp),
@@ -2243,9 +2317,9 @@ static void CustomData_copy_data_layer(
 
 	if (!count || !src_data || !dst_data) {
 		if (count && !(src_data == NULL && dst_data == NULL)) {
-			printf("%s: warning null data for %s type (%p --> %p), skipping\n",
-				   __func__, layerType_getName(source->layers[src_i].type),
-				   (void *)src_data, (void *)dst_data);
+			CLOG_WARN(&LOG, "null data for %s type (%p --> %p), skipping",
+			          layerType_getName(source->layers[src_i].type),
+			          (void *)src_data, (void *)dst_data);
 		}
 		return;
 	}
@@ -3405,7 +3479,7 @@ void CustomData_file_write_prepare(
 		CustomDataLayer *layer = &data->layers[i];
 		if (layer->flag & CD_FLAG_NOCOPY) {  /* Layers with this flag set are not written to file. */
 			data->totlayer--;
-			/* printf("%s: skipping layer %p (%s)\n", __func__, layer, layer->name); */
+			/* CLOG_WARN(&LOG, "skipping layer %p (%s)", layer, layer->name); */
 		}
 		else {
 			if (UNLIKELY((size_t)j >= write_layers_size)) {
@@ -3566,6 +3640,19 @@ bool CustomData_verify_versions(struct CustomData *data, int index)
 		{
 			keeplayer = false; /* multiple layers of which we only support one */
 		}
+		/* This is a pre-emptive fix for cases that should not happen (layers that should not be written
+		 * in .blend files), but can happen due to bugs (see e.g. T62318).
+		 * Also for forward compatibility, in future, we may put into .blend file some currently un-written data types,
+		 * this should cover that case as well.
+		 * Better to be safe here, and fix issue on the fly rather than crash... */
+		/* 0 structnum is used in writing code to tag layer types that should not be written. */
+		else if (typeInfo->structnum == 0 &&
+		         /* XXX Not sure why those two are exception, maybe that should be fixed? */
+		         !ELEM(layer->type, CD_PAINT_MASK, CD_FACEMAP))
+		{
+			keeplayer = false;
+			CLOG_WARN(&LOG, ".blend file read: removing a data layer that should not have been written");
+		}
 	}
 
 	if (!keeplayer) {
@@ -3658,7 +3745,7 @@ void CustomData_external_read(CustomData *data, ID *id, CustomDataMask mask, int
 	cdf = cdf_create(CDF_TYPE_MESH);
 	if (!cdf_read_open(cdf, filename)) {
 		cdf_free(cdf);
-		fprintf(stderr, "Failed to read %s layer from %s.\n", layerType_getName(layer->type), filename);
+		CLOG_ERROR(&LOG, "Failed to read %s layer from %s.", layerType_getName(layer->type), filename);
 		return;
 	}
 
@@ -3747,7 +3834,7 @@ void CustomData_external_write(CustomData *data, ID *id, CustomDataMask mask, in
 	}
 
 	if (!cdf_write_open(cdf, filename)) {
-		fprintf(stderr, "Failed to open %s for writing.\n", filename);
+		CLOG_ERROR(&LOG, "Failed to open %s for writing.", filename);
 		cdf_free(cdf);
 		return;
 	}
@@ -3774,7 +3861,7 @@ void CustomData_external_write(CustomData *data, ID *id, CustomDataMask mask, in
 	}
 
 	if (i != data->totlayer) {
-		fprintf(stderr, "Failed to write data to %s.\n", filename);
+		CLOG_ERROR(&LOG, "Failed to write data to %s.", filename);
 		cdf_write_close(cdf);
 		cdf_free(cdf);
 		return;
@@ -3879,7 +3966,7 @@ static void copy_bit_flag(void *dst, const void *src, const size_t data_size, co
 			COPY_BIT_FLAG(uint64_t, dst, src, flag);
 			break;
 		default:
-			//printf("ERROR %s: Unknown flags-container size (%zu)\n", __func__, datasize);
+			//CLOG_ERROR(&LOG, "Unknown flags-container size (%zu)", datasize);
 			break;
 	}
 
@@ -3898,7 +3985,7 @@ static bool check_bit_flag(const void *data, const size_t data_size, const uint6
 		case 8:
 			return ((*((uint64_t *)data) & ((uint64_t)flag)) != 0);
 		default:
-			//printf("ERROR %s: Unknown flags-container size (%zu)\n", __func__, datasize);
+			//CLOG_ERROR(&LOG, "Unknown flags-container size (%zu)", datasize);
 			return false;
 	}
 }

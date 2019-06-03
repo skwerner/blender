@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,19 +15,10 @@
  *
  * The Original Code is Copyright (C) 2012 by Blender Foundation.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): Xavier Thomas,
- *                 Lukas Toenne,
- *                 Sergey Sharybin
- *
- * ***** END GPL LICENSE BLOCK *****
- *
  */
 
-/** \file blender/imbuf/intern/colormanagement.c
- *  \ingroup imbuf
+/** \file
+ * \ingroup imbuf
  */
 
 #include "IMB_colormanagement.h"
@@ -1144,7 +1133,7 @@ void IMB_colormanagement_check_file_config(Main *bmain)
 		return;
 	}
 
-	for (scene = bmain->scene.first; scene; scene = scene->id.next) {
+	for (scene = bmain->scenes.first; scene; scene = scene->id.next) {
 		ColorManagedColorspaceSettings *sequencer_colorspace_settings;
 
 		/* check scene color management settings */
@@ -1170,16 +1159,16 @@ void IMB_colormanagement_check_file_config(Main *bmain)
 
 	/* ** check input color space settings ** */
 
-	for (image = bmain->image.first; image; image = image->id.next) {
+	for (image = bmain->images.first; image; image = image->id.next) {
 		colormanage_check_colorspace_settings(&image->colorspace_settings, "image");
 	}
 
-	for (clip = bmain->movieclip.first; clip; clip = clip->id.next) {
+	for (clip = bmain->movieclips.first; clip; clip = clip->id.next) {
 		colormanage_check_colorspace_settings(&clip->colorspace_settings, "clip");
 	}
 }
 
-void IMB_colormanagement_validate_settings(ColorManagedDisplaySettings *display_settings,
+void IMB_colormanagement_validate_settings(const ColorManagedDisplaySettings *display_settings,
                                            ColorManagedViewSettings *view_settings)
 {
 	ColorManagedDisplay *display;

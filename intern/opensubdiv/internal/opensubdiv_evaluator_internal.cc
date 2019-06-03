@@ -20,7 +20,6 @@
 
 #include <cassert>
 #include <cstdio>
-#include <vector>
 
 #ifdef _MSC_VER
 #  include <iso646.h>
@@ -39,6 +38,7 @@
 #include "MEM_guardedalloc.h"
 
 #include "internal/opensubdiv_topology_refiner_internal.h"
+#include "internal/opensubdiv_util.h"
 #include "internal/opensubdiv_util.h"
 #include "opensubdiv_topology_refiner_capi.h"
 
@@ -68,7 +68,7 @@ namespace {
 // Helper class to wrap numerous of patch coordinates into a buffer.
 // Used to pass coordinates to the CPU evaluator. Other evaluators are not
 // supported.
-class PatchCoordBuffer : public std::vector<PatchCoord> {
+class PatchCoordBuffer : public vector<PatchCoord> {
  public:
   static PatchCoordBuffer* Create(int size) {
     PatchCoordBuffer* buffer = new PatchCoordBuffer();
@@ -130,7 +130,7 @@ template <int element_size, int num_vertices>
 class StackAllocatedBuffer {
  public:
   static PatchCoordBuffer* Create(int /*size*/) {
-    // TODO(sergey): Validate that requested dize is smaller than static
+    // TODO(sergey): Validate that requested size is smaller than static
     // stack memory size.
     return new StackAllocatedBuffer<element_size, num_vertices>();
   }
@@ -527,12 +527,12 @@ class CpuEvalOutput : public VolatileEvalOutput<CpuVertexBuffer,
                            CpuVertexBuffer,
                            StencilTable,
                            CpuPatchTable,
-                           CpuEvaluator> (vertex_stencils,
-                                          varying_stencils,
-                                          all_face_varying_stencils,
-                                          face_varying_width,
-                                          patch_table,
-                                          evaluator_cache) {
+                           CpuEvaluator>(vertex_stencils,
+                                         varying_stencils,
+                                         all_face_varying_stencils,
+                                         face_varying_width,
+                                         patch_table,
+                                         evaluator_cache) {
   }
 };
 

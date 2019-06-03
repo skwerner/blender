@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,10 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * Contributor(s): Original design: Reevan McKay
- * Contributor(s): Full recode, Ton Roosendaal, Crete 2005
- * Contributor(s): Animation recode, Joshua Leung
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file DNA_action_types.h
- *  \ingroup DNA
+/** \file
+ * \ingroup DNA
  *
  * Define actions data-block for the animation system.
  * A collection of animation curves and drivers to be assigned to data-blocks
@@ -41,10 +33,10 @@
 #include "DNA_view2d_types.h"
 #include "DNA_userdef_types.h" /* ThemeWireColor */
 
-struct SpaceLink;
-struct Object;
 struct Collection;
 struct GHash;
+struct Object;
+struct SpaceLink;
 
 /* ************************************************ */
 /* Visualization */
@@ -94,7 +86,7 @@ typedef struct bMotionPath {
 	struct GPUVertBuf *points_vbo;
 	struct GPUBatch *batch_line;
 	struct GPUBatch *batch_points;
-	void *pad;
+	void *_pad;
 } bMotionPath;
 
 /* bMotionPath->flag */
@@ -106,7 +98,7 @@ typedef enum eMotionPath_Flag {
 	/* Custom colors */
 	MOTIONPATH_FLAG_CUSTOM      = (1 << 2),
 	/* Draw lines or only points */
-	MOTIONPATH_FLAG_LINES       = (1 << 3)
+	MOTIONPATH_FLAG_LINES       = (1 << 3),
 } eMotionPath_Flag;
 
 /* Visualization General --------------------------- */
@@ -114,20 +106,6 @@ typedef enum eMotionPath_Flag {
 
 /* Animation Visualization Settings (avs) */
 typedef struct bAnimVizSettings {
-	/* Onion-Skinning Settings ----------------- */
-	/** Start and end frames of ghost-drawing range (only used for GHOST_TYPE_RANGE). */
-	int ghost_sf, ghost_ef;
-	/** Number of frames befo.re/after current frame to show */
-	int ghost_bc, ghost_ac;
-
-	/** #eOnionSkin_Types. */
-	short ghost_type;
-	/** Number of frames between each ghost shown (not for GHOST_TYPE_KEYS). */
-	short ghost_step;
-
-	/** #eOnionSkin_Flag. */
-	short ghost_flag;
-
 	/* General Settings ------------------------ */
 	/** #eAnimViz_RecalcFlags. */
 	short recalc;
@@ -142,6 +120,7 @@ typedef struct bAnimVizSettings {
 	short path_viewflag;
 	/** #eMotionPaths_BakeFlag. */
 	short path_bakeflag;
+	char _pad[6];
 
 	/** Start and end frames of path-calculation range. */
 	int path_sf, path_ef;
@@ -153,28 +132,8 @@ typedef struct bAnimVizSettings {
 /* bAnimVizSettings->recalc */
 typedef enum eAnimViz_RecalcFlags {
 	/* motionpaths need recalculating */
-	ANIMVIZ_RECALC_PATHS    = (1 << 0)
+	ANIMVIZ_RECALC_PATHS    = (1 << 0),
 } eAnimViz_RecalcFlags;
-
-
-/* bAnimVizSettings->ghost_type */
-typedef enum eOnionSkin_Types {
-	/* no ghosts at all */
-	GHOST_TYPE_NONE = 0,
-	/* around current frame */
-	GHOST_TYPE_ACFRA = 1,
-	/* show ghosts within the specified frame range */
-	GHOST_TYPE_RANGE = 2,
-	/* show ghosts on keyframes within the specified range only */
-	GHOST_TYPE_KEYS = 3
-} eOnionSkin_Types;
-
-/* bAnimVizSettings->ghost_flag */
-typedef enum eOnionSkin_Flag {
-	/* only show selected bones in ghosts */
-	GHOST_FLAG_ONLYSEL  = (1 << 0)
-} eOnionSkin_Flag;
-
 
 /* bAnimVizSettings->path_type */
 typedef enum eMotionPaths_Types {
@@ -195,17 +154,18 @@ typedef enum eMotionPaths_ViewFlag {
 	/* find keyframes in whole action (instead of just in matching group name) */
 	MOTIONPATH_VIEW_KFACT       = (1 << 3),
 	/* draw lines on path */
-	MOTIONPATH_VIEW_LINES       = (1 << 4)
+	MOTIONPATH_VIEW_LINES       = (1 << 4),
 } eMotionPath_ViewFlag;
 
 /* bAnimVizSettings->path_bakeflag */
 typedef enum eMotionPaths_BakeFlag {
-	/* motion paths directly associated with this block of settings needs updating */
+	/** motion paths directly associated with this block of settings needs updating */
 	MOTIONPATH_BAKE_NEEDS_RECALC    = (1 << 0),
-	/* for bones - calculate head-points for curves instead of tips */
+	/** for bones - calculate head-points for curves instead of tips */
 	MOTIONPATH_BAKE_HEADS           = (1 << 1),
-	/* motion paths exist for AnimVizSettings instance - set when calc for first time, and unset when clearing */
-	MOTIONPATH_BAKE_HAS_PATHS       = (1 << 2)
+	/** motion paths exist for AnimVizSettings instance - set when calc for first time,
+	 * and unset when clearing */
+	MOTIONPATH_BAKE_HAS_PATHS       = (1 << 2),
 } eMotionPath_BakeFlag;
 
 /* runtime */
@@ -220,12 +180,12 @@ typedef struct bPoseChannelDrawData {
 	float bbone_matrix[0][4][4];
 } bPoseChannelDrawData;
 
-struct Mat4;
 struct DualQuat;
+struct Mat4;
 
-typedef struct bPoseChannelRuntime {
+typedef struct bPoseChannel_Runtime {
 	int bbone_segments;
-	char pad[4];
+	char _pad[4];
 
 	/* Rest and posed matrices for segments. */
 	struct Mat4 *bbone_rest_mats;
@@ -234,7 +194,7 @@ typedef struct bPoseChannelRuntime {
 	/* Delta from rest to pose in matrix and DualQuat form. */
 	struct Mat4 *bbone_deform_mats;
 	struct DualQuat *bbone_dual_quats;
-} bPoseChannelRuntime;
+} bPoseChannel_Runtime;
 
 /* ************************************************ */
 /* Poses */
@@ -271,7 +231,7 @@ typedef struct bPoseChannel {
 	char selectflag;
 	char drawflag;
 	char bboneflag DNA_DEPRECATED;
-	char pad0[4];
+	char _pad0[4];
 
 	/** Set on read file or rebuild pose. */
 	struct Bone         *bone;
@@ -297,7 +257,7 @@ typedef struct bPoseChannel {
 	struct bPoseChannel *custom_tx;
 	float custom_scale;
 
-	char pad1[4];
+	char _pad1[4];
 
 	/** Transforms - written in by actions or transform. */
 	float loc[3];
@@ -315,9 +275,9 @@ typedef struct bPoseChannel {
 	float rotAxis[3], rotAngle;
 	/** #eRotationModes - rotation representation to use. */
 	short rotmode;
-	short pad;
+	char _pad[2];
 
-	/** Matrix result of l.oc/quat/size, and where we put deform in, see next line */
+	/** Matrix result of loc/quat/size, and where we put deform in, see next line */
 	float chan_mat[4][4];
 	/**
 	 * Constraints accumulate here. in the end, pose_mat = bone->arm_mat * chan_mat
@@ -371,8 +331,8 @@ typedef struct bPoseChannel {
 	/** Points to an original pose channel. */
 	struct bPoseChannel *orig_pchan;
 
-	/** Runtime data. */
-	struct bPoseChannelRuntime runtime;
+	/** Runtime data (keep last). */
+	struct bPoseChannel_Runtime runtime;
 } bPoseChannel;
 
 
@@ -405,7 +365,7 @@ typedef enum ePchan_Flag {
 	POSE_HAS_IKS    =   (1 << 14),
 #endif
 	/* spline IK solving */
-	POSE_IKSPLINE   =   (1 << 15)
+	POSE_IKSPLINE   =   (1 << 15),
 } ePchan_Flag;
 
 /* PoseChannel constflag (constraint detection) */
@@ -418,7 +378,7 @@ typedef enum ePchan_ConstFlag {
 	/* only for drawing Posemode too */
 	PCHAN_HAS_STRIDE    = (1 << 4),
 	/* spline IK */
-	PCHAN_HAS_SPLINEIK  = (1 << 5)
+	PCHAN_HAS_SPLINEIK  = (1 << 5),
 } ePchan_ConstFlag;
 
 /* PoseChannel->ikflag */
@@ -436,7 +396,7 @@ typedef enum ePchan_IkFlag {
 
 	BONE_IK_NO_XDOF_TEMP = (1 << 10),
 	BONE_IK_NO_YDOF_TEMP = (1 << 11),
-	BONE_IK_NO_ZDOF_TEMP = (1 << 12)
+	BONE_IK_NO_ZDOF_TEMP = (1 << 12),
 } ePchan_IkFlag;
 
 /* PoseChannel->drawflag */
@@ -479,7 +439,7 @@ typedef enum eRotationModes {
 	ROT_MODE_AXISANGLE = -1,
 
 	ROT_MODE_MIN = ROT_MODE_AXISANGLE,  /* sentinel for Py API */
-	ROT_MODE_MAX = ROT_MODE_ZYX
+	ROT_MODE_MAX = ROT_MODE_ZYX,
 } eRotationModes;
 
 /* Pose ------------------------------------ */
@@ -500,10 +460,11 @@ typedef struct bPose {
 	 */
 	bPoseChannel **chan_array;
 
-	short flag, pad;
+	short flag;
+	char _pad[2];
 	/** Proxy layer: copy from armature, gets synced. */
 	unsigned int proxy_layer;
-	int pad1;
+	char _pad1[4];
 
 	/** Local action time of this pose. */
 	float ctime;
@@ -556,7 +517,7 @@ typedef enum ePose_Flags {
 /* bPose->iksolver and bPose->ikparam->iksolver */
 typedef enum ePose_IKSolverType {
 	IKSOLVER_STANDARD = 0,
-	IKSOLVER_ITASC = 1
+	IKSOLVER_ITASC = 1,
 } ePose_IKSolverType;
 
 /* header for all bPose->ikparam structures */
@@ -588,7 +549,7 @@ typedef enum eItasc_Flags {
 	ITASC_AUTO_STEP           = (1 << 0),
 	ITASC_INITIAL_REITERATION = (1 << 1),
 	ITASC_REITERATION         = (1 << 2),
-	ITASC_SIMULATION          = (1 << 3)
+	ITASC_SIMULATION          = (1 << 3),
 } eItasc_Flags;
 
 /* bItasc->solver */
@@ -661,7 +622,7 @@ typedef enum eActionGroup_Flag {
 	AGRP_MODIFIERS_OFF = (1 << 7),
 
 	AGRP_TEMP       = (1 << 30),
-	AGRP_MOVED      = (1u << 31)
+	AGRP_MOVED      = (1u << 31),
 } eActionGroup_Flag;
 
 
@@ -700,7 +661,7 @@ typedef struct bAction {
 	 * (if 0, will be set to whatever ID first evaluates it).
 	 */
 	int idroot;
-	int pad;
+	char _pad[4];
 } bAction;
 
 
@@ -713,7 +674,7 @@ typedef enum eAction_Flags {
 	/* flags for evaluation/editing */
 	ACT_MUTED       = (1 << 9),
 	ACT_PROTECTED   = (1 << 10),
-	ACT_DISABLED    = (1 << 11)
+	ACT_DISABLED    = (1 << 11),
 } eAction_Flags;
 
 
@@ -734,32 +695,38 @@ typedef struct bDopeSheet {
 
 	/** Flags to use for filtering data. */
 	int filterflag;
+	int filterflag2;
 	/** Standard flags. */
 	int flag;
 
-	/** Index+1 of channel to rename - only gets set by renaming operator. */
+	/** `index + 1` of channel to rename - only gets set by renaming operator. */
 	int renameIndex;
-	int pad;
 } bDopeSheet;
 
 
 /* DopeSheet filter-flag */
 typedef enum eDopeSheet_FilterFlag {
 	/* general filtering */
-	ADS_FILTER_ONLYSEL          = (1 << 0),   /* only include channels relating to selected data */
+	/** only include channels relating to selected data */
+	ADS_FILTER_ONLYSEL          = (1 << 0),
 
 	/* temporary filters */
-	ADS_FILTER_ONLYDRIVERS      = (1 << 1),   /* for 'Drivers' editor - only include Driver data from AnimData */
-	ADS_FILTER_ONLYNLA          = (1 << 2),   /* for 'NLA' editor - only include NLA data from AnimData */
-	ADS_FILTER_SELEDIT          = (1 << 3),   /* for Graph Editor - used to indicate whether to include a filtering flag or not */
+	/** for 'Drivers' editor - only include Driver data from AnimData */
+	ADS_FILTER_ONLYDRIVERS      = (1 << 1),
+	/** for 'NLA' editor - only include NLA data from AnimData */
+	ADS_FILTER_ONLYNLA          = (1 << 2),
+	/** for Graph Editor - used to indicate whether to include a filtering flag or not */
+	ADS_FILTER_SELEDIT          = (1 << 3),
 
 	/* general filtering */
-	ADS_FILTER_SUMMARY          = (1 << 4),   /* for 'DopeSheet' Editors - include 'summary' line */
+	/** for 'DopeSheet' Editors - include 'summary' line */
+	ADS_FILTER_SUMMARY          = (1 << 4),
 
 	/* datatype-based filtering */
 	ADS_FILTER_NOSHAPEKEYS      = (1 << 6),
 	ADS_FILTER_NOMESH           = (1 << 7),
-	ADS_FILTER_NOOBJ            = (1 << 8),   /* for animdata on object level, if we only want to concentrate on materials/etc. */
+	/** for animdata on object level, if we only want to concentrate on materials/etc. */
+	ADS_FILTER_NOOBJ            = (1 << 8),
 	ADS_FILTER_NOLAT            = (1 << 9),
 	ADS_FILTER_NOCAM            = (1 << 10),
 	ADS_FILTER_NOMAT            = (1 << 11),
@@ -779,28 +746,40 @@ typedef enum eDopeSheet_FilterFlag {
 	/* NOTE: all new datablock filters will have to go in filterflag2 (see below) */
 
 	/* NLA-specific filters */
-	ADS_FILTER_NLA_NOACT        = (1 << 25),  /* if the AnimData block has no NLA data, don't include to just show Action-line */
+	/** if the AnimData block has no NLA data, don't include to just show Action-line */
+	ADS_FILTER_NLA_NOACT        = (1 << 25),
 
 	/* general filtering 3 */
-	ADS_FILTER_INCL_HIDDEN      = (1 << 26),  /* include 'hidden' channels too (i.e. those from hidden Objects/Bones) */
-	ADS_FILTER_ONLY_ERRORS		= (1 << 28),  /* show only F-Curves which are disabled/have errors - for debugging drivers */
+	/** include 'hidden' channels too (i.e. those from hidden Objects/Bones) */
+	ADS_FILTER_INCL_HIDDEN      = (1 << 26),
+	/** show only F-Curves which are disabled/have errors - for debugging drivers */
+	ADS_FILTER_ONLY_ERRORS		= (1 << 28),
 
 	/* GPencil Mode */
-	ADS_FILTER_GP_3DONLY        = (1 << 29),  /* GP Mode - Only show datablocks used in the scene */
+	/** GP Mode - Only show datablocks used in the scene */
+	ADS_FILTER_GP_3DONLY        = (1 << 29),
 
-	/* combination filters (some only used at runtime) */
-	ADS_FILTER_NOOBDATA = (ADS_FILTER_NOCAM | ADS_FILTER_NOMAT | ADS_FILTER_NOLAM | ADS_FILTER_NOCUR | ADS_FILTER_NOPART | ADS_FILTER_NOARM | ADS_FILTER_NOSPK | ADS_FILTER_NOMODIFIERS)
+	/** combination filters (some only used at runtime) */
+	ADS_FILTER_NOOBDATA = (ADS_FILTER_NOCAM | ADS_FILTER_NOMAT | ADS_FILTER_NOLAM | ADS_FILTER_NOCUR | ADS_FILTER_NOPART | ADS_FILTER_NOARM | ADS_FILTER_NOSPK | ADS_FILTER_NOMODIFIERS),
 } eDopeSheet_FilterFlag;
+
+/* DopeSheet filter-flags - Overflow (filterflag2) */
+typedef enum eDopeSheet_FilterFlag2 {
+	ADS_FILTER_NOCACHEFILES      = (1 << 1),
+} eDopeSheet_FilterFlag2;
 
 /* DopeSheet general flags */
 typedef enum eDopeSheet_Flag {
-	ADS_FLAG_SUMMARY_COLLAPSED  = (1 << 0),   /* when summary is shown, it is collapsed, so all other channels get hidden */
-	ADS_FLAG_SHOW_DBFILTERS     = (1 << 1),   /* show filters for datablocks */
+	/** when summary is shown, it is collapsed, so all other channels get hidden */
+	ADS_FLAG_SUMMARY_COLLAPSED  = (1 << 0),
+	/** show filters for datablocks */
+	ADS_FLAG_SHOW_DBFILTERS     = (1 << 1),
 
-	ADS_FLAG_FUZZY_NAMES        = (1 << 2),   /* use fuzzy/partial string matches when ADS_FILTER_BY_FCU_NAME is enabled (WARNING: expensive operation) */
-	ADS_FLAG_NO_DB_SORT         = (1 << 3),   /* do not sort datablocks (mostly objects) by name (NOTE: potentially expensive operation) */
-
-	/* NOTE: datablock filter flags continued (1 << 10) onwards... */
+	/** use fuzzy/partial string matches when ADS_FILTER_BY_FCU_NAME is enabled
+	 * (WARNING: expensive operation) */
+	ADS_FLAG_FUZZY_NAMES        = (1 << 2),
+	/** do not sort datablocks (mostly objects) by name (NOTE: potentially expensive operation) */
+	ADS_FLAG_NO_DB_SORT         = (1 << 3),
 } eDopeSheet_Flag;
 
 
@@ -854,11 +833,11 @@ typedef enum eSAction_Flag {
 	/* draw time in seconds instead of time in frames */
 	SACTION_DRAWTIME = (1 << 2),
 	/* don't filter action channels according to visibility */
-	//SACTION_NOHIDE = (1<<3), // XXX deprecated... old animation system
+	//SACTION_NOHIDE = (1 << 3), // XXX deprecated... old animation system
 	/* don't kill overlapping keyframes after transform */
 	SACTION_NOTRANSKEYCULL = (1 << 4),
 	/* don't include keyframes that are out of view */
-	//SACTION_HORIZOPTIMISEON = (1<<5), // XXX deprecated... old irrelevant trick
+	//SACTION_HORIZOPTIMISEON = (1 << 5), // XXX deprecated... old irrelevant trick
 	/* show pose-markers (local to action) in Action Editor mode  */
 	SACTION_POSEMARKERS_SHOW = (1 << 6),
 	/* don't draw action channels using group colors (where applicable) */
@@ -873,6 +852,8 @@ typedef enum eSAction_Flag {
 	SACTION_SHOW_INTERPOLATION = (1 << 12),
 	/* show extremes */
 	SACTION_SHOW_EXTREMES = (1 << 13),
+	/* show vertical line markers */
+	SACTION_SHOW_MARKER_LINES = (1 << 14),
 } eSAction_Flag;
 
 
@@ -913,7 +894,7 @@ typedef enum eAnimEdit_AutoSnap {
 	/* snap to actual seconds (nla-action time) */
 	SACTSNAP_SECOND = 4,
 	/* snap to 1.0 second increments */
-	SACTSNAP_TSTEP = 5
+	SACTSNAP_TSTEP = 5,
 } eAnimEdit_AutoSnap;
 
 /* SAction->cache_display */
@@ -969,7 +950,7 @@ typedef enum eActionChannelFlag {
 	ACHAN_EXPANDED  = (1 << 4),
 	ACHAN_SHOWIPO   = (1 << 5),
 	ACHAN_SHOWCONS  = (1 << 6),
-	ACHAN_MOVED     = (1u << 31)
+	ACHAN_MOVED     = (1u << 31),
 } eActionChannelFlag;
 
 #endif  /* __DNA_ACTION_TYPES_H__ */

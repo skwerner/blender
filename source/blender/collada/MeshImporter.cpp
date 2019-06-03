@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,14 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * Contributor(s): Chingiz Dyussenov, Arystanbek Dyussenov, Nathan Letwory, Trevor Glauz.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/collada/MeshImporter.cpp
- *  \ingroup collada
+/** \file
+ * \ingroup collada
  */
 
 
@@ -211,7 +205,9 @@ MeshImporter::MeshImporter(UnitConverter *unitconv, ArmatureImporter *arm, Main 
 	m_bmain(bmain),
 	scene(sce),
 	view_layer(view_layer),
-	armature_importer(arm) {
+	armature_importer(arm)
+{
+	/* pass */
 }
 
 bool MeshImporter::set_poly_indices(MPoly *mpoly, MLoop *mloop, int loop_index, unsigned int *indices, int loop_count)
@@ -562,7 +558,7 @@ void MeshImporter::mesh_add_edges(Mesh *mesh, int len)
 	totedge = mesh->totedge + len;
 
 	/* update customdata  */
-	CustomData_copy(&mesh->edata, &edata, CD_MASK_MESH, CD_DEFAULT, totedge);
+	CustomData_copy(&mesh->edata, &edata, CD_MASK_MESH.emask, CD_DEFAULT, totedge);
 	CustomData_copy_data(&mesh->edata, &edata, 0, 0, mesh->totedge);
 
 	if (!CustomData_has_layer(&edata, CD_MEDGE))
@@ -882,7 +878,7 @@ std::string *MeshImporter::get_geometry_name(const std::string &mesh_name)
  * this function checks if both objects have the same
  * materials assigned to Object (in the same order)
  * returns true if condition matches, otherwise false;
- **/
+ */
 static bool bc_has_same_material_configuration(Object *ob1, Object *ob2)
 {
 	if (ob1->totcol != ob2->totcol) return false; // not same number of materials
@@ -903,7 +899,7 @@ static bool bc_has_same_material_configuration(Object *ob1, Object *ob2)
  * and no material is assigned to Data.
  * That is true right after the objects have been imported.
  *
- **/
+ */
 static void bc_copy_materials_to_data(Object *ob, Mesh *me)
 {
 	for (int index = 0; index < ob->totcol; index++) {
@@ -916,7 +912,7 @@ static void bc_copy_materials_to_data(Object *ob, Mesh *me)
  *
  * Remove all references to materials from the object
  *
- **/
+ */
 static void bc_remove_materials_from_object(Object *ob, Mesh *me)
 {
 	for (int index = 0; index < ob->totcol; index++) {
@@ -929,7 +925,7 @@ static void bc_remove_materials_from_object(Object *ob, Mesh *me)
  * Returns the list of Users of the given Mesh object.
  * Note: This function uses the object user flag to control
  * which objects have already been processed.
- **/
+ */
 std::vector<Object *> MeshImporter::get_all_users_of(Mesh *reference_mesh)
 {
 	std::vector<Object *> mesh_users;
@@ -964,7 +960,7 @@ std::vector<Object *> MeshImporter::get_all_users_of(Mesh *reference_mesh)
  *             Add the materials of the first user to the geometry
  *             adjust all other users accordingly.
  *
- **/
+ */
 void MeshImporter::optimize_material_assignements()
 {
 	for (std::vector<Object *>::iterator it = imported_objects.begin();
@@ -1105,7 +1101,7 @@ Object *MeshImporter::create_mesh_object(COLLADAFW::Node *node, COLLADAFW::Insta
 	BKE_mesh_calc_normals(new_mesh);
 
 	id_us_plus(&old_mesh->id);  /* Because BKE_mesh_assign_object would have already decreased it... */
-	BKE_libblock_free_us(m_bmain, old_mesh);
+	BKE_id_free_us(m_bmain, old_mesh);
 
 	COLLADAFW::MaterialBindingArray& mat_array =
 	    geom->getMaterialBindings();

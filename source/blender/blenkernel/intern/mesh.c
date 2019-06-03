@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,14 +15,10 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * Contributor(s): Blender Foundation
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/blenkernel/intern/mesh.c
- *  \ingroup bke
+/** \file
+ * \ingroup bke
  */
 
 #include "MEM_guardedalloc.h"
@@ -68,7 +62,7 @@ enum {
 	MESHCMP_POLYMISMATCH,
 	MESHCMP_EDGEUNKNOWN,
 	MESHCMP_VERTCOMISMATCH,
-	MESHCMP_CDLAYERS_MISMATCH
+	MESHCMP_CDLAYERS_MISMATCH,
 };
 
 static const char *cmpcode_to_str(int code)
@@ -337,7 +331,7 @@ static void mesh_ensure_tessellation_customdata(Mesh *me)
 
 void BKE_mesh_ensure_skin_customdata(Mesh *me)
 {
-	BMesh *bm = me->edit_btmesh ? me->edit_btmesh->bm : NULL;
+	BMesh *bm = me->edit_mesh ? me->edit_mesh->bm : NULL;
 	MVertSkin *vs;
 
 	if (bm) {
@@ -376,7 +370,7 @@ void BKE_mesh_ensure_skin_customdata(Mesh *me)
 
 bool BKE_mesh_ensure_facemap_customdata(struct Mesh *me)
 {
-	BMesh *bm = me->edit_btmesh ? me->edit_btmesh->bm : NULL;
+	BMesh *bm = me->edit_mesh ? me->edit_mesh->bm : NULL;
 	bool changed = false;
 	if (bm) {
 		if (!CustomData_has_layer(&bm->pdata, CD_FACEMAP)) {
@@ -400,7 +394,7 @@ bool BKE_mesh_ensure_facemap_customdata(struct Mesh *me)
 
 bool BKE_mesh_clear_facemap_customdata(struct Mesh *me)
 {
-	BMesh *bm = me->edit_btmesh ? me->edit_btmesh->bm : NULL;
+	BMesh *bm = me->edit_mesh ? me->edit_mesh->bm : NULL;
 	bool changed = false;
 	if (bm) {
 		if (CustomData_has_layer(&bm->pdata, CD_FACEMAP)) {
@@ -454,8 +448,8 @@ void BKE_mesh_update_customdata_pointers(Mesh *me, const bool do_ensure_tess_cd)
 
 bool BKE_mesh_has_custom_loop_normals(Mesh *me)
 {
-	if (me->edit_btmesh) {
-		return CustomData_has_layer(&me->edit_btmesh->bm->ldata, CD_CUSTOMLOOPNORMAL);
+	if (me->edit_mesh) {
+		return CustomData_has_layer(&me->edit_mesh->bm->ldata, CD_CUSTOMLOOPNORMAL);
 	}
 	else {
 		return CustomData_has_layer(&me->ldata, CD_CUSTOMLOOPNORMAL);
@@ -478,7 +472,7 @@ void BKE_mesh_free(Mesh *me)
 	MEM_SAFE_FREE(me->mat);
 	MEM_SAFE_FREE(me->bb);
 	MEM_SAFE_FREE(me->mselect);
-	MEM_SAFE_FREE(me->edit_btmesh);
+	MEM_SAFE_FREE(me->edit_mesh);
 }
 
 static void mesh_tessface_clear_intern(Mesh *mesh, int free_customdata)
@@ -498,7 +492,7 @@ static void mesh_tessface_clear_intern(Mesh *mesh, int free_customdata)
 
 void BKE_mesh_init(Mesh *me)
 {
-	BLI_assert(MEMCMP_STRUCT_OFS_IS_ZERO(me, id));
+	BLI_assert(MEMCMP_STRUCT_AFTER_IS_ZERO(me, id));
 
 	me->size[0] = me->size[1] = me->size[2] = 1.0;
 	me->smoothresh = DEG2RADF(30);
@@ -524,7 +518,7 @@ Mesh *BKE_mesh_add(Main *bmain, const char *name)
 
 /**
  * Only copy internal data of Mesh ID from source to already allocated/initialized destination.
- * You probably nerver want to use that directly, use id_copy or BKE_id_copy_ex for typical needs.
+ * You probably never want to use that directly, use BKE_id_copy or BKE_id_copy_ex for typical needs.
  *
  * WARNING! This function will not handle ID user count!
  *
@@ -532,23 +526,31 @@ Mesh *BKE_mesh_add(Main *bmain, const char *name)
  */
 void BKE_mesh_copy_data(Main *bmain, Mesh *me_dst, const Mesh *me_src, const int flag)
 {
+	BKE_mesh_runtime_reset_on_copy(me_dst, flag);
+	if ((me_src->id.tag & LIB_TAG_NO_MAIN) == 0) {
+		/* This is a direct copy of a main mesh, so for now it has the same topology. */
+		me_dst->runtime.deformed_only = true;
+	}
+	/* XXX WHAT? Why? Comment, please! And pretty sure this is not valid for regular Mesh copying? */
+	me_dst->runtime.is_original = false;
+
 	const bool do_tessface = ((me_src->totface != 0) && (me_src->totpoly == 0)); /* only do tessface if we have no polys */
-	CustomDataMask mask = CD_MASK_MESH;
+	CustomData_MeshMasks mask = CD_MASK_MESH;
 
 	if (me_src->id.tag & LIB_TAG_NO_MAIN) {
 		/* For copies in depsgraph, keep data like origindex and orco. */
-		mask |= CD_MASK_DERIVEDMESH;
+		CustomData_MeshMasks_update(&mask, &CD_MASK_DERIVEDMESH);
 	}
 
 	me_dst->mat = MEM_dupallocN(me_src->mat);
 
 	const eCDAllocType alloc_type = (flag & LIB_ID_COPY_CD_REFERENCE) ? CD_REFERENCE : CD_DUPLICATE;
-	CustomData_copy(&me_src->vdata, &me_dst->vdata, mask, alloc_type, me_dst->totvert);
-	CustomData_copy(&me_src->edata, &me_dst->edata, mask, alloc_type, me_dst->totedge);
-	CustomData_copy(&me_src->ldata, &me_dst->ldata, mask, alloc_type, me_dst->totloop);
-	CustomData_copy(&me_src->pdata, &me_dst->pdata, mask, alloc_type, me_dst->totpoly);
+	CustomData_copy(&me_src->vdata, &me_dst->vdata, mask.vmask, alloc_type, me_dst->totvert);
+	CustomData_copy(&me_src->edata, &me_dst->edata, mask.emask, alloc_type, me_dst->totedge);
+	CustomData_copy(&me_src->ldata, &me_dst->ldata, mask.lmask, alloc_type, me_dst->totloop);
+	CustomData_copy(&me_src->pdata, &me_dst->pdata, mask.pmask, alloc_type, me_dst->totpoly);
 	if (do_tessface) {
-		CustomData_copy(&me_src->fdata, &me_dst->fdata, mask, alloc_type, me_dst->totface);
+		CustomData_copy(&me_src->fdata, &me_dst->fdata, mask.fmask, alloc_type, me_dst->totface);
 	}
 	else {
 		mesh_tessface_clear_intern(me_dst, false);
@@ -556,29 +558,14 @@ void BKE_mesh_copy_data(Main *bmain, Mesh *me_dst, const Mesh *me_src, const int
 
 	BKE_mesh_update_customdata_pointers(me_dst, do_tessface);
 
-	me_dst->edit_btmesh = NULL;
-
-	/* Call BKE_mesh_runtime_reset? */
-	me_dst->runtime.batch_cache = NULL;
-	me_dst->runtime.looptris.array = NULL;
-	me_dst->runtime.bvh_cache = NULL;
-	me_dst->runtime.shrinkwrap_data = NULL;
-
-	if (me_src->id.tag & LIB_TAG_NO_MAIN) {
-		me_dst->runtime.deformed_only = me_src->runtime.deformed_only;
-	}
-	else {
-		/* This is a direct copy of a main mesh, so for now it has the same topology. */
-		me_dst->runtime.deformed_only = 1;
-	}
-	me_dst->runtime.is_original = false;
+	me_dst->edit_mesh = NULL;
 
 	me_dst->mselect = MEM_dupallocN(me_dst->mselect);
 	me_dst->bb = MEM_dupallocN(me_dst->bb);
 
 	/* TODO Do we want to add flag to prevent this? */
 	if (me_src->key && (flag & LIB_ID_COPY_SHAPEKEY)) {
-		BKE_id_copy_ex(bmain, &me_src->key->id, (ID **)&me_dst->key, flag, false);
+		BKE_id_copy_ex(bmain, &me_src->key->id, (ID **)&me_dst->key, flag);
 	}
 }
 
@@ -597,27 +584,13 @@ static void mesh_ensure_cdlayers_primary(Mesh *mesh, bool do_tessface)
 	if (do_tessface && !CustomData_get_layer(&mesh->fdata, CD_MFACE))
 		CustomData_add_layer(&mesh->fdata, CD_MFACE, CD_CALLOC, NULL, mesh->totface);
 }
-static void mesh_ensure_cdlayers_origindex(Mesh *mesh, bool do_tessface)
-{
-	if (!CustomData_get_layer(&mesh->vdata, CD_ORIGINDEX))
-		CustomData_add_layer(&mesh->vdata, CD_ORIGINDEX, CD_CALLOC, NULL, mesh->totvert);
-	if (!CustomData_get_layer(&mesh->edata, CD_ORIGINDEX))
-		CustomData_add_layer(&mesh->edata, CD_ORIGINDEX, CD_CALLOC, NULL, mesh->totedge);
-	if (!CustomData_get_layer(&mesh->pdata, CD_ORIGINDEX))
-		CustomData_add_layer(&mesh->pdata, CD_ORIGINDEX, CD_CALLOC, NULL,  mesh->totpoly);
-
-	if (do_tessface && !CustomData_get_layer(&mesh->fdata, CD_ORIGINDEX))
-		CustomData_add_layer(&mesh->fdata, CD_ORIGINDEX, CD_CALLOC, NULL, mesh->totface);
-}
 
 Mesh *BKE_mesh_new_nomain(int verts_len, int edges_len, int tessface_len, int loops_len, int polys_len)
 {
 	Mesh *mesh = BKE_libblock_alloc(
 	        NULL, ID_ME,
 	        BKE_idcode_to_name(ID_ME),
-	        LIB_ID_CREATE_NO_MAIN |
-	        LIB_ID_CREATE_NO_USER_REFCOUNT |
-	        LIB_ID_CREATE_NO_DEG_TAG);
+	        LIB_ID_COPY_LOCALIZE);
 	BKE_libblock_init_empty(&mesh->id);
 
 	/* don't use CustomData_reset(...); because we dont want to touch customdata */
@@ -634,7 +607,6 @@ Mesh *BKE_mesh_new_nomain(int verts_len, int edges_len, int tessface_len, int lo
 	mesh->totpoly = polys_len;
 
 	mesh_ensure_cdlayers_primary(mesh, true);
-	mesh_ensure_cdlayers_origindex(mesh, true);
 	BKE_mesh_update_customdata_pointers(mesh, false);
 
 	return mesh;
@@ -644,7 +616,7 @@ static Mesh *mesh_new_nomain_from_template_ex(
         const Mesh *me_src,
         int verts_len, int edges_len, int tessface_len,
         int loops_len, int polys_len,
-        CustomDataMask mask)
+        CustomData_MeshMasks mask)
 {
 	/* Only do tessface if we are creating tessfaces or copying from mesh with only tessfaces. */
 	const bool do_tessface = (tessface_len ||
@@ -662,13 +634,14 @@ static Mesh *mesh_new_nomain_from_template_ex(
 	me_dst->totpoly = polys_len;
 
 	me_dst->cd_flag = me_src->cd_flag;
+	me_dst->editflag = me_src->editflag;
 
-	CustomData_copy(&me_src->vdata, &me_dst->vdata, mask, CD_CALLOC, verts_len);
-	CustomData_copy(&me_src->edata, &me_dst->edata, mask, CD_CALLOC, edges_len);
-	CustomData_copy(&me_src->ldata, &me_dst->ldata, mask, CD_CALLOC, loops_len);
-	CustomData_copy(&me_src->pdata, &me_dst->pdata, mask, CD_CALLOC, polys_len);
+	CustomData_copy(&me_src->vdata, &me_dst->vdata, mask.vmask, CD_CALLOC, verts_len);
+	CustomData_copy(&me_src->edata, &me_dst->edata, mask.emask, CD_CALLOC, edges_len);
+	CustomData_copy(&me_src->ldata, &me_dst->ldata, mask.lmask, CD_CALLOC, loops_len);
+	CustomData_copy(&me_src->pdata, &me_dst->pdata, mask.pmask, CD_CALLOC, polys_len);
 	if (do_tessface) {
-		CustomData_copy(&me_src->fdata, &me_dst->fdata, mask, CD_CALLOC, tessface_len);
+		CustomData_copy(&me_src->fdata, &me_dst->fdata, mask.fmask, CD_CALLOC, tessface_len);
 	}
 	else {
 		mesh_tessface_clear_intern(me_dst, false);
@@ -677,7 +650,6 @@ static Mesh *mesh_new_nomain_from_template_ex(
 	/* The destination mesh should at least have valid primary CD layers,
 	 * even in cases where the source mesh does not. */
 	mesh_ensure_cdlayers_primary(me_dst, do_tessface);
-	mesh_ensure_cdlayers_origindex(me_dst, false);
 	BKE_mesh_update_customdata_pointers(me_dst, false);
 
 	return me_dst;
@@ -697,24 +669,21 @@ Mesh *BKE_mesh_new_nomain_from_template(
 
 Mesh *BKE_mesh_copy_for_eval(struct Mesh *source, bool reference)
 {
-	int flags = (LIB_ID_CREATE_NO_MAIN |
-	             LIB_ID_CREATE_NO_USER_REFCOUNT |
-	             LIB_ID_CREATE_NO_DEG_TAG |
-	             LIB_ID_COPY_NO_PREVIEW);
+	int flags = LIB_ID_COPY_LOCALIZE;
 
 	if (reference) {
 		flags |= LIB_ID_COPY_CD_REFERENCE;
 	}
 
 	Mesh *result;
-	BKE_id_copy_ex(NULL, &source->id, (ID **)&result, flags, false);
+	BKE_id_copy_ex(NULL, &source->id, (ID **)&result, flags);
 	return result;
 }
 
 Mesh *BKE_mesh_copy(Main *bmain, const Mesh *me)
 {
 	Mesh *me_copy;
-	BKE_id_copy_ex(bmain, &me->id, (ID **)&me_copy, LIB_ID_COPY_SHAPEKEY, false);
+	BKE_id_copy(bmain, &me->id, (ID **)&me_copy);
 	return me_copy;
 }
 
@@ -754,7 +723,7 @@ Mesh *BKE_mesh_from_bmesh_nomain(BMesh *bm, const struct BMeshToMeshParams *para
 	return mesh;
 }
 
-Mesh *BKE_mesh_from_bmesh_for_eval_nomain(BMesh *bm, const int64_t cd_mask_extra)
+Mesh *BKE_mesh_from_bmesh_for_eval_nomain(BMesh *bm, const CustomData_MeshMasks *cd_mask_extra)
 {
 	Mesh *mesh = BKE_id_new_nomain(ID_ME, NULL);
 	BM_mesh_bm_to_me_for_eval(bm, mesh, cd_mask_extra);
@@ -765,7 +734,7 @@ Mesh *BKE_mesh_from_bmesh_for_eval_nomain(BMesh *bm, const int64_t cd_mask_extra
  * TODO(campbell): support mesh with only an edit-mesh which is lazy initialized.
  */
 Mesh *BKE_mesh_from_editmesh_with_coords_thin_wrap(
-        BMEditMesh *em, CustomDataMask data_mask, float (*vertexCos)[3])
+        BMEditMesh *em, const CustomData_MeshMasks *data_mask, float (*vertexCos)[3])
 {
 	Mesh *me = BKE_mesh_from_bmesh_for_eval_nomain(em->bm, data_mask);
 	/* Use editmesh directly where possible. */
@@ -791,8 +760,8 @@ bool BKE_mesh_uv_cdlayer_rename_index(
 	CustomData *ldata, *fdata;
 	CustomDataLayer *cdlu, *cdlf;
 
-	if (me->edit_btmesh) {
-		ldata = &me->edit_btmesh->bm->ldata;
+	if (me->edit_mesh) {
+		ldata = &me->edit_mesh->bm->ldata;
 		fdata = NULL;  /* No tessellated data in BMesh! */
 	}
 	else {
@@ -824,8 +793,8 @@ bool BKE_mesh_uv_cdlayer_rename_index(
 bool BKE_mesh_uv_cdlayer_rename(Mesh *me, const char *old_name, const char *new_name, bool do_tessface)
 {
 	CustomData *ldata, *fdata;
-	if (me->edit_btmesh) {
-		ldata = &me->edit_btmesh->bm->ldata;
+	if (me->edit_mesh) {
+		ldata = &me->edit_mesh->bm->ldata;
 		/* No tessellated data in BMesh! */
 		fdata = NULL;
 		do_tessface = false;
@@ -916,7 +885,7 @@ void BKE_mesh_texspace_calc(Mesh *me)
 BoundBox *BKE_mesh_boundbox_get(Object *ob)
 {
 	/* This is Object-level data access, DO NOT touch to Mesh's bb, would be totally thread-unsafe. */
-	if (ob->bb == NULL || ob->bb->flag & BOUNDBOX_DIRTY) {
+	if (ob->runtime.bb == NULL || ob->runtime.bb->flag & BOUNDBOX_DIRTY) {
 		Mesh *me = ob->data;
 		float min[3], max[3];
 
@@ -926,14 +895,14 @@ BoundBox *BKE_mesh_boundbox_get(Object *ob)
 			max[0] = max[1] = max[2] = 1.0f;
 		}
 
-		if (ob->bb == NULL) {
-			ob->bb = MEM_mallocN(sizeof(*ob->bb), __func__);
+		if (ob->runtime.bb == NULL) {
+			ob->runtime.bb = MEM_mallocN(sizeof(*ob->runtime.bb), __func__);
 		}
-		BKE_boundbox_init_from_minmax(ob->bb, min, max);
-		ob->bb->flag &= ~BOUNDBOX_DIRTY;
+		BKE_boundbox_init_from_minmax(ob->runtime.bb, min, max);
+		ob->runtime.bb->flag &= ~BOUNDBOX_DIRTY;
 	}
 
-	return ob->bb;
+	return ob->runtime.bb;
 }
 
 BoundBox *BKE_mesh_texspace_get(Mesh *me, float r_loc[3], float r_rot[3], float r_size[3])
@@ -1164,8 +1133,8 @@ void BKE_mesh_material_remap(Mesh *me, const unsigned int *remap, unsigned int r
 		n = remap[n]; \
 	} ((void)0)
 
-	if (me->edit_btmesh) {
-		BMEditMesh *em = me->edit_btmesh;
+	if (me->edit_mesh) {
+		BMEditMesh *em = me->edit_mesh;
 		BMIter iter;
 		BMFace *efa;
 
@@ -1566,8 +1535,8 @@ void BKE_mesh_mselect_active_set(Mesh *me, int index, int type)
 void BKE_mesh_count_selected_items(const Mesh *mesh, int r_count[3])
 {
 	r_count[0] = r_count[1] = r_count[2] = 0;
-	if (mesh->edit_btmesh) {
-		BMesh *bm = mesh->edit_btmesh->bm;
+	if (mesh->edit_mesh) {
+		BMesh *bm = mesh->edit_mesh->bm;
 		r_count[0] = bm->totvertsel;
 		r_count[1] = bm->totedgesel;
 		r_count[2] = bm->totfacesel;
@@ -1932,8 +1901,8 @@ void BKE_mesh_eval_geometry(
 	DEG_debug_print_eval(depsgraph, __func__, mesh->id.name, mesh);
 	if (mesh->bb == NULL || (mesh->bb->flag & BOUNDBOX_DIRTY)) {
 		BKE_mesh_texspace_calc(mesh);
-		/* Clear autospace flag in evaluated mesh, so that texspace does not get recomputed when bbox is
-		 * (e.g. after modifiers, etc.) */
-		mesh->texflag &= ~ME_AUTOSPACE;
 	}
+	/* Clear autospace flag in evaluated mesh, so that texspace does not get recomputed when bbox is
+	 * (e.g. after modifiers, etc.) */
+	mesh->texflag &= ~ME_AUTOSPACE;
 }

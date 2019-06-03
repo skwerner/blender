@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,18 +12,14 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
 #ifndef __FREESTYLE_ADVANCED_STROKE_SHADERS_H__
 #define __FREESTYLE_ADVANCED_STROKE_SHADERS_H__
 
-/** \file blender/freestyle/intern/stroke/AdvancedStrokeShaders.h
- *  \ingroup freestyle
- *  \brief Fredo's stroke shaders
- *  \author Fredo Durand
- *  \date 17/12/2002
+/** \file
+ * \ingroup freestyle
+ * \brief Fredo's stroke shaders
  */
 
 #include "BasicStrokeShaders.h"
@@ -68,7 +62,7 @@ protected:
 /*! [ Geometry Shader ].
  *  Spatial Noise stroke shader.
  *  Moves the vertices to make the stroke more noisy.
- *  \see \htmlonly <a href=noise/noise.html>noise/noise.html</a> \endhtmlonly
+ * \see \htmlonly <a href=noise/noise.html>noise/noise.html</a> \endhtmlonly
  */
 class SpatialNoiseShader : public StrokeShader
 {
@@ -106,7 +100,7 @@ protected:
  *  (Moves the vertices to make the stroke smoother).
  *  Uses curvature flow to converge towards a curve of constant curvature. The diffusion method we use is anisotropic
  *  to prevent the diffusion accross corners.
- *  \see \htmlonly <a href=/smoothing/smoothing.html>smoothing/smoothing.html</a> \endhtmlonly
+ * \see \htmlonly <a href=/smoothing/smoothing.html>smoothing/smoothing.html</a> \endhtmlonly
  */
 class SmoothingShader : public StrokeShader
 {

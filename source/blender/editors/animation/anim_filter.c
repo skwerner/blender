@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,15 +15,10 @@
  *
  * The Original Code is Copyright (C) 2008 Blender Foundation, Joshua Leung
  * All rights reserved.
- *
- *
- * Contributor(s): Joshua Leung (original author)
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/animation/anim_filter.c
- *  \ingroup edanimation
+/** \file
+ * \ingroup edanimation
  */
 
 
@@ -54,7 +47,7 @@
 #include "DNA_armature_types.h"
 #include "DNA_camera_types.h"
 #include "DNA_cachefile_types.h"
-#include "DNA_lamp_types.h"
+#include "DNA_light_types.h"
 #include "DNA_lattice_types.h"
 #include "DNA_linestyle_types.h"
 #include "DNA_key_types.h"
@@ -119,7 +112,7 @@ static void animedit_get_yscale_factor(bAnimContext *ac)
 	 * NOTE: This theme setting doesn't have an ID, as it cannot be accessed normally
 	 *       since it is a float, and the theme settings methods can only handle chars.
 	 */
-	ac->yscale_fac = btheme->tact.keyframe_scale_fac;
+	ac->yscale_fac = btheme->space_action.keyframe_scale_fac;
 
 	/* clamp to avoid problems with uninitialised values... */
 	if (ac->yscale_fac < 0.1f)
@@ -276,7 +269,7 @@ static bool actedit_get_context(bAnimContext *ac, SpaceAction *saction)
 /* ----------- Private Stuff - Graph Editor ------------- */
 
 /* Get data being edited in Graph Editor (depending on current 'mode') */
-static bool graphedit_get_context(bAnimContext *ac, SpaceIpo *sipo)
+static bool graphedit_get_context(bAnimContext *ac, SpaceGraph *sipo)
 {
 	/* init dopesheet data if non-existent (i.e. for old files) */
 	if (sipo->ads == NULL) {
@@ -365,9 +358,9 @@ bool ANIM_animdata_context_getdata(bAnimContext *ac)
 				ok = actedit_get_context(ac, saction);
 				break;
 			}
-			case SPACE_IPO:
+			case SPACE_GRAPH:
 			{
-				SpaceIpo *sipo = (SpaceIpo *)sl;
+				SpaceGraph *sipo = (SpaceGraph *)sl;
 				ok = graphedit_get_context(ac, sipo);
 				break;
 			}
@@ -679,7 +672,7 @@ static bAnimListElem *make_new_animlistelem(void *data, short datatype, ID *owne
 			}
 			case ANIMTYPE_DSLAM:
 			{
-				Lamp *la = (Lamp *)data;
+				Light *la = (Light *)data;
 				AnimData *adt = la->adt;
 
 				ale->flag = FILTER_LAM_OBJD(la);
@@ -908,7 +901,8 @@ static bAnimListElem *make_new_animlistelem(void *data, short datatype, ID *owne
 				break;
 			}
 			case ANIMTYPE_FCURVE:
-			case ANIMTYPE_NLACURVE: /* practically the same as ANIMTYPE_FCURVE. Differences are applied post-creation */
+			case ANIMTYPE_NLACURVE: /* practically the same as ANIMTYPE_FCURVE.
+			                         * Differences are applied post-creation */
 			{
 				FCurve *fcu = (FCurve *)data;
 
@@ -1001,7 +995,8 @@ static bool skip_fcurve_selected_data(bDopeSheet *ads, FCurve *fcu, ID *owner_id
 	if (fcu->grp != NULL && fcu->grp->flag & ADT_CURVES_ALWAYS_VISIBLE) {
 		return false;
 	}
-	/* hidden items should be skipped if we only care about visible data, but we aren't interested in hidden stuff */
+	/* hidden items should be skipped if we only care about visible data,
+	 * but we aren't interested in hidden stuff */
 	const bool skip_hidden = (filter_mode & ANIMFILTER_DATA_VISIBLE) && !(ads->filterflag & ADS_FILTER_INCL_HIDDEN);
 
 	if (GS(owner_id->name) == ID_OB) {
@@ -1266,7 +1261,8 @@ static size_t animfilter_fcurves(ListBase *anim_data, bDopeSheet *ads,
 	 */
 	for (fcu = first; ( (fcu = animfilter_fcurve_next(ads, fcu, fcurve_type, filter_mode, owner, owner_id)) ); fcu = fcu->next) {
 		if (UNLIKELY(fcurve_type == ANIMTYPE_NLACURVE)) {
-			/* NLA Control Curve - Basically the same as normal F-Curves, except we need to set some stuff differently */
+			/* NLA Control Curve - Basically the same as normal F-Curves,
+			 * except we need to set some stuff differently */
 			ANIMCHANNEL_NEW_CHANNEL_FULL(fcu, ANIMTYPE_NLACURVE, owner_id, fcurve_owner_id, {
 				ale->owner = owner; /* strip */
 				ale->adt = NULL;    /* to prevent time mapping from causing problems */
@@ -1295,8 +1291,11 @@ static size_t animfilter_act_group(bAnimContext *ac, ListBase *anim_data, bDopeS
 	 *     - Hierarchy matters: this hack should be applied
 	 *     - Hierarchy ignored: cases like [#21276] won't work properly, unless we skip this hack
 	 */
-	if ( ((filter_mode & ANIMFILTER_LIST_VISIBLE) && EXPANDED_AGRP(ac, agrp) == 0) &&     /* care about hierarchy but group isn't expanded */
-	     (filter_mode & (ANIMFILTER_SEL | ANIMFILTER_UNSEL)) )                          /* care about selection status */
+	if (
+	        /* care about hierarchy but group isn't expanded */
+	        ((filter_mode & ANIMFILTER_LIST_VISIBLE) && EXPANDED_AGRP(ac, agrp) == 0) &&
+	        /* care about selection status */
+	        (filter_mode & (ANIMFILTER_SEL | ANIMFILTER_UNSEL)) )
 	{
 		/* if the group itself isn't selected appropriately, we shouldn't consider it's children either */
 		if (ANIMCHANNEL_SELOK(SEL_AGRP(agrp)) == 0)
@@ -1318,9 +1317,9 @@ static size_t animfilter_act_group(bAnimContext *ac, ListBase *anim_data, bDopeS
 	{
 		/* special filter so that we can get just the F-Curves within the active group */
 		if (!(filter_mode & ANIMFILTER_ACTGROUPED) || (agrp->flag & AGRP_ACTIVE)) {
-			/* for the Graph Editor, curves may be set to not be visible in the view to lessen clutter,
-			 * but to do this, we need to check that the group doesn't have it's not-visible flag set preventing
-			 * all its sub-curves to be shown
+			/* for the Graph Editor, curves may be set to not be visible in the view to lessen
+			 * clutter, but to do this, we need to check that the group doesn't have it's
+			 * not-visible flag set preventing all its sub-curves to be shown
 			 */
 			if (!(filter_mode & ANIMFILTER_CURVE_VISIBLE) || !(agrp->flag & AGRP_NOTVISIBLE)) {
 				/* group must be editable for its children to be editable (if we care about this) */
@@ -1343,7 +1342,8 @@ static size_t animfilter_act_group(bAnimContext *ac, ListBase *anim_data, bDopeS
 			/* restore original filter mode so that this next step works ok... */
 			//filter_mode = ofilter;
 
-			/* filter selection of channel specially here again, since may be open and not subject to previous test */
+			/* filter selection of channel specially here again,
+			 * since may be open and not subject to previous test */
 			if (ANIMCHANNEL_SELOK(SEL_AGRP(agrp)) ) {
 				ANIMCHANNEL_NEW_CHANNEL(agrp, ANIMTYPE_GROUP, owner_id, NULL);
 			}
@@ -1418,10 +1418,11 @@ static size_t animfilter_nla(bAnimContext *UNUSED(ac), ListBase *anim_data, bDop
 				 * - as AnimData may not have an action, we pass a dummy pointer just to get the list elem created, then
 				 *   overwrite this with the real value - REVIEW THIS...
 				 */
-				ANIMCHANNEL_NEW_CHANNEL_FULL((void *)(&adt->action), ANIMTYPE_NLAACTION, owner_id, NULL,
-					{
-						ale->data = adt->action ? adt->action : NULL;
-					});
+				ANIMCHANNEL_NEW_CHANNEL_FULL(
+				        (void *)(&adt->action), ANIMTYPE_NLAACTION, owner_id, NULL,
+				        {
+				            ale->data = adt->action ? adt->action : NULL;
+				        });
 			}
 		}
 
@@ -1551,26 +1552,27 @@ static size_t animfilter_block_data(bAnimContext *ac, ListBase *anim_data, bDope
 		 * in a few places in the rest of the code still - notably for the few cases where special mode-based
 		 * different types of data expanders are required.
 		 */
-		ANIMDATA_FILTER_CASES(iat,
-			{ /* AnimData */
-				/* specifically filter animdata block */
-				if (ANIMCHANNEL_SELOK(SEL_ANIMDATA(adt)) ) {
-					ANIMCHANNEL_NEW_CHANNEL(adt, ANIMTYPE_ANIMDATA, id, NULL);
-				}
-			},
-			{ /* NLA */
-				items += animfilter_nla(ac, anim_data, ads, adt, filter_mode, id);
-			},
-			{ /* Drivers */
-				items += animfilter_fcurves(anim_data, ads, adt->drivers.first, ANIMTYPE_FCURVE,
-				                            filter_mode, NULL, id, id);
-			},
-			{ /* NLA Control Keyframes */
-				items += animfilter_nla_controls(anim_data, ads, adt, filter_mode, id);
-			},
-			{ /* Keyframes */
-				items += animfilter_action(ac, anim_data, ads, adt->action, filter_mode, id);
-			}
+		ANIMDATA_FILTER_CASES(
+		        iat,
+		        { /* AnimData */
+		            /* specifically filter animdata block */
+		            if (ANIMCHANNEL_SELOK(SEL_ANIMDATA(adt)) ) {
+		                ANIMCHANNEL_NEW_CHANNEL(adt, ANIMTYPE_ANIMDATA, id, NULL);
+		            }
+		        },
+		        { /* NLA */
+		            items += animfilter_nla(ac, anim_data, ads, adt, filter_mode, id);
+		        },
+		        { /* Drivers */
+		            items += animfilter_fcurves(anim_data, ads, adt->drivers.first, ANIMTYPE_FCURVE,
+		                                        filter_mode, NULL, id, id);
+		        },
+		        { /* NLA Control Keyframes */
+		            items += animfilter_nla_controls(anim_data, ads, adt, filter_mode, id);
+		        },
+		        { /* Keyframes */
+		            items += animfilter_action(ac, anim_data, ads, adt->action, filter_mode, id);
+		        }
 		);
 	}
 
@@ -1759,8 +1761,9 @@ static size_t animdata_filter_gpencil(bAnimContext *ac, ListBase *anim_data, voi
 	else {
 		bGPdata *gpd;
 
-		/* Grab all Grease Pencil datablocks directly from main, but only those that seem to be useful somewhere */
-		for (gpd = ac->bmain->gpencil.first; gpd; gpd = gpd->id.next) {
+		/* Grab all Grease Pencil datablocks directly from main,
+		 * but only those that seem to be useful somewhere */
+		for (gpd = ac->bmain->gpencils.first; gpd; gpd = gpd->id.next) {
 			/* only show if gpd is used by something... */
 			if (ID_REAL_USERS(gpd) < 1)
 				continue;
@@ -1883,7 +1886,7 @@ static size_t animdata_filter_mask(Main *bmain, ListBase *anim_data, void *UNUSE
 
 	/* for now, grab mask datablocks directly from main */
 	// XXX: this is not good...
-	for (mask = bmain->mask.first; mask; mask = mask->id.next) {
+	for (mask = bmain->masks.first; mask; mask = mask->id.next) {
 		ListBase tmp_data = {NULL, NULL};
 		size_t tmp_items = 0;
 
@@ -1902,7 +1905,7 @@ static size_t animdata_filter_mask(Main *bmain, ListBase *anim_data, void *UNUSE
 		if (tmp_items) {
 			/* include data-expand widget first */
 			if (filter_mode & ANIMFILTER_LIST_CHANNELS) {
-				/* add gpd as channel too (if for drawing, and it has layers) */
+				/* add mask datablock as channel too (if for drawing, and it has layers) */
 				ANIMCHANNEL_NEW_CHANNEL(mask, ANIMTYPE_MASKDATABLOCK, NULL, NULL);
 			}
 
@@ -1965,8 +1968,9 @@ static size_t animdata_filter_ds_nodetree(bAnimContext *ac, ListBase *anim_data,
 				if ((ads->filterflag & ADS_FILTER_ONLYSEL) && (node->flag & NODE_SELECT) == 0) {
 					continue;
 				}
-				items += animdata_filter_ds_nodetree_group(ac, anim_data, ads, owner_id, (bNodeTree *) node->id,
-				                                           filter_mode | ANIMFILTER_TMP_IGNORE_ONLYSEL);
+				/* Recurse into the node group */
+				items += animdata_filter_ds_nodetree(ac, anim_data, ads, owner_id, (bNodeTree *) node->id,
+				                                     filter_mode | ANIMFILTER_TMP_IGNORE_ONLYSEL);
 			}
 		}
 	}
@@ -2081,7 +2085,7 @@ static size_t animdata_filter_ds_texture(bAnimContext *ac, ListBase *anim_data, 
 }
 
 /* NOTE: owner_id is the direct owner of the texture stack in question
- *       It used to be Material/Lamp/World before the Blender Internal removal for 2.8
+ *       It used to be Material/Light/World before the Blender Internal removal for 2.8
  */
 static size_t animdata_filter_ds_textures(bAnimContext *ac, ListBase *anim_data, bDopeSheet *ads, ID *owner_id, int filter_mode)
 {
@@ -2362,9 +2366,9 @@ static size_t animdata_filter_ds_obdata(bAnimContext *ac, ListBase *anim_data, b
 			expanded = FILTER_CAM_OBJD(ca);
 			break;
 		}
-		case OB_LAMP: /* ---------- Lamp ----------- */
+		case OB_LAMP: /* ---------- Light ----------- */
 		{
-			Lamp *la = (Lamp *)ob->data;
+			Light *la = (Light *)ob->data;
 
 			if (ads->filterflag & ADS_FILTER_NOLAM)
 				return 0;
@@ -2448,9 +2452,9 @@ static size_t animdata_filter_ds_obdata(bAnimContext *ac, ListBase *anim_data, b
 
 		/* sub-data filtering... */
 		switch (ob->type) {
-			case OB_LAMP:  /* lamp - textures + nodetree */
+			case OB_LAMP:  /* light - textures + nodetree */
 			{
-				Lamp *la = ob->data;
+				Light *la = ob->data;
 				bNodeTree *ntree = la->nodetree;
 
 				/* nodetree */
@@ -2530,20 +2534,21 @@ static size_t animdata_filter_ds_obanim(bAnimContext *ac, ListBase *anim_data, b
 
 	/* determine the type of expander channels to use */
 	/* this is the best way to do this for now... */
-	ANIMDATA_FILTER_CASES(ob,
-		{ /* AnimData - no channel, but consider data */ },
-		{ /* NLA - no channel, but consider data */ },
-		{ /* Drivers */
-			type = ANIMTYPE_FILLDRIVERS;
-			cdata = adt;
-			expanded = EXPANDED_DRVD(adt);
-		},
-		{ /* NLA Strip Controls - no dedicated channel for now (XXX) */ },
-		{ /* Keyframes */
-			type = ANIMTYPE_FILLACTD;
-			cdata = adt->action;
-			expanded = EXPANDED_ACTC(adt->action);
-		});
+	ANIMDATA_FILTER_CASES(
+	        ob,
+	        { /* AnimData - no channel, but consider data */ },
+	        { /* NLA - no channel, but consider data */ },
+	        { /* Drivers */
+	            type = ANIMTYPE_FILLDRIVERS;
+	            cdata = adt;
+	            expanded = EXPANDED_DRVD(adt);
+	        },
+	        { /* NLA Strip Controls - no dedicated channel for now (XXX) */ },
+	        { /* Keyframes */
+	            type = ANIMTYPE_FILLACTD;
+	            cdata = adt->action;
+	            expanded = EXPANDED_ACTC(adt->action);
+	        });
 
 	/* add object-level animation channels */
 	BEGIN_ANIMFILTER_SUBCHANNELS(expanded)
@@ -2700,20 +2705,21 @@ static size_t animdata_filter_ds_scene(bAnimContext *ac, ListBase *anim_data, bD
 
 	/* determine the type of expander channels to use */
 	// this is the best way to do this for now...
-	ANIMDATA_FILTER_CASES(sce,
-		{ /* AnimData - no channel, but consider data */},
-		{ /* NLA - no channel, but consider data */},
-		{ /* Drivers */
-			type = ANIMTYPE_FILLDRIVERS;
-			cdata = adt;
-			expanded = EXPANDED_DRVD(adt);
-		},
-		{ /* NLA Strip Controls - no dedicated channel for now (XXX) */ },
-		{ /* Keyframes */
-			type = ANIMTYPE_FILLACTD;
-			cdata = adt->action;
-			expanded = EXPANDED_ACTC(adt->action);
-		});
+	ANIMDATA_FILTER_CASES(
+	        sce,
+	        { /* AnimData - no channel, but consider data */},
+	        { /* NLA - no channel, but consider data */},
+	        { /* Drivers */
+	            type = ANIMTYPE_FILLDRIVERS;
+	            cdata = adt;
+	            expanded = EXPANDED_DRVD(adt);
+	        },
+	        { /* NLA Strip Controls - no dedicated channel for now (XXX) */ },
+	        { /* Keyframes */
+	            type = ANIMTYPE_FILLACTD;
+	            cdata = adt->action;
+	            expanded = EXPANDED_ACTC(adt->action);
+	        });
 
 	/* add scene-level animation channels */
 	BEGIN_ANIMFILTER_SUBCHANNELS(expanded)
@@ -2840,7 +2846,7 @@ static size_t animdata_filter_dopesheet_movieclips(bAnimContext *ac, ListBase *a
 {
 	size_t items = 0;
 	MovieClip *clip;
-	for (clip = ac->bmain->movieclip.first; clip != NULL; clip = clip->id.next) {
+	for (clip = ac->bmain->movieclips.first; clip != NULL; clip = clip->id.next) {
 		/* only show if gpd is used by something... */
 		if (ID_REAL_USERS(clip) < 1) {
 			continue;
@@ -2979,9 +2985,11 @@ static size_t animdata_filter_dopesheet(bAnimContext *ac, ListBase *anim_data, b
 	}
 
 	/* Cache files level animations (frame duration and such). */
-	CacheFile *cache_file = ac->bmain->cachefiles.first;
-	for (; cache_file; cache_file = cache_file->id.next) {
-		items += animdata_filter_ds_cachefile(ac, anim_data, ads, cache_file, filter_mode);
+	if (!(ads->filterflag2 & ADS_FILTER_NOCACHEFILES) && !(ads->filterflag & ADS_FILTER_ONLYSEL)) {
+		CacheFile *cache_file = ac->bmain->cachefiles.first;
+		for (; cache_file; cache_file = cache_file->id.next) {
+			items += animdata_filter_ds_cachefile(ac, anim_data, ads, cache_file, filter_mode);
+		}
 	}
 
 	/* movie clip's animation */
@@ -3260,7 +3268,8 @@ size_t ANIM_animdata_filter(bAnimContext *ac, ListBase *anim_data, eAnimFilter_F
 			case ANIMCONT_DRIVERS: /* Graph Editor -> Drivers Editing */
 			case ANIMCONT_NLA:     /* NLA Editor */
 			{
-				/* all of these editors use the basic DopeSheet data for filtering options, but don't have all the same features */
+				/* all of these editors use the basic DopeSheet data for filtering options,
+				 * but don't have all the same features */
 				items = animdata_filter_dopesheet(ac, anim_data, data, filter_mode);
 				break;
 			}

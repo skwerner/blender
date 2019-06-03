@@ -18,7 +18,11 @@ vec2 decode_hit_data(vec2 hit_data, out bool has_hit, out bool is_planar)
 {
 	is_planar = (hit_data.x < 0);
 	has_hit = (hit_data.y > 0);
-	return vec2(abs(hit_data)) / 32767.0; /* 16bit signed int limit */
+	vec2 hit_co = vec2(abs(hit_data)) / 32767.0; /* 16bit signed int limit */
+	if (is_planar) {
+		hit_co.x = 1.0 - hit_co.x;
+	}
+	return hit_co;
 }
 
 #ifdef STEP_RAYTRACE
@@ -91,8 +95,9 @@ void main()
 
 	/* Early out */
 	/* We can't do discard because we don't clear the render target. */
-	if (depth == 1.0)
+	if (depth == 1.0) {
 		return;
+	}
 
 	vec2 uvs = vec2(fullres_texel) / vec2(textureSize(depthBuffer, 0));
 
@@ -105,16 +110,18 @@ void main()
 	vec4 speccol_roughness = texelFetch(specroughBuffer, fullres_texel, 0).rgba;
 
 	/* Early out */
-	if (dot(speccol_roughness.rgb, vec3(1.0)) == 0.0)
+	if (dot(speccol_roughness.rgb, vec3(1.0)) == 0.0) {
 		return;
+	}
 
 	float roughness = speccol_roughness.a;
 	float roughnessSquared = max(1e-3, roughness * roughness);
 	float a2 = roughnessSquared * roughnessSquared;
 
 	/* Early out */
-	if (roughness > ssrMaxRoughness + 0.2)
+	if (roughness > ssrMaxRoughness + 0.2) {
 		return;
+	}
 
 	vec4 rand = texelFetch(utilTex, ivec3(halfres_texel % LUT_SIZE, 2), 0);
 
@@ -216,6 +223,7 @@ vec2 get_reprojected_reflection(vec3 hit, vec3 pos, vec3 N)
 float get_sample_depth(vec2 hit_co, bool is_planar, float planar_index)
 {
 	if (is_planar) {
+		hit_co.x = 1.0 - hit_co.x;
 		return textureLod(planarDepth, vec3(hit_co, planar_index), 0.0).r;
 	}
 	else {
@@ -234,6 +242,8 @@ vec3 get_hit_vector(
 		vec3 trace_pos = line_plane_intersect(worldPosition, V, pd.pl_plane_eq);
 		hit_vec = hit_pos - trace_pos;
 		hit_vec = reflect(hit_vec, pd.pl_normal);
+		/* Modify here so mip texel alignment is correct. */
+		hit_co.x = 1.0 - hit_co.x;
 	}
 	else {
 		/* Find hit position in previous frame. */
@@ -394,8 +404,9 @@ void main()
 	float depth = textureLod(depthBuffer, uvs, 0.0).r;
 
 	/* Early out */
-	if (depth == 1.0)
+	if (depth == 1.0) {
 		discard;
+	}
 
 	/* Using world space */
 	vec3 viewPosition = get_view_space_from_depth(uvs, depth); /* Needed for viewCameraVec */
@@ -406,8 +417,9 @@ void main()
 	vec4 speccol_roughness = texelFetch(specroughBuffer, fullres_texel, 0).rgba;
 
 	/* Early out */
-	if (dot(speccol_roughness.rgb, vec3(1.0)) == 0.0)
+	if (dot(speccol_roughness.rgb, vec3(1.0)) == 0.0) {
 		discard;
+	}
 
 	float roughness = speccol_roughness.a;
 	float roughnessSquared = max(1e-3, roughness * roughness);

@@ -1,6 +1,4 @@
 /*
- * Copyright 2016, Blender Foundation.
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -15,12 +13,11 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
- * Contributor(s): Blender Institute
- *
+ * Copyright 2016, Blender Foundation.
  */
 
-/** \file eevee_temporal_sampling.c
- *  \ingroup draw_engine
+/** \file
+ * \ingroup draw_engine
  *
  * Temporal super sampling technique
  */
@@ -30,7 +27,6 @@
 #include "ED_screen.h"
 
 #include "BLI_rand.h"
-#include "BLI_string_utils.h"
 
 #include "DEG_depsgraph_query.h"
 
@@ -183,10 +179,7 @@ int EEVEE_temporal_sampling_init(EEVEE_ViewLayerData *UNUSED(sldata), EEVEE_Data
 	const DRWContextState *draw_ctx = DRW_context_state_get();
 	const Scene *scene_eval = DEG_get_evaluated_scene(draw_ctx->depsgraph);
 
-	if (((scene_eval->eevee.taa_samples != 1) &&
-	    /* FIXME the motion blur camera evaluation is tagging view_updated
-	     * thus making the TAA always reset and never stopping rendering. */
-	    (effects->enabled_effects & EFFECT_MOTION_BLUR) == 0) ||
+	if ((scene_eval->eevee.taa_samples != 1) ||
 	    DRW_state_is_image_render())
 	{
 		float persmat[4][4], viewmat[4][4];
@@ -238,7 +231,7 @@ int EEVEE_temporal_sampling_init(EEVEE_ViewLayerData *UNUSED(sldata), EEVEE_Data
 					double ht_offset[2] = {0.0, 0.0};
 					uint ht_primes[2] = {2, 3};
 
-					BLI_halton_2D(ht_primes, ht_offset, effects->taa_current_sample - 1, ht_point);
+					BLI_halton_2d(ht_primes, ht_offset, effects->taa_current_sample - 1, ht_point);
 
 					EEVEE_temporal_sampling_matrices_calc(effects, viewmat, persmat, ht_point);
 

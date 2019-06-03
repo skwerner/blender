@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,17 +15,10 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
- *
  */
 
-/** \file blender/blenlib/intern/string.c
- *  \ingroup bli
+/** \file
+ * \ingroup bli
  */
 
 
@@ -380,7 +371,8 @@ char *BLI_str_quoted_substrN(const char *__restrict str, const char *__restrict 
 {
 	const char *startMatch, *endMatch;
 
-	/* get the starting point (i.e. where prefix starts, and add prefixLen+1 to it to get be after the first " */
+	/* get the starting point (i.e. where prefix starts, and add prefixLen+1
+	 * to it to get be after the first " */
 	startMatch = strstr(str, prefix);
 	if (startMatch) {
 		const size_t prefixLen = strlen(prefix);
@@ -431,15 +423,16 @@ char *BLI_str_replaceN(const char *__restrict str, const char *__restrict substr
 	 */
 	while ((match = strstr(str, substr_old))) {
 		/* the assembly buffer only gets created when we actually need to rebuild the string */
-		if (ds == NULL)
+		if (ds == NULL) {
 			ds = BLI_dynstr_new();
+		}
 
 		/* if the match position does not match the current position in the string,
 		 * copy the text up to this position and advance the current position in the string
 		 */
 		if (str != match) {
-			/* add the segment of the string from str to match to the buffer, then restore the value at match
-			 */
+			/* add the segment of the string from str to match to the buffer,
+			 * then restore the value at match */
 			BLI_dynstr_nappend(ds, str, (match - str));
 
 			/* now our current position should be set on the start of the match */
@@ -516,8 +509,9 @@ char *BLI_strcasestr(const char *s, const char *find)
 		len = strlen(find);
 		do {
 			do {
-				if ((sc = *s++) == 0)
+				if ((sc = *s++) == 0) {
 					return (NULL);
+				}
 				sc = tolower(sc);
 			} while (sc != c);
 		} while (BLI_strncasecmp(s, find, len) != 0);
@@ -538,8 +532,9 @@ char *BLI_strncasestr(const char *s, const char *find, size_t len)
 		if (len > 1) {
 			do {
 				do {
-					if ((sc = *s++) == 0)
+					if ((sc = *s++) == 0) {
 						return NULL;
+					}
 					sc = tolower(sc);
 				} while (sc != c);
 			} while (BLI_strncasecmp(s, find, len - 1) != 0);
@@ -547,8 +542,9 @@ char *BLI_strncasestr(const char *s, const char *find, size_t len)
 		else {
 			{
 				do {
-					if ((sc = *s++) == 0)
+					if ((sc = *s++) == 0) {
 						return NULL;
+					}
 					sc = tolower(sc);
 				} while (sc != c);
 			}
@@ -611,37 +607,46 @@ static int left_number_strcmp(const char *s1, const char *s2, int *tiebreaker)
 	int numdigit, numzero1, numzero2;
 
 	/* count and skip leading zeros */
-	for (numzero1 = 0; *p1 && (*p1 == '0'); numzero1++)
+	for (numzero1 = 0; *p1 == '0'; numzero1++) {
 		p1++;
-	for (numzero2 = 0; *p2 && (*p2 == '0'); numzero2++)
+	}
+	for (numzero2 = 0; *p2 == '0'; numzero2++) {
 		p2++;
+	}
 
 	/* find number of consecutive digits */
 	for (numdigit = 0; ; numdigit++) {
-		if (isdigit(*(p1 + numdigit)) && isdigit(*(p2 + numdigit)))
+		if (isdigit(*(p1 + numdigit)) && isdigit(*(p2 + numdigit))) {
 			continue;
-		else if (isdigit(*(p1 + numdigit)))
+		}
+		else if (isdigit(*(p1 + numdigit))) {
 			return 1; /* s2 is bigger */
-		else if (isdigit(*(p2 + numdigit)))
+		}
+		else if (isdigit(*(p2 + numdigit))) {
 			return -1; /* s1 is bigger */
-		else
+		}
+		else {
 			break;
+		}
 	}
 
 	/* same number of digits, compare size of number */
 	if (numdigit > 0) {
 		int compare = (int)strncmp(p1, p2, (size_t)numdigit);
 
-		if (compare != 0)
+		if (compare != 0) {
 			return compare;
+		}
 	}
 
 	/* use number of leading zeros as tie breaker if still equal */
 	if (*tiebreaker == 0) {
-		if (numzero1 > numzero2)
+		if (numzero1 > numzero2) {
 			*tiebreaker = 1;
-		else if (numzero1 < numzero2)
+		}
+		else if (numzero1 < numzero2) {
 			*tiebreaker = -1;
+		}
 	}
 
 	return 0;
@@ -665,25 +670,30 @@ int BLI_natstrcmp(const char *s1, const char *s2)
 		if (isdigit(c1) && isdigit(c2)) {
 			int numcompare = left_number_strcmp(s1 + d1, s2 + d2, &tiebreaker);
 
-			if (numcompare != 0)
+			if (numcompare != 0) {
 				return numcompare;
+			}
 
 			d1++;
-			while (isdigit(s1[d1]))
+			while (isdigit(s1[d1])) {
 				d1++;
+			}
 			d2++;
-			while (isdigit(s2[d2]))
+			while (isdigit(s2[d2])) {
 				d2++;
+			}
 
 			c1 = tolower(s1[d1]);
 			c2 = tolower(s2[d2]);
 		}
 
 		/* first check for '.' so "foo.bar" comes before "foo 1.bar" */
-		if (c1 == '.' && c2 != '.')
+		if (c1 == '.' && c2 != '.') {
 			return -1;
-		if (c1 != '.' && c2 == '.')
+		}
+		if (c1 != '.' && c2 == '.') {
 			return 1;
+		}
 		else if (c1 < c2) {
 			return -1;
 		}
@@ -697,8 +707,9 @@ int BLI_natstrcmp(const char *s1, const char *s2)
 		d2++;
 	}
 
-	if (tiebreaker)
+	if (tiebreaker) {
 		return tiebreaker;
+	}
 
 	/* we might still have a different string because of lower/upper case, in
 	 * that case fall back to regular string comparison */
@@ -755,8 +766,9 @@ size_t BLI_strnlen(const char *s, const size_t maxlen)
 	size_t len;
 
 	for (len = 0; len < maxlen; len++, s++) {
-		if (!*s)
+		if (!*s) {
 			break;
+		}
 	}
 	return len;
 }
@@ -765,18 +777,22 @@ void BLI_str_tolower_ascii(char *str, const size_t len)
 {
 	size_t i;
 
-	for (i = 0; (i < len) && str[i]; i++)
-		if (str[i] >= 'A' && str[i] <= 'Z')
+	for (i = 0; (i < len) && str[i]; i++) {
+		if (str[i] >= 'A' && str[i] <= 'Z') {
 			str[i] += 'a' - 'A';
+		}
+	}
 }
 
 void BLI_str_toupper_ascii(char *str, const size_t len)
 {
 	size_t i;
 
-	for (i = 0; (i < len) && str[i]; i++)
-		if (str[i] >= 'a' && str[i] <= 'z')
+	for (i = 0; (i < len) && str[i]; i++) {
+		if (str[i] >= 'a' && str[i] <= 'z') {
 			str[i] -= 'a' - 'A';
+		}
+	}
 }
 
 /**
@@ -947,7 +963,9 @@ size_t BLI_str_partition_ex(
 
 		if (end) {
 			if (from_right) {
-				for (tmp = end - 1; (tmp >= str) && (*tmp != *d); tmp--);
+				for (tmp = end - 1; (tmp >= str) && (*tmp != *d); tmp--) {
+					/* pass */
+				}
 				if (tmp < str) {
 					tmp = NULL;
 				}

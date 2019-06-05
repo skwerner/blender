@@ -185,7 +185,7 @@ static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, Mes
 
   return r_dm;
 #else
-  UNUSED_VARS(md, ob, flag);
+  UNUSED_VARS(md, ctx);
   return mesh;
 #endif
 }

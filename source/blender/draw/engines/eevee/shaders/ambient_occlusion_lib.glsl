@@ -1,7 +1,8 @@
 
 /* Based on Practical Realtime Strategies for Accurate Indirect Occlusion
  * http://blog.selfshadow.com/publications/s2016-shading-course/activision/s2016_pbs_activision_occlusion.pdf
- * http://blog.selfshadow.com/publications/s2016-shading-course/activision/s2016_pbs_activision_occlusion.pptx */
+ * http://blog.selfshadow.com/publications/s2016-shading-course/activision/s2016_pbs_activision_occlusion.pptx
+ */
 
 #if defined(MESH_SHADER)
 #  if !defined(USE_ALPHA_HASH)
@@ -231,8 +232,9 @@ void gtao(vec3 normal, vec3 position, vec4 noise, out float visibility, out vec3
  * Page 78 in the .pdf version. */
 float gtao_multibounce(float visibility, vec3 albedo)
 {
-  if (aoBounceFac == 0.0)
+  if (aoBounceFac == 0.0) {
     return visibility;
+  }
 
   /* Median luminance. Because Colored multibounce looks bad. */
   float lum = dot(albedo, vec3(0.3333));

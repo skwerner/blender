@@ -314,7 +314,7 @@ static int gpencil_paintmode_toggle_exec(bContext *C, wmOperator *op)
     BKE_paint_ensure(ts, (Paint **)&ts->gp_paint);
     Paint *paint = &ts->gp_paint->paint;
     /* if not exist, create a new one */
-    if (paint->brush == NULL) {
+    if ((paint->brush == NULL) || (paint->brush->gpencil_settings == NULL)) {
       BKE_brush_gpencil_presets(C);
     }
     BKE_paint_toolslots_brush_validate(bmain, &ts->gp_paint->paint);
@@ -619,7 +619,7 @@ static void gp_duplicate_points(const bGPDstroke *gps,
       else if (i == gps->totpoints - 1) {
         len = i - start_idx + 1;
       }
-      //printf("copying from %d to %d = %d\n", start_idx, i, len);
+      // printf("copying from %d to %d = %d\n", start_idx, i, len);
 
       /* make copies of the relevant data */
       if (len) {
@@ -1069,7 +1069,8 @@ void ED_gpencil_strokes_copybuf_free(void)
   gp_strokes_copypastebuf.first = gp_strokes_copypastebuf.last = NULL;
 }
 
-/* Ensure that destination datablock has all the colours the pasted strokes need
+/**
+ * Ensure that destination datablock has all the colors the pasted strokes need.
  * Helper function for copy-pasting strokes
  */
 GHash *gp_copybuf_validate_colormap(bContext *C)
@@ -1211,7 +1212,7 @@ void GPENCIL_OT_copy(wmOperatorType *ot)
   ot->poll = gp_stroke_edit_poll;
 
   /* flags */
-  //ot->flag = OPTYPE_REGISTER;
+  // ot->flag = OPTYPE_REGISTER;
 }
 
 /* --------------------- */
@@ -2211,7 +2212,8 @@ void gp_stroke_delete_tagged_points(bGPDframe *gpf,
 
   /* Watch out for special case where No islands = All points selected = Delete Stroke only */
   if (num_islands) {
-    /* there are islands, so create a series of new strokes, adding them before the "next" stroke */
+    /* There are islands, so create a series of new strokes,
+     * adding them before the "next" stroke. */
     int idx;
     bGPDstroke *new_stroke = NULL;
 

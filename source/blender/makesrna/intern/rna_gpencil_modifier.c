@@ -296,7 +296,8 @@ static void greasepencil_modifier_object_set(Object *self,
 }
 
 #  define RNA_GP_MOD_OBJECT_SET(_type, _prop, _obtype) \
-    static void rna_##_type##GpencilModifier_##_prop##_set(PointerRNA *ptr, PointerRNA value) \
+    static void rna_##_type##GpencilModifier_##_prop##_set( \
+        PointerRNA *ptr, PointerRNA value, struct ReportList *UNUSED(reports)) \
     { \
       _type##GpencilModifierData *tmd = (_type##GpencilModifierData *)ptr->data; \
       greasepencil_modifier_object_set(ptr->id.data, &tmd->_prop, _obtype, value); \
@@ -308,7 +309,9 @@ RNA_GP_MOD_OBJECT_SET(Mirror, object, OB_EMPTY);
 
 #  undef RNA_GP_MOD_OBJECT_SET
 
-static void rna_HookGpencilModifier_object_set(PointerRNA *ptr, PointerRNA value)
+static void rna_HookGpencilModifier_object_set(PointerRNA *ptr,
+                                               PointerRNA value,
+                                               struct ReportList *UNUSED(reports))
 {
   HookGpencilModifierData *hmd = ptr->data;
   Object *ob = (Object *)value.data;

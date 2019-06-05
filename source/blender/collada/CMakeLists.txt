@@ -41,10 +41,10 @@ set(INC
   ../blentranslation
   ../depsgraph
   ../editors/include
+  ../imbuf
   ../makesdna
   ../makesrna
   ../windowmanager
-  ../imbuf
   ../../../intern/guardedalloc
   ../ikplugin
   ../../../intern/iksolver/extern
@@ -63,6 +63,7 @@ set(SRC
   ArmatureImporter.cpp
   BCAnimationCurve.cpp
   BCAnimationSampler.cpp
+  BCMath.cpp
   BCSampleData.cpp
   BlenderContext.cpp
   CameraExporter.cpp
@@ -97,8 +98,10 @@ set(SRC
   ArmatureImporter.h
   BCAnimationCurve.h
   BCAnimationSampler.h
+  BCMath.h
   BCSampleData.h
   BlenderContext.h
+  BlenderTypes.h
   CameraExporter.h
   ControllerExporter.h
   DocumentExporter.h

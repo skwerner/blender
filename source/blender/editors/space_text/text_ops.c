@@ -61,6 +61,83 @@
 
 static void txt_screen_clamp(SpaceText *st, ARegion *ar);
 
+/************************ util ***************************/
+
+/**
+ * Tests if the given character represents a start of a new line or the
+ * indentation part of a line.
+ * \param c: The current character.
+ * \param r_last_state: A pointer to a flag representing the last state. The
+ * flag may be modified.
+ */
+static void test_line_start(char c, bool *r_last_state)
+{
+  if (c == '\n') {
+    *r_last_state = true;
+  }
+  else if (!ELEM(c, '\t', ' ')) {
+    *r_last_state = false;
+  }
+}
+
+/**
+ * This function converts the indentation tabs from a buffer to spaces.
+ * \param buf: A pointer to a cstring.
+ * \param tab_size: The size, in spaces, of the tab character.
+ */
+static char *buf_tabs_to_spaces(const char *in_buf, const int tab_size)
+{
+  /* Get the number of tab characters in buffer. */
+  bool line_start = true;
+  int num_tabs = 0;
+
+  for (int in_offset = 0; in_buf[in_offset]; in_offset++) {
+    /* Verify if is an indentation whitespace character. */
+    test_line_start(in_buf[in_offset], &line_start);
+
+    if (in_buf[in_offset] == '\t' && line_start) {
+      num_tabs++;
+    }
+  }
+
+  /* Allocate output before with extra space for expanded tabs. */
+  const int out_size = strlen(in_buf) + num_tabs * (tab_size - 1) + 1;
+  char *out_buf = MEM_mallocN(out_size * sizeof(char), __func__);
+
+  /* Fill output buffer. */
+  int spaces_until_tab = 0;
+  int out_offset = 0;
+  line_start = true;
+
+  for (int in_offset = 0; in_buf[in_offset]; in_offset++) {
+    /* Verify if is an indentation whitespace character. */
+    test_line_start(in_buf[in_offset], &line_start);
+
+    if (in_buf[in_offset] == '\t' && line_start) {
+      /* Calculate tab size so it fills until next indentation. */
+      int num_spaces = tab_size - (spaces_until_tab % tab_size);
+      spaces_until_tab = 0;
+
+      /* Write to buffer. */
+      memset(&out_buf[out_offset], ' ', num_spaces);
+      out_offset += num_spaces;
+    }
+    else {
+      if (in_buf[in_offset] == ' ') {
+        spaces_until_tab++;
+      }
+      else if (in_buf[in_offset] == '\n') {
+        spaces_until_tab = 0;
+      }
+
+      out_buf[out_offset++] = in_buf[in_offset];
+    }
+  }
+
+  out_buf[out_offset] = '\0';
+  return out_buf;
+}
+
 /************************ poll ***************************/
 
 BLI_INLINE int text_pixel_x_to_column(SpaceText *st, const int x)
@@ -170,7 +247,7 @@ static int text_new_exec(bContext *C, wmOperator *UNUSED(op))
 
   if (prop) {
     RNA_id_pointer_create(&text->id, &idptr);
-    RNA_property_pointer_set(&ptr, prop, idptr);
+    RNA_property_pointer_set(&ptr, prop, idptr, NULL);
     RNA_property_update(C, &ptr, prop);
   }
   else if (st) {
@@ -249,7 +326,7 @@ static int text_open_exec(bContext *C, wmOperator *op)
 
   if (pprop->prop) {
     RNA_id_pointer_create(&text->id, &idptr);
-    RNA_property_pointer_set(&pprop->ptr, pprop->prop, idptr);
+    RNA_property_pointer_set(&pprop->ptr, pprop->prop, idptr, NULL);
     RNA_property_update(C, &pprop->ptr, pprop->prop);
   }
   else if (st) {
@@ -308,7 +385,7 @@ void TEXT_OT_open(wmOperatorType *ot)
                                  FILE_OPENFILE,
                                  WM_FILESEL_FILEPATH,
                                  FILE_DEFAULTDISPLAY,
-                                 FILE_SORT_ALPHA);  //XXX TODO, relative_path
+                                 FILE_SORT_ALPHA);  // XXX TODO, relative_path
   RNA_def_boolean(
       ot->srna, "internal", 0, "Make internal", "Make text file internal after loading");
 }
@@ -608,7 +685,7 @@ void TEXT_OT_save_as(wmOperatorType *ot)
                                  FILE_SAVE,
                                  WM_FILESEL_FILEPATH,
                                  FILE_DEFAULTDISPLAY,
-                                 FILE_SORT_ALPHA);  //XXX TODO, relative_path
+                                 FILE_SORT_ALPHA);  // XXX TODO, relative_path
 }
 
 /******************* run script operator *********************/
@@ -764,6 +841,14 @@ static int text_paste_exec(bContext *C, wmOperator *op)
   text_drawcache_tag_update(CTX_wm_space_text(C), 0);
 
   TextUndoBuf *utxt = ED_text_undo_push_init(C);
+
+  /* Convert clipboard content indentation to spaces if specified */
+  if (text->flags & TXT_TABSTOSPACES) {
+    char *new_buf = buf_tabs_to_spaces(buf, TXT_TABSIZE);
+    MEM_freeN(buf);
+    buf = new_buf;
+  }
+
   txt_insert_buf(text, utxt, buf);
   text_update_edited(text);
 
@@ -1183,7 +1268,7 @@ static int text_convert_whitespace_exec(bContext *C, wmOperator *op)
           for (j = 1;
                (j < tab_len) && (a + j < text_check_line_len) && (text_check_line[a + j] == ' ');
                j++) {
-            ;
+            /* pass */
           }
 
           if (j == tab_len) {
@@ -2477,7 +2562,7 @@ void TEXT_OT_scroll(wmOperatorType *ot)
   ot->poll = text_scroll_poll;
 
   /* flags */
-  ot->flag = OPTYPE_BLOCKING | OPTYPE_GRAB_CURSOR | OPTYPE_INTERNAL;
+  ot->flag = OPTYPE_BLOCKING | OPTYPE_GRAB_CURSOR_XY | OPTYPE_INTERNAL;
 
   /* properties */
   RNA_def_int(

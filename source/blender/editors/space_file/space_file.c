@@ -142,18 +142,16 @@ static void file_free(SpaceLink *sl)
 }
 
 /* spacetype; init callback, area size changes, screen set, etc */
-static void file_init(wmWindowManager *UNUSED(wm), ScrArea *sa)
+static void file_init(wmWindowManager *wm, ScrArea *sa)
 {
   SpaceFile *sfile = (SpaceFile *)sa->spacedata.first;
+  struct FSMenu *fsmenu = ED_fsmenu_get();
 
   /* refresh system directory list */
-  fsmenu_refresh_system_category(ED_fsmenu_get());
+  fsmenu_refresh_system_category(fsmenu);
 
-  /* Update bookmarks 'valid' state.
-   * Done here, because it seems BLI_is_dir() can have huge impact on performances
-   * in some cases, on win systems... See T43684.
-   */
-  fsmenu_refresh_bookmarks_status(ED_fsmenu_get());
+  /* Update bookmarks 'valid' state. */
+  fsmenu_refresh_bookmarks_status(wm, fsmenu);
 
   if (sfile->layout) {
     sfile->layout->dirty = true;
@@ -316,10 +314,10 @@ static void file_main_region_init(wmWindowManager *wm, ARegion *ar)
 
   /* own keymaps */
   keymap = WM_keymap_ensure(wm->defaultconf, "File Browser", SPACE_FILE, 0);
-  WM_event_add_keymap_handler_bb(&ar->handlers, keymap, &ar->v2d.mask, &ar->winrct);
+  WM_event_add_keymap_handler_v2d_mask(&ar->handlers, keymap);
 
   keymap = WM_keymap_ensure(wm->defaultconf, "File Browser Main", SPACE_FILE, 0);
-  WM_event_add_keymap_handler_bb(&ar->handlers, keymap, &ar->v2d.mask, &ar->winrct);
+  WM_event_add_keymap_handler_v2d_mask(&ar->handlers, keymap);
 }
 
 static void file_main_region_listener(wmWindow *UNUSED(win),
@@ -441,9 +439,8 @@ static void file_main_region_draw(const bContext *C, ARegion *ar)
   UI_view2d_view_restore(C);
 
   /* scrollers */
-  scrollers = UI_view2d_scrollers_calc(
-      C, v2d, NULL, V2D_ARG_DUMMY, V2D_ARG_DUMMY, V2D_ARG_DUMMY, V2D_ARG_DUMMY);
-  UI_view2d_scrollers_draw(C, v2d, scrollers);
+  scrollers = UI_view2d_scrollers_calc(v2d, NULL);
+  UI_view2d_scrollers_draw(v2d, scrollers);
   UI_view2d_scrollers_free(scrollers);
 }
 
@@ -498,7 +495,7 @@ static void file_tools_region_init(wmWindowManager *wm, ARegion *ar)
 
   /* own keymaps */
   keymap = WM_keymap_ensure(wm->defaultconf, "File Browser", SPACE_FILE, 0);
-  WM_event_add_keymap_handler_bb(&ar->handlers, keymap, &ar->v2d.mask, &ar->winrct);
+  WM_event_add_keymap_handler_v2d_mask(&ar->handlers, keymap);
 }
 
 static void file_tools_region_draw(const bContext *C, ARegion *ar)
@@ -528,7 +525,7 @@ static void file_header_region_init(wmWindowManager *wm, ARegion *ar)
   ED_region_header_init(ar);
 
   keymap = WM_keymap_ensure(wm->defaultconf, "File Browser", SPACE_FILE, 0);
-  WM_event_add_keymap_handler_bb(&ar->handlers, keymap, &ar->v2d.mask, &ar->winrct);
+  WM_event_add_keymap_handler_v2d_mask(&ar->handlers, keymap);
 }
 
 static void file_header_region_draw(const bContext *C, ARegion *ar)
@@ -545,10 +542,10 @@ static void file_ui_region_init(wmWindowManager *wm, ARegion *ar)
 
   /* own keymap */
   keymap = WM_keymap_ensure(wm->defaultconf, "File Browser", SPACE_FILE, 0);
-  WM_event_add_keymap_handler_bb(&ar->handlers, keymap, &ar->v2d.mask, &ar->winrct);
+  WM_event_add_keymap_handler_v2d_mask(&ar->handlers, keymap);
 
   keymap = WM_keymap_ensure(wm->defaultconf, "File Browser Buttons", SPACE_FILE, 0);
-  WM_event_add_keymap_handler_bb(&ar->handlers, keymap, &ar->v2d.mask, &ar->winrct);
+  WM_event_add_keymap_handler_v2d_mask(&ar->handlers, keymap);
 }
 
 static void file_ui_region_draw(const bContext *C, ARegion *ar)

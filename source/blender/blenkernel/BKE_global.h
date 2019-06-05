@@ -107,10 +107,10 @@ typedef struct Global {
 /** #Global.f */
 enum {
   G_FLAG_RENDER_VIEWPORT = (1 << 0),
-  G_FLAG_BACKBUFSEL = (1 << 1),
   G_FLAG_PICKSEL = (1 << 2),
   /** Support simulating events (for testing). */
   G_FLAG_EVENT_SIMULATE = (1 << 3),
+  G_FLAG_USERPREF_NO_SAVE_ON_EXIT = (1 << 4),
 
   G_FLAG_SCRIPT_AUTOEXEC = (1 << 13),
   /** When this flag is set ignore the prefs #USER_SCRIPT_AUTOEXEC_DISABLE. */
@@ -121,7 +121,8 @@ enum {
 
 /** Don't overwrite these flags when reading a file. */
 #define G_FLAG_ALL_RUNTIME \
-  (G_FLAG_SCRIPT_AUTOEXEC | G_FLAG_SCRIPT_OVERRIDE_PREF | G_FLAG_EVENT_SIMULATE)
+  (G_FLAG_SCRIPT_AUTOEXEC | G_FLAG_SCRIPT_OVERRIDE_PREF | G_FLAG_EVENT_SIMULATE | \
+   G_FLAG_USERPREF_NO_SAVE_ON_EXIT)
 
 /** Flags to read from blend file. */
 #define G_FLAG_ALL_READFILE 0

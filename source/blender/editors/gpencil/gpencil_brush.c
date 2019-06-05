@@ -88,6 +88,7 @@ typedef struct tGP_BrushEditData {
   /* Current editor/region/etc. */
   /* NOTE: This stuff is mainly needed to handle 3D view projection stuff... */
   Depsgraph *depsgraph;
+  struct Main *bmain;
   Scene *scene;
   Object *object;
 
@@ -893,7 +894,6 @@ static bool gp_brush_weight_apply(
   /* create dvert */
   BKE_gpencil_dvert_ensure(gps);
 
-  bGPDspoint *pt = gps->points + pt_index;
   MDeformVert *dvert = gps->dvert + pt_index;
   float inf;
 
@@ -907,6 +907,7 @@ static bool gp_brush_weight_apply(
   if (gso->vrgroup == -1) {
     if (gso->object) {
       BKE_object_defgroup_add(gso->object);
+      DEG_relations_tag_update(gso->bmain);
       gso->vrgroup = 0;
     }
   }
@@ -921,25 +922,24 @@ static bool gp_brush_weight_apply(
   float curweight = dw ? dw->weight : 0.0f;
 
   if (gp_brush_invert_check(gso)) {
-    /* reduce weight */
-    curweight -= inf;
+    /* reduce weight (verify mainimum target) */
+    if (curweight - inf < gso->gp_brush->weight) {
+      curweight = gso->gp_brush->weight;
+    }
+    else {
+      curweight -= inf;
+    }
   }
   else {
     /* increase weight */
     curweight += inf;
+    /* verify maximum target weight */
+    CLAMP_MAX(curweight, gso->gp_brush->weight);
   }
-
-  /* verify target weight */
-  CLAMP_MAX(curweight, gso->gp_brush->weight);
 
   CLAMP(curweight, 0.0f, 1.0f);
   if (dw) {
     dw->weight = curweight;
-  }
-
-  /* weight should stay within [0.0, 1.0] */
-  if (pt->pressure < 0.0f) {
-    pt->pressure = 0.0f;
   }
 
   return true;
@@ -969,7 +969,7 @@ typedef struct tGPSB_CloneBrushData {
   /* for "stamp" mode, the currently pasted brushes */
   bGPDstroke **new_strokes;
 
-  /* mapping from colors referenced per stroke, to the new colours in the "pasted" strokes */
+  /** Mapping from colors referenced per stroke, to the new colors in the "pasted" strokes. */
   GHash *new_colors;
 } tGPSB_CloneBrushData;
 
@@ -1017,7 +1017,7 @@ static void gp_brush_clone_init(bContext *C, tGP_BrushEditData *gso)
   }
 
   /* Init colormap for mapping between the pasted stroke's source color (names)
-   * and the final colours that will be used here instead.
+   * and the final colors that will be used here instead.
    */
   data->new_colors = gp_copybuf_validate_colormap(C);
 }
@@ -1167,7 +1167,8 @@ static bool gpsculpt_brush_apply_clone(bContext *C, tGP_BrushEditData *gso)
     }
     else {
       /* Continuous - Just keep pasting everytime we move */
-      /* TODO: The spacing of repeat should be controlled using a "stepsize" or similar property? */
+      /* TODO: The spacing of repeat should be controlled using a
+       * "stepsize" or similar property? */
       gp_brush_clone_add(C, gso);
     }
   }
@@ -1219,6 +1220,7 @@ static bool gpsculpt_brush_init(bContext *C, wmOperator *op)
   op->customdata = gso;
 
   gso->depsgraph = CTX_data_depsgraph(C);
+  gso->bmain = CTX_data_main(C);
   /* store state */
   gso->settings = gpsculpt_get_settings(scene);
   gso->gp_brush = gpsculpt_get_brush(scene, is_weight_mode);
@@ -1322,7 +1324,7 @@ static bool gpsculpt_brush_init(bContext *C, wmOperator *op)
   gpsculpt_brush_header_set(C, gso);
 
   /* setup cursor drawing */
-  //WM_cursor_modal_set(CTX_wm_window(C), BC_CROSSCURSOR);
+  // WM_cursor_modal_set(CTX_wm_window(C), BC_CROSSCURSOR);
   if (gso->sa->spacetype != SPACE_VIEW3D) {
     ED_gpencil_toggle_brush_cursor(C, true, NULL);
   }
@@ -1406,9 +1408,10 @@ static void gpsculpt_brush_init_stroke(tGP_BrushEditData *gso)
     if (gpencil_layer_is_editable(gpl) && (gpl->actframe != NULL)) {
       bGPDframe *gpf = gpl->actframe;
 
-      /* Make a new frame to work on if the layer's frame and the current scene frame don't match up
+      /* Make a new frame to work on if the layer's frame
+       * and the current scene frame don't match up:
        * - This is useful when animating as it saves that "uh-oh" moment when you realize you've
-       *   spent too much time editing the wrong frame...
+       *   spent too much time editing the wrong frame.
        */
       // XXX: should this be allowed when framelock is enabled?
       if (gpf->framenum != cfra_eval) {
@@ -2002,7 +2005,7 @@ static int gpsculpt_brush_modal(bContext *C, wmOperator *op, const wmEvent *even
 
       /* Painting mbut release = Stop painting (back to idle) */
       case LEFTMOUSE:
-        //BLI_assert(event->val == KM_RELEASE);
+        // BLI_assert(event->val == KM_RELEASE);
         if (is_modal) {
           /* go back to idling... */
           gso->is_painting = false;

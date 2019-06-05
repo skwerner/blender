@@ -132,7 +132,10 @@ void ED_render_scene_update(const DEGEditorUpdateContext *update_ctx, int update
           CTX_wm_region_set(C, ar);
 
           engine->flag &= ~RE_ENGINE_DO_UPDATE;
-          engine->type->view_update(engine, C);
+          /* NOTE: Important to pass non-updated depsgraph, This is because this function is called
+           * from inside dependency graph evaluation. Additionally, if we pass fully evaluated one
+           * we will loose updates stored in the graph. */
+          engine->type->view_update(engine, C, CTX_data_depsgraph(C));
         }
         else {
           RenderEngineType *engine_type = ED_view3d_engine_type(scene, v3d->shading.type);
@@ -265,7 +268,7 @@ static void image_changed(Main *bmain, Image *ima)
 
   /* textures */
   for (tex = bmain->textures.first; tex; tex = tex->id.next) {
-    if (tex->ima == ima) {
+    if (tex->type == TEX_IMAGE && tex->ima == ima) {
       texture_changed(bmain, tex);
     }
   }

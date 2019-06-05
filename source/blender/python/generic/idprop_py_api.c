@@ -164,7 +164,8 @@ PyObject *BPy_IDGroup_WrapData(ID *id, IDProperty *prop, IDProperty *parent)
   }
 }
 
-#if 0 /* UNUSED, currently assignment overwrites into new properties, rather than setting in-place */
+/* UNUSED, currently assignment overwrites into new properties, rather than setting in-place. */
+#if 0
 static int BPy_IDGroup_SetData(BPy_IDProperty *self, IDProperty *prop, PyObject *value)
 {
   switch (prop->type) {
@@ -600,7 +601,6 @@ static IDProperty *idp_from_PyMapping(const char *name, PyObject *ob)
     pval = PySequence_GetItem(vals, i);
     if (BPy_IDProperty_Map_ValidateAndCreate(key, prop, pval) == false) {
       IDP_FreeProperty(prop);
-      MEM_freeN(prop);
       Py_XDECREF(keys);
       Py_XDECREF(vals);
       Py_XDECREF(key);
@@ -689,7 +689,7 @@ bool BPy_IDProperty_Map_ValidateAndCreate(PyObject *name_obj, IDProperty *group,
       prop->prev = prop_exist->prev;
       prop->next = prop_exist->next;
 
-      IDP_FreeProperty(prop_exist);
+      IDP_FreePropertyContent(prop_exist);
       *prop_exist = *prop;
       MEM_freeN(prop);
     }

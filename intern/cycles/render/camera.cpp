@@ -643,7 +643,8 @@ float Camera::world_to_raster_size(float3 P)
     float3 D = normalize(Ddiff);
     res = len(dist * dDdx - dot(dist * dDdx, D) * D);
 
-    /* Decent approx distance to frustum (doesn't handle corners correctly, but not that big of a deal) */
+    /* Decent approx distance to frustum
+     * (doesn't handle corners correctly, but not that big of a deal) */
     float f_dist = 0.0f;
 
     if (offscreen_dicing_scale > 1.0f) {
@@ -687,7 +688,8 @@ float Camera::world_to_raster_size(float3 P)
               f_dist = max(f_dist, *d);
             }
             else {
-              /* Possibly far enough behind the frustum to use distance to origin instead of edge */
+              /* Possibly far enough behind the frustum to use distance to origin instead of edge
+               */
               test_o = true;
             }
           }

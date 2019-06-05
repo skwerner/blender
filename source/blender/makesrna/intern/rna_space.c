@@ -112,12 +112,7 @@ const EnumPropertyItem rna_enum_space_type_items[] = {
      "Python Console",
      "Interactive programmatic console for "
      "advanced editing and script development"},
-    {SPACE_INFO,
-     "INFO",
-     ICON_INFO,
-     "Info",
-     "Main menu bar and list of error messages "
-     "(drag down to expand and display)"},
+    {SPACE_INFO, "INFO", ICON_INFO, "Info", "Log of operations, warnings and error messages"},
     /* Special case: Top-bar and Status-bar aren't supposed to be a regular editor for the user. */
     {SPACE_TOPBAR,
      "TOPBAR",
@@ -345,23 +340,24 @@ static const EnumPropertyItem autosnap_items[] = {
 const EnumPropertyItem rna_enum_shading_type_items[] = {
     {OB_WIRE, "WIREFRAME", ICON_SHADING_WIRE, "Wireframe", "Display the object as wire edges"},
     {OB_SOLID, "SOLID", ICON_SHADING_SOLID, "Solid", "Display in solid mode"},
-    {OB_MATERIAL, "MATERIAL", ICON_SHADING_TEXTURE, "LookDev", "Display in LookDev mode"},
+    {OB_MATERIAL, "MATERIAL", ICON_SHADING_TEXTURE, "Look Dev", "Display in Look Dev mode"},
     {OB_RENDER, "RENDERED", ICON_SHADING_RENDERED, "Rendered", "Display render preview"},
     {0, NULL, 0, NULL, NULL},
 };
 
 static const EnumPropertyItem rna_enum_viewport_lighting_items[] = {
-    {V3D_LIGHTING_FLAT, "FLAT", 0, "Flat", "Display using flat lighting"},
     {V3D_LIGHTING_STUDIO, "STUDIO", 0, "Studio", "Display using studio lighting"},
     {V3D_LIGHTING_MATCAP, "MATCAP", 0, "MatCap", "Display using matcap material and lighting"},
+    {V3D_LIGHTING_FLAT, "FLAT", 0, "Flat", "Display using flat lighting"},
     {0, NULL, 0, NULL, NULL},
 };
 
 static const EnumPropertyItem rna_enum_shading_color_type_items[] = {
-    {V3D_SHADING_SINGLE_COLOR, "SINGLE", 0, "Single", "Show scene in a single color"},
     {V3D_SHADING_MATERIAL_COLOR, "MATERIAL", 0, "Material", "Show material color"},
+    {V3D_SHADING_SINGLE_COLOR, "SINGLE", 0, "Single", "Show scene in a single color"},
     {V3D_SHADING_OBJECT_COLOR, "OBJECT", 0, "Object", "Show object color"},
     {V3D_SHADING_RANDOM_COLOR, "RANDOM", 0, "Random", "Show random object color"},
+    {V3D_SHADING_VERTEX_COLOR, "VERTEX", 0, "Vertex", "Show active vertex color"},
     {V3D_SHADING_TEXTURE_COLOR, "TEXTURE", 0, "Texture", "Show texture"},
     {0, NULL, 0, NULL, NULL},
 };
@@ -637,7 +633,7 @@ static void rna_Space_show_region_header_set(PointerRNA *ptr, bool value)
     ScrArea *sa = rna_area_from_space(ptr);
     ARegion *ar_tool_header = BKE_area_find_region_type(sa, RGN_TYPE_TOOL_HEADER);
     if (ar_tool_header != NULL) {
-      value = !(ar_tool_header->flag & RGN_FLAG_HIDDEN_BY_USER);
+      value_for_tool_header = !(ar_tool_header->flag & RGN_FLAG_HIDDEN_BY_USER);
     }
   }
   rna_Space_bool_from_region_flag_set_by_type(
@@ -646,6 +642,20 @@ static void rna_Space_show_region_header_set(PointerRNA *ptr, bool value)
 static void rna_Space_show_region_header_update(bContext *C, PointerRNA *ptr)
 {
   rna_Space_bool_from_region_flag_update_by_type(C, ptr, RGN_TYPE_HEADER, RGN_FLAG_HIDDEN);
+}
+
+/* Footer Region. */
+static bool rna_Space_show_region_footer_get(PointerRNA *ptr)
+{
+  return !rna_Space_bool_from_region_flag_get_by_type(ptr, RGN_TYPE_FOOTER, RGN_FLAG_HIDDEN);
+}
+static void rna_Space_show_region_footer_set(PointerRNA *ptr, bool value)
+{
+  rna_Space_bool_from_region_flag_set_by_type(ptr, RGN_TYPE_FOOTER, RGN_FLAG_HIDDEN, !value);
+}
+static void rna_Space_show_region_footer_update(bContext *C, PointerRNA *ptr)
+{
+  rna_Space_bool_from_region_flag_update_by_type(C, ptr, RGN_TYPE_FOOTER, RGN_FLAG_HIDDEN);
 }
 
 /* Tool Header Region.
@@ -860,8 +870,9 @@ static void rna_RegionView3D_quadview_update(Main *UNUSED(main),
   ARegion *ar;
 
   rna_area_region_from_regiondata(ptr, &sa, &ar);
-  if (sa && ar && ar->alignment == RGN_ALIGN_QSPLIT)
+  if (sa && ar && ar->alignment == RGN_ALIGN_QSPLIT) {
     ED_view3d_quadview_update(sa, ar, false);
+  }
 }
 
 /* same as above but call clip==true */
@@ -873,8 +884,9 @@ static void rna_RegionView3D_quadview_clip_update(Main *UNUSED(main),
   ARegion *ar;
 
   rna_area_region_from_regiondata(ptr, &sa, &ar);
-  if (sa && ar && ar->alignment == RGN_ALIGN_QSPLIT)
+  if (sa && ar && ar->alignment == RGN_ALIGN_QSPLIT) {
     ED_view3d_quadview_update(sa, ar, true);
+  }
 }
 
 static void rna_RegionView3D_view_location_get(PointerRNA *ptr, float *values)
@@ -1073,13 +1085,15 @@ static const EnumPropertyItem *rna_View3DShading_color_type_itemf(bContext *UNUS
 
   if (shading->type == OB_SOLID) {
     RNA_enum_items_add_value(
-        &item, &totitem, rna_enum_shading_color_type_items, V3D_SHADING_SINGLE_COLOR);
-    RNA_enum_items_add_value(
         &item, &totitem, rna_enum_shading_color_type_items, V3D_SHADING_MATERIAL_COLOR);
+    RNA_enum_items_add_value(
+        &item, &totitem, rna_enum_shading_color_type_items, V3D_SHADING_SINGLE_COLOR);
     RNA_enum_items_add_value(
         &item, &totitem, rna_enum_shading_color_type_items, V3D_SHADING_OBJECT_COLOR);
     RNA_enum_items_add_value(
         &item, &totitem, rna_enum_shading_color_type_items, V3D_SHADING_RANDOM_COLOR);
+    RNA_enum_items_add_value(
+        &item, &totitem, rna_enum_shading_color_type_items, V3D_SHADING_VERTEX_COLOR);
     if (shading->light != V3D_LIGHTING_MATCAP) {
       RNA_enum_items_add_value(
           &item, &totitem, rna_enum_shading_color_type_items, V3D_SHADING_TEXTURE_COLOR);
@@ -1209,10 +1223,12 @@ static const EnumPropertyItem *rna_SpaceView3D_stereo3d_camera_itemf(bContext *C
 {
   Scene *scene = CTX_data_scene(C);
 
-  if (scene->r.views_format == SCE_VIEWS_FORMAT_MULTIVIEW)
+  if (scene->r.views_format == SCE_VIEWS_FORMAT_MULTIVIEW) {
     return multiview_camera_items;
-  else
+  }
+  else {
     return stereo3d_camera_items;
+  }
 }
 
 static int rna_SpaceView3D_icon_from_show_object_viewport_get(PointerRNA *ptr)
@@ -1257,10 +1273,12 @@ static void rna_SpaceImageEditor_show_stereo_set(PointerRNA *ptr, int value)
 {
   SpaceImage *sima = (SpaceImage *)(ptr->data);
 
-  if (value)
+  if (value) {
     sima->iuser.flag |= IMA_SHOW_STEREO;
-  else
+  }
+  else {
     sima->iuser.flag &= ~IMA_SHOW_STEREO;
+  }
 }
 
 static bool rna_SpaceImageEditor_show_stereo_get(PointerRNA *ptr)
@@ -1317,7 +1335,9 @@ static bool rna_SpaceImageEditor_show_maskedit_get(PointerRNA *ptr)
   return ED_space_image_check_show_maskedit(sima, view_layer);
 }
 
-static void rna_SpaceImageEditor_image_set(PointerRNA *ptr, PointerRNA value)
+static void rna_SpaceImageEditor_image_set(PointerRNA *ptr,
+                                           PointerRNA value,
+                                           struct ReportList *UNUSED(reports))
 {
   SpaceImage *sima = (SpaceImage *)(ptr->data);
   bScreen *sc = (bScreen *)ptr->id.data;
@@ -1329,7 +1349,9 @@ static void rna_SpaceImageEditor_image_set(PointerRNA *ptr, PointerRNA value)
   ED_space_image_set(G_MAIN, sima, obedit, (Image *)value.data, false);
 }
 
-static void rna_SpaceImageEditor_mask_set(PointerRNA *ptr, PointerRNA value)
+static void rna_SpaceImageEditor_mask_set(PointerRNA *ptr,
+                                          PointerRNA value,
+                                          struct ReportList *UNUSED(reports))
 {
   SpaceImage *sima = (SpaceImage *)(ptr->data);
 
@@ -1352,8 +1374,9 @@ static const EnumPropertyItem *rna_SpaceImageEditor_display_channels_itemf(
 
   ED_space_image_release_buffer(sima, ibuf, lock);
 
-  if (alpha && zbuf)
+  if (alpha && zbuf) {
     return display_channels_items;
+  }
 
   if (alpha) {
     RNA_enum_items_add_value(&item, &totitem, display_channels_items, SI_USE_ALPHA);
@@ -1479,10 +1502,12 @@ static const EnumPropertyItem *rna_SpaceImageEditor_pivot_itemf(bContext *UNUSED
 
   SpaceImage *sima = (SpaceImage *)ptr->data;
 
-  if (sima->mode == SI_MODE_PAINT)
+  if (sima->mode == SI_MODE_PAINT) {
     return rna_enum_transform_pivot_items_full;
-  else
+  }
+  else {
     return pivot_items;
+  }
 }
 
 /* Space Text Editor */
@@ -1495,7 +1520,9 @@ static void rna_SpaceTextEditor_word_wrap_set(PointerRNA *ptr, bool value)
   st->left = 0;
 }
 
-static void rna_SpaceTextEditor_text_set(PointerRNA *ptr, PointerRNA value)
+static void rna_SpaceTextEditor_text_set(PointerRNA *ptr,
+                                         PointerRNA value,
+                                         struct ReportList *UNUSED(reports))
 {
   SpaceText *st = (SpaceText *)(ptr->data);
 
@@ -1510,14 +1537,17 @@ static void rna_SpaceTextEditor_updateEdited(Main *UNUSED(bmain),
 {
   SpaceText *st = (SpaceText *)ptr->data;
 
-  if (st->text)
+  if (st->text) {
     WM_main_add_notifier(NC_TEXT | NA_EDITED, st->text);
+  }
 }
 
 /* Space Properties */
 
 /* note: this function exists only to avoid id refcounting */
-static void rna_SpaceProperties_pin_id_set(PointerRNA *ptr, PointerRNA value)
+static void rna_SpaceProperties_pin_id_set(PointerRNA *ptr,
+                                           PointerRNA value,
+                                           struct ReportList *UNUSED(reports))
 {
   SpaceProperties *sbuts = (SpaceProperties *)(ptr->data);
   sbuts->pinid = value.data;
@@ -1527,8 +1557,9 @@ static StructRNA *rna_SpaceProperties_pin_id_typef(PointerRNA *ptr)
 {
   SpaceProperties *sbuts = (SpaceProperties *)(ptr->data);
 
-  if (sbuts->pinid)
+  if (sbuts->pinid) {
     return ID_code_to_RNA_type(GS(sbuts->pinid->name));
+  }
 
   return &RNA_ID;
 }
@@ -1704,8 +1735,10 @@ static void rna_ConsoleLine_body_set(PointerRNA *ptr, const char *value)
   memcpy(ci->line, value, len + 1);
   ci->len = len;
 
-  if (ci->cursor > len) /* clamp the cursor */
+  if (ci->cursor > len) {
+    /* clamp the cursor */
     ci->cursor = len;
+  }
 }
 
 static void rna_ConsoleLine_cursor_index_range(
@@ -1719,7 +1752,9 @@ static void rna_ConsoleLine_cursor_index_range(
 
 /* Space Dopesheet */
 
-static void rna_SpaceDopeSheetEditor_action_set(PointerRNA *ptr, PointerRNA value)
+static void rna_SpaceDopeSheetEditor_action_set(PointerRNA *ptr,
+                                                PointerRNA value,
+                                                struct ReportList *UNUSED(reports))
 {
   SpaceAction *saction = (SpaceAction *)(ptr->data);
   bAction *act = (bAction *)value.data;
@@ -1732,23 +1767,27 @@ static void rna_SpaceDopeSheetEditor_action_set(PointerRNA *ptr, PointerRNA valu
     /* action to set must strictly meet the mode criteria... */
     if (saction->mode == SACTCONT_ACTION) {
       /* currently, this is "object-level" only, until we have some way of specifying this */
-      if (act->idroot == ID_OB)
+      if (act->idroot == ID_OB) {
         saction->action = act;
-      else
+      }
+      else {
         printf(
             "ERROR: cannot assign Action '%s' to Action Editor, as action is not object-level "
             "animation\n",
             act->id.name + 2);
+      }
     }
     else if (saction->mode == SACTCONT_SHAPEKEY) {
       /* as the name says, "shapekey-level" only... */
-      if (act->idroot == ID_KE)
+      if (act->idroot == ID_KE) {
         saction->action = act;
-      else
+      }
+      else {
         printf(
             "ERROR: cannot assign Action '%s' to Shape Key Editor, as action doesn't animate "
             "Shape Keys\n",
             act->id.name + 2);
+      }
     }
     else {
       printf(
@@ -1775,8 +1814,9 @@ static void rna_SpaceDopeSheetEditor_action_update(bContext *C, PointerRNA *ptr)
     }
     else if (saction->mode == SACTCONT_SHAPEKEY) {
       Key *key = BKE_key_from_object(obact);
-      if (key)
+      if (key) {
         adt = BKE_animdata_add_id(&key->id); /* this only adds if non-existent */
+      }
     }
 
     /* set action */
@@ -1848,10 +1888,12 @@ static void rna_SpaceDopeSheetEditor_mode_update(bContext *C, PointerRNA *ptr)
     Key *key = BKE_key_from_object(obact);
 
     /* 1) update the action stored for the editor */
-    if (key)
+    if (key) {
       saction->action = (key->adt) ? key->adt->action : NULL;
-    else
+    }
+    else {
       saction->action = NULL;
+    }
 
     /* 2) enable 'show sliders' by default, since one of the main
      *    points of the ShapeKey Editor is to provide a one-stop shop
@@ -1863,10 +1905,12 @@ static void rna_SpaceDopeSheetEditor_mode_update(bContext *C, PointerRNA *ptr)
   else if (saction->mode == SACTCONT_ACTION) {
     /* 1) update the action stored for the editor */
     /* TODO: context selector could help decide this with more control? */
-    if (obact)
+    if (obact) {
       saction->action = (obact->adt) ? obact->adt->action : NULL;
-    else
+    }
+    else {
       saction->action = NULL;
+    }
   }
 
   /* Collapse (and show) summary channel and hide channel list for timeline */
@@ -1941,7 +1985,9 @@ static void rna_Sequencer_view_type_update(Main *UNUSED(bmain),
 
 /* Space Node Editor */
 
-static void rna_SpaceNodeEditor_node_tree_set(PointerRNA *ptr, const PointerRNA value)
+static void rna_SpaceNodeEditor_node_tree_set(PointerRNA *ptr,
+                                              const PointerRNA value,
+                                              struct ReportList *UNUSED(reports))
 {
   SpaceNode *snode = (SpaceNode *)ptr->data;
   ED_node_tree_start(snode, (bNodeTree *)value.data, NULL, NULL);
@@ -1974,10 +2020,12 @@ static void rna_SpaceNodeEditor_tree_type_set(PointerRNA *ptr, int value)
 static bool rna_SpaceNodeEditor_tree_type_poll(void *Cv, bNodeTreeType *type)
 {
   bContext *C = (bContext *)Cv;
-  if (type->poll)
+  if (type->poll) {
     return type->poll(C, type);
-  else
+  }
+  else {
     return true;
+  }
 }
 
 const EnumPropertyItem *RNA_enum_node_tree_types_itemf_impl(bContext *C, bool *r_free)
@@ -2052,7 +2100,9 @@ static void rna_SpaceNodeEditor_cursor_location_from_region(SpaceNode *snode,
   snode->cursor[1] /= UI_DPI_FAC;
 }
 
-static void rna_SpaceClipEditor_clip_set(PointerRNA *ptr, PointerRNA value)
+static void rna_SpaceClipEditor_clip_set(PointerRNA *ptr,
+                                         PointerRNA value,
+                                         struct ReportList *UNUSED(reports))
 {
   SpaceClip *sc = (SpaceClip *)(ptr->data);
   bScreen *screen = (bScreen *)ptr->id.data;
@@ -2060,7 +2110,9 @@ static void rna_SpaceClipEditor_clip_set(PointerRNA *ptr, PointerRNA value)
   ED_space_clip_set_clip(NULL, screen, sc, (MovieClip *)value.data);
 }
 
-static void rna_SpaceClipEditor_mask_set(PointerRNA *ptr, PointerRNA value)
+static void rna_SpaceClipEditor_mask_set(PointerRNA *ptr,
+                                         PointerRNA value,
+                                         struct ReportList *UNUSED(reports))
 {
   SpaceClip *sc = (SpaceClip *)(ptr->data);
 
@@ -2456,11 +2508,15 @@ static void rna_def_space_generic_show_region_toggles(StructRNA *srna, int regio
 
   if (region_type_mask & (1 << RGN_TYPE_TOOL_HEADER)) {
     region_type_mask &= ~(1 << RGN_TYPE_TOOL_HEADER);
-    DEF_SHOW_REGION_PROPERTY(show_region_tool_header, "Tool Header", "");
+    DEF_SHOW_REGION_PROPERTY(show_region_tool_header, "Tool Settings", "");
   }
   if (region_type_mask & (1 << RGN_TYPE_HEADER)) {
     region_type_mask &= ~(1 << RGN_TYPE_HEADER);
     DEF_SHOW_REGION_PROPERTY(show_region_header, "Header", "");
+  }
+  if (region_type_mask & (1 << RGN_TYPE_FOOTER)) {
+    region_type_mask &= ~(1 << RGN_TYPE_FOOTER);
+    DEF_SHOW_REGION_PROPERTY(show_region_footer, "Footer", "");
   }
   if (region_type_mask & (1 << RGN_TYPE_TOOLS)) {
     region_type_mask &= ~(1 << RGN_TYPE_TOOLS);
@@ -2610,7 +2666,7 @@ static void rna_def_space_image_uv(BlenderRNA *brna)
   prop = RNA_def_property(srna, "edge_display_type", PROP_ENUM, PROP_NONE);
   RNA_def_property_enum_sdna(prop, NULL, "dt_uv");
   RNA_def_property_enum_items(prop, dt_uv_items);
-  RNA_def_property_ui_text(prop, "Edge Display Type", "Display type for drawing UV edges");
+  RNA_def_property_ui_text(prop, "Display As", "Display style for UV edges");
   RNA_def_property_update(prop, NC_SPACE | ND_SPACE_IMAGE, NULL);
 
   prop = RNA_def_property(srna, "show_smooth_edges", PROP_BOOLEAN, PROP_NONE);
@@ -2752,25 +2808,60 @@ static void rna_def_space_outliner(BlenderRNA *brna)
   RNA_def_property_boolean_sdna(prop, NULL, "search_flags", SO_FIND_CASE_SENSITIVE);
   RNA_def_property_ui_text(
       prop, "Case Sensitive Matches Only", "Only use case sensitive matches of search string");
-  RNA_def_property_ui_icon(prop, ICON_SYNTAX_OFF, 0);
   RNA_def_property_update(prop, NC_SPACE | ND_SPACE_OUTLINER, NULL);
 
   prop = RNA_def_property(srna, "use_filter_complete", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_sdna(prop, NULL, "search_flags", SO_FIND_COMPLETE);
   RNA_def_property_ui_text(
       prop, "Complete Matches Only", "Only use complete matches of search string");
-  RNA_def_property_ui_icon(prop, ICON_OUTLINER_DATA_FONT, 0);
   RNA_def_property_update(prop, NC_SPACE | ND_SPACE_OUTLINER, NULL);
 
   prop = RNA_def_property(srna, "use_sort_alpha", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_negative_sdna(prop, NULL, "flag", SO_SKIP_SORT_ALPHA);
   RNA_def_property_ui_text(prop, "Sort Alphabetically", "");
-  RNA_def_property_ui_icon(prop, ICON_SORTALPHA, 0);
   RNA_def_property_update(prop, NC_SPACE | ND_SPACE_OUTLINER, NULL);
 
-  prop = RNA_def_property(srna, "show_restrict_columns", PROP_BOOLEAN, PROP_NONE);
-  RNA_def_property_boolean_negative_sdna(prop, NULL, "flag", SO_HIDE_RESTRICTCOLS);
-  RNA_def_property_ui_text(prop, "Show Restriction Columns", "Show column");
+  /* Granular restriction column option. */
+  prop = RNA_def_property(srna, "show_restrict_column_enable", PROP_BOOLEAN, PROP_NONE);
+  RNA_def_property_boolean_sdna(prop, NULL, "show_restrict_flags", SO_RESTRICT_ENABLE);
+  RNA_def_property_ui_text(prop, "Exclude from View Layer", "Exclude from view layer");
+  RNA_def_property_ui_icon(prop, ICON_CHECKBOX_HLT, 0);
+  RNA_def_property_update(prop, NC_SPACE | ND_SPACE_OUTLINER, NULL);
+
+  prop = RNA_def_property(srna, "show_restrict_column_select", PROP_BOOLEAN, PROP_NONE);
+  RNA_def_property_boolean_sdna(prop, NULL, "show_restrict_flags", SO_RESTRICT_SELECT);
+  RNA_def_property_ui_text(prop, "Selectable", "Selectable");
+  RNA_def_property_ui_icon(prop, ICON_RESTRICT_SELECT_OFF, 0);
+  RNA_def_property_update(prop, NC_SPACE | ND_SPACE_OUTLINER, NULL);
+
+  prop = RNA_def_property(srna, "show_restrict_column_hide", PROP_BOOLEAN, PROP_NONE);
+  RNA_def_property_boolean_sdna(prop, NULL, "show_restrict_flags", SO_RESTRICT_HIDE);
+  RNA_def_property_ui_text(prop, "Hide in Viewport", "Temporarily hide in viewport");
+  RNA_def_property_ui_icon(prop, ICON_HIDE_OFF, 0);
+  RNA_def_property_update(prop, NC_SPACE | ND_SPACE_OUTLINER, NULL);
+
+  prop = RNA_def_property(srna, "show_restrict_column_viewport", PROP_BOOLEAN, PROP_NONE);
+  RNA_def_property_boolean_sdna(prop, NULL, "show_restrict_flags", SO_RESTRICT_VIEWPORT);
+  RNA_def_property_ui_text(prop, "Disable in Viewports", "Globally disable in viewports");
+  RNA_def_property_ui_icon(prop, ICON_RESTRICT_VIEW_OFF, 0);
+  RNA_def_property_update(prop, NC_SPACE | ND_SPACE_OUTLINER, NULL);
+
+  prop = RNA_def_property(srna, "show_restrict_column_render", PROP_BOOLEAN, PROP_NONE);
+  RNA_def_property_boolean_sdna(prop, NULL, "show_restrict_flags", SO_RESTRICT_RENDER);
+  RNA_def_property_ui_text(prop, "Disable in Renders", "Globally disable in renders");
+  RNA_def_property_ui_icon(prop, ICON_RESTRICT_RENDER_OFF, 0);
+  RNA_def_property_update(prop, NC_SPACE | ND_SPACE_OUTLINER, NULL);
+
+  prop = RNA_def_property(srna, "show_restrict_column_holdout", PROP_BOOLEAN, PROP_NONE);
+  RNA_def_property_boolean_sdna(prop, NULL, "show_restrict_flags", SO_RESTRICT_HOLDOUT);
+  RNA_def_property_ui_text(prop, "Holdout", "Holdout");
+  RNA_def_property_ui_icon(prop, ICON_HOLDOUT_ON, 0);
+  RNA_def_property_update(prop, NC_SPACE | ND_SPACE_OUTLINER, NULL);
+
+  prop = RNA_def_property(srna, "show_restrict_column_indirect_only", PROP_BOOLEAN, PROP_NONE);
+  RNA_def_property_boolean_sdna(prop, NULL, "show_restrict_flags", SO_RESTRICT_INDIRECT_ONLY);
+  RNA_def_property_ui_text(prop, "Indirect Only", "Indirect only");
+  RNA_def_property_ui_icon(prop, ICON_INDIRECT_ONLY_ON, 0);
   RNA_def_property_update(prop, NC_SPACE | ND_SPACE_OUTLINER, NULL);
 
   /* Filters. */
@@ -3001,6 +3092,7 @@ static void rna_def_space_view3d_shading(BlenderRNA *brna)
   RNA_def_property_enum_items(prop, rna_enum_shading_color_type_items);
   RNA_def_property_enum_funcs(prop, NULL, NULL, "rna_View3DShading_color_type_itemf");
   RNA_def_property_ui_text(prop, "Color", "Color Type");
+  RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
   RNA_def_property_update(prop, NC_SPACE | ND_SPACE_VIEW3D, NULL);
 
   prop = RNA_def_property(srna, "wireframe_color_type", PROP_ENUM, PROP_NONE);
@@ -3276,7 +3368,7 @@ static void rna_def_space_view3d_overlay(BlenderRNA *brna)
   prop = RNA_def_property(srna, "show_look_dev", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_sdna(prop, NULL, "overlay.flag", V3D_OVERLAY_LOOK_DEV);
   RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
-  RNA_def_property_ui_text(prop, "Look Dev Preview", "Show look development balls and palette");
+  RNA_def_property_ui_text(prop, "Look Dev Preview", "Show look development spheres and palette");
   RNA_def_property_update(prop, NC_SPACE | ND_SPACE_VIEW3D, NULL);
 
   prop = RNA_def_property(srna, "show_wireframes", PROP_BOOLEAN, PROP_NONE);
@@ -3335,14 +3427,12 @@ static void rna_def_space_view3d_overlay(BlenderRNA *brna)
 
   prop = RNA_def_property(srna, "show_edges", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_sdna(prop, NULL, "overlay.edit_flag", V3D_OVERLAY_EDIT_EDGES);
-  RNA_def_property_ui_text(
-      prop, "Draw Edges", "Display selected edges using highlights in the 3D view and UV editor");
+  RNA_def_property_ui_text(prop, "Draw Edges", "Display selected edges using highlights");
   RNA_def_property_update(prop, NC_SPACE | ND_SPACE_VIEW3D, NULL);
 
   prop = RNA_def_property(srna, "show_faces", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_sdna(prop, NULL, "overlay.edit_flag", V3D_OVERLAY_EDIT_FACES);
-  RNA_def_property_ui_text(
-      prop, "Draw Faces", "Display all faces as shades in the 3D view and UV editor");
+  RNA_def_property_ui_text(prop, "Draw Faces", "Display shading over all faces");
   RNA_def_property_update(prop, NC_SPACE | ND_SPACE_VIEW3D, NULL);
 
   prop = RNA_def_property(srna, "show_face_center", PROP_BOOLEAN, PROP_NONE);
@@ -4474,7 +4564,7 @@ static void rna_def_space_text(BlenderRNA *brna)
   RNA_def_struct_sdna(srna, "SpaceText");
   RNA_def_struct_ui_text(srna, "Space Text Editor", "Text editor space data");
 
-  rna_def_space_generic_show_region_toggles(srna, (1 << RGN_TYPE_UI));
+  rna_def_space_generic_show_region_toggles(srna, (1 << RGN_TYPE_UI) | (1 << RGN_TYPE_FOOTER));
 
   /* text */
   prop = RNA_def_property(srna, "text", PROP_POINTER, PROP_NONE);
@@ -5147,7 +5237,7 @@ static void rna_def_fileselect_params(BlenderRNA *brna)
        "Show/hide Paint Curve data-blocks"},
       {FILTER_ID_LP,
        "LIGHT_PROBE",
-       ICON_LIGHTPROBE_CUBEMAP,
+       ICON_OUTLINER_DATA_LIGHTPROBE,
        "Light Probes",
        "Show/hide Light Probe data-blocks"},
       {FILTER_ID_SCE, "SCENE", ICON_SCENE_DATA, "Scenes", "Show/hide Scene data-blocks"},

@@ -55,6 +55,7 @@
 #include "DEG_depsgraph_build.h"
 
 #include "UI_view2d.h"
+#include "UI_interface.h"
 
 #include "ED_anim_api.h"
 #include "ED_keyframing.h"
@@ -282,10 +283,18 @@ static int graphkeys_viewall(bContext *C,
                              do_sel_only,
                              include_handles);
 
+  /* Give some more space at the borders. */
   BLI_rctf_scale(&cur_new, 1.1f);
 
-  UI_view2d_smooth_view(C, ac.ar, &cur_new, smooth_viewtx);
+  /* Take regions into account, that could block the view. */
+  float pad_top = UI_TIME_SCRUB_MARGIN_Y;
+  float pad_bottom = 0;
+  if (!BLI_listbase_is_empty(ED_context_get_markers(C))) {
+    pad_bottom = UI_MARKER_MARGIN_Y;
+  }
+  BLI_rctf_pad_y(&cur_new, ac.ar->sizey * UI_DPI_FAC, pad_bottom, pad_top);
 
+  UI_view2d_smooth_view(C, ac.ar, &cur_new, smooth_viewtx);
   return OPERATOR_FINISHED;
 }
 
@@ -932,9 +941,15 @@ static short copy_graph_keys(bAnimContext *ac)
   /* clear buffer first */
   ANIM_fcurves_copybuf_free();
 
-  /* filter data */
+  /* filter data
+   * - First time we try to filter more strictly, allowing only selected channels
+   *   to allow copying animation between channels
+   */
   filter = (ANIMFILTER_DATA_VISIBLE | ANIMFILTER_CURVE_VISIBLE | ANIMFILTER_NODUPLIS);
-  ANIM_animdata_filter(ac, &anim_data, filter, ac->data, ac->datatype);
+
+  if (ANIM_animdata_filter(ac, &anim_data, filter | ANIMFILTER_SEL, ac->data, ac->datatype) == 0) {
+    ANIM_animdata_filter(ac, &anim_data, filter, ac->data, ac->datatype);
+  }
 
   /* copy keyframes */
   ok = copy_animedit_keys(ac, &anim_data);
@@ -1166,9 +1181,7 @@ static bool delete_graph_keys(bAnimContext *ac)
     }
 
     /* Only delete curve too if it won't be doing anything anymore */
-    if ((fcu->totvert == 0) &&
-        (list_has_suitable_fmodifier(&fcu->modifiers, 0, FMI_TYPE_GENERATE_CURVE) == 0) &&
-        (fcu->driver == NULL)) {
+    if (BKE_fcurve_is_empty(fcu)) {
       ANIM_fcurve_delete_from_animdata(ac, adt, fcu);
       ale->key_data = NULL;
     }
@@ -1275,7 +1288,7 @@ void GRAPH_OT_clean(wmOperatorType *ot)
   ot->description = "Simplify F-Curves by removing closely spaced keyframes";
 
   /* api callbacks */
-  //ot->invoke =  // XXX we need that number popup for this!
+  // ot->invoke =  // XXX we need that number popup for this!
   ot->exec = graphkeys_clean_exec;
   ot->poll = graphop_editable_keyframes_poll;
 
@@ -1484,7 +1497,7 @@ static int graphkeys_sound_bake_exec(bContext *C, wmOperator *op)
   return OPERATOR_FINISHED;
 }
 
-#else  //WITH_AUDASPACE
+#else  // WITH_AUDASPACE
 
 static int graphkeys_sound_bake_exec(bContext *UNUSED(C), wmOperator *op)
 {
@@ -1493,7 +1506,7 @@ static int graphkeys_sound_bake_exec(bContext *UNUSED(C), wmOperator *op)
   return OPERATOR_CANCELLED;
 }
 
-#endif  //WITH_AUDASPACE
+#endif  // WITH_AUDASPACE
 
 static int graphkeys_sound_bake_invoke(bContext *C, wmOperator *op, const wmEvent *event)
 {
@@ -2814,6 +2827,7 @@ void GRAPH_OT_fmodifier_add(wmOperatorType *ot)
 
   /* id-props */
   prop = RNA_def_enum(ot->srna, "type", rna_enum_fmodifier_type_items, 0, "Type", "");
+  RNA_def_property_translation_context(prop, BLT_I18NCONTEXT_ID_ACTION);
   RNA_def_enum_funcs(prop, graph_fmodifier_itemf);
   ot->prop = prop;
 

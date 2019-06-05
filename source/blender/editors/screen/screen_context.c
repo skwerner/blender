@@ -69,15 +69,10 @@ const char *screen_context_dir[] = {
     "scene",
     "view_layer",
     "visible_objects",
-    "visible_bases",
     "selectable_objects",
-    "selectable_bases",
     "selected_objects",
-    "selected_bases",
     "editable_objects",
-    "editable_bases",
     "selected_editable_objects",
-    "selected_editable_bases",
     "objects_in_mode",
     "objects_in_mode_unique_data",
     "visible_bones",
@@ -89,7 +84,6 @@ const char *screen_context_dir[] = {
     "selected_pose_bones_from_active_object",
     "active_bone",
     "active_pose_bone",
-    "active_base",
     "active_object",
     "object",
     "edit_object",
@@ -98,7 +92,6 @@ const char *screen_context_dir[] = {
     "weight_paint_object",
     "image_paint_object",
     "particle_edit_object",
-    "uv_sculpt_object",
     "pose_object",
     "sequences",
     "selected_sequences",
@@ -175,52 +168,6 @@ int ed_screen_context(const bContext *C, const char *member, bContextDataResult 
     for (Base *base = view_layer->object_bases.first; base; base = base->next) {
       if (BASE_EDITABLE(v3d, base)) {
         CTX_data_id_list_add(result, &base->object->id);
-      }
-    }
-    CTX_data_type_set(result, CTX_DATA_TYPE_COLLECTION);
-    return 1;
-  }
-  else if (CTX_data_equals(member, "visible_bases")) {
-    for (Base *base = view_layer->object_bases.first; base; base = base->next) {
-      if (BASE_VISIBLE(v3d, base)) {
-        CTX_data_list_add(result, &scene->id, &RNA_ObjectBase, base);
-      }
-    }
-    CTX_data_type_set(result, CTX_DATA_TYPE_COLLECTION);
-    return 1;
-  }
-  else if (CTX_data_equals(member, "selectable_bases")) {
-    for (Base *base = view_layer->object_bases.first; base; base = base->next) {
-      if (BASE_SELECTABLE(v3d, base)) {
-        CTX_data_list_add(result, &scene->id, &RNA_ObjectBase, base);
-      }
-    }
-    CTX_data_type_set(result, CTX_DATA_TYPE_COLLECTION);
-    return 1;
-  }
-  else if (CTX_data_equals(member, "selected_bases")) {
-    for (Base *base = view_layer->object_bases.first; base; base = base->next) {
-      if (BASE_SELECTED(v3d, base)) {
-        CTX_data_list_add(result, &scene->id, &RNA_ObjectBase, base);
-      }
-    }
-    CTX_data_type_set(result, CTX_DATA_TYPE_COLLECTION);
-    return 1;
-  }
-  else if (CTX_data_equals(member, "selected_editable_bases")) {
-    for (Base *base = view_layer->object_bases.first; base; base = base->next) {
-      if (BASE_SELECTED_EDITABLE(v3d, base)) {
-        CTX_data_list_add(result, &scene->id, &RNA_ObjectBase, base);
-      }
-    }
-    CTX_data_type_set(result, CTX_DATA_TYPE_COLLECTION);
-    return 1;
-  }
-  else if (CTX_data_equals(member, "editable_bases")) {
-    /* Visible + Editable, but not necessarily selected */
-    for (Base *base = view_layer->object_bases.first; base; base = base->next) {
-      if (BASE_EDITABLE(v3d, base)) {
-        CTX_data_list_add(result, &scene->id, &RNA_ObjectBase, base);
       }
     }
     CTX_data_type_set(result, CTX_DATA_TYPE_COLLECTION);
@@ -456,13 +403,6 @@ int ed_screen_context(const bContext *C, const char *member, bContextDataResult 
       return 1;
     }
   }
-  else if (CTX_data_equals(member, "active_base")) {
-    if (view_layer->basact) {
-      CTX_data_pointer_set(result, &scene->id, &RNA_ObjectBase, view_layer->basact);
-    }
-
-    return 1;
-  }
   else if (CTX_data_equals(member, "active_object")) {
     if (obact) {
       CTX_data_id_pointer_set(result, &obact->id);
@@ -518,22 +458,6 @@ int ed_screen_context(const bContext *C, const char *member, bContextDataResult 
       CTX_data_id_pointer_set(result, &obact->id);
     }
 
-    return 1;
-  }
-  else if (CTX_data_equals(member, "uv_sculpt_object")) {
-    /* TODO(campbell): most likely we change rules for uv_sculpt. */
-    if (obact && (obact->mode & OB_MODE_EDIT)) {
-      const ToolSettings *ts = scene->toolsettings;
-      if (ts->use_uv_sculpt) {
-        if (ED_uvedit_test(obedit)) {
-          WorkSpace *workspace = CTX_wm_workspace(C);
-          if ((workspace->tools_space_type == SPACE_IMAGE) &&
-              (workspace->tools_mode == SI_MODE_UV)) {
-            CTX_data_id_pointer_set(result, &obact->id);
-          }
-        }
-      }
-    }
     return 1;
   }
   else if (CTX_data_equals(member, "pose_object")) {

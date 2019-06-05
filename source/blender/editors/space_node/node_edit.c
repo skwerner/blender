@@ -453,13 +453,8 @@ void ED_node_shader_default(const bContext *C, ID *id)
       output_type = SH_NODE_OUTPUT_LIGHT;
       shader_type = SH_NODE_EMISSION;
 
-      copy_v3_v3(color, &la->r);
-      if (la->type == LA_LOCAL || la->type == LA_SPOT || la->type == LA_AREA) {
-        strength = 100.0f;
-      }
-      else {
-        strength = 1.0f;
-      }
+      copy_v3_fl3(color, 1.0f, 1.0f, 1.0f);
+      strength = 1.0f;
       break;
     }
     default:
@@ -750,10 +745,11 @@ void ED_node_set_active(Main *bmain, bNodeTree *ntree, bNode *node)
     else if (ntree->type == NTREE_TEXTURE) {
       // XXX
 #if 0
-      if (node->id)
-        ;  // XXX BIF_preview_changed(-1);
-           // allqueue(REDRAWBUTSSHADING, 1);
-           // allqueue(REDRAWIPO, 0);
+      if (node->id) {
+        // XXX BIF_preview_changed(-1);
+        // allqueue(REDRAWBUTSSHADING, 1);
+        // allqueue(REDRAWIPO, 0);
+      }
 #endif
     }
   }
@@ -789,17 +785,21 @@ static int edit_node_invoke_properties(bContext *C, wmOperator *op)
 {
   if (!RNA_struct_property_is_set(op->ptr, "node")) {
     bNode *node = CTX_data_pointer_get_type(C, "node", &RNA_Node).data;
-    if (!node)
+    if (!node) {
       return 0;
-    else
+    }
+    else {
       RNA_string_set(op->ptr, "node", node->name);
+    }
   }
 
-  if (!RNA_struct_property_is_set(op->ptr, "in_out"))
+  if (!RNA_struct_property_is_set(op->ptr, "in_out")) {
     RNA_enum_set(op->ptr, "in_out", SOCK_IN);
+  }
 
-  if (!RNA_struct_property_is_set(op->ptr, "socket"))
+  if (!RNA_struct_property_is_set(op->ptr, "socket")) {
     RNA_int_set(op->ptr, "socket", 0);
+  }
 
   return 1;
 }
@@ -828,12 +828,15 @@ static void edit_node_properties_get(
       break;
   }
 
-  if (rnode)
+  if (rnode) {
     *rnode = node;
-  if (rsock)
+  }
+  if (rsock) {
     *rsock = sock;
-  if (rin_out)
+  }
+  if (rin_out) {
     *rin_out = in_out;
+  }
 }
 #endif
 

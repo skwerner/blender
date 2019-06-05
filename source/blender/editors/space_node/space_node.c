@@ -617,7 +617,7 @@ static void node_main_region_init(wmWindowManager *wm, ARegion *ar)
   WM_event_add_keymap_handler(&ar->handlers, keymap);
 
   keymap = WM_keymap_ensure(wm->defaultconf, "Node Editor", SPACE_NODE, 0);
-  WM_event_add_keymap_handler_bb(&ar->handlers, keymap, &ar->v2d.mask, &ar->winrct);
+  WM_event_add_keymap_handler_v2d_mask(&ar->handlers, keymap);
 
   /* add drop boxes */
   lb = WM_dropboxmap_find("Node Editor", SPACE_NODE, RGN_TYPE_WINDOW);
@@ -998,9 +998,10 @@ void ED_spacetype_node(void)
   /* regions: listview/buttons */
   art = MEM_callocN(sizeof(ARegionType), "spacetype node region");
   art->regionid = RGN_TYPE_UI;
-  art->prefsizex = 180;  // XXX
+  art->prefsizex = UI_SIDEBAR_PANEL_WIDTH;
   art->keymapflag = ED_KEYMAP_UI | ED_KEYMAP_FRAMES;
   art->listener = node_region_listener;
+  art->message_subscribe = ED_area_do_mgs_subscribe_for_tool_ui;
   art->init = node_buttons_region_init;
   art->draw = node_buttons_region_draw;
   BLI_addhead(&st->regiontypes, art);

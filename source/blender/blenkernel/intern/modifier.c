@@ -36,6 +36,7 @@
 #include "DNA_armature_types.h"
 #include "DNA_mesh_types.h"
 #include "DNA_object_types.h"
+#include "DNA_scene_types.h"
 
 #include "BLI_utildefines.h"
 #include "BLI_listbase.h"
@@ -501,7 +502,8 @@ bool modifiers_isParticleEnabled(Object *ob)
 /**
  * Check whether is enabled.
  *
- * \param scene: Current scene, may be NULL, in which case isDisabled callback of the modifier is never called.
+ * \param scene: Current scene, may be NULL,
+ * in which case isDisabled callback of the modifier is never called.
  */
 bool modifier_isEnabled(const struct Scene *scene, ModifierData *md, int required_mode)
 {
@@ -656,7 +658,7 @@ Object *modifiers_isDeformedByArmature(Object *ob)
   for (; md; md = md->next) {
     if (md->type == eModifierType_Armature) {
       amd = (ArmatureModifierData *)md;
-      if (amd->object && (amd->object->flag & SELECT)) {
+      if (amd->object && (amd->object->base_flag & BASE_SELECTED)) {
         return amd->object;
       }
     }
@@ -679,7 +681,7 @@ Object *modifiers_isDeformedByMeshDeform(Object *ob)
   for (; md; md = md->next) {
     if (md->type == eModifierType_MeshDeform) {
       mdmd = (MeshDeformModifierData *)md;
-      if (mdmd->object && (mdmd->object->flag & SELECT)) {
+      if (mdmd->object && (mdmd->object->base_flag & BASE_SELECTED)) {
         return mdmd->object;
       }
     }
@@ -705,7 +707,7 @@ Object *modifiers_isDeformedByLattice(Object *ob)
   for (; md; md = md->next) {
     if (md->type == eModifierType_Lattice) {
       lmd = (LatticeModifierData *)md;
-      if (lmd->object && (lmd->object->flag & SELECT)) {
+      if (lmd->object && (lmd->object->base_flag & BASE_SELECTED)) {
         return lmd->object;
       }
     }
@@ -731,7 +733,7 @@ Object *modifiers_isDeformedByCurve(Object *ob)
   for (; md; md = md->next) {
     if (md->type == eModifierType_Curve) {
       cmd = (CurveModifierData *)md;
-      if (cmd->object && (cmd->object->flag & SELECT)) {
+      if (cmd->object && (cmd->object->base_flag & BASE_SELECTED)) {
         return cmd->object;
       }
     }
@@ -929,10 +931,11 @@ void modwrap_deformVertsEM(ModifierData *md,
 /**
  * Get evaluated mesh for other evaluated object, which is used as an operand for the modifier,
  * e.g. second operand for boolean modifier.
- * Note that modifiers in stack always get fully evaluated COW ID pointers, never original ones. Makes things simpler.
+ * Note that modifiers in stack always get fully evaluated COW ID pointers,
+ * never original ones. Makes things simpler.
  *
- * \param get_cage_mesh Return evaluated mesh with only deforming modifiers applied
- *                      (i.e. mesh topology remains the same as original one, a.k.a. 'cage' mesh).
+ * \param get_cage_mesh: Return evaluated mesh with only deforming modifiers applied
+ * (i.e. mesh topology remains the same as original one, a.k.a. 'cage' mesh).
  */
 Mesh *BKE_modifier_get_evaluated_mesh_from_evaluated_object(Object *ob_eval,
                                                             const bool get_cage_mesh)
@@ -942,8 +945,8 @@ Mesh *BKE_modifier_get_evaluated_mesh_from_evaluated_object(Object *ob_eval,
   if ((ob_eval->type == OB_MESH) && (ob_eval->mode & OB_MODE_EDIT)) {
     /* In EditMode, evaluated mesh is stored in BMEditMesh, not the object... */
     BMEditMesh *em = BKE_editmesh_from_object(ob_eval);
-    if (em !=
-        NULL) { /* em might not exist yet in some cases, just after loading a .blend file, see T57878. */
+    /* 'em' might not exist yet in some cases, just after loading a .blend file, see T57878. */
+    if (em != NULL) {
       me = (get_cage_mesh && em->mesh_eval_cage != NULL) ? em->mesh_eval_cage :
                                                            em->mesh_eval_final;
     }

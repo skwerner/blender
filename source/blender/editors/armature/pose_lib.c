@@ -77,7 +77,9 @@ static void action_set_activemarker(void *UNUSED(a), void *UNUSED(b), void *UNUS
 }
 
 /* ************************************************************* */
-/* == POSE-LIBRARY TOOL FOR BLENDER ==
+/**
+ * Pose-Library Tool for Blender
+ * =============================
  *
  * Overview:
  *  This tool allows animators to store a set of frequently used poses to dump into
@@ -85,13 +87,13 @@ static void action_set_activemarker(void *UNUSED(a), void *UNUSED(b), void *UNUS
  *  It acts as a kind of "glorified clipboard for poses", allowing for naming of poses.
  *
  * Features:
- * - PoseLibs are simply normal Actions
- * - Each "pose" is simply a set of keyframes that occur on a particular frame
- *   -> a set of TimeMarkers that belong to each Action, help 'label' where a 'pose' can be
- *      found in the Action
+ * - PoseLibs are simply normal Actions.
+ * - Each "pose" is simply a set of keyframes that occur on a particular frame.
+ *   - A set of TimeMarkers that belong to each Action, help 'label' where a 'pose' can be
+ *     found in the Action.
  * - The Scrollwheel or PageUp/Down buttons when used in a special mode or after pressing/holding
- *   [a modifier] key, cycles through the poses available for the active pose's poselib, allowing the
- *   animator to preview what action best suits that pose
+ *   [a modifier] key, cycles through the poses available for the active pose's poselib,
+ *   allowing the animator to preview what action best suits that pose.
  */
 /* ************************************************************* */
 
@@ -1016,7 +1018,6 @@ static void poselib_backup_free_data(tPoseLib_PreviewData *pld)
     /* free custom data */
     if (plb->oldprops) {
       IDP_FreeProperty(plb->oldprops);
-      MEM_freeN(plb->oldprops);
     }
 
     /* free backup element now */
@@ -1453,7 +1454,7 @@ static int poselib_preview_handle_event(bContext *UNUSED(C), wmOperator *op, con
       case PADMINUS:
       case MIDDLEMOUSE:
       case MOUSEMOVE:
-        //pld->redraw = PL_PREVIEW_REDRAWHEADER;
+        // pld->redraw = PL_PREVIEW_REDRAWHEADER;
         ret = OPERATOR_PASS_THROUGH;
         break;
 
@@ -1585,7 +1586,7 @@ static int poselib_preview_handle_event(bContext *UNUSED(C), wmOperator *op, con
      */
     case MIDDLEMOUSE:
     case MOUSEMOVE:
-      //pld->redraw = PL_PREVIEW_REDRAWHEADER;
+      // pld->redraw = PL_PREVIEW_REDRAWHEADER;
       ret = OPERATOR_PASS_THROUGH;
       break;
 
@@ -1608,7 +1609,7 @@ static int poselib_preview_handle_event(bContext *UNUSED(C), wmOperator *op, con
       }
       else {
         /* view manipulation (see above) */
-        //pld->redraw = PL_PREVIEW_REDRAWHEADER;
+        // pld->redraw = PL_PREVIEW_REDRAWHEADER;
         ret = OPERATOR_PASS_THROUGH;
       }
       break;
@@ -1746,7 +1747,7 @@ static void poselib_preview_cleanup(bContext *C, wmOperator *op)
 
     /* updates */
     if (IS_AUTOKEY_MODE(scene, NORMAL)) {
-      //remake_action_ipos(ob->action);
+      // remake_action_ipos(ob->action);
     }
     else {
       BKE_pose_where_is(CTX_data_depsgraph(C), scene, ob);

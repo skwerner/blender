@@ -29,6 +29,8 @@
 #include "BLI_listbase.h"
 #include "BLI_string.h"
 
+#include "BLT_translation.h"
+
 #include "DNA_listBase.h"
 #include "DNA_windowmanager_types.h"
 
@@ -135,7 +137,8 @@ static void undosys_id_ref_store(void *UNUSED(user_data), UndoRefID *id_ref)
 
 static void undosys_id_ref_resolve(void *user_data, UndoRefID *id_ref)
 {
-  /* Note: we could optimize this, for now it's not too bad since it only runs when we access undo! */
+  /* Note: we could optimize this,
+   * for now it's not too bad since it only runs when we access undo! */
   Main *bmain = user_data;
   ListBase *lb = which_libbase(bmain, GS(id_ref->name));
   for (ID *id = lb->first; id; id = id->next) {
@@ -154,7 +157,8 @@ static bool undosys_step_encode(bContext *C, Main *bmain, UndoStack *ustack, Und
   UNDO_NESTED_CHECK_END;
   if (ok) {
     if (us->type->step_foreach_ID_ref != NULL) {
-      /* Don't use from context yet because sometimes context is fake and not all members are filled in. */
+      /* Don't use from context yet because sometimes context is fake and
+       * not all members are filled in. */
       us->type->step_foreach_ID_ref(us, undosys_id_ref_store, bmain);
     }
 #ifdef WITH_GLOBAL_UNDO_CORRECT_ORDER
@@ -193,7 +197,8 @@ static void undosys_step_decode(bContext *C, Main *bmain, UndoStack *ustack, Und
       }
     }
 #endif
-    /* Don't use from context yet because sometimes context is fake and not all members are filled in. */
+    /* Don't use from context yet because sometimes context is fake and
+     * not all members are filled in. */
     us->type->step_foreach_ID_ref(us, undosys_id_ref_resolve, bmain);
   }
 
@@ -334,7 +339,7 @@ static bool undosys_stack_push_main(UndoStack *ustack, const char *name, struct 
 void BKE_undosys_stack_init_from_main(UndoStack *ustack, struct Main *bmain)
 {
   UNDO_NESTED_ASSERT(false);
-  undosys_stack_push_main(ustack, "original", bmain);
+  undosys_stack_push_main(ustack, IFACE_("Original"), bmain);
 }
 
 /* called after 'BKE_undosys_stack_init_from_main' */
@@ -342,7 +347,7 @@ void BKE_undosys_stack_init_from_context(UndoStack *ustack, bContext *C)
 {
   const UndoType *ut = BKE_undosys_type_from_context(C);
   if ((ut != NULL) && (ut != BKE_UNDOSYS_TYPE_MEMFILE)) {
-    BKE_undosys_step_push_with_type(ustack, C, "original mode", ut);
+    BKE_undosys_step_push_with_type(ustack, C, IFACE_("Original Mode"), ut);
   }
 }
 
@@ -429,7 +434,8 @@ void BKE_undosys_stack_limit_steps_and_memory(UndoStack *ustack, int steps, size
       }
     }
 #endif
-    /* Free from first to last, free functions may update de-duplication info (see #MemFileUndoStep). */
+    /* Free from first to last, free functions may update de-duplication info
+     * (see #MemFileUndoStep). */
     undosys_stack_clear_all_first(ustack, us->prev);
 
 #ifdef WITH_GLOBAL_UNDO_KEEP_ONE

@@ -351,7 +351,9 @@ static StructRNA *rna_ConstraintType_refine(struct PointerRNA *ptr)
   }
 }
 
-static void rna_ConstraintTargetBone_target_set(PointerRNA *ptr, PointerRNA value)
+static void rna_ConstraintTargetBone_target_set(PointerRNA *ptr,
+                                                PointerRNA value,
+                                                struct ReportList *UNUSED(reports))
 {
   bConstraintTarget *tgt = (bConstraintTarget *)ptr->data;
   Object *ob = value.data;
@@ -379,8 +381,9 @@ static void rna_Constraint_name_set(PointerRNA *ptr, const char *value)
     ListBase *list = get_constraint_lb(ob, con, NULL);
 
     /* if we have the list, check for unique name, otherwise give up */
-    if (list)
+    if (list) {
       BKE_constraint_unique_name(con, list);
+    }
   }
 
   /* fix all the animation data which may link to this */
@@ -392,11 +395,12 @@ static char *rna_Constraint_do_compute_path(Object *ob, bConstraint *con)
   bPoseChannel *pchan;
   ListBase *lb = get_constraint_lb(ob, con, &pchan);
 
-  if (lb == NULL)
+  if (lb == NULL) {
     printf("%s: internal error, constraint '%s' not found in object '%s'\n",
            __func__,
            con->name,
            ob->id.name);
+  }
 
   if (pchan) {
     char name_esc_pchan[sizeof(pchan->name) * 2];
@@ -489,8 +493,9 @@ static void rna_Constraint_influence_update(Main *bmain, Scene *scene, PointerRN
 {
   Object *ob = ptr->id.data;
 
-  if (ob->pose)
+  if (ob->pose) {
     ob->pose->flag |= (POSE_LOCKED | POSE_DO_UNLOCK);
+  }
 
   rna_Constraint_update(bmain, scene, ptr);
 }
@@ -521,10 +526,13 @@ static const EnumPropertyItem *rna_Constraint_owner_space_itemf(bContext *UNUSED
   Object *ob = (Object *)ptr->id.data;
   bConstraint *con = (bConstraint *)ptr->data;
 
-  if (BLI_findindex(&ob->constraints, con) == -1)
+  if (BLI_findindex(&ob->constraints, con) == -1) {
     return owner_space_pchan_items;
-  else /* object */
+  }
+  else {
+    /* object */
     return space_object_items;
+  }
 }
 
 static const EnumPropertyItem *rna_Constraint_target_space_itemf(bContext *UNUSED(C),
@@ -540,15 +548,19 @@ static const EnumPropertyItem *rna_Constraint_target_space_itemf(bContext *UNUSE
   if (cti && cti->get_constraint_targets) {
     cti->get_constraint_targets(con, &targets);
 
-    for (ct = targets.first; ct; ct = ct->next)
-      if (ct->tar && ct->tar->type == OB_ARMATURE)
+    for (ct = targets.first; ct; ct = ct->next) {
+      if (ct->tar && ct->tar->type == OB_ARMATURE) {
         break;
+      }
+    }
 
-    if (cti->flush_constraint_targets)
+    if (cti->flush_constraint_targets) {
       cti->flush_constraint_targets(con, &targets, 1);
+    }
 
-    if (ct)
+    if (ct) {
       return target_space_pchan_items;
+    }
   }
 
   return space_object_items;
@@ -614,10 +626,12 @@ static int rna_SplineIKConstraint_joint_bindings_get_length(PointerRNA *ptr,
   bConstraint *con = (bConstraint *)ptr->data;
   bSplineIKConstraint *ikData = (bSplineIKConstraint *)con->data;
 
-  if (ikData)
+  if (ikData) {
     length[0] = ikData->numpoints;
-  else
+  }
+  else {
     length[0] = 256; /* for raw_access, untested */
+  }
 
   return length[0];
 }
@@ -665,7 +679,9 @@ static bool rna_Constraint_cameraObject_poll(PointerRNA *ptr, PointerRNA value)
   return 0;
 }
 
-static void rna_Constraint_followTrack_camera_set(PointerRNA *ptr, PointerRNA value)
+static void rna_Constraint_followTrack_camera_set(PointerRNA *ptr,
+                                                  PointerRNA value,
+                                                  struct ReportList *UNUSED(reports))
 {
   bConstraint *con = (bConstraint *)ptr->data;
   bFollowTrackConstraint *data = (bFollowTrackConstraint *)con->data;
@@ -682,7 +698,9 @@ static void rna_Constraint_followTrack_camera_set(PointerRNA *ptr, PointerRNA va
   }
 }
 
-static void rna_Constraint_followTrack_depthObject_set(PointerRNA *ptr, PointerRNA value)
+static void rna_Constraint_followTrack_depthObject_set(PointerRNA *ptr,
+                                                       PointerRNA value,
+                                                       struct ReportList *UNUSED(reports))
 {
   bConstraint *con = (bConstraint *)ptr->data;
   bFollowTrackConstraint *data = (bFollowTrackConstraint *)con->data;
@@ -712,7 +730,9 @@ static bool rna_Constraint_followTrack_depthObject_poll(PointerRNA *ptr, Pointer
   return 0;
 }
 
-static void rna_Constraint_objectSolver_camera_set(PointerRNA *ptr, PointerRNA value)
+static void rna_Constraint_objectSolver_camera_set(PointerRNA *ptr,
+                                                   PointerRNA value,
+                                                   struct ReportList *UNUSED(reports))
 {
   bConstraint *con = (bConstraint *)ptr->data;
   bObjectSolverConstraint *data = (bObjectSolverConstraint *)con->data;
@@ -727,22 +747,6 @@ static void rna_Constraint_objectSolver_camera_set(PointerRNA *ptr, PointerRNA v
   else {
     data->camera = NULL;
   }
-}
-
-static void rna_Constraint_transformCache_object_path_update(Main *bmain,
-                                                             Scene *scene,
-                                                             PointerRNA *ptr)
-{
-#  ifdef WITH_ALEMBIC
-  bConstraint *con = (bConstraint *)ptr->data;
-  bTransformCacheConstraint *data = (bTransformCacheConstraint *)con->data;
-  Object *ob = (Object *)ptr->id.data;
-
-  data->reader = CacheReader_open_alembic_object(
-      data->cache_file->handle, data->reader, ob, data->object_path);
-#  endif
-
-  rna_Constraint_update(bmain, scene, ptr);
 }
 
 #else
@@ -1343,6 +1347,13 @@ static void rna_def_constraint_size_like(BlenderRNA *brna)
   RNA_def_property_ui_text(prop, "Copy Z", "Copy the target's Z scale");
   RNA_def_property_update(prop, NC_OBJECT | ND_CONSTRAINT, "rna_Constraint_update");
 
+  prop = RNA_def_property(srna, "power", PROP_FLOAT, PROP_NONE);
+  RNA_def_property_float_sdna(prop, NULL, "power");
+  RNA_def_property_float_default(prop, 1.0f);
+  RNA_def_property_ui_range(prop, -FLT_MAX, FLT_MAX, 1, 3);
+  RNA_def_property_ui_text(prop, "Power", "Raise the target's scale to the specified power");
+  RNA_def_property_update(prop, NC_OBJECT | ND_CONSTRAINT, "rna_Constraint_update");
+
   prop = RNA_def_property(srna, "use_offset", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_sdna(prop, NULL, "flag", SIZELIKE_OFFSET);
   RNA_def_property_ui_text(prop, "Offset", "Combine original scale with copied scale");
@@ -1362,10 +1373,31 @@ static void rna_def_constraint_same_volume(BlenderRNA *brna)
   StructRNA *srna;
   PropertyRNA *prop;
 
-  static const EnumPropertyItem volume_items[] = {
+  static const EnumPropertyItem axis_items[] = {
       {SAMEVOL_X, "SAMEVOL_X", 0, "X", ""},
       {SAMEVOL_Y, "SAMEVOL_Y", 0, "Y", ""},
       {SAMEVOL_Z, "SAMEVOL_Z", 0, "Z", ""},
+      {0, NULL, 0, NULL, NULL},
+  };
+
+  static const EnumPropertyItem mode_items[] = {
+      {SAMEVOL_STRICT,
+       "STRICT",
+       0,
+       "Strict",
+       "Volume is strictly preserved, overriding the scaling of non-free axes"},
+      {SAMEVOL_UNIFORM,
+       "UNIFORM",
+       0,
+       "Uniform",
+       "Volume is preserved when the object is scaled uniformly. "
+       "Deviations from uniform scale on non-free axes are passed through"},
+      {SAMEVOL_SINGLE_AXIS,
+       "SINGLE_AXIS",
+       0,
+       "Single Axis",
+       "Volume is preserved when the object is scaled only on the free axis. "
+       "Non-free axis scaling is passed through"},
       {0, NULL, 0, NULL, NULL},
   };
 
@@ -1376,9 +1408,16 @@ static void rna_def_constraint_same_volume(BlenderRNA *brna)
   RNA_def_struct_sdna_from(srna, "bSameVolumeConstraint", "data");
 
   prop = RNA_def_property(srna, "free_axis", PROP_ENUM, PROP_NONE);
-  RNA_def_property_enum_sdna(prop, NULL, "flag");
-  RNA_def_property_enum_items(prop, volume_items);
+  RNA_def_property_enum_sdna(prop, NULL, "free_axis");
+  RNA_def_property_enum_items(prop, axis_items);
   RNA_def_property_ui_text(prop, "Free Axis", "The free scaling axis of the object");
+  RNA_def_property_update(prop, NC_OBJECT | ND_CONSTRAINT, "rna_Constraint_update");
+
+  prop = RNA_def_property(srna, "mode", PROP_ENUM, PROP_NONE);
+  RNA_def_property_enum_sdna(prop, NULL, "mode");
+  RNA_def_property_enum_items(prop, mode_items);
+  RNA_def_property_ui_text(
+      prop, "Mode", "The way the constraint treats original non-free axis scaling");
   RNA_def_property_update(prop, NC_OBJECT | ND_CONSTRAINT, "rna_Constraint_update");
 
   prop = RNA_def_property(srna, "volume", PROP_FLOAT, PROP_DISTANCE);
@@ -2592,6 +2631,13 @@ static void rna_def_constraint_spline_ik(BlenderRNA *brna)
                            "on top of the shape and scaling of the curve itself");
   RNA_def_property_update(prop, NC_OBJECT | ND_CONSTRAINT, "rna_Constraint_update");
 
+  /* take original scaling of the bone into account in volume preservation */
+  prop = RNA_def_property(srna, "use_original_scale", PROP_BOOLEAN, PROP_NONE);
+  RNA_def_property_boolean_sdna(prop, NULL, "flag", CONSTRAINT_SPLINEIK_USE_ORIGINAL_SCALE);
+  RNA_def_property_ui_text(
+      prop, "Use Original Scale", "Apply volume preservation over the original scaling");
+  RNA_def_property_update(prop, NC_OBJECT | ND_CONSTRAINT, "rna_Constraint_update");
+
   /* volume presevation for "volumetric" scale mode */
   prop = RNA_def_property(srna, "bulge", PROP_FLOAT, PROP_NONE);
   RNA_def_property_range(prop, 0.0, 100.f);
@@ -2902,7 +2948,7 @@ static void rna_def_constraint_transform_cache(BlenderRNA *brna)
       prop,
       "Object Path",
       "Path to the object in the Alembic archive used to lookup the transform matrix");
-  RNA_def_property_update(prop, 0, "rna_Constraint_transformCache_object_path_update");
+  RNA_def_property_update(prop, 0, "rna_Constraint_update");
 }
 
 /* base struct for constraints */

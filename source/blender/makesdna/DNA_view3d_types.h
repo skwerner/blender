@@ -432,6 +432,7 @@ enum {
   V3D_SHADING_SINGLE_COLOR = 2,
   V3D_SHADING_TEXTURE_COLOR = 3,
   V3D_SHADING_OBJECT_COLOR = 4,
+  V3D_SHADING_VERTEX_COLOR = 5,
 };
 
 /** #View3DShading.background_type */
@@ -578,6 +579,13 @@ enum {
   /** Also used for ortho size. */
   V3D_GIZMO_SHOW_CAMERA_LENS = (1 << 0),
   V3D_GIZMO_SHOW_CAMERA_DOF_DIST = (1 << 2),
+};
+
+/** Settings for offscreen rendering */
+enum {
+  V3D_OFSDRAW_NONE = (0),
+  V3D_OFSDRAW_SHOW_ANNOTATION = (1 << 0),
+  V3D_OFSDRAW_OVERRIDE_SCENE_SETTINGS = (1 << 1),
 };
 
 #define RV3D_CAMZOOM_MIN -30

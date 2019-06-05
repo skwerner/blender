@@ -78,7 +78,7 @@ class GHOST_SystemX11 : public GHOST_System {
  public:
   /**
    * Constructor
-   * this class should only be instanciated by GHOST_ISystem.
+   * this class should only be instantiated by GHOST_ISystem.
    */
 
   GHOST_SystemX11();
@@ -89,11 +89,6 @@ class GHOST_SystemX11 : public GHOST_System {
   ~GHOST_SystemX11();
 
   GHOST_TSuccess init();
-
-  /**
-   * Informs if the system provides native dialogs (eg. confirm quit)
-   */
-  virtual bool supportsNativeDialogs(void);
 
   /**
    * \section Interface Inherited from GHOST_ISystem
@@ -128,7 +123,8 @@ class GHOST_SystemX11 : public GHOST_System {
    * Create a new window.
    * The new window is added to the list of windows managed.
    * Never explicitly delete the window, use disposeWindow() instead.
-   * \param   title   The name of the window (displayed in the title bar of the window if the OS supports it).
+   * \param   title   The name of the window
+   * (displayed in the title bar of the window if the OS supports it).
    * \param   left        The coordinate of the left edge of the window.
    * \param   top     The coordinate of the top edge of the window.
    * \param   width       The width the window.
@@ -241,7 +237,8 @@ class GHOST_SystemX11 : public GHOST_System {
    * Creates a drag'n'drop event and pushes it immediately onto the event queue.
    * Called by GHOST_DropTargetX11 class.
    * \param eventType The type of drag'n'drop event
-   * \param draggedObjectType The type object concerned (currently array of file names, string, ?bitmap)
+   * \param draggedObjectType The type object concerned
+   * (currently array of file names, string, ?bitmap)
    * \param mouseX x mouse coordinate (in window coordinates)
    * \param mouseY y mouse coordinate
    * \param window The window on which the event occurred

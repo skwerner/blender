@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+#include "render/colorspace.h"
 #include "render/film.h"
 #include "render/image.h"
 #include "render/integrator.h"
@@ -207,13 +208,15 @@ NODE_DEFINE(ImageTextureNode)
   TEXTURE_MAPPING_DEFINE(ImageTextureNode);
 
   SOCKET_STRING(filename, "Filename", ustring());
+  SOCKET_STRING(colorspace, "Colorspace", u_colorspace_auto);
 
-  static NodeEnum color_space_enum;
-  color_space_enum.insert("none", NODE_COLOR_SPACE_NONE);
-  color_space_enum.insert("color", NODE_COLOR_SPACE_COLOR);
-  SOCKET_ENUM(color_space, "Color Space", color_space_enum, NODE_COLOR_SPACE_COLOR);
-
-  SOCKET_BOOLEAN(use_alpha, "Use Alpha", true);
+  static NodeEnum alpha_type_enum;
+  alpha_type_enum.insert("auto", IMAGE_ALPHA_AUTO);
+  alpha_type_enum.insert("unassociated", IMAGE_ALPHA_UNASSOCIATED);
+  alpha_type_enum.insert("associated", IMAGE_ALPHA_ASSOCIATED);
+  alpha_type_enum.insert("channel_packed", IMAGE_ALPHA_CHANNEL_PACKED);
+  alpha_type_enum.insert("ignore", IMAGE_ALPHA_IGNORE);
+  SOCKET_ENUM(alpha_type, "Alpha Type", alpha_type_enum, IMAGE_ALPHA_AUTO);
 
   static NodeEnum interpolation_enum;
   interpolation_enum.insert("closest", INTERPOLATION_CLOSEST);
@@ -250,7 +253,8 @@ ImageTextureNode::ImageTextureNode() : ImageSlotTextureNode(node_type)
   image_manager = NULL;
   slot = -1;
   is_float = -1;
-  is_linear = false;
+  compress_as_srgb = false;
+  colorspace = u_colorspace_raw;
   builtin_data = NULL;
   animated = false;
 }
@@ -259,18 +263,17 @@ ImageTextureNode::~ImageTextureNode()
 {
   if (image_manager) {
     image_manager->remove_image(
-        filename.string(), builtin_data, interpolation, extension, use_alpha);
+        filename.string(), builtin_data, interpolation, extension, alpha_type, colorspace);
   }
 }
 
 ShaderNode *ImageTextureNode::clone() const
 {
-  ImageTextureNode *node = new ImageTextureNode(*this);
-  node->image_manager = NULL;
-  node->slot = -1;
-  node->is_float = -1;
-  node->is_linear = false;
-  return node;
+  /* Increase image user count for new node. */
+  if (slot != -1) {
+    image_manager->add_image_user(slot);
+  }
+  return new ImageTextureNode(*this);
 }
 
 void ImageTextureNode::attributes(Shader *shader, AttributeRequestSet *attributes)
@@ -303,15 +306,30 @@ void ImageTextureNode::compile(SVMCompiler &compiler)
                                     0,
                                     interpolation,
                                     extension,
-                                    use_alpha,
+                                    alpha_type,
+                                    colorspace,
                                     metadata);
     is_float = metadata.is_float;
-    is_linear = metadata.is_linear;
+    compress_as_srgb = metadata.compress_as_srgb;
+    known_colorspace = metadata.colorspace;
   }
 
   if (slot != -1) {
-    int srgb = (is_linear || color_space != NODE_COLOR_SPACE_COLOR) ? 0 : 1;
     int vector_offset = tex_mapping.compile_begin(compiler, vector_in);
+    uint flags = 0;
+
+    if (compress_as_srgb) {
+      flags |= NODE_IMAGE_COMPRESS_AS_SRGB;
+    }
+    if (!alpha_out->links.empty()) {
+      const bool unassociate_alpha = !(ColorSpaceManager::colorspace_is_data(colorspace) ||
+                                       alpha_type == IMAGE_ALPHA_CHANNEL_PACKED ||
+                                       alpha_type == IMAGE_ALPHA_IGNORE);
+
+      if (unassociate_alpha) {
+        flags |= NODE_IMAGE_ALPHA_UNASSOCIATE;
+      }
+    }
 
     if (projection != NODE_IMAGE_PROJ_BOX) {
       compiler.add_node(NODE_TEX_IMAGE,
@@ -319,7 +337,7 @@ void ImageTextureNode::compile(SVMCompiler &compiler)
                         compiler.encode_uchar4(vector_offset,
                                                compiler.stack_assign_if_linked(color_out),
                                                compiler.stack_assign_if_linked(alpha_out),
-                                               srgb),
+                                               flags),
                         projection);
     }
     else {
@@ -328,7 +346,7 @@ void ImageTextureNode::compile(SVMCompiler &compiler)
                         compiler.encode_uchar4(vector_offset,
                                                compiler.stack_assign_if_linked(color_out),
                                                compiler.stack_assign_if_linked(alpha_out),
-                                               srgb),
+                                               flags),
                         __float_as_int(projection_blend));
     }
 
@@ -358,7 +376,7 @@ void ImageTextureNode::compile(OSLCompiler &compiler)
   if (is_float == -1) {
     ImageMetaData metadata;
     if (builtin_data == NULL) {
-      image_manager->get_image_metadata(filename.string(), NULL, metadata);
+      image_manager->get_image_metadata(filename.string(), NULL, colorspace, metadata);
     }
     else {
       slot = image_manager->add_image(filename.string(),
@@ -367,33 +385,32 @@ void ImageTextureNode::compile(OSLCompiler &compiler)
                                       0,
                                       interpolation,
                                       extension,
-                                      use_alpha,
+                                      alpha_type,
+                                      colorspace,
                                       metadata);
     }
     is_float = metadata.is_float;
-    is_linear = metadata.is_linear;
+    compress_as_srgb = metadata.compress_as_srgb;
+    known_colorspace = metadata.colorspace;
   }
 
   if (slot == -1) {
-    compiler.parameter(this, "filename");
+    compiler.parameter_texture("filename", filename, known_colorspace);
   }
   else {
-    /* TODO(sergey): It's not so simple to pass custom attribute
-     * to the texture() function in order to make builtin images
-     * support more clear. So we use special file name which is
-     * "@i<slot_number>" and check whether file name matches this
-     * mask in the OSLRenderServices::texture().
-     */
-    compiler.parameter("filename", string_printf("@i%d", slot).c_str());
+    compiler.parameter_texture("filename", slot);
   }
-  if (is_linear || color_space != NODE_COLOR_SPACE_COLOR)
-    compiler.parameter("color_space", "linear");
-  else
-    compiler.parameter("color_space", "sRGB");
+
+  const bool unassociate_alpha = !(ColorSpaceManager::colorspace_is_data(colorspace) ||
+                                   alpha_type == IMAGE_ALPHA_CHANNEL_PACKED ||
+                                   alpha_type == IMAGE_ALPHA_IGNORE);
+
   compiler.parameter(this, "projection");
   compiler.parameter(this, "projection_blend");
+  compiler.parameter("compress_as_srgb", compress_as_srgb);
+  compiler.parameter("ignore_alpha", alpha_type == IMAGE_ALPHA_IGNORE);
+  compiler.parameter("unassociate_alpha", !alpha_out->links.empty() && unassociate_alpha);
   compiler.parameter("is_float", is_float);
-  compiler.parameter("use_alpha", !alpha_out->links.empty());
   compiler.parameter(this, "interpolation");
   compiler.parameter(this, "extension");
 
@@ -409,13 +426,15 @@ NODE_DEFINE(EnvironmentTextureNode)
   TEXTURE_MAPPING_DEFINE(EnvironmentTextureNode);
 
   SOCKET_STRING(filename, "Filename", ustring());
+  SOCKET_STRING(colorspace, "Colorspace", u_colorspace_auto);
 
-  static NodeEnum color_space_enum;
-  color_space_enum.insert("none", NODE_COLOR_SPACE_NONE);
-  color_space_enum.insert("color", NODE_COLOR_SPACE_COLOR);
-  SOCKET_ENUM(color_space, "Color Space", color_space_enum, NODE_COLOR_SPACE_COLOR);
-
-  SOCKET_BOOLEAN(use_alpha, "Use Alpha", true);
+  static NodeEnum alpha_type_enum;
+  alpha_type_enum.insert("auto", IMAGE_ALPHA_AUTO);
+  alpha_type_enum.insert("unassociated", IMAGE_ALPHA_UNASSOCIATED);
+  alpha_type_enum.insert("associated", IMAGE_ALPHA_ASSOCIATED);
+  alpha_type_enum.insert("channel_packed", IMAGE_ALPHA_CHANNEL_PACKED);
+  alpha_type_enum.insert("ignore", IMAGE_ALPHA_IGNORE);
+  SOCKET_ENUM(alpha_type, "Alpha Type", alpha_type_enum, IMAGE_ALPHA_AUTO);
 
   static NodeEnum interpolation_enum;
   interpolation_enum.insert("closest", INTERPOLATION_CLOSEST);
@@ -442,7 +461,8 @@ EnvironmentTextureNode::EnvironmentTextureNode() : ImageSlotTextureNode(node_typ
   image_manager = NULL;
   slot = -1;
   is_float = -1;
-  is_linear = false;
+  compress_as_srgb = false;
+  colorspace = u_colorspace_raw;
   builtin_data = NULL;
   animated = false;
 }
@@ -451,18 +471,17 @@ EnvironmentTextureNode::~EnvironmentTextureNode()
 {
   if (image_manager) {
     image_manager->remove_image(
-        filename.string(), builtin_data, interpolation, EXTENSION_REPEAT, use_alpha);
+        filename.string(), builtin_data, interpolation, EXTENSION_REPEAT, alpha_type, colorspace);
   }
 }
 
 ShaderNode *EnvironmentTextureNode::clone() const
 {
-  EnvironmentTextureNode *node = new EnvironmentTextureNode(*this);
-  node->image_manager = NULL;
-  node->slot = -1;
-  node->is_float = -1;
-  node->is_linear = false;
-  return node;
+  /* Increase image user count for new node. */
+  if (slot != -1) {
+    image_manager->add_image_user(slot);
+  }
+  return new EnvironmentTextureNode(*this);
 }
 
 void EnvironmentTextureNode::attributes(Shader *shader, AttributeRequestSet *attributes)
@@ -493,22 +512,28 @@ void EnvironmentTextureNode::compile(SVMCompiler &compiler)
                                     0,
                                     interpolation,
                                     EXTENSION_REPEAT,
-                                    use_alpha,
+                                    alpha_type,
+                                    colorspace,
                                     metadata);
     is_float = metadata.is_float;
-    is_linear = metadata.is_linear;
+    compress_as_srgb = metadata.compress_as_srgb;
+    known_colorspace = metadata.colorspace;
   }
 
   if (slot != -1) {
-    int srgb = (is_linear || color_space != NODE_COLOR_SPACE_COLOR) ? 0 : 1;
     int vector_offset = tex_mapping.compile_begin(compiler, vector_in);
+    uint flags = 0;
+
+    if (compress_as_srgb) {
+      flags |= NODE_IMAGE_COMPRESS_AS_SRGB;
+    }
 
     compiler.add_node(NODE_TEX_ENVIRONMENT,
                       slot,
                       compiler.encode_uchar4(vector_offset,
                                              compiler.stack_assign_if_linked(color_out),
                                              compiler.stack_assign_if_linked(alpha_out),
-                                             srgb),
+                                             flags),
                       projection);
 
     tex_mapping.compile_end(compiler, vector_in, vector_offset);
@@ -529,8 +554,6 @@ void EnvironmentTextureNode::compile(SVMCompiler &compiler)
 
 void EnvironmentTextureNode::compile(OSLCompiler &compiler)
 {
-  ShaderOutput *alpha_out = output("Alpha");
-
   tex_mapping.compile(compiler);
 
   /* See comments in ImageTextureNode::compile about support
@@ -540,7 +563,7 @@ void EnvironmentTextureNode::compile(OSLCompiler &compiler)
   if (is_float == -1) {
     ImageMetaData metadata;
     if (builtin_data == NULL) {
-      image_manager->get_image_metadata(filename.string(), NULL, metadata);
+      image_manager->get_image_metadata(filename.string(), NULL, colorspace, metadata);
     }
     else {
       slot = image_manager->add_image(filename.string(),
@@ -549,28 +572,27 @@ void EnvironmentTextureNode::compile(OSLCompiler &compiler)
                                       0,
                                       interpolation,
                                       EXTENSION_REPEAT,
-                                      use_alpha,
+                                      alpha_type,
+                                      colorspace,
                                       metadata);
     }
     is_float = metadata.is_float;
-    is_linear = metadata.is_linear;
+    compress_as_srgb = metadata.compress_as_srgb;
+    known_colorspace = metadata.colorspace;
   }
 
   if (slot == -1) {
-    compiler.parameter(this, "filename");
+    compiler.parameter_texture("filename", filename, known_colorspace);
   }
   else {
-    compiler.parameter("filename", string_printf("@i%d", slot).c_str());
+    compiler.parameter_texture("filename", slot);
   }
-  compiler.parameter(this, "projection");
-  if (is_linear || color_space != NODE_COLOR_SPACE_COLOR)
-    compiler.parameter("color_space", "linear");
-  else
-    compiler.parameter("color_space", "sRGB");
 
+  compiler.parameter(this, "projection");
   compiler.parameter(this, "interpolation");
+  compiler.parameter("compress_as_srgb", compress_as_srgb);
+  compiler.parameter("ignore_alpha", alpha_type == IMAGE_ALPHA_IGNORE);
   compiler.parameter("is_float", is_float);
-  compiler.parameter("use_alpha", !alpha_out->links.empty());
   compiler.add(this, "node_environment_texture");
 }
 
@@ -1080,7 +1102,7 @@ void IESLightNode::compile(OSLCompiler &compiler)
 
   tex_mapping.compile(compiler);
 
-  compiler.parameter("slot", slot);
+  compiler.parameter_texture_ies("filename", slot);
   compiler.add(this, "node_ies_light");
 }
 
@@ -1482,17 +1504,24 @@ PointDensityTextureNode::PointDensityTextureNode() : ShaderNode(node_type)
 PointDensityTextureNode::~PointDensityTextureNode()
 {
   if (image_manager) {
-    image_manager->remove_image(
-        filename.string(), builtin_data, interpolation, EXTENSION_CLIP, true);
+    image_manager->remove_image(filename.string(),
+                                builtin_data,
+                                interpolation,
+                                EXTENSION_CLIP,
+                                IMAGE_ALPHA_AUTO,
+                                ustring());
   }
 }
 
 ShaderNode *PointDensityTextureNode::clone() const
 {
-  PointDensityTextureNode *node = new PointDensityTextureNode(*this);
-  node->image_manager = NULL;
-  node->slot = -1;
-  return node;
+  /* Increase image user count for new node. We need to ensure to not call
+   * add_image again, to work around access of freed data on the Blender
+   * side. A better solution should be found to avoid this. */
+  if (slot != -1) {
+    image_manager->add_image_user(slot);
+  }
+  return new PointDensityTextureNode(*this);
 }
 
 void PointDensityTextureNode::attributes(Shader *shader, AttributeRequestSet *attributes)
@@ -1507,8 +1536,15 @@ void PointDensityTextureNode::add_image()
 {
   if (slot == -1) {
     ImageMetaData metadata;
-    slot = image_manager->add_image(
-        filename.string(), builtin_data, false, 0, interpolation, EXTENSION_CLIP, true, metadata);
+    slot = image_manager->add_image(filename.string(),
+                                    builtin_data,
+                                    false,
+                                    0,
+                                    interpolation,
+                                    EXTENSION_CLIP,
+                                    IMAGE_ALPHA_AUTO,
+                                    u_colorspace_raw,
+                                    metadata);
   }
 }
 
@@ -1567,9 +1603,7 @@ void PointDensityTextureNode::compile(OSLCompiler &compiler)
   if (use_density || use_color) {
     add_image();
 
-    if (slot != -1) {
-      compiler.parameter("filename", string_printf("@i%d", slot).c_str());
-    }
+    compiler.parameter_texture("filename", slot);
     if (space == NODE_TEX_VOXEL_SPACE_WORLD) {
       compiler.parameter("mapping", tfm);
       compiler.parameter("use_mapping", 1);
@@ -2430,6 +2464,8 @@ NODE_DEFINE(PrincipledBsdfNode)
   SOCKET_IN_FLOAT(transmission, "Transmission", 0.0f);
   SOCKET_IN_FLOAT(transmission_roughness, "Transmission Roughness", 0.0f);
   SOCKET_IN_FLOAT(anisotropic_rotation, "Anisotropic Rotation", 0.0f);
+  SOCKET_IN_COLOR(emission, "Emission", make_float3(0.0f, 0.0f, 0.0f));
+  SOCKET_IN_FLOAT(alpha, "Alpha", 1.0f);
   SOCKET_IN_NORMAL(normal, "Normal", make_float3(0.0f, 0.0f, 0.0f), SocketType::LINK_NORMAL);
   SOCKET_IN_NORMAL(clearcoat_normal,
                    "Clearcoat Normal",
@@ -2448,6 +2484,48 @@ PrincipledBsdfNode::PrincipledBsdfNode() : BsdfBaseNode(node_type)
   closure = CLOSURE_BSDF_PRINCIPLED_ID;
   distribution = CLOSURE_BSDF_MICROFACET_MULTI_GGX_GLASS_ID;
   distribution_orig = NBUILTIN_CLOSURES;
+}
+
+void PrincipledBsdfNode::expand(ShaderGraph *graph)
+{
+  ShaderOutput *principled_out = output("BSDF");
+
+  ShaderInput *emission_in = input("Emission");
+  if (emission_in->link || emission != make_float3(0.0f, 0.0f, 0.0f)) {
+    /* Create add closure and emission. */
+    AddClosureNode *add = new AddClosureNode();
+    EmissionNode *emission_node = new EmissionNode();
+    ShaderOutput *new_out = add->output("Closure");
+
+    graph->add(add);
+    graph->add(emission_node);
+
+    emission_node->strength = 1.0f;
+    graph->relink(emission_in, emission_node->input("Color"));
+    graph->relink(principled_out, new_out);
+    graph->connect(emission_node->output("Emission"), add->input("Closure1"));
+    graph->connect(principled_out, add->input("Closure2"));
+
+    principled_out = new_out;
+  }
+
+  ShaderInput *alpha_in = input("Alpha");
+  if (alpha_in->link || alpha != 1.0f) {
+    /* Create mix and transparent BSDF for alpha transparency. */
+    MixClosureNode *mix = new MixClosureNode();
+    TransparentBsdfNode *transparent = new TransparentBsdfNode();
+
+    graph->add(mix);
+    graph->add(transparent);
+
+    graph->relink(alpha_in, mix->input("Fac"));
+    graph->relink(principled_out, mix->output("Closure"));
+    graph->connect(transparent->output("BSDF"), mix->input("Closure1"));
+    graph->connect(principled_out, mix->input("Closure2"));
+  }
+
+  remove_input(emission_in);
+  remove_input(alpha_in);
 }
 
 bool PrincipledBsdfNode::has_surface_bssrdf()
@@ -2630,7 +2708,7 @@ NODE_DEFINE(TransparentBsdfNode)
 {
   NodeType *type = NodeType::add("transparent_bsdf", create, NodeType::SHADER);
 
-  SOCKET_IN_COLOR(color, "Color", make_float3(0.8f, 0.8f, 0.8f));
+  SOCKET_IN_COLOR(color, "Color", make_float3(1.0f, 1.0f, 1.0f));
   SOCKET_IN_FLOAT(surface_mix_weight, "SurfaceMixWeight", 0.0f, SocketType::SVM_INTERNAL);
 
   SOCKET_OUT_CLOSURE(BSDF, "BSDF");

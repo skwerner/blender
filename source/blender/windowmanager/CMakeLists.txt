@@ -39,8 +39,8 @@ set(INC
   ../render/extern/include
   ../../../intern/clog
   ../../../intern/ghost
-  ../../../intern/guardedalloc
   ../../../intern/glew-mx
+  ../../../intern/guardedalloc
   ../../../intern/memutil
 )
 
@@ -74,6 +74,7 @@ set(SRC
   intern/wm_toolsystem.c
   intern/wm_tooltip.c
   intern/wm_uilist_type.c
+  intern/wm_utils.c
   intern/wm_window.c
   gizmo/intern/wm_gizmo.c
   gizmo/intern/wm_gizmo_group.c

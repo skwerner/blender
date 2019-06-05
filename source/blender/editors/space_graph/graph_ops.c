@@ -222,7 +222,7 @@ static void GRAPH_OT_cursor_set(wmOperatorType *ot)
   ot->poll = graphview_cursor_poll;
 
   /* flags */
-  ot->flag = OPTYPE_BLOCKING | OPTYPE_UNDO;
+  ot->flag = OPTYPE_BLOCKING | OPTYPE_GRAB_CURSOR_X | OPTYPE_UNDO;
 
   /* rna */
   RNA_def_float(ot->srna, "frame", 0, MINAFRAMEF, MAXFRAMEF, "Frame", "", MINAFRAMEF, MAXFRAMEF);
@@ -494,7 +494,7 @@ void ED_operatormacros_graph(void)
   WM_operatortype_macro_define(ot, "GRAPH_OT_duplicate");
   otmacro = WM_operatortype_macro_define(ot, "TRANSFORM_OT_transform");
   RNA_enum_set(otmacro->ptr, "mode", TFM_TIME_DUPLICATE);
-  RNA_enum_set(otmacro->ptr, "proportional", PROP_EDIT_OFF);
+  RNA_boolean_set(otmacro->ptr, "use_proportional_edit", false);
 }
 
 /* ************************** registration - keymaps **********************************/

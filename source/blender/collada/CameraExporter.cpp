@@ -29,8 +29,7 @@ extern "C" {
 
 #include "collada_internal.h"
 
-CamerasExporter::CamerasExporter(COLLADASW::StreamWriter *sw,
-                                 const ExportSettings *export_settings)
+CamerasExporter::CamerasExporter(COLLADASW::StreamWriter *sw, BCExportSettings &export_settings)
     : COLLADASW::LibraryCameras(sw), export_settings(export_settings)
 {
 }
@@ -52,7 +51,7 @@ void CamerasExporter::exportCameras(Scene *sce)
 {
   openLibrary();
 
-  forEachCameraObjectInExportSet(sce, *this, this->export_settings->export_set);
+  forEachCameraObjectInExportSet(sce, *this, this->export_settings.get_export_set());
 
   closeLibrary();
 }
@@ -94,6 +93,6 @@ bool CamerasExporter::exportBlenderProfile(COLLADASW::Camera &cm, Camera *cam)
 {
   cm.addExtraTechniqueParameter("blender", "shiftx", cam->shiftx);
   cm.addExtraTechniqueParameter("blender", "shifty", cam->shifty);
-  cm.addExtraTechniqueParameter("blender", "dof_distance", cam->dof_distance);
+  cm.addExtraTechniqueParameter("blender", "dof_distance", cam->dof.focus_distance);
   return true;
 }

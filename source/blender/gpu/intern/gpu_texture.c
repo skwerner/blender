@@ -544,6 +544,8 @@ static bool gpu_texture_check_capacity(
           return false;
         }
         ATTR_FALLTHROUGH;
+      default:
+        break;
     }
 
     return true;
@@ -997,7 +999,8 @@ GPUTexture *GPU_texture_create_buffer(eGPUTextureFormat tex_format, const GLuint
         ELEM(tex_format, GPU_RG16F, GPU_RG32F) ||
         ELEM(tex_format, GPU_RG8I, GPU_RG16I, GPU_RG32I) ||
         ELEM(tex_format, GPU_RG8UI, GPU_RG16UI, GPU_RG32UI) ||
-        //ELEM(tex_format, GPU_RGB32F, GPU_RGB32I, GPU_RGB32UI) || /* Not available until gl 4.0 */
+        /* Not available until gl 4.0 */
+        // ELEM(tex_format, GPU_RGB32F, GPU_RGB32I, GPU_RGB32UI) ||
         ELEM(tex_format, GPU_RGBA8, GPU_RGBA16) || ELEM(tex_format, GPU_RGBA16F, GPU_RGBA32F) ||
         ELEM(tex_format, GPU_RGBA8I, GPU_RGBA16I, GPU_RGBA32I) ||
         ELEM(tex_format, GPU_RGBA8UI, GPU_RGBA16UI, GPU_RGBA32UI))) {
@@ -1078,7 +1081,7 @@ GPUTexture *GPU_texture_from_preview(PreviewImage *prv, int mipmap)
   /* this binds a texture, so that's why we restore it to 0 */
   if (bindcode == 0) {
     GPU_create_gl_tex(
-        &bindcode, prv->rect[0], NULL, prv->w[0], prv->h[0], GL_TEXTURE_2D, mipmap, 0, NULL);
+        &bindcode, prv->rect[0], NULL, prv->w[0], prv->h[0], GL_TEXTURE_2D, mipmap, false, NULL);
   }
   if (tex) {
     tex->bindcode = bindcode;

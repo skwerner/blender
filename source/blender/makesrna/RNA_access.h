@@ -97,6 +97,7 @@ extern StructRNA RNA_BuildGpencilModifier;
 extern StructRNA RNA_BuildModifier;
 extern StructRNA RNA_CacheFile;
 extern StructRNA RNA_Camera;
+extern StructRNA RNA_CameraDOFSettings;
 extern StructRNA RNA_CastModifier;
 extern StructRNA RNA_ChildOfConstraint;
 extern StructRNA RNA_ChildParticle;
@@ -725,6 +726,7 @@ extern StructRNA RNA_View3DOverlay;
 extern StructRNA RNA_View3DShading;
 extern StructRNA RNA_ViewLayer;
 extern StructRNA RNA_VoronoiTexture;
+extern StructRNA RNA_WalkNavigation;
 extern StructRNA RNA_WarpModifier;
 extern StructRNA RNA_WaveModifier;
 extern StructRNA RNA_WeightedNormalModifier;
@@ -1030,9 +1032,12 @@ void *RNA_property_enum_py_data_get(PropertyRNA *prop);
 int RNA_property_enum_step(
     const struct bContext *C, PointerRNA *ptr, PropertyRNA *prop, int from_value, int step);
 
-PointerRNA RNA_property_pointer_get(PointerRNA *ptr, PropertyRNA *prop);
-void RNA_property_pointer_set(PointerRNA *ptr, PropertyRNA *prop, PointerRNA ptr_value);
-PointerRNA RNA_property_pointer_get_default(PointerRNA *ptr, PropertyRNA *prop);
+PointerRNA RNA_property_pointer_get(PointerRNA *ptr, PropertyRNA *prop) ATTR_NONNULL(1, 2);
+void RNA_property_pointer_set(PointerRNA *ptr,
+                              PropertyRNA *prop,
+                              PointerRNA ptr_value,
+                              struct ReportList *reports) ATTR_NONNULL(1, 2);
+PointerRNA RNA_property_pointer_get_default(PointerRNA *ptr, PropertyRNA *prop) ATTR_NONNULL(1, 2);
 
 void RNA_property_collection_begin(PointerRNA *ptr,
                                    PropertyRNA *prop,

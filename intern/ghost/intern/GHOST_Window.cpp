@@ -109,6 +109,11 @@ GHOST_TSuccess GHOST_Window::getSwapInterval(int &intervalOut)
   return m_context->getSwapInterval(intervalOut);
 }
 
+unsigned int GHOST_Window::getDefaultFramebuffer()
+{
+  return (m_context) ? m_context->getDefaultFramebuffer() : 0;
+}
+
 GHOST_TSuccess GHOST_Window::activateDrawingContext()
 {
   return m_context->activateDrawingContext();
@@ -136,6 +141,7 @@ GHOST_TSuccess GHOST_Window::setCursorVisibility(bool visible)
 }
 
 GHOST_TSuccess GHOST_Window::setCursorGrab(GHOST_TGrabCursorMode mode,
+                                           GHOST_TAxisFlag wrap_axis,
                                            GHOST_Rect *bounds,
                                            GHOST_TInt32 mouse_ungrab_xy[2])
 {
@@ -151,8 +157,9 @@ GHOST_TSuccess GHOST_Window::setCursorGrab(GHOST_TGrabCursorMode mode,
 
   if (setWindowCursorGrab(mode)) {
 
-    if (mode == GHOST_kGrabDisable)
+    if (mode == GHOST_kGrabDisable) {
       m_cursorGrabBounds.m_l = m_cursorGrabBounds.m_r = -1;
+    }
     else if (bounds) {
       m_cursorGrabBounds = *bounds;
     }
@@ -160,6 +167,7 @@ GHOST_TSuccess GHOST_Window::setCursorGrab(GHOST_TGrabCursorMode mode,
       getClientBounds(m_cursorGrabBounds);
     }
     m_cursorGrab = mode;
+    m_cursorGrabAxis = wrap_axis;
     return GHOST_kSuccess;
   }
   else {

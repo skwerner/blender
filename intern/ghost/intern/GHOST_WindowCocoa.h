@@ -32,8 +32,10 @@
 #include "GHOST_Window.h"
 #include "STR_String.h"
 
-@class CocoaWindow;
+@class CAMetalLayer;
+@class CocoaMetalView;
 @class CocoaOpenGLView;
+@class CocoaWindow;
 @class NSCursor;
 @class NSScreen;
 
@@ -98,7 +100,8 @@ class GHOST_WindowCocoa : public GHOST_Window {
 
   /**
    * Returns the window rectangle dimensions.
-   * The dimensions are given in screen coordinates that are relative to the upper-left corner of the screen.
+   * The dimensions are given in screen coordinates that are
+   * relative to the upper-left corner of the screen.
    * \param bounds The bounding rectangle of the window.
    */
   void getWindowBounds(GHOST_Rect &bounds) const;
@@ -312,11 +315,13 @@ class GHOST_WindowCocoa : public GHOST_Window {
                                             int hotX,
                                             int hotY);
 
-  /** The window containing the OpenGL view */
+  /** The window containing the view */
   CocoaWindow *m_window;
 
-  /** The openGL view */
+  /** The view, either Metal or OpenGL */
   CocoaOpenGLView *m_openGLView;
+  CocoaMetalView *m_metalView;
+  CAMetalLayer *m_metalLayer;
 
   /** The mother SystemCocoa class to send events */
   GHOST_SystemCocoa *m_systemCocoa;

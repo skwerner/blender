@@ -156,7 +156,6 @@ void WM_operatortype_remove_ptr(wmOperatorType *ot)
 
   if (ot->last_properties) {
     IDP_FreeProperty(ot->last_properties);
-    MEM_freeN(ot->last_properties);
   }
 
   if (ot->macro.first) {
@@ -194,7 +193,6 @@ static void operatortype_ghash_free_cb(wmOperatorType *ot)
 {
   if (ot->last_properties) {
     IDP_FreeProperty(ot->last_properties);
-    MEM_freeN(ot->last_properties);
   }
 
   if (ot->macro.first) {
@@ -279,7 +277,6 @@ void WM_operatortype_last_properties_clear_all(void)
 
     if (ot->last_properties) {
       IDP_FreeProperty(ot->last_properties);
-      MEM_freeN(ot->last_properties);
       ot->last_properties = NULL;
     }
   }
@@ -433,9 +430,18 @@ static int wm_macro_modal(bContext *C, wmOperator *op, const wmEvent *event)
          * */
         if (op->opm->type->flag & OPTYPE_BLOCKING) {
           int bounds[4] = {-1, -1, -1, -1};
-          const bool wrap = ((U.uiflag & USER_CONTINUOUS_MOUSE) &&
-                             ((op->opm->flag & OP_IS_MODAL_GRAB_CURSOR) ||
-                              (op->opm->type->flag & OPTYPE_GRAB_CURSOR)));
+          int wrap = WM_CURSOR_WRAP_NONE;
+
+          if ((op->opm->flag & OP_IS_MODAL_GRAB_CURSOR) ||
+              (op->opm->type->flag & OPTYPE_GRAB_CURSOR_XY)) {
+            wrap = WM_CURSOR_WRAP_XY;
+          }
+          else if (op->opm->type->flag & OPTYPE_GRAB_CURSOR_X) {
+            wrap = WM_CURSOR_WRAP_X;
+          }
+          else if (op->opm->type->flag & OPTYPE_GRAB_CURSOR_Y) {
+            wrap = WM_CURSOR_WRAP_Y;
+          }
 
           if (wrap) {
             ARegion *ar = CTX_wm_region(C);

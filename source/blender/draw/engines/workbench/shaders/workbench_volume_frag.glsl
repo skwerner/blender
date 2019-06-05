@@ -1,8 +1,4 @@
 
-uniform mat4 ProjectionMatrix;
-uniform mat4 ModelMatrixInverse;
-uniform mat4 ModelViewMatrixInverse;
-uniform mat4 ModelMatrix;
 uniform vec3 OrcoTexCoFactors[2];
 
 uniform sampler2D depthBuffer;
@@ -64,7 +60,8 @@ float max_v3(vec3 v)
 
 float line_unit_box_intersect_dist(vec3 lineorigin, vec3 linedirection)
 {
-  /* https://seblagarde.wordpress.com/2012/09/29/image-based-lighting-approaches-and-parallax-corrected-cubemap/ */
+  /* https://seblagarde.wordpress.com/2012/09/29/image-based-lighting-approaches-and-parallax-corrected-cubemap/
+   */
   vec3 firstplane = (vec3(1.0) - lineorigin) / linedirection;
   vec3 secondplane = (vec3(-1.0) - lineorigin) / linedirection;
   vec3 furthestplane = min(firstplane, secondplane);
@@ -218,9 +215,11 @@ void main()
   vec3 vs_ray_dir = (is_persp) ? (vs_ray_end - vs_ray_ori) : vec3(0.0, 0.0, -1.0);
   vs_ray_dir /= abs(vs_ray_dir.z);
 
-  vec3 ls_ray_dir = mat3(ModelViewMatrixInverse) * vs_ray_dir * OrcoTexCoFactors[1] * 2.0;
-  vec3 ls_ray_ori = (ModelViewMatrixInverse * vec4(vs_ray_ori, 1.0)).xyz;
-  vec3 ls_ray_end = (ModelViewMatrixInverse * vec4(vs_ray_end, 1.0)).xyz;
+  /* TODO(fclem) Precompute the matrix/ */
+  vec3 ls_ray_dir = mat3(ViewMatrixInverse) * vs_ray_dir * OrcoTexCoFactors[1] * 2.0;
+  ls_ray_dir = mat3(ModelMatrixInverse) * ls_ray_dir;
+  vec3 ls_ray_ori = point_view_to_object(vs_ray_ori);
+  vec3 ls_ray_end = point_view_to_object(vs_ray_end);
 
   ls_ray_ori = (OrcoTexCoFactors[0] + ls_ray_ori * OrcoTexCoFactors[1]) * 2.0 - 1.0;
   ls_ray_end = (OrcoTexCoFactors[0] + ls_ray_end * OrcoTexCoFactors[1]) * 2.0 - 1.0;

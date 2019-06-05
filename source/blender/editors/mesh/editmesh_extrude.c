@@ -36,6 +36,7 @@
 #include "RNA_access.h"
 
 #include "WM_types.h"
+#include "WM_api.h"
 
 #include "ED_mesh.h"
 #include "ED_screen.h"
@@ -440,7 +441,7 @@ void MESH_OT_extrude_region(wmOperatorType *ot)
   ot->description = "Extrude region of faces";
 
   /* api callbacks */
-  //ot->invoke = mesh_extrude_region_invoke;
+  // ot->invoke = mesh_extrude_region_invoke;
   ot->exec = edbm_extrude_region_exec;
   ot->poll = ED_operator_editmesh;
 
@@ -860,6 +861,9 @@ static int edbm_dupli_extrude_cursor_invoke(bContext *C, wmOperator *op, const w
     EDBM_mesh_normals_update(vc.em);
 
     EDBM_update_generic(vc.em, true, true);
+
+    WM_event_add_notifier(C, NC_GEOM | ND_DATA, obedit->data);
+    WM_event_add_notifier(C, NC_GEOM | ND_SELECT, obedit->data);
   }
   MEM_freeN(objects);
 

@@ -165,7 +165,9 @@ bool ED_workspace_change(WorkSpace *workspace_new, bContext *C, wmWindowManager 
   }
 
   screen_new = screen_change_prepare(screen_old, screen_new, bmain, C, win);
-  BLI_assert(BKE_workspace_layout_screen_get(layout_new) == screen_new);
+  if (BKE_workspace_layout_screen_get(layout_new) != screen_new) {
+    layout_new = BKE_workspace_layout_find(workspace_new, screen_new);
+  }
 
   if (screen_new == NULL) {
     return false;
@@ -203,6 +205,8 @@ WorkSpace *ED_workspace_duplicate(WorkSpace *workspace_old, Main *bmain, wmWindo
   WorkSpace *workspace_new = ED_workspace_add(bmain, workspace_old->id.name + 2);
 
   workspace_new->flags = workspace_old->flags;
+  workspace_new->object_mode = workspace_old->object_mode;
+  workspace_new->order = workspace_old->order;
   BLI_duplicatelist(&workspace_new->owner_ids, &workspace_old->owner_ids);
 
   /* TODO(campbell): tools */
@@ -371,13 +375,15 @@ static int workspace_append_activate_exec(bContext *C, wmOperator *op)
         &bmain->workspaces, idname, offsetof(ID, name) + 2);
     BLI_assert(appended_workspace != NULL);
 
-    /* Reorder to last position. */
-    BKE_id_reorder(&bmain->workspaces, &appended_workspace->id, NULL, true);
+    if (appended_workspace) {
+      /* Reorder to last position. */
+      BKE_id_reorder(&bmain->workspaces, &appended_workspace->id, NULL, true);
 
-    /* Changing workspace changes context. Do delayed! */
-    WM_event_add_notifier(C, NC_SCREEN | ND_WORKSPACE_SET, appended_workspace);
+      /* Changing workspace changes context. Do delayed! */
+      WM_event_add_notifier(C, NC_SCREEN | ND_WORKSPACE_SET, appended_workspace);
 
-    return OPERATOR_FINISHED;
+      return OPERATOR_FINISHED;
+    }
   }
 
   return OPERATOR_CANCELLED;

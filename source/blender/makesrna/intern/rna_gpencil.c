@@ -76,6 +76,36 @@ static EnumPropertyItem rna_enum_gpencil_onion_modes_items[] = {
     {0, NULL, 0, NULL, NULL},
 };
 
+static const EnumPropertyItem rna_enum_onion_keyframe_type_items[] = {
+    {-1, "ALL", ICON_ACTION, "All Types", "Include all Keyframe types"},
+    {BEZT_KEYTYPE_KEYFRAME,
+     "KEYFRAME",
+     ICON_KEYTYPE_KEYFRAME_VEC,
+     "Keyframe",
+     "Normal keyframe - e.g. for key poses"},
+    {BEZT_KEYTYPE_BREAKDOWN,
+     "BREAKDOWN",
+     ICON_KEYTYPE_BREAKDOWN_VEC,
+     "Breakdown",
+     "A breakdown pose - e.g. for transitions between key poses"},
+    {BEZT_KEYTYPE_MOVEHOLD,
+     "MOVING_HOLD",
+     ICON_KEYTYPE_MOVING_HOLD_VEC,
+     "Moving Hold",
+     "A keyframe that is part of a moving hold"},
+    {BEZT_KEYTYPE_EXTREME,
+     "EXTREME",
+     ICON_KEYTYPE_EXTREME_VEC,
+     "Extreme",
+     "An 'extreme' pose, or some other purpose as needed"},
+    {BEZT_KEYTYPE_JITTER,
+     "JITTER",
+     ICON_KEYTYPE_JITTER_VEC,
+     "Jitter",
+     "A filler or baked keyframe for keying on ones, or some other purpose as needed"},
+    {0, NULL, 0, NULL, NULL},
+};
+
 static const EnumPropertyItem rna_enum_gplayer_move_type_items[] = {
     {-1, "UP", 0, "Up", ""},
     {1, "DOWN", 0, "Down", ""},
@@ -83,7 +113,7 @@ static const EnumPropertyItem rna_enum_gplayer_move_type_items[] = {
 };
 
 static const EnumPropertyItem rna_enum_layer_blend_modes_items[] = {
-    {eGplBlendMode_Normal, "NORMAL", 0, "Regular", ""},
+    {eGplBlendMode_Regular, "REGULAR", 0, "Regular", ""},
     {eGplBlendMode_Overlay, "OVERLAY", 0, "Overlay", ""},
     {eGplBlendMode_Add, "ADD", 0, "Add", ""},
     {eGplBlendMode_Subtract, "SUBTRACT", 0, "Subtract", ""},
@@ -177,10 +207,12 @@ static void UNUSED_FUNCTION(rna_GPencil_onion_skinning_update)(Main *bmain,
     }
   }
 
-  if (enabled)
+  if (enabled) {
     gpd->flag |= GP_DATA_SHOW_ONIONSKINS;
-  else
+  }
+  else {
     gpd->flag &= ~GP_DATA_SHOW_ONIONSKINS;
+  }
 
   /* Now do standard updates... */
   rna_GPencil_update(bmain, scene, ptr);
@@ -215,10 +247,12 @@ static int rna_GPencilLayer_active_frame_editable(PointerRNA *ptr, const char **
   bGPDlayer *gpl = (bGPDlayer *)ptr->data;
 
   /* surely there must be other criteria too... */
-  if (gpl->flag & GP_LAYER_LOCKED)
+  if (gpl->flag & GP_LAYER_LOCKED) {
     return 0;
-  else
+  }
+  else {
     return PROP_EDITABLE;
+  }
 }
 
 /* set parent */
@@ -251,7 +285,9 @@ static void set_parent(bGPDlayer *gpl, Object *par, const int type, const char *
 }
 
 /* set parent object and inverse matrix */
-static void rna_GPencilLayer_parent_set(PointerRNA *ptr, PointerRNA value)
+static void rna_GPencilLayer_parent_set(PointerRNA *ptr,
+                                        PointerRNA value,
+                                        struct ReportList *UNUSED(reports))
 {
   bGPDlayer *gpl = (bGPDlayer *)ptr->data;
   Object *par = (Object *)value.data;
@@ -345,7 +381,9 @@ static PointerRNA rna_GPencil_active_layer_get(PointerRNA *ptr)
   return rna_pointer_inherit_refine(ptr, NULL, NULL);
 }
 
-static void rna_GPencil_active_layer_set(PointerRNA *ptr, PointerRNA value)
+static void rna_GPencil_active_layer_set(PointerRNA *ptr,
+                                         PointerRNA value,
+                                         struct ReportList *UNUSED(reports))
 {
   bGPdata *gpd = ptr->id.data;
 
@@ -469,10 +507,12 @@ static bGPDstroke *rna_GPencil_stroke_point_find_stroke(const bGPdata *gpd,
     return NULL;
   }
 
-  if (r_gpl)
+  if (r_gpl) {
     *r_gpl = NULL;
-  if (r_gpf)
+  }
+  if (r_gpf) {
     *r_gpf = NULL;
+  }
 
   /* there's no faster alternative than just looping over everything... */
   for (gpl = gpd->layers.first; gpl; gpl = gpl->next) {
@@ -480,10 +520,12 @@ static bGPDstroke *rna_GPencil_stroke_point_find_stroke(const bGPdata *gpd,
       for (gps = gpl->actframe->strokes.first; gps; gps = gps->next) {
         if ((pt >= gps->points) && (pt < &gps->points[gps->totpoints])) {
           /* found it */
-          if (r_gpl)
+          if (r_gpl) {
             *r_gpl = gpl;
-          if (r_gpf)
+          }
+          if (r_gpf) {
             *r_gpf = gpl->actframe;
+          }
 
           return gps;
         }
@@ -509,10 +551,12 @@ static void rna_GPencil_stroke_point_select_set(PointerRNA *ptr, const bool valu
   gps = rna_GPencil_stroke_point_find_stroke(gpd, pt, NULL, NULL);
   if (gps) {
     /* Set the new selection state for the point */
-    if (value)
+    if (value) {
       pt->flag |= GP_SPOINT_SELECT;
-    else
+    }
+    else {
       pt->flag &= ~GP_SPOINT_SELECT;
+    }
 
     /* Check if the stroke should be selected or not... */
     BKE_gpencil_stroke_sync_selection(gps);
@@ -618,6 +662,8 @@ static void rna_GPencil_stroke_point_pop(ID *id,
 static bGPDstroke *rna_GPencil_stroke_new(bGPDframe *frame)
 {
   bGPDstroke *stroke = MEM_callocN(sizeof(bGPDstroke), "gp_stroke");
+  stroke->gradient_f = 1.0f;
+  ARRAY_SET_ITEMS(stroke->gradient_s, 1.0f, 1.0f);
   BLI_addtail(&frame->strokes, stroke);
 
   return stroke;
@@ -646,17 +692,21 @@ static void rna_GPencil_stroke_select_set(PointerRNA *ptr, const bool value)
   int i;
 
   /* set new value */
-  if (value)
+  if (value) {
     gps->flag |= GP_STROKE_SELECT;
-  else
+  }
+  else {
     gps->flag &= ~GP_STROKE_SELECT;
+  }
 
   /* ensure that the stroke's points are selected in the same way */
   for (i = 0, pt = gps->points; i < gps->totpoints; i++, pt++) {
-    if (value)
+    if (value) {
       pt->flag |= GP_SPOINT_SELECT;
-    else
+    }
+    else {
       pt->flag &= ~GP_SPOINT_SELECT;
+    }
   }
 }
 
@@ -781,8 +831,9 @@ static void rna_GpencilVertex_groups_begin(CollectionPropertyIterator *iter, Poi
     rna_iterator_array_begin(
         iter, (void *)dvert->dw, sizeof(MDeformWeight), dvert->totweight, 0, NULL);
   }
-  else
+  else {
     rna_iterator_array_begin(iter, NULL, 0, 0, 0, NULL);
+  }
 }
 
 static char *rna_GreasePencilGrid_path(PointerRNA *UNUSED(ptr))
@@ -810,7 +861,7 @@ static void rna_def_gpencil_stroke_point(BlenderRNA *brna)
 
   prop = RNA_def_property(srna, "pressure", PROP_FLOAT, PROP_FACTOR);
   RNA_def_property_float_sdna(prop, NULL, "pressure");
-  RNA_def_property_range(prop, 0.0f, 1.0f);
+  RNA_def_property_range(prop, 0.0f, FLT_MAX);
   RNA_def_property_ui_text(prop, "Pressure", "Pressure of tablet at point when drawing it");
   RNA_def_property_update(prop, NC_GPENCIL | ND_DATA, "rna_GPencil_update");
 
@@ -861,11 +912,11 @@ static void rna_def_gpencil_stroke_points_api(BlenderRNA *brna, PropertyRNA *cpr
                 "pressure",
                 1.0f,
                 0.0f,
-                1.0f,
+                FLT_MAX,
                 "Pressure",
                 "Pressure for newly created points",
                 0.0f,
-                1.0f);
+                FLT_MAX);
   RNA_def_float(func,
                 "strength",
                 1.0f,
@@ -1388,7 +1439,7 @@ static void rna_def_gpencil_layer(BlenderRNA *brna)
   RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
   RNA_def_property_ui_text(
       prop, "Clamp Layer", "Clamp any pixel outside underlying layers drawing");
-  RNA_def_property_update(prop, NC_GPENCIL | ND_DATA, NULL);
+  RNA_def_property_update(prop, NC_GPENCIL | ND_DATA, "rna_GPencil_update");
 
   /* solo mode: Only display frames with keyframe */
   prop = RNA_def_property(srna, "use_solo_mode", PROP_BOOLEAN, PROP_NONE);
@@ -1737,6 +1788,7 @@ static void rna_def_gpencil_data(BlenderRNA *brna)
   RNA_def_property_int_sdna(prop, NULL, "gstep");
   RNA_def_property_range(prop, 0, 120);
   RNA_def_property_int_default(prop, 1);
+  RNA_def_parameter_clear_flags(prop, PROP_ANIMATABLE, 0);
   RNA_def_property_ui_text(prop,
                            "Frames Before",
                            "Maximum number of frames to show before current frame "
@@ -1747,6 +1799,7 @@ static void rna_def_gpencil_data(BlenderRNA *brna)
   RNA_def_property_int_sdna(prop, NULL, "gstep_next");
   RNA_def_property_range(prop, 0, 120);
   RNA_def_property_int_default(prop, 1);
+  RNA_def_parameter_clear_flags(prop, PROP_ANIMATABLE, 0);
   RNA_def_property_ui_text(prop,
                            "Frames After",
                            "Maximum number of frames to show after current frame "
@@ -1756,6 +1809,7 @@ static void rna_def_gpencil_data(BlenderRNA *brna)
   prop = RNA_def_property(srna, "use_ghost_custom_colors", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_sdna(
       prop, NULL, "onion_flag", GP_ONION_GHOST_PREVCOL | GP_ONION_GHOST_NEXTCOL);
+  RNA_def_parameter_clear_flags(prop, PROP_ANIMATABLE, 0);
   RNA_def_property_ui_text(prop, "Use Custom Ghost Colors", "Use custom colors for ghost frames");
   RNA_def_property_update(prop, NC_GPENCIL | ND_DATA, "rna_GPencil_update");
 
@@ -1779,6 +1833,7 @@ static void rna_def_gpencil_data(BlenderRNA *brna)
 
   prop = RNA_def_property(srna, "use_ghosts_always", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_sdna(prop, NULL, "onion_flag", GP_ONION_GHOST_ALWAYS);
+  RNA_def_parameter_clear_flags(prop, PROP_ANIMATABLE, 0);
   RNA_def_property_ui_text(prop,
                            "Always Show Ghosts",
                            "Ghosts are shown in renders and animation playback. Useful for "
@@ -1788,17 +1843,27 @@ static void rna_def_gpencil_data(BlenderRNA *brna)
   prop = RNA_def_property(srna, "onion_mode", PROP_ENUM, PROP_NONE);
   RNA_def_property_enum_sdna(prop, NULL, "onion_mode");
   RNA_def_property_enum_items(prop, rna_enum_gpencil_onion_modes_items);
+  RNA_def_parameter_clear_flags(prop, PROP_ANIMATABLE, 0);
   RNA_def_property_ui_text(prop, "Mode", "Mode to display frames");
+  RNA_def_property_update(prop, NC_GPENCIL | ND_DATA, "rna_GPencil_update");
+
+  prop = RNA_def_property(srna, "onion_keyframe_type", PROP_ENUM, PROP_NONE);
+  RNA_def_property_enum_sdna(prop, NULL, "onion_keytype");
+  RNA_def_parameter_clear_flags(prop, PROP_ANIMATABLE, 0);
+  RNA_def_property_enum_items(prop, rna_enum_onion_keyframe_type_items);
+  RNA_def_property_ui_text(prop, "Filter By Type", "Type of keyframe (for filtering)");
   RNA_def_property_update(prop, NC_GPENCIL | ND_DATA, "rna_GPencil_update");
 
   prop = RNA_def_property(srna, "use_onion_fade", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_sdna(prop, NULL, "onion_flag", GP_ONION_FADE);
+  RNA_def_parameter_clear_flags(prop, PROP_ANIMATABLE, 0);
   RNA_def_property_ui_text(
       prop, "Fade", "Display onion keyframes with a fade in color transparency");
   RNA_def_property_update(prop, NC_GPENCIL | ND_DATA, "rna_GPencil_update");
 
   prop = RNA_def_property(srna, "use_onion_loop", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_sdna(prop, NULL, "onion_flag", GP_ONION_LOOP);
+  RNA_def_parameter_clear_flags(prop, PROP_ANIMATABLE, 0);
   RNA_def_property_ui_text(prop,
                            "Loop",
                            "Display first onion keyframes using next frame color to show "
@@ -1809,6 +1874,7 @@ static void rna_def_gpencil_data(BlenderRNA *brna)
   RNA_def_property_float_sdna(prop, NULL, "onion_factor");
   RNA_def_property_float_default(prop, 0.5f);
   RNA_def_property_range(prop, 0.0, 1.0f);
+  RNA_def_parameter_clear_flags(prop, PROP_ANIMATABLE, 0);
   RNA_def_property_ui_text(prop, "Onion Opacity", "Change fade opacity of displayed onion frames");
   RNA_def_property_update(prop, NC_GPENCIL | ND_DATA, "rna_GPencil_update");
 
@@ -1818,6 +1884,11 @@ static void rna_def_gpencil_data(BlenderRNA *brna)
   RNA_def_property_ui_range(prop, 0.0f, 1.0f, 0.001, 5);
   RNA_def_property_ui_text(prop, "Surface Offset", "Offset amount when drawing in surface mode");
   RNA_def_property_update(prop, NC_GPENCIL | ND_DATA, "rna_GPencil_update");
+
+  prop = RNA_def_property(srna, "is_annotation", PROP_BOOLEAN, PROP_NONE);
+  RNA_def_property_boolean_sdna(prop, NULL, "flag", GP_DATA_ANNOTATIONS);
+  RNA_def_property_clear_flag(prop, PROP_EDITABLE);
+  RNA_def_property_ui_text(prop, "Annotation", "Current datablock is an annotation");
 
   /* Nested Structs */
   prop = RNA_def_property(srna, "grid", PROP_POINTER, PROP_NONE);

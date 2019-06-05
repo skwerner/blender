@@ -56,7 +56,7 @@ void BKE_light_init(Light *la)
   la->att2 = 1.0f;
   la->mode = LA_SHADOW;
   la->bufsize = 512;
-  la->clipsta = 0.5f;
+  la->clipsta = 0.05f;
   la->clipend = 40.0f;
   la->bleedexp = 2.5f;
   la->samp = 3;
@@ -80,6 +80,7 @@ void BKE_light_init(Light *la)
   la->contact_thickness = 0.2f;
   la->spec_fac = 1.0f;
   la->att_dist = 40.0f;
+  la->sun_angle = DEG2RADF(0.526f);
 
   curvemapping_initialize(la->curfalloff);
 }
@@ -96,8 +97,10 @@ Light *BKE_light_add(Main *bmain, const char *name)
 }
 
 /**
- * Only copy internal data of Light ID from source to already allocated/initialized destination.
- * You probably never want to use that directly, use BKE_id_copy or BKE_id_copy_ex for typical needs.
+ * Only copy internal data of Light ID from source
+ * to already allocated/initialized destination.
+ * You probably never want to use that directly,
+ * use #BKE_id_copy or #BKE_id_copy_ex for typical needs.
  *
  * WARNING! This function will not handle ID user count!
  *

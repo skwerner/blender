@@ -2416,7 +2416,7 @@ static void write_paint(WriteData *wd, Paint *p)
   if (p->cavity_curve) {
     write_curvemapping(wd, p->cavity_curve);
   }
-  writedata(wd, DATA, sizeof(PaintToolSlot) * p->tool_slots_len, p->tool_slots);
+  writestruct(wd, DATA, PaintToolSlot, p->tool_slots_len, p->tool_slots);
 }
 
 static void write_layer_collections(WriteData *wd, ListBase *lb)
@@ -2580,13 +2580,13 @@ static void write_scene(WriteData *wd, Scene *sce)
 
         Strip *strip = seq->strip;
         writestruct(wd, DATA, Strip, 1, strip);
-        if (seq->flag & SEQ_USE_CROP && strip->crop) {
+        if (strip->crop) {
           writestruct(wd, DATA, StripCrop, 1, strip->crop);
         }
-        if (seq->flag & SEQ_USE_TRANSFORM && strip->transform) {
+        if (strip->transform) {
           writestruct(wd, DATA, StripTransform, 1, strip->transform);
         }
-        if (seq->flag & SEQ_USE_PROXY && strip->proxy) {
+        if (strip->proxy) {
           writestruct(wd, DATA, StripProxy, 1, strip->proxy);
         }
         if (seq->type == SEQ_TYPE_IMAGE) {

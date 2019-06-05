@@ -205,16 +205,16 @@ static void wm_region_test_render_do_draw(const Scene *scene,
 
       /* do partial redraw when possible */
       if (ED_view3d_calc_render_border(scene, depsgraph, v3d, ar, &border_rect)) {
-        ED_region_tag_redraw_partial(ar, &border_rect);
+        ED_region_tag_redraw_partial(ar, &border_rect, false);
       }
       else {
-        ED_region_tag_redraw(ar);
+        ED_region_tag_redraw_no_rebuild(ar);
       }
 
       engine->flag &= ~RE_ENGINE_DO_DRAW;
     }
     else if (viewport && GPU_viewport_do_update(viewport)) {
-      ED_region_tag_redraw(ar);
+      ED_region_tag_redraw_no_rebuild(ar);
     }
   }
 }
@@ -915,6 +915,17 @@ void WM_draw_region_free(ARegion *ar)
 {
   wm_draw_region_buffer_free(ar);
   ar->visible = 0;
+}
+
+void wm_draw_region_test(bContext *C, ScrArea *sa, ARegion *ar)
+{
+  /* Function for redraw timer benchmark. */
+  bool use_viewport = wm_region_use_viewport(sa, ar);
+  wm_draw_region_buffer_create(ar, false, use_viewport);
+  wm_draw_region_bind(ar, 0);
+  ED_region_do_draw(C, ar);
+  wm_draw_region_unbind(ar, 0);
+  ar->do_draw = false;
 }
 
 void WM_redraw_windows(bContext *C)

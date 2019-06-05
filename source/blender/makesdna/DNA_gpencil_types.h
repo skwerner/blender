@@ -136,7 +136,7 @@ typedef enum eGPDpalettecolor_Flag {
 typedef struct bGPDpalette {
   struct bGPDpalette *next, *prev;
 
-  /** Pointer to individual colours. */
+  /** Pointer to individual colors. */
   ListBase colors;
   /** Palette name. Must be unique. */
   char info[64];
@@ -251,7 +251,7 @@ typedef enum eGPDstroke_Caps {
 /* Runtime temp data for bGPDframe */
 typedef struct bGPDframe_Runtime {
   /** Parent matrix for drawing. */
-  float viewmatrix[4][4];
+  float parent_obmat[4][4];
 } bGPDframe_Runtime;
 
 /* Grease-Pencil Annotations - 'Frame'
@@ -397,7 +397,7 @@ typedef enum eGPDlayer_OnionFlag {
 
 /* layer blend_mode */
 typedef enum eGPLayerBlendModes {
-  eGplBlendMode_Normal = 0,
+  eGplBlendMode_Regular = 0,
   eGplBlendMode_Overlay = 1,
   eGplBlendMode_Add = 2,
   eGplBlendMode_Subtract = 3,
@@ -518,7 +518,8 @@ typedef struct bGPdata {
 
   /** Draw mode for strokes (eGP_DrawMode). */
   short draw_mode;
-  char _pad3[2];
+  /** Keyframe type for onion filter  (eBezTriple_KeyframeType plus All option) */
+  short onion_keytype;
 
   bGPgrid grid;
 

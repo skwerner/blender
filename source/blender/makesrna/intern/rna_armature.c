@@ -67,7 +67,9 @@ static void rna_Armature_dependency_update(Main *bmain, Scene *UNUSED(scene), Po
   WM_main_add_notifier(NC_GEOM | ND_DATA, id);
 }
 
-static void rna_Armature_act_bone_set(PointerRNA *ptr, PointerRNA value)
+static void rna_Armature_act_bone_set(PointerRNA *ptr,
+                                      PointerRNA value,
+                                      struct ReportList *UNUSED(reports))
 {
   bArmature *arm = (bArmature *)ptr->data;
 
@@ -89,7 +91,9 @@ static void rna_Armature_act_bone_set(PointerRNA *ptr, PointerRNA value)
   }
 }
 
-static void rna_Armature_act_edit_bone_set(PointerRNA *ptr, PointerRNA value)
+static void rna_Armature_act_edit_bone_set(PointerRNA *ptr,
+                                           PointerRNA value,
+                                           struct ReportList *UNUSED(reports))
 {
   bArmature *arm = (bArmature *)ptr->data;
 
@@ -153,8 +157,9 @@ static void rna_Armature_update_layers(Main *bmain, Scene *UNUSED(scene), Pointe
   /* proxy lib exception, store it here so we can restore layers on file
    * load, since it would otherwise get lost due to being linked data */
   for (ob = bmain->objects.first; ob; ob = ob->id.next) {
-    if (ob->data == arm && ob->pose)
+    if (ob->data == arm && ob->pose) {
       ob->pose->proxy_layer = arm->layer;
+    }
   }
 
   DEG_id_tag_update(&arm->id, ID_RECALC_COPY_ON_WRITE);
@@ -280,18 +285,23 @@ static void rna_bone_layer_set(int *layer, const bool *values)
   int i, tot = 0;
 
   /* ensure we always have some layer selected */
-  for (i = 0; i < 32; i++)
-    if (values[i])
+  for (i = 0; i < 32; i++) {
+    if (values[i]) {
       tot++;
+    }
+  }
 
-  if (tot == 0)
+  if (tot == 0) {
     return;
+  }
 
   for (i = 0; i < 32; i++) {
-    if (values[i])
+    if (values[i]) {
       *layer |= (1u << i);
-    else
+    }
+    else {
       *layer &= ~(1u << i);
+    }
   }
 }
 
@@ -312,18 +322,23 @@ static void rna_Armature_layer_set(PointerRNA *ptr, const bool *values)
   int i, tot = 0;
 
   /* ensure we always have some layer selected */
-  for (i = 0; i < 32; i++)
-    if (values[i])
+  for (i = 0; i < 32; i++) {
+    if (values[i]) {
       tot++;
+    }
+  }
 
-  if (tot == 0)
+  if (tot == 0) {
     return;
+  }
 
   for (i = 0; i < 32; i++) {
-    if (values[i])
+    if (values[i]) {
       arm->layer |= (1u << i);
-    else
+    }
+    else {
       arm->layer &= ~(1u << i);
+    }
   }
 }
 
@@ -368,8 +383,9 @@ static void rna_EditBone_connected_check(EditBone *ebone)
       /* Attach this bone to its parent */
       copy_v3_v3(ebone->head, ebone->parent->tail);
 
-      if (ebone->flag & BONE_ROOTSEL)
+      if (ebone->flag & BONE_ROOTSEL) {
         ebone->parent->flag |= BONE_TIPSEL;
+      }
     }
     else if (!(ebone->parent->flag & BONE_ROOTSEL)) {
       ebone->parent->flag &= ~BONE_TIPSEL;
@@ -381,10 +397,12 @@ static void rna_EditBone_connected_set(PointerRNA *ptr, bool value)
 {
   EditBone *ebone = (EditBone *)(ptr->data);
 
-  if (value)
+  if (value) {
     ebone->flag |= BONE_CONNECTED;
-  else
+  }
+  else {
     ebone->flag &= ~BONE_CONNECTED;
+  }
 
   rna_EditBone_connected_check(ebone);
 }
@@ -395,30 +413,37 @@ static PointerRNA rna_EditBone_parent_get(PointerRNA *ptr)
   return rna_pointer_inherit_refine(ptr, &RNA_EditBone, data->parent);
 }
 
-static void rna_EditBone_parent_set(PointerRNA *ptr, PointerRNA value)
+static void rna_EditBone_parent_set(PointerRNA *ptr,
+                                    PointerRNA value,
+                                    struct ReportList *UNUSED(reports))
 {
   EditBone *ebone = (EditBone *)(ptr->data);
   EditBone *pbone, *parbone = (EditBone *)value.data;
 
   if (parbone == NULL) {
-    if (ebone->parent && !(ebone->parent->flag & BONE_ROOTSEL))
+    if (ebone->parent && !(ebone->parent->flag & BONE_ROOTSEL)) {
       ebone->parent->flag &= ~BONE_TIPSEL;
+    }
 
     ebone->parent = NULL;
     ebone->flag &= ~BONE_CONNECTED;
   }
   else {
     /* within same armature */
-    if (value.id.data != ptr->id.data)
+    if (value.id.data != ptr->id.data) {
       return;
+    }
 
     /* make sure this is a valid child */
-    if (parbone == ebone)
+    if (parbone == ebone) {
       return;
+    }
 
-    for (pbone = parbone->parent; pbone; pbone = pbone->parent)
-      if (pbone == ebone)
+    for (pbone = parbone->parent; pbone; pbone = pbone->parent) {
+      if (pbone == ebone) {
         return;
+      }
+    }
 
     ebone->parent = parbone;
     rna_EditBone_connected_check(ebone);
@@ -463,7 +488,9 @@ static PointerRNA rna_EditBone_bbone_prev_get(PointerRNA *ptr)
   return rna_pointer_inherit_refine(ptr, &RNA_EditBone, data->bbone_prev);
 }
 
-static void rna_EditBone_bbone_prev_set(PointerRNA *ptr, PointerRNA value)
+static void rna_EditBone_bbone_prev_set(PointerRNA *ptr,
+                                        PointerRNA value,
+                                        struct ReportList *UNUSED(reports))
 {
   EditBone *ebone = (EditBone *)(ptr->data);
   EditBone *hbone = (EditBone *)value.data;
@@ -474,7 +501,9 @@ static void rna_EditBone_bbone_prev_set(PointerRNA *ptr, PointerRNA value)
   }
 }
 
-static void rna_Bone_bbone_prev_set(PointerRNA *ptr, PointerRNA value)
+static void rna_Bone_bbone_prev_set(PointerRNA *ptr,
+                                    PointerRNA value,
+                                    struct ReportList *UNUSED(reports))
 {
   Bone *bone = (Bone *)ptr->data;
   Bone *hbone = (Bone *)value.data;
@@ -491,7 +520,9 @@ static PointerRNA rna_EditBone_bbone_next_get(PointerRNA *ptr)
   return rna_pointer_inherit_refine(ptr, &RNA_EditBone, data->bbone_next);
 }
 
-static void rna_EditBone_bbone_next_set(PointerRNA *ptr, PointerRNA value)
+static void rna_EditBone_bbone_next_set(PointerRNA *ptr,
+                                        PointerRNA value,
+                                        struct ReportList *UNUSED(reports))
 {
   EditBone *ebone = (EditBone *)(ptr->data);
   EditBone *hbone = (EditBone *)value.data;
@@ -502,7 +533,9 @@ static void rna_EditBone_bbone_next_set(PointerRNA *ptr, PointerRNA value)
   }
 }
 
-static void rna_Bone_bbone_next_set(PointerRNA *ptr, PointerRNA value)
+static void rna_Bone_bbone_next_set(PointerRNA *ptr,
+                                    PointerRNA value,
+                                    struct ReportList *UNUSED(reports))
 {
   Bone *bone = (Bone *)ptr->data;
   Bone *hbone = (Bone *)value.data;
@@ -520,13 +553,16 @@ static void rna_Armature_editbone_transform_update(Main *bmain, Scene *scene, Po
   EditBone *child, *eboflip;
 
   /* update our parent */
-  if (ebone->parent && ebone->flag & BONE_CONNECTED)
+  if (ebone->parent && ebone->flag & BONE_CONNECTED) {
     copy_v3_v3(ebone->parent->tail, ebone->head);
+  }
 
   /* update our children if necessary */
-  for (child = arm->edbo->first; child; child = child->next)
-    if (child->parent == ebone && (child->flag & BONE_CONNECTED))
+  for (child = arm->edbo->first; child; child = child->next) {
+    if (child->parent == ebone && (child->flag & BONE_CONNECTED)) {
       copy_v3_v3(child->head, ebone->tail);
+    }
+  }
 
   if (arm->flag & ARM_MIRROR_EDIT) {
     eboflip = ED_armature_ebone_get_mirrored(arm->edbo, ebone);
@@ -538,13 +574,16 @@ static void rna_Armature_editbone_transform_update(Main *bmain, Scene *scene, Po
       eboflip->tail[0] = -ebone->tail[0];
 
       /* update our parent */
-      if (eboflip->parent && eboflip->flag & BONE_CONNECTED)
+      if (eboflip->parent && eboflip->flag & BONE_CONNECTED) {
         copy_v3_v3(eboflip->parent->tail, eboflip->head);
+      }
 
       /* update our children if necessary */
-      for (child = arm->edbo->first; child; child = child->next)
-        if (child->parent == eboflip && (child->flag & BONE_CONNECTED))
+      for (child = arm->edbo->first; child; child = child->next) {
+        if (child->parent == eboflip && (child->flag & BONE_CONNECTED)) {
           copy_v3_v3(child->head, eboflip->tail);
+        }
+      }
     }
   }
 
@@ -556,10 +595,12 @@ static void rna_Armature_bones_next(CollectionPropertyIterator *iter)
   ListBaseIterator *internal = &iter->internal.listbase;
   Bone *bone = (Bone *)internal->link;
 
-  if (bone->childbase.first)
+  if (bone->childbase.first) {
     internal->link = (Link *)bone->childbase.first;
-  else if (bone->next)
+  }
+  else if (bone->next) {
     internal->link = (Link *)bone->next;
+  }
   else {
     internal->link = NULL;
 
@@ -573,6 +614,20 @@ static void rna_Armature_bones_next(CollectionPropertyIterator *iter)
   }
 
   iter->valid = (internal->link != NULL);
+}
+
+/* not essential, but much faster then the default lookup function */
+static int rna_Armature_bones_lookup_string(PointerRNA *ptr, const char *key, PointerRNA *r_ptr)
+{
+  bArmature *arm = (bArmature *)ptr->data;
+  Bone *bone = BKE_armature_find_bone_name(arm, key);
+  if (bone) {
+    RNA_pointer_create(ptr->id.data, &RNA_Bone, bone, r_ptr);
+    return true;
+  }
+  else {
+    return false;
+  }
 }
 
 static bool rna_Armature_is_editmode_get(PointerRNA *ptr)
@@ -594,10 +649,12 @@ void rna_def_bone_curved_common(StructRNA *srna, bool is_posebone)
 {
 #  define RNA_DEF_CURVEBONE_UPDATE(prop, is_posebone) \
     { \
-      if (is_posebone) \
+      if (is_posebone) { \
         RNA_def_property_update(prop, NC_OBJECT | ND_POSE, "rna_Pose_update"); \
-      else \
+      } \
+      else { \
         RNA_def_property_update(prop, 0, "rna_Armature_update_data"); \
+      } \
     } \
     ((void)0)
 
@@ -621,9 +678,10 @@ void rna_def_bone_curved_common(StructRNA *srna, bool is_posebone)
   if (is_posebone == false) {
     prop = RNA_def_property(srna, "use_endroll_as_inroll", PROP_BOOLEAN, PROP_NONE);
     RNA_def_property_ui_text(
-        prop, "Inherit End Roll", "Use Roll Out of parent bone as Roll In of its children");
+        prop, "Inherit End Roll", "Add Roll Out of the Start Handle bone to the Roll In value");
     RNA_def_property_boolean_sdna(prop, NULL, "flag", BONE_ADD_PARENT_END_ROLL);
-    RNA_def_property_update(prop, 0, "rna_Armature_update_data");
+    RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
+    RNA_def_property_update(prop, 0, "rna_Armature_dependency_update");
   }
 
   /* Curve X/Y Offsets */
@@ -1143,7 +1201,7 @@ static void rna_def_edit_bone(BlenderRNA *brna)
   prop = RNA_def_property(srna, "matrix", PROP_FLOAT, PROP_MATRIX);
   /*RNA_def_property_float_sdna(prop, NULL, "");  */ /* doesn't access any real data */
   RNA_def_property_multi_array(prop, 2, rna_matrix_dimsize_4x4);
-  //RNA_def_property_clear_flag(prop, PROP_EDITABLE);
+  // RNA_def_property_clear_flag(prop, PROP_EDITABLE);
   RNA_def_property_flag(prop, PROP_THICK_WRAP); /* no reference to original data */
   RNA_def_property_ui_text(
       prop,
@@ -1285,8 +1343,15 @@ static void rna_def_armature(BlenderRNA *brna)
   /* Collections */
   prop = RNA_def_property(srna, "bones", PROP_COLLECTION, PROP_NONE);
   RNA_def_property_collection_sdna(prop, NULL, "bonebase", NULL);
-  RNA_def_property_collection_funcs(
-      prop, NULL, "rna_Armature_bones_next", NULL, NULL, NULL, NULL, NULL, NULL);
+  RNA_def_property_collection_funcs(prop,
+                                    NULL,
+                                    "rna_Armature_bones_next",
+                                    NULL,
+                                    NULL,
+                                    NULL,
+                                    NULL,
+                                    "rna_Armature_bones_lookup_string",
+                                    NULL);
   RNA_def_property_struct_type(prop, "Bone");
   RNA_def_property_ui_text(prop, "Bones", "");
   rna_def_armature_bones(brna, prop);
@@ -1356,13 +1421,6 @@ static void rna_def_armature(BlenderRNA *brna)
   RNA_def_property_boolean_sdna(prop, NULL, "flag", ARM_MIRROR_EDIT);
   RNA_def_property_ui_text(
       prop, "X-Axis Mirror", "Apply changes to matching bone on opposite side of X-Axis");
-  RNA_def_property_update(prop, 0, "rna_Armature_redraw_data");
-  RNA_def_property_flag(prop, PROP_LIB_EXCEPTION);
-
-  prop = RNA_def_property(srna, "use_auto_ik", PROP_BOOLEAN, PROP_NONE);
-  RNA_def_property_boolean_sdna(prop, NULL, "flag", ARM_AUTO_IK);
-  RNA_def_property_ui_text(
-      prop, "Auto IK", "Add temporary IK constraints while grabbing bones in Pose Mode");
   RNA_def_property_update(prop, 0, "rna_Armature_redraw_data");
   RNA_def_property_flag(prop, PROP_LIB_EXCEPTION);
 

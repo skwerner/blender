@@ -68,8 +68,10 @@ class GHOST_Window : public GHOST_IWindow {
    * virtual  GHOST_TSuccess setClientWidth(GHOST_TUns32 width) = 0;
    * virtual  GHOST_TSuccess setClientHeight(GHOST_TUns32 height) = 0;
    * virtual  GHOST_TSuccess setClientSize(GHOST_TUns32 width, GHOST_TUns32 height) = 0;
-   * virtual  void screenToClient(GHOST_TInt32 inX, GHOST_TInt32 inY, GHOST_TInt32& outX, GHOST_TInt32& outY) const = 0;
-   * virtual  void clientToScreen(GHOST_TInt32 inX, GHOST_TInt32 inY, GHOST_TInt32& outX, GHOST_TInt32& outY) const = 0;
+   * virtual void screenToClient(
+   *     GHOST_TInt32 inX, GHOST_TInt32 inY, GHOST_TInt32& outX, GHOST_TInt32& outY) const = 0;
+   * virtual void clientToScreen(
+   *     GHOST_TInt32 inX, GHOST_TInt32 inY, GHOST_TInt32& outX, GHOST_TInt32& outY) const = 0;
    * virtual GHOST_TWindowState getState() const = 0;
    * virtual GHOST_TSuccess setState(GHOST_TWindowState state) = 0;
    * virtual GHOST_TSuccess setOrder(GHOST_TWindowOrder order) = 0;
@@ -143,6 +145,7 @@ class GHOST_Window : public GHOST_IWindow {
   inline bool getCursorVisibility() const;
   inline GHOST_TGrabCursorMode getCursorGrabMode() const;
   inline bool getCursorGrabModeIsWarp() const;
+  inline GHOST_TAxisFlag getCursorGrabAxis() const;
   inline void getCursorGrabInitPos(GHOST_TInt32 &x, GHOST_TInt32 &y) const;
   inline void getCursorGrabAccum(GHOST_TInt32 &x, GHOST_TInt32 &y) const;
   inline void setCursorGrabAccum(GHOST_TInt32 x, GHOST_TInt32 y);
@@ -160,6 +163,7 @@ class GHOST_Window : public GHOST_IWindow {
    * \return  Indication of success.
    */
   GHOST_TSuccess setCursorGrab(GHOST_TGrabCursorMode mode,
+                               GHOST_TAxisFlag wrap_axis,
                                GHOST_Rect *bounds,
                                GHOST_TInt32 mouse_ungrab_xy[2]);
 
@@ -256,6 +260,12 @@ class GHOST_Window : public GHOST_IWindow {
    * \return Indication of success.
    */
   GHOST_TSuccess updateDrawingContext();
+
+  /**
+   * Gets the OpenGL framebuffer associated with the window's contents.
+   * \return The ID of an OpenGL framebuffer object.
+   */
+  virtual unsigned int getDefaultFramebuffer();
 
   /**
    * Returns the window user data.
@@ -365,6 +375,9 @@ class GHOST_Window : public GHOST_IWindow {
   /** The current grabbed state of the cursor */
   GHOST_TGrabCursorMode m_cursorGrab;
 
+  /** Grab cursor axis.*/
+  GHOST_TAxisFlag m_cursorGrabAxis;
+
   /** Initial grab location. */
   GHOST_TInt32 m_cursorGrabInitPos[2];
 
@@ -422,6 +435,11 @@ inline GHOST_TGrabCursorMode GHOST_Window::getCursorGrabMode() const
 inline bool GHOST_Window::getCursorGrabModeIsWarp() const
 {
   return (m_cursorGrab == GHOST_kGrabWrap) || (m_cursorGrab == GHOST_kGrabHide);
+}
+
+inline GHOST_TAxisFlag GHOST_Window::getCursorGrabAxis() const
+{
+  return m_cursorGrabAxis;
 }
 
 inline void GHOST_Window::getCursorGrabInitPos(GHOST_TInt32 &x, GHOST_TInt32 &y) const

@@ -1,7 +1,6 @@
-uniform mat4 ModelViewProjectionMatrix;
 uniform vec2 Viewport;
 uniform int xraymode;
-uniform int use_follow_path;
+uniform int alignment_mode;
 
 layout(points) in;
 layout(triangle_strip, max_vertices = 4) out;
@@ -21,6 +20,9 @@ out vec2 mTexCoord;
 #define M_2PI 6.28318530717958647692 /* 2*pi */
 #define FALSE 0
 
+/* keep this definition equals to GP_STYLE_FOLLOW_FIXED value */
+#define FIXED 2
+
 /* project 3d point to 2d on screen space */
 vec2 toScreenSpace(vec4 vertex)
 {
@@ -31,7 +33,7 @@ vec2 toScreenSpace(vec4 vertex)
 float getZdepth(vec4 point)
 {
   if (xraymode == GP_XRAY_FRONT) {
-    return min(0.000001, (point.z / point.w));
+    return min(-0.05, (point.z / point.w));
   }
   if (xraymode == GP_XRAY_3DSPACE) {
     return (point.z / point.w);
@@ -70,7 +72,7 @@ float getAngle(vec2 pt0, vec2 pt1)
     return 0.0;
   }
 
-  if (use_follow_path == FALSE) {
+  if (alignment_mode == FIXED) {
     return 0.0;
   }
 

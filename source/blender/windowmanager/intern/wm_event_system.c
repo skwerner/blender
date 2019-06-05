@@ -87,10 +87,6 @@
 
 #include "DEG_depsgraph.h"
 
-/* Motion in pixels allowed before we don't consider single/double click,
- * or detect the start of a tweak event. */
-#define WM_EVENT_CLICK_TWEAK_THRESHOLD (U.tweak_threshold * U.dpi_fac)
-
 static void wm_notifier_clear(wmNotifier *note);
 static void update_tablet_data(wmWindow *win, wmEvent *event);
 
@@ -732,6 +728,24 @@ void WM_operator_region_active_win_set(bContext *C)
   }
 }
 
+int WM_event_modifier_flag(const wmEvent *event)
+{
+  int flag = 0;
+  if (event->ctrl) {
+    flag |= KM_CTRL;
+  }
+  if (event->alt) {
+    flag |= KM_ALT;
+  }
+  if (event->shift) {
+    flag |= KM_SHIFT;
+  }
+  if (event->oskey) {
+    flag |= KM_OSKEY;
+  }
+  return flag;
+}
+
 /* for debugging only, getting inspecting events manually is tedious */
 void WM_event_print(const wmEvent *event)
 {
@@ -1293,7 +1307,6 @@ static bool operator_last_properties_init_impl(wmOperator *op, IDProperty *last_
 
   IDP_MergeGroup(op->properties, replaceprops, true);
   IDP_FreeProperty(replaceprops);
-  MEM_freeN(replaceprops);
   return changed;
 }
 
@@ -1316,7 +1329,6 @@ bool WM_operator_last_properties_store(wmOperator *op)
 {
   if (op->type->last_properties) {
     IDP_FreeProperty(op->type->last_properties);
-    MEM_freeN(op->type->last_properties);
     op->type->last_properties = NULL;
   }
 
@@ -1453,26 +1465,20 @@ static int wm_operator_invoke(bContext *C,
        */
       if (ot->flag & OPTYPE_BLOCKING || (op->opm && op->opm->type->flag & OPTYPE_BLOCKING)) {
         int bounds[4] = {-1, -1, -1, -1};
-        bool wrap;
+        int wrap = WM_CURSOR_WRAP_NONE;
 
-        if (event == NULL) {
-          wrap = false;
-        }
-        else if (op->opm) {
-          wrap = (U.uiflag & USER_CONTINUOUS_MOUSE) &&
-                 ((op->opm->flag & OP_IS_MODAL_GRAB_CURSOR) ||
-                  (op->opm->type->flag & OPTYPE_GRAB_CURSOR));
-        }
-        else {
-          wrap = (U.uiflag & USER_CONTINUOUS_MOUSE) &&
-                 ((op->flag & OP_IS_MODAL_GRAB_CURSOR) || (ot->flag & OPTYPE_GRAB_CURSOR));
-        }
-
-        /* exception, cont. grab in header is annoying */
-        if (wrap) {
-          ARegion *ar = CTX_wm_region(C);
-          if (ar && ELEM(ar->regiontype, RGN_TYPE_HEADER, RGN_TYPE_TOOL_HEADER, RGN_TYPE_FOOTER)) {
-            wrap = false;
+        if (event && (U.uiflag & USER_CONTINUOUS_MOUSE)) {
+          const wmOperator *op_test = op->opm ? op->opm : op;
+          const wmOperatorType *ot_test = op_test->type;
+          if ((ot_test->flag & OPTYPE_GRAB_CURSOR_XY) ||
+              (op_test->flag & OP_IS_MODAL_GRAB_CURSOR)) {
+            wrap = WM_CURSOR_WRAP_XY;
+          }
+          else if (ot_test->flag & OPTYPE_GRAB_CURSOR_X) {
+            wrap = WM_CURSOR_WRAP_X;
+          }
+          else if (ot_test->flag & OPTYPE_GRAB_CURSOR_Y) {
+            wrap = WM_CURSOR_WRAP_Y;
           }
         }
 
@@ -1480,6 +1486,11 @@ static int wm_operator_invoke(bContext *C,
           const rcti *winrect = NULL;
           ARegion *ar = CTX_wm_region(C);
           ScrArea *sa = CTX_wm_area(C);
+
+          /* Wrap only in X for header. */
+          if (ar && ELEM(ar->regiontype, RGN_TYPE_HEADER, RGN_TYPE_TOOL_HEADER, RGN_TYPE_FOOTER)) {
+            wrap = WM_CURSOR_WRAP_X;
+          }
 
           if (ar && ar->regiontype == RGN_TYPE_WINDOW &&
               BLI_rcti_isect_pt_v(&ar->winrct, &event->x)) {
@@ -1680,6 +1691,17 @@ int WM_operator_name_call(bContext *C, const char *opstring, short context, Poin
   return 0;
 }
 
+int WM_operator_name_call_with_properties(struct bContext *C,
+                                          const char *opstring,
+                                          short context,
+                                          struct IDProperty *properties)
+{
+  PointerRNA props_ptr;
+  wmOperatorType *ot = WM_operatortype_find(opstring, false);
+  RNA_pointer_create(NULL, ot->srna, properties, &props_ptr);
+  return WM_operator_name_call_ptr(C, ot, context, &props_ptr);
+}
+
 /**
  * Call an existent menu. The menu can be created in C or Python.
  */
@@ -1714,14 +1736,16 @@ int WM_operator_call_py(bContext *C,
   op = wm_operator_create(wm, ot, properties, reports);
 
   if (op->type->exec) {
-    if (is_undo && op->type->flag & OPTYPE_UNDO)
+    if (is_undo && op->type->flag & OPTYPE_UNDO) {
       wm->op_undo_depth++;
+    }
 
     retval = op->type->exec(C, op);
     OPERATOR_RETVAL_CHECK(retval);
 
-    if (is_undo && op->type->flag & OPTYPE_UNDO && CTX_wm_manager(C) == wm)
+    if (is_undo && op->type->flag & OPTYPE_UNDO && CTX_wm_manager(C) == wm) {
       wm->op_undo_depth--;
+    }
   }
   else {
     CLOG_WARN(WM_LOG_OPERATORS,
@@ -2203,7 +2227,7 @@ static int wm_handler_operator_call(bContext *C,
           wm_event_free_handler(&handler->head);
 
           /* prevent silly errors from operator users */
-          //retval &= ~OPERATOR_PASS_THROUGH;
+          // retval &= ~OPERATOR_PASS_THROUGH;
         }
       }
     }
@@ -2475,15 +2499,134 @@ static int wm_action_not_handled(int action)
   return action == WM_HANDLER_CONTINUE || action == (WM_HANDLER_BREAK | WM_HANDLER_MODAL);
 }
 
+#define PRINT \
+  if (do_debug_handler) \
+  printf
+
+static int wm_handlers_do_keymap_with_keymap_handler(
+    /* From 'wm_handlers_do_intern' */
+    bContext *C,
+    wmEvent *event,
+    ListBase *handlers,
+    wmEventHandler_Keymap *handler,
+    /* Additional. */
+    wmKeyMap *keymap,
+    const bool do_debug_handler)
+{
+  int action = WM_HANDLER_CONTINUE;
+
+  PRINT("%s:   checking '%s' ...", __func__, keymap->idname);
+
+  if (keymap == NULL) {
+    /* Only callback is allowed to have NULL keymaps. */
+    BLI_assert(handler->dynamic.keymap_fn);
+  }
+  else {
+    if (WM_keymap_poll(C, keymap)) {
+
+      PRINT("pass\n");
+
+      for (wmKeyMapItem *kmi = keymap->items.first; kmi; kmi = kmi->next) {
+        if (wm_eventmatch(event, kmi)) {
+          struct wmEventHandler_KeymapPost keymap_post = handler->post;
+
+          PRINT("%s:     item matched '%s'\n", __func__, kmi->idname);
+
+          /* weak, but allows interactive callback to not use rawkey */
+          event->keymap_idname = kmi->idname;
+
+          action |= wm_handler_operator_call(C, handlers, &handler->head, event, kmi->ptr);
+
+          if (action & WM_HANDLER_BREAK) {
+            /* not always_pass here, it denotes removed handler_base */
+            CLOG_INFO(WM_LOG_HANDLERS, 2, "handled! '%s'", kmi->idname);
+            if (keymap_post.post_fn != NULL) {
+              keymap_post.post_fn(keymap, kmi, keymap_post.user_data);
+            }
+            break;
+          }
+          else {
+            if (action & WM_HANDLER_HANDLED) {
+              CLOG_INFO(WM_LOG_HANDLERS, 2, "handled - and pass on! '%s'", kmi->idname);
+            }
+            else {
+              CLOG_INFO(WM_LOG_HANDLERS, 2, "un-handled '%s'", kmi->idname);
+            }
+          }
+        }
+      }
+    }
+    else {
+      PRINT("fail\n");
+    }
+  }
+
+  return action;
+}
+
+static int wm_handlers_do_keymap_with_gizmo_handler(
+    /* From 'wm_handlers_do_intern' */
+    bContext *C,
+    wmEvent *event,
+    ListBase *handlers,
+    wmEventHandler_Gizmo *handler,
+    /* Additional. */
+    wmGizmoGroup *gzgroup,
+    wmKeyMap *keymap,
+    const bool do_debug_handler)
+{
+  int action = WM_HANDLER_CONTINUE;
+  wmKeyMapItem *kmi;
+
+  PRINT("%s:   checking '%s' ...", __func__, keymap->idname);
+
+  if (WM_keymap_poll(C, keymap)) {
+    PRINT("pass\n");
+    for (kmi = keymap->items.first; kmi; kmi = kmi->next) {
+      if (wm_eventmatch(event, kmi)) {
+        PRINT("%s:     item matched '%s'\n", __func__, kmi->idname);
+
+        /* weak, but allows interactive callback to not use rawkey */
+        event->keymap_idname = kmi->idname;
+
+        CTX_wm_gizmo_group_set(C, gzgroup);
+
+        /* handler->op is called later, we want keymap op to be triggered here */
+        action |= wm_handler_operator_call(C, handlers, &handler->head, event, kmi->ptr);
+
+        CTX_wm_gizmo_group_set(C, NULL);
+
+        if (action & WM_HANDLER_BREAK) {
+          if (G.debug & (G_DEBUG_EVENTS | G_DEBUG_HANDLERS)) {
+            printf("%s:       handled - and pass on! '%s'\n", __func__, kmi->idname);
+          }
+          break;
+        }
+        else {
+          if (action & WM_HANDLER_HANDLED) {
+            if (G.debug & (G_DEBUG_EVENTS | G_DEBUG_HANDLERS)) {
+              printf("%s:       handled - and pass on! '%s'\n", __func__, kmi->idname);
+            }
+          }
+          else {
+            PRINT("%s:       un-handled '%s'\n", __func__, kmi->idname);
+          }
+        }
+      }
+    }
+  }
+  else {
+    PRINT("fail\n");
+  }
+  return action;
+}
+
 static int wm_handlers_do_intern(bContext *C, wmEvent *event, ListBase *handlers)
 {
   const bool do_debug_handler =
       (G.debug & G_DEBUG_HANDLERS) &&
       /* comment this out to flood the console! (if you really want to test) */
       !ELEM(event->type, MOUSEMOVE, INBETWEEN_MOUSEMOVE);
-#define PRINT \
-  if (do_debug_handler) \
-  printf
 
   wmWindowManager *wm = CTX_wm_manager(C);
   int action = WM_HANDLER_CONTINUE;
@@ -2521,50 +2664,8 @@ static int wm_handlers_do_intern(bContext *C, wmEvent *event, ListBase *handlers
       if (handler_base->type == WM_HANDLER_TYPE_KEYMAP) {
         wmEventHandler_Keymap *handler = (wmEventHandler_Keymap *)handler_base;
         wmKeyMap *keymap = WM_event_get_keymap_from_handler(wm, handler);
-
-        PRINT("%s:   checking '%s' ...", __func__, keymap->idname);
-
-        if (keymap == NULL) {
-          /* Only callback is allowed to have NULL keymaps. */
-          BLI_assert(handler->dynamic.keymap_fn);
-        }
-        else if (WM_keymap_poll(C, keymap)) {
-
-          PRINT("pass\n");
-
-          for (wmKeyMapItem *kmi = keymap->items.first; kmi; kmi = kmi->next) {
-            if (wm_eventmatch(event, kmi)) {
-              struct wmEventHandler_KeymapPost keymap_post = handler->post;
-
-              PRINT("%s:     item matched '%s'\n", __func__, kmi->idname);
-
-              /* weak, but allows interactive callback to not use rawkey */
-              event->keymap_idname = kmi->idname;
-
-              action |= wm_handler_operator_call(C, handlers, handler_base, event, kmi->ptr);
-
-              if (action & WM_HANDLER_BREAK) {
-                /* not always_pass here, it denotes removed handler_base */
-                CLOG_INFO(WM_LOG_HANDLERS, 2, "handled! '%s'", kmi->idname);
-                if (keymap_post.post_fn != NULL) {
-                  keymap_post.post_fn(keymap, kmi, keymap_post.user_data);
-                }
-                break;
-              }
-              else {
-                if (action & WM_HANDLER_HANDLED) {
-                  CLOG_INFO(WM_LOG_HANDLERS, 2, "handled - and pass on! '%s'", kmi->idname);
-                }
-                else {
-                  CLOG_INFO(WM_LOG_HANDLERS, 2, "un-handled '%s'", kmi->idname);
-                }
-              }
-            }
-          }
-        }
-        else {
-          PRINT("fail\n");
-        }
+        action |= wm_handlers_do_keymap_with_keymap_handler(
+            C, event, handlers, handler, keymap, do_debug_handler);
       }
       else if (handler_base->type == WM_HANDLER_TYPE_UI) {
         wmEventHandler_UI *handler = (wmEventHandler_UI *)handler_base;
@@ -2635,8 +2736,27 @@ static int wm_handlers_do_intern(bContext *C, wmEvent *event, ListBase *handlers
         wm_gizmomap_handler_context_gizmo(C, handler);
         wm_region_mouse_co(C, event);
 
+        /* Drag events use the previous click location to highlight the gizmos,
+         * Get the highlight again in case the user dragged off the gizmo. */
+        const bool is_event_drag = ISTWEAK(event->type) || (event->val == KM_CLICK_DRAG);
+        const bool is_event_modifier = ISKEYMODIFIER(event->type);
+
+        bool handle_highlight = false;
+        bool handle_keymap = false;
+
         /* handle gizmo highlighting */
-        if (event->type == MOUSEMOVE && !wm_gizmomap_modal_get(gzmap)) {
+        if (!wm_gizmomap_modal_get(gzmap) &&
+            ((event->type == MOUSEMOVE) || is_event_modifier || is_event_drag)) {
+          handle_highlight = true;
+          if (is_event_modifier || is_event_drag) {
+            handle_keymap = true;
+          }
+        }
+        else {
+          handle_keymap = true;
+        }
+
+        if (handle_highlight) {
           int part;
           gz = wm_gizmomap_highlight_find(gzmap, C, event, &part);
           if (wm_gizmomap_highlight_set(gzmap, C, gz, part) && gz != NULL) {
@@ -2645,98 +2765,44 @@ static int wm_handlers_do_intern(bContext *C, wmEvent *event, ListBase *handlers
             }
           }
         }
-        else {
-          /* Either we operate on a single highlighted item
-           * or groups attached to the selected gizmos.
-           * To simplify things both cases loop over an array of items. */
-          wmGizmoGroup *gzgroup_first;
-          bool is_gzgroup_single;
 
-          if (ISMOUSE(event->type)) {
-            /* Keep gz set as-is, just fake single selection. */
-            if (gz) {
-              gzgroup_first = gz->parent_gzgroup;
-            }
-            else {
-              gzgroup_first = NULL;
-            }
-            is_gzgroup_single = true;
-          }
-          else {
-            if (WM_gizmomap_is_any_selected(gzmap)) {
-              const ListBase *groups = WM_gizmomap_group_list(gzmap);
-              gzgroup_first = groups->first;
-            }
-            else {
-              gzgroup_first = NULL;
-            }
-            is_gzgroup_single = false;
+        /* Don't use from now on. */
+        const bool is_event_handle_all = gz && (gz->flag & WM_GIZMO_EVENT_HANDLE_ALL);
+
+        if (handle_keymap) {
+          /* Handle highlight gizmo. */
+          if (gz != NULL) {
+            wmGizmoGroup *gzgroup = gz->parent_gzgroup;
+            wmKeyMap *keymap = WM_keymap_active(wm,
+                                                gz->keymap ? gz->keymap : gzgroup->type->keymap);
+            action |= wm_handlers_do_keymap_with_gizmo_handler(
+                C, event, handlers, handler, gzgroup, keymap, do_debug_handler);
           }
 
           /* Don't use from now on. */
           gz = NULL;
 
-          for (wmGizmoGroup *gzgroup = gzgroup_first; gzgroup; gzgroup = gzgroup->next) {
-            /* get user customized keymap from default one */
-
-            if ((is_gzgroup_single == false) &&
-                /* We might want to change the logic here and use some kind of gizmo edit-mode.
-                 * For now just use keymap when a selection exists. */
-                wm_gizmogroup_is_any_selected(gzgroup) == false) {
-              continue;
-            }
-
-            wmKeyMap *keymap = WM_keymap_active(wm, gzgroup->type->keymap);
-            wmKeyMapItem *kmi;
-
-            PRINT("%s:   checking '%s' ...", __func__, keymap->idname);
-
-            if (WM_keymap_poll(C, keymap)) {
-              PRINT("pass\n");
-              for (kmi = keymap->items.first; kmi; kmi = kmi->next) {
-                if (wm_eventmatch(event, kmi)) {
-                  PRINT("%s:     item matched '%s'\n", __func__, kmi->idname);
-
-                  /* weak, but allows interactive callback to not use rawkey */
-                  event->keymap_idname = kmi->idname;
-
-                  CTX_wm_gizmo_group_set(C, gzgroup);
-
-                  /* handler->op is called later, we want keymap op to be triggered here */
-                  action |= wm_handler_operator_call(C, handlers, handler_base, event, kmi->ptr);
-
-                  CTX_wm_gizmo_group_set(C, NULL);
-
+          /* Fallback to selected gizmo (when un-handled). */
+          if ((action & WM_HANDLER_BREAK) == 0) {
+            if (WM_gizmomap_is_any_selected(gzmap)) {
+              const ListBase *groups = WM_gizmomap_group_list(gzmap);
+              for (wmGizmoGroup *gzgroup = groups->first; gzgroup; gzgroup = gzgroup->next) {
+                if (wm_gizmogroup_is_any_selected(gzgroup)) {
+                  wmKeyMap *keymap = WM_keymap_active(wm, gzgroup->type->keymap);
+                  action |= wm_handlers_do_keymap_with_gizmo_handler(
+                      C, event, handlers, handler, gzgroup, keymap, do_debug_handler);
                   if (action & WM_HANDLER_BREAK) {
-                    if (G.debug & (G_DEBUG_EVENTS | G_DEBUG_HANDLERS)) {
-                      printf("%s:       handled - and pass on! '%s'\n", __func__, kmi->idname);
-                    }
                     break;
-                  }
-                  else {
-                    if (action & WM_HANDLER_HANDLED) {
-                      if (G.debug & (G_DEBUG_EVENTS | G_DEBUG_HANDLERS)) {
-                        printf("%s:       handled - and pass on! '%s'\n", __func__, kmi->idname);
-                      }
-                    }
-                    else {
-                      PRINT("%s:       un-handled '%s'\n", __func__, kmi->idname);
-                    }
                   }
                 }
               }
             }
-            else {
-              PRINT("fail\n");
-            }
+          }
+        }
 
-            if (action & WM_HANDLER_BREAK) {
-              break;
-            }
-
-            if (is_gzgroup_single) {
-              break;
-            }
+        if (is_event_handle_all) {
+          if (action == WM_HANDLER_CONTINUE) {
+            action |= WM_HANDLER_BREAK | WM_HANDLER_MODAL;
           }
         }
 
@@ -2793,10 +2859,10 @@ static int wm_handlers_do_intern(bContext *C, wmEvent *event, ListBase *handlers
     wm_cursor_arrow_move(CTX_wm_window(C), event);
   }
 
-#undef PRINT
-
   return action;
 }
+
+#undef PRINT
 
 /* this calls handlers twice - to solve (double-)click events */
 static int wm_handlers_do(bContext *C, wmEvent *event, ListBase *handlers)
@@ -2814,10 +2880,7 @@ static int wm_handlers_do(bContext *C, wmEvent *event, ListBase *handlers)
     if (wm_action_not_handled(action)) {
       if (event->check_drag) {
         wmWindow *win = CTX_wm_window(C);
-        if ((abs(event->x - win->eventstate->prevclickx)) >=
-                WM_EVENT_CURSOR_CLICK_DRAG_THRESHOLD ||
-            (abs(event->y - win->eventstate->prevclicky)) >=
-                WM_EVENT_CURSOR_CLICK_DRAG_THRESHOLD) {
+        if (WM_event_drag_test(event, &win->eventstate->prevclickx)) {
           int x = event->x;
           int y = event->y;
           short val = event->val;
@@ -2873,8 +2936,11 @@ static int wm_handlers_do(bContext *C, wmEvent *event, ListBase *handlers)
 
         if ((event->val == KM_RELEASE) && (win->eventstate->prevval == KM_PRESS) &&
             (win->eventstate->check_click == true)) {
-          if ((abs(event->x - win->eventstate->prevclickx)) < WM_EVENT_CLICK_TWEAK_THRESHOLD &&
-              (abs(event->y - win->eventstate->prevclicky)) < WM_EVENT_CLICK_TWEAK_THRESHOLD) {
+          if (WM_event_drag_test(event, &win->eventstate->prevclickx)) {
+            win->eventstate->check_click = 0;
+            win->eventstate->check_drag = 0;
+          }
+          else {
             /* Position is where the actual click happens, for more
              * accurate selecting in case the mouse drifts a little. */
             int x = event->x;
@@ -2891,10 +2957,6 @@ static int wm_handlers_do(bContext *C, wmEvent *event, ListBase *handlers)
             event->val = KM_RELEASE;
             event->x = x;
             event->y = y;
-          }
-          else {
-            win->eventstate->check_click = 0;
-            win->eventstate->check_drag = 0;
           }
         }
         else if (event->val == KM_DBL_CLICK) {
@@ -3011,7 +3073,7 @@ static void wm_paintcursor_test(bContext *C, const wmEvent *event)
   }
 }
 
-static void wm_event_drag_test(wmWindowManager *wm, wmWindow *win, wmEvent *event)
+static void wm_event_drag_and_drop_test(wmWindowManager *wm, wmWindow *win, wmEvent *event)
 {
   bScreen *screen = WM_window_get_active_screen(win);
 
@@ -3186,7 +3248,7 @@ void wm_event_do_handlers(bContext *C)
       }
 
       /* check dragging, creates new event or frees, adds draw tag */
-      wm_event_drag_test(wm, win, event);
+      wm_event_drag_and_drop_test(wm, win, event);
 
       /* builtin tweak, if action is break it removes tweak */
       wm_tweakevent_test(C, event, action);
@@ -4197,13 +4259,14 @@ static wmWindow *wm_event_cursor_other_windows(wmWindowManager *wm, wmWindow *wi
   return NULL;
 }
 
-static bool wm_event_is_double_click(wmEvent *event, const wmEvent *event_state)
+static bool wm_event_is_double_click(const wmEvent *event, const wmEvent *event_state)
 {
   if ((event->type == event_state->prevtype) && (event_state->prevval == KM_RELEASE) &&
       (event->val == KM_PRESS)) {
-    if ((ISMOUSE(event->type) == false) ||
-        ((abs(event->x - event_state->prevclickx)) < WM_EVENT_CLICK_TWEAK_THRESHOLD &&
-         (abs(event->y - event_state->prevclicky)) < WM_EVENT_CLICK_TWEAK_THRESHOLD)) {
+    if (ISMOUSE(event->type) && WM_event_drag_test(event, &event_state->prevclickx)) {
+      /* pass */
+    }
+    else {
       if ((PIL_check_seconds_timer() - event_state->prevclicktime) * 1000 < U.dbl_click_time) {
         return true;
       }
@@ -4235,8 +4298,7 @@ static wmEvent *wm_event_add_mousemove(wmWindow *win, const wmEvent *event)
 
 /* windows store own event queues, no bContext here */
 /* time is in 1000s of seconds, from ghost */
-void wm_event_add_ghostevent(
-    wmWindowManager *wm, wmWindow *win, int type, int UNUSED(time), void *customdata)
+void wm_event_add_ghostevent(wmWindowManager *wm, wmWindow *win, int type, void *customdata)
 {
   wmWindow *owin;
 
@@ -4267,6 +4329,8 @@ void wm_event_add_ghostevent(
       copy_v2_v2_int(&event.x, &cd->x);
       wm_stereo3d_mouse_offset_apply(win, &event.x);
 
+      event.prevtype = event.type;
+      event.prevval = event.val;
       event.type = MOUSEMOVE;
       {
         wmEvent *event_new = wm_event_add_mousemove(win, &event);
@@ -4283,6 +4347,8 @@ void wm_event_add_ghostevent(
         oevent = *oevt;
 
         copy_v2_v2_int(&oevent.x, &event.x);
+        oevent.prevtype = oevent.type;
+        oevent.prevval = oevent.val;
         oevent.type = MOUSEMOVE;
         {
           wmEvent *event_new = wm_event_add_mousemove(owin, &oevent);
@@ -5128,6 +5194,46 @@ bool WM_window_modal_keymap_status_draw(bContext *UNUSED(C), wmWindow *win, uiLa
     }
   }
   return true;
+}
+
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Event Click/Drag Checks
+ *
+ * Values under this limit are detected as clicks.
+ *
+ * \{ */
+
+int WM_event_drag_threshold(const struct wmEvent *event)
+{
+  int drag_threshold;
+  if (WM_event_is_tablet(event)) {
+    drag_threshold = U.drag_threshold_tablet;
+  }
+  else if (ISMOUSE(event->prevtype)) {
+    drag_threshold = U.drag_threshold_mouse;
+  }
+  else {
+    /* Typically keyboard, could be NDOF button or other less common types. */
+    drag_threshold = U.drag_threshold;
+  }
+  return drag_threshold * U.dpi_fac;
+}
+
+bool WM_event_drag_test_with_delta(const wmEvent *event, const int drag_delta[2])
+{
+  const int drag_threshold = WM_event_drag_threshold(event);
+  return abs(drag_delta[0]) > drag_threshold || abs(drag_delta[1]) > drag_threshold;
+}
+
+bool WM_event_drag_test(const wmEvent *event, const int prev_xy[2])
+{
+  const int drag_delta[2] = {
+      prev_xy[0] - event->x,
+      prev_xy[1] - event->y,
+  };
+  return WM_event_drag_test_with_delta(event, drag_delta);
 }
 
 /** \} */

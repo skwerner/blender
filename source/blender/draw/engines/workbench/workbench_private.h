@@ -75,18 +75,7 @@
 
 #define IS_NAVIGATING(wpd) \
   ((DRW_context_state_get()->rv3d) && (DRW_context_state_get()->rv3d->rflag & RV3D_NAVIGATING))
-#define FXAA_ENABLED(wpd) \
-  ((!DRW_state_is_opengl_render()) && \
-   (IN_RANGE(wpd->preferences->gpu_viewport_quality, \
-             GPU_VIEWPORT_QUALITY_FXAA, \
-             GPU_VIEWPORT_QUALITY_TAA8) || \
-    ((IS_NAVIGATING(wpd) || wpd->is_playback) && \
-     (wpd->preferences->gpu_viewport_quality >= GPU_VIEWPORT_QUALITY_TAA8))))
-#define TAA_ENABLED(wpd) \
-  ((DRW_state_is_image_render() && DRW_context_state_get()->scene->r.mode & R_OSA) || \
-   (!DRW_state_is_image_render() && \
-    wpd->preferences->gpu_viewport_quality >= GPU_VIEWPORT_QUALITY_TAA8 && !IS_NAVIGATING(wpd) && \
-    !wpd->is_playback))
+
 #define SPECULAR_HIGHLIGHT_ENABLED(wpd) \
   (STUDIOLIGHT_ENABLED(wpd) && (wpd->shading.flag & V3D_SHADING_SPECULAR_HIGHLIGHT) && \
    (!STUDIOLIGHT_TYPE_MATCAP_ENABLED(wpd)))
@@ -284,12 +273,10 @@ typedef struct WORKBENCH_PrivateData {
 } WORKBENCH_PrivateData; /* Transient data */
 
 typedef struct WORKBENCH_EffectInfo {
-  float override_persmat[4][4];
-  float override_persinv[4][4];
-  float override_winmat[4][4];
-  float override_wininv[4][4];
+  /** View */
+  struct DRWView *view;
+  /** Last projection matrix to see if view is still valid. */
   float last_mat[4][4];
-  float curr_mat[4][4];
   int jitter_index;
   float taa_mix_factor;
   bool view_updated;
@@ -326,6 +313,46 @@ typedef struct WORKBENCH_ObjectData {
   int object_id;
 } WORKBENCH_ObjectData;
 
+/* inline helper functions */
+BLI_INLINE bool workbench_is_taa_enabled(WORKBENCH_PrivateData *wpd)
+{
+  if (DRW_state_is_image_render()) {
+    const DRWContextState *draw_ctx = DRW_context_state_get();
+    if (draw_ctx->v3d) {
+      return draw_ctx->scene->display.viewport_aa > SCE_DISPLAY_AA_FXAA;
+    }
+    else {
+      return draw_ctx->scene->display.render_aa > SCE_DISPLAY_AA_FXAA;
+    }
+  }
+  else {
+    return !(IS_NAVIGATING(wpd) || wpd->is_playback) &&
+           wpd->preferences->viewport_aa > SCE_DISPLAY_AA_FXAA;
+  }
+}
+
+BLI_INLINE bool workbench_is_fxaa_enabled(WORKBENCH_PrivateData *wpd)
+{
+  if (DRW_state_is_image_render()) {
+    const DRWContextState *draw_ctx = DRW_context_state_get();
+    if (draw_ctx->v3d) {
+      return draw_ctx->scene->display.viewport_aa == SCE_DISPLAY_AA_FXAA;
+    }
+    else {
+      return draw_ctx->scene->display.render_aa == SCE_DISPLAY_AA_FXAA;
+    }
+  }
+  else {
+    if (wpd->preferences->viewport_aa == SCE_DISPLAY_AA_FXAA) {
+      return true;
+    }
+
+    /* when navigating or animation playback use FXAA if scene uses TAA. */
+    return (IS_NAVIGATING(wpd) || wpd->is_playback) &&
+           wpd->preferences->viewport_aa > SCE_DISPLAY_AA_FXAA;
+  }
+}
+
 /* workbench_deferred.c */
 void workbench_deferred_engine_init(WORKBENCH_Data *vedata);
 void workbench_deferred_engine_free(void);
@@ -356,7 +383,7 @@ WORKBENCH_MaterialData *workbench_forward_get_or_create_material_data(WORKBENCH_
                                                                       ImageUser *iuser,
                                                                       int color_type,
                                                                       int interp,
-                                                                      bool is_sculpt_mode);
+                                                                      bool use_sculpt_pbvh);
 
 /* workbench_effect_aa.c */
 void workbench_aa_create_pass(WORKBENCH_Data *vedata, GPUTexture **tx);
@@ -375,6 +402,7 @@ void workbench_taa_draw_scene_start(WORKBENCH_Data *vedata);
 void workbench_taa_draw_scene_end(WORKBENCH_Data *vedata);
 void workbench_taa_view_updated(WORKBENCH_Data *vedata);
 int workbench_taa_calculate_num_iterations(WORKBENCH_Data *vedata);
+int workbench_num_viewport_rendering_iterations(WORKBENCH_Data *vedata);
 
 /* workbench_effect_dof.c */
 void workbench_dof_engine_init(WORKBENCH_Data *vedata, Object *camera);
@@ -388,7 +416,7 @@ void workbench_dof_draw_pass(WORKBENCH_Data *vedata);
 int workbench_material_determine_color_type(WORKBENCH_PrivateData *wpd,
                                             Image *ima,
                                             Object *ob,
-                                            bool is_sculpt_mode);
+                                            bool use_sculpt_pbvh);
 void workbench_material_get_image_and_mat(
     Object *ob, int mat_nr, Image **r_image, ImageUser **r_iuser, int *r_interp, Material **r_mat);
 char *workbench_material_build_defines(WORKBENCH_PrivateData *wpd,

@@ -336,6 +336,7 @@ void MESH_OT_subdivide_edgering(wmOperatorType *ot)
 {
   /* identifiers */
   ot->name = "Subdivide Edge-Ring";
+  ot->description = "Subdivide perpendicular edges to the selected edge ring";
   ot->idname = "MESH_OT_subdivide_edgering";
 
   /* api callbacks */
@@ -1123,7 +1124,7 @@ static int edbm_mark_sharp_exec(bContext *C, wmOperator *op)
     BMEditMesh *em = BKE_editmesh_from_object(obedit);
     BMesh *bm = em->bm;
 
-    if (bm->totedgesel == 0) {
+    if ((use_verts && bm->totvertsel == 0) || (!use_verts && bm->totedgesel == 0)) {
       continue;
     }
 
@@ -2209,7 +2210,7 @@ static int edbm_normals_make_consistent_exec(bContext *C, wmOperator *op)
 void MESH_OT_normals_make_consistent(wmOperatorType *ot)
 {
   /* identifiers */
-  ot->name = "Make Normals Consistent";
+  ot->name = "Recalculate Normals";
   ot->description = "Make face and vertex normals point either outside or inside the mesh";
   ot->idname = "MESH_OT_normals_make_consistent";
 
@@ -2774,7 +2775,7 @@ void MESH_OT_uvs_reverse(wmOperatorType *ot)
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
 
   /* props */
-  //RNA_def_enum(ot->srna, "axis", axis_items, DIRECTION_CW, "Axis", "Axis to mirror UVs around");
+  // RNA_def_enum(ot->srna, "axis", axis_items, DIRECTION_CW, "Axis", "Axis to mirror UVs around");
 }
 
 void MESH_OT_colors_rotate(wmOperatorType *ot)
@@ -2810,7 +2811,9 @@ void MESH_OT_colors_reverse(wmOperatorType *ot)
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
 
   /* props */
-  //RNA_def_enum(ot->srna, "axis", axis_items, DIRECTION_CW, "Axis", "Axis to mirror colors around");
+#if 0
+  RNA_def_enum(ot->srna, "axis", axis_items, DIRECTION_CW, "Axis", "Axis to mirror colors around");
+#endif
 }
 
 /** \} */
@@ -3167,8 +3170,8 @@ static int edbm_remove_doubles_exec(bContext *C, wmOperator *op)
 void MESH_OT_remove_doubles(wmOperatorType *ot)
 {
   /* identifiers */
-  ot->name = "Remove Doubles";
-  ot->description = "Remove duplicate vertices";
+  ot->name = "Merge by Distance";
+  ot->description = "Merge vertices based on their proximity";
   ot->idname = "MESH_OT_remove_doubles";
 
   /* api callbacks */
@@ -3571,7 +3574,7 @@ static float bm_edge_seg_isect(const float sco_a[2],
   float threshold = 0.0;
   int i;
 
-  //threshold = 0.000001; /* tolerance for vertex intersection */
+  // threshold = 0.000001; /* tolerance for vertex intersection */
   // XXX threshold = scene->toolsettings->select_thresh / 100;
 
   /* Get screen coords of verts */
@@ -3713,7 +3716,7 @@ static float bm_edge_seg_isect(const float sco_a[2],
         else {
           perc = (yi - y21) / (y22 - y21); /* lower slope more accurate */
         }
-        //isect = 32768.0 * (perc + 0.0000153); /* Percentage in 1 / 32768ths */
+        // isect = 32768.0 * (perc + 0.0000153); /* Percentage in 1 / 32768ths */
 
         break;
       }
@@ -6791,7 +6794,7 @@ void MESH_OT_bridge_edge_loops(wmOperatorType *ot)
 
   /* identifiers */
   ot->name = "Bridge Edge Loops";
-  ot->description = "Make faces between two or more edge loops";
+  ot->description = "Create a bridge of faces between two or more selected edge loops";
   ot->idname = "MESH_OT_bridge_edge_loops";
 
   /* api callbacks */
@@ -7010,7 +7013,8 @@ void MESH_OT_offset_edge_loops(wmOperatorType *ot)
   ot->exec = edbm_offset_edgeloop_exec;
   ot->poll = ED_operator_editmesh;
 
-  /* Keep internal, since this is only meant to be accessed via 'MESH_OT_offset_edge_loops_slide' */
+  /* Keep internal, since this is only meant to be accessed via
+   * 'MESH_OT_offset_edge_loops_slide'. */
 
   /* flags */
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO | OPTYPE_INTERNAL;
@@ -7683,6 +7687,7 @@ static int point_normals_init(bContext *C, wmOperator *op, const wmEvent *UNUSED
   BMEditMesh *em = BKE_editmesh_from_object(obedit);
   BMesh *bm = em->bm;
 
+  BKE_editmesh_ensure_autosmooth(em);
   BKE_editmesh_lnorspace_update(em);
   BMLoopNorEditDataArray *lnors_ed_arr = BM_loop_normal_editdata_array_init(bm);
 
@@ -8072,7 +8077,7 @@ void MESH_OT_point_normals(struct wmOperatorType *ot)
   ot->exec = edbm_point_normals_exec;
   ot->invoke = edbm_point_normals_invoke;
   ot->modal = edbm_point_normals_modal;
-  ot->poll = ED_operator_editmesh_auto_smooth;
+  ot->poll = ED_operator_editmesh;
   ot->ui = edbm_point_normals_ui;
   ot->cancel = point_normals_free;
 
@@ -8238,6 +8243,7 @@ static int normals_split_merge(bContext *C, const bool do_merge)
   BMEdge *e;
   BMIter eiter;
 
+  BKE_editmesh_ensure_autosmooth(em);
   BKE_editmesh_lnorspace_update(em);
 
   BMLoopNorEditDataArray *lnors_ed_arr = do_merge ? BM_loop_normal_editdata_array_init(bm) : NULL;
@@ -8283,7 +8289,7 @@ void MESH_OT_merge_normals(struct wmOperatorType *ot)
 
   /* api callbacks */
   ot->exec = edbm_merge_normals_exec;
-  ot->poll = ED_operator_editmesh_auto_smooth;
+  ot->poll = ED_operator_editmesh;
 
   /* flags */
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
@@ -8303,7 +8309,7 @@ void MESH_OT_split_normals(struct wmOperatorType *ot)
 
   /* api callbacks */
   ot->exec = edbm_split_normals_exec;
-  ot->poll = ED_operator_editmesh_auto_smooth;
+  ot->poll = ED_operator_editmesh;
 
   /* flags */
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
@@ -8341,6 +8347,7 @@ static int edbm_average_normals_exec(bContext *C, wmOperator *op)
   BMLoop *l, *l_curr, *l_first;
   BMIter fiter;
 
+  BKE_editmesh_ensure_autosmooth(em);
   bm->spacearr_dirty |= BM_SPACEARR_DIRTY_ALL;
   BKE_editmesh_lnorspace_update(em);
 
@@ -8501,7 +8508,7 @@ void MESH_OT_average_normals(struct wmOperatorType *ot)
 
   /* api callbacks */
   ot->exec = edbm_average_normals_exec;
-  ot->poll = ED_operator_editmesh_auto_smooth;
+  ot->poll = ED_operator_editmesh;
   ot->ui = edbm_average_normals_ui;
 
   /* flags */
@@ -8564,6 +8571,7 @@ static int edbm_normals_tools_exec(bContext *C, wmOperator *op)
   const int mode = RNA_enum_get(op->ptr, "mode");
   const bool absolute = RNA_boolean_get(op->ptr, "absolute");
 
+  BKE_editmesh_ensure_autosmooth(em);
   BKE_editmesh_lnorspace_update(em);
   BMLoopNorEditDataArray *lnors_ed_arr = BM_loop_normal_editdata_array_init(bm);
   BMLoopNorEditData *lnor_ed = lnors_ed_arr->lnor_editdata;
@@ -8720,7 +8728,7 @@ void MESH_OT_normals_tools(struct wmOperatorType *ot)
 
   /* api callbacks */
   ot->exec = edbm_normals_tools_exec;
-  ot->poll = ED_operator_editmesh_auto_smooth;
+  ot->poll = ED_operator_editmesh;
   ot->ui = edbm_normals_tools_ui;
 
   /* flags */
@@ -8760,6 +8768,7 @@ static int edbm_set_normals_from_faces_exec(bContext *C, wmOperator *op)
 
     const bool keep_sharp = RNA_boolean_get(op->ptr, "keep_sharp");
 
+    BKE_editmesh_ensure_autosmooth(em);
     BKE_editmesh_lnorspace_update(em);
 
     float(*vnors)[3] = MEM_callocN(sizeof(*vnors) * bm->totvert, __func__);
@@ -8825,6 +8834,7 @@ static int edbm_set_normals_from_faces_exec(bContext *C, wmOperator *op)
     MEM_freeN(vnors);
     EDBM_update_generic(em, true, false);
   }
+  MEM_freeN(objects);
 
   return OPERATOR_FINISHED;
 }
@@ -8838,7 +8848,7 @@ void MESH_OT_set_normals_from_faces(struct wmOperatorType *ot)
 
   /* api callbacks */
   ot->exec = edbm_set_normals_from_faces_exec;
-  ot->poll = ED_operator_editmesh_auto_smooth;
+  ot->poll = ED_operator_editmesh;
 
   /* flags */
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
@@ -8855,6 +8865,7 @@ static int edbm_smoothen_normals_exec(bContext *C, wmOperator *op)
   BMLoop *l;
   BMIter fiter, liter;
 
+  BKE_editmesh_ensure_autosmooth(em);
   BKE_editmesh_lnorspace_update(em);
   BMLoopNorEditDataArray *lnors_ed_arr = BM_loop_normal_editdata_array_init(bm);
 
@@ -8924,13 +8935,13 @@ static int edbm_smoothen_normals_exec(bContext *C, wmOperator *op)
 void MESH_OT_smoothen_normals(struct wmOperatorType *ot)
 {
   /* identifiers */
-  ot->name = "Smoothen Normals";
+  ot->name = "Smooth Normals Vectors";
   ot->description = "Smoothen custom normals based on adjacent vertex normals";
   ot->idname = "MESH_OT_smoothen_normals";
 
   /* api callbacks */
   ot->exec = edbm_smoothen_normals_exec;
-  ot->poll = ED_operator_editmesh_auto_smooth;
+  ot->poll = ED_operator_editmesh;
 
   /* flags */
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
@@ -8950,7 +8961,6 @@ void MESH_OT_smoothen_normals(struct wmOperatorType *ot)
 
 static int edbm_mod_weighted_strength_exec(bContext *C, wmOperator *op)
 {
-  Scene *scene = CTX_data_scene(C);
   Object *obedit = CTX_data_edit_object(C);
   BMEditMesh *em = BKE_editmesh_from_object(obedit);
   BMesh *bm = em->bm;
@@ -8969,7 +8979,7 @@ static int edbm_mod_weighted_strength_exec(bContext *C, wmOperator *op)
   const int cd_prop_int_offset = CustomData_get_n_offset(
       &bm->pdata, CD_PROP_INT, cd_prop_int_index);
 
-  const int face_strength = scene->toolsettings->face_strength;
+  const int face_strength = RNA_enum_get(op->ptr, "face_strength");
   const bool set = RNA_boolean_get(op->ptr, "set");
   BM_mesh_elem_index_ensure(bm, BM_FACE);
 
@@ -8998,20 +9008,34 @@ static int edbm_mod_weighted_strength_exec(bContext *C, wmOperator *op)
   return OPERATOR_FINISHED;
 }
 
+static const EnumPropertyItem prop_mesh_face_strength_types[] = {
+    {FACE_STRENGTH_WEAK, "WEAK", 0, "Weak", ""},
+    {FACE_STRENGTH_MEDIUM, "MEDIUM", 0, "Medium", ""},
+    {FACE_STRENGTH_STRONG, "STRONG", 0, "Strong", ""},
+    {0, NULL, 0, NULL, NULL},
+};
+
 void MESH_OT_mod_weighted_strength(struct wmOperatorType *ot)
 {
   /* identifiers */
-  ot->name = "Face Strength";
+  ot->name = "Face Normals Strength";
   ot->description = "Set/Get strength of face (used in Weighted Normal modifier)";
   ot->idname = "MESH_OT_mod_weighted_strength";
 
   /* api callbacks */
   ot->exec = edbm_mod_weighted_strength_exec;
-  ot->poll = ED_operator_editmesh_auto_smooth;
+  ot->poll = ED_operator_editmesh;
 
   /* flags */
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
 
   ot->prop = RNA_def_boolean(ot->srna, "set", 0, "Set value", "Set Value of faces");
-  RNA_def_property_flag(ot->prop, PROP_HIDDEN);
+
+  ot->prop = RNA_def_enum(
+      ot->srna,
+      "face_strength",
+      prop_mesh_face_strength_types,
+      FACE_STRENGTH_MEDIUM,
+      "Face Strength",
+      "Strength to use for assigning or selecting face influence for weighted normal modifier");
 }

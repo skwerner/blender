@@ -133,7 +133,7 @@ void BKE_material_init(Material *ma)
   ma->a = 1.0f;
   ma->spec = 0.5;
 
-  ma->roughness = 0.25f;
+  ma->roughness = 0.4f;
 
   ma->pr_type = MA_SPHERE;
 
@@ -169,8 +169,10 @@ Material *BKE_material_add_gpencil(Main *bmain, const char *name)
 }
 
 /**
- * Only copy internal data of Material ID from source to already allocated/initialized destination.
- * You probably never want to use that directly, use BKE_id_copy or BKE_id_copy_ex for typical needs.
+ * Only copy internal data of Material ID from source
+ * to already allocated/initialized destination.
+ * You probably never want to use that directly,
+ * use #BKE_id_copy or #BKE_id_copy_ex for typical needs.
  *
  * WARNING! This function will not handle ID user count!
  *

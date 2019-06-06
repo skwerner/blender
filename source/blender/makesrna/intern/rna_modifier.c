@@ -1456,6 +1456,23 @@ static void rna_OpenVDBModifier_update(Main *bmain, Scene *scene, PointerRNA *pt
 
   vdbmd->frame_last = -1;
 
+  char filepath[1024];
+  BLI_strncpy(filepath, vdbmd->filepath, sizeof(filepath));
+//  BLI_path_abs(filepath, ID_BLEND_PATH(G.main, (ID *)ob));
+
+  if (BLI_exists(filepath)) {
+    struct OpenVDBReader *reader = OpenVDBReader_create();
+    OpenVDBReader_open(reader, filepath);
+
+    vdbmd->numgrids = OpenVDB_get_num_grids(reader);
+
+    vdbmd->grids = MEM_callocN(sizeof(*vdbmd->grids) * vdbmd->numgrids, "OpenVDB grid list");
+
+    OpenVDB_fill_name_array(reader, (char **)vdbmd->grids);
+
+    OpenVDBReader_free(reader);
+  }
+
   rna_Modifier_update(bmain, scene, ptr);
 }
 

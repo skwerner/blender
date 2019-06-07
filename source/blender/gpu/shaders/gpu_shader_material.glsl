@@ -1241,7 +1241,7 @@ void node_bsdf_glossy(vec4 color, float roughness, vec3 N, float ssr_id, out Clo
 {
   N = normalize(N);
   vec3 out_spec, ssr_spec;
-  eevee_closure_glossy(N, vec3(1.0), int(ssr_id), roughness, 1.0, out_spec, ssr_spec);
+  eevee_closure_glossy(N, vec3(1.0), vec3(1.0), int(ssr_id), roughness, 1.0, out_spec, ssr_spec);
   vec3 vN = mat3(ViewMatrix) * N;
   result = CLOSURE_DEFAULT;
   result.radiance = out_spec * color.rgb;
@@ -1269,7 +1269,7 @@ void node_bsdf_glass(
   vec3 refr_color = (refractionDepth > 0.0) ? color.rgb * color.rgb :
                                               color.rgb; /* Simulate 2 transmission event */
   eevee_closure_glass(
-      N, vec3(1.0), int(ssr_id), roughness, 1.0, ior, out_spec, out_refr, ssr_spec);
+      N, vec3(1.0), vec3(1.0), int(ssr_id), roughness, 1.0, ior, out_spec, out_refr, ssr_spec);
   out_refr *= refr_color;
   out_spec *= color.rgb;
   float fresnel = F_eta(ior, dot(N, cameraVec));
@@ -1339,12 +1339,15 @@ void node_bsdf_principled(vec4 base_color,
   vec3 spec_col = F_color_blend(ior, fresnel, f0_glass) * fresnel;
   f0 = mix(f0, spec_col, transmission);
 
+  vec3 f90 = mix(vec3(1.0), f0, (1.0 - specular) * metallic);
+
   vec3 mixed_ss_base_color = mix(diffuse, subsurface_color.rgb, subsurface);
 
   float sss_scalef = dot(sss_scale, vec3(1.0 / 3.0)) * subsurface;
   eevee_closure_principled(N,
                            mixed_ss_base_color,
                            f0,
+                           f90,
                            int(ssr_id),
                            roughness,
                            CN,
@@ -1428,7 +1431,8 @@ void node_bsdf_principled_dielectric(vec4 base_color,
   float NV = dot(N, cameraVec);
   vec3 out_sheen = sheen * principled_sheen(NV, ctint, sheen_tint);
 
-  eevee_closure_default(N, diffuse, f0, int(ssr_id), roughness, 1.0, out_diff, out_spec, ssr_spec);
+  eevee_closure_default(
+      N, diffuse, f0, vec3(1.0), int(ssr_id), roughness, 1.0, out_diff, out_spec, ssr_spec);
 
   vec3 vN = mat3(ViewMatrix) * N;
   result = CLOSURE_DEFAULT;
@@ -1471,7 +1475,9 @@ void node_bsdf_principled_metallic(vec4 base_color,
   N = normalize(N);
   vec3 out_spec, ssr_spec;
 
-  eevee_closure_glossy(N, base_color.rgb, int(ssr_id), roughness, 1.0, out_spec, ssr_spec);
+  vec3 f90 = mix(vec3(1.0), base_color.rgb, (1.0 - specular) * metallic);
+
+  eevee_closure_glossy(N, base_color.rgb, f90, int(ssr_id), roughness, 1.0, out_spec, ssr_spec);
 
   vec3 vN = mat3(ViewMatrix) * N;
   result = CLOSURE_DEFAULT;
@@ -1514,8 +1520,11 @@ void node_bsdf_principled_clearcoat(vec4 base_color,
   vec3 out_spec, ssr_spec;
   N = normalize(N);
 
+  vec3 f90 = mix(vec3(1.0), base_color.rgb, (1.0 - specular) * metallic);
+
   eevee_closure_clearcoat(N,
                           base_color.rgb,
+                          f90,
                           int(ssr_id),
                           roughness,
                           CN,
@@ -1578,9 +1587,12 @@ void node_bsdf_principled_subsurface(vec4 base_color,
   float NV = dot(N, cameraVec);
   vec3 out_sheen = sheen * principled_sheen(NV, ctint, sheen_tint);
 
+  vec3 f90 = mix(vec3(1.0), base_color.rgb, (1.0 - specular) * metallic);
+
   eevee_closure_skin(N,
                      mixed_ss_base_color,
                      f0,
+                     f90,
                      int(ssr_id),
                      roughness,
                      1.0,
@@ -1647,7 +1659,7 @@ void node_bsdf_principled_glass(vec4 base_color,
   f0 = mix(vec3(1.0), base_color.rgb, specular_tint);
 
   eevee_closure_glass(
-      N, vec3(1.0), int(ssr_id), roughness, 1.0, ior, out_spec, out_refr, ssr_spec);
+      N, vec3(1.0), vec3(1.0), int(ssr_id), roughness, 1.0, ior, out_spec, out_refr, ssr_spec);
 
   vec3 refr_color = base_color.rgb;
   refr_color *= (refractionDepth > 0.0) ? refr_color :
@@ -1797,14 +1809,12 @@ void node_wireframe_screenspace(float size, vec2 barycentric, out float fac)
 
 void node_emission(vec4 color, float strength, vec3 vN, out Closure result)
 {
-#ifndef VOLUMETRICS
-  color *= strength;
   result = CLOSURE_DEFAULT;
-  result.radiance = color.rgb;
-  result.opacity = color.a;
+#ifndef VOLUMETRICS
+  result.radiance = color.rgb * strength;
   result.ssr_normal = normal_encode(vN, viewCameraVec);
 #else
-  result = Closure(vec3(0.0), vec3(0.0), color.rgb * strength, 0.0);
+  result.emission = color.rgb * strength;
 #endif
 }
 
@@ -3366,7 +3376,7 @@ void node_bump(
     float strength, float dist, float height, vec3 N, vec3 surf_pos, float invert, out vec3 result)
 {
   N = mat3(ViewMatrix) * normalize(N);
-  dist *= invert;
+  dist *= gl_FrontFacing ? invert : -invert;
 
   vec3 dPdx = dFdx(surf_pos);
   vec3 dPdy = dFdy(surf_pos);
@@ -3405,7 +3415,7 @@ void node_hair_info(out float is_strand,
   is_strand = 1.0;
   intercept = hairTime;
   thickness = hairThickness;
-  tangent = normalize(hairTangent);
+  tangent = normalize(worldNormal);
   random = wang_hash_noise(
       uint(hairStrandID)); /* TODO: could be precomputed per strand instead. */
 #else
@@ -3529,6 +3539,7 @@ void node_eevee_specular(vec4 diffuse,
   eevee_closure_default_clearcoat(normal,
                                   diffuse.rgb,
                                   specular.rgb,
+                                  vec3(1.0),
                                   int(ssr_id),
                                   roughness,
                                   clearcoat_normal,

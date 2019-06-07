@@ -479,9 +479,6 @@ typedef struct bNodeTree {
   int (*test_break)(void *);
   void (*update_draw)(void *);
   void *tbh, *prh, *sdh, *udh;
-
-  void *duplilock;
-
 } bNodeTree;
 
 /* ntree->type, index */
@@ -1012,6 +1009,12 @@ typedef struct NodeCryptomatte {
   int num_inputs;
   char _pad[4];
 } NodeCryptomatte;
+
+typedef struct NodeDenoise {
+  char hdr;
+  char srgb;
+  char _pad[6];
+} NodeDenoise;
 
 /* script node mode */
 #define NODE_SCRIPT_INTERNAL 0

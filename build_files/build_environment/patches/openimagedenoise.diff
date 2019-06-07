@@ -1,0 +1,49 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 70ec895..e616b63 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -178,7 +178,9 @@ set_property(TARGET ${PROJECT_NAME} PROPERTY SOVERSION "0")
+ ## Open Image Denoise examples
+ ## ----------------------------------------------------------------------------
+ 
+-add_subdirectory(examples)
++if(WITH_EXAMPLE)
++  add_subdirectory(examples)
++endif()
+ 
+ ## ----------------------------------------------------------------------------
+ ## Open Image Denoise install and packaging
+Submodule mkl-dnn contains modified content
+diff --git a/mkl-dnn/cmake/TBB.cmake b/mkl-dnn/cmake/TBB.cmake
+index 0711e699..c14210b6 100644
+--- a/mkl-dnn/cmake/TBB.cmake
++++ b/mkl-dnn/cmake/TBB.cmake
+@@ -90,8 +90,8 @@ if(WIN32)
+             NO_DEFAULT_PATH
+         )
+         set(TBB_LIB_DIR ${TBB_ROOT}/lib/${TBB_ARCH}/${TBB_VCVER})
+-        find_library(TBB_LIBRARY tbb PATHS ${TBB_LIB_DIR} ${TBB_ROOT}/lib NO_DEFAULT_PATH)
+-        find_library(TBB_LIBRARY_MALLOC tbbmalloc PATHS ${TBB_LIB_DIR} ${TBB_ROOT}/lib NO_DEFAULT_PATH)
++        find_library(TBB_LIBRARY tbb_static PATHS ${TBB_LIB_DIR} ${TBB_ROOT}/lib NO_DEFAULT_PATH)
++        find_library(TBB_LIBRARY_MALLOC tbbmalloc_static PATHS ${TBB_LIB_DIR} ${TBB_ROOT}/lib NO_DEFAULT_PATH)
+     endif()
+ 
+ else()
+@@ -138,13 +138,13 @@ else()
+         set(TBB_LIBRARY_MALLOC TBB_LIBRARY_MALLOC-NOTFOUND)
+         if(APPLE)
+             find_path(TBB_INCLUDE_DIR tbb/task_scheduler_init.h PATHS ${TBB_ROOT}/include NO_DEFAULT_PATH)
+-            find_library(TBB_LIBRARY tbb PATHS ${TBB_ROOT}/lib NO_DEFAULT_PATH)
+-            find_library(TBB_LIBRARY_MALLOC tbbmalloc PATHS ${TBB_ROOT}/lib NO_DEFAULT_PATH)
++            find_library(TBB_LIBRARY tbb_static PATHS ${TBB_ROOT}/lib NO_DEFAULT_PATH)
++            find_library(TBB_LIBRARY_MALLOC tbbmalloc_static PATHS ${TBB_ROOT}/lib NO_DEFAULT_PATH)
+         else()
+             find_path(TBB_INCLUDE_DIR tbb/task_scheduler_init.h PATHS ${TBB_ROOT}/include NO_DEFAULT_PATH)
+             set(TBB_HINTS HINTS ${TBB_ROOT}/lib/intel64/gcc4.4 ${TBB_ROOT}/lib ${TBB_ROOT}/lib64 PATHS /usr/libx86_64-linux-gnu/)
+-            find_library(TBB_LIBRARY tbb ${TBB_HINTS})
+-            find_library(TBB_LIBRARY_MALLOC tbbmalloc ${TBB_HINTS})
++            find_library(TBB_LIBRARY tbb_static ${TBB_HINTS})
++            find_library(TBB_LIBRARY_MALLOC tbbmalloc_static ${TBB_HINTS})
+         endif()
+     endif()
+ 

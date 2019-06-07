@@ -819,6 +819,9 @@ static void pose_transform_mirror_update(Object *ob, PoseInitData_Mirror *pid)
           pid++;
         }
         BKE_pchan_apply_mat4(pchan, pchan_mtx_final, false);
+
+        /* set flag to let autokeyframe know to keyframe the mirrred bone */
+        pchan->bone->flag |= BONE_TRANSFORM_MIRROR;
       }
     }
   }
@@ -1182,6 +1185,8 @@ static void recalcData_sequencer(TransInfo *t)
 
     seq_prev = seq;
   }
+
+  DEG_id_tag_update(&t->scene->id, ID_RECALC_SEQUENCER_STRIPS);
 
   flushTransSeq(t);
 }

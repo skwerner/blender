@@ -302,3 +302,7 @@ set(SQLITE_HASH fb558c49ee21a837713c4f1e7e413309aabdd9c7)
 set(EMBREE_VERSION 3.2.4)
 set(EMBREE_URI https://github.com/embree/embree/archive/v${EMBREE_VERSION}.zip)
 set(EMBREE_HASH 3d4a1147002ff43939d45140aa9d6fb8)
+
+set(OIDN_VERSION 0.8.2)
+set(OIDN_URI https://github.com/OpenImageDenoise/oidn/releases/download/v${OIDN_VERSION}/oidn-${OIDN_VERSION}.src.zip)
+set(OIDN_HASH dbdee1a8ea91b81cbf3a6c7a7db41277)

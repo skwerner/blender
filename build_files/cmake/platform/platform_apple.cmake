@@ -382,6 +382,11 @@ if(WITH_CYCLES_EMBREE)
   set(PLATFORM_LINKFLAGS "${PLATFORM_LINKFLAGS} -Xlinker -stack_size -Xlinker 0x100000")
 endif()
 
+if(WITH_OPENIMAGEDENOISE)
+  find_package(OpenImageDenoise REQUIRED)
+  find_package(TBB REQUIRED)
+endif()
+
 # CMake FindOpenMP doesn't know about AppleClang before 3.12, so provide custom flags.
 if(WITH_OPENMP)
   if(CMAKE_C_COMPILER_ID MATCHES "AppleClang" AND CMAKE_C_COMPILER_VERSION VERSION_GREATER_EQUAL "7.0")

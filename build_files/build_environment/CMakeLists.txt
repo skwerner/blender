@@ -92,6 +92,7 @@ include(cmake/python.cmake)
 include(cmake/python_site_packages.cmake)
 include(cmake/numpy.cmake)
 include(cmake/pugixml.cmake)
+include(cmake/openimagedenoise.cmake)
 
 if(WITH_WEBP)
   include(cmake/webp.cmake)

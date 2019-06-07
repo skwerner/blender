@@ -86,6 +86,7 @@
 #include "RNA_enum_types.h"
 
 #include "DEG_depsgraph.h"
+#include "DEG_depsgraph_query.h"
 
 static void wm_notifier_clear(wmNotifier *note);
 static void update_tablet_data(wmWindow *win, wmEvent *event);
@@ -312,7 +313,7 @@ static void wm_notifier_clear(wmNotifier *note)
   memset(((char *)note) + sizeof(Link), 0, sizeof(*note) - sizeof(Link));
 }
 
-void wm_event_do_depsgraph(bContext *C)
+void wm_event_do_depsgraph(bContext *C, bool is_after_open_file)
 {
   wmWindowManager *wm = CTX_wm_manager(C);
   /* The whole idea of locked interface is to prevent viewport and whatever
@@ -346,6 +347,10 @@ void wm_event_do_depsgraph(bContext *C)
      * across visible view layers and has overrides on it.
      */
     Depsgraph *depsgraph = BKE_scene_get_depsgraph(scene, view_layer, true);
+    if (is_after_open_file) {
+      DEG_graph_relations_update(depsgraph, bmain, scene, view_layer);
+      DEG_graph_on_visible_update(bmain, depsgraph, true);
+    }
     DEG_make_active(depsgraph);
     BKE_scene_graph_update_tagged(depsgraph, bmain);
   }
@@ -373,7 +378,7 @@ void wm_event_do_refresh_wm_and_depsgraph(bContext *C)
     }
   }
 
-  wm_event_do_depsgraph(C);
+  wm_event_do_depsgraph(C, false);
 
   CTX_wm_window_set(C, NULL);
 }
@@ -3154,13 +3159,17 @@ void wm_event_do_handlers(bContext *C)
     else {
       Scene *scene = WM_window_get_active_scene(win);
 
-      if (scene) {
-        int is_playing_sound = BKE_sound_scene_playing(scene);
+      CTX_wm_window_set(C, win);
+      CTX_data_scene_set(C, scene);
+
+      Depsgraph *depsgraph = CTX_data_depsgraph(C);
+      Scene *scene_eval = DEG_get_evaluated_scene_if_exists(depsgraph);
+
+      if (scene_eval) {
+        const int is_playing_sound = BKE_sound_scene_playing(scene_eval);
 
         if (is_playing_sound != -1) {
           bool is_playing_screen;
-          CTX_wm_window_set(C, win);
-          CTX_data_scene_set(C, scene);
 
           is_playing_screen = (ED_screen_animation_playing(wm) != NULL);
 
@@ -3175,18 +3184,17 @@ void wm_event_do_handlers(bContext *C)
               int ncfra = time * (float)FPS + 0.5f;
               if (ncfra != scene->r.cfra) {
                 scene->r.cfra = ncfra;
-                Depsgraph *depsgraph = CTX_data_depsgraph(C);
                 ED_update_for_newframe(CTX_data_main(C), depsgraph);
                 WM_event_add_notifier(C, NC_WINDOW, NULL);
               }
             }
           }
-
-          CTX_data_scene_set(C, NULL);
-          CTX_wm_screen_set(C, NULL);
-          CTX_wm_window_set(C, NULL);
         }
       }
+
+      CTX_data_scene_set(C, NULL);
+      CTX_wm_screen_set(C, NULL);
+      CTX_wm_window_set(C, NULL);
     }
 
     while ((event = win->queue.first)) {
@@ -5099,7 +5107,8 @@ void WM_window_cursor_keymap_status_refresh(bContext *C, wmWindow *win)
     }
     if (kmi) {
       wmOperatorType *ot = WM_operatortype_find(kmi->idname, 0);
-      STRNCPY(cd->text[button_index][type_index], ot ? ot->name : kmi->idname);
+      const char *name = (ot) ? WM_operatortype_name(ot, kmi->ptr) : kmi->idname;
+      STRNCPY(cd->text[button_index][type_index], name);
     }
   }
 

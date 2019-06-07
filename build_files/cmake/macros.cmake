@@ -235,7 +235,7 @@ function(blender_add_lib__impl
   add_library(${name} ${sources})
 
   if (NOT "${library_deps}" STREQUAL "")
-    target_link_libraries(${name} "${library_deps}")
+    target_link_libraries(${name} INTERFACE "${library_deps}")
   endif()
 
   # works fine without having the includes
@@ -334,6 +334,9 @@ function(SETUP_LIBDIRS)
     endif()
     if(WITH_OPENIMAGEIO)
       link_directories(${OPENIMAGEIO_LIBPATH})
+    endif()
+    if(WITH_OPENIMAGEDENOISE)
+      link_directories(${OPENIMAGEDENOISE_LIBPATH})
     endif()
     if(WITH_OPENCOLORIO)
       link_directories(${OPENCOLORIO_LIBPATH})
@@ -444,6 +447,9 @@ function(setup_liblinks
   endif()
   if(WITH_OPENIMAGEIO)
     target_link_libraries(${target} ${OPENIMAGEIO_LIBRARIES})
+  endif()
+  if(WITH_OPENIMAGEDENOISE)
+    target_link_libraries(${target} ${OPENIMAGEDENOISE_LIBRARIES} ${TBB_LIBRARIES})
   endif()
   if(WITH_OPENCOLORIO)
     target_link_libraries(${target} ${OPENCOLORIO_LIBRARIES})
@@ -1218,5 +1224,28 @@ macro(WINDOWS_SIGN_TARGET target)
         VERBATIM
       )
     endif()
+  endif()
+endmacro()
+
+macro(blender_precompile_headers target cpp header)
+  if (MSVC)
+    # get the name for the pch output file
+    get_filename_component( pchbase ${cpp} NAME_WE )
+    set( pchfinal "${CMAKE_CURRENT_BINARY_DIR}/${pchbase}.pch" )
+
+    # mark the cpp as the one outputting the pch
+    set_property(SOURCE ${cpp} APPEND PROPERTY OBJECT_OUTPUTS "${pchfinal}")
+
+    # get all sources for the target
+    get_target_property(sources ${target} SOURCES)
+
+    # make all sources depend on the pch to enforce the build order
+    foreach(src ${sources})
+      set_property(SOURCE ${src} APPEND PROPERTY OBJECT_DEPENDS "${pchfinal}")
+    endforeach()
+
+    target_sources(${target} PRIVATE ${cpp} ${header})
+    set_target_properties(${target} PROPERTIES COMPILE_FLAGS "/Yu${header} /Fp${pchfinal} /FI${header}")
+    set_source_files_properties(${cpp} PROPERTIES COMPILE_FLAGS "/Yc${header} /Fp${pchfinal}")
   endif()
 endmacro()

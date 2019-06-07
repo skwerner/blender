@@ -22,6 +22,7 @@ set(SRC
   graph.cpp
   image.cpp
   integrator.cpp
+  jitter.cpp
   light.cpp
   merge.cpp
   mesh.cpp
@@ -58,6 +59,7 @@ set(SRC_HEADERS
   image.h
   integrator.h
   light.h
+  jitter.h
   merge.h
   mesh.h
   nodes.h

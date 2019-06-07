@@ -263,6 +263,7 @@ enum PathTraceDimension {
 enum SamplingPattern {
   SAMPLING_PATTERN_SOBOL = 0,
   SAMPLING_PATTERN_CMJ = 1,
+  SAMPLING_PATTERN_PMJ = 2,
 
   SAMPLING_NUM_PATTERNS,
 };
@@ -367,6 +368,8 @@ typedef enum PassType {
 #endif
   PASS_RENDER_TIME,
   PASS_CRYPTOMATTE,
+  PASS_ADAPTIVE_AUX_BUFFER,
+  PASS_SAMPLE_COUNT,
   PASS_CATEGORY_MAIN_END = 31,
 
   PASS_MIST = 32,
@@ -1220,6 +1223,9 @@ typedef struct KernelFilm {
   int cryptomatte_depth;
   int pass_cryptomatte;
 
+  int pass_adaptive_aux_buffer;
+  int pass_sample_count;
+
   int pass_mist;
   float mist_start;
   float mist_inv_depth;
@@ -1242,6 +1248,8 @@ typedef struct KernelFilm {
   int pass_bvh_intersections;
   int pass_ray_bounces;
 #endif
+
+  int pad1, pad2;
 } KernelFilm;
 static_assert_align(KernelFilm, 16);
 
@@ -1321,6 +1329,8 @@ typedef struct KernelIntegrator {
   /* sampler */
   int sampling_pattern;
   int aa_samples;
+  int adaptive_min_samples;
+  float adaptive_threshold;
 
   /* volume render */
   int use_volumes;
@@ -1332,7 +1342,7 @@ typedef struct KernelIntegrator {
 
   int max_closures;
 
-  int pad1, pad2, pad3;
+  int pad1;
 } KernelIntegrator;
 static_assert_align(KernelIntegrator, 16);
 
@@ -1640,7 +1650,7 @@ typedef struct WorkTile {
   uint start_sample;
   uint num_samples;
 
-  uint offset;
+  int offset;
   uint stride;
 
   ccl_global float *buffer;

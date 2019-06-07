@@ -179,6 +179,8 @@ class CYCLES_RENDER_PT_sampling(CyclesButtonsPanel, Panel):
             col.prop(cscene, "aa_samples", text="Render")
             col.prop(cscene, "preview_aa_samples", text="Viewport")
 
+        col.prop(cscene, "use_adaptive_sampling", text="Adaptive Sampling")
+
 
 class CYCLES_RENDER_PT_sampling_sub_samples(CyclesButtonsPanel, Panel):
     bl_label = "Sub Samples"
@@ -230,7 +232,13 @@ class CYCLES_RENDER_PT_sampling_advanced(CyclesButtonsPanel, Panel):
         row.prop(cscene, "seed")
         row.prop(cscene, "use_animated_seed", text="", icon='TIME')
 
-        layout.prop(cscene, "sampling_pattern", text="Pattern")
+        col = layout.column(align=True)
+        col.active = not(cscene.use_adaptive_sampling)
+        col.prop(cscene, "sampling_pattern", text="Pattern")
+        col = layout.column(align=True)
+        col.active = cscene.use_adaptive_sampling
+        col.prop(cscene, "adaptive_min_samples", text="Adaptive Min Samples")
+        col.prop(cscene, "adaptive_threshold", text="Adaptive Threshold")
 
         layout.prop(cscene, "use_square_samples")
 
@@ -826,6 +834,8 @@ class CYCLES_RENDER_PT_passes_data(CyclesButtonsPanel, Panel):
         col.prop(cycles_view_layer, "denoising_store_passes", text="Denoising Data")
         col = flow.column()
         col.prop(cycles_view_layer, "pass_debug_render_time", text="Render Time")
+        col = flow.column()
+        col.prop(cycles_view_layer, "pass_debug_sample_count", text="Sample Count")
 
         layout.separator()
 

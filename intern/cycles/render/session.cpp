@@ -902,7 +902,7 @@ bool Session::update_scene()
   Integrator *integrator = scene->integrator;
   BakeManager *bake_manager = scene->bake_manager;
 
-  if (integrator->sampling_pattern == SAMPLING_PATTERN_CMJ || bake_manager->get_baking()) {
+  if (integrator->sampling_pattern != SAMPLING_PATTERN_SOBOL || bake_manager->get_baking()) {
     int aa_samples = tile_manager.num_samples;
 
     if (aa_samples != integrator->aa_samples) {
@@ -1024,6 +1024,7 @@ void Session::render()
   task.update_progress_sample = function_bind(&Progress::add_samples, &this->progress, _1, _2);
   task.need_finish_queue = params.progressive_refine;
   task.integrator_branched = scene->integrator->method == Integrator::BRANCHED_PATH;
+  task.integrator_adaptive = scene->integrator->sampling_pattern == SAMPLING_PATTERN_PMJ;
   task.requested_tile_size = params.tile_size;
   task.passes_size = tile_manager.params.get_passes_size();
 

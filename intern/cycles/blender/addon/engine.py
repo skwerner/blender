@@ -253,6 +253,7 @@ def register_passes(engine, scene, srl):
     if crl.pass_debug_bvh_traversed_instances: engine.register_pass(scene, srl, "Debug BVH Traversed Instances", 1, "X",   'VALUE')
     if crl.pass_debug_bvh_intersections:       engine.register_pass(scene, srl, "Debug BVH Intersections",       1, "X",   'VALUE')
     if crl.pass_debug_ray_bounces:             engine.register_pass(scene, srl, "Debug Ray Bounces",             1, "X",   'VALUE')
+    if crl.pass_debug_sample_count:            engine.register_pass(scene, srl, "Debug Sample Count",            1, "X",   'VALUE')
     if crl.use_pass_volume_direct:             engine.register_pass(scene, srl, "VolumeDir",                     3, "RGB", 'COLOR')
     if crl.use_pass_volume_indirect:           engine.register_pass(scene, srl, "VolumeInd",                     3, "RGB", 'COLOR')
 

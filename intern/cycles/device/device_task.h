@@ -110,6 +110,7 @@ class DeviceTask : public Task {
 
   bool need_finish_queue;
   bool integrator_branched;
+  bool integrator_adaptive;
   int2 requested_tile_size;
 
  protected:

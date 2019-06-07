@@ -539,6 +539,24 @@ ccl_device_forceinline void kernel_path_integrate(KernelGlobals *kg,
       Intersection isect;
       bool hit = kernel_path_scene_intersect(kg, state, ray, &isect, L);
 
+      if (hit && (kernel_data.integrator.feature_overrides & IGNORE_SHADERS)) {
+        shader_setup_from_ray(kg, &sd, &isect, ray);
+#  ifdef __VOLUME__
+        if (!(sd.flag & SD_HAS_ONLY_VOLUME &&
+              kernel_data.integrator.feature_overrides & IGNORE_VOLUMES))
+#  endif
+        {
+          float n_dot_eye = fabsf(dot(ray->D, sd.N));
+          if (L->use_light_pass) {
+            L->direct_diffuse = make_float3(n_dot_eye, n_dot_eye, n_dot_eye);
+          }
+          else {
+            L->emission = make_float3(n_dot_eye, n_dot_eye, n_dot_eye);
+          }
+          return;
+        }
+      }
+
       /* Find intersection with lamps and compute emission for MIS. */
       kernel_path_lamp_emission(kg, state, ray, throughput, &isect, &sd, L);
 

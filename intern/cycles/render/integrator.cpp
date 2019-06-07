@@ -84,6 +84,17 @@ NODE_DEFINE(Integrator)
   sampling_pattern_enum.insert("pmj", SAMPLING_PATTERN_PMJ);
   SOCKET_ENUM(sampling_pattern, "Sampling Pattern", sampling_pattern_enum, SAMPLING_PATTERN_SOBOL);
 
+  SOCKET_BOOLEAN(ignore_shaders, "Ignore Shaders", false);
+  SOCKET_BOOLEAN(ignore_volumes, "Ignore Volumes", false);
+  SOCKET_BOOLEAN(ignore_lights, "Ignore Lights", false);
+  SOCKET_BOOLEAN(ignore_shadows, "Ignore Shadows", false);
+  SOCKET_BOOLEAN(ignore_displacement, "Ignore Displacement", false);
+  SOCKET_BOOLEAN(ignore_bump, "Ignore Bump", false);
+  SOCKET_BOOLEAN(ignore_polygon_smoothing, "Ignore Polygon Smoothing", false);
+  SOCKET_BOOLEAN(ignore_depth_of_field, "Ignore Depth of Field", false);
+  SOCKET_BOOLEAN(ignore_subsurface_scattering, "Ignore Subsurface Scattering", false);
+  SOCKET_BOOLEAN(ignore_textures, "Ignore Textures", false);
+
   return type;
 }
 
@@ -250,6 +261,10 @@ void Integrator::device_update(Device *device, DeviceScene *dscene, Scene *scene
     scene->film->tag_update(scene);
   }
 
+  /* diagnostics */
+  kintegrator->feature_overrides = 0;
+  kintegrator->feature_overrides = ignore_shaders ? IGNORE_SHADERS : 0;
+  kintegrator->feature_overrides |= ignore_volumes ? IGNORE_VOLUMES : 0;
   need_update = false;
 }
 

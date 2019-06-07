@@ -185,6 +185,7 @@ class BlenderSync {
   set<float> motion_times;
   void *world_map;
   bool world_recalc;
+  bool shader_recalc;
 
   Scene *scene;
   bool preview;

@@ -471,6 +471,11 @@ typedef enum DenoiseFlag {
   DENOISING_CLEAN_ALL_PASSES = (1 << 8) - 1,
 } DenoiseFlag;
 
+typedef enum FeatureOverrides {
+  IGNORE_SHADERS = (1 << 0),
+  IGNORE_VOLUMES = (1 << 1),
+} FeatureOverrides;
+
 #ifdef __KERNEL_DEBUG__
 /* NOTE: This is a runtime-only struct, alignment is not
  * really important here.
@@ -1342,7 +1347,8 @@ typedef struct KernelIntegrator {
 
   int max_closures;
 
-  int pad1;
+  /* diagnostics */
+  int feature_overrides;
 } KernelIntegrator;
 static_assert_align(KernelIntegrator, 16);
 

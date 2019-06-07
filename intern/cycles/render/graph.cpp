@@ -16,6 +16,7 @@
 
 #include "render/attribute.h"
 #include "render/graph.h"
+#include "render/integrator.h"
 #include "render/nodes.h"
 #include "render/scene.h"
 #include "render/shader.h"
@@ -351,7 +352,9 @@ void ShaderGraph::simplify(Scene *scene)
     expand();
     default_inputs(scene->shader_manager->use_osl());
     clean(scene);
-    refine_bump_nodes();
+    if (!scene->integrator->ignore_bump) {
+      refine_bump_nodes();
+    }
 
     simplified = true;
   }
@@ -367,7 +370,7 @@ void ShaderGraph::finalize(Scene *scene, bool do_bump, bool do_simplify, bool bu
   if (!finalized) {
     simplify(scene);
 
-    if (do_bump)
+    if (do_bump && !scene->integrator->ignore_bump)
       bump_from_displacement(bump_in_object_space);
 
     /* This must be after all bump nodes are created,
@@ -769,6 +772,60 @@ void ShaderGraph::compute_displacement_hash()
 void ShaderGraph::clean(Scene *scene)
 {
   /* Graph simplification */
+
+  /* Feature overrides */
+  if (scene->integrator->ignore_displacement) {
+    ShaderInput *displacement_in = output()->input("Displacement");
+    if (displacement_in->link) {
+      disconnect(displacement_in);
+    }
+  }
+  if (scene->integrator->ignore_volumes) {
+    ShaderInput *displacement_in = output()->input("Volume");
+    if (displacement_in->link) {
+      disconnect(displacement_in);
+    }
+  }
+  if (scene->integrator->ignore_subsurface_scattering || scene->integrator->ignore_textures) {
+    foreach (ShaderNode *node, nodes) {
+      bool ignored = false;
+      if (node->special_type == SHADER_SPECIAL_TYPE_IMAGE_SLOT &&
+          scene->integrator->ignore_textures) {
+        ignored = true;
+      }
+      else if (node->special_type == SHADER_SPECIAL_TYPE_CLOSURE &&
+               CLOSURE_IS_BSSRDF(node->get_closure_type()) &&
+               scene->integrator->ignore_subsurface_scattering) {
+        ignored = true;
+      }
+      if (ignored) {
+        foreach (ShaderOutput *output, node->outputs) {
+          disconnect(output);
+        }
+      }
+      else {
+        if (node->special_type == SHADER_SPECIAL_TYPE_CLOSURE &&
+            CLOSURE_IS_PRINCIPLED(node->get_closure_type())) {
+          ShaderInput *subsurface = node->input("Subsurface Color");
+          assert(subsurface);
+          if (subsurface) {
+            if (subsurface->link) {
+              disconnect(subsurface);
+            }
+            subsurface->set(make_float3(0.0f));
+          }
+          ShaderInput *subsurface_radius = node->input("Subsurface Radius");
+          assert(subsurface_radius);
+          if (subsurface_radius) {
+            if (subsurface_radius->link) {
+              disconnect(subsurface_radius);
+            }
+            subsurface_radius->set(make_float3(0.0f));
+          }
+        }
+      }
+    }
+  }
 
   /* NOTE: Remove proxy nodes was already done. */
   constant_fold(scene);

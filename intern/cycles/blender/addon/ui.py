@@ -1949,6 +1949,36 @@ class CYCLES_RENDER_PT_bake_output(CyclesButtonsPanel, Panel):
             layout.prop(cbk, "use_clear", text="Clear Image")
 
 
+class CYCLES_RENDER_PT_simplify_diagnostics(CyclesButtonsPanel, Panel):
+    bl_label = "Diagnostics"
+    bl_context = "render"
+    bl_parent_id = "CYCLES_RENDER_PT_simplify"
+    bl_options = {'DEFAULT_CLOSED'}
+    COMPAT_ENGINES = {'CYCLES'}
+
+    def draw(self, context):
+        layout = self.layout
+
+        scene = context.scene
+        rd = scene.render
+        cscene = scene.cycles
+
+        layout.use_property_split = True
+        layout.use_property_decorate = False
+        layout.active = rd.use_simplify
+
+        col = layout.column()
+        col.prop(cscene, "ignore_lights")
+        col.prop(cscene, "ignore_shadows")
+        col.prop(cscene, "ignore_shaders")
+        col.prop(cscene, "ignore_subsurface_scattering")
+        col.prop(cscene, "ignore_textures")
+        col.prop(cscene, "ignore_bump")
+        col.prop(cscene, "ignore_volumes")
+        col.prop(cscene, "ignore_displacement")
+        col.prop(cscene, "ignore_polygon_smoothing")
+        col.prop(cscene, "ignore_depth_of_field")
+
 class CYCLES_RENDER_PT_debug(CyclesButtonsPanel, Panel):
     bl_label = "Debug"
     bl_context = "render"
@@ -2173,6 +2203,7 @@ classes = (
     CYCLES_RENDER_PT_simplify_viewport,
     CYCLES_RENDER_PT_simplify_render,
     CYCLES_RENDER_PT_simplify_culling,
+    CYCLES_RENDER_PT_simplify_diagnostics,
     CYCLES_RENDER_PT_motion_blur,
     CYCLES_RENDER_PT_motion_blur_curve,
     CYCLES_RENDER_PT_film,

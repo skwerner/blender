@@ -26,39 +26,46 @@
 #include "DNA_node_types.h"
 
 class DenoiseOperation : public SingleThreadedOperation {
-private:
-	/**
-	 * \brief Cached reference to the input programs
-	 */
-	SocketReader *m_inputProgramColor;
-	SocketReader *m_inputProgramAlbedo;
-	SocketReader *m_inputProgramNormal;
+ private:
+  /**
+   * \brief Cached reference to the input programs
+   */
+  SocketReader *m_inputProgramColor;
+  SocketReader *m_inputProgramAlbedo;
+  SocketReader *m_inputProgramNormal;
 
-	/**
-	 * \brief settings of the denoise node.
-	 */
-	NodeDenoise *m_settings;
-public:
-	DenoiseOperation();
-	/**
-	 * Initialize the execution
-	 */
-	void initExecution();
+  /**
+   * \brief settings of the denoise node.
+   */
+  NodeDenoise *m_settings;
 
-	/**
-	 * Deinitialize the execution
-	 */
-	void deinitExecution();
+ public:
+  DenoiseOperation();
+  /**
+   * Initialize the execution
+   */
+  void initExecution();
 
-	void setDenoiseSettings(NodeDenoise *settings) {
-		this->m_settings = settings;
-	}
-	bool determineDependingAreaOfInterest(rcti *input, ReadBufferOperation *readOperation, rcti *output);
+  /**
+   * Deinitialize the execution
+   */
+  void deinitExecution();
 
-protected:
-	void generateDenoise(float *data, MemoryBuffer *inputTileColor, MemoryBuffer *inputTileAlbedo, MemoryBuffer *inputTileNormal, NodeDenoise *settings);
+  void setDenoiseSettings(NodeDenoise *settings)
+  {
+    this->m_settings = settings;
+  }
+  bool determineDependingAreaOfInterest(rcti *input,
+                                        ReadBufferOperation *readOperation,
+                                        rcti *output);
 
-	MemoryBuffer *createMemoryBuffer(rcti *rect);
+ protected:
+  void generateDenoise(float *data,
+                       MemoryBuffer *inputTileColor,
+                       MemoryBuffer *inputTileAlbedo,
+                       MemoryBuffer *inputTileNormal,
+                       NodeDenoise *settings);
 
+  MemoryBuffer *createMemoryBuffer(rcti *rect);
 };
 #endif

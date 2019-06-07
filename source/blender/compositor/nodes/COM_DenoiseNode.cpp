@@ -27,20 +27,21 @@
 
 DenoiseNode::DenoiseNode(bNode *editorNode) : Node(editorNode)
 {
-	/* pass */
+  /* pass */
 }
 
-void DenoiseNode::convertToOperations(NodeConverter &converter, const CompositorContext &/*context*/) const
+void DenoiseNode::convertToOperations(NodeConverter &converter,
+                                      const CompositorContext & /*context*/) const
 {
-	bNode *node = this->getbNode();
-	NodeDenoise *denoise = (NodeDenoise *)node->storage;
+  bNode *node = this->getbNode();
+  NodeDenoise *denoise = (NodeDenoise *)node->storage;
 
-	DenoiseOperation *operation = new DenoiseOperation();
-	converter.addOperation(operation);
-	operation->setDenoiseSettings(denoise);
+  DenoiseOperation *operation = new DenoiseOperation();
+  converter.addOperation(operation);
+  operation->setDenoiseSettings(denoise);
 
-	converter.mapInputSocket(getInputSocket(0), operation->getInputSocket(0));
-	converter.mapInputSocket(getInputSocket(1), operation->getInputSocket(1));
-	converter.mapInputSocket(getInputSocket(2), operation->getInputSocket(2));
-	converter.mapOutputSocket(getOutputSocket(0), operation->getOutputSocket(0));
+  converter.mapInputSocket(getInputSocket(0), operation->getInputSocket(0));
+  converter.mapInputSocket(getInputSocket(1), operation->getInputSocket(1));
+  converter.mapInputSocket(getInputSocket(2), operation->getInputSocket(2));
+  converter.mapOutputSocket(getOutputSocket(0), operation->getOutputSocket(0));
 }

@@ -29,36 +29,31 @@
  *  \ingroup cmpnodes
  */
 
-
 #include "node_composite_util.h"
 
 static bNodeSocketTemplate cmp_node_denoise_in[] = {
-	{	SOCK_RGBA, 1, N_("Image"),			1.0f, 1.0f, 1.0f, 1.0f},
-	{	SOCK_RGBA, 1, N_("Albedo"),			1.0f, 1.0f, 1.0f, 1.0f},
-	{	SOCK_RGBA, 1, N_("Normal"),			1.0f, 1.0f, 1.0f, 1.0f},
-	{	-1, 0, ""	}
-};
-static bNodeSocketTemplate cmp_node_denoise_out[] = {
-	{	SOCK_RGBA, 0, N_("Image")},
-	{	-1, 0, ""	}
-};
+    {SOCK_RGBA, 1, N_("Image"), 1.0f, 1.0f, 1.0f, 1.0f},
+    {SOCK_RGBA, 1, N_("Albedo"), 1.0f, 1.0f, 1.0f, 1.0f},
+    {SOCK_RGBA, 1, N_("Normal"), 1.0f, 1.0f, 1.0f, 1.0f},
+    {-1, 0, ""}};
+static bNodeSocketTemplate cmp_node_denoise_out[] = {{SOCK_RGBA, 0, N_("Image")}, {-1, 0, ""}};
 
 static void node_composit_init_denonise(bNodeTree *UNUSED(ntree), bNode *node)
 {
-	NodeDenoise *ndg = MEM_callocN(sizeof(NodeDenoise), "node denoise data");
-	ndg->hdr = 1;
-	ndg->srgb = 0;
-	node->storage = ndg;
+  NodeDenoise *ndg = MEM_callocN(sizeof(NodeDenoise), "node denoise data");
+  ndg->hdr = 1;
+  ndg->srgb = 0;
+  node->storage = ndg;
 }
 
 void register_node_type_cmp_denoise(void)
 {
-	static bNodeType ntype;
+  static bNodeType ntype;
 
-	cmp_node_type_base(&ntype, CMP_NODE_DENOISE, "Denoise", NODE_CLASS_OP_FILTER, 0);
-	node_type_socket_templates(&ntype, cmp_node_denoise_in, cmp_node_denoise_out);
-	node_type_init(&ntype, node_composit_init_denonise);
-	node_type_storage(&ntype, "NodeDenoise", node_free_standard_storage, node_copy_standard_storage);
+  cmp_node_type_base(&ntype, CMP_NODE_DENOISE, "Denoise", NODE_CLASS_OP_FILTER, 0);
+  node_type_socket_templates(&ntype, cmp_node_denoise_in, cmp_node_denoise_out);
+  node_type_init(&ntype, node_composit_init_denonise);
+  node_type_storage(&ntype, "NodeDenoise", node_free_standard_storage, node_copy_standard_storage);
 
-	nodeRegisterType(&ntype);
+  nodeRegisterType(&ntype);
 }

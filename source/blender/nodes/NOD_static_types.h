@@ -254,4 +254,4 @@ DefNode(TextureNode,    TEX_NODE_PROC+TEX_DISTNOISE, 0,                  "TEX_DI
 /* undefine macros */
 #undef DefNode
 
-/* clang-format on */
+    /* clang-format on */

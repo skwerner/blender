@@ -113,8 +113,9 @@ static int nlaedit_enable_tweakmode_exec(bContext *C, wmOperator *op)
   bool ok = false;
 
   /* get editor data */
-  if (ANIM_animdata_get_context(C, &ac) == 0)
+  if (ANIM_animdata_get_context(C, &ac) == 0) {
     return OPERATOR_CANCELLED;
+  }
 
   /* get a list of the AnimData blocks being shown in the NLA */
   filter = (ANIMFILTER_DATA_VISIBLE | ANIMFILTER_ANIMDATA);
@@ -257,17 +258,20 @@ static int nlaedit_disable_tweakmode_exec(bContext *C, wmOperator *op)
   bool ok = false;
 
   /* get editor data */
-  if (ANIM_animdata_get_context(C, &ac) == 0)
+  if (ANIM_animdata_get_context(C, &ac) == 0) {
     return OPERATOR_CANCELLED;
+  }
 
   /* perform operation */
   ok = nlaedit_disable_tweakmode(&ac, do_solo);
 
   /* success? */
-  if (ok)
+  if (ok) {
     return OPERATOR_FINISHED;
-  else
+  }
+  else {
     return OPERATOR_CANCELLED;
+  }
 }
 
 void NLA_OT_tweakmode_exit(wmOperatorType *ot)
@@ -362,13 +366,16 @@ static int nlaedit_previewrange_exec(bContext *C, wmOperator *UNUSED(op))
   float min, max;
 
   /* get editor data */
-  if (ANIM_animdata_get_context(C, &ac) == 0)
+  if (ANIM_animdata_get_context(C, &ac) == 0) {
     return OPERATOR_CANCELLED;
+  }
 
-  if (ac.scene == NULL)
+  if (ac.scene == NULL) {
     return OPERATOR_CANCELLED;
-  else
+  }
+  else {
     scene = ac.scene;
+  }
 
   /* set the range directly */
   get_nlastrip_extents(&ac, &min, &max, true);
@@ -414,27 +421,25 @@ static bool nla_channels_get_selected_extents(bAnimContext *ac, float *min, floa
   int filter;
 
   SpaceNla *snla = (SpaceNla *)ac->sl;
-  const float half_height = NLACHANNEL_HEIGHT_HALF(snla);
   /* NOTE: not bool, since we want prioritise individual channels over expanders */
   short found = 0;
-  float y;
 
   /* get all items - we need to do it this way */
   filter = (ANIMFILTER_DATA_VISIBLE | ANIMFILTER_LIST_VISIBLE | ANIMFILTER_LIST_CHANNELS);
   ANIM_animdata_filter(ac, &anim_data, filter, ac->data, ac->datatype);
 
   /* loop through all channels, finding the first one that's selected */
-  y = (float)NLACHANNEL_FIRST;
+  float ymax = NLACHANNEL_FIRST_TOP(ac);
 
-  for (ale = anim_data.first; ale; ale = ale->next) {
+  for (ale = anim_data.first; ale; ale = ale->next, ymax -= NLACHANNEL_STEP(snla)) {
     const bAnimChannelType *acf = ANIM_channel_get_typeinfo(ale);
 
     /* must be selected... */
     if (acf && acf->has_setting(ac, ale, ACHANNEL_SETTING_SELECT) &&
         ANIM_channel_setting_get(ac, ale, ACHANNEL_SETTING_SELECT)) {
       /* update best estimate */
-      *min = (float)(y - half_height);
-      *max = (float)(y + half_height);
+      *min = ymax - NLACHANNEL_HEIGHT(snla);
+      *max = ymax;
 
       /* is this high enough priority yet? */
       found = acf->channel_role;
@@ -446,9 +451,6 @@ static bool nla_channels_get_selected_extents(bAnimContext *ac, float *min, floa
         break;
       }
     }
-
-    /* adjust y-position for next one */
-    y -= NLACHANNEL_STEP(snla);
   }
 
   /* free all temp data */
@@ -464,8 +466,9 @@ static int nlaedit_viewall(bContext *C, const bool only_sel)
   float extra;
 
   /* get editor data */
-  if (ANIM_animdata_get_context(C, &ac) == 0)
+  if (ANIM_animdata_get_context(C, &ac) == 0) {
     return OPERATOR_CANCELLED;
+  }
   v2d = &ac.ar->v2d;
 
   /* set the horizontal range, with an extra offset so that the extreme keys will be in view */
@@ -597,8 +600,9 @@ static int nlaedit_add_actionclip_exec(bContext *C, wmOperator *op)
   float cfra;
 
   /* get editor data */
-  if (ANIM_animdata_get_context(C, &ac) == 0)
+  if (ANIM_animdata_get_context(C, &ac) == 0) {
     return OPERATOR_CANCELLED;
+  }
 
   scene = ac.scene;
   cfra = (float)CFRA;
@@ -608,7 +612,7 @@ static int nlaedit_add_actionclip_exec(bContext *C, wmOperator *op)
 
   if (act == NULL) {
     BKE_report(op->reports, RPT_ERROR, "No valid action to add");
-    //printf("Add strip - actname = '%s'\n", actname);
+    // printf("Add strip - actname = '%s'\n", actname);
     return OPERATOR_CANCELLED;
   }
   else if (act->idroot == 0) {
@@ -648,8 +652,9 @@ static int nlaedit_add_actionclip_exec(bContext *C, wmOperator *op)
     AnimData *adt = ale->adt;
     NlaStrip *strip = NULL;
 
-    /* sanity check: only apply actions of the right type for this ID
-     * NOTE: in the case that this hasn't been set, we've already warned the user about this already
+    /* Sanity check: only apply actions of the right type for this ID.
+     * NOTE: in the case that this hasn't been set,
+     * we've already warned the user about this already
      */
     if ((act->idroot) && (act->idroot != GS(ale->id->name))) {
       BKE_reportf(
@@ -735,8 +740,9 @@ static int nlaedit_add_transition_exec(bContext *C, wmOperator *op)
   bool done = false;
 
   /* get editor data */
-  if (ANIM_animdata_get_context(C, &ac) == 0)
+  if (ANIM_animdata_get_context(C, &ac) == 0) {
     return OPERATOR_CANCELLED;
+  }
 
   /* get a list of the editable tracks being shown in the NLA */
   filter = (ANIMFILTER_DATA_VISIBLE | ANIMFILTER_LIST_VISIBLE | ANIMFILTER_FOREDIT);
@@ -749,8 +755,9 @@ static int nlaedit_add_transition_exec(bContext *C, wmOperator *op)
     NlaStrip *s1, *s2;
 
     /* get initial pair of strips */
-    if (ELEM(nlt->strips.first, NULL, nlt->strips.last))
+    if (ELEM(nlt->strips.first, NULL, nlt->strips.last)) {
       continue;
+    }
     s1 = nlt->strips.first;
     s2 = s1->next;
 
@@ -759,20 +766,24 @@ static int nlaedit_add_transition_exec(bContext *C, wmOperator *op)
       NlaStrip *strip;
 
       /* check if both are selected */
-      if (ELEM(0, (s1->flag & NLASTRIP_FLAG_SELECT), (s2->flag & NLASTRIP_FLAG_SELECT)))
+      if (ELEM(0, (s1->flag & NLASTRIP_FLAG_SELECT), (s2->flag & NLASTRIP_FLAG_SELECT))) {
         continue;
+      }
       /* check if there's space between the two */
-      if (IS_EQF(s1->end, s2->start))
+      if (IS_EQF(s1->end, s2->start)) {
         continue;
+      }
       /* make sure neither one is a transition
        * - although this is impossible to create with the standard tools,
        *   the user may have altered the settings
        */
-      if (ELEM(NLASTRIP_TYPE_TRANSITION, s1->type, s2->type))
+      if (ELEM(NLASTRIP_TYPE_TRANSITION, s1->type, s2->type)) {
         continue;
+      }
       /* also make sure neither one is a soundclip */
-      if (ELEM(NLASTRIP_TYPE_SOUND, s1->type, s2->type))
+      if (ELEM(NLASTRIP_TYPE_SOUND, s1->type, s2->type)) {
         continue;
+      }
 
       /* allocate new strip */
       strip = MEM_callocN(sizeof(NlaStrip), "NlaStrip");
@@ -856,8 +867,9 @@ static int nlaedit_add_sound_exec(bContext *C, wmOperator *UNUSED(op))
   int cfra;
 
   /* get editor data */
-  if (ANIM_animdata_get_context(C, &ac) == 0)
+  if (ANIM_animdata_get_context(C, &ac) == 0) {
     return OPERATOR_CANCELLED;
+  }
 
   scene = ac.scene;
   cfra = CFRA;
@@ -877,8 +889,9 @@ static int nlaedit_add_sound_exec(bContext *C, wmOperator *UNUSED(op))
     NlaStrip *strip;
 
     /* does this belong to speaker - assumed to live on Object level only */
-    if ((GS(ale->id->name) != ID_OB) || (ob->type != OB_SPEAKER))
+    if ((GS(ale->id->name) != ID_OB) || (ob->type != OB_SPEAKER)) {
       continue;
+    }
 
     /* create a new strip, and offset it to start on the current frame */
     strip = BKE_nla_add_soundstrip(ac.scene, ob->data);
@@ -940,8 +953,9 @@ static int nlaedit_add_meta_exec(bContext *C, wmOperator *UNUSED(op))
   int filter;
 
   /* get editor data */
-  if (ANIM_animdata_get_context(C, &ac) == 0)
+  if (ANIM_animdata_get_context(C, &ac) == 0) {
     return OPERATOR_CANCELLED;
+  }
 
   /* get a list of the editable tracks being shown in the NLA */
   filter = (ANIMFILTER_DATA_VISIBLE | ANIMFILTER_LIST_VISIBLE | ANIMFILTER_FOREDIT);
@@ -959,8 +973,9 @@ static int nlaedit_add_meta_exec(bContext *C, wmOperator *UNUSED(op))
     /* name the metas */
     for (strip = nlt->strips.first; strip; strip = strip->next) {
       /* auto-name this strip if selected (that means it is a meta) */
-      if (strip->flag & NLASTRIP_FLAG_SELECT)
+      if (strip->flag & NLASTRIP_FLAG_SELECT) {
         BKE_nlastrip_validate_name(adt, strip);
+      }
     }
 
     ale->update |= ANIM_UPDATE_DEPS;
@@ -1004,8 +1019,9 @@ static int nlaedit_remove_meta_exec(bContext *C, wmOperator *UNUSED(op))
   int filter;
 
   /* get editor data */
-  if (ANIM_animdata_get_context(C, &ac) == 0)
+  if (ANIM_animdata_get_context(C, &ac) == 0) {
     return OPERATOR_CANCELLED;
+  }
 
   /* get a list of the editable tracks being shown in the NLA */
   filter = (ANIMFILTER_DATA_VISIBLE | ANIMFILTER_LIST_VISIBLE | ANIMFILTER_FOREDIT);
@@ -1064,8 +1080,9 @@ static int nlaedit_duplicate_exec(bContext *C, wmOperator *op)
   bool done = false;
 
   /* get editor data */
-  if (ANIM_animdata_get_context(C, &ac) == 0)
+  if (ANIM_animdata_get_context(C, &ac) == 0) {
     return OPERATOR_CANCELLED;
+  }
 
   /* get a list of editable tracks being shown in the NLA */
   filter = (ANIMFILTER_DATA_VISIBLE | ANIMFILTER_LIST_VISIBLE | ANIMFILTER_FOREDIT);
@@ -1127,8 +1144,9 @@ static int nlaedit_duplicate_exec(bContext *C, wmOperator *op)
     /* done */
     return OPERATOR_FINISHED;
   }
-  else
+  else {
     return OPERATOR_CANCELLED;
+  }
 }
 
 static int nlaedit_duplicate_invoke(bContext *C, wmOperator *op, const wmEvent *UNUSED(event))
@@ -1180,8 +1198,9 @@ static int nlaedit_delete_exec(bContext *C, wmOperator *UNUSED(op))
   int filter;
 
   /* get editor data */
-  if (ANIM_animdata_get_context(C, &ac) == 0)
+  if (ANIM_animdata_get_context(C, &ac) == 0) {
     return OPERATOR_CANCELLED;
+  }
 
   /* get a list of the editable tracks being shown in the NLA */
   filter = (ANIMFILTER_DATA_VISIBLE | ANIMFILTER_LIST_VISIBLE | ANIMFILTER_FOREDIT);
@@ -1198,8 +1217,9 @@ static int nlaedit_delete_exec(bContext *C, wmOperator *UNUSED(op))
       /* if selected, delete */
       if (strip->flag & NLASTRIP_FLAG_SELECT) {
         /* if a strip either side of this was a transition, delete those too */
-        if ((strip->prev) && (strip->prev->type == NLASTRIP_TYPE_TRANSITION))
+        if ((strip->prev) && (strip->prev->type == NLASTRIP_TYPE_TRANSITION)) {
           BKE_nlastrip_free(&nlt->strips, strip->prev, true);
+        }
         if ((nstrip) && (nstrip->type == NLASTRIP_TYPE_TRANSITION)) {
           nstrip = nstrip->next;
           BKE_nlastrip_free(&nlt->strips, strip->next, true);
@@ -1268,17 +1288,21 @@ static void nlaedit_split_strip_actclip(
 
     /* strip extents */
     len = strip->end - strip->start;
-    if (IS_EQF(len, 0.0f))
+    if (IS_EQF(len, 0.0f)) {
       return;
-    else
+    }
+    else {
       splitframe = strip->start + (len / 2.0f);
+    }
 
     /* action range */
     len = strip->actend - strip->actstart;
-    if (IS_EQF(len, 0.0f))
+    if (IS_EQF(len, 0.0f)) {
       splitaframe = strip->actend;
-    else
+    }
+    else {
       splitaframe = strip->actstart + (len / 2.0f);
+    }
   }
 
   /* make a copy (assume that this is possible) and append
@@ -1324,8 +1348,9 @@ static int nlaedit_split_exec(bContext *C, wmOperator *UNUSED(op))
   int filter;
 
   /* get editor data */
-  if (ANIM_animdata_get_context(C, &ac) == 0)
+  if (ANIM_animdata_get_context(C, &ac) == 0) {
     return OPERATOR_CANCELLED;
+  }
 
   /* get a list of editable tracks being shown in the NLA */
   filter = (ANIMFILTER_DATA_VISIBLE | ANIMFILTER_LIST_VISIBLE | ANIMFILTER_FOREDIT);
@@ -1402,8 +1427,9 @@ static int nlaedit_toggle_mute_exec(bContext *C, wmOperator *UNUSED(op))
   int filter;
 
   /* get editor data */
-  if (ANIM_animdata_get_context(C, &ac) == 0)
+  if (ANIM_animdata_get_context(C, &ac) == 0) {
     return OPERATOR_CANCELLED;
+  }
 
   /* get a list of the editable tracks being shown in the NLA */
   filter = (ANIMFILTER_DATA_VISIBLE | ANIMFILTER_LIST_VISIBLE | ANIMFILTER_FOREDIT);
@@ -1465,8 +1491,9 @@ static int nlaedit_swap_exec(bContext *C, wmOperator *op)
   int filter;
 
   /* get editor data */
-  if (ANIM_animdata_get_context(C, &ac) == 0)
+  if (ANIM_animdata_get_context(C, &ac) == 0) {
     return OPERATOR_CANCELLED;
+  }
 
   /* get a list of the editable tracks being shown in the NLA */
   filter = (ANIMFILTER_DATA_VISIBLE | ANIMFILTER_LIST_VISIBLE | ANIMFILTER_FOREDIT);
@@ -1482,7 +1509,8 @@ static int nlaedit_swap_exec(bContext *C, wmOperator *op)
     /* make temporary metastrips so that entire islands of selections can be moved around */
     BKE_nlastrips_make_metas(&nlt->strips, 1);
 
-    /* special case: if there is only 1 island (i.e. temp meta BUT NOT unselected/normal/normal-meta strips) left after this,
+    /* special case: if there is only 1 island
+     * (i.e. temp meta BUT NOT unselected/normal/normal-meta strips) left after this,
      * and this island has two strips inside it, then we should be able to just swap these still...
      */
     if (BLI_listbase_is_empty(&nlt->strips) == false) {
@@ -1633,8 +1661,9 @@ static int nlaedit_move_up_exec(bContext *C, wmOperator *UNUSED(op))
   int filter;
 
   /* get editor data */
-  if (ANIM_animdata_get_context(C, &ac) == 0)
+  if (ANIM_animdata_get_context(C, &ac) == 0) {
     return OPERATOR_CANCELLED;
+  }
 
   /* get a list of the editable tracks being shown in the NLA */
   filter = (ANIMFILTER_DATA_VISIBLE | ANIMFILTER_LIST_VISIBLE | ANIMFILTER_FOREDIT);
@@ -1649,8 +1678,9 @@ static int nlaedit_move_up_exec(bContext *C, wmOperator *UNUSED(op))
     NlaStrip *strip, *stripn;
 
     /* if this track has no tracks after it, skip for now... */
-    if (nltn == NULL)
+    if (nltn == NULL) {
       continue;
+    }
 
     /* for every selected strip, try to move */
     for (strip = nlt->strips.first; strip; strip = stripn) {
@@ -1708,8 +1738,9 @@ static int nlaedit_move_down_exec(bContext *C, wmOperator *UNUSED(op))
   int filter;
 
   /* get editor data */
-  if (ANIM_animdata_get_context(C, &ac) == 0)
+  if (ANIM_animdata_get_context(C, &ac) == 0) {
     return OPERATOR_CANCELLED;
+  }
 
   /* get a list of the editable tracks being shown in the NLA */
   filter = (ANIMFILTER_DATA_VISIBLE | ANIMFILTER_LIST_VISIBLE | ANIMFILTER_FOREDIT);
@@ -1724,8 +1755,9 @@ static int nlaedit_move_down_exec(bContext *C, wmOperator *UNUSED(op))
     NlaStrip *strip, *stripn;
 
     /* if this track has no tracks before it, skip for now... */
-    if (nltp == NULL)
+    if (nltp == NULL) {
       continue;
+    }
 
     /* for every selected strip, try to move */
     for (strip = nlt->strips.first; strip; strip = stripn) {
@@ -1784,13 +1816,15 @@ static int nlaedit_sync_actlen_exec(bContext *C, wmOperator *op)
   const bool active_only = RNA_boolean_get(op->ptr, "active");
 
   /* get editor data */
-  if (ANIM_animdata_get_context(C, &ac) == 0)
+  if (ANIM_animdata_get_context(C, &ac) == 0) {
     return OPERATOR_CANCELLED;
+  }
 
   /* get a list of the editable tracks being shown in the NLA */
   filter = (ANIMFILTER_DATA_VISIBLE | ANIMFILTER_LIST_VISIBLE | ANIMFILTER_FOREDIT);
-  if (active_only)
+  if (active_only) {
     filter |= ANIMFILTER_ACTIVE;
+  }
   ANIM_animdata_filter(&ac, &anim_data, filter, ac.data, ac.datatype);
 
   /* for each NLA-Track, apply scale of all selected strips */
@@ -1801,18 +1835,21 @@ static int nlaedit_sync_actlen_exec(bContext *C, wmOperator *op)
     for (strip = nlt->strips.first; strip; strip = strip->next) {
       /* strip selection/active status check */
       if (active_only) {
-        if ((strip->flag & NLASTRIP_FLAG_ACTIVE) == 0)
+        if ((strip->flag & NLASTRIP_FLAG_ACTIVE) == 0) {
           continue;
+        }
       }
       else {
-        if ((strip->flag & NLASTRIP_FLAG_SELECT) == 0)
+        if ((strip->flag & NLASTRIP_FLAG_SELECT) == 0) {
           continue;
+        }
       }
 
       /* must be action-clip only (transitions don't have scale) */
       if (strip->type == NLASTRIP_TYPE_CLIP) {
-        if (strip->act == NULL)
+        if (strip->act == NULL) {
           continue;
+        }
 
         /* recalculate the length of the action */
         calc_action_range(strip->act, &strip->actstart, &strip->actend, 0);
@@ -1873,8 +1910,9 @@ static int nlaedit_make_single_user_exec(bContext *C, wmOperator *UNUSED(op))
   bool copied = false;
 
   /* get editor data */
-  if (ANIM_animdata_get_context(C, &ac) == 0)
+  if (ANIM_animdata_get_context(C, &ac) == 0) {
     return OPERATOR_CANCELLED;
+  }
 
   /* get a list of the editable tracks being shown in the NLA */
   filter = (ANIMFILTER_DATA_VISIBLE | ANIMFILTER_LIST_VISIBLE | ANIMFILTER_FOREDIT);
@@ -1891,8 +1929,9 @@ static int nlaedit_make_single_user_exec(bContext *C, wmOperator *UNUSED(op))
     for (strip = nlt->strips.last; strip; strip = strip->prev) {
       /* must be action-clip only (as only these have actions) */
       if ((strip->flag & NLASTRIP_FLAG_SELECT) && (strip->type == NLASTRIP_TYPE_CLIP)) {
-        if (strip->act == NULL)
+        if (strip->act == NULL) {
           continue;
+        }
 
         /* multi-user? */
         if (ID_REAL_USERS(strip->act) > 1) {
@@ -1974,8 +2013,9 @@ static int nlaedit_apply_scale_exec(bContext *C, wmOperator *UNUSED(op))
   KeyframeEditData ked = {{NULL}};
 
   /* get editor data */
-  if (ANIM_animdata_get_context(C, &ac) == 0)
+  if (ANIM_animdata_get_context(C, &ac) == 0) {
     return OPERATOR_CANCELLED;
+  }
 
   /* get a list of the editable tracks being shown in the NLA */
   filter = (ANIMFILTER_DATA_VISIBLE | ANIMFILTER_LIST_VISIBLE | ANIMFILTER_FOREDIT);
@@ -1992,8 +2032,9 @@ static int nlaedit_apply_scale_exec(bContext *C, wmOperator *UNUSED(op))
       if ((strip->flag & NLASTRIP_FLAG_SELECT) && (strip->type == NLASTRIP_TYPE_CLIP)) {
         /* if the referenced action is used by other strips,
          * make this strip use its own copy */
-        if (strip->act == NULL)
+        if (strip->act == NULL) {
           continue;
+        }
         if (strip->act->id.us > 1) {
           /* make a copy of the Action to work on */
           bAction *act = BKE_action_copy(bmain, strip->act);
@@ -2066,8 +2107,9 @@ static int nlaedit_clear_scale_exec(bContext *C, wmOperator *UNUSED(op))
   int filter;
 
   /* get editor data */
-  if (ANIM_animdata_get_context(C, &ac) == 0)
+  if (ANIM_animdata_get_context(C, &ac) == 0) {
     return OPERATOR_CANCELLED;
+  }
 
   /* get a list of the editable tracks being shown in the NLA */
   filter = (ANIMFILTER_DATA_VISIBLE | ANIMFILTER_LIST_VISIBLE | ANIMFILTER_FOREDIT);
@@ -2144,8 +2186,9 @@ static int nlaedit_snap_exec(bContext *C, wmOperator *op)
   float secf;
 
   /* get editor data */
-  if (ANIM_animdata_get_context(C, &ac) == 0)
+  if (ANIM_animdata_get_context(C, &ac) == 0) {
     return OPERATOR_CANCELLED;
+  }
 
   /* get a list of the editable tracks being shown in the NLA */
   filter = (ANIMFILTER_DATA_VISIBLE | ANIMFILTER_LIST_VISIBLE | ANIMFILTER_FOREDIT);
@@ -2293,10 +2336,12 @@ static const EnumPropertyItem *nla_fmodifier_itemf(bContext *C,
     int index;
 
     /* check if modifier is valid for this context */
-    if (fmi == NULL)
+    if (fmi == NULL) {
       continue;
-    if (i == FMODIFIER_TYPE_CYCLES) /* we already have repeat... */
+    }
+    if (i == FMODIFIER_TYPE_CYCLES) { /* we already have repeat... */
       continue;
+    }
 
     index = RNA_enum_from_value(rna_enum_fmodifier_type_items, fmi->type);
     if (index != -1) { /* Not all types are implemented yet... */
@@ -2323,8 +2368,9 @@ static int nla_fmodifier_add_exec(bContext *C, wmOperator *op)
   const bool active_only = RNA_boolean_get(op->ptr, "only_active");
 
   /* get editor data */
-  if (ANIM_animdata_get_context(C, &ac) == 0)
+  if (ANIM_animdata_get_context(C, &ac) == 0) {
     return OPERATOR_CANCELLED;
+  }
 
   /* get a list of the editable tracks being shown in the NLA */
   filter = (ANIMFILTER_DATA_VISIBLE | ANIMFILTER_LIST_VISIBLE | ANIMFILTER_FOREDIT);
@@ -2339,18 +2385,21 @@ static int nla_fmodifier_add_exec(bContext *C, wmOperator *op)
       /* can F-Modifier be added to the current strip? */
       if (active_only) {
         /* if not active, cannot add since we're only adding to active strip */
-        if ((strip->flag & NLASTRIP_FLAG_ACTIVE) == 0)
+        if ((strip->flag & NLASTRIP_FLAG_ACTIVE) == 0) {
           continue;
+        }
       }
       else {
         /* strip must be selected, since we're not just doing active */
-        if ((strip->flag & NLASTRIP_FLAG_SELECT) == 0)
+        if ((strip->flag & NLASTRIP_FLAG_SELECT) == 0) {
           continue;
+        }
       }
 
       /* sound clips are not affected by FModifiers */
-      if (strip->type == NLASTRIP_TYPE_SOUND)
+      if (strip->type == NLASTRIP_TYPE_SOUND) {
         continue;
+      }
 
       /* add F-Modifier of specified type to selected, and make it the active one */
       fcm = add_fmodifier(&strip->modifiers, type, NULL);
@@ -2397,6 +2446,7 @@ void NLA_OT_fmodifier_add(wmOperatorType *ot)
 
   /* id-props */
   ot->prop = RNA_def_enum(ot->srna, "type", rna_enum_fmodifier_type_items, 0, "Type", "");
+  RNA_def_property_translation_context(ot->prop, BLT_I18NCONTEXT_ID_ACTION);
   RNA_def_enum_funcs(ot->prop, nla_fmodifier_itemf);
 
   RNA_def_boolean(ot->srna,
@@ -2417,8 +2467,9 @@ static int nla_fmodifier_copy_exec(bContext *C, wmOperator *op)
   bool ok = false;
 
   /* get editor data */
-  if (ANIM_animdata_get_context(C, &ac) == 0)
+  if (ANIM_animdata_get_context(C, &ac) == 0) {
     return OPERATOR_CANCELLED;
+  }
 
   /* clear buffer first */
   ANIM_fmodifiers_copybuf_free();
@@ -2434,8 +2485,9 @@ static int nla_fmodifier_copy_exec(bContext *C, wmOperator *op)
 
     for (strip = nlt->strips.first; strip; strip = strip->next) {
       /* only add F-Modifier if on active strip? */
-      if ((strip->flag & NLASTRIP_FLAG_ACTIVE) == 0)
+      if ((strip->flag & NLASTRIP_FLAG_ACTIVE) == 0) {
         continue;
+      }
 
       // TODO: when 'active' vs 'all' boolean is added, change last param!
       ok |= ANIM_fmodifiers_copy_to_buf(&strip->modifiers, 0);
@@ -2471,7 +2523,13 @@ void NLA_OT_fmodifier_copy(wmOperatorType *ot)
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
 
   /* id-props */
-  //ot->prop = RNA_def_boolean(ot->srna, "all", 1, "All F-Modifiers", "Copy all the F-Modifiers, instead of just the active one");
+#if 0
+  ot->prop = RNA_def_boolean(ot->srna,
+                             "all",
+                             1,
+                             "All F-Modifiers",
+                             "Copy all the F-Modifiers, instead of just the active one");
+#endif
 }
 
 /* ******************** Paste F-Modifiers Operator *********************** */
@@ -2487,8 +2545,9 @@ static int nla_fmodifier_paste_exec(bContext *C, wmOperator *op)
   const bool replace = RNA_boolean_get(op->ptr, "replace");
 
   /* get editor data */
-  if (ANIM_animdata_get_context(C, &ac) == 0)
+  if (ANIM_animdata_get_context(C, &ac) == 0) {
     return OPERATOR_CANCELLED;
+  }
 
   /* get a list of the editable tracks being shown in the NLA */
   filter = (ANIMFILTER_DATA_VISIBLE | ANIMFILTER_LIST_VISIBLE | ANIMFILTER_FOREDIT |
@@ -2504,13 +2563,15 @@ static int nla_fmodifier_paste_exec(bContext *C, wmOperator *op)
       /* can F-Modifier be added to the current strip? */
       if (active_only) {
         /* if not active, cannot add since we're only adding to active strip */
-        if ((strip->flag & NLASTRIP_FLAG_ACTIVE) == 0)
+        if ((strip->flag & NLASTRIP_FLAG_ACTIVE) == 0) {
           continue;
+        }
       }
       else {
         /* strip must be selected, since we're not just doing active */
-        if ((strip->flag & NLASTRIP_FLAG_SELECT) == 0)
+        if ((strip->flag & NLASTRIP_FLAG_SELECT) == 0) {
           continue;
+        }
       }
 
       /* paste FModifiers from buffer */

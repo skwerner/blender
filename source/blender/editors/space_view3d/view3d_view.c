@@ -146,7 +146,7 @@ void ED_view3d_smooth_view_ex(
   }
   sms.org_view = rv3d->view;
 
-  /* sms.to_camera = false; */ /* initizlized to zero anyway */
+  /* sms.to_camera = false; */ /* initialized to zero anyway */
 
   /* note on camera locking, this is a little confusing but works ok.
    * we may be changing the view 'as if' there is no active camera, but in fact
@@ -428,7 +428,7 @@ void ED_view3d_smooth_view_force_finish(bContext *C, View3D *v3d, ARegion *ar)
      * can use them without redrawing first */
     Depsgraph *depsgraph = CTX_data_depsgraph(C);
     Scene *scene = CTX_data_scene(C);
-    ED_view3d_update_viewmat(depsgraph, scene, v3d, ar, NULL, NULL, NULL);
+    ED_view3d_update_viewmat(depsgraph, scene, v3d, ar, NULL, NULL, NULL, false);
   }
 }
 
@@ -865,8 +865,8 @@ void view3d_viewmatrix_set(Depsgraph *depsgraph,
       vec[2] = 0.0f;
 
       if (rect_scale) {
-        /* Since 'RegionView3D.winmat' has been calculated and this function doesn't take the 'ARegion'
-         * we don't know about the region size.
+        /* Since 'RegionView3D.winmat' has been calculated and this function doesn't take the
+         * 'ARegion' we don't know about the region size.
          * Use 'rect_scale' when drawing a sub-region to apply 2D offset,
          * scaled by the difference between the sub-region and the region size.
          */

@@ -64,10 +64,12 @@ static float mix_weight(float weight, float weight2, char mix_mode)
       return (weight * weight2);
     case MOD_WVG_MIX_DIV:
       /* Avoid dividing by zero (or really small values). */
-      if (0.0 <= weight2 < MOD_WVG_ZEROFLOOR)
+      if (0.0 <= weight2 < MOD_WVG_ZEROFLOOR) {
         weight2 = MOD_WVG_ZEROFLOOR;
-      else if (-MOD_WVG_ZEROFLOOR < weight2)
+      }
+      else if (-MOD_WVG_ZEROFLOOR < weight2) {
         weight2 = -MOD_WVG_ZEROFLOOR;
+      }
       return (weight / weight2);
     case MOD_WVG_MIX_DIF:
       return (weight < weight2 ? weight2 - weight : weight - weight2);
@@ -78,28 +80,37 @@ static float mix_weight(float weight, float weight2, char mix_mode)
       return weight2;
   }
 #endif
-  if (mix_mode == MOD_WVG_MIX_SET)
+  if (mix_mode == MOD_WVG_MIX_SET) {
     return weight2;
-  else if (mix_mode == MOD_WVG_MIX_ADD)
+  }
+  else if (mix_mode == MOD_WVG_MIX_ADD) {
     return (weight + weight2);
-  else if (mix_mode == MOD_WVG_MIX_SUB)
+  }
+  else if (mix_mode == MOD_WVG_MIX_SUB) {
     return (weight - weight2);
-  else if (mix_mode == MOD_WVG_MIX_MUL)
+  }
+  else if (mix_mode == MOD_WVG_MIX_MUL) {
     return (weight * weight2);
+  }
   else if (mix_mode == MOD_WVG_MIX_DIV) {
     /* Avoid dividing by zero (or really small values). */
-    if (weight2 < 0.0f && weight2 > -MOD_WVG_ZEROFLOOR)
+    if (weight2 < 0.0f && weight2 > -MOD_WVG_ZEROFLOOR) {
       weight2 = -MOD_WVG_ZEROFLOOR;
-    else if (weight2 >= 0.0f && weight2 < MOD_WVG_ZEROFLOOR)
+    }
+    else if (weight2 >= 0.0f && weight2 < MOD_WVG_ZEROFLOOR) {
       weight2 = MOD_WVG_ZEROFLOOR;
+    }
     return (weight / weight2);
   }
-  else if (mix_mode == MOD_WVG_MIX_DIF)
+  else if (mix_mode == MOD_WVG_MIX_DIF) {
     return (weight < weight2 ? weight2 - weight : weight - weight2);
-  else if (mix_mode == MOD_WVG_MIX_AVG)
+  }
+  else if (mix_mode == MOD_WVG_MIX_AVG) {
     return (weight + weight2) * 0.5f;
-  else
+  }
+  else {
     return weight2;
+  }
 }
 
 /**************************************
@@ -140,8 +151,9 @@ static bool dependsOnTime(ModifierData *md)
 {
   WeightVGMixModifierData *wmd = (WeightVGMixModifierData *)md;
 
-  if (wmd->mask_texture)
+  if (wmd->mask_texture) {
     return BKE_texture_dependsOnTime(wmd->mask_texture);
+  }
   return false;
 }
 
@@ -391,8 +403,9 @@ static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, Mes
 
   /* If weight preview enabled... */
 #if 0 /* XXX Currently done in mod stack :/ */
-  if (do_prev)
+  if (do_prev) {
     DM_update_weight_mcol(ob, dm, 0, org_w, numIdx, indices);
+  }
 #endif
 
   /* Freeing stuff. */

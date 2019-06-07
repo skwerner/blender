@@ -31,6 +31,7 @@
 #include "BKE_customdata.h"
 #include "BKE_global.h"
 #include "BKE_library.h"
+#include "BKE_mesh.h"
 #include "BKE_mesh_runtime.h"
 
 #include "DEG_depsgraph.h"
@@ -875,10 +876,20 @@ static PyGetSetDef bpy_bmface_getseters[] = {
 };
 
 static PyGetSetDef bpy_bmloop_getseters[] = {
-    /* generic */
-    /* flags are available but not used for loops. */
-    // {(char *)"select", (getter)bpy_bm_elem_hflag_get, (setter)bpy_bm_elem_hflag_set, (char *)bpy_bm_elem_select_doc, (void *)BM_ELEM_SELECT},
-    // {(char *)"hide",   (getter)bpy_bm_elem_hflag_get, (setter)bpy_bm_elem_hflag_set, (char *)bpy_bm_elem_hide_doc,   (void *)BM_ELEM_HIDDEN},
+/* generic */
+/* flags are available but not used for loops. */
+#if 0
+    {(char *)"select",
+     (getter)bpy_bm_elem_hflag_get,
+     (setter)bpy_bm_elem_hflag_set,
+     (char *)bpy_bm_elem_select_doc,
+     (void *)BM_ELEM_SELECT},
+    {(char *)"hide",
+     (getter)bpy_bm_elem_hflag_get,
+     (setter)bpy_bm_elem_hflag_set,
+     (char *)bpy_bm_elem_hide_doc,
+     (void *)BM_ELEM_HIDDEN},
+#endif
     {(char *)"tag",
      (getter)bpy_bm_elem_hflag_get,
      (setter)bpy_bm_elem_hflag_set,
@@ -1079,13 +1090,19 @@ static PyObject *bpy_bmesh_to_mesh(BPy_BMesh *self, PyObject *args)
 
   bm = self->bm;
 
-  BLI_assert(BKE_id_is_in_global_main(&me->id));
-  BM_mesh_bm_to_me(G_MAIN, /* XXX UGLY! */
-                   bm,
-                   me,
-                   (&(struct BMeshToMeshParams){
-                       .calc_object_remap = true,
-                   }));
+  struct Main *bmain = NULL;
+  struct BMeshToMeshParams params = {0};
+  if (me->id.tag & LIB_TAG_NO_MAIN) {
+    /* Mesh might be coming from a self-contained source like object.to_mesh(). No need to remap
+     * anything in this case. */
+  }
+  else {
+    BLI_assert(BKE_id_is_in_global_main(&me->id));
+    bmain = G_MAIN; /* XXX UGLY! */
+    params.calc_object_remap = true;
+  }
+
+  BM_mesh_bm_to_me(bmain, bm, me, &params);
 
   /* we could have the user do this but if they forget blender can easy crash
    * since the references arrays for the objects derived meshes are now invalid */
@@ -2593,8 +2610,7 @@ static PyObject *bpy_bmelemseq_index_update(BPy_BMElemSeq *self)
       int index = 0;
       const char htype = bm_iter_itype_htype_map[self->itype];
 
-      BM_ITER_BPY_BM_SEQ(ele, &iter, self)
-      {
+      BM_ITER_BPY_BM_SEQ (ele, &iter, self) {
         BM_elem_index_set(ele, index); /* set_dirty! */
         index++;
       }
@@ -2744,8 +2760,7 @@ static PyObject *bpy_bmelemseq_sort(BPy_BMElemSeq *self, PyObject *args, PyObjec
   }
 
   i = 0;
-  BM_ITER_BPY_BM_SEQ(ele, &iter, self)
-  {
+  BM_ITER_BPY_BM_SEQ (ele, &iter, self) {
     if (keyfunc != NULL) {
       PyObject *py_elem;
       PyObject *index;
@@ -3168,8 +3183,7 @@ static Py_ssize_t bpy_bmelemseq_length(BPy_BMElemSeq *self)
     BMHeader *ele;
     Py_ssize_t tot = 0;
 
-    BM_ITER_BPY_BM_SEQ(ele, &iter, self)
-    {
+    BM_ITER_BPY_BM_SEQ (ele, &iter, self) {
       tot++;
     }
     return tot;
@@ -3343,8 +3357,7 @@ static int bpy_bmelemseq_contains(BPy_BMElemSeq *self, PyObject *value)
     if (value_bm_ele->bm == self->bm) {
       BMElem *ele, *ele_test = value_bm_ele->ele;
       BMIter iter;
-      BM_ITER_BPY_BM_SEQ(ele, &iter, self)
-      {
+      BM_ITER_BPY_BM_SEQ (ele, &iter, self) {
         if (ele == ele_test) {
           return 1;
         }

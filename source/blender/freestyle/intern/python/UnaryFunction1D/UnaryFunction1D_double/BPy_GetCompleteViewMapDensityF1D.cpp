@@ -77,14 +77,15 @@ static int GetCompleteViewMapDensityF1D___init__(BPy_GetCompleteViewMapDensityF1
   float f = 2.0;
 
   if (!PyArg_ParseTupleAndKeywords(
-          args, kwds, "i|O!f", (char **)kwlist, &i, &IntegrationType_Type, &obj, &f))
+          args, kwds, "i|O!f", (char **)kwlist, &i, &IntegrationType_Type, &obj, &f)) {
     return -1;
+  }
   IntegrationType t = (obj) ? IntegrationType_from_BPy_IntegrationType(obj) : MEAN;
   self->py_uf1D_double.uf1D_double = new Functions1D::GetCompleteViewMapDensityF1D(i, t, f);
   return 0;
 }
 
-/*-----------------------BPy_GetCompleteViewMapDensityF1D type definition ------------------------------*/
+/*-----------------------BPy_GetCompleteViewMapDensityF1D type definition -----------------------*/
 
 PyTypeObject GetCompleteViewMapDensityF1D_Type = {
     PyVarObject_HEAD_INIT(NULL, 0) "GetCompleteViewMapDensityF1D", /* tp_name */

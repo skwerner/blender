@@ -883,19 +883,18 @@ static uiTooltipData *ui_tooltip_data_from_gizmo(bContext *C, wmGizmo *gz)
 
   /* Operator Actions */
   {
-    bool use_drag = gz->drag_part != -1 && gz->highlight_part != gz->drag_part;
-
+    const bool use_drag = gz->drag_part != -1 && gz->highlight_part != gz->drag_part;
     const struct {
       int part;
       const char *prefix;
     } gzop_actions[] = {
         {
             .part = gz->highlight_part,
-            .prefix = use_drag ? TIP_("Click") : NULL,
+            .prefix = use_drag ? CTX_TIP_(BLT_I18NCONTEXT_OPERATOR_DEFAULT, "Click") : NULL,
         },
         {
             .part = use_drag ? gz->drag_part : -1,
-            .prefix = use_drag ? TIP_("Drag") : NULL,
+            .prefix = use_drag ? CTX_TIP_(BLT_I18NCONTEXT_OPERATOR_DEFAULT, "Drag") : NULL,
         },
     };
 
@@ -1063,7 +1062,7 @@ static ARegion *ui_tooltip_create_with_data(bContext *C,
     field->geom.x_pos = x_pos;
   }
 
-  //fontw *= aspect;
+  // fontw *= aspect;
 
   BLF_disable(data->fstyle.uifont_id, font_flag);
   BLF_disable(blf_mono_font, font_flag);

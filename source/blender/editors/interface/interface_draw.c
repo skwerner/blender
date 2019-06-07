@@ -1333,12 +1333,14 @@ void ui_draw_but_VECTORSCOPE(ARegion *UNUSED(ar),
   const float skin_rad = DEG2RADF(123.0f); /* angle in radians of the skin tone line */
   Scopes *scopes = (Scopes *)but->poin;
 
-  const float colors[6][3] = {{0.75, 0.0, 0.0},
-                              {0.75, 0.75, 0.0},
-                              {0.0, 0.75, 0.0},
-                              {0.0, 0.75, 0.75},
-                              {0.0, 0.0, 0.75},
-                              {0.75, 0.0, 0.75}};
+  const float colors[6][3] = {
+      {0.75, 0.0, 0.0},
+      {0.75, 0.75, 0.0},
+      {0.0, 0.75, 0.0},
+      {0.0, 0.75, 0.75},
+      {0.0, 0.0, 0.75},
+      {0.75, 0.0, 0.75},
+  };
 
   rctf rect = {
       .xmin = (float)recti->xmin + 1,
@@ -1608,16 +1610,10 @@ void ui_draw_but_COLORBAND(uiBut *but, const uiWidgetColors *UNUSED(wcol), const
   immBindBuiltinProgram(GPU_SHADER_2D_CHECKER);
 
   /* Drawing the checkerboard. */
-  immUniform4f("color1",
-               UI_ALPHA_CHECKER_DARK / 255.0f,
-               UI_ALPHA_CHECKER_DARK / 255.0f,
-               UI_ALPHA_CHECKER_DARK / 255.0f,
-               1.0f);
-  immUniform4f("color2",
-               UI_ALPHA_CHECKER_LIGHT / 255.0f,
-               UI_ALPHA_CHECKER_LIGHT / 255.0f,
-               UI_ALPHA_CHECKER_LIGHT / 255.0f,
-               1.0f);
+  const float checker_dark = UI_ALPHA_CHECKER_DARK / 255.0f;
+  const float checker_light = UI_ALPHA_CHECKER_LIGHT / 255.0f;
+  immUniform4f("color1", checker_dark, checker_dark, checker_dark, 1.0f);
+  immUniform4f("color2", checker_light, checker_light, checker_light, 1.0f);
   immUniform1i("size", 8);
   immRectf(pos_id, x1, y1, x1 + sizex, rect->ymax);
   immUnbindProgram();
@@ -1802,12 +1798,12 @@ static void ui_draw_but_curve_grid(
                       1.0f);
 
   immBegin(GPU_PRIM_LINES, (int)line_count * 2);
-  while (fx < rect->xmax) {
+  while (fx <= rect->xmax) {
     immVertex2f(pos, fx, rect->ymin);
     immVertex2f(pos, fx, rect->ymax);
     fx += dx;
   }
-  while (fy < rect->ymax) {
+  while (fy <= rect->ymax) {
     immVertex2f(pos, rect->xmin, fy);
     immVertex2f(pos, rect->xmax, fy);
     fy += dy;
@@ -1847,6 +1843,17 @@ void ui_draw_but_CURVE(ARegion *ar, uiBut *but, const uiWidgetColors *wcol, cons
     cumap = (CurveMapping *)but->poin;
   }
 
+  /* calculate offset and zoom */
+  float zoomx = (BLI_rcti_size_x(rect) - 2.0f) / BLI_rctf_size_x(&cumap->curr);
+  float zoomy = (BLI_rcti_size_y(rect) - 2.0f) / BLI_rctf_size_y(&cumap->curr);
+  float offsx = cumap->curr.xmin - (1.0f / zoomx);
+  float offsy = cumap->curr.ymin - (1.0f / zoomy);
+
+  /* exit early if too narrow */
+  if (zoomx == 0.0f) {
+    return;
+  }
+
   CurveMap *cuma = &cumap->cm[cumap->cur];
 
   /* need scissor test, curve can draw outside of boundary */
@@ -1864,12 +1871,6 @@ void ui_draw_but_CURVE(ARegion *ar, uiBut *but, const uiWidgetColors *wcol, cons
               scissor_new.ymin,
               BLI_rcti_size_x(&scissor_new),
               BLI_rcti_size_y(&scissor_new));
-
-  /* calculate offset and zoom */
-  float zoomx = (BLI_rcti_size_x(rect) - 2.0f) / BLI_rctf_size_x(&cumap->curr);
-  float zoomy = (BLI_rcti_size_y(rect) - 2.0f) / BLI_rctf_size_y(&cumap->curr);
-  float offsx = cumap->curr.xmin - (1.0f / zoomx);
-  float offsy = cumap->curr.ymin - (1.0f / zoomy);
 
   /* Do this first to not mess imm context */
   if (but->a1 == UI_GRAD_H) {
@@ -2252,104 +2253,6 @@ void ui_draw_but_TRACKPREVIEW(ARegion *UNUSED(ar),
   draw_scope_end(&rect, scissor);
 
   GPU_blend(false);
-}
-
-void ui_draw_but_NODESOCKET(ARegion *ar,
-                            uiBut *but,
-                            const uiWidgetColors *UNUSED(wcol),
-                            const rcti *recti)
-{
-  static const float size = 5.0f;
-
-  /* 16 values of sin function */
-  const float si[16] = {
-      0.00000000f,
-      0.39435585f,
-      0.72479278f,
-      0.93775213f,
-      0.99871650f,
-      0.89780453f,
-      0.65137248f,
-      0.29936312f,
-      -0.10116832f,
-      -0.48530196f,
-      -0.79077573f,
-      -0.96807711f,
-      -0.98846832f,
-      -0.84864425f,
-      -0.57126821f,
-      -0.20129852f,
-  };
-  /* 16 values of cos function */
-  const float co[16] = {
-      1.00000000f,
-      0.91895781f,
-      0.68896691f,
-      0.34730525f,
-      -0.05064916f,
-      -0.44039415f,
-      -0.75875812f,
-      -0.95413925f,
-      -0.99486932f,
-      -0.87434661f,
-      -0.61210598f,
-      -0.25065253f,
-      0.15142777f,
-      0.52896401f,
-      0.82076344f,
-      0.97952994f,
-  };
-
-  int scissor[4];
-
-  /* need scissor test, can draw outside of boundary */
-  GPU_scissor_get_i(scissor);
-
-  rcti scissor_new = {
-      .xmin = recti->xmin,
-      .ymin = recti->ymin,
-      .xmax = recti->xmax,
-      .ymax = recti->ymax,
-  };
-
-  rcti scissor_region = {0, ar->winx, 0, ar->winy};
-
-  BLI_rcti_isect(&scissor_new, &scissor_region, &scissor_new);
-  GPU_scissor(scissor_new.xmin,
-              scissor_new.ymin,
-              BLI_rcti_size_x(&scissor_new),
-              BLI_rcti_size_y(&scissor_new));
-
-  float x = 0.5f * (recti->xmin + recti->xmax);
-  float y = 0.5f * (recti->ymin + recti->ymax);
-
-  GPUVertFormat *format = immVertexFormat();
-  uint pos = GPU_vertformat_attr_add(format, "pos", GPU_COMP_F32, 2, GPU_FETCH_FLOAT);
-  immBindBuiltinProgram(GPU_SHADER_2D_UNIFORM_COLOR);
-  immUniformColor4ubv(but->col);
-
-  GPU_blend(true);
-  immBegin(GPU_PRIM_TRI_FAN, 16);
-  for (int a = 0; a < 16; a++) {
-    immVertex2f(pos, x + size * si[a], y + size * co[a]);
-  }
-  immEnd();
-
-  immUniformColor4ub(0, 0, 0, 150);
-  GPU_line_width(1);
-  GPU_line_smooth(true);
-  immBegin(GPU_PRIM_LINE_LOOP, 16);
-  for (int a = 0; a < 16; a++) {
-    immVertex2f(pos, x + size * si[a], y + size * co[a]);
-  }
-  immEnd();
-  GPU_line_smooth(false);
-  GPU_blend(false);
-
-  immUnbindProgram();
-
-  /* restore scissortest */
-  GPU_scissor(scissor[0], scissor[1], scissor[2], scissor[3]);
 }
 
 /* ****************************************************** */

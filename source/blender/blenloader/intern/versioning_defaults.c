@@ -24,7 +24,9 @@
 #include "BLI_listbase.h"
 #include "BLI_math.h"
 #include "BLI_string.h"
+#include "BLI_system.h"
 
+#include "DNA_camera_types.h"
 #include "DNA_gpencil_types.h"
 #include "DNA_mesh_types.h"
 #include "DNA_object_types.h"
@@ -47,6 +49,7 @@
 #include "BKE_node.h"
 #include "BKE_paint.h"
 #include "BKE_screen.h"
+#include "BKE_studiolight.h"
 #include "BKE_workspace.h"
 
 #include "BLO_readfile.h"
@@ -68,19 +71,20 @@ void BLO_update_defaults_userpref_blend(void)
   U.flag &= ~USER_SCRIPT_AUTOEXEC_DISABLE;
 #endif
 
+  /* Transform tweak with single click and drag. */
+  U.flag |= USER_RELEASECONFIRM;
+
+  U.flag &= ~(USER_DEVELOPER_UI | USER_TOOLTIPS_PYTHON);
+
   /* Clear addon preferences. */
   for (bAddon *addon = U.addons.first, *addon_next; addon != NULL; addon = addon_next) {
     addon_next = addon->next;
 
     if (addon->prop) {
       IDP_FreeProperty(addon->prop);
-      MEM_freeN(addon->prop);
       addon->prop = NULL;
     }
   }
-
-  /* Transform tweak with single click and drag. */
-  U.flag |= USER_RELEASECONFIRM;
 
   /* Ignore the theme saved in the blend file,
    * instead use the theme from 'userdef_default_theme.c' */
@@ -92,9 +96,13 @@ void BLO_update_defaults_userpref_blend(void)
   /* Leave temp directory empty, will then get appropriate value per OS. */
   U.tempdir[0] = '\0';
 
-  /* Only enable tooltips translation by default, without actually enabling translation itself, for now. */
+  /* System-specific fonts directory. */
+  BKE_appdir_font_folder_default(U.fontdir);
+
+  /* Only enable tooltips translation by default,
+   * without actually enabling translation itself, for now. */
   U.transopts = USER_TR_TOOLTIPS;
-  U.memcachelimit = 4096;
+  U.memcachelimit = min_ii(BLI_system_memory_max_in_megabytes_int() / 2, 4096);
 
   /* Auto perspective. */
   U.uiflag |= USER_AUTOPERSP;
@@ -107,6 +115,12 @@ void BLO_update_defaults_userpref_blend(void)
 
   /* Default to left click select. */
   BKE_keyconfig_pref_set_select_mouse(&U, 0, true);
+
+  /* Increase a little for new scrubbing area. */
+  U.v2d_min_gridsize = 45;
+
+  /* Default studio light. */
+  BKE_studiolight_default(U.light_param, U.light_ambient);
 }
 
 /**
@@ -143,12 +157,25 @@ static ID *rename_id_for_versioning(Main *bmain,
  * This function can be emptied each time the startup.blend is updated. */
 void BLO_update_defaults_startup_blend(Main *bmain, const char *app_template)
 {
+  /* For all builtin templates shipped with Blender. */
+  const bool builtin_template =
+      (!app_template ||
+       STR_ELEM(app_template, "2D_Animation", "Sculpting", "VFX", "Video_Editing"));
+
   /* For all startup.blend files. */
   for (bScreen *screen = bmain->screens.first; screen; screen = screen->id.next) {
     for (ScrArea *sa = screen->areabase.first; sa; sa = sa->next) {
       for (ARegion *ar = sa->regionbase.first; ar; ar = ar->next) {
-        /* Remove all stored panels, we want to use defaults (order, open/closed) as defined by UI code here! */
-        BKE_area_region_panels_free(&ar->panels);
+        if (builtin_template) {
+          /* Remove all stored panels, we want to use defaults
+           * (order, open/closed) as defined by UI code here! */
+          BKE_area_region_panels_free(&ar->panels);
+          BLI_freelistN(&ar->panels_category_active);
+
+          /* Reset size so it uses consistent defaults from the region types. */
+          ar->sizex = 0;
+          ar->sizey = 0;
+        }
 
         /* some toolbars have been saved as initialized,
          * we don't want them to have odd zoom-level or scrolling set, see: T47047 */
@@ -164,9 +191,13 @@ void BLO_update_defaults_startup_blend(Main *bmain, const char *app_template)
             v3d->overlay.texture_paint_mode_opacity = 1.0f;
             v3d->overlay.weight_paint_mode_opacity = 1.0f;
             v3d->overlay.vertex_paint_mode_opacity = 1.0f;
+            /* Use dimmed selected edges. */
+            v3d->overlay.edit_flag &= ~V3D_OVERLAY_EDIT_EDGES;
             /* grease pencil settings */
             v3d->vertex_opacity = 1.0f;
             v3d->gp_flag |= V3D_GP_SHOW_EDIT_LINES;
+            /* Remove dither pattern in wireframe mode. */
+            v3d->shading.xray_alpha_wire = 0.0f;
             /* Skip startups that use the viewport color by default. */
             if (v3d->shading.background_type != V3D_SHADING_BACKGROUND_VIEWPORT) {
               copy_v3_fl(v3d->shading.background_color, 0.05f);
@@ -189,31 +220,29 @@ void BLO_update_defaults_startup_blend(Main *bmain, const char *app_template)
     }
   }
 
-  if (app_template == NULL) {
+  if (builtin_template) {
     /* Name all screens by their workspaces (avoids 'Default.###' names). */
-    {
-      /* Default only has one window. */
-      wmWindow *win = ((wmWindowManager *)bmain->wm.first)->windows.first;
-      for (WorkSpace *workspace = bmain->workspaces.first; workspace;
-           workspace = workspace->id.next) {
-        WorkSpaceLayout *layout = BKE_workspace_hook_layout_for_workspace_get(win->workspace_hook,
-                                                                              workspace);
-        bScreen *screen = layout->screen;
-        BLI_strncpy(screen->id.name + 2, workspace->id.name + 2, sizeof(screen->id.name) - 2);
-        BLI_libblock_ensure_unique_name(bmain, screen->id.name);
-      }
+    /* Default only has one window. */
+    wmWindow *win = ((wmWindowManager *)bmain->wm.first)->windows.first;
+    for (WorkSpace *workspace = bmain->workspaces.first; workspace;
+         workspace = workspace->id.next) {
+      WorkSpaceLayout *layout = BKE_workspace_hook_layout_for_workspace_get(win->workspace_hook,
+                                                                            workspace);
+      bScreen *screen = layout->screen;
+      BLI_strncpy(screen->id.name + 2, workspace->id.name + 2, sizeof(screen->id.name) - 2);
+      BLI_libblock_ensure_unique_name(bmain, screen->id.name);
     }
+  }
 
-    {
-      /* 'UV Editing' should use UV mode. */
-      bScreen *screen = BLI_findstring(&bmain->screens, "UV Editing", offsetof(ID, name) + 2);
-      for (ScrArea *sa = screen->areabase.first; sa; sa = sa->next) {
-        for (SpaceLink *sl = sa->spacedata.first; sl; sl = sl->next) {
-          if (sl->spacetype == SPACE_IMAGE) {
-            SpaceImage *sima = (SpaceImage *)sl;
-            if (sima->mode == SI_MODE_VIEW) {
-              sima->mode = SI_MODE_UV;
-            }
+  if (app_template == NULL) {
+    /* 'UV Editing' should use UV mode. */
+    bScreen *screen = BLI_findstring(&bmain->screens, "UV Editing", offsetof(ID, name) + 2);
+    for (ScrArea *sa = screen->areabase.first; sa; sa = sa->next) {
+      for (SpaceLink *sl = sa->spacedata.first; sl; sl = sl->next) {
+        if (sl->spacetype == SPACE_IMAGE) {
+          SpaceImage *sima = (SpaceImage *)sl;
+          if (sima->mode == SI_MODE_VIEW) {
+            sima->mode = SI_MODE_UV;
           }
         }
       }
@@ -264,11 +293,6 @@ void BLO_update_defaults_startup_blend(Main *bmain, const char *app_template)
     }
   }
 
-  /* For all builtin templates shipped with Blender. */
-  bool builtin_template = (!app_template || STREQ(app_template, "2D_Animation") ||
-                           STREQ(app_template, "Sculpting") || STREQ(app_template, "VFX") ||
-                           STREQ(app_template, "Video_Editing"));
-
   if (builtin_template) {
     /* Clear all tools to use default options instead, ignore the tool saved in the file. */
     for (WorkSpace *workspace = bmain->workspaces.first; workspace;
@@ -279,14 +303,75 @@ void BLO_update_defaults_startup_blend(Main *bmain, const char *app_template)
     }
 
     for (bScreen *screen = bmain->screens.first; screen; screen = screen->id.next) {
-      /* Hide channels in timelines. */
       for (ScrArea *sa = screen->areabase.first; sa; sa = sa->next) {
-        SpaceAction *saction = (sa->spacetype == SPACE_ACTION) ? sa->spacedata.first : NULL;
+        if (sa->spacetype == SPACE_ACTION) {
+          /* Show marker lines, hide channels and collapse summary in timelines. */
+          SpaceAction *saction = sa->spacedata.first;
+          saction->flag |= SACTION_SHOW_MARKER_LINES;
 
-        if (saction && saction->mode == SACTCONT_TIMELINE) {
-          for (ARegion *ar = sa->regionbase.first; ar; ar = ar->next) {
-            if (ar->regiontype == RGN_TYPE_CHANNELS) {
-              ar->flag |= RGN_FLAG_HIDDEN;
+          if (saction->mode == SACTCONT_TIMELINE) {
+            saction->ads.flag |= ADS_FLAG_SUMMARY_COLLAPSED;
+
+            for (ARegion *ar = sa->regionbase.first; ar; ar = ar->next) {
+              if (ar->regiontype == RGN_TYPE_CHANNELS) {
+                ar->flag |= RGN_FLAG_HIDDEN;
+              }
+            }
+          }
+        }
+        else if (sa->spacetype == SPACE_GRAPH) {
+          SpaceGraph *sipo = sa->spacedata.first;
+          sipo->flag |= SIPO_MARKER_LINES;
+        }
+        else if (sa->spacetype == SPACE_NLA) {
+          SpaceNla *snla = sa->spacedata.first;
+          snla->flag |= SNLA_SHOW_MARKER_LINES;
+        }
+        else if (sa->spacetype == SPACE_TEXT) {
+          /* Show syntax and line numbers in Script workspace text editor. */
+          SpaceText *stext = sa->spacedata.first;
+          stext->showsyntax = true;
+          stext->showlinenrs = true;
+        }
+        else if (sa->spacetype == SPACE_VIEW3D) {
+          /* Screen space cavity by default for faster performance. */
+          View3D *v3d = sa->spacedata.first;
+          v3d->shading.cavity_type = V3D_SHADING_CAVITY_CURVATURE;
+        }
+        else if (sa->spacetype == SPACE_CLIP) {
+          SpaceClip *sclip = sa->spacedata.first;
+          sclip->around = V3D_AROUND_CENTER_MEDIAN;
+        }
+      }
+    }
+
+    /* Show toopbar for sculpt/paint modes. */
+    for (bScreen *screen = bmain->screens.first; screen; screen = screen->id.next) {
+      bool show_tool_header = false;
+      if (app_template == NULL) {
+        if (STR_ELEM(screen->id.name + 2, "Sculpting", "Texture Paint")) {
+          show_tool_header = true;
+        }
+      }
+      else if (STREQ(app_template, "2D_Animation")) {
+        if (STR_ELEM(screen->id.name + 2, "2D Animation", "2D Full Canvas")) {
+          show_tool_header = true;
+        }
+      }
+      else if (STREQ(app_template, "Sculpting")) {
+        if (STR_ELEM(screen->id.name + 2, "Sculpting")) {
+          show_tool_header = true;
+        }
+      }
+
+      if (show_tool_header) {
+        for (ScrArea *sa = screen->areabase.first; sa; sa = sa->next) {
+          for (SpaceLink *sl = sa->spacedata.first; sl; sl = sl->next) {
+            ListBase *regionbase = (sl == sa->spacedata.first) ? &sa->regionbase : &sl->regionbase;
+            for (ARegion *ar = regionbase->first; ar; ar = ar->next) {
+              if (ar->regiontype == RGN_TYPE_TOOL_HEADER) {
+                ar->flag &= ~(RGN_FLAG_HIDDEN | RGN_FLAG_HIDDEN_BY_USER);
+              }
             }
           }
         }
@@ -300,8 +385,8 @@ void BLO_update_defaults_startup_blend(Main *bmain, const char *app_template)
       scene->r.displaymode = R_OUTPUT_WINDOW;
 
       if (app_template && STREQ(app_template, "Video_Editing")) {
-        /* Filmic is too slow, use default until it is optimized. */
-        STRNCPY(scene->view_settings.view_transform, "Default");
+        /* Filmic is too slow, use standard until it is optimized. */
+        STRNCPY(scene->view_settings.view_transform, "Standard");
         STRNCPY(scene->view_settings.look, "None");
       }
       else {
@@ -328,12 +413,33 @@ void BLO_update_defaults_startup_blend(Main *bmain, const char *app_template)
     }
 
     /* Rename light objects. */
-    rename_id_for_versioning(bmain, ID_OB, "Light", "Light");
-    rename_id_for_versioning(bmain, ID_LA, "Light", "Light");
+    rename_id_for_versioning(bmain, ID_OB, "Lamp", "Light");
+    rename_id_for_versioning(bmain, ID_LA, "Lamp", "Light");
 
     for (Mesh *mesh = bmain->meshes.first; mesh; mesh = mesh->id.next) {
       /* Match default for new meshes. */
       mesh->smoothresh = DEG2RADF(30);
+    }
+
+    for (Camera *camera = bmain->cameras.first; camera; camera = camera->id.next) {
+      /* Initialize to a useful value. */
+      camera->dof.focus_distance = 10.0f;
+      camera->dof.aperture_fstop = 2.8f;
+    }
+
+    for (Material *ma = bmain->materials.first; ma; ma = ma->id.next) {
+      /* Update default material to be a bit more rough. */
+      ma->roughness = 0.4f;
+
+      if (ma->nodetree) {
+        for (bNode *node = ma->nodetree->nodes.first; node; node = node->next) {
+          if (node->type == SH_NODE_BSDF_PRINCIPLED) {
+            bNodeSocket *roughness_socket = nodeFindSocket(node, SOCK_IN, "Roughness");
+            bNodeSocketValueFloat *roughness_data = roughness_socket->default_value;
+            roughness_data->value = 0.4f;
+          }
+        }
+      }
     }
   }
 
@@ -352,5 +458,25 @@ void BLO_update_defaults_startup_blend(Main *bmain, const char *app_template)
     copy_v3_v3(scene->display.light_direction, (float[3]){M_SQRT1_3, M_SQRT1_3, M_SQRT1_3});
     copy_v2_fl2(scene->safe_areas.title, 0.1f, 0.05f);
     copy_v2_fl2(scene->safe_areas.action, 0.035f, 0.035f);
+
+    /* Change default cubemap quality. */
+    scene->eevee.gi_filter_quality = 3.0f;
+  }
+
+  for (Light *light = bmain->lights.first; light; light = light->id.next) {
+    /* Fix lights defaults. */
+    light->clipsta = 0.05f;
+    light->att_dist = 40.0f;
+  }
+
+  if (app_template == NULL) {
+    /* Enable for UV sculpt (other brush types will be created as needed),
+     * without this the grab brush will be active but not selectable from the list. */
+    Brush *brush = BLI_findstring(&bmain->brushes, "Grab", offsetof(ID, name) + 2);
+    brush->ob_mode |= OB_MODE_EDIT;
+  }
+
+  for (Brush *brush = bmain->brushes.first; brush; brush = brush->id.next) {
+    brush->blur_kernel_radius = 2;
   }
 }

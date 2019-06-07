@@ -127,9 +127,11 @@ static void rna_FluidSettings_update_type(Main *bmain, Scene *scene, PointerRNA 
 
   /* remove fluidsim particle system */
   if (fluidmd->fss->type & OB_FLUIDSIM_PARTICLE) {
-    for (psys = ob->particlesystem.first; psys; psys = psys->next)
-      if (psys->part->type == PART_FLUID)
+    for (psys = ob->particlesystem.first; psys; psys = psys->next) {
+      if (psys->part->type == PART_FLUID) {
         break;
+      }
+    }
 
     if (ob->type == OB_MESH && !psys) {
       /* add particle system */
@@ -771,8 +773,10 @@ void RNA_def_fluidsim(BlenderRNA *brna)
   RNA_def_property_ui_text(prop, "Type", "Type of participation in the fluid simulation");
   RNA_def_property_update(prop, 0, "rna_FluidSettings_update_type");
 
-  /*prop = RNA_def_property(srna, "ipo", PROP_POINTER, PROP_NONE); */
-  /*RNA_def_property_ui_text(prop, "IPO Curves", "IPO curves used by fluid simulation settings"); */
+#  if 0
+  prop = RNA_def_property(srna, "ipo", PROP_POINTER, PROP_NONE);
+  RNA_def_property_ui_text(prop, "IPO Curves", "IPO curves used by fluid simulation settings");
+#  endif
 
   /* types */
 

@@ -127,15 +127,6 @@ void VIEW3D_OT_fly(struct wmOperatorType *ot);
 void VIEW3D_OT_walk(struct wmOperatorType *ot);
 
 /* drawobject.c */
-void draw_object_select_id(struct Depsgraph *depsgraph,
-                           Scene *scene,
-                           View3D *v3d,
-                           RegionView3D *rv3d,
-                           struct Object *ob,
-                           short select_mode);
-
-void draw_object_depth(RegionView3D *rv3d, struct Object *ob);
-
 int view3d_effective_drawtype(const struct View3D *v3d);
 
 /* view3d_draw.c */
@@ -266,9 +257,6 @@ void VIEW3D_OT_snap_cursor_to_selected(struct wmOperatorType *ot);
 void VIEW3D_OT_snap_cursor_to_active(struct wmOperatorType *ot);
 
 /* space_view3d.c */
-struct ARegion *view3d_has_buttons_region(struct ScrArea *sa);
-struct ARegion *view3d_has_tools_region(struct ScrArea *sa);
-
 extern const char *view3d_context_dir[]; /* doc access */
 
 /* view3d_widgets.c */

@@ -34,8 +34,6 @@ struct bNodeTree;
 struct wmOperatorType;
 
 /* space_image.c */
-struct ARegion *image_has_buttons_region(struct ScrArea *sa);
-struct ARegion *image_has_tools_region(struct ScrArea *sa);
 
 extern const char *image_context_dir[]; /* doc access */
 
@@ -68,6 +66,7 @@ void IMAGE_OT_reload(struct wmOperatorType *ot);
 void IMAGE_OT_save(struct wmOperatorType *ot);
 void IMAGE_OT_save_as(struct wmOperatorType *ot);
 void IMAGE_OT_save_sequence(struct wmOperatorType *ot);
+void IMAGE_OT_save_all_modified(struct wmOperatorType *ot);
 void IMAGE_OT_pack(struct wmOperatorType *ot);
 void IMAGE_OT_unpack(struct wmOperatorType *ot);
 

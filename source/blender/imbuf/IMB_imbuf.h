@@ -173,6 +173,13 @@ bool addzbufImBuf(struct ImBuf *ibuf);
 bool addzbuffloatImBuf(struct ImBuf *ibuf);
 
 /**
+ * Approximate size of ImBuf in memory
+ *
+ * \attention Defined in allocimbuf.c
+ */
+size_t IMB_get_size_in_memory(struct ImBuf *ibuf);
+
+/**
  *
  * \attention Defined in rectop.c
  */
@@ -469,12 +476,11 @@ int imb_get_anim_type(const char *name);
  */
 bool IMB_isfloat(struct ImBuf *ibuf);
 
+/* Do byte/float and colorspace conversions need to take alpha into account? */
+bool IMB_alpha_affects_rgb(const struct ImBuf *ibuf);
+
 /* create char buffer, color corrected if necessary, for ImBufs that lack one */
 void IMB_rect_from_float(struct ImBuf *ibuf);
-/* Create char buffer for part of the image, color corrected if necessary,
- * Changed part will be stored in buffer. This is expected to be used for texture painting updates */
-void IMB_partial_rect_from_float(
-    struct ImBuf *ibuf, float *buffer, int x, int y, int w, int h, bool is_data);
 void IMB_float_from_rect(struct ImBuf *ibuf);
 void IMB_color_to_bw(struct ImBuf *ibuf);
 void IMB_saturation(struct ImBuf *ibuf, float sat);
@@ -547,7 +553,6 @@ void IMB_buffer_byte_from_byte(unsigned char *rect_to,
                                int height,
                                int stride_to,
                                int stride_from);
-void IMB_buffer_float_clamp(float *buf, int width, int height);
 void IMB_buffer_float_unpremultiply(float *buf, int width, int height);
 void IMB_buffer_float_premultiply(float *buf, int width, int height);
 
@@ -660,7 +665,8 @@ void IMB_rectfill_area(struct ImBuf *ibuf,
                        struct ColorManagedDisplay *display);
 void IMB_rectfill_alpha(struct ImBuf *ibuf, const float value);
 
-/* this should not be here, really, we needed it for operating on render data, IMB_rectfill_area calls it */
+/* This should not be here, really,
+ * we needed it for operating on render data, IMB_rectfill_area calls it. */
 void buf_rectfill_area(unsigned char *rect,
                        float *rectf,
                        int width,

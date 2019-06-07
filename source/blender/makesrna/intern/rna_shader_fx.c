@@ -185,7 +185,8 @@ static void shaderfx_object_set(Object *self, Object **ob_p, int type, PointerRN
 }
 
 #  define RNA_FX_OBJECT_SET(_type, _prop, _obtype) \
-    static void rna_##_type##ShaderFx_##_prop##_set(PointerRNA *ptr, PointerRNA value) \
+    static void rna_##_type##ShaderFx_##_prop##_set( \
+        PointerRNA *ptr, PointerRNA value, struct ReportList *UNUSED(reports)) \
     { \
       _type##ShaderFxData *tmd = (_type##ShaderFxData *)ptr->data; \
       shaderfx_object_set(ptr->id.data, &tmd->_prop, _obtype, value); \
@@ -532,7 +533,8 @@ static void rna_def_shader_fx_glow(BlenderRNA *brna)
   RNA_def_property_ui_text(prop, "Threshold", "Limit to select color for glow effect");
   RNA_def_property_update(prop, NC_OBJECT | ND_MODIFIER, "rna_ShaderFx_update");
 
-  /* use blur fields to make compatible with blur filter, but only makes public first array element */
+  /* Use blur fields to make compatible with blur filter,
+   * but only makes public first array element. */
   prop = RNA_def_property(srna, "radius", PROP_INT, PROP_PIXEL);
   RNA_def_property_int_sdna(prop, NULL, "blur[0]");
   RNA_def_property_range(prop, 0, INT_MAX);

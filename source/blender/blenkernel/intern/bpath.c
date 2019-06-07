@@ -233,21 +233,25 @@ static bool missing_files_find__recursive(char *filename_new,
 
   dir = opendir(dirname);
 
-  if (dir == NULL)
+  if (dir == NULL) {
     return found;
+  }
 
-  if (*r_filesize == -1)
+  if (*r_filesize == -1) {
     *r_filesize = 0; /* dir opened fine */
+  }
 
   while ((de = readdir(dir)) != NULL) {
 
-    if (FILENAME_IS_CURRPAR(de->d_name))
+    if (FILENAME_IS_CURRPAR(de->d_name)) {
       continue;
+    }
 
     BLI_join_dirfile(path, sizeof(path), dirname, de->d_name);
 
-    if (BLI_stat(path, &status) == -1)
+    if (BLI_stat(path, &status) == -1) {
       continue; /* cant stat, don't bother with this file, could print debug info here */
+    }
 
     if (S_ISREG(status.st_mode)) {                              /* is file */
       if (BLI_path_ncmp(filename, de->d_name, FILE_MAX) == 0) { /* name matches */
@@ -321,8 +325,9 @@ static bool missing_files_find__visit_cb(void *userdata, char *path_dst, const c
     BLI_strncpy(path_dst, filename_new, FILE_MAX);
 
     /* keep path relative if the previous one was relative */
-    if (was_relative)
+    if (was_relative) {
       BLI_path_rel(path_dst, data->basedir);
+    }
 
     return true;
   }
@@ -445,7 +450,10 @@ void BKE_bpath_traverse_id(
       Image *ima;
       ima = (Image *)id;
       if (BKE_image_has_packedfile(ima) == false || (flag & BKE_BPATH_TRAVERSE_SKIP_PACKED) == 0) {
-        if (ELEM(ima->source, IMA_SRC_FILE, IMA_SRC_MOVIE, IMA_SRC_SEQUENCE)) {
+        /* Skip empty file paths, these are typically from generated images and
+         * don't make sense to add directories to until the image has been saved
+         * once to give it a meaningful value. */
+        if (ELEM(ima->source, IMA_SRC_FILE, IMA_SRC_MOVIE, IMA_SRC_SEQUENCE) && ima->name[0]) {
           if (rewrite_path_fixed(ima->name, visit_cb, absbase, bpath_user_data)) {
             if (flag & BKE_BPATH_TRAVERSE_RELOAD_EDITED) {
               if (!BKE_image_has_packedfile(ima) &&

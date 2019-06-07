@@ -5,8 +5,8 @@
  * We want to know how much a pixel is covered by a line.
  * We replace the square pixel with acircle of the same area and try to find the intersection area.
  * The area we search is the circular segment. https://en.wikipedia.org/wiki/Circular_segment
- * The formula for the area uses inverse trig function and is quite complexe.
- * Instead, we approximate it by using the smoothstep function and a 1.05 factor to the disc radius.
+ * The formula for the area uses inverse trig function and is quite complexe. Instead,
+ * we approximate it by using the smoothstep function and a 1.05 factor to the disc radius.
  */
 #define DISC_RADIUS (M_1_SQRTPI * 1.05)
 #define GRID_LINE_SMOOTH_START (0.5 - DISC_RADIUS)
@@ -29,7 +29,8 @@ void main()
   float mix_w = step(0.5, dist);
   float mix_w_outer = step(0.5, dist_outer);
 #endif
+  /* Line color & alpha. */
   FragColor = mix(finalColorOuter_f, finalColor_f, 1.0 - mix_w * finalColorOuter_f.a);
+  /* Line edges shape. */
   FragColor.a *= 1.0 - (finalColorOuter_f.a > 0.0 ? mix_w_outer : mix_w);
-  FragColor.a *= (selectEdges) ? 1.0 : 0.4;
 }

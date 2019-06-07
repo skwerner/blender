@@ -1,5 +1,4 @@
 
-uniform bool doEdges = true;
 uniform bool selectFaces = true;
 uniform bool selectEdges = true;
 
@@ -17,16 +16,23 @@ vec4 EDIT_MESH_edge_color_outer(int edge_flag, int face_flag, float crease, floa
 vec4 EDIT_MESH_edge_color_inner(int edge_flag)
 {
   vec4 color = colorWireEdit;
-  color = (doEdges && ((edge_flag & EDGE_SELECTED) != 0)) ? colorEdgeSelect : color;
-  color = (doEdges && ((edge_flag & EDGE_ACTIVE) != 0)) ? colorEditMeshActive : color;
+  vec4 color_select = (selectEdges) ? colorEdgeSelect : mix(colorEdgeSelect, colorWireEdit, .45);
+  color = ((edge_flag & EDGE_SELECTED) != 0) ? color_select : color;
+  color = ((edge_flag & EDGE_ACTIVE) != 0) ? colorEditMeshActive : color;
+
+  color.a = (selectEdges || (edge_flag & (EDGE_SELECTED | EDGE_ACTIVE)) != 0) ? 1.0 : 0.4;
   return color;
 }
 
 vec4 EDIT_MESH_edge_vertex_color(int vertex_flag)
 {
   vec4 color = colorWireEdit;
-  color = (doEdges && (vertex_flag & (VERT_ACTIVE | VERT_SELECTED)) != 0) ? colorEdgeSelect :
-                                                                            color;
+  vec4 color_select = (selectEdges) ? colorEdgeSelect : mix(colorEdgeSelect, colorWireEdit, .45);
+
+  bool edge_selected = (vertex_flag & (VERT_ACTIVE | VERT_SELECTED)) != 0;
+  color = (edge_selected) ? color_select : color;
+
+  color.a = (selectEdges || edge_selected) ? 1.0 : 0.4;
   return color;
 }
 
@@ -46,10 +52,10 @@ vec4 EDIT_MESH_vertex_color(int vertex_flag)
 vec4 EDIT_MESH_face_color(int face_flag)
 {
   vec4 color = colorFace;
+  vec4 color_active = mix(colorFaceSelect, colorEditMeshActive, 0.5);
   color = ((face_flag & FACE_FREESTYLE) != 0) ? colorFaceFreestyle : color;
   color = ((face_flag & FACE_SELECTED) != 0) ? colorFaceSelect : color;
-  color = ((face_flag & FACE_ACTIVE) != 0) ? mix(colorFaceSelect, colorEditMeshActive, 0.5) :
-                                             color;
+  color = ((face_flag & FACE_ACTIVE) != 0) ? color_active : color;
   color.a *= ((face_flag & (FACE_FREESTYLE | FACE_SELECTED | FACE_ACTIVE)) == 0 || selectFaces) ?
                  1.0 :
                  0.5;

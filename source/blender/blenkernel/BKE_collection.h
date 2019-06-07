@@ -161,6 +161,11 @@ bool BKE_collection_move(struct Main *bmain,
 
 bool BKE_collection_find_cycle(struct Collection *new_ancestor, struct Collection *collection);
 
+bool BKE_collection_has_collection(struct Collection *parent, struct Collection *collection);
+
+void BKE_collection_parent_relations_rebuild(struct Collection *collection);
+void BKE_main_collections_parent_relations_rebuild(struct Main *bmain);
+
 /* Iteration callbacks. */
 
 typedef void (*BKE_scene_objects_Cb)(struct Object *ob, void *data);

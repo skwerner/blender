@@ -591,7 +591,7 @@ static void library_foreach_ID_link(Main *bmain,
         CALLBACK_INVOKE(object->parent, IDWALK_CB_NEVER_SELF);
         CALLBACK_INVOKE(object->track, IDWALK_CB_NEVER_SELF);
         /* object->proxy is refcounted, but not object->proxy_group... *sigh* */
-        CALLBACK_INVOKE(object->proxy, IDWALK_CB_NEVER_SELF);
+        CALLBACK_INVOKE(object->proxy, IDWALK_CB_USER | IDWALK_CB_NEVER_SELF);
         CALLBACK_INVOKE(object->proxy_group, IDWALK_CB_NOP);
 
         /* Special case!
@@ -755,7 +755,7 @@ static void library_foreach_ID_link(Main *bmain,
 
       case ID_CA: {
         Camera *camera = (Camera *)id;
-        CALLBACK_INVOKE(camera->dof_ob, IDWALK_CB_NOP);
+        CALLBACK_INVOKE(camera->dof.focus_object, IDWALK_CB_NOP);
         for (CameraBGImage *bgpic = camera->bg_images.first; bgpic; bgpic = bgpic->next) {
           if (bgpic->source == CAM_BGIMG_SOURCE_IMAGE) {
             CALLBACK_INVOKE(bgpic->ima, IDWALK_CB_USER);

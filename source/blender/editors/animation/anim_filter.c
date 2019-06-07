@@ -455,10 +455,12 @@ bool ANIM_animdata_get_context(const bContext *C, bAnimContext *ac)
   { \
     int _filter = filter_mode; \
     short _doSubChannels = 0; \
-    if (!(filter_mode & ANIMFILTER_LIST_VISIBLE) || (expanded_check)) \
+    if (!(filter_mode & ANIMFILTER_LIST_VISIBLE) || (expanded_check)) { \
       _doSubChannels = 1; \
-    else if (!(filter_mode & ANIMFILTER_LIST_CHANNELS)) \
+    } \
+    else if (!(filter_mode & ANIMFILTER_LIST_CHANNELS)) { \
       _doSubChannels = 2; \
+    } \
     else { \
       filter_mode |= ANIMFILTER_TMP_PEEK; \
     } \
@@ -1823,7 +1825,7 @@ static size_t animdata_filter_gpencil(bAnimContext *ac,
           }
 
           /* outliner restrict-flag */
-          if (ob->restrictflag & OB_RESTRICT_VIEW) {
+          if (ob->restrictflag & OB_RESTRICT_VIEWPORT) {
             continue;
           }
         }
@@ -3022,7 +3024,7 @@ static bool animdata_filter_base_is_ok(bDopeSheet *ads, Base *base, int filter_m
     }
 
     /* outliner restrict-flag */
-    if (ob->restrictflag & OB_RESTRICT_VIEW) {
+    if (ob->restrictflag & OB_RESTRICT_VIEWPORT) {
       return false;
     }
   }

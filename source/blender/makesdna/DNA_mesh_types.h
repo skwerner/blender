@@ -75,6 +75,12 @@ struct MLoopTri_Store {
 
 /* not saved in file! */
 typedef struct Mesh_Runtime {
+  /* Evaluated mesh for objects which do not have effective modifiers. This mesh is sued as a
+   * result of modifier stack evaluation.
+   * Since modifier stack evaluation is threaded on object level we need some synchronization. */
+  struct Mesh *mesh_eval;
+  void *eval_mutex;
+
   struct EditMeshData *edit_data;
   void *batch_cache;
 
@@ -233,11 +239,11 @@ enum {
 
 /* me->flag */
 enum {
-  ME_FLAG_UNUSED_0 = 1 << 0, /* cleared */
-  ME_FLAG_UNUSED_1 = 1 << 1, /* cleared */
-  ME_TWOSIDED = 1 << 2,
-  ME_FLAG_UNUSED_3 = 1 << 3, /* cleared */
-  ME_FLAG_UNUSED_4 = 1 << 4, /* cleared */
+  ME_FLAG_UNUSED_0 = 1 << 0,     /* cleared */
+  ME_FLAG_UNUSED_1 = 1 << 1,     /* cleared */
+  ME_FLAG_DEPRECATED_2 = 1 << 2, /* deprecated */
+  ME_FLAG_UNUSED_3 = 1 << 3,     /* cleared */
+  ME_FLAG_UNUSED_4 = 1 << 4,     /* cleared */
   ME_AUTOSMOOTH = 1 << 5,
   ME_FLAG_UNUSED_6 = 1 << 6, /* cleared */
   ME_FLAG_UNUSED_7 = 1 << 7, /* cleared */

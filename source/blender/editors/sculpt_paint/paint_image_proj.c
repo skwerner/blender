@@ -40,6 +40,7 @@
 #include "BLI_math_bits.h"
 #include "BLI_math_color_blend.h"
 #include "BLI_memarena.h"
+#include "BLI_task.h"
 #include "BLI_threads.h"
 #include "BLI_utildefines.h"
 
@@ -1837,7 +1838,7 @@ static int project_paint_undo_subtiles(const TileInfo *tinf, int tx, int ty)
                                       false);
     }
 
-    pjIma->ibuf->userflags |= IB_BITMAPDIRTY;
+    BKE_image_mark_dirty(pjIma->ima, pjIma->ibuf);
     /* tile ready, publish */
     if (tinf->lock) {
       BLI_spin_lock(tinf->lock);
@@ -2255,8 +2256,9 @@ static bool project_bucket_isect_circle(const float cent[2],
    * this is even less work then an intersection test.
    */
 #if 0
-  if (BLI_rctf_isect_pt_v(bucket_bounds, cent))
+  if (BLI_rctf_isect_pt_v(bucket_bounds, cent)) {
     return 1;
+  }
 #endif
 
   if ((bucket_bounds->xmin <= cent[0] && bucket_bounds->xmax >= cent[0]) ||
@@ -5103,7 +5105,9 @@ static void image_paint_partial_redraw_expand(ImagePaintPartialRedraw *cell,
 }
 
 /* run this for single and multithreaded painting */
-static void *do_projectpaint_thread(void *ph_v)
+static void do_projectpaint_thread(TaskPool *__restrict UNUSED(pool),
+                                   void *ph_v,
+                                   int UNUSED(threadid))
 {
   /* First unpack args from the struct */
   ProjPaintState *ps = ((ProjectHandle *)ph_v)->ps;
@@ -5535,8 +5539,6 @@ static void *do_projectpaint_thread(void *ph_v)
 
     BLI_memarena_free(softenArena);
   }
-
-  return NULL;
 }
 
 static bool project_paint_op(void *state, const float lastpos[2], const float pos[2])
@@ -5546,20 +5548,22 @@ static bool project_paint_op(void *state, const float lastpos[2], const float po
   bool touch_any = false;
 
   ProjectHandle handles[BLENDER_MAX_THREADS];
-  ListBase threads;
+  TaskScheduler *scheduler = NULL;
+  TaskPool *task_pool = NULL;
   int a, i;
 
-  struct ImagePool *pool;
+  struct ImagePool *image_pool;
 
   if (!project_bucket_iter_init(ps, pos)) {
     return touch_any;
   }
 
   if (ps->thread_tot > 1) {
-    BLI_threadpool_init(&threads, do_projectpaint_thread, ps->thread_tot);
+    scheduler = BLI_task_scheduler_get();
+    task_pool = BLI_task_pool_create_suspended(scheduler, NULL);
   }
 
-  pool = BKE_image_pool_new();
+  image_pool = BKE_image_pool_new();
 
   /* get the threads running */
   for (a = 0; a < ps->thread_tot; a++) {
@@ -5588,21 +5592,23 @@ static bool project_paint_op(void *state, const float lastpos[2], const float po
              sizeof(ImagePaintPartialRedraw) * PROJ_BOUNDBOX_SQUARED);
     }
 
-    handles[a].pool = pool;
+    handles[a].pool = image_pool;
 
-    if (ps->thread_tot > 1) {
-      BLI_threadpool_insert(&threads, &handles[a]);
+    if (task_pool != NULL) {
+      BLI_task_pool_push(
+          task_pool, do_projectpaint_thread, &handles[a], false, TASK_PRIORITY_HIGH);
     }
   }
 
-  if (ps->thread_tot > 1) { /* wait for everything to be done */
-    BLI_threadpool_end(&threads);
+  if (task_pool != NULL) { /* wait for everything to be done */
+    BLI_task_pool_work_and_wait(task_pool);
+    BLI_task_pool_free(task_pool);
   }
   else {
-    do_projectpaint_thread(&handles[0]);
+    do_projectpaint_thread(NULL, &handles[0], 0);
   }
 
-  BKE_image_pool_free(pool);
+  BKE_image_pool_free(image_pool);
 
   /* move threaded bounds back into ps->projectPartialRedraws */
   for (i = 0; i < ps->image_tot; i++) {
@@ -6188,7 +6194,6 @@ static int texture_paint_image_from_view_exec(bContext *C, wmOperator *op)
                                         w,
                                         h,
                                         IB_rect,
-                                        V3D_OFSDRAW_NONE,
                                         R_ALPHAPREMUL,
                                         0,
                                         NULL,
@@ -6394,7 +6399,7 @@ static const EnumPropertyItem layer_type_items[] = {
     {0, NULL, 0, NULL, NULL},
 };
 
-static Image *proj_paint_image_create(wmOperator *op, Main *bmain)
+static Image *proj_paint_image_create(wmOperator *op, Main *bmain, bool is_data)
 {
   Image *ima;
   float color[4] = {0.0f, 0.0f, 0.0f, 1.0f};
@@ -6416,6 +6421,11 @@ static Image *proj_paint_image_create(wmOperator *op, Main *bmain)
   }
   ima = BKE_image_add_generated(
       bmain, width, height, imagename, alpha ? 32 : 24, use_float, gen_type, color, false);
+
+  if (is_data) {
+    STRNCPY(ima->colorspace_settings.name,
+            IMB_colormanagement_role_colorspace_name_get(COLOR_ROLE_DATA));
+  }
 
   return ima;
 }
@@ -6487,6 +6497,7 @@ static bool proj_paint_add_slot(bContext *C, wmOperator *op)
   if (ma) {
     Main *bmain = CTX_data_main(C);
     int type = RNA_enum_get(op->ptr, "type");
+    bool is_data = (type > LAYER_BASE_COLOR);
 
     bNode *imanode;
     bNodeTree *ntree = ma->nodetree;
@@ -6501,7 +6512,7 @@ static bool proj_paint_add_slot(bContext *C, wmOperator *op)
     /* try to add an image node */
     imanode = nodeAddStaticNode(C, ntree, SH_NODE_TEX_IMAGE);
 
-    ima = proj_paint_image_create(op, bmain);
+    ima = proj_paint_image_create(op, bmain, is_data);
     imanode->id = &ima->id;
 
     nodeSetActive(ntree, imanode);
@@ -6551,12 +6562,6 @@ static bool proj_paint_add_slot(bContext *C, wmOperator *op)
         else {
           in_sock = NULL;
         }
-      }
-
-      if (type > LAYER_BASE_COLOR) {
-        /* This is a "non color data" image */
-        NodeTexImage *tex = imanode->storage;
-        tex->color_space = SHD_COLORSPACE_NONE;
       }
 
       /* Check if the socket in already connected to something */

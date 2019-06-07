@@ -1068,6 +1068,7 @@ static int arg_handle_factory_startup_set(int UNUSED(argc),
                                           void *UNUSED(data))
 {
   G.factory_startup = 1;
+  G.f |= G_FLAG_USERPREF_NO_SAVE_ON_EXIT;
   return 0;
 }
 
@@ -1239,8 +1240,9 @@ static const char arg_handle_register_extension_doc_silent[] =
 static int arg_handle_register_extension(int UNUSED(argc), const char **UNUSED(argv), void *data)
 {
 #  ifdef WIN32
-  if (data)
+  if (data) {
     G.background = 1;
+  }
   RegisterBlendExtension();
 #  else
   (void)data; /* unused */

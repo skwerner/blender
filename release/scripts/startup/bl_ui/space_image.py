@@ -37,6 +37,10 @@ from .properties_paint_common import (
 from .properties_grease_pencil_common import (
     AnnotationDataPanel,
 )
+from .space_toolsystem_common import (
+    ToolActivePanelHelper,
+)
+
 from bpy.app.translations import pgettext_iface as iface_
 
 
@@ -55,23 +59,10 @@ class BrushButtonsPanel(UnifiedPaintPanel):
         return tool_settings.brush
 
 
-class IMAGE_PT_active_tool(Panel):
+class IMAGE_PT_active_tool(ToolActivePanelHelper, Panel):
     bl_space_type = 'IMAGE_EDITOR'
     bl_region_type = 'UI'
-    bl_label = "Active Tool"
     bl_category = "Tool"
-
-    def draw(self, context):
-        layout = self.layout
-
-        # Panel display of topbar tool settings.
-        # currently displays in tool settings, keep here since the same functionality is used for the topbar.
-
-        layout.use_property_split = True
-        layout.use_property_decorate = False
-
-        from .space_toolsystem_common import ToolSelectPanelHelper
-        ToolSelectPanelHelper.draw_active_tool_header(context, layout, show_tool_name=True)
 
 
 class IMAGE_MT_view(Menu):
@@ -90,6 +81,7 @@ class IMAGE_MT_view(Menu):
 
         layout.prop(sima, "show_region_toolbar")
         layout.prop(sima, "show_region_ui")
+        layout.prop(sima, "show_region_tool_header")
         layout.prop(sima, "show_region_hud")
 
         layout.separator()
@@ -116,10 +108,10 @@ class IMAGE_MT_view(Menu):
         layout.separator()
 
         if show_uvedit:
-            layout.operator("image.view_selected")
+            layout.operator("image.view_selected", text="Frame Selected")
 
-        layout.operator("image.view_all")
-        layout.operator("image.view_all", text="View Fit").fit_view = True
+        layout.operator("image.view_all", text="Frame All")
+        layout.operator("image.view_all", text="Frame All Fit").fit_view = True
 
         layout.separator()
 
@@ -239,19 +231,21 @@ class IMAGE_MT_image(Menu):
         if ima and ima.source == 'SEQUENCE':
             layout.operator("image.save_sequence")
 
-        layout.operator("image.save_dirty", text="Save All Images")
+        layout.operator("image.save_all_modified", text="Save All Images")
 
         if ima:
             layout.separator()
 
             layout.menu("IMAGE_MT_image_invert")
 
-            if not show_render:
+        if ima and not show_render:
+            if ima.packed_file:
+                if len(ima.filepath):
+                    layout.separator()
+                    layout.operator("image.unpack", text="Unpack")
+            else:
                 layout.separator()
-                if ima.packed_file:
-                    layout.operator("image.pack", text="Repack")
-                else:
-                    layout.operator("image.pack", text="Pack")
+                layout.operator("image.pack", text="Pack")
 
 
 class IMAGE_MT_image_invert(Menu):
@@ -353,7 +347,6 @@ class IMAGE_MT_uvs(Menu):
 
         sima = context.space_data
         uv = sima.uv_editor
-        tool_settings = context.tool_settings
 
         layout.menu("IMAGE_MT_uvs_transform")
         layout.menu("IMAGE_MT_uvs_mirror")
@@ -499,17 +492,41 @@ class IMAGE_MT_uvs_snap_pie(Menu):
 
         layout.operator_context = 'EXEC_REGION_WIN'
 
-        pie.operator("uv.snap_selected", text="Selected to Pixels", icon='RESTRICT_SELECT_OFF').target = 'PIXELS'
-        pie.operator("uv.snap_cursor", text="Cursor to Pixels", icon='PIVOT_CURSOR').target = 'PIXELS'
-        pie.operator("uv.snap_cursor", text="Cursor to Selected", icon='PIVOT_CURSOR').target = 'SELECTED'
-        pie.operator("uv.snap_selected", text="Selected to Cursor", icon='RESTRICT_SELECT_OFF').target = 'CURSOR'
-        pie.operator("uv.snap_selected", text="Selected to Cursor (Offset)", icon='RESTRICT_SELECT_OFF').target = 'CURSOR_OFFSET'
-        pie.operator("uv.snap_selected", text="Selected to Adjacent Unselected", icon='RESTRICT_SELECT_OFF').target = 'ADJACENT_UNSELECTED'
+        pie.operator(
+            "uv.snap_selected",
+            text="Selected to Pixels",
+            icon='RESTRICT_SELECT_OFF',
+        ).target = 'PIXELS'
+        pie.operator(
+            "uv.snap_cursor",
+            text="Cursor to Pixels",
+            icon='PIVOT_CURSOR',
+        ).target = 'PIXELS'
+        pie.operator(
+            "uv.snap_cursor",
+            text="Cursor to Selected",
+            icon='PIVOT_CURSOR',
+        ).target = 'SELECTED'
+        pie.operator(
+            "uv.snap_selected",
+            text="Selected to Cursor",
+            icon='RESTRICT_SELECT_OFF',
+        ).target = 'CURSOR'
+        pie.operator(
+            "uv.snap_selected",
+            text="Selected to Cursor (Offset)",
+            icon='RESTRICT_SELECT_OFF',
+        ).target = 'CURSOR_OFFSET'
+        pie.operator(
+            "uv.snap_selected",
+            text="Selected to Adjacent Unselected",
+            icon='RESTRICT_SELECT_OFF',
+        ).target = 'ADJACENT_UNSELECTED'
 
 
 class IMAGE_HT_tool_header(Header):
     bl_space_type = 'IMAGE_EDITOR'
-    bl_region_type = "TOOL_HEADER"
+    bl_region_type = 'TOOL_HEADER'
 
     def draw(self, context):
         layout = self.layout
@@ -517,8 +534,6 @@ class IMAGE_HT_tool_header(Header):
         layout.template_header()
 
         self.draw_tool_settings(context)
-
-        sima = context.space_data
 
         layout.separator_spacer()
 
@@ -550,7 +565,12 @@ class IMAGE_HT_tool_header(Header):
 
         if tool_mode == 'PAINT':
             if (tool is not None) and tool.has_datablock:
-                layout.popover_group(space_type='IMAGE_EDITOR', region_type='UI', context=".paint_common_2d", category="")
+                layout.popover_group(
+                    space_type='IMAGE_EDITOR',
+                    region_type='UI',
+                    context=".paint_common_2d",
+                    category="",
+                )
         elif tool_mode == 'UV':
             if (tool is not None) and tool.has_datablock:
                 layout.popover_group(space_type='IMAGE_EDITOR', region_type='UI', context=".uv_sculpt", category="")
@@ -683,7 +703,7 @@ class IMAGE_HT_header(Header):
             row.template_ID(sima, "mask", new="mask.new")
 
         if not show_render:
-            layout.prop(sima, "use_image_pin", text="")
+            layout.prop(sima, "use_image_pin", text="", emboss=False)
 
         layout.separator_spacer()
 
@@ -1456,7 +1476,6 @@ class IMAGE_PT_uv_sculpt_curve(Panel):
             row.operator("brush.curve_preset", icon='NOCURVE', text="").shape = 'MAX'
 
 
-
 class ImageScopesPanel:
     @classmethod
     def poll(cls, context):
@@ -1500,7 +1519,6 @@ class IMAGE_PT_view_waveform(ImageScopesPanel, Panel):
     bl_region_type = 'UI'
     bl_category = "Scopes"
     bl_label = "Waveform"
-    bl_options = {'DEFAULT_CLOSED'}
 
     def draw(self, context):
         layout = self.layout
@@ -1518,7 +1536,6 @@ class IMAGE_PT_view_vectorscope(ImageScopesPanel, Panel):
     bl_region_type = 'UI'
     bl_category = "Scopes"
     bl_label = "Vectorscope"
-    bl_options = {'DEFAULT_CLOSED'}
 
     def draw(self, context):
         layout = self.layout
@@ -1533,7 +1550,6 @@ class IMAGE_PT_sample_line(ImageScopesPanel, Panel):
     bl_region_type = 'UI'
     bl_category = "Scopes"
     bl_label = "Sample Line"
-    bl_options = {'DEFAULT_CLOSED'}
 
     def draw(self, context):
         layout = self.layout

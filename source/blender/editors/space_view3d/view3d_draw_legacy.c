@@ -77,6 +77,7 @@
 #include "ED_armature.h"
 #include "ED_keyframing.h"
 #include "ED_gpencil.h"
+#include "ED_mesh.h"
 #include "ED_screen.h"
 #include "ED_space_api.h"
 #include "ED_screen_types.h"
@@ -151,13 +152,11 @@ void ED_view3d_clipping_enable(void)
 
 /* *********************** backdraw for selection *************** */
 
-static void validate_object_select_id(struct Depsgraph *depsgraph,
-                                      Scene *scene,
-                                      ARegion *ar,
-                                      View3D *v3d,
-                                      Object *obact,
-                                      Object *obedit,
-                                      short select_mode)
+/**
+ * \note Only use in object mode.
+ */
+static void validate_object_select_id(
+    struct Depsgraph *depsgraph, Scene *scene, ARegion *ar, View3D *v3d, Object *obact)
 {
   RegionView3D *rv3d = ar->regiondata;
   Scene *scene_eval = (Scene *)DEG_get_evaluated_id(depsgraph, &scene->id);
@@ -177,9 +176,6 @@ static void validate_object_select_id(struct Depsgraph *depsgraph,
   else if ((obact_eval && (obact_eval->mode & OB_MODE_PARTICLE_EDIT)) && !XRAY_ENABLED(v3d)) {
     /* do nothing */
   }
-  else if ((obedit && (obedit->mode & OB_MODE_EDIT)) && !XRAY_FLAG_ENABLED(v3d)) {
-    /* do nothing */
-  }
   else {
     v3d->flag &= ~V3D_INVALID_BACKBUF;
     return;
@@ -189,34 +185,25 @@ static void validate_object_select_id(struct Depsgraph *depsgraph,
     return;
   }
 
-#if 0
-  if (test) {
-    if (qtest()) {
-      addafterqueue(ar->win, BACKBUFDRAW, 1);
-      return;
-    }
-  }
-#endif
-
-#if 0 /* v3d->zbuf deprecated */
-  if (v3d->shading.type > OB_WIRE) {
-    v3d->zbuf = true;
-  }
-#endif
-
-  G.f |= G_FLAG_BACKBUFSEL;
-
   if (obact_eval && ((obact_eval->base_flag & BASE_VISIBLE) != 0)) {
+    uint dummy_vert_ofs, dummy_edge_ofs, dummy_face_ofs;
     DRW_framebuffer_select_id_setup(ar, true);
-    draw_object_select_id(depsgraph, scene_eval, v3d, rv3d, obact_eval, select_mode);
+    DRW_draw_select_id_object(scene_eval,
+                              rv3d,
+                              obact_eval,
+                              scene->toolsettings->selectmode,
+                              false,
+                              1,
+                              &dummy_vert_ofs,
+                              &dummy_edge_ofs,
+                              &dummy_face_ofs);
+
     DRW_framebuffer_select_id_release(ar);
   }
 
   /* TODO: Create a flag in `DRW_manager` because the drawing is no longer
    *       made on the backbuffer in this case. */
   v3d->flag &= ~V3D_INVALID_BACKBUF;
-
-  G.f &= ~G_FLAG_BACKBUFSEL;
 }
 
 /* TODO: Creating, attaching texture, and destroying a framebuffer is quite slow.
@@ -241,19 +228,13 @@ static void view3d_opengl_read_Z_pixels(GPUViewport *viewport, rcti *rect, void 
   GPU_framebuffer_free(tmp_fb);
 }
 
-void ED_view3d_select_id_validate_with_select_mode(ViewContext *vc, short select_mode)
+void ED_view3d_select_id_validate(ViewContext *vc)
 {
   /* TODO: Create a flag in `DRW_manager` because the drawing is no longer
    *       made on the backbuffer in this case. */
   if (vc->v3d->flag & V3D_INVALID_BACKBUF) {
-    validate_object_select_id(
-        vc->depsgraph, vc->scene, vc->ar, vc->v3d, vc->obact, vc->obedit, select_mode);
+    validate_object_select_id(vc->depsgraph, vc->scene, vc->ar, vc->v3d, vc->obact);
   }
-}
-
-void ED_view3d_select_id_validate(ViewContext *vc)
-{
-  ED_view3d_select_id_validate_with_select_mode(vc, -1);
 }
 
 void ED_view3d_backbuf_depth_validate(ViewContext *vc)
@@ -271,10 +252,8 @@ void ED_view3d_backbuf_depth_validate(ViewContext *vc)
   }
 }
 
-uint *ED_view3d_select_id_read_rect(ViewContext *vc, const rcti *clip, uint *r_buf_len)
+uint *ED_view3d_select_id_read_rect(const rcti *clip, uint *r_buf_len)
 {
-  ED_view3d_select_id_validate(vc);
-
   uint width = BLI_rcti_size_x(clip);
   uint height = BLI_rcti_size_y(clip);
   uint buf_len = width * height;
@@ -298,25 +277,8 @@ int ED_view3d_backbuf_sample_size_clamp(ARegion *ar, const float dist)
   return (int)min_ff(ceilf(dist), (float)max_ii(ar->winx, ar->winx));
 }
 
-/* samples a single pixel (copied from vpaint) */
-uint ED_view3d_select_id_sample(ViewContext *vc, int x, int y)
-{
-  if (x >= vc->ar->winx || y >= vc->ar->winy) {
-    return 0;
-  }
-
-  uint buf_len;
-  uint *buf = ED_view3d_select_id_read(vc, x, y, x, y, &buf_len);
-  BLI_assert(0 != buf_len);
-  uint ret = buf[0];
-  MEM_freeN(buf);
-
-  return ret;
-}
-
 /* reads full rect, converts indices */
-uint *ED_view3d_select_id_read(
-    ViewContext *vc, int xmin, int ymin, int xmax, int ymax, uint *r_buf_len)
+uint *ED_view3d_select_id_read(int xmin, int ymin, int xmax, int ymax, uint *r_buf_len)
 {
   if (UNLIKELY((xmin > xmax) || (ymin > ymax))) {
     return NULL;
@@ -330,92 +292,13 @@ uint *ED_view3d_select_id_read(
   };
 
   uint buf_len;
-  uint *buf = ED_view3d_select_id_read_rect(vc, &rect, &buf_len);
+  uint *buf = ED_view3d_select_id_read_rect(&rect, &buf_len);
 
   if (r_buf_len) {
     *r_buf_len = buf_len;
   }
 
   return buf;
-}
-
-/* smart function to sample a rect spiralling outside, nice for backbuf selection */
-uint ED_view3d_select_id_read_nearest(struct ViewContext *UNUSED(vc),
-                                      const int mval[2],
-                                      const uint id_min,
-                                      const uint id_max,
-                                      uint *r_dist)
-{
-  /* Create region around mouse cursor. This must be square and have an odd
-   * width, the spiraling algorithm does not work with arbitrary rectangles. */
-  rcti rect;
-  BLI_rcti_init_pt_radius(&rect, mval, *r_dist);
-  rect.xmax += 1;
-  rect.ymax += 1;
-
-  int width = BLI_rcti_size_x(&rect);
-  int height = width;
-  BLI_assert(width == height);
-
-  /* Read from selection framebuffer. */
-  uint *buf = MEM_mallocN(width * height * sizeof(*buf), __func__);
-  DRW_framebuffer_select_id_read(&rect, buf);
-
-  /* Spiral, starting from center of buffer. */
-  int spiral_offset = height * (int)(width / 2) + (height / 2);
-  int spiral_direction = 0;
-
-  uint index = 0;
-
-  for (int nr = 1; nr <= height; nr++) {
-    for (int a = 0; a < 2; a++) {
-      for (int b = 0; b < nr; b++) {
-        /* Find hit within the specified range. */
-        uint hit_id = buf[spiral_offset];
-
-        if (hit_id && hit_id >= id_min && hit_id < id_max) {
-          /* Get x/y from spiral offset. */
-          int hit_x = spiral_offset % width;
-          int hit_y = spiral_offset / width;
-
-          int center_x = width / 2;
-          int center_y = height / 2;
-
-          /* Manhatten distance in keeping with other screen-based selection. */
-          *r_dist = (uint)(abs(hit_x - center_x) + abs(hit_y - center_y));
-
-          /* Indices start at 1 here. */
-          index = (hit_id - id_min) + 1;
-          goto exit;
-        }
-
-        /* Next spiral step. */
-        if (spiral_direction == 0) {
-          spiral_offset += 1; /* right */
-        }
-        else if (spiral_direction == 1) {
-          spiral_offset -= width; /* down */
-        }
-        else if (spiral_direction == 2) {
-          spiral_offset -= 1; /* left */
-        }
-        else {
-          spiral_offset += width; /* up */
-        }
-
-        /* Stop if we are outside the buffer. */
-        if (spiral_offset < 0 || spiral_offset >= width * height) {
-          goto exit;
-        }
-      }
-
-      spiral_direction = (spiral_direction + 1) % 4;
-    }
-  }
-
-exit:
-  MEM_freeN(buf);
-  return index;
 }
 
 /* ************************************************************* */

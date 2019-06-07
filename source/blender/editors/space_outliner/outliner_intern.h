@@ -156,11 +156,9 @@ typedef enum {
 /* size constants */
 #define OL_Y_OFFSET 2
 
-#define OL_TOG_RESTRICT_SELECTX (UI_UNIT_X * 3.0f + V2D_SCROLL_WIDTH)
-#define OL_TOG_RESTRICT_VIEWX (UI_UNIT_X * 2.0f + V2D_SCROLL_WIDTH)
-#define OL_TOG_RESTRICT_RENDERX (UI_UNIT_X + V2D_SCROLL_WIDTH)
-
-#define OL_TOGW OL_TOG_RESTRICT_SELECTX
+#define OL_TOG_USER_BUTS_USERS (UI_UNIT_X * 2.0f + V2D_SCROLL_WIDTH)
+#define OL_TOG_USER_BUTS_STATUS (UI_UNIT_X * 3.0f + V2D_SCROLL_WIDTH)
+#define OL_TOG_USER_BUTS_FAKEUSER (UI_UNIT_X + V2D_SCROLL_WIDTH)
 
 #define OL_RNA_COLX (UI_UNIT_X * 15)
 #define OL_RNA_COL_SIZEX (UI_UNIT_X * 7.5f)
@@ -216,6 +214,14 @@ TreeTraversalAction outliner_find_selected_objects(struct TreeElement *te, void 
 void draw_outliner(const struct bContext *C);
 
 TreeElementIcon tree_element_get_icon(TreeStoreElem *tselem, TreeElement *te);
+
+void outliner_collection_isolate_flag(struct Scene *scene,
+                                      struct ViewLayer *view_layer,
+                                      struct LayerCollection *layer_collection,
+                                      struct Collection *collection,
+                                      struct PropertyRNA *layer_or_collection_prop,
+                                      const char *propname,
+                                      const bool value);
 
 /* outliner_select.c -------------------------------------------- */
 eOLDrawState tree_element_type_active(struct bContext *C,
@@ -449,5 +455,6 @@ bool outliner_tree_traverse(const SpaceOutliner *soops,
                             int filter_tselem_flag,
                             TreeTraversalFunc func,
                             void *customdata);
+float outliner_restrict_columns_width(const struct SpaceOutliner *soops);
 
 #endif /* __OUTLINER_INTERN_H__ */

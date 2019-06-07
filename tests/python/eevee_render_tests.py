@@ -12,17 +12,17 @@ import sys
 def setup():
     import bpy
 
+    for scene in bpy.data.scenes:
+        scene.render.engine = 'BLENDER_EEVEE'
+
     # Enable Eevee features
     scene = bpy.context.scene
     eevee = scene.eevee
 
-    eevee.use_sss = True
     eevee.use_ssr = True
     eevee.use_ssr_refraction = True
     eevee.use_gtao = True
-    eevee.use_dof = True
 
-    eevee.use_volumetric = True
     eevee.use_volumetric_shadows = True
     eevee.volumetric_tile_size = '2'
 

@@ -427,10 +427,8 @@ extern "C" int GHOST_HACK_getFirstFile(char buf[FIRSTFILEBUFLG])
   /* TODO: implement graceful termination through Cocoa mechanism
    * to avoid session log off to be canceled. */
   /* Note that Cmd+Q is already handled by keyhandler. */
-  if (systemCocoa->handleQuitRequest() == GHOST_kExitNow)
-    return NSTerminateCancel;  //NSTerminateNow;
-  else
-    return NSTerminateCancel;
+  systemCocoa->handleQuitRequest();
+  return NSTerminateCancel;
 }
 
 // To avoid canceling a log off process, we must use Cocoa termination process
@@ -764,22 +762,7 @@ GHOST_IWindow *GHOST_SystemCocoa::createWindow(const STR_String &title,
  */
 GHOST_IContext *GHOST_SystemCocoa::createOffscreenContext()
 {
-  GHOST_Context *context = new GHOST_ContextCGL(false,
-                                                NULL,
-                                                NULL,
-
-#if defined(WITH_GL_PROFILE_CORE)
-                                                GL_CONTEXT_CORE_PROFILE_BIT,
-                                                3,
-                                                3,
-#else
-                                                0,  // no profile bit
-                                                2,
-                                                1,
-#endif
-                                                GHOST_OPENGL_CGL_CONTEXT_FLAGS,
-                                                GHOST_OPENGL_CGL_RESET_NOTIFICATION_STRATEGY);
-
+  GHOST_Context *context = new GHOST_ContextCGL(false, NULL, NULL, NULL);
   if (context->initializeDrawingContext())
     return context;
   else
@@ -1342,52 +1325,23 @@ GHOST_TSuccess GHOST_SystemCocoa::handleDraggingEvent(GHOST_TEventType eventType
   return GHOST_kSuccess;
 }
 
-GHOST_TUns8 GHOST_SystemCocoa::handleQuitRequest()
+void GHOST_SystemCocoa::handleQuitRequest()
 {
   GHOST_Window *window = (GHOST_Window *)m_windowManager->getActiveWindow();
 
   // Discard quit event if we are in cursor grab sequence
   if (window && window->getCursorGrabModeIsWarp())
-    return GHOST_kExitCancel;
+    return;
 
-  // Check open windows if some changes are not saved
-  if (m_windowManager->getAnyModifiedState()) {
-    int shouldQuit = NSRunAlertPanel(
-        @"Exit Blender",
-        @"Some changes have not been saved.\nDo you really want to quit?",
-        @"Cancel",
-        @"Quit Anyway",
-        nil);
-    if (shouldQuit == NSAlertAlternateReturn) {
-      pushEvent(new GHOST_Event(getMilliSeconds(), GHOST_kEventQuit, NULL));
-      return GHOST_kExitNow;
-    }
-    else {
-      // Give back focus to the blender window if user selected cancel quit
-      NSArray *windowsList = [NSApp orderedWindows];
-      if ([windowsList count]) {
-        [[windowsList objectAtIndex:0] makeKeyAndOrderFront:nil];
-        // Handle the modifiers keyes changed state issue
-        // as recovering from the quit dialog is like application
-        // gaining focus back.
-        // Main issue fixed is Cmd modifier not being cleared
-        handleApplicationBecomeActiveEvent();
-      }
-    }
-  }
-  else {
-    pushEvent(new GHOST_Event(getMilliSeconds(), GHOST_kEventQuit, NULL));
-    m_outsideLoopEventProcessed = true;
-    return GHOST_kExitNow;
-  }
-
-  return GHOST_kExitCancel;
+  // Push the event to Blender so it can open a dialog if needed
+  pushEvent(new GHOST_Event(getMilliSeconds(), GHOST_kEventQuitRequest, window));
+  m_outsideLoopEventProcessed = true;
 }
 
 bool GHOST_SystemCocoa::handleOpenDocumentRequest(void *filepathStr)
 {
   NSString *filepath = (NSString *)filepathStr;
-  int confirmOpen = NSAlertAlternateReturn;
+  bool confirmOpen = true;
   NSArray *windowsList;
   char *temp_buff;
   size_t filenameTextSize;
@@ -1400,16 +1354,21 @@ bool GHOST_SystemCocoa::handleOpenDocumentRequest(void *filepathStr)
   /* Discard event if we are in cursor grab sequence,
    * it'll lead to "stuck cursor" situation if the alert panel is raised */
   if (window && window->getCursorGrabModeIsWarp())
-    return GHOST_kExitCancel;
+    return NO;
 
   // Check open windows if some changes are not saved
   if (m_windowManager->getAnyModifiedState()) {
-    confirmOpen = NSRunAlertPanel(
-        [NSString stringWithFormat:@"Opening %@", [filepath lastPathComponent]],
-        @"Current document has not been saved.\nDo you really want to proceed?",
-        @"Cancel",
-        @"Open",
-        nil);
+    @autoreleasepool {
+      NSAlert *alert = [[NSAlert alloc] init];
+      NSString *title = [NSString stringWithFormat:@"Opening %@", [filepath lastPathComponent]];
+      NSString *text = @"Current document has not been saved.\nDo you really want to proceed?";
+      [alert addButtonWithTitle:@"Open"];
+      [alert addButtonWithTitle:@"Cancel"];
+      [alert setMessageText:title];
+      [alert setInformativeText:text];
+      [alert setAlertStyle:NSAlertStyleInformational];
+      confirmOpen = [alert runModal] == NSAlertFirstButtonReturn;
+    }
   }
 
   // Give back focus to the blender window
@@ -1418,7 +1377,7 @@ bool GHOST_SystemCocoa::handleOpenDocumentRequest(void *filepathStr)
     [[windowsList objectAtIndex:0] makeKeyAndOrderFront:nil];
   }
 
-  if (confirmOpen == NSAlertAlternateReturn) {
+  if (confirmOpen) {
     filenameTextSize = [filepath lengthOfBytesUsingEncoding:NSUTF8StringEncoding];
 
     temp_buff = (char *)malloc(filenameTextSize + 1);
@@ -1622,7 +1581,7 @@ GHOST_TSuccess GHOST_SystemCocoa::handleMouseEvent(void *eventPtr)
             window->getClientBounds(bounds);
 
           /* Switch back to Cocoa coordinates orientation
-           * (y=0 at botton,the same as blender internal btw!), and to client coordinates. */
+           * (y=0 at bottom, the same as blender internal btw!), and to client coordinates. */
           window->getClientBounds(windowBounds);
           window->screenToClient(bounds.m_l, bounds.m_b, correctedBounds.m_l, correctedBounds.m_t);
           window->screenToClient(bounds.m_r, bounds.m_t, correctedBounds.m_r, correctedBounds.m_b);
@@ -1636,7 +1595,9 @@ GHOST_TSuccess GHOST_SystemCocoa::handleMouseEvent(void *eventPtr)
           // Warp mouse cursor if needed
           GHOST_TInt32 warped_x_mouse = x_mouse;
           GHOST_TInt32 warped_y_mouse = y_mouse;
-          correctedBounds.wrapPoint(warped_x_mouse, warped_y_mouse, 4);
+
+          correctedBounds.wrapPoint(
+              warped_x_mouse, warped_y_mouse, 4, window->getCursorGrabAxis());
 
           // Set new cursor position
           if (x_mouse != warped_x_mouse || y_mouse != warped_y_mouse) {
@@ -1696,7 +1657,7 @@ GHOST_TSuccess GHOST_SystemCocoa::handleMouseEvent(void *eventPtr)
       else if (phase == NSEventPhaseEnded)
         m_multiTouchScroll = false;
 
-      /* Standard scrollwheel case, if no swiping happened,
+      /* Standard scroll-wheel case, if no swiping happened,
        * and no momentum (kinetic scroll) works. */
       if (!m_multiTouchScroll && momentumPhase == NSEventPhaseNone) {
         GHOST_TInt32 delta;
@@ -1988,9 +1949,4 @@ void GHOST_SystemCocoa::putClipboard(GHOST_TInt8 *buffer, bool selection) const
   [pasteBoard setString:textToCopy forType:NSStringPboardType];
 
   [pool drain];
-}
-
-bool GHOST_SystemCocoa::supportsNativeDialogs(void)
-{
-  return false;
 }

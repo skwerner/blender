@@ -19,6 +19,7 @@
 # <pep8 compliant>
 
 from bpy.types import Header, Menu, Panel
+from bpy.app.translations import contexts as i18n_contexts
 from .space_dopesheet import (
     DopesheetFilterPopoverBase,
     dopesheet_filter,
@@ -197,6 +198,7 @@ class NLA_MT_edit(Menu):
 
 class NLA_MT_add(Menu):
     bl_label = "Add"
+    bl_translation_context = i18n_contexts.operator_default
 
     def draw(self, _context):
         layout = self.layout
@@ -240,6 +242,7 @@ class NLA_MT_snap_pie(Menu):
         pie.operator("nla.snap", text="Nearest Second").type = 'NEAREST_SECOND'
         pie.operator("nla.snap", text="Nearest Marker").type = 'NEAREST_MARKER'
 
+
 class NLA_MT_context_menu(Menu):
     bl_label = "NLA Context Menu"
 
@@ -276,12 +279,11 @@ class NLA_MT_context_menu(Menu):
 class NLA_MT_channel_context_menu(Menu):
     bl_label = "NLA Channel Context Menu"
 
-    def draw(self, context):
+    def draw(self, _context):
         layout = self.layout
 
         layout.operator_menu_enum("anim.channels_move", "direction", text="Track Ordering...")
         layout.operator("anim.channels_clean_empty")
-
 
 
 classes = (

@@ -47,7 +47,7 @@ class OUTLINER_HT_header(Header):
         layout.separator_spacer()
 
         row = layout.row(align=True)
-        if display_mode in {'VIEW_LAYER'}:
+        if display_mode in {'SCENES', 'VIEW_LAYER'}:
             row.popover(
                 panel="OUTLINER_PT_filter",
                 text="",
@@ -60,7 +60,7 @@ class OUTLINER_HT_header(Header):
             sub.prop(space, "filter_id_type", text="", icon_only=True)
 
         if display_mode == 'VIEW_LAYER':
-            layout.operator("outliner.collection_new", text="", icon='GROUP').nested = True
+            layout.operator("outliner.collection_new", text="", icon='COLLECTION_NEW').nested = True
 
         elif display_mode == 'ORPHAN_DATA':
             layout.operator("outliner.orphans_purge", text="Purge")
@@ -166,19 +166,19 @@ class OUTLINER_MT_collection_visibility(Menu):
 
         layout.separator()
 
-        layout.operator("outliner.collection_show", text="Show", icon="HIDE_OFF")
+        layout.operator("outliner.collection_show", text="Show", icon='HIDE_OFF')
         layout.operator("outliner.collection_show_inside", text="Show All Inside")
-        layout.operator("outliner.collection_hide", text="Hide", icon="HIDE_ON")
+        layout.operator("outliner.collection_hide", text="Hide", icon='HIDE_ON')
         layout.operator("outliner.collection_hide_inside", text="Hide All Inside")
 
         layout.separator()
 
-        layout.operator("outliner.collection_enable", text="Enable in Viewports", icon="RESTRICT_VIEW_OFF")
+        layout.operator("outliner.collection_enable", text="Enable in Viewports", icon='RESTRICT_VIEW_OFF')
         layout.operator("outliner.collection_disable", text="Disable in Viewports")
 
         layout.separator()
 
-        layout.operator("outliner.collection_enable_render", text="Enable in Render", icon="RESTRICT_RENDER_OFF")
+        layout.operator("outliner.collection_enable_render", text="Enable in Render", icon='RESTRICT_RENDER_OFF')
         layout.operator("outliner.collection_disable_render", text="Disable in Render")
 
 
@@ -198,12 +198,12 @@ class OUTLINER_MT_collection(Menu):
 
         layout.separator()
 
-        layout.operator("outliner.collection_delete", text="Delete", icon="X").hierarchy = False
+        layout.operator("outliner.collection_delete", text="Delete", icon='X').hierarchy = False
         layout.operator("outliner.collection_delete", text="Delete Hierarchy").hierarchy = True
 
         layout.separator()
 
-        layout.operator("outliner.collection_objects_select", text="Select Objects", icon="RESTRICT_SELECT_OFF")
+        layout.operator("outliner.collection_objects_select", text="Select Objects", icon='RESTRICT_SELECT_OFF')
         layout.operator("outliner.collection_objects_deselect", text="Deselect Objects")
 
         layout.separator()
@@ -260,14 +260,14 @@ class OUTLINER_MT_object(Menu):
 
         layout.separator()
 
-        layout.operator("outliner.object_operation", text="Delete", icon="X").type = 'DELETE'
+        layout.operator("outliner.object_operation", text="Delete", icon='X').type = 'DELETE'
 
         if space.display_mode == 'VIEW_LAYER' and not space.use_filter_collection:
             layout.operator("outliner.object_operation", text="Delete Hierarchy").type = 'DELETE_HIERARCHY'
 
         layout.separator()
 
-        layout.operator("outliner.object_operation", text="Select", icon="RESTRICT_SELECT_OFF").type = 'SELECT'
+        layout.operator("outliner.object_operation", text="Select", icon='RESTRICT_SELECT_OFF').type = 'SELECT'
         layout.operator("outliner.object_operation", text="Select Hierarchy").type = 'SELECT_HIERARCHY'
         layout.operator("outliner.object_operation", text="Deselect").type = 'DESELECT'
 
@@ -303,16 +303,38 @@ class OUTLINER_PT_filter(Panel):
         space = context.space_data
         display_mode = space.display_mode
 
+        if display_mode == 'VIEW_LAYER':
+            layout.label(text="Restriction Toggles:")
+            row = layout.row(align=True)
+            row.prop(space, "show_restrict_column_enable", text="")
+            row.prop(space, "show_restrict_column_select", text="")
+            row.prop(space, "show_restrict_column_hide", text="")
+            row.prop(space, "show_restrict_column_viewport", text="")
+            row.prop(space, "show_restrict_column_render", text="")
+            row.prop(space, "show_restrict_column_holdout", text="")
+            row.prop(space, "show_restrict_column_indirect_only", text="")
+            layout.separator()
+        elif display_mode == 'SCENES':
+            layout.label(text="Restriction Toggles:")
+            row = layout.row(align=True)
+            row.prop(space, "show_restrict_column_select", text="")
+            row.prop(space, "show_restrict_column_hide", text="")
+            row.prop(space, "show_restrict_column_viewport", text="")
+            row.prop(space, "show_restrict_column_render", text="")
+            layout.separator()
+
         if display_mode != 'DATA_API':
             col = layout.column(align=True)
             col.prop(space, "use_sort_alpha")
-            col.prop(space, "show_restrict_columns")
             layout.separator()
 
         col = layout.column(align=True)
         col.label(text="Search:")
         col.prop(space, "use_filter_complete", text="Exact Match")
         col.prop(space, "use_filter_case_sensitive", text="Case Sensitive")
+
+        if display_mode != 'VIEW_LAYER':
+            return
 
         layout.separator()
 

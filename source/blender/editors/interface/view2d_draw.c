@@ -53,7 +53,7 @@
 /* Compute display grid resolution
  ********************************************************/
 
-#define MIN_MAJOR_LINE_DISTANCE (UI_DPI_FAC * 50)
+#define MIN_MAJOR_LINE_DISTANCE (U.v2d_min_gridsize * UI_DPI_FAC)
 
 static float select_major_distance(const float *possible_distances,
                                    uint amount,
@@ -267,6 +267,10 @@ static void draw_horizontal_scale_indicators(const ARegion *ar,
                                              void *to_string_data,
                                              int colorid)
 {
+  if (UI_view2d_scale_get_x(v2d) <= 0.0f) {
+    return;
+  }
+
   GPU_matrix_push_projection();
   wmOrtho2_region_pixelspace(ar);
 
@@ -318,6 +322,10 @@ static void draw_vertical_scale_indicators(const ARegion *ar,
                                            void *to_string_data,
                                            int colorid)
 {
+  if (UI_view2d_scale_get_y(v2d) <= 0.0f) {
+    return;
+  }
+
   GPU_matrix_push_projection();
   wmOrtho2_region_pixelspace(ar);
 

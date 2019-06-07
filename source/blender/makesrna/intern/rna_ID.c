@@ -161,8 +161,9 @@ static int rna_ID_name_editable(PointerRNA *ptr, const char **UNUSED(r_info))
 
   if (GS(id->name) == ID_VF) {
     VFont *vfont = (VFont *)id;
-    if (BKE_vfont_is_builtin(vfont))
+    if (BKE_vfont_is_builtin(vfont)) {
       return 0;
+    }
   }
   else if (!BKE_id_is_in_global_main(id)) {
     return 0;
@@ -205,76 +206,111 @@ short RNA_type_to_ID_code(const StructRNA *type)
   if (UNLIKELY(base_type == NULL)) {
     return 0;
   }
-  if (base_type == &RNA_Action)
+  if (base_type == &RNA_Action) {
     return ID_AC;
-  if (base_type == &RNA_Armature)
+  }
+  if (base_type == &RNA_Armature) {
     return ID_AR;
-  if (base_type == &RNA_Brush)
+  }
+  if (base_type == &RNA_Brush) {
     return ID_BR;
-  if (base_type == &RNA_CacheFile)
+  }
+  if (base_type == &RNA_CacheFile) {
     return ID_CF;
-  if (base_type == &RNA_Camera)
+  }
+  if (base_type == &RNA_Camera) {
     return ID_CA;
-  if (base_type == &RNA_Curve)
+  }
+  if (base_type == &RNA_Curve) {
     return ID_CU;
-  if (base_type == &RNA_GreasePencil)
+  }
+  if (base_type == &RNA_GreasePencil) {
     return ID_GD;
-  if (base_type == &RNA_Collection)
+  }
+  if (base_type == &RNA_Collection) {
     return ID_GR;
-  if (base_type == &RNA_Image)
+  }
+  if (base_type == &RNA_Image) {
     return ID_IM;
-  if (base_type == &RNA_Key)
+  }
+  if (base_type == &RNA_Key) {
     return ID_KE;
-  if (base_type == &RNA_Light)
+  }
+  if (base_type == &RNA_Light) {
     return ID_LA;
-  if (base_type == &RNA_Library)
+  }
+  if (base_type == &RNA_Library) {
     return ID_LI;
-  if (base_type == &RNA_FreestyleLineStyle)
+  }
+  if (base_type == &RNA_FreestyleLineStyle) {
     return ID_LS;
-  if (base_type == &RNA_Lattice)
+  }
+  if (base_type == &RNA_Lattice) {
     return ID_LT;
-  if (base_type == &RNA_Material)
+  }
+  if (base_type == &RNA_Material) {
     return ID_MA;
-  if (base_type == &RNA_MetaBall)
+  }
+  if (base_type == &RNA_MetaBall) {
     return ID_MB;
-  if (base_type == &RNA_MovieClip)
+  }
+  if (base_type == &RNA_MovieClip) {
     return ID_MC;
-  if (base_type == &RNA_Mesh)
+  }
+  if (base_type == &RNA_Mesh) {
     return ID_ME;
-  if (base_type == &RNA_Mask)
+  }
+  if (base_type == &RNA_Mask) {
     return ID_MSK;
-  if (base_type == &RNA_NodeTree)
+  }
+  if (base_type == &RNA_NodeTree) {
     return ID_NT;
-  if (base_type == &RNA_Object)
+  }
+  if (base_type == &RNA_Object) {
     return ID_OB;
-  if (base_type == &RNA_ParticleSettings)
+  }
+  if (base_type == &RNA_ParticleSettings) {
     return ID_PA;
-  if (base_type == &RNA_Palette)
+  }
+  if (base_type == &RNA_Palette) {
     return ID_PAL;
-  if (base_type == &RNA_PaintCurve)
+  }
+  if (base_type == &RNA_PaintCurve) {
     return ID_PC;
-  if (base_type == &RNA_LightProbe)
+  }
+  if (base_type == &RNA_LightProbe) {
     return ID_LP;
-  if (base_type == &RNA_Scene)
+  }
+  if (base_type == &RNA_Scene) {
     return ID_SCE;
-  if (base_type == &RNA_Screen)
+  }
+  if (base_type == &RNA_Screen) {
     return ID_SCR;
-  if (base_type == &RNA_Sound)
+  }
+  if (base_type == &RNA_Sound) {
     return ID_SO;
-  if (base_type == &RNA_Speaker)
+  }
+  if (base_type == &RNA_Speaker) {
     return ID_SPK;
-  if (base_type == &RNA_Texture)
+  }
+  if (base_type == &RNA_Texture) {
     return ID_TE;
-  if (base_type == &RNA_Text)
+  }
+  if (base_type == &RNA_Text) {
     return ID_TXT;
-  if (base_type == &RNA_VectorFont)
+  }
+  if (base_type == &RNA_VectorFont) {
     return ID_VF;
-  if (base_type == &RNA_WorkSpace)
+  }
+  if (base_type == &RNA_WorkSpace) {
     return ID_WS;
-  if (base_type == &RNA_World)
+  }
+  if (base_type == &RNA_World) {
     return ID_WO;
-  if (base_type == &RNA_WindowManager)
+  }
+  if (base_type == &RNA_WindowManager) {
     return ID_WM;
+  }
 
   return 0;
 }
@@ -411,8 +447,9 @@ StructRNA *rna_PropertyGroup_register(Main *UNUSED(bmain),
   RNA_pointer_create(NULL, &RNA_PropertyGroup, NULL, &dummyptr);
 
   /* validate the python class */
-  if (validate(&dummyptr, data, NULL) != 0)
+  if (validate(&dummyptr, data, NULL) != 0) {
     return NULL;
+  }
 
   /* note: it looks like there is no length limit on the srna id since its
    * just a char pointer, but take care here, also be careful that python
@@ -433,6 +470,11 @@ StructRNA *rna_PropertyGroup_register(Main *UNUSED(bmain),
 StructRNA *rna_PropertyGroup_refine(PointerRNA *ptr)
 {
   return ptr->type;
+}
+
+static ID *rna_ID_evaluated_get(ID *id, struct Depsgraph *depsgraph)
+{
+  return DEG_get_evaluated_id(depsgraph, id);
 }
 
 static ID *rna_ID_copy(ID *id, Main *bmain)
@@ -458,7 +500,7 @@ static ID *rna_ID_override_create(ID *id, Main *bmain)
   return BKE_override_static_create_from_id(bmain, id);
 }
 
-static void rna_ID_update_tag(ID *id, ReportList *reports, int flag)
+static void rna_ID_update_tag(ID *id, Main *bmain, ReportList *reports, int flag)
 {
   /* XXX, new function for this! */
 #  if 0
@@ -473,6 +515,8 @@ static void rna_ID_update_tag(ID *id, ReportList *reports, int flag)
     /* pass */
   }
   else {
+    int allow_flag = 0;
+
     /* ensure flag us correct for the type */
     switch (GS(id->name)) {
       case ID_OB:
@@ -480,28 +524,35 @@ static void rna_ID_update_tag(ID *id, ReportList *reports, int flag)
          * object types supports different flags. Maybe does not worth checking
          * for this at all. Or maybe let dependency graph to return whether
          * the tag was valid or not. */
-        if (flag & ~(ID_RECALC_ALL)) {
-          BKE_report(reports, RPT_ERROR, "'Refresh' incompatible with Object ID type");
-          return;
-        }
+        allow_flag = ID_RECALC_ALL;
         break;
         /* Could add particle updates later */
 #  if 0
       case ID_PA:
-        if (flag & ~(OB_RECALC_ALL | PSYS_RECALC)) {
-          BKE_report(reports, RPT_ERROR, "'Refresh' incompatible with ParticleSettings ID type");
-          return;
-        }
+        allow_flag = OB_RECALC_ALL | PSYS_RECALC;
         break;
 #  endif
+      case ID_AC:
+        allow_flag = ID_RECALC_ANIMATION;
+        break;
       default:
-        BKE_report(
-            reports, RPT_ERROR, "This ID type is not compatible with any 'refresh' options");
-        return;
+        if (id_can_have_animdata(id)) {
+          allow_flag = ID_RECALC_ANIMATION;
+        }
+    }
+
+    if (flag & ~allow_flag) {
+      StructRNA *srna = ID_code_to_RNA_type(GS(id->name));
+      BKE_reportf(reports,
+                  RPT_ERROR,
+                  "%s is not compatible with %s 'refresh' options",
+                  RNA_struct_identifier(srna),
+                  allow_flag ? "the specified" : "any");
+      return;
     }
   }
 
-  DEG_id_tag_update(id, flag);
+  DEG_id_tag_update_ex(bmain, id, flag);
 }
 
 static void rna_ID_user_clear(ID *id)
@@ -652,10 +703,12 @@ static void rna_ImagePreview_is_custom_set(PointerRNA *ptr, int value, enum eIco
     return;
   }
 
-  if (value)
+  if (value) {
     prv_img->flag[size] |= PRV_USER_EDITED;
-  else
+  }
+  else {
     prv_img->flag[size] &= ~PRV_USER_EDITED;
+  }
 
   prv_img->flag[size] |= PRV_CHANGED;
 
@@ -1446,6 +1499,15 @@ static void rna_def_ID(BlenderRNA *brna)
   RNA_def_property_pointer_funcs(prop, "rna_IDPreview_get", NULL, NULL, NULL);
 
   /* functions */
+  func = RNA_def_function(srna, "evaluated_get", "rna_ID_evaluated_get");
+  RNA_def_function_ui_description(
+      func, "Get corresponding evaluated ID from the given dependency graph");
+  parm = RNA_def_pointer(
+      func, "depsgraph", "Depsgraph", "", "Dependency graph to perform lookup in");
+  RNA_def_parameter_flags(parm, PROP_NEVER_NULL, PARM_REQUIRED);
+  parm = RNA_def_pointer(func, "id", "ID", "", "New copy of the ID");
+  RNA_def_function_return(func, parm);
+
   func = RNA_def_function(srna, "copy", "rna_ID_copy");
   RNA_def_function_ui_description(
       func, "Create a copy of this data-block (not supported for all data-blocks)");
@@ -1517,7 +1579,7 @@ static void rna_def_ID(BlenderRNA *brna)
   RNA_def_function_ui_description(func, "Clear animation on this this ID");
 
   func = RNA_def_function(srna, "update_tag", "rna_ID_update_tag");
-  RNA_def_function_flag(func, FUNC_USE_REPORTS);
+  RNA_def_function_flag(func, FUNC_USE_MAIN | FUNC_USE_REPORTS);
   RNA_def_function_ui_description(func,
                                   "Tag the ID to update its display data, "
                                   "e.g. when calling :class:`bpy.types.Scene.update`");

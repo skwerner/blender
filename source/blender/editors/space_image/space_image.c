@@ -224,6 +224,7 @@ static void image_operatortypes(void)
   WM_operatortype_append(IMAGE_OT_save);
   WM_operatortype_append(IMAGE_OT_save_as);
   WM_operatortype_append(IMAGE_OT_save_sequence);
+  WM_operatortype_append(IMAGE_OT_save_all_modified);
   WM_operatortype_append(IMAGE_OT_pack);
   WM_operatortype_append(IMAGE_OT_unpack);
 
@@ -460,13 +461,24 @@ static void IMAGE_GGT_gizmo2d(wmGizmoGroupType *gzgt)
 
   gzgt->poll = ED_widgetgroup_gizmo2d_poll;
   gzgt->setup = ED_widgetgroup_gizmo2d_setup;
+  gzgt->setup_keymap = WM_gizmogroup_setup_keymap_generic_drag;
   gzgt->refresh = ED_widgetgroup_gizmo2d_refresh;
   gzgt->draw_prepare = ED_widgetgroup_gizmo2d_draw_prepare;
 }
 
+static void IMAGE_GGT_navigate(wmGizmoGroupType *gzgt)
+{
+  VIEW2D_GGT_navigate_impl(gzgt, "IMAGE_GGT_navigate");
+}
+
 static void image_widgets(void)
 {
+  wmGizmoMapType *gzmap_type = WM_gizmomaptype_ensure(
+      &(const struct wmGizmoMapType_Params){SPACE_IMAGE, RGN_TYPE_WINDOW});
+
   WM_gizmogrouptype_append(IMAGE_GGT_gizmo2d);
+
+  WM_gizmogrouptype_append_and_link(gzmap_type, IMAGE_GGT_navigate);
 }
 
 /************************** main region ***************************/
@@ -657,7 +669,8 @@ static void image_main_region_draw(const bContext *C, ARegion *ar)
       BLI_thread_unlock(LOCK_DRAW_IMAGE);
     }
 
-    ED_mask_draw_region(mask,
+    ED_mask_draw_region(depsgraph,
+                        mask,
                         ar,
                         sima->mask_info.draw_flag,
                         sima->mask_info.draw_type,
@@ -762,7 +775,7 @@ static void image_buttons_region_layout(const bContext *C, ARegion *ar)
   }
 
   const bool vertical = true;
-  ED_region_panels_layout_ex(C, ar, contexts_base, -1, vertical);
+  ED_region_panels_layout_ex(C, ar, &ar->type->paneltypes, contexts_base, -1, vertical, NULL);
 }
 
 static void image_buttons_region_draw(const bContext *C, ARegion *ar)
@@ -1033,7 +1046,7 @@ void ED_spacetype_image(void)
   /* regions: listview/buttons/scopes */
   art = MEM_callocN(sizeof(ARegionType), "spacetype image region");
   art->regionid = RGN_TYPE_UI;
-  art->prefsizex = 220;  // XXX
+  art->prefsizex = UI_SIDEBAR_PANEL_WIDTH;
   art->keymapflag = ED_KEYMAP_UI | ED_KEYMAP_FRAMES;
   art->listener = image_buttons_region_listener;
   art->message_subscribe = ED_area_do_mgs_subscribe_for_tool_ui;

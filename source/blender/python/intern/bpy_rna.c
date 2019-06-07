@@ -1122,7 +1122,6 @@ static void pyrna_struct_dealloc(BPy_StructRNA *self)
 #ifdef PYRNA_FREE_SUPPORT
   if (self->freeptr && self->ptr.data) {
     IDP_FreeProperty(self->ptr.data);
-    MEM_freeN(self->ptr.data);
     self->ptr.data = NULL;
   }
 #endif /* PYRNA_FREE_SUPPORT */
@@ -2030,7 +2029,15 @@ static int pyrna_py_to_prop(
           else {
             /* data == NULL, assign to RNA */
             if (value == Py_None || RNA_struct_is_a(param->ptr.type, ptr_type)) {
-              RNA_property_pointer_set(ptr, prop, value == Py_None ? PointerRNA_NULL : param->ptr);
+              ReportList reports;
+              BKE_reports_init(&reports, RPT_STORE);
+              RNA_property_pointer_set(
+                  ptr, prop, value == Py_None ? PointerRNA_NULL : param->ptr, &reports);
+              int err = (BPy_reports_to_error(&reports, PyExc_RuntimeError, true));
+              if (err == -1) {
+                Py_XDECREF(value_new);
+                return -1;
+              }
             }
             else {
               raise_error = true;
@@ -2815,18 +2822,22 @@ static int pyrna_prop_collection_ass_subscript(BPy_PropertyRNA *self,
       Py_ssize_t start = 0, stop = PY_SSIZE_T_MAX;
 
       /* avoid PySlice_GetIndicesEx because it needs to know the length ahead of time. */
-      if (key_slice->start != Py_None && !_PyEval_SliceIndex(key_slice->start, &start))
+      if (key_slice->start != Py_None && !_PyEval_SliceIndex(key_slice->start, &start)) {
         return NULL;
-      if (key_slice->stop != Py_None && !_PyEval_SliceIndex(key_slice->stop, &stop))
+      }
+      if (key_slice->stop != Py_None && !_PyEval_SliceIndex(key_slice->stop, &stop)) {
         return NULL;
+      }
 
       if (start < 0 || stop < 0) {
         /* only get the length for negative values */
         Py_ssize_t len = (Py_ssize_t)RNA_property_collection_length(&self->ptr, self->prop);
-        if (start < 0)
+        if (start < 0) {
           start += len;
-        if (stop < 0)
+        }
+        if (stop < 0) {
           stop += len;
+        }
       }
 
       if (stop - start <= 0) {
@@ -4294,8 +4305,9 @@ static PyObject *pyrna_struct_getattro(BPy_StructRNA *self, PyObject *pyname)
 static int pyrna_struct_pydict_contains(PyObject *self, PyObject *pyname)
 {
   PyObject *dict = *(_PyObject_GetDictPtr((PyObject *)self));
-  if (dict == NULL) /* unlikely */
+  if (UNLIKELY(dict == NULL)) {
     return 0;
+  }
 
   return PyDict_Contains(dict, pyname);
 }
@@ -4324,7 +4336,7 @@ static PyObject *pyrna_struct_meta_idprop_getattro(PyObject *cls, PyObject *attr
    * Disable for now,
    * this is faking internal behavior in a way that's too tricky to maintain well. */
 #  if 0
-  if (ret == NULL) { // || pyrna_is_deferred_prop(ret)
+  if ((ret == NULL)  /* || pyrna_is_deferred_prop(ret) */ ) {
     StructRNA *srna = srna_from_self(cls, "StructRNA.__getattr__");
     if (srna) {
       PropertyRNA *prop = RNA_struct_type_find_property(srna, _PyUnicode_AsString(attr));

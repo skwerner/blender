@@ -130,15 +130,6 @@ class AnnotationDrawingToolsPanel:
 
         gpencil_stroke_placement_settings(context, col)
 
-        gpd = context.gpencil_data
-
-        if gpd and not is_3d_view:
-            layout.separator()
-            layout.separator()
-
-            col = layout.column(align=True)
-            col.prop(gpd, "use_stroke_edit_mode", text="Enable Editing", toggle=True)  # was: icon='EDIT'
-
 
 class GreasePencilStrokeEditPanel:
     # subclass must set
@@ -370,7 +361,10 @@ class GPENCIL_MT_pie_tool_palette(Menu):
         # E - "Settings" Palette is included here too, since it needs to be in a stable position...
         if gpd and gpd.layers.active:
             col.separator()
-            col.operator("wm.call_menu_pie", text="Settings...", icon='SCRIPTWIN').name = "GPENCIL_MT_pie_settings_palette"
+            col.operator(
+                "wm.call_menu_pie",
+                text="Settings...",
+                icon='SCRIPTWIN').name = "GPENCIL_MT_pie_settings_palette"
 
         # Editing tools
         if gpd:
@@ -800,20 +794,6 @@ class GreasePencilToolsPanel:
     def draw(self, context):
         layout = self.layout
 
-        gpd = context.gpencil_data
-
-        layout.prop(gpd, "use_stroke_edit_mode", text="Enable Editing", icon='EDIT', toggle=True)
-
-        layout.separator()
-
-        layout.label(text="Proportional Edit:")
-        row = layout.row()
-        row.prop(context.tool_settings, "use_proportional_edit", text="")
-        row.prop(context.tool_settings, "proportional_edit_falloff", text="")
-
-        layout.separator()
-        layout.separator()
-
         gpencil_active_brush_settings_simple(context, layout)
 
         layout.separator()
@@ -892,9 +872,11 @@ class GreasePencilMaterialsPanel:
 
             if ma is not None and ma.grease_pencil is not None:
                 gpcolor = ma.grease_pencil
-                if gpcolor.stroke_style == 'SOLID' or \
-                    gpcolor.use_stroke_pattern is True or \
-                    gpcolor.use_stroke_texture_mix is True:
+                if (
+                        gpcolor.stroke_style == 'SOLID' or
+                        gpcolor.use_stroke_pattern or
+                        gpcolor.use_stroke_texture_mix
+                ):
                     row = layout.row()
                     row.prop(gpcolor, "color", text="Stroke Color")
 

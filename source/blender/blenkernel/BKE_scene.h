@@ -148,6 +148,7 @@ int BKE_scene_orientation_slot_get_index(const struct TransformOrientationSlot *
 /* **  Scene evaluation ** */
 
 void BKE_scene_graph_update_tagged(struct Depsgraph *depsgraph, struct Main *bmain);
+void BKE_scene_graph_evaluated_ensure(struct Depsgraph *depsgraph, struct Main *bmain);
 
 void BKE_scene_graph_update_for_newframe(struct Depsgraph *depsgraph, struct Main *bmain);
 
@@ -239,6 +240,11 @@ void BKE_scene_cursor_rot_to_quat(const struct View3DCursor *cursor, float quat[
 void BKE_scene_cursor_quat_to_rot(struct View3DCursor *cursor,
                                   const float quat[4],
                                   bool use_compat);
+
+void BKE_scene_cursor_to_mat4(const struct View3DCursor *cursor, float mat[4][4]);
+void BKE_scene_cursor_from_mat4(struct View3DCursor *cursor,
+                                const float mat[4][4],
+                                bool use_compat);
 
 #ifdef __cplusplus
 }

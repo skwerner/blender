@@ -85,6 +85,10 @@ typedef enum eWM_GizmoFlag {
 
   /** Use the active tools operator properties when running as an operator. */
   WM_GIZMO_OPERATOR_TOOL_INIT = (1 << 9),
+
+  /** Don't pass through events to other handlers
+   * (allows click/drag not to have it's events stolen by press events in other keymaps). */
+  WM_GIZMO_EVENT_HANDLE_ALL = (1 << 10),
 } eWM_GizmoFlag;
 
 /**
@@ -182,6 +186,9 @@ struct wmGizmo {
   /** Pointer back to group this gizmo is in (just for quick access). */
   struct wmGizmoGroup *parent_gzgroup;
 
+  /** Optional keymap to use for this gizmo (overrides #wmGizmoGroupType.keymap) */
+  struct wmKeyMap *keymap;
+
   void *py_instance;
 
   /** Rna pointer to access properties. */
@@ -195,8 +202,16 @@ struct wmGizmo {
   /** Optional ID for highlighting different parts of this gizmo.
    * -1 when unset, otherwise a valid index. (Used as index to 'op_data'). */
   int highlight_part;
-  /** For single click button gizmos, use a different part as a fallback, -1 when unused. */
+
+  /**
+   * For gizmos that differentiate between click & drag,
+   * use a different part for any drag events, -1 when unused.
+   */
   int drag_part;
+
+  /** Distance to bias this gizmo above others when picking
+   * (in worldspace, scaled by the gizmo scale - when used). */
+  float select_bias;
 
   /**
    * Transformation of the gizmo in 2d or 3d space.

@@ -262,7 +262,7 @@ static void BKE_sequence_free_ex(Scene *scene,
   }
 
   if (seq->prop) {
-    IDP_FreeProperty_ex(seq->prop, do_id_user);
+    IDP_FreePropertyContent_ex(seq->prop, do_id_user);
     MEM_freeN(seq->prop);
   }
 
@@ -279,7 +279,7 @@ static void BKE_sequence_free_ex(Scene *scene,
    */
   if (do_cache) {
     if (scene) {
-      BKE_sequence_invalidate_cache(scene, seq);
+      BKE_sequence_invalidate_cache_raw(scene, seq);
     }
   }
 
@@ -3546,7 +3546,7 @@ static ImBuf *seq_render_scene_strip(const SeqRenderData *context,
         IB_rect,
         draw_flags,
         scene->r.alphamode,
-        0, /* no aa samples */
+        U.ogl_multisamples,
         viewname,
         context->gpu_offscreen,
         err_out);
@@ -4307,7 +4307,8 @@ static void sequence_do_invalidate_dependent(Scene *scene, Sequence *seq, ListBa
     }
 
     if (BKE_sequence_check_depend(seq, cur)) {
-      BKE_sequencer_cache_cleanup_sequence(scene, cur);
+      BKE_sequencer_cache_cleanup_sequence(
+          scene, cur, seq, SEQ_CACHE_STORE_COMPOSITE | SEQ_CACHE_STORE_FINAL_OUT);
     }
 
     if (cur->seqbase.first) {
@@ -4319,46 +4320,46 @@ static void sequence_do_invalidate_dependent(Scene *scene, Sequence *seq, ListBa
 static void sequence_invalidate_cache(Scene *scene,
                                       Sequence *seq,
                                       bool invalidate_self,
-                                      bool UNUSED(invalidate_preprocess))
+                                      int invalidate_types)
 {
   Editing *ed = scene->ed;
 
-  /* invalidate cache for current sequence */
   if (invalidate_self) {
-    /* Animation structure holds some buffers inside,
-     * so for proper cache invalidation we need to
-     * re-open the animation.
-     */
     BKE_sequence_free_anim(seq);
-    BKE_sequencer_cache_cleanup_sequence(scene, seq);
+    BKE_sequencer_cache_cleanup_sequence(scene, seq, seq, invalidate_types);
   }
 
-  /* if invalidation is invoked from sequence free routine, effectdata would be NULL here */
   if (seq->effectdata && seq->type == SEQ_TYPE_SPEED) {
     BKE_sequence_effect_speed_rebuild_map(scene, seq, true);
   }
 
-  /* invalidate cache for all dependent sequences */
-
-  /* NOTE: can not use SEQ_BEGIN/SEQ_END here because that macro will change sequence's depth,
-   *       which makes transformation routines work incorrect
-   */
   sequence_do_invalidate_dependent(scene, seq, &ed->seqbase);
 }
 
-void BKE_sequence_invalidate_cache(Scene *scene, Sequence *seq)
+void BKE_sequence_invalidate_cache_raw(Scene *scene, Sequence *seq)
 {
-  sequence_invalidate_cache(scene, seq, true, true);
+  sequence_invalidate_cache(scene, seq, true, SEQ_CACHE_ALL_TYPES);
+}
+
+void BKE_sequence_invalidate_cache_preprocessed(Scene *scene, Sequence *seq)
+{
+  sequence_invalidate_cache(scene,
+                            seq,
+                            true,
+                            SEQ_CACHE_STORE_PREPROCESSED | SEQ_CACHE_STORE_COMPOSITE |
+                                SEQ_CACHE_STORE_FINAL_OUT);
+}
+
+void BKE_sequence_invalidate_cache_composite(Scene *scene, Sequence *seq)
+{
+  sequence_invalidate_cache(
+      scene, seq, true, SEQ_CACHE_STORE_COMPOSITE | SEQ_CACHE_STORE_FINAL_OUT);
 }
 
 void BKE_sequence_invalidate_dependent(Scene *scene, Sequence *seq)
 {
-  sequence_invalidate_cache(scene, seq, false, true);
-}
-
-void BKE_sequence_invalidate_cache_for_modifier(Scene *scene, Sequence *seq)
-{
-  sequence_invalidate_cache(scene, seq, true, false);
+  sequence_invalidate_cache(
+      scene, seq, false, SEQ_CACHE_STORE_COMPOSITE | SEQ_CACHE_STORE_FINAL_OUT);
 }
 
 void BKE_sequencer_free_imbuf(Scene *scene, ListBase *seqbase, bool for_render)
@@ -4932,7 +4933,7 @@ void BKE_sequencer_update_sound_bounds_all(Scene *scene)
 void BKE_sequencer_update_sound_bounds(Scene *scene, Sequence *seq)
 {
   if (seq->type == SEQ_TYPE_SCENE) {
-    if (seq->scene_sound) {
+    if (seq->scene && seq->scene_sound) {
       /* We have to take into account start frame of the sequence's scene! */
       int startofs = seq->startofs + seq->anim_startofs + seq->scene->r.sfra;
 
@@ -5352,7 +5353,20 @@ static void seq_load_apply(Main *bmain, Scene *scene, Sequence *seq, SeqLoadInfo
   }
 }
 
-Sequence *BKE_sequence_alloc(ListBase *lb, int cfra, int machine)
+static Strip *seq_strip_alloc(int type)
+{
+  Strip *strip = MEM_callocN(sizeof(Strip), "strip");
+
+  if (ELEM(type, SEQ_TYPE_SOUND_RAM, SEQ_TYPE_SOUND_HD) == 0) {
+    strip->transform = MEM_callocN(sizeof(struct StripTransform), "StripTransform");
+    strip->crop = MEM_callocN(sizeof(struct StripCrop), "StripCrop");
+  }
+
+  strip->us = 1;
+  return strip;
+}
+
+Sequence *BKE_sequence_alloc(ListBase *lb, int cfra, int machine, int type)
 {
   Sequence *seq;
 
@@ -5371,7 +5385,9 @@ Sequence *BKE_sequence_alloc(ListBase *lb, int cfra, int machine)
   seq->volume = 1.0f;
   seq->pitch = 1.0f;
   seq->scene_sound = NULL;
+  seq->type = type;
 
+  seq->strip = seq_strip_alloc(type);
   seq->stereo3d_format = MEM_callocN(sizeof(Stereo3dFormat), "Sequence Stereo Format");
   seq->cache_flag = SEQ_CACHE_ALL_TYPES;
 
@@ -5455,15 +5471,13 @@ Sequence *BKE_sequencer_add_image_strip(bContext *C, ListBase *seqbasep, SeqLoad
   Sequence *seq;
   Strip *strip;
 
-  seq = BKE_sequence_alloc(seqbasep, seq_load->start_frame, seq_load->channel);
-  seq->type = SEQ_TYPE_IMAGE;
+  seq = BKE_sequence_alloc(seqbasep, seq_load->start_frame, seq_load->channel, SEQ_TYPE_IMAGE);
   seq->blend_mode = SEQ_TYPE_ALPHAOVER;
 
   /* basic defaults */
-  seq->strip = strip = MEM_callocN(sizeof(Strip), "strip");
-
   seq->len = seq_load->len ? seq_load->len : 1;
-  strip->us = 1;
+
+  strip = seq->strip;
   strip->stripdata = MEM_callocN(seq->len * sizeof(StripElem), "stripelem");
   BLI_strncpy(strip->dir, seq_load->path, sizeof(strip->dir));
 
@@ -5507,19 +5521,16 @@ Sequence *BKE_sequencer_add_sound_strip(bContext *C, ListBase *seqbasep, SeqLoad
     return NULL;
   }
 
-  seq = BKE_sequence_alloc(seqbasep, seq_load->start_frame, seq_load->channel);
-
-  seq->type = SEQ_TYPE_SOUND_RAM;
+  seq = BKE_sequence_alloc(seqbasep, seq_load->start_frame, seq_load->channel, SEQ_TYPE_SOUND_RAM);
   seq->sound = sound;
   BLI_strncpy(seq->name + 2, "Sound", SEQ_NAME_MAXSTR - 2);
   BKE_sequence_base_unique_name_recursive(&scene->ed->seqbase, seq);
 
   /* basic defaults */
-  seq->strip = strip = MEM_callocN(sizeof(Strip), "strip");
   /* We add a very small negative offset here, because
    * ceil(132.0) == 133.0, not nice with videos, see T47135. */
   seq->len = (int)ceil((double)info.length * FPS - 1e-4);
-  strip->us = 1;
+  strip = seq->strip;
 
   /* we only need 1 element to store the filename */
   strip->stripdata = se = MEM_callocN(sizeof(StripElem), "stripelem");
@@ -5612,7 +5623,7 @@ Sequence *BKE_sequencer_add_movie_strip(bContext *C, ListBase *seqbasep, SeqLoad
     }
   }
 
-  seq = BKE_sequence_alloc(seqbasep, seq_load->start_frame, seq_load->channel);
+  seq = BKE_sequence_alloc(seqbasep, seq_load->start_frame, seq_load->channel, SEQ_TYPE_MOVIE);
 
   /* multiview settings */
   if (seq_load->stereo3d_format) {
@@ -5620,8 +5631,6 @@ Sequence *BKE_sequencer_add_movie_strip(bContext *C, ListBase *seqbasep, SeqLoad
     seq->views_format = seq_load->views_format;
   }
   seq->flag |= seq_load->flag & SEQ_USE_VIEWS;
-
-  seq->type = SEQ_TYPE_MOVIE;
   seq->blend_mode = SEQ_TYPE_ALPHAOVER;
 
   for (i = 0; i < totfiles; i++) {
@@ -5647,9 +5656,8 @@ Sequence *BKE_sequencer_add_movie_strip(bContext *C, ListBase *seqbasep, SeqLoad
   }
 
   /* basic defaults */
-  seq->strip = strip = MEM_callocN(sizeof(Strip), "strip");
   seq->len = IMB_anim_get_duration(anim_arr[0], IMB_TC_RECORD_RUN);
-  strip->us = 1;
+  strip = seq->strip;
 
   BLI_strncpy(seq->strip->colorspace_settings.name,
               colorspace,
@@ -5668,12 +5676,12 @@ Sequence *BKE_sequencer_add_movie_strip(bContext *C, ListBase *seqbasep, SeqLoad
 
   if (seq_load->flag & SEQ_LOAD_MOVIE_SOUND) {
     int start_frame_back = seq_load->start_frame;
-    seq_load->channel++;
+    seq_load->channel--;
 
     seq_load->seq_sound = BKE_sequencer_add_sound_strip(C, seqbasep, seq_load);
 
     seq_load->start_frame = start_frame_back;
-    seq_load->channel--;
+    seq_load->channel++;
   }
 
   /* can be NULL */

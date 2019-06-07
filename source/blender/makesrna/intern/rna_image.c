@@ -314,12 +314,15 @@ static int rna_Image_depth_get(PointerRNA *ptr)
 
   ibuf = BKE_image_acquire_ibuf(im, NULL, &lock);
 
-  if (!ibuf)
+  if (!ibuf) {
     planes = 0;
-  else if (ibuf->rect_float)
+  }
+  else if (ibuf->rect_float) {
     planes = ibuf->planes * 4;
-  else
+  }
+  else {
     planes = ibuf->planes;
+  }
 
   BKE_image_release_ibuf(im, ibuf, lock);
 
@@ -332,7 +335,10 @@ static int rna_Image_frame_duration_get(PointerRNA *ptr)
   int duration = 1;
 
   if (BKE_image_has_anim(ima)) {
-    duration = IMB_anim_get_duration(((ImageAnim *)ima->anims.first)->anim, IMB_TC_RECORD_RUN);
+    struct anim *anim = ((ImageAnim *)ima->anims.first)->anim;
+    if (anim) {
+      duration = IMB_anim_get_duration(anim, IMB_TC_RECORD_RUN);
+    }
   }
   else {
     /* acquire ensures ima->anim is set, if possible! */
@@ -352,10 +358,12 @@ static int rna_Image_pixels_get_length(PointerRNA *ptr, int length[RNA_MAX_ARRAY
 
   ibuf = BKE_image_acquire_ibuf(ima, NULL, &lock);
 
-  if (ibuf)
+  if (ibuf) {
     length[0] = ibuf->x * ibuf->y * ibuf->channels;
-  else
+  }
+  else {
     length[0] = 0;
+  }
 
   BKE_image_release_ibuf(ima, ibuf, lock);
 
@@ -378,8 +386,9 @@ static void rna_Image_pixels_get(PointerRNA *ptr, float *values)
       memcpy(values, ibuf->rect_float, sizeof(float) * size);
     }
     else {
-      for (i = 0; i < size; i++)
+      for (i = 0; i < size; i++) {
         values[i] = ((unsigned char *)ibuf->rect)[i] * (1.0f / 255.0f);
+      }
     }
   }
 
@@ -402,11 +411,13 @@ static void rna_Image_pixels_set(PointerRNA *ptr, const float *values)
       memcpy(ibuf->rect_float, values, sizeof(float) * size);
     }
     else {
-      for (i = 0; i < size; i++)
+      for (i = 0; i < size; i++) {
         ((unsigned char *)ibuf->rect)[i] = unit_float_to_uchar_clamp(values[i]);
+      }
     }
 
-    ibuf->userflags |= IB_BITMAPDIRTY | IB_DISPLAY_BUFFER_INVALID | IB_MIPMAP_INVALID;
+    ibuf->userflags |= IB_DISPLAY_BUFFER_INVALID | IB_MIPMAP_INVALID;
+    BKE_image_mark_dirty(ima, ibuf);
     if (!G.background) {
       GPU_free_image(ima);
     }
@@ -424,8 +435,9 @@ static int rna_Image_channels_get(PointerRNA *ptr)
   int channels = 0;
 
   ibuf = BKE_image_acquire_ibuf(im, NULL, &lock);
-  if (ibuf)
+  if (ibuf) {
     channels = ibuf->channels;
+  }
 
   BKE_image_release_ibuf(im, ibuf, lock);
 
@@ -440,8 +452,9 @@ static bool rna_Image_is_float_get(PointerRNA *ptr)
   bool is_float = false;
 
   ibuf = BKE_image_acquire_ibuf(im, NULL, &lock);
-  if (ibuf)
+  if (ibuf) {
     is_float = ibuf->rect_float != NULL;
+  }
 
   BKE_image_release_ibuf(im, ibuf, lock);
 
@@ -478,14 +491,17 @@ static PointerRNA rna_render_slots_active_get(PointerRNA *ptr)
   return rna_pointer_inherit_refine(ptr, &RNA_RenderSlot, render_slot);
 }
 
-static void rna_render_slots_active_set(PointerRNA *ptr, PointerRNA value)
+static void rna_render_slots_active_set(PointerRNA *ptr,
+                                        PointerRNA value,
+                                        struct ReportList *UNUSED(reports))
 {
   Image *image = (Image *)ptr->id.data;
   if (value.id.data == image) {
     RenderSlot *slot = (RenderSlot *)value.data;
     int index = BLI_findindex(&image->renderslots, slot);
-    if (index != -1)
+    if (index != -1) {
       image->render_slot = index;
+    }
   }
 }
 
@@ -677,12 +693,26 @@ static void rna_def_image(BlenderRNA *brna)
        "STRAIGHT",
        0,
        "Straight",
-       "Transparent RGB and alpha pixels are unmodified"},
+       "Store RGB and alpha channels separately with alpha acting as a mask, also known as "
+       "unassociated alpha. Commonly used by image editing applications and file formats like "
+       "PNG"},
       {IMA_ALPHA_PREMUL,
        "PREMUL",
        0,
        "Premultiplied",
-       "Transparent RGB pixels are multiplied by the alpha channel"},
+       "Store RGB channels with alpha multipled in, also known as associated alpha. The natural "
+       "format for renders and used by file formats like OpenEXR"},
+      {IMA_ALPHA_CHANNEL_PACKED,
+       "CHANNEL_PACKED",
+       0,
+       "Channel Packed",
+       "Different images are packed in the RGB and alpha channels, and they should not "
+       "affect each other. Channel packing is commonly used by game engines to save memory"},
+      {IMA_ALPHA_IGNORE,
+       "NONE",
+       0,
+       "None",
+       "Ignore alpha channel from the file and make image fully opaque"},
       {0, NULL, 0, NULL, NULL},
   };
 
@@ -740,15 +770,6 @@ static void rna_def_image(BlenderRNA *brna)
       "View as Render",
       "Apply render part of display transformation when displaying this image on the screen");
   RNA_def_property_update(prop, NC_IMAGE | ND_DISPLAY, NULL);
-
-  prop = RNA_def_property(srna, "use_alpha", PROP_BOOLEAN, PROP_NONE);
-  RNA_def_property_override_flag(prop, PROPOVERRIDE_OVERRIDABLE_STATIC);
-  RNA_def_property_boolean_negative_sdna(prop, NULL, "flag", IMA_IGNORE_ALPHA);
-  RNA_def_property_ui_text(
-      prop,
-      "Use Alpha",
-      "Use the alpha channel information from the image or make image fully opaque");
-  RNA_def_property_update(prop, NC_IMAGE | ND_DISPLAY, "rna_Image_colormanage_update");
 
   prop = RNA_def_property(srna, "use_deinterlace", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_override_flag(prop, PROPOVERRIDE_OVERRIDABLE_STATIC);
@@ -907,8 +928,10 @@ static void rna_def_image(BlenderRNA *brna)
   prop = RNA_def_property(srna, "alpha_mode", PROP_ENUM, PROP_NONE);
   RNA_def_property_override_flag(prop, PROPOVERRIDE_OVERRIDABLE_STATIC);
   RNA_def_property_enum_items(prop, alpha_mode_items);
-  RNA_def_property_ui_text(
-      prop, "Alpha Mode", "Representation of alpha information in the RGBA pixels");
+  RNA_def_property_ui_text(prop,
+                           "Alpha Mode",
+                           "Representation of alpha in the image file, to convert to and from "
+                           "when saving and loading the image");
   RNA_def_property_update(prop, NC_IMAGE | ND_DISPLAY, "rna_Image_colormanage_update");
 
   /* multiview */

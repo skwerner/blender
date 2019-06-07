@@ -497,7 +497,6 @@ void BKE_scene_free_ex(Scene *sce, const bool do_id_user)
   }
   if (sce->r.ffcodecdata.properties) {
     IDP_FreeProperty(sce->r.ffcodecdata.properties);
-    MEM_freeN(sce->r.ffcodecdata.properties);
     sce->r.ffcodecdata.properties = NULL;
   }
 
@@ -917,7 +916,7 @@ void BKE_scene_init(Scene *sce)
   sce->eevee.gi_cubemap_draw_size = 0.3f;
   sce->eevee.gi_irradiance_draw_size = 0.1f;
   sce->eevee.gi_irradiance_smoothing = 0.1f;
-  sce->eevee.gi_filter_quality = 1.0f;
+  sce->eevee.gi_filter_quality = 3.0f;
 
   sce->eevee.taa_samples = 16;
   sce->eevee.taa_render_samples = 64;
@@ -1510,9 +1509,16 @@ static void prepare_mesh_for_viewport_render(Main *bmain, const ViewLayer *view_
 
 /* TODO(sergey): This actually should become view_layer_graph or so.
  * Same applies to update_for_newframe.
+ *
+ * If only_if_tagged is truth then the function will do nothing if the dependency graph is up
+ * to date already.
  */
-void BKE_scene_graph_update_tagged(Depsgraph *depsgraph, Main *bmain)
+static void scene_graph_update_tagged(Depsgraph *depsgraph, Main *bmain, bool only_if_tagged)
 {
+  if (only_if_tagged && DEG_is_fully_evaluated(depsgraph)) {
+    return;
+  }
+
   Scene *scene = DEG_get_input_scene(depsgraph);
   ViewLayer *view_layer = DEG_get_input_view_layer(depsgraph);
 
@@ -1547,6 +1553,16 @@ void BKE_scene_graph_update_tagged(Depsgraph *depsgraph, Main *bmain)
   DEG_ids_check_recalc(bmain, depsgraph, scene, view_layer, false);
   /* Clear recalc flags. */
   DEG_ids_clear_recalc(bmain, depsgraph);
+}
+
+void BKE_scene_graph_update_tagged(Depsgraph *depsgraph, Main *bmain)
+{
+  scene_graph_update_tagged(depsgraph, bmain, false);
+}
+
+void BKE_scene_graph_evaluated_ensure(Depsgraph *depsgraph, Main *bmain)
+{
+  scene_graph_update_tagged(depsgraph, bmain, true);
 }
 
 /* applies changes right away, does all sets too */
@@ -2384,6 +2400,22 @@ void BKE_scene_cursor_quat_to_rot(View3DCursor *cursor, const float quat[4], boo
       break;
     }
   }
+}
+
+void BKE_scene_cursor_to_mat4(const View3DCursor *cursor, float mat[4][4])
+{
+  float mat3[3][3];
+  BKE_scene_cursor_rot_to_mat3(cursor, mat3);
+  copy_m4_m3(mat, mat3);
+  copy_v3_v3(mat[3], cursor->location);
+}
+
+void BKE_scene_cursor_from_mat4(View3DCursor *cursor, const float mat[4][4], bool use_compat)
+{
+  float mat3[3][3];
+  copy_m3_m4(mat3, mat);
+  BKE_scene_cursor_mat3_to_rot(cursor, mat3, use_compat);
+  copy_v3_v3(cursor->location, mat[3]);
 }
 
 /** \} */

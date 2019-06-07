@@ -1536,9 +1536,9 @@ class CLIP_MT_marker_pie(Menu):
         # Make Settings Default
         pie.operator("clip.track_settings_as_default", icon='SETTINGS')
         if track_active:
-        # Use Normalization
+            # Use Normalization
             pie.prop(track_active, "use_normalization", text="Normalization")
-        # Use Brute Force
+            # Use Brute Force
             pie.prop(track_active, "use_brute", text="Use Brute Force")
             # Match Keyframe
             prop = pie.operator("wm.context_set_enum", text="Match Previous", icon='KEYFRAME_HLT')
@@ -1559,12 +1559,9 @@ class CLIP_MT_tracking_pie(Menu):
         space = context.space_data
         return space.mode == 'TRACKING' and space.clip
 
-    def draw(self, context):
-        space = context.space_data
-        clip = space.clip
-        act_track = clip.tracking.tracks.active
-
+    def draw(self, _context):
         layout = self.layout
+
         pie = layout.menu_pie()
         # Track Backwards
         prop = pie.operator("clip.track_markers", icon='TRACKING_BACKWARDS')
@@ -1575,7 +1572,7 @@ class CLIP_MT_tracking_pie(Menu):
         prop.backwards = False
         prop.sequence = True
         # Disable Marker
-        pie.operator("clip.disable_markers", icon="VISIBLE_IPO_ON").action = 'TOGGLE'
+        pie.operator("clip.disable_markers", icon='VISIBLE_IPO_ON').action = 'TOGGLE'
         # Detect Features
         pie.operator("clip.detect_features", icon='ZOOM_SELECTED')
         # Clear Path Backwards
@@ -1613,11 +1610,17 @@ class CLIP_MT_solving_pie(Menu):
         # create Plane Track
         pie.operator("clip.create_plane_track", icon='MATPLANE')
         # Set Keyframe A
-        pie.operator("clip.set_solver_keyframe", text="Set Keyframe A",
-                    icon='KEYFRAME').keyframe = 'KEYFRAME_A'
+        pie.operator(
+            "clip.set_solver_keyframe",
+            text="Set Keyframe A",
+            icon='KEYFRAME',
+        ).keyframe = 'KEYFRAME_A'
         # Set Keyframe B
-        pie.operator("clip.set_solver_keyframe", text="Set Keyframe B",
-                    icon='KEYFRAME').keyframe = 'KEYFRAME_B'
+        pie.operator(
+            "clip.set_solver_keyframe",
+            text="Set Keyframe B",
+            icon='KEYFRAME',
+        ).keyframe = 'KEYFRAME_B'
         # Clean Tracks
         prop = pie.operator("clip.clean_tracks", icon='X')
         # Filter Tracks
@@ -1635,7 +1638,7 @@ class CLIP_MT_reconstruction_pie(Menu):
         space = context.space_data
         return space.mode == 'TRACKING' and space.clip
 
-    def draw(self, context):
+    def draw(self, _context):
         layout = self.layout
         pie = layout.menu_pie()
         # Set Active Clip As Viewport Background
@@ -1654,7 +1657,6 @@ class CLIP_MT_reconstruction_pie(Menu):
         pie.operator("clip.set_scale", text="Set Scale", icon='ARROW_LEFTRIGHT')
         # Apply Solution Scale
         pie.operator("clip.apply_solution_scale", icon='ARROW_LEFTRIGHT')
-
 
 
 classes = (

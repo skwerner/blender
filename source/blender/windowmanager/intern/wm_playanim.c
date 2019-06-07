@@ -1063,7 +1063,7 @@ static int ghost_event_proc(GHOST_EventHandle evt, GHOST_TUserDataPtr ps_void)
 
       break;
     }
-    case GHOST_kEventQuit:
+    case GHOST_kEventQuitRequest:
     case GHOST_kEventWindowClose: {
       ps->go = false;
       break;
@@ -1287,7 +1287,8 @@ static char *wm_main_playanim_intern(int argc, const char **argv)
   // GHOST_ActivateWindowDrawingContext(g_WS.ghost_window);
 
   /* initialize OpenGL immediate mode */
-  g_WS.gpu_context = GPU_context_create();
+  GLuint default_fb = GHOST_GetDefaultOpenGLFramebuffer(g_WS.ghost_window);
+  g_WS.gpu_context = GPU_context_create(default_fb);
   GPU_init();
   immActivate();
 

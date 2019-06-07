@@ -33,7 +33,7 @@ extern "C" {
 /**
  * Creates a "handle" for a C++ GHOST object.
  * A handle is just an opaque pointer to an empty struct.
- * In the API the pointer is casted to the actual C++ class.
+ * In the API the pointer is cast to the actual C++ class.
  * The 'name' argument to the macro is the name of the handle to create.
  */
 
@@ -410,6 +410,7 @@ extern GHOST_TSuccess GHOST_SetCursorPosition(GHOST_SystemHandle systemhandle,
  */
 extern GHOST_TSuccess GHOST_SetCursorGrab(GHOST_WindowHandle windowhandle,
                                           GHOST_TGrabCursorMode mode,
+                                          GHOST_TAxisFlag warp_axis,
                                           int bounds[4],
                                           const int mouse_ungrab_xy[2]);
 
@@ -721,6 +722,11 @@ extern GHOST_TSuccess GHOST_ActivateOpenGLContext(GHOST_ContextHandle contexthan
 extern GHOST_TSuccess GHOST_ReleaseOpenGLContext(GHOST_ContextHandle contexthandle);
 
 /**
+ * Get the OpenGL framebuffer handle that serves as a default framebuffer.
+ */
+extern unsigned int GHOST_GetDefaultOpenGLFramebuffer(GHOST_WindowHandle windwHandle);
+
+/**
  * Set which tablet API to use. Only affects Windows, other platforms have a single API.
  * \param systemhandle The handle to the system
  * \param api Enum indicating which API to use.
@@ -904,17 +910,6 @@ extern void GHOST_putClipboard(GHOST_TInt8 *buffer, int selection);
  * \return current status (1 -visible, 0 - hidden)
  */
 extern int GHOST_toggleConsole(int action);
-
-/**
- * Confirms quitting he program when there is just one window left open
- * in the application
- */
-extern int GHOST_confirmQuit(GHOST_WindowHandle windowhandle);
-
-/**
- * Informs if the system provides native dialogs (eg. confirm quit)
- */
-extern int GHOST_SupportsNativeDialogs(void);
 
 /**
  * Use native pixel size (MacBook pro 'retina'), if supported.

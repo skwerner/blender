@@ -57,6 +57,7 @@ ccl_device_noinline float3 direct_emissive_eval(KernelGlobals *kg,
                                ls->P,
                                ls->Ng,
                                I,
+                               &dI,
                                ls->shader,
                                ls->object,
                                ls->prim,
@@ -111,10 +112,21 @@ ccl_device_noinline bool direct_emission(KernelGlobals *kg,
   if (ls->pdf == 0.0f)
     return false;
 
-  /* todo: implement */
-  differential3 dD = differential3_zero();
+  differential3 dD;
+  differential3 dN;
+#ifdef __DNDU__
+  dN.dx = sd->dNdx;
+  dN.dy = sd->dNdy;
+#else
+  dN = differential3_zero();
+#endif
+  /* This is how differentials are calculated for a perfect specular reflection.
+   * This is not the exact value that we should be getting here,
+   * but it's still better than using zero differentials. */
+  differential_reflect(&dD, sd->I, &sd->dI, sd->N, &dN);
 
   /* evaluate closure */
+  emission_sd->dP = sd->dP;
 
   float3 light_eval = direct_emissive_eval(
       kg, emission_sd, ls, state, -ls->D, dD, ls->t, sd->time);

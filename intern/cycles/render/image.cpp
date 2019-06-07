@@ -32,6 +32,9 @@
 #  include <OSL/oslexec.h>
 #endif
 
+#include "kernel/kernel_oiio_globals.h"
+#include <OpenImageIO/imagebufalgo.h>
+
 CCL_NAMESPACE_BEGIN
 
 namespace {
@@ -97,7 +100,8 @@ const char *name_from_type(ImageDataType type)
 ImageManager::ImageManager(const DeviceInfo &info)
 {
   need_update = true;
-  osl_texture_system = NULL;
+  pack_images = false;
+  oiio_texture_system = NULL;
   animation_frame = 0;
 
   /* Set image limits */
@@ -117,9 +121,14 @@ ImageManager::~ImageManager()
   }
 }
 
-void ImageManager::set_osl_texture_system(void *texture_system)
+void ImageManager::set_pack_images(bool pack_images_)
 {
-  osl_texture_system = texture_system;
+  pack_images = pack_images_;
+}
+
+void ImageManager::set_oiio_texture_system(void *texture_system)
+{
+  oiio_texture_system = texture_system;
 }
 
 bool ImageManager::set_animation_frame_update(int frame)
@@ -292,6 +301,28 @@ bool ImageManager::get_image_metadata(const string &filename,
   in->close();
 
   return true;
+}
+
+const string ImageManager::get_mip_map_path(const string &filename)
+{
+  if (!path_exists(filename)) {
+    return "";
+  }
+
+  string::size_type idx = filename.rfind('.');
+  if (idx != string::npos) {
+    std::string extension = filename.substr(idx + 1);
+    if (extension == "tx") {
+      return filename;
+    }
+  }
+
+  string tx_name = filename.substr(0, idx) + ".tx";
+  if (path_exists(tx_name)) {
+    return tx_name;
+  }
+
+  return "";
 }
 
 static bool image_equals(ImageManager::Image *image,
@@ -779,11 +810,71 @@ void ImageManager::device_load_image(
     return;
 
   Image *img = images[type][slot];
-
-  if (osl_texture_system && !img->builtin_data)
+  if (!img) {
     return;
+  }
 
-  string filename = path_filename(images[type][slot]->filename);
+  if (oiio_texture_system && !img->builtin_data) {
+    /* Get or generate a mip mapped tile image file.
+     * If we have a mip map, assume it's linear, not sRGB. */
+    const char *cache_path = scene->params.texture.use_custom_cache_path ?
+                                 scene->params.texture.custom_cache_path.c_str() :
+                                 NULL;
+    bool have_mip = get_tx(img, progress, scene->params.texture.auto_convert, cache_path);
+
+    /* When using OIIO directly from SVM, store the TextureHandle
+     * in an array for quicker lookup at shading time */
+    OIIOGlobals *oiio = (OIIOGlobals *)device->oiio_memory();
+    if (oiio) {
+      thread_scoped_lock lock(oiio->tex_paths_mutex);
+      int flat_slot = type_index_to_flattened_slot(slot, type);
+      if (oiio->textures.size() <= flat_slot) {
+        oiio->textures.resize(flat_slot + 1);
+      }
+      OIIO::TextureSystem *tex_sys = (OIIO::TextureSystem *)oiio_texture_system;
+      OIIO::TextureSystem::TextureHandle *handle = tex_sys->get_texture_handle(
+          OIIO::ustring(img->filename.c_str()));
+      if (tex_sys->good(handle)) {
+        oiio->textures[flat_slot].handle = handle;
+        switch (img->interpolation) {
+          case INTERPOLATION_SMART:
+            oiio->textures[flat_slot].interpolation = OIIO::TextureOpt::InterpSmartBicubic;
+            break;
+          case INTERPOLATION_CUBIC:
+            oiio->textures[flat_slot].interpolation = OIIO::TextureOpt::InterpBicubic;
+            break;
+          case INTERPOLATION_LINEAR:
+            oiio->textures[flat_slot].interpolation = OIIO::TextureOpt::InterpBilinear;
+            break;
+          case INTERPOLATION_NONE:
+          case INTERPOLATION_CLOSEST:
+          default:
+            oiio->textures[flat_slot].interpolation = OIIO::TextureOpt::InterpClosest;
+            break;
+        }
+        switch (img->extension) {
+          case EXTENSION_CLIP:
+            oiio->textures[flat_slot].extension = OIIO::TextureOpt::WrapBlack;
+            break;
+          case EXTENSION_EXTEND:
+            oiio->textures[flat_slot].extension = OIIO::TextureOpt::WrapClamp;
+            break;
+          case EXTENSION_REPEAT:
+          default:
+            oiio->textures[flat_slot].extension = OIIO::TextureOpt::WrapPeriodic;
+            break;
+        }
+        oiio->textures[flat_slot].is_linear = have_mip;
+      }
+      else {
+        oiio->textures[flat_slot].handle = NULL;
+      }
+    }
+    img->need_load = false;
+    return;
+  }
+
+  string filename = path_filename(img->filename);
   progress->set_status("Updating Images", "Loading " + filename);
 
   const int texture_limit = scene->params.texture_limit;
@@ -972,11 +1063,9 @@ void ImageManager::device_free_image(Device *, ImageDataType type, int slot)
   Image *img = images[type][slot];
 
   if (img) {
-    if (osl_texture_system && !img->builtin_data) {
-#ifdef WITH_OSL
+    if (oiio_texture_system && !img->builtin_data) {
       ustring filename(images[type][slot]->filename);
-      ((OSL::TextureSystem *)osl_texture_system)->invalidate(filename);
-#endif
+      //  ((OIIO::TextureSystem*)oiio_texture_system)->invalidate(filename);
     }
 
     if (img->mem) {
@@ -1006,14 +1095,13 @@ void ImageManager::device_update(Device *device, Scene *scene, Progress &progres
         device_free_image(device, (ImageDataType)type, slot);
       }
       else if (images[type][slot]->need_load) {
-        if (!osl_texture_system || images[type][slot]->builtin_data)
-          pool.push(function_bind(&ImageManager::device_load_image,
-                                  this,
-                                  device,
-                                  scene,
-                                  (ImageDataType)type,
-                                  slot,
-                                  &progress));
+        pool.push(function_bind(&ImageManager::device_load_image,
+                                this,
+                                device,
+                                scene,
+                                (ImageDataType)type,
+                                slot,
+                                &progress));
       }
     }
   }
@@ -1038,8 +1126,7 @@ void ImageManager::device_update_slot(Device *device,
     device_free_image(device, type, slot);
   }
   else if (image->need_load) {
-    if (!osl_texture_system || image->builtin_data)
-      device_load_image(device, scene, type, slot, progress);
+    device_load_image(device, scene, type, slot, progress);
   }
 }
 
@@ -1092,6 +1179,87 @@ void ImageManager::device_free(Device *device)
     }
     images[type].clear();
   }
+}
+
+bool ImageManager::make_tx(const string &filename,
+                           const string &outputfilename,
+                           const ustring &colorspace,
+                           ExtensionType extension)
+{
+  ImageSpec config;
+  config.attribute("maketx:filtername", "lanczos3");
+  config.attribute("maketx:opaque_detect", 1);
+  config.attribute("maketx:highlightcomp", 1);
+  config.attribute("maketx:oiio_options", 1);
+  config.attribute("maketx:updatemode", 1);
+
+  switch (extension) {
+    case EXTENSION_CLIP:
+      config.attribute("maketx:wrap", "black");
+      break;
+    case EXTENSION_REPEAT:
+      config.attribute("maketx:wrap", "periodic");
+      break;
+    case EXTENSION_EXTEND:
+      config.attribute("maketx:wrap", "clamp");
+      break;
+    default:
+      assert(0);
+      break;
+  }
+
+  /* Convert textures to linear color space before mip mapping. */
+  if (colorspace != u_colorspace_raw) {
+    if (colorspace == u_colorspace_srgb || colorspace.empty()) {
+      config.attribute("maketx:incolorspace", "sRGB");
+    }
+    else {
+      config.attribute("maketx:incolorspace", colorspace.c_str());
+    }
+    config.attribute("maketx:outcolorspace", "linear");
+  }
+
+  return ImageBufAlgo::make_texture(ImageBufAlgo::MakeTxTexture, filename, outputfilename, config);
+}
+
+bool ImageManager::get_tx(Image *image,
+                          Progress *progress,
+                          bool auto_convert,
+                          const char *cache_path)
+{
+  if (!path_exists(image->filename)) {
+    return false;
+  }
+
+  string::size_type idx = image->filename.rfind('.');
+  if (idx != string::npos) {
+    std::string extension = image->filename.substr(idx + 1);
+    if (extension == "tx") {
+      return true;
+    }
+  }
+
+  string tx_name = image->filename.substr(0, idx) + ".tx";
+  if (cache_path) {
+    string filename = path_filename(tx_name);
+    tx_name = path_join(string(cache_path), filename);
+  }
+  if (path_exists(tx_name)) {
+    image->filename = tx_name;
+    return true;
+  }
+
+  if (auto_convert) {
+    progress->set_status("Updating Images", "Converting " + image->filename);
+
+//    ustring colorspace = image->metadata.compress_as_srgb ? ustring("sRGB") : image->colorspace;
+    bool ok = make_tx(image->filename, tx_name, image->metadata.colorspace, image->extension);
+    if (ok) {
+      image->filename = tx_name;
+      return true;
+    }
+  }
+  return false;
 }
 
 void ImageManager::collect_statistics(RenderStats *stats)

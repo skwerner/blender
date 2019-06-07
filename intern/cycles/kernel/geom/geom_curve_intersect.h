@@ -852,6 +852,10 @@ ccl_device_inline float3 curve_refine(KernelGlobals *kg,
   sd->dPdu = tg;
   sd->dPdv = cross(tg, sd->Ng);
 #  endif
+#  ifdef __DNDU__
+  sd->dNdx = make_float3(0.0f, 0.0f, 0.0f);
+  sd->dNdy = make_float3(0.0f, 0.0f, 0.0f);
+#  endif
 
   if (isect->object != OBJECT_NONE) {
 #  ifdef __OBJECT_MOTION__

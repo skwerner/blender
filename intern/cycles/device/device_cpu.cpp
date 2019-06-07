@@ -34,6 +34,7 @@
 #include "kernel/kernel_types.h"
 #include "kernel/split/kernel_split_data.h"
 #include "kernel/kernel_globals.h"
+#include "kernel/kernel_oiio_globals.h"
 
 #include "kernel/filter/filter.h"
 
@@ -167,6 +168,7 @@ class CPUDevice : public Device {
 #ifdef WITH_OSL
   OSLGlobals osl_globals;
 #endif
+  OIIOGlobals oiio_globals;
 
   bool use_split_kernel;
 
@@ -284,6 +286,9 @@ class CPUDevice : public Device {
 #ifdef WITH_OSL
     kernel_globals.osl = &osl_globals;
 #endif
+    oiio_globals.tex_sys = NULL;
+    kernel_globals.oiio = &oiio_globals;
+
     use_split_kernel = DebugFlags().cpu.split_kernel;
     if (use_split_kernel) {
       VLOG(1) << "Will be using split kernel.";
@@ -319,6 +324,12 @@ class CPUDevice : public Device {
   {
     task_pool.stop();
     texture_info.free();
+    if (oiio_globals.tex_sys) {
+      VLOG(1) << oiio_globals.tex_sys->getstats();
+      oiio_globals.tex_sys->reset_stats();
+      TextureSystem::destroy(oiio_globals.tex_sys);
+    }
+    kernel_globals.oiio = NULL;
   }
 
   virtual bool show_samples() const
@@ -498,6 +509,11 @@ class CPUDevice : public Device {
 #else
     return NULL;
 #endif
+  }
+
+  void *oiio_memory()
+  {
+    return &oiio_globals;
   }
 
   void thread_run(DeviceTask *task)
@@ -985,6 +1001,13 @@ class CPUDevice : public Device {
 #ifdef WITH_OSL
     OSLShader::thread_init(&kg, &kernel_globals, &osl_globals);
 #endif
+    if (kg.oiio && kg.oiio->tex_sys) {
+      kg.oiio_tdata = kg.oiio->tex_sys->get_perthread_info();
+    }
+    else {
+      kg.oiio_tdata = NULL;
+    }
+
     for (int sample = 0; sample < task.num_samples; sample++) {
       for (int x = task.shader_x; x < task.shader_x + task.shader_w; x++)
         shader_kernel()(&kg,
@@ -1057,6 +1080,10 @@ class CPUDevice : public Device {
 #ifdef WITH_OSL
     OSLShader::thread_init(&kg, &kernel_globals, &osl_globals);
 #endif
+    if (kg.oiio && kg.oiio->tex_sys) {
+      kg.oiio_tdata = kg.oiio->tex_sys->get_perthread_info();
+    }
+
     return kg;
   }
 

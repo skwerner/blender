@@ -14,11 +14,78 @@
  * limitations under the License.
  */
 
+#ifdef __OIIO__
+#  include "kernel/kernel_oiio_globals.h"
+#  define NEAREST_LOOKUP_PATHS \
+    (PATH_RAY_DIFFUSE | PATH_RAY_SHADOW | PATH_RAY_DIFFUSE_ANCESTOR | PATH_RAY_VOLUME_SCATTER | \
+     PATH_RAY_GLOSSY | PATH_RAY_EMISSION)
+#  define DIFFUSE_BLUR_PATHS (PATH_RAY_DIFFUSE | PATH_RAY_DIFFUSE_ANCESTOR)
+#endif
+
 CCL_NAMESPACE_BEGIN
 
-ccl_device float4 svm_image_texture(KernelGlobals *kg, int id, float x, float y, uint flags)
+ccl_device float4 svm_image_texture(KernelGlobals *kg,
+                                    int id,
+                                    float x,
+                                    float y,
+                                    differential ds,
+                                    differential dt,
+                                    uint flags,
+                                    int path_flag)
 {
-  float4 r = kernel_tex_image_interp(kg, id, x, y);
+  float4 r;
+#ifdef __OIIO__
+  if (kg->oiio && kg->oiio->textures.size() > id && kg->oiio->textures[id].handle) {
+    OIIO::TextureOpt options;
+    options.swrap = options.twrap = kg->oiio->textures[id].extension;
+    options.anisotropic = 8;
+    float missingcolor[4] = {
+        TEX_IMAGE_MISSING_R, TEX_IMAGE_MISSING_G, TEX_IMAGE_MISSING_B, TEX_IMAGE_MISSING_A};
+    options.missingcolor = missingcolor;
+
+    if (path_flag & NEAREST_LOOKUP_PATHS && !(path_flag & PATH_RAY_SINGULAR)) {
+      options.interpmode = OIIO::TextureOpt::InterpClosest;
+      options.mipmode = OIIO::TextureOpt::MipModeOneLevel;
+    }
+    else {
+      options.interpmode = kg->oiio->textures[id].interpolation;
+      options.mipmode = OIIO::TextureOpt::MipModeAniso;
+    }
+
+    if (path_flag & DIFFUSE_BLUR_PATHS) {
+      options.sblur = options.tblur = kg->oiio->diffuse_blur;
+    }
+    else if (path_flag & PATH_RAY_GLOSSY) {
+      options.sblur = options.tblur = kg->oiio->glossy_blur;
+    }
+    else {
+      options.sblur = options.tblur = 0.0f;
+    }
+
+    bool success = kg->oiio->tex_sys->texture(kg->oiio->textures[id].handle,
+                                              (OIIO::TextureSystem::Perthread *)kg->oiio_tdata,
+                                              options,
+                                              x,
+                                              y,
+                                              ds.dx,
+                                              ds.dy,
+                                              dt.dx,
+                                              dt.dy,
+                                              4,
+                                              (float *)&r);
+    if (!success) {
+      (void)kg->oiio->tex_sys->geterror();
+    }
+    else {
+      /* Mip maps are always linear. */
+      if (kg->oiio->textures[id].is_linear) {
+        flags &= ~NODE_IMAGE_COMPRESS_AS_SRGB;
+      }
+    }
+  }
+  else
+#endif
+    r = kernel_tex_image_interp(kg, id, x, y);
   const float alpha = r.w;
 
   if ((flags & NODE_IMAGE_ALPHA_UNASSOCIATE) && alpha != 1.0f && alpha != 0.0f) {
@@ -43,27 +110,65 @@ ccl_device_inline float3 texco_remap_square(float3 co)
   return (co - make_float3(0.5f, 0.5f, 0.5f)) * 2.0f;
 }
 
-ccl_device void svm_node_tex_image(KernelGlobals *kg, ShaderData *sd, float *stack, uint4 node)
+ccl_device void svm_node_tex_image(
+    KernelGlobals *kg, ShaderData *sd, int path_flag, float *stack, uint4 node)
 {
   uint id = node.y;
   uint co_offset, out_offset, alpha_offset, flags;
+  uint projection, dx_offset, dy_offset;
 
   decode_node_uchar4(node.z, &co_offset, &out_offset, &alpha_offset, &flags);
+  decode_node_uchar4(node.w, &projection, &dx_offset, &dy_offset, NULL);
 
   float3 co = stack_load_float3(stack, co_offset);
   float2 tex_co;
-  if (node.w == NODE_IMAGE_PROJ_SPHERE) {
+  uint use_alpha = stack_valid(alpha_offset);
+  if (projection == NODE_IMAGE_PROJ_SPHERE) {
     co = texco_remap_square(co);
     tex_co = map_to_sphere(co);
   }
-  else if (node.w == NODE_IMAGE_PROJ_TUBE) {
+  else if (projection == NODE_IMAGE_PROJ_TUBE) {
     co = texco_remap_square(co);
     tex_co = map_to_tube(co);
   }
   else {
     tex_co = make_float2(co.x, co.y);
   }
-  float4 f = svm_image_texture(kg, id, tex_co.x, tex_co.y, flags);
+
+  differential ds, dt;
+#ifdef __KERNEL_CPU__
+  if (stack_valid(dx_offset) && stack_valid(dy_offset)) {
+    float3 dx = stack_load_float3(stack, dx_offset);
+    float3 dy = stack_load_float3(stack, dy_offset);
+    float2 tex_co_dx, tex_co_dy;
+    if (projection == NODE_IMAGE_PROJ_SPHERE) {
+      dx = texco_remap_square(dx);
+      tex_co_dx = map_to_sphere(dx);
+      dy = texco_remap_square(dy);
+      tex_co_dy = map_to_sphere(dy);
+    }
+    else if (projection == NODE_IMAGE_PROJ_TUBE) {
+      dx = texco_remap_square(dx);
+      tex_co_dx = map_to_tube(dx);
+      dy = texco_remap_square(dy);
+      tex_co_dy = map_to_tube(dy);
+    }
+    else {
+      tex_co_dx = make_float2(dx.x, dx.y);
+      tex_co_dy = make_float2(dy.x, dy.y);
+    }
+    ds.dx = tex_co_dx.x - tex_co.x;
+    ds.dy = tex_co_dy.x - tex_co.x;
+    dt.dx = tex_co_dx.y - tex_co.y;
+    dt.dy = tex_co_dy.y - tex_co.y;
+  }
+  else
+#endif
+  {
+    ds = differential_zero();
+    dt = differential_zero();
+  }
+  float4 f = svm_image_texture(kg, id, tex_co.x, tex_co.y, ds, dt, flags, path_flag);
 
   if (stack_valid(out_offset))
     stack_store_float3(stack, out_offset, make_float3(f.x, f.y, f.z));
@@ -99,7 +204,9 @@ ccl_device void svm_node_tex_image_box(KernelGlobals *kg, ShaderData *sd, float 
    * 7 zones, with an if() test for each zone */
 
   float3 weight = make_float3(0.0f, 0.0f, 0.0f);
-  float blend = __int_as_float(node.w);
+  uint blend_hi, blend_lo, dx_offset, dy_offset;
+  decode_node_uchar4(node.w, &blend_hi, &blend_lo, &dx_offset, &dy_offset);
+  float blend = ((blend_hi << 8) + blend_lo) / 65536.0f;
   float limit = 0.5f * (1.0f + blend);
 
   /* first test for corners with single texture */
@@ -150,48 +257,124 @@ ccl_device void svm_node_tex_image_box(KernelGlobals *kg, ShaderData *sd, float 
 
   float4 f = make_float4(0.0f, 0.0f, 0.0f, 0.0f);
 
+  float3 co_dx = make_float3(0.0f, 0.0f, 0.0f);
+  float3 co_dy = make_float3(0.0f, 0.0f, 0.0f);
+  differential ds, dt;
+#ifdef __KERNEL_CPU__
+  if (stack_valid(dx_offset) && stack_valid(dy_offset)) {
+    co_dx = co - stack_load_float3(stack, dx_offset);
+    co_dy = co - stack_load_float3(stack, dy_offset);
+  }
+#endif
+
   /* Map so that no textures are flipped, rotation is somewhat arbitrary. */
   if (weight.x > 0.0f) {
     float2 uv = make_float2((signed_N.x < 0.0f) ? 1.0f - co.y : co.y, co.z);
-    f += weight.x * svm_image_texture(kg, id, uv.x, uv.y, flags);
+    ds.dx = co_dx.y;
+    ds.dy = co_dy.y;
+    dt.dx = co_dx.z;
+    dt.dy = co_dy.z;
+    f += weight.x * svm_image_texture(kg, id, uv.x, uv.y, ds, dt, flags, false);
   }
   if (weight.y > 0.0f) {
-    float2 uv = make_float2((signed_N.y > 0.0f) ? 1.0f - co.x : co.x, co.z);
-    f += weight.y * svm_image_texture(kg, id, uv.x, uv.y, flags);
+    float2 uv = make_float2((signed_N.y < 0.0f) ? 1.0f - co.x : co.x, co.z);
+    ds.dx = co_dx.x;
+    ds.dy = co_dy.x;
+    dt.dx = co_dx.z;
+    dt.dy = co_dy.z;
+    f += weight.y * svm_image_texture(kg, id, uv.x, uv.y, ds, dt, flags, false);
   }
   if (weight.z > 0.0f) {
-    float2 uv = make_float2((signed_N.z > 0.0f) ? 1.0f - co.y : co.y, co.x);
-    f += weight.z * svm_image_texture(kg, id, uv.x, uv.y, flags);
+    float2 uv = make_float2((signed_N.z < 0.0f) ? 1.0f - co.y : co.y, co.x);
+    ds.dx = co_dx.y;
+    ds.dy = co_dy.y;
+    dt.dx = co_dx.x;
+    dt.dy = co_dy.x;
+    f += weight.z * svm_image_texture(kg, id, uv.x, uv.y, ds, dt, flags, false);
   }
-
   if (stack_valid(out_offset))
     stack_store_float3(stack, out_offset, make_float3(f.x, f.y, f.z));
   if (stack_valid(alpha_offset))
     stack_store_float(stack, alpha_offset, f.w);
 }
 
-ccl_device void svm_node_tex_environment(KernelGlobals *kg,
-                                         ShaderData *sd,
-                                         float *stack,
-                                         uint4 node)
+ccl_device void svm_node_tex_environment(
+    KernelGlobals *kg, ShaderData *sd, int path_flag, float *stack, uint4 node)
 {
   uint id = node.y;
   uint co_offset, out_offset, alpha_offset, flags;
-  uint projection = node.w;
+  uint projection, dx_offset, dy_offset;
 
   decode_node_uchar4(node.z, &co_offset, &out_offset, &alpha_offset, &flags);
+  decode_node_uchar4(node.w, &projection, &dx_offset, &dy_offset, NULL);
 
+  uint use_alpha = stack_valid(alpha_offset);
+  float4 f;
   float3 co = stack_load_float3(stack, co_offset);
   float2 uv;
 
   co = safe_normalize(co);
+#ifdef __OIIO__
+  float3 dRdx, dRdy;
+  if (stack_valid(dx_offset) && stack_valid(dy_offset)) {
+    dRdx = co - normalize(stack_load_float3(stack, dx_offset));
+    dRdy = co - normalize(stack_load_float3(stack, dy_offset));
+  }
+  else {
+    dRdx = make_float3(0.0f, 0.0f, 0.0f);
+    dRdy = make_float3(0.0f, 0.0f, 0.0f);
+  }
+  if (kg->oiio && kg->oiio->textures.size() > id && kg->oiio->textures[id].handle &&
+      projection == 0) {
+    OIIO::TextureOpt options;
+    options.swrap = options.twrap = kg->oiio->textures[id].extension;
+    options.anisotropic = 8;
 
-  if (projection == 0)
-    uv = direction_to_equirectangular(co);
-  else
-    uv = direction_to_mirrorball(co);
+    if (path_flag & NEAREST_LOOKUP_PATHS && !(path_flag & PATH_RAY_SINGULAR)) {
+      options.interpmode = OIIO::TextureOpt::InterpClosest;
+      options.mipmode = OIIO::TextureOpt::MipModeOneLevel;
+    }
+    else {
+      options.interpmode = kg->oiio->textures[id].interpolation;
+      options.mipmode = OIIO::TextureOpt::MipModeTrilinear;
+    }
 
-  float4 f = svm_image_texture(kg, id, uv.x, uv.y, flags);
+    if (path_flag & DIFFUSE_BLUR_PATHS) {
+      options.sblur = options.tblur = kg->oiio->diffuse_blur;
+    }
+    else if (path_flag & PATH_RAY_GLOSSY) {
+      options.sblur = options.tblur = kg->oiio->glossy_blur;
+    }
+    else {
+      options.sblur = options.tblur = 0.0f;
+    }
+
+    bool success = kg->oiio->tex_sys->environment(kg->oiio->textures[id].handle,
+                                                  (OIIO::TextureSystem::Perthread *)kg->oiio_tdata,
+                                                  options,
+                                                  Imath::V3f(co.x, -co.y, co.z),
+                                                  Imath::V3f(dRdx.x, -dRdx.y, dRdx.z),
+                                                  Imath::V3f(dRdy.x, -dRdy.y, dRdy.z),
+                                                  use_alpha ? 4 : 3,
+                                                  (float *)&f);
+
+    if (!success) {
+      (void)kg->oiio->tex_sys->geterror();
+    }
+  }
+  else {
+#endif
+
+    if (projection == 0)
+      uv = direction_to_equirectangular(co);
+    else
+      uv = direction_to_mirrorball(co);
+
+    f = svm_image_texture(
+        kg, id, uv.x, uv.y, differential_zero(), differential_zero(), flags, path_flag);
+#ifdef __OIIO__
+  }
+#endif
 
   if (stack_valid(out_offset))
     stack_store_float3(stack, out_offset, make_float3(f.x, f.y, f.z));

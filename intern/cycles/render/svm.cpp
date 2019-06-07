@@ -34,10 +34,12 @@ CCL_NAMESPACE_BEGIN
 
 SVMShaderManager::SVMShaderManager()
 {
+  texture_system_init();
 }
 
 SVMShaderManager::~SVMShaderManager()
 {
+  texture_system_free();
 }
 
 void SVMShaderManager::reset(Scene * /*scene*/)

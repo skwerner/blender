@@ -241,6 +241,8 @@ NODE_DEFINE(ImageTextureNode)
   SOCKET_FLOAT(projection_blend, "Projection Blend", 0.0f);
 
   SOCKET_IN_POINT(vector, "Vector", make_float3(0.0f, 0.0f, 0.0f), SocketType::LINK_TEXTURE_UV);
+  SOCKET_IN_POINT(vector_dx, "Vector_dx", make_float3(0.0f, 0.0f, 0.0f));
+  SOCKET_IN_POINT(vector_dy, "Vector_dy", make_float3(0.0f, 0.0f, 0.0f));
 
   SOCKET_OUT_COLOR(color, "Color");
   SOCKET_OUT_FLOAT(alpha, "Alpha");
@@ -296,6 +298,8 @@ void ImageTextureNode::compile(SVMCompiler &compiler)
   ShaderInput *vector_in = input("Vector");
   ShaderOutput *color_out = output("Color");
   ShaderOutput *alpha_out = output("Alpha");
+  ShaderInput *vector_dx = input("Vector_dx");
+  ShaderInput *vector_dy = input("Vector_dy");
 
   image_manager = compiler.image_manager;
   if (is_float == -1) {
@@ -332,22 +336,29 @@ void ImageTextureNode::compile(SVMCompiler &compiler)
     }
 
     if (projection != NODE_IMAGE_PROJ_BOX) {
-      compiler.add_node(NODE_TEX_IMAGE,
-                        slot,
-                        compiler.encode_uchar4(vector_offset,
-                                               compiler.stack_assign_if_linked(color_out),
-                                               compiler.stack_assign_if_linked(alpha_out),
-                                               flags),
-                        projection);
+      compiler.add_node(
+          NODE_TEX_IMAGE,
+          slot,
+          compiler.encode_uchar4(vector_offset,
+                                 compiler.stack_assign_if_linked(color_out),
+                                 compiler.stack_assign_if_linked(alpha_out),
+                                 flags),
+          compiler.encode_uchar4(
+              projection, compiler.stack_assign(vector_dx), compiler.stack_assign(vector_dy), 0));
     }
     else {
+      /* Blend is a float between 0 and 1. Convert to 16 bit unsigned int to make room for vector_dx and vector_dy. */
+      uint blend = clamp((uint)(projection_blend * 65535.0f), 0, 0xffff);
       compiler.add_node(NODE_TEX_IMAGE_BOX,
                         slot,
                         compiler.encode_uchar4(vector_offset,
                                                compiler.stack_assign_if_linked(color_out),
                                                compiler.stack_assign_if_linked(alpha_out),
                                                flags),
-                        __float_as_int(projection_blend));
+                        compiler.encode_uchar4(blend >> 8,
+                                               blend & 0xff,
+                                               compiler.stack_assign(vector_dx),
+                                               compiler.stack_assign(vector_dy)));
     }
 
     tex_mapping.compile_end(compiler, vector_in, vector_offset);
@@ -395,6 +406,7 @@ void ImageTextureNode::compile(OSLCompiler &compiler)
   }
 
   if (slot == -1) {
+    filename = image_manager->get_mip_map_path(filename.string());
     compiler.parameter_texture("filename", filename, known_colorspace);
   }
   else {
@@ -448,7 +460,9 @@ NODE_DEFINE(EnvironmentTextureNode)
   projection_enum.insert("mirror_ball", NODE_ENVIRONMENT_MIRROR_BALL);
   SOCKET_ENUM(projection, "Projection", projection_enum, NODE_ENVIRONMENT_EQUIRECTANGULAR);
 
-  SOCKET_IN_POINT(vector, "Vector", make_float3(0.0f, 0.0f, 0.0f), SocketType::LINK_POSITION);
+  SOCKET_IN_POINT(vector, "Vector", make_float3(0.0f, 0.0f, 0.0f), SocketType::LINK_POSITION)
+  SOCKET_IN_POINT(vector_dx, "Vector_dx", make_float3(0.0f, 0.0f, 0.0f));
+  SOCKET_IN_POINT(vector_dy, "Vector_dy", make_float3(0.0f, 0.0f, 0.0f));
 
   SOCKET_OUT_COLOR(color, "Color");
   SOCKET_OUT_FLOAT(alpha, "Alpha");
@@ -502,6 +516,8 @@ void EnvironmentTextureNode::compile(SVMCompiler &compiler)
   ShaderInput *vector_in = input("Vector");
   ShaderOutput *color_out = output("Color");
   ShaderOutput *alpha_out = output("Alpha");
+  ShaderInput *vector_dx = input("Vector_dx");
+  ShaderInput *vector_dy = input("Vector_dy");
 
   image_manager = compiler.image_manager;
   if (slot == -1) {

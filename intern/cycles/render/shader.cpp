@@ -34,6 +34,8 @@
 #include "util/util_foreach.h"
 #include "util/util_murmurhash.h"
 
+#include "kernel/kernel_oiio_globals.h"
+#include <OpenImageIO/texture.h>
 #ifdef WITH_OCIO
 #  include <OpenColorIO/OpenColorIO.h>
 namespace OCIO = OCIO_NAMESPACE;
@@ -42,6 +44,12 @@ namespace OCIO = OCIO_NAMESPACE;
 CCL_NAMESPACE_BEGIN
 
 thread_mutex ShaderManager::lookup_table_mutex;
+
+/* Shared Texture System */
+OIIO::TextureSystem *ShaderManager::ts_shared = NULL;
+int ShaderManager::ts_shared_users = 0;
+thread_mutex ShaderManager::ts_shared_mutex;
+
 vector<float> ShaderManager::beckmann_table;
 bool ShaderManager::beckmann_table_ready = false;
 
@@ -496,9 +504,33 @@ void ShaderManager::device_update_common(Device *device,
                                          Progress & /*progress*/)
 {
   dscene->shaders.free();
-
   if (scene->shaders.size() == 0)
     return;
+
+  if (device->info.type == DEVICE_CPU &&
+      (scene->params.shadingsystem == SHADINGSYSTEM_OSL || scene->params.texture.use_cache)) {
+    /* set texture system */
+    scene->image_manager->set_oiio_texture_system((void *)ts);
+    OIIOGlobals *oiio_globals = (OIIOGlobals *)device->oiio_memory();
+    if (oiio_globals) {
+      /* update attributes from scene parms */
+      ts->attribute("autotile",
+                    scene->params.texture.auto_tile ? scene->params.texture.tile_size : 0);
+      ts->attribute("automip", scene->params.texture.auto_mip ? 1 : 0);
+      ts->attribute("accept_unmipped", scene->params.texture.accept_unmipped ? 1 : 0);
+      ts->attribute("accept_untiled", scene->params.texture.accept_untiled ? 1 : 0);
+      ts->attribute("max_memory_MB",
+                    scene->params.texture.cache_size > 0 ?
+                        (float)scene->params.texture.cache_size :
+                        16384.0f);
+      ts->attribute("latlong_up", "z");
+      ts->attribute("flip_t", 1);
+      ts->attribute("max_tile_channels", 1);
+      oiio_globals->tex_sys = ts;
+      oiio_globals->diffuse_blur = scene->params.texture.diffuse_blur;
+      oiio_globals->glossy_blur = scene->params.texture.glossy_blur;
+    }
+  }
 
   KernelShader *kshader = dscene->shaders.alloc(scene->shaders.size());
   bool has_volumes = false;
@@ -721,6 +753,22 @@ void ShaderManager::free_memory()
 #endif
 
   ColorSpaceManager::free_memory();
+}
+
+void ShaderManager::texture_system_init()
+{
+  ts = TextureSystem::create(true);
+  ts->attribute("gray_to_rgb", 1);
+  ts->attribute("forcefloat", 1);
+}
+
+void ShaderManager::texture_system_free()
+{
+  std::cout << ts->getstats(2) << std::endl;
+  ts->reset_stats();
+  ts->invalidate_all(true);
+  TextureSystem::destroy(ts);
+  ts = NULL;
 }
 
 float ShaderManager::linear_rgb_to_gray(float3 c)

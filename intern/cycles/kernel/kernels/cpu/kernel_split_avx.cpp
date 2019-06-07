@@ -36,6 +36,8 @@
 #  endif
 #endif /* WITH_CYCLES_OPTIMIZED_KERNEL_AVX */
 
+#define OIIO_NO_AVX 1
+
 #include "kernel/kernel.h"
 #define KERNEL_ARCH cpu_avx
 #include "kernel/kernels/cpu/kernel_cpu_impl.h"

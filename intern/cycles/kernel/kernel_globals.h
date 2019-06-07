@@ -44,6 +44,9 @@ struct OSLGlobals;
 struct OSLThreadData;
 struct OSLShadingSystem;
 #  endif
+#  ifdef __OIIO__
+struct OIIOGlobals;
+#  endif
 
 typedef unordered_map<float, float> CoverageMap;
 
@@ -62,6 +65,11 @@ typedef struct KernelGlobals {
   OSLGlobals *osl;
   OSLShadingSystem *osl_ss;
   OSLThreadData *osl_tdata;
+#  endif
+
+#  ifdef __OIIO__
+  OIIOGlobals *oiio;
+  void *oiio_tdata;
 #  endif
 
   /* **** Run-time data ****  */

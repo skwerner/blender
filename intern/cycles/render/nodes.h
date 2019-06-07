@@ -110,6 +110,7 @@ class ImageTextureNode : public ImageSlotTextureNode {
   float projection_blend;
   bool animated;
   float3 vector;
+  float3 vector_dx, vector_dy;
 
   /* Runtime. */
   ImageManager *image_manager;
@@ -149,6 +150,7 @@ class EnvironmentTextureNode : public ImageSlotTextureNode {
   InterpolationType interpolation;
   bool animated;
   float3 vector;
+  float3 vector_dx, vector_dy;
 
   /* Runtime. */
   ImageManager *image_manager;

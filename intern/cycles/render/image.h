@@ -113,7 +113,9 @@ class ImageManager {
   void device_load_builtin(Device *device, Scene *scene, Progress &progress);
   void device_free_builtin(Device *device);
 
-  void set_osl_texture_system(void *texture_system);
+  void set_oiio_texture_system(void *texture_system);
+  const string get_mip_map_path(const string &filename);
+  void set_pack_images(bool pack_images_);
   bool set_animation_frame_update(int frame);
 
   device_memory *image_memory(int flat_slot);
@@ -162,6 +164,11 @@ class ImageManager {
     int users;
   };
 
+  static bool make_tx(const string &filename,
+                      const string &outputfilename,
+                      const ustring &colorspace,
+                      ExtensionType extension);
+
  private:
   int tex_num_images[IMAGE_DATA_NUM_TYPES];
   int max_num_images;
@@ -171,7 +178,8 @@ class ImageManager {
   int animation_frame;
 
   vector<Image *> images[IMAGE_DATA_NUM_TYPES];
-  void *osl_texture_system;
+  void *oiio_texture_system;
+  bool pack_images;
 
   bool file_load_image_generic(Image *img, unique_ptr<ImageInput> *in);
 
@@ -186,6 +194,8 @@ class ImageManager {
   void device_load_image(
       Device *device, Scene *scene, ImageDataType type, int slot, Progress *progress);
   void device_free_image(Device *device, ImageDataType type, int slot);
+
+  bool get_tx(Image *image, Progress *progress, bool auto_convert, const char *cache_path);
 };
 
 CCL_NAMESPACE_END

@@ -57,14 +57,15 @@ static int VertexOrientation2DF0D___init__(BPy_VertexOrientation2DF0D *self,
 {
   static const char *kwlist[] = {NULL};
 
-  if (!PyArg_ParseTupleAndKeywords(args, kwds, "", (char **)kwlist))
+  if (!PyArg_ParseTupleAndKeywords(args, kwds, "", (char **)kwlist)) {
     return -1;
+  }
   self->py_uf0D_vec2f.uf0D_vec2f = new Functions0D::VertexOrientation2DF0D();
   self->py_uf0D_vec2f.uf0D_vec2f->py_uf0D = (PyObject *)self;
   return 0;
 }
 
-/*-----------------------BPy_VertexOrientation2DF0D type definition ------------------------------*/
+/*-----------------------BPy_VertexOrientation2DF0D type definition -----------------------------*/
 
 PyTypeObject VertexOrientation2DF0D_Type = {
     PyVarObject_HEAD_INIT(NULL, 0) "VertexOrientation2DF0D", /* tp_name */

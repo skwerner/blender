@@ -330,36 +330,35 @@ static void mat4_frustum_set(
 static void mat4_look_from_origin(float m[4][4], float lookdir[3], float camup[3])
 {
   /* This function is loosely based on Mesa implementation.
- *
- * SGI FREE SOFTWARE LICENSE B (Version 2.0, Sept. 18, 2008)
- * Copyright (C) 1991-2000 Silicon Graphics, Inc. All Rights Reserved.
- *
- * Permission is hereby granted, free of charge, to any person obtaining a
- * copy of this software and associated documentation files (the "Software"),
- * to deal in the Software without restriction, including without limitation
- * the rights to use, copy, modify, merge, publish, distribute, sublicense,
- * and/or sell copies of the Software, and to permit persons to whom the
- * Software is furnished to do so, subject to the following conditions:
- *
- * The above copyright notice including the dates of first publication and
- * either this permission notice or a reference to
- * http://oss.sgi.com/projects/FreeB/
- * shall be included in all copies or substantial portions of the Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
- * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
- * SILICON GRAPHICS, INC. BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
- * WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF
- * OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
- *
- * Except as contained in this notice, the name of Silicon Graphics, Inc.
- * shall not be used in advertising or otherwise to promote the sale, use or
- * other dealings in this Software without prior written authorization from
- * Silicon Graphics, Inc.
- */
-
+   *
+   * SGI FREE SOFTWARE LICENSE B (Version 2.0, Sept. 18, 2008)
+   * Copyright (C) 1991-2000 Silicon Graphics, Inc. All Rights Reserved.
+   *
+   * Permission is hereby granted, free of charge, to any person obtaining a
+   * copy of this software and associated documentation files (the "Software"),
+   * to deal in the Software without restriction, including without limitation
+   * the rights to use, copy, modify, merge, publish, distribute, sublicense,
+   * and/or sell copies of the Software, and to permit persons to whom the
+   * Software is furnished to do so, subject to the following conditions:
+   *
+   * The above copyright notice including the dates of first publication and
+   * either this permission notice or a reference to
+   * http://oss.sgi.com/projects/FreeB/
+   * shall be included in all copies or substantial portions of the Software.
+   *
+   * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+   * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+   * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
+   * SILICON GRAPHICS, INC. BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
+   * WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF
+   * OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+   * SOFTWARE.
+   *
+   * Except as contained in this notice, the name of Silicon Graphics, Inc.
+   * shall not be used in advertising or otherwise to promote the sale, use or
+   * other dealings in this Software without prior written authorization from
+   * Silicon Graphics, Inc.
+   */
   float side[3];
 
   normalize_v3(lookdir);
@@ -503,19 +502,13 @@ static void gpu_mul_invert_projmat_m4_unmapped_v3(const float projmat[4][4], flo
   co[2] *= -1;
 }
 
-bool GPU_matrix_unproject(const float win[3],
-                          const float model[4][4],
-                          const float proj[4][4],
-                          const int view[4],
-                          float world[3])
+void GPU_matrix_unproject_model_inverted(const float win[3],
+                                         const float model_inverted[4][4],
+                                         const float proj[4][4],
+                                         const int view[4],
+                                         float world[3])
 {
   float in[3];
-  float viewinv[4][4];
-
-  if (!invert_m4_m4(viewinv, model)) {
-    zero_v3(world);
-    return false;
-  }
 
   copy_v3_v3(in, win);
 
@@ -524,8 +517,22 @@ bool GPU_matrix_unproject(const float win[3],
   in[1] = (in[1] - view[1]) / view[3];
 
   gpu_mul_invert_projmat_m4_unmapped_v3(proj, in);
-  mul_v3_m4v3(world, viewinv, in);
+  mul_v3_m4v3(world, model_inverted, in);
+}
 
+bool GPU_matrix_unproject(const float win[3],
+                          const float model[4][4],
+                          const float proj[4][4],
+                          const int view[4],
+                          float world[3])
+{
+  float model_inverted[4][4];
+
+  if (!invert_m4_m4(model_inverted, model)) {
+    zero_v3(world);
+    return false;
+  }
+  GPU_matrix_unproject_model_inverted(win, model_inverted, proj, view, world);
   return true;
 }
 

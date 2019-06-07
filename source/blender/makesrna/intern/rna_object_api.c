@@ -106,12 +106,7 @@ static void rna_Object_select_set(
     return;
   }
 
-  if (select) {
-    BKE_view_layer_base_select(base);
-  }
-  else {
-    base->flag &= ~BASE_SELECTED;
-  }
+  ED_object_base_select(base, select ? BA_SELECT : BA_DESELECT);
 
   Scene *scene = CTX_data_scene(C);
   DEG_id_tag_update(&scene->id, ID_RECALC_SELECT);
@@ -380,18 +375,31 @@ static void rna_Object_camera_fit_coords(
 }
 
 /* copied from Mesh_getFromObject and adapted to RNA interface */
-/* settings: 0 - preview, 1 - render */
-static Mesh *rna_Object_to_mesh(Object *ob,
-                                bContext *C,
+static Mesh *rna_Object_to_mesh(Object *object,
                                 ReportList *reports,
-                                Depsgraph *depsgraph,
-                                bool apply_modifiers,
-                                bool calc_undeformed)
+                                bool preserve_all_data_layers,
+                                Depsgraph *depsgraph)
 {
-  Main *bmain = CTX_data_main(C);
+  /* TODO(sergey): Make it more re-usable function, de-duplicate with
+   * rna_Main_meshes_new_from_object. */
+  switch (object->type) {
+    case OB_FONT:
+    case OB_CURVE:
+    case OB_SURF:
+    case OB_MBALL:
+    case OB_MESH:
+      break;
+    default:
+      BKE_report(reports, RPT_ERROR, "Object does not have geometry data");
+      return NULL;
+  }
 
-  return rna_Main_meshes_new_from_object(
-      bmain, reports, depsgraph, ob, apply_modifiers, calc_undeformed);
+  return BKE_object_to_mesh(depsgraph, object, preserve_all_data_layers);
+}
+
+static void rna_Object_to_mesh_clear(Object *object)
+{
+  BKE_object_to_mesh_clear(object);
 }
 
 static PointerRNA rna_Object_shape_key_add(
@@ -403,7 +411,7 @@ static PointerRNA rna_Object_shape_key_add(
   if ((kb = BKE_object_shapekey_insert(bmain, ob, name, from_mix))) {
     PointerRNA keyptr;
 
-    RNA_pointer_create((ID *)ob->data, &RNA_ShapeKey, kb, &keyptr);
+    RNA_pointer_create((ID *)BKE_key_from_object(ob), &RNA_ShapeKey, kb, &keyptr);
     WM_event_add_notifier(C, NC_OBJECT | ND_DRAW, ob);
 
     return keyptr;
@@ -438,9 +446,17 @@ static void rna_Object_shape_key_remove(Object *ob,
   RNA_POINTER_INVALIDATE(kb_ptr);
 }
 
+static void rna_Object_shape_key_clear(Object *ob, Main *bmain)
+{
+  BKE_object_shapekey_free(bmain, ob);
+
+  DEG_id_tag_update(&ob->id, ID_RECALC_GEOMETRY);
+  WM_main_add_notifier(NC_OBJECT | ND_DRAW, ob);
+}
+
 #  if 0
-static void rna_Mesh_assign_verts_to_group(Object *ob, bDeformGroup *group, int *indices, int totindex,
-                                           float weight, int assignmode)
+static void rna_Mesh_assign_verts_to_group(
+    Object *ob, bDeformGroup *group, int *indices, int totindex, float weight, int assignmode)
 {
   if (ob->type != OB_MESH) {
     BKE_report(reports, RPT_ERROR, "Object should be of mesh type");
@@ -460,8 +476,9 @@ static void rna_Mesh_assign_verts_to_group(Object *ob, bDeformGroup *group, int 
   }
 
   /* makes a set of dVerts corresponding to the mVerts */
-  if (!me->dvert)
+  if (!me->dvert) {
     create_dverts(&me->id);
+  }
 
   /* loop list adding verts to group  */
   for (i = 0; i < totindex; i++) {
@@ -534,7 +551,8 @@ static void rna_Object_ray_cast(Object *ob,
        distmin <= distance)) {
     BVHTreeFromMesh treeData = {NULL};
 
-    /* no need to managing allocation or freeing of the BVH data. this is generated and freed as needed */
+    /* No need to managing allocation or freeing of the BVH data.
+     * This is generated and freed as needed. */
     BKE_bvhtree_from_mesh_get(&treeData, ob->runtime.mesh_eval, BVHTREE_FROM_LOOPTRI, 4);
 
     /* may fail if the mesh has no faces, in that case the ray-cast misses */
@@ -591,7 +609,8 @@ static void rna_Object_closest_point_on_mesh(Object *ob,
     return;
   }
 
-  /* no need to managing allocation or freeing of the BVH data. this is generated and freed as needed */
+  /* No need to managing allocation or freeing of the BVH data.
+   * this is generated and freed as needed. */
   BKE_bvhtree_from_mesh_get(&treeData, ob->runtime.mesh_eval, BVHTREE_FROM_LOOPTRI, 4);
 
   if (treeData.tree == NULL) {
@@ -688,7 +707,13 @@ void rna_Object_me_eval_info(
 static bool rna_Object_update_from_editmode(Object *ob, Main *bmain)
 {
   /* fail gracefully if we aren't in edit-mode. */
-  return ED_object_editmode_load(bmain, ob);
+  const bool result = ED_object_editmode_load(bmain, ob);
+  if (result) {
+    /* Loading edit mesh to mesh changes geometry, and scripts might expect it to be properly
+     * informed about changes. */
+    DEG_id_tag_update(&ob->id, ID_RECALC_GEOMETRY);
+  }
+  return result;
 }
 #else /* RNA_RUNTIME */
 
@@ -877,27 +902,30 @@ void RNA_api_object(StructRNA *srna)
 
   /* mesh */
   func = RNA_def_function(srna, "to_mesh", "rna_Object_to_mesh");
-  RNA_def_function_ui_description(func, "Create a Mesh data-block with modifiers applied");
-  RNA_def_function_flag(func, FUNC_USE_REPORTS | FUNC_USE_CONTEXT);
-  parm = RNA_def_pointer(func,
-                         "depsgraph",
-                         "Depsgraph",
-                         "Dependency Graph",
-                         "Evaluated dependency graph within which to evaluate modifiers");
-  RNA_def_parameter_flags(parm, PROP_NEVER_NULL, PARM_REQUIRED);
-  parm = RNA_def_boolean(func, "apply_modifiers", 0, "", "Apply modifiers");
-  RNA_def_parameter_flags(parm, 0, PARM_REQUIRED);
+  RNA_def_function_ui_description(
+      func,
+      "Create a Mesh data-block from the current state of the object. The object owns the "
+      "data-block. To force free it use to_mesh_clear(). "
+      "The result is temporary and can not be used by objects from the main database");
+  RNA_def_function_flag(func, FUNC_USE_REPORTS);
   RNA_def_boolean(func,
-                  "calc_undeformed",
+                  "preserve_all_data_layers",
                   false,
-                  "Calculate Undeformed",
-                  "Calculate undeformed vertex coordinates");
-  parm = RNA_def_pointer(func,
-                         "mesh",
-                         "Mesh",
-                         "",
-                         "Mesh created from object, remove it if it is only used for export");
+                  "",
+                  "Preserve all data layers in the mesh, like UV maps and vertex groups. "
+                  "By default Blender only computes the subset of data layers needed for viewport "
+                  "display and rendering, for better performance");
+  RNA_def_pointer(
+      func,
+      "depsgraph",
+      "Depsgraph",
+      "Dependency Graph",
+      "Evaluated dependency graph which is required when preserve_all_data_layers is true");
+  parm = RNA_def_pointer(func, "mesh", "Mesh", "", "Mesh created from object");
   RNA_def_function_return(func, parm);
+
+  func = RNA_def_function(srna, "to_mesh_clear", "rna_Object_to_mesh_clear");
+  RNA_def_function_ui_description(func, "Clears mesh data-block created by to_mesh()");
 
   /* Armature */
   func = RNA_def_function(srna, "find_armature", "modifiers_isDeformedByArmature");
@@ -923,6 +951,10 @@ void RNA_api_object(StructRNA *srna)
   parm = RNA_def_pointer(func, "key", "ShapeKey", "", "Keyblock to be removed");
   RNA_def_parameter_flags(parm, PROP_NEVER_NULL, PARM_REQUIRED | PARM_RNAPTR);
   RNA_def_parameter_clear_flags(parm, PROP_THICK_WRAP, 0);
+
+  func = RNA_def_function(srna, "shape_key_clear", "rna_Object_shape_key_clear");
+  RNA_def_function_ui_description(func, "Remove all Shape Keys from this object");
+  RNA_def_function_flag(func, FUNC_USE_MAIN);
 
   /* Ray Cast */
   func = RNA_def_function(srna, "ray_cast", "rna_Object_ray_cast");

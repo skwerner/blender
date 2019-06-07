@@ -383,6 +383,30 @@ typedef struct BoneInitData {
   float zwidth;
 } BoneInitData;
 
+typedef struct PoseInitData_Mirror {
+  /** Points to the bone which this info is initialized & restored to.
+   * A NULL value is used to terminate the array. */
+  struct bPoseChannel *pchan;
+  struct {
+    float loc[3];
+    float size[3];
+    union {
+      float eul[3];
+      float quat[4];
+      float axis_angle[4];
+    };
+    float curve_in_x;
+    float curve_out_x;
+    float roll1;
+    float roll2;
+  } orig;
+  /**
+   * An extra offset to apply after mirroring.
+   * Use with #POSE_MIRROR_RELATIVE.
+   */
+  float offset_mtx[4][4];
+} PoseInitData_Mirror;
+
 typedef struct TransData {
   /** Distance needed to affect element (for Proportionnal Editing). */
   float dist;
@@ -501,7 +525,7 @@ typedef struct TransDataContainer {
   struct Object *obedit;
 
   /**
-   * Use when #T_LOCAL_MATRIX is set.
+   * Store matrix, this avoids having to have duplicate check all over
    * Typically: 'obedit->obmat' or 'poseobj->obmat', but may be used elsewhere too.
    */
   bool use_local_mat;
@@ -715,10 +739,8 @@ enum {
   T_CURSOR = 1 << 5,
   /** Transform points, having no rotation/scale. */
   T_POINTS = 1 << 6,
-  /**
-   * Apply matrix #TransDataContainer.matrix, this avoids having to have duplicate check all over
-   * that happen to apply to specific modes (edit & pose for eg). */
-  T_LOCAL_MATRIX = 1 << 7,
+
+  /* empty slot - (1 << 7) */
 
   /** restrictions flags */
   T_NO_CONSTRAINT = 1 << 8,
@@ -824,9 +846,10 @@ enum {
   TD_BEZTRIPLE = 1 << 12,
   /** when this is set, don't apply translation changes to this element */
   TD_NO_LOC = 1 << 13,
-  /** for Graph Editor autosnap, indicates that point should not undergo autosnapping */
+  /** For Graph Editor autosnap, indicates that point should not undergo autosnapping */
   TD_NOTIMESNAP = 1 << 14,
-  /** for Graph Editor - curves that can only have int-values need their keyframes tagged with this */
+  /** For Graph Editor - curves that can only have int-values
+   * need their keyframes tagged with this. */
   TD_INTVALUES = 1 << 15,
   /** For editmode mirror, clamp to x = 0 */
   TD_MIRROR_EDGE = 1 << 16,
@@ -891,6 +914,7 @@ void flushTransSeq(TransInfo *t);
 void flushTransTracking(TransInfo *t);
 void flushTransMasking(TransInfo *t);
 void flushTransPaintCurve(TransInfo *t);
+void restoreMirrorPoseBones(TransDataContainer *tc);
 void restoreBones(TransDataContainer *tc);
 
 /*********************** transform_gizmo.c ********** */

@@ -199,10 +199,12 @@ static int rna_idproperty_known(CollectionPropertyIterator *iter, void *data)
   /* function to skip any id properties that are already known by RNA,
    * for the second loop where we go over unknown id properties */
   do {
-    for (prop = ptype->cont.properties.first; prop; prop = prop->next)
+    for (prop = ptype->cont.properties.first; prop; prop = prop->next) {
       if ((prop->flag_internal & PROP_INTERN_BUILTIN) == 0 &&
-          STREQ(prop->identifier, idprop->name))
+          STREQ(prop->identifier, idprop->name)) {
         return 1;
+      }
+    }
   } while ((ptype = ptype->base));
 
   return 0;
@@ -237,15 +239,18 @@ static void rna_inheritance_next_level_restart(CollectionPropertyIterator *iter,
 
     srna = (StructRNA *)iter->parent.data;
     iter->level--;
-    for (i = iter->level; i > 0; i--)
+    for (i = iter->level; i > 0; i--) {
       srna = srna->base;
+    }
 
     rna_iterator_listbase_end(iter);
 
-    if (funcs)
+    if (funcs) {
       rna_iterator_listbase_begin(iter, &srna->functions, skip);
-    else
+    }
+    else {
       rna_iterator_listbase_begin(iter, &srna->cont.properties, skip);
+    }
   }
 }
 
@@ -382,10 +387,12 @@ void rna_builtin_properties_begin(CollectionPropertyIterator *iter, PointerRNA *
   newptr.type = &RNA_Struct;
   newptr.data = ptr->type;
 
-  if (ptr->type->flag & STRUCT_ID)
+  if (ptr->type->flag & STRUCT_ID) {
     newptr.id.data = ptr->data;
-  else
+  }
+  else {
     newptr.id.data = NULL;
+  }
 
   iter->parent = newptr;
   iter->builtin_parent = *ptr;
@@ -970,20 +977,24 @@ static void rna_EnumPropertyItem_description_get(PointerRNA *ptr, char *value)
 {
   EnumPropertyItem *eprop = (EnumPropertyItem *)ptr->data;
 
-  if (eprop->description)
+  if (eprop->description) {
     strcpy(value, eprop->description);
-  else
+  }
+  else {
     value[0] = '\0';
+  }
 }
 
 static int rna_EnumPropertyItem_description_length(PointerRNA *ptr)
 {
   EnumPropertyItem *eprop = (EnumPropertyItem *)ptr->data;
 
-  if (eprop->description)
+  if (eprop->description) {
     return strlen(eprop->description);
-  else
+  }
+  else {
     return 0;
+  }
 }
 
 static int rna_EnumPropertyItem_value_get(PointerRNA *ptr)
@@ -1165,7 +1176,8 @@ static bool rna_property_override_diff_propptr_validate_diffing(PointerRNA *prop
 
   /* We do a generic quick first comparison checking for "name" and/or "type" properties.
    * We assume that is any of those are false, then we are not handling the same data.
-   * This helps a lot in static override case, especially to detect inserted items in collections. */
+   * This helps a lot in static override case, especially to detect inserted items in collections.
+   */
   if (!no_prop_name && (is_valid_for_diffing || do_force_name)) {
     PropertyRNA *nameprop_a = RNA_struct_name_property(propptr_a->type);
     PropertyRNA *nameprop_b = (propptr_b != NULL) ? RNA_struct_name_property(propptr_b->type) :
@@ -1238,7 +1250,8 @@ static int rna_property_override_diff_propptr(Main *bmain,
   bool is_id = false;
   bool is_null = false;
   bool is_type_diff = false;
-  /* If false, it means that the whole data itself is different, so no point in going inside of it at all! */
+  /* If false, it means that the whole data itself is different,
+   * so no point in going inside of it at all! */
   bool is_valid_for_diffing = rna_property_override_diff_propptr_validate_diffing(propptr_a,
                                                                                   propptr_b,
                                                                                   no_prop_name,
@@ -1253,8 +1266,8 @@ static int rna_property_override_diff_propptr(Main *bmain,
                                                                                   0);
 
   if (is_id) {
-    BLI_assert(
-        no_ownership); /* For now, once we deal with nodetrees we'll want to get rid of that one. */
+    /* For now, once we deal with nodetrees we'll want to get rid of that one. */
+    BLI_assert(no_ownership);
   }
 
   if (override) {
@@ -1319,7 +1332,8 @@ int rna_property_override_diff_default(Main *bmain,
 {
   BLI_assert(len_a == len_b);
 
-  /* Note: at this point, we are sure that when len_a is zero, we are not handling an (empty) array. */
+  /* Note: at this point, we are sure that when len_a is zero,
+   * we are not handling an (empty) array. */
 
   const bool do_create = override != NULL && (flags & RNA_OVERRIDE_COMPARE_CREATE) != 0 &&
                          rna_path != NULL;
@@ -1358,10 +1372,12 @@ int rna_property_override_diff_default(Main *bmain,
           }
         }
 
-        if (array_a != array_stack_a)
+        if (array_a != array_stack_a) {
           MEM_freeN(array_a);
-        if (array_b != array_stack_b)
+        }
+        if (array_b != array_stack_b) {
           MEM_freeN(array_b);
+        }
 
         return comp;
       }
@@ -1421,10 +1437,12 @@ int rna_property_override_diff_default(Main *bmain,
           }
         }
 
-        if (array_a != array_stack_a)
+        if (array_a != array_stack_a) {
           MEM_freeN(array_a);
-        if (array_b != array_stack_b)
+        }
+        if (array_b != array_stack_b) {
           MEM_freeN(array_b);
+        }
 
         return comp;
       }
@@ -1484,10 +1502,12 @@ int rna_property_override_diff_default(Main *bmain,
           }
         }
 
-        if (array_a != array_stack_a)
+        if (array_a != array_stack_a) {
           MEM_freeN(array_a);
-        if (array_b != array_stack_b)
+        }
+        if (array_b != array_stack_b) {
           MEM_freeN(array_b);
+        }
 
         return comp;
       }
@@ -1543,9 +1563,14 @@ int rna_property_override_diff_default(Main *bmain,
           ptr_a, prop_a, fixed_a, sizeof(fixed_a), &len_str_a);
       char *value_b = RNA_property_string_get_alloc(
           ptr_b, prop_b, fixed_b, sizeof(fixed_b), &len_str_b);
-      /* TODO we could do a check on length too, but then we would not have a 'real' string comparison...
+      /* TODO we could do a check on length too,
+       * but then we would not have a 'real' string comparison...
        * Maybe behind a eRNAOverrideMatch flag? */
-      //          const int comp = len_str_a < len_str_b ? -1 : len_str_a > len_str_b ? 1 : strcmp(value_a, value_b);
+#  if 0
+      const int comp = len_str_a < len_str_b ?
+                           -1 :
+                           len_str_a > len_str_b ? 1 : strcmp(value_a, value_b);
+#  endif
       const int comp = strcmp(value_a, value_b);
 
       if (do_create && comp != 0) {
@@ -1562,10 +1587,12 @@ int rna_property_override_diff_default(Main *bmain,
         }
       }
 
-      if (value_a != fixed_a)
+      if (value_a != fixed_a) {
         MEM_freeN(value_a);
-      if (value_b != fixed_b)
+      }
+      if (value_b != fixed_b) {
         MEM_freeN(value_b);
+      }
 
       return comp;
     }
@@ -1643,7 +1670,8 @@ int rna_property_override_diff_default(Main *bmain,
 
           is_valid_for_insertion = use_insertion;
 
-          /* If false, it means that the whole data itself is different, so no point in going inside of it at all! */
+          /* If false, it means that the whole data itself is different,
+           * so no point in going inside of it at all! */
           if (iter_b.valid) {
             is_valid_for_diffing = rna_property_override_diff_propptr_validate_diffing(
                 &iter_a.ptr,
@@ -1685,11 +1713,19 @@ int rna_property_override_diff_default(Main *bmain,
 
 #  if 0
           if (rna_path) {
-            printf("Checking %s, %s [%d] vs %s [%d]; is_id: %d, diffing: %d; "
-                   "insert: %d (could be used: %d, do_create: %d)\n",
-                   rna_path, propname_a ? propname_a : "", idx_a, propname_b ? propname_b : "", idx_b,
-                   is_id, is_valid_for_diffing, is_valid_for_insertion,
-                   (RNA_property_override_flag(prop_a) & PROPOVERRIDE_STATIC_INSERTION) != 0, do_create);
+            printf(
+                "Checking %s, %s [%d] vs %s [%d]; is_id: %d, diffing: %d; "
+                "insert: %d (could be used: %d, do_create: %d)\n",
+                rna_path,
+                propname_a ? propname_a : "",
+                idx_a,
+                propname_b ? propname_b : "",
+                idx_b,
+                is_id,
+                is_valid_for_diffing,
+                is_valid_for_insertion,
+                (RNA_property_override_flag(prop_a) & PROPOVERRIDE_STATIC_INSERTION) != 0,
+                do_create);
           }
 #  endif
 
@@ -1717,7 +1753,8 @@ int rna_property_override_diff_default(Main *bmain,
             }
             else { /* Based on index... */
               if (rna_path) {
-                /* In case of indices, we need _a one for insertion, but _b ones for in-depth diffing.
+                /* In case of indices, we need _a one for insertion,
+                 * but _b ones for in-depth diffing.
                  * Insertion always happen once all 'replace' operations have been done,
                  * otherwise local and reference paths for those would have to be different! */
                 RNA_PATH_PRINTF("%s[%d]", rna_path, is_valid_for_insertion ? idx_a : idx_b);
@@ -1725,8 +1762,8 @@ int rna_property_override_diff_default(Main *bmain,
             }
           }
 
-          /* Collections do not support replacement of their data (since they do not support removing),
-           * only in *some* cases, insertion.
+          /* Collections do not support replacement of their data
+           * (since they do not support removing), only in *some* cases, insertion.
            * We also assume then that _a data is the one where things are inserted. */
           if (is_valid_for_insertion && use_insertion) {
             bool created;
@@ -1734,8 +1771,8 @@ int rna_property_override_diff_default(Main *bmain,
                 override, rna_path, &created);
 
             if (is_first_insert) {
-              /* We need to clean up all possible existing insertion operations, otherwise we'd end up
-               * with a mess of ops everytime something changes. */
+              /* We need to clean up all possible existing insertion operations,
+               * otherwise we'd end up with a mess of ops everytime something changes. */
               for (IDOverrideStaticPropertyOperation *opop = op->operations.first; opop != NULL;) {
                 IDOverrideStaticPropertyOperation *opop_next = opop->next;
                 if (ELEM(opop->operation,
@@ -1757,7 +1794,12 @@ int rna_property_override_diff_default(Main *bmain,
                                                        true,
                                                        NULL,
                                                        NULL);
-            //                      printf("%s: Adding insertion op override after '%s'/%d\n", rna_path, prev_propname_a, idx_a - 1);
+#  if 0
+            printf("%s: Adding insertion op override after '%s'/%d\n",
+                   rna_path,
+                   prev_propname_a,
+                   idx_a - 1);
+#  endif
           }
           else if (is_id || is_valid_for_diffing) {
             if (equals || do_create) {
@@ -1870,8 +1912,8 @@ bool rna_property_override_store_default(Main *UNUSED(bmain),
 
   /* XXX TODO About range limits.
    * Ideally, it would be great to get rid of RNA range in that specific case.
-   * However, this won't be that easy and will add yet another layer of complexity in generated code,
-   * not to mention that we could most likely *not* bypass custom setters anyway.
+   * However, this won't be that easy and will add yet another layer of complexity in
+   * generated code, not to mention that we could most likely *not* bypass custom setters anyway.
    * So for now, if needed second operand value is not in valid range, we simply fall back
    * to a mere REPLACE operation.
    * Time will say whether this is acceptable limitation or not. */
@@ -1926,8 +1968,9 @@ bool rna_property_override_store_default(Main *UNUSED(bmain),
               changed = true;
               RNA_property_int_set_array(ptr_storage, prop_storage, array_b);
             }
-            if (array_b != array_stack_b)
+            if (array_b != array_stack_b) {
               MEM_freeN(array_b);
+            }
             break;
           }
           default:
@@ -1935,8 +1978,9 @@ bool rna_property_override_store_default(Main *UNUSED(bmain),
             break;
         }
 
-        if (array_a != array_stack_a)
+        if (array_a != array_stack_a) {
           MEM_freeN(array_a);
+        }
       }
       else {
         const int value = RNA_PROPERTY_GET_SINGLE(int, ptr_reference, prop_reference, index);
@@ -2014,8 +2058,9 @@ bool rna_property_override_store_default(Main *UNUSED(bmain),
               changed = true;
               RNA_property_float_set_array(ptr_storage, prop_storage, array_b);
             }
-            if (array_b != array_stack_b)
+            if (array_b != array_stack_b) {
               MEM_freeN(array_b);
+            }
             break;
           }
           case IDOVERRIDESTATIC_OP_MULTIPLY: {
@@ -2036,8 +2081,9 @@ bool rna_property_override_store_default(Main *UNUSED(bmain),
               changed = true;
               RNA_property_float_set_array(ptr_storage, prop_storage, array_b);
             }
-            if (array_b != array_stack_b)
+            if (array_b != array_stack_b) {
               MEM_freeN(array_b);
+            }
             break;
           }
           default:
@@ -2045,8 +2091,9 @@ bool rna_property_override_store_default(Main *UNUSED(bmain),
             break;
         }
 
-        if (array_a != array_stack_a)
+        if (array_a != array_stack_a) {
           MEM_freeN(array_a);
+        }
       }
       else {
         const float value = RNA_PROPERTY_GET_SINGLE(float, ptr_reference, prop_reference, index);
@@ -2152,8 +2199,9 @@ bool rna_property_override_apply_default(Main *UNUSED(bmain),
             return false;
         }
 
-        if (array_a != array_stack_a)
+        if (array_a != array_stack_a) {
           MEM_freeN(array_a);
+        }
       }
       else {
         const bool value = RNA_PROPERTY_GET_SINGLE(boolean, ptr_src, prop_src, index);
@@ -2189,24 +2237,28 @@ bool rna_property_override_apply_default(Main *UNUSED(bmain),
                           array_stack_b;
             RNA_property_int_get_array(ptr_storage, prop_storage, array_b);
             if (override_op == IDOVERRIDESTATIC_OP_ADD) {
-              for (int i = len_dst; i--;)
+              for (int i = len_dst; i--;) {
                 array_a[i] += array_b[i];
+              }
             }
             else {
-              for (int i = len_dst; i--;)
+              for (int i = len_dst; i--;) {
                 array_a[i] -= array_b[i];
+              }
             }
             RNA_property_int_set_array(ptr_dst, prop_dst, array_a);
-            if (array_b != array_stack_b)
+            if (array_b != array_stack_b) {
               MEM_freeN(array_b);
+            }
             break;
           default:
             BLI_assert(0 && "Unsupported RNA override operation on integer");
             return false;
         }
 
-        if (array_a != array_stack_a)
+        if (array_a != array_stack_a) {
           MEM_freeN(array_a);
+        }
       }
       else {
         const int storage_value = ptr_storage ? RNA_PROPERTY_GET_SINGLE(
@@ -2265,28 +2317,33 @@ bool rna_property_override_apply_default(Main *UNUSED(bmain),
                           array_stack_b;
             RNA_property_float_get_array(ptr_storage, prop_storage, array_b);
             if (override_op == IDOVERRIDESTATIC_OP_ADD) {
-              for (int i = len_dst; i--;)
+              for (int i = len_dst; i--;) {
                 array_a[i] += array_b[i];
+              }
             }
             else if (override_op == IDOVERRIDESTATIC_OP_SUBTRACT) {
-              for (int i = len_dst; i--;)
+              for (int i = len_dst; i--;) {
                 array_a[i] -= array_b[i];
+              }
             }
             else {
-              for (int i = len_dst; i--;)
+              for (int i = len_dst; i--;) {
                 array_a[i] *= array_b[i];
+              }
             }
             RNA_property_float_set_array(ptr_dst, prop_dst, array_a);
-            if (array_b != array_stack_b)
+            if (array_b != array_stack_b) {
               MEM_freeN(array_b);
+            }
             break;
           default:
             BLI_assert(0 && "Unsupported RNA override operation on float");
             return false;
         }
 
-        if (array_a != array_stack_a)
+        if (array_a != array_stack_a) {
           MEM_freeN(array_a);
+        }
       }
       else {
         const float storage_value = ptr_storage ? RNA_PROPERTY_GET_SINGLE(
@@ -2350,7 +2407,7 @@ bool rna_property_override_apply_default(Main *UNUSED(bmain),
 
       switch (override_op) {
         case IDOVERRIDESTATIC_OP_REPLACE:
-          RNA_property_pointer_set(ptr_dst, prop_dst, value);
+          RNA_property_pointer_set(ptr_dst, prop_dst, value, NULL);
           break;
         default:
           BLI_assert(0 && "Unsupported RNA override operation on pointer");
@@ -2371,8 +2428,9 @@ bool rna_property_override_apply_default(Main *UNUSED(bmain),
           return false;
       }
 
-      if (value != buff)
+      if (value != buff) {
         MEM_freeN(value);
+      }
       return true;
     }
     case PROP_COLLECTION: {
@@ -2802,47 +2860,58 @@ static void rna_def_number_property(StructRNA *srna, PropertyType type)
   RNA_def_property_boolean_funcs(prop, "rna_NumberProperty_is_array_get", NULL);
   RNA_def_property_ui_text(prop, "Is Array", "");
 
-  if (type == PROP_BOOLEAN)
+  if (type == PROP_BOOLEAN) {
     return;
+  }
 
   prop = RNA_def_property(srna, "hard_min", type, PROP_NONE);
   RNA_def_property_clear_flag(prop, PROP_EDITABLE);
-  if (type == PROP_INT)
+  if (type == PROP_INT) {
     RNA_def_property_int_funcs(prop, "rna_IntProperty_hard_min_get", NULL, NULL);
-  else
+  }
+  else {
     RNA_def_property_float_funcs(prop, "rna_FloatProperty_hard_min_get", NULL, NULL);
+  }
   RNA_def_property_ui_text(prop, "Hard Minimum", "Minimum value used by buttons");
 
   prop = RNA_def_property(srna, "hard_max", type, PROP_NONE);
   RNA_def_property_clear_flag(prop, PROP_EDITABLE);
-  if (type == PROP_INT)
+  if (type == PROP_INT) {
     RNA_def_property_int_funcs(prop, "rna_IntProperty_hard_max_get", NULL, NULL);
-  else
+  }
+  else {
     RNA_def_property_float_funcs(prop, "rna_FloatProperty_hard_max_get", NULL, NULL);
+  }
   RNA_def_property_ui_text(prop, "Hard Maximum", "Maximum value used by buttons");
 
   prop = RNA_def_property(srna, "soft_min", type, PROP_NONE);
   RNA_def_property_clear_flag(prop, PROP_EDITABLE);
-  if (type == PROP_INT)
+  if (type == PROP_INT) {
     RNA_def_property_int_funcs(prop, "rna_IntProperty_soft_min_get", NULL, NULL);
-  else
+  }
+  else {
     RNA_def_property_float_funcs(prop, "rna_FloatProperty_soft_min_get", NULL, NULL);
+  }
   RNA_def_property_ui_text(prop, "Soft Minimum", "Minimum value used by buttons");
 
   prop = RNA_def_property(srna, "soft_max", type, PROP_NONE);
   RNA_def_property_clear_flag(prop, PROP_EDITABLE);
-  if (type == PROP_INT)
+  if (type == PROP_INT) {
     RNA_def_property_int_funcs(prop, "rna_IntProperty_soft_max_get", NULL, NULL);
-  else
+  }
+  else {
     RNA_def_property_float_funcs(prop, "rna_FloatProperty_soft_max_get", NULL, NULL);
+  }
   RNA_def_property_ui_text(prop, "Soft Maximum", "Maximum value used by buttons");
 
   prop = RNA_def_property(srna, "step", type, PROP_UNSIGNED);
   RNA_def_property_clear_flag(prop, PROP_EDITABLE);
-  if (type == PROP_INT)
+  if (type == PROP_INT) {
     RNA_def_property_int_funcs(prop, "rna_IntProperty_step_get", NULL, NULL);
-  else
+  }
+  else {
     RNA_def_property_float_funcs(prop, "rna_FloatProperty_step_get", NULL, NULL);
+  }
   RNA_def_property_ui_text(
       prop, "Step", "Step size used by number buttons, for floats 1/100th of the step size");
 
@@ -2973,11 +3042,13 @@ static void rna_def_pointer_property(StructRNA *srna, PropertyType type)
   prop = RNA_def_property(srna, "fixed_type", PROP_POINTER, PROP_NONE);
   RNA_def_property_clear_flag(prop, PROP_EDITABLE);
   RNA_def_property_struct_type(prop, "Struct");
-  if (type == PROP_POINTER)
+  if (type == PROP_POINTER) {
     RNA_def_property_pointer_funcs(prop, "rna_PointerProperty_fixed_type_get", NULL, NULL, NULL);
-  else
+  }
+  else {
     RNA_def_property_pointer_funcs(
         prop, "rna_CollectionProperty_fixed_type_get", NULL, NULL, NULL);
+  }
   RNA_def_property_ui_text(prop, "Pointer Type", "Fixed pointer type, empty if variable type");
 }
 
@@ -3045,11 +3116,17 @@ void RNA_def_rna(BlenderRNA *brna)
   prop = RNA_def_property(srna, "structs", PROP_COLLECTION, PROP_NONE);
   RNA_def_property_clear_flag(prop, PROP_EDITABLE);
   RNA_def_property_struct_type(prop, "Struct");
-  RNA_def_property_collection_funcs(prop, "rna_BlenderRNA_structs_begin", "rna_iterator_listbase_next",
-                                    "rna_iterator_listbase_end", "rna_iterator_listbase_get",
+  RNA_def_property_collection_funcs(prop,
+                                    "rna_BlenderRNA_structs_begin",
+                                    "rna_iterator_listbase_next",
+                                    "rna_iterator_listbase_end",
+                                    "rna_iterator_listbase_get",
   /* included for speed, can be removed */
 #  if 0
-                                    NULL, NULL, NULL, NULL);
+                                    NULL,
+                                    NULL,
+                                    NULL,
+                                    NULL);
 #  else
                                     "rna_BlenderRNA_structs_length",
                                     "rna_BlenderRNA_structs_lookup_int",

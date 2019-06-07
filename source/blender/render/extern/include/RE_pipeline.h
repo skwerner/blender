@@ -91,24 +91,28 @@ typedef struct RenderPass {
 
 /* a renderlayer is a full image, but with all passes and samples */
 /* size of the rects is defined in RenderResult */
-/* after render, the Combined pass is in combined, for renderlayers read from files it is a real pass */
+/* after render, the Combined pass is in combined,
+ * for renderlayers read from files it is a real pass */
 typedef struct RenderLayer {
   struct RenderLayer *next, *prev;
 
-  /* copy of RenderData */
+  /** copy of RenderData */
   char name[RE_MAXNAME];
   int layflag, passflag, pass_xor;
 
   /* MULTIVIEW_TODO: acolrect and scolrect are not supported by multiview at the moment.
    * If they are really required they should be in RenderView instead */
 
-  float *acolrect; /* 4 float, optional transparent buffer, needs storage for display updates */
-  float *scolrect; /* 4 float, optional strand buffer, needs storage for display updates */
-  int *display_buffer; /* 4 char, optional color managed display buffer which is used when
-                           * Save Buffer is enabled to display combined pass of the screen. */
+  /** 4 float, optional transparent buffer, needs storage for display updates */
+  float *acolrect;
+  /** 4 float, optional strand buffer, needs storage for display updates */
+  float *scolrect;
+  /** 4 char, optional color managed display buffer which is used when
+   * Save Buffer is enabled to display combined pass of the screen. */
+  int *display_buffer;
   int rectx, recty;
 
-  /* optional saved endresult on disk */
+  /** Optional saved endresult on disk. */
   void *exrhandle;
 
   ListBase passes;
@@ -122,8 +126,8 @@ typedef struct RenderResult {
   int rectx, recty;
   short crop, sample_nr;
 
-  /* the following rect32, rectf and rectz buffers are for temporary storage only, for RenderResult structs
-   * created in #RE_AcquireResultImage - which do not have RenderView */
+  /* The following rect32, rectf and rectz buffers are for temporary storage only,
+   * for RenderResult structs created in #RE_AcquireResultImage - which do not have RenderView */
 
   /* optional, 32 bits version of picture, used for ogl render and image curves */
   int *rect32;
@@ -280,21 +284,21 @@ bool RE_WriteRenderViewsMovie(struct ReportList *reports,
                               bool preview);
 
 /* only RE_NewRender() needed, main Blender render calls */
-void RE_BlenderFrame(struct Render *re,
-                     struct Main *bmain,
-                     struct Scene *scene,
-                     struct ViewLayer *single_layer,
-                     struct Object *camera_override,
-                     int frame,
-                     const bool write_still);
-void RE_BlenderAnim(struct Render *re,
+void RE_RenderFrame(struct Render *re,
                     struct Main *bmain,
                     struct Scene *scene,
                     struct ViewLayer *single_layer,
                     struct Object *camera_override,
-                    int sfra,
-                    int efra,
-                    int tfra);
+                    int frame,
+                    const bool write_still);
+void RE_RenderAnim(struct Render *re,
+                   struct Main *bmain,
+                   struct Scene *scene,
+                   struct ViewLayer *single_layer,
+                   struct Object *camera_override,
+                   int sfra,
+                   int efra,
+                   int tfra);
 #ifdef WITH_FREESTYLE
 void RE_RenderFreestyleStrokes(struct Render *re,
                                struct Main *bmain,
@@ -302,6 +306,9 @@ void RE_RenderFreestyleStrokes(struct Render *re,
                                int render);
 void RE_RenderFreestyleExternal(struct Render *re);
 #endif
+
+/* Free memory and clear runtime data which is only needed during rendering. */
+void RE_CleanAfterRender(struct Render *re);
 
 void RE_SetActiveRenderView(struct Render *re, const char *viewname);
 const char *RE_GetActiveRenderView(struct Render *re);

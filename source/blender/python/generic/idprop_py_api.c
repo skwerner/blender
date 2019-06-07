@@ -164,12 +164,12 @@ PyObject *BPy_IDGroup_WrapData(ID *id, IDProperty *prop, IDProperty *parent)
   }
 }
 
-#if 0 /* UNUSED, currently assignment overwrites into new properties, rather than setting in-place */
+/* UNUSED, currently assignment overwrites into new properties, rather than setting in-place. */
+#if 0
 static int BPy_IDGroup_SetData(BPy_IDProperty *self, IDProperty *prop, PyObject *value)
 {
   switch (prop->type) {
-    case IDP_STRING:
-    {
+    case IDP_STRING: {
       char *st;
       if (!PyUnicode_Check(value)) {
         PyErr_SetString(PyExc_TypeError, "expected a string!");
@@ -198,8 +198,7 @@ static int BPy_IDGroup_SetData(BPy_IDProperty *self, IDProperty *prop, PyObject 
       return 0;
     }
 
-    case IDP_INT:
-    {
+    case IDP_INT: {
       int ivalue = PyLong_AsSsize_t(value);
       if (ivalue == -1 && PyErr_Occurred()) {
         PyErr_SetString(PyExc_TypeError, "expected an int type");
@@ -208,8 +207,7 @@ static int BPy_IDGroup_SetData(BPy_IDProperty *self, IDProperty *prop, PyObject 
       IDP_Int(prop) = ivalue;
       break;
     }
-    case IDP_FLOAT:
-    {
+    case IDP_FLOAT: {
       float fvalue = (float)PyFloat_AsDouble(value);
       if (fvalue == -1 && PyErr_Occurred()) {
         PyErr_SetString(PyExc_TypeError, "expected a float");
@@ -218,8 +216,7 @@ static int BPy_IDGroup_SetData(BPy_IDProperty *self, IDProperty *prop, PyObject 
       IDP_Float(self->prop) = fvalue;
       break;
     }
-    case IDP_DOUBLE:
-    {
+    case IDP_DOUBLE: {
       double dvalue = PyFloat_AsDouble(value);
       if (dvalue == -1 && PyErr_Occurred()) {
         PyErr_SetString(PyExc_TypeError, "expected a float");
@@ -604,7 +601,6 @@ static IDProperty *idp_from_PyMapping(const char *name, PyObject *ob)
     pval = PySequence_GetItem(vals, i);
     if (BPy_IDProperty_Map_ValidateAndCreate(key, prop, pval) == false) {
       IDP_FreeProperty(prop);
-      MEM_freeN(prop);
       Py_XDECREF(keys);
       Py_XDECREF(vals);
       Py_XDECREF(key);
@@ -693,7 +689,7 @@ bool BPy_IDProperty_Map_ValidateAndCreate(PyObject *name_obj, IDProperty *group,
       prop->prev = prop_exist->prev;
       prop->next = prop_exist->next;
 
-      IDP_FreeProperty(prop_exist);
+      IDP_FreePropertyContent(prop_exist);
       *prop_exist = *prop;
       MEM_freeN(prop);
     }

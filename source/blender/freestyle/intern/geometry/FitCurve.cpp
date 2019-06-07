@@ -181,8 +181,8 @@ static BezierCurve GenerateBezier(
   alpha_l = det_X_C1 / det_C0_C1;
   alpha_r = det_C0_X / det_C0_C1;
 
-  /* If alpha negative, use the Wu/Barsky heuristic (see text) (if alpha is 0, you get coincident control points
-   * that lead to divide by zero in any subsequent NewtonRaphsonRootFind() call).
+  /* If alpha negative, use the Wu/Barsky heuristic (see text) (if alpha is 0, you get coincident
+   * control points that lead to divide by zero in any subsequent NewtonRaphsonRootFind() call).
    */
   if (alpha_l < 1.0e-6 || alpha_r < 1.0e-6) {
     double dist = V2DistanceBetween2Points(&d[last], &d[first]) / 3.0;
@@ -194,8 +194,9 @@ static BezierCurve GenerateBezier(
     return bezCurve;
   }
 
-  /* First and last control points of the Bezier curve are positioned exactly at the first and last data points
-   * Control points 1 and 2 are positioned an alpha distance out on the tangent vectors, left and right, respectively
+  /* First and last control points of the Bezier curve are positioned exactly at the first and last
+   * data points Control points 1 and 2 are positioned an alpha distance out on the tangent
+   * vectors, left and right, respectively
    */
   bezCurve[0] = d[first];
   bezCurve[3] = d[last];
@@ -265,8 +266,9 @@ static double NewtonRaphsonRootFind(BezierCurve Q, Vector2 P, double u)
                 (Q_u[1] - P[1]) * (Q2_u[1]);
 
   /* u = u - f(u)/f'(u) */
-  if (denominator == 0)  // FIXME
+  if (denominator == 0) {  // FIXME
     return u;
+  }
   uPrime = u - (numerator / denominator);
   return uPrime;
 }
@@ -471,8 +473,9 @@ FitCurveWrapper::~FitCurveWrapper()
 
 void FitCurveWrapper::DrawBezierCurve(int n, Vector2 *curve)
 {
-  for (int i = 0; i <= n; ++i)
+  for (int i = 0; i <= n; ++i) {
     _vertices.push_back(curve[i]);
+  }
 }
 
 void FitCurveWrapper::FitCurve(vector<Vec2d> &data, vector<Vec2d> &oCurve, double error)

@@ -26,7 +26,8 @@
 /* TODO(campbell):
  * We may want to have a higher level API that initializes a timer,
  * checks for mouse motion and clears the tool-tip afterwards.
- * We never want multiple tool-tips at once so this could be handled on the window / window-manager level.
+ * We never want multiple tool-tips at once
+ * so this could be handled on the window / window-manager level.
  *
  * For now it's not a priority, so leave as-is.
  */
@@ -461,7 +462,8 @@ static uiTooltipData *ui_tooltip_data_from_tool(bContext *C, uiBut *but, bool is
      *
      * - Direct access to the tool (as if the toolbar button is pressed).
      * - The key is bound to a brush type (not the exact brush name).
-     * - The key is assigned to the operator it's self (bypassing the tool, executing the operator).
+     * - The key is assigned to the operator it's self
+     *   (bypassing the tool, executing the operator).
      *
      * Either way case it's useful to show the shortcut.
      */
@@ -881,19 +883,18 @@ static uiTooltipData *ui_tooltip_data_from_gizmo(bContext *C, wmGizmo *gz)
 
   /* Operator Actions */
   {
-    bool use_drag = gz->drag_part != -1 && gz->highlight_part != gz->drag_part;
-
+    const bool use_drag = gz->drag_part != -1 && gz->highlight_part != gz->drag_part;
     const struct {
       int part;
       const char *prefix;
     } gzop_actions[] = {
         {
             .part = gz->highlight_part,
-            .prefix = use_drag ? TIP_("Click") : NULL,
+            .prefix = use_drag ? CTX_TIP_(BLT_I18NCONTEXT_OPERATOR_DEFAULT, "Click") : NULL,
         },
         {
             .part = use_drag ? gz->drag_part : -1,
-            .prefix = use_drag ? TIP_("Drag") : NULL,
+            .prefix = use_drag ? CTX_TIP_(BLT_I18NCONTEXT_OPERATOR_DEFAULT, "Drag") : NULL,
         },
     };
 
@@ -1061,7 +1062,7 @@ static ARegion *ui_tooltip_create_with_data(bContext *C,
     field->geom.x_pos = x_pos;
   }
 
-  //fontw *= aspect;
+  // fontw *= aspect;
 
   BLF_disable(data->fstyle.uifont_id, font_flag);
   BLF_disable(blf_mono_font, font_flag);

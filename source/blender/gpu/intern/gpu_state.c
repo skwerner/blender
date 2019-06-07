@@ -20,6 +20,8 @@
 
 #include "DNA_userdef_types.h"
 
+#include "BLI_utildefines.h"
+
 #include "BKE_global.h"
 
 #include "GPU_glew.h"
@@ -123,6 +125,19 @@ void GPU_polygon_smooth(bool enable)
   }
   else {
     glDisable(GL_POLYGON_SMOOTH);
+  }
+}
+
+/* Programmable point size
+ * - shaders set their own point size when enabled
+ * - use glPointSize when disabled */
+void GPU_program_point_size(bool enable)
+{
+  if (enable) {
+    glEnable(GL_PROGRAM_POINT_SIZE);
+  }
+  else {
+    glDisable(GL_PROGRAM_POINT_SIZE);
   }
 }
 

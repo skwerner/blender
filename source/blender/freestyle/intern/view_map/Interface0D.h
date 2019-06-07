@@ -95,7 +95,8 @@ class Interface0D {
   /*! Returns the 2D point. */
   virtual Geometry::Vec2r getPoint2D() const;
 
-  /*! Returns the FEdge that lies between this Interface0D and the Interface0D given as argument. */
+  /*! Returns the FEdge that lies between this Interface0D and the Interface0D given as argument.
+   */
   virtual FEdge *getFEdge(Interface0D &);
 
   /*! Returns the Id of the point. */
@@ -175,8 +176,8 @@ class Interface0DIteratorNested : public Iterator {
 
 /*! Class defining an iterator over Interface0D elements.
  *  An instance of this iterator is always obtained from a 1D element.
- * \attention In the scripting language, you must call \code it2 = Interface0DIterator(it1) \endcode instead of
- * \code it2 = it1 \endcode where \a it1 and \a it2 are 2 Interface0DIterator.
+ * \attention In the scripting language, you must call \code it2 = Interface0DIterator(it1)
+ * \endcode instead of \code it2 = it1 \endcode where \a it1 and \a it2 are 2 Interface0DIterator.
  *  Otherwise, incrementing \a it1 will also increment \a it2.
  */
 class Interface0DIterator : public Iterator {
@@ -195,19 +196,21 @@ class Interface0DIterator : public Iterator {
   /*! Destructor */
   virtual ~Interface0DIterator()
   {
-    if (_iterator)
+    if (_iterator) {
       delete _iterator;
+    }
   }
 
   /*! Operator =
-   *  \attention In the scripting language, you must call \code it2 = Interface0DIterator(it1) \endcode instead of
-   *  \code it2 = it1 \endcode where \a it1 and \a it2 are 2 Interface0DIterator.
-   *  Otherwise, incrementing \a it1 will also increment \a it2.
+   *  \attention In the scripting language, you must call \code it2 = Interface0DIterator(it1)
+   * \endcode instead of \code it2 = it1 \endcode where \a it1 and \a it2 are 2
+   * Interface0DIterator. Otherwise, incrementing \a it1 will also increment \a it2.
    */
   Interface0DIterator &operator=(const Interface0DIterator &it)
   {
-    if (_iterator)
+    if (_iterator) {
       delete _iterator;
+    }
     _iterator = it._iterator->copy();
     return *this;
   }
@@ -215,8 +218,9 @@ class Interface0DIterator : public Iterator {
   /*! Returns the string "Interface0DIterator". */
   virtual string getExactTypeName() const
   {
-    if (!_iterator)
+    if (!_iterator) {
       return "Interface0DIterator";
+    }
     return _iterator->getExactTypeName() + "Proxy";
   }
 
@@ -280,16 +284,16 @@ class Interface0DIterator : public Iterator {
     return _iterator->decrement();
   }
 
-  /*! Returns true if the pointed Interface0D is the first of the 1D element containing the points over which
-   *  we're iterating.
+  /*! Returns true if the pointed Interface0D is the first of the 1D element containing the points
+   * over which we're iterating.
    */
   virtual bool isBegin() const
   {
     return _iterator->isBegin();
   }
 
-  /*! Returns true if the pointed Interface0D is after the after the last point of the 1D element we're
-   *  iterating from. */
+  /*! Returns true if the pointed Interface0D is after the after the last point of the 1D element
+   * we're iterating from. */
   virtual bool isEnd() const
   {
     return _iterator->isEnd();
@@ -298,8 +302,9 @@ class Interface0DIterator : public Iterator {
   /*! Returns true when the iterator is pointing to the final valid element. */
   virtual bool atLast() const
   {
-    if (_iterator->isEnd())
+    if (_iterator->isEnd()) {
       return false;
+    }
 
     _iterator->increment();
     bool result = _iterator->isEnd();

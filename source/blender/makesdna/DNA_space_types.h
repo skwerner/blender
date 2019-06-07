@@ -247,7 +247,7 @@ typedef struct SpaceOutliner {
   short flag, outlinevis, storeflag, search_flags;
   int filter;
   char filter_state;
-  char _pad;
+  char show_restrict_flags;
   short filter_id_type;
 
   /**
@@ -260,7 +260,7 @@ typedef struct SpaceOutliner {
 typedef enum eSpaceOutliner_Flag {
   SO_TESTBLOCKS = (1 << 0),
   SO_NEWSELECTED = (1 << 1),
-  SO_HIDE_RESTRICTCOLS = (1 << 2),
+  SO_FLAG_UNUSED_1 = (1 << 2), /* cleared */
   SO_HIDE_KEYINGSETINFO = (1 << 3),
   SO_SKIP_SORT_ALPHA = (1 << 4),
 } eSpaceOutliner_Flag;
@@ -308,6 +308,17 @@ typedef enum eSpaceOutliner_StateFilter {
   SO_FILTER_OB_SELECTED = 2,
   SO_FILTER_OB_ACTIVE = 3,
 } eSpaceOutliner_StateFilter;
+
+/* SpaceOutliner.show_restrict_flags */
+typedef enum eSpaceOutliner_ShowRestrictFlag {
+  SO_RESTRICT_ENABLE = (1 << 0),
+  SO_RESTRICT_SELECT = (1 << 1),
+  SO_RESTRICT_HIDE = (1 << 2),
+  SO_RESTRICT_VIEWPORT = (1 << 3),
+  SO_RESTRICT_RENDER = (1 << 4),
+  SO_RESTRICT_HOLDOUT = (1 << 5),
+  SO_RESTRICT_INDIRECT_ONLY = (1 << 6),
+} eSpaceOutliner_Restrict;
 
 /* SpaceOutliner.outlinevis */
 typedef enum eSpaceOutliner_Mode {
@@ -774,11 +785,12 @@ typedef enum eFileSel_Params_Flag {
 /* sfile->params->rename_flag */
 /* Note: short flag. Defined as bitflags, but currently only used as exclusive status markers... */
 typedef enum eFileSel_Params_RenameFlag {
-  /* Used when we only have the name of the entry we want to rename, but not yet access to its matching file entry. */
+  /** Used when we only have the name of the entry we want to rename,
+   * but not yet access to its matching file entry. */
   FILE_PARAMS_RENAME_PENDING = 1 << 0,
-  /* We are actually renaming an entry. */
+  /** We are actually renaming an entry. */
   FILE_PARAMS_RENAME_ACTIVE = 1 << 1,
-  /* Used to scroll to newly renamed entry. */
+  /** Used to scroll to newly renamed entry. */
   FILE_PARAMS_RENAME_POSTSCROLL_PENDING = 1 << 2,
   FILE_PARAMS_RENAME_POSTSCROLL_ACTIVE = 1 << 3,
 } eFileSel_Params_RenameFlag;
@@ -821,10 +833,12 @@ typedef enum eDirEntry_SelectFlag {
 
 /* ***** Related to file browser, but never saved in DNA, only here to help with RNA. ***** */
 
-/* About Unique identifier.
+/**
+ * About Unique identifier.
+ *
  * Stored in a CustomProps once imported.
- * Each engine is free to use it as it likes - it will be the only thing passed to it by blender to identify
- * asset/variant/version (concatenating the three into a single 48 bytes one).
+ * Each engine is free to use it as it likes - it will be the only thing passed to it by blender to
+ * identify asset/variant/version (concatenating the three into a single 48 bytes one).
  * Assumed to be 128bits, handled as four integers due to lack of real bytes proptype in RNA :|.
  */
 #define ASSET_UUID_LENGTH 16
@@ -918,12 +932,17 @@ typedef struct FileDirEntry {
   int act_variant;
 } FileDirEntry;
 
-/* Array of direntries. */
-/* This struct is used in various, different contexts.
- * In Filebrowser UI, it stores the total number of available entries, the number of visible (filtered) entries,
- *                    and a subset of those in 'entries' ListBase, from idx_start (included) to idx_end (excluded).
- * In AssetEngine context (i.e. outside of 'browsing' context), entries contain all needed data, there is no filtering,
- *                        so nbr_entries_filtered, entry_idx_start and entry_idx_end should all be set to -1.
+/** Array of direntries.
+ *
+ * This struct is used in various, different contexts.
+ *
+ * In Filebrowser UI, it stores the total number of available entries, the number of visible
+ * (filtered) entries, and a subset of those in 'entries' ListBase, from idx_start (included)
+ * to idx_end (excluded).
+ *
+ * In AssetEngine context (i.e. outside of 'browsing' context), entries contain all needed data,
+ * there is no filtering, so nbr_entries_filtered, entry_idx_start and entry_idx_end
+ * should all be set to -1.
  */
 #
 #
@@ -1278,10 +1297,12 @@ typedef struct SpaceNode {
   /** Mouse pos for drawing socketless link and adding nodes. */
   float cursor[2];
 
-  /* XXX nodetree pointer info is all in the path stack now,
-   * remove later on and use bNodeTreePath instead. For now these variables are set when pushing/popping
-   * from path stack, to avoid having to update all the functions and operators. Can be done when
-   * design is accepted and everything is properly tested.
+  /**
+   * XXX nodetree pointer info is all in the path stack now,
+   * remove later on and use bNodeTreePath instead.
+   * For now these variables are set when pushing/popping
+   * from path stack, to avoid having to update all the functions and operators.
+   * Can be done when design is accepted and everything is properly tested.
    */
   ListBase treepath;
 

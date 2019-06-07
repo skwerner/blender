@@ -33,6 +33,7 @@ struct Depsgraph;
 
 /* ------------------------------------------------ */
 
+struct bNodeTree;
 struct CacheFile;
 struct Collection;
 struct CustomData_MeshMasks;
@@ -52,13 +53,29 @@ extern "C" {
 
 /* Graph Building -------------------------------- */
 
-/* Build depsgraph for the given scene, and dump results in given
- * graph container.
- */
+/* Build depsgraph for the given scene, and dump results in given graph container. */
 void DEG_graph_build_from_view_layer(struct Depsgraph *graph,
                                      struct Main *bmain,
                                      struct Scene *scene,
                                      struct ViewLayer *view_layer);
+
+/* Special version of builder which produces dependency graph suitable for the render pipeline.
+ * It will contain sequencer and compositor (if needed) and all their dependencies. */
+void DEG_graph_build_for_render_pipeline(struct Depsgraph *graph,
+                                         struct Main *bmain,
+                                         struct Scene *scene,
+                                         struct ViewLayer *view_layer);
+
+/* Builds minimal dependency graph for compositor preview.
+ *
+ * Note that compositor editor might have pinned node tree, which is different from scene's node
+ * tree.
+ */
+void DEG_graph_build_for_compositor_preview(struct Depsgraph *graph,
+                                            struct Main *bmain,
+                                            struct Scene *scene,
+                                            struct ViewLayer *view_layer,
+                                            struct bNodeTree *nodetree);
 
 /* Tag relations from the given graph for update. */
 void DEG_graph_tag_relations_update(struct Depsgraph *graph);

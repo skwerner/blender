@@ -139,7 +139,7 @@ typedef struct Panel {
   struct uiLayout *layout;
 
   /** Defined as UI_MAX_NAME_STR. */
-  char panelname[64], tabname[64];
+  char panelname[64];
   /** Panel name is identifier for restoring location. */
   char drawname[64];
   /** Offset within the region. */
@@ -155,8 +155,6 @@ typedef struct Panel {
   short snap;
   /** Panels are aligned according to increasing sort-order. */
   int sortorder;
-  /** This panel is tabbed in *paneltab. */
-  struct Panel *paneltab;
   /** Runtime for panel manipulation. */
   void *activedata;
   /** Sub panels. */
@@ -166,9 +164,11 @@ typedef struct Panel {
 /**
  * Notes on Panel Categories:
  *
- * - #ARegion.panels_category (#PanelCategoryDyn) is a runtime only list of categories collected during draw.
+ * - #ARegion.panels_category (#PanelCategoryDyn)
+ *   is a runtime only list of categories collected during draw.
  *
- * - #ARegion.panels_category_active (#PanelCategoryStack) is basically a list of strings (category id's).
+ * - #ARegion.panels_category_active (#PanelCategoryStack)
+ *   is basically a list of strings (category id's).
  *
  * Clicking on a tab moves it to the front of ar->panels_category_active,
  * If the context changes so this tab is no longer displayed,
@@ -344,7 +344,7 @@ typedef struct ScrArea {
    * runtime variable, updated by executing operators.
    */
   short region_active_win;
-  char temp, _pad;
+  char _pad[2];
 
   /** Callbacks for this space type. */
   struct SpaceType *type;
@@ -471,7 +471,7 @@ enum {
 
 /** #bScreen.flag */
 enum {
-  SCREEN_COLLAPSE_TOPBAR = 1,
+  SCREEN_DEPRECATED = 1,
   SCREEN_COLLAPSE_STATUSBAR = 2,
 };
 
@@ -544,7 +544,7 @@ enum {
 #define UI_LIST_AUTO_SIZE_THRESHOLD 1
 
 /* uiList filter flags (dyn_data) */
-/* WARNING! Those values are used by integer RNA too, which does not handle well values > INT_MAX...
+/* WARNING! Those values are used by integer RNA too, which does not handle well values > INT_MAX.
  *          So please do not use 32nd bit here. */
 enum {
   UILST_FLT_ITEM = 1 << 30, /* This item has passed the filter process successfully. */
@@ -589,6 +589,7 @@ enum {
   /* A place for buttons to trigger execution of something that was set up in other regions. */
   RGN_TYPE_EXECUTE = 10,
   RGN_TYPE_FOOTER = 11,
+  RGN_TYPE_TOOL_HEADER = 12,
 };
 /* use for function args */
 #define RGN_TYPE_ANY -1
@@ -596,42 +597,64 @@ enum {
 /* Region supports panel tabs (categories). */
 #define RGN_TYPE_HAS_CATEGORY_MASK (1 << RGN_TYPE_UI)
 
-/* region alignment */
-#define RGN_ALIGN_NONE 0
-#define RGN_ALIGN_TOP 1
-#define RGN_ALIGN_BOTTOM 2
-#define RGN_ALIGN_LEFT 3
-#define RGN_ALIGN_RIGHT 4
-#define RGN_ALIGN_HSPLIT 5
-#define RGN_ALIGN_VSPLIT 6
-#define RGN_ALIGN_FLOAT 7
-#define RGN_ALIGN_QSPLIT 8
-#define RGN_ALIGN_ENUM_MASK 0x0F
+/** #ARegion.alignment */
+enum {
+  RGN_ALIGN_NONE = 0,
+  RGN_ALIGN_TOP = 1,
+  RGN_ALIGN_BOTTOM = 2,
+  RGN_ALIGN_LEFT = 3,
+  RGN_ALIGN_RIGHT = 4,
+  RGN_ALIGN_HSPLIT = 5,
+  RGN_ALIGN_VSPLIT = 6,
+  RGN_ALIGN_FLOAT = 7,
+  RGN_ALIGN_QSPLIT = 8,
+  /* Maximum 15. */
 
-#define RGN_SPLIT_PREV 32
+  /* Flags start here. */
+  RGN_SPLIT_PREV = 32,
+};
+
+/** Mask out flags so we can check the alignment. */
+#define RGN_ALIGN_ENUM_FROM_MASK(align) ((align) & ((1 << 4) - 1))
 
 /** #ARegion.flag */
 enum {
   RGN_FLAG_HIDDEN = (1 << 0),
   RGN_FLAG_TOO_SMALL = (1 << 1),
-  /* Force delayed reinit of region size data, so that region size is calculated
+  /**
+   * Force delayed reinit of region size data, so that region size is calculated
    * just big enough to show all its content (if enough space is available).
-   * Note that only ED_region_header supports this right now. */
+   * Note that only ED_region_header supports this right now.
+   */
   RGN_FLAG_DYNAMIC_SIZE = (1 << 2),
-  /* Region data is NULL'd on read, never written. */
+  /** Region data is NULL'd on read, never written. */
   RGN_FLAG_TEMP_REGIONDATA = (1 << 3),
-  /* The region must either use its prefsizex/y or be hidden. */
+  /** The region must either use its prefsizex/y or be hidden. */
   RGN_FLAG_PREFSIZE_OR_HIDDEN = (1 << 4),
   /** Size has been clamped (floating regions only). */
   RGN_FLAG_SIZE_CLAMP_X = (1 << 5),
   RGN_FLAG_SIZE_CLAMP_Y = (1 << 6),
+  /** When the user sets the region is hidden,
+   * needed for floating regions that may be hidden for other reasons. */
+  RGN_FLAG_HIDDEN_BY_USER = (1 << 7),
 };
 
 /** #ARegion.do_draw */
-#define RGN_DRAW 1
-#define RGN_DRAW_PARTIAL 2
-#define RGN_DRAWING 4
-#define RGN_DRAW_REFRESH_UI 8 /* re-create uiBlock's where possible */
-#define RGN_DRAW_NO_REBUILD 16
+enum {
+  /* Region must be fully redrawn. */
+  RGN_DRAW = 1,
+  /* Redraw only part of region, for sculpting and painting to get smoother
+   * stroke painting on heavy meshes. */
+  RGN_DRAW_PARTIAL = 2,
+  /* For outliner, to do faster redraw without rebuilding outliner tree.
+   * For 3D viewport, to display a new progressive render sample without
+   * while other buffers and overlays remain unchanged. */
+  RGN_DRAW_NO_REBUILD = 4,
+
+  /* Set while region is being drawn. */
+  RGN_DRAWING = 8,
+  /* For popups, to refresh UI layout along with drawing. */
+  RGN_REFRESH_UI = 16,
+};
 
 #endif /* __DNA_SCREEN_TYPES_H__ */

@@ -526,8 +526,9 @@ static void rna_MeshVertex_groups_begin(CollectionPropertyIterator *iter, Pointe
     rna_iterator_array_begin(
         iter, (void *)dvert->dw, sizeof(MDeformWeight), dvert->totweight, 0, NULL);
   }
-  else
+  else {
     rna_iterator_array_begin(iter, NULL, 0, 0, 0, NULL);
+  }
 }
 
 static void rna_MeshVertex_undeformed_co_get(PointerRNA *ptr, float values[3])
@@ -543,18 +544,21 @@ static void rna_MeshVertex_undeformed_co_get(PointerRNA *ptr, float values[3])
     BKE_mesh_texspace_get(me->texcomesh ? me->texcomesh : me, loc, NULL, size);
     madd_v3_v3v3v3(values, loc, orco[(mvert - me->mvert)], size);
   }
-  else
+  else {
     copy_v3_v3(values, mvert->co);
+  }
 }
 
 static int rna_CustomDataLayer_active_get(PointerRNA *ptr, CustomData *data, int type, bool render)
 {
   int n = ((CustomDataLayer *)ptr->data) - data->layers;
 
-  if (render)
+  if (render) {
     return (n == CustomData_get_render_layer_index(data, type));
-  else
+  }
+  else {
     return (n == CustomData_get_active_layer_index(data, type));
+  }
 }
 
 static int rna_CustomDataLayer_clone_get(PointerRNA *ptr, CustomData *data, int type)
@@ -570,13 +574,16 @@ static void rna_CustomDataLayer_active_set(
   Mesh *me = ptr->id.data;
   int n = (((CustomDataLayer *)ptr->data) - data->layers) - CustomData_get_layer_index(data, type);
 
-  if (value == 0)
+  if (value == 0) {
     return;
+  }
 
-  if (render)
+  if (render) {
     CustomData_set_layer_render(data, type, n);
-  else
+  }
+  else {
     CustomData_set_layer_active(data, type, n);
+  }
 
   BKE_mesh_update_customdata_pointers(me, true);
 }
@@ -585,8 +592,9 @@ static void rna_CustomDataLayer_clone_set(PointerRNA *ptr, CustomData *data, int
 {
   int n = ((CustomDataLayer *)ptr->data) - data->layers;
 
-  if (value == 0)
+  if (value == 0) {
     return;
+  }
 
   CustomData_set_layer_clone_index(data, type, n);
 }
@@ -1002,7 +1010,8 @@ static void rna_Mesh_face_map_remove(struct Mesh *me,
 static int rna_MeshPoly_vertices_get_length(PointerRNA *ptr, int length[RNA_MAX_ARRAY_DIMENSION])
 {
   MPoly *mp = (MPoly *)ptr->data;
-  /* note, raw access uses dummy item, this _could_ crash, watch out for this, mface uses it but it cant work here */
+  /* note, raw access uses dummy item, this _could_ crash,
+   * watch out for this, mface uses it but it cant work here. */
   return (length[0] = mp->totloop);
 }
 
@@ -1030,7 +1039,8 @@ static void rna_MeshPoly_vertices_set(PointerRNA *ptr, const int *values)
 
 /* disabling, some importers don't know the total material count when assigning materials */
 #  if 0
-static void rna_MeshPoly_material_index_range(PointerRNA *ptr, int *min, int *max, int *softmin, int *softmax)
+static void rna_MeshPoly_material_index_range(
+    PointerRNA *ptr, int *min, int *max, int *softmin, int *softmax)
 {
   Mesh *me = rna_mesh(ptr);
   *min = 0;
@@ -1096,10 +1106,13 @@ static char *rna_VertexGroupElement_path(PointerRNA *ptr)
   MDeformVert *dvert;
   int a, b;
 
-  for (a = 0, dvert = me->dvert; a < me->totvert; a++, dvert++)
-    for (b = 0; b < dvert->totweight; b++)
-      if (dw == &dvert->dw[b])
+  for (a = 0, dvert = me->dvert; a < me->totvert; a++, dvert++) {
+    for (b = 0; b < dvert->totweight; b++) {
+      if (dw == &dvert->dw[b]) {
         return BLI_sprintfN("vertices[%d].groups[%d]", a, b);
+      }
+    }
+  }
 
   return NULL;
 }
@@ -2075,7 +2088,8 @@ static void rna_def_mproperties(BlenderRNA *brna)
     prop = RNA_def_property(srna, "value", PROP_FLOAT, PROP_NONE); \
     RNA_def_property_float_sdna(prop, NULL, "f"); \
     RNA_def_property_ui_text(prop, "Value", ""); \
-    RNA_def_property_update(prop, 0, "rna_Mesh_update_data");
+    RNA_def_property_update(prop, 0, "rna_Mesh_update_data"); \
+    ((void)0)
 
   /* Int */
 #  define MESH_INT_PROPERTY_LAYER(elemname) \
@@ -2115,7 +2129,8 @@ static void rna_def_mproperties(BlenderRNA *brna)
     prop = RNA_def_property(srna, "value", PROP_INT, PROP_NONE); \
     RNA_def_property_int_sdna(prop, NULL, "i"); \
     RNA_def_property_ui_text(prop, "Value", ""); \
-    RNA_def_property_update(prop, 0, "rna_Mesh_update_data");
+    RNA_def_property_update(prop, 0, "rna_Mesh_update_data"); \
+    ((void)0)
 
   /* String */
 #  define MESH_STRING_PROPERTY_LAYER(elemname) \
@@ -2162,10 +2177,10 @@ static void rna_def_mproperties(BlenderRNA *brna)
     RNA_def_property_ui_text(prop, "Value", ""); \
     RNA_def_property_update(prop, 0, "rna_Mesh_update_data");
 
-  MESH_FLOAT_PROPERTY_LAYER("Vertex")
-  MESH_FLOAT_PROPERTY_LAYER("Polygon")
-  MESH_INT_PROPERTY_LAYER("Vertex")
-  MESH_INT_PROPERTY_LAYER("Polygon")
+  MESH_FLOAT_PROPERTY_LAYER("Vertex");
+  MESH_FLOAT_PROPERTY_LAYER("Polygon");
+  MESH_INT_PROPERTY_LAYER("Vertex");
+  MESH_INT_PROPERTY_LAYER("Polygon");
   MESH_STRING_PROPERTY_LAYER("Vertex")
   MESH_STRING_PROPERTY_LAYER("Polygon")
 #  undef MESH_PROPERTY_LAYER
@@ -3011,12 +3026,6 @@ static void rna_def_mesh(BlenderRNA *brna)
   RNA_def_property_boolean_funcs(prop, "rna_Mesh_has_custom_normals_get", NULL);
   RNA_define_verify_sdna(true);
 
-  prop = RNA_def_property(srna, "show_double_sided", PROP_BOOLEAN, PROP_NONE);
-  RNA_def_property_boolean_sdna(prop, NULL, "flag", ME_TWOSIDED);
-  RNA_def_property_ui_text(
-      prop, "Double Sided", "Display the mesh with double or single sided lighting (OpenGL only)");
-  RNA_def_property_update(prop, 0, "rna_Mesh_update_data");
-
   prop = RNA_def_property(srna, "texco_mesh", PROP_POINTER, PROP_NONE);
   RNA_def_property_pointer_sdna(prop, NULL, "texcomesh");
   RNA_def_property_flag(prop, PROP_EDITABLE);
@@ -3041,7 +3050,8 @@ static void rna_def_mesh(BlenderRNA *brna)
   RNA_def_property_array(prop, 3);
   RNA_def_property_ui_text(prop, "Texture Space Location", "Texture space location");
   RNA_def_property_editable_func(prop, "rna_Mesh_texspace_editable");
-  RNA_def_property_float_funcs(prop, "rna_Mesh_texspace_loc_get", "rna_Mesh_texspace_loc_set", NULL);
+  RNA_def_property_float_funcs(
+      prop, "rna_Mesh_texspace_loc_get", "rna_Mesh_texspace_loc_set", NULL);
   RNA_def_property_update(prop, 0, "rna_Mesh_update_draw");
 #  endif
 

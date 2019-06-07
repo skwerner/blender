@@ -63,7 +63,8 @@ typedef struct DRWDeferredShader {
 } DRWDeferredShader;
 
 typedef struct DRWShaderCompiler {
-  ListBase queue; /* DRWDeferredShader */
+  ListBase queue;          /* DRWDeferredShader */
+  ListBase queue_conclude; /* DRWDeferredShader */
   SpinLock list_lock;
 
   DRWDeferredShader *mat_compiling;
@@ -134,7 +135,12 @@ static void drw_deferred_shader_compilation_exec(void *custom_data,
     BLI_mutex_unlock(&comp->compilation_lock);
 
     BLI_spin_lock(&comp->list_lock);
-    drw_deferred_shader_free(comp->mat_compiling);
+    if (GPU_material_status(comp->mat_compiling->mat) == GPU_MAT_QUEUED) {
+      BLI_addtail(&comp->queue_conclude, comp->mat_compiling);
+    }
+    else {
+      drw_deferred_shader_free(comp->mat_compiling);
+    }
     comp->mat_compiling = NULL;
     BLI_spin_unlock(&comp->list_lock);
   }
@@ -147,6 +153,17 @@ static void drw_deferred_shader_compilation_free(void *custom_data)
   DRWShaderCompiler *comp = (DRWShaderCompiler *)custom_data;
 
   drw_deferred_shader_queue_free(&comp->queue);
+
+  if (!BLI_listbase_is_empty(&comp->queue_conclude)) {
+    /* Compile the shaders in the context they will be deleted. */
+    DRW_opengl_context_enable_ex(false);
+    DRWDeferredShader *mat_conclude;
+    while ((mat_conclude = BLI_poptail(&comp->queue_conclude))) {
+      GPU_material_compile(mat_conclude->mat);
+      drw_deferred_shader_free(mat_conclude);
+    }
+    DRW_opengl_context_disable_ex(true);
+  }
 
   BLI_spin_end(&comp->list_lock);
   BLI_mutex_end(&comp->compilation_lock);
@@ -161,8 +178,10 @@ static void drw_deferred_shader_compilation_free(void *custom_data)
 
 static void drw_deferred_shader_add(GPUMaterial *mat, bool deferred)
 {
-  /* Do not deferre the compilation if we are rendering for image. */
-  if (DRW_state_is_image_render() || !USE_DEFERRED_COMPILATION || !deferred) {
+  /* Do not deferre the compilation if we are rendering for image.
+   * deferred rendering is only possible when `evil_C` is available */
+  if (DST.draw_ctx.evil_C == NULL || DRW_state_is_image_render() || !USE_DEFERRED_COMPILATION ||
+      !deferred) {
     /* Double checking that this GPUMaterial is not going to be
      * compiled by another thread. */
     DRW_deferred_shader_remove(mat);
@@ -181,7 +200,8 @@ static void drw_deferred_shader_add(GPUMaterial *mat, bool deferred)
   /* Use original scene ID since this is what the jobs template tests for. */
   Scene *scene = (Scene *)DEG_get_original_id(&DST.draw_ctx.scene->id);
 
-  /* Get the running job or a new one if none is running. Can only have one job per type & owner.  */
+  /* Get the running job or a new one if none is running. Can only have one job per type & owner.
+   */
   wmJob *wm_job = WM_jobs_get(wm,
                               win,
                               scene,
@@ -391,6 +411,7 @@ GPUMaterial *DRW_shader_create_from_world(struct Scene *scene,
   if (mat == NULL) {
     scene = (Scene *)DEG_get_original_id(&DST.draw_ctx.scene->id);
     mat = GPU_material_from_nodetree(scene,
+                                     NULL,
                                      wo->nodetree,
                                      &wo->gpumaterial,
                                      engine_type,
@@ -427,6 +448,7 @@ GPUMaterial *DRW_shader_create_from_material(struct Scene *scene,
   if (mat == NULL) {
     scene = (Scene *)DEG_get_original_id(&DST.draw_ctx.scene->id);
     mat = GPU_material_from_nodetree(scene,
+                                     ma,
                                      ma->nodetree,
                                      &ma->gpumaterial,
                                      engine_type,

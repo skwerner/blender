@@ -164,7 +164,8 @@ eExprPyLike_EvalStatus BLI_expr_pylike_eval(ExprPyLike_Parsed *expr,
 #define FAIL_IF(condition) \
   if (condition) { \
     return EXPR_PYLIKE_FATAL_ERROR; \
-  }
+  } \
+  ((void)0)
 
   /* Check the stack requirement is at least remotely sane and allocate on the actual stack. */
   FAIL_IF(expr->max_stack <= 0 || expr->max_stack > 1000);
@@ -356,27 +357,29 @@ typedef struct BuiltinOpDef {
   void *funcptr;
 } BuiltinOpDef;
 
-static BuiltinOpDef builtin_ops[] = {{"radians", OPCODE_FUNC1, op_radians},
-                                     {"degrees", OPCODE_FUNC1, op_degrees},
-                                     {"abs", OPCODE_FUNC1, fabs},
-                                     {"fabs", OPCODE_FUNC1, fabs},
-                                     {"floor", OPCODE_FUNC1, floor},
-                                     {"ceil", OPCODE_FUNC1, ceil},
-                                     {"trunc", OPCODE_FUNC1, trunc},
-                                     {"int", OPCODE_FUNC1, trunc},
-                                     {"sin", OPCODE_FUNC1, sin},
-                                     {"cos", OPCODE_FUNC1, cos},
-                                     {"tan", OPCODE_FUNC1, tan},
-                                     {"asin", OPCODE_FUNC1, asin},
-                                     {"acos", OPCODE_FUNC1, acos},
-                                     {"atan", OPCODE_FUNC1, atan},
-                                     {"atan2", OPCODE_FUNC2, atan2},
-                                     {"exp", OPCODE_FUNC1, exp},
-                                     {"log", OPCODE_FUNC1, log},
-                                     {"sqrt", OPCODE_FUNC1, sqrt},
-                                     {"pow", OPCODE_FUNC2, pow},
-                                     {"fmod", OPCODE_FUNC2, fmod},
-                                     {NULL, OPCODE_CONST, NULL}};
+static BuiltinOpDef builtin_ops[] = {
+    {"radians", OPCODE_FUNC1, op_radians},
+    {"degrees", OPCODE_FUNC1, op_degrees},
+    {"abs", OPCODE_FUNC1, fabs},
+    {"fabs", OPCODE_FUNC1, fabs},
+    {"floor", OPCODE_FUNC1, floor},
+    {"ceil", OPCODE_FUNC1, ceil},
+    {"trunc", OPCODE_FUNC1, trunc},
+    {"int", OPCODE_FUNC1, trunc},
+    {"sin", OPCODE_FUNC1, sin},
+    {"cos", OPCODE_FUNC1, cos},
+    {"tan", OPCODE_FUNC1, tan},
+    {"asin", OPCODE_FUNC1, asin},
+    {"acos", OPCODE_FUNC1, acos},
+    {"atan", OPCODE_FUNC1, atan},
+    {"atan2", OPCODE_FUNC2, atan2},
+    {"exp", OPCODE_FUNC1, exp},
+    {"log", OPCODE_FUNC1, log},
+    {"sqrt", OPCODE_FUNC1, sqrt},
+    {"pow", OPCODE_FUNC2, pow},
+    {"fmod", OPCODE_FUNC2, fmod},
+    {NULL, OPCODE_CONST, NULL},
+};
 
 /** \} */
 
@@ -389,7 +392,8 @@ static BuiltinOpDef builtin_ops[] = {{"radians", OPCODE_FUNC1, op_radians},
 #define CHECK_ERROR(condition) \
   if (!(condition)) { \
     return false; \
-  }
+  } \
+  ((void)0)
 
 /* For simplicity simple token types are represented by their own character;
  * these are special identifiers for multi-character tokens. */
@@ -413,12 +417,14 @@ typedef struct KeywordTokenDef {
   short token;
 } KeywordTokenDef;
 
-static KeywordTokenDef keyword_list[] = {{"and", TOKEN_AND},
-                                         {"or", TOKEN_OR},
-                                         {"not", TOKEN_NOT},
-                                         {"if", TOKEN_IF},
-                                         {"else", TOKEN_ELSE},
-                                         {NULL, TOKEN_ID}};
+static KeywordTokenDef keyword_list[] = {
+    {"and", TOKEN_AND},
+    {"or", TOKEN_OR},
+    {"not", TOKEN_NOT},
+    {"if", TOKEN_IF},
+    {"else", TOKEN_ELSE},
+    {NULL, TOKEN_ID},
+};
 
 typedef struct ExprParseState {
   int param_names_len;

@@ -296,7 +296,8 @@ static void greasepencil_modifier_object_set(Object *self,
 }
 
 #  define RNA_GP_MOD_OBJECT_SET(_type, _prop, _obtype) \
-    static void rna_##_type##GpencilModifier_##_prop##_set(PointerRNA *ptr, PointerRNA value) \
+    static void rna_##_type##GpencilModifier_##_prop##_set( \
+        PointerRNA *ptr, PointerRNA value, struct ReportList *UNUSED(reports)) \
     { \
       _type##GpencilModifierData *tmd = (_type##GpencilModifierData *)ptr->data; \
       greasepencil_modifier_object_set(ptr->id.data, &tmd->_prop, _obtype, value); \
@@ -308,7 +309,9 @@ RNA_GP_MOD_OBJECT_SET(Mirror, object, OB_EMPTY);
 
 #  undef RNA_GP_MOD_OBJECT_SET
 
-static void rna_HookGpencilModifier_object_set(PointerRNA *ptr, PointerRNA value)
+static void rna_HookGpencilModifier_object_set(PointerRNA *ptr,
+                                               PointerRNA value,
+                                               struct ReportList *UNUSED(reports))
 {
   HookGpencilModifierData *hmd = ptr->data;
   Object *ob = (Object *)value.data;
@@ -1665,8 +1668,9 @@ static void rna_def_modifier_gpencilarmature(BlenderRNA *brna)
   prop = RNA_def_property(srna, "use_multi_modifier", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_sdna(prop, NULL, "multi", 0);
   RNA_def_property_ui_text(
-          prop, "Multi Modifier",
-          "Use same input as previous modifier, and mix results using overall vgroup");
+      prop,
+      "Multi Modifier",
+      "Use same input as previous modifier, and mix results using overall vgroup");
   RNA_def_property_update(prop, 0, "rna_GpencilModifier_dependency_update");
 #  endif
 

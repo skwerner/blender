@@ -22,26 +22,25 @@ setup_libdirs()
 
 blender_include_dirs(
   ../../intern/clog
-  ../../intern/guardedalloc
   ../../intern/glew-mx
-  ../blender/blenlib
+  ../../intern/guardedalloc
   ../blender/blenkernel
+  ../blender/blenlib
   ../blender/blenloader
   ../blender/depsgraph
   ../blender/editors/include
-  ../blender/makesrna
   ../blender/imbuf
+  ../blender/makesrna
   ../blender/render/extern/include
-  ../blender/makesdna
   ../blender/gpu
+  ../blender/makesdna
   ../blender/windowmanager
 )
 
 set(LIB
-  bf_blenfont
+  bf_blenloader
   bf_blenkernel
   bf_blenlib
-  bf_blenloader
   bf_depsgraph
   bf_dna
   bf_editor_datafiles
@@ -738,22 +737,15 @@ elseif(WIN32)
 
       if(WITH_PYTHON_INSTALL_NUMPY)
         set(PYTHON_NUMPY_VERSION 1.15)
-        add_custom_command(OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/${BLENDER_VERSION}/python/lib/site-packages
-          COMMAND ${CMAKE_COMMAND} -E
-                  make_directory ${CMAKE_CURRENT_BINARY_DIR}/${BLENDER_VERSION}/python/lib/site-packages)
-
         add_custom_command(
-          OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/${BLENDER_VERSION}/python/lib/site-packages/numpy
+          OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/${BLENDER_VERSION}/python/lib/site-packages/numpy/__init__.py
           COMMAND ${CMAKE_COMMAND} -E
                   tar xzvf "${LIBDIR}/release/python${_PYTHON_VERSION_NO_DOTS}_numpy_${PYTHON_NUMPY_VERSION}$<$<CONFIG:Debug>:d>.tar.gz"
-          DEPENDS
-            ${LIBDIR}/release/python${_PYTHON_VERSION_NO_DOTS}_numpy_${PYTHON_NUMPY_VERSION}$<$<CONFIG:Debug>:d>.tar.gz
-            ${CMAKE_CURRENT_BINARY_DIR}/${BLENDER_VERSION}/python/lib/site-packages
           WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/${BLENDER_VERSION}/python/lib/site-packages
         )
         add_custom_target(
           python_numpy ALL
-          DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/${BLENDER_VERSION}/python/lib/site-packages/numpy
+          DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/${BLENDER_VERSION}/python/lib/site-packages/numpy/__init__.py
         )
         install(
           DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/${BLENDER_VERSION}/python/lib/site-packages/numpy

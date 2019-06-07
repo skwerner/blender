@@ -545,10 +545,6 @@ if(CMAKE_COMPILER_IS_GNUCC OR CMAKE_C_COMPILER_ID MATCHES "Clang")
   endif()
 endif()
 
-# Dependency graph
-option(WITH_LEGACY_DEPSGRAPH "Build Blender with legacy dependency graph" ON)
-mark_as_advanced(WITH_LEGACY_DEPSGRAPH)
-
 if(WIN32)
   # Use hardcoded paths or find_package to find externals
   option(WITH_WINDOWS_FIND_MODULES "Use find_package to locate libraries" OFF)
@@ -568,6 +564,14 @@ if(WIN32)
 
   option(WINDOWS_PYTHON_DEBUG "Include the files needed for debugging python scripts with visual studio 2017+." OFF)
   mark_as_advanced(WINDOWS_PYTHON_DEBUG)
+endif()
+
+# The following only works with the Ninja generator in CMake >= 3.0.
+if("${CMAKE_GENERATOR}" MATCHES "Ninja")
+  option(WITH_NINJA_POOL_JOBS
+         "Enable Ninja pools of jobs, to try to ease building on machines with 16GB of RAM or less (if not yet defined, will try to set best values based on detected machine specifications)."
+         OFF)
+  mark_as_advanced(WITH_NINJA_POOL_JOBS)
 endif()
 
 # avoid using again
@@ -816,6 +820,12 @@ if (NOT CMAKE_BUILD_TYPE MATCHES "Release")
 
     set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} ${COMPILER_ASAN_CXXFLAGS}")
     set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "${CMAKE_CXX_FLAGS_RELWITHDEBINFO} ${COMPILER_ASAN_CXXFLAGS}")
+    if(WITH_CYCLES_OSL)
+      # With OSL, Cycles disables rtti in some modules, wich then breaks at linking
+      # when trying to use vptr sanitizer (included into 'undefined' general option).
+      set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -fno-sanitize=vptr")
+      set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "${CMAKE_CXX_FLAGS_RELWITHDEBINFO} -fno-sanitize=vptr")
+    endif()
     if(MSVC)
       set(COMPILER_ASAN_LINKER_FLAGS "/FUNCTIONPADMIN:6")
     endif()
@@ -1286,6 +1296,76 @@ if(WITH_LIBMV)
 endif()
 
 #-----------------------------------------------------------------------------
+# Extra limits to number of jobs running in parallel for some kind os tasks.
+# Only supported by Ninja build system currently.
+if("${CMAKE_GENERATOR}" MATCHES "Ninja" AND WITH_NINJA_POOL_JOBS)
+  if(NOT NINJA_MAX_NUM_PARALLEL_COMPILE_JOBS AND
+     NOT NINJA_MAX_NUM_PARALLEL_COMPILE_HEAVY_JOBS AND
+     NOT NINJA_MAX_NUM_PARALLEL_LINK_JOBS)
+    # Try to define good default values.
+    # Max mem of heavy cpp files compilation: about 2.5GB
+    # Max mem during linking: about 3.3GB
+    cmake_host_system_information(RESULT _NUM_CORES QUERY NUMBER_OF_LOGICAL_CORES)
+    # Note: this gives mem in MB.
+    cmake_host_system_information(RESULT _TOT_MEM QUERY TOTAL_PHYSICAL_MEMORY)
+
+    # Heuristics... the more cores we have, the more free mem we have to keep for the non-heavy tasks too.
+    if(${_TOT_MEM} LESS 8000 AND ${_NUM_CORES} GREATER 2)
+      set(_compile_heavy_jobs "1")
+    elseif(${_TOT_MEM} LESS 16000 AND ${_NUM_CORES} GREATER 4)
+      set(_compile_heavy_jobs "2")
+    elseif(${_TOT_MEM} LESS 24000 AND ${_NUM_CORES} GREATER 8)
+      set(_compile_heavy_jobs "3")
+    elseif(${_TOT_MEM} LESS 32000 AND ${_NUM_CORES} GREATER 16)
+      set(_compile_heavy_jobs "4")
+    elseif(${_TOT_MEM} LESS 64000 AND ${_NUM_CORES} GREATER 32)
+      set(_compile_heavy_jobs "8")
+    else()
+      set(_compile_heavy_jobs "")
+    endif()
+
+    set(NINJA_MAX_NUM_PARALLEL_COMPILE_HEAVY_JOBS "${_compile_heavy_jobs}" CACHE STRING
+        "Define the maximum number of concurrent heavy compilation jobs, for ninja build system (used for some targets which cpp files can take several GB each during compilation)." FORCE)
+    mark_as_advanced(NINJA_MAX_NUM_PARALLEL_COMPILE_HEAVY_JOBS)
+    set(_compile_heavy_jobs)
+
+    # Only set regular compile jobs if we set heavy jobs, otherwise default (using all cores) if fine.
+    if(NINJA_MAX_NUM_PARALLEL_COMPILE_HEAVY_JOBS)
+      math(EXPR _compile_jobs "${_NUM_CORES} - 1")
+    else()
+      set(_compile_jobs "")
+    endif()
+    set(NINJA_MAX_NUM_PARALLEL_COMPILE_JOBS "${_compile_jobs}" CACHE STRING
+        "Define the maximum number of concurrent compilation jobs, for ninja build system." FORCE)
+    mark_as_advanced(NINJA_MAX_NUM_PARALLEL_COMPILE_JOBS)
+    set(_compile_jobs)
+
+    # In practice, even when there is RAM available, this proves to be quicker than running in parallel
+    # (due to slow disks accesses).
+    set(NINJA_MAX_NUM_PARALLEL_LINK_JOBS "1" CACHE STRING
+        "Define the maximum number of concurrent link jobs, for ninja build system." FORCE)
+    mark_as_advanced(NINJA_MAX_NUM_PARALLEL_LINK_JOBS)
+
+    set(_NUM_CORES)
+    set(_TOT_MEM)
+  endif()
+
+  if(NINJA_MAX_NUM_PARALLEL_COMPILE_JOBS)
+    set_property(GLOBAL APPEND PROPERTY JOB_POOLS compile_job_pool=${NINJA_MAX_NUM_PARALLEL_COMPILE_JOBS})
+    set(CMAKE_JOB_POOL_COMPILE compile_job_pool)
+  endif()
+
+  if(NINJA_MAX_NUM_PARALLEL_COMPILE_HEAVY_JOBS)
+    set_property(GLOBAL APPEND PROPERTY JOB_POOLS compile_heavy_job_pool=${NINJA_MAX_NUM_PARALLEL_COMPILE_HEAVY_JOBS})
+  endif()
+
+  if(NINJA_MAX_NUM_PARALLEL_LINK_JOBS)
+    set_property(GLOBAL APPEND PROPERTY JOB_POOLS link_job_pool=${NINJA_MAX_NUM_PARALLEL_LINK_JOBS})
+    set(CMAKE_JOB_POOL_LINK link_job_pool)
+  endif()
+endif()
+
+#-----------------------------------------------------------------------------
 # Extra compile flags
 
 if(CMAKE_COMPILER_IS_GNUCC)
@@ -1473,6 +1553,7 @@ elseif(CMAKE_C_COMPILER_ID MATCHES "MSVC")
     "/wd4800"  # forcing value to bool 'true' or 'false'
     "/wd4828"  # The file contains a character that is illegal
     "/wd4996"  # identifier was declared deprecated
+    "/wd4661"  # no suitable definition provided for explicit template instantiation request
     # errors:
     "/we4013"  # 'function' undefined; assuming extern returning int
     "/we4133"  # incompatible pointer types
@@ -1618,6 +1699,11 @@ endif()
 #-----------------------------------------------------------------------------
 # Testing
 add_subdirectory(tests)
+
+
+#-----------------------------------------------------------------------------
+# Define 'heavy' submodules (for Ninja builder when using pools).
+setup_heavy_lib_pool()
 
 
 #-----------------------------------------------------------------------------

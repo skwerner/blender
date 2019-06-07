@@ -141,16 +141,15 @@ static void console_lb_debug__internal(ListBase *lb)
   ConsoleLine *cl;
 
   printf("%d: ", BLI_listbase_count(lb));
-  for (cl = lb->first; cl; cl = cl->next)
+  for (cl = lb->first; cl; cl = cl->next) {
     printf("<%s> ", cl->line);
+  }
   printf("\n");
-
 }
 
 static void console_history_debug(const bContext *C)
 {
   SpaceConsole *sc = CTX_wm_space_console(C);
-
 
   console_lb_debug__internal(&sc->history);
 }

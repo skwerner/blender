@@ -29,12 +29,14 @@ extern "C" {
 #include <string.h>  // XXX: memcpy
 
 #include "BLI_utildefines.h"
+#include "BLI_listbase.h"
+#include "BLI_ghash.h"
+
+#include "BKE_action.h"  // XXX: BKE_pose_channel_find_name
 #include "BKE_customdata.h"
 #include "BKE_idcode.h"
 #include "BKE_main.h"
-#include "BLI_listbase.h"
 
-#include "BKE_action.h"  // XXX: BKE_pose_channel_from_name
 } /* extern "C" */
 
 #include "DNA_object_types.h"
@@ -93,6 +95,12 @@ bool DEG_id_type_any_updated(const Depsgraph *graph)
   return false;
 }
 
+bool DEG_id_type_any_exists(const Depsgraph *depsgraph, short id_type)
+{
+  const DEG::Depsgraph *deg_graph = reinterpret_cast<const DEG::Depsgraph *>(depsgraph);
+  return deg_graph->id_type_exist[BKE_idcode_to_index(id_type)] != 0;
+}
+
 uint32_t DEG_get_eval_flags_for_id(const Depsgraph *graph, ID *id)
 {
   if (graph == NULL) {
@@ -149,6 +157,19 @@ Scene *DEG_get_evaluated_scene(const Depsgraph *graph)
    * that calleer is OK with just a pointer in case scene is not updated
    * yet? */
   BLI_assert(scene_cow != NULL && DEG::deg_copy_on_write_is_expanded(&scene_cow->id));
+  return scene_cow;
+}
+
+Scene *DEG_get_evaluated_scene_if_exists(const Depsgraph *graph)
+{
+  if (graph == NULL) {
+    return NULL;
+  }
+  const DEG::Depsgraph *deg_graph = reinterpret_cast<const DEG::Depsgraph *>(graph);
+  Scene *scene_cow = deg_graph->scene_cow;
+  if (scene_cow == NULL || !DEG::deg_copy_on_write_is_expanded(&scene_cow->id)) {
+    return NULL;
+  }
   return scene_cow;
 }
 
@@ -262,4 +283,58 @@ ID *DEG_get_original_id(ID *id)
   }
   BLI_assert((id->tag & LIB_TAG_COPIED_ON_WRITE) != 0);
   return (ID *)id->orig_id;
+}
+
+bool DEG_is_original_id(ID *id)
+{
+  /* Some explanation of the logic.
+   *
+   * What we want here is to be able to tell whether given ID is a result of dependency graph
+   * evaluation or not.
+   *
+   * All the datablocks which are created by copy-on-write mechanism will have will be tagged with
+   * LIB_TAG_COPIED_ON_WRITE tag. Those datablocks can not be original.
+   *
+   * Modifier stack evaluation might create special datablocks which have all the modifiers
+   * applied, and those will be tagged with LIB_TAG_COPIED_ON_WRITE_EVAL_RESULT. Such datablocks
+   * can not be original as well.
+   *
+   * Localization is usually happening from evaluated datablock, or will have some special pointer
+   * magic which will make them to act as evaluated.
+   *
+   * NOTE: We conder ID evaluated if ANY of those flags is set. We do NOT require ALL of them. */
+  if (id->tag &
+      (LIB_TAG_COPIED_ON_WRITE | LIB_TAG_COPIED_ON_WRITE_EVAL_RESULT | LIB_TAG_LOCALIZED)) {
+    return false;
+  }
+  return true;
+}
+
+bool DEG_is_original_object(Object *object)
+{
+  return DEG_is_original_id(&object->id);
+}
+
+bool DEG_is_evaluated_id(ID *id)
+{
+  return !DEG_is_original_id(id);
+}
+
+bool DEG_is_evaluated_object(Object *object)
+{
+  return !DEG_is_original_object(object);
+}
+
+bool DEG_is_fully_evaluated(const struct Depsgraph *depsgraph)
+{
+  const DEG::Depsgraph *deg_graph = (const DEG::Depsgraph *)depsgraph;
+  /* Check whether relations are up to date. */
+  if (deg_graph->need_update) {
+    return false;
+  }
+  /* Check whether IDs are up to date. */
+  if (BLI_gset_len(deg_graph->entry_tags) > 0) {
+    return false;
+  }
+  return true;
 }

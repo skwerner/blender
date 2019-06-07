@@ -417,12 +417,12 @@ ccl_device_inline float triangle_area(const float3 v1, const float3 v2, const fl
 ccl_device_inline void make_orthonormals(const float3 N, float3 *a, float3 *b)
 {
 #if 0
-  if(fabsf(N.y) >= 0.999f) {
+  if (fabsf(N.y) >= 0.999f) {
     *a = make_float3(1, 0, 0);
     *b = make_float3(0, 0, 1);
     return;
   }
-  if(fabsf(N.z) >= 0.999f) {
+  if (fabsf(N.z) >= 0.999f) {
     *a = make_float3(1, 0, 0);
     *b = make_float3(0, 1, 0);
     return;
@@ -649,6 +649,26 @@ ccl_device_inline float2 map_to_sphere(const float3 co)
     u = v = 0.0f;
   }
   return make_float2(u, v);
+}
+
+/* Compares two floats.
+ * Returns true if their absolute difference is smaller than abs_diff (for numbers near zero)
+ * or their relative difference is less than ulp_diff ULPs.
+ * Based on
+ * https://randomascii.wordpress.com/2012/02/25/comparing-floating-point-numbers-2012-edition/
+ */
+
+ccl_device_inline float compare_floats(float a, float b, float abs_diff, int ulp_diff)
+{
+  if (fabsf(a - b) < abs_diff) {
+    return true;
+  }
+
+  if ((a < 0.0f) != (b < 0.0f)) {
+    return false;
+  }
+
+  return (abs(__float_as_int(a) - __float_as_int(b)) < ulp_diff);
 }
 
 CCL_NAMESPACE_END

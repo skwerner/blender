@@ -156,7 +156,6 @@ void WM_operatortype_remove_ptr(wmOperatorType *ot)
 
   if (ot->last_properties) {
     IDP_FreeProperty(ot->last_properties);
-    MEM_freeN(ot->last_properties);
   }
 
   if (ot->macro.first) {
@@ -194,7 +193,6 @@ static void operatortype_ghash_free_cb(wmOperatorType *ot)
 {
   if (ot->last_properties) {
     IDP_FreeProperty(ot->last_properties);
-    MEM_freeN(ot->last_properties);
   }
 
   if (ot->macro.first) {
@@ -236,9 +234,11 @@ void WM_operatortype_props_advanced_begin(wmOperatorType *ot)
 }
 
 /**
- * Tags all operator-properties of \ot defined since the first #WM_operatortype_props_advanced_begin
- * call, or the last #WM_operatortype_props_advanced_end call, with #OP_PROP_TAG_ADVANCED.
- * Note that this is called for all operators during registration (see #wm_operatortype_append__end).
+ * Tags all operator-properties of \a ot defined since the first
+ * #WM_operatortype_props_advanced_begin call,
+ * or the last #WM_operatortype_props_advanced_end call, with #OP_PROP_TAG_ADVANCED.
+ *
+ * \note This is called for all operators during registration (see #wm_operatortype_append__end).
  * So it does not need to be explicitly called in operator-type definition.
  */
 void WM_operatortype_props_advanced_end(wmOperatorType *ot)
@@ -277,7 +277,6 @@ void WM_operatortype_last_properties_clear_all(void)
 
     if (ot->last_properties) {
       IDP_FreeProperty(ot->last_properties);
-      MEM_freeN(ot->last_properties);
       ot->last_properties = NULL;
     }
   }
@@ -431,9 +430,18 @@ static int wm_macro_modal(bContext *C, wmOperator *op, const wmEvent *event)
          * */
         if (op->opm->type->flag & OPTYPE_BLOCKING) {
           int bounds[4] = {-1, -1, -1, -1};
-          const bool wrap = ((U.uiflag & USER_CONTINUOUS_MOUSE) &&
-                             ((op->opm->flag & OP_IS_MODAL_GRAB_CURSOR) ||
-                              (op->opm->type->flag & OPTYPE_GRAB_CURSOR)));
+          int wrap = WM_CURSOR_WRAP_NONE;
+
+          if ((op->opm->flag & OP_IS_MODAL_GRAB_CURSOR) ||
+              (op->opm->type->flag & OPTYPE_GRAB_CURSOR_XY)) {
+            wrap = WM_CURSOR_WRAP_XY;
+          }
+          else if (op->opm->type->flag & OPTYPE_GRAB_CURSOR_X) {
+            wrap = WM_CURSOR_WRAP_X;
+          }
+          else if (op->opm->type->flag & OPTYPE_GRAB_CURSOR_Y) {
+            wrap = WM_CURSOR_WRAP_Y;
+          }
 
           if (wrap) {
             ARegion *ar = CTX_wm_region(C);
@@ -574,6 +582,17 @@ static void wm_operatortype_free_macro(wmOperatorType *ot)
     }
   }
   BLI_freelistN(&ot->macro);
+}
+
+const char *WM_operatortype_name(struct wmOperatorType *ot, struct PointerRNA *properties)
+{
+  const char *name = NULL;
+
+  if (ot->get_name && properties) {
+    name = ot->get_name(ot, properties);
+  }
+
+  return (name && name[0]) ? name : RNA_struct_ui_name(ot->srna);
 }
 
 /** \} */

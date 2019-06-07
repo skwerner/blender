@@ -187,6 +187,10 @@ BLI_INLINE OperationNode *flush_schedule_children(OperationNode *op_node, FlushQ
     if (rel->flag & RELATION_FLAG_NO_FLUSH) {
       continue;
     }
+    if (op_node->flag & DEPSOP_FLAG_USER_MODIFIED) {
+      IDNode *id_node = op_node->owner->owner;
+      id_node->is_user_modified = true;
+    }
     /* Relation only allows flushes on user changes, but the node was not
      * affected by user. */
     if ((rel->flag & RELATION_FLAG_FLUSH_USER_EDIT_ONLY) &&
@@ -234,10 +238,6 @@ void flush_editors_id_update(Depsgraph *graph, const DEGEditorUpdateContext *upd
     /* TODO(sergey): Do we need to pass original or evaluated ID here? */
     ID *id_orig = id_node->id_orig;
     ID *id_cow = id_node->id_cow;
-    /* Copy tag from original data to CoW storage.
-     * This is because DEG_id_tag_update() sets tags on original
-     * data. */
-    id_cow->recalc |= (id_orig->recalc & ID_RECALC_ALL);
     /* Gather recalc flags from all changed components. */
     GHASH_FOREACH_BEGIN (ComponentNode *, comp_node, id_node->components) {
       if (comp_node->custom_flags != COMPONENT_STATE_DONE) {
@@ -261,7 +261,7 @@ void flush_editors_id_update(Depsgraph *graph, const DEGEditorUpdateContext *upd
      * TODO: image datablocks do not use COW, so might not be detected
      * correctly. */
     if (deg_copy_on_write_is_expanded(id_cow)) {
-      if (graph->is_active) {
+      if (graph->is_active && id_node->is_user_modified) {
         deg_editors_id_update(update_ctx, id_orig);
       }
       /* ID may need to get its auto-override operations refreshed. */

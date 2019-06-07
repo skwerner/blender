@@ -43,10 +43,10 @@ CCL_NAMESPACE_BEGIN
 void python_thread_state_save(void **python_thread_state);
 void python_thread_state_restore(void **python_thread_state);
 
-static inline BL::Mesh object_to_mesh(BL::BlendData &data,
+static inline BL::Mesh object_to_mesh(BL::BlendData & /*data*/,
                                       BL::Object &object,
-                                      BL::Depsgraph &depsgraph,
-                                      bool calc_undeformed,
+                                      BL::Depsgraph & /*depsgraph*/,
+                                      bool /*calc_undeformed*/,
                                       Mesh::SubdivisionType subdivision_type)
 {
   /* TODO: make this work with copy-on-write, modifiers are already evaluated. */
@@ -54,8 +54,8 @@ static inline BL::Mesh object_to_mesh(BL::BlendData &data,
   bool subsurf_mod_show_render = false;
   bool subsurf_mod_show_viewport = false;
 
-  if(subdivision_type != Mesh::SUBDIVISION_NONE) {
-    BL::Modifier subsurf_mod = object.modifiers[object.modifiers.length()-1];
+  if (subdivision_type != Mesh::SUBDIVISION_NONE) {
+    BL::Modifier subsurf_mod = object.modifiers[object.modifiers.length() - 1];
 
     subsurf_mod_show_render = subsurf_mod.show_render();
     subsurf_mod_show_viewport = subsurf_mod.show_viewport();
@@ -75,16 +75,18 @@ static inline BL::Mesh object_to_mesh(BL::BlendData &data,
      * UV are not empty. */
     if (mesh.is_editmode() ||
         (mesh.use_auto_smooth() && subdivision_type == Mesh::SUBDIVISION_NONE)) {
-      mesh = data.meshes.new_from_object(depsgraph, object, false, false);
+      BL::Depsgraph depsgraph(PointerRNA_NULL);
+      mesh = object.to_mesh(false, depsgraph);
     }
   }
   else {
-    mesh = data.meshes.new_from_object(depsgraph, object, true, calc_undeformed);
+    BL::Depsgraph depsgraph(PointerRNA_NULL);
+    mesh = object.to_mesh(false, depsgraph);
   }
 
 #if 0
-  if(subdivision_type != Mesh::SUBDIVISION_NONE) {
-    BL::Modifier subsurf_mod = object.modifiers[object.modifiers.length()-1];
+  if (subdivision_type != Mesh::SUBDIVISION_NONE) {
+    BL::Modifier subsurf_mod = object.modifiers[object.modifiers.length() - 1];
 
     subsurf_mod.show_render(subsurf_mod_show_render);
     subsurf_mod.show_viewport(subsurf_mod_show_viewport);
@@ -102,11 +104,13 @@ static inline BL::Mesh object_to_mesh(BL::BlendData &data,
   return mesh;
 }
 
-static inline void free_object_to_mesh(BL::BlendData &data, BL::Object &object, BL::Mesh &mesh)
+static inline void free_object_to_mesh(BL::BlendData & /*data*/,
+                                       BL::Object &object,
+                                       BL::Mesh &mesh)
 {
   /* Free mesh if we didn't just use the existing one. */
   if (object.data().ptr.data != mesh.ptr.data) {
-    data.meshes.remove(mesh, false, true, false);
+    object.to_mesh_clear();
   }
 }
 

@@ -46,14 +46,15 @@ static std::string getActiveUVLayerName(Object *ob)
   Mesh *me = (Mesh *)ob->data;
 
   int num_layers = CustomData_number_of_layers(&me->ldata, CD_MLOOPUV);
-  if (num_layers)
+  if (num_layers) {
     return std::string(bc_CustomData_get_active_layer_name(&me->ldata, CD_MLOOPUV));
+  }
 
   return "";
 }
 
 EffectsExporter::EffectsExporter(COLLADASW::StreamWriter *sw,
-                                 const ExportSettings *export_settings,
+                                 BCExportSettings &export_settings,
                                  KeyImageMap &key_image_map)
     : COLLADASW::LibraryEffects(sw), export_settings(export_settings), key_image_map(key_image_map)
 {
@@ -67,8 +68,9 @@ bool EffectsExporter::hasEffects(Scene *sce)
       Material *ma = give_current_material(ob, a + 1);
 
       // no material, but check all of the slots
-      if (!ma)
+      if (!ma) {
         continue;
+      }
 
       return true;
     }
@@ -84,7 +86,8 @@ void EffectsExporter::exportEffects(bContext *C, Scene *sce)
     this->scene = sce;
     openLibrary();
     MaterialFunctor mf;
-    mf.forEachMaterialInExportSet<EffectsExporter>(sce, *this, this->export_settings->export_set);
+    mf.forEachMaterialInExportSet<EffectsExporter>(
+        sce, *this, this->export_settings.get_export_set());
 
     closeLibrary();
   }
@@ -92,26 +95,40 @@ void EffectsExporter::exportEffects(bContext *C, Scene *sce)
 
 void EffectsExporter::set_shader_type(COLLADASW::EffectProfile &ep, Material *ma)
 {
-  ep.setShaderType(
-      COLLADASW::EffectProfile::LAMBERT);  //XXX check if BLINN and PHONG can be supported as well
+  /* XXX check if BLINN and PHONG can be supported as well */
+  ep.setShaderType(COLLADASW::EffectProfile::LAMBERT);
 }
 
 void EffectsExporter::set_transparency(COLLADASW::EffectProfile &ep, Material *ma)
 {
-  COLLADASW::ColorOrTexture cot = bc_get_base_color(ma);
-  float transparency = cot.getColor().getAlpha();
-  if (transparency < 1) {
-    // Tod: because we are in A_ONE mode transparency is calculated like this:
-    COLLADASW::ColorOrTexture cot = getcol(1.0f, 1.0f, 1.0f, transparency);
-    ep.setTransparent(cot);
-    ep.setOpaque(COLLADASW::EffectProfile::A_ONE);
-  }
+  double alpha = bc_get_alpha(ma);
+  ep.setTransparency(alpha, false, "alpha");
 }
+
 void EffectsExporter::set_diffuse_color(COLLADASW::EffectProfile &ep, Material *ma)
 {
   // get diffuse color
   COLLADASW::ColorOrTexture cot = bc_get_base_color(ma);
   ep.setDiffuse(cot, false, "diffuse");
+}
+
+void EffectsExporter::set_ambient(COLLADASW::EffectProfile &ep, Material *ma)
+{
+  // get diffuse color
+  COLLADASW::ColorOrTexture cot = bc_get_ambient(ma);
+  ep.setAmbient(cot, false, "ambient");
+}
+void EffectsExporter::set_specular(COLLADASW::EffectProfile &ep, Material *ma)
+{
+  // get diffuse color
+  COLLADASW::ColorOrTexture cot = bc_get_specular(ma);
+  ep.setSpecular(cot, false, "specular");
+}
+void EffectsExporter::set_reflective(COLLADASW::EffectProfile &ep, Material *ma)
+{
+  // get diffuse color
+  COLLADASW::ColorOrTexture cot = bc_get_reflective(ma);
+  ep.setReflective(cot, false, "reflective");
 }
 
 void EffectsExporter::set_reflectivity(COLLADASW::EffectProfile &ep, Material *ma)
@@ -122,7 +139,20 @@ void EffectsExporter::set_reflectivity(COLLADASW::EffectProfile &ep, Material *m
 
 void EffectsExporter::set_emission(COLLADASW::EffectProfile &ep, Material *ma)
 {
-  // not yet supported (needs changes in principled shader
+  COLLADASW::ColorOrTexture cot = bc_get_emission(ma);
+  ep.setEmission(cot, false, "emission");
+}
+
+void EffectsExporter::set_ior(COLLADASW::EffectProfile &ep, Material *ma)
+{
+  double alpha = bc_get_ior(ma);
+  ep.setIndexOfRefraction(alpha, false, "ior");
+}
+
+void EffectsExporter::set_shininess(COLLADASW::EffectProfile &ep, Material *ma)
+{
+  double shininess = bc_get_shininess(ma);
+  ep.setShininess(shininess, false, "shininess");
 }
 
 void EffectsExporter::get_images(Material *ma, KeyImageMap &material_image_map)
@@ -182,10 +212,17 @@ void EffectsExporter::operator()(Material *ma, Object *ob)
 
   COLLADASW::ColorOrTexture cot;
 
-  set_transparency(ep, ma);
   set_diffuse_color(ep, ma);
-  set_reflectivity(ep, ma);
   set_emission(ep, ma);
+  set_ior(ep, ma);
+  set_shininess(ep, ma);
+  set_reflectivity(ep, ma);
+  set_transparency(ep, ma);
+
+  /* TODO: from where to get ambient, specular and reflective? */
+  // set_ambient(ep, ma);
+  // set_specular(ep, ma);
+  // set_reflective(ep, ma);
 
   get_images(ma, material_image_map);
   std::string active_uv(getActiveUVLayerName(ob));
@@ -198,7 +235,9 @@ void EffectsExporter::operator()(Material *ma, Object *ob)
     Image *ima = t->tex->ima;
 
     // Image not set for texture
-    if (!ima) continue;
+    if (!ima) {
+      continue;
+    }
 
     std::string key(id_name(ima));
     key = translate_id(key);
@@ -206,10 +245,9 @@ void EffectsExporter::operator()(Material *ma, Object *ob)
     // create only one <sampler>/<surface> pair for each unique image
     if (im_samp_map.find(key) == im_samp_map.end()) {
       //<newparam> <sampler> <source>
-      COLLADASW::Sampler sampler(
-              COLLADASW::Sampler::SAMPLER_TYPE_2D,
-              key + COLLADASW::Sampler::SAMPLER_SID_SUFFIX,
-              key + COLLADASW::Sampler::SURFACE_SID_SUFFIX);
+      COLLADASW::Sampler sampler(COLLADASW::Sampler::SAMPLER_TYPE_2D,
+                                 key + COLLADASW::Sampler::SAMPLER_SID_SUFFIX,
+                                 key + COLLADASW::Sampler::SURFACE_SID_SUFFIX);
       sampler.setImageId(key);
       // copy values to arrays since they will live longer
       samplers[a] = sampler;
@@ -235,27 +273,17 @@ void EffectsExporter::operator()(Material *ma, Object *ob)
     key = translate_id(key);
     int i = im_samp_map[key];
     std::string uvname = strlen(t->uvname) ? t->uvname : active_uv;
-    COLLADASW::Sampler *sampler = (COLLADASW::Sampler *)samp_surf[i]; // possibly uninitialised memory ...
+    COLLADASW::Sampler *sampler = (COLLADASW::Sampler *)
+        samp_surf[i];  // possibly uninitialised memory ...
     writeTextures(ep, key, sampler, t, ima, uvname);
   }
 #endif
 
   // performs the actual writing
   ep.addProfileElements();
-  bool twoSided = false;
-  if (ob->type == OB_MESH && ob->data) {
-    Mesh *me = (Mesh *)ob->data;
-    if (me->flag & ME_TWOSIDED)
-      twoSided = true;
-  }
-  if (twoSided)
-    ep.addExtraTechniqueParameter("GOOGLEEARTH", "double_sided", 1);
   ep.addExtraTechniques(mSW);
 
   ep.closeProfile();
-  if (twoSided)
-    mSW->appendTextBlock(
-        "<extra><technique profile=\"MAX3D\"><double_sided>1</double_sided></technique></extra>");
   closeEffect();
 }
 
@@ -267,7 +295,7 @@ COLLADASW::ColorOrTexture EffectsExporter::createTexture(Image *ima,
 
   COLLADASW::Texture texture(translate_id(id_name(ima)));
   texture.setTexcoord(uv_layer_name);
-  //texture.setSurface(*surface);
+  // texture.setSurface(*surface);
   texture.setSampler(*sampler);
 
   COLLADASW::ColorOrTexture cot(texture);

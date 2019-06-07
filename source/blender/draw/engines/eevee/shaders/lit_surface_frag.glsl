@@ -13,13 +13,8 @@ uniform sampler2DArray utilTex;
 in vec3 worldPosition;
 in vec3 viewPosition;
 
-#ifdef USE_FLAT_NORMAL
-flat in vec3 worldNormal;
-flat in vec3 viewNormal;
-#else
 in vec3 worldNormal;
 in vec3 viewNormal;
-#endif
 
 #ifdef HAIR_SHADER
 in vec3 hairTangent; /* world space */
@@ -43,6 +38,14 @@ uniform int hairThicknessRes = 1;
 #define CLOSURE_DIFFUSE
 #define CLOSURE_GLOSSY
 #endif /* SURFACE_DEFAULT */
+
+#if !defined(SURFACE_DEFAULT_CLEARCOAT) && !defined(CLOSURE_NAME)
+#define SURFACE_DEFAULT_CLEARCOAT
+#define CLOSURE_NAME eevee_closure_default_clearcoat
+#define CLOSURE_DIFFUSE
+#define CLOSURE_GLOSSY
+#define CLOSURE_CLEARCOAT
+#endif /* SURFACE_DEFAULT_CLEARCOAT */
 
 #if !defined(SURFACE_PRINCIPLED) && !defined(CLOSURE_NAME)
 #define SURFACE_PRINCIPLED
@@ -116,6 +119,7 @@ void CLOSURE_NAME(vec3 N
 #ifdef CLOSURE_GLOSSY
                   ,
                   vec3 f0,
+                  vec3 f90,
                   int ssr_id
 #endif
 #if defined(CLOSURE_GLOSSY) || defined(CLOSURE_REFRACTION)
@@ -261,12 +265,12 @@ void CLOSURE_NAME(vec3 N
 
 #ifdef CLOSURE_GLOSSY
   vec2 brdf_lut_lights = texture(utilTex, vec3(lut_uv, 1.0)).ba;
-  out_spec *= F_area(f0, brdf_lut_lights.xy);
+  out_spec *= F_area(f0, f90, brdf_lut_lights.xy);
 #endif
 
 #ifdef CLOSURE_CLEARCOAT
   vec2 brdf_lut_lights_clear = texture(utilTex, vec3(lut_uv_clear, 1.0)).ba;
-  out_spec_clear *= F_area(vec3(0.04), brdf_lut_lights_clear.xy);
+  out_spec_clear *= F_area(vec3(0.04), vec3(1.0), brdf_lut_lights_clear.xy);
   out_spec += out_spec_clear * C_intensity;
 #endif
 
@@ -274,7 +278,8 @@ void CLOSURE_NAME(vec3 N
   /* ---------------- SPECULAR ENVIRONMENT LIGHTING ----------------- */
   /* ---------------------------------------------------------------- */
 
-  /* Accumulate incoming light from all sources until accumulator is full. Then apply Occlusion and BRDF. */
+  /* Accumulate incoming light from all sources until accumulator is full. Then apply Occlusion and
+   * BRDF. */
 #ifdef CLOSURE_GLOSSY
   vec4 spec_accum = vec4(0.0);
 #endif
@@ -450,7 +455,7 @@ void CLOSURE_NAME(vec3 N
 
   /* This factor is outputted to be used by SSR in order
    * to match the intensity of the regular reflections. */
-  ssr_spec = F_ibl(f0, brdf_lut);
+  ssr_spec = F_ibl(f0, f90, brdf_lut);
   float spec_occlu = specular_occlusion(NV, final_ao, roughness);
 
   /* The SSR pass recompute the occlusion to not apply it to the SSR */
@@ -471,7 +476,8 @@ void CLOSURE_NAME(vec3 N
   NV = dot(C_N, V);
   vec2 C_uv = lut_coords(NV, C_roughness);
   vec2 C_brdf_lut = texture(utilTex, vec3(C_uv, 1.0)).rg;
-  vec3 C_fresnel = F_ibl(vec3(0.04), C_brdf_lut) * specular_occlusion(NV, final_ao, C_roughness);
+  vec3 C_fresnel = F_ibl(vec3(0.04), vec3(1.0), C_brdf_lut) *
+                   specular_occlusion(NV, final_ao, C_roughness);
 
   out_spec += C_spec_accum.rgb * C_fresnel * C_intensity;
 #endif

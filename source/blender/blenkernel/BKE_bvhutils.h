@@ -84,11 +84,12 @@ typedef struct BVHTreeFromMesh {
 
 /**
  * Builds a bvh tree where nodes are the relevant elements of the given mesh.
- * Configures BVHTreeFromMesh.
+ * Configures #BVHTreeFromMesh.
  *
  * The tree is build in mesh space coordinates, this means special care must be made on queries
  * so that the coordinates and rays are first translated on the mesh local coordinates.
- * Reason for this is that bvh_from_mesh_* can use a cache in some cases and so it becomes possible to reuse a BVHTree.
+ * Reason for this is that bvh_from_mesh_* can use a cache in some cases and so it
+ * becomes possible to reuse a #BVHTree.
  *
  * free_bvhtree_from_mesh should be called when the tree is no longer needed.
  */
@@ -215,17 +216,18 @@ float bvhtree_sphereray_tri_intersection(const BVHTreeRay *ray,
 
 /* Using local coordinates */
 enum {
-  BVHTREE_FROM_VERTS = 0,
-  BVHTREE_FROM_EDGES = 1,
-  BVHTREE_FROM_FACES = 2,
-  BVHTREE_FROM_LOOPTRI = 3,
+  BVHTREE_FROM_VERTS,
+  BVHTREE_FROM_EDGES,
+  BVHTREE_FROM_FACES,
+  BVHTREE_FROM_LOOPTRI,
+  BVHTREE_FROM_LOOPTRI_NO_HIDDEN,
 
-  BVHTREE_FROM_LOOSEVERTS = 4,
-  BVHTREE_FROM_LOOSEEDGES = 5,
+  BVHTREE_FROM_LOOSEVERTS,
+  BVHTREE_FROM_LOOSEEDGES,
 
-  BVHTREE_FROM_EM_VERTS = 6,
-  BVHTREE_FROM_EM_EDGES = 7,
-  BVHTREE_FROM_EM_LOOPTRI = 8,
+  BVHTREE_FROM_EM_VERTS,
+  BVHTREE_FROM_EM_EDGES,
+  BVHTREE_FROM_EM_LOOPTRI,
 };
 
 bool bvhcache_find(const BVHCache *cache, int type, BVHTree **r_tree);

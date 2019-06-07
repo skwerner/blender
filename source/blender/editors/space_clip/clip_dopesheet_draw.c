@@ -59,10 +59,12 @@ static void track_channel_color(MovieTrackingTrack *track, float default_color[3
     interp_v3_v3v3(color, track->color, bg, 0.5);
   }
   else {
-    if (default_color)
+    if (default_color) {
       copy_v3_v3(color, default_color);
-    else
+    }
+    else {
       UI_GetThemeColor3fv(TH_HEADER, color);
+    }
   }
 }
 
@@ -221,7 +223,7 @@ void clip_draw_dopesheet_main(SpaceClip *sc, ARegion *ar, Scene *scene)
       uint flags_id = GPU_vertformat_attr_add(format, "flags", GPU_COMP_U32, 1, GPU_FETCH_INT);
 
       immBindBuiltinProgram(GPU_SHADER_KEYFRAME_DIAMOND);
-      GPU_enable_program_point_size();
+      GPU_program_point_size(true);
       immUniform2f(
           "ViewportSize", BLI_rcti_size_x(&v2d->mask) + 1, BLI_rcti_size_y(&v2d->mask) + 1);
       immBegin(GPU_PRIM_POINTS, keyframe_len);
@@ -280,7 +282,7 @@ void clip_draw_dopesheet_main(SpaceClip *sc, ARegion *ar, Scene *scene)
       }
 
       immEnd();
-      GPU_disable_program_point_size();
+      GPU_program_point_size(false);
       immUnbindProgram();
     }
 
@@ -297,8 +299,9 @@ void clip_draw_dopesheet_channels(const bContext *C, ARegion *ar)
   uiStyle *style = UI_style_get();
   int fontid = style->widget.uifont_id;
 
-  if (!clip)
+  if (!clip) {
     return;
+  }
 
   MovieTracking *tracking = &clip->tracking;
   MovieTrackingDopesheet *dopesheet = &tracking->dopesheet;

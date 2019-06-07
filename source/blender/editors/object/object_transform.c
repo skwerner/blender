@@ -47,6 +47,7 @@
 #include "BKE_mball.h"
 #include "BKE_mesh.h"
 #include "BKE_object.h"
+#include "BKE_scene.h"
 #include "BKE_report.h"
 #include "BKE_editmesh.h"
 #include "BKE_multires.h"
@@ -56,6 +57,7 @@
 #include "BKE_gpencil.h"
 
 #include "DEG_depsgraph.h"
+#include "DEG_depsgraph_query.h"
 
 #include "RNA_define.h"
 #include "RNA_access.h"
@@ -82,18 +84,21 @@ static void object_clear_loc(Object *ob, const bool clear_delta)
   /* clear location if not locked */
   if ((ob->protectflag & OB_LOCK_LOCX) == 0) {
     ob->loc[0] = 0.0f;
-    if (clear_delta)
+    if (clear_delta) {
       ob->dloc[0] = 0.0f;
+    }
   }
   if ((ob->protectflag & OB_LOCK_LOCY) == 0) {
     ob->loc[1] = 0.0f;
-    if (clear_delta)
+    if (clear_delta) {
       ob->dloc[1] = 0.0f;
+    }
   }
   if ((ob->protectflag & OB_LOCK_LOCZ) == 0) {
     ob->loc[2] = 0.0f;
-    if (clear_delta)
+    if (clear_delta) {
       ob->dloc[2] = 0.0f;
+    }
   }
 }
 
@@ -107,52 +112,63 @@ static void object_clear_rot(Object *ob, const bool clear_delta)
       if (ob->rotmode == ROT_MODE_AXISANGLE) {
         if ((ob->protectflag & OB_LOCK_ROTW) == 0) {
           ob->rotAngle = 0.0f;
-          if (clear_delta)
+          if (clear_delta) {
             ob->drotAngle = 0.0f;
+          }
         }
         if ((ob->protectflag & OB_LOCK_ROTX) == 0) {
           ob->rotAxis[0] = 0.0f;
-          if (clear_delta)
+          if (clear_delta) {
             ob->drotAxis[0] = 0.0f;
+          }
         }
         if ((ob->protectflag & OB_LOCK_ROTY) == 0) {
           ob->rotAxis[1] = 0.0f;
-          if (clear_delta)
+          if (clear_delta) {
             ob->drotAxis[1] = 0.0f;
+          }
         }
         if ((ob->protectflag & OB_LOCK_ROTZ) == 0) {
           ob->rotAxis[2] = 0.0f;
-          if (clear_delta)
+          if (clear_delta) {
             ob->drotAxis[2] = 0.0f;
+          }
         }
 
-        /* check validity of axis - axis should never be 0,0,0 (if so, then we make it rotate about y) */
-        if (IS_EQF(ob->rotAxis[0], ob->rotAxis[1]) && IS_EQF(ob->rotAxis[1], ob->rotAxis[2]))
+        /* Check validity of axis - axis should never be 0,0,0
+         * (if so, then we make it rotate about y). */
+        if (IS_EQF(ob->rotAxis[0], ob->rotAxis[1]) && IS_EQF(ob->rotAxis[1], ob->rotAxis[2])) {
           ob->rotAxis[1] = 1.0f;
+        }
         if (IS_EQF(ob->drotAxis[0], ob->drotAxis[1]) && IS_EQF(ob->drotAxis[1], ob->drotAxis[2]) &&
-            clear_delta)
+            clear_delta) {
           ob->drotAxis[1] = 1.0f;
+        }
       }
       else if (ob->rotmode == ROT_MODE_QUAT) {
         if ((ob->protectflag & OB_LOCK_ROTW) == 0) {
           ob->quat[0] = 1.0f;
-          if (clear_delta)
+          if (clear_delta) {
             ob->dquat[0] = 1.0f;
+          }
         }
         if ((ob->protectflag & OB_LOCK_ROTX) == 0) {
           ob->quat[1] = 0.0f;
-          if (clear_delta)
+          if (clear_delta) {
             ob->dquat[1] = 0.0f;
+          }
         }
         if ((ob->protectflag & OB_LOCK_ROTY) == 0) {
           ob->quat[2] = 0.0f;
-          if (clear_delta)
+          if (clear_delta) {
             ob->dquat[2] = 0.0f;
+          }
         }
         if ((ob->protectflag & OB_LOCK_ROTZ) == 0) {
           ob->quat[3] = 0.0f;
-          if (clear_delta)
+          if (clear_delta) {
             ob->dquat[3] = 0.0f;
+          }
         }
         /* TODO: does this quat need normalizing now? */
       }
@@ -160,18 +176,21 @@ static void object_clear_rot(Object *ob, const bool clear_delta)
         /* the flag may have been set for the other modes, so just ignore the extra flag... */
         if ((ob->protectflag & OB_LOCK_ROTX) == 0) {
           ob->rot[0] = 0.0f;
-          if (clear_delta)
+          if (clear_delta) {
             ob->drot[0] = 0.0f;
+          }
         }
         if ((ob->protectflag & OB_LOCK_ROTY) == 0) {
           ob->rot[1] = 0.0f;
-          if (clear_delta)
+          if (clear_delta) {
             ob->drot[1] = 0.0f;
+          }
         }
         if ((ob->protectflag & OB_LOCK_ROTZ) == 0) {
           ob->rot[2] = 0.0f;
-          if (clear_delta)
+          if (clear_delta) {
             ob->drot[2] = 0.0f;
+          }
         }
       }
     }
@@ -193,12 +212,15 @@ static void object_clear_rot(Object *ob, const bool clear_delta)
 
       eul[0] = eul[1] = eul[2] = 0.0f;
 
-      if (ob->protectflag & OB_LOCK_ROTX)
+      if (ob->protectflag & OB_LOCK_ROTX) {
         eul[0] = oldeul[0];
-      if (ob->protectflag & OB_LOCK_ROTY)
+      }
+      if (ob->protectflag & OB_LOCK_ROTY) {
         eul[1] = oldeul[1];
-      if (ob->protectflag & OB_LOCK_ROTZ)
+      }
+      if (ob->protectflag & OB_LOCK_ROTZ) {
         eul[2] = oldeul[2];
+      }
 
       if (ob->rotmode == ROT_MODE_QUAT) {
         eul_to_quat(ob->quat, eul);
@@ -218,18 +240,21 @@ static void object_clear_rot(Object *ob, const bool clear_delta)
   else {
     if (ob->rotmode == ROT_MODE_QUAT) {
       unit_qt(ob->quat);
-      if (clear_delta)
+      if (clear_delta) {
         unit_qt(ob->dquat);
+      }
     }
     else if (ob->rotmode == ROT_MODE_AXISANGLE) {
       unit_axis_angle(ob->rotAxis, &ob->rotAngle);
-      if (clear_delta)
+      if (clear_delta) {
         unit_axis_angle(ob->drotAxis, &ob->drotAngle);
+      }
     }
     else {
       zero_v3(ob->rot);
-      if (clear_delta)
+      if (clear_delta) {
         zero_v3(ob->drot);
+      }
     }
   }
 }
@@ -240,18 +265,21 @@ static void object_clear_scale(Object *ob, const bool clear_delta)
   /* clear scale factors which are not locked */
   if ((ob->protectflag & OB_LOCK_SCALEX) == 0) {
     ob->scale[0] = 1.0f;
-    if (clear_delta)
+    if (clear_delta) {
       ob->dscale[0] = 1.0f;
+    }
   }
   if ((ob->protectflag & OB_LOCK_SCALEY) == 0) {
     ob->scale[1] = 1.0f;
-    if (clear_delta)
+    if (clear_delta) {
       ob->dscale[1] = 1.0f;
+    }
   }
   if ((ob->protectflag & OB_LOCK_SCALEZ) == 0) {
     ob->scale[2] = 1.0f;
-    if (clear_delta)
+    if (clear_delta) {
       ob->dscale[2] = 1.0f;
+    }
   }
 }
 
@@ -441,9 +469,12 @@ static void ignore_parent_tx(const bContext *C, Main *bmain, Scene *scene, Objec
   /* a change was made, adjust the children to compensate */
   for (ob_child = bmain->objects.first; ob_child; ob_child = ob_child->id.next) {
     if (ob_child->parent == ob) {
-      BKE_object_apply_mat4(ob_child, ob_child->obmat, true, false);
-      BKE_object_workob_calc_parent(depsgraph, scene, ob_child, &workob);
+      Object *ob_child_eval = DEG_get_evaluated_object(depsgraph, ob_child);
+      BKE_object_apply_mat4(ob_child_eval, ob_child_eval->obmat, true, false);
+      BKE_object_workob_calc_parent(depsgraph, scene, ob_child_eval, &workob);
       invert_m4_m4(ob_child->parentinv, workob.obmat);
+      /* Copy result of BKE_object_apply_mat4(). */
+      BKE_object_transform_copy(ob_child, ob_child_eval);
     }
   }
 }
@@ -584,8 +615,9 @@ static int apply_objects_internal(bContext *C,
   }
   CTX_DATA_END;
 
-  if (!changed)
+  if (!changed) {
     return OPERATOR_CANCELLED;
+  }
 
   changed = false;
 
@@ -593,10 +625,12 @@ static int apply_objects_internal(bContext *C,
   CTX_DATA_BEGIN (C, Object *, ob, selected_editable_objects) {
 
     /* calculate rotation/scale matrix */
-    if (apply_scale && apply_rot)
+    if (apply_scale && apply_rot) {
       BKE_object_to_mat3(ob, rsmat);
-    else if (apply_scale)
+    }
+    else if (apply_scale) {
       BKE_object_scale_to_mat3(ob, rsmat);
+    }
     else if (apply_rot) {
       float tmat[3][3], timat[3][3];
 
@@ -609,8 +643,9 @@ static int apply_objects_internal(bContext *C,
       mul_m3_m3m3(rsmat, timat, rsmat);
       mul_m3_m3m3(rsmat, rsmat, tmat);
     }
-    else
+    else {
       unit_m3(rsmat);
+    }
 
     copy_m4_m3(mat, rsmat);
 
@@ -632,8 +667,9 @@ static int apply_objects_internal(bContext *C,
     if (ob->type == OB_MESH) {
       Mesh *me = ob->data;
 
-      if (apply_scale)
+      if (apply_scale) {
         multiresModifier_scale_disp(depsgraph, scene, ob);
+      }
 
       /* adjust data */
       BKE_mesh_transform(me, mat, true);
@@ -686,11 +722,13 @@ static int apply_objects_internal(bContext *C,
       /* applying scale on camera actually scales clip's reconstruction.
        * of there's clip assigned to camera nothing to do actually.
        */
-      if (!clip)
+      if (!clip) {
         continue;
+      }
 
-      if (apply_scale)
+      if (apply_scale) {
         BKE_tracking_reconstruction_scale(&clip->tracking, ob->scale);
+      }
     }
     else if (ob->type == OB_EMPTY) {
       /* It's possible for empties too, even though they don't
@@ -734,19 +772,25 @@ static int apply_objects_internal(bContext *C,
       continue;
     }
 
-    if (apply_loc)
+    if (apply_loc) {
       zero_v3(ob->loc);
-    if (apply_scale)
+    }
+    if (apply_scale) {
       ob->scale[0] = ob->scale[1] = ob->scale[2] = 1.0f;
+    }
     if (apply_rot) {
       zero_v3(ob->rot);
       unit_qt(ob->quat);
       unit_axis_angle(ob->rotAxis, &ob->rotAngle);
     }
 
-    BKE_object_where_is_calc(depsgraph, scene, ob);
+    Object *ob_eval = DEG_get_evaluated_object(depsgraph, ob);
+    BKE_object_transform_copy(ob_eval, ob);
+
+    BKE_object_where_is_calc(depsgraph, scene, ob_eval);
     if (ob->type == OB_ARMATURE) {
-      BKE_pose_where_is(depsgraph, scene, ob); /* needed for bone parents */
+      /* needed for bone parents */
+      BKE_pose_where_is(depsgraph, scene, ob_eval);
     }
 
     ignore_parent_tx(C, bmain, scene, ob);
@@ -769,13 +813,14 @@ static int apply_objects_internal(bContext *C,
 static int visual_transform_apply_exec(bContext *C, wmOperator *UNUSED(op))
 {
   Scene *scene = CTX_data_scene(C);
-  Depsgraph *depsgraph = CTX_data_depsgraph(C);
+  Depsgraph *depsgraph = CTX_data_evaluated_depsgraph(C);
   bool changed = false;
 
   CTX_DATA_BEGIN (C, Object *, ob, selected_editable_objects) {
-    BKE_object_where_is_calc(depsgraph, scene, ob);
-    BKE_object_apply_mat4(ob, ob->obmat, true, true);
-    BKE_object_where_is_calc(depsgraph, scene, ob);
+    Object *ob_eval = DEG_get_evaluated_object(depsgraph, ob);
+    BKE_object_where_is_calc(depsgraph, scene, ob_eval);
+    BKE_object_apply_mat4(ob_eval, ob_eval->obmat, true, true);
+    BKE_object_transform_copy(ob, ob_eval);
 
     /* update for any children that may get moved */
     DEG_id_tag_update(&ob->id, ID_RECALC_TRANSFORM);
@@ -784,8 +829,9 @@ static int visual_transform_apply_exec(bContext *C, wmOperator *UNUSED(op))
   }
   CTX_DATA_END;
 
-  if (!changed)
+  if (!changed) {
     return OPERATOR_CANCELLED;
+  }
 
   WM_event_add_notifier(C, NC_OBJECT | ND_TRANSFORM, NULL);
   return OPERATOR_FINISHED;
@@ -958,10 +1004,12 @@ static int object_origin_set_exec(bContext *C, wmOperator *op)
   }
 
   for (tob = bmain->objects.first; tob; tob = tob->id.next) {
-    if (tob->data)
+    if (tob->data) {
       ((ID *)tob->data)->tag &= ~LIB_TAG_DOIT;
-    if (tob->instance_collection)
+    }
+    if (tob->instance_collection) {
       ((ID *)tob->instance_collection)->tag &= ~LIB_TAG_DOIT;
+    }
   }
 
   for (ctx_ob = ctx_data_list.first; ctx_ob; ctx_ob = ctx_ob->next) {
@@ -1049,8 +1097,9 @@ static int object_origin_set_exec(bContext *C, wmOperator *op)
         }
 
         /* don't allow Z change if curve is 2D */
-        if ((ob->type == OB_CURVE) && !(cu->flag & CU_3D))
+        if ((ob->type == OB_CURVE) && !(cu->flag & CU_3D)) {
           cent[2] = 0.0;
+        }
 
         negate_v3_v3(cent_neg, cent);
         BKE_curve_translate(cu, cent_neg, 1);
@@ -1119,8 +1168,9 @@ static int object_origin_set_exec(bContext *C, wmOperator *op)
 
           ignore_parent_tx(C, bmain, scene, ob);
 
-          if (obedit)
+          if (obedit) {
             break;
+          }
         }
       }
       else if (ob->type == OB_MBALL) {
@@ -1206,8 +1256,9 @@ static int object_origin_set_exec(bContext *C, wmOperator *op)
               for (bGPDframe *gpf = gpl->frames.first; gpf; gpf = gpf->next) {
                 for (bGPDstroke *gps = gpf->strokes.first; gps; gps = gps->next) {
                   /* skip strokes that are invalid for current view */
-                  if (ED_gpencil_stroke_can_use(C, gps) == false)
+                  if (ED_gpencil_stroke_can_use(C, gps) == false) {
                     continue;
+                  }
 
                   for (i = 0, pt = gps->points; i < gps->totpoints; i++, pt++) {
                     float mpt[3];
@@ -1257,7 +1308,7 @@ static int object_origin_set_exec(bContext *C, wmOperator *op)
         ignore_parent_tx(C, bmain, scene, ob);
 
         /* other users? */
-        //CTX_DATA_BEGIN (C, Object *, ob_other, selected_editable_objects)
+        // CTX_DATA_BEGIN (C, Object *, ob_other, selected_editable_objects)
         //{
 
         /* use existing context looper */
@@ -1283,7 +1334,7 @@ static int object_origin_set_exec(bContext *C, wmOperator *op)
             ignore_parent_tx(C, bmain, scene, ob_other);
           }
         }
-        //CTX_DATA_END;
+        // CTX_DATA_END;
       }
     }
   }
@@ -1293,6 +1344,11 @@ static int object_origin_set_exec(bContext *C, wmOperator *op)
     if (tob->data && (((ID *)tob->data)->tag & LIB_TAG_DOIT)) {
       BKE_object_batch_cache_dirty_tag(tob);
       DEG_id_tag_update(&tob->id, ID_RECALC_TRANSFORM | ID_RECALC_GEOMETRY);
+    }
+    /* special support for dupligroups */
+    else if (tob->instance_collection && tob->instance_collection->id.tag & LIB_TAG_DOIT) {
+      DEG_id_tag_update(&tob->id, ID_RECALC_TRANSFORM);
+      DEG_id_tag_update(&tob->instance_collection->id, ID_RECALC_COPY_ON_WRITE);
     }
   }
 
@@ -1307,11 +1363,13 @@ static int object_origin_set_exec(bContext *C, wmOperator *op)
                 "%i object(s) not centered, %i changed:",
                 tot_lib_error + tot_multiuser_arm_error,
                 tot_change);
-    if (tot_lib_error)
+    if (tot_lib_error) {
       BKE_reportf(op->reports, RPT_WARNING, "|%i linked library object(s)", tot_lib_error);
-    if (tot_multiuser_arm_error)
+    }
+    if (tot_multiuser_arm_error) {
       BKE_reportf(
           op->reports, RPT_WARNING, "|%i multiuser armature object(s)", tot_multiuser_arm_error);
+    }
   }
 
   return OPERATOR_FINISHED;
@@ -1385,11 +1443,12 @@ void OBJECT_OT_origin_set(wmOperatorType *ot)
  * - campbell.
  * \{ */
 
-/* When using multiple objects, apply their relative rotational offset to the active object. */
+/** When using multiple objects, apply their relative rotational offset to the active object. */
 #define USE_RELATIVE_ROTATION
-/* Disable overlays, ignoring user setting (light wire gets in the way). */
+/** Disable overlays, ignoring user setting (light wire gets in the way). */
 #define USE_RENDER_OVERRIDE
-/* Calculate a depth if the cursor isn't already over a depth (not essential but feels buggy without). */
+/** Calculate a depth if the cursor isn't already over a depth
+ * (not essential but feels buggy without). */
 #define USE_FAKE_DEPTH_INIT
 
 struct XFormAxisItem {

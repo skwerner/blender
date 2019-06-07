@@ -30,7 +30,7 @@ Device *device_cuda_create(DeviceInfo &info, Stats &stats, Profiler &profiler, b
 bool device_optix_init();
 Device *device_optix_create(DeviceInfo &info, Stats &stats, Profiler &profiler, bool background);
 bool device_metal_init(void);
-Device *device_metal_create(DeviceInfo& info, Stats &stats, Profiler &profiler, bool background);
+Device *device_metal_create(DeviceInfo &info, Stats &stats, Profiler &profiler, bool background);
 
 Device *device_network_create(DeviceInfo &info,
                               Stats &stats,
@@ -42,7 +42,7 @@ void device_cpu_info(vector<DeviceInfo> &devices);
 void device_opencl_info(vector<DeviceInfo> &devices);
 void device_cuda_info(vector<DeviceInfo> &devices);
 void device_optix_info(vector<DeviceInfo> &devices);
-void device_metal_info(vector<DeviceInfo>& devices);
+void device_metal_info(vector<DeviceInfo> &devices);
 void device_network_info(vector<DeviceInfo> &devices);
 
 string device_cpu_capabilities();

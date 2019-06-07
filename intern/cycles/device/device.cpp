@@ -409,7 +409,7 @@ Device *Device::create(DeviceInfo &info, Stats &stats, Profiler &profiler, bool 
 #endif
 #ifdef WITH_METAL
     case DEVICE_METAL:
-      if(device_metal_init())
+      if (device_metal_init())
         device = device_metal_create(info, stats, profiler, background);
       else
         device = NULL;
@@ -432,7 +432,7 @@ DeviceType Device::type_from_string(const char *name)
     return DEVICE_OPTIX;
   else if (strcmp(name, "OPENCL") == 0)
     return DEVICE_OPENCL;
-  else if(strcmp(name, "METAL") == 0)
+  else if (strcmp(name, "METAL") == 0)
     return DEVICE_METAL;
   else if (strcmp(name, "NETWORK") == 0)
     return DEVICE_NETWORK;
@@ -452,7 +452,7 @@ string Device::string_from_type(DeviceType type)
     return "OPTIX";
   else if (type == DEVICE_OPENCL)
     return "OPENCL";
-  else if(type == DEVICE_METAL)
+  else if (type == DEVICE_METAL)
     return "METAL";
   else if (type == DEVICE_NETWORK)
     return "NETWORK";
@@ -476,9 +476,9 @@ vector<DeviceType> Device::available_types()
   types.push_back(DEVICE_OPENCL);
 #endif
 #ifdef WITH_METAL
-		if(device_metal_init()) {
-			types.push_back(DEVICE_METAL);
-		}
+  if (device_metal_init()) {
+    types.push_back(DEVICE_METAL);
+  }
 #endif
 #ifdef WITH_NETWORK
   types.push_back(DEVICE_NETWORK);

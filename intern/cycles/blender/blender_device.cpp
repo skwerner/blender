@@ -62,7 +62,8 @@ DeviceInfo blender_device_info(BL::Preferences &b_preferences, BL::Scene &b_scen
       COMPUTE_DEVICE_CUDA = 1,
       COMPUTE_DEVICE_OPENCL = 2,
       COMPUTE_DEVICE_OPTIX = 3,
-      COMPUTE_DEVICE_NUM = 4,
+      COMPUTE_DEVICE_METAL = 4,
+      COMPUTE_DEVICE_NUM = 5,
     };
 
     ComputeDevice compute_device = (ComputeDevice)get_enum(
@@ -80,6 +81,10 @@ DeviceInfo blender_device_info(BL::Preferences &b_preferences, BL::Scene &b_scen
       }
       else if (compute_device == COMPUTE_DEVICE_OPENCL) {
         mask |= DEVICE_MASK_OPENCL;
+      }
+      else if (compute_device == COMPUTE_DEVICE_METAL) {
+        /* Cannot use CPU and Metal device at the same time right now, so replace mask. */
+        mask = DEVICE_MASK_METAL;
       }
       vector<DeviceInfo> devices = Device::available_devices(mask);
 

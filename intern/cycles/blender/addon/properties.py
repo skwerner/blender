@@ -1413,7 +1413,7 @@ class CyclesPreferences(bpy.types.AddonPreferences):
         if has_opencl:
             list.append(('OPENCL', "OpenCL", "Use OpenCL for GPU acceleration", 2))
         if has_metal:
-            list.append(('METAL', "Metal", "Use Metal for GPU acceleration", 3))
+            list.append(('METAL', "Metal", "Use Metal for GPU acceleration", 4))
         return list
 
     compute_device_type: EnumProperty(
@@ -1466,7 +1466,7 @@ class CyclesPreferences(bpy.types.AddonPreferences):
             elif entry.type == 'CPU':
                 cpu_devices.append(entry)
         # Extend all GPU devices with CPU.
-        if compute_device_type in ('CUDA', 'OPENCL', 'METAL'):
+        if compute_device_type in ('CUDA', 'OPENCL'):
             devices.extend(cpu_devices)
         return devices
 
@@ -1474,7 +1474,6 @@ class CyclesPreferences(bpy.types.AddonPreferences):
     def get_devices(self, compute_device_type=''):
         cuda_devices = self.get_devices_for_type('CUDA')
         opencl_devices = self.get_devices_for_type('OPENCL')
-        metal_devices = self.get_devices_for_type('METAL')
         return cuda_devices, opencl_devices
 
     def get_num_gpu_devices(self):
@@ -1514,11 +1513,10 @@ class CyclesPreferences(bpy.types.AddonPreferences):
             col = box.column(align=True)
             col.label(text="OptiX support is experimental", icon='INFO')
             col.label(text="Not all Cycles features are supported yet", icon='BLANK1')
-
-        if self.compute_device_type == 'METAL' and metal_devices:
-            box = row.box()
-            for device in metal_devices:
-                box.prop(device, "use", text=device.name)
+        elif device_type == 'METAL':
+            col = box.column(align=True)
+            col.label(text="Metal support is experimental", icon='INFO')
+            col.label(text="Not all Cycles features are supported yet", icon='BLANK1')
 
     def draw_impl(self, layout, context):
         row = layout.row()
@@ -1532,6 +1530,8 @@ class CyclesPreferences(bpy.types.AddonPreferences):
             self._draw_devices(row, 'OPTIX', devices)
         elif self.compute_device_type == 'OPENCL':
             self._draw_devices(row, 'OPENCL', devices)
+        elif self.compute_device_type == 'METAL':
+            self._draw_devices(row, 'METAL', devices)
 
     def draw(self, context):
         self.draw_impl(self.layout, context)

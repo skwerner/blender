@@ -506,7 +506,7 @@ DRWShadingGroup *DRW_gpencil_shgroup_stroke_create(
 	DRW_shgroup_uniform_float(grp, "pixsize", stl->storage->pixsize, 1);
 
 	/* avoid wrong values */
-	if ((gpd) && (gpd->pixfactor == 0)) {
+	if ((gpd) && (gpd->pixfactor == 0.0f)) {
 		gpd->pixfactor = GP_DEFAULT_PIX_FACTOR;
 	}
 
@@ -531,6 +531,10 @@ DRWShadingGroup *DRW_gpencil_shgroup_stroke_create(
 		stl->shgroups[id].caps_mode[0] = gps->caps[0];
 		stl->shgroups[id].caps_mode[1] = gps->caps[1];
 		DRW_shgroup_uniform_int(grp, "caps_mode", &stl->shgroups[id].caps_mode[0], 2);
+
+		stl->shgroups[id].gradient_f = gps->gradient_f;
+		copy_v2_v2(stl->shgroups[id].gradient_s, gps->gradient_s);
+		DRW_shgroup_uniform_float(grp, "gradient_f", &stl->shgroups[id].gradient_f, 1);
 
 		/* viewport x-ray */
 		stl->shgroups[id].is_xray = (ob->dt == OB_WIRE) ? 1 : stl->storage->is_xray;
@@ -564,6 +568,8 @@ DRWShadingGroup *DRW_gpencil_shgroup_stroke_create(
 		}
 		const int zero[2] = { 0, 0 };
 		DRW_shgroup_uniform_int(grp, "caps_mode", &zero[0], 2);
+
+		DRW_shgroup_uniform_float(grp, "gradient_f", &stl->storage->gradient_f, 1);
 
 		/* viewport x-ray */
 		DRW_shgroup_uniform_int(grp, "viewport_xray", &stl->storage->is_xray, 1);
@@ -611,7 +617,7 @@ DRWShadingGroup *DRW_gpencil_shgroup_stroke_create(
 /* create shading group for points */
 static DRWShadingGroup *DRW_gpencil_shgroup_point_create(
         GPENCIL_e_data *e_data, GPENCIL_Data *vedata, DRWPass *pass, GPUShader *shader, Object *ob,
-        bGPdata *gpd, bGPDlayer *gpl,
+        bGPdata *gpd, bGPDlayer *gpl, bGPDstroke *gps,
         MaterialGPencilStyle *gp_style, int id, bool onion,
         const float scale, const int shading_type[2])
 {
@@ -627,7 +633,7 @@ static DRWShadingGroup *DRW_gpencil_shgroup_point_create(
 	DRW_shgroup_uniform_float(grp, "pixsize", stl->storage->pixsize, 1);
 
 	/* avoid wrong values */
-	if ((gpd) && (gpd->pixfactor == 0)) {
+	if ((gpd) && (gpd->pixfactor == 0.0f)) {
 		gpd->pixfactor = GP_DEFAULT_PIX_FACTOR;
 	}
 
@@ -650,6 +656,11 @@ static DRWShadingGroup *DRW_gpencil_shgroup_point_create(
 		DRW_shgroup_uniform_int(grp, "color_type", &stl->shgroups[id].color_type, 1);
 		DRW_shgroup_uniform_int(grp, "mode", &stl->shgroups[id].mode, 1);
 		DRW_shgroup_uniform_float(grp, "pixfactor", &gpd->pixfactor, 1);
+
+		stl->shgroups[id].gradient_f = gps->gradient_f;
+		copy_v2_v2(stl->shgroups[id].gradient_s, gps->gradient_s);
+		DRW_shgroup_uniform_float(grp, "gradient_f", &stl->shgroups[id].gradient_f, 1);
+		DRW_shgroup_uniform_vec2(grp, "gradient_s", stl->shgroups[id].gradient_s, 1);
 
 		/* viewport x-ray */
 		stl->shgroups[id].is_xray = (ob->dt == OB_WIRE) ? 1 : stl->storage->is_xray;
@@ -684,8 +695,12 @@ static DRWShadingGroup *DRW_gpencil_shgroup_point_create(
 		else {
 			DRW_shgroup_uniform_float(grp, "pixfactor", &stl->storage->pixfactor, 1);
 		}
+
+		DRW_shgroup_uniform_float(grp, "gradient_f", &stl->storage->gradient_f, 1);
+		DRW_shgroup_uniform_vec2(grp, "gradient_s", stl->storage->gradient_s, 1);
+
 		/* viewport x-ray */
-		stl->shgroups[id].is_xray = (ob->dt == OB_WIRE) ? 1 : stl->storage->is_xray;
+		stl->shgroups[id].is_xray = ((ob) && (ob->dt == OB_WIRE)) ? 1 : stl->storage->is_xray;
 		DRW_shgroup_uniform_int(grp, "viewport_xray", (const int *)&stl->shgroups[id].is_xray, 1);
 		DRW_shgroup_uniform_int(grp, "shading_type", (const int *)&stl->storage->shade_render, 2);
 	}
@@ -693,11 +708,20 @@ static DRWShadingGroup *DRW_gpencil_shgroup_point_create(
 	if ((gpd) && (id > -1)) {
 		stl->shgroups[id].xray_mode = (ob->dtx & OB_DRAWXRAY) ? GP_XRAY_FRONT : GP_XRAY_3DSPACE;
 		DRW_shgroup_uniform_int(grp, "xraymode", (const int *)&stl->shgroups[id].xray_mode, 1);
+
+		/* lock rotation of dots and boxes */
+		stl->shgroups[id].use_follow_path = (gp_style->flag & GP_STYLE_COLOR_LOCK_DOTS) ? 0 : 1;
+		DRW_shgroup_uniform_int(grp, "use_follow_path", &stl->shgroups[id].use_follow_path, 1);
 	}
 	else {
 		/* for drawing always on predefined z-depth */
 		DRW_shgroup_uniform_int(grp, "xraymode", &stl->storage->xray, 1);
+
+		/* lock rotation of dots and boxes */
+		DRW_shgroup_uniform_int(grp, "use_follow_path", &stl->storage->use_follow_path, 1);
 	}
+
+
 
 	/* image texture */
 	if ((gp_style) && (gp_style->stroke_style == GP_STYLE_STROKE_STYLE_TEXTURE) && (!onion)) {
@@ -999,8 +1023,8 @@ static void gpencil_draw_strokes(
 				    ((gps->flag & GP_STROKE_NOFILL) == 0))
 				{
 					gpencil_add_fill_vertexdata(
-						cache, ob, gpl, derived_gpf, gps,
-						opacity, tintcolor, false, custonion);
+					        cache, ob, gpl, derived_gpf, gps,
+					        opacity, tintcolor, false, custonion);
 				}
 				/* stroke */
 				/* No fill strokes, must show stroke always */
@@ -1015,8 +1039,8 @@ static void gpencil_draw_strokes(
 					}
 
 					gpencil_add_stroke_vertexdata(
-						cache, ob, gpl, derived_gpf, gps,
-						opacity, tintcolor, false, custonion);
+					        cache, ob, gpl, derived_gpf, gps,
+					        opacity, tintcolor, false, custonion);
 				}
 			}
 		}
@@ -1355,7 +1379,7 @@ void DRW_gpencil_populate_buffer_strokes(GPENCIL_e_data *e_data, void *vedata, T
 	float obscale = mat4_to_scale(ob->obmat);
 
 	/* use the brush material */
-	Material *ma = BKE_gpencil_get_material_from_brush(brush);
+	Material *ma = BKE_gpencil_object_material_get_from_brush(ob, brush);
 	if (ma != NULL) {
 		gp_style = ma->gp_style;
 	}
@@ -1374,19 +1398,25 @@ void DRW_gpencil_populate_buffer_strokes(GPENCIL_e_data *e_data, void *vedata, T
 			 * i.e. tGPspoints NOT bGPDspoints
 			 */
 			short lthick = brush->size * obscale;
+
+			/* save gradient info */
+			stl->storage->gradient_f = brush->gpencil_settings->gradient_f;
+			copy_v2_v2(stl->storage->gradient_s, brush->gpencil_settings->gradient_s);
+			stl->storage->use_follow_path = (gp_style->flag & GP_STYLE_COLOR_LOCK_DOTS) ? 0 : 1;
+
 			/* if only one point, don't need to draw buffer because the user has no time to see it */
 			if (gpd->runtime.sbuffer_size > 1) {
 				if ((gp_style) && (gp_style->mode == GP_STYLE_MODE_LINE)) {
 					stl->g_data->shgrps_drawing_stroke = DRW_gpencil_shgroup_stroke_create(
-						e_data, vedata, psl->drawing_pass, e_data->gpencil_stroke_sh, NULL,
-						gpd, NULL, NULL, gp_style, -1,
-						false, 1.0f, (const int *)stl->storage->shade_render);
+					        e_data, vedata, psl->drawing_pass, e_data->gpencil_stroke_sh, NULL,
+					        gpd, NULL, NULL, gp_style, -1,
+					        false, 1.0f, (const int *)stl->storage->shade_render);
 				}
 				else {
 					stl->g_data->shgrps_drawing_stroke = DRW_gpencil_shgroup_point_create(
-						e_data, vedata, psl->drawing_pass, e_data->gpencil_point_sh, NULL,
-						gpd, NULL, gp_style, -1,
-						false, 1.0f, (const int *)stl->storage->shade_render);
+					        e_data, vedata, psl->drawing_pass, e_data->gpencil_point_sh, NULL,
+					        gpd, NULL, NULL, gp_style, -1,
+					        false, 1.0f, (const int *)stl->storage->shade_render);
 				}
 
 				/* clean previous version of the batch */
@@ -1399,18 +1429,18 @@ void DRW_gpencil_populate_buffer_strokes(GPENCIL_e_data *e_data, void *vedata, T
 				/* use unit matrix because the buffer is in screen space and does not need conversion */
 				if (gpd->runtime.mode == GP_STYLE_MODE_LINE) {
 					e_data->batch_buffer_stroke = DRW_gpencil_get_buffer_stroke_geom(
-						gpd, lthick);
+					        gpd, lthick);
 				}
 				else {
 					e_data->batch_buffer_stroke = DRW_gpencil_get_buffer_point_geom(
-						gpd, lthick);
+					        gpd, lthick);
 				}
 
 				/* buffer strokes, must show stroke always */
 				DRW_shgroup_call_add(
-					    stl->g_data->shgrps_drawing_stroke,
-					    e_data->batch_buffer_stroke,
-					    stl->storage->unit_matrix);
+				        stl->g_data->shgrps_drawing_stroke,
+				        e_data->batch_buffer_stroke,
+				        stl->storage->unit_matrix);
 
 				if ((gpd->runtime.sbuffer_size >= 3) &&
 				    (gpd->runtime.sfill[3] > GPENCIL_ALPHA_OPACITY_THRESH) &&
@@ -1423,7 +1453,7 @@ void DRW_gpencil_populate_buffer_strokes(GPENCIL_e_data *e_data, void *vedata, T
 						gpd->runtime.sfill[3] = 0.5f;
 					}
 					stl->g_data->shgrps_drawing_fill = DRW_shgroup_create(
-						e_data->gpencil_drawing_fill_sh, psl->drawing_pass);
+					        e_data->gpencil_drawing_fill_sh, psl->drawing_pass);
 
 					/* clean previous version of the batch */
 					if (stl->storage->buffer_fill) {
@@ -1453,7 +1483,7 @@ void DRW_gpencil_populate_buffer_strokes(GPENCIL_e_data *e_data, void *vedata, T
 	    ((gpd->runtime.sbuffer_sflag & GP_STROKE_ERASER) == 0))
 	{
 		DRWShadingGroup *shgrp = DRW_shgroup_create(
-			e_data->gpencil_edit_point_sh, psl->drawing_pass);
+		        e_data->gpencil_edit_point_sh, psl->drawing_pass);
 		const float *viewport_size = DRW_viewport_size_get();
 		DRW_shgroup_uniform_vec2(shgrp, "Viewport", viewport_size, 1);
 
@@ -1582,7 +1612,7 @@ static void DRW_gpencil_shgroups_create(
 
 				shgrp = DRW_gpencil_shgroup_point_create(
 				        e_data, vedata, stroke_pass, e_data->gpencil_point_sh,
-				        ob, gpd, gpl, gp_style, stl->storage->shgroup_id, elm->onion,
+				        ob, gpd, gpl, gps, gp_style, stl->storage->shgroup_id, elm->onion,
 				        scale, cache_ob->shading_type);
 
 				DRW_shgroup_call_range_add(

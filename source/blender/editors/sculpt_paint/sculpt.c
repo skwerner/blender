@@ -1599,7 +1599,7 @@ static void bmesh_neighbor_average(float avg[3], BMVert *v)
 }
 
 /* For bmesh: average only the four most aligned (parallel and perpendicular) edges
- * relative to a direction. Naturally converges to a quad-like tesselation. */
+ * relative to a direction. Naturally converges to a quad-like tessellation. */
 static void bmesh_four_neighbor_average(float avg[3], float direction[3], BMVert *v)
 {
 	/* Logic for 3 or more is identical. */
@@ -1859,8 +1859,8 @@ static void do_topology_rake_bmesh_task_cb_ex(
 
 	float tmp[3];
 	mul_v3_v3fl(
-		tmp, ss->cache->sculpt_normal_symm,
-		dot_v3v3(ss->cache->sculpt_normal_symm, direction));
+	        tmp, ss->cache->sculpt_normal_symm,
+	        dot_v3v3(ss->cache->sculpt_normal_symm, direction));
 	sub_v3_v3(direction, tmp);
 
 	/* Cancel if there's no grab data. */
@@ -1880,8 +1880,8 @@ static void do_topology_rake_bmesh_task_cb_ex(
 	{
 		if (sculpt_brush_test_sq_fn(&test, vd.co)) {
 			const float fade = bstrength * tex_strength(
-				ss, brush, vd.co, sqrtf(test.dist),
-				vd.no, vd.fno, *vd.mask, tls->thread_id) * ss->cache->pressure;
+			        ss, brush, vd.co, sqrtf(test.dist),
+			        vd.no, vd.fno, *vd.mask, tls->thread_id) * ss->cache->pressure;
 
 			float avg[3], val[3];
 
@@ -5423,7 +5423,7 @@ static void SCULPT_OT_set_persistent_base(wmOperatorType *ot)
 static void sculpt_dynamic_topology_triangulate(BMesh *bm)
 {
 	if (bm->totloop != bm->totface * 3) {
-		BM_mesh_triangulate(bm, MOD_TRIANGULATE_QUAD_BEAUTY, MOD_TRIANGULATE_NGON_EARCLIP, false, NULL, NULL, NULL);
+		BM_mesh_triangulate(bm, MOD_TRIANGULATE_QUAD_BEAUTY, MOD_TRIANGULATE_NGON_EARCLIP, 4, false, NULL, NULL, NULL);
 	}
 }
 

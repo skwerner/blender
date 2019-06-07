@@ -93,7 +93,7 @@ typedef enum eGP_StrokeAdd_Result {
 	GP_STROKEADD_INVALID    = -2,       /* error occurred - insufficient info to do so */
 	GP_STROKEADD_OVERFLOW   = -1,       /* error occurred - cannot fit any more points */
 	GP_STROKEADD_NORMAL,                /* point was successfully added */
-	GP_STROKEADD_FULL                   /* cannot add any more points to buffer */
+	GP_STROKEADD_FULL,                   /* cannot add any more points to buffer */
 } eGP_StrokeAdd_Result;
 
 /* Runtime flags */
@@ -227,8 +227,7 @@ static bool gpencil_draw_poll(bContext *C)
 		if ((obact) && (obact->type == OB_GPENCIL) &&
 		    (obact->mode == OB_MODE_PAINT_GPENCIL))
 		{
-			CTX_wm_operator_poll_msg_set(C,
-				"Annotation cannot be used in grease pencil draw mode");
+			CTX_wm_operator_poll_msg_set(C, "Annotation cannot be used in grease pencil draw mode");
 			return false;
 		}
 	}
@@ -682,6 +681,9 @@ static void gp_stroke_newfrombuffer(tGPsdata *p)
 	/* copy appropriate settings for stroke */
 	gps->totpoints = totelem;
 	gps->thickness = gpl->thickness;
+	gps->gradient_f = 1.0f;
+	gps->gradient_s[0] = 1.0f;
+	gps->gradient_s[1] = 1.0f;
 	gps->flag = gpd->runtime.sbuffer_sflag;
 	gps->inittime = p->inittime;
 
@@ -1424,34 +1426,8 @@ static void gp_paint_initstroke(tGPsdata *p, eGPencil_PaintModes paintmode, Deps
 				break;
 			}
 			case SPACE_NODE:
-			{
-				p->gpd->runtime.sbuffer_sflag |= GP_STROKE_2DSPACE;
-				break;
-			}
 			case SPACE_SEQ:
-			{
-				p->gpd->runtime.sbuffer_sflag |= GP_STROKE_2DSPACE;
-				break;
-			}
 			case SPACE_IMAGE:
-			{
-				SpaceImage *sima = (SpaceImage *)p->sa->spacedata.first;
-
-				/* only set these flags if the image editor doesn't have an image active,
-				 * otherwise user will be confused by strokes not appearing after they're drawn
-				 *
-				 * Admittedly, this is a bit hacky, but it works much nicer from an ergonomic standpoint!
-				 */
-				if (ELEM(NULL, sima, sima->image)) {
-					/* make strokes be drawn in screen space */
-					p->gpd->runtime.sbuffer_sflag &= ~GP_STROKE_2DSPACE;
-					*(p->align_flag) &= ~GP_PROJECT_VIEWSPACE;
-				}
-				else {
-					p->gpd->runtime.sbuffer_sflag |= GP_STROKE_2DSPACE;
-				}
-				break;
-			}
 			case SPACE_CLIP:
 			{
 				p->gpd->runtime.sbuffer_sflag |= GP_STROKE_2DSPACE;
@@ -1787,9 +1763,9 @@ static void annotation_draw_apply_event(wmOperator *op, const wmEvent *event, De
 	float mousef[2];
 	int tablet = 0;
 
-	 /* convert from window-space to area-space mouse coordinates
-	  * add any x,y override position for fake events
-	  */
+	/* convert from window-space to area-space mouse coordinates
+	 * add any x,y override position for fake events
+	 */
 	p->mval[0] = (float)event->mval[0] - x;
 	p->mval[1] = (float)event->mval[1] - y;
 
@@ -2133,8 +2109,7 @@ static void annotation_add_missing_events(bContext *C, wmOperator *op, const wmE
 		interp_v2_v2v2(pt, a, b, 0.5f);
 		sub_v2_v2v2(pt, b, pt);
 		/* create fake event */
-		annotation_draw_apply_event(op, event, CTX_data_depsgraph(C),
-			pt[0], pt[1]);
+		annotation_draw_apply_event(op, event, CTX_data_depsgraph(C), pt[0], pt[1]);
 	}
 	else if (dist >= factor) {
 		int slices = 2 + (int)((dist - 1.0) / factor);
@@ -2143,8 +2118,9 @@ static void annotation_add_missing_events(bContext *C, wmOperator *op, const wmE
 			interp_v2_v2v2(pt, a, b, n * i);
 			sub_v2_v2v2(pt, b, pt);
 			/* create fake event */
-			annotation_draw_apply_event(op, event, CTX_data_depsgraph(C),
-				pt[0], pt[1]);
+			annotation_draw_apply_event(
+			        op, event, CTX_data_depsgraph(C),
+			        pt[0], pt[1]);
 		}
 	}
 }
@@ -2281,8 +2257,8 @@ static int gpencil_draw_modal(bContext *C, wmOperator *op, const wmEvent *event)
 
 				if (G.debug & G_DEBUG) {
 					printf("found alternative region %p (old was %p) - at %d %d (sa: %d %d -> %d %d)\n",
-						current_region, p->ar, event->x, event->y,
-						p->sa->totrct.xmin, p->sa->totrct.ymin, p->sa->totrct.xmax, p->sa->totrct.ymax);
+					       current_region, p->ar, event->x, event->y,
+					       p->sa->totrct.xmin, p->sa->totrct.ymin, p->sa->totrct.xmax, p->sa->totrct.ymax);
 				}
 
 				if (current_region) {

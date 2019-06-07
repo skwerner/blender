@@ -23,6 +23,8 @@
 
 #include <stdlib.h>
 
+#include "MEM_guardedalloc.h"
+
 #include "DNA_armature_types.h"
 #include "DNA_collection_types.h"
 #include "DNA_light_types.h"
@@ -227,8 +229,9 @@ static eOLDrawState active_viewlayer(
         bContext *C, Scene *UNUSED(scene), ViewLayer *UNUSED(sl), TreeElement *te, const eOLSetState set)
 {
 	/* paranoia check */
-	if (te->idcode != ID_SCE)
+	if (te->idcode != ID_SCE) {
 		return OL_DRAWSEL_NONE;
+	}
 
 	ViewLayer *view_layer = te->directdata;
 
@@ -268,10 +271,12 @@ static void do_outliner_bone_select_recursive(bArmature *arm, Bone *bone_parent,
 {
 	Bone *bone;
 	for (bone = bone_parent->childbase.first; bone; bone = bone->next) {
-		if (select && PBONE_SELECTABLE(arm, bone))
+		if (select && PBONE_SELECTABLE(arm, bone)) {
 			bone->flag |= BONE_SELECTED;
-		else
+		}
+		else {
 			bone->flag &= ~(BONE_TIPSEL | BONE_SELECTED | BONE_ROOTSEL);
+		}
 		do_outliner_bone_select_recursive(arm, bone, select);
 	}
 }
@@ -281,10 +286,12 @@ static void do_outliner_ebone_select_recursive(bArmature *arm, EditBone *ebone_p
 	EditBone *ebone;
 	for (ebone = ebone_parent->next; ebone; ebone = ebone->next) {
 		if (ED_armature_ebone_is_child_recursive(ebone_parent, ebone)) {
-			if (select && EBONE_SELECTABLE(arm, ebone))
+			if (select && EBONE_SELECTABLE(arm, ebone)) {
 				ebone->flag |= BONE_TIPSEL | BONE_SELECTED | BONE_ROOTSEL;
-			else
+			}
+			else {
 				ebone->flag &= ~(BONE_TIPSEL | BONE_SELECTED | BONE_ROOTSEL);
+			}
 		}
 	}
 }
@@ -341,10 +348,12 @@ static eOLDrawState tree_element_set_active_object(
 	if (base) {
 		if (set == OL_SETSEL_EXTEND) {
 			/* swap select */
-			if (base->flag & BASE_SELECTED)
+			if (base->flag & BASE_SELECTED) {
 				ED_object_base_select(base, BA_DESELECT);
-			else
+			}
+			else {
 				ED_object_base_select(base, BA_SELECT);
+			}
 		}
 		else {
 			/* deleselect all */
@@ -477,8 +486,9 @@ static eOLDrawState tree_element_active_world(
 	tep = te->parent;
 	if (tep) {
 		tselem = TREESTORE(tep);
-		if (tselem->type == 0)
+		if (tselem->type == 0) {
 			sce = (Scene *)tselem->id;
+		}
 	}
 
 	if (set != OL_SETSEL_NONE) {
@@ -522,7 +532,7 @@ static eOLDrawState tree_element_active_defgroup(
 	return OL_DRAWSEL_NONE;
 }
 
-static eOLDrawState UNUSED_FUNCTION(tree_element_active_gplayer)(
+static eOLDrawState tree_element_active_gplayer(
         bContext *C, Scene *UNUSED(scene), TreeElement *te, TreeStoreElem *tselem, const eOLSetState set)
 {
 	bGPdata *gpd = (bGPdata *)tselem->id;
@@ -576,10 +586,27 @@ static eOLDrawState tree_element_active_posechannel(
 		if (!(pchan->bone->flag & BONE_HIDDEN_P)) {
 
 			if (set != OL_SETSEL_EXTEND) {
-				bPoseChannel *pchannel;
-				/* single select forces all other bones to get unselected */
-				for (pchannel = ob->pose->chanbase.first; pchannel; pchannel = pchannel->next)
-					pchannel->bone->flag &= ~(BONE_TIPSEL | BONE_SELECTED | BONE_ROOTSEL);
+				/* Single select forces all other bones to get unselected. */
+				uint objects_len = 0;
+				Object **objects = BKE_view_layer_array_from_objects_in_mode_unique_data(view_layer, NULL, &objects_len, OB_MODE_POSE);
+				for (uint object_index = 0; object_index < objects_len; object_index++) {
+					Object *ob_iter = BKE_object_pose_armature_get(objects[object_index]);
+
+					/* Sanity checks. */
+					if (ELEM(NULL, ob_iter, ob_iter->pose, ob_iter->data)) {
+						continue;
+					}
+
+					bPoseChannel *pchannel;
+					for (pchannel = ob_iter->pose->chanbase.first; pchannel; pchannel = pchannel->next) {
+						pchannel->bone->flag &= ~(BONE_TIPSEL | BONE_SELECTED | BONE_ROOTSEL);
+					}
+
+					if (ob != ob_iter) {
+						DEG_id_tag_update(ob_iter->data, ID_RECALC_SELECT);
+					}
+				}
+				MEM_freeN(objects);
 			}
 
 			if ((set == OL_SETSEL_EXTEND) && (pchan->bone->flag & BONE_SELECTED)) {
@@ -659,48 +686,53 @@ static eOLDrawState tree_element_active_bone(
 
 
 /* ebones only draw in editmode armature */
-static void tree_element_active_ebone__sel(bContext *C, Object *obedit, bArmature *arm, EditBone *ebone, short sel)
+static void tree_element_active_ebone__sel(bContext *C, bArmature *arm, EditBone *ebone, short sel)
 {
 	if (sel) {
 		ebone->flag |= BONE_SELECTED | BONE_ROOTSEL | BONE_TIPSEL;
 		arm->act_edbone = ebone;
 		// flush to parent?
-		if (ebone->parent && (ebone->flag & BONE_CONNECTED)) ebone->parent->flag |= BONE_TIPSEL;
+		if (ebone->parent && (ebone->flag & BONE_CONNECTED)) {
+			ebone->parent->flag |= BONE_TIPSEL;
+		}
 	}
 	else {
 		ebone->flag &= ~(BONE_SELECTED | BONE_ROOTSEL | BONE_TIPSEL);
 		// flush to parent?
-		if (ebone->parent && (ebone->flag & BONE_CONNECTED)) ebone->parent->flag &= ~BONE_TIPSEL;
+		if (ebone->parent && (ebone->flag & BONE_CONNECTED)) {
+			ebone->parent->flag &= ~BONE_TIPSEL;
+		}
 	}
-
-	WM_event_add_notifier(C, NC_OBJECT | ND_BONE_ACTIVE, obedit);
+	WM_event_add_notifier(C, NC_OBJECT | ND_BONE_ACTIVE, CTX_data_edit_object(C));
 }
 static eOLDrawState tree_element_active_ebone(
-        bContext *C, TreeElement *te, TreeStoreElem *UNUSED(tselem), const eOLSetState set, bool recursive)
+        bContext *C, ViewLayer *view_layer, TreeElement *te, TreeStoreElem *tselem, const eOLSetState set, bool recursive)
 {
-	Object *obedit = CTX_data_edit_object(C);
-	BLI_assert(obedit != NULL);
-	bArmature *arm = obedit->data;
+	bArmature *arm = (bArmature *)tselem->id;
 	EditBone *ebone = te->directdata;
 	eOLDrawState status = OL_DRAWSEL_NONE;
 
 	if (set != OL_SETSEL_NONE) {
 		if (set == OL_SETSEL_NORMAL) {
 			if (!(ebone->flag & BONE_HIDDEN_A)) {
-				ED_armature_edit_deselect_all(obedit);
-				tree_element_active_ebone__sel(C, obedit, arm, ebone, true);
+				uint bases_len = 0;
+				Base **bases = BKE_view_layer_array_from_bases_in_edit_mode_unique_data(view_layer, NULL, &bases_len);
+				ED_armature_edit_deselect_all_multi_ex(bases, bases_len);
+				MEM_freeN(bases);
+
+				tree_element_active_ebone__sel(C, arm, ebone, true);
 				status = OL_DRAWSEL_NORMAL;
 			}
 		}
 		else if (set == OL_SETSEL_EXTEND) {
 			if (!(ebone->flag & BONE_HIDDEN_A)) {
 				if (!(ebone->flag & BONE_SELECTED)) {
-					tree_element_active_ebone__sel(C, obedit, arm, ebone, true);
+					tree_element_active_ebone__sel(C, arm, ebone, true);
 					status = OL_DRAWSEL_NORMAL;
 				}
 				else {
 					/* entirely selected, so de-select */
-					tree_element_active_ebone__sel(C, obedit, arm, ebone, false);
+					tree_element_active_ebone__sel(C, arm, ebone, false);
 					status = OL_DRAWSEL_NONE;
 				}
 			}
@@ -830,8 +862,9 @@ static eOLDrawState tree_element_active_sequence_dup(
 
 	seq = (Sequence *)te->directdata;
 	if (set == OL_SETSEL_NONE) {
-		if (seq->flag & SELECT)
+		if (seq->flag & SELECT) {
 			return OL_DRAWSEL_NORMAL;
+		}
 		return OL_DRAWSEL_NONE;
 	}
 
@@ -950,7 +983,7 @@ eOLDrawState tree_element_type_active(
 		case TSE_BONE:
 			return tree_element_active_bone(C, view_layer, te, tselem, set, recursive);
 		case TSE_EBONE:
-			return tree_element_active_ebone(C, te, tselem, set, recursive);
+			return tree_element_active_ebone(C, view_layer, te, tselem, set, recursive);
 		case TSE_MODIFIER:
 			return tree_element_active_modifier(C, scene, view_layer, te, tselem, set);
 		case TSE_LINKED_OB:
@@ -980,7 +1013,7 @@ eOLDrawState tree_element_type_active(
 		case TSE_KEYMAP_ITEM:
 			return tree_element_active_keymap_item(C, scene, view_layer, te, tselem, set);
 		case TSE_GP_LAYER:
-			//return tree_element_active_gplayer(C, scene, s, te, tselem, set);
+			return tree_element_active_gplayer(C, scene, te, tselem, set);
 			break;
 		case TSE_VIEW_COLLECTION_BASE:
 			return tree_element_active_master_collection(C, te, set);

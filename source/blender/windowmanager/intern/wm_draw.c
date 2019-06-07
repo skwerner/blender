@@ -59,6 +59,7 @@
 #include "GPU_framebuffer.h"
 #include "GPU_immediate.h"
 #include "GPU_matrix.h"
+#include "GPU_state.h"
 #include "GPU_texture.h"
 #include "GPU_viewport.h"
 
@@ -125,44 +126,59 @@ static bool wm_draw_region_stereo_set(Main *bmain, ScrArea *sa, ARegion *ar, eSt
 {
 	/* We could detect better when stereo is actually needed, by inspecting the
 	 * image in the image editor and sequencer. */
-	if (ar->regiontype != RGN_TYPE_WINDOW) {
+	if (!ELEM(ar->regiontype, RGN_TYPE_WINDOW, RGN_TYPE_PREVIEW)) {
 		return false;
 	}
 
 	switch (sa->spacetype) {
 		case SPACE_IMAGE:
 		{
-			SpaceImage *sima = sa->spacedata.first;
-			sima->iuser.multiview_eye = sview;
-			return true;
+			if (ar->regiontype == RGN_TYPE_WINDOW) {
+				SpaceImage *sima = sa->spacedata.first;
+				sima->iuser.multiview_eye = sview;
+				return true;
+			}
+			break;
 		}
 		case SPACE_VIEW3D:
 		{
-			View3D *v3d = sa->spacedata.first;
-			if (v3d->camera && v3d->camera->type == OB_CAMERA) {
-				Camera *cam = v3d->camera->data;
-				CameraBGImage *bgpic = cam->bg_images.first;
-				v3d->multiview_eye = sview;
-				if (bgpic) bgpic->iuser.multiview_eye = sview;
-				return true;
+			if (ar->regiontype == RGN_TYPE_WINDOW) {
+				View3D *v3d = sa->spacedata.first;
+				if (v3d->camera && v3d->camera->type == OB_CAMERA) {
+					Camera *cam = v3d->camera->data;
+					CameraBGImage *bgpic = cam->bg_images.first;
+					v3d->multiview_eye = sview;
+					if (bgpic) {
+						bgpic->iuser.multiview_eye = sview;
+					}
+					return true;
+				}
 			}
-			return false;
+			break;
 		}
 		case SPACE_NODE:
 		{
-			SpaceNode *snode = sa->spacedata.first;
-			if ((snode->flag & SNODE_BACKDRAW) && ED_node_is_compositor(snode)) {
-				Image *ima = BKE_image_verify_viewer(bmain, IMA_TYPE_COMPOSITE, "Viewer Node");
-				ima->eye = sview;
-				return true;
+			if (ar->regiontype == RGN_TYPE_WINDOW) {
+				SpaceNode *snode = sa->spacedata.first;
+				if ((snode->flag & SNODE_BACKDRAW) && ED_node_is_compositor(snode)) {
+					Image *ima = BKE_image_verify_viewer(bmain, IMA_TYPE_COMPOSITE, "Viewer Node");
+					ima->eye = sview;
+					return true;
+				}
 			}
-			return false;
+			break;
 		}
 		case SPACE_SEQ:
 		{
 			SpaceSeq *sseq = sa->spacedata.first;
 			sseq->multiview_eye = sview;
-			return true;
+
+			if (ar->regiontype == RGN_TYPE_PREVIEW) {
+				return true;
+			}
+			else if (ar->regiontype == RGN_TYPE_WINDOW) {
+				return (sseq->draw_flag & SEQ_DRAW_BACKDROP) != 0;
+			}
 		}
 	}
 
@@ -173,8 +189,9 @@ static bool wm_draw_region_stereo_set(Main *bmain, ScrArea *sa, ARegion *ar, eSt
 
 static void wm_area_mark_invalid_backbuf(ScrArea *sa)
 {
-	if (sa->spacetype == SPACE_VIEW3D)
+	if (sa->spacetype == SPACE_VIEW3D) {
 		((View3D *)sa->spacedata.first)->flag |= V3D_INVALID_BACKBUF;
+	}
 }
 
 static void wm_region_test_render_do_draw(const Scene *scene, struct Depsgraph *depsgraph,
@@ -191,10 +208,12 @@ static void wm_region_test_render_do_draw(const Scene *scene, struct Depsgraph *
 			rcti border_rect;
 
 			/* do partial redraw when possible */
-			if (ED_view3d_calc_render_border(scene, depsgraph, v3d, ar, &border_rect))
+			if (ED_view3d_calc_render_border(scene, depsgraph, v3d, ar, &border_rect)) {
 				ED_region_tag_redraw_partial(ar, &border_rect);
-			else
+			}
+			else {
 				ED_region_tag_redraw(ar);
+			}
 
 			engine->flag &= ~RE_ENGINE_DO_DRAW;
 		}
@@ -448,7 +467,7 @@ void wm_draw_region_blend(ARegion *ar, int view, bool blend)
 
 	if (blend) {
 		/* GL_ONE because regions drawn offscreen have premultiplied alpha. */
-		glEnable(GL_BLEND);
+		GPU_blend(true);
 		glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
 	}
 
@@ -492,7 +511,7 @@ void wm_draw_region_blend(ARegion *ar, int view, bool blend)
 
 	if (blend) {
 		glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-		glDisable(GL_BLEND);
+		GPU_blend(false);
 	}
 }
 
@@ -686,8 +705,9 @@ static void wm_draw_window_onscreen(bContext *C, wmWindow *win, int view)
 	}
 
 	/* always draw, not only when screen tagged */
-	if (win->gesture.first)
+	if (win->gesture.first) {
 		wm_gesture_draw(win);
+	}
 
 	/* needs pixel coords in screen */
 	if (wm->drags.first) {
@@ -782,32 +802,40 @@ static bool wm_draw_update_test_window(wmWindow *win)
 			screen->do_draw_paintcursor = true;
 			ar->do_draw_overlay = false;
 		}
-		if (ar->visible && ar->do_draw)
+		if (ar->visible && ar->do_draw) {
 			do_draw = true;
+		}
 	}
 
 	ED_screen_areas_iter(win, screen, sa) {
 		for (ar = sa->regionbase.first; ar; ar = ar->next) {
 			wm_region_test_render_do_draw(scene, depsgraph, sa, ar);
 
-			if (ar->visible && ar->do_draw)
+			if (ar->visible && ar->do_draw) {
 				do_draw = true;
+			}
 		}
 	}
 
-	if (do_draw)
+	if (do_draw) {
 		return true;
+	}
 
-	if (screen->do_refresh)
+	if (screen->do_refresh) {
 		return true;
-	if (screen->do_draw)
+	}
+	if (screen->do_draw) {
 		return true;
-	if (screen->do_draw_gesture)
+	}
+	if (screen->do_draw_gesture) {
 		return true;
-	if (screen->do_draw_paintcursor)
+	}
+	if (screen->do_draw_paintcursor) {
 		return true;
-	if (screen->do_draw_drag)
+	}
+	if (screen->do_draw_drag) {
 		return true;
+	}
 
 	return false;
 }

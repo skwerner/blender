@@ -56,3 +56,17 @@ void register_node_type_cmp_group(void)
 
 	nodeRegisterType(&ntype);
 }
+
+void register_node_type_cmp_custom_group(bNodeType *ntype)
+{
+	/* These methods can be overriden but need a default implementation otherwise. */
+	if (ntype->poll == NULL) {
+		ntype->poll = cmp_node_poll_default;
+	}
+	if (ntype->insert_link == NULL) {
+		ntype->insert_link = node_insert_link_default;
+	}
+	if (ntype->update_internal_links == NULL) {
+		ntype->update_internal_links = node_update_internal_links_default;
+	}
+}

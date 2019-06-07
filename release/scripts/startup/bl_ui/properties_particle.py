@@ -184,8 +184,6 @@ class PARTICLE_PT_context_particles(ParticleButtonsPanel, Panel):
         if psys is None:
             part = particle_get_settings(context)
 
-            layout.operator("object.particle_system_add", icon='ADD', text="New")
-
             if part is None:
                 return
 
@@ -678,7 +676,7 @@ class PARTICLE_PT_physics(ParticleButtonsPanel, Panel):
         elif part.physics_type == 'KEYED':
 
             sub = col.column()
-            sub.active = not psys.use_keyed_timing
+            sub.active = not psys or not psys.use_keyed_timing
             sub.prop(part, "keyed_loops", text="Loops")
             if psys:
                 col.prop(psys, "use_keyed_timing", text="Use Timing")
@@ -938,8 +936,9 @@ class PARTICLE_PT_physics_relations(ParticleButtonsPanel, Panel):
 
     @classmethod
     def poll(cls, context):
+        psys = context.particle_system
         part = particle_get_settings(context)
-        return part.physics_type in {'KEYED', 'BOIDS'}
+        return psys and part.physics_type in {'KEYED', 'BOIDS'}
 
     def draw(self, context):
         layout = self.layout
@@ -1000,7 +999,6 @@ class PARTICLE_PT_physics_fluid_interaction(ParticleButtonsPanel, Panel):
         layout.use_property_split = True
 
         psys = context.particle_system
-        part = particle_get_settings(context)
 
         row = layout.row()
         row.template_list("UI_UL_list", "particle_targets", psys, "targets",
@@ -1478,98 +1476,6 @@ class PARTICLE_PT_render_collection_use_count(ParticleButtonsPanel, Panel):
         if weight:
             row = layout.row()
             row.prop(weight, "count")
-
-
-class PARTICLE_PT_render_billboards_alignment(ParticleButtonsPanel, Panel):
-    bl_label = "Billboard Alignment"
-    bl_parent_id = "PARTICLE_PT_render"
-    bl_options = {'DEFAULT_CLOSED'}
-    COMPAT_ENGINES = {'BLENDER_RENDER', 'BLENDER_EEVEE', 'BLENDER_WORKBENCH'}
-
-    @classmethod
-    def poll(cls, context):
-        part = particle_get_settings(context)
-        return part.render_type == 'BILLBOARD'
-
-    def draw(self, context):
-        layout = self.layout
-        layout.use_property_split = True
-
-        part = particle_get_settings(context)
-
-        col = layout.column()
-
-        col.prop(part, "billboard_align", text="Align To")
-        col.prop(part, "lock_billboard", text="Lock Axis")
-        col.prop(part, "billboard_object")
-
-
-class PARTICLE_PT_render_billboards_tilt(ParticleButtonsPanel, Panel):
-    bl_label = "Billboard Tilt"
-    bl_parent_id = "PARTICLE_PT_render"
-    bl_options = {'DEFAULT_CLOSED'}
-    COMPAT_ENGINES = {'BLENDER_RENDER', 'BLENDER_EEVEE', 'BLENDER_WORKBENCH'}
-
-    @classmethod
-    def poll(cls, context):
-        part = particle_get_settings(context)
-        return part.render_type == 'BILLBOARD'
-
-    def draw(self, context):
-        layout = self.layout
-        layout.use_property_split = True
-
-        part = particle_get_settings(context)
-
-        col = layout.column()
-
-        sub = col.column(align=True)
-        sub.prop(part, "billboard_tilt", text="Angle", slider=True)
-        sub.prop(part, "billboard_tilt_random", text="Random", slider=True)
-
-        sub = col.column(align=True)
-        sub.prop(part, "billboard_offset")
-        col.prop(part, "billboard_size", text="Scale")
-        if part.billboard_align == 'VEL':
-            col = col.column(align=True)
-            col.prop(part, "billboard_velocity_head", text="Velocity ScaleHead")
-            col.prop(part, "billboard_velocity_tail", text="Tail")
-
-
-class PARTICLE_PT_render_billboards_uv(ParticleButtonsPanel, Panel):
-    bl_label = "Billboard UVs"
-    bl_parent_id = "PARTICLE_PT_render"
-    bl_options = {'DEFAULT_CLOSED'}
-    COMPAT_ENGINES = {'BLENDER_RENDER', 'BLENDER_EEVEE', 'BLENDER_WORKBENCH'}
-
-    @classmethod
-    def poll(cls, context):
-        part = particle_get_settings(context)
-        return part.render_type == 'BILLBOARD'
-
-    def draw(self, context):
-        layout = self.layout
-        layout.use_property_split = True
-
-        psys = context.particle_system
-        ob = context.object
-        part = particle_get_settings(context)
-
-        col = layout.column()
-
-        if psys:
-            col.prop_search(psys, "billboard_normal_uv", ob.data, "uv_layers")
-            col.prop_search(psys, "billboard_time_index_uv", ob.data, "uv_layers")
-
-        col.prop(part, "billboard_uv_split", text="Split UVs")
-
-        if psys:
-            sub = col.column()
-            sub.active = part.billboard_uv_split > 1
-            sub.prop_search(psys, "billboard_split_uv", ob.data, "uv_layers")
-
-        sub.prop(part, "billboard_animation")
-        sub.prop(part, "billboard_offset_split")
 
 
 class PARTICLE_PT_render_trails(ParticleButtonsPanel, Panel):
@@ -2186,8 +2092,6 @@ classes = (
     PARTICLE_PT_render_object,
     PARTICLE_PT_render_collection,
     PARTICLE_PT_render_collection_use_count,
-    PARTICLE_PT_render_billboards_tilt,
-    PARTICLE_PT_render_billboards_uv,
     PARTICLE_PT_render_trails,
     PARTICLE_PT_render_extra,
     PARTICLE_PT_draw,

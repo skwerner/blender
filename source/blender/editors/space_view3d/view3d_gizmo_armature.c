@@ -125,9 +125,7 @@ static void gizmo_bbone_offset_set(
 static bool WIDGETGROUP_armature_spline_poll(const bContext *C, wmGizmoGroupType *UNUSED(gzgt))
 {
 	View3D *v3d = CTX_wm_view3d(C);
-	if ((v3d->flag2 & V3D_HIDE_OVERLAYS) ||
-	    (v3d->gizmo_flag & (V3D_GIZMO_HIDE | V3D_GIZMO_HIDE_CONTEXT)))
-	{
+	if (v3d->gizmo_flag & (V3D_GIZMO_HIDE | V3D_GIZMO_HIDE_CONTEXT)) {
 		return false;
 	}
 
@@ -185,8 +183,9 @@ static void WIDGETGROUP_armature_spline_refresh(const bContext *C, wmGizmoGroup 
 	ViewLayer *view_layer = CTX_data_view_layer(C);
 	Object *ob = BKE_object_pose_armature_get(OBACT(view_layer));
 
-	if (!gzgroup->customdata)
+	if (!gzgroup->customdata) {
 		return;
+	}
 
 	struct BoneSplineWidgetGroup *bspline_group = gzgroup->customdata;
 	bPoseChannel *pchan = BKE_pose_channel_active(ob);

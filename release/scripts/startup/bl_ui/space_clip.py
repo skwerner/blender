@@ -383,8 +383,6 @@ class CLIP_PT_tools_marker(CLIP_PT_tracking_panel, Panel):
     def draw(self, context):
         layout = self.layout
 
-        sc = context.space_data
-
         col = layout.column(align=True)
         row = col.row(align=True)
         row.operator("clip.add_marker_at_click", text="Add")
@@ -1387,7 +1385,7 @@ class CLIP_MT_track_visibility(Menu):
     def draw(self, context):
         layout = self.layout
 
-        layout.operator("clip.hide_tracks_clear", text="Show Hidden")
+        layout.operator("clip.hide_tracks_clear")
         layout.operator("clip.hide_tracks", text="Hide Selected").unselected = False
         layout.operator("clip.hide_tracks", text="Hide Unselected").unselected = True
 

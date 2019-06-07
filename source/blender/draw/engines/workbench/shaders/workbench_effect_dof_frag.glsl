@@ -2,7 +2,7 @@
  * Separable Hexagonal Bokeh Blur by Colin Barré-Brisebois
  * https://colinbarrebrisebois.com/2017/04/18/hexagonal-bokeh-blur-revisited-part-1-basic-3-pass-version/
  * Converted and adapted from HLSL to GLSL by Clément Foucault
- **/
+ */
 
 uniform mat4 ProjectionMatrix;
 uniform vec2 invertedViewportSize;
@@ -31,9 +31,10 @@ float max_v4(vec4 v) { return max(max(v.x, v.y), max(v.z, v.w)); }
 /* divide by sensor size to get the normalized size */
 #define calculate_coc(zdepth) (dof_aperturesize * (dof_distance / zdepth - 1.0) * dof_invsensorsize)
 
-#define linear_depth(z) ((ProjectionMatrix[3][3] == 0.0) \
-		? (nearFar.x  * nearFar.y) / (z * (nearFar.x - nearFar.y) + nearFar.y) \
-		: (z * 2.0 - 1.0) * nearFar.y)
+#define linear_depth(z) \
+	((ProjectionMatrix[3][3] == 0.0) ? \
+	 (nearFar.x  * nearFar.y) / (z * (nearFar.x - nearFar.y) + nearFar.y) : \
+	 (z * 2.0 - 1.0) * nearFar.y)
 
 
 const float MAX_COC_SIZE = 100.0;
@@ -44,7 +45,7 @@ float decode_signed_coc(vec2 cocs) { return ((cocs.x > cocs.y) ? cocs.x : -cocs.
 /**
  * ----------------- STEP 0 ------------------
  * Custom Coc aware downsampling. Half res pass.
- **/
+ */
 #ifdef PREPARE
 
 layout(location = 0) out vec4 halfResColor;
@@ -91,7 +92,7 @@ void main()
 /**
  * ----------------- STEP 0.5 ------------------
  * Custom Coc aware downsampling. Quater res pass.
- **/
+ */
 #ifdef DOWNSAMPLE
 
 layout(location = 0) out vec4 outColor;
@@ -135,7 +136,7 @@ void main()
 /**
  * ----------------- STEP 1 ------------------
  * Flatten COC buffer using max filter.
- **/
+ */
 #if defined(FLATTEN_VERTICAL) || defined(FLATTEN_HORIZONTAL)
 
 layout(location = 0) out vec2 flattenedCoc;
@@ -170,7 +171,7 @@ void main()
 /**
  * ----------------- STEP 1.ax------------------
  * Dilate COC buffer using min filter.
- **/
+ */
 #if defined(DILATE_VERTICAL) || defined(DILATE_HORIZONTAL)
 
 layout(location = 0) out vec2 dilatedCoc;
@@ -205,7 +206,7 @@ void main()
  * ----------------- STEP 2 ------------------
  * Blur vertically and diagonally.
  * Outputs vertical blur and combined blur in MRT
- **/
+ */
 #ifdef BLUR1
 layout(location = 0) out vec4 blurColor;
 
@@ -290,7 +291,7 @@ void main()
  * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- **/
+ */
 #ifdef BLUR2
 out vec4 finalColor;
 
@@ -298,7 +299,7 @@ void main()
 {
 	/* Half Res pass */
 	vec2 pixel_size = 1.0 / vec2(textureSize(blurTex, 0).xy);
-	vec2 uv = gl_FragCoord.xy * pixel_size.xy; 
+	vec2 uv = gl_FragCoord.xy * pixel_size.xy;
 	float coc = decode_coc(texture(inputCocTex, uv).rg);
 	/* Only use this filter if coc is > 9.0
 	 * since this filter is not weighted by CoC
@@ -344,7 +345,7 @@ void main()
 
 /**
  * ----------------- STEP 4 ------------------
- **/
+ */
 #ifdef RESOLVE
 out vec4 finalColor;
 

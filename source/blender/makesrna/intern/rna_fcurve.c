@@ -495,7 +495,7 @@ static void rna_FCurve_update_eval(Main *UNUSED(bmain), Scene *UNUSED(scene), Po
 	IdAdtTemplate *iat = (IdAdtTemplate *)ptr->id.data;
 	if (iat && iat->adt && iat->adt->action) {
 		/* action is separate datablock, needs separate tag */
-		DEG_id_tag_update(&iat->adt->action->id, ID_RECALC_COPY_ON_WRITE);
+		DEG_id_tag_update(&iat->adt->action->id, ID_RECALC_ANIMATION);
 	}
 }
 
@@ -618,7 +618,7 @@ static void rna_FModifier_update(Main *UNUSED(bmain), Scene *UNUSED(scene), Poin
 	if (adt != NULL) {
 		if (adt->action != NULL) {
 			/* action is separate datablock, needs separate tag */
-			DEG_id_tag_update(&adt->action->id, ID_RECALC_COPY_ON_WRITE);
+			DEG_id_tag_update(&adt->action->id, ID_RECALC_ANIMATION);
 		}
 	}
 
@@ -955,7 +955,7 @@ static void rna_Keyframe_update(Main *UNUSED(bmain), Scene *UNUSED(scene), Point
 	if (adt != NULL) {
 		if (adt->action != NULL) {
 			/* action is separate datablock, needs separate tag */
-			DEG_id_tag_update(&adt->action->id, ID_RECALC_COPY_ON_WRITE);
+			DEG_id_tag_update(&adt->action->id, ID_RECALC_ANIMATION);
 		}
 	}
 }
@@ -1405,6 +1405,7 @@ static void rna_def_fmodifier(BlenderRNA *brna)
 
 	/* settings */
 	prop = RNA_def_property(srna, "show_expanded", PROP_BOOLEAN, PROP_NONE);
+	RNA_def_property_flag(prop, PROP_NO_DEG_UPDATE);
 	RNA_def_property_boolean_sdna(prop, NULL, "flag", FMODIFIER_FLAG_EXPANDED);
 	RNA_def_property_ui_text(prop, "Expanded", "F-Curve Modifier's panel is expanded in UI");
 	RNA_def_property_ui_icon(prop, ICON_DISCLOSURE_TRI_RIGHT, 1);

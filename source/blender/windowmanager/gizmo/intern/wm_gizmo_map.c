@@ -39,6 +39,7 @@
 #include "GPU_glew.h"
 #include "GPU_matrix.h"
 #include "GPU_select.h"
+#include "GPU_state.h"
 
 #include "MEM_guardedalloc.h"
 
@@ -344,8 +345,9 @@ static void gizmomap_prepare_drawing(
         wmGizmoMap *gzmap, const bContext *C, ListBase *draw_gizmos,
         const eWM_GizmoFlagMapDrawStep drawstep)
 {
-	if (!gzmap || BLI_listbase_is_empty(&gzmap->groups))
+	if (!gzmap || BLI_listbase_is_empty(&gzmap->groups)) {
 		return;
+	}
 
 	gzmap->is_init = false;
 
@@ -429,29 +431,29 @@ static void gizmos_draw_list(const wmGizmoMap *gzmap, const bContext *C, ListBas
 		}
 		else {
 			if (is_depth) {
-				glEnable(GL_DEPTH_TEST);
+				GPU_depth_test(true);
 			}
 			else {
-				glDisable(GL_DEPTH_TEST);
+				GPU_depth_test(false);
 			}
 			is_depth_prev = is_depth;
 		}
 
 		/* XXX force AntiAlias Gizmos. */
-		glEnable(GL_LINE_SMOOTH);
-		glEnable(GL_POLYGON_SMOOTH);
+		GPU_line_smooth(true);
+		GPU_polygon_smooth(true);
 
 		gz->type->draw(C, gz);
 
-		glDisable(GL_LINE_SMOOTH);
-		glDisable(GL_POLYGON_SMOOTH);
+		GPU_line_smooth(false);
+		GPU_polygon_smooth(false);
 
 		/* free/remove gizmo link after drawing */
 		BLI_freelinkN(draw_gizmos, link);
 	}
 
 	if (is_depth_prev) {
-		glDisable(GL_DEPTH_TEST);
+		GPU_depth_test(false);
 	}
 }
 
@@ -496,10 +498,10 @@ static void gizmo_draw_select_3D_loop(
 		}
 		else {
 			if (is_depth) {
-				glEnable(GL_DEPTH_TEST);
+				GPU_depth_test(true);
 			}
 			else {
-				glDisable(GL_DEPTH_TEST);
+				GPU_depth_test(false);
 			}
 			is_depth_prev = is_depth;
 		}
@@ -518,7 +520,7 @@ static void gizmo_draw_select_3D_loop(
 	}
 
 	if (is_depth_prev) {
-		glDisable(GL_DEPTH_TEST);
+		GPU_depth_test(false);
 	}
 	if (is_depth_skip_prev) {
 		glDepthMask(true);
@@ -843,8 +845,9 @@ bool WM_gizmomap_select_all(bContext *C, wmGizmoMap *gzmap, const int action)
 			break;
 	}
 
-	if (changed)
+	if (changed) {
 		WM_event_add_mousemove(C);
+	}
 
 	return changed;
 }
@@ -873,12 +876,15 @@ void wm_gizmomap_handler_context_op(bContext *C, wmEventHandler_Op *handler)
 		else {
 			ARegion *ar;
 			CTX_wm_area_set(C, sa);
-			for (ar = sa->regionbase.first; ar; ar = ar->next)
-				if (ar == handler->context.region)
+			for (ar = sa->regionbase.first; ar; ar = ar->next) {
+				if (ar == handler->context.region) {
 					break;
+				}
+			}
 			/* XXX no warning print here, after full-area and back regions are remade */
-			if (ar)
+			if (ar) {
 				CTX_wm_region_set(C, ar);
+			}
 		}
 	}
 }
@@ -1197,11 +1203,13 @@ void WM_gizmoconfig_update_tag_remove(
  */
 void WM_gizmoconfig_update(struct Main *bmain)
 {
-	if (G.background)
+	if (G.background) {
 		return;
+	}
 
-	if (wm_gzmap_type_update_flag == 0)
+	if (wm_gzmap_type_update_flag == 0) {
 		return;
+	}
 
 	if (wm_gzmap_type_update_flag & WM_GIZMOMAPTYPE_GLOBAL_UPDATE_REMOVE) {
 		for (wmGizmoMapType *gzmap_type = gizmomaptypes.first;

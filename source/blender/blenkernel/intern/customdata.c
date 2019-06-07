@@ -1252,9 +1252,8 @@ static void layerSwap_flnor(void *data, const int *corner_indices)
 static void layerDefault_fmap(void *data, int count)
 {
 	int *fmap_num = (int *)data;
-	int i;
-	for (i = 0; i < count; i++) {
-		*fmap_num = -1;
+	for (int i = 0; i < count; i++) {
+		fmap_num[i] = -1;
 	}
 }
 
@@ -2319,8 +2318,8 @@ static void CustomData_copy_data_layer(
 	if (!count || !src_data || !dst_data) {
 		if (count && !(src_data == NULL && dst_data == NULL)) {
 			CLOG_WARN(&LOG, "null data for %s type (%p --> %p), skipping",
-				      layerType_getName(source->layers[src_i].type),
-				      (void *)src_data, (void *)dst_data);
+			          layerType_getName(source->layers[src_i].type),
+			          (void *)src_data, (void *)dst_data);
 		}
 		return;
 	}

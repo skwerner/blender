@@ -15,10 +15,9 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
-
- * The Original Code is: some of this file.
  *
- * */
+ * The Original Code is: some of this file.
+ */
 
 /** \file
  * \ingroup bli
@@ -138,8 +137,9 @@ void invert_qt(float q[4])
 {
 	const float f = dot_qtqt(q, q);
 
-	if (f == 0.0f)
+	if (f == 0.0f) {
 		return;
+	}
 
 	conjugate_qt(q);
 	mul_qt_fl(q, 1.0f / f);
@@ -200,6 +200,29 @@ void pow_qt_fl_normalized(float q[4], const float fac)
 	const float si = sinf(angle);
 	q[0] = co;
 	normalize_v3_length(q + 1, si);
+}
+
+/**
+ * Apply the rotation of \a a to \a q keeping the values compatible with \a old.
+ * Avoid axis flipping for animated f-curves for eg.
+ */
+void quat_to_compatible_quat(float q[4], const float a[4], const float old[4])
+{
+	const float eps = 1e-4f;
+	BLI_ASSERT_UNIT_QUAT(a);
+	float old_unit[4];
+	/* Skips `!finite_v4(old)` case too. */
+	if (normalize_qt_qt(old_unit, old) > eps) {
+		float delta[4];
+		rotation_between_quats_to_quat(delta, old_unit, a);
+		mul_qt_qtqt(q, old, delta);
+		if ((q[0] < 0.0f) != (old[0] < 0.0f)) {
+			negate_v4(q);
+		}
+	}
+	else {
+		copy_qt_qt(q, a);
+	}
 }
 
 /* skip error check, currently only needed by mat3_to_quat_is_ok */
@@ -649,8 +672,9 @@ void vec_to_quat(float q[4], const float vec[3], short axis, const short upflag)
 		nor[1] = -tvec[2];
 		nor[2] =  tvec[1];
 
-		if (fabsf(tvec[1]) + fabsf(tvec[2]) < eps)
+		if (fabsf(tvec[1]) + fabsf(tvec[2]) < eps) {
 			nor[1] = 1.0f;
+		}
 
 		co = tvec[0];
 	}
@@ -659,8 +683,9 @@ void vec_to_quat(float q[4], const float vec[3], short axis, const short upflag)
 		nor[1] =  0.0;
 		nor[2] = -tvec[0];
 
-		if (fabsf(tvec[0]) + fabsf(tvec[2]) < eps)
+		if (fabsf(tvec[0]) + fabsf(tvec[2]) < eps) {
 			nor[2] = 1.0f;
+		}
 
 		co = tvec[1];
 	}
@@ -669,8 +694,9 @@ void vec_to_quat(float q[4], const float vec[3], short axis, const short upflag)
 		nor[1] =  tvec[0];
 		nor[2] =  0.0;
 
-		if (fabsf(tvec[0]) + fabsf(tvec[1]) < eps)
+		if (fabsf(tvec[0]) + fabsf(tvec[1]) < eps) {
 			nor[0] = 1.0f;
+		}
 
 		co = tvec[2];
 	}
@@ -687,16 +713,16 @@ void vec_to_quat(float q[4], const float vec[3], short axis, const short upflag)
 		quat_to_mat3(mat, q);
 
 		if (axis == 0) {
-			if (upflag == 1) angle =  0.5f * atan2f(fp[2], fp[1]);
-			else             angle = -0.5f * atan2f(fp[1], fp[2]);
+			if (upflag == 1) { angle =  0.5f * atan2f(fp[2], fp[1]); }
+			else             { angle = -0.5f * atan2f(fp[1], fp[2]); }
 		}
 		else if (axis == 1) {
-			if (upflag == 0) angle = -0.5f * atan2f(fp[2], fp[0]);
-			else             angle =  0.5f * atan2f(fp[0], fp[2]);
+			if (upflag == 0) { angle = -0.5f * atan2f(fp[2], fp[0]); }
+			else             { angle =  0.5f * atan2f(fp[0], fp[2]); }
 		}
 		else {
-			if (upflag == 0) angle =  0.5f * atan2f(-fp[1], -fp[0]);
-			else             angle = -0.5f * atan2f(-fp[0], -fp[1]);
+			if (upflag == 0) { angle =  0.5f * atan2f(-fp[1], -fp[0]); }
+			else             { angle = -0.5f * atan2f(-fp[0], -fp[1]); }
 		}
 
 		co = cosf(angle);
@@ -932,8 +958,9 @@ void quat_to_axis_angle(float axis[3], float *angle, const float q[4])
 	*angle = ha * 2;
 
 	/* prevent division by zero for axis conversion */
-	if (fabsf(si) < 0.0005f)
+	if (fabsf(si) < 0.0005f) {
 		si = 1.0f;
+	}
 
 	axis[0] = q[1] / si;
 	axis[1] = q[2] / si;
@@ -1358,9 +1385,15 @@ void rotate_eul(float beul[3], const char axis, const float ang)
 	assert(axis >= 'X' && axis <= 'Z');
 
 	eul[0] = eul[1] = eul[2] = 0.0f;
-	if (axis == 'X') eul[0] = ang;
-	else if (axis == 'Y') eul[1] = ang;
-	else eul[2] = ang;
+	if (axis == 'X') {
+		eul[0] = ang;
+	}
+	else if (axis == 'Y') {
+		eul[1] = ang;
+	}
+	else {
+		eul[2] = ang;
+	}
 
 	eul_to_mat3(mat1, eul);
 	eul_to_mat3(mat2, beul);
@@ -1396,16 +1429,16 @@ void compatible_eul(float eul[3], const float oldrot[3])
 
 	/* is 1 of the axis rotations larger than 180 degrees and the other small? NO ELSE IF!! */
 	if (fabsf(deul[0]) > 3.2f && fabsf(deul[1]) < 1.6f && fabsf(deul[2]) < 1.6f) {
-		if (deul[0] > 0.0f) eul[0] -= pi_x2;
-		else                eul[0] += pi_x2;
+		if (deul[0] > 0.0f) { eul[0] -= pi_x2; }
+		else                { eul[0] += pi_x2; }
 	}
 	if (fabsf(deul[1]) > 3.2f && fabsf(deul[2]) < 1.6f && fabsf(deul[0]) < 1.6f) {
-		if (deul[1] > 0.0f) eul[1] -= pi_x2;
-		else                eul[1] += pi_x2;
+		if (deul[1] > 0.0f) { eul[1] -= pi_x2; }
+		else                { eul[1] += pi_x2; }
 	}
 	if (fabsf(deul[2]) > 3.2f && fabsf(deul[0]) < 1.6f && fabsf(deul[1]) < 1.6f) {
-		if (deul[2] > 0.0f) eul[2] -= pi_x2;
-		else                eul[2] += pi_x2;
+		if (deul[2] > 0.0f) { eul[2] -= pi_x2; }
+		else                { eul[2] += pi_x2; }
 	}
 }
 
@@ -1484,12 +1517,15 @@ static const RotOrderInfo rotOrders[] = {
 static const RotOrderInfo *get_rotation_order_info(const short order)
 {
 	assert(order >= 0 && order <= 6);
-	if (order < 1)
+	if (order < 1) {
 		return &rotOrders[0];
-	else if (order < 6)
+	}
+	else if (order < 6) {
 		return &rotOrders[order - 1];
-	else
+	}
+	else {
 		return &rotOrders[5];
+	}
 }
 
 /* Construct quaternion from Euler angles (in radians). */
@@ -1525,7 +1561,9 @@ void eulO_to_quat(float q[4], const float e[3], const short order)
 	q[2] = (float)(a[1]);
 	q[3] = (float)(a[2]);
 
-	if (R->parity) q[j + 1] = -q[j + 1];
+	if (R->parity) {
+		q[j + 1] = -q[j + 1];
+	}
 }
 
 /* Convert quaternion to Euler angles (in radians). */
@@ -1739,12 +1777,15 @@ void rotate_eulO(float beul[3], const short order, char axis, float ang)
 
 	zero_v3(eul);
 
-	if (axis == 'X')
+	if (axis == 'X') {
 		eul[0] = ang;
-	else if (axis == 'Y')
+	}
+	else if (axis == 'Y') {
 		eul[1] = ang;
-	else
+	}
+	else {
 		eul[2] = ang;
+	}
 
 	eulO_to_mat3(mat1, eul, order);
 	eulO_to_mat3(mat2, beul, order);
@@ -1917,12 +1958,16 @@ void add_weighted_dq_dq(DualQuat *dqsum, const DualQuat *dq, float weight)
 	dqsum->trans[2] += weight * dq->trans[2];
 	dqsum->trans[3] += weight * dq->trans[3];
 
-	/* interpolate scale - but only if needed */
+	/* Interpolate scale - but only if there is scale present. If any dual
+	 * quaternions without scale are added, they will be compensated for in
+	 * normalize_dq. */
 	if (dq->scale_weight) {
 		float wmat[4][4];
 
-		if (flipped) /* we don't want negative weights for scaling */
+		if (flipped) {
+			/* we don't want negative weights for scaling */
 			weight = -weight;
+		}
 
 		copy_m4_m4(wmat, (float(*)[4])dq->scale);
 		mul_m4_fl(wmat, weight);
@@ -1938,7 +1983,10 @@ void normalize_dq(DualQuat *dq, float totweight)
 	mul_qt_fl(dq->quat, scale);
 	mul_qt_fl(dq->trans, scale);
 
+	/* Handle scale if needed. */
 	if (dq->scale_weight) {
+		/* Compensate for any dual quaternions added without scale. This is an
+		 * optimization so that we can skip the scale part when not needed. */
 		float addweight = totweight - dq->scale_weight;
 
 		if (addweight) {
@@ -1973,8 +2021,9 @@ void mul_v3m3_dq(float co[3], float mat[3][3], DualQuat *dq)
 	M[2][2] = w * w + z * z - x * x - y * y;
 
 	len2 = dot_qtqt(dq->quat, dq->quat);
-	if (len2 > 0.0f)
+	if (len2 > 0.0f) {
 		len2 = 1.0f / len2;
+	}
 
 	/* translation */
 	t[0] = 2 * (-t0 * x + w * t1 - t2 * z + y * t3);
@@ -1982,8 +2031,9 @@ void mul_v3m3_dq(float co[3], float mat[3][3], DualQuat *dq)
 	t[2] = 2 * (-t0 * z + x * t2 + w * t3 - t1 * y);
 
 	/* apply scaling */
-	if (dq->scale_weight)
+	if (dq->scale_weight) {
 		mul_m4_v3(dq->scale, co);
+	}
 
 	/* apply rotation and translation */
 	mul_m3_v3(M, co);
@@ -1997,8 +2047,9 @@ void mul_v3m3_dq(float co[3], float mat[3][3], DualQuat *dq)
 			copy_m3_m4(scalemat, dq->scale);
 			mul_m3_m3m3(mat, M, scalemat);
 		}
-		else
+		else {
 			copy_m3_m3(mat, M);
+		}
 		mul_m3_fl(mat, len2);
 	}
 }

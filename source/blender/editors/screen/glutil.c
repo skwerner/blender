@@ -48,21 +48,6 @@
 
 /* ******************************************** */
 
-void setlinestyle(int nr)
-{
-	if (nr == 0) {
-		GPU_line_stipple(false);
-	}
-	else {
-
-		GPU_line_stipple(true);
-		if (U.pixelsize > 1.0f)
-			glLineStipple(nr, 0xCCCC);
-		else
-			glLineStipple(nr, 0xAAAA);
-	}
-}
-
 /* Invert line handling */
 
 #define GL_TOGGLE(mode, onoff)  (((onoff) ? glEnable : glDisable)(mode))
@@ -301,6 +286,13 @@ void immDrawPixelsTexScaled_clipping(IMMDrawPixelsTexState *state,
 			immAttr2f(texco, (float)(0 + offset_left) / tex_w, (float)(subpart_h - offset_top) / tex_h);
 			immVertex2f(pos, rast_x + (float)offset_left * xzoom, rast_y + (float)(subpart_h - offset_top) * yzoom * scaleY);
 			immEnd();
+
+			/* NOTE: Weirdly enough this is only required on macOS. Without this there is some sort of
+			 * bleeding of data is happening from tiles which are drawn later on.
+			 * This doesn't seem to be too slow, but still would be nice to have fast and nice solution. */
+#ifdef __APPLE__
+			GPU_flush();
+#endif
 		}
 	}
 

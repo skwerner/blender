@@ -1132,7 +1132,7 @@ void DirectDrawSurface::mipmap(Image *img, uint face, uint mipmap)
 
 // It was easier to copy this function from upstream than to resync.
 // This should be removed if a resync ever occurs.
-void* DirectDrawSurface::readData(uint &rsize)
+void *DirectDrawSurface::readData(uint &rsize)
 {
 	uint header_size = 128; // sizeof(DDSHeader);
 	if (header.hasDX10Header())
@@ -1147,6 +1147,12 @@ void* DirectDrawSurface::readData(uint &rsize)
 
 	stream.seek(header_size);
 	mem_read(stream, data, size);
+
+	if (stream.failed) {
+		free(data);
+		data = NULL;
+		rsize = 0;
+	}
 
 	// Maybe check if size == rsize? assert() isn't in this scope...
 

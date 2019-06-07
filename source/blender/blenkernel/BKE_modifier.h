@@ -28,7 +28,6 @@ struct BMEditMesh;
 struct CustomData_MeshMasks;
 struct DepsNodeHandle;
 struct Depsgraph;
-struct DerivedMesh;
 struct ID;
 struct ListBase;
 struct Main;
@@ -155,17 +154,6 @@ typedef struct ModifierTypeInfo {
 	void (*copyData)(const struct ModifierData *md, struct ModifierData *target, const int flag);
 
 
-	/********************* Deform modifier functions *********************/ /* DEPRECATED */
-
-	void (*deformVerts_DM_removed)(void);
-	void (*deformMatrices_DM_removed)(void);
-	void (*deformVertsEM_DM_removed)(void);
-	void (*deformMatricesEM_DM_removed)(void);
-
-	/********************* Non-deform modifier functions *********************/ /* DEPRECATED */
-
-	void (*applyModifier_DM_removed)(void);
-
 	/********************* Deform modifier functions *********************/
 
 	/* Only for deform types, should apply the deformation
@@ -232,6 +220,8 @@ typedef struct ModifierTypeInfo {
 
 	/* Free internal modifier data variables, this function should
 	 * not free the md variable itself.
+	 *
+	 * This function is responsible for freeing the runtime data as well.
 	 *
 	 * This function is optional.
 	 */
@@ -301,6 +291,18 @@ typedef struct ModifierTypeInfo {
 	 */
 	void (*foreachTexLink)(struct ModifierData *md, struct Object *ob,
 	                       TexWalkFunc walk, void *userData);
+
+	/* Free given runtime data.
+	 *
+	 * This data is coming from a modifier of the corresponding type, but actual
+	 * modifier data is not known here.
+	 *
+	 * Notes:
+	 *  - The data itself is to be de-allocated as well.
+	 *  - This calback is allowed to receive NULL pointer as a data, so it's
+	 *    more like "ensure the data is freed".
+	 */
+	void (*freeRuntimeData)(void *runtime_data);
 } ModifierTypeInfo;
 
 /* Initialize modifier's global data (type info and some common global storages). */
@@ -401,6 +403,16 @@ void        modifier_path_init(char *path, int path_maxlen, const char *name);
 const char *modifier_path_relbase(struct Main *bmain, struct Object *ob);
 const char *modifier_path_relbase_from_global(struct Object *ob);
 
+/* Accessors of original/evaluated modifiers. */
+
+/* For a given modifier data, get corresponding original one.
+ * If the modifier data is already original, return it as-is. */
+struct ModifierData *modifier_get_original(struct ModifierData *md);
+struct ModifierData *modifier_get_evaluated(
+        struct Depsgraph *depsgraph,
+        struct Object *object,
+        struct ModifierData *md);
+
 /* wrappers for modifier callbacks that ensure valid normals */
 
 struct Mesh *modwrap_applyModifier(
@@ -416,14 +428,6 @@ void modwrap_deformVertsEM(
         ModifierData *md, const struct ModifierEvalContext *ctx,
         struct BMEditMesh *em, struct Mesh *me,
         float (*vertexCos)[3], int numVerts);
-
-/* wrappers for modifier callbacks that accept Mesh and select the proper implementation
- * depending on if the modifier has been ported to Mesh or is still using DerivedMesh
- */
-
-struct DerivedMesh *modifier_applyModifier_DM_deprecated(
-        struct ModifierData *md, const struct ModifierEvalContext *ctx,
-        struct DerivedMesh *dm);
 
 struct Mesh *BKE_modifier_get_evaluated_mesh_from_evaluated_object(
         struct Object *ob_eval, const bool get_cage_mesh);

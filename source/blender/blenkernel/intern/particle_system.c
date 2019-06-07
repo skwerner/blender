@@ -512,7 +512,7 @@ void psys_thread_context_free(ParticleThreadContext *ctx)
 	if (ctx->index) MEM_freeN(ctx->index);
 	if (ctx->seams) MEM_freeN(ctx->seams);
 	//if (ctx->vertpart) MEM_freeN(ctx->vertpart);
-	BLI_kdtree_free(ctx->tree);
+	BLI_kdtree_3d_free(ctx->tree);
 
 	if (ctx->clumpcurve != NULL) {
 		curvemapping_free(ctx->clumpcurve);
@@ -1280,18 +1280,18 @@ void psys_update_particle_tree(ParticleSystem *psys, float cfra)
 				totpart++;
 			}
 
-			BLI_kdtree_free(psys->tree);
-			psys->tree = BLI_kdtree_new(psys->totpart);
+			BLI_kdtree_3d_free(psys->tree);
+			psys->tree = BLI_kdtree_3d_new(psys->totpart);
 
 			LOOP_SHOWN_PARTICLES {
 				if (pa->alive == PARS_ALIVE) {
 					if (pa->state.time == cfra)
-						BLI_kdtree_insert(psys->tree, p, pa->prev_state.co);
+						BLI_kdtree_3d_insert(psys->tree, p, pa->prev_state.co);
 					else
-						BLI_kdtree_insert(psys->tree, p, pa->state.co);
+						BLI_kdtree_3d_insert(psys->tree, p, pa->state.co);
 				}
 			}
-			BLI_kdtree_balance(psys->tree);
+			BLI_kdtree_3d_balance(psys->tree);
 
 			psys->tree_frame = cfra;
 		}
@@ -1557,7 +1557,7 @@ typedef struct SPHRangeData {
 	SPHNeighbor neighbors[SPH_NEIGHBORS];
 	int tot_neighbors;
 
-	float* data;
+	float *data;
 
 	ParticleSystem *npsys;
 	ParticleData *pa;
@@ -1623,8 +1623,8 @@ static void sph_density_accum_cb(void *userdata, int index, const float co[3], f
 	if (pfr->use_size)
 		q *= npa->size;
 
-	pfr->data[0] += q*q;
-	pfr->data[1] += q*q*q;
+	pfr->data[0] += q * q;
+	pfr->data[1] += q * q * q;
 }
 
 /*

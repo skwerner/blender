@@ -248,11 +248,11 @@ static void hook_co_apply(struct HookData_cb *hd, const int j)
 }
 
 static void deformVerts_do(
-        HookModifierData *hmd, const ModifierEvalContext *ctx,
+        HookModifierData *hmd, const ModifierEvalContext *UNUSED(ctx),
         Object *ob, Mesh *mesh,
         float (*vertexCos)[3], int numVerts)
 {
-	Object *ob_target = DEG_get_evaluated_object(ctx->depsgraph, hmd->object);
+	Object *ob_target = hmd->object;
 	bPoseChannel *pchan = BKE_pose_channel_find_name(ob_target->pose, hmd->subtarget);
 	float dmat[4][4];
 	int i, *index_pt;
@@ -386,12 +386,6 @@ ModifierTypeInfo modifierType_Hook = {
 	                        eModifierTypeFlag_SupportsEditmode,
 	/* copyData */          copyData,
 
-	/* deformVerts_DM */    NULL,
-	/* deformMatrices_DM */ NULL,
-	/* deformVertsEM_DM */  NULL,
-	/* deformMatricesEM_DM*/NULL,
-	/* applyModifier_DM */  NULL,
-
 	/* deformVerts */       deformVerts,
 	/* deformMatrices */    NULL,
 	/* deformVertsEM */     deformVertsEM,
@@ -408,4 +402,5 @@ ModifierTypeInfo modifierType_Hook = {
 	/* foreachObjectLink */ foreachObjectLink,
 	/* foreachIDLink */     NULL,
 	/* foreachTexLink */    NULL,
+	/* freeRuntimeData */   NULL,
 };

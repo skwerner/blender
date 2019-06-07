@@ -130,7 +130,7 @@ static Mesh *doBiscetOnMirrorPlane(
 
 static Mesh *doMirrorOnAxis(
 	MirrorModifierData *mmd,
-	const ModifierEvalContext *ctx,
+	const ModifierEvalContext *UNUSED(ctx),
 	Object *ob,
 	const Mesh *mesh,
 	int axis)
@@ -159,7 +159,7 @@ static Mesh *doMirrorOnAxis(
 	unit_m4(mtx);
 	mtx[axis][axis] = -1.0f;
 
-	Object *mirror_ob = DEG_get_evaluated_object(ctx->depsgraph, mmd->mirror_ob);
+	Object *mirror_ob = mmd->mirror_ob;
 	if (mirror_ob != NULL) {
 		float tmp[4][4];
 		float itmp[4][4];
@@ -432,12 +432,6 @@ ModifierTypeInfo modifierType_Mirror = {
 
 	/* copyData */          modifier_copyData_generic,
 
-	/* deformVerts_DM */    NULL,
-	/* deformMatrices_DM */ NULL,
-	/* deformVertsEM_DM */  NULL,
-	/* deformMatricesEM_DM*/NULL,
-	/* applyModifier_DM */  NULL,
-
 	/* deformVerts */       NULL,
 	/* deformMatrices */    NULL,
 	/* deformVertsEM */     NULL,
@@ -454,4 +448,5 @@ ModifierTypeInfo modifierType_Mirror = {
 	/* foreachObjectLink */ foreachObjectLink,
 	/* foreachIDLink */     NULL,
 	/* foreachTexLink */    NULL,
+	/* freeRuntimeData */   NULL,
 };

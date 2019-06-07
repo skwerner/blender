@@ -92,8 +92,8 @@ void workbench_volume_engine_init(void)
 {
 	if (!e_data.dummy_tex) {
 		float pixel[4] = {0.0f, 0.0f, 0.0f, 0.0f};
-		e_data.dummy_tex = GPU_texture_create_3D(1, 1, 1, GPU_RGBA8, pixel, NULL);
-		e_data.dummy_coba_tex = GPU_texture_create_1D(1, GPU_RGBA8, pixel, NULL);
+		e_data.dummy_tex = GPU_texture_create_3d(1, 1, 1, GPU_RGBA8, pixel, NULL);
+		e_data.dummy_coba_tex = GPU_texture_create_1d(1, GPU_RGBA8, pixel, NULL);
 	}
 }
 
@@ -168,7 +168,7 @@ void workbench_volume_cache_populate(WORKBENCH_Data *vedata, Scene *scene, Objec
 	}
 	else {
 		double noise_ofs;
-		BLI_halton_1D(3, 0.0, effect_info->jitter_index, &noise_ofs);
+		BLI_halton_1d(3, 0.0, effect_info->jitter_index, &noise_ofs);
 		float dim[3], step_length, max_slice;
 		float slice_ct[3] = {sds->res[0], sds->res[1], sds->res[2]};
 		mul_v3_fl(slice_ct, max_ff(0.001f, sds->slice_per_voxel));
@@ -191,10 +191,14 @@ void workbench_volume_cache_populate(WORKBENCH_Data *vedata, Scene *scene, Objec
 		DRW_shgroup_uniform_texture(grp, "transferTexture", sds->tex_coba);
 	}
 	else {
+		static float white[3] = {1.0f, 1.0f, 1.0f};
+		bool use_constant_color = ((sds->active_fields & SM_ACTIVE_COLORS) == 0 &&
+		                           (sds->active_fields & SM_ACTIVE_COLOR_SET) != 0);
 		DRW_shgroup_uniform_texture(grp, "densityTexture", sds->tex);
 		DRW_shgroup_uniform_texture(grp, "shadowTexture", sds->tex_shadow);
 		DRW_shgroup_uniform_texture(grp, "flameTexture", (sds->tex_flame) ? sds->tex_flame : e_data.dummy_tex);
 		DRW_shgroup_uniform_texture(grp, "flameColorTexture", (sds->tex_flame) ? sds->tex_flame_coba : e_data.dummy_coba_tex);
+		DRW_shgroup_uniform_vec3(grp, "activeColor", (use_constant_color) ? sds->active_color : white, 1);
 	}
 	DRW_shgroup_uniform_texture_ref(grp, "depthBuffer", &dtxl->depth);
 	DRW_shgroup_uniform_float_copy(grp, "densityScale", 10.0f * sds->display_thickness);

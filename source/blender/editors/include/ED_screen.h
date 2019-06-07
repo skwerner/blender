@@ -147,6 +147,9 @@ void    ED_area_swapspace(struct bContext *C, ScrArea *sa1, ScrArea *sa2);
 int     ED_area_headersize(void);
 int     ED_area_header_alignment_or_fallback(const ScrArea *area, int fallback);
 int     ED_area_header_alignment(const ScrArea *area);
+int     ED_area_footersize(void);
+int     ED_area_footer_alignment_or_fallback(const ScrArea *area, int fallback);
+int     ED_area_footer_alignment(const ScrArea *area);
 int     ED_area_global_size_y(const ScrArea *area);
 int     ED_area_global_min_size_y(const ScrArea *area);
 int     ED_area_global_max_size_y(const ScrArea *area);
@@ -192,11 +195,12 @@ void    ED_screen_full_prevspace(struct bContext *C, ScrArea *sa);
 void    ED_screen_full_restore(struct bContext *C, ScrArea *sa);
 struct ScrArea *ED_screen_state_toggle(struct bContext *C, struct wmWindow *win, struct ScrArea *sa, const short state);
 void    ED_screens_header_tools_menu_create(struct bContext *C, struct uiLayout *layout, void *arg);
+void    ED_screens_footer_tools_menu_create(struct bContext *C, struct uiLayout *layout, void *arg);
 void    ED_screens_navigation_bar_tools_menu_create(struct bContext *C, struct uiLayout *layout, void *arg);
 bool    ED_screen_stereo3d_required(const struct bScreen *screen, const struct Scene *scene);
 Scene   *ED_screen_scene_find(const struct bScreen *screen, const struct wmWindowManager *wm);
 Scene   *ED_screen_scene_find_with_window(const struct bScreen *screen, const struct wmWindowManager *wm, struct wmWindow **r_window);
-ScrArea *ED_screen_area_find_with_spacedata(const bScreen *screen, const struct SpaceLink *sl, bool only_visible);
+ScrArea *ED_screen_area_find_with_spacedata(const bScreen *screen, const struct SpaceLink *sl, const bool only_visible);
 struct wmWindow *ED_screen_window_find(const struct bScreen *screen, const struct wmWindowManager *wm);
 void    ED_screen_preview_render(const struct bScreen *screen, int size_x, int size_y, unsigned int *r_rect) ATTR_NONNULL();
 
@@ -365,6 +369,7 @@ enum {
 	ED_KEYMAP_FRAMES    = (1 << 7),
 	ED_KEYMAP_HEADER    = (1 << 8),
 	ED_KEYMAP_GPENCIL   = (1 << 9),
+	ED_KEYMAP_FOOTER    = (1 << 10),
 };
 
 /* SCREEN_OT_space_context_cycle direction */

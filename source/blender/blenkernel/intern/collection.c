@@ -360,7 +360,7 @@ void BKE_collection_new_name_get(Collection *collection_parent, char *rname)
 	char *name;
 
 	if (!collection_parent) {
-		name = BLI_sprintfN("Collection");
+		name = BLI_strdup("Collection");
 	}
 	else if (collection_parent->flag & COLLECTION_IS_MASTER) {
 		name = BLI_sprintfN("Collection %d", BLI_listbase_count(&collection_parent->children) + 1);
@@ -558,17 +558,32 @@ bool BKE_collection_has_object_recursive(Collection *collection, Object *ob)
 	return (BLI_findptr(&objects, ob, offsetof(Base, object)));
 }
 
-Collection *BKE_collection_object_find(Main *bmain, Collection *collection, Object *ob)
+static Collection *collection_next_find(Main *bmain, Scene *scene, Collection *collection)
 {
-	if (collection)
-		collection = collection->id.next;
-	else
+	if (scene && collection == BKE_collection_master(scene)) {
+		return bmain->collections.first;
+	}
+	else {
+		return collection->id.next;
+	}
+}
+
+Collection *BKE_collection_object_find(Main *bmain, Scene *scene, Collection *collection, Object *ob)
+{
+	if (collection) {
+		collection = collection_next_find(bmain, scene, collection);
+	}
+	else if (scene) {
+		collection = BKE_collection_master(scene);
+	}
+	else {
 		collection = bmain->collections.first;
+	}
 
 	while (collection) {
 		if (BKE_collection_has_object(collection, ob))
 			return collection;
-		collection = collection->id.next;
+		collection = collection_next_find(bmain, scene, collection);
 	}
 	return NULL;
 }
@@ -789,7 +804,7 @@ static void collection_missing_parents_remove(Collection *collection)
  * This is used for library remapping, where these pointers have been set to NULL.
  * Otherwise this should never happen.
  *
- * \note caller must ensure BKE_main_collection_sync_remap() is called afterwards!
+ * \note caller must ensure #BKE_main_collection_sync_remap() is called afterwards!
  *
  * \param collection: may be \a NULL, in which case whole \a bmain database of collections is checked.
  */

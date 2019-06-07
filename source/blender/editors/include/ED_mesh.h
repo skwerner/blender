@@ -203,6 +203,9 @@ void EDBM_select_swap(struct BMEditMesh *em); /* exported for UV */
 bool EDBM_select_interior_faces(struct BMEditMesh *em);
 void em_setup_viewcontext(struct bContext *C, struct ViewContext *vc);  /* rename? */
 
+bool EDBM_mesh_deselect_all_multi_ex(struct Base **bases, const uint bases_len);
+bool EDBM_mesh_deselect_all_multi(struct bContext *C);
+
 extern unsigned int bm_vertoffs, bm_solidoffs, bm_wireoffs;
 
 /* editmesh_preselect_edgering.c */
@@ -237,15 +240,15 @@ void EDBM_project_snap_verts(struct bContext *C, struct ARegion *ar, struct BMEd
 /* editface.c */
 void paintface_flush_flags(struct bContext *C, struct Object *ob, short flag);
 bool paintface_mouse_select(struct bContext *C, struct Object *ob, const int mval[2], bool extend, bool deselect, bool toggle);
-int  do_paintface_box_select(struct ViewContext *vc, struct rcti *rect, int sel_op);
-void paintface_deselect_all_visible(struct bContext *C, struct Object *ob, int action, bool flush_flags);
+bool do_paintface_box_select(struct ViewContext *vc, const struct rcti *rect, int sel_op);
+bool paintface_deselect_all_visible(struct bContext *C, struct Object *ob, int action, bool flush_flags);
 void paintface_select_linked(struct bContext *C, struct Object *ob, const int mval[2], const bool select);
 bool paintface_minmax(struct Object *ob, float r_min[3], float r_max[3]);
 
 void paintface_hide(struct bContext *C, struct Object *ob, const bool unselected);
 void paintface_reveal(struct bContext *C, struct Object *ob, const bool select);
 
-void paintvert_deselect_all_visible(struct Object *ob, int action, bool flush_flags);
+bool paintvert_deselect_all_visible(struct Object *ob, int action, bool flush_flags);
 void paintvert_select_ungrouped(struct Object *ob, bool extend, bool flush_flags);
 void paintvert_flush_flags(struct Object *ob);
 void paintvert_tag_select_update(struct bContext *C, struct Object *ob);
@@ -365,9 +368,15 @@ int *mesh_get_x_mirror_faces(struct Object *ob, struct BMEditMesh *em, struct Me
 
 int ED_mesh_mirror_get_vert(struct Object *ob, int index);
 
-bool ED_mesh_pick_vert(struct bContext *C,      struct Object *ob, const int mval[2], unsigned int *index, int size, bool use_zbuf);
-bool ED_mesh_pick_face(struct bContext *C,      struct Object *ob, const int mval[2], unsigned int *index, int size);
-bool ED_mesh_pick_face_vert(struct bContext *C, struct Object *ob, const int mval[2], unsigned int *index, int size);
+bool ED_mesh_pick_vert(
+        struct bContext *C, struct Object *ob, const int mval[2], uint dist_px, bool use_zbuf,
+        uint *r_index);
+bool ED_mesh_pick_face(
+        struct bContext *C, struct Object *ob, const int mval[2], uint dist_px,
+        uint *r_index);
+bool ED_mesh_pick_face_vert(
+        struct bContext *C, struct Object *ob, const int mval[2], uint dist_px,
+        uint *r_index);
 
 
 struct MDeformVert *ED_mesh_active_dvert_get_em(struct Object *ob, struct BMVert **r_eve);
@@ -377,8 +386,8 @@ struct MDeformVert *ED_mesh_active_dvert_get_only(struct Object *ob);
 void EDBM_mesh_stats_multi(struct Object **objects, const uint objects_len, int totelem[3], int totelem_sel[3]);
 void EDBM_mesh_elem_index_ensure_multi(struct Object **objects, const uint objects_len, const char htype);
 
-#define ED_MESH_PICK_DEFAULT_VERT_SIZE 50
-#define ED_MESH_PICK_DEFAULT_FACE_SIZE 3
+#define ED_MESH_PICK_DEFAULT_VERT_DIST 25
+#define ED_MESH_PICK_DEFAULT_FACE_DIST 1
 
 #define USE_LOOPSLIDE_HACK
 

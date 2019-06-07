@@ -58,13 +58,14 @@ wmKeyMap *eyedropper_modal_keymap(wmKeyConfig *keyconf)
 	wmKeyMap *keymap = WM_modalkeymap_get(keyconf, "Eyedropper Modal Map");
 
 	/* this function is called for each spacetype, only needs to add map once */
-	if (keymap && keymap->modal_items)
+	if (keymap && keymap->modal_items) {
 		return NULL;
+	}
 
 	keymap = WM_modalkeymap_add(keyconf, "Eyedropper Modal Map", modal_items);
 
 	/* assign to operators */
-	WM_modalkeymap_assign(keymap, "UI_OT_eyedropper_colorband");
+	WM_modalkeymap_assign(keymap, "UI_OT_eyedropper_colorramp");
 	WM_modalkeymap_assign(keymap, "UI_OT_eyedropper_color");
 	WM_modalkeymap_assign(keymap, "UI_OT_eyedropper_id");
 	WM_modalkeymap_assign(keymap, "UI_OT_eyedropper_depth");
@@ -83,14 +84,15 @@ wmKeyMap *eyedropper_colorband_modal_keymap(wmKeyConfig *keyconf)
 		{0, NULL, 0, NULL, NULL},
 	};
 
-	wmKeyMap *keymap = WM_modalkeymap_get(keyconf, "Eyedropper ColorBand PointSampling Map");
-	if (keymap && keymap->modal_items)
+	wmKeyMap *keymap = WM_modalkeymap_get(keyconf, "Eyedropper ColorRamp PointSampling Map");
+	if (keymap && keymap->modal_items) {
 		return keymap;
+	}
 
-	keymap = WM_modalkeymap_add(keyconf, "Eyedropper ColorBand PointSampling Map", modal_items_point);
+	keymap = WM_modalkeymap_add(keyconf, "Eyedropper ColorRamp PointSampling Map", modal_items_point);
 
 	/* assign to operators */
-	WM_modalkeymap_assign(keymap, "UI_OT_eyedropper_colorband_point");
+	WM_modalkeymap_assign(keymap, "UI_OT_eyedropper_colorramp_point");
 
 	return keymap;
 }

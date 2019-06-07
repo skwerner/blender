@@ -318,6 +318,7 @@ void BKE_scene_copy_data(Main *bmain, Scene *sce_dst, const Scene *sce_src, cons
 	}
 
 	sce_dst->eevee.light_cache = NULL;
+	sce_dst->eevee.light_cache_info[0] = '\0';
 	/* TODO Copy the cache. */
 }
 
@@ -339,6 +340,9 @@ Scene *BKE_scene_copy(Main *bmain, Scene *sce, int type)
 		sce_copy->unit = sce->unit;
 		sce_copy->physics_settings = sce->physics_settings;
 		sce_copy->audio = sce->audio;
+		sce_copy->eevee = sce->eevee;
+		sce_copy->eevee.light_cache = NULL;
+		sce_copy->eevee.light_cache_info[0] = '\0';
 
 		if (sce->id.properties)
 			sce_copy->id.properties = IDP_CopyProperty(sce->id.properties);
@@ -427,14 +431,8 @@ Scene *BKE_scene_copy(Main *bmain, Scene *sce, int type)
 			BKE_sequencer_editing_free(sce_copy, true);
 		}
 
-		/* NOTE: part of SCE_COPY_LINK_DATA and SCE_COPY_FULL operations
+		/* NOTE: part of SCE_COPY_FULL operations
 		 * are done outside of blenkernel with ED_object_single_users! */
-
-		/*  camera */
-		/* XXX This is most certainly useless? Object have not yet been duplicated... */
-		if (ELEM(type, SCE_COPY_LINK_DATA, SCE_COPY_FULL)) {
-			ID_NEW_REMAP(sce_copy->camera);
-		}
 
 		return sce_copy;
 	}
@@ -653,7 +651,6 @@ void BKE_scene_init(Scene *sce)
 	sce->toolsettings->uvcalc_flag = UVCALC_TRANSFORM_CORRECT;
 	sce->toolsettings->unwrapper = 1;
 	sce->toolsettings->select_thresh = 0.01f;
-	sce->toolsettings->gizmo_flag = SCE_GIZMO_SHOW_TRANSLATE | SCE_GIZMO_SHOW_ROTATE | SCE_GIZMO_SHOW_SCALE;
 
 	sce->toolsettings->selectmode = SCE_SELECT_VERTEX;
 	sce->toolsettings->uv_selectmode = UV_SELECT_VERTEX;
@@ -1349,24 +1346,28 @@ void BKE_scene_frame_set(struct Scene *scene, double cfra)
 /** \name Scene Orientation Slots
  * \{ */
 
-TransformOrientationSlot *BKE_scene_orientation_slot_get(Scene *scene, int flag)
+TransformOrientationSlot *BKE_scene_orientation_slot_get(Scene *scene, int slot_index)
 {
-	BLI_assert(flag && !(flag & ~(SCE_GIZMO_SHOW_TRANSLATE | SCE_GIZMO_SHOW_ROTATE | SCE_GIZMO_SHOW_SCALE)));
-	int index = SCE_ORIENT_DEFAULT;
-	if (flag & SCE_GIZMO_SHOW_TRANSLATE) {
-		index = SCE_ORIENT_TRANSLATE;
+	if ((scene->orientation_slots[slot_index].flag & SELECT) == 0) {
+		slot_index = SCE_ORIENT_DEFAULT;
 	}
-	else if (flag & SCE_GIZMO_SHOW_ROTATE) {
-		index = SCE_ORIENT_ROTATE;
-	}
-	else if (flag & SCE_GIZMO_SHOW_SCALE) {
-		index = SCE_ORIENT_SCALE;
-	}
+	return &scene->orientation_slots[slot_index];
+}
 
-	if ((scene->orientation_slots[index].flag & SELECT) == 0) {
-		index = SCE_ORIENT_DEFAULT;
+TransformOrientationSlot *BKE_scene_orientation_slot_get_from_flag(Scene *scene, int flag)
+{
+	BLI_assert(flag && !(flag & ~(V3D_GIZMO_SHOW_OBJECT_TRANSLATE | V3D_GIZMO_SHOW_OBJECT_ROTATE | V3D_GIZMO_SHOW_OBJECT_SCALE)));
+	int slot_index = SCE_ORIENT_DEFAULT;
+	if (flag & V3D_GIZMO_SHOW_OBJECT_TRANSLATE) {
+		slot_index = SCE_ORIENT_TRANSLATE;
 	}
-	return &scene->orientation_slots[index];
+	else if (flag & V3D_GIZMO_SHOW_OBJECT_ROTATE) {
+		slot_index = SCE_ORIENT_ROTATE;
+	}
+	else if (flag & V3D_GIZMO_SHOW_OBJECT_SCALE) {
+		slot_index = SCE_ORIENT_SCALE;
+	}
+	return BKE_scene_orientation_slot_get(scene, slot_index);
 }
 
 /**
@@ -1639,11 +1640,11 @@ int get_render_child_particle_number(const RenderData *r, int num, bool for_rend
 }
 
 /**
-  * Helper function for the SETLOOPER and SETLOOPER_VIEW_LAYER macros
-  *
-  * It iterates over the bases of the active layer and then the bases
-  * of the active layer of the background (set) scenes recursively.
-  */
+ * Helper function for the SETLOOPER and SETLOOPER_VIEW_LAYER macros
+ *
+ * It iterates over the bases of the active layer and then the bases
+ * of the active layer of the background (set) scenes recursively.
+ */
 Base *_setlooper_base_step(Scene **sce_iter, ViewLayer *view_layer, Base *base)
 {
 	if (base && base->next) {
@@ -1731,9 +1732,8 @@ void BKE_scene_object_base_flag_sync_from_object(Base *base)
 	Object *ob = base->object;
 	base->flag = ob->flag;
 
-	if ((ob->flag & SELECT) != 0) {
+	if ((ob->flag & SELECT) != 0 && (base->flag & BASE_SELECTABLE) != 0) {
 		base->flag |= BASE_SELECTED;
-		BLI_assert((base->flag & BASE_SELECTABLE) != 0);
 	}
 	else {
 		base->flag &= ~BASE_SELECTED;

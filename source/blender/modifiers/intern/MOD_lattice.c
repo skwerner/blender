@@ -94,7 +94,7 @@ static void deformVerts(
 
 	MOD_previous_vcos_store(md, vertexCos); /* if next modifier needs original vertices */
 
-	lattice_deform_verts(DEG_get_evaluated_object(ctx->depsgraph, lmd->object), ctx->object, mesh_src,
+	lattice_deform_verts(lmd->object, ctx->object, mesh_src,
 	                     vertexCos, numVerts, lmd->name, lmd->strength);
 
 	if (!ELEM(mesh_src, NULL, mesh)) {
@@ -127,12 +127,6 @@ ModifierTypeInfo modifierType_Lattice = {
 
 	/* copyData */          modifier_copyData_generic,
 
-	/* deformVerts_DM */    NULL,
-	/* deformMatrices_DM */ NULL,
-	/* deformVertsEM_DM */  NULL,
-	/* deformMatricesEM_DM*/NULL,
-	/* applyModifier_DM */  NULL,
-
 	/* deformVerts */       deformVerts,
 	/* deformMatrices */    NULL,
 	/* deformVertsEM */     deformVertsEM,
@@ -149,4 +143,5 @@ ModifierTypeInfo modifierType_Lattice = {
 	/* foreachObjectLink */ foreachObjectLink,
 	/* foreachIDLink */     NULL,
 	/* foreachTexLink */    NULL,
+	/* freeRuntimeData */   NULL,
 };

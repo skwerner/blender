@@ -49,7 +49,7 @@ static const EnumPropertyItem space_items[] = {
 	{CONSTRAINT_SPACE_POSE,     "POSE", 0, "Pose Space",
 	                            "The pose space of a bone (its armature's object space)"},
 	{CONSTRAINT_SPACE_PARLOCAL, "LOCAL_WITH_PARENT", 0, "Local With Parent",
-	                            "The local space of a bone's parent bone"},
+	                            "The rest pose local space of a bone (thus matrix includes parent transforms)"},
 	{CONSTRAINT_SPACE_LOCAL,    "LOCAL", 0, "Local Space",
 	                            "The local space of an object/bone"},
 	{0, NULL, 0, NULL, NULL},
@@ -359,12 +359,12 @@ static void rna_Object_shape_key_remove(
 	Key *key = BKE_key_from_object(ob);
 
 	if ((key == NULL) || BLI_findindex(&key->block, kb) == -1) {
-		BKE_reportf(reports, RPT_ERROR, "ShapeKey not found");
+		BKE_report(reports, RPT_ERROR, "ShapeKey not found");
 		return;
 	}
 
 	if (!BKE_object_shapekey_remove(bmain, ob, kb)) {
-		BKE_reportf(reports, RPT_ERROR, "Could not remove ShapeKey");
+		BKE_report(reports, RPT_ERROR, "Could not remove ShapeKey");
 		return;
 	}
 

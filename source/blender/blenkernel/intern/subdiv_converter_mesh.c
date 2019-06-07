@@ -168,6 +168,9 @@ static float get_edge_sharpness(const OpenSubdiv_Converter *converter,
 		return 10.0f;
 	}
 #endif
+	if (!storage->settings.use_creases) {
+		return 0.0f;
+	}
 	const int edge_index =
 	        storage->manifold_edge_index_reverse[manifold_edge_index];
 	const MEdge *medge = storage->mesh->medge;
@@ -190,9 +193,13 @@ static bool is_infinite_sharp_vertex(const OpenSubdiv_Converter *converter,
 	                            vertex_index);
 }
 
-static float get_vertex_sharpness(const OpenSubdiv_Converter *UNUSED(converter),
+static float get_vertex_sharpness(const OpenSubdiv_Converter *converter,
                                   int UNUSED(manifold_vertex_index))
 {
+	ConverterStorage *storage = converter->user_data;
+	if (!storage->settings.use_creases) {
+		return 0.0f;
+	}
 	return 0.0f;
 }
 
@@ -324,12 +331,12 @@ static void initialize_manifold_index_array(const BLI_bitmap *used_map,
 	int *indices = NULL;
 	if (indices_r != NULL) {
 		indices = MEM_malloc_arrayN(
-	        num_elements, sizeof(int), "manifold indices");
+		        num_elements, sizeof(int), "manifold indices");
 	}
 	int *indices_reverse = NULL;
 	if (indices_reverse_r != NULL) {
 		indices_reverse = MEM_malloc_arrayN(
-	        num_elements, sizeof(int), "manifold indices reverse");
+		        num_elements, sizeof(int), "manifold indices reverse");
 	}
 	int offset = 0;
 	for (int i = 0; i < num_elements; i++) {

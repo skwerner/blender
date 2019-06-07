@@ -137,6 +137,7 @@ typedef struct EEVEE_LightBake {
 	bool own_resources;
 	bool own_light_cache;            /* If the lightcache was created for baking, it's first owned by the baker. */
 	int delay;                       /* ms. delay the start of the baking to not slowdown interactions (TODO remove) */
+	int frame;                       /* Scene frame to bake. */
 
 	void *gl_context, *gpu_context;  /* If running in parallel (in a separate thread), use this context. */
 
@@ -249,12 +250,12 @@ LightCache *EEVEE_lightcache_create(
 	light_cache->cube_data = MEM_callocN(sizeof(EEVEE_LightProbe) * cube_len, "EEVEE_LightProbe");
 	light_cache->grid_data = MEM_callocN(sizeof(EEVEE_LightGrid) * grid_len, "EEVEE_LightGrid");
 
-	light_cache->grid_tx.tex = DRW_texture_create_2D_array(irr_size[0], irr_size[1], irr_size[2], IRRADIANCE_FORMAT, DRW_TEX_FILTER, NULL);
+	light_cache->grid_tx.tex = DRW_texture_create_2d_array(irr_size[0], irr_size[1], irr_size[2], IRRADIANCE_FORMAT, DRW_TEX_FILTER, NULL);
 	light_cache->grid_tx.tex_size[0] = irr_size[0];
 	light_cache->grid_tx.tex_size[1] = irr_size[1];
 	light_cache->grid_tx.tex_size[2] = irr_size[2];
 
-	light_cache->cube_tx.tex = DRW_texture_create_2D_array(cube_size, cube_size, cube_len, GPU_R11F_G11F_B10F, DRW_TEX_FILTER | DRW_TEX_MIPMAP, NULL);
+	light_cache->cube_tx.tex = DRW_texture_create_2d_array(cube_size, cube_size, cube_len, GPU_R11F_G11F_B10F, DRW_TEX_FILTER | DRW_TEX_MIPMAP, NULL);
 	light_cache->cube_tx.tex_size[0] = cube_size;
 	light_cache->cube_tx.tex_size[1] = cube_size;
 	light_cache->cube_tx.tex_size[2] = cube_len;
@@ -461,7 +462,7 @@ static void eevee_lightbake_create_resources(EEVEE_LightBake *lbake)
 	lbake->cube_prb = MEM_callocN(sizeof(LightProbe *) * lbake->cube_len, "EEVEE Cube visgroup ptr");
 	lbake->grid_prb = MEM_callocN(sizeof(LightProbe *) * lbake->grid_len, "EEVEE Grid visgroup ptr");
 
-	lbake->grid_prev = DRW_texture_create_2D_array(
+	lbake->grid_prev = DRW_texture_create_2d_array(
 	        lbake->irr_size[0], lbake->irr_size[1], lbake->irr_size[2],
 	        IRRADIANCE_FORMAT, DRW_TEX_FILTER, NULL);
 
@@ -499,7 +500,7 @@ static void eevee_lightbake_create_resources(EEVEE_LightBake *lbake)
 
 wmJob *EEVEE_lightbake_job_create(
         struct wmWindowManager *wm, struct wmWindow *win, struct Main *bmain,
-        struct ViewLayer *view_layer, struct Scene *scene, int delay)
+        struct ViewLayer *view_layer, struct Scene *scene, int delay, int frame)
 {
 	EEVEE_LightBake *lbake = NULL;
 
@@ -532,6 +533,7 @@ wmJob *EEVEE_lightbake_job_create(
 		lbake->gl_context = old_lbake->gl_context;
 		lbake->own_resources = true;
 		lbake->delay = delay;
+		lbake->frame = frame;
 
 		if (lbake->gl_context == NULL) {
 			lbake->gl_context = WM_opengl_context_create();
@@ -544,7 +546,7 @@ wmJob *EEVEE_lightbake_job_create(
 		BLI_mutex_unlock(old_lbake->mutex);
 	}
 	else {
-		lbake = EEVEE_lightbake_job_data_alloc(bmain, view_layer, scene, true);
+		lbake = EEVEE_lightbake_job_data_alloc(bmain, view_layer, scene, true, frame);
 		lbake->delay = delay;
 	}
 
@@ -559,7 +561,7 @@ wmJob *EEVEE_lightbake_job_create(
 
 /* MUST run on the main thread. */
 void *EEVEE_lightbake_job_data_alloc(
-        struct Main *bmain, struct ViewLayer *view_layer, struct Scene *scene, bool run_as_job)
+        struct Main *bmain, struct ViewLayer *view_layer, struct Scene *scene, bool run_as_job, int frame)
 {
 	BLI_assert(BLI_thread_is_main());
 
@@ -572,6 +574,7 @@ void *EEVEE_lightbake_job_data_alloc(
 	lbake->own_resources = true;
 	lbake->own_light_cache = false;
 	lbake->mutex = BLI_mutex_alloc();
+	lbake->frame = frame;
 
 	if (run_as_job) {
 		lbake->gl_context = WM_opengl_context_create();
@@ -727,7 +730,7 @@ static void eevee_lightbake_copy_irradiance(EEVEE_LightBake *lbake, LightCache *
 
 	/* Copy texture by reading back and reuploading it. */
 	float *tex = GPU_texture_read(lcache->grid_tx.tex, GPU_DATA_FLOAT, 0);
-	lbake->grid_prev = DRW_texture_create_2D_array(lbake->irr_size[0], lbake->irr_size[1], lbake->irr_size[2],
+	lbake->grid_prev = DRW_texture_create_2d_array(lbake->irr_size[0], lbake->irr_size[1], lbake->irr_size[2],
 	                                               IRRADIANCE_FORMAT, DRW_TEX_FILTER, tex);
 
 	MEM_freeN(tex);
@@ -981,15 +984,15 @@ static bool eevee_lightbake_cube_comp(EEVEE_LightProbe *prb_a, EEVEE_LightProbe 
 	bool sorted = false; \
 	while (!sorted) { \
 		sorted = true; \
-		for (int i = 0; i < (elems_len) - 1; ++i) { \
-			if ((comp_fn)((elems) + i, (elems) + i+1)) { \
-				SWAP(elems_type, (elems)[i], (elems)[i+1]); \
-				SWAP(LightProbe *, (prbs)[i], (prbs)[i+1]); \
+		for (int i = 0; i < (elems_len) - 1; i++) { \
+			if ((comp_fn)((elems) + i, (elems) + i + 1)) { \
+				SWAP(elems_type, (elems)[i], (elems)[i + 1]); \
+				SWAP(LightProbe *, (prbs)[i], (prbs)[i + 1]); \
 				sorted = false; \
 			} \
 		} \
 	} \
-}
+} ((void)0)
 
 static void eevee_lightbake_gather_probes(EEVEE_LightBake *lbake)
 {
@@ -1077,10 +1080,9 @@ void EEVEE_lightbake_job(void *custom_data, short *stop, short *do_update, float
 {
 	EEVEE_LightBake *lbake = (EEVEE_LightBake *)custom_data;
 	Depsgraph *depsgraph = lbake->depsgraph;
-	int frame = 0; /* TODO make it user param. */
 
 	DEG_graph_relations_update(depsgraph, lbake->bmain, lbake->scene, lbake->view_layer_input);
-	DEG_evaluate_on_framechange(lbake->bmain, depsgraph, frame);
+	DEG_evaluate_on_framechange(lbake->bmain, depsgraph, lbake->frame);
 
 	lbake->view_layer = DEG_get_evaluated_view_layer(depsgraph);
 	lbake->stop = stop;

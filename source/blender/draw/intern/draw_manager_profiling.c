@@ -317,7 +317,7 @@ void DRW_stats_draw(rcti *rect)
 	v += 1;
 
 	/* GPU Timings */
-	BLI_snprintf(stat_string, sizeof(stat_string), "GPU Render Timings");
+	BLI_strncpy(stat_string, "GPU Render Timings", sizeof(stat_string));
 	draw_stat(rect, 0, v++, stat_string, sizeof(stat_string));
 
 	for (int i = 0; i < DTP.timer_increment; ++i) {
@@ -326,7 +326,9 @@ void DRW_stats_draw(rcti *rect)
 		DRWTimer *timer_parent = (timer->lvl > 0) ? &DTP.timers[lvl_index[timer->lvl - 1]] : NULL;
 
 		/* Only display a number of lvl at a time */
-		if ((G.debug_value - 21) < timer->lvl) continue;
+		if ((G.debug_value - 21) < timer->lvl) {
+			continue;
+		}
 
 		BLI_assert(timer->lvl < MAX_NESTED_TIMER);
 		lvl_index[timer->lvl] = i;

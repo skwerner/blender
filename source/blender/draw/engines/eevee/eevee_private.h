@@ -59,6 +59,8 @@ extern struct DrawEngineType draw_engine_eevee_type;
 #  define SHADER_IRRADIANCE "#define IRRADIANCE_HL2\n"
 #endif
 
+/* Macro causes over indentation. */
+/* clang-format off */
 #define SHADER_DEFINES \
 	"#define EEVEE_ENGINE\n" \
 	"#define MAX_PROBE " STRINGIFY(MAX_PROBE) "\n" \
@@ -70,6 +72,7 @@ extern struct DrawEngineType draw_engine_eevee_type;
 	"#define MAX_SHADOW_CASCADE " STRINGIFY(MAX_SHADOW_CASCADE) "\n" \
 	"#define MAX_CASCADE_NUM " STRINGIFY(MAX_CASCADE_NUM) "\n" \
 	SHADER_IRRADIANCE
+/* clang-format on */
 
 #define SWAP_DOUBLE_BUFFERS() {                                       \
 	if (effects->swap_double_buffer) {                                \
@@ -253,7 +256,9 @@ typedef struct EEVEE_PassList {
 	struct DRWPass *refract_depth_pass_clip_cull;
 	struct DRWPass *default_pass[VAR_MAT_MAX];
 	struct DRWPass *sss_pass;
+	struct DRWPass *sss_pass_cull;
 	struct DRWPass *material_pass;
+	struct DRWPass *material_pass_cull;
 	struct DRWPass *refract_pass;
 	struct DRWPass *transparent_pass;
 	struct DRWPass *background_pass;
@@ -486,8 +491,6 @@ typedef struct EEVEE_LightProbesInfo {
 	float visibility_blur;
 	float intensity_fac;
 	int shres;
-	int studiolight_index;
-	float studiolight_rot_z;
 	EEVEE_LightProbeVisTest planar_vis_tests[MAX_PLANAR];
 	/* UBO Storage : data used by UBO */
 	EEVEE_LightProbe probe_data[MAX_PROBE];
@@ -563,16 +566,18 @@ typedef struct EEVEE_EffectsInfo {
 	struct GPUTexture *gtao_horizons; /* Textures from pool */
 	struct GPUTexture *gtao_horizons_debug;
 	/* Motion Blur */
+	float current_world_to_ndc[4][4];
 	float current_ndc_to_world[4][4];
 	float past_world_to_ndc[4][4];
 	int motion_blur_samples;
+	bool motion_blur_mat_cached;
 	/* Velocity Pass */
 	float velocity_curr_persinv[4][4];
 	float velocity_past_persmat[4][4];
 	struct GPUTexture *velocity_tx; /* Texture from pool */
 	/* Depth Of Field */
 	float dof_near_far[2];
-	float dof_params[3];
+	float dof_params[2];
 	float dof_bokeh[4];
 	float dof_bokeh_sides[4];
 	int dof_target_size[2];
@@ -816,6 +821,14 @@ typedef struct EEVEE_PrivateData {
 
 	/* Color Management */
 	bool use_color_render_settings;
+
+	/* LookDev Settings */
+	int studiolight_index;
+	float studiolight_rot_z;
+	int studiolight_cubemap_res;
+	float studiolight_glossy_clamp;
+	float studiolight_filter_quality;
+
 } EEVEE_PrivateData; /* Transient data */
 
 /* eevee_data.c */
@@ -853,6 +866,7 @@ struct GPUMaterial *EEVEE_material_hair_get(struct Scene *scene, Material *ma, i
 void EEVEE_materials_free(void);
 void EEVEE_draw_default_passes(EEVEE_PassList *psl);
 void EEVEE_update_noise(EEVEE_PassList *psl, EEVEE_FramebufferList *fbl, const double offsets[3]);
+void EEVEE_update_viewvecs(float invproj[4][4], float winmat[4][4], float (*r_viewvecs)[4]);
 
 /* eevee_lights.c */
 void EEVEE_lights_init(EEVEE_ViewLayerData *sldata);

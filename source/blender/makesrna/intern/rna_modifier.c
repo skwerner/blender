@@ -122,9 +122,9 @@ const EnumPropertyItem rna_enum_modifier_triangulate_quad_method_items[] = {
 	{MOD_TRIANGULATE_QUAD_BEAUTY, "BEAUTY", 0, "Beauty ", "Split the quads in nice triangles, slower method"},
 	{MOD_TRIANGULATE_QUAD_FIXED, "FIXED", 0, "Fixed", "Split the quads on the first and third vertices"},
 	{MOD_TRIANGULATE_QUAD_ALTERNATE, "FIXED_ALTERNATE", 0, "Fixed Alternate",
-		                             "Split the quads on the 2nd and 4th vertices"},
+	 "Split the quads on the 2nd and 4th vertices"},
 	{MOD_TRIANGULATE_QUAD_SHORTEDGE, "SHORTEST_DIAGONAL", 0, "Shortest Diagonal",
-		                             "Split the quads based on the distance between the vertices"},
+	 "Split the quads based on the distance between the vertices"},
 	{0, NULL, 0, NULL, NULL},
 };
 
@@ -1278,6 +1278,11 @@ static void rna_def_modifier_subsurf(BlenderRNA *brna)
 	RNA_def_property_boolean_sdna(prop, NULL, "flags", eSubsurfModifierFlag_ControlEdges);
 	RNA_def_property_ui_text(prop, "Optimal Display", "Skip drawing/rendering of interior subdivided edges");
 	RNA_def_property_update(prop, 0, "rna_Modifier_update");
+
+	prop = RNA_def_property(srna, "use_creases", PROP_BOOLEAN, PROP_NONE);
+	RNA_def_property_boolean_sdna(prop, NULL, "flags", eSubsurfModifierFlag_UseCrease);
+	RNA_def_property_ui_text(prop, "Use Creases", "Use mesh edge crease information to sharpen edges");
+	RNA_def_property_update(prop, 0, "rna_Modifier_update");
 }
 
 static void rna_def_modifier_generic_map_info(StructRNA *srna)
@@ -1422,6 +1427,11 @@ static void rna_def_modifier_multires(BlenderRNA *brna)
 	prop = RNA_def_property(srna, "show_only_control_edges", PROP_BOOLEAN, PROP_NONE);
 	RNA_def_property_boolean_sdna(prop, NULL, "flags", eMultiresModifierFlag_ControlEdges);
 	RNA_def_property_ui_text(prop, "Optimal Display", "Skip drawing/rendering of interior subdivided edges");
+	RNA_def_property_update(prop, 0, "rna_Modifier_update");
+
+	prop = RNA_def_property(srna, "use_creases", PROP_BOOLEAN, PROP_NONE);
+	RNA_def_property_boolean_sdna(prop, NULL, "flags", eMultiresModifierFlag_UseCrease);
+	RNA_def_property_ui_text(prop, "Use Creases", "Use mesh edge crease information to sharpen edges");
 	RNA_def_property_update(prop, 0, "rna_Modifier_update");
 }
 
@@ -3043,7 +3053,7 @@ static void rna_def_modifier_bevel(BlenderRNA *brna)
 		{ MOD_BEVEL_FACE_STRENGTH_NONE, "FSTR_NONE", 0, "None", "Do not set face strength" },
 		{ MOD_BEVEL_FACE_STRENGTH_NEW, "FSTR_NEW", 0, "New", "Set face strength on new faces only" },
 		{ MOD_BEVEL_FACE_STRENGTH_AFFECTED, "FSTR_AFFECTED", 0, "Affected",
-			"Set face strength on new and affected faces only" },
+		  "Set face strength on new and affected faces only" },
 		{ MOD_BEVEL_FACE_STRENGTH_ALL, "FSTR_ALL", 0, "All", "Set face strength on all faces" },
 		{ 0, NULL, 0, NULL, NULL },
 	};
@@ -3144,8 +3154,9 @@ static void rna_def_modifier_bevel(BlenderRNA *brna)
 
 	prop = RNA_def_property(srna, "harden_normals", PROP_BOOLEAN, PROP_NONE);
 	RNA_def_property_boolean_sdna(prop, NULL, "flags", MOD_BEVEL_HARDEN_NORMALS);
-	RNA_def_property_ui_text(prop, "Harden Normals",
-		"Match normals of new faces to adjacent faces");
+	RNA_def_property_ui_text(
+	        prop, "Harden Normals",
+	        "Match normals of new faces to adjacent faces");
 	RNA_def_property_update(prop, 0, "rna_Modifier_update");
 
 	prop = RNA_def_property(srna, "face_strength_mode", PROP_ENUM, PROP_NONE);
@@ -4358,6 +4369,12 @@ static void rna_def_modifier_triangulate(BlenderRNA *brna)
 	RNA_def_property_ui_text(prop, "Polygon Method", "Method for splitting the polygons into triangles");
 	RNA_def_property_update(prop, 0, "rna_Modifier_update");
 
+	prop = RNA_def_property(srna, "min_vertices", PROP_INT, PROP_UNSIGNED);
+	RNA_def_property_int_sdna(prop, NULL, "min_vertices");
+	RNA_def_property_range(prop, 4, INT_MAX);
+	RNA_def_property_ui_text(prop, "Minimum Vertices", "Triangulate only polygons with vertex count greater than or equal to this number");
+	RNA_def_property_update(prop, 0, "rna_Modifier_update");
+
 	prop = RNA_def_property(srna, "keep_custom_normals", PROP_BOOLEAN, PROP_NONE);
 	RNA_def_property_boolean_sdna(prop, NULL, "flag", MOD_TRIANGULATE_KEEP_CUSTOMLOOP_NORMALS);
 	RNA_def_property_ui_text(prop, "Keep Normals",
@@ -5112,6 +5129,7 @@ void RNA_def_modifier(BlenderRNA *brna)
 	RNA_def_property_update(prop, 0, "rna_Modifier_update");
 
 	prop = RNA_def_property(srna, "show_expanded", PROP_BOOLEAN, PROP_NONE);
+	RNA_def_property_flag(prop, PROP_NO_DEG_UPDATE);
 	RNA_def_property_boolean_sdna(prop, NULL, "mode", eModifierMode_Expanded);
 	RNA_def_property_override_flag(prop, PROPOVERRIDE_OVERRIDABLE_STATIC);
 	RNA_def_property_ui_text(prop, "Expanded", "Set modifier expanded in the user interface");

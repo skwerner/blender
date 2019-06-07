@@ -207,11 +207,12 @@ static void drw_shgroup_bone_stick(
 /* Envelope */
 static void drw_shgroup_bone_envelope_distance(
         const float (*bone_mat)[4],
-        const float *radius_head, const float *radius_tail, const float *distance)
+        const float *radius_head, const float *radius_tail, const float *distance,
+        const eGPUShaderConfig sh_cfg)
 {
 	if (g_data.passes.bone_envelope != NULL) {
 		if (g_data.bone_envelope_distance == NULL) {
-			g_data.bone_envelope_distance = shgroup_instance_bone_envelope_distance(g_data.passes.bone_envelope);
+			g_data.bone_envelope_distance = shgroup_instance_bone_envelope_distance(g_data.passes.bone_envelope, sh_cfg);
 			/* passes.bone_envelope should have the DRW_STATE_CULL_FRONT state enabled. */
 		}
 		float head_sphere[4] = {0.0f, 0.0f, 0.0f, 1.0f}, tail_sphere[4] = {0.0f, 1.0f, 0.0f, 1.0f};
@@ -244,12 +245,12 @@ static void drw_shgroup_bone_envelope(
 		g_data.bone_point_solid = shgroup_instance_bone_sphere_solid(g_data.passes.bone_solid, g_data.transparent, sh_cfg);
 	}
 	if (g_data.bone_envelope_wire == NULL) {
-		g_data.bone_envelope_wire = shgroup_instance_bone_envelope_outline(g_data.passes.bone_wire);
+		g_data.bone_envelope_wire = shgroup_instance_bone_envelope_outline(g_data.passes.bone_wire, sh_cfg);
 	}
 	if (g_data.bone_envelope_solid == NULL &&
 	    g_data.passes.bone_solid != NULL)
 	{
-		g_data.bone_envelope_solid = shgroup_instance_bone_envelope_solid(g_data.passes.bone_solid, g_data.transparent);
+		g_data.bone_envelope_solid = shgroup_instance_bone_envelope_solid(g_data.passes.bone_solid, g_data.transparent, sh_cfg);
 		/* We can have a lot of overdraw if we don't do this. Also envelope are not subject to
 		 * inverted matrix. */
 		DRW_shgroup_state_enable(g_data.bone_envelope_solid, DRW_STATE_CULL_BACK);
@@ -416,10 +417,12 @@ static void drw_shgroup_bone_point(
 }
 
 /* Axes */
-static void drw_shgroup_bone_axes(const float (*bone_mat)[4], const float color[4])
+static void drw_shgroup_bone_axes(
+        const float (*bone_mat)[4], const float color[4],
+        const eGPUShaderConfig sh_cfg)
 {
 	if (g_data.bone_axes == NULL) {
-		g_data.bone_axes = shgroup_instance_bone_axes(g_data.passes.bone_axes);
+		g_data.bone_axes = shgroup_instance_bone_axes(g_data.passes.bone_axes, sh_cfg);
 	}
 	float final_bonemat[4][4];
 	mul_m4_m4m4(final_bonemat, g_data.ob->obmat, bone_mat);
@@ -427,11 +430,11 @@ static void drw_shgroup_bone_axes(const float (*bone_mat)[4], const float color[
 }
 
 /* Relationship lines */
-static void drw_shgroup_bone_relationship_lines(const float start[3], const float end[3])
+static void drw_shgroup_bone_relationship_lines(const float start[3], const float end[3], const eGPUShaderConfig sh_cfg)
 {
 	if (g_data.lines_relationship == NULL) {
 		g_data.lines_relationship = shgroup_dynlines_dashed_uniform_color(
-		        g_data.passes.relationship_lines, g_theme.wire_color);
+		        g_data.passes.relationship_lines, g_theme.wire_color, sh_cfg);
 	}
 	/* reverse order to have less stipple overlap */
 	float v[3];
@@ -441,11 +444,11 @@ static void drw_shgroup_bone_relationship_lines(const float start[3], const floa
 	DRW_shgroup_call_dynamic_add(g_data.lines_relationship, v);
 }
 
-static void drw_shgroup_bone_ik_lines(const float start[3], const float end[3])
+static void drw_shgroup_bone_ik_lines(const float start[3], const float end[3], const eGPUShaderConfig sh_cfg)
 {
 	if (g_data.lines_ik == NULL) {
 		static float fcolor[4] = {0.8f, 0.5f, 0.0f, 1.0f};  /* add theme! */
-		g_data.lines_ik = shgroup_dynlines_dashed_uniform_color(g_data.passes.relationship_lines, fcolor);
+		g_data.lines_ik = shgroup_dynlines_dashed_uniform_color(g_data.passes.relationship_lines, fcolor, sh_cfg);
 	}
 	/* reverse order to have less stipple overlap */
 	float v[3];
@@ -455,11 +458,11 @@ static void drw_shgroup_bone_ik_lines(const float start[3], const float end[3])
 	DRW_shgroup_call_dynamic_add(g_data.lines_ik, v);
 }
 
-static void drw_shgroup_bone_ik_no_target_lines(const float start[3], const float end[3])
+static void drw_shgroup_bone_ik_no_target_lines(const float start[3], const float end[3], const eGPUShaderConfig sh_cfg)
 {
 	if (g_data.lines_ik_no_target == NULL) {
 		static float fcolor[4] = {0.8f, 0.8f, 0.2f, 1.0f};  /* add theme! */
-		g_data.lines_ik_no_target = shgroup_dynlines_dashed_uniform_color(g_data.passes.relationship_lines, fcolor);
+		g_data.lines_ik_no_target = shgroup_dynlines_dashed_uniform_color(g_data.passes.relationship_lines, fcolor, sh_cfg);
 	}
 	/* reverse order to have less stipple overlap */
 	float v[3];
@@ -469,11 +472,11 @@ static void drw_shgroup_bone_ik_no_target_lines(const float start[3], const floa
 	DRW_shgroup_call_dynamic_add(g_data.lines_ik_no_target, v);
 }
 
-static void drw_shgroup_bone_ik_spline_lines(const float start[3], const float end[3])
+static void drw_shgroup_bone_ik_spline_lines(const float start[3], const float end[3], const eGPUShaderConfig sh_cfg)
 {
 	if (g_data.lines_ik_spline == NULL) {
 		static float fcolor[4] = {0.8f, 0.8f, 0.2f, 1.0f};  /* add theme! */
-		g_data.lines_ik_spline = shgroup_dynlines_dashed_uniform_color(g_data.passes.relationship_lines, fcolor);
+		g_data.lines_ik_spline = shgroup_dynlines_dashed_uniform_color(g_data.passes.relationship_lines, fcolor, sh_cfg);
 	}
 	/* reverse order to have less stipple overlap */
 	float v[3];
@@ -506,7 +509,7 @@ enum {
 
 	PCHAN_COLOR_SPHEREBONE_BASE,    /* for the 'stick' of sphere (envelope) bones */
 	PCHAN_COLOR_SPHEREBONE_END,     /* for the ends of sphere (envelope) bones */
-	PCHAN_COLOR_LINEBONE            /* for the middle of line-bones */
+	PCHAN_COLOR_LINEBONE,            /* for the middle of line-bones */
 };
 
 /* This function sets the color-set for coloring a certain bone */
@@ -640,10 +643,10 @@ static bool set_pchan_color(short colCode, const int boneflag, const short const
 		{
 			if ((bcolor == NULL) || (bcolor->flag & TH_WIRECOLOR_CONSTCOLS)) {
 				uchar cp[4];
-				if (constflag & PCHAN_HAS_TARGET) rgba_char_args_set((char *)cp, 255, 150, 0, 80);
-				else if (constflag & PCHAN_HAS_IK) rgba_char_args_set((char *)cp, 255, 255, 0, 80);
-				else if (constflag & PCHAN_HAS_SPLINEIK) rgba_char_args_set((char *)cp, 200, 255, 0, 80);
-				else if (constflag & PCHAN_HAS_CONST) rgba_char_args_set((char *)cp, 0, 255, 120, 80);
+				if (constflag & PCHAN_HAS_TARGET) { rgba_char_args_set((char *)cp, 255, 150, 0, 80); }
+				else if (constflag & PCHAN_HAS_IK) { rgba_char_args_set((char *)cp, 255, 255, 0, 80); }
+				else if (constflag & PCHAN_HAS_SPLINEIK) { rgba_char_args_set((char *)cp, 200, 255, 0, 80); }
+				else if (constflag & PCHAN_HAS_CONST) { rgba_char_args_set((char *)cp, 0, 255, 120, 80); }
 				else {
 					return false;
 				}
@@ -723,11 +726,11 @@ static bool set_pchan_color(short colCode, const int boneflag, const short const
 			/* inner part in background color or constraint */
 			if ((constflag) && ((bcolor == NULL) || (bcolor->flag & TH_WIRECOLOR_CONSTCOLS))) {
 				uchar cp[4];
-				if (constflag & PCHAN_HAS_TARGET) rgba_char_args_set((char *)cp, 255, 150, 0, 255);
-				else if (constflag & PCHAN_HAS_IK) rgba_char_args_set((char *)cp, 255, 255, 0, 255);
-				else if (constflag & PCHAN_HAS_SPLINEIK) rgba_char_args_set((char *)cp, 200, 255, 0, 255);
-				else if (constflag & PCHAN_HAS_CONST) rgba_char_args_set((char *)cp, 0, 255, 120, 255);
-				else if (constflag) UI_GetThemeColor4ubv(TH_BONE_POSE, cp);  /* PCHAN_HAS_ACTION */
+				if (constflag & PCHAN_HAS_TARGET) { rgba_char_args_set((char *)cp, 255, 150, 0, 255); }
+				else if (constflag & PCHAN_HAS_IK) { rgba_char_args_set((char *)cp, 255, 255, 0, 255); }
+				else if (constflag & PCHAN_HAS_SPLINEIK) { rgba_char_args_set((char *)cp, 200, 255, 0, 255); }
+				else if (constflag & PCHAN_HAS_CONST) { rgba_char_args_set((char *)cp, 0, 255, 120, 255); }
+				else if (constflag) { UI_GetThemeColor4ubv(TH_BONE_POSE, cp); }  /* PCHAN_HAS_ACTION */
 
 				rgb_uchar_to_float(fcolor, cp);
 			}
@@ -1076,7 +1079,7 @@ static void ebone_spline_preview(EditBone *ebone, float result_array[MAX_BBONE_S
 	param.curveOutX = ebone->curveOutX;
 	param.curveOutY = ebone->curveOutY;
 
-	ebone->segments = BKE_pchan_bbone_spline_compute(&param, (Mat4 *)result_array);
+	ebone->segments = BKE_pchan_bbone_spline_compute(&param, false, (Mat4 *)result_array);
 }
 
 static void draw_bone_update_disp_matrix_bbone(EditBone *eBone, bPoseChannel *pchan)
@@ -1115,12 +1118,7 @@ static void draw_bone_update_disp_matrix_bbone(EditBone *eBone, bPoseChannel *pc
 	if (pchan) {
 		Mat4 *bbones_mat = (Mat4 *)pchan->draw_data->bbone_matrix;
 		if (bbone_segments > 1) {
-			if (bbone_segments == pchan->runtime.bbone_segments) {
-				memcpy(bbones_mat, pchan->runtime.bbone_pose_mats, sizeof(Mat4) * bbone_segments);
-			}
-			else {
-				BKE_pchan_bbone_spline_setup(pchan, false, bbones_mat);
-			}
+			BKE_pchan_bbone_spline_setup(pchan, false, false, bbones_mat);
 
 			for (int i = bbone_segments; i--; bbones_mat++) {
 				mul_m4_m4m4(bbones_mat->mat, bbones_mat->mat, s);
@@ -1171,7 +1169,9 @@ static void draw_bone_update_disp_matrix_custom(bPoseChannel *pchan)
 	translate_m4(disp_tail_mat, 0.0f, 1.0f, 0.0f);
 }
 
-static void draw_axes(EditBone *eBone, bPoseChannel *pchan)
+static void draw_axes(
+        EditBone *eBone, bPoseChannel *pchan,
+        const eGPUShaderConfig sh_cfg)
 {
 	float final_col[4];
 	const float *col = (g_theme.const_color) ? g_theme.const_color :
@@ -1179,7 +1179,7 @@ static void draw_axes(EditBone *eBone, bPoseChannel *pchan)
 	copy_v4_v4(final_col, col);
 	/* Mix with axes color. */
 	final_col[3] = (g_theme.const_color) ? 1.0 : (BONE_FLAG(eBone, pchan) & BONE_SELECTED) ? 0.3 : 0.8;
-	drw_shgroup_bone_axes(BONE_VAR(eBone, pchan, disp_mat), final_col);
+	drw_shgroup_bone_axes(BONE_VAR(eBone, pchan, disp_mat), final_col, sh_cfg);
 }
 
 static void draw_points(
@@ -1221,35 +1221,31 @@ static void draw_points(
 	bone_hint_color_shade(col_hint_root, (g_theme.const_color) ? col_solid_root : col_wire_root);
 	bone_hint_color_shade(col_hint_tail, (g_theme.const_color) ? col_solid_tail : col_wire_tail);
 
-	/*	Draw root point if we are not connected and parent are not hidden */
+	/* Draw root point if we are not connected to our parent */
 	if ((BONE_FLAG(eBone, pchan) & BONE_CONNECTED) == 0) {
 		if (select_id != -1) {
 			DRW_select_load_id(select_id | BONESEL_ROOT);
 		}
 
 		if (eBone) {
-			if (!((eBone->parent) && !EBONE_VISIBLE(arm, eBone->parent))) {
-				if (is_envelope_draw) {
-					drw_shgroup_bone_envelope(
-					        eBone->disp_mat, col_solid_root, col_hint_root, col_wire_root,
-					        &eBone->rad_head, &envelope_ignore, sh_cfg);
-				}
-				else {
-					drw_shgroup_bone_point(eBone->disp_mat, col_solid_root, col_hint_root, col_wire_root, sh_cfg);
-				}
+			if (is_envelope_draw) {
+				drw_shgroup_bone_envelope(
+				        eBone->disp_mat, col_solid_root, col_hint_root, col_wire_root,
+				        &eBone->rad_head, &envelope_ignore, sh_cfg);
+			}
+			else {
+				drw_shgroup_bone_point(eBone->disp_mat, col_solid_root, col_hint_root, col_wire_root, sh_cfg);
 			}
 		}
 		else {
 			Bone *bone = pchan->bone;
-			if (!((bone->parent) && (bone->parent->flag & (BONE_HIDDEN_P | BONE_HIDDEN_PG)))) {
-				if (is_envelope_draw) {
-					drw_shgroup_bone_envelope(
-					        pchan->disp_mat, col_solid_root, col_hint_root, col_wire_root,
-					        &bone->rad_head, &envelope_ignore, sh_cfg);
-				}
-				else {
-					drw_shgroup_bone_point(pchan->disp_mat, col_solid_root, col_hint_root, col_wire_root, sh_cfg);
-				}
+			if (is_envelope_draw) {
+				drw_shgroup_bone_envelope(
+				        pchan->disp_mat, col_solid_root, col_hint_root, col_wire_root,
+				        &bone->rad_head, &envelope_ignore, sh_cfg);
+			}
+			else {
+				drw_shgroup_bone_point(pchan->disp_mat, col_solid_root, col_hint_root, col_wire_root, sh_cfg);
 			}
 		}
 	}
@@ -1332,7 +1328,7 @@ static void draw_bone_envelope(
 	    (boneflag & BONE_NO_DEFORM) == 0 &&
 	    ((boneflag & BONE_SELECTED) || (eBone && (boneflag & (BONE_ROOTSEL | BONE_TIPSEL)))))
 	{
-		drw_shgroup_bone_envelope_distance(BONE_VAR(eBone, pchan, disp_mat), rad_head, rad_tail, distance);
+		drw_shgroup_bone_envelope_distance(BONE_VAR(eBone, pchan, disp_mat), rad_head, rad_tail, distance, sh_cfg);
 	}
 
 	if (select_id != -1) {
@@ -1371,16 +1367,13 @@ static void draw_bone_line(
 		col_wire = g_theme.wire_color;
 	}
 
-	/*	Draw root point if we are not connected and parent are not hidden */
+	/* Draw root point if we are not connected to our parent */
 	if ((BONE_FLAG(eBone, pchan) & BONE_CONNECTED) == 0) {
-		if (eBone && !(eBone->parent && !EBONE_VISIBLE(arm, eBone->parent))) {
+		if (eBone) {
 			col_head = (eBone->flag & BONE_ROOTSEL) ? g_theme.vertex_select_color : col_bone;
 		}
 		else if (pchan) {
-			Bone *bone = pchan->bone;
-			if (!(bone->parent && (bone->parent->flag & (BONE_HIDDEN_P | BONE_HIDDEN_PG)))) {
-				col_head = col_bone;
-			}
+			col_head = col_bone;
 		}
 	}
 
@@ -1585,7 +1578,9 @@ static void draw_bone_dofs(bPoseChannel *pchan)
 /** \name Draw Relationships
  * \{ */
 
-static void pchan_draw_ik_lines(bPoseChannel *pchan, const bool only_temp, const int constflag)
+static void pchan_draw_ik_lines(
+        bPoseChannel *pchan, const bool only_temp, const int constflag,
+        const eGPUShaderConfig sh_cfg)
 {
 	bConstraint *con;
 	bPoseChannel *parchan;
@@ -1624,10 +1619,10 @@ static void pchan_draw_ik_lines(bPoseChannel *pchan, const bool only_temp, const
 					line_end = parchan->pose_head;
 
 					if (constflag & PCHAN_HAS_TARGET) {
-						drw_shgroup_bone_ik_lines(line_start, line_end);
+						drw_shgroup_bone_ik_lines(line_start, line_end, sh_cfg);
 					}
 					else {
-						drw_shgroup_bone_ik_no_target_lines(line_start, line_end);
+						drw_shgroup_bone_ik_no_target_lines(line_start, line_end, sh_cfg);
 					}
 				}
 				break;
@@ -1649,13 +1644,15 @@ static void pchan_draw_ik_lines(bPoseChannel *pchan, const bool only_temp, const
 				while (parchan->parent) {
 					segcount++;
 					/* FIXME: revise the breaking conditions */
-					if (segcount == data->chainlen || segcount > 255) break;  /* 255 is weak */
+					if (segcount == data->chainlen || segcount > 255) {
+						break;  /* 255 is weak */
+					}
 					parchan = parchan->parent;
 				}
 				/* Only draw line in case our chain is more than one bone long! */
 				if (parchan != pchan) { /* XXX revise the breaking conditions to only stop at the tail? */
 					line_end = parchan->pose_head;
-					drw_shgroup_bone_ik_spline_lines(line_start, line_end);
+					drw_shgroup_bone_ik_spline_lines(line_start, line_end, sh_cfg);
 				}
 				break;
 			}
@@ -1665,7 +1662,8 @@ static void pchan_draw_ik_lines(bPoseChannel *pchan, const bool only_temp, const
 
 static void draw_bone_relations(
         EditBone *ebone, bPoseChannel *pchan, bArmature *arm,
-        const int boneflag, const short constflag, const bool do_relations)
+        const int boneflag, const short constflag, const bool do_relations,
+        const eGPUShaderConfig sh_cfg)
 {
 	if (g_data.passes.relationship_lines) {
 		if (ebone && ebone->parent) {
@@ -1674,7 +1672,7 @@ static void draw_bone_relations(
 				 * since riggers will want to know about the links between bones
 				 */
 				if ((boneflag & BONE_CONNECTED) == 0) {
-					drw_shgroup_bone_relationship_lines(ebone->head, ebone->parent->tail);
+					drw_shgroup_bone_relationship_lines(ebone->head, ebone->parent->tail, sh_cfg);
 				}
 			}
 		}
@@ -1685,7 +1683,7 @@ static void draw_bone_relations(
 				    (pchan->parent->bone && (pchan->parent->bone->flag & BONE_SELECTED)))
 				{
 					if ((boneflag & BONE_CONNECTED) == 0) {
-						drw_shgroup_bone_relationship_lines(pchan->pose_head, pchan->parent->pose_tail);
+						drw_shgroup_bone_relationship_lines(pchan->pose_head, pchan->parent->pose_tail, sh_cfg);
 					}
 				}
 			}
@@ -1694,7 +1692,7 @@ static void draw_bone_relations(
 			if (arm->flag & ARM_POSEMODE) {
 				if (constflag & (PCHAN_HAS_IK | PCHAN_HAS_SPLINEIK)) {
 					if (boneflag & BONE_SELECTED) {
-						pchan_draw_ik_lines(pchan, !do_relations, constflag);
+						pchan_draw_ik_lines(pchan, !do_relations, constflag, sh_cfg);
 					}
 				}
 			}
@@ -1739,7 +1737,7 @@ static void draw_armature_edit(Object *ob)
 					boneflag |= BONE_DRAW_ACTIVE;
 				}
 
-				draw_bone_relations(eBone, NULL, arm, boneflag, constflag, show_relations);
+				draw_bone_relations(eBone, NULL, arm, boneflag, constflag, show_relations, draw_ctx->sh_cfg);
 
 				if (arm->drawtype == ARM_ENVELOPE) {
 					draw_bone_update_disp_matrix_default(eBone, NULL);
@@ -1779,7 +1777,7 @@ static void draw_armature_edit(Object *ob)
 
 				/*	Draw additional axes */
 				if (arm->flag & ARM_DRAWAXES) {
-					draw_axes(eBone, NULL);
+					draw_axes(eBone, NULL, draw_ctx->sh_cfg);
 				}
 			}
 		}
@@ -1850,7 +1848,7 @@ static void draw_armature_pose(Object *ob, const float const_color[4])
 					boneflag |= BONE_DRAW_ACTIVE;
 				}
 
-				draw_bone_relations(NULL, pchan, arm, boneflag, constflag, show_relations);
+				draw_bone_relations(NULL, pchan, arm, boneflag, constflag, show_relations, draw_ctx->sh_cfg);
 
 				if ((pchan->custom) && !(arm->flag & ARM_NO_CUSTOM)) {
 					draw_bone_update_disp_matrix_custom(pchan);
@@ -1903,7 +1901,7 @@ static void draw_armature_pose(Object *ob, const float const_color[4])
 
 				/*	Draw additional axes */
 				if (arm->flag & ARM_DRAWAXES) {
-					draw_axes(NULL, pchan);
+					draw_axes(NULL, pchan, draw_ctx->sh_cfg);
 				}
 			}
 		}

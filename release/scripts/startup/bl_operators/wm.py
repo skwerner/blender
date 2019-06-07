@@ -656,10 +656,11 @@ class WM_OT_context_collection_boolean_set(Operator):
 
     type: EnumProperty(
         name="Type",
-        items=(('TOGGLE', "Toggle", ""),
-               ('ENABLE', "Enable", ""),
-               ('DISABLE', "Disable", ""),
-               ),
+        items=(
+            ('TOGGLE', "Toggle", ""),
+            ('ENABLE', "Enable", ""),
+            ('DISABLE', "Disable", ""),
+        ),
     )
 
     def execute(self, context):
@@ -1008,7 +1009,7 @@ class WM_OT_doc_view(Operator):
     if bpy.app.version_cycle == "release":
         _prefix = ("https://docs.blender.org/api/current")
     else:
-        _prefix = ("https://docs.blender.org/api/blender2.7")
+        _prefix = ("https://docs.blender.org/api/master")
 
     def execute(self, context):
         url = _wm_doc_get_id(self.doc_id, do_url=True, url_prefix=self._prefix)
@@ -1124,7 +1125,6 @@ class WM_OT_properties_edit(Operator):
         )
 
         data_path = self.data_path
-        value = self.value
         prop = self.property
 
         prop_old = getattr(self, "_last_prop", [None])[0]
@@ -1322,8 +1322,7 @@ class WM_OT_properties_add(Operator):
 
     def execute(self, context):
         from rna_prop_ui import (
-            rna_idprop_ui_prop_get,
-            rna_idprop_ui_prop_update,
+            rna_idprop_ui_create,
         )
 
         data_path = self.data_path
@@ -1344,13 +1343,7 @@ class WM_OT_properties_add(Operator):
             *type(item).bl_rna.properties.keys(),
         })
 
-        item[prop] = 1.0
-        rna_idprop_ui_prop_update(item, prop)
-
-        # not essential, but without this we get [#31661]
-        prop_ui = rna_idprop_ui_prop_get(item, prop)
-        prop_ui["soft_min"] = prop_ui["min"] = 0.0
-        prop_ui["soft_max"] = prop_ui["max"] = 1.0
+        rna_idprop_ui_create(item, prop, default=1.0)
 
         return {'FINISHED'}
 
@@ -1423,7 +1416,6 @@ class WM_OT_sysinfo(Operator):
         return {'RUNNING_MODAL'}
 
 
-
 class WM_OT_operator_cheat_sheet(Operator):
     """List all the Operators in a text-block, useful for scripting"""
     bl_idname = "wm.operator_cheat_sheet"
@@ -1484,15 +1476,14 @@ class WM_OT_owner_disable(Operator):
         return {'FINISHED'}
 
 
-
-class WM_OT_tool_set_by_name(Operator):
+class WM_OT_tool_set_by_id(Operator):
     """Set the tool by name (for keymaps)"""
-    bl_idname = "wm.tool_set_by_name"
+    bl_idname = "wm.tool_set_by_id"
     bl_label = "Set Tool By Name"
 
     name: StringProperty(
-        name="Text",
-        description="Display name of the tool",
+        name="Identifier",
+        description="Identifier of the tool",
     )
     cycle: BoolProperty(
         name="Cycle",
@@ -1517,8 +1508,8 @@ class WM_OT_tool_set_by_name(Operator):
 
     def execute(self, context):
         from bl_ui.space_toolsystem_common import (
-            activate_by_name,
-            activate_by_name_or_cycle,
+            activate_by_id,
+            activate_by_id_or_cycle,
         )
 
         if self.properties.is_property_set("space_type"):
@@ -1526,7 +1517,7 @@ class WM_OT_tool_set_by_name(Operator):
         else:
             space_type = context.space_data.type
 
-        fn = activate_by_name_or_cycle if self.cycle else activate_by_name
+        fn = activate_by_id_or_cycle if self.cycle else activate_by_id
         if fn(context, space_type, self.name):
             return {'FINISHED'}
         else:
@@ -1666,7 +1657,7 @@ class WM_MT_splash(Menu):
         # Draw setup screen if no preferences have been saved yet.
         import os
 
-        userconfig_path = bpy.utils.user_resource('CONFIG');
+        userconfig_path = bpy.utils.user_resource('CONFIG')
         userdef_path = os.path.join(userconfig_path, "userpref.blend")
 
         if not os.path.isfile(userdef_path):
@@ -1799,7 +1790,7 @@ classes = (
     WM_OT_owner_disable,
     WM_OT_owner_enable,
     WM_OT_url_open,
-    WM_OT_tool_set_by_name,
+    WM_OT_tool_set_by_id,
     WM_OT_toolbar,
     WM_MT_splash,
 )

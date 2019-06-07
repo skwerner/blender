@@ -331,15 +331,15 @@ typedef enum eObRelationTypes {
 typedef enum eObjectSet {
 	OB_SET_SELECTED, /* Selected Objects */
 	OB_SET_VISIBLE,  /* Visible Objects  */
-	OB_SET_ALL       /* All Objects      */
+	OB_SET_ALL,      /* All Objects      */
 } eObjectSet;
 
 struct LinkNode *BKE_object_relational_superset(
         struct ViewLayer *view_layer, eObjectSet objectSet, eObRelationTypes includeFilter);
-struct LinkNode *BKE_object_groups(struct Main *bmain, struct Object *ob);
-void             BKE_object_groups_clear(struct Main *bmain, struct Object *object);
+struct LinkNode *BKE_object_groups(struct Main *bmain, struct Scene *scene, struct Object *ob);
+void             BKE_object_groups_clear(struct Main *bmain, struct Scene *scene, struct Object *object);
 
-struct KDTree *BKE_object_as_kdtree(struct Object *ob, int *r_tot);
+struct KDTree_3d *BKE_object_as_kdtree(struct Object *ob, int *r_tot);
 
 bool BKE_object_modifier_use_time(struct Object *ob, struct ModifierData *md);
 

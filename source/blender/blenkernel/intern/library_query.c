@@ -581,7 +581,7 @@ static void library_foreach_ID_link(
 				}
 				data.cb_flag = data_cb_flag;
 
-				CALLBACK_INVOKE(object->gpd, IDWALK_CB_USER);
+				/* Note that ob->gpd is deprecated, so no need to handle it here. */
 				CALLBACK_INVOKE(object->instance_collection, IDWALK_CB_USER);
 
 				if (object->pd) {
@@ -783,7 +783,7 @@ static void library_foreach_ID_link(
 					CALLBACK_INVOKE(child->collection, IDWALK_CB_NEVER_SELF | IDWALK_CB_USER);
 				}
 				for (CollectionParent *parent = collection->parents.first; parent; parent = parent->next) {
-					CALLBACK_INVOKE(parent->collection, IDWALK_CB_NEVER_SELF);
+					CALLBACK_INVOKE(parent->collection, IDWALK_CB_NEVER_SELF | IDWALK_CB_LOOPBACK);
 				}
 				break;
 			}
@@ -1204,9 +1204,9 @@ static int foreach_libblock_id_users_callback(void *user_data, ID *UNUSED(self_i
 		if (*id_p == iter->id) {
 #if 0
 			printf("%s uses %s (refcounted: %d, userone: %d, used_one: %d, used_one_active: %d, indirect_usage: %d)\n",
-				   iter->curr_id->name, iter->id->name, (cb_flag & IDWALK_USER) ? 1 : 0, (cb_flag & IDWALK_USER_ONE) ? 1 : 0,
-				   (iter->id->tag & LIB_TAG_EXTRAUSER) ? 1 : 0, (iter->id->tag & LIB_TAG_EXTRAUSER_SET) ? 1 : 0,
-				   (cb_flag & IDWALK_INDIRECT_USAGE) ? 1 : 0);
+			       iter->curr_id->name, iter->id->name, (cb_flag & IDWALK_USER) ? 1 : 0, (cb_flag & IDWALK_USER_ONE) ? 1 : 0,
+			       (iter->id->tag & LIB_TAG_EXTRAUSER) ? 1 : 0, (iter->id->tag & LIB_TAG_EXTRAUSER_SET) ? 1 : 0,
+			       (cb_flag & IDWALK_INDIRECT_USAGE) ? 1 : 0);
 #endif
 			if (cb_flag & IDWALK_CB_INDIRECT_USAGE) {
 				iter->count_indirect++;
@@ -1294,7 +1294,7 @@ bool BKE_library_ID_is_indirectly_used(Main *bmain, void *idv)
 }
 
 /**
- * Combine \a BKE_library_ID_is_locally_used() and \a BKE_library_ID_is_indirectly_used() in a single call.
+ * Combine #BKE_library_ID_is_locally_used() and #BKE_library_ID_is_indirectly_used() in a single call.
  */
 void BKE_library_ID_test_usages(Main *bmain, void *idv, bool *is_used_local, bool *is_used_linked)
 {
@@ -1331,20 +1331,14 @@ void BKE_library_ID_test_usages(Main *bmain, void *idv, bool *is_used_local, boo
 
 /* ***** IDs usages.checking/tagging. ***** */
 static int foreach_libblock_used_linked_data_tag_clear_cb(
-        void *user_data, ID *self_id, ID **id_p, int UNUSED(cb_flag))
+        void *user_data, ID *self_id, ID **id_p, int cb_flag)
 {
 	bool *is_changed = user_data;
 
 	if (*id_p) {
-		/* XXX This is actually some kind of hack...
-		 * Issue is, shapekeys' 'from' ID pointer is not actually ID usage.
-		 * Maybe we should even nuke it from BKE_library_foreach_ID_link, not 100% sure yet...
-		 */
-		if ((GS(self_id->name) == ID_KE) && (((Key *)self_id)->from == *id_p)) {
-			return IDWALK_RET_NOP;
-		}
-		/* XXX another hack, for similar reasons as above one. */
-		if ((GS(self_id->name) == ID_OB) && (((Object *)self_id)->proxy_from == (Object *)*id_p)) {
+		/* The infamous 'from' pointers (Key.from, Object.proxy_from, ...).
+		 * those are not actually ID usage, so we ignore them here. */
+		if (cb_flag & IDWALK_CB_LOOPBACK) {
 			return IDWALK_RET_NOP;
 		}
 
@@ -1384,19 +1378,16 @@ void BKE_library_unused_linked_data_set_tag(Main *bmain, const bool do_init_tag)
 	}
 
 	for (bool do_loop = true; do_loop; ) {
-		bool do_break = false;
 		do_loop = false;
-		FOREACH_MAIN_ID_BREAKABLE_BEGIN(bmain, id, do_break)
+		FOREACH_MAIN_ID_BEGIN(bmain, id)
 		{
+			/* We only want to check that ID if it is currently known as used... */
 			if ((id->tag & LIB_TAG_DOIT) == 0) {
 				BKE_library_foreach_ID_link(
 				            bmain, id, foreach_libblock_used_linked_data_tag_clear_cb, &do_loop, IDWALK_READONLY);
 			}
-			/* Else it is an unused ID (so far), no need to check it further. */
-			do_break = true;
-			break;
 		}
-		FOREACH_MAIN_ID_BREAKABLE_END;
+		FOREACH_MAIN_ID_END;
 	}
 }
 

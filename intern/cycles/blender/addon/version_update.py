@@ -253,7 +253,7 @@ def do_versions(self):
                 pass
 
             # Init device list for UI
-            prop.get_devices()
+            prop.get_devices(prop.compute_device_type)
 
     # We don't modify startup file because it assumes to
     # have all the default values only.
@@ -267,7 +267,7 @@ def do_versions(self):
         library_versions.setdefault(library.version, []).append(library)
 
     # Do versioning per library, since they might have different versions.
-    max_need_versioning = (2, 79, 6)
+    max_need_versioning = (2, 80, 41)
     for version, libraries in library_versions.items():
         if version > max_need_versioning:
             continue

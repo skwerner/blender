@@ -115,7 +115,7 @@ static void deformVerts(
 
 	/* silly that defaxis and curve_deform_verts are off by 1
 	 * but leave for now to save having to call do_versions */
-	curve_deform_verts(DEG_get_evaluated_object(ctx->depsgraph, cmd->object), ctx->object,
+	curve_deform_verts(cmd->object, ctx->object,
 	                   vertexCos, numVerts, dvert, defgrp_index, cmd->defaxis - 1);
 
 	if (!ELEM(mesh_src, NULL, mesh)) {
@@ -152,12 +152,6 @@ ModifierTypeInfo modifierType_Curve = {
 
 	/* copyData */          modifier_copyData_generic,
 
-	/* deformVerts_DM */    NULL,
-	/* deformMatrices_DM */ NULL,
-	/* deformVertsEM_DM */  NULL,
-	/* deformMatricesEM_DM*/NULL,
-	/* applyModifier_DM */  NULL,
-
 	/* deformVerts */       deformVerts,
 	/* deformMatrices */    NULL,
 	/* deformVertsEM */     deformVertsEM,
@@ -174,4 +168,5 @@ ModifierTypeInfo modifierType_Curve = {
 	/* foreachObjectLink */ foreachObjectLink,
 	/* foreachIDLink */     NULL,
 	/* foreachTexLink */    NULL,
+	/* freeRuntimeData */   NULL,
 };

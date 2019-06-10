@@ -707,6 +707,35 @@ void ED_transform_calc_orientation_from_type_ex(const bContext *C,
       ok = true;
       break;
     }
+    case V3D_ORIENT_AXIAL: {
+      if (ob->parent) {
+        /* Copying local manipulation for bone pose mode. */
+        if (ob->mode & OB_MODE_POSE) {
+          /* each bone moves on its own local axis, but  to avoid confusion,
+           * use the active pones axis for display [#33575], this works as expected on a single
+           * bone and users who select many bones will understand what's going on and what local
+           * means when they start transforming. */
+          ED_getTransformOrientationMatrix(C, r_mat, pivot_point);
+          ok = true;
+          break;
+        }
+
+        float final_orientation[4][4];
+
+        float tmat[4][4];
+        float locmat[4][4];
+
+        BKE_object_to_mat4_loc_matrix(ob, locmat);
+        mul_m4_m4m4(tmat, ob->parent->obmat, ob->parentinv);
+        mul_m4_m4m4(final_orientation, tmat, locmat);
+
+        copy_m3_m4(r_mat, final_orientation);
+        normalize_m3(r_mat);
+        ok = true;
+        break;
+      }
+      break;
+    }
     case V3D_ORIENT_CUSTOM: {
       TransformOrientation *custom_orientation = BKE_scene_transform_orientation_find(
           scene, orientation_index_custom);

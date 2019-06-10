@@ -636,6 +636,11 @@ const EnumPropertyItem rna_enum_transform_orientation_items[] = {
      ICON_ORIENTATION_CURSOR,
      "Cursor",
      "Align the transformation axes to the 3D cursor"},
+    {V3D_ORIENT_AXIAL,
+     "AXIAL",
+     ICON_ORIENTATION_GLOBAL,
+     "Axial",
+     "Align the transformation axes to the world space no matter the dependencies"},
     // {V3D_ORIENT_CUSTOM, "CUSTOM", 0, "Custom", "Use a custom transform orientation"},
     {0, NULL, 0, NULL, NULL},
 };

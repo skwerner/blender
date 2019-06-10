@@ -47,6 +47,7 @@
 #include "BKE_report.h"
 #include "BKE_scene.h"
 #include "BKE_workspace.h"
+#include "BKE_object.h"
 
 #include "BLT_translation.h"
 
@@ -488,6 +489,28 @@ void initTransformOrientation(bContext *C, TransInfo *t)
       BKE_scene_cursor_rot_to_mat3(&t->scene->cursor, t->spacemtx);
       break;
     }
+    case V3D_ORIENT_AXIAL:
+      BLI_strncpy(t->spacename, IFACE_("axial"), sizeof(t->spacename));
+
+      if (ob) {
+        if (ob->parent) {
+          float final_orientation[4][4];
+
+          float tmat[4][4];
+          float locmat[4][4];
+
+          BKE_object_to_mat4_loc_matrix(ob, locmat);
+          mul_m4_m4m4(tmat, ob->parent->obmat, ob->parentinv);
+          mul_m4_m4m4(final_orientation, tmat, locmat);
+
+          copy_m3_m4(t->spacemtx, final_orientation);
+          normalize_m3(t->spacemtx);
+        }
+        else {
+          unit_m3(t->spacemtx);
+        }
+      }
+      break;
     case V3D_ORIENT_CUSTOM_MATRIX:
       /* Already set. */
       BLI_strncpy(t->spacename, IFACE_("custom"), sizeof(t->spacename));

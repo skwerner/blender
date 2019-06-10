@@ -2139,6 +2139,19 @@ void BKE_object_tfm_protected_backup(const Object *ob, ObjectTfmProtectedChannel
 #undef TFMCPY4D
 }
 
+void BKE_object_to_mat4_loc_matrix(Object *ob, float mat[4][4])
+{
+  float tmat[3][3];
+  float smat[3][3];
+
+  /* scale */
+  BKE_object_scale_to_mat3(ob, smat);
+  copy_m3_m3(tmat, smat);
+  copy_m4_m3(mat, tmat);
+
+  add_v3_v3v3(mat[3], ob->loc, ob->dloc);
+}
+
 void BKE_object_tfm_protected_restore(Object *ob,
                                       const ObjectTfmProtectedChannels *obtfm,
                                       const short protectflag)

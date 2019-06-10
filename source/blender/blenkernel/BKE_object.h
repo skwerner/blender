@@ -145,6 +145,7 @@ void BKE_object_make_local_ex(struct Main *bmain,
                               struct Object *ob,
                               const bool lib_local,
                               const bool clear_proxy);
+void BKE_object_to_mat4_loc_matrix(struct Object *ob, float mat[4][4]);
 bool BKE_object_is_libdata(const struct Object *ob);
 bool BKE_object_obdata_is_libdata(const struct Object *ob);
 

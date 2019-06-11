@@ -770,7 +770,7 @@ class DATA_PT_modifiers(ModifierButtonsPanel, Panel):
         layout.prop(md, "color1")
 
         if (md.use_split_color):
-            split = layout.split(percentage=0.333333)
+            split = layout.split()
 
             col = split.column()
 
@@ -787,7 +787,7 @@ class DATA_PT_modifiers(ModifierButtonsPanel, Panel):
         layout.prop(md, "velocity1")
 
         if (md.use_split_velocity):
-            split = layout.split(percentage=0.333333)
+            split = layout.split()
 
             col = split.column()
 

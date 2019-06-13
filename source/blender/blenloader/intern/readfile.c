@@ -5523,6 +5523,13 @@ static void direct_link_modifiers(FileData *fd, ListBase *lb)
     md->error = NULL;
     md->runtime = NULL;
 
+    /* Tangent Animation specific change:
+     * Backwards compatibility with 2.78 studio builds.
+     */
+    if(md->type == 54 && strcmp(md->name, "OpenVDB") == 0) {
+      md->type = eModifierType_OpenVDB;
+    }
+
     /* if modifiers disappear, or for upward compatibility */
     if (NULL == modifierType_getInfo(md->type)) {
       md->type = eModifierType_None;

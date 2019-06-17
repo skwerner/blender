@@ -497,8 +497,7 @@ void MeshManager::create_volume_mesh(Scene *scene,
           for(int c = 0; c < channels; c++) {
             if(voxel_grid.data) {
               size_t voxel_index = compute_voxel_index(resolution, x, y, z);
-
-							if(voxel_grid.data[voxel_index * channels + c] >=isovalue) {
+              if(voxel_grid.data[voxel_index * channels + c] >=isovalue) {
                 builder.add_node_with_padding(x, y, z);
                 break;
               }

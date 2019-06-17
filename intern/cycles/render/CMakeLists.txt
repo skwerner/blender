@@ -87,6 +87,12 @@ if(WITH_CYCLES_OSL)
   )
 endif()
 
+if(WITH_OPENVDB)
+  list(APPEND LIB
+    cycles_kernel_vdb
+  )
+endif()
+
 include_directories(${INC})
 include_directories(SYSTEM ${INC_SYS})
 

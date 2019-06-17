@@ -483,7 +483,10 @@ endif()
 
 # OpenVDB module
 if(WITH_OPENVDB)
-	add_subdirectory(vdb)
+  list(APPEND LIB
+    cycles_kernel_vdb
+  )
+  add_subdirectory(vdb)
 endif()
 
 # CPU module

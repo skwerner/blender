@@ -29,6 +29,10 @@
 #include <openvdb/tools/Interpolation.h>
 #include <openvdb/tools/RayIntersector.h>
 
+#ifdef ERROR
+#  undef ERROR
+#endif
+
 #ifdef __GNUC__
 #	pragma GCC diagnostic pop
 #endif

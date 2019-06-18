@@ -20,6 +20,9 @@
 #  include <openvdb/openvdb.h>
 #  include <openvdb/tools/Interpolation.h>
 #  include <openvdb/tools/RayIntersector.h>
+#  ifdef ERROR
+#    undef ERROR
+#  endif
 #endif
 
 #include "scene.h"
@@ -230,14 +233,16 @@ void VolumeManager::device_update(Device *device, DeviceScene *dscene, Scene *sc
 void VolumeManager::device_free(Device *device, DeviceScene *dscene)
 {
 #ifdef WITH_OPENVDB
-	OpenVDBGlobals *vdb = (OpenVDBGlobals*)device->vdb_memory();
-	for (size_t i = 0; i < vdb->grids.size(); ++i) {
-		if(vdb->grids[i]) {
-			delete vdb->grids[i];
-			vdb->grids[i] = NULL;
-		}
-	}
-	vdb->grids.clear();
+  OpenVDBGlobals *vdb = (OpenVDBGlobals*)device->vdb_memory();
+  if (vdb) {
+    for (size_t i = 0; i < vdb->grids.size(); ++i) {
+      if(vdb->grids[i]) {
+        delete vdb->grids[i];
+        vdb->grids[i] = NULL;
+      }
+    }
+    vdb->grids.clear();
+  }
 #endif
 }
 

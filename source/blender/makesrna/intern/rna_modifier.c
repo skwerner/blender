@@ -1463,7 +1463,7 @@ static void rna_OpenVDBModifier_update(Main *bmain, Scene *scene, PointerRNA *pt
 
   char filepath[1024];
   BLI_strncpy(filepath, vdbmd->filepath, sizeof(filepath));
-  //  BLI_path_abs(filepath, ID_BLEND_PATH(G.main, (ID *)ob));
+  BLI_path_abs(filepath, G.main->name);
 
   if (BLI_exists(filepath)) {
     struct OpenVDBReader *reader = OpenVDBReader_create();

@@ -117,7 +117,7 @@ AbcObjectReader::AbcObjectReader(const IObject &object, ImportSettings &settings
       m_object_name(""),
       m_data_name(""),
       m_object(NULL),
-	  m_idprop(NULL),
+      m_idprop(NULL),
       m_iobject(object),
       m_settings(&settings),
       m_min_time(std::numeric_limits<chrono_t>::max()),

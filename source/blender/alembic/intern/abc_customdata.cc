@@ -491,34 +491,34 @@ static void read_custom_data_generic(
   PropType param(prop, prop_header.getName());
   int scope = param.getScope();
 
-	if (ELEM(scope, kVertexScope, kVaryingScope)) {
-		size_t elem_extent = param.getDataType().getExtent();
-		size_t array_extent = param.getArrayExtent();
-		size_t total_extent = elem_extent * array_extent;
+  if (ELEM(scope, kVertexScope, kVaryingScope)) {
+    size_t elem_extent = param.getDataType().getExtent();
+    size_t array_extent = param.getArrayExtent();
+    size_t total_extent = elem_extent * array_extent;
 
-		if (ELEM(total_extent, 1, 3)) {
-			DerivedMesh *dm = static_cast<DerivedMesh *>(config.user_data);
-			typename PropType::Sample sample;
-			typename PropType::Sample::samp_ptr_type vals;
-			size_t array_size;
+    if (ELEM(total_extent, 1, 3)) {
+      DerivedMesh *dm = static_cast<DerivedMesh *>(config.user_data);
+      typename PropType::Sample sample;
+      typename PropType::Sample::samp_ptr_type vals;
+      size_t array_size;
 
-			param.getExpanded(sample, iss);
-			vals = sample.getVals();
-			array_size = vals->size();
+      param.getExpanded(sample, iss);
+      vals = sample.getVals();
+      array_size = vals->size();
 
-			if(array_size / array_extent == dm->getNumVerts(dm)) {
-				write_data_to_idprop(id_prop, vals->getData(), array_size * elem_extent,
-				                     type, param.getName().c_str());
-			}
-		}
-	}
+      if(array_size / array_extent == dm->getNumVerts(dm)) {
+        write_data_to_idprop(id_prop, vals->getData(), array_size * elem_extent,
+                             type, param.getName().c_str());
+      }
+    }
+  }
 }
 
 static void read_custom_data_generic(
     const ICompoundProperty &prop,
     const PropertyHeader &prop_header,
-		const CDStreamConfig &config,
-		const Alembic::Abc::ISampleSelector &iss,
+    const CDStreamConfig &config,
+    const Alembic::Abc::ISampleSelector &iss,
     IDProperty *&id_prop)
 {
   if (IInt32GeomParam::matches(prop_header)) {

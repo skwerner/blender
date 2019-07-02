@@ -1079,7 +1079,7 @@ void AbcMeshReader::readObjectData(Main *bmain, const Alembic::Abc::ISampleSelec
     BKE_mesh_validate(mesh, false, false);
   }
 
-	add_custom_data_to_ob(m_object, m_idprop);
+  add_custom_data_to_ob(m_object, m_idprop);
 
   readFaceSetsSample(bmain, mesh, 0, sample_sel);
 
@@ -1307,7 +1307,7 @@ static void read_subd_sample(const std::string &iobject_full_name,
   }
 
   if ((settings->read_flag & (MOD_MESHSEQ_READ_UV | MOD_MESHSEQ_READ_COLOR)) != 0) {
-		read_custom_data(iobject_full_name, schema.getArbGeomParams(), config, selector, id_prop);
+    read_custom_data(iobject_full_name, schema.getArbGeomParams(), config, selector, id_prop);
   }
 }
 
@@ -1398,7 +1398,7 @@ void AbcSubDReader::readObjectData(Main *bmain, const Alembic::Abc::ISampleSelec
     BKE_mesh_validate(mesh, false, false);
   }
 
-	add_custom_data_to_ob(m_object, m_idprop);
+  add_custom_data_to_ob(m_object, m_idprop);
 
   if (has_animations(m_schema, m_settings)) {
     addCacheModifier();

@@ -187,15 +187,17 @@ void AbcPointsReader::readObjectData(Main *bmain, const Alembic::Abc::ISampleSel
 
   m_object = BKE_object_add_only_object(bmain, OB_MESH, m_object_name.c_str());
   m_object->data = mesh;
+  add_custom_data_to_ob(m_object, m_idprop);
 
   if (has_animations(m_schema, m_settings)) {
     addCacheModifier();
   }
 }
 
-void read_points_sample(const IPointsSchema &schema,
+void read_points_sample(const std::string &iobject_full_name,
+                        const IPointsSchema &schema,
                         const ISampleSelector &selector,
-                        CDStreamConfig &config)
+                        CDStreamConfig &config, IDProperty *&id_prop)
 {
   Alembic::AbcGeom::IPointsSchema::Sample sample = schema.getValue(selector);
 
@@ -215,6 +217,8 @@ void read_points_sample(const IPointsSchema &schema,
   }
 
   read_mverts(config.mvert, positions, vnormals);
+
+  read_custom_data(iobject_full_name, prop, config, selector, id_prop);
 }
 
 struct Mesh *AbcPointsReader::read_mesh(struct Mesh *existing_mesh,
@@ -245,7 +249,7 @@ struct Mesh *AbcPointsReader::read_mesh(struct Mesh *existing_mesh,
   }
 
   CDStreamConfig config = get_config(new_mesh ? new_mesh : existing_mesh);
-  read_points_sample(m_schema, sample_sel, config);
+  read_points_sample(m_iobject.getFullName(), m_schema, sample_sel, config, m_idprop);
 
   return new_mesh ? new_mesh : existing_mesh;
 }

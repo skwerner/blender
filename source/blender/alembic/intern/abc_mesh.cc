@@ -989,7 +989,7 @@ static void read_mesh_sample(const std::string &iobject_full_name,
                              const IPolyMeshSchema &schema,
                              const ISampleSelector &selector,
                              CDStreamConfig &config,
-                             bool &do_normals)
+                             bool &do_normals, IDProperty *&id_prop)
 {
   const IPolyMeshSchema::Sample sample = schema.getValue(selector);
 
@@ -1023,7 +1023,7 @@ static void read_mesh_sample(const std::string &iobject_full_name,
   }
 
   if ((settings->read_flag & (MOD_MESHSEQ_READ_UV | MOD_MESHSEQ_READ_COLOR)) != 0) {
-    read_custom_data(iobject_full_name, schema.getArbGeomParams(), config, selector);
+    read_custom_data(iobject_full_name, schema.getArbGeomParams(), config, selector, id_prop);
   }
 }
 
@@ -1078,6 +1078,8 @@ void AbcMeshReader::readObjectData(Main *bmain, const Alembic::Abc::ISampleSelec
   if (m_settings->validate_meshes) {
     BKE_mesh_validate(mesh, false, false);
   }
+
+	add_custom_data_to_ob(m_object, m_idprop);
 
   readFaceSetsSample(bmain, mesh, 0, sample_sel);
 
@@ -1164,7 +1166,7 @@ Mesh *AbcMeshReader::read_mesh(Mesh *existing_mesh,
   config.time = sample_sel.getRequestedTime();
 
   bool do_normals = false;
-  read_mesh_sample(m_iobject.getFullName(), &settings, m_schema, sample_sel, config, do_normals);
+  read_mesh_sample(m_iobject.getFullName(), &settings, m_schema, sample_sel, config, do_normals, m_idprop);
 
   if (new_mesh) {
     /* Check if we had ME_SMOOTH flag set to restore it. */
@@ -1273,7 +1275,7 @@ static void read_subd_sample(const std::string &iobject_full_name,
                              ImportSettings *settings,
                              const ISubDSchema &schema,
                              const ISampleSelector &selector,
-                             CDStreamConfig &config)
+                             CDStreamConfig &config, IDProperty *&id_prop)
 {
   const ISubDSchema::Sample sample = schema.getValue(selector);
 
@@ -1305,7 +1307,7 @@ static void read_subd_sample(const std::string &iobject_full_name,
   }
 
   if ((settings->read_flag & (MOD_MESHSEQ_READ_UV | MOD_MESHSEQ_READ_COLOR)) != 0) {
-    read_custom_data(iobject_full_name, schema.getArbGeomParams(), config, selector);
+		read_custom_data(iobject_full_name, schema.getArbGeomParams(), config, selector, id_prop);
   }
 }
 
@@ -1396,6 +1398,8 @@ void AbcSubDReader::readObjectData(Main *bmain, const Alembic::Abc::ISampleSelec
     BKE_mesh_validate(mesh, false, false);
   }
 
+	add_custom_data_to_ob(m_object, m_idprop);
+
   if (has_animations(m_schema, m_settings)) {
     addCacheModifier();
   }
@@ -1454,7 +1458,7 @@ Mesh *AbcSubDReader::read_mesh(Mesh *existing_mesh,
   /* Only read point data when streaming meshes, unless we need to create new ones. */
   CDStreamConfig config = get_config(new_mesh ? new_mesh : existing_mesh);
   config.time = sample_sel.getRequestedTime();
-  read_subd_sample(m_iobject.getFullName(), &settings, m_schema, sample_sel, config);
+  read_subd_sample(m_iobject.getFullName(), &settings, m_schema, sample_sel, config, m_idprop);
 
   if (new_mesh) {
     /* Check if we had ME_SMOOTH flag set to restore it. */

@@ -679,6 +679,101 @@ static void attr_create_pointiness(Scene *scene, Mesh *mesh, BL::Mesh &b_mesh, b
   }
 }
 
+/* Create Alembic custom attributes. */
+static void attr_create_alembic(Scene *scene,
+                                Mesh *mesh,
+                                BL::Mesh& b_mesh,
+                                bool subdivision)
+{
+  AttributeSet &attributes = (subdivision)? mesh->subd_attributes: mesh->attributes;
+
+  {
+    BL::Mesh::alembic_int_props_iterator iter;
+
+    for (b_mesh.alembic_int_props.begin(iter); iter != b_mesh.alembic_int_props.end(); ++iter) {
+      if (!mesh->need_attribute(scene, ustring(iter->name().c_str()))) {
+        continue;
+      }
+
+      Attribute *attr = attributes.add(ustring(iter->name().c_str()),
+                       TypeDesc::TypeFloat,
+                       ATTR_ELEMENT_VERTEX);
+
+      float *data = attr->data_float();
+
+      for (int i = 0; i < b_mesh.vertices.length(); i++) {
+        *(data++) = (int)iter->data[i].val();
+      }
+    }
+  }
+
+  {
+    BL::Mesh::alembic_float_props_iterator iter;
+
+    for (b_mesh.alembic_float_props.begin(iter); iter != b_mesh.alembic_float_props.end(); ++iter) {
+      if (!mesh->need_attribute(scene, ustring(iter->name().c_str()))) {
+        continue;
+      }
+
+      Attribute *attr = attributes.add(ustring(iter->name().c_str()),
+                       TypeDesc::TypeFloat,
+                       ATTR_ELEMENT_VERTEX);
+
+      float *data = attr->data_float();
+
+      for (int i = 0; i < b_mesh.vertices.length(); i++) {
+        *(data++) = iter->data[i].val();
+      }
+    }
+  }
+
+  {
+    BL::Mesh::alembic_int3_props_iterator iter;
+
+    for (b_mesh.alembic_int3_props.begin(iter); iter != b_mesh.alembic_int3_props.end(); ++iter) {
+      if (!mesh->need_attribute(scene, ustring(iter->name().c_str()))) {
+        continue;
+      }
+
+      Attribute *attr = attributes.add(ustring(iter->name().c_str()),
+                       TypeDesc::TypeVector,
+                       ATTR_ELEMENT_VERTEX);
+
+      float3 *data = attr->data_float3();
+
+      for (int i = 0; i < b_mesh.vertices.length(); i++) {
+        (*data)[0] = (int)iter->data[i].val()[0];
+        (*data)[1] = (int)iter->data[i].val()[1];
+        (*data)[2] = (int)iter->data[i].val()[2];
+        data++;
+      }
+    }
+  }
+
+  {
+    BL::Mesh::alembic_float3_props_iterator iter;
+
+    for (b_mesh.alembic_float3_props.begin(iter); iter != b_mesh.alembic_float3_props.end(); ++iter) {
+      if (!mesh->need_attribute(scene, ustring(iter->name().c_str()))) {
+        continue;
+      }
+
+      Attribute *attr = attributes.add(ustring(iter->name().c_str()),
+                       TypeDesc::TypeVector,
+                       ATTR_ELEMENT_VERTEX);
+
+      float3 *data = attr->data_float3();
+
+      for (int i = 0; i < b_mesh.vertices.length(); i++) {
+        (*data)[0] = iter->data[i].val()[0];
+        (*data)[1] = iter->data[i].val()[1];
+        (*data)[2] = iter->data[i].val()[2];
+        data++;
+      }
+    }
+  }
+}
+
 /* Create Mesh */
 
 static void create_mesh(Scene *scene,
@@ -806,6 +901,8 @@ static void create_mesh(Scene *scene,
   else {
     attr_create_uv_map(scene, mesh, b_mesh);
   }
+  
+  attr_create_alembic(scene, mesh, b_mesh, subdivision);
 
   /* for volume objects, create a matrix to transform from object space to
    * mesh texture space. this does not work with deformations but that can

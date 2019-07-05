@@ -821,7 +821,7 @@ void read_mverts(MVert *mverts,
   }
 }
 
-static void read_mpolys(CDStreamConfig &config, const AbcMeshData &mesh_data)
+static bool read_mpolys(CDStreamConfig &config, const AbcMeshData &mesh_data)
 {
   MPoly *mpolys = config.mpoly;
   MLoop *mloops = config.mloop;
@@ -841,6 +841,10 @@ static void read_mpolys(CDStreamConfig &config, const AbcMeshData &mesh_data)
 
   for (int i = 0; i < face_counts->size(); ++i) {
     const int face_size = (*face_counts)[i];
+
+    if (face_size < 3) {
+      return false;
+    }
 
     MPoly &poly = mpolys[i];
     poly.loopstart = loop_index;
@@ -866,6 +870,8 @@ static void read_mpolys(CDStreamConfig &config, const AbcMeshData &mesh_data)
       }
     }
   }
+
+  return true;
 }
 
 ABC_INLINE void read_uvs_params(CDStreamConfig &config,
@@ -984,7 +990,7 @@ static void get_weight_and_index(CDStreamConfig &config,
   config.ceil_index = i1;
 }
 
-static void read_mesh_sample(const std::string &iobject_full_name,
+static bool read_mesh_sample(const std::string &iobject_full_name,
                              ImportSettings *settings,
                              const IPolyMeshSchema &schema,
                              const ISampleSelector &selector,
@@ -1019,12 +1025,16 @@ static void read_mesh_sample(const std::string &iobject_full_name,
   }
 
   if ((settings->read_flag & MOD_MESHSEQ_READ_POLY) != 0) {
-    read_mpolys(config, abc_mesh_data);
+    if (!read_mpolys(config, abc_mesh_data)) {
+      return false;
+    }
   }
 
   if ((settings->read_flag & (MOD_MESHSEQ_READ_UV | MOD_MESHSEQ_READ_COLOR)) != 0) {
     read_custom_data(iobject_full_name, schema.getArbGeomParams(), config, selector, id_prop);
   }
+
+  return true;
 }
 
 CDStreamConfig get_config(Mesh *mesh)
@@ -1067,10 +1077,16 @@ void AbcMeshReader::readObjectData(Main *bmain, const Alembic::Abc::ISampleSelec
 {
   Mesh *mesh = BKE_mesh_add(bmain, m_data_name.c_str());
 
+  Mesh *read_mesh = this->read_mesh(mesh, sample_sel, MOD_MESHSEQ_READ_ALL, NULL);
+  if (!read_mesh) {
+    BKE_id_free(bmain, mesh);
+    m_object = NULL;
+    return;
+  }
+
   m_object = BKE_object_add_only_object(bmain, OB_MESH, m_object_name.c_str());
   m_object->data = mesh;
 
-  Mesh *read_mesh = this->read_mesh(mesh, sample_sel, MOD_MESHSEQ_READ_ALL, NULL);
   if (read_mesh != mesh) {
     BKE_mesh_nomain_to_mesh(read_mesh, mesh, m_object, &CD_MASK_MESH, true);
   }
@@ -1166,7 +1182,14 @@ Mesh *AbcMeshReader::read_mesh(Mesh *existing_mesh,
   config.time = sample_sel.getRequestedTime();
 
   bool do_normals = false;
-  read_mesh_sample(m_iobject.getFullName(), &settings, m_schema, sample_sel, config, do_normals, m_idprop);
+  if (!read_mesh_sample(m_iobject.getFullName(), &settings, m_schema, sample_sel, config, do_normals, m_idprop)) {
+    *err_str = "Error reading mesh sample; more detail on the console";
+    printf("Alembic: error reading mesh sample for '%s/%s' at time %f\n",
+           m_iobject.getFullName().c_str(),
+           m_schema.getName().c_str(),
+           sample_sel.getRequestedTime());
+    return NULL;
+  }
 
   if (new_mesh) {
     /* Check if we had ME_SMOOTH flag set to restore it. */
@@ -1271,7 +1294,7 @@ ABC_INLINE MEdge *find_edge(MEdge *edges, int totedge, int v1, int v2)
   return NULL;
 }
 
-static void read_subd_sample(const std::string &iobject_full_name,
+static bool read_subd_sample(const std::string &iobject_full_name,
                              ImportSettings *settings,
                              const ISubDSchema &schema,
                              const ISampleSelector &selector,
@@ -1303,12 +1326,16 @@ static void read_subd_sample(const std::string &iobject_full_name,
   }
 
   if ((settings->read_flag & MOD_MESHSEQ_READ_POLY) != 0) {
-    read_mpolys(config, abc_mesh_data);
+    if (!read_mpolys(config, abc_mesh_data)) {
+      return false;
+    }
   }
 
   if ((settings->read_flag & (MOD_MESHSEQ_READ_UV | MOD_MESHSEQ_READ_COLOR)) != 0) {
     read_custom_data(iobject_full_name, schema.getArbGeomParams(), config, selector, id_prop);
   }
+
+  return true;
 }
 
 /* ************************************************************************** */
@@ -1353,10 +1380,16 @@ void AbcSubDReader::readObjectData(Main *bmain, const Alembic::Abc::ISampleSelec
 {
   Mesh *mesh = BKE_mesh_add(bmain, m_data_name.c_str());
 
+  Mesh *read_mesh = this->read_mesh(mesh, sample_sel, MOD_MESHSEQ_READ_ALL, NULL);
+  if (!read_mesh) {
+     BKE_id_free(bmain, mesh);
+     m_object = NULL;
+     return;
+  }
+
   m_object = BKE_object_add_only_object(bmain, OB_MESH, m_object_name.c_str());
   m_object->data = mesh;
 
-  Mesh *read_mesh = this->read_mesh(mesh, sample_sel, MOD_MESHSEQ_READ_ALL, NULL);
   if (read_mesh != mesh) {
     BKE_mesh_nomain_to_mesh(read_mesh, mesh, m_object, &CD_MASK_MESH, true);
   }
@@ -1415,8 +1448,8 @@ Mesh *AbcSubDReader::read_mesh(Mesh *existing_mesh,
     sample = m_schema.getValue(sample_sel);
   }
   catch (Alembic::Util::Exception &ex) {
-    *err_str = "Error reading mesh sample; more detail on the console";
-    printf("Alembic: error reading mesh sample for '%s/%s' at time %f: %s\n",
+    *err_str = "Error reading subd mesh sample; more detail on the console";
+    printf("Alembic: error reading subd mesh sample for '%s/%s' at time %f: %s\n",
            m_iobject.getFullName().c_str(),
            m_schema.getName().c_str(),
            sample_sel.getRequestedTime(),
@@ -1458,7 +1491,14 @@ Mesh *AbcSubDReader::read_mesh(Mesh *existing_mesh,
   /* Only read point data when streaming meshes, unless we need to create new ones. */
   CDStreamConfig config = get_config(new_mesh ? new_mesh : existing_mesh);
   config.time = sample_sel.getRequestedTime();
-  read_subd_sample(m_iobject.getFullName(), &settings, m_schema, sample_sel, config, m_idprop);
+  if (!read_subd_sample(m_iobject.getFullName(), &settings, m_schema, sample_sel, config, m_idprop)) {
+     *err_str = "Error reading subd mesh sample; more detail on the console";
+     printf("Alembic: error reading subd mesh sample for '%s/%s' at time %f\n",
+           m_iobject.getFullName().c_str(),
+           m_schema.getName().c_str(),
+           sample_sel.getRequestedTime());
+    return NULL;
+  }
 
   if (new_mesh) {
     /* Check if we had ME_SMOOTH flag set to restore it. */

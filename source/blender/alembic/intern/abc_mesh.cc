@@ -1036,7 +1036,7 @@ static bool read_mesh_sample(const std::string &iobject_full_name,
     }
   }
 
-  if ((settings->read_flag & (MOD_MESHSEQ_READ_UV | MOD_MESHSEQ_READ_COLOR)) != 0) {
+  if ((settings->read_flag & (MOD_MESHSEQ_READ_UV | MOD_MESHSEQ_READ_COLOR | MOD_MESHSEQ_READ_ATTR)) != 0) {
     read_custom_data(iobject_full_name, schema.getArbGeomParams(), config, selector, id_prop);
   }
 
@@ -1339,7 +1339,7 @@ static bool read_subd_sample(const std::string &iobject_full_name,
     }
   }
 
-  if ((settings->read_flag & (MOD_MESHSEQ_READ_UV | MOD_MESHSEQ_READ_COLOR)) != 0) {
+  if ((settings->read_flag & (MOD_MESHSEQ_READ_UV | MOD_MESHSEQ_READ_COLOR | MOD_MESHSEQ_READ_ATTR)) != 0) {
     read_custom_data(iobject_full_name, schema.getArbGeomParams(), config, selector, id_prop);
   }
 

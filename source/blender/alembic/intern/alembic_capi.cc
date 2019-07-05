@@ -874,6 +874,7 @@ bool ABC_import(bContext *C,
                 float scale,
                 bool is_sequence,
                 bool set_frame_range,
+                bool import_attrs,
                 int sequence_len,
                 int offset,
                 bool validate_meshes,
@@ -898,6 +899,10 @@ bool ABC_import(bContext *C,
   job->error_code = ABC_NO_ERROR;
   job->was_cancelled = false;
   job->archive = NULL;
+
+  if (import_attrs) {
+    job->settings.read_flag |= MOD_MESHSEQ_READ_ATTR;
+  }
 
   G.is_break = false;
 

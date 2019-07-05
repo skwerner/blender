@@ -70,6 +70,7 @@ class AbcPointsReader : public AbcObjectReader {
 void read_points_sample(const std::string &iobject_full_name,
                         const Alembic::AbcGeom::IPointsSchema &schema,
                         const Alembic::AbcGeom::ISampleSelector &selector,
-                        CDStreamConfig &config, IDProperty *&id_prop);
+                        CDStreamConfig &config, IDProperty *&id_prop,
+                        const int read_flag);
 
 #endif  /* __ABC_POINTS_H__ */

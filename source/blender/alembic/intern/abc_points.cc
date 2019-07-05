@@ -197,7 +197,9 @@ void AbcPointsReader::readObjectData(Main *bmain, const Alembic::Abc::ISampleSel
 void read_points_sample(const std::string &iobject_full_name,
                         const IPointsSchema &schema,
                         const ISampleSelector &selector,
-                        CDStreamConfig &config, IDProperty *&id_prop)
+                        CDStreamConfig &config, 
+                        IDProperty *&id_prop,
+                        const int read_flag)
 {
   Alembic::AbcGeom::IPointsSchema::Sample sample = schema.getValue(selector);
 
@@ -218,12 +220,12 @@ void read_points_sample(const std::string &iobject_full_name,
 
   read_mverts(config.mvert, positions, vnormals);
 
-  read_custom_data(iobject_full_name, prop, config, selector, id_prop);
+  read_custom_data(iobject_full_name, prop, config, selector, id_prop, read_flag);
 }
 
 struct Mesh *AbcPointsReader::read_mesh(struct Mesh *existing_mesh,
                                         const ISampleSelector &sample_sel,
-                                        int /*read_flag*/,
+                                        int read_flag,
                                         const char **err_str)
 {
   IPointsSchema::Sample sample;
@@ -249,7 +251,7 @@ struct Mesh *AbcPointsReader::read_mesh(struct Mesh *existing_mesh,
   }
 
   CDStreamConfig config = get_config(new_mesh ? new_mesh : existing_mesh);
-  read_points_sample(m_iobject.getFullName(), m_schema, sample_sel, config, m_idprop);
+  read_points_sample(m_iobject.getFullName(), m_schema, sample_sel, config, m_idprop, read_flag);
 
   return new_mesh ? new_mesh : existing_mesh;
 }

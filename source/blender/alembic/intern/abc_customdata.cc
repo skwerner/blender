@@ -30,6 +30,7 @@
 extern "C" {
 #include "DNA_customdata_types.h"
 #include "DNA_meshdata_types.h"
+#include "DNA_modifier_types.h"
 
 #include "MEM_guardedalloc.h"
 #include "BLI_math_base.h"
@@ -583,7 +584,9 @@ static void read_custom_data_generic(
 void read_custom_data(const std::string &iobject_full_name,
                       const ICompoundProperty &prop,
                       const CDStreamConfig &config,
-                      const Alembic::Abc::ISampleSelector &iss, IDProperty *&id_prop)
+                      const Alembic::Abc::ISampleSelector &iss, 
+                      IDProperty *&id_prop,
+                      const int read_flag)
 {
   if (!prop.valid()) {
     return;
@@ -598,7 +601,8 @@ void read_custom_data(const std::string &iobject_full_name,
     const Alembic::Abc::PropertyHeader &prop_header = prop.getPropertyHeader(i);
 
     /* Read UVs according to convention. */
-    if (IV2fGeomParam::matches(prop_header) && Alembic::AbcGeom::isUV(prop_header)) {
+    if (read_flag & MOD_MESHSEQ_READ_UV &&
+        (IV2fGeomParam::matches(prop_header) && Alembic::AbcGeom::isUV(prop_header))) {
       if (++num_uvs > MAX_MTFACE) {
         continue;
       }
@@ -608,7 +612,8 @@ void read_custom_data(const std::string &iobject_full_name,
     }
 
     /* Read vertex colors according to convention. */
-    if (IC3fGeomParam::matches(prop_header) || IC4fGeomParam::matches(prop_header)) {
+    if (read_flag & MOD_MESHSEQ_READ_COLOR &&
+        (IC3fGeomParam::matches(prop_header) || IC4fGeomParam::matches(prop_header))) {
       if (++num_colors > MAX_MCOL) {
         continue;
       }
@@ -617,10 +622,11 @@ void read_custom_data(const std::string &iobject_full_name,
       continue;
     }
 
-    if (IInt32GeomParam::matches(prop_header) ||
+    if (read_flag & MOD_MESHSEQ_READ_ATTR &&
+        (IInt32GeomParam::matches(prop_header) ||
         IV3iGeomParam::matches(prop_header) ||
         IFloatGeomParam::matches(prop_header) ||
-        IV3fGeomParam::matches(prop_header))
+        IV3fGeomParam::matches(prop_header)))
     {
       read_custom_data_generic(prop, prop_header, config, iss, id_prop);
       continue;

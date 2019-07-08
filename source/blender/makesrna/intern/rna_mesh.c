@@ -806,6 +806,20 @@ static int rna_MeshVertexAlembicLayer_data_length(PointerRNA *ptr)
   return (me->edit_mesh) ? 0 : me->totvert;
 }
 
+static void rna_MeshVelocity_data_begin(CollectionPropertyIterator *iter, PointerRNA *ptr)
+{
+  Mesh *me = rna_mesh(ptr);
+  void *data = CustomData_get_layer(&me->vdata, CD_VELOCITY);
+  rna_iterator_array_begin(iter, data, sizeof(MAlembicF3Property), ((me->edit_mesh) || (!data)) ? 0 : me->totvert, 0, NULL);
+}
+
+static int rna_MeshVelocity_data_length(PointerRNA *ptr)
+{
+  Mesh *me = rna_mesh(ptr);
+  void *data = CustomData_get_layer(&me->vdata, CD_VELOCITY);
+  return ((me->edit_mesh) || (!data)) ? 0 : me->totvert;
+}
+
 static int rna_float_layer_check(CollectionPropertyIterator *UNUSED(iter), void *data)
 {
   CustomDataLayer *layer = (CustomDataLayer *)data;
@@ -3010,6 +3024,13 @@ static void rna_def_mesh(BlenderRNA *brna)
   RNA_def_property_struct_type(prop, "MeshPolygon");
   RNA_def_property_ui_text(prop, "Polygons", "Polygons of the mesh");
   rna_def_mesh_polygons(brna, prop);
+
+  prop = RNA_def_property(srna, "velocities", PROP_COLLECTION, PROP_NONE);
+  RNA_def_property_collection_funcs(prop, "rna_MeshVelocity_data_begin", "rna_iterator_array_next",
+                                    "rna_iterator_array_end", "rna_iterator_array_get",
+                                    "rna_MeshVelocity_data_length", NULL, NULL, NULL);
+  RNA_def_property_struct_type(prop, "MeshAlembicF3Prop");
+  RNA_def_property_ui_text(prop, "Velocities", "Velocities of the mesh");
 
   prop = RNA_def_property(srna, "loop_triangles", PROP_COLLECTION, PROP_NONE);
   RNA_def_property_collection_sdna(prop, NULL, "runtime.looptris.array", "runtime.looptris.len");

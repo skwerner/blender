@@ -29,6 +29,7 @@
 
 extern "C" {
 #include "DNA_mesh_types.h"
+#include "DNA_modifier_types.h"
 #include "DNA_object_types.h"
 
 #include "BKE_cdderivedmesh.h"
@@ -175,7 +176,7 @@ bool AbcPointsReader::accepts_object_type(
 void AbcPointsReader::readObjectData(Main *bmain, const Alembic::Abc::ISampleSelector &sample_sel)
 {
   Mesh *mesh = BKE_mesh_add(bmain, m_data_name.c_str());
-  Mesh *read_mesh = this->read_mesh(mesh, sample_sel, 0, NULL);
+  Mesh *read_mesh = this->read_mesh(mesh, sample_sel, m_settings->read_flag & ~MOD_MESHSEQ_READ_ALL, NULL);
 
   if (read_mesh != mesh) {
     BKE_mesh_nomain_to_mesh(read_mesh, mesh, m_object, &CD_MASK_MESH, true);

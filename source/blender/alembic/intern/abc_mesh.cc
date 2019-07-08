@@ -1083,7 +1083,7 @@ void AbcMeshReader::readObjectData(Main *bmain, const Alembic::Abc::ISampleSelec
 {
   Mesh *mesh = BKE_mesh_add(bmain, m_data_name.c_str());
 
-  Mesh *read_mesh = this->read_mesh(mesh, sample_sel, MOD_MESHSEQ_READ_ALL, NULL);
+  Mesh *read_mesh = this->read_mesh(mesh, sample_sel, MOD_MESHSEQ_READ_ALL | m_settings->read_flag, NULL);
   if (!read_mesh) {
     BKE_id_free(bmain, mesh);
     m_object = NULL;
@@ -1388,7 +1388,7 @@ void AbcSubDReader::readObjectData(Main *bmain, const Alembic::Abc::ISampleSelec
 {
   Mesh *mesh = BKE_mesh_add(bmain, m_data_name.c_str());
 
-  Mesh *read_mesh = this->read_mesh(mesh, sample_sel, MOD_MESHSEQ_READ_ALL, NULL);
+  Mesh *read_mesh = this->read_mesh(mesh, sample_sel, MOD_MESHSEQ_READ_ALL | m_settings->read_flag, NULL);
   if (!read_mesh) {
      BKE_id_free(bmain, mesh);
      m_object = NULL;

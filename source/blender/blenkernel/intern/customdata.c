@@ -1688,6 +1688,8 @@ static const LayerTypeInfo LAYERTYPEINFO[CD_NUMTYPES] = {
     {sizeof(MAlembicF3Property), "MAlembicF3Property", 1, N_("AlembicFloat3"), NULL, NULL, layerInterp_alembicf3, NULL, NULL},
     /* 45: CD_ALEMBIC_I3 */
     {sizeof(MAlembicI3Property), "MAlembicI3Property", 1, N_("AlembicInt3"), NULL, NULL, layerInterp_alembici3, NULL, NULL},
+    /* 46: CD_VELOCITY */
+    {sizeof(MAlembicF3Property), "MAlembicF3Property", 1, NULL, NULL, NULL, layerInterp_alembicf3, NULL, NULL},
 };
 
 static const char *LAYERTYPENAMES[CD_NUMTYPES] = {
@@ -1737,7 +1739,7 @@ static const char *LAYERTYPENAMES[CD_NUMTYPES] = {
     "CDCustomLoopNormal",
 };
 
-#define CD_MASK_ALEMBIC (CD_MASK_ALEMBIC_F3 | CD_MASK_ALEMBIC_FLOAT | CD_MASK_ALEMBIC_I3 | CD_MASK_ALEMBIC_INT)
+#define CD_MASK_ALEMBIC (CD_MASK_ALEMBIC_F3 | CD_MASK_ALEMBIC_FLOAT | CD_MASK_ALEMBIC_I3 | CD_MASK_ALEMBIC_INT | CD_MASK_VELOCITY)
 
 const CustomData_MeshMasks CD_MASK_BAREMESH = {
     .vmask = CD_MASK_MVERT | CD_MASK_BWEIGHT,

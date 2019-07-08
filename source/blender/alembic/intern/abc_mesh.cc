@@ -32,6 +32,7 @@ extern "C" {
 #include "DNA_modifier_types.h"
 #include "DNA_object_fluidsim_types.h"
 #include "DNA_object_types.h"
+#include "DNA_customdata_types.h"
 
 #include "BLI_math_geom.h"
 #include "BLI_string.h"
@@ -933,6 +934,17 @@ ABC_INLINE void read_normals_params(AbcMeshData &abc_data,
   }
 }
 
+void read_vels(Mesh *mesh, const Alembic::AbcGeom::V3fArraySamplePtr &velocities)
+{
+  BLI_assert(mesh->totvert == velocities->size());
+
+  void *vdata = CustomData_add_layer(&mesh->vdata, CD_VELOCITY, CD_DEFAULT, NULL, mesh->totvert);
+
+  if (vdata) {
+    memcpy(vdata, velocities->getData(), mesh->totvert * 3 * 4);
+  }
+}
+
 static bool check_smooth_poly_flag(Mesh *mesh)
 {
   MPoly *mpolys = mesh->mpoly;
@@ -1034,6 +1046,10 @@ static bool read_mesh_sample(const std::string &iobject_full_name,
     if (!read_mpolys(config, abc_mesh_data)) {
       return false;
     }
+  }
+
+  if ((settings->read_flag & MOD_MESHSEQ_READ_VELS) != 0) {
+    read_vels(static_cast<Mesh *>(config.user_data), sample.getVelocities());
   }
 
   if ((settings->read_flag & (MOD_MESHSEQ_READ_UV | MOD_MESHSEQ_READ_COLOR | MOD_MESHSEQ_READ_ATTR)) != 0) {
@@ -1337,6 +1353,10 @@ static bool read_subd_sample(const std::string &iobject_full_name,
     if (!read_mpolys(config, abc_mesh_data)) {
       return false;
     }
+  }
+
+  if ((settings->read_flag & MOD_MESHSEQ_READ_VELS) != 0) {
+    read_vels(static_cast<Mesh *>(config.user_data), sample.getVelocities());
   }
 
   if ((settings->read_flag & (MOD_MESHSEQ_READ_UV | MOD_MESHSEQ_READ_COLOR | MOD_MESHSEQ_READ_ATTR)) != 0) {

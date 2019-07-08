@@ -936,6 +936,10 @@ ABC_INLINE void read_normals_params(AbcMeshData &abc_data,
 
 void read_vels(Mesh *mesh, const Alembic::AbcGeom::V3fArraySamplePtr &velocities)
 {
+  if (!velocities) {
+    return;
+  }
+
   BLI_assert(mesh->totvert == velocities->size());
 
   void *vdata = CustomData_add_layer(&mesh->vdata, CD_VELOCITY, CD_DEFAULT, NULL, mesh->totvert);

@@ -942,10 +942,14 @@ void read_vels(Mesh *mesh, const Alembic::AbcGeom::V3fArraySamplePtr &velocities
 
   BLI_assert(mesh->totvert == velocities->size());
 
-  void *vdata = CustomData_add_layer(&mesh->vdata, CD_VELOCITY, CD_DEFAULT, NULL, mesh->totvert);
+  float (*vdata)[3] = (float (*)[3])CustomData_add_layer(&mesh->vdata, CD_VELOCITY, CD_DEFAULT, NULL, mesh->totvert);
 
   if (vdata) {
-    memcpy(vdata, velocities->getData(), mesh->totvert * 3 * 4);
+    float (*data)[3] = (float (*)[3])velocities->getData();
+
+    for (int i = 0; i < mesh->totvert; i++) {
+      copy_zup_from_yup(vdata[i], data[i]);
+    }
   }
 }
 

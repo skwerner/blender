@@ -172,7 +172,7 @@ static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, Mes
 
     start = CustomData_get_layer_index(cd, start_type);
 
-    while (start < 0 && start_type <= end_type) {
+    while (start < 0 && start_type < end_type) {
       start_type++;
       start = CustomData_get_layer_index(cd, start_type);
     }
@@ -184,7 +184,7 @@ static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, Mes
       else {
         end = CustomData_get_layer_index(cd, end_type);
 
-        while (end < 0 && end_type >= start_type) {
+        while (end < 0 && end_type > start_type) {
           end_type--;
           end = CustomData_get_layer_index(cd, end_type);
         }

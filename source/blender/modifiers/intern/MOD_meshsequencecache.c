@@ -31,13 +31,18 @@
 #include "DNA_scene_types.h"
 
 #include "BKE_cachefile.h"
+#include "BKE_customdata.h"
 #include "BKE_library_query.h"
 #include "BKE_scene.h"
+
+#include "BLI_string.h"
 
 #include "DEG_depsgraph_build.h"
 #include "DEG_depsgraph_query.h"
 
 #include "MOD_modifiertypes.h"
+
+#include "MEM_guardedalloc.h"
 
 #ifdef WITH_ALEMBIC
 #  include "ABC_alembic.h"
@@ -55,19 +60,27 @@ static void initData(ModifierData *md)
 
   mcmd->reader = NULL;
   mcmd->reader_object_path[0] = '\0';
+  
+  mcmd->attr_names = NULL;
+  mcmd->num_attr = 0;
 }
 
 static void copyData(const ModifierData *md, ModifierData *target, const int flag)
 {
-#if 0
+
   const MeshSeqCacheModifierData *mcmd = (const MeshSeqCacheModifierData *)md;
-#endif
+
   MeshSeqCacheModifierData *tmcmd = (MeshSeqCacheModifierData *)target;
 
   modifier_copyData_generic(md, target, flag);
 
   tmcmd->reader = NULL;
   tmcmd->reader_object_path[0] = '\0';
+  
+  if (mcmd->attr_names) {
+    tmcmd->attr_names = MEM_dupallocN(mcmd->attr_names);
+    tmcmd->num_attr = mcmd->num_attr;
+  }
 }
 
 static void freeData(ModifierData *md)
@@ -77,6 +90,12 @@ static void freeData(ModifierData *md)
   if (mcmd->reader) {
     mcmd->reader_object_path[0] = '\0';
     BKE_cachefile_reader_free(mcmd->cache_file, &mcmd->reader);
+  }
+  
+  if (mcmd->attr_names) {
+    MEM_freeN(mcmd->attr_names);
+    mcmd->attr_names = NULL;
+    mcmd->num_attr = 0;
   }
 }
 
@@ -139,7 +158,53 @@ static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, Mes
     mesh = org_mesh;
   }
 
-  return result ? result : mesh;
+  if (!result) {
+    result = mesh;
+  }
+
+  /* Store a list of all attribute names */
+  {
+    CustomData *cd = &result->vdata;
+    int start_type = CD_ALEMBIC_FLOAT;
+    int end_type = CD_ALEMBIC_I3;
+    int start = -1;
+    int end = -1;
+
+    start = CustomData_get_layer_index(cd, start_type);
+
+    while (start < 0 && start_type <= end_type) {
+      start_type++;
+      start = CustomData_get_layer_index(cd, start_type);
+    }
+
+    if (start != -1) {
+      if (end_type == start_type) {
+        end = start;
+      }
+      else {
+        end = CustomData_get_layer_index(cd, end_type);
+
+        while (end < 0 && end_type >= start_type) {
+          end_type--;
+          end = CustomData_get_layer_index(cd, end_type);
+        }
+      }
+
+      while (end < cd->totlayer && cd->layers[end].type == end_type) {
+        end++;
+      }
+
+      mcmd->num_attr = end - start;
+
+      mcmd->attr_names = MEM_mallocN(sizeof(*mcmd->attr_names) * mcmd->num_attr, "alembic_attribute_names");
+
+      for (int i = 0; i < mcmd->num_attr; i++) {
+        BLI_strncpy(mcmd->attr_names[i], cd->layers[start + i].name, 64);
+      }
+    }
+  }
+
+  return result;
 #else
   UNUSED_VARS(ctx, md);
   return mesh;

@@ -1632,6 +1632,10 @@ static void UNUSED_FUNCTION(rna_mesh_unused)(void)
   (void)rna_Mesh_face_map_active_index_set;
   (void)rna_Mesh_face_map_active_index_get;
   (void)rna_Mesh_face_map_active_set;
+  (void)rna_Mesh_alembic_float3_prop_index_range;
+  (void)rna_Mesh_alembic_int3_prop_index_range;
+  (void)rna_Mesh_alembic_float_prop_index_range;
+  (void)rna_Mesh_alembic_int_prop_index_range;
   /* end unused function block */
 }
 

@@ -923,7 +923,7 @@ bool ABC_import(bContext *C,
 
     /* setup job */
     WM_jobs_customdata_set(wm_job, job, import_freejob);
-    WM_jobs_timer(wm_job, 0.1, NC_SCENE | ND_FRAME, NC_SCENE | ND_FRAME);
+    WM_jobs_timer(wm_job, 0.1, 0, NC_SCENE | ND_FRAME);
     WM_jobs_callbacks(wm_job, import_startjob, NULL, NULL, import_endjob);
 
     WM_jobs_start(CTX_wm_manager(C), wm_job);

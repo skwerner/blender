@@ -109,6 +109,7 @@ class AbcMeshReader : public AbcObjectReader {
   struct Mesh *read_mesh(struct Mesh *existing_mesh,
                          const Alembic::Abc::ISampleSelector &sample_sel,
                          int read_flag,
+                         float vel_fac,
                          const char **err_str);
 
  private:
@@ -142,6 +143,7 @@ class AbcSubDReader : public AbcObjectReader {
   struct Mesh *read_mesh(struct Mesh *existing_mesh,
                          const Alembic::Abc::ISampleSelector &sample_sel,
                          int read_flag,
+                         float vel_fac,
                          const char **err_str);
 };
 
@@ -151,7 +153,7 @@ void read_mverts(MVert *mverts,
                  const Alembic::AbcGeom::P3fArraySamplePtr &positions,
                  const Alembic::AbcGeom::N3fArraySamplePtr &normals);
 
-void read_vels(Mesh *mesh, const Alembic::AbcGeom::V3fArraySamplePtr &velocities);
+void read_vels(Mesh *mesh, const Alembic::AbcGeom::V3fArraySamplePtr &velocities, float vel_fac);
 
 CDStreamConfig get_config(struct Mesh *mesh);
 

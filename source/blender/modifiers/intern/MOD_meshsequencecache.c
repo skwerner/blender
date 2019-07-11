@@ -63,6 +63,7 @@ static void initData(ModifierData *md)
   
   mcmd->attr_names = NULL;
   mcmd->num_attr = 0;
+  mcmd->vel_fac = 1.0f;
 }
 
 static void copyData(const ModifierData *md, ModifierData *target, const int flag)
@@ -129,6 +130,7 @@ static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, Mes
     BKE_cachefile_reader_open(cache_file, &mcmd->reader, ctx->object, mcmd->object_path);
     if (!mcmd->reader) {
       modifier_setError(md, "Could not create Alembic reader for file %s", cache_file->filepath);
+      mcmd->data_flag &= ~MOD_MESHSEQ_HAS_VEL;
       return mesh;
     }
   }
@@ -147,7 +149,7 @@ static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, Mes
     }
   }
 
-  Mesh *result = ABC_read_mesh(mcmd->reader, ctx->object, mesh, time, &err_str, mcmd->read_flag);
+  Mesh *result = ABC_read_mesh(mcmd->reader, ctx->object, mesh, time, &err_str, mcmd->read_flag, mcmd->vel_fac);
 
   if (err_str) {
     modifier_setError(md, "%s", err_str);
@@ -202,6 +204,13 @@ static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, Mes
         BLI_strncpy(mcmd->attr_names[i], cd->layers[start + i].name, 64);
       }
     }
+  }
+
+  if (CustomData_get_layer(&result->vdata, CD_VELOCITY)) {
+    mcmd->data_flag |= MOD_MESHSEQ_HAS_VEL;
+  }
+  else {
+    mcmd->data_flag &= ~MOD_MESHSEQ_HAS_VEL;
   }
 
   return result;

@@ -117,7 +117,8 @@ struct Mesh *ABC_read_mesh(struct CacheReader *reader,
                            struct Mesh *current_mesh,
                            const float time,
                            const char **err_str,
-                           int flags);
+                           int flags,
+                           float vel_fac);                           
 
 void CacheReader_incref(struct CacheReader *reader);
 void CacheReader_free(struct CacheReader *reader);

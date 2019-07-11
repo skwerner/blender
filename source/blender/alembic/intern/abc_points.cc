@@ -176,7 +176,7 @@ bool AbcPointsReader::accepts_object_type(
 void AbcPointsReader::readObjectData(Main *bmain, const Alembic::Abc::ISampleSelector &sample_sel)
 {
   Mesh *mesh = BKE_mesh_add(bmain, m_data_name.c_str());
-  Mesh *read_mesh = this->read_mesh(mesh, sample_sel, m_settings->read_flag & ~MOD_MESHSEQ_READ_ALL, NULL);
+  Mesh *read_mesh = this->read_mesh(mesh, sample_sel, m_settings->read_flag & ~MOD_MESHSEQ_READ_ALL, m_settings->vel_fac, NULL);
 
   if (read_mesh != mesh) {
     BKE_mesh_nomain_to_mesh(read_mesh, mesh, m_object, &CD_MASK_MESH, true);
@@ -200,7 +200,8 @@ void read_points_sample(const std::string &iobject_full_name,
                         const ISampleSelector &selector,
                         CDStreamConfig &config, 
                         IDProperty *&id_prop,
-                        const int read_flag)
+                        const int read_flag,
+                        float vel_fac)
 {
   Alembic::AbcGeom::IPointsSchema::Sample sample = schema.getValue(selector);
 
@@ -222,7 +223,7 @@ void read_points_sample(const std::string &iobject_full_name,
   read_mverts(config.mvert, positions, vnormals);
 
   if ((read_flag & MOD_MESHSEQ_READ_VELS) != 0) {
-    read_vels(static_cast<Mesh *>(config.user_data), sample.getVelocities());
+    read_vels(static_cast<Mesh *>(config.user_data), sample.getVelocities(), vel_fac);
   }
 
   read_custom_data(iobject_full_name, prop, config, selector, id_prop, read_flag);
@@ -231,6 +232,7 @@ void read_points_sample(const std::string &iobject_full_name,
 struct Mesh *AbcPointsReader::read_mesh(struct Mesh *existing_mesh,
                                         const ISampleSelector &sample_sel,
                                         int read_flag,
+                                        float vel_fac,
                                         const char **err_str)
 {
   IPointsSchema::Sample sample;
@@ -256,7 +258,7 @@ struct Mesh *AbcPointsReader::read_mesh(struct Mesh *existing_mesh,
   }
 
   CDStreamConfig config = get_config(new_mesh ? new_mesh : existing_mesh);
-  read_points_sample(m_iobject.getFullName(), m_schema, sample_sel, config, m_idprop, read_flag);
+  read_points_sample(m_iobject.getFullName(), m_schema, sample_sel, config, m_idprop, read_flag, vel_fac);
 
   return new_mesh ? new_mesh : existing_mesh;
 }

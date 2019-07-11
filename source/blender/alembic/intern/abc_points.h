@@ -65,12 +65,14 @@ class AbcPointsReader : public AbcObjectReader {
   struct Mesh *read_mesh(struct Mesh *existing_mesh,
                          const Alembic::Abc::ISampleSelector &sample_sel,
                          int read_flag,
+                         float vel_fac,
                          const char **err_str);
 };
 void read_points_sample(const std::string &iobject_full_name,
                         const Alembic::AbcGeom::IPointsSchema &schema,
                         const Alembic::AbcGeom::ISampleSelector &selector,
                         CDStreamConfig &config, IDProperty *&id_prop,
-                        const int read_flag);
+                        const int read_flag,
+                        float vel_fac);
 
 #endif  /* __ABC_POINTS_H__ */

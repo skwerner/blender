@@ -95,6 +95,8 @@ struct ImportSettings {
 
   CacheFile *cache_file;
 
+  float vel_fac;
+
   ImportSettings()
       : do_convert_mat(false),
         from_up(0),
@@ -190,6 +192,7 @@ class AbcObjectReader {
   virtual struct Mesh *read_mesh(struct Mesh *mesh,
                                  const Alembic::Abc::ISampleSelector &sample_sel,
                                  int read_flag,
+                                 float vel_fac,
                                  const char **err_str);
 
   /** Reads the object matrix and sets up an object transform if animated. */

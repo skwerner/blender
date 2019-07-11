@@ -1864,6 +1864,9 @@ typedef struct MeshSeqCacheModifierData {
   char reader_object_path[1024];  
 
   char (*attr_names)[64];
+
+  float vel_fac;
+  int data_flag;
 } MeshSeqCacheModifierData;
 
 /* MeshSeqCacheModifierData.read_flag */
@@ -1874,6 +1877,11 @@ enum {
   MOD_MESHSEQ_READ_COLOR = (1 << 3),
   MOD_MESHSEQ_READ_ATTR  = (1 << 4),
   MOD_MESHSEQ_READ_VELS  = (1 << 5),
+};
+
+/* MeshSeqCacheModifierData.data_flag */
+enum {
+  MOD_MESHSEQ_HAS_VEL  = (1 << 0),
 };
 
 typedef struct MeshSeqCacheString {

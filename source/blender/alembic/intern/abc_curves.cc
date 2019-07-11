@@ -447,6 +447,7 @@ void AbcCurveReader::read_curve_sample(Curve *cu,
 Mesh *AbcCurveReader::read_mesh(Mesh *existing_mesh,
                                 const ISampleSelector &sample_sel,
                                 int /*read_flag*/,
+                                float /*vel_fac*/,
                                 const char **err_str)
 {
   ICurvesSchema::Sample sample;

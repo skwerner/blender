@@ -934,7 +934,7 @@ ABC_INLINE void read_normals_params(AbcMeshData &abc_data,
   }
 }
 
-void read_vels(Mesh *mesh, const Alembic::AbcGeom::V3fArraySamplePtr &velocities)
+void read_vels(Mesh *mesh, const Alembic::AbcGeom::V3fArraySamplePtr &velocities, float vel_fac)
 {
   if (!velocities) {
     return;
@@ -948,7 +948,7 @@ void read_vels(Mesh *mesh, const Alembic::AbcGeom::V3fArraySamplePtr &velocities
     float (*data)[3] = (float (*)[3])velocities->getData();
 
     for (int i = 0; i < mesh->totvert; i++) {
-      copy_zup_from_yup(vdata[i], data[i]);
+      copy_zup_from_yup(vdata[i], data[i], vel_fac);
     }
   }
 }
@@ -1057,7 +1057,7 @@ static bool read_mesh_sample(const std::string &iobject_full_name,
   }
 
   if ((settings->read_flag & MOD_MESHSEQ_READ_VELS) != 0) {
-    read_vels(static_cast<Mesh *>(config.user_data), sample.getVelocities());
+    read_vels(static_cast<Mesh *>(config.user_data), sample.getVelocities(), settings->vel_fac);
   }
 
   if ((settings->read_flag & (MOD_MESHSEQ_READ_UV | MOD_MESHSEQ_READ_COLOR | MOD_MESHSEQ_READ_ATTR)) != 0) {
@@ -1107,7 +1107,7 @@ void AbcMeshReader::readObjectData(Main *bmain, const Alembic::Abc::ISampleSelec
 {
   Mesh *mesh = BKE_mesh_add(bmain, m_data_name.c_str());
 
-  Mesh *read_mesh = this->read_mesh(mesh, sample_sel, MOD_MESHSEQ_READ_ALL | m_settings->read_flag, NULL);
+  Mesh *read_mesh = this->read_mesh(mesh, sample_sel, MOD_MESHSEQ_READ_ALL | m_settings->read_flag, m_settings->vel_fac, NULL);
   if (!read_mesh) {
     BKE_id_free(bmain, mesh);
     m_object = NULL;
@@ -1157,6 +1157,7 @@ bool AbcMeshReader::accepts_object_type(
 Mesh *AbcMeshReader::read_mesh(Mesh *existing_mesh,
                                const ISampleSelector &sample_sel,
                                int read_flag,
+                               float vel_fac,
                                const char **err_str)
 {
   IPolyMeshSchema::Sample sample;
@@ -1184,6 +1185,7 @@ Mesh *AbcMeshReader::read_mesh(Mesh *existing_mesh,
   /* Only read point data when streaming meshes, unless we need to create new ones. */
   ImportSettings settings;
   settings.read_flag |= read_flag;
+  settings.vel_fac = vel_fac;
 
   bool topology_changed = positions->size() != existing_mesh->totvert ||
                           face_counts->size() != existing_mesh->totpoly ||
@@ -1364,7 +1366,7 @@ static bool read_subd_sample(const std::string &iobject_full_name,
   }
 
   if ((settings->read_flag & MOD_MESHSEQ_READ_VELS) != 0) {
-    read_vels(static_cast<Mesh *>(config.user_data), sample.getVelocities());
+    read_vels(static_cast<Mesh *>(config.user_data), sample.getVelocities(), settings->vel_fac);
   }
 
   if ((settings->read_flag & (MOD_MESHSEQ_READ_UV | MOD_MESHSEQ_READ_COLOR | MOD_MESHSEQ_READ_ATTR)) != 0) {
@@ -1416,7 +1418,7 @@ void AbcSubDReader::readObjectData(Main *bmain, const Alembic::Abc::ISampleSelec
 {
   Mesh *mesh = BKE_mesh_add(bmain, m_data_name.c_str());
 
-  Mesh *read_mesh = this->read_mesh(mesh, sample_sel, MOD_MESHSEQ_READ_ALL | m_settings->read_flag, NULL);
+  Mesh *read_mesh = this->read_mesh(mesh, sample_sel, MOD_MESHSEQ_READ_ALL | m_settings->read_flag, m_settings->vel_fac, NULL);
   if (!read_mesh) {
      BKE_id_free(bmain, mesh);
      m_object = NULL;
@@ -1477,6 +1479,7 @@ void AbcSubDReader::readObjectData(Main *bmain, const Alembic::Abc::ISampleSelec
 Mesh *AbcSubDReader::read_mesh(Mesh *existing_mesh,
                                const ISampleSelector &sample_sel,
                                int read_flag,
+                               float vel_fac,
                                const char **err_str)
 {
   ISubDSchema::Sample sample;
@@ -1503,6 +1506,7 @@ Mesh *AbcSubDReader::read_mesh(Mesh *existing_mesh,
 
   ImportSettings settings;
   settings.read_flag |= read_flag;
+  settings.vel_fac = vel_fac;
 
   if (existing_mesh->totvert != positions->size()) {
     new_mesh = BKE_mesh_new_nomain_from_template(

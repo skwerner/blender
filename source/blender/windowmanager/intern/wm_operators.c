@@ -76,6 +76,7 @@
 #include "BKE_scene.h"
 #include "BKE_screen.h" /* BKE_ST_MAXNAME */
 #include "BKE_unit.h"
+#include "studio_version.h"
 
 #include "BKE_idcode.h"
 
@@ -1558,6 +1559,11 @@ static void wm_block_splash_add_labels(uiBlock *block, int x, int y)
 
       wm_block_splash_add_label(block, branch_buf, x, &y);
     }
+    
+    /* Add a studio specific version string */    
+    char studio_vers_buf[256] = "\0";
+    BLI_snprintf(branch_buf, sizeof(studio_vers_buf), "Studio Version: %s", STUDIO_VERSION_STR);            
+    wm_block_splash_add_label(block, studio_vers_buf, x, &y);        
   }
 #else
   UNUSED_VARS(show_build_info);

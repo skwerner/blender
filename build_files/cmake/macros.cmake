@@ -897,6 +897,15 @@ function(get_blender_version)
 endfunction()
 
 
+function(get_studio_version)
+  if(NOT DEFINED STUDIO_VERSION)
+    set(STUDIO_VERSION not.defined)
+  endif()
+  CONFIGURE_FILE(${CMAKE_SOURCE_DIR}/source/blender/blenkernel/studio_version.h.in
+                 ${CMAKE_BINARY_DIR}/source/blender/blenkernel/studio_version.h)
+endfunction()
+
+
 # hacks to override initial project settings
 # these macros must be called directly before/after project(Blender)
 macro(blender_project_hack_pre)

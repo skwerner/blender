@@ -181,22 +181,22 @@ static void stats_background(void *UNUSED(arg), RenderStats *rs)
   megs_peak_memory = (peak_memory) / (1024.0 * 1024.0);
 
   fprintf(stdout,
-          IFACE_("Fra:%d Mem:%.2fM (%.2fM, Peak %.2fM) "),
+          TIP_("Fra:%d Mem:%.2fM (%.2fM, Peak %.2fM) "),
           rs->cfra,
           megs_used_memory,
           mmap_used_memory,
           megs_peak_memory);
 
   if (rs->curfield) {
-    fprintf(stdout, IFACE_("Field %d "), rs->curfield);
+    fprintf(stdout, TIP_("Field %d "), rs->curfield);
   }
   if (rs->curblur) {
-    fprintf(stdout, IFACE_("Blur %d "), rs->curblur);
+    fprintf(stdout, TIP_("Blur %d "), rs->curblur);
   }
 
   BLI_timecode_string_from_time_simple(
       info_time_str, sizeof(info_time_str), PIL_check_seconds_timer() - rs->starttime);
-  fprintf(stdout, IFACE_("| Time:%s | "), info_time_str);
+  fprintf(stdout, TIP_("| Time:%s | "), info_time_str);
 
   if (rs->infostr) {
     fprintf(stdout, "%s", rs->infostr);
@@ -204,7 +204,7 @@ static void stats_background(void *UNUSED(arg), RenderStats *rs)
   else {
     if (rs->tothalo) {
       fprintf(stdout,
-              IFACE_("Sce: %s Ve:%d Fa:%d Ha:%d La:%d"),
+              TIP_("Sce: %s Ve:%d Fa:%d Ha:%d La:%d"),
               rs->scene_name,
               rs->totvert,
               rs->totface,
@@ -213,7 +213,7 @@ static void stats_background(void *UNUSED(arg), RenderStats *rs)
     }
     else {
       fprintf(stdout,
-              IFACE_("Sce: %s Ve:%d Fa:%d La:%d"),
+              TIP_("Sce: %s Ve:%d Fa:%d La:%d"),
               rs->scene_name,
               rs->totvert,
               rs->totface,
@@ -2071,10 +2071,8 @@ void RE_SetReports(Render *re, ReportList *reports)
 static void render_update_depsgraph(Render *re)
 {
   Scene *scene = re->scene;
-  /* TODO(sergey): This doesn't run any callbacks and doesn't do sound update. But we can not use
-   * BKE_scene_graph_update_for_newframe() because that one builds dependency graph for view layer
-   * and not for the render pipeline. */
   DEG_evaluate_on_framechange(re->main, re->pipeline_depsgraph, CFRA);
+  BKE_scene_update_sound(re->pipeline_depsgraph, re->main);
 }
 
 static void render_init_depsgraph(Render *re)
@@ -2553,6 +2551,7 @@ void RE_RenderAnim(Render *re,
     if (is_error) {
       /* report is handled above */
       re_movie_free_all(re, mh, i + 1);
+      RE_CleanAfterRender(re);
       return;
     }
   }

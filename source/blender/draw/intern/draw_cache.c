@@ -3016,7 +3016,7 @@ GPUBatch *DRW_cache_bone_dof_sphere_get(void)
         pz = z;
       }
     }
-    /* TODO alloc right count from the begining. */
+    /* TODO allocate right count from the beginning. */
     GPU_vertbuf_data_resize(vbo, v);
 
     SHC.drw_bone_dof_sphere = GPU_batch_create_ex(GPU_PRIM_TRIS, vbo, NULL, GPU_BATCH_OWNS_VBO);
@@ -4037,7 +4037,7 @@ void drw_batch_cache_generate_requested(Object *ob)
   const enum eContextObjectMode mode = CTX_data_mode_enum_ex(
       draw_ctx->object_edit, draw_ctx->obact, draw_ctx->object_mode);
   const bool is_paint_mode = ELEM(
-      mode, CTX_MODE_PAINT_TEXTURE, CTX_MODE_PAINT_VERTEX, CTX_MODE_PAINT_WEIGHT);
+      mode, CTX_MODE_SCULPT, CTX_MODE_PAINT_TEXTURE, CTX_MODE_PAINT_VERTEX, CTX_MODE_PAINT_WEIGHT);
 
   const bool use_hide = ((ob->type == OB_MESH) &&
                          ((is_paint_mode && (ob == draw_ctx->obact) &&

@@ -79,6 +79,7 @@ extern "C" {
 #include "BKE_image.h"
 #include "BKE_key.h"
 #include "BKE_lattice.h"
+#include "BKE_layer.h"
 #include "BKE_mask.h"
 #include "BKE_material.h"
 #include "BKE_mesh.h"
@@ -594,7 +595,7 @@ void DepsgraphNodeBuilder::build_object(int base_index,
   }
   /* Object data. */
   build_object_data(object, is_visible);
-  /* Paramaters, used by both drivers/animation and also to inform dependency
+  /* Parameters, used by both drivers/animation and also to inform dependency
    * from object's data. */
   build_parameters(&object->id);
   /* Build animation data,
@@ -696,6 +697,12 @@ void DepsgraphNodeBuilder::build_object_data(Object *object, bool is_object_visi
       break;
     }
   }
+  /* Materials. */
+  Material ***materials_ptr = give_matarar(object);
+  if (materials_ptr != NULL) {
+    short *num_materials_ptr = give_totcolp(object);
+    build_materials(*materials_ptr, *num_materials_ptr);
+  }
 }
 
 void DepsgraphNodeBuilder::build_object_data_camera(Object *object)
@@ -752,7 +759,7 @@ void DepsgraphNodeBuilder::build_object_transform(Object *object)
                      NodeType::TRANSFORM,
                      OperationCode::TRANSFORM_EVAL,
                      function_bind(BKE_object_eval_uber_transform, _1, ob_cow));
-  /* Operation to take of rigid body simulation. soft bodies and other firends
+  /* Operation to take of rigid body simulation. soft bodies and other friends
    * in the context of point cache invalidation. */
   add_operation_node(&object->id, NodeType::TRANSFORM, OperationCode::TRANSFORM_SIMULATION_INIT);
   /* Object transform is done. */
@@ -1194,18 +1201,16 @@ void DepsgraphNodeBuilder::build_object_data_geometry(Object *object, bool is_ob
       function_bind(BKE_object_eval_uber_data, _1, scene_cow, object_cow));
   op_node->set_as_exit();
   /* Materials. */
-  if (object->totcol != 0) {
-    for (int a = 1; a <= object->totcol; a++) {
-      Material *ma = give_current_material(object, a);
-      if (ma != NULL) {
-        build_material(ma);
-      }
-    }
-  }
+  build_materials(object->mat, object->totcol);
   /* Point caches. */
   build_object_pointcache(object);
   /* Geometry. */
   build_object_data_geometry_datablock((ID *)object->data, is_object_visible);
+  /* Batch cache. */
+  add_operation_node(&object->id,
+                     NodeType::BATCH_CACHE,
+                     OperationCode::GEOMETRY_SELECT_UPDATE,
+                     function_bind(BKE_object_select_update, _1, object_cow));
 }
 
 void DepsgraphNodeBuilder::build_object_data_geometry_datablock(ID *obdata, bool is_object_visible)
@@ -1305,7 +1310,7 @@ void DepsgraphNodeBuilder::build_armature(bArmature *armature)
   build_animdata(&armature->id);
   build_parameters(&armature->id);
   /* Make sure pose is up-to-date with armature updates. */
-  add_operation_node(&armature->id, NodeType::PARAMETERS, OperationCode::ARMATURE_EVAL);
+  add_operation_node(&armature->id, NodeType::ARMATURE, OperationCode::ARMATURE_EVAL);
 }
 
 void DepsgraphNodeBuilder::build_camera(Camera *camera)
@@ -1428,6 +1433,16 @@ void DepsgraphNodeBuilder::build_material(Material *material)
   build_nodetree(material->nodetree);
 }
 
+void DepsgraphNodeBuilder::build_materials(Material **materials, int num_materials)
+{
+  for (int i = 0; i < num_materials; ++i) {
+    if (materials[i] == NULL) {
+      continue;
+    }
+    build_material(materials[i]);
+  }
+}
+
 /* Recursively build graph for texture */
 void DepsgraphNodeBuilder::build_texture(Tex *texture)
 {
@@ -1513,6 +1528,19 @@ void DepsgraphNodeBuilder::build_mask(Mask *mask)
                      NodeType::PARAMETERS,
                      OperationCode::MASK_EVAL,
                      function_bind(BKE_mask_eval_update, _1, mask_cow));
+  /* Build parents. */
+  LISTBASE_FOREACH (MaskLayer *, mask_layer, &mask->masklayers) {
+    LISTBASE_FOREACH (MaskSpline *, spline, &mask_layer->splines) {
+      for (int i = 0; i < spline->tot_point; i++) {
+        MaskSplinePoint *point = &spline->points[i];
+        MaskParent *parent = &point->parent;
+        if (parent == NULL || parent->id == NULL) {
+          continue;
+        }
+        build_id(parent->id);
+      }
+    }
+  }
 }
 
 void DepsgraphNodeBuilder::build_movieclip(MovieClip *clip)
@@ -1582,7 +1610,8 @@ void DepsgraphNodeBuilder::build_scene_sequencer(Scene *scene)
   if (scene->ed == NULL) {
     return;
   }
-  Scene *scene_cow = get_cow_datablock(scene_);
+  build_scene_audio(scene);
+  Scene *scene_cow = get_cow_datablock(scene);
   add_operation_node(&scene->id,
                      NodeType::SEQUENCER,
                      OperationCode::SEQUENCES_EVAL,
@@ -1593,6 +1622,16 @@ void DepsgraphNodeBuilder::build_scene_sequencer(Scene *scene)
     if (seq->sound != NULL) {
       build_sound(seq->sound);
     }
+    if (seq->scene != NULL) {
+      build_scene_parameters(seq->scene);
+    }
+    if (seq->type == SEQ_TYPE_SCENE && seq->scene != NULL) {
+      if (seq->flag & SEQ_SCENE_STRIPS) {
+        build_scene_sequencer(seq->scene);
+      }
+      ViewLayer *sequence_view_layer = BKE_view_layer_default_render(seq->scene);
+      build_scene_speakers(seq->scene, sequence_view_layer);
+    }
     /* TODO(sergey): Movie clip, scene, camera, mask. */
   }
   SEQ_END;
@@ -1600,7 +1639,22 @@ void DepsgraphNodeBuilder::build_scene_sequencer(Scene *scene)
 
 void DepsgraphNodeBuilder::build_scene_audio(Scene *scene)
 {
+  if (built_map_.checkIsBuiltAndTag(scene, BuilderMap::TAG_SCENE_AUDIO)) {
+    return;
+  }
   add_operation_node(&scene->id, NodeType::AUDIO, OperationCode::SOUND_EVAL);
+}
+
+void DepsgraphNodeBuilder::build_scene_speakers(Scene * /*scene*/, ViewLayer *view_layer)
+{
+  LISTBASE_FOREACH (Base *, base, &view_layer->object_bases) {
+    Object *object = base->object;
+    if (object->type != OB_SPEAKER || !need_pull_base_into_graph(base)) {
+      continue;
+    }
+    /* NOTE: Can not use base because it does not belong to a current view layer. */
+    build_object(-1, base->object, DEG_ID_LINKED_INDIRECTLY, true);
+  }
 }
 
 /* **** ID traversal callbacks functions **** */

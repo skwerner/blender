@@ -562,6 +562,7 @@ typedef struct EEVEE_EffectsInfo {
   /* SSR */
   bool reflection_trace_full;
   bool ssr_was_persp;
+  bool ssr_was_valid_double_buffer;
   int ssr_neighbor_ofs;
   int ssr_halfres_ofs[2];
   struct GPUTexture *ssr_normal_input; /* Textures from pool */
@@ -653,11 +654,11 @@ typedef struct EEVEE_CommonUniformBuffer {
   float ao_offset, ao_bounce_fac, ao_quality, ao_settings; /* vec4 */
   /* Volumetric */
   /* -- 16 byte aligned -- */
-  int vol_tex_size[3], pad3;         /* ivec3 */
-  float vol_depth_param[3], pad4;    /* vec3 */
-  float vol_inv_tex_size[3], pad5;   /* vec3 */
-  float vol_jitter[3], pad6;         /* vec3 */
-  float vol_coord_scale[2], pad7[2]; /* vec2 */
+  int vol_tex_size[3], pad3;       /* ivec3 */
+  float vol_depth_param[3], pad4;  /* vec3 */
+  float vol_inv_tex_size[3], pad5; /* vec3 */
+  float vol_jitter[3], pad6;       /* vec3 */
+  float vol_coord_scale[4];        /* vec4 */
   /* -- 16 byte aligned -- */
   float vol_history_alpha; /* float */
   float vol_light_clamp;   /* float */
@@ -671,6 +672,7 @@ typedef struct EEVEE_CommonUniformBuffer {
   float ssr_firefly_fac;                              /* float */
   float ssr_brdf_bias;                                /* float */
   int ssr_toggle;                                     /* bool */
+  int ssrefract_toggle;                               /* bool */
   /* SubSurface Scattering */
   float sss_jitter_threshold; /* float */
   int sss_toggle;             /* bool */
@@ -690,8 +692,6 @@ typedef struct EEVEE_CommonUniformBuffer {
   int hiz_mip_offset; /* int */
   int ray_type;       /* int */
   float ray_depth;    /* float */
-
-  float pad_common_ubo;
 } EEVEE_CommonUniformBuffer;
 
 BLI_STATIC_ASSERT_ALIGN(EEVEE_CommonUniformBuffer, 16)
@@ -839,6 +839,10 @@ typedef struct EEVEE_PrivateData {
 
   /* Color Management */
   bool use_color_render_settings;
+
+  /* Compiling shaders count. This is to track if a shader has finished compiling. */
+  int queued_shaders_count;
+  int queued_shaders_count_prev;
 
   /* LookDev Settings */
   int studiolight_index;

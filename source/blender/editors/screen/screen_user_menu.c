@@ -289,8 +289,8 @@ static void screen_user_menu_draw(const bContext *C, Menu *menu)
   }
 
   if (is_empty) {
-    uiItemL(menu->layout, IFACE_("No menu items found"), ICON_NONE);
-    uiItemL(menu->layout, IFACE_("Right click on buttons to add them to this menu"), ICON_NONE);
+    uiItemL(menu->layout, TIP_("No menu items found"), ICON_NONE);
+    uiItemL(menu->layout, TIP_("Right click on buttons to add them to this menu"), ICON_NONE);
   }
 }
 
@@ -298,7 +298,7 @@ void ED_screen_user_menu_register(void)
 {
   MenuType *mt = MEM_callocN(sizeof(MenuType), __func__);
   strcpy(mt->idname, "SCREEN_MT_user_menu");
-  strcpy(mt->label, "Quick Favorites");
+  strcpy(mt->label, N_("Quick Favorites"));
   strcpy(mt->translation_context, BLT_I18NCONTEXT_DEFAULT_BPYRNA);
   mt->draw = screen_user_menu_draw;
   WM_menutype_add(mt);

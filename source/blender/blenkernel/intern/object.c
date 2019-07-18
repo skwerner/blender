@@ -429,27 +429,6 @@ static void object_update_from_subsurf_ccg(Object *object)
 /* free data derived from mesh, called when mesh changes or is freed */
 void BKE_object_free_derived_caches(Object *ob)
 {
-  /* Also serves as signal to remake texspace.
-   *
-   * NOTE: This function can be called from threads on different objects
-   * sharing same data datablock. So we need to ensure atomic nature of
-   * data modification here.
-   */
-  if (ob->type == OB_MESH) {
-    Mesh *me = ob->data;
-
-    if (me && me->bb) {
-      atomic_fetch_and_or_int32(&me->bb->flag, BOUNDBOX_DIRTY);
-    }
-  }
-  else if (ELEM(ob->type, OB_SURF, OB_CURVE, OB_FONT)) {
-    Curve *cu = ob->data;
-
-    if (cu && cu->bb) {
-      atomic_fetch_and_or_int32(&cu->bb->flag, BOUNDBOX_DIRTY);
-    }
-  }
-
   MEM_SAFE_FREE(ob->runtime.bb);
 
   object_update_from_subsurf_ccg(ob);
@@ -1438,8 +1417,7 @@ void BKE_object_copy_data(Main *bmain, Object *ob_dst, const Object *ob_src, con
     }
   }
   BKE_object_copy_softbody(ob_dst, ob_src, flag_subdata);
-  ob_dst->rigidbody_object = BKE_rigidbody_copy_object(ob_src, flag_subdata);
-  ob_dst->rigidbody_constraint = BKE_rigidbody_copy_constraint(ob_src, flag_subdata);
+  BKE_rigidbody_object_copy(bmain, ob_dst, ob_src, flag_subdata);
 
   BKE_object_copy_particlesystems(ob_dst, ob_src, flag_subdata);
 

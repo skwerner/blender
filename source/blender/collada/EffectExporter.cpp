@@ -208,21 +208,20 @@ void EffectsExporter::operator()(Material *ma, Object *ob)
   COLLADASW::EffectProfile ep(mSW);
   ep.setProfileType(COLLADASW::EffectProfile::COMMON);
   ep.openProfile();
-  set_shader_type(ep, ma);
+  set_shader_type(ep, ma);  // creates a Lambert Shader for now
 
   COLLADASW::ColorOrTexture cot;
 
   set_diffuse_color(ep, ma);
   set_emission(ep, ma);
   set_ior(ep, ma);
-  set_shininess(ep, ma);
   set_reflectivity(ep, ma);
   set_transparency(ep, ma);
 
-  /* TODO: from where to get ambient, specular and reflective? */
+  /* TODO: */
+  // set_shininess(ep, ma); shininess not supported for lambert
   // set_ambient(ep, ma);
   // set_specular(ep, ma);
-  // set_reflective(ep, ma);
 
   get_images(ma, material_image_map);
   std::string active_uv(getActiveUVLayerName(ob));
@@ -274,7 +273,7 @@ void EffectsExporter::operator()(Material *ma, Object *ob)
     int i = im_samp_map[key];
     std::string uvname = strlen(t->uvname) ? t->uvname : active_uv;
     COLLADASW::Sampler *sampler = (COLLADASW::Sampler *)
-        samp_surf[i];  // possibly uninitialised memory ...
+        samp_surf[i];  // possibly uninitialized memory ...
     writeTextures(ep, key, sampler, t, ima, uvname);
   }
 #endif

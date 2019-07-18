@@ -207,7 +207,11 @@ static void compo_initjob(void *cjv)
   cj->compositor_depsgraph = DEG_graph_new(scene, view_layer, DAG_EVAL_RENDER);
   DEG_graph_build_for_compositor_preview(
       cj->compositor_depsgraph, bmain, scene, view_layer, cj->ntree);
-  DEG_evaluate_on_framechange(bmain, cj->compositor_depsgraph, CFRA);
+
+  /* NOTE: Don't update animation to preserve unkeyed changes, this means can not use
+   * evaluate_on_framechange. */
+  DEG_graph_flush_update(bmain, cj->compositor_depsgraph);
+  DEG_evaluate_on_refresh(cj->compositor_depsgraph);
 
   bNodeTree *ntree_eval = (bNodeTree *)DEG_get_evaluated_id(cj->compositor_depsgraph,
                                                             &cj->ntree->id);
@@ -2415,6 +2419,7 @@ static int ntree_socket_move_exec(bContext *C, wmOperator *op)
     }
   }
 
+  ntree->update |= NTREE_UPDATE_GROUP;
   ntreeUpdateTree(CTX_data_main(C), ntree);
 
   snode_notify(C, snode);
@@ -2673,7 +2678,7 @@ static int viewer_border_exec(bContext *C, wmOperator *op)
 void NODE_OT_viewer_border(wmOperatorType *ot)
 {
   /* identifiers */
-  ot->name = "Viewer Border";
+  ot->name = "Viewer Region";
   ot->description = "Set the boundaries for viewer operations";
   ot->idname = "NODE_OT_viewer_border";
 

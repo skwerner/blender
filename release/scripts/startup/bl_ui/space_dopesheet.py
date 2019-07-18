@@ -136,6 +136,8 @@ class DopesheetFilterPopoverBase:
             flow.prop(dopesheet, "show_shapekeys", text="Shape Keys")
         if bpy.data.cache_files:
             flow.prop(dopesheet, "show_cache_files", text="Cache Files")
+        if bpy.data.movieclips:
+            flow.prop(dopesheet, "show_movieclips", text="Movie Clips")
 
         layout.separator()
 
@@ -199,7 +201,7 @@ class DOPESHEET_HT_header(Header):
         layout.template_header()
 
         if st.mode == 'TIMELINE':
-            from .space_time import (
+            from bl_ui.space_time import (
                 TIME_MT_editor_menus,
                 TIME_HT_editor_buttons,
             )
@@ -394,7 +396,7 @@ class DOPESHEET_MT_marker(Menu):
     def draw(self, context):
         layout = self.layout
 
-        from .space_time import marker_menu_generic
+        from bl_ui.space_time import marker_menu_generic
         marker_menu_generic(layout, context)
 
         st = context.space_data
@@ -573,6 +575,7 @@ class DOPESHEET_MT_context_menu(Menu):
 
         layout.separator()
 
+        layout.operator_menu_enum("action.keyframe_type", "type", text="Keyframe Type")
         layout.operator_menu_enum("action.handle_type", "type", text="Handle Type")
         layout.operator_menu_enum("action.interpolation_type", "type", text="Interpolation Mode")
 

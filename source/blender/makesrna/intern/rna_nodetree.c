@@ -1711,6 +1711,12 @@ static void rna_Node_update(Main *bmain, Scene *UNUSED(scene), PointerRNA *ptr)
   ED_node_tag_update_nodetree(bmain, ntree, node);
 }
 
+static void rna_Node_update_relations(Main *bmain, Scene *scene, PointerRNA *ptr)
+{
+  rna_Node_update(bmain, scene, ptr);
+  DEG_relations_tag_update(bmain);
+}
+
 static void rna_Node_socket_value_update(ID *id, bNode *node, bContext *C)
 {
   ED_node_tag_update_nodetree(CTX_data_main(C), (bNodeTree *)id, node);
@@ -2119,6 +2125,15 @@ static PointerRNA rna_NodeSocket_node_get(PointerRNA *ptr)
 
   RNA_pointer_create((ID *)ntree, &RNA_Node, node, &r_ptr);
   return r_ptr;
+}
+
+static void rna_NodeSocket_type_set(PointerRNA *ptr, int value)
+{
+  bNodeTree *ntree = (bNodeTree *)ptr->id.data;
+  bNodeSocket *sock = (bNodeSocket *)ptr->data;
+  bNode *node;
+  nodeFindNode(ntree, sock, &node, NULL);
+  nodeModifySocketType(ntree, node, sock, value, 0);
 }
 
 static void rna_NodeSocket_update(Main *bmain, Scene *UNUSED(scene), PointerRNA *ptr)
@@ -4449,7 +4464,7 @@ static void def_sh_tex_coord(StructRNA *srna)
   RNA_def_property_flag(prop, PROP_EDITABLE | PROP_ID_REFCOUNT);
   RNA_def_property_ui_text(
       prop, "Object", "Use coordinates from this object (for object texture coordinates output)");
-  RNA_def_property_update(prop, NC_NODE | NA_EDITED, "rna_Node_update");
+  RNA_def_property_update(prop, NC_NODE | NA_EDITED, "rna_Node_update_relations");
 
   prop = RNA_def_property(srna, "from_instancer", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_sdna(prop, NULL, "custom1", 1);
@@ -7776,6 +7791,7 @@ static void rna_def_node_socket(BlenderRNA *brna)
   RNA_def_property_enum_sdna(prop, NULL, "type");
   RNA_def_property_enum_items(prop, node_socket_type_items);
   RNA_def_property_enum_default(prop, SOCK_FLOAT);
+  RNA_def_property_enum_funcs(prop, NULL, "rna_NodeSocket_type_set", NULL);
   RNA_def_property_ui_text(prop, "Type", "Data type");
   RNA_def_property_update(prop, NC_NODE | NA_EDITED, "rna_NodeSocket_update");
 

@@ -169,6 +169,7 @@ static const IconType icontypes[] = {
 #  define DEF_ICON_OBJECT_DATA(name) {ICON_TYPE_MONO_TEXTURE, TH_ICON_OBJECT_DATA},
 #  define DEF_ICON_MODIFIER(name) {ICON_TYPE_MONO_TEXTURE, TH_ICON_MODIFIER},
 #  define DEF_ICON_SHADING(name) {ICON_TYPE_MONO_TEXTURE, TH_ICON_SHADING},
+#  define DEF_ICON_FUND(name) {ICON_TYPE_MONO_TEXTURE, TH_ICON_FUND},
 #  define DEF_ICON_VECTOR(name) {ICON_TYPE_VECTOR, 0},
 #  define DEF_ICON_COLOR(name) {ICON_TYPE_COLOR_TEXTURE, 0},
 #  define DEF_ICON_BLANK(name) {ICON_TYPE_BLANK, 0},
@@ -1417,11 +1418,13 @@ static void icon_set_image(const bContext *C,
     return;
   }
 
+  const bool delay = prv_img->rect[size] != NULL;
   icon_create_rect(prv_img, size);
 
   if (use_job) {
     /* Job (background) version */
-    ED_preview_icon_job(C, prv_img, id, prv_img->rect[size], prv_img->w[size], prv_img->h[size]);
+    ED_preview_icon_job(
+        C, prv_img, id, prv_img->rect[size], prv_img->w[size], prv_img->h[size], delay);
   }
   else {
     if (!scene) {

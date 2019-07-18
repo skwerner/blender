@@ -1000,6 +1000,7 @@ void EEVEE_materials_cache_init(EEVEE_ViewLayerData *sldata, EEVEE_Data *vedata)
             break;
           case GPU_MAT_QUEUED:
             /* TODO Bypass probe compilation. */
+            stl->g_data->queued_shaders_count++;
             col = compile_col;
             break;
           case GPU_MAT_FAILED:
@@ -1077,7 +1078,7 @@ void EEVEE_materials_cache_init(EEVEE_ViewLayerData *sldata, EEVEE_Data *vedata)
 
   {
     DRWState state = (DRW_STATE_WRITE_COLOR | DRW_STATE_DEPTH_EQUAL | DRW_STATE_CLIP_PLANES |
-                      DRW_STATE_WRITE_STENCIL);
+                      DRW_STATE_WRITE_STENCIL | DRW_STATE_STENCIL_ALWAYS);
     DRW_PASS_CREATE(psl->sss_pass, state);
     DRW_PASS_CREATE(psl->sss_pass_cull, state | DRW_STATE_CULL_BACK);
     e_data.sss_count = 0;
@@ -1352,6 +1353,7 @@ static void material_opaque(Material *ma,
         break;
       }
       case GPU_MAT_QUEUED: {
+        stl->g_data->queued_shaders_count++;
         color_p = compile_col;
         metal_p = spec_p = rough_p = &half;
         break;
@@ -1458,6 +1460,7 @@ static void material_transparent(Material *ma,
       }
       case GPU_MAT_QUEUED: {
         /* TODO Bypass probe compilation. */
+        stl->g_data->queued_shaders_count++;
         color_p = compile_col;
         metal_p = spec_p = rough_p = &half;
         break;
@@ -1785,6 +1788,7 @@ void EEVEE_hair_cache_populate(EEVEE_Data *vedata,
               break;
             }
             case GPU_MAT_QUEUED: {
+              stl->g_data->queued_shaders_count++;
               color_p = compile_col;
               metal_p = spec_p = rough_p = &half;
               break;

@@ -79,6 +79,10 @@
 #include "sculpt_intern.h"
 #include "paint_intern.h" /* own include */
 
+/* -------------------------------------------------------------------- */
+/** \name Internal Utilities
+ * \{ */
+
 /* Use for 'blur' brush, align with PBVH nodes, created and freed on each update. */
 struct VPaintAverageAccum {
   uint len;
@@ -1100,6 +1104,8 @@ static void vertex_paint_init_session_data(const ToolSettings *ts, Object *ob)
   }
 }
 
+/** \} */
+
 /* -------------------------------------------------------------------- */
 /** \name Enter Vertex/Weight Paint Mode
  * \{ */
@@ -1264,7 +1270,9 @@ void ED_object_wpaintmode_exit(struct bContext *C)
 
 /** \} */
 
-/* *************** set wpaint operator ****************** */
+/* -------------------------------------------------------------------- */
+/** \name Toggle Weight Paint Operator
+ * \{ */
 
 /**
  * \note Keep in sync with #vpaint_mode_toggle_exec
@@ -1361,7 +1369,11 @@ void PAINT_OT_weight_paint_toggle(wmOperatorType *ot)
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO | OPTYPE_USE_EVAL_DATA;
 }
 
-/* ************ weight paint operator ********** */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Weight Paint Operator
+ * \{ */
 
 struct WPaintData {
   ViewContext vc;
@@ -2259,7 +2271,6 @@ static void wpaint_stroke_update_step(bContext *C, struct PaintStroke *stroke, P
   vwpaint_update_cache_variants(C, wp, ob, itemptr);
 
   float mat[4][4];
-  float mval[2];
 
   const float brush_alpha_value = BKE_brush_alpha_get(scene, brush);
 
@@ -2309,7 +2320,7 @@ static void wpaint_stroke_update_step(bContext *C, struct PaintStroke *stroke, P
 
   /* calculate pivot for rotation around seletion if needed */
   /* also needed for "View Selected" on last stroke */
-  paint_last_stroke_update(scene, vc->ar, mval);
+  paint_last_stroke_update(scene, vc->ar, ss->cache->mouse);
 
   BKE_mesh_batch_cache_dirty_tag(ob->data, BKE_MESH_BATCH_DIRTY_ALL);
 
@@ -2464,7 +2475,11 @@ void PAINT_OT_weight_paint(wmOperatorType *ot)
   paint_stroke_operator_properties(ot);
 }
 
-/* ************ set / clear vertex paint mode ********** */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Toggle Vertex Paint Operator
+ * \{ */
 
 /**
  * \note Keep in sync with #wpaint_mode_toggle_exec
@@ -2527,7 +2542,11 @@ void PAINT_OT_vertex_paint_toggle(wmOperatorType *ot)
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO | OPTYPE_USE_EVAL_DATA;
 }
 
-/* ********************** vertex paint operator ******************* */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Vertex Paint Operator
+ * \{ */
 
 /* Implementation notes:
  *
@@ -3253,12 +3272,12 @@ static void vpaint_stroke_update_step(bContext *C, struct PaintStroke *stroke, P
   VPaint *vp = ts->vpaint;
   ViewContext *vc = &vpd->vc;
   Object *ob = vc->obact;
+  SculptSession *ss = ob->sculpt;
   Sculpt *sd = CTX_data_tool_settings(C)->sculpt;
 
   vwpaint_update_cache_variants(C, vp, ob, itemptr);
 
   float mat[4][4];
-  float mval[2];
 
   ED_view3d_init_mats_rv3d(ob, vc->rv3d);
 
@@ -3280,7 +3299,7 @@ static void vpaint_stroke_update_step(bContext *C, struct PaintStroke *stroke, P
 
   /* calculate pivot for rotation around seletion if needed */
   /* also needed for "View Selected" on last stroke */
-  paint_last_stroke_update(scene, vc->ar, mval);
+  paint_last_stroke_update(scene, vc->ar, ss->cache->mouse);
 
   ED_region_tag_redraw(vc->ar);
 
@@ -3397,3 +3416,5 @@ void PAINT_OT_vertex_paint(wmOperatorType *ot)
 
   paint_stroke_operator_properties(ot);
 }
+
+/** \} */

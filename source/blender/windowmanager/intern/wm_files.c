@@ -634,7 +634,17 @@ bool WM_file_read(bContext *C, const char *filepath, ReportList *reports)
 
     /* confusing this global... */
     G.relbase_valid = 1;
-    retval = BKE_blendfile_read(C, filepath, &(const struct BlendFileReadParams){0}, reports);
+    retval = BKE_blendfile_read(
+        C,
+        filepath,
+        /* Loading preferences when the user intended to load a regular file is a security risk,
+         * because the excluded path list is also loaded.
+         * Further it's just confusing if a user loads a file and various preferences change. */
+        &(const struct BlendFileReadParams){
+            .is_startup = false,
+            .skip_flags = BLO_READ_SKIP_USERDEF,
+        },
+        reports);
 
     /* BKE_file_read sets new Main into context. */
     Main *bmain = CTX_data_main(C);
@@ -1376,7 +1386,7 @@ static bool wm_file_write(bContext *C, const char *filepath, int fileflags, Repo
   /* operator now handles overwrite checks */
 
   if (G.fileflags & G_FILE_AUTOPACK) {
-    packAll(bmain, reports, false);
+    BKE_packedfile_pack_all(bmain, reports, false);
   }
 
   /* don't forget not to return without! */
@@ -1739,6 +1749,23 @@ void WM_OT_save_userpref(wmOperatorType *ot)
   ot->exec = wm_userpref_write_exec;
 }
 
+/**
+ * When reading preferences, there are some exceptions for values which are reset.
+ */
+static void wm_userpref_read_exceptions(UserDef *userdef_curr, const UserDef *userdef_prev)
+{
+#define USERDEF_RESTORE(member) \
+  { \
+    userdef_curr->member = userdef_prev->member; \
+  } \
+  ((void)0)
+
+  /* Current visible preferences category. */
+  USERDEF_RESTORE(userpref);
+
+#undef USERDEF_RESTORE
+}
+
 static void rna_struct_update_when_changed(bContext *C,
                                            Main *bmain,
                                            PointerRNA *ptr_a,
@@ -1811,15 +1838,8 @@ static int wm_userpref_read_exec(bContext *C, wmOperator *op)
                    WM_init_state_app_template_get(),
                    NULL);
 
-#define USERDEF_RESTORE(member) \
-  { \
-    U.member = U_backup.member; \
-  } \
-  ((void)0)
-
-  USERDEF_RESTORE(userpref);
-
-#undef USERDEF_RESTORE
+  wm_userpref_read_exceptions(&U, &U_backup);
+  SET_FLAG_FROM_TEST(G.f, use_factory_settings, G_FLAG_USERPREF_NO_SAVE_ON_EXIT);
 
   Main *bmain = CTX_data_main(C);
 
@@ -1883,6 +1903,7 @@ static int wm_homefile_read_exec(bContext *C, wmOperator *op)
   bool use_userdef = false;
   char filepath_buf[FILE_MAX];
   const char *filepath = NULL;
+  UserDef U_backup = U;
 
   if (!use_factory_settings) {
     PropertyRNA *prop = RNA_struct_find_property(op->ptr, "filepath");
@@ -1914,7 +1935,6 @@ static int wm_homefile_read_exec(bContext *C, wmOperator *op)
   PropertyRNA *prop_app_template = RNA_struct_find_property(op->ptr, "app_template");
   const bool use_splash = !use_factory_settings && RNA_boolean_get(op->ptr, "use_splash");
   const bool use_empty_data = RNA_boolean_get(op->ptr, "use_empty");
-  const bool use_temporary_preferences = RNA_boolean_get(op->ptr, "use_temporary_preferences");
 
   if (prop_app_template && RNA_property_is_set(op->ptr, prop_app_template)) {
     RNA_property_string_get(op->ptr, prop_app_template, app_template_buf);
@@ -1945,7 +1965,11 @@ static int wm_homefile_read_exec(bContext *C, wmOperator *op)
   if (use_splash) {
     WM_init_splash(C);
   }
-  SET_FLAG_FROM_TEST(G.f, use_temporary_preferences, G_FLAG_USERPREF_NO_SAVE_ON_EXIT);
+
+  if (use_userdef) {
+    wm_userpref_read_exceptions(&U, &U_backup);
+    SET_FLAG_FROM_TEST(G.f, use_factory_settings, G_FLAG_USERPREF_NO_SAVE_ON_EXIT);
+  }
 
   return OPERATOR_FINISHED;
 }
@@ -1985,13 +2009,6 @@ static void read_homefile_props(wmOperatorType *ot)
   RNA_def_property_flag(prop, PROP_HIDDEN | PROP_SKIP_SAVE);
 
   prop = RNA_def_boolean(ot->srna, "use_empty", false, "Empty", "");
-  RNA_def_property_flag(prop, PROP_HIDDEN | PROP_SKIP_SAVE);
-
-  prop = RNA_def_boolean(ot->srna,
-                         "use_temporary_preferences",
-                         false,
-                         "Temporary Preferences",
-                         "Don't save preferences on exit");
   RNA_def_property_flag(prop, PROP_HIDDEN | PROP_SKIP_SAVE);
 }
 
@@ -2791,13 +2808,13 @@ static uiBlock *block_create_autorun_warning(struct bContext *C,
   /* Text and some vertical space */
   uiLayout *col = uiLayoutColumn(layout, true);
   uiItemL(col,
-          IFACE_("For security reasons, automatic execution of Python scripts in this file was "
-                 "disabled:"),
+          TIP_("For security reasons, automatic execution of Python scripts in this file was "
+               "disabled:"),
           ICON_ERROR);
   uiLayout *sub = uiLayoutRow(col, true);
   uiLayoutSetRedAlert(sub, true);
   uiItemL(sub, G.autoexec_fail, ICON_BLANK1);
-  uiItemL(col, IFACE_("This may lead to unexpected behavior"), ICON_BLANK1);
+  uiItemL(col, TIP_("This may lead to unexpected behavior"), ICON_BLANK1);
 
   uiItemS(layout);
 
@@ -2807,7 +2824,7 @@ static uiBlock *block_create_autorun_warning(struct bContext *C,
           &pref_ptr,
           "use_scripts_auto_execute",
           0,
-          IFACE_("Permanently allow execution of scripts"),
+          TIP_("Permanently allow execution of scripts"),
           ICON_NONE);
 
   uiItemS(layout);
@@ -2942,11 +2959,14 @@ static void wm_block_file_close_save(bContext *C, void *arg_block, void *arg_dat
   UI_popup_block_close(C, win, arg_block);
 
   if (save_images_when_file_is_closed) {
-    ReportList *reports = CTX_wm_reports(C);
-    if (!ED_image_save_all_modified(C, reports)) {
+    if (ED_image_should_save_modified(C)) {
+      ReportList *reports = CTX_wm_reports(C);
+      ED_image_save_all_modified(C, reports);
+      WM_report_banner_show();
+    }
+    else {
       execute_callback = false;
     }
-    WM_report_banner_show();
   }
 
   Main *bmain = CTX_data_main(C);
@@ -3052,10 +3072,10 @@ static uiBlock *block_create__close_file_dialog(struct bContext *C, struct ARegi
                  0,
                  0,
                  "");
+  }
 
-    LISTBASE_FOREACH (Report *, report, &reports.list) {
-      uiItemL(layout, report->message, ICON_ERROR);
-    }
+  LISTBASE_FOREACH (Report *, report, &reports.list) {
+    uiItemL(layout, report->message, ICON_ERROR);
   }
 
   BKE_reports_clear(&reports);

@@ -180,7 +180,7 @@ static void panel_draw_header_preset(const bContext *C, Panel *pnl)
   RNA_parameter_list_free(&list);
 }
 
-static void rna_Panel_unregister(Main *UNUSED(bmain), StructRNA *type)
+static void rna_Panel_unregister(Main *bmain, StructRNA *type)
 {
   ARegionType *art;
   PanelType *pt = RNA_struct_blender_type_get(type);
@@ -207,8 +207,28 @@ static void rna_Panel_unregister(Main *UNUSED(bmain), StructRNA *type)
     child_pt->parent = NULL;
   }
 
+  const char space_type = pt->space_type;
   BLI_freelistN(&pt->children);
   BLI_freelinkN(&art->paneltypes, pt);
+
+  for (bScreen *screen = bmain->screens.first; screen; screen = screen->id.next) {
+    for (ScrArea *sa = screen->areabase.first; sa; sa = sa->next) {
+      for (SpaceLink *sl = sa->spacedata.first; sl; sl = sl->next) {
+        if (sl->spacetype == space_type) {
+          ListBase *regionbase = (sl == sa->spacedata.first) ? &sa->regionbase : &sl->regionbase;
+          for (ARegion *region = regionbase->first; region; region = region->next) {
+            if (region->type == art) {
+              for (Panel *pa = region->panels.first; pa; pa = pa->next) {
+                if (pa->type == pt) {
+                  pa->type = NULL;
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
 
   /* update while blender is running */
   WM_main_add_notifier(NC_WINDOW, NULL);
@@ -279,12 +299,24 @@ static StructRNA *rna_Panel_register(Main *bmain,
   /* check if we have registered this panel type before, and remove it */
   for (pt = art->paneltypes.first; pt; pt = pt->next) {
     if (STREQ(pt->idname, dummypt.idname)) {
+      PanelType *pt_next = pt->next;
       if (pt->ext.srna) {
         rna_Panel_unregister(bmain, pt->ext.srna);
       }
       else {
         BLI_freelinkN(&art->paneltypes, pt);
       }
+
+      /* The order of panel types will be altered on re-registration. */
+      if (dummypt.parent_id[0] && (parent == NULL)) {
+        for (pt = pt_next; pt; pt = pt->next) {
+          if (STREQ(pt->idname, dummypt.parent_id)) {
+            parent = pt;
+            break;
+          }
+        }
+      }
+
       break;
     }
 
@@ -292,6 +324,7 @@ static StructRNA *rna_Panel_register(Main *bmain,
       parent = pt;
     }
   }
+
   if (!RNA_struct_available_or_report(reports, dummypt.idname)) {
     return NULL;
   }

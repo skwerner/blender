@@ -77,31 +77,6 @@ static DEG::NodeType deg_build_scene_component_type(eDepsSceneComponentType comp
   return DEG::NodeType::UNDEFINED;
 }
 
-static DEG::NodeType deg_build_object_component_type(eDepsObjectComponentType component)
-{
-  switch (component) {
-    case DEG_OB_COMP_PARAMETERS:
-      return DEG::NodeType::PARAMETERS;
-    case DEG_OB_COMP_PROXY:
-      return DEG::NodeType::PROXY;
-    case DEG_OB_COMP_ANIMATION:
-      return DEG::NodeType::ANIMATION;
-    case DEG_OB_COMP_TRANSFORM:
-      return DEG::NodeType::TRANSFORM;
-    case DEG_OB_COMP_GEOMETRY:
-      return DEG::NodeType::GEOMETRY;
-    case DEG_OB_COMP_EVAL_POSE:
-      return DEG::NodeType::EVAL_POSE;
-    case DEG_OB_COMP_BONE:
-      return DEG::NodeType::BONE;
-    case DEG_OB_COMP_SHADING:
-      return DEG::NodeType::SHADING;
-    case DEG_OB_COMP_CACHE:
-      return DEG::NodeType::CACHE;
-  }
-  return DEG::NodeType::UNDEFINED;
-}
-
 static DEG::DepsNodeHandle *get_node_handle(DepsNodeHandle *node_handle)
 {
   return reinterpret_cast<DEG::DepsNodeHandle *>(node_handle);
@@ -123,7 +98,7 @@ void DEG_add_object_relation(DepsNodeHandle *node_handle,
                              eDepsObjectComponentType component,
                              const char *description)
 {
-  DEG::NodeType type = deg_build_object_component_type(component);
+  DEG::NodeType type = DEG::nodeTypeFromObjectComponent(component);
   DEG::ComponentKey comp_key(&object->id, type);
   DEG::DepsNodeHandle *deg_node_handle = get_node_handle(node_handle);
   deg_node_handle->builder->add_node_handle_relation(comp_key, deg_node_handle, description);
@@ -134,7 +109,7 @@ void DEG_add_object_cache_relation(DepsNodeHandle *node_handle,
                                    eDepsObjectComponentType component,
                                    const char *description)
 {
-  DEG::NodeType type = deg_build_object_component_type(component);
+  DEG::NodeType type = DEG::nodeTypeFromObjectComponent(component);
   DEG::ComponentKey comp_key(&cache_file->id, type);
   DEG::DepsNodeHandle *deg_node_handle = get_node_handle(node_handle);
   deg_node_handle->builder->add_node_handle_relation(comp_key, deg_node_handle, description);
@@ -146,7 +121,7 @@ void DEG_add_bone_relation(DepsNodeHandle *node_handle,
                            eDepsObjectComponentType component,
                            const char *description)
 {
-  DEG::NodeType type = deg_build_object_component_type(component);
+  DEG::NodeType type = DEG::nodeTypeFromObjectComponent(component);
   DEG::ComponentKey comp_key(&object->id, type, bone_name);
   DEG::DepsNodeHandle *deg_node_handle = get_node_handle(node_handle);
   deg_node_handle->builder->add_node_handle_relation(comp_key, deg_node_handle, description);
@@ -157,7 +132,7 @@ void DEG_add_object_pointcache_relation(struct DepsNodeHandle *node_handle,
                                         eDepsObjectComponentType component,
                                         const char *description)
 {
-  DEG::NodeType type = deg_build_object_component_type(component);
+  DEG::NodeType type = DEG::nodeTypeFromObjectComponent(component);
   DEG::ComponentKey comp_key(&object->id, type);
   DEG::DepsNodeHandle *deg_node_handle = get_node_handle(node_handle);
   DEG::DepsgraphRelationBuilder *relation_builder = deg_node_handle->builder;
@@ -285,7 +260,7 @@ void DEG_graph_build_from_view_layer(Depsgraph *graph,
 void DEG_graph_build_for_render_pipeline(Depsgraph *graph,
                                          Main *bmain,
                                          Scene *scene,
-                                         ViewLayer * /*view_layer*/)
+                                         ViewLayer *view_layer)
 {
   double start_time = 0.0;
   if (G.debug & (G_DEBUG_DEPSGRAPH_BUILD | G_DEBUG_DEPSGRAPH_TIME)) {
@@ -299,13 +274,13 @@ void DEG_graph_build_for_render_pipeline(Depsgraph *graph,
   /* Generate all the nodes in the graph first */
   DEG::DepsgraphNodeBuilder node_builder(bmain, deg_graph, &builder_cache);
   node_builder.begin_build();
-  node_builder.build_scene_render(scene);
+  node_builder.build_scene_render(scene, view_layer);
   node_builder.end_build();
   /* Hook up relationships between operations - to determine evaluation
    * order. */
   DEG::DepsgraphRelationBuilder relation_builder(bmain, deg_graph, &builder_cache);
   relation_builder.begin_build();
-  relation_builder.build_scene_render(scene);
+  relation_builder.build_scene_render(scene, view_layer);
   relation_builder.build_copy_on_write_relations();
   /* Finalize building. */
   graph_build_finalize_common(deg_graph, bmain);
@@ -315,11 +290,8 @@ void DEG_graph_build_for_render_pipeline(Depsgraph *graph,
   }
 }
 
-void DEG_graph_build_for_compositor_preview(Depsgraph *graph,
-                                            Main *bmain,
-                                            Scene *scene,
-                                            struct ViewLayer * /*view_layer*/,
-                                            bNodeTree *nodetree)
+void DEG_graph_build_for_compositor_preview(
+    Depsgraph *graph, Main *bmain, Scene *scene, struct ViewLayer *view_layer, bNodeTree *nodetree)
 {
   double start_time = 0.0;
   if (G.debug & (G_DEBUG_DEPSGRAPH_BUILD | G_DEBUG_DEPSGRAPH_TIME)) {
@@ -333,14 +305,14 @@ void DEG_graph_build_for_compositor_preview(Depsgraph *graph,
   /* Generate all the nodes in the graph first */
   DEG::DepsgraphNodeBuilder node_builder(bmain, deg_graph, &builder_cache);
   node_builder.begin_build();
-  node_builder.build_scene_render(scene);
+  node_builder.build_scene_render(scene, view_layer);
   node_builder.build_nodetree(nodetree);
   node_builder.end_build();
   /* Hook up relationships between operations - to determine evaluation
    * order. */
   DEG::DepsgraphRelationBuilder relation_builder(bmain, deg_graph, &builder_cache);
   relation_builder.begin_build();
-  relation_builder.build_scene_render(scene);
+  relation_builder.build_scene_render(scene, view_layer);
   relation_builder.build_nodetree(nodetree);
   relation_builder.build_copy_on_write_relations();
   /* Finalize building. */

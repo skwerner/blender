@@ -40,10 +40,26 @@ class USERPREF_HT_header(Header):
 
         row = layout.row()
         row.menu("USERPREF_MT_save_load", text="", icon='COLLAPSEMENU')
-        if not prefs.use_preferences_save:
-            sub_revert = row.row(align=True)
-            sub_revert.active = prefs.is_dirty
-            sub_revert.operator("wm.save_userpref")
+        # Use '_is_startup' so once factory settings are loaded
+        # this display option will show, since it's confusing if disabling
+        # the option makes it dissapiers.
+        if prefs.use_preferences_save:
+            use_userpref_skip_save_on_exit = bpy.app.use_userpref_skip_save_on_exit
+            if use_userpref_skip_save_on_exit or getattr(USERPREF_HT_header, "_is_startup", False):
+                USERPREF_HT_header._is_startup = True
+
+                sub = row.row(align=True)
+                sub.alignment = 'LEFT'
+                props = sub.operator(
+                    "preferences.autosave_override_toggle",
+                    text="Skip Auto-Save",
+                    emboss=False,
+                    icon='CHECKBOX_HLT' if use_userpref_skip_save_on_exit else 'CHECKBOX_DEHLT',
+                )
+        else:
+            sub = row.row(align=True)
+            sub.active = prefs.is_dirty
+            sub.operator("wm.save_userpref")
 
     def draw(self, context):
         layout = self.layout
@@ -252,6 +268,7 @@ class USERPREF_PT_interface_editors(PreferencePanel, Panel):
 
         flow.prop(system, "use_region_overlap")
         flow.prop(view, "show_layout_ui", text="Corner Splitting")
+        flow.prop(view, "show_navigate_ui")
         flow.prop(view, "color_picker_type")
         flow.row().prop(view, "header_align")
         flow.prop(view, "factor_display_type")
@@ -628,10 +645,8 @@ class USERPREF_PT_viewport_display(PreferencePanel, Panel):
         col.prop(view, "mini_axis_type", text="3D Viewport Axis")
 
         if view.mini_axis_type == 'MINIMAL':
-            sub = col.column()
-            sub.active = view.mini_axis_type == 'MINIMAL'
-            sub.prop(view, "mini_axis_size", text="Size")
-            sub.prop(view, "mini_axis_brightness", text="Brightness")
+            col.prop(view, "mini_axis_size", text="Size")
+            col.prop(view, "mini_axis_brightness", text="Brightness")
 
 
 class USERPREF_PT_viewport_quality(PreferencePanel, Panel):

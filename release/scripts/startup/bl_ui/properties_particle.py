@@ -24,7 +24,7 @@ from bpy.app.translations import pgettext_iface as iface_
 from bpy.app.translations import contexts as i18n_contexts
 from bl_ui.utils import PresetPanel
 
-from .properties_physics_common import (
+from bl_ui.properties_physics_common import (
     point_cache_ui,
     effector_weights_ui,
     basic_force_field_settings_ui,
@@ -820,7 +820,7 @@ class PARTICLE_PT_physics_boids_movement(ParticleButtonsPanel, Panel):
     @classmethod
     def poll(cls, context):
         part = particle_get_settings(context)
-        return part.physics_type in {'BOIDS'}
+        return part.physics_type == 'BOIDS'
 
     def draw(self, context):
         layout = self.layout
@@ -873,7 +873,7 @@ class PARTICLE_PT_physics_boids_battle(ParticleButtonsPanel, Panel):
     @classmethod
     def poll(cls, context):
         part = particle_get_settings(context)
-        return part.physics_type in {'BOIDS'}
+        return part.physics_type == 'BOIDS'
 
     def draw(self, context):
         layout = self.layout
@@ -900,7 +900,7 @@ class PARTICLE_PT_physics_boids_misc(ParticleButtonsPanel, Panel):
     @classmethod
     def poll(cls, context):
         part = particle_get_settings(context)
-        return part.physics_type in {'BOIDS'}
+        return part.physics_type == 'BOIDS'
 
     def draw(self, context):
         layout = self.layout
@@ -1232,8 +1232,7 @@ class PARTICLE_PT_render(ParticleButtonsPanel, Panel):
                 part.type == 'EMITTER' or
                 (part.render_type in {'OBJECT', 'COLLECTION'} and part.type == 'HAIR')
         ):
-            if part.render_type not in {'NONE'}:
-
+            if part.render_type != 'NONE':
                 col = layout.column(align=True)
                 col.prop(part, "particle_size", text="Scale")
                 col.prop(part, "size_random", slider=True, text="Scale Randomness")
@@ -1948,9 +1947,10 @@ class PARTICLE_PT_hair_shape(ParticleButtonsPanel, Panel):
 
     @classmethod
     def poll(cls, context):
-        if context.particle_system is None:
+        psys = context.particle_system
+        if psys is None:
             return False
-        return particle_panel_poll(cls, context)
+        return particle_panel_poll(cls, context) and psys.settings.type == 'HAIR'
 
     def draw(self, context):
         layout = self.layout

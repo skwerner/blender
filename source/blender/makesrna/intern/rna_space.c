@@ -30,6 +30,7 @@
 #include "BKE_movieclip.h"
 #include "BKE_node.h"
 #include "BKE_studiolight.h"
+#include "BKE_sequencer.h"
 
 #include "BLI_math.h"
 
@@ -984,7 +985,7 @@ static int rna_3DViewShading_type_get(PointerRNA *ptr)
     return shading->type;
   }
   else if (BKE_scene_uses_blender_workbench(scene)) {
-    return (shading->type == OB_MATERIAL) ? OB_RENDER : shading->type;
+    return (shading->type == OB_MATERIAL) ? OB_SOLID : shading->type;
   }
   else {
     if (shading->type == OB_RENDER && !(type && type->view_draw)) {
@@ -1057,21 +1058,6 @@ static PointerRNA rna_View3DShading_selected_studio_light_get(PointerRNA *ptr)
 }
 
 /* shading.light */
-static int rna_View3DShading_light_get(PointerRNA *ptr)
-{
-  View3DShading *shading = (View3DShading *)ptr->data;
-  return shading->light;
-}
-
-static void rna_View3DShading_light_set(PointerRNA *ptr, int value)
-{
-  View3DShading *shading = (View3DShading *)ptr->data;
-  if (value == V3D_LIGHTING_MATCAP && shading->color_type == V3D_SHADING_TEXTURE_COLOR) {
-    shading->color_type = V3D_SHADING_MATERIAL_COLOR;
-  }
-  shading->light = value;
-}
-
 static const EnumPropertyItem *rna_View3DShading_color_type_itemf(bContext *UNUSED(C),
                                                                   PointerRNA *ptr,
                                                                   PropertyRNA *UNUSED(prop),
@@ -1080,36 +1066,24 @@ static const EnumPropertyItem *rna_View3DShading_color_type_itemf(bContext *UNUS
   View3DShading *shading = (View3DShading *)ptr->data;
 
   int totitem = 0;
-  EnumPropertyItem *item = NULL;
 
-  if (shading->type == OB_SOLID) {
-    RNA_enum_items_add_value(
-        &item, &totitem, rna_enum_shading_color_type_items, V3D_SHADING_MATERIAL_COLOR);
+  if (shading->type == OB_WIRE) {
+    EnumPropertyItem *item = NULL;
     RNA_enum_items_add_value(
         &item, &totitem, rna_enum_shading_color_type_items, V3D_SHADING_SINGLE_COLOR);
     RNA_enum_items_add_value(
         &item, &totitem, rna_enum_shading_color_type_items, V3D_SHADING_OBJECT_COLOR);
     RNA_enum_items_add_value(
         &item, &totitem, rna_enum_shading_color_type_items, V3D_SHADING_RANDOM_COLOR);
-    RNA_enum_items_add_value(
-        &item, &totitem, rna_enum_shading_color_type_items, V3D_SHADING_VERTEX_COLOR);
-    if (shading->light != V3D_LIGHTING_MATCAP) {
-      RNA_enum_items_add_value(
-          &item, &totitem, rna_enum_shading_color_type_items, V3D_SHADING_TEXTURE_COLOR);
-    }
+    RNA_enum_item_end(&item, &totitem);
+    *r_free = true;
+    return item;
   }
-  else if (shading->type == OB_WIRE) {
-    RNA_enum_items_add_value(
-        &item, &totitem, rna_enum_shading_color_type_items, V3D_SHADING_SINGLE_COLOR);
-    RNA_enum_items_add_value(
-        &item, &totitem, rna_enum_shading_color_type_items, V3D_SHADING_OBJECT_COLOR);
-    RNA_enum_items_add_value(
-        &item, &totitem, rna_enum_shading_color_type_items, V3D_SHADING_RANDOM_COLOR);
+  else {
+    /* Solid mode, or lookdev mode for workbench engine. */
+    r_free = false;
+    return rna_enum_shading_color_type_items;
   }
-
-  RNA_enum_item_end(&item, &totitem);
-  *r_free = true;
-  return item;
 }
 
 /* Studio light */
@@ -1845,7 +1819,7 @@ static void rna_SpaceDopeSheetEditor_action_update(bContext *C, PointerRNA *ptr)
              *
              * EXCEPTION:
              * This callback runs when unlinking actions. In that case, we don't want to
-             * stash the action, as the user is signalling that they want to detach it.
+             * stash the action, as the user is signaling that they want to detach it.
              * This can be reviewed again later,
              * but it could get annoying if we keep these instead.
              */
@@ -1972,6 +1946,13 @@ static void rna_SpaceConsole_rect_update(Main *UNUSED(bmain),
 {
   SpaceConsole *sc = ptr->data;
   WM_main_add_notifier(NC_SPACE | ND_SPACE_CONSOLE | NA_EDITED, sc);
+}
+
+static void rna_SequenceEditor_update_cache(Main *UNUSED(bmain),
+                                            Scene *scene,
+                                            PointerRNA *UNUSED(ptr))
+{
+  BKE_sequencer_cache_cleanup(scene);
 }
 
 static void rna_Sequencer_view_type_update(Main *UNUSED(bmain),
@@ -2989,8 +2970,6 @@ static void rna_def_space_view3d_shading(BlenderRNA *brna)
   prop = RNA_def_property(srna, "light", PROP_ENUM, PROP_NONE);
   RNA_def_property_enum_sdna(prop, NULL, "light");
   RNA_def_property_enum_items(prop, rna_enum_viewport_lighting_items);
-  RNA_def_property_enum_funcs(
-      prop, "rna_View3DShading_light_get", "rna_View3DShading_light_set", NULL);
   RNA_def_property_ui_text(prop, "Lighting", "Lighting Method for Solid/Texture Viewport Shading");
   RNA_def_property_update(prop, NC_SPACE | ND_SPACE_VIEW3D, NULL);
 
@@ -3133,7 +3112,7 @@ static void rna_def_space_view3d_shading(BlenderRNA *brna)
   RNA_def_property_update(prop, NC_SPACE | ND_SPACE_VIEW3D, NULL);
 
   prop = RNA_def_property(srna, "show_xray_wireframe", PROP_BOOLEAN, PROP_NONE);
-  RNA_def_property_boolean_sdna(prop, NULL, "flag", V3D_SHADING_XRAY_BONE);
+  RNA_def_property_boolean_sdna(prop, NULL, "flag", V3D_SHADING_XRAY_WIREFRAME);
   RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
   RNA_def_property_ui_text(prop, "Show X-Ray", "Show whole scene transparent");
   RNA_def_property_update(prop, NC_SPACE | ND_SPACE_VIEW3D, NULL);
@@ -3231,23 +3210,22 @@ static void rna_def_space_view3d_overlay(BlenderRNA *brna)
 
   prop = RNA_def_property(srna, "show_floor", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_sdna(prop, NULL, "gridflag", V3D_SHOW_FLOOR);
-  RNA_def_property_ui_text(
-      prop, "Display Grid Floor", "Show the ground plane grid in perspective view");
+  RNA_def_property_ui_text(prop, "Display Grid Floor", "Show the ground plane grid");
   RNA_def_property_update(prop, NC_SPACE | ND_SPACE_VIEW3D, NULL);
 
   prop = RNA_def_property(srna, "show_axis_x", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_sdna(prop, NULL, "gridflag", V3D_SHOW_X);
-  RNA_def_property_ui_text(prop, "Display X Axis", "Show the X axis line in perspective view");
+  RNA_def_property_ui_text(prop, "Display X Axis", "Show the X axis line");
   RNA_def_property_update(prop, NC_SPACE | ND_SPACE_VIEW3D, NULL);
 
   prop = RNA_def_property(srna, "show_axis_y", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_sdna(prop, NULL, "gridflag", V3D_SHOW_Y);
-  RNA_def_property_ui_text(prop, "Display Y Axis", "Show the Y axis line in perspective view");
+  RNA_def_property_ui_text(prop, "Display Y Axis", "Show the Y axis line");
   RNA_def_property_update(prop, NC_SPACE | ND_SPACE_VIEW3D, NULL);
 
   prop = RNA_def_property(srna, "show_axis_z", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_sdna(prop, NULL, "gridflag", V3D_SHOW_Z);
-  RNA_def_property_ui_text(prop, "Display Z Axis", "Show the Z axis line in perspective view");
+  RNA_def_property_ui_text(prop, "Display Z Axis", "Show the Z axis line");
   RNA_def_property_update(prop, NC_SPACE | ND_SPACE_VIEW3D, NULL);
 
   prop = RNA_def_property(srna, "grid_scale", PROP_FLOAT, PROP_NONE);
@@ -3282,9 +3260,7 @@ static void rna_def_space_view3d_overlay(BlenderRNA *brna)
   prop = RNA_def_property(srna, "show_outline_selected", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_sdna(prop, NULL, "flag", V3D_SELECT_OUTLINE);
   RNA_def_property_ui_text(
-      prop,
-      "Outline Selected",
-      "Show an outline highlight around selected objects in non-wireframe views");
+      prop, "Outline Selected", "Show an outline highlight around selected objects");
   RNA_def_property_update(prop, NC_SPACE | ND_SPACE_VIEW3D, NULL);
 
   prop = RNA_def_property(srna, "show_object_origins", PROP_BOOLEAN, PROP_NONE);
@@ -3426,20 +3402,17 @@ static void rna_def_space_view3d_overlay(BlenderRNA *brna)
 
   prop = RNA_def_property(srna, "show_edges", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_sdna(prop, NULL, "overlay.edit_flag", V3D_OVERLAY_EDIT_EDGES);
-  RNA_def_property_ui_text(prop, "Draw Edges", "Display selected edges using highlights");
+  RNA_def_property_ui_text(prop, "Draw Edges", "Highlight selected edges");
   RNA_def_property_update(prop, NC_SPACE | ND_SPACE_VIEW3D, NULL);
 
   prop = RNA_def_property(srna, "show_faces", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_sdna(prop, NULL, "overlay.edit_flag", V3D_OVERLAY_EDIT_FACES);
-  RNA_def_property_ui_text(prop, "Draw Faces", "Display shading over all faces");
+  RNA_def_property_ui_text(prop, "Draw Faces", "Highlight selected faces");
   RNA_def_property_update(prop, NC_SPACE | ND_SPACE_VIEW3D, NULL);
 
   prop = RNA_def_property(srna, "show_face_center", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_sdna(prop, NULL, "overlay.edit_flag", V3D_OVERLAY_EDIT_FACE_DOT);
-  RNA_def_property_ui_text(prop,
-                           "Draw Face Center",
-                           "Display face center "
-                           "(when disabled, edges display wider in edge mode)");
+  RNA_def_property_ui_text(prop, "Draw Face Center", "Display face center");
   RNA_def_property_update(prop, NC_SPACE | ND_SPACE_VIEW3D, NULL);
 
   prop = RNA_def_property(srna, "show_edge_crease", PROP_BOOLEAN, PROP_NONE);
@@ -3549,7 +3522,8 @@ static void rna_def_space_view3d_overlay(BlenderRNA *brna)
   prop = RNA_def_property(srna, "texture_paint_mode_opacity", PROP_FLOAT, PROP_FACTOR);
   RNA_def_property_float_sdna(prop, NULL, "overlay.texture_paint_mode_opacity");
   RNA_def_property_float_default(prop, 1.0f);
-  RNA_def_property_ui_text(prop, "Texture Opacity", "Opacity of the texture paint mode overlay");
+  RNA_def_property_ui_text(
+      prop, "Stencil Opacity", "Opacity of the texture paint mode stencil mask overlay");
   RNA_def_property_range(prop, 0.0f, 1.0f);
   RNA_def_property_update(prop, NC_SPACE | ND_SPACE_VIEW3D, NULL);
 
@@ -3835,7 +3809,8 @@ static void rna_def_space_view3d(BlenderRNA *brna)
 
   prop = RNA_def_property(srna, "show_gizmo_light_look_at", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_sdna(prop, NULL, "gizmo_show_light", V3D_GIZMO_SHOW_LIGHT_LOOK_AT);
-  RNA_def_property_ui_text(prop, "Show Light Look-At", "Gizmo to adjust spot and area size");
+  RNA_def_property_ui_text(
+      prop, "Show Light Look-At", "Gizmo to adjust the direction of the light");
   RNA_def_property_update(prop, NC_SPACE | ND_SPACE_VIEW3D, NULL);
 
   /* Camera Object Data. */
@@ -4498,13 +4473,13 @@ static void rna_def_space_sequencer(BlenderRNA *brna)
       "Display Channel",
       "The channel number shown in the image preview. 0 is the result of all strips combined");
   RNA_def_property_range(prop, -5, MAXSEQ);
-  RNA_def_property_update(prop, NC_SPACE | ND_SPACE_SEQUENCER, NULL);
+  RNA_def_property_update(prop, NC_SPACE | ND_SPACE_SEQUENCER, "rna_SequenceEditor_update_cache");
 
   prop = RNA_def_property(srna, "preview_channels", PROP_ENUM, PROP_NONE);
   RNA_def_property_enum_bitflag_sdna(prop, NULL, "flag");
   RNA_def_property_enum_items(prop, preview_channels_items);
   RNA_def_property_ui_text(prop, "Display Channels", "Channels of the preview to draw");
-  RNA_def_property_update(prop, NC_SPACE | ND_SPACE_SEQUENCER, NULL);
+  RNA_def_property_update(prop, NC_SPACE | ND_SPACE_SEQUENCER, "rna_SequenceEditor_update_cache");
 
   prop = RNA_def_property(srna, "waveform_display_type", PROP_ENUM, PROP_NONE);
   RNA_def_property_enum_bitflag_sdna(prop, NULL, "flag");
@@ -4524,7 +4499,7 @@ static void rna_def_space_sequencer(BlenderRNA *brna)
   RNA_def_property_ui_text(prop,
                            "Proxy Render Size",
                            "Display preview using full resolution or different proxy resolutions");
-  RNA_def_property_update(prop, NC_SPACE | ND_SPACE_SEQUENCER, NULL);
+  RNA_def_property_update(prop, NC_SPACE | ND_SPACE_SEQUENCER, "rna_SequenceEditor_update_cache");
 
   /* grease pencil */
   prop = RNA_def_property(srna, "grease_pencil", PROP_POINTER, PROP_NONE);
@@ -5485,6 +5460,8 @@ static void rna_def_space_filebrowser(BlenderRNA *brna)
   srna = RNA_def_struct(brna, "SpaceFileBrowser", "Space");
   RNA_def_struct_sdna(srna, "SpaceFile");
   RNA_def_struct_ui_text(srna, "Space File Browser", "File browser space data");
+
+  rna_def_space_generic_show_region_toggles(srna, (1 << RGN_TYPE_TOOLS) | (1 << RGN_TYPE_UI));
 
   prop = RNA_def_property(srna, "params", PROP_POINTER, PROP_NONE);
   RNA_def_property_pointer_sdna(prop, NULL, "params");

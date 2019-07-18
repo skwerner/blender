@@ -65,6 +65,7 @@
 #endif
 
 #include "DEG_depsgraph.h"
+#include "DEG_depsgraph_build.h"
 
 /* own include */
 #include "sequencer_intern.h"
@@ -314,6 +315,7 @@ static void sequencer_add_apply_replace_sel(bContext *C, wmOperator *op, Sequenc
 /* add scene operator */
 static int sequencer_add_scene_strip_exec(bContext *C, wmOperator *op)
 {
+  Main *bmain = CTX_data_main(C);
   Scene *scene = CTX_data_scene(C);
   Editing *ed = BKE_sequencer_editing_get(scene, true);
 
@@ -344,16 +346,15 @@ static int sequencer_add_scene_strip_exec(bContext *C, wmOperator *op)
   BLI_strncpy(seq->name + 2, sce_seq->id.name + 2, sizeof(seq->name) - 2);
   BKE_sequence_base_unique_name_recursive(&ed->seqbase, seq);
 
-  seq->scene_sound = BKE_sound_scene_add_scene_sound(
-      scene, seq, start_frame, start_frame + seq->len, 0);
-
   BKE_sequence_calc_disp(scene, seq);
   BKE_sequencer_sort(scene);
 
   sequencer_add_apply_replace_sel(C, op, seq);
   sequencer_add_apply_overlap(C, op, seq);
+  BKE_sequence_invalidate_cache_composite(scene, seq);
 
   DEG_id_tag_update(&scene->id, ID_RECALC_SEQUENCER_STRIPS);
+  DEG_relations_tag_update(bmain);
   WM_event_add_notifier(C, NC_SCENE | ND_SEQUENCER, scene);
 
   return OPERATOR_FINISHED;
@@ -435,6 +436,7 @@ static int sequencer_add_movieclip_strip_exec(bContext *C, wmOperator *op)
 
   sequencer_add_apply_replace_sel(C, op, seq);
   sequencer_add_apply_overlap(C, op, seq);
+  BKE_sequence_invalidate_cache_composite(scene, seq);
 
   DEG_id_tag_update(&scene->id, ID_RECALC_SEQUENCER_STRIPS);
   WM_event_add_notifier(C, NC_SCENE | ND_SEQUENCER, scene);
@@ -518,6 +520,7 @@ static int sequencer_add_mask_strip_exec(bContext *C, wmOperator *op)
 
   sequencer_add_apply_replace_sel(C, op, seq);
   sequencer_add_apply_overlap(C, op, seq);
+  BKE_sequence_invalidate_cache_composite(scene, seq);
 
   DEG_id_tag_update(&scene->id, ID_RECALC_SEQUENCER_STRIPS);
   WM_event_add_notifier(C, NC_SCENE | ND_SEQUENCER, scene);
@@ -622,13 +625,14 @@ static int sequencer_add_generic_strip_exec(bContext *C, wmOperator *op, SeqLoad
     }
   }
 
-  if (seq_load.tot_success == 0) {
-    BKE_reportf(op->reports, RPT_ERROR, "File '%s' could not be loaded", seq_load.path);
-    return OPERATOR_CANCELLED;
-  }
-
   if (op->customdata) {
     MEM_freeN(op->customdata);
+  }
+
+  if (seq_load.tot_success == 0) {
+    BKE_reportf(op->reports, RPT_ERROR, "File '%s' could not be loaded", seq_load.path);
+
+    return OPERATOR_CANCELLED;
   }
 
   BKE_sequencer_sort(scene);
@@ -960,6 +964,7 @@ static int sequencer_add_image_strip_exec(bContext *C, wmOperator *op)
   if (op->customdata) {
     MEM_freeN(op->customdata);
   }
+  BKE_sequence_invalidate_cache_composite(scene, seq);
 
   DEG_id_tag_update(&scene->id, ID_RECALC_SEQUENCER_STRIPS);
   WM_event_add_notifier(C, NC_SCENE | ND_SEQUENCER, scene);
@@ -1110,6 +1115,7 @@ static int sequencer_add_effect_strip_exec(bContext *C, wmOperator *op)
   /* not sure if this is needed with update_changed_seq_and_deps.
    * it was NOT called in blender 2.4x, but wont hurt */
   BKE_sequencer_sort(scene);
+  BKE_sequence_invalidate_cache_composite(scene, seq);
 
   DEG_id_tag_update(&scene->id, ID_RECALC_SEQUENCER_STRIPS);
   WM_event_add_notifier(C, NC_SCENE | ND_SEQUENCER, scene);

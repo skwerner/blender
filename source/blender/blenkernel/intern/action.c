@@ -729,6 +729,21 @@ void BKE_pose_channels_hash_free(bPose *pose)
   }
 }
 
+static void pose_channels_remove_internal_links(Object *ob, bPoseChannel *unlinked_pchan)
+{
+  LISTBASE_FOREACH (bPoseChannel *, pchan, &ob->pose->chanbase) {
+    if (pchan->bbone_prev == unlinked_pchan) {
+      pchan->bbone_prev = NULL;
+    }
+    if (pchan->bbone_next == unlinked_pchan) {
+      pchan->bbone_next = NULL;
+    }
+    if (pchan->custom_tx == unlinked_pchan) {
+      pchan->custom_tx = NULL;
+    }
+  }
+}
+
 /**
  * Selectively remove pose channels.
  */
@@ -747,6 +762,7 @@ void BKE_pose_channels_remove(Object *ob,
       if (filter_fn(pchan->name, user_data)) {
         /* Bone itself is being removed */
         BKE_pose_channel_free(pchan);
+        pose_channels_remove_internal_links(ob, pchan);
         if (ob->pose->chanhash) {
           BLI_ghash_remove(ob->pose->chanhash, pchan->name, NULL, NULL);
         }
@@ -1522,8 +1538,8 @@ void what_does_obaction(
   workob->constraints.first = ob->constraints.first;
   workob->constraints.last = ob->constraints.last;
 
-  workob->pose =
-      pose; /* need to set pose too, since this is used for both types of Action Constraint */
+  /* Need to set pose too, since this is used for both types of Action Constraint. */
+  workob->pose = pose;
   if (pose) {
     /* This function is most likely to be used with a temporary pose with a single bone in there.
      * For such cases it makes no sense to create hash since it'll only waste CPU ticks on memory

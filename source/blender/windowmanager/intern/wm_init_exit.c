@@ -166,7 +166,7 @@ void WM_init_state_start_with_console_set(bool value)
 /**
  * Since we cannot know in advance if we will require the draw manager
  * context when starting blender in background mode (specially true with
- * scripts) we deferre the ghost initialization the most as possible
+ * scripts) we defer the ghost initialization the most as possible
  * so that it does not break anything that can run in headless mode (as in
  * without display server attached).
  */
@@ -267,7 +267,7 @@ void WM_init(bContext *C, int argc, const char **argv)
 
   BLT_lang_init();
   /* Must call first before doing any '.blend' file reading,
-   * since versionning code may create new IDs... See T57066. */
+   * since versioning code may create new IDs... See T57066. */
   BLT_lang_set(NULL);
 
   /* Init icons before reading .blend files for preview icons, which can

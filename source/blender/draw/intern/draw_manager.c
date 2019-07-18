@@ -88,6 +88,7 @@
 #include "engines/basic/basic_engine.h"
 #include "engines/workbench/workbench_engine.h"
 #include "engines/external/external_engine.h"
+#include "engines/gpencil/gpencil_engine.h"
 
 #include "GPU_context.h"
 
@@ -206,6 +207,8 @@ bool DRW_object_use_hide_faces(const struct Object *ob)
     const Mesh *me = ob->data;
 
     switch (ob->mode) {
+      case OB_MODE_SCULPT:
+        return true;
       case OB_MODE_TEXTURE_PAINT:
         return (me->editflag & ME_EDIT_PAINT_FACE_SEL) != 0;
       case OB_MODE_VERTEX_PAINT:
@@ -849,7 +852,7 @@ void **DRW_view_layer_engine_data_ensure(DrawEngineType *engine_type,
  * \{ */
 
 /* Used for DRW_drawdata_from_id()
- * All ID-datablocks which have their own 'local' DrawData
+ * All ID-data-blocks which have their own 'local' DrawData
  * should have the same arrangement in their structs.
  */
 typedef struct IdDdtTemplate {
@@ -1494,6 +1497,7 @@ void DRW_notify_view_update(const DRWUpdateContext *update_ctx)
     };
 
     drw_engines_enable(view_layer, engine_type, gpencil_engine_needed);
+    drw_engines_data_validate();
 
     for (LinkData *link = DST.enabled_engines.first; link; link = link->next) {
       DrawEngineType *draw_engine = link->data;
@@ -1557,7 +1561,6 @@ void DRW_draw_render_loop_ex(struct Depsgraph *depsgraph,
   RegionView3D *rv3d = ar->regiondata;
   const bool do_annotations = (((v3d->flag2 & V3D_SHOW_ANNOTATION) != 0) &&
                                ((v3d->flag2 & V3D_HIDE_OVERLAYS) == 0));
-  const bool do_camera_frame = !DST.options.is_image_render;
 
   DST.draw_ctx.evil_C = evil_C;
   DST.viewport = viewport;
@@ -1590,7 +1593,6 @@ void DRW_draw_render_loop_ex(struct Depsgraph *depsgraph,
 
   /* Get list of enabled engines */
   drw_engines_enable(view_layer, engine_type, gpencil_engine_needed);
-
   drw_engines_data_validate();
 
   /* Update ubos */
@@ -1650,23 +1652,7 @@ void DRW_draw_render_loop_ex(struct Depsgraph *depsgraph,
 
   drw_engines_draw_background();
 
-  /* WIP, single image drawn over the camera view (replace) */
-  bool do_bg_image = false;
-  if (rv3d->persp == RV3D_CAMOB) {
-    Object *cam_ob = v3d->camera;
-    if (cam_ob && cam_ob->type == OB_CAMERA) {
-      Camera *cam = cam_ob->data;
-      if (!BLI_listbase_is_empty(&cam->bg_images)) {
-        do_bg_image = true;
-      }
-    }
-  }
-
   GPU_framebuffer_bind(DST.default_framebuffer);
-
-  if (do_bg_image) {
-    ED_view3d_draw_bgpic_test(scene, depsgraph, ar, v3d, false, do_camera_frame);
-  }
 
   DRW_draw_callbacks_pre_scene();
   if (DST.draw_ctx.evil_C) {
@@ -1691,7 +1677,9 @@ void DRW_draw_render_loop_ex(struct Depsgraph *depsgraph,
   DRW_state_reset();
 
   if (DST.draw_ctx.evil_C) {
+    GPU_depth_test(false);
     ED_region_draw_cb_draw(DST.draw_ctx.evil_C, DST.draw_ctx.ar, REGION_DRAW_POST_VIEW);
+    GPU_depth_test(true);
     /* Callback can be nasty and do whatever they want with the state.
      * Don't trust them! */
     DRW_state_reset();
@@ -1731,10 +1719,6 @@ void DRW_draw_render_loop_ex(struct Depsgraph *depsgraph,
   }
 
   DRW_stats_reset();
-
-  if (do_bg_image) {
-    ED_view3d_draw_bgpic_test(scene, depsgraph, ar, v3d, true, do_camera_frame);
-  }
 
   if (G.debug_value > 20 && G.debug_value < 30) {
     GPU_depth_test(false);
@@ -1935,6 +1919,13 @@ void DRW_render_gpencil(struct RenderEngine *engine, struct Depsgraph *depsgraph
   DST.buffer_finish_called = false;
 }
 
+static void drw_view_reset(void)
+{
+  DST.view_default = NULL;
+  DST.view_active = NULL;
+  DST.view_previous = NULL;
+}
+
 void DRW_render_to_image(RenderEngine *engine, struct Depsgraph *depsgraph)
 {
   Scene *scene = DEG_get_evaluated_scene(depsgraph);
@@ -1999,6 +1990,8 @@ void DRW_render_to_image(RenderEngine *engine, struct Depsgraph *depsgraph)
     BLI_rcti_init(&render_rect, 0, size[0], 0, size[1]);
   }
 
+  /* Set the default Blender draw state */
+  GPU_state_init();
   /* Reset state before drawing */
   DRW_state_reset();
 
@@ -2015,15 +2008,12 @@ void DRW_render_to_image(RenderEngine *engine, struct Depsgraph *depsgraph)
   for (RenderView *render_view = render_result->views.first; render_view != NULL;
        render_view = render_view->next) {
     RE_SetActiveRenderView(render, render_view->name);
+    drw_view_reset();
     engine_type->draw_engine->render_to_image(data, engine, render_layer, &render_rect);
     /* grease pencil: render result is merged in the previous render result. */
     if (DRW_render_check_grease_pencil(depsgraph)) {
       DRW_state_reset();
-      /* HACK: this is just for sanity and not trigger asserts. */
-      DST.view_default = NULL;
-      DST.view_active = NULL;
-      DST.view_previous = NULL;
-
+      drw_view_reset();
       DRW_render_gpencil_to_image(engine, render_layer, &render_rect);
     }
     DST.buffer_finish_called = false;
@@ -2287,6 +2277,7 @@ void DRW_draw_select_loop(struct Depsgraph *depsgraph,
     drw_engines_enable_from_overlays(v3d->overlay.flag);
     drw_engines_enable_from_object_mode();
   }
+  drw_engines_data_validate();
 
   /* Setup viewport */
 
@@ -2389,6 +2380,13 @@ void DRW_draw_select_loop(struct Depsgraph *depsgraph,
     if (!select_pass_fn(DRW_SELECT_PASS_POST, select_pass_user_data)) {
       break;
     }
+  }
+
+  /* TODO: GPXX Workaround for grease pencil selection while draw manager support a callback from
+   * scene finish */
+  void *data = GPU_viewport_engine_data_get(DST.viewport, &draw_engine_gpencil_type);
+  if (data != NULL) {
+    DRW_gpencil_free_runtime_data(data);
   }
 
   DRW_state_lock(0);
@@ -2514,6 +2512,7 @@ void DRW_draw_depth_loop(struct Depsgraph *depsgraph,
     if (DRW_state_draw_support()) {
       drw_engines_enable_from_object_mode();
     }
+    drw_engines_data_validate();
   }
 
   drw_draw_depth_loop_imp();
@@ -2561,7 +2560,10 @@ void DRW_draw_depth_loop_gpencil(struct Depsgraph *depsgraph,
   };
 
   use_drw_engine(&draw_engine_gpencil_type);
+  drw_engines_data_validate();
+
   drw_draw_depth_loop_imp();
+
   drw_engines_disable();
 
 #ifdef DEBUG
@@ -2602,6 +2604,8 @@ void DRW_draw_depth_object(ARegion *ar, GPUViewport *viewport, Object *object)
     ED_view3d_clipping_local(rv3d, object->obmat);
     world_clip_planes = rv3d->clip_local;
   }
+
+  drw_batch_cache_validate(object);
 
   switch (object->type) {
     case OB_MESH: {
@@ -2727,6 +2731,14 @@ void DRW_draw_select_id_object(Scene *scene,
   if (select_mode == -1) {
     select_mode = ts->selectmode;
   }
+
+  /* Init the scene of the draw context. When using face dot selection on
+   * when the subsurf modifier is active on the cage, the scene needs to be
+   * valid. It is read from the context in the
+   * `DRW_mesh_batch_cache_create_requested` and used in the `isDisabled`
+   * method of the SubSurfModifier. */
+  DRWContextState *draw_ctx = &DST.draw_ctx;
+  draw_ctx->scene = scene;
 
   GPU_matrix_mul(ob->obmat);
 

@@ -22,7 +22,7 @@
  */
 
 /* Enable special; trickery to treat nested owned IDs (such as nodetree of
- * material) to be handled in same way as "real" datablocks, even tho some
+ * material) to be handled in same way as "real" data-blocks, even tho some
  * internal BKE routines doesn't treat them like that.
  *
  * TODO(sergey): Re-evaluate that after new ID handling is in place. */
@@ -63,6 +63,7 @@ extern "C" {
 #include "DNA_sound_types.h"
 #include "DNA_object_types.h"
 #include "DNA_particle_types.h"
+#include "DNA_rigidbody_types.h"
 
 #include "DRW_engine.h"
 
@@ -86,6 +87,7 @@ extern "C" {
 #include "BKE_library_query.h"
 #include "BKE_modifier.h"
 #include "BKE_object.h"
+#include "BKE_pointcache.h"
 #include "BKE_sequencer.h"
 #include "BKE_sound.h"
 }
@@ -496,7 +498,7 @@ BLI_INLINE bool check_datablock_expanded(const ID *id_cow)
   return (id_cow->name[0] != '\0');
 }
 
-/* Those are datablocks which are not covered by dependency graph and hence
+/* Those are data-blocks which are not covered by dependency graph and hence
  * does not need any remapping or anything.
  *
  * TODO(sergey): How to make it more robust for the future, so we don't have
@@ -576,6 +578,7 @@ void update_armature_edit_mode_pointers(const Depsgraph * /*depsgraph*/,
   const bArmature *armature_orig = (const bArmature *)id_orig;
   bArmature *armature_cow = (bArmature *)id_cow;
   armature_cow->edbo = armature_orig->edbo;
+  armature_cow->act_edbone = armature_orig->act_edbone;
 }
 
 void update_curve_edit_mode_pointers(const Depsgraph * /*depsgraph*/,
@@ -682,10 +685,29 @@ void set_particle_system_modifiers_loaded(Object *object_cow)
   }
 }
 
-void update_particles_after_copy(const Object *object_orig, Object *object_cow)
+void reset_particle_system_edit_eval(const Depsgraph *depsgraph, Object *object_cow)
+{
+  /* Inactive (and render) dependency graphs are living in own little bubble, should not care about
+   * edit mode at all. */
+  if (!DEG_is_active(reinterpret_cast<const ::Depsgraph *>(depsgraph))) {
+    return;
+  }
+  LISTBASE_FOREACH (ParticleSystem *, psys, &object_cow->particlesystem) {
+    ParticleSystem *orig_psys = psys->orig_psys;
+    if (orig_psys->edit != NULL) {
+      orig_psys->edit->psys_eval = NULL;
+      orig_psys->edit->psmd_eval = NULL;
+    }
+  }
+}
+
+void update_particles_after_copy(const Depsgraph *depsgraph,
+                                 const Object *object_orig,
+                                 Object *object_cow)
 {
   update_particle_system_orig_pointers(object_orig, object_cow);
   set_particle_system_modifiers_loaded(object_cow);
+  reset_particle_system_edit_eval(depsgraph, object_cow);
 }
 
 void update_pose_orig_pointers(const bPose *pose_orig, bPose *pose_cow)
@@ -736,7 +758,7 @@ void update_animation_data_after_copy(const ID *id_orig, ID *id_cow)
 /* Do some special treatment of data transfer from original ID to it's
  * CoW complementary part.
  *
- * Only use for the newly created CoW datablocks. */
+ * Only use for the newly created CoW data-blocks. */
 void update_id_after_copy(const Depsgraph *depsgraph,
                           const IDNode *id_node,
                           const ID *id_orig,
@@ -764,7 +786,7 @@ void update_id_after_copy(const Depsgraph *depsgraph,
         }
         BKE_pose_pchan_index_rebuild(object_cow->pose);
       }
-      update_particles_after_copy(object_orig, object_cow);
+      update_particles_after_copy(depsgraph, object_orig, object_cow);
       update_modifiers_orig_pointers(object_orig, object_cow);
       break;
     }
@@ -784,7 +806,7 @@ void update_id_after_copy(const Depsgraph *depsgraph,
   BKE_animsys_update_driver_array(id_cow);
 }
 
-/* This callback is used to validate that all nested ID datablocks are
+/* This callback is used to validate that all nested ID data-blocks are
  * properly expanded. */
 int foreach_libblock_validate_callback(void *user_data,
                                        ID * /*id_self*/,
@@ -1010,6 +1032,7 @@ class SceneBackup {
   void *playback_handle;
   void *sound_scrub_handle;
   void *speaker_handles;
+  float rigidbody_last_time;
 
   SequencerBackup sequencer_backup;
 };
@@ -1025,6 +1048,7 @@ void SceneBackup::reset()
   playback_handle = NULL;
   sound_scrub_handle = NULL;
   speaker_handles = NULL;
+  rigidbody_last_time = -1;
 }
 
 void SceneBackup::init_from_scene(Scene *scene)
@@ -1033,6 +1057,10 @@ void SceneBackup::init_from_scene(Scene *scene)
   playback_handle = scene->playback_handle;
   sound_scrub_handle = scene->sound_scrub_handle;
   speaker_handles = scene->speaker_handles;
+
+  if (scene->rigidbody_world != NULL) {
+    rigidbody_last_time = scene->rigidbody_world->ltime;
+  }
 
   /* Clear pointers stored in the scene, so they are not freed when copied-on-written datablock
    * is freed for re-allocation. */
@@ -1050,6 +1078,10 @@ void SceneBackup::restore_to_scene(Scene *scene)
   scene->playback_handle = playback_handle;
   scene->sound_scrub_handle = sound_scrub_handle;
   scene->speaker_handles = speaker_handles;
+
+  if (scene->rigidbody_world != NULL) {
+    scene->rigidbody_world->ltime = rigidbody_last_time;
+  }
 
   sequencer_backup.restore_to_scene(scene);
 
@@ -1310,6 +1342,50 @@ void ObjectRuntimeBackup::restore_pose_channel_runtime_data(Object *object)
   }
 }
 
+/* Backup of movie clip runtime data. */
+
+class MovieClipBackup {
+ public:
+  MovieClipBackup();
+
+  void reset();
+
+  void init_from_movieclip(MovieClip *movieclip);
+  void restore_to_movieclip(MovieClip *movieclip);
+
+  struct anim *anim;
+  struct MovieClipCache *cache;
+};
+
+MovieClipBackup::MovieClipBackup()
+{
+  reset();
+}
+
+void MovieClipBackup::reset()
+{
+  anim = NULL;
+  cache = NULL;
+}
+
+void MovieClipBackup::init_from_movieclip(MovieClip *movieclip)
+{
+  anim = movieclip->anim;
+  cache = movieclip->cache;
+  /* Clear pointers stored in the movie clip, so they are not freed when copied-on-written
+   * datablock is freed for re-allocation. */
+  movieclip->anim = NULL;
+  movieclip->cache = NULL;
+}
+
+void MovieClipBackup::restore_to_movieclip(MovieClip *movieclip)
+{
+  movieclip->anim = anim;
+  movieclip->cache = cache;
+
+  reset();
+}
+
 class RuntimeBackup {
  public:
   RuntimeBackup() : drawdata_ptr(NULL)
@@ -1328,6 +1404,7 @@ class RuntimeBackup {
   ObjectRuntimeBackup object_backup;
   DrawDataList drawdata_backup;
   DrawDataList *drawdata_ptr;
+  MovieClipBackup movieclip_backup;
 };
 
 void RuntimeBackup::init_from_id(ID *id)
@@ -1345,6 +1422,9 @@ void RuntimeBackup::init_from_id(ID *id)
       break;
     case ID_SO:
       sound_backup.init_from_sound(reinterpret_cast<bSound *>(id));
+      break;
+    case ID_MC:
+      movieclip_backup.init_from_movieclip(reinterpret_cast<MovieClip *>(id));
       break;
     default:
       break;
@@ -1370,6 +1450,9 @@ void RuntimeBackup::restore_to_id(ID *id)
       break;
     case ID_SO:
       sound_backup.restore_to_sound(reinterpret_cast<bSound *>(id));
+      break;
+    case ID_MC:
+      movieclip_backup.restore_to_movieclip(reinterpret_cast<MovieClip *>(id));
       break;
     default:
       break;
@@ -1483,10 +1566,10 @@ void discard_edit_mode_pointers(ID *id_cow)
 
 }  // namespace
 
-/* Free content of the CoW datablock
+/* Free content of the CoW data-block
  * Notes:
- * - Does not recurs into nested ID datablocks.
- * - Does not free datablock itself. */
+ * - Does not recurs into nested ID data-blocks.
+ * - Does not free data-block itself. */
 void deg_free_copy_on_write_datablock(ID *id_cow)
 {
   if (!check_datablock_expanded(id_cow)) {

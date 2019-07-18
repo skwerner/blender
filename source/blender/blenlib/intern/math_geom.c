@@ -506,7 +506,7 @@ float dist_to_line_v3(const float p[3], const float l1[3], const float l2[3])
  *
  * \param axis_ref: used when v1,v2,v3 form a line and to check if the corner is concave/convex.
  *
- * \note the distance from \a v1 & \a v3 to \a v2 doesnt matter
+ * \note the distance from \a v1 & \a v3 to \a v2 doesn't matter
  * (it just defines the planes).
  *
  * \return the lowest squared distance to either of the planes.
@@ -2532,7 +2532,7 @@ bool isect_sweeping_sphere_tri_v3(const float p1[3],
   }
 
   /*---test edges---*/
-  sub_v3_v3v3(e3, v2, v1); /* wasnt yet calculated */
+  sub_v3_v3v3(e3, v2, v1); /* wasn't yet calculated */
 
   /*e1*/
   sub_v3_v3v3(bv, v0, p1);

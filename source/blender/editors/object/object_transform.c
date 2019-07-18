@@ -53,6 +53,7 @@
 #include "BKE_multires.h"
 #include "BKE_armature.h"
 #include "BKE_lattice.h"
+#include "BKE_library.h"
 #include "BKE_tracking.h"
 #include "BKE_gpencil.h"
 
@@ -460,11 +461,12 @@ void OBJECT_OT_origin_clear(wmOperatorType *ot)
 
 /* use this when the loc/size/rot of the parent has changed but the children
  * should stay in the same place, e.g. for apply-size-rot or object center */
-static void ignore_parent_tx(const bContext *C, Main *bmain, Scene *scene, Object *ob)
+static void ignore_parent_tx(Main *bmain, Depsgraph *depsgraph, Scene *scene, Object *ob)
 {
   Object workob;
   Object *ob_child;
-  Depsgraph *depsgraph = CTX_data_depsgraph(C);
+
+  Scene *scene_eval = DEG_get_evaluated_scene(depsgraph);
 
   /* a change was made, adjust the children to compensate */
   for (ob_child = bmain->objects.first; ob_child; ob_child = ob_child->id.next) {
@@ -475,8 +477,65 @@ static void ignore_parent_tx(const bContext *C, Main *bmain, Scene *scene, Objec
       invert_m4_m4(ob_child->parentinv, workob.obmat);
       /* Copy result of BKE_object_apply_mat4(). */
       BKE_object_transform_copy(ob_child, ob_child_eval);
+      /* Make sure evaluated object is in a consistent state with the original one.
+       * It might be needed for applying transform on its children. */
+      copy_m4_m4(ob_child_eval->parentinv, ob_child->parentinv);
+      BKE_object_eval_transform_all(depsgraph, scene_eval, ob_child_eval);
+      /* Tag for update.
+       * This is because parent matrix did change, so in theory the child object might now be
+       * evaluated to a different location in another editing context. */
+      DEG_id_tag_update(&ob_child->id, ID_RECALC_TRANSFORM);
     }
   }
+}
+
+static void append_sorted_object_parent_hierarchy(Object *root_object,
+                                                  Object *object,
+                                                  Object **sorted_objects,
+                                                  int *object_index)
+{
+  if (object->parent != NULL && object->parent != root_object) {
+    append_sorted_object_parent_hierarchy(
+        root_object, object->parent, sorted_objects, object_index);
+  }
+  if (object->id.tag & LIB_TAG_DOIT) {
+    sorted_objects[*object_index] = object;
+    (*object_index)++;
+    object->id.tag &= ~LIB_TAG_DOIT;
+  }
+}
+
+static Object **sorted_selected_editable_objects(bContext *C, int *r_num_objects)
+{
+  Main *bmain = CTX_data_main(C);
+
+  /* Count all objects, but also tag all the selected ones. */
+  BKE_main_id_tag_all(bmain, LIB_TAG_DOIT, false);
+  int num_objects = 0;
+  CTX_DATA_BEGIN (C, Object *, object, selected_editable_objects) {
+    object->id.tag |= LIB_TAG_DOIT;
+    num_objects++;
+  }
+  CTX_DATA_END;
+  if (num_objects == 0) {
+    *r_num_objects = 0;
+    return NULL;
+  }
+
+  /* Append all the objects. */
+  Object **sorted_objects = MEM_malloc_arrayN(num_objects, sizeof(Object *), "sorted objects");
+  int object_index = 0;
+  CTX_DATA_BEGIN (C, Object *, object, selected_editable_objects) {
+    if ((object->id.tag & LIB_TAG_DOIT) == 0) {
+      continue;
+    }
+    append_sorted_object_parent_hierarchy(object, object, sorted_objects, &object_index);
+  }
+  CTX_DATA_END;
+
+  *r_num_objects = num_objects;
+
+  return sorted_objects;
 }
 
 static int apply_objects_internal(bContext *C,
@@ -488,7 +547,7 @@ static int apply_objects_internal(bContext *C,
 {
   Main *bmain = CTX_data_main(C);
   Scene *scene = CTX_data_scene(C);
-  Depsgraph *depsgraph = CTX_data_depsgraph(C);
+  Depsgraph *depsgraph = CTX_data_evaluated_depsgraph(C);
   float rsmat[3][3], obmat[3][3], iobmat[3][3], mat[4][4], scale;
   bool changed = true;
 
@@ -622,7 +681,14 @@ static int apply_objects_internal(bContext *C,
   changed = false;
 
   /* now execute */
-  CTX_DATA_BEGIN (C, Object *, ob, selected_editable_objects) {
+  int num_objects;
+  Object **objects = sorted_selected_editable_objects(C, &num_objects);
+  if (objects == NULL) {
+    return OPERATOR_CANCELLED;
+  }
+
+  for (int object_index = 0; object_index < num_objects; ++object_index) {
+    Object *ob = objects[object_index];
 
     /* calculate rotation/scale matrix */
     if (apply_scale && apply_rot) {
@@ -793,13 +859,14 @@ static int apply_objects_internal(bContext *C,
       BKE_pose_where_is(depsgraph, scene, ob_eval);
     }
 
-    ignore_parent_tx(C, bmain, scene, ob);
+    ignore_parent_tx(bmain, depsgraph, scene, ob);
 
     DEG_id_tag_update(&ob->id, ID_RECALC_TRANSFORM | ID_RECALC_GEOMETRY);
 
     changed = true;
   }
-  CTX_DATA_END;
+
+  MEM_freeN(objects);
 
   if (!changed) {
     BKE_report(reports, RPT_WARNING, "Objects have no data to transform");
@@ -908,15 +975,11 @@ static int object_origin_set_exec(bContext *C, wmOperator *op)
   Scene *scene = CTX_data_scene(C);
   Object *obact = CTX_data_active_object(C);
   Object *obedit = CTX_data_edit_object(C);
-  Depsgraph *depsgraph = CTX_data_depsgraph(C);
+  Depsgraph *depsgraph = CTX_data_evaluated_depsgraph(C);
   Object *tob;
   float cent[3], cent_neg[3], centn[3];
   const float *cursor = scene->cursor.location;
   int centermode = RNA_enum_get(op->ptr, "type");
-
-  ListBase ctx_data_list;
-  CollectionPointerLink *ctx_ob;
-  CollectionPointerLink *ctx_ob_act = NULL;
 
   /* keep track of what is changed */
   int tot_change = 0, tot_lib_error = 0, tot_multiuser_arm_error = 0;
@@ -986,21 +1049,22 @@ static int object_origin_set_exec(bContext *C, wmOperator *op)
     }
   }
 
-  CTX_data_selected_editable_objects(C, &ctx_data_list);
+  int num_objects;
+  Object **objects = sorted_selected_editable_objects(C, &num_objects);
+  if (objects == NULL) {
+    return OPERATOR_CANCELLED;
+  }
 
   /* reset flags */
-  for (ctx_ob = ctx_data_list.first; ctx_ob; ctx_ob = ctx_ob->next) {
-    Object *ob = ctx_ob->ptr.data;
+  for (int object_index = 0; object_index < num_objects; ++object_index) {
+    Object *ob = objects[object_index];
     ob->flag &= ~OB_DONE;
 
     /* move active first */
     if (ob == obact) {
-      ctx_ob_act = ctx_ob;
+      memmove(&objects[1], objects, object_index * sizeof(Object *));
+      objects[0] = ob;
     }
-  }
-
-  if (ctx_ob_act) {
-    BLI_listbase_rotate_first(&ctx_data_list, (LinkData *)ctx_ob_act);
   }
 
   for (tob = bmain->objects.first; tob; tob = tob->id.next) {
@@ -1012,8 +1076,8 @@ static int object_origin_set_exec(bContext *C, wmOperator *op)
     }
   }
 
-  for (ctx_ob = ctx_data_list.first; ctx_ob; ctx_ob = ctx_ob->next) {
-    Object *ob = ctx_ob->ptr.data;
+  for (int object_index = 0; object_index < num_objects; ++object_index) {
+    Object *ob = objects[object_index];
 
     if ((ob->flag & OB_DONE) == 0) {
       bool do_inverse_offset = false;
@@ -1163,10 +1227,12 @@ static int object_origin_set_exec(bContext *C, wmOperator *op)
           arm->id.tag |= LIB_TAG_DOIT;
           /* do_inverse_offset = true; */ /* docenter_armature() handles this */
 
-          BKE_object_where_is_calc(depsgraph, scene, ob);
-          BKE_pose_where_is(depsgraph, scene, ob); /* needed for bone parents */
+          Object *ob_eval = DEG_get_evaluated_object(depsgraph, ob);
+          BKE_object_transform_copy(ob_eval, ob);
+          BKE_object_where_is_calc(depsgraph, scene, ob_eval);
+          BKE_pose_where_is(depsgraph, scene, ob_eval); /* needed for bone parents */
 
-          ignore_parent_tx(C, bmain, scene, ob);
+          ignore_parent_tx(bmain, depsgraph, scene, ob);
 
           if (obedit) {
             break;
@@ -1288,7 +1354,6 @@ static int object_origin_set_exec(bContext *C, wmOperator *op)
 
       /* offset other selected objects */
       if (do_inverse_offset && (centermode != GEOMETRY_TO_ORIGIN)) {
-        CollectionPointerLink *ctx_link_other;
         float obmat[4][4];
 
         /* was the object data modified
@@ -1300,21 +1365,23 @@ static int object_origin_set_exec(bContext *C, wmOperator *op)
 
         add_v3_v3(ob->loc, centn);
 
-        BKE_object_where_is_calc(depsgraph, scene, ob);
+        Object *ob_eval = DEG_get_evaluated_object(depsgraph, ob);
+        BKE_object_transform_copy(ob_eval, ob);
+        BKE_object_where_is_calc(depsgraph, scene, ob_eval);
         if (ob->type == OB_ARMATURE) {
-          BKE_pose_where_is(depsgraph, scene, ob); /* needed for bone parents */
+          /* needed for bone parents */
+          BKE_pose_where_is(depsgraph, scene, ob_eval);
         }
 
-        ignore_parent_tx(C, bmain, scene, ob);
+        ignore_parent_tx(bmain, depsgraph, scene, ob);
 
         /* other users? */
         // CTX_DATA_BEGIN (C, Object *, ob_other, selected_editable_objects)
         //{
 
         /* use existing context looper */
-        for (ctx_link_other = ctx_data_list.first; ctx_link_other;
-             ctx_link_other = ctx_link_other->next) {
-          Object *ob_other = ctx_link_other->ptr.data;
+        for (int other_object_index = 0; other_object_index < num_objects; ++other_object_index) {
+          Object *ob_other = objects[other_object_index];
 
           if ((ob_other->flag & OB_DONE) == 0 &&
               ((ob->data && (ob->data == ob_other->data)) ||
@@ -1326,19 +1393,21 @@ static int object_origin_set_exec(bContext *C, wmOperator *op)
             mul_v3_mat3_m4v3(centn, ob_other->obmat, cent); /* omit translation part */
             add_v3_v3(ob_other->loc, centn);
 
-            BKE_object_where_is_calc(depsgraph, scene, ob_other);
+            Object *ob_other_eval = DEG_get_evaluated_object(depsgraph, ob_other);
+            BKE_object_transform_copy(ob_other_eval, ob_other);
+            BKE_object_where_is_calc(depsgraph, scene, ob_other_eval);
             if (ob_other->type == OB_ARMATURE) {
               /* needed for bone parents */
-              BKE_pose_where_is(depsgraph, scene, ob_other);
+              BKE_pose_where_is(depsgraph, scene, ob_other_eval);
             }
-            ignore_parent_tx(C, bmain, scene, ob_other);
+            ignore_parent_tx(bmain, depsgraph, scene, ob_other);
           }
         }
         // CTX_DATA_END;
       }
     }
   }
-  BLI_freelistN(&ctx_data_list);
+  MEM_freeN(objects);
 
   for (tob = bmain->objects.first; tob; tob = tob->id.next) {
     if (tob->data && (((ID *)tob->data)->tag & LIB_TAG_DOIT)) {
@@ -1438,7 +1507,7 @@ void OBJECT_OT_origin_set(wmOperatorType *ot)
 /* -------------------------------------------------------------------- */
 /** \name Transform Axis Target
  *
- * Note this is an experemental operator to point lights/cameras at objects.
+ * Note this is an experimental operator to point lights/cameras at objects.
  * We may re-work how this behaves based on user feedback.
  * - campbell.
  * \{ */

@@ -65,6 +65,7 @@
 #include "UI_interface.h"
 
 #include "DEG_depsgraph.h"
+#include "DEG_depsgraph_build.h"
 
 /* own include */
 #include "sequencer_intern.h"
@@ -725,7 +726,8 @@ static void recurs_del_seq_flag(Scene *scene, ListBase *lb, short flag, short de
   }
 }
 
-static Sequence *cut_seq_hard(Scene *scene, Sequence *seq, ListBase *new_seq_list, int cutframe)
+static Sequence *cut_seq_hard(
+    Main *bmain, Scene *scene, Sequence *seq, ListBase *new_seq_list, int cutframe)
 {
   TransSeq ts;
   Sequence *seqn = NULL;
@@ -754,7 +756,7 @@ static Sequence *cut_seq_hard(Scene *scene, Sequence *seq, ListBase *new_seq_lis
    * blend file, or our code may have minor differences reading file length between versions.
    * This causes hard-cut to fail, see: T47862 */
   if (seq->type != SEQ_TYPE_META) {
-    BKE_sequence_reload_new_file(scene, seq, true);
+    BKE_sequence_reload_new_file(bmain, scene, seq, true);
     BKE_sequence_calc(scene, seq);
   }
 
@@ -789,7 +791,7 @@ static Sequence *cut_seq_hard(Scene *scene, Sequence *seq, ListBase *new_seq_lis
     }
   }
 
-  BKE_sequence_reload_new_file(scene, seq, false);
+  BKE_sequence_reload_new_file(bmain, scene, seq, false);
   BKE_sequence_calc(scene, seq);
 
   if (!skip_dup) {
@@ -836,13 +838,14 @@ static Sequence *cut_seq_hard(Scene *scene, Sequence *seq, ListBase *new_seq_lis
       seqn->startstill = 0;
     }
 
-    BKE_sequence_reload_new_file(scene, seqn, false);
+    BKE_sequence_reload_new_file(bmain, scene, seqn, false);
     BKE_sequence_calc(scene, seqn);
   }
   return seqn;
 }
 
-static Sequence *cut_seq_soft(Scene *scene, Sequence *seq, ListBase *new_seq_list, int cutframe)
+static Sequence *cut_seq_soft(
+    Main *UNUSED(bmain), Scene *scene, Sequence *seq, ListBase *new_seq_list, int cutframe)
 {
   TransSeq ts;
   Sequence *seqn = NULL;
@@ -948,10 +951,11 @@ static Sequence *cut_seq_soft(Scene *scene, Sequence *seq, ListBase *new_seq_lis
  * may generate strips with the same name (which will mess up animdata)
  */
 
-static bool cut_seq_list(Scene *scene,
+static bool cut_seq_list(Main *bmain,
+                         Scene *scene,
                          ListBase *slist,
                          int cutframe,
-                         Sequence *(*cut_seq)(Scene *, Sequence *, ListBase *, int))
+                         Sequence *(*cut_seq)(Main *bmain, Scene *, Sequence *, ListBase *, int))
 {
   Sequence *seq, *seq_next_iter;
   Sequence *seq_first_new = NULL;
@@ -963,7 +967,7 @@ static bool cut_seq_list(Scene *scene,
     seq->tmp = NULL;
     if (seq->flag & SELECT) {
       if (cutframe > seq->startdisp && cutframe < seq->enddisp) {
-        Sequence *seqn = cut_seq(scene, seq, slist, cutframe);
+        Sequence *seqn = cut_seq(bmain, scene, seq, slist, cutframe);
         if (seqn) {
           if (seq_first_new == NULL) {
             seq_first_new = seqn;
@@ -1039,7 +1043,7 @@ static void set_filter_seq(Scene *scene)
     if (seq->flag & SELECT) {
       if (seq->type == SEQ_TYPE_MOVIE) {
         seq->flag |= SEQ_FILTERY;
-        BKE_sequence_reload_new_file(scene, seq, false);
+        BKE_sequence_reload_new_file(bmain, scene, seq, false);
         BKE_sequence_calc(scene, seq);
       }
     }
@@ -1316,6 +1320,7 @@ static int sequencer_snap_exec(bContext *C, wmOperator *op)
   /* as last: */
   BKE_sequencer_sort(scene);
 
+  DEG_id_tag_update(&scene->id, ID_RECALC_SEQUENCER_STRIPS);
   WM_event_add_notifier(C, NC_SCENE | ND_SEQUENCER, scene);
 
   return OPERATOR_FINISHED;
@@ -1609,10 +1614,10 @@ static void sequencer_slip_update_header(Scene *scene, ScrArea *sa, SlipData *da
     if (hasNumInput(&data->num_input)) {
       char num_str[NUM_STR_REP_LEN];
       outputNumInput(&data->num_input, num_str, &scene->unit);
-      BLI_snprintf(msg, sizeof(msg), IFACE_("Trim offset: %s"), num_str);
+      BLI_snprintf(msg, sizeof(msg), TIP_("Trim offset: %s"), num_str);
     }
     else {
-      BLI_snprintf(msg, sizeof(msg), IFACE_("Trim offset: %d"), offset);
+      BLI_snprintf(msg, sizeof(msg), TIP_("Trim offset: %d"), offset);
     }
   }
 
@@ -1621,6 +1626,7 @@ static void sequencer_slip_update_header(Scene *scene, ScrArea *sa, SlipData *da
 
 static int sequencer_slip_modal(bContext *C, wmOperator *op, const wmEvent *event)
 {
+  Main *bmain = CTX_data_main(C);
   Scene *scene = CTX_data_scene(C);
   SlipData *data = (SlipData *)op->customdata;
   ScrArea *sa = CTX_wm_area(C);
@@ -1701,7 +1707,7 @@ static int sequencer_slip_modal(bContext *C, wmOperator *op, const wmEvent *even
 
       for (i = 0; i < data->num_seq; i++) {
         Sequence *seq = data->seq_array[i];
-        BKE_sequence_reload_new_file(scene, seq, false);
+        BKE_sequence_reload_new_file(bmain, scene, seq, false);
         BKE_sequence_calc(scene, seq);
       }
 
@@ -1955,6 +1961,7 @@ void SEQUENCER_OT_unlock(struct wmOperatorType *ot)
 /* reload operator */
 static int sequencer_reload_exec(bContext *C, wmOperator *op)
 {
+  Main *bmain = CTX_data_main(C);
   Scene *scene = CTX_data_scene(C);
   Editing *ed = BKE_sequencer_editing_get(scene, false);
   Sequence *seq;
@@ -1963,7 +1970,7 @@ static int sequencer_reload_exec(bContext *C, wmOperator *op)
   for (seq = ed->seqbasep->first; seq; seq = seq->next) {
     if (seq->flag & SELECT) {
       BKE_sequencer_update_changed_seq_and_deps(scene, seq, 0, 1);
-      BKE_sequence_reload_new_file(scene, seq, !adjust_length);
+      BKE_sequence_reload_new_file(bmain, scene, seq, !adjust_length);
 
       if (adjust_length) {
         if (BKE_sequence_test_overlap(ed->seqbasep, seq)) {
@@ -2138,6 +2145,7 @@ static const EnumPropertyItem prop_cut_types[] = {
 
 static int sequencer_cut_exec(bContext *C, wmOperator *op)
 {
+  Main *bmain = CTX_data_main(C);
   Scene *scene = CTX_data_scene(C);
   Editing *ed = BKE_sequencer_editing_get(scene, false);
   int cut_side, cut_hard, cut_frame;
@@ -2149,10 +2157,10 @@ static int sequencer_cut_exec(bContext *C, wmOperator *op)
   cut_side = RNA_enum_get(op->ptr, "side");
 
   if (cut_hard == SEQ_CUT_HARD) {
-    changed = cut_seq_list(scene, ed->seqbasep, cut_frame, cut_seq_hard);
+    changed = cut_seq_list(bmain, scene, ed->seqbasep, cut_frame, cut_seq_hard);
   }
   else {
-    changed = cut_seq_list(scene, ed->seqbasep, cut_frame, cut_seq_soft);
+    changed = cut_seq_list(bmain, scene, ed->seqbasep, cut_frame, cut_seq_soft);
   }
 
   if (changed) { /* got new strips ? */
@@ -2320,6 +2328,7 @@ void SEQUENCER_OT_duplicate(wmOperatorType *ot)
 /* delete operator */
 static int sequencer_delete_exec(bContext *C, wmOperator *UNUSED(op))
 {
+  Main *bmain = CTX_data_main(C);
   Scene *scene = CTX_data_scene(C);
   Editing *ed = BKE_sequencer_editing_get(scene, false);
   Sequence *seq;
@@ -2373,6 +2382,7 @@ static int sequencer_delete_exec(bContext *C, wmOperator *UNUSED(op))
   }
 
   DEG_id_tag_update(&scene->id, ID_RECALC_SEQUENCER_STRIPS);
+  DEG_relations_tag_update(bmain);
   WM_event_add_notifier(C, NC_SCENE | ND_SEQUENCER, scene);
 
   return OPERATOR_FINISHED;
@@ -2673,7 +2683,7 @@ static int sequencer_meta_make_exec(bContext *C, wmOperator *op)
   while (seq) {
     next = seq->next;
     if (seq != seqm && (seq->flag & SELECT)) {
-      BKE_sequence_invalidate_dependent(scene, seq);
+      BKE_sequence_invalidate_cache_composite(scene, seq);
       channel_max = max_ii(seq->machine, channel_max);
       BLI_remlink(ed->seqbasep, seq);
       BLI_addtail(&seqm->seqbase, seq);
@@ -2692,7 +2702,7 @@ static int sequencer_meta_make_exec(bContext *C, wmOperator *op)
   DEG_id_tag_update(&scene->id, ID_RECALC_SEQUENCER_STRIPS);
 
   BKE_sequence_base_unique_name_recursive(&scene->ed->seqbase, seqm);
-
+  BKE_sequence_invalidate_cache_composite(scene, seqm);
   WM_event_add_notifier(C, NC_SCENE | ND_SEQUENCER, scene);
 
   return OPERATOR_FINISHED;
@@ -2745,7 +2755,7 @@ static int sequencer_meta_separate_exec(bContext *C, wmOperator *UNUSED(op))
   }
 
   for (seq = last_seq->seqbase.first; seq != NULL; seq = seq->next) {
-    BKE_sequence_invalidate_dependent(scene, seq);
+    BKE_sequence_invalidate_cache_composite(scene, seq);
   }
 
   BLI_movelisttolist(ed->seqbasep, &last_seq->seqbase);
@@ -3381,7 +3391,7 @@ static int sequencer_copy_exec(bContext *C, wmOperator *op)
   }
 
   /* Replace datablock pointers with copies, to keep things working in case
-   * datablocks get deleted or another .blend file is opened. */
+   * data-blocks get deleted or another .blend file is opened. */
   BKE_sequencer_base_clipboard_pointers_store(bmain, &seqbase_clipboard);
 
   return OPERATOR_FINISHED;
@@ -3415,9 +3425,9 @@ static int sequencer_paste_exec(bContext *C, wmOperator *UNUSED(op))
   ED_sequencer_deselect_all(scene);
   ofs = scene->r.cfra - seqbase_clipboard_frame;
 
-  /* Copy strips, temporarily restoring pointers to actual datablocks. This
+  /* Copy strips, temporarily restoring pointers to actual data-blocks. This
    * must happen on the clipboard itself, so that copying does user counting
-   * on the actual datablocks. */
+   * on the actual data-blocks. */
   BKE_sequencer_base_clipboard_pointers_restore(&seqbase_clipboard, bmain);
   BKE_sequence_base_dupli_recursive(
       scene, scene, &nseqbase, &seqbase_clipboard, SEQ_DUPE_UNIQUE_NAME, 0);
@@ -3428,10 +3438,6 @@ static int sequencer_paste_exec(bContext *C, wmOperator *UNUSED(op))
     for (iseq = nseqbase.first; iseq; iseq = iseq->next) {
       BKE_sequence_translate(scene, iseq, ofs);
     }
-  }
-
-  for (iseq = nseqbase.first; iseq; iseq = iseq->next) {
-    BKE_sequence_sound_init(scene, iseq);
   }
 
   iseq_first = nseqbase.first;
@@ -3450,6 +3456,7 @@ static int sequencer_paste_exec(bContext *C, wmOperator *UNUSED(op))
     }
   }
 
+  DEG_id_tag_update(&scene->id, ID_RECALC_SEQUENCER_STRIPS);
   WM_event_add_notifier(C, NC_SCENE | ND_SEQUENCER, scene);
 
   return OPERATOR_FINISHED;
@@ -3945,7 +3952,7 @@ static int sequencer_change_path_exec(bContext *C, wmOperator *op)
 
     /* correct start/end frames so we don't move
      * important not to set seq->len = len; allow the function to handle it */
-    BKE_sequence_reload_new_file(scene, seq, true);
+    BKE_sequence_reload_new_file(bmain, scene, seq, true);
 
     BKE_sequence_calc(scene, seq);
 

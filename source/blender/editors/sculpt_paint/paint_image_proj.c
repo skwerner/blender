@@ -1554,9 +1554,8 @@ static void screen_px_from_persp(const float uv[2],
     w_int[2] *= wtot_inv;
   }
   else {
-    w[0] = w[1] = w[2] =
-        /* dummy values for zero area face */
-        w_int[0] = w_int[1] = w_int[2] = 1.0f / 3.0f;
+    /* Dummy values for zero area face. */
+    w[0] = w[1] = w[2] = w_int[0] = w_int[1] = w_int[2] = 1.0f / 3.0f;
   }
   /* done re-weighting */
 
@@ -3912,7 +3911,7 @@ static void proj_paint_state_thread_init(ProjPaintState *ps, const bool reset_th
 
   /* Thread stuff
    *
-   * very small brushes run a lot slower multithreaded since the advantage with
+   * very small brushes run a lot slower multi-threaded since the advantage with
    * threads is being able to fill in multiple buckets at once.
    * Only use threads for bigger brushes. */
 
@@ -5104,7 +5103,7 @@ static void image_paint_partial_redraw_expand(ImagePaintPartialRedraw *cell,
   cell->y2 = max_ii(cell->y2, (int)projPixel->y_px + 1);
 }
 
-/* run this for single and multithreaded painting */
+/* Run this for single and multi-threaded painting. */
 static void do_projectpaint_thread(TaskPool *__restrict UNUSED(pool),
                                    void *ph_v,
                                    int UNUSED(threadid))
@@ -6167,7 +6166,7 @@ static int texture_paint_image_from_view_exec(bContext *C, wmOperator *op)
     BKE_report(op->reports, RPT_ERROR, "No 3D viewport found to create image from");
     return OPERATOR_CANCELLED;
   }
-  View3D *v3d = sa->spacedata.first;
+
   ARegion *ar = BKE_area_find_region_active_win(sa);
   if (!ar) {
     BKE_report(op->reports, RPT_ERROR, "No 3D viewport found to create image from");
@@ -6186,10 +6185,25 @@ static int texture_paint_image_from_view_exec(bContext *C, wmOperator *op)
     h = maxsize;
   }
 
+  /* Create a copy of the overlays where they are all turned off, except the
+   * texture paint overlay opacity */
+  View3D *v3d = sa->spacedata.first;
+  View3D v3d_copy = *v3d;
+  v3d_copy.gridflag = 0;
+  v3d_copy.flag2 = 0;
+  v3d_copy.flag = V3D_HIDE_HELPLINES;
+  v3d_copy.gizmo_flag = V3D_GIZMO_HIDE;
+
+  memset(&v3d_copy.overlay, 0, sizeof(View3DOverlay));
+  v3d_copy.overlay.flag = V3D_OVERLAY_HIDE_CURSOR | V3D_OVERLAY_HIDE_TEXT |
+                          V3D_OVERLAY_HIDE_MOTION_PATHS | V3D_OVERLAY_HIDE_BONES |
+                          V3D_OVERLAY_HIDE_OBJECT_XTRAS | V3D_OVERLAY_HIDE_OBJECT_ORIGINS;
+  v3d_copy.overlay.texture_paint_mode_opacity = v3d->overlay.texture_paint_mode_opacity;
+
   ibuf = ED_view3d_draw_offscreen_imbuf(depsgraph,
                                         scene,
-                                        v3d->shading.type,
-                                        v3d,
+                                        v3d_copy.shading.type,
+                                        &v3d_copy,
                                         ar,
                                         w,
                                         h,
@@ -6199,6 +6213,7 @@ static int texture_paint_image_from_view_exec(bContext *C, wmOperator *op)
                                         NULL,
                                         NULL,
                                         err_out);
+
   if (!ibuf) {
     /* Mostly happens when OpenGL offscreen buffer was failed to create, */
     /* but could be other reasons. Should be handled in the future. nazgul */
@@ -6419,13 +6434,16 @@ static Image *proj_paint_image_create(wmOperator *op, Main *bmain, bool is_data)
     alpha = RNA_boolean_get(op->ptr, "alpha");
     RNA_string_get(op->ptr, "name", imagename);
   }
-  ima = BKE_image_add_generated(
-      bmain, width, height, imagename, alpha ? 32 : 24, use_float, gen_type, color, false);
-
-  if (is_data) {
-    STRNCPY(ima->colorspace_settings.name,
-            IMB_colormanagement_role_colorspace_name_get(COLOR_ROLE_DATA));
-  }
+  ima = BKE_image_add_generated(bmain,
+                                width,
+                                height,
+                                imagename,
+                                alpha ? 32 : 24,
+                                use_float,
+                                gen_type,
+                                color,
+                                false,
+                                is_data);
 
   return ima;
 }

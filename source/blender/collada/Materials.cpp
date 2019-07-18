@@ -19,11 +19,13 @@
 MaterialNode::MaterialNode(bContext *C, Material *ma, KeyImageMap &key_image_map)
     : mContext(C), material(ma), effect(nullptr), key_image_map(&key_image_map)
 {
-  ntree = prepare_material_nodetree();
+  bNodeTree *new_ntree = prepare_material_nodetree();
   setShaderType();
-  shader_node = add_node(SH_NODE_BSDF_PRINCIPLED, 0, 300, "");
-  output_node = add_node(SH_NODE_OUTPUT_MATERIAL, 300, 300, "");
-  add_link(shader_node, 0, output_node, 0);
+  if (new_ntree) {
+    shader_node = add_node(SH_NODE_BSDF_PRINCIPLED, 0, 300, "");
+    output_node = add_node(SH_NODE_OUTPUT_MATERIAL, 300, 300, "");
+    add_link(shader_node, 0, output_node, 0);
+  }
 }
 
 MaterialNode::MaterialNode(bContext *C,
@@ -32,7 +34,7 @@ MaterialNode::MaterialNode(bContext *C,
                            UidImageMap &uid_image_map)
     : mContext(C), material(ma), effect(ef), uid_image_map(&uid_image_map)
 {
-  ntree = prepare_material_nodetree();
+  prepare_material_nodetree();
   setShaderType();
 
   std::map<std::string, bNode *> nmap;
@@ -89,13 +91,18 @@ void MaterialNode::setShaderType()
 #endif
 }
 
+// returns null if material already has a node tree
 bNodeTree *MaterialNode::prepare_material_nodetree()
 {
-  if (material->nodetree == NULL) {
-    material->nodetree = ntreeAddTree(NULL, "Shader Nodetree", "ShaderNodeTree");
-    material->use_nodes = true;
+  if (material->nodetree) {
+    ntree = material->nodetree;
+    return NULL;
   }
-  return material->nodetree;
+
+  material->nodetree = ntreeAddTree(NULL, "Shader Nodetree", "ShaderNodeTree");
+  material->use_nodes = true;
+  ntree = material->nodetree;
+  return ntree;
 }
 
 bNode *MaterialNode::add_node(int node_type, int locx, int locy, std::string label)
@@ -124,18 +131,24 @@ void MaterialNode::add_link(bNode *from_node, int from_index, bNode *to_node, in
 void MaterialNode::set_reflectivity(COLLADAFW::FloatOrParam &val)
 {
   float reflectivity = val.getFloatValue();
-  bNodeSocket *socket = nodeFindSocket(shader_node, SOCK_IN, "Metallic");
-  ((bNodeSocketValueFloat *)socket->default_value)->value = reflectivity;
-
-  material->metallic = reflectivity;
+  if (reflectivity >= 0) {
+    bNodeSocket *socket = nodeFindSocket(shader_node, SOCK_IN, "Metallic");
+    ((bNodeSocketValueFloat *)socket->default_value)->value = reflectivity;
+    material->metallic = reflectivity;
+  }
 }
 
+#if 0
+// needs rework to be done for 2.81
 void MaterialNode::set_shininess(COLLADAFW::FloatOrParam &val)
 {
   float roughness = val.getFloatValue();
-  bNodeSocket *socket = nodeFindSocket(shader_node, SOCK_IN, "Roughness");
-  ((bNodeSocketValueFloat *)socket->default_value)->value = roughness;
+  if (roughness >= 0) {
+    bNodeSocket *socket = nodeFindSocket(shader_node, SOCK_IN, "Roughness");
+    ((bNodeSocketValueFloat *)socket->default_value)->value = roughness;
+  }
 }
+#endif
 
 void MaterialNode::set_ior(COLLADAFW::FloatOrParam &val)
 {

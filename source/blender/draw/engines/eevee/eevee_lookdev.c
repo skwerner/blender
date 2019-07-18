@@ -71,6 +71,8 @@ void EEVEE_lookdev_cache_init(EEVEE_Data *vedata,
   View3D *v3d = draw_ctx->v3d;
   Scene *scene = draw_ctx->scene;
 
+  effects->lookdev_view = NULL;
+
   if (LOOK_DEV_OVERLAY_ENABLED(v3d)) {
     /* Viewport / Spheres size. */
     rcti rect;
@@ -126,7 +128,7 @@ void EEVEE_lookdev_cache_init(EEVEE_Data *vedata,
         MEM_SAFE_FREE(stl->lookdev_cube_mips);
 
         /* We do this to use a special light cache for lookdev.
-         * This lightcache needs to be per viewport. But we need to
+         * This light-cache needs to be per viewport. But we need to
          * have correct freeing when the viewport is closed. So we
          * need to reference all textures to the txl and the memblocks
          * to the stl. */

@@ -310,6 +310,20 @@ class CyclesRenderSettings(bpy.types.PropertyGroup):
         name="Use adaptive sampling",
         description="Automatically determine the number of samples per pixel based on a variance estimation",
         default=False,
+
+    min_light_bounces: IntProperty(
+            name="Min Light Bounces",
+            description="Minimum number of light bounces. Setting this higher reduces noise in the first bounces, "
+                        "but can also be less efficient for more complex geometry like hair and volumes",
+            min=0, max=1024,
+            default=0,
+    )
+    min_transparent_bounces: IntProperty(
+            name="Min Transparent Bounces",
+            description="Minimum number of transparent bounces. Setting this higher reduces noise in the first bounces, "
+                        "but can also be less efficient for more complex geometry like hair and volumes",
+            min=0, max=1024,
+            default=0,
     )
 
     caustics_reflective: BoolProperty(

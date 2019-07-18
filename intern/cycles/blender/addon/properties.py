@@ -310,6 +310,7 @@ class CyclesRenderSettings(bpy.types.PropertyGroup):
         name="Use adaptive sampling",
         description="Automatically determine the number of samples per pixel based on a variance estimation",
         default=False,
+    )
 
     min_light_bounces: IntProperty(
             name="Min Light Bounces",

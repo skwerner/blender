@@ -559,6 +559,14 @@ void workbench_forward_cache_populate(WORKBENCH_Data *vedata, Object *ob)
     return; /* Do not draw solid in this case. */
   }
 
+  if (((ob->base_flag & BASE_FROM_DUPLI) == 0) &&
+      (md = modifiers_findByType(ob, eModifierType_OpenVDB)) &&
+      (modifier_isEnabled(scene, md, eModifierMode_Realtime)) &&
+      (((OpenVDBModifierData *)md)->smoke->domain != NULL)) {
+    workbench_volume_cache_populate(vedata, scene, ob, ((OpenVDBModifierData *)md)->smoke);
+    return; /* Do not draw solid in this case. */
+  }
+
   if (!(DRW_object_visibility_in_active_context(ob) & OB_VISIBLE_SELF)) {
     return;
   }

@@ -826,7 +826,11 @@ void IMB_exr_add_channel(void *handle,
   else {
     BLI_strncpy(echan->name, echan->m->name.c_str(), sizeof(echan->name));
   }
-
+  const char *crypto = "Crypto";
+  if(strncmp(crypto, passname, strlen(crypto)) == 0)
+  {
+    use_half_float = 0;
+  }
   echan->xstride = xstride;
   echan->ystride = ystride;
   echan->rect = rect;

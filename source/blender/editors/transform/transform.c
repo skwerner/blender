@@ -2157,16 +2157,6 @@ void saveTransform(bContext *C, TransInfo *t, wmOperator *op)
       }
     }
 
-    /* do we check for parameter? */
-    if (transformModeUseSnap(t)) {
-      if (t->modifiers & MOD_SNAP) {
-        ts->snap_flag |= SCE_SNAP;
-      }
-      else {
-        ts->snap_flag &= ~SCE_SNAP;
-      }
-    }
-
     if (t->spacetype == SPACE_VIEW3D) {
       if ((prop = RNA_struct_find_property(op->ptr, "orient_type")) &&
           !RNA_property_is_set(op->ptr, prop) &&
@@ -2176,6 +2166,18 @@ void saveTransform(bContext *C, TransInfo *t, wmOperator *op)
         BLI_assert(((orient_slot->index_custom == -1) && (t->orientation.custom == NULL)) ||
                    (BKE_scene_transform_orientation_get_index(t->scene, t->orientation.custom) ==
                     orient_slot->index_custom));
+      }
+    }
+  }
+
+  if (t->flag & T_MODAL) {
+    /* do we check for parameter? */
+    if (transformModeUseSnap(t)) {
+      if (t->modifiers & MOD_SNAP) {
+        ts->snap_flag |= SCE_SNAP;
+      }
+      else {
+        ts->snap_flag &= ~SCE_SNAP;
       }
     }
   }
@@ -6703,9 +6705,28 @@ static void slide_origdata_free_date(SlideOrigData *sod)
 /** \name Transform Edge Slide
  * \{ */
 
+/**
+ * Get the first valid EdgeSlideData.
+ *
+ * Note we cannot trust TRANS_DATA_CONTAINER_FIRST_OK because of multi-object that
+ * may leave items with invalid custom data in the transform data container.
+ */
+static EdgeSlideData *edgeSlideFirstGet(TransInfo *t)
+{
+  FOREACH_TRANS_DATA_CONTAINER (t, tc) {
+    EdgeSlideData *sld = tc->custom.mode.data;
+    if (sld == NULL) {
+      continue;
+    }
+    return sld;
+  }
+  BLI_assert(!"Should never happen, at least one EdgeSlideData should be valid");
+  return NULL;
+}
+
 static void calcEdgeSlideCustomPoints(struct TransInfo *t)
 {
-  EdgeSlideData *sld = TRANS_DATA_CONTAINER_FIRST_OK(t)->custom.mode.data;
+  EdgeSlideData *sld = edgeSlideFirstGet(t);
 
   setCustomPoints(t, &t->mouse, sld->mval_end, sld->mval_start);
 
@@ -7679,10 +7700,14 @@ void projectEdgeSlideData(TransInfo *t, bool is_final)
 {
   FOREACH_TRANS_DATA_CONTAINER (t, tc) {
     EdgeSlideData *sld = tc->custom.mode.data;
-    SlideOrigData *sod = &sld->orig_data;
 
+    if (sld == NULL) {
+      continue;
+    }
+
+    SlideOrigData *sod = &sld->orig_data;
     if (sod->use_origfaces == false) {
-      return;
+      continue;
     }
 
     slide_origdata_interp_data(tc->obedit,
@@ -7705,7 +7730,7 @@ void freeEdgeSlideVerts(TransInfo *UNUSED(t),
 {
   EdgeSlideData *sld = custom_data->data;
 
-  if (!sld) {
+  if (sld == NULL) {
     return;
   }
 
@@ -7847,9 +7872,9 @@ static eRedrawFlag handleEventEdgeSlide(struct TransInfo *t, const struct wmEven
 
 static void drawEdgeSlide(TransInfo *t)
 {
-  if ((t->mode == TFM_EDGE_SLIDE) && TRANS_DATA_CONTAINER_FIRST_OK(t)->custom.mode.data) {
+  if ((t->mode == TFM_EDGE_SLIDE) && edgeSlideFirstGet(t)) {
     const EdgeSlideParams *slp = t->custom.mode.data;
-    EdgeSlideData *sld = TRANS_DATA_CONTAINER_FIRST_OK(t)->custom.mode.data;
+    EdgeSlideData *sld = edgeSlideFirstGet(t);
     const bool is_clamp = !(t->flag & T_ALT_TRANSFORM);
 
     /* Even mode */
@@ -7968,7 +7993,7 @@ static void drawEdgeSlide(TransInfo *t)
 static void doEdgeSlide(TransInfo *t, float perc)
 {
   EdgeSlideParams *slp = t->custom.mode.data;
-  EdgeSlideData *sld_active = TRANS_DATA_CONTAINER_FIRST_OK(t)->custom.mode.data;
+  EdgeSlideData *sld_active = edgeSlideFirstGet(t);
 
   slp->perc = perc;
 
@@ -7979,6 +8004,11 @@ static void doEdgeSlide(TransInfo *t, float perc)
       const float perc_final = fabsf(perc);
       FOREACH_TRANS_DATA_CONTAINER (t, tc) {
         EdgeSlideData *sld = tc->custom.mode.data;
+
+        if (sld == NULL) {
+          continue;
+        }
+
         TransDataEdgeSlideVert *sv = sld->sv;
         for (int i = 0; i < sld->totsv; i++, sv++) {
           madd_v3_v3v3fl(sv->v->co, sv->v_co_orig, sv->dir_side[side_index], perc_final);
@@ -7992,6 +8022,11 @@ static void doEdgeSlide(TransInfo *t, float perc)
       const int side_index = sld_active->curr_side_unclamp;
       FOREACH_TRANS_DATA_CONTAINER (t, tc) {
         EdgeSlideData *sld = tc->custom.mode.data;
+
+        if (sld == NULL) {
+          continue;
+        }
+
         TransDataEdgeSlideVert *sv = sld->sv;
         for (int i = 0; i < sld->totsv; i++, sv++) {
           float dir_flip[3];
@@ -8028,6 +8063,11 @@ static void doEdgeSlide(TransInfo *t, float perc)
 
     FOREACH_TRANS_DATA_CONTAINER (t, tc) {
       EdgeSlideData *sld = tc->custom.mode.data;
+
+      if (sld == NULL) {
+        continue;
+      }
+
       TransDataEdgeSlideVert *sv = sld->sv;
       for (int i = 0; i < sld->totsv; i++, sv++) {
         if (sv->edge_len > FLT_EPSILON) {

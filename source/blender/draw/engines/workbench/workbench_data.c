@@ -24,6 +24,8 @@
 
 #include "DNA_userdef_types.h"
 
+#include "ED_view3d.h"
+
 #include "UI_resources.h"
 
 #include "GPU_batch.h"
@@ -43,16 +45,14 @@ void workbench_private_data_init(WORKBENCH_PrivateData *wpd)
   wpd->preferences = &U;
 
   View3D *v3d = draw_ctx->v3d;
-  if (!v3d) {
+  if (!v3d || (v3d->shading.type == OB_RENDER && BKE_scene_uses_blender_workbench(scene))) {
     wpd->shading = scene->display.shading;
-    wpd->use_color_render_settings = true;
-  }
-  else if (v3d->shading.type == OB_RENDER && BKE_scene_uses_blender_workbench(scene)) {
-    wpd->shading = scene->display.shading;
+    wpd->shading.xray_alpha = XRAY_ALPHA((&scene->display));
     wpd->use_color_render_settings = true;
   }
   else {
     wpd->shading = v3d->shading;
+    wpd->shading.xray_alpha = XRAY_ALPHA(v3d);
     wpd->use_color_render_settings = false;
   }
 
@@ -79,9 +79,7 @@ void workbench_private_data_init(WORKBENCH_PrivateData *wpd)
 
   WORKBENCH_UBO_World *wd = &wpd->world_data;
   wd->matcap_orientation = (wpd->shading.flag & V3D_SHADING_MATCAP_FLIP_X) != 0;
-  wd->background_alpha = (DRW_state_is_image_render() && scene->r.alphamode == R_ALPHAPREMUL) ?
-                             0.0f :
-                             1.0f;
+  wd->background_alpha = DRW_state_draw_background() ? 1.0f : 0.0f;
 
   if ((scene->world != NULL) &&
       (!v3d || (v3d && ((v3d->shading.background_type == V3D_SHADING_BACKGROUND_WORLD) ||

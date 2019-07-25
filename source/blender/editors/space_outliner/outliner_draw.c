@@ -31,6 +31,7 @@
 #include "DNA_object_types.h"
 #include "DNA_scene_types.h"
 #include "DNA_sequence_types.h"
+#include "DNA_object_force_types.h"
 
 #include "BLI_math.h"
 #include "BLI_blenlib.h"
@@ -115,7 +116,17 @@ static void outliner_tree_dimensions(SpaceOutliner *soops, int *r_width, int *r_
  */
 static bool is_object_data_in_editmode(const ID *id, const Object *obact)
 {
+  if (id == NULL) {
+    return false;
+  }
+
   const short id_type = GS(id->name);
+
+  if (id_type == ID_GD && obact && obact->data == id) {
+    bGPdata *gpd = (bGPdata *)id;
+    return GPENCIL_EDIT_MODE(gpd);
+  }
+
   return ((obact && (obact->mode & OB_MODE_EDIT)) && (id && OB_DATA_SUPPORT_EDITMODE(id_type)) &&
           (GS(((ID *)obact->data)->name) == id_type) && BKE_object_data_is_in_editmode(id));
 }
@@ -800,7 +811,7 @@ static void namebutton_cb(bContext *C, void *tsep, char *oldname)
           BLI_uniquename(
               &gpd->layers, gpl, "GP Layer", '.', offsetof(bGPDlayer, info), sizeof(gpl->info));
 
-          WM_event_add_notifier(C, NC_GPENCIL | ND_DATA, gpd);
+          WM_event_add_notifier(C, NC_GPENCIL | ND_DATA | NA_SELECTED, gpd);
           break;
         }
         case TSE_R_LAYER: {
@@ -920,6 +931,40 @@ static void outliner_restrict_properties_enable_layer_collection_set(
       props_active->object_hide_select = false;
     }
   }
+}
+
+static bool outliner_restrict_properties_collection_set(Scene *scene,
+                                                        TreeElement *te,
+                                                        PointerRNA *collection_ptr,
+                                                        PointerRNA *layer_collection_ptr,
+                                                        RestrictProperties *props,
+                                                        RestrictPropertiesActive *props_active)
+{
+  TreeStoreElem *tselem = TREESTORE(te);
+  LayerCollection *layer_collection = (tselem->type == TSE_LAYER_COLLECTION) ? te->directdata :
+                                                                               NULL;
+  Collection *collection = outliner_collection_from_tree_element(te);
+
+  if ((collection->flag & COLLECTION_IS_MASTER) ||
+      (layer_collection && ((layer_collection->flag & LAYER_COLLECTION_EXCLUDE) != 0))) {
+    return false;
+  }
+
+  /* Create the PointerRNA. */
+  RNA_id_pointer_create(&collection->id, collection_ptr);
+  if (layer_collection != NULL) {
+    RNA_pointer_create(&scene->id, &RNA_LayerCollection, layer_collection, layer_collection_ptr);
+  }
+
+  /* Update the restriction column values for the collection children. */
+  if (layer_collection) {
+    outliner_restrict_properties_enable_layer_collection_set(
+        layer_collection_ptr, collection_ptr, props, props_active);
+  }
+  else {
+    outliner_restrict_properties_enable_collection_set(collection_ptr, props, props_active);
+  }
+  return true;
 }
 
 static void outliner_draw_restrictbuts(uiBlock *block,
@@ -1050,7 +1095,7 @@ static void outliner_draw_restrictbuts(uiBlock *block,
                                     0,
                                     0,
                                     0,
-                                    TIP_("Temporarly hide in viewport\n"
+                                    TIP_("Temporarily hide in viewport\n"
                                          "* Shift to set children"));
             UI_but_func_set(
                 bt, outliner__base_set_flag_recursive_cb, base, (void *)"hide_viewport");
@@ -1326,30 +1371,16 @@ static void outliner_draw_restrictbuts(uiBlock *block,
         }
       }
       else if (outliner_is_collection_tree_element(te)) {
-        LayerCollection *layer_collection = (tselem->type == TSE_LAYER_COLLECTION) ?
-                                                te->directdata :
-                                                NULL;
-        Collection *collection = outliner_collection_from_tree_element(te);
-        if ((!layer_collection || !(layer_collection->flag & LAYER_COLLECTION_EXCLUDE)) &&
-            !(collection->flag & COLLECTION_IS_MASTER)) {
+        PointerRNA collection_ptr;
+        PointerRNA layer_collection_ptr;
 
-          PointerRNA collection_ptr;
-          PointerRNA layer_collection_ptr;
-          RNA_id_pointer_create(&collection->id, &collection_ptr);
-          if (layer_collection != NULL) {
-            RNA_pointer_create(
-                &scene->id, &RNA_LayerCollection, layer_collection, &layer_collection_ptr);
-          }
+        if (outliner_restrict_properties_collection_set(
+                scene, te, &collection_ptr, &layer_collection_ptr, &props, &props_active)) {
 
-          /* Update the restriction column values for the collection children. */
-          if (layer_collection) {
-            outliner_restrict_properties_enable_layer_collection_set(
-                &layer_collection_ptr, &collection_ptr, &props, &props_active);
-          }
-          else {
-            outliner_restrict_properties_enable_collection_set(
-                &collection_ptr, &props, &props_active);
-          }
+          LayerCollection *layer_collection = (tselem->type == TSE_LAYER_COLLECTION) ?
+                                                  te->directdata :
+                                                  NULL;
+          Collection *collection = outliner_collection_from_tree_element(te);
 
           if (layer_collection != NULL) {
             if (soops->show_restrict_flags & SO_RESTRICT_HIDE) {
@@ -1436,7 +1467,8 @@ static void outliner_draw_restrictbuts(uiBlock *block,
                               layer_collection,
                               (char *)"indirect_only");
               UI_but_flag_enable(bt, UI_BUT_DRAG_LOCK);
-              if (!props_active.layer_collection_indirect_only) {
+              if (props_active.layer_collection_holdout ||
+                  !props_active.layer_collection_indirect_only) {
                 UI_but_flag_enable(bt, UI_BUT_INACTIVE);
               }
             }
@@ -1550,6 +1582,12 @@ static void outliner_draw_restrictbuts(uiBlock *block,
           }
         }
       }
+    }
+    else if (outliner_is_collection_tree_element(te)) {
+      PointerRNA collection_ptr;
+      PointerRNA layer_collection_ptr;
+      outliner_restrict_properties_collection_set(
+          scene, te, &collection_ptr, &layer_collection_ptr, &props, &props_active);
     }
 
     if (TSELEM_OPEN(tselem, soops)) {
@@ -2145,17 +2183,8 @@ TreeElementIcon tree_element_get_icon(TreeStoreElem *tselem, TreeElement *te)
         data.icon = ICON_GROUP;
         break;
       }
-      /* Removed the icons from outliner.
-       * Need a better structure with Layers, Palettes and Colors. */
       case TSE_GP_LAYER: {
-        /* indicate whether layer is active */
-        bGPDlayer *gpl = te->directdata;
-        if (gpl->flag & GP_LAYER_ACTIVE) {
-          data.icon = ICON_GREASEPENCIL;
-        }
-        else {
-          data.icon = ICON_DOT;
-        }
+        data.icon = ICON_OUTLINER_DATA_GP_LAYER;
         break;
       }
       default:
@@ -2204,11 +2233,14 @@ TreeElementIcon tree_element_get_icon(TreeStoreElem *tselem, TreeElement *te)
           data.icon = ICON_OUTLINER_OB_LIGHTPROBE;
           break;
         case OB_EMPTY:
-          if (ob->instance_collection) {
+          if (ob->instance_collection && (ob->transflag & OB_DUPLICOLLECTION)) {
             data.icon = ICON_OUTLINER_OB_GROUP_INSTANCE;
           }
           else if (ob->empty_drawtype == OB_EMPTY_IMAGE) {
             data.icon = ICON_OUTLINER_OB_IMAGE;
+          }
+          else if (ob->pd && ob->pd->forcefield) {
+            data.icon = ICON_OUTLINER_OB_FORCE_FIELD;
           }
           else {
             data.icon = ICON_OUTLINER_OB_EMPTY;
@@ -2574,7 +2606,7 @@ static void outliner_draw_iconrow_doit(uiBlock *block,
 /**
  * Return the index to use based on the TreeElement ID and object type
  *
- * We use a continuum of indices until we get to the object datablocks
+ * We use a continuum of indices until we get to the object data-blocks
  * and we then make room for the object types.
  */
 static int tree_element_id_type_to_index(TreeElement *te)
@@ -2635,12 +2667,16 @@ static void outliner_draw_iconrow(bContext *C,
           active = tree_element_active(C, scene, view_layer, soops, te, OL_SETSEL_NONE, false);
         }
       }
+      else if (tselem->type == TSE_GP_LAYER) {
+        bGPDlayer *gpl = te->directdata;
+        active = (gpl->flag & GP_LAYER_ACTIVE) ? OL_DRAWSEL_ACTIVE : OL_DRAWSEL_NONE;
+      }
       else {
         active = tree_element_type_active(
             C, scene, view_layer, soops, te, tselem, OL_SETSEL_NONE, false);
       }
 
-      if (!ELEM(tselem->type, 0, TSE_LAYER_COLLECTION, TSE_R_LAYER)) {
+      if (!ELEM(tselem->type, 0, TSE_LAYER_COLLECTION, TSE_R_LAYER, TSE_GP_LAYER)) {
         outliner_draw_iconrow_doit(block, te, fstyle, xmax, offsx, ys, alpha_fac, active, 1);
       }
       else {
@@ -2802,6 +2838,13 @@ static void outliner_draw_tree_element(bContext *C,
         }
       }
     }
+    else if (tselem->type == TSE_GP_LAYER) {
+      /* Active grease pencil layer. */
+      if (((bGPDlayer *)te->directdata)->flag & GP_LAYER_ACTIVE) {
+        icon_bgcolor[3] = 0.2f;
+        active = OL_DRAWSEL_ACTIVE;
+      }
+    }
     else {
       active = tree_element_type_active(
           C, scene, view_layer, soops, te, tselem, OL_SETSEL_NONE, false);
@@ -2895,7 +2938,7 @@ static void outliner_draw_tree_element(bContext *C,
       }
       offsx += UI_UNIT_X + 4 * ufac;
     }
-    else if (ELEM(tselem->type, 0, TSE_LAYER_COLLECTION) && ID_IS_STATIC_OVERRIDE(tselem->id)) {
+    else if (ELEM(tselem->type, 0, TSE_LAYER_COLLECTION) && ID_IS_OVERRIDE_LIBRARY(tselem->id)) {
       UI_icon_draw_alpha((float)startx + offsx + 2 * ufac,
                          (float)*starty + 2 * ufac,
                          ICON_LIBRARY_DATA_OVERRIDE,
@@ -3197,7 +3240,7 @@ static void outliner_draw_highlights_recursive(unsigned pos,
       else {
         if (is_searching && (tselem->flag & TSE_SEARCHMATCH)) {
           /* search match highlights
-           *   we don't expand items when searching in the datablocks but we
+           *   we don't expand items when searching in the data-blocks but we
            *   still want to highlight any filter matches. */
           immUniformColor4fv(col_searchmatch);
           immRecti(pos, start_x, start_y, end_x, start_y + UI_UNIT_Y);

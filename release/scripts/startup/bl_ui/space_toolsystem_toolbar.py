@@ -27,7 +27,7 @@
 import bpy
 from bpy.types import Panel
 
-from .space_toolsystem_common import (
+from bl_ui.space_toolsystem_common import (
     ToolSelectPanelHelper,
     ToolDef,
 )
@@ -295,7 +295,7 @@ class _defs_transform:
     @ToolDef.from_fn
     def transform():
         def draw_settings(context, layout, tool):
-            if not layout.use_property_split:
+            if layout.use_property_split:
                 layout.label(text="Gizmos:")
 
             props = tool.gizmo_group_properties("VIEW3D_GGT_xform_gizmo")
@@ -776,6 +776,7 @@ class _defs_edit_mesh:
         return dict(
             idname="builtin.knife",
             label="Knife",
+            cursor='KNIFE',
             icon="ops.mesh.knife_tool",
             widget=None,
             keymap=(),
@@ -971,6 +972,16 @@ class _defs_sculpt:
             keymap=(),
         )
 
+    @ToolDef.from_fn
+    def mask_lasso():
+        return dict(
+            idname="builtin.lasso_mask",
+            label="Lasso Mask",
+            icon="ops.sculpt.lasso_mask",
+            widget=None,
+            keymap=(),
+        )
+
 
 class _defs_vertex_paint:
 
@@ -1061,7 +1072,7 @@ class _defs_weight_paint:
         def draw_settings(context, layout, tool):
             brush = context.tool_settings.weight_paint.brush
             if brush is not None:
-                from .properties_paint_common import UnifiedPaintPanel
+                from bl_ui.properties_paint_common import UnifiedPaintPanel
                 UnifiedPaintPanel.prop_unified_weight(layout, context, brush, "weight", slider=True)
                 UnifiedPaintPanel.prop_unified_strength(layout, context, brush, "strength", slider=True)
             props = tool.operator_properties("paint.weight_gradient")
@@ -1122,6 +1133,39 @@ class _defs_image_generic:
 
 
 class _defs_image_uv_transform:
+
+    @ToolDef.from_fn
+    def translate():
+        return dict(
+            idname="builtin.move",
+            label="Move",
+            icon="ops.transform.translate",
+            # widget="VIEW3D_GGT_xform_gizmo",
+            operator="transform.translate",
+            keymap="Image Editor Tool: Uv, Move",
+        )
+
+    @ToolDef.from_fn
+    def rotate():
+        return dict(
+            idname="builtin.rotate",
+            label="Rotate",
+            icon="ops.transform.rotate",
+            # widget="VIEW3D_GGT_xform_gizmo",
+            operator="transform.rotate",
+            keymap="Image Editor Tool: Uv, Rotate",
+        )
+
+    @ToolDef.from_fn
+    def scale():
+        return dict(
+            idname="builtin.scale",
+            label="Scale",
+            icon="ops.transform.resize",
+            # widget="VIEW3D_GGT_xform_gizmo",
+            operator="transform.resize",
+            keymap="Image Editor Tool: Uv, Scale",
+        )
 
     @ToolDef.from_fn
     def transform():
@@ -1483,6 +1527,10 @@ class _defs_gpencil_weight:
             icon_prefix="ops.gpencil.sculpt_",
             type=bpy.types.GPencilSculptSettings,
             attr="weight_tool",
+            tooldef_keywords=dict(
+                operator="gpencil.sculpt_paint",
+                keymap="3D View Tool: Sculpt Gpencil, Paint",
+            ),
         )
 
 
@@ -1602,6 +1650,9 @@ class IMAGE_PT_tools_active(ToolSelectPanelHelper, Panel):
 
     # for reuse
     _tools_transform = (
+        _defs_image_uv_transform.translate,
+        _defs_image_uv_transform.rotate,
+        _defs_image_uv_transform.scale,
         _defs_image_uv_transform.transform,
     )
 
@@ -1897,8 +1948,11 @@ class VIEW3D_PT_tools_active(ToolSelectPanelHelper, Panel):
         'SCULPT': [
             _defs_sculpt.generate_from_brushes,
             None,
+            (
+                _defs_sculpt.mask_border,
+                _defs_sculpt.mask_lasso,
+            ),
             _defs_sculpt.hide_border,
-            _defs_sculpt.mask_border,
             None,
             *_tools_annotate,
         ],

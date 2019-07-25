@@ -1730,17 +1730,21 @@ typedef struct SculptDoBrushSmoothGridDataChunk {
 
 typedef struct {
   SculptSession *ss;
-  const float *ray_start, *ray_normal;
+  const float *ray_start;
   bool hit;
   float depth;
   bool original;
+
+  struct IsectRayPrecalc isect_precalc;
 } SculptRaycastData;
 
 typedef struct {
-  const float *ray_start, *ray_normal;
+  const float *ray_start;
   bool hit;
   float depth;
   float edge_length;
+
+  struct IsectRayPrecalc isect_precalc;
 } SculptDetailRaycastData;
 
 typedef struct {
@@ -4949,7 +4953,7 @@ static void sculpt_raycast_cb(PBVHNode *node, void *data_v, float *tmin)
                               origco,
                               use_origco,
                               srd->ray_start,
-                              srd->ray_normal,
+                              &srd->isect_precalc,
                               &srd->depth)) {
       srd->hit = 1;
       *tmin = srd->depth;
@@ -4995,7 +4999,7 @@ static void sculpt_raycast_detail_cb(PBVHNode *node, void *data_v, float *tmin)
   if (BKE_pbvh_node_get_tmin(node) < *tmin) {
     SculptDetailRaycastData *srd = data_v;
     if (BKE_pbvh_bmesh_node_raycast_detail(
-            node, srd->ray_start, srd->ray_normal, &srd->depth, &srd->edge_length)) {
+            node, srd->ray_start, &srd->isect_precalc, &srd->depth, &srd->edge_length)) {
       srd->hit = 1;
       *tmin = srd->depth;
     }
@@ -5067,14 +5071,14 @@ bool sculpt_stroke_get_location(bContext *C, float out[3], const float mouse[2])
 
   bool hit = false;
   {
-    SculptRaycastData srd = {
-        .original = original,
-        .ss = ob->sculpt,
-        .hit = 0,
-        .ray_start = ray_start,
-        .ray_normal = ray_normal,
-        .depth = depth,
-    };
+    SculptRaycastData srd;
+    srd.ss = ob->sculpt;
+    srd.ray_start = ray_start;
+    srd.hit = 0;
+    srd.depth = depth;
+    srd.original = original;
+    isect_ray_tri_watertight_v3_precalc(&srd.isect_precalc, ray_normal);
+
     BKE_pbvh_raycast(ss->pbvh, sculpt_raycast_cb, &srd, ray_start, ray_normal, srd.original);
     if (srd.hit) {
       hit = true;
@@ -5182,15 +5186,13 @@ static void sculpt_flush_update_step(bContext *C)
 {
   Depsgraph *depsgraph = CTX_data_depsgraph(C);
   Object *ob = CTX_data_active_object(C);
-  Object *ob_eval = DEG_get_evaluated_object(depsgraph, ob);
   SculptSession *ss = ob->sculpt;
   ARegion *ar = CTX_wm_region(C);
   MultiresModifierData *mmd = ss->multires;
   View3D *v3d = CTX_wm_view3d(C);
 
   if (mmd != NULL) {
-    /* NOTE: SubdivCCG is living in the evaluated object. */
-    multires_mark_as_modified(ob_eval, MULTIRES_COORDS_MODIFIED);
+    multires_mark_as_modified(depsgraph, ob, MULTIRES_COORDS_MODIFIED);
   }
 
   DEG_id_tag_update(&ob->id, ID_RECALC_SHADING);
@@ -5803,6 +5805,7 @@ static int sculpt_dynamic_topology_toggle_exec(bContext *C, wmOperator *UNUSED(o
   }
 
   WM_cursor_wait(0);
+  WM_main_add_notifier(NC_SCENE | ND_TOOLSETTINGS, NULL);
 
   return OPERATOR_FINISHED;
 }
@@ -6372,9 +6375,9 @@ static void sample_detail(bContext *C, int mx, int my)
   SculptDetailRaycastData srd;
   srd.hit = 0;
   srd.ray_start = ray_start;
-  srd.ray_normal = ray_normal;
   srd.depth = depth;
   srd.edge_length = 0.0f;
+  isect_ray_tri_watertight_v3_precalc(&srd.isect_precalc, ray_normal);
 
   BKE_pbvh_raycast(ob->sculpt->pbvh, sculpt_raycast_detail_cb, &srd, ray_start, ray_normal, false);
 
@@ -6398,7 +6401,7 @@ static int sculpt_sample_detail_size_exec(bContext *C, wmOperator *op)
 
 static int sculpt_sample_detail_size_invoke(bContext *C, wmOperator *op, const wmEvent *UNUSED(e))
 {
-  ED_workspace_status_text(C, "Click on the mesh to set the detail");
+  ED_workspace_status_text(C, TIP_("Click on the mesh to set the detail"));
   WM_cursor_modal_set(CTX_wm_window(C), BC_EYEDROPPER_CURSOR);
   WM_event_add_modal_handler(C, op);
   return OPERATOR_RUNNING_MODAL;

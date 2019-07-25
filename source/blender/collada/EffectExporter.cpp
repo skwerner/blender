@@ -102,7 +102,12 @@ void EffectsExporter::set_shader_type(COLLADASW::EffectProfile &ep, Material *ma
 void EffectsExporter::set_transparency(COLLADASW::EffectProfile &ep, Material *ma)
 {
   double alpha = bc_get_alpha(ma);
-  ep.setTransparency(alpha, false, "alpha");
+  if (alpha < 1) {
+    // workaround use <transparent> to avoid wrong handling of <transparency> by other tools
+    COLLADASW::ColorOrTexture cot = bc_get_cot(0, 0, 0, alpha);
+    ep.setTransparent(cot, false, "alpha");
+    ep.setOpaque(COLLADASW::EffectProfile::A_ONE);
+  }
 }
 
 void EffectsExporter::set_diffuse_color(COLLADASW::EffectProfile &ep, Material *ma)
@@ -134,7 +139,9 @@ void EffectsExporter::set_reflective(COLLADASW::EffectProfile &ep, Material *ma)
 void EffectsExporter::set_reflectivity(COLLADASW::EffectProfile &ep, Material *ma)
 {
   double reflectivity = bc_get_reflectivity(ma);
-  ep.setReflectivity(reflectivity, false, "specular");
+  if (reflectivity > 0.0) {
+    ep.setReflectivity(reflectivity, false, "specular");
+  }
 }
 
 void EffectsExporter::set_emission(COLLADASW::EffectProfile &ep, Material *ma)
@@ -208,21 +215,20 @@ void EffectsExporter::operator()(Material *ma, Object *ob)
   COLLADASW::EffectProfile ep(mSW);
   ep.setProfileType(COLLADASW::EffectProfile::COMMON);
   ep.openProfile();
-  set_shader_type(ep, ma);
+  set_shader_type(ep, ma);  // creates a Lambert Shader for now
 
   COLLADASW::ColorOrTexture cot;
 
   set_diffuse_color(ep, ma);
   set_emission(ep, ma);
   set_ior(ep, ma);
-  set_shininess(ep, ma);
   set_reflectivity(ep, ma);
   set_transparency(ep, ma);
 
-  /* TODO: from where to get ambient, specular and reflective? */
+  /* TODO: */
+  // set_shininess(ep, ma); shininess not supported for lambert
   // set_ambient(ep, ma);
   // set_specular(ep, ma);
-  // set_reflective(ep, ma);
 
   get_images(ma, material_image_map);
   std::string active_uv(getActiveUVLayerName(ob));
@@ -274,7 +280,7 @@ void EffectsExporter::operator()(Material *ma, Object *ob)
     int i = im_samp_map[key];
     std::string uvname = strlen(t->uvname) ? t->uvname : active_uv;
     COLLADASW::Sampler *sampler = (COLLADASW::Sampler *)
-        samp_surf[i];  // possibly uninitialised memory ...
+        samp_surf[i];  // possibly uninitialized memory ...
     writeTextures(ep, key, sampler, t, ima, uvname);
   }
 #endif

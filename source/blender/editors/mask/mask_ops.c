@@ -288,7 +288,7 @@ bool ED_mask_feather_find_nearest(const bContext *C,
               uw = NULL;
             }
             else {
-              uw = &cur_point_eval->uw[j - 1];
+              uw = &cur_point_orig->uw[j - 1];
             }
 
             point_masklay = masklay_orig;
@@ -441,6 +441,7 @@ static int masklay_new_exec(bContext *C, wmOperator *op)
   mask->masklay_act = mask->masklay_tot - 1;
 
   WM_event_add_notifier(C, NC_MASK | NA_EDITED, mask);
+  DEG_id_tag_update(&mask->id, ID_RECALC_COPY_ON_WRITE);
 
   return OPERATOR_FINISHED;
 }
@@ -474,6 +475,7 @@ static int masklay_remove_exec(bContext *C, wmOperator *UNUSED(op))
     BKE_mask_layer_remove(mask, masklay);
 
     WM_event_add_notifier(C, NC_MASK | NA_EDITED, mask);
+    DEG_id_tag_update(&mask->id, ID_RECALC_COPY_ON_WRITE);
   }
 
   return OPERATOR_FINISHED;
@@ -2206,6 +2208,7 @@ static int mask_layer_move_exec(bContext *C, wmOperator *op)
   }
 
   WM_event_add_notifier(C, NC_MASK | NA_EDITED, mask);
+  DEG_id_tag_update(&mask->id, ID_RECALC_COPY_ON_WRITE);
 
   return OPERATOR_FINISHED;
 }

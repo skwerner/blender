@@ -33,7 +33,6 @@ struct Depsgraph;
 
 /* ------------------------------------------------ */
 
-struct bNodeTree;
 struct CacheFile;
 struct Collection;
 struct CustomData_MeshMasks;
@@ -44,6 +43,7 @@ struct ModifierData;
 struct Object;
 struct Scene;
 struct ViewLayer;
+struct bNodeTree;
 
 #ifdef __cplusplus
 extern "C" {
@@ -110,6 +110,9 @@ typedef enum eDepsSceneComponentType {
 } eDepsSceneComponentType;
 
 typedef enum eDepsObjectComponentType {
+  /* Used in query API, to denote which component caller is interested in. */
+  DEG_OB_COMP_ANY,
+
   /* Parameters Component - Default when nothing else fits
    * (i.e. just SDNA property setting). */
   DEG_OB_COMP_PARAMETERS,
@@ -125,11 +128,11 @@ typedef enum eDepsObjectComponentType {
   /* Geometry Component (Mesh/Displist) */
   DEG_OB_COMP_GEOMETRY,
 
-  /* Evaluation-Related Outer Types (with Subdata) */
+  /* Evaluation-Related Outer Types (with Sub-data) */
 
   /* Pose Component - Owner/Container of Bones Eval */
   DEG_OB_COMP_EVAL_POSE,
-  /* Bone Component - Child/Subcomponent of Pose */
+  /* Bone Component - Child/Sub-component of Pose */
   DEG_OB_COMP_BONE,
 
   /* Material Shading Component */
@@ -162,7 +165,7 @@ void DEG_add_generic_id_relation(struct DepsNodeHandle *node_handle,
                                  const char *description);
 
 /* Special function which is used from modifiers' updateDepsgraph() callback
- * to indicate that the modifietr needs to know transformation of the object
+ * to indicate that the modifier needs to know transformation of the object
  * which that modifier belongs to.
  * This function will take care of checking which operation is required to
  * have transformation for the modifier, taking into account possible simulation

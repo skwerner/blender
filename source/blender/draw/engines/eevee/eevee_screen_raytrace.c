@@ -135,6 +135,12 @@ int EEVEE_screen_raytrace_init(EEVEE_ViewLayerData *sldata, EEVEE_Data *vedata)
       stl->g_data->valid_double_buffer = false;
     }
 
+    if (!effects->ssr_was_valid_double_buffer) {
+      DRW_viewport_request_redraw();
+      EEVEE_temporal_sampling_reset(vedata);
+    }
+    effects->ssr_was_valid_double_buffer = stl->g_data->valid_double_buffer;
+
     effects->reflection_trace_full = (scene_eval->eevee.flag & SCE_EEVEE_SSR_HALF_RESOLUTION) == 0;
     common_data->ssr_thickness = scene_eval->eevee.ssr_thickness;
     common_data->ssr_border_fac = scene_eval->eevee.ssr_border_fade;
@@ -152,6 +158,9 @@ int EEVEE_screen_raytrace_init(EEVEE_ViewLayerData *sldata, EEVEE_Data *vedata)
     int size_fs[2] = {(int)viewport_size[0], (int)viewport_size[1]};
     const bool high_qual_input = true; /* TODO dither low quality input */
     const eGPUTextureFormat format = (high_qual_input) ? GPU_RGBA16F : GPU_RGBA8;
+
+    tracing_res[0] = max_ii(1, tracing_res[0]);
+    tracing_res[1] = max_ii(1, tracing_res[1]);
 
     /* MRT for the shading pass in order to output needed data for the SSR pass. */
     effects->ssr_specrough_input = DRW_texture_pool_query_2d(
@@ -209,7 +218,7 @@ void EEVEE_screen_raytrace_cache_init(EEVEE_ViewLayerData *sldata, EEVEE_Data *v
      * - First pass Trace rays across the depth buffer. The hit position and pdf are
      *   recorded in a RGBA16F render target for each ray (sample).
      *
-     * - We downsample the previous frame color buffer.
+     * - We down-sample the previous frame color buffer.
      *
      * - For each final pixel, we gather neighbors rays and choose a color buffer
      *   mipmap for each ray using its pdf. (filtered importance sampling)

@@ -27,6 +27,7 @@
 #include "MEM_guardedalloc.h"
 
 #include "BLI_blenlib.h"
+#include "BLI_iterator.h"
 #include "BLI_math.h"
 #include "BLI_threads.h"
 
@@ -57,6 +58,7 @@
 #include "BKE_scene.h"
 
 #include "DEG_depsgraph.h"
+#include "DEG_depsgraph_query.h"
 
 #ifdef WITH_AUDASPACE
 /* evil globals ;-) */
@@ -69,19 +71,20 @@ BLI_INLINE void sound_verify_evaluated_id(ID *id)
   UNUSED_VARS_NDEBUG(id);
   /* This is a bit tricky and not quite reliable, but good enough check.
    *
-   * We don't want audio system handles to be allocated on amn original datablocks, and only want
-   * them to be allocated on a datablocks which are result of dependency graph evaluation.
+   * We don't want audio system handles to be allocated on an original data-blocks, and only want
+   * them to be allocated on a data-blocks which are result of dependency graph evaluation.
    *
-   * Datablocks which are covered by a copy-on-write system of dependency graph will have
-   * LIB_TAG_COPIED_ON_WRITE tag set on them. But if some of datablocks during its evaluation
+   * Data-blocks which are covered by a copy-on-write system of dependency graph will have
+   * LIB_TAG_COPIED_ON_WRITE tag set on them. But if some of data-blocks during its evaluation
    * decides to re-allocate it's nested one (for example, object evaluation could re-allocate mesh
-   * when evaluating modifier stack). Such datablocks will have LIB_TAG_COPIED_ON_WRITE_EVAL_RESULT
-   * tag set on them.
+   * when evaluating modifier stack). Such data-blocks will have
+   * LIB_TAG_COPIED_ON_WRITE_EVAL_RESULT tag set on them.
    *
-   * Additionally, we also allow datablocks outside of main database. Those can not be "original"
+   * Additionally, we also allow data-blocks outside of main database. Those can not be "original"
    * and could be used as a temporary evaluated result during operations like baking.
    *
-   * NOTE: We conder ID evaluated if ANY of those flags is set. We do NOT require ALL of them. */
+   * NOTE: We consider ID evaluated if ANY of those flags is set. We do NOT require ALL of them.
+   */
   BLI_assert(id->tag &
              (LIB_TAG_COPIED_ON_WRITE | LIB_TAG_COPIED_ON_WRITE_EVAL_RESULT | LIB_TAG_NO_MAIN));
 }
@@ -143,27 +146,7 @@ bSound *BKE_sound_new_file_exists(Main *bmain, const char *filepath)
   return BKE_sound_new_file_exists_ex(bmain, filepath, NULL);
 }
 
-/** Free (or release) any data used by this sound (does not free the sound itself). */
-void BKE_sound_free(bSound *sound)
-{
-  /* No animdata here. */
-
-  if (sound->packedfile) {
-    freePackedFile(sound->packedfile);
-    sound->packedfile = NULL;
-  }
-
-  BKE_sound_free_audio(sound);
-  BKE_sound_free_waveform(sound);
-
-  if (sound->spinlock) {
-    BLI_spin_end(sound->spinlock);
-    MEM_freeN(sound->spinlock);
-    sound->spinlock = NULL;
-  }
-}
-
-void BKE_sound_free_audio(bSound *sound)
+static void sound_free_audio(bSound *sound)
 {
 #ifdef WITH_AUDASPACE
   if (sound->handle) {
@@ -179,6 +162,26 @@ void BKE_sound_free_audio(bSound *sound)
 #else
   UNUSED_VARS(sound);
 #endif /* WITH_AUDASPACE */
+}
+
+/** Free (or release) any data used by this sound (does not free the sound itself). */
+void BKE_sound_free(bSound *sound)
+{
+  /* No animdata here. */
+
+  if (sound->packedfile) {
+    BKE_packedfile_free(sound->packedfile);
+    sound->packedfile = NULL;
+  }
+
+  sound_free_audio(sound);
+  BKE_sound_free_waveform(sound);
+
+  if (sound->spinlock) {
+    BLI_spin_end(sound->spinlock);
+    MEM_freeN(sound->spinlock);
+    sound->spinlock = NULL;
+  }
 }
 
 /**
@@ -208,7 +211,7 @@ void BKE_sound_copy_data(Main *UNUSED(bmain),
   sound_dst->newpackedfile = NULL;
 
   if (sound_dst->packedfile) {
-    sound_dst->packedfile = dupPackedFile(sound_dst->packedfile);
+    sound_dst->packedfile = BKE_packedfile_duplicate(sound_dst->packedfile);
   }
 
   BKE_sound_reset_runtime(sound_dst);
@@ -386,7 +389,6 @@ void BKE_sound_cache(bSound *sound)
 {
   sound_verify_evaluated_id(&sound->id);
 
-  sound->flags |= SOUND_FLAGS_CACHING;
   if (sound->cache) {
     AUD_Sound_free(sound->cache);
   }
@@ -402,7 +404,6 @@ void BKE_sound_cache(bSound *sound)
 
 void BKE_sound_delete_cache(bSound *sound)
 {
-  sound->flags &= ~SOUND_FLAGS_CACHING;
   if (sound->cache) {
     AUD_Sound_free(sound->cache);
     sound->cache = NULL;
@@ -410,13 +411,7 @@ void BKE_sound_delete_cache(bSound *sound)
   }
 }
 
-void BKE_sound_load(Main *bmain, bSound *sound)
-{
-  sound_verify_evaluated_id(&sound->id);
-  BKE_sound_load_audio(bmain, sound);
-}
-
-void BKE_sound_load_audio(Main *bmain, bSound *sound)
+static void sound_load_audio(Main *bmain, bSound *sound)
 {
 
   if (sound->cache) {
@@ -490,6 +485,12 @@ void BKE_sound_load_audio(Main *bmain, bSound *sound)
   }
 }
 
+void BKE_sound_load(Main *bmain, bSound *sound)
+{
+  sound_verify_evaluated_id(&sound->id);
+  sound_load_audio(bmain, sound);
+}
+
 AUD_Device *BKE_sound_mixdown(Scene *scene, AUD_DeviceSpecs specs, int start, float volume)
 {
   sound_verify_evaluated_id(&scene->id);
@@ -522,11 +523,17 @@ void BKE_sound_destroy_scene(Scene *scene)
   if (scene->sound_scrub_handle) {
     AUD_Handle_stop(scene->sound_scrub_handle);
   }
+  if (scene->speaker_handles) {
+    void *handle;
+
+    while ((handle = AUD_getSet(scene->speaker_handles))) {
+      AUD_Sequence_remove(scene->sound_scene, handle);
+    }
+
+    AUD_destroySet(scene->speaker_handles);
+  }
   if (scene->sound_scene) {
     AUD_Sequence_free(scene->sound_scene);
-  }
-  if (scene->speaker_handles) {
-    AUD_destroySet(scene->speaker_handles);
   }
 }
 
@@ -552,7 +559,7 @@ void BKE_sound_mute_scene(Scene *scene, int muted)
   }
 }
 
-void BKE_sound_update_fps(Scene *scene)
+void BKE_sound_update_fps(Main *bmain, Scene *scene)
 {
   sound_verify_evaluated_id(&scene->id);
 
@@ -560,7 +567,7 @@ void BKE_sound_update_fps(Scene *scene)
     AUD_Sequence_setFPS(scene->sound_scene, FPS);
   }
 
-  BKE_sequencer_refresh_sound_length(scene);
+  BKE_sequencer_refresh_sound_length(bmain, scene);
 }
 
 void BKE_sound_update_scene_listener(Scene *scene)
@@ -600,10 +607,11 @@ void *BKE_sound_add_scene_sound(
     Scene *scene, Sequence *sequence, int startframe, int endframe, int frameskip)
 {
   sound_verify_evaluated_id(&scene->id);
-  /* Happens when sequence's sound datablock was removed. */
+  /* Happens when sequence's sound data-block was removed. */
   if (sequence->sound == NULL) {
     return NULL;
   }
+  sound_verify_evaluated_id(&sequence->sound->id);
   const double fps = FPS;
   void *handle = AUD_Sequence_add(scene->sound_scene,
                                   sequence->sound->playback_handle,
@@ -886,11 +894,15 @@ void BKE_sound_free_waveform(bSound *sound)
   sound->tags &= ~SOUND_TAGS_WAVEFORM_NO_RELOAD;
 }
 
-/* TODO(sergey): Consider mamakinging this function fully autonomous, as in, not require having
- * an existing playback handle. That would make it easy to read waveforms, which doesn't seem to
- * be affected by evaluated scene (waveworm comes from file). */
-void BKE_sound_read_waveform(bSound *sound, short *stop)
+void BKE_sound_read_waveform(Main *bmain, bSound *sound, short *stop)
 {
+  bool need_close_audio_handles = false;
+  if (sound->playback_handle == NULL) {
+    /* TOOD(sergey): Make it fully independent audio handle. */
+    sound_load_audio(bmain, sound);
+    need_close_audio_handles = true;
+  }
+
   AUD_SoundInfo info = AUD_getInfo(sound->playback_handle);
   SoundWaveform *waveform = MEM_mallocN(sizeof(SoundWaveform), "SoundWaveform");
 
@@ -927,35 +939,32 @@ void BKE_sound_read_waveform(bSound *sound, short *stop)
   sound->waveform = waveform;
   sound->tags &= ~SOUND_TAGS_WAVEFORM_LOADING;
   BLI_spin_unlock(sound->spinlock);
+
+  if (need_close_audio_handles) {
+    sound_free_audio(sound);
+  }
 }
 
-static void sound_update_base(Scene *scene, Base *base, void *new_set)
+static void sound_update_base(Scene *scene, Object *object, void *new_set)
 {
-  Object *ob = base->object;
   NlaTrack *track;
   NlaStrip *strip;
   Speaker *speaker;
   float quat[4];
 
   sound_verify_evaluated_id(&scene->id);
-  sound_verify_evaluated_id(&ob->id);
+  sound_verify_evaluated_id(&object->id);
 
-  // TODO(sergey): Bring the test back, or make it a part of dependency graph update.
-  // if ((ob->id.tag & LIB_TAG_DOIT) == 0) {
-  //   return;
-  // }
-  // ob->id.tag &= ~LIB_TAG_DOIT;
-
-  if ((ob->type != OB_SPEAKER) || !ob->adt) {
+  if ((object->type != OB_SPEAKER) || !object->adt) {
     return;
   }
 
-  for (track = ob->adt->nla_tracks.first; track; track = track->next) {
+  for (track = object->adt->nla_tracks.first; track; track = track->next) {
     for (strip = track->strips.first; strip; strip = strip->next) {
       if (strip->type != NLASTRIP_TYPE_SOUND) {
         continue;
       }
-      speaker = (Speaker *)ob->data;
+      speaker = (Speaker *)object->data;
 
       if (AUD_removeSet(scene->speaker_handles, strip->speaker_handle)) {
         if (speaker->sound) {
@@ -989,9 +998,9 @@ static void sound_update_base(Scene *scene, Base *base, void *new_set)
         AUD_SequenceEntry_setConeAngleInner(strip->speaker_handle, speaker->cone_angle_inner);
         AUD_SequenceEntry_setConeVolumeOuter(strip->speaker_handle, speaker->cone_volume_outer);
 
-        mat4_to_quat(quat, ob->obmat);
+        mat4_to_quat(quat, object->obmat);
         AUD_SequenceEntry_setAnimationData(
-            strip->speaker_handle, AUD_AP_LOCATION, CFRA, ob->obmat[3], 1);
+            strip->speaker_handle, AUD_AP_LOCATION, CFRA, object->obmat[3], 1);
         AUD_SequenceEntry_setAnimationData(
             strip->speaker_handle, AUD_AP_ORIENTATION, CFRA, quat, 1);
         AUD_SequenceEntry_setAnimationData(
@@ -1005,32 +1014,24 @@ static void sound_update_base(Scene *scene, Base *base, void *new_set)
   }
 }
 
-void BKE_sound_update_scene(Main *bmain, Scene *scene)
+void BKE_sound_update_scene(Depsgraph *depsgraph, Scene *scene)
 {
   sound_verify_evaluated_id(&scene->id);
-
-  Base *base;
-  Scene *sce_it;
 
   void *new_set = AUD_createSet();
   void *handle;
   float quat[4];
 
   /* cheap test to skip looping over all objects (no speakers is a common case) */
-  if (!BLI_listbase_is_empty(&bmain->speakers)) {
-    // TODO(sergey): Bring the test back, or make it a part of dependency graph update.
-    // BKE_main_id_tag_listbase(&bmain->objects, LIB_TAG_DOIT, true);
-
-    for (ViewLayer *view_layer = scene->view_layers.first; view_layer;
-         view_layer = view_layer->next) {
-      for (base = view_layer->object_bases.first; base; base = base->next) {
-        sound_update_base(scene, base, new_set);
-      }
+  if (DEG_id_type_any_exists(depsgraph, ID_SPK)) {
+    DEG_OBJECT_ITER_BEGIN (depsgraph,
+                           object,
+                           (DEG_ITER_OBJECT_FLAG_LINKED_DIRECTLY |
+                            DEG_ITER_OBJECT_FLAG_LINKED_INDIRECTLY |
+                            DEG_ITER_OBJECT_FLAG_LINKED_VIA_SET)) {
+      sound_update_base(scene, object, new_set);
     }
-
-    for (SETLOOPER_SET_ONLY(scene, sce_it, base)) {
-      sound_update_base(scene, base, new_set);
-    }
+    DEG_OBJECT_ITER_END;
   }
 
   while ((handle = AUD_getSet(scene->speaker_handles))) {
@@ -1053,12 +1054,16 @@ void *BKE_sound_get_factory(void *sound)
   return ((bSound *)sound)->playback_handle;
 }
 
-/* stupid wrapper because AUD_C-API.h includes Python.h which makesrna doesn't like */
-float BKE_sound_get_length(bSound *sound)
+float BKE_sound_get_length(Main *bmain, bSound *sound)
 {
-  sound_verify_evaluated_id(&sound->id);
-  AUD_SoundInfo info = AUD_getInfo(sound->playback_handle);
-
+  if (sound->playback_handle != NULL) {
+    AUD_SoundInfo info = AUD_getInfo(sound->playback_handle);
+    return info.length;
+  }
+  SoundInfo info;
+  if (!BKE_sound_info_get(bmain, sound, &info)) {
+    return 0.0f;
+  }
   return info.length;
 }
 
@@ -1069,6 +1074,29 @@ char **BKE_sound_get_device_names(void)
   }
 
   return audio_device_names;
+}
+
+static bool sound_info_from_playback_handle(void *playback_handle, SoundInfo *sound_info)
+{
+  if (playback_handle == NULL) {
+    return false;
+  }
+  AUD_SoundInfo info = AUD_getInfo(playback_handle);
+  sound_info->specs.channels = (eSoundChannels)info.specs.channels;
+  sound_info->length = info.length;
+  return true;
+}
+
+bool BKE_sound_info_get(struct Main *main, struct bSound *sound, SoundInfo *sound_info)
+{
+  if (sound->playback_handle != NULL) {
+    return sound_info_from_playback_handle(sound->playback_handle, sound_info);
+  }
+  /* TOOD(sergey): Make it fully independent audio handle. */
+  sound_load_audio(main, sound);
+  const bool result = sound_info_from_playback_handle(sound->playback_handle, sound_info);
+  sound_free_audio(sound);
+  return result;
 }
 
 #else /* WITH_AUDASPACE */
@@ -1168,9 +1196,9 @@ int BKE_sound_scene_playing(Scene *UNUSED(scene))
 {
   return -1;
 }
-void BKE_sound_read_waveform(bSound *sound, short *stop)
+void BKE_sound_read_waveform(Main *bmain, bSound *sound, short *stop)
 {
-  UNUSED_VARS(sound, stop);
+  UNUSED_VARS(sound, stop, bmain);
 }
 void BKE_sound_init_main(Main *UNUSED(bmain))
 {
@@ -1181,7 +1209,7 @@ void BKE_sound_set_cfra(int UNUSED(cfra))
 void BKE_sound_update_sequencer(Main *UNUSED(main), bSound *UNUSED(sound))
 {
 }
-void BKE_sound_update_scene(Main *UNUSED(bmain), Scene *UNUSED(scene))
+void BKE_sound_update_scene(Depsgraph *UNUSED(depsgraph), Scene *UNUSED(scene))
 {
 }
 void BKE_sound_update_scene_sound(void *UNUSED(handle), bSound *UNUSED(sound))
@@ -1190,7 +1218,7 @@ void BKE_sound_update_scene_sound(void *UNUSED(handle), bSound *UNUSED(sound))
 void BKE_sound_update_scene_listener(Scene *UNUSED(scene))
 {
 }
-void BKE_sound_update_fps(Scene *UNUSED(scene))
+void BKE_sound_update_fps(Main *UNUSED(bmain), Scene *UNUSED(scene))
 {
 }
 void BKE_sound_set_scene_sound_volume(void *UNUSED(handle),
@@ -1209,7 +1237,7 @@ void BKE_sound_set_scene_sound_pitch(void *UNUSED(handle),
                                      char UNUSED(animated))
 {
 }
-float BKE_sound_get_length(bSound *UNUSED(sound))
+float BKE_sound_get_length(struct Main *UNUSED(bmain), bSound *UNUSED(sound))
 {
   return 0;
 }
@@ -1223,8 +1251,11 @@ void BKE_sound_free_waveform(bSound *UNUSED(sound))
 {
 }
 
-void BKE_sound_load_audio(Main *UNUSED(bmain), bSound *UNUSED(sound))
+bool BKE_sound_info_get(struct Main *UNUSED(main),
+                        struct bSound *UNUSED(sound),
+                        SoundInfo *UNUSED(sound_info))
 {
+  return false;
 }
 
 #endif /* WITH_AUDASPACE */
@@ -1295,5 +1326,9 @@ void BKE_sound_jack_scene_update(Scene *scene, int mode, float time)
 void BKE_sound_evaluate(Depsgraph *depsgraph, Main *bmain, bSound *sound)
 {
   DEG_debug_print_eval(depsgraph, __func__, sound->id.name, sound);
+  if (sound->id.recalc & ID_RECALC_AUDIO) {
+    BKE_sound_load(bmain, sound);
+    return;
+  }
   BKE_sound_ensure_loaded(bmain, sound);
 }

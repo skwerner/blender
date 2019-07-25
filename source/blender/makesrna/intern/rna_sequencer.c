@@ -69,6 +69,7 @@ const EnumPropertyItem rna_enum_sequence_modifier_type_items[] = {
 
 #ifdef RNA_RUNTIME
 
+#  include "BKE_global.h"
 #  include "BKE_report.h"
 #  include "BKE_idprop.h"
 #  include "BKE_movieclip.h"
@@ -76,6 +77,7 @@ const EnumPropertyItem rna_enum_sequence_modifier_type_items[] = {
 #  include "WM_api.h"
 
 #  include "DEG_depsgraph.h"
+#  include "DEG_depsgraph_build.h"
 
 #  include "IMB_imbuf.h"
 
@@ -153,6 +155,25 @@ static void rna_Sequence_invalidate_composite_update(Main *UNUSED(bmain),
 
     BKE_sequence_invalidate_cache_composite(scene, seq);
   }
+}
+
+static void rna_Sequence_use_sequence(Main *bmain, Scene *scene, PointerRNA *ptr)
+{
+  /* General update callback. */
+  rna_Sequence_invalidate_raw_update(bmain, scene, ptr);
+  /* Chaning recursion changes set of IDs which needs to be remapped by the copy-on-write.
+   * the only way for this currently is to tag the ID for ID_RECALC_COPY_ON_WRITE. */
+  Editing *ed = BKE_sequencer_editing_get(scene, false);
+  if (ed) {
+    Sequence *seq = (Sequence *)ptr->data;
+    if (seq->scene != NULL) {
+      DEG_id_tag_update(&seq->scene->id, ID_RECALC_COPY_ON_WRITE);
+    }
+  }
+  /* The sequencer scene is to be updated as well, including new relations from the nested
+   * sequencer. */
+  DEG_id_tag_update(&scene->id, ID_RECALC_SEQUENCER_STRIPS);
+  DEG_relations_tag_update(bmain);
 }
 
 static void rna_SequenceEditor_sequences_all_begin(CollectionPropertyIterator *iter,
@@ -301,7 +322,7 @@ static void rna_Sequence_anim_startofs_final_set(PointerRNA *ptr, int value)
 
   seq->anim_startofs = MIN2(value, seq->len + seq->anim_startofs);
 
-  BKE_sequence_reload_new_file(scene, seq, false);
+  BKE_sequence_reload_new_file(G.main, scene, seq, false);
   do_sequence_frame_change_update(scene, seq);
 }
 
@@ -312,7 +333,7 @@ static void rna_Sequence_anim_endofs_final_set(PointerRNA *ptr, int value)
 
   seq->anim_endofs = MIN2(value, seq->len + seq->anim_endofs);
 
-  BKE_sequence_reload_new_file(scene, seq, false);
+  BKE_sequence_reload_new_file(G.main, scene, seq, false);
   do_sequence_frame_change_update(scene, seq);
 }
 
@@ -783,17 +804,14 @@ static void rna_Sequence_filepath_update(Main *bmain, Scene *UNUSED(scene), Poin
 {
   Scene *scene = (Scene *)ptr->id.data;
   Sequence *seq = (Sequence *)(ptr->data);
-  BKE_sequence_reload_new_file(scene, seq, true);
+  BKE_sequence_reload_new_file(bmain, scene, seq, true);
   BKE_sequence_calc(scene, seq);
   rna_Sequence_invalidate_raw_update(bmain, scene, ptr);
 }
 
-static void rna_Sequence_sound_update(Main *UNUSED(bmain), Scene *UNUSED(scene), PointerRNA *ptr)
+static void rna_Sequence_sound_update(Main *UNUSED(bmain), Scene *scene, PointerRNA *UNUSED(ptr))
 {
-  Sequence *seq = (Sequence *)ptr->data;
-  if (seq->sound != NULL) {
-    BKE_sound_update_scene_sound(seq->scene_sound, seq->sound);
-  }
+  DEG_id_tag_update(&scene->id, ID_RECALC_SEQUENCER_STRIPS | ID_RECALC_AUDIO);
 }
 
 static int seqproxy_seq_cmp_cb(Sequence *seq, void *arg_pt)
@@ -818,13 +836,13 @@ static Sequence *sequence_get_by_proxy(Editing *ed, StripProxy *proxy)
   return data.seq;
 }
 
-static void rna_Sequence_tcindex_update(Main *UNUSED(bmain), Scene *UNUSED(scene), PointerRNA *ptr)
+static void rna_Sequence_tcindex_update(Main *bmain, Scene *UNUSED(scene), PointerRNA *ptr)
 {
   Scene *scene = (Scene *)ptr->id.data;
   Editing *ed = BKE_sequencer_editing_get(scene, false);
   Sequence *seq = sequence_get_by_proxy(ed, ptr->data);
 
-  BKE_sequence_reload_new_file(scene, seq, false);
+  BKE_sequence_reload_new_file(bmain, scene, seq, false);
   do_sequence_frame_change_update(scene, seq);
 }
 
@@ -1588,7 +1606,7 @@ static void rna_def_sequence(BlenderRNA *brna)
 
   prop = RNA_def_property(srna, "mute", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_sdna(prop, NULL, "flag", SEQ_MUTE);
-  RNA_def_property_ui_icon(prop, ICON_HIDE_OFF, -1);
+  RNA_def_property_ui_icon(prop, ICON_CHECKBOX_HLT, -1);
   RNA_def_property_ui_text(
       prop, "Mute", "Disable strip so that it cannot be viewed in the output");
   RNA_def_property_update(prop, NC_SCENE | ND_SEQUENCER, "rna_Sequence_mute_update");
@@ -1763,7 +1781,7 @@ static void rna_def_sequence(BlenderRNA *brna)
   RNA_def_property_boolean_sdna(prop, NULL, "cache_flag", SEQ_CACHE_STORE_PREPROCESSED);
   RNA_def_property_ui_text(
       prop,
-      "Cache Rreprocessed",
+      "Cache Preprocessed",
       "Cache preprocessed images, for faster tweaking of effects at the cost of memory usage");
 
   prop = RNA_def_property(srna, "use_cache_composite", PROP_BOOLEAN, PROP_NONE);
@@ -1939,6 +1957,12 @@ static void rna_def_filter_video(StructRNA *srna)
       {0, NULL, 0, NULL, NULL},
   };
 
+  static const EnumPropertyItem playback_direction_items[] = {
+      {0, "FORWARD", 0, "Forwards", "Play strip forwards"},
+      {SEQ_REVERSE_FRAMES, "BACKWARD", 0, "Backwards", "Play strip backwards"},
+      {0, NULL, 0, NULL, NULL},
+  };
+
   prop = RNA_def_property(srna, "use_deinterlace", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_sdna(prop, NULL, "flag", SEQ_FILTERY);
   RNA_def_property_ui_text(prop, "Deinterlace", "Remove fields from video movies");
@@ -1965,9 +1989,10 @@ static void rna_def_filter_video(StructRNA *srna)
   RNA_def_property_ui_text(prop, "Convert Float", "Convert input to float data");
   RNA_def_property_update(prop, NC_SCENE | ND_SEQUENCER, "rna_Sequence_invalidate_raw_update");
 
-  prop = RNA_def_property(srna, "use_reverse_frames", PROP_BOOLEAN, PROP_NONE);
-  RNA_def_property_boolean_sdna(prop, NULL, "flag", SEQ_REVERSE_FRAMES);
-  RNA_def_property_ui_text(prop, "Flip Time", "Reverse frame order");
+  prop = RNA_def_property(srna, "playback_direction", PROP_ENUM, PROP_NONE); /* as an enum */
+  RNA_def_property_enum_bitflag_sdna(prop, NULL, "flag");
+  RNA_def_property_enum_items(prop, playback_direction_items);
+  RNA_def_property_ui_text(prop, "Playback Direction", "Play strip forwards or backwards");
   RNA_def_property_update(prop, NC_SCENE | ND_SEQUENCER, "rna_Sequence_invalidate_raw_update");
 
   prop = RNA_def_property(srna, "color_multiply", PROP_FLOAT, PROP_UNSIGNED);
@@ -2022,6 +2047,7 @@ static void rna_def_proxy(StructRNA *srna)
   RNA_def_property_ui_text(
       prop, "Use Proxy / Timecode", "Use a preview proxy and/or timecode index for this strip");
   RNA_def_property_boolean_funcs(prop, NULL, "rna_Sequence_use_proxy_set");
+  RNA_def_property_update(prop, NC_SCENE | ND_SEQUENCER, "rna_Sequence_invalidate_raw_update");
 
   prop = RNA_def_property(srna, "proxy", PROP_POINTER, PROP_NONE);
   RNA_def_property_pointer_sdna(prop, NULL, "strip->proxy");
@@ -2182,6 +2208,16 @@ static void rna_def_scene(BlenderRNA *brna)
   StructRNA *srna;
   PropertyRNA *prop;
 
+  static const EnumPropertyItem scene_input_items[] = {
+      {0, "CAMERA", ICON_VIEW3D, "Camera", "Use the Scene's 3D camera as input"},
+      {SEQ_SCENE_STRIPS,
+       "SEQUENCER",
+       ICON_SEQUENCE,
+       "Sequencer",
+       "Use the Scene's Sequencer timeline as input"},
+      {0, NULL, 0, NULL, NULL},
+  };
+
   srna = RNA_def_struct(brna, "SceneSequence", "Sequence");
   RNA_def_struct_ui_text(
       srna, "Scene Sequence", "Sequence strip to used the rendered image of a scene");
@@ -2198,11 +2234,11 @@ static void rna_def_scene(BlenderRNA *brna)
   RNA_def_property_ui_text(prop, "Camera Override", "Override the scenes active camera");
   RNA_def_property_update(prop, NC_SCENE | ND_SEQUENCER, "rna_Sequence_invalidate_raw_update");
 
-  prop = RNA_def_property(srna, "use_sequence", PROP_BOOLEAN, PROP_NONE);
-  RNA_def_property_boolean_sdna(prop, NULL, "flag", SEQ_SCENE_STRIPS);
-  RNA_def_property_ui_text(
-      prop, "Use Sequence", "Use scenes sequence strips directly, instead of rendering");
-  RNA_def_property_update(prop, NC_SCENE | ND_SEQUENCER, "rna_Sequence_invalidate_raw_update");
+  prop = RNA_def_property(srna, "scene_input", PROP_ENUM, PROP_NONE);
+  RNA_def_property_enum_bitflag_sdna(prop, NULL, "flag");
+  RNA_def_property_enum_items(prop, scene_input_items);
+  RNA_def_property_ui_text(prop, "Input", "Input type to use for the Scene strip");
+  RNA_def_property_update(prop, NC_SCENE | ND_SEQUENCER, "rna_Sequence_use_sequence");
 
   prop = RNA_def_property(srna, "use_grease_pencil", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_negative_sdna(prop, NULL, "flag", SEQ_SCENE_NO_GPENCIL);
@@ -2382,7 +2418,8 @@ static void rna_def_sound(BlenderRNA *brna)
 
   prop = RNA_def_property(srna, "show_waveform", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_sdna(prop, NULL, "flag", SEQ_AUDIO_DRAW_WAVEFORM);
-  RNA_def_property_ui_text(prop, "Display Waveform", "Display the audio waveform inside the clip");
+  RNA_def_property_ui_text(
+      prop, "Display Waveform", "Display the audio waveform inside the strip");
   RNA_def_property_update(prop, NC_SCENE | ND_SEQUENCER, NULL);
 
   rna_def_input(srna);
@@ -2656,15 +2693,15 @@ static void rna_def_gaussian_blur(StructRNA *srna)
 static void rna_def_text(StructRNA *srna)
 {
   static const EnumPropertyItem text_align_x_items[] = {
-      {SEQ_TEXT_ALIGN_X_LEFT, "LEFT", 0, "Left", ""},
-      {SEQ_TEXT_ALIGN_X_CENTER, "CENTER", 0, "Center", ""},
-      {SEQ_TEXT_ALIGN_X_RIGHT, "RIGHT", 0, "Right", ""},
+      {SEQ_TEXT_ALIGN_X_LEFT, "LEFT", ICON_ALIGN_LEFT, "Left", ""},
+      {SEQ_TEXT_ALIGN_X_CENTER, "CENTER", ICON_ALIGN_CENTER, "Center", ""},
+      {SEQ_TEXT_ALIGN_X_RIGHT, "RIGHT", ICON_ALIGN_RIGHT, "Right", ""},
       {0, NULL, 0, NULL, NULL},
   };
   static const EnumPropertyItem text_align_y_items[] = {
-      {SEQ_TEXT_ALIGN_Y_TOP, "TOP", 0, "Top", ""},
-      {SEQ_TEXT_ALIGN_Y_CENTER, "CENTER", 0, "Center", ""},
-      {SEQ_TEXT_ALIGN_Y_BOTTOM, "BOTTOM", 0, "Bottom", ""},
+      {SEQ_TEXT_ALIGN_Y_TOP, "TOP", ICON_ALIGN_TOP, "Top", ""},
+      {SEQ_TEXT_ALIGN_Y_CENTER, "CENTER", ICON_ALIGN_MIDDLE, "Center", ""},
+      {SEQ_TEXT_ALIGN_Y_BOTTOM, "BOTTOM", ICON_ALIGN_BOTTOM, "Bottom", ""},
       {0, NULL, 0, NULL, NULL},
   };
 
@@ -2738,7 +2775,7 @@ static void rna_def_text(StructRNA *srna)
 
   prop = RNA_def_property(srna, "use_shadow", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_sdna(prop, NULL, "flag", SEQ_TEXT_SHADOW);
-  RNA_def_property_ui_text(prop, "Shadow", "Draw text with shadow");
+  RNA_def_property_ui_text(prop, "Shadow", "Display shadow behind text");
   RNA_def_property_update(
       prop, NC_SCENE | ND_SEQUENCER, "rna_Sequence_invalidate_preprocessed_update");
 }

@@ -4607,7 +4607,7 @@ static int view3d_navigate_invoke(bContext *C,
 void VIEW3D_OT_navigate(wmOperatorType *ot)
 {
   /* identifiers */
-  ot->name = "View Navigation";
+  ot->name = "View Navigation (Walk/Fly)";
   ot->description =
       "Interactively navigate around the scene (uses the mode (walk/fly) preference)";
   ot->idname = "VIEW3D_OT_navigate";
@@ -4661,6 +4661,7 @@ static int background_image_add_invoke(bContext *C, wmOperator *op, const wmEven
   cam->flag |= CAM_SHOW_BG_IMAGE;
 
   WM_event_add_notifier(C, NC_CAMERA | ND_DRAW_RENDER_VIEWPORT, cam);
+  DEG_id_tag_update(&cam->id, ID_RECALC_COPY_ON_WRITE);
 
   return OPERATOR_FINISHED;
 }
@@ -4721,6 +4722,8 @@ static int background_image_remove_exec(bContext *C, wmOperator *op)
     BKE_camera_background_image_remove(cam, bgpic_rem);
 
     WM_event_add_notifier(C, NC_CAMERA | ND_DRAW_RENDER_VIEWPORT, cam);
+    DEG_id_tag_update(&cam->id, ID_RECALC_COPY_ON_WRITE);
+
     return OPERATOR_FINISHED;
   }
   else {
@@ -4944,7 +4947,7 @@ void ED_view3d_cursor3d_position_rotation(bContext *C,
                                                    ray_no,
                                                    NULL,
                                                    &ob_dummy,
-                                                   obmat)) {
+                                                   obmat) != 0) {
       if (use_depth) {
         copy_v3_v3(cursor_co, ray_co);
       }
@@ -5204,7 +5207,7 @@ static int toggle_xray_exec(bContext *C, wmOperator *op)
                               ELEM(v3d->shading.type, OB_WIRE, OB_SOLID));
 
     if (v3d->shading.type == OB_WIRE) {
-      v3d->shading.flag ^= V3D_SHADING_XRAY_BONE;
+      v3d->shading.flag ^= V3D_SHADING_XRAY_WIREFRAME;
     }
     else {
       v3d->shading.flag ^= V3D_SHADING_XRAY;

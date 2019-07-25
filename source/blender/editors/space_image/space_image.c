@@ -292,8 +292,7 @@ static void image_refresh(const bContext *C, ScrArea *sa)
   Image *ima;
 
   ima = ED_space_image(sima);
-
-  BKE_image_user_frame_calc(&sima->iuser, scene->r.cfra);
+  BKE_image_user_frame_calc(ima, &sima->iuser, scene->r.cfra);
 
   /* check if we have to set the image from the editmesh */
   if (ima && (ima->source == IMA_SRC_VIEWER && sima->mode == SI_MODE_MASK)) {
@@ -461,7 +460,7 @@ static void IMAGE_GGT_gizmo2d(wmGizmoGroupType *gzgt)
 
   gzgt->poll = ED_widgetgroup_gizmo2d_poll;
   gzgt->setup = ED_widgetgroup_gizmo2d_setup;
-  gzgt->setup_keymap = WM_gizmogroup_setup_keymap_generic_drag;
+  gzgt->setup_keymap = WM_gizmogroup_setup_keymap_generic_maybe_drag;
   gzgt->refresh = ED_widgetgroup_gizmo2d_refresh;
   gzgt->draw_prepare = ED_widgetgroup_gizmo2d_draw_prepare;
 }
@@ -591,19 +590,19 @@ static void image_main_region_draw(const bContext *C, ARegion *ar)
    * olg context since we now use it for drawing the entire area */
   gpu_batch_presets_reset();
 
-  /* TODO(fclem) port to draw manager and remove the depth buffer allocation. */
   GPUViewport *viewport =
       ar->draw_buffer->viewport[ar->draw_buffer->stereo ? sima->iuser.multiview_eye : 0];
   DefaultFramebufferList *fbl = GPU_viewport_framebuffer_list_get(viewport);
-  GPU_framebuffer_bind(fbl->color_only_fb);
+  GPU_framebuffer_bind(fbl->default_fb);
 
   /* XXX not supported yet, disabling for now */
   scene->r.scemode &= ~R_COMP_CROP;
 
   /* clear and setup matrix */
   UI_GetThemeColor3fv(TH_BACK, col);
-  GPU_clear_color(col[0], col[1], col[2], 0.0);
+  GPU_clear_color(col[0], col[1], col[2], 0.0f);
   GPU_clear(GPU_COLOR_BIT);
+  GPU_depth_test(false);
 
   image_user_refresh_scene(C, sima);
 
@@ -844,6 +843,11 @@ static void image_buttons_region_listener(wmWindow *UNUSED(win),
         ED_region_tag_redraw(ar);
       }
       break;
+    case NC_BRUSH:
+      if (wmn->action == NA_EDITED) {
+        ED_region_tag_redraw(ar);
+      }
+      break;
   }
 }
 
@@ -945,6 +949,11 @@ static void image_header_region_listener(wmWindow *UNUSED(win),
         case ND_SELECT:
           ED_region_tag_redraw(ar);
           break;
+      }
+      break;
+    case NC_BRUSH:
+      if (wmn->action == NA_EDITED) {
+        ED_region_tag_redraw(ar);
       }
       break;
   }

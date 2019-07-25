@@ -125,7 +125,9 @@ static struct WMInitStruct {
     .native_pixels = true,
 };
 
-/* ******** win open & close ************ */
+/* -------------------------------------------------------------------- */
+/** \name Window Open & Close
+ * \{ */
 
 static void wm_window_set_drawable(wmWindowManager *wm, wmWindow *win, bool activate);
 static int wm_window_timer(const bContext *C);
@@ -352,6 +354,8 @@ wmWindow *wm_window_copy_test(bContext *C,
     return NULL;
   }
 }
+
+/** \} */
 
 /* -------------------------------------------------------------------- */
 /** \name Quit Confirmation Dialog
@@ -710,8 +714,14 @@ void wm_window_ghostwindows_ensure(wmWindowManager *wm)
 
       wm_window_ghostwindow_add(wm, "Blender", win);
     }
-    /* happens after fileread */
-    wm_window_ensure_eventstate(win);
+
+    if (win->ghostwin != NULL) {
+      /* If we have no ghostwin this is a buggy window that should be removed.
+       * However we still need to initialize it correctly so the screen doesn't hang. */
+
+      /* happens after fileread */
+      wm_window_ensure_eventstate(win);
+    }
 
     /* add keymap handlers (1 handler for all keys in map!) */
     keymap = WM_keymap_ensure(wm->defaultconf, "Window", 0, 0);
@@ -1197,8 +1207,8 @@ static int ghost_event_proc(GHOST_EventHandle evt, GHOST_TUserDataPtr C_void_ptr
 //#  define USE_WIN_ACTIVATE
 #endif
 
-        wm->winactive =
-            win; /* no context change! c->wm->windrawable is drawable, or for area queues */
+        /* No context change! C->wm->windrawable is drawable, or for area queues. */
+        wm->winactive = win;
 
         win->active = 1;
         //              window_handle(win, INPUTCHANGE, win->active);
@@ -1450,8 +1460,9 @@ static int ghost_event_proc(GHOST_EventHandle evt, GHOST_TUserDataPtr C_void_ptr
         event.prevx = event.x;
         event.prevy = event.y;
 
-        wm->winactive =
-            win; /* no context change! c->wm->windrawable is drawable, or for area queues */
+        /* No context change! C->wm->windrawable is drawable, or for area queues. */
+        wm->winactive = win;
+
         win->active = 1;
 
         wm_event_add(win, &event);
@@ -1602,10 +1613,14 @@ void wm_window_process_events(const bContext *C)
   }
 }
 
-/* **************** init ********************** */
+/* -------------------------------------------------------------------- */
+/** \name Ghost Init/Exit
+ * \{ */
 
-/* bContext can be null in background mode because we don't
- * need to event handling. */
+/**
+ * \note #bContext can be null in background mode because we don't
+ * need to event handling.
+ */
 void wm_ghost_init(bContext *C)
 {
   if (!g_system) {
@@ -1639,7 +1654,11 @@ void wm_ghost_exit(void)
   g_system = NULL;
 }
 
-/* **************** timer ********************** */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Event Timer
+ * \{ */
 
 /* to (de)activate running timers temporary */
 void WM_event_timer_sleep(wmWindowManager *wm,
@@ -1739,7 +1758,11 @@ void WM_event_remove_timer_notifier(wmWindowManager *wm, wmWindow *win, wmTimer 
   WM_event_remove_timer(wm, win, timer);
 }
 
-/* ******************* clipboard **************** */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Clipboard
+ * \{ */
 
 static char *wm_clipboard_text_get_ex(bool selection, int *r_len, bool firstline)
 {
@@ -1844,7 +1867,11 @@ void WM_clipboard_text_set(const char *buf, bool selection)
   }
 }
 
-/* ******************* progress bar **************** */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Progress Bar
+ * \{ */
 
 void WM_progress_set(wmWindow *win, float progress)
 {
@@ -1856,7 +1883,11 @@ void WM_progress_clear(wmWindow *win)
   GHOST_EndProgressBar(win->ghostwin);
 }
 
-/* ************************************ */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Window Position/Size (internal)
+ * \{ */
 
 void wm_window_get_position(wmWindow *win, int *r_pos_x, int *r_pos_y)
 {
@@ -1869,6 +1900,12 @@ void wm_window_set_size(wmWindow *win, int width, int height)
   GHOST_SetClientSize(win->ghostwin, width, height);
 }
 
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Window Depth (Raise/Lower)
+ * \{ */
+
 void wm_window_lower(wmWindow *win)
 {
   GHOST_SetWindowOrder(win->ghostwin, GHOST_kWindowOrderBottom);
@@ -1876,8 +1913,18 @@ void wm_window_lower(wmWindow *win)
 
 void wm_window_raise(wmWindow *win)
 {
+  /* Restore window if minimized */
+  if (GHOST_GetWindowState(win->ghostwin) == GHOST_kWindowStateMinimized) {
+    GHOST_SetWindowState(win->ghostwin, GHOST_kWindowStateNormal);
+  }
   GHOST_SetWindowOrder(win->ghostwin, GHOST_kWindowOrderTop);
 }
+
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Window Buffers
+ * \{ */
 
 void wm_window_swap_buffers(wmWindow *win)
 {
@@ -1894,7 +1941,55 @@ bool wm_window_get_swap_interval(wmWindow *win, int *intervalOut)
   return GHOST_GetSwapInterval(win->ghostwin, intervalOut);
 }
 
-/* ******************* exported api ***************** */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Window Screen Shot Utility
+ *
+ * Include here since it can involve low level buffer switching.
+ *
+ * \{ */
+
+uint *WM_window_pixels_read(wmWindowManager *wm, wmWindow *win, int r_size[2])
+{
+  bool setup_context = wm->windrawable != win;
+
+  if (setup_context) {
+    GHOST_ActivateWindowDrawingContext(win->ghostwin);
+    GPU_context_active_set(win->gpuctx);
+  }
+
+  r_size[0] = WM_window_pixels_x(win);
+  r_size[1] = WM_window_pixels_y(win);
+  const uint rect_len = r_size[0] * r_size[1];
+  uint *rect = MEM_mallocN(sizeof(*rect) * rect_len, __func__);
+
+  glReadBuffer(GL_FRONT);
+  glReadPixels(0, 0, r_size[0], r_size[1], GL_RGBA, GL_UNSIGNED_BYTE, rect);
+  glFinish();
+  glReadBuffer(GL_BACK);
+
+  if (setup_context) {
+    if (wm->windrawable) {
+      GHOST_ActivateWindowDrawingContext(wm->windrawable->ghostwin);
+      GPU_context_active_set(wm->windrawable->gpuctx);
+    }
+  }
+
+  /* Clear alpha, it is not set to a meaningful value in OpenGL. */
+  uchar *cp = (uchar *)rect;
+  uint i;
+  for (i = 0, cp += 3; i < rect_len; i++, cp += 4) {
+    *cp = 0xff;
+  }
+  return (uint *)rect;
+}
+
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Initial Window State API
+ * \{ */
 
 /* called whem no ghost system was initialized */
 void WM_init_state_size_set(int stax, int stay, int sizx, int sizy)
@@ -1934,6 +2029,12 @@ void WM_init_native_pixels(bool do_it)
 {
   wm_init_state.native_pixels = do_it;
 }
+
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Cursor API
+ * \{ */
 
 void WM_init_tablet_api(void)
 {
@@ -1997,8 +2098,17 @@ float WM_cursor_pressure(const struct wmWindow *win)
   }
 }
 
-/* support for native pixel size */
-/* mac retina opens window in size X, but it has up to 2 x more pixels */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Window Size (public)
+ * \{ */
+
+/**
+ * Support for native pixel size
+ *
+ * \note macOS retina opens window in size X, but it has up to 2 x more pixels.
+ */
 int WM_window_pixels_x(const wmWindow *win)
 {
   float f = GHOST_GetNativePixelSize(win->ghostwin);
@@ -2073,6 +2183,12 @@ bool WM_window_is_fullscreen(wmWindow *win)
 {
   return win->windowstate == GHOST_kWindowStateFullScreen;
 }
+
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Window Screen/Scene/WorkSpaceViewLayer API
+ * \{ */
 
 /**
  * Some editor data may need to be synced with scene data (3D View camera and layers).
@@ -2249,8 +2365,16 @@ bool WM_window_is_temp_screen(const wmWindow *win)
   return (screen && screen->temp != 0);
 }
 
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Window IME API
+ * \{ */
+
 #ifdef WITH_INPUT_IME
-/* note: keep in mind wm_window_IME_begin is also used to reposition the IME window */
+/**
+ * \note Keep in mind #wm_window_IME_begin is also used to reposition the IME window.
+ */
 void wm_window_IME_begin(wmWindow *win, int x, int y, int w, int h, bool complete)
 {
   BLI_assert(win);
@@ -2267,7 +2391,11 @@ void wm_window_IME_end(wmWindow *win)
 }
 #endif /* WITH_INPUT_IME */
 
-/* ****** direct opengl context management ****** */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Direct OpenGL Context Management
+ * \{ */
 
 void *WM_opengl_context_create(void)
 {
@@ -2297,3 +2425,5 @@ void WM_opengl_context_release(void *context)
   BLI_assert(GPU_framebuffer_active_get() == NULL);
   GHOST_ReleaseOpenGLContext((GHOST_ContextHandle)context);
 }
+
+/** \} */

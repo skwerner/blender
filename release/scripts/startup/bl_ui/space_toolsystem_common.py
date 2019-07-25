@@ -195,11 +195,8 @@ class ToolSelectPanelHelper:
             assert(type(icon_name) is str)
             icon_value = _icon_cache.get(icon_name)
             if icon_value is None:
-                dirname = bpy.utils.resource_path('LOCAL')
-                if not os.path.exists(dirname):
-                    # TODO(campbell): use a better way of finding datafiles.
-                    dirname = bpy.utils.resource_path('SYSTEM')
-                filename = os.path.join(dirname, "datafiles", "icons", icon_name + ".dat")
+                dirname = bpy.utils.system_resource('DATAFILES', "icons")
+                filename = os.path.join(dirname, icon_name + ".dat")
                 try:
                     icon_value = bpy.app.icons.new_triangles_from_file(filename)
                 except Exception as ex:
@@ -293,6 +290,45 @@ class ToolSelectPanelHelper:
                 if item is not None:
                     if item.idname == idname:
                         return (cls, item, index)
+        return None, None, -1
+
+    @staticmethod
+    def _tool_get_by_flat_index(context, space_type, tool_index):
+        """
+        Return the active Python tool definition and index (if in sub-group, else -1).
+
+        Return the index of the expanded list.
+        """
+        cls = ToolSelectPanelHelper._tool_class_from_space_type(space_type)
+        if cls is not None:
+            i = 0
+            for item, index in ToolSelectPanelHelper._tools_flatten_with_tool_index(cls.tools_from_context(context)):
+                if item is not None:
+                    if i == tool_index:
+                        return (cls, item, index)
+                    i += 1
+        return None, None, -1
+
+    @staticmethod
+    def _tool_get_by_index(context, space_type, tool_index):
+        """
+        Return the active Python tool definition and index (if in sub-group, else -1).
+
+        Return the index of the list without expanding.
+        """
+        cls = ToolSelectPanelHelper._tool_class_from_space_type(space_type)
+        if cls is not None:
+            i = 0
+            for item in cls.tools_from_context(context):
+                if item is not None:
+                    if i == tool_index:
+                        if type(item) is tuple:
+                            index = cls._tool_group_active.get(item[0].idname, 0)
+                            item = item[index]
+                        else:
+                            index = -1
+                        return (cls, item, index)
+                    i += 1
         return None, None, -1
 
     @staticmethod
@@ -769,6 +805,16 @@ def description_from_id(context, space_type, idname, *, use_operator=True):
 def item_from_id(context, space_type, idname):
     # Used directly for tooltips.
     _cls, item, _index = ToolSelectPanelHelper._tool_get_by_id(context, space_type, idname)
+    return item
+
+
+def item_from_flat_index(context, space_type, index):
+    _cls, item, _index = ToolSelectPanelHelper._tool_get_by_flat_index(context, space_type, index)
+    return item
+
+
+def item_from_index(context, space_type, index):
+    _cls, item, _index = ToolSelectPanelHelper._tool_get_by_index(context, space_type, index)
     return item
 
 

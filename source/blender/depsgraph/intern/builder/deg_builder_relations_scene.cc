@@ -27,7 +27,7 @@
 
 namespace DEG {
 
-void DepsgraphRelationBuilder::build_scene_render(Scene *scene)
+void DepsgraphRelationBuilder::build_scene_render(Scene *scene, ViewLayer *view_layer)
 {
   scene_ = scene;
   const bool build_compositor = (scene->r.scemode & R_DOCOMP);
@@ -40,6 +40,10 @@ void DepsgraphRelationBuilder::build_scene_render(Scene *scene)
   }
   if (build_sequencer) {
     build_scene_sequencer(scene);
+    build_scene_speakers(scene, view_layer);
+  }
+  if (scene->camera != NULL) {
+    build_object(NULL, scene->camera);
   }
 }
 
@@ -48,8 +52,9 @@ void DepsgraphRelationBuilder::build_scene_parameters(Scene *scene)
   if (built_map_.checkIsBuiltAndTag(scene, BuilderMap::TAG_PARAMETERS)) {
     return;
   }
+  build_parameters(&scene->id);
   OperationKey parameters_eval_key(
-      &scene->id, NodeType::PARAMETERS, OperationCode::PARAMETERS_EVAL);
+      &scene->id, NodeType::PARAMETERS, OperationCode::PARAMETERS_EXIT);
   OperationKey scene_eval_key(&scene->id, NodeType::PARAMETERS, OperationCode::SCENE_EVAL);
   add_relation(parameters_eval_key, scene_eval_key, "Parameters -> Scene Eval");
 }

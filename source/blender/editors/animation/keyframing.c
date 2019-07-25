@@ -532,7 +532,7 @@ int insert_vert_fcurve(
    *                 introduced discontinuities in how the param worked. */
   beztr.back = 1.70158f;
 
-  /* "elastic" easing - values here were hand-optimised for a default duration of
+  /* "elastic" easing - values here were hand-optimized for a default duration of
    *                    ~10 frames (typical mograph motion length) */
   beztr.amplitude = 0.8f;
   beztr.period = 4.1f;
@@ -2034,7 +2034,7 @@ static int delete_key_exec(bContext *C, wmOperator *op)
     int type = RNA_property_enum_get(op->ptr, op->type->prop);
     ks = ANIM_keyingset_get_from_enum_type(scene, type);
     if (ks == NULL) {
-      BKE_report(op->reports, RPT_ERROR, "No active keying set");
+      BKE_report(op->reports, RPT_ERROR, "No active Keying Set");
       return OPERATOR_CANCELLED;
     }
   }
@@ -2044,7 +2044,7 @@ static int delete_key_exec(bContext *C, wmOperator *op)
     ks = ANIM_keyingset_get_from_idname(scene, type_id);
 
     if (ks == NULL) {
-      BKE_reportf(op->reports, RPT_ERROR, "No active keying set '%s' not found", type_id);
+      BKE_reportf(op->reports, RPT_ERROR, "Active Keying Set '%s' not found", type_id);
       return OPERATOR_CANCELLED;
     }
   }
@@ -2249,9 +2249,15 @@ static int delete_key_v3d_exec(bContext *C, wmOperator *op)
   Scene *scene = CTX_data_scene(C);
   float cfra = (float)CFRA;
 
+  int selected_objects_len = 0;
+  int selected_objects_success_len = 0;
+  int success_multi = 0;
+
   CTX_DATA_BEGIN (C, Object *, ob, selected_objects) {
     ID *id = &ob->id;
     int success = 0;
+
+    selected_objects_len += 1;
 
     /* just those in active action... */
     if ((ob->adt) && (ob->adt->action)) {
@@ -2317,21 +2323,28 @@ static int delete_key_v3d_exec(bContext *C, wmOperator *op)
       DEG_id_tag_update(&ob->adt->action->id, ID_RECALC_ANIMATION_NO_FLUSH);
     }
 
-    /* report success (or failure) */
+    /* Only for reporting. */
     if (success) {
-      BKE_reportf(op->reports,
-                  RPT_INFO,
-                  "Object '%s' successfully had %d keyframes removed",
-                  id->name + 2,
-                  success);
-    }
-    else {
-      BKE_reportf(op->reports, RPT_ERROR, "No keyframes removed from Object '%s'", id->name + 2);
+      selected_objects_success_len += 1;
+      success_multi += success;
     }
 
     DEG_id_tag_update(&ob->id, ID_RECALC_TRANSFORM);
   }
   CTX_DATA_END;
+
+  /* report success (or failure) */
+  if (selected_objects_success_len) {
+    BKE_reportf(op->reports,
+                RPT_INFO,
+                "%d object(s) successfully had %d keyframes removed",
+                selected_objects_success_len,
+                success_multi);
+  }
+  else {
+    BKE_reportf(
+        op->reports, RPT_ERROR, "No keyframes removed from %d object(s)", selected_objects_len);
+  }
 
   /* send updates */
   WM_event_add_notifier(C, NC_OBJECT | ND_KEYS, NULL);
@@ -3000,7 +3013,7 @@ static KeyingSet *keyingset_get_from_op_with_error(wmOperator *op, PropertyRNA *
     int type = RNA_property_enum_get(op->ptr, prop);
     ks = ANIM_keyingset_get_from_enum_type(scene, type);
     if (ks == NULL) {
-      BKE_report(op->reports, RPT_ERROR, "No active keying set");
+      BKE_report(op->reports, RPT_ERROR, "No active Keying Set");
     }
   }
   else if (prop_type == PROP_STRING) {

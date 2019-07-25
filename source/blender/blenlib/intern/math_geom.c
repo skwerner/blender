@@ -506,7 +506,7 @@ float dist_to_line_v3(const float p[3], const float l1[3], const float l2[3])
  *
  * \param axis_ref: used when v1,v2,v3 form a line and to check if the corner is concave/convex.
  *
- * \note the distance from \a v1 & \a v3 to \a v2 doesnt matter
+ * \note the distance from \a v1 & \a v3 to \a v2 doesn't matter
  * (it just defines the planes).
  *
  * \return the lowest squared distance to either of the planes.
@@ -2532,7 +2532,7 @@ bool isect_sweeping_sphere_tri_v3(const float p1[3],
   }
 
   /*---test edges---*/
-  sub_v3_v3v3(e3, v2, v1); /* wasnt yet calculated */
+  sub_v3_v3v3(e3, v2, v1); /* wasn't yet calculated */
 
   /*e1*/
   sub_v3_v3v3(bv, v0, p1);
@@ -2796,6 +2796,46 @@ bool isect_line_line_strict_v3(const float v1[3],
       return false;
     }
   }
+}
+
+/**
+ * Check if two rays are not parallel and returns a factor that indicates
+ * the distance from \a ray_origin_b to the closest point on ray-a to ray-b.
+ *
+ * \note Neither directions need to be normalized.
+ */
+bool isect_ray_ray_v3(const float ray_origin_a[3],
+                      const float ray_direction_a[3],
+                      const float ray_origin_b[3],
+                      const float ray_direction_b[3],
+                      float *r_lambda_a,
+                      float *r_lambda_b)
+{
+  BLI_assert(r_lambda_a || r_lambda_b);
+  float n[3];
+  cross_v3_v3v3(n, ray_direction_b, ray_direction_a);
+  const float nlen = len_squared_v3(n);
+
+  if (UNLIKELY(nlen == 0.0f)) {
+    /* The lines are parallel. */
+    return false;
+  }
+
+  float t[3], c[3], cray[3];
+  sub_v3_v3v3(t, ray_origin_b, ray_origin_a);
+  sub_v3_v3v3(c, n, t);
+
+  if (r_lambda_a != NULL) {
+    cross_v3_v3v3(cray, c, ray_direction_b);
+    *r_lambda_a = dot_v3v3(cray, n) / nlen;
+  }
+
+  if (r_lambda_b != NULL) {
+    cross_v3_v3v3(cray, c, ray_direction_a);
+    *r_lambda_b = dot_v3v3(cray, n) / nlen;
+  }
+
+  return true;
 }
 
 bool isect_aabb_aabb_v3(const float min1[3],

@@ -81,9 +81,9 @@ struct rcti;
 
 typedef struct DRWInterface DRWInterface;
 typedef struct DRWPass DRWPass;
-typedef struct DRWView DRWView;
 typedef struct DRWShadingGroup DRWShadingGroup;
 typedef struct DRWUniform DRWUniform;
+typedef struct DRWView DRWView;
 
 /* Opaque type to avoid usage as a DRWCall but it is exactly the same thing. */
 typedef struct DRWCallBuffer DRWCallBuffer;
@@ -314,7 +314,7 @@ void DRW_shader_free(struct GPUShader *shader);
 /* Batches */
 
 typedef enum {
-  /** Wrtie mask */
+  /** Write mask */
   DRW_STATE_WRITE_DEPTH = (1 << 0),
   DRW_STATE_WRITE_COLOR = (1 << 1),
   DRW_STATE_WRITE_STENCIL = (1 << 2),
@@ -332,26 +332,29 @@ typedef enum {
   DRW_STATE_CULL_BACK = (1 << 11),
   DRW_STATE_CULL_FRONT = (1 << 12),
   /** Stencil test */
-  DRW_STATE_STENCIL_EQUAL = (1 << 13),
-  DRW_STATE_STENCIL_NEQUAL = (1 << 14),
+  DRW_STATE_STENCIL_ALWAYS = (1 << 13),
+  DRW_STATE_STENCIL_EQUAL = (1 << 14),
+  DRW_STATE_STENCIL_NEQUAL = (1 << 15),
 
   /** Blend state */
-  DRW_STATE_BLEND_ADD = (1 << 15),
+  DRW_STATE_BLEND_ADD = (1 << 16),
   /** Same as additive but let alpha accumulate without premult. */
-  DRW_STATE_BLEND_ADD_FULL = (1 << 16),
+  DRW_STATE_BLEND_ADD_FULL = (1 << 17),
   /** Standard alpha blending. */
-  DRW_STATE_BLEND_ALPHA = (1 << 17),
+  DRW_STATE_BLEND_ALPHA = (1 << 18),
   /** Use that if color is already premult by alpha. */
-  DRW_STATE_BLEND_ALPHA_PREMUL = (1 << 18),
-  DRW_STATE_BLEND_ALPHA_UNDER_PREMUL = (1 << 19),
-  DRW_STATE_BLEND_OIT = (1 << 20),
-  DRW_STATE_BLEND_MUL = (1 << 21),
+  DRW_STATE_BLEND_ALPHA_PREMUL = (1 << 19),
+  DRW_STATE_BLEND_ALPHA_UNDER_PREMUL = (1 << 20),
+  DRW_STATE_BLEND_OIT = (1 << 21),
+  DRW_STATE_BLEND_MUL = (1 << 22),
+  /** Use dual source blending. WARNING: Only one color buffer allowed. */
+  DRW_STATE_BLEND_CUSTOM = (1 << 23),
 
-  DRW_STATE_CLIP_PLANES = (1 << 22),
-  DRW_STATE_WIRE_SMOOTH = (1 << 23),
-  DRW_STATE_FIRST_VERTEX_CONVENTION = (1 << 24),
+  DRW_STATE_CLIP_PLANES = (1 << 28),
+  DRW_STATE_WIRE_SMOOTH = (1 << 29),
+  DRW_STATE_FIRST_VERTEX_CONVENTION = (1 << 30),
   /** DO NOT USE. Assumed always enabled. Only used internally. */
-  DRW_STATE_PROGRAM_POINT_SIZE = (1 << 25),
+  DRW_STATE_PROGRAM_POINT_SIZE = (1u << 31),
 } DRWState;
 
 #define DRW_STATE_DEFAULT \
@@ -359,6 +362,14 @@ typedef enum {
 #define DRW_STATE_RASTERIZER_ENABLED \
   (DRW_STATE_WRITE_DEPTH | DRW_STATE_WRITE_COLOR | DRW_STATE_WRITE_STENCIL | \
    DRW_STATE_WRITE_STENCIL_SHADOW_PASS | DRW_STATE_WRITE_STENCIL_SHADOW_FAIL)
+#define DRW_STATE_DEPTH_TEST_ENABLED \
+  (DRW_STATE_DEPTH_ALWAYS | DRW_STATE_DEPTH_LESS | DRW_STATE_DEPTH_LESS_EQUAL | \
+   DRW_STATE_DEPTH_EQUAL | DRW_STATE_DEPTH_GREATER | DRW_STATE_DEPTH_GREATER_EQUAL)
+#define DRW_STATE_STENCIL_TEST_ENABLED \
+  (DRW_STATE_STENCIL_ALWAYS | DRW_STATE_STENCIL_EQUAL | DRW_STATE_STENCIL_NEQUAL)
+#define DRW_STATE_WRITE_STENCIL_ENABLED \
+  (DRW_STATE_WRITE_STENCIL | DRW_STATE_WRITE_STENCIL_SHADOW_PASS | \
+   DRW_STATE_WRITE_STENCIL_SHADOW_FAIL)
 
 typedef enum {
   DRW_ATTR_INT,
@@ -522,6 +533,11 @@ void DRW_shgroup_uniform_float_copy(DRWShadingGroup *shgroup, const char *name, 
 void DRW_shgroup_uniform_vec2_copy(DRWShadingGroup *shgroup, const char *name, const float *value);
 
 bool DRW_shgroup_is_empty(DRWShadingGroup *shgroup);
+
+/* TODO: workaround functions waiting for the clearing operation to be available inside the
+ * shgroups. */
+DRWShadingGroup *DRW_shgroup_get_next(DRWShadingGroup *shgroup);
+uint DRW_shgroup_stencil_mask_get(DRWShadingGroup *shgroup);
 
 /* Passes */
 DRWPass *DRW_pass_create(const char *name, DRWState state);

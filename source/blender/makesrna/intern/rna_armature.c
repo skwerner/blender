@@ -268,18 +268,6 @@ static IDProperty *rna_EditBone_idprops(PointerRNA *ptr, bool create)
   return ebone->prop;
 }
 
-/* Update the layers_used variable after bones are moved between layer
- * NOTE: Used to be done in drawing code in 2.7, but that won't work with
- *       Copy-on-Write, as drawing uses evaluated copies.
- */
-static void rna_Armature_layer_used_refresh(bArmature *arm, ListBase *bones)
-{
-  for (Bone *bone = bones->first; bone; bone = bone->next) {
-    arm->layer_used |= bone->layer;
-    rna_Armature_layer_used_refresh(arm, &bone->childbase);
-  }
-}
-
 static void rna_bone_layer_set(int *layer, const bool *values)
 {
   int i, tot = 0;
@@ -312,8 +300,7 @@ static void rna_Bone_layer_set(PointerRNA *ptr, const bool *values)
 
   rna_bone_layer_set(&bone->layer, values);
 
-  arm->layer_used = 0;
-  rna_Armature_layer_used_refresh(arm, &arm->bonebase);
+  BKE_armature_refresh_layer_used(arm);
 }
 
 static void rna_Armature_layer_set(PointerRNA *ptr, const bool *values)
@@ -550,7 +537,7 @@ static void rna_Armature_editbone_transform_update(Main *bmain, Scene *scene, Po
 {
   bArmature *arm = (bArmature *)ptr->id.data;
   EditBone *ebone = (EditBone *)ptr->data;
-  EditBone *child, *eboflip;
+  EditBone *child;
 
   /* update our parent */
   if (ebone->parent && ebone->flag & BONE_CONNECTED) {
@@ -565,26 +552,7 @@ static void rna_Armature_editbone_transform_update(Main *bmain, Scene *scene, Po
   }
 
   if (arm->flag & ARM_MIRROR_EDIT) {
-    eboflip = ED_armature_ebone_get_mirrored(arm->edbo, ebone);
-
-    if (eboflip) {
-      eboflip->roll = -ebone->roll;
-
-      eboflip->head[0] = -ebone->head[0];
-      eboflip->tail[0] = -ebone->tail[0];
-
-      /* update our parent */
-      if (eboflip->parent && eboflip->flag & BONE_CONNECTED) {
-        copy_v3_v3(eboflip->parent->tail, eboflip->head);
-      }
-
-      /* update our children if necessary */
-      for (child = arm->edbo->first; child; child = child->next) {
-        if (child->parent == eboflip && (child->flag & BONE_CONNECTED)) {
-          copy_v3_v3(child->head, eboflip->tail);
-        }
-      }
-    }
+    ED_armature_ebone_transform_mirror_update(arm, ebone, false);
   }
 
   rna_Armature_update_data(bmain, scene, ptr);
@@ -1374,7 +1342,7 @@ static void rna_def_armature(BlenderRNA *brna)
   prop = RNA_def_property(srna, "display_type", PROP_ENUM, PROP_NONE);
   RNA_def_property_enum_sdna(prop, NULL, "drawtype");
   RNA_def_property_enum_items(prop, prop_drawtype_items);
-  RNA_def_property_ui_text(prop, "Display Type Type", "");
+  RNA_def_property_ui_text(prop, "Display Type", "");
   RNA_def_property_update(prop, 0, "rna_Armature_redraw_data");
   RNA_def_property_flag(prop, PROP_LIB_EXCEPTION);
 
@@ -1410,12 +1378,6 @@ static void rna_def_armature(BlenderRNA *brna)
   RNA_def_property_ui_text(prop, "Display Names", "Display bone names");
   RNA_def_property_update(prop, 0, "rna_Armature_redraw_data");
   RNA_def_property_flag(prop, PROP_LIB_EXCEPTION);
-
-  prop = RNA_def_property(srna, "use_deform_delay", PROP_BOOLEAN, PROP_NONE);
-  RNA_def_property_boolean_sdna(prop, NULL, "flag", ARM_DELAYDEFORM);
-  RNA_def_property_ui_text(
-      prop, "Delay Deform", "Don't deform children when manipulating bones in Pose Mode");
-  RNA_def_property_update(prop, 0, "rna_Armature_update_data");
 
   prop = RNA_def_property(srna, "use_mirror_x", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_sdna(prop, NULL, "flag", ARM_MIRROR_EDIT);

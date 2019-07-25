@@ -515,8 +515,8 @@ static void template_id_cb(bContext *C, void *arg_litem, void *arg_event)
     case UI_ID_LOCAL:
       if (id) {
         Main *bmain = CTX_data_main(C);
-        if (BKE_override_static_is_enabled() && CTX_wm_window(C)->eventstate->shift) {
-          ID *override_id = BKE_override_static_create_from_id(bmain, id);
+        if (BKE_override_library_is_enabled() && CTX_wm_window(C)->eventstate->shift) {
+          ID *override_id = BKE_override_library_create_from_id(bmain, id);
           if (override_id != NULL) {
             BKE_main_id_clear_newpoins(bmain);
 
@@ -537,8 +537,8 @@ static void template_id_cb(bContext *C, void *arg_litem, void *arg_event)
       }
       break;
     case UI_ID_OVERRIDE:
-      if (id && id->override_static) {
-        BKE_override_static_free(&id->override_static);
+      if (id && id->override_library) {
+        BKE_override_library_free(&id->override_library);
         /* reassign to get get proper updates/notifiers */
         idptr = RNA_property_pointer_get(&template_ui->ptr, template_ui->prop);
         RNA_property_pointer_set(&template_ui->ptr, template_ui->prop, idptr, NULL);
@@ -856,9 +856,9 @@ static void template_ID(bContext *C,
                            0,
                            0,
                            0,
-                           BKE_override_static_is_enabled() ?
+                           BKE_override_library_is_enabled() ?
                                TIP_("Direct linked library data-block, click to make local, "
-                                    "Shift + Click to create a static override") :
+                                    "Shift + Click to create a library override") :
                                TIP_("Direct linked library data-block, click to make local"));
         if (disabled) {
           UI_but_flag_enable(but, UI_BUT_DISABLED);
@@ -869,22 +869,21 @@ static void template_ID(bContext *C,
         }
       }
     }
-    else if (ID_IS_STATIC_OVERRIDE(id)) {
-      but = uiDefIconBut(
-          block,
-          UI_BTYPE_BUT,
-          0,
-          ICON_LIBRARY_DATA_OVERRIDE,
-          0,
-          0,
-          UI_UNIT_X,
-          UI_UNIT_Y,
-          NULL,
-          0,
-          0,
-          0,
-          0,
-          TIP_("Static override of linked library data-block, click to make fully local"));
+    else if (ID_IS_OVERRIDE_LIBRARY(id)) {
+      but = uiDefIconBut(block,
+                         UI_BTYPE_BUT,
+                         0,
+                         ICON_LIBRARY_DATA_OVERRIDE,
+                         0,
+                         0,
+                         UI_UNIT_X,
+                         UI_UNIT_Y,
+                         NULL,
+                         0,
+                         0,
+                         0,
+                         0,
+                         TIP_("Library override of linked data-block, click to make fully local"));
       UI_but_funcN_set(
           but, template_id_cb, MEM_dupallocN(template_ui), POINTER_FROM_INT(UI_ID_OVERRIDE));
     }
@@ -953,7 +952,7 @@ static void template_ID(bContext *C,
 
   /* Due to space limit in UI - skip the "open" icon for packed data, and allow to unpack.
    * Only for images, sound and fonts */
-  if (id && BKE_pack_check(id)) {
+  if (id && BKE_packedfile_id_check(id)) {
     but = uiDefIconButO(block,
                         UI_BTYPE_BUT,
                         "FILE_OT_unpack_item",
@@ -1723,7 +1722,7 @@ void uiTemplatePathBuilder(uiLayout *layout,
 
 /************************ Modifier Template *************************/
 
-#define ERROR_LIBDATA_MESSAGE IFACE_("Can't edit external library data")
+#define ERROR_LIBDATA_MESSAGE TIP_("Can't edit external library data")
 
 static void modifiers_convertToReal(bContext *C, void *ob_v, void *md_v)
 {
@@ -2550,7 +2549,7 @@ static uiLayout *draw_constraint(uiLayout *layout, Object *ob, bConstraint *con)
 
   /* Set but-locks for protected settings (magic numbers are used here!) */
   if (proxy_protected) {
-    UI_block_lock_set(block, true, IFACE_("Cannot edit Proxy-Protected Constraint"));
+    UI_block_lock_set(block, true, TIP_("Cannot edit Proxy-Protected Constraint"));
   }
 
   /* Draw constraint data */
@@ -3079,7 +3078,7 @@ static void colorband_update_cb(bContext *UNUSED(C), void *bt_v, void *coba_v)
   uiBut *bt = bt_v;
   ColorBand *coba = coba_v;
 
-  /* sneaky update here, we need to sort the colorband points to be in order,
+  /* Sneaky update here, we need to sort the color-band points to be in order,
    * however the RNA pointer then is wrong, so we update it */
   BKE_colorband_update_sort(coba);
   bt->rnapoin.data = coba->data + coba->cur;
@@ -6451,7 +6450,7 @@ static void template_keymap_item_properties(uiLayout *layout, const char *title,
 
   flow = uiLayoutColumnFlow(layout, 2, false);
 
-  RNA_STRUCT_BEGIN (ptr, prop) {
+  RNA_STRUCT_BEGIN_SKIP_RNA_TYPE (ptr, prop) {
     const bool is_set = RNA_property_is_set(ptr, prop);
     uiBut *but;
 

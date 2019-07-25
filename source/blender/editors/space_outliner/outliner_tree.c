@@ -109,7 +109,7 @@ static void outliner_storage_cleanup(SpaceOutliner *soops)
     }
 
     /* cleanup only after reading file or undo step, and always for
-     * RNA datablocks view in order to save memory */
+     * RNA data-blocks view in order to save memory */
     if (soops->storeflag & SO_TREESTORE_CLEANUP) {
       soops->storeflag &= ~SO_TREESTORE_CLEANUP;
 
@@ -515,7 +515,7 @@ static void outliner_add_object_contents(SpaceOutliner *soops,
   }
 
   /* duplicated group */
-  if (ob->instance_collection) {
+  if (ob->instance_collection && (ob->transflag & OB_DUPLICOLLECTION)) {
     outliner_add_element(soops, &te->subtree, ob->instance_collection, te, 0, 0);
   }
 }
@@ -835,7 +835,7 @@ static TreeElement *outliner_add_element(
   if (type == 0) {
     TreeStoreElem *tsepar = parent ? TREESTORE(parent) : NULL;
 
-    /* ID datablock */
+    /* ID data-block. */
     if (tsepar == NULL || tsepar->type != TSE_ID_BASE || soops->filter_id_type) {
       outliner_add_id_contents(soops, te, tselem, id);
     }
@@ -1277,7 +1277,7 @@ static TreeElement *outliner_add_library_contents(Main *mainvar,
 
       if (id) {
         if (!tenlib) {
-          /* Create library tree element on demand, depending if there are any datablocks. */
+          /* Create library tree element on demand, depending if there are any data-blocks. */
           if (lib) {
             tenlib = outliner_add_element(soops, lb, lib, NULL, 0, 0);
           }
@@ -1287,7 +1287,7 @@ static TreeElement *outliner_add_library_contents(Main *mainvar,
           }
         }
 
-        /* Create datablock list parent element on demand. */
+        /* Create data-block list parent element on demand. */
         if (filter_id_type) {
           ten = tenlib;
         }
@@ -1328,7 +1328,7 @@ static void outliner_add_orphaned_datablocks(Main *mainvar, SpaceOutliner *soops
     if (lbarray[a] && lbarray[a]->first) {
       ID *id = lbarray[a]->first;
 
-      /* check if there are any datablocks of this type which are orphans */
+      /* check if there are any data-blocks of this type which are orphans */
       for (; id; id = id->next) {
         if (ID_REAL_USERS(id) <= 0) {
           break;
@@ -1336,7 +1336,7 @@ static void outliner_add_orphaned_datablocks(Main *mainvar, SpaceOutliner *soops
       }
 
       if (id) {
-        /* header for this type of datablock */
+        /* header for this type of data-block */
         if (filter_id_type) {
           ten = NULL;
         }
@@ -1346,7 +1346,7 @@ static void outliner_add_orphaned_datablocks(Main *mainvar, SpaceOutliner *soops
           ten->name = outliner_idcode_to_plural(GS(id->name));
         }
 
-        /* add the orphaned datablocks - these will not be added with any subtrees attached */
+        /* add the orphaned data-blocks - these will not be added with any subtrees attached */
         for (id = lbarray[a]->first; id; id = id->next) {
           if (ID_REAL_USERS(id) <= 0) {
             outliner_add_element(soops, (ten) ? &ten->subtree : &soops->tree, id, ten, 0, 0);
@@ -1545,7 +1545,7 @@ static void outliner_make_object_parent_hierarchy_collections(SpaceOutliner *soo
 
       if (!found) {
         /* We add the child in the tree even if it is not in the collection.
-         * We deliberately clear its subtree though, to make it less proeminent. */
+         * We deliberately clear its sub-tree though, to make it less prominent. */
         TreeElement *child_ob_tree_element = outliner_add_element(
             soops, &parent_ob_tree_element->subtree, child, parent_ob_tree_element, 0, 0);
         outliner_free_tree(&child_ob_tree_element->subtree);
@@ -2126,6 +2126,45 @@ static bool outliner_filter_has_name(TreeElement *te, const char *name, int flag
   return fnmatch(name, te->name, fn_flag) == 0;
 }
 
+static bool outliner_element_is_collection_or_object(TreeElement *te)
+{
+  TreeStoreElem *tselem = TREESTORE(te);
+
+  if ((tselem->type == 0) && (te->idcode == ID_OB)) {
+    return true;
+  }
+  else if (outliner_is_collection_tree_element(te)) {
+    return true;
+  }
+
+  return false;
+}
+
+static TreeElement *outliner_extract_children_from_subtree(TreeElement *element,
+                                                           ListBase *parent_subtree)
+{
+  TreeElement *te_next = element->next;
+
+  if (outliner_element_is_collection_or_object(element)) {
+    TreeElement *te_prev = NULL;
+    for (TreeElement *te = element->subtree.last; te; te = te_prev) {
+      te_prev = te->prev;
+
+      if (!outliner_element_is_collection_or_object(te)) {
+        continue;
+      }
+
+      te_next = te;
+      BLI_remlink(&element->subtree, te);
+      BLI_insertlinkafter(parent_subtree, element->prev, te);
+      te->parent = element->parent;
+    }
+  }
+
+  outliner_free_tree_element(element, parent_subtree);
+  return te_next;
+}
+
 static int outliner_filter_subtree(SpaceOutliner *soops,
                                    ViewLayer *view_layer,
                                    ListBase *lb,
@@ -2137,9 +2176,9 @@ static int outliner_filter_subtree(SpaceOutliner *soops,
 
   for (te = lb->first; te; te = te_next) {
     te_next = te->next;
-
     if ((outliner_element_visible_get(view_layer, te, exclude_filter) == false)) {
-      outliner_free_tree_element(te, lb);
+      /* Don't free the tree, but extract the children from the parent and add to this tree. */
+      te_next = outliner_extract_children_from_subtree(te, lb);
       continue;
     }
     else if ((exclude_filter & SO_FILTER_SEARCH) == 0) {
@@ -2218,7 +2257,7 @@ void outliner_build_tree(
   int show_opened = !soops->treestore || !BLI_mempool_len(soops->treestore);
 
   /* Are we looking for something - we want to tag parents to filter child matches
-   * - NOT in datablocks view - searching all datablocks takes way too long to be useful
+   * - NOT in data-blocks view - searching all data-blocks takes way too long to be useful
    * - this variable is only set once per tree build */
   if (soops->search_string[0] != 0 && soops->outlinevis != SO_DATA_API) {
     soops->search_flags |= SO_SEARCH_RECURSIVE;

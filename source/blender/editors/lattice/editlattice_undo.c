@@ -68,9 +68,19 @@ typedef struct UndoLattice {
 
 static void undolatt_to_editlatt(UndoLattice *ult, EditLatt *editlatt)
 {
-  int len = editlatt->latt->pntsu * editlatt->latt->pntsv * editlatt->latt->pntsw;
+  const int len_src = ult->pntsu * ult->pntsv * ult->pntsw;
+  const int len_dst = editlatt->latt->pntsu * editlatt->latt->pntsv * editlatt->latt->pntsw;
+  if (len_src != len_dst) {
+    MEM_freeN(editlatt->latt->def);
+    editlatt->latt->def = MEM_dupallocN(ult->def);
+  }
+  else {
+    memcpy(editlatt->latt->def, ult->def, sizeof(BPoint) * len_src);
+  }
 
-  memcpy(editlatt->latt->def, ult->def, sizeof(BPoint) * len);
+  editlatt->latt->pntsu = ult->pntsu;
+  editlatt->latt->pntsv = ult->pntsv;
+  editlatt->latt->pntsw = ult->pntsw;
   editlatt->latt->actbp = ult->actbp;
 }
 
@@ -176,7 +186,8 @@ static bool lattice_undosys_step_encode(struct bContext *C,
 static void lattice_undosys_step_decode(struct bContext *C,
                                         struct Main *UNUSED(bmain),
                                         UndoStep *us_p,
-                                        int UNUSED(dir))
+                                        int UNUSED(dir),
+                                        bool UNUSED(is_final))
 {
   LatticeUndoStep *us = (LatticeUndoStep *)us_p;
 

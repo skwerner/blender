@@ -70,7 +70,9 @@
 wmGizmoGroup *wm_gizmogroup_new_from_type(wmGizmoMap *gzmap, wmGizmoGroupType *gzgt)
 {
   wmGizmoGroup *gzgroup = MEM_callocN(sizeof(*gzgroup), "gizmo-group");
+
   gzgroup->type = gzgt;
+  gzgroup->type->users += 1;
 
   /* keep back-link */
   gzgroup->parent_gzmap = gzmap;
@@ -78,6 +80,11 @@ wmGizmoGroup *wm_gizmogroup_new_from_type(wmGizmoMap *gzmap, wmGizmoGroupType *g
   BLI_addtail(&gzmap->groups, gzgroup);
 
   return gzgroup;
+}
+
+wmGizmoGroup *wm_gizmogroup_find_by_type(const wmGizmoMap *gzmap, const wmGizmoGroupType *gzgt)
+{
+  return BLI_findptr(&gzmap->groups, gzgt, offsetof(wmGizmoGroup, type));
 }
 
 void wm_gizmogroup_free(bContext *C, wmGizmoGroup *gzgroup)
@@ -125,7 +132,21 @@ void wm_gizmogroup_free(bContext *C, wmGizmoGroup *gzgroup)
 
   BLI_remlink(&gzmap->groups, gzgroup);
 
+  if (gzgroup->tag_remove == false) {
+    gzgroup->type->users -= 1;
+  }
+
   MEM_freeN(gzgroup);
+}
+
+void WM_gizmo_group_tag_remove(wmGizmoGroup *gzgroup)
+{
+  if (gzgroup->tag_remove == false) {
+    gzgroup->tag_remove = true;
+    gzgroup->type->users -= 1;
+    BLI_assert(gzgroup->type->users >= 0);
+    WM_gizmoconfig_update_tag_group_remove(gzgroup->parent_gzmap);
+  }
 }
 
 /**
@@ -283,6 +304,34 @@ bool WM_gizmo_group_type_poll(const bContext *C, const struct wmGizmoGroupType *
   /* Check for poll function, if gizmo-group belongs to an operator,
    * also check if the operator is running. */
   return (!gzgt->poll || gzgt->poll(C, (wmGizmoGroupType *)gzgt));
+}
+
+void WM_gizmo_group_remove_by_tool(bContext *C,
+                                   Main *bmain,
+                                   const wmGizmoGroupType *gzgt,
+                                   const bToolRef *tref)
+{
+  wmGizmoMapType *gzmap_type = WM_gizmomaptype_find(&gzgt->gzmap_params);
+  for (bScreen *sc = bmain->screens.first; sc; sc = sc->id.next) {
+    for (ScrArea *sa = sc->areabase.first; sa; sa = sa->next) {
+      if (sa->runtime.tool == tref) {
+        for (ARegion *ar = sa->regionbase.first; ar; ar = ar->next) {
+          wmGizmoMap *gzmap = ar->gizmo_map;
+          if (gzmap && gzmap->type == gzmap_type) {
+            wmGizmoGroup *gzgroup, *gzgroup_next;
+            for (gzgroup = gzmap->groups.first; gzgroup; gzgroup = gzgroup_next) {
+              gzgroup_next = gzgroup->next;
+              if (gzgroup->type == gzgt) {
+                BLI_assert(gzgroup->parent_gzmap == gzmap);
+                wm_gizmogroup_free(C, gzgroup);
+                ED_region_tag_redraw(ar);
+              }
+            }
+          }
+        }
+      }
+    }
+  }
 }
 
 bool wm_gizmogroup_is_visible_in_drawstep(const wmGizmoGroup *gzgroup,
@@ -662,6 +711,12 @@ wmKeyMap *WM_gizmogroup_setup_keymap_generic_drag(const wmGizmoGroupType *UNUSED
   return WM_gizmo_keymap_generic_drag_with_keyconfig(kc);
 }
 
+wmKeyMap *WM_gizmogroup_setup_keymap_generic_maybe_drag(const wmGizmoGroupType *UNUSED(gzgt),
+                                                        wmKeyConfig *kc)
+{
+  return WM_gizmo_keymap_generic_maybe_drag_with_keyconfig(kc);
+}
+
 /**
  * Variation of #WM_gizmogroup_keymap_common but with keymap items for selection
  *
@@ -767,6 +822,17 @@ struct wmKeyMap *WM_gizmo_keymap_generic_click_drag(wmWindowManager *wm)
   return WM_gizmo_keymap_generic_click_drag_with_keyconfig(wm->defaultconf);
 }
 
+/** Drag or press depending on preference. */
+struct wmKeyMap *WM_gizmo_keymap_generic_maybe_drag_with_keyconfig(wmKeyConfig *kc)
+{
+  const char *idname = "Generic Gizmo Maybe Drag";
+  return WM_keymap_ensure(kc, idname, SPACE_EMPTY, RGN_TYPE_WINDOW);
+}
+struct wmKeyMap *WM_gizmo_keymap_generic_maybe_drag(wmWindowManager *wm)
+{
+  return WM_gizmo_keymap_generic_maybe_drag_with_keyconfig(wm->defaultconf);
+}
+
 /** \} */
 
 /* -------------------------------------------------------------------- */
@@ -861,6 +927,15 @@ wmGizmoGroup *WM_gizmomaptype_group_init_runtime_with_region(wmGizmoMapType *gzm
 
   wmGizmoGroup *gzgroup = wm_gizmogroup_new_from_type(gzmap, gzgt);
 
+  /* Don't allow duplicates when switching modes for e.g. see: T66229. */
+  LISTBASE_FOREACH (wmGizmoGroup *, gzgroup_iter, &gzmap->groups) {
+    if (gzgroup_iter->type == gzgt) {
+      if (gzgroup_iter != gzgroup) {
+        WM_gizmo_group_tag_remove(gzgroup_iter);
+      }
+    }
+  }
+
   wm_gizmomap_highlight_set(gzmap, NULL, NULL, 0);
 
   ED_region_tag_redraw(ar);
@@ -953,7 +1028,7 @@ void WM_gizmo_group_type_add_ptr_ex(wmGizmoGroupType *gzgt, wmGizmoMapType *gzma
 {
   WM_gizmomaptype_group_link_ptr(gzmap_type, gzgt);
 
-  WM_gizmoconfig_update_tag_init(gzmap_type, gzgt);
+  WM_gizmoconfig_update_tag_group_type_init(gzmap_type, gzgt);
 }
 void WM_gizmo_group_type_add_ptr(wmGizmoGroupType *gzgt)
 {
@@ -1033,7 +1108,7 @@ void WM_gizmo_group_type_reinit(struct Main *bmain, const char *idname)
 
 void WM_gizmo_group_type_unlink_delayed_ptr_ex(wmGizmoGroupType *gzgt, wmGizmoMapType *gzmap_type)
 {
-  WM_gizmoconfig_update_tag_remove(gzmap_type, gzgt);
+  WM_gizmoconfig_update_tag_group_type_remove(gzmap_type, gzgt);
 }
 
 void WM_gizmo_group_type_unlink_delayed_ptr(wmGizmoGroupType *gzgt)
@@ -1047,6 +1122,22 @@ void WM_gizmo_group_type_unlink_delayed(const char *idname)
   wmGizmoGroupType *gzgt = WM_gizmogrouptype_find(idname, false);
   BLI_assert(gzgt != NULL);
   WM_gizmo_group_type_unlink_delayed_ptr(gzgt);
+}
+
+void WM_gizmo_group_unlink_delayed_ptr_from_space(wmGizmoGroupType *gzgt,
+                                                  wmGizmoMapType *gzmap_type,
+                                                  ScrArea *sa)
+{
+  for (ARegion *ar = sa->regionbase.first; ar; ar = ar->next) {
+    wmGizmoMap *gzmap = ar->gizmo_map;
+    if (gzmap && gzmap->type == gzmap_type) {
+      for (wmGizmoGroup *gzgroup = gzmap->groups.first; gzgroup; gzgroup = gzgroup->next) {
+        if (gzgroup->type == gzgt) {
+          WM_gizmo_group_tag_remove(gzgroup);
+        }
+      }
+    }
+  }
 }
 
 /** \} */

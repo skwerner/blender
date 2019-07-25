@@ -155,8 +155,8 @@ typedef struct SB_thread_context {
 #define BFF_INTERSECT 1 /* collider edge   intrudes face */
 #define BFF_CLOSEVERT 2 /* collider vertex repulses face */
 
-static float SoftHeunTol =
-    1.0f; /* humm .. this should be calculated from sb parameters and sizes */
+/* humm .. this should be calculated from sb parameters and sizes. */
+static float SoftHeunTol = 1.0f;
 
 /* local prototypes */
 static void free_softbody_intern(SoftBody *sb);
@@ -251,7 +251,7 @@ static float _final_mass(Object *ob, BodyPoint *bp)
 /*
  * for each target object/face the axis aligned bounding box (AABB) is stored
  * faces parallel to global axes
- * so only simple "value" in [min, max] ckecks are used
+ * so only simple "value" in [min, max] checks are used
  * float operations still
  */
 
@@ -952,7 +952,7 @@ static void free_softbody_intern(SoftBody *sb)
  *
  * it actually checks if the particle intrudes a short range force field generated
  * by the faces of the target object and returns a force to drive the particel out
- * the strength of the field grows exponetially if the particle is on the 'wrong' side of the face
+ * the strength of the field grows exponentially if the particle is on the 'wrong' side of the face
  * 'wrong' side : projection to the face normal is negative (all referred to a vertex in the face)
  *
  * flaw of this: 'fast' particles as well as 'fast' colliding faces
@@ -962,7 +962,7 @@ static void free_softbody_intern(SoftBody *sb)
  * besides our h is way larger than in QM because forces propagate way slower here
  * we have to deal with fuzzy(time) in the range of 1/25 seconds (typical frame rate)
  * yup collision targets are not known here any better
- * and 1/25 second is looong compared to real collision events
+ * and 1/25 second is very long compared to real collision events
  * Q: why not use 'simple' collision here like bouncing back a particle
  *   --> reverting is velocity on the face normal
  * A: because our particles are not alone here
@@ -1707,11 +1707,10 @@ static int sb_detect_vertex_collisionCached(float opco[3],
             copy_v3_v3(nv3, mvert[vt->tri[2]].co);
 
             if (mprevvert) {
-              /* grab the average speed of the collider vertices
-               * before we spoil nvX
+              /* Grab the average speed of the collider vertices before we spoil nvX
                * humm could be done once a SB steps but then we' need to store that too
-               * since the AABB reduced propabitlty to get here drasticallly
-               * it might be a nice tradeof CPU <--> memory
+               * since the AABB reduced probability to get here drastically
+               * it might be a nice tradeoff CPU <--> memory.
                */
               sub_v3_v3v3(vv1, nv1, mprevvert[vt->tri[0]].co);
               sub_v3_v3v3(vv2, nv2, mprevvert[vt->tri[1]].co);

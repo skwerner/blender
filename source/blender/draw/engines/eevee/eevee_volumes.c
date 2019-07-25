@@ -178,6 +178,8 @@ void EEVEE_volumes_init(EEVEE_ViewLayerData *sldata, EEVEE_Data *vedata)
 
   common_data->vol_coord_scale[0] = viewport_size[0] / (float)(tile_size * tex_size[0]);
   common_data->vol_coord_scale[1] = viewport_size[1] / (float)(tile_size * tex_size[1]);
+  common_data->vol_coord_scale[2] = 1.0f / viewport_size[0];
+  common_data->vol_coord_scale[3] = 1.0f / viewport_size[1];
 
   /* TODO compute snap to maxZBuffer for clustered rendering */
   if ((common_data->vol_tex_size[0] != tex_size[0]) ||
@@ -394,9 +396,13 @@ void EEVEE_volumes_cache_object_add(EEVEE_ViewLayerData *sldata,
   }
 
   struct GPUMaterial *mat = EEVEE_material_mesh_volume_get(scene, ma);
+  eGPUMaterialStatus status = GPU_material_status(mat);
 
+  if (status == GPU_MAT_QUEUED) {
+    vedata->stl->g_data->queued_shaders_count++;
+  }
   /* If shader failed to compile or is currently compiling. */
-  if (GPU_material_status(mat) != GPU_MAT_SUCCESS) {
+  if (status != GPU_MAT_SUCCESS) {
     return;
   }
 
@@ -505,11 +511,10 @@ void EEVEE_volumes_cache_finish(EEVEE_ViewLayerData *sldata, EEVEE_Data *vedata)
 
     DRW_shgroup_call_procedural_triangles(grp, NULL, common_data->vol_tex_size[2]);
 
-    DRW_PASS_CREATE(psl->volumetric_resolve_ps, DRW_STATE_WRITE_COLOR);
+    DRW_PASS_CREATE(psl->volumetric_resolve_ps, DRW_STATE_WRITE_COLOR | DRW_STATE_BLEND_CUSTOM);
     grp = DRW_shgroup_create(e_data.volumetric_resolve_sh, psl->volumetric_resolve_ps);
     DRW_shgroup_uniform_texture_ref(grp, "inScattering", &txl->volume_scatter);
     DRW_shgroup_uniform_texture_ref(grp, "inTransmittance", &txl->volume_transmit);
-    DRW_shgroup_uniform_texture_ref(grp, "inSceneColor", &e_data.color_src);
     DRW_shgroup_uniform_texture_ref(grp, "inSceneDepth", &e_data.depth_src);
     DRW_shgroup_uniform_block(grp, "common_block", sldata->common_ubo);
 
@@ -571,10 +576,6 @@ void EEVEE_volumes_draw_init(EEVEE_ViewLayerData *sldata, EEVEE_Data *vedata)
                                   {GPU_ATTACHMENT_NONE,
                                    GPU_ATTACHMENT_TEXTURE(txl->volume_scatter_history),
                                    GPU_ATTACHMENT_TEXTURE(txl->volume_transmit_history)});
-
-    /* Usage happens after buffer have been swapped. */
-    effects->volume_scatter = txl->volume_scatter_history;
-    effects->volume_transmit = txl->volume_transmit_history;
   }
   else {
     DRW_TEXTURE_FREE_SAFE(txl->volume_prop_scattering);
@@ -588,10 +589,10 @@ void EEVEE_volumes_draw_init(EEVEE_ViewLayerData *sldata, EEVEE_Data *vedata)
     GPU_FRAMEBUFFER_FREE_SAFE(fbl->volumetric_fb);
     GPU_FRAMEBUFFER_FREE_SAFE(fbl->volumetric_scat_fb);
     GPU_FRAMEBUFFER_FREE_SAFE(fbl->volumetric_integ_fb);
-
-    effects->volume_scatter = e_data.dummy_scatter;
-    effects->volume_transmit = e_data.dummy_transmit;
   }
+
+  effects->volume_scatter = e_data.dummy_scatter;
+  effects->volume_transmit = e_data.dummy_transmit;
 }
 
 void EEVEE_volumes_compute(EEVEE_ViewLayerData *UNUSED(sldata), EEVEE_Data *vedata)
@@ -618,6 +619,9 @@ void EEVEE_volumes_compute(EEVEE_ViewLayerData *UNUSED(sldata), EEVEE_Data *veda
     SWAP(GPUTexture *, txl->volume_scatter, txl->volume_scatter_history);
     SWAP(GPUTexture *, txl->volume_transmit, txl->volume_transmit_history);
 
+    effects->volume_scatter = txl->volume_scatter;
+    effects->volume_transmit = txl->volume_transmit;
+
     /* Restore */
     GPU_framebuffer_bind(fbl->main_fb);
 
@@ -628,29 +632,19 @@ void EEVEE_volumes_compute(EEVEE_ViewLayerData *UNUSED(sldata), EEVEE_Data *veda
 void EEVEE_volumes_resolve(EEVEE_ViewLayerData *UNUSED(sldata), EEVEE_Data *vedata)
 {
   EEVEE_PassList *psl = vedata->psl;
-  EEVEE_TextureList *txl = vedata->txl;
   EEVEE_FramebufferList *fbl = vedata->fbl;
   EEVEE_StorageList *stl = vedata->stl;
   EEVEE_EffectsInfo *effects = stl->effects;
 
   if ((effects->enabled_effects & EFFECT_VOLUMETRIC) != 0) {
     DefaultTextureList *dtxl = DRW_viewport_texture_list_get();
-
-    e_data.color_src = txl->color;
     e_data.depth_src = dtxl->depth;
 
-    /* Step 4: Apply for opaque */
-    GPU_framebuffer_bind(fbl->effect_color_fb);
+    /* Apply for opaque geometry. */
+    GPU_framebuffer_bind(fbl->main_color_fb);
     DRW_draw_pass(psl->volumetric_resolve_ps);
 
-    /* Swap the buffers and rebind depth to the current buffer */
-    SWAP(GPUFrameBuffer *, fbl->main_fb, fbl->effect_fb);
-    SWAP(GPUFrameBuffer *, fbl->main_color_fb, fbl->effect_color_fb);
-    SWAP(GPUTexture *, txl->color, txl->color_post);
-
-    /* Restore */
-    GPU_framebuffer_texture_detach(fbl->effect_fb, dtxl->depth);
-    GPU_framebuffer_texture_attach(fbl->main_fb, dtxl->depth, 0, 0);
+    /* Restore. */
     GPU_framebuffer_bind(fbl->main_fb);
   }
 }

@@ -225,8 +225,8 @@ static void gp_primitive_update_cps(tGPDprimitive *tgpi)
   }
   else if (tgpi->type == GP_STROKE_CURVE) {
     mid_v2_v2v2(tgpi->midpoint, tgpi->start, tgpi->end);
-    copy_v2_v2(tgpi->cp1, tgpi->midpoint);
-    copy_v2_v2(tgpi->cp2, tgpi->cp1);
+    interp_v2_v2v2(tgpi->cp1, tgpi->midpoint, tgpi->start, 0.33f);
+    interp_v2_v2v2(tgpi->cp2, tgpi->midpoint, tgpi->end, 0.33f);
   }
   else if (tgpi->type == GP_STROKE_ARC) {
     if (tgpi->flip) {
@@ -400,32 +400,32 @@ static void gpencil_primitive_status_indicators(bContext *C, tGPDprimitive *tgpi
 
   if (tgpi->type == GP_STROKE_LINE) {
     BLI_strncpy(msg_str,
-                IFACE_("Line: ESC to cancel, LMB set origin, Enter/MMB to confirm, WHEEL/+- to "
-                       "adjust subdivision number, Shift to align, Alt to center, E: extrude"),
+                TIP_("Line: ESC to cancel, LMB set origin, Enter/MMB to confirm, WHEEL/+- to "
+                     "adjust subdivision number, Shift to align, Alt to center, E: extrude"),
                 UI_MAX_DRAW_STR);
   }
   else if (tgpi->type == GP_STROKE_BOX) {
     BLI_strncpy(msg_str,
-                IFACE_("Rectangle: ESC to cancel, LMB set origin, Enter/MMB to confirm, WHEEL/+- "
-                       "to adjust subdivision number, Shift to square, Alt to center"),
+                TIP_("Rectangle: ESC to cancel, LMB set origin, Enter/MMB to confirm, WHEEL/+- "
+                     "to adjust subdivision number, Shift to square, Alt to center"),
                 UI_MAX_DRAW_STR);
   }
   else if (tgpi->type == GP_STROKE_CIRCLE) {
     BLI_strncpy(msg_str,
-                IFACE_("Circle: ESC to cancel, Enter/MMB to confirm, WHEEL/+- to adjust edge "
-                       "number, Shift to square, Alt to center"),
+                TIP_("Circle: ESC to cancel, Enter/MMB to confirm, WHEEL/+- to adjust edge "
+                     "number, Shift to square, Alt to center"),
                 UI_MAX_DRAW_STR);
   }
   else if (tgpi->type == GP_STROKE_ARC) {
     BLI_strncpy(msg_str,
-                IFACE_("Arc: ESC to cancel, Enter/MMB to confirm, WHEEL/+- to adjust edge number, "
-                       "Shift to square, Alt to center, M: Flip, E: extrude"),
+                TIP_("Arc: ESC to cancel, Enter/MMB to confirm, WHEEL/+- to adjust edge number, "
+                     "Shift to square, Alt to center, M: Flip, E: extrude"),
                 UI_MAX_DRAW_STR);
   }
   else if (tgpi->type == GP_STROKE_CURVE) {
     BLI_strncpy(msg_str,
-                IFACE_("Curve: ESC to cancel, Enter/MMB to confirm, WHEEL/+- to adjust edge "
-                       "number, Shift to square, Alt to center, E: extrude"),
+                TIP_("Curve: ESC to cancel, Enter/MMB to confirm, WHEEL/+- to adjust edge "
+                     "number, Shift to square, Alt to center, E: extrude"),
                 UI_MAX_DRAW_STR);
   }
 
@@ -770,8 +770,9 @@ static void gp_primitive_update_strokes(bContext *C, tGPDprimitive *tgpi)
         is_depth = false;
       }
       else {
-        if ((ts->gpencil_v3d_align & GP_PROJECT_DEPTH_STROKE_ENDPOINTS) ||
-            (ts->gpencil_v3d_align & GP_PROJECT_DEPTH_STROKE_FIRST)) {
+        if ((ts->gpencil_v3d_align & GP_PROJECT_DEPTH_STROKE) &&
+            ((ts->gpencil_v3d_align & GP_PROJECT_DEPTH_STROKE_ENDPOINTS) ||
+             (ts->gpencil_v3d_align & GP_PROJECT_DEPTH_STROKE_FIRST))) {
           int first_valid = 0;
           int last_valid = 0;
 
@@ -1281,6 +1282,11 @@ static void gpencil_primitive_interaction_end(bContext *C,
         dw->weight = ts->vgroup_weight;
       }
     }
+  }
+
+  /* Close stroke with geometry */
+  if ((tgpi->type == GP_STROKE_BOX) || (tgpi->type == GP_STROKE_CIRCLE)) {
+    BKE_gpencil_close_stroke(gps);
   }
 
   DEG_id_tag_update(&tgpi->gpd->id, ID_RECALC_COPY_ON_WRITE);

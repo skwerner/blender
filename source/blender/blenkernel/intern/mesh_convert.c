@@ -1007,6 +1007,14 @@ static void curve_to_mesh_eval_ensure(Object *object)
                                          &remapped_object.runtime.mesh_eval,
                                          false);
 
+  /* Note: this is to be consistent with `BKE_displist_make_curveTypes()`, however that is not a
+   * real issue currently, code here is broken in more than one way, fix(es) will be done
+   * separately. */
+  if (remapped_object.runtime.mesh_eval != NULL) {
+    remapped_object.runtime.mesh_eval->id.tag |= LIB_TAG_COPIED_ON_WRITE_EVAL_RESULT;
+    remapped_object.runtime.is_mesh_eval_owned = true;
+  }
+
   BKE_object_free_curve_cache(&bevel_object);
   BKE_object_free_curve_cache(&taper_object);
 }
@@ -1040,6 +1048,7 @@ static Mesh *mesh_new_from_curve_type_object(Object *object)
   /* BKE_mesh_from_nurbs changes the type to a mesh, check it worked. If it didn't the curve did
    * not have any segments or otherwise would have generated an empty mesh. */
   if (temp_object->type != OB_MESH) {
+    BKE_id_free(NULL, temp_object->data);
     BKE_id_free(NULL, temp_object);
     return NULL;
   }
@@ -1208,6 +1217,10 @@ Mesh *BKE_mesh_new_from_object_to_bmain(Main *bmain,
                                         bool preserve_all_data_layers)
 {
   Mesh *mesh = BKE_mesh_new_from_object(depsgraph, object, preserve_all_data_layers);
+  if (mesh == NULL) {
+    /* Unable to convert the object to a mesh. */
+    return NULL;
+  }
 
   /* Make sure mesh only points original datablocks, also increase users of materials and other
    * possibly referenced data-blocks.

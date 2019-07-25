@@ -3055,7 +3055,7 @@ static void adjust_the_cycle_or_chain(BoundVert *vstart, bool iscycle)
  * on loop slide edges, the widths at each end could be different.
  *
  * It turns out that the dependent offsets either form chains or
- * cycles, and we can process each of those separatey.
+ * cycles, and we can process each of those separately.
  */
 static void adjust_offsets(BevelParams *bp, BMesh *bm)
 {
@@ -3201,7 +3201,7 @@ static BoundVert *pipe_test(BevVert *bv)
   /* check face planes: all should have normals perpendicular to epipe */
   for (e = &bv->edges[0]; e != &bv->edges[bv->edgecount]; e++) {
     if (e->fnext) {
-      if (dot_v3v3(dir1, e->fnext->no) > BEVEL_EPSILON_BIG) {
+      if (fabsf(dot_v3v3(dir1, e->fnext->no)) > BEVEL_EPSILON_BIG) {
         return NULL;
       }
     }

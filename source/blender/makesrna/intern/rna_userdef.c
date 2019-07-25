@@ -230,6 +230,13 @@ static void rna_userdef_theme_update(Main *bmain, Scene *scene, PointerRNA *ptr)
   rna_userdef_update(bmain, scene, ptr);
 }
 
+static void rna_userdef_gizmo_update(Main *bmain, Scene *scene, PointerRNA *ptr)
+{
+  WM_reinit_gizmomap_all(bmain);
+
+  rna_userdef_update(bmain, scene, ptr);
+}
+
 static void rna_userdef_theme_update_icons(Main *bmain, Scene *scene, PointerRNA *ptr)
 {
   UI_icons_reload_internal_textures();
@@ -4118,6 +4125,14 @@ static void rna_def_userdef_view(BlenderRNA *brna)
       prop, "Editor Corner Splitting", "Split and join editors by dragging from corners");
   RNA_def_property_update(prop, 0, "rna_userdef_screen_update");
 
+  prop = RNA_def_property(srna, "show_navigate_ui", PROP_BOOLEAN, PROP_NONE);
+  RNA_def_property_boolean_sdna(prop, NULL, "uiflag", USER_SHOW_GIZMO_NAVIGATE);
+  RNA_def_property_ui_text(
+      prop,
+      "Navigation Controls",
+      "Show navigation controls in 2D & 3D views which do not have scroll bars");
+  RNA_def_property_update(prop, 0, "rna_userdef_gizmo_update");
+
   /* menus */
   prop = RNA_def_property(srna, "use_mouse_over_open", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_sdna(prop, NULL, "uiflag", USER_MENUOPENAUTO);
@@ -4229,24 +4244,24 @@ static void rna_def_userdef_view(BlenderRNA *brna)
 
   /* mini axis */
   static const EnumPropertyItem mini_axis_type_items[] = {
-      {0, "MINIMAL", 0, "Simple Axis", ""},
-      {USER_SHOW_GIZMO_AXIS, "GIZMO", 0, "Interactive Navigation", ""},
+      {USER_MINI_AXIS_TYPE_NONE, "NONE", 0, "Off", ""},
+      {USER_MINI_AXIS_TYPE_MINIMAL, "MINIMAL", 0, "Simple Axis", ""},
+      {USER_MINI_AXIS_TYPE_GIZMO, "GIZMO", 0, "Interactive Navigation", ""},
       {0, NULL, 0, NULL, NULL},
   };
 
   prop = RNA_def_property(srna, "mini_axis_type", PROP_ENUM, PROP_NONE);
   RNA_def_property_enum_items(prop, mini_axis_type_items);
-  RNA_def_property_enum_bitflag_sdna(prop, NULL, "uiflag");
   RNA_def_property_ui_text(prop,
                            "Mini Axes Type",
                            "Show a small rotating 3D axes in the top right corner of the 3D View");
-  RNA_def_property_update(prop, 0, "rna_userdef_update");
+  RNA_def_property_update(prop, 0, "rna_userdef_gizmo_update");
 
   prop = RNA_def_property(srna, "mini_axis_size", PROP_INT, PROP_PIXEL);
   RNA_def_property_int_sdna(prop, NULL, "rvisize");
   RNA_def_property_range(prop, 10, 64);
   RNA_def_property_ui_text(prop, "Mini Axes Size", "The axes icon's size");
-  RNA_def_property_update(prop, 0, "rna_userdef_update");
+  RNA_def_property_update(prop, 0, "rna_userdef_gizmo_update");
 
   prop = RNA_def_property(srna, "mini_axis_brightness", PROP_INT, PROP_NONE);
   RNA_def_property_int_sdna(prop, NULL, "rvibright");
@@ -5212,7 +5227,7 @@ static void rna_def_userdef_input(BlenderRNA *brna)
 
   /* tweak tablet & mouse preset */
   prop = RNA_def_property(srna, "drag_threshold_mouse", PROP_INT, PROP_PIXEL);
-  RNA_def_property_range(prop, 3, 255);
+  RNA_def_property_range(prop, 1, 255);
   RNA_def_property_ui_text(prop,
                            "Mouse Drag Threshold",
                            "Number of pixels to drag before a tweak/drag event is triggered "
@@ -5220,7 +5235,7 @@ static void rna_def_userdef_input(BlenderRNA *brna)
                            "(otherwise click events are detected)");
 
   prop = RNA_def_property(srna, "drag_threshold_tablet", PROP_INT, PROP_PIXEL);
-  RNA_def_property_range(prop, 3, 255);
+  RNA_def_property_range(prop, 1, 255);
   RNA_def_property_ui_text(prop,
                            "Tablet Drag Threshold",
                            "Number of pixels to drag before a tweak/drag event is triggered "
@@ -5228,7 +5243,7 @@ static void rna_def_userdef_input(BlenderRNA *brna)
                            "(otherwise click events are detected)");
 
   prop = RNA_def_property(srna, "drag_threshold", PROP_INT, PROP_PIXEL);
-  RNA_def_property_range(prop, 3, 255);
+  RNA_def_property_range(prop, 1, 255);
   RNA_def_property_ui_text(prop,
                            "Drag Threshold",
                            "Number of pixels to drag before a drag event is triggered "
@@ -5437,7 +5452,7 @@ static void rna_def_userdef_filepaths(BlenderRNA *brna)
   prop = RNA_def_property(srna, "show_hidden_files_datablocks", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_sdna(prop, NULL, "uiflag", USER_HIDE_DOT);
   RNA_def_property_ui_text(prop,
-                           "Hide Dot Files/Libraries",
+                           "Hide Dot Files/Data-blocks",
                            "Hide files and data-blocks if their name start with a dot (.*)");
 
   prop = RNA_def_property(srna, "use_filter_files", PROP_BOOLEAN, PROP_NONE);
@@ -5568,8 +5583,8 @@ static void rna_def_userdef_filepaths(BlenderRNA *brna)
   RNA_def_property_boolean_sdna(prop, NULL, "flag", USER_AUTOSAVE);
   RNA_def_property_ui_text(prop,
                            "Auto Save Temporary Files",
-                           "Automatic saving of temporary files in temp directory, uses process "
-                           "ID (Sculpt or edit mode data won't be saved!')");
+                           "Automatic saving of temporary files in temp directory, "
+                           "uses process ID (sculpt & edit-mode data won't be saved!)");
   RNA_def_property_update(prop, 0, "rna_userdef_autosave_update");
 
   prop = RNA_def_property(srna, "auto_save_time", PROP_INT, PROP_NONE);
@@ -5793,8 +5808,8 @@ void RNA_def_userdef(BlenderRNA *brna)
 
   prop = RNA_def_property(srna, "is_dirty", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_sdna(prop, NULL, "runtime.is_dirty", 0);
-  RNA_def_property_clear_flag(prop, PROP_EDITABLE);
   RNA_def_property_ui_text(prop, "Dirty", "Preferences have changed");
+  RNA_def_property_update(prop, 0, "rna_userdef_ui_update");
 
   rna_def_userdef_view(brna);
   rna_def_userdef_edit(brna);

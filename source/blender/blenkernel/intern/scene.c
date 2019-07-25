@@ -1506,7 +1506,7 @@ static void prepare_mesh_for_viewport_render(Main *bmain, const ViewLayer *view_
   }
 }
 
-static void scene_update_sound(Depsgraph *depsgraph, Main *bmain)
+void BKE_scene_update_sound(Depsgraph *depsgraph, Main *bmain)
 {
   Scene *scene = DEG_get_evaluated_scene(depsgraph);
   const int recalc = scene->id.recalc;
@@ -1515,7 +1515,7 @@ static void scene_update_sound(Depsgraph *depsgraph, Main *bmain)
     BKE_sound_seek_scene(bmain, scene);
   }
   if (recalc & ID_RECALC_AUDIO_FPS) {
-    BKE_sound_update_fps(scene);
+    BKE_sound_update_fps(bmain, scene);
   }
   if (recalc & ID_RECALC_AUDIO_VOLUME) {
     BKE_sound_set_scene_volume(scene, scene->audio.volume);
@@ -1527,7 +1527,7 @@ static void scene_update_sound(Depsgraph *depsgraph, Main *bmain)
   if (recalc & ID_RECALC_AUDIO_LISTENER) {
     BKE_sound_update_scene_listener(scene);
   }
-  BKE_sound_update_scene(bmain, scene);
+  BKE_sound_update_scene(depsgraph, scene);
 }
 
 /* TODO(sergey): This actually should become view_layer_graph or so.
@@ -1566,7 +1566,7 @@ static void scene_graph_update_tagged(Depsgraph *depsgraph, Main *bmain, bool on
    */
   DEG_evaluate_on_refresh(depsgraph);
   /* Update sound system. */
-  scene_update_sound(depsgraph, bmain);
+  BKE_scene_update_sound(depsgraph, bmain);
   /* Notify python about depsgraph update. */
   if (run_callbacks) {
     BLI_callback_exec(bmain, &scene->id, BLI_CB_EVT_DEPSGRAPH_UPDATE_POST);
@@ -1613,7 +1613,7 @@ void BKE_scene_graph_update_for_newframe(Depsgraph *depsgraph, Main *bmain)
    */
   DEG_evaluate_on_framechange(bmain, depsgraph, ctime);
   /* Update sound system animation. */
-  scene_update_sound(depsgraph, bmain);
+  BKE_scene_update_sound(depsgraph, bmain);
   /* Notify editors and python about recalc. */
   BLI_callback_exec(bmain, &scene->id, BLI_CB_EVT_FRAME_CHANGE_POST);
   /* Inform editors about possible changes. */
@@ -2445,6 +2445,21 @@ void BKE_scene_cursor_from_mat4(View3DCursor *cursor, const float mat[4][4], boo
 
 /* Dependency graph evaluation. */
 
+static void scene_sequencer_disable_sound_strips(Scene *scene)
+{
+  if (scene->sound_scene == NULL) {
+    return;
+  }
+  Sequence *seq;
+  SEQ_BEGIN (scene->ed, seq) {
+    if (seq->scene_sound != NULL) {
+      BKE_sound_remove_scene_sound(scene, seq->scene_sound);
+      seq->scene_sound = NULL;
+    }
+  }
+  SEQ_END;
+}
+
 void BKE_scene_eval_sequencer_sequences(Depsgraph *depsgraph, Scene *scene)
 {
   DEG_debug_print_eval(depsgraph, __func__, scene->id.name, scene);
@@ -2454,10 +2469,35 @@ void BKE_scene_eval_sequencer_sequences(Depsgraph *depsgraph, Scene *scene)
   BKE_sound_ensure_scene(scene);
   Sequence *seq;
   SEQ_BEGIN (scene->ed, seq) {
-    if (seq->sound != NULL && seq->scene_sound == NULL) {
-      seq->scene_sound = BKE_sound_add_scene_sound_defaults(scene, seq);
+    if (seq->scene_sound == NULL) {
+      if (seq->sound != NULL) {
+        if (seq->scene_sound == NULL) {
+          seq->scene_sound = BKE_sound_add_scene_sound_defaults(scene, seq);
+        }
+      }
+      else if (seq->type == SEQ_TYPE_SCENE) {
+        if (seq->scene != NULL) {
+          BKE_sound_ensure_scene(seq->scene);
+          seq->scene_sound = BKE_sound_scene_add_scene_sound_defaults(scene, seq);
+        }
+      }
     }
-    if (seq->scene_sound) {
+    if (seq->scene_sound != NULL) {
+      /* Make sure changing volume via sequence's properties panel works correct.
+       *
+       * Ideally, the entire BKE_scene_update_sound() will happen from a dependency graph, so
+       * then it is no longer needed to do such manual forced updates. */
+      if (seq->type == SEQ_TYPE_SCENE && seq->scene != NULL) {
+        BKE_sound_set_scene_volume(seq->scene, seq->scene->audio.volume);
+        if ((seq->flag & SEQ_SCENE_STRIPS) == 0) {
+          scene_sequencer_disable_sound_strips(seq->scene);
+        }
+      }
+      if (seq->sound != NULL) {
+        if (scene->id.recalc & ID_RECALC_AUDIO || seq->sound->id.recalc & ID_RECALC_AUDIO) {
+          BKE_sound_update_scene_sound(seq->scene_sound, seq->sound);
+        }
+      }
       BKE_sound_set_scene_sound_volume(
           seq->scene_sound, seq->volume, (seq->flag & SEQ_AUDIO_VOLUME_ANIMATED) != 0);
       BKE_sound_set_scene_sound_pitch(

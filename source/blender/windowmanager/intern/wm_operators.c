@@ -1562,7 +1562,7 @@ static void wm_block_splash_add_labels(uiBlock *block, int x, int y)
     
     /* Add a studio specific version string */    
     char studio_vers_buf[256] = "\0";
-    BLI_snprintf(branch_buf, sizeof(studio_vers_buf), "Studio Version: %s", STUDIO_VERSION_STR);            
+    BLI_snprintf(studio_vers_buf, sizeof(studio_vers_buf), "Studio Version: %s", STUDIO_VERSION_STR);            
     wm_block_splash_add_label(block, studio_vers_buf, x, &y);        
   }
 #else

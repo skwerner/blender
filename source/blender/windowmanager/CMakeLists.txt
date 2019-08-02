@@ -42,6 +42,7 @@ set(INC
   ../../../intern/glew-mx
   ../../../intern/guardedalloc
   ../../../intern/memutil
+  ${CMAKE_BINARY_DIR}/source/blender/blenkernel
 )
 
 set(INC_SYS

@@ -128,6 +128,8 @@ endif()
 
 get_blender_version()
 
+get_studio_version()
+
 
 #-----------------------------------------------------------------------------
 # Platform Specific Defaults

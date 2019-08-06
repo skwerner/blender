@@ -33,10 +33,10 @@ Attribute::~Attribute()
     VoxelAttribute *voxel_data = data_voxel();
 
     if (voxel_data && voxel_data->slot != -1) {
-      if(voxel_data->manager) {
+      if (voxel_data->manager) {
         voxel_data->manager->remove_image(voxel_data->slot);
       }
-      else if(voxel_data->vol_manager) {
+      else if (voxel_data->vol_manager) {
         voxel_data->vol_manager->remove_volume(voxel_data->slot);
       }
     }

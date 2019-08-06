@@ -779,9 +779,9 @@ void ImageManager::device_load_image(
     return;
 
   Image *img = images[type][slot];
-  if(!img) {
-		return;
-	}
+  if (!img) {
+    return;
+  }
 
   if (osl_texture_system && !img->builtin_data)
     return;

@@ -498,13 +498,13 @@ ccl_device float4 kernel_tex_image_interp_3d(
     KernelGlobals *kg, int id, float x, float y, float z, InterpolationType interp)
 {
 #ifdef __OPENVDB__
-  if(kg->vdb && id < -1) {
+  if (kg->vdb && id < -1) {
     float r, g, b;
-    VDBVolume::sample(kg->vdb_tdata, (-id)-2, x, y, z, &r, &g, &b, 1);
+    VDBVolume::sample(kg->vdb_tdata, (-id) - 2, x, y, z, &r, &g, &b, 1);
     return make_float4(r, g, b, 1.0f);
   }
 #endif
-  
+
   const TextureInfo &info = kernel_tex_fetch(__texture_info, id);
 
   switch (kernel_tex_type(id)) {

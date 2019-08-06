@@ -1948,7 +1948,7 @@ typedef struct OpenVDBModifierData {
   ModifierData modifier;
 
   char filepath[1024]; /* FILE_MAX */
-	char abs_path[1024]; /* The absolute file path with the current frame number. */
+  char abs_path[1024]; /* The absolute file path with the current frame number. */
   char (*grids)[64];
   char density[64];
   char heat[64];
@@ -1997,9 +1997,9 @@ enum {
   MOD_OPENVDB_IS_RENDER = (1 << 4),
   MOD_OPENVDB_HAS_DENSITY = (1 << 5),
   MOD_OPENVDB_SPLIT_VELOCITY = (1 << 6),
-  MOD_OPENVDB_NOW_RENDERING   = (1 << 7),
-	MOD_OPENVDB_SIMPLIFY_RENDER = (1 << 8),
-	MOD_OPENVDB_IN_MEMORY_RENDER= (1 << 9),
+  MOD_OPENVDB_NOW_RENDERING = (1 << 7),
+  MOD_OPENVDB_SIMPLIFY_RENDER = (1 << 8),
+  MOD_OPENVDB_IN_MEMORY_RENDER = (1 << 9),
 };
 
 enum {

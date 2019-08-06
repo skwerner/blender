@@ -43,7 +43,6 @@
 #include "kernel/osl/osl_shader.h"
 #include "kernel/osl/osl_globals.h"
 
-
 #include "render/buffers.h"
 #include "render/coverage.h"
 
@@ -173,7 +172,7 @@ class CPUDevice : public Device {
 #endif
 
 #ifdef WITH_OPENVDB
-	OpenVDBGlobals vdb_globals;
+  OpenVDBGlobals vdb_globals;
 #endif
 
   bool use_split_kernel;

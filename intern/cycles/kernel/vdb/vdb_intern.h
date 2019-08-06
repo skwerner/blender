@@ -20,9 +20,9 @@
 /* They are too many implicit float conversions happening in OpenVDB, disabling
  * errors for now (kevin) */
 #ifdef __GNUC__
-#	pragma GCC diagnostic push
-#	pragma GCC diagnostic ignored "-Wfloat-conversion"
-#	pragma GCC diagnostic ignored "-Wdouble-promotion"
+#  pragma GCC diagnostic push
+#  pragma GCC diagnostic ignored "-Wfloat-conversion"
+#  pragma GCC diagnostic ignored "-Wdouble-promotion"
 #endif
 
 #include <openvdb/openvdb.h>
@@ -34,7 +34,7 @@
 #endif
 
 #ifdef __GNUC__
-#	pragma GCC diagnostic pop
+#  pragma GCC diagnostic pop
 #endif
 
 #include "util/util_vector.h"

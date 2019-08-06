@@ -32,40 +32,53 @@ class Shader;
 class OpenVDBTextureBase;
 
 class VolumeManager {
-	friend class MeshManager;
+  friend class MeshManager;
 
-	struct GridDescription {
-		string filename;
-		string gridname;
-		Transform tfm;
-		int3 vdb_resolution;
-		int3 vdb_offset;
-		int3 axis;
-		int users;
-	};
+  struct GridDescription {
+    string filename;
+    string gridname;
+    Transform tfm;
+    int3 vdb_resolution;
+    int3 vdb_offset;
+    int3 axis;
+    int users;
+  };
 
-	vector<GridDescription*> grids;
+  vector<GridDescription *> grids;
 
-	void add_grid_description(const string& filename, const string& gridname, int slot);
-	int find_existing_slot(const string& filename, const string& gridname, const Transform &tfm);
+  void add_grid_description(const string &filename, const string &gridname, int slot);
+  int find_existing_slot(const string &filename, const string &gridname, const Transform &tfm);
 
-	bool is_openvdb_file(const string& filename) const;
-	int add_openvdb_volume(const string& filename, const string& gridname, const Transform &tfm, const int3 resolution, const int3 offset, const int3 axis);
+  bool is_openvdb_file(const string &filename) const;
+  int add_openvdb_volume(const string &filename,
+                         const string &gridname,
+                         const Transform &tfm,
+                         const int3 resolution,
+                         const int3 offset,
+                         const int3 axis);
 
-public:
-	VolumeManager();
-	~VolumeManager();
+ public:
+  VolumeManager();
+  ~VolumeManager();
 
-	int add_volume(const string& filename, const string& grodname, const Transform &tfm, const int3 resolution, const int3 offset, const int3 axis);
-	void remove_volume(int slot);
+  int add_volume(const string &filename,
+                 const string &grodname,
+                 const Transform &tfm,
+                 const int3 resolution,
+                 const int3 offset,
+                 const int3 axis);
+  void remove_volume(int slot);
 
-	void device_update(Device *device, DeviceScene *dscene, Scene *scene, Progress& progress);
-	void device_update_attributes(Device *device, DeviceScene *dscene, Scene *scene, Progress& progress);
-	void device_free(Device *device, DeviceScene *dscene);
+  void device_update(Device *device, DeviceScene *dscene, Scene *scene, Progress &progress);
+  void device_update_attributes(Device *device,
+                                DeviceScene *dscene,
+                                Scene *scene,
+                                Progress &progress);
+  void device_free(Device *device, DeviceScene *dscene);
 
-	void tag_update(Scene *scene);
+  void tag_update(Scene *scene);
 
-	bool need_update;
+  bool need_update;
 };
 
 CCL_NAMESPACE_END

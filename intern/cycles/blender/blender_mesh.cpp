@@ -283,7 +283,7 @@ static void mikk_compute_tangents(
 
 /* Create Volume Attribute */
 
-static void create_mesh_volume_attribute(BL::Object& b_ob,
+static void create_mesh_volume_attribute(BL::Object &b_ob,
                                          Mesh *mesh,
                                          ImageManager *image_manager,
                                          VolumeManager *volume_manager,
@@ -305,8 +305,8 @@ static void create_mesh_volume_attribute(BL::Object& b_ob,
 #ifdef WITH_OPENVDB
   bool has_vdb = false;
   BL::OpenVDBModifier b_vdb = object_vdb_modifier_find(b_ob);
-	int index = 0;
-  switch(std) {
+  int index = 0;
+  switch (std) {
     case ATTR_STD_VOLUME_FLAME:
       index = b_vdb.flame();
       break;
@@ -330,18 +330,18 @@ static void create_mesh_volume_attribute(BL::Object& b_ob,
   /* Values from the VDB modifier are 1 based, indices in the OpenVDB API are 0 based. */
   --index;
 
-	if(index >= 0 && b_vdb && b_domain && !b_vdb.in_memory_render()) {
+  if (index >= 0 && b_vdb && b_domain && !b_vdb.in_memory_render()) {
     short front = b_vdb.front_axis();
     short up = b_vdb.up_axis();
 
     /* Look up the name of the grid. */
     string grid_name;
-    if(string_endswith(b_vdb.abs_path(), ".vdb")) {
+    if (string_endswith(b_vdb.abs_path(), ".vdb")) {
       openvdb::io::File file(b_vdb.abs_path());
       try {
         file.open();
         openvdb::MetaMap::Ptr meta_map = file.getMetadata();
-        if(meta_map && (*meta_map)["FFXVDBVersion"]) {
+        if (meta_map && (*meta_map)["FFXVDBVersion"]) {
           front = 2;
           up = 1;
         }
@@ -350,24 +350,24 @@ static void create_mesh_volume_attribute(BL::Object& b_ob,
         size_t num = min(index, grids->size());
         openvdb::io::File::NameIterator name_iter = file.beginName();
         size_t i = 0;
-        while(i < num) {
+        while (i < num) {
           ++i;
           ++name_iter;
         }
-        if(i < grids->size()) {
+        if (i < grids->size()) {
           grid_name = name_iter.gridName();
         }
       }
-      catch(const openvdb::Exception& e) {
+      catch (const openvdb::Exception &e) {
       }
-      if(file.isOpen()) {
+      if (file.isOpen()) {
         file.close();
       }
     }
-    if(!grid_name.empty()) {
+    if (!grid_name.empty()) {
       bool inv[3];
       inv[2] = up >= 3;
-      inv[1]= front < 3;
+      inv[1] = front < 3;
       up %= 3;
       front %= 3;
       short right = 3 - (up + front);
@@ -384,21 +384,24 @@ static void create_mesh_volume_attribute(BL::Object& b_ob,
       int3 resolution = get_int3(b_domain.domain_resolution());
       int3 offset = get_int3(b_domain.index_offset());
 
-			Transform tfm = transform_empty();
-			tfm.x[right] = inv[right] ? -resolution[right] : resolution[right];
-			tfm.x.w = offset[right] + (inv[right] ? resolution[right] : 0);
-			tfm.y[front] = inv[front] ? -resolution[front] : resolution[front];
-			tfm.y.w = offset[front] + (inv[front] ? resolution[front] : 0);
-			tfm.z[up] = inv[up] ? -resolution[up] : resolution[up];
-			tfm.z.w = offset[up] + (inv[up] ? resolution[up] : 0);
+      Transform tfm = transform_empty();
+      tfm.x[right] = inv[right] ? -resolution[right] : resolution[right];
+      tfm.x.w = offset[right] + (inv[right] ? resolution[right] : 0);
+      tfm.y[front] = inv[front] ? -resolution[front] : resolution[front];
+      tfm.y.w = offset[front] + (inv[front] ? resolution[front] : 0);
+      tfm.z[up] = inv[up] ? -resolution[up] : resolution[up];
+      tfm.z.w = offset[up] + (inv[up] ? resolution[up] : 0);
 
-      int3 axis = make_int3(inv[0] ? -right-1 : right, inv[1] ? -front-1 : front, inv[2] ? -up-1 : up);
-      volume_data->slot = -(volume_manager->add_volume(b_vdb.abs_path(), grid_name, tfm, resolution, offset, axis) + 2);
+      int3 axis = make_int3(
+          inv[0] ? -right - 1 : right, inv[1] ? -front - 1 : front, inv[2] ? -up - 1 : up);
+      volume_data->slot = -(
+          volume_manager->add_volume(b_vdb.abs_path(), grid_name, tfm, resolution, offset, axis) +
+          2);
       volume_data->vol_manager = volume_manager;
       volume_data->manager = NULL;
       has_vdb = true;
     }
-    if(has_vdb) {
+    if (has_vdb) {
       return;
     }
   }
@@ -420,21 +423,30 @@ static void create_mesh_volume_attributes(Scene *scene, BL::Object &b_ob, Mesh *
 {
   /* for smoke volume rendering */
   if (mesh->need_attribute(scene, ATTR_STD_VOLUME_DENSITY))
-    create_mesh_volume_attribute(b_ob, mesh, scene->image_manager, scene->volume_manager, ATTR_STD_VOLUME_DENSITY, frame);
-  if (mesh->need_attribute(scene, ATTR_STD_VOLUME_COLOR))
-    create_mesh_volume_attribute(b_ob, mesh, scene->image_manager, scene->volume_manager, ATTR_STD_VOLUME_COLOR, frame);
-  if (mesh->need_attribute(scene, ATTR_STD_VOLUME_FLAME))
-    create_mesh_volume_attribute(b_ob, mesh, scene->image_manager, scene->volume_manager, ATTR_STD_VOLUME_FLAME, frame);
-  if (mesh->need_attribute(scene, ATTR_STD_VOLUME_HEAT))
-    create_mesh_volume_attribute(b_ob, mesh, scene->image_manager, scene->volume_manager, ATTR_STD_VOLUME_HEAT, frame);
-  if (mesh->need_attribute(scene, ATTR_STD_VOLUME_TEMPERATURE))
     create_mesh_volume_attribute(
-        b_ob, mesh, scene->image_manager, scene->volume_manager, ATTR_STD_VOLUME_TEMPERATURE, frame);
+        b_ob, mesh, scene->image_manager, scene->volume_manager, ATTR_STD_VOLUME_DENSITY, frame);
+  if (mesh->need_attribute(scene, ATTR_STD_VOLUME_COLOR))
+    create_mesh_volume_attribute(
+        b_ob, mesh, scene->image_manager, scene->volume_manager, ATTR_STD_VOLUME_COLOR, frame);
+  if (mesh->need_attribute(scene, ATTR_STD_VOLUME_FLAME))
+    create_mesh_volume_attribute(
+        b_ob, mesh, scene->image_manager, scene->volume_manager, ATTR_STD_VOLUME_FLAME, frame);
+  if (mesh->need_attribute(scene, ATTR_STD_VOLUME_HEAT))
+    create_mesh_volume_attribute(
+        b_ob, mesh, scene->image_manager, scene->volume_manager, ATTR_STD_VOLUME_HEAT, frame);
+  if (mesh->need_attribute(scene, ATTR_STD_VOLUME_TEMPERATURE))
+    create_mesh_volume_attribute(b_ob,
+                                 mesh,
+                                 scene->image_manager,
+                                 scene->volume_manager,
+                                 ATTR_STD_VOLUME_TEMPERATURE,
+                                 frame);
   if (mesh->need_attribute(scene, ATTR_STD_VOLUME_VELOCITY))
     create_mesh_volume_attribute(
         b_ob, mesh, scene->image_manager, scene->volume_manager, ATTR_STD_VOLUME_VELOCITY, frame);
   else if (scene->need_motion() == Scene::MOTION_BLUR) {
-		create_mesh_volume_attribute(b_ob, mesh, scene->image_manager, scene->volume_manager, ATTR_STD_VOLUME_VELOCITY, frame);
+    create_mesh_volume_attribute(
+        b_ob, mesh, scene->image_manager, scene->volume_manager, ATTR_STD_VOLUME_VELOCITY, frame);
   }
 }
 

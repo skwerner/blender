@@ -167,11 +167,11 @@ static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, Mes
   if (ctx->flag & MOD_APPLY_RENDER) {
     if (vdbmd->flags & MOD_OPENVDB_IN_MEMORY_RENDER) {
       vdbmd->flags |= MOD_OPENVDB_HIDE_VOLUME;
-			vdbmd->flags &= ~MOD_OPENVDB_SIMPLIFY_RENDER;
+      vdbmd->flags &= ~MOD_OPENVDB_SIMPLIFY_RENDER;
     }
     else {
-			vdbmd->flags |= MOD_OPENVDB_HIDE_VOLUME;
-			vdbmd->flags &= ~MOD_OPENVDB_SIMPLIFY_RENDER;
+      vdbmd->flags |= MOD_OPENVDB_HIDE_VOLUME;
+      vdbmd->flags &= ~MOD_OPENVDB_SIMPLIFY_RENDER;
     }
 
     if (!(vdbmd->flags & MOD_OPENVDB_SIMPLIFY_RENDER)) {

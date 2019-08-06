@@ -2667,7 +2667,7 @@ static void openvdb_filepath(PTCacheID *pid, char *filepath, int cfra)
     BLI_path_abs(filepath, blendfilename);
   }
 
-	BLI_strncpy(vdbmd->abs_path, filepath, sizeof(vdbmd->abs_path));
+  BLI_strncpy(vdbmd->abs_path, filepath, sizeof(vdbmd->abs_path));
 }
 
 /* youll need to close yourself after! */
@@ -3587,7 +3587,7 @@ int BKE_ptcache_read(PTCacheID *pid, float cfra, bool no_extrapolate_old)
     vdbmd = sds->vdb;
 
     if (vdbmd->flags & MOD_OPENVDB_NOW_RENDERING) {
-        return 0;
+      return 0;
     }
 
     cfra1 = cfra2 = -1;

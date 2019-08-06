@@ -148,7 +148,7 @@ static const int CUBE_SIZE = 8;
  */
 class VolumeMeshBuilder {
   /* Auxilliary volume that is used to check if a node already added. */
-	vector<bool> grid;
+  vector<bool> grid;
 
   /* The resolution of the auxilliary volume, set to be equal to 1/CUBE_SIZE
    * of the original volume on each axis. */
@@ -366,11 +366,8 @@ struct VoxelAttributeGrid {
   int channels;
 };
 
-void MeshManager::create_volume_mesh(Scene *scene,
-                                     Device *device,
-                                     DeviceScene *dscene,
-									 Mesh *mesh,
-									 Progress& progress)
+void MeshManager::create_volume_mesh(
+    Scene *scene, Device *device, DeviceScene *dscene, Mesh *mesh, Progress &progress)
 {
   string msg = string_printf("Computing Volume Mesh %s", mesh->name.c_str());
   progress.set_status("Updating Mesh", msg);
@@ -381,9 +378,8 @@ void MeshManager::create_volume_mesh(Scene *scene,
   VolumeParams volume_params;
   volume_params.resolution = make_int3(0, 0, 0);
 
-
 #ifdef WITH_OPENVDB
-	VDBThread vdb_thread((OpenVDBGlobals*)device->vdb_memory());
+  VDBThread vdb_thread((OpenVDBGlobals *)device->vdb_memory());
 #endif
 
   foreach (Attribute &attr, mesh->attributes.attributes) {
@@ -392,24 +388,23 @@ void MeshManager::create_volume_mesh(Scene *scene,
     }
 
     VoxelAttribute *voxel = attr.data_voxel();
-		device_memory *image_memory = NULL;
-		int3 resolution = make_int3(1, 1, 1);
-		if(voxel->manager && voxel->slot >= 0) {
-			image_memory = scene->image_manager->image_memory(voxel->slot);
-			resolution = make_int3(image_memory->data_width,
-                                   image_memory->data_height,
-                                   image_memory->data_depth);
-		}
+    device_memory *image_memory = NULL;
+    int3 resolution = make_int3(1, 1, 1);
+    if (voxel->manager && voxel->slot >= 0) {
+      image_memory = scene->image_manager->image_memory(voxel->slot);
+      resolution = make_int3(
+          image_memory->data_width, image_memory->data_height, image_memory->data_depth);
+    }
 
-        else if(voxel->vol_manager && voxel->slot < -1) {
+    else if (voxel->vol_manager && voxel->slot < -1) {
 #ifdef WITH_OPENVDB
-			resolution = voxel->vol_manager->grids[-(voxel->slot + 2)]->vdb_resolution;
+      resolution = voxel->vol_manager->grids[-(voxel->slot + 2)]->vdb_resolution;
 #endif
-		}
-		else {
-			VLOG(1) << "Can't create volume mesh, invalid voxel index found in attributes\n";
-			return;
-		}
+    }
+    else {
+      VLOG(1) << "Can't create volume mesh, invalid voxel index found in attributes\n";
+      return;
+    }
 
     if (volume_params.resolution == make_int3(0, 0, 0)) {
       volume_params.resolution = resolution;
@@ -482,22 +477,21 @@ void MeshManager::create_volume_mesh(Scene *scene,
   VolumeMeshBuilder builder(&volume_params);
   const float isovalue = mesh->volume_isovalue;
 
-
-  for(int z = 0; z < resolution.z; ++z) {
-    for(int y = 0; y < resolution.y; ++y) {
-      for(int x = 0; x < resolution.x; ++x) {
-        for(size_t i = 0; i < voxel_grids.size(); ++i) {
+  for (int z = 0; z < resolution.z; ++z) {
+    for (int y = 0; y < resolution.y; ++y) {
+      for (int x = 0; x < resolution.x; ++x) {
+        for (size_t i = 0; i < voxel_grids.size(); ++i) {
           const VoxelAttributeGrid &voxel_grid = voxel_grids[i];
           int channels = voxel_grid.channels;
-          if(voxel_grid.data == NULL) {
+          if (voxel_grid.data == NULL) {
 #ifdef WITH_OPENVDB
             channels = 1;
 #endif
           }
-          for(int c = 0; c < channels; c++) {
-            if(voxel_grid.data) {
+          for (int c = 0; c < channels; c++) {
+            if (voxel_grid.data) {
               size_t voxel_index = compute_voxel_index(resolution, x, y, z);
-              if(voxel_grid.data[voxel_index * channels + c] >=isovalue) {
+              if (voxel_grid.data[voxel_index * channels + c] >= isovalue) {
                 builder.add_node_with_padding(x, y, z);
                 break;
               }
@@ -505,15 +499,25 @@ void MeshManager::create_volume_mesh(Scene *scene,
 #ifdef WITH_OPENVDB
             else {
               float r, g, b;
-              const int3& offset = scene->volume_manager->grids[voxel_grid.channels]->vdb_offset;
-              const int3& axis = scene->volume_manager->grids[voxel_grid.channels]->axis;
+              const int3 &offset = scene->volume_manager->grids[voxel_grid.channels]->vdb_offset;
+              const int3 &axis = scene->volume_manager->grids[voxel_grid.channels]->axis;
               int index[3];
-              index[axis.x >= 0 ? axis.x : -axis.x - 1] = ((axis.x >= 0) ? x : (resolution.x - x - 1)) + offset.x;
-              index[axis.y >= 0 ? axis.y : -axis.y - 1] = ((axis.y >= 0) ? y : (resolution.y - y - 1)) + offset.y;
-              index[axis.z >= 0 ? axis.z : -axis.z - 1] = ((axis.z >= 0) ? z : (resolution.z - z - 1)) + offset.z;
+              index[axis.x >= 0 ? axis.x : -axis.x - 1] =
+                  ((axis.x >= 0) ? x : (resolution.x - x - 1)) + offset.x;
+              index[axis.y >= 0 ? axis.y : -axis.y - 1] =
+                  ((axis.y >= 0) ? y : (resolution.y - y - 1)) + offset.y;
+              index[axis.z >= 0 ? axis.z : -axis.z - 1] =
+                  ((axis.z >= 0) ? z : (resolution.z - z - 1)) + offset.z;
 
-              if(VDBVolume::sample_index(vdb_thread.data, voxel_grid.channels, index[0], index[1], index[2], &r, &g, &b)) {
-								if(r >= isovalue || r >= isovalue || g >= isovalue) {
+              if (VDBVolume::sample_index(vdb_thread.data,
+                                          voxel_grid.channels,
+                                          index[0],
+                                          index[1],
+                                          index[2],
+                                          &r,
+                                          &g,
+                                          &b)) {
+                if (r >= isovalue || r >= isovalue || g >= isovalue) {
                   builder.add_node_with_padding(x, y, z);
                   break;
                 }

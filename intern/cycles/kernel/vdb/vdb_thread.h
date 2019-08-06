@@ -28,33 +28,51 @@ struct OpenVDBThreadData;
 struct Ray;
 
 class VDBVolume {
-public:
-	static OpenVDBThreadData* thread_init(OpenVDBGlobals *vdb_globals);
-	static void thread_free(OpenVDBThreadData *tdata);
+ public:
+  static OpenVDBThreadData *thread_init(OpenVDBGlobals *vdb_globals);
+  static void thread_free(OpenVDBThreadData *tdata);
 
-	enum OpenVDB_SampleType {
-		OPENVDB_SAMPLE_POINT = 0,
-		OPENVDB_SAMPLE_BOX   = 1,
-	};
+  enum OpenVDB_SampleType {
+    OPENVDB_SAMPLE_POINT = 0,
+    OPENVDB_SAMPLE_BOX = 1,
+  };
 
-	static bool has_uniform_voxels(OpenVDBGlobals *vdb, int vdb_index);
-	static bool sample(OpenVDBThreadData *vdb_thread, int vdb_index,
-	                          float x, float y, float z,
-	                          float *r, float *g, float *b, int sampling);
-	static bool sample_index(OpenVDBThreadData *vdb_thread, int vdb_index, int x, int y, int z, float *r, float *g, float *b);
-	static bool intersect(OpenVDBThreadData *vdb_thread, int vdb_index, const Ray *ray, float *isect);
-	static bool march(OpenVDBThreadData *vdb_thread, int vdb_index, float *t0, float *t1);
+  static bool has_uniform_voxels(OpenVDBGlobals *vdb, int vdb_index);
+  static bool sample(OpenVDBThreadData *vdb_thread,
+                     int vdb_index,
+                     float x,
+                     float y,
+                     float z,
+                     float *r,
+                     float *g,
+                     float *b,
+                     int sampling);
+  static bool sample_index(OpenVDBThreadData *vdb_thread,
+                           int vdb_index,
+                           int x,
+                           int y,
+                           int z,
+                           float *r,
+                           float *g,
+                           float *b);
+  static bool intersect(OpenVDBThreadData *vdb_thread,
+                        int vdb_index,
+                        const Ray *ray,
+                        float *isect);
+  static bool march(OpenVDBThreadData *vdb_thread, int vdb_index, float *t0, float *t1);
 };
 
 class VDBThread {
-public:
-	OpenVDBThreadData * data;
-	VDBThread(OpenVDBGlobals *vdb) {
-		data = VDBVolume::thread_init(vdb);
-	}
-	~VDBThread() {
-		VDBVolume::thread_free(data);
-	}
+ public:
+  OpenVDBThreadData *data;
+  VDBThread(OpenVDBGlobals *vdb)
+  {
+    data = VDBVolume::thread_init(vdb);
+  }
+  ~VDBThread()
+  {
+    VDBVolume::thread_free(data);
+  }
 };
 
 CCL_NAMESPACE_END

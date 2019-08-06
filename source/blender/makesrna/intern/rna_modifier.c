@@ -1464,7 +1464,7 @@ static void rna_OpenVDBModifier_update(Main *bmain, Scene *scene, PointerRNA *pt
   char filepath[1024];
   BLI_strncpy(filepath, vdbmd->filepath, sizeof(filepath));
   BLI_path_abs(filepath, G.main->name);
-
+#  ifdef WITH_OPENVDB
   if (BLI_exists(filepath)) {
     struct OpenVDBReader *reader = OpenVDBReader_create();
     OpenVDBReader_open(reader, filepath);
@@ -1477,7 +1477,7 @@ static void rna_OpenVDBModifier_update(Main *bmain, Scene *scene, PointerRNA *pt
 
     OpenVDBReader_free(reader);
   }
-
+#  endif
   rna_Modifier_update(bmain, scene, ptr);
 }
 
@@ -6553,15 +6553,15 @@ static void rna_def_modifier_openvdb(BlenderRNA *brna)
   RNA_def_property_boolean_funcs(prop, "rna_OpenVDBModifier_show_axis_convert_get", NULL);
   RNA_def_property_clear_flag(prop, PROP_EDITABLE);
 
-	prop = RNA_def_property(srna, "simplify_render", PROP_BOOLEAN, PROP_NONE);
-	RNA_def_property_boolean_sdna(prop, NULL, "flags", MOD_OPENVDB_SIMPLIFY_RENDER);
-	RNA_def_property_ui_text(prop, "Simplify Render", "Use simplification level in render");
-	RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
+  prop = RNA_def_property(srna, "simplify_render", PROP_BOOLEAN, PROP_NONE);
+  RNA_def_property_boolean_sdna(prop, NULL, "flags", MOD_OPENVDB_SIMPLIFY_RENDER);
+  RNA_def_property_ui_text(prop, "Simplify Render", "Use simplification level in render");
+  RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
 
-	prop = RNA_def_property(srna, "in_memory_render", PROP_BOOLEAN, PROP_NONE);
-	RNA_def_property_boolean_sdna(prop, NULL, "flags", MOD_OPENVDB_IN_MEMORY_RENDER);
-	RNA_def_property_ui_text(prop, "In Memory Render", "Render with loading volume into memory");
-	RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
+  prop = RNA_def_property(srna, "in_memory_render", PROP_BOOLEAN, PROP_NONE);
+  RNA_def_property_boolean_sdna(prop, NULL, "flags", MOD_OPENVDB_IN_MEMORY_RENDER);
+  RNA_def_property_ui_text(prop, "In Memory Render", "Render with loading volume into memory");
+  RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
 
   prop = RNA_def_property(srna, "max_density", PROP_FLOAT, PROP_NONE);
   RNA_def_property_clear_flag(prop, PROP_EDITABLE);

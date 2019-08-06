@@ -70,9 +70,9 @@ typedef struct KernelGlobals {
 #  endif
 
 #  ifdef __OPENVDB__
-	/* OpenVDB */
-	OpenVDBGlobals *vdb;
-	OpenVDBThreadData *vdb_tdata;
+  /* OpenVDB */
+  OpenVDBGlobals *vdb;
+  OpenVDBThreadData *vdb_tdata;
 #  endif
 
   /* **** Run-time data ****  */

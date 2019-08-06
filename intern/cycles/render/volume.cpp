@@ -42,201 +42,220 @@ CCL_NAMESPACE_BEGIN
 VolumeManager::VolumeManager()
 {
 #ifdef WITH_OPENVDB
-	openvdb::initialize();
+  openvdb::initialize();
 #endif
-	need_update = true;
+  need_update = true;
 }
 
 VolumeManager::~VolumeManager()
 {
-	for(size_t i = 0; i < grids.size(); ++i) {
-		if(grids[i]) {
-			delete grids[i];
-		}
-	}
+  for (size_t i = 0; i < grids.size(); ++i) {
+    if (grids[i]) {
+      delete grids[i];
+    }
+  }
 }
 
 static inline void catch_exceptions()
 {
 #ifdef WITH_OPENVDB
-	try {
-		throw;
-	}
-	catch(const openvdb::IoError& e) {
-		std::cerr << e.what() << "\n";
-	}
+  try {
+    throw;
+  }
+  catch (const openvdb::IoError &e) {
+    std::cerr << e.what() << "\n";
+  }
 #endif
 }
 
-int VolumeManager::add_volume(const std::string &filename, const std::string &name, const Transform& tfm, const int3 resolution, const int3 offset, const int3 axis)
+int VolumeManager::add_volume(const std::string &filename,
+                              const std::string &name,
+                              const Transform &tfm,
+                              const int3 resolution,
+                              const int3 offset,
+                              const int3 axis)
 {
-	int slot = -1;
+  int slot = -1;
 
-	if((slot = find_existing_slot(filename, name, tfm)) != -1) {
-		grids[slot]->users += 1;
-	}
+  if ((slot = find_existing_slot(filename, name, tfm)) != -1) {
+    grids[slot]->users += 1;
+  }
 
-	try {
-		if(is_openvdb_file(filename)) {
-			slot = add_openvdb_volume(filename, name, tfm, resolution, offset, axis);
-		}
-	}
-	catch(...) {
-		catch_exceptions();
-		slot = -1;
-	}
+  try {
+    if (is_openvdb_file(filename)) {
+      slot = add_openvdb_volume(filename, name, tfm, resolution, offset, axis);
+    }
+  }
+  catch (...) {
+    catch_exceptions();
+    slot = -1;
+  }
 
-	return slot;
+  return slot;
 }
 
-int VolumeManager::find_existing_slot(const std::string &filename, const std::string &gridname, const Transform &tfm)
+int VolumeManager::find_existing_slot(const std::string &filename,
+                                      const std::string &gridname,
+                                      const Transform &tfm)
 {
-	for(size_t i = 0; i < grids.size(); ++i) {
-		if(grids[i]) {
-			if(grids[i]->filename == filename
-			   && grids[i]->gridname == gridname
-			   && grids[i]->tfm == tfm) {
-				return i;
-			}
-		}
-	}
+  for (size_t i = 0; i < grids.size(); ++i) {
+    if (grids[i]) {
+      if (grids[i]->filename == filename && grids[i]->gridname == gridname &&
+          grids[i]->tfm == tfm) {
+        return i;
+      }
+    }
+  }
 
-	return -1;
+  return -1;
 }
 
-
-bool VolumeManager::is_openvdb_file(const string& filename) const
+bool VolumeManager::is_openvdb_file(const string &filename) const
 {
-	return string_endswith(filename, ".vdb");
+  return string_endswith(filename, ".vdb");
 }
 
-int VolumeManager::add_openvdb_volume(const std::string &filename, const std::string &gridname, const Transform &tfm, const int3 resolution, const int3 offset, const int3 axis)
+int VolumeManager::add_openvdb_volume(const std::string &filename,
+                                      const std::string &gridname,
+                                      const Transform &tfm,
+                                      const int3 resolution,
+                                      const int3 offset,
+                                      const int3 axis)
 {
-	int slot = -1;
+  int slot = -1;
 
 #ifdef WITH_OPENVDB
-	bool file_ok = true;
-	openvdb::io::File file(filename);
-	try {
-		file.open();
-		if(!file.hasGrid(gridname)) {
-			file_ok = false;
-		}
-		else {
-			openvdb::GridBase::Ptr grid = file.readGridMetadata(gridname);
-			if(grid->getGridClass() == openvdb::GRID_LEVEL_SET) {
-				file_ok = false;
-			}
-		}
-	}
-	catch(...) {
-		catch_exceptions();
-		file_ok = false;
-	}
+  bool file_ok = true;
+  openvdb::io::File file(filename);
+  try {
+    file.open();
+    if (!file.hasGrid(gridname)) {
+      file_ok = false;
+    }
+    else {
+      openvdb::GridBase::Ptr grid = file.readGridMetadata(gridname);
+      if (grid->getGridClass() == openvdb::GRID_LEVEL_SET) {
+        file_ok = false;
+      }
+    }
+  }
+  catch (...) {
+    catch_exceptions();
+    file_ok = false;
+  }
 
-	if(!file_ok) {
-		return -1;
-	}
+  if (!file_ok) {
+    return -1;
+  }
 
-	/* Find a free slot. */
-	for(slot = 0; slot < grids.size(); slot++) {
-		if(!grids[slot])
-			break;
-	}
+  /* Find a free slot. */
+  for (slot = 0; slot < grids.size(); slot++) {
+    if (!grids[slot])
+      break;
+  }
 
-	if(slot == grids.size()) {
-		grids.resize(grids.size() + 1);
-	}
+  if (slot == grids.size()) {
+    grids.resize(grids.size() + 1);
+  }
 
-	GridDescription *grid = new GridDescription();
-	grid->filename = filename;
-	grid->gridname = gridname;
-	grid->tfm = tfm;
-	grid->users = 1;
-	grid->vdb_offset = offset;
-	grid->vdb_resolution = resolution;
-	grid->axis = axis;
+  GridDescription *grid = new GridDescription();
+  grid->filename = filename;
+  grid->gridname = gridname;
+  grid->tfm = tfm;
+  grid->users = 1;
+  grid->vdb_offset = offset;
+  grid->vdb_resolution = resolution;
+  grid->axis = axis;
 
-	grids[slot] = grid;
+  grids[slot] = grid;
 #else
-	(void)volume;
-	(void)filename;
-	(void)name;
+  (void)filename;
+  (void)gridname;
+  (void)tfm;
+  (void)resolution;
+  (void)offset;
+  (void)axis;
 #endif
 
-	return slot;
+  return slot;
 }
 
 void VolumeManager::remove_volume(int slot)
 {
-	if(slot < grids.size() && grids[slot]) {
-		delete grids[slot];
-		grids[slot] = NULL;
-	}
-	need_update = true;
+  if (slot < grids.size() && grids[slot]) {
+    delete grids[slot];
+    grids[slot] = NULL;
+  }
+  need_update = true;
 }
 
-void VolumeManager::device_update(Device *device, DeviceScene *dscene, Scene *scene, Progress& progress)
+void VolumeManager::device_update(Device *device,
+                                  DeviceScene *dscene,
+                                  Scene *scene,
+                                  Progress &progress)
 {
-	if(!need_update) {
-		return;
-	}
+  if (!need_update) {
+    return;
+  }
 
-	device_free(device, dscene);
-	progress.set_status("Updating OpenVDB volumes", "Sending volumes to device.");
+  device_free(device, dscene);
+  progress.set_status("Updating OpenVDB volumes", "Sending volumes to device.");
 
 #ifdef WITH_OPENVDB
-	OpenVDBGlobals *vdb = (OpenVDBGlobals*)device->vdb_memory();
-	if(!vdb) {
-		assert(0);
-		return;
-	}
+  OpenVDBGlobals *vdb = (OpenVDBGlobals *)device->vdb_memory();
+  if (!vdb) {
+    assert(0);
+    return;
+  }
 
-	for(int i = 0; i < vdb->grids.size(); ++i) {
-		if(vdb->grids[i]) {
-			delete vdb->grids[i];
-		}
-	}
+  for (int i = 0; i < vdb->grids.size(); ++i) {
+    if (vdb->grids[i]) {
+      delete vdb->grids[i];
+    }
+  }
 
-	vdb->grids.resize(grids.size());
+  vdb->grids.resize(grids.size());
 
-	for(int i = 0; i < grids.size(); ++i) {
-		if(grids[i] == NULL) {
-			vdb->grids[i] = NULL;
-			continue;
-		}
+  for (int i = 0; i < grids.size(); ++i) {
+    if (grids[i] == NULL) {
+      vdb->grids[i] = NULL;
+      continue;
+    }
 
-		progress.set_status("Updating OpenVDB volumes", "Loading " + grids[i]->gridname + " from " + grids[i]->filename);
-		openvdb::io::File file(grids[i]->filename);
-		try {
-			file.open();
-			openvdb::GridBase::Ptr base_grid = file.readGrid(grids[i]->gridname);
-			if(base_grid) {
-				vdb->grids[i] = OpenVDBTextureBase::create_from_grid(base_grid, grids[i]->tfm, grids[i]->vdb_resolution, grids[i]->vdb_offset);
-				VLOG(1) << base_grid->getName().c_str() << " memory usage: " << base_grid->memUsage() / 1024.0f << " kilobytes.\n";
-			}
-		}
-		catch(...) {
-			catch_exceptions();
-			vdb->grids[i] = NULL;
-		}
-	}
+    progress.set_status("Updating OpenVDB volumes",
+                        "Loading " + grids[i]->gridname + " from " + grids[i]->filename);
+    openvdb::io::File file(grids[i]->filename);
+    try {
+      file.open();
+      openvdb::GridBase::Ptr base_grid = file.readGrid(grids[i]->gridname);
+      if (base_grid) {
+        vdb->grids[i] = OpenVDBTextureBase::create_from_grid(
+            base_grid, grids[i]->tfm, grids[i]->vdb_resolution, grids[i]->vdb_offset);
+        VLOG(1) << base_grid->getName().c_str()
+                << " memory usage: " << base_grid->memUsage() / 1024.0f << " kilobytes.\n";
+      }
+    }
+    catch (...) {
+      catch_exceptions();
+      vdb->grids[i] = NULL;
+    }
+  }
 #endif
 
-	if(progress.get_cancel()) {
-		return;
-	}
+  if (progress.get_cancel()) {
+    return;
+  }
 
-	need_update = false;
+  need_update = false;
 }
 
 void VolumeManager::device_free(Device *device, DeviceScene *dscene)
 {
 #ifdef WITH_OPENVDB
-  OpenVDBGlobals *vdb = (OpenVDBGlobals*)device->vdb_memory();
+  OpenVDBGlobals *vdb = (OpenVDBGlobals *)device->vdb_memory();
   if (vdb) {
     for (size_t i = 0; i < vdb->grids.size(); ++i) {
-      if(vdb->grids[i]) {
+      if (vdb->grids[i]) {
         delete vdb->grids[i];
         vdb->grids[i] = NULL;
       }
@@ -248,7 +267,7 @@ void VolumeManager::device_free(Device *device, DeviceScene *dscene)
 
 void VolumeManager::tag_update(Scene * /*scene*/)
 {
-	need_update = true;
+  need_update = true;
 }
 
 CCL_NAMESPACE_END

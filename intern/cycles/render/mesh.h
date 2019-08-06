@@ -361,14 +361,18 @@ class MeshManager {
                              Scene *scene,
                              vector<AttributeRequestSet> &mesh_attributes);
 
-  void device_update_preprocess(Device *device, DeviceScene *dscene, Scene *scene, Progress &progress);
+  void device_update_preprocess(Device *device,
+                                DeviceScene *dscene,
+                                Scene *scene,
+                                Progress &progress);
   void device_update(Device *device, DeviceScene *dscene, Scene *scene, Progress &progress);
 
   void device_free(Device *device, DeviceScene *dscene);
 
   void tag_update(Scene *scene);
 
-  void create_volume_mesh(Scene *scene, Device *device, DeviceScene *dscene, Mesh *mesh, Progress &progress);
+  void create_volume_mesh(
+      Scene *scene, Device *device, DeviceScene *dscene, Mesh *mesh, Progress &progress);
 
   void collect_statistics(const Scene *scene, RenderStats *stats);
 
@@ -393,7 +397,10 @@ class MeshManager {
 
   void device_update_displacement_images(Device *device, Scene *scene, Progress &progress);
 
-  void device_update_volume_images(Device *device, DeviceScene *dscene, Scene *scene, Progress &progress);
+  void device_update_volume_images(Device *device,
+                                   DeviceScene *dscene,
+                                   Scene *scene,
+                                   Progress &progress);
 };
 
 CCL_NAMESPACE_END

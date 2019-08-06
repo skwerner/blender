@@ -225,7 +225,7 @@ class Scene {
   ParticleSystemManager *particle_system_manager;
   CurveSystemManager *curve_system_manager;
   BakeManager *bake_manager;
-	VolumeManager *volume_manager;
+  VolumeManager *volume_manager;
 
   /* default shaders */
   Shader *default_surface;

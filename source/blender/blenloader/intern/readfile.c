@@ -5526,7 +5526,7 @@ static void direct_link_modifiers(FileData *fd, ListBase *lb)
     /* Tangent Animation specific change:
      * Backwards compatibility with 2.78 studio builds.
      */
-    if(md->type == 54 && strcmp(md->name, "OpenVDB") == 0) {
+    if (md->type == 54 && strcmp(md->name, "OpenVDB") == 0) {
       md->type = eModifierType_OpenVDB;
     }
 

@@ -799,10 +799,13 @@ static void rna_def_smoke_domain_settings(BlenderRNA *brna)
   RNA_def_property_clear_flag(prop, PROP_EDITABLE);
   RNA_def_property_ui_text(prop, "res", "Smoke Grid Resolution");
 
-	prop = RNA_def_property(srna, "index_offset", PROP_INT, PROP_XYZ); /* can change each frame when using adaptive domain */
-	RNA_def_property_int_sdna(prop, NULL, "res_offset");
-	RNA_def_property_clear_flag(prop, PROP_EDITABLE);
-	RNA_def_property_ui_text(prop, "res_offset", "Index Offset");
+  prop = RNA_def_property(srna,
+                          "index_offset",
+                          PROP_INT,
+                          PROP_XYZ); /* can change each frame when using adaptive domain */
+  RNA_def_property_int_sdna(prop, NULL, "res_offset");
+  RNA_def_property_clear_flag(prop, PROP_EDITABLE);
+  RNA_def_property_ui_text(prop, "res_offset", "Index Offset");
 
   prop = RNA_def_property(srna, "burning_rate", PROP_FLOAT, PROP_NONE);
   RNA_def_property_range(prop, 0.01, 4.0);

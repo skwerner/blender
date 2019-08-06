@@ -44,7 +44,7 @@ void OpenVDBReader::open(const openvdb::Name &filename)
     m_meta_map = m_file->getMetadata();
   }
   /* Mostly to catch exceptions related to Blosc not being supported. */
-	catch (const openvdb::Exception &e) {
+  catch (const openvdb::Exception &e) {
     std::cerr << e.what() << '\n';
     cleanupFile();
   }

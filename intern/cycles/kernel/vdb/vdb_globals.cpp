@@ -18,22 +18,24 @@
 
 CCL_NAMESPACE_BEGIN
 
-OpenVDBTextureBase *OpenVDBTextureBase::create_from_grid(openvdb::GridBase::Ptr grid, const Transform& tfm, int3 resolution, int3 index_offset)
+OpenVDBTextureBase *OpenVDBTextureBase::create_from_grid(openvdb::GridBase::Ptr grid,
+                                                         const Transform &tfm,
+                                                         int3 resolution,
+                                                         int3 index_offset)
 {
-	if(grid->isType<openvdb::FloatGrid>()) {
-		OpenVDBTexture<openvdb::FloatGrid> *texture = new OpenVDBTexture<openvdb::FloatGrid>();
-		openvdb::FloatGrid::Ptr float_grid = openvdb::gridPtrCast<openvdb::FloatGrid>(grid);
-		texture->init(float_grid, tfm, resolution, index_offset);
-		return texture;
-	}
-	else if(grid->isType<openvdb::Vec3SGrid>()) {
-		OpenVDBTexture<openvdb::Vec3SGrid> *texture = new OpenVDBTexture<openvdb::Vec3SGrid>();
-		openvdb::Vec3SGrid::Ptr vector_grid = openvdb::gridPtrCast<openvdb::Vec3SGrid>(grid);
-		texture->init(vector_grid, tfm, resolution, index_offset);
-		return texture;
-	}
-	return NULL;
+  if (grid->isType<openvdb::FloatGrid>()) {
+    OpenVDBTexture<openvdb::FloatGrid> *texture = new OpenVDBTexture<openvdb::FloatGrid>();
+    openvdb::FloatGrid::Ptr float_grid = openvdb::gridPtrCast<openvdb::FloatGrid>(grid);
+    texture->init(float_grid, tfm, resolution, index_offset);
+    return texture;
+  }
+  else if (grid->isType<openvdb::Vec3SGrid>()) {
+    OpenVDBTexture<openvdb::Vec3SGrid> *texture = new OpenVDBTexture<openvdb::Vec3SGrid>();
+    openvdb::Vec3SGrid::Ptr vector_grid = openvdb::gridPtrCast<openvdb::Vec3SGrid>(grid);
+    texture->init(vector_grid, tfm, resolution, index_offset);
+    return texture;
+  }
+  return NULL;
 }
-
 
 CCL_NAMESPACE_END

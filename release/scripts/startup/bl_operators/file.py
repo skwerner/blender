@@ -37,56 +37,56 @@ class WM_OT_previews_batch_generate(Operator):
 
     # -----------
     # File props.
-    files = CollectionProperty(
+    files: CollectionProperty(
         type=bpy.types.OperatorFileListElement,
         options={'HIDDEN', 'SKIP_SAVE'},
     )
 
-    directory = StringProperty(
+    directory: StringProperty(
         maxlen=1024,
         subtype='FILE_PATH',
         options={'HIDDEN', 'SKIP_SAVE'},
     )
 
     # Show only images/videos, and directories!
-    filter_blender = BoolProperty(
+    filter_blender: BoolProperty(
         default=True,
         options={'HIDDEN', 'SKIP_SAVE'},
     )
-    filter_folder = BoolProperty(
+    filter_folder: BoolProperty(
         default=True,
         options={'HIDDEN', 'SKIP_SAVE'},
     )
 
     # -----------
     # Own props.
-    use_scenes = BoolProperty(
+    use_scenes: BoolProperty(
         default=True,
         name="Scenes",
         description="Generate scenes' previews",
     )
-    use_groups = BoolProperty(
+    use_collections: BoolProperty(
         default=True,
-        name="Groups",
-        description="Generate groups' previews",
+        name="Collections",
+        description="Generate collections' previews",
     )
-    use_objects = BoolProperty(
+    use_objects: BoolProperty(
         default=True,
         name="Objects",
         description="Generate objects' previews",
     )
-    use_intern_data = BoolProperty(
+    use_intern_data: BoolProperty(
         default=True,
         name="Mat/Tex/...",
         description="Generate 'internal' previews (materials, textures, images, etc.)",
     )
 
-    use_trusted = BoolProperty(
+    use_trusted: BoolProperty(
         default=False,
         name="Trusted Blend Files",
         description="Enable python evaluation for selected files",
     )
-    use_backups = BoolProperty(
+    use_backups: BoolProperty(
         default=True,
         name="Save Backups",
         description="Keep a backup (.blend1) version of the files when saving with generated previews",
@@ -121,8 +121,8 @@ class WM_OT_previews_batch_generate(Operator):
             ])
             if not self.use_scenes:
                 cmd.append('--no_scenes')
-            if not self.use_groups:
-                cmd.append('--no_groups')
+            if not self.use_collections:
+                cmd.append('--no_collections')
             if not self.use_objects:
                 cmd.append('--no_objects')
             if not self.use_intern_data:
@@ -147,55 +147,56 @@ class WM_OT_previews_batch_clear(Operator):
 
     # -----------
     # File props.
-    files = CollectionProperty(
+    files: CollectionProperty(
         type=bpy.types.OperatorFileListElement,
         options={'HIDDEN', 'SKIP_SAVE'},
     )
 
-    directory = StringProperty(
+    directory: StringProperty(
         maxlen=1024,
         subtype='FILE_PATH',
         options={'HIDDEN', 'SKIP_SAVE'},
     )
 
     # Show only images/videos, and directories!
-    filter_blender = BoolProperty(
+    filter_blender: BoolProperty(
         default=True,
         options={'HIDDEN', 'SKIP_SAVE'},
     )
-    filter_folder = BoolProperty(
+    filter_folder: BoolProperty(
         default=True,
         options={'HIDDEN', 'SKIP_SAVE'},
     )
 
     # -----------
     # Own props.
-    use_scenes = BoolProperty(
+    use_scenes: BoolProperty(
         default=True,
         name="Scenes",
         description="Clear scenes' previews",
     )
-    use_groups = BoolProperty(default=True,
-                              name="Groups",
-                              description="Clear groups' previews",
-                              )
-    use_objects = BoolProperty(
+    use_collections: BoolProperty(
+        default=True,
+        name="Collections",
+        description="Clear collections' previews",
+    )
+    use_objects: BoolProperty(
         default=True,
         name="Objects",
         description="Clear objects' previews",
     )
-    use_intern_data = BoolProperty(
+    use_intern_data: BoolProperty(
         default=True,
         name="Mat/Tex/...",
         description="Clear 'internal' previews (materials, textures, images, etc.)",
     )
 
-    use_trusted = BoolProperty(
+    use_trusted: BoolProperty(
         default=False,
         name="Trusted Blend Files",
         description="Enable python evaluation for selected files",
     )
-    use_backups = BoolProperty(
+    use_backups: BoolProperty(
         default=True,
         name="Save Backups",
         description="Keep a backup (.blend1) version of the files when saving with cleared previews",
@@ -231,8 +232,8 @@ class WM_OT_previews_batch_clear(Operator):
             ])
             if not self.use_scenes:
                 cmd.append('--no_scenes')
-            if not self.use_groups:
-                cmd.append('--no_groups')
+            if not self.use_collections:
+                cmd.append('--no_collections')
             if not self.use_objects:
                 cmd.append('--no_objects')
             if not self.use_intern_data:
@@ -250,7 +251,8 @@ class WM_OT_previews_batch_clear(Operator):
 
 
 class WM_OT_blend_strings_utf8_validate(Operator):
-    """Check and fix all strings in current .blend file to be valid UTF-8 Unicode (needed for some old, 2.4x area files)"""
+    """Check and fix all strings in current .blend file to be valid UTF-8 Unicode """ \
+    """(needed for some old, 2.4x area files)"""
     bl_idname = "wm.blend_strings_utf8_validate"
     bl_label = "Validate .blend strings"
     bl_options = {'REGISTER'}
@@ -263,12 +265,12 @@ class WM_OT_blend_strings_utf8_validate(Operator):
             return False
         done_items.add(item)
 
-        if getattr(item, 'library', None) is not None:
+        if getattr(item, "library", None) is not None:
             return False  # No point in checking library data, we cannot fix it anyway...
 
         changed = False
         for prop in item.bl_rna.properties:
-            if prop.identifier in {'bl_rna', 'rna_type'}:
+            if prop.identifier in {"bl_rna", "rna_type"}:
                 continue  # Or we'd recurse 'till Hell freezes.
             if prop.is_readonly:
                 continue

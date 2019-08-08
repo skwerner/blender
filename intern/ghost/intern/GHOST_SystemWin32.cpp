@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,18 +15,10 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file ghost/intern/GHOST_SystemWin32.cpp
- *  \ingroup GHOST
- *
- * \author	Maarten Gribnau
+/** \file
+ * \ingroup GHOST
  */
 
 
@@ -55,6 +45,12 @@
 #include "GHOST_TimerManager.h"
 #include "GHOST_WindowManager.h"
 #include "GHOST_WindowWin32.h"
+
+#if defined(WITH_GL_EGL)
+#  include "GHOST_ContextEGL.h"
+#else
+#  include "GHOST_ContextWGL.h"
+#endif
 
 #ifdef WITH_INPUT_NDOF
   #include "GHOST_NDOFManagerWin32.h"
@@ -115,6 +111,13 @@
 #ifndef WM_DPICHANGED
 #define WM_DPICHANGED 0x02E0
 #endif // WM_DPICHANGED
+
+#ifndef WM_POINTERUPDATE
+#define WM_POINTERUPDATE 0x0245
+#endif // WM_POINTERUPDATE
+
+#define WM_POINTERDOWN                  0x0246
+#define WM_POINTERUP                    0x0247
 
 /* Workaround for some laptop touchpads, some of which seems to
  * have driver issues which makes it so window function receives
@@ -299,15 +302,116 @@ GHOST_IWindow *GHOST_SystemWin32::createWindow(
 }
 
 
+/**
+ * Create a new offscreen context.
+ * Never explicitly delete the window, use #disposeContext() instead.
+ * \return The new context (or 0 if creation failed).
+ */
+GHOST_IContext *GHOST_SystemWin32::createOffscreenContext()
+{
+	bool debug_context = false; /* TODO: inform as a parameter */
+
+	GHOST_Context *context;
+
+	HWND wnd = CreateWindowA("STATIC",
+		"BlenderGLEW",
+		WS_OVERLAPPEDWINDOW | WS_CLIPSIBLINGS | WS_CLIPCHILDREN,
+		0, 0, 64, 64,
+		NULL, NULL,
+		GetModuleHandle(NULL), NULL
+	);
+
+	HDC  mHDC = GetDC(wnd);
+	HDC  prev_hdc = wglGetCurrentDC();
+	HGLRC prev_context = wglGetCurrentContext();
+#if defined(WITH_GL_PROFILE_CORE)
+	for (int minor = 5; minor >= 0; --minor) {
+			context = new GHOST_ContextWGL(
+			    false, true, 0,
+			    wnd, mHDC,
+			    WGL_CONTEXT_CORE_PROFILE_BIT_ARB,
+			    4, minor,
+			    (debug_context ? WGL_CONTEXT_DEBUG_BIT_ARB : 0),
+			    GHOST_OPENGL_WGL_RESET_NOTIFICATION_STRATEGY);
+
+			if (context->initializeDrawingContext()) {
+				goto finished;
+			}
+			else {
+				delete context;
+			}
+		}
+
+		context = new GHOST_ContextWGL(
+		    false, true, 0,
+		    wnd, mHDC,
+		    WGL_CONTEXT_CORE_PROFILE_BIT_ARB,
+		    3, 3,
+		    (debug_context ? WGL_CONTEXT_DEBUG_BIT_ARB : 0),
+		    GHOST_OPENGL_WGL_RESET_NOTIFICATION_STRATEGY);
+
+		if (context->initializeDrawingContext()) {
+			goto finished;
+		}
+		else {
+			MessageBox(
+			        NULL,
+			        "A graphics card and driver with support for OpenGL 3.3 or higher is required.\n"
+			        "Installing the latest driver for your graphics card may resolve the issue.\n\n"
+			        "The program will now close.",
+			        "Blender - Unsupported Graphics Card or Driver",
+			        MB_OK | MB_ICONERROR);
+			delete context;
+			exit();
+		}
+
+#elif defined(WITH_GL_PROFILE_COMPAT)
+		// ask for 2.1 context, driver gives any GL version >= 2.1 (hopefully the latest compatibility profile)
+		// 2.1 ignores the profile bit & is incompatible with core profile
+		context = new GHOST_ContextWGL(
+		        false, true, 0,
+		        NULL, NULL,
+		        0, // no profile bit
+		        2, 1,
+		        (debug_context ? WGL_CONTEXT_DEBUG_BIT_ARB : 0),
+		        GHOST_OPENGL_WGL_RESET_NOTIFICATION_STRATEGY);
+
+		if (context->initializeDrawingContext()) {
+			return context;
+		}
+		else {
+			delete context;
+		}
+#else
+#  error // must specify either core or compat at build time
+#endif
+finished:
+	wglMakeCurrent(prev_hdc, prev_context);
+	return context;
+}
+
+/**
+ * Dispose of a context.
+ * \param   context Pointer to the context to be disposed.
+ * \return  Indication of success.
+ */
+GHOST_TSuccess GHOST_SystemWin32::disposeContext(GHOST_IContext *context)
+{
+	delete context;
+
+	return GHOST_kSuccess;
+}
+
+
 bool GHOST_SystemWin32::processEvents(bool waitForEvent)
 {
 	MSG msg;
-	bool anyProcessed = false;
+	bool hasEventHandled = false;
 
 	do {
 		GHOST_TimerManager *timerMgr = getTimerManager();
 
-		if (waitForEvent && !::PeekMessage(&msg, 0, 0, 0, PM_NOREMOVE)) {
+		if (waitForEvent && !::PeekMessage(&msg, NULL, 0, 0, PM_NOREMOVE)) {
 #if 1
 			::Sleep(1);
 #else
@@ -326,20 +430,20 @@ bool GHOST_SystemWin32::processEvents(bool waitForEvent)
 		}
 
 		if (timerMgr->fireTimers(getMilliSeconds())) {
-			anyProcessed = true;
+			hasEventHandled = true;
 		}
 
 		// Process all the events waiting for us
-		while (::PeekMessageW(&msg, 0, 0, 0, PM_REMOVE) != 0) {
+		while (::PeekMessageW(&msg, NULL, 0, 0, PM_REMOVE) != 0) {
 			// TranslateMessage doesn't alter the message, and doesn't change our raw keyboard data.
 			// Needed for MapVirtualKey or if we ever need to get chars from wm_ime_char or similar.
 			::TranslateMessage(&msg);
 			::DispatchMessageW(&msg);
-			anyProcessed = true;
+			hasEventHandled = true;
 		}
-	} while (waitForEvent && !anyProcessed);
+	} while (waitForEvent && !hasEventHandled);
 
-	return anyProcessed;
+	return hasEventHandled;
 }
 
 
@@ -691,9 +795,55 @@ GHOST_EventButton *GHOST_SystemWin32::processButtonEvent(
         GHOST_WindowWin32 *window,
         GHOST_TButtonMask mask)
 {
-	return new GHOST_EventButton(getSystem()->getMilliSeconds(), type, window, mask);
+	GHOST_SystemWin32 * system = (GHOST_SystemWin32 *)getSystem();
+	if (window->useTabletAPI(GHOST_kTabletNative)) {
+		window->setTabletData(NULL);
+	}
+	return new GHOST_EventButton(system->getMilliSeconds(), type, window, mask);
 }
 
+GHOST_Event *GHOST_SystemWin32::processPointerEvent(
+	GHOST_TEventType type,
+	GHOST_WindowWin32 *window,
+	WPARAM wParam,
+	LPARAM lParam,
+	bool& eventHandled)
+{
+	GHOST_PointerInfoWin32 pointerInfo;
+	GHOST_SystemWin32 * system = (GHOST_SystemWin32 *)getSystem();
+
+	if (!window->useTabletAPI(GHOST_kTabletNative)) {
+		return NULL;
+	}
+
+	if (window->getPointerInfo(&pointerInfo, wParam, lParam) != GHOST_kSuccess) {
+		return NULL;
+	}
+
+	if (!pointerInfo.isPrimary) {
+		eventHandled = true;
+		return NULL; // For multi-touch displays we ignore these events
+	}
+
+	system->setCursorPosition(pointerInfo.pixelLocation.x, pointerInfo.pixelLocation.y);
+
+	switch (type) {
+		case GHOST_kEventButtonDown:
+			window->setTabletData(&pointerInfo.tabletData);
+			eventHandled = true;
+			return new GHOST_EventButton(system->getMilliSeconds(), GHOST_kEventButtonDown, window, pointerInfo.buttonMask);
+		case GHOST_kEventButtonUp:
+			eventHandled = true;
+			return new GHOST_EventButton(system->getMilliSeconds(), GHOST_kEventButtonUp, window, pointerInfo.buttonMask);
+		case GHOST_kEventCursorMove:
+			window->setTabletData(&pointerInfo.tabletData);
+			eventHandled = true;
+			return new GHOST_EventCursor(system->getMilliSeconds(), GHOST_kEventCursorMove, window,
+			                             pointerInfo.pixelLocation.x,  pointerInfo.pixelLocation.y);
+		default:
+			return NULL;
+	}
+}
 
 GHOST_EventCursor *GHOST_SystemWin32::processCursorEvent(GHOST_TEventType type, GHOST_WindowWin32 *window)
 {
@@ -998,8 +1148,9 @@ LRESULT WINAPI GHOST_SystemWin32::s_wndProc(HWND hwnd, UINT msg, WPARAM wParam, 
 							break;
 #ifdef WITH_INPUT_NDOF
 						case RIM_TYPEHID:
-							if (system->processNDOF(raw))
+							if (system->processNDOF(raw)) {
 								eventHandled = true;
+							}
 							break;
 #endif
 					}
@@ -1118,6 +1269,24 @@ LRESULT WINAPI GHOST_SystemWin32::s_wndProc(HWND hwnd, UINT msg, WPARAM wParam, 
 				case WT_CSRCHANGE:
 				case WT_PROXIMITY:
 					window->processWin32TabletInitEvent();
+					break;
+				////////////////////////////////////////////////////////////////////////
+				// Pointer events, processed
+				////////////////////////////////////////////////////////////////////////
+				case WM_POINTERDOWN:
+					event = processPointerEvent(GHOST_kEventButtonDown, window, wParam, lParam, eventHandled);
+					if (event && eventHandled) {
+						window->registerMouseClickEvent(0);
+					}
+					break;
+				case WM_POINTERUP:
+					event = processPointerEvent(GHOST_kEventButtonUp, window, wParam, lParam, eventHandled);
+					if (event && eventHandled) {
+						window->registerMouseClickEvent(1);
+					}
+					break;
+				case WM_POINTERUPDATE:
+					event = processPointerEvent(GHOST_kEventCursorMove, window, wParam, lParam, eventHandled);
 					break;
 				////////////////////////////////////////////////////////////////////////
 				// Mouse events, processed
@@ -1336,8 +1505,6 @@ LRESULT WINAPI GHOST_SystemWin32::s_wndProc(HWND hwnd, UINT msg, WPARAM wParam, 
 					 * change such as when the window is moved to a monitor with a different DPI.
 					 */
 					{
-						WORD newYAxisDPI = HIWORD(wParam);
-						WORD newXAxisDPI = LOWORD(wParam);
 						// The suggested new size and position of the window.
 						RECT* const suggestedWindowRect = (RECT*)lParam;
 
@@ -1602,7 +1769,7 @@ static bool isStartedFromCommandPrompt()
 		}
 
 		/* When we're starting from a wrapper we need to compare with parent process ID. */
-		if (pid == (start_from_launcher ? ppid : GetCurrentProcessId()))
+		if (pid != (start_from_launcher ? ppid : GetCurrentProcessId()))
 			return true;
 	}
 
@@ -1611,29 +1778,36 @@ static bool isStartedFromCommandPrompt()
 
 int GHOST_SystemWin32::toggleConsole(int action)
 {
+	HWND wnd = GetConsoleWindow();
+
 	switch (action) {
 		case 3: // startup: hide if not started from command prompt
 		{
-			if (isStartedFromCommandPrompt()) {
-				ShowWindow(GetConsoleWindow(), SW_HIDE);
+			if (!isStartedFromCommandPrompt()) {
+				ShowWindow(wnd, SW_HIDE);
 				m_consoleStatus = 0;
 			}
 			break;
 		}
 		case 0: // hide
-			ShowWindow(GetConsoleWindow(), SW_HIDE);
+			ShowWindow(wnd, SW_HIDE);
 			m_consoleStatus = 0;
 			break;
 		case 1: // show
-			ShowWindow(GetConsoleWindow(), SW_SHOW);
+			ShowWindow(wnd, SW_SHOW);
+			if (!isStartedFromCommandPrompt()) {
+				DeleteMenu(GetSystemMenu(wnd, FALSE), SC_CLOSE, MF_BYCOMMAND);
+			}
 			m_consoleStatus = 1;
 			break;
 		case 2: // toggle
-			ShowWindow(GetConsoleWindow(), m_consoleStatus ? SW_HIDE : SW_SHOW);
+			ShowWindow(wnd, m_consoleStatus ? SW_HIDE : SW_SHOW);
 			m_consoleStatus = !m_consoleStatus;
+			if (m_consoleStatus && !isStartedFromCommandPrompt()) {
+				DeleteMenu(GetSystemMenu(wnd, FALSE), SC_CLOSE, MF_BYCOMMAND);
+			}
 			break;
 	}
-
 
 	return m_consoleStatus;
 }

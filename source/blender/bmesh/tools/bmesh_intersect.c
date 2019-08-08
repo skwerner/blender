@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,12 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/bmesh/tools/bmesh_intersect.c
- *  \ingroup bmesh
+/** \file
+ * \ingroup bmesh
  *
  * Cut meshes along intersections.
  *
@@ -46,7 +42,6 @@
 #include "BLI_linklist_stack.h"
 #include "BLI_utildefines_stack.h"
 #ifndef NDEBUG
-#  include "BLI_array_utils.h"
 #endif
 
 #include "BLI_kdopbvh.h"
@@ -80,12 +75,6 @@
 // #define USE_PARANOID
 /* use accelerated overlap check */
 #define USE_BVH
-
-// #define USE_BOOLEAN_RAYCAST_DRAW
-
-#ifdef USE_BOOLEAN_RAYCAST_DRAW
-/* insert bl_debug_draw_quad_clear... here */
-#endif
 
 // #define USE_DUMP
 
@@ -808,14 +797,16 @@ static void bm_isect_tri_tri(
 			BMEdge *ie;
 
 			if (i == 0) {
-				if (STACK_SIZE(iv_ls_a) != 2)
+				if (STACK_SIZE(iv_ls_a) != 2) {
 					continue;
+				}
 				ie_vs = iv_ls_a;
 				f = f_a;
 			}
 			else {
-				if (STACK_SIZE(iv_ls_b) != 2)
+				if (STACK_SIZE(iv_ls_b) != 2) {
 					continue;
+				}
 				ie_vs = iv_ls_b;
 				f = f_b;
 			}
@@ -977,8 +968,8 @@ static int isect_bvhtree_point_v3(
  * Intersect tessellated faces
  * leaving the resulting edges tagged.
  *
- * \param test_fn Return value: -1: skip, 0: tree_a, 1: tree_b (use_self == false)
- * \param boolean_mode -1: no-boolean, 0: intersection... see #BMESH_ISECT_BOOLEAN_ISECT.
+ * \param test_fn: Return value: -1: skip, 0: tree_a, 1: tree_b (use_self == false)
+ * \param boolean_mode: -1: no-boolean, 0: intersection... see #BMESH_ISECT_BOOLEAN_ISECT.
  * \return true if the mesh is changed (intersections cut or faces removed from boolean).
  */
 bool BM_mesh_intersect(
@@ -1004,10 +995,6 @@ bool BM_mesh_intersect(
 	BVHTreeOverlap *overlap;
 #else
 	int i_a, i_b;
-#endif
-
-#ifdef USE_BOOLEAN_RAYCAST_DRAW
-	bl_debug_draw_quad_clear();
 #endif
 
 	s.bm = bm;
@@ -1588,7 +1575,7 @@ bool BM_mesh_intersect(
 				BLI_assert(ELEM(side, 0, 1));
 				side = !side;
 
-				// BM_face_calc_center_mean(f, co);
+				// BM_face_calc_center_median(f, co);
 				BM_face_calc_point_in_face(f, co);
 
 				hits = isect_bvhtree_point_v3(tree_pair[side], looptri_coords, co);
@@ -1607,17 +1594,6 @@ bool BM_mesh_intersect(
 						do_flip = (side == 0);
 						break;
 				}
-
-#ifdef USE_BOOLEAN_RAYCAST_DRAW
-				{
-					uint colors[4] = {0x00000000, 0xffffffff, 0xff000000, 0x0000ff};
-					float co_other[3] = {UNPACK3(co)};
-					co_other[0] += 1000.0f;
-					bl_debug_color_set(colors[(hits & 1) == 1]);
-					bl_debug_draw_edge_add(co, co_other);
-				}
-#endif
-
 			}
 
 			if (do_remove) {

@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,10 @@
  *
  * The Original Code is Copyright (C) 2011 Blender Foundation.
  * All rights reserved.
- *
- * Contributor(s): Blender Foundation,
- *                 Sergey Sharybin
- *                 Keir Mierle
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/blenkernel/intern/tracking.c
- *  \ingroup bke
+/** \file
+ * \ingroup bke
  */
 
 #include <stddef.h>
@@ -61,6 +53,7 @@
 #include "BKE_movieclip.h"
 #include "BKE_object.h"
 #include "BKE_scene.h"
+#include "BKE_layer.h"
 
 #include "IMB_imbuf_types.h"
 #include "IMB_imbuf.h"
@@ -404,11 +397,11 @@ void BKE_tracking_get_camera_object_matrix(Scene *scene, Object *ob, float mat[4
 		if (scene->camera)
 			ob = scene->camera;
 		else
-			ob = BKE_scene_camera_find(scene);
+			ob = BKE_view_layer_camera_find(BKE_view_layer_context_active_PLACEHOLDER(scene));
 	}
 
 	if (ob)
-		BKE_object_where_is_calc_mat4(scene, ob, mat);
+		BKE_object_where_is_calc_mat4(ob, mat);
 	else
 		unit_m4(mat);
 }
@@ -3005,7 +2998,7 @@ void BKE_tracking_get_rna_path_prefix_for_track(
 	MovieTrackingObject *object =
 	        BKE_tracking_find_object_for_track(tracking, track);
 	if (object == NULL) {
-		BLI_snprintf(rna_path, rna_path_len, "tracking.tracks");
+		BLI_strncpy(rna_path, "tracking.tracks", rna_path_len);
 	}
 	else {
 		char object_name_esc[MAX_NAME * 2];
@@ -3050,7 +3043,7 @@ void BKE_tracking_get_rna_path_prefix_for_plane_track(
 	MovieTrackingObject *object =
 	        BKE_tracking_find_object_for_plane_track(tracking, plane_track);
 	if (object == NULL) {
-		BLI_snprintf(rna_path, rna_path_len, "tracking.plane_tracks");
+		BLI_strncpy(rna_path, "tracking.plane_tracks", rna_path_len);
 	}
 	else {
 		char object_name_esc[MAX_NAME * 2];

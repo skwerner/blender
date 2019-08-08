@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,14 +15,10 @@
  *
  * The Original Code is Copyright (C) 2012 Blender Foundation.
  * All rights reserved.
- *
- * Contributor(s): Campbell Barton
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/python/bmesh/bmesh_py_types_meshdata.c
- *  \ingroup pybmesh
+/** \file
+ * \ingroup pybmesh
  *
  * This file defines customdata types which can't be accessed as primitive
  * python types such as MDeformVert, MLoopUV, MTexPoly
@@ -42,102 +36,11 @@
 #include "BLI_math_vector.h"
 
 #include "BKE_deform.h"
-#include "BKE_library.h"
 
 #include "bmesh_py_types_meshdata.h"
 
 #include "../generic/py_capi_utils.h"
 #include "../generic/python_utildefines.h"
-
-
-/* Mesh BMTexPoly
- * ************** */
-
-#define BPy_BMTexPoly_Check(v)  (Py_TYPE(v) == &BPy_BMTexPoly_Type)
-
-typedef struct BPy_BMTexPoly {
-	PyObject_VAR_HEAD
-	MTexPoly *data;
-} BPy_BMTexPoly;
-
-extern PyObject *pyrna_id_CreatePyObject(ID *id);
-extern bool      pyrna_id_FromPyObject(PyObject *obj, ID **id);
-
-PyDoc_STRVAR(bpy_bmtexpoly_image_doc,
-"Image or None.\n\n:type: :class:`bpy.types.Image`"
-);
-static PyObject *bpy_bmtexpoly_image_get(BPy_BMTexPoly *self, void *UNUSED(closure))
-{
-	return pyrna_id_CreatePyObject((ID *)self->data->tpage);
-}
-
-static int bpy_bmtexpoly_image_set(BPy_BMTexPoly *self, PyObject *value, void *UNUSED(closure))
-{
-	ID *id;
-
-	if (value == Py_None) {
-		id = NULL;
-	}
-	else if (pyrna_id_FromPyObject(value, &id) && id && GS(id->name) == ID_IM) {
-		/* pass */
-	}
-	else {
-		PyErr_Format(PyExc_KeyError, "BMTexPoly.image = x"
-		             "expected an image or None, not '%.200s'",
-		             Py_TYPE(value)->tp_name);
-		return -1;
-	}
-
-	id_lib_extern(id);
-	self->data->tpage = (struct Image *)id;
-
-	return 0;
-}
-
-static PyGetSetDef bpy_bmtexpoly_getseters[] = {
-	/* attributes match rna_def_mtpoly  */
-	{(char *)"image", (getter)bpy_bmtexpoly_image_get, (setter)bpy_bmtexpoly_image_set, (char *)bpy_bmtexpoly_image_doc, NULL},
-
-	{NULL, NULL, NULL, NULL, NULL} /* Sentinel */
-};
-
-static PyTypeObject BPy_BMTexPoly_Type; /* bm.loops.layers.uv.active */
-
-static void bm_init_types_bmtexpoly(void)
-{
-	BPy_BMTexPoly_Type.tp_basicsize = sizeof(BPy_BMTexPoly);
-
-	BPy_BMTexPoly_Type.tp_name = "BMTexPoly";
-
-	BPy_BMTexPoly_Type.tp_doc = NULL; // todo
-
-	BPy_BMTexPoly_Type.tp_getset = bpy_bmtexpoly_getseters;
-
-	BPy_BMTexPoly_Type.tp_flags = Py_TPFLAGS_DEFAULT;
-
-	PyType_Ready(&BPy_BMTexPoly_Type);
-}
-
-int BPy_BMTexPoly_AssignPyObject(struct MTexPoly *mtpoly, PyObject *value)
-{
-	if (UNLIKELY(!BPy_BMTexPoly_Check(value))) {
-		PyErr_Format(PyExc_TypeError, "expected BMTexPoly, not a %.200s", Py_TYPE(value)->tp_name);
-		return -1;
-	}
-	else {
-		*((MTexPoly *)mtpoly) = *(((BPy_BMTexPoly *)value)->data);
-		return 0;
-	}
-}
-
-PyObject *BPy_BMTexPoly_CreatePyObject(struct MTexPoly *mtpoly)
-{
-	BPy_BMTexPoly *self = PyObject_New(BPy_BMTexPoly, &BPy_BMTexPoly_Type);
-	self->data = mtpoly;
-	return (PyObject *)self;
-}
-
-/* --- End Mesh BMTexPoly --- */
 
 /* Mesh Loop UV
  * ************ */
@@ -403,8 +306,9 @@ static int mathutils_bmloopcol_set(BaseMathObject *bmo, int UNUSED(subtype))
 static int mathutils_bmloopcol_get_index(BaseMathObject *bmo, int subtype, int UNUSED(index))
 {
 	/* lazy, avoid repeteing the case statement */
-	if (mathutils_bmloopcol_get(bmo, subtype) == -1)
+	if (mathutils_bmloopcol_get(bmo, subtype) == -1) {
 		return -1;
+	}
 	return 0;
 }
 
@@ -413,8 +317,9 @@ static int mathutils_bmloopcol_set_index(BaseMathObject *bmo, int subtype, int i
 	const float f = bmo->data[index];
 
 	/* lazy, avoid repeteing the case statement */
-	if (mathutils_bmloopcol_get(bmo, subtype) == -1)
+	if (mathutils_bmloopcol_get(bmo, subtype) == -1) {
 		return -1;
+	}
 
 	bmo->data[index] = f;
 	return mathutils_bmloopcol_set(bmo, subtype);
@@ -425,7 +330,7 @@ static Mathutils_Callback mathutils_bmloopcol_cb = {
 	mathutils_bmloopcol_get,
 	mathutils_bmloopcol_set,
 	mathutils_bmloopcol_get_index,
-	mathutils_bmloopcol_set_index
+	mathutils_bmloopcol_set_index,
 };
 
 static void bm_init_types_bmloopcol(void)
@@ -614,7 +519,7 @@ static PySequenceMethods bpy_bmdeformvert_as_sequence = {
 static PyMappingMethods bpy_bmdeformvert_as_mapping = {
 	(lenfunc)bpy_bmdeformvert_len,
 	(binaryfunc)bpy_bmdeformvert_subscript,
-	(objobjargproc)bpy_bmdeformvert_ass_subscript
+	(objobjargproc)bpy_bmdeformvert_ass_subscript,
 };
 
 /* Methods
@@ -746,7 +651,7 @@ static struct PyMethodDef bpy_bmdeformvert_methods[] = {
 	{"get",     (PyCFunction)bpy_bmdeformvert_get,     METH_VARARGS, bpy_bmdeformvert_get_doc},
 	/* BMESH_TODO pop, popitem, update */
 	{"clear",   (PyCFunction)bpy_bmdeformvert_clear,   METH_NOARGS,  bpy_bmdeformvert_clear_doc},
-	{NULL, NULL, 0, NULL}
+	{NULL, NULL, 0, NULL},
 };
 
 PyTypeObject BPy_BMDeformVert_Type; /* bm.loops.layers.uv.active */
@@ -797,7 +702,6 @@ PyObject *BPy_BMDeformVert_CreatePyObject(struct MDeformVert *dvert)
 /* call to init all types */
 void BPy_BM_init_types_meshdata(void)
 {
-	bm_init_types_bmtexpoly();
 	bm_init_types_bmloopuv();
 	bm_init_types_bmloopcol();
 	bm_init_types_bmdvert();

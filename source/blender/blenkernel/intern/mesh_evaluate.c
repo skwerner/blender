@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,19 +15,17 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * Contributor(s): Blender Foundation
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/blenkernel/intern/mesh_evaluate.c
- *  \ingroup bke
+/** \file
+ * \ingroup bke
  *
  * Functions to evaluate mesh data.
  */
 
 #include <limits.h>
+
+#include "CLG_log.h"
 
 #include "MEM_guardedalloc.h"
 
@@ -39,7 +35,6 @@
 
 #include "BLI_utildefines.h"
 #include "BLI_memarena.h"
-#include "BLI_mempool.h"
 #include "BLI_math.h"
 #include "BLI_edgehash.h"
 #include "BLI_bitmap.h"
@@ -68,8 +63,9 @@
 #  include "PIL_time_utildefines.h"
 #endif
 
-/* -------------------------------------------------------------------- */
+static CLG_LogRef LOG = {"bke.mesh_evaluate"};
 
+/* -------------------------------------------------------------------- */
 /** \name Mesh Normal Calculation
  * \{ */
 
@@ -86,6 +82,20 @@ static void mesh_calc_normals_vert_fallback(MVert *mverts, int numVerts)
 		normalize_v3_v3(no, mv->co);
 		normal_float_to_short_v3(mv->no, no);
 	}
+}
+
+/* TODO(Sybren): we can probably rename this to BKE_mesh_calc_normals_mapping(),
+ * and remove the function of the same name below, as that one doesn't seem to be
+ * called anywhere. */
+void BKE_mesh_calc_normals_mapping_simple(struct Mesh *mesh)
+{
+	const bool only_face_normals = CustomData_is_referenced_layer(&mesh->vdata, CD_MVERT);
+
+	BKE_mesh_calc_normals_mapping_ex(
+	        mesh->mvert, mesh->totvert,
+	        mesh->mloop, mesh->mpoly, mesh->totloop, mesh->totpoly, NULL,
+	        mesh->mface, mesh->totface, NULL, NULL,
+	        only_face_normals);
 }
 
 /* Calculate vertex and face normals, face normals are returned in *r_faceNors if non-NULL
@@ -123,7 +133,7 @@ void BKE_mesh_calc_normals_mapping_ex(
 
 	/* if we are not calculating verts and no verts were passes then we have nothing to do */
 	if ((only_face_normals == true) && (r_polyNors == NULL) && (r_faceNors == NULL)) {
-		printf("%s: called with nothing to do\n", __func__);
+		CLOG_WARN(&LOG, "called with nothing to do");
 		return;
 	}
 
@@ -156,7 +166,7 @@ void BKE_mesh_calc_normals_mapping_ex(
 			}
 			else {
 				/* eek, we're not corresponding to polys */
-				printf("error in %s: tessellation face indices are incorrect.  normals may look bad.\n", __func__);
+				CLOG_ERROR(&LOG, "tessellation face indices are incorrect.  normals may look bad.");
 			}
 		}
 	}
@@ -310,7 +320,7 @@ void BKE_mesh_calc_normals_poly(
 
 	MeshCalcNormalsData data = {
 	    .mpolys = mpolys, .mloop = mloop, .mverts = mverts,
-	    .pnors = pnors, .lnors_weighted = lnors_weighted, .vnors = vnors
+	    .pnors = pnors, .lnors_weighted = lnors_weighted, .vnors = vnors,
 	};
 
 	/* Compute poly normals, and prepare weighted loop normals. */
@@ -332,6 +342,45 @@ void BKE_mesh_calc_normals_poly(
 	MEM_freeN(lnors_weighted);
 }
 
+void BKE_mesh_ensure_normals(Mesh *mesh)
+{
+	if (mesh->runtime.cd_dirty_vert & CD_MASK_NORMAL) {
+		BKE_mesh_calc_normals(mesh);
+	}
+	BLI_assert((mesh->runtime.cd_dirty_vert & CD_MASK_NORMAL) == 0);
+}
+
+/**
+ * Called after calculating all modifiers.
+ */
+void BKE_mesh_ensure_normals_for_display(Mesh *mesh)
+{
+	float (*poly_nors)[3] = CustomData_get_layer(&mesh->pdata, CD_NORMAL);
+	const bool do_vert_normals = (mesh->runtime.cd_dirty_vert & CD_MASK_NORMAL) != 0;
+	const bool do_poly_normals = (mesh->runtime.cd_dirty_poly & CD_MASK_NORMAL || poly_nors == NULL);
+
+	if (do_vert_normals || do_poly_normals) {
+		const bool do_add_poly_nors_cddata = (poly_nors == NULL);
+		if (do_add_poly_nors_cddata) {
+			poly_nors = MEM_malloc_arrayN((size_t)mesh->totpoly, sizeof(*poly_nors), __func__);
+		}
+
+		/* calculate poly/vert normals */
+		BKE_mesh_calc_normals_poly(
+		        mesh->mvert, NULL, mesh->totvert, mesh->mloop, mesh->mpoly,
+		        mesh->totloop, mesh->totpoly, poly_nors,
+		        !do_vert_normals);
+
+		if (do_add_poly_nors_cddata) {
+			CustomData_add_layer(&mesh->pdata, CD_NORMAL, CD_ASSIGN, poly_nors, mesh->totpoly);
+		}
+
+		mesh->runtime.cd_dirty_vert &= ~CD_MASK_NORMAL;
+		mesh->runtime.cd_dirty_poly &= ~CD_MASK_NORMAL;
+	}
+}
+
+/* Note that this does not update the CD_NORMAL layer, but does update the normals in the CD_MVERT layer. */
 void BKE_mesh_calc_normals(Mesh *mesh)
 {
 #ifdef DEBUG_TIME
@@ -344,6 +393,7 @@ void BKE_mesh_calc_normals(Mesh *mesh)
 #ifdef DEBUG_TIME
 	TIMEIT_END_AVERAGED(BKE_mesh_calc_normals);
 #endif
+	mesh->runtime.cd_dirty_vert &= ~CD_MASK_NORMAL;
 }
 
 void BKE_mesh_calc_normals_tessface(
@@ -456,6 +506,8 @@ void BKE_lnor_spacearr_init(MLoopNorSpaceArray *lnors_spacearr, const int numLoo
 		mem = lnors_spacearr->mem;
 		lnors_spacearr->lspacearr = BLI_memarena_calloc(mem, sizeof(MLoopNorSpace *) * (size_t)numLoops);
 		lnors_spacearr->loops_pool = BLI_memarena_alloc(mem, sizeof(LinkNode) * (size_t)numLoops);
+
+		lnors_spacearr->num_spaces = 0;
 	}
 	BLI_assert(ELEM(data_type, MLNOR_SPACEARR_BMLOOP_PTR, MLNOR_SPACEARR_LOOP_INDEX));
 	lnors_spacearr->data_type = data_type;
@@ -463,21 +515,24 @@ void BKE_lnor_spacearr_init(MLoopNorSpaceArray *lnors_spacearr, const int numLoo
 
 void BKE_lnor_spacearr_clear(MLoopNorSpaceArray *lnors_spacearr)
 {
-	BLI_memarena_clear(lnors_spacearr->mem);
+	lnors_spacearr->num_spaces = 0;
 	lnors_spacearr->lspacearr = NULL;
 	lnors_spacearr->loops_pool = NULL;
+	BLI_memarena_clear(lnors_spacearr->mem);
 }
 
 void BKE_lnor_spacearr_free(MLoopNorSpaceArray *lnors_spacearr)
 {
-	BLI_memarena_free(lnors_spacearr->mem);
+	lnors_spacearr->num_spaces = 0;
 	lnors_spacearr->lspacearr = NULL;
 	lnors_spacearr->loops_pool = NULL;
+	BLI_memarena_free(lnors_spacearr->mem);
 	lnors_spacearr->mem = NULL;
 }
 
 MLoopNorSpace *BKE_lnor_space_create(MLoopNorSpaceArray *lnors_spacearr)
 {
+	lnors_spacearr->num_spaces++;
 	return BLI_memarena_calloc(lnors_spacearr->mem, sizeof(MLoopNorSpace));
 }
 
@@ -1711,7 +1766,7 @@ static void mesh_normals_loop_custom_set(
 		        &lnors_spacearr, NULL, loop_to_poly);
 	}
 	else {
-		BLI_BITMAP_SET_ALL(done_loops, true, (size_t)numLoops);
+		BLI_bitmap_set_all(done_loops, true, (size_t)numLoops);
 	}
 
 	/* And we just have to convert plain object-space custom normals to our lnor space-encoded ones. */
@@ -1796,6 +1851,61 @@ void BKE_mesh_normals_loop_custom_from_vertices_set(
 	        mpolys, polynors, numPolys, r_clnors_data, true);
 }
 
+static void mesh_set_custom_normals(Mesh *mesh, float (*r_custom_nors)[3], const bool use_vertices)
+{
+	short (*clnors)[2];
+	const int numloops = mesh->totloop;
+
+	clnors = CustomData_get_layer(&mesh->ldata, CD_CUSTOMLOOPNORMAL);
+	if (clnors != NULL) {
+		memset(clnors, 0, sizeof(*clnors) * (size_t)numloops);
+	}
+	else {
+		clnors = CustomData_add_layer(&mesh->ldata, CD_CUSTOMLOOPNORMAL, CD_CALLOC, NULL, numloops);
+	}
+
+	float (*polynors)[3] = CustomData_get_layer(&mesh->pdata, CD_NORMAL);
+	bool free_polynors = false;
+	if (polynors == NULL) {
+		polynors = MEM_mallocN(sizeof(float[3]) * (size_t)mesh->totpoly, __func__);
+		BKE_mesh_calc_normals_poly(
+		            mesh->mvert, NULL, mesh->totvert,
+		            mesh->mloop, mesh->mpoly, mesh->totloop, mesh->totpoly, polynors, false);
+		free_polynors = true;
+	}
+
+	mesh_normals_loop_custom_set(
+	            mesh->mvert, mesh->totvert, mesh->medge, mesh->totedge, mesh->mloop, r_custom_nors, mesh->totloop,
+	            mesh->mpoly, polynors, mesh->totpoly, clnors, use_vertices);
+
+	if (free_polynors) {
+		MEM_freeN(polynors);
+	}
+}
+
+/**
+ * Higher level functions hiding most of the code needed around call to #BKE_mesh_normals_loop_custom_set().
+ *
+ * \param r_custom_loopnors is not const, since code will replace zero_v3 normals there
+ *                          with automatically computed vectors.
+ */
+void BKE_mesh_set_custom_normals(Mesh *mesh, float (*r_custom_loopnors)[3])
+{
+	mesh_set_custom_normals(mesh, r_custom_loopnors, false);
+}
+
+/**
+ * Higher level functions hiding most of the code needed around call to #BKE_mesh_normals_loop_custom_from_vertices_set().
+ *
+ * \param r_custom_loopnors is not const, since code will replace zero_v3 normals there
+ *                          with automatically computed vectors.
+ */
+void BKE_mesh_set_custom_normals_from_vertices(Mesh *mesh, float (*r_custom_vertnors)[3])
+{
+	mesh_set_custom_normals(mesh, r_custom_vertnors, true);
+}
+
+
 /**
  * Computes average per-vertex normals from given custom loop normals.
  *
@@ -1834,156 +1944,6 @@ void BKE_mesh_normals_loop_to_vertex(
 
 
 /* -------------------------------------------------------------------- */
-
-/** \name Mesh Tangent Calculations
- * \{ */
-
-/* Tangent space utils. */
-
-/* User data. */
-typedef struct {
-	const MPoly *mpolys;   /* faces */
-	const MLoop *mloops;   /* faces's vertices */
-	const MVert *mverts;   /* vertices */
-	const MLoopUV *luvs;   /* texture coordinates */
-	float (*lnors)[3];     /* loops' normals */
-	float (*tangents)[4];  /* output tangents */
-	int num_polys;         /* number of polygons */
-} BKEMeshToTangent;
-
-/* Mikktspace's API */
-static int get_num_faces(const SMikkTSpaceContext *pContext)
-{
-	BKEMeshToTangent *p_mesh = (BKEMeshToTangent *)pContext->m_pUserData;
-	return p_mesh->num_polys;
-}
-
-static int get_num_verts_of_face(const SMikkTSpaceContext *pContext, const int face_idx)
-{
-	BKEMeshToTangent *p_mesh = (BKEMeshToTangent *)pContext->m_pUserData;
-	return p_mesh->mpolys[face_idx].totloop;
-}
-
-static void get_position(const SMikkTSpaceContext *pContext, float r_co[3], const int face_idx, const int vert_idx)
-{
-	BKEMeshToTangent *p_mesh = (BKEMeshToTangent *)pContext->m_pUserData;
-	const int loop_idx = p_mesh->mpolys[face_idx].loopstart + vert_idx;
-	copy_v3_v3(r_co, p_mesh->mverts[p_mesh->mloops[loop_idx].v].co);
-}
-
-static void get_texture_coordinate(
-        const SMikkTSpaceContext *pContext, float r_uv[2], const int face_idx,
-        const int vert_idx)
-{
-	BKEMeshToTangent *p_mesh = (BKEMeshToTangent *)pContext->m_pUserData;
-	copy_v2_v2(r_uv, p_mesh->luvs[p_mesh->mpolys[face_idx].loopstart + vert_idx].uv);
-}
-
-static void get_normal(const SMikkTSpaceContext *pContext, float r_no[3], const int face_idx, const int vert_idx)
-{
-	BKEMeshToTangent *p_mesh = (BKEMeshToTangent *)pContext->m_pUserData;
-	copy_v3_v3(r_no, p_mesh->lnors[p_mesh->mpolys[face_idx].loopstart + vert_idx]);
-}
-
-static void set_tspace(
-        const SMikkTSpaceContext *pContext, const float fv_tangent[3], const float face_sign,
-        const int face_idx, const int vert_idx)
-{
-	BKEMeshToTangent *p_mesh = (BKEMeshToTangent *)pContext->m_pUserData;
-	float *p_res = p_mesh->tangents[p_mesh->mpolys[face_idx].loopstart + vert_idx];
-	copy_v3_v3(p_res, fv_tangent);
-	p_res[3] = face_sign;
-}
-
-/**
- * Compute simplified tangent space normals, i.e. tangent vector + sign of bi-tangent one, which combined with
- * split normals can be used to recreate the full tangent space.
- * Note: * The mesh should be made of only tris and quads!
- */
-void BKE_mesh_loop_tangents_ex(
-        const MVert *mverts, const int UNUSED(numVerts), const MLoop *mloops,
-        float (*r_looptangent)[4], float (*loopnors)[3], const MLoopUV *loopuvs,
-        const int UNUSED(numLoops), const MPoly *mpolys, const int numPolys,
-        ReportList *reports)
-{
-	BKEMeshToTangent mesh_to_tangent = {NULL};
-	SMikkTSpaceContext s_context = {NULL};
-	SMikkTSpaceInterface s_interface = {NULL};
-
-	const MPoly *mp;
-	int mp_index;
-
-	/* First check we do have a tris/quads only mesh. */
-	for (mp = mpolys, mp_index = 0; mp_index < numPolys; mp++, mp_index++) {
-		if (mp->totloop > 4) {
-			BKE_report(reports, RPT_ERROR, "Tangent space can only be computed for tris/quads, aborting");
-			return;
-		}
-	}
-
-	/* Compute Mikktspace's tangent normals. */
-	mesh_to_tangent.mpolys = mpolys;
-	mesh_to_tangent.mloops = mloops;
-	mesh_to_tangent.mverts = mverts;
-	mesh_to_tangent.luvs = loopuvs;
-	mesh_to_tangent.lnors = loopnors;
-	mesh_to_tangent.tangents = r_looptangent;
-	mesh_to_tangent.num_polys = numPolys;
-
-	s_context.m_pUserData = &mesh_to_tangent;
-	s_context.m_pInterface = &s_interface;
-	s_interface.m_getNumFaces = get_num_faces;
-	s_interface.m_getNumVerticesOfFace = get_num_verts_of_face;
-	s_interface.m_getPosition = get_position;
-	s_interface.m_getTexCoord = get_texture_coordinate;
-	s_interface.m_getNormal = get_normal;
-	s_interface.m_setTSpaceBasic = set_tspace;
-
-	/* 0 if failed */
-	if (genTangSpaceDefault(&s_context) == false) {
-		BKE_report(reports, RPT_ERROR, "Mikktspace failed to generate tangents for this mesh!");
-	}
-}
-
-/**
- * Wrapper around BKE_mesh_loop_tangents_ex, which takes care of most boiling code.
- * \note
- * - There must be a valid loop's CD_NORMALS available.
- * - The mesh should be made of only tris and quads!
- */
-void BKE_mesh_loop_tangents(Mesh *mesh, const char *uvmap, float (*r_looptangents)[4], ReportList *reports)
-{
-	MLoopUV *loopuvs;
-	float (*loopnors)[3];
-
-	/* Check we have valid texture coordinates first! */
-	if (uvmap) {
-		loopuvs = CustomData_get_layer_named(&mesh->ldata, CD_MLOOPUV, uvmap);
-	}
-	else {
-		loopuvs = CustomData_get_layer(&mesh->ldata, CD_MLOOPUV);
-	}
-	if (!loopuvs) {
-		BKE_reportf(reports, RPT_ERROR, "Tangent space computation needs an UVMap, \"%s\" not found, aborting", uvmap);
-		return;
-	}
-
-	loopnors = CustomData_get_layer(&mesh->ldata, CD_NORMAL);
-	if (!loopnors) {
-		BKE_report(reports, RPT_ERROR, "Tangent space computation needs loop normals, none found, aborting");
-		return;
-	}
-
-	BKE_mesh_loop_tangents_ex(
-	        mesh->mvert, mesh->totvert, mesh->mloop, r_looptangents,
-	        loopnors, loopuvs, mesh->totloop, mesh->mpoly, mesh->totpoly, reports);
-}
-
-/** \} */
-
-
-/* -------------------------------------------------------------------- */
-
 /** \name Polygon Calculations
  * \{ */
 
@@ -1993,7 +1953,6 @@ void BKE_mesh_loop_tangents(Mesh *mesh, const char *uvmap, float (*r_looptangent
  * Computes the normal of a planar
  * polygon See Graphics Gems for
  * computing newell normal.
- *
  */
 static void mesh_calc_ngon_normal(
         const MPoly *mpoly, const MLoop *loopstart,
@@ -2256,30 +2215,6 @@ static float mesh_calc_poly_area_centroid(
 	return total_area;
 }
 
-#if 0 /* slow version of the function below */
-void BKE_mesh_calc_poly_angles(
-        MPoly *mpoly, MLoop *loopstart,
-        MVert *mvarray, float angles[])
-{
-	MLoop *ml;
-	MLoop *mloop = &loopstart[-mpoly->loopstart];
-
-	int j;
-	for (j = 0, ml = loopstart; j < mpoly->totloop; j++, ml++) {
-		MLoop *ml_prev = ME_POLY_LOOP_PREV(mloop, mpoly, j);
-		MLoop *ml_next = ME_POLY_LOOP_NEXT(mloop, mpoly, j);
-
-		float e1[3], e2[3];
-
-		sub_v3_v3v3(e1, mvarray[ml_next->v].co, mvarray[ml->v].co);
-		sub_v3_v3v3(e2, mvarray[ml_prev->v].co, mvarray[ml->v].co);
-
-		angles[j] = (float)M_PI - angle_v3v3(e1, e2);
-	}
-}
-
-#else /* equivalent the function above but avoid multiple subtractions + normalize */
-
 void BKE_mesh_calc_poly_angles(
         const MPoly *mpoly, const MLoop *loopstart,
         const MVert *mvarray, float angles[])
@@ -2304,7 +2239,6 @@ void BKE_mesh_calc_poly_angles(
 		i_next++;
 	}
 }
-#endif
 
 void BKE_mesh_poly_edgehash_insert(EdgeHash *ehash, const MPoly *mp, const MLoop *mloop)
 {
@@ -2339,7 +2273,6 @@ void BKE_mesh_poly_edgebitmap_insert(unsigned int *edge_bitmap, const MPoly *mp,
 
 
 /* -------------------------------------------------------------------- */
-
 /** \name Mesh Center Calculation
  * \{ */
 
@@ -2441,7 +2374,6 @@ bool BKE_mesh_center_of_volume(const Mesh *me, float r_cent[3])
 
 
 /* -------------------------------------------------------------------- */
-
 /** \name Mesh Volume Calculation
  * \{ */
 
@@ -2547,7 +2479,6 @@ void BKE_mesh_calc_volume(
 /** \} */
 
 /* -------------------------------------------------------------------- */
-
 /** \name NGon Tessellation (NGon/Tessface Conversion)
  * \{ */
 
@@ -2556,12 +2487,12 @@ void BKE_mesh_calc_volume(
  */
 void BKE_mesh_loops_to_mface_corners(
         CustomData *fdata, CustomData *ldata,
-        CustomData *pdata, unsigned int lindex[4], int findex,
-        const int polyindex,
+        CustomData *UNUSED(pdata), unsigned int lindex[4], int findex,
+        const int UNUSED(polyindex),
         const int mf_len, /* 3 or 4 */
 
         /* cache values to avoid lookups every time */
-        const int numTex, /* CustomData_number_of_layers(pdata, CD_MTEXPOLY) */
+        const int numUV, /* CustomData_number_of_layers(ldata, CD_MLOOPUV) */
         const int numCol, /* CustomData_number_of_layers(ldata, CD_MLOOPCOL) */
         const bool hasPCol, /* CustomData_has_layer(ldata, CD_PREVIEW_MLOOPCOL) */
         const bool hasOrigSpace, /* CustomData_has_layer(ldata, CD_ORIGSPACE_MLOOP) */
@@ -2569,17 +2500,13 @@ void BKE_mesh_loops_to_mface_corners(
 )
 {
 	MTFace *texface;
-	MTexPoly *texpoly;
 	MCol *mcol;
 	MLoopCol *mloopcol;
 	MLoopUV *mloopuv;
 	int i, j;
 
-	for (i = 0; i < numTex; i++) {
+	for (i = 0; i < numUV; i++) {
 		texface = CustomData_get_n(fdata, CD_MTFACE, findex, i);
-		texpoly = CustomData_get_n(pdata, CD_MTEXPOLY, polyindex, i);
-
-		ME_MTEXFACE_CPY(texface, texpoly);
 
 		for (j = 0; j < mf_len; j++) {
 			mloopuv = CustomData_get_n(ldata, CD_MLOOPUV, (int)lindex[j], i);
@@ -2627,19 +2554,19 @@ void BKE_mesh_loops_to_mface_corners(
 /**
  * Convert all CD layers from loop/poly to tessface data.
  *
- * \param loopindices is an array of an int[4] per tessface, mapping tessface's verts to loops indices.
+ * \param loopindices: is an array of an int[4] per tessface, mapping tessface's verts to loops indices.
  *
  * \note when mface is not NULL, mface[face_index].v4 is used to test quads, else, loopindices[face_index][3] is used.
  */
 void BKE_mesh_loops_to_tessdata(
-        CustomData *fdata, CustomData *ldata, CustomData *pdata, MFace *mface,
+        CustomData *fdata, CustomData *ldata, MFace *mface,
         int *polyindices, unsigned int (*loopindices)[4], const int num_faces)
 {
 	/* Note: performances are sub-optimal when we get a NULL mface, we could be ~25% quicker with dedicated code...
 	 *       Issue is, unless having two different functions with nearly the same code, there's not much ways to solve
 	 *       this. Better imho to live with it for now. :/ --mont29
 	 */
-	const int numTex = CustomData_number_of_layers(pdata, CD_MTEXPOLY);
+	const int numUV = CustomData_number_of_layers(ldata, CD_MLOOPUV);
 	const int numCol = CustomData_number_of_layers(ldata, CD_MLOOPCOL);
 	const bool hasPCol = CustomData_has_layer(ldata, CD_PREVIEW_MLOOPCOL);
 	const bool hasOrigSpace = CustomData_has_layer(ldata, CD_ORIGSPACE_MLOOP);
@@ -2649,17 +2576,14 @@ void BKE_mesh_loops_to_tessdata(
 	const int *pidx;
 	unsigned int (*lidx)[4];
 
-	for (i = 0; i < numTex; i++) {
+	for (i = 0; i < numUV; i++) {
 		MTFace *texface = CustomData_get_layer_n(fdata, CD_MTFACE, i);
-		MTexPoly *texpoly = CustomData_get_layer_n(pdata, CD_MTEXPOLY, i);
 		MLoopUV *mloopuv = CustomData_get_layer_n(ldata, CD_MLOOPUV, i);
 
 		for (findex = 0, pidx = polyindices, lidx = loopindices;
 		     findex < num_faces;
 		     pidx++, lidx++, findex++, texface++)
 		{
-			ME_MTEXFACE_CPY(texface, &texpoly[*pidx]);
-
 			for (j = (mface ? mface[findex].v4 : (*lidx)[3]) ? 4 : 3; j--;) {
 				copy_v2_v2(texface->uv[j], mloopuv[(*lidx)[j]].uv);
 			}
@@ -2982,7 +2906,7 @@ int BKE_mesh_recalc_tessellation(
 	/* CD_ORIGINDEX will contain an array of indices from tessfaces to the polygons
 	 * they are directly tessellated from */
 	CustomData_add_layer(fdata, CD_ORIGINDEX, CD_ASSIGN, mface_to_poly_map, totface);
-	CustomData_from_bmeshpoly(fdata, pdata, ldata, totface);
+	CustomData_from_bmeshpoly(fdata, ldata, totface);
 
 	if (do_face_nor_copy) {
 		/* If polys have a normals layer, copying that to faces can help
@@ -3003,7 +2927,7 @@ int BKE_mesh_recalc_tessellation(
 	 * So we pass NULL as MFace pointer, and BKE_mesh_loops_to_tessdata will use the fourth loop index as quad test.
 	 * ...
 	 */
-	BKE_mesh_loops_to_tessdata(fdata, ldata, pdata, NULL, mface_to_poly_map, lindices, totface);
+	BKE_mesh_loops_to_tessdata(fdata, ldata, NULL, mface_to_poly_map, lindices, totface);
 
 	/* NOTE: quad detection issue - fourth vertidx vs fourth loopidx:
 	 * ...However, most TFace code uses 'MFace->v4 == 0' test to check whether it is a tri or quad.
@@ -3173,11 +3097,10 @@ void BKE_mesh_recalc_looptri(
 }
 
 static void bm_corners_to_loops_ex(
-        ID *id, CustomData *fdata, CustomData *ldata, CustomData *pdata,
+        ID *id, CustomData *fdata, CustomData *ldata,
         MFace *mface, int totloop, int findex, int loopstart, int numTex, int numCol)
 {
 	MTFace *texface;
-	MTexPoly *texpoly;
 	MCol *mcol;
 	MLoopCol *mloopcol;
 	MLoopUV *mloopuv;
@@ -3188,9 +3111,6 @@ static void bm_corners_to_loops_ex(
 
 	for (i = 0; i < numTex; i++) {
 		texface = CustomData_get_n(fdata, CD_MTFACE, findex, i);
-		texpoly = CustomData_get_n(pdata, CD_MTEXPOLY, findex, i);
-
-		ME_MTEXFACE_CPY(texpoly, texface);
 
 		mloopuv = CustomData_get_n(ldata, CD_MLOOPUV, loopstart, i);
 		copy_v2_v2(mloopuv->uv, texface->uv[0]); mloopuv++;
@@ -3300,7 +3220,7 @@ void BKE_mesh_do_versions_convert_mfaces_to_mpolys(Mesh *mesh)
 	        mesh->medge, mesh->mface,
 	        &mesh->totloop, &mesh->totpoly, &mesh->mloop, &mesh->mpoly);
 
-	CustomData_bmesh_do_versions_update_active_layers(&mesh->fdata, &mesh->pdata, &mesh->ldata);
+	CustomData_bmesh_do_versions_update_active_layers(&mesh->fdata, &mesh->ldata);
 
 	BKE_mesh_update_customdata_pointers(mesh, true);
 }
@@ -3344,7 +3264,7 @@ void BKE_mesh_convert_mfaces_to_mpolys_ex(
 
 	CustomData_add_layer(ldata, CD_MLOOP, CD_ASSIGN, mloop, totloop);
 
-	CustomData_to_bmeshpoly(fdata, pdata, ldata, totloop, totpoly);
+	CustomData_to_bmeshpoly(fdata, ldata, totloop);
 
 	if (id) {
 		/* ensure external data is transferred */
@@ -3394,7 +3314,7 @@ void BKE_mesh_convert_mfaces_to_mpolys_ex(
 
 #       undef ML
 
-		bm_corners_to_loops_ex(id, fdata, ldata, pdata, mface, totloop, i, mp->loopstart, numTex, numCol);
+		bm_corners_to_loops_ex(id, fdata, ldata, mface, totloop, i, mp->loopstart, numTex, numCol);
 
 		if (polyindex) {
 			*polyindex = i;
@@ -3461,9 +3381,9 @@ void BKE_mesh_mdisp_flip(MDisps *md, const bool use_loop_mdisp_flip)
  * Flip (invert winding of) the given \a mpoly, i.e. reverse order of its loops
  * (keeping the same vertex as 'start point').
  *
- * \param mpoly the polygon to flip.
- * \param mloop the full loops array.
- * \param ldata the loops custom data.
+ * \param mpoly: the polygon to flip.
+ * \param mloop: the full loops array.
+ * \param ldata: the loops custom data.
  */
 void BKE_mesh_polygon_flip_ex(
         MPoly *mpoly, MLoop *mloop, CustomData *ldata,
@@ -3528,7 +3448,6 @@ void BKE_mesh_polygons_flip(
 }
 
 /* -------------------------------------------------------------------- */
-
 /** \name Mesh Flag Flushing
  * \{ */
 
@@ -3719,7 +3638,6 @@ void BKE_mesh_flush_select_from_verts(Mesh *me)
 /** \} */
 
 /* -------------------------------------------------------------------- */
-
 /** \name Mesh Spatial Calculation
  * \{ */
 
@@ -3728,11 +3646,11 @@ void BKE_mesh_flush_select_from_verts(Mesh *me)
  * (\a vert_cos_src, \a vert_cos_dst),
  * and applies the difference to \a vert_cos_new relative to \a vert_cos_org.
  *
- * \param vert_cos_src reference deform source.
- * \param vert_cos_dst reference deform destination.
+ * \param vert_cos_src: reference deform source.
+ * \param vert_cos_dst: reference deform destination.
  *
- * \param vert_cos_org reference for the output location.
- * \param vert_cos_new resulting coords.
+ * \param vert_cos_org: reference for the output location.
+ * \param vert_cos_new: resulting coords.
  */
 void BKE_mesh_calc_relative_deform(
         const MPoly *mpoly, const int totpoly,

@@ -21,7 +21,7 @@ class ExportSomeData(bpy.types.Operator):
     bl_idname = "export.some_data"
     bl_label = "Export Some Data"
 
-    filepath = bpy.props.StringProperty(subtype="FILE_PATH")
+    filepath: bpy.props.StringProperty(subtype="FILE_PATH")
 
     @classmethod
     def poll(cls, context):
@@ -45,7 +45,7 @@ def menu_func(self, context):
 
 # Register and add to the file selector
 bpy.utils.register_class(ExportSomeData)
-bpy.types.INFO_MT_file_export.append(menu_func)
+bpy.types.TOPBAR_MT_file_export.append(menu_func)
 
 
 # test call

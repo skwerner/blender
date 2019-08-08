@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,14 +15,10 @@
  *
  * The Original Code is Copyright (C) 2008 Blender Foundation.
  * All rights reserved.
- *
- * Contributor(s): Blender Foundation
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/interface/interface_region_menu_popup.c
- *  \ingroup edinterface
+/** \file
+ * \ingroup edinterface
  *
  * PopUp Menu Region
  */
@@ -191,25 +185,24 @@ static uiBlock *ui_block_func_POPUP(bContext *C, uiPopupBlockHandle *handle, voi
 
 	if (pup->but) {
 		/* minimum width to enforece */
-		minwidth = BLI_rctf_size_x(&pup->but->rect);
+		if (pup->but->drawstr[0]) {
+			minwidth = BLI_rctf_size_x(&pup->but->rect);
+		}
+		else {
+			/* For buttons with no text, use the minimum (typically icon only). */
+			minwidth = UI_MENU_WIDTH_MIN;
+		}
 
-		/* settings (typically rna-enum-popups) show above the button,
-		 * menu's like file-menu, show below */
 		if (pup->block->direction != 0) {
 			/* allow overriding the direction from menu_func */
 			direction = pup->block->direction;
 		}
-		else if ((pup->but->type == UI_BTYPE_PULLDOWN) ||
-		         (UI_but_menutype_get(pup->but) != NULL))
-		{
-			direction = UI_DIR_DOWN;
-		}
 		else {
-			direction = UI_DIR_UP;
+			direction = UI_DIR_DOWN;
 		}
 	}
 	else {
-		minwidth = 50;
+		minwidth = UI_MENU_WIDTH_MIN;
 		direction = UI_DIR_DOWN;
 	}
 
@@ -279,17 +272,25 @@ static uiBlock *ui_block_func_POPUP(bContext *C, uiPopupBlockHandle *handle, voi
 		}
 
 		block->minbounds = minwidth;
-		UI_block_bounds_set_menu(block, 1, offset[0], offset[1]);
+		UI_block_bounds_set_menu(block, 1, offset);
 	}
 	else {
 		/* for a header menu we set the direction automatic */
 		if (!pup->slideout && flip) {
 			ScrArea *sa = CTX_wm_area(C);
-			if (sa && sa->headertype == HEADERDOWN) {
-				ARegion *ar = CTX_wm_region(C);
-				if (ar && ar->regiontype == RGN_TYPE_HEADER) {
-					UI_block_direction_set(block, UI_DIR_UP);
-					UI_block_order_flip(block);
+			ARegion *ar = CTX_wm_region(C);
+			if (sa && ar) {
+				if (ar->regiontype == RGN_TYPE_HEADER) {
+					if (ED_area_header_alignment(sa) == RGN_ALIGN_BOTTOM) {
+						UI_block_direction_set(block, UI_DIR_UP);
+						UI_block_order_flip(block);
+					}
+				}
+				if (ar->regiontype == RGN_TYPE_FOOTER) {
+					if (ED_area_footer_alignment(sa) == RGN_ALIGN_BOTTOM) {
+						UI_block_direction_set(block, UI_DIR_UP);
+						UI_block_order_flip(block);
+					}
 				}
 			}
 		}
@@ -318,7 +319,7 @@ uiPopupBlockHandle *ui_popup_menu_create(
 	pup = MEM_callocN(sizeof(uiPopupMenu), __func__);
 	pup->block = UI_block_begin(C, NULL, __func__, UI_EMBOSS_PULLDOWN);
 	pup->block->flag |= UI_BLOCK_NUMSELECT;  /* default menus to numselect */
-	pup->layout = UI_block_layout(pup->block, UI_LAYOUT_VERTICAL, UI_LAYOUT_MENU, 0, 0, 200, 0, MENU_PADDING, style);
+	pup->layout = UI_block_layout(pup->block, UI_LAYOUT_VERTICAL, UI_LAYOUT_MENU, 0, 0, 200, 0, UI_MENU_PADDING, style);
 	pup->slideout = but ? ui_block_is_menu(but->block) : false;
 	pup->but = but;
 	uiLayoutSetOperatorContext(pup->layout, WM_OP_INVOKE_REGION_WIN);
@@ -360,7 +361,6 @@ uiPopupBlockHandle *ui_popup_menu_create(
 		WM_event_add_mousemove(C);
 	}
 
-	handle->can_refresh = false;
 	MEM_freeN(pup);
 
 	return handle;
@@ -385,10 +385,11 @@ uiPopupMenu *UI_popup_menu_begin_ex(bContext *C, const char *title, const char *
 	pup->block = UI_block_begin(C, NULL, block_name, UI_EMBOSS_PULLDOWN);
 	pup->block->flag |= UI_BLOCK_POPUP_MEMORY | UI_BLOCK_IS_FLIP;
 	pup->block->puphash = ui_popup_menu_hash(title);
-	pup->layout = UI_block_layout(pup->block, UI_LAYOUT_VERTICAL, UI_LAYOUT_MENU, 0, 0, 200, 0, MENU_PADDING, style);
+	pup->layout = UI_block_layout(pup->block, UI_LAYOUT_VERTICAL, UI_LAYOUT_MENU, 0, 0, 200, 0, UI_MENU_PADDING, style);
 
 	/* note, this intentionally differs from the menu & submenu default because many operators
-	 * use popups like this to select one of their options - where having invoke doesn't make sense */
+	 * use popups like this to select one of their options -
+	 * where having invoke doesn't make sense */
 	uiLayoutSetOperatorContext(pup->layout, WM_OP_EXEC_REGION_WIN);
 
 	/* create in advance so we can let buttons point to retval already */
@@ -451,7 +452,6 @@ void UI_popup_menu_end(bContext *C, uiPopupMenu *pup)
 	UI_popup_handlers_add(C, &window->modalhandlers, menu, 0);
 	WM_event_add_mousemove(C);
 
-	menu->can_refresh = false;
 	MEM_freeN(pup);
 }
 
@@ -488,8 +488,9 @@ void UI_popup_menu_reports(bContext *C, ReportList *reports)
 	uiPopupMenu *pup = NULL;
 	uiLayout *layout;
 
-	if (!CTX_wm_window(C))
+	if (!CTX_wm_window(C)) {
 		return;
+	}
 
 	for (report = reports->list.first; report; report = report->next) {
 		int icon;
@@ -570,10 +571,12 @@ void UI_popup_block_invoke_ex(bContext *C, uiBlockCreateFunc func, void *arg, co
 
 	handle = ui_popup_block_create(C, NULL, NULL, func, NULL, arg);
 	handle->popup = true;
+	handle->can_refresh = true;
 	handle->optype = (opname) ? WM_operatortype_find(opname, 0) : NULL;
 	handle->opcontext = opcontext;
 
 	UI_popup_handlers_add(C, &window->modalhandlers, handle, 0);
+	UI_block_active_only_flagged_buttons(C, handle->region, handle->region->uiblocks.first);
 	WM_event_add_mousemove(C);
 }
 
@@ -592,6 +595,7 @@ void UI_popup_block_ex(
 	handle = ui_popup_block_create(C, NULL, NULL, func, NULL, arg);
 	handle->popup = true;
 	handle->retvalue = 1;
+	handle->can_refresh = true;
 
 	handle->popup_op = op;
 	handle->popup_arg = arg;
@@ -600,6 +604,7 @@ void UI_popup_block_ex(
 	// handle->opcontext = opcontext;
 
 	UI_popup_handlers_add(C, &window->modalhandlers, handle, 0);
+	UI_block_active_only_flagged_buttons(C, handle->region, handle->region->uiblocks.first);
 	WM_event_add_mousemove(C);
 }
 
@@ -612,6 +617,7 @@ void uiPupBlockOperator(bContext *C, uiBlockCreateFunc func, wmOperator *op, int
 	handle = ui_popup_block_create(C, NULL, NULL, func, NULL, op);
 	handle->popup = 1;
 	handle->retvalue = 1;
+	handle->can_refresh = true;
 
 	handle->popup_arg = op;
 	handle->popup_func = operator_cb;
@@ -628,15 +634,34 @@ void UI_popup_block_close(bContext *C, wmWindow *win, uiBlock *block)
 	/* if loading new .blend while popup is open, window will be NULL */
 	if (block->handle) {
 		if (win) {
+			const bScreen *screen = WM_window_get_active_screen(win);
+
 			UI_popup_handlers_remove(&win->modalhandlers, block->handle);
 			ui_popup_block_free(C, block->handle);
 
-			/* In the case we have nested popups, closing one may need to redraw another, see: T48874 */
-			for (ARegion *ar = win->screen->regionbase.first; ar; ar = ar->next) {
+			/* In the case we have nested popups,
+			 * closing one may need to redraw another, see: T48874 */
+			for (ARegion *ar = screen->regionbase.first; ar; ar = ar->next) {
 				ED_region_tag_refresh_ui(ar);
 			}
 		}
 	}
+}
+
+bool UI_popup_block_name_exists(bContext *C, const char *name)
+{
+	bScreen *sc = CTX_wm_screen(C);
+	uiBlock *block;
+	ARegion *ar;
+
+	for (ar = sc->regionbase.first; ar; ar = ar->next) {
+		for (block = ar->uiblocks.first; block; block = block->next) {
+			if (STREQ(block->name, name)) {
+				return true;
+			}
+		}
+	}
+	return false;
 }
 
 /** \} */

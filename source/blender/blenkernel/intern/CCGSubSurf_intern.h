@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,12 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/blenkernel/intern/CCGSubSurf_intern.h
- *  \ingroup bke
+/** \file
+ * \ingroup bke
  */
 
 #ifndef __CCGSUBSURF_INTERN_H__
@@ -103,15 +99,15 @@ struct DerivedMesh;
 enum {
 	Vert_eEffected =    (1 << 0),
 	Vert_eChanged =     (1 << 1),
-	Vert_eSeam =        (1 << 2)
+	Vert_eSeam =        (1 << 2),
 } /*VertFlags*/;
 
 enum {
-	Edge_eEffected =    (1 << 0)
+	Edge_eEffected =    (1 << 0),
 } /*CCGEdgeFlags*/;
 
 enum {
-	Face_eEffected =    (1 << 0)
+	Face_eEffected =    (1 << 0),
 } /*FaceFlags*/;
 
 struct CCGVert {
@@ -236,7 +232,7 @@ struct CCGSubSurf {
 	 * Refiner is created from the modifier stack and used later from the main
 	 * thread to construct GL mesh to avoid threaded access to GL.
 	 */
-	struct OpenSubdiv_TopologyRefinerDescr *osd_topology_refiner;  /* Only used at synchronization stage. */
+	struct OpenSubdiv_TopologyRefiner *osd_topology_refiner;  /* Only used at synchronization stage. */
 	/* Denotes whether osd_mesh is invalid now due to topology changes and needs
 	 * to be reconstructed.
 	 *
@@ -249,7 +245,7 @@ struct CCGSubSurf {
 	/* ** CPU backend. ** */
 
 	/* Limit evaluator, used to evaluate CCG. */
-	struct OpenSubdiv_EvaluatorDescr *osd_evaluator;
+	struct OpenSubdiv_Evaluator *osd_evaluator;
 	/* Next PTex face index, used while CCG synchronization
 	 * to fill in PTex index of CCGFace.
 	 */

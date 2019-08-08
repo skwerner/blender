@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,36 +12,31 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 #ifndef __BKE_MODIFIER_H__
 #define __BKE_MODIFIER_H__
 
-/** \file BKE_modifier.h
- *  \ingroup bke
+/** \file
+ * \ingroup bke
  */
 
 #include "DNA_modifier_types.h"     /* needed for all enum typdefs */
 #include "BLI_compiler_attrs.h"
 #include "BKE_customdata.h"
 
+struct BMEditMesh;
+struct CustomData_MeshMasks;
+struct DepsNodeHandle;
+struct Depsgraph;
 struct ID;
-struct DerivedMesh;
-struct DagForest;
-struct DagNode;
+struct ListBase;
+struct Main;
+struct Mesh;
+struct ModifierData;
 struct Object;
 struct Scene;
-struct ListBase;
+struct ViewLayer;
 struct bArmature;
-struct Main;
-struct ModifierData;
-struct BMEditMesh;
-struct DepsNodeHandle;
 
 typedef enum {
 	/* Should not be used, only for None modifier type */
@@ -118,26 +111,22 @@ typedef enum ModifierApplyFlag {
 	MOD_APPLY_IGNORE_SIMPLIFY = 1 << 3, /* Ignore scene simplification flag and use subdivisions
 	                                     * level set in multires modifier.
 	                                     */
-	MOD_APPLY_ALLOW_GPU = 1 << 4,  /* Allow modifier to be applied and stored in the GPU.
-	                                * Used by the viewport in order to be able to have SS
-	                                * happening on GPU.
-	                                * Render pipeline (including viewport render) should
-	                                * have DM on the CPU.
-	                                */
 } ModifierApplyFlag;
-
 
 typedef struct ModifierUpdateDepsgraphContext {
 	struct Scene *scene;
 	struct Object *object;
-
-	/* Old depsgraph node handle. */
-	struct DagForest *forest;
-	struct DagNode *obNode;
-
-	/* new depsgraph node handle. */
 	struct DepsNodeHandle *node;
 } ModifierUpdateDepsgraphContext;
+
+/* Contains the information for deformXXX and applyXXX functions below that
+ * doesn't change between consecutive modifiers. */
+typedef struct ModifierEvalContext {
+	struct Depsgraph *depsgraph;
+	struct Object *object;
+	ModifierApplyFlag flag;
+} ModifierEvalContext;
+
 
 typedef struct ModifierTypeInfo {
 	/* The user visible name for this modifier */
@@ -159,73 +148,50 @@ typedef struct ModifierTypeInfo {
 
 	/* Copy instance data for this modifier type. Should copy all user
 	 * level settings to the target modifier.
+	 *
+	 * \param flag: Copying options (see BKE_library.h's LIB_ID_COPY_... flags for more).
 	 */
-	void (*copyData)(const struct ModifierData *md, struct ModifierData *target);
+	void (*copyData)(const struct ModifierData *md, struct ModifierData *target, const int flag);
+
 
 	/********************* Deform modifier functions *********************/
 
 	/* Only for deform types, should apply the deformation
 	 * to the given vertex array. If the deformer requires information from
-	 * the object it can obtain it from the derivedData argument if non-NULL,
+	 * the object it can obtain it from the mesh argument if non-NULL,
 	 * and otherwise the ob argument.
 	 */
-	void (*deformVerts)(struct ModifierData *md, struct Object *ob,
-	                    struct DerivedMesh *derivedData,
-	                    float (*vertexCos)[3], int numVerts,
-	                    ModifierApplyFlag flag);
+	void (*deformVerts)(struct ModifierData *md,  const struct ModifierEvalContext *ctx,
+	                    struct Mesh *mesh, float (*vertexCos)[3], int numVerts);
 
 	/* Like deformMatricesEM but called from object mode (for supporting modifiers in sculpt mode) */
-	void (*deformMatrices)(struct ModifierData *md, struct Object *ob,
-	                       struct DerivedMesh *derivedData,
-	                       float (*vertexCos)[3], float (*defMats)[3][3], int numVerts);
+	void (*deformMatrices)(struct ModifierData *md,  const struct ModifierEvalContext *ctx,
+	                       struct Mesh *mesh, float (*vertexCos)[3], float (*defMats)[3][3], int numVerts);
 
 	/* Like deformVerts but called during editmode (for supporting modifiers)
 	 */
-	void (*deformVertsEM)(struct ModifierData *md, struct Object *ob,
-	                      struct BMEditMesh *editData, struct DerivedMesh *derivedData,
-	                      float (*vertexCos)[3], int numVerts);
+	void (*deformVertsEM)(struct ModifierData *md,  const struct ModifierEvalContext *ctx,
+	                      struct BMEditMesh *editData,
+	                      struct Mesh *mesh, float (*vertexCos)[3], int numVerts);
 
 	/* Set deform matrix per vertex for crazyspace correction */
-	void (*deformMatricesEM)(struct ModifierData *md, struct Object *ob,
-	                         struct BMEditMesh *editData, struct DerivedMesh *derivedData,
-	                         float (*vertexCos)[3], float (*defMats)[3][3], int numVerts);
+	void (*deformMatricesEM)(struct ModifierData *md,  const struct ModifierEvalContext *ctx,
+	                         struct BMEditMesh *editData,
+	                         struct Mesh *mesh, float (*vertexCos)[3], float (*defMats)[3][3], int numVerts);
 
 	/********************* Non-deform modifier functions *********************/
 
-	/* For non-deform types: apply the modifier and return a derived
-	 * data object (type is dependent on object type).
+	/* For non-deform types: apply the modifier and return a mesh object.
 	 *
-	 * The derivedData argument should always be non-NULL; the modifier
-	 * should read the object data from the derived object instead of the
+	 * The mesh argument should always be non-NULL; the modifier
+	 * should read the object data from the mesh object instead of the
 	 * actual object data.
 	 *
-	 * The useRenderParams argument indicates if the modifier is being
-	 * applied in the service of the renderer which may alter quality
-	 * settings.
-	 *
-	 * The isFinalCalc parameter indicates if the modifier is being
-	 * calculated for a final result or for something temporary
-	 * (like orcos). This is a hack at the moment, it is meant so subsurf
-	 * can know if it is safe to reuse its internal cache.
-	 *
-	 * The modifier may reuse the derivedData argument (i.e. return it in
+	 * The modifier may reuse the mesh argument (i.e. return it in
 	 * modified form), but must not release it.
 	 */
-	struct DerivedMesh *(*applyModifier)(struct ModifierData *md, struct Object *ob,
-	                                     struct DerivedMesh *derivedData,
-	                                     ModifierApplyFlag flag);
-
-	/* Like applyModifier but called during editmode (for supporting
-	 * modifiers).
-	 *
-	 * The derived object that is returned must support the operations that
-	 * are expected from editmode objects. The same qualifications regarding
-	 * derivedData apply as for applyModifier.
-	 */
-	struct DerivedMesh *(*applyModifierEM)(struct ModifierData *md, struct Object *ob,
-	                                       struct BMEditMesh *editData,
-	                                       struct DerivedMesh *derivedData,
-	                                       ModifierApplyFlag flag);
+	struct Mesh *(*applyModifier)(struct ModifierData *md, const struct ModifierEvalContext *ctx,
+	                              struct Mesh *mesh);
 
 
 	/********************* Optional functions *********************/
@@ -237,26 +203,25 @@ typedef struct ModifierTypeInfo {
 	 */
 	void (*initData)(struct ModifierData *md);
 
-	/* Should return a CustomDataMask indicating what data this
+	/* Should add to passed \a r_cddata_masks the data types that this
 	 * modifier needs. If (mask & (1 << (layer type))) != 0, this modifier
-	 * needs that custom data layer. This function's return value can change
+	 * needs that custom data layer. It can change required layers
 	 * depending on the modifier's settings.
 	 *
 	 * Note that this means extra data (e.g. vertex groups) - it is assumed
 	 * that all modifiers need mesh data and deform modifiers need vertex
 	 * coordinates.
 	 *
-	 * Note that this limits the number of custom data layer types to 32.
-	 *
-	 * If this function is not present or it returns 0, it is assumed that
-	 * no extra data is needed.
+	 * If this function is not present, it is assumed that no extra data is needed.
 	 *
 	 * This function is optional.
 	 */
-	CustomDataMask (*requiredDataMask)(struct Object *ob, struct ModifierData *md);
+	void (*requiredDataMask)(struct Object *ob, struct ModifierData *md, struct CustomData_MeshMasks *r_cddata_masks);
 
 	/* Free internal modifier data variables, this function should
 	 * not free the md variable itself.
+	 *
+	 * This function is responsible for freeing the runtime data as well.
 	 *
 	 * This function is optional.
 	 */
@@ -270,21 +235,12 @@ typedef struct ModifierTypeInfo {
 	 *
 	 * This function is optional (assumes never disabled if not present).
 	 */
-	bool (*isDisabled)(struct ModifierData *md, int userRenderParams);
-
-	/* Add the appropriate relations to the DEP graph depending on the
-	 * modifier data.
-	 *
-	 * This function is optional.
-	 */
-	void (*updateDepgraph)(struct ModifierData *md,
-	                       const ModifierUpdateDepsgraphContext *ctx);
+	bool (*isDisabled)(const struct Scene *scene, struct ModifierData *md, bool userRenderParams);
 
 	/* Add the appropriate relations to the dependency graph.
 	 *
 	 * This function is optional.
 	 */
-	/* TODO(sergey): Remove once we finally switched to the new depsgraph. */
 	void (*updateDepsgraph)(struct ModifierData *md,
 	                        const ModifierUpdateDepsgraphContext *ctx);
 
@@ -297,7 +253,7 @@ typedef struct ModifierTypeInfo {
 
 
 	/* True when a deform modifier uses normals, the requiredDataMask
-	 * cant be used here because that refers to a normal layer where as
+	 * cant be used here because that refers to a normal layer whereas
 	 * in this case we need to know if the deform modifier uses normals.
 	 *
 	 * this is needed because applying 2 deform modifiers will give the
@@ -335,6 +291,18 @@ typedef struct ModifierTypeInfo {
 	 */
 	void (*foreachTexLink)(struct ModifierData *md, struct Object *ob,
 	                       TexWalkFunc walk, void *userData);
+
+	/* Free given runtime data.
+	 *
+	 * This data is coming from a modifier of the corresponding type, but actual
+	 * modifier data is not known here.
+	 *
+	 * Notes:
+	 *  - The data itself is to be de-allocated as well.
+	 *  - This calback is allowed to receive NULL pointer as a data, so it's
+	 *    more like "ensure the data is freed".
+	 */
+	void (*freeRuntimeData)(void *runtime_data);
 } ModifierTypeInfo;
 
 /* Initialize modifier's global data (type info and some common global storages). */
@@ -351,7 +319,7 @@ void          modifier_free(struct ModifierData *md);
 
 bool          modifier_unique_name(struct ListBase *modifiers, struct ModifierData *md);
 
-void          modifier_copyData_generic(const struct ModifierData *md, struct ModifierData *target);
+void          modifier_copyData_generic(const struct ModifierData *md, struct ModifierData *target, const int flag);
 void          modifier_copyData(struct ModifierData *md, struct ModifierData *target);
 void          modifier_copyData_ex(struct ModifierData *md, struct ModifierData *target, const int flag);
 bool          modifier_dependsOnTime(struct ModifierData *md);
@@ -361,7 +329,7 @@ bool          modifier_couldBeCage(struct Scene *scene, struct ModifierData *md)
 bool          modifier_isCorrectableDeformed(struct ModifierData *md);
 bool          modifier_isSameTopology(ModifierData *md);
 bool          modifier_isNonGeometrical(ModifierData *md);
-bool          modifier_isEnabled(struct Scene *scene, struct ModifierData *md, int required_mode);
+bool          modifier_isEnabled(const struct Scene *scene, struct ModifierData *md, int required_mode);
 void          modifier_setError(struct ModifierData *md, const char *format, ...) ATTR_PRINTF_FORMAT(2, 3);
 bool          modifier_isPreview(struct ModifierData *md);
 
@@ -387,6 +355,7 @@ bool          modifiers_isClothEnabled(struct Object *ob);
 bool          modifiers_isParticleEnabled(struct Object *ob);
 
 struct Object *modifiers_isDeformedByArmature(struct Object *ob);
+struct Object *modifiers_isDeformedByMeshDeform(struct Object *ob);
 struct Object *modifiers_isDeformedByLattice(struct Object *ob);
 struct Object *modifiers_isDeformedByCurve(struct Object *ob);
 bool          modifiers_usesArmature(struct Object *ob, struct bArmature *arm);
@@ -396,10 +365,10 @@ bool          modifiers_isPreview(struct Object *ob);
 
 typedef struct CDMaskLink {
 	struct CDMaskLink *next;
-	CustomDataMask mask;
+	struct CustomData_MeshMasks mask;
 } CDMaskLink;
 
-/* Calculates and returns a linked list of CustomDataMasks indicating the
+/* Calculates and returns a linked list of CustomData_MeshMasks indicating the
  * data required by each modifier in the stack pointed to by md for correct
  * evaluation, assuming the data indicated by dataMask is required at the
  * end of the stack.
@@ -407,9 +376,10 @@ typedef struct CDMaskLink {
 struct CDMaskLink *modifiers_calcDataMasks(struct Scene *scene,
                                            struct Object *ob,
                                            struct ModifierData *md,
-                                           CustomDataMask dataMask,
+                                           const struct CustomData_MeshMasks *dataMask,
                                            int required_mode,
-                                           ModifierData *previewmd, CustomDataMask previewmask);
+                                           ModifierData *previewmd,
+                                           const struct CustomData_MeshMasks *previewmask);
 struct ModifierData *modifiers_getLastPreview(struct Scene *scene,
                                               struct ModifierData *md,
                                               int required_mode);
@@ -433,28 +403,33 @@ void        modifier_path_init(char *path, int path_maxlen, const char *name);
 const char *modifier_path_relbase(struct Main *bmain, struct Object *ob);
 const char *modifier_path_relbase_from_global(struct Object *ob);
 
-/* wrappers for modifier callbacks */
+/* Accessors of original/evaluated modifiers. */
 
-struct DerivedMesh *modwrap_applyModifier(
-        ModifierData *md, struct Object *ob,
-        struct DerivedMesh *dm,
-        ModifierApplyFlag flag);
+/* For a given modifier data, get corresponding original one.
+ * If the modifier data is already original, return it as-is. */
+struct ModifierData *modifier_get_original(struct ModifierData *md);
+struct ModifierData *modifier_get_evaluated(
+        struct Depsgraph *depsgraph,
+        struct Object *object,
+        struct ModifierData *md);
 
-struct DerivedMesh *modwrap_applyModifierEM(
-        ModifierData *md, struct Object *ob,
-        struct BMEditMesh *em,
-        struct DerivedMesh *dm,
-        ModifierApplyFlag flag);
+/* wrappers for modifier callbacks that ensure valid normals */
+
+struct Mesh *modwrap_applyModifier(
+        ModifierData *md, const struct ModifierEvalContext *ctx,
+        struct Mesh *me);
 
 void modwrap_deformVerts(
-        ModifierData *md, struct Object *ob,
-        struct DerivedMesh *dm,
-        float (*vertexCos)[3], int numVerts,
-        ModifierApplyFlag flag);
+        ModifierData *md, const struct ModifierEvalContext *ctx,
+        struct Mesh *me,
+        float (*vertexCos)[3], int numVerts);
 
 void modwrap_deformVertsEM(
-        ModifierData *md, struct Object *ob,
-        struct BMEditMesh *em, struct DerivedMesh *dm,
+        ModifierData *md, const struct ModifierEvalContext *ctx,
+        struct BMEditMesh *em, struct Mesh *me,
         float (*vertexCos)[3], int numVerts);
+
+struct Mesh *BKE_modifier_get_evaluated_mesh_from_evaluated_object(
+        struct Object *ob_eval, const bool get_cage_mesh);
 
 #endif

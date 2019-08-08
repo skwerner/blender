@@ -16,11 +16,6 @@
 #
 # The Original Code is Copyright (C) 2012, Blender Foundation
 # All rights reserved.
-#
-# The Original Code is: all of this file.
-#
-# Contributor(s): Bastien Montagne.
-#
 # ***** END GPL LICENSE BLOCK *****
 
 set(INC
@@ -34,6 +29,9 @@ set(SRC
 	boost_locale_wrapper.cpp
 
 	boost_locale_wrapper.h
+)
+
+set(LIB
 )
 
 if(APPLE)
@@ -59,4 +57,4 @@ if(WITH_INTERNATIONAL)
 	add_definitions(${BOOST_DEFINITIONS})
 endif()
 
-blender_add_lib(bf_intern_locale "${SRC}" "${INC}" "${INC_SYS}")
+blender_add_lib(bf_intern_locale "${SRC}" "${INC}" "${INC_SYS}" "${LIB}")

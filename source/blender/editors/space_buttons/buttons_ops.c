@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,14 +15,10 @@
  *
  * The Original Code is Copyright (C) 2009 Blender Foundation.
  * All rights reserved.
- *
- * Contributor(s): Blender Foundation
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/space_buttons/buttons_ops.c
- *  \ingroup spbuttons
+/** \file
+ * \ingroup spbuttons
  */
 
 
@@ -43,7 +37,6 @@
 #include "BLT_translation.h"
 
 #include "BKE_context.h"
-#include "BKE_global.h"
 #include "BKE_main.h"
 #include "BKE_report.h"
 
@@ -60,35 +53,33 @@
 
 #include "buttons_intern.h"  /* own include */
 
-/********************** toolbox operator *********************/
+/********************** context_menu operator *********************/
 
-static int toolbox_invoke(bContext *C, wmOperator *UNUSED(op), const wmEvent *UNUSED(event))
+static int context_menu_invoke(bContext *C, wmOperator *UNUSED(op), const wmEvent *UNUSED(event))
 {
-	bScreen *sc = CTX_wm_screen(C);
-	SpaceButs *sbuts = CTX_wm_space_buts(C);
-	PointerRNA ptr;
-	uiPopupMenu *pup;
-	uiLayout *layout;
+	const ARegion *ar = CTX_wm_region(C);
+	uiPopupMenu *pup = UI_popup_menu_begin(C, IFACE_("Context Menu"), ICON_NONE);
+	uiLayout *layout = UI_popup_menu_layout(pup);
 
-	RNA_pointer_create(&sc->id, &RNA_SpaceProperties, sbuts, &ptr);
+	uiItemM(layout, "INFO_MT_area", NULL, ICON_NONE);
+	if (ar->regiontype == RGN_TYPE_NAV_BAR) {
+		ED_screens_navigation_bar_tools_menu_create(C, layout, NULL);
+	}
 
-	pup = UI_popup_menu_begin(C, IFACE_("Align"), ICON_NONE);
-	layout = UI_popup_menu_layout(pup);
-	uiItemsEnumR(layout, &ptr, "align");
 	UI_popup_menu_end(C, pup);
 
 	return OPERATOR_INTERFACE;
 }
 
-void BUTTONS_OT_toolbox(wmOperatorType *ot)
+void BUTTONS_OT_context_menu(wmOperatorType *ot)
 {
 	/* identifiers */
-	ot->name = "Toolbox";
-	ot->description = "Display button panel toolbox";
-	ot->idname = "BUTTONS_OT_toolbox";
+	ot->name = "Context Menu";
+	ot->description = "Display properties editor context_menu";
+	ot->idname = "BUTTONS_OT_context_menu";
 
 	/* api callbacks */
-	ot->invoke = toolbox_invoke;
+	ot->invoke = context_menu_invoke;
 	ot->poll = ED_operator_buttons_active;
 }
 
@@ -108,8 +99,9 @@ static int file_browse_exec(bContext *C, wmOperator *op)
 	char *str, path[FILE_MAX];
 	const char *path_prop = RNA_struct_find_property(op->ptr, "directory") ? "directory" : "filepath";
 
-	if (RNA_struct_property_is_set(op->ptr, path_prop) == 0 || fbo == NULL)
+	if (RNA_struct_property_is_set(op->ptr, path_prop) == 0 || fbo == NULL) {
 		return OPERATOR_CANCELLED;
+	}
 
 	str = RNA_string_get_alloc(op->ptr, path_prop, NULL, 0);
 
@@ -136,7 +128,9 @@ static int file_browse_exec(bContext *C, wmOperator *op)
 		}
 		else {
 			char * const lslash = (char *)BLI_last_slash(str);
-			if (lslash) lslash[1] = '\0';
+			if (lslash) {
+				lslash[1] = '\0';
+			}
 		}
 	}
 
@@ -185,8 +179,9 @@ static int file_browse_invoke(bContext *C, wmOperator *op, const wmEvent *event)
 
 	UI_context_active_but_prop_get_filebrowser(C, &ptr, &prop, &is_undo);
 
-	if (!prop)
+	if (!prop) {
 		return OPERATOR_CANCELLED;
+	}
 
 	str = RNA_property_string_get_alloc(&ptr, prop, NULL, 0, NULL);
 
@@ -198,8 +193,9 @@ static int file_browse_invoke(bContext *C, wmOperator *op, const wmEvent *event)
 
 		if (event->alt) {
 			char *lslash = (char *)BLI_last_slash(str);
-			if (lslash)
+			if (lslash) {
 				*lslash = '\0';
+			}
 		}
 
 

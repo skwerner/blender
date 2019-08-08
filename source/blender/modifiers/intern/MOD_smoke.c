@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,19 +15,10 @@
  *
  * The Original Code is Copyright (C) 2005 by the Blender Foundation.
  * All rights reserved.
- *
- * Contributor(s): Daniel Dunbar
- *                 Ton Roosendaal,
- *                 Ben Batt,
- *                 Brecht Van Lommel,
- *                 Campbell Barton
- *
- * ***** END GPL LICENSE BLOCK *****
- *
  */
 
-/** \file blender/modifiers/intern/MOD_smoke.c
- *  \ingroup modifiers
+/** \file
+ * \ingroup modifiers
  */
 
 
@@ -37,23 +26,25 @@
 
 #include "MEM_guardedalloc.h"
 
-#include "DNA_group_types.h"
+#include "BLI_utildefines.h"
+
+#include "DNA_collection_types.h"
 #include "DNA_object_types.h"
 #include "DNA_scene_types.h"
 #include "DNA_smoke_types.h"
 #include "DNA_object_force_types.h"
-
-#include "BLI_utildefines.h"
+#include "DNA_mesh_types.h"
 
 #include "BKE_cdderivedmesh.h"
-#include "BKE_library.h"
+#include "BKE_layer.h"
 #include "BKE_library_query.h"
-#include "BKE_main.h"
 #include "BKE_modifier.h"
 #include "BKE_smoke.h"
 
-#include "depsgraph_private.h"
+#include "DEG_depsgraph.h"
 #include "DEG_depsgraph_build.h"
+#include "DEG_depsgraph_physics.h"
+#include "DEG_depsgraph_query.h"
 
 #include "MOD_modifiertypes.h"
 
@@ -68,12 +59,13 @@ static void initData(ModifierData *md)
 	smd->time = -1;
 }
 
-static void copyData(const ModifierData *md, ModifierData *target)
+static void copyData(const ModifierData *md, ModifierData *target, const int flag)
 {
 	const SmokeModifierData *smd  = (const SmokeModifierData *)md;
 	SmokeModifierData *tsmd = (SmokeModifierData *)target;
 
-	smokeModifier_copy(smd, tsmd);
+	smokeModifier_free(tsmd);
+	smokeModifier_copy(smd, tsmd, flag);
 }
 
 static void freeData(ModifierData *md)
@@ -83,35 +75,34 @@ static void freeData(ModifierData *md)
 	smokeModifier_free(smd);
 }
 
-static CustomDataMask requiredDataMask(Object *UNUSED(ob), ModifierData *md)
+static void requiredDataMask(Object *UNUSED(ob), ModifierData *md, CustomData_MeshMasks *r_cddata_masks)
 {
 	SmokeModifierData *smd  = (SmokeModifierData *)md;
-	CustomDataMask dataMask = 0;
 
 	if (smd && (smd->type & MOD_SMOKE_TYPE_FLOW) && smd->flow) {
 		if (smd->flow->source == MOD_SMOKE_FLOW_SOURCE_MESH) {
 			/* vertex groups */
 			if (smd->flow->vgroup_density)
-				dataMask |= CD_MASK_MDEFORMVERT;
+				r_cddata_masks->vmask |= CD_MASK_MDEFORMVERT;
 			/* uv layer */
 			if (smd->flow->texture_type == MOD_SMOKE_FLOW_TEXTURE_MAP_UV)
-				dataMask |= CD_MASK_MTFACE;
+				r_cddata_masks->fmask |= CD_MASK_MTFACE;
 		}
 	}
-	return dataMask;
 }
 
-static DerivedMesh *applyModifier(
-        ModifierData *md, Object *ob,
-        DerivedMesh *dm,
-        ModifierApplyFlag flag)
+static Mesh *applyModifier(
+        ModifierData *md, const ModifierEvalContext *ctx,
+        Mesh *me)
 {
 	SmokeModifierData *smd = (SmokeModifierData *) md;
 
-	if (flag & MOD_APPLY_ORCO)
-		return dm;
+	if (ctx->flag & MOD_APPLY_ORCO) {
+		return me;
+	}
 
-	return smokeModifier_do(smd, md->scene, ob, dm);
+	Scene *scene = DEG_get_evaluated_scene(ctx->depsgraph);
+	return smokeModifier_do(smd, ctx->depsgraph, scene, ctx->object, me);
 }
 
 static bool dependsOnTime(ModifierData *UNUSED(md))
@@ -131,32 +122,14 @@ static bool is_coll_cb(Object *UNUSED(ob), ModifierData *md)
 	return (smd->type & MOD_SMOKE_TYPE_COLL) && smd->coll;
 }
 
-static void updateDepgraph(ModifierData *md, const ModifierUpdateDepsgraphContext *ctx)
-{
-	SmokeModifierData *smd = (SmokeModifierData *) md;
-
-	if (smd && (smd->type & MOD_SMOKE_TYPE_DOMAIN) && smd->domain) {
-		/* Actual code uses get_collisionobjects */
-#ifdef WITH_LEGACY_DEPSGRAPH
-		dag_add_collision_relations(ctx->forest, ctx->scene, ctx->object, ctx->obNode, smd->domain->fluid_group, ctx->object->lay | ctx->scene->lay, eModifierType_Smoke, is_flow_cb, true, "Smoke Flow");
-		dag_add_collision_relations(ctx->forest, ctx->scene, ctx->object, ctx->obNode, smd->domain->coll_group, ctx->object->lay | ctx->scene->lay, eModifierType_Smoke, is_coll_cb, true, "Smoke Coll");
-		dag_add_forcefield_relations(ctx->forest, ctx->scene, ctx->object, ctx->obNode, smd->domain->effector_weights, true, PFIELD_SMOKEFLOW, "Smoke Force Field");
-#else
-	(void)ctx;
-#endif
-	}
-}
-
 static void updateDepsgraph(ModifierData *md, const ModifierUpdateDepsgraphContext *ctx)
 {
 	SmokeModifierData *smd = (SmokeModifierData *)md;
 
 	if (smd && (smd->type & MOD_SMOKE_TYPE_DOMAIN) && smd->domain) {
-		/* Actual code uses get_collisionobjects */
-		DEG_add_collision_relations(ctx->node, ctx->scene, ctx->object, smd->domain->fluid_group, ctx->object->lay | ctx->scene->lay, eModifierType_Smoke, is_flow_cb, true, "Smoke Flow");
-		DEG_add_collision_relations(ctx->node, ctx->scene, ctx->object, smd->domain->coll_group, ctx->object->lay | ctx->scene->lay, eModifierType_Smoke, is_coll_cb, true, "Smoke Coll");
-
-		DEG_add_forcefield_relations(ctx->node, ctx->scene, ctx->object, smd->domain->effector_weights, true, PFIELD_SMOKEFLOW, "Smoke Force Field");
+		DEG_add_collision_relations(ctx->node, ctx->object, smd->domain->fluid_group, eModifierType_Smoke, is_flow_cb, "Smoke Flow");
+		DEG_add_collision_relations(ctx->node, ctx->object, smd->domain->coll_group, eModifierType_Smoke, is_coll_cb, "Smoke Coll");
+		DEG_add_forcefield_relations(ctx->node, ctx->object, smd->domain->effector_weights, true, PFIELD_SMOKEFLOW, "Smoke Force Field");
 	}
 }
 
@@ -191,21 +164,22 @@ ModifierTypeInfo modifierType_Smoke = {
 	                        eModifierTypeFlag_Single,
 
 	/* copyData */          copyData,
+
 	/* deformVerts */       NULL,
 	/* deformMatrices */    NULL,
 	/* deformVertsEM */     NULL,
 	/* deformMatricesEM */  NULL,
 	/* applyModifier */     applyModifier,
-	/* applyModifierEM */   NULL,
+
 	/* initData */          initData,
 	/* requiredDataMask */  requiredDataMask,
 	/* freeData */          freeData,
 	/* isDisabled */        NULL,
-	/* updateDepgraph */    updateDepgraph,
 	/* updateDepsgraph */   updateDepsgraph,
 	/* dependsOnTime */     dependsOnTime,
 	/* dependsOnNormals */	NULL,
 	/* foreachObjectLink */ NULL,
 	/* foreachIDLink */     foreachIDLink,
-	/* foreachTexLink */    NULL
+	/* foreachTexLink */    NULL,
+	/* freeRuntimeData */   NULL,
 };

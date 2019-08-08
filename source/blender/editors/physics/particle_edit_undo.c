@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,10 @@
  *
  * The Original Code is Copyright (C) 2007 by Janne Karhu.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/physics/particle_edit_undo.c
- *  \ingroup edphys
+/** \file
+ * \ingroup edphys
  */
 
 #include <stdlib.h>
@@ -41,15 +33,14 @@
 #include "DNA_windowmanager_types.h"
 
 #include "BLI_listbase.h"
-#include "BLI_string.h"
 #include "BLI_utildefines.h"
 
 #include "BKE_context.h"
-#include "BKE_depsgraph.h"
-#include "BKE_main.h"
 #include "BKE_particle.h"
 #include "BKE_pointcache.h"
 #include "BKE_undo_system.h"
+
+#include "DEG_depsgraph.h"
 
 #include "ED_object.h"
 #include "ED_particle.h"
@@ -229,27 +220,27 @@ typedef struct ParticleUndoStep {
 
 static bool particle_undosys_poll(struct bContext *C)
 {
-	Main *bmain = CTX_data_main(C);
 	Scene *scene = CTX_data_scene(C);
-	Object *ob = OBACT;
-	PTCacheEdit *edit = PE_get_current(bmain, scene, ob);
+	ViewLayer *view_layer = CTX_data_view_layer(C);
+	Object *ob = OBACT(view_layer);
+	PTCacheEdit *edit = PE_get_current(scene, ob);
+
 	return (edit != NULL);
 }
 
-static bool particle_undosys_step_encode(struct bContext *C, UndoStep *us_p)
+static bool particle_undosys_step_encode(struct bContext *C, struct Main *UNUSED(bmain), UndoStep *us_p)
 {
-	Main *bmain = CTX_data_main(C);
 	ParticleUndoStep *us = (ParticleUndoStep *)us_p;
+	ViewLayer *view_layer = CTX_data_view_layer(C);
 	us->scene_ref.ptr = CTX_data_scene(C);
-	us->object_ref.ptr = us->scene_ref.ptr->basact->object;
-	PTCacheEdit *edit = PE_get_current(bmain, us->scene_ref.ptr, us->object_ref.ptr);
+	us->object_ref.ptr = OBACT(view_layer);
+	PTCacheEdit *edit = PE_get_current(us->scene_ref.ptr, us->object_ref.ptr);
 	undoptcache_from_editcache(&us->data, edit);
 	return true;
 }
 
-static void particle_undosys_step_decode(struct bContext *C, UndoStep *us_p, int UNUSED(dir))
+static void particle_undosys_step_decode(struct bContext *C, struct Main *UNUSED(bmain), UndoStep *us_p, int UNUSED(dir))
 {
-	Main *bmain = CTX_data_main(C);
 	/* TODO(campbell): undo_system: use low-level API to set mode. */
 	ED_object_mode_set(C, OB_MODE_PARTICLE_EDIT);
 	BLI_assert(particle_undosys_poll(C));
@@ -257,10 +248,10 @@ static void particle_undosys_step_decode(struct bContext *C, UndoStep *us_p, int
 	ParticleUndoStep *us = (ParticleUndoStep *)us_p;
 	Scene *scene = us->scene_ref.ptr;
 	Object *ob = us->object_ref.ptr;
-	PTCacheEdit *edit = PE_get_current(bmain, scene, ob);
+	PTCacheEdit *edit = PE_get_current(scene, ob);
 	if (edit) {
 		undoptcache_to_editcache(&us->data, edit);
-		DAG_id_tag_update(&ob->id, OB_RECALC_DATA);
+		DEG_id_tag_update(&ob->id, ID_RECALC_GEOMETRY);
 	}
 	else {
 		BLI_assert(0);
@@ -292,7 +283,6 @@ void ED_particle_undosys_type(UndoType *ut)
 
 	ut->step_foreach_ID_ref = particle_undosys_foreach_ID_ref;
 
-	ut->mode = BKE_UNDOTYPE_MODE_STORE;
 	ut->use_context = true;
 
 	ut->step_size = sizeof(ParticleUndoStep);

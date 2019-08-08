@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,17 +15,11 @@
  *
  * The Original Code is Copyright (C) 2006 Blender Foundation.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): Campbell Barton, Alfredo de Greef, David Millan Escriva,
  * Juho Vepsäläinen
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/nodes/shader/nodes/node_shader_common.c
- *  \ingroup shdnodes
+/** \file
+ * \ingroup shdnodes
  */
 
 
@@ -215,11 +207,7 @@ static int gpu_group_execute(GPUMaterial *mat, bNode *node, bNodeExecData *execd
 		return 0;
 
 	group_gpu_copy_inputs(node, in, exec->stack);
-#if 0   /* XXX NODE_GROUP_EDIT is deprecated, depends on node space */
-	ntreeExecGPUNodes(exec, mat, (node->flag & NODE_GROUP_EDIT));
-#else
-	ntreeExecGPUNodes(exec, mat, 0, NODE_NEW_SHADING | NODE_OLD_SHADING);
-#endif
+	ntreeExecGPUNodes(exec, mat, NULL);
 	group_gpu_move_outputs(node, out, exec->stack);
 
 	return 1;
@@ -242,7 +230,6 @@ void register_node_type_sh_group(void)
 	BLI_assert(ntype.ext.srna != NULL);
 	RNA_struct_blender_type_set(ntype.ext.srna, &ntype);
 
-	node_type_compatibility(&ntype, NODE_OLD_SHADING | NODE_NEW_SHADING);
 	node_type_socket_templates(&ntype, NULL, NULL);
 	node_type_size(&ntype, 140, 60, 400);
 	node_type_label(&ntype, node_group_label);
@@ -251,4 +238,21 @@ void register_node_type_sh_group(void)
 	node_type_gpu(&ntype, gpu_group_execute);
 
 	nodeRegisterType(&ntype);
+}
+
+void register_node_type_sh_custom_group(bNodeType *ntype)
+{
+	/* These methods can be overriden but need a default implementation otherwise. */
+	if (ntype->poll == NULL) {
+		ntype->poll = sh_node_poll_default;
+	}
+	if (ntype->insert_link == NULL) {
+		ntype->insert_link = node_insert_link_default;
+	}
+	if (ntype->update_internal_links == NULL) {
+		ntype->update_internal_links = node_update_internal_links_default;
+	}
+
+	node_type_exec(ntype, group_initexec, group_freeexec, group_execute);
+	node_type_gpu(ntype, gpu_group_execute);
 }

@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,17 +15,10 @@
  *
  * The Original Code is Copyright (C) 2011 Blender Foundation.
  * All rights reserved.
- *
- * Contributor(s): Blender Foundation,
- *                 Sergey Sharybin
- *                 Keir Mierle
- *                 Ichthyostega
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/blenkernel/intern/tracking_stabilize.c
- *  \ingroup bke
+/** \file
+ * \ingroup bke
  *
  * This file contains implementation of 2D image stabilization.
  */
@@ -275,12 +266,13 @@ static StabContext *initialize_stabilization_working_context(MovieClip *clip)
 	return ctx;
 }
 
-/* Discard all private working data attached to this call context.
- * NOTE: We allocate the record for the per track baseline contribution
- *       locally for each call context (i.e. call to
- *       BKE_tracking_stabilization_data_get()
- *       Thus it is correct to discard all allocations found within the
- *       corresponding _local_ GHash
+/**
+ * Discard all private working data attached to this call context.
+ *
+ * \note We allocate the record for the per track baseline contribution
+ * locally for each call context (i.e. call to #BKE_tracking_stabilization_data_get)
+ * Thus it is correct to discard all allocations found within the
+ * corresponding _local_ GHash.
  */
 static void discard_stabilization_working_context(StabContext *ctx)
 {
@@ -982,7 +974,7 @@ static void initialize_track_for_stabilization(StabContext *ctx,
 
 static void initialize_all_tracks(StabContext *ctx, float aspect)
 {
-	size_t i, track_cnt = 0;
+	size_t i, track_len = 0;
 	MovieClip *clip = ctx->clip;
 	MovieTracking *tracking = ctx->tracking;
 	MovieTrackingTrack *track;
@@ -1011,20 +1003,20 @@ static void initialize_all_tracks(StabContext *ctx, float aspect)
 		                                                                 track);
 		local_data->is_init_for_stabilization = false;
 
-		++track_cnt;
+		++track_len;
 	}
-	if (!track_cnt) {
+	if (!track_len) {
 		return;
 	}
 
-	order = MEM_mallocN(track_cnt * sizeof(TrackInitOrder),
+	order = MEM_mallocN(track_len * sizeof(TrackInitOrder),
 	                    "stabilization track order");
 	if (!order) {
 		return;
 	}
 
-	track_cnt = establish_track_initialization_order(ctx, order);
-	if (track_cnt == 0) {
+	track_len = establish_track_initialization_order(ctx, order);
+	if (track_len == 0) {
 		goto cleanup;
 	}
 
@@ -1032,7 +1024,7 @@ static void initialize_all_tracks(StabContext *ctx, float aspect)
 	average_marker_positions(ctx, reference_frame, average_pos);
 	setup_pivot(average_pos, pivot);
 
-	for (i = 0; i < track_cnt; ++i) {
+	for (i = 0; i < track_len; ++i) {
 		track = order[i].data;
 		if (reference_frame != order[i].reference_frame) {
 			reference_frame = order[i].reference_frame;
@@ -1598,7 +1590,7 @@ ImBuf *BKE_tracking_stabilize_frame(MovieClip *clip,
 
 	TrackingStabilizeFrameInterpolationData data = {
 		.ibuf = ibuf, .tmpibuf = tmpibuf, .mat = mat,
-		.interpolation = interpolation
+		.interpolation = interpolation,
 	};
 
 	ParallelRangeSettings settings;

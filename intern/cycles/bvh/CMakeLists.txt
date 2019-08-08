@@ -13,6 +13,7 @@ set(SRC
 	bvh8.cpp
 	bvh_binning.cpp
 	bvh_build.cpp
+	bvh_embree.cpp
 	bvh_node.cpp
 	bvh_sort.cpp
 	bvh_split.cpp
@@ -26,6 +27,7 @@ set(SRC_HEADERS
 	bvh8.h
 	bvh_binning.h
 	bvh_build.h
+	bvh_embree.h
 	bvh_node.h
 	bvh_params.h
 	bvh_sort.h
@@ -33,7 +35,11 @@ set(SRC_HEADERS
 	bvh_unaligned.h
 )
 
+set(LIB
+	cycles_render
+)
+
 include_directories(${INC})
 include_directories(SYSTEM ${INC_SYS})
 
-cycles_add_library(cycles_bvh ${SRC} ${SRC_HEADERS})
+cycles_add_library(cycles_bvh "${LIB}" ${SRC} ${SRC_HEADERS})

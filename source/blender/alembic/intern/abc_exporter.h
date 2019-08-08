@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,10 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * Contributor(s): Esteban Tovagliari, Cedric Paille, Kevin Dietrich
- *
- * ***** END GPL LICENSE BLOCK *****
+ */
+
+/** \file
+ * \ingroup balembic
  */
 
 #ifndef __ABC_EXPORTER_H__
@@ -34,15 +32,19 @@ class AbcObjectWriter;
 class AbcTransformWriter;
 class ArchiveWriter;
 
-struct EvaluationContext;
+struct Base;
+struct Depsgraph;
 struct Main;
 struct Object;
 struct Scene;
+struct ViewLayer;
 
 struct ExportSettings {
 	ExportSettings();
 
 	Scene *scene;
+	ViewLayer *view_layer;  // Scene layer to export; all its objects will be exported, unless selected_only=true
+	Depsgraph *depsgraph;
 	SimpleLogger logger;
 
 	bool selected_only;
@@ -67,6 +69,7 @@ struct ExportSettings {
 	bool export_particles;
 
 	bool apply_subdiv;
+	bool curves_as_mesh;
 	bool use_subdiv_schema;
 	bool export_child_hairs;
 	bool export_ogawa;
@@ -88,8 +91,6 @@ class AbcExporter {
 
 	unsigned int m_trans_sampling_index, m_shape_sampling_index;
 
-	Scene *m_scene;
-
 	ArchiveWriter *m_writer;
 
 	/* mapping from name to transform writer */
@@ -99,10 +100,10 @@ class AbcExporter {
 	std::vector<AbcObjectWriter *> m_shapes;
 
 public:
-	AbcExporter(Main *bmain, Scene *scene, const char *filename, ExportSettings &settings);
+	AbcExporter(Main *bmain, const char *filename, ExportSettings &settings);
 	~AbcExporter();
 
-	void operator()(Main *bmain, float &progress, bool &was_canceled);
+	void operator()(float &progress, bool &was_canceled);
 
 protected:
 	void getShutterSamples(unsigned int nr_of_samples,
@@ -113,11 +114,11 @@ protected:
 private:
 	Alembic::Abc::TimeSamplingPtr createTimeSampling(double step);
 
-	void createTransformWritersHierarchy(EvaluationContext *eval_ctx);
+	void createTransformWritersHierarchy();
 	AbcTransformWriter *createTransformWriter(Object *ob,  Object *parent, Object *dupliObParent);
-	void exploreTransform(EvaluationContext *eval_ctx, Object *ob, Object *parent, Object *dupliObParent = NULL);
-	void exploreObject(EvaluationContext *eval_ctx, Object *ob, Object *dupliObParent);
-	void createShapeWriters(EvaluationContext *eval_ctx);
+	void exploreTransform(Base *base, Object *object, Object *parent, Object *dupliObParent);
+	void exploreObject(Base *base, Object *object, Object *dupliObParent);
+	void createShapeWriters();
 	void createShapeWriter(Object *ob, Object *dupliObParent);
 	void createParticleSystemsWriters(Object *ob, AbcTransformWriter *xform);
 

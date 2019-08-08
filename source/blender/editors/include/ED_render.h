@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,12 +15,10 @@
  *
  * The Original Code is Copyright (C) 2005 Blender Foundation.
  * All rights reserved.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file ED_render.h
- *  \ingroup editors
+/** \file
+ * \ingroup editors
  */
 
 #ifndef __ED_RENDER_H__
@@ -30,28 +26,32 @@
 
 #include "DNA_vec_types.h"
 
-struct bContext;
+struct DEGEditorUpdateContext;
 struct ID;
-struct Main;
 struct MTex;
+struct Main;
 struct Render;
 struct Scene;
 struct ScrArea;
+struct bContext;
+struct bScreen;
 struct wmWindowManager;
 
 /* render_ops.c */
 
 void ED_operatortypes_render(void);
 
-/* render_shading.c */
+/* render_update.c */
 
-void ED_render_id_flush_update(struct Main *bmain, struct ID *id);
 void ED_render_engine_changed(struct Main *bmain);
 void ED_render_engine_area_exit(struct Main *bmain, struct ScrArea *sa);
-void ED_render_scene_update(struct Main *bmain, struct Scene *scene, int updated);
-void ED_render_scene_update_pre(struct Main *bmain, struct Scene *scene, bool time);
+void ED_render_view_layer_changed(struct Main *bmain, struct bScreen *sc);
 
-void ED_viewport_render_kill_jobs(struct wmWindowManager *wm, struct Main *bmain, bool free_database);
+/* Callbacks handling data update events coming from depsgraph. */
+
+void ED_render_id_flush_update(const struct DEGEditorUpdateContext *update_ctx, struct ID *id);
+void ED_render_scene_update(const struct DEGEditorUpdateContext *update_ctx, int updated);
+
 struct Scene *ED_render_job_get_scene(const struct bContext *C);
 struct Scene *ED_render_job_get_current_scene(const struct bContext *C);
 

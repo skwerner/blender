@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,14 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * Contributor(s): Campbell Barton
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/python/intern/bpy_app.c
- *  \ingroup pythonintern
+/** \file
+ * \ingroup pythonintern
  *
  * This file defines a 'PyStructSequence' accessed via 'bpy.app', mostly
  * exposing static applications variables such as version and buildinfo
@@ -47,11 +41,16 @@
 #include "bpy_app_handlers.h"
 #include "bpy_driver.h"
 
+/* modules */
+#include "bpy_app_icons.h"
+#include "bpy_app_timers.h"
+
 #include "BLI_utildefines.h"
 
 #include "BKE_appdir.h"
 #include "BKE_blender_version.h"
 #include "BKE_global.h"
+#include "BKE_library_override.h"
 
 #include "DNA_ID.h"
 
@@ -117,6 +116,10 @@ static PyStructSequence_Field app_info_fields[] = {
 	{(char *)"build_options", (char *)"A set containing most important enabled optional build features"},
 	{(char *)"handlers", (char *)"Application handler callbacks"},
 	{(char *)"translations", (char *)"Application and addons internationalization API"},
+
+	/* Modules (not struct sequence). */
+	{(char *)"icons", (char *)"Manage custom icons"},
+	{(char *)"timers", (char *)"Manage timers"},
 	{NULL},
 };
 
@@ -129,6 +132,8 @@ PyDoc_STRVAR(bpy_app_doc,
 "   :maxdepth: 1\n"
 "\n"
 "   bpy.app.handlers.rst\n"
+"   bpy.app.icons.rst\n"
+"   bpy.app.timers.rst\n"
 "   bpy.app.translations.rst\n"
 );
 
@@ -136,7 +141,7 @@ static PyStructSequence_Desc app_info_desc = {
 	(char *)"bpy.app",     /* name */
 	bpy_app_doc,    /* doc */
 	app_info_fields,    /* fields */
-	ARRAY_SIZE(app_info_fields) - 1
+	ARRAY_SIZE(app_info_fields) - 1,
 };
 
 static PyObject *make_app_info(void)
@@ -210,6 +215,10 @@ static PyObject *make_app_info(void)
 	SetObjItem(BPY_app_handlers_struct());
 	SetObjItem(BPY_app_translations_struct());
 
+	/* modules */
+	SetObjItem(BPY_app_icons_module());
+	SetObjItem(BPY_app_timers_module());
+
 #undef SetIntItem
 #undef SetStrItem
 #undef SetBytesItem
@@ -244,10 +253,53 @@ static int bpy_app_debug_set(PyObject *UNUSED(self), PyObject *value, void *clos
 		return -1;
 	}
 
-	if (param)  G.debug |=  flag;
-	else        G.debug &= ~flag;
+	if (param) {
+		G.debug |=  flag;
+	}
+	else {
+		G.debug &= ~flag;
+	}
 
 	return 0;
+}
+
+PyDoc_STRVAR(bpy_app_global_flag_doc,
+"Boolean, for application behavior (started with --enable-* matching this attribute name)"
+);
+static PyObject *bpy_app_global_flag_get(PyObject *UNUSED(self), void *closure)
+{
+	const int flag = POINTER_AS_INT(closure);
+	return PyBool_FromLong(G.f & flag);
+}
+
+static int bpy_app_global_flag_set(PyObject *UNUSED(self), PyObject *value, void *closure)
+{
+	const int flag = POINTER_AS_INT(closure);
+	const int param = PyObject_IsTrue(value);
+
+	if (param == -1) {
+		PyErr_SetString(PyExc_TypeError, "bpy.app.use_* can only be True/False");
+		return -1;
+	}
+
+	if (param) {
+		G.f |=  flag;
+	}
+	else {
+		G.f &= ~flag;
+	}
+
+	return 0;
+}
+
+static int bpy_app_global_flag_set__only_disable(PyObject *UNUSED(self), PyObject *value, void *closure)
+{
+	const int param = PyObject_IsTrue(value);
+	if (param == 1) {
+		PyErr_SetString(PyExc_ValueError, "This bpy.app.use_* option can only be disabled");
+		return -1;
+	}
+	return bpy_app_global_flag_set(NULL, value, closure);
 }
 
 #define BROKEN_BINARY_PATH_PYTHON_HACK
@@ -282,7 +334,7 @@ static PyObject *bpy_app_binary_path_python_get(PyObject *self, void *UNUSED(clo
 }
 
 PyDoc_STRVAR(bpy_app_debug_value_doc,
-"Int, number which can be set to non-zero values for testing purposes"
+"Short, number which can be set to non-zero values for testing purposes"
 );
 static PyObject *bpy_app_debug_value_get(PyObject *UNUSED(self), void *UNUSED(closure))
 {
@@ -291,10 +343,12 @@ static PyObject *bpy_app_debug_value_get(PyObject *UNUSED(self), void *UNUSED(cl
 
 static int bpy_app_debug_value_set(PyObject *UNUSED(self), PyObject *value, void *UNUSED(closure))
 {
-	int param = PyC_Long_AsI32(value);
+	short param = PyC_Long_AsI16(value);
 
 	if (param == -1 && PyErr_Occurred()) {
-		PyErr_SetString(PyExc_TypeError, "bpy.app.debug_value can only be set to a whole number");
+		PyC_Err_SetString_Prefix(
+		        PyExc_TypeError,
+		        "bpy.app.debug_value can only be set to a whole number");
 		return -1;
 	}
 
@@ -303,12 +357,6 @@ static int bpy_app_debug_value_set(PyObject *UNUSED(self), PyObject *value, void
 	WM_main_add_notifier(NC_WINDOW, NULL);
 
 	return 0;
-}
-
-static PyObject *bpy_app_global_flag_get(PyObject *UNUSED(self), void *closure)
-{
-	const int flag = POINTER_AS_INT(closure);
-	return PyBool_FromLong(G.f & flag);
 }
 
 PyDoc_STRVAR(bpy_app_tempdir_doc,
@@ -348,6 +396,29 @@ static PyObject *bpy_app_autoexec_fail_message_get(PyObject *UNUSED(self), void 
 }
 
 
+PyDoc_STRVAR(bpy_app_use_static_override_doc,
+"Boolean, whether static override is exposed in UI or not."
+);
+static PyObject *bpy_app_use_static_override_get(PyObject *UNUSED(self), void *UNUSED(closure))
+{
+	return PyBool_FromLong((long)BKE_override_static_is_enabled());
+}
+
+static int bpy_app_use_static_override_set(PyObject *UNUSED(self), PyObject *value, void *UNUSED(closure))
+{
+	const int param = PyC_Long_AsBool(value);
+
+	if (param == -1 && PyErr_Occurred()) {
+		PyErr_SetString(PyExc_TypeError, "bpy.app.use_static_override must be a boolean");
+		return -1;
+	}
+
+	BKE_override_static_enable((const bool)param);
+
+	return 0;
+}
+
+
 static PyGetSetDef bpy_app_getsets[] = {
 	{(char *)"debug",           bpy_app_debug_get, bpy_app_debug_set, (char *)bpy_app_debug_doc, (void *)G_DEBUG},
 	{(char *)"debug_ffmpeg",    bpy_app_debug_get, bpy_app_debug_set, (char *)bpy_app_debug_doc, (void *)G_DEBUG_FFMPEG},
@@ -366,6 +437,9 @@ static PyGetSetDef bpy_app_getsets[] = {
 	{(char *)"debug_gpumem",    bpy_app_debug_get, bpy_app_debug_set, (char *)bpy_app_debug_doc, (void *)G_DEBUG_GPU_MEM},
 	{(char *)"debug_io",        bpy_app_debug_get, bpy_app_debug_set, (char *)bpy_app_debug_doc, (void *)G_DEBUG_IO},
 
+	{(char *)"use_static_override", bpy_app_use_static_override_get, bpy_app_use_static_override_set, (char *)bpy_app_use_static_override_doc, NULL},
+	{(char *)"use_event_simulate", bpy_app_global_flag_get, bpy_app_global_flag_set__only_disable, (char *)bpy_app_global_flag_doc, (void *)G_FLAG_EVENT_SIMULATE},
+
 	{(char *)"binary_path_python", bpy_app_binary_path_python_get, NULL, (char *)bpy_app_binary_path_python_doc, NULL},
 
 	{(char *)"debug_value", bpy_app_debug_value_get, bpy_app_debug_value_set, (char *)bpy_app_debug_value_doc, NULL},
@@ -376,10 +450,10 @@ static PyGetSetDef bpy_app_getsets[] = {
 	{(char *)"render_preview_size", bpy_app_preview_render_size_get, NULL, (char *)bpy_app_preview_render_size_doc, (void *)ICON_SIZE_PREVIEW},
 
 	/* security */
-	{(char *)"autoexec_fail", bpy_app_global_flag_get, NULL, NULL, (void *)G_SCRIPT_AUTOEXEC_FAIL},
-	{(char *)"autoexec_fail_quiet", bpy_app_global_flag_get, NULL, NULL, (void *)G_SCRIPT_AUTOEXEC_FAIL_QUIET},
+	{(char *)"autoexec_fail", bpy_app_global_flag_get, NULL, NULL, (void *)G_FLAG_SCRIPT_AUTOEXEC_FAIL},
+	{(char *)"autoexec_fail_quiet", bpy_app_global_flag_get, NULL, NULL, (void *)G_FLAG_SCRIPT_AUTOEXEC_FAIL_QUIET},
 	{(char *)"autoexec_fail_message", bpy_app_autoexec_fail_message_get, NULL, NULL, NULL},
-	{NULL, NULL, NULL, NULL, NULL}
+	{NULL, NULL, NULL, NULL, NULL},
 };
 
 static void py_struct_seq_getset_init(void)

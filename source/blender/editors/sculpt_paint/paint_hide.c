@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,19 +15,11 @@
  *
  * The Original Code is Copyright (C) 2010 by Nicholas Bishop
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s):
- *
- * ***** END GPL LICENSE BLOCK *****
- *
  * Implements the PBVH node hiding operator
- *
  */
 
-/** \file blender/editors/sculpt_paint/paint_hide.c
- *  \ingroup edsculpt
+/** \file
+ * \ingroup edsculpt
  */
 
 #include "MEM_guardedalloc.h"
@@ -46,13 +36,13 @@
 #include "BKE_pbvh.h"
 #include "BKE_ccg.h"
 #include "BKE_context.h"
-#include "BKE_DerivedMesh.h"
 #include "BKE_mesh.h"
+#include "BKE_mesh_runtime.h"
 #include "BKE_multires.h"
 #include "BKE_paint.h"
 #include "BKE_subsurf.h"
 
-#include "BIF_glutil.h"
+#include "DEG_depsgraph.h"
 
 #include "WM_api.h"
 #include "WM_types.h"
@@ -333,12 +323,10 @@ static void clip_planes_from_rect(
 {
 	ViewContext vc;
 	BoundBox bb;
-	bglMats mats = {{0}};
 
 	view3d_operator_needs_opengl(C);
 	ED_view3d_viewcontext_init(C, &vc);
-	view3d_get_transformation(vc.ar, vc.rv3d, vc.obact, &mats);
-	ED_view3d_clipping_calc(&bb, clip_planes, &mats, rect);
+	ED_view3d_clipping_calc(&bb, clip_planes, vc.ar, vc.obact, rect);
 	negate_m4(clip_planes);
 }
 
@@ -375,12 +363,12 @@ static int hide_show_exec(bContext *C, wmOperator *op)
 {
 	ARegion *ar = CTX_wm_region(C);
 	Object *ob = CTX_data_active_object(C);
+	Depsgraph *depsgraph = CTX_data_depsgraph(C);
 	Mesh *me = ob->data;
 	PartialVisAction action;
 	PartialVisArea area;
 	PBVH *pbvh;
 	PBVHNode **nodes;
-	DerivedMesh *dm;
 	PBVHType pbvh_type;
 	float clip_planes[4][4];
 	rcti rect;
@@ -393,9 +381,8 @@ static int hide_show_exec(bContext *C, wmOperator *op)
 
 	clip_planes_from_rect(C, clip_planes, &rect);
 
-	dm = mesh_get_derived_final(CTX_data_scene(C), ob, CD_MASK_BAREMESH);
-	pbvh = dm->getPBVH(ob, dm);
-	ob->sculpt->pbvh = pbvh;
+	pbvh = BKE_sculpt_object_pbvh_ensure(depsgraph, ob);
+	BLI_assert(ob->sculpt->pbvh == pbvh);
 
 	get_pbvh_nodes(pbvh, &nodes, &totnode, clip_planes, area);
 	pbvh_type = BKE_pbvh_type(pbvh);
@@ -446,7 +433,7 @@ static int hide_show_invoke(bContext *C, wmOperator *op, const wmEvent *event)
 	PartialVisArea area = RNA_enum_get(op->ptr, "area");
 
 	if (!ELEM(area, PARTIALVIS_ALL, PARTIALVIS_MASKED))
-		return WM_gesture_border_invoke(C, op, event);
+		return WM_gesture_box_invoke(C, op, event);
 	else
 		return op->type->exec(C, op);
 }
@@ -456,7 +443,7 @@ void PAINT_OT_hide_show(struct wmOperatorType *ot)
 	static const EnumPropertyItem action_items[] = {
 		{PARTIALVIS_HIDE, "HIDE", 0, "Hide", "Hide vertices"},
 		{PARTIALVIS_SHOW, "SHOW", 0, "Show", "Show vertices"},
-		{0, NULL, 0, NULL, NULL}
+		{0, NULL, 0, NULL, NULL},
 	};
 
 	static const EnumPropertyItem area_items[] = {
@@ -464,7 +451,7 @@ void PAINT_OT_hide_show(struct wmOperatorType *ot)
 		{PARTIALVIS_INSIDE, "INSIDE", 0, "Inside", "Hide or show vertices inside the selection"},
 		{PARTIALVIS_ALL, "ALL", 0, "All", "Hide or show all vertices"},
 		{PARTIALVIS_MASKED, "MASKED", 0, "Masked", "Hide or show vertices that are masked (minimum mask value of 0.5)"},
-		{0, NULL, 0, NULL, NULL}
+		{0, NULL, 0, NULL, NULL},
 	};
 
 	/* identifiers */
@@ -474,7 +461,7 @@ void PAINT_OT_hide_show(struct wmOperatorType *ot)
 
 	/* api callbacks */
 	ot->invoke = hide_show_invoke;
-	ot->modal = WM_gesture_border_modal;
+	ot->modal = WM_gesture_box_modal;
 	ot->exec = hide_show_exec;
 	/* sculpt-only for now */
 	ot->poll = sculpt_mode_poll_view3d;

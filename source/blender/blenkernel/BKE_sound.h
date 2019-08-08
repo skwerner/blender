@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,31 +15,23 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 #ifndef __BKE_SOUND_H__
 #define __BKE_SOUND_H__
 
-/** \file BKE_sound.h
- *  \ingroup bke
- *  \since March 2001
- *  \author nzc
+/** \file
+ * \ingroup bke
  */
 
 #define SOUND_WAVE_SAMPLES_PER_SECOND 250
 
-#ifdef WITH_SYSTEM_AUDASPACE
-#  include AUD_DEVICE_H
+#if defined(WITH_AUDASPACE)
+#  include <AUD_Device.h>
 #endif
 
-struct bSound;
 struct Main;
 struct Sequence;
+struct bSound;
 
 typedef struct SoundWaveform {
 	int length;
@@ -84,7 +74,7 @@ void BKE_sound_copy_data(struct Main *bmain, struct bSound *sound_dst, const str
 
 void BKE_sound_make_local(struct Main *bmain, struct bSound *sound, const bool lib_local);
 
-#if defined(__AUD_C_API_H__) || defined(WITH_SYSTEM_AUDASPACE)
+#if defined(WITH_AUDASPACE)
 AUD_Device *BKE_sound_mixdown(struct Scene *scene, AUD_DeviceSpecs specs, int start, float volume);
 #endif
 
@@ -148,7 +138,5 @@ void *BKE_sound_get_factory(void *sound);
 float BKE_sound_get_length(struct bSound *sound);
 
 char **BKE_sound_get_device_names(void);
-
-bool BKE_sound_is_jack_supported(void);
 
 #endif  /* __BKE_SOUND_H__ */

@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,35 +12,34 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
 #ifndef __BKE_PBVH_H__
 #define __BKE_PBVH_H__
 
-/** \file BKE_pbvh.h
- *  \ingroup bke
- *  \brief A BVH for high poly meshes.
+/** \file
+ * \ingroup bke
+ * \brief A BVH for high poly meshes.
  */
 
 #include "BLI_bitmap.h"
 #include "BLI_ghash.h"
 #include "BLI_utildefines.h"
 
+struct BMLog;
+struct BMesh;
+struct CCGDerivedMesh;
 struct CCGElem;
 struct CCGKey;
-struct CCGDerivedMesh;
 struct CustomData;
 struct DMFlagMat;
-struct MPoly;
+struct GPUBatch;
 struct MLoop;
 struct MLoopTri;
+struct MPoly;
 struct MVert;
 struct PBVH;
 struct PBVHNode;
-struct BMesh;
-struct BMLog;
 
 typedef struct PBVH PBVH;
 typedef struct PBVHNode PBVHNode;
@@ -107,7 +104,7 @@ bool BKE_pbvh_node_raycast(
 bool BKE_pbvh_bmesh_node_raycast_detail(
         PBVHNode *node,
         const float ray_start[3], const float ray_normal[3],
-        float *depth, float *r_detail);
+        float *depth, float *r_edge_length);
 
 /* for orthographic cameras, project the far away ray segment points to the root node so
  * we can have better precision. */
@@ -127,16 +124,15 @@ bool BKE_pbvh_node_find_nearest_to_ray(
 
 /* Drawing */
 
-void BKE_pbvh_node_draw(PBVHNode *node, void *data);
-void BKE_pbvh_draw(PBVH *bvh, float (*planes)[4], float (*face_nors)[3],
-                   int (*setMaterial)(int matnr, void *attribs), bool wireframe, bool fast);
-void BKE_pbvh_draw_BB(PBVH *bvh);
+void BKE_pbvh_draw_cb(
+        PBVH *bvh, float (*planes)[4], float (*fnors)[3], bool fast, bool wires, bool only_mask,
+        void (*draw_fn)(void *user_data, struct GPUBatch *batch), void *user_data);
 
 /* PBVH Access */
 typedef enum {
 	PBVH_FACES,
 	PBVH_GRIDS,
-	PBVH_BMESH
+	PBVH_BMESH,
 } PBVHType;
 
 PBVHType BKE_pbvh_type(const PBVH *bvh);
@@ -154,6 +150,8 @@ int BKE_pbvh_count_grid_quads(BLI_bitmap **grid_hidden,
 
 /* multires level, only valid for type == PBVH_GRIDS */
 void BKE_pbvh_get_grid_key(const PBVH *pbvh, struct CCGKey *key);
+
+struct CCGElem **BKE_pbvh_get_grids(const PBVH *pbvh, int *num_grids);
 
 /* Only valid for type == PBVH_BMESH */
 struct BMesh *BKE_pbvh_get_bmesh(PBVH *pbvh);
@@ -219,7 +217,7 @@ struct GSet *BKE_pbvh_bmesh_node_faces(PBVHNode *node);
 void BKE_pbvh_bmesh_node_save_orig(PBVHNode *node);
 void BKE_pbvh_bmesh_after_stroke(PBVH *bvh);
 
-/* Update Normals/Bounding Box/Draw Buffers/Redraw and clear flags */
+/* Update Normals/Bounding Box/Redraw and clear flags */
 
 void BKE_pbvh_update(PBVH *bvh, int flags, float (*face_nors)[3]);
 void BKE_pbvh_redraw_BB(PBVH *bvh, float bb_min[3], float bb_max[3]);
@@ -238,7 +236,7 @@ void BKE_pbvh_node_layer_disp_free(PBVHNode *node);
 
 /* vertex deformer */
 float (*BKE_pbvh_get_vertCos(struct PBVH *pbvh))[3];
-void BKE_pbvh_apply_vertCos(struct PBVH *pbvh, float (*vertCos)[3]);
+void BKE_pbvh_apply_vertCos(struct PBVH *pbvh, float (*vertCos)[3], const int totvert);
 bool BKE_pbvh_isDeformed(struct PBVH *pbvh);
 
 /* Vertex Iterator */
@@ -352,7 +350,7 @@ void pbvh_vertex_iter_init(PBVH *bvh, PBVHNode *node,
 #define BKE_pbvh_vertex_iter_end \
 			} \
 		} \
-	}
+	} ((void)0)
 
 void BKE_pbvh_node_get_proxies(PBVHNode *node, PBVHProxyNode **proxies, int *proxy_count);
 void BKE_pbvh_node_free_proxies(PBVHNode *node);
@@ -367,6 +365,7 @@ bool BKE_pbvh_node_vert_update_check_any(PBVH *bvh, PBVHNode *node);
 //void BKE_pbvh_node_BB_reset(PBVHNode *node);
 //void BKE_pbvh_node_BB_expand(PBVHNode *node, float co[3]);
 
+bool pbvh_has_mask(PBVH *bvh);
 void pbvh_show_diffuse_color_set(PBVH *bvh, bool show_diffuse_color);
 void pbvh_show_mask_set(PBVH *bvh, bool show_mask);
 

@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,12 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/blenkernel/intern/CCGSubSurf.c
- *  \ingroup bke
+/** \file
+ * \ingroup bke
  */
 
 #include <stdlib.h>
@@ -30,7 +26,6 @@
 #include "BLI_sys_types.h" // for intptr_t support
 
 #include "BLI_utildefines.h" /* for BLI_assert */
-#include "BLI_math.h"
 
 #include "BKE_ccg.h"
 #include "CCGSubSurf.h"
@@ -40,9 +35,11 @@
 #ifdef WITH_OPENSUBDIV
 #  include "opensubdiv_capi.h"
 #  include "opensubdiv_converter_capi.h"
+#  include "opensubdiv_evaluator_capi.h"
+#  include "opensubdiv_topology_refiner_capi.h"
 #endif
 
-#include "GL/glew.h"
+#include "GPU_glew.h"
 
 /***/
 
@@ -329,7 +326,7 @@ void ccgSubSurf_free(CCGSubSurf *ss)
 	CCGAllocatorHDL allocator = ss->allocator;
 #ifdef WITH_OPENSUBDIV
 	if (ss->osd_evaluator != NULL) {
-		openSubdiv_deleteEvaluatorDescr(ss->osd_evaluator);
+		openSubdiv_deleteEvaluator(ss->osd_evaluator);
 	}
 	if (ss->osd_mesh != NULL) {
 		ccgSubSurf__delete_osdGLMesh(ss->osd_mesh);
@@ -341,7 +338,7 @@ void ccgSubSurf_free(CCGSubSurf *ss)
 		MEM_freeN(ss->osd_coarse_coords);
 	}
 	if (ss->osd_topology_refiner != NULL) {
-		openSubdiv_deleteTopologyRefinerDescr(ss->osd_topology_refiner);
+		openSubdiv_deleteTopologyRefiner(ss->osd_topology_refiner);
 	}
 #endif
 

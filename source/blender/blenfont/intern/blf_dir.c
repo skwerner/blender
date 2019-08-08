@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,14 +15,10 @@
  *
  * The Original Code is Copyright (C) 2009 Blender Foundation.
  * All rights reserved.
- *
- * Contributor(s): Blender Foundation.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/blenfont/intern/blf_dir.c
- *  \ingroup blf
+/** \file
+ * \ingroup blf
  *
  * Manage search paths for font files.
  */
@@ -49,8 +43,6 @@
 #include "BLI_path_util.h"
 #include "BLI_string.h"
 #include "BLI_threads.h"
-
-#include "BIF_gl.h"
 
 #include "BLF_api.h"
 #include "blf_internal_types.h"
@@ -153,32 +145,6 @@ char *blf_dir_search(const char *file)
 
 	return s;
 }
-
-#if 0 /* UNUSED */
-int blf_dir_split(const char *str, char *file, int *size)
-{
-	int i, len;
-	char *s;
-
-	/* Window, Linux or Mac, this is always / */
-	s = strrchr(str, '/');
-	if (s) {
-		len = s - str;
-		for (i = 0; i < len; i++)
-			file[i] = str[i];
-
-		file[i] = '.';
-		file[i + 1] = 't';
-		file[i + 2] = 't';
-		file[i + 3] = 'f';
-		file[i + 4] = '\0';
-		s++;
-		*size = atoi(s);
-		return 1;
-	}
-	return 0;
-}
-#endif
 
 /* Some font have additional file with metrics information,
  * in general, the extension of the file is: .afm or .pfm

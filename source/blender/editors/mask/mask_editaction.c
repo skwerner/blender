@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,14 +15,10 @@
  *
  * The Original Code is Copyright (C) 2008, Blender Foundation
  * This is a new part of Blender
- *
- * Contributor(s): Campbell Barton
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/mask/mask_editaction.c
- *  \ingroup edmask
+/** \file
+ * \ingroup edmask
  */
 
 #include <stdio.h>
@@ -187,7 +181,7 @@ void ED_mask_select_frame(MaskLayer *masklay, int selx, short select_mode)
 }
 
 /* select the frames in this layer that occur within the bounds specified */
-void ED_masklayer_frames_select_border(MaskLayer *masklay, float min, float max, short select_mode)
+void ED_masklayer_frames_select_box(MaskLayer *masklay, float min, float max, short select_mode)
 {
 	MaskLayerShape *masklay_shape;
 
